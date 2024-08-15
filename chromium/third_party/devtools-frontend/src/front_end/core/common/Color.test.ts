@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
 import * as Common from './common.js';
 
 const Color = Common.Color;
@@ -11,7 +9,7 @@ const Color = Common.Color;
 const parseAndAssertNotNull = (value: string) => {
   const result = Color.parse(value);
   assert.isNotNull(result, `failed to parse '${value} as color`);
-  return result!.asLegacyColor();
+  return result.asLegacyColor();
 };
 
 const deepCloseTo = (actual: number[], expected: number[], delta: number, message?: string) => {

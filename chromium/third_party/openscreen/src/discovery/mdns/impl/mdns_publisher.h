@@ -46,8 +46,8 @@ class MdnsPublisher : public MdnsResponder::RecordHandler {
  public:
   // |sender|, |ownership_manager|, and  |task_runner| must all persist for the
   // duration of this object's lifetime
-  MdnsPublisher(MdnsSender* sender,
-                MdnsProbeManager* ownership_manager,
+  MdnsPublisher(MdnsSender& sender,
+                MdnsProbeManager& ownership_manager,
                 TaskRunner& task_runner,
                 ClockNowFunctionPtr now_function,
                 const Config& config);
@@ -91,7 +91,7 @@ class MdnsPublisher : public MdnsResponder::RecordHandler {
   class RecordAnnouncer {
    public:
     RecordAnnouncer(MdnsRecord record,
-                    MdnsPublisher* publisher,
+                    MdnsPublisher& publisher,
                     TaskRunner& task_runner,
                     ClockNowFunctionPtr now_function,
                     int max_announcement_attempts);
@@ -121,7 +121,7 @@ class MdnsPublisher : public MdnsResponder::RecordHandler {
     void QueueGoodbye();
     void QueueAnnouncement();
 
-    MdnsPublisher* const publisher_;
+    MdnsPublisher& publisher_;
     TaskRunner& task_runner_;
     const ClockNowFunctionPtr now_function_;
 
@@ -147,7 +147,7 @@ class MdnsPublisher : public MdnsResponder::RecordHandler {
 
   // Creates a new published from the provided record.
   RecordAnnouncerPtr CreateAnnouncer(MdnsRecord record) {
-    return std::make_unique<RecordAnnouncer>(std::move(record), this,
+    return std::make_unique<RecordAnnouncer>(std::move(record), *this,
                                              task_runner_, now_function_,
                                              max_announcement_attempts_);
   }
@@ -177,8 +177,8 @@ class MdnsPublisher : public MdnsResponder::RecordHandler {
                                                DnsClass clazz) override;
   std::vector<MdnsRecord::ConstRef> GetPtrRecords(DnsClass clazz) override;
 
-  MdnsSender* const sender_;
-  MdnsProbeManager* const ownership_manager_;
+  MdnsSender& sender_;
+  MdnsProbeManager& ownership_manager_;
   TaskRunner& task_runner_;
   ClockNowFunctionPtr now_function_;
 

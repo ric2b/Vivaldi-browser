@@ -28,8 +28,7 @@ function(add_to_libaom_test_srcs src_list_name)
   set(AOM_TEST_SOURCE_VARS "${AOM_TEST_SOURCE_VARS}" PARENT_SCOPE)
 endfunction()
 
-list(APPEND AOM_UNIT_TEST_WRAPPER_SOURCES "${AOM_GEN_SRC_DIR}/usage_exit.c"
-            "${AOM_ROOT}/test/test_libaom.cc")
+list(APPEND AOM_UNIT_TEST_WRAPPER_SOURCES "${AOM_ROOT}/test/test_libaom.cc")
 add_to_libaom_test_srcs(AOM_UNIT_TEST_WRAPPER_SOURCES)
 
 list(APPEND AOM_UNIT_TEST_COMMON_SOURCES
@@ -102,7 +101,7 @@ add_to_libaom_test_srcs(AOM_UNIT_TEST_ENCODER_SOURCES)
 list(APPEND AOM_ENCODE_PERF_TEST_SOURCES "${AOM_ROOT}/test/encode_perf_test.cc")
 list(APPEND AOM_UNIT_TEST_WEBM_SOURCES "${AOM_ROOT}/test/webm_video_source.h")
 add_to_libaom_test_srcs(AOM_UNIT_TEST_WEBM_SOURCES)
-list(APPEND AOM_TEST_INTRA_PRED_SPEED_SOURCES "${AOM_GEN_SRC_DIR}/usage_exit.c"
+list(APPEND AOM_TEST_INTRA_PRED_SPEED_SOURCES
             "${AOM_ROOT}/test/test_intra_pred_speed.cc")
 
 if(CONFIG_AV1_DECODER)
@@ -210,6 +209,7 @@ if(NOT BUILD_SHARED_LIBS)
               "${AOM_ROOT}/test/fdct4x4_test.cc"
               "${AOM_ROOT}/test/fft_test.cc"
               "${AOM_ROOT}/test/firstpass_test.cc"
+              "${AOM_ROOT}/test/frame_resize_test.cc"
               "${AOM_ROOT}/test/fwht4x4_test.cc"
               "${AOM_ROOT}/test/hadamard_test.cc"
               "${AOM_ROOT}/test/horver_correlation_test.cc"
@@ -462,6 +462,7 @@ function(setup_aom_test_targets)
 
   add_executable(test_libaom ${AOM_UNIT_TEST_WRAPPER_SOURCES}
                              $<TARGET_OBJECTS:aom_common_app_util>
+                             $<TARGET_OBJECTS:aom_usage_exit>
                              $<TARGET_OBJECTS:test_aom_common>)
   set_property(TARGET test_libaom PROPERTY FOLDER ${AOM_IDE_TEST_FOLDER})
   list(APPEND AOM_APP_TARGETS test_libaom)
@@ -484,9 +485,9 @@ function(setup_aom_test_targets)
     endif()
 
     if(NOT BUILD_SHARED_LIBS)
-      add_executable(test_intra_pred_speed
-                     ${AOM_TEST_INTRA_PRED_SPEED_SOURCES}
-                     $<TARGET_OBJECTS:aom_common_app_util>)
+      add_executable(test_intra_pred_speed ${AOM_TEST_INTRA_PRED_SPEED_SOURCES}
+                                           $<TARGET_OBJECTS:aom_common_app_util>
+                                           $<TARGET_OBJECTS:aom_usage_exit>)
       set_property(TARGET test_intra_pred_speed
                    PROPERTY FOLDER ${AOM_IDE_TEST_FOLDER})
       target_link_libraries(test_intra_pred_speed ${AOM_LIB_LINK_TYPE} aom

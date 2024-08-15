@@ -375,9 +375,7 @@ void WallpaperSearchHandler::GetWallpaperSearchResults(
     }
   }
   optimization_guide_keyed_service->ExecuteModel(
-      optimization_guide::proto::ModelExecutionFeature::
-          MODEL_EXECUTION_FEATURE_WALLPAPER_SEARCH,
-      request,
+      optimization_guide::ModelBasedCapabilityKey::kWallpaperSearch, request,
       base::BindOnce(&WallpaperSearchHandler::OnWallpaperSearchResultsRetrieved,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback),
                      base::ElapsedTimer()));
@@ -569,9 +567,8 @@ void WallpaperSearchHandler::ShowFeedbackPage() {
   OptimizationGuideKeyedService* opt_guide_keyed_service =
       OptimizationGuideKeyedServiceFactory::GetForProfile(browser->profile());
   if (!opt_guide_keyed_service ||
-      !opt_guide_keyed_service->ShouldFeatureBeCurrentlyAllowedForLogging(
-          optimization_guide::proto::
-              MODEL_EXECUTION_FEATURE_WALLPAPER_SEARCH)) {
+      !opt_guide_keyed_service->ShouldFeatureBeCurrentlyAllowedForFeedback(
+          optimization_guide::UserVisibleFeatureKey::kWallpaperSearch)) {
     return;
   }
   base::Value::Dict feedback_metadata;
@@ -582,7 +579,7 @@ void WallpaperSearchHandler::ShowFeedbackPage() {
                                         .execution_id());
   }
   chrome::ShowFeedbackPage(
-      browser, chrome::kFeedbackSourceAI,
+      browser, feedback::kFeedbackSourceAI,
       /*description_template=*/std::string(),
       /*description_placeholder_text=*/
       l10n_util::GetStringUTF8(IDS_NTP_WALLPAPER_SEARCH_FEEDBACK_PLACEHOLDER),

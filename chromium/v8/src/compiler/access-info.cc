@@ -18,6 +18,7 @@
 #include "src/objects/field-index-inl.h"
 #include "src/objects/field-type.h"
 #include "src/objects/objects-inl.h"
+#include "src/objects/property-details.h"
 #include "src/objects/struct-inl.h"
 #include "src/objects/templates.h"
 
@@ -526,6 +527,14 @@ PropertyAccessInfo AccessorAccessInfoHelper(
         Cell::cast(module_namespace->module()->exports()->Lookup(
             isolate, name.object(),
             Smi::ToInt(Object::GetHash(*name.object())))));
+    if (IsAnyStore(access_mode)) {
+      // ES#sec-module-namespace-exotic-objects-set-p-v-receiver
+      // ES#sec-module-namespace-exotic-objects-defineownproperty-p-desc
+      //
+      // Storing to a module namespace object is always an error or a no-op in
+      // JS.
+      return PropertyAccessInfo::Invalid(zone);
+    }
     if (IsTheHole(cell->value(kRelaxedLoad), isolate)) {
       // This module has not been fully initialized yet.
       return PropertyAccessInfo::Invalid(zone);
@@ -772,6 +781,16 @@ PropertyAccessInfo AccessInfoFactory::ComputePropertyAccessInfo(
           // create a new data property on the receiver. We can still optimize
           // if such a transition already exists.
           return LookupTransition(receiver_map, name, holder, NONE);
+        }
+      }
+
+      if (IsDefiningStore(access_mode)) {
+        if (details.attributes() != PropertyAttributes::NONE) {
+          // We should store the property with WEC attributes, but that's not the
+          // attributes of the property that we found. We just bail out and let
+          // the runtime figure out what to do (which probably requires changing
+          // the object's map).
+          return Invalid();
         }
       }
 

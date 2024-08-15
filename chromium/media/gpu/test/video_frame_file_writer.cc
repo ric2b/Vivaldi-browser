@@ -225,11 +225,6 @@ void VideoFrameFileWriter::WriteVideoFramePNG(
     const base::FilePath& filename) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(writer_thread_sequence_checker_);
 
-  if (VideoFrame::BytesPerElement(video_frame->format(), 0) > 1) {
-    LOG(ERROR) << "We don't support more than 8 bits color depth for PNG"
-               << " output. Please use YUV output";
-    return;
-  }
   auto mapped_frame = video_frame;
 #if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
   const uint64_t modifier = video_frame->layout().modifier();
@@ -257,9 +252,9 @@ void VideoFrameFileWriter::WriteVideoFramePNG(
   // Convert the ARGB frame to PNG.
   std::vector<uint8_t> png_output;
   const bool png_encode_status = gfx::PNGCodec::Encode(
-      argb_out_frame->visible_data(VideoFrame::kARGBPlane),
+      argb_out_frame->visible_data(VideoFrame::Plane::kARGB),
       gfx::PNGCodec::FORMAT_BGRA, argb_out_frame->visible_rect().size(),
-      argb_out_frame->stride(VideoFrame::kARGBPlane),
+      argb_out_frame->stride(VideoFrame::Plane::kARGB),
       true, /* discard_transparency */
       std::vector<gfx::PNGCodec::Comment>(), &png_output);
   ASSERT_TRUE(png_encode_status);

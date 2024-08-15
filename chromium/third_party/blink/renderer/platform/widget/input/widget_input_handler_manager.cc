@@ -20,13 +20,13 @@
 #include "cc/metrics/event_metrics.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/paint_holding_reason.h"
+#include "components/viz/common/features.h"
 #include "services/tracing/public/cpp/perfetto/flow_event_utils.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_input_event_attribution.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/agent_group_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/compositor_thread_scheduler.h"
@@ -94,9 +94,6 @@ mojom::blink::InputEventResultState InputEventDispositionToAck(
     case InputHandlerProxy::DID_HANDLE:
       return mojom::blink::InputEventResultState::kConsumed;
     case InputHandlerProxy::DID_NOT_HANDLE:
-      if (base::FeatureList::IsEnabled(features::kFixGestureScrollQueuingBug)) {
-        return mojom::blink::InputEventResultState::kNotConsumedBlocking;
-      }
       return mojom::blink::InputEventResultState::kNotConsumed;
     case InputHandlerProxy::DID_NOT_HANDLE_NON_BLOCKING_DUE_TO_FLING:
       return mojom::blink::InputEventResultState::kSetNonBlockingDueToFling;
@@ -118,9 +115,13 @@ class SynchronousCompositorProxyRegistry
     : public SynchronousCompositorRegistry {
  public:
   explicit SynchronousCompositorProxyRegistry(
-      scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner)
+      scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
+      base::PlatformThreadId io_thread_id,
+      base::PlatformThreadId main_thread_id)
       : compositor_thread_default_task_runner_(
-            std::move(compositor_task_runner)) {}
+            std::move(compositor_task_runner)),
+        io_thread_id_(io_thread_id),
+        main_thread_id_(main_thread_id) {}
 
   ~SynchronousCompositorProxyRegistry() override {
     // Ensure the proxy has already been release on the compositor thread
@@ -131,7 +132,22 @@ class SynchronousCompositorProxyRegistry
   void CreateProxy(InputHandlerProxy* handler) {
     DCHECK(compositor_thread_default_task_runner_->BelongsToCurrentThread());
     proxy_ = std::make_unique<SynchronousCompositorProxy>(handler);
+
     proxy_->Init();
+
+    if (base::FeatureList::IsEnabled(::features::kWebViewEnableADPF)) {
+      Vector<base::PlatformThreadId> renderer_thread_ids;
+      renderer_thread_ids.push_back(base::PlatformThread::CurrentId());
+      if (io_thread_id_ != base::kInvalidThreadId) {
+        renderer_thread_ids.push_back(io_thread_id_);
+      }
+      if (main_thread_id_ != base::kInvalidThreadId &&
+          base::FeatureList::IsEnabled(
+              ::features::kWebViewEnableADPFRendererMain)) {
+        renderer_thread_ids.push_back(main_thread_id_);
+      }
+      proxy_->SetThreadIds(renderer_thread_ids);
+    }
 
     if (sink_)
       proxy_->SetLayerTreeFrameSink(sink_);
@@ -165,6 +181,8 @@ class SynchronousCompositorProxyRegistry
       compositor_thread_default_task_runner_;
   std::unique_ptr<SynchronousCompositorProxy> proxy_;
   raw_ptr<SynchronousLayerTreeFrameSink> sink_ = nullptr;
+  base::PlatformThreadId io_thread_id_;
+  base::PlatformThreadId main_thread_id_;
 };
 
 #endif
@@ -177,13 +195,16 @@ scoped_refptr<WidgetInputHandlerManager> WidgetInputHandlerManager::Create(
     CompositorThreadScheduler* compositor_thread_scheduler,
     scoped_refptr<scheduler::WidgetScheduler> widget_scheduler,
     bool uses_input_handler,
-    bool allow_scroll_resampling) {
+    bool allow_scroll_resampling,
+    base::PlatformThreadId io_thread_id,
+    base::PlatformThreadId main_thread_id) {
   DCHECK(widget_scheduler);
   scoped_refptr<WidgetInputHandlerManager> manager =
       new WidgetInputHandlerManager(
           std::move(widget), std::move(frame_widget_input_handler),
           never_composited, compositor_thread_scheduler,
-          std::move(widget_scheduler), allow_scroll_resampling);
+          std::move(widget_scheduler), allow_scroll_resampling, io_thread_id,
+          main_thread_id);
 
   manager->InitializeInputEventSuppressionStates();
   if (uses_input_handler)
@@ -207,7 +228,9 @@ WidgetInputHandlerManager::WidgetInputHandlerManager(
     bool never_composited,
     CompositorThreadScheduler* compositor_thread_scheduler,
     scoped_refptr<scheduler::WidgetScheduler> widget_scheduler,
-    bool allow_scroll_resampling)
+    bool allow_scroll_resampling,
+    base::PlatformThreadId io_thread_id,
+    base::PlatformThreadId main_thread_id)
     : widget_(std::move(widget)),
       frame_widget_input_handler_(std::move(frame_widget_input_handler)),
       widget_scheduler_(std::move(widget_scheduler)),
@@ -231,7 +254,8 @@ WidgetInputHandlerManager::WidgetInputHandlerManager(
   if (compositor_thread_default_task_runner_) {
     synchronous_compositor_registry_ =
         std::make_unique<SynchronousCompositorProxyRegistry>(
-            compositor_thread_default_task_runner_);
+            compositor_thread_default_task_runner_, io_thread_id,
+            main_thread_id);
   }
 #endif
 }
@@ -355,10 +379,6 @@ void WidgetInputHandlerManager::FindScrollTargetOnMainThread(
 
   InputThreadTaskRunner(TaskRunnerType::kInputBlocking)
       ->PostTask(FROM_HERE, base::BindOnce(std::move(callback), element_id));
-}
-
-void WidgetInputHandlerManager::DidAnimateForInput() {
-  widget_scheduler_->DidAnimateForInputOnCompositorThread();
 }
 
 void WidgetInputHandlerManager::DidStartScrollingViewport() {
@@ -614,9 +634,9 @@ void WidgetInputHandlerManager::DispatchEvent(
               : cc::ScrollUpdateEventMetrics::ScrollUpdateType::kStarted,
           gesture_event.data.scroll_update.delta_y, event->Event().TimeStamp(),
           arrived_in_browser_main_timestamp,
+          blocking_touch_dispatched_to_renderer_timestamp,
           base::IdType64<class ui::LatencyInfo>(
-              event->latency_info().trace_id()),
-          blocking_touch_dispatched_to_renderer_timestamp);
+              event->latency_info().trace_id()));
       has_seen_first_gesture_scroll_update_after_begin_ = true;
     } else {
       metrics = cc::ScrollEventMetrics::Create(
@@ -1007,8 +1027,7 @@ void WidgetInputHandlerManager::DidHandleInputEventSentToCompositor(
   if (ack_state == mojom::blink::InputEventResultState::kSetNonBlocking ||
       ack_state ==
           mojom::blink::InputEventResultState::kSetNonBlockingDueToFling ||
-      ack_state == mojom::blink::InputEventResultState::kNotConsumed ||
-      ack_state == mojom::blink::InputEventResultState::kNotConsumedBlocking) {
+      ack_state == mojom::blink::InputEventResultState::kNotConsumed) {
     DCHECK(!overscroll_params);
     DCHECK(!event->latency_info().coalesced());
     MainThreadEventQueue::DispatchType dispatch_type =

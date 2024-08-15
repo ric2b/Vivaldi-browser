@@ -9,6 +9,7 @@ import {
 import * as expert from '../expert.js';
 import {Point} from '../geometry.js';
 import * as metrics from '../metrics.js';
+import * as loadTimeData from '../models/load_time_data.js';
 import {ChromeHelper} from '../mojo/chrome_helper.js';
 import {LidState, ScreenState} from '../mojo/type.js';
 import * as nav from '../nav.js';
@@ -459,6 +460,10 @@ export class CameraManager implements EventListener {
     return util.toAspectRatioSet(resolution);
   }
 
+  getZoomRatio(): number {
+    return this.preview.getZoomRatio();
+  }
+
   /**
    * Applies point of interest to the stream.
    *
@@ -575,6 +580,14 @@ export class CameraManager implements EventListener {
     state.set(state.State.CAMERA_CONFIGURING, true);
     this.setCameraAvailable(false);
     this.scheduler.reconfigurer.setShouldSuspend(this.shouldSuspend());
+    if (loadTimeData.isVideoCaptureDisallowed()) {
+      if (this.watchdog === null) {
+        nav.open(ViewName.WARNING, WarningType.DISABLED_CAMERA);
+        this.watchdog = new ResumeStateWatchdog(() => this.doReconfigure());
+        this.perfLogger.interrupt();
+      }
+      return false;
+    }
     try {
       if (!(await this.scheduler.reconfigure())) {
         throw new Error('camera suspended');

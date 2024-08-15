@@ -31,35 +31,42 @@ public class FullscreenSigninCoordinator {
 
         /**
          * Notifies when the user accepts the terms of service.
+         *
          * @param allowMetricsAndCrashUploading Whether the user has opted into uploading crash
-         *         reports and UMA.
-         * */
+         *     reports and UMA.
+         */
+        // TODO(crbug.com/41493788): This method is FRE-specific. Figure out what to do with this
+        // when the coordinator is used for the upgrade promo.
         void acceptTermsOfService(boolean allowMetricsAndCrashUploading);
 
         /** Called when the interaction with the page is over and the next page should be shown. */
-        // TODO(crbug.com/41493788): This method is FRE-specific. Figure out what to do with this when the coordinator is used for the upgrade promo.
         void advanceToNextPage();
 
-        /** Called to display the device lock page  */
+        /** Called to display the device lock page */
         void displayDeviceLockPage(Account selectedAccount);
 
         /**
          * Records the FRE progress histogram MobileFre.Progress.*.
+         *
          * @param state FRE state to record.
          */
-        // TODO(crbug.com/41493788): This method is FRE-specific. Figure out what to do with this when the coordinator is used for the upgrade promo.
+        // TODO(crbug.com/41493788): This method is FRE-specific. Figure out what to do with this
+        //  when the coordinator is used for the upgrade promo.
         void recordFreProgressHistogram(@MobileFreProgress int state);
 
-        /** Records MobileFre.FromLaunch.NativeAndPoliciesLoaded histogram. **/
+        /** Records MobileFre.FromLaunch.NativeAndPoliciesLoaded histogram. */
         void recordNativePolicyAndChildStatusLoadedHistogram();
 
-        /** Records MobileFre.FromLaunch.NativeInitialized histogram. **/
+        /** Records MobileFre.FromLaunch.NativeInitialized histogram. */
         void recordNativeInitializedHistogram();
 
         /**
          * Show an informational web page. The page doesn't show navigation control.
+         *
          * @param url Resource id for the URL of the web page.
          */
+        // TODO(crbug.com/41493788): This method is FRE-specific. Figure out what to do with this
+        //  when the coordinator is used for the upgrade promo.
         void showInfoPage(@StringRes int url);
 
         /** Returns the supplier that provides the Profile (when available). */
@@ -80,6 +87,12 @@ public class FullscreenSigninCoordinator {
          * initialized.
          */
         Promise<Void> getNativeInitializationPromise();
+
+        /** Returns {@code true} if the management notice should be shown on managed devices. */
+        boolean shouldDisplayManagementNoticeOnManagedDevices();
+
+        /** Returns {@code true} when the footer text should be displayed */
+        boolean shouldDisplayFooterText();
     }
 
     private final FullscreenSigninMediator mMediator;
@@ -95,9 +108,9 @@ public class FullscreenSigninCoordinator {
      * @param modalDialogManager is used to open dialogs like account picker dialog and uma dialog.
      * @param delegate is invoked to interact with classes outside the module.
      * @param privacyPreferencesManager is used to check whether metrics and crash reporting are
-     *         disabled by policy and set the footer string accordingly.
+     *     disabled by policy and set the footer string accordingly.
      */
-    public FullscreenSigninCoordinator (
+    public FullscreenSigninCoordinator(
             Context context,
             ModalDialogManager modalDialogManager,
             Delegate delegate,
@@ -114,9 +127,8 @@ public class FullscreenSigninCoordinator {
     }
 
     /**
-     * Resets model properties in {@link FullscreenSigninMediator}.
-     * This method is called when the user advances to the sync consent page and then presses back
-     * and returns to the FRE again.
+     * Resets model properties in {@link FullscreenSigninMediator}. This method is called when the
+     * user advances to the next page and then presses back and returns to the FRE again.
      */
     public void reset() {
         mMediator.reset();
@@ -124,9 +136,10 @@ public class FullscreenSigninCoordinator {
 
     /**
      * Sets the view that is controlled by the coordinator.
-     * @param view is the FRE view including the selected account, the continue/dismiss buttons,
-     *        the footer string and other view components that change according to different state.
-     *        Can be null, in which case the coordinator will just detach from the previous view.
+     *
+     * @param view is the FRE view including the selected account, the continue/dismiss buttons, the
+     *     footer string and other view components that change according to different state. Can be
+     *     null, in which case the coordinator will just detach from the previous view.
      */
     public void setView(@Nullable FullscreenSigninView view) {
         if (mPropertyModelChangeProcessor != null) {

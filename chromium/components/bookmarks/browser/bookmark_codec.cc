@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <string_view>
 #include <utility>
 
 #include "base/base64.h"
@@ -93,11 +94,22 @@ base::Value::Dict BookmarkCodec::Encode(
 
   InitializeChecksum();
   base::Value::Dict roots;
-  roots.Set(kBookmarkBarFolderNameKey, EncodeNode(bookmark_bar_node));
-  roots.Set(kOtherBookmarkFolderNameKey, EncodeNode(other_folder_node));
-  roots.Set(kMobileBookmarkFolderNameKey, EncodeNode(mobile_folder_node));
-  if (trash_folder_node)
-    roots.Set(kTrashBookmarkFolderNameKey, EncodeNode(trash_folder_node));
+
+  if (bookmark_bar_node) {
+    // If one permanent node is provided, all permanent nodes should have been
+    // provided.
+    CHECK(other_folder_node);
+    CHECK(mobile_folder_node);
+    roots.Set(kBookmarkBarFolderNameKey, EncodeNode(bookmark_bar_node));
+    roots.Set(kOtherBookmarkFolderNameKey, EncodeNode(other_folder_node));
+    roots.Set(kMobileBookmarkFolderNameKey, EncodeNode(mobile_folder_node));
+    if (trash_folder_node)
+      roots.Set(kTrashBookmarkFolderNameKey, EncodeNode(trash_folder_node));
+  } else {
+    // No permanent node should have been provided.
+    CHECK(!other_folder_node);
+    CHECK(!mobile_folder_node);
+  }
 
   FinalizeChecksum();
   // We are going to store the computed checksum. So set stored checksum to be
@@ -119,6 +131,10 @@ bool BookmarkCodec::Decode(const base::Value::Dict& value,
                            std::string* sync_metadata_str) {
   const int64_t max_already_assigned_id =
       already_assigned_ids.empty() ? 0 : *already_assigned_ids.rbegin();
+
+  if (sync_metadata_str) {
+    sync_metadata_str->clear();
+  }
 
   ids_ = std::move(already_assigned_ids);
   uuids_ = {base::Uuid::ParseLowercase(kRootNodeUuid),
@@ -160,7 +176,7 @@ base::Value::Dict BookmarkCodec::EncodeNode(const BookmarkNode* node) {
   value.Set(kNameKey, title);
   const std::string& uuid = node->uuid().AsLowercaseString();
   value.Set(kGuidKey, uuid);
-  // TODO(crbug.com/634507): Avoid ToInternalValue().
+  // TODO(crbug.com/40479288): Avoid ToInternalValue().
   value.Set(kDateAddedKey,
             base::NumberToString(node->date_added().ToInternalValue()));
   value.Set(kDateLastUsed,
@@ -215,6 +231,14 @@ bool BookmarkCodec::DecodeHelper(BookmarkNode* bb_node,
       return false;
   }
 
+  if (sync_metadata_str) {
+    const std::string* sync_metadata_str_base64 =
+        value.FindString(kSyncMetadata);
+    if (sync_metadata_str_base64) {
+      base::Base64Decode(*sync_metadata_str_base64, sync_metadata_str);
+    }
+  }
+
   const base::Value::Dict* roots = value.FindDict(kRootsKey);
   if (!roots)
     return false;  // No roots, or invalid type for roots.
@@ -239,13 +263,6 @@ bool BookmarkCodec::DecodeHelper(BookmarkNode* bb_node,
     if (trash_folder_value) {
       DecodeNode(*trash_folder_value, nullptr, trash_folder_node);
     }
-  }
-
-  if (sync_metadata_str) {
-    const std::string* sync_metadata_str_base64 =
-        value.FindString(kSyncMetadata);
-    if (sync_metadata_str_base64)
-      base::Base64Decode(*sync_metadata_str_base64, sync_metadata_str);
   }
 
   // Need to reset the title as the title is persisted and restored from
@@ -511,9 +528,8 @@ void BookmarkCodec::UpdateChecksum(const std::string& str) {
 
 void BookmarkCodec::UpdateChecksum(const std::u16string& str) {
   base::MD5Update(&md5_context_,
-                  base::StringPiece(
-                      reinterpret_cast<const char*>(str.data()),
-                      str.length() * sizeof(str[0])));
+                  std::string_view(reinterpret_cast<const char*>(str.data()),
+                                   str.length() * sizeof(str[0])));
 }
 
 void BookmarkCodec::UpdateChecksumWithUrlNode(const std::string& id,

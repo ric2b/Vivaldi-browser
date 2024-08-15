@@ -155,6 +155,10 @@ const UIStrings = {
    */
   preload: 'Preload',
   /**
+   *@description Cell title in Network Data Grid Node of the Network panel
+   */
+  earlyHints: 'early-hints',
+  /**
    *@description Text in Network Data Grid Node of the Network panel
    */
   signedexchange: 'signed-exchange',
@@ -212,10 +216,6 @@ const UIStrings = {
    *@example {10 B} PH1
    */
   servedFromDiskCacheResourceSizeS: 'Served from disk cache, resource size: {PH1}',
-  /**
-   *@description Text of a DOM element in Network Data Grid Node of the Network panel
-   */
-  serviceWorkerRouter: '(`ServiceWorker router`)',
   /**
    *@description Cell title in Network Data Grid Node of the Network panel
    *@example {1} PH1
@@ -866,6 +866,10 @@ export class NetworkRequestNode extends NetworkNode {
     const resourceType = this.requestInternal.resourceType();
     let simpleType = resourceType.name();
 
+    if (this.requestInternal.fromEarlyHints()) {
+      return i18nString(UIStrings.earlyHints);
+    }
+
     if (resourceType === Common.ResourceType.resourceTypes.Other ||
         resourceType === Common.ResourceType.resourceTypes.Image) {
       simpleType = mimeType.replace(/^(application|image)\//, '');
@@ -942,7 +946,7 @@ export class NetworkRequestNode extends NetworkNode {
               i18nString(UIStrings.sPreflight, {PH1: this.requestInternal.requestMethod}));
           cell.appendChild(Components.Linkifier.Linkifier.linkifyRevealable(
               preflightRequest, i18nString(UIStrings.preflight), undefined,
-              i18nString(UIStrings.selectPreflightRequest)));
+              i18nString(UIStrings.selectPreflightRequest), undefined, 'preflight-request'));
         } else {
           this.setTextAndTitle(cell, this.requestInternal.requestMethod);
         }
@@ -1130,7 +1134,7 @@ export class NetworkRequestNode extends NetworkNode {
           cell.appendChild(Components.Linkifier.Linkifier.linkifyRevealable(
               new NetworkForward.NetworkRequestId.NetworkRequestId(
                   webBundleInnerRequestInfo.bundleRequestId, networkManager),
-              secondIconElement));
+              secondIconElement, undefined, undefined, undefined, 'webbundle-request'));
         } else {
           cell.appendChild(secondIconElement);
         }
@@ -1452,9 +1456,11 @@ export class NetworkRequestNode extends NetworkNode {
         console.assert(redirectSource !== null);
         if (this.parentView().nodeForRequest(redirectSource)) {
           cell.appendChild(Components.Linkifier.Linkifier.linkifyRevealable(
-              redirectSource, Bindings.ResourceUtils.displayNameForURL(redirectSource.url())));
+              redirectSource, Bindings.ResourceUtils.displayNameForURL(redirectSource.url()), undefined, undefined,
+              undefined, 'redirect-source-request'));
         } else {
-          cell.appendChild(Components.Linkifier.Linkifier.linkifyURL(redirectSource.url()));
+          cell.appendChild(Components.Linkifier.Linkifier.linkifyURL(
+              redirectSource.url(), {jslogContext: 'redirect-source-request-url'}));
         }
         this.appendSubtitle(cell, i18nString(UIStrings.redirect));
         break;
@@ -1496,7 +1502,7 @@ export class NetworkRequestNode extends NetworkNode {
           const icon = IconButton.Icon.create('arrow-up-down-circle');
           const link = Components.Linkifier.Linkifier.linkifyRevealable(
               initiator.initiatorRequest, icon, undefined, i18nString(UIStrings.selectTheRequestThatTriggered),
-              'trailing-link-icon');
+              'trailing-link-icon', 'initator-request');
           UI.ARIAUtils.setLabel(link, i18nString(UIStrings.selectTheRequestThatTriggered));
           cell.appendChild(link);
         }
@@ -1526,8 +1532,9 @@ export class NetworkRequestNode extends NetworkNode {
       cell.classList.add('network-dim-cell');
     } else if (this.requestInternal.serviceWorkerRouterInfo) {
       const {serviceWorkerRouterInfo} = this.requestInternal;
-      const ruleIdMatched = serviceWorkerRouterInfo.ruleIdMatched;
-      UI.UIUtils.createTextChild(cell, i18nString(UIStrings.serviceWorkerRouter));
+      // If `serviceWorkerRouterInfo.ruleIdMatched` is undefined,store 0 to indicate invalid ID.
+      const ruleIdMatched = serviceWorkerRouterInfo.ruleIdMatched ?? 0;
+      UI.UIUtils.createTextChild(cell, i18n.i18n.lockedString('(ServiceWorker router)'));
       let tooltipText;
       if (serviceWorkerRouterInfo.matchedSourceType === Protocol.Network.ServiceWorkerRouterSource.Network) {
         const transferSize = Platform.NumberUtilities.bytesToString(this.requestInternal.transferSize);

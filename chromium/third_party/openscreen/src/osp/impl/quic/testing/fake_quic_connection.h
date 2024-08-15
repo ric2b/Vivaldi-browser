@@ -7,6 +7,7 @@
 
 #include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "osp/impl/quic/quic_connection.h"
@@ -17,10 +18,10 @@ class FakeQuicConnectionFactoryBridge;
 
 class FakeQuicStream final : public QuicStream {
  public:
-  FakeQuicStream(Delegate* delegate, uint64_t id);
+  FakeQuicStream(Delegate& delegate, uint64_t id);
   ~FakeQuicStream() override;
 
-  void ReceiveData(const uint8_t* data, size_t size);
+  void ReceiveData(const ByteView& bytes);
   void CloseReadEnd();
 
   std::vector<uint8_t> TakeReceivedData();
@@ -32,12 +33,14 @@ class FakeQuicStream final : public QuicStream {
   bool write_end_closed() const { return write_end_closed_; }
   bool read_end_closed() const { return read_end_closed_; }
 
-  Delegate* delegate() { return delegate_; }
+  Delegate& delegate() { return delegate_; }
 
-  void Write(const uint8_t* data, size_t size) override;
+  uint64_t GetStreamId() override;
+  void Write(const ByteView& bytes) override;
   void CloseWriteEnd() override;
 
  private:
+  uint64_t stream_id_ = 0u;
   bool write_end_closed_ = false;
   bool read_end_closed_ = false;
   std::vector<uint8_t> write_buffer_;
@@ -46,32 +49,29 @@ class FakeQuicStream final : public QuicStream {
 
 class FakeQuicConnection final : public QuicConnection {
  public:
-  FakeQuicConnection(FakeQuicConnectionFactoryBridge* parent_factory,
-                     uint64_t connection_id,
-                     Delegate* delegate);
+  FakeQuicConnection(FakeQuicConnectionFactoryBridge& parent_factory,
+                     std::string connection_id,
+                     Delegate& delegate);
   ~FakeQuicConnection() override;
 
-  Delegate* delegate() { return delegate_; }
-  uint64_t id() const { return connection_id_; }
-  std::map<uint64_t, FakeQuicStream*>& streams() { return streams_; }
+  Delegate& delegate() { return delegate_; }
+  const std::string& id() const { return connection_id_; }
+  std::map<uint64_t, std::unique_ptr<FakeQuicStream>>& streams() {
+    return streams_;
+  }
 
-  std::unique_ptr<FakeQuicStream> MakeIncomingStream();
-
-  // UdpSocket::Client overrides.
-  void OnRead(UdpSocket* socket, ErrorOr<UdpPacket> data) override;
-  void OnSendError(UdpSocket* socket, Error error) override;
-  void OnError(UdpSocket* socket, Error error) override;
+  FakeQuicStream* MakeIncomingStream();
 
   // QuicConnection overrides.
-  std::unique_ptr<QuicStream> MakeOutgoingStream(
-      QuicStream::Delegate* delegate) override;
+  void OnPacketReceived(const UdpPacket& packet) override;
+  QuicStream* MakeOutgoingStream(QuicStream::Delegate* delegate) override;
   void Close() override;
 
  private:
-  FakeQuicConnectionFactoryBridge* const parent_factory_;
-  const uint64_t connection_id_;
+  FakeQuicConnectionFactoryBridge& parent_factory_;
+  const std::string connection_id_;
   uint64_t next_stream_id_ = 1;
-  std::map<uint64_t, FakeQuicStream*> streams_;
+  std::map<uint64_t, std::unique_ptr<FakeQuicStream>> streams_;
 };
 
 }  // namespace openscreen::osp

@@ -106,14 +106,16 @@ class VideoViewsTestsBase : public DawnTestWithParams<Params> {
     static constexpr dawn::utils::RGBA8 kTolerance{1, 1, 1, 0};
 
     template <typename T>
-    static std::vector<T> GetTestTextureData(bool isMultiPlane, bool isCheckerboard, bool hasAlpha);
+    static std::vector<T> GetTestTextureData(wgpu::TextureFormat format,
+                                             bool isCheckerboard,
+                                             bool hasAlpha);
     template <typename T>
-    static std::vector<T> GetTestTextureDataWithPlaneIndex(size_t planeIndex,
+    static std::vector<T> GetTestTextureDataWithPlaneIndex(wgpu::TextureFormat format,
+                                                           size_t planeIndex,
                                                            size_t bytesPerRow,
                                                            size_t height,
                                                            bool isCheckerboard,
                                                            bool hasAlpha);
-    static uint32_t NumPlanes(wgpu::TextureFormat format);
     static std::array<Format, 2> PlaneFormats(Format textureFormat);
 
   protected:
@@ -121,8 +123,13 @@ class VideoViewsTestsBase : public DawnTestWithParams<Params> {
     std::vector<wgpu::FeatureName> GetRequiredFeatures() override;
     bool IsMultiPlanarFormatsSupported() const;
     bool IsMultiPlanarFormatP010Supported() const;
+    bool IsMultiPlanarFormatP210Supported() const;
+    bool IsMultiPlanarFormatP410Supported() const;
+    bool IsMultiPlanarFormatNv16Supported() const;
+    bool IsMultiPlanarFormatNv24Supported() const;
     bool IsMultiPlanarFormatNv12aSupported() const;
-    bool IsNorm16TextureFormatsSupported() const;
+    bool IsUnorm16TextureFormatsSupported() const;
+    bool IsSnorm16TextureFormatsSupported() const;
     wgpu::ShaderModule GetTestVertexShaderModule() const;
     wgpu::TextureFormat GetFormat() const;
     wgpu::TextureFormat GetPlaneFormat(int plane) const;
@@ -131,8 +138,13 @@ class VideoViewsTestsBase : public DawnTestWithParams<Params> {
 
     bool mIsMultiPlanarFormatsSupported = false;
     bool mIsMultiPlanarFormatP010Supported = false;
+    bool mIsMultiPlanarFormatP210Supported = false;
+    bool mIsMultiPlanarFormatP410Supported = false;
+    bool mIsMultiPlanarFormatNv16Supported = false;
+    bool mIsMultiPlanarFormatNv24Supported = false;
     bool mIsMultiPlanarFormatNv12aSupported = false;
-    bool mIsNorm16TextureFormatsSupported = false;
+    bool mIsUnorm16TextureFormatsSupported = false;
+    bool mIsSnorm16TextureFormatsSupported = false;
 };
 
 }  // namespace dawn

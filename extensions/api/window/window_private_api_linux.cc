@@ -15,4 +15,6 @@ void WindowPrivateSetControlButtonsPaddingFunction::RequestChange(
     gfx::NativeWindow window,
     vivaldi::window_private::ControlButtonsPadding) {}
 
+void WindowPrivatePerformHapticFeedbackFunction::PerformHapticFeedback() {}
+
 }  // namespace extensions

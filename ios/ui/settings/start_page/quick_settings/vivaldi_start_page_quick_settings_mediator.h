@@ -5,15 +5,15 @@
 
 #import <Foundation/Foundation.h>
 
-#import "ios/ui/settings/start_page/quick_settings/vivaldi_start_page_quick_settings_consumer.h"
+#import "ios/ui/settings/start_page/vivaldi_start_page_settings_consumer.h"
 
 class PrefService;
 
-@protocol VivaldiStartPageQuickSettingsConsumer;
+@protocol VivaldiStartPageSettingsConsumer;
 
 // The Mediator for start page quick setting.
 @interface VivaldiStartPageQuickSettingsMediator:
-    NSObject<VivaldiStartPageQuickSettingsConsumer>
+    NSObject<VivaldiStartPageSettingsConsumer>
 
 - (instancetype)initWithOriginalPrefService:(PrefService*)originalPrefService
     NS_DESIGNATED_INITIALIZER;
@@ -21,7 +21,7 @@ class PrefService;
 - (instancetype)init NS_UNAVAILABLE;
 
 // The consumer of the start page settings mediator.
-@property(nonatomic, weak) id<VivaldiStartPageQuickSettingsConsumer> consumer;
+@property(nonatomic, weak) id<VivaldiStartPageSettingsConsumer> consumer;
 
 // Disconnects the start page settings observation.
 - (void)disconnect;

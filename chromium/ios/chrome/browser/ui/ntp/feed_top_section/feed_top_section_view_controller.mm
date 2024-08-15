@@ -5,8 +5,6 @@
 #import "ios/chrome/browser/ui/ntp/feed_top_section/feed_top_section_view_controller.h"
 
 #import "base/check.h"
-#import "base/feature_list.h"
-#import "components/sync/base/features.h"
 #import "ios/chrome/browser/discover_feed/model/feed_constants.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view.h"
@@ -90,7 +88,7 @@ NSArray<NSLayoutConstraint*>* SameConstraintsWithInsets(
     _contentStack.translatesAutoresizingMaskIntoConstraints = NO;
     _contentStack.axis = UILayoutConstraintAxisVertical;
     _contentStack.distribution = UIStackViewDistributionFill;
-    // TODO(crbug.com/1331010): Update background color for the view.
+    // TODO(crbug.com/40843602): Update background color for the view.
   }
   return self;
 }
@@ -227,7 +225,6 @@ NSArray<NSLayoutConstraint*>* SameConstraintsWithInsets(
 
 // TODO(b/312248486): Assign configurator and delegate here.
 - (NotificationsPromoView*)createNotificationsPromoView {
-  DCHECK(IsContentPushNotificationsPromoEnabled());
   NotificationsPromoView* promoView =
       [[NotificationsPromoView alloc] initWithFrame:CGRectZero];
   promoView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -247,9 +244,7 @@ NSArray<NSLayoutConstraint*>* SameConstraintsWithInsets(
   [configurator configureSigninPromoView:promoView withStyle:promoViewStyle];
 
   promoView.textLabel.text =
-      base::FeatureList::IsEnabled(syncer::kReplaceSyncPromosWithSignInPromos)
-          ? l10n_util::GetNSString(IDS_IOS_SIGNIN_SHEET_LABEL_FOR_FEED_PROMO)
-          : l10n_util::GetNSString(IDS_IOS_NTP_FEED_SIGNIN_COMPACT_PROMO_BODY);
+      l10n_util::GetNSString(IDS_IOS_SIGNIN_SHEET_LABEL_FOR_FEED_PROMO);
   return promoView;
 }
 

@@ -13,7 +13,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/supervised_user/core/browser/proto/kidschromemanagement_messages.pb.h"
+#include "components/supervised_user/core/browser/proto/kidsmanagement_messages.pb.h"
 #include "components/supervised_user/core/browser/proto_fetcher.h"
 
 namespace network {
@@ -31,7 +31,7 @@ namespace supervised_user {
 class ListFamilyMembersService : public KeyedService {
  public:
   using SuccessfulFetchCallback =
-      void(const kids_chrome_management::ListMembersResponse&);
+      void(const kidsmanagement::ListMembersResponse&);
 
   ListFamilyMembersService() = delete;
   ListFamilyMembersService(
@@ -51,20 +51,11 @@ class ListFamilyMembersService : public KeyedService {
   base::CallbackListSubscription SubscribeToSuccessfulFetches(
       base::RepeatingCallback<SuccessfulFetchCallback> callback);
 
-  // `callback` will receive only one next update of family members. Can be
-  // unsubscribed by destroying the `base::CallbackListSubscription` handle.
-  // After use, must be cleaned-up (see
-  // base::OnceCallbackList::null_callbacks_).
-  base::CallbackListSubscription SubscribeToNextSuccessfulFetch(
-      base::OnceCallback<SuccessfulFetchCallback> callback);
-
  private:
   void OnResponse(
       const ProtoFetcherStatus& status,
-      std::unique_ptr<kids_chrome_management::ListMembersResponse>
-          response);
-  void OnSuccess(
-      const kids_chrome_management::ListMembersResponse& response);
+      std::unique_ptr<kidsmanagement::ListMembersResponse> response);
+  void OnSuccess(const kidsmanagement::ListMembersResponse& response);
   void OnFailure(const ProtoFetcherStatus& status);
   void ScheduleNextUpdate(base::TimeDelta delay);
 
@@ -76,14 +67,8 @@ class ListFamilyMembersService : public KeyedService {
   base::RepeatingCallbackList<SuccessfulFetchCallback>
       successful_fetch_repeating_consumers_;
 
-  // One-shot consumers.
-  base::OnceCallbackList<SuccessfulFetchCallback>
-      successful_fetch_disposable_consumers_;
-
   // Attributes.
-  std::unique_ptr<
-      ProtoFetcher<kids_chrome_management::ListMembersResponse>>
-      fetcher_;
+  std::unique_ptr<ProtoFetcher<kidsmanagement::ListMembersResponse>> fetcher_;
   base::OneShotTimer timer_;
 };
 

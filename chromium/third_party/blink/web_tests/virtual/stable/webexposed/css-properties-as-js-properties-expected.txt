@@ -8,6 +8,7 @@ alignItems
 alignSelf
 alignmentBaseline
 all
+anchorName
 animation
 animationComposition
 animationDelay
@@ -230,6 +231,7 @@ initialLetter
 initialValue
 inlineSize
 inset
+insetArea
 insetBlock
 insetBlockEnd
 insetBlockStart
@@ -289,6 +291,7 @@ minHeight
 minInlineSize
 minWidth
 mixBlendMode
+navigation
 negative
 objectFit
 objectPosition
@@ -346,6 +349,11 @@ placeItems
 placeSelf
 pointerEvents
 position
+positionAnchor
+positionTry
+positionTryOptions
+positionTryOrder
+positionVisibility
 prefix
 quotes
 r
@@ -456,6 +464,7 @@ transitionDuration
 transitionProperty
 transitionTimingFunction
 translate
+types
 unicodeBidi
 unicodeRange
 userSelect
@@ -465,6 +474,7 @@ viewTimeline
 viewTimelineAxis
 viewTimelineInset
 viewTimelineName
+viewTransitionClass
 viewTransitionName
 visibility
 webkitAlignContent

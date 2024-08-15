@@ -831,8 +831,14 @@ Status DatasetBase::CheckRandomAccessCompatible(const int64 index) const {
 
 Status DatasetBase::Get(OpKernelContext* ctx, int64 index,
                         std::vector<Tensor>* out_tensors) const {
-  return errors::Unimplemented(
-      "Random access is not implemented for this dataset.");
+  return errors::Unimplemented("Random access is not implemented for dataset ",
+                               DebugString());
+}
+
+Status DatasetBase::Get(AnyContext ctx, int64 index,
+                        std::vector<Tensor>* out_tensors) const {
+  return errors::Unimplemented("Random access is not implemented for dataset ",
+                               DebugString());
 }
 
 absl::StatusOr<DatasetBase*> DatasetBase::Finalize(
@@ -914,6 +920,30 @@ Status DatasetBase::MakeSplitProviders(
         "), and no custom implementation of `MakeSplitProvider` is defined.");
   }
   return inputs[0]->MakeSplitProviders(split_providers);
+}
+
+std::optional<int64_t> DatasetBase::GetEstimatedElementSize() const {
+  const auto& shapes = output_shapes();
+  const auto& dtypes = output_dtypes();
+  if (shapes.size() != dtypes.size()) {
+    LOG(ERROR) << "This should not happen because the sizes of output_shapes() "
+                  "and output_dtypes() should always be "
+                  "the same.";
+    return std::nullopt;
+  }
+
+  size_t num_outputs = shapes.size();
+  int64_t element_size = 0;
+  for (int i = 0; i < num_outputs; ++i) {
+    const auto& partial_shape = shapes[i];
+    const auto& dtype = dtypes[i];
+    auto num_elements = partial_shape.num_elements();
+    if (num_elements == -1) {
+      return std::nullopt;
+    }
+    element_size += num_elements * DataTypeSize(dtype);
+  }
+  return element_size;
 }
 
 int64_t DatasetBase::Cardinality() const {

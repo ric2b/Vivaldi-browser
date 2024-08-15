@@ -23,6 +23,8 @@
 
 - (void)logOutButtonPressed;
 
+- (void)deleteRemoteData;
+
 @end
 
 @interface VivaldiSyncEncryptionPasswordViewController

@@ -13,7 +13,6 @@
 #include "ash/components/arc/session/arc_service_manager.h"
 #include "ash/components/arc/test/arc_util_test_support.h"
 #include "ash/components/arc/test/connection_holder_util.h"
-#include "ash/constants/app_types.h"
 #include "ash/shell.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_base.h"
@@ -62,7 +61,7 @@ class MockAutomationEventRouter
                                    std::vector<ui::AXEvent> events) override {}
 
   void DispatchAccessibilityLocationChange(
-      const content::AXLocationChangeNotificationDetails& details) override {}
+      const ui::AXLocationChanges& details) override {}
 
   void DispatchTreeDestroyedEvent(ui::AXTreeID tree_id) override {}
 

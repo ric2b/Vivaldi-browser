@@ -303,7 +303,7 @@ TEST_F(ManualTestingImportTest, LoadProfilesFromFile_InvalidInitialCreatorId) {
   EXPECT_FALSE(LoadProfilesFromFile(file_path2).has_value());
 }
 
-// TODO(1445454): Re-enable this test.
+// TODO(crbug.com/40268162): Re-enable this test.
 // Tests that the conversion fails for non-fully structured profiles.
 TEST_F(ManualTestingImportTest,
        DISABLED_LoadProfilesFromFile_Invalid_NotFullyStructured) {
@@ -323,7 +323,10 @@ class ManualTestingImportTesti18n : public ManualTestingImportTest {
  public:
   ManualTestingImportTesti18n() {
     features_.InitWithFeatures({features::kAutofillUseI18nAddressModel,
+                                features::kAutofillUseAUAddressModel,
                                 features::kAutofillUseBRAddressModel,
+                                features::kAutofillUseDEAddressModel,
+                                features::kAutofillUseINAddressModel,
                                 features::kAutofillUseMXAddressModel},
                                {});
   }

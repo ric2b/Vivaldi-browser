@@ -23,6 +23,20 @@ size_t GetLCPPFontURLPredictorMaxUrlLength() {
   return max_length;
 }
 
+bool IsTimingPredictorEnabled() {
+  if (base::FeatureList::IsEnabled(
+          blink::features::kLCPTimingPredictorPrerender2)) {
+    return true;
+  }
+  if (base::FeatureList::IsEnabled(blink::features::kLCPPDeferUnusedPreload) &&
+      features::kLcppDeferUnusedPreloadTiming.Get() ==
+          features::LcppDeferUnusedPreloadTiming::kLcpTimingPredictor) {
+    return true;
+  }
+
+  return false;
+}
+
 }  // namespace
 
 LCPCriticalPathPredictor::LCPCriticalPathPredictor(LocalFrame& frame)
@@ -78,6 +92,10 @@ void LCPCriticalPathPredictor::set_preconnected_origins(
   preconnected_origins_ = std::move(origins);
 }
 
+void LCPCriticalPathPredictor::set_unused_preloads(Vector<KURL> preloads) {
+  unused_preloads_ = std::move(preloads);
+}
+
 void LCPCriticalPathPredictor::Reset() {
   lcp_element_locators_.clear();
   lcp_element_locator_strings_.clear();
@@ -92,11 +110,21 @@ void LCPCriticalPathPredictor::Reset() {
 }
 
 void LCPCriticalPathPredictor::AddLCPPredictedCallback(LCPCallback callback) {
+  CHECK(IsTimingPredictorEnabled());
   if (are_predicted_callbacks_called_) {
     std::move(callback).Run(/*lcp_element=*/nullptr);
     return;
   }
   lcp_predicted_callbacks_.push_back(std::move(callback));
+}
+
+void LCPCriticalPathPredictor::AddLCPPredictedCallback(
+    base::OnceClosure callback) {
+  LCPCallback lcp_callback =
+      WTF::BindOnce([](base::OnceClosure callback,
+                       const Element*) { std::move(callback).Run(); },
+                    std::move(callback));
+  AddLCPPredictedCallback(std::move(lcp_callback));
 }
 
 void LCPCriticalPathPredictor::MayRunPredictedCallbacks(
@@ -124,7 +152,8 @@ void LCPCriticalPathPredictor::OnLargestContentfulPaintUpdated(
     const Element& lcp_element,
     std::optional<const KURL> maybe_image_url) {
   if (base::FeatureList::IsEnabled(features::kLCPCriticalPathPredictor) ||
-      base::FeatureList::IsEnabled(features::kLCPPLazyLoadImagePreload)) {
+      base::FeatureList::IsEnabled(features::kLCPPLazyLoadImagePreload) ||
+      IsTimingPredictorEnabled()) {
     std::string lcp_element_locator_string =
         element_locator::OfElement(lcp_element).SerializeAsString();
 
@@ -269,7 +298,7 @@ void LCPCriticalPathPredictor::OnFontFetched(const KURL& url) {
   if (url.GetString().length() > GetLCPPFontURLPredictorMaxUrlLength()) {
     return;
   }
-  GetHost().NotifyFetchedFont(url);
+  GetHost().NotifyFetchedFont(url, fetched_fonts_.Contains(url));
 }
 
 void LCPCriticalPathPredictor::OnStartPreload(const KURL& url) {
@@ -314,12 +343,31 @@ bool LCPCriticalPathPredictor::IsLcpInfluencerScript(const KURL& url) {
 }
 
 void LCPCriticalPathPredictor::OnOutermostMainFrameDocumentLoad() {
+  if (!IsTimingPredictorEnabled()) {
+    return;
+  }
   is_outermost_main_frame_document_loaded_ = true;
   // Call callbacks as fallback because we can not detect
   // which is lcp in the lcps before onload.
   if (has_lcp_occurred_ || lcp_element_locators_.empty()) {
     MayRunPredictedCallbacks(nullptr);
   }
+}
+
+void LCPCriticalPathPredictor::OnWarnedUnusedPreloads(
+    const Vector<KURL>& unused_preloads) {
+  // This should be sent in the outermost main frame. It's fine without checking
+  // |frame_->IsOutermostMainFrame()| here because the caller side
+  // LocalFrame::GetLCPP() has the outermost main frame check.
+  if (!base::FeatureList::IsEnabled(features::kLCPPDeferUnusedPreload) ||
+      has_sent_unused_preloads_) {
+    return;
+  }
+  // Limit the list of preload requests to be sent once. This function can be
+  // called after the load event, but we only take care of unused preloads
+  // dispatched before LCP.
+  has_sent_unused_preloads_ = true;
+  GetHost().SetUnusedPreloads(unused_preloads);
 }
 
 void LCPCriticalPathPredictor::Trace(Visitor* visitor) const {

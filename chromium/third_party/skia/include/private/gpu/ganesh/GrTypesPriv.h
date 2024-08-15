@@ -14,7 +14,6 @@
 #include "include/core/SkPath.h"
 #include "include/core/SkPathTypes.h"
 #include "include/core/SkRefCnt.h"
-#include "include/core/SkTextureCompressionType.h"
 #include "include/gpu/GrTypes.h"
 #include "include/private/base/SkAssert.h"
 #include "include/private/base/SkMacros.h"
@@ -644,6 +643,7 @@ static constexpr GrColorType SkColorTypeToGrColorType(SkColorType ct) {
         case kBGRA_1010102_SkColorType:       return GrColorType::kBGRA_1010102;
         case kBGR_101010x_SkColorType:        return GrColorType::kUnknown;
         case kBGR_101010x_XR_SkColorType:     return GrColorType::kUnknown;
+        case kBGRA_10101010_XR_SkColorType:   return GrColorType::kUnknown;
         case kRGBA_10x6_SkColorType:          return GrColorType::kRGBA_10x6;
         case kRGBA_F32_SkColorType:           return GrColorType::kRGBA_F32;
         case kR8G8_unorm_SkColorType:         return GrColorType::kRG_88;
@@ -932,19 +932,6 @@ static constexpr size_t GrColorTypeBytesPerPixel(GrColorType ct) {
     SkUNREACHABLE;
 }
 
-// In general we try to not mix CompressionType and ColorType, but currently SkImage still requires
-// an SkColorType even for CompressedTypes so we need some conversion.
-static constexpr SkColorType GrCompressionTypeToSkColorType(SkTextureCompressionType compression) {
-    switch (compression) {
-        case SkTextureCompressionType::kNone:            return kUnknown_SkColorType;
-        case SkTextureCompressionType::kETC2_RGB8_UNORM: return kRGB_888x_SkColorType;
-        case SkTextureCompressionType::kBC1_RGB8_UNORM:  return kRGB_888x_SkColorType;
-        case SkTextureCompressionType::kBC1_RGBA8_UNORM: return kRGBA_8888_SkColorType;
-    }
-
-    SkUNREACHABLE;
-}
-
 enum class GrDstSampleFlags {
     kNone = 0,
     kRequiresTextureBarrier =   1 << 0,
@@ -1003,16 +990,6 @@ static constexpr const char* GrColorTypeToStr(GrColorType ct) {
         case GrColorType::kGray_F16:         return "kGray_F16";
         case GrColorType::kARGB_4444:        return "kARGB_4444";
         case GrColorType::kBGRA_4444:        return "kBGRA_4444";
-    }
-    SkUNREACHABLE;
-}
-
-static constexpr const char* GrCompressionTypeToStr(SkTextureCompressionType compression) {
-    switch (compression) {
-        case SkTextureCompressionType::kNone:            return "kNone";
-        case SkTextureCompressionType::kETC2_RGB8_UNORM: return "kETC2_RGB8_UNORM";
-        case SkTextureCompressionType::kBC1_RGB8_UNORM:  return "kBC1_RGB8_UNORM";
-        case SkTextureCompressionType::kBC1_RGBA8_UNORM: return "kBC1_RGBA8_UNORM";
     }
     SkUNREACHABLE;
 }

@@ -10,49 +10,68 @@ import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
- * A stacker that tells the {@link StripLayoutHelper} how to layer the tabs for the
- * {@link StaticLayout} when the available window width is < 600dp. Tabs will be stacked side by
- * side and the entire strip will scroll. Tabs will never completely overlap each other.
+ * A stacker that tells the {@link StripLayoutHelper} how to layer the views for the {@link
+ * StaticLayout} when the available window width is < 600dp. Tabs will be stacked side by side and
+ * the entire strip will scroll. Tabs will never completely overlap each other.
  */
 public class ScrollingStripStacker extends StripStacker {
     @Override
-    public void setTabOffsets(
-            StripLayoutTab[] indexOrderedTabs,
+    public void setViewOffsets(
+            StripLayoutView[] indexOrderedViews,
             boolean tabClosing,
             boolean tabCreating,
+            boolean groupTitleSlidingAnimRunning,
+            boolean groupCollapsingOrExpanding,
             float cachedTabWidth) {
-        boolean rtl = LocalizationUtils.isLayoutRtl();
-        for (int i = 0; i < indexOrderedTabs.length; i++) {
-            StripLayoutTab tab = indexOrderedTabs[i];
-            // When a tab is closed, drawX and width update will be animated so skip this.
-            if (!tabClosing) {
-                tab.setDrawX(tab.getIdealX() + tab.getOffsetX());
-
-                // Properly animate container slide-out in RTL.
-                if (tabCreating && rtl) {
-                    tab.setDrawX(tab.getDrawX() + cachedTabWidth - tab.getWidth());
-                }
-
-                // Note(david@vivaldi.com): We handle the desired width in |StripLayoutHelper|.
-                if (!ChromeApplicationImpl.isVivaldi()) {
-                // When a tab is being created, all tabs are animating to their desired width.
-                if (!tabCreating) {
-                    tab.setWidth(cachedTabWidth);
-                }
-                } // Vivaldi
-            }
-            tab.setDrawY(tab.getOffsetY());
-        }
-    }
-
-    @Override
-    public void performOcclusionPass(
-            StripLayoutView[] indexOrderedViews, float xOffset, float visibleWidth) {
         for (int i = 0; i < indexOrderedViews.length; i++) {
             StripLayoutView view = indexOrderedViews[i];
-            view.setVisible(
-                    (view.getDrawX() + view.getWidth()) >= xOffset
-                            && view.getDrawX() <= xOffset + visibleWidth);
+            // When a tab is closed or group title sliding animation is running, drawX and width
+            // update will be animated so skip this.
+            if (!tabClosing && !groupTitleSlidingAnimRunning) {
+                view.setDrawX(view.getIdealX() + view.getOffsetX());
+
+                if (view instanceof StripLayoutTab tab) {
+                    // Properly animate container slide-out in RTL.
+                    if (tabCreating && LocalizationUtils.isLayoutRtl()) {
+                        tab.setDrawX(tab.getDrawX() + cachedTabWidth - tab.getWidth());
+                    }
+
+                    // Note(david@vivaldi.com): We handle the desired width in |StripLayoutHelper|.
+                    if (!ChromeApplicationImpl.isVivaldi()) {
+                    // When a tab is being created, a tab group is collapsing, or a tab group is
+                    // expanding, then all tabs are instead animating to their desired width.
+                    if (!tabCreating && !tab.isCollapsed() && !groupCollapsingOrExpanding) {
+                        tab.setWidth(cachedTabWidth);
+                    }
+                    } // Vivaldi
+                }
+                } // Vivaldi
+            if (view instanceof StripLayoutTab tab) {
+                tab.setDrawY(tab.getOffsetY());
+            }
+            }
         }
-    }
+
+        @Override
+        public void performOcclusionPass(
+                StripLayoutView[] indexOrderedViews, float xOffset, float visibleWidth) {
+            for (int i = 0; i < indexOrderedViews.length; i++) {
+                StripLayoutView view = indexOrderedViews[i];
+                float drawX;
+                float width;
+                if (view instanceof StripLayoutGroupTitle groupTitle) {
+                    drawX = groupTitle.getPaddedX();
+                    width = groupTitle.getBottomIndicatorWidth();
+                } else {
+                    drawX = view.getDrawX();
+                    width = view.getWidth();
+                    if (width < StripLayoutTab.MIN_WIDTH) {
+                        // Hide the tab if its width is too small to properly display its favicon.
+                        view.setVisible(false);
+                        continue;
+                    }
+                }
+                view.setVisible((drawX + width) >= xOffset && drawX <= xOffset + visibleWidth);
+            }
+        }
 }

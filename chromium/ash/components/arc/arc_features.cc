@@ -14,6 +14,20 @@ BASE_FEATURE(kArcOnDemandFeature,
              "ArcOnDemand",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Controls whether to start ARC with the GKI kernel.
+BASE_FEATURE(kArcVmGki,
+             "ArcVmGki",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Controls block IO schedulers in ARCVM.
+BASE_FEATURE(kBlockIoScheduler,
+             "ArcBlockIoScheduler",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Controls whether to enable block IO scheduler for virtio-blk /data.
+const base::FeatureParam<bool> kEnableDataBlockIoScheduler{
+    &kBlockIoScheduler, "data_block_io_scheduler", true};
+
 // Controls ACTION_BOOT_COMPLETED broadcast for third party applications on ARC.
 // When disabled, third party apps will not receive this broadcast.
 BASE_FEATURE(kBootCompletedBroadcastFeature,
@@ -68,12 +82,12 @@ BASE_FEATURE(kDocumentsProviderUnknownSizeFeature,
 // when it is mostly idle - even if Chrome is still active.
 BASE_FEATURE(kEnableArcIdleManager,
              "ArcIdleManager",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // For test purposes, ignore battery status changes, allowing Doze mode to
 // kick in even if we do not receive powerd changes related to battery.
 const base::FeatureParam<bool> kEnableArcIdleManagerIgnoreBatteryForPLT{
-    &kEnableArcIdleManager, "ignore_battery_for_test", false};
+    &kEnableArcIdleManager, "ignore_battery_for_test", true};
 
 const base::FeatureParam<int> kEnableArcIdleManagerDelayMs{
     &kEnableArcIdleManager, "delay_ms", 60 * 1000};
@@ -438,6 +452,15 @@ const base::FeatureParam<int> kVmmSwapOutTimeIntervalSecond{
 // Controls the time interval of ARC silence. The default value is 15 minutes.
 const base::FeatureParam<int> kVmmSwapArcSilenceIntervalSecond{
     &kVmmSwapPolicy, "arc_silence_interval_sec", 60 * 15};
+
+// Controls the interval for swap trimming maintenance.
+const base::FeatureParam<base::TimeDelta> kVmmSwapTrimInterval{
+    &kVmmSwapPolicy, "swap_trim_interval", base::Hours(1)};
+
+// Controls the minimum time interval between attempts to shrink ARCVM memory
+// when swap is enabled or swap trimming is performed.
+const base::FeatureParam<base::TimeDelta> kVmmSwapMinShrinkInterval{
+    &kVmmSwapPolicy, "min_shrink_interval", base::Minutes(10)};
 
 // When enabled, ARC uses XDG-based Wayland protocols.
 BASE_FEATURE(kXdgMode, "ArcXdgMode", base::FEATURE_DISABLED_BY_DEFAULT);

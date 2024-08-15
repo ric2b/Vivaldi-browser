@@ -176,7 +176,7 @@ class CORE_EXPORT ElementRareDataVector final : public NodeRareData {
   }
 
  public:
-  explicit ElementRareDataVector(NodeData*);
+  ElementRareDataVector();
   ~ElementRareDataVector() override;
 
   void SetPseudoElement(
@@ -303,9 +303,6 @@ class CORE_EXPORT ElementRareDataVector final : public NodeRareData {
   void ClearElementFlag(ElementFlags mask) {
     element_flags_ &= ~static_cast<uint16_t>(mask);
   }
-
-  bool HasRestyleFlags() const { return bit_field_.get<RestyleFlags>(); }
-  void ClearRestyleFlags() { bit_field_.set<RestyleFlags>(0); }
 
   void SetTabIndexExplicitly() {
     SetElementFlag(ElementFlags::kTabIndexWasSetExplicitly, true);

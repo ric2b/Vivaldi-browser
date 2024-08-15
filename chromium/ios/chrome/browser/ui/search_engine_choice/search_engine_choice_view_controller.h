@@ -31,15 +31,10 @@
 @property(nonatomic, weak) id<SearchEngineChoiceMutator> mutator;
 
 - (instancetype)initWithFirstRunMode:(BOOL)isForFRE
-                     wideMarginWidth:(BOOL)wideMarginWidth
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)initWithNibName:(NSString*)nibNameOrNil
                          bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
-
-// Update the primary action button based on whether the user has scrolled to
-// the bottom and whether they have selected a row.
-- (void)updatePrimaryActionButton;
 
 @end
 

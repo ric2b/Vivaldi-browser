@@ -974,12 +974,21 @@ vpx_codec_err_t vpx_codec_enc_config_set(vpx_codec_ctx_t *ctx,
  *
  * Retrieves a stream level global header packet, if supported by the codec.
  *
+ * \li VP8: Unsupported
+ * \li VP9: Returns a buffer of <tt>ID (1 byte)|Length (1 byte)|Length
+ * bytes</tt> values. The function should be called after encoding to retrieve
+ * the most accurate information.
+ *
  * \param[in]    ctx     Pointer to this instance's context
  *
  * \retval NULL
  *     Encoder does not support global header
  * \retval Non-NULL
- *     Pointer to buffer containing global header packet
+ *     Pointer to buffer containing global header packet. The buffer pointer
+ *     and its contents are only valid for the lifetime of \a ctx. The contents
+ *     may change in subsequent calls to the function.
+ * \sa
+ * https://www.webmproject.org/docs/container/#vp9-codec-feature-metadata-codecprivate
  */
 vpx_fixed_buf_t *vpx_codec_get_global_headers(vpx_codec_ctx_t *ctx);
 
@@ -1019,6 +1028,8 @@ typedef unsigned long vpx_enc_deadline_t;
  *
  * \param[in]    ctx       Pointer to this instance's context
  * \param[in]    img       Image data to encode, NULL to flush.
+ *                         Encoding sample values outside the range
+ *                         [0..(1<<img->bit_depth)-1] is undefined behavior.
  * \param[in]    pts       Presentation time stamp, in timebase units.
  * \param[in]    duration  Duration to show frame, in timebase units.
  * \param[in]    flags     Flags to use for encoding this frame.

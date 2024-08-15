@@ -80,6 +80,9 @@ class ImporterBridge : public base::RefCountedThreadSafe<ImporterBridge> {
   virtual void AddSpeedDial(
       const std::vector<ImportedSpeedDialEntry>& speeddials) {}
 
+  virtual void AddExtensions(
+      const std::vector<std::string>& extensions) {}
+
   virtual void NotifyItemFailed(importer::ImportItem item,
                                 const std::string& error) {}
 

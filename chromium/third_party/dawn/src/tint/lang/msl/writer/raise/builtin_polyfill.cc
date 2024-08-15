@@ -57,10 +57,7 @@ struct State {
     void Process() {
         // Find the builtins that need replacing.
         Vector<core::ir::CoreBuiltinCall*, 4> worklist;
-        for (auto* inst : ir.instructions.Objects()) {
-            if (!inst->Alive()) {
-                continue;
-            }
+        for (auto* inst : ir.Instructions()) {
             if (auto* builtin = inst->As<core::ir::CoreBuiltinCall>()) {
                 switch (builtin->Func()) {
                     case core::BuiltinFn::kStorageBarrier:
@@ -76,68 +73,32 @@ struct State {
 
         // Replace the builtins that we found.
         for (auto* builtin : worklist) {
-            core::ir::Value* replacement = nullptr;
             switch (builtin->Func()) {
                 case core::BuiltinFn::kStorageBarrier:
-                    replacement = StorageBarrier(builtin);
+                    ThreadgroupBarrier(builtin, BarrierType::kDevice);
                     break;
                 case core::BuiltinFn::kWorkgroupBarrier:
-                    replacement = WorkgroupBarrier(builtin);
+                    ThreadgroupBarrier(builtin, BarrierType::kThreadGroup);
                     break;
                 case core::BuiltinFn::kTextureBarrier:
-                    replacement = TextureBarrier(builtin);
+                    ThreadgroupBarrier(builtin, BarrierType::kTexture);
                     break;
                 default:
                     break;
             }
-            TINT_ASSERT_OR_RETURN(replacement);
-
-            // Replace the old builtin result with the new value.
-            if (auto name = ir.NameOf(builtin->Result(0))) {
-                ir.SetName(replacement, name);
-            }
-            builtin->Result(0)->ReplaceAllUsesWith(replacement);
-            builtin->Destroy();
         }
     }
 
-    /// Handle a `workgroupBarrier()` builtin.
+    /// Replace a barrier builtin with the `threadgroupBarrier()` intrinsic.
     /// @param builtin the builtin call instruction
-    /// @returns the replacement value
-    core::ir::Value* WorkgroupBarrier(core::ir::CoreBuiltinCall* builtin) {
+    /// @param type the barrier type
+    void ThreadgroupBarrier(core::ir::CoreBuiltinCall* builtin, BarrierType type) {
         // Replace the builtin call with a call to the msl.threadgroup_barrier intrinsic.
-        auto args = Vector<core::ir::Value*, 4>{b.Constant(u32(BarrierType::kThreadGroup))};
-
-        auto* call = b.Call<msl::ir::BuiltinCall>(
-            builtin->Result(0)->Type(), msl::BuiltinFn::kThreadgroupBarrier, std::move(args));
+        auto args = Vector<core::ir::Value*, 1>{b.Constant(u32(type))};
+        auto* call = b.CallWithResult<msl::ir::BuiltinCall>(
+            builtin->DetachResult(), msl::BuiltinFn::kThreadgroupBarrier, std::move(args));
         call->InsertBefore(builtin);
-        return call->Result(0);
-    }
-
-    /// Handle a `storageBarrier()` builtin.
-    /// @param builtin the builtin call instruction
-    /// @returns the replacement value
-    core::ir::Value* StorageBarrier(core::ir::CoreBuiltinCall* builtin) {
-        // Replace the builtin call with a call to the msl.threadgroup_barrier intrinsic.
-        auto args = Vector<core::ir::Value*, 4>{b.Constant(u32(BarrierType::kDevice))};
-
-        auto* call = b.Call<msl::ir::BuiltinCall>(
-            builtin->Result(0)->Type(), msl::BuiltinFn::kThreadgroupBarrier, std::move(args));
-        call->InsertBefore(builtin);
-        return call->Result(0);
-    }
-
-    /// Handle a `textureBarrier()` builtin.
-    /// @param builtin the builtin call instruction
-    /// @returns the replacement value
-    core::ir::Value* TextureBarrier(core::ir::CoreBuiltinCall* builtin) {
-        // Replace the builtin call with a call to the msl.threadgroup_barrier intrinsic.
-        auto args = Vector<core::ir::Value*, 4>{b.Constant(u32(BarrierType::kTexture))};
-
-        auto* call = b.Call<msl::ir::BuiltinCall>(
-            builtin->Result(0)->Type(), msl::BuiltinFn::kThreadgroupBarrier, std::move(args));
-        call->InsertBefore(builtin);
-        return call->Result(0);
+        builtin->Destroy();
     }
 };
 

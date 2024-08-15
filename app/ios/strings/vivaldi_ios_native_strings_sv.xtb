@@ -41,7 +41,6 @@
 <translation id="1689333818294560261">Smeknamn</translation>
 <translation id="1711184756728070210"><ph name="BEGIN_LINK" />Användarvillkor ➔<ph name="END_LINK" /> <ph name="BEGIN_LINK2" />Sekretesspolicy ➔<ph name="END_LINK2" /></translation>
 <translation id="1717473843091433383">Tvinga fram ett mörkt tema på alla webbplatser</translation>
-<translation id="1721552494230946796">Ny snabbvalsmapp</translation>
 <translation id="173924678149983125">Ange Webbadress för att importera blockeringsregler</translation>
 <translation id="1751280147639351837">Annons- och spårningsblockerare</translation>
 <translation id="1752547299766512813">Spara lösenord</translation>
@@ -59,7 +58,6 @@
 <translation id="2034405583989639424">Redigera snabbval</translation>
 <translation id="2048247880942380698">Arabisk (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">Ångra</translation>
-<translation id="2117093051794889870">Efter innehåll</translation>
 <translation id="2129408066358825297">Ålder</translation>
 <translation id="2148384276939959392">Synkronisera vald</translation>
 <translation id="2195713384412091023">Detta kommer att ta bort alla synkroniserade data som lagras på vår server, återställa ditt krypteringslösenord och logga ut.</translation>
@@ -81,6 +79,8 @@
 <translation id="2536780277491102902">UNDANTAG</translation>
 <translation id="2558801801411970131">Blockerar spårare</translation>
 <translation id="2562040727226360285">Ta bort irritationsmoment, kan bryta webbplatser (<ph name="ORIGIN" />)</translation>
+<translation id="2563886993995570961">Maximalt antal kolumner</translation>
+<translation id="257674075312929031">Grupp</translation>
 <translation id="2577446409661931381">Ny anteckning</translation>
 <translation id="261264557609353020">Startsida</translation>
 <translation id="2619628557366098325">Portugisisk (<ph name="ORIGIN" />)</translation>
@@ -100,10 +100,13 @@ blockerad</translation>
 <translation id="2843343418360315034">Ungersk (<ph name="ORIGIN" />)</translation>
 <translation id="2850144663494818309">Initierar Synkronisering...</translation>
 <translation id="2874111661876416905">Sök med Vivaldi</translation>
+<translation id="2884735088411646852">Sortering</translation>
 <translation id="2898963176829412617">Ny mapp…</translation>
+<translation id="2924890236896835588">Grupp namn</translation>
 <translation id="2961573414320947355">Vill du öppna alla länkar i Vivaldi? Se till att ställa in oss som standard.</translation>
 <translation id="3006429105107822794">Du behöver inte komma ihåg detta lösenord. Det kommer att sparas i Vivaldi Password Manager.</translation>
 <translation id="3018244467214569202">Grekisk (<ph name="ORIGIN" />)</translation>
+<translation id="3029426144711327484">Visa kortnummer</translation>
 <translation id="3039671569659952257">Radera Mapp</translation>
 <translation id="3073196329485613487">Logga in på ditt konto</translation>
 <translation id="307859903981308731">Genom att fortsätta godkänner du Vivaldis</translation>
@@ -112,6 +115,7 @@ blockerad</translation>
 <translation id="3091563570137981919">Spårare och annonsblockering</translation>
 <translation id="3134385238404760368">Inga senaste flikar</translation>
 <translation id="3157931365184549694">Återställ</translation>
+<translation id="3159285901314605198">Bakgrundsbild</translation>
 <translation id="3177673846235066154">Servern godkände inte dina inloggningsuppgifter.</translation>
 <translation id="3229182533910980085">Lägg till ditt första bokmärke genom att trycka på plusikonen nedan</translation>
 <translation id="3236835587712044564">Nöjd med Vivaldi? Gör den till din standard.</translation>
@@ -130,6 +134,7 @@ blockerad</translation>
 <translation id="3513566764071045027">Logga ut</translation>
 <translation id="3527085408025491307">Mapp</translation>
 <translation id="3530991200302302959">Bulgarisk (<ph name="ORIGIN" />)</translation>
+<translation id="3536029647154100190">Lägg till grupp</translation>
 <translation id="3601414719864711130">Efter datum</translation>
 <translation id="3602290021589620013">Förhandsvisning</translation>
 <translation id="3607176258839749451">Registreringen misslyckades på grund av ett fel. Vänligen försök igen senare.</translation>
@@ -139,13 +144,14 @@ blockerad</translation>
 <translation id="3699026013955941879">Koden har gått ut. Begär en ny aktiveringskod.</translation>
 <translation id="3700829948786686853">Välkommen till Vivaldi</translation>
 <translation id="3766350025418769949">Du kan använda lösenorden som du sparat i Vivaldi Password Manager i andra appar på din iPad.</translation>
+<translation id="3817539520771282781">Av typ</translation>
 <translation id="3842727926262967527">Välj var du föredrar att ha flikfältet och adressfältet.</translation>
 <translation id="3845564230651302310">Använder nya blockeringsinställningar...</translation>
 <translation id="3858860766373142691">Namn</translation>
 <translation id="3866249974567520381">Beskrivning</translation>
 <translation id="3872195896030547485">Vänligen ange en giltig e-postadress.</translation>
-<translation id="3894427358181296146">Lägg till Mapp</translation>
 <translation id="3897092660631435901">Meny</translation>
+<translation id="3920366244737784074">Lägg till <ph name="ITEM_TYPE" /></translation>
 <translation id="3921585859122905677">Adressfältets position</translation>
 <translation id="3953599441418463312">Japansk (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">Spårare blockerad</translation>
@@ -155,6 +161,7 @@ blockerad</translation>
 <translation id="4032606071208172574">(Standard)</translation>
 <translation id="4048057312173843244">Synkroniserade flikar från andra enheter visas här. Logga in på Sync för att använda den här tjänsten.</translation>
 <translation id="4073968054795398875">Synkroniseringsservern har problem. Försöker snart initiera synkroniseringen igen...</translation>
+<translation id="4084682180776658562">Bokmärke</translation>
 <translation id="4096707694175478403">Panel</translation>
 <translation id="414098425907666915">Privat sök</translation>
 <translation id="4141861385728508836">Nordisk (<ph name="ORIGIN" />)</translation>
@@ -165,6 +172,7 @@ blockerad</translation>
 <translation id="4176463684765177261">Inaktiverad</translation>
 <translation id="4209092469652827314">Stor</translation>
 <translation id="4219175188138757774">Tjeckisk och Slovakisk (<ph name="ORIGIN" />)</translation>
+<translation id="4222285809803895512">Skapat datum</translation>
 <translation id="4276839458685471670">Efter skapningsdatum</translation>
 <translation id="4277085371281330061">Spårare
 blockerad</translation>
@@ -192,6 +200,7 @@ blockerad</translation>
 <translation id="457386861538956877">Mer...</translation>
 <translation id="460370326897402035">Lösenordet är ogiltigt.</translation>
 <translation id="4619615317237390068">Flikar från andra enheter</translation>
+<translation id="462860218383788109">Redigerat datum</translation>
 <translation id="4640946580087069269">Kopiera till anteckning</translation>
 <translation id="4654578955713250802">Blockera annonser och spårare</translation>
 <translation id="4655510151391078468">Den här koden matchar inte den vi skickade till dig.
@@ -202,6 +211,7 @@ blockerad</translation>
 <translation id="4727698999970341158">Isländsk (<ph name="ORIGIN" />)</translation>
 <translation id="473775607612524610">Uppdatera</translation>
 <translation id="4739712911308055817">Inte hämtad</translation>
+<translation id="4759399863961855552">Sorteringsordning</translation>
 <translation id="4780953868408193639">Spårare
 blockerad</translation>
 <translation id="4807415245238822255">Lösenord måste matcha.</translation>
@@ -210,7 +220,6 @@ blockerad</translation>
 <translation id="4833044618885331665">Du måste uppgradera Vivaldi för att kunna använda synk.</translation>
 <translation id="484462545196658690">Auto</translation>
 <translation id="4852383705713307704">Annons blockerad</translation>
-<translation id="4871370605780490696">Lägg till Bokmärke</translation>
 <translation id="4903325570808402486">Synkronisera Vivaldi -inställningarna (alla inställningar är inte synkroniserade ännu)</translation>
 <translation id="4929196061847506605">Kraftfull. Personlig. Privat.</translation>
 <translation id="4936710149174207991">Inte synkroniserad</translation>
@@ -243,9 +252,12 @@ blockerad</translation>
 <translation id="5439835075346716808">Registrering har tillfälligt blockerats från denna IP adress. Vänligen försök igen senare.</translation>
 <translation id="5486261815000869482">Bekräfta lösenord</translation>
 <translation id="5494016731375030300">Nyligen stängda flikar</translation>
+<translation id="5564687523685713029">Visa endast grupper</translation>
+<translation id="5600792731098584229">Storlek för snabbval</translation>
 <translation id="5639137028584114536">Din organisation kräver att du surfar privat. Flikar sparas inte i privat läge.
          <ph name="BEGIN_LINK" />Läs mer<ph name="END_LINK" /></translation>
 <translation id="5684277895745049190">Lista</translation>
+<translation id="5710478562694930157">Stigande</translation>
 <translation id="574392208103952083">Medium</translation>
 <translation id="5787420647064736989">Enhetsnamn</translation>
 <translation id="5822336771053074270">Lägg till anteckning</translation>
@@ -259,13 +271,13 @@ blockerad</translation>
 <translation id="5900160494089383343">Detta användarnamn är inte tillgängligt.</translation>
 <translation id="6005497458542935062">Flytta ut ur mapp</translation>
 <translation id="6042308850641462728">Mer</translation>
-<translation id="6077943432358741146">Snabbval</translation>
+<translation id="6077943432358741146">Kortnummer</translation>
+<translation id="6079696972035130497">Obegränsat</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> objekt har flyttats</translation>
 <translation id="6147094071357011481">Nyligen stängda flikar är inte tillgängliga</translation>
 <translation id="6193995664633100765">Indisk (<ph name="ORIGIN" />)</translation>
 <translation id="6224086034182508647">Inställningar för webbplatsens utseende</translation>
 <translation id="6365929278691047681">Tysk (<ph name="ORIGIN" />)</translation>
-<translation id="6404511346730675251">Redigera bokmärke</translation>
 <translation id="6406506848690869874">Synkronisera</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> har valts</translation>
 <translation id="6468130661190228905">Tyvärr ser det ut som att du behöver vänta ett tag innan du kan gå med i vår gemenskap. Vi kräver att våra medlemmar är åtminstone 16 år för att kunna gå med.</translation>
@@ -276,7 +288,6 @@ blockerad</translation>
 <translation id="659351303388691480">Rensa surfhistorik ...</translation>
 <translation id="6602272356389933803">Utseende och tema</translation>
 <translation id="6614744450826097546">Annons detaljer</translation>
-<translation id="6627583120233659107">Redigera Mapp</translation>
 <translation id="6631760746795162665">Colombiansk (<ph name="ORIGIN" />)</translation>
 <translation id="6639866709520319699">Spårare och annonser är blockerade. Vissa webbplatser fungerar kanske inte korrekt.</translation>
 <translation id="6642196070615520677">Radera fjärrsynkroniseringsdata</translation>
@@ -306,11 +317,13 @@ blockerad</translation>
 <translation id="7029809446516969842">Lösenord</translation>
 <translation id="7041964446309059643">Manuell</translation>
 <translation id="7110758301321962823">Återställ användarnamn</translation>
+<translation id="7158507293261405349">Lägg till ny grupp</translation>
+<translation id="7192066917392691622">Nedåtgående</translation>
 <translation id="7194677467200983873">Senaste synkronisering:</translation>
+<translation id="7203411967620588391">Redigera <ph name="ITEM_TYPE" /></translation>
 <translation id="7210372243397300116">Sökmapp</translation>
 <translation id="7215420652436283416">Efter adress</translation>
 <translation id="7229439505896086266">Skapa anteckning</translation>
-<translation id="7299721129597238157">Radera Bokmärke</translation>
 <translation id="7311118006561484338">Efter titel</translation>
 <translation id="7325310788570036874">Fortsätt surfa på webben smartare, smidigare och snabbare med Vivaldi.</translation>
 <translation id="734110743815267231">Hebreisk (<ph name="ORIGIN" />)</translation>
@@ -336,17 +349,20 @@ blockerad</translation>
 <translation id="7658239707568436148">Avbryt</translation>
 <translation id="767363698559661695">Ställ in din Flik-stil</translation>
 <translation id="7702907602086592255">Domän</translation>
+<translation id="7703885416803110670">Snabbvalsgrupper är ett utmärkt sätt att organisera dina bokmärken.</translation>
 <translation id="7730831244010940855">Byt din standardbrowser till Vivaldi på din iPad?</translation>
 <translation id="7732622593814325274">Hantera spårningsblockerande källor</translation>
 <translation id="7765158879357617694">Flytta</translation>
 <translation id="7771452384635174008">Layout</translation>
 <translation id="7801204999757211519">Har du redan ett konto? <ph name="BEGIN_LINK" />Logga in ➔<ph name="END_LINK" /></translation>
+<translation id="7850070199083838600">Skapa en ny grupp?</translation>
 <translation id="7914995060146784406">Redigera anteckning</translation>
 <translation id="7925340978147141704">Visa lösenord</translation>
 <translation id="8008214489230610096">Bekräfta e-post för återställning</translation>
 <translation id="8046542428651654244">Uppdatera miniatyrbild</translation>
 <translation id="804786196054284061">Användarvillkor</translation>
 <translation id="8053851743673939284">Fransk (<ph name="ORIGIN" />)</translation>
+<translation id="8058018971942772071">Använd som grupp</translation>
 <translation id="8066170816074394954">Serverfel.</translation>
 <translation id="8076492880354921740">Flikar</translation>
 <translation id="8112996065264879835">Den här koden matchar inte den vi skickade till dig.
@@ -363,6 +379,7 @@ blockerad</translation>
 <translation id="8275038454117074363">Importera</translation>
 <translation id="8284356787013856231">Tillstånd att öppna filen nekades</translation>
 <translation id="8289933454364510719">Högst upp eller längst ner</translation>
+<translation id="8304044605002588416">Anpassa startside knappen</translation>
 <translation id="8326104954595890674">Ny privat flik</translation>
 <translation id="8329813750766387010">Uppdaterad: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Ta bort varningar om kakor (<ph name="TYPE" />)</translation>
@@ -380,6 +397,7 @@ blockerad</translation>
 <translation id="8517852590337319813">Aktivera ditt konto</translation>
 <translation id="8546963963006468833">Med Vivaldi kan du sömlöst öppna länkar, söka från widgets och autofylla lösenord i andra appar.</translation>
 <translation id="8562452229998620586">Sparade lösenord visas här.</translation>
+<translation id="8591818185775466306">Ta bort <ph name="ITEM_TYPE" /></translation>
 <translation id="8605953154325672921">Användarnamn krävs</translation>
 <translation id="8675578805254882416">Hämtar</translation>
 <translation id="8677007239430848917">Lägg till din första anteckning genom att trycka på plusikonen nedan</translation>
@@ -403,8 +421,10 @@ blockerade</translation>
 <translation id="9083392325882095631">1 föremål</translation>
 <translation id="9091665118798175641">Synkronisera formulärets autofyllningsinformation</translation>
 <translation id="9097127519290088802">Krypteringslösenord krävs</translation>
+<translation id="9195659219948942754">Fortsätt använda den synkroniserade datan i ditt Vivaldi-konto</translation>
 <translation id="9212737146310746733">Persisk (<ph name="ORIGIN" />)</translation>
 <translation id="9218693288527810093">Blockera spårare</translation>
+<translation id="924053859552461110">Anpassa startsidan</translation>
 <translation id="937440209447114831">Vi blockerar inga annonser eller spårare.</translation>
 <translation id="958688202859970851">Senast besökta flikar kommer att visas här</translation>
 <translation id="984650419570014454">Aktiveringskoden måste vara 6 siffror.</translation>

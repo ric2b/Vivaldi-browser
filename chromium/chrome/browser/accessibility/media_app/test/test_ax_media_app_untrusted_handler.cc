@@ -4,12 +4,25 @@
 
 #include "chrome/browser/accessibility/media_app/test/test_ax_media_app_untrusted_handler.h"
 
-#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-#include "third_party/re2/src/re2/re2.h"
+#include <utility>
+
+#include "content/public/browser/browser_context.h"
 #include "ui/accessibility/ax_tree.h"
+#include "ui/accessibility/ax_tree_id.h"
+#include "ui/accessibility/ax_tree_update.h"
+
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+#include "chrome/browser/screen_ai/public/test/fake_optical_character_recognizer.h"
 #endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 
 namespace ash::test {
+
+TestAXMediaAppUntrustedHandler::TestAXMediaAppUntrustedHandler(
+    content::BrowserContext& context,
+    mojo::PendingRemote<media_app_ui::mojom::OcrUntrustedPage> page)
+    : AXMediaAppUntrustedHandler(context, std::move(page)) {}
+
+TestAXMediaAppUntrustedHandler::~TestAXMediaAppUntrustedHandler() = default;
 
 std::string TestAXMediaAppUntrustedHandler::GetDocumentTreeToStringForTesting()
     const {
@@ -19,24 +32,27 @@ std::string TestAXMediaAppUntrustedHandler::GetDocumentTreeToStringForTesting()
   return document_.ax_tree()->ToString();
 }
 
+void TestAXMediaAppUntrustedHandler::
+    EnablePendingSerializedUpdatesForTesting() {
+  pending_serialized_updates_for_testing_ =
+      std::make_unique<std::vector<const ui::AXTreeUpdate>>();
+}
+
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-void TestAXMediaAppUntrustedHandler::SetScreenAIAnnotatorForTesting(
-    mojo::PendingRemote<screen_ai::mojom::ScreenAIAnnotator>
-        screen_ai_annotator) {
-  screen_ai_annotator_.reset();
-  screen_ai_annotator_.Bind(std::move(screen_ai_annotator));
+void TestAXMediaAppUntrustedHandler::
+    CreateFakeOpticalCharacterRecognizerForTesting(bool return_empty) {
+  ocr_.reset();
+  ocr_ = screen_ai::FakeOpticalCharacterRecognizer::Create(return_empty);
 }
 
 void TestAXMediaAppUntrustedHandler::FlushForTesting() {
-  screen_ai_annotator_.FlushForTesting();  // IN-TEST
+  ocr_->FlushForTesting();  // IN-TEST
 }
 #endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 
 bool TestAXMediaAppUntrustedHandler::IsOcrServiceEnabled() const {
-  if (is_ocr_service_enabled_for_testing_) {
-    return true;
-  }
-  return AXMediaAppUntrustedHandler::IsOcrServiceEnabled();
+  return is_ocr_service_enabled_for_testing_ ||
+         AXMediaAppUntrustedHandler::IsOcrServiceEnabled();
 }
 
 void TestAXMediaAppUntrustedHandler::PushDirtyPageForTesting(

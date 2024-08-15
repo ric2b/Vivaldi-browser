@@ -63,7 +63,7 @@ component("crypto") {
     "user_verifying_key.h",
   ]
 
-  deps = [ "//base/third_party/dynamic_annotations" ]
+  deps = []
 
   public_deps = [
     ":buildflags",
@@ -83,6 +83,12 @@ component("crypto") {
     if (is_mac) {
       sources += [
         "apple_keychain_mac.cc",
+        "mac_security_services_lock.cc",
+        "mac_security_services_lock.h",
+        "scoped_lacontext.h",
+        "scoped_lacontext.mm",
+        "unexportable_key_mac.h",
+        "unexportable_key_mac.mm",
         "user_verifying_key_mac.mm",
       ]
     } else if (is_ios) {
@@ -90,6 +96,7 @@ component("crypto") {
     }
 
     frameworks = [
+      "LocalAuthentication.framework",
       "CoreFoundation.framework",
       "CryptoTokenKit.framework",
       "Foundation.framework",
@@ -97,18 +104,12 @@ component("crypto") {
     ]
   }
 
-  if (is_mac) {
-    sources += [
-      "mac_security_services_lock.cc",
-      "mac_security_services_lock.h",
-      "unexportable_key_mac.mm",
-    ]
-  }
   if (is_win) {
     sources += [
       "scoped_capi_types.h",
       "scoped_cng_types.h",
       "unexportable_key_win.cc",
+      "unexportable_key_win.h",
       "user_verifying_key_win.cc",
     ]
     libs = [ "ncrypt.lib" ]
@@ -251,6 +252,7 @@ static_library("test_support") {
     frameworks = [
       "CoreFoundation.framework",
       "Foundation.framework",
+      "LocalAuthentication.framework",
       "Security.framework",
     ]
   }

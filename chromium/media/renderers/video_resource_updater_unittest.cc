@@ -29,17 +29,8 @@
 namespace media {
 namespace {
 
-bool CanUseRasterInterface() {
-#if BUILDFLAG(IS_ANDROID)
-  return base::FeatureList::IsEnabled(
-      media::kRasterInterfaceInVideoResourceUpdater);
-#else
-  return true;
-#endif
-}
-
 bool UseMultiplanarSoftwarePixelUpload() {
-  return CanUseRasterInterface() && IsWritePixelsYUVEnabled();
+  return IsWritePixelsYUVEnabled();
 }
 
 class FakeSharedBitmapReporter : public viz::SharedBitmapReporter {
@@ -327,12 +318,11 @@ class VideoResourceUpdaterTest : public testing::Test {
     const int kDimension = 10;
     gfx::Size size(kDimension, kDimension);
 
-    auto mailbox = gpu::Mailbox::GenerateForSharedImage();
-
-    gpu::MailboxHolder mailbox_holders[VideoFrame::kMaxPlanes] = {
-        gpu::MailboxHolder(mailbox, kMailboxSyncToken, target)};
-    scoped_refptr<VideoFrame> video_frame = VideoFrame::WrapNativeTextures(
-        format, mailbox_holders,
+    scoped_refptr<gpu::ClientSharedImage>
+        shared_images[VideoFrame::kMaxPlanes] = {
+            gpu::ClientSharedImage::CreateForTesting()};
+    scoped_refptr<VideoFrame> video_frame = VideoFrame::WrapSharedImages(
+        format, shared_images, kMailboxSyncToken, target,
         base::BindOnce(&VideoResourceUpdaterTest::SetReleaseSyncToken,
                        base::Unretained(this)),
         size,                // coded_size
@@ -371,15 +361,12 @@ class VideoResourceUpdaterTest : public testing::Test {
     const int kDimension = 10;
     gfx::Size size(kDimension, kDimension);
 
-    gpu::MailboxHolder mailbox_holders[VideoFrame::kMaxPlanes];
+    scoped_refptr<gpu::ClientSharedImage> shared_images[VideoFrame::kMaxPlanes];
     for (size_t i = 0; i < num_textures; ++i) {
-      gpu::Mailbox mailbox;
-      mailbox.name[0] = 50 + 1;
-      mailbox_holders[i] =
-          gpu::MailboxHolder(mailbox, kMailboxSyncToken, target);
+      shared_images[i] = gpu::ClientSharedImage::CreateForTesting();
     }
-    scoped_refptr<VideoFrame> video_frame = VideoFrame::WrapNativeTextures(
-        format, mailbox_holders,
+    scoped_refptr<VideoFrame> video_frame = VideoFrame::WrapSharedImages(
+        format, shared_images, kMailboxSyncToken, target,
         base::BindOnce(&VideoResourceUpdaterTest::SetReleaseSyncToken,
                        base::Unretained(this)),
         size,                // coded_size
@@ -481,27 +468,6 @@ TEST_F(VideoResourceUpdaterTest, SoftwareFrameRGB) {
   }
 }
 
-TEST_F(VideoResourceUpdaterTest, SoftwareFrameYCOCG) {
-  std::unique_ptr<VideoResourceUpdater> updater = CreateUpdaterForHardware();
-  scoped_refptr<VideoFrame> video_frame = CreateTestYUVVideoFrame();
-  video_frame->set_color_space(gfx::ColorSpace(
-      gfx::ColorSpace::PrimaryID::BT709, gfx::ColorSpace::TransferID::BT709,
-      gfx::ColorSpace::MatrixID::YCOCG, gfx::ColorSpace::RangeID::FULL));
-
-  // We should always get `VideoFrameResourceType::YUV` since Skia doesn't
-  // support YCoCg color spaces.
-
-  VideoFrameExternalResources resources =
-      updater->CreateExternalResourcesFromVideoFrame(video_frame);
-  EXPECT_EQ(VideoFrameResourceType::YUV, resources.type);
-
-  // Setting to kSharedImageFormat, resources type should not change.
-  video_frame->set_shared_image_format_type(
-      SharedImageFormatType::kSharedImageFormat);
-  resources = updater->CreateExternalResourcesFromVideoFrame(video_frame);
-  EXPECT_EQ(VideoFrameResourceType::YUV, resources.type);
-}
-
 // Ensure the visible data is where it's supposed to be.
 TEST_F(VideoResourceUpdaterTest, SoftwareFrameRGBNonOrigin) {
   std::unique_ptr<VideoResourceUpdater> updater = CreateUpdaterForHardware();
@@ -515,12 +481,12 @@ TEST_F(VideoResourceUpdaterTest, SoftwareFrameRGBNonOrigin) {
 
     auto rect = video_frame->visible_rect();
 
-    const auto bytes_per_row = video_frame->row_bytes(VideoFrame::kARGBPlane);
+    const auto bytes_per_row = video_frame->row_bytes(VideoFrame::Plane::kARGB);
     const auto bytes_per_element =
-        VideoFrame::BytesPerElement(fmt, VideoFrame::kARGBPlane);
+        VideoFrame::BytesPerElement(fmt, VideoFrame::Plane::kARGB);
     auto* dest_pixels = gl_->last_upload() + rect.y() * bytes_per_row +
                         rect.x() * bytes_per_element;
-    auto* src_pixels = video_frame->visible_data(VideoFrame::kARGBPlane);
+    auto* src_pixels = video_frame->visible_data(VideoFrame::Plane::kARGB);
 
     // Pixels are 0xFFFFFFFF, so channel reordering doesn't matter.
     for (int y = 0; y < rect.height(); ++y) {
@@ -547,10 +513,11 @@ TEST_F(VideoResourceUpdaterTest, SoftwareFrameY16NonOrigin) {
   // Just used for sizing information, channel order doesn't matter.
   constexpr auto kOutputFormat = PIXEL_FORMAT_ARGB;
 
-  const auto bytes_per_row = VideoFrame::RowBytes(
-      VideoFrame::kARGBPlane, kOutputFormat, video_frame->coded_size().width());
+  const auto bytes_per_row =
+      VideoFrame::RowBytes(VideoFrame::Plane::kARGB, kOutputFormat,
+                           video_frame->coded_size().width());
   const auto bytes_per_element =
-      VideoFrame::BytesPerElement(kOutputFormat, VideoFrame::kARGBPlane);
+      VideoFrame::BytesPerElement(kOutputFormat, VideoFrame::Plane::kARGB);
   auto* dest_pixels = gl_->last_upload() + rect.y() * bytes_per_row +
                       rect.x() * bytes_per_element;
 
@@ -981,7 +948,7 @@ TEST_F(VideoResourceUpdaterTest,
   EXPECT_EQ(VideoFrameResourceType::STREAM_TEXTURE, resources.type);
   EXPECT_EQ(1u, resources.resources.size());
   EXPECT_EQ((GLenum)GL_TEXTURE_EXTERNAL_OES,
-            resources.resources[0].mailbox_holder.texture_target);
+            resources.resources[0].texture_target());
   EXPECT_EQ(1u, resources.release_callbacks.size());
   EXPECT_EQ(0u, GetSharedImageCount());
 
@@ -991,8 +958,7 @@ TEST_F(VideoResourceUpdaterTest,
   resources = updater->CreateExternalResourcesFromVideoFrame(video_frame);
   EXPECT_EQ(VideoFrameResourceType::RGBA_PREMULTIPLIED, resources.type);
   EXPECT_EQ(1u, resources.resources.size());
-  EXPECT_EQ((GLenum)GL_TEXTURE_2D,
-            resources.resources[0].mailbox_holder.texture_target);
+  EXPECT_EQ((GLenum)GL_TEXTURE_2D, resources.resources[0].texture_target());
   EXPECT_EQ(1u, resources.release_callbacks.size());
   EXPECT_EQ(1u, GetSharedImageCount());
 }
@@ -1008,7 +974,7 @@ TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes_TextureQuad) {
   EXPECT_EQ(VideoFrameResourceType::RGBA_PREMULTIPLIED, resources.type);
   EXPECT_EQ(1u, resources.resources.size());
   EXPECT_EQ((GLenum)GL_TEXTURE_EXTERNAL_OES,
-            resources.resources[0].mailbox_holder.texture_target);
+            resources.resources[0].texture_target());
   EXPECT_EQ(1u, resources.release_callbacks.size());
   EXPECT_EQ(0u, GetSharedImageCount());
 }
@@ -1026,7 +992,7 @@ TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes_DCompSurface) {
   EXPECT_EQ(VideoFrameResourceType::STREAM_TEXTURE, resources.type);
   EXPECT_EQ(1u, resources.resources.size());
   EXPECT_EQ((GLenum)GL_TEXTURE_EXTERNAL_OES,
-            resources.resources[0].mailbox_holder.texture_target);
+            resources.resources[0].texture_target());
   EXPECT_EQ(1u, resources.release_callbacks.size());
   EXPECT_EQ(0u, GetSharedImageCount());
 
@@ -1123,9 +1089,8 @@ TEST_F(VideoResourceUpdaterTest, PassMailboxSyncToken) {
       updater->CreateExternalResourcesFromVideoFrame(video_frame);
 
   ASSERT_EQ(resources.resources.size(), 1u);
-  EXPECT_TRUE(resources.resources[0].mailbox_holder.sync_token.HasData());
-  EXPECT_EQ(resources.resources[0].mailbox_holder.sync_token,
-            kMailboxSyncToken);
+  EXPECT_TRUE(resources.resources[0].sync_token().HasData());
+  EXPECT_EQ(resources.resources[0].sync_token(), kMailboxSyncToken);
 }
 
 // Generate new sync token for compositor when copying the texture.
@@ -1139,9 +1104,8 @@ TEST_F(VideoResourceUpdaterTest, GenerateSyncTokenOnTextureCopy) {
       updater->CreateExternalResourcesFromVideoFrame(video_frame);
 
   ASSERT_EQ(resources.resources.size(), 1u);
-  EXPECT_TRUE(resources.resources[0].mailbox_holder.sync_token.HasData());
-  EXPECT_NE(resources.resources[0].mailbox_holder.sync_token,
-            kMailboxSyncToken);
+  EXPECT_TRUE(resources.resources[0].sync_token().HasData());
+  EXPECT_NE(resources.resources[0].sync_token(), kMailboxSyncToken);
 }
 
 // NV12 VideoFrames backed by a single native texture can be sampled out
@@ -1152,14 +1116,20 @@ TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes_SingleNV12) {
   EXPECT_EQ(0u, GetSharedImageCount());
   scoped_refptr<VideoFrame> video_frame =
       CreateTestHardwareVideoFrame(PIXEL_FORMAT_NV12, GL_TEXTURE_EXTERNAL_OES);
-
+#if BUILDFLAG(IS_OZONE)
+  video_frame->set_shared_image_format_type(
+      SharedImageFormatType::kSharedImageFormatExternalSampler);
+#else
+  video_frame->set_shared_image_format_type(
+      SharedImageFormatType::kSharedImageFormat);
+#endif
   VideoFrameExternalResources resources =
       updater->CreateExternalResourcesFromVideoFrame(video_frame);
   EXPECT_EQ(VideoFrameResourceType::RGB, resources.type);
   EXPECT_EQ(1u, resources.resources.size());
   EXPECT_EQ((GLenum)GL_TEXTURE_EXTERNAL_OES,
-            resources.resources[0].mailbox_holder.texture_target);
-  EXPECT_EQ(viz::LegacyMultiPlaneFormat::kNV12, resources.resources[0].format);
+            resources.resources[0].texture_target());
+  EXPECT_EQ(viz::MultiPlaneFormat::kNV12, resources.resources[0].format);
   EXPECT_EQ(0u, GetSharedImageCount());
 }
 
@@ -1176,9 +1146,9 @@ TEST_F(VideoResourceUpdaterTest,
   EXPECT_EQ(2u, resources.resources.size());
   EXPECT_EQ(2u, resources.release_callbacks.size());
   EXPECT_EQ((GLenum)GL_TEXTURE_EXTERNAL_OES,
-            resources.resources[0].mailbox_holder.texture_target);
+            resources.resources[0].texture_target());
   EXPECT_EQ((GLenum)GL_TEXTURE_EXTERNAL_OES,
-            resources.resources[1].mailbox_holder.texture_target);
+            resources.resources[1].texture_target());
   // |updater| doesn't set |buffer_format| in this case.
   EXPECT_EQ(viz::SinglePlaneFormat::kR_8, resources.resources[0].format);
   EXPECT_EQ(viz::SinglePlaneFormat::kRG_88, resources.resources[1].format);
@@ -1189,9 +1159,9 @@ TEST_F(VideoResourceUpdaterTest,
   EXPECT_EQ(VideoFrameResourceType::YUV, resources.type);
   EXPECT_EQ(2u, resources.resources.size());
   EXPECT_EQ((GLenum)GL_TEXTURE_RECTANGLE_ARB,
-            resources.resources[0].mailbox_holder.texture_target);
+            resources.resources[0].texture_target());
   EXPECT_EQ((GLenum)GL_TEXTURE_RECTANGLE_ARB,
-            resources.resources[1].mailbox_holder.texture_target);
+            resources.resources[1].texture_target());
   EXPECT_EQ(viz::SinglePlaneFormat::kR_8, resources.resources[0].format);
   EXPECT_EQ(viz::SinglePlaneFormat::kRG_88, resources.resources[1].format);
   EXPECT_EQ(0u, GetSharedImageCount());
@@ -1211,7 +1181,7 @@ TEST_F(VideoResourceUpdaterTest,
   EXPECT_EQ(VideoFrameResourceType::RGB, resources.type);
   EXPECT_EQ(1u, resources.resources.size());
   EXPECT_EQ((GLenum)GL_TEXTURE_RECTANGLE_ARB,
-            resources.resources[0].mailbox_holder.texture_target);
+            resources.resources[0].texture_target());
   EXPECT_EQ(viz::MultiPlaneFormat::kNV12, resources.resources[0].format);
   EXPECT_EQ(0u, GetSharedImageCount());
 
@@ -1225,7 +1195,7 @@ TEST_F(VideoResourceUpdaterTest,
   EXPECT_EQ(1u, resources.resources.size());
   EXPECT_EQ(1u, resources.release_callbacks.size());
   EXPECT_EQ((GLenum)GL_TEXTURE_EXTERNAL_OES,
-            resources.resources[0].mailbox_holder.texture_target);
+            resources.resources[0].texture_target());
   // |updater| doesn't set |buffer_format| in this case.
   EXPECT_EQ(viz::MultiPlaneFormat::kNV12, resources.resources[0].format);
   EXPECT_EQ(0u, GetSharedImageCount());
@@ -1242,6 +1212,13 @@ TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes_SingleP016HDR) {
   EXPECT_EQ(0u, GetSharedImageCount());
   scoped_refptr<VideoFrame> video_frame = CreateTestHardwareVideoFrame(
       PIXEL_FORMAT_P016LE, GL_TEXTURE_EXTERNAL_OES);
+#if BUILDFLAG(IS_OZONE)
+  video_frame->set_shared_image_format_type(
+      SharedImageFormatType::kSharedImageFormatExternalSampler);
+#else
+  video_frame->set_shared_image_format_type(
+      SharedImageFormatType::kSharedImageFormat);
+#endif
   video_frame->set_color_space(kHDR10ColorSpace);
   video_frame->set_hdr_metadata(hdr_metadata);
 
@@ -1250,8 +1227,8 @@ TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes_SingleP016HDR) {
   EXPECT_EQ(VideoFrameResourceType::RGB, resources.type);
   EXPECT_EQ(1u, resources.resources.size());
   EXPECT_EQ(static_cast<GLenum>(GL_TEXTURE_EXTERNAL_OES),
-            resources.resources[0].mailbox_holder.texture_target);
-  EXPECT_EQ(viz::LegacyMultiPlaneFormat::kP010, resources.resources[0].format);
+            resources.resources[0].texture_target());
+  EXPECT_EQ(viz::MultiPlaneFormat::kP010, resources.resources[0].format);
   EXPECT_EQ(kHDR10ColorSpace, resources.resources[0].color_space);
   EXPECT_EQ(hdr_metadata, resources.resources[0].hdr_metadata);
   EXPECT_EQ(0u, GetSharedImageCount());

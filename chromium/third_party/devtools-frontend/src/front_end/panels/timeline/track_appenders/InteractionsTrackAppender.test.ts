@@ -2,24 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type * as TimelineModel from '../../../models/timeline_model/timeline_model.js';
 import * as TraceEngine from '../../../models/trace/trace.js';
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
 import * as PerfUI from '../../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as Timeline from '../timeline.js';
 
-const {assert} = chai;
-
 function initTrackAppender(
     flameChartData: PerfUI.FlameChart.FlameChartTimelineData,
     traceParsedData: TraceEngine.Handlers.Types.TraceParseData,
     entryData: Timeline.TimelineFlameChartDataProvider.TimelineFlameChartEntry[],
     entryTypeByLevel: Timeline.TimelineFlameChartDataProvider.EntryType[],
-    timelineModel: TimelineModel.TimelineModel.TimelineModelImpl):
-    Timeline.InteractionsTrackAppender.InteractionsTrackAppender {
+    ): Timeline.InteractionsTrackAppender.InteractionsTrackAppender {
   const compatibilityTracksAppender = new Timeline.CompatibilityTracksAppender.CompatibilityTracksAppender(
-      flameChartData, traceParsedData, entryData, entryTypeByLevel, timelineModel);
+      flameChartData, traceParsedData, entryData, entryTypeByLevel);
   return compatibilityTracksAppender.interactionsTrackAppender();
 }
 
@@ -34,14 +30,13 @@ describeWithEnvironment('InteractionsTrackAppender', function() {
     const entryTypeByLevel: Timeline.TimelineFlameChartDataProvider.EntryType[] = [];
     const entryData: Timeline.TimelineFlameChartDataProvider.TimelineFlameChartEntry[] = [];
     const flameChartData = PerfUI.FlameChart.FlameChartTimelineData.createEmpty();
-    const allModels = await TraceLoader.allModels(context, trace);
-    const interactionsTrackAppender = initTrackAppender(
-        flameChartData, allModels.traceParsedData, entryData, entryTypeByLevel, allModels.timelineModel);
+    const traceParsedData = await TraceLoader.traceEngine(context, trace);
+    const interactionsTrackAppender = initTrackAppender(flameChartData, traceParsedData, entryData, entryTypeByLevel);
     interactionsTrackAppender.appendTrackAtLevel(0);
 
     return {
       entryTypeByLevel,
-      traceParsedData: allModels.traceParsedData,
+      traceParsedData,
       flameChartData,
       interactionsTrackAppender,
       entryData,
@@ -81,7 +76,7 @@ describeWithEnvironment('InteractionsTrackAppender', function() {
       const events = traceParsedData.UserInteractions.interactionEventsWithNoNesting;
       for (const event of events) {
         const markerIndex = entryData.indexOf(event);
-        assert.isDefined(markerIndex);
+        assert.exists(markerIndex);
         assert.strictEqual(
             flameChartData.entryStartTimes[markerIndex],
             TraceEngine.Helpers.Timing.microSecondsToMilliseconds(event.ts));
@@ -94,7 +89,7 @@ describeWithEnvironment('InteractionsTrackAppender', function() {
       const events = traceParsedData.UserInteractions.interactionEventsWithNoNesting;
       for (const event of events) {
         const markerIndex = entryData.indexOf(event);
-        assert.isDefined(markerIndex);
+        assert.exists(markerIndex);
         const expectedTotalTimeForEvent = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(
             (event.dur || 0) as TraceEngine.Types.Timing.MicroSeconds);
         assert.strictEqual(flameChartData.entryTotalTimes[markerIndex], expectedTotalTimeForEvent);

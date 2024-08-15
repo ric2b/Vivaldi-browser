@@ -180,15 +180,15 @@ Validator::Validator(
 Validator::~Validator() = default;
 
 diag::Diagnostic& Validator::AddError(const Source& source) const {
-    return diagnostics_.AddError(diag::System::Resolver, source);
+    return diagnostics_.AddError(source);
 }
 
 diag::Diagnostic& Validator::AddWarning(const Source& source) const {
-    return diagnostics_.AddWarning(diag::System::Resolver, source);
+    return diagnostics_.AddWarning(source);
 }
 
 diag::Diagnostic& Validator::AddNote(const Source& source) const {
-    return diagnostics_.AddNote(diag::System::Resolver, source);
+    return diagnostics_.AddNote(source);
 }
 
 diag::Diagnostic* Validator::MaybeAddDiagnostic(wgsl::DiagnosticRule rule,
@@ -197,7 +197,6 @@ diag::Diagnostic* Validator::MaybeAddDiagnostic(wgsl::DiagnosticRule rule,
     if (severity != wgsl::DiagnosticSeverity::kOff) {
         diag::Diagnostic d{};
         d.severity = ToSeverity(severity);
-        d.system = diag::System::Resolver;
         d.source = source;
         return &diagnostics_.Add(std::move(d));
     }
@@ -337,6 +336,16 @@ bool Validator::Pointer(const ast::TemplatedIdentifier* a, const core::type::Poi
     if (s->AddressSpace() == core::AddressSpace::kUndefined) {
         AddError(a->source) << "ptr missing address space";
         return false;
+    }
+
+    if (s->AddressSpace() != core::AddressSpace::kHandle) {
+        if (s->StoreType()->Is<core::type::Texture>()) {
+            AddError(a->source) << "pointer can not be formed to a texture";
+            return false;
+        } else if (s->StoreType()->Is<core::type::Sampler>()) {
+            AddError(a->source) << "pointer can not be formed to a sampler";
+            return false;
+        }
     }
 
     if (a->arguments.Length() > 2) {  // ptr<address-space, type [, access]>
@@ -509,13 +518,14 @@ bool Validator::AddressSpaceLayout(const core::type::Type* store_ty,
     }
 
     if (auto* str = store_ty->As<sem::Struct>()) {
+        auto& str_source = str->Declaration()->name->source;
         for (size_t i = 0; i < str->Members().Length(); ++i) {
             auto* const m = str->Members()[i];
             uint32_t required_align = required_alignment_of(m->Type());
 
             // Recurse into the member type.
             if (!AddressSpaceLayout(m->Type(), address_space, m->Declaration()->type->source)) {
-                AddNote(str->Declaration()->source) << "see layout of struct:\n" << str->Layout();
+                AddNote(str_source) << "see layout of struct:\n" << str->Layout();
                 note_usage();
                 return false;
             }
@@ -533,11 +543,12 @@ bool Validator::AddressSpaceLayout(const core::type::Type* store_ty,
                     << style::Attribute("@align") << style::Code("(", required_align, ")")
                     << " on this member";
 
-                AddNote(str->Declaration()->source) << "see layout of struct:\n" << str->Layout();
+                AddNote(str_source) << "see layout of struct:\n" << str->Layout();
 
                 if (auto* member_str = m->Type()->As<sem::Struct>()) {
-                    AddNote(member_str->Declaration()->source) << "and layout of struct member:\n"
-                                                               << member_str->Layout();
+                    AddNote(member_str->Declaration()->name->source)
+                        << "and layout of struct member:\n"
+                        << member_str->Layout();
                 }
 
                 note_usage();
@@ -562,11 +573,10 @@ bool Validator::AddressSpaceLayout(const core::type::Type* store_ty,
                         << style::Variable(member_name_of(m)) << ". Consider setting "
                         << style::Attribute("@align") << style::Code("(16)") << " on this member";
 
-                    AddNote(str->Declaration()->source) << "see layout of struct:\n"
-                                                        << str->Layout();
+                    AddNote(str_source) << "see layout of struct:\n" << str->Layout();
 
                     auto* prev_member_str = prev_member->Type()->As<sem::Struct>();
-                    AddNote(prev_member_str->Declaration()->source)
+                    AddNote(prev_member_str->Declaration()->name->source)
                         << "and layout of previous member struct:\n"
                         << prev_member_str->Layout();
                     note_usage();
@@ -1086,8 +1096,8 @@ bool Validator::Function(const sem::Function* func, ast::PipelineStage stage) co
     }
 
     if (decl->params.Length() > kMaxFunctionParameters) {
-        AddError(decl->source) << "function declares " << decl->params.Length()
-                               << " parameters, maximum is " << kMaxFunctionParameters;
+        AddError(decl->name->source) << "function declares " << decl->params.Length()
+                                     << " parameters, maximum is " << kMaxFunctionParameters;
         return false;
     }
 
@@ -1104,7 +1114,9 @@ bool Validator::Function(const sem::Function* func, ast::PipelineStage stage) co
                 behaviors = sem_.Get(last)->Behaviors();
             }
             if (behaviors.Contains(sem::Behavior::kNext)) {
-                AddError(decl->source) << "missing return at end of function";
+                auto end_source = decl->body->source.End();
+                end_source.range.begin.column--;
+                AddError(end_source) << "missing return at end of function";
                 return false;
             }
         } else if (TINT_UNLIKELY(IsValidationEnabled(
@@ -1210,7 +1222,6 @@ bool Validator::EntryPoint(const sem::Function* func, ast::PipelineStage stage) 
 
                     if (TINT_UNLIKELY(!location.has_value())) {
                         TINT_ICE() << "@location has no value";
-                        return false;
                     }
 
                     return LocationAttribute(loc_attr, ty, stage, source);
@@ -1220,7 +1231,6 @@ bool Validator::EntryPoint(const sem::Function* func, ast::PipelineStage stage) 
 
                     if (TINT_UNLIKELY(!blend_src.has_value())) {
                         TINT_ICE() << "@blend_src has no value";
-                        return false;
                     }
 
                     return BlendSrcAttribute(blend_src_attr, stage);
@@ -1240,7 +1250,6 @@ bool Validator::EntryPoint(const sem::Function* func, ast::PipelineStage stage) 
 
                     if (TINT_UNLIKELY(!color.has_value())) {
                         TINT_ICE() << "@color has no value";
-                        return false;
                     }
 
                     return ColorAttribute(col_attr, ty, stage, source, is_input);
@@ -2029,7 +2038,6 @@ bool Validator::ArrayConstructor(const ast::CallExpression* ctor,
 
     if (TINT_UNLIKELY(!c->Is<core::type::ConstantArrayCount>())) {
         TINT_ICE() << "Invalid ArrayCount found";
-        return false;
     }
 
     const auto count = c->As<core::type::ConstantArrayCount>()->value;
@@ -2220,7 +2228,7 @@ bool Validator::Alias(const ast::Alias*) const {
 
 bool Validator::Structure(const sem::Struct* str, ast::PipelineStage stage) const {
     if (str->Members().IsEmpty()) {
-        AddError(str->Declaration()->source) << "structures must have at least one member";
+        AddError(str->Declaration()->name->source) << "structures must have at least one member";
         return false;
     }
 
@@ -2542,7 +2550,6 @@ bool Validator::Assignment(const ast::Statement* a, const core::type::Type* rhs_
         rhs = compound->rhs;
     } else {
         TINT_ICE() << "invalid assignment statement";
-        return false;
     }
 
     if (lhs->Is<ast::PhonyExpression>()) {

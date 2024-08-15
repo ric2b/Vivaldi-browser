@@ -4,11 +4,12 @@
 
 #include "media/gpu/windows/media_foundation_video_encode_accelerator_win.h"
 
+#include <objbase.h>
+
 #include <codecapi.h>
 #include <d3d11_1.h>
 #include <mferror.h>
 #include <mftransform.h>
-#include <objbase.h>
 
 #include <algorithm>
 #include <iterator>
@@ -306,8 +307,11 @@ uint32_t EnumerateHardwareEncoders(VideoCodec codec, IMFActivate*** activates) {
 #if defined(ARCH_CPU_ARM64)
   // TODO (crbug.com/1509117): Temporarily disable video encoding on arm64
   // until we figure out what OS reports all codecs as supported.
-  return 0;
-#else
+  if (!base::FeatureList::IsEnabled(
+          kMediaFoundationAcceleratedEncodeOnArm64)) {
+    return 0;
+  }
+#endif
   uint32_t flags = MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER;
   MFT_REGISTER_TYPE_INFO input_info;
   input_info.guidMajorType = MFMediaType_Video;
@@ -336,7 +340,6 @@ uint32_t EnumerateHardwareEncoders(VideoCodec codec, IMFActivate*** activates) {
   }
 
   return count - excluded_encoders;
-#endif
 }
 
 bool IsCodecSupportedForEncoding(VideoCodec codec, int* num_temporal_layers) {
@@ -602,6 +605,7 @@ bool MediaFoundationVideoEncodeAccelerator::Initialize(
 #endif
   }
   profile_ = config.output_profile;
+  content_type_ = config.content_type;
 
   if (codec_ == VideoCodec::kUnknown) {
     MEDIA_LOG(ERROR, media_log_)
@@ -812,6 +816,7 @@ void MediaFoundationVideoEncodeAccelerator::Encode(
 void MediaFoundationVideoEncodeAccelerator::Encode(
     scoped_refptr<VideoFrame> frame,
     const EncodeOptions& options) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (codec_ == VideoCodec::kVP9 &&
       workarounds_.avoid_consecutive_keyframes_for_vp9 &&
       last_frame_was_keyframe_request_ && options.key_frame) {
@@ -831,7 +836,8 @@ void MediaFoundationVideoEncodeAccelerator::Encode(
     // state and produce a keyframe, to work around this issue, MFVEA will add
     // input and internally discard output until driver transition to T0 layer.
     uint32_t distance_to_base_layer = GetDistanceToNextTemporalBaseLayer(
-        input_since_keyframe_count_, num_temporal_layers_);
+        input_since_keyframe_count_ + pending_input_queue_.size(),
+        num_temporal_layers_);
     for (uint32_t i = 0; i < distance_to_base_layer; ++i) {
       EncodeOptions discard_options(/*force_keyframe=*/false);
       EncodeInternal(frame, discard_options, /*discard_output=*/true);
@@ -980,9 +986,9 @@ void MediaFoundationVideoEncodeAccelerator::RequestEncodingParametersChange(
   frame_rate_ = framerate;
   // For SW BRC we don't reconfigure the encoder.
   if (rate_ctrl_) {
-    rate_ctrl_->UpdateRateControl(
-        CreateRateControllerConfig(bitrate_allocation_, input_visible_size_,
-                                   frame_rate_, num_temporal_layers_, codec_));
+    rate_ctrl_->UpdateRateControl(CreateRateControllerConfig(
+        bitrate_allocation_, size.value_or(input_visible_size_), frame_rate_,
+        num_temporal_layers_, codec_));
   } else {
     VARIANT var;
     var.vt = VT_UI4;
@@ -1140,6 +1146,9 @@ void MediaFoundationVideoEncodeAccelerator::UpdateFrameSize(
   input_sample_->RemoveAllBuffers();
   bitstream_buffer_size_ = input_visible_size_.GetArea();
   bitstream_buffer_queue_.clear();
+  // Reset the input frame counter since MFT was notified to end the streaming
+  // and restart with new frame size.
+  input_since_keyframe_count_ = 0;
   client_->RequireBitstreamBuffers(kNumInputBuffers, input_visible_size_,
                                    bitstream_buffer_size_);
 }
@@ -1460,6 +1469,22 @@ bool MediaFoundationVideoEncodeAccelerator::SetEncoderModes() {
     RETURN_ON_HR_FAILURE(hr, "Couldn't set low latency mode", false);
   }
 
+  // For AV1 screen content encoding, configure scenario to enable AV1
+  // SCC tools(palette mode, intra block copy, etc.) This will also turn
+  // off CDEF on I-frame, and enable long term reference for screen contents.
+  // For other codecs this may impact some encoding parameters as well.
+  // TODO(crbugs.com/336592435): Set scenario info if we confirm it
+  // works on other vendors, and possibly set eAVScenarioInfo_VideoConference
+  // for camera streams if all drivers support it.
+  if (S_OK == codec_api_->IsModifiable(&CODECAPI_AVScenarioInfo) &&
+      vendor_ == DriverVendor::kIntel &&
+      content_type_ == Config::ContentType::kDisplay) {
+    var.vt = VT_UI4;
+    var.ulVal = eAVScenarioInfo_DisplayRemoting;
+    hr = codec_api_->SetValue(&CODECAPI_AVScenarioInfo, &var);
+    RETURN_ON_HR_FAILURE(hr, "Couldn't set scenario info", false);
+  }
+
   return true;
 }
 
@@ -1496,6 +1521,7 @@ void MediaFoundationVideoEncodeAccelerator::FeedInputs() {
     return;
   }
   pending_input_queue_.pop_front();
+  input_since_keyframe_count_++;
 }
 
 HRESULT MediaFoundationVideoEncodeAccelerator::ProcessInput(
@@ -1578,7 +1604,6 @@ HRESULT MediaFoundationVideoEncodeAccelerator::ProcessInput(
                           .qp = metadata_qp,
                           .frame_id = input_since_keyframe_count_});
 
-    input_since_keyframe_count_++;
     has_prepared_input_sample_ = true;
   }
 
@@ -1637,20 +1662,12 @@ HRESULT MediaFoundationVideoEncodeAccelerator::PopulateInputSampleBuffer(
 
   if (frame->storage_type() ==
       VideoFrame::StorageType::STORAGE_GPU_MEMORY_BUFFER) {
-    gfx::GpuMemoryBuffer* gmb = frame->GetGpuMemoryBuffer();
-    if (!gmb) {
+    if (!frame->HasGpuMemoryBuffer()) {
       LOG(ERROR) << "Failed to get GMB for input frame";
       return MF_E_INVALID_STREAM_DATA;
     }
 
-    if (gmb->GetType() != gfx::GpuMemoryBufferType::DXGI_SHARED_HANDLE &&
-        gmb->GetType() != gfx::GpuMemoryBufferType::SHARED_MEMORY_BUFFER) {
-      LOG(ERROR) << "Unsupported GMB type";
-      return MF_E_INVALID_STREAM_DATA;
-    }
-
-    if (gmb->GetType() == gfx::GpuMemoryBufferType::DXGI_SHARED_HANDLE &&
-        dxgi_device_manager_ != nullptr) {
+    if (frame->HasNativeGpuMemoryBuffer() && dxgi_device_manager_ != nullptr) {
       if (!dxgi_resource_mapping_required_) {
         return PopulateInputSampleBufferGpu(std::move(frame));
       } else {
@@ -1684,6 +1701,12 @@ HRESULT MediaFoundationVideoEncodeAccelerator::PopulateInputSampleBuffer(
                                            : input_stream_info.cbAlignment - 1,
         &input_buffer);
     RETURN_ON_HR_FAILURE(hr, "Failed to create memory buffer", hr);
+    hr = input_buffer->SetCurrentLength(
+        input_stream_info.cbSize
+            ? input_stream_info.cbSize
+            : VideoFrame::AllocationSize(kTargetPixelFormat,
+                                         input_visible_size_));
+    RETURN_ON_HR_FAILURE(hr, "Failed to set length on buffer", hr);
     hr = input_sample_->AddBuffer(input_buffer.Get());
     RETURN_ON_HR_FAILURE(hr, "Failed to add buffer to sample", hr);
   }
@@ -1694,15 +1717,15 @@ HRESULT MediaFoundationVideoEncodeAccelerator::PopulateInputSampleBuffer(
   DCHECK(scoped_buffer.get());
   uint8_t* dst_y = scoped_buffer.get();
   size_t dst_y_stride = VideoFrame::RowBytes(
-      VideoFrame::kYPlane, kTargetPixelFormat, input_visible_size_.width());
+      VideoFrame::Plane::kY, kTargetPixelFormat, input_visible_size_.width());
   uint8_t* dst_uv =
       scoped_buffer.get() +
-      dst_y_stride * VideoFrame::Rows(VideoFrame::kYPlane, kTargetPixelFormat,
+      dst_y_stride * VideoFrame::Rows(VideoFrame::Plane::kY, kTargetPixelFormat,
                                       input_visible_size_.height());
   size_t dst_uv_stride = VideoFrame::RowBytes(
-      VideoFrame::kUVPlane, kTargetPixelFormat, input_visible_size_.width());
+      VideoFrame::Plane::kUV, kTargetPixelFormat, input_visible_size_.width());
   uint8_t* end =
-      dst_uv + dst_uv_stride * VideoFrame::Rows(VideoFrame::kUVPlane,
+      dst_uv + dst_uv_stride * VideoFrame::Rows(VideoFrame::Plane::kUV,
                                                 kTargetPixelFormat,
                                                 input_visible_size_.height());
   DCHECK_GE(static_cast<ptrdiff_t>(scoped_buffer.max_length()),
@@ -2014,7 +2037,7 @@ void MediaFoundationVideoEncodeAccelerator::ProcessOutput() {
     } else if (codec_ == VideoCodec::kVP9) {
       Vp9Metadata& vp9 = md.vp9.emplace();
       if (keyframe) {
-        // |spatial_layer_resolutions| has to be filled iif keyframe is
+        // |spatial_layer_resolutions| has to be filled if keyframe is
         // requested.
         vp9.spatial_layer_resolutions.emplace_back(input_visible_size_);
         vp9.begin_active_spatial_layer_index = 0;

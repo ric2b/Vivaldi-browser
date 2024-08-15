@@ -21,6 +21,7 @@
 #include "ui/aura/window_observer.h"
 #include "ui/display/display_observer.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/wm/public/activation_change_observer.h"
 
 class PrefRegistrySimple;
 
@@ -40,7 +41,8 @@ class ASH_EXPORT GameDashboardController : public aura::EnvObserver,
                                            public aura::WindowObserver,
                                            public CaptureModeObserver,
                                            public display::DisplayObserver,
-                                           public OverviewObserver {
+                                           public OverviewObserver,
+                                           public wm::ActivationChangeObserver {
  public:
   explicit GameDashboardController(
       std::unique_ptr<GameDashboardDelegate> delegate);
@@ -94,6 +96,8 @@ class ASH_EXPORT GameDashboardController : public aura::EnvObserver,
   void OnWindowPropertyChanged(aura::Window* window,
                                const void* key,
                                intptr_t old) override;
+  void OnWindowParentChanged(aura::Window* window,
+                             aura::Window* parent) override;
   void OnWindowBoundsChanged(aura::Window* window,
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds,
@@ -115,6 +119,11 @@ class ASH_EXPORT GameDashboardController : public aura::EnvObserver,
   void OnOverviewModeWillStart() override;
   void OnOverviewModeEnded() override;
 
+  // wm::ActivationChangeObserver:
+  void OnWindowActivated(wm::ActivationChangeObserver::ActivationReason reason,
+                         aura::Window* gained_active,
+                         aura::Window* lost_active) override;
+
  private:
   friend class GameDashboardControllerTest;
   friend class GameDashboardTestBase;
@@ -122,6 +131,12 @@ class ASH_EXPORT GameDashboardController : public aura::EnvObserver,
   enum class WindowGameState { kGame, kNotGame, kNotYetKnown };
 
   using GetWindowStateCallback = base::OnceCallback<void(WindowGameState)>;
+
+  // Creates a `GameDashboardContext` for the given `window` and
+  // adds it to `game_window_contexts_`, if `GameDashboardContext` doesn't
+  // exist, the given window is a game, the `window` is parented, and the
+  // `window` has a valid `WindowState`. Otherwise, no object is created.
+  void MaybeCreateGameDashboardContext(aura::Window* window);
 
   // Checks whether the given window is a game, and then calls
   // `RefreshWindowTracking`. If there's not enough information, it passes

@@ -39,6 +39,7 @@
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/ui/passwords/ui_utils.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
@@ -53,6 +54,8 @@
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/test_autofill_driver.h"
+#include "components/autofill/core/browser/ui/suggestion_hiding_reason.h"
+#include "components/autofill/core/browser/ui/suggestion_type.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/custom_handlers/protocol_handler_registry.h"
 #include "components/lens/buildflags.h"
@@ -177,7 +180,9 @@ class TestNavigationDelegate : public content::WebContentsDelegate {
 
   content::WebContents* OpenURLFromTab(
       content::WebContents* source,
-      const content::OpenURLParams& params) override {
+      const content::OpenURLParams& params,
+      base::OnceCallback<void(content::NavigationHandle&)>
+          navigation_handle_callback) override {
     last_navigation_params_ = params;
     return nullptr;
   }
@@ -1120,12 +1125,13 @@ TEST_F(RenderViewContextMenuPrefsTest,
   EXPECT_FALSE(menu->IsCommandIdEnabled(IDC_CONTENT_CONTEXT_SAVELINKAS));
 }
 
-// Verify that item "Search web for" on password Manager is not present
+// Verify that item "Search web for" on password Manager - passwords is not
+// present
 TEST_F(RenderViewContextMenuPrefsTest,
-       SearchWebForOptionOnPasswordsManagerIsDisabled) {
+       SearchWebForOptionOnPasswordsManagerSubPageIsDisabled) {
   content::ContextMenuParams params =
       CreateParams(MenuItem::SELECTION | MenuItem::EDITABLE);
-  params.page_url = chrome::GetSettingsUrl(chrome::kPasswordManagerSubPage);
+  params.page_url = GURL(GetGooglePasswordManagerSubPageURLStr());
   auto menu = std::make_unique<TestRenderViewContextMenu>(
       *web_contents()->GetPrimaryMainFrame(), params);
   menu->set_selection_navigation_url(GURL("https://www.foo.com/"));
@@ -1137,10 +1143,10 @@ TEST_F(RenderViewContextMenuPrefsTest,
 
 // Verify that item "Search web for" on password check is not present
 TEST_F(RenderViewContextMenuPrefsTest,
-       SearchWebForOptionOnPasswordCheckIsDisabled) {
+       SearchWebForOptionOnPasswordManagerCheckIsDisabled) {
   content::ContextMenuParams params =
       CreateParams(MenuItem::SELECTION | MenuItem::EDITABLE);
-  params.page_url = chrome::GetSettingsUrl(chrome::kPasswordCheckSubPage);
+  params.page_url = GURL(chrome::kChromeUIPasswordManagerCheckupURL);
   auto menu = std::make_unique<TestRenderViewContextMenu>(
       *web_contents()->GetPrimaryMainFrame(), params);
   menu->set_selection_navigation_url(GURL("https://www.foo.com/"));
@@ -1150,10 +1156,25 @@ TEST_F(RenderViewContextMenuPrefsTest,
   EXPECT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORNEWTAB));
 }
 
-class RenderViewContextMenuHideAutofillPopupTest
+// Verify that item "Search web for" on password settings is not present
+TEST_F(RenderViewContextMenuPrefsTest,
+       SearchWebForOptionOnPasswordManagerSettingsIsDisabled) {
+  content::ContextMenuParams params =
+      CreateParams(MenuItem::SELECTION | MenuItem::EDITABLE);
+  params.page_url = GURL(chrome::kChromeUIPasswordManagerSettingsURL);
+  auto menu = std::make_unique<TestRenderViewContextMenu>(
+      *web_contents()->GetPrimaryMainFrame(), params);
+  menu->set_selection_navigation_url(GURL("https://www.foo.com/"));
+  menu->Init();
+
+  EXPECT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFOR));
+  EXPECT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORNEWTAB));
+}
+
+class RenderViewContextMenuHideAutofillSuggestionsTest
     : public RenderViewContextMenuPrefsTest {
  public:
-  RenderViewContextMenuHideAutofillPopupTest() = default;
+  RenderViewContextMenuHideAutofillSuggestionsTest() = default;
 
  protected:
   autofill::TestContentAutofillClient* autofill_client() {
@@ -1168,7 +1189,8 @@ class RenderViewContextMenuHideAutofillPopupTest
 };
 
 // Always hide the autofill popup when the context menu opens.
-TEST_F(RenderViewContextMenuHideAutofillPopupTest, HideAutofillPopup) {
+TEST_F(RenderViewContextMenuHideAutofillSuggestionsTest,
+       HideAutofillSuggestions) {
   NavigateAndCommit(GURL("http://www.foo.com/"));
   content::ContextMenuParams params = CreateParams(MenuItem::EDITABLE);
   params.form_control_type = blink::mojom::FormControlType::kInputText;
@@ -1176,14 +1198,14 @@ TEST_F(RenderViewContextMenuHideAutofillPopupTest, HideAutofillPopup) {
       *web_contents()->GetPrimaryMainFrame(), params);
 
   const autofill::AutofillClient::PopupOpenArgs args;
-  autofill_client()->ShowAutofillPopup(args, /*delegate=*/nullptr);
+  autofill_client()->ShowAutofillSuggestions(args, /*delegate=*/nullptr);
   EXPECT_TRUE(autofill_client()->IsShowingAutofillPopup());
 
   menu->Init();
 
   EXPECT_FALSE(autofill_client()->IsShowingAutofillPopup());
   EXPECT_EQ(autofill_client()->popup_hiding_reason(),
-            autofill::PopupHidingReason::kContextMenuOpened);
+            autofill::SuggestionHidingReason::kContextMenuOpened);
 }
 
 // Verify that the Lens Image Search menu item is disabled on non-image content

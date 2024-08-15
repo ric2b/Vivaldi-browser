@@ -18,11 +18,11 @@ class NinjaCreateBundleTargetWriter : public NinjaTargetWriter {
   void Run() override;
 
  private:
-  // Writes the Ninja rule for invoking the code signing script.
+  // Writes the Ninja rule for invoking the post-processing script.
   //
-  // Returns the name of the custom rule generated for the code signing step if
-  // defined, otherwise returns an empty string.
-  std::string WriteCodeSigningRuleDefinition();
+  // Returns the name of the custom rule generated for the post-processing step
+  // if defined, otherwise returns an empty string.
+  std::string WritePostProcessingRuleDefinition();
 
   // Writes the steps to copy files into the bundle.
   //
@@ -50,17 +50,17 @@ class NinjaCreateBundleTargetWriter : public NinjaTargetWriter {
   OutputFile WriteCompileAssetsCatalogInputDepsStamp(
       const std::vector<const Target*>& dependencies);
 
-  // Writes the code signing step (if a script is defined).
+  // Writes the post-processing step (if a script is defined).
   //
   // The list of newly created files will be added to |output_files|. As the
-  // code signing may depends on the full bundle structure, this step will
+  // post-processing may depends on the full bundle structure, this step will
   // depends on all files generated via other rules.
-  void WriteCodeSigningStep(const std::string& code_signing_rule_name,
-                            const std::vector<OutputFile>& order_only_deps,
-                            std::vector<OutputFile>* output_files);
+  void WritePostProcessingStep(const std::string& post_processing_rule_name,
+                               const std::vector<OutputFile>& order_only_deps,
+                               std::vector<OutputFile>* output_files);
 
-  // Writes the stamp file for the code signing input dependencies.
-  OutputFile WriteCodeSigningInputDepsStamp(
+  // Writes the stamp file for the post-processing input dependencies.
+  OutputFile WritePostProcessingInputDepsStamp(
       const std::vector<OutputFile>& order_only_deps,
       std::vector<OutputFile>* output_files);
 

@@ -4,8 +4,6 @@
 
 #include "chrome/browser/apps/link_capturing/link_capturing_navigation_throttle.h"
 
-#include "base/strings/stringprintf.h"
-
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -16,11 +14,11 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
+#include "chrome/browser/web_applications/test/os_integration_test_override_impl.h"
 #include "chrome/browser/web_applications/test/web_app_test_observers.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -37,9 +35,11 @@ class LinkCapturingNavigationThrottleBrowserTest : public InProcessBrowserTest {
  public:
   void SetUpOnMainThread() override {
 #if BUILDFLAG(IS_CHROMEOS_LACROS) || \
-    (BUILDFLAG(IS_LINUX) && defined(MEMORY_SANITIZER)) || BUILDFLAG(IS_MAC)
+    (BUILDFLAG(IS_LINUX) && defined(MEMORY_SANITIZER)) || BUILDFLAG(IS_MAC) ||\
+    (BUILDFLAG(IS_WIN) && defined(ADDRESS_SANITIZER))
     // TODO(https://issues.chromium.org/329174385): Deflake tests in
-    // lacros_chrome_browser_tests / Linux MSan Tests / Mac Tests.
+    // lacros_chrome_browser_tests / Linux MSan Tests / Mac Tests / Win ASan
+    // Tests.
     GTEST_SKIP();
 #else
     InProcessBrowserTest::SetUpOnMainThread();
@@ -90,7 +90,7 @@ class LinkCapturingNavigationThrottleBrowserTest : public InProcessBrowserTest {
   webapps::AppId app_id_;
   base::test::ScopedFeatureList feature_list_{
       features::kDesktopPWAsLinkCapturing};
-  web_app::OsIntegrationManager::ScopedSuppressForTesting os_hooks_suppress_;
+  web_app::OsIntegrationTestOverrideBlockingRegistration faked_os_integration_;
 };
 
 IN_PROC_BROWSER_TEST_F(LinkCapturingNavigationThrottleBrowserTest,

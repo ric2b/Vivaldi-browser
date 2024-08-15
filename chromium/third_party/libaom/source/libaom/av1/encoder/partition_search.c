@@ -2255,6 +2255,8 @@ static void pick_sb_modes_nonrd(AV1_COMP *const cpi, TileDataEnc *tile_data,
   const AQ_MODE aq_mode = cpi->oxcf.q_cfg.aq_mode;
   TxfmSearchInfo *txfm_info = &x->txfm_search_info;
   int i;
+  const int seg_skip =
+      segfeature_active(&cm->seg, mbmi->segment_id, SEG_LVL_SKIP);
 
   // This is only needed for real time/allintra row-mt enabled multi-threaded
   // encoding with cost update frequency set to COST_UPD_TILE/COST_UPD_OFF.
@@ -2277,15 +2279,17 @@ static void pick_sb_modes_nonrd(AV1_COMP *const cpi, TileDataEnc *tile_data,
   }
   for (i = 0; i < 2; ++i) pd[i].color_index_map = ctx->color_index_map[i];
 
-  x->force_zeromv_skip_for_blk =
-      get_force_zeromv_skip_flag_for_blk(cpi, x, bsize);
+  if (!seg_skip) {
+    x->force_zeromv_skip_for_blk =
+        get_force_zeromv_skip_flag_for_blk(cpi, x, bsize);
 
-  // Source variance may be already compute at superblock level, so no need
-  // to recompute, unless bsize < sb_size or source_variance is not yet set.
-  if (!x->force_zeromv_skip_for_blk &&
-      (x->source_variance == UINT_MAX || bsize < cm->seq_params->sb_size))
-    x->source_variance = av1_get_perpixel_variance_facade(
-        cpi, xd, &x->plane[0].src, bsize, AOM_PLANE_Y);
+    // Source variance may be already compute at superblock level, so no need
+    // to recompute, unless bsize < sb_size or source_variance is not yet set.
+    if (!x->force_zeromv_skip_for_blk &&
+        (x->source_variance == UINT_MAX || bsize < cm->seq_params->sb_size))
+      x->source_variance = av1_get_perpixel_variance_facade(
+          cpi, xd, &x->plane[0].src, bsize, AOM_PLANE_Y);
+  }
 
   // Save rdmult before it might be changed, so it can be restored later.
   const int orig_rdmult = x->rdmult;
@@ -2306,7 +2310,7 @@ static void pick_sb_modes_nonrd(AV1_COMP *const cpi, TileDataEnc *tile_data,
 #if CONFIG_COLLECT_COMPONENT_TIMING
     start_timing(cpi, nonrd_pick_inter_mode_sb_time);
 #endif
-    if (segfeature_active(&cm->seg, mbmi->segment_id, SEG_LVL_SKIP)) {
+    if (seg_skip) {
       x->force_zeromv_skip_for_blk = 1;
       // TODO(marpan): Consider adding a function for nonrd:
       // av1_nonrd_pick_inter_mode_sb_seg_skip(), instead of setting
@@ -2319,11 +2323,14 @@ static void pick_sb_modes_nonrd(AV1_COMP *const cpi, TileDataEnc *tile_data,
   }
   if (cpi->sf.rt_sf.skip_cdef_sb) {
     // cdef_strength is initialized to 1 which means skip_cdef, and is updated
-    // here. Check to see is skipping cdef is allowed.
+    // here. Check to see is skipping cdef is allowed. Never skip on slide/scene
+    // change, near a key frame, or when color sensitivity is set. Always allow
+    // cdef_skip for seg_skip = 1.
     const int allow_cdef_skipping =
-        cpi->rc.frames_since_key > 10 && !cpi->rc.high_source_sad &&
-        !(x->color_sensitivity[COLOR_SENS_IDX(AOM_PLANE_U)] ||
-          x->color_sensitivity[COLOR_SENS_IDX(AOM_PLANE_V)]);
+        seg_skip ||
+        (cpi->rc.frames_since_key > 10 && !cpi->rc.high_source_sad &&
+         !(x->color_sensitivity[COLOR_SENS_IDX(AOM_PLANE_U)] ||
+           x->color_sensitivity[COLOR_SENS_IDX(AOM_PLANE_V)]));
 
     // Find the corresponding 64x64 block. It'll be the 128x128 block if that's
     // the block size.
@@ -2332,8 +2339,16 @@ static void pick_sb_modes_nonrd(AV1_COMP *const cpi, TileDataEnc *tile_data,
     MB_MODE_INFO **mi_sb =
         cm->mi_params.mi_grid_base +
         get_mi_grid_idx(&cm->mi_params, mi_row_sb, mi_col_sb);
-    // Do not skip if intra or new mv is picked, or color sensitivity is set.
-    // Never skip on slide/scene change.
+    const int is_720p_or_larger = AOMMIN(cm->width, cm->height) >= 720;
+    unsigned int thresh_spatial_var =
+        (cpi->oxcf.speed >= 11 && !is_720p_or_larger &&
+         cpi->oxcf.tune_cfg.content != AOM_CONTENT_SCREEN)
+            ? 400
+            : UINT_MAX;
+    // For skip_cdef_sb = 1: do not skip if allow_cdef_skipping is false or
+    // intra or new mv is picked, with possible conidition on spatial variance.
+    // For skip_cdef_sb >= 2: more aggressive mode to always skip unless
+    // allow_cdef_skipping is false and source_variance is non-zero.
     if (cpi->sf.rt_sf.skip_cdef_sb >= 2) {
       mi_sb[0]->cdef_strength =
           mi_sb[0]->cdef_strength &&
@@ -2341,7 +2356,8 @@ static void pick_sb_modes_nonrd(AV1_COMP *const cpi, TileDataEnc *tile_data,
     } else {
       mi_sb[0]->cdef_strength =
           mi_sb[0]->cdef_strength && allow_cdef_skipping &&
-          !(mbmi->mode < INTRA_MODES || mbmi->mode == NEWMV);
+          !(x->source_variance < thresh_spatial_var &&
+            (mbmi->mode < INTRA_MODES || mbmi->mode == NEWMV));
     }
     // Store in the pickmode context.
     ctx->mic.cdef_strength = mi_sb[0]->cdef_strength;

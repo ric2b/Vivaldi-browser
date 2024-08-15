@@ -37,17 +37,13 @@
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/translate/core/browser/translate_driver.h"
 
-namespace gfx {
-class RectF;
-}  // namespace gfx
-
 namespace autofill {
 
 class AutofillField;
 class AutofillProfile;
 class CreditCard;
 struct FormData;
-struct FormFieldData;
+class FormFieldData;
 class FormStructure;
 class LogManager;
 class TouchToFillDelegateAndroidImpl;
@@ -56,7 +52,7 @@ class TouchToFillDelegateAndroidImpl;
 // implementation in browser side to interact with AutofillDriver.
 //
 // AutofillManager has two implementations:
-// - AndroidAutofillManager for WebView and WebLayer,
+// - AndroidAutofillManager for WebView,
 // - BrowserAutofillManager for Chrome.
 //
 // It is owned by the AutofillDriver.
@@ -75,8 +71,8 @@ class AutofillManager
   // no 2XX
   //   response code or a null response body).
   //
-  // TODO(crbug.com/1476488): Consider moving events that are specific to BAM to
-  // a new BAM::Observer class.
+  // TODO(crbug.com/40280003): Consider moving events that are specific to BAM
+  // to a new BAM::Observer class.
   class Observer : public base::CheckedObserver {
    public:
     virtual void OnAutofillManagerDestroyed(AutofillManager& manager) {}
@@ -90,11 +86,20 @@ class AutofillManager
     virtual void OnAfterFormsSeen(AutofillManager& manager,
                                   base::span<const FormGlobalId> forms) {}
 
+    virtual void OnBeforeCaretMovedInFormField(AutofillManager& manager,
+                                               const FormGlobalId& form,
+                                               const FieldGlobalId& field,
+                                               const gfx::Rect& caret_bounds) {}
+    virtual void OnAfterCaretMovedInFormField(AutofillManager& manager,
+                                              const FormGlobalId& form,
+                                              const FieldGlobalId& field,
+                                              const gfx::Rect& caret_bounds) {}
+
     virtual void OnBeforeTextFieldDidChange(AutofillManager& manager,
                                             FormGlobalId form,
                                             FieldGlobalId field) {}
 
-    // TODO(crbug.com/1331312): Get rid of `text_value`.
+    // TODO(crbug.com/40227496): Get rid of `text_value`.
     virtual void OnAfterTextFieldDidChange(AutofillManager& manager,
                                            FormGlobalId form,
                                            FieldGlobalId field,
@@ -155,7 +160,7 @@ class AutofillManager
                                         FormGlobalId form,
                                         FieldTypeSource source) {}
 
-    // Fired when the popup is *actually* shown or hidden.
+    // Fired when the suggestions are *actually* shown or hidden.
     virtual void OnSuggestionsShown(AutofillManager& manager) {}
     virtual void OnSuggestionsHidden(AutofillManager& manager) {}
 
@@ -165,8 +170,8 @@ class AutofillManager
     // be filled: each `FormFieldData::value` contains the filled or previewed
     // value; the corresponding `AutofillField` contains the field type
     // information. The field values come from `profile_or_credit_card`.
-    // TODO(crbug.com/1331312): Get rid of FormFieldData.
-    // TODO(crbug.com/1476488): Consider removing the event in favor of
+    // TODO(crbug.com/40227496): Get rid of FormFieldData.
+    // TODO(crbug.com/40280003): Consider removing the event in favor of
     // OnAfterDidFillAutofillFormData(), which is fired by the renderer.
     virtual void OnFillOrPreviewDataModelForm(
         AutofillManager& manager,
@@ -179,7 +184,7 @@ class AutofillManager
     virtual void OnFormSubmitted(AutofillManager& manager, FormGlobalId form) {}
   };
 
-  // TODO(crbug.com/1151542): Move to anonymous namespace once
+  // TODO(crbug.com/40733066): Move to anonymous namespace once
   // BrowserAutofillManager::OnLoadedServerPredictions() moves to
   // AutofillManager.
   static void LogAutofillTypePredictionsAvailable(
@@ -210,93 +215,42 @@ class AutofillManager
   virtual base::WeakPtr<AutofillManager> GetWeakPtr() = 0;
 
   // Events triggered by the renderer.
-
-  // Returns true only if the previewed form should be cleared.
-  virtual bool ShouldClearPreviewedForm() = 0;
-
-  // Invoked when the value of textfield is changed.
-  // |bounding_box| are viewport coordinates.
-  // Virtual for testing.
-  virtual void OnTextFieldDidChange(const FormData& form,
-                                    const FormFieldData& field,
-                                    const gfx::RectF& bounding_box,
-                                    const base::TimeTicks timestamp);
-
-  // Invoked when the textfield is scrolled.
-  // |bounding_box| are viewport coordinates.
-  void OnTextFieldDidScroll(const FormData& form,
-                            const FormFieldData& field,
-                            const gfx::RectF& bounding_box);
-
-  // Invoked when the value of select is changed.
-  // |bounding_box| are viewport coordinates.
-  void OnSelectControlDidChange(const FormData& form,
-                                const FormFieldData& field,
-                                const gfx::RectF& bounding_box);
-
-  // Invoked when the |form| needs to be autofilled, the |bounding_box| is
-  // a window relative value of |field|.
-  // |bounding_box| are viewport coordinates.
-  // Virtual for testing.
-  virtual void OnAskForValuesToFill(
-      const FormData& form,
-      const FormFieldData& field,
-      const gfx::RectF& bounding_box,
-      AutofillSuggestionTriggerSource trigger_source);
-
-  // Invoked when |form|'s |field| has focus.
-  // |bounding_box| are viewport coordinates.
-  void OnFocusOnFormField(const FormData& form,
-                          const FormFieldData& field,
-                          const gfx::RectF& bounding_box);
-
-  // Invoked when |form| has been submitted.
-  // Processes the submitted |form|, saving any new Autofill data to the user's
-  // personal profile.
-  // Virtual for testing.
+  // See autofill_driver.mojom for documentation.
+  // Some functions are virtual for testing.
+  virtual void OnFormsSeen(const std::vector<FormData>& updated_forms,
+                           const std::vector<FormGlobalId>& removed_forms);
   virtual void OnFormSubmitted(const FormData& form,
                                bool known_success,
                                mojom::SubmissionSource source);
-
-  // Invoked when |form| has been filled with the value given by
-  // FillOrPreviewForm.
-  // Virtual for testing.
+  virtual void OnTextFieldDidChange(const FormData& form,
+                                    const FormFieldData& field,
+                                    const base::TimeTicks timestamp);
+  void OnDidEndTextFieldEditing();
+  void OnTextFieldDidScroll(const FormData& form, const FormFieldData& field);
+  void OnSelectControlDidChange(const FormData& form,
+                                const FormFieldData& field);
+  void OnSelectOrSelectListFieldOptionsDidChange(const FormData& form);
+  void OnFocusOnFormField(const FormData& form, const FormFieldData& field);
+  void OnFocusOnNonFormField(bool had_interacted_form);
+  virtual void OnAskForValuesToFill(
+      const FormData& form,
+      const FormFieldData& field,
+      const gfx::Rect& caret_bounds,
+      AutofillSuggestionTriggerSource trigger_source);
+  void OnHidePopup();
+  virtual void OnCaretMovedInFormField(const FormData& form,
+                                       const FormFieldData& field,
+                                       const gfx::Rect& caret_bounds);
   virtual void OnDidFillAutofillFormData(const FormData& form,
                                          const base::TimeTicks timestamp);
-
-  // Invoked when changes of the forms have been detected: the forms in
-  // |updated_forms| are either new or have changed, and the forms in
-  // |removed_forms| have been removed from the DOM (but may be re-added to the
-  // DOM later).
-  // Virtual for testing.
-  virtual void OnFormsSeen(const std::vector<FormData>& updated_forms,
-                           const std::vector<FormGlobalId>& removed_forms);
-
-  // Invoked when focus is no longer on form. |had_interacted_form| indicates
-  // whether focus was previously on a form with which the user had interacted.
-  void OnFocusNoLongerOnForm(bool had_interacted_form);
-
-  // Invoked when textfield editing ended
-  void OnDidEndTextFieldEditing();
-
-  // Invoked when popup window should be hidden.
-  void OnHidePopup();
-
-  // Invoked when popup window is actually hidden.
-  void OnPopupHidden();
-
-  // Invoked when the options of a select element in the |form| changed.
-  void OnSelectOrSelectListFieldOptionsDidChange(const FormData& form);
-
-  // Invoked after JavaScript set the value of |field| in |form|. Only called
-  // if |field| was in autofilled state. Note that from a renderer's
-  // perspective, modifying the value with JavaScript leads to a state where
-  // the field is not considered autofilled anymore. So this notification won't
-  // be sent again until the field gets autofilled again.
   virtual void OnJavaScriptChangedAutofilledValue(
       const FormData& form,
       const FormFieldData& field,
-      const std::u16string& old_value);
+      const std::u16string& old_value,
+      bool formatting_only);
+
+  // Invoked when the suggestions are actually hidden.
+  void OnSuggestionsHidden();
 
   // Other events.
 
@@ -376,57 +330,48 @@ class AutofillManager
   // constructing or resetting the manager.
   AutofillClient& unsafe_client() { return driver_->GetAutofillClient(); }
 
+  // OnFooImpl() is called, potentially asynchronously after parsing the form,
+  // by the renderer event OnFoo().
   virtual void OnFormSubmittedImpl(const FormData& form,
                                    bool known_success,
                                    mojom::SubmissionSource source) = 0;
-
+  virtual void OnCaretMovedInFormFieldImpl(const FormData& form,
+                                           const FormFieldData& field,
+                                           const gfx::Rect& caret_bounds) = 0;
   virtual void OnTextFieldDidChangeImpl(const FormData& form,
                                         const FormFieldData& field,
-                                        const gfx::RectF& bounding_box,
                                         const base::TimeTicks timestamp) = 0;
-
+  virtual void OnDidEndTextFieldEditingImpl() = 0;
   virtual void OnTextFieldDidScrollImpl(const FormData& form,
-                                        const FormFieldData& field,
-                                        const gfx::RectF& bounding_box) = 0;
-
+                                        const FormFieldData& field) = 0;
+  virtual void OnSelectControlDidChangeImpl(const FormData& form,
+                                            const FormFieldData& field) = 0;
+  virtual void OnSelectOrSelectListFieldOptionsDidChangeImpl(
+      const FormData& form) = 0;
+  virtual void OnFocusOnFormFieldImpl(const FormData& form,
+                                      const FormFieldData& field) = 0;
+  virtual void OnFocusOnNonFormFieldImpl(bool had_interacted_form) = 0;
   virtual void OnAskForValuesToFillImpl(
       const FormData& form,
       const FormFieldData& field,
-      const gfx::RectF& bounding_box,
+      const gfx::Rect& caret_bounds,
       AutofillSuggestionTriggerSource trigger_source) = 0;
-
-  virtual void OnFocusOnFormFieldImpl(const FormData& form,
-                                      const FormFieldData& field,
-                                      const gfx::RectF& bounding_box) = 0;
-
-  virtual void OnSelectControlDidChangeImpl(const FormData& form,
-                                            const FormFieldData& field,
-                                            const gfx::RectF& bounding_box) = 0;
-
   virtual void OnDidFillAutofillFormDataImpl(
       const FormData& form,
       const base::TimeTicks timestamp) = 0;
-
-  virtual void OnFocusNoLongerOnFormImpl(bool had_interacted_form) = 0;
-
-  virtual void OnDidEndTextFieldEditingImpl() = 0;
-
   virtual void OnHidePopupImpl() = 0;
-
-  virtual void OnSelectOrSelectListFieldOptionsDidChangeImpl(
-      const FormData& form) = 0;
-
   virtual void OnJavaScriptChangedAutofilledValueImpl(
       const FormData& form,
       const FormFieldData& field,
-      const std::u16string& old_value) = 0;
+      const std::u16string& old_value,
+      bool formatting_only) = 0;
 
   // Return whether the |forms| from OnFormSeen() should be parsed to
   // form_structures.
   virtual bool ShouldParseForms() = 0;
 
   // Invoked before parsing the forms.
-  // TODO(crbug.com/1309848): Rename to some consistent scheme, e.g.,
+  // TODO(crbug.com/40219607): Rename to some consistent scheme, e.g.,
   // OnBeforeParsedForm().
   virtual void OnBeforeProcessParsedForms() = 0;
 
@@ -434,10 +379,6 @@ class AutofillManager
   // |form_structure|.
   virtual void OnFormProcessed(const FormData& form_data,
                                const FormStructure& form_structure) = 0;
-  // Invoked after all forms have been processed, |form_types| is a set of
-  // FormType found.
-  virtual void OnAfterProcessParsedForms(
-      const DenseSet<FormType>& form_types) = 0;
 
   // Returns the number of FormStructures with the given |form_signature| and
   // appends them to |form_structures|. Runs in linear time.
@@ -460,8 +401,8 @@ class AutofillManager
   // - if the overall number exceeds `kAutofillManagerMaxFormCacheSize`;
   // - if the form should not be parsed according to ShouldParseForms().
   //
-  // TODO(crbug.com/1309848): Add unit tests.
-  // TODO(crbug.com/1345089): Eliminate either the ParseFormsAsync() or
+  // TODO(crbug.com/40219607): Add unit tests.
+  // TODO(crbug.com/40232021): Eliminate either the ParseFormsAsync() or
   // ParseFormAsync(). There are a few possible directions:
   // - Let ParseFormAsync() wrap the FormData in a vector, call
   //   ParseFormsAsync(), and then unwrap the vector again.
@@ -480,6 +421,9 @@ class AutofillManager
   void ParseFormAsync(
       const FormData& form,
       base::OnceCallback<void(AutofillManager&, const FormData&)> callback);
+
+  // Returns true only if the previewed form should be cleared.
+  virtual bool ShouldClearPreviewedForm() = 0;
 
   std::map<FormGlobalId, std::unique_ptr<FormStructure>>*
   mutable_form_structures() {

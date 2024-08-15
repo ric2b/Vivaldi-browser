@@ -55,3 +55,22 @@ void ExternalProcessImporterClient::OnSpeedDialImportGroup(
   if (speeddial_.size() == total_speeddial_count_)
     bridge_->AddSpeedDial(speeddial_);
 }
+
+void ExternalProcessImporterClient::OnExtensionsImportStart(
+    uint32_t total_count) {
+  if (cancelled_)
+    return;
+
+  total_extensions_count_ = total_count;
+  extensions_.reserve(total_count);
+}
+
+void ExternalProcessImporterClient::OnExtensionsImportGroup(
+    const std::vector<std::string>& group) {
+  if (cancelled_)
+    return;
+
+  extensions_.insert(extensions_.end(), group.begin(), group.end());
+  if (extensions_.size() == total_extensions_count_)
+    bridge_->AddExtensions(extensions_);
+}

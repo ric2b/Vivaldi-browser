@@ -14,6 +14,9 @@ class Browser;
     : SettingsRootTableViewController <SettingsControllerProtocol,
                                       VivaldiStartPageSettingsConsumer>
 
+// The consumer of the start page settings mediator.
+@property(nonatomic, weak) id<VivaldiStartPageSettingsConsumer> consumer;
+
 // Initializes a new VivaldiStartPageSettingsViewController. `browser` must not
 // be nil.
 - (instancetype)initWithBrowser:(Browser*)browser NS_DESIGNATED_INITIALIZER;

@@ -56,14 +56,21 @@ bool ShouldPreventWindowGestures(VivaldiBrowserWindow* window) {
 }
 
 VivaldiBrowserWindow* FindMouseEventWindowFromView(
-    content::RenderWidgetHostViewBase* root_view,
+    content::RenderWidgetHostViewInput* root_view,
     bool ignore_native_children = false) {
-  if (!root_view->host())
+  if (!root_view->GetViewRenderInputRouter()) {
     return nullptr;
-  content::WebContents* web_contents = content::WebContents::FromRenderViewHost(
-      content::RenderViewHostImpl::From(root_view->host()));
-  if (!web_contents)
+  }
+
+  content::RenderWidgetHostViewBase* host =
+      static_cast<content::RenderWidgetHostViewBase*>(root_view);
+
+  auto* web_contents =
+      content::WebContentsImpl::FromRenderWidgetHostImpl(host->host());
+
+  if (!web_contents) {
     return nullptr;
+  }
   // web_contents is not ourtermost content when the root_view corresponds
   // to a native control like date picker on Mac.
   web_contents = web_contents->GetOutermostWebContents();
@@ -135,7 +142,7 @@ VivaldiUIEvents::VivaldiUIEvents() = default;
 VivaldiUIEvents::~VivaldiUIEvents() = default;
 
 void VivaldiUIEvents::StartMouseGestureDetection(
-    content::RenderWidgetHostViewBase* root_view,
+    content::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseEvent& mouse_event,
     bool with_alt) {
   DCHECK(!mouse_gestures_);
@@ -276,7 +283,7 @@ bool VivaldiUIEvents::FinishMouseOrWheelGesture(bool with_alt) {
 }
 
 bool VivaldiUIEvents::CheckMouseMove(
-    content::RenderWidgetHostViewBase* root_view,
+    content::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseEvent& mouse_event) {
   DCHECK_EQ(mouse_event.GetType(), blink::WebInputEvent::Type::kMouseMove);
   bool eat_event = false;
@@ -313,7 +320,7 @@ bool VivaldiUIEvents::CheckMouseMove(
 }
 
 bool VivaldiUIEvents::CheckMouseGesture(
-    content::RenderWidgetHostViewBase* root_view,
+    content::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseEvent& mouse_event) {
   using blink::WebInputEvent;
   using blink::WebMouseEvent;
@@ -337,7 +344,7 @@ bool VivaldiUIEvents::CheckMouseGesture(
 }
 
 bool VivaldiUIEvents::CheckRockerGesture(
-    content::RenderWidgetHostViewBase* root_view,
+    content::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseEvent& mouse_event) {
   using blink::WebInputEvent;
   using blink::WebMouseEvent;
@@ -420,7 +427,7 @@ bool VivaldiUIEvents::CheckRockerGesture(
 // filter out clicks outside the webviews in the handler for the extension event
 // using document.elementFromPoint().
 void VivaldiUIEvents::CheckWebviewClick(
-    content::RenderWidgetHostViewBase* root_view,
+    content::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseEvent& mouse_event) {
   using blink::WebInputEvent;
   using Button = blink::WebPointerProperties::Button;
@@ -445,6 +452,7 @@ void VivaldiUIEvents::CheckWebviewClick(
   if (!window)
     return;
 
+  /*
   if (window->web_contents()->GetRenderWidgetHostView() != root_view) {
     // The event was originated in a native child view like that of a date
     // picker input elelemnt on Mac. As popups such controls are supposed
@@ -452,7 +460,7 @@ void VivaldiUIEvents::CheckWebviewClick(
     // it.
     DCHECK(root_view->GetWidgetType() == content::WidgetType::kPopup);
     return;
-  }
+  }*/
 
   gfx::PointF p =
       TransformToWindowUICoordinates(window, mouse_event.PositionInScreen());
@@ -462,7 +470,7 @@ void VivaldiUIEvents::CheckWebviewClick(
 }
 
 bool VivaldiUIEvents::CheckBackForward(
-    content::RenderWidgetHostViewBase* root_view,
+    content::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseEvent& event) {
   using Button = blink::WebPointerProperties::Button;
 
@@ -537,7 +545,7 @@ bool VivaldiUIEvents::DoHandleKeyboardEvent(
 }
 
 bool VivaldiUIEvents::DoHandleMouseEvent(
-    content::RenderWidgetHostViewBase* root_view,
+    content::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseEvent& event) {
   // Check if the view has pointer-lock enabled. This should take precedence so
   // that the webpage mouse events do not trigger Vivaldi mouse actions by
@@ -565,7 +573,7 @@ bool VivaldiUIEvents::DoHandleMouseEvent(
 }
 
 bool VivaldiUIEvents::DoHandleWheelEvent(
-    content::RenderWidgetHostViewBase* root_view,
+    content::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseWheelEvent& wheel_event,
     const ui::LatencyInfo& latency) {
   using blink::WebInputEvent;
@@ -614,7 +622,7 @@ bool VivaldiUIEvents::DoHandleWheelEvent(
 }
 
 bool VivaldiUIEvents::DoHandleWheelEventAfterChild(
-    content::RenderWidgetHostViewBase* root_view,
+    content::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseWheelEvent& event) {
   using blink::WebInputEvent;
   using blink::WebMouseWheelEvent;

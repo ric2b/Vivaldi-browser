@@ -15,16 +15,19 @@
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
+#include "components/autofill/core/browser/address_data_manager.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_trigger_details.h"
-#include "components/autofill/core/browser/personal_data_manager_observer.h"
-#include "components/autofill/core/browser/ui/autofill_popup_delegate.h"
-#include "components/autofill/core/browser/ui/popup_item_ids.h"
+#include "components/autofill/core/browser/ui/autofill_suggestion_delegate.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
+#include "components/autofill/core/browser/ui/suggestion_type.h"
 #include "components/autofill/core/common/aliases.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
-#include "ui/gfx/geometry/rect_f.h"
+
+namespace gfx {
+class Rect;
+}  // namespace gfx
 
 namespace autofill {
 
@@ -34,8 +37,8 @@ class CreditCard;
 enum class CreditCardFetchResult;
 
 // Delegate for in-browser Autocomplete and Autofill display and selection.
-class AutofillExternalDelegate : public AutofillPopupDelegate,
-                                 public PersonalDataManagerObserver {
+class AutofillExternalDelegate : public AutofillSuggestionDelegate,
+                                 public AddressDataManager::Observer {
  public:
   class ScopedAutofillPopupShortcutForTesting;
 
@@ -50,13 +53,13 @@ class AutofillExternalDelegate : public AutofillPopupDelegate,
 
   // Returns true if `item_id` identifies a suggestion which can appear on the
   // first layer of the Autofill popup and can fill form fields.
-  static bool IsAutofillAndFirstLayerSuggestionId(PopupItemId item_id);
+  static bool IsAutofillAndFirstLayerSuggestionId(SuggestionType item_id);
 
-  // AutofillPopupDelegate implementation.
+  // AutofillSuggestionDelegate implementation.
   absl::variant<AutofillDriver*, password_manager::PasswordManagerDriver*>
   GetDriver() override;
-  void OnPopupShown() override;
-  void OnPopupHidden() override;
+  void OnSuggestionsShown() override;
+  void OnSuggestionsHidden() override;
   void DidSelectSuggestion(const Suggestion& suggestion) override;
   void DidAcceptSuggestion(const Suggestion& suggestion,
                            const SuggestionPosition& position) override;
@@ -70,16 +73,19 @@ class AutofillExternalDelegate : public AutofillPopupDelegate,
   // suggestion that has a filling product that is not none.
   FillingProduct GetMainFillingProduct() const override;
 
-  // Called when the renderer posts an Autofill query to the browser. |bounds|
-  // is window relative. We might not want to display the warning if a website
-  // has disabled Autocomplete because they have their own popup, and showing
-  // our popup on to of theirs would be a poor user experience.
+  // Called when the renderer posts an Autofill query to the browser. We might
+  // not want to display the warning if a website has disabled Autocomplete
+  // because they have their own popup, and showing our popup on to of theirs
+  // would be a poor user experience.
+  // `caret_bounds` represents the position of the focused field caret. This is
+  // used as bounds to anchor the Autofill popup on. Today this is only used by
+  // compose suggestions.
   //
-  // TODO(crbug.com/1117028): Storing `form` and `field` in member variables
+  // TODO(crbug.com/40144964): Storing `form` and `field` in member variables
   // breaks the cache.
   virtual void OnQuery(const FormData& form,
                        const FormFieldData& field,
-                       const gfx::RectF& element_bounds,
+                       const gfx::Rect& caret_bounds,
                        AutofillSuggestionTriggerSource trigger_source);
 
   // Records query results and correctly formats them before sending them off
@@ -110,15 +116,15 @@ class AutofillExternalDelegate : public AutofillPopupDelegate,
   virtual void OnAutofillAvailabilityEvent(
       mojom::AutofillSuggestionAvailability suggestion_availability);
 
-  // Set the data list value associated with the current field.
+  // Sets the data list value associated with the current field.
   void SetCurrentDataListValues(std::vector<SelectOption> datalist);
 
-  // Inform the delegate that the text field editing has ended. This is
+  // Informs the delegate that the text field editing has ended. This is
   // used to help record the metrics of when a new popup is shown.
   void DidEndTextFieldEditing();
 
-  // PersonalDataManagerObserver:
-  void OnPersonalDataChanged() override;
+  // AddressDataManager::Observer:
+  void OnAddressDataChanged() override;
 
   const FormData& query_form() const { return query_form_; }
 
@@ -131,6 +137,14 @@ class AutofillExternalDelegate : public AutofillPopupDelegate,
                            FillCreditCardForm);
 
   base::WeakPtr<AutofillExternalDelegate> GetWeakPtr();
+
+  // Private handler for DidAcceptSuggestions for address related suggestions.
+  void DidAcceptAddressSuggestion(const Suggestion& suggestion,
+                                  const SuggestionPosition& position);
+
+  // Private handler for DidAcceptSuggestions for payments related suggestions.
+  void DidAcceptPaymentsSuggestion(const Suggestion& suggestion,
+                                   const SuggestionPosition& position);
 
   // Shows the address editor to the user. The Autofill profile to edit is
   // determined by passed `guid`.
@@ -160,7 +174,7 @@ class AutofillExternalDelegate : public AutofillPopupDelegate,
   // If `is_preview` is true then this is just a preview to show the user what
   // would be selected and if `is_preview` is false then the user has selected
   // this data.
-  void FillAutofillFormData(PopupItemId popup_item_id,
+  void FillAutofillFormData(SuggestionType type,
                             Suggestion::BackendId backend_id,
                             bool is_preview,
                             const AutofillTriggerDetails& trigger_details);
@@ -171,10 +185,8 @@ class AutofillExternalDelegate : public AutofillPopupDelegate,
 
   // Determines the correct data type (`AutofillProfile` or `CreditCard`) to be
   // filled and fills the corresponding field-by-field filling suggestion.
-  void FillFieldByFieldFillingSuggestion(
-      const Suggestion& suggestion,
-      const SuggestionPosition& position,
-      AutofillSuggestionTriggerSource trigger_source);
+  void FillFieldByFieldFillingSuggestion(const Suggestion& suggestion,
+                                         const SuggestionPosition& position);
 
   // Previews the value from `profile` specified in the `suggestion`.
   void PreviewAddressFieldByFieldFillingSuggestion(
@@ -191,8 +203,7 @@ class AutofillExternalDelegate : public AutofillPopupDelegate,
   void FillAddressFieldByFieldFillingSuggestion(
       const AutofillProfile& profile,
       const Suggestion& suggestion,
-      const SuggestionPosition& position,
-      AutofillSuggestionTriggerSource trigger_source);
+      const SuggestionPosition& position);
 
   // Uses the `credit_card` to optionally fetch the credit card number depending
   // on the `suggestion.field_by_field_filling_type_used`. Fills the fetched
@@ -264,16 +275,19 @@ class AutofillExternalDelegate : public AutofillPopupDelegate,
 
   bool show_cards_from_account_suggestion_was_shown_ = false;
 
-  std::vector<PopupItemId> shown_suggestion_types_;
+  std::vector<SuggestionType> shown_suggestion_types_;
 
   // The current data list values.
   std::vector<SelectOption> datalist_;
 
-  // Autofill profile update and deletion are async operations. PDM observer is
+  // The caret position of the focused field.
+  gfx::Rect caret_bounds_;
+
+  // Autofill profile update and deletion are async operations. ADM observer is
   // used to detect when these operations finish. These operations can happen at
   // the same time.
-  base::ScopedObservation<PersonalDataManager, PersonalDataManagerObserver>
-      pdm_observation_{this};
+  base::ScopedObservation<AddressDataManager, AddressDataManager::Observer>
+      adm_observation_{this};
 
   base::WeakPtrFactory<AutofillExternalDelegate> weak_ptr_factory_{this};
 };

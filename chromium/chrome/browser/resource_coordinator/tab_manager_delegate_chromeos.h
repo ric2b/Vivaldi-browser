@@ -145,6 +145,8 @@ class TabManagerDelegate : public wm::ActivationChangeObserver,
                            TestTabStateChangeCausesNewReport);
   FRIEND_TEST_ALL_PREFIXES(TabManagerDelegateTest,
                            TestAdditionalTabCausesNewReport);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerDelegateTest,
+                           TestDiscardedTabsAreNotReported);
 
   using OptionalArcProcessList = arc::ArcProcessService::OptionalArcProcessList;
 
@@ -353,6 +355,7 @@ struct TabManagerDelegate::PageState {
   bool is_protected;
   bool is_visible;
   bool is_focused;
+  base::TimeTicks last_visible;
 
   friend bool operator==(const PageState&, const PageState&) = default;
 };

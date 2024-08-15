@@ -5,6 +5,7 @@
 module auction_worklet.mojom;
 
 import "content/services/auction_worklet/public/mojom/private_aggregation_request.mojom";
+import "content/services/auction_worklet/public/mojom/real_time_reporting.mojom";
 import "content/services/auction_worklet/public/mojom/reject_reason.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "services/network/public/mojom/url_loader_factory.mojom";
@@ -21,7 +22,7 @@ struct PreviousWin {
   // seconds, to reduce time resolution of cross-site information provided to an
   // untrusted service.
   //
-  // TODO(https://crbug.com/1207135): Decide what to do when wins are
+  // TODO(crbug.com/40765411): Decide what to do when wins are
   // "in the future" due to clock changes.
   mojo_base.mojom.Time time;
 
@@ -163,10 +164,13 @@ struct PrioritySignalsDouble {
 };
 
 // Which field identifying the ad is passed to reportWin()
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
 enum ReportingIdField {
-  kInterestGroupName,
-  kBuyerReportingId,
-  kBuyerAndSellerReportingId,
+  kNone = 0,
+  kInterestGroupName = 1,
+  kBuyerReportingId = 2,
+  kBuyerAndSellerReportingId = 3,
 };
 
 // Represents the time between BidderWorklet::BeginGenerateBid and each of the
@@ -222,9 +226,14 @@ interface GenerateBidClient {
   //
   //  `trusted_signals_fetch_latency` The amount of time taken fetching trusted
   //  bidding signals. If no trusted signals were fetched, returns a 0 duration.
+  //
+  //  `update_if_older_than` If present, indicates that the interest group
+  //  should potentially be updated even if its last update was less than 24
+  //  hours ago, if the last update was less recent than `update_if_older_than`.
   OnBiddingSignalsReceived(
       map<string, double> priority_vector,
-      mojo_base.mojom.TimeDelta trusted_signals_fetch_latency) => ();
+      mojo_base.mojom.TimeDelta trusted_signals_fetch_latency,
+      mojo_base.mojom.TimeDelta? update_if_older_than) => ();
 
   // Invoked once GenerateBid completes, either having successfully generated
   // bids, or having failed to generate one for any reason.
@@ -266,10 +275,12 @@ interface GenerateBidClient {
   //  the interest group's priorityOverrides map. Null values mean to delete the
   //  corresponding value, if present. Values with keys not in the map are
   //  preserved.
-  //  TODO(https://crbug.com/657632): Update to use `double?` type if/when
+  //  TODO(crbug.com/40489779): Update to use `double?` type if/when
   //  that's supported as a value in a Mojo map.
   //
   // `pa_requests` The various requests made to the Private Aggregation API.
+  //
+  // `real_time_contributions` Real time reporting contributions.
   //
   // `bidding_latency` The amount of time taken running all bids (note that
   // there may be 2 bids if the first bid result was not k-anonymous).
@@ -295,6 +306,7 @@ interface GenerateBidClient {
       map<string, PrioritySignalsDouble?> update_priority_signals_overrides,
       array<PrivateAggregationRequest> pa_requests,
       array<PrivateAggregationRequest> non_kanon_pa_requests,
+      array<RealTimeReportingContribution> real_time_contributions,
       mojo_base.mojom.TimeDelta bidding_latency,
       GenerateBidDependencyLatencies generate_bid_dependency_latencies,
       RejectReason reject_reason,

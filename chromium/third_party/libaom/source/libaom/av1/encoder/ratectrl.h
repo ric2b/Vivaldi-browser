@@ -249,7 +249,7 @@ typedef struct {
   // signals if number of blocks with motion is high
   int percent_blocks_with_motion;
 
-  // signals percentge of 16x16 blocks that are inactive, via active_maps
+  // signals percentage of 16x16 blocks that are inactive, via active_maps
   int percent_blocks_inactive;
 
   // Maximum value of source sad across all blocks of frame.

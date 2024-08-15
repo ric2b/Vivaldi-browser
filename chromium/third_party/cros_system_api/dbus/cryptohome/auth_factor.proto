@@ -162,6 +162,57 @@ message AuthInput {
   }
 }
 
+// Recovery requires input to generate the initial request to be sent to the
+// recovery server.
+message CryptohomeRecoveryPrepareInput {
+  // Label to identify the existing cryptohome recovery AuthFactor.
+  string auth_factor_label = 2;
+  // The type of user being requested.
+  enum UserType {
+    UNKNOWN = 0;
+    GAIA_ID = 1;
+  }
+  UserType requestor_user_id_type = 3;
+  // Format of `requestor_user_id` is determined by `requestor_user_id_type`
+  // enum. For GAIA_ID it's number string obfuscated Gaia id.
+  string requestor_user_id = 4;
+  // Access token with reauth scope.
+  string gaia_access_token = 5;
+  // A short-lived token, it's validity will be verified by the Recovery
+  // Service.
+  string gaia_reauth_proof_token = 6;
+  // Serialized cryptohome.cryptorecovery.CryptoRecoveryEpochResponse.
+  // An epoch response received from Recovery Mediator service containing epoch
+  // beacon value for Cryptohome recovery flow.
+  bytes epoch_response = 7;
+
+  reserved 1;
+}
+
+// PrepareInput is a wrapper around any secret or input data that is required to
+// prepare for authentication with a factor.
+message PrepareInput {
+  oneof input {
+    CryptohomeRecoveryPrepareInput cryptohome_recovery_input = 1;
+  }
+}
+
+// Recovery requires input to generate the initial request to be sent to the
+// recovery server.
+message CryptohomeRecoveryPrepareOutput {
+  // Serialized cryptohome.cryptorecovery.CryptoRecoveryRpcRequest, to be sent
+  // to the recovery server.
+  bytes recovery_request = 1;
+}
+
+// PrepareOutput is a wrapper around any output data produced by the preparation
+// process.
+message PrepareOutput {
+  oneof output {
+    CryptohomeRecoveryPrepareOutput cryptohome_recovery_output = 1;
+  }
+}
+
 message PasswordMetadata {
   // The hash information used to generate the secret.
   KnowledgeFactorHashInfo hash_info = 1;
@@ -251,7 +302,10 @@ message CommonMetadata {
 
 message LegacyFingerprintMetadata {}
 
-message FingerprintMetadata {}
+message FingerprintMetadata {
+  // Set to true when migrated from a legacy fingerprint template.
+  bool was_migrated = 1;
+}
 
 // AuthFactor is a backing store for any secret stored on Chrome OS in the USS
 // World. This proto definition is used to communicate with the client side.

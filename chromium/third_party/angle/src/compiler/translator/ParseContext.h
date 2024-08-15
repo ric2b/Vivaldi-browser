@@ -82,7 +82,11 @@ class TParseContext : angle::NonCopyable
 
     void setLoopNestingLevel(int loopNestintLevel) { mLoopNestingLevel = loopNestintLevel; }
 
-    void incrLoopNestingLevel() { ++mLoopNestingLevel; }
+    void incrLoopNestingLevel(const TSourceLoc &line)
+    {
+        ++mLoopNestingLevel;
+        checkNestingLevel(line);
+    }
     void decrLoopNestingLevel() { --mLoopNestingLevel; }
 
     void incrSwitchNestingLevel() { ++mSwitchNestingLevel; }
@@ -142,6 +146,7 @@ class TParseContext : angle::NonCopyable
 
     // Returns a sanitized array size to use (the size is at least 1).
     unsigned int checkIsValidArraySize(const TSourceLoc &line, TIntermTyped *expr);
+    bool checkIsValidArrayDimension(const TSourceLoc &line, TVector<unsigned int> *arraySizes);
     bool checkIsValidQualifierForArray(const TSourceLoc &line, const TPublicType &elementQualifier);
     bool checkArrayElementIsNotArray(const TSourceLoc &line, const TPublicType &elementType);
     bool checkArrayOfArraysInOut(const TSourceLoc &line,
@@ -520,6 +525,9 @@ class TParseContext : angle::NonCopyable
 
     ShShaderOutput getOutputType() const { return mOutputType; }
 
+    size_t getMaxExpressionComplexity() const { return mMaxExpressionComplexity; }
+    size_t getMaxStatementDepth() const { return mMaxStatementDepth; }
+
     // TODO(jmadill): make this private
     TSymbolTable &symbolTable;  // symbol table that goes with the language currently being parsed
 
@@ -548,6 +556,8 @@ class TParseContext : angle::NonCopyable
                          const ImmutableString &identifier,
                          const TType *type,
                          TVariable **variable);
+
+    void checkNestingLevel(const TSourceLoc &line);
 
     void checkCanBeDeclaredWithoutInitializer(const TSourceLoc &line,
                                               const ImmutableString &identifier,
@@ -761,6 +771,8 @@ class TParseContext : angle::NonCopyable
     TDirectiveHandler mDirectiveHandler;
     angle::pp::Preprocessor mPreprocessor;
     void *mScanner;
+    const size_t mMaxExpressionComplexity;
+    const size_t mMaxStatementDepth;
     int mMinProgramTexelOffset;
     int mMaxProgramTexelOffset;
 

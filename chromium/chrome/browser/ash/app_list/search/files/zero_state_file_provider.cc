@@ -118,25 +118,13 @@ void ZeroStateFileProvider::SetSearchResults(
           results[i].id, filepath, results[i].prediction_reason,
           ash::AppListSearchResultType::kZeroStateFile,
           ash::SearchResultDisplayType::kContinue, score, std::u16string(),
-          FileResult::Type::kFile, profile_);
-      switch (results[i].justification_type) {
-        case ash::FileSuggestionJustificationType::kUnknown:
-          NOTREACHED();
-          break;
-        case ash::FileSuggestionJustificationType::kViewed:
-          result->SetContinueFileSuggestionType(
-              ash::ContinueFileSuggestionType::kViewedFile);
-          break;
-        case ash::FileSuggestionJustificationType::kModified:
-          NOTREACHED();
-          break;
-        case ash::FileSuggestionJustificationType::kModifiedByCurrentUser:
-          result->SetContinueFileSuggestionType(
-              ash::ContinueFileSuggestionType::kModifiedByCurrentUserFile);
-          break;
-        case ash::FileSuggestionJustificationType::kShared:
-          NOTREACHED();
-          break;
+          FileResult::Type::kFile, profile_, /*thumbnail_loader=*/nullptr);
+      if (results[i].modified_time) {
+        result->SetContinueFileSuggestionType(
+            ash::ContinueFileSuggestionType::kModifiedByCurrentUserFile);
+      } else if (results[i].viewed_time) {
+        result->SetContinueFileSuggestionType(
+            ash::ContinueFileSuggestionType::kViewedFile);
       }
       new_results.push_back(std::move(result));
     }
@@ -159,7 +147,7 @@ void ZeroStateFileProvider::AppendFakeSearchResults(Results* results) {
         /*id=*/kSchema + path.value(), path, u"-",
         ash::AppListSearchResultType::kZeroStateFile,
         ash::SearchResultDisplayType::kContinue, 0.1f, std::u16string(),
-        FileResult::Type::kFile, profile_));
+        FileResult::Type::kFile, profile_, /*thumbnail_loader=*/nullptr));
   }
 }
 

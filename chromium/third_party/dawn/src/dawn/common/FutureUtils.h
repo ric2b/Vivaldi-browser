@@ -47,6 +47,8 @@ enum class EventCompletionType {
     Shutdown,
 };
 
+bool ValidateCallbackMode(WGPUCallbackMode mode);
+
 }  // namespace dawn
 
 #endif  // SRC_DAWN_COMMON_FUTUREUTILS_H_

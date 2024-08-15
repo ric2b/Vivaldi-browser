@@ -139,7 +139,8 @@ class Http2Connection::ResponseDelegate : public HttpResponseDelegate {
         std::make_unique<DataFrameSource>(connection_, stream_id_);
     data_frame_ = data_frame.get();
     connection_->adapter()->SubmitResponse(
-        stream_id_, GenerateHeaders(status, headers), std::move(data_frame));
+        stream_id_, GenerateHeaders(status, headers), std::move(data_frame),
+        /*end_stream=*/false);
     connection_->SendIfNotProcessing();
   }
 
@@ -189,7 +190,8 @@ class Http2Connection::ResponseDelegate : public HttpResponseDelegate {
     data_frame->AddChunk(contents);
     data_frame->set_last_frame(true);
     connection_->adapter()->SubmitResponse(
-        stream_id_, GenerateHeaders(status, headers), std::move(data_frame));
+        stream_id_, GenerateHeaders(status, headers), std::move(data_frame),
+        /*end_stream=*/false);
     connection_->SendIfNotProcessing();
   }
   base::WeakPtr<ResponseDelegate> GetWeakPtr() {
@@ -370,7 +372,7 @@ bool Http2Connection::OnEndHeadersForStream(
     http2::adapter::Http2StreamId stream_id) {
   HttpRequest::HeaderMap header_map = header_map_[stream_id];
   auto request = std::make_unique<HttpRequest>();
-  // TODO(crbug.com/1375303): Handle proxy cases.
+  // TODO(crbug.com/40242862): Handle proxy cases.
   request->relative_url = header_map[":path"];
   request->base_url = GURL(header_map[":authority"]);
   request->method_string = header_map[":method"];

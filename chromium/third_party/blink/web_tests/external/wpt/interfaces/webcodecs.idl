@@ -158,8 +158,8 @@ dictionary VideoDecoderConfig {
 
 dictionary AudioEncoderConfig {
   required DOMString codec;
-  [EnforceRange] unsigned long sampleRate;
-  [EnforceRange] unsigned long numberOfChannels;
+  [EnforceRange] required unsigned long sampleRate;
+  [EnforceRange] required unsigned long numberOfChannels;
   [EnforceRange] unsigned long long bitrate;
   BitrateMode bitrateMode = "variable";
 };
@@ -371,6 +371,8 @@ dictionary VideoFrameBufferInit {
   VideoColorSpaceInit colorSpace;
 
   sequence<ArrayBuffer> transfer = [];
+
+  VideoFrameMetadata metadata;
 };
 
 dictionary VideoFrameMetadata {
@@ -380,6 +382,8 @@ dictionary VideoFrameMetadata {
 dictionary VideoFrameCopyToOptions {
   DOMRectInit rect;
   sequence<PlaneLayout> layout;
+  VideoPixelFormat format;
+  PredefinedColorSpace colorSpace;
 };
 
 dictionary PlaneLayout {

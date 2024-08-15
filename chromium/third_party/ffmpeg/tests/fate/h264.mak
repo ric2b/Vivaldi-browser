@@ -224,9 +224,10 @@ FATE_H264-$(call FRAMECRC, MOV, H264) += fate-h264-unescaped-extradata
 # this sample contains field-coded frames, with both fields in a single packet
 FATE_H264-$(call FRAMECRC, MOV, H264) += fate-h264-twofields-packet
 
+FATE_H264-$(call DEMMUX, MOV, H264, H264_MP4TOANNEXB_BSF SCALE_FILTER) += fate-h264-bsf-mp4toannexb-new-extradata
+
 FATE_H264-$(call DEMMUX, MOV, H264, H264_MP4TOANNEXB_BSF) += fate-h264-bsf-mp4toannexb \
                                                              fate-h264-bsf-mp4toannexb-2 \
-                                                             fate-h264-bsf-mp4toannexb-new-extradata \
                                                              fate-h264_mp4toannexb_ticket5927 \
                                                              fate-h264_mp4toannexb_ticket5927_2 \
 
@@ -311,7 +312,7 @@ fate-h264-conformance-ci1_ft_b:                   CMD = framecrc -i $(TARGET_SAM
 fate-h264-conformance-ci_mw_d:                    CMD = framecrc -i $(TARGET_SAMPLES)/h264-conformance/CI_MW_D.264
 fate-h264-conformance-cvbs3_sony_c:               CMD = framecrc -i $(TARGET_SAMPLES)/h264-conformance/CVBS3_Sony_C.jsv
 fate-h264-conformance-cvcanlma2_sony_c:           CMD = framecrc -i $(TARGET_SAMPLES)/h264-conformance/CVCANLMA2_Sony_C.jsv
-fate-h264-conformance-cvfc1_sony_c:               CMD = framecrc -flags unaligned -i $(TARGET_SAMPLES)/h264-conformance/CVFC1_Sony_C.jsv
+fate-h264-conformance-cvfc1_sony_c:               CMD = framecrc -i $(TARGET_SAMPLES)/h264-conformance/CVFC1_Sony_C.jsv
 fate-h264-conformance-cvfi1_sony_d:               CMD = framecrc -i $(TARGET_SAMPLES)/h264-conformance/CVFI1_Sony_D.jsv
 fate-h264-conformance-cvfi1_sva_c:                CMD = framecrc -i $(TARGET_SAMPLES)/h264-conformance/CVFI1_SVA_C.264
 fate-h264-conformance-cvfi2_sony_h:               CMD = framecrc -i $(TARGET_SAMPLES)/h264-conformance/CVFI2_Sony_H.jsv

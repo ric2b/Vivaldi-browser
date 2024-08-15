@@ -55,16 +55,17 @@ if (dawn_enable_vulkan) {
 }
 
 group("abseil") {
-  # When build_with_chromium=true we need to include "//third_party/abseil-cpp:absl" while
+  # When building within Chromium or ANGLE we need to include "//third_party/abseil-cpp:absl" while
   # it's beneficial to be more specific with standalone Dawn, especially when it comes to
   # including it as a dependency in other projects (such as Skia).
-  if (build_with_chromium) {
+  if (build_with_chromium || build_with_angle) {
     public_deps = [ "$dawn_abseil_dir:absl" ]
   } else {
     public_deps = [
       "${dawn_root}/third_party/gn/abseil-cpp:bits",
       "${dawn_root}/third_party/gn/abseil-cpp:flat_hash_map",
       "${dawn_root}/third_party/gn/abseil-cpp:flat_hash_set",
+      "${dawn_root}/third_party/gn/abseil-cpp:inlined_vector",
       "${dawn_root}/third_party/gn/abseil-cpp:str_format",
       "${dawn_root}/third_party/gn/abseil-cpp:strings",
     ]
@@ -87,6 +88,13 @@ config("vulkan_rpath") {
       "@executable_path/",
     ]
   }
+}
+
+# Config that adds delayloads when built as a shared library or component,
+# useful as we're linking user32.lib which can't always be loaded in the
+# chromium sandbox under win32k lockdown.
+config("win_delayload") {
+  ldflags = [ "/DELAYLOAD:user32.dll" ]
 }
 
 # Config that adds include directory for vulkan-utility-libraries.
@@ -258,8 +266,8 @@ source_set("sources") {
     "ComputePipeline.h",
     "CopyTextureForBrowserHelper.cpp",
     "CopyTextureForBrowserHelper.h",
-    "CreatePipelineAsyncTask.cpp",
-    "CreatePipelineAsyncTask.h",
+    "CreatePipelineAsyncEvent.cpp",
+    "CreatePipelineAsyncEvent.h",
     "Device.cpp",
     "Device.h",
     "DynamicUploader.cpp",
@@ -276,6 +284,7 @@ source_set("sources") {
     "ErrorInjector.h",
     "ErrorScope.cpp",
     "ErrorScope.h",
+    "ErrorSink.h",
     "EventManager.cpp",
     "EventManager.h",
     "ExecutionQueue.cpp",
@@ -354,6 +363,8 @@ source_set("sources") {
     "SharedBufferMemory.h",
     "SharedFence.cpp",
     "SharedFence.h",
+    "SharedResourceMemory.cpp",
+    "SharedResourceMemory.h",
     "SharedTextureMemory.cpp",
     "SharedTextureMemory.h",
     "Subresource.cpp",
@@ -409,7 +420,11 @@ source_set("sources") {
   # Only win32 app needs to link with user32.lib
   # In UWP, all availiable APIs are defined in WindowsApp.lib
   if (is_win && !dawn_is_winuwp) {
-    libs += [ "user32.lib" ]
+    libs += [
+      "user32.lib",
+      "delayimp.lib",
+    ]
+    public_configs = [ ":win_delayload" ]
   }
 
   if (dawn_is_winuwp && is_debug) {
@@ -688,6 +703,7 @@ source_set("sources") {
   if (dawn_enable_opengl) {
     public_deps += [
       ":opengl_loader_gen",
+      "${dawn_root}/src/tint/api/common:common",
       "${dawn_root}/third_party/khronos:khronos_platform",
     ]
     sources += get_target_outputs(":opengl_loader_gen")
@@ -698,6 +714,7 @@ source_set("sources") {
       "opengl/BindGroupGL.h",
       "opengl/BindGroupLayoutGL.cpp",
       "opengl/BindGroupLayoutGL.h",
+      "opengl/BindingPoint.h",
       "opengl/BufferGL.cpp",
       "opengl/BufferGL.h",
       "opengl/CommandBufferGL.cpp",
@@ -845,22 +862,10 @@ source_set("sources") {
       }
     } else if (is_fuchsia) {
       sources += [
-        "vulkan/external_memory/MemoryServiceImplementationZicronHandle.cpp",
-        "vulkan/external_memory/MemoryServiceImplementationZicronHandle.h",
+        "vulkan/external_memory/MemoryServiceImplementationZirconHandle.cpp",
+        "vulkan/external_memory/MemoryServiceImplementationZirconHandle.h",
         "vulkan/external_semaphore/SemaphoreServiceImplementationZirconHandle.cpp",
         "vulkan/external_semaphore/SemaphoreServiceImplementationZirconHandle.h",
-      ]
-    }
-
-    if (build_with_chromium && is_fuchsia) {
-      # Necessary to ensure that the Vulkan libraries will be in the
-      # final Fuchsia package.
-      data_deps = [
-        "//third_party/fuchsia-sdk:vulkan_base",
-        "//third_party/fuchsia-sdk:vulkan_validation",
-
-        # NOTE: The line below is a work around for http://crbug.com/1001081
-        "//third_party/fuchsia-sdk/sdk:trace_engine",
       ]
     }
     if (dawn_is_winuwp) {

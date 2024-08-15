@@ -31,7 +31,8 @@
 #include "chrome/browser/ash/crosapi/crosapi_id.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
-#include "chromeos/crosapi/mojom/crosapi.mojom-forward.h"
+#include "chromeos/ash/components/standalone_browser/lacros_selection.h"
+#include "chromeos/crosapi/mojom/browser_service.mojom.h"
 #include "chromeos/crosapi/mojom/desk_template.mojom.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
@@ -47,7 +48,7 @@
 #include "ui/base/ui_base_types.h"
 
 namespace component_updater {
-class CrOSComponentManager;
+class ComponentManagerAsh;
 }  // namespace component_updater
 
 namespace apps {
@@ -74,6 +75,10 @@ namespace policy {
 class CloudPolicyCore;
 }
 
+namespace user_manager {
+class DeviceOwnershipWaiter;
+}  // namespace user_manager
+
 namespace crosapi {
 
 namespace mojom {
@@ -83,12 +88,11 @@ class Crosapi;
 
 class BrowserAction;
 class BrowserLoader;
-class DeviceOwnershipWaiter;
 class FilesAppLauncher;
 class PersistentForcedExtensionKeepAlive;
 class TestMojoConnectionManager;
 
-using browser_util::LacrosSelection;
+using ash::standalone_browser::LacrosSelection;
 using component_updater::ComponentUpdateService;
 
 // Manages the lifetime of lacros-chrome, and its loading status. Observes the
@@ -107,7 +111,7 @@ class BrowserManager : public session_manager::SessionManagerObserver,
   static BrowserManager* Get();
 
   explicit BrowserManager(
-      scoped_refptr<component_updater::CrOSComponentManager> manager);
+      scoped_refptr<component_updater::ComponentManagerAsh> manager);
   // Constructor for testing.
   BrowserManager(std::unique_ptr<BrowserLoader> browser_loader,
                  ComponentUpdateService* update_service);
@@ -137,7 +141,7 @@ class BrowserManager : public session_manager::SessionManagerObserver,
   // Opens the browser window in lacros-chrome.
   // If lacros-chrome is not yet launched, it triggers to launch.
   // This needs to be called after loading.
-  // TODO(crbug.com/1101676): Notify callers the result of opening window
+  // TODO(crbug.com/40703695): Notify callers the result of opening window
   // request. Because of asynchronous operations crossing processes,
   // there's no guarantee that the opening window request succeeds.
   // Currently, its condition and result are completely hidden behind this
@@ -207,8 +211,7 @@ class BrowserManager : public session_manager::SessionManagerObserver,
   void OpenUrl(
       const GURL& url,
       crosapi::mojom::OpenUrlFrom from,
-      // TODO(crbug.com/329182208): use inner enum again.
-      crosapi::mojom::OpenUrlParams_WindowOpenDisposition disposition,
+      crosapi::mojom::OpenUrlParams::WindowOpenDisposition disposition,
       NavigateParams::PathBehavior path_behavior = NavigateParams::RESPECT);
 
   // Opens the captive portal signin window in lacros-chrome.
@@ -267,9 +270,6 @@ class BrowserManager : public session_manager::SessionManagerObserver,
   // Returns true if keep-alive is enabled.
   bool IsKeepAliveEnabled() const;
 
-  // Returns true if crosapi interface supports GetFeedbackData API.
-  bool GetFeedbackDataSupported() const;
-
   using GetFeedbackDataCallback = base::OnceCallback<void(base::Value::Dict)>;
   // Gathers Lacros feedback data.
   // Virtual for testing.
@@ -327,10 +327,11 @@ class BrowserManager : public session_manager::SessionManagerObserver,
     version_service_delegate_ = std::move(version_service_delegate);
   }
 
-  // TODO(crbug.com/1463883): Remove this once we refactored to use the
+  // TODO(crbug.com/40275396): Remove this once we refactored to use the
   // constructor.
   void set_device_ownership_waiter_for_testing(
-      std::unique_ptr<DeviceOwnershipWaiter> device_ownership_waiter);
+      std::unique_ptr<user_manager::DeviceOwnershipWaiter>
+          device_ownership_waiter);
 
   void set_relaunch_requested_for_testing(bool relaunch_requested);
 
@@ -510,11 +511,11 @@ class BrowserManager : public session_manager::SessionManagerObserver,
   //    have web apps info showing on the app list, shelf, etc..
   // 2. Able to interact with web apps (e.g. uninstall) at any time.
   // 3. Have notifications.
-  // TODO(crbug.com/1174246): This is a short term solution to integrate
+  // TODO(crbug.com/40167449): This is a short term solution to integrate
   // web apps in Lacros. Need to decouple the App Platform systems from
   // needing lacros-chrome running all the time.
   friend class apps::AppServiceProxyAsh;
-  // TODO(crbug.com/1311501): ApkWebAppService does not yet support app
+  // TODO(crbug.com/40220252): ApkWebAppService does not yet support app
   // installation when lacros-chrome starts at arbitrary points of time, so it
   // needs to be kept alive.
   friend class ash::ApkWebAppService;
@@ -657,15 +658,9 @@ class BrowserManager : public session_manager::SessionManagerObserver,
   // Shared implementation of OpenUrl and SwitchToTab.
   void OpenUrlImpl(
       const GURL& url,
-      // TODO(crbug.com/329182208): use inner enum again.
-      crosapi::mojom::OpenUrlParams_WindowOpenDisposition disposition,
+      crosapi::mojom::OpenUrlParams::WindowOpenDisposition disposition,
       crosapi::mojom::OpenUrlFrom from,
       NavigateParams::PathBehavior path_behavior);
-
-  // Returns true if the crosapi interface of the currently running lacros
-  // supports NewGuestWindow API. If lacros is older or lacros is not running,
-  // this returns false.
-  bool IsNewGuestWindowSupported() const;
 
   // Creates windows from template data.
   void RestoreWindowsFromTemplate();

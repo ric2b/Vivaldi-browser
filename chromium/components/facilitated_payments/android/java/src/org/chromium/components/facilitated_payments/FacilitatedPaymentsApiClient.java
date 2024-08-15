@@ -4,12 +4,16 @@
 
 package org.chromium.components.facilitated_payments;
 
+import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.content_public.browser.RenderFrameHost;
+
 /**
  * Client for facilitated payment APIs, such as PIX. The default implementation cannot invoke
  * payments. An implementing subclass must provide a factory that builds its instances.
  * Example usage:
  *
- *  FacilitatedPaymentsApiClient apiClient = FacilitatedPaymentsApiClient.create(delegate);
+ *  FacilitatedPaymentsApiClient apiClient =
+ *      FacilitatedPaymentsApiClient.create(renderFrameHost, delegate);
  *  apiClient.isAvailable();
  */
 public class FacilitatedPaymentsApiClient {
@@ -25,23 +29,39 @@ public class FacilitatedPaymentsApiClient {
      *
      *  private static final class FactoryImpl implements Factory {
      *      @Override
-     *      public FacilitatedPaymentsApiClient factoryCreate(Delegate delegate) {
-     *          return new CustomSubclassOfFacilitatedPaymentsApiClient(delegate);
+     *      public FacilitatedPaymentsApiClient factoryCreate(
+     *              RenderFrameHost renderFrameHost, Delegate delegate) {
+     *          return new CustomSubclassOfFacilitatedPaymentsApiClient(renderFrameHost, delegate);
      *      }
      *  }
      *
      *  FacilitatedPaymentsApiClient.setFactory(new FactoryImpl());
-     *  FacilitatedPaymentsApiClient apiClient = FacilitatedPaymentsApiClient.create(delegate);
+     *  FacilitatedPaymentsApiClient apiClient =
+     *          FacilitatedPaymentsApiClient.create(renderFrameHost, delegate);
      */
     protected interface Factory {
         /**
          * Builds an instance of facilitated payment API client.
+         * TODO(https://crbug.com/329108444): Remove this method.
          *
          * @param delegate The delegate to notify of payment result.
          * @return An object that can invoke a facilitated payment API.
          */
+        @Deprecated
         default FacilitatedPaymentsApiClient factoryCreate(Delegate delegate) {
-            return null;
+            return new FacilitatedPaymentsApiClient(delegate);
+        }
+
+        /**
+         * Builds an instance of facilitated payment API client.
+         *
+         * @param renderFrameHost The RenderFrameHost used for retrieving the Android context.
+         * @param delegate The delegate to notify of payment result.
+         * @return An object that can invoke a facilitated payment API.
+         */
+        default FacilitatedPaymentsApiClient factoryCreate(
+                RenderFrameHost renderFrameHost, Delegate delegate) {
+            return new FacilitatedPaymentsApiClient(delegate);
         }
     }
 
@@ -65,9 +85,18 @@ public class FacilitatedPaymentsApiClient {
         default void onGetClientToken(byte[] clientToken) {}
 
         /**
+         * Notifies the delegate about the result of the facilitated payment.
+         *
+         * @param purchaseActionResult The result of the purchase action.
+         */
+        default void onPurchaseActionResultEnum(@PurchaseActionResult int purchaseActionResult) {}
+
+        /**
          * Notifies the delegate whether the facilitated payment was successful.
          *
          * @param isPurchaseActionSuccessful Whether the purchase action was successful.
+         *
+         * @Deprecated TODO(b/300335735): Remove this method.
          */
         default void onPurchaseActionResult(boolean isPurchaseActionSuccessful) {}
     }
@@ -84,12 +113,14 @@ public class FacilitatedPaymentsApiClient {
     /**
      * Creates an instance of a facilitated payment API client.
      *
+     * @param renderFrameHost The RenderFrameHost used for retrieving the Android context.
      * @param delegate The delegate to notify of payment result.
      * @return An object that can invoke facilitated payment APIs.
      */
-    public static FacilitatedPaymentsApiClient create(Delegate delegate) {
+    public static FacilitatedPaymentsApiClient create(
+            RenderFrameHost renderFrameHost, Delegate delegate) {
         return sFactory != null
-                ? sFactory.factoryCreate(delegate)
+                ? sFactory.factoryCreate(renderFrameHost, delegate)
                 : new FacilitatedPaymentsApiClient(delegate);
     }
 
@@ -121,9 +152,21 @@ public class FacilitatedPaymentsApiClient {
     /**
      * Initiates the payment flow UI. Will invoke a delegate callback with the result.
      *
+     * @param primaryAccount User's signed in account.
      * @param actionToken An opaque token used for invoking the purchase action.
      */
+    public void invokePurchaseAction(CoreAccountInfo primaryAccount, byte[] actionToken) {
+        mDelegate.onPurchaseActionResultEnum(PurchaseActionResult.COULD_NOT_INVOKE);
+    }
+
+    /**
+     * Initiates the payment flow UI. Will invoke a delegate callback with the result.
+     *
+     * @param actionToken An opaque token used for invoking the purchase action.
+     *
+     * @Deprecated TODO(https://crbug.com/329108444): Remove this method.
+     */
     public void invokePurchaseAction(byte[] actionToken) {
-        mDelegate.onPurchaseActionResult(/* isPurchaseActionSuccessful= */ false);
+        mDelegate.onPurchaseActionResultEnum(PurchaseActionResult.COULD_NOT_INVOKE);
     }
 }

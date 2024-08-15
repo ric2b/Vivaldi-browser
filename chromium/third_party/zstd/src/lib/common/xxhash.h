@@ -575,7 +575,11 @@ typedef uint32_t XXH32_hash_t;
 #elif !defined (__VMS) \
   && (defined (__cplusplus) \
   || (defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) /* C99 */) )
-#   include <stdint.h>
+#   ifdef _AIX
+#     include <inttypes.h>
+#   else
+#     include <stdint.h>
+#   endif
     typedef uint32_t XXH32_hash_t;
 
 #else
@@ -838,7 +842,11 @@ typedef uint64_t XXH64_hash_t;
 #elif !defined (__VMS) \
   && (defined (__cplusplus) \
   || (defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) /* C99 */) )
-#  include <stdint.h>
+#   ifdef _AIX
+#     include <inttypes.h>
+#   else
+#     include <stdint.h>
+#   endif
    typedef uint64_t XXH64_hash_t;
 #else
 #  include <limits.h>
@@ -2426,7 +2434,11 @@ static void* XXH_memcpy(void* dest, const void* src, size_t size)
 #if !defined (__VMS) \
  && (defined (__cplusplus) \
  || (defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) /* C99 */) )
-# include <stdint.h>
+# ifdef _AIX
+#   include <inttypes.h>
+# else
+#   include <stdint.h>
+# endif
   typedef uint8_t xxh_u8;
 #else
   typedef unsigned char xxh_u8;
@@ -3317,6 +3329,23 @@ static xxh_u64 XXH64_round(xxh_u64 acc, xxh_u64 input)
     acc += input * XXH_PRIME64_2;
     acc  = XXH_rotl64(acc, 31);
     acc *= XXH_PRIME64_1;
+#if (defined(__AVX512F__)) && !defined(XXH_ENABLE_AUTOVECTORIZE)
+    /*
+     * DISABLE AUTOVECTORIZATION:
+     * A compiler fence is used to prevent GCC and Clang from
+     * autovectorizing the XXH64 loop (pragmas and attributes don't work for some
+     * reason) without globally disabling AVX512.
+     *
+     * Autovectorization of XXH64 tends to be detrimental,
+     * though the exact outcome may change depending on exact cpu and compiler version.
+     * For information, it has been reported as detrimental for Skylake-X,
+     * but possibly beneficial for Zen4.
+     *
+     * The default is to disable auto-vectorization,
+     * but you can select to enable it instead using `XXH_ENABLE_AUTOVECTORIZE` build variable.
+     */
+    XXH_COMPILER_GUARD(acc);
+#endif
     return acc;
 }
 

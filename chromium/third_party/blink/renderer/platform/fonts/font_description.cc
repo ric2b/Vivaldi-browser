@@ -28,9 +28,9 @@
  */
 
 #include "third_party/blink/renderer/platform/fonts/font_description.h"
-#include "build/build_config.h"
 
 #include "base/memory/values_equivalent.h"
+#include "build/build_config.h"
 #include "third_party/blink/public/platform/web_font_description.h"
 #include "third_party/blink/renderer/platform/language.h"
 #include "third_party/blink/renderer/platform/wtf/hash_functions.h"
@@ -112,6 +112,7 @@ FontDescription::FontDescription()
   fields_.font_synthesis_style_ = kAutoFontSynthesisStyle;
   fields_.font_synthesis_small_caps_ = kAutoFontSynthesisSmallCaps;
   fields_.variant_position_ = kNormalVariantPosition;
+  fields_.variant_emoji_ = kNormalVariantEmoji;
   static_assert(static_cast<unsigned>(TextSpacingTrim::kInitial) == 0);
 }
 
@@ -733,7 +734,8 @@ String FontDescription::ToString() const {
       "subpixel_ascent_descent=%s, variant_numeric=[%s], "
       "variant_east_asian=[%s], font_optical_sizing=%s, "
       "font_synthesis_weight=%s, font_synthesis_style=%s, "
-      "font_synthesis_small_caps=%s, font_variant_position=%s",
+      "font_synthesis_small_caps=%s, font_variant_position=%s, "
+      "font_variant_emoji=%s",
       family_list_.ToString().Ascii().c_str(),
       (feature_settings_ ? feature_settings_->ToString().Ascii().c_str() : ""),
       (variation_settings_ ? variation_settings_->ToString().Ascii().c_str()
@@ -767,7 +769,8 @@ String FontDescription::ToString() const {
       FontDescription::ToString(GetFontSynthesisWeight()).Ascii().c_str(),
       FontDescription::ToString(GetFontSynthesisStyle()).Ascii().c_str(),
       FontDescription::ToString(GetFontSynthesisSmallCaps()).Ascii().c_str(),
-      FontDescription::ToString(VariantPosition()).Ascii().c_str());
+      FontDescription::ToString(VariantPosition()).Ascii().c_str(),
+      blink::ToString(VariantEmoji()).Ascii().c_str());
 }
 
 }  // namespace blink

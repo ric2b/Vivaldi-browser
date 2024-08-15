@@ -10,6 +10,7 @@
 #ifndef EIGEN_PACKED_TRIANGULAR_MATRIX_VECTOR_H
 #define EIGEN_PACKED_TRIANGULAR_MATRIX_VECTOR_H
 
+namespace Eigen {
 namespace internal {
 
 template <typename Index, int Mode, typename LhsScalar, bool ConjLhs, typename RhsScalar, bool ConjRhs,
@@ -75,6 +76,7 @@ struct packed_triangular_matrix_vector_product<Index, Mode, LhsScalar, ConjLhs, 
   };
 };
 
-}  // end namespace internal
+}  // namespace internal
+}  // namespace Eigen
 
 #endif  // EIGEN_PACKED_TRIANGULAR_MATRIX_VECTOR_H

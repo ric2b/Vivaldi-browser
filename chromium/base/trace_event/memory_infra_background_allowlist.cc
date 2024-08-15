@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/trace_event/memory_infra_background_allowlist.h"
 
 #include <string.h>
@@ -186,8 +191,11 @@ constexpr auto kAllocatorDumpNameAllowlist =
         "leveldatabase/memenv_0x?",
         "malloc",
         "malloc/allocated_objects",
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+        "malloc/extreme_lud",
+#endif
         "malloc/metadata_fragmentation_caches",
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
         "malloc/partitions",
         "malloc/partitions/allocator",
         "malloc/partitions/allocator/scheduler_loop_quarantine",
@@ -199,7 +207,7 @@ constexpr auto kAllocatorDumpNameAllowlist =
         "malloc/partitions/nonquarantinable",
         "malloc/sys_malloc",
         "malloc/win_heap",
-#endif
+#endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
         "media/webmediaplayer/audio/player_0x?",
         "media/webmediaplayer/data_source/player_0x?",
         "media/webmediaplayer/demuxer/player_0x?",
@@ -233,7 +241,7 @@ constexpr auto kAllocatorDumpNameAllowlist =
         "partition_alloc/partitions/array_buffer",
         "partition_alloc/partitions/buffer",
         "partition_alloc/partitions/fast_malloc",
-#if !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#if !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
         "partition_alloc/partitions/fast_malloc/thread_cache",
         "partition_alloc/partitions/fast_malloc/thread_cache/main_thread",
 #endif
@@ -260,6 +268,8 @@ constexpr auto kAllocatorDumpNameAllowlist =
         "v8/main/heap/read_only_space",
         "v8/main/heap/shared_large_object_space",
         "v8/main/heap/shared_space",
+        "v8/main/heap/shared_trusted_large_object_space",
+        "v8/main/heap/shared_trusted_space",
         "v8/main/heap/trusted_space",
         "v8/main/heap/trusted_large_object_space",
         "v8/main/malloc",
@@ -278,6 +288,8 @@ constexpr auto kAllocatorDumpNameAllowlist =
         "v8/utility/heap/read_only_space",
         "v8/utility/heap/shared_large_object_space",
         "v8/utility/heap/shared_space",
+        "v8/utility/heap/shared_trusted_large_object_space",
+        "v8/utility/heap/shared_trusted_space",
         "v8/utility/heap/trusted_space",
         "v8/utility/heap/trusted_large_object_space",
         "v8/utility/malloc",
@@ -296,6 +308,8 @@ constexpr auto kAllocatorDumpNameAllowlist =
         "v8/workers/heap/read_only_space/isolate_0x?",
         "v8/workers/heap/shared_large_object_space/isolate_0x?",
         "v8/workers/heap/shared_space/isolate_0x?",
+        "v8/workers/heap/shared_trusted_large_object_space/isolate_0x?",
+        "v8/workers/heap/shared_trusted_space/isolate_0x?",
         "v8/workers/heap/trusted_space/isolate_0x?",
         "v8/workers/heap/trusted_large_object_space/isolate_0x?",
         "v8/workers/malloc/isolate_0x?",

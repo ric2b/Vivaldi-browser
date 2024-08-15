@@ -30,6 +30,10 @@ namespace {
 // Amount of time the user must press on Esc to make it a press-and-hold event.
 constexpr base::TimeDelta kHoldEscapeTime = base::Milliseconds(1500);
 
+// Amount of time the user must press on Esc to see the Exclusive Access Bubble
+// showing up.
+constexpr base::TimeDelta kShowExitBubbleTime = base::Milliseconds(500);
+
 constexpr char kHistogramFullscreenLockStateAtEntryViaApi[] =
     "WebCore.Fullscreen.LockStateAtEntryViaApi";
 constexpr char kHistogramFullscreenLockStateAtEntryViaBrowserUi[] =
@@ -55,7 +59,8 @@ ExclusiveAccessManager::ExclusiveAccessManager(
       pointer_lock_controller_(this),
       exclusive_access_controllers_({&fullscreen_controller_,
                                      &keyboard_lock_controller_,
-                                     &pointer_lock_controller_}) {}
+                                     &pointer_lock_controller_}),
+      permission_manager_(exclusive_access_context) {}
 
 ExclusiveAccessManager::~ExclusiveAccessManager() = default;
 
@@ -103,14 +108,14 @@ ExclusiveAccessManager::GetExclusiveAccessExitBubbleType() const {
   return EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE;
 }
 
-void ExclusiveAccessManager::UpdateExclusiveAccessExitBubbleContent(
-    ExclusiveAccessBubbleHideCallback bubble_first_hide_callback,
+void ExclusiveAccessManager::UpdateBubble(
+    ExclusiveAccessBubbleHideCallback first_hide_callback,
     bool force_update) {
-  GURL url = GetExclusiveAccessBubbleURL();
-  ExclusiveAccessBubbleType bubble_type = GetExclusiveAccessExitBubbleType();
-  exclusive_access_context_->UpdateExclusiveAccessExitBubbleContent(
-      url, bubble_type, std::move(bubble_first_hide_callback),
-      /*notify_download=*/false, force_update);
+  exclusive_access_context_->UpdateExclusiveAccessBubble(
+      {.url = GetExclusiveAccessBubbleURL(),
+       .type = GetExclusiveAccessExitBubbleType(),
+       .force_update = force_update},
+      std::move(first_hide_callback));
 }
 
 GURL ExclusiveAccessManager::GetExclusiveAccessBubbleURL() const {
@@ -161,6 +166,7 @@ bool ExclusiveAccessManager::HandleUserKeyEvent(
     if (event.GetType() == content::NativeWebKeyboardEvent::Type::kKeyUp &&
         esc_key_hold_timer_.IsRunning()) {
       esc_key_hold_timer_.Stop();
+      show_exit_bubble_timer_.Stop();
       for (auto controller : exclusive_access_controllers_) {
         controller->HandleUserReleasedEscapeEarly();
       }
@@ -171,6 +177,11 @@ bool ExclusiveAccessManager::HandleUserKeyEvent(
           FROM_HERE, kHoldEscapeTime,
           base::BindOnce(&ExclusiveAccessManager::HandleUserHeldEscape,
                          base::Unretained(this)));
+      show_exit_bubble_timer_.Start(
+          FROM_HERE, kShowExitBubbleTime,
+          base::BindOnce(&ExclusiveAccessManager::UpdateBubble,
+                         base::Unretained(this), base::NullCallback(),
+                         /*force_update=*/true));
     }
     // If the keyboard lock is enabled and requires press-and-hold Esc to exit,
     // do not pass the event to other controllers. Returns false as we don't

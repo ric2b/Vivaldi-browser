@@ -14,6 +14,7 @@
 
 #include "app/vivaldi_resources.h"
 #include "importer/chrome_importer_utils.h"
+#include "importer/chromium_extension_importer.h"
 
 using importer::ChromeProfileInfo;
 using importer::ImporterType;
@@ -151,8 +152,9 @@ void ChromiumProfileImporter::DetectChromiumProfiles(
       }
       chrome.user_profile_names = prof;
 
-      chrome.services_supported =
-          importer::FAVORITES | importer::PASSWORDS | importer::HISTORY;
+      chrome.services_supported = importer::FAVORITES | importer::PASSWORDS |
+                                  importer::HISTORY | importer::EXTENSIONS;
+
       profiles->push_back(chrome);
     }
   }

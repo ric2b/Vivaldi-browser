@@ -41,8 +41,11 @@ class PermissionPromptNotificationsMac : public permissions::PermissionPrompt {
   TabSwitchingBehavior GetTabSwitchingBehavior() override;
   permissions::PermissionPromptDisposition GetPromptDisposition()
       const override;
+  bool IsAskPrompt() const override;
   std::optional<gfx::Rect> GetViewBoundsInScreen() const override;
   bool ShouldFinalizeRequestAfterDecided() const override;
+  std::vector<permissions::ElementAnchoredBubbleVariant> GetPromptVariants()
+      const override;
 
  private:
   void ShowPrompt();

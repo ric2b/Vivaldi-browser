@@ -35,7 +35,6 @@
 <translation id="1659112017960130179">کره‌ای (<ph name="ORIGIN" />)</translation>
 <translation id="1689333818294560261">نام مستعار</translation>
 <translation id="1711184756728070210"><ph name="BEGIN_LINK" />➔ شرایط استفاده<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />➔ سیاست حفظ حریم خصوصی<ph name="END_LINK2" /></translation>
-<translation id="1721552494230946796">پوشه‌ی دسترسی سریع جدید</translation>
 <translation id="173924678149983125">برای وارد کردن قوانین مسدودسازی، نشانی اینترنتی را وارد کنید</translation>
 <translation id="1751280147639351837">مسدودساز ردیاب و تبلیغات</translation>
 <translation id="1752547299766512813">ذخیره‌سازی رمزهای عبور</translation>
@@ -52,7 +51,6 @@
 <translation id="2034405583989639424">ویرایش بخش دسترسی سریع</translation>
 <translation id="2048247880942380698">عربی (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">بازگردانی تغییرات</translation>
-<translation id="2117093051794889870">بر اساس محتوا</translation>
 <translation id="2129408066358825297">سن</translation>
 <translation id="2148384276939959392">همگام‌سازی موارد انتخاب شده</translation>
 <translation id="2195713384412091023">با این کار تمامی اطلاعات همگام‌سازی شده بر روی سرورهای ما حذف خواهد شد، رمزعبوری که برای رمزگذاری تعیین نموده‌اید، بازنشانی شده، و شما نیز از حساب کاربری خارج خواهید شد.</translation>
@@ -123,7 +121,6 @@
 <translation id="3858860766373142691">نام</translation>
 <translation id="3866249974567520381">توضیحات</translation>
 <translation id="3872195896030547485">لطفاً یک آدرس ایمیل معتبر وارد کنید.</translation>
-<translation id="3894427358181296146">افزودن پوشه</translation>
 <translation id="3897092660631435901">منو</translation>
 <translation id="3953599441418463312">ژاپنی (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">ردیاب مسدود شد</translation>
@@ -177,7 +174,6 @@
 <translation id="4807415245238822255">رمزهای عبور باید باهم مطابقت داشته باشند.</translation>
 <translation id="4833044618885331665">برای استفاده از ابزار همگام‌سازی باید ویوالدی را به‌روزرسانی نمایید.</translation>
 <translation id="4852383705713307704">تبلیغ مسدود شد</translation>
-<translation id="4871370605780490696">افزودن نشانک</translation>
 <translation id="4903325570808402486">همگام‌سازی تنظیمات ویوالدی (هنوز همه‌ی تنظیمات قابل همگام‌سازی نیستند)</translation>
 <translation id="4929196061847506605">قدرتمند. شخصی. خصوصی.</translation>
 <translation id="4936710149174207991">همگام‌سازی نشده</translation>
@@ -228,7 +224,6 @@
 <translation id="6147094071357011481">آخرین زبانه‌های بسته شده در دسترس نیستند</translation>
 <translation id="6193995664633100765">هندی (<ph name="ORIGIN" />)</translation>
 <translation id="6365929278691047681">آلمانی (<ph name="ORIGIN" />)</translation>
-<translation id="6404511346730675251">ویرایش نشانک</translation>
 <translation id="6406506848690869874">همگام‌سازی</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> یادداشت انتخاب شد</translation>
 <translation id="6468130661190228905">متأسفیم، به‌نظر می‌رسد قبل از پیوستن به انجمن ما باید کمی صبر کنید. زیرا اعضای ما باید حداقل ۱۶ سال سن داشته باشند.</translation>
@@ -238,7 +233,6 @@
 <translation id="6535988230515403205">لهستانی (<ph name="ORIGIN" />)</translation>
 <translation id="659351303388691480">پاک‌سازی داده‌های وب‌گردی...</translation>
 <translation id="6614744450826097546">جزئیات تبلیغ</translation>
-<translation id="6627583120233659107">ویرایش پوشه</translation>
 <translation id="6631760746795162665">کلمبیایی (<ph name="ORIGIN" />)</translation>
 <translation id="6639866709520319699">ردیاب‌ها و تبلیغات مسدود شده‌اند. برخی سایت‌ها ممکن است به درستی کار نکنند.</translation>
 <translation id="6642196070615520677">حذف داده‌های همگام‌سازی شده‌ی راه دور</translation>
@@ -268,7 +262,6 @@
 <translation id="7210372243397300116">جستجوی پوشه</translation>
 <translation id="7215420652436283416">بر اساس آدرس</translation>
 <translation id="7229439505896086266">ایجاد یادداشت</translation>
-<translation id="7299721129597238157">حذف نشانک</translation>
 <translation id="7311118006561484338">بر اساس عنوان</translation>
 <translation id="7325310788570036874">با ویوالدی هوشمندانه‌تر، کارآمدتر و سریع‌تر به وب‌گردی بپردازید.</translation>
 <translation id="734110743815267231">عبری (<ph name="ORIGIN" />)</translation>

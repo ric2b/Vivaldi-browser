@@ -130,6 +130,7 @@ import org.chromium.components.browsing_data.DeleteBrowsingDataAction;
 import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.content_settings.CookieControlsMode;
+import org.chromium.components.content_settings.ProviderType;
 import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.components.location.LocationUtils;
 import org.chromium.components.permissions.nfc.NfcSystemLevelSetting;
@@ -381,7 +382,7 @@ public class SiteSettingsTest {
                         "primary.com",
                         "secondary1.com",
                         ContentSettingValues.ALLOW,
-                        "preference",
+                        ProviderType.PREF_PROVIDER,
                         30,
                         false));
         site.addEmbeddedPermission(
@@ -390,7 +391,7 @@ public class SiteSettingsTest {
                         "primary.com",
                         "secondary3.com",
                         ContentSettingValues.ALLOW,
-                        "preference",
+                        ProviderType.PREF_PROVIDER,
                         30,
                         false));
 
@@ -572,7 +573,11 @@ public class SiteSettingsTest {
                 });
         if (type == SiteSettingsCategory.Type.SITE_DATA && !enabled) {
             int id = R.string.website_settings_site_data_page_block_confirm_dialog_confirm_button;
-            onViewWaiting(withText(id)).perform(click());
+            onViewWaiting(
+                            withText(id),
+                            // checkRootDialog=true ensures dialog is in focus, avoids flakiness.
+                            true)
+                    .perform(click());
         }
         settingsActivity.finish();
     }
@@ -905,7 +910,7 @@ public class SiteSettingsTest {
                 settingsActivity,
                 CookieControlsMode.BLOCK_THIRD_PARTY,
                 ToggleButtonState.EnabledUnchecked);
-        // TODO(crbug.com/1449833): fix this assertion.
+        // TODO(crbug.com/40064993): fix this assertion.
         // onView(getManagedViewMatcher(/* activeView= */ true)).check(matches(isDisplayed()));
         onView(getManagedViewMatcher(/* activeView= */ false)).check(matches(not(isDisplayed())));
         settingsActivity.finish();
@@ -940,7 +945,7 @@ public class SiteSettingsTest {
                 settingsActivity,
                 CookieControlsMode.BLOCK_THIRD_PARTY,
                 ToggleButtonState.EnabledUnchecked);
-        // TODO(crbug.com/1449833): fix this assertion.
+        // TODO(crbug.com/40064993): fix this assertion.
         // onView(getManagedViewMatcher(/* activeView= */ true)).check(matches(isDisplayed()));
         onView(getManagedViewMatcher(/* activeView= */ false)).check(matches(not(isDisplayed())));
         settingsActivity.finish();
@@ -2736,7 +2741,8 @@ public class SiteSettingsTest {
         testTwoStateToggleDisabledByPolicy(SiteSettingsCategory.Type.JAVASCRIPT);
         testTwoStateToggleDisabledByPolicy(SiteSettingsCategory.Type.POPUPS);
         testTwoStateToggleDisabledByPolicy(SiteSettingsCategory.Type.DEVICE_LOCATION);
-        // TODO(crbug/1385889): add a test for sensors once crash in the sensors settings page is
+        // TODO(crbug.com/40879457): add a test for sensors once crash in the sensors settings page
+        // is
         // resolved.
     }
 
@@ -2938,17 +2944,11 @@ public class SiteSettingsTest {
                     singleCategorySettings.findPreference(SingleCategorySettings.BINARY_TOGGLE_KEY);
             assert toggle != null;
 
-            var delegate =
-                    new ChromeSiteSettingsDelegate(
-                            toggle.getContext(), ProfileManager.getLastUsedRegularProfile());
-
             Assert.assertEquals(
                     "Preference title is not set correctly.",
                     singleCategorySettings
                             .getResources()
-                            .getString(
-                                    ContentSettingsResources.getTitle(
-                                            mContentSettingsType, delegate)),
+                            .getString(ContentSettingsResources.getTitle(mContentSettingsType)),
                     toggle.getTitle());
             assertNotNull("Enabled summary text should not be null.", toggle.getSummaryOn());
             assertNotNull("Disabled summary text should not be null.", toggle.getSummaryOff());
@@ -2963,9 +2963,9 @@ public class SiteSettingsTest {
                             .getString(
                                     mIsCategoryEnabled
                                             ? ContentSettingsResources.getEnabledSummary(
-                                                    mContentSettingsType, delegate)
+                                                    mContentSettingsType)
                                             : ContentSettingsResources.getDisabledSummary(
-                                                    mContentSettingsType, delegate));
+                                                    mContentSettingsType));
             Assert.assertEquals(
                     "Summary text in state <" + mIsCategoryEnabled + "> does not match.",
                     expected,

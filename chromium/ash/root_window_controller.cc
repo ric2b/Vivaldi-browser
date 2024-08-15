@@ -49,6 +49,7 @@
 #include "ash/touch/touch_hud_debug.h"
 #include "ash/touch/touch_hud_projection.h"
 #include "ash/touch/touch_observer_hud.h"
+#include "ash/utility/forest_util.h"
 #include "ash/wallpaper/views/wallpaper_widget_controller.h"
 #include "ash/wm/always_on_top_controller.h"
 #include "ash/wm/bounds_tracker/window_bounds_tracker.h"
@@ -62,11 +63,10 @@
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overlay_layout_manager.h"
 #include "ash/wm/overview/birch/birch_bar_context_menu_model.h"
+#include "ash/wm/overview/birch/birch_bar_controller.h"
 #include "ash/wm/overview/birch/birch_bar_menu_model_adapter.h"
 #include "ash/wm/overview/overview_controller.h"
-#include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_session.h"
-#include "ash/wm/overview/overview_utils.h"
 #include "ash/wm/root_window_layout_manager.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/splitview/split_view_overview_session.h"
@@ -845,13 +845,11 @@ void RootWindowController::SetTouchAccessibilityAnchorPoint(
 
 void RootWindowController::ShowContextMenu(const gfx::Point& location_in_screen,
                                            ui::MenuSourceType source_type) {
-  // Show birch bar context menu in clamshell mode Overview without a partial
-  // split screen.
-  // TODO(http://325963519): remove the tablet mode restriction when tablet mode
-  // birch bar is implemented.
-  if (features::IsForestFeatureEnabled() &&
+  // Show birch bar context menu for the primary user in clamshell mode Overview
+  // without a partial split screen.
+  if (IsForestFeatureEnabled() &&
+      Shell::Get()->session_controller()->IsUserPrimary() &&
       OverviewController::Get()->InOverviewSession() &&
-      !display::Screen::GetScreen()->InTabletMode() &&
       !split_view_overview_session_) {
     root_window_menu_model_adapter_ = BuildBirchMenuModelAdapter(source_type);
   } else {
@@ -1217,7 +1215,7 @@ void RootWindowController::CreateContainers() {
                   non_lock_screen_containers);
 
   aura::Window* shutdown_screenshot_container = non_lock_screen_containers;
-  if (features::IsForestFeatureEnabled()) {
+  if (IsForestFeatureFlagEnabled()) {
     shutdown_screenshot_container = CreateContainer(
         kShellWindowId_ShutdownScreenshotContainer,
         "ShutdownScreenshotContainer", non_lock_screen_containers);
@@ -1442,15 +1440,15 @@ RootWindowController::GetAccessibilityPanelLayoutManager() const {
 std::unique_ptr<AppMenuModelAdapter>
 RootWindowController::BuildBirchMenuModelAdapter(
     ui::MenuSourceType source_type) {
-  const bool is_birch_bar_showing = GetOverviewSession()
-                                        ->GetGridWithRootWindow(GetRootWindow())
-                                        ->IsBirchBarShowing();
+  const bool is_birch_bar_showing =
+      BirchBarController::Get()->GetShowBirchSuggestions();
 
   return std::make_unique<BirchBarMenuModelAdapter>(
       std::make_unique<BirchBarContextMenuModel>(
-          nullptr, is_birch_bar_showing
-                       ? BirchBarContextMenuModel::Type::kExpandedBarMenu
-                       : BirchBarContextMenuModel::Type::kCollapsedBarMenu),
+          BirchBarController::Get(),
+          is_birch_bar_showing
+              ? BirchBarContextMenuModel::Type::kExpandedBarMenu
+              : BirchBarContextMenuModel::Type::kCollapsedBarMenu),
       wallpaper_widget_controller()->GetWidget(), source_type,
       base::BindOnce(&RootWindowController::OnMenuClosed,
                      base::Unretained(this)),

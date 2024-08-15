@@ -92,6 +92,8 @@ class RequestHandler:
             "timeLapse": True,
             "auto_qr": True,
             "digital_zoom": True,
+            "preview_ocr": True,
+            "super_res": True,
         }
         load_time_data.update(self._load_grd_strings())
         relative_path = _get_root_relative_path(request_path)
@@ -181,6 +183,7 @@ class RequestHandler:
         mojo_files = [
             "camera_app_helper.mojom",
             "events_sender.mojom",
+            "ocr.mojom",
             "types.mojom",
         ]
         # TODO(pihsun): This doesn't handle possible enum name collision

@@ -36,9 +36,8 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityUtils;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.app.bookmarks.BookmarkActivity;
-import org.chromium.chrome.browser.app.bookmarks.BookmarkAddEditFolderActivity;
 import org.chromium.chrome.browser.app.bookmarks.BookmarkEditActivity;
-import org.chromium.chrome.browser.app.bookmarks.BookmarkFolderSelectActivity;
+import org.chromium.chrome.browser.app.bookmarks.BookmarkFolderPickerActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayPref;
 import org.chromium.chrome.browser.commerce.ShoppingServiceFactory;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
@@ -85,6 +84,7 @@ import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.widget.Toast;
+import org.chromium.ui.modelutil.MVCListAdapter;
 
 import org.vivaldi.browser.common.VivaldiBookmarkUtils;
 import org.vivaldi.browser.panels.PanelUtils;
@@ -121,7 +121,7 @@ public class BookmarkUtils {
             Callback<BookmarkId> callback,
             boolean fromExplicitTrackUi) {
         assert bookmarkModel.isBookmarkModelLoaded();
-        if (existingBookmarkItem != null) {
+        if (existingBookmarkItem != null && bookmarkType != BookmarkType.READING_LIST) {  // Vivaldi Ref. VAB-9205
             startEditActivity(activity, existingBookmarkItem.getId());
             callback.onResult(existingBookmarkItem.getId());
             return;
@@ -221,6 +221,9 @@ public class BookmarkUtils {
             boolean fromCustomTab,
             @BookmarkType int bookmarkType) {
         BookmarkId parentId = null;
+        if (ChromeApplicationImpl.isVivaldi()) { // Vivaldi Ref. VAB-9205
+            parentId = getLastUsedParent();
+        }
         if (bookmarkType == BookmarkType.READING_LIST) {
             parentId = bookmarkModel.getDefaultReadingListFolder();
         }
@@ -386,7 +389,7 @@ public class BookmarkUtils {
             @NonNull BookmarkModel bookmarkModel,
             @NonNull List<Tab> tabList,
             @NonNull SnackbarManager snackbarManager) {
-        // TODO(crbug.com/1385914): Refactor the bookmark folder select activity to allow for the
+        // TODO(crbug.com/40879467): Refactor the bookmark folder select activity to allow for the
         // view to display in a dialog implementation approach.
         assert bookmarkModel != null;
 
@@ -502,6 +505,7 @@ public class BookmarkUtils {
 
         if (bookmarkId != null) {
             BookmarkMetrics.recordBookmarkAdded(profile, bookmarkId);
+            if (bookmarkType != BookmarkType.READING_LIST)  // Vivaldi Ref. VAB-9205
             setLastUsedParent(parent);
         }
         return bookmarkId;
@@ -542,7 +546,7 @@ public class BookmarkUtils {
             @Override
             public void onAction(Object actionData) {
                 RecordUserAction.record("TabMultiSelectV2.BookmarkTabsSnackbarEditClicked");
-                BookmarkAddEditFolderActivity.startEditFolderActivity(context, folder);
+                BookmarkUtils.startEditActivity(context, folder);
             }
         };
     }
@@ -693,19 +697,8 @@ public class BookmarkUtils {
         SharedPreferencesManager preferences = ChromeSharedPreferences.getInstance();
         if (!preferences.contains(ChromePreferenceKeys.BOOKMARKS_LAST_USED_PARENT)) return null;
 
-        BookmarkId parent =
-            BookmarkId.getBookmarkIdFromString(
+        return BookmarkId.getBookmarkIdFromString(
                 preferences.readString(ChromePreferenceKeys.BOOKMARKS_LAST_USED_PARENT, null));
-
-        // We need to reset the last used parent to support toggling reading list type-swapping.
-        if (parent.getType() == BookmarkType.READING_LIST
-                // Vivaldi - Reset last used parent to avoid next bookmarks being added as reading
-                // list items
-                || ChromeApplicationImpl.isVivaldi()) {
-            setLastUsedParent(parent);
-            return null;
-        }
-        return parent;
     }
 
     /** Starts an {@link BookmarkEditActivity} for the given {@link BookmarkId}. */
@@ -751,9 +744,13 @@ public class BookmarkUtils {
         return bookmarkIds;
     }
 
-    /** Starts an {@link BookmarkFolderSelectActivity} for the given {@link BookmarkId}. */
-    public static void startFolderSelectActivity(Context context, BookmarkId bookmarkId) {
-        BookmarkFolderSelectActivity.startFolderSelectActivity(context, bookmarkId);
+    /** Starts an {@link BookmarkFolderPickerActivity} for the given {@link BookmarkId}s. */
+    public static void startFolderPickerActivity(Context context, BookmarkId... bookmarkIds) {
+        Intent intent = new Intent(context, BookmarkFolderPickerActivity.class);
+        intent.putStringArrayListExtra(
+                BookmarkFolderPickerActivity.INTENT_BOOKMARK_IDS,
+                BookmarkUtils.bookmarkIdsToStringList(bookmarkIds));
+        context.startActivity(intent);
     }
 
     /**
@@ -770,8 +767,7 @@ public class BookmarkUtils {
         ColorStateList tint = getFolderIconTint(context, bookmarkId.getType());
         if (bookmarkId.getType() == BookmarkType.READING_LIST) {
             return UiUtils.getTintedDrawable(context, R.drawable.ic_reading_list_folder_24dp, tint);
-        } else if (BookmarkFeatures.isAndroidImprovedBookmarksEnabled()
-                && bookmarkId.getType() == BookmarkType.NORMAL
+        } else if (bookmarkId.getType() == BookmarkType.NORMAL
                 && Objects.equals(bookmarkId, bookmarkModel.getDesktopFolderId())) {
             return UiUtils.getTintedDrawable(context, R.drawable.ic_toolbar_24dp, tint);
         }
@@ -789,11 +785,10 @@ public class BookmarkUtils {
      * @param type The bookmark type of the folder.
      * @return The tint used on the bookmark folder icon.
      */
-    // TODO(crbug.com/1483510): This function isn't used in the new bookmarks manager, remove it
+    // TODO(crbug.com/40282037): This function isn't used in the new bookmarks manager, remove it
     // after android-improved-bookmarks is the default.
     public static ColorStateList getFolderIconTint(Context context, @BookmarkType int type) {
-        if (BookmarkFeatures.isAndroidImprovedBookmarksEnabled()
-                && type == BookmarkType.READING_LIST) {
+        if (type == BookmarkType.READING_LIST) {
             return ColorStateList.valueOf(SemanticColorUtils.getDefaultIconColorAccent1(context));
         }
 
@@ -883,34 +878,21 @@ public class BookmarkUtils {
 
     /** Returns the size to use when fetching favicons. */
     public static int getFaviconFetchSize(Resources resources) {
-        if (BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) {
-            return resources.getDimensionPixelSize(R.dimen.tile_view_icon_min_size);
-        }
-        return resources.getDimensionPixelSize(R.dimen.default_favicon_min_size);
+        return resources.getDimensionPixelSize(R.dimen.tile_view_icon_min_size);
     }
 
     /** Returns the size to use when displaying an image. */
     public static int getImageIconSize(
             Resources resources, @BookmarkRowDisplayPref int displayPref) {
-        if (BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) {
-            return displayPref == BookmarkRowDisplayPref.VISUAL
-                    ? resources.getDimensionPixelSize(
-                            R.dimen.improved_bookmark_start_image_size_visual)
-                    : resources.getDimensionPixelSize(
-                            R.dimen.improved_bookmark_start_image_size_compact);
-        }
-
-        return BookmarkFeatures.isLegacyBookmarksVisualRefreshEnabled()
-                ? resources.getDimensionPixelSize(R.dimen.list_item_v2_start_icon_width_compact)
-                : resources.getDimensionPixelSize(R.dimen.list_item_start_icon_width);
+        return displayPref == BookmarkRowDisplayPref.VISUAL
+                ? resources.getDimensionPixelSize(R.dimen.improved_bookmark_start_image_size_visual)
+                : resources.getDimensionPixelSize(
+                        R.dimen.improved_bookmark_start_image_size_compact);
     }
 
     /** Returns the size to use when displaying the favicon. */
     public static int getFaviconDisplaySize(Resources resources) {
-        if (BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) {
-            return resources.getDimensionPixelSize(R.dimen.tile_view_icon_size_modern);
-        }
-        return resources.getDimensionPixelSize(R.dimen.bookmark_favicon_display_size);
+        return resources.getDimensionPixelSize(R.dimen.tile_view_icon_size_modern);
     }
 
     /**
@@ -941,22 +923,6 @@ public class BookmarkUtils {
         return true;
     }
 
-    /** Returns whether the given folder should display images. */
-    public static boolean shouldShowImagesForFolder(
-            BookmarkModel bookmarkModel, BookmarkId folder) {
-        BookmarkId rootNodeId = bookmarkModel.getRootFolderId();
-        BookmarkId desktopNodeId = bookmarkModel.getDesktopFolderId();
-        BookmarkId mobileNodeId = bookmarkModel.getMobileFolderId();
-        BookmarkId othersNodeId = bookmarkModel.getOtherFolderId();
-
-        List<BookmarkId> specialFoldersIds = bookmarkModel.getTopLevelFolderIds();
-        return !Objects.equals(folder, rootNodeId)
-                && !Objects.equals(folder, desktopNodeId)
-                && !Objects.equals(folder, mobileNodeId)
-                && !Objects.equals(folder, othersNodeId)
-                && !specialFoldersIds.contains(folder);
-    }
-
     /** Returns whether the given id is a special folder. */
     public static boolean isSpecialFolder(BookmarkModel bookmarkModel, BookmarkItem item) {
         return item != null && Objects.equals(item.getParentId(), bookmarkModel.getRootFolderId());
@@ -965,6 +931,9 @@ public class BookmarkUtils {
     /** Return the background color for the given {@link BookmarkType}. */
     public static @ColorInt int getIconBackground(
             Context context, BookmarkModel bookmarkModel, BookmarkItem item) {
+        if (ChromeApplicationImpl.isVivaldi())
+            return ChromeColors.getSurfaceColor(context, R.dimen.default_elevation_1);
+        // End Vivaldi
         if (isSpecialFolder(bookmarkModel, item)) {
             return SemanticColorUtils.getColorPrimaryContainer(context);
         } else {
@@ -976,7 +945,8 @@ public class BookmarkUtils {
     public static ColorStateList getIconTint(
             Context context, BookmarkModel bookmarkModel, BookmarkItem item) {
         if (isSpecialFolder(bookmarkModel, item)) {
-            return ColorStateList.valueOf(SemanticColorUtils.getDefaultIconColorAccent1(context));
+            return ColorStateList.valueOf(
+                    SemanticColorUtils.getDefaultIconColorOnAccent1Container(context));
         } else {
             return AppCompatResources.getColorStateList(
                     context, R.color.default_icon_color_secondary_tint_list);
@@ -994,14 +964,7 @@ public class BookmarkUtils {
     }
 
     private static int getDisplayTextSize(Resources resources) {
-        if (BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) {
-            return resources.getDimensionPixelSize(R.dimen.improved_bookmark_favicon_text_size);
-        }
-
-        return BookmarkFeatures.isLegacyBookmarksVisualRefreshEnabled()
-                ? resources.getDimensionPixelSize(
-                        R.dimen.bookmark_refresh_circular_monogram_text_size)
-                : resources.getDimensionPixelSize(R.dimen.circular_monogram_text_size);
+        return resources.getDimensionPixelSize(R.dimen.improved_bookmark_favicon_text_size);
     }
 
     private static Locale getLocale(Activity activity) {
@@ -1020,10 +983,28 @@ public class BookmarkUtils {
     }
 
     public static void setLastUsedParentPublic(Context context, BookmarkId bookmarkId) {
+        if (!bookmarkId.equals(BookmarkBridge.getForProfile(  // Vivaldi Ref. VAB-9205
+                ProfileManager.getLastUsedRegularProfile()).getTrashFolderId()))
         setLastUsedParent(bookmarkId);
     }
 
     public static String getFirstUrlToLoadPublic(Context context, BookmarkId folderId) {
         return getFirstUrlToLoad(folderId);
+    }
+
+    /** Vivaldi Checks if the current sorted list contains the same entries
+     * as the current Bookmark Model**/
+    public static boolean getIfBookmarkOrderIsSame(List<BookmarkListEntry> entries,
+                                                    MVCListAdapter.ModelList bookmarkModel) {
+        boolean isEqual = true;
+        for (int i = 0; i < entries.size(); i++) {
+            if (!bookmarkModel.get(i).model.get(
+                    BookmarkManagerProperties.BOOKMARK_LIST_ENTRY).
+                    getBookmarkItem().getTitle().equals(
+                    entries.get(i).getBookmarkItem().getTitle())) {
+                isEqual = false;
+            }
+        }
+        return isEqual;
     }
 }

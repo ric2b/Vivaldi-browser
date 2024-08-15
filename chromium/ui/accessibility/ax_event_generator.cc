@@ -319,6 +319,19 @@ void AXEventGenerator::OnNodeDataChanged(AXTree* tree,
   if (!node)
     return;
 
+  // We can't rely on `AttributeChanged` methods since ARIA notifications may be
+  // posted more than once with the same announcement and properties.
+  // Each `AriaNotification` is discarded once it's serialized, so we can simply
+  // check if there's notification data; it won't persist across updates.
+  //
+  // TODO(crbug.com/330589205): Remove all of this when we develop a better way
+  // to send single-use data attached to events. DO NOT replicate this pattern,
+  // as this method is not intended to check for attribute changes.
+  if (new_node_data.HasStringListAttribute(
+          ax::mojom::StringListAttribute::kAriaNotificationAnnouncements)) {
+    AddEvent(node, Event::ARIA_NOTIFICATIONS_POSTED);
+  }
+
   // Internally we store inline text box nodes as children of a static text
   // node or a line break node, which enables us to determine character bounds
   // and line layout. We don't expose those to platform APIs, though, so
@@ -584,9 +597,6 @@ void AXEventGenerator::OnIntAttributeChanged(AXTree* tree,
     case ax::mojom::IntAttribute::kAriaCurrentState:
       AddEvent(node, Event::ARIA_CURRENT_CHANGED);
       break;
-    case ax::mojom::IntAttribute::kDropeffectDeprecated:
-      AddEvent(node, Event::DROPEFFECT_CHANGED);
-      break;
     case ax::mojom::IntAttribute::kHasPopup:
       AddEvent(node, Event::HASPOPUP_CHANGED);
       AddEvent(node, Event::WIN_IACCESSIBLE_STATE_CHANGED);
@@ -720,9 +730,6 @@ void AXEventGenerator::OnBoolAttributeChanged(AXTree* tree,
       // Fire an 'invalidated' event when aria-busy becomes false.
       if (!new_value)
         AddEvent(node, Event::LAYOUT_INVALIDATED);
-      break;
-    case ax::mojom::BoolAttribute::kGrabbedDeprecated:
-      AddEvent(node, Event::GRABBED_CHANGED);
       break;
     case ax::mojom::BoolAttribute::kLiveAtomic:
       AddEvent(node, Event::ATOMIC_CHANGED);
@@ -1333,8 +1340,6 @@ const char* ToString(AXEventGenerator::Event event) {
       return "documentSelectionChanged";
     case AXEventGenerator::Event::DOCUMENT_TITLE_CHANGED:
       return "documentTitleChanged";
-    case AXEventGenerator::Event::DROPEFFECT_CHANGED:
-      return "dropeffectChanged";
     case ui::AXEventGenerator::Event::EDITABLE_TEXT_CHANGED:
       return "editableTextChanged";
     case AXEventGenerator::Event::ENABLED_CHANGED:
@@ -1347,8 +1352,6 @@ const char* ToString(AXEventGenerator::Event event) {
       return "flowFromChanged";
     case AXEventGenerator::Event::FLOW_TO_CHANGED:
       return "flowToChanged";
-    case AXEventGenerator::Event::GRABBED_CHANGED:
-      return "grabbedChanged";
     case AXEventGenerator::Event::HASPOPUP_CHANGED:
       return "haspopupChanged";
     case AXEventGenerator::Event::HIERARCHICAL_LEVEL_CHANGED:

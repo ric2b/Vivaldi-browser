@@ -25,6 +25,9 @@ import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.url.GURL;
 import org.chromium.url.Origin;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * The NavigationControllerImpl Java wrapper to allow communicating with the native
  * NavigationControllerImpl object.
@@ -299,6 +302,8 @@ import org.chromium.url.Origin;
     @Override
     public void setUseDesktopUserAgent(boolean override, boolean reloadOnChange, int caller) {
         if (mNativeNavigationControllerAndroid != 0) {
+            // Vivaldi
+            if (!BuildConfig.IS_VIVALDI) {
             Log.i(
                     TAG,
                     "Thread dump for debugging, override: "
@@ -308,7 +313,7 @@ import org.chromium.url.Origin;
                             + " caller: "
                             + caller);
             Thread.dumpStack();
-
+            }
             NavigationControllerImplJni.get()
                     .setUseDesktopUserAgent(
                             mNativeNavigationControllerAndroid,

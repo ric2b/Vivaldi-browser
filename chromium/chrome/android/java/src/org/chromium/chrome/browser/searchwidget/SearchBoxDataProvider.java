@@ -31,7 +31,6 @@ class SearchBoxDataProvider implements LocationBarDataProvider {
      * @param tab The tab to use.
      */
     public void onNativeLibraryReady(Tab tab) {
-        assert LibraryLoader.getInstance().isInitialized();
         mTab = tab;
     }
 
@@ -107,7 +106,7 @@ class SearchBoxDataProvider implements LocationBarDataProvider {
     public GURL getCurrentGurl() {
         if (GURL.isEmptyOrInvalid(mGurl)) {
             assert LibraryLoader.getInstance().isInitialized();
-            mGurl = new GURL(SearchActivityPreferencesManager.getCurrent().searchEngineUrl);
+            mGurl = SearchActivityPreferencesManager.getCurrent().searchEngineUrl;
         }
 
         return mGurl;

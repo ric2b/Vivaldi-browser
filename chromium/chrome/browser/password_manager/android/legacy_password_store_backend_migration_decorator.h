@@ -96,15 +96,18 @@ class LegacyPasswordStoreBackendMigrationDecorator : public PasswordStoreBackend
                      PasswordChangesOrErrorReply callback) override;
   void UpdateLoginAsync(const PasswordForm& form,
                         PasswordChangesOrErrorReply callback) override;
-  void RemoveLoginAsync(const PasswordForm& form,
+  void RemoveLoginAsync(const base::Location& location,
+                        const PasswordForm& form,
                         PasswordChangesOrErrorReply callback) override;
   void RemoveLoginsByURLAndTimeAsync(
+      const base::Location& location,
       const base::RepeatingCallback<bool(const GURL&)>& url_filter,
       base::Time delete_begin,
       base::Time delete_end,
       base::OnceCallback<void(bool)> sync_completion,
       PasswordChangesOrErrorReply callback) override;
   void RemoveLoginsCreatedBetweenAsync(
+      const base::Location& location,
       base::Time delete_begin,
       base::Time delete_end,
       PasswordChangesOrErrorReply callback) override;
@@ -112,7 +115,7 @@ class LegacyPasswordStoreBackendMigrationDecorator : public PasswordStoreBackend
       const base::RepeatingCallback<bool(const GURL&)>& origin_filter,
       base::OnceClosure completion) override;
   SmartBubbleStatsStore* GetSmartBubbleStatsStore() override;
-  std::unique_ptr<syncer::ProxyModelTypeControllerDelegate>
+  std::unique_ptr<syncer::ModelTypeControllerDelegate>
   CreateSyncControllerDelegate() override;
   void OnSyncServiceInitialized(syncer::SyncService* sync_service) override;
   void RecordAddLoginAsyncCalledFromTheStore() override;
@@ -124,7 +127,7 @@ class LegacyPasswordStoreBackendMigrationDecorator : public PasswordStoreBackend
 
   // React on sync changes to keep GMS Core local storage up-to-date.
   // Called when the changed setting is applied.
-  // TODO(https://crbug.com/) Remove this method when no longer needed.
+  // TODO(crbug.com/) Remove this method when no longer needed.
   void SyncStatusChanged();
 
   // Proxy backend to which all responsibilities are being delegated.

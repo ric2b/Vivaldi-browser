@@ -19,6 +19,7 @@ import org.chromium.ui.base.ViewUtils;
 // Vivaldi
 import android.view.MotionEvent;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.build.BuildConfig;
 
 /** The New Tab Page for use in the incognito profile. */
 public class IncognitoNewTabPageView extends FrameLayout {
@@ -43,9 +44,6 @@ public class IncognitoNewTabPageView extends FrameLayout {
 
         /** Tells the caller whether a new snapshot is required or not. */
         boolean shouldCaptureThumbnail();
-
-        /** Whether the new version of the Incognito NTP should be shown. */
-        boolean shouldShowRevampedIncognitoNtp();
 
         /** Whether to show the tracking protection UI on the NTP. */
         boolean shouldShowTrackingProtectionNtp();
@@ -85,12 +83,7 @@ public class IncognitoNewTabPageView extends FrameLayout {
 
     private void inflateConditionalLayouts() {
         ViewStub viewStub = findViewById(R.id.incognito_description_layout_stub);
-        if (mManager.shouldShowRevampedIncognitoNtp()) {
-            viewStub.setLayoutResource(R.layout.revamped_incognito_description_layout);
-        } else {
-            viewStub.setLayoutResource(R.layout.incognito_description_layout);
-        }
-
+        viewStub.setLayoutResource(R.layout.incognito_description_layout);
         mDescriptionView = (IncognitoDescriptionView) viewStub.inflate();
         mDescriptionView.setLearnMoreOnclickListener(
                 new OnClickListener() {
@@ -99,20 +92,15 @@ public class IncognitoNewTabPageView extends FrameLayout {
                         mManager.loadIncognitoLearnMore();
                     }
                 });
+        if (BuildConfig.IS_VIVALDI) return; // Vivaldi Ref VAB-9323
 
         // Inflate the correct cookie/tracking protection card.
         ViewStub cardStub = findViewById(R.id.cookie_card_stub);
         if (cardStub == null) return;
         if (mManager.shouldShowTrackingProtectionNtp()) {
-            cardStub.setLayoutResource(
-                    mManager.shouldShowRevampedIncognitoNtp()
-                            ? R.layout.revamped_incognito_tracking_protection_card
-                            : R.layout.incognito_tracking_protection_card);
+            cardStub.setLayoutResource(R.layout.incognito_tracking_protection_card);
         } else {
-            cardStub.setLayoutResource(
-                    mManager.shouldShowRevampedIncognitoNtp()
-                            ? R.layout.revamped_incognito_cookie_controls_card
-                            : R.layout.incognito_cookie_controls_card);
+            cardStub.setLayoutResource(R.layout.incognito_cookie_controls_card);
         }
         cardStub.inflate();
         mDescriptionView.formatTrackingProtectionText(getContext(), this);

@@ -4,6 +4,8 @@
 
 #include "fpdfsdk/cpdfsdk_helpers.h"
 
+#include "core/fxcrt/compiler_specific.h"
+#include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -15,30 +17,32 @@ TEST(CPDFSDK_HelpersTest, NulTerminateMaybeCopyAndReturnLength) {
     const ByteString to_be_copied("toBeCopied");
     constexpr size_t kExpectedToBeCopiedLen = 10;
     ASSERT_EQ(kExpectedToBeCopiedLen, to_be_copied.GetLength());
-
     EXPECT_EQ(kExpectedToBeCopiedLen + 1,
-              NulTerminateMaybeCopyAndReturnLength(to_be_copied, nullptr, 0));
+              NulTerminateMaybeCopyAndReturnLength(to_be_copied,
+                                                   pdfium::span<char>()));
 
     // Buffer should not change if declared length is too short.
     char buf[kExpectedToBeCopiedLen + 1];
-    memset(buf, 0x42, kExpectedToBeCopiedLen + 1);
+    fxcrt::spanset(pdfium::make_span(buf), 0x42);
     ASSERT_EQ(kExpectedToBeCopiedLen + 1,
-              NulTerminateMaybeCopyAndReturnLength(to_be_copied, buf,
-                                                   kExpectedToBeCopiedLen));
+              NulTerminateMaybeCopyAndReturnLength(
+                  to_be_copied, UNSAFE_BUFFERS(pdfium::make_span(
+                                    buf, kExpectedToBeCopiedLen))));
     for (char c : buf)
       EXPECT_EQ(0x42, c);
 
     // Buffer should copy over if long enough.
     ASSERT_EQ(kExpectedToBeCopiedLen + 1,
-              NulTerminateMaybeCopyAndReturnLength(to_be_copied, buf,
-                                                   kExpectedToBeCopiedLen + 1));
+              NulTerminateMaybeCopyAndReturnLength(to_be_copied,
+                                                   pdfium::make_span(buf)));
     EXPECT_EQ(to_be_copied, ByteString(buf));
   }
   {
     // Empty ByteString should still copy NUL terminator.
     const ByteString empty;
     char buf[1];
-    ASSERT_EQ(1u, NulTerminateMaybeCopyAndReturnLength(empty, buf, 1));
+    ASSERT_EQ(1u, NulTerminateMaybeCopyAndReturnLength(empty,
+                                                       pdfium::make_span(buf)));
     EXPECT_EQ(empty, ByteString(buf));
   }
 }

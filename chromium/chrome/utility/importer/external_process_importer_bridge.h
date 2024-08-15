@@ -77,6 +77,8 @@ class ExternalProcessImporterBridge : public ImporterBridge {
   void AddSpeedDial(
       const std::vector<ImportedSpeedDialEntry>& speeddials) override;
 
+  void AddExtensions(const std::vector<std::string>& extensions) override;
+
   void NotifyItemFailed(importer::ImportItem item,
                         const std::string& error) override;
  private:

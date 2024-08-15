@@ -30,7 +30,7 @@
 #include <memory>
 #include <utility>
 
-#include "dawn/native/CreatePipelineAsyncTask.h"
+#include "dawn/native/CreatePipelineAsyncEvent.h"
 #include "dawn/native/d3d/D3DError.h"
 #include "dawn/native/d3d11/DeviceD3D11.h"
 #include "dawn/native/d3d11/ShaderModuleD3D11.h"
@@ -63,11 +63,11 @@ MaybeError ComputePipeline::InitializeImpl() {
     // Tint does matrix multiplication expecting row major matrices
     compileFlags |= D3DCOMPILE_PACK_MATRIX_ROW_MAJOR;
 
-    if (!device->IsToggleEnabled(Toggle::D3DDisableIEEEStrictness)) {
+    const ProgrammableStage& programmableStage = GetStage(SingleShaderStage::Compute);
+    if (programmableStage.module->GetStrictMath().value_or(
+            !device->IsToggleEnabled(Toggle::D3DDisableIEEEStrictness))) {
         compileFlags |= D3DCOMPILE_IEEE_STRICTNESS;
     }
-
-    const ProgrammableStage& programmableStage = GetStage(SingleShaderStage::Compute);
 
     d3d::CompiledShader compiledShader;
     DAWN_TRY_ASSIGN(compiledShader, ToBackend(programmableStage.module)
@@ -90,15 +90,6 @@ void ComputePipeline::SetLabelImpl() {
 void ComputePipeline::ApplyNow(const ScopedSwapStateCommandRecordingContext* commandContext) {
     auto* d3dDeviceContext = commandContext->GetD3D11DeviceContext4();
     d3dDeviceContext->CSSetShader(mComputeShader.Get(), nullptr, 0);
-}
-
-void ComputePipeline::InitializeAsync(Ref<ComputePipelineBase> computePipeline,
-                                      WGPUCreateComputePipelineAsyncCallback callback,
-                                      void* userdata) {
-    std::unique_ptr<CreateComputePipelineAsyncTask> asyncTask =
-        std::make_unique<CreateComputePipelineAsyncTask>(std::move(computePipeline), callback,
-                                                         userdata);
-    CreateComputePipelineAsyncTask::RunAsync(std::move(asyncTask));
 }
 
 bool ComputePipeline::UsesNumWorkgroups() const {

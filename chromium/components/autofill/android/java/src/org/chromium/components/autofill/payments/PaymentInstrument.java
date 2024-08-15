@@ -4,9 +4,16 @@
 
 package org.chromium.components.autofill.payments;
 
+import org.jni_zero.CalledByNative;
+import org.jni_zero.JNINamespace;
+
 import org.chromium.url.GURL;
 
+import java.util.Arrays;
+import java.util.Objects;
+
 /** Base data model for any form of payment (FOP) synced via Google Payments. */
+@JNINamespace("autofill")
 public class PaymentInstrument {
     private final long mInstrumentId;
     private final String mNickname;
@@ -25,11 +32,13 @@ public class PaymentInstrument {
     }
 
     /** Returns the instrument id for the payment instrument. */
+    @CalledByNative
     public long getInstrumentId() {
         return mInstrumentId;
     }
 
     /** Returns the user-assigned nickname for the payment instrument, if one exists. */
+    @CalledByNative
     public String getNickname() {
         return mNickname;
     }
@@ -38,6 +47,7 @@ public class PaymentInstrument {
      * Returns the URL to download the icon to be displayed for the payment instrument, if one
      * exists.
      */
+    @CalledByNative
     public GURL getDisplayIconUrl() {
         return mDisplayIconUrl;
     }
@@ -58,6 +68,23 @@ public class PaymentInstrument {
             }
         }
         return false;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (obj == null) {
+            return false;
+        }
+
+        if (!(obj instanceof PaymentInstrument)) {
+            return false;
+        }
+
+        PaymentInstrument other = (PaymentInstrument) obj;
+        return mInstrumentId == other.getInstrumentId()
+                && Objects.equals(mNickname, other.getNickname())
+                && Objects.equals(mDisplayIconUrl, other.getDisplayIconUrl())
+                && Arrays.equals(mSupportedPaymentRails, other.getSupportedPaymentRails());
     }
 
     /** Builder for {@link PaymentInstrument}. */

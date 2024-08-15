@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fr">
+<translation id="2947471979790858922">Toutes les activités réalisées dans ces onglets privés seront supprimées sur cet appareil</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Vous pouvez retrouver votre onglet fermé via l'entrée Onglets récents du menu principal de Vivaldi. Aucun onglet privé n'y figurera.}
+        other {Vous pouvez retrouver vos onglets fermés via l'entrée Onglets récents du menu principal de Vivaldi. Vos # onglets privés n'y figureront pas.}}</translation>
+<translation id="4871187110787939393">Fermer tous les onglets privés ?</translation>
 </translationbundle>

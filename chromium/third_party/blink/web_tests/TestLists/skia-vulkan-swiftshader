@@ -411,9 +411,7 @@ animations/prefixed/string-keyframes-identifier-prefixed.html
 animations/responsive/responsive-neutral-keyframes.html
 animations/responsive/svg-responsive-to-timing-updates.html
 animations/retain-zero-percent.html
-animations/skew-notsequential-compositor.html
 animations/some-keyframes-empty.html
-animations/stability/animation-iteration-event-destroy-renderer.html
 animations/stability/animation-transition-collision-crash.html
 animations/stability/empty-keyframes.html
 animations/stability/keyframe-timing-function-unset-crash.html
@@ -745,7 +743,6 @@ media/avtrack/audio-track-enabled.html
 media/avtrack/track-switching.html
 media/avtrack/video-track-properties.html
 media/controls-layout-direction.html
-media/controls-slider-appearance-crash.html
 media/controls/accessibility-time-element.html
 media/controls/audio-element-should-not-propagate-click-events.html
 media/controls/closed-captions-on-off.html

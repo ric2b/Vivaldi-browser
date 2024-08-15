@@ -12,8 +12,9 @@
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_widget_sublevel.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "components/permissions/features.h"
 #include "components/vector_icons/vector_icons.h"
-#include "content/public/common/content_features.h"
+#include "third_party/blink/public/common/features_generated.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -70,7 +71,7 @@ std::unique_ptr<views::View> AddSpacer() {
 }
 
 int GetPermissionIconSize() {
-  return features::IsChromeRefresh2023() ? 20 : 18;
+  return 20;
 }
 
 }  // namespace
@@ -114,14 +115,18 @@ void EmbeddedPermissionPromptBaseView::CreateWidget() {
 std::unique_ptr<views::FlexLayoutView>
 EmbeddedPermissionPromptBaseView::CreateLoadingIcon() {
   auto throbber_container = std::make_unique<views::FlexLayoutView>();
-  throbber_container->SetMainAxisAlignment(views::LayoutAlignment::kCenter);
+  throbber_container->SetMainAxisAlignment(views::LayoutAlignment::kStart);
+  throbber_container->SetOrientation(views::LayoutOrientation::kVertical);
   auto throbber = std::make_unique<views::Throbber>();
   throbber->SetPreferredSize(
       gfx::Size(GetPermissionIconSize(), GetPermissionIconSize()));
-  throbber->SetProperty(views::kMarginsKey,
-                        gfx::Insets().set_top_bottom(1, 25));
+
   throbber->Start();
   throbber_container->AddChildView(std::move(throbber));
+
+  // Also add a filler view to fill in vertical space below the throbber.
+  auto filler = std::make_unique<views::View>();
+  throbber_container->AddChildView(std::move(filler));
   return throbber_container;
 }
 
@@ -147,7 +152,7 @@ void EmbeddedPermissionPromptBaseView::AddedToWidget() {
   }
 
   auto label = std::make_unique<views::Label>(
-      GetWindowTitle(), views::style::CONTEXT_DIALOG_BODY_TEXT);
+      GetWindowTitle(), views::style::CONTEXT_DIALOG_TITLE);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   label->SetCollapseWhenHidden(true);
   label->SetMultiLine(true);
@@ -270,13 +275,11 @@ void EmbeddedPermissionPromptBaseView::AddRequestLine(
   label->SetMultiLine(true);
   AddElementIdentifierToLabel(*label, index);
 
-  if (features::IsChromeRefresh2023()) {
-    label->SetTextStyle(views::style::STYLE_BODY_3);
-    label->SetEnabledColorId(kColorPermissionPromptRequestText);
+  label->SetTextStyle(views::style::STYLE_BODY_3);
+  label->SetEnabledColorId(kColorPermissionPromptRequestText);
 
-    line_container->SetProperty(views::kMarginsKey,
-                                gfx::Insets().set_top(BODY_TOP_MARGIN));
-  }
+  line_container->SetProperty(views::kMarginsKey,
+                              gfx::Insets().set_top(BODY_TOP_MARGIN));
 }
 
 void EmbeddedPermissionPromptBaseView::AddButton(
@@ -341,7 +344,9 @@ gfx::Rect EmbeddedPermissionPromptBaseView::GetBubbleBounds() {
 }
 
 bool EmbeddedPermissionPromptBaseView::ShouldOverrideBubbleBounds() const {
-  return features::kPermissionElementDialogPositioning.Get() &&
+  return base::FeatureList::IsEnabled(blink::features::kPermissionElement) &&
+         base::FeatureList::IsEnabled(
+             permissions::features::kPermissionElementDialogPositioning) &&
          !element_rect_.IsEmpty();
 }
 

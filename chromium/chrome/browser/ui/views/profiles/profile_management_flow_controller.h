@@ -28,7 +28,7 @@ class ProfilePickerWebContentsHost;
 // the next steps.
 class ProfileManagementFlowController {
  public:
-  // TODO(https://crbug.com/1358843): Split the steps more granularly across
+  // TODO(crbug.com/40237131): Split the steps more granularly across
   // logical steps instead of according to implementation details.
   enum class Step {
     kUnknown,
@@ -38,7 +38,7 @@ class ProfileManagementFlowController {
     kProfilePicker,
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
     // Renders the sign in screen on Dice platforms.
-    // TODO(https://crbug.com/1360773): Support the `kAccountSelection` step on
+    // TODO(crbug.com/40237764): Support the `kAccountSelection` step on
     // Lacros. Picking an account during the `kLacrosSelectAvailableAccount`
     // flow and the profile creation should be implemented as a standalone step.
     kAccountSelection,

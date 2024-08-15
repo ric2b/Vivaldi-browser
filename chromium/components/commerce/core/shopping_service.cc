@@ -18,11 +18,13 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "commerce_types.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/commerce/core/bookmark_update_manager.h"
 #include "components/commerce/core/commerce_constants.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/commerce_utils.h"
+#include "components/commerce/core/compare/cluster_manager.h"
 #include "components/commerce/core/compare/product_specifications_server_proxy.h"
 #include "components/commerce/core/discounts_storage.h"
 #include "components/commerce/core/feature_utils.h"
@@ -31,6 +33,7 @@
 #include "components/commerce/core/parcel/parcels_manager.h"
 #include "components/commerce/core/pref_names.h"
 #include "components/commerce/core/price_tracking_utils.h"
+#include "components/commerce/core/product_specifications/product_specifications_service.h"
 #include "components/commerce/core/proto/commerce_subscription_db_content.pb.h"
 #include "components/commerce/core/proto/discounts.pb.h"
 #include "components/commerce/core/proto/merchant_trust.pb.h"
@@ -65,18 +68,17 @@
 
 namespace commerce {
 
+namespace {
+// The maximum number of recently visited tab URLs to maintain.
+const size_t kRecentTabsMaxSize = 10;
+}  // namespace
+
 const char kImageAvailabilityHistogramName[] =
     "Commerce.ShoppingService.ProductInfo.ImageAvailability";
 const char kProductInfoLocalExtractionTime[] =
     "Commerce.ShoppingService.ProductInfo.LocalExtractionExecutionTime";
 
 const uint64_t kProductInfoLocalExtractionDelayMs = 2000;
-
-ProductInfoCacheEntry::ProductInfoCacheEntry() = default;
-ProductInfoCacheEntry::~ProductInfoCacheEntry() = default;
-
-PriceInsightsInfoCacheEntry::PriceInsightsInfoCacheEntry() = default;
-PriceInsightsInfoCacheEntry::~PriceInsightsInfoCacheEntry() = default;
 
 ShoppingService::ShoppingService(
     const std::string& country_on_startup,
@@ -216,17 +218,32 @@ ShoppingService::ShoppingService(
   product_specs_server_proxy_ =
       std::make_unique<ProductSpecificationsServerProxy>(
           account_checker_.get(), identity_manager, url_loader_factory);
+
+  if (account_checker_ && product_specifications_service_ &&
+      IsProductSpecificationsEnabled(account_checker_.get())) {
+    cluster_manager_ = std::make_unique<ClusterManager>(
+        product_specifications_service_,
+        base::BindRepeating(&ShoppingService::GetProductInfoForUrl,
+                            weak_ptr_factory_.GetWeakPtr()),
+        base::BindRepeating(&ShoppingService::GetUrlInfosForActiveWebWrappers,
+                            base::Unretained(this)));
+  }
 }
 
 AccountChecker* ShoppingService::GetAccountChecker() {
   return account_checker_.get();
 }
 
-void ShoppingService::WebWrapperCreated(WebWrapper* web) {}
+void ShoppingService::WebWrapperCreated(WebWrapper* web) {
+  open_web_wrappers_.insert(web);
+}
 
 void ShoppingService::DidNavigatePrimaryMainFrame(WebWrapper* web) {
   HandleDidNavigatePrimaryMainFrameForProductInfo(web);
   HandleDidNavigatePrimaryMainFrameForPriceInsightsInfo(web);
+  if (cluster_manager_) {
+    cluster_manager_->DidNavigatePrimaryMainFrame(web->GetLastCommittedURL());
+  }
 }
 
 void ShoppingService::HandleDidNavigatePrimaryMainFrameForProductInfo(
@@ -238,7 +255,18 @@ void ShoppingService::HandleDidNavigatePrimaryMainFrameForProductInfo(
     return;
   }
 
-  UpdateProductInfoCacheForInsertion(web->GetLastCommittedURL());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (IsProductInfoApiEnabled()) {
+    commerce_info_cache_.AddRef(web->GetLastCommittedURL());
+
+    CommerceInfoCache::CacheEntry* entry =
+        commerce_info_cache_.GetEntryForUrl(web->GetLastCommittedURL());
+    CHECK(entry);
+
+    // When info is loaded as the result of a navigation, there's no reason to
+    // require it be loaded on-demand.
+    entry->run_product_info_on_demand = false;
+  }
 
   opt_guide_->CanApplyOptimization(
       web->GetLastCommittedURL(),
@@ -259,15 +287,18 @@ void ShoppingService::HandleDidNavigatePrimaryMainFrameForProductInfo(
                 decision, metadata);
 
             service->PDPMetricsCallback(web_wrapper->IsOffTheRecord(), decision,
-                                        metadata);
+                                        metadata, url);
           },
           weak_ptr_factory_.GetWeakPtr(), web->GetLastCommittedURL(),
           web->GetWeakPtr()));
 }
 
 void ShoppingService::DidNavigateAway(WebWrapper* web, const GURL& from_url) {
-  UpdateProductInfoCacheForRemoval(from_url);
-  UpdatePriceInsightsInfoCacheForRemoval(from_url);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  commerce_info_cache_.RemoveRef(web->GetLastCommittedURL());
+  if (cluster_manager_) {
+    cluster_manager_->DidNavigateAway(from_url);
+  }
 }
 
 void ShoppingService::DidStopLoading(WebWrapper* web) {
@@ -320,6 +351,38 @@ void ShoppingService::ScheduleProductInfoLocalExtraction(WebWrapper* web) {
 
 void ShoppingService::DidFinishLoad(WebWrapper* web) {
   ScheduleProductInfoLocalExtraction(web);
+}
+
+void ShoppingService::OnWebWrapperSwitched(WebWrapper* web) {
+  bool already_exists_in_recents = false;
+  for (auto it = recently_visited_tabs_.begin();
+       it != recently_visited_tabs_.end(); ++it) {
+    if (it->url == web->GetLastCommittedURL()) {
+      recently_visited_tabs_.erase(it);
+
+      // Don't remove the item from the cache here in case it's the only
+      // reference to a particular URL (causing deletion from the cache) since
+      // we're only shifting it to the head of the list.
+      already_exists_in_recents = true;
+      break;
+    }
+  }
+
+  UrlInfo info;
+  info.url = web->GetLastCommittedURL();
+  info.title = web->GetTitle();
+
+  if (!already_exists_in_recents) {
+    commerce_info_cache_.AddRef(info.url);
+  }
+
+  recently_visited_tabs_.insert(recently_visited_tabs_.begin(),
+                                std::move(info));
+
+  if (recently_visited_tabs_.size() > kRecentTabsMaxSize) {
+    commerce_info_cache_.RemoveRef(recently_visited_tabs_.back().url);
+    recently_visited_tabs_.pop_back();
+  }
 }
 
 void ShoppingService::TryRunningLocalExtractionForProductInfo(
@@ -450,17 +513,12 @@ bool ShoppingService::CheckIsPDPFromMetaOnly(
 }
 
 void ShoppingService::WebWrapperDestroyed(WebWrapper* web) {
-  UpdateProductInfoCacheForRemoval(web->GetLastCommittedURL());
-  UpdatePriceInsightsInfoCacheForRemoval(web->GetLastCommittedURL());
-}
-
-void ShoppingService::UpdateProductInfoCacheForInsertion(const GURL& url) {
-  if (!IsProductInfoApiEnabled())
-    return;
-
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  commerce_info_cache_.AddRef(url);
+  open_web_wrappers_.erase(web);
+  commerce_info_cache_.RemoveRef(web->GetLastCommittedURL());
+  if (cluster_manager_) {
+    cluster_manager_->WebWrapperDestroyed(web->GetLastCommittedURL());
+  }
 }
 
 void ShoppingService::UpdateProductInfoCache(
@@ -489,21 +547,16 @@ const ProductInfo* ShoppingService::GetFromProductInfoCache(const GURL& url) {
   return entry->product_info.get();
 }
 
-void ShoppingService::UpdateProductInfoCacheForRemoval(const GURL& url) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  commerce_info_cache_.RemoveRef(url);
-}
-
 void ShoppingService::PDPMetricsCallback(
     bool is_off_the_record,
     optimization_guide::OptimizationGuideDecision decision,
-    const optimization_guide::OptimizationMetadata& metadata) {
+    const optimization_guide::OptimizationMetadata& metadata,
+    const GURL& url) {
   if (!IsPDPMetricsRecordingEnabled())
     return;
 
   metrics::RecordPDPMetrics(decision, metadata, pref_service_,
-                            is_off_the_record, IsShoppingListEligible());
+                            is_off_the_record, IsShoppingListEligible(), url);
 
   bool supported_country =
       IsRegionLockedFeatureEnabled(kShoppingList, kShoppingListRegionLaunched);
@@ -811,22 +864,52 @@ bool ShoppingService::IsDiscountInfoApiEnabled() {
                                       kEnableDiscountInfoApiRegionLaunched);
 }
 
+const std::vector<UrlInfo> ShoppingService::GetUrlInfosForActiveWebWrappers() {
+  std::vector<UrlInfo> urls;
+  for (auto web : open_web_wrappers_) {
+    if (!web->GetLastCommittedURL().SchemeIsHTTPOrHTTPS()) {
+      continue;
+    }
+    UrlInfo url;
+    url.url = web->GetLastCommittedURL();
+    url.title = web->GetTitle();
+    urls.push_back(url);
+  }
+  return urls;
+}
+
+const std::vector<UrlInfo>
+ShoppingService::GetUrlInfosForRecentlyViewedWebWrappers() {
+  std::vector<UrlInfo> info_list;
+  for (auto info : recently_visited_tabs_) {
+    if (!info.url.SchemeIsHTTPOrHTTPS()) {
+      continue;
+    }
+    info_list.push_back(info);
+  }
+  return info_list;
+}
+
 void ShoppingService::HandleOptGuideProductInfoResponse(
     const GURL& url,
     WebWrapper* web,
     ProductInfoCallback callback,
     optimization_guide::OptimizationGuideDecision decision,
     const optimization_guide::OptimizationMetadata& metadata) {
+  CommerceInfoCache::CacheEntry* entry =
+      commerce_info_cache_.GetEntryForUrl(url);
+
   // If optimization guide returns negative, return a negative signal with an
   // empty data object.
   if (decision != optimization_guide::OptimizationGuideDecision::kTrue) {
-    // Receiving a negative signal could simply mean that opt guide no longer
-    // has the information available, it doesn't mean the backend doesn't know.
-    // We may be allowed to fetch information on-demand if we're referencing
-    // the URL in the cache. Only do this for explicit requests from a feature
-    // rather than populating as a result of navigation (signified by the lack
-    // of a web wrapper).
-    if (commerce_info_cache_.IsUrlReferenced(url) && !web) {
+    // Receiving a negative signal could simply mean that opt guide doesn't have
+    // the information available, it doesn't mean the backend doesn't know. If
+    // the cache wasn't populated by a page load event, we should be allowed to
+    // fetch on demand (assuming the URL is referenced by some other feature).
+    if (commerce_info_cache_.IsUrlReferenced(url) && entry &&
+        entry->run_product_info_on_demand) {
+      entry->run_product_info_on_demand = false;
+
       // We're wrapping this in a repeating callback but it should only ever be
       // called once. This is necessary because the on-demand api requires a
       // repeating callback but we primarily use once callbacks in the shopping
@@ -952,6 +1035,10 @@ std::unique_ptr<ProductInfo> ShoppingService::OptGuideResultToProductInfo(
       info->previous_amount_micros.emplace(
           price_update.old_price().amount_micros());
     }
+  }
+
+  if (buyable_product.has_category_data()) {
+    info->category_data = buyable_product.category_data();
   }
 
   return info;
@@ -1181,10 +1268,10 @@ void ShoppingService::HandleOptGuidePriceInsightsInfoResponse(
       std::optional<PriceInsightsInfo> optional_info;
       optional_info.emplace(*info);
 
-      auto it = price_insights_info_cache_.find(url.spec());
-      if (kPriceInsightsUseCache.Get() &&
-          it != price_insights_info_cache_.end()) {
-        it->second->info = std::move(info);
+      CommerceInfoCache::CacheEntry* entry =
+          commerce_info_cache_.GetEntryForUrl(url);
+      if (kPriceInsightsUseCache.Get() && entry) {
+        entry->price_insights_info = std::move(info);
       }
 
       std::move(callback).Run(url, std::move(optional_info));
@@ -1193,11 +1280,11 @@ void ShoppingService::HandleOptGuidePriceInsightsInfoResponse(
   }
 
   // Check cache if we don't get info back from OptGuide.
-  auto it = price_insights_info_cache_.find(url.spec());
-  if (kPriceInsightsUseCache.Get() && it != price_insights_info_cache_.end() &&
-      it->second->info) {
+  CommerceInfoCache::CacheEntry* entry =
+      commerce_info_cache_.GetEntryForUrl(url);
+  if (entry && entry->price_insights_info) {
     std::optional<PriceInsightsInfo> optional_info;
-    optional_info.emplace(*(it->second->info));
+    optional_info.emplace(*(entry->price_insights_info));
     std::move(callback).Run(url, std::move(optional_info));
   } else {
     std::move(callback).Run(url, std::nullopt);
@@ -1283,12 +1370,6 @@ void ShoppingService::HandleDidNavigatePrimaryMainFrameForPriceInsightsInfo(
   }
 
   auto url = web->GetLastCommittedURL().spec();
-  if (price_insights_info_cache_.find(url) ==
-      price_insights_info_cache_.end()) {
-    price_insights_info_cache_.emplace(
-        url, std::make_unique<PriceInsightsInfoCacheEntry>());
-  }
-  price_insights_info_cache_[url]->pages_with_url_open++;
 
   opt_guide_->CanApplyOptimization(
       web->GetLastCommittedURL(),
@@ -1310,17 +1391,6 @@ void ShoppingService::HandleDidNavigatePrimaryMainFrameForPriceInsightsInfo(
           },
           weak_ptr_factory_.GetWeakPtr(), web->GetLastCommittedURL(),
           web->GetWeakPtr()));
-}
-
-void ShoppingService::UpdatePriceInsightsInfoCacheForRemoval(const GURL& url) {
-  auto it = price_insights_info_cache_.find(url.spec());
-  if (it != price_insights_info_cache_.end()) {
-    if (it->second->pages_with_url_open <= 1) {
-      price_insights_info_cache_.erase(it);
-    } else {
-      it->second->pages_with_url_open--;
-    }
-  }
 }
 
 void ShoppingService::HandleOptGuideShoppingPageTypesResponse(
@@ -1505,7 +1575,7 @@ void ShoppingService::SetDiscountsStorageForTesting(
 void ShoppingService::Subscribe(
     std::unique_ptr<std::vector<CommerceSubscription>> subscriptions,
     base::OnceCallback<void(bool)> callback) {
-  // TODO(crbug.com/1377515): When calling this api, we should always have a
+  // TODO(crbug.com/40243618): When calling this api, we should always have a
   // valid subscriptions_manager_ and there is no need to do the null check. We
   // can build an internal system for error logging.
   if (subscriptions_manager_) {
@@ -1519,7 +1589,7 @@ void ShoppingService::Subscribe(
 void ShoppingService::Unsubscribe(
     std::unique_ptr<std::vector<CommerceSubscription>> subscriptions,
     base::OnceCallback<void(bool)> callback) {
-  // TODO(crbug.com/1377515): When calling this api, we should always have a
+  // TODO(crbug.com/40243618): When calling this api, we should always have a
   // valid subscriptions_manager_ and there is no need to do the null check. We
   // can build an internal system for error logging.
   if (subscriptions_manager_) {
@@ -1669,6 +1739,11 @@ void ShoppingService::StopTrackingAllParcels(
   }
 }
 
+ProductSpecificationsService*
+ShoppingService::GetProductSpecificationsService() {
+  return product_specifications_service_;
+}
+
 void ShoppingService::GetProductIdentifierForUrl(
     const GURL& url,
     UrlProductIdentifierTupleCallback callback) {
@@ -1685,44 +1760,25 @@ void ShoppingService::GetProductIdentifierForUrl(
           std::move(callback)));
 }
 
-void ShoppingService::CreateProductSpecificationsSet(
-    base::OnceCallback<void(ProductSpecificationSet)> callback,
-    const std::vector<UrlProductIdentifierTuple>& result) {
-  // Build a comma-separated list of product ids.
-  std::vector<std::string> string_product_ids(result.size());
-  std::transform(result.begin(), result.end(), string_product_ids.begin(),
-                 [](commerce::UrlProductIdentifierTuple value) {
-                   return base::NumberToString(std::get<1>(value).value_or(0));
-                 });
-
-  auto product_list_string = std::accumulate(
-      std::next(string_product_ids.begin()), string_product_ids.end(),
-      string_product_ids[0],
-      [](const std::string& a, const std::string& b) { return a + "," + b; });
-
-  ProductSpecificationSet sepcification_set;
-  sepcification_set.product_spec_url = net::AppendQueryParameter(
-      GURL(commerce::kChromeUICompareUrl), "ids", product_list_string);
-
-  std::move(callback).Run(sepcification_set);
-}
-
-void ShoppingService::GetProductSpecificationsSetForUrls(
-    const std::vector<GURL>& urls,
-    base::OnceCallback<void(ProductSpecificationSet)> callback) {
-  const auto barrier_callback =
-      base::BarrierCallback<const UrlProductIdentifierTuple&>(
-          urls.size(),
-          base::BindOnce(&ShoppingService::CreateProductSpecificationsSet,
-                         weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
-
-  for (auto url : urls) {
-    GetProductIdentifierForUrl(url, barrier_callback);
+const std::vector<ProductSpecificationsSet>
+ShoppingService::GetAllProductSpecificationSets() {
+  if (!product_specifications_service_) {
+    return {};
   }
+  return product_specifications_service_->GetAllProductSpecifications();
 }
 
 base::WeakPtr<ShoppingService> ShoppingService::AsWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
+}
+
+std::optional<EntryPointInfo> ShoppingService::GetEntryPointInfoForSelection(
+    GURL old_url,
+    GURL new_url) {
+  if (!cluster_manager_) {
+    return std::nullopt;
+  }
+  return cluster_manager_->GetEntryPointInfoForSelection(old_url, new_url);
 }
 
 void ShoppingService::Shutdown() {

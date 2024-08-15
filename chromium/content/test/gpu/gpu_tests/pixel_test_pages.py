@@ -297,6 +297,13 @@ class PixelTestPages():
                       matching_algorithm=algo.FuzzyMatchingAlgorithm(
                           max_different_pixels=130,
                           pixel_per_channel_delta_threshold=2)),
+        PixelTestPage('pixel_canvas2d_blit.html',
+                      base_name + '_Canvas2DBlitText',
+                      test_rect=[0, 0, 800, 300],
+                      grace_period_end=date(2024, 4, 1),
+                      matching_algorithm=algo.FuzzyMatchingAlgorithm(
+                          max_different_pixels=5,
+                          pixel_per_channel_delta_threshold=2)),
         PixelTestPage('pixel_canvas2d_untagged.html',
                       base_name + '_Canvas2DUntagged',
                       test_rect=[0, 0, 257, 257]),
@@ -548,11 +555,18 @@ class PixelTestPages():
         PixelTestPage(
             'pixel_render_passes.html',
             base_name + '_RenderPasses',
-            test_rect=[0, 80, 485, 245],
+            test_rect=[3, 90, 485, 245],
             grace_period_end=date(2024, 5, 1),
-            requires_fullscreen_os_screenshot_func=
-              RequiresFullScreenOSScreenshot
+            requires_fullscreen_os_screenshot_func=\
+            RequiresFullScreenOSScreenshot
         ),
+        PixelTestPage('pixel_view_transitions_capture.html',
+                      base_name + '_ViewTransitionsCapture',
+                      test_rect=[0, 0, 300, 300],
+                      matching_algorithm=algo.SobelMatchingAlgorithm(
+                          max_different_pixels=0,
+                          pixel_delta_threshold=0,
+                          edge_threshold=90)),
     ]
 
   @staticmethod
@@ -1570,4 +1584,18 @@ class PixelTestPages():
         PixelTestPage('receiver.html',
                       base_name + '_VP8_1Frame',
                       test_rect=[0, 0, 0, 0]),
+    ]
+
+  # Check what MediaFoundationD3D11VideoCapture works
+  @staticmethod
+  def MediaFoundationD3D11VideoCapturePages(
+      base_name: str) -> List[PixelTestPage]:
+    return [
+        PixelTestPage('media_foundation_d3d11_video_capture.html',
+                      base_name + '_MediaFoundationD3D11VideoCapture',
+                      test_rect=[0, 0, 300, 300],
+                      browser_args=[
+                          '--use-fake-ui-for-media-stream',
+                          '--enable-features=MediaFoundationD3D11VideoCapture'
+                      ]),
     ]

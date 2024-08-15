@@ -6,9 +6,11 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_ANCHOR_EVALUATOR_H_
 
 #include <optional>
-#include "third_party/abseil-cpp/absl/types/variant.h"
+
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/css_anchor_query_enums.h"
+#include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
+#include "third_party/blink/renderer/core/style/inset_area.h"
 #include "third_party/blink/renderer/platform/geometry/layout_unit.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/heap/visitor.h"
@@ -18,10 +20,15 @@ namespace blink {
 
 class AnchorQuery;
 class AnchorScope;
-class AnchorSpecifierValue;
+class ComputedStyleBuilder;
+class ScopedCSSName;
 
 class CORE_EXPORT AnchorEvaluator {
+  DISALLOW_NEW();
+
  public:
+  AnchorEvaluator() = default;
+
   // The evaluation of anchor() and anchor-size() functions is affected
   // by the context they are used in. For example, it is not allowed to
   // do anchor() queries "cross-axis" (e.g. left:anchor(--a top)),
@@ -61,13 +68,31 @@ class CORE_EXPORT AnchorEvaluator {
   // Evaluates an anchor() or anchor-size() query.
   // Returns |nullopt| if the query is invalid (e.g., no targets or wrong
   // axis.), in which case the fallback should be used.
-  virtual std::optional<LayoutUnit> Evaluate(const AnchorQuery&) = 0;
+  virtual std::optional<LayoutUnit> Evaluate(
+      const AnchorQuery&,
+      const ScopedCSSName* position_anchor,
+      const std::optional<InsetAreaOffsets>&) = 0;
+
+  // Take the computed inset-area and position-anchor and compute the physical
+  // offsets to inset the containing block with.
+  virtual std::optional<InsetAreaOffsets> ComputeInsetAreaOffsetsForLayout(
+      const ScopedCSSName* position_anchor,
+      InsetArea inset_area) = 0;
+
+  // Take the computed inset-area and position-anchor from the builder and
+  // compute the physical offset for anchor-center
+  virtual std::optional<PhysicalOffset> ComputeAnchorCenterOffsets(
+      const ComputedStyleBuilder&) = 0;
+
+  virtual void Trace(Visitor*) const {}
 
  protected:
   Mode GetMode() const { return mode_; }
 
  private:
   friend class AnchorScope;
+
+  // The computed position-anchor in use for the current try option.
   Mode mode_ = Mode::kNone;
 };
 
@@ -99,61 +124,6 @@ class CORE_EXPORT AnchorScope {
  private:
   Mode* target_;
   Mode original_;
-};
-
-// The input to AnchorEvaluator::Evaluate.
-//
-// It represents either an anchor() function, or an anchor-size() function.
-//
-// https://drafts.csswg.org/css-anchor-position-1/#anchor-pos
-// https://drafts.csswg.org/css-anchor-position-1/#anchor-size-fn
-class CORE_EXPORT AnchorQuery {
-  DISALLOW_NEW();
-
- public:
-  AnchorQuery(CSSAnchorQueryType query_type,
-              const AnchorSpecifierValue* anchor_specifier,
-              float percentage,
-              absl::variant<CSSAnchorValue, CSSAnchorSizeValue> value)
-      : query_type_(query_type),
-        anchor_specifier_(anchor_specifier),
-        percentage_(percentage),
-        value_(value) {
-    CHECK(anchor_specifier);
-  }
-
-  CSSAnchorQueryType Type() const { return query_type_; }
-  const AnchorSpecifierValue& AnchorSpecifier() const {
-    return *anchor_specifier_;
-  }
-  CSSAnchorValue AnchorSide() const {
-    DCHECK_EQ(query_type_, CSSAnchorQueryType::kAnchor);
-    return absl::get<CSSAnchorValue>(value_);
-  }
-  float AnchorSidePercentage() const {
-    DCHECK_EQ(query_type_, CSSAnchorQueryType::kAnchor);
-    DCHECK_EQ(AnchorSide(), CSSAnchorValue::kPercentage);
-    return percentage_;
-  }
-  float AnchorSidePercentageOrZero() const {
-    DCHECK_EQ(query_type_, CSSAnchorQueryType::kAnchor);
-    return AnchorSide() == CSSAnchorValue::kPercentage ? percentage_ : 0;
-  }
-  CSSAnchorSizeValue AnchorSize() const {
-    DCHECK_EQ(query_type_, CSSAnchorQueryType::kAnchorSize);
-    return absl::get<CSSAnchorSizeValue>(value_);
-  }
-
-  bool operator==(const AnchorQuery& other) const;
-  bool operator!=(const AnchorQuery& other) const { return !operator==(other); }
-  unsigned GetHash() const;
-  void Trace(Visitor*) const;
-
- private:
-  CSSAnchorQueryType query_type_;
-  Member<const AnchorSpecifierValue> anchor_specifier_;
-  float percentage_;
-  absl::variant<CSSAnchorValue, CSSAnchorSizeValue> value_;
 };
 
 }  // namespace blink

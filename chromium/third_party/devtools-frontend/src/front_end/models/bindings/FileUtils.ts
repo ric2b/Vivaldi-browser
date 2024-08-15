@@ -65,11 +65,11 @@ export class ChunkedFileReader implements ChunkedReader {
   #output?: Common.StringOutputStream.OutputStream;
   #reader?: FileReader|null;
 
-  constructor(file: File, chunkSize: number, chunkTransferredCallback?: ((arg0: ChunkedReader) => void)) {
+  constructor(file: File, chunkSize?: number, chunkTransferredCallback?: ((arg0: ChunkedReader) => void)) {
     this.#file = file;
     this.#fileSizeInternal = file.size;
     this.#loadedSizeInternal = 0;
-    this.#chunkSize = chunkSize;
+    this.#chunkSize = (chunkSize) ? chunkSize : Number.MAX_VALUE;
     this.#chunkTransferredCallback = chunkTransferredCallback;
     this.#decoder = new TextDecoder();
     this.#isCanceled = false;
@@ -158,7 +158,7 @@ export class ChunkedFileReader implements ChunkedReader {
       return;
     }
     const decodedString = this.#decoder.decode(buffer, {stream: !endOfFile});
-    await this.#output.write(decodedString);
+    await this.#output.write(decodedString, endOfFile);
     if (this.#isCanceled) {
       return;
     }
@@ -190,6 +190,8 @@ export class ChunkedFileReader implements ChunkedReader {
     if (this.#streamReader) {
       const {value, done} = await this.#streamReader.read();
       if (done || !value) {
+        // Write empty string to inform of file end
+        await this.#output.write('', true);
         return this.finishRead();
       }
       void this.decodeChunkBuffer(value.buffer, false);
@@ -221,7 +223,8 @@ export class FileOutputStream implements Common.StringOutputStream.OutputStream 
     this.#closed = false;
     this.#writeCallbacks = [];
     this.#fileName = fileName;
-    const saveResponse = await Workspace.FileManager.FileManager.instance().save(this.#fileName, '', true);
+    const saveResponse =
+        await Workspace.FileManager.FileManager.instance().save(this.#fileName, '', true, false /* isBase64 */);
     if (saveResponse) {
       Workspace.FileManager.FileManager.instance().addEventListener(
           Workspace.FileManager.Events.AppendedToURL, this.onAppendDone, this);

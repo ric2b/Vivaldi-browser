@@ -10,11 +10,13 @@
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_content_injector.h"
 
 @class ReauthenticationModule;
+@protocol FormSuggestionClient;
 @protocol SecurityAlertCommands;
 class WebStateList;
 
 // Handler with the common logic for injecting data from manual fill.
-// TODO(crbug.com/1116980): Convert ManualFillInjectionHandler to browser agent.
+// TODO(crbug.com/40144948): Convert ManualFillInjectionHandler to browser
+// agent.
 @interface ManualFillInjectionHandler : NSObject <ManualFillContentInjector>
 
 // Returns a handler using the `WebStateList` to inject JS to the active web
@@ -22,7 +24,8 @@ class WebStateList;
 - (instancetype)
       initWithWebStateList:(WebStateList*)webStateList
       securityAlertHandler:(id<SecurityAlertCommands>)securityAlertHandler
-    reauthenticationModule:(ReauthenticationModule*)reauthenticationModule;
+    reauthenticationModule:(ReauthenticationModule*)reauthenticationModule
+      formSuggestionClient:(id<FormSuggestionClient>)formSuggestionClient;
 
 @end
 

@@ -32,6 +32,7 @@
 #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/chrome_switches.h"
@@ -363,8 +364,17 @@ bool ChromeDevToolsManagerDelegate::AllowInspection(
       return false;
     case Availability::kAllowed:
       return true;
-    case Availability::kDisallowedForForceInstalledExtensions:
-      return !web_app || !web_app->IsKioskInstalledApp();
+    case Availability::kDisallowedForForceInstalledExtensions: {
+      if (!web_app) {
+        return true;
+      }
+      // DevTools should be blocked for Kiosk apps and policy-installed IWAs.
+      if (web_app->IsKioskInstalledApp() ||
+          web_app->IsIwaPolicyInstalledApp()) {
+        return false;
+      }
+      return true;
+    }
     default:
       NOTREACHED() << "Unknown developer tools policy";
       return true;

@@ -3,10 +3,12 @@
 // found in the LICENSE file.
 
 import {assert, assertExists, assertNotReached} from '../assert.js';
+import {Flag} from '../flag.js';
 import {Point} from '../geometry.js';
+import * as loadTimeData from '../models/load_time_data.js';
 import {DeviceOperator} from '../mojo/device_operator.js';
 import * as state from '../state.js';
-import {CropRegionRect, Resolution} from '../type.js';
+import {CropRegionRect, Mode, Resolution} from '../type.js';
 
 enum PTZAttr {
   PAN = 'pan',
@@ -14,7 +16,7 @@ enum PTZAttr {
   ZOOM = 'zoom',
 }
 
-interface PTZCapabilities {
+export interface PTZCapabilities {
   pan: MediaSettingsRange;
   tilt: MediaSettingsRange;
   zoom: MediaSettingsRange;
@@ -29,11 +31,7 @@ interface PTZSettings {
 /**
  * All pan, tilt, and zoom values must be non-empty.
  */
-interface StrictPTZSettings {
-  pan: number;
-  tilt: number;
-  zoom: number;
-}
+export type StrictPTZSettings = Required<PTZSettings>;
 
 export interface PTZController {
   /**
@@ -170,7 +168,7 @@ export class MediaStreamPTZController implements PTZController {
 const DIGITAL_ZOOM_MAX_PAN = 1;
 const DIGITAL_ZOOM_MAX_TILT = 1;
 const DIGITAL_ZOOM_DEFAULT_MAX_ZOOM = 6;
-const DIGITAL_ZOOM_CAPABILITIES: PTZCapabilities = {
+export const DIGITAL_ZOOM_CAPABILITIES: PTZCapabilities = {
   pan: {min: -DIGITAL_ZOOM_MAX_PAN, max: DIGITAL_ZOOM_MAX_PAN, step: 0.1},
   tilt: {min: -DIGITAL_ZOOM_MAX_TILT, max: DIGITAL_ZOOM_MAX_TILT, step: 0.1},
   zoom: {min: 1, max: DIGITAL_ZOOM_DEFAULT_MAX_ZOOM, step: 0.1},
@@ -211,7 +209,10 @@ function getFullCropRegionForAspectRatio(
   };
 }
 
-function assertStrictPTZSettings({pan, tilt, zoom}: PTZSettings):
+/**
+ * Asserts that all pan, tilt, and zoom fields have values.
+ */
+export function assertStrictPTZSettings({pan, tilt, zoom}: PTZSettings):
     StrictPTZSettings {
   assert(pan !== undefined);
   assert(tilt !== undefined);
@@ -374,6 +375,7 @@ export class DigitalZoomPTZController implements PTZController {
     const deviceOperator = assertExists(DeviceOperator.getInstance());
     await deviceOperator.resetCropRegion(this.deviceId);
     this.ptzSettings = DIGITAL_ZOOM_DEFAULT_SETTINGS;
+    state.set(state.State.SUPER_RES_ZOOM, false);
   }
 
   async pan(value: number): Promise<void> {
@@ -410,6 +412,12 @@ export class DigitalZoomPTZController implements PTZController {
     const cropRegion = calculateCropRegion(baseSettings, this.fullCropRegion);
     await deviceOperator.setCropRegion(this.deviceId, cropRegion);
     this.ptzSettings = baseSettings;
+
+    state.set(state.State.SUPER_RES_ZOOM, this.isSuperResZoomPhotoMode());
+  }
+
+  private isSuperResZoomPhotoMode(): boolean {
+    return state.get(Mode.PHOTO) && loadTimeData.getChromeFlag(Flag.SUPER_RES);
   }
 
   private isFullFrame({zoom}: PTZSettings): boolean {

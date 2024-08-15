@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.tab_resumption;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.metrics.RecordHistogram;
 
@@ -16,16 +17,22 @@ public class TabResumptionModuleMetricsUtils {
     // Information on the tile clicked by the user. The values must be consistent with
     // MagicStack.Clank.TabResumption.ClickInfo in enums.xml.
     @IntDef({
-        ClickInfo.SINGLE_TILE_FIRST,
-        ClickInfo.DOUBLE_TILE_FIRST,
-        ClickInfo.DOUBLE_TILE_SECOND,
+        ClickInfo.FOREIGN_SINGLE_FIRST,
+        ClickInfo.FOREIGN_FOREIGN_DOUBLE_FIRST,
+        ClickInfo.FOREIGN_FOREIGN_DOUBLE_SECOND,
+        ClickInfo.LOCAL_SINGLE_FIRST,
+        ClickInfo.LOCAL_FOREIGN_DOUBLE_FIRST,
+        ClickInfo.LOCAL_FOREIGN_DOUBLE_SECOND,
         ClickInfo.NUM_ENTRIES
     })
     @interface ClickInfo {
-        int SINGLE_TILE_FIRST = 0;
-        int DOUBLE_TILE_FIRST = 1;
-        int DOUBLE_TILE_SECOND = 2;
-        int NUM_ENTRIES = 3;
+        int FOREIGN_SINGLE_FIRST = 0;
+        int FOREIGN_FOREIGN_DOUBLE_FIRST = 1;
+        int FOREIGN_FOREIGN_DOUBLE_SECOND = 2;
+        int LOCAL_SINGLE_FIRST = 3;
+        int LOCAL_FOREIGN_DOUBLE_FIRST = 4;
+        int LOCAL_FOREIGN_DOUBLE_SECOND = 5;
+        int NUM_ENTRIES = 6;
     }
 
     // These values are persisted to logs. Entries should not be renumbered and numeric values
@@ -54,29 +61,17 @@ public class TabResumptionModuleMetricsUtils {
     // enums.xml.
     @IntDef({
         ModuleShowConfig.SINGLE_TILE_FOREIGN,
-        ModuleShowConfig.DOUBLE_TILE_FOREIGN,
+        ModuleShowConfig.DOUBLE_TILE_FOREIGN_FOREIGN,
+        ModuleShowConfig.SINGLE_TILE_LOCAL,
+        ModuleShowConfig.DOUBLE_TILE_LOCAL_FOREIGN,
         ModuleShowConfig.NUM_ENTRIES
     })
     @interface ModuleShowConfig {
         int SINGLE_TILE_FOREIGN = 0;
-        int DOUBLE_TILE_FOREIGN = 1;
-        int NUM_ENTRIES = 2;
-    }
-
-    /**
-     * Decision on whether or not to show the tab resumption module, attached with reason if the
-     * decision is to not show.
-     */
-    public static class ModuleVisibility {
-        public final boolean value;
-
-        // Useful only if `value` is false.
-        public final @ModuleNotShownReason int notShownReason;
-
-        ModuleVisibility(boolean value, @ModuleNotShownReason int notShownReason) {
-            this.value = value;
-            this.notShownReason = notShownReason;
-        }
+        int DOUBLE_TILE_FOREIGN_FOREIGN = 1;
+        int SINGLE_TILE_LOCAL = 2;
+        int DOUBLE_TILE_LOCAL_FOREIGN = 3;
+        int NUM_ENTRIES = 4;
     }
 
     static final String HISTOGRAM_CLICK_INFO = "MagicStack.Clank.TabResumption.ClickInfo";
@@ -86,15 +81,55 @@ public class TabResumptionModuleMetricsUtils {
             "MagicStack.Clank.TabResumption.ModuleShowConfig";
     static final String HISTOGRAM_STABILITY_DELAY = "MagicStack.Clank.TabResumption.StabilityDelay";
 
+    static final String HISTOGRAM_IS_SALIENT_IMAGE_AVAILABLE =
+            "MagicStack.Clank.TabResumption.IsSalientImageAvailable";
+
+    static final String HISTOGRAM_SEE_MORE_LINK_CLICKED =
+            "MagicStack.Clank.TabResumption.SeeMoreLinkClicked";
+
     /** Maps specification of a clicked tile to a ClickInfo for logging. */
-    static @ClickInfo int computeClickInfo(int tileCount, int tileIndex) {
-        assert tileIndex >= 0 && tileIndex < tileCount;
-        if (tileCount == 1) {
-            return ClickInfo.SINGLE_TILE_FIRST;
+    static @ClickInfo int computeClickInfo(@ModuleShowConfig int moduleShowConfig, int tileIndex) {
+        switch (moduleShowConfig) {
+            case ModuleShowConfig.SINGLE_TILE_FOREIGN:
+                assert tileIndex == 0;
+                return ClickInfo.FOREIGN_SINGLE_FIRST;
+
+            case ModuleShowConfig.DOUBLE_TILE_FOREIGN_FOREIGN:
+                assert tileIndex == 0 || tileIndex == 1;
+                return tileIndex == 0
+                        ? ClickInfo.FOREIGN_FOREIGN_DOUBLE_FIRST
+                        : ClickInfo.FOREIGN_FOREIGN_DOUBLE_SECOND;
+
+            case ModuleShowConfig.SINGLE_TILE_LOCAL:
+                assert tileIndex == 0;
+                return ClickInfo.LOCAL_SINGLE_FIRST;
+
+            case ModuleShowConfig.DOUBLE_TILE_LOCAL_FOREIGN:
+                assert tileIndex == 0 || tileIndex == 1;
+                return tileIndex == 0
+                        ? ClickInfo.LOCAL_FOREIGN_DOUBLE_FIRST
+                        : ClickInfo.LOCAL_FOREIGN_DOUBLE_SECOND;
         }
 
-        assert tileCount == 2;
-        return tileIndex == 0 ? ClickInfo.DOUBLE_TILE_FIRST : ClickInfo.DOUBLE_TILE_SECOND;
+        assert false;
+        return ClickInfo.NUM_ENTRIES;
+    }
+
+    /** Maps SuggestionBundle to a ModuleShowConfig value, or null if there are no suggestions. */
+    static @Nullable @ModuleShowConfig Integer computeModuleShowConfig(
+            @Nullable SuggestionBundle bundle) {
+        if (bundle == null || bundle.entries.size() == 0) return null;
+
+        if (bundle.entries.size() == 1) {
+            return (bundle.entries.get(0) instanceof LocalTabSuggestionEntry)
+                    ? ModuleShowConfig.SINGLE_TILE_LOCAL
+                    : ModuleShowConfig.SINGLE_TILE_FOREIGN;
+        }
+
+        // If Local Tab suggestion exists, it's always at index 0.
+        return (bundle.entries.get(0) instanceof LocalTabSuggestionEntry)
+                ? ModuleShowConfig.DOUBLE_TILE_LOCAL_FOREIGN
+                : ModuleShowConfig.DOUBLE_TILE_FOREIGN_FOREIGN;
     }
 
     /** Records info (encoded tile count and index) on a clicked tile. */
@@ -124,5 +159,18 @@ public class TabResumptionModuleMetricsUtils {
         // imposes stability after a timeout of STABILITY_TIMEOUT_MS, after which delay logging is
         // moot. This timeout is well below the max bucket of 10 seconds.
         RecordHistogram.recordTimesHistogram(HISTOGRAM_STABILITY_DELAY, stabilityDelay);
+    }
+
+    /** Records whether a salient image fetch attempt was successful. */
+    static void recordSalientImageAvailability(boolean isAvailable) {
+        RecordHistogram.recordBooleanHistogram(HISTOGRAM_IS_SALIENT_IMAGE_AVAILABLE, isAvailable);
+    }
+
+    /**
+     * Records the configuration of the tab resumption module when the "see more" link is clicked.
+     */
+    static void recordSeeMoreLinkClicked(@ModuleShowConfig int config) {
+        RecordHistogram.recordEnumeratedHistogram(
+                HISTOGRAM_SEE_MORE_LINK_CLICKED, config, ModuleShowConfig.NUM_ENTRIES);
     }
 }

@@ -1,3 +1,5 @@
+# buildifier: disable=out-of-order-load
+
 load("//tensorflow:strict.default.bzl", "py_strict_library")
 
 # copybara:uncomment_begin(google-only)
@@ -354,12 +356,15 @@ cc_library(
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
         "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:BytecodeOpInterface",
+        "@llvm-project//mlir:CallOpInterfaces",
         "@llvm-project//mlir:ControlFlowInterfaces",
         "@llvm-project//mlir:DerivedAttributeOpInterface",
         "@llvm-project//mlir:Dialect",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:InferTypeOpInterface",
+        "@llvm-project//mlir:InliningUtils",
         "@llvm-project//mlir:LoopLikeInterface",
         "@llvm-project//mlir:Parser",
         "@llvm-project//mlir:SideEffectInterfaces",
@@ -400,12 +405,15 @@ cc_library(
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:BytecodeOpInterface",
+        "@llvm-project//mlir:CallOpInterfaces",
         "@llvm-project//mlir:ControlFlowInterfaces",
         "@llvm-project//mlir:DerivedAttributeOpInterface",
         "@llvm-project//mlir:Dialect",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:InferTypeOpInterface",
+        "@llvm-project//mlir:InliningUtils",
         "@llvm-project//mlir:LoopLikeInterface",
         "@llvm-project//mlir:Parser",
         "@llvm-project//mlir:SideEffectInterfaces",
@@ -447,12 +455,15 @@ cc_library(
         "//tensorflow/core/common_runtime:lower_function_call_inline_policy",
         "@com_google_absl//absl/strings",
         "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:BytecodeOpInterface",
+        "@llvm-project//mlir:CallOpInterfaces",
         "@llvm-project//mlir:ControlFlowInterfaces",
         "@llvm-project//mlir:DerivedAttributeOpInterface",
         "@llvm-project//mlir:Dialect",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:InferTypeOpInterface",
+        "@llvm-project//mlir:InliningUtils",
         "@llvm-project//mlir:LoopLikeInterface",
         "@llvm-project//mlir:Parser",
         "@llvm-project//mlir:SideEffectInterfaces",
@@ -521,7 +532,6 @@ cc_library(
         "ir/tf_saved_model.h",
         "ir/tf_structs.h",
         "@llvm-project//mlir:include/mlir/Interfaces/CallInterfaces.h",
-        "@llvm-project//mlir:include/mlir/Transforms/InliningUtils.h",
     ],
     includes = ["include"],
     visibility = ["//visibility:public"],
@@ -549,6 +559,7 @@ cc_library(
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:Analysis",
         "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:BytecodeOpInterface",
         "@llvm-project//mlir:CallOpInterfacesIncGen",
         "@llvm-project//mlir:ControlFlowDialect",
         "@llvm-project//mlir:ControlFlowInterfaces",
@@ -558,6 +569,7 @@ cc_library(
         "@llvm-project//mlir:FuncExtensions",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:InferTypeOpInterface",
+        "@llvm-project//mlir:InliningUtils",
         "@llvm-project//mlir:LoopLikeInterface",
         "@llvm-project//mlir:MLProgramDialect",
         "@llvm-project//mlir:Parser",
@@ -632,6 +644,7 @@ cc_library(
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
     ],
 )
 
@@ -672,6 +685,7 @@ cc_library(
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:SideEffectInterfaces",
         "@llvm-project//mlir:Support",
     ],
 )
@@ -765,6 +779,7 @@ cc_library(
     hdrs = ["utils/location_utils.h"],
     deps = [
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
     ],
 )
 
@@ -895,6 +910,7 @@ tf_cc_test(
         "//tensorflow/core:test_main",
         "//tensorflow/core:testlib",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
         "@local_tsl//tsl/platform:ml_dtypes",
         "@local_xla//xla:test",
     ],
@@ -925,6 +941,7 @@ cc_library(
         "//tensorflow/core/util:managed_stack_trace",
         "@com_google_absl//absl/status",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
         "@local_xla//xla/mlir/utils:error_util",
     ],
 )
@@ -1366,6 +1383,9 @@ cc_library(
     deps = [
         ":tensorflow",
         "//tensorflow/core/protobuf/tpu:compile_metadata_proto_cc",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
@@ -1385,6 +1405,7 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
     ],
 )
 
@@ -1457,6 +1478,7 @@ cc_library(
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:Dialect",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
     ],
 )
 
@@ -1489,6 +1511,7 @@ cc_library(
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
     ],
 )
 
@@ -1500,6 +1523,7 @@ cc_library(
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:Dialect",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
     ],
 )
 
@@ -1598,6 +1622,7 @@ cc_library(
         "tensorflow_side_effects",
         "tensorflow_types",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:SideEffectInterfaces",
         "@llvm-project//mlir:Support",
     ],
 )
@@ -1640,8 +1665,6 @@ aliased_targets = [
     "import_model",
     "export_tf_dialect_op",
     "translate_tf_dialect_op",
-    "mlir_roundtrip_pass",
-    "mlir_roundtrip_pass_registration",
     "mlir_roundtrip_flags",
     "mlir_import_options",
     "translate_lib",

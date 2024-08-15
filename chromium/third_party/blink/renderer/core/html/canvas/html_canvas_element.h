@@ -231,7 +231,7 @@ class CORE_EXPORT HTMLCanvasElement final
 
   // ImageBitmapSource implementation
   gfx::Size BitmapSourceSize() const override;
-  ScriptPromiseTyped<ImageBitmap> CreateImageBitmap(
+  ScriptPromise<ImageBitmap> CreateImageBitmap(
       ScriptState*,
       std::optional<gfx::Rect> crop_rect,
       const ImageBitmapOptions*,
@@ -355,15 +355,13 @@ class CORE_EXPORT HTMLCanvasElement final
 
   void SetSurfaceSize(gfx::Size);
 
+  bool SizeChangesAreAllowed(ExceptionState& exception_state);
+
   bool PaintsIntoCanvasBuffer() const;
 
   String ToDataURLInternal(const String& mime_type,
                            const double& quality,
                            SourceDrawingBuffer) const;
-
-  // Returns true if the canvas' context type is inherited from
-  // ImageBitmapRenderingContextBase.
-  bool HasImageBitmapContext() const;
 
   // Returns the transparent image resource for this canvas.
   scoped_refptr<StaticBitmapImage> GetTransparentImage();
@@ -379,8 +377,6 @@ class CORE_EXPORT HTMLCanvasElement final
 
   static std::pair<blink::Image*, float> BrokenCanvas(
       float device_scale_factor);
-
-  AnimationState ComputeAnimationState() const;
 
   FRIEND_TEST_ALL_PREFIXES(HTMLCanvasElementTest, BrokenCanvasHighRes);
 

@@ -3512,6 +3512,26 @@ TEST_P(GLSLTest_ES3, InitGlobalArrayWithArrayIndexing)
     EXPECT_NE(0u, program);
 }
 
+// Test that constant global matrix array with an initializer compiles.
+TEST_P(GLSLTest_ES3, InitConstantMatrixArray)
+{
+    constexpr char kFS[] = R"(#version 300 es
+        precision highp float;
+        uniform int index;
+
+        const mat4 matrix = mat4(1.0);
+        const mat4 array[1] = mat4[1](matrix);
+        out vec4 my_FragColor;
+        void main() {
+            my_FragColor = vec4(array[index][1].rgb, 1.0);
+        })";
+
+    ANGLE_GL_PROGRAM(program, essl3_shaders::vs::Simple(), kFS);
+
+    drawQuad(program, essl3_shaders::PositionAttrib(), 0.5f);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
+}
+
 // Test that index-constant sampler array indexing is supported.
 TEST_P(GLSLTest, IndexConstantSamplerArrayIndexing)
 {
@@ -19229,6 +19249,66 @@ Foo foo(float bar)
 
     drawQuad(program, essl1_shaders::PositionAttrib(), 0.5f, 1.0f, true);
     EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
+}
+
+// Test that underscores in array names work with out arrays.
+TEST_P(GLSLTest_ES3, UnderscoresWorkWithOutArrays)
+{
+    GLuint fbo;
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
+
+    GLuint textures[4];
+    glGenTextures(4, textures);
+
+    for (size_t texIndex = 0; texIndex < ArraySize(textures); texIndex++)
+    {
+        glBindTexture(GL_TEXTURE_2D, textures[texIndex]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, getWindowWidth(), getWindowHeight(), 0, GL_RGBA,
+                     GL_UNSIGNED_BYTE, nullptr);
+    }
+
+    GLint maxDrawBuffers;
+    glGetIntegerv(GL_MAX_DRAW_BUFFERS, &maxDrawBuffers);
+    ASSERT_GE(maxDrawBuffers, 4);
+
+    GLuint readFramebuffer;
+    glGenFramebuffers(1, &readFramebuffer);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, readFramebuffer);
+
+    constexpr char kFS[] = R"(#version 300 es
+precision highp float;
+out vec4 _e[4];
+void main()
+{
+    _e[0] = vec4(1.0, 0.0, 0.0, 1.0);
+    _e[1] = vec4(0.0, 1.0, 0.0, 1.0);
+    _e[2] = vec4(0.0, 0.0, 1.0, 1.0);
+    _e[3] = vec4(1.0, 1.0, 1.0, 1.0);
+}
+)";
+    ANGLE_GL_PROGRAM(program, essl3_shaders::vs::Simple(), kFS);
+    GLenum allBufs[4] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2,
+                         GL_COLOR_ATTACHMENT3};
+    constexpr GLuint kMaxBuffers = 4;
+    // Enable all draw buffers.
+    for (GLuint texIndex = 0; texIndex < kMaxBuffers; texIndex++)
+    {
+        glBindTexture(GL_TEXTURE_2D, textures[texIndex]);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + texIndex, GL_TEXTURE_2D,
+                               textures[texIndex], 0);
+        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + texIndex, GL_TEXTURE_2D,
+                               textures[texIndex], 0);
+    }
+    glDrawBuffers(kMaxBuffers, allBufs);
+
+    // Draw with simple program.
+    drawQuad(program, essl3_shaders::PositionAttrib(), 0.5f, 1.0f, true);
+    ASSERT_GL_NO_ERROR();
+    verifyAttachment2DColor(0, textures[0], GL_TEXTURE_2D, 0, GLColor::red);
+    verifyAttachment2DColor(1, textures[1], GL_TEXTURE_2D, 0, GLColor::green);
+    verifyAttachment2DColor(2, textures[2], GL_TEXTURE_2D, 0, GLColor::blue);
+    verifyAttachment2DColor(3, textures[3], GL_TEXTURE_2D, 0, GLColor::white);
 }
 
 }  // anonymous namespace

@@ -97,10 +97,9 @@
         presentation interface. The presentation clock does not change
         during the lifetime of the client connection.
 
-        The clock identifier is platform dependent. On Linux/glibc,
-        the identifier value is one of the clockid_t values accepted
-        by clock_gettime(). clock_gettime() is defined by
-        POSIX.1-2001.
+        The clock identifier is platform dependent. On POSIX platforms, the
+        identifier value is one of the clockid_t values accepted by
+        clock_gettime(). clock_gettime() is defined by POSIX.1-2001.
 
         Timestamps in this clock domain are expressed as tv_sec_hi,
         tv_sec_lo, tv_nsec triples, each component being an unsigned

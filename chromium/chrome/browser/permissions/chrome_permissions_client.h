@@ -90,7 +90,8 @@ class ChromePermissionsClient : public permissions::PermissionsClient {
       content::BrowserContext* browser_context,
       const GURL& origin,
       ContentSettingsType permission) override;
-  std::optional<url::Origin> GetAutoApprovalOrigin() override;
+  std::optional<url::Origin> GetAutoApprovalOrigin(
+      content::BrowserContext* browser_context) override;
   bool CanBypassEmbeddingOriginCheck(const GURL& requesting_origin,
                                      const GURL& embedding_origin) override;
   std::optional<GURL> OverrideCanonicalOrigin(
@@ -128,6 +129,9 @@ class ChromePermissionsClient : public permissions::PermissionsClient {
       content::WebContents* web_contents,
       permissions::PermissionPrompt::Delegate* delegate) override;
 #endif
+
+  bool HasDevicePermission(ContentSettingsType type) const override;
+  bool CanRequestDevicePermission(ContentSettingsType type) const override;
 
  private:
   friend base::NoDestructor<ChromePermissionsClient>;

@@ -9,8 +9,9 @@
 #include <stdint.h>
 
 #include <xnnpack.h>
-#include <xnnpack/common.h>
+#include <xnnpack/allocation-type.h>
 #include <xnnpack/cache.h>
+#include <xnnpack/common.h>
 #include <xnnpack/math.h>
 #include <xnnpack/node-type.h>
 
@@ -47,12 +48,7 @@ enum xnn_status evaluate(slinky_pipeline_t p, struct xnn_value* const* input_val
 
 struct xnn_shape {
   size_t num_dims;
-  // Currently inferred dimensions.
   size_t dim[XNN_MAX_TENSOR_DIMS];
-  // Lower bound on dynamic dimension implied by the subgraph.
-  size_t minimum_dim[XNN_MAX_TENSOR_DIMS];
-  // Upper bound on dynamic dimension implied by the subgraph.
-  size_t maximum_dim[XNN_MAX_TENSOR_DIMS];
 };
 
 enum xnn_value_type {
@@ -63,20 +59,6 @@ enum xnn_value_type {
 enum xnn_layout_type {
   xnn_layout_type_nhwc = 0,
   xnn_layout_type_nchw = 1,
-};
-
-enum xnn_allocation_type {
-  xnn_allocation_type_invalid = 0,
-  /// Static data that is provided by caller, needs to outlive the xnn_runtime.
-  xnn_allocation_type_static,
-  /// Lives in XNNPACK-managed internal workspace.
-  xnn_allocation_type_workspace,
-  /// Non-static data that is external to the runtime, provided by caller, specified in xnn_setup_runtime.
-  xnn_allocation_type_external,
-  // Persistent data is internal to XNNPACK-managed workspace, but shared by multiple runtime/subgraph.
-  xnn_allocation_type_persistent,
-  /// Data allocated dynamically and managed by XNNPACK, not part of workspace.
-  xnn_allocation_type_dynamic,
 };
 
 /// Abstraction for a collections of elements produced and consumed by nodes.
@@ -108,6 +90,8 @@ struct xnn_value {
         size_t num_nonbatch_dims;
         /// Per-batch quantization parameters factor to convert quantized elements to real representation.
         struct xnn_dynamic_quantization_params* dynamic_params;
+        /// Number of (struct xnn_dynamic_quantization_params) * sizeof(struct xnn_dynamic_quantization_params)
+        size_t dynamic_params_size;
       };
     };
   } quantization;
@@ -208,19 +192,6 @@ typedef enum xnn_status (*xnn_setup_operator_fn)(
   const struct xnn_value* values,
   size_t num_values,
   pthreadpool_t threadpool);
-
-enum xnn_shape_inference_status {
-  // Shape inference did not change any dimension.
-  xnn_shape_inference_status_no_change,
-  // Shape inference change some dimension.
-  xnn_shape_inference_status_changed,
-  // Shape inference met an error.
-  xnn_shape_inference_status_error,
-};
-
-typedef enum xnn_shape_inference_status (*xnn_infer_shape_fn)(
-  const struct xnn_node* node,
-  struct xnn_value* values);
 
 enum xnn_compute_type {
   xnn_compute_type_invalid = 0,
@@ -382,10 +353,6 @@ struct xnn_node {
   xnn_reshape_operator_fn reshape;
   // Function to setup an operator using opdata.
   xnn_setup_operator_fn setup;
-  // Function for shape inference forward pass (infer output shape from input shape).
-  xnn_infer_shape_fn infer_shape_forward;
-  // Function for shape inference backward pass (infer input shape from output shape).
-  xnn_infer_shape_fn infer_shape_backward;
 };
 
 #ifdef __MACH__
@@ -532,12 +499,6 @@ XNN_INLINE static size_t xnn_tensor_get_rounded_size(const struct xnn_value* val
   return xnn_get_rounded_size(value->size);
 }
 
-// Sets a single dimension of to based on a dimension of from.
-enum xnn_shape_inference_status xnn_tensor_propagate_dimension(
-  struct xnn_value* to,
-  uint32_t to_dim,
-  size_t infer_dim);
-
 // Product of all shape dimensions
 size_t xnn_shape_multiply_all_dims(
   const struct xnn_shape shape[1]);
@@ -559,6 +520,18 @@ size_t xnn_shape_multiply_leading_dims(
 size_t xnn_shape_multiply_trailing_dims(
   const struct xnn_shape shape[1],
   size_t start_dim);
+
+// Get the size in bytes to hold dynamic quant params
+size_t xnn_tensor_get_dynamic_quant_param_size(const struct xnn_value* value);
+
+XNN_INLINE static size_t xnn_tensor_get_rounded_dynamic_quant_param_size(const struct xnn_value *value) {
+  assert (value->datatype == xnn_datatype_qdint8);
+
+  // We may read out of bounds for qparams.
+  return xnn_get_rounded_size(value->quantization.dynamic_params_size
+    + XNN_EXTRA_QUANTIZATION_PARAMS * sizeof(struct xnn_dynamic_quantization_params));
+}
+
 
 enum xnn_status xnn_subgraph_optimize(xnn_subgraph_t subgraph, uint32_t flags);
 
@@ -588,10 +561,6 @@ struct xnn_workspace {
 };
 
 void xnn_subgraph_analyze_consumers_and_producers(xnn_subgraph_t subgraph);
-
-// Infer shape information across subgraph.
-// No flags currently supported, in the future it can be used to configure how shape inference is done.
-enum xnn_status xnn_subgraph_infer_shape(xnn_subgraph_t subgraph, uint32_t flags);
 
 enum xnn_status resize_fully_connected_output_tensor(
   const struct xnn_operator_data* opdata,

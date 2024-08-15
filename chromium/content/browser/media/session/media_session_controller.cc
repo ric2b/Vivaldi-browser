@@ -49,7 +49,7 @@ bool MediaSessionController::OnPlaybackStarted() {
 
 void MediaSessionController::OnSuspend(int player_id) {
   DCHECK_EQ(player_id_, player_id);
-  // TODO(crbug.com/953645): Set triggered_by_user to true ONLY if that action
+  // TODO(crbug.com/40623496): Set triggered_by_user to true ONLY if that action
   // was actually triggered by user as this will activate the frame.
   web_contents_->media_web_contents_observer()
       ->GetMediaPlayerRemote(id_)
@@ -296,6 +296,11 @@ bool MediaSessionController::HasAudio(int player_id) const {
 bool MediaSessionController::HasVideo(int player_id) const {
   DCHECK_EQ(player_id_, player_id);
   return has_video_;
+}
+
+bool MediaSessionController::IsPaused(int player_id) const {
+  DCHECK_EQ(player_id_, player_id);
+  return is_paused_;
 }
 
 std::string MediaSessionController::GetAudioOutputSinkId(int player_id) const {

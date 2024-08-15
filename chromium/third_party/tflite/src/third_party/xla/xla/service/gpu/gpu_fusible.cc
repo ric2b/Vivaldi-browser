@@ -16,21 +16,29 @@ limitations under the License.
 #include "xla/service/gpu/gpu_fusible.h"
 
 #include <algorithm>
-#include <iterator>
+#include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <stack>
 #include <vector>
 
 #include "absl/algorithm/container.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/container/inlined_vector.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/service/gpu/backend_configs.pb.h"
+#include "xla/service/gpu/hlo_traversal.h"
 #include "xla/service/gpu/ir_emission_utils.h"
 #include "xla/service/gpu/reduction_utils.h"
+#include "xla/service/hlo_dataflow_analysis.h"
 #include "xla/service/instruction_fusion.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
+#include "xla/stream_executor/device_description.h"
 #include "xla/util.h"
 
 namespace xla {
@@ -265,7 +273,9 @@ FusionDecision ShapesCompatibleForMultiOutputFusion(
     // Special-case reduction-to-vector ops: The loop dimensions are determined
     // by the shape of the first operand.
     // TODO(jreiffers): Compute the non-trivial hero only once here.
-    const auto& hero = FindNonTrivialHero(*element_instr);
+    const auto& hero = element_instr->parent()->IsFusionComputation()
+                           ? FindNonTrivialHero(*element_instr)
+                           : *element_instr;
     if (IsReductionFromOrToContiguousDimensions(*element_instr) ||
         GetDescriptionForTiledTransposeEmitter(*element_instr, hero)
             .has_value()) {
@@ -710,10 +720,9 @@ FusionDecision FusionFitsInBudget(const HloInstruction& instr1,
       MaxOperandsAndOutputsPerFusion()) {
     return {};
   } else {
-    VLOG(5) << "Operand count of "
-            << "(" << instr1.ToString() << " ) = " << instr1.operand_count()
-            << " and ( " << instr2.ToString()
-            << " ) = " << instr2.operand_count()
+    VLOG(5) << "Operand count of " << "(" << instr1.ToString()
+            << " ) = " << instr1.operand_count() << " and ( "
+            << instr2.ToString() << " ) = " << instr2.operand_count()
             << " and num_output_buffers = " << num_output_buffers
             << " is bigger than the bound of "
             << MaxOperandsAndOutputsPerFusion();
@@ -871,16 +880,17 @@ size_t GetOutputSizeOfFusible(const HloInstruction& instr) {
 // Recursive helper for GetFusionRoots below.
 static void GetFusionRootsRec(const HloInstruction* root,
                               std::vector<const HloInstruction*>& out) {
-  if (root->opcode() == HloOpcode::kGetTupleElement) {
-    return GetFusionRootsRec(root->operand(0), out);
+  if (root->opcode() == HloOpcode::kGetTupleElement &&
+      root->operand(0)->opcode() == HloOpcode::kTuple) {
+    return GetFusionRootsRec(root->operand(0)->operand(root->tuple_index()),
+                             out);
+  } else if (root->opcode() == HloOpcode::kGetTupleElement) {
+    out.push_back(root->operand(0));
   } else if (root->opcode() == HloOpcode::kTuple) {
     for (int i = 0; i < root->operand_count(); i++) {
       GetFusionRootsRec(root->operand(i), out);
     }
   } else {
-    if (!out.empty() && out.back() == root) {
-      return;
-    }
     CHECK(!absl::c_linear_search(out, root))
         << "Fusion root contains instruction " << root->ToString()
         << " multiple times";
@@ -928,6 +938,36 @@ bool MayPreventVectorization(const HloFusionAdaptor& fusion) {
         return false;
     }
   });
+}
+
+std::vector<HloComputation*> GetFusibleComputations(
+    const HloModule& module,
+    const absl::flat_hash_set<absl::string_view>& execution_threads) {
+  auto result = module.MakeComputationPostOrder(execution_threads);
+  absl::flat_hash_set<const HloComputation*> computations_not_to_fuse;
+  for (const auto* computation : result) {
+    for (const auto* instr : computation->instructions()) {
+      // Don't fuse within called computations, unless they are for control
+      // flow. See also fusion_wrapper.cc, which does the same.
+      if (HloInstruction::MightHaveCalledComputations(instr->opcode()) &&
+          instr->opcode() != HloOpcode::kWhile &&
+          instr->opcode() != HloOpcode::kConditional &&
+          // No need to add fusion computations, just check the flag.
+          instr->opcode() != HloOpcode::kFusion) {
+        for (auto* called : instr->called_computations()) {
+          computations_not_to_fuse.insert(called);
+        }
+      }
+    }
+  }
+  result.erase(
+      std::remove_if(result.begin(), result.end(),
+                     [&](HloComputation* computation) {
+                       return computation->IsFusionComputation() ||
+                              computations_not_to_fuse.contains(computation);
+                     }),
+      result.end());
+  return result;
 }
 
 }  // namespace gpu

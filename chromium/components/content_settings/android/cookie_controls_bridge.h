@@ -38,7 +38,8 @@ class CookieControlsBridge : public CookieControlsObserver {
       const base::android::JavaParamRef<jobject>&
           joriginal_browser_context_handle);
 
-  // Called by the Java counterpart when it is getting garbage collected.
+  // Destroys the CookieControlsBridge object. This needs to be called on the
+  // java side when the object is not in use anymore.
   void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
   void SetThirdPartyCookieBlockingEnabledForSite(JNIEnv* env,
@@ -54,8 +55,6 @@ class CookieControlsBridge : public CookieControlsObserver {
                        CookieControlsEnforcement enforcement,
                        CookieBlocking3pcdStatus blocking_status,
                        base::Time expiration) override;
-  void OnSitesCountChanged(int allowed_third_party_sites_count,
-                           int blocked_third_party_sites_count) override;
   void OnCookieControlsIconStatusChanged(
       bool icon_visible,
       bool protections_on,
@@ -69,10 +68,6 @@ class CookieControlsBridge : public CookieControlsObserver {
   CookieControlsEnforcement enforcement_ =
       CookieControlsEnforcement::kNoEnforcement;
   std::optional<base::Time> expiration_;
-  std::optional<int> blocked_cookies_;
-  std::optional<int> allowed_cookies_;
-  std::optional<int> blocked_third_party_sites_count_;
-  std::optional<int> allowed_third_party_sites_count_;
   std::unique_ptr<CookieControlsController> controller_;
   base::ScopedObservation<CookieControlsController, CookieControlsObserver>
       observation_{this};

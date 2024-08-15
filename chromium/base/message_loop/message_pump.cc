@@ -48,6 +48,11 @@ MessagePump::MessagePump() = default;
 
 MessagePump::~MessagePump() = default;
 
+bool MessagePump::HandleNestedNativeLoopWithApplicationTasks(
+    bool application_tasks_desired) {
+  return false;
+}
+
 // static
 void MessagePump::OverrideMessagePumpForUIFactory(MessagePumpFactory* factory) {
   DCHECK(!message_pump_for_ui_factory_);
@@ -70,7 +75,7 @@ std::unique_ptr<MessagePump> MessagePump::Create(MessagePumpType type) {
 #elif BUILDFLAG(IS_NACL) || BUILDFLAG(IS_AIX)
       // Currently NaCl and AIX don't have a UI MessagePump.
       // TODO(abarth): Figure out if we need this.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return nullptr;
 #elif BUILDFLAG(IS_ANDROID)
       {
@@ -96,7 +101,7 @@ std::unique_ptr<MessagePump> MessagePump::Create(MessagePumpType type) {
 #endif
 
     case MessagePumpType::CUSTOM:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return nullptr;
 
     case MessagePumpType::DEFAULT:
@@ -115,6 +120,7 @@ void MessagePump::InitializeFeatures() {
 #if BUILDFLAG(IS_WIN)
   g_explicit_high_resolution_timer_win =
       FeatureList::IsEnabled(kExplicitHighResolutionTimerWin);
+  MessagePumpWin::InitializeFeatures();
 #endif
 }
 

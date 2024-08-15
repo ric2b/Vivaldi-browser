@@ -20,10 +20,10 @@
  */
 
 #include "libavutil/avassert.h"
-#include "libavutil/common.h"
 #include "libavutil/iamf.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/log.h"
+#include "libavutil/mem.h"
 #include "libavcodec/get_bits.h"
 #include "libavcodec/flac.h"
 #include "libavcodec/leb.h"
@@ -580,16 +580,6 @@ static int param_parse(void *s, IAMFContext *c, AVIOContext *pb,
     return 0;
 }
 
-static IAMFCodecConfig *get_codec_config(IAMFContext *c, unsigned int codec_config_id)
-{
-    for (int i = 0; i < c->nb_codec_configs; i++) {
-        if (c->codec_configs[i]->codec_config_id == codec_config_id)
-            return c->codec_configs[i];
-    }
-
-    return NULL;
-}
-
 static int audio_element_obu(void *s, IAMFContext *c, AVIOContext *pb, int len)
 {
     const IAMFCodecConfig *codec_config;
@@ -627,7 +617,7 @@ static int audio_element_obu(void *s, IAMFContext *c, AVIOContext *pb, int len)
     audio_element_type = avio_r8(pbc) >> 5;
     codec_config_id = ffio_read_leb(pbc);
 
-    codec_config = get_codec_config(c, codec_config_id);
+    codec_config = ff_iamf_get_codec_config(c, codec_config_id);
     if (!codec_config) {
         av_log(s, AV_LOG_ERROR, "Non existant codec config id %d referenced in an audio element\n", codec_config_id);
         ret = AVERROR_INVALIDDATA;
@@ -832,6 +822,7 @@ static int mix_presentation_obu(void *s, IAMFContext *c, AVIOContext *pb, int le
     mix_presentation->language_label = av_calloc(mix_presentation->count_label,
                                                  sizeof(*mix_presentation->language_label));
     if (!mix_presentation->language_label) {
+        mix_presentation->count_label = 0;
         ret = AVERROR(ENOMEM);
         goto fail;
     }
@@ -943,6 +934,10 @@ static int mix_presentation_obu(void *s, IAMFContext *c, AVIOContext *pb, int le
             if (submix_layout->layout_type == 2) {
                 int sound_system;
                 sound_system = (byte >> 2) & 0xF;
+                if (sound_system >= FF_ARRAY_ELEMS(ff_iamf_sound_system_map)) {
+                    ret = AVERROR_INVALIDDATA;
+                    goto fail;
+                }
                 av_channel_layout_copy(&submix_layout->sound_system, &ff_iamf_sound_system_map[sound_system].layout);
             }
 

@@ -170,7 +170,6 @@ TEST_P(CompositingTest, DidScrollCallbackAfterScrollableAreaChanges) {
                                 ->property_trees()
                                 ->scroll_tree()
                                 .FindNodeFromElementId(scroll_element_id);
-  EXPECT_TRUE(scroll_node->scrollable);
   EXPECT_EQ(scroll_node->container_bounds, gfx::Size(100, 100));
 
   // Ensure a synthetic impl-side scroll offset propagates to the scrollable
@@ -230,7 +229,6 @@ TEST_P(CompositingTest, FrameViewScroll) {
           ->scroll_tree()
           .FindNodeFromElementId(scrollable_area->GetScrollElementId());
   ASSERT_TRUE(scroll_node);
-  EXPECT_TRUE(scroll_node->scrollable);
 
   // Ensure a synthetic impl-side scroll offset propagates to the scrollable
   // area using the DidScroll callback.
@@ -603,9 +601,11 @@ TEST_P(CompositingTest, CompositedOverlayScrollbarUnderNonNonFastBorderRadius) {
 }
 
 // https://crbug.com/1459318
-TEST_P(CompositingTest, FullPACUpdateOnScrollWithSyntheticClipAcrossScroller) {
+TEST_P(CompositingTest,
+       FullPACUpdateOnScrollWithSyntheticClipAcrossScrollerSimpleRadius) {
   InitializeWithHTML(*WebView()->MainFrameImpl()->GetFrame(), R"HTML(
-    <div id="scroll" style="width: 200px; height: 200px; border-radius: 2px;
+    <div id="scroll" style="width: 200px; height: 200px;
+                            border-radius: 2px;
                             overflow: scroll; background: white">
       <div id="masked" style="width: 100px; height: 100px;
                               backdrop-filter: blur(1px)"></div>
@@ -618,6 +618,28 @@ TEST_P(CompositingTest, FullPACUpdateOnScrollWithSyntheticClipAcrossScroller) {
   GetLocalFrameView()->UpdateAllLifecyclePhasesExceptPaint(
       DocumentUpdateReason::kTest);
   EXPECT_TRUE(paint_artifact_compositor()->NeedsUpdate());
+  UpdateAllLifecyclePhases();
+}
+
+// https://crbug.com/1459318
+TEST_P(CompositingTest,
+       FullPACUpdateOnScrollWithSyntheticClipAcrossScrollerComplexRadius) {
+  InitializeWithHTML(*WebView()->MainFrameImpl()->GetFrame(), R"HTML(
+    <div id="scroll" style="width: 200px; height: 200px;
+                            border-radius: 2px / 4px;
+                            overflow: scroll; background: white">
+      <div id="masked" style="width: 100px; height: 100px;
+                              backdrop-filter: blur(1px)"></div>
+      <div style="height: 200px"></div>
+    </div>
+  )HTML");
+
+  EXPECT_FALSE(paint_artifact_compositor()->NeedsUpdate());
+  GetElementById("scroll")->scrollTo(0, 2);
+  GetLocalFrameView()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason::kTest);
+  EXPECT_TRUE(paint_artifact_compositor()->NeedsUpdate());
+  UpdateAllLifecyclePhases();
 }
 
 TEST_P(CompositingTest, HitTestOpaqueness) {
@@ -806,8 +828,96 @@ TEST_P(CompositingTest, HitTestOpaquenessOnChangeOfUsedPointerEvents) {
   EXPECT_EQ(hit_test_opaque, target_layer->hit_test_opaqueness());
 }
 
-class CompositingSimTest : public PaintTestConfigurations, public SimTest {
+// Based on the minimized test case of https://crbug.com/343198769.
+TEST_P(CompositingTest,
+       NonStackedScrollerWithRelativeChildAboveFixedAndAbsolute) {
+  GetLocalFrameView()
+      ->GetFrame()
+      .GetSettings()
+      ->SetPreferCompositingToLCDTextForTesting(false);
+
+  InitializeWithHTML(*WebView()->MainFrameImpl()->GetFrame(), R"HTML(
+    <!doctype html>
+    <style>
+      div { width: 100px; height: 100px; }
+      ::-webkit-scrollbar { display: none; }
+    </style>
+    <div id="fixed" style="position: fixed"></div>
+    <div id="absolute" style="position: absolute"></div>
+    <div style="overflow: scroll">
+      <div id="relative" style="position: relative; height: 2000px">
+        Contents
+      </div>
+    </div>
+  )HTML");
+
+  EXPECT_TRUE(CcLayerByDOMElementId("fixed"));     // Directly composited.
+  EXPECT_TRUE(CcLayerByDOMElementId("absolute"));  // Overlaps with #fixed.
+  if (RuntimeEnabledFeatures::HitTestOpaquenessEnabled()) {
+    // Not merged because that would miss #relative's scroll state without a
+    // NonFastScrollableRegion.
+    EXPECT_TRUE(CcLayerByDOMElementId("relative"));
+  } else {
+    // Merged into #absolute.
+    EXPECT_FALSE(CcLayerByDOMElementId("relative"));
+  }
+
+  GetElementById("fixed")->SetInlineStyleProperty(CSSPropertyID::kPosition,
+                                                  "absolute");
+  UpdateAllLifecyclePhases();
+  // All layers are merged together.
+  EXPECT_FALSE(CcLayerByDOMElementId("fixed"));
+  EXPECT_FALSE(CcLayerByDOMElementId("absolute"));
+  EXPECT_FALSE(CcLayerByDOMElementId("relative"));
+}
+
+TEST_P(CompositingTest, AnchorPositionAdjustmentTransformIdReference) {
+  GetLocalFrameView()
+      ->GetFrame()
+      .GetSettings()
+      ->SetPreferCompositingToLCDTextForTesting(false);
+
+  InitializeWithHTML(*WebView()->MainFrameImpl()->GetFrame(), R"HTML(
+    <div id="anchored1"
+         style="position: absolute; position-anchor: --a; top: anchor(bottom)">
+      anchored
+    </div>
+    <div id="scroller" style="overflow: scroll; width: 200px; height: 200px">
+      <div id="anchor" style="anchor-name: --a">anchor</div>
+      <div style="height: 1000px"></div>
+    </div>
+    <div id="anchored2"
+         style="position: absolute; position-anchor: --a; top: anchor(bottom)">
+      anchored
+    </div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+
+  int scroll_translation_id =
+      GetElementById("scroller")
+          ->GetLayoutObject()
+          ->FirstFragment()
+          .PaintProperties()
+          ->ScrollTranslation()
+          ->CcNodeId(LayerTreeHost()->property_trees()->sequence_number());
+  EXPECT_LT(scroll_translation_id,
+            CcLayersByDOMElementId(RootCcLayer(), "anchored1")[0]
+                ->transform_tree_index());
+  EXPECT_LT(scroll_translation_id,
+            CcLayersByDOMElementId(RootCcLayer(), "anchored2")[0]
+                ->transform_tree_index());
+}
+
+constexpr unsigned kFillScrollingContentsLayer = 1 << 10;
+
+class CompositingSimTest : public PaintTestConfigurations,
+                           public SimTest,
+                           private ScopedFillScrollingContentsLayerForTest {
  public:
+  CompositingSimTest()
+      : ScopedFillScrollingContentsLayerForTest(GetParam() &
+                                                kFillScrollingContentsLayer) {}
+
   void InitializeWithHTML(const String& html) {
     SimRequest request("https://example.com/test.html", "text/html");
     LoadURL("https://example.com/test.html");
@@ -877,7 +987,11 @@ class CompositingSimTest : public PaintTestConfigurations, public SimTest {
   }
 };
 
-INSTANTIATE_PAINT_TEST_SUITE_P(CompositingSimTest);
+INSTANTIATE_TEST_SUITE_P(All,
+                         CompositingSimTest,
+                         ::testing::Values(PAINT_TEST_SUITE_P_VALUES,
+                                           kHitTestOpaqueness |
+                                               kFillScrollingContentsLayer));
 
 TEST_P(CompositingSimTest, LayerUpdatesDoNotInvalidateEarlierLayers) {
   InitializeWithHTML(R"HTML(
@@ -3291,7 +3405,10 @@ TEST_P(CompositingSimTest, ScrollingContentsLayerRecordedBounds) {
                                                     ->GetScrollableArea()
                                                     ->GetScrollElementId()));
   ASSERT_TRUE(layer);
-  if (RuntimeEnabledFeatures::HitTestOpaquenessEnabled()) {
+  if (RuntimeEnabledFeatures::HitTestOpaquenessEnabled() ||
+      // This will make a difference when UseRecordedBoundsForTiling is enabled
+      // by default.
+      RuntimeEnabledFeatures::FillScrollingContentsLayerEnabled()) {
     EXPECT_EQ(gfx::Size(2000, 16000), layer->bounds());
     EXPECT_EQ(gfx::Rect(0, 0, 2000, 16000),
               layer->GetRecordingSourceForTesting()->recorded_bounds());

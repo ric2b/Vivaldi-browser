@@ -223,8 +223,6 @@ SK_API void SkDebugf_FileLine(const char* file,
 // Max. verb count for paths rendered by the edge-AA tessellating path renderer.
 #define GR_AA_TESSELLATOR_MAX_VERB_COUNT 100
 
-#define SK_SUPPORT_LEGACY_DRAWLOOPER
-
 #define SK_USE_LEGACY_MIPMAP_BUILDER
 
 #define SK_SUPPORT_LEGACY_CONIC_CHOP
@@ -236,6 +234,8 @@ SK_API void SkDebugf_FileLine(const char* file,
 #define SK_LEGACY_INITWITHPREV_LAYER_SIZING
 
 #define SK_DONT_PAD_LAYER_IMAGES
+
+#define GRAPHITE_USE_APPROX_FIT_FOR_FILTERS
 
 /* When --disable-skia-runtime-opts is set in Chrome (or when SkGraphics::Init
    is not called), Skia will prefer precision over performance when computing

@@ -419,8 +419,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				skip(ALL, "test", ALL, "GraphitePurgeNotUsedSinceResourcesTest")
 				skip(ALL, "test", ALL, "PaintParamsKeyTest")
 
-				if b.matchOs("Win10") || b.matchGpu("MaliG78", "Adreno620") {
-					// The Dawn Win10 and some Android device jobs OOMs (skbug.com/14410, b/318725123)
+				if b.matchOs("Win10") || b.matchGpu("MaliG78", "Adreno620", "QuadroP400") {
+					// The Dawn Win10 and some Android/Linux device jobs OOMs (skbug.com/14410, b/318725123)
 					skip(ALL, "test", ALL, "BigImageTest_Graphite")
 				}
 				if b.matchGpu("Adreno620") {
@@ -902,13 +902,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip(ALL, "svg", ALL, ALL)
 		// skbug.com/9171 and 8847
 		skip(ALL, "test", ALL, "InitialTextureClear")
-	}
-
-	if b.model("Pixel3") {
-		// skbug.com/10546
-		skip("vkddl", "gm", ALL, "compressed_textures_nmof")
-		skip("vkddl", "gm", ALL, "compressed_textures_npot")
-		skip("vkddl", "gm", ALL, "compressed_textures")
 	}
 
 	if b.model("TecnoSpark3Pro", "Wembley") {
@@ -1476,6 +1469,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 	if b.extraConfig("GDI") {
 		args = append(args, "--gdi")
+	}
+
+	if b.extraConfig("Fontations") {
+		args = append(args, "--fontations")
 	}
 
 	// Let's make all tasks produce verbose output by default.

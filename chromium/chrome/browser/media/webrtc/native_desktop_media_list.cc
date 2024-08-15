@@ -46,6 +46,7 @@
 
 #if BUILDFLAG(IS_WIN)
 #include <windows.h>
+
 #include "base/strings/string_util_win.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_win.h"
 #endif
@@ -85,7 +86,7 @@ std::optional<size_t> GetFrameHash(webrtc::DesktopFrame* frame) {
   // These checks ensure invalid data isn't passed along, potentially leading to
   // crashes, e.g. when we calculate the hash which assumes a positive height
   // and stride.
-  // TODO(crbug.com/1085230): figure out why the height is sometimes negative.
+  // TODO(crbug.com/40132113): figure out why the height is sometimes negative.
   if (!frame || !frame->data() || frame->stride() < 0 ||
       frame->size().height() < 0) {
     return std::nullopt;
@@ -198,7 +199,7 @@ content::DesktopMediaID::Id GetUpdatedWindowId(
 
   // Update |window_id| if |desktop_media_id.id| corresponds to a
   // viz::FrameSinkId.
-  // TODO(https://crbug.com/1366579): This lookup is fairly fragile and has
+  // TODO(crbug.com/40239799): This lookup is fairly fragile and has
   // now resulted in at least two patches to avoid it (though both are Wayland
   // based problems). On top of that, the series of ifdefs is a bit confusing.
   // We should try to simplify/abstract/cleanup this logic.
@@ -368,7 +369,7 @@ class NativeDesktopMediaList::Worker
   // Used to keep track of the view dialog where the thumbnails are displayed,
   // so as to avoid offering the user to capture that dialog, which will
   // disappear as soon as the user makes that choice.
-  // TODO(https://crbug.com/1471931): Set this earlier to avoid frames being
+  // TODO(crbug.com/40278456): Set this earlier to avoid frames being
   // dropped because it's not set. If possible set it in the constructor.
   DesktopMediaID::Id excluded_window_id_ = DesktopMediaID::kNullId;
 
@@ -428,7 +429,7 @@ void NativeDesktopMediaList::Worker::Refresh(bool update_thumbnails) {
 
   if (capturer_->GetFrameDeliveryMethod() ==
       ThumbnailCapturer::FrameDeliveryMethod::kMultipleSourcesRecurrent) {
-    // TODO(https://crbug.com/1471931): Select windows to stream based on what's
+    // TODO(crbug.com/40278456): Select windows to stream based on what's
     // visible. For now, select the first N windows.
     const size_t target_size = std::min(
         static_cast<size_t>(kNativeDesktopMediaListMaxConcurrentStreams.Get()),
@@ -798,7 +799,7 @@ NativeDesktopMediaList::NativeDesktopMediaList(
   DCHECK(type_ == DesktopMediaList::Type::kWindow ||
          !add_current_process_windows_);
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_FUCHSIA)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
   // webrtc::DesktopCapturer implementations on Windows, MacOS and Fuchsia
   // expect to run on a thread with a UI message pump. Under Fuchsia the
   // capturer needs an async loop to support FIDL I/O.

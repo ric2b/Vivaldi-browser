@@ -3,8 +3,18 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <xnnpack.h>
+#include <xnnpack/aligned-allocator.h>
+#include <xnnpack/common.h>
+#include <xnnpack/node-type.h>
+#include <xnnpack/operator.h>
+#include <xnnpack/subgraph.h>
+
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -12,21 +22,13 @@
 #include <random>
 #include <vector>
 
-#include <fp16/fp16.h>
+#include "replicable_random_device.h"
 #include <gtest/gtest.h>
-
-#include <xnnpack.h>
-#include <xnnpack/aligned-allocator.h>
-#include <xnnpack/node-type.h>
-#include <xnnpack/operator.h>
-#include <xnnpack/subgraph.h>
+#include <fp16/fp16.h>
 
 template <typename T> class GlobalSumPooling1DTest : public ::testing::Test {
-protected:
-  GlobalSumPooling1DTest()
-  {
-    random_device = std::make_unique<std::random_device>();
-    rng = std::mt19937((*random_device)());
+ protected:
+  GlobalSumPooling1DTest() {
     shape_dist = std::uniform_int_distribution<size_t>(2, XNN_MAX_TENSOR_DIMS);
     dim_dist = std::uniform_int_distribution<size_t>(1, 9);
     f32dist = std::uniform_real_distribution<float>();
@@ -60,8 +62,7 @@ protected:
     return std::accumulate(dims.begin(), dims.end(), size_t(1), std::multiplies<size_t>());
   }
 
-  std::unique_ptr<std::random_device> random_device;
-  std::mt19937 rng;
+  xnnpack::ReplicableRandomDevice rng;
   std::uniform_int_distribution<size_t> shape_dist;
   std::uniform_int_distribution<size_t> dim_dist;
   std::uniform_real_distribution<float> f32dist;
@@ -168,8 +169,8 @@ TEST_F(GlobalSumPooling1DTestF16, matches_operator_api)
   xnn_operator_t op = nullptr;
 
   std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-  std::fill(operator_output.begin(), operator_output.end(), fp16_ieee_from_fp32_value(nanf("")));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), fp16_ieee_from_fp32_value(nanf("")));
+  std::fill(operator_output.begin(), operator_output.end(), UINT16_C(0x7E00) /* NaN */);
+  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT16_C(0x7E00) /* NaN */);
 
   // Call operator API.
   const xnn_status status = xnn_create_global_sum_pooling_nwc_f16(

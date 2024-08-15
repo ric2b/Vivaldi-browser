@@ -81,7 +81,19 @@ struct ForwardToServerHelper {
     template <typename Return, typename Class, typename Userdata, typename... Args>
     struct ExtractedTypes<Return (Class::*)(Userdata*, Args...)> {
         using UntypedCallback = Return (*)(Args..., void*);
+        using UntypedCallback2 = Return (*)(Args..., void*, void*);
         static Return Callback(Args... args, void* userdata) {
+            // Acquire the userdata, and cast it to UserdataT.
+            std::unique_ptr<Userdata> data(static_cast<Userdata*>(userdata));
+            auto server = data->server.lock();
+            if (!server) {
+                // Do nothing if the server has already been destroyed.
+                return;
+            }
+            // Forward the arguments and the typed userdata to the Server:: member function.
+            (server.get()->*F)(data.get(), std::forward<decltype(args)>(args)...);
+        }
+        static Return Callback2(Args... args, void* userdata, void*) {
             // Acquire the userdata, and cast it to UserdataT.
             std::unique_ptr<Userdata> data(static_cast<Userdata*>(userdata));
             auto server = data->server.lock();
@@ -97,10 +109,15 @@ struct ForwardToServerHelper {
     static constexpr typename ExtractedTypes<decltype(F)>::UntypedCallback Create() {
         return ExtractedTypes<decltype(F)>::Callback;
     }
+    static constexpr typename ExtractedTypes<decltype(F)>::UntypedCallback2 Create2() {
+        return ExtractedTypes<decltype(F)>::Callback2;
+    }
 };
 
 template <auto F>
 constexpr auto ForwardToServer = ForwardToServerHelper<F>::Create();
+template <auto F>
+constexpr auto ForwardToServer2 = ForwardToServerHelper<F>::Create2();
 
 struct MapUserdata : CallbackUserdata {
     using CallbackUserdata::CallbackUserdata;
@@ -160,6 +177,14 @@ struct RequestDeviceUserdata : CallbackUserdata {
     ObjectHandle eventManager;
     WGPUFuture future;
     ObjectId deviceObjectId;
+    WGPUFuture deviceLostFuture;
+};
+
+struct DeviceLostUserdata : CallbackUserdata {
+    using CallbackUserdata::CallbackUserdata;
+
+    ObjectHandle eventManager;
+    WGPUFuture future;
 };
 
 class Server : public ServerBase {
@@ -172,6 +197,7 @@ class Server : public ServerBase {
     // ChunkedCommandHandler implementation
     const volatile char* HandleCommandsImpl(const volatile char* commands, size_t size) override;
 
+    WireResult InjectBuffer(WGPUBuffer buffer, const Handle& handle, const Handle& deviceHandle);
     WireResult InjectTexture(WGPUTexture texture, const Handle& handle, const Handle& deviceHandle);
     WireResult InjectSwapChain(WGPUSwapChain swapchain,
                                const Handle& handle,
@@ -202,13 +228,27 @@ class Server : public ServerBase {
         mSerializer->SerializeCommand(cmd, std::forward<Extensions>(es)...);
     }
 
+    template <typename T>
+    WireResult FillReservation(ObjectId id, T handle, Known<T>* known = nullptr) {
+        auto result = Objects<T>().FillReservation(id, handle, known);
+        if (result == WireResult::FatalError) {
+            Release(mProcs, handle);
+        }
+        return result;
+    }
+
     void SetForwardingDeviceCallbacks(Known<WGPUDevice> device);
     void ClearDeviceCallbacks(WGPUDevice device);
 
     // Error callbacks
     void OnUncapturedError(ObjectHandle device, WGPUErrorType type, const char* message);
-    void OnDeviceLost(ObjectHandle device, WGPUDeviceLostReason reason, const char* message);
     void OnLogging(ObjectHandle device, WGPULoggingType type, const char* message);
+
+    // Async event callbacks
+    void OnDeviceLost(DeviceLostUserdata* userdata,
+                      WGPUDevice const* device,
+                      WGPUDeviceLostReason reason,
+                      const char* message);
     void OnDevicePopErrorScope(ErrorScopeUserdata* userdata,
                                WGPUErrorType type,
                                const char* message);

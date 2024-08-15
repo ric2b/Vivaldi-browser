@@ -147,7 +147,7 @@ void ChromeBookmarkReader::DecodeNode(const base::Value::Dict& dict) {
   }
 
   const std::string* nickname = nullptr;
-  if (const base::Value::Dict* meta = dict.FindDict("meta_info")) {
+  if (dict.FindDict("meta_info")) {
     nickname = dict.FindString("Nickname");
   }
 

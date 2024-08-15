@@ -12,9 +12,9 @@
 #include "ash/style/icon_button.h"
 #include "ash/style/style_util.h"
 #include "ash/style/typography.h"
-#include "base/scoped_observation.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ash/arc/input_overlay/actions/action.h"
+#include "chrome/browser/ash/arc/input_overlay/arc_input_overlay_metrics.h"
 #include "chrome/browser/ash/arc/input_overlay/display_overlay_controller.h"
 #include "chrome/browser/ash/arc/input_overlay/touch_injector.h"
 #include "chrome/browser/ash/arc/input_overlay/ui/action_type_button_group.h"
@@ -39,7 +39,6 @@
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/layout_types.h"
 #include "ui/views/style/typography.h"
-#include "ui/views/widget/widget.h"
 
 namespace arc::input_overlay {
 
@@ -61,8 +60,7 @@ constexpr int kHeaderLeftMarginSpacing = 6;
 // ----------------------------
 // | |Name tag|        |keys| |
 // ----------------------------
-class ButtonOptionsActionEdit : public ActionEditView,
-                                public views::WidgetObserver {
+class ButtonOptionsActionEdit : public ActionEditView {
   METADATA_HEADER(ButtonOptionsActionEdit, ActionEditView)
 
  public:
@@ -85,28 +83,21 @@ class ButtonOptionsActionEdit : public ActionEditView,
         IDS_INPUT_OVERLAY_BUTTON_OPTIONS_ASSIGNED_KEY));
   }
 
+  // views::View:
+  void VisibilityChanged(views::View* starting_from, bool is_visible) override {
+    if (is_visible && action_->is_new() &&
+        labels_view_->IsFirstLabelUnassigned() &&
+        controller_->HasSingleUserAddedAction()) {
+      PerformPulseAnimation();
+    }
+  }
+
  private:
   friend class ButtonOptionsMenuTest;
   friend class EditLabelTest;
 
   // ActionEditView:
   void ClickCallback() override { labels_view_->FocusLabel(); }
-
-  // views::View:
-  void AddedToWidget() override { observation_.Observe(GetWidget()); }
-
-  void RemovedFromWidget() override { observation_.Reset(); }
-
-  // views::WidgetObserver:
-  void OnWidgetActivationChanged(views::Widget* widget, bool active) override {
-    if (active) {
-      DCHECK(!for_editing_list_);
-      labels_view_->FocusLabel();
-    }
-  }
-
-  base::ScopedObservation<views::Widget, views::WidgetObserver> observation_{
-      this};
 };
 
 BEGIN_METADATA(ButtonOptionsActionEdit)
@@ -291,11 +282,17 @@ void ButtonOptionsMenu::AddDoneButton() {
 }
 
 void ButtonOptionsMenu::OnTrashButtonPressed() {
+  RecordButtonOptionsMenuFunctionTriggered(controller_->GetPackageName(),
+                                           ButtonOptionsMenuFunction::kDelete);
   controller_->RemoveAction(action_);
 }
 
 void ButtonOptionsMenu::OnDoneButtonPressed() {
   controller_->SaveToProtoFile();
+  RecordButtonOptionsMenuFunctionTriggered(controller_->GetPackageName(),
+                                           ButtonOptionsMenuFunction::kDone);
+
+  controller_->SetEditingListVisibility(/*visible=*/true);
 
   // Remove this view at last.
   controller_->RemoveButtonOptionsMenuWidget();
@@ -305,6 +302,10 @@ void ButtonOptionsMenu::OnActionRemoved(const Action& action) {
   if (action_ != &action) {
     return;
   }
+
+  controller_->SetEditingListVisibility(/*visible=*/true);
+
+  // Remove this view at last.
   controller_->RemoveButtonOptionsMenuWidget();
 }
 

@@ -2,11 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
 import * as SDK from '../../../core/sdk/sdk.js';
-import * as TraceEngine from '../trace.js';
-import {assertNotNullOrUndefined} from '../../../core/platform/platform.js';
 import type * as Protocol from '../../../generated/protocol.js';
 import {createTarget} from '../../../testing/EnvironmentHelpers.js';
 import {
@@ -16,15 +12,16 @@ import {
   setMockConnectionResponseHandler,
 } from '../../../testing/MockConnection.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
+import * as TraceEngine from '../trace.js';
 
 function nodeId<T extends Protocol.DOM.BackendNodeId|Protocol.DOM.NodeId>(x: number): T {
   return x as T;
 }
 
-describeWithMockConnection('TraceSDKServices', function() {
+describeWithMockConnection('FetchNodes', function() {
   beforeEach(async () => {
     clearAllMockConnectionResponseHandlers();
-    TraceEngine.Extras.FetchNodes._TEST_clearCache();
+    TraceEngine.Extras.FetchNodes.clearCacheForTesting();
   });
 
   describe('DOMNodeLookup', function() {
@@ -32,7 +29,7 @@ describeWithMockConnection('TraceSDKServices', function() {
       // Create a mock target, dom model, document and node.
       const target = createTarget();
       const domModel = target.model(SDK.DOMModel.DOMModel);
-      assertNotNullOrUndefined(domModel);
+      assert.exists(domModel);
       const documentNode = {nodeId: nodeId(1)};
       const domNode = new SDK.DOMModel.DOMNode(domModel);
       domNode.id = nodeId(2);
@@ -60,7 +57,7 @@ describeWithMockConnection('TraceSDKServices', function() {
       // Create a mock target, dom model, document and node.
       const target = createTarget();
       const domModel = target.model(SDK.DOMModel.DOMModel);
-      assertNotNullOrUndefined(domModel);
+      assert.exists(domModel);
       const documentNode = {nodeId: nodeId(1)};
       const domNode = new SDK.DOMModel.DOMNode(domModel);
       domNode.id = nodeId(2);
@@ -88,7 +85,7 @@ describeWithMockConnection('TraceSDKServices', function() {
       // Create a mock target, dom model, document and node.
       const target = createTarget();
       const domModel = target.model(SDK.DOMModel.DOMModel);
-      assertNotNullOrUndefined(domModel);
+      assert.exists(domModel);
       const documentNode = {nodeId: nodeId(1)};
       const domNodeId2 = new SDK.DOMModel.DOMNode(domModel);
       domNodeId2.id = nodeId(2);
@@ -116,12 +113,91 @@ describeWithMockConnection('TraceSDKServices', function() {
     });
   });
 
+  describe('nodeIdsForEvent', () => {
+    it('identifies node ids for a Layout event', async function() {
+      const traceData = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
+      const layoutEvent = traceData.Renderer.allTraceEntries.find(TraceEngine.Types.TraceEvents.isTraceEventLayout);
+      assert.isOk(layoutEvent);
+      const nodeIds = TraceEngine.Extras.FetchNodes.nodeIdsForEvent(traceData, layoutEvent);
+      assert.deepEqual(Array.from(nodeIds), [2]);
+    });
+
+    it('identifies node ids for a LayoutShift event', async function() {
+      const traceData = await TraceLoader.traceEngine(this, 'web-dev-initial-url.json.gz');
+      const layoutShiftEvent = traceData.LayoutShifts.clusters[0].events.at(0);
+      assert.isOk(layoutShiftEvent);
+      const nodeIds = TraceEngine.Extras.FetchNodes.nodeIdsForEvent(traceData, layoutShiftEvent);
+      assert.deepEqual(Array.from(nodeIds), [
+        193,
+        195,
+        178,
+        189,
+        188,
+      ]);
+    });
+
+    it('identifies node ids for a Paint event', async function() {
+      const traceData = await TraceLoader.traceEngine(this, 'web-dev-initial-url.json.gz');
+      const paintEvent = traceData.Renderer.allTraceEntries.find(TraceEngine.Types.TraceEvents.isTraceEventPaint);
+      assert.isOk(paintEvent);
+      const nodeIds = TraceEngine.Extras.FetchNodes.nodeIdsForEvent(traceData, paintEvent);
+      assert.deepEqual(Array.from(nodeIds), [75]);
+    });
+
+    it('identifies node ids for a PaintImage event', async function() {
+      const traceData = await TraceLoader.traceEngine(this, 'web-dev-initial-url.json.gz');
+      const paintImageEvent =
+          traceData.Renderer.allTraceEntries.find(TraceEngine.Types.TraceEvents.isTraceEventPaintImage);
+      assert.isOk(paintImageEvent);
+      const nodeIds = TraceEngine.Extras.FetchNodes.nodeIdsForEvent(traceData, paintImageEvent);
+      assert.deepEqual(Array.from(nodeIds), [107]);
+    });
+
+    it('identifies node ids for a ScrollLayer event', async function() {
+      // This trace chosen as it happens to have ScrollLayer events, unlike the
+      // web-dev traces used in tests above.
+      const traceData = await TraceLoader.traceEngine(this, 'extension-tracks-and-marks.json.gz');
+      const scrollLayerEvent =
+          traceData.Renderer.allTraceEntries.find(TraceEngine.Types.TraceEvents.isTraceEventScrollLayer);
+      assert.isOk(scrollLayerEvent);
+      const nodeIds = TraceEngine.Extras.FetchNodes.nodeIdsForEvent(traceData, scrollLayerEvent);
+      assert.deepEqual(Array.from(nodeIds), [4]);
+    });
+
+    it('identifies node ids for a DecodeImage event', async function() {
+      const traceData = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
+      const decodeImageEvent =
+          traceData.Renderer.allTraceEntries.find(TraceEngine.Types.TraceEvents.isTraceEventDecodeImage);
+      assert.isOk(decodeImageEvent);
+      const nodeIds = TraceEngine.Extras.FetchNodes.nodeIdsForEvent(traceData, decodeImageEvent);
+      assert.deepEqual(Array.from(nodeIds), [240]);
+    });
+
+    it('identifies node ids for a DrawLazyPixelRef event', async function() {
+      const traceData = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
+      const drawLazyPixelRefEvent =
+          traceData.Renderer.allTraceEntries.find(TraceEngine.Types.TraceEvents.isTraceEventDrawLazyPixelRef);
+      assert.isOk(drawLazyPixelRefEvent);
+      const nodeIds = TraceEngine.Extras.FetchNodes.nodeIdsForEvent(traceData, drawLazyPixelRefEvent);
+      assert.deepEqual(Array.from(nodeIds), [212]);
+    });
+
+    it('identifies node ids for a MarkLCP event', async function() {
+      const traceData = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
+      const lcpCandidateEvent = traceData.PageLoadMetrics.allMarkerEvents.find(
+          TraceEngine.Types.TraceEvents.isTraceEventLargestContentfulPaintCandidate);
+      assert.isOk(lcpCandidateEvent);
+      const nodeIds = TraceEngine.Extras.FetchNodes.nodeIdsForEvent(traceData, lcpCandidateEvent);
+      assert.deepEqual(Array.from(nodeIds), [209]);
+    });
+  });
+
   describe('LayoutShifts', () => {
     it('returns a list of sources for the given event', async () => {
       // Create a mock target, dom model, document and node.
       const target = createTarget();
       const domModel = target.model(SDK.DOMModel.DOMModel);
-      assertNotNullOrUndefined(domModel);
+      assert.exists(domModel);
       const documentNode = {nodeId: 1 as Protocol.DOM.NodeId};
       const domNode = new SDK.DOMModel.DOMNode(domModel);
       domNode.id = 2 as Protocol.DOM.NodeId;

@@ -430,6 +430,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   // coordinates, clipped by the parent's client rect.
   PhysicalRect ScrollIntoView(
       const PhysicalRect&,
+      const PhysicalBoxStrut& scroll_margin,
       const mojom::blink::ScrollIntoViewParamsPtr&) override;
 
   // Returns true if the scrollable area is user-scrollable and it does
@@ -626,6 +627,8 @@ class CORE_EXPORT PaintLayerScrollableArea final
   void SetTargetedSnapAreaId(const std::optional<cc::ElementId>& id) override {
     EnsureRareData().targeted_snap_area_id_ = id;
   }
+
+  void DropCompositorScrollDeltaNextCommit() override;
 
  private:
   bool NeedsHypotheticalScrollbarThickness(ScrollbarOrientation) const;

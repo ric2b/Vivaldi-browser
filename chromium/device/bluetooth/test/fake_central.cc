@@ -101,7 +101,7 @@ void FakeCentral::SimulateAdvertisementReceived(
     observer.DeviceAdvertisementReceived(
         scan_result_ptr->device_address, scan_record->name, scan_record->name,
         scan_result_ptr->rssi, scan_record->tx_power->value,
-        std::nullopt, /* TODO(crbug.com/588083) Implement appearance */
+        std::nullopt, /* TODO(crbug.com/41240161) Implement appearance */
         uuids, service_data, manufacturer_data);
   }
 
@@ -593,13 +593,6 @@ void FakeCentral::RegisterAdvertisement(
     AdvertisementErrorCallback error_callback) {
   NOTREACHED();
 }
-
-#if BUILDFLAG(IS_CHROMEOS)
-bool FakeCentral::IsExtendedAdvertisementsAvailable() const {
-  NOTREACHED();
-  return false;
-}
-#endif
 
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
 void FakeCentral::SetAdvertisingInterval(

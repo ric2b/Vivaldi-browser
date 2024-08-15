@@ -26,6 +26,10 @@ namespace autofill {
 class AutofillWebDataService;
 }
 
+namespace commerce {
+class ProductSpecificationsService;
+}
+
 namespace password_manager {
 class PasswordStoreInterface;
 }
@@ -45,6 +49,12 @@ namespace supervised_user {
 class SupervisedUserSettingsService;
 }  // namespace supervised_user
 
+
+namespace data_sharing {
+class DataSharingService;
+}
+
+// Vivaldi
 namespace sync_notes {
 class NoteSyncService;
 }
@@ -76,6 +86,10 @@ class SyncApiComponentFactoryImpl : public syncer::SyncApiComponentFactory {
           supervised_user_settings_service,
       const scoped_refptr<plus_addresses::PlusAddressWebDataService>&
           plus_address_webdata_service,
+      commerce::ProductSpecificationsService* product_specifications_service,
+      data_sharing::DataSharingService* data_sharing_service,
+
+      // Vivaldi
       sync_notes::NoteSyncService* note_sync_service);
   SyncApiComponentFactoryImpl(const SyncApiComponentFactoryImpl&) = delete;
   SyncApiComponentFactoryImpl& operator=(const SyncApiComponentFactoryImpl&) =
@@ -85,15 +99,14 @@ class SyncApiComponentFactoryImpl : public syncer::SyncApiComponentFactory {
   // Creates and returns enabled datatypes and their controllers.
   // `disabled_types` allows callers to prevent certain types from being
   // created.
-  syncer::DataTypeController::TypeVector CreateCommonDataTypeControllers(
+  syncer::ModelTypeController::TypeVector CreateCommonModelTypeControllers(
       syncer::ModelTypeSet disabled_types,
       syncer::SyncService* sync_service);
 
   // SyncApiComponentFactory implementation:
   std::unique_ptr<syncer::DataTypeManager> CreateDataTypeManager(
-      const syncer::DataTypeController::TypeMap* controllers,
+      const syncer::ModelTypeController::TypeMap* controllers,
       const syncer::DataTypeEncryptionHandler* encryption_handler,
-      syncer::ModelTypeConfigurer* configurer,
       syncer::DataTypeManagerObserver* observer) override;
   std::unique_ptr<syncer::SyncEngine> CreateSyncEngine(
       const std::string& name,
@@ -145,7 +158,11 @@ class SyncApiComponentFactoryImpl : public syncer::SyncApiComponentFactory {
       supervised_user_settings_service_;
   const scoped_refptr<plus_addresses::PlusAddressWebDataService>
       plus_address_webdata_service_;
+  const raw_ptr<commerce::ProductSpecificationsService>
+      product_specifications_service_;
+  const raw_ptr<data_sharing::DataSharingService> data_sharing_service_;
 
+  // Vivaldi
   const raw_ptr<sync_notes::NoteSyncService> note_sync_service_;
 
 };

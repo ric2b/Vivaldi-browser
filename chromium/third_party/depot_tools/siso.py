@@ -15,6 +15,29 @@ import sys
 import gclient_paths
 
 
+def checkOutdir(args):
+    subcmd = ''
+    out_dir = "."
+    for i, arg in enumerate(args):
+        if not arg.startswith("-") and not subcmd:
+            subcmd = arg
+            continue
+        if arg == "-C":
+            out_dir = args[i + 1]
+        elif arg.startswith("-C"):
+            out_dir = arg[2:]
+    if subcmd != "ninja":
+        return
+    ninja_marker = os.path.join(out_dir, ".ninja_deps")
+    if os.path.exists(ninja_marker):
+        print("depot_tools/siso.py: %s contains Ninja state file.\n"
+              "Use `autoninja` to use reclient,\n"
+              "or run `gn clean %s` to switch from ninja to siso\n" %
+              (out_dir, out_dir),
+              file=sys.stderr)
+        sys.exit(1)
+
+
 def main(args):
     # Propagate signals to siso process so that it can run cleanup steps.
     # Siso will be terminated immediately after the second Ctrl-C.

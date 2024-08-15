@@ -131,7 +131,6 @@ bool IsDownloadSecuritySensitive(safe_browsing::DownloadCheckResult result) {
     case Result::DEEP_SCANNED_SAFE:
     case Result::PROMPT_FOR_SCANNING:
     case Result::PROMPT_FOR_LOCAL_PASSWORD_SCANNING:
-    case Result::BLOCKED_UNSUPPORTED_FILE_TYPE:
     case Result::BLOCKED_SCAN_FAILED:
     case Result::IMMEDIATE_DEEP_SCAN:
       return false;
@@ -462,7 +461,8 @@ void DownloadProtectionService::ShowDetailsForDownload(
   navigator->OpenURL(
       content::OpenURLParams(learn_more_url, content::Referrer(),
                              WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                             ui::PAGE_TRANSITION_LINK, false));
+                             ui::PAGE_TRANSITION_LINK, false),
+      /*navigation_handle_callback=*/{});
 }
 
 // static
@@ -521,11 +521,43 @@ DownloadProtectionService::GetDownloadProtectionTailoredVerdict(
     return ClientDownloadResponse::TailoredVerdict();
 }
 
+// static
+bool DownloadProtectionService::ShouldSendDangerousDownloadReport(
+    download::DownloadItem* item) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  content::BrowserContext* browser_context =
+      content::DownloadItemUtils::GetBrowserContext(item);
+  Profile* profile = Profile::FromBrowserContext(browser_context);
+  if (!profile || !IsExtendedReportingEnabled(*profile->GetPrefs())) {
+    return false;
+  }
+
+  // When users are in incognito mode, no report will be sent and no
+  // |onDangerousDownloadOpened| extension API will be called.
+  if (browser_context->IsOffTheRecord()) {
+    return false;
+  }
+
+  // Only report downloads that are known to be dangerous or was dangerous but
+  // was validated by the user.
+  if (!item->IsDangerous() &&
+      item->GetDangerType() != download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED) {
+    return false;
+  }
+
+  std::string token = GetDownloadPingToken(item);
+  // Only dangerous downloads have token stored.
+  if (token.empty()) {
+    return false;
+  }
+
+  return true;
+}
+
 void DownloadProtectionService::MaybeSendDangerousDownloadOpenedReport(
     download::DownloadItem* item,
     bool show_download_in_folder) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  std::string token = GetDownloadPingToken(item);
   content::BrowserContext* browser_context =
       content::DownloadItemUtils::GetBrowserContext(item);
   Profile* profile = Profile::FromBrowserContext(browser_context);
@@ -544,9 +576,8 @@ void DownloadProtectionService::MaybeSendDangerousDownloadOpenedReport(
     return;
 
   OnDangerousDownloadOpened(item, profile);
-  if (sb_service_ &&
-      !token.empty() &&  // Only dangerous downloads have token stored.
-      profile && (IsExtendedReportingEnabled(*profile->GetPrefs()))) {
+
+  if (sb_service_ && ShouldSendDangerousDownloadReport(item)) {
     // If the download is opened, it indicates the user has bypassed the warning
     // and decided to proceed, so setting did_proceed to true.
     bool is_successful = sb_service_->SendDownloadReport(
@@ -800,14 +831,21 @@ void DownloadProtectionService::UploadForDeepScanning(
       std::make_pair(request_raw, std::move(request)));
   DCHECK(insertion_result.second);
   insertion_result.first->second->Start();
+
+  Profile* profile = Profile::FromBrowserContext(
+      content::DownloadItemUtils::GetBrowserContext(item));
   SafeBrowsingMetricsCollector* metrics_collector =
-      SafeBrowsingMetricsCollectorFactory::GetForProfile(
-          Profile::FromBrowserContext(
-              content::DownloadItemUtils::GetBrowserContext(item)));
+      SafeBrowsingMetricsCollectorFactory::GetForProfile(profile);
   if (metrics_collector) {
     metrics_collector->AddSafeBrowsingEventToPref(
         safe_browsing::SafeBrowsingMetricsCollector::EventType::
             DOWNLOAD_DEEP_SCAN);
+  }
+
+  if (trigger ==
+      DownloadItemWarningData::DeepScanTrigger::TRIGGER_IMMEDIATE_DEEP_SCAN) {
+    profile->GetPrefs()->SetBoolean(
+        prefs::kSafeBrowsingAutomaticDeepScanPerformed, true);
   }
 }
 

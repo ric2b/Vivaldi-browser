@@ -28,7 +28,7 @@ bool FormatJSON(std::string& json) {
 
 TEST(AdBlockIosRuleCompilerTest, SimpleRule) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse("example");
   rule_parser.Parse("blåbærsyltetøy");
   std::string expected(R"===({
@@ -81,7 +81,7 @@ TEST(AdBlockIosRuleCompilerTest, SimpleRule) {
 
 TEST(AdBlockIosRuleCompilerTest, RuleWithResource) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse("something$script");
   rule_parser.Parse("something$image,match-case");
   std::string expected(R"===({
@@ -124,7 +124,7 @@ TEST(AdBlockIosRuleCompilerTest, RuleWithResource) {
 
 TEST(AdBlockIosRuleCompilerTest, SubdocumentRule) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse("something$subdocument");
   std::string expected(R"===({
     "network": {
@@ -157,7 +157,7 @@ TEST(AdBlockIosRuleCompilerTest, SubdocumentRule) {
 
 TEST(AdBlockIosRuleCompilerTest, RuleWithParty) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse("something_from_self$script,~third-party");
   rule_parser.Parse("something_from_others$script,third-party");
   std::string expected(R"===({
@@ -206,7 +206,7 @@ TEST(AdBlockIosRuleCompilerTest, RuleWithParty) {
 
 TEST(AdBlockIosRuleCompilerTest, AllowRuleWithResource) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse("@@something$script");
   std::string expected(R"===({
     "network": {
@@ -234,7 +234,7 @@ TEST(AdBlockIosRuleCompilerTest, AllowRuleWithResource) {
 
 TEST(AdBlockIosRuleCompilerTest, AnchoredRules) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse("|https://example.com/$script");
   rule_parser.Parse("||google.com/$script");
   rule_parser.Parse("ad.js|$script");
@@ -291,7 +291,7 @@ TEST(AdBlockIosRuleCompilerTest, AnchoredRules) {
 
 TEST(AdBlockIosRuleCompilerTest, WildcardsAndSpecialCharsRules) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse("part1*part2?part(3)$ping");
   rule_parser.Parse("example.com^bad^$websocket");
   rule_parser.Parse("google.com^|$media");
@@ -347,7 +347,7 @@ TEST(AdBlockIosRuleCompilerTest, WildcardsAndSpecialCharsRules) {
 
 TEST(AdBlockIosRuleCompilerTest, RulesWithHost) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse("advert$host=example.com,image");
   rule_parser.Parse("foo.com/bar$host=foo.com,image");
   rule_parser.Parse("google.com/something$host=evil.google.com,image");
@@ -455,7 +455,7 @@ TEST(AdBlockIosRuleCompilerTest, RulesWithHost) {
 
 TEST(AdBlockIosRuleCompilerTest, RegexRules) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse("/ad(vert)?[0-9]$/$image");
   rule_parser.Parse("/ba{1-3}d/$image");
   std::string expected(R"===({
@@ -486,7 +486,7 @@ TEST(AdBlockIosRuleCompilerTest, RegexRules) {
 
 TEST(AdBlockIosRuleCompilerTest, DocumentActivationRules) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse("evil$document");
   rule_parser.Parse("dangerous$script,document");
   rule_parser.Parse("@@good$image,document");
@@ -570,7 +570,7 @@ TEST(AdBlockIosRuleCompilerTest, DocumentActivationRules) {
 
 TEST(AdBlockIosRuleCompilerTest, OtherActivations) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse("@@no.generic.blocks$genericblock");
   rule_parser.Parse("@@no.generic.hide$generichide,match-case");
   rule_parser.Parse("@@no.element.hide$elemhide");
@@ -626,7 +626,7 @@ TEST(AdBlockIosRuleCompilerTest, OtherActivations) {
 
 TEST(AdBlockIosRuleCompilerTest, RulesWithIncludedDomains) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse("danger$domain=evil.com,script");
   rule_parser.Parse("@@allowed$domain=nice.com,script");
   std::string expected(R"===({
@@ -675,7 +675,7 @@ TEST(AdBlockIosRuleCompilerTest, RulesWithIncludedDomains) {
 
 TEST(AdBlockIosRuleCompilerTest, RulesWithExcludedDomains) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse("danger$domain=~nice.com,script");
   rule_parser.Parse("@@allowed$domain=~evil.com,script");
   std::string expected(R"===({
@@ -724,7 +724,7 @@ TEST(AdBlockIosRuleCompilerTest, RulesWithExcludedDomains) {
 
 TEST(AdBlockIosRuleCompilerTest, BlockRuleWithInclusionsAndExclusions) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse(
       "something$domain=evil.com|~nice.com|~good.evil.com|except.good.evil.com|"
       "bad.evil.com|danger.com|~safe.danger.com|~allowed.safe.danger.com,"
@@ -795,7 +795,7 @@ TEST(AdBlockIosRuleCompilerTest, BlockRuleWithInclusionsAndExclusions) {
 
 TEST(AdBlockIosRuleCompilerTest, BlockRuleWithInclusionsCancelledByExclusions) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse("something$domain=example.com|~example.com");
   std::string expected(R"===({
     "network": {},
@@ -808,7 +808,7 @@ TEST(AdBlockIosRuleCompilerTest, BlockRuleWithInclusionsCancelledByExclusions) {
 
 TEST(AdBlockIosRuleCompilerTest, BlockRuleWithSuperfluousExclusions) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse("something$domain=evil.com|~nice.com, script");
   std::string expected(R"===({
     "network": {
@@ -840,7 +840,7 @@ TEST(AdBlockIosRuleCompilerTest, BlockRuleWithSuperfluousExclusions) {
 
 TEST(AdBlockIosRuleCompilerTest, AllowRuleWithInclusionsAndExclusions) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse(
       "@@something$domain=nice.com|~bad.nice.com|except.bad.nice.com|foo."
       "except.bad.nice.com|good.com|~evil.com|, script");
@@ -876,7 +876,7 @@ TEST(AdBlockIosRuleCompilerTest, AllowRuleWithInclusionsAndExclusions) {
 
 TEST(AdBlockIosRuleCompilerTest, GenericCosmeticHideRule) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse("##.adfoo");
   rule_parser.Parse("##.adbar");
   std::string expected(R"===({
@@ -925,7 +925,7 @@ TEST(AdBlockIosRuleCompilerTest, GenericCosmeticHideRule) {
 
 TEST(AdBlockIosRuleCompilerTest, SpecificCosmeticHideRule) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse("example.com##.ad");
   std::string expected(R"===({
     "network": {},
@@ -961,7 +961,7 @@ TEST(AdBlockIosRuleCompilerTest, SpecificCosmeticHideRule) {
 
 TEST(AdBlockIosRuleCompilerTest, CosmeticAllowRule) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
   rule_parser.Parse("example.com#@#.show");
   rule_parser.Parse("#@#.nice");
   std::string expected(R"===({

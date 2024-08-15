@@ -30,7 +30,6 @@ class ScriptMessage;
 
 @protocol AutofillCommands;
 @class CommandDispatcher;
-@protocol PasswordsAccountStorageNoticeHandler;
 
 // This class manages state and events relating to the showing of various bottom
 // sheets for Autofill/Password Manager.
@@ -73,13 +72,17 @@ class AutofillBottomSheetTabHelper
   // `kCreateNewPlusAddress` autofill suggestion. Also stores `callback` for
   // if/when the UI completes successfully.
   void ShowPlusAddressesBottomSheet(
-      const url::Origin& main_frame_origin,
       plus_addresses::PlusAddressCallback callback);
 
   // Send a command to show the VCN enrollment Bottom Sheet.
   void ShowVirtualCardEnrollmentBottomSheet(
       autofill::VirtualCardEnrollUiModel model,
       autofill::VirtualCardEnrollmentCallbacks callbacks);
+
+  // Send a command to show the bottom sheet to edit an address.
+  // The address to be shown/worked upon in this bottom sheet is fetched via the
+  // `AutofillSaveUpdateAddressProfileDelegateIOS` delegate.
+  void ShowEditAddressBottomSheet();
 
   // Handler for JavaScript messages. Dispatch to more specific handler.
   void OnFormMessageReceived(const web::ScriptMessage& message);
@@ -98,7 +101,7 @@ class AutofillBottomSheetTabHelper
 
   // Detach the password listeners, which will deactivate the password bottom
   // sheet on all frames.
-  void DetachPasswordListenersForAllFrames(bool refocus);
+  void DetachPasswordListenersForAllFrames();
 
   // Detach the payments listeners, which will deactivate the payments bottom
   // sheet on the provided frame.
@@ -141,10 +144,7 @@ class AutofillBottomSheetTabHelper
  private:
   friend class web::WebStateUserData<AutofillBottomSheetTabHelper>;
 
-  explicit AutofillBottomSheetTabHelper(
-      web::WebState* web_state,
-      id<PasswordsAccountStorageNoticeHandler>
-          password_account_storage_notice_handler);
+  explicit AutofillBottomSheetTabHelper(web::WebState* web_state);
 
   // Check whether the password bottom sheet has been dismissed too many times
   // by the user.
@@ -172,16 +172,10 @@ class AutofillBottomSheetTabHelper
   // Handler used to request showing the password bottom sheet.
   __weak id<AutofillCommands> commands_handler_;
 
-  // Handler used for the passwords account storage notice.
-  // TODO(crbug.com/1434606): Remove this when the move to account storage
-  // notice is removed.
-  __weak id<PasswordsAccountStorageNoticeHandler>
-      password_account_storage_notice_handler_;
-
   // The WebState with which this object is associated.
   const raw_ptr<web::WebState> web_state_;
 
-  // TODO(crbug.com/1441921): Remove once this class uses FormGlobalIds.
+  // TODO(crbug.com/40266699): Remove once this class uses FormGlobalIds.
   base::ScopedObservation<web::WebFramesManager,
                           web::WebFramesManager::Observer>
       frames_manager_observation_{this};
@@ -191,12 +185,12 @@ class AutofillBottomSheetTabHelper
       autofill_manager_observations_{this};
 
   // List of password bottom sheet related renderer ids, mapped to a frame id.
-  // TODO(crbug.com/1441921): Maybe migrate to FieldGlobalIds.
+  // TODO(crbug.com/40266699): Maybe migrate to FieldGlobalIds.
   std::map<std::string, std::set<autofill::FieldRendererId>>
       registered_password_renderer_ids_;
 
   // List of payments bottom sheet related renderer ids, mapped to a frame id.
-  // TODO(crbug.com/1441921): Migrate to FieldGlobalIds.
+  // TODO(crbug.com/40266699): Migrate to FieldGlobalIds.
   std::map<std::string, std::set<autofill::FieldRendererId>>
       registered_payments_renderer_ids_;
 

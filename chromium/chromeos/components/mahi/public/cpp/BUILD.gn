@@ -23,12 +23,18 @@ component("cpp") {
     "//chromeos/constants",
     "//chromeos/crosapi/mojom",
     "//chromeos/strings:strings_grit",
+    "//components/account_id",
+    "//components/user_manager",
+    "//google_apis",
     "//ui/base",
-    "//ui/chromeos/styles:cros_tokens_color_mappings",
+    "//ui/color",
     "//ui/gfx",
     "//ui/views",
   ]
   if (is_chromeos_ash) {
     deps += [ "//ash/constants" ]
+  }
+  if (is_chromeos_lacros) {
+    deps += [ "//chromeos/startup" ]
   }
 }

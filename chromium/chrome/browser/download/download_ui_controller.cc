@@ -31,6 +31,7 @@
 #include "chrome/browser/download/android/download_controller.h"
 #include "chrome/browser/download/android/download_controller_base.h"
 #include "components/pdf/common/constants.h"
+#include "content/public/browser/download_manager_delegate.h"
 #include "content/public/common/content_features.h"
 #else
 #include "chrome/browser/download/bubble/download_bubble_prefs.h"
@@ -307,7 +308,7 @@ void DownloadUIController::OnDownloadCreated(content::DownloadManager* manager,
   }
 
   if (web_contents) {
-    // TODO(crbug.com/1179196): Add test for this metric.
+    // TODO(crbug.com/40169435): Add test for this metric.
     RecordDownloadStartPerProfileType(
         Profile::FromBrowserContext(web_contents->GetBrowserContext()));
   }
@@ -323,7 +324,8 @@ void DownloadUIController::OnDownloadUpdated(content::DownloadManager* manager,
 
   bool needs_to_render = false;
 #if BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(features::kAndroidOpenPdfInline) &&
+  if (manager && manager->GetDelegate() &&
+      manager->GetDelegate()->ShouldOpenPdfInline() &&
       !item->IsMustDownload() &&
       base::EqualsCaseInsensitiveASCII(item->GetMimeType(),
                                        pdf::kPDFMimeType)) {

@@ -9,24 +9,46 @@
 #include <optional>
 
 #include "base/component_export.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "chromeos/ash/components/growth/action_performer.h"
 
 namespace base {
 class Time;
-}
+}  // namespace base
+
+namespace gfx {
+struct VectorIcon;
+}  // namespace gfx
+
+namespace ui {
+class ImageModel;
+}  // namespace ui
 
 namespace growth {
 
 // Entries should not be renumbered and numeric values should never be reused
 // as it is used for logging metrics as well. Please keep in sync with
-// "CampaignSlot" in src/tools/metrics/histograms/enums.xml.
+// "CampaignSlot" in tools/metrics/histograms/metadata/ash_growth/enums.xml.
 enum class Slot {
   kDemoModeApp = 0,
   kDemoModeFreePlayApps = 1,
   kNudge = 2,
-  kMaxValue = kNudge
+  kNotification = 3,
+  kMaxValue = kNotification
 };
+
+// These values are deserialized from Growth Campaign, so entries should not
+// be renumbered and numeric values should never be reused.
+enum class TriggeringType {
+  kAppOpened = 0,
+  kCampaignsLoaded = 1,
+  kMaxValue = kCampaignsLoaded
+};
+
+// These values are deserialized from Growth Campaign, so entries should not
+// be renumbered and numeric values should never be reused.
+enum class BuiltInIcon { kRedeem, kContainerApp, kG1 };
 
 // Supported window anchor element.
 // These values are deserialized from Growth Campaign, so entries should not
@@ -68,19 +90,6 @@ using Campaign = base::Value::Dict;
 // List of campaigns.
 using Campaigns = base::Value::List;
 
-// Lists of campaigns keyed by the targeted slot. The key is the slot ID in
-// string. For example:
-// {
-//   "0": [...]
-//   "1": [...]
-// }
-using CampaignsPerSlot = base::Value::Dict;
-
-const Campaigns* GetCampaignsBySlot(const CampaignsPerSlot* campaigns_per_slot,
-                                    Slot slot);
-
-const Targetings* GetTargetings(const Campaign* campaign);
-
 COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_GROWTH)
 const Payload* GetPayloadBySlot(const Campaign* campaign, Slot slot);
 
@@ -97,6 +106,9 @@ std::optional<int> GetStudyId(const Campaign* campaign);
 //   "1": [...]
 // }
 using CampaignsPerSlot = base::Value::Dict;
+
+Campaigns* GetMutableCampaignsBySlot(CampaignsPerSlot* campaigns_per_slot,
+                                     Slot slot);
 
 const Campaigns* GetCampaignsBySlot(const CampaignsPerSlot* campaigns_per_slot,
                                     Slot slot);
@@ -122,6 +134,7 @@ class TargetingBase {
   const std::optional<bool> GetBoolCriteria(const char* path_suffix) const;
   const std::optional<int> GetIntCriteria(const char* path_suffix) const;
   const std::string* GetStringCriteria(const char* path_suffix) const;
+  const base::Value::Dict* GetDictCriteria(const char* path_suffix) const;
 
  private:
   const std::string GetCriteriaPath(const char* path_suffix) const;
@@ -159,6 +172,50 @@ class DemoModeTargeting : public TargetingBase {
   const std::optional<bool> TargetFeatureAwareDevice() const;
 };
 
+// Wrapper around time window targeting dictionary.
+//
+// The structure looks like:
+// {
+//   "start": 1697046365,
+//   "end": 1697046598
+// }
+//
+// Start and end are the number of seconds since epoch in UTC.
+class TimeWindowTargeting {
+ public:
+  explicit TimeWindowTargeting(const base::Value::Dict* time_window_dict);
+  TimeWindowTargeting(const TimeWindowTargeting&) = delete;
+  TimeWindowTargeting& operator=(const TimeWindowTargeting) = delete;
+  ~TimeWindowTargeting();
+
+  const base::Time GetStartTime() const;
+  const base::Time GetEndTime() const;
+
+ private:
+  raw_ptr<const base::Value::Dict> time_window_dict_;
+};
+
+// Wrapper around number range targeting dictionary.
+//
+// The structure looks like:
+// {
+//   "start": 3,
+//   "end": 5
+// }
+class NumberRangeTargeting {
+ public:
+  explicit NumberRangeTargeting(const base::Value::Dict* number_range_dict);
+  NumberRangeTargeting(const NumberRangeTargeting&) = delete;
+  NumberRangeTargeting& operator=(const NumberRangeTargeting) = delete;
+  ~NumberRangeTargeting();
+
+  const std::optional<int> GetStart() const;
+  const std::optional<int> GetEnd() const;
+
+ private:
+  raw_ptr<const base::Value::Dict> number_range_dict_;
+};
+
 // Wrapper around Device targeting dictionary. The structure looks like:
 // {
 //   "locales": ["en-US", "zh-CN"];
@@ -178,29 +235,29 @@ class DeviceTargeting : public TargetingBase {
   const std::optional<int> GetMinMilestone() const;
   const std::optional<int> GetMaxMilestone() const;
   const std::optional<bool> GetFeatureAwareDevice() const;
+  std::unique_ptr<TimeWindowTargeting> GetRegisteredTime() const;
+  const std::unique_ptr<NumberRangeTargeting> GetDeviceAge() const;
 };
 
-// Wrapper around scheduling targeting dictionary.
+// Wrapper around session targeting dictionary.
 //
 // The structure looks like:
 // {
-//   "start": 1697046365,
-//   "end": 1697046598
+//   "session": {
+//      "experimentTag": [...]
+//   }
 // }
-//
-// Start and end are the number of seconds since epoch in UTC.
-class SchedulingTargeting {
+class SessionTargeting : public TargetingBase {
  public:
-  explicit SchedulingTargeting(const base::Value::Dict* scheduling_dict);
-  SchedulingTargeting(const SchedulingTargeting&) = delete;
-  SchedulingTargeting& operator=(const SchedulingTargeting) = delete;
-  ~SchedulingTargeting();
+  explicit SessionTargeting(const Targeting* targeting_dict);
+  SessionTargeting(const SessionTargeting&) = delete;
+  SessionTargeting& operator=(const SessionTargeting) = delete;
+  ~SessionTargeting();
 
-  const base::Time GetStartTime() const;
-  const base::Time GetEndTime() const;
+  const base::Value::List* GetExperimentTags() const;
 
- private:
-  raw_ptr<const base::Value::Dict> scheduling_dict_;
+  std::optional<bool> GetMinorUser() const;
+  std::optional<bool> GetIsOwner() const;
 };
 
 // Wrapper around app targeting dictionary.
@@ -222,24 +279,71 @@ class AppTargeting {
   raw_ptr<const base::Value::Dict> app_dict_;
 };
 
-// Wrapper around scheduling targeting dictionary.
+// Wrapper around events targeting dictionary.
 //
 // The structure looks like:
 // {
-//   "scheduling": []
+//   "events": {
+//     // A list of list of conditions to meet.
+//     // The inside list condition is logic OR.
+//     // The outer list condition is logic AND.
+//     // conditions_met = (A || B || C) && D;
+//     "conditions": [// Thsese two conditions are logic AND.
+//       [ // These three conditions are logic OR.
+//         "name:A;comparator:==2;window:365;storage:365",
+//         "name:B;comparator:==5;window:365;storage:365",
+//         "name:C;comparator:==8;window:365;storage:365"
+//       ],
+//       [
+//         "name:D;comparator:<3;window:365;storage:365"
+//       ]
+//     ]
+//   }
 // }
-class SessionTargeting : public TargetingBase {
+class EventsTargeting {
  public:
-  explicit SessionTargeting(const Targeting* targeting_dict);
-  SessionTargeting(const SessionTargeting&) = delete;
-  SessionTargeting& operator=(const SessionTargeting) = delete;
-  ~SessionTargeting();
+  explicit EventsTargeting(const base::Value::Dict* config);
+  EventsTargeting(const EventsTargeting&) = delete;
+  EventsTargeting& operator=(const EventsTargeting) = delete;
+  ~EventsTargeting();
 
-  const std::vector<std::unique_ptr<SchedulingTargeting>> GetSchedulings()
+  int GetImpressionCap() const;
+  int GetDismissalCap() const;
+  const base::Value::List* GetEventsConditions() const;
+
+ private:
+  raw_ptr<const base::Value::Dict> config_dict_;
+};
+
+// Wrapper around runtime targeting dictionary.
+//
+// The structure looks like:
+// {
+//   "runtime": {
+//      "schedulings": [...]
+//      "appsOpend": [...]
+//      "triggers": [...]
+//   }
+// }
+class RuntimeTargeting : public TargetingBase {
+ public:
+  explicit RuntimeTargeting(const Targeting* targeting_dict);
+  RuntimeTargeting(const RuntimeTargeting&) = delete;
+  RuntimeTargeting& operator=(const RuntimeTargeting) = delete;
+  ~RuntimeTargeting();
+
+  const std::vector<std::unique_ptr<TimeWindowTargeting>> GetSchedulings()
       const;
-  const base::Value::List* GetExperimentTags() const;
+
+  // Returns a list of triggers against the current trigger, e.g. `AppOpened`.
+  const std::vector<TriggeringType> GetTriggers() const;
+
   // Returns a list of apps to be matched against the current opened app.
   const std::vector<std::unique_ptr<AppTargeting>> GetAppsOpened() const;
+
+  const std::vector<std::string> GetActiveUrlRegexes() const;
+
+  std::unique_ptr<EventsTargeting> GetEventsConfig() const;
 };
 
 // Wrapper around the action dictionary for performing an action, including
@@ -254,7 +358,7 @@ class SessionTargeting : public TargetingBase {
 //     }
 //   }
 // }
-class Action {
+class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_GROWTH) Action {
  public:
   explicit Action(const base::Value::Dict* action_dict);
   Action(const Action&) = delete;
@@ -275,7 +379,7 @@ class Action {
 // }
 // TODO(b/329698643): Consider moving to nudge controller if Anchor is not used
 // by other surfaces.
-class Anchor {
+class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_GROWTH) Anchor {
  public:
   explicit Anchor(const base::Value::Dict* anchor_dict);
   Anchor(const Anchor&) = delete;
@@ -287,6 +391,29 @@ class Anchor {
 
  private:
   raw_ptr<const base::Value::Dict> anchor_dict_;
+};
+
+// Wrapper around image dictionary.
+//
+// The structure looks like:
+// {
+//   "builtInImage": 0
+// }
+class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_GROWTH) Image {
+ public:
+  explicit Image(const base::Value::Dict* image_dict);
+  Image(const Image&) = delete;
+  Image& operator=(const Image) = delete;
+  ~Image();
+
+  const gfx::VectorIcon* GetVectorIcon() const;
+  const std::optional<ui::ImageModel> GetImage() const;
+
+ private:
+  // Get built in icon based on the given image data.
+  const std::optional<ui::ImageModel> GetBuiltInIcon() const;
+
+  raw_ptr<const base::Value::Dict> image_dict_;
 };
 
 }  // namespace growth

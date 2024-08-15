@@ -38,7 +38,6 @@ base::CancelableTaskTracker::TaskId HistoryService::VisitSearch(
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 base::CancelableTaskTracker::TaskId HistoryService::GetVivaldiTypedHistory(
     const std::string query,
-    KeywordID prefix_keyword,
     int max_results,
     TypedHistoryCallback callback,
     base::CancelableTaskTracker* tracker) {
@@ -48,7 +47,7 @@ base::CancelableTaskTracker::TaskId HistoryService::GetVivaldiTypedHistory(
   return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
       base::BindOnce(&HistoryBackend::QueryTypedHistory, history_backend_.get(),
-                     query, prefix_keyword, max_results),
+                     query, max_results),
       std::move(callback));
 }
 

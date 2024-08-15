@@ -86,12 +86,12 @@ Here are some examples for a 2D array/matrix \c A and a 1D array/vector \c v.
   <td></td>
 </tr>
 <tr>
-  <td>First \c n odd rows A</td>
+  <td>First \c n odd rows of A</td>
   <td>\code A(seqN(1,n,2), all) \endcode</td>
   <td></td>
 </tr>
 <tr>
-  <td>The last past one column</td>
+  <td>The second-last column</td>
   <td>\code A(all, last-1) \endcode</td>
   <td>\code A.col(A.cols()-2) \endcode</td>
 </tr>
@@ -158,7 +158,7 @@ It is equivalent to:
 \endcode
 
 We can revisit the <i>even columns of A</i> example as follows:
-\code A(all, seq(0,last,fix<2>))
+\code A(all, seq(fix<0>,last,fix<2>))
 \endcode
 
 

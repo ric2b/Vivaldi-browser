@@ -59,13 +59,6 @@ constexpr char kFormZip[] = "form_zip";
   net::test_server::RegisterDefaultHandlers(self.testServer);
   GREYAssertTrue(self.testServer->Start(), @"Server did not start.");
 
-  // Prefs aren't reset between tests, crbug.com/1069086. Most tests don't care
-  // about the account storage notice, so suppress it by marking it as shown.
-  [PasswordManagerAppInterface setAccountStorageNoticeShown:YES];
-  // Manually clear sync passwords pref before testShowAccountStorageNotice*.
-  [ChromeEarlGrey
-      clearUserPrefWithName:syncer::SyncPrefs::GetPrefNameForTypeForTesting(
-                                syncer::UserSelectableType::kPasswords)];
   // Make sure a credit card suggestion is available.
   [AutofillAppInterface clearCreditCardStore];
   [AutofillAppInterface saveLocalCreditCard];
@@ -77,7 +70,8 @@ constexpr char kFormZip[] = "form_zip";
 - (void)tearDown {
   [AutofillAppInterface clearCreditCardStore];
   [AutofillAppInterface clearProfilesStore];
-  [PasswordManagerAppInterface clearCredentials];
+  GREYAssertTrue([PasswordManagerAppInterface clearCredentials],
+                 @"Clearing credentials wasn't done.");
   [super tearDown];
 }
 
@@ -86,12 +80,6 @@ constexpr char kFormZip[] = "form_zip";
   config.features_disabled.push_back(
       autofill::features::test::kAutofillServerCommunication);
 
-  if ([self isRunningTest:@selector(testFillPasswordFieldsOnForm)] ||
-      [self isRunningTest:@selector(testFillFieldOnFormWithSingleUsername)] ||
-      [self isRunningTest:@selector(testFillFieldOnFormWithSinglePassword)]) {
-    config.features_disabled.push_back(
-        password_manager::features::kIOSPasswordBottomSheet);
-  }
   if ([self isRunningTest:@selector(testFillFieldOnFormWithSingleUsername)] ||
       [self isRunningTest:@selector(testFillFieldOnFormWithSinglePassword)]) {
     config.features_enabled.push_back(
@@ -223,6 +211,9 @@ id<GREYMatcher> PaymentsBottomSheetUseKeyboardButton() {
 // with the proper suggestion visible and that tapping on that suggestion
 // properly fills the related fields on the form.
 - (void)testFillPasswordFieldsOnForm {
+  // Disable the password bottom sheet.
+  [PasswordSuggestionBottomSheetAppInterface disableBottomSheet];
+
   [FormInputAccessoryAppInterface setUpMockReauthenticationModule];
   [FormInputAccessoryAppInterface mockReauthenticationModuleExpectedResult:
                                       ReauthenticationResult::kSuccess];
@@ -252,6 +243,9 @@ id<GREYMatcher> PaymentsBottomSheetUseKeyboardButton() {
 // Tests that the username field is filled when it is the only field in the
 // sign-in form.
 - (void)testFillFieldOnFormWithSingleUsername {
+  // Disable the password bottom sheet.
+  [PasswordSuggestionBottomSheetAppInterface disableBottomSheet];
+
   [FormInputAccessoryAppInterface setUpMockReauthenticationModule];
   [FormInputAccessoryAppInterface mockReauthenticationModuleExpectedResult:
                                       ReauthenticationResult::kSuccess];
@@ -282,6 +276,9 @@ id<GREYMatcher> PaymentsBottomSheetUseKeyboardButton() {
 // Tests that the password field is filled when it is the only field in the
 // sign-in form.
 - (void)testFillFieldOnFormWithSinglePassword {
+  // Disable the password bottom sheet.
+  [PasswordSuggestionBottomSheetAppInterface disableBottomSheet];
+
   [FormInputAccessoryAppInterface setUpMockReauthenticationModule];
   [FormInputAccessoryAppInterface mockReauthenticationModuleExpectedResult:
                                       ReauthenticationResult::kSuccess];

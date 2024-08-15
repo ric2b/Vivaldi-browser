@@ -83,11 +83,11 @@
 <translation id="3914946330804881301">Importované z prehliadača Opera</translation>
 <translation id="3921292902397893431">Nafúkanec (Príšerka 8)</translation>
 <translation id="3943857333388298514">Prilepiť</translation>
-<translation id="3974783668264968389">Aplikácia Vivaldi nemohla odomknúť vaše zabezpečené úložisko kľúčov. Bez úložiska kľúčov stratíte uložené prihlasovacie údaje, zabezpečené súbory cookie a niektoré funkcie, ako napríklad synchronizácia, pošta a kalendár, prestanú fungovať.
-
-    Teraz ukončite prácu, odomknite alebo opravte svoje úložisko kľúčov a potom to skúste znova. Ak naozaj chcete pokračovať, kliknite na začiarkavacie políčko a stlačte tlačidlo "Pokračovať so stratou údajov".</translation>
 <translation id="4005270918754737597">Prekočiť túto verziu</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Aplikácia Vivaldi nemohla odomknúť vaše zabezpečené úložisko kľúčov. Bez úložiska kľúčov stratíte uložené prihlasovacie údaje, zabezpečené súbory cookie a niektoré funkcie, ako napríklad synchronizácia, pošta a kalendár, prestanú fungovať.
+
+    Teraz ukončite prácu, odomknite alebo opravte svoje úložisko kľúčov a potom to skúste znova. Naozaj chcete pokračovať, ale stratiť údaje ?</translation>
 <translation id="4074744496918018786">Otvoriť obrázok v novom súkromnom okne</translation>
 <translation id="410351446219883937">Automatické prehrávanie</translation>
 <translation id="4281844954008187215">Podmienky použitia</translation>
@@ -178,6 +178,7 @@
 <translation id="8669345741879513971">Prasiatko Babe (Príšerka 10)</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Preskúmať portal-document</translation>
+<translation id="875142999698251063">Ukončiť teraz</translation>
 <translation id="8768970203213061953">Americká púšť (Krajina 14)</translation>
 <translation id="8773635261052182196">Nebudete už naďalej vidieť tieto upozornenia. Môžete si ich znova zapnúť v nastaveniach Vivaldi.</translation>
 <translation id="8774017153185436870">Webové stránky môžu automaticky prehrávať videá</translation>

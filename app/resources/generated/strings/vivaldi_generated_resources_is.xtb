@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">Ekki eftir</translation>
 <translation id="2749881179542288782">Athuga málfræði og stafsetningu</translation>
 <translation id="2785873697295365461">Skráalýsingar</translation>
-<translation id="2809586584051668049">ásamt <ph name="NUMBER_ADDITIONAL_DISABLED" /> öðrum</translation>
 <translation id="2825758591930162672">Opinber lykill viðfangs</translation>
 <translation id="2850541429955027218">Bæta við þema</translation>
 <translation id="2861941300086904918">Staðbundin biðlara öryggis stýring</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">Opna sem glugga</translation>
 <translation id="3280237271814976245">Vista &amp;sem...</translation>
 <translation id="3285322247471302225">Nýr &amp;flipi</translation>
-<translation id="3288047731229977326">Viðbætur sem keyra í þróunarfasa geta skaðað tölvuna þín. Ef þú ert ekki forritari skaltu gera þessar viðbætur í þróunarfasa óvirkar til öryggis.</translation>
 <translation id="329838636886466101">Laga</translation>
 <translation id="33022249435934718">GDI handtök</translation>
 <translation id="3303818374450886607">Afrit</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">Bjó til viðbót:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Gera viðbætur í þróunarfasa óvirkar</translation>
 <translation id="4100839878934973028">Annað forrit á tölvunni þinni bætti við appi sem gæti breytt virkni Vivaldi.</translation>
 <translation id="4104163789986725820">Flytja út...</translation>
 <translation id="4109898769411476438">Lokaðu vafra áður en þú flytur inn (gögn)</translation>
@@ -261,7 +258,6 @@
 <translation id="5269977353971873915">Prentun mistókst</translation>
 <translation id="5284445933715251131">Halda áfram niðurhali</translation>
 <translation id="52912272896845572">Einkalyklaskrá er ógild.</translation>
-<translation id="5301954838959518834">Allt í lagi, náði því</translation>
 <translation id="5302932258331363306">Sýna innsetningar</translation>
 <translation id="5317780077021120954">Vista</translation>
 <translation id="5334142896108694079">Skyndiminni skriptu</translation>

@@ -6,13 +6,14 @@
     "./node_modules/gts",
     "plugin:import/errors",
     "plugin:import/warnings",
-    "plugin:import/typescript"
+    "plugin:import/typescript",
+    "plugin:n/recommended"
   ],
   "env": {
     "browser": true,
     "node": true
   },
-  "plugins": ["node", "ban", "import", "deprecation", "gpuweb-cts"],
+  "plugins": ["node", "ban", "import", "deprecation", "gpuweb-cts", "n"],
   "rules": {
     // Core rules
     "linebreak-style": ["warn", "unix"],
@@ -88,6 +89,17 @@
     // Plugin: deprecation
     //"deprecation/deprecation": "warn",
 
+    // Plugin: n (for Node)
+    "n/no-unsupported-features/es-syntax": "off",
+    "n/no-unsupported-features/node-builtins": "off",
+    "n/no-restricted-require": ["warn", ["*"]],
+    "n/no-restricted-import": ["warn", [
+      {
+        "name": ["*", "!./**/*.js", "!../**/*.js"],
+        "message": "All imports must end in .js and be relative for Web. If this a Node-only file, use an eslint-disable directive or subdirectory .eslintrc.json to disable this lint."
+      }
+    ]],
+
     // Plugin: import
     "import/order": [
       "warn",
@@ -100,7 +112,7 @@
     "import/newline-after-import": ["warn", { "count": 1 }],
     "import/no-duplicates": "warn",
     "import/no-restricted-paths": [
-      "error",
+      "warn",
       {
         "zones": [
           {

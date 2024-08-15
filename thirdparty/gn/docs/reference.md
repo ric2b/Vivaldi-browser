@@ -112,10 +112,10 @@
     *   [cflags_objc: [string list] Flags passed to the Objective C compiler.](#var_cflags_objc)
     *   [cflags_objcc: [string list] Flags passed to the Objective C++ compiler.](#var_cflags_objcc)
     *   [check_includes: [boolean] Controls whether a target's files are checked.](#var_check_includes)
-    *   [code_signing_args: [string list] Arguments passed to code signing script.](#var_code_signing_args)
-    *   [code_signing_outputs: [file list] Output files for code signing step.](#var_code_signing_outputs)
-    *   [code_signing_script: [file name] Script for code signing.](#var_code_signing_script)
-    *   [code_signing_sources: [file list] Sources for code signing step.](#var_code_signing_sources)
+    *   [code_signing_args: [string list] [deprecated] Args for the post-processing script.](#var_code_signing_args)
+    *   [code_signing_outputs: [file list] [deprecated] Outputs of the post-processing step.](#var_code_signing_outputs)
+    *   [code_signing_script: [file name] [deprecated] Script for the post-processing step.](#var_code_signing_script)
+    *   [code_signing_sources: [file list] [deprecated] Sources for the post-processing step.](#var_code_signing_sources)
     *   [complete_static_lib: [boolean] Links all deps into a static library.](#var_complete_static_lib)
     *   [configs: [label list] Configs applying to this target or config.](#var_configs)
     *   [contents: Contents to write to file.](#var_contents)
@@ -149,6 +149,10 @@
     *   [outputs: [file list] Output files for actions and copy targets.](#var_outputs)
     *   [partial_info_plist: [filename] Path plist from asset catalog compiler.](#var_partial_info_plist)
     *   [pool: [string] Label of the pool used by binary targets and actions.](#var_pool)
+    *   [post_processing_args: [string list] Args for the post-processing script.](#var_post_processing_args)
+    *   [post_processing_outputs: [file list] Outputs of the post-processing step.](#var_post_processing_outputs)
+    *   [post_processing_script: [file name] Script for the post-processing step.](#var_post_processing_script)
+    *   [post_processing_sources: [file list] Sources for the post-processing step.](#var_post_processing_sources)
     *   [precompiled_header: [string] Header file to precompile.](#var_precompiled_header)
     *   [precompiled_header_type: [string] "gcc" or "msvc".](#var_precompiled_header_type)
     *   [precompiled_source: [file name] Source file to precompile.](#var_precompiled_source)
@@ -1326,7 +1330,7 @@
   gn refs out/Debug //gn:gn
       Find all targets depending on the given exact target name.
 
-  gn refs out/Debug //base:i18n --as=buildfiles | xargs gvim
+  gn refs out/Debug //base:i18n --as=buildfile | xargs gvim
       Edit all .gn files containing references to //base:i18n
 
   gn refs out/Debug //base --all
@@ -1607,6 +1611,11 @@
   generate iOS/macOS bundle. In cross-platform projects, it is advised to put it
   behind iOS/macOS conditionals.
 
+  If any source files in a bundle_data target match `*/*.xcassets/*` then they
+  will be considered part of an assets catalog, and instead of being copied to
+  the final bundle the assets catalog itself will be added to the inputs of the
+  assets catalog compilation step. See "compile_xcassets" tool.
+
   See "gn help create_bundle" for more information.
 ```
 
@@ -1747,22 +1756,30 @@
   data_deps, however.
 ```
 
-#### **Code signing**
+#### **Post-processing**
 
 ```
-  Some bundle needs to be code signed as part of the build (on iOS all
-  application needs to be code signed to run on a device). The code signature
-  can be configured via the code_signing_script variable.
+  Some bundle needs to be post-processed as part of the build (e.g. on iOS all
+  application needs to be code signed to run on a device). The post processing
+  step can be configured via the post_processing_script variable.
 
-  If set, code_signing_script is the path of a script that invoked after all
-  files have been moved into the bundle. The script must not change any file in
-  the bundle, but may add new files.
+  If set, `post_processing_script` is the path of a script that invoked after
+  all files have been moved into the bundle. The script must not change any file
+  in the bundle, but may add new files.
 
-  If code_signing_script is defined, then code_signing_outputs must also be
-  defined and non-empty to inform when the script needs to be re-run. The
-  code_signing_args will be passed as is to the script (so path have to be
-  rebased) and additional inputs may be listed with the variable
-  code_signing_sources.
+  If `post_processing_script` is defined, then `post_processing_outputs` must
+  be defined and non-empty to inform when the script needs to be re-run. The
+  `post_processing_args` will be passed as is to the script (so path have to be
+  rebased) and additional inputs may be listed via `post_processing_sources`.
+```
+
+#### **Migration**
+
+```
+  The post-processing step used to be limited to code-signing. The properties
+  used to be named `code_signing_$name` instead of `post_processing_$name`. The
+  old names are still accepted as alias to facilitate migration but a warning
+  will be emitted and the alias eventually be removed.
 ```
 
 #### **Variables**
@@ -1776,9 +1793,10 @@
            visibility
   Bundle vars: bundle_root_dir, bundle_contents_dir, bundle_resources_dir,
                bundle_executable_dir, bundle_deps_filter, product_type,
-               code_signing_args, code_signing_script, code_signing_sources,
-               code_signing_outputs, xcode_extra_attributes,
-               xcode_test_application_name, partial_info_plist
+               post_processing_args, post_processing_script,
+               post_processing_sources, post_processing_outputs,
+               xcode_extra_attributes, xcode_test_application_name,
+               partial_info_plist
 ```
 
 #### **Example**
@@ -1852,19 +1870,19 @@
         deps = [ ":${app_name}_bundle_info_plist" ]
         if (is_ios && code_signing) {
           deps += [ ":${app_name}_generate_executable" ]
-          code_signing_script = "//build/config/ios/codesign.py"
-          code_signing_sources = [
+          post_processing_script = "//build/config/ios/codesign.py"
+          post_processing_sources = [
             invoker.entitlements_path,
             "$target_gen_dir/$app_name",
           ]
-          code_signing_outputs = [
+          post_processing_outputs = [
             "$bundle_root_dir/$app_name",
             "$bundle_root_dir/_CodeSignature/CodeResources",
             "$bundle_root_dir/embedded.mobileprovision",
             "$target_gen_dir/$app_name.xcent",
           ]
-          code_signing_args = [
-            "-i=" + ios_code_signing_identity,
+          post_processing_args = [
+            "-i=" + ios_post_processing_identity,
             "-b=" + rebase_path(
                 "$target_gen_dir/$app_name", root_build_dir),
             "-e=" + rebase_path(
@@ -4285,6 +4303,10 @@
         Expands to the list of flags specified in corresponding
         create_bundle target.
 
+  The inputs for compile_xcassets tool will be found from the bundle_data
+  dependencies by looking for any file matching "*/*.xcassets/*" pattern.
+  The "$assets.xcassets" directory will be added as input to the tool.
+
   The Swift tool has multiple input and outputs. It must have exactly one
   output of .swiftmodule type, but can have one or more object file outputs,
   in addition to other type of outputs. The following expansions are available:
@@ -5592,39 +5614,55 @@
     ...
   }
 ```
-### <a name="var_code_signing_args"></a>**code_signing_args**: [string list] Arguments passed to code signing script.
+### <a name="var_code_signing_args"></a>**code_signing_args**: [string list] [deprecated] Args for the post-processing script.
 
 ```
-  For create_bundle targets, code_signing_args is the list of arguments to pass
-  to the code signing script. Typically you would use source expansion (see "gn
-  help source_expansion") to insert the source file names.
+  For create_bundle targets, post_processing_args is the list of arguments to
+  pass to the post-processing script. Typically you would use source expansion
+  (see "gn help source_expansion") to insert the source file names.
 
-  See also "gn help create_bundle".
+  Deprecated: this is an old name for the "post_processing_args" property of
+  the "create_bundle" target. It is still supported to avoid breaking existing
+  build rules, but a warning will be emitted when it is used.
+
+  See also "gn help create_bundle" and "gn help post_processing_args".
 ```
-### <a name="var_code_signing_outputs"></a>**code_signing_outputs**: [file list] Output files for code signing step.
+### <a name="var_code_signing_outputs"></a>**code_signing_outputs**: [file list] [deprecated] Outputs of the post-processing step.
 
 ```
-  Outputs from the code signing step of a create_bundle target. Must refer to
+  Outputs from the post-processing step of a create_bundle target. Must refer to
   files in the build directory.
 
-  See also "gn help create_bundle".
+  Deprecated: this is an old name for the "post_processing_outputs" property of
+  the "create_bundle" target. It is still supported to avoid breaking existing
+  build rules, but a warning will be emitted when it is used.
+
+  See also "gn help create_bundle" and "gn help post_processing_args".
 ```
-### <a name="var_code_signing_script"></a>**code_signing_script**: [file name] Script for code signing."
+### <a name="var_code_signing_script"></a>**code_signing_script**: [file name] [deprecated] Script for the post-processing step."
 
 ```
   An absolute or buildfile-relative file name of a Python script to run for a
-  create_bundle target to perform code signing step.
+  create_bundle target to perform the post-processing step.
 
-  See also "gn help create_bundle".
+  Deprecated: this is an old name for the "post_processing_script" property of
+  the "create_bundle" target. It is still supported to avoid breaking existing
+  build rules, but a warning will be emitted when it is used.
+
+  See also "gn help create_bundle" and "gn help post_processing_args".
 ```
-### <a name="var_code_signing_sources"></a>**code_signing_sources**: [file list] Sources for code signing step.
+### <a name="var_code_signing_sources"></a>**code_signing_sources**: [file list] [deprecated] Sources for the post-processing step.
 
 ```
-  A list of files used as input for code signing script step of a create_bundle
+  A list of files used as input for the post-processing step of a create_bundle
   target. Non-absolute paths will be resolved relative to the current build
   file.
 
-  See also "gn help create_bundle".
+  Deprecated: this is an old name for the "post_processing_sources" property of
+  the "create_bundle" target. It is still supported to avoid breaking existing
+  build rules, but a warning will be emitted when it is used.
+
+  See also "gn help create_bundle" and "gn help post_processing_args".
 ```
 ### <a name="var_complete_static_lib"></a>**complete_static_lib**: [boolean] Links all deps into a static library.
 
@@ -6568,7 +6606,7 @@
 ```
   Valid for create_bundle target, corresponds to the path for the partial
   Info.plist created by the asset catalog compiler that needs to be merged
-  with the application Info.plist (usually done by the code signing script).
+  with the application Info.plist (usually done by the post-processing script).
 
   The file will be generated regardless of whether the asset compiler has
   been invoked or not. See "gn help create_bundle".
@@ -6592,6 +6630,40 @@
     pool = "//build:custom_pool"
     ...
   }
+```
+### <a name="var_post_processing_args"></a>**post_processing_args**: [string list] Args for the post-processing script.
+
+```
+  For create_bundle targets, post_processing_args is the list of arguments to
+  pass to the post-processing script. Typically you would use source expansion
+  (see "gn help source_expansion") to insert the source file names.
+
+  See also "gn help create_bundle".
+```
+### <a name="var_post_processing_outputs"></a>**post_processing_outputs**: [file list] Outputs of the post-processing step.
+
+```
+  Outputs from the post-processing step of a create_bundle target. Must refer to
+  files in the build directory.
+
+  See also "gn help create_bundle".
+```
+### <a name="var_post_processing_script"></a>**post_processing_script**: [file name] Script for the post-processing step."
+
+```
+  An absolute or buildfile-relative file name of a Python script to run for a
+  create_bundle target to perform the post-processing step.
+
+  See also "gn help create_bundle".
+```
+### <a name="var_post_processing_sources"></a>**post_processing_sources**: [file list] Sources for the post-processing step.
+
+```
+  A list of files used as input for the post-processing step of a create_bundle
+  target. Non-absolute paths will be resolved relative to the current build
+  file.
+
+  See also "gn help create_bundle".
 ```
 ### <a name="var_precompiled_header"></a>**precompiled_header**: [string] Header file to precompile.
 

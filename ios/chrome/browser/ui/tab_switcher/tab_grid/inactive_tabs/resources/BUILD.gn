@@ -1,0 +1,10 @@
+# Copyright 2024 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/ios/asset_catalog.gni")
+
+imageset("vivaldi_inactive_tabs_edu_icon") {
+  sources = [
+    "vivaldi_inactive_tabs_edu_icon.imageset/Contents.json",
+    "vivaldi_inactive_tabs_edu_icon.imageset/vivaldi_inactive_tabs_edu_icon.pdf",
+  ]
+}

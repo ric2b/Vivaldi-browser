@@ -19,8 +19,9 @@ class Window;
 namespace apps {
 
 // This is used for logging, so do not remove or reorder existing entries.
-// This should be kept in sync with GetAppTypeNameSet in
-// c/b/apps/app_service/app_platform_metrics_service.cc.
+// This should be kept in sync with:
+// * c/b/apps/app_service/metrics/app_platform_metrics_utils.cc:kAppTypeNameMap
+// * tools/metrics/histograms/metadata/apps/histograms.xml:AppType
 enum class AppTypeName {
   kUnknown = 0,
   kArc = 1,
@@ -172,13 +173,19 @@ std::string GetAppTypeHistogramName(apps::AppTypeName app_type_name);
 // Returns AppTypeName for the given `app_type_name` string.
 AppTypeName GetAppTypeNameFromString(const std::string& app_type_name);
 
-// Returns true if we are allowed to record UKM for `profile`. Otherwise,
-// returns false.
-bool ShouldRecordUkm(Profile* profile);
+// Returns InstallReason string to use in UMA names.
+std::string GetInstallReason(InstallReason install_reason);
 
-// Returns true if it's allowed to record UKM for `app_id`.
-bool ShouldRecordUkmForAppId(const std::string& app_id,
-                             const apps::AppRegistryCache& cache);
+// Returns true if it's permitted to record UKM for `app_id` in `profile`.
+bool ShouldRecordUkmForAppId(Profile* profile,
+                             const AppRegistryCache& cache,
+                             const std::string& app_id);
+
+// Returns true if we are allowed to record UKM for `profile`. When recording
+// UKM for a particular app, prefer `ShouldRecordUkmForAppId`, which also checks
+// this function. This function can be used to disable functionality entirely
+// when UKM is not allowed.
+bool ShouldRecordUkm(Profile* profile);
 
 // Due to the privacy limitation, only ARC apps, Chrome apps and web apps(PWA),
 // system web apps, builtin apps, Borealis apps, and Crostini apps are recorded

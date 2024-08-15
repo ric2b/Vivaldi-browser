@@ -27,7 +27,6 @@
 #include "chrome/browser/web_applications/web_app_pref_guardrails.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/feature_engagement/public/feature_constants.h"
-#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/site_engagement/content/site_engagement_service.h"
 #include "components/user_education/common/feature_promo_controller.h"
@@ -42,8 +41,8 @@
 #include "ui/views/view_class_properties.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "chrome/browser/metrics/structured/event_logging_features.h"
-// TODO(crbug.com/1125897): Enable gn check once it handles conditional includes
+// TODO(crbug.com/40147906): Enable gn check once it handles conditional
+// includes
 #include "components/metrics/structured/structured_events.h"  // nogncheck
 #include "components/metrics/structured/structured_metrics_client.h"  // nogncheck
 #endif
@@ -207,11 +206,9 @@ void PwaInstallView::OnExecuting(PageActionIconView::ExecuteSource source) {
   }
 
 #if BUILDFLAG(IS_CHROMEOS)
-  if (base::FeatureList::IsEnabled(metrics::structured::kAppDiscoveryLogging)) {
-    metrics::structured::StructuredMetricsClient::Record(
-        std::move(cros_events::AppDiscovery_Browser_OmniboxInstallIconClicked()
-                      .SetIPHShown(install_icon_clicked_after_iph_shown_)));
-  }
+  metrics::structured::StructuredMetricsClient::Record(
+      cros_events::AppDiscovery_Browser_OmniboxInstallIconClicked().SetIPHShown(
+          install_icon_clicked_after_iph_shown_));
 #endif
 
   web_app::CreateWebAppFromManifest(
@@ -250,9 +247,7 @@ views::BubbleDialogDelegate* PwaInstallView::GetBubble() const {
 }
 
 const gfx::VectorIcon& PwaInstallView::GetVectorIcon() const {
-  return OmniboxFieldTrial::IsChromeRefreshIconsEnabled()
-             ? kInstallDesktopChromeRefreshIcon
-             : omnibox::kInstallDesktopIcon;
+  return kInstallDesktopChromeRefreshIcon;
 }
 
 bool PwaInstallView::ShouldShowIph(content::WebContents* web_contents,

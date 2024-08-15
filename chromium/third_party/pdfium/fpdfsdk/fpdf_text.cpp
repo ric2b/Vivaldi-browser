@@ -21,6 +21,7 @@
 #include "core/fpdftext/cpdf_textpagefind.h"
 #include "core/fxcrt/check_op.h"
 #include "core/fxcrt/compiler_specific.h"
+#include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
 #include "core/fxcrt/span.h"
 #include "core/fxcrt/span_util.h"
@@ -131,13 +132,12 @@ FPDFText_GetFontInfo(FPDF_TEXTPAGE text_page,
   if (flags)
     *flags = font->GetFontFlags();
 
+  // SAFETY: required from caller.
+  auto result_span = UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, buflen));
   ByteString basefont = font->GetBaseFontName();
-  const unsigned long length =
-      pdfium::checked_cast<unsigned long>(basefont.GetLength() + 1);
-  if (buffer && buflen >= length)
-    memcpy(buffer, basefont.c_str(), length);
-
-  return length;
+  auto basefont_span = basefont.span_with_terminator();
+  fxcrt::try_spancpy(result_span, basefont_span);
+  return pdfium::checked_cast<unsigned long>(basefont_span.size());
 }
 
 FPDF_EXPORT int FPDF_CALLCONV FPDFText_GetFontWeight(FPDF_TEXTPAGE text_page,
@@ -343,10 +343,11 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFText_GetText(FPDF_TEXTPAGE page,
 
   // Includes two-byte terminator in string data itself.
   ByteString str = textpage->GetPageText(start_index, char_count).ToUCS2LE();
-  pdfium::span<const char> str_span = str.AsStringView().span();
-  auto copy_span = fxcrt::reinterpret_span<const unsigned short>(str_span);
-  fxcrt::spancpy(result_span, copy_span);
-  return static_cast<int>(copy_span.size());
+  auto str_span = fxcrt::reinterpret_span<const unsigned short>(str.span());
+
+  // Hard CHECK() in spancpy if retrieved text is too long.
+  fxcrt::spancpy(result_span, str_span);
+  return pdfium::checked_cast<int>(str_span.size());
 }
 
 FPDF_EXPORT int FPDF_CALLCONV FPDFText_CountRects(FPDF_TEXTPAGE text_page,
@@ -420,8 +421,10 @@ FPDFText_FindStart(FPDF_TEXTPAGE text_page,
   options.bMatchCase = !!(flags & FPDF_MATCHCASE);
   options.bMatchWholeWord = !!(flags & FPDF_MATCHWHOLEWORD);
   options.bConsecutive = !!(flags & FPDF_CONSECUTIVE);
+
+  // SAFETY: required from caller.
   auto find = CPDF_TextPageFind::Create(
-      textpage, WideStringFromFPDFWideString(findwhat), options,
+      textpage, UNSAFE_BUFFERS(WideStringFromFPDFWideString(findwhat)), options,
       start_index >= 0 ? std::optional<size_t>(start_index) : std::nullopt);
 
   // Caller takes ownership.
@@ -502,17 +505,19 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFLink_GetURL(FPDF_PAGELINK link_page,
     wsUrl = pageLink->GetURL(link_index);
   }
   ByteString cbUTF16URL = wsUrl.ToUTF16LE();
-  int required = pdfium::checked_cast<int>(cbUTF16URL.GetLength() /
-                                           sizeof(unsigned short));
-  if (!buffer || buflen <= 0)
-    return required;
-
-  int size = std::min(required, buflen);
-  if (size > 0) {
-    int buf_size = size * sizeof(unsigned short);
-    memcpy(buffer, cbUTF16URL.c_str(), buf_size);
+  auto url_span =
+      fxcrt::reinterpret_span<const unsigned short>(cbUTF16URL.span());
+  if (!buffer || buflen <= 0) {
+    return pdfium::checked_cast<int>(url_span.size());
   }
-  return size;
+
+  // SAFETY: required from caller.
+  pdfium::span<unsigned short> result_span =
+      UNSAFE_BUFFERS(pdfium::make_span(buffer, buflen));
+
+  size_t size = std::min(url_span.size(), result_span.size());
+  fxcrt::spancpy(result_span, url_span.first(size));
+  return pdfium::checked_cast<int>(size);
 }
 
 FPDF_EXPORT int FPDF_CALLCONV FPDFLink_CountRects(FPDF_PAGELINK link_page,

@@ -19,6 +19,7 @@
 #include "media/base/audio_decoder_config.h"
 #include "media/base/encryption_pattern.h"
 #include "media/base/encryption_scheme.h"
+#include "media/base/media_client.h"
 #include "media/base/media_tracks.h"
 #include "media/base/media_util.h"
 #include "media/base/stream_parser.h"
@@ -152,8 +153,8 @@ bool MP4StreamParser::AppendToParseBuffer(const uint8_t* buf, size_t size) {
     // synchronous with the app's appendBuffer() call, instead of async decode
     // error during async parse. Since Parse() cannot succeed in kError state,
     // don't even copy `buf` into `queue_` in this case.
-    // TODO(crbug.com/1379160): Instrument this path to see if it can be changed
-    // to just DCHECK_NE(state_, kError).
+    // TODO(crbug.com/40244241): Instrument this path to see if it can be
+    // changed to just DCHECK_NE(state_, kError).
     return true;
   }
 
@@ -552,23 +553,21 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
         }
 
         // Check if it is MPEG4 AAC defined in ISO 14496 Part 3 or
-        // supported MPEG2 AAC varients.
+        // supported MPEG2 AAC variants.
         if (ESDescriptor::IsAAC(audio_type)) {
           const AAC& aac = entry.esds.aac;
           codec = AudioCodec::kAAC;
           profile = aac.GetProfile();
           channel_layout = aac.GetChannelLayout(has_sbr_);
           sample_per_second = aac.GetOutputSamplesPerSecond(has_sbr_);
-          // Set `aac_extra_data` on all platforms but only set `extra_data` on
-          // Android. This is for backward compatibility until we have a better
-          // solution. See crbug.com/1245123 for details.
+          // Set `aac_extra_data` on all platforms. This is for backward
+          // compatibility until we have a better solution.
+          // See crbug.com/1245123 for details.
           aac_extra_data = aac.codec_specific_data();
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
           // FEATURE_EXTRA_DATA
           extra_data = entry.esds.data;
-#elif BUILDFLAG(IS_ANDROID)
-          extra_data = aac.codec_specific_data();
-#endif  // BUILDFLAG(IS_ANDROID)
+#endif  // USE_SYSTEM_PROPRIETARY_CODECS
 #if BUILDFLAG(ENABLE_PLATFORM_AC3_EAC3_AUDIO)
         } else if (audio_type == kAC3) {
           codec = AudioCodec::kAC3;
@@ -1112,9 +1111,20 @@ ParseResult MP4StreamParser::EnqueueSample(BufferQueueMap* buffers) {
   StreamParserBuffer::Type buffer_type = audio ? DemuxerStream::AUDIO :
       DemuxerStream::VIDEO;
 
-  auto stream_buf = StreamParserBuffer::FromExternalMemory(
-      std::make_unique<ExternalMemoryAdapter>(std::move(frame_buf)),
-      is_keyframe, buffer_type, runs_->track_id());
+  scoped_refptr<StreamParserBuffer> stream_buf;
+
+  if (auto* media_client = GetMediaClient()) {
+    if (auto* alloc = media_client->GetMediaAllocator()) {
+      stream_buf = StreamParserBuffer::FromExternalMemory(
+          alloc->CopyFrom(frame_buf), is_keyframe, buffer_type,
+          runs_->track_id());
+    }
+  }
+  if (!stream_buf) {
+    stream_buf = StreamParserBuffer::FromExternalMemory(
+        std::make_unique<ExternalMemoryAdapter>(std::move(frame_buf)),
+        is_keyframe, buffer_type, runs_->track_id());
+  }
 
   if (decrypt_config)
     stream_buf->set_decrypt_config(std::move(decrypt_config));

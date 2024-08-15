@@ -31,51 +31,11 @@
 #include <stdint.h>
 
 #include "libavutil/attributes.h"
-#include "libavutil/internal.h"
 #include "libavutil/mem_internal.h"
 
 #include "audiodsp.h"
 #include "ac3enc.h"
 #include "eac3enc.h"
-
-
-static int allocate_sample_buffers(AC3EncodeContext *s)
-{
-    int ch;
-
-    if (!FF_ALLOC_TYPED_ARRAY(s->windowed_samples, AC3_WINDOW_SIZE) ||
-        !FF_ALLOCZ_TYPED_ARRAY(s->planar_samples,  s->channels))
-        return AVERROR(ENOMEM);
-
-    for (ch = 0; ch < s->channels; ch++) {
-        if (!(s->planar_samples[ch] = av_mallocz((AC3_FRAME_SIZE + AC3_BLOCK_SIZE) *
-                                                  sizeof(**s->planar_samples))))
-            return AVERROR(ENOMEM);
-    }
-    return 0;
-}
-
-
-/*
- * Copy input samples.
- * Channels are reordered from FFmpeg's default order to AC-3 order.
- */
-static void copy_input_samples(AC3EncodeContext *s, SampleType **samples)
-{
-    int ch;
-
-    /* copy and remap input samples */
-    for (ch = 0; ch < s->channels; ch++) {
-        /* copy last 256 samples of previous frame to the start of the current frame */
-        memcpy(&s->planar_samples[ch][0], &s->planar_samples[ch][AC3_BLOCK_SIZE * s->num_blocks],
-               AC3_BLOCK_SIZE * sizeof(s->planar_samples[0][0]));
-
-        /* copy new samples for current frame */
-        memcpy(&s->planar_samples[ch][AC3_BLOCK_SIZE],
-               samples[s->channel_map[ch]],
-               AC3_BLOCK_SIZE * s->num_blocks * sizeof(s->planar_samples[0][0]));
-    }
-}
 
 
 /*
@@ -90,11 +50,11 @@ static void apply_mdct(AC3EncodeContext *s)
     for (ch = 0; ch < s->channels; ch++) {
         for (blk = 0; blk < s->num_blocks; blk++) {
             AC3Block *block = &s->blocks[blk];
-            const SampleType *input_samples = &s->planar_samples[ch][blk * AC3_BLOCK_SIZE];
+            const SampleType *input_samples = (SampleType*)s->planar_samples[ch] + blk * AC3_BLOCK_SIZE;
 
             s->fdsp->vector_fmul(s->windowed_samples, input_samples,
                                  s->mdct_window, AC3_BLOCK_SIZE);
-            s->fdsp->vector_fmul_reverse(s->windowed_samples + AC3_BLOCK_SIZE,
+            s->fdsp->vector_fmul_reverse((SampleType*)s->windowed_samples + AC3_BLOCK_SIZE,
                                          &input_samples[AC3_BLOCK_SIZE],
                                          s->mdct_window, AC3_BLOCK_SIZE);
 
@@ -370,23 +330,8 @@ static void compute_rematrixing_strategy(AC3EncodeContext *s)
 }
 
 
-int AC3_NAME(encode_frame)(AVCodecContext *avctx, AVPacket *avpkt,
-                           const AVFrame *frame, int *got_packet_ptr)
+static void encode_frame(AC3EncodeContext *s)
 {
-    AC3EncodeContext *s = avctx->priv_data;
-    int ret;
-
-    if (s->options.allow_per_frame_metadata) {
-        ret = ff_ac3_validate_metadata(s);
-        if (ret)
-            return ret;
-    }
-
-    if (s->bit_alloc.sr_code == 1 || (AC3ENC_FLOAT && s->eac3))
-        ff_ac3_adjust_frame_size(s);
-
-    copy_input_samples(s, (SampleType **)frame->extended_data);
-
     apply_mdct(s);
 
     s->cpl_on = s->cpl_enabled;
@@ -400,6 +345,4 @@ int AC3_NAME(encode_frame)(AVCodecContext *avctx, AVPacket *avpkt,
 #if AC3ENC_FLOAT
     scale_coefficients(s);
 #endif
-
-    return ff_ac3_encode_frame_common_end(avctx, avpkt, frame, got_packet_ptr);
 }

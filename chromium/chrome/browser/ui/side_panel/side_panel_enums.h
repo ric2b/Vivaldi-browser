@@ -29,7 +29,22 @@ enum class SidePanelOpenTrigger {
   kReadAnythingOmniboxIcon = 15,
   kReadAnythingNavigationThrottle = 16,
   kOverflowMenu = 17,
-  kMaxValue = kOverflowMenu,
+  kExtension = 18,
+  kMaxValue = kExtension,
+};
+
+enum class SidePanelContentState {
+  // Content is ready to show and will influence side panel visibility.
+  kReadyToShow = 0,
+  // Side panel content should be hidden, either immediately if other content
+  // is causing the side panel to remain open or after the side panel has been
+  // closed.
+  kReadyToHide = 1,
+  // Content is ready to show, will influence side panel visibility, and show
+  // immediately without any animations.
+  kShowImmediately = 2,
+  // Side panel content should be hidden immediately with no animations.
+  kHideImmediately = 3,
 };
 
 #endif  // CHROME_BROWSER_UI_SIDE_PANEL_SIDE_PANEL_ENUMS_H_

@@ -5,25 +5,10 @@
 import {TraceLoader} from '../../../testing/TraceLoader.js';
 import * as TraceModel from '../trace.js';
 
-const {assert} = chai;
-
 type DataArgs = TraceModel.Types.TraceEvents.SyntheticNetworkRequest['args']['data'];
 type DataArgsProcessedData = TraceModel.Types.TraceEvents.SyntheticNetworkRequest['args']['data']['syntheticData'];
 type DataArgsMap = Map<keyof DataArgs, DataArgs[keyof DataArgs]>;
 type DataArgsProcessedDataMap = Map<keyof DataArgsProcessedData, DataArgsProcessedData[keyof DataArgsProcessedData]>;
-
-async function parseAndFinalizeFile(context: Mocha.Suite|Mocha.Context|null, traceFile: string) {
-  const traceEvents = await TraceLoader.rawEvents(context, traceFile);
-  TraceModel.Handlers.ModelHandlers.Meta.initialize();
-  TraceModel.Handlers.ModelHandlers.NetworkRequests.initialize();
-  for (const event of traceEvents) {
-    TraceModel.Handlers.ModelHandlers.Meta.handleEvent(event);
-    TraceModel.Handlers.ModelHandlers.NetworkRequests.handleEvent(event);
-  }
-  await TraceModel.Handlers.ModelHandlers.Meta.finalize();
-  await TraceModel.Handlers.ModelHandlers.NetworkRequests.finalize();
-  return traceEvents;
-}
 
 describe('NetworkRequestsHandler', function() {
   describe('error handling', () => {
@@ -45,16 +30,9 @@ describe('NetworkRequestsHandler', function() {
     });
   });
 
-  it('parses search param strings for network requests', async () => {
-    await parseAndFinalizeFile(this, 'request-with-query-param.json.gz');
-    const {byTime} = TraceModel.Handlers.ModelHandlers.NetworkRequests.data();
-    // Filter to the requests that have search params.
-    const withSearchParams = byTime.filter(request => Boolean(request.args.data.search));
-    assert.deepEqual(['?test-query=hello'], withSearchParams.map(request => request.args.data.search));
-  });
-
   describe('network requests calculations', () => {
     beforeEach(() => {
+      TraceModel.Handlers.ModelHandlers.Meta.reset();
       TraceModel.Handlers.ModelHandlers.Meta.initialize();
       TraceModel.Handlers.ModelHandlers.NetworkRequests.initialize();
     });
@@ -208,6 +186,7 @@ describe('NetworkRequestsHandler', function() {
 
   describe('parses the change priority request', () => {
     beforeEach(() => {
+      TraceModel.Handlers.ModelHandlers.Meta.reset();
       TraceModel.Handlers.ModelHandlers.Meta.initialize();
       TraceModel.Handlers.ModelHandlers.NetworkRequests.initialize();
     });
@@ -239,6 +218,7 @@ describe('NetworkRequestsHandler', function() {
 
   describe('redirects', () => {
     beforeEach(() => {
+      TraceModel.Handlers.ModelHandlers.Meta.reset();
       TraceModel.Handlers.ModelHandlers.Meta.initialize();
       TraceModel.Handlers.ModelHandlers.NetworkRequests.initialize();
     });

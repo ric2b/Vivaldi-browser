@@ -2,16 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "core/fxge/win32/ctext_only_printer_driver.h"
 
 #include <limits.h>
 #include <stddef.h>
-#include <stdint.h>
-#include <string.h>
 
 #include <algorithm>
 
 #include "core/fxcrt/check_op.h"
+#include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_string.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/notreached.h"
@@ -174,7 +178,7 @@ bool CTextOnlyPrinterDriver::DrawDeviceText(
     uint8_t buffer[1026];
     size_t send_len = std::min<size_t>(text_span.size(), 1024);
     *(reinterpret_cast<uint16_t*>(buffer)) = static_cast<uint16_t>(send_len);
-    memcpy(buffer + 2, text_span.data(), send_len);
+    FXSYS_memcpy(buffer + 2, text_span.data(), send_len);
     ::GdiComment(m_hDC, static_cast<UINT>(send_len + 2), buffer);
     text_span = text_span.subspan(send_len);
   }

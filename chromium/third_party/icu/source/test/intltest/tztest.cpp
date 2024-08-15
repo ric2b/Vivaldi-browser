@@ -17,6 +17,7 @@
 #include "unicode/localpointer.h"
 #include "unicode/resbund.h"
 #include "unicode/strenum.h"
+#include "unicode/ustring.h"
 #include "unicode/uversion.h"
 #include "tztest.h"
 #include "cmemory.h"
@@ -78,6 +79,8 @@ void TimeZoneTest::runIndexedTest( int32_t index, UBool exec, const char* &name,
     TESTCASE_AUTO(TestGetIDForWindowsID);
     TESTCASE_AUTO(TestCasablancaNameAndOffset22041);
     TESTCASE_AUTO(TestRawOffsetAndOffsetConsistency22041);
+    TESTCASE_AUTO(TestGetIanaID);
+    TESTCASE_AUTO(TestGMTMinus24ICU22526);
     TESTCASE_AUTO_END;
 }
 
@@ -957,7 +960,7 @@ void TimeZoneTest::TestShortZoneIDs()
                       (usesDaylight?"true":"false") +
                       " but it should be " +
                       ((kReferenceList[i].daylight)?"true":"false"));
-            } else {
+            } else if (!(itsID==UnicodeString(u"ART",-1) && logKnownIssue("ICU-22436", "Wrong DST status for time zone ART"))) {
                 dataerrln("FAIL: Time Zone " + itsID + " use daylight is " +
                       (usesDaylight?"true":"false") +
                       " but it should be " +
@@ -2621,6 +2624,45 @@ void TimeZoneTest::TestRawOffsetAndOffsetConsistency22041() {
         assertEquals(u"TimeZone '" + UnicodeString(tz) +
                      u"' getRawOffset() and the raw from getOffset(now, false, raw, dst, status) should not be different but got",
                      zone->getRawOffset(), raw);
+    }
+}
+
+void TimeZoneTest::TestGetIanaID() {
+    const char16_t* UNKNOWN = u"Etc/Unknown";
+    static const struct {
+        const char16_t* id;
+        const char16_t* expected;
+    } TESTDATA[] = {
+        {u"",                   UNKNOWN},
+        {0,                     UNKNOWN},
+        {UNKNOWN,               UNKNOWN},
+        {u"America/New_York",   u"America/New_York"},
+        {u"Asia/Calcutta",      u"Asia/Kolkata"},
+        {u"Europe/Kiev",        u"Europe/Kyiv"},
+        {u"Europe/Zaporozhye",  u"Europe/Kyiv"},
+        {u"Etc/GMT-1",          u"Etc/GMT-1"},
+        {u"Etc/GMT+20",         UNKNOWN},
+        {u"PST8PDT",            u"PST8PDT"},
+        {u"GMT-08:00",          UNKNOWN},
+        {0,                     0}
+    };
+
+    for (int32_t i = 0; TESTDATA[i].expected != 0; i++) {
+        UErrorCode sts = U_ZERO_ERROR;
+        UnicodeString inputID(TESTDATA[i].id);
+        UnicodeString ianaID;
+
+        TimeZone::getIanaID(inputID, ianaID, sts);
+        if (u_strcmp(TESTDATA[i].expected, UNKNOWN) == 0) {
+            assertEquals(inputID + " should fail", (int32_t)U_ILLEGAL_ARGUMENT_ERROR, sts);
+            assertTrue(inputID + " should set bogus", ianaID.isBogus());
+        } else {
+            assertEquals(inputID, UnicodeString(TESTDATA[i].expected), ianaID);
+            // Calling getIanaID with an IANA ID should return the same
+            UnicodeString ianaID2;
+            TimeZone::getIanaID(ianaID, ianaID2, sts);
+            assertEquals(ianaID, ianaID, ianaID2);
+        }
     }
 }
 

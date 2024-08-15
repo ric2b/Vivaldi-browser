@@ -21,9 +21,17 @@ jobs:
         os: [ ubuntu-20.04, ubuntu-22.04, windows-latest, macos-latest ]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Set up Python 3.8
+        if: matrix.os != 'macos-latest'
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.8'
+          python-version: '3.8'      
+      # MacOS machine can run on arm64 and it doesn't support 3.8
+      - name: Set up Python 3.10.11
+        if: matrix.os == 'macos-latest'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10.11'
       - name: Test CMake Minimum
         if: matrix.os == 'ubuntu-20.04'
         uses: lukka/get-cmake@latest

@@ -41,12 +41,7 @@ namespace base {
 
 #if BUILDFLAG(ENABLE_MESSAGE_PUMP_EPOLL)
 namespace {
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_ANDROID)
 bool g_use_epoll = true;
-#else
-// TODO(crbug.com/1243354): Enable by default on chromeos.
-bool g_use_epoll = false;
-#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_ANDROID)
 }  // namespace
 
 BASE_FEATURE(kMessagePumpEpoll, "MessagePumpEpoll", FEATURE_ENABLED_BY_DEFAULT);
@@ -148,7 +143,7 @@ MessagePumpLibevent::MessagePumpLibevent() {
 #endif
 
   if (!Init())
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   DCHECK_NE(wakeup_pipe_in_, -1);
   DCHECK_NE(wakeup_pipe_out_, -1);
   DCHECK(wakeup_event_);
@@ -236,7 +231,8 @@ bool MessagePumpLibevent::WatchFileDescriptor(int fd,
     // It's illegal to use this function to listen on 2 separate fds with the
     // same |controller|.
     if (EVENT_FD(evt.get()) != fd) {
-      NOTREACHED() << "FDs don't match" << EVENT_FD(evt.get()) << "!=" << fd;
+      NOTREACHED_IN_MIGRATION()
+          << "FDs don't match" << EVENT_FD(evt.get()) << "!=" << fd;
       return false;
     }
   }

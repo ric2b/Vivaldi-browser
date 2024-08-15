@@ -4,11 +4,12 @@
 
 #include "device/fido/mac/util.h"
 
+#import <Foundation/Foundation.h>
+#import <LocalAuthentication/LocalAuthentication.h>
+
 #include <array>
 #include <set>
 #include <string>
-
-#import <Foundation/Foundation.h>
 
 #include "base/apple/foundation_util.h"
 #include "base/apple/osstatus_logging.h"
@@ -172,12 +173,32 @@ CodeSigningState ProcessIsSigned() {
                                     : CodeSigningState::kNotSigned;
 }
 
+std::optional<bool>& GetBiometricOverride() {
+  static std::optional<bool> flag;
+  return flag;
+}
+
+ScopedBiometricsOverride::ScopedBiometricsOverride(bool has_biometrics) {
+  std::optional<bool>& flag = GetBiometricOverride();
+  // Overrides don't nest.
+  CHECK(!flag.has_value());
+  flag = has_biometrics;
+}
+
+ScopedBiometricsOverride::~ScopedBiometricsOverride() {
+  std::optional<bool>& flag = GetBiometricOverride();
+  CHECK(flag.has_value());
+  flag.reset();
+}
+
 bool DeviceHasBiometricsAvailable() {
-  LAContext* context = [[LAContext alloc] init];
-  NSError* nserr;
-  return
-      [context canEvaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics
-                           error:&nserr];
+  std::optional<bool>& flag = GetBiometricOverride();
+  if (flag.has_value()) {
+    return *flag;
+  }
+
+  return crypto::AppleKeychainV2::GetInstance().LAContextCanEvaluatePolicy(
+      LAPolicyDeviceOwnerAuthenticationWithBiometrics, /*error=*/nil);
 }
 
 }  // namespace device::fido::mac

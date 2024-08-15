@@ -140,8 +140,8 @@ class ChromeMimeHandlerViewTest : public extensions::ExtensionApiTest {
   // inner WebContents. The direct access is centralized in this helper function
   // for easier migration.
   //
-  // TODO(crbug/1261928): Update this implementation for MPArch, and consider
-  // relocate it to `content/public/test/browser_test_utils.h`.
+  // TODO(crbug.com/40202416): Update this implementation for MPArch, and
+  // consider relocate it to `content/public/test/browser_test_utils.h`.
   void WaitForGuestViewLoadStop(GuestViewBase* guest_view) {
     auto* guest_contents = guest_view->web_contents();
     ASSERT_TRUE(content::WaitForLoadStop(guest_contents));
@@ -291,7 +291,7 @@ IN_PROC_BROWSER_TEST_F(ChromeMimeHandlerViewTest,
 // other cross-origin content. On the embedder side, when the first page loads,
 // the <object> loads some text/csv content to create a MimeHandlerViewGuest.
 // The test passes if MHV loads.
-// TODO(crbug.com/1182355): Disabled due to flakes.
+// TODO(crbug.com/40751404): Disabled due to flakes.
 IN_PROC_BROWSER_TEST_F(ChromeMimeHandlerViewTest,
                        DISABLED_NavigationRaceFromCrossProcessRenderer) {
   const std::string kTestName = "test_navigation_race_cross_origin";

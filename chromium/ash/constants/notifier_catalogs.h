@@ -15,14 +15,14 @@ enum class NotificationCatalogName {
   kNone = 0,
   kTestCatalogName = 1,
   kManagementTransition = 2,
-  kAuthpolicyCredentialsError = 3,
-  kUnauthorizedBattery = 4,
-  kNonWilcoCharger = 5,
-  kIncompatibleDock = 6,
-  kDockError = 7,
-  KDockDisplayError = 8,
-  kDockThunderboltError = 9,
-  kWilcoLowPowerCharger = 10,
+  // [Deprecated] kAuthpolicyCredentialsError = 3,
+  // [Deprecated] kUnauthorizedBattery = 4,
+  // [Deprecated] kNonWilcoCharger = 5,
+  // [Deprecated] kIncompatibleDock = 6,
+  // [Deprecated] kDockError = 7,
+  // [Deprecated] KDockDisplayError = 8,
+  // [Deprecated] kDockThunderboltError = 9,
+  // [Deprecated] kWilcoLowPowerCharger = 10,
   kDeprecatedAccelerator = 11,
   // [Deprecated] kShortcutsChanged = 12,
   kDockedMagnifierEnabled = 13,
@@ -192,7 +192,10 @@ enum class NotificationCatalogName {
   kCoralFeature = 177,
   kInputDeviceSettings = 178,
   kDocumentScanning = 179,
-  kMaxValue = kDocumentScanning
+  kGrowthFramework = 180,
+  kAudioSelection = 181,
+  kExtendedUpdatesAvailable = 182,
+  kMaxValue = kExtendedUpdatesAvailable
 };
 
 // A living catalog that registers system nudges.
@@ -233,7 +236,11 @@ enum class NudgeCatalogName {
   kStandaloneWindowMigrationUx = 27,
   kFocusModeEndingMomentNudge = 28,
   kPineEducationNudge = 29,
-  kMaxValue = kPineEducationNudge
+  kGrowthCampaignNudge = 30,
+  kSearchTopRowKeyPressed = 31,
+  kSixPackRemappingPressed = 32,
+  kCapsLockShortcutPressed = 33,
+  kMaxValue = kCapsLockShortcutPressed
 };
 
 // A living catalog that registers toasts.
@@ -292,7 +299,8 @@ enum class ToastCatalogName {
   kVideoConferenceTraySpeakOnMuteOptInConfirmation = 48,
   kAppNotClosable = 49,
   kGameDashboardEnterTablet = 50,
-  kMaxValue = kGameDashboardEnterTablet
+  kPineOnboarding = 51,
+  kMaxValue = kPineOnboarding
 };
 
 }  // namespace ash

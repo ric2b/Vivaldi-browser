@@ -27,8 +27,10 @@
 #include <utility>
 #include <vector>
 
+#include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/string_view.h"
+#include "absl/synchronization/mutex.h"
 #include "sharing/common/nearby_share_enums.h"
 #include "sharing/nearby_connections_manager.h"
 #include "sharing/nearby_connections_types.h"
@@ -73,6 +75,11 @@ class FakeNearbyConnectionsManager : public NearbyConnectionsManager {
       absl::string_view endpoint_id) override;
   void UpgradeBandwidth(absl::string_view endpoint_id) override;
   void SetCustomSavePath(absl::string_view custom_save_path) override;
+  absl::flat_hash_set<std::filesystem::path> GetUnknownFilePathsToDelete()
+      override;
+  absl::flat_hash_set<std::filesystem::path>
+  GetAndClearUnknownFilePathsToDelete() override;
+  void ClearUnknownFilePathsToDelete() override;
 
   // Testing methods
   void SetRawAuthenticationToken(absl::string_view endpoint_id,
@@ -128,14 +135,22 @@ class FakeNearbyConnectionsManager : public NearbyConnectionsManager {
     return it->second;
   }
 
-  bool has_incoming_payloads() { return !incoming_payloads_.empty(); }
+  bool has_incoming_payloads() {
+    absl::MutexLock lock(&incoming_payloads_mutex_);
+    return !incoming_payloads_.empty();
+  }
+
+  void AddUnknownFilePathsToDeleteForTesting(std::filesystem::path file_path);
 
  private:
   void HandleStartAdvertisingCallback(ConnectionsStatus status);
   void HandleStopAdvertisingCallback(ConnectionsStatus status);
 
-  IncomingConnectionListener* advertising_listener_ = nullptr;
-  DiscoveryListener* discovery_listener_ = nullptr;
+  mutable absl::Mutex listener_mutex_;
+  IncomingConnectionListener* advertising_listener_
+      ABSL_GUARDED_BY(listener_mutex_) = nullptr;
+  DiscoveryListener* discovery_listener_ ABSL_GUARDED_BY(listener_mutex_) =
+      nullptr;
   bool is_shutdown_ = false;
   proto::DataUsage advertising_data_usage_ =
       proto::DataUsage::UNKNOWN_DATA_USAGE;
@@ -163,9 +178,11 @@ class FakeNearbyConnectionsManager : public NearbyConnectionsManager {
   std::map<int64_t, ConnectionsStatus> payload_path_status_;
   std::map<int64_t, std::weak_ptr<PayloadStatusListener>>
       payload_status_listeners_;
-  std::map<int64_t, std::unique_ptr<Payload>> incoming_payloads_;
+  absl::Mutex incoming_payloads_mutex_;
+  std::map<int64_t, std::unique_ptr<Payload>> incoming_payloads_
+      ABSL_GUARDED_BY(incoming_payloads_mutex_);
   std::map<int64_t, std::filesystem::path> registered_payload_paths_;
-
+  absl::flat_hash_set<std::filesystem::path> file_paths_to_delete_;
   std::string Dump() const override;
 };
 

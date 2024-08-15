@@ -176,6 +176,7 @@ class MojoUtils;
 }
 namespace system {
 class StatisticsProviderImpl;
+class ProcStatFile;
 }  // namespace system
 }  // namespace ash
 namespace audio {
@@ -305,6 +306,8 @@ namespace leveldb::port {
 class CondVar;
 }  // namespace leveldb::port
 namespace nearby::chrome {
+class BleV2GattClient;
+class BleV2Medium;
 class ScheduledExecutor;
 class SubmittableExecutor;
 }  // namespace nearby::chrome
@@ -323,7 +326,7 @@ class CodecWorkerImpl;
 class FileVideoCaptureDeviceFactory;
 class MojoVideoEncodeAccelerator;
 class PaintCanvasVideoRenderer;
-class V4L2DevicePoller;  // TODO(1513721): remove this.
+class V4L2DevicePoller;  // TODO(crbug.com/41486289): remove this.
 }  // namespace media
 namespace memory_instrumentation {
 class OSMetrics;
@@ -361,6 +364,7 @@ class ProxyConfigServiceWin;
 class ScopedAllowBlockingForSettingGetter;
 namespace internal {
 class AddressTrackerLinux;
+class PemFileCertStore;
 }
 }  // namespace net
 namespace printing {
@@ -587,6 +591,7 @@ class BASE_EXPORT [[maybe_unused, nodiscard]] ScopedAllowBlocking {
   friend class ash::StartupCustomizationDocument;  // http://crosbug.com/11103
   friend class ash::StartupUtils;
   friend class ash::converters::diagnostics::MojoUtils;  // http://b/322741627
+  friend class ash::system::ProcStatFile;
   friend class base::AdjustOOMScoreHelper;
   friend class base::ChromeOSVersionInfo;
   friend class base::Process;
@@ -631,6 +636,7 @@ class BASE_EXPORT [[maybe_unused, nodiscard]] ScopedAllowBlocking {
   friend class net::ProxyConfigServiceWin;  // http://crbug.com/61453
   friend class net::
       ScopedAllowBlockingForSettingGetter;  // http://crbug.com/69057
+  friend class net::internal::PemFileCertStore;
   friend class printing::LocalPrinterHandlerDefault;
   friend class printing::PrintBackendServiceManager;
   friend class printing::PrintPreviewUIUntrusted;
@@ -777,6 +783,8 @@ class BASE_EXPORT [[maybe_unused, nodiscard]] ScopedAllowBaseSyncPrimitives {
   friend class leveldb::port::CondVar;
   friend class nearby::chrome::ScheduledExecutor;
   friend class nearby::chrome::SubmittableExecutor;
+  friend class nearby::chrome::BleV2GattClient;
+  friend class nearby::chrome::BleV2Medium;
   friend class media::AudioOutputDevice;
   friend class media::BlockingUrlProtocol;
   template <class WorkerInterface,
@@ -868,7 +876,8 @@ class BASE_EXPORT
   friend class media::AudioInputDevice;
   friend class media::AudioOutputDevice;
   friend class media::PaintCanvasVideoRenderer;
-  friend class media::V4L2DevicePoller;  // TODO(1513721): remove this.
+  friend class media::V4L2DevicePoller;  // TODO(crbug.com/41486289): remove
+                                         // this.
   friend class mojo::SyncCallRestrictions;
   friend class mojo::core::ipcz_driver::MojoTrap;
   friend class net::NetworkConfigWatcherAppleThread;

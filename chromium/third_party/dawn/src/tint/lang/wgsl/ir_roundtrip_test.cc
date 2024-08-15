@@ -29,7 +29,7 @@
 
 #include "gtest/gtest.h"
 
-#include "src/tint/lang/core/ir/disassembler.h"
+#include "src/tint/lang/core/ir/disassembly.h"
 #include "src/tint/lang/wgsl/reader/program_to_ir/program_to_ir.h"
 #include "src/tint/lang/wgsl/reader/reader.h"
 #include "src/tint/lang/wgsl/writer/ir_to_program/ir_to_program.h"
@@ -73,14 +73,14 @@ class IRToProgramRoundtripTest : public testing::Test {
             return result;
         }
 
-        result.ir_pre_raise = core::ir::Disassemble(ir_module.Get());
+        result.ir_pre_raise = core::ir::Disassemble(ir_module.Get()).Plain();
 
         if (auto res = tint::wgsl::writer::Raise(ir_module.Get()); res != Success) {
             result.err = res.Failure().reason.Str();
             return result;
         }
 
-        result.ir_post_raise = core::ir::Disassemble(ir_module.Get());
+        result.ir_post_raise = core::ir::Disassemble(ir_module.Get()).Plain();
 
         writer::ProgramOptions program_options;
         program_options.allowed_features = AllowedFeatures::Everything();
@@ -192,6 +192,14 @@ TEST_F(IRToProgramRoundtripTest, SingleFunction_Parameters) {
     RUN_TEST(R"(
 fn f(i : i32, u : u32) -> i32 {
   return i;
+}
+)");
+}
+
+TEST_F(IRToProgramRoundtripTest, SingleFunction_UnrestrictedPointerParameters) {
+    RUN_TEST(R"(
+fn f(p : ptr<uniform, i32>) -> i32 {
+  return *(p);
 }
 )");
 }
@@ -1917,6 +1925,21 @@ fn v() -> i32 {
 
 fn f() {
   v();
+}
+)");
+}
+
+TEST_F(IRToProgramRoundtripTest, PhonyAssign_Conversion) {
+    RUN_TEST(R"(
+fn f() {
+  let i = 42i;
+  _ = u32(i);
+}
+)",
+             R"(
+fn f() {
+  let i = 42i;
+  _ = u32(i);
 }
 )");
 }

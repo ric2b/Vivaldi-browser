@@ -108,6 +108,16 @@ class HardwareDisplayPlaneManager {
     display::ColorCalibration color_calibration;
     display::GammaAdjustment gamma_adjustment;
 
+    // The color space of all input planes. This assumes that all planes have
+    // the same color space, because all existing devices only support one
+    // color management configuration for all planes.
+    SkColorSpacePrimaries planes_primaries = SkNamedPrimariesExt::kSRGB;
+
+    // The color space of the output. All planes must be transformed to this
+    // space, using the hardware color management parameters (DEGAMMA, CTM,
+    // and GAMMA, where available).
+    SkColorSpacePrimaries output_primaries = SkNamedPrimariesExt::kSRGB;
+
     // Cached blobs for the properties to commit in CommitCrtcProperties.
     // * If a property is `std::nullopt`, then it should be left unchanged.
     // * If a property is `nullptr` then it should be set to 0.
@@ -137,9 +147,23 @@ class HardwareDisplayPlaneManager {
   // Commit() down below.
   virtual bool Commit(CommitRequest commit_request, uint32_t flags) = 0;
 
+  // Probe the mode for the CRTC to |mode| based on the current configuration
+  // of display hardware.
+  virtual bool TestSeamlessMode(int32_t crtc_id,
+                                const drmModeModeInfo& mode) = 0;
+
   // Clears old frame state out. Must be called before any AssignOverlayPlanes
   // calls.
   void BeginFrame(HardwareDisplayPlaneList* plane_list);
+
+  // Sets the input color space for all planes. This assumes that all planes on
+  // a CRTC have the same color space.
+  void SetColorSpaceForAllPlanes(uint32_t crtc_id,
+                                 const SkColorSpacePrimaries& primaries);
+
+  // Sets the output color space for the given CRTC.
+  void SetOutputColorSpace(uint32_t crtc_id,
+                           const SkColorSpacePrimaries& primaries);
 
   // Sets the color temperature adjustment for a given CRTC.
   void SetColorTemperatureAdjustment(
@@ -289,8 +313,8 @@ class HardwareDisplayPlaneManager {
   // Populates scanout formats supported by all planes.
   void PopulateSupportedFormats();
 
-  void UpdateAndCommitCrtcState(uint32_t crtc_id, CrtcState* state);
-  virtual bool CommitPendingCrtcState(CrtcState* state) = 0;
+  void UpdatePendingCrtcState(CrtcState& state);
+  virtual bool CommitPendingCrtcState(CrtcState& state) = 0;
 
   // Object containing the connection to the graphics device and wraps the API
   // calls to control it. Not owned.

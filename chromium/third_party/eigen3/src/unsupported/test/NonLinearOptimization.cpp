@@ -1008,7 +1008,7 @@ void testNistLanczos1(void) {
   // check norm^2
   // std::cout.precision(30);
   // std::cout << lm.fvec.squaredNorm() << "\n";
-  VERIFY(lm.fvec.squaredNorm() <= 1.4307867721E-25);
+  VERIFY(lm.fvec.squaredNorm() <= 1.44E-25);
   // check x
   VERIFY_IS_APPROX(x[0], 9.5100000027E-02);
   VERIFY_IS_APPROX(x[1], 1.0000000001E+00);
@@ -1029,7 +1029,7 @@ void testNistLanczos1(void) {
   // VERIFY_IS_EQUAL(info, 2);
   LM_CHECK_N_ITERS(lm, 9, 8);
   // check norm^2
-  VERIFY(lm.fvec.squaredNorm() <= 1.4307867721E-25);
+  VERIFY(lm.fvec.squaredNorm() <= 1.44E-25);
   // check x
   VERIFY_IS_APPROX(x[0], 9.5100000027E-02);
   VERIFY_IS_APPROX(x[1], 1.0000000001E+00);

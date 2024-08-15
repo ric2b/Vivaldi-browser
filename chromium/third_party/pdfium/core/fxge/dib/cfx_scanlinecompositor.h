@@ -7,6 +7,9 @@
 #ifndef CORE_FXGE_DIB_CFX_SCANLINECOMPOSITOR_H_
 #define CORE_FXGE_DIB_CFX_SCANLINECOMPOSITOR_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <memory>
 
 #include "core/fxcrt/fx_memory_wrappers.h"
@@ -68,6 +71,8 @@ class CFX_ScanlineCompositor {
     // If 4, then |m_pData| is uint32_t* as expected.
     size_t m_Width = 0;
     size_t m_nElements = 0;
+
+    // TODO(tsepez): convert to variant of FixedArray.
     std::unique_ptr<uint32_t, FxFreeDeleter> m_pData;
   };
 

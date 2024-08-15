@@ -10,6 +10,9 @@
 
 #include "libANGLE/renderer/metal/TextureMtl.h"
 
+#include <algorithm>
+#include <initializer_list>
+
 #include "common/Color.h"
 #include "common/MemoryBuffer.h"
 #include "common/debug.h"
@@ -257,6 +260,22 @@ void ConvertDepthStencilData(const MTLSize &regionSize,
     }
 }
 
+mtl::BlitCommandEncoder *GetBlitCommandEncoderForResources(
+    ContextMtl *contextMtl,
+    const std::initializer_list<const mtl::Resource *> &resources)
+{
+    if (std::none_of(resources.begin(), resources.end(), [contextMtl](const mtl::Resource *res) {
+            return res->hasPendingRenderWorks(contextMtl);
+        }))
+    {
+        // If no resource has pending render works waiting to be submitted, then it's safe to
+        // create a blit encoder without ending current render pass. The blit commands
+        // will run before any pending render commands.
+        return contextMtl->getBlitCommandEncoderWithoutEndingRenderEncoder();
+    }
+    return contextMtl->getBlitCommandEncoder();
+}
+
 angle::Result CopyDepthStencilTextureContentsToStagingBuffer(
     ContextMtl *contextMtl,
     const angle::Format &textureAngleFormat,
@@ -406,7 +425,8 @@ angle::Result UploadDepthStencilTextureContentsWithStagingBuffer(
     }
 
     // Copy staging buffer to texture.
-    mtl::BlitCommandEncoder *encoder = contextMtl->getBlitCommandEncoder();
+    mtl::BlitCommandEncoder *encoder =
+        GetBlitCommandEncoderForResources(contextMtl, {stagingBuffer.get(), texture.get()});
     encoder->copyBufferToTexture(stagingBuffer, 0, stagingBufferRowPitch, stagingBuffer2DImageSize,
                                  region.size, texture, slice, mipmapLevel, region.origin,
                                  MTLBlitOptionNone);
@@ -486,7 +506,8 @@ angle::Result UploadPackedDepthStencilTextureContentsWithStagingBuffer(
                                 static_cast<uint32_t>(region.size.width), region.size));
     }
 
-    mtl::BlitCommandEncoder *encoder = contextMtl->getBlitCommandEncoder();
+    mtl::BlitCommandEncoder *encoder = GetBlitCommandEncoderForResources(
+        contextMtl, {stagingDepthBuffer.get(), stagingStencilBuffer.get(), texture.get()});
 
     encoder->copyBufferToTexture(stagingDepthBuffer, 0, stagingDepthBufferRowPitch,
                                  stagingDepthBuffer2DImageSize, region.size, texture, slice,
@@ -542,7 +563,8 @@ angle::Result UploadTextureContentsWithStagingBuffer(ContextMtl *contextMtl,
             contextMtl, angleStagingFormat, region.size, data, bytesPerRow, bytesPer2DImage,
             &stagingBufferRowPitch, &stagingBuffer2DImageSize, &stagingBuffer));
     }
-    mtl::BlitCommandEncoder *encoder = contextMtl->getBlitCommandEncoder();
+    mtl::BlitCommandEncoder *encoder =
+        GetBlitCommandEncoderForResources(contextMtl, {stagingBuffer.get(), texture.get()});
 
     encoder->copyBufferToTexture(stagingBuffer, 0, stagingBufferRowPitch, stagingBuffer2DImageSize,
                                  region.size, texture, slice, mipmapLevel, region.origin, 0);
@@ -793,7 +815,6 @@ angle::Result TextureMtl::createNativeTexture(const gl::Context *context,
     ANGLE_TRY(checkForEmulatedChannels(context, mFormat, mNativeTexture));
 
     // Transfer data from images to actual texture object
-    mtl::BlitCommandEncoder *encoder = nullptr;
     for (int face = 0; face < numCubeFaces; ++face)
     {
         for (mtl::MipmapNativeLevel actualMip = mtl::kZeroNativeMipLevel; actualMip.get() < mips;
@@ -809,10 +830,9 @@ angle::Result TextureMtl::createNativeTexture(const gl::Context *context,
                 imageToTransfer->arrayLength() == mNativeTexture->arrayLength() &&
                 imageToTransfer->pixelFormat() == mNativeTexture->pixelFormat())
             {
-                if (!encoder)
-                {
-                    encoder = contextMtl->getBlitCommandEncoder();
-                }
+                mtl::BlitCommandEncoder *encoder = GetBlitCommandEncoderForResources(
+                    contextMtl, {imageToTransfer.get(), mNativeTexture.get()});
+
                 encoder->copyTexture(imageToTransfer, 0, mtl::kZeroNativeMipLevel, mNativeTexture,
                                      face, actualMip, imageToTransfer->arrayLength(), 1);
 
@@ -1304,7 +1324,9 @@ angle::Result TextureMtl::setEGLImageTarget(const gl::Context *context,
         angle::Format::InternalFormatToID(image->getFormat().info->sizedInternalFormat);
     mFormat = contextMtl->getPixelFormat(angleFormatId);
 
-    mSlices = mNativeTexture->cubeFacesOrArrayLength();
+    mSlices           = mNativeTexture->cubeFacesOrArrayLength();
+    mCurrentBaseLevel = 0;
+    mCurrentMaxLevel  = mNativeTexture->mipmapLevels() - 1;
 
     ANGLE_TRY(ensureSamplerStateCreated(context));
 
@@ -1351,7 +1373,8 @@ angle::Result TextureMtl::generateMipmap(const gl::Context *context)
     }
     else if (!avoidGPUPath && caps.filterable && caps.colorRenderable)
     {
-        mtl::BlitCommandEncoder *blitEncoder = contextMtl->getBlitCommandEncoder();
+        mtl::BlitCommandEncoder *blitEncoder =
+            GetBlitCommandEncoderForResources(contextMtl, {mNativeTexture.get()});
         blitEncoder->generateMipmapsForTexture(mNativeTexture);
     }
     else
@@ -1463,10 +1486,13 @@ angle::Result TextureMtl::bindTexImage(const gl::Context *context, egl::Surface 
 {
     releaseTexture(true);
 
-    mBoundSurface  = surface;
-    auto pBuffer   = GetImplAs<OffscreenSurfaceMtl>(surface);
-    mNativeTexture = pBuffer->getColorTexture();
-    mFormat        = pBuffer->getColorFormat();
+    mBoundSurface     = surface;
+    auto pBuffer      = GetImplAs<OffscreenSurfaceMtl>(surface);
+    mNativeTexture    = pBuffer->getColorTexture();
+    mFormat           = pBuffer->getColorFormat();
+    mSlices           = mNativeTexture->cubeFacesOrArrayLength();
+    mCurrentBaseLevel = 0;
+    mCurrentMaxLevel  = mNativeTexture->mipmapLevels() - 1;
     ANGLE_TRY(ensureSamplerStateCreated(context));
 
     // Tell context to rebind textures
@@ -2005,7 +2031,8 @@ angle::Result TextureMtl::setPerSliceSubImage(const gl::Context *context,
             }
 
             // Use blit encoder to copy
-            mtl::BlitCommandEncoder *blitEncoder = contextMtl->getBlitCommandEncoder();
+            mtl::BlitCommandEncoder *blitEncoder =
+                GetBlitCommandEncoderForResources(contextMtl, {sourceBuffer.get(), image.get()});
             blitEncoder->copyBufferToTexture(
                 sourceBuffer, offset, pixelsRowPitch, pixelsDepthPitch, mtlArea.size, image, slice,
                 mtl::kZeroNativeMipLevel, mtlArea.origin,
@@ -2336,7 +2363,7 @@ angle::Result TextureMtl::copySubImageWithDraw(const gl::Context *context,
     blitParams.dstLuminance = internalFormat.isLUMA();
 
     return displayMtl->getUtils().blitColorWithDraw(
-        context, cmdEncoder, colorReadRT->getFormat()->actualAngleFormat(), blitParams);
+        context, cmdEncoder, colorReadRT->getFormat().actualAngleFormat(), blitParams);
 }
 
 angle::Result TextureMtl::copySubImageCPU(const gl::Context *context,

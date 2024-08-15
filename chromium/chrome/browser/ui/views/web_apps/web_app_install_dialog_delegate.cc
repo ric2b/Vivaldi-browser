@@ -22,15 +22,14 @@
 #include "components/feature_engagement/public/tracker.h"
 #include "components/prefs/pref_service.h"
 #include "components/webapps/browser/installable/ml_install_operation_tracker.h"
-#include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/page.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/view_utils.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "chrome/browser/metrics/structured/event_logging_features.h"
-// TODO(crbug/1125897): Enable gn check once it learns about conditional
+// TODO(crbug.com/40147906): Enable gn check once it learns about conditional
 // includes.
 #include "components/metrics/structured/structured_events.h"  // nogncheck
 #include "components/metrics/structured/structured_metrics_client.h"  // nogncheck
@@ -61,6 +60,9 @@ std::u16string NormalizeSuggestedAppTitle(const std::u16string& title) {
   return normalized;
 }
 
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(WebAppInstallDialogDelegate,
+                                      kDiyAppsDialogOkButtonId);
+
 WebAppInstallDialogDelegate::WebAppInstallDialogDelegate(
     content::WebContents* web_contents,
     std::unique_ptr<web_app::WebAppInstallInfo> web_app_info,
@@ -69,8 +71,7 @@ WebAppInstallDialogDelegate::WebAppInstallDialogDelegate(
     PwaInProductHelpState iph_state,
     PrefService* prefs,
     feature_engagement::Tracker* tracker,
-    InstallDialogType dialog_type,
-    DiyAppTitleFieldTextTracker title_field_data)
+    InstallDialogType dialog_type)
     : content::WebContentsObserver(web_contents),
       web_contents_(web_contents),
       install_info_(std::move(web_app_info)),
@@ -79,8 +80,7 @@ WebAppInstallDialogDelegate::WebAppInstallDialogDelegate(
       iph_state_(std::move(iph_state)),
       prefs_(prefs),
       tracker_(tracker),
-      dialog_type_(dialog_type),
-      title_field_data_(title_field_data) {
+      dialog_type_(dialog_type) {
   CHECK(install_info_);
   CHECK(install_info_->manifest_id.is_valid());
   CHECK(install_tracker_);
@@ -88,7 +88,7 @@ WebAppInstallDialogDelegate::WebAppInstallDialogDelegate(
 }
 
 WebAppInstallDialogDelegate::~WebAppInstallDialogDelegate() {
-  // TODO(crbug.com/1327363): move this to dialog->SetHighlightedButton.
+  // TODO(crbug.com/40841129): move this to dialog->SetHighlightedButton.
   Browser* browser = chrome::FindBrowserWithTab(web_contents_);
   if (!browser) {
     return;
@@ -117,21 +117,20 @@ void WebAppInstallDialogDelegate::OnAccept() {
   }
 
 #if BUILDFLAG(IS_CHROMEOS)
-  if (base::FeatureList::IsEnabled(metrics::structured::kAppDiscoveryLogging)) {
-    const webapps::AppId app_id =
-        web_app::GenerateAppIdFromManifestId(install_info_->manifest_id);
-    metrics::structured::StructuredMetricsClient::Record(
-        cros_events::AppDiscovery_Browser_AppInstallDialogResult()
-            .SetWebAppInstallStatus(
-                ToLong(web_app::WebAppInstallStatus::kAccepted))
-            .SetAppId(app_id));
-  }
+  const webapps::AppId app_id =
+      web_app::GenerateAppIdFromManifestId(install_info_->manifest_id);
+  metrics::structured::StructuredMetricsClient::Record(
+      cros_events::AppDiscovery_Browser_AppInstallDialogResult()
+          .SetWebAppInstallStatus(
+              ToLong(web_app::WebAppInstallStatus::kAccepted))
+          .SetAppId(app_id));
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
   // DIY apps get their name from the DIY install dialog and are always set to
   // open in a new window.
   if (dialog_type_ == InstallDialogType::kDiy) {
-    install_info_->title = title_field_data_->data;
+    CHECK(!text_field_contents_.empty());
+    install_info_->title = text_field_contents_;
     install_info_->user_display_mode =
         web_app::mojom::UserDisplayMode::kStandalone;
   }
@@ -154,6 +153,16 @@ void WebAppInstallDialogDelegate::OnClose() {
   MeasureIphOnDialogClose();
 }
 
+void WebAppInstallDialogDelegate::OnTextFieldChangedMaybeUpdateButton(
+    const std::u16string& text_field_contents) {
+  text_field_contents_ = text_field_contents;
+  ui::DialogModel::Button* ok_button =
+      dialog_model()->GetButtonByUniqueId(kDiyAppsDialogOkButtonId);
+  CHECK(ok_button);
+  dialog_model()->SetButtonEnabled(ok_button,
+                                   /*enabled=*/!text_field_contents.empty());
+}
+
 void WebAppInstallDialogDelegate::OnVisibilityChanged(
     content::Visibility visibility) {
   if (visibility == content::Visibility::HIDDEN) {
@@ -165,19 +174,8 @@ void WebAppInstallDialogDelegate::WebContentsDestroyed() {
   CloseDialogAsIgnored();
 }
 
-void WebAppInstallDialogDelegate::DidFinishNavigation(
-    content::NavigationHandle* navigation_handle) {
-  if (!navigation_handle->IsInPrimaryMainFrame() ||
-      !navigation_handle->HasCommitted()) {
-    return;
-  }
-
-  // Close dialog when navigating to a different domain.
-  if (!url::IsSameOriginWith(
-          navigation_handle->GetPreviousPrimaryMainFrameURL(),
-          navigation_handle->GetURL())) {
-    CloseDialogAsIgnored();
-  }
+void WebAppInstallDialogDelegate::PrimaryPageChanged(content::Page& page) {
+  CloseDialogAsIgnored();
 }
 
 void WebAppInstallDialogDelegate::CloseDialogAsIgnored() {
@@ -203,16 +201,13 @@ void WebAppInstallDialogDelegate::MeasureIphOnDialogClose() {
   // If |install_info_| is populated, then the dialog was not accepted.
   if (install_info_) {
 #if BUILDFLAG(IS_CHROMEOS)
-    if (base::FeatureList::IsEnabled(
-            metrics::structured::kAppDiscoveryLogging)) {
-      const webapps::AppId app_id =
-          web_app::GenerateAppIdFromManifestId(install_info_->manifest_id);
-      metrics::structured::StructuredMetricsClient::Record(
-          cros_events::AppDiscovery_Browser_AppInstallDialogResult()
-              .SetWebAppInstallStatus(
-                  ToLong(web_app::WebAppInstallStatus::kCancelled))
-              .SetAppId(app_id));
-    }
+    const webapps::AppId app_id =
+        web_app::GenerateAppIdFromManifestId(install_info_->manifest_id);
+    metrics::structured::StructuredMetricsClient::Record(
+        cros_events::AppDiscovery_Browser_AppInstallDialogResult()
+            .SetWebAppInstallStatus(
+                ToLong(web_app::WebAppInstallStatus::kCancelled))
+            .SetAppId(app_id));
 #endif  // BUILDFLAG(IS_CHROMEOS)
     std::move(callback_).Run(false, std::move(install_info_));
   }

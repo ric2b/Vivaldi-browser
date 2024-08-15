@@ -21,41 +21,35 @@ build_webui("build") {
   ]
 
   if (include_polymer) {
-    web_component_files += [
-      "cr_a11y_announcer/cr_a11y_announcer.ts",
-      "cr_loading_gradient/cr_loading_gradient.ts",
-      "cr_lottie/cr_lottie.ts",
-      "cr_profile_avatar_selector/cr_profile_avatar_selector.ts",
-      "cr_segmented_button/cr_segmented_button.ts",
-      "cr_segmented_button/cr_segmented_button_option.ts",
-      "cr_url_list_item/cr_url_list_item.ts",
-      "policy/cr_policy_indicator.ts",
-      "policy/cr_policy_pref_indicator.ts",
-      "policy/cr_tooltip_icon.ts",
-    ]
+    web_component_files += [ "cr_a11y_announcer/cr_a11y_announcer.ts" ]
 
     icons_html_files = [
       "icons.html",
+      "icons_lit.html",
       "mwb_shared_icons.html",
     ]
 
     non_web_component_files += [
       "cr_container_shadow_mixin.ts",
       "cr_container_shadow_mixin_lit.ts",
-      "cr_paper_ripple_mixin.ts",
+      "cr_icon/iconset_map.ts",
       "cr_radio_button/cr_radio_button_mixin.ts",
       "cr_radio_button/cr_radio_button_mixin_lit.ts",
+      "cr_ripple/cr_ripple_mixin.ts",
       "cr_scrollable_mixin.ts",
       "cr_search_field/cr_search_field_mixin.ts",
       "cr_search_field/cr_search_field_mixin_lit.ts",
       "find_shortcut_mixin.ts",
       "focus_row_mixin.ts",
       "i18n_mixin.ts",
+      "i18n_mixin_lit.ts",
       "list_property_update_mixin.ts",
       "mouse_hoverable_mixin.ts",
-      "policy/cr_policy_indicator_mixin.ts",
+      "mouse_hoverable_mixin_lit.ts",
+      "policy/cr_policy_types.ts",
       "store_client/store_client.ts",
       "web_ui_listener_mixin.ts",
+      "web_ui_listener_mixin_lit.ts",
 
       # Web components files that either
       #  - don't have a corresponding .html file or
@@ -69,6 +63,8 @@ build_webui("build") {
       "cr_checkbox/cr_checkbox.ts",
       "cr_chip/cr_chip.html.ts",
       "cr_chip/cr_chip.ts",
+      "cr_collapse/cr_collapse.html.ts",
+      "cr_collapse/cr_collapse.ts",
       "cr_dialog/cr_dialog.html.ts",
       "cr_dialog/cr_dialog.ts",
       "cr_drawer/cr_drawer.html.ts",
@@ -79,6 +75,9 @@ build_webui("build") {
       "cr_feedback_buttons/cr_feedback_buttons.ts",
       "cr_grid/cr_grid.html.ts",
       "cr_grid/cr_grid.ts",
+      "cr_icon/cr_icon.ts",
+      "cr_icon/cr_iconset.html.ts",
+      "cr_icon/cr_iconset.ts",
       "cr_icon_button/cr_icon_button.html.ts",
       "cr_icon_button/cr_icon_button.ts",
       "cr_input/cr_input.html.ts",
@@ -86,15 +85,28 @@ build_webui("build") {
       "cr_lazy_render/cr_lazy_render.ts",
       "cr_link_row/cr_link_row.ts",
       "cr_link_row/cr_link_row.html.ts",
+      "cr_loading_gradient/cr_loading_gradient.ts",
+      "cr_loading_gradient/cr_loading_gradient.html.ts",
+      "cr_lottie/cr_lottie.ts",
+      "cr_lottie/cr_lottie.html.ts",
       "cr_menu_selector/cr_menu_selector.ts",
+      "cr_menu_selector/cr_menu_selector.html.ts",
+      "cr_page_selector/cr_page_selector.ts",
+      "cr_page_selector/cr_page_selector.html.ts",
+      "cr_profile_avatar_selector/cr_profile_avatar_selector.html.ts",
+      "cr_profile_avatar_selector/cr_profile_avatar_selector.ts",
+      "cr_progress/cr_progress.html.ts",
+      "cr_progress/cr_progress.ts",
       "cr_radio_button/cr_card_radio_button.html.ts",
       "cr_radio_button/cr_card_radio_button.ts",
       "cr_radio_button/cr_radio_button.html.ts",
       "cr_radio_button/cr_radio_button.ts",
       "cr_radio_group/cr_radio_group.html.ts",
       "cr_radio_group/cr_radio_group.ts",
+      "cr_ripple/cr_ripple.ts",
       "cr_search_field/cr_search_field.html.ts",
       "cr_search_field/cr_search_field.ts",
+      "cr_selectable_mixin.ts",
       "cr_slider/cr_slider.html.ts",
       "cr_slider/cr_slider.ts",
       "cr_tabs/cr_tabs.html.ts",
@@ -113,8 +125,16 @@ build_webui("build") {
       "cr_toolbar/cr_toolbar_selection_overlay.html.ts",
       "cr_toolbar/cr_toolbar_selection_overlay.ts",
       "cr_toolbar/cr_toolbar.ts",
+      "cr_tooltip/cr_tooltip.html.ts",
+      "cr_tooltip/cr_tooltip.ts",
+      "cr_url_list_item/cr_url_list_item.html.ts",
+      "cr_url_list_item/cr_url_list_item.ts",
       "cr_view_manager/cr_view_manager.html.ts",
       "cr_view_manager/cr_view_manager.ts",
+      "policy/cr_policy_indicator.html.ts",
+      "policy/cr_policy_indicator.ts",
+      "policy/cr_tooltip_icon.html.ts",
+      "policy/cr_tooltip_icon.ts",
     ]
 
     css_files = [
@@ -136,7 +156,9 @@ build_webui("build") {
       "cr_shared_style_lit.css",
       "cr_shared_vars.css",
       "md_select.css",
+      "md_select_lit.css",
       "mwb_element_shared_style.css",
+      "mwb_element_shared_style_lit.css",
       "mwb_shared_style.css",
       "mwb_shared_vars.css",
       "search_highlight_style.css",
@@ -144,16 +166,25 @@ build_webui("build") {
       "cr_button/cr_button.css",
       "cr_checkbox/cr_checkbox.css",
       "cr_chip/cr_chip.css",
+      "cr_collapse/cr_collapse.css",
       "cr_dialog/cr_dialog.css",
       "cr_drawer/cr_drawer.css",
       "cr_expand_button/cr_expand_button.css",
       "cr_feedback_buttons/cr_feedback_buttons.css",
       "cr_grid/cr_grid.css",
+      "cr_icon/cr_icon.css",
+      "cr_icon/cr_iconset.css",
       "cr_icon_button/cr_icon_button.css",
       "cr_input/cr_input.css",
       "cr_input/cr_input_style.css",
       "cr_input/cr_input_style_lit.css",
       "cr_link_row/cr_link_row.css",
+      "cr_loading_gradient/cr_loading_gradient.css",
+      "cr_lottie/cr_lottie.css",
+      "cr_page_selector/cr_page_selector.css",
+      "cr_profile_avatar_selector/cr_profile_avatar_selector.css",
+      "cr_progress/cr_progress.css",
+      "cr_ripple/cr_ripple.css",
       "cr_search_field/cr_search_field.css",
       "cr_slider/cr_slider.css",
       "cr_tabs/cr_tabs.css",
@@ -164,7 +195,11 @@ build_webui("build") {
       "cr_toolbar/cr_toolbar.css",
       "cr_toolbar/cr_toolbar_search_field.css",
       "cr_toolbar/cr_toolbar_selection_overlay.css",
+      "cr_tooltip/cr_tooltip.css",
+      "cr_url_list_item/cr_url_list_item.css",
       "cr_view_manager/cr_view_manager.css",
+      "policy/cr_policy_indicator.css",
+      "policy/cr_tooltip_icon.css",
     ]
   }
 
@@ -184,6 +219,7 @@ build_webui("build") {
     "//tools/typescript/definitions/pending.d.ts",
     "//tools/typescript/definitions/settings_private.d.ts",
   ]
+  webui_context_type = "relative"
   generate_grdp = true
   grd_resource_path_prefix = rebase_path(".", "//ui/webui/resources")
 }

@@ -12,6 +12,7 @@
 #include "base/time/time.h"
 #include "components/endpoint_fetcher/endpoint_fetcher.h"
 #include "components/manta/base_provider.h"
+#include "components/manta/features.h"
 #include "components/manta/manta_service_callbacks.h"
 #include "components/manta/manta_status.h"
 #include "components/manta/proto/manta.pb.h"
@@ -24,38 +25,36 @@ namespace manta {
 namespace {
 
 constexpr char kOauthConsumerName[] = "manta_snapper";
-constexpr char kEndpointUrl[] =
-    "https://autopush-aratea-pa.sandbox.googleapis.com/generate";
 
 }  // namespace
 
 SnapperProvider::SnapperProvider(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    signin::IdentityManager* identity_manager,
+    bool is_demo_mode,
+    const std::string& chrome_version)
+    : BaseProvider(url_loader_factory,
+                   identity_manager,
+                   is_demo_mode,
+                   chrome_version) {}
+
+SnapperProvider::SnapperProvider(
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     signin::IdentityManager* identity_manager)
-    : BaseProvider(url_loader_factory, identity_manager) {}
+    : SnapperProvider(url_loader_factory,
+                      identity_manager,
+                      false,
+                      std::string()) {}
 
 SnapperProvider::~SnapperProvider() = default;
 
-void SnapperProvider::Call(const manta::proto::Request& request,
+void SnapperProvider::Call(manta::proto::Request& request,
+                           net::NetworkTrafficAnnotationTag traffic_annotation,
                            MantaProtoResponseCallback done_callback) {
-  if (!identity_manager_observation_.IsObserving()) {
-    std::move(done_callback)
-        .Run(nullptr, {MantaStatusCode::kNoIdentityManager});
-    return;
-  }
-  std::string serialized_request;
-  request.SerializeToString(&serialized_request);
-
-  // TODO(b:288019728): MISSING_TRAFFIC_ANNOTATION should be resolved before
-  // launch.
-  std::unique_ptr<EndpointFetcher> fetcher =
-      CreateEndpointFetcher(GURL{kEndpointUrl}, kOauthConsumerName,
-                            MISSING_TRAFFIC_ANNOTATION, serialized_request);
-
-  EndpointFetcher* const fetcher_ptr = fetcher.get();
-  fetcher_ptr->Fetch(base::BindOnce(&OnEndpointFetcherComplete,
-                                    std::move(done_callback),
-                                    std::move(fetcher)));
+  RequestInternal(
+      GURL{GetProviderEndpoint(features::IsSeaPenUseProdServerEnabled())},
+      kOauthConsumerName, traffic_annotation, request,
+      MantaMetricType::kSnapper, std::move(done_callback));
 }
 
 }  // namespace manta

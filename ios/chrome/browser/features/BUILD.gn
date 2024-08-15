@@ -1,0 +1,11 @@
+# Copyright 2024 Vivaldi Technologies. All rights reserved.
+
+source_set("features") {
+  sources = [
+    "vivaldi_features.h",
+    "vivaldi_features.mm",
+    "vivaldi_ios_chrome_flag_descriptions.h",
+    "vivaldi_ios_chrome_flag_descriptions.cc",
+  ]
+  public_deps = [ "//base" ]
+}

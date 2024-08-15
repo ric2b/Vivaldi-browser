@@ -4,65 +4,66 @@
 
 package org.chromium.chrome.test.transit;
 
-import static androidx.test.espresso.action.ViewActions.click;
-import static androidx.test.espresso.matcher.ViewMatchers.withId;
+import androidx.annotation.CallSuper;
 
 import org.chromium.base.test.transit.Elements;
-import org.chromium.base.test.transit.StationFacility;
-import org.chromium.base.test.transit.Trip;
-import org.chromium.base.test.transit.ViewElement;
-import org.chromium.chrome.R;
-import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 
 /**
  * The app menu shown when pressing ("...") in a Tab.
+ *
+ * <p>Use subclasses to access menu items not shared between all PageStation types:
+ *
+ * <ul>
+ *   <li>{@link NewTabPageRegularAppMenuFacility}
+ *   <li>{@link NewTabPageIncognitoAppMenuFacility}
+ *   <li>{@link WebPageRegularAppMenuFacility}
+ *   <li>{@link WebPageIncognitoAppMenuFacility}
+ * </ul>
+ *
+ * @param <HostPageStationT> the type of host {@link PageStation} where this app menu is opened.
  */
-public class PageAppMenuFacility extends StationFacility<BasePageStation> {
-    public static final ViewElement NEW_TAB_MENU_ITEM =
-            ViewElement.sharedViewElement(withId(R.id.new_tab_menu_id));
-    public static final ViewElement NEW_INCOGNITO_TAB_MENU_ITEM =
-            ViewElement.sharedViewElement(withId(R.id.new_incognito_tab_menu_id));
+public class PageAppMenuFacility<HostPageStationT extends PageStation>
+        extends AppMenuFacility<HostPageStationT> {
 
-    private final ChromeTabbedActivityTestRule mChromeTabbedActivityTestRule;
+    protected Item<NewTabPageStation> mNewTab;
+    protected Item<IncognitoNewTabPageStation> mNewIncognitoTab;
+    protected Item<SettingsStation> mSettings;
 
-    public PageAppMenuFacility(
-            BasePageStation station, ChromeTabbedActivityTestRule chromeTabbedActivityTestRule) {
-        super(station);
-        mChromeTabbedActivityTestRule = chromeTabbedActivityTestRule;
+    public PageAppMenuFacility(HostPageStationT station) {
+        super(station, station.mChromeTabbedActivityTestRule);
     }
 
     @Override
+    @CallSuper
     public void declareElements(Elements.Builder elements) {
-        elements.declareView(NEW_TAB_MENU_ITEM);
-        elements.declareView(NEW_INCOGNITO_TAB_MENU_ITEM);
+        super.declareElements(elements);
+
+        // TODO: Declare top buttons (forward, reload, bookmark, etc.).
     }
 
-    /** Selects "New tab" from the app menu. */
+    @Override
+    protected void declareItems(ItemsBuilder items) {
+        // TODO: Declare more common menu items
+
+        mNewTab = declareMenuItemToStation(items, NEW_TAB_ID, this::createNewTabPageStation);
+        mNewIncognitoTab =
+                declareMenuItemToStation(
+                        items, NEW_INCOGNITO_TAB_ID, this::createIncognitoNewTabPageStation);
+        mSettings = declareMenuItemToStation(items, SETTINGS_ID, this::createSettingsStation);
+    }
+
+    /** Select "New tab" from the app menu. */
     public NewTabPageStation openNewTab() {
-        recheckActiveConditions();
-
-        NewTabPageStation destination =
-                new NewTabPageStation(
-                        mChromeTabbedActivityTestRule,
-                        /* incognito= */ false,
-                        /* isOpeningTab= */ true,
-                        /* isSelectingTab= */ true);
-
-        return Trip.travelSync(mStation, destination, t -> NEW_TAB_MENU_ITEM.perform(click()));
+        return mNewTab.scrollToAndSelect();
     }
 
-    /** Selects "New Incognito tab" from the app menu. */
-    public NewTabPageStation openNewIncognitoTab() {
-        recheckActiveConditions();
+    /** Select "New Incognito tab" from the app menu. */
+    public IncognitoNewTabPageStation openNewIncognitoTab() {
+        return mNewIncognitoTab.scrollToAndSelect();
+    }
 
-        NewTabPageStation destination =
-                new NewTabPageStation(
-                        mChromeTabbedActivityTestRule,
-                        /* incognito= */ true,
-                        /* isOpeningTab= */ true,
-                        /* isSelectingTab= */ true);
-
-        return Trip.travelSync(
-                mStation, destination, t -> NEW_INCOGNITO_TAB_MENU_ITEM.perform(click()));
+    /** Select "Settings" from the app menu. */
+    public SettingsStation openSettings() {
+        return mSettings.scrollToAndSelect();
     }
 }

@@ -335,7 +335,7 @@ class GceAuthenticator(Authenticator):
                 return (resp, contents)
 
             # Retry server error status codes.
-            LOGGER.warn('Encountered server error')
+            LOGGER.warning('Encountered server error')
             if TRY_LIMIT - i > 1:
                 next_delay_sec = log_retry_and_sleep(next_delay_sec, i)
         return None, None
@@ -475,7 +475,7 @@ def ReadHttpResponse(conn, accept_statuses=frozenset([200])):
 
         # A status >=500 is assumed to be a possible transient error; retry.
         http_version = 'HTTP/%s' % ('1.1' if response.version == 11 else '1.0')
-        LOGGER.warn(
+        LOGGER.warning(
             'A transient error occurred while querying %s:\n'
             '%s %s %s\n'
             '%s %d %s\n'
@@ -982,7 +982,7 @@ def AddReviewers(host,
         state = 'REVIEWER' if r in reviewers else 'CC'
         if result.get('error'):
             errored.add(r)
-            LOGGER.warn('Note: "%s" not added as a %s' % (r, state.lower()))
+            LOGGER.warning('Note: "%s" not added as a %s' % (r, state.lower()))
     if errored:
         # Try again, adding only those that didn't fail, and only accepting 200.
         AddReviewers(host,

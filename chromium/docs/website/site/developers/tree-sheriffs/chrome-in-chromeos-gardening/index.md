@@ -15,7 +15,7 @@ Chrome on Chrome OS Gardening Duties:
 2. Keep Chrome OS UI BVTs green.
 
 3. Help fix the crashes labeled [TreeCloser on the Chromium
-waterfall.](https://code.google.com/p/chromium/issues/list?can=2&q=label%3ATreeCloser)
+waterfall.](https://issues.chromium.org/u/1/issues?q=is:open%20hotlistid:5563291)
 
 Chrome on Chrome OS [gardening
 documentation](https://docs.google.com/document/d/13zse2T7S-rMaFEvd0HhFvF95GWJWbuwY-QfeWUlOwbg/edit#)

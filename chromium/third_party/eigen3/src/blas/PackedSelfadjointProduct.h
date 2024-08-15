@@ -10,6 +10,7 @@
 #ifndef EIGEN_SELFADJOINT_PACKED_PRODUCT_H
 #define EIGEN_SELFADJOINT_PACKED_PRODUCT_H
 
+namespace Eigen {
 namespace internal {
 
 /* Optimized matrix += alpha * uv'
@@ -45,6 +46,7 @@ struct selfadjoint_packed_rank1_update<Scalar, Index, RowMajor, UpLo, ConjLhs, C
   }
 };
 
-}  // end namespace internal
+}  // namespace internal
+}  // namespace Eigen
 
 #endif  // EIGEN_SELFADJOINT_PACKED_PRODUCT_H

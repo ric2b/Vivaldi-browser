@@ -4,7 +4,6 @@
 
 import * as Protocol from '../../../generated/protocol.js';
 import {
-  assertShadowRoot,
   getElementWithinComponent,
   renderElementIntoDOM,
   stripLitHtmlCommentNodes,
@@ -17,8 +16,6 @@ import * as ApplicationComponents from './components.js';
 
 const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
-const {assert} = chai;
-
 async function renderOriginTrialTreeView(
     data: ApplicationComponents.OriginTrialTreeView.OriginTrialTreeViewData,
     ): Promise<{
@@ -28,7 +25,7 @@ async function renderOriginTrialTreeView(
   const component = new ApplicationComponents.OriginTrialTreeView.OriginTrialTreeView();
   component.data = data;
   renderElementIntoDOM(component);
-  assertShadowRoot(component.shadowRoot);
+  assert.isNotNull(component.shadowRoot);
   await coordinator.done();
   return {
     component,
@@ -52,7 +49,7 @@ async function renderOriginTrialTreeViewTreeOutline(
   const treeOutline: OriginTrialTreeOutline =
       getElementWithinComponent<ApplicationComponents.OriginTrialTreeView.OriginTrialTreeView, OriginTrialTreeOutline>(
           component, 'devtools-tree-outline', TreeOutline.TreeOutline.TreeOutline);
-  assertShadowRoot(treeOutline.shadowRoot);
+  assert.isNotNull(treeOutline.shadowRoot);
   return {
     component: treeOutline,
     shadowRoot: treeOutline.shadowRoot,
@@ -239,7 +236,7 @@ describeWithLocale('OriginTrialTreeView', () => {
     // When there are more than 1 tokens in a trial, second level nodes
     // should show token status.
     const tokenWithStatusNodes = visibleTree[0].children;
-    assert.isDefined(tokenWithStatusNodes);
+    assert.exists(tokenWithStatusNodes);
     if (tokenWithStatusNodes === undefined) {
       return;
     }
@@ -264,7 +261,7 @@ describeWithLocale('OriginTrialTreeView', () => {
 
     // When there is only 1 token, token with status level should be skipped.
     const tokenDetailNodes = visibleTree[0].children;
-    assert.isDefined(tokenDetailNodes);
+    assert.exists(tokenDetailNodes);
     if (tokenDetailNodes === undefined) {
       return;
     }
@@ -282,7 +279,7 @@ describeWithLocale('OriginTrialTreeView', () => {
     const visibleTree = visibleNodesToTree(shadowRoot);
 
     const tokenDetailNodes = visibleTree[0].children;
-    assert.isDefined(tokenDetailNodes);
+    assert.exists(tokenDetailNodes);
     if (tokenDetailNodes === undefined) {
       return;
     }
@@ -291,7 +288,7 @@ describeWithLocale('OriginTrialTreeView', () => {
     const rowsComponent = tokenFieldsNode.nodeElement.querySelector('devtools-resources-origin-trial-token-rows');
     const {innerHTML} = rowsComponent!.shadowRoot!;
     const parsedToken = trialWithSingleToken.tokensWithStatus[0].parsedToken;
-    assert.isDefined(parsedToken);
+    assert.exists(parsedToken);
     if (parsedToken === undefined) {
       return;
     }
@@ -315,13 +312,13 @@ describeWithLocale('OriginTrialTreeView', () => {
     const visibleTree = visibleNodesToTree(shadowRoot);
 
     const tokenDetailNodes = visibleTree[0].children;
-    assert.isDefined(tokenDetailNodes);
+    assert.exists(tokenDetailNodes);
     if (tokenDetailNodes === undefined) {
       return;
     }
     assert.lengthOf(tokenDetailNodes, 2);
     const rawTokenNode = tokenDetailNodes[1];
-    assert.isDefined(rawTokenNode.children);
+    assert.exists(rawTokenNode.children);
     if (rawTokenNode.children === undefined) {
       return;
     }
@@ -371,7 +368,7 @@ describeWithLocale('OriginTrialTreeView', () => {
 
     const visibleTree = visibleNodesToTree(shadowRoot);
     const trialNameNode = visibleTree[0];
-    assert.isDefined(trialNameNode.children);
+    assert.exists(trialNameNode.children);
     if (trialNameNode.children === undefined) {
       return;
     }
@@ -395,13 +392,9 @@ describeWithLocale('OriginTrialTreeView', () => {
 
     const visibleTree = visibleNodesToTree(shadowRoot);
     const trialNameNode = visibleTree[0];
-    assert.isDefined(trialNameNode.children);
-    if (trialNameNode.children === undefined) {
-      return;
-    }
-    for (let i = 0; i < trialNameNode.children.length; i++) {
-      const tokenWithStatusNode = trialNameNode.children[i];
-      assert.isDefined(tokenWithStatusNode.children);
+    assert.exists(trialNameNode.children);
+    for (const tokenWithStatusNode of trialNameNode.children) {
+      assert.exists(tokenWithStatusNode.children);
       const badges = extractBadgeTextFromTreeNode(tokenWithStatusNode.nodeElement);
       assert.lengthOf(badges, 0);
     }
@@ -437,7 +430,7 @@ describeWithLocale('OriginTrialTreeView', () => {
     const visibleTree = visibleNodesToTree(shadowRoot);
 
     const tokenDetailNodes = visibleTree[0].children;
-    assert.isDefined(tokenDetailNodes);
+    assert.exists(tokenDetailNodes);
     if (tokenDetailNodes === undefined) {
       return;
     }

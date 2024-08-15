@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: hardening-prioritizing-guidelines
 title: Prioritizing security hardening bugs
 ---

@@ -21,7 +21,6 @@
 <translation id="2470702053775288986">ಬೆಂಬಲವಿರದ ವಿಸ್ತರಣೆಗಳನ್ನು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ</translation>
 <translation id="2662876636500006917">Vivaldi ವೆಬ್ ಪೇಟೆ</translation>
 <translation id="2678063897982469759">ಮರು-ಸಕ್ರಿಯಗೊಳಿಸಿ</translation>
-<translation id="2809586584051668049">ಮತ್ತು <ph name="NUMBER_ADDITIONAL_DISABLED" /> ಇನ್ನಷ್ಟು</translation>
 <translation id="2850541429955027218">ಥೀಮ್ ಸೇರಿಸು</translation>
 <translation id="2861941300086904918">ಮೂಲ ಕ್ಲೈಂಟ್ ಭದ್ರತೆ ನಿರ್ವಾಹಕ</translation>
 <translation id="2932883381142163287">ನಿಂದನೆ ವರದಿ ಮಾಡಿ</translation>
@@ -30,7 +29,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3222066309010235055">ಪ್ರೀರೆಂಡರ್: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">ಪ್ಯಾಕ್ ಮಾಡಲು ವಿಸ್ತರಣೆಯ ಮೂಲ ಡೈರೆಕ್ಟರಿಯನ್ನು ಆಯ್ಕೆಮಾಡಿ. ವಿಸ್ತರಣೆಯನ್ನು ನವೀಕರಿಸಲು, ಮರುಬಳಸಲು ಖಾಸಗಿ ಕೀ ಫೈಲ್‌‌ ಅನ್ನು ಕೂಡ ಆಯ್ಕೆಮಾಡಿ.</translation>
-<translation id="3288047731229977326">ಡೆವಲಪರ್ ಮೋಡ್‌ನಲ್ಲಿ ಚಾಲನೆಯಾಗುವ ವಿಸ್ತರಣೆಗಳು ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್‌ಗೆ ಹಾನಿಮಾಡಬಹುದು. ನೀವು ಡೆವಲಪರ್ ಆಗಿರದಿದ್ದರೇ, ಸುರಕ್ಷಿತವಾಗಿರಲು ಡೆವಲಪರ್ ಮೋಡ್‌ನಲ್ಲಿ ಈ ವಿಸ್ತರಣೆಗಳ ಚಾಲನೆಯನ್ನು ನೀವು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಬೇಕು.</translation>
 <translation id="3378572629723696641">ಈ ವಿಸ್ತರಣೆಯು ದೋಷಪೂರಿತವಾಗಿರಬಹುದು.</translation>
 <translation id="3678156199662914018">ವಿಸ್ತರಣೆ: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">ಅಪ್ಲಿಕೇಶನ್ ಸರಿಪಡಿಸು</translation>
@@ -41,7 +39,6 @@
 <translation id="4087089424473531098">ವಿಸ್ತರಣೆಯನ್ನು ರಚಿಸಲಾಗಿದೆ:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">ವಿಸ್ತರಣೆಗಳ ಡೆವೆಲಪರ್ ಮೋಡ್ ಅನ್ನು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಿ</translation>
 <translation id="4100839878934973028">ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್‌ನಲ್ಲಿನ ಮತ್ತೊಂದು ಪ್ರೋಗ್ರಾಂ Vivaldi ಕಾರ್ಯನಿರ್ವಹಿಸುವ ವಿಧಾನವನ್ನು ಬದಲಿಸಬಹುದಾದಂತಹ ಅಪ್ಲಿಕೇಶನ್ ಅನ್ನು ಸೇರಿಸಿದೆ.</translation>
 <translation id="4176463684765177261">ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K ಲೈವ್)</translation>
@@ -54,7 +51,6 @@
 <translation id="5143374789336132547">ನೀವು ಮುಖಪುಟದ ಬಟನ್ ಕ್ಲಿಕ್ ಮಾಡಿದಾಗ ತೋರಿಸಬೇಕಾದ ಪುಟವನ್ನು "<ph name="EXTENSION_NAME" />" ವಿಸ್ತರಣೆಯು ಬದಲಾಯಿಸಿದೆ.</translation>
 <translation id="5233231016133573565">ಪ್ರಗತಿ ID</translation>
 <translation id="52912272896845572">ಖಾಸಗಿ ಕೀಲಿ ಫೈಲ್ ಅಮಾನ್ಯವಾಗಿದೆ.</translation>
-<translation id="5301954838959518834">ಸರಿ, ಅರ್ಥವಾಯಿತು</translation>
 <translation id="5362741141255528695">ಖಾಸಗಿ ಕೀಲಿ ಫೈಲ್ ಆಯ್ಕೆಮಾಡಿ.</translation>
 <translation id="5485102783864353244">ಅಪ್ಲಿಕೇಶನ್‌ ಸೇರಿಸು</translation>
 <translation id="5521078259930077036">ಇದು ನೀವು ನಿರೀಕ್ಷಿಸುತ್ತಿದ್ದ ಮುಖಪುಟವೇ?</translation>

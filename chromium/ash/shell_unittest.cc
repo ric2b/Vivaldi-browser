@@ -236,8 +236,7 @@ TEST_F(ShellTest, CreateWindow) {
 }
 
 // Verifies that a window with a preferred size is created centered on the
-// default display for new windows. Mojo apps like shortcut_viewer rely on this
-// behavior.
+// default display for new windows.
 TEST_F(ShellTest, CreateWindowWithPreferredSize) {
   UpdateDisplay("1024x768,800x600");
 
@@ -595,19 +594,37 @@ TEST_F(ShellTest, NoWindowTabFocus) {
   EXPECT_TRUE(status_area_widget->GetNativeView()->HasFocus());
 }
 
-class ShellPickerDisabledTest : public AshTestBase {
+class ShellPickerIncorrectKeyTest : public AshTestBase {
  public:
-  ShellPickerDisabledTest() {
+  ShellPickerIncorrectKeyTest() {
+    feature_list_.InitWithFeatures({features::kPicker},
+                                   {features::kPickerDogfood});
+
     base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
     command_line->AppendSwitchASCII(switches::kPickerFeatureKey, "hello");
   }
 
  private:
-  base::test::ScopedFeatureList feature_list_{features::kPicker};
+  base::test::ScopedFeatureList feature_list_;
 };
 
-TEST_F(ShellPickerDisabledTest, NoPickerControllerIfFeatureKeyIsWrong) {
+TEST_F(ShellPickerIncorrectKeyTest, NoPickerControllerIfFeatureKeyIsWrong) {
   EXPECT_FALSE(Shell::Get()->picker_controller());
+}
+
+class ShellPickerDogfoodTest : public AshTestBase {
+ public:
+  ShellPickerDogfoodTest() {
+    feature_list_.InitWithFeatures(
+        {features::kPicker, features::kPickerDogfood}, {});
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+TEST_F(ShellPickerDogfoodTest, PickerControllerExistsIfDogfooding) {
+  EXPECT_TRUE(Shell::Get()->picker_controller());
 }
 
 // This verifies WindowObservers are removed when a window is destroyed after

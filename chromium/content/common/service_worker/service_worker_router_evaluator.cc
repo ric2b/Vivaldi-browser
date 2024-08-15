@@ -64,7 +64,7 @@ void RecordEvaluationTime(base::TimeDelta duration) {
       "ServiceWorker.RouterEvaluator.EvaluationTime", duration);
 }
 
-// TODO(crbug.com/1371756): consolidate code with blink::url_pattern.
+// TODO(crbug.com/40241479): consolidate code with blink::url_pattern.
 //
 // The type and method come form
 // third_party/blink/renderer/core/url_pattern/url_pattern_component.{h,cc}.
@@ -96,7 +96,7 @@ GetOptionsAndSegmentWildcardRegex(const blink::SafeUrlPattern& url_pattern,
   if (type == URLPatternFieldType::kHostname) {
     options.delimiter_list = ".";
   } else if (type == URLPatternFieldType::kPathname) {
-    // TODO(crbug.com/1371756): follows the original GetOptions behavior.
+    // TODO(crbug.com/40241479): follows the original GetOptions behavior.
     // It sets the following delimiters for some limited protocols.
     options.delimiter_list = "/";
     options.prefix_list = "/";
@@ -246,7 +246,7 @@ bool IsValidSources(
     RecordSetupError(ServiceWorkerRouterEvaluatorErrorEnums::kEmptySource);
     return false;
   }
-  // TODO(crbug.com/1371756): support other sources in the future.
+  // TODO(crbug.com/40241479): support other sources in the future.
   // Currently, only network source is supported.
   for (const auto& s : sources) {
     switch (s.type) {
@@ -292,15 +292,52 @@ bool IsValidSources(
   const auto& or_condition =
       std::get<const std::optional<blink::ServiceWorkerRouterOrCondition>&>(
           condition.get());
-  if (!or_condition) {
-    return false;
+  if (or_condition) {
+    for (const auto& c : or_condition->conditions) {
+      if (ExceedsMaxConditionDepth(c, depth + 1)) {
+        return true;
+      }
+    }
   }
-  for (const auto& c : or_condition->conditions) {
-    if (ExceedsMaxConditionDepth(c, depth + 1)) {
+  const auto& not_condition =
+      std::get<const std::optional<blink::ServiceWorkerRouterNotCondition>&>(
+          condition.get());
+  if (not_condition) {
+    CHECK(not_condition->condition);
+    if (ExceedsMaxConditionDepth(*not_condition->condition, depth + 1)) {
       return true;
     }
   }
   return false;
+}
+
+void UpdateMaxConditionDepthAndWidth(
+    const blink::ServiceWorkerRouterCondition& condition,
+    size_t& max_depth,
+    size_t& max_width,
+    size_t depth = 0) {
+  const auto& or_condition =
+      std::get<const std::optional<blink::ServiceWorkerRouterOrCondition>&>(
+          condition.get());
+  if (or_condition) {
+    max_width = std::max(max_width, or_condition->conditions.size());
+    for (const auto& c : or_condition->conditions) {
+      UpdateMaxConditionDepthAndWidth(c, max_depth, max_width, depth + 1);
+    }
+    // Or and other conditions are mutual exclusive.
+    return;
+  }
+  const auto& not_condition =
+      std::get<const std::optional<blink::ServiceWorkerRouterNotCondition>&>(
+          condition.get());
+  if (not_condition) {
+    CHECK(not_condition->condition);
+    UpdateMaxConditionDepthAndWidth(*not_condition->condition, max_depth,
+                                    max_width, depth + 1);
+    // Not and other conditions are mutual exclusive.
+    return;
+  }
+  max_depth = std::max(max_depth, depth);
 }
 
 bool MatchRequestCondition(
@@ -404,7 +441,7 @@ bool BaseCondition::Set(const blink::ServiceWorkerRouterCondition& condition) {
     SET_PATTERN(hash, URLPatternFieldType::kHash);
 #undef SET_PATTERN
     has_url_pattern_ = true;
-    // TODO(crbug.com/1371756): consider fast path on empty parts and "*".
+    // TODO(crbug.com/40241479): consider fast path on empty parts and "*".
     // Currently, regular expressions are executed even for empty parts cases,
     // which try to match inputs with "^$".  It is also executed for "*".
     // If performance to evaluate regular expressions matter, fast path can
@@ -749,7 +786,8 @@ base::Value ServiceWorkerRouterEvaluator::ToValue() const {
           source.Append("network");
           break;
         case network::mojom::ServiceWorkerRouterSourceType::kRace:
-          // TODO(crbug.com/1371756): we may need to update the name per target.
+          // TODO(crbug.com/40241479): we may need to update the name per
+          // target.
           source.Append("race-network-and-fetch-handler");
           break;
         case network::mojom::ServiceWorkerRouterSourceType::kFetchEvent:
@@ -780,9 +818,24 @@ std::string ServiceWorkerRouterEvaluator::ToString() const {
   return json;
 }
 
-void ServiceWorkerRouterEvaluator::RecordRouterRuleCount() const {
+void ServiceWorkerRouterEvaluator::RecordRouterRuleInfo() const {
   base::UmaHistogramCounts1000("ServiceWorker.RouterEvaluator.RuleCount",
                                compiled_rules_.size());
+  size_t depth, width;
+  std::tie(depth, width) = GetMaxDepthAndWidth();
+  base::UmaHistogramCounts1000("ServiceWorker.RouterEvaluator.ConditionDepth",
+                               depth);
+  base::UmaHistogramCounts1000("ServiceWorker.RouterEvaluator.OrConditionWidth",
+                               width);
+}
+
+std::tuple<size_t, size_t> ServiceWorkerRouterEvaluator::GetMaxDepthAndWidth()
+    const {
+  size_t depth = 0, width = 0;
+  for (const auto& r : rules_.rules) {
+    UpdateMaxConditionDepthAndWidth(r.condition, depth, width);
+  }
+  return {depth, width};
 }
 
 }  // namespace content

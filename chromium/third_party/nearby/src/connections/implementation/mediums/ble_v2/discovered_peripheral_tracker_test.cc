@@ -26,6 +26,7 @@
 #include "connections/implementation/mediums/ble_v2/instant_on_lost_advertisement.h"
 #include "internal/platform/ble_v2.h"
 #include "internal/platform/count_down_latch.h"
+#include "internal/platform/feature_flags.h"
 #include "internal/platform/medium_environment.h"
 #include "internal/platform/mutex.h"
 #include "internal/platform/mutex_lock.h"
@@ -203,7 +204,7 @@ TEST_F(DiscoveredPeripheralTrackerTest,
       },
       Uuid(kFastAdvertisementServiceUuid));
 
-  api::ble_v2::BleAdvertisementData advertisement_data;
+  api::ble_v2::BleAdvertisementData advertisement_data{};
   if (!fast_advertisement_bytes.Empty()) {
     advertisement_data.service_data.insert(
         {Uuid(kFastAdvertisementServiceUuid), fast_advertisement_bytes});
@@ -243,7 +244,7 @@ TEST_F(DiscoveredPeripheralTrackerTest,
       },
       Uuid(kFastAdvertisementServiceUuid));
 
-  api::ble_v2::BleAdvertisementData advertisement_data;
+  api::ble_v2::BleAdvertisementData advertisement_data{};
   if (!fast_advertisement_bytes.Empty()) {
     advertisement_data.service_data.insert(
         {Uuid(kFastAdvertisementServiceUuid), fast_advertisement_bytes});
@@ -314,7 +315,7 @@ TEST_F(DiscoveredPeripheralTrackerTest,
       },
       Uuid(kFastAdvertisementServiceUuid));
 
-  api::ble_v2::BleAdvertisementData advertisement_data;
+  api::ble_v2::BleAdvertisementData advertisement_data{};
   if (!fast_advertisement_bytes.Empty()) {
     advertisement_data.service_data.insert(
         {Uuid(kFastAdvertisementServiceUuid), fast_advertisement_bytes});
@@ -358,7 +359,7 @@ TEST_F(DiscoveredPeripheralTrackerTest,
       },
       Uuid("FE3C"));
 
-  api::ble_v2::BleAdvertisementData advertisement_data;
+  api::ble_v2::BleAdvertisementData advertisement_data{};
   if (!fast_advertisement_bytes.Empty()) {
     advertisement_data.service_data.insert(
         {Uuid(kFastAdvertisementServiceUuid), fast_advertisement_bytes});
@@ -415,7 +416,7 @@ TEST_F(DiscoveredPeripheralTrackerTest,
       },
       {});
 
-  api::ble_v2::BleAdvertisementData advertisement_data;
+  api::ble_v2::BleAdvertisementData advertisement_data{};
   if (!advertisement_header_bytes.Empty()) {
     advertisement_data.service_data.insert(
         {bleutils::kCopresenceServiceUuid, advertisement_header_bytes});
@@ -460,7 +461,7 @@ TEST_F(DiscoveredPeripheralTrackerTest,
       },
       {});
 
-  api::ble_v2::BleAdvertisementData advertisement_data;
+  api::ble_v2::BleAdvertisementData advertisement_data{};
   if (!advertisement_header_bytes.Empty()) {
     advertisement_data.service_data.insert(
         {bleutils::kCopresenceServiceUuid, advertisement_header_bytes});
@@ -496,7 +497,7 @@ TEST_F(DiscoveredPeripheralTrackerTest,
       },
       {});
 
-  api::ble_v2::BleAdvertisementData advertisement_data;
+  api::ble_v2::BleAdvertisementData advertisement_data{};
   if (!advertisement_header_bytes.Empty()) {
     advertisement_data.service_data.insert(
         {bleutils::kCopresenceServiceUuid, advertisement_header_bytes});
@@ -542,7 +543,7 @@ TEST_F(DiscoveredPeripheralTrackerTest,
       },
       {});
 
-  api::ble_v2::BleAdvertisementData advertisement_data;
+  api::ble_v2::BleAdvertisementData advertisement_data{};
   if (!advertisement_header_bytes.Empty()) {
     advertisement_data.service_data.insert(
         {bleutils::kCopresenceServiceUuid, advertisement_header_bytes});
@@ -588,7 +589,7 @@ TEST_F(DiscoveredPeripheralTrackerTest,
       },
       {});
 
-  api::ble_v2::BleAdvertisementData advertisement_data;
+  api::ble_v2::BleAdvertisementData advertisement_data{};
   if (!advertisement_header_bytes.Empty()) {
     advertisement_data.service_data.insert(
         {bleutils::kCopresenceServiceUuid, advertisement_header_bytes});
@@ -631,7 +632,7 @@ TEST_F(DiscoveredPeripheralTrackerTest,
       },
       {});
 
-  api::ble_v2::BleAdvertisementData advertisement_data;
+  api::ble_v2::BleAdvertisementData advertisement_data{};
   if (!advertisement_header_bytes.Empty()) {
     advertisement_data.service_data.insert(
         {bleutils::kCopresenceServiceUuid, advertisement_header_bytes});
@@ -680,7 +681,7 @@ TEST_F(DiscoveredPeripheralTrackerTest,
       },
       Uuid(kFastAdvertisementServiceUuid));
 
-  api::ble_v2::BleAdvertisementData advertisement_data;
+  api::ble_v2::BleAdvertisementData advertisement_data{};
   if (!advertisement_header_bytes.Empty()) {
     advertisement_data.service_data.insert(
         {bleutils::kCopresenceServiceUuid, advertisement_header_bytes});
@@ -740,7 +741,7 @@ TEST_F(DiscoveredPeripheralTrackerTest,
       },
       Uuid(kFastAdvertisementServiceUuid));
 
-  api::ble_v2::BleAdvertisementData advertisement_data;
+  api::ble_v2::BleAdvertisementData advertisement_data{};
   if (!advertisement_header_bytes.Empty()) {
     advertisement_data.service_data.insert(
         {bleutils::kCopresenceServiceUuid, advertisement_header_bytes});
@@ -797,7 +798,7 @@ TEST_F(DiscoveredPeripheralTrackerTest, LostPeripheralForAdvertisementLost) {
       },
       {});
 
-  api::ble_v2::BleAdvertisementData advertisement_data;
+  api::ble_v2::BleAdvertisementData advertisement_data{};
   if (!advertisement_header_bytes.Empty()) {
     advertisement_data.service_data.insert(
         {bleutils::kCopresenceServiceUuid, advertisement_header_bytes});
@@ -875,7 +876,7 @@ TEST_F(DiscoveredPeripheralTrackerTest,
       },
       {});
 
-  api::ble_v2::BleAdvertisementData advertisement_data;
+  api::ble_v2::BleAdvertisementData advertisement_data{};
   if (!advertisement_header_bytes.Empty()) {
     advertisement_data.service_data.insert(
         {bleutils::kCopresenceServiceUuid, advertisement_header_bytes});
@@ -937,7 +938,7 @@ TEST_F(DiscoveredPeripheralTrackerTest,
       },
       {});
 
-  api::ble_v2::BleAdvertisementData advertisement_data;
+  api::ble_v2::BleAdvertisementData advertisement_data{};
   if (!advertisement_header_bytes.Empty()) {
     advertisement_data.service_data.insert(
         {bleutils::kCopresenceServiceUuid, advertisement_header_bytes});
@@ -991,7 +992,7 @@ TEST_F(DiscoveredPeripheralTrackerTest, LostPeripheralForInstantOnLost) {
       },
       {});
 
-  api::ble_v2::BleAdvertisementData advertisement_data;
+  api::ble_v2::BleAdvertisementData advertisement_data{};
   if (!advertisement_header_bytes.Empty()) {
     advertisement_data.service_data.insert(
         {bleutils::kCopresenceServiceUuid, advertisement_header_bytes});
@@ -1007,7 +1008,7 @@ TEST_F(DiscoveredPeripheralTrackerTest, LostPeripheralForInstantOnLost) {
   auto advertisement = InstantOnLostAdvertisement::CreateFromHash(
       advertisement_hash.AsStringView());
   ASSERT_OK(advertisement);
-  api::ble_v2::BleAdvertisementData loss_advertisement_data;
+  api::ble_v2::BleAdvertisementData loss_advertisement_data{};
   loss_advertisement_data.service_data.insert(
       {bleutils::kCopresenceServiceUuid, ByteArray(advertisement->ToBytes())});
 
@@ -1021,6 +1022,80 @@ TEST_F(DiscoveredPeripheralTrackerTest, LostPeripheralForInstantOnLost) {
 
   // We should receive a client callback of a lost peripheral
   EXPECT_TRUE(lost_latch.Await(kWaitDuration).result());
+}
+
+TEST_F(DiscoveredPeripheralTrackerTest, HandleDummyAdvertisement) {
+  auto flag = nearby::FeatureFlags::Flags{
+      .enable_invoking_legacy_device_discovered_cb = true,
+  };
+  MediumEnvironment::Instance().SetFeatureFlags(flag);
+  api::ble_v2::BleAdvertisementData advertising_data{};
+  advertising_data.is_extended_advertisement = false;
+  ByteArray encoded_bytes{
+      DiscoveredPeripheralTracker::kDummyAdvertisementValue};
+  advertising_data.service_data.insert(
+      {mediums::bleutils::kCopresenceServiceUuid, encoded_bytes});
+  CountDownLatch fetch_latch(1);
+  CountDownLatch legacy_device_found_latch(1);
+
+  discovered_peripheral_tracker_.StartTracking(
+      std::string(kServiceIdA),
+      {
+          .peripheral_discovered_cb =
+              [](BleV2Peripheral peripheral,
+                             const std::string& service_id,
+                             const ByteArray& advertisement_bytes,
+                             bool fast_advertisement) {
+                FAIL() << "Should NOT report found for dummy advertisement";
+              },
+          .legacy_device_discovered_cb =
+              [&legacy_device_found_latch]() {
+                legacy_device_found_latch.CountDown();
+              },
+      },
+      {});
+
+  FindAdvertisement(advertising_data, {}, fetch_latch);
+
+  EXPECT_TRUE(legacy_device_found_latch.Await(kWaitDuration).result());
+  EXPECT_EQ(GetFetchAdvertisementCallbackCount(), 0);
+}
+
+TEST_F(DiscoveredPeripheralTrackerTest, SkipDummyAdvertisement) {
+  auto flag = nearby::FeatureFlags::Flags{
+      .enable_invoking_legacy_device_discovered_cb = false,
+  };
+  MediumEnvironment::Instance().SetFeatureFlags(flag);
+  api::ble_v2::BleAdvertisementData advertising_data{};
+  advertising_data.is_extended_advertisement = false;
+  ByteArray encoded_bytes{
+      DiscoveredPeripheralTracker::kDummyAdvertisementValue};
+  advertising_data.service_data.insert(
+      {mediums::bleutils::kCopresenceServiceUuid, encoded_bytes});
+  CountDownLatch fetch_latch(1);
+  CountDownLatch legacy_device_found_latch(1);
+
+  discovered_peripheral_tracker_.StartTracking(
+      std::string(kServiceIdA),
+      {
+          .peripheral_discovered_cb =
+              [](BleV2Peripheral peripheral,
+                             const std::string& service_id,
+                             const ByteArray& advertisement_bytes,
+                             bool fast_advertisement) {
+                FAIL() << "Should NOT report found for dummy advertisement";
+              },
+          .legacy_device_discovered_cb =
+              []() {
+                FAIL() << "Should NOT report found for dummy advertisement";
+              },
+      },
+      {});
+
+  FindAdvertisement(advertising_data, {}, fetch_latch);
+
+  EXPECT_FALSE(legacy_device_found_latch.Await(kWaitDuration).result());
+  EXPECT_EQ(GetFetchAdvertisementCallbackCount(), 0);
 }
 
 }  // namespace

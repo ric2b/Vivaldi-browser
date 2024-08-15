@@ -23,8 +23,12 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "absl/base/optimization.h"
+#include "absl/status/status.h"
 #include "xla/status.h"
 #include "xla/statusor.h"
+#include "tsl/platform/macros.h"
+#include "tsl/platform/status.h"
 
 namespace xla {
 namespace status_macros {
@@ -72,7 +76,7 @@ class MakeErrorStream {
     operator Status() { return wrapped_error_stream_->GetStatus(); }
     template <typename T>
     // NOLINTNEXTLINE(google-explicit-constructor)
-    operator xla::StatusOr<T>() {
+    operator absl::StatusOr<T>() {
       return wrapped_error_stream_->GetStatus();
     }
 

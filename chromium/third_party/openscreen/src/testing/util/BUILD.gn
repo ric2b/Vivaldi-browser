@@ -11,16 +11,10 @@ openscreen_source_set("util") {
 
   visibility += [ "../../*" ]
 
-  public = [
-    "read_file.h",
-    "task_util.h",
-  ]
-
-  sources = [ "read_file.cc" ]
+  public = [ "task_util.h" ]
 
   public_deps = [
     "../../platform",
-    "../../third_party/abseil",
     "../../util",
   ]
 }

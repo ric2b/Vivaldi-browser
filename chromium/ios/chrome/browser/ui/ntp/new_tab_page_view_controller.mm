@@ -43,7 +43,6 @@
 
 namespace {
 // Animation time for the shift up/down animations to focus/defocus omnibox.
-const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 const CGFloat kShiftTilesUpAnimationDuration = 0.1;
 // The minimum height of the feed container.
 const CGFloat kFeedContainerMinimumHeight = 1000;
@@ -112,7 +111,7 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
     NSMutableArray<UIViewController*>* viewControllersAboveFeed;
 
 // Identity disc shown in the NTP.
-// TODO(crbug.com/1170995): Remove once the Feed header properly supports
+// TODO(crbug.com/40165977): Remove once the Feed header properly supports
 // ContentSuggestions.
 @property(nonatomic, weak) UIButton* identityDiscButton;
 
@@ -158,6 +157,10 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
 // When set to YES, the scroll position wont be updated.
 @property(nonatomic, assign) BOOL inhibitScrollPositionUpdates;
 
+// YES if there is a currently running "shift down" / omnibox defocus animation
+// running.
+@property(nonatomic, assign) BOOL shiftDownInProgress;
+
 @end
 
 @implementation NewTabPageViewController {
@@ -201,14 +204,14 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
 
   self.view.accessibilityIdentifier = kNTPViewIdentifier;
 
-  // TODO(crbug.com/1262536): Remove this when bug is fixed.
+  // TODO(crbug.com/40799579): Remove this when bug is fixed.
   [self.feedWrapperViewController loadViewIfNeeded];
   [self.contentSuggestionsViewController loadViewIfNeeded];
 
   // Prevent the NTP from spilling behind the toolbar and tab strip.
   self.view.clipsToBounds = YES;
 
-  // TODO(crbug.com/1403612): The contentCollectionView width might be narrower
+  // TODO(crbug.com/40251609): The contentCollectionView width might be narrower
   // than the ContentSuggestions view. This causes elements to be hidden. A
   // gesture recognizer is added to allow these elements to be interactable.
   UITapGestureRecognizer* singleTapRecognizer = [[UITapGestureRecognizer alloc]
@@ -242,9 +245,7 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
   [super viewWillAppear:animated];
   _appearing = YES;
 
-  if (IsIOSLargeFakeboxEnabled()) {
-    self.headerViewController.view.alpha = 1;
-  }
+  self.headerViewController.view.alpha = 1;
   self.headerViewController.showing = YES;
 
   [self updateNTPLayout];
@@ -468,8 +469,8 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
     _feedContainer.layer.maskedCorners =
         kCALayerMaxXMinYCorner | kCALayerMinXMinYCorner;
     _feedContainer.layer.masksToBounds = YES;
-
-    [self.view addSubview:_feedContainer];
+    _feedContainer.layer.zPosition = -CGFLOAT_MAX;
+    [self.collectionView insertSubview:_feedContainer atIndex:0];
   }
 
   // Configures the feed and wrapper in the view hierarchy.
@@ -482,7 +483,7 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
   AddSameConstraints(feedView, self.view);
 
   // Configures the content suggestions in the view hierarchy.
-  // TODO(crbug.com/1262536): Remove this when issue is fixed.
+  // TODO(crbug.com/40799579): Remove this when issue is fixed.
   if (self.contentSuggestionsViewController.parentViewController) {
     [self.contentSuggestionsViewController willMoveToParentViewController:nil];
     [self.contentSuggestionsViewController.view removeFromSuperview];
@@ -516,7 +517,7 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
       [self.headerViewController.view isDescendantOfView:self.containerView]);
   self.headerViewController.view.translatesAutoresizingMaskIntoConstraints = NO;
 
-  // TODO(crbug.com/1170995): The contentCollectionView width might be
+  // TODO(crbug.com/40165977): The contentCollectionView width might be
   // narrower than the ContentSuggestions view. This causes elements to be
   // hidden, so we set clipsToBounds to ensure that they remain visible. The
   // collection view changes, so we must set this property each time it does.
@@ -554,11 +555,6 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
 
 - (void)willUpdateSnapshot {
   [self.overscrollActionsController clear];
-}
-
-- (void)stopScrolling {
-  UIScrollView* scrollView = self.collectionView;
-  [scrollView setContentOffset:scrollView.contentOffset animated:NO];
 }
 
 - (BOOL)isNTPScrolledToTop {
@@ -625,13 +621,13 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
   // fetched/displayed, thus needed a reset. However, in the instance where the
   // omnibox is focused, it is more important to keep that focused state and not
   // show a "double" omibox state.
-  // TODO(crbug.com/1371261): Replace the -setContentOffsetForWebState: call
+  // TODO(crbug.com/40241297): Replace the -setContentOffsetForWebState: call
   // with calls directly from all async updates to the NTP.
   if (self.omniboxFocused) {
     return;
   }
   [self setContentOffset:-[self heightAboveFeed]];
-  // TODO(crbug.com/1406940): Constraint updating should not be necessary since
+  // TODO(crbug.com/40252945): Constraint updating should not be necessary since
   // scrollViewDidScroll: calls this if needed.
   [self setInitialFakeOmniboxConstraints];
   if ([self.NTPContentDelegate isContentHeaderSticky]) {
@@ -650,6 +646,9 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
   CGFloat heightAboveFeed = 0;
   for (UIViewController* viewController in self.viewControllersAboveFeed) {
     heightAboveFeed += viewController.view.frame.size.height;
+  }
+  if (IsIOSMagicStackCollectionViewEnabled()) {
+    heightAboveFeed += kBottomMagicStackPadding;
   }
   return heightAboveFeed;
 }
@@ -689,6 +688,13 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
 }
 
 - (void)feedLayoutDidEndUpdates {
+  if (_feedContainer) {
+    // Feed content gets added to the top of the subview array, so after content
+    // loads the feed container needs to be sent to the back so that it isn't
+    // in front of the new content and doesn't intercept taps / interactions
+    // that are meant for the feed content.
+    [self.collectionView sendSubviewToBack:_feedContainer];
+  }
   [self updateFeedInsetsForMinimumHeight];
   // Updating insets can influence contentOffset, so update saved scroll state
   // after it. This handles what the starting offset be with the feed enabled,
@@ -765,18 +771,14 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
 
 - (void)omniboxDidBecomeFirstResponder {
   self.omniboxFocused = YES;
-  if (IsIOSLargeFakeboxEnabled()) {
-    self.headerViewController.view.alpha = 0.01;
-  }
+  self.headerViewController.view.alpha = 0.01;
 }
 
 - (void)omniboxWillResignFirstResponder {
   self.omniboxFocused = NO;
-  if (IsIOSLargeFakeboxEnabled()) {
-    if ([self isFakeboxPinned]) {
-      // Return early to allow the omnibox defocus animation show.
-      return;
-    }
+  if ([self isFakeboxPinned]) {
+    // Return early to allow the omnibox defocus animation to show.
+    return;
   }
 
   [self omniboxDidResignFirstResponder];
@@ -787,10 +789,12 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
     return;
   }
 
-  if (IsIOSLargeFakeboxEnabled()) {
+  // Do not trigger defocus animation if the user is already navigating away
+  // from the NTP.
+  if (self.NTPVisible) {
     self.headerViewController.view.alpha = 1;
+    [self shiftTilesDownForOmniboxDefocus];
   }
-  [self shiftTilesDownForOmniboxDefocus];
 }
 
 #pragma mark - UIScrollViewDelegate
@@ -872,19 +876,19 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
 }
 
 - (void)scrollViewDidScrollToTop:(UIScrollView*)scrollView {
-  // TODO(crbug.com/1114792): Handle scrolling.
+  // TODO(crbug.com/40710989): Handle scrolling.
 }
 
 - (void)scrollViewWillBeginDecelerating:(UIScrollView*)scrollView {
-  // TODO(crbug.com/1114792): Handle scrolling.
+  // TODO(crbug.com/40710989): Handle scrolling.
 }
 
 - (void)scrollViewDidEndDecelerating:(UIScrollView*)scrollView {
-  // TODO(crbug.com/1114792): Handle scrolling.
+  // TODO(crbug.com/40710989): Handle scrolling.
 }
 
 - (void)scrollViewDidEndScrollingAnimation:(UIScrollView*)scrollView {
-  // TODO(crbug.com/1114792): Handle scrolling.
+  // TODO(crbug.com/40710989): Handle scrolling.
 }
 
 - (BOOL)scrollViewShouldScrollToTop:(UIScrollView*)scrollView {
@@ -911,7 +915,7 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
 
 #pragma mark - UIGestureRecognizerDelegate
 
-// TODO(crbug.com/1170995): Remove once the Feed header properly supports
+// TODO(crbug.com/40165977): Remove once the Feed header properly supports
 // ContentSuggestions.
 - (BOOL)gestureRecognizer:(UIGestureRecognizer*)gestureRecognizer
        shouldReceiveTouch:(UITouch*)touch {
@@ -927,41 +931,16 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
 
 #pragma mark - Scrolling Animations
 
-// Updates the collection view's scroll view offset for the next frame of the
-// shiftTilesDownForOmniboxDefocus animation.
-- (void)shiftTilesDownAnimationDidFire:(CADisplayLink*)link {
-  // If this is the first frame of the animation, store the starting timestamp
-  // and do nothing.
-  if (self.shiftTileStartTime == -1) {
-    self.shiftTileStartTime = link.timestamp;
-    return;
-  }
-
-  CFTimeInterval timeElapsed = link.timestamp - self.shiftTileStartTime;
-  double percentComplete = timeElapsed / kShiftTilesDownAnimationDuration;
-  // Ensure that the percentage cannot be above 1.0.
-  if (percentComplete > 1.0) {
-    percentComplete = 1.0;
-  }
-
-  // Find how much the collection view should be scrolled up in the next frame.
-  CGFloat yOffset = (1.0 - percentComplete) * [self pinnedOffsetY] +
-                    percentComplete * MAX([self pinnedOffsetY] -
-                                              self.collectionShiftingOffset,
-                                          -[self heightAboveFeed]);
-  self.collectionView.contentOffset = CGPointMake(0, yOffset);
-
-  if (percentComplete == 1.0) {
-    [link invalidate];
-    self.collectionShiftingOffset = 0;
-    // Reset `shiftTileStartTime` to its sentinel value.
-    self.shiftTileStartTime = -1;
-  }
-}
-
 - (void)shiftTilesUpToFocusOmnibox {
   // Add gesture recognizer to collection view when the omnibox is focused.
   [self.view addGestureRecognizer:self.tapGestureRecognizer];
+
+  // Stop any existing focus/defocus animation.
+  if (self.animator.running) {
+    [self.animator stopAnimation:NO];
+    [self.animator finishAnimationAtPosition:UIViewAnimatingPositionStart];
+    self.animator = nil;
+  }
 
   if (self.collectionView.decelerating) {
     // Stop the scrolling if the scroll view is decelerating to prevent the
@@ -983,13 +962,6 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
         MAX(-[self heightAboveFeed],
             AlignValueToPixel([self.headerViewController pinnedOffsetY] -
                               [self adjustedOffset].y));
-  }
-
-  // Stop any existing focus/defocus animation.
-  if (self.animator.running) {
-    [self.animator stopAnimation:NO];
-    [self.animator finishAnimationAtPosition:UIViewAnimatingPositionStart];
-    self.animator = nil;
   }
 
   // If the fake omnibox is already at the final position, just focus it and
@@ -1085,8 +1057,7 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
 
 // Returns YES if scroll should be skipped when focusing the omnibox.
 - (BOOL)shouldSkipScrollToFocusOmnibox {
-  return self.scrolledToMinimumHeight ||
-         (IsIOSLargeFakeboxEnabled() && IsSplitToolbarMode(self));
+  return self.scrolledToMinimumHeight || IsSplitToolbarMode(self);
 }
 
 // Returns the collection view containing all NTP content.
@@ -1148,6 +1119,10 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
 
 // Shifts tiles down when defocusing the omnibox.
 - (void)shiftTilesDownForOmniboxDefocus {
+  if (self.shiftDownInProgress) {
+    return;
+  }
+  self.shiftDownInProgress = YES;
   if (IsSplitToolbarMode(self)) {
     [self.NTPContentDelegate onFakeboxBlur];
   }
@@ -1165,52 +1140,37 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
   if (self.collectionShiftingOffset == 0 || self.collectionView.dragging) {
     self.collectionShiftingOffset = 0;
     [self updateFakeOmniboxForScrollPosition];
+    self.shiftDownInProgress = NO;
     return;
   }
 
-  if (IsIOSLargeFakeboxEnabled()) {
-    // Skip the full CADisplayLink animation below, and use a simpler animation
-    // to scroll back into position.
-    CGFloat yOffset = MAX([self pinnedOffsetY] - self.collectionShiftingOffset,
-                          -[self heightAboveFeed]);
-    self.headerViewController.view.alpha = 0;
-    __weak __typeof(self) weakSelf = self;
-    self.inhibitScrollPositionUpdates = YES;
-    self.animator = [[UIViewPropertyAnimator alloc]
-        initWithDuration:kMaterialDuration6
-                   curve:UIViewAnimationCurveEaseInOut
-              animations:^{
-                weakSelf.headerViewController.view.alpha = 1;
-                weakSelf.collectionView.contentOffset = CGPoint(0, yOffset);
-                [weakSelf updateFakeOmniboxForScrollPosition];
-              }];
-    [self.animator addCompletion:^(UIViewAnimatingPosition finalPosition) {
-      weakSelf.inhibitScrollPositionUpdates = NO;
-      weakSelf.collectionShiftingOffset = 0;
-      weakSelf.headerViewController.view.alpha = 1;
-      weakSelf.collectionView.contentOffset = CGPoint(0, yOffset);
-      weakSelf.scrolledToMinimumHeight = NO;
-    }];
-    self.animator.interruptible = YES;
-    [self.animator startAnimation];
-    return;
-  }
-
-  self.scrolledToMinimumHeight = NO;
-
-  // CADisplayLink is used for this animation instead of the standard UIView
-  // animation because the standard animation did not properly convert the
-  // fakebox from its scrolled up mode to its scrolled down mode. Specifically,
-  // calling `UICollectionView reloadData` adjacent to the standard animation
-  // caused the fakebox's views to jump incorrectly. CADisplayLink avoids this
-  // problem because it allows `shiftTilesDownAnimationDidFire` to directly
-  // control each frame.
-  // TODO(crbug.com/1403613): Remove the use of this, listen to the UIScrollView
-  // delegate.
-  CADisplayLink* link = [CADisplayLink
-      displayLinkWithTarget:self
-                   selector:@selector(shiftTilesDownAnimationDidFire:)];
-  [link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
+  // Use a simple animation to scroll back into position.
+  CGFloat yOffset = MAX([self pinnedOffsetY] - self.collectionShiftingOffset,
+                        -[self heightAboveFeed]);
+  self.headerViewController.view.alpha = 1;
+  __weak __typeof(self) weakSelf = self;
+  self.inhibitScrollPositionUpdates = YES;
+  self.headerViewController.allowFontScaleAnimation = YES;
+  [self updateFakeOmniboxForScrollPosition];
+  [self.headerViewController layoutHeader];
+  self.animator = [[UIViewPropertyAnimator alloc]
+      initWithDuration:kMaterialDuration6
+                 curve:UIViewAnimationCurveEaseInOut
+            animations:^{
+              weakSelf.collectionView.contentOffset = CGPoint(0, yOffset);
+              [weakSelf.headerViewController layoutHeader];
+            }];
+  [self.animator addCompletion:^(UIViewAnimatingPosition finalPosition) {
+    weakSelf.inhibitScrollPositionUpdates = NO;
+    weakSelf.collectionShiftingOffset = 0;
+    weakSelf.headerViewController.view.alpha = 1;
+    weakSelf.collectionView.contentOffset = CGPoint(0, yOffset);
+    weakSelf.scrolledToMinimumHeight = NO;
+    weakSelf.headerViewController.allowFontScaleAnimation = NO;
+    weakSelf.shiftDownInProgress = NO;
+  }];
+  self.animator.interruptible = YES;
+  [self.animator startAnimation];
 }
 
 // Pins the fake omnibox to the top of the NTP.
@@ -1400,9 +1360,9 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
 
 // Checks whether the feed top section is visible and updates the
 // `NTPContentDelegate`.
-// TODO(crbug.com/1331010): This function currently checks the visibility of the
-// entire feed top section, but it should only check the visibility of the promo
-// within it.
+// TODO(crbug.com/40843602): This function currently checks the visibility of
+// the entire feed top section, but it should only check the visibility of the
+// promo within it.
 - (void)updateFeedSigninPromoIsVisible {
   if (!self.feedTopSectionViewController) {
     return;
@@ -1425,7 +1385,7 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
       signinPromoHasChangedVisibility:isFeedSigninPromoVisible];
 }
 
-// TODO(crbug.com/1403612): Remove once the Feed header properly supports
+// TODO(crbug.com/40251609): Remove once the Feed header properly supports
 // ContentSuggestions.
 - (void)handleSingleTapInView:(UITapGestureRecognizer*)recognizer {
   CGPoint location = [recognizer locationInView:[recognizer.view superview]];
@@ -1732,7 +1692,8 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
   CGFloat oldWidth = _moduleWidth.constant;
   CGFloat width;
   if (IsFeedContainmentEnabled()) {
-    width = MIN(self.view.frame.size.width * content_suggestions::kModuleWidth,
+    CGFloat widthMultiplier = (100 - HomeModuleMinimumPadding()) / 100;
+    width = MIN(self.view.frame.size.width * widthMultiplier,
                 kDiscoverFeedContentMaxWidth);
   } else {
     width =
@@ -1777,12 +1738,15 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
   // for Discover infinite feed.
   CGFloat minimumHeight = collectionViewHeight + headerHeight;
   if (!IsRegularXRegularSizeClass(self.collectionView)) {
-    CGFloat toolbarHeight = IsSplitToolbarMode(self.collectionView)
-                                ? [self stickyOmniboxHeight]
-                                : 0;
-    CGFloat additionalHeight =
-        toolbarHeight + self.collectionView.contentInset.bottom;
-    minimumHeight -= additionalHeight;
+    minimumHeight -= self.collectionView.contentInset.bottom;
+    if (IsSplitToolbarMode(self)) {
+      minimumHeight -= [self stickyOmniboxHeight];
+    } else {
+      // Add in half of the margin between the fakebox and the rest of the
+      // content suggestions, to ensure there is enough height to fully
+      // finish the fakebox to omnibox transition.
+      minimumHeight += content_suggestions::HeaderBottomPadding() / 2;
+    }
   }
 
   return minimumHeight;
@@ -1829,7 +1793,7 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
   return self.collectionView.contentSize.height > 0;
 }
 
-// TODO(crbug.com/1262536): Temporary fix to compensate for the view hierarchy
+// TODO(crbug.com/40799579): Temporary fix to compensate for the view hierarchy
 // sometimes breaking. Use DCHECKs to investigate what exactly is broken and
 // find a fix.
 - (void)verifyNTPViewHierarchy {
@@ -1884,7 +1848,7 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
 // Ensures that `subView` is a descendent of `parentView`. If not, logs a DCHECK
 // and adds the subview. Includes `relationshipID` for metrics recorder to log
 // which part of the view hierarchy was broken.
-// TODO(crbug.com/1262536): Remove this once bug is fixed.
+// TODO(crbug.com/40799579): Remove this once bug is fixed.
 - (void)ensureView:(UIView*)subView
            isSubviewOf:(UIView*)parentView
     withRelationshipID:(BrokenNTPHierarchyRelationship)relationship {
@@ -1945,7 +1909,7 @@ BASE_FEATURE(kMagicStackRemoveGradientView,
 - (UIView*)containerView {
   UIView* containerView;
   if (self.isFeedVisible) {
-    // TODO(crbug.com/1262536): Remove this when the bug is fixed.
+    // TODO(crbug.com/40799579): Remove this when the bug is fixed.
     if (IsNTPViewHierarchyRepairEnabled()) {
       [self verifyNTPViewHierarchy];
     }

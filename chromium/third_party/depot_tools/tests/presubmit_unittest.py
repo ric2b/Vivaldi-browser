@@ -966,7 +966,9 @@ def CheckChangeOnCommit(input_api, output_api):
     def testParseChange_Files(self):
         presubmit._parse_files.return_value = [('M', 'random_file.txt')]
         scm.determine_scm.return_value = None
-        options = mock.Mock(all_files=False, source_controlled_only=False)
+        options = mock.Mock(all_files=False,
+                            generate_diff=False,
+                            source_controlled_only=False)
 
         change = presubmit._parse_change(None, options)
         self.assertEqual(presubmit.Change.return_value, change)
@@ -1009,11 +1011,26 @@ def CheckChangeOnCommit(input_api, output_api):
         parser.error.assert_called_once_with(
             '<diff_file> cannot be specified when --all-files is set.')
 
+    def testParseChange_DiffAndGenerateDiff(self):
+        parser = mock.Mock()
+        parser.error.side_effect = [SystemExit]
+        options = mock.Mock(all_files=False,
+                            files=[],
+                            generate_diff=True,
+                            diff_file='foo.diff')
+
+        with self.assertRaises(SystemExit):
+            presubmit._parse_change(parser, options)
+        parser.error.assert_called_once_with(
+            '<diff_file> cannot be specified when <generate_diff> is set.')
+
     @mock.patch('presubmit_support.GitChange', mock.Mock())
     def testParseChange_FilesAndGit(self):
         scm.determine_scm.return_value = 'git'
         presubmit._parse_files.return_value = [('M', 'random_file.txt')]
-        options = mock.Mock(all_files=False, source_controlled_only=False)
+        options = mock.Mock(all_files=False,
+                            generate_diff=False,
+                            source_controlled_only=False)
 
         change = presubmit._parse_change(None, options)
         self.assertEqual(presubmit.GitChange.return_value, change)
@@ -1071,7 +1088,10 @@ def CheckChangeOnCommit(input_api, output_api):
 
     def testParseChange_EmptyDiffFile(self):
         gclient_utils.FileRead.return_value = ''
-        options = mock.Mock(all_files=False, files=[], diff_file='foo.diff')
+        options = mock.Mock(all_files=False,
+                            files=[],
+                            generate_diff=False,
+                            diff_file='foo.diff')
         with self.assertRaises(presubmit.PresubmitFailure):
             presubmit._parse_change(None, options)
 
@@ -1100,7 +1120,10 @@ index d7ba659f..b7957f3 100644
 -baz
 +bat"""
         gclient_utils.FileRead.return_value = diff
-        options = mock.Mock(all_files=False, files=[], diff_file='foo.diff')
+        options = mock.Mock(all_files=False,
+                            files=[],
+                            generate_diff=False,
+                            diff_file='foo.diff')
         change = presubmit._parse_change(None, options)
         self.assertEqual(presubmit.ProvidedDiffChange.return_value, change)
         presubmit.ProvidedDiffChange.assert_called_once_with(
@@ -1887,7 +1910,8 @@ class ChangeUnittest(PresubmitTestsBase):
 
 class CannedChecksUnittest(PresubmitTestsBase):
     """Tests presubmit_canned_checks.py."""
-    def MockInputApi(self, change, committing):
+
+    def MockInputApi(self, change, committing, gerrit=None):
         # pylint: disable=no-self-use
         input_api = mock.MagicMock(presubmit.InputApi)
         input_api.thread_pool = presubmit.ThreadPool()
@@ -1898,7 +1922,7 @@ class CannedChecksUnittest(PresubmitTestsBase):
         input_api.os_walk = mock.Mock()
         input_api.os_path = os.path
         input_api.re = presubmit.re
-        input_api.gerrit = mock.MagicMock(presubmit.GerritAccessor)
+        input_api.gerrit = gerrit
         input_api.urllib_request = mock.MagicMock(presubmit.urllib_request)
         input_api.urllib_error = mock.MagicMock(presubmit.urllib_error)
         input_api.unittest = unittest
@@ -2338,6 +2362,42 @@ class CannedChecksUnittest(PresubmitTestsBase):
                                                  cwd=self.fake_root_dir,
                                                  stderr=subprocess.PIPE,
                                                  shell=input_api.is_windows)
+
+    @mock.patch('git_cl.Changelist')
+    @mock.patch('auth.Authenticator')
+    def testCannedCheckChangedLUCIConfigsGerritInfo(self, mockGetAuth, mockCl):
+        affected_file = mock.MagicMock(presubmit.ProvidedDiffAffectedFile)
+        affected_file.LocalPath.return_value = 'foo.cfg'
+
+        mockGetAuth().get_id_token().token = 123
+
+        host = 'host.googlesource.com'
+        project = 'project/deadbeef'
+        branch = 'branch'
+        http_resp = b")]}'\n" + json.dumps({
+            'configSets':
+            [{
+                'name': 'project/deadbeef',
+                'url': f'https://{host}/{project}/+/{branch}/generated'
+                # no affected file in generated folder
+            }]
+        }).encode("utf-8")
+
+        gerrit_mock = mock.MagicMock(presubmit.GerritAccessor)
+        gerrit_mock.host = host
+        gerrit_mock.project = project
+        gerrit_mock.branch = branch
+
+        change1 = presubmit.Change('foo', 'foo1', self.fake_root_dir, None, 0,
+                                   0, None)
+        input_api = self.MockInputApi(change1, False, gerrit_mock)
+        input_api.urllib_request.urlopen().read.return_value = http_resp
+
+        input_api.AffectedFiles = lambda **_: (affected_file, )
+
+        results = presubmit_canned_checks.CheckChangedLUCIConfigs(
+            input_api, presubmit.OutputApi)
+        self.assertEqual(len(results), 0)
 
     def testCannedCheckChangeHasNoTabs(self):
         self.ContentTest(presubmit_canned_checks.CheckChangeHasNoTabs,
@@ -2943,7 +3003,9 @@ the current line as well!
 
     def GetInputApiWithOWNERS(self, owners_content):
         input_api = self.GetInputApiWithFiles({'OWNERS': ('M', owners_content)})
-        input_api.gerrit.IsCodeOwnersEnabledOnRepo = lambda: True
+        gerrit_mock = mock.MagicMock(presubmit.GerritAccessor)
+        gerrit_mock.IsCodeOwnersEnabledOnRepo = lambda: True
+        input_api.gerrit = gerrit_mock
 
         return input_api
 

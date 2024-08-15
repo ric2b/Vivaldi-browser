@@ -69,9 +69,6 @@ extern const base::FeatureParam<TrustTokenOriginTrialSpec>
     kTrustTokenOperationsRequiringOriginTrial;
 COMPONENT_EXPORT(NETWORK_CPP)
 
-COMPONENT_EXPORT(NETWORK_CPP)
-BASE_DECLARE_FEATURE(kWebSocketReassembleShortMessages);
-
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kAcceptCHFrame);
 
 enum class DataPipeAllocationSize {
@@ -84,10 +81,10 @@ extern uint32_t GetDataPipeDefaultAllocationSize(
     DataPipeAllocationSize = DataPipeAllocationSize::kDefaultSizeOnly);
 
 COMPONENT_EXPORT(NETWORK_CPP)
-extern uint32_t GetNetAdapterMaxBufSize();
+extern size_t GetNetAdapterMaxBufSize();
 
 COMPONENT_EXPORT(NETWORK_CPP)
-extern uint32_t GetLoaderChunkSize();
+extern size_t GetLoaderChunkSize();
 
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kCorsNonWildcardRequestHeadersSupport);
@@ -95,8 +92,6 @@ BASE_DECLARE_FEATURE(kCorsNonWildcardRequestHeadersSupport);
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kNetworkServiceMemoryCache);
 
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kOmitCorsClientCert);
-
-COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kCacheTransparency);
 
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kPervasivePayloadsList);
 
@@ -162,12 +157,14 @@ BASE_DECLARE_FEATURE(kCompressionDictionaryTransport);
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kCompressionDictionaryTransportOverHttp1);
 COMPONENT_EXPORT(NETWORK_CPP)
+BASE_DECLARE_FEATURE(kCompressionDictionaryTransportOverHttp2);
+COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kCompressionDictionaryTransportRequireKnownRootCert);
 
 // Enables visibility aware network service resource scheduler. When enabled,
 // request may be prioritized or de-prioritized based on the visibility of
 // requestors.
-// TODO(https://crbug.com/1457817): Remove this feature.
+// TODO(crbug.com/40066382): Remove this feature.
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kVisibilityAwareResourceScheduler);
 
@@ -192,6 +189,11 @@ COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::FeatureParam<bool> kSkipTpcdMitigationsForAdsTrial;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::FeatureParam<bool> kSkipTpcdMitigationsForAdsTopLevelTrial;
+
+COMPONENT_EXPORT(NETWORK_CPP)
+BASE_DECLARE_FEATURE(kAvoidResourceRequestCopies);
+
+COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kDocumentIsolationPolicy);
 
 }  // namespace features
 }  // namespace network

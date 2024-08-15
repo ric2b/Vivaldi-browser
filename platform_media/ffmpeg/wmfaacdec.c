@@ -29,6 +29,7 @@
 #include "third_party/ffmpeg/libavcodec/mpegaudiodecheader.h"
 #include "third_party/ffmpeg/libavutil/avassert.h"
 #include "third_party/ffmpeg/libavutil/log.h"
+#include "third_party/ffmpeg/libavutil/mem.h"
 #include "third_party/ffmpeg/libavutil/opt.h"
 
 #include "platform_media/ffmpeg/ffviv_audio_kit.h"

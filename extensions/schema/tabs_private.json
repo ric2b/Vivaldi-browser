@@ -218,6 +218,24 @@
             "description": "True is current element is not null. Currently used to see if previous escape closed a menu that made our current element disappear."
           }
         }
+      },
+      {
+        "id": "TabPerformanceData",
+        "type": "object",
+        "description" :  "Memory information about a tab.",
+        "properties": {
+          "tabId": {
+            "type": "integer"
+          },
+          "memoryUsage": {
+            "type": "integer",
+            "description": "Memory usage of tab in bytes."
+          },
+          "discarded": {
+            "type": "boolean",
+            "description": "If true |memoryUsage| will be saved memory."
+          }
+        }
       }
     ],
     "functions": [
@@ -492,6 +510,47 @@
               "name": "langCode",
               "type": "string",
               "description": "Contains the language code for the given text, or empty string if language could not be determined."
+            }
+          ]
+        }
+      },
+      {
+        "name": "loadViaLifeCycleUnit",
+        "type": "function",
+        "description": "Calls TabLifecycleUnitSource::TabLifecycleUnit::Load if there is a TLU associated with the webcontents for the tab.",
+        "parameters": [
+          {
+            "name": "tabId",
+            "type": "integer",
+            "minimum": 0
+          }
+        ]
+      },
+      {
+        "name": "getTabPerformanceData",
+        "type": "function",
+        "description": "Look up performance data about tabs. We might migrate to TabRendererData instead.",
+        "parameters": [
+          {
+            "name": "tabIds",
+            "type": "array",
+            "items": {
+              "name": "tabId",
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Ids for tabs we want info about."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "performanceData",
+              "type": "array",
+              "items": {
+                "$ref": "TabPerformanceData"
+              }
             }
           ]
         }
@@ -962,8 +1021,18 @@
             "description": "The translation state has changed. For eg. revert, it will be false after revert has been invoked."
           }
         ]
+      },
+      {
+        "name": "onTabResourceMetricsRefreshed",
+        "type": "function",
+        "description": "Fired when resource metrics are updated.",
+        "parameters": [
+          {
+            "name": "info",
+            "$ref": "TabPerformanceData"
+          }
+        ]
       }
-
     ]
   }
 ]

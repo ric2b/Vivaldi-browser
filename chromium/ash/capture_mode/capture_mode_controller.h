@@ -316,6 +316,13 @@ class ASH_EXPORT CaptureModeController
   // screen recording and whether camera or audio are being recorded.
   void MaybeUpdateVcPanel();
 
+  // Checks if there are any content currently on the screen that are restricted
+  // by DLP. `callback` will be triggered by the DLP manager with `proceed` set
+  // to true if screen capture is allowed to continue, or set to false if it
+  // should not continue.
+  void CheckScreenCaptureDlpRestrictions(
+      OnCaptureModeDlpRestrictionChecked callback);
+
   // recording::mojom::RecordingServiceClient:
   void OnRecordingEnded(recording::mojom::RecordingStatus status,
                         const gfx::ImageSkia& thumbnail) override;
@@ -694,6 +701,8 @@ class ASH_EXPORT CaptureModeController
   OnFileDeletedCallback on_file_deleted_callback_for_test_;
 
   base::OnceClosure on_countdown_finished_callback_for_test_;
+
+  base::OnceClosure on_video_recording_started_callback_for_test_;
 
   // Timers used to schedule recording of the number of screenshots taken.
   base::RepeatingTimer num_screenshots_taken_in_last_day_scheduler_;

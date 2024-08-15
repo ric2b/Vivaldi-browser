@@ -4,18 +4,21 @@
 
 #include "ash/wm/toplevel_window_event_handler.h"
 
-#include "ash/constants/app_types.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
 #include "ash/wm/multi_display/multi_display_metrics_controller.h"
 #include "ash/wm/resize_shadow.h"
 #include "ash/wm/resize_shadow_controller.h"
+#include "ash/wm/snap_group/snap_group.h"
+#include "ash/wm/snap_group/snap_group_controller.h"
 #include "ash/wm/window_resizer.h"
 #include "ash/wm/window_state_observer.h"
 #include "ash/wm/window_util.h"
 #include "base/functional/bind.h"
 #include "base/run_loop.h"
+#include "chromeos/ui/base/app_types.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
@@ -846,9 +849,9 @@ aura::Window* ToplevelWindowEventHandler::GetTargetForClientAreaGesture(
     return nullptr;
   }
 
-  auto app_type = toplevel->GetProperty(aura::client::kAppType);
-  if (app_type == static_cast<int>(AppType::BROWSER) ||
-      app_type == static_cast<int>(AppType::LACROS)) {
+  auto app_type = toplevel->GetProperty(chromeos::kAppTypeKey);
+  if (app_type == chromeos::AppType::BROWSER ||
+      app_type == chromeos::AppType::LACROS) {
     return nullptr;
   }
 
@@ -1008,6 +1011,15 @@ void ToplevelWindowEventHandler::HandleDrag(aura::Window* target,
 
   if (!window_resizer_)
     return;
+
+  // Hide the divider when dragging a window out from a snap group.
+  if (SnapGroupController* snap_group_controller = SnapGroupController::Get()) {
+    if (SnapGroup* snap_group =
+            snap_group_controller->GetSnapGroupForGivenWindow(target)) {
+      snap_group->OnLocatedEvent(event);
+    }
+  }
+
   gfx::PointF location_in_parent = event->location_f();
   aura::Window::ConvertPointToTarget(
       target, window_resizer_->resizer()->GetTarget()->parent(),

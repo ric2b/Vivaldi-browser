@@ -198,6 +198,7 @@ export interface Selection {
  * Represents the entries displayed in the file list/grid.
  */
 export interface DirectoryContent {
+  status: PropStatus;
   keys: FileKey[];
 }
 
@@ -395,7 +396,7 @@ export interface AndroidApp {
  *
  * Its content comes from the File Index.
  */
-export interface MaterializeView {
+export interface MaterializedView {
   id: string;
   key: FileKey;
   label: string;
@@ -420,5 +421,5 @@ export interface State {
   androidApps: Record<string, AndroidApp>;
   bulkPinning?: chrome.fileManagerPrivate.BulkPinProgress;
   preferences?: chrome.fileManagerPrivate.Preferences;
-  materializedViews: MaterializeView[];
+  materializedViews: MaterializedView[];
 }

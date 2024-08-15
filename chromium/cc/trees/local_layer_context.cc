@@ -54,7 +54,7 @@ void LocalLayerContext::SetVisible(bool visible) {
 }
 
 void LocalLayerContext::Commit(const CommitState& state) {
-  // TODO(https://crbug.com/1431762): Actually update the tree contents.
+  // TODO(crbug.com/40902503): Actually update the tree contents.
   host_->SetViewportRectAndScale(state.device_viewport_rect,
                                  state.device_scale_factor,
                                  state.local_surface_id_from_parent);
@@ -104,8 +104,6 @@ void LocalLayerContext::DidCommit(int source_frame_number,
                                   base::TimeTicks commit_finish_time) {}
 
 void LocalLayerContext::DidCommitAndDrawFrame(int source_frame_number) {}
-
-void LocalLayerContext::DidReceiveCompositorFrameAck() {}
 
 void LocalLayerContext::DidCompletePageScaleAnimation(int source_frame_number) {
 }

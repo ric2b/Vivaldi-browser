@@ -28,6 +28,13 @@ std::optional<adblock_filter::RuleGroup> FromVivaldiContentBlockingRuleGroup(
   }
 }
 
+adblock_filter::RuleSourceSettings FromVivaldiContentBlockingRuleSourceSettings(
+    const vivaldi::content_blocking::RuleSourceSettings& settings) {
+  return adblock_filter::RuleSourceSettings{
+      .allow_abp_snippets = settings.allow_abp_snippets,
+      .naked_hostname_is_pure_host = settings.naked_hostname_is_pure_host};
+}
+
 vivaldi::content_blocking::RuleGroup ToVivaldiContentBlockingRuleGroup(
     adblock_filter::RuleGroup rule_group) {
   switch (rule_group) {
@@ -83,17 +90,20 @@ vivaldi::content_blocking::FetchResult ToVivaldiContentBlockingFetchResult(
 }
 
 vivaldi::content_blocking::RuleSource
-ToVivaldiContentBlockingRuleSourceFromBase(
-    const adblock_filter::RuleSourceBase& rule_source) {
+ToVivaldiContentBlockingRuleSourceFromCore(
+    const adblock_filter::RuleSourceCore& core) {
   vivaldi::content_blocking::RuleSource result;
-  if (rule_source.is_from_url)
-    result.source_url = rule_source.source_url.spec();
+  if (core.is_from_url())
+    result.source_url = core.source_url().spec();
   else
-    result.source_file = rule_source.source_file.AsUTF8Unsafe();
-  result.is_from_url = rule_source.is_from_url;
-  result.group = ToVivaldiContentBlockingRuleGroup(rule_source.group);
-  result.id = rule_source.id;
+    result.source_file = core.source_file().AsUTF8Unsafe();
+  result.is_from_url = core.is_from_url();
+  result.id = core.id();
   result.loaded = false;
+
+  result.settings.allow_abp_snippets = core.settings().allow_abp_snippets;
+  result.settings.naked_hostname_is_pure_host =
+      core.settings().naked_hostname_is_pure_host;
 
   result.removable = true;
   result.rules_list_checksum = "";
@@ -104,8 +114,7 @@ ToVivaldiContentBlockingRuleSourceFromBase(
   result.unsafe_adblock_metadata.version = 0;
   result.last_update = 0;
   result.next_fetch = 0;
-  result.last_fetch_result =
-      vivaldi::content_blocking::FetchResult::kUnknown;
+  result.last_fetch_result = vivaldi::content_blocking::FetchResult::kUnknown;
   result.rules_info.valid_rules = 0;
   result.rules_info.unsupported_rules = 0;
   result.rules_info.invalid_rules = 0;
@@ -114,7 +123,7 @@ ToVivaldiContentBlockingRuleSourceFromBase(
 }
 
 void UpdateVivaldiContentBlockingRuleSourceWithLoadedSource(
-    const adblock_filter::RuleSource& rule_source,
+    const adblock_filter::ActiveRuleSource& rule_source,
     vivaldi::content_blocking::RuleSource* result) {
   result->rules_list_checksum = rule_source.rules_list_checksum;
   result->unsafe_adblock_metadata.homepage =
@@ -143,16 +152,16 @@ void UpdateVivaldiContentBlockingRuleSourceWithLoadedSource(
 vivaldi::content_blocking::RuleSource ToVivaldiContentBlockingRuleSource(
     const adblock_filter::KnownRuleSource& known_source) {
   vivaldi::content_blocking::RuleSource result =
-      ToVivaldiContentBlockingRuleSourceFromBase(known_source);
+      ToVivaldiContentBlockingRuleSourceFromCore(known_source.core);
   result.removable = known_source.removable;
 
   return result;
 }
 
 vivaldi::content_blocking::RuleSource ToVivaldiContentBlockingRuleSource(
-    const adblock_filter::RuleSource& rule_source) {
+    const adblock_filter::ActiveRuleSource& rule_source) {
   vivaldi::content_blocking::RuleSource result =
-      ToVivaldiContentBlockingRuleSourceFromBase(rule_source);
+      ToVivaldiContentBlockingRuleSourceFromCore(rule_source.core);
   UpdateVivaldiContentBlockingRuleSourceWithLoadedSource(rule_source, &result);
 
   return result;
@@ -201,11 +210,13 @@ void ContentBlockingEventRouter::OnRuleServiceStateLoaded(
 }
 
 void ContentBlockingEventRouter::OnKnownSourceAdded(
+    adblock_filter::RuleGroup group,
     const adblock_filter::KnownRuleSource& rule_source) {
   ::vivaldi::BroadcastEvent(
       vivaldi::content_blocking::OnRuleSourceAdded::kEventName,
       vivaldi::content_blocking::OnRuleSourceAdded::Create(
-          ToVivaldiContentBlockingRuleSource(rule_source)),
+          ToVivaldiContentBlockingRuleSource(rule_source),
+          ToVivaldiContentBlockingRuleGroup(group)),
       browser_context_);
 }
 
@@ -238,12 +249,14 @@ void ContentBlockingEventRouter::OnKnownSourceDisabled(
       browser_context_);
 }
 
-void ContentBlockingEventRouter::OnRulesSourceUpdated(
-    const adblock_filter::RuleSource& rule_source) {
+void ContentBlockingEventRouter::OnRuleSourceUpdated(
+    adblock_filter::RuleGroup group,
+    const adblock_filter::ActiveRuleSource& rule_source) {
   ::vivaldi::BroadcastEvent(
-      vivaldi::content_blocking::OnRulesSourceUpdated::kEventName,
-      vivaldi::content_blocking::OnRulesSourceUpdated::Create(
-          ToVivaldiContentBlockingRuleSource(rule_source)),
+      vivaldi::content_blocking::OnRuleSourceUpdated::kEventName,
+      vivaldi::content_blocking::OnRuleSourceUpdated::Create(
+          ToVivaldiContentBlockingRuleSource(rule_source),
+          ToVivaldiContentBlockingRuleGroup(group)),
       browser_context_);
 }
 
@@ -397,14 +410,26 @@ ContentBlockingAddKnownSourceFromURLFunction::RunWithService(
   namespace Results = vivaldi::content_blocking::AddKnownSourceFromURL::Results;
   std::optional<Params> params(Params::Create(args()));
 
-  auto source_id = rules_service->GetKnownSourcesHandler()->AddSourceFromUrl(
-      FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
-      GURL(params->url));
+  std::optional<adblock_filter::RuleSourceCore> source_core =
+      adblock_filter::RuleSourceCore::FromUrl(GURL(params->url));
 
-  if (!source_id)
+  if (!source_core) {
+    return Error("Invalid url");
+  }
+
+  if (params->source_settings) {
+    source_core->set_settings(
+        FromVivaldiContentBlockingRuleSourceSettings(*params->source_settings));
+  }
+
+  int32_t source_id = source_core->id();
+
+  if (!rules_service->GetKnownSourcesHandler()->AddSource(
+          FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
+          std::move(*source_core)))
     return Error("Failed to add rule source");
 
-  return ArgumentList(Results::Create(source_id.value()));
+  return ArgumentList(Results::Create(source_id));
 }
 
 ExtensionFunction::ResponseValue
@@ -415,14 +440,43 @@ ContentBlockingAddKnownSourceFromFileFunction::RunWithService(
       vivaldi::content_blocking::AddKnownSourceFromFile::Results;
   std::optional<Params> params(Params::Create(args()));
 
-  auto source_id = rules_service->GetKnownSourcesHandler()->AddSourceFromFile(
-      FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
-      base::FilePath::FromUTF8Unsafe(params->file));
+  std::optional<adblock_filter::RuleSourceCore> source_core =
+      adblock_filter::RuleSourceCore::FromFile(
+          base::FilePath::FromUTF8Unsafe(params->file));
 
-  if (!source_id)
+  if (!source_core) {
+    return Error("Invalid file path");
+  }
+
+  if (params->source_settings) {
+    source_core->set_settings(
+        FromVivaldiContentBlockingRuleSourceSettings(*params->source_settings));
+  }
+
+  int32_t source_id = source_core->id();
+
+  if (!rules_service->GetKnownSourcesHandler()->AddSource(
+          FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
+          std::move(*source_core))) {
     return Error("Failed to add rule source");
+  }
 
-  return ArgumentList(Results::Create(source_id.value()));
+  return ArgumentList(Results::Create(source_id));
+}
+
+ExtensionFunction::ResponseValue
+ContentBlockingSetKnownSourceSettingsFunction::RunWithService(
+    adblock_filter::RuleService* rules_service) {
+  using vivaldi::content_blocking::SetKnownSourceSettings::Params;
+  namespace Results =
+      vivaldi::content_blocking::SetKnownSourceSettings::Results;
+  std::optional<Params> params(Params::Create(args()));
+
+  bool success = rules_service->GetKnownSourcesHandler()->SetSourceSettings(
+      FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
+      params->source_id,
+      FromVivaldiContentBlockingRuleSourceSettings(params->source_settings));
+  return ArgumentList(Results::Create(success));
 }
 
 ExtensionFunction::ResponseValue
@@ -530,10 +584,10 @@ ContentBlockingGetRuleSourcesFunction::RunWithService(
       rules_service->GetKnownSourcesHandler()->GetSources(group);
 
   std::vector<vivaldi::content_blocking::RuleSource> result;
-  for (const auto& known_source : known_sources) {
-    auto rule_source = ToVivaldiContentBlockingRuleSource(known_source.second);
-    auto loaded_source = rules_service->GetRuleManager()->GetRuleSource(
-        group, known_source.first);
+  for (const auto& [id, known_source] : known_sources) {
+    auto rule_source = ToVivaldiContentBlockingRuleSource(known_source);
+    auto loaded_source =
+        rules_service->GetRuleManager()->GetRuleSource(group, id);
     if (loaded_source)
       UpdateVivaldiContentBlockingRuleSourceWithLoadedSource(
           loaded_source.value(), &rule_source);
@@ -756,8 +810,7 @@ ContentBlockingGetBlockedCountersFunction::RunWithService(
       reporter->GetBlockedForOrigin()[static_cast<size_t>(
           adblock_filter::RuleGroup::kAdBlockingRules)]);
   return ArgumentList(Results::Create(
-      reporter->GetReportingStart().InMillisecondsFSinceUnixEpoch(),
-      counters));
+      reporter->GetReportingStart().InMillisecondsFSinceUnixEpoch(), counters));
 }
 
 ExtensionFunction::ResponseValue

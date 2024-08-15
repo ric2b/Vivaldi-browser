@@ -14,15 +14,18 @@
 #include "base/functional/callback.h"
 #include "build/build_config.h"
 #include "components/viz/common/vertical_scroll_direction.h"
+#include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/common/content_export.h"
 #include "content/public/common/drop_data.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/page/drag_operation.h"
+#include "third_party/blink/public/mojom/device_posture/device_posture_provider.mojom.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom-shared.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/gfx/mojom/delegated_ink_point_renderer.mojom.h"
 #include "ui/gfx/native_widget_types.h"
 
 namespace blink {
@@ -37,12 +40,15 @@ class Rect;
 class Size;
 }  // namespace gfx
 
+namespace ui {
+class Compositor;
+}  // namespace ui
+
 namespace content {
 
 class BrowserAccessibilityManager;
 class RenderFrameProxyHost;
 class RenderWidgetHostImpl;
-class DevicePostureProviderImpl;
 class RenderWidgetHostInputEventRouter;
 class RenderViewHostDelegateView;
 class TextInputManager;
@@ -166,6 +172,12 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
 
   virtual RenderWidgetHostInputEventRouter* GetInputEventRouter();
 
+  virtual void GetRenderWidgetHostAtPointAsynchronously(
+      RenderWidgetHostViewBase* root_view,
+      const gfx::PointF& point,
+      base::OnceCallback<void(base::WeakPtr<RenderWidgetHostViewBase>,
+                              std::optional<gfx::PointF>)> callback) {}
+
   // Get the focused RenderWidgetHost associated with |receiving_widget|. A
   // RenderWidgetHostView, upon receiving a keyboard event, will pass its
   // RenderWidgetHost to this function to determine who should ultimately
@@ -217,7 +229,7 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   virtual ui::WindowShowState GetWindowShowState();
 
   // Returns the device posture provider tracking the device posture.
-  virtual DevicePostureProviderImpl* GetDevicePostureProvider();
+  virtual blink::mojom::DevicePostureProvider* GetDevicePostureProvider();
 
   // Returns whether the window can be resized or not. Defaults to true for
   // desktopOSs and false for mobileOSs.
@@ -281,6 +293,13 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // the WebContents.
   virtual VisibleTimeRequestTrigger& GetVisibleTimeRequestTrigger() = 0;
 
+  // Returns the delegated ink point renderer associated with this WebContents
+  // for dispatching delegated ink points to viz. This also attempts to setup
+  // mojo connection using |compositor|, if the DelegatedInkPointRenderer
+  // interface is not bound.
+  virtual gfx::mojom::DelegatedInkPointRenderer* GetDelegatedInkRenderer(
+      ui::Compositor* compositor);
+
   // Inner WebContents Helpers -------------------------------------------------
   //
   // These functions are helpers in managing a hierarchy of WebContents
@@ -338,6 +357,14 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // Returns false if it's a private window, and text entered into this page
   // shouldn't be used to improve typing suggestions for the user.
   virtual bool ShouldDoLearning();
+
+  // Zoom level is normally inherited from the parent. The delegate can override
+  // this behavior by returning a value.
+  // This is used in <webview>, which permits zoom level to be set
+  // programmatically by script:
+  // https://developer.chrome.com/docs/apps/reference/webviewTag#method-setZoom
+  virtual std::optional<double> AdjustedChildZoom(
+      const RenderWidgetHostViewChildFrame* render_widget);
 
  protected:
   virtual ~RenderWidgetHostDelegate() {}

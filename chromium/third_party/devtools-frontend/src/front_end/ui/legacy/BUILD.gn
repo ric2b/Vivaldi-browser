@@ -142,12 +142,13 @@ devtools_module("ui") {
     "../../models/text_utils:bundle",
     "../../ui/legacy/theme_support:bundle",
     "../components/adorners:bundle",
+    "../components/buttons:bundle",
+    "../components/buttons:bundle",
     "../components/helpers:bundle",
     "../components/icon_button:bundle",
     "../components/settings:bundle",
     "../lit-html:bundle",
     "../visual_logging:bundle",
-    "utils:bundle",
   ]
 }
 
@@ -191,6 +192,7 @@ ts_library("unittests") {
   testonly = true
 
   sources = [
+    "ARIAUtils.test.ts",
     "ActionRegistration.test.ts",
     "Context.test.ts",
     "ContextMenu.test.ts",
@@ -208,6 +210,7 @@ ts_library("unittests") {
     "UIUtils.test.ts",
     "View.test.ts",
     "ViewRegistration.test.ts",
+    "Widget.test.ts",
     "XLink.test.ts",
   ]
 

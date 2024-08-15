@@ -6,8 +6,10 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
 #include <algorithm>
 #include <memory>
+#include <string_view>
 #include <utility>
 
 #include "base/feature_list.h"
@@ -699,7 +701,7 @@ void UmaPageLoadMetricsObserver::OnLoadedResource(
   if (timing_info.receive_headers_end.is_null())
     return;
 
-  base::StringPiece destination =
+  std::string_view destination =
       network::RequestDestinationToStringForHistogram(
           extra_request_complete_info.request_destination);
 
@@ -793,7 +795,7 @@ void UmaPageLoadMetricsObserver::RecordNavigationTimingHistograms() {
       timing.navigation_commit_sent_time.is_null()) {
     return;
   }
-  // TODO(https://crbug.com/1076710): Change these early-returns to DCHECKs
+  // TODO(crbug.com/40688345): Change these early-returns to DCHECKs
   // after the issue 1076710 is fixed.
   if (navigation_start_time > timing.first_request_start_time ||
       timing.first_request_start_time > timing.first_response_start_time ||

@@ -54,11 +54,12 @@ void Manager::OnStaticContentUpdated(
   // Now read in the rest of the block.
   size_t pickle_size =
       sizeof(base::Pickle::Header) + pickle_header->payload_size;
-  auto memory = static_content_mapping_.GetMemoryAsSpan<char>(pickle_size);
+  auto memory = static_content_mapping_.GetMemoryAsSpan<uint8_t>(pickle_size);
+
   if (!memory.size())
     return;
 
-  base::Pickle pickle(memory.data(), pickle_size);
+  base::Pickle pickle = base::Pickle::WithUnownedBuffer(memory);
   base::PickleIterator iter(pickle);
 
   int provider_count;
@@ -90,10 +91,12 @@ void Manager::OnStaticContentUpdated(
         case mojom::ItemType::kJS: {
           int javascript_world_id;
           CHECK(iter.ReadInt(&javascript_world_id));
-          CHECK_GE(javascript_world_id,
-                   ISOLATED_WORLD_ID_VIVALDI_CONTENT_INJECTION);
-          CHECK_LT(javascript_world_id,
-                   ISOLATED_WORLD_ID_VIVALDI_CONTENT_INJECTION_END);
+          if (javascript_world_id != content::ISOLATED_WORLD_ID_GLOBAL) {
+            CHECK_GE(javascript_world_id,
+                     ISOLATED_WORLD_ID_VIVALDI_CONTENT_INJECTION);
+            CHECK_LT(javascript_world_id,
+                     ISOLATED_WORLD_ID_VIVALDI_CONTENT_INJECTION_END);
+          }
           item.metadata.javascript_world_id = javascript_world_id;
           break;
         }

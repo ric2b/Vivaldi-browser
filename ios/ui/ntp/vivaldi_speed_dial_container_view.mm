@@ -4,13 +4,16 @@
 
 #import "UIKit/UIKit.h"
 
+#import "base/ios/ios_util.h"
 #import "ios/chrome/browser/favicon/model/favicon_loader.h"
+#import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/common/ui/favicon/favicon_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/ui/custom_views/custom_views_swift.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/ntp/cells/vivaldi_speed_dial_folder_list_cell.h"
@@ -50,11 +53,15 @@ const CGFloat commonPadding = 20;
                                             UICollectionViewDragDelegate,
                                             UICollectionViewDropDelegate,
                                      VivaldiSpeedDialAddGroupViewDelegate>
+// Action factory for speed dials
+@property (nonatomic,strong) BrowserActionFactory* actionFactory;
 // FaviconLoader is a keyed service that uses LargeIconService to retrieve
 // favicon images.
 @property(nonatomic,assign) FaviconLoader* faviconLoader;
 // Collection view that holds the speed dial folder's children
 @property(weak,nonatomic) UICollectionView *collectionView;
+// Empty message view when there's no items available to show
+@property(weak,nonatomic) VivaldiEmptyMessageView *emptyMessageView;
 // Add group view visible when no items present or on last slide.
 @property(weak,nonatomic) VivaldiSpeedDialAddGroupView *addGroupView;
 // Collection view layout for selected column and layout rendering
@@ -67,12 +74,18 @@ const CGFloat commonPadding = 20;
 @property(nonatomic,assign) VivaldiStartPageLayoutStyle selectedLayout;
 // Currently selected maximum columns
 @property(nonatomic,assign) VivaldiStartPageLayoutColumn selectedColumn;
+// Boolean to keep track if container is holding frequently visited items
+@property(nonatomic,assign) BOOL showingFrequentlyVisited;
+// Bool to keep track if top sites result is ready. The results can be empty,
+// this only checks if we got a response from backend for the query.
+@property(nonatomic,assign) BOOL isTopSitesResultsAvailable;
 @end
 
 @implementation VivaldiSpeedDialContainerView
 
 @synthesize faviconLoader = _faviconLoader;
 @synthesize collectionView = _collectionView;
+@synthesize emptyMessageView = _emptyMessageView;
 @synthesize parent = _parent;
 @synthesize speedDialItems = _speedDialItems;
 
@@ -93,7 +106,7 @@ const CGFloat commonPadding = 20;
 - (void)setUpUI {
   VivaldiSpeedDialViewContainerViewFlowLayout *layout =
       [VivaldiSpeedDialViewContainerViewFlowLayout new];
-  layout.isPreview = NO;
+  layout.layoutState = VivaldiStartPageLayoutStateNormal;
   self.layout = layout;
   UICollectionView* collectionView =
     [[UICollectionView alloc] initWithFrame:CGRectZero
@@ -145,17 +158,35 @@ const CGFloat commonPadding = 20;
                                  constant:-commonPadding]
   ]];
   addGroupView.hidden = YES;
+
+  // Empty message view
+  NSString* emptyString =
+      GetNSString(IDS_IOS_START_PAGE_FREQUENTLY_VISITED_EMPTY_DESCRIPTION);
+  VivaldiEmptyMessageView* emptyMessageView =
+      [[VivaldiEmptyMessageView alloc] initWithMessage:emptyString];
+  self.emptyMessageView = emptyMessageView;
+  [self addSubview:emptyMessageView];
+  [emptyMessageView fillSuperview];
+  emptyMessageView.hidden = YES;
 }
 
 #pragma mark - SETTERS
+- (void)configureActionFactory:(BrowserActionFactory*)actionFactory {
+  self.actionFactory = actionFactory;
+}
+
 - (void)configureWith:(NSArray*)speedDials
                parent:(VivaldiSpeedDialItem*)parent
         faviconLoader:(FaviconLoader*)faviconLoader
           layoutStyle:(VivaldiStartPageLayoutStyle)style
          layoutColumn:(VivaldiStartPageLayoutColumn)column
          showAddGroup:(BOOL)showAddGroup
+    frequentlyVisited:(BOOL)frequentlyVisited
+    topSitesAvailable:(BOOL)topSitesAvailable
     verticalSizeClass:(UIUserInterfaceSizeClass)verticalSizeClass {
   self.parent = parent;
+  self.isTopSitesResultsAvailable = topSitesAvailable;
+  self.showingFrequentlyVisited = frequentlyVisited;
   self.faviconLoader = faviconLoader;
   self.selectedLayout = style;
   self.selectedColumn = column;
@@ -164,6 +195,9 @@ const CGFloat commonPadding = 20;
   self.speedDialItems = [[NSMutableArray alloc] initWithArray:speedDials];
   self.collectionView.hidden = showAddGroup;
   self.addGroupView.hidden = !showAddGroup;
+  self.emptyMessageView.hidden =
+      !(frequentlyVisited && topSitesAvailable &&
+        self.speedDialItems.count == 0);
   [self.collectionView reloadData];
 
   [self.addGroupView refreshLayoutWithVerticalSizeClass:verticalSizeClass];
@@ -193,7 +227,8 @@ const CGFloat commonPadding = 20;
      numberOfItemsInSection:(NSInteger)section {
   // '+1' is for the 'New Speed Dial' item on the start page that's reponsible
   // for opening bookmark/speed dial editor.
-  return self.speedDialItems.count + 1;
+  // Do not show that add item tile when frequently visited pages are visible.
+  return self.speedDialItems.count + (self.showingFrequentlyVisited ? 0 : 1);
 }
 
 - (UICollectionViewCell*)collectionView:(UICollectionView*)collectionView
@@ -486,6 +521,9 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
                                            actionProvider:^UIMenu*
    _Nullable(NSArray<UIMenuElement*>* _Nonnull menuActions) {
 
+    VivaldiSpeedDialItem* item =
+        [self.speedDialItems objectAtIndex: indexPath.row];
+
     NSString* editActionTitle = l10n_util::GetNSString(IDS_IOS_EDIT_SPEED_DIAL);
     UIAction * editAction =
       [UIAction actionWithTitle:editActionTitle
@@ -494,8 +532,6 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
                         handler:^(__kindof UIAction* _Nonnull action) {
         // Edit button action
         if (self.delegate) {
-          VivaldiSpeedDialItem* item =
-            [self.speedDialItems objectAtIndex: indexPath.row];
           [self.delegate didSelectEditItem:item
                                     parent:self.parent];
         }
@@ -510,8 +546,6 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
                         handler:^(__kindof UIAction* _Nonnull action) {
         // Thumbnail refresh button action
         if (self.delegate) {
-          VivaldiSpeedDialItem* item =
-            [self.speedDialItems objectAtIndex: indexPath.row];
           [self.delegate didRefreshThumbnailForItem:item
                                              parent:self.parent];
         }
@@ -525,8 +559,6 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
                         handler:^(__kindof UIAction* _Nonnull action) {
         // Move out of folder action
         if (self.delegate) {
-          VivaldiSpeedDialItem* item =
-            [self.speedDialItems objectAtIndex: indexPath.row];
           [self.delegate didSelectMoveItem:item
                                     parent:self.parent];
         }
@@ -541,31 +573,86 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
                         handler:^(__kindof UIAction* _Nonnull action) {
         // Delete button action
         if (self.delegate) {
-          VivaldiSpeedDialItem* item =
-            [self.speedDialItems objectAtIndex: indexPath.row];
           [self.delegate didSelectDeleteItem:item
                                       parent:self.parent];
         }
       }];
     deleteAction.attributes = UIMenuElementAttributesDestructive;
 
-    NSMutableArray *actions =
-        [NSMutableArray arrayWithObjects:
-            editAction, moveAction, deleteAction, nil];
+    NSMutableArray *actions = [[NSMutableArray alloc] init];
 
-    // Refresh is not available when thumbnail url is a synced-store thumbnail,
-    // or if the selected layout is anything other than regular or medium.
-    BOOL layoutHasThumbnail =
-        self.selectedLayout == VivaldiStartPageLayoutStyleLarge ||
-        self.selectedLayout == VivaldiStartPageLayoutStyleMedium;
+    if (!item.isFolder) {
+      // Add open in new tab item.
+      UIAction* openAction =
+          [self.actionFactory actionToOpenInNewTabWithBlock:^{
+            if (self.delegate) {
+              [self.delegate didSelectItemToOpenInNewTab:item
+                                                  parent:self.parent];
+            }
+          }];
+      [actions addObject:openAction];
 
-    VivaldiSpeedDialItem* item =
-      [self.speedDialItems objectAtIndex: indexPath.row];
+      // Add open in background tab item.
+      UIAction* openNewBackgroundTab =
+        [self.actionFactory actionToOpenInNewBackgroundTabWithBlock:^{
+          if (self.delegate) {
+            [self.delegate didSelectItemToOpenInBackgroundTab:item
+                                                       parent:self.parent];
+          }
+        }];
+      [actions addObject:openNewBackgroundTab];
 
-    BOOL shouldAddThumbnailRefreshAction =
-        layoutHasThumbnail && ![self isSyncedStoreThumbnailURLForItem:item];
-    if (shouldAddThumbnailRefreshAction) {
-      [actions insertObject:thumbnailRefreshAction atIndex:1];
+      // Add open in private menu item.
+      UIAction* openInIncognito =
+        [self.actionFactory actionToOpenInNewIncognitoTabWithBlock:^{
+          if (self.delegate) {
+            [self.delegate didSelectItemToOpenInPrivateTab:item
+                                                    parent:self.parent];
+          }
+        }];
+      [actions addObject:openInIncognito];
+
+      // Add open URL in new window menu item.
+      if (base::ios::IsMultipleScenesSupported()) {
+        [actions addObject:
+            [self.actionFactory actionToOpenInNewWindowWithURL:item.url
+                    activityOrigin:WindowActivityBookmarksOrigin]];
+      }
+
+      // Copy link
+      [actions addObject:[self.actionFactory
+          actionToCopyURL:[[CrURL alloc] initWithGURL:item.url]]];
+
+      // Share item
+      [actions addObject:[self.actionFactory actionToShareWithBlock:^{
+        if (self.delegate) {
+          [self.delegate didSelectItemToShare:item
+                                       parent:self.parent
+                                     fromView:[self.collectionView
+                                              cellForItemAtIndexPath:indexPath]];
+        }
+      }]];
+    }
+
+    if (self.showingFrequentlyVisited) {
+      [actions addObject:deleteAction];
+    } else {
+      // Refresh is not available when thumbnail url is a synced-store thumbnail
+      // or if the selected layout is anything other than regular or medium.
+      BOOL layoutHasThumbnail =
+          self.selectedLayout == VivaldiStartPageLayoutStyleLarge ||
+          self.selectedLayout == VivaldiStartPageLayoutStyleMedium;
+
+      BOOL shouldAddThumbnailRefreshAction =
+          !item.isFolder &&
+          layoutHasThumbnail &&
+          ![self isSyncedStoreThumbnailURLForItem:item];
+
+      if (shouldAddThumbnailRefreshAction) {
+        [actions addObject:thumbnailRefreshAction];
+      }
+
+      [actions addObjectsFromArray:@[editAction, moveAction, deleteAction]];
     }
 
     // Create the menu with the actions array
@@ -629,6 +716,8 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
 }
 
 - (void)handleSDItemPropertyChangeNotification:(NSNotification*)notification {
+  if (self.showingFrequentlyVisited)
+    return;
   NSDictionary *userInfo = notification.userInfo;
   NSNumber *bookmarkNodeId = userInfo[vSpeedDialIdentifierKey];
 

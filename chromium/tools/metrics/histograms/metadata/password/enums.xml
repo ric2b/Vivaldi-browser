@@ -716,12 +716,6 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="User moved or closed the tab, or closed the browser."/>
 </enum>
 
-<enum name="PasswordManager.GroupedPasswordFetchResult">
-  <int value="0" label="No grouped matches"/>
-  <int value="1" label="Grouped matches exist among other matches"/>
-  <int value="2" label="Only grouped matches exist"/>
-</enum>
-
 <enum name="PasswordManager.MoveToAccountStoreTrigger">
   <summary>
     Triggers that will cause Chrome to offer to move a password from the profile
@@ -939,6 +933,10 @@ chromium-metrics-reviews@google.com.
     A credential exists for an affiliated site but not for the current security
     origin.
   </int>
+  <int value="4" label="Grouped website">
+    A credential exists for a web site, which is grouped with the current domain
+    by the AffiliationService.
+  </int>
 </enum>
 
 <enum name="PasswordManagerOfferedAndroidCredentials">
@@ -1124,13 +1122,6 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Has password field"/>
 </enum>
 
-<enum name="PasswordsAccountStorageNoticeDismissalReason">
-  <int value="0" label="Unknown"/>
-  <int value="1" label="Primary button"/>
-  <int value="2" label="Settings link"/>
-  <int value="3" label="Swipe"/>
-</enum>
-
 <enum name="PasswordsImportDesktopInteractions">
   <int value="0" label="Import dialog opened from the three-dot menu."/>
   <int value="1" label="Import dialog opened from the empty passwords list."/>
@@ -1166,6 +1157,10 @@ chromium-metrics-reviews@google.com.
   <int value="11012" label="UNMAPPED_ERROR_CODE"/>
   <int value="11013" label="UNEXPECTED_ERROR"/>
   <int value="11014" label="KEY_RETRIEVAL_REQUIRED"/>
+  <int value="11015" label="DATA_HOLDER_CREATION_ERROR"/>
+  <int value="11016" label="EXTERNAL_API_EXCEPTION"/>
+  <int value="11017" label="EXTERNAL_INVALID_LOCAL_KEYS"/>
+  <int value="11018" label="DATABASE_ERROR"/>
   <int value="43502" label="CHROME_SYNC_API_CALL_ERROR"/>
   <int value="43504" label="ERROR_WHILE_DOING_LEAK_CHECK_SERVICE_GRPC"/>
   <int value="43507" label="REQUIRED_SYNCED_ACCOUNT_MISSING"/>
@@ -1431,6 +1426,12 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="HTML based classifier"/>
   <int value="3" label="'autocomplete' attribute"/>
   <int value="4" label="Server-side prediction"/>
+</enum>
+
+<enum name="UseUpmLocalAndSeparateStoresState">
+  <int value="0" label="Off"/>
+  <int value="1" label="OffAndMigrationPending"/>
+  <int value="2" label="On"/>
 </enum>
 
 </enums>

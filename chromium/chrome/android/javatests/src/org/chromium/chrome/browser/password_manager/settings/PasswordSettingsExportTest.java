@@ -210,7 +210,6 @@ public class PasswordSettingsExportTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @DisabledTest(message = "crbug.com/330204151")
     public void testExportReauthAfterCancel() {
         mTestHelper.setPasswordSource(
                 new SavedPasswordEntry("https://example.com", "test user", "password"));
@@ -225,7 +224,7 @@ public class PasswordSettingsExportTest {
         reauthenticateAndRequestExport(settingsActivity);
 
         // Hit the Cancel button on the warning dialog to cancel the flow.
-        onView(withText(R.string.cancel)).perform(click());
+        onView(withText(R.string.cancel)).inRoot(isDialog()).perform(click());
 
         // Now repeat the steps almost like in |reauthenticateAndRequestExport| but simulate failing
         // the reauthentication challenge.
@@ -470,7 +469,8 @@ public class PasswordSettingsExportTest {
         onViewWaiting(
                         allOf(
                                 withText(R.string.password_settings_export_action_title),
-                                isCompletelyDisplayed()))
+                                isCompletelyDisplayed()),
+                        /* checkRootDialog= */ true)
                 .perform(click());
         exportEventHistogram.assertExpected();
 
@@ -535,7 +535,8 @@ public class PasswordSettingsExportTest {
         onViewWaiting(
                         allOf(
                                 withText(R.string.password_settings_export_action_title),
-                                isCompletelyDisplayed()))
+                                isCompletelyDisplayed()),
+                        /* checkRootDialog= */ true)
                 .perform(click());
         histogram.assertExpected();
 
@@ -608,7 +609,8 @@ public class PasswordSettingsExportTest {
         onViewWaiting(
                         allOf(
                                 withText(R.string.password_settings_export_action_title),
-                                isCompletelyDisplayed()))
+                                isCompletelyDisplayed()),
+                        /* checkRootDialog= */ true)
                 .perform(click());
         histogram.assertExpected();
 
@@ -672,7 +674,6 @@ public class PasswordSettingsExportTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @DisabledTest(message = "crbug.com/330204151")
     public void testExportWarningOnResume() {
         mTestHelper.setPasswordSource(
                 new SavedPasswordEntry("https://example.com", "test user", "password"));
@@ -694,7 +695,7 @@ public class PasswordSettingsExportTest {
                 });
 
         // Cancel the export warning.
-        onView(withText(R.string.cancel)).perform(click());
+        onView(withText(R.string.cancel)).inRoot(isDialog()).perform(click());
 
         // Check that export warning is not visible again.
         onView(withText(R.string.cancel)).check(doesNotExist());
@@ -778,6 +779,7 @@ public class PasswordSettingsExportTest {
         // Verify that the warning dialog is shown and then dismiss it through pressing back (as
         // opposed to the cancel button).
         onView(withText(R.string.password_settings_export_action_title))
+                .inRoot(isDialog())
                 .check(matches(isCompletelyDisplayed()));
         Espresso.pressBack();
 
@@ -791,7 +793,6 @@ public class PasswordSettingsExportTest {
     @SmallTest
     @DisableFeatures(UNIFIED_PASSWORD_MANAGER_LOCAL_PWD_MIGRATION_WARNING)
     @Feature({"Preferences"})
-    @DisabledTest(message = "crbug.com/330204151")
     public void testExportProgressMinimalTime() throws Exception {
         mTestHelper.setPasswordSource(
                 new SavedPasswordEntry("https://example.com", "test user", "password"));
@@ -818,12 +819,14 @@ public class PasswordSettingsExportTest {
         onViewWaiting(
                         allOf(
                                 withText(R.string.password_settings_export_action_title),
-                                isCompletelyDisplayed()))
+                                isCompletelyDisplayed()),
+                        /* checkRootDialog= */ true)
                 .perform(click());
 
         // Before simulating the serialized passwords being received, check that the progress bar is
         // shown.
         onView(withText(R.string.settings_passwords_preparing_export))
+                .inRoot(isDialog())
                 .check(matches(isCompletelyDisplayed()));
 
         File tempFile = createFakeExportedPasswordsFile();
@@ -833,6 +836,7 @@ public class PasswordSettingsExportTest {
         // Check that the progress bar is still shown, though, because the timer has not gone off
         // yet.
         onView(withText(R.string.settings_passwords_preparing_export))
+                .inRoot(isDialog())
                 .check(matches(isCompletelyDisplayed()));
 
         // Now mark the timer as gone off and check that the progress bar is hidden.
@@ -886,12 +890,15 @@ public class PasswordSettingsExportTest {
         onViewWaiting(
                         allOf(
                                 withText(R.string.password_settings_export_action_title),
-                                isCompletelyDisplayed()))
+                                isCompletelyDisplayed()),
+                        /* checkRootDialog= */ true)
                 .perform(click());
 
         // Before simulating the serialized passwords being received, check that the progress bar is
         // shown.
-        onViewWaiting(withText(R.string.settings_passwords_preparing_export))
+        onViewWaiting(
+                        withText(R.string.settings_passwords_preparing_export),
+                        /* checkRootDialog= */ true)
                 .check(matches(isCompletelyDisplayed()));
 
         File tempFile = createFakeExportedPasswordsFile();
@@ -940,7 +947,8 @@ public class PasswordSettingsExportTest {
         onViewWaiting(
                         allOf(
                                 withText(R.string.password_settings_export_action_title),
-                                isCompletelyDisplayed()))
+                                isCompletelyDisplayed()),
+                        /* checkRootDialog= */ true)
                 .perform(click());
 
         // Simulate the minimal time for showing the progress bar to have passed, to ensure that it
@@ -949,10 +957,11 @@ public class PasswordSettingsExportTest {
 
         // Check that the progress bar is shown.
         onView(withText(R.string.settings_passwords_preparing_export))
+                .inRoot(isDialog())
                 .check(matches(isCompletelyDisplayed()));
 
         // Hit the Cancel button.
-        onView(withText(R.string.cancel)).perform(click());
+        onView(withText(R.string.cancel)).inRoot(isDialog()).perform(click());
 
         // Check that the cancellation succeeded by checking that the export menu is available and
         // enabled.
@@ -980,7 +989,8 @@ public class PasswordSettingsExportTest {
         onViewWaiting(
                         allOf(
                                 withText(R.string.password_settings_export_action_title),
-                                isCompletelyDisplayed()))
+                                isCompletelyDisplayed()),
+                        /* checkRootDialog= */ true)
                 .perform(click());
 
         // Show an arbitrary error. This should replace the progress bar if that has been shown in
@@ -994,7 +1004,7 @@ public class PasswordSettingsExportTest {
                 .check(matches(isCompletelyDisplayed()));
 
         // Hit the negative button on the error prompt.
-        onView(withText(R.string.close)).perform(click());
+        onView(withText(R.string.close)).inRoot(isDialog()).perform(click());
 
         // Check that the cancellation succeeded by checking that the export menu is available and
         // enabled.
@@ -1025,7 +1035,8 @@ public class PasswordSettingsExportTest {
         onViewWaiting(
                         allOf(
                                 withText(R.string.password_settings_export_action_title),
-                                isCompletelyDisplayed()))
+                                isCompletelyDisplayed()),
+                        /* checkRootDialog= */ true)
                 .perform(click());
 
         // Show an arbitrary error but ensure that the positive button label is the one for "try
@@ -1038,6 +1049,7 @@ public class PasswordSettingsExportTest {
 
         // Check that there is again the export warning.
         onView(withText(R.string.password_settings_export_action_title))
+                .inRoot(isDialog())
                 .check(matches(isCompletelyDisplayed()));
     }
 
@@ -1100,7 +1112,6 @@ public class PasswordSettingsExportTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @DisabledTest(message = "crbug.com/330204151")
     public void testExportErrorUiAfterConfirmation() {
         mTestHelper.setPasswordSource(
                 new SavedPasswordEntry("https://example.com", "test user", "password"));
@@ -1121,7 +1132,8 @@ public class PasswordSettingsExportTest {
         onViewWaiting(
                         allOf(
                                 withText(R.string.password_settings_export_action_title),
-                                isCompletelyDisplayed()))
+                                isCompletelyDisplayed()),
+                        /* checkRootDialog= */ true)
                 .perform(click());
 
         // Check that now the error is displayed, instead of the progress bar.

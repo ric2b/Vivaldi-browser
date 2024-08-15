@@ -19,7 +19,7 @@ class TlsConnection {
   class Client {
    public:
     // Called when |connection| experiences an error, such as a read error.
-    virtual void OnError(TlsConnection* connection, Error error) = 0;
+    virtual void OnError(TlsConnection* connection, const Error& error) = 0;
 
     // Called when a |block| arrives on |connection|.
     virtual void OnRead(TlsConnection* connection,

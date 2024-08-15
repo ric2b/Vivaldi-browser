@@ -105,6 +105,7 @@ public class TabSwitcherMessageManagerUnitTest {
                 .addObserver(mMultiWindowModeObserverCaptor.capture());
         doNothing().when(mTabModelFilter).addObserver(mTabModelObserverCaptor.capture());
         doReturn(mTabModel).when(mTabModelFilter).getTabModel();
+        doReturn(mProfile).when(mTabModel).getProfile();
         mCurrentTabModelFilterSupplier.set(mTabModelFilter);
 
         mActivityScenarioRule.getScenario().onActivity(this::onActivityReady);
@@ -165,12 +166,12 @@ public class TabSwitcherMessageManagerUnitTest {
     public void removeMessageItemsWhenCloseLastTab() {
         // Mock that mTab1 is not the only tab in the current tab model and it will be closed.
         doReturn(2).when(mTabModel).getCount();
-        mTabModelObserverCaptor.getValue().willCloseTab(mTab1, false, true);
+        mTabModelObserverCaptor.getValue().willCloseTab(mTab1, true);
         verify(mTabListCoordinator, never()).removeSpecialListItem(anyInt(), anyInt());
 
         // Mock that mTab1 is the only tab in the current tab model and it will be closed.
         doReturn(1).when(mTabModel).getCount();
-        mTabModelObserverCaptor.getValue().willCloseTab(mTab1, false, true);
+        mTabModelObserverCaptor.getValue().willCloseTab(mTab1, true);
         verify(mTabListCoordinator)
                 .removeSpecialListItem(
                         TabProperties.UiType.MESSAGE, MessageService.MessageType.ALL);
@@ -232,17 +233,17 @@ public class TabSwitcherMessageManagerUnitTest {
     public void removePriceWelcomeMessageWhenCloseBindingTab() {
         doReturn(1).when(mTabModel).getCount();
         doReturn(TAB1_ID).when(mPriceMessageService).getBindingTabId();
-        mTabModelObserverCaptor.getValue().willCloseTab(mTab1, false, true);
+        mTabModelObserverCaptor.getValue().willCloseTab(mTab1, true);
         verify(mMessageUpdateObserver, never()).onRemovePriceWelcomeMessage();
 
         doReturn(2).when(mTabModel).getCount();
         doReturn(TAB2_ID).when(mPriceMessageService).getBindingTabId();
-        mTabModelObserverCaptor.getValue().willCloseTab(mTab1, false, true);
+        mTabModelObserverCaptor.getValue().willCloseTab(mTab1, true);
         verify(mMessageUpdateObserver, never()).onRemovePriceWelcomeMessage();
 
         doReturn(2).when(mTabModel).getCount();
         doReturn(TAB1_ID).when(mPriceMessageService).getBindingTabId();
-        mTabModelObserverCaptor.getValue().willCloseTab(mTab1, false, true);
+        mTabModelObserverCaptor.getValue().willCloseTab(mTab1, true);
         verify(mMessageUpdateObserver).onRemovePriceWelcomeMessage();
     }
 

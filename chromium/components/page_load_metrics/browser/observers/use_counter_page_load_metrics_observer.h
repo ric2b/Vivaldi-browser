@@ -17,13 +17,12 @@
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/css_property_id.mojom.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom.h"
+#include "third_party/blink/public/mojom/use_counter/metrics/webdx_feature.mojom.h"
 #include "third_party/blink/public/mojom/use_counter/use_counter_feature.mojom-forward.h"
 
 class UseCounterMetricsRecorder {
  public:
-  // If `is_in_fenced_frames_page` is true, uses prefix
-  // "Blink.UseCounter.FencedFrames.". Otherwise, uses
-  // "Blink.UseCounter.".
+  // If `is_in_fenced_frames_page` is true, only use counter UKMs are recorded.
   explicit UseCounterMetricsRecorder(bool is_in_fenced_frames_page);
 
   UseCounterMetricsRecorder(const UseCounterMetricsRecorder&) = delete;
@@ -51,7 +50,10 @@ class UseCounterMetricsRecorder {
 
   // Records UKM subset of WebFeatures, if the WebFeature is observed in the
   // page.
-  void RecordUkmFeatures(ukm::SourceId ukm_source_id);
+  void RecordWebFeatures(ukm::SourceId ukm_source_id);
+
+  // Records WebDXFeatures that are based on other WebFeature use counters.
+  void RecordWebDXFeatures(ukm::SourceId ukm_source_id);
 
   using UkmFeatureList = base::flat_set<blink::mojom::WebFeature>;
 
@@ -69,19 +71,22 @@ class UseCounterMetricsRecorder {
   static const UkmFeatureList& GetAllowedWebDevMetricsUkmFeatures();
 
   // To keep tracks of which features have been measured.
+  // `uma_features_` and `uma_main_frame_features_` are also used for UKMs.
   AtMostOnceEnumUmaDeferrer<blink::mojom::WebFeature> uma_features_;
   AtMostOnceEnumUmaDeferrer<blink::mojom::WebFeature> uma_main_frame_features_;
-  AtMostOnceEnumUmaDeferrer<blink::mojom::CSSSampleId> uma_css_properties_;
-  AtMostOnceEnumUmaDeferrer<blink::mojom::CSSSampleId>
+  AtMostOnceEnumUmaDeferrer<blink::mojom::WebDXFeature> uma_webdx_features_;
+  std::unique_ptr<AtMostOnceEnumUmaDeferrer<blink::mojom::CSSSampleId>>
+      uma_css_properties_;
+  std::unique_ptr<AtMostOnceEnumUmaDeferrer<blink::mojom::CSSSampleId>>
       uma_animated_css_properties_;
-
-  AtMostOnceEnumUmaDeferrer<blink::mojom::PermissionsPolicyFeature>
+  std::unique_ptr<
+      AtMostOnceEnumUmaDeferrer<blink::mojom::PermissionsPolicyFeature>>
       uma_permissions_policy_violation_enforce_;
-
-  AtMostOnceEnumUmaDeferrer<blink::mojom::PermissionsPolicyFeature>
+  std::unique_ptr<
+      AtMostOnceEnumUmaDeferrer<blink::mojom::PermissionsPolicyFeature>>
       uma_permissions_policy_allow2_;
-
-  AtMostOnceEnumUmaDeferrer<blink::mojom::PermissionsPolicyFeature>
+  std::unique_ptr<
+      AtMostOnceEnumUmaDeferrer<blink::mojom::PermissionsPolicyFeature>>
       uma_permissions_policy_header2_;
 
   // To keep tracks of which features have been measured.

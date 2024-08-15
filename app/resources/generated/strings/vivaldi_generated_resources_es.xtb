@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">Anterior a</translation>
 <translation id="2749881179542288782">Revisar la ortografía y gramática</translation>
 <translation id="2785873697295365461">Descriptores de archivo</translation>
-<translation id="2809586584051668049">y <ph name="NUMBER_ADDITIONAL_DISABLED" /> más</translation>
 <translation id="2825758591930162672">Clave pública del sujeto</translation>
 <translation id="2850541429955027218">Añadir tema</translation>
 <translation id="2861941300086904918">Gestor de seguridad de cliente nativo</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">Abrir como ventana</translation>
 <translation id="3280237271814976245">Guardar &amp;como...</translation>
 <translation id="3285322247471302225">Nueva pes&amp;taña</translation>
-<translation id="3288047731229977326">Las extensiones que se ejecutan en el modo desarrollador pueden dañar tu equipo. Si no eres desarrollador, debes desactivar esas extensiones para mantenerte protegido.</translation>
 <translation id="329838636886466101">Reparar</translation>
 <translation id="33022249435934718">GDI administra</translation>
 <translation id="3303818374450886607">Copias</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">Se creó la extensión:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Desactivar extensiones en el modo desarrollador</translation>
 <translation id="4100839878934973028">Otro programa de tu ordenador ha añadido una aplicación que puede cambiar el funcionamiento de Vivaldi.</translation>
 <translation id="4104163789986725820">E&amp;xportar...</translation>
 <translation id="4109898769411476438">Cerrar navegador antes de importar</translation>
@@ -261,7 +258,6 @@
 <translation id="5269977353971873915">Error al imprimir</translation>
 <translation id="5284445933715251131">Continuar descargando</translation>
 <translation id="52912272896845572">El archivo de clave privada no es válido.</translation>
-<translation id="5301954838959518834">Entendido</translation>
 <translation id="5302932258331363306">Mostrar sustituciones</translation>
 <translation id="5317780077021120954">Guardar</translation>
 <translation id="5334142896108694079">Caché de secuencia de comandos</translation>

@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: simple-chrome-workflow
 title: Building Chrome for ChromeOS (Simple Chrome)
 ---
@@ -531,7 +531,7 @@ To deploy a debug build you need to add `--nostrip` to `deploy_chrome` because
 otherwise it will strip symbols even from a debug build. This requires
 [Deploying Chrome to the user partition].
 
-See [./stack_traces.md] for some tips on getting stack traces at runtime
+See [Stack Traces] for some tips on getting stack traces at runtime
 (not during a crash).
 
 > **Note:** If you just want crash backtraces in the logs you can deploy a
@@ -865,14 +865,19 @@ $ cros_sdk --chrome-root <path-to-chrome-checkout> cros_workon_make --board=${BO
 Some notes about the above:
 *   If you run into Google Storage authentication issues, be sure to follow
     the gsutil [setup](https://www.chromium.org/chromium-os/developer-library/reference/tools/gsutil/) instructions.
+*   `.gclient` in your Chrome checkout should not define `cros_boards` in `custom_vars`.
 *   If you run into errors with `pkg-config`, try first running a full
     `cros build-packages --board=${BOARD}` invocation without
     `chromeos-chrome` and `chrome-icu` being cros workon'ed. That's been
     observed to fix/avoid the `pkg-config` errors when building Chrome from
     source in the chroot.
 *   By default, the build will not run on RBE. To speed it up, you can try using
-    `USE=remoteexec` in the `cros_workon_make` invocation. But authentication
-    can be difficult in that case, so YMMV.
+    `USE_REMOTEEXEC=true` in the `cros_workon_make` invocation. But
+    authentication can be difficult in that case, so YMMV.
+*   To fetch third party code and run hook scripts, please make sure to run
+    `gclient sync` in your chrome checkout. Previously, chromeos-chrome ebuild
+    was running gclient hooks when being built, but R126+ requires the user to
+    runhooks themselves.
 
 [Custom build directories]: #custom-build-directories
 [Updating the version of the ChromeOS SDK]: #updating-the-version-of-the-chromeos-sdk
@@ -893,14 +898,14 @@ Some notes about the above:
 [quick start guide]: https://gn.googlesource.com/gn/+/HEAD/docs/quick_start.md
 [device-specific instructions]: https://www.chromium.org/chromium-os/developer-information-for-chrome-os-devices
 [generic instructions]: https://www.chromium.org/a/chromium.org/dev/chromium-os/developer-information-for-chrome-os-devices/generic
-[rootfs has been removed]: developer_mode.md#TOC-Making-changes-to-the-filesystem
+[rootfs has been removed]: /chromium-os/developer-library/guides/device/developer-mode/#TOC-Making-changes-to-the-filesystem
 [remounted as read-write]: https://www.chromium.org/chromium-os/how-tos-and-troubleshooting/debugging-tips#TOC-Setting-up-the-device
 [additional debugging tips]: https://www.chromium.org/chromium-os/how-tos-and-troubleshooting/debugging-tips#TOC-Enabling-core-dumps
 [chromite repo]: https://chromium.googlesource.com/chromiumos/chromite/
 [issue 437877]: https://crbug.com/403086
 [CrOS Flash page]: https://www.chromium.org/chromium-os/developer-library/reference/tools/cros-flash/
 [VM]: https://www.chromium.org/chromium-os/developer-library/guides/containers/cros-vm/
-[Running a Chrome Google Test binary in the VM]: cros_vm.md#Run-a-Chrome-GTest-binary-in-the-VM
+[Running a Chrome Google Test binary in the VM]: /chromium-os/developer-library/guides/containers/cros-vm/#Run-a-Chrome-GTest-binary-in-the-VM
 [go/shortleash]: https://goto.google.com/shortleash
 [debugging tips]: https://www.chromium.org/chromium-os/how-tos-and-troubleshooting/debugging-tips
 [chrome build instructions]: https://g3doc.corp.google.com/company/teams/chrome/linux_build_instructions.md
@@ -911,7 +916,7 @@ Some notes about the above:
 [crbug.com/360342]: https://crbug.com/360342
 [crbug.com/403086]: https://crbug.com/403086
 [web_tests_linux.md]: https://chromium.googlesource.com/chromium/src/+/refs/heads/main/docs/testing/web_tests_linux.md
-[./stack_traces.md]: stack_traces.md
+[stack traces]: /chromium-os/developer-library/guides/debugging/stack-traces/
 [chromeos-uprev-tester]: https://ci.chromium.org/p/chrome/builders/try/chromeos-uprev-tester
 [Prepare a DUT]:#set-up-the-chromeos-device
 [Shell-less flow]: #shell-less-flow

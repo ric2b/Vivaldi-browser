@@ -113,7 +113,7 @@ using vivaldi::IsVivaldiRunning;
         std::make_unique<WebStateListObserverBridge>(self);
     _webStateList->AddObserver(_webStateListObserverBridge.get());
 
-    if (IsBottomOmniboxSteadyStateEnabled()) {
+    if (IsBottomOmniboxAvailable()) {
 
       if (IsVivaldiRunning()) {
         _shouldCheckSafariSwitcherOnFRE = NO;
@@ -146,7 +146,7 @@ using vivaldi::IsVivaldiRunning;
 
 - (void)setOriginalPrefService:(PrefService*)originalPrefService {
   _originalPrefService = originalPrefService;
-  if (IsBottomOmniboxSteadyStateEnabled() && _originalPrefService) {
+  if (IsBottomOmniboxAvailable() && _originalPrefService) {
     _bottomOmniboxEnabled =
         [[PrefBackedBoolean alloc] initWithPrefService:_originalPrefService
                                               prefName:prefs::kBottomOmnibox];
@@ -178,14 +178,14 @@ using vivaldi::IsVivaldiRunning;
 
 - (void)locationBarFocusChangedTo:(BOOL)focused {
   _locationBarFocused = focused;
-  if (IsBottomOmniboxSteadyStateEnabled()) {
+  if (IsBottomOmniboxAvailable()) {
     [self updateOmniboxPosition];
   }
 }
 
 - (void)toolbarTraitCollectionChangedTo:(UITraitCollection*)traitCollection {
   _toolbarTraitCollection = traitCollection;
-  if (IsBottomOmniboxSteadyStateEnabled()) {
+  if (IsBottomOmniboxAvailable()) {
     [self updateOmniboxPosition];
   }
 }
@@ -211,7 +211,7 @@ using vivaldi::IsVivaldiRunning;
 
 - (void)didNavigateToNTPOnActiveWebState {
   _isNTP = YES;
-  if (IsBottomOmniboxSteadyStateEnabled()) {
+  if (IsBottomOmniboxAvailable()) {
     [self updateOmniboxPosition];
   }
 }
@@ -296,7 +296,7 @@ using vivaldi::IsVivaldiRunning;
   [self.delegate updateToolbar];
   NewTabPageTabHelper* NTPHelper = NewTabPageTabHelper::FromWebState(webState);
   _isNTP = NTPHelper && NTPHelper->IsActive();
-  if (IsBottomOmniboxSteadyStateEnabled()) {
+  if (IsBottomOmniboxAvailable()) {
     if (_shouldCheckSafariSwitcherOnFRE) {
       [self checkSafariSwitcherOnFRE];
     }
@@ -307,7 +307,6 @@ using vivaldi::IsVivaldiRunning;
 /// Computes the toolbar that should contain the unfocused omnibox in the
 /// current state.
 - (ToolbarType)steadyStateOmniboxPositionInCurrentState {
-  CHECK(IsBottomOmniboxSteadyStateEnabled());
 
   if (IsVivaldiRunning()) {
     return _preferredOmniboxPosition;
@@ -325,7 +324,6 @@ using vivaldi::IsVivaldiRunning;
 
 /// Computes the toolbar that should contain the omnibox in the current state.
 - (ToolbarType)omniboxPositionInCurrentState {
-  CHECK(IsBottomOmniboxSteadyStateEnabled());
 
   if (IsVivaldiRunning()) {
     return [self steadyStateOmniboxPositionInCurrentState];
@@ -340,7 +338,7 @@ using vivaldi::IsVivaldiRunning;
 
 /// Updates the omnibox position to the correct toolbar.
 - (void)updateOmniboxPosition {
-  if (!IsBottomOmniboxSteadyStateEnabled()) {
+  if (!IsBottomOmniboxAvailable()) {
     [self.delegate transitionOmniboxToToolbarType:ToolbarType::kPrimary];
     return;
   }
@@ -359,7 +357,6 @@ using vivaldi::IsVivaldiRunning;
 
 /// Verifies if the user is a safari switcher on FRE.
 - (void)checkSafariSwitcherOnFRE {
-  CHECK(IsBottomOmniboxSteadyStateEnabled());
   CHECK(_shouldCheckSafariSwitcherOnFRE);
   CHECK(self.deviceSwitcherResultDispatcher);
   CHECK(self.originalPrefService);
@@ -404,7 +401,6 @@ using vivaldi::IsVivaldiRunning;
 /// `bottomOmniboxIsDefault`, still log the status as bottom as the user was
 /// classified as safari switcher in a previous session.
 - (BOOL)isSafariSwitcherAtStartup:(BOOL)bottomOmniboxIsDefault {
-  CHECK(IsBottomOmniboxSteadyStateEnabled());
   CHECK(self.originalPrefService);
 
   if (!omnibox::IsNewUser()) {
@@ -439,7 +435,6 @@ using vivaldi::IsVivaldiRunning;
 
 /// Updates the default setting for bottom omnibox.
 - (void)updateOmniboxDefaultPosition {
-  CHECK(IsBottomOmniboxSteadyStateEnabled());
   CHECK(self.originalPrefService);
 
   // This only needs to be executed once and deviceSwitcherResult are not
@@ -483,7 +478,6 @@ using vivaldi::IsVivaldiRunning;
 
 /// Logs preferred omnibox position.
 - (void)logOmniboxPosition {
-  CHECK(IsBottomOmniboxSteadyStateEnabled());
   CHECK(self.originalPrefService);
 
   static dispatch_once_t once;

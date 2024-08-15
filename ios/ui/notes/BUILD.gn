@@ -49,6 +49,7 @@ source_set("notes") {
   ]
 
   deps = [
+    ":markdown_js",
     "//base",
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
@@ -68,11 +69,23 @@ source_set("notes") {
     "//ios/chrome/common/ui/util",
     "//ui/base",
     "//vivaldi/components/notes:browser",
-    "//vivaldi/ios/ui/notes/cells",
+    "//vivaldi/ios/chrome/browser/features",
     "//vivaldi/ios/panel",
-    "//vivaldi/ios/sync:sync_notes",
     "//vivaldi/ios/sync:file_sync",
+    "//vivaldi/ios/sync:sync_notes",
+    "//vivaldi/ios/ui/notes/cells",
   ]
 
   frameworks = [ "UIKit.framework" ]
+}
+
+copy("markdown_js") {
+  sources = [
+    "//vivaldi/vivapp/src/mobile/markdown/markdown.html",
+    "$root_out_dir/resources/vivaldi/mobile-markdown-bundle.js"
+  ]
+  outputs = [ "$root_out_dir/Vivaldi.app/{{source_file_part}}" ]
+  deps = [
+    "//vivaldi/vivapp:bundle",
+  ]
 }

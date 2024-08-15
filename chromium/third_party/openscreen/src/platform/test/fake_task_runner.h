@@ -44,7 +44,7 @@ class FakeTaskRunner : public TaskRunner {
  public:
   using Task = TaskRunner::Task;
 
-  explicit FakeTaskRunner(FakeClock* clock);
+  explicit FakeTaskRunner(FakeClock& clock);
   ~FakeTaskRunner() override;
 
   // Runs all ready-to-run tasks.
@@ -63,7 +63,7 @@ class FakeTaskRunner : public TaskRunner {
   Clock::time_point GetResumeTime() const;
 
  private:
-  FakeClock* const clock_;
+  FakeClock& clock_;
 
   std::vector<Task> ready_to_run_tasks_;
   std::multimap<Clock::time_point, Task> delayed_tasks_;

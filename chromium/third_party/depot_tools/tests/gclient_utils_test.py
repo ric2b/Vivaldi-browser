@@ -401,6 +401,18 @@ class GClientUtilsTest(trial_dir.TestCase):
             self.assertEqual('test', gclient_utils.FileRead(tmp))
         self.assertFalse(os.path.exists(tmp))
 
+    def testMergeConditions(self):
+        self.assertEqual(None, gclient_utils.merge_conditions(None, None))
+
+        self.assertEqual('foo', gclient_utils.merge_conditions('foo', None))
+
+        self.assertEqual('foo', gclient_utils.merge_conditions(None, 'foo'))
+
+        self.assertEqual('(foo) AND (bar)',
+                         gclient_utils.merge_conditions('foo', 'bar'))
+
+        self.assertEqual('(foo or bar) AND (baz)',
+                         gclient_utils.merge_conditions('foo or bar', 'baz'))
 
 if __name__ == '__main__':
     unittest.main()

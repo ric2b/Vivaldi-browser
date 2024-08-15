@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.quick_delete;
 
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withEffectiveVisibility;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
@@ -48,6 +49,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.layouts.LayoutTestUtils;
 import org.chromium.chrome.browser.layouts.LayoutType;
+import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.browser.tab.Tab;
@@ -175,7 +177,9 @@ public class QuickDeleteDialogDelegateTest {
 
         openQuickDeleteDialog();
 
-        onView(withText(R.string.quick_delete_dialog_title)).check(matches(isDisplayed()));
+        onView(withText(R.string.quick_delete_dialog_title))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
         onView(withId(R.id.quick_delete_spinner)).check(matches(isDisplayed()));
         onView(withId(R.id.quick_delete_history_row)).check(matches(isDisplayed()));
         onViewWaiting(withText(R.string.quick_delete_dialog_browsing_history_secondary_text))
@@ -219,7 +223,9 @@ public class QuickDeleteDialogDelegateTest {
 
         openQuickDeleteDialog();
 
-        onView(withText(R.string.quick_delete_dialog_title)).check(matches(isDisplayed()));
+        onView(withText(R.string.quick_delete_dialog_title))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
         onView(withId(R.id.quick_delete_spinner)).check(matches(isDisplayed()));
         onView(withId(R.id.quick_delete_history_row)).check(matches(isDisplayed()));
         onView(withText(R.string.quick_delete_dialog_browsing_history_secondary_text))
@@ -260,14 +266,17 @@ public class QuickDeleteDialogDelegateTest {
 
         openQuickDeleteDialog();
 
-        onView(withText(R.string.quick_delete_dialog_title)).check(matches(isDisplayed()));
-        onView(withId(R.id.quick_delete_spinner)).check(matches(isDisplayed()));
+        onView(withText(R.string.quick_delete_dialog_title))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+        onView(withId(R.id.quick_delete_spinner)).inRoot(isDialog()).check(matches(isDisplayed()));
         onView(
                         withText(
                                 mActivity.getString(
                                         R.string
                                                 .quick_delete_dialog_zero_browsing_history_domain_count_text,
                                         timePeriodString)))
+                .inRoot(isDialog())
                 .check(matches(isDisplayed()));
         onView(
                         withText(
@@ -294,9 +303,26 @@ public class QuickDeleteDialogDelegateTest {
 
     @Test
     @MediumTest
+    @Feature({"RenderTest"})
+    public void testQuickDeleteDialogView_MultiInstance() throws IOException {
+        MultiWindowUtils.setInstanceCountForTesting(3);
+        openQuickDeleteDialog();
+
+        onView(withId(R.id.quick_delete_tabs_row_subtitle)).check(matches(isDisplayed()));
+
+        View dialogView =
+                mActivity
+                        .getModalDialogManager()
+                        .getCurrentDialogForTest()
+                        .get(ModalDialogProperties.CUSTOM_VIEW);
+        mRenderTestRule.render(dialogView, "quick_delete_dialog-tabs-disabled");
+    }
+
+    @Test
+    @MediumTest
     public void testQuickDeleteDialogSpinnerViewContents() {
         openQuickDeleteDialog();
-        onView(withId(R.id.quick_delete_spinner)).check(matches(isDisplayed()));
+        onView(withId(R.id.quick_delete_spinner)).inRoot(isDialog()).check(matches(isDisplayed()));
         View dialogView =
                 mActivity
                         .getModalDialogManager()

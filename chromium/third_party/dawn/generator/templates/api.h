@@ -73,6 +73,20 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#define WGPU_BREAKING_REFERENCE_ADDREF
+
+#if defined(__cplusplus)
+#  if __cplusplus >= 201103L
+#    define {{API}}_MAKE_INIT_STRUCT(type, value) (type value)
+#  else
+#    define {{API}}_MAKE_INIT_STRUCT(type, value) value
+#  endif
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+#  define {{API}}_MAKE_INIT_STRUCT(type, value) ((type) value)
+#else
+#  define {{API}}_MAKE_INIT_STRUCT(type, value) value
+#endif
+
 {% for constant in by_category["constant"] %}
     #define {{API}}_{{constant.name.SNAKE_CASE()}} {{constant.value}}
 {% endfor %}
@@ -114,6 +128,15 @@ typedef uint32_t {{API}}Bool;
     ) {{API}}_FUNCTION_ATTRIBUTE;
 {% endfor %}
 
+// Callback function pointers
+{% for type in by_category["callback function"] %}
+    typedef {{as_cType(type.return_type.name)}} (*{{as_cType(type.name)}})(
+        {%- for arg in type.arguments -%}
+            {{as_annotated_cType(arg)}}{{", "}}
+        {%- endfor -%}
+    void* userdata1, void* userdata2) {{API}}_FUNCTION_ATTRIBUTE;
+{% endfor %}
+
 typedef struct {{API}}ChainedStruct {
     struct {{API}}ChainedStruct const * next;
     {{API}}SType sType;
@@ -123,6 +146,28 @@ typedef struct {{API}}ChainedStructOut {
     struct {{API}}ChainedStructOut * next;
     {{API}}SType sType;
 } {{API}}ChainedStructOut {{API}}_STRUCTURE_ATTRIBUTE;
+
+{% macro render_c_default_value(member) -%}
+    {%- if member.annotation in ["*", "const*"] and member.optional or member.default_value == "nullptr" -%}
+        nullptr
+    {%- elif member.type.category == "object" and member.optional -%}
+        nullptr
+    {%- elif member.type.category == "callback function" -%}
+        nullptr
+    {%- elif member.type.category in ["enum", "bitmask"] and member.default_value != None -%}
+        {{as_cEnum(member.type.name, Name(member.default_value))}}
+    {%- elif member.default_value != None -%}
+        {{member.default_value}}
+    {%- elif member.type.category == "structure" and member.annotation == "value" -%}
+        {{API}}_{{member.type.name.SNAKE_CASE()}}_INIT
+    {%- else -%}
+        {{- assert(member.json_data.get("no_default", false) == false) -}}
+        {{- assert(member.default_value == None) -}}
+        {}
+    {%- endif -%}
+{% endmacro %}
+
+#define {{API}}_COMMA ,
 
 {% for type in by_category["structure"] %}
     {% for root in type.chain_roots %}
@@ -145,6 +190,40 @@ typedef struct {{API}}ChainedStructOut {
             {% endif-%}
         {% endfor %}
     } {{as_cType(type.name)}} {{API}}_STRUCTURE_ATTRIBUTE;
+
+    #define {{API}}_{{type.name.SNAKE_CASE()}}_INIT {{API}}_MAKE_INIT_STRUCT({{as_cType(type.name)}}, { \
+        {% if type.extensible %}
+            /*.nextInChain=*/nullptr {{API}}_COMMA \
+        {% endif %}
+        {% if type.chained %}
+            /*.chain=*/{} {{API}}_COMMA \
+        {% endif %}
+        {% for member in type.members %}
+            /*.{{as_varName(member.name)}}=*/{{render_c_default_value(member)}} {{API}}_COMMA \
+        {% endfor %}
+    })
+
+{% endfor %}
+{% for type in by_category["callback info"] %}
+    typedef struct {{as_cType(type.name)}} {
+        {{API}}ChainedStruct const* nextInChain;
+        {{as_cType(types["callback mode"].name)}} mode;
+        {% for member in type.members %}
+            //* Only callback function types are allowed in callback info structs.
+            {{assert(member.type.category == "callback function")}}{{as_annotated_cType(member)}};
+        {% endfor %}
+        void* userdata1;
+        void* userdata2;
+    } {{as_cType(type.name)}} {{API}}_STRUCTURE_ATTRIBUTE;
+
+    #define {{API}}_{{type.name.SNAKE_CASE()}}_INIT {{API}}_MAKE_INIT_STRUCT({{as_cType(type.name)}}, { \
+        /*.mode=*/{{as_cEnum(types["callback mode"].name, Name("undefined"))}} {{API}}_COMMA \
+        {% for member in type.members %}
+            /*.{{as_varName(member.name)}}=*/{{render_c_default_value(member)}} {{API}}_COMMA \
+        {% endfor %}
+        /*.userdata1=*/nullptr {{API}}_COMMA \
+        /*.userdata2=*/nullptr {{API}}_COMMA \
+    })
 
 {% endfor %}
 {% for typeDef in by_category["typedef"] %}

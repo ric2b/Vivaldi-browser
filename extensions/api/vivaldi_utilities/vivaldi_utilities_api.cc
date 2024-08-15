@@ -35,6 +35,7 @@
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_event_router_factory.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/first_run/first_run.h"
+#include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
 #include "chrome/browser/platform_util.h"
@@ -64,6 +65,7 @@
 #include "components/crash/core/app/crashpad.h"
 #include "components/custom_handlers/protocol_handler.h"
 #include "components/custom_handlers/protocol_handler_registry.h"
+#include "components/history/core/browser/top_sites.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/media_router/browser/media_router_dialog_controller.h"
 #include "components/media_router/browser/media_router_metrics.h"
@@ -121,7 +123,6 @@
 
 #include "components/qr_code_generator/qr_code_generator.h"
 #include "components/qr_code_generator/bitmap_generator.h"
-
 #if defined(ENABLE_RELAY_PROXY)
 #include "proxy/launcher.h"
 #endif
@@ -192,6 +193,9 @@ VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext* context)
 
   razer_chroma_handler_.reset(
       new RazerChromaHandler(Profile::FromBrowserContext(context)));
+
+  TopSitesFactory::GetForProfile(
+      (Profile::FromBrowserContext(context)))->AddObserver(this);
 }
 
 void VivaldiUtilitiesAPI::PostProfileSetup() {
@@ -213,6 +217,9 @@ void VivaldiUtilitiesAPI::Shutdown() {
   if (razer_chroma_handler_ && razer_chroma_handler_->IsAvailable()) {
     razer_chroma_handler_->Shutdown();
   }
+
+  TopSitesFactory::GetForProfile(
+      (Profile::FromBrowserContext(browser_context_)))->RemoveObserver(this);
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI>>::
@@ -436,6 +443,16 @@ void VivaldiUtilitiesAPI::OnPasswordIconStatusChanged(int window_id,
       browser_context_);
 }
 
+void VivaldiUtilitiesAPI::TopSitesLoaded(history::TopSites* top_sites) {}
+
+void VivaldiUtilitiesAPI::TopSitesChanged(
+    history::TopSites* top_sites,
+    history::TopSitesObserver::ChangeReason change_reason) {
+  ::vivaldi::BroadcastEvent(vivaldi::utilities::OnTopSitesChanged::kEventName,
+                            vivaldi::utilities::OnTopSitesChanged::Create(),
+                            browser_context_);
+}
+
 VivaldiUtilitiesAPI::DialogPosition::DialogPosition(
     int window_id,
     const std::string& dialog_name,
@@ -504,7 +521,7 @@ UtilitiesClearRecentlyClosedTabsFunction::Run() {
     result = true;
     for (std::string id : params->ids) {
       size_t before = tab_restore_service->entries().size();
-      tab_restore_service->RemoveTabEntryById(
+      tab_restore_service->RemoveEntryById(
           SessionID::FromSerializedValue(std::stoi(id)));
       // We have no direct mechanism to detect errors, so just test that the
       // number of entries are as expected.
@@ -1369,7 +1386,6 @@ UtilitiesGetDefaultContentSettingsFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string& content_settings = params->content_setting;
-  std::string def_provider = "";
   ContentSettingsType content_type =
       site_settings::ContentSettingsTypeFromGroupName(content_settings);
   ContentSetting default_setting;
@@ -1377,7 +1393,7 @@ UtilitiesGetDefaultContentSettingsFunction::Run() {
       Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
 
   default_setting = HostContentSettingsMapFactory::GetForProfile(profile)
-                        ->GetDefaultContentSetting(content_type, &def_provider);
+                        ->GetDefaultContentSetting(content_type, nullptr);
 
   std::string setting =
       content_settings::ContentSettingToString(default_setting);

@@ -13,10 +13,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "base/version_info/version_info.h"
 #include "chrome/browser/extensions/api/webstore_private/webstore_private_api.h"
 #include "chrome/browser/extensions/extension_api_unittest.h"
 #include "chrome/browser/extensions/extension_install_prompt_show_params.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/mv2_experiment_stage.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
@@ -146,6 +148,21 @@ std::unique_ptr<KeyedService> BuildEventRouter(
 }
 
 }  // namespace
+
+using WebstorePrivateApiUnittest = ExtensionApiUnittest;
+
+TEST_F(WebstorePrivateApiUnittest, GetFullChromeVersion) {
+  auto function =
+      base::MakeRefCounted<WebstorePrivateGetFullChromeVersionFunction>();
+  std::optional<base::Value> response =
+      api_test_utils::RunFunctionAndReturnSingleResult(
+          function.get(), /*args*/ "[]", browser()->profile());
+  ASSERT_TRUE(response);
+  ASSERT_TRUE(response->is_dict());
+
+  std::string version = std::string(version_info::GetVersionNumber());
+  EXPECT_EQ(version, *response->GetDict().FindString("version_number"));
+}
 
 class WebstorePrivateExtensionInstallRequestBase : public ExtensionApiUnittest {
  public:
@@ -717,5 +734,71 @@ INSTANTIATE_TEST_SUITE_P(
     [](const testing::TestParamInfo<FrictionDialogTestCase>& info) {
       return info.param.test_name;
     });
+
+// A test suite to be used with the MV2 deprecation experiments.
+class WebstorePrivateManifestV2DeprecationUnitTest
+    : public ExtensionApiUnittest,
+      public testing::WithParamInterface<MV2ExperimentStage> {
+ public:
+  WebstorePrivateManifestV2DeprecationUnitTest();
+  ~WebstorePrivateManifestV2DeprecationUnitTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+WebstorePrivateManifestV2DeprecationUnitTest::
+    WebstorePrivateManifestV2DeprecationUnitTest() {
+  std::vector<base::test::FeatureRef> enabled_features;
+  std::vector<base::test::FeatureRef> disabled_features;
+  switch (GetParam()) {
+    case MV2ExperimentStage::kNone:
+      disabled_features.push_back(
+          extensions_features::kExtensionManifestV2DeprecationWarning);
+      break;
+    case MV2ExperimentStage::kWarning:
+      enabled_features.push_back(
+          extensions_features::kExtensionManifestV2DeprecationWarning);
+      break;
+  }
+
+  feature_list_.InitWithFeatures(enabled_features, disabled_features);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    WebstorePrivateManifestV2DeprecationUnitTest,
+    testing::Values(MV2ExperimentStage::kNone, MV2ExperimentStage::kWarning),
+    [](const testing::TestParamInfo<MV2ExperimentStage>& info) {
+      switch (info.param) {
+        case MV2ExperimentStage::kNone:
+          return "ExperimentDisabled";
+        case MV2ExperimentStage::kWarning:
+          return "WarningExperiment";
+      }
+    });
+
+// Tests the behavior of the webstorePrivate.getMV2DeprecationStatus() function.
+TEST_P(WebstorePrivateManifestV2DeprecationUnitTest,
+       TestGetMV2DeprecationStatus) {
+  auto function =
+      base::MakeRefCounted<WebstorePrivateGetMV2DeprecationStatusFunction>();
+  std::optional<base::Value> response =
+      api_test_utils::RunFunctionAndReturnSingleResult(
+          function.get(), /*args*/ "[]", browser()->profile());
+  ASSERT_TRUE(response);
+
+  std::string expected;
+  switch (GetParam()) {
+    case MV2ExperimentStage::kNone:
+      expected = "inactive";
+      break;
+    case MV2ExperimentStage::kWarning:
+      expected = "warning";
+      break;
+  }
+
+  EXPECT_EQ(expected, *response);
+}
 
 }  // namespace extensions

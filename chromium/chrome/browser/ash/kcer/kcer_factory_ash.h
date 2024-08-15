@@ -21,6 +21,8 @@ class KcerFactoryAsh final : public KcerFactory, ash::SessionObserver {
  public:
   static void EnsureFactoryBuilt();
 
+  static KcerFactory* GetInstance();
+
   KcerFactoryAsh();
   ~KcerFactoryAsh() override;
 
@@ -64,6 +66,7 @@ class KcerFactoryAsh final : public KcerFactory, ash::SessionObserver {
       std::optional<user_data_auth::TpmTokenInfo> device_token_info);
   // Implements users preference service observer.
   void OnActiveUserPrefServiceChanged(PrefService* pref_service) override;
+  void MaybeScheduleRollbackForCertDoubleWrite(PrefService* pref_service);
 
   std::unique_ptr<internal::KcerRollbackHelper> rollback_helper_;
 };

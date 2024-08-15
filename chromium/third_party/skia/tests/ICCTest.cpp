@@ -44,46 +44,67 @@ DEF_TEST(HDR_ICC, r) {
             SkWriteICCProfile(SkNamedTransferFn::kLinear, SkNamedGamut::kSRGB),
     };
 
-    constexpr size_t kPixelCount = 6;
+    constexpr size_t kPixelCount = 7;
 
     // clang-format off
     float pixels[kPixelCount][3] = {
-            { 0.0f, 0.0f, 0.0f, },
-            { 0.5f, 0.5f, 0.5f, },
-            { 0.5f, 0.0f, 0.0f, },
-            { 0.0f, 0.5f, 0.0f, },
-            { 0.0f, 0.0f, 0.5f, },
-            { 1.0f, 1.0f, 1.0f, },
+            { 0.00f, 0.00f, 0.00f, },
+            { 0.50f, 0.50f, 0.50f, },
+            { 0.50f, 0.00f, 0.00f, },
+            { 0.00f, 0.50f, 0.00f, },
+            { 0.00f, 0.00f, 0.50f, },
+            { 0.25f, 0.50f, 0.00f, },
+            { 0.75f, 0.75f, 0.75f, },
     };
+
+    // The tone mapped value of PQ 0.5 and 0.75.
+    constexpr float kPQ_05 = 0.3182877451f;
+    constexpr float kPQ_075 = 0.9943588777f;
+
+    // The tone mapped value of PQ 0.25, when maxRGB is 0.5.
+    constexpr float kPQ_025 = 0.020679904f;
+
+    // The tone mapped value of HLG 0.5 and 0.75 (when all channels are equal).
+    constexpr float kHLG_05 = 0.20188954163f;
+    constexpr float kHLG_075 = 0.5208149688f;
+
+    // The linearized values of sRGB 0.25, 0.5, and 0.75.
+    constexpr float kSRGB_025 = 0.05087607f;
+    constexpr float kSRGB_05  = 0.21404112f;
+    constexpr float kSRGB_075 = 0.52252153f;
+
     float dst_pixels_expected[kTestCount][kPixelCount][3] = {
             {
                     { 0.f,     0.f,     0.f,     },
-                    { 0.3126f, 0.3125f, 0.3125f, },
-                    { 0.4061f, 0.f,     0.f,     },
-                    { 0.f,     0.3475f, 0.f,     },
-                    { 0.f,     0.f,     0.4426f, },
-                    { 1.f,     1.f,     1.f,     },
+                    { kPQ_05,  kPQ_05,  kPQ_05,  },
+                    { kPQ_05,  0.f,     0.f,     },
+                    { 0.f,     kPQ_05,  0.f,     },
+                    { 0.f,     0.f,     kPQ_05,  },
+                    { kPQ_025, kPQ_05,  0.f,     },
+                    { kPQ_075, kPQ_075, kPQ_075, }, // PQ maps 0.75 ~ 1000 nits to 1.0
             },
             {
-                    { 0.f,     0.f,     0.f,     },
-                    { 0.1044f, 0.1044f, 0.1044f, },
-                    { 0.1044f, 0.f,     0.f,     },
-                    { 0.f,     0.1044f, 0.f,     },
-                    { 0.f,     0.f,     0.1044f, },
-                    { 1.f,     1.f,     1.f,     },
+                    { 0.f,      0.f,      0.f,      },
+                    { kHLG_05,  kHLG_05,  kHLG_05,  },
+                    { 0.1618f,  0.f,      0.f,      }, // HLG will map 0.5 to different values
+                    { 0.f,      0.1895f,  0.f,      }, // if it is the R, G, or B channel, because
+                    { 0.f,      0.f,      0.1251f,  }, // of the OOTF.
+                    { 0.0513f,  0.1924f,  0.f,      },
+                    { kHLG_075, kHLG_075, kHLG_075, },
             },
             {
-                    { 0.f,     0.0f,    0.0f,    },
-                    { 0.2140f, 0.2140f, 0.2140f, },
-                    { 0.2140f, 0.0f,    0.0f,    },
-                    { 0.0f,    0.2140f, 0.0f,    },
-                    { 0.0f,    0.0f,    0.2140f, },
-                    { 1.0f,    1.0f,    1.0f,    },
+                    { 0.f,       0.f,       0.f,       },
+                    { kSRGB_05,  kSRGB_05,  kSRGB_05,  }, // This is just the sRGB transfer function
+                    { kSRGB_05,  0.f,       0.f,       },
+                    { 0.f,       kSRGB_05,  0.f,       },
+                    { 0.f,       0.f,       kSRGB_05,  },
+                    { kSRGB_025, kSRGB_05,  0.f,       },
+                    { kSRGB_075, kSRGB_075, kSRGB_075, },
             },
     };
     // clang-format on
     bool cicp_expected[kTestCount] = {true, true, false};
-    bool a2b_expected[kTestCount] = {true, false, false};
+    bool a2b_expected[kTestCount] = {true, true, false};
     uint32_t cicp_primaries_expected[kTestCount] = {9, 12, 0};
     uint32_t cicp_trfn_expected[kTestCount] = {16, 18, 0};
 
@@ -117,7 +138,7 @@ DEF_TEST(HDR_ICC, r) {
                                                 1);
             REPORTER_ASSERT(r, xform_result);
 
-            auto approx_equal = [=](float x, float y) { return std::abs(x - y) < 1e-3f; };
+            auto approx_equal = [=](float x, float y) { return std::abs(x - y) < 1.f / 64.f; };
             for (size_t i = 0; i < 3; ++i) {
                 REPORTER_ASSERT(
                         r, approx_equal(dst_pixel_actual[i], dst_pixels_expected[test][pixel][i]));

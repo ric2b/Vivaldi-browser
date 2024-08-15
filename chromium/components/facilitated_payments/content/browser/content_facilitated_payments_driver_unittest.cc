@@ -34,11 +34,33 @@ class FakeFacilitatedPaymentsAgent : public mojom::FacilitatedPaymentsAgent {
   // mojom::FacilitatedPaymentsAgent:
   MOCK_METHOD(void,
               TriggerPixCodeDetection,
-              (base::OnceCallback<void(mojom::PixCodeDetectionResult)>),
+              (base::OnceCallback<void(mojom::PixCodeDetectionResult,
+                                       const std::string&)>),
               (override));
 
  private:
   mojo::AssociatedReceiver<mojom::FacilitatedPaymentsAgent> receiver_{this};
+};
+
+// A mock for the facilitated payment "client" interface, used for loading risk
+// data, and showing the PIX payment prompt.
+class FakeFacilitatedPaymentsClient : public FacilitatedPaymentsClient {
+ public:
+  FakeFacilitatedPaymentsClient() = default;
+  ~FakeFacilitatedPaymentsClient() override = default;
+
+  MOCK_METHOD(void,
+              LoadRiskData,
+              (base::OnceCallback<void(const std::string&)>),
+              (override));
+  MOCK_METHOD(autofill::PersonalDataManager*,
+              GetPersonalDataManager,
+              (),
+              (override));
+  MOCK_METHOD(FacilitatedPaymentsNetworkInterface*,
+              GetFacilitatedPaymentsNetworkInterface,
+              (),
+              (override));
 };
 
 class ContentFacilitatedPaymentsDriverTest
@@ -49,7 +71,7 @@ class ContentFacilitatedPaymentsDriverTest
   void SetUp() override {
     decider_ =
         std::make_unique<optimization_guide::TestOptimizationGuideDecider>();
-    client_ = std::make_unique<FacilitatedPaymentsClient>();
+    client_ = std::make_unique<FakeFacilitatedPaymentsClient>();
     agent_ = std::make_unique<FakeFacilitatedPaymentsAgent>();
     content::RenderViewHostTestHarness::SetUp();
 
@@ -92,21 +114,24 @@ INSTANTIATE_TEST_SUITE_P(
 // Test that the renderer receives the call to run PIX code detection, and that
 // the browser is able to get the result.
 TEST_P(ContentFacilitatedPaymentsDriverTest, TestBrowserRendererConnection) {
-  base::test::TestFuture<mojom::PixCodeDetectionResult>
+  base::test::TestFuture<mojom::PixCodeDetectionResult, const std::string&>
       captured_result_for_test;
 
   // On the renderer, when the call to run PIX code detection is received, run
   // callback with different results.
   EXPECT_CALL(*agent_, TriggerPixCodeDetection)
       .Times(1)
-      .WillOnce(base::test::RunOnceCallback<0>(GetParam()));
+      .WillOnce(base::test::RunOnceCallback<0>(GetParam(), "pix code"));
 
   // Trigger PIX code detection from the browser, and capture the result that
   // the callback is called with.
   driver_->TriggerPixCodeDetection(captured_result_for_test.GetCallback());
 
   // Verify that the correct result is captured.
-  EXPECT_EQ(captured_result_for_test.Get(), GetParam());
+  EXPECT_EQ(captured_result_for_test.Get<mojom::PixCodeDetectionResult>(),
+            GetParam());
+  EXPECT_EQ(captured_result_for_test.Get<std::string>(),
+            "pix code");
 }
 
 }  // namespace payments::facilitated

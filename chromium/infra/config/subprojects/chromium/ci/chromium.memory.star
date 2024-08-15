@@ -7,7 +7,7 @@ load("//lib/args.star", "args")
 load("//lib/branches.star", "branches")
 load("//lib/builder_config.star", "builder_config")
 load("//lib/builder_health_indicators.star", "health_spec")
-load("//lib/builders.star", "os", "reclient", "sheriff_rotations", "siso")
+load("//lib/builders.star", "os", "reclient", "sheriff_rotations")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
 load("//lib/gn_args.star", "gn_args")
@@ -29,10 +29,8 @@ ci.defaults.set(
     reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
     service_account = ci.DEFAULT_SERVICE_ACCOUNT,
     shadow_service_account = ci.DEFAULT_SHADOW_SERVICE_ACCOUNT,
-    siso_configs = ["builder"],
-    siso_enable_cloud_profiler = True,
-    siso_enable_cloud_trace = True,
-    siso_project = siso.project.DEFAULT_TRUSTED,
+    siso_enabled = True,
+    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
 )
 
 consoles.console_view(
@@ -89,6 +87,7 @@ linux_memory_builder(
         short_name = "bld",
     ),
     cq_mirrors_console_view = "mirrors",
+    siso_enabled = True,
 )
 
 linux_memory_builder(
@@ -172,6 +171,9 @@ linux_memory_builder(
         ),
         build_gs_bucket = "chromium-memory-archive",
     ),
+    builder_config_settings = builder_config.ci_settings(
+        retry_failed_shards = True,
+    ),
     gn_args = gn_args.config(
         configs = [
             "cfi_full",
@@ -230,10 +232,9 @@ linux_memory_builder(
         category = "cros|asan",
         short_name = "bld",
     ),
-    # TODO(crbug.com/1030593): Builds take more than 3 hours sometimes. Remove
+    # TODO(crbug.com/40661942): Builds take more than 3 hours sometimes. Remove
     # once the builds are faster.
     execution_timeout = 6 * time.hour,
-    siso_enabled = True,
 )
 
 linux_memory_builder(
@@ -258,6 +259,9 @@ linux_memory_builder(
             target_platform = builder_config.target_platform.CHROMEOS,
         ),
         build_gs_bucket = "chromium-memory-archive",
+    ),
+    builder_config_settings = builder_config.ci_settings(
+        retry_failed_shards = True,
     ),
     console_view_entry = consoles.console_view_entry(
         category = "cros|asan",
@@ -304,7 +308,6 @@ linux_memory_builder(
         short_name = "bld",
     ),
     execution_timeout = 4 * time.hour,
-    siso_enabled = True,
 )
 
 linux_memory_builder(
@@ -374,7 +377,6 @@ linux_memory_builder(
         category = "linux|msan",
         short_name = "bld",
     ),
-    siso_enabled = True,
 )
 
 linux_memory_builder(
@@ -446,6 +448,7 @@ linux_memory_builder(
         category = "lacros|asan",
         short_name = "asan",
     ),
+    execution_timeout = 4 * time.hour,
 )
 
 ci.builder(

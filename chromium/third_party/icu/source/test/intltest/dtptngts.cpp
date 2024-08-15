@@ -140,7 +140,7 @@ void IntlTestDateTimePatternGeneratorAPI::testAPI(/*char *par*/)
 
     UnicodeString patternResults_de_DE[] = {
         // de_DE                                              // 2 de_DE
-        UnicodeString("01/1999"),                             // 00: yM
+        UnicodeString("1/1999"),                             // 00: yM
         UnicodeString("Jan. 1999"),                           // 01: yMMM
         UnicodeString("13.1.1999"),                           // 02: yMd
         UnicodeString("13. Jan. 1999"),                       // 03: yMMMd
@@ -245,7 +245,7 @@ void IntlTestDateTimePatternGeneratorAPI::testAPI(/*char *par*/)
 
     UnicodeString patternResults_zh_Hans_CN[] = {
         // zh_Hans_CN                                                     // 7 zh_Hans_CN
-        CharsToUnicodeString("1999\\u5E741\\u6708"),                      // 00: yM -> y\u5E74M\u6708
+        CharsToUnicodeString("1999/1"),                                   // 00: yM
         CharsToUnicodeString("1999\\u5E741\\u6708"),                      // 01: yMMM  -> yyyy\u5E74MMM (fixed expected result per ticket:6626:)
         CharsToUnicodeString("1999/1/13"),                                // 02: yMd
         CharsToUnicodeString("1999\\u5E741\\u670813\\u65E5"),             // 03: yMMMd -> yyyy\u5E74MMMd\u65E5 (fixed expected result per ticket:6626:)
@@ -1384,6 +1384,9 @@ void IntlTestDateTimePatternGeneratorAPI::testJjMapping() {
             continue;
         }
         // Now check that shortPattern and jPattern use the same hour cycle
+        if ((uprv_strncmp(localeID, "csw", 3) == 0 || uprv_strncmp(localeID, "kxv_", 4) == 0) && logKnownIssue("CLDR-17199", "Need timeFormats with h for csw, kxv_Xxxx")) {
+            continue;
+        }
         UnicodeString jPatSkeleton = DateTimePatternGenerator::staticGetSkeleton(jPattern, status);
         UnicodeString shortPatSkeleton = DateTimePatternGenerator::staticGetSkeleton(shortPattern, status);
         if (U_FAILURE(status)) {
@@ -1599,6 +1602,8 @@ void IntlTestDateTimePatternGeneratorAPI::testBestPattern() {
         { "en_GB@calendar=coptic",   "yMd", u"dd/MM/y GGGGG"    },
         { "en_GB@calendar=japanese", "yMd", u"dd/MM/y GGGGG"    },
         { "en_GB@calendar=buddhist", "yMd", u"dd/MM/y GGGGG"    },
+        // ICU-22757: Not inheriting availableFormats patterns from root
+        { "sv_SE",                   "yMd", u"y-MM-dd"          },
         // ICU-20992: Bad patterns for missing fields
         { "ckb_IR",     "mmSSS",       u"mm:ss\u066bSSS"     },
         { "ckb_IR",     "BSSS",        u"SSS \u251c'Dayperiod': B\u2524" },

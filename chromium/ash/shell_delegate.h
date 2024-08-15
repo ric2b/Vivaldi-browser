@@ -43,6 +43,7 @@ class BackGestureContextualNudgeDelegate;
 class CaptureModeDelegate;
 class ClipboardHistoryControllerDelegate;
 class DeskProfilesDelegate;
+class FocusModeDelegate;
 class GameDashboardDelegate;
 class MediaNotificationProvider;
 class NearbyShareController;
@@ -56,6 +57,7 @@ class WindowState;
 class ASH_EXPORT ShellDelegate {
  public:
   enum class FeedbackSource {
+    kBirch,
     kFocusMode,
     kGameDashboard,
     kOverview,
@@ -105,6 +107,10 @@ class ASH_EXPORT ShellDelegate {
 
   virtual std::unique_ptr<api::TasksDelegate> CreateTasksDelegate() const = 0;
 
+  // Creates and returns the delegate for Focus Mode.
+  virtual std::unique_ptr<FocusModeDelegate> CreateFocusModeDelegate()
+      const = 0;
+
   // Creates and returns the delegate of the System Sounds feature.
   virtual std::unique_ptr<SystemSoundsDelegate> CreateSystemSoundsDelegate()
       const = 0;
@@ -113,10 +119,10 @@ class ASH_EXPORT ShellDelegate {
   virtual std::unique_ptr<UserEducationDelegate> CreateUserEducationDelegate()
       const = 0;
 
-  // Returns the geolocation loader factory used to initialize geolocation
-  // provider.
+  // Returns the `SharedURLLoaderFactory` associated with the browser process.
+  // Do not use for requests related to the user profile.
   virtual scoped_refptr<network::SharedURLLoaderFactory>
-  GetGeolocationUrlLoaderFactory() const = 0;
+  GetBrowserProcessUrlLoaderFactory() const = 0;
 
   // Check whether the current tab of the browser window can go back.
   virtual bool CanGoBack(gfx::NativeWindow window) const = 0;

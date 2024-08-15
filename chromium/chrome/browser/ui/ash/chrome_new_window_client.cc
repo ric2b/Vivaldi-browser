@@ -12,7 +12,6 @@
 #include "apps/launcher.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_list/internal_app_id_constants.h"
-#include "ash/public/cpp/keyboard_shortcut_viewer.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/window_properties.h"
@@ -62,8 +61,6 @@
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_util.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_id_constants.h"
-#include "chrome/browser/web_applications/web_app_provider.h"
-#include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
@@ -115,18 +112,18 @@ std::string GetPathAndQuery(const GURL& url) {
   return result;
 }
 
-chrome::FeedbackSource MapToChromeSource(
+feedback::FeedbackSource MapToChromeSource(
     ash::NewWindowDelegate::FeedbackSource source) {
   switch (source) {
     case ash::NewWindowDelegate::FeedbackSource::kFeedbackSourceAsh:
-      return chrome::FeedbackSource::kFeedbackSourceAsh;
+      return feedback::FeedbackSource::kFeedbackSourceAsh;
     case ash::NewWindowDelegate::FeedbackSource::kFeedbackSourceAssistant:
-      return chrome::FeedbackSource::kFeedbackSourceAssistant;
+      return feedback::FeedbackSource::kFeedbackSourceAssistant;
     case ash::NewWindowDelegate::FeedbackSource::kFeedbackSourceQuickAnswers:
-      return chrome::FeedbackSource::kFeedbackSourceQuickAnswers;
+      return feedback::FeedbackSource::kFeedbackSourceQuickAnswers;
     case ash::NewWindowDelegate::FeedbackSource::
         kFeedbackSourceChannelIndicator:
-      return chrome::FeedbackSource::kFeedbackSourceChannelIndicator;
+      return feedback::FeedbackSource::kFeedbackSourceChannelIndicator;
   }
 }
 
@@ -293,7 +290,7 @@ void ChromeNewWindowClient::NewWindowForDetachingTab(
     return;
   }
 
-  // TODO(https://crbug.com/1069869): evaluate whether the above
+  // TODO(crbug.com/40126106): evaluate whether the above
   // failures can happen in valid states, and if so whether we need to
   // reflect failure in UX.
 
@@ -490,10 +487,6 @@ void ChromeNewWindowClient::RestoreTab() {
         std::make_unique<TabRestoreHelper>(this, profile, service);
     service->LoadTabsFromLastSession();
   }
-}
-
-void ChromeNewWindowClient::ShowKeyboardShortcutViewer() {
-  ShowShortcutCustomizationApp();
 }
 
 void ChromeNewWindowClient::ShowShortcutCustomizationApp() {

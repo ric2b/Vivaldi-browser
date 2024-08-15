@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="be">
+<translation id="2947471979790858922">Гісторыя вашай актыўнасці ў прыватных укладках будзе выдаленая з гэтай прылады</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Вы можаце знайсці ўсе закрытыя ўкладкі ў галоўным меню Vivaldi у нядаўніх укладках. Вашая прыватная ўкладка не будзе паказвацца.}
+        other {Вы можаце знайсці ўсе закрытыя ўкладкі ў галоўным меню Vivaldi у нядаўніх укладках. # вашыя прыватныя ўкладкі не будуць паказвацца.}}</translation>
+<translation id="4871187110787939393">Закрыць усе прыватныя ўкладкі?</translation>
 </translationbundle>

@@ -5,9 +5,13 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_STYLE_INSET_AREA_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_STYLE_INSET_AREA_H_
 
+#include <optional>
+
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/css/anchor_evaluator.h"
+#include "third_party/blink/renderer/core/css/anchor_query.h"
+#include "third_party/blink/renderer/core/css/css_anchor_query_enums.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
+#include "third_party/blink/renderer/platform/geometry/layout_unit.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 
 namespace blink {
@@ -15,7 +19,7 @@ namespace blink {
 class WritingDirectionMode;
 
 // Possible region end points for a computed <inset-area-span>
-enum class InsetAreaRegion {
+enum class InsetAreaRegion : uint8_t {
   kNone,
   kAll,
   kCenter,
@@ -23,6 +27,14 @@ enum class InsetAreaRegion {
   kEnd,
   kSelfStart,
   kSelfEnd,
+  kInlineStart,
+  kInlineEnd,
+  kSelfInlineStart,
+  kSelfInlineEnd,
+  kBlockStart,
+  kBlockEnd,
+  kSelfBlockStart,
+  kSelfBlockEnd,
   kTop,
   kBottom,
   kLeft,
@@ -38,12 +50,13 @@ enum class InsetAreaRegion {
 };
 
 // Represents the computed value for the inset-area property. Each span is
-// represented by two end points in the spec order for that axis. That is:
+// represented by two end points. That is:
 //
-//   "all" -> (kStart, kEnd)
+//   "span-all" -> (kAll, kAll)
 //   "center" -> (kCenter, kCenter)
-//   "right left" -> (kLeft, kRight)
-//   "top center bottom" -> (kTop, kBottom)
+//   "span-right" -> (kCenter, kRight)
+//   "span-left" -> (kLeft, kCenter)
+//   "top" -> (kTop, kTop)
 //
 // The axes are not ordered in a particular block/inline or vertical/
 // horizontal order because the axes will be resolved at layout time (see
@@ -110,6 +123,22 @@ class CORE_EXPORT InsetArea {
   InsetAreaRegion span1_end_ = InsetAreaRegion::kNone;
   InsetAreaRegion span2_start_ = InsetAreaRegion::kNone;
   InsetAreaRegion span2_end_ = InsetAreaRegion::kNone;
+};
+
+// Used to store inset offsets on ComputedStyle for adjusting the
+// containing-block rectangle. All zeros means a span-all inset-area is applied.
+// Non-zero values refer to an anchor edge offset relative to the containing
+// block rectangle.
+struct InsetAreaOffsets {
+  std::optional<LayoutUnit> top;
+  std::optional<LayoutUnit> bottom;
+  std::optional<LayoutUnit> left;
+  std::optional<LayoutUnit> right;
+
+  bool operator==(const InsetAreaOffsets& other) const {
+    return top == other.top && bottom == other.bottom && left == other.left &&
+           right == other.right;
+  }
 };
 
 }  // namespace blink

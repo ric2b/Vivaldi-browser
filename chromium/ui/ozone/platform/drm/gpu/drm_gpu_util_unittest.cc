@@ -10,8 +10,8 @@
 #include "build/chromeos_buildflags.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/ozone/platform/drm/gpu/fake_drm_device.h"
 #include "ui/ozone/platform/drm/gpu/fake_drm_device_generator.h"
-#include "ui/ozone/platform/drm/gpu/mock_drm_device.h"
 
 namespace ui {
 namespace {
@@ -28,14 +28,14 @@ Matcher<const CrtcConnectorPair&> PairEq(const CrtcConnectorPair& value) {
                Field(&CrtcConnectorPair::crtc_id, Eq(value.crtc_id)));
 }
 
-MockDrmDevice::ConnectorProperties& CreateConnectorWithPossibleCrtcs(
-    MockDrmDevice::MockDrmState& drm_state,
+FakeDrmDevice::ConnectorProperties& CreateConnectorWithPossibleCrtcs(
+    raw_ptr<FakeDrmDevice> drm,
     uint32_t possible_crtcs) {
-  MockDrmDevice::EncoderProperties& encoder = drm_state.AddEncoder();
+  FakeDrmDevice::EncoderProperties& encoder = drm->AddEncoder();
   encoder.possible_crtcs = possible_crtcs;
   const uint32_t encoder_id = encoder.id;
 
-  MockDrmDevice::ConnectorProperties& connector = drm_state.AddConnector();
+  FakeDrmDevice::ConnectorProperties& connector = drm->AddConnector();
   connector.connection = true;
   connector.encoders = std::vector<uint32_t>{encoder_id};
   return connector;
@@ -50,7 +50,7 @@ class DrmGpuUtilTest : public testing::Test {
     device_ = fake_device_generator_->CreateDevice(
         base::FilePath("/test/dri/card0"), base::ScopedFD(),
         /*is_primary_device=*/true);
-    mock_drm_ = static_cast<MockDrmDevice*>(device_.get());
+    fake_drm_ = static_cast<FakeDrmDevice*>(device_.get());
   }
 
   ControllerConfigParams CreateFakeParamWithConnectorId(uint32_t connector_id) {
@@ -61,7 +61,7 @@ class DrmGpuUtilTest : public testing::Test {
 
   std::unique_ptr<DrmDeviceGenerator> fake_device_generator_;
   scoped_refptr<DrmDevice> device_;
-  raw_ptr<MockDrmDevice> mock_drm_;
+  raw_ptr<FakeDrmDevice> fake_drm_;
 };
 
 // TODO(b/322831691): Deterministic failure.
@@ -72,43 +72,43 @@ class DrmGpuUtilTest : public testing::Test {
 #define MAYBE_EmptyPossibleCrtcsForConnector EmptyPossibleCrtcsForConnector
 #endif
 TEST_F(DrmGpuUtilTest, MAYBE_EmptyPossibleCrtcsForConnector) {
-  EXPECT_DEATH_IF_SUPPORTED(GetAllCrtcConnectorPermutations(*mock_drm_, {}),
+  EXPECT_DEATH_IF_SUPPORTED(GetAllCrtcConnectorPermutations(*fake_drm_, {}),
                             "No connectors specified");
 }
 
 TEST_F(DrmGpuUtilTest, EmptyPossibleCrtcs) {
-  auto drm_state = MockDrmDevice::MockDrmState::CreateStateWithAllProperties();
+  fake_drm_->ResetStateWithAllProperties();
 
   uint32_t connector_1 =
-      CreateConnectorWithPossibleCrtcs(drm_state, /*possible_crtcs=*/0).id;
+      CreateConnectorWithPossibleCrtcs(fake_drm_, /*possible_crtcs=*/0).id;
   uint32_t connector_2 =
-      CreateConnectorWithPossibleCrtcs(drm_state, /*possible_crtcs=*/0).id;
+      CreateConnectorWithPossibleCrtcs(fake_drm_, /*possible_crtcs=*/0).id;
 
-  mock_drm_->InitializeState(drm_state, /*use_atomic*/ true);
+  fake_drm_->InitializeState(/*use_atomic*/ true);
 
   EXPECT_THAT(GetAllCrtcConnectorPermutations(
-                  *mock_drm_, {CreateFakeParamWithConnectorId(connector_1),
+                  *fake_drm_, {CreateFakeParamWithConnectorId(connector_1),
                                CreateFakeParamWithConnectorId(connector_2)}),
               IsEmpty());
 }
 
 TEST_F(DrmGpuUtilTest, ThreeConnectorsSameThreeCrtcs) {
-  auto drm_state = MockDrmDevice::MockDrmState::CreateStateWithAllProperties();
+  fake_drm_->ResetStateWithAllProperties();
 
   // Add 3 CRTCs
-  uint32_t crtc_1 = drm_state.AddCrtc().id;
-  uint32_t crtc_2 = drm_state.AddCrtc().id;
-  uint32_t crtc_3 = drm_state.AddCrtc().id;
+  uint32_t crtc_1 = fake_drm_->AddCrtc().id;
+  uint32_t crtc_2 = fake_drm_->AddCrtc().id;
+  uint32_t crtc_3 = fake_drm_->AddCrtc().id;
 
   // Add 3 encoders and connectors that can use all 3 CRTCs.
   uint32_t connector_1 =
-      CreateConnectorWithPossibleCrtcs(drm_state, /*possible_crtcs=*/0b111).id;
+      CreateConnectorWithPossibleCrtcs(fake_drm_, /*possible_crtcs=*/0b111).id;
   uint32_t connector_2 =
-      CreateConnectorWithPossibleCrtcs(drm_state, /*possible_crtcs=*/0b111).id;
+      CreateConnectorWithPossibleCrtcs(fake_drm_, /*possible_crtcs=*/0b111).id;
   uint32_t connector_3 =
-      CreateConnectorWithPossibleCrtcs(drm_state, /*possible_crtcs=*/0b111).id;
+      CreateConnectorWithPossibleCrtcs(fake_drm_, /*possible_crtcs=*/0b111).id;
 
-  mock_drm_->InitializeState(drm_state, /*use_atomic*/ true);
+  fake_drm_->InitializeState(/*use_atomic*/ true);
 
   // 3! = 6 permutations
   //   {{crtc_1, connector_1}, {crtc_2, connector_2}, {crtc_3, connector_3}},
@@ -118,7 +118,7 @@ TEST_F(DrmGpuUtilTest, ThreeConnectorsSameThreeCrtcs) {
   //   {{crtc_3, connector_1}, {crtc_2, connector_2}, {crtc_1, connector_3}},
   //   {{crtc_3, connector_1}, {crtc_1, connector_2}, {crtc_2, connector_3}}
   EXPECT_THAT(GetAllCrtcConnectorPermutations(
-                  *mock_drm_, {CreateFakeParamWithConnectorId(connector_1),
+                  *fake_drm_, {CreateFakeParamWithConnectorId(connector_1),
                                CreateFakeParamWithConnectorId(connector_2),
                                CreateFakeParamWithConnectorId(connector_3)}),
               UnorderedElementsAre(
@@ -146,44 +146,44 @@ TEST_F(DrmGpuUtilTest, ThreeConnectorsSameThreeCrtcs) {
 // all connectors are assigned a CRTC (But the inverse of not all CRTCs being
 // assigned connectors is OK).
 TEST_F(DrmGpuUtilTest, FilterConnectorWithoutCrtcPermutaitons) {
-  auto drm_state = MockDrmDevice::MockDrmState::CreateStateWithAllProperties();
+  fake_drm_->ResetStateWithAllProperties();
 
   // Add 2 CRTCs
-  drm_state.AddCrtc();
-  drm_state.AddCrtc();
+  fake_drm_->AddCrtc();
+  fake_drm_->AddCrtc();
 
   // Add 3 encoders and connectors that can use all 2 CRTCs.
   uint32_t connector_1 =
-      CreateConnectorWithPossibleCrtcs(drm_state, /*possible_crtcs=*/0b11).id;
+      CreateConnectorWithPossibleCrtcs(fake_drm_, /*possible_crtcs=*/0b11).id;
   uint32_t connector_2 =
-      CreateConnectorWithPossibleCrtcs(drm_state, /*possible_crtcs=*/0b11).id;
+      CreateConnectorWithPossibleCrtcs(fake_drm_, /*possible_crtcs=*/0b11).id;
   uint32_t connector_3 =
-      CreateConnectorWithPossibleCrtcs(drm_state, /*possible_crtcs=*/0b11).id;
+      CreateConnectorWithPossibleCrtcs(fake_drm_, /*possible_crtcs=*/0b11).id;
 
-  mock_drm_->InitializeState(drm_state, /*use_atomic*/ true);
+  fake_drm_->InitializeState(/*use_atomic*/ true);
 
   EXPECT_THAT(GetAllCrtcConnectorPermutations(
-                  *mock_drm_, {CreateFakeParamWithConnectorId(connector_1),
+                  *fake_drm_, {CreateFakeParamWithConnectorId(connector_1),
                                CreateFakeParamWithConnectorId(connector_2),
                                CreateFakeParamWithConnectorId(connector_3)}),
               IsEmpty());
 }
 
 TEST_F(DrmGpuUtilTest, MoreCrtcsThanConnectors) {
-  auto drm_state = MockDrmDevice::MockDrmState::CreateStateWithAllProperties();
+  fake_drm_->ResetStateWithAllProperties();
 
   // Add 3 CRTCs
-  uint32_t crtc_1 = drm_state.AddCrtc().id;
-  uint32_t crtc_2 = drm_state.AddCrtc().id;
-  uint32_t crtc_3 = drm_state.AddCrtc().id;
+  uint32_t crtc_1 = fake_drm_->AddCrtc().id;
+  uint32_t crtc_2 = fake_drm_->AddCrtc().id;
+  uint32_t crtc_3 = fake_drm_->AddCrtc().id;
 
   // Add 2 encoders and connectors that can use all 3 CRTCs.
   uint32_t connector_1 =
-      CreateConnectorWithPossibleCrtcs(drm_state, /*possible_crtcs=*/0b111).id;
+      CreateConnectorWithPossibleCrtcs(fake_drm_, /*possible_crtcs=*/0b111).id;
   uint32_t connector_2 =
-      CreateConnectorWithPossibleCrtcs(drm_state, /*possible_crtcs=*/0b111).id;
+      CreateConnectorWithPossibleCrtcs(fake_drm_, /*possible_crtcs=*/0b111).id;
 
-  mock_drm_->InitializeState(drm_state, /*use_atomic*/ true);
+  fake_drm_->InitializeState(/*use_atomic*/ true);
 
   // 2 * 3 = 6 permutations
   //   {{crtc_1, connector_1}, {crtc_2, connector_2},
@@ -193,7 +193,7 @@ TEST_F(DrmGpuUtilTest, MoreCrtcsThanConnectors) {
   //   {{crtc_3, connector_1}, {crtc_2, connector_2},
   //   {{crtc_3, connector_1}, {crtc_1, connector_2}
   EXPECT_THAT(GetAllCrtcConnectorPermutations(
-                  *mock_drm_, {CreateFakeParamWithConnectorId(connector_1),
+                  *fake_drm_, {CreateFakeParamWithConnectorId(connector_1),
                                CreateFakeParamWithConnectorId(connector_2)}),
               UnorderedElementsAre(
                   UnorderedElementsAre(PairEq({crtc_1, connector_1}),
@@ -211,28 +211,28 @@ TEST_F(DrmGpuUtilTest, MoreCrtcsThanConnectors) {
 }
 
 TEST_F(DrmGpuUtilTest, VaryingPossibleCrtcs) {
-  auto drm_state = MockDrmDevice::MockDrmState::CreateStateWithAllProperties();
+  fake_drm_->ResetStateWithAllProperties();
 
   // Add 3 CRTCs
-  uint32_t crtc_1 = drm_state.AddCrtc().id;
-  uint32_t crtc_2 = drm_state.AddCrtc().id;
-  uint32_t crtc_3 = drm_state.AddCrtc().id;
+  uint32_t crtc_1 = fake_drm_->AddCrtc().id;
+  uint32_t crtc_2 = fake_drm_->AddCrtc().id;
+  uint32_t crtc_3 = fake_drm_->AddCrtc().id;
 
   // Add 3 encoders and connectors that uses combination of the above 3 CRTCs.
   uint32_t connector_1 =
-      CreateConnectorWithPossibleCrtcs(drm_state, /*possible_crtcs=*/0b111).id;
+      CreateConnectorWithPossibleCrtcs(fake_drm_, /*possible_crtcs=*/0b111).id;
   uint32_t connector_2 =
-      CreateConnectorWithPossibleCrtcs(drm_state, /*possible_crtcs=*/0b011).id;
+      CreateConnectorWithPossibleCrtcs(fake_drm_, /*possible_crtcs=*/0b011).id;
   uint32_t connector_3 =
-      CreateConnectorWithPossibleCrtcs(drm_state, /*possible_crtcs=*/0b101).id;
+      CreateConnectorWithPossibleCrtcs(fake_drm_, /*possible_crtcs=*/0b101).id;
 
-  mock_drm_->InitializeState(drm_state, /*use_atomic*/ true);
+  fake_drm_->InitializeState(/*use_atomic*/ true);
 
   //   {{crtc_1, connector_1}, {crtc_2, connector_2}, {crtc_3, connector_3}},
   //   {{crtc_2, connector_1}, {crtc_1, connector_2}, {crtc_3, connector_3}},
   //   {{crtc_3, connector_1}, {crtc_2, connector_2}, {crtc_1, connector_3}}
   EXPECT_THAT(GetAllCrtcConnectorPermutations(
-                  *mock_drm_, {CreateFakeParamWithConnectorId(connector_1),
+                  *fake_drm_, {CreateFakeParamWithConnectorId(connector_1),
                                CreateFakeParamWithConnectorId(connector_2),
                                CreateFakeParamWithConnectorId(connector_3)}),
               UnorderedElementsAre(

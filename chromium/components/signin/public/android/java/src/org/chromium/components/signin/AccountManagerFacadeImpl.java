@@ -186,7 +186,7 @@ public class AccountManagerFacadeImpl implements AccountManagerFacade {
 
             @Override
             protected void onPostExecute(Boolean isChild) {
-                // TODO(crbug.com/1258563): rework this interface to avoid passing a null account.
+                // TODO(crbug.com/40201126): rework this interface to avoid passing a null account.
                 listener.onStatusReady(isChild, isChild ? coreAccountInfo : null);
             }
         }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
@@ -296,7 +296,7 @@ public class AccountManagerFacadeImpl implements AccountManagerFacade {
                             }
                             final String gaiaId = getAccountGaiaId(email);
                             if (gaiaId == null) {
-                                // TODO(crbug.com/1465339): Add metrics to check how often we get a
+                                // TODO(crbug.com/40275966): Add metrics to check how often we get a
                                 // null gaiaId.
                                 return null;
                             }

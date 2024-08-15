@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: selinux
 title: SELinux in ChromeOS
 ---
@@ -1034,7 +1034,7 @@ for acknowledged users on user build. But for developer build, we still write
 all audit events dumped to syslog to crash pool.
 
 If you see any `selinux_violation`\* in `/var/spool/crash`, it doesn't mean that
-something has crashed. It only means an audit event has occured. SELinux doesn't
+something has crashed. It only means an audit event has occurred. SELinux doesn't
 kill any process violating the policy, it just forces the corresponding syscall
 to return `-EACCESS` (permission denied). In most cases, you don't need to care
 about what's being stored in /var/spool/crash for SELinux violations. If you

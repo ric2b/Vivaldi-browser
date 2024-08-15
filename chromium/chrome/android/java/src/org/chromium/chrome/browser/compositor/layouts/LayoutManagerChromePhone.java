@@ -10,14 +10,14 @@ import android.view.ViewGroup;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
-import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.layouts.phone.SimpleAnimationLayout;
 import org.chromium.chrome.browser.hub.HubLayoutDependencyHolder;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab_ui.TabContentManager;
+import org.chromium.chrome.browser.tab_ui.TabSwitcher;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.features.start_surface.StartSurface;
@@ -40,7 +40,7 @@ import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
-
+import org.chromium.chrome.browser.ui.desktop_windowing.DesktopWindowStateProvider;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -54,13 +54,8 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
 
     // Vivaldi
     private final List<StripLayoutHelperManager> mTabStrips = new ArrayList<>();
-    private SharedPreferences.OnSharedPreferenceChangeListener mPrefsListener;
     /** A {@link TitleCache} instance that stores all title/favicon bitmaps as CC resources. */
     protected LayerTitleCache mLayerTitleCache;
-
-    // Vivaldi
-    protected ObservableSupplierImpl<LayerTitleCache> mLayerTitleCacheSupplier =
-            new ObservableSupplierImpl<>();
 
     /**
      * Creates an instance of a {@link LayoutManagerChromePhone}.
@@ -73,6 +68,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
      * @param tabSwitcherSupplier Supplier for an interface to talk to the Grid Tab Switcher when
      *     Start surface refactor is enabled. Used to create overviewLayout if it has value,
      *     otherwise will use the accessibility overview layout.
+     * @param tabModelSelectorSupplier Supplier for an interface to talk to the Tab Model Selector.
      * @param browserControlsStateProvider The {@link BrowserControlsStateProvider} for top
      *     controls.
      * @param tabContentManagerSupplier Supplier of the {@link TabContentManager} instance.
@@ -86,6 +82,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             ViewGroup contentContainer,
             Supplier<StartSurface> startSurfaceSupplier,
             Supplier<TabSwitcher> tabSwitcherSupplier,
+            Supplier<TabModelSelector> tabModelSelectorSupplier,
             BrowserControlsStateProvider browserControlsStateProvider,
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             Supplier<TopUiThemeColorProvider> topUiThemeColorProvider,
@@ -98,13 +95,16 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             DragAndDropDelegate dragAndDropDelegate, // Vivaldi
             View toolbarContainerView, //Vivaldi
             ViewStub tabHoverCardViewStub, // Vivaldi
+            ViewStub tabHoverCardViewStubStack, // Vivaldi
             WindowAndroid windowAndroid, // Vivaldi
-            ToolbarManager toolbarManager) { //Vivaldi
+            ToolbarManager toolbarManager,
+            DesktopWindowStateProvider desktopWindowStateProvider) { //Vivaldi
         super(
                 host,
                 contentContainer,
                 startSurfaceSupplier,
                 tabSwitcherSupplier,
+                tabModelSelectorSupplier,
                 browserControlsStateProvider,
                 tabContentManagerSupplier,
                 topUiThemeColorProvider,
@@ -117,12 +117,12 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         // The second one is the stack strip.
         for (int i = 0; i < 2; i++) {
             mTabStrips.add(new StripLayoutHelperManager(mHost.getContext(), host, this,
-                    mHost.getLayoutRenderHost(),
-                    mLayerTitleCacheSupplier,
+                    mHost.getLayoutRenderHost(), new ObservableSupplierImpl<>(mLayerTitleCache),
                     tabModelStartupInfoSupplier, lifecycleDispatcher, multiInstanceManager,
-                    dragAndDropDelegate, toolbarContainerView, tabHoverCardViewStub,
+                    dragAndDropDelegate, toolbarContainerView,
+                    i == 0 ? tabHoverCardViewStub : tabHoverCardViewStubStack,
                     tabContentManagerSupplier, browserControlsStateProvider, windowAndroid,
-                    toolbarManager));
+                    toolbarManager, desktopWindowStateProvider));
             mTabStrips.get(i).setIsStackStrip(i != 0);
             addObserver(mTabStrips.get(i).getTabSwitcherObserver());
         }
@@ -158,7 +158,6 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         if (DeviceClassManager.enableLayerDecorationCache()) {
             mLayerTitleCache = new LayerTitleCache(mHost.getContext(), getResourceManager());
             mLayerTitleCache.setTabModelSelector(selector);
-            mLayerTitleCacheSupplier.set(mLayerTitleCache);
         }
     }
 

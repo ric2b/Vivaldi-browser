@@ -313,7 +313,7 @@ class RendererImplTest : public ::testing::Test {
   void SetAudioTrackSwitchExpectations() {
     InSequence track_switch_seq;
 
-    // Called from withing OnEnabledAudioTracksChanged
+    // Called from within OnEnabledAudioTracksChanged
     EXPECT_CALL(time_source_, CurrentMediaTime());
     EXPECT_CALL(time_source_, CurrentMediaTime());
     EXPECT_CALL(time_source_, StopTicking());
@@ -332,7 +332,7 @@ class RendererImplTest : public ::testing::Test {
   void SetVideoTrackSwitchExpectations() {
     InSequence track_switch_seq;
 
-    // Called from withing OnSelectedVideoTrackChanged
+    // Called from within OnSelectedVideoTrackChanged
     EXPECT_CALL(time_source_, CurrentMediaTime());
     EXPECT_CALL(*video_renderer_, Flush(_));
 
@@ -359,7 +359,7 @@ class RendererImplTest : public ::testing::Test {
   StrictMock<MockTimeSource> time_source_;
   std::unique_ptr<StrictMock<MockDemuxerStream>> audio_stream_;
   std::unique_ptr<StrictMock<MockDemuxerStream>> video_stream_;
-  std::vector<raw_ptr<DemuxerStream, VectorExperimental>> streams_;
+  std::vector<DemuxerStream*> streams_;
   // This field is not a raw_ptr<> because it was filtered by the rewriter for:
   // #addr-of
   RAW_PTR_EXCLUSION RendererClient* video_renderer_client_;

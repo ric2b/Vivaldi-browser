@@ -28,6 +28,7 @@
 #include "libavutil/hwcontext.h"
 #include "libavutil/hwcontext_cuda_internal.h"
 #include "libavutil/cuda_check.h"
+#include "libavutil/mem.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/pixfmt.h"
 
@@ -664,6 +665,8 @@ int ff_nvdec_simple_end_frame(AVCodecContext *avctx)
     NVDECContext *ctx = avctx->internal->hwaccel_priv_data;
     int ret = ff_nvdec_end_frame(avctx);
     ctx->bitstream = NULL;
+    ctx->bitstream_len = 0;
+    ctx->nb_slices = 0;
     return ret;
 }
 

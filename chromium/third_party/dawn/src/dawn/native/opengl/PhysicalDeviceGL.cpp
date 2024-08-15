@@ -178,6 +178,8 @@ MaybeError PhysicalDevice::InitializeImpl() {
 }
 
 void PhysicalDevice::InitializeSupportedFeaturesImpl() {
+    EnableFeature(Feature::StaticSamplers);
+
     // TextureCompressionBC
     {
         // BC1, BC2 and BC3 are not supported in OpenGL or OpenGL ES core features.
@@ -242,8 +244,10 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
         EnableFeature(Feature::DualSourceBlending);
     }
 
-    // Norm16TextureFormats
+    // Unorm16TextureFormats, Snorm16TextureFormats and Norm16TextureFormats
     if (mFunctions.IsGLExtensionSupported("GL_EXT_texture_norm16")) {
+        EnableFeature(Feature::Unorm16TextureFormats);
+        EnableFeature(Feature::Snorm16TextureFormats);
         EnableFeature(Feature::Norm16TextureFormats);
     }
 }
@@ -426,7 +430,8 @@ void PhysicalDevice::SetupBackendDeviceToggles(TogglesState* deviceToggles) cons
 ResultOrError<Ref<DeviceBase>> PhysicalDevice::CreateDeviceImpl(
     AdapterBase* adapter,
     const UnpackedPtr<DeviceDescriptor>& descriptor,
-    const TogglesState& deviceToggles) {
+    const TogglesState& deviceToggles,
+    Ref<DeviceBase::DeviceLostEvent>&& lostEvent) {
     EGLenum api =
         GetBackendType() == wgpu::BackendType::OpenGL ? EGL_OPENGL_API : EGL_OPENGL_ES_API;
     std::unique_ptr<Device::Context> context;
@@ -439,11 +444,43 @@ ResultOrError<Ref<DeviceBase>> PhysicalDevice::CreateDeviceImpl(
 
     DAWN_TRY_ASSIGN(context,
                     ContextEGL::Create(mEGLFunctions, api, mDisplay, useANGLETextureSharing));
-    return Device::Create(adapter, descriptor, mFunctions, std::move(context), deviceToggles);
+    return Device::Create(adapter, descriptor, mFunctions, std::move(context), deviceToggles,
+                          std::move(lostEvent));
 }
 
 bool PhysicalDevice::SupportsFeatureLevel(FeatureLevel featureLevel) const {
     return featureLevel == FeatureLevel::Compatibility;
+}
+
+ResultOrError<PhysicalDeviceSurfaceCapabilities> PhysicalDevice::GetSurfaceCapabilities(
+    const Surface*) const {
+    PhysicalDeviceSurfaceCapabilities capabilities;
+
+    // Formats
+
+    // This is the only supported format in native mode (see crbug.com/dawn/160).
+#if DAWN_PLATFORM_IS(ANDROID)
+    capabilities.formats.push_back(wgpu::TextureFormat::RGBA8Unorm);
+#else
+    capabilities.formats.push_back(wgpu::TextureFormat::BGRA8Unorm);
+#endif  // !DAWN_PLATFORM_IS(ANDROID)
+
+    // Present Modes
+
+    capabilities.presentModes = {
+        wgpu::PresentMode::Fifo,
+        wgpu::PresentMode::Immediate,
+        wgpu::PresentMode::Mailbox,
+    };
+
+    // Alpha Modes
+
+    capabilities.alphaModes = {
+        wgpu::CompositeAlphaMode::Opaque,
+        wgpu::CompositeAlphaMode::Auto,
+    };
+
+    return capabilities;
 }
 
 FeatureValidationResult PhysicalDevice::ValidateFeatureSupportedWithTogglesImpl(

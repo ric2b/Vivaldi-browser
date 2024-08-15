@@ -21,7 +21,6 @@
 <translation id="2470702053775288986">અસમર્થિત એક્સ્ટેન્શન્સ અક્ષમ કર્યાં</translation>
 <translation id="2662876636500006917">Vivaldi વેબ બજાર</translation>
 <translation id="2678063897982469759">ફરી સક્ષમ કરો</translation>
-<translation id="2809586584051668049">અને <ph name="NUMBER_ADDITIONAL_DISABLED" /> વધુ</translation>
 <translation id="2850541429955027218">થીમ ઉમેરો</translation>
 <translation id="2861941300086904918">નેટિવ ક્લાયન્ટ સિક્યુરિટી મેનેજર</translation>
 <translation id="2932883381142163287">દુરુપયોગ જણાવો</translation>
@@ -30,7 +29,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3222066309010235055">પ્રીરેન્ડર: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">પૅક કરવા માટે એક્સ્ટેંશનની રૂટ ડાયરેક્ટરી પસંદ કરો. એક્સ્ટેંશનને અપડેટ કરવા માટે, ફરી ઉપયોગ કરવા ખાનગી કી ફાઇલ પણ પસંદ કરો.</translation>
-<translation id="3288047731229977326">વિકાસકર્તા મોડમાં ચાલી રહેલા એક્સટેન્શન્સ તમારા કમ્પ્યુટરને નુકસાન પહોંચાડી શકે છે. જો તમે વિકાસકર્તા નથી, તો તમે સુરક્ષિત રહેવા માટે વિકાસકર્તા મોડમાં ચાલી રહેલા આ એક્સ્ટેન્શન્સને અક્ષમ કરવા જોઈએ.</translation>
 <translation id="3378572629723696641">આ એક્સ્ટેન્શન દૂષિત થયેલ હોઈ શકે છે.</translation>
 <translation id="3678156199662914018">એક્સ્ટેંશન: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">ઍપ્લિકેશન સુધારો</translation>
@@ -41,7 +39,6 @@
 <translation id="4087089424473531098">એક્સ્ટેંશન બનાવ્યું:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">વિકાસકર્તા મોડ એક્સ્ટેન્શન્સ અક્ષમ કરો</translation>
 <translation id="4100839878934973028">તમારા કમ્પ્યુટર પરના બીજા પ્રોગ્રામે એક ઍપ્લિકેશન ઉમેરી જે Vivaldi કાર્ય કરે છે તે રીતને બદલી શકે છે.</translation>
 <translation id="4176463684765177261">અક્ષમ કરેલું</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K લાઇવ)</translation>
@@ -54,7 +51,6 @@
 <translation id="5143374789336132547">જ્યારે તમે હોમ બટન ક્લિક કરો છો ત્યારે જે પૃષ્ઠ દર્શાવવામાં આવે છે તે <ph name="EXTENSION_NAME" /> એક્સટેન્શને બદલ્યું છે.</translation>
 <translation id="5233231016133573565">પ્રક્રિયા ID</translation>
 <translation id="52912272896845572">ખાનગી કી ફાઇલ અમાન્ય છે.</translation>
-<translation id="5301954838959518834">બરાબર, સમજાઇ ગયું</translation>
 <translation id="5362741141255528695">ખાનગી કી ફાઇલ પસંદ કરો.</translation>
 <translation id="5485102783864353244">ઍપ્લિકેશન ઉમેરો</translation>
 <translation id="5521078259930077036">શું આ તમારી અપેક્ષા મુજબનું હોમ પૃષ્ઠ છે?</translation>

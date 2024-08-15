@@ -5,58 +5,60 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
+#include <xnnpack.h>
+#include <xnnpack/microfnptr.h>
 
 #include <algorithm>
-#include <chrono>
+#include <cassert>
+#include <cmath>
 #include <cstddef>
 #include <cstdlib>
 #include <functional>
 #include <random>
 #include <vector>
 
-#include <xnnpack.h>
-#include <xnnpack/microfnptr.h>
-
+#include "replicable_random_device.h"
+#include <gtest/gtest.h>
 
 class VScaleExpMinusMaxMicrokernelTester {
  public:
-  inline VScaleExpMinusMaxMicrokernelTester& elements(size_t elements) {
+  VScaleExpMinusMaxMicrokernelTester& elements(size_t elements) {
     assert(elements != 0);
     this->elements_ = elements;
     return *this;
   }
 
-  inline size_t elements() const {
+  size_t elements() const {
     return this->elements_;
   }
 
-  inline VScaleExpMinusMaxMicrokernelTester& scale(float scale) {
+  VScaleExpMinusMaxMicrokernelTester& scale(float scale) {
     assert(std::isfinite(scale));
     assert(scale > 0);
     this->scale_ = scale;
     return *this;
   }
 
-  inline float scale() const {
+  float scale() const {
     return this->scale_;
   }
 
-  inline VScaleExpMinusMaxMicrokernelTester& iterations(size_t iterations) {
+  VScaleExpMinusMaxMicrokernelTester& iterations(size_t iterations) {
     this->iterations_ = iterations;
     return *this;
   }
 
-  inline size_t iterations() const {
+  size_t iterations() const {
     return this->iterations_;
   }
 
   void Test(xnn_f32_vscaleexpminusmax_ukernel_fn vscaleexpminusmax) const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     // Choose such range that expf(x[i]) overflows, but expf(x[i] - x_max) doesn't.
     // However, the range is still narrow enough that double-precision exp doesn't overflow.
-    auto f32rng = std::bind(std::uniform_real_distribution<float>(90.0f, 100.0f), rng);
+    auto f32rng = [&rng]() {
+      return std::uniform_real_distribution<float>(90.0f, 100.0f)(rng);
+    };
 
     std::vector<float> x(elements() + XNN_EXTRA_BYTES / sizeof(float));
     std::vector<float> y(elements());

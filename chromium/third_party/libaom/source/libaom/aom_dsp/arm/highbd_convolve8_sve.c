@@ -17,6 +17,8 @@
 #include "config/aom_dsp_rtcd.h"
 
 #include "aom_dsp/arm/aom_neon_sve_bridge.h"
+#include "aom_dsp/arm/aom_filter.h"
+#include "aom_dsp/arm/highbd_convolve8_neon.h"
 #include "aom_dsp/arm/mem_neon.h"
 
 static INLINE uint16x4_t highbd_convolve8_4_h(int16x8_t s[4], int16x8_t filter,
@@ -63,22 +65,10 @@ static INLINE uint16x8_t highbd_convolve8_8_h(int16x8_t s[8], int16x8_t filter,
   return vminq_u16(res, max);
 }
 
-void aom_highbd_convolve8_horiz_sve(const uint8_t *src8, ptrdiff_t src_stride,
-                                    uint8_t *dst8, ptrdiff_t dst_stride,
-                                    const int16_t *filter_x, int x_step_q4,
-                                    const int16_t *filter_y, int y_step_q4,
-                                    int width, int height, int bd) {
-  assert(x_step_q4 == 16);
-  assert(width >= 4 && height >= 4);
-  (void)filter_y;
-  (void)x_step_q4;
-  (void)y_step_q4;
-
-  uint16_t *src = CONVERT_TO_SHORTPTR(src8);
-  uint16_t *dst = CONVERT_TO_SHORTPTR(dst8);
-
-  src -= SUBPEL_TAPS / 2 - 1;
-
+static INLINE void highbd_convolve8_horiz_8tap_sve(
+    const uint16_t *src, ptrdiff_t src_stride, uint16_t *dst,
+    ptrdiff_t dst_stride, const int16_t *filter_x, int width, int height,
+    int bd) {
   const int16x8_t filter = vld1q_s16(filter_x);
 
   if (width == 4) {
@@ -140,10 +130,142 @@ void aom_highbd_convolve8_horiz_sve(const uint8_t *src8, ptrdiff_t src_stride,
   }
 }
 
-DECLARE_ALIGNED(16, static const uint8_t, kDotProdTranConcatTbl[32]) = {
-  0, 1, 8,  9,  16, 17, 24, 25, 2, 3, 10, 11, 18, 19, 26, 27,
-  4, 5, 12, 13, 20, 21, 28, 29, 6, 7, 14, 15, 22, 23, 30, 31
+// clang-format off
+DECLARE_ALIGNED(16, static const uint16_t, kDotProdTbl[16]) = {
+  0, 1, 2, 3, 1, 2, 3, 4, 2, 3, 4, 5, 3, 4, 5, 6,
 };
+
+DECLARE_ALIGNED(16, static const uint16_t, kDeinterleaveTbl[8]) = {
+  0, 2, 4, 6, 1, 3, 5, 7,
+};
+// clang-format on
+
+static INLINE uint16x4_t highbd_convolve4_4_h(int16x8_t s, int16x8_t filter,
+                                              uint16x8x2_t permute_tbl,
+                                              uint16x4_t max) {
+  int16x8_t permuted_samples0 = aom_tbl_s16(s, permute_tbl.val[0]);
+  int16x8_t permuted_samples1 = aom_tbl_s16(s, permute_tbl.val[1]);
+
+  int64x2_t sum0 =
+      aom_svdot_lane_s16(vdupq_n_s64(0), permuted_samples0, filter, 0);
+  int64x2_t sum1 =
+      aom_svdot_lane_s16(vdupq_n_s64(0), permuted_samples1, filter, 0);
+
+  int32x4_t res_s32 = vcombine_s32(vmovn_s64(sum0), vmovn_s64(sum1));
+  uint16x4_t res = vqrshrun_n_s32(res_s32, FILTER_BITS);
+
+  return vmin_u16(res, max);
+}
+
+static INLINE uint16x8_t highbd_convolve4_8_h(int16x8_t s[4], int16x8_t filter,
+                                              uint16x8_t idx, uint16x8_t max) {
+  int64x2_t sum04 = aom_svdot_lane_s16(vdupq_n_s64(0), s[0], filter, 0);
+  int64x2_t sum15 = aom_svdot_lane_s16(vdupq_n_s64(0), s[1], filter, 0);
+  int64x2_t sum26 = aom_svdot_lane_s16(vdupq_n_s64(0), s[2], filter, 0);
+  int64x2_t sum37 = aom_svdot_lane_s16(vdupq_n_s64(0), s[3], filter, 0);
+
+  int32x4_t res0 = vcombine_s32(vmovn_s64(sum04), vmovn_s64(sum15));
+  int32x4_t res1 = vcombine_s32(vmovn_s64(sum26), vmovn_s64(sum37));
+
+  uint16x8_t res = vcombine_u16(vqrshrun_n_s32(res0, FILTER_BITS),
+                                vqrshrun_n_s32(res1, FILTER_BITS));
+
+  res = aom_tbl_u16(res, idx);
+
+  return vminq_u16(res, max);
+}
+
+static INLINE void highbd_convolve8_horiz_4tap_sve(
+    const uint16_t *src, ptrdiff_t src_stride, uint16_t *dst,
+    ptrdiff_t dst_stride, const int16_t *filter_x, int width, int height,
+    int bd) {
+  const int16x8_t filter = vcombine_s16(vld1_s16(filter_x + 2), vdup_n_s16(0));
+
+  if (width == 4) {
+    const uint16x4_t max = vdup_n_u16((1 << bd) - 1);
+    uint16x8x2_t permute_tbl = vld1q_u16_x2(kDotProdTbl);
+
+    const int16_t *s = (const int16_t *)src;
+    uint16_t *d = dst;
+
+    do {
+      int16x8_t s0, s1, s2, s3;
+      load_s16_8x4(s, src_stride, &s0, &s1, &s2, &s3);
+
+      uint16x4_t d0 = highbd_convolve4_4_h(s0, filter, permute_tbl, max);
+      uint16x4_t d1 = highbd_convolve4_4_h(s1, filter, permute_tbl, max);
+      uint16x4_t d2 = highbd_convolve4_4_h(s2, filter, permute_tbl, max);
+      uint16x4_t d3 = highbd_convolve4_4_h(s3, filter, permute_tbl, max);
+
+      store_u16_4x4(d, dst_stride, d0, d1, d2, d3);
+
+      s += 4 * src_stride;
+      d += 4 * dst_stride;
+      height -= 4;
+    } while (height > 0);
+  } else {
+    const uint16x8_t max = vdupq_n_u16((1 << bd) - 1);
+    uint16x8_t idx = vld1q_u16(kDeinterleaveTbl);
+
+    do {
+      const int16_t *s = (const int16_t *)src;
+      uint16_t *d = dst;
+      int w = width;
+
+      do {
+        int16x8_t s0[4], s1[4], s2[4], s3[4];
+        load_s16_8x4(s + 0 * src_stride, 1, &s0[0], &s0[1], &s0[2], &s0[3]);
+        load_s16_8x4(s + 1 * src_stride, 1, &s1[0], &s1[1], &s1[2], &s1[3]);
+        load_s16_8x4(s + 2 * src_stride, 1, &s2[0], &s2[1], &s2[2], &s2[3]);
+        load_s16_8x4(s + 3 * src_stride, 1, &s3[0], &s3[1], &s3[2], &s3[3]);
+
+        uint16x8_t d0 = highbd_convolve4_8_h(s0, filter, idx, max);
+        uint16x8_t d1 = highbd_convolve4_8_h(s1, filter, idx, max);
+        uint16x8_t d2 = highbd_convolve4_8_h(s2, filter, idx, max);
+        uint16x8_t d3 = highbd_convolve4_8_h(s3, filter, idx, max);
+
+        store_u16_8x4(d, dst_stride, d0, d1, d2, d3);
+
+        s += 8;
+        d += 8;
+        w -= 8;
+      } while (w != 0);
+      src += 4 * src_stride;
+      dst += 4 * dst_stride;
+      height -= 4;
+    } while (height > 0);
+  }
+}
+
+void aom_highbd_convolve8_horiz_sve(const uint8_t *src8, ptrdiff_t src_stride,
+                                    uint8_t *dst8, ptrdiff_t dst_stride,
+                                    const int16_t *filter_x, int x_step_q4,
+                                    const int16_t *filter_y, int y_step_q4,
+                                    int width, int height, int bd) {
+  assert(x_step_q4 == 16);
+  assert(width >= 4 && height >= 4);
+  (void)filter_y;
+  (void)x_step_q4;
+  (void)y_step_q4;
+
+  const uint16_t *src = CONVERT_TO_SHORTPTR(src8);
+  uint16_t *dst = CONVERT_TO_SHORTPTR(dst8);
+
+  src -= SUBPEL_TAPS / 2 - 1;
+
+  const int filter_taps = get_filter_taps_convolve8(filter_x);
+
+  if (filter_taps == 2) {
+    highbd_convolve8_horiz_2tap_neon(src + 3, src_stride, dst, dst_stride,
+                                     filter_x, width, height, bd);
+  } else if (filter_taps == 4) {
+    highbd_convolve8_horiz_4tap_sve(src + 2, src_stride, dst, dst_stride,
+                                    filter_x, width, height, bd);
+  } else {
+    highbd_convolve8_horiz_8tap_sve(src, src_stride, dst, dst_stride, filter_x,
+                                    width, height, bd);
+  }
+}
 
 DECLARE_ALIGNED(16, static const uint8_t, kDotProdMergeBlockTbl[48]) = {
   // Shift left and insert new last column in transposed 4x4 block.
@@ -156,8 +278,7 @@ DECLARE_ALIGNED(16, static const uint8_t, kDotProdMergeBlockTbl[48]) = {
 
 static INLINE void transpose_concat_4x4(int16x4_t s0, int16x4_t s1,
                                         int16x4_t s2, int16x4_t s3,
-                                        int16x8_t res[2],
-                                        uint8x16_t permute_tbl[2]) {
+                                        int16x8_t res[2]) {
   // Transpose 16-bit elements and concatenate result rows as follows:
   // s0: 00, 01, 02, 03
   // s1: 10, 11, 12, 13
@@ -166,22 +287,24 @@ static INLINE void transpose_concat_4x4(int16x4_t s0, int16x4_t s1,
   //
   // res[0]: 00 10 20 30 01 11 21 31
   // res[1]: 02 12 22 32 03 13 23 33
-  //
-  // The 'permute_tbl' is always 'kDotProdTranConcatTbl' above. Passing it
-  // as an argument is preferable to loading it directly from memory as this
-  // inline helper is called many times from the same parent function.
 
-  int8x16x2_t samples = { vreinterpretq_s8_s16(vcombine_s16(s0, s1)),
-                          vreinterpretq_s8_s16(vcombine_s16(s2, s3)) };
+  int16x8_t s0q = vcombine_s16(s0, vdup_n_s16(0));
+  int16x8_t s1q = vcombine_s16(s1, vdup_n_s16(0));
+  int16x8_t s2q = vcombine_s16(s2, vdup_n_s16(0));
+  int16x8_t s3q = vcombine_s16(s3, vdup_n_s16(0));
 
-  res[0] = vreinterpretq_s16_s8(vqtbl2q_s8(samples, permute_tbl[0]));
-  res[1] = vreinterpretq_s16_s8(vqtbl2q_s8(samples, permute_tbl[1]));
+  int32x4_t s01 = vreinterpretq_s32_s16(vzip1q_s16(s0q, s1q));
+  int32x4_t s23 = vreinterpretq_s32_s16(vzip1q_s16(s2q, s3q));
+
+  int32x4x2_t s0123 = vzipq_s32(s01, s23);
+
+  res[0] = vreinterpretq_s16_s32(s0123.val[0]);
+  res[1] = vreinterpretq_s16_s32(s0123.val[1]);
 }
 
 static INLINE void transpose_concat_8x4(int16x8_t s0, int16x8_t s1,
                                         int16x8_t s2, int16x8_t s3,
-                                        int16x8_t res[4],
-                                        uint8x16_t permute_tbl[2]) {
+                                        int16x8_t res[4]) {
   // Transpose 16-bit elements and concatenate result rows as follows:
   // s0: 00, 01, 02, 03, 04, 05, 06, 07
   // s1: 10, 11, 12, 13, 14, 15, 16, 17
@@ -192,26 +315,19 @@ static INLINE void transpose_concat_8x4(int16x8_t s0, int16x8_t s1,
   // res_lo[1]: 02 12 22 32 03 13 23 33
   // res_hi[0]: 04 14 24 34 05 15 25 35
   // res_hi[1]: 06 16 26 36 07 17 27 37
-  //
-  // The 'permute_tbl' is always 'kDotProdTranConcatTbl' above. Passing it
-  // as an argument is preferable to loading it directly from memory as this
-  // inline helper is called many times from the same parent function.
 
-  int8x16x2_t samples_lo = {
-    vreinterpretq_s8_s16(vcombine_s16(vget_low_s16(s0), vget_low_s16(s1))),
-    vreinterpretq_s8_s16(vcombine_s16(vget_low_s16(s2), vget_low_s16(s3)))
-  };
+  int16x8x2_t tr01_16 = vzipq_s16(s0, s1);
+  int16x8x2_t tr23_16 = vzipq_s16(s2, s3);
 
-  res[0] = vreinterpretq_s16_s8(vqtbl2q_s8(samples_lo, permute_tbl[0]));
-  res[1] = vreinterpretq_s16_s8(vqtbl2q_s8(samples_lo, permute_tbl[1]));
+  int32x4x2_t tr01_32 = vzipq_s32(vreinterpretq_s32_s16(tr01_16.val[0]),
+                                  vreinterpretq_s32_s16(tr23_16.val[0]));
+  int32x4x2_t tr23_32 = vzipq_s32(vreinterpretq_s32_s16(tr01_16.val[1]),
+                                  vreinterpretq_s32_s16(tr23_16.val[1]));
 
-  int8x16x2_t samples_hi = {
-    vreinterpretq_s8_s16(vcombine_s16(vget_high_s16(s0), vget_high_s16(s1))),
-    vreinterpretq_s8_s16(vcombine_s16(vget_high_s16(s2), vget_high_s16(s3)))
-  };
-
-  res[2] = vreinterpretq_s16_s8(vqtbl2q_s8(samples_hi, permute_tbl[0]));
-  res[3] = vreinterpretq_s16_s8(vqtbl2q_s8(samples_hi, permute_tbl[1]));
+  res[0] = vreinterpretq_s16_s32(tr01_32.val[0]);
+  res[1] = vreinterpretq_s16_s32(tr01_32.val[1]);
+  res[2] = vreinterpretq_s16_s32(tr23_32.val[0]);
+  res[3] = vreinterpretq_s16_s32(tr23_32.val[1]);
 }
 
 static INLINE void aom_tbl2x4_s16(int16x8_t t0[4], int16x8_t t1[4],
@@ -288,27 +404,12 @@ static INLINE uint16x8_t highbd_convolve8_8_v(int16x8_t samples_lo[4],
   return vminq_u16(res, max);
 }
 
-void aom_highbd_convolve8_vert_sve(const uint8_t *src8, ptrdiff_t src_stride,
-                                   uint8_t *dst8, ptrdiff_t dst_stride,
-                                   const int16_t *filter_x, int x_step_q4,
-                                   const int16_t *filter_y, int y_step_q4,
-                                   int width, int height, int bd) {
-  assert(y_step_q4 == 16);
-  assert(w >= 4 && h >= 4);
-  (void)filter_x;
-  (void)y_step_q4;
-  (void)x_step_q4;
-
-  uint16_t *src = CONVERT_TO_SHORTPTR(src8);
-  uint16_t *dst = CONVERT_TO_SHORTPTR(dst8);
-
-  src -= (SUBPEL_TAPS / 2 - 1) * src_stride;
-
+static INLINE void highbd_convolve8_vert_8tap_sve(
+    const uint16_t *src, ptrdiff_t src_stride, uint16_t *dst,
+    ptrdiff_t dst_stride, const int16_t *filter_y, int width, int height,
+    int bd) {
   const int16x8_t y_filter = vld1q_s16(filter_y);
 
-  uint8x16_t tran_concat_tbl[2];
-  tran_concat_tbl[0] = vld1q_u8(kDotProdTranConcatTbl);
-  tran_concat_tbl[1] = vld1q_u8(kDotProdTranConcatTbl + 16);
   uint8x16_t merge_block_tbl[3];
   merge_block_tbl[0] = vld1q_u8(kDotProdMergeBlockTbl);
   merge_block_tbl[1] = vld1q_u8(kDotProdMergeBlockTbl + 16);
@@ -325,10 +426,10 @@ void aom_highbd_convolve8_vert_sve(const uint8_t *src8, ptrdiff_t src_stride,
     // This operation combines a conventional transpose and the sample permute
     // required before computing the dot product.
     int16x8_t s0123[2], s1234[2], s2345[2], s3456[2];
-    transpose_concat_4x4(s0, s1, s2, s3, s0123, tran_concat_tbl);
-    transpose_concat_4x4(s1, s2, s3, s4, s1234, tran_concat_tbl);
-    transpose_concat_4x4(s2, s3, s4, s5, s2345, tran_concat_tbl);
-    transpose_concat_4x4(s3, s4, s5, s6, s3456, tran_concat_tbl);
+    transpose_concat_4x4(s0, s1, s2, s3, s0123);
+    transpose_concat_4x4(s1, s2, s3, s4, s1234);
+    transpose_concat_4x4(s2, s3, s4, s5, s2345);
+    transpose_concat_4x4(s3, s4, s5, s6, s3456);
 
     do {
       int16x4_t s7, s8, s9, s10;
@@ -337,7 +438,7 @@ void aom_highbd_convolve8_vert_sve(const uint8_t *src8, ptrdiff_t src_stride,
       int16x8_t s4567[2], s5678[2], s6789[2], s78910[2];
 
       // Transpose and shuffle the 4 lines that were loaded.
-      transpose_concat_4x4(s7, s8, s9, s10, s78910, tran_concat_tbl);
+      transpose_concat_4x4(s7, s8, s9, s10, s78910);
 
       // Merge new data into block from previous iteration.
       aom_tbl2x2_s16(s3456, s78910, merge_block_tbl[0], s4567);
@@ -380,10 +481,10 @@ void aom_highbd_convolve8_vert_sve(const uint8_t *src8, ptrdiff_t src_stride,
       // This operation combines a conventional transpose and the sample permute
       // required before computing the dot product.
       int16x8_t s0123[4], s1234[4], s2345[4], s3456[4];
-      transpose_concat_8x4(s0, s1, s2, s3, s0123, tran_concat_tbl);
-      transpose_concat_8x4(s1, s2, s3, s4, s1234, tran_concat_tbl);
-      transpose_concat_8x4(s2, s3, s4, s5, s2345, tran_concat_tbl);
-      transpose_concat_8x4(s3, s4, s5, s6, s3456, tran_concat_tbl);
+      transpose_concat_8x4(s0, s1, s2, s3, s0123);
+      transpose_concat_8x4(s1, s2, s3, s4, s1234);
+      transpose_concat_8x4(s2, s3, s4, s5, s2345);
+      transpose_concat_8x4(s3, s4, s5, s6, s3456);
 
       do {
         int16x8_t s7, s8, s9, s10;
@@ -392,7 +493,7 @@ void aom_highbd_convolve8_vert_sve(const uint8_t *src8, ptrdiff_t src_stride,
         int16x8_t s4567[4], s5678[4], s6789[4], s78910[4];
 
         // Transpose and shuffle the 4 lines that were loaded.
-        transpose_concat_8x4(s7, s8, s9, s10, s78910, tran_concat_tbl);
+        transpose_concat_8x4(s7, s8, s9, s10, s78910);
 
         // Merge new data into block from previous iteration.
         aom_tbl2x4_s16(s3456, s78910, merge_block_tbl[0], s4567);
@@ -436,5 +537,35 @@ void aom_highbd_convolve8_vert_sve(const uint8_t *src8, ptrdiff_t src_stride,
       dst += 8;
       width -= 8;
     } while (width != 0);
+  }
+}
+
+void aom_highbd_convolve8_vert_sve(const uint8_t *src8, ptrdiff_t src_stride,
+                                   uint8_t *dst8, ptrdiff_t dst_stride,
+                                   const int16_t *filter_x, int x_step_q4,
+                                   const int16_t *filter_y, int y_step_q4,
+                                   int width, int height, int bd) {
+  assert(y_step_q4 == 16);
+  assert(width >= 4 && height >= 4);
+  (void)filter_x;
+  (void)y_step_q4;
+  (void)x_step_q4;
+
+  const uint16_t *src = CONVERT_TO_SHORTPTR(src8);
+  uint16_t *dst = CONVERT_TO_SHORTPTR(dst8);
+
+  src -= (SUBPEL_TAPS / 2 - 1) * src_stride;
+
+  const int filter_taps = get_filter_taps_convolve8(filter_y);
+
+  if (filter_taps == 2) {
+    highbd_convolve8_vert_2tap_neon(src + 3 * src_stride, src_stride, dst,
+                                    dst_stride, filter_y, width, height, bd);
+  } else if (filter_taps == 4) {
+    highbd_convolve8_vert_4tap_neon(src + 2 * src_stride, src_stride, dst,
+                                    dst_stride, filter_y, width, height, bd);
+  } else {
+    highbd_convolve8_vert_8tap_sve(src, src_stride, dst, dst_stride, filter_y,
+                                   width, height, bd);
   }
 }

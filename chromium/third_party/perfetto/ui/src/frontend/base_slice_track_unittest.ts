@@ -13,22 +13,22 @@
 // limitations under the License.
 
 import {Time} from '../base/time';
-import {UNEXPECTED_PINK} from '../common/colorizer';
+import {UNEXPECTED_PINK} from '../core/colorizer';
 import {Slice} from '../public';
 
 import {filterVisibleSlicesForTesting as filterVisibleSlices} from './base_slice_track';
 
 function slice(start: number, duration: number, depth: number = 0): Slice {
-  const startNsQ = Time.fromRaw(BigInt(start));
-  const durNsQ = Time.fromRaw(BigInt(duration));
-  const endNsQ = Time.fromRaw(startNsQ + durNsQ);
+  const startNs = Time.fromRaw(BigInt(start));
+  const durNs = Time.fromRaw(BigInt(duration));
+  const endNs = Time.fromRaw(startNs + durNs);
   return {
     id: 42,
-    startNsQ,
-    endNsQ,
-    durNsQ,
-    ts: startNsQ,
-    dur: durNsQ,
+    startNs,
+    endNs,
+    durNs,
+    ts: startNs,
+    dur: durNs,
     depth,
     flags: 0,
     title: '',

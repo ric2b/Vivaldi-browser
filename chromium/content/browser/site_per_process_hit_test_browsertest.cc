@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <optional>
 #include <tuple>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/containers/contains.h"
@@ -553,9 +555,11 @@ void HitTestNestedFramesHelper(
     base::OnceClosure quit_closure = run_loop.QuitClosure();
     DCHECK(child_node->current_frame_host()
                ->GetRenderWidgetHost()
+               ->GetRenderInputRouter()
                ->input_target_client());
     child_node->current_frame_host()
         ->GetRenderWidgetHost()
+        ->GetRenderInputRouter()
         ->input_target_client()
         ->FrameSinkIdAt(
             point_in_child, 0,
@@ -579,9 +583,11 @@ void HitTestNestedFramesHelper(
     base::OnceClosure quit_closure = run_loop.QuitClosure();
     DCHECK(child_node->current_frame_host()
                ->GetRenderWidgetHost()
+               ->GetRenderInputRouter()
                ->input_target_client());
     child_node->current_frame_host()
         ->GetRenderWidgetHost()
+        ->GetRenderInputRouter()
         ->input_target_client()
         ->FrameSinkIdAt(
             point_in_nested_child_transformed, 0,
@@ -750,8 +756,7 @@ class SetMouseCaptureInterceptor
   bool capturing_;
   raw_ptr<RenderWidgetHostImpl> host_;
   raw_ptr<blink::mojom::WidgetInputHandlerHost> impl_;
-  mojo::test::ScopedSwapImplForTesting<
-      mojo::Receiver<blink::mojom::WidgetInputHandlerHost>>
+  mojo::test::ScopedSwapImplForTesting<blink::mojom::WidgetInputHandlerHost>
       swapped_impl_;
 };
 
@@ -1037,7 +1042,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessInternalsHitTestBrowserTest,
                    "document.getElementById('scrollable_div').scrollTop;"));
 }
 
-// TODO(https://crbug.com/961135): disabled because tests are flaky
+// TODO(crbug.com/41457695): disabled because tests are flaky
 IN_PROC_BROWSER_TEST_P(SitePerProcessInternalsHitTestBrowserTest,
                        DISABLED_NestedLocalNonFastScrollableDivCoordsAreLocal) {
   GURL main_url(embedded_test_server()->GetURL(
@@ -3046,7 +3051,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 
 // Verify that an event is properly retargeted to the main frame when an
 // asynchronous hit test to the child frame times out.
-// TODO(crbug.com/1272137) Flaky on all platforms
+// TODO(crbug.com/40806028) Flaky on all platforms
 IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
                        DISABLED_AsynchronousHitTestChildTimeout) {
   GURL main_url(embedded_test_server()->GetURL(
@@ -3166,6 +3171,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
     // Raise error for call disconnect handler.
     static_cast<RenderWidgetHostImpl*>(
         root->current_frame_host()->GetRenderWidgetHost())
+        ->GetRenderInputRouter()
         ->input_target_client()
         .internal_state()
         ->RaiseError();
@@ -3421,8 +3427,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 
 // This test verifies that MouseEnter and MouseLeave events fire correctly
 // when the mouse cursor moves between processes.
-// Flaky (timeout): https://crbug.com/1006635.
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+// Flaky (timeout): https://crbug.com/1006635, crbug.com/334105909.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
 #define MAYBE_CrossProcessMouseEnterAndLeaveTest \
   DISABLED_CrossProcessMouseEnterAndLeaveTest
 #else
@@ -4286,9 +4292,7 @@ class SetCursorInterceptor
   base::RunLoop run_loop_;
   raw_ptr<RenderWidgetHostImpl> render_widget_host_;
   std::optional<ui::Cursor> cursor_;
-  mojo::test::ScopedSwapImplForTesting<
-      mojo::AssociatedReceiver<blink::mojom::WidgetHost>>
-      swapped_impl_;
+  mojo::test::ScopedSwapImplForTesting<blink::mojom::WidgetHost> swapped_impl_;
 };
 
 // Verify that we receive a mouse cursor update message when we mouse over
@@ -4768,7 +4772,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessMouseWheelHitTestBrowserTest,
 // Ensure that the positions of mouse wheel events sent to cross-process
 // subframes account for any change in the position of the subframe during the
 // scroll sequence.
-// TODO(https://crbug.com/1033388): Flaky on all platforms.
+// TODO(crbug.com/40663303): Flaky on all platforms.
 IN_PROC_BROWSER_TEST_F(SitePerProcessMouseWheelHitTestBrowserTest,
                        DISABLED_MouseWheelEventPositionChange) {
   GURL main_url(embedded_test_server()->GetURL(
@@ -5094,7 +5098,7 @@ namespace {
 uint32_t SendTouchTapWithExpectedTarget(
     RenderWidgetHostViewBase* root_view,
     const gfx::Point& touch_point,
-    RenderWidgetHostViewBase*& router_touch_target,
+    RenderWidgetHostViewInput*& router_touch_target,
     RenderWidgetHostViewBase* expected_target,
     RenderWidgetHostImpl* child_render_widget_host) {
   auto* root_view_aura = static_cast<RenderWidgetHostViewAura*>(root_view);
@@ -5139,7 +5143,7 @@ uint32_t SendTouchTapWithExpectedTarget(
 void SendGestureTapSequenceWithExpectedTarget(
     RenderWidgetHostViewBase* root_view,
     const gfx::Point& gesture_point,
-    base::WeakPtr<RenderWidgetHostViewBase>& router_gesture_target,
+    base::WeakPtr<RenderWidgetHostViewInput>& router_gesture_target,
     const RenderWidgetHostViewBase* expected_target,
     const uint32_t unique_touch_event_id) {
   auto* root_view_aura = static_cast<RenderWidgetHostViewAura*>(root_view);
@@ -5198,7 +5202,7 @@ void SendGestureTapSequenceWithExpectedTarget(
 void SendTouchpadPinchSequenceWithExpectedTarget(
     RenderWidgetHostViewBase* root_view,
     const gfx::Point& gesture_point,
-    RenderWidgetHostViewBase*& router_touchpad_gesture_target,
+    RenderWidgetHostViewInput*& router_touchpad_gesture_target,
     RenderWidgetHostViewBase* expected_target) {
   auto* root_view_aura = static_cast<RenderWidgetHostViewAura*>(root_view);
 
@@ -5250,7 +5254,7 @@ void SendTouchpadPinchSequenceWithExpectedTarget(
 void SendTouchpadFlingSequenceWithExpectedTarget(
     RenderWidgetHostViewBase* root_view,
     const gfx::Point& gesture_point,
-    RenderWidgetHostViewBase*& router_wheel_target,
+    RenderWidgetHostViewInput*& router_wheel_target,
     RenderWidgetHostViewBase* expected_target) {
   auto* root_view_aura = static_cast<RenderWidgetHostViewAura*>(root_view);
 
@@ -5487,14 +5491,14 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   RenderWidgetHostInputEventRouter* router = contents->GetInputEventRouter();
   EXPECT_EQ(nullptr, router->touchpad_gesture_target_);
 
-  // TODO(848050): If we send multiple touchpad pinch sequences to separate
-  // views and the timing of the acks are such that the begin ack of the second
-  // sequence arrives in the root before the end ack of the first sequence, we
-  // would produce an invalid gesture event sequence. For now, we wait for the
-  // root to receive the end ack before sending a pinch sequence to a different
-  // view. The root view should preserve validity of input event sequences
-  // when processing acks from multiple views, so that waiting here is not
-  // necessary.
+  // TODO(crbug.com/40578618): If we send multiple touchpad pinch sequences to
+  // separate views and the timing of the acks are such that the begin ack of
+  // the second sequence arrives in the root before the end ack of the first
+  // sequence, we would produce an invalid gesture event sequence. For now, we
+  // wait for the root to receive the end ack before sending a pinch sequence to
+  // a different view. The root view should preserve validity of input event
+  // sequences when processing acks from multiple views, so that waiting here is
+  // not necessary.
   auto wait_for_pinch_sequence_end = base::BindRepeating(
       [](RenderWidgetHost* rwh) {
         InputEventAckWaiter pinch_end_observer(
@@ -5553,7 +5557,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 // the main frame (given that the child did not consume the wheel).
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN) || \
     BUILDFLAG(IS_FUCHSIA)
-// TODO(crbug.com/947193): Flaky on multiple platforms.
+// TODO(crbug.com/41449850): Flaky on multiple platforms.
 #define MAYBE_TouchpadPinchOverOOPIF DISABLED_TouchpadPinchOverOOPIF
 #else
 #define MAYBE_TouchpadPinchOverOOPIF TouchpadPinchOverOOPIF
@@ -5632,7 +5636,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   // Clobber the real hit test data once it comes in.
   WaitForHitTestData(root->current_frame_host());
   ASSERT_TRUE(GetHostFrameSinkManager());
-  viz::HostFrameSinkManager::DisplayHitTestQueryMap empty_hit_test_map;
+  viz::DisplayHitTestQueryMap empty_hit_test_map;
   viz::HostFrameSinkManagerTestApi(GetHostFrameSinkManager())
       .SetDisplayHitTestQuery(std::move(empty_hit_test_map));
 
@@ -5662,7 +5666,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 // synthetic wheel event to the child.
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
     BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
-// TODO(crbug.com/947193): Flaky on multiple platforms.
+// TODO(crbug.com/41449850): Flaky on multiple platforms.
 #define MAYBE_TouchpadDoubleTapZoomOverOOPIF \
   DISABLED_TouchpadDoubleTapZoomOverOOPIF
 #else
@@ -5908,8 +5912,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest, MAYBE_PopupMenuTest) {
   EXPECT_NE(shell()->web_contents()->GetSiteInstance(),
             child_node->current_frame_host()->GetSiteInstance());
 
-  auto popup_waiter = std::make_unique<ShowPopupWidgetWaiter>(
-      web_contents(), child_node->current_frame_host());
+  std::optional<ShowPopupWidgetWaiter> popup_waiter(
+      std::in_place, web_contents(), child_node->current_frame_host());
 
   // Target left-click event to child frame.
   blink::WebMouseEvent click_event(
@@ -5957,9 +5961,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest, MAYBE_PopupMenuTest) {
   // convention (it requires separate clicks to open the menu and select an
   // option). See https://crbug.com/703191.
   int process_id = child_node->current_frame_host()->GetProcess()->GetID();
-  popup_waiter->Stop();
-  popup_waiter = std::make_unique<ShowPopupWidgetWaiter>(
-      web_contents(), child_node->current_frame_host());
+  popup_waiter.emplace(web_contents(), child_node->current_frame_host());
   RenderWidgetHostInputEventRouter* router =
       static_cast<WebContentsImpl*>(shell()->web_contents())
           ->GetInputEventRouter();
@@ -6037,8 +6039,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   EXPECT_NE(shell()->web_contents()->GetSiteInstance(),
             c_node->current_frame_host()->GetSiteInstance());
 
-  auto popup_waiter = std::make_unique<ShowPopupWidgetWaiter>(
-      web_contents(), c_node->current_frame_host());
+  std::optional<ShowPopupWidgetWaiter> popup_waiter(
+      std::in_place, web_contents(), c_node->current_frame_host());
 
   WaitForHitTestData(c_node->current_frame_host());
 
@@ -6085,9 +6087,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
       "iframe.style.top = 150;";
   EXPECT_TRUE(ExecJs(root, script));
 
-  popup_waiter->Stop();
-  popup_waiter = std::make_unique<ShowPopupWidgetWaiter>(
-      web_contents(), c_node->current_frame_host());
+  popup_waiter.emplace(web_contents(), c_node->current_frame_host());
 
   // Wait for b_node's screen rect to get updated. There doesn't seem to be any
   // better way to find out when this happens.
@@ -6179,8 +6179,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
               ->GetRenderWidgetHost()
               ->GetView());
 
-  auto popup_waiter = std::make_unique<ShowPopupWidgetWaiter>(
-      web_contents(), grandchild_node->current_frame_host());
+  std::optional<ShowPopupWidgetWaiter> popup_waiter(
+      std::in_place, web_contents(), grandchild_node->current_frame_host());
 
   // Target left-click event to the select element in the innermost frame.
   DispatchMouseDownEventAndWaitUntilDispatch(
@@ -6202,7 +6202,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   EXPECT_TRUE(ExecJs(root, "window.scrollTo(0, 20);"));
 
   // Wait until the OOPIF positions have been updated in the browser process.
-  // TODO(crbug.com/1519130): Using `base::test::RunUntil` makes the test flaky
+  // TODO(crbug.com/41492111): Using `base::test::RunUntil` makes the test flaky
   // on `linux-chromeos-rel`.
   while (true) {
     base::RunLoop run_loop;
@@ -6214,9 +6214,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
       break;
   }
 
-  popup_waiter->Stop();
-  popup_waiter = std::make_unique<ShowPopupWidgetWaiter>(
-      web_contents(), grandchild_node->current_frame_host());
+  popup_waiter.emplace(web_contents(), grandchild_node->current_frame_host());
   // This sends the message directly to the rwhv_grandchild, avoiding using
   // the helper methods, to avert a race condition with the surfaces or
   // HitTestRegions needing to update post-scroll. The event won't hit test
@@ -6255,7 +6253,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 // Tests that a <select>'s visibility is correctly computed and thus shows the
 // popup when clicked.
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_CASTOS)
-// TODO(crbug.com/1405317): Test is flaky on every platform.
+// TODO(crbug.com/40252258): Test is flaky on every platform.
 IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
                        DISABLED_ScrolledMainFrameSelectInLongIframe) {
   GURL main_url(embedded_test_server()->GetURL(
@@ -6303,8 +6301,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 
   hit_test_data_change_observer.WaitForHitTestDataChange();
 
-  auto popup_waiter = std::make_unique<ShowPopupWidgetWaiter>(
-      web_contents(), child_node->current_frame_host());
+  ShowPopupWidgetWaiter popup_waiter(web_contents(),
+                                     child_node->current_frame_host());
 
   // Left click the <select> element inside the iframe.
   DispatchMouseDownEventAndWaitUntilDispatch(web_contents(), rwhv_child,
@@ -6312,7 +6310,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
                                              gfx::PointF(15, 710));
 
   // Ensure the popup is requested. This test fails if this timesouts.
-  popup_waiter->Wait();
+  popup_waiter.Wait();
 }
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_CASTOS)
 
@@ -6680,7 +6678,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessNonIntegerScaleFactorHitTestBrowserTest,
 
 // MacOSX does not have fractional device scales.
 // Linux/Lacros started failing after Wayland window configuration fixes have
-// landed. TODO(crbug.com/1313023): Re-enable once the test issue is addressed.
+// landed. TODO(crbug.com/40832051): Re-enable once the test issue is addressed.
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #define MAYBE_NestedSurfaceHitTestTest DISABLED_NestedSurfaceHitTestTest
 #else
@@ -6841,6 +6839,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
     viz::FrameSinkId received_frame_sink_id;
     root->current_frame_host()
         ->GetRenderWidgetHost()
+        ->GetRenderInputRouter()
         ->input_target_client()
         ->FrameSinkIdAt(
             point_in_border, 0,
@@ -6859,6 +6858,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
     viz::FrameSinkId received_frame_sink_id;
     root->current_frame_host()
         ->GetRenderWidgetHost()
+        ->GetRenderInputRouter()
         ->input_target_client()
         ->FrameSinkIdAt(
             point_in_padding, 0,
@@ -6877,6 +6877,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
     viz::FrameSinkId received_frame_sink_id;
     root->current_frame_host()
         ->GetRenderWidgetHost()
+        ->GetRenderInputRouter()
         ->input_target_client()
         ->FrameSinkIdAt(
             point_in_content_box, 0,
@@ -6890,7 +6891,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   }
 }
 
-// TODO(https://crbug.com/1269640): This flakes badly on debug & sanitizer
+// TODO(crbug.com/40804367): This flakes badly on debug & sanitizer
 // builds on almost all platforms, and on Mac and Android.
 IN_PROC_BROWSER_TEST_F(SitePerProcessUserActivationHitTestBrowserTest,
                        DISABLED_RenderWidgetUserActivationStateTest) {
@@ -7397,9 +7398,10 @@ using SitePerProcessDelegatedInkBrowserTest = SitePerProcessHitTestBrowserTest;
 // Test confirms that a point hitting an OOPIF that is requesting delegated ink
 // trails results in the metadata being correctly sent to the child's
 // RenderWidgetHost and is usable for sending delegated ink points.
-// TODO(https://crbug.com/1318221): Fix and enable the test on Fuchsia.
-// TODO(https://crbug.com/1490367): flaky on ChromeOS
-#if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_CHROMEOS)
+// TODO(crbug.com/40835227): Fix and enable the test on Fuchsia.
+// TODO(crbug.com/40935254): flaky on ChromeOS
+// TODO(http://b/331190208): Test failing on Linux
+#if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
 #define MAYBE_MetadataAndPointGoThroughOOPIF \
   DISABLED_MetadataAndPointGoThroughOOPIF
 #else
@@ -7457,7 +7459,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessDelegatedInkBrowserTest,
   RenderWidgetHostInputEventRouter* router =
       web_contents()->GetInputEventRouter();
 
-  EXPECT_FALSE(router->IsDelegatedInkRendererBoundForTest());
+  EXPECT_FALSE(web_contents()->IsDelegatedInkRendererBoundForTest());
 
   // Target MouseMove to child frame.
   blink::WebMouseEvent mouse_event(
@@ -7500,7 +7502,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessDelegatedInkBrowserTest,
 
   EXPECT_FALSE(main_frame_monitor.EventWasReceived());
   EXPECT_TRUE(child_frame_monitor.EventWasReceived());
-  EXPECT_TRUE(router->IsDelegatedInkRendererBoundForTest());
+  EXPECT_TRUE(web_contents()->IsDelegatedInkRendererBoundForTest());
 }
 #endif  // USE_AURA
 

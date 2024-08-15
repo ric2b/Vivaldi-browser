@@ -7,14 +7,17 @@
 
 #include <deque>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-#include "base/functional/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
+#include "base/observer_list_types.h"
 #include "base/scoped_observation.h"
+#include "components/autofill/core/browser/country_type.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/strike_databases/address_suggestion_strike_database.h"
 #include "components/autofill/core/browser/strike_databases/autofill_profile_migration_strike_database.h"
@@ -23,21 +26,50 @@
 #include "components/autofill/core/browser/strike_databases/strike_database_base.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service_observer.h"
+#include "components/history/core/browser/history_types.h"
 #include "components/prefs/pref_member.h"
+#include "components/signin/public/identity_manager/account_info.h"
+#include "components/sync/service/sync_service.h"
 #include "components/webdata/common/web_data_service_consumer.h"
+
+namespace signin {
+class IdentityManager;
+}
 
 class PrefService;
 
 namespace autofill {
 
-class PersonalDataManager;
+class AddressDataCleaner;
+class AlternativeStateNameMapUpdater;
+class ContactInfoPreconditionChecker;
 
-// Intended to contain all address-related logic of the `PersonalDataManager`.
+// Contains all address-related logic of the `PersonalDataManager`. See comment
+// above the `PersonalDataManager` first. In the `AddressDataManager` (ADM),
+// `Refresh()` is called `LoadProfiles()`.
 // Owned by the PDM.
-// TODO(b/322170538): Move all address-related logic from the PDM to this file.
+//
+// Technical details on how modifications are implemented:
+// The ADM queues pending changes in `ongoing_profile_changes_`. For each
+// profile, they are executed in order and the next change is only posted to the
+// DB sequence once the previous change has finished. After each change that
+// finishes, the `AutofillWebDataService` notifies the ADM via
+// `OnAutofillProfileChanged(change)` - and the ADM updates its state
+// accordingly. No `LoadProfiles()` is performed.
+// Queuing the pending modifications is necessary, so the ADM can do consistency
+// checks against the latest state. For example, a remove should only be
+// performed if the profile exists. Without the queuing, if a remove operation
+// was posted before the add operation has finished, the remove would
+// incorrectly get rejected by the ADM.
 class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence,
                            public WebDataServiceConsumer {
  public:
+  class Observer : public base::CheckedObserver {
+   public:
+    // Triggered after all pending read and write operations have finished.
+    virtual void OnAddressDataChanged() = 0;
+  };
+
   // Profiles can be retrieved from the AddressDataManager in different orders.
   enum class ProfileOrder {
     // Arbitrary order.
@@ -54,13 +86,27 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence,
 
   AddressDataManager(scoped_refptr<AutofillWebDataService> webdata_service,
                      PrefService* pref_service,
+                     PrefService* local_state,
+                     syncer::SyncService* sync_service,
+                     signin::IdentityManager* identity_manager,
                      StrikeDatabaseBase* strike_database,
-                     base::RepeatingClosure notify_pdm_observers,
+                     GeoIpCountryCode variation_country_code,
                      const std::string& app_locale);
 
   ~AddressDataManager() override;
   AddressDataManager(const AddressDataManager&) = delete;
   AddressDataManager& operator=(const AddressDataManager&) = delete;
+
+  // Only intended to be called during shutdown of the parent `KeyedService`.
+  void Shutdown();
+
+  virtual void AddObserver(Observer* obs);
+  virtual void RemoveObserver(Observer* obs);
+
+  // Adds a callback which will be triggered on the next address data change,
+  // at the same time `Observer::OnAddressDataChanged()` of `observers_` is
+  // called.
+  void AddChangeCallback(base::OnceClosure callback);
 
   // AutofillWebDataServiceObserverOnUISequence:
   void OnAutofillChangedBySync(syncer::ModelType model_type) override;
@@ -76,19 +122,31 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence,
   // `GetProfiles()` returns local-or-syncable and account profiles. Using
   // `GetProfilesFromSource()`, profiles from a single source can be retrieved.
   // The profiles are returned in the specified `order`.
-  // TODO(crbug.com/1487119): Change return type to
+  // TODO(crbug.com/40283168): Change return type to
   // std::vector<const AutofillProfile*>
   std::vector<AutofillProfile*> GetProfiles(
       ProfileOrder order = ProfileOrder::kNone) const;
-  // TODO(crbug.com/1487119): Change return type to
+  // TODO(crbug.com/40283168): Change return type to
   // std::vector<const AutofillProfile*>
   std::vector<AutofillProfile*> GetProfilesFromSource(
       AutofillProfile::Source profile_source,
       ProfileOrder order = ProfileOrder::kNone) const;
 
+  // Returns the profiles to suggest to the user for filling, ordered by
+  // frecency.
+  // TODO(crbug.com/40283168): Change return type to
+  // std::vector<const AutofillProfile*>
+  std::vector<AutofillProfile*> GetProfilesToSuggest() const;
+
+  // Returns all `GetProfiles()` in the order that the should be shown in the
+  // settings.
+  // TODO(crbug.com/40283168): Change return type to
+  // std::vector<const AutofillProfile*>
+  std::vector<AutofillProfile*> GetProfilesForSettings() const;
+
   // Returns the profile with the specified `guid`, or nullptr if there is no
   // profile such profile. See `GetProfiles()` for the lifetime of the pointer.
-  // TODO(crbug.com/1487119): Change return type to const AutofillProfile*
+  // TODO(crbug.com/40283168): Change return type to const AutofillProfile*
   AutofillProfile* GetProfileByGUID(const std::string& guid) const;
 
   // Adds |profile| to the web database.
@@ -100,13 +158,22 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence,
   // Removes the profile by `guid`.
   virtual void RemoveProfile(const std::string& guid);
 
+  // Determines whether the logged in user (if any) is eligible to store
+  // Autofill address profiles to their account.
+  virtual bool IsEligibleForAddressAccountStorage() const;
+
+  // Users based in unsupported countries and profiles with a country value set
+  // to an unsupported country are not eligible for account storage. This
+  // function determines if the `country_code` is eligible.
+  bool IsCountryEligibleForAccountStorage(std::string_view country_code) const;
+
   // Migrates a given kLocalOrSyncable `profile` to source kAccount. This has
   // multiple side-effects for the profile:
   // - It is stored in a different backend.
   // - It receives a new GUID.
   // Like all database operations, the migration happens asynchronously.
   // `profile` (the kLocalOrSyncable one) will not be available in the
-  // PersonalDataManager anymore once the migrating has finished.
+  // AddressDataManager anymore once the migrating has finished.
   void MigrateProfileToAccount(const AutofillProfile& profile);
 
   // Asynchronously loads all `AutofillProfile`s (from all sources) into the
@@ -115,6 +182,12 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence,
 
   // Updates the `profile`'s use count and use date in the database.
   virtual void RecordUseOf(const AutofillProfile& profile);
+
+  // Returns an uppercase ISO 3166-1 alpha-2 country code, which represents our
+  // best guess for the country a user is likely to use when inputting a new
+  // address. This is used as the default in settings and on form import, if no
+  // country field was observed in the submitted form.
+  virtual AddressCountryCode GetDefaultCountryCodeForNewAddress() const;
 
   // Returns true if a `kLocalOrSyncable` profile identified by its guid is
   // blocked for migration to a `kAccount` profile.
@@ -180,11 +253,15 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence,
                                              FieldSignature field_signature,
                                              const GURL& gurl);
 
+  // Clear all relevant strike database strikes whenever some browsing history
+  // is deleted. This currently doesn't depend on a history observer directly,
+  // but is forwarded from the PDM's history observer.
+  void OnHistoryDeletions(const history::DeletionInfo& deletion_info);
+
   // Returns true if the PDM is currently awaiting an address-related responses
   // from the database. In this case, the PDM's address data is currently
   // potentially inconsistent with the database. Once the state has converged,
-  // PersonalDataManagerObserver:: OnPersonalDataFinishedProfileTasks() will be
-  // called.
+  // PersonalDataManagerObserver:: OnPersonalDataChanged() will be called.
   bool IsAwaitingPendingAddressChanges() const {
     return ProfileChangesAreOngoing() || HasPendingQueries();
   }
@@ -197,7 +274,50 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence,
   // Returns the value of the AutofillProfileEnabled pref.
   virtual bool IsAutofillProfileEnabled() const;
 
+  // Returns true if Sync-the-feature is enabled and
+  // UserSelectableType::kAutofill is among the user's selected data types.
+  // TODO(crbug.com/40066949): Remove this method once ConsentLevel::kSync and
+  // SyncService::IsSyncFeatureEnabled() are deleted from the codebase.
+  bool IsSyncFeatureEnabledForAutofill() const;
+
+  // Returns true if `syncer::UserSelectableType::kAutofill` is enabled.
+  bool IsAutofillUserSelectableTypeEnabled() const;
+
+  // Defines whether the Sync toggle on the Autofill Settings page is visible.
+  // TODO(crbug.com/40943238): Remove when toggle becomes available on the Sync
+  // page for non-syncing users.
+  bool IsAutofillSyncToggleAvailable() const;
+
+  // Sets the Sync UserSelectableType::kAutofill toggle value.
+  // TODO(crbug.com/40943238): Used for the toggle on the Autofill Settings page
+  // only. It controls syncing of autofill data stored in user accounts for
+  // non-syncing users. Remove when toggle becomes available on the Sync page.
+  void SetAutofillSelectableTypeEnabled(bool enabled);
+
+  // Returns the account info of currently signed-in user, or std::nullopt if
+  // the user is not signed-in or the identity manager is not available.
+  std::optional<CoreAccountInfo> GetPrimaryAccountInfo() const;
+
+  bool has_initial_load_finished() const { return has_initial_load_finished_; }
+
+  const std::string& app_locale() const { return app_locale_; }
+
+  void SetSyncServiceForTest(syncer::SyncService* sync_service) {
+    sync_service_ = sync_service;
+  }
+
+  bool auto_accept_address_imports_for_testing() const {
+    return auto_accept_address_imports_for_testing_;
+  }
+
+  AlternativeStateNameMapUpdater*
+  get_alternative_state_name_map_updater_for_testing() {
+    return alternative_state_name_map_updater_.get();
+  }
+
  protected:
+  friend class AddressDataManagerTestApi;
+
   // Profiles of different sources are stored in different vectors.
   // Several function need to read/write from the correct vector, depending
   // on the source of the profile they are dealing with. This helper function
@@ -241,17 +361,14 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence,
   virtual const AddressSuggestionStrikeDatabase*
   GetAddressSuggestionStrikeDatabase() const;
 
-  // TODO(b/322170538): Remove once the PDM observer is split.
-  base::RepeatingClosure notify_pdm_observers_;
+  void NotifyObservers();
 
   // Tracks whether the first `LoadProfiles()` call has already finished.
   bool has_initial_load_finished_ = false;
 
- private:
-  // TODO(b/322170538): Remove once all code writing to `synced_local_profiles_`
-  // and `account_profile_` moved to this class.
-  friend class PersonalDataManager;
+  GeoIpCountryCode variation_country_code_;
 
+ private:
   // A profile change with a boolean representing if the change is ongoing or
   // not. "Ongoing" means that the change is taking place asynchronously on the
   // DB sequence at the moment. Ongoing changes are still part of
@@ -284,13 +401,12 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence,
   // Refresh.
   void OnProfileChangeDone(const std::string& guid);
 
-  // Finds the country code that occurs most frequently among all profiles.
-  // Prefers verified profiles over unverified ones.
-  const std::string& MostCommonCountryCodeFromProfiles() const;
-
   // Logs metrics around the number of stored profiles after the initial load
   // has finished.
   void LogStoredDataMetrics() const;
+
+  std::unique_ptr<ContactInfoPreconditionChecker>
+      contact_info_precondition_checker_;
 
   // A copy of the profiles stored in `AddressAutofillTable`. They come from
   // two sources:
@@ -311,6 +427,13 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence,
   // but must otherwise outlive this instance.
   raw_ptr<PrefService> pref_service_ = nullptr;
 
+  // The identity manager that this instance uses. May be null in tests, but
+  // must otherwise outlive this instance.
+  raw_ptr<signin::IdentityManager> identity_manager_;
+
+  // May be null in tests, but must otherwise outlive this instance.
+  raw_ptr<syncer::SyncService> sync_service_;
+
   // Make sure to get notified about changes to `AddressAutofillTable` via sync.
   base::ScopedObservation<AutofillWebDataService,
                           AutofillWebDataServiceObserverOnUISequence>
@@ -322,9 +445,6 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence,
 
   // An observer to listen for changes to prefs::kAutofillProfileEnabled.
   std::unique_ptr<BooleanPrefMember> profile_enabled_pref_;
-
-  // The cached result of `MostCommonCountryCodeFromProfiles()`.
-  mutable std::string most_common_country_code_;
 
   // The database that is used to count guid-keyed strikes to suppress the
   // migration-prompt of new profiles.
@@ -346,6 +466,26 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence,
   // field.
   std::unique_ptr<AddressSuggestionStrikeDatabase>
       address_suggestion_strike_database_;
+
+  // Used to populate AlternativeStateNameMap with the geographical state data
+  // (including their abbreviations and localized names).
+  std::unique_ptr<AlternativeStateNameMapUpdater>
+      alternative_state_name_map_updater_;
+
+  // The AddressDataCleaner is used to apply various cleanups (e.g.
+  // deduplication, disused address removal) at browser startup or when the sync
+  // starts.
+  std::unique_ptr<AddressDataCleaner> address_data_cleaner_;
+
+  base::ObserverList<Observer> observers_;
+
+  // The list of change callbacks. All of them are being triggered in
+  // `NotifyObservers()` and then the list is cleared.
+  std::vector<base::OnceClosure> change_callbacks_;
+
+  // If true, new addresses imports are automatically accepted without a prompt.
+  // Only to be used for testing.
+  bool auto_accept_address_imports_for_testing_ = false;
 
   const std::string app_locale_;
 

@@ -30,11 +30,10 @@ import("../../../scripts/dawn_overrides_with_defaults.gni")
 group("samples") {
   deps = [
     ":Animometer",
-    ":CHelloTriangle",
     ":ComputeBoids",
-    ":CppHelloTriangle",
     ":DawnInfo",
-    ":ManualSwapChainTest",
+    ":HelloTriangle",
+    ":ManualSurfaceTest",
   ]
 }
 
@@ -47,15 +46,12 @@ static_library("utils") {
 
   # Export all of these as public deps so that `gn check` allows includes
   public_deps = [
-    "${dawn_root}/src/dawn:cpp",
-    "${dawn_root}/src/dawn:proc_shared",
+    "${dawn_root}/include/dawn:cpp_headers",
     "${dawn_root}/src/dawn/common",
     "${dawn_root}/src/dawn/glfw",
     "${dawn_root}/src/dawn/native",
     "${dawn_root}/src/dawn/utils",
-    "${dawn_root}/src/dawn/wire",
   ]
-  public_configs = [ "${dawn_root}/src/dawn/common:internal_config" ]
 }
 
 # Template for samples to avoid listing utils as a dep every time
@@ -70,12 +66,8 @@ template("sample") {
   }
 }
 
-sample("CppHelloTriangle") {
-  sources = [ "CppHelloTriangle.cpp" ]
-}
-
-sample("CHelloTriangle") {
-  sources = [ "CHelloTriangle.cpp" ]
+sample("HelloTriangle") {
+  sources = [ "HelloTriangle.cpp" ]
 }
 
 sample("ComputeBoids") {
@@ -86,8 +78,8 @@ sample("Animometer") {
   sources = [ "Animometer.cpp" ]
 }
 
-sample("ManualSwapChainTest") {
-  sources = [ "ManualSwapChainTest.cpp" ]
+sample("ManualSurfaceTest") {
+  sources = [ "ManualSurfaceTest.cpp" ]
 }
 
 sample("DawnInfo") {

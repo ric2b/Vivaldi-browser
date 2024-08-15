@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/getting-started
-  - Chromium OS > Developer Library > Getting Started
+  - ChromiumOS > Getting Started
 page_name: build-chromium
 title: Build Chromium
 ---
@@ -82,7 +82,7 @@ href="https://chromium.googlesource.com/chromium/src/+/0e94f26e8/docs/ninja_buil
 target="_blank">ninja</a> is a build system specializing in a fast edit-build
 cycle and is the tool used to build Chromium.
 
-### Common build errrors
+### Common build errors
 
 ```
 ninja: error: loading 'build.ninja': No such file or directory

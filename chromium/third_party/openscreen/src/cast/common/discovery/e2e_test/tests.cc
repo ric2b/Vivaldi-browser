@@ -106,12 +106,12 @@ class ServiceReceiver : public discovery::DnsSdServiceWatcher<ReceiverInfo> {
 };
 
 class FailOnErrorReporting : public discovery::ReportingClient {
-  void OnFatalError(Error error) override {
+  void OnFatalError(const Error& error) override {
     OSP_LOG_FATAL << "Fatal error received: '" << error << "'";
     OSP_NOTREACHED();
   }
 
-  void OnRecoverableError(Error error) override {
+  void OnRecoverableError(const Error& error) override {
     // Pending resolution of openscreen:105, logging recoverable errors is
     // disabled, as this will end up polluting the output with logs related to
     // mDNS messages received from non-loopback network interfaces over which
@@ -156,8 +156,8 @@ class DiscoveryE2ETest : public testing::Test {
     OSP_CHECK(!dnssd_service_);
     std::atomic_bool done{false};
     task_runner_->PostTask([this, &config, &done]() {
-      dnssd_service_ = discovery::CreateDnsSdService(
-          *task_runner_, &reporting_client_, config);
+      dnssd_service_ = discovery::CreateDnsSdService(*task_runner_,
+                                                     reporting_client_, config);
       receiver_ = std::make_unique<ServiceReceiver>(dnssd_service_.get());
       publisher_ = std::make_unique<Publisher>(dnssd_service_.get());
       done = true;

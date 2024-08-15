@@ -22,12 +22,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "cc/paint/draw_looper.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_shader.h"
 #include "third_party/icu/source/common/unicode/rbbi.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "third_party/icu/source/common/unicode/utf16.h"
-#include "third_party/skia/include/core/SkDrawLooper.h"
 #include "third_party/skia/include/core/SkFontStyle.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
 #include "third_party/skia/include/core/SkTypeface.h"
@@ -143,7 +143,7 @@ sk_sp<cc::PaintShader> CreateFadeShader(const FontList& font_list,
 
   const SkPoint points[2] = { PointToSkPoint(text_rect.origin()),
                               PointToSkPoint(text_rect.top_right()) };
-  // TODO(crbug/1308932): Remove this helper vector colors4f and make all
+  // TODO(crbug.com/40219248): Remove this helper vector colors4f and make all
   // SkColor4f.
   std::vector<SkColor4f> colors4f;
   colors4f.reserve(colors.size());
@@ -327,7 +327,7 @@ SkiaTextRenderer::SkiaTextRenderer(Canvas* canvas)
 SkiaTextRenderer::~SkiaTextRenderer() {
 }
 
-void SkiaTextRenderer::SetDrawLooper(sk_sp<SkDrawLooper> draw_looper) {
+void SkiaTextRenderer::SetDrawLooper(sk_sp<cc::DrawLooper> draw_looper) {
   flags_.setLooper(std::move(draw_looper));
 }
 
@@ -662,7 +662,7 @@ size_t RenderText::GetTextIndexOfLine(size_t line) {
 }
 
 void RenderText::SetWordWrapBehavior(WordWrapBehavior behavior) {
-  // TODO(1150235): ELIDE_LONG_WORDS is not supported.
+  // TODO(crbug.com/40157791): ELIDE_LONG_WORDS is not supported.
   DCHECK_NE(behavior, ELIDE_LONG_WORDS);
 
   if (word_wrap_behavior_ != behavior) {
@@ -1139,7 +1139,7 @@ SelectionModel RenderText::FindCursorPosition(const Point& view_point,
   const float point_offset_relative_run =
       point_offset_relative_segment + segment_offset_relative_run;
 
-  // TODO(crbug.com/676287): Use offset within the glyph to return the correct
+  // TODO(crbug.com/40499140): Use offset within the glyph to return the correct
   // grapheme position within a multi-grapheme glyph.
   for (size_t i = 0; i < run.shape.glyph_count; ++i) {
     const float end = i + 1 == run.shape.glyph_count
@@ -1859,7 +1859,7 @@ Point RenderText::ToViewPoint(const PointF& point, size_t line) {
       x -= shaped_text->lines()[l].size.width();
     }
   } else {
-    // TODO(crbug.com/1163587): This doesn't account for line breaks caused by
+    // TODO(crbug.com/40163177): This doesn't account for line breaks caused by
     // wrapping, in which case the cursor may end up right after the trailing
     // space on the top line instead of before the first character of the second
     // line depending on which direction the cursor is moving. Both positions

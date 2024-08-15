@@ -8,15 +8,18 @@
 
 #include "ash/birch/birch_data_provider.h"
 #include "ash/birch/birch_item.h"
+#include "ash/birch/birch_item_remover.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
-#include "ash/constants/ash_switches.h"
 #include "ash/constants/geolocation_access_level.h"
 #include "ash/public/cpp/ambient/ambient_backend_controller.h"
 #include "ash/public/cpp/ambient/fake_ambient_backend_controller_impl.h"
 #include "ash/public/cpp/test/test_image_downloader.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "base/files/scoped_temp_dir.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "chromeos/ash/components/geolocation/simple_geolocation_provider.h"
@@ -27,6 +30,45 @@
 namespace ash {
 
 namespace {
+
+std::vector<BirchFileItem> MakeFileItemList(int item_count) {
+  std::vector<BirchFileItem> file_item_list;
+  for (int i = 0; i < item_count; i++) {
+    file_item_list.emplace_back(
+        base::FilePath("test path " + base::NumberToString(i)), u"suggestion",
+        base::Time(), "file_id_" + base::NumberToString(i), "icon_url");
+  }
+  return file_item_list;
+}
+
+std::vector<BirchCalendarItem> MakeCalendarItemList(int event_count) {
+  std::vector<BirchCalendarItem> calendar_item_list;
+  for (int i = 0; i < event_count; i++) {
+    calendar_item_list.emplace_back(
+        /*title=*/u"Event " + base::NumberToString16(i),
+        /*start_time=*/base::Time(),
+        /*end_time=*/base::Time(),
+        /*calendar_url=*/GURL(),
+        /*conference_url=*/GURL(),
+        /*event_id=*/"event_id_" + base::NumberToString(i),
+        /*all_day_event=*/false);
+  }
+  return calendar_item_list;
+}
+
+std::vector<BirchAttachmentItem> MakeAttachmentItemList(int item_count) {
+  std::vector<BirchAttachmentItem> attachment_item_list;
+  for (int i = 0; i < item_count; i++) {
+    attachment_item_list.emplace_back(
+        u"Attachment " + base::NumberToString16(i),
+        /*file_url=*/GURL(),
+        /*icon_url=*/GURL(),
+        /*start_time=*/base::Time(),
+        /*end_time=*/base::Time(),
+        /*file_id=*/"file_id" + base::NumberToString(i));
+  }
+  return attachment_item_list;
+}
 
 // A data provider that does nothing.
 class StubBirchDataProvider : public BirchDataProvider {
@@ -45,7 +87,7 @@ class StubBirchDataProvider : public BirchDataProvider {
 // A BirchClient that returns data providers that do nothing.
 class StubBirchClient : public BirchClient {
  public:
-  StubBirchClient() = default;
+  StubBirchClient() { EXPECT_TRUE(test_dir_.CreateUniqueTempDir()); }
   ~StubBirchClient() override = default;
 
   // BirchClient:
@@ -64,11 +106,15 @@ class StubBirchClient : public BirchClient {
   void WaitForRefreshTokens(base::OnceClosure callback) override {
     std::move(callback).Run();
   }
+  base::FilePath GetRemovedItemsFilePath() override {
+    return test_dir_.GetPath();
+  }
 
   StubBirchDataProvider calendar_provider_;
   StubBirchDataProvider file_suggest_provider_;
   StubBirchDataProvider recent_tabs_provider_;
   StubBirchDataProvider release_notes_provider_;
+  base::ScopedTempDir test_dir_;
 };
 
 class TestModelConsumer {
@@ -91,6 +137,21 @@ base::Time TimeFromString(const char* time_string) {
   return time;
 }
 
+class TestModelObserver : public BirchModel::Observer {
+ public:
+  TestModelObserver() { Shell::Get()->birch_model()->AddObserver(this); }
+  ~TestModelObserver() override {
+    Shell::Get()->birch_model()->RemoveObserver(this);
+  }
+
+  void OnBirchClientSet() override { birch_client_set_ = true; }
+
+  bool birch_client_set() const { return birch_client_set_; }
+
+ private:
+  bool birch_client_set_ = false;
+};
+
 }  // namespace
 
 class BirchModelTest : public AshTestBase {
@@ -102,13 +163,18 @@ class BirchModelTest : public AshTestBase {
   }
 
   void SetUp() override {
-    switches::SetIgnoreForestSecretKeyForTest(true);
     AshTestBase::SetUp();
     // Inject no-op, stub weather provider to prevent real implementation from
     // returning empty weather info.
     Shell::Get()->birch_model()->OverrideWeatherProviderForTest(
         std::make_unique<StubBirchDataProvider>());
-    Shell::Get()->birch_model()->SetClient(&stub_birch_client_);
+    Shell::Get()->birch_model()->SetClientAndInit(&stub_birch_client_);
+    base::RunLoop run_loop;
+    Shell::Get()
+        ->birch_model()
+        ->GetItemRemoverForTest()
+        ->SetProtoInitCallbackForTest(run_loop.QuitClosure());
+    run_loop.Run();
 
     // Set a test clock so that ranking uses a consistent time across test runs.
     test_clock_.SetNow(TimeFromString("22 Feb 2024 4:00 UTC"));
@@ -116,9 +182,12 @@ class BirchModelTest : public AshTestBase {
   }
 
   void TearDown() override {
-    Shell::Get()->birch_model()->SetClient(nullptr);
+    Shell::Get()->birch_model()->SetClientAndInit(nullptr);
     AshTestBase::TearDown();
-    switches::SetIgnoreForestSecretKeyForTest(false);
+  }
+
+  void RecordProviderHiddenHistograms() {
+    Shell::Get()->birch_model()->RecordProviderHiddenHistograms();
   }
 
  protected:
@@ -130,21 +199,28 @@ class BirchModelTest : public AshTestBase {
 class BirchModelWithoutWeatherTest : public AshTestBase {
  public:
   BirchModelWithoutWeatherTest()
-      : AshTestBase(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
+      : AshTestBase(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
+    feature_list_.InitWithFeatures({features::kForestFeature},
+                                   {features::kBirchWeather});
+  }
   void SetUp() override {
-    switches::SetIgnoreForestSecretKeyForTest(true);
     AshTestBase::SetUp();
-    Shell::Get()->birch_model()->SetClient(&stub_birch_client_);
+    Shell::Get()->birch_model()->SetClientAndInit(&stub_birch_client_);
+    base::RunLoop run_loop;
+    Shell::Get()
+        ->birch_model()
+        ->GetItemRemoverForTest()
+        ->SetProtoInitCallbackForTest(run_loop.QuitClosure());
+    run_loop.Run();
   }
 
   void TearDown() override {
-    Shell::Get()->birch_model()->SetClient(nullptr);
+    Shell::Get()->birch_model()->SetClientAndInit(nullptr);
     AshTestBase::TearDown();
-    switches::SetIgnoreForestSecretKeyForTest(false);
   }
 
  protected:
-  base::test::ScopedFeatureList feature_list_{features::kForestFeature};
+  base::test::ScopedFeatureList feature_list_;
   StubBirchClient stub_birch_client_;
 };
 
@@ -164,7 +240,8 @@ TEST_F(BirchModelTest, AddItemNotifiesCallback) {
   EXPECT_THAT(consumer.items_ready_responses(), testing::IsEmpty());
 
   // Make a data fetch request and set fresh tab data.
-  model->RequestBirchDataFetch(base::BindOnce(&TestModelConsumer::OnItemsReady,
+  model->RequestBirchDataFetch(/*is_post_login=*/false,
+                               base::BindOnce(&TestModelConsumer::OnItemsReady,
                                               base::Unretained(&consumer),
                                               /*id=*/"0"));
   model->SetRecentTabItems(std::vector<BirchTabItem>());
@@ -172,10 +249,7 @@ TEST_F(BirchModelTest, AddItemNotifiesCallback) {
   // Consumer is not notified until all data sources have responded.
   EXPECT_THAT(consumer.items_ready_responses(), testing::IsEmpty());
 
-  std::vector<BirchFileItem> file_item_list;
-  file_item_list.emplace_back(base::FilePath("test path 1"), u"suggestion",
-                              base::Time());
-  model->SetFileSuggestItems(std::move(file_item_list));
+  model->SetFileSuggestItems(MakeFileItemList(/*item_count=*/1));
   model->SetWeatherItems({});
   model->SetCalendarItems({});
   model->SetAttachmentItems({});
@@ -186,26 +260,97 @@ TEST_F(BirchModelTest, AddItemNotifiesCallback) {
 
   // Setting the file suggest items should not trigger items ready again, since
   // no data fetch was requested.
-  file_item_list.emplace_back(base::FilePath("test path 1"), u"suggestion",
-                              base::Time());
-  file_item_list.emplace_back(base::FilePath("test path 2"), u"suggestion",
-                              base::Time());
-  model->SetFileSuggestItems(std::move(file_item_list));
+  model->SetFileSuggestItems(MakeFileItemList(/*item_count=*/2));
   EXPECT_THAT(consumer.items_ready_responses(), testing::ElementsAre("0"));
 
   // Request another data fetch and expect the consumer to be notified once
   // items are set again.
-  model->RequestBirchDataFetch(base::BindOnce(&TestModelConsumer::OnItemsReady,
+  model->RequestBirchDataFetch(/*is_post_login=*/false,
+                               base::BindOnce(&TestModelConsumer::OnItemsReady,
                                               base::Unretained(&consumer),
                                               /*id=*/"1"));
   model->SetRecentTabItems(std::vector<BirchTabItem>());
-  model->SetFileSuggestItems(std::move(file_item_list));
+  model->SetFileSuggestItems(MakeFileItemList(/*item_count=*/2));
   model->SetWeatherItems({});
   model->SetCalendarItems({});
   model->SetAttachmentItems({});
   model->SetReleaseNotesItems({});
 
   EXPECT_THAT(consumer.items_ready_responses(), testing::ElementsAre("0", "1"));
+}
+
+TEST_F(BirchModelTest, RequestBirchDataFetchRecordsHistograms) {
+  base::HistogramTester histograms;
+  BirchModel* model = Shell::Get()->birch_model();
+  TestModelConsumer consumer;
+  EXPECT_TRUE(model);
+
+  // Make a data fetch request.
+  model->RequestBirchDataFetch(/*is_post_login=*/false,
+                               base::BindOnce(&TestModelConsumer::OnItemsReady,
+                                              base::Unretained(&consumer),
+                                              /*id=*/"0"));
+
+  // Simulate each data provider replying.
+  model->SetCalendarItems({});
+  model->SetAttachmentItems({});
+  model->SetRecentTabItems({});
+  model->SetFileSuggestItems({});
+  model->SetWeatherItems({});
+  model->SetReleaseNotesItems({});
+
+  // Callback is called.
+  EXPECT_THAT(consumer.items_ready_responses(), testing::ElementsAre("0"));
+
+  // Histograms were recorded for each type.
+  histograms.ExpectTotalCount("Ash.Birch.Latency.Calendar", 1);
+  histograms.ExpectTotalCount("Ash.Birch.Latency.File", 1);
+  histograms.ExpectTotalCount("Ash.Birch.Latency.Tab", 1);
+  histograms.ExpectTotalCount("Ash.Birch.Latency.Weather", 1);
+  histograms.ExpectTotalCount("Ash.Birch.Latency.ReleaseNotes", 1);
+
+  // Total latency was recorded.
+  histograms.ExpectTotalCount("Ash.Birch.TotalLatency", 1);
+
+  // Simulate a data provider replying outside of a fetch.
+  model->SetFileSuggestItems({});
+
+  // Histograms didn't change.
+  histograms.ExpectTotalCount("Ash.Birch.Latency.File", 1);
+  histograms.ExpectTotalCount("Ash.Birch.TotalLatency", 1);
+}
+
+TEST_F(BirchModelTest, RequestBirchDataFetchRecordsTotalLatencyHistogram) {
+  base::HistogramTester histograms;
+  BirchModel* model = Shell::Get()->birch_model();
+
+  // Make a data fetch request for post-login.
+  model->RequestBirchDataFetch(/*is_post_login=*/true, base::DoNothing());
+
+  // Simulate each data provider replying.
+  model->SetCalendarItems({});
+  model->SetAttachmentItems({});
+  model->SetRecentTabItems({});
+  model->SetFileSuggestItems({});
+  model->SetWeatherItems({});
+  model->SetReleaseNotesItems({});
+
+  // Total latency post login was recorded.
+  histograms.ExpectTotalCount("Ash.Birch.TotalLatencyPostLogin", 1);
+
+  // Make a data fetch request for non-post-login.
+  model->RequestBirchDataFetch(/*is_post_login=*/false, base::DoNothing());
+
+  // Simulate each data provider replying.
+  model->SetCalendarItems({});
+  model->SetAttachmentItems({});
+  model->SetRecentTabItems({});
+  model->SetFileSuggestItems({});
+  model->SetWeatherItems({});
+  model->SetReleaseNotesItems({});
+
+  // Regular latency histogram was recorded.
+  histograms.ExpectTotalCount("Ash.Birch.TotalLatency", 1);
 }
 
 TEST_F(BirchModelTest, DataFetchForNonPrimaryUserClearsModel) {
@@ -217,13 +362,11 @@ TEST_F(BirchModelTest, DataFetchForNonPrimaryUserClearsModel) {
   ASSERT_FALSE(Shell::Get()->session_controller()->IsUserPrimary());
 
   // Add an item to the model.
-  std::vector<BirchFileItem> file_item_list;
-  file_item_list.emplace_back(base::FilePath("test path 1"), u"suggestion",
-                              base::Time());
-  model->SetFileSuggestItems(std::move(file_item_list));
+  model->SetFileSuggestItems(MakeFileItemList(/*item_count=*/1));
 
   // Request a data fetch.
-  model->RequestBirchDataFetch(base::BindOnce(&TestModelConsumer::OnItemsReady,
+  model->RequestBirchDataFetch(/*is_post_login=*/false,
+                               base::BindOnce(&TestModelConsumer::OnItemsReady,
                                               base::Unretained(&consumer),
                                               /*id=*/"0"));
   // The fetch callback was called.
@@ -262,7 +405,8 @@ TEST_F(BirchModelTest, DisablingAllPrefsCausesNoFetch) {
   model->OverrideWeatherProviderForTest(std::move(weather_provider));
 
   // Request a data fetch.
-  model->RequestBirchDataFetch(base::BindOnce(&TestModelConsumer::OnItemsReady,
+  model->RequestBirchDataFetch(/*is_post_login=*/false,
+                               base::BindOnce(&TestModelConsumer::OnItemsReady,
                                               base::Unretained(&consumer),
                                               /*id=*/"0"));
 
@@ -298,7 +442,7 @@ TEST_F(BirchModelTest, EnablingOnePrefsCausesFetch) {
   model->OverrideWeatherProviderForTest(std::move(weather_provider));
 
   // Request a fetch.
-  model->RequestBirchDataFetch(base::DoNothing());
+  model->RequestBirchDataFetch(/*is_post_login=*/false, base::DoNothing());
 
   // Only calendar was fetched.
   auto& client = stub_birch_client_;
@@ -313,22 +457,9 @@ TEST_F(BirchModelTest, DisablingPrefsClearsModel) {
   BirchModel* model = Shell::Get()->birch_model();
 
   // Populate the model with every data type.
-  std::vector<BirchCalendarItem> calendar_item_list;
-  calendar_item_list.emplace_back(u"Event 1", /*start_time=*/base::Time(),
-                                  /*end_time=*/base::Time(),
-                                  /*calendar_url=*/GURL(),
-                                  /*conference_url=*/GURL());
-  model->SetCalendarItems(std::move(calendar_item_list));
-  std::vector<BirchAttachmentItem> attachment_item_list;
-  attachment_item_list.emplace_back(u"Attachment 1", /*file_url=*/GURL(),
-                                    /*icon_url=*/GURL(),
-                                    /*start_time=*/base::Time(),
-                                    /*end_time=*/base::Time());
-  model->SetAttachmentItems(std::move(attachment_item_list));
-  std::vector<BirchFileItem> file_item_list;
-  file_item_list.emplace_back(base::FilePath("test path 1"), u"suggested",
-                              base::Time());
-  model->SetFileSuggestItems(std::move(file_item_list));
+  model->SetCalendarItems(MakeCalendarItemList(/*event_count=*/1));
+  model->SetAttachmentItems(MakeAttachmentItemList(/*item_count=*/1));
+  model->SetFileSuggestItems(MakeFileItemList(/*item_count=*/1));
   std::vector<BirchTabItem> tab_item_list;
   tab_item_list.emplace_back(u"tab", GURL("foo.bar"), base::Time(),
                              GURL("favicon"), "session",
@@ -393,7 +524,8 @@ TEST_F(BirchModelTest, FetchWithOnePrefDisabledMarksDataFresh) {
   prefs->SetBoolean(prefs::kBirchUseWeather, false);
 
   // Request a fetch.
-  model->RequestBirchDataFetch(base::BindOnce(&TestModelConsumer::OnItemsReady,
+  model->RequestBirchDataFetch(/*is_post_login=*/false,
+                               base::BindOnce(&TestModelConsumer::OnItemsReady,
                                               base::Unretained(&consumer),
                                               /*id=*/"0"));
   // Reply with everything but weather.
@@ -408,6 +540,64 @@ TEST_F(BirchModelTest, FetchWithOnePrefDisabledMarksDataFresh) {
 
   // Data is fresh.
   EXPECT_TRUE(model->IsDataFresh());
+}
+
+TEST_F(BirchModelTest, EnablePrefsDuringFetchCausesDataFetchRequest) {
+  BirchModel* model = Shell::Get()->birch_model();
+
+  // Disable all the prefs except weather, so that a data fetch request creates
+  // a pending request.
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetPrimaryUserPrefService();
+  ASSERT_TRUE(prefs);
+  prefs->SetBoolean(prefs::kBirchUseCalendar, false);
+  prefs->SetBoolean(prefs::kBirchUseFileSuggest, false);
+  prefs->SetBoolean(prefs::kBirchUseRecentTabs, false);
+  prefs->SetBoolean(prefs::kBirchUseReleaseNotes, false);
+
+  // Request a fetch, creating a pending fetch request.
+  model->RequestBirchDataFetch(/*is_post_login=*/false, base::DoNothing());
+
+  auto& client = stub_birch_client_;
+  EXPECT_FALSE(client.calendar_provider_.did_request_birch_data_fetch_);
+  EXPECT_FALSE(client.file_suggest_provider_.did_request_birch_data_fetch_);
+  EXPECT_FALSE(client.recent_tabs_provider_.did_request_birch_data_fetch_);
+  EXPECT_FALSE(client.release_notes_provider_.did_request_birch_data_fetch_);
+
+  // Enable prefs and then expect that data fetch requests are called for each
+  // enabled data type.
+  prefs->SetBoolean(prefs::kBirchUseCalendar, true);
+  prefs->SetBoolean(prefs::kBirchUseFileSuggest, true);
+  prefs->SetBoolean(prefs::kBirchUseRecentTabs, true);
+  prefs->SetBoolean(prefs::kBirchUseReleaseNotes, true);
+  EXPECT_TRUE(client.calendar_provider_.did_request_birch_data_fetch_);
+  EXPECT_TRUE(client.file_suggest_provider_.did_request_birch_data_fetch_);
+  EXPECT_TRUE(client.recent_tabs_provider_.did_request_birch_data_fetch_);
+  EXPECT_TRUE(client.release_notes_provider_.did_request_birch_data_fetch_);
+}
+
+TEST_F(BirchModelTest, EnableWeatherPrefDuringFetchCausesDataFetchRequest) {
+  BirchModel* model = Shell::Get()->birch_model();
+
+  // Install a stub weather provider.
+  auto weather_provider = std::make_unique<StubBirchDataProvider>();
+  auto* weather_provider_ptr = weather_provider.get();
+  model->OverrideWeatherProviderForTest(std::move(weather_provider));
+
+  // Disable the weather pref.
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetPrimaryUserPrefService();
+  ASSERT_TRUE(prefs);
+  prefs->SetBoolean(prefs::kBirchUseWeather, false);
+
+  // Request a fetch, creating a pending fetch request.
+  model->RequestBirchDataFetch(/*is_post_login=*/false, base::DoNothing());
+
+  EXPECT_FALSE(weather_provider_ptr->did_request_birch_data_fetch_);
+
+  // Enable the weather pref and expect a weather data fetch.
+  prefs->SetBoolean(prefs::kBirchUseWeather, true);
+  EXPECT_TRUE(weather_provider_ptr->did_request_birch_data_fetch_);
 }
 
 // Regression test for missing attachment type check in IsDataFresh().
@@ -447,10 +637,7 @@ TEST_F(BirchModelTest, MAYBE_DataFetchTimeout) {
   // not notify consumer.
   task_environment()->FastForwardBy(base::Milliseconds(1000));
 
-  std::vector<BirchFileItem> file_item_list;
-  file_item_list.emplace_back(base::FilePath("test path 1"), u"suggestion",
-                              base::Time());
-  model->SetFileSuggestItems(std::move(file_item_list));
+  model->SetFileSuggestItems(MakeFileItemList(/*item_count=*/1));
   model->SetRecentTabItems(std::vector<BirchTabItem>());
   std::vector<BirchWeatherItem> weather_items;
   weather_items.emplace_back(u"desc", u"temp", ui::ImageModel());
@@ -462,7 +649,8 @@ TEST_F(BirchModelTest, MAYBE_DataFetchTimeout) {
   EXPECT_TRUE(model->IsDataFresh());
   EXPECT_THAT(consumer.items_ready_responses(), testing::IsEmpty());
 
-  model->RequestBirchDataFetch(base::BindOnce(&TestModelConsumer::OnItemsReady,
+  model->RequestBirchDataFetch(/*is_post_login=*/false,
+                               base::BindOnce(&TestModelConsumer::OnItemsReady,
                                               base::Unretained(&consumer),
                                               /*id=*/"0"));
   EXPECT_FALSE(model->IsDataFresh());
@@ -486,9 +674,9 @@ TEST_F(BirchModelTest, MAYBE_DataFetchTimeout) {
 
   std::vector<std::unique_ptr<BirchItem>> all_items = model->GetAllItems();
   EXPECT_EQ(all_items.size(), 3u);
-  EXPECT_STREQ(all_items[0]->GetItemType(), BirchTabItem::kItemType);
-  EXPECT_STREQ(all_items[1]->GetItemType(), BirchFileItem::kItemType);
-  EXPECT_STREQ(all_items[2]->GetItemType(), BirchWeatherItem::kItemType);
+  EXPECT_EQ(all_items[0]->GetType(), BirchItemType::kWeather);
+  EXPECT_EQ(all_items[1]->GetType(), BirchItemType::kTab);
+  EXPECT_EQ(all_items[2]->GetType(), BirchItemType::kFile);
   EXPECT_FALSE(model->IsDataFresh());
 }
 
@@ -497,15 +685,11 @@ TEST_F(BirchModelWithoutWeatherTest, MAYBE_DataFetchTimeout) {
   TestModelConsumer consumer;
   EXPECT_TRUE(model);
 
-  std::vector<BirchFileItem> file_item_list;
-  file_item_list.emplace_back(base::FilePath("test path 1"), u"suggestion",
-                              base::Time());
-
   // Passing time and setting data before requesting a birch data fetch will
   // not notify consumer.
   task_environment()->FastForwardBy(base::Milliseconds(1000));
   model->SetRecentTabItems(std::vector<BirchTabItem>());
-  model->SetFileSuggestItems(std::move(file_item_list));
+  model->SetFileSuggestItems(MakeFileItemList(/*item_count=*/1));
   model->SetCalendarItems({});
   model->SetAttachmentItems({});
   model->SetReleaseNotesItems({});
@@ -513,7 +697,8 @@ TEST_F(BirchModelWithoutWeatherTest, MAYBE_DataFetchTimeout) {
   EXPECT_TRUE(model->IsDataFresh());
   EXPECT_THAT(consumer.items_ready_responses(), testing::IsEmpty());
 
-  model->RequestBirchDataFetch(base::BindOnce(&TestModelConsumer::OnItemsReady,
+  model->RequestBirchDataFetch(/*is_post_login=*/false,
+                               base::BindOnce(&TestModelConsumer::OnItemsReady,
                                               base::Unretained(&consumer),
                                               /*id=*/"0"));
   EXPECT_FALSE(model->IsDataFresh());
@@ -536,8 +721,59 @@ TEST_F(BirchModelWithoutWeatherTest, MAYBE_DataFetchTimeout) {
 
   std::vector<std::unique_ptr<BirchItem>> all_items = model->GetAllItems();
   EXPECT_EQ(all_items.size(), 2u);
-  EXPECT_STREQ(all_items[0]->GetItemType(), BirchTabItem::kItemType);
-  EXPECT_STREQ(all_items[1]->GetItemType(), BirchFileItem::kItemType);
+  EXPECT_EQ(all_items[0]->GetType(), BirchItemType::kTab);
+  EXPECT_EQ(all_items[1]->GetType(), BirchItemType::kFile);
+  EXPECT_FALSE(model->IsDataFresh());
+}
+
+// Test that the data fetch timeout is longer when requesting directly after
+// login.
+TEST_F(BirchModelTest, PostLoginDataFetchTimeout) {
+  BirchModel* model = Shell::Get()->birch_model();
+  TestModelConsumer consumer;
+  EXPECT_TRUE(model);
+
+  // Passing time and setting data before requesting a birch data fetch will
+  // not notify consumer.
+  task_environment()->FastForwardBy(base::Milliseconds(1000));
+
+  model->SetFileSuggestItems(MakeFileItemList(/*item_count=*/1));
+  model->SetRecentTabItems(std::vector<BirchTabItem>());
+  model->SetWeatherItems({});
+  model->SetCalendarItems({});
+  model->SetAttachmentItems({});
+  model->SetReleaseNotesItems({});
+
+  EXPECT_TRUE(model->IsDataFresh());
+  EXPECT_THAT(consumer.items_ready_responses(), testing::IsEmpty());
+
+  model->RequestBirchDataFetch(/*is_post_login=*/true,
+                               base::BindOnce(&TestModelConsumer::OnItemsReady,
+                                              base::Unretained(&consumer),
+                                              /*id=*/"0"));
+  EXPECT_FALSE(model->IsDataFresh());
+  EXPECT_THAT(consumer.items_ready_responses(), testing::IsEmpty());
+
+  // Test that passing a short amount of time and setting some data does not
+  // notify that items are ready.
+  task_environment()->FastForwardBy(base::Milliseconds(2500));
+
+  std::vector<BirchTabItem> tab_item_list;
+  tab_item_list.emplace_back(u"tab title", GURL("example.com"),
+                             base::Time::Now(), GURL("example.com/favicon_url"),
+                             "session_name",
+                             BirchTabItem::DeviceFormFactor::kDesktop);
+  model->SetRecentTabItems(tab_item_list);
+  EXPECT_THAT(consumer.items_ready_responses(), testing::IsEmpty());
+
+  // Test that passing enough time notifies that items are ready.
+  task_environment()->FastForwardBy(base::Milliseconds(500));
+  EXPECT_THAT(consumer.items_ready_responses(), testing::ElementsAre("0"));
+
+  std::vector<std::unique_ptr<BirchItem>> all_items = model->GetAllItems();
+  EXPECT_EQ(all_items.size(), 2u);
+  EXPECT_EQ(all_items[0]->GetType(), BirchItemType::kTab);
+  EXPECT_EQ(all_items[1]->GetType(), BirchItemType::kFile);
   EXPECT_FALSE(model->IsDataFresh());
 }
 
@@ -552,7 +788,8 @@ TEST_F(BirchModelWithoutWeatherTest, AddItemNotifiesCallback) {
   EXPECT_THAT(consumer.items_ready_responses(), testing::IsEmpty());
 
   // Make a data fetch request and set fresh tab data.
-  model->RequestBirchDataFetch(base::BindOnce(&TestModelConsumer::OnItemsReady,
+  model->RequestBirchDataFetch(/*is_post_login=*/false,
+                               base::BindOnce(&TestModelConsumer::OnItemsReady,
                                               base::Unretained(&consumer),
                                               /*id=*/"0"));
   model->SetRecentTabItems(std::vector<BirchTabItem>());
@@ -560,10 +797,7 @@ TEST_F(BirchModelWithoutWeatherTest, AddItemNotifiesCallback) {
   // Consumer is not notified until all data sources have responded.
   EXPECT_THAT(consumer.items_ready_responses(), testing::IsEmpty());
 
-  std::vector<BirchFileItem> file_item_list;
-  file_item_list.emplace_back(base::FilePath("test path 1"), u"suggestion",
-                              base::Time());
-  model->SetFileSuggestItems(std::move(file_item_list));
+  model->SetFileSuggestItems(MakeFileItemList(/*item_count=*/1));
   model->SetWeatherItems({});
   model->SetCalendarItems({});
   model->SetAttachmentItems({});
@@ -574,20 +808,17 @@ TEST_F(BirchModelWithoutWeatherTest, AddItemNotifiesCallback) {
 
   // Setting the file suggest items should not trigger items ready again, since
   // no data fetch was requested.
-  file_item_list.emplace_back(base::FilePath("test path 1"), u"suggestion",
-                              base::Time());
-  file_item_list.emplace_back(base::FilePath("test path 2"), u"suggestion",
-                              base::Time());
-  model->SetFileSuggestItems(std::move(file_item_list));
+  model->SetFileSuggestItems(MakeFileItemList(/*item_count=*/2));
   EXPECT_THAT(consumer.items_ready_responses(), testing::ElementsAre("0"));
 
   // Request another data fetch and expect the consumer to be notified once
   // items are set again.
-  model->RequestBirchDataFetch(base::BindOnce(&TestModelConsumer::OnItemsReady,
+  model->RequestBirchDataFetch(/*is_post_login=*/false,
+                               base::BindOnce(&TestModelConsumer::OnItemsReady,
                                               base::Unretained(&consumer),
                                               /*id=*/"1"));
   model->SetRecentTabItems(std::vector<BirchTabItem>());
-  model->SetFileSuggestItems(std::move(file_item_list));
+  model->SetFileSuggestItems(MakeFileItemList(/*item_count=*/2));
   model->SetCalendarItems({});
   model->SetAttachmentItems({});
   model->SetReleaseNotesItems({});
@@ -599,14 +830,16 @@ TEST_F(BirchModelTest, MultipleRequestsHaveIndependentTimeouts) {
   TestModelConsumer consumer;
   EXPECT_TRUE(model);
 
-  model->RequestBirchDataFetch(base::BindOnce(&TestModelConsumer::OnItemsReady,
+  model->RequestBirchDataFetch(/*is_post_login=*/false,
+                               base::BindOnce(&TestModelConsumer::OnItemsReady,
                                               base::Unretained(&consumer),
                                               /*id=*/"0"));
 
   task_environment()->FastForwardBy(base::Milliseconds(500));
   EXPECT_THAT(consumer.items_ready_responses(), testing::IsEmpty());
 
-  model->RequestBirchDataFetch(base::BindOnce(&TestModelConsumer::OnItemsReady,
+  model->RequestBirchDataFetch(/*is_post_login=*/false,
+                               base::BindOnce(&TestModelConsumer::OnItemsReady,
                                               base::Unretained(&consumer),
                                               /*id=*/"1"));
   task_environment()->FastForwardBy(base::Milliseconds(500));
@@ -616,7 +849,8 @@ TEST_F(BirchModelTest, MultipleRequestsHaveIndependentTimeouts) {
   EXPECT_THAT(consumer.items_ready_responses(), testing::ElementsAre("0", "1"));
   EXPECT_FALSE(model->IsDataFresh());
 
-  model->RequestBirchDataFetch(base::BindOnce(&TestModelConsumer::OnItemsReady,
+  model->RequestBirchDataFetch(/*is_post_login=*/false,
+                               base::BindOnce(&TestModelConsumer::OnItemsReady,
                                               base::Unretained(&consumer),
                                               /*id=*/"2"));
 
@@ -633,14 +867,16 @@ TEST_F(BirchModelTest, ResponseAfterFirstTimeout) {
   TestModelConsumer consumer;
   EXPECT_TRUE(model);
 
-  model->RequestBirchDataFetch(base::BindOnce(&TestModelConsumer::OnItemsReady,
+  model->RequestBirchDataFetch(/*is_post_login=*/false,
+                               base::BindOnce(&TestModelConsumer::OnItemsReady,
                                               base::Unretained(&consumer),
                                               /*id=*/"0"));
 
   task_environment()->FastForwardBy(base::Milliseconds(500));
   EXPECT_THAT(consumer.items_ready_responses(), testing::IsEmpty());
 
-  model->RequestBirchDataFetch(base::BindOnce(&TestModelConsumer::OnItemsReady,
+  model->RequestBirchDataFetch(/*is_post_login=*/false,
+                               base::BindOnce(&TestModelConsumer::OnItemsReady,
                                               base::Unretained(&consumer),
                                               /*id=*/"1"));
   task_environment()->FastForwardBy(base::Milliseconds(500));
@@ -650,10 +886,7 @@ TEST_F(BirchModelTest, ResponseAfterFirstTimeout) {
   EXPECT_THAT(consumer.items_ready_responses(), testing::ElementsAre("0"));
   EXPECT_FALSE(model->IsDataFresh());
 
-  std::vector<BirchFileItem> file_item_list;
-  file_item_list.emplace_back(base::FilePath("test path 1"), u"suggested",
-                              base::Time());
-  model->SetFileSuggestItems(std::move(file_item_list));
+  model->SetFileSuggestItems(MakeFileItemList(/*item_count=*/1));
   std::vector<BirchWeatherItem> weather_item_list;
   weather_item_list.emplace_back(u"cloudy", u"16 c", ui::ImageModel());
   model->SetWeatherItems(std::move(weather_item_list));
@@ -662,18 +895,8 @@ TEST_F(BirchModelTest, ResponseAfterFirstTimeout) {
                              GURL("favicon"), "session",
                              BirchTabItem::DeviceFormFactor::kDesktop);
   model->SetRecentTabItems(std::move(tab_item_list));
-  std::vector<BirchCalendarItem> calendar_item_list;
-  calendar_item_list.emplace_back(u"Event 1", /*start_time=*/base::Time(),
-                                  /*end_time=*/base::Time(),
-                                  /*calendar_url=*/GURL(),
-                                  /*conference_url=*/GURL());
-  model->SetCalendarItems(std::move(calendar_item_list));
-  std::vector<BirchAttachmentItem> attachment_item_list;
-  attachment_item_list.emplace_back(u"Attachment 1", /*file_url=*/GURL(),
-                                    /*icon_url=*/GURL(),
-                                    /*start_time=*/base::Time(),
-                                    /*end_time=*/base::Time());
-  model->SetAttachmentItems(std::move(attachment_item_list));
+  model->SetCalendarItems(MakeCalendarItemList(/*event_count=*/1));
+  model->SetAttachmentItems(MakeAttachmentItemList(/*item_count=*/1));
   std::vector<BirchReleaseNotesItem> release_notes_item_list;
   release_notes_item_list.emplace_back(u"note", u"explore", GURL("foo.bar"),
                                        base::Time());
@@ -684,7 +907,8 @@ TEST_F(BirchModelTest, ResponseAfterFirstTimeout) {
   EXPECT_THAT(consumer.items_ready_responses(), testing::ElementsAre("0", "1"));
   EXPECT_EQ(model->GetAllItems().size(), 6u);
 
-  model->RequestBirchDataFetch(base::BindOnce(&TestModelConsumer::OnItemsReady,
+  model->RequestBirchDataFetch(/*is_post_login=*/false,
+                               base::BindOnce(&TestModelConsumer::OnItemsReady,
                                               base::Unretained(&consumer),
                                               /*id=*/"2"));
   EXPECT_FALSE(model->IsDataFresh());
@@ -716,128 +940,123 @@ TEST_F(BirchModelTest, GetAllItems) {
   release_notes_item_list.emplace_back(u"note", u"explore", GURL("foo.bar"),
                                        base::Time());
   model->SetReleaseNotesItems(std::move(release_notes_item_list));
-  std::vector<BirchCalendarItem> calendar_item_list;
-  calendar_item_list.emplace_back(u"Event 1", /*start_time=*/base::Time(),
-                                  /*end_time=*/base::Time(),
-                                  /*calendar_url=*/GURL(),
-                                  /*conference_url=*/GURL());
-  model->SetCalendarItems(std::move(calendar_item_list));
-  std::vector<BirchAttachmentItem> attachment_item_list;
-  attachment_item_list.emplace_back(u"Attachment 1", /*file_url=*/GURL(),
-                                    /*icon_url=*/GURL(),
-                                    /*start_time=*/base::Time(),
-                                    /*end_time=*/base::Time());
-  model->SetAttachmentItems(std::move(attachment_item_list));
+  model->SetCalendarItems(MakeCalendarItemList(/*event_count=*/1));
+  model->SetAttachmentItems(MakeAttachmentItemList(/*item_count=*/1));
   std::vector<BirchTabItem> tab_item_list;
   tab_item_list.emplace_back(u"tab", GURL("foo.bar"), base::Time(),
                              GURL("favicon"), "session",
                              BirchTabItem::DeviceFormFactor::kDesktop);
   model->SetRecentTabItems(std::move(tab_item_list));
-  std::vector<BirchFileItem> file_item_list;
-  file_item_list.emplace_back(base::FilePath("test path 1"), u"suggested",
-                              base::Time());
-  model->SetFileSuggestItems(std::move(file_item_list));
+  model->SetFileSuggestItems(MakeFileItemList(/*item_count=*/1));
 
   // Verify that GetAllItems() returns the correct number of items and the
   // code didn't skip a type.
   std::vector<std::unique_ptr<BirchItem>> all_items = model->GetAllItems();
   ASSERT_EQ(all_items.size(), 6u);
-  EXPECT_STREQ(all_items[0]->GetItemType(), BirchReleaseNotesItem::kItemType);
-  EXPECT_STREQ(all_items[1]->GetItemType(), BirchCalendarItem::kItemType);
-  EXPECT_STREQ(all_items[2]->GetItemType(), BirchAttachmentItem::kItemType);
-  EXPECT_STREQ(all_items[3]->GetItemType(), BirchTabItem::kItemType);
-  EXPECT_STREQ(all_items[4]->GetItemType(), BirchFileItem::kItemType);
-  EXPECT_STREQ(all_items[5]->GetItemType(), BirchWeatherItem::kItemType);
+  EXPECT_EQ(all_items[0]->GetType(), BirchItemType::kWeather);
+  EXPECT_EQ(all_items[1]->GetType(), BirchItemType::kReleaseNotes);
+  EXPECT_EQ(all_items[2]->GetType(), BirchItemType::kCalendar);
+  EXPECT_EQ(all_items[3]->GetType(), BirchItemType::kAttachment);
+  EXPECT_EQ(all_items[4]->GetType(), BirchItemType::kTab);
+  EXPECT_EQ(all_items[5]->GetType(), BirchItemType::kFile);
+}
+
+TEST_F(BirchModelTest, SetItemListRecordsHistogram) {
+  base::HistogramTester histograms;
+  BirchModel* model = Shell::Get()->birch_model();
+  TestModelConsumer consumer;
+
+  // Simulate a data fetch.
+  model->RequestBirchDataFetch(/*is_post_login=*/false,
+                               base::BindOnce(&TestModelConsumer::OnItemsReady,
+                                              base::Unretained(&consumer),
+                                              /*id=*/"0"));
+  // Insert one item of each type.
+  model->SetCalendarItems(MakeCalendarItemList(/*event_count=*/1));
+  model->SetAttachmentItems(MakeAttachmentItemList(/*item_count=*/1));
+  std::vector<BirchTabItem> tab_item_list;
+  tab_item_list.emplace_back(u"tab", GURL("foo.bar"), base::Time(),
+                             GURL("favicon"), "session",
+                             BirchTabItem::DeviceFormFactor::kDesktop);
+  model->SetRecentTabItems(std::move(tab_item_list));
+  model->SetFileSuggestItems(MakeFileItemList(/*item_count=*/1));
+  std::vector<BirchWeatherItem> weather_item_list;
+  weather_item_list.emplace_back(u"cloudy", u"16 c", ui::ImageModel());
+  model->SetWeatherItems(std::move(weather_item_list));
+  std::vector<BirchReleaseNotesItem> release_notes_item_list;
+  release_notes_item_list.emplace_back(u"note", u"explore", GURL("foo.bar"),
+                                       base::Time());
+  model->SetReleaseNotesItems(std::move(release_notes_item_list));
+
+  // Histograms were recorded for each type.
+  histograms.ExpectBucketCount("Ash.Birch.ResultsReturned.Calendar", 1, 1);
+  histograms.ExpectBucketCount("Ash.Birch.ResultsReturned.Attachment", 1, 1);
+  histograms.ExpectBucketCount("Ash.Birch.ResultsReturned.File", 1, 1);
+  histograms.ExpectBucketCount("Ash.Birch.ResultsReturned.Tab", 1, 1);
+  histograms.ExpectBucketCount("Ash.Birch.ResultsReturned.Weather", 1, 1);
+  histograms.ExpectBucketCount("Ash.Birch.ResultsReturned.ReleaseNotes", 1, 1);
 }
 
 TEST_F(BirchModelTest, GetItemsForDisplay_EnoughTypes) {
   BirchModel* model = Shell::Get()->birch_model();
 
   // Insert two calendar items.
-  // The first one has ranking 5.f;
-  std::vector<BirchCalendarItem> calendar_item_list;
-  calendar_item_list.emplace_back(u"Event 1", /*start_time=*/base::Time(),
-                                  /*end_time=*/base::Time(),
-                                  /*calendar_url=*/GURL(),
-                                  /*conference_url=*/GURL());
-  calendar_item_list.back().set_ranking(5.f);
+  std::vector<BirchCalendarItem> calendar_item_list =
+      MakeCalendarItemList(/*event_count=*/2);
 
-  // The second one has no ranking.
-  calendar_item_list.emplace_back(u"Event 2", /*start_time=*/base::Time(),
-                                  /*end_time=*/base::Time(),
-                                  /*calendar_url=*/GURL(),
-                                  /*conference_url=*/GURL());
+  // The first event has ranking, the second one has no ranking.
+  calendar_item_list.front().set_ranking(4.f);
+
   model->SetCalendarItems(std::move(calendar_item_list));
 
   // Insert one item for other types.
-  std::vector<BirchAttachmentItem> attachment_item_list;
-  attachment_item_list.emplace_back(u"Attachment 1", /*file_url=*/GURL(),
-                                    /*icon_url=*/GURL(),
-                                    /*start_time=*/base::Time(),
-                                    /*end_time=*/base::Time());
+  std::vector<BirchAttachmentItem> attachment_item_list =
+      MakeAttachmentItemList(/*item_count=*/1);
 
-  attachment_item_list.back().set_ranking(4.f);
+  attachment_item_list.back().set_ranking(3.f);
   model->SetAttachmentItems(std::move(attachment_item_list));
 
   std::vector<BirchTabItem> tab_item_list;
   tab_item_list.emplace_back(u"tab", GURL("foo.bar"), base::Time(),
                              GURL("favicon"), "session",
                              BirchTabItem::DeviceFormFactor::kDesktop);
-  tab_item_list.back().set_ranking(3.f);
+  tab_item_list.back().set_ranking(2.f);
   model->SetRecentTabItems(std::move(tab_item_list));
 
-  std::vector<BirchFileItem> file_item_list;
-  file_item_list.emplace_back(base::FilePath("test path 1"), u"suggested",
-                              base::Time());
-  file_item_list.back().set_ranking(2.f);
+  std::vector<BirchFileItem> file_item_list =
+      MakeFileItemList(/*item_count=*/1);
+  file_item_list.back().set_ranking(1.f);
   model->SetFileSuggestItems(std::move(file_item_list));
-
-  std::vector<BirchWeatherItem> weather_item_list;
-  weather_item_list.emplace_back(u"cloudy", u"16 c", ui::ImageModel());
-  weather_item_list.back().set_ranking(1.f);
-  model->SetWeatherItems(std::move(weather_item_list));
 
   std::vector<std::unique_ptr<BirchItem>> items = model->GetItemsForDisplay();
 
-  // We should only get 5 ranked items.
-  ASSERT_EQ(items.size(), 5u);
+  // We should only get 4 ranked items.
+  ASSERT_EQ(items.size(), 4u);
 
   // The items are in priority order.
   EXPECT_FLOAT_EQ(items[0]->ranking(), 1.f);
-  EXPECT_STREQ(items[0]->GetItemType(), BirchWeatherItem::kItemType);
+  EXPECT_EQ(items[0]->GetType(), BirchItemType::kFile);
   EXPECT_FLOAT_EQ(items[1]->ranking(), 2.f);
-  EXPECT_STREQ(items[1]->GetItemType(), BirchFileItem::kItemType);
+  EXPECT_EQ(items[1]->GetType(), BirchItemType::kTab);
   EXPECT_FLOAT_EQ(items[2]->ranking(), 3.f);
-  EXPECT_STREQ(items[2]->GetItemType(), BirchTabItem::kItemType);
+  EXPECT_EQ(items[2]->GetType(), BirchItemType::kAttachment);
   EXPECT_FLOAT_EQ(items[3]->ranking(), 4.f);
-  EXPECT_STREQ(items[3]->GetItemType(), BirchAttachmentItem::kItemType);
-  EXPECT_FLOAT_EQ(items[4]->ranking(), 5.f);
-  EXPECT_STREQ(items[4]->GetItemType(), BirchCalendarItem::kItemType);
+  EXPECT_EQ(items[3]->GetType(), BirchItemType::kCalendar);
 }
 
 TEST_F(BirchModelTest, GetItemsForDisplay_IncludesDuplicateTypes) {
   BirchModel* model = Shell::Get()->birch_model();
 
   // Insert 2 calendar events with high priority.
-  std::vector<BirchCalendarItem> calendar_item_list;
-  calendar_item_list.emplace_back(u"Event 1", /*start_time=*/base::Time(),
-                                  /*end_time=*/base::Time(),
-                                  /*calendar_url=*/GURL(),
-                                  /*conference_url=*/GURL());
-  calendar_item_list.back().set_ranking(1.f);
-  calendar_item_list.emplace_back(u"Event 2", /*start_time=*/base::Time(),
-                                  /*end_time=*/base::Time(),
-                                  /*calendar_url=*/GURL(),
-                                  /*conference_url=*/GURL());
+  std::vector<BirchCalendarItem> calendar_item_list =
+      MakeCalendarItemList(/*event_count=*/2);
+  calendar_item_list.front().set_ranking(1.f);
   calendar_item_list.back().set_ranking(2.f);
   model->SetCalendarItems(std::move(calendar_item_list));
 
   // Then insert 3 other items with lower priority.
-  std::vector<BirchAttachmentItem> attachment_item_list;
-  attachment_item_list.emplace_back(u"Attachment 1", /*file_url=*/GURL(),
-                                    /*icon_url=*/GURL(),
-                                    /*start_time=*/base::Time(),
-                                    /*end_time=*/base::Time());
+  std::vector<BirchAttachmentItem> attachment_item_list =
+      MakeAttachmentItemList(/*item_count=*/1);
   attachment_item_list.back().set_ranking(3.f);
   model->SetAttachmentItems(std::move(attachment_item_list));
 
@@ -848,9 +1067,8 @@ TEST_F(BirchModelTest, GetItemsForDisplay_IncludesDuplicateTypes) {
   tab_item_list.back().set_ranking(4.f);
   model->SetRecentTabItems(std::move(tab_item_list));
 
-  std::vector<BirchFileItem> file_item_list;
-  file_item_list.emplace_back(base::FilePath("test path 1"), u"suggested",
-                              base::Time());
+  std::vector<BirchFileItem> file_item_list =
+      MakeFileItemList(/*item_count=*/1);
   file_item_list.back().set_ranking(5.f);
   model->SetFileSuggestItems(std::move(file_item_list));
 
@@ -858,45 +1076,31 @@ TEST_F(BirchModelTest, GetItemsForDisplay_IncludesDuplicateTypes) {
 
   // Both calendar events are included.
   EXPECT_FLOAT_EQ(items[0]->ranking(), 1.f);
-  EXPECT_STREQ(items[0]->GetItemType(), BirchCalendarItem::kItemType);
+  EXPECT_EQ(items[0]->GetType(), BirchItemType::kCalendar);
   EXPECT_FLOAT_EQ(items[1]->ranking(), 2.f);
-  EXPECT_STREQ(items[1]->GetItemType(), BirchCalendarItem::kItemType);
+  EXPECT_EQ(items[1]->GetType(), BirchItemType::kCalendar);
   EXPECT_FLOAT_EQ(items[2]->ranking(), 3.f);
-  EXPECT_STREQ(items[2]->GetItemType(), BirchAttachmentItem::kItemType);
+  EXPECT_EQ(items[2]->GetType(), BirchItemType::kAttachment);
   EXPECT_FLOAT_EQ(items[3]->ranking(), 4.f);
-  EXPECT_STREQ(items[3]->GetItemType(), BirchTabItem::kItemType);
+  EXPECT_EQ(items[3]->GetType(), BirchItemType::kTab);
   EXPECT_FLOAT_EQ(items[4]->ranking(), 5.f);
-  EXPECT_STREQ(items[4]->GetItemType(), BirchFileItem::kItemType);
+  EXPECT_EQ(items[4]->GetType(), BirchItemType::kFile);
 }
 
 TEST_F(BirchModelTest, GetItemsForDisplay_TwoDuplicateTypes) {
   BirchModel* model = Shell::Get()->birch_model();
 
   // Insert 2 items of the same type.
-  std::vector<BirchCalendarItem> calendar_item_list;
-  calendar_item_list.emplace_back(u"Event 1", /*start_time=*/base::Time(),
-                                  /*end_time=*/base::Time(),
-                                  /*calendar_url=*/GURL(),
-                                  /*conference_url=*/GURL());
-  calendar_item_list.back().set_ranking(1.f);
-  calendar_item_list.emplace_back(u"Event 2", /*start_time=*/base::Time(),
-                                  /*end_time=*/base::Time(),
-                                  /*calendar_url=*/GURL(),
-                                  /*conference_url=*/GURL());
+  std::vector<BirchCalendarItem> calendar_item_list =
+      MakeCalendarItemList(/*event_count=*/2);
+  calendar_item_list.front().set_ranking(1.f);
   calendar_item_list.back().set_ranking(2.f);
   model->SetCalendarItems(std::move(calendar_item_list));
 
   // Insert 2 more items of a different type.
-  std::vector<BirchAttachmentItem> attachment_item_list;
-  attachment_item_list.emplace_back(u"Attachment 1", /*file_url=*/GURL(),
-                                    /*icon_url=*/GURL(),
-                                    /*start_time=*/base::Time(),
-                                    /*end_time=*/base::Time());
-  attachment_item_list.back().set_ranking(3.f);
-  attachment_item_list.emplace_back(u"Attachment 2", /*file_url=*/GURL(),
-                                    /*icon_url=*/GURL(),
-                                    /*start_time=*/base::Time(),
-                                    /*end_time=*/base::Time());
+  std::vector<BirchAttachmentItem> attachment_item_list =
+      MakeAttachmentItemList(/*item_count=*/2);
+  attachment_item_list.front().set_ranking(3.f);
   attachment_item_list.back().set_ranking(4.f);
   model->SetAttachmentItems(std::move(attachment_item_list));
 
@@ -904,35 +1108,24 @@ TEST_F(BirchModelTest, GetItemsForDisplay_TwoDuplicateTypes) {
 
   ASSERT_EQ(items.size(), 4u);
   EXPECT_FLOAT_EQ(items[0]->ranking(), 1.f);
-  EXPECT_STREQ(items[0]->GetItemType(), BirchCalendarItem::kItemType);
+  EXPECT_EQ(items[0]->GetType(), BirchItemType::kCalendar);
   EXPECT_FLOAT_EQ(items[1]->ranking(), 2.f);
-  EXPECT_STREQ(items[1]->GetItemType(), BirchCalendarItem::kItemType);
+  EXPECT_EQ(items[1]->GetType(), BirchItemType::kCalendar);
   EXPECT_FLOAT_EQ(items[2]->ranking(), 3.f);
-  EXPECT_STREQ(items[2]->GetItemType(), BirchAttachmentItem::kItemType);
+  EXPECT_EQ(items[2]->GetType(), BirchItemType::kAttachment);
   EXPECT_FLOAT_EQ(items[3]->ranking(), 4.f);
-  EXPECT_STREQ(items[3]->GetItemType(), BirchAttachmentItem::kItemType);
+  EXPECT_EQ(items[3]->GetType(), BirchItemType::kAttachment);
 }
 
 TEST_F(BirchModelTest, GetItemsForDisplay_NotEnoughItems) {
   BirchModel* model = Shell::Get()->birch_model();
 
   // Insert 3 items of the same type.
-  std::vector<BirchCalendarItem> calendar_item_list;
-  calendar_item_list.emplace_back(u"Event 1", /*start_time=*/base::Time(),
-                                  /*end_time=*/base::Time(),
-                                  /*calendar_url=*/GURL(),
-                                  /*conference_url=*/GURL());
-  calendar_item_list.back().set_ranking(1.f);
-  calendar_item_list.emplace_back(u"Event 2", /*start_time=*/base::Time(),
-                                  /*end_time=*/base::Time(),
-                                  /*calendar_url=*/GURL(),
-                                  /*conference_url=*/GURL());
-  calendar_item_list.back().set_ranking(2.f);
-  calendar_item_list.emplace_back(u"Event 3", /*start_time=*/base::Time(),
-                                  /*end_time=*/base::Time(),
-                                  /*calendar_url=*/GURL(),
-                                  /*conference_url=*/GURL());
-  calendar_item_list.back().set_ranking(3.f);
+  std::vector<BirchCalendarItem> calendar_item_list =
+      MakeCalendarItemList(/*event_count=*/3);
+  calendar_item_list[0].set_ranking(1.f);
+  calendar_item_list[1].set_ranking(2.f);
+  calendar_item_list[2].set_ranking(3.f);
   model->SetCalendarItems(std::move(calendar_item_list));
 
   std::vector<std::unique_ptr<BirchItem>> items = model->GetItemsForDisplay();
@@ -940,27 +1133,20 @@ TEST_F(BirchModelTest, GetItemsForDisplay_NotEnoughItems) {
   // 3 items are returned.
   ASSERT_EQ(items.size(), 3u);
   EXPECT_FLOAT_EQ(items[0]->ranking(), 1.f);
-  EXPECT_STREQ(items[0]->GetItemType(), BirchCalendarItem::kItemType);
+  EXPECT_EQ(items[0]->GetType(), BirchItemType::kCalendar);
   EXPECT_FLOAT_EQ(items[1]->ranking(), 2.f);
-  EXPECT_STREQ(items[1]->GetItemType(), BirchCalendarItem::kItemType);
+  EXPECT_EQ(items[1]->GetType(), BirchItemType::kCalendar);
   EXPECT_FLOAT_EQ(items[2]->ranking(), 3.f);
-  EXPECT_STREQ(items[2]->GetItemType(), BirchCalendarItem::kItemType);
+  EXPECT_EQ(items[2]->GetType(), BirchItemType::kCalendar);
 }
 
 TEST_F(BirchModelTest, GetItemsForDisplay_NotRankedItem) {
   BirchModel* model = Shell::Get()->birch_model();
 
   // Insert 1 regular item and 1 item with no ranking.
-  std::vector<BirchCalendarItem> calendar_item_list;
-  calendar_item_list.emplace_back(u"Ranked", /*start_time=*/base::Time(),
-                                  /*end_time=*/base::Time(),
-                                  /*calendar_url=*/GURL(),
-                                  /*conference_url=*/GURL());
-  calendar_item_list.back().set_ranking(1.f);
-  calendar_item_list.emplace_back(u"Unranked", /*start_time=*/base::Time(),
-                                  /*end_time=*/base::Time(),
-                                  /*calendar_url=*/GURL(),
-                                  /*conference_url=*/GURL());
+  std::vector<BirchCalendarItem> calendar_item_list =
+      MakeCalendarItemList(/*event_count=*/2);
+  calendar_item_list.front().set_ranking(1.f);
   model->SetCalendarItems(std::move(calendar_item_list));
 
   std::vector<std::unique_ptr<BirchItem>> items = model->GetItemsForDisplay();
@@ -968,7 +1154,7 @@ TEST_F(BirchModelTest, GetItemsForDisplay_NotRankedItem) {
   // Only 1 item is returned because the unranked item is discarded.
   ASSERT_EQ(items.size(), 1u);
   EXPECT_FLOAT_EQ(items[0]->ranking(), 1.f);
-  EXPECT_STREQ(items[0]->GetItemType(), BirchCalendarItem::kItemType);
+  EXPECT_EQ(items[0]->GetType(), BirchItemType::kCalendar);
 }
 
 TEST_F(BirchModelTest, ModelClearedOnMultiProfileUserSwitch) {
@@ -976,10 +1162,7 @@ TEST_F(BirchModelTest, ModelClearedOnMultiProfileUserSwitch) {
   TestModelConsumer consumer;
 
   // Add an item to the model.
-  std::vector<BirchFileItem> file_item_list;
-  file_item_list.emplace_back(base::FilePath("test path 1"), u"suggested",
-                              base::Time());
-  model->SetFileSuggestItems(std::move(file_item_list));
+  model->SetFileSuggestItems(MakeFileItemList(/*item_count=*/1));
 
   // Set the other types as empty so the model has fresh data.
   model->SetCalendarItems({});
@@ -1020,6 +1203,205 @@ TEST_F(BirchModelTest, WeatherItemsClearedWhenGeolocationDisabled) {
 
   // The weather item is removed.
   EXPECT_TRUE(model->GetWeatherForTest().empty());
+}
+
+TEST_F(BirchModelTest, RemoveAndFilterTabItem) {
+  BirchModel* model = Shell::Get()->birch_model();
+
+  model->SetCalendarItems({});
+  model->SetAttachmentItems({});
+  model->SetFileSuggestItems({});
+  model->SetWeatherItems({});
+  model->SetReleaseNotesItems({});
+
+  BirchTabItem item0(u"item0", GURL("https://example.com/01"), base::Time(),
+                     GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop);
+  BirchTabItem item1(u"item1", GURL("https://example.com/11"), base::Time(),
+                     GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop);
+  BirchTabItem item2(u"item2", GURL("https://example.com/21"), base::Time(),
+                     GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop);
+  std::vector<BirchTabItem> tab_item_list = {item0, item1, item2};
+  model->SetRecentTabItems(tab_item_list);
+
+  std::vector<std::unique_ptr<BirchItem>> all_items = model->GetAllItems();
+  ASSERT_EQ(all_items.size(), 3u);
+
+  // Remove `item1` and check that it is filtered from `all_items`.
+  model->RemoveItem(&item1);
+
+  all_items = model->GetAllItems();
+  ASSERT_EQ(all_items.size(), 2u);
+}
+
+TEST_F(BirchModelTest, RemoveAndFilterCalendarItem) {
+  BirchModel* model = Shell::Get()->birch_model();
+
+  model->SetRecentTabItems({});
+  model->SetAttachmentItems({});
+  model->SetFileSuggestItems({});
+  model->SetWeatherItems({});
+  model->SetReleaseNotesItems({});
+
+  std::vector<BirchCalendarItem> calendar_item_list =
+      MakeCalendarItemList(/*event_count=*/3);
+  model->SetCalendarItems(calendar_item_list);
+
+  std::vector<std::unique_ptr<BirchItem>> all_items = model->GetAllItems();
+  ASSERT_EQ(all_items.size(), 3u);
+
+  // Remove the second item and check that it is filtered from `all_items`.
+  model->RemoveItem(&calendar_item_list[1]);
+
+  all_items = model->GetAllItems();
+  ASSERT_EQ(all_items.size(), 2u);
+}
+
+TEST_F(BirchModelTest, RemoveAndFilterAttachmentItem) {
+  BirchModel* model = Shell::Get()->birch_model();
+
+  model->SetCalendarItems({});
+  model->SetRecentTabItems({});
+  model->SetFileSuggestItems({});
+  model->SetWeatherItems({});
+  model->SetReleaseNotesItems({});
+
+  std::vector<BirchAttachmentItem> attachment_item_list =
+      MakeAttachmentItemList(/*item_count=*/3);
+  model->SetAttachmentItems(attachment_item_list);
+
+  std::vector<std::unique_ptr<BirchItem>> all_items = model->GetAllItems();
+  ASSERT_EQ(all_items.size(), 3u);
+
+  // Remove the second item and check that it is filtered from `all_items`.
+  model->RemoveItem(&attachment_item_list[1]);
+
+  all_items = model->GetAllItems();
+  ASSERT_EQ(all_items.size(), 2u);
+}
+
+TEST_F(BirchModelTest, RemoveAndFilterFileItem) {
+  BirchModel* model = Shell::Get()->birch_model();
+
+  model->SetCalendarItems({});
+  model->SetAttachmentItems({});
+  model->SetRecentTabItems({});
+  model->SetWeatherItems({});
+  model->SetReleaseNotesItems({});
+
+  std::vector<BirchFileItem> file_item_list =
+      MakeFileItemList(/*item_count=*/3);
+  model->SetFileSuggestItems(file_item_list);
+
+  std::vector<std::unique_ptr<BirchItem>> all_items = model->GetAllItems();
+  ASSERT_EQ(all_items.size(), 3u);
+
+  // Remove the second item and check that it is filtered from `all_items`.
+  model->RemoveItem(&file_item_list[1]);
+
+  all_items = model->GetAllItems();
+  ASSERT_EQ(all_items.size(), 2u);
+}
+
+TEST_F(BirchModelTest, DuplicateFileAndAttachmentItem) {
+  BirchModel* model = Shell::Get()->birch_model();
+
+  model->SetCalendarItems({});
+  model->SetRecentTabItems({});
+  model->SetWeatherItems({});
+  model->SetReleaseNotesItems({});
+
+  std::vector<BirchAttachmentItem> attachment_item_list;
+  attachment_item_list.emplace_back(
+      u"Ongoing Event Attachment 1",
+      /*file_url=*/GURL(),
+      /*icon_url=*/GURL(),
+      /*start_time=*/base::Time(TimeFromString("22 Feb 2024 3:00 UTC")),
+      /*end_time=*/base::Time(TimeFromString("22 Feb 2024 5:00 UTC")),
+      /*file_id=*/"duplicate_file_id_1");
+  attachment_item_list.emplace_back(
+      u"Tomorrow Event Attachment 2",
+      /*file_url=*/GURL(),
+      /*icon_url=*/GURL(),
+      /*start_time=*/base::Time(TimeFromString("23 Feb 2024 3:00 UTC")),
+      /*end_time=*/base::Time(TimeFromString("23 Feb 2024 5:00 UTC")),
+      /*file_id=*/"duplicate_file_id_2");
+  model->SetAttachmentItems(attachment_item_list);
+
+  std::vector<BirchFileItem> file_item_list;
+  file_item_list.emplace_back(
+      base::FilePath("Recently Edited File 1"),
+      /*justification=*/u"",
+      /*timestamp=*/base::Time(TimeFromString("22 Feb 2024 3:00 UTC")),
+      /*file_id=*/"duplicate_file_id_1", "icon_url");
+  file_item_list.emplace_back(
+      base::FilePath("Recently Edited File 2"),
+      /*justification=*/u"",
+      /*timestamp=*/base::Time(TimeFromString("22 Feb 2024 3:00 UTC")),
+      /*file_id=*/"duplicate_file_id_2", "icon_url");
+  model->SetFileSuggestItems(file_item_list);
+
+  // Calling GetAllItems() should return two items, once attachment and one
+  // file.
+  std::vector<std::unique_ptr<BirchItem>> all_items = model->GetAllItems();
+  ASSERT_EQ(all_items.size(), 2u);
+  EXPECT_EQ(all_items[0]->GetType(), BirchItemType::kAttachment);
+  EXPECT_EQ(all_items[0]->title(), u"Ongoing Event Attachment 1");
+  EXPECT_EQ(all_items[1]->GetType(), BirchItemType::kFile);
+  EXPECT_EQ(all_items[1]->title(), u"Recently Edited File 2");
+}
+
+TEST_F(BirchModelTest, SetClientObservation) {
+  BirchModel* model = Shell::Get()->birch_model();
+  TestModelObserver test_observer;
+
+  // BirchClient has not been set since observation has started.
+  EXPECT_FALSE(test_observer.birch_client_set());
+
+  // Set the client and expect model observer to be notified.
+  model->SetClientAndInit(&stub_birch_client_);
+  EXPECT_TRUE(test_observer.birch_client_set());
+}
+
+TEST_F(BirchModelTest, RemoveItemRecordsHistogram) {
+  base::HistogramTester histograms;
+  BirchModel* model = Shell::Get()->birch_model();
+
+  // Add a calendar item to the model.
+  std::vector<BirchCalendarItem> calendar_item_list =
+      MakeCalendarItemList(/*event_count=*/1);
+  model->SetCalendarItems(calendar_item_list);
+
+  // Remove the calendar item, as if a user hid the suggestion chip.
+  model->RemoveItem(&calendar_item_list[0]);
+
+  // Histogram was recorded.
+  histograms.ExpectBucketCount("Ash.Birch.Chip.Hidden",
+                               BirchItemType::kCalendar, 1);
+}
+
+TEST_F(BirchModelTest, RecordProviderHiddenHistograms) {
+  base::HistogramTester histograms;
+
+  // Disable all the prefs, as if the user had hidden each data type.
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetPrimaryUserPrefService();
+  ASSERT_TRUE(prefs);
+  prefs->SetBoolean(prefs::kBirchUseCalendar, false);
+  prefs->SetBoolean(prefs::kBirchUseFileSuggest, false);
+  prefs->SetBoolean(prefs::kBirchUseRecentTabs, false);
+  prefs->SetBoolean(prefs::kBirchUseReleaseNotes, false);
+  prefs->SetBoolean(prefs::kBirchUseWeather, false);
+
+  // Record histograms.
+  RecordProviderHiddenHistograms();
+
+  // Histograms are recorded. All types are hidden.
+  histograms.ExpectBucketCount("Ash.Birch.ProviderHidden.Calendar", true, 1);
+  histograms.ExpectBucketCount("Ash.Birch.ProviderHidden.FileSuggest", true, 1);
+  histograms.ExpectBucketCount("Ash.Birch.ProviderHidden.RecentTabs", true, 1);
+  histograms.ExpectBucketCount("Ash.Birch.ProviderHidden.Weather", true, 1);
+  histograms.ExpectBucketCount("Ash.Birch.ProviderHidden.ReleaseNotes", true,
+                               1);
 }
 
 }  // namespace ash

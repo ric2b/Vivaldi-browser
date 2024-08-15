@@ -45,9 +45,9 @@ void test_gpu_cumsum(int m_size, int k_size, int n_size) {
   Eigen::GpuDevice gpu_device(&stream);
 
   Eigen::TensorMap<Eigen::Tensor<float, 3, DataLayout> > gpu_t_input(d_t_input,
-                                                                     Eigen::array<int, 3>(m_size, k_size, n_size));
+                                                                     Eigen::array<int, 3>{m_size, k_size, n_size});
   Eigen::TensorMap<Eigen::Tensor<float, 3, DataLayout> > gpu_t_result(d_t_result,
-                                                                      Eigen::array<int, 3>(m_size, k_size, n_size));
+                                                                      Eigen::array<int, 3>{m_size, k_size, n_size});
 
   gpu_t_result.device(gpu_device) = gpu_t_input.cumsum(1);
   t_result = t_input.cumsum(1);

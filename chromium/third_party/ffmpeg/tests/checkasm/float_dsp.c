@@ -16,13 +16,12 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include "config.h"
-
 #include <float.h>
 #include <stdint.h>
 
 #include "libavutil/float_dsp.h"
 #include "libavutil/internal.h"
+#include "libavutil/mem.h"
 #include "libavutil/mem_internal.h"
 
 #include "checkasm.h"
@@ -236,7 +235,7 @@ static void test_butterflies_float(const float *src0, const float *src1)
     LOCAL_ALIGNED_16(float,  odst1, [LEN]);
     int i;
 
-    declare_func(void, float *av_restrict src0, float *av_restrict src1,
+    declare_func(void, float *restrict src0, float *restrict src1,
     int len);
 
     memcpy(cdst,  src0, LEN * sizeof(*src0));

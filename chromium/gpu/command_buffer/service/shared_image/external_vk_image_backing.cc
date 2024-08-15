@@ -164,7 +164,6 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::Create(
   auto* device_queue = context_state->vk_context_provider()->GetDeviceQueue();
   constexpr auto kUsageNeedsColorAttachment =
       SHARED_IMAGE_USAGE_GLES2_READ | SHARED_IMAGE_USAGE_GLES2_WRITE |
-      SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
       SHARED_IMAGE_USAGE_RASTER_READ | SHARED_IMAGE_USAGE_RASTER_WRITE |
       SHARED_IMAGE_USAGE_OOP_RASTERIZATION | SHARED_IMAGE_USAGE_WEBGPU_READ |
       SHARED_IMAGE_USAGE_WEBGPU_WRITE;
@@ -636,22 +635,29 @@ void ExternalVkImageBacking::AddSemaphoresToPendingListOrRelease(
     pending_semaphores_.push_back(std::move(semaphores.back()));
     semaphores.pop_back();
   }
-  if (!semaphores.empty()) {
-    // |semaphores| may contain VkSemephores which are submitted to queue for
-    // signalling but have not been signalled. In that case, we have to release
-    // them via fence helper to make sure all submitted GPU works is finished
-    // before releasing them.
-    fence_helper()->EnqueueCleanupTaskForSubmittedWork(base::BindOnce(
-        [](scoped_refptr<SharedContextState> shared_context_state,
-           std::vector<ExternalSemaphore>, VulkanDeviceQueue* device_queue,
-           bool device_lost) {
-          if (!gl::GLContext::GetCurrent()) {
-            shared_context_state->MakeCurrent(/*surface=*/nullptr,
-                                              /*needs_gl=*/true);
-          }
-        },
-        context_state_, std::move(semaphores)));
+  ReleaseSemaphoresWithFenceHelper(std::move(semaphores));
+}
+
+void ExternalVkImageBacking::ReleaseSemaphoresWithFenceHelper(
+    std::vector<ExternalSemaphore> semaphores) {
+  if (semaphores.empty()) {
+    return;
   }
+
+  // |semaphores| may contain VkSemephores which are submitted to queue for
+  // signalling but have not been signalled. In that case, we have to release
+  // them via fence helper to make sure all submitted GPU works is finished
+  // before releasing them.
+  fence_helper()->EnqueueCleanupTaskForSubmittedWork(base::BindOnce(
+      [](scoped_refptr<SharedContextState> shared_context_state,
+         std::vector<ExternalSemaphore>, VulkanDeviceQueue* device_queue,
+         bool device_lost) {
+        if (!gl::GLContext::GetCurrent()) {
+          shared_context_state->MakeCurrent(/*surface=*/nullptr,
+                                            /*needs_gl=*/true);
+        }
+      },
+      context_state_, std::move(semaphores)));
 }
 
 scoped_refptr<gfx::NativePixmap> ExternalVkImageBacking::GetNativePixmap() {
@@ -1335,9 +1341,8 @@ void ExternalVkImageBacking::EndAccessInternal(
     is_write_in_progress_ = false;
   }
 
-  if (need_synchronization()) {
+  if (need_synchronization() && external_semaphore) {
     DCHECK(!is_write_in_progress_);
-    DCHECK(external_semaphore);
     if (readonly) {
       read_semaphores_.push_back(std::move(external_semaphore));
     } else {

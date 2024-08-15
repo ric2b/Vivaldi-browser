@@ -169,7 +169,6 @@
 <translation id="7353601530677266744">Línia de comandes</translation>
 <translation id="7364115444476960850">La pàgina a la que intentaves accedir ha estat bloquejada per <ph name="BLOCKER_NAME" /> de Vivaldi</translation>
 <translation id="7419106976560586862">Ruta del perfil</translation>
-<translation id="7445762425076701745">La identitat del servidor al qual estàs connectat no es pot validar. Estàs connectat a un servidor que utilitza un nom que només és vàlid dins la teva xarxa, de manera que una autoritat de certificació externa no en pot validar la propietat. Com que de tota manera algunes autoritats de certificació emetran certificats per a aquests noms, no es pot assegurar que estigui connectat al lloc web previst i no a un atacant.</translation>
 <translation id="7455133967321480974">Utilitza l'opció predeterminada global (bloqueja)</translation>
 <translation id="7518003948725431193">No s'ha trobat cap pàgina web per a l'adreça: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Aquesta pàgina web necessita dades que has introduït anteiorment per poder mostrar-la correctament. Pot tornar a enviar les dades, però es tornarà a repetir qualsevol acció que la pàgina hagi dut a terme prèviament.</translation>

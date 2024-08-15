@@ -256,6 +256,11 @@ class CalendarService : public KeyedService {
       base::OnceCallback<void(bool)> callback,
       base::CancelableTaskTracker* tracker);
 
+  base::CancelableTaskTracker::TaskId GetParentExceptionEventId(
+      calendar::EventID exception_eventId,
+      base::OnceCallback<void(calendar::EventID)> callback,
+      base::CancelableTaskTracker* tracker);
+
  private:
   class CalendarBackendDelegate;
   friend class base::RefCountedThreadSafe<CalendarService>;

@@ -14,7 +14,7 @@
 
 import {Draft} from 'immer';
 
-import {assertExists, assertTrue, assertUnreachable} from '../base/logging';
+import {assertExists, assertTrue} from '../base/logging';
 import {duration, time} from '../base/time';
 import {RecordConfig} from '../controller/record_config_types';
 import {
@@ -30,7 +30,7 @@ import {
 } from '../frontend/pivot_table_types';
 import {PrimaryTrackSortKey} from '../public/index';
 
-import {randomColor} from './colorizer';
+import {randomColor} from '../core/colorizer';
 import {
   computeIntervals,
   DropDirection,
@@ -40,7 +40,6 @@ import {createEmptyState} from './empty_state';
 import {defaultViewingOption} from './flamegraph_util';
 import {
   MetatraceTrackId,
-  traceEvent,
   traceEventBegin,
   traceEventEnd,
   TraceEventScope,
@@ -51,12 +50,10 @@ import {
   CallsiteInfo,
   EngineMode,
   FlamegraphStateViewingOption,
-  FtraceFilterPatch,
   LoadedConfig,
   NewEngineMode,
   OmniboxMode,
   OmniboxState,
-  Pagination,
   PendingDeeplinkState,
   PivotTableResult,
   ProfileType,
@@ -82,6 +79,7 @@ export interface AddTrackArgs {
   trackSortKey: TrackSortKey;
   trackGroup?: string;
   params?: unknown;
+  closeable?: boolean;
 }
 
 export interface PostedTrace {
@@ -95,8 +93,8 @@ export interface PostedTrace {
 }
 
 export interface PostedScrollToRange {
-  timeStart: time;
-  timeEnd: time;
+  timeStart: number;
+  timeEnd: number;
   viewPercentage?: number;
 }
 
@@ -213,6 +211,7 @@ export const StateActions = {
         labels: track.labels,
         uri: track.uri,
         params: track.params,
+        closeable: track.closeable,
       };
       if (track.trackGroup === SCROLLING_TRACK_GROUP) {
         state.scrollingTracks.push(trackKey);
@@ -256,7 +255,7 @@ export const StateActions = {
     args: {
       name: string;
       id: string;
-      summaryTrackKey: string;
+      summaryTrackKey?: string;
       collapsed: boolean;
       fixedOrdering?: boolean;
     },
@@ -265,7 +264,8 @@ export const StateActions = {
       name: args.name,
       id: args.id,
       collapsed: args.collapsed,
-      tracks: [args.summaryTrackKey],
+      tracks: [],
+      summaryTrack: args.summaryTrackKey,
       fixedOrdering: args.fixedOrdering,
     };
   },
@@ -516,9 +516,12 @@ export const StateActions = {
 
   selectNote(state: StateDraft, args: {id: string}): void {
     if (args.id) {
-      state.currentSelection = {
-        kind: 'NOTE',
-        id: args.id,
+      state.selection = {
+        kind: 'legacy',
+        legacySelection: {
+          kind: 'NOTE',
+          id: args.id,
+        },
       };
     }
   },
@@ -553,32 +556,33 @@ export const StateActions = {
     state: StateDraft,
     args: {color: string; persistent: boolean},
   ): void {
-    if (
-      state.currentSelection === null ||
-      state.currentSelection.kind !== 'AREA'
-    ) {
+    if (state.selection.kind !== 'legacy') {
       return;
     }
+    if (state.selection.legacySelection.kind !== 'AREA') {
+      return;
+    }
+    const legacySelection = state.selection.legacySelection;
     const id = args.persistent ? generateNextId(state) : '0';
     const color = args.persistent ? args.color : '#344596';
     state.notes[id] = {
       noteType: 'AREA',
       id,
-      areaId: state.currentSelection.areaId,
+      areaId: legacySelection.areaId,
       color,
       text: '',
     };
-    state.currentSelection.noteId = id;
+    legacySelection.noteId = id;
   },
 
   toggleMarkCurrentArea(state: StateDraft, args: {persistent: boolean}) {
-    const selection = state.currentSelection;
+    const selection = state.selection;
     if (
-      selection != null &&
-      selection.kind === 'AREA' &&
-      selection.noteId !== undefined
+      selection.kind === 'legacy' &&
+      selection.legacySelection.kind === 'AREA' &&
+      selection.legacySelection.noteId !== undefined
     ) {
-      this.removeNote(state, {id: selection.noteId});
+      this.removeNote(state, {id: selection.legacySelection.noteId});
     } else {
       const color = randomColor();
       this.markCurrentArea(state, {color, persistent: args.persistent});
@@ -621,42 +625,35 @@ export const StateActions = {
     delete state.notes[args.id];
     // For regular notes, we clear the current selection but for an area note
     // we only want to clear the note/marking and leave the area selected.
-    if (state.currentSelection === null) return;
+    if (state.selection.kind !== 'legacy') return;
     if (
-      state.currentSelection.kind === 'NOTE' &&
-      state.currentSelection.id === args.id
+      state.selection.legacySelection.kind === 'NOTE' &&
+      state.selection.legacySelection.id === args.id
     ) {
-      state.currentSelection = null;
+      state.selection = {
+        kind: 'empty',
+      };
     } else if (
-      state.currentSelection.kind === 'AREA' &&
-      state.currentSelection.noteId === args.id
+      state.selection.legacySelection.kind === 'AREA' &&
+      state.selection.legacySelection.noteId === args.id
     ) {
-      state.currentSelection.noteId = undefined;
+      state.selection.legacySelection.noteId = undefined;
     }
-  },
-
-  selectSlice(
-    state: StateDraft,
-    args: {id: number; trackKey: string; scroll?: boolean},
-  ): void {
-    state.currentSelection = {
-      kind: 'SLICE',
-      id: args.id,
-      trackKey: args.trackKey,
-    };
-    state.pendingScrollId = args.scroll ? args.id : undefined;
   },
 
   selectCounter(
     state: StateDraft,
     args: {leftTs: time; rightTs: time; id: number; trackKey: string},
   ): void {
-    state.currentSelection = {
-      kind: 'COUNTER',
-      leftTs: args.leftTs,
-      rightTs: args.rightTs,
-      id: args.id,
-      trackKey: args.trackKey,
+    state.selection = {
+      kind: 'legacy',
+      legacySelection: {
+        kind: 'COUNTER',
+        leftTs: args.leftTs,
+        rightTs: args.rightTs,
+        id: args.id,
+        trackKey: args.trackKey,
+      },
     };
   },
 
@@ -664,12 +661,15 @@ export const StateActions = {
     state: StateDraft,
     args: {id: number; upid: number; ts: time; type: ProfileType},
   ): void {
-    state.currentSelection = {
-      kind: 'HEAP_PROFILE',
-      id: args.id,
-      upid: args.upid,
-      ts: args.ts,
-      type: args.type,
+    state.selection = {
+      kind: 'legacy',
+      legacySelection: {
+        kind: 'HEAP_PROFILE',
+        id: args.id,
+        upid: args.upid,
+        ts: args.ts,
+        type: args.type,
+      },
     };
     this.openFlamegraph(state, {
       type: args.type,
@@ -690,13 +690,16 @@ export const StateActions = {
       type: ProfileType;
     },
   ): void {
-    state.currentSelection = {
-      kind: 'PERF_SAMPLES',
-      id: args.id,
-      upid: args.upid,
-      leftTs: args.leftTs,
-      rightTs: args.rightTs,
-      type: args.type,
+    state.selection = {
+      kind: 'legacy',
+      legacySelection: {
+        kind: 'PERF_SAMPLES',
+        id: args.id,
+        upid: args.upid,
+        leftTs: args.leftTs,
+        rightTs: args.rightTs,
+        type: args.type,
+      },
     };
     this.openFlamegraph(state, {
       type: args.type,
@@ -725,6 +728,7 @@ export const StateActions = {
       type: args.type,
       viewingOption: args.viewingOption,
       focusRegex: '',
+      expandedCallsiteByViewingOption: {},
     };
   },
 
@@ -732,20 +736,28 @@ export const StateActions = {
     state: StateDraft,
     args: {id: number; utid: number; ts: time},
   ): void {
-    state.currentSelection = {
-      kind: 'CPU_PROFILE_SAMPLE',
-      id: args.id,
-      utid: args.utid,
-      ts: args.ts,
+    state.selection = {
+      kind: 'legacy',
+      legacySelection: {
+        kind: 'CPU_PROFILE_SAMPLE',
+        id: args.id,
+        utid: args.utid,
+        ts: args.ts,
+      },
     };
   },
 
   expandFlamegraphState(
     state: StateDraft,
-    args: {expandedCallsite?: CallsiteInfo},
+    args: {
+      expandedCallsite?: CallsiteInfo;
+      viewingOption: FlamegraphStateViewingOption;
+    },
   ): void {
     if (state.currentFlamegraphState === null) return;
-    state.currentFlamegraphState.expandedCallsite = args.expandedCallsite;
+    state.currentFlamegraphState.expandedCallsiteByViewingOption[
+      args.viewingOption
+    ] = args.expandedCallsite;
   },
 
   changeViewFlamegraphState(
@@ -768,11 +780,14 @@ export const StateActions = {
     state: StateDraft,
     args: {id: number; trackKey: string; table?: string; scroll?: boolean},
   ): void {
-    state.currentSelection = {
-      kind: 'CHROME_SLICE',
-      id: args.id,
-      trackKey: args.trackKey,
-      table: args.table,
+    state.selection = {
+      kind: 'legacy',
+      legacySelection: {
+        kind: 'CHROME_SLICE',
+        id: args.id,
+        trackKey: args.trackKey,
+        table: args.table,
+      },
     };
     state.pendingScrollId = args.scroll ? args.id : undefined;
   },
@@ -796,18 +811,25 @@ export const StateActions = {
       ...args.detailsPanelConfig.config,
     };
 
-    state.currentSelection = {
-      kind: 'GENERIC_SLICE',
-      id: args.id,
-      sqlTableName: args.sqlTableName,
-      start: args.start,
-      duration: args.duration,
-      trackKey: args.trackKey,
-      detailsPanelConfig: {
-        kind: args.detailsPanelConfig.kind,
-        config: detailsPanelConfig,
+    state.selection = {
+      kind: 'legacy',
+      legacySelection: {
+        kind: 'GENERIC_SLICE',
+        id: args.id,
+        sqlTableName: args.sqlTableName,
+        start: args.start,
+        duration: args.duration,
+        trackKey: args.trackKey,
+        detailsPanelConfig: {
+          kind: args.detailsPanelConfig.kind,
+          config: detailsPanelConfig,
+        },
       },
     };
+  },
+
+  setPendingScrollId(state: StateDraft, args: {pendingScrollId: number}): void {
+    state.pendingScrollId = args.pendingScrollId;
   },
 
   clearPendingScrollId(state: StateDraft, _: {}): void {
@@ -818,58 +840,14 @@ export const StateActions = {
     state: StateDraft,
     args: {id: number; trackKey: string},
   ): void {
-    state.currentSelection = {
-      kind: 'THREAD_STATE',
-      id: args.id,
-      trackKey: args.trackKey,
+    state.selection = {
+      kind: 'legacy',
+      legacySelection: {
+        kind: 'THREAD_STATE',
+        id: args.id,
+        trackKey: args.trackKey,
+      },
     };
-  },
-
-  selectLog(
-    state: StateDraft,
-    args: {id: number; trackKey: string; scroll?: boolean},
-  ): void {
-    state.currentSelection = {
-      kind: 'LOG',
-      id: args.id,
-      trackKey: args.trackKey,
-    };
-    state.pendingScrollId = args.scroll ? args.id : undefined;
-  },
-
-  deselect(state: StateDraft, _: {}): void {
-    state.currentSelection = null;
-  },
-
-  updateLogsPagination(state: StateDraft, args: Pagination): void {
-    state.logsPagination = args;
-  },
-
-  updateFtracePagination(state: StateDraft, args: Pagination): void {
-    state.ftracePagination = args;
-  },
-
-  updateFtraceFilter(state: StateDraft, patch: FtraceFilterPatch) {
-    const {excludedNames: diffs} = patch;
-    const excludedNames = state.ftraceFilter.excludedNames;
-    for (const [addRemove, name] of diffs) {
-      switch (addRemove) {
-        case 'add':
-          if (!excludedNames.some((excluded: string) => excluded === name)) {
-            excludedNames.push(name);
-          }
-          break;
-        case 'remove':
-          state.ftraceFilter.excludedNames =
-            state.ftraceFilter.excludedNames.filter(
-              (excluded: string) => excluded !== name,
-            );
-          break;
-        default:
-          assertUnreachable(addRemove);
-          break;
-      }
-    }
   },
 
   startRecording(state: StateDraft, _: {}): void {
@@ -919,7 +897,10 @@ export const StateActions = {
     assertTrue(start <= end);
     const areaId = generateNextId(state);
     state.areas[areaId] = {id: areaId, start, end, tracks};
-    state.currentSelection = {kind: 'AREA', areaId};
+    state.selection = {
+      kind: 'legacy',
+      legacySelection: {kind: 'AREA', areaId},
+    };
   },
 
   editArea(state: StateDraft, args: {area: Area; areaId: string}): void {
@@ -932,10 +913,13 @@ export const StateActions = {
     state: StateDraft,
     args: {areaId: string; noteId: string},
   ): void {
-    state.currentSelection = {
-      kind: 'AREA',
-      areaId: args.areaId,
-      noteId: args.noteId,
+    state.selection = {
+      kind: 'legacy',
+      legacySelection: {
+        kind: 'AREA',
+        areaId: args.areaId,
+        noteId: args.noteId,
+      },
     };
   },
 
@@ -943,9 +927,14 @@ export const StateActions = {
     state: StateDraft,
     args: {id: string; isTrackGroup: boolean},
   ) {
-    const selection = state.currentSelection;
-    if (selection === null || selection.kind !== 'AREA') return;
-    const areaId = selection.areaId;
+    const selection = state.selection;
+    if (
+      selection.kind !== 'legacy' ||
+      selection.legacySelection.kind !== 'AREA'
+    ) {
+      return;
+    }
+    const areaId = selection.legacySelection.areaId;
     const index = state.areas[areaId].tracks.indexOf(args.id);
     if (index > -1) {
       state.areas[areaId].tracks.splice(index, 1);
@@ -973,7 +962,7 @@ export const StateActions = {
     // selection to be updated and this leads to bugs for people who do:
     // if (oldSelection !== state.selection) etc.
     // To solve this re-create the selection object here:
-    state.currentSelection = Object.assign({}, state.currentSelection);
+    state.selection = Object.assign({}, state.selection);
   },
 
   setVisibleTraceTime(state: StateDraft, args: VisibleState): void {
@@ -1031,22 +1020,6 @@ export const StateActions = {
     state.hoveredNoteTimestamp = args.ts;
   },
 
-  // Tab V1 specific
-  setCurrentTab(state: StateDraft, args: {tab: string | undefined}) {
-    traceEvent(
-      'setCurrentTab',
-      () => {
-        state.currentTab = args.tab;
-      },
-      {
-        args: {
-          tab: args.tab ?? '<undefined>',
-        },
-      },
-    );
-  },
-
-  // Specific to tabs V2.
   // Add a tab with a given URI to the tab bar and show it.
   // If the tab is already present in the tab bar, just show it.
   showTab(state: StateDraft, args: {uri: string}) {
@@ -1060,7 +1033,6 @@ export const StateActions = {
     state.tabs.currentTab = args.uri;
   },
 
-  // Specific to tabs V2.
   // Hide a tab in the tab bar pick a new tab to show.
   // Note: Attempting to hide the "current_selection" tab doesn't work. This tab
   // is special and cannot be removed.
@@ -1190,13 +1162,6 @@ export const StateActions = {
       );
   },
 
-  setPivotTableArgumentNames(
-    state: StateDraft,
-    args: {argumentNames: string[]},
-  ) {
-    state.nonSerializableState.pivotTable.argumentNames = args.argumentNames;
-  },
-
   changePivotTablePivotOrder(
     state: StateDraft,
     args: {from: number; to: number; direction: DropDirection},
@@ -1224,31 +1189,6 @@ export const StateActions = {
         ),
         aggregations,
       );
-  },
-
-  setMinimumLogLevel(state: StateDraft, args: {minimumLevel: number}) {
-    state.logFilteringCriteria.minimumLevel = args.minimumLevel;
-  },
-
-  addLogTag(state: StateDraft, args: {tag: string}) {
-    if (!state.logFilteringCriteria.tags.includes(args.tag)) {
-      state.logFilteringCriteria.tags.push(args.tag);
-    }
-  },
-
-  removeLogTag(state: StateDraft, args: {tag: string}) {
-    state.logFilteringCriteria.tags = state.logFilteringCriteria.tags.filter(
-      (t) => t !== args.tag,
-    );
-  },
-
-  updateLogFilterText(state: StateDraft, args: {textEntry: string}) {
-    state.logFilteringCriteria.textEntry = args.textEntry;
-  },
-
-  toggleCollapseByTextEntry(state: StateDraft, _: {}) {
-    state.logFilteringCriteria.hideNonMatching =
-      !state.logFilteringCriteria.hideNonMatching;
   },
 };
 

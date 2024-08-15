@@ -30,9 +30,13 @@
 
 #include <vector>
 
+#include "include/v8-context.h"
+#include "include/v8-cppgc.h"
 #include "include/v8-extension.h"
 #include "include/v8-function.h"
 #include "include/v8-locker.h"
+#include "include/v8-platform.h"
+#include "include/v8-sandbox.h"
 #include "include/v8-snapshot.h"
 #include "src/api/api-inl.h"
 #include "src/codegen/compilation-cache.h"
@@ -437,7 +441,7 @@ static void SerializeContext(base::Vector<const uint8_t>* startup_blob_out,
     SnapshotByteSink context_sink;
     ContextSerializer context_serializer(
         isolate, Snapshot::kDefaultSerializerFlags, &startup_serializer,
-        v8::SerializeInternalFieldsCallback());
+        SerializeEmbedderFieldsCallback(v8::SerializeInternalFieldsCallback()));
     context_serializer.Serialize(&raw_context, no_gc);
 
     startup_serializer.SerializeWeakReferencesAndDeferred();
@@ -505,7 +509,8 @@ UNINITIALIZED_TEST(ContextSerializerContext) {
       SnapshotData snapshot_data(context_blob);
       root = ContextDeserializer::DeserializeContext(
                  isolate, &snapshot_data, 0, false, global_proxy,
-                 v8::DeserializeInternalFieldsCallback())
+                 DeserializeEmbedderFieldsCallback(
+                     v8::DeserializeInternalFieldsCallback()))
                  .ToHandleChecked();
       CHECK(IsContext(*root));
       CHECK(Handle<Context>::cast(root)->global_proxy() == *global_proxy);
@@ -516,7 +521,8 @@ UNINITIALIZED_TEST(ContextSerializerContext) {
       SnapshotData snapshot_data(context_blob);
       root2 = ContextDeserializer::DeserializeContext(
                   isolate, &snapshot_data, 0, false, global_proxy,
-                  v8::DeserializeInternalFieldsCallback())
+                  DeserializeEmbedderFieldsCallback(
+                      v8::DeserializeInternalFieldsCallback()))
                   .ToHandleChecked();
       CHECK(IsContext(*root2));
       CHECK(!root.is_identical_to(root2));
@@ -535,10 +541,11 @@ static void SerializeCustomContext(
     base::Vector<const uint8_t>* context_blob_out) {
   v8::Isolate* isolate = TestSerializer::NewIsolateInitialized();
   Isolate* i_isolate = reinterpret_cast<Isolate*>(isolate);
+
   {
+    v8::Global<v8::Context> env;
     v8::Isolate::Scope isolate_scope(isolate);
 
-    v8::Persistent<v8::Context> env;
     {
       HandleScope scope(i_isolate);
       env.Reset(isolate, v8::Context::New(isolate));
@@ -587,62 +594,74 @@ static void SerializeCustomContext(
       v8::Local<v8::Context>::New(isolate, env)->Exit();
     }
 
-    HandleScope scope(i_isolate);
-    i::Tagged<i::Context> raw_context =
-        i::Context::cast(*v8::Utils::OpenPersistent(env));
+    {
+      HandleScope scope(i_isolate);
+      i::Tagged<i::Context> raw_context =
+          i::Context::cast(*v8::Utils::OpenPersistent(env));
 
-    env.Reset();
+      // On purpose we do not reset the global context here --- env.Reset() ---
+      // so that it is found below, during heap verification at the GC before
+      // isolate disposal.
 
-    SafepointScope safepoint(i_isolate, SafepointKind::kIsolate);
-    DisallowGarbageCollection no_gc;
+      SafepointScope safepoint(i_isolate, SafepointKind::kIsolate);
+      DisallowGarbageCollection no_gc;
 
-    if (i_isolate->heap()->read_only_space()->writable()) {
-      // Promote objects from mutable heap spaces to read-only space prior to
-      // serialization. Objects can be promoted if a) they are themselves
-      // immutable-after-deserialization and b) all objects in the transitive
-      // object graph also satisfy condition a).
-      ReadOnlyPromotion::Promote(i_isolate, safepoint, no_gc);
-      // When creating the snapshot from scratch, we are responsible for sealing
-      // the RO heap here. Note we cannot delegate the responsibility e.g. to
-      // Isolate::Init since it should still be possible to allocate into RO
-      // space after the Isolate has been initialized, for example as part of
-      // Context creation.
-      i_isolate->read_only_heap()->OnCreateHeapObjectsComplete(i_isolate);
+      if (i_isolate->heap()->read_only_space()->writable()) {
+        // Promote objects from mutable heap spaces to read-only space prior to
+        // serialization. Objects can be promoted if a) they are themselves
+        // immutable-after-deserialization and b) all objects in the transitive
+        // object graph also satisfy condition a).
+        ReadOnlyPromotion::Promote(i_isolate, safepoint, no_gc);
+        // When creating the snapshot from scratch, we are responsible for
+        // sealing the RO heap here. Note we cannot delegate the responsibility
+        // e.g. to Isolate::Init since it should still be possible to allocate
+        // into RO space after the Isolate has been initialized, for example as
+        // part of Context creation.
+        i_isolate->read_only_heap()->OnCreateHeapObjectsComplete(i_isolate);
+      }
+
+      SnapshotByteSink read_only_sink;
+      ReadOnlySerializer read_only_serializer(
+          i_isolate, Snapshot::kDefaultSerializerFlags);
+      read_only_serializer.Serialize();
+
+      SharedHeapSerializer shared_space_serializer(
+          i_isolate, Snapshot::kDefaultSerializerFlags);
+
+      SnapshotByteSink startup_sink;
+      StartupSerializer startup_serializer(i_isolate,
+                                           Snapshot::kDefaultSerializerFlags,
+                                           &shared_space_serializer);
+      startup_serializer.SerializeStrongReferences(no_gc);
+
+      SnapshotByteSink context_sink;
+      ContextSerializer context_serializer(
+          i_isolate, Snapshot::kDefaultSerializerFlags, &startup_serializer,
+          SerializeEmbedderFieldsCallback(
+              v8::SerializeInternalFieldsCallback()));
+      context_serializer.Serialize(&raw_context, no_gc);
+
+      startup_serializer.SerializeWeakReferencesAndDeferred();
+
+      shared_space_serializer.FinalizeSerialization();
+
+      SnapshotData read_only_snapshot(&read_only_serializer);
+      SnapshotData shared_space_snapshot(&shared_space_serializer);
+      SnapshotData startup_snapshot(&startup_serializer);
+      SnapshotData context_snapshot(&context_serializer);
+
+      *context_blob_out = WritePayload(context_snapshot.RawData());
+      *startup_blob_out = WritePayload(startup_snapshot.RawData());
+      *read_only_blob_out = WritePayload(read_only_snapshot.RawData());
+      *shared_space_blob_out = WritePayload(shared_space_snapshot.RawData());
     }
 
-    SnapshotByteSink read_only_sink;
-    ReadOnlySerializer read_only_serializer(i_isolate,
-                                            Snapshot::kDefaultSerializerFlags);
-    read_only_serializer.Serialize();
-
-    SharedHeapSerializer shared_space_serializer(
-        i_isolate, Snapshot::kDefaultSerializerFlags);
-
-    SnapshotByteSink startup_sink;
-    StartupSerializer startup_serializer(
-        i_isolate, Snapshot::kDefaultSerializerFlags, &shared_space_serializer);
-    startup_serializer.SerializeStrongReferences(no_gc);
-
-    SnapshotByteSink context_sink;
-    ContextSerializer context_serializer(
-        i_isolate, Snapshot::kDefaultSerializerFlags, &startup_serializer,
-        v8::SerializeInternalFieldsCallback());
-    context_serializer.Serialize(&raw_context, no_gc);
-
-    startup_serializer.SerializeWeakReferencesAndDeferred();
-
-    shared_space_serializer.FinalizeSerialization();
-
-    SnapshotData read_only_snapshot(&read_only_serializer);
-    SnapshotData shared_space_snapshot(&shared_space_serializer);
-    SnapshotData startup_snapshot(&startup_serializer);
-    SnapshotData context_snapshot(&context_serializer);
-
-    *context_blob_out = WritePayload(context_snapshot.RawData());
-    *startup_blob_out = WritePayload(startup_snapshot.RawData());
-    *read_only_blob_out = WritePayload(read_only_snapshot.RawData());
-    *shared_space_blob_out = WritePayload(shared_space_snapshot.RawData());
+    // At this point, the heap must be in a consistent state and this GC must
+    // not crash, even with the live handle to the global environment.
+    heap::InvokeMajorGC(i_isolate->heap());
+    // We reset the global context, before isolate disposal.
   }
+
   isolate->Dispose();
 }
 
@@ -671,7 +690,8 @@ UNINITIALIZED_TEST(ContextSerializerCustomContext) {
       SnapshotData snapshot_data(context_blob);
       root = ContextDeserializer::DeserializeContext(
                  isolate, &snapshot_data, 0, false, global_proxy,
-                 v8::DeserializeInternalFieldsCallback())
+                 DeserializeEmbedderFieldsCallback(
+                     v8::DeserializeInternalFieldsCallback()))
                  .ToHandleChecked();
       CHECK(IsContext(*root));
       Handle<NativeContext> context = Handle<NativeContext>::cast(root);
@@ -1151,7 +1171,9 @@ class AlternatingArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
   void Free(void* data, size_t size) override { allocator_->Free(data, size); }
 
   void* Reallocate(void* data, size_t old_length, size_t new_length) override {
+    START_ALLOW_USE_DEPRECATED()
     return allocator_->Reallocate(data, old_length, new_length);
+    END_ALLOW_USE_DEPRECATED()
   }
 
  private:
@@ -3434,10 +3456,10 @@ UNINITIALIZED_TEST(SnapshotCreatorMultipleContexts) {
   FreeCurrentEmbeddedBlob();
 }
 
-static int serialized_static_field = 314;
+namespace {
+int serialized_static_field = 314;
 
-static void SerializedCallback(
-    const v8::FunctionCallbackInfo<v8::Value>& info) {
+void SerializedCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
   CHECK(i::ValidateCallbackInfo(info));
   if (info.Data()->IsExternal()) {
     CHECK_EQ(info.Data().As<v8::External>()->Value(),
@@ -3449,30 +3471,31 @@ static void SerializedCallback(
   info.GetReturnValue().Set(v8_num(42));
 }
 
-static void SerializedCallbackReplacement(
+void SerializedCallbackReplacement(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   CHECK(i::ValidateCallbackInfo(info));
   info.GetReturnValue().Set(v8_num(1337));
 }
 
-static void NamedPropertyGetterForSerialization(
+v8::Intercepted NamedPropertyGetterForSerialization(
     v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info) {
   CHECK(i::ValidateCallbackInfo(info));
-  if (name->Equals(info.GetIsolate()->GetCurrentContext(), v8_str("x"))
-          .FromJust()) {
+  v8::Local<v8::Context> context = info.GetIsolate()->GetCurrentContext();
+  if (name->Equals(context, v8_str("x")).FromJust()) {
     info.GetReturnValue().Set(v8_num(2016));
+    return v8::Intercepted::kYes;
   }
+  return v8::Intercepted::kNo;
 }
 
-static void AccessorForSerialization(
-    v8::Local<v8::Name> property,
-    const v8::PropertyCallbackInfo<v8::Value>& info) {
+void AccessorForSerialization(v8::Local<v8::Name> property,
+                              const v8::PropertyCallbackInfo<v8::Value>& info) {
   CHECK(i::ValidateCallbackInfo(info));
   info.GetReturnValue().Set(v8_num(2017));
 }
 
-static SerializerOneByteResource serializable_one_byte_resource("one_byte", 8);
-static SerializerTwoByteResource serializable_two_byte_resource(
+SerializerOneByteResource serializable_one_byte_resource("one_byte", 8);
+SerializerTwoByteResource serializable_two_byte_resource(
     AsciiToTwoByteString(u"two_byte 🤓"), 11);
 
 intptr_t original_external_references[] = {
@@ -3497,6 +3520,8 @@ intptr_t replaced_external_references[] = {
 
 intptr_t short_external_references[] = {
     reinterpret_cast<intptr_t>(SerializedCallbackReplacement), 0};
+
+}  // namespace
 
 UNINITIALIZED_TEST(SnapshotCreatorExternalReferences) {
   DisableAlwaysOpt();
@@ -3664,7 +3689,8 @@ v8::StartupData CreateSnapshotWithDefaultAndCustom() {
       CHECK(context->Global()->Set(context, v8_str("f"), function).FromJust());
       v8::Local<v8::ObjectTemplate> object_template =
           v8::ObjectTemplate::New(isolate);
-      object_template->SetAccessor(v8_str("x"), AccessorForSerialization);
+      object_template->SetNativeDataProperty(v8_str("x"),
+                                             AccessorForSerialization);
       v8::Local<v8::Object> object =
           object_template->NewInstance(context).ToLocalChecked();
       CHECK(context->Global()->Set(context, v8_str("o"), object).FromJust());
@@ -4329,6 +4355,134 @@ UNINITIALIZED_TEST(SerializeContextData) {
   FreeCurrentEmbeddedBlob();
 }
 
+class DummyWrappable : public cppgc::GarbageCollected<DummyWrappable> {
+ public:
+  void Trace(cppgc::Visitor*) const {}
+
+  bool is_special = false;
+};
+
+static constexpr char kSpecialTag = 1;
+
+static v8::StartupData SerializeAPIWrapperCallback(Local<v8::Object> holder,
+                                                   void* cpp_heap_pointer,
+                                                   void* data) {
+  auto* wrappable = reinterpret_cast<DummyWrappable*>(cpp_heap_pointer);
+  if (wrappable && wrappable->is_special) {
+    *reinterpret_cast<int64_t*>(data) += 1;
+    return v8::StartupData{&kSpecialTag, 1};
+  }
+  return v8::StartupData{nullptr, 0};
+}
+
+static void DeserializeAPIWrapperCallback(Local<v8::Object> holder,
+                                          v8::StartupData payload, void* data) {
+  if (payload.raw_size == 1 &&
+      *reinterpret_cast<const char*>(payload.data) == kSpecialTag) {
+    *reinterpret_cast<int64_t*>(data) -= 1;
+  }
+}
+
+START_ALLOW_USE_DEPRECATED()
+
+UNINITIALIZED_TEST(SerializeApiWrapperData) {
+  DisableAlwaysOpt();
+  DisableEmbeddedBlobRefcounting();
+
+  int64_t special_objects_encountered = 0;
+
+  v8::SerializeAPIWrapperCallback serialize_api_fields(
+      &SerializeAPIWrapperCallback, &special_objects_encountered);
+  v8::DeserializeAPIWrapperCallback deserialize_api_fields(
+      &DeserializeAPIWrapperCallback, &special_objects_encountered);
+
+  v8::StartupData blob;
+  auto* platform = V8::GetCurrentPlatform();
+  {
+    // Create a blob with API wrapper objects. One of the objects is marked as
+    // special which results in providing a tag via embedder callbacks.
+
+    SnapshotCreatorParams params;
+    params.create_params.cpp_heap =
+        v8::CppHeap::Create(platform, v8::CppHeapCreateParams(
+                                          {}, v8::WrapperDescriptor(0, 1, 0)))
+            .release();
+    v8::SnapshotCreator creator(params.create_params);
+    v8::Isolate* isolate = creator.GetIsolate();
+    v8::CppHeap* cpp_heap = isolate->GetCppHeap();
+    DummyWrappable *wrappable1, *wrappable2;
+    {
+      v8::HandleScope handle_scope(isolate);
+      v8::Local<v8::Context> context = v8::Context::New(isolate);
+      v8::Context::Scope context_scope(context);
+
+      v8::Local<v8::FunctionTemplate> function_template =
+          v8::FunctionTemplate::New(isolate);
+      auto object_template = function_template->InstanceTemplate();
+
+      v8::Local<v8::Object> obj1 =
+          object_template->NewInstance(context).ToLocalChecked();
+      wrappable1 = cppgc::MakeGarbageCollected<DummyWrappable>(
+          cpp_heap->GetAllocationHandle());
+      v8::Object::Wrap<v8::CppHeapPointerTag::kDefaultTag>(isolate, obj1,
+                                                           wrappable1);
+      CHECK_EQ(wrappable1, v8::Object::Unwrap<CppHeapPointerTag::kDefaultTag>(
+                               isolate, obj1));
+      CHECK(context->Global()->Set(context, v8_str("obj1"), obj1).FromJust());
+
+      v8::Local<v8::Object> obj2 =
+          object_template->NewInstance(context).ToLocalChecked();
+      wrappable2 = cppgc::MakeGarbageCollected<DummyWrappable>(
+          cpp_heap->GetAllocationHandle());
+      wrappable2->is_special = true;
+      v8::Object::Wrap<v8::CppHeapPointerTag::kDefaultTag>(isolate, obj2,
+                                                           wrappable2);
+      CHECK_EQ(wrappable2, v8::Object::Unwrap<CppHeapPointerTag::kDefaultTag>(
+                               isolate, obj2));
+      CHECK(context->Global()->Set(context, v8_str("obj2"), obj2).FromJust());
+
+      creator.SetDefaultContext(context, SerializeInternalFieldsCallback(),
+                                SerializeContextDataCallback(),
+                                serialize_api_fields);
+    }
+    blob =
+        creator.CreateBlob(v8::SnapshotCreator::FunctionCodeHandling::kClear);
+    CHECK_EQ(special_objects_encountered, 1);
+  }
+  {
+    // Initialize an Isolate from the blob.
+
+    v8::Isolate::CreateParams params;
+    params.snapshot_blob = &blob;
+    params.array_buffer_allocator = CcTest::array_buffer_allocator();
+    // Test-appropriate equivalent of v8::Isolate::New.
+    v8::Isolate* isolate = TestSerializer::NewIsolate(params);
+    {
+      v8::Isolate::Scope isolate_scope(isolate);
+      v8::HandleScope handle_scope(isolate);
+      v8::Local<v8::Context> context = v8::Context::New(
+          isolate, nullptr, {}, {}, DeserializeInternalFieldsCallback(),
+          nullptr, DeserializeContextDataCallback(), deserialize_api_fields);
+      v8::Local<v8::Value> obj1 =
+          context->Global()->Get(context, v8_str("obj1")).ToLocalChecked();
+      CHECK(obj1->IsObject());
+      v8::Local<v8::Value> obj2 =
+          context->Global()->Get(context, v8_str("obj1")).ToLocalChecked();
+      CHECK(obj2->IsObject());
+      CHECK_EQ(nullptr, v8::Object::Unwrap<CppHeapPointerTag::kDefaultTag>(
+                            isolate, obj1.As<v8::Object>()));
+      CHECK_EQ(nullptr, v8::Object::Unwrap<CppHeapPointerTag::kDefaultTag>(
+                            isolate, obj2.As<v8::Object>()));
+      CHECK_EQ(special_objects_encountered, 0);
+    }
+    isolate->Dispose();
+  }
+  delete[] blob.data;
+  FreeCurrentEmbeddedBlob();
+}
+
+END_ALLOW_USE_DEPRECATED()
+
 MaybeLocal<v8::Module> ResolveCallback(Local<v8::Context> context,
                                        Local<v8::String> specifier,
                                        Local<v8::FixedArray> import_attributes,
@@ -4691,7 +4845,8 @@ UNINITIALIZED_TEST(SnapshotCreatorIncludeGlobalProxy) {
       global_template->Set(isolate, "f", callback);
       global_template->SetHandler(v8::NamedPropertyHandlerConfiguration(
           NamedPropertyGetterForSerialization));
-      global_template->SetAccessor(v8_str("y"), AccessorForSerialization);
+      global_template->SetNativeDataProperty(v8_str("y"),
+                                             AccessorForSerialization);
       v8::Local<v8::Private> priv =
           v8::Private::ForApi(isolate, v8_str("cached"));
       global_template->SetAccessorProperty(
@@ -5658,6 +5813,215 @@ TEST(WeakArraySerializationInCodeCache) {
   CheckSFIsAreWeak(sfis, isolate);
 
   delete cache;
+}
+
+v8::MaybeLocal<v8::Promise> TestHostDefinedOptionFromCachedScript(
+    Local<v8::Context> context, Local<v8::Data> host_defined_options,
+    Local<v8::Value> resource_name, Local<v8::String> specifier,
+    Local<v8::FixedArray> import_attributes) {
+  CHECK(host_defined_options->IsFixedArray());
+  auto arr = host_defined_options.As<v8::FixedArray>();
+  CHECK_EQ(arr->Length(), 1);
+  v8::Local<v8::Symbol> expected =
+      v8::Symbol::For(context->GetIsolate(), v8_str("hdo"));
+  CHECK_EQ(arr->Get(context, 0), expected);
+  CHECK(resource_name->Equals(context, v8_str("test_hdo")).FromJust());
+  CHECK(specifier->Equals(context, v8_str("foo")).FromJust());
+
+  Local<v8::Promise::Resolver> resolver =
+      v8::Promise::Resolver::New(context).ToLocalChecked();
+  resolver->Resolve(context, v8_str("hello")).ToChecked();
+  return resolver->GetPromise();
+}
+
+TEST(CachedFunctionHostDefinedOption) {
+  DisableAlwaysOpt();
+  LocalContext env;
+  v8::Isolate* isolate = env->GetIsolate();
+  i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
+  i_isolate->compilation_cache()
+      ->DisableScriptAndEval();  // Disable same-isolate code cache.
+  isolate->SetHostImportModuleDynamicallyCallback(
+      TestHostDefinedOptionFromCachedScript);
+
+  v8::HandleScope scope(isolate);
+
+  v8::Local<v8::String> source = v8_str("return import(x)");
+  v8::Local<v8::String> arg_str = v8_str("x");
+
+  v8::Local<v8::PrimitiveArray> hdo = v8::PrimitiveArray::New(isolate, 1);
+  hdo->Set(isolate, 0, v8::Symbol::For(isolate, v8_str("hdo")));
+  v8::ScriptOrigin origin(v8_str("test_hdo"),  // resource_name
+                          0,                   // resource_line_offset
+                          0,                   // resource_column_offset
+                          false,  // resource_is_shared_cross_origin
+                          -1,     // script_id
+                          {},     // source_map_url
+                          false,  // resource_is_opaque
+                          false,  // is_wasm
+                          false,  // is_module
+                          hdo     // host_defined_options
+  );
+  ScriptCompiler::CachedData* cache;
+  {
+    v8::ScriptCompiler::Source script_source(source, origin);
+    v8::Local<v8::Function> fun =
+        v8::ScriptCompiler::CompileFunction(
+            env.local(), &script_source, 1, &arg_str, 0, nullptr,
+            v8::ScriptCompiler::kNoCompileOptions)
+            .ToLocalChecked();
+    cache = v8::ScriptCompiler::CreateCodeCacheForFunction(fun);
+  }
+
+  {
+    DisallowCompilation no_compile_expected(i_isolate);
+    v8::ScriptCompiler::Source script_source(source, origin, cache);
+    v8::Local<v8::Function> fun =
+        v8::ScriptCompiler::CompileFunction(
+            env.local(), &script_source, 1, &arg_str, 0, nullptr,
+            v8::ScriptCompiler::kConsumeCodeCache)
+            .ToLocalChecked();
+    v8::Local<v8::Value> arg = v8_str("foo");
+    v8::Local<v8::Value> result =
+        fun->Call(env.local(), v8::Undefined(isolate), 1, &arg)
+            .ToLocalChecked();
+    CHECK(result->IsPromise());
+    v8::Local<v8::Promise> promise = result.As<v8::Promise>();
+    isolate->PerformMicrotaskCheckpoint();
+    v8::Local<v8::Value> resolved = promise->Result();
+    CHECK(resolved->IsString());
+    CHECK(resolved.As<v8::String>()
+              ->Equals(env.local(), v8_str("hello"))
+              .FromJust());
+  }
+}
+
+TEST(CachedUnboundScriptHostDefinedOption) {
+  DisableAlwaysOpt();
+  LocalContext env;
+  v8::Isolate* isolate = env->GetIsolate();
+  i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
+  i_isolate->compilation_cache()
+      ->DisableScriptAndEval();  // Disable same-isolate code cache.
+  isolate->SetHostImportModuleDynamicallyCallback(
+      TestHostDefinedOptionFromCachedScript);
+
+  v8::HandleScope scope(isolate);
+
+  v8::Local<v8::String> source = v8_str("globalThis.foo =import('foo')");
+
+  v8::Local<v8::PrimitiveArray> hdo = v8::PrimitiveArray::New(isolate, 1);
+  hdo->Set(isolate, 0, v8::Symbol::For(isolate, v8_str("hdo")));
+  v8::ScriptOrigin origin(v8_str("test_hdo"),  // resource_name
+                          0,                   // resource_line_offset
+                          0,                   // resource_column_offset
+                          false,  // resource_is_shared_cross_origin
+                          -1,     // script_id
+                          {},     // source_map_url
+                          false,  // resource_is_opaque
+                          false,  // is_wasm
+                          false,  // is_module
+                          hdo     // host_defined_options
+  );
+  ScriptCompiler::CachedData* cache;
+  {
+    v8::ScriptCompiler::Source script_source(source, origin);
+    v8::Local<v8::UnboundScript> script =
+        v8::ScriptCompiler::CompileUnboundScript(
+            isolate, &script_source, v8::ScriptCompiler::kNoCompileOptions)
+            .ToLocalChecked();
+    cache = v8::ScriptCompiler::CreateCodeCache(script);
+  }
+
+  {
+    DisallowCompilation no_compile_expected(i_isolate);
+    v8::ScriptCompiler::Source script_source(source, origin, cache);
+    v8::Local<v8::UnboundScript> script =
+        v8::ScriptCompiler::CompileUnboundScript(
+            isolate, &script_source, v8::ScriptCompiler::kConsumeCodeCache)
+            .ToLocalChecked();
+    v8::Local<v8::Script> bound = script->BindToCurrentContext();
+    USE(bound->Run(env.local(), hdo).ToLocalChecked());
+    v8::Local<v8::Value> result =
+        env.local()->Global()->Get(env.local(), v8_str("foo")).ToLocalChecked();
+    CHECK(result->IsPromise());
+    v8::Local<v8::Promise> promise = result.As<v8::Promise>();
+    isolate->PerformMicrotaskCheckpoint();
+    v8::Local<v8::Value> resolved = promise->Result();
+    CHECK(resolved->IsString());
+    CHECK(resolved.As<v8::String>()
+              ->Equals(env.local(), v8_str("hello"))
+              .FromJust());
+  }
+}
+
+v8::MaybeLocal<v8::Module> UnexpectedModuleResolveCallback(
+    v8::Local<v8::Context> context, v8::Local<v8::String> specifier,
+    v8::Local<v8::FixedArray> import_attributes,
+    v8::Local<v8::Module> referrer) {
+  CHECK_WITH_MSG(false, "Unexpected call to resolve callback");
+}
+
+TEST(CachedModuleScriptFunctionHostDefinedOption) {
+  DisableAlwaysOpt();
+  LocalContext env;
+  v8::Isolate* isolate = env->GetIsolate();
+  i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
+  i_isolate->compilation_cache()
+      ->DisableScriptAndEval();  // Disable same-isolate code cache.
+  isolate->SetHostImportModuleDynamicallyCallback(
+      TestHostDefinedOptionFromCachedScript);
+
+  v8::HandleScope scope(isolate);
+
+  v8::Local<v8::String> source = v8_str("globalThis.foo = import('foo')");
+
+  v8::Local<v8::PrimitiveArray> hdo = v8::PrimitiveArray::New(isolate, 1);
+  hdo->Set(isolate, 0, v8::Symbol::For(isolate, v8_str("hdo")));
+  v8::ScriptOrigin origin(v8_str("test_hdo"),  // resource_name
+                          0,                   // resource_line_offset
+                          0,                   // resource_column_offset
+                          false,  // resource_is_shared_cross_origin
+                          -1,     // script_id
+                          {},     // source_map_url
+                          false,  // resource_is_opaque
+                          false,  // is_wasm
+                          true,   // is_module
+                          hdo     // host_defined_options
+  );
+  ScriptCompiler::CachedData* cache;
+  {
+    v8::ScriptCompiler::Source script_source(source, origin);
+    v8::Local<v8::Module> mod =
+        v8::ScriptCompiler::CompileModule(isolate, &script_source,
+                                          v8::ScriptCompiler::kNoCompileOptions)
+            .ToLocalChecked();
+    cache = v8::ScriptCompiler::CreateCodeCache(mod->GetUnboundModuleScript());
+  }
+
+  {
+    DisallowCompilation no_compile_expected(i_isolate);
+    v8::ScriptCompiler::Source script_source(source, origin, cache);
+    v8::Local<v8::Module> mod =
+        v8::ScriptCompiler::CompileModule(isolate, &script_source,
+                                          v8::ScriptCompiler::kConsumeCodeCache)
+            .ToLocalChecked();
+    mod->InstantiateModule(env.local(), UnexpectedModuleResolveCallback)
+        .Check();
+    v8::Local<v8::Value> evaluted = mod->Evaluate(env.local()).ToLocalChecked();
+    CHECK(evaluted->IsPromise());
+    CHECK_EQ(evaluted.As<v8::Promise>()->State(),
+             v8::Promise::PromiseState::kFulfilled);
+    v8::Local<v8::Value> result =
+        env.local()->Global()->Get(env.local(), v8_str("foo")).ToLocalChecked();
+    v8::Local<v8::Promise> promise = result.As<v8::Promise>();
+    isolate->PerformMicrotaskCheckpoint();
+    v8::Local<v8::Value> resolved = promise->Result();
+    CHECK(resolved->IsString());
+    CHECK(resolved.As<v8::String>()
+              ->Equals(env.local(), v8_str("hello"))
+              .FromJust());
+  }
 }
 
 TEST(CachedCompileFunction) {

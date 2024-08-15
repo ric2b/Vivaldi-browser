@@ -20,6 +20,9 @@ namespace ash {
 // performant resizing.
 class LayoutDividerController {
  public:
+  // Returns the root window for the layout.
+  virtual aura::Window* GetRootWindow() = 0;
+
   // Resizing functions used when resizing via the divider, where
   // `location_in_screen` is the location of the event that started this resize
   // and will be used to calculate the divider position.
@@ -52,16 +55,15 @@ class LayoutDividerController {
   virtual gfx::Rect GetSnappedWindowBoundsInScreen(
       SnapPosition snap_position,
       aura::Window* window_for_minimum_size,
-      float snap_ratio) const = 0;
+      float snap_ratio,
+      bool account_for_divider_width) const = 0;
 
-  // `window` should be `primary_window_` or `secondary_window_` of this
-  // delegate, and this function returns `SnapPosition::kPrimary` or
-  // `SnapPosition::kSecondary` accordingly.
+  // Returns the snap position of the given snapped `window`.
+  // `SnapPosition::kPrimary` is returned if the window is the primary snapped
+  // window. `SnapPosition::kSecondary` is returned if the window is the
+  // secondary snapped window.
   virtual SnapPosition GetPositionOfSnappedWindow(
       const aura::Window* window) const = 0;
-
-  // Returns the windows associated with this delegate.
-  virtual aura::Window::Windows GetLayoutWindows() const = 0;
 
  protected:
   virtual ~LayoutDividerController() = default;

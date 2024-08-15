@@ -41,7 +41,6 @@ class F extends GPUTest {
       colorAttachments: [
         {
           view: renderTarget.createView(),
-          storeOp: 'store',
           clearValue: {
             r: kClearValueResult.R,
             g: kClearValueResult.G,
@@ -49,6 +48,7 @@ class F extends GPUTest {
             a: kClearValueResult.A,
           },
           loadOp: 'clear',
+          storeOp: 'store',
         },
       ],
     });
@@ -328,7 +328,6 @@ g.test('shared_shader_module')
       colorAttachments: [
         {
           view: renderTarget0.createView(),
-          storeOp: 'store',
           clearValue: {
             r: kClearValueResult.R,
             g: kClearValueResult.G,
@@ -336,6 +335,7 @@ g.test('shared_shader_module')
             a: kClearValueResult.A,
           },
           loadOp: 'clear',
+          storeOp: 'store',
         },
       ],
     });
@@ -347,7 +347,6 @@ g.test('shared_shader_module')
       colorAttachments: [
         {
           view: renderTarget1.createView(),
-          storeOp: 'store',
           clearValue: {
             r: kClearValueResult.R,
             g: kClearValueResult.G,
@@ -355,6 +354,7 @@ g.test('shared_shader_module')
             a: kClearValueResult.A,
           },
           loadOp: 'clear',
+          storeOp: 'store',
         },
       ],
     });

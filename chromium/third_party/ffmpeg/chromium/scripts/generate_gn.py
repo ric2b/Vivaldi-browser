@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2012 The Chromium Authors. All rights reserved.
+# Copyright (c) 2012 The Chromium Authors.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Creates a GN include file for building FFmpeg from source.
@@ -36,10 +36,7 @@ import re
 import shutil
 import subprocess
 import sys
-from robo_lib import config
 
-# The test wrapper doesn't appreciate the status messages.
-ROBO_CONFIGURATION = config.RoboConfiguration(quiet=True)
 
 COPYRIGHT = """# Copyright %d The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
@@ -367,12 +364,16 @@ class SourceSet(object):
 
         sources = sorted(n.replace('\\', '/') for n in self.sources)
 
+        def get_formatted_sources_for_file(file):
+            yield indent(GN_SOURCE_ITEM % file)
+
         # Write out all C sources.
         c_sources = list(filter(IsCFile, sources))
         if c_sources:
             stanza += indent(GN_C_SOURCES_BEGIN)
             for name in c_sources:
-                stanza += indent(GN_SOURCE_ITEM % (name))
+                for formatted in get_formatted_sources_for_file(name):
+                    stanza += formatted
             stanza += indent(GN_SOURCE_END)
 
         # Write out all assembly sources.
@@ -380,7 +381,8 @@ class SourceSet(object):
         if gas_sources:
             stanza += indent(GN_GAS_SOURCES_BEGIN)
             for name in gas_sources:
-                stanza += indent(GN_SOURCE_ITEM % (name))
+                for formatted in get_formatted_sources_for_file(name):
+                    stanza += formatted
             stanza += indent(GN_SOURCE_END)
 
         # Write out all assembly sources.
@@ -388,7 +390,8 @@ class SourceSet(object):
         if nasm_sources:
             stanza += indent(GN_NASM_SOURCES_BEGIN)
             for name in nasm_sources:
-                stanza += indent(GN_SOURCE_ITEM % (name))
+                for formatted in get_formatted_sources_for_file(name):
+                    stanza += formatted
             stanza += indent(GN_SOURCE_END)
 
         # Close the conditional if necessary.
@@ -564,6 +567,13 @@ def ReduceConditionalLogic(source_set):
         source_set.conditions.add(reduction.condition)
 
 
+def GetFFmpegSrc():
+    """Gets the location of the ffmpeg checkout."""
+    scripts = os.path.dirname(__file__)
+    chromium = os.path.dirname(scripts)
+    return os.path.dirname(chromium)
+
+
 def ParseOptions():
     """Parses the options and terminates program if they are not sane.
 
@@ -576,14 +586,14 @@ def ParseOptions():
     parser.add_option('-s',
                       '--source_dir',
                       dest='source_dir',
-                      default=ROBO_CONFIGURATION.ffmpeg_home(),
+                      default=GetFFmpegSrc(),
                       metavar='DIR',
                       help='FFmpeg source directory.')
 
     parser.add_option('-b',
                       '--build_dir',
                       dest='build_dir',
-                      default=ROBO_CONFIGURATION.ffmpeg_home(),
+                      default=GetFFmpegSrc(),
                       metavar='DIR',
                       help='Build root containing build.x64.linux, etc...')
 
@@ -977,13 +987,16 @@ def main():
         for target in SUPPORT_MATRIX[Attr.TARGET]:
             for platform in SUPPORT_MATRIX[Attr.PLATFORM]:
                 # Assume build directory is of the form build.$arch.$platform/$target.
-                name = ''.join(['build.', arch, '.', platform])
+                name = '.'.join(['build', arch, platform])
                 build_dir = os.path.join(options.build_dir, name, target)
                 if not os.path.exists(build_dir):
                     continue
-                print(f'Processing build directory: {name}')
 
+                print(f'Processing build directory: {name} {options.build_dir}')
+                print(build_dir)
                 object_files = GetObjectFiles(build_dir)
+                if not object_files:
+                    raise Exception(object_files)
 
                 # Generate the set of source files to build said target.
                 s = GetSourceFileSet(object_to_sources, object_files)

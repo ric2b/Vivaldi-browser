@@ -12,12 +12,12 @@
 <translation id="1588438908519853928">Bình thường</translation>
 <translation id="1591562245178063882">Tháng này</translation>
 <translation id="1637811476055996098">Chọn tệp</translation>
+<translation id="1680090928918677457">Sử dụng camera</translation>
 <translation id="1681022320378710418">thời gian hiện tại</translation>
 <translation id="1727839386348365796">Dụng cụ nhỏ giọt</translation>
 <translation id="1729654308190250600">Vui lòng nhập địa chỉ email không trống.</translation>
 <translation id="1758486001363313524">Khác...</translation>
 <translation id="1787192514241997742">tổng thời gian: <ph name="REMAINING_TIME" /></translation>
-<translation id="1800494066469288780">Cho phép dùng camera</translation>
 <translation id="1822429046913737220">SA/CH</translation>
 <translation id="1832974991323546415">phát trên thiết bị từ xa</translation>
 <translation id="1921819250265091946">dd</translation>
@@ -54,7 +54,6 @@
 <translation id="3220661731597678625">bước hiện tại</translation>
 <translation id="3321030238473337787">Tốc độ phát</translation>
 <translation id="3329013043687509092">Độ bão hòa</translation>
-<translation id="3377518164566272702">Cho phép dùng micrô và camera</translation>
 <translation id="3450233048674729344">Giá trị phải nhỏ hơn hoặc bằng <ph name="MAXIMUM" />.</translation>
 <translation id="3732799496749320381">mm</translation>
 <translation id="3754210790023674521">Thoát chế độ hình trong hình</translation>
@@ -62,6 +61,7 @@
 <translation id="3822383571486410024">Hãy kéo dài văn bản này thành <ph name="MIN_CHARACTERS" /> ký tự trở lên (bạn hiện đang sử dụng <ph name="CURRENT_LENGTH" /> ký tự).</translation>
 <translation id="383465348367842624">Phần đứng trước '<ph name="ATSIGN" />' không được chứa biểu tượng '<ph name="INVALIDCHARACTER" />'.</translation>
 <translation id="3846214748874656680">Thoát chế độ toàn màn hình</translation>
+<translation id="3914173277599553213">Bắt buộc</translation>
 <translation id="4031179711345676612">Cho phép micrô</translation>
 <translation id="4103419683916926126">Mili giây</translation>
 <translation id="4201051445878709314">Hiển thị tháng trước</translation>
@@ -77,6 +77,7 @@
 <translation id="4912200001568447310">mục hiện tại</translation>
 <translation id="4915360478455618802">Hiển thị bộ chọn giờ</translation>
 <translation id="4924138096460353083">không xác định</translation>
+<translation id="49269513399674318">Sử dụng micrô</translation>
 <translation id="4950364064308314478">Hiển thị bộ chọn ngày và giờ địa phương</translation>
 <translation id="4971739861736909480">Đã chọn <ph name="ACCNAME" /></translation>
 <translation id="4975562563186953947">Đã chọn <ph name="SELECTED_COUNT" /></translation>
@@ -144,6 +145,7 @@
 <translation id="7080893216867146095">Đã cho phép chia sẻ thông tin vị trí</translation>
 <translation id="709897737746224366">Vui lòng khớp với định dạng được yêu cầu.</translation>
 <translation id="7102274145889307184">vị trí hiện tại</translation>
+<translation id="7134810312945846184">Sử dụng micrô và camera</translation>
 <translation id="7263440858009898357">Vui lòng chọn một mục trong danh sách.</translation>
 <translation id="7320576522385648310">lưu vào bộ đệm</translation>
 <translation id="7341556277900466204">Vòng tròn màu</translation>
@@ -188,7 +190,6 @@
 <translation id="9132465097189459683">Khác...</translation>
 <translation id="9155987714137265666"><ph name="WEEK" />, bắt đầu vào <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Ảnh trong ảnh</translation>
-<translation id="918430632320614861">Cho phép dùng micrô</translation>
 <translation id="945780513535800434">Đã kiểm tra một phần</translation>
 <translation id="954003015749068518">vào chế độ hình trong hình</translation>
 </translationbundle>

@@ -38,6 +38,38 @@ PLATFORM_MAPPING = {
     'zos': 'zos',
 }
 
+# (b/328065301): Remove when all GCS hooks are migrated to first class deps
+MIGRATION_TOGGLE_FILE_SUFFIX = '_is_first_class_gcs'
+
+
+def construct_migration_file_name(gcs_object_name):
+    # Remove any forward slashes
+    gcs_file_name = gcs_object_name.replace('/', '_')
+    # Remove any dots
+    gcs_file_name = gcs_file_name.replace('.', '_')
+
+    return f'.{gcs_file_name}{MIGRATION_TOGGLE_FILE_SUFFIX}'
+
+
+def set_executable_bit(output_filename, file_url, gsutil):
+    # Set executable bit.
+    code, err = 0, ''
+    if sys.platform == 'cygwin':
+        # Under cygwin, mark all files as executable. The executable flag in
+        # Google Storage will not be set when uploading from Windows, so if
+        # this script is running under cygwin and we're downloading an
+        # executable, it will be unrunnable from inside cygwin without this.
+        st = os.stat(output_filename)
+        os.chmod(output_filename, st.st_mode | stat.S_IEXEC)
+    elif sys.platform != 'win32':
+        # On non-Windows platforms, key off of the custom header
+        # "x-goog-meta-executable".
+        code, out, err = gsutil.check_call('stat', file_url)
+        if re.search(r'executable:\s*1', out):
+            st = os.stat(output_filename)
+            os.chmod(output_filename, st.st_mode | stat.S_IEXEC)
+    return code, err
+
 
 class InvalidFileError(IOError):
     pass
@@ -255,6 +287,12 @@ def _downloader_worker_thread(thread_num,
         input_sha1_sum, output_filename = q.get()
         if input_sha1_sum is None:
             return
+        working_dir = os.path.dirname(output_filename)
+        if not working_dir:
+            raise Exception(
+                'Unable to construct a working_dir from the output_filename.')
+        migration_file_name = os.path.join(
+            working_dir, construct_migration_file_name(input_sha1_sum))
         extract_dir = None
         if extract:
             if not output_filename.endswith('.tar.gz'):
@@ -284,6 +322,14 @@ def _downloader_worker_thread(thread_num,
                               're-downloading...' %
                               (thread_num, output_filename))
                     skip = False
+            # (b/328065301): Remove when all GCS hooks are migrated to first
+            # class deps
+            # If the directory was created by a first class GCS
+            # dep, remove the migration file and re-download using the
+            # latest hook.
+            is_first_class_gcs = os.path.exists(migration_file_name)
+            if is_first_class_gcs:
+                skip = False
             if skip:
                 continue
 
@@ -371,24 +417,12 @@ def _downloader_worker_thread(thread_num,
                 with open(extract_dir + '.tmp', 'a'):
                     tar.extractall(path=dirname)
                 os.remove(extract_dir + '.tmp')
-        # Set executable bit.
-        if sys.platform == 'cygwin':
-            # Under cygwin, mark all files as executable. The executable flag in
-            # Google Storage will not be set when uploading from Windows, so if
-            # this script is running under cygwin and we're downloading an
-            # executable, it will be unrunnable from inside cygwin without this.
-            st = os.stat(output_filename)
-            os.chmod(output_filename, st.st_mode | stat.S_IEXEC)
-        elif sys.platform != 'win32':
-            # On non-Windows platforms, key off of the custom header
-            # "x-goog-meta-executable".
-            code, out, err = gsutil.check_call('stat', file_url)
-            if code != 0:
-                out_q.put('%d> %s' % (thread_num, err))
-                ret_codes.put((code, err))
-            elif re.search(r'executable:\s*1', out):
-                st = os.stat(output_filename)
-                os.chmod(output_filename, st.st_mode | stat.S_IEXEC)
+        if os.path.exists(migration_file_name):
+            os.remove(migration_file_name)
+        code, err = set_executable_bit(output_filename, file_url, gsutil)
+        if code != 0:
+            out_q.put('%d> %s' % (thread_num, err))
+            ret_codes.put((code, err))
 
 
 class PrinterThread(threading.Thread):
@@ -448,7 +482,30 @@ def download_from_google_storage(input_filename, base_url, gsutil, num_threads,
 
     # Sequentially check for the most common case and see if we can bail out
     # early before making any slow calls to gsutil.
-    if not force and all(
+    if directory:
+        working_dir = input_filename
+    elif os.path.dirname(output):
+        working_dir = os.path.dirname(output)
+
+    if not working_dir:
+        raise Exception(
+            'Unable to construct a working_dir from the inputted directory'
+            ' or sha1 file name.')
+
+    # (b/328065301): Remove when all GCS hooks are migrated to first class deps
+    # If the directory was created by a first class GCS
+    # dep, remove the migration file and re-download using the
+    # latest hook.
+    is_first_class_gcs = False
+    # Check all paths to see if they have an equivalent is_first_class_gcs file
+    # If directory is False, there will be only one item in input_data
+    for sha1, _ in input_data:
+        migration_file_name = os.path.join(working_dir,
+                                           construct_migration_file_name(sha1))
+        if os.path.exists(migration_file_name):
+            is_first_class_gcs = True
+
+    if not force and not is_first_class_gcs and all(
             _data_exists(sha1, path, extract) for sha1, path in input_data):
         return 0
 

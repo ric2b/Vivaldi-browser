@@ -12,7 +12,6 @@
 #import "components/omnibox/browser/omnibox_field_trial.h"
 #import "components/open_from_clipboard/clipboard_recent_content.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/default_browser/model/default_browser_interest_signals.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/commands/activity_service_commands.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
@@ -58,10 +57,6 @@ typedef NS_ENUM(int, TrailingButtonState) {
 // The size of the symbol image.
 const CGFloat kSymbolImagePointSize = 18.;
 
-// FullScreen progress threshold in which to toggle between full screen on and
-// off mode for the badge view.
-const double kFullscreenProgressBadgeViewThreshold = 0.85;
-
 // Identifier for the omnibox embedded in this location bar as a scribble
 // element.
 const NSString* kScribbleOmniboxElementId = @"omnibox";
@@ -78,6 +73,9 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 
 // The injected badge view.
 @property(nonatomic, strong) UIView* badgeView;
+
+// The injected Contextual Panel entrypoint view;
+@property(nonatomic, strong) UIView* contextualPanelEntrypointView;
 
 // The view that displays current location when the omnibox is not focused.
 @property(nonatomic, strong) LocationBarSteadyView* locationBarSteadyView;
@@ -128,6 +126,12 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 - (void)setBadgeView:(UIView*)badgeView {
   DCHECK(!self.badgeView);
   _badgeView = badgeView;
+}
+
+- (void)setContextualPanelEntrypointView:
+    (UIView*)contextualPanelEntrypointView {
+  DCHECK(!self.contextualPanelEntrypointView);
+  _contextualPanelEntrypointView = contextualPanelEntrypointView;
 }
 
 - (void)switchToEditing:(BOOL)editing {
@@ -212,6 +216,14 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
   [super viewDidLoad];
   self.view.clipsToBounds = YES;
 
+  // TODO(crbug.com/328446957): Cleanup when fully launched, at which point
+  // `contextualPanelEntrypointView` should be CHECK()'ed. Until fully launched,
+  // the entrypoint view might be nil if the flag is disabled.
+  if (self.contextualPanelEntrypointView) {
+    self.locationBarSteadyView.contextualPanelEntrypointView =
+        self.contextualPanelEntrypointView;
+  }
+
   DCHECK(self.badgeView) << "The badge view must be set at this point";
   self.locationBarSteadyView.badgeView = self.badgeView;
 
@@ -270,8 +282,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
   CGFloat alphaValue = fmax((progress - 0.85) / 0.15, 0);
   CGFloat scaleValue = 0.79 + 0.21 * progress;
   self.locationBarSteadyView.trailingButton.alpha = alphaValue;
-  BOOL badgeViewShouldCollapse =
-      progress <= kFullscreenProgressBadgeViewThreshold;
+  BOOL badgeViewShouldCollapse = progress <= kFullscreenProgressThreshold;
   [self.locationBarSteadyView
       setFullScreenCollapsedMode:badgeViewShouldCollapse];
 
@@ -357,6 +368,17 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 
 }
 
+- (BOOL)canShowLargeContextualPanelEntrypoint {
+  // TODO(crbug.com/330701617): Add actual checks when implementing badge view
+  // loud moment blocking (check might need to be in the actual view).
+  return !self.locationBarSteadyView.hidden;
+}
+
+- (void)setLocationBarLabelCenteredBetweenContent:(BOOL)centered {
+  [self.locationBarSteadyView
+      setLocationBarLabelCenteredBetweenContent:centered];
+}
+
 #pragma mark - LocationBarAnimatee
 
 - (void)offsetTextFieldToMatchSteadyView {
@@ -387,12 +409,14 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
   self.locationBarSteadyView.alpha = hidden ? 0 : 1;
 }
 
-- (void)hideSteadyViewBadgeView {
+- (void)hideSteadyViewBadgeAndEntrypointViews {
   [self.locationBarSteadyView displayBadgeView:NO animated:NO];
+  [self.delegate displayContextualPanelEntrypointView:NO];
 }
 
-- (void)showSteadyViewBadgeView {
+- (void)showSteadyViewBadgeAndEntrypointViews {
   [self.locationBarSteadyView displayBadgeView:YES animated:NO];
+  [self.delegate displayContextualPanelEntrypointView:YES];
 }
 
 - (void)setEditViewFaded:(BOOL)hidden {
@@ -484,6 +508,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 
 - (void)locationBarSteadyViewTapped {
   base::RecordAction(base::UserMetricsAction("MobileLocationBarTapped"));
+  TriggerHapticFeedbackForSelectionChange();
   [self.delegate locationBarSteadyViewTapped];
 }
 
@@ -649,14 +674,14 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 
   __weak __typeof__(self) weakSelf = self;
   UIImage* pasteImage = nil;
-  if (IsBottomOmniboxSteadyStateEnabled()) {
+  if (IsBottomOmniboxAvailable()) {
 
     if (IsVivaldiRunning()) {
       pasteImage =
           [[UIImage imageNamed:vToolbarPaste]
               imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
       // Copy link action.
-      if (!self.locationBarSteadyView.hidden) {
+      if (!self.locationBarSteadyView.hidden && !_isNTP) {
         UIAction* copyAction = [UIAction
             actionWithTitle:
                 l10n_util::GetNSString(IDS_IOS_COPY_LINK_ACTION_TITLE)
@@ -751,7 +776,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 
   if (IsVivaldiRunning()) {
     // Show Top or Bottom Address Bar action.
-    if (IsBottomOmniboxSteadyStateEnabled() && _originalPrefService) {
+    if (IsBottomOmniboxAvailable() && _originalPrefService) {
       NSString* title = nil;
       UIImage* image = nil;
       ToolbarType targetToolbarType;
@@ -788,7 +813,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
     }
   } else {
   // Show Top or Bottom Address Bar action.
-  if (IsBottomOmniboxSteadyStateEnabled() && _originalPrefService &&
+  if (IsBottomOmniboxAvailable() && _originalPrefService &&
       IsSplitToolbarMode(self)) {
     NSString* title = nil;
     UIImage* image = nil;
@@ -832,7 +857,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
   } // End Vivaldi
 
   // Reverse the array manually when preferredMenuElementOrder is not available.
-  if (IsBottomOmniboxSteadyStateEnabled() && _originalPrefService) {
+  if (IsBottomOmniboxAvailable() && _originalPrefService) {
     if (!base::ios::IsRunningOnIOS16OrLater()) {
       if (_originalPrefService->GetBoolean(prefs::kBottomOmnibox)) {
         menuElements =
@@ -876,7 +901,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
                      return [weakSelf contextMenuUIMenu:suggestedActions];
                    }];
 
-  if (IsBottomOmniboxSteadyStateEnabled()) {
+  if (IsBottomOmniboxAvailable()) {
     if (@available(iOS 16, *)) {
       configuration.preferredMenuElementOrder =
           UIContextMenuConfigurationElementOrderPriority;
@@ -886,6 +911,14 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
+
+  // Note:(VIB-692)(prio@vivaldi.com) - Do not allow copying for NTP or when
+  // address bar is empty.
+  if (IsVivaldiRunning() && (_isNTP || self.locationBarSteadyView.alpha == 0)
+      && action == @selector(copy:)) {
+    return NO;
+  } // End Vivaldi
+
   // Allow copying if the steady location bar is visible.
   if (!self.locationBarSteadyView.hidden && action == @selector(copy:)) {
     return YES;
@@ -930,7 +963,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 - (void)searchCopiedText:(id)sender {
   // A search using clipboard text is activity that should indicate a user
   // that would be interested in setting Chrome as the default browser.
-  default_browser::NotifyOmniboxTextCopyPasteAndNavigate();
+  [self.delegate locationBarSearchCopiedTextTapped];
   RecordAction(UserMetricsAction("Mobile.OmniboxContextMenu.SearchCopiedText"));
   ClipboardRecentContent::GetInstance()->GetRecentTextFromClipboard(
       base::BindOnce(^(std::optional<std::u16string> optionalText) {

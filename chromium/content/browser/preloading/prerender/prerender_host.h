@@ -13,13 +13,13 @@
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "base/types/pass_key.h"
-#include "content/browser/preloading/prefetch/no_vary_search_helper.h"
 #include "content/browser/preloading/prerender/prerender_attributes.h"
 #include "content/browser/preloading/prerender/prerender_final_status.h"
 #include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/navigation_controller_delegate.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/render_frame_host.h"
+#include "net/http/http_no_vary_search_data.h"
 #include "third_party/blink/public/mojom/navigation/navigation_params.mojom-forward.h"
 #include "url/gurl.h"
 
@@ -106,7 +106,7 @@ class CONTENT_EXPORT PrerenderHost : public FrameTree::Delegate,
 
   // Checks whether two headers are the same in a case-insensitive and
   // order-insensitive way.
-  // TODO(https://crbug.com/1443922): Migrate this method into
+  // TODO(crbug.com/40267487): Migrate this method into
   // `HttpRequestHeaders`.
   static bool IsActivationHeaderMatch(
       const net::HttpRequestHeaders& potential_activation_headers,
@@ -137,7 +137,7 @@ class CONTENT_EXPORT PrerenderHost : public FrameTree::Delegate,
 
   // FrameTree::Delegate
 
-  // TODO(https://crbug.com/1199682): Correctly handle load events. Ignored for
+  // TODO(crbug.com/40177943): Correctly handle load events. Ignored for
   // now as it confuses WebContentsObserver instances because they can not
   // distinguish between the different FrameTrees.
 

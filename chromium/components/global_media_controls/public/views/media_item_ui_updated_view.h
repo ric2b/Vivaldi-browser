@@ -6,6 +6,8 @@
 #define COMPONENTS_GLOBAL_MEDIA_CONTROLS_PUBLIC_VIEWS_MEDIA_ITEM_UI_UPDATED_VIEW_H_
 
 #include "components/global_media_controls/public/media_item_ui.h"
+#include "components/global_media_controls/public/views/media_action_button.h"
+#include "components/global_media_controls/public/views/media_item_ui_device_selector.h"
 #include "components/media_message_center/media_notification_view.h"
 #include "components/media_message_center/notification_theme.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -26,8 +28,8 @@ class Label;
 
 namespace global_media_controls {
 
-class MediaActionButton;
 class MediaItemUIObserver;
+class MediaProgressView;
 
 // MediaItemUIUpdatedView holds the media information and playback controls for
 // a media session or cast session. This will be displayed within
@@ -43,13 +45,16 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemUIUpdatedView
   MediaItemUIUpdatedView(
       const std::string& id,
       base::WeakPtr<media_message_center::MediaNotificationItem> item,
-      media_message_center::MediaColorTheme media_color_theme);
+      media_message_center::MediaColorTheme media_color_theme,
+      std::unique_ptr<MediaItemUIDeviceSelector> device_selector_view);
   MediaItemUIUpdatedView(const MediaItemUIUpdatedView&) = delete;
   MediaItemUIUpdatedView& operator=(const MediaItemUIUpdatedView&) = delete;
   ~MediaItemUIUpdatedView() override;
 
   // views::View:
+  void AddedToWidget() override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+  bool OnKeyPressed(const ui::KeyEvent& event) override;
 
   // MediaItemUI:
   void AddObserver(MediaItemUIObserver* observer) override;
@@ -75,14 +80,19 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemUIUpdatedView
   void UpdateWithVectorIcon(const gfx::VectorIcon* vector_icon) override {}
   void UpdateWithMuteStatus(bool mute) override {}
   void UpdateWithVolume(float volume) override {}
-  void UpdateDeviceSelectorVisibility(bool visible) override {}
-  void UpdateDeviceSelectorAvailability(bool has_devices) override {}
+  void UpdateDeviceSelectorVisibility(bool visible) override;
+  void UpdateDeviceSelectorAvailability(bool has_devices) override;
 
   // Helper functions for testing:
   views::ImageView* GetArtworkViewForTesting();
   views::Label* GetSourceLabelForTesting();
   views::Label* GetTitleLabelForTesting();
   views::Label* GetArtistLabelForTesting();
+  MediaActionButton* GetMediaActionButtonForTesting(
+      media_session::mojom::MediaSessionAction action);
+  MediaProgressView* GetProgressViewForTesting();
+  MediaActionButton* GetStartCastingButtonForTesting();
+  MediaItemUIDeviceSelector* GetDeviceSelectorForTesting();
 
  private:
   MediaActionButton* CreateMediaActionButton(views::View* parent,
@@ -93,8 +103,32 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemUIUpdatedView
   // Callback for a media action button being pressed.
   void MediaActionButtonPressed(views::Button* button);
 
+  // Update the visibility of media action buttons based on which media session
+  // actions are enabled.
+  void UpdateMediaActionButtonsVisibility();
+
+  // Callback for the user dragging the progress view. A playing media should be
+  // temporarily paused when the user is dragging the progress line.
+  void OnProgressDragging(bool pause);
+
+  // Callback for when the media progress view wants to update the progress
+  // position.
+  void SeekTo(double seek_progress);
+
+  // Callback for when the start casting button is toggled by user.
+  void StartCastingButtonPressed();
+
+  // Update the display states of UI elements for casting devices.
+  void UpdateCastingState();
+
   // Whether the media is currently in picture-in-picture.
   bool in_picture_in_picture_ = false;
+
+  // Set of enabled media session actions that are used to decide media action
+  // button visibilities.
+  base::flat_set<media_session::mojom::MediaSessionAction> media_actions_;
+
+  media_session::MediaPosition position_;
 
   base::ObserverList<MediaItemUIObserver> observers_;
 
@@ -103,13 +137,17 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemUIUpdatedView
   raw_ptr<views::Label> title_label_ = nullptr;
   raw_ptr<views::Label> artist_label_ = nullptr;
 
+  raw_ptr<MediaProgressView> progress_view_ = nullptr;
   std::vector<MediaActionButton*> media_action_buttons_;
+  raw_ptr<MediaActionButton> start_casting_button_ = nullptr;
   raw_ptr<MediaActionButton> picture_in_picture_button_ = nullptr;
   raw_ptr<MediaActionButton> play_pause_button_ = nullptr;
 
+  // Init parameters.
   const std::string id_;
   base::WeakPtr<media_message_center::MediaNotificationItem> item_;
   media_message_center::MediaColorTheme media_color_theme_;
+  raw_ptr<MediaItemUIDeviceSelector> device_selector_view_ = nullptr;
 };
 
 }  // namespace global_media_controls

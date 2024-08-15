@@ -19,6 +19,7 @@
 #include "base/time/time.h"
 #include "net/base/auth.h"
 #include "net/base/completion_once_callback.h"
+#include "net/base/connection_endpoint_metadata.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
@@ -244,8 +245,8 @@ class WebSocketHandshakeStreamCreateHelperTest
       const std::vector<std::string>& sub_protocols,
       const WebSocketExtraHeaders& extra_request_headers,
       const WebSocketExtraHeaders& extra_response_headers) {
-    const char kPath[] = "/";
-    const char kOrigin[] = "http://origin.example.org";
+    constexpr char kPath[] = "/";
+    constexpr char kOrigin[] = "http://origin.example.org";
     const GURL url("wss://www.example.org/");
     NetLogWithSource net_log;
 
@@ -510,7 +511,8 @@ class WebSocketHandshakeStreamCreateHelperTest
             base::DefaultTickClock::GetInstance(),
             base::SingleThreadTaskRunner::GetCurrentDefault().get(),
             /*socket_performance_watcher=*/nullptr,
-            HostResolverEndpointResult(), NetLog::Get());
+            ConnectionEndpointMetadata(), /*report_ecn=*/true,
+            NetLogWithSource::Make(NetLogSourceType::NONE));
 
         session_->Initialize();
 

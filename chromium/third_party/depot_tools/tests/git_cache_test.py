@@ -309,6 +309,14 @@ class MirrorTest(unittest.TestCase):
                 'https://chromium.googlesource.com/a/chromium/src.git'),
             'chromium.googlesource.com-chromium-src')
 
+    def test_ssh_url_in_UrlToCacheDir_and_CacheDirToUrl(self):
+        ssh_url = "git@github.com:chromium/chromium.git"
+        self.assertEqual(git_cache.Mirror.UrlToCacheDir(ssh_url),
+                         "git@github.com__chromium-chromium")
+        self.assertEqual(
+            git_cache.Mirror.CacheDirToUrl(
+                git_cache.Mirror.UrlToCacheDir(ssh_url)), ssh_url[:-4])
+
 
 if __name__ == '__main__':
     logging.basicConfig(

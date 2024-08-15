@@ -83,11 +83,11 @@
 <translation id="3914946330804881301">Importados do Opera</translation>
 <translation id="3921292902397893431">Monstro 8</translation>
 <translation id="3943857333388298514">Colar</translation>
-<translation id="3974783668264968389">O Vivaldi não conseguiu aceder à sua keystore segura. Sem a keystore vai perder as suas credenciais de acesso guardadas, cookies seguras e algumas funcionalidades deixarão de funcionar como a sincronização, correio e calendário.
-
-    Por favor, saia agora ou repare a sua keystore e tente novamente. Se pretender mesmo continuar ative a caixa de verificação e prima o botão "Continuar com perda de dados".</translation>
 <translation id="4005270918754737597">Ignorar esta versão</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">O Vivaldi não conseguiu desbloquear a sua chave de segurança. Sem a chave de segurança irá perder todas as suas palavras-passe guardadas, cookies seguras e algumas funcionalidades como a sincronização, correio e calendário deixarão de funcionar.
+
+    Por favor, saia agora e desbloqueie ou repare a sua chave de segurança e tente novamente. Ou pretende continuar mas perdendo os seus dados?</translation>
 <translation id="4074744496918018786">Abrir imagem numa nova janela privada</translation>
 <translation id="410351446219883937">Reprodução automática</translation>
 <translation id="4281844954008187215">Condições de serviço</translation>
@@ -178,6 +178,7 @@
 <translation id="8669345741879513971">Monstro 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Inspecionar portal-document</translation>
+<translation id="875142999698251063">Sair agora</translation>
 <translation id="8768970203213061953">Paisagem 14</translation>
 <translation id="8773635261052182196">Não voltará a ver estas notificações. Poderá reativá-las nas definições do Vivaldi.</translation>
 <translation id="8774017153185436870">Os websites podem reproduzir vídeo automaticamente</translation>

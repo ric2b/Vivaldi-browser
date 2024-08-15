@@ -155,6 +155,7 @@ class CalendarBackend
       const EventTemplateRow& event_template);
 
   bool DeleteEventTemplate(EventTemplateID event_template_id);
+  EventID GetParentExceptionEventId(EventID exception_event_id);
 
   void NotifyEventCreated(const EventResult& event) override;
   void NotifyNotificationChanged(const NotificationRow& row) override;

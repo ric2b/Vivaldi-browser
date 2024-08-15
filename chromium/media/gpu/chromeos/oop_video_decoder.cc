@@ -123,12 +123,13 @@ scoped_refptr<FrameResource> MojoVideoFrameToFrameResource(
     return nullptr;
   }
 
-  gpu::MailboxHolder dummy_mailbox[media::VideoFrame::kMaxPlanes];
+  scoped_refptr<gpu::ClientSharedImage>
+      dummy_shared_images[media::VideoFrame::kMaxPlanes];
   scoped_refptr<media::FrameResource> gmb_frame =
       VideoFrameResource::Create(media::VideoFrame::WrapExternalGpuMemoryBuffer(
           mojo_frame->visible_rect, mojo_frame->natural_size,
-          std::move(gpu_memory_buffer), dummy_mailbox, base::NullCallback(),
-          mojo_frame->timestamp));
+          std::move(gpu_memory_buffer), dummy_shared_images, gpu::SyncToken(),
+          0, base::NullCallback(), mojo_frame->timestamp));
   if (!gmb_frame) {
     VLOGF(2) << "Could not create a GpuMemoryBuffer-backed VideoFrame";
     return nullptr;
@@ -169,9 +170,9 @@ class OOPVideoDecoderSupportedConfigsManager {
     // a) We didn't try to get the supported configurations before initializing
     //    OOPVideoDecoder instances. This should be impossible as higher layers
     //    should guarantee that we know the supported configurations before
-    //    creating MojoVideoDecoderService instances (and therefore
-    //    OOPVideoDecoder instances). See, e.g., the logic in
-    //    InterfaceFactoryImpl::CreateVideoDecoder().
+    //    creating OOPVideoDecoder instances. See the logic in
+    //    InterfaceFactoryImpl::CreateVideoDecoder() (for regular OOP-VD) and in
+    //    MojoStableVideoDecoder::Initialize() (for GTFO OOP-VD).
     //
     // b) We did try to get the supported configurations but an error occurred.
     //    This case reduces to no supported configurations in which case, a
@@ -240,6 +241,19 @@ class OOPVideoDecoderSupportedConfigsManager {
     waiting_callbacks_.emplace(
         mojo::PendingRemote<stable::mojom::StableVideoDecoder>(), std::move(cb),
         base::SequencedTaskRunner::GetCurrentDefault());
+  }
+
+  void ResetForTesting() {
+    base::AutoLock lock(lock_);
+    oop_video_decoder_.reset();
+    disconnected_ = false;
+    configs_.reset();
+    decoder_type_.reset();
+    interface_version_.reset();
+    config_retry_count_ = 0u;
+    while (!waiting_callbacks_.empty()) {
+      waiting_callbacks_.pop();
+    }
   }
 
  private:
@@ -415,6 +429,12 @@ OOPVideoDecoder::GetSupportedConfigs() {
   return OOPVideoDecoderSupportedConfigsManager::Instance().Get();
 }
 
+// static
+void OOPVideoDecoder::ResetGlobalStateForTesting() {
+  OOPVideoDecoderSupportedConfigsManager::Instance()
+      .ResetForTesting();  // IN-TEST
+}
+
 OOPVideoDecoder::OOPVideoDecoder(
     std::unique_ptr<media::MediaLog> media_log,
     scoped_refptr<base::SequencedTaskRunner> decoder_task_runner,
@@ -571,6 +591,11 @@ void OOPVideoDecoder::OnInitializeDone(const DecoderStatus& status,
 
   CHECK(!has_error_);
 
+  if (max_decode_requests <= 0) {
+    Stop();
+    return;
+  }
+
   const VideoDecoderType expected_decoder_type =
       OOPVideoDecoderSupportedConfigsManager::Instance().GetDecoderType();
 
@@ -580,6 +605,9 @@ void OOPVideoDecoder::OnInitializeDone(const DecoderStatus& status,
     Stop();
     return;
   }
+
+  needs_bitstream_conversion_ = needs_bitstream_conversion;
+  max_decode_requests_ = max_decode_requests;
   remote_decoder_type_ = decoder_type;
 
   if (OOPVideoDecoderSupportedConfigsManager::Instance()
@@ -627,7 +655,11 @@ void OOPVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
     return;
   }
 
+  // If we change |buffer| to have a fake timestamp, we'll need to restore the
+  // original timestamp in case higher layers rely on that timestamp. The
+  // |buffer_timestamp_restorer| ensures that happens before Decode() returns.
   CHECK(buffer);
+  base::ScopedClosureRunner buffer_timestamp_restorer;
   if (!buffer->end_of_stream()) {
     const base::TimeDelta next_fake_timestamp =
         current_fake_timestamp_ + base::Microseconds(1u);
@@ -642,6 +674,12 @@ void OOPVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
         fake_timestamp_to_real_timestamp_cache_.end());
     fake_timestamp_to_real_timestamp_cache_.Put(current_fake_timestamp_,
                                                 buffer->timestamp());
+    buffer_timestamp_restorer.ReplaceClosure(base::BindOnce(
+        [](scoped_refptr<DecoderBuffer> decoder_buffer,
+           base::TimeDelta original_timestamp) {
+          decoder_buffer->set_timestamp(original_timestamp);
+        },
+        buffer, buffer->timestamp()));
     buffer->set_timestamp(current_fake_timestamp_);
   }
 
@@ -859,7 +897,10 @@ void OOPVideoDecoder::ApplyResolutionChange() {
 }
 
 bool OOPVideoDecoder::NeedsBitstreamConversion() const {
-  NOTREACHED_NORETURN();
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK(!has_error_);
+  CHECK_NE(remote_decoder_type_, VideoDecoderType::kUnknown);
+  return needs_bitstream_conversion_;
 }
 
 bool OOPVideoDecoder::CanReadWithoutStalling() const {
@@ -882,7 +923,10 @@ bool OOPVideoDecoder::CanReadWithoutStalling() const {
 }
 
 int OOPVideoDecoder::GetMaxDecodeRequests() const {
-  NOTREACHED_NORETURN();
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK(!has_error_);
+  CHECK_NE(remote_decoder_type_, VideoDecoderType::kUnknown);
+  return base::strict_cast<int>(max_decode_requests_);
 }
 
 VideoDecoderType OOPVideoDecoder::GetDecoderType() const {

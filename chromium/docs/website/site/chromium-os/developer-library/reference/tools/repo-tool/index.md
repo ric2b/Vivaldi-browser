@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: repo-tool
 title: repo
 ---
@@ -74,7 +74,7 @@ If you know a new release was made and you're itching to try it out immediately,
 you can run `repo selfupdate` to force it.
 
 This guidance applies equally to [rollbacks] -- repo will automatically roll
-itself back as neeeded; see that section for more details.
+itself back as needed; see that section for more details.
 
 ## Updating The Launcher
 
@@ -208,7 +208,7 @@ $ git fetch --tags upstream
 # Check which tags will be pushed to our fork.
 $ git push origin --tags -n
 # Do the actual push!
-$ git push origin --tags
+$ git push origin --tags -o push-justification='b/<id> - repo release'
 ```
 
 ### Merging Upstream Releases
@@ -242,7 +242,7 @@ $ git commit
 
 # Sign the new release.  The script defaults to signing HEAD.
 # NB: This requires access to official repo keys.  See go/repo-release.
-# NB: --force is required since ChromeOS tag naming convetion is different than
+# NB: --force is required since ChromeOS tag naming convention is different than
 # upstream.
 $ ./release/sign-tag.py --force v2.5-cr1
 
@@ -250,7 +250,7 @@ $ ./release/sign-tag.py --force v2.5-cr1
 # updating any branches.  See the next sections for those steps.
 $ git push origin --tags -n
 # If the -n output looked correct, push for real.
-$ git push origin --tags
+$ git push origin --tags -o push-justification='b/<id> - repo release'
 ```
 
 ### Sidenote On Tagging Syntax
@@ -313,17 +313,17 @@ Pay particular attention to the [staging CQ] as they will cycle the fastest.
 # immediately, so start monitoring the bots.
 $ git push origin v2.5-cr1^0:main -n
 # If that looked good, push it for real.
-$ git push origin v2.5-cr1^0:main
+$ git push origin v2.5-cr1^0:main -o push-justification='b/<id> - repo release'
 
 # If you don't have a tag but just want to test some new changes on staging
 # bots, you can push a commit to the main branch.
 $ git push origin <commit>:main -n
 # If that looked good, push it for real.
-$ git push origin <commit>:main
+$ git push origin <commit>:main -o push-justification='b/<id> - repo release'
 
 # If things go wrong, it's perfectly safe to do non-fast-forward pushes.
 # Bots will rollback to the right version immediately.
-$ git push origin <old commit>:main -f
+$ git push origin <old commit>:main -f -o push-justification='b/<id> - repo release'
 ```
 
 [staging CQ]: https://ci.chromium.org/p/chromeos/g/chromeos.staging-cq/builders
@@ -371,12 +371,12 @@ triage failures faster that might be related to the new release.
 # e.g. gitiles.  NB: This will not affect any bots or users.
 $ git push origin v2.5-cr1^0:main -n
 # If that looked good, push it for real.
-$ git push origin v2.5-cr1^0:main
+$ git push origin v2.5-cr1^0:main -o push-justification='b/<id> - repo release'
 
 # Push the new release to the stable branch.  This makes it live in production!
 $ git push origin v2.5-cr1^0:stable -n
 # If that looked good, push it for real.
-$ git push origin v2.5-cr1^0:stable
+$ git push origin v2.5-cr1^0:stable -o push-justification='b/<id> - repo release'
 ```
 
 ### Rolling Back A Release
@@ -394,7 +394,7 @@ Make sure all rollbacks are coordinated with [go/cros-oncall].
 # Push the an old release to the stable branch.  This makes it live in production!
 $ git push origin v2.4-cr1^0:stable -f -n
 # If that looked good, push it for real.
-$ git push origin v2.4-cr1^0:stable -f
+$ git push origin v2.4-cr1^0:stable -f -o push-justification='b/<id> - repo release'
 ```
 
 ## FAQs
@@ -485,7 +485,7 @@ It has user & developer & internal documentation.
 Check out our [source checkout] documentation.
 
 
-[cros_portage_upgrade]: ./portage/package_upgrade_process.md
+[cros_portage_upgrade]: /chromium-os/developer-library/guides/portage/package-upgrade-process/
 [depot_tools]: https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html
 [dev-vcs/repo]: https://chromium.googlesource.com/chromiumos/overlays/portage-stable/+/HEAD/dev-vcs/repo
 [go/cros-infra-chat]: https://goto.google.com/cros-infra-chat
@@ -493,7 +493,7 @@ Check out our [source checkout] documentation.
 [production]: #prod
 [repo tool]: https://gerrit.googlesource.com/git-repo
 [rollbacks]: #rollback
-[source checkout]: ./source_layout.md
+[source checkout]: /chromium-os/developer-library/reference/development/source-layout/
 [staging]: #staging
 [tagging sidenotes]: #sidenote-tags
 [updating bots]: #updating-bots

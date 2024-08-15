@@ -4,17 +4,96 @@
 
 """Recipe module to ensure a checkout is consistent on a bot."""
 
+import dataclasses
+import typing
+
 from recipe_engine import recipe_api
+from recipe_engine.config_types import Path
+from recipe_engine.engine_types import StepPresentation
 
 from PB.go.chromium.org.luci.buildbucket.proto import common as common_pb2
 
 
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class RelativeRoot:
+  """A root that is relative to the checkout root.
+
+  Attributes:
+    name: The name of the root/the path to the root relative to the checkout
+      directory.
+    path: The absolute path to the root.
+  """
+  name: str
+  path: Path
+
+  @classmethod
+  def create(cls, checkout_dir: Path, name: str) -> typing.Self:
+    return cls(name=name, path=checkout_dir / name)
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class Json:
+  output: dict[str, typing.Any]
+
+
+class ManifestRepo(typing.TypedDict):
+  repository: str
+  revision: str
+
+
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class Result:
+  """The noteworthy paths for a source checkout.
+
+  Attributes:
+    checkout_dir: The directory where the checkout was performed.
+    source_root: The root for the repo identified by the first gclient solution.
+    patch_root: The root for the repo that was patched, if a patch was applied.
+      Otherwise, None.
+    presentation: DEPRECATED. The presentation of the bot_update step. This is
+      used by some code to get the properties. This is provided for backwards
+      compatibility, code should access the properties attribute instead.
+    json: DEPRECATED. The result of json outputs for the bot_update step. This
+      is provided for backwards compatibility, attributes on this object are
+      provided for accessing the contents of json.output.
+    properties: The properties set by the bot_update execution.
+    manifest: The manifest mapping the checkout_dir-relative path to the
+      repository and revision that was checked out.
+    fixed_revisions: The explicitly requested revisions; a mapping from the
+      checkout_dir-relative path to the requested revision.
+  """
+  # Directories relevant to the checkout
+  checkout_dir: Path
+  source_root: RelativeRoot
+  patch_root: RelativeRoot | None = None
+
+  # Details about the revisions that were checked out
+  properties: dict[str, str]
+  manifest: dict[str, ManifestRepo]
+  fixed_revisions: dict[str, str]
+
+  # TODO: crbug.com/339472834 - Once all downstream users are switched to use
+  # the above fields, these attributes and the property methods can be removed,
+  # as well as the Json type
+  _api: 'BotUpdateApi'
+  _presentation: StepPresentation
+  _json: Json
+
+  @property
+  def presentation(self):
+    self._api.m.warning.issue('BOT_UPDATE_CUSTOM_RESULT_ATTRIBUTES')
+    return self._presentation
+
+  @property
+  def json(self):
+    self._api.m.warning.issue('BOT_UPDATE_CUSTOM_RESULT_ATTRIBUTES')
+    return self._json
+
+
 class BotUpdateApi(recipe_api.RecipeApi):
 
-  def __init__(self, properties, deps_revision_overrides, fail_patch, *args,
-               **kwargs):
+  def __init__(self, properties, deps_revision_overrides, *args, **kwargs):
     self._deps_revision_overrides = deps_revision_overrides
-    self._fail_patch = fail_patch
 
     self._last_returned_properties = {}
     super(BotUpdateApi, self).__init__(*args, **kwargs)
@@ -72,7 +151,7 @@ class BotUpdateApi(recipe_api.RecipeApi):
 
   def _get_bot_update_env(self):
     # TODO(gavinmak): Use mkdtemp when crbug.com/1457059 is fixed.
-    self._trace_dir = self.m.path['cleanup']
+    self._trace_dir = self.m.path.cleanup_dir
 
     # If a Git HTTP request is constantly below GIT_HTTP_LOW_SPEED_LIMIT
     # bytes/second for GIT_HTTP_LOW_SPEED_TIME seconds then such request will be
@@ -114,9 +193,9 @@ class BotUpdateApi(recipe_api.RecipeApi):
                or self.m.led.run_id.replace('/', '_'))
       dest = self.m.path.join(self._trace_dir, '%s.zip' % id)
       zip_path = self.m.archive.package(self._trace_dir) \
-                  .with_file(self._trace_dir.join('trace2-event')) \
-                  .with_file(self._trace_dir.join('trace-curl')) \
-                  .with_file(self._trace_dir.join('trace-packet')) \
+                  .with_file(self._trace_dir / 'trace2-event') \
+                  .with_file(self._trace_dir / 'trace-curl') \
+                  .with_file(self._trace_dir / 'trace-packet') \
                   .archive('compress traces', dest, 'zip')
       try:
         # Don't upload with a destination path, otherwise we have to grant bots
@@ -218,7 +297,7 @@ class BotUpdateApi(recipe_api.RecipeApi):
         ['--patch_root', patch_root],
         ['--revision_mapping_file', self.m.json.input(reverse_rev_map)],
         ['--git-cache-dir', cfg.cache_dir],
-        ['--cleanup-dir', self.m.path['cleanup'].join('bot_update')],
+        ['--cleanup-dir', self.m.path.cleanup_dir / 'bot_update'],
 
         # Hookups to JSON output back into recipes.
         ['--output_json', self.m.json.output()],
@@ -351,8 +430,14 @@ class BotUpdateApi(recipe_api.RecipeApi):
     # Inject Json output for testing.
     first_sln = cfg.solutions[0].name
     step_test_data = step_test_data or (lambda: self.test_api.output_json(
-        patch_root, first_sln, reverse_rev_map, self._fail_patch,
-        fixed_revisions=fixed_revisions))
+        first_sln,
+        reverse_rev_map,
+        patch_root=patch_root,
+        fixed_revisions=fixed_revisions,
+        fail_checkout=self._test_data.get('fail_checkout', False),
+        fail_patch=self._test_data.get('fail_patch', False),
+        commit_positions=self._test_data.get('commit_positions', True),
+    ))
 
     name = 'bot_update'
     if not patch:
@@ -411,7 +496,7 @@ class BotUpdateApi(recipe_api.RecipeApi):
             step_result.presentation.status = 'FAILURE'
             # This is actual patch failure.
             self.m.tryserver.set_patch_failure_tryjob_result()
-            self.m.cq.set_do_not_retry_build()
+            self.m.cv.set_do_not_retry_build()
             self._upload_traces()
             raise self.m.step.StepFailure(
                 'Patch failure: See patch error log attached to bot_update. '
@@ -488,10 +573,23 @@ class BotUpdateApi(recipe_api.RecipeApi):
             and 'checkout' not in self.m.path
             and 'root' in result):
           co_root = result['root']
-          cwd = self.m.context.cwd or self.m.path['start_dir']
-          self.m.path['checkout'] = cwd.join(*co_root.split(self.m.path.sep))
+          cwd = self.m.context.cwd or self.m.path.start_dir
+          self.m.path.checkout_dir = cwd / co_root
 
-    return step_result
+    assert result.get('did_run') and result.get('root')
+    checkout_dir = self.m.context.cwd or self.m.path.start_dir
+    return Result(
+        checkout_dir=checkout_dir,
+        source_root=RelativeRoot.create(checkout_dir, result['root']),
+        patch_root=(RelativeRoot.create(checkout_dir, result['patch_root'])
+                    if result['patch_root'] is not None else None),
+        properties=result.get('properties', {}),
+        manifest=result.get('manifest', {}),
+        fixed_revisions=result.get('fixed_revisions', {}),
+        _api=self,
+        _presentation=step_result.presentation,
+        _json=Json(output=result),
+    )
 
   def _destination_ref(self, cfg, path):
     """Returns the ref branch of a CL for the matching project if available or
@@ -529,7 +627,7 @@ class BotUpdateApi(recipe_api.RecipeApi):
       name: bot_update_json['properties'][rev_properties[0]]
     }
 
-  def _resolve_fixed_revisions(self, bot_update_json):
+  def _resolve_fixed_revisions(self, bot_update_result):
     """Sets all fixed revisions from the first sync to their respective
     got_X_revision values.
 
@@ -560,12 +658,12 @@ class BotUpdateApi(recipe_api.RecipeApi):
     bot_update.py --revision src@abc
     When deapplying the patch, v8 will be synced to v8_before.
     """
-    for name in bot_update_json.get('fixed_revisions', {}):
+    for name in bot_update_result.fixed_revisions:
       rev_properties = self.get_project_revision_properties(name)
-      if (rev_properties and
-          bot_update_json['properties'].get(rev_properties[0])):
+      if (rev_properties
+          and bot_update_result.properties.get(rev_properties[0])):
         self.m.gclient.c.revisions[name] = str(
-            bot_update_json['properties'][rev_properties[0]])
+            bot_update_result.properties[rev_properties[0]])
 
   # TODO(machenbach): Replace usages of this method eventually by direct calls
   # to the manifest output.
@@ -592,10 +690,9 @@ class BotUpdateApi(recipe_api.RecipeApi):
         if project == project_name
     )
 
-  def deapply_patch(self, bot_update_step):
+  def deapply_patch(self, bot_update_result):
     """Deapplies a patch, taking care of DEPS and solution revisions properly.
     """
-    bot_update_json = bot_update_step.json.output
     # We only override first solution here to make sure that we correctly revert
     # changes to DEPS file, which is particularly important for auto-rolls. It
     # is also imporant that we do not assume that corresponding revision is
@@ -604,8 +701,8 @@ class BotUpdateApi(recipe_api.RecipeApi):
     first_solution_name = self.m.gclient.c.solutions[0].name
     rev_property = self.get_project_revision_properties(first_solution_name)[0]
     self.m.gclient.c.revisions[first_solution_name] = str(
-        bot_update_json['properties'][rev_property])
-    self._resolve_fixed_revisions(bot_update_json)
+        bot_update_result.properties[rev_property])
+    self._resolve_fixed_revisions(bot_update_result)
 
     self.ensure_checkout(
         patch=False, no_fetch_tags=True, update_presentation=False)

@@ -25,6 +25,7 @@
 #include <mfxvideo.h>
 
 #include "libavutil/common.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/mastering_display_metadata.h"
 
@@ -374,7 +375,7 @@ static const AVClass class = {
 };
 
 static const FFCodecDefault qsv_enc_defaults[] = {
-    { "b",         "1M"    },
+    { "b",         "0"     },
     { "refs",      "0"     },
     { "g",         "248"   },
     { "bf",        "-1"    },

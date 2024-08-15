@@ -28,6 +28,7 @@
 #include "device/fido/discoverable_credential_metadata.h"
 #include "device/fido/features.h"
 #include "device/fido/fido_authenticator.h"
+#include "device/fido/fido_constants.h"
 #include "device/fido/fido_discovery_factory.h"
 #include "device/fido/fido_parsing_utils.h"
 #include "device/fido/fido_transport_protocol.h"
@@ -87,6 +88,9 @@ std::optional<GetAssertionStatus> ConvertDeviceResponseCode(
     // when the user cancels the macOS prompt. External authenticators may
     // return it e.g. after the user fails fingerprint verification.
     case CtapDeviceResponseCode::kCtap2ErrOperationDenied:
+      if (auth_type == AuthenticatorType::kEnclave) {
+        return GetAssertionStatus::kEnclaveCancel;
+      }
       return GetAssertionStatus::kUserConsentDenied;
 
     // External authenticators may return this error if internal user
@@ -710,8 +714,8 @@ void GetAssertionRequestHandler::HandleResponse(
   }
 #endif
 
-  // If we requested UV from an authentiator without uvToken support, UV failed,
-  // and the authenticator supports PIN, fall back to that.
+  // If we requested UV from an authenticator without uvToken support, UV
+  // failed, and the authenticator supports PIN, fall back to that.
   if (request.user_verification != UserVerificationRequirement::kDiscouraged &&
       !request.pin_auth &&
       (status == CtapDeviceResponseCode::kCtap2ErrPinAuthInvalid ||
@@ -733,6 +737,12 @@ void GetAssertionRequestHandler::HandleResponse(
     ObtainPINUVAuthToken(authenticator,
                          GetPinTokenPermissionsFor(*authenticator, options_),
                          /*skip_pin_touch=*/true, /*internal_uv_locked=*/true);
+    return;
+  }
+
+  if (authenticator->GetType() == AuthenticatorType::kEnclave &&
+      status == CtapDeviceResponseCode::kCtap2ErrPinInvalid) {
+    // EnclaveAuthenticator will trigger UI that can cause a retry.
     return;
   }
 

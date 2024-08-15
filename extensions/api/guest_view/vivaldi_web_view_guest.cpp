@@ -726,7 +726,11 @@ void WebViewGuest::CapturePaintPreviewOfSubframe(
 }
 
 void WebViewGuest::LoadTabContentsIfNecessary() {
-  web_contents()->GetController().LoadIfNecessary();
+  // If the content was discarded the loading has already been handled in
+  // resource_coordinator::LifecycleUnit::TabModelObserver.
+  if (!web_contents()->WasDiscarded()) {
+    web_contents()->GetController().LoadIfNecessary();
+  }
 
   TabStripModel* tab_strip;
   int tab_index;
@@ -902,6 +906,13 @@ void WebViewGuest::VivaldiCreateWebContents(
       if (web_view_guest) {
         zoom::ZoomController::FromWebContents(tabstrip_contents)
             ->RemoveObserver(web_view_guest);
+
+        web_view_guest->GetJavaScriptDialogManager(tabstrip_contents)
+            ->CancelDialogs(tabstrip_contents, false);
+        // To avoid chromium patches. No other reason.
+        static_cast<content::WebContentsImpl*>(tabstrip_contents)
+            ->SetJavaScriptDialogManager(nullptr);
+
         web_view_guest->WebContentsDestroyed();
       }
 

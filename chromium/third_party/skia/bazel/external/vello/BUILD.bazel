@@ -26,6 +26,7 @@ rust_library(
         include = ["crates/encoding/src/**/*.rs"],
         allow_empty = False,
     ),
+    crate_features = ["bump_estimate"],
     visibility = ["//visibility:public"],
     deps = [
         "@vello_deps//:bytemuck",
@@ -76,9 +77,7 @@ cargo_build_script(
     build_script_env = {
         "WORKSPACE_MANIFEST_FILE": "$(location Cargo.toml)",
     },
-    crate_features = [
-        "force_rw_storage",
-    ] + select({
+    crate_features = select({
         ":msl_shaders": ["msl"],
         "//conditions:default": [],
     }) + select({

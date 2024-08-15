@@ -440,6 +440,12 @@ message StartArcVmRequest {
   // Whether to enable the multiple-workers feature for the root disk
   // (/dev/block/vda).
   bool rootfs_multiple_workers = 47;
+
+  // Whether to use the GKI kernel.
+  bool use_gki = 48;
+
+  // Enable IO scheduler for the /data block device (/dev/block/vde).
+  bool enable_data_block_io_scheduler = 49;
 }
 
 enum VmStatus {
@@ -1115,6 +1121,31 @@ message AttachUsbDeviceResponse {
   bool success = 1;
 
   // The USB port number that was allocated to the USB device on the guest.
+  uint32 guest_port = 2;
+
+  // The reason for the failure, if there was one.
+  string reason = 3;
+}
+
+// Request to vm_concierge to attach a security key to a VM.
+message AttachKeyRequest {
+  // Name of the VM to attach the key to.
+  string vm_name = 1;
+
+  // The owner of the VM.
+  string owner_id = 2;
+
+  // String path to the hidraw device on the host.
+  string hidraw = 3;
+}
+
+// Response sent back by vm_concierge after it receives an
+// AttachKeyRequest call.
+message AttachKeyResponse {
+  // Was the key successfully attached?
+  bool success = 1;
+
+  // The USB port number that was allocated to the key on the guest.
   uint32 guest_port = 2;
 
   // The reason for the failure, if there was one.

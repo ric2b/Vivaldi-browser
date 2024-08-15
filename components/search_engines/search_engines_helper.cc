@@ -141,8 +141,7 @@ const std::vector<EngineAndTier> GetPrepopulationSetFromCountryID(
 }
 
 SearchEngineType StringToSearchEngine(const std::string& s) {
-  auto engines =
-      base::MakeFixedFlatMapNonConsteval<std::string, SearchEngineType>({
+  base::flat_map<std::string, SearchEngineType> engines = {
           {"SEARCH_ENGINE_OTHER", SEARCH_ENGINE_OTHER},
           {"SEARCH_ENGINE_AOL", SEARCH_ENGINE_AOL},
           {"SEARCH_ENGINE_ASK", SEARCH_ENGINE_ASK},
@@ -228,9 +227,9 @@ SearchEngineType StringToSearchEngine(const std::string& s) {
           {"VIVALDI_SEARCH_ENGINE_QWANT", VIVALDI_SEARCH_ENGINE_QWANT},
           {"VIVALDI_SEARCH_ENGINE_YELP", VIVALDI_SEARCH_ENGINE_YELP},
           {"VIVALDI_SEARCH_ENGINE_YOU", VIVALDI_SEARCH_ENGINE_YOU},
-      });
+      };
 
-  auto* it = engines.find(s);
+  auto it = engines.find(s);
   if (it == engines.end())
     return SEARCH_ENGINE_UNKNOWN;
   return it->second;

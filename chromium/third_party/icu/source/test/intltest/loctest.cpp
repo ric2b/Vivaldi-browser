@@ -11,6 +11,7 @@
 #include <iterator>
 #include <set>
 #include <utility>
+#include <cctype>
 
 #include "loctest.h"
 #include "unicode/localebuilder.h"
@@ -234,6 +235,7 @@ void LocaleTest::runIndexedTest( int32_t index, UBool exec, const char* &name, c
     TESTCASE_AUTO(TestAddLikelySubtags);
     TESTCASE_AUTO(TestMinimizeSubtags);
     TESTCASE_AUTO(TestAddLikelyAndMinimizeSubtags);
+    TESTCASE_AUTO(TestDataDrivenLikelySubtags);
     TESTCASE_AUTO(TestKeywordVariants);
     TESTCASE_AUTO(TestCreateUnicodeKeywords);
     TESTCASE_AUTO(TestKeywordVariantParsing);
@@ -927,8 +929,8 @@ LocaleTest::TestGetLangsAndCountries()
       ;
 
     /* TODO: Change this test to be more like the cloctst version? */
-    if (testCount != 595)
-        errln("Expected getISOLanguages() to return 595 languages; it returned %d", testCount);
+    if (testCount != 601)
+        errln("Expected getISOLanguages() to return 601 languages; it returned %d", testCount);
     else {
         for (i = 0; i < 15; i++) {
             int32_t j;
@@ -1712,21 +1714,26 @@ LocaleTest::TestAddLikelyAndMinimizeSubtags() {
         const char* const remove;
     } full_data[] = {
         {
+            "und",
+            "en_Latn_US",
+            "en"
+        },
+        {
             "und_AQ",
-            "_Latn_AQ",
-            "_AQ"
+            "en_Latn_AQ",
+            "en_AQ"
         }, {
             "und_Zzzz_AQ",
-            "_Latn_AQ",
-            "_AQ"
+            "en_Latn_AQ",
+            "en_AQ"
         }, {
             "und_Latn_AQ",
-            "_Latn_AQ",
-            "_AQ"
+            "en_Latn_AQ",
+            "en_AQ"
         }, {
             "und_Moon_AQ",
-            "_Moon_AQ",
-            "_Moon_AQ"
+            "en_Moon_AQ",
+            "en_Moon_AQ"
         }, {
             "aa",
             "aa_Latn_ET",
@@ -2517,8 +2524,8 @@ LocaleTest::TestAddLikelyAndMinimizeSubtags() {
             "am"
         }, {
             "und_Ethi_ER",
-            "am_Ethi_ER",
-            "am_ER"
+            "ti_Ethi_ER",
+            "ti_ER"
         }, {
             "und_FI",
             "fi_Latn_FI",
@@ -3249,8 +3256,8 @@ LocaleTest::TestAddLikelyAndMinimizeSubtags() {
             "zh_HK"
         }, {
             "und_AQ",
-            "_Latn_AQ",
-            "_AQ"
+            "en_Latn_AQ",
+            "en_AQ"
         }, {
             "und_Zzzz",
             "en_Latn_US",
@@ -3273,8 +3280,8 @@ LocaleTest::TestAddLikelyAndMinimizeSubtags() {
             "zh_HK"
         }, {
             "und_Zzzz_AQ",
-            "_Latn_AQ",
-            "_AQ"
+            "en_Latn_AQ",
+            "en_AQ"
         }, {
             "und_Latn",
             "en_Latn_US",
@@ -3293,12 +3300,12 @@ LocaleTest::TestAddLikelyAndMinimizeSubtags() {
             "trv"
         }, {
             "und_Latn_HK",
-            "zh_Latn_HK",
-            "zh_Latn_HK"
+            "en_Latn_HK",
+            "en_HK"
         }, {
             "und_Latn_AQ",
-            "_Latn_AQ",
-            "_AQ"
+            "en_Latn_AQ",
+            "en_AQ"
         }, {
             "und_Hans",
             "zh_Hans_CN",
@@ -3369,8 +3376,8 @@ LocaleTest::TestAddLikelyAndMinimizeSubtags() {
             "zh_Moon_HK"
         }, {
             "und_Moon_AQ",
-            "_Moon_AQ",
-            "_Moon_AQ"
+            "en_Moon_AQ",
+            "en_Moon_AQ"
         }, {
             "es",
             "es_Latn_ES",
@@ -3825,8 +3832,8 @@ LocaleTest::TestAddLikelyAndMinimizeSubtags() {
             "es_419"
         }, {
             "und_150",
-            "ru_Cyrl_RU",
-            "ru"
+            "en_Latn_150",
+            "en_150"
         }, {
             "und_AT",
             "de_Latn_AT",
@@ -3864,7 +3871,6 @@ LocaleTest::TestAddLikelyAndMinimizeSubtags() {
         }
     }
 }
-
 
 void
 LocaleTest::TestKeywordVariants() {
@@ -3982,6 +3988,8 @@ LocaleTest::TestCreateUnicodeKeywords() {
 
     LocalPointer<StringEnumeration> keys(l.createUnicodeKeywords(status));
     status.errIfFailureAndReset("\"%s\"", l.getName());
+
+    assertEquals("count", 2, keys->count(status));
 
     const char* key;
     int32_t resultLength;
@@ -4133,6 +4141,11 @@ LocaleTest::TestCreateUnicodeKeywordSet() {
                result.find("ca") != result.end());
     assertTrue("set::find(\"co\")",
                result.find("co") != result.end());
+
+    LocalPointer<StringEnumeration> se(l.createUnicodeKeywords(status), status);
+    status.errIfFailureAndReset("\"%s\" createUnicodeKeywords()", l.getName());
+    assertEquals("count()", 2, se->count(status));
+    status.errIfFailureAndReset("\"%s\" count()", l.getName());
 }
 
 void
@@ -4148,6 +4161,10 @@ LocaleTest::TestCreateUnicodeKeywordSetEmpty() {
     status.errIfFailureAndReset("\"%s\"", l.getName());
 
     assertEquals("set::size()", 0, static_cast<int32_t>(result.size()));
+
+    LocalPointer<StringEnumeration> se(l.createUnicodeKeywords(status), status);
+    assertTrue("createUnicodeKeywords", se.isNull());
+    status.expectErrorAndReset(U_MEMORY_ALLOCATION_ERROR);
 }
 
 void
@@ -4168,6 +4185,12 @@ LocaleTest::TestCreateUnicodeKeywordSetWithPrivateUse() {
                result.find("x") == result.end());
     assertTrue("getUnicodeKeywords set::find(\"foo\")",
                result.find("foo") == result.end());
+    assertEquals("set::size()", 1, static_cast<int32_t>(result.size()));
+
+    LocalPointer<StringEnumeration> se(l.createUnicodeKeywords(status), status);
+    status.errIfFailureAndReset("\"%s\" createUnicodeKeywords()", l.getName());
+    assertEquals("count()", 1, se->count(status));
+    status.errIfFailureAndReset("\"%s\" count()", l.getName());
 }
 
 void
@@ -5504,7 +5527,7 @@ void LocaleTest::TestLocaleCanonicalizationFromFile()
     char testPath[400];
     char line[256];
     strcpy(testPath, sourceTestDataPath);
-    strcat(testPath, "localeCanonicalization.txt");
+    strcat(testPath, "cldr/localeIdentifiers/localeCanonicalization.txt");
     LocalStdioFilePointer testFile(fopen(testPath, "r"));
     if(testFile.isNull()) {
         errln("unable to open %s", testPath);
@@ -5545,6 +5568,168 @@ void LocaleTest::TestLocaleCanonicalizationFromFile()
         assertEquals(msg.c_str(), expect.c_str(), tag);
     }
 }
+
+std::string trim(const std::string &s) {
+    auto start = s.begin();
+    while (start != s.end() && std::isspace(*start)) {
+        start++;
+    }
+
+    auto end = s.end();
+    do {
+        end--;
+    } while (std::distance(start, end) > 0 && std::isspace(*end));
+
+    return std::string(start, end + 1);
+}
+
+// A testing helper class which favorScript when minimizeSubtags.
+class FavorScriptLocale : public Locale {
+public:
+    FavorScriptLocale(const Locale& l) :Locale(l) { }
+    void minimizeSubtags(UErrorCode& status) {
+        Locale::minimizeSubtags(true, status);
+    }
+};
+
+bool isKnownSourceForCLDR17099(const std::string& s) {
+    if (s.compare("qaa-Cyrl-CH") == 0) {
+        return true;
+    }
+    
+	return false;
+}
+
+void U_CALLCONV
+testLikelySubtagsLineFn(void *context,
+               char *fields[][2], int32_t fieldCount,
+               UErrorCode *pErrorCode) {
+    if (U_FAILURE(*pErrorCode)) {
+        return;
+    }
+    (void)fieldCount;
+    LocaleTest* THIS = (LocaleTest*)context;
+    std::string source(trim(std::string(fields[0][0], fields[0][1]-fields[0][0])));
+    if (isKnownSourceForCLDR17099(source) && THIS->logKnownIssue("CLDR-17099", "likelySubtags.txt wrong for qaa-Cyrl-CH")) {
+        return;
+    }
+    std::string addLikely(trim(std::string(fields[1][0], fields[1][1]-fields[1][0])));
+    std::string removeFavorScript(trim(std::string(fields[2][0], fields[2][1]-fields[2][0])));
+    if (removeFavorScript.length() == 0) {
+        removeFavorScript = addLikely;
+    }
+    std::string removeFavorRegion(trim(std::string(fields[3][0], fields[3][1]-fields[3][0])));
+
+    if (removeFavorRegion.length() == 0) {
+        removeFavorRegion = removeFavorScript;
+    }
+    Locale l = Locale::forLanguageTag(source, *pErrorCode);
+    if (U_FAILURE(*pErrorCode)) {
+        THIS->errln("forLanguageTag(%s) return error %x %s", source.c_str(),
+                    *pErrorCode, u_errorName(*pErrorCode));
+        *pErrorCode = U_ZERO_ERROR;
+        return;
+    }
+
+    Locale actualMax(l);
+    actualMax.addLikelySubtags(*pErrorCode);
+    if (addLikely == "FAIL") {
+        if (uprv_strcmp(l.getName(), actualMax.getName()) != 0) {
+            THIS->errln("addLikelySubtags('%s') return should return the same but return '%s'",
+                        l.getName(), actualMax.getName());
+        }
+    } else {
+        std::string max = actualMax.toLanguageTag<std::string>(*pErrorCode);
+        if (U_FAILURE(*pErrorCode)) {
+            THIS->errln("toLanguageTag(%s) return error %x %s", actualMax.getName(),
+                        *pErrorCode, u_errorName(*pErrorCode));
+            *pErrorCode = U_ZERO_ERROR;
+        } else {
+            if (max != addLikely) {
+                THIS->errln("addLikelySubtags('%s') should return '%s' but got '%s'",
+                            source.c_str(), addLikely.c_str(), max.c_str());
+            }
+        }
+    }
+
+    Locale actualMin(l);
+    actualMin.minimizeSubtags(*pErrorCode);
+    if (removeFavorRegion == "FAIL") {
+        if (uprv_strcmp(l.getName(), actualMin.getName()) != 0) {
+            THIS->errln("minimizeSubtags('%s') return should return the same but return '%s'",
+                        l.getName(), actualMin.getName());
+        }
+    } else {
+        std::string min = actualMin.toLanguageTag<std::string>(*pErrorCode);
+        if (U_FAILURE(*pErrorCode)) {
+            THIS->errln("toLanguageTag(%s) return error %x %s", actualMin.getName(),
+                        *pErrorCode, u_errorName(*pErrorCode));
+            *pErrorCode = U_ZERO_ERROR;
+        } else {
+            if (min != removeFavorRegion) {
+                THIS->errln("minimizeSubtags('%s') should return '%s' but got '%s'",
+                            source.c_str(), removeFavorRegion.c_str(), min.c_str());
+            }
+        }
+    }
+
+    FavorScriptLocale actualMinFavorScript(l);
+    actualMinFavorScript.minimizeSubtags(*pErrorCode);
+    if (removeFavorScript == "FAIL") {
+        if (uprv_strcmp(l.getName(), actualMinFavorScript.getName()) != 0) {
+            THIS->errln("minimizeSubtags('%s') return should return the same but return '%s'",
+                        l.getName(), actualMinFavorScript.getName());
+        }
+    } else {
+        std::string min = actualMinFavorScript.toLanguageTag<std::string>(*pErrorCode);
+        if (U_FAILURE(*pErrorCode)) {
+            THIS->errln("toLanguageTag(%s) favor script return error %x %s", actualMinFavorScript.getName(),
+                        *pErrorCode, u_errorName(*pErrorCode));
+            *pErrorCode = U_ZERO_ERROR;
+        } else {
+            if (min != removeFavorScript) {
+                THIS->errln("minimizeSubtags('%s') favor script should return '%s' but got '%s'",
+                            source.c_str(), removeFavorScript.c_str(), min.c_str());
+            }
+        }
+    }
+}
+
+void
+LocaleTest::TestDataDrivenLikelySubtags() {
+    if (quick) {
+        // This test is too slow to run. Only run in -e mode.
+        return;
+    }
+    IcuTestErrorCode errorCode(*this, "TestDataDrivenLikelySubtags()");
+    const char* name = "cldr/localeIdentifiers/likelySubtags.txt";
+    const char *sourceTestDataPath = getSourceTestData(errorCode);
+    if (errorCode.errIfFailureAndReset("unable to find the source/test/testdata "
+                                       "folder (getSourceTestData())")) {
+        return;
+    }
+    CharString path(sourceTestDataPath, errorCode);
+    path.appendPathPart(name, errorCode);
+    LocalStdioFilePointer testFile(fopen(path.data(), "r"));
+    if (testFile.isNull()) {
+        errln("unable to open %s", path.data());
+        return;
+    }
+
+    // Columns (c1, c2,...) are separated by semicolons.
+    // Leading and trailing spaces and tabs in each column are ignored.
+    // Comments are indicated with hash marks.
+    const int32_t kNumFields = 4;
+    char *fields[kNumFields][2];
+
+    u_parseDelimitedFile(path.data(), ';', fields, kNumFields, testLikelySubtagsLineFn,
+                         this, errorCode);
+    if (errorCode.errIfFailureAndReset("error parsing %s", name)) {
+        return;
+    }
+}
+
+
 
 void LocaleTest::TestKnownCanonicalizedListCorrect()
 {
@@ -5773,6 +5958,10 @@ void LocaleTest::TestToLanguageTag() {
       {"und-Latn-x-private", "und-Latn-x-private"},
       {"und-1994-biske-rozaj", "und-1994-biske-rozaj"},
       {"und-1994-biske-rozaj-x-private", "und-1994-biske-rozaj-x-private"},
+      // ICU-22497
+      {"-ins0-ins17Rz-yqyq-UWLF-uRyq-UWLF-uRRyq-UWLF-uR-UWLF-uRns0-ins17Rz-yq-UWLF-uRyq-UWLF-uRRyq-LF-uRyq-UWLF-uRRyq-UWLF-uRq-UWLF-uRyq-UWLF-uRRyq-UWLF-uR", ""},
+      // ICU-22504
+      {"@attribute=zzo9zzzzzzzs0zzzzzzzzzz55555555555555555555500000000000000000000fffffffffffffffffffffffffzzzzz2mfPAK", ""},
     };
     int32_t i;
     for (i=0; i < UPRV_LENGTHOF(testCases); i++) {
@@ -5786,6 +5975,12 @@ void LocaleTest::TestToLanguageTag() {
                        tag.c_str(),
                        u_errorName(status));
         }
+        // Test ICU-22497
+        status = U_ZERO_ERROR;
+        icu::Locale locale(otag.c_str());
+        char buf[245];
+        icu::CheckedArrayByteSink sink(buf, sizeof(buf));
+        locale.toLanguageTag(sink, status);
     }
 }
 

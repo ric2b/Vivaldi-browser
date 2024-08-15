@@ -51,7 +51,7 @@ class ChromeSyncClient : public browser_sync::BrowserSyncClient {
       override;
   password_manager::PasswordSenderService* GetPasswordSenderService() override;
   sync_preferences::PrefServiceSyncable* GetPrefServiceSyncable() override;
-  syncer::DataTypeController::TypeVector CreateDataTypeControllers(
+  syncer::ModelTypeController::TypeVector CreateModelTypeControllers(
       syncer::SyncService* sync_service) override;
   trusted_vault::TrustedVaultClient* GetTrustedVaultClient() override;
   syncer::SyncInvalidationsService* GetSyncInvalidationsService() override;
@@ -64,6 +64,9 @@ class ChromeSyncClient : public browser_sync::BrowserSyncClient {
   bool IsPasswordSyncAllowed() override;
   void SetPasswordSyncAllowedChangeCb(
       const base::RepeatingClosure& cb) override;
+  void RegisterTrustedVaultAutoUpgradeSyntheticFieldTrial(
+      const syncer::TrustedVaultAutoUpgradeSyntheticFieldTrialGroup& group)
+      override;
 
  private:
   // Convenience function used during controller creation.

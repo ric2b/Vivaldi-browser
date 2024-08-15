@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 /** @fileoverview Definitions for chrome.autofillPrivate API */
-// TODO(crbug.com/1203307): Auto-generate this file.
+// TODO(crbug.com/40179454): Auto-generate this file.
 
 import {ChromeEvent} from './chrome_event.js';
 
@@ -114,6 +114,7 @@ declare global {
         SINGLE_USERNAME_FORGOT_PASSWORD,
         ADDRESS_HOME_APT,
         ADDRESS_HOME_APT_TYPE,
+        ADDRESS_HOME_HOUSE_NUMBER_AND_APT,
         SINGLE_USERNAME_WITH_INTERMEDIATE_VALUES,
       }
 

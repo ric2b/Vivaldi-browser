@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Dawn Mac x64 DEPS Builder",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-dawn-archive",
@@ -36,7 +36,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Dawn Mac x64 DEPS Release (AMD)",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-dawn-archive",
@@ -58,7 +58,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Dawn Mac x64 DEPS Builder",
-                "project": "chromium-m124"
+                "project": "chromium-m126"
               },
               "run_tests_serially": true
             }
@@ -67,7 +67,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Dawn Mac x64 DEPS Release (Intel)",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-dawn-archive",
@@ -89,7 +89,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Dawn Mac x64 DEPS Builder",
-                "project": "chromium-m124"
+                "project": "chromium-m126"
               },
               "run_tests_serially": true
             }
@@ -100,19 +100,19 @@
         {
           "bucket": "ci",
           "builder": "Dawn Mac x64 DEPS Builder",
-          "project": "chromium-m124"
+          "project": "chromium-m126"
         }
       ],
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
           "builder": "Dawn Mac x64 DEPS Release (AMD)",
-          "project": "chromium-m124"
+          "project": "chromium-m126"
         },
         {
           "bucket": "ci",
           "builder": "Dawn Mac x64 DEPS Release (Intel)",
-          "project": "chromium-m124"
+          "project": "chromium-m126"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -128,6 +128,16 @@
     "jobs": 250,
     "metrics_project": "chromium-reclient-metrics",
     "scandeps_server": true
+  },
+  "$build/siso": {
+    "configs": [
+      "builder"
+    ],
+    "enable_cloud_profiler": true,
+    "enable_cloud_trace": true,
+    "experiments": [],
+    "project": "rbe-chromium-trusted",
+    "remote_jobs": 250
   },
   "$recipe_engine/resultdb/test_presentation": {
     "column_keys": [],

@@ -14,6 +14,7 @@
 #include "ash/wm/window_resizer.h"
 #include "ash/wm/window_state.h"
 #include "base/containers/adapters.h"
+#include "base/debug/crash_logging.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/strings/string_piece.h"
@@ -239,6 +240,21 @@ void ShellSurface::AcknowledgeConfigure(uint32_t serial) {
 void ShellSurface::SetParent(ShellSurface* parent) {
   TRACE_EVENT1("exo", "ShellSurface::SetParent", "parent",
                parent ? base::UTF16ToASCII(parent->GetWindowTitle()) : "null");
+
+  // Some apps are trying to parent to its descendant, e.g. b/342265753. Add
+  // crash keys here to find out the causes.
+  const std::string* app_id = GetShellApplicationId(host_window());
+  SCOPED_CRASH_KEY_STRING256("342265753", "app id", app_id ? *app_id : "null");
+  SCOPED_CRASH_KEY_STRING256("342265753", "app title",
+                             base::UTF16ToUTF8(GetWindowTitle()));
+
+  const std::string* parent_id =
+      parent ? GetShellApplicationId(parent->host_window()) : nullptr;
+  SCOPED_CRASH_KEY_STRING256("342265753", "parent app id",
+                             parent_id ? *parent_id : "null");
+  SCOPED_CRASH_KEY_STRING256(
+      "342265753", "parent title",
+      parent ? base::UTF16ToUTF8(parent->GetWindowTitle()) : "null");
 
   SetParentWindow(parent ? parent->GetWidget()->GetNativeWindow() : nullptr);
 }
@@ -672,8 +688,8 @@ void ShellSurface::OnWindowBoundsChanged(aura::Window* window,
       // dependency won't be fulfilled until corresponding configure
       // acknowledgement.
       // Synchronize bounds to it, s.t. the fallback surface looks reasonable.
-      // TODO(crbug.com/1251778): Take non-zero origin introduced by geometry or
-      // clipping into account.
+      // TODO(crbug.com/40057347): Take non-zero origin introduced by geometry
+      // or clipping into account.
       viz::ScopedSurfaceIdAllocator scoped_suppression =
           host_window()->GetSurfaceIdAllocator(base::NullCallback());
       host_window()->layer()->SetBounds(
@@ -692,7 +708,7 @@ void ShellSurface::OnWindowBoundsChanged(aura::Window* window,
       // prevent flashes.
       if (reason != ui::PropertyChangeReason::FROM_ANIMATION &&
           ash::WindowState::Get(window)->IsMaximizedOrFullscreenOrPinned()) {
-        // TODO(crbug.com/1399478): See if we can rid of the slow lock timeout
+        // TODO(crbug.com/40249858): See if we can rid of the slow lock timeout
         // by adjusting the order of resize of windows to top to bottom.
         MaybeSetCompositorLockForNextConfigure(kSlowCompositorLockTimeoutMs);
       }
@@ -854,6 +870,14 @@ gfx::Rect ShellSurface::ComputeAdjustedBounds(const gfx::Rect& bounds) const {
   if (!max_size.IsEmpty()) {
     size.SetToMin(max_size);
   }
+
+  // The size should never be bigger than work area, even if the min size is
+  // bigger than that.
+  auto work_area = display::Screen::GetScreen()
+                       ->GetDisplayNearestWindow(widget_->GetNativeWindow())
+                       .work_area();
+  size.SetToMin(work_area.size());
+
   // Keep the origin instead of center.
   return gfx::Rect(bounds.origin(), size);
 }

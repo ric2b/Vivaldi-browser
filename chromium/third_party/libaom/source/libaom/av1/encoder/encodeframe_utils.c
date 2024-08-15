@@ -15,6 +15,7 @@
 
 #include "av1/encoder/encoder.h"
 #include "av1/encoder/encodeframe_utils.h"
+#include "av1/encoder/encoder_utils.h"
 #include "av1/encoder/rdopt.h"
 
 void av1_set_ssim_rdmult(const AV1_COMP *const cpi, int *errorperbit,
@@ -306,6 +307,7 @@ void av1_update_state(const AV1_COMP *const cpi, ThreadData *td,
     // Else for cyclic refresh mode update the segment map, set the segment id
     // and then update the quantizer.
     if (cpi->oxcf.q_cfg.aq_mode == CYCLIC_REFRESH_AQ &&
+        mi_addr->segment_id != AM_SEGMENT_ID_INACTIVE &&
         !cpi->rc.rtc_external_ratectrl) {
       av1_cyclic_refresh_update_segment(cpi, x, mi_row, mi_col, bsize,
                                         ctx->rd_stats.rate, ctx->rd_stats.dist,

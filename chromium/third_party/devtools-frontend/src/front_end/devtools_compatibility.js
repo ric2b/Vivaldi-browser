@@ -405,12 +405,10 @@ window.DevToolsAPI = DevToolsAPI;
  */
 const EnumeratedHistogram = {
   ActionTaken: 'DevTools.ActionTaken',
-  BreakpointWithConditionAdded: 'DevTools.BreakpointWithConditionAdded',
   BreakpointEditDialogRevealedFrom: 'DevTools.BreakpointEditDialogRevealedFrom',
   CSSHintShown: 'DevTools.CSSHintShown',
   DeveloperResourceLoaded: 'DevTools.DeveloperResourceLoaded',
   DeveloperResourceScheme: 'DevTools.DeveloperResourceScheme',
-  ElementsSidebarTabShown: 'DevTools.Elements.SidebarTabShown',
   ExperimentDisabled: 'DevTools.ExperimentDisabled',
   ExperimentDisabledAtLaunch: 'DevTools.ExperimentDisabledAtLaunch',
   ExperimentEnabled: 'DevTools.ExperimentEnabled',
@@ -447,11 +445,7 @@ const EnumeratedHistogram = {
   ColorConvertedFrom: 'DevTools.ColorConvertedFrom',
   ColorPickerOpenedFrom: 'DevTools.ColorPickerOpenedFrom',
   CSSPropertyDocumentation: 'DevTools.CSSPropertyDocumentation',
-  InlineScriptParsed: 'DevTools.InlineScriptParsed',
-  VMInlineScriptTypeShown: 'DevTools.VMInlineScriptShown',
-  BreakpointsRestoredFromStorageCount: 'DevTools.BreakpointsRestoredFromStorageCount',
   SwatchActivated: 'DevTools.SwatchActivated',
-  BadgeActivated: 'DevTools.BadgeActivated',
   AnimationPlaybackRateChanged: 'DevTools.AnimationPlaybackRateChanged',
   AnimationPointDragged: 'DevTools.AnimationPointDragged',
   LegacyResourceTypeFilterNumberOfSelectedChanged: 'DevTools.LegacyResourceTypeFilterNumberOfSelectedChanged',
@@ -697,9 +691,10 @@ const InspectorFrontendHostImpl = class {
    * @param {string} url
    * @param {string} content
    * @param {boolean} forceSaveAs
+   * @param {boolean} isBase64
    */
-  save(url, content, forceSaveAs) {
-    DevToolsAPI.sendMessageToEmbedder('save', [url, content, forceSaveAs], null);
+  save(url, content, forceSaveAs, isBase64) {
+    DevToolsAPI.sendMessageToEmbedder('save', [url, content, forceSaveAs, isBase64], null);
   }
 
   /**

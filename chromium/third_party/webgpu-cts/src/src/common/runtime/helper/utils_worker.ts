@@ -15,11 +15,12 @@ export interface WorkerTestRunRequest {
  * Set config environment for workers with ctsOptions and return a Logger.
  */
 export function setupWorkerEnvironment(ctsOptions: CTSOptions): Logger {
-  const { debug, unrollConstEvalLoops, powerPreference, compatibility } = ctsOptions;
-  globalTestConfig.unrollConstEvalLoops = unrollConstEvalLoops;
+  const { powerPreference, compatibility } = ctsOptions;
+  globalTestConfig.enableDebugLogs = ctsOptions.debug;
+  globalTestConfig.unrollConstEvalLoops = ctsOptions.unrollConstEvalLoops;
   globalTestConfig.compatibility = compatibility;
+  globalTestConfig.logToWebSocket = ctsOptions.logToWebSocket;
 
-  Logger.globalDebugMode = debug;
   const log = new Logger();
 
   if (powerPreference || compatibility) {

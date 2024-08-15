@@ -55,6 +55,7 @@
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
+#include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_box_model_object.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
@@ -65,6 +66,7 @@
 #include "third_party/blink/renderer/platform/animation/compositor_animation.h"
 #include "third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.h"
 #include "third_party/blink/renderer/platform/graphics/platform_paint_worklet_layer_painter.h"
+#include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "ui/gfx/animation/keyframe/animation_curve.h"
 #include "ui/gfx/animation/keyframe/keyframed_animation_curve.h"
@@ -265,7 +267,8 @@ CompositorAnimations::CheckCanStartEffectOnCompositor(
     reasons |= kTargetHasInvalidCompositingState;
   }
 
-  PropertyHandleSet properties = keyframe_effect.DynamicProperties();
+  const PropertyHandleSet& properties =
+      keyframe_effect.EnsureDynamicProperties();
   if (RuntimeEnabledFeatures::StaticAnimationOptimizationEnabled()) {
     // If all properties are static, we don't need to composite. The animation
     // can only change at a phase boundary.
@@ -273,7 +276,10 @@ CompositorAnimations::CheckCanStartEffectOnCompositor(
       reasons |= kAnimationHasNoVisibleChange;
     }
   }
-
+  if (keyframe_effect.HasStaticProperty()) {
+    UseCounter::Count(target_element.GetDocument(),
+                      WebFeature::kStaticPropertyInAnimation);
+  }
   for (const auto& property : properties) {
     if (!property.IsCSSProperty()) {
       // None of the below reasons make any sense if |property| isn't CSS, so we
@@ -977,7 +983,7 @@ void CompositorAnimations::GetAnimationOnCompositor(
       timing, normalized_timing, time_offset, compositor_timing,
       animation_playback_rate, is_monotonic_timeline, is_boundary_aligned);
 
-  PropertyHandleSet properties = effect.DynamicProperties();
+  const PropertyHandleSet& properties = effect.EnsureDynamicProperties();
   DCHECK(!properties.empty());
   for (const auto& property : properties) {
     // If the animation duration is infinite, it doesn't make sense to scale
@@ -1151,10 +1157,13 @@ bool CompositorAnimations::CanStartScrollTimelineOnCompositor(Node* target) {
     return false;
   }
   if (RuntimeEnabledFeatures::ScrollTimelineAlwaysOnCompositorEnabled()) {
-    return layout_box->FirstFragment().PaintProperties() &&
-           layout_box->FirstFragment().PaintProperties()->Scroll();
+    if (auto* properties = layout_box->FirstFragment().PaintProperties()) {
+      return properties->Scroll() &&
+             (!RuntimeEnabledFeatures::ScrollNodeForOverflowHiddenEnabled() ||
+              properties->Scroll()->UserScrollable());
+    }
   }
-  if (RuntimeEnabledFeatures::CompositeBGColorAnimationEnabled() &&
+  if (NativePaintImageGenerator::NativePaintWorkletAnimationsEnabled() &&
       target->GetDocument().Lifecycle().GetState() <
           DocumentLifecycle::kPaintClean) {
     // TODO(crbug.com/1434728): This happens when we paint a scroll-driven

@@ -231,11 +231,12 @@ class FFT {
                         THIS_METHOD_IS_ONLY_FOR_EXPRESSIONS_WITH_DIRECT_MEMORY_ACCESS_SUCH_AS_MAP_OR_PLAIN_MATRICES)
 
     if (nfft < 1) nfft = src.size();
-
-    if (NumTraits<src_type>::IsComplex == 0 && HasFlag(HalfSpectrum))
-      dst.derived().resize((nfft >> 1) + 1);
-    else
-      dst.derived().resize(nfft);
+    
+    Index dst_size = nfft;
+    if (NumTraits<src_type>::IsComplex == 0 && HasFlag(HalfSpectrum)) {
+      dst_size = (nfft >> 1) + 1;
+    }
+    dst.derived().resize(dst_size);
 
     if (src.innerStride() != 1 || src.size() < nfft) {
       Matrix<src_type, 1, Dynamic> tmp;
@@ -245,9 +246,21 @@ class FFT {
       } else {
         tmp = src;
       }
-      fwd(&dst[0], &tmp[0], nfft);
+      if (dst.innerStride() != 1) {
+        Matrix<dst_type, 1, Dynamic> out(1, dst_size);
+        fwd(&out[0], &tmp[0], nfft);
+        dst.derived() = out;
+      } else {
+        fwd(&dst[0], &tmp[0], nfft);
+      }
     } else {
-      fwd(&dst[0], &src[0], nfft);
+      if (dst.innerStride() != 1) {
+        Matrix<dst_type, 1, Dynamic> out(1, dst_size);
+        fwd(&out[0], &src[0], nfft);
+        dst.derived() = out;
+      } else {
+        fwd(&dst[0], &src[0], nfft);
+      }
     }
   }
 
@@ -326,9 +339,22 @@ class FFT {
       } else {
         tmp = src;
       }
-      inv(&dst[0], &tmp[0], nfft);
+
+      if (dst.innerStride() != 1) {
+        Matrix<dst_type, 1, Dynamic> out(1, nfft);
+        inv(&out[0], &tmp[0], nfft);
+        dst.derived() = out;
+      } else {
+        inv(&dst[0], &tmp[0], nfft);
+      }
     } else {
-      inv(&dst[0], &src[0], nfft);
+      if (dst.innerStride() != 1) {
+        Matrix<dst_type, 1, Dynamic> out(1, nfft);
+        inv(&out[0], &src[0], nfft);
+        dst.derived() = out;
+      } else {
+        inv(&dst[0], &src[0], nfft);
+      }
     }
   }
 

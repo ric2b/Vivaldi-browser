@@ -12,12 +12,12 @@
 <translation id="1588438908519853928">Normaal</translation>
 <translation id="1591562245178063882">Deze maand</translation>
 <translation id="1637811476055996098">Bestanden kiezen</translation>
+<translation id="1680090928918677457">Camera gebruiken</translation>
 <translation id="1681022320378710418">huidige tijd</translation>
 <translation id="1727839386348365796">Pipet</translation>
 <translation id="1729654308190250600">Geef een e-mailadres op.</translation>
 <translation id="1758486001363313524">Anders...</translation>
 <translation id="1787192514241997742">totale tijd: <ph name="REMAINING_TIME" /></translation>
-<translation id="1800494066469288780">Camera toestaan</translation>
 <translation id="1822429046913737220">a.m./p.m.</translation>
 <translation id="1832974991323546415">afspelen op extern apparaat</translation>
 <translation id="1921819250265091946">dd</translation>
@@ -54,7 +54,6 @@
 <translation id="3220661731597678625">huidige stap</translation>
 <translation id="3321030238473337787">Afspeelsnelheid</translation>
 <translation id="3329013043687509092">Verzadiging</translation>
-<translation id="3377518164566272702">Microfoon en camera toestaan</translation>
 <translation id="3450233048674729344">Waarde moet kleiner dan of gelijk zijn aan <ph name="MAXIMUM" />.</translation>
 <translation id="3732799496749320381">mm</translation>
 <translation id="3754210790023674521">Scherm-in-scherm afsluiten</translation>
@@ -62,6 +61,7 @@
 <translation id="3822383571486410024">Breid deze tekst uit tot <ph name="MIN_CHARACTERS" /> tekens of meer (je gebruikt momenteel <ph name="CURRENT_LENGTH" /> tekens).</translation>
 <translation id="383465348367842624">Het naamgedeelte vóór '<ph name="ATSIGN" />' mag niet het teken '<ph name="INVALIDCHARACTER" />' bevatten.</translation>
 <translation id="3846214748874656680">Volledig scherm sluiten</translation>
+<translation id="3914173277599553213">Vereist</translation>
 <translation id="4031179711345676612">Microfoon toegestaan</translation>
 <translation id="4103419683916926126">Milliseconden</translation>
 <translation id="4201051445878709314">Vorige maand bekijken</translation>
@@ -77,6 +77,7 @@
 <translation id="4912200001568447310">huidig item</translation>
 <translation id="4915360478455618802">Tijdkiezer bekijken</translation>
 <translation id="4924138096460353083">onbepaald</translation>
+<translation id="49269513399674318">Microfoon gebruiken</translation>
 <translation id="4950364064308314478">Kiezer voor lokale datum en tijd bekijken</translation>
 <translation id="4971739861736909480"><ph name="ACCNAME" /> geselecteerd</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> geselecteerd</translation>
@@ -144,6 +145,7 @@
 <translation id="7080893216867146095">Locatie delen toegestaan</translation>
 <translation id="709897737746224366">Zorg dat de indeling voldoet aan de gevraagde indeling.</translation>
 <translation id="7102274145889307184">huidige locatie</translation>
+<translation id="7134810312945846184">Microfoon en camera gebruiken</translation>
 <translation id="7263440858009898357">Selecteer een item in de lijst.</translation>
 <translation id="7320576522385648310">bufferen</translation>
 <translation id="7341556277900466204">Kleurenwiel</translation>
@@ -188,7 +190,6 @@
 <translation id="9132465097189459683">Anders...</translation>
 <translation id="9155987714137265666"><ph name="WEEK" />, die begint op <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Scherm-in-scherm</translation>
-<translation id="918430632320614861">Microfoon toestaan</translation>
 <translation id="945780513535800434">Gedeeltelijk aangevinkt</translation>
 <translation id="954003015749068518">scherm-in-scherm openen</translation>
 </translationbundle>

@@ -31,6 +31,11 @@
     position: relative;
     top: -22px;
   }
+
+  #apnSubpageTitleExtra {
+    display: flex;
+    align-items: center;
+  }
 </style>
 <os-settings-animated-pages id="pages" section="[[section_]]">
   <div route-path="default">
@@ -132,16 +137,25 @@
 
   <template is="dom-if" route-path="/apn" restamp>
     <os-settings-subpage page-title="$i18n{internetApnPageTitle}">
-      <div slot="subpage-title-extra">
+      <div id="apnSubpageTitleExtra" slot="subpage-title-extra">
+        <template is="dom-if" if="[[shouldDisallowApnModification_(globalPolicy_)]]">
+          <cr-tooltip-icon id="apnManagedIcon"
+              tooltip-text="$i18n{controlledSettingPolicy}"
+              icon-class="cr20:domain"
+              tooltip-position="bottom">
+          </cr-tooltip-icon>
+        </template>
         <cr-icon-button id="apnActionMenuButton" class="icon-more-vert"
             on-click="onApnMenuButtonClicked_"
             focus-row-control focus-type="menu"
             deep-link-focus-id$="[[Setting.kCellularAddApn]]"
-            title="$i18n{moreActions}">
+            title="$i18n{moreActions}"
+            disabled="[[shouldDisallowApnModification_(globalPolicy_)]]">
         </cr-icon-button>
       </div>
       <apn-subpage id="apnSubpage"
           is-num-custom-apns-limit-reached="{{isNumCustomApnsLimitReached_}}"
+          should-disallow-apn-modification="[[shouldDisallowApnModification_(globalPolicy_)]]"
       >
       </apn-subpage>
     </os-settings-subpage>
@@ -264,12 +278,12 @@
   <!-- TODO(b/162365553) Add a11y support-->
   <paper-tooltip id="discoverMoreApnsTooltip"
       for="discoverMoreApnsButton"
-      position="left">
+      position="[[apnMenuTooltipsPosition_]]">
     $i18n{customApnLimitReached}
   </paper-tooltip>
   <paper-tooltip id="createCustomApnTooltip"
       for="createCustomApnButton"
-      position="left">
+      position="[[apnMenuTooltipsPosition_]]">
     $i18n{customApnLimitReached}
   </paper-tooltip>
 </template>

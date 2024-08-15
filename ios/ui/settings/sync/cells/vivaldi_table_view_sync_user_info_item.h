@@ -9,7 +9,7 @@
 
 @interface VivaldiTableViewSyncUserInfoItem : TableViewHeaderFooterItem
 @property(nonatomic, copy) NSString* userName;
-@property(nonatomic, copy) NSString* userEmail;
+@property(nonatomic, copy) NSString* sessionName;
 @property(nonatomic, copy) UIImage* userAvatar;
 
 @end
@@ -17,7 +17,7 @@
 @interface VivaldiTableViewSyncUserInfoView : UITableViewHeaderFooterView
 
 @property(nonatomic, readonly, strong) UILabel* userNameLabel;
-@property(nonatomic, readonly, strong) UILabel* userEmailLabel;
+@property(nonatomic, readonly, strong) UILabel* sessionNameLabel;
 
 - (void)setUserAvatar:(UIImage*)image;
 

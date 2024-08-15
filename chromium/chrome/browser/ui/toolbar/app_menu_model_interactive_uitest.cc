@@ -20,6 +20,7 @@
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/web_applications/test/web_app_icon_test_utils.h"
@@ -109,13 +110,14 @@ class AppMenuModelInteractiveTest : public InteractiveBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(AppMenuModelInteractiveTest, PerformanceNavigation) {
-  RunTestSequence(InstrumentTab(kPrimaryTabPageElementId),
-                  PressButton(kToolbarAppMenuButtonElementId),
-                  SelectMenuItem(AppMenuModel::kMoreToolsMenuItem),
-                  SelectMenuItem(ToolsMenuModel::kPerformanceMenuItem),
-                  WaitForWebContentsNavigation(
-                      kPrimaryTabPageElementId,
-                      GURL(chrome::kChromeUIPerformanceSettingsURL)));
+  RunTestSequence(
+      InstrumentTab(kPrimaryTabPageElementId),
+      PressButton(kToolbarAppMenuButtonElementId),
+      SelectMenuItem(AppMenuModel::kMoreToolsMenuItem),
+      SelectMenuItem(ToolsMenuModel::kPerformanceMenuItem),
+      WaitForWebContentsNavigation(
+          kPrimaryTabPageElementId,
+          GURL(chrome::GetSettingsUrl(chrome::kPerformanceSubPage))));
 }
 
 IN_PROC_BROWSER_TEST_F(AppMenuModelInteractiveTest, IncognitoMenuItem) {
@@ -227,7 +229,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionsMenuModelInteractiveTest, ManageExtensions) {
                                MENU_ACTION_VISIT_CHROME_WEB_STORE, 0);
 }
 
-// TODO(crbug.com/1488136): Remove this test in favor of a unit test
+// TODO(crbug.com/40073814): Remove this test in favor of a unit test
 // extension_urls::GetWebstoreLaunchURL().
 class ExtensionsMenuVisitChromeWebstoreModelInteractiveTest
     : public AppMenuModelInteractiveTest,
@@ -297,11 +299,7 @@ class PasswordManagerMenuItemInteractiveTest
     : public AppMenuModelInteractiveTest,
       public testing::WithParamInterface<bool> {
  public:
-  PasswordManagerMenuItemInteractiveTest() {
-    scoped_feature_list_.InitWithFeatureStates(
-        {{features::kChromeRefresh2023, false},
-         {features::kChromeRefreshSecondary2023, false}});
-  }
+  PasswordManagerMenuItemInteractiveTest() = default;
   PasswordManagerMenuItemInteractiveTest(
       const PasswordManagerMenuItemInteractiveTest&) = delete;
   void operator=(const PasswordManagerMenuItemInteractiveTest&) = delete;
@@ -315,14 +313,15 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerMenuItemInteractiveTest,
 
   RunTestSequence(InstrumentTab(kPrimaryTabPageElementId),
                   PressButton(kToolbarAppMenuButtonElementId),
+                  SelectMenuItem(AppMenuModel::kPasswordAndAutofillMenuItem),
                   SelectMenuItem(AppMenuModel::kPasswordManagerMenuItem),
                   WaitForWebContentsNavigation(
                       kPrimaryTabPageElementId,
                       GURL("chrome://password-manager/passwords")));
 
-  histograms.ExpectTotalCount("WrenchMenu.TimeToAction.PasswordManager", 1);
+  histograms.ExpectTotalCount("WrenchMenu.TimeToAction.ShowPasswordManager", 1);
   histograms.ExpectBucketCount("WrenchMenu.MenuAction",
-                               MENU_ACTION_PASSWORD_MANAGER, 1);
+                               MENU_ACTION_SHOW_PASSWORD_MANAGER, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(PasswordManagerMenuItemInteractiveTest,
@@ -470,7 +469,7 @@ class UniversalInstallAppMenuModelInteractiveTest
   // a corresponding menu item entry for installation, as well as the default
   // install icon next to them.
   auto VerifyDiyAppMenuItemViews() {
-    if (IsUniversalInstallEnabled()) {
+    if (ShouldShowDiyAppInstallOption()) {
       const ui::ImageModel icon_image = ui::ImageModel::FromVectorIcon(
           kInstallDesktopChromeRefreshIcon, ui::kColorMenuIcon,
           ui::SimpleMenuModel::kDefaultIconSize);
@@ -498,7 +497,7 @@ class UniversalInstallAppMenuModelInteractiveTest
   // so we do a 1:1 comparison.
   auto CompareIcons() {
     return base::BindLambdaForTesting([&](views::MenuItemView* item_view) {
-      if (IsUniversalInstallEnabled()) {
+      if (GetParam()) {
         EXPECT_TRUE(item_view->GetIcon().IsImage());
         EXPECT_EQ(
             GetMidColorFromBitmap(item_view->GetIcon().GetImage().AsBitmap()),
@@ -537,7 +536,13 @@ class UniversalInstallAppMenuModelInteractiveTest
   }
 
  private:
-  bool IsUniversalInstallEnabled() { return GetParam(); }
+  bool ShouldShowDiyAppInstallOption() {
+#if BUILDFLAG(IS_CHROMEOS)
+    return false;
+#else
+    return GetParam();
+#endif  // BUILDFLAG(IS_CHROMEOS)
+  }
 
   SkColor GetAppIconColorBasedOnBannerData() {
     std::optional<WebAppBannerData> banner_data =

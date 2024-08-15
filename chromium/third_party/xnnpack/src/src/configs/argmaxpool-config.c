@@ -12,11 +12,10 @@
   #include <pthread.h>
 #endif
 
+#include <xnnpack/argmaxpool.h>
 #include <xnnpack/common.h>
 #include <xnnpack/config.h>
-#include <xnnpack/microparams-init.h>
-#include <xnnpack/argmaxpool.h>
-
+#include <xnnpack/microfnptr.h>
 
 static struct xnn_argmaxpool_config f32_argmaxpool_config[XNN_MAX_F32_ARGMAXPOOL_UKERNELS ] = {0};
 
@@ -101,35 +100,7 @@ static void init_f32_argmaxpool_config(void) {
       .first_pass_tile_size = 9,
       .remainder_pass_tile_size = 8,
     };
-  #elif XNN_ARCH_WASM
-    f32_argmaxpool_config[0] = (struct xnn_argmaxpool_config) {
-      .up = (xnn_argmaxpool_unipass_ukernel_fn) xnn_f32_argmaxpool_ukernel_4x__scalar_c1,
-      .first_pass_tile_size = 4,
-    };
-    f32_argmaxpool_config[1] = (struct xnn_argmaxpool_config) {
-      .up = (xnn_argmaxpool_unipass_ukernel_fn) xnn_f32_argmaxpool_ukernel_9x__scalar_c1,
-      .first_pass_tile_size = 9,
-    };
-    f32_argmaxpool_config[2] = (struct xnn_argmaxpool_config) {
-      .mp = (xnn_argmaxpool_multipass_ukernel_fn) xnn_f32_argmaxpool_ukernel_9p8x__scalar_c1,
-      .first_pass_tile_size = 9,
-      .remainder_pass_tile_size = 8,
-    };
-  #elif XNN_ARCH_RISCV
-    f32_argmaxpool_config[0] = (struct xnn_argmaxpool_config) {
-      .up = (xnn_argmaxpool_unipass_ukernel_fn) xnn_f32_argmaxpool_ukernel_4x__scalar_c1,
-      .first_pass_tile_size = 4,
-    };
-    f32_argmaxpool_config[1] = (struct xnn_argmaxpool_config) {
-      .up = (xnn_argmaxpool_unipass_ukernel_fn) xnn_f32_argmaxpool_ukernel_9x__scalar_c1,
-      .first_pass_tile_size = 9,
-    };
-    f32_argmaxpool_config[2] = (struct xnn_argmaxpool_config) {
-      .mp = (xnn_argmaxpool_multipass_ukernel_fn) xnn_f32_argmaxpool_ukernel_9p8x__scalar_c1,
-      .first_pass_tile_size = 9,
-      .remainder_pass_tile_size = 8,
-    };
-  #elif XNN_ARCH_PPC64
+  #else
     f32_argmaxpool_config[0] = (struct xnn_argmaxpool_config) {
       .up = (xnn_argmaxpool_unipass_ukernel_fn) xnn_f32_argmaxpool_ukernel_4x__scalar_c1,
       .first_pass_tile_size = 4,

@@ -20,8 +20,6 @@
 #include "base/time/time.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/about_flags.h"
-#include "chrome/browser/nearby_sharing/common/nearby_share_features.h"
-#include "chrome/browser/nearby_sharing/common/nearby_share_resource_getter.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sharesheet/sharesheet_metrics.h"
 #include "chrome/browser/sharesheet/sharesheet_service_delegator.h"
@@ -71,7 +69,7 @@
 
 namespace {
 
-// TODO(crbug.com/1097623) Many of below values are sums of each other and
+// TODO(crbug.com/40136695) Many of below values are sums of each other and
 // can be removed.
 
 // Sizes are in px.
@@ -86,7 +84,7 @@ constexpr int kMaxRowsForDefaultView = 2;
 constexpr int kTargetViewHeight = 216;
 // TargetViewExpandedHeight is default_view_->GetPreferredSize().height() + apps
 // list text + 2*kExpandedViewPaddingTop + expanded_view_->FirstRow().height().
-// TODO(crbug.com/1097623): Update this to a layout that will allow us to get
+// TODO(crbug.com/40136695): Update this to a layout that will allow us to get
 // the height of the first row.
 constexpr int kTargetViewExpandedHeight = 382;
 
@@ -141,7 +139,7 @@ class SharesheetBubbleView::SharesheetParentWidgetObserver
     observer_.Reset();
     // |this| may be destroyed here!
 
-    // TODO(crbug.com/1188938) Code clean up.
+    // TODO(crbug.com/40173521) Code clean up.
     // There should be something here telling SharesheetBubbleView
     // that its parent widget is closing and therefore it should
     // also close. Or we should try to inherit the widget changes from
@@ -161,7 +159,11 @@ class SharesheetBubbleView::SharesheetParentWidgetObserver
 SharesheetBubbleView::SharesheetBubbleView(
     gfx::NativeWindow native_window,
     ::sharesheet::SharesheetServiceDelegator* delegator)
-    : delegator_(delegator) {
+    : BubbleDialogDelegateView(nullptr,
+                               views::BubbleBorder::TOP_LEFT,
+                               views::BubbleBorder::DIALOG_SHADOW,
+                               true),
+      delegator_(delegator) {
   CHECK(native_window);
   CHECK(delegator_);
 
@@ -185,7 +187,7 @@ SharesheetBubbleView::SharesheetBubbleView(
 }
 
 SharesheetBubbleView::~SharesheetBubbleView() {
-  // TODO(https://crbug.com/1249491): While this is harmless, it should not be
+  // TODO(crbug.com/40057260): While this is harmless, it should not be
   // necessary unless something fishy is happening with the behavior of layer
   // animations around widget teardown.
   if (close_callback_) {
@@ -290,14 +292,11 @@ void SharesheetBubbleView::ShowNearbyShareBubbleForArc(
   // and use that instead for a more consistent UI experience.
   height_ = 1;
 
-  const std::u16string target_name =
-      features::IsNameEnabled()
-          ? NearbyShareResourceGetter::GetInstance()->GetStringWithFeatureName(
-                IDS_NEARBY_SHARE_FEATURE_NAME_PH)
-          : l10n_util::GetStringUTF16(IDS_NEARBY_SHARE_FEATURE_NAME);
-
-  delegator_->OnTargetSelected(target_name, ::sharesheet::TargetType::kAction,
-                               std::move(intent_), share_action_view_);
+  delegator_->OnTargetSelected(
+      /*type=*/::sharesheet::TargetType::kAction,
+      /*share_action_type=*/::sharesheet::ShareActionType::kNearbyShare,
+      /*app_name=*/std::nullopt, /*intent=*/std::move(intent_),
+      /*share_action_view=*/share_action_view_);
 }
 
 std::unique_ptr<views::View> SharesheetBubbleView::MakeScrollableTargetView(
@@ -395,13 +394,18 @@ void SharesheetBubbleView::PopulateLayoutsWithTargets(
     std::u16string display_name = target.display_name;
     std::u16string secondary_display_name =
         target.secondary_display_name.value_or(std::u16string());
+
+    // Only apps are expected to have an |icon|, while share actions will
+    // have a vector icon.
     std::optional<gfx::ImageSkia> icon = target.icon;
+    const gfx::VectorIcon* vector_icon =
+        delegator_->GetVectorIcon(target.share_action_type);
 
     view_for_target->AddChildView(std::make_unique<SharesheetTargetButton>(
         base::BindRepeating(&SharesheetBubbleView::TargetButtonPressed,
                             base::Unretained(this), target),
-        display_name, secondary_display_name, icon,
-        delegator_->GetVectorIcon(display_name), target.is_dlp_blocked));
+        display_name, secondary_display_name, icon, vector_icon,
+        target.is_dlp_blocked));
   }
 }
 
@@ -492,7 +496,9 @@ bool SharesheetBubbleView::AcceleratorPressed(
   // not pressed |VKEY_TAB| first to focus the SharesheetBubbleView.
   DCHECK_EQ(accelerator.key_code(), ui::VKEY_ESCAPE);
   if (share_action_view_->GetVisible() &&
-      delegator_->OnAcceleratorPressed(accelerator, active_target_)) {
+      active_share_action_type_.has_value() &&
+      delegator_->OnAcceleratorPressed(accelerator,
+                                       active_share_action_type_.value())) {
     return true;
   }
 
@@ -565,7 +571,7 @@ bool SharesheetBubbleView::OnKeyPressed(const ui::KeyEvent& event) {
 
 std::unique_ptr<views::NonClientFrameView>
 SharesheetBubbleView::CreateNonClientFrameView(views::Widget* widget) {
-  // TODO(crbug.com/1097623) Replace this with layer->SetRoundedCornerRadius.
+  // TODO(crbug.com/40136695) Replace this with layer->SetRoundedCornerRadius.
   auto bubble_border =
       std::make_unique<views::BubbleBorder>(arrow(), GetShadow());
   bubble_border->SetColor(color());
@@ -577,7 +583,8 @@ SharesheetBubbleView::CreateNonClientFrameView(views::Widget* widget) {
   return frame;
 }
 
-gfx::Size SharesheetBubbleView::CalculatePreferredSize() const {
+gfx::Size SharesheetBubbleView::CalculatePreferredSize(
+    const views::SizeBounds& available_size) const {
   return gfx::Size(width_, height_);
 }
 
@@ -698,12 +705,14 @@ void SharesheetBubbleView::TargetButtonPressed(TargetInfo target) {
   }
   auto type = target.type;
   if (type == ::sharesheet::TargetType::kAction) {
-    active_target_ = target.launch_name;
+    active_share_action_type_ = target.share_action_type.value();
   } else {
     intent_->activity_name = target.activity_name;
   }
-  delegator_->OnTargetSelected(target.launch_name, type, std::move(intent_),
-                               share_action_view_);
+  delegator_->OnTargetSelected(
+      /*type=*/type, /*share_action_type=*/target.share_action_type,
+      /*app_name=*/target.launch_name, /*intent=*/std::move(intent_),
+      /*share_action_view=*/share_action_view_);
   if (delivered_callback_) {
     std::move(delivered_callback_)
         .Run(::sharesheet::SharesheetResult::kSuccess);
@@ -732,6 +741,7 @@ void SharesheetBubbleView::UpdateAnchorPosition() {
 void SharesheetBubbleView::SetToDefaultBubbleSizing() {
   width_ = kDefaultBubbleWidth;
   height_ = main_view_->GetPreferredSize().height();
+  PreferredSizeChanged();
 }
 
 void SharesheetBubbleView::ShowWidgetWithAnimateFadeIn() {
@@ -797,7 +807,7 @@ void SharesheetBubbleView::CloseWidgetWithReason(
     std::move(close_callback_).Run(closed_reason);
   }
   // Bubble is deleted here.
-  delegator_->OnBubbleClosed(active_target_);
+  delegator_->OnBubbleClosed(active_share_action_type_);
 }
 
 BEGIN_METADATA(SharesheetBubbleView)

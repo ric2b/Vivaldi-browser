@@ -10,8 +10,8 @@
 #include <vector>
 
 #include "base/functional/callback.h"
-#include "components/ad_blocker/adblock_metadata.h"
 #include "components/ad_blocker/adblock_rule_manager.h"
+#include "components/ad_blocker/adblock_types.h"
 
 namespace content {
 class BrowserContext;
@@ -26,8 +26,7 @@ class RuleService;
 
 class RuleBufferHolder {
  public:
-  RuleBufferHolder(std::unique_ptr<std::string> rule_buffer,
-                   const std::string& checksum);
+  RuleBufferHolder(std::string rule_buffer, const std::string& checksum);
   ~RuleBufferHolder();
   RuleBufferHolder(const RuleBufferHolder&) = delete;
   RuleBufferHolder& operator=(const RuleBufferHolder&) = delete;
@@ -71,22 +70,23 @@ class RulesIndexManager : public RuleManager::Observer {
   RuleGroup group() const { return group_; }
 
  private:
-  void OnRulesSourceUpdated(const RuleSource& rule_source) override;
+  void OnRuleSourceUpdated(RuleGroup group,
+                           const ActiveRuleSource& rule_source) override;
   void OnRuleSourceDeleted(uint32_t source_id, RuleGroup group) override;
 
-  void ReadRules(const RuleSource& rule_source);
+  void ReadRules(const ActiveRuleSource& rule_source);
   void OnRulesRead(uint32_t source_id,
                    const std::string& checksum,
-                   std::unique_ptr<std::string> rules_buffer);
+                   std::string rules_buffer);
 
   void RebuildIndex();
   void ReadIndex(const std::string& checksum);
-  void OnIndexRead(std::unique_ptr<std::string> index_buffer);
+  void OnIndexRead(std::string index_buffer);
 
   RuleGroup group_;
   bool reload_in_progress_;
 
-  std::map<uint32_t, RuleSource> rule_sources_;
+  std::map<uint32_t, ActiveRuleSource> rule_sources_;
   base::FilePath rules_list_folder_;
 
   std::map<uint32_t, std::unique_ptr<RuleBufferHolder>> rules_buffers_;

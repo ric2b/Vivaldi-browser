@@ -27,6 +27,7 @@ lucicfg.config(
         "builders/*/*/*",
         "builders/*/*/*/*",
         "builders/gn_args_locations.json",
+        "builder-owners/*.txt",
         "cq-builders.md",
         "cq-usage/default.cfg",
         "cq-usage/full.cfg",
@@ -43,6 +44,7 @@ lucicfg.config(
         "luci/luci-scheduler.cfg",
         "luci/project.cfg",
         "luci/realms.cfg",
+        "luci/testhaus.cfg",
         "luci/tricium-prod.cfg",
         "outages.pyl",
         "sheriff-rotations/*.txt",
@@ -59,6 +61,12 @@ lucicfg.config(
         "-function-docstring-header",
         "-module-docstring",
     ],
+)
+
+# Just copy Testhaus config to generated outputs.
+lucicfg.emit(
+    dest = "luci/testhaus.cfg",
+    data = io.read_file("testhaus.cfg"),
 )
 
 # Just copy tricium-prod.cfg to the generated outputs
@@ -157,6 +165,10 @@ chrome_settings.per_builder_outputs(
     root_dir = "builders",
 )
 
+chrome_settings.targets(
+    autoshard_exceptions_file = "//targets/autoshard_exceptions.json",
+)
+
 # An all-purpose public realm.
 luci.realm(
     name = "public",
@@ -206,7 +218,7 @@ luci.realm(
 )
 
 # Allows builders to write baselines and query ResultDB for new tests.
-# TODO(crbug/1465953) @project is not available, and @root should inherit into
+# TODO(crbug.com/40276195) @project is not available, and @root should inherit into
 # project so we'll do this for now until @project is supported.
 luci.realm(
     name = "@root",
@@ -269,7 +281,6 @@ exec("//subprojects/infra.star")
 branches.exec("//subprojects/codesearch/subproject.star")
 branches.exec("//subprojects/findit/subproject.star")
 branches.exec("//subprojects/flakiness/subproject.star")
-branches.exec("//subprojects/goma/subproject.star")
 branches.exec("//subprojects/reclient/subproject.star")
 branches.exec("//subprojects/reviver/subproject.star")
 branches.exec("//subprojects/webrtc/subproject.star")
@@ -277,6 +288,7 @@ branches.exec("//subprojects/webrtc/subproject.star")
 exec("//generators/cq-usage.star")
 branches.exec("//generators/cq-builders-md.star")
 
+exec("//generators/builder-owners.star")
 exec("//generators/sort-consoles.star")
 
 # Execute validators after eveything except the outage file so that we're

@@ -136,14 +136,14 @@ int ForEachBlob(const Environment &env) {
 // Stops when `continue_running` becomes false.
 // Exits immediately if --experiment flag is not used.
 void ReportStatsThread(const std::atomic<bool> &continue_running,
-                       const std::vector<Stats> &stats_vec,
+                       const std::vector<std::atomic<Stats>> &stats_vec,
                        const std::vector<Environment> &envs) {
   CHECK(!envs.empty());
 
   std::vector<std::unique_ptr<StatsReporter>> reporters;
   reporters.emplace_back(
       std::make_unique<StatsCsvFileAppender>(stats_vec, envs));
-  if (!envs.front().experiment.empty() || VLOG_IS_ON(1)) {
+  if (!envs.front().experiment.empty() || ABSL_VLOG_IS_ON(1)) {
     reporters.emplace_back(std::make_unique<StatsLogger>(stats_vec, envs));
   }
 
@@ -161,22 +161,31 @@ void ReportStatsThread(const std::atomic<bool> &continue_running,
   }
 }
 
-// Loads corpora from work dirs provided in `env.args`, analyzes differences.
-// Returns EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
+// Loads corpora from work dirs provided in `env.args`, if there are two args
+// provided, analyzes differences. If there is one arg provided, reports the
+// function coverage. Returns EXIT_SUCCESS on success, EXIT_FAILURE otherwise.
 int Analyze(const Environment &env) {
   LOG(INFO) << "Analyze " << absl::StrJoin(env.args, ",");
-  CHECK_EQ(env.args.size(), 2) << "for now, Analyze supports only 2 work dirs";
   CHECK(!env.binary.empty()) << "--binary must be used";
-  std::vector<std::vector<CorpusRecord>> corpora;
-  AnalyzeCorporaToLog(env.binary_name, env.binary_hash, env.args[0],
-                      env.args[1]);
+  if (env.args.size() == 1) {
+    const CoverageResults coverage_results =
+        GetCoverage(env.binary_name, env.binary_hash, env.args[0]);
+    WorkDir workdir{env};
+    const std::string coverage_report_path =
+        workdir.CoverageReportPath(/*annotation=*/"");
+    DumpCoverageReport(coverage_results, coverage_report_path);
+  } else if (env.args.size() == 2) {
+    AnalyzeCorporaToLog(env.binary_name, env.binary_hash, env.args[0],
+                        env.args[1]);
+  } else {
+    LOG(FATAL) << "for now, --analyze supports only 1 or 2 work dirs; got "
+               << env.args.size();
+  }
   return EXIT_SUCCESS;
 }
 
 void SavePCTableToFile(const PCTable &pc_table, std::string_view file_path) {
-  ByteSpan bytes = {reinterpret_cast<const uint8_t *>(pc_table.data()),
-                    pc_table.size() * sizeof(pc_table[0])};
-  WriteToLocalFile(file_path, bytes);
+  WriteToLocalFile(file_path, AsByteSpan(pc_table));
 }
 
 }  // namespace
@@ -253,8 +262,18 @@ int CentipedeMain(const Environment &env,
   }
   CoverageLogger coverage_logger(binary_info.pc_table, binary_info.symbols);
 
-  auto thread_callback = [&](Environment &my_env, Stats &stats) {
-    CreateLocalDirRemovedAtExit(TemporaryLocalDirPath());  // creates temp dir.
+  std::vector<Environment> envs(env.num_threads, env);
+  std::vector<std::atomic<Stats>> stats_vec(env.num_threads);
+  std::atomic<bool> stats_thread_continue_running = true;
+
+  std::thread stats_thread(ReportStatsThread,
+                           std::ref(stats_thread_continue_running),
+                           std::ref(stats_vec), std::ref(envs));
+
+  auto fuzzing_worker = [&](Environment &my_env, std::atomic<Stats> &stats,
+                            bool create_tmpdir) {
+    if (create_tmpdir) CreateLocalDirRemovedAtExit(TemporaryLocalDirPath());
+    my_env.UpdateForExperiment();
     my_env.seed = GetRandomSeed(env.seed);  // uses TID, call in this thread.
     my_env.pcs_file_path = pcs_file_path;   // same for all threads.
 
@@ -266,28 +285,29 @@ int CentipedeMain(const Environment &env,
     centipede.FuzzingLoop();
   };
 
-  std::vector<Environment> envs(env.num_threads, env);
-  std::vector<Stats> stats_vec(env.num_threads);
-  std::vector<std::thread> threads(env.num_threads);
-  std::atomic<bool> stats_thread_continue_running(true);
-
-  // Create threads.
-  for (size_t thread_idx = 0; thread_idx < env.num_threads; thread_idx++) {
-    Environment &my_env = envs[thread_idx];
-    my_env.my_shard_index = env.my_shard_index + thread_idx;
-    my_env.UpdateForExperiment();
-    threads[thread_idx] = std::thread(thread_callback, std::ref(my_env),
-                                      std::ref(stats_vec[thread_idx]));
+  if (env.num_threads == 1) {
+    // When fuzzing with one thread, run fuzzing loop in the current
+    // thread. This is because FuzzTest/Centipede's single-process
+    // fuzzing requires the test body, which is invoked by the fuzzing
+    // loop, to run in the main thread.
+    //
+    // Here, the fuzzing worker should not re-create the tmpdir since the path
+    // is thread-local and it has been created in the current function.
+    fuzzing_worker(envs[0], stats_vec[0], /*create_tmpdir=*/false);
+  } else {
+    std::vector<std::thread> fuzzing_worker_threads(env.num_threads);
+    for (size_t thread_idx = 0; thread_idx < env.num_threads; thread_idx++) {
+      Environment &my_env = envs[thread_idx];
+      my_env.my_shard_index = env.my_shard_index + thread_idx;
+      fuzzing_worker_threads[thread_idx] =
+          std::thread(fuzzing_worker, std::ref(my_env),
+                      std::ref(stats_vec[thread_idx]), /*create_tmpdir=*/true);
+    }
+    for (size_t thread_idx = 0; thread_idx < env.num_threads; thread_idx++) {
+      fuzzing_worker_threads[thread_idx].join();
+    }
   }
 
-  std::thread stats_thread(ReportStatsThread,
-                           std::ref(stats_thread_continue_running),
-                           std::ref(stats_vec), std::ref(envs));
-
-  // Join threads.
-  for (size_t thread_idx = 0; thread_idx < env.num_threads; thread_idx++) {
-    threads[thread_idx].join();
-  }
   stats_thread_continue_running = false;
   stats_thread.join();
 

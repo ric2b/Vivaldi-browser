@@ -23,8 +23,8 @@ namespace openscreen::discovery {
 namespace {
 
 DnsSdInstanceEndpoint CreateEndpoint(
-    DnsSdInstance instance,
-    InstanceKey key,
+    const DnsSdInstance& instance,
+    const InstanceKey& key,
     const NetworkInterfaceConfig& network_config) {
   std::vector<IPEndpoint> endpoints;
   if (network_config.HasAddressV4()) {
@@ -40,16 +40,15 @@ DnsSdInstanceEndpoint CreateEndpoint(
 
 DnsSdInstanceEndpoint UpdateDomain(
     const DomainName& name,
-    DnsSdInstance instance,
+    const DnsSdInstance& instance,
     const NetworkInterfaceConfig& network_config) {
-  return CreateEndpoint(std::move(instance), InstanceKey(name), network_config);
+  return CreateEndpoint(instance, InstanceKey(name), network_config);
 }
 
 DnsSdInstanceEndpoint CreateEndpoint(
-    DnsSdInstance instance,
+    const DnsSdInstance& instance,
     const NetworkInterfaceConfig& network_config) {
-  InstanceKey key(instance);
-  return CreateEndpoint(std::move(instance), std::move(key), network_config);
+  return CreateEndpoint(instance, InstanceKey(instance), network_config);
 }
 
 template <typename T>
@@ -80,22 +79,18 @@ int EraseInstancesWithServiceId(std::map<DnsSdInstance, T>* instances,
 
 }  // namespace
 
-PublisherImpl::PublisherImpl(MdnsService* publisher,
-                             ReportingClient* reporting_client,
+PublisherImpl::PublisherImpl(MdnsService& publisher,
+                             ReportingClient& reporting_client,
                              TaskRunner& task_runner,
-                             const NetworkInterfaceConfig* network_config)
+                             const NetworkInterfaceConfig& network_config)
     : mdns_publisher_(publisher),
       reporting_client_(reporting_client),
       task_runner_(task_runner),
-      network_config_(network_config) {
-  OSP_CHECK(mdns_publisher_);
-  OSP_CHECK(reporting_client_);
-}
+      network_config_(network_config) {}
 
 PublisherImpl::~PublisherImpl() = default;
 
 Error PublisherImpl::Register(const DnsSdInstance& instance, Client* client) {
-  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
   OSP_CHECK(client);
 
   if (published_instances_.find(instance) != published_instances_.end()) {
@@ -104,20 +99,17 @@ Error PublisherImpl::Register(const DnsSdInstance& instance, Client* client) {
     return Error::Code::kOperationInProgress;
   }
 
-  InstanceKey key(instance);
-  const IPAddress& address = network_config_->GetAddress();
+  const IPAddress& address = network_config_.GetAddress();
   OSP_CHECK(address);
-  pending_instances_.emplace(CreateEndpoint(instance, *network_config_),
-                             client);
+  pending_instances_.emplace(instance, client);
 
   OSP_DVLOG << "Registering instance '" << instance.instance_id() << "'";
 
-  return mdns_publisher_->StartProbe(this, GetDomainName(key), address);
+  return mdns_publisher_.StartProbe(this, GetDomainName(InstanceKey(instance)),
+                                    address);
 }
 
 Error PublisherImpl::UpdateRegistration(const DnsSdInstance& instance) {
-  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
-
   // Check if the instance is still pending publication.
   auto it = FindKey(&pending_instances_, InstanceKey(instance));
 
@@ -131,8 +123,7 @@ Error PublisherImpl::UpdateRegistration(const DnsSdInstance& instance) {
     // modified.
     Client* const client = it->second;
     pending_instances_.erase(it);
-    pending_instances_.emplace(CreateEndpoint(instance, *network_config_),
-                               client);
+    pending_instances_.emplace(instance, client);
     return Error::None();
   } else {
     return UpdatePublishedRegistration(instance);
@@ -141,8 +132,6 @@ Error PublisherImpl::UpdateRegistration(const DnsSdInstance& instance) {
 
 Error PublisherImpl::UpdatePublishedRegistration(
     const DnsSdInstance& instance) {
-  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
-
   auto published_instance_it =
       FindKey(&published_instances_, InstanceKey(instance));
 
@@ -154,7 +143,7 @@ Error PublisherImpl::UpdatePublishedRegistration(
 
   const DnsSdInstanceEndpoint updated_endpoint =
       UpdateDomain(GetDomainName(InstanceKey(published_instance_it->second)),
-                   instance, *network_config_);
+                   instance, network_config_);
   if (published_instance_it->second == updated_endpoint) {
     return Error::Code::kParameterInvalid;
   }
@@ -197,21 +186,21 @@ Error PublisherImpl::UpdatePublishedRegistration(
               pair.second.second != std::nullopt);
     if (pair.second.first == std::nullopt) {
       TRACE_SCOPED(TraceCategory::kDiscovery, "mdns.RegisterRecord");
-      auto error = mdns_publisher_->RegisterRecord(pair.second.second.value());
+      auto error = mdns_publisher_.RegisterRecord(pair.second.second.value());
       TRACE_SET_RESULT(error);
       if (!error.ok()) {
         total_result = error;
       }
     } else if (pair.second.second == std::nullopt) {
       TRACE_SCOPED(TraceCategory::kDiscovery, "mdns.UnregisterRecord");
-      auto error = mdns_publisher_->UnregisterRecord(pair.second.first.value());
+      auto error = mdns_publisher_.UnregisterRecord(pair.second.first.value());
       TRACE_SET_RESULT(error);
       if (!error.ok()) {
         total_result = error;
       }
     } else if (pair.second.first.value() != pair.second.second.value()) {
       TRACE_SCOPED(TraceCategory::kDiscovery, "mdns.UpdateRegisteredRecord");
-      auto error = mdns_publisher_->UpdateRegisteredRecord(
+      auto error = mdns_publisher_.UpdateRegisteredRecord(
           pair.second.first.value(), pair.second.second.value());
       TRACE_SET_RESULT(error);
       if (!error.ok()) {
@@ -228,8 +217,6 @@ Error PublisherImpl::UpdatePublishedRegistration(
 }
 
 ErrorOr<int> PublisherImpl::DeregisterAll(const std::string& service) {
-  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
-
   OSP_DVLOG << "Deregistering all instances";
 
   int removed_count = 0;
@@ -239,7 +226,7 @@ ErrorOr<int> PublisherImpl::DeregisterAll(const std::string& service) {
     if (it->second.service_id() == service) {
       for (const auto& mdns_record : GetDnsRecords(it->second)) {
         TRACE_SCOPED(TraceCategory::kDiscovery, "mdns.UnregisterRecord");
-        auto publisher_error = mdns_publisher_->UnregisterRecord(mdns_record);
+        auto publisher_error = mdns_publisher_.UnregisterRecord(mdns_record);
         TRACE_SET_RESULT(error);
         if (!publisher_error.ok()) {
           error = publisher_error;
@@ -264,7 +251,6 @@ ErrorOr<int> PublisherImpl::DeregisterAll(const std::string& service) {
 void PublisherImpl::OnDomainFound(const DomainName& requested_name,
                                   const DomainName& confirmed_name) {
   TRACE_DEFAULT_SCOPED(TraceCategory::kDiscovery);
-  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 
   OSP_DVLOG << "Domain successfully claimed: '" << confirmed_name
             << "' based on requested name: '" << requested_name << "'";
@@ -279,23 +265,21 @@ void PublisherImpl::OnDomainFound(const DomainName& requested_name,
 
   DnsSdInstance requested_instance = std::move(it->first);
   DnsSdInstanceEndpoint endpoint =
-      CreateEndpoint(requested_instance, *network_config_);
+      CreateEndpoint(requested_instance, network_config_);
   Client* const client = it->second;
   pending_instances_.erase(it);
-
-  InstanceKey requested_key(requested_instance);
 
   if (requested_name != confirmed_name) {
     OSP_DCHECK(HasValidDnsRecordAddress(confirmed_name));
     endpoint =
-        UpdateDomain(confirmed_name, requested_instance, *network_config_);
+        UpdateDomain(confirmed_name, requested_instance, network_config_);
   }
 
   for (const auto& mdns_record : GetDnsRecords(endpoint)) {
     TRACE_SCOPED(TraceCategory::kDiscovery, "mdns.RegisterRecord");
-    Error result = mdns_publisher_->RegisterRecord(mdns_record);
+    Error result = mdns_publisher_.RegisterRecord(mdns_record);
     if (!result.ok()) {
-      reporting_client_->OnRecoverableError(
+      reporting_client_.OnRecoverableError(
           Error(Error::Code::kRecordPublicationError, result.ToString()));
     }
   }

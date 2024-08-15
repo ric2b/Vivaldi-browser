@@ -41,7 +41,8 @@ NSString* thumbnailDirectory = @"Vivaldi/sd-thumbnails";
     const std::string imagePathU16 =
         base::SysNSStringToUTF8(snapshotPath);
     [[NSOperationQueue mainQueue] addOperationWithBlock:^{
-      SetNodeThumbnail(bookmarks, sdItem.bookmarkNode, imagePathU16);
+      SetNodeThumbnail(bookmarks->getUnderlyingModel(),
+                       sdItem.bookmarkNode, imagePathU16);
     }];
   }
 }

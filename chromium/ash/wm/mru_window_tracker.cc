@@ -6,7 +6,6 @@
 
 #include <vector>
 
-#include "ash/constants/app_types.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
 #include "ash/wm/ash_focus_rules.h"
@@ -23,6 +22,8 @@
 #include "base/containers/contains.h"
 #include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
+#include "chromeos/ui/base/app_types.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "components/app_restore/window_properties.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -39,7 +40,7 @@ using WindowList = MruWindowTracker::WindowList;
 // A class that observes a window that should not be destroyed inside a certain
 // scope. This class is added to investigate crbug.com/937381 to see if it's
 // possible that a window is destroyed while building up the mru window list.
-// TODO(crbug.com/937381): Remove this class once we figure out the reason.
+// TODO(crbug.com/41444457): Remove this class once we figure out the reason.
 class ScopedWindowClosingObserver : public aura::WindowObserver {
  public:
   explicit ScopedWindowClosingObserver(aura::Window* window) : window_(window) {
@@ -245,8 +246,8 @@ WindowList MruWindowTracker::BuildAppWindowList(
     DesksMruType desks_mru_type) const {
   return BuildWindowListInternal(
       &mru_windows_, desks_mru_type, [](aura::Window* w) {
-        return w->GetProperty(aura::client::kAppType) !=
-               static_cast<int>(ash::AppType::NON_APP);
+        return w->GetProperty(chromeos::kAppTypeKey) !=
+               chromeos::AppType::NON_APP;
       });
 }
 

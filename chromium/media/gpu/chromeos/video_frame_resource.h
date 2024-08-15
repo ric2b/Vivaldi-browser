@@ -35,7 +35,7 @@ class VideoFrameResource : public FrameResource {
   uint8_t* GetWritableVisibleData(size_t plane) override;
   size_t NumDmabufFds() const override;
   int GetDmabufFd(size_t i) const override;
-  scoped_refptr<gfx::NativePixmapDmaBuf> CreateNativePixmapDmaBuf()
+  scoped_refptr<const gfx::NativePixmapDmaBuf> GetNativePixmapDmaBuf()
       const override;
   gfx::GpuMemoryBufferHandle CreateGpuMemoryBufferHandle() const override;
   gfx::GpuMemoryBuffer* GetGpuMemoryBuffer() const override;

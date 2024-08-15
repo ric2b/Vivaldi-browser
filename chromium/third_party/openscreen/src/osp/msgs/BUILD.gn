@@ -4,7 +4,7 @@
 
 import("../../gni/openscreen.gni")
 
-if (!is_win && !is_mac) {
+if (!is_win) {
   visibility = [ "./*" ]
   openscreen_source_set("msgs") {
     visibility += [

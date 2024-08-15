@@ -10,4 +10,4 @@ title: Simple developer workflow
 
 ## This document has been moved to markdown/git. The up-to-date version can be
 found at
-<https://chromium.googlesource.com/chromiumos/docs/+/HEAD/developer_guide.md#Making-changes-to-packages-whose-source-code-is-checked-into-Chromium-OS-git-repositories>
+<https://www.chromium.org/chromium-os/developer-library/guides/development/developer-guide/#Making-changes-to-packages-whose-source-code-is-checked-into-Chromium-OS-git-repositories>

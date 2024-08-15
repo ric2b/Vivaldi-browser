@@ -29,6 +29,13 @@
 
 #include "blas.h"
 
+#include "BandTriangularSolver.h"
+#include "GeneralRank1Update.h"
+#include "PackedSelfadjointProduct.h"
+#include "PackedTriangularMatrixVector.h"
+#include "PackedTriangularSolverVector.h"
+#include "Rank2Update.h"
+
 #define NOTR 0
 #define TR 1
 #define ADJ 2
@@ -59,58 +66,58 @@ inline bool check_side(const char* side) { return SIDE(*side) != 0xff; }
 
 inline bool check_uplo(const char* uplo) { return UPLO(*uplo) != 0xff; }
 
-namespace Eigen {
-#include "BandTriangularSolver.h"
-#include "GeneralRank1Update.h"
-#include "PackedSelfadjointProduct.h"
-#include "PackedTriangularMatrixVector.h"
-#include "PackedTriangularSolverVector.h"
-#include "Rank2Update.h"
-}  // namespace Eigen
-
-using namespace Eigen;
-
 typedef SCALAR Scalar;
-typedef NumTraits<Scalar>::Real RealScalar;
+typedef Eigen::NumTraits<Scalar>::Real RealScalar;
 typedef std::complex<RealScalar> Complex;
 
 enum { IsComplex = Eigen::NumTraits<SCALAR>::IsComplex, Conj = IsComplex };
 
-typedef Matrix<Scalar, Dynamic, Dynamic, ColMajor> PlainMatrixType;
-typedef Map<Matrix<Scalar, Dynamic, Dynamic, ColMajor>, 0, OuterStride<> > MatrixType;
-typedef Map<const Matrix<Scalar, Dynamic, Dynamic, ColMajor>, 0, OuterStride<> > ConstMatrixType;
-typedef Map<Matrix<Scalar, Dynamic, 1>, 0, InnerStride<Dynamic> > StridedVectorType;
-typedef Map<Matrix<Scalar, Dynamic, 1> > CompactVectorType;
+typedef Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> PlainMatrixType;
+typedef Eigen::Map<Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>, 0, Eigen::OuterStride<> >
+    MatrixType;
+typedef Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>, 0,
+                   Eigen::OuterStride<> >
+    ConstMatrixType;
+typedef Eigen::Map<Eigen::Matrix<Scalar, Eigen::Dynamic, 1>, 0, Eigen::InnerStride<Eigen::Dynamic> > StridedVectorType;
+typedef Eigen::Map<Eigen::Matrix<Scalar, Eigen::Dynamic, 1> > CompactVectorType;
 
 template <typename T>
-Map<Matrix<T, Dynamic, Dynamic, ColMajor>, 0, OuterStride<> > matrix(T* data, int rows, int cols, int stride) {
-  return Map<Matrix<T, Dynamic, Dynamic, ColMajor>, 0, OuterStride<> >(data, rows, cols, OuterStride<>(stride));
+Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>, 0, Eigen::OuterStride<> > matrix(
+    T* data, int rows, int cols, int stride) {
+  return Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>, 0, Eigen::OuterStride<> >(
+      data, rows, cols, Eigen::OuterStride<>(stride));
 }
 
 template <typename T>
-Map<const Matrix<T, Dynamic, Dynamic, ColMajor>, 0, OuterStride<> > matrix(const T* data, int rows, int cols,
-                                                                           int stride) {
-  return Map<const Matrix<T, Dynamic, Dynamic, ColMajor>, 0, OuterStride<> >(data, rows, cols, OuterStride<>(stride));
+Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>, 0, Eigen::OuterStride<> > matrix(
+    const T* data, int rows, int cols, int stride) {
+  return Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>, 0, Eigen::OuterStride<> >(
+      data, rows, cols, Eigen::OuterStride<>(stride));
 }
 
 template <typename T>
-Map<Matrix<T, Dynamic, 1>, 0, InnerStride<Dynamic> > make_vector(T* data, int size, int incr) {
-  return Map<Matrix<T, Dynamic, 1>, 0, InnerStride<Dynamic> >(data, size, InnerStride<Dynamic>(incr));
+Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, 1>, 0, Eigen::InnerStride<Eigen::Dynamic> > make_vector(T* data, int size,
+                                                                                                    int incr) {
+  return Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, 1>, 0, Eigen::InnerStride<Eigen::Dynamic> >(
+      data, size, Eigen::InnerStride<Eigen::Dynamic>(incr));
 }
 
 template <typename T>
-Map<const Matrix<T, Dynamic, 1>, 0, InnerStride<Dynamic> > make_vector(const T* data, int size, int incr) {
-  return Map<const Matrix<T, Dynamic, 1>, 0, InnerStride<Dynamic> >(data, size, InnerStride<Dynamic>(incr));
+Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, 1>, 0, Eigen::InnerStride<Eigen::Dynamic> > make_vector(const T* data,
+                                                                                                          int size,
+                                                                                                          int incr) {
+  return Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, 1>, 0, Eigen::InnerStride<Eigen::Dynamic> >(
+      data, size, Eigen::InnerStride<Eigen::Dynamic>(incr));
 }
 
 template <typename T>
-Map<Matrix<T, Dynamic, 1> > make_vector(T* data, int size) {
-  return Map<Matrix<T, Dynamic, 1> >(data, size);
+Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, 1> > make_vector(T* data, int size) {
+  return Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, 1> >(data, size);
 }
 
 template <typename T>
-Map<const Matrix<T, Dynamic, 1> > make_vector(const T* data, int size) {
-  return Map<const Matrix<T, Dynamic, 1> >(data, size);
+Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, 1> > make_vector(const T* data, int size) {
+  return Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, 1> >(data, size);
 }
 
 template <typename T>

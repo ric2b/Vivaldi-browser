@@ -16,8 +16,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/accessibility/platform/ax_platform.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/cursor/cursor.h"
@@ -423,15 +423,23 @@ void Label::SetObscured(bool obscured) {
                     kPropertyEffectsPreferredSizeChanged);
 }
 
-bool Label::IsDisplayTextTruncated() const {
+bool Label::IsDisplayTextClipped() const {
   MaybeBuildDisplayText();
   if (!full_text_ || full_text_->text().empty())
     return false;
   auto text_bounds = GetTextBounds();
+  return text_bounds.width() > GetContentsBounds().width() ||
+         text_bounds.height() > GetContentsBounds().height();
+}
+
+bool Label::IsDisplayTextTruncated() const {
+  MaybeBuildDisplayText();
+  if (!full_text_ || full_text_->text().empty()) {
+    return false;
+  }
   return (display_text_ &&
           display_text_->text() != display_text_->GetDisplayText()) ||
-         text_bounds.width() > GetContentsBounds().width() ||
-         text_bounds.height() > GetContentsBounds().height();
+         IsDisplayTextClipped();
 }
 
 bool Label::GetAllowCharacterBreak() const {
@@ -634,10 +642,6 @@ int Label::GetBaseline() const {
   return GetInsets().top() + font_list().GetBaseline();
 }
 
-gfx::Size Label::CalculatePreferredSize() const {
-  return CalculatePreferredSize({width(), {}});
-}
-
 gfx::Size Label::CalculatePreferredSize(
     const SizeBounds& available_size) const {
   // Return a size of (0, 0) if the label is not visible and if the
@@ -811,7 +815,7 @@ void Label::PaintText(gfx::Canvas* canvas) {
 
 #if DCHECK_IS_ON() && !BUILDFLAG(IS_CHROMEOS_ASH) && \
     !BUILDFLAG(IS_CHROMEOS_LACROS)
-  // TODO(crbug.com/1139395): Enable this DCHECK on ChromeOS and LaCrOS by
+  // TODO(crbug.com/40725997): Enable this DCHECK on ChromeOS and LaCrOS by
   // fixing either this check (to correctly idenfify more paints-on-opaque
   // cases), refactoring parents to use background() or by fixing
   // subpixel-rendering issues that the DCHECK detects.
@@ -995,7 +999,7 @@ void Label::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 #if BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
   // If the accessible name changed since the last time we computed the text
   // offsets, we need to recompute them.
-  if (::features::IsUiaProviderEnabled() &&
+  if (::ui::AXPlatform::GetInstance().IsUiaProviderEnabled() &&
       ax_name_used_to_compute_offsets_ != GetAccessibleName()) {
     GetViewAccessibility().ClearTextOffsets();
     ax_name_used_to_compute_offsets_.clear();
@@ -1009,7 +1013,7 @@ void Label::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 #if BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
 bool Label::RefreshAccessibleTextOffsets() {
   MaybeBuildDisplayText();
-  // TODO(https://crbug.com/1485632): Add support for multiline textfields.
+  // TODO(crbug.com/40933356): Add support for multiline textfields.
   if (!display_text_ || display_text_->multiline()) {
     return false;
   }
@@ -1082,7 +1086,7 @@ bool Label::IsReadOnly() const {
 }
 
 bool Label::SupportsDrag() const {
-  // TODO(crbug.com/661379): Labels should support dragging selected text.
+  // TODO(crbug.com/40491606): Labels should support dragging selected text.
   return false;
 }
 
@@ -1256,7 +1260,7 @@ gfx::Size Label::GetBoundedTextSize(const SizeBounds& available_size) const {
                           : 0;
     // SetDisplayRect() has side-effect. The text height will change to respect
     // width.
-    // TODO(crbug.com/1347330): `width` should respect insets, but doing so
+    // TODO(crbug.com/40232910): `width` should respect insets, but doing so
     // will break LabelTest.MultiLineSizing. Fix that.
     full_text_->SetDisplayRect(gfx::Rect(0, 0, width, 0));
     size = full_text_->GetStringSize();

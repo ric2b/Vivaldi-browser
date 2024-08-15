@@ -13,6 +13,8 @@ import { getDefaultLimits, kLimits } from '../capability_info.js';
 // This file should not be transitively imported by .cache.ts files
 
 export interface DeviceProvider {
+  /** Adapter the device was created from. Cannot be reused; just for adapter info. */
+  readonly adapter: GPUAdapter;
   readonly device: GPUDevice;
   expectDeviceLost(reason: GPUDeviceLostReason): void;
 }
@@ -22,21 +24,33 @@ class FeaturesNotSupported extends Error {}
 export class TestOOMedShouldAttemptGC extends Error {}
 
 export class DevicePool {
-  private holders = new DescriptorToHolderMap();
-
-  async requestAdapter(recorder: TestCaseRecorder) {
-    const gpu = getGPU(recorder);
-    const adapter = await gpu.requestAdapter();
-    assert(adapter !== null, 'requestAdapter returned null');
-    return adapter;
-  }
+  private holders: 'uninitialized' | 'failed' | DescriptorToHolderMap = 'uninitialized';
 
   /** Acquire a device from the pool and begin the error scopes. */
   async acquire(
-    adapter: GPUAdapter,
+    recorder: TestCaseRecorder,
     descriptor?: UncanonicalizedDeviceDescriptor
   ): Promise<DeviceProvider> {
-    const holder = await this.holders.getOrCreate(adapter, descriptor);
+    let errorMessage = '';
+    if (this.holders === 'uninitialized') {
+      this.holders = new DescriptorToHolderMap();
+      try {
+        await this.holders.getOrCreate(recorder, undefined);
+      } catch (ex) {
+        this.holders = 'failed';
+        if (ex instanceof Error) {
+          errorMessage = ` with ${ex.name} "${ex.message}"`;
+        }
+      }
+    }
+
+    assert(
+      this.holders !== 'failed',
+      `WebGPU device failed to initialize${errorMessage}; not retrying`
+    );
+
+    const holder = await this.holders.getOrCreate(recorder, descriptor);
+
     assert(holder.state === 'free', 'Device was in use on DevicePool.acquire');
     holder.state = 'acquired';
     holder.beginTestScope();
@@ -126,7 +140,7 @@ class DescriptorToHolderMap {
    * Throws SkipTestCase if devices with this descriptor are unsupported.
    */
   async getOrCreate(
-    adapter: GPUAdapter,
+    recorder: TestCaseRecorder,
     uncanonicalizedDescriptor: UncanonicalizedDeviceDescriptor | undefined
   ): Promise<DeviceHolder> {
     const [descriptor, key] = canonicalizeDescriptor(uncanonicalizedDescriptor);
@@ -151,7 +165,7 @@ class DescriptorToHolderMap {
     // No existing item was found; add a new one.
     let value;
     try {
-      value = await DeviceHolder.create(adapter, descriptor);
+      value = await DeviceHolder.create(recorder, descriptor);
     } catch (ex) {
       if (ex instanceof FeaturesNotSupported) {
         this.unsupported.add(key);
@@ -274,6 +288,8 @@ type DeviceHolderState = 'free' | 'acquired';
  * Holds a GPUDevice and tracks its state (free/acquired) and handles device loss.
  */
 class DeviceHolder implements DeviceProvider {
+  /** Adapter the device was created from. Cannot be reused; just for adapter info. */
+  readonly adapter: GPUAdapter;
   /** The device. Will be cleared during cleanup if there were unexpected errors. */
   private _device: GPUDevice | undefined;
   /** Whether the device is in use by a test or not. */
@@ -286,21 +302,23 @@ class DeviceHolder implements DeviceProvider {
   // Gets a device and creates a DeviceHolder.
   // If the device is lost, DeviceHolder.lost gets set.
   static async create(
-    adapter: GPUAdapter,
+    recorder: TestCaseRecorder,
     descriptor: CanonicalDeviceDescriptor | undefined
   ): Promise<DeviceHolder> {
-    assert(adapter !== null, 'requestAdapter is null');
+    const gpu = getGPU(recorder);
+    const adapter = await gpu.requestAdapter();
+    assert(adapter !== null, 'requestAdapter returned null');
     if (!supportsFeature(adapter, descriptor)) {
       throw new FeaturesNotSupported('One or more features are not supported');
     }
-
     const device = await adapter.requestDevice(descriptor);
     assert(device !== null, 'requestDevice returned null');
 
-    return new DeviceHolder(device);
+    return new DeviceHolder(adapter, device);
   }
 
-  private constructor(device: GPUDevice) {
+  private constructor(adapter: GPUAdapter, device: GPUDevice) {
+    this.adapter = adapter;
     this._device = device;
     void this._device.lost.then(ev => {
       this.lostInfo = ev;

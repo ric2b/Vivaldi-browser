@@ -5,13 +5,15 @@
 <translation id="1118377629180821201">Paesaggio 12</translation>
 <translation id="1158503667684816647">Non mostrare nuovamente la conferma</translation>
 <translation id="1222195720020481779">Avvio programma di installazione...</translation>
-<translation id="1276145862619442150">Selezione Rapida</translation>
+<translation id="1270785070369717623">Purtroppo le tue impostazioni di Opera GX non sono disponibili mentre il browser è in esecuzione. Per importarle in Vivaldi, salva il tuo lavoro e chiudi tutte le finestre di Opera GX. Poi clicca su Continua.</translation>
+<translation id="1276145862619442150">Selezioni rapide</translation>
 <translation id="1281950884873973195">Animale 6</translation>
 <translation id="1411638389238344450">Invia Link per posta</translation>
 <translation id="1454726940098520109">Non Chiedere Conferma Di Nuovo</translation>
 <translation id="1462666970065907900">Vuoi davvero chiudere questa finestra?</translation>
 <translation id="1480046233931937785">Riconoscimenti</translation>
 <translation id="1526344461589023948">Si è verificato un errore durante il salvataggio di un aggiornamento. Verifica che il computer abbia spazio su disco sufficiente e riprova.</translation>
+<translation id="1635542496948266458">Cambia profilo</translation>
 <translation id="1657174850639146440">Mostro 9</translation>
 <translation id="1676595396635191120">Nuova finestra privata</translation>
 <translation id="1702758681952953055">Se l'errore persiste, segnalalo e includi i seguenti dettagli:</translation>
@@ -27,12 +29,14 @@
 <translation id="1985669426322966465">Aggiornamento programma</translation>
 <translation id="2079036669923635404">Clicca qui per aggiornare Vivaldi alla versione <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Si è verificato un errore durante il download dei file di aggiornamento. Controlla la tua connessione e riprova.</translation>
+<translation id="2226825946708954262">⚠ Continua con perdita di dati</translation>
 <translation id="2339641773402824483">Ricerca aggiornamenti...</translation>
 <translation id="2441056087170876076">Mostro 2</translation>
 <translation id="2444387452209867610">Inserisci nota</translation>
 <translation id="2486841023299517366">Animale 4</translation>
 <translation id="2612127540243995147">Pronto per l'installazione. Vivaldi verrà chiuso e riavviato.</translation>
 <translation id="2613387515621326337">Mostra il sito per l'aggiornamento</translation>
+<translation id="2645477450146475243">Purtroppo le tue impostazioni di Opera non sono disponibili mentre il browser è in esecuzione. Per importarle in Vivaldi, salva il tuo lavoro e chiudi tutte le finestre di Opera. Poi clicca su Continua.</translation>
 <translation id="2647368062414805334">Purtroppo le impostazioni di Edge non sono disponibili mentre il browser è in uso. Per importare queste impostazioni in Vivaldi, salva il tuo lavoro e chiudi tutte le finestre di Edge. Poi clicca su Continua.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Animale 3</translation>
@@ -41,11 +45,14 @@
 <translation id="2923448633003185837">Incolla e Vai</translation>
 <translation id="2953943267837858202">Riproduzione automatica video non consentita</translation>
 <translation id="2977472760057091832">Apri link in una finestra privata</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Apri in una nuova scheda</translation>
 <translation id="3027988479108856431">Purtroppo le impostazioni di Yandex non sono disponibili mentre il browser è in uso. Per importare queste impostazioni in Vivaldi, salva il tuo lavoro e chiudi tutte le finestre di Yandex. Poi clicca su Continua.</translation>
 <translation id="3084011186245865060">Paesaggio 6</translation>
+<translation id="3085906383264247940">Opera (Beta)</translation>
 <translation id="3093931836425623631">Vivaldi è reso possibile dal progetto open source Chromium e da altri programmi open source.</translation>
 <translation id="3127383884976966729">Animale 7</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">Nuovo segnalibro</translation>
 <translation id="3255747772218936245">Installa aggiornamento</translation>
 <translation id="3259769196742189631">Convalida sorgente pagina</translation>
@@ -64,6 +71,7 @@
 <translation id="3588820906588687999">Apri immagine in nuova scheda</translation>
 <translation id="3601066750251199488">Mostro 3</translation>
 <translation id="3620979700683094848">I siti possono riprodurre automaticamente video</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">È disponibile una nuova versione di Vivaldi!</translation>
 <translation id="3708982624815781692">Il download è stato annullato.</translation>
 <translation id="3732157130969736834">Aggiungi link nei segnalibri</translation>
@@ -77,6 +85,9 @@
 <translation id="3943857333388298514">Incolla</translation>
 <translation id="4005270918754737597">Salta questa versione</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi non può sbloccare il tuo archivio chiavi protetto. Senza l'archivio chiavi perderai i tuoi accessi salvati, i cookie protetti e alcune funzioni, come Sincronizzazione, Posta e Calendario, smetteranno di funzionare.
+
+    Esci ora, sblocca o ripara l'archivio chiavi e riprova. Vuoi davvero continuare, ma perdendo i dati?</translation>
 <translation id="4074744496918018786">Apri immagine in finestra privata</translation>
 <translation id="410351446219883937">Riproduzione automatica</translation>
 <translation id="4281844954008187215">Condizioni di servizio</translation>
@@ -98,11 +109,13 @@
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> di <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Selezione rapida importata</translation>
 <translation id="5092656712000637858">Aggiungi pagina al pannello web</translation>
+<translation id="5106275083540628394">Decrittazione non riuscita: rischio di perdita dati</translation>
 <translation id="5177818338935286353">Mostro 7</translation>
 <translation id="5213743983876949565">Animale 1</translation>
 <translation id="5238244642230426581">Segnalibri importati</translation>
 <translation id="527605719918376753">Silenzia scheda</translation>
 <translation id="5305569355661722298">Conferma la chiusura della finestra</translation>
+<translation id="5322922669477407077">Opera (Developer)</translation>
 <translation id="5388358297987318779">Apri immagine</translation>
 <translation id="5416008465899576639">È disponibile una nuova versione di Vivaldi.</translation>
 <translation id="5497042274492038489">Conferma la chiusura della finestra</translation>
@@ -118,6 +131,7 @@
 <translation id="6229528619562190452">Clicca qui per aggiornare Vivaldi.</translation>
 <translation id="6234173136417926046">Usa immagine come sfondo per la pagina iniziale</translation>
 <translation id="6339818817272922368">Account locale</translation>
+<translation id="6398710281890660037">Proteggi il mio profilo</translation>
 <translation id="6438786710866753178">Paesaggio 4</translation>
 <translation id="6477028720702061455">Seleziona cartella profilo Opera per l'importazione</translation>
 <translation id="6510706699590490869">&amp;Aggiornamento Vivaldi</translation>
@@ -129,8 +143,11 @@
 <translation id="6726279523566323394">Seleziona la cartella del profilo di Brave per l'importazione</translation>
 <translation id="6892812721183419409">Apri link come <ph name="USER" /></translation>
 <translation id="6896758677409633944">Copia</translation>
+<translation id="6960139763942959188">Questo profilo ora è archiviato in modo non sicuro in un formato non crittografato. Vivaldi sta per aggiornare il tuo profilo a un formato crittografato più sicuro. Dovresti uscire ora ed eseguire il backup del tuo profilo prima di continuare.</translation>
 <translation id="7086554968911045110">Paesaggio 7</translation>
+<translation id="7099506190679014195">Aggiornamento sicuro dell'archivio chiavi</translation>
 <translation id="7111492742514999492">Paesaggio 9</translation>
+<translation id="7208252576848052204">Purtroppo le tue impostazioni di Arc non sono disponibili mentre il browser è in esecuzione. Per importarle in Vivaldi, salva il tuo lavoro e chiudi tutte le finestre di Arc. Poi clicca su Continua.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Impossibile avviare l'installazione dell'aggiornamento. Verifica che il computer abbia memoria o spazio su disco sufficienti e riprova.</translation>
 <translation id="7658239707568436148">Annulla</translation>
@@ -161,6 +178,7 @@
 <translation id="8669345741879513971">Mostro 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Ispeziona il documento del portale</translation>
+<translation id="875142999698251063">Chiudi ora</translation>
 <translation id="8768970203213061953">Paesaggio 14</translation>
 <translation id="8773635261052182196">Non vedrai più queste notifiche. È possibile attivarle nuovamente dalle impostazioni di Vivaldi.</translation>
 <translation id="8774017153185436870">I siti potrebbero riprodurre automaticamente video</translation>
@@ -172,6 +190,7 @@
 <translation id="9048058608784130603">Aggiornamento in attesa <ph name="VERSION" /></translation>
 <translation id="9048224371732578627">Riproduzione automatica video consentita</translation>
 <translation id="9065203028668620118">Modifica</translation>
+<translation id="9090254883741610153">Lasciami continuare</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Apri immagine come <ph name="USER" /></translation>
 <translation id="9157539936604258187">Apri link</translation>

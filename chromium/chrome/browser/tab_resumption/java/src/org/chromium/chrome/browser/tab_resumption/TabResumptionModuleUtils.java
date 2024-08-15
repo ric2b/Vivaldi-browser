@@ -7,65 +7,80 @@ package org.chromium.chrome.browser.tab_resumption;
 import android.content.res.Resources;
 import android.text.TextUtils;
 
+import org.chromium.base.cached_flags.BooleanCachedFieldTrialParameter;
+import org.chromium.base.cached_flags.IntCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.magic_stack.HomeModulesConfigManager;
-import org.chromium.chrome.browser.magic_stack.ModuleDelegate.ModuleType;
-import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
-import org.chromium.chrome.browser.sync.SyncServiceFactory;
-import org.chromium.chrome.browser.tab_resumption.TabResumptionModuleMetricsUtils.ModuleNotShownReason;
-import org.chromium.chrome.browser.tab_resumption.TabResumptionModuleMetricsUtils.ModuleVisibility;
 import org.chromium.components.embedder_support.util.UrlUtilities;
-import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.url.GURL;
 
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /** Utilities for the tab resumption module. */
 public class TabResumptionModuleUtils {
+    private static final int DEFAULT_MAX_TILES_NUMBER = 2;
 
     /** Callback to handle click on suggestion tiles. */
-    public interface SuggestionClickCallback {
-        void onSuggestionClick(GURL gurl);
+    public interface SuggestionClickCallbacks {
+        // Called to open a URL.
+        void onSuggestionClickByUrl(GURL gurl);
+
+        // Called to switch to an existing Tab.
+        void onSuggestionClickByTabId(int tabId);
     }
 
     /**
-     * Based on settings, decides whether Chrome should attempt to show the tab resumption module.
-     * Provides the reason if the decision is to not show.
+     * A set of the host URLs of default native apps on Android. This set should be keep consistent
+     * with kDefaultAppBlocklist in {@link
+     * components/visited_url_ranking/internal/url_visit_util.h}.
      */
-    static ModuleVisibility computeModuleVisibility(Profile profile) {
-        if (!ChromeFeatureList.sTabResumptionModuleAndroid.isEnabled()
-                || !HomeModulesConfigManager.getInstance()
-                        .getPrefModuleTypeEnabled(ModuleType.TAB_RESUMPTION)) {
-            return new ModuleVisibility(false, ModuleNotShownReason.FEATURE_DISABLED);
-        }
+    static final Set<String> sDefaultAppBlocklist =
+            Set.of(
+                    "assistant.google.com",
+                    "calendar.google.com",
+                    "docs.google.com",
+                    "drive.google.com",
+                    "mail.google.com",
+                    "music.youtube.com",
+                    "m.youtube.com",
+                    "photos.google.com",
+                    "www.youtube.com");
 
-        if (!IdentityServicesProvider.get()
-                .getIdentityManager(profile)
-                .hasPrimaryAccount(ConsentLevel.SYNC)) {
-            return new ModuleVisibility(false, ModuleNotShownReason.NOT_SIGNED_IN);
-        }
+    private static final String TAB_RESUMPTION_V2_PARAM = "enable_v2";
+    public static final BooleanCachedFieldTrialParameter TAB_RESUMPTION_V2 =
+            ChromeFeatureList.newBooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.TAB_RESUMPTION_MODULE_ANDROID,
+                    TAB_RESUMPTION_V2_PARAM,
+                    false);
 
-        if (!SyncServiceFactory.getForProfile(profile).hasKeepEverythingSynced()) {
-            return new ModuleVisibility(false, ModuleNotShownReason.NOT_SYNC);
-        }
+    private static final String TAB_RESUMPTION_MAX_TILES_NUMBER_PARAM = "max_tiles_number";
+    public static final IntCachedFieldTrialParameter TAB_RESUMPTION_MAX_TILES_NUMBER =
+            ChromeFeatureList.newIntCachedFieldTrialParameter(
+                    ChromeFeatureList.TAB_RESUMPTION_MODULE_ANDROID,
+                    TAB_RESUMPTION_MAX_TILES_NUMBER_PARAM,
+                    DEFAULT_MAX_TILES_NUMBER);
 
-        return new ModuleVisibility(true, ModuleNotShownReason.NUM_ENTRIES);
-    }
+    private static final String TAB_RESUMPTION_USE_SALIENT_IMAGE_PARAM = "use_salient_image";
+    public static final BooleanCachedFieldTrialParameter TAB_RESUMPTION_USE_SALIENT_IMAGE =
+            ChromeFeatureList.newBooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.TAB_RESUMPTION_MODULE_ANDROID,
+                    TAB_RESUMPTION_USE_SALIENT_IMAGE_PARAM,
+                    false);
 
-    /**
-     * Returns whether to show the tab resumption module. The module shows only if the following are
-     * met:
-     *
-     * <pre>
-     * 1. Feature (by flag TAB_RESUMPTION_MODULE_ANDROID and user preferences) is enabled;
-     * 2. The user has signed in;
-     * 3. The user has turned on sync.
-     * </pre>
-     */
-    static boolean shouldShowTabResumptionModule(Profile profile) {
-        return computeModuleVisibility(profile).value;
-    }
+    private static final String TAB_RESUMPTION_SHOW_SEE_MORE_PARAM = "show_see_more";
+    public static final BooleanCachedFieldTrialParameter TAB_RESUMPTION_SHOW_SEE_MORE =
+            ChromeFeatureList.newBooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.TAB_RESUMPTION_MODULE_ANDROID,
+                    TAB_RESUMPTION_SHOW_SEE_MORE_PARAM,
+                    false);
+
+    private static final String TAB_RESUMPTION_USE_DEFAULT_APP_FILTER_PARAM =
+            "use_default_app_filter";
+    public static final BooleanCachedFieldTrialParameter TAB_RESUMPTION_USE_DEFAULT_APP_FILTER =
+            ChromeFeatureList.newBooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.TAB_RESUMPTION_MODULE_ANDROID,
+                    TAB_RESUMPTION_USE_DEFAULT_APP_FILTER_PARAM,
+                    false);
 
     /**
      * Computes the string representation of how recent an event was, given the time delta.
@@ -100,5 +115,16 @@ public class TabResumptionModuleUtils {
     static String getDomainUrl(GURL url) {
         String domainUrl = UrlUtilities.getDomainAndRegistry(url.getSpec(), false);
         return TextUtils.isEmpty(domainUrl) ? url.getHost() : domainUrl;
+    }
+
+    /**
+     * Returns whether to exclude the given URL. It returns true if the host of the URL matches one
+     * of the default native apps.
+     *
+     * @param url The URL of the suggestion.
+     */
+    static boolean shouldExcludeUrl(GURL url) {
+        return TabResumptionModuleUtils.TAB_RESUMPTION_USE_DEFAULT_APP_FILTER.getValue()
+                && sDefaultAppBlocklist.contains(url.getHost());
     }
 }

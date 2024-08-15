@@ -93,13 +93,6 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestChipGestureSensitiveBrowserTest,
   // location icon isn't offset by the chip and the bubble is hidden.
   EXPECT_FALSE(lbv->GetChipController()->IsPermissionPromptChipVisible());
   EXPECT_FALSE(lbv->GetChipController()->IsBubbleShowing());
-  if (!features::IsChromeRefresh2023() &&
-      !OmniboxFieldTrial::IsCr23LayoutEnabled()) {
-    // CR2023 has a few experimental flavors of LocationIconView positioning.
-    // It does not make sense to test them here. See LocationBarView::Layout().
-    EXPECT_EQ(lbv->location_icon_view()->bounds().x(),
-              GetLayoutConstant(LOCATION_BAR_ELEMENT_PADDING));
-  }
 
   // Ensure no callbacks are pending.
   EXPECT_FALSE(
@@ -377,8 +370,14 @@ class PermissionRequestChipBrowserUiTest : public UiBrowserTest {
           gfx::Animation::RichAnimationRenderMode::FORCE_DISABLED);
 };
 
+// TODO(crbug.com/340578724): Flaky on Windows.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_InvokeUi_geolocation DISABLED_InvokeUi_geolocation
+#else
+#define MAYBE_InvokeUi_geolocation InvokeUi_geolocation
+#endif
 IN_PROC_BROWSER_TEST_F(PermissionRequestChipBrowserUiTest,
-                       InvokeUi_geolocation) {
+                       MAYBE_InvokeUi_geolocation) {
   ShowAndVerifyUi();
 }
 

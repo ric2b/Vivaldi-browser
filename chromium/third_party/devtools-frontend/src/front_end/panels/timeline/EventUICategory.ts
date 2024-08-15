@@ -411,10 +411,6 @@ const UIStrings = {
    */
   imageDecode: 'Image Decode',
   /**
-   *@description Event category in the Performance panel for time spent to resize an image
-   */
-  imageResize: 'Image Resize',
-  /**
    *@description Event category in the Performance panel for time spent to perform Garbage Collection for the Document Object Model
    */
   domGc: 'DOM GC',
@@ -653,6 +649,9 @@ export function maybeInitSylesMap(): EventStylesMap {
     [TraceEngine.Types.TraceEvents.KnownEventName.ProfileCall]:
         new TimelineRecordStyle(i18nString(UIStrings.jsFrame), defaultCategoryStyles.scripting),
 
+    [TraceEngine.Types.TraceEvents.KnownEventName.JSSample]:
+        new TimelineRecordStyle(TraceEngine.Types.TraceEvents.KnownEventName.JSSample, defaultCategoryStyles.scripting),
+
     [TraceEngine.Types.TraceEvents.KnownEventName.Program]:
         new TimelineRecordStyle(i18nString(UIStrings.other), defaultCategoryStyles.other),
 
@@ -696,9 +695,6 @@ export function maybeInitSylesMap(): EventStylesMap {
         i18nString(UIStrings.scheduleStyleRecalculation),
         defaultCategoryStyles.rendering,
         ),
-
-    [TraceEngine.Types.TraceEvents.KnownEventName.RecalculateStyles]:
-        new TimelineRecordStyle(i18nString(UIStrings.recalculateStyle), defaultCategoryStyles.rendering),
 
     [TraceEngine.Types.TraceEvents.KnownEventName.UpdateLayoutTree]:
         new TimelineRecordStyle(i18nString(UIStrings.recalculateStyle), defaultCategoryStyles.rendering),
@@ -914,9 +910,6 @@ export function maybeInitSylesMap(): EventStylesMap {
     [TraceEngine.Types.TraceEvents.KnownEventName.MinorGC]:
         new TimelineRecordStyle(i18nString(UIStrings.minorGc), defaultCategoryStyles.scripting),
 
-    [TraceEngine.Types.TraceEvents.KnownEventName.IncrementalGCMarking]:
-        new TimelineRecordStyle(i18nString(UIStrings.gcEvent), defaultCategoryStyles.scripting),
-
     [TraceEngine.Types.TraceEvents.KnownEventName.CPPGCSweep]:
         new TimelineRecordStyle(i18nString(UIStrings.cppGc), defaultCategoryStyles.scripting),
 
@@ -967,9 +960,6 @@ export function maybeInitSylesMap(): EventStylesMap {
 
     [TraceEngine.Types.TraceEvents.KnownEventName.DecodeImage]:
         new TimelineRecordStyle(i18nString(UIStrings.imageDecode), defaultCategoryStyles.painting),
-
-    [TraceEngine.Types.TraceEvents.KnownEventName.ResizeImage]:
-        new TimelineRecordStyle(i18nString(UIStrings.imageResize), defaultCategoryStyles.painting),
 
     [TraceEngine.Types.TraceEvents.KnownEventName.GPUTask]:
         new TimelineRecordStyle(i18nString(UIStrings.gpu), defaultCategoryStyles.gpu),

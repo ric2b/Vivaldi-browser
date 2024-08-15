@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 
+#include "discovery/common/config.h"
 #include "discovery/mdns/public/mdns_records.h"
 #include "platform/api/time.h"
 #include "platform/base/macros.h"
@@ -21,7 +22,6 @@ class TaskRunner;
 
 namespace discovery {
 
-struct Config;
 class MdnsMessage;
 class MdnsProbeManager;
 class MdnsRandom;
@@ -63,13 +63,13 @@ class MdnsResponder {
   // |record_handler|, |sender|, |receiver|, |task_runner|, |random_delay|, and
   // |config| are expected to persist for the duration of this instance's
   // lifetime.
-  MdnsResponder(RecordHandler* record_handler,
-                MdnsProbeManager* ownership_handler,
-                MdnsSender* sender,
-                MdnsReceiver* receiver,
+  MdnsResponder(RecordHandler& record_handler,
+                MdnsProbeManager& ownership_handler,
+                MdnsSender& sender,
+                MdnsReceiver& receiver,
                 TaskRunner& task_runner,
                 ClockNowFunctionPtr now_function,
-                MdnsRandom* random_delay,
+                MdnsRandom& random_delay,
                 const Config& config);
   ~MdnsResponder();
 
@@ -82,7 +82,7 @@ class MdnsResponder {
    public:
     // |responder| and |task_runner| are expected to persist for the duration of
     // this instance's lifetime.
-    TruncatedQuery(MdnsResponder* responder,
+    TruncatedQuery(MdnsResponder& responder,
                    TaskRunner& task_runner,
                    ClockNowFunctionPtr now_function,
                    IPEndpoint src,
@@ -120,7 +120,7 @@ class MdnsResponder {
     const int max_allowed_messages_;
     const int max_allowed_records_;
     const IPEndpoint src_;
-    MdnsResponder* const responder_;
+    MdnsResponder& responder_;
 
     std::vector<MdnsQuestion> questions_;
     std::vector<MdnsRecord> known_answers_;
@@ -154,14 +154,14 @@ class MdnsResponder {
   // NOTE: unique_ptrs used because TruncatedQuery is not movable.
   std::map<IPEndpoint, std::unique_ptr<TruncatedQuery>> truncated_queries_;
 
-  RecordHandler* const record_handler_;
-  MdnsProbeManager* const ownership_handler_;
-  MdnsSender* const sender_;
-  MdnsReceiver* const receiver_;
+  RecordHandler& record_handler_;
+  MdnsProbeManager& ownership_handler_;
+  MdnsSender& sender_;
+  MdnsReceiver& receiver_;
   TaskRunner& task_runner_;
   const ClockNowFunctionPtr now_function_;
-  MdnsRandom* const random_delay_;
-  const Config& config_;
+  MdnsRandom& random_delay_;
+  Config config_;
 
   friend class MdnsResponderTest;
 };

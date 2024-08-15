@@ -72,6 +72,7 @@
 #endif
 
 #if defined(SK_METAL)
+#include "include/gpu/ganesh/mtl/GrMtlBackendSurface.h"
 #include "include/gpu/ganesh/mtl/GrMtlTypes.h"
 #include "src/gpu/ganesh/mtl/GrMtlCppUtil.h"
 #endif
@@ -195,7 +196,7 @@ static bool isBGRA8(const GrBackendFormat& format) {
         }
         case GrBackendApi::kMetal:
 #ifdef SK_METAL
-            return GrMtlFormatIsBGRA8(format.asMtlFormat());
+            return GrMtlFormatIsBGRA8(GrBackendFormats::AsMtlFormat(format));
 #else
             return false;
 #endif
@@ -626,6 +627,7 @@ void color_type_backend_allocation_test(const sk_gpu_test::ContextInfo& ctxInfo,
         { kBGR_101010x_SkColorType,       { 0, 0.5f, 0, 0.5f }     },
         { kBGR_101010x_XR_SkColorType,    { 0, 0.5f, 0, 0.5f }     },
         { kRGBA_10x6_SkColorType,         { 0.25f, 0.5f, 0.75f, 1.0f }},
+        { kBGRA_10101010_XR_SkColorType,  { 0.25f, 0.5f, 0.75f, 1.0f }},
         { kGray_8_SkColorType,            kGrayCol                 },
         { kRGBA_F16Norm_SkColorType,      SkColors::kLtGray        },
         { kRGBA_F16_SkColorType,          SkColors::kYellow        },

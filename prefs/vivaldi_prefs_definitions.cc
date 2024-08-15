@@ -688,7 +688,7 @@ void VivaldiPrefsDefinitions::RegisterProfilePrefs(
 std::optional<sync_preferences::SyncablePrefMetadata>
 VivaldiPrefsDefinitions::GetSyncablePrefMetadata(
     const std::string& pref_name) const {
-  const auto* it = SyncablePreferences().find(pref_name);
+  const auto it = SyncablePreferences().find(pref_name);
   if (it != SyncablePreferences().end()) {
     return it->second;
   }

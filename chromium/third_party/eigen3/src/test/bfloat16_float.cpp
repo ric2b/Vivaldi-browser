@@ -82,7 +82,7 @@ void test_conversion() {
   // Conversion to bool
   VERIFY_IS_EQUAL(static_cast<bool>(bfloat16(3)), true);
   VERIFY_IS_EQUAL(static_cast<bool>(bfloat16(0.33333f)), true);
-  VERIFY_IS_EQUAL(bfloat16(-0.0), false);
+  VERIFY_IS_EQUAL(static_cast<bool>(bfloat16(-0.0)), false);
   VERIFY_IS_EQUAL(static_cast<bool>(bfloat16(0.0)), false);
 
   // Explicit conversion to float.

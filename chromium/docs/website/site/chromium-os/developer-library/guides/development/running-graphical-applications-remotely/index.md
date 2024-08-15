@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: running-graphical-applications-remotely
 title: Running graphical applications remotely
 ---
@@ -29,7 +29,7 @@ DISPLAY=:20 ./out/Default/chrome
 This will set the `DISPLAY` environment variable to `:20` for the duration of
 the command, causing the `chrome` binary to run using `:20` as the targeted
 display. This results in the ChromeOS window opening on the remote desktop
-display despite being run over SSH, or elsehwere.
+display despite being run over SSH, or elsewhere.
 
 ## Forwarding the display using xpra
 

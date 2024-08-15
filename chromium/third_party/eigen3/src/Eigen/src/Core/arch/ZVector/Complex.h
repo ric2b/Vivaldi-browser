@@ -61,6 +61,7 @@ struct packet_traits<std::complex<float> > : default_packet_traits {
     HasMul = 1,
     HasDiv = 1,
     HasLog = 1,
+    HasExp = 1,
     HasNegate = 1,
     HasAbs = 0,
     HasAbs2 = 0,
@@ -434,6 +435,11 @@ EIGEN_STRONG_INLINE Packet2cf pdiv<Packet2cf>(const Packet2cf& a, const Packet2c
 template <>
 EIGEN_STRONG_INLINE Packet2cf plog<Packet2cf>(const Packet2cf& a, const Packet2cf& b) {
   return plog_complex(a, b);
+}
+
+template <>
+EIGEN_STRONG_INLINE Packet2cf pexp<Packet2cf>(const Packet2cf& a, const Packet2cf& b) {
+  return pexp_complex(a, b);
 }
 
 EIGEN_STRONG_INLINE Packet2cf pcplxflip /*<Packet2cf>*/ (const Packet2cf& x) {

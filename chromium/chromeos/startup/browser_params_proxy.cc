@@ -244,6 +244,10 @@ bool BrowserParamsProxy::IsFlossAvailabilityCheckNeeded() const {
   return BrowserInitParams::Get()->is_floss_availability_check_needed;
 }
 
+bool BrowserParamsProxy::IsLLPrivacyAvailable() const {
+  return BrowserInitParams::Get()->is_llprivacy_available;
+}
+
 bool BrowserParamsProxy::IsCurrentUserDeviceOwner() const {
   if (IsLaunchedWithPostLoginParams()) {
     return BrowserPostLoginParams::Get()->is_current_user_device_owner;
@@ -364,6 +368,11 @@ bool BrowserParamsProxy::IsFileSystemProviderCloudFileSystemEnabled() const {
       ->is_file_system_provider_cloud_file_system_enabled;
 }
 
+bool BrowserParamsProxy::IsFileSystemProviderContentCacheEnabled() const {
+  return BrowserInitParams::Get()
+      ->is_file_system_provider_content_cache_enabled;
+}
+
 bool BrowserParamsProxy::IsOrcaEnabled() const {
   return BrowserInitParams::Get()->is_orca_enabled;
 }
@@ -374,6 +383,26 @@ bool BrowserParamsProxy::IsCrosMallEnabled() const {
 
 bool BrowserParamsProxy::IsMahiEnabled() const {
   return BrowserInitParams::Get()->is_mahi_enabled;
+}
+
+bool BrowserParamsProxy::IsContainerAppPreinstallEnabled() const {
+  return BrowserInitParams::Get()->is_container_app_preinstall_enabled;
+}
+
+bool BrowserParamsProxy::IsOrcaUseL10nStringsEnabled() const {
+  return BrowserInitParams::Get()->is_orca_use_l10n_strings_enabled;
+}
+
+bool BrowserParamsProxy::IsMahiSupportedWithCorrectFeatureKey() const {
+  if (IsLaunchedWithPostLoginParams()) {
+    return BrowserPostLoginParams::Get()
+        ->is_mahi_supported_with_correct_feature_key;
+  }
+  return BrowserInitParams::Get()->is_mahi_supported_with_correct_feature_key;
+}
+
+bool BrowserParamsProxy::IsOrcaInternationalizeEnabled() const {
+  return BrowserInitParams::Get()->is_orca_internationalize_enabled;
 }
 
 }  // namespace chromeos

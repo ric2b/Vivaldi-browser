@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">Nicht nach</translation>
 <translation id="2749881179542288782">Grammatik und Rechtschreibung überprüfen</translation>
 <translation id="2785873697295365461">Dateideskriptoren</translation>
-<translation id="2809586584051668049">und <ph name="NUMBER_ADDITIONAL_DISABLED" /> weitere</translation>
 <translation id="2825758591930162672">Öffentlicher Schlüssel des Antragstellers</translation>
 <translation id="2850541429955027218">Design hinzufügen</translation>
 <translation id="2861941300086904918">Sicherheitsmanager für native Clients</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">In neuem Fenster öffnen</translation>
 <translation id="3280237271814976245">Speichern &amp;unter...</translation>
 <translation id="3285322247471302225">Neuer &amp;Tab</translation>
-<translation id="3288047731229977326">Erweiterungen im Entwicklermodus können auf Ihrem Computer Schaden anrichten. Wenn Sie kein Entwickler sind, sollten Sie diese Erweiterungen im Entwicklermodus deaktivieren, um sicher zu sein.</translation>
 <translation id="329838636886466101">Reparieren</translation>
 <translation id="33022249435934718">GDI-Handles</translation>
 <translation id="3303818374450886607">Kopien</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">Die folgende Erweiterung wurde erstellt:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Erweiterungen im Entwicklermodus deaktivieren</translation>
 <translation id="4100839878934973028">Ein anderes Programm auf Ihrem Computer hat eine App hinzugefügt, die sich möglicherweise auf die Funktionsweise von Vivaldi auswirkt.</translation>
 <translation id="4104163789986725820">E&amp;xportieren...</translation>
 <translation id="4109898769411476438">Browser vor dem Import schließen</translation>
@@ -261,7 +258,6 @@
 <translation id="5269977353971873915">Fehler beim Drucken</translation>
 <translation id="5284445933715251131">Download fortsetzen</translation>
 <translation id="52912272896845572">Private Schlüsseldatei ist ungültig.</translation>
-<translation id="5301954838959518834">OK</translation>
 <translation id="5302932258331363306">Ersetzungen einblenden</translation>
 <translation id="5317780077021120954">Speichern</translation>
 <translation id="5334142896108694079">Skript-Cache</translation>

@@ -12,7 +12,6 @@
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/ntp/incognito/incognito_view.h"
-#import "ios/chrome/browser/ui/ntp/incognito/revamped_incognito_view.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_constants.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_url_loader_delegate.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
@@ -37,7 +36,7 @@ using vivaldi::IsVivaldiRunning;
 
 @implementation IncognitoViewController {
   // The UrlLoadingService associated with this view.
-  // TODO(crbug.com/1335402): View controllers should not have access to
+  // TODO(crbug.com/40228520): View controllers should not have access to
   // model-layer objects. Create a mediator to connect model-layer class
   // `UrlLoadingBrowserAgent` to the view controller.
   raw_ptr<UrlLoadingBrowserAgent> _URLLoader;  // weak
@@ -67,18 +66,9 @@ using vivaldi::IsVivaldiRunning;
     [privateView fillSuperview];
     privateView.URLLoaderDelegate = self;
   } else {
-  if (base::FeatureList::IsEnabled(kIncognitoNtpRevamp)) {
-    RevampedIncognitoView* view =
-        [[RevampedIncognitoView alloc] initWithFrame:self.view.bounds];
-    view.URLLoaderDelegate = self;
-    self.incognitoView = view;
-  } else {
-    IncognitoView* view =
-        [[IncognitoView alloc] initWithFrame:self.view.bounds];
-    view.URLLoaderDelegate = self;
-    self.incognitoView = view;
-  }
-
+  IncognitoView* view = [[IncognitoView alloc] initWithFrame:self.view.bounds];
+  view.URLLoaderDelegate = self;
+  self.incognitoView = view;
   self.incognitoView.accessibilityIdentifier = kNTPIncognitoViewIdentifier;
   [self.incognitoView setAutoresizingMask:UIViewAutoresizingFlexibleHeight |
                                           UIViewAutoresizingFlexibleWidth];

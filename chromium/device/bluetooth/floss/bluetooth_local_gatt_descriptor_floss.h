@@ -24,7 +24,7 @@ class BluetoothLocalGattCharacteristicFloss;
 // The BluetoothLocalGattDescriptorFloss class implements
 // BluetoothRemoteGattDescriptor for remote and local GATT characteristic
 // descriptors for platforms that use Floss.
-class BluetoothLocalGattDescriptorFloss
+class DEVICE_BLUETOOTH_EXPORT BluetoothLocalGattDescriptorFloss
     : public device::BluetoothLocalGattDescriptor,
       public FlossGattServerObserver {
  public:
@@ -65,16 +65,21 @@ class BluetoothLocalGattDescriptorFloss
                                         std::vector<uint8_t> value) override;
 
   void ResolveInstanceId(const GattCharacteristic& characteristic);
+  int32_t InstanceId() const { return floss_instance_id_; }
+  device::BluetoothGattCharacteristic::NotificationType CccdNotificationType() {
+    return cccd_type_;
+  }
 
  private:
   friend class BluetoothLocalGattCharacteristicFloss;
+  friend class BluetoothLocalGattServiceFlossTest;
 
   BluetoothLocalGattDescriptorFloss(
       const device::BluetoothUUID& uuid,
       device::BluetoothGattCharacteristic::Permissions permissions,
       BluetoothLocalGattCharacteristicFloss* characteristic);
 
-  // Convert this descriptor to GattDescriptor struct.
+  // Convert this descriptor to DBUS |GattDescriptor| struct.
   GattDescriptor ToGattDescriptor();
 
   // Runs after the browser client has processed the read request and has sent a
@@ -90,6 +95,13 @@ class BluetoothLocalGattDescriptorFloss
                               std::vector<uint8_t>& value,
                               bool needs_response,
                               bool success);
+
+  // Notify browser clients if there was a change to the CCCD.
+  GattStatus HandleCccDescriptor(std::string address,
+                                 std::vector<uint8_t>& value);
+
+  // Notification type of the CCCD.
+  device::BluetoothGattCharacteristic::NotificationType cccd_type_;
 
   // Cached instance of the latest pending read/write request, if one exists.
   std::optional<GattRequest> pending_request_;
@@ -108,7 +120,7 @@ class BluetoothLocalGattDescriptorFloss
 
   // Client and Floss-assigned instance id.
   int32_t client_instance_id_;
-  int32_t floss_instance_id_;
+  int32_t floss_instance_id_ = -1;
 
   // Index of this descriptor within the containing characteristic.
   int32_t index_;

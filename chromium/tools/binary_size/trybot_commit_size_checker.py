@@ -99,7 +99,7 @@ class _SizeDelta(collections.namedtuple(
 
 # See https://crbug.com/1426694
 def _MaxSizeIncrease(author, subject):
-  if 'AFDO' in subject:
+  if 'AFDO' in subject or 'PGO Profile' in subject:
     return 1024 * 1024
   if 'Update V8' in subject:
     return 100 * 1024
@@ -142,8 +142,8 @@ def _CreateMethodCountDelta(symbols, max_increase):
   symbols = symbols.WhereIsOnDemand(False)
   method_symbols = symbols.WhereInSection(models.SECTION_DEX_METHOD)
   method_lines, net_method_added = _SymbolDiffHelper('Methods', method_symbols)
-  class_symbols = symbols.WhereInSection(
-      models.SECTION_DEX).WhereNameMatches('#').Inverted()
+  class_symbols = symbols.WhereInSection(models.SECTION_DEX).Filter(
+      lambda s: not s.IsStringLiteral() and '#' not in s.name)
   class_lines, _ = _SymbolDiffHelper('Classes', class_symbols)
   lines = []
   if class_lines:
@@ -315,7 +315,7 @@ def _FormatNumber(number):
   return '{:+,}'.format(number)
 
 
-# TODO(https://crbug.com/1414410): If missing and file is x32y, return xy; else
+# TODO(crbug.com/40256106): If missing and file is x32y, return xy; else
 # return original filename. Basically allows comparing x_32 targets with x
 # targets built under 32bit target_cpu without failing the script due to
 # different file names. Remove once migration is complete.

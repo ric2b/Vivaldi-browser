@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "extensions/browser/process_map.h"
+
 #include <memory>
+#include <string_view>
 #include <vector>
 
-#include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/profiles/profile.h"
@@ -23,7 +25,6 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
-#include "extensions/browser/process_map.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/test/extension_test_message_listener.h"
@@ -62,8 +63,8 @@ class ProcessMapBrowserTest : public ExtensionBrowserTest {
   // Adds a new extension with the given `extension_name` and host permission to
   // the given `host_pattern`.
   const Extension* AddExtensionWithHostPermission(
-      base::StringPiece extension_name,
-      base::StringPiece host_pattern) {
+      std::string_view extension_name,
+      std::string_view host_pattern) {
     static constexpr char kManifestTemplate[] =
         R"({
              "name": "%s",
@@ -83,8 +84,8 @@ class ProcessMapBrowserTest : public ExtensionBrowserTest {
   // that runs on `content_script_pattern`, sending a message when the script
   // injects.
   const Extension* AddExtensionWithContentScript(
-      base::StringPiece extension_name,
-      base::StringPiece content_script_pattern) {
+      std::string_view extension_name,
+      std::string_view content_script_pattern) {
     static constexpr char kManifestTemplate[] =
         R"({
              "name": "%s",
@@ -109,7 +110,7 @@ class ProcessMapBrowserTest : public ExtensionBrowserTest {
   void ExecuteUserScriptInActiveTab(const ExtensionId& extension_id) {
     base::RunLoop run_loop;
     content::WebContents* web_contents = GetActiveTab();
-    // TODO(https://crbug.com/1429408): Add a utility method for user script
+    // TODO(crbug.com/40262660): Add a utility method for user script
     // injection in browser tests.
     ScriptExecutor script_executor(web_contents);
     std::vector<mojom::JSSourcePtr> sources;
@@ -119,6 +120,7 @@ class ProcessMapBrowserTest : public ExtensionBrowserTest {
         mojom::HostID(mojom::HostID::HostType::kExtensions, extension_id),
         mojom::CodeInjection::NewJs(mojom::JSInjection::New(
             std::move(sources), mojom::ExecutionWorld::kUserScript,
+            /*world_id=*/std::nullopt,
             blink::mojom::WantResultOption::kWantResult,
             blink::mojom::UserActivationOption::kDoNotActivate,
             blink::mojom::PromiseResultOption::kAwait)),
@@ -415,7 +417,7 @@ class ProcessMapBrowserTest : public ExtensionBrowserTest {
   }
 
   // Opens a new tab to the given `domain`.
-  void OpenDomain(base::StringPiece domain) {
+  void OpenDomain(std::string_view domain) {
     ASSERT_TRUE(ui_test_utils::NavigateToURL(
         browser(), embedded_test_server()->GetURL(domain, "/simple.html")));
   }
@@ -434,7 +436,7 @@ class ProcessMapBrowserTest : public ExtensionBrowserTest {
 
   // Opens a new tab to the given `domain` and waits for a content script to
   // inject.
-  void OpenDomainAndWaitForContentScript(base::StringPiece domain) {
+  void OpenDomainAndWaitForContentScript(std::string_view domain) {
     ExtensionTestMessageListener listener("script injected");
     OpenDomain(domain);
     ASSERT_TRUE(listener.WaitUntilSatisfied());
@@ -488,7 +490,7 @@ class ProcessMapBrowserTest : public ExtensionBrowserTest {
       const Extension* extension,
       const content::RenderProcessHost& process,
       const std::vector<mojom::ContextType>& allowed_contexts,
-      base::StringPiece debug_string) {
+      std::string_view debug_string) {
     std::vector<mojom::ContextType> all_types = {
         mojom::ContextType::kUnspecified,
         mojom::ContextType::kPrivilegedExtension,
@@ -524,6 +526,83 @@ class ProcessMapBrowserTest : public ExtensionBrowserTest {
   // of the test.
   std::vector<std::unique_ptr<TestExtensionDir>> extension_dirs_;
 };
+
+// Check that when an extension frame is inadvertently loaded as sandboxed
+// because it inherits sandbox flags from its parent, the extension frame can
+// still use extension messaging APIs without triggering a renderer kill due
+// to sandboxed frame checks in ChildProcessSecurityPolicy.
+IN_PROC_BROWSER_TEST_F(ProcessMapBrowserTest, SandboxedWebPageEmbedsExtension) {
+  GURL sandboxed_url =
+      embedded_test_server()->GetURL("a.test", "/csp-sandbox.html");
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), sandboxed_url));
+  content::WebContents* web_contents = GetActiveTab();
+  content::RenderFrameHost* sandboxed_main_frame =
+      web_contents->GetPrimaryMainFrame();
+  ASSERT_TRUE(sandboxed_main_frame->IsSandboxed(
+      network::mojom::WebSandboxFlags::kOrigin));
+
+  // Set up an extension with a web-accessible page that sends a message to a
+  // background worker and waits for a response.
+  static constexpr char kManifest[] = R"(
+      {
+        "name": "Foo",
+        "version": "1.0",
+        "web_accessible_resources": [{
+          "resources": ["foo.html"],
+          "matches": ["*://*/*"]
+        }],
+        "manifest_version": 3,
+        "background": { "service_worker": "worker.js" }
+    })";
+
+  TestExtensionDir dir;
+  dir.WriteManifest(kManifest);
+  dir.WriteFile(FILE_PATH_LITERAL("foo.html"),
+                R"(<script src="foo.js"></script>)");
+  dir.WriteFile(FILE_PATH_LITERAL("foo.js"), R"(
+    (async function() {
+      const response = await chrome.runtime.sendMessage('ping');
+      chrome.test.assertEq('pong', response);
+      chrome.test.sendMessage('done');
+    })();
+  )");
+
+  dir.WriteFile(FILE_PATH_LITERAL("worker.js"), R"(
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      if (request == 'ping') {
+        sendResponse('pong');
+      }
+    });
+  )");
+
+  const Extension* extension = LoadExtension(dir.UnpackedPath());
+  GURL extension_url = extension->GetResourceURL("foo.html");
+
+  // Insert an extension subframe into the sandboxed main frame and ensure that
+  // the the sendMessage exchange finishes successfully.
+  const char kAddFrameScript[] =
+      R"(
+        let f = document.createElement('iframe');
+        f.src = $1;
+        document.body.appendChild(f);
+      )";
+
+  ExtensionTestMessageListener listener("done");
+  content::TestNavigationObserver observer(web_contents, 1);
+  EXPECT_TRUE(ExecJs(sandboxed_main_frame,
+                     content::JsReplace(kAddFrameScript, extension_url)));
+  observer.Wait();
+
+  // Double-check that the extension frame was sandboxed but maintained access
+  // to extension APIs.
+  content::RenderFrameHost* sandboxed_extension_frame =
+      content::ChildFrameAt(sandboxed_main_frame, 0);
+  EXPECT_TRUE(sandboxed_extension_frame->IsSandboxed(
+      network::mojom::WebSandboxFlags::kOrigin));
+  EXPECT_TRUE(FrameHasAccessToExtensionApis(sandboxed_extension_frame));
+  EXPECT_TRUE(listener.WaitUntilSatisfied());
+}
 
 // Tests that extension E1 containing a sandboxed webpage A which then contains
 // extension E2 in a subframe results in the E2 frame being sandboxed.
@@ -952,7 +1031,7 @@ void ProcessMapBrowserTest::
     } else {
       // Frames for other URLs are miscategorized as being privileged, even
       // though they don't have API access.
-      // TODO(https://crbug.com/1376636): Make sure that all process-isolated
+      // TODO(crbug.com/40243274): Make sure that all process-isolated
       // sandboxed srcdoc frames don't get marked as privileged extension
       // processes.
       EXPECT_TRUE(process_map()->IsPrivilegedExtensionProcess(
@@ -1073,7 +1152,7 @@ IN_PROC_BROWSER_TEST_F(ProcessMapBrowserTest,
 // At present, there's a default mode (which doesn't isolate the sandboxed
 // extension URL in a different process), and IsolatedSandboxedIframes mode
 // (which does isolate it in a different process but still gives it privileges).
-// TODO(https://crbug.com/1376636): Make sure that sandboxed extension frames
+// TODO(crbug.com/40243274): Make sure that sandboxed extension frames
 // don't get marked as privileged extension processes.
 IN_PROC_BROWSER_TEST_F(ProcessMapBrowserTest,
                        IsPrivilegedExtensionProcess_SandboxedExtensionFrame) {

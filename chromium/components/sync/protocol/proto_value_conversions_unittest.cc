@@ -20,6 +20,7 @@
 #include "components/sync/protocol/collaboration_group_specifics.pb.h"
 #include "components/sync/protocol/compare_specifics.pb.h"
 #include "components/sync/protocol/contact_info_specifics.pb.h"
+#include "components/sync/protocol/cookie_specifics.pb.h"
 #include "components/sync/protocol/data_type_progress_marker.pb.h"
 #include "components/sync/protocol/device_info_specifics.pb.h"
 #include "components/sync/protocol/encryption.pb.h"
@@ -34,7 +35,6 @@
 #include "components/sync/protocol/preference_specifics.pb.h"
 #include "components/sync/protocol/priority_preference_specifics.pb.h"
 #include "components/sync/protocol/search_engine_specifics.pb.h"
-#include "components/sync/protocol/segmentation_specifics.pb.h"
 #include "components/sync/protocol/session_specifics.pb.h"
 #include "components/sync/protocol/sharing_message_specifics.pb.h"
 #include "components/sync/protocol/sync.pb.h"
@@ -86,6 +86,7 @@ DEFINE_SPECIFICS_TO_VALUE_TEST(bookmark)
 DEFINE_SPECIFICS_TO_VALUE_TEST(collaboration_group)
 DEFINE_SPECIFICS_TO_VALUE_TEST(compare)
 DEFINE_SPECIFICS_TO_VALUE_TEST(contact_info)
+DEFINE_SPECIFICS_TO_VALUE_TEST(cookie)
 DEFINE_SPECIFICS_TO_VALUE_TEST(device_info)
 DEFINE_SPECIFICS_TO_VALUE_TEST(dictionary)
 DEFINE_SPECIFICS_TO_VALUE_TEST(extension)
@@ -109,7 +110,6 @@ DEFINE_SPECIFICS_TO_VALUE_TEST(reading_list)
 DEFINE_SPECIFICS_TO_VALUE_TEST(saved_tab_group)
 DEFINE_SPECIFICS_TO_VALUE_TEST(search_engine)
 DEFINE_SPECIFICS_TO_VALUE_TEST(security_event)
-DEFINE_SPECIFICS_TO_VALUE_TEST(segmentation)
 DEFINE_SPECIFICS_TO_VALUE_TEST(send_tab_to_self)
 DEFINE_SPECIFICS_TO_VALUE_TEST(session)
 DEFINE_SPECIFICS_TO_VALUE_TEST(shared_tab_group_data)

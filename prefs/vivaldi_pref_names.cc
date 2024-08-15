@@ -71,6 +71,9 @@ const char kVivaldiNotesSortingOrder[] = "vivaldi.notes.sorting_order";
 const char kVivaldiBookmarkFoldersViewMode[] =
     "vivaldi.bookmark_folders.view_mode";
 
+const char kVivaldiBookmarksSortingMode[] = "vivaldi.bookmarks.sorting_mode";
+const char kVivaldiBookmarksSortingOrder[] = "vivaldi.bookmarks.sorting_order";
+
 // Tabs
 // Desktop style tabs enabled status
 const char kVivaldiDesktopTabsEnabled[] = "vivaldi.desktop_tabs.mode";
@@ -97,6 +100,8 @@ const char kVivaldiSpeedDialSortingOrder[] = "vivaldi.speed_dial.sorting_order";
 const char kVivaldiStartPageLayoutStyle[] = "vivaldi.start_page.layout_style";
 const char kVivaldiStartPageSDMaximumColumns[] =
     "vivaldi.start_page.speed_dial.maximum_columns";
+const char kVivaldiStartPageShowFrequentlyVisited[] =
+    "vivaldi.start_page.show_frequently_visited";
 const char kVivaldiStartPageShowSpeedDials[] =
     "vivaldi.start_page.show_speed_dials";
 const char kVivaldiStartPageShowCustomizeButton[] =

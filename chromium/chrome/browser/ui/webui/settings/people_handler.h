@@ -40,6 +40,16 @@ class SyncSetupInProgressHandle;
 
 namespace settings {
 
+// Enum used to share the sign in state with the WebUI.
+// TODO(b/336510160): Look into integrating SYNC_PAUSED value.
+enum class SignedInState {
+  SignedOut = 0,
+  SignedIn = 1,
+  Syncing = 2,
+  SignedInPaused = 3,
+  WebOnlySignedIn = 4,
+};
+
 class PeopleHandler : public SettingsPageUIHandler,
                       public signin::IdentityManager::Observer,
                       public LoginUIService::LoginUI,
@@ -68,6 +78,7 @@ class PeopleHandler : public SettingsPageUIHandler,
  private:
   friend class PeopleHandlerTest;
   friend class PeopleHandlerSignoutTest;
+  friend class PeopleHandlerWithExplicitBrowserSigninTest;
   FRIEND_TEST_ALL_PREFIXES(PeopleHandlerTest,
                            DisplayConfigureWithEngineDisabledAndCancel);
   FRIEND_TEST_ALL_PREFIXES(
@@ -127,6 +138,8 @@ class PeopleHandler : public SettingsPageUIHandler,
   FRIEND_TEST_ALL_PREFIXES(PeopleHandlerMainProfile, GetStoredAccountsList);
   FRIEND_TEST_ALL_PREFIXES(PeopleHandlerSecondaryProfile,
                            GetStoredAccountsList);
+  FRIEND_TEST_ALL_PREFIXES(PeopleHandlerWebOnlySigninTest,
+                           ChromeSigninUserAvailableOnWebSignin);
 #if DCHECK_IS_ON()
   FRIEND_TEST_ALL_PREFIXES(PeopleHandlerMainProfile, DeleteProfileCrashes);
 #endif
@@ -144,6 +157,16 @@ class PeopleHandler : public SettingsPageUIHandler,
       const signin::PrimaryAccountChangeEvent& event) override;
   void OnExtendedAccountInfoUpdated(const AccountInfo& info) override;
   void OnExtendedAccountInfoRemoved(const AccountInfo& info) override;
+  void OnRefreshTokenUpdatedForAccount(
+      const CoreAccountInfo& account_info) override;
+  void OnAccountsInCookieUpdated(
+      const signin::AccountsInCookieJarInfo& accounts_in_cookie_jar_info,
+      const GoogleServiceAuthError& error) override;
+  void OnErrorStateOfRefreshTokenUpdatedForAccount(
+      const CoreAccountInfo& account_info,
+      const GoogleServiceAuthError& error,
+      signin_metrics::SourceForRefreshTokenOperation token_operation_source)
+      override;
 
   // syncer::SyncServiceObserver implementation.
   void OnStateChanged(syncer::SyncService* sync_service) override;
@@ -171,6 +194,10 @@ class PeopleHandler : public SettingsPageUIHandler,
   void HandleShowSyncSetupUI(const base::Value::List& args);
   void HandleSyncPrefsDispatch(const base::Value::List& args);
   void HandleTrustedVaultBannerStateDispatch(const base::Value::List& args);
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  void HandleGetChromeSigninUserChoiceInfo(const base::Value::List& args);
+  void HandleSetChromeSigninUserChoice(const base::Value::List& args);
+#endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   void HandleAttemptUserExit(const base::Value::List& args);
@@ -181,6 +208,8 @@ class PeopleHandler : public SettingsPageUIHandler,
 #endif
 #if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
   void HandleSignout(const base::Value::List& args);
+  void HandleTurnOffSync(bool delete_profile,
+                         bool is_clear_primary_account_allowed);
 #endif
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   void HandlePauseSync(const base::Value::List& args);
@@ -202,6 +231,13 @@ class PeopleHandler : public SettingsPageUIHandler,
   void HandleStartSyncingWithEmail(const base::Value::List& args);
   base::Value::List GetStoredAccountsList();
 
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  // Sends the updated chrome signin user choice info to UI.
+  void UpdateChromeSigninUserChoiceInfo();
+  // Constructs the information dictionary needed to be sent.
+  base::Value::Dict GetChromeSigninUserChoiceInfo();
+#endif
+
   // Pushes the updated sync prefs to JavaScript.
   void PushSyncPrefs();
 
@@ -209,6 +245,9 @@ class PeopleHandler : public SettingsPageUIHandler,
 
   // Sends the current sync status to the JavaScript WebUI code.
   void UpdateSyncStatus();
+
+  // Sends the computed stored accounts to the JavaScript WebUI code.
+  void UpdateStoredAccounts();
 
   // Suppresses any further signin promos, since the user has signed in once.
   void MarkFirstSetupComplete();
@@ -238,6 +277,13 @@ class PeopleHandler : public SettingsPageUIHandler,
   // what stage of the setup wizard the user was in and to update the UMA
   // histograms in the case that the user cancels out.
   bool configuring_sync_;
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  // Information used to know whether changes on `ChromeSigninUserChoice`
+  // happened or not. These are used for metrics purposes.
+  bool chrome_signin_user_choice_shown_ = false;
+  bool chrome_signin_user_choice_modified_ = false;
+#endif
 
   // The OneShotTimer object used to timeout of starting the sync engine
   // service.

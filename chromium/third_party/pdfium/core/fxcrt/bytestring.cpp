@@ -69,9 +69,10 @@ ByteString ByteString::FormatV(const char* pFormat, va_list argList) {
     // Span's lifetime must end before ReleaseBuffer() below.
     pdfium::span<char> buf = ret.GetBuffer(nMaxLen);
 
-    // In the following two calls, there's always space in the buffer for
-    // a terminating NUL that's not included in nMaxLen.
-    memset(buf.data(), 0, nMaxLen + 1);
+    // SAFETY: In the following two calls, there's always space in the buffer
+    // for a terminating NUL that's not included in nMaxLen, and hence not
+    // included in the span.
+    UNSAFE_BUFFERS(FXSYS_memset(buf.data(), 0, nMaxLen + 1));
     va_copy(argListCopy, argList);
     vsnprintf(buf.data(), nMaxLen + 1, pFormat, argListCopy);
     va_end(argListCopy);
@@ -90,9 +91,11 @@ ByteString ByteString::Format(const char* pFormat, ...) {
   return ret;
 }
 
+// TODO(tsepez): should be UNSAFE_BUFFER_USAGE.
 ByteString::ByteString(const char* pStr, size_t nLen) {
   if (nLen) {
-    m_pData = StringData::Create({pStr, nLen});
+    // SAFETY: caller ensures `pStr` points to at least `nLen` chars.
+    m_pData = StringData::Create(UNSAFE_BUFFERS(pdfium::make_span(pStr, nLen)));
   }
 }
 
@@ -147,7 +150,7 @@ ByteString::ByteString(const std::initializer_list<ByteStringView>& list) {
 ByteString::ByteString(const fxcrt::ostringstream& outStream) {
   auto str = outStream.str();
   if (!str.empty()) {
-    m_pData = StringData::Create({str.c_str(), str.size()});
+    m_pData = StringData::Create(pdfium::make_span(str));
   }
 }
 
@@ -216,17 +219,23 @@ bool ByteString::operator==(const char* ptr) const {
   if (!ptr)
     return m_pData->m_nDataLength == 0;
 
+  // SAFETY: `m_nDataLength` is within `m_String`, and the strlen() call
+  // ensures there are `m_nDataLength` bytes at `ptr` before the terminator.
   return strlen(ptr) == m_pData->m_nDataLength &&
-         FXSYS_memcmp(ptr, m_pData->m_String, m_pData->m_nDataLength) == 0;
+         UNSAFE_BUFFERS(
+             FXSYS_memcmp(ptr, m_pData->m_String, m_pData->m_nDataLength)) == 0;
 }
 
 bool ByteString::operator==(ByteStringView str) const {
   if (!m_pData)
     return str.IsEmpty();
 
+  // SAFETY: `str` has `GetLength()` valid bytes in `unterminated_c_str()`,
+  // `m_nDataLength` is within `m_String`, and equality comparison.
   return m_pData->m_nDataLength == str.GetLength() &&
-         FXSYS_memcmp(m_pData->m_String, str.unterminated_c_str(),
-                      str.GetLength()) == 0;
+         UNSAFE_BUFFERS(FXSYS_memcmp(
+             m_pData->m_String, str.unterminated_c_str(), str.GetLength())) ==
+             0;
 }
 
 bool ByteString::operator==(const ByteString& other) const {
@@ -252,7 +261,10 @@ bool ByteString::operator<(const char* ptr) const {
 
   size_t len = GetLength();
   size_t other_len = ptr ? strlen(ptr) : 0;
-  int result = FXSYS_memcmp(c_str(), ptr, std::min(len, other_len));
+
+  // SAFETY: Comparison limited to minimum valid length of either argument.
+  int result =
+      UNSAFE_BUFFERS(FXSYS_memcmp(c_str(), ptr, std::min(len, other_len)));
   return result < 0 || (result == 0 && len < other_len);
 }
 
@@ -266,7 +278,10 @@ bool ByteString::operator<(const ByteString& other) const {
 
   size_t len = GetLength();
   size_t other_len = other.GetLength();
-  int result = FXSYS_memcmp(c_str(), other.c_str(), std::min(len, other_len));
+
+  // SAFETY: Comparison limited to minimum valid length of either argument.
+  int result = UNSAFE_BUFFERS(
+      FXSYS_memcmp(c_str(), other.c_str(), std::min(len, other_len)));
   return result < 0 || (result == 0 && len < other_len);
 }
 
@@ -342,8 +357,10 @@ int ByteString::Compare(ByteStringView str) const {
   size_t this_len = m_pData->m_nDataLength;
   size_t that_len = str.GetLength();
   size_t min_len = std::min(this_len, that_len);
-  int result =
-      FXSYS_memcmp(m_pData->m_String, str.unterminated_c_str(), min_len);
+
+  // SAFETY: Comparison limited to minimum valid length of either argument.
+  int result = UNSAFE_BUFFERS(
+      FXSYS_memcmp(m_pData->m_String, str.unterminated_c_str(), min_len));
   if (result != 0)
     return result;
   if (this_len == that_len)

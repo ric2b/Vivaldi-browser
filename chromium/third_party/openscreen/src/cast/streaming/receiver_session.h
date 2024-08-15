@@ -117,7 +117,8 @@ class ReceiverSession final : public Environment::SocketSubscriber {
     // Called whenever an error that the client may care about occurs.
     // Recoverable errors are usually logged by the receiver session instead
     // of reported here.
-    virtual void OnError(const ReceiverSession* session, Error error) = 0;
+    virtual void OnError(const ReceiverSession* session,
+                         const Error& error) = 0;
 
     // Called to verify whether a given codec parameter is supported by
     // this client. If not overriden, this always assumes true.
@@ -137,9 +138,9 @@ class ReceiverSession final : public Environment::SocketSubscriber {
     virtual ~Client();
   };
 
-  ReceiverSession(Client* const client,
-                  Environment* environment,
-                  MessagePort* message_port,
+  ReceiverSession(Client& client,
+                  Environment& environment,
+                  MessagePort& message_port,
                   ReceiverConstraints constraints);
   ReceiverSession(const ReceiverSession&) = delete;
   ReceiverSession(ReceiverSession&&) noexcept = delete;
@@ -151,7 +152,7 @@ class ReceiverSession final : public Environment::SocketSubscriber {
 
   // Environment::SocketSubscriber event callbacks.
   void OnSocketReady() override;
-  void OnSocketInvalid(Error error) override;
+  void OnSocketInvalid(const Error& error) override;
 
  private:
   // In some cases, such as waiting for the UDP socket to be bound, we
@@ -213,10 +214,10 @@ class ReceiverSession final : public Environment::SocketSubscriber {
   // Sends an error answer reply and notifies the client of the error.
   void SendErrorAnswerReply(const std::string& sender_id,
                             int sequence_number,
-                            Error error);
+                            const Error& error);
 
-  Client* const client_;
-  Environment* const environment_;
+  Client& client_;
+  Environment& environment_;
   const ReceiverConstraints constraints_;
 
   // The sender_id of this session.

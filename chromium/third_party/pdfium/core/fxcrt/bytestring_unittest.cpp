@@ -20,6 +20,14 @@
 namespace fxcrt {
 
 TEST(ByteString, ElementAccess) {
+  const ByteString empty;
+  pdfium::span<const char> empty_span = empty.span();
+  pdfium::span<const char> empty_span_with_terminator =
+      empty.span_with_terminator();
+  EXPECT_EQ(0u, empty_span.size());
+  ASSERT_EQ(1u, empty_span_with_terminator.size());
+  EXPECT_EQ('\0', empty_span_with_terminator[0]);
+
   const ByteString abc("abc");
   EXPECT_EQ('a', abc[0]);
   EXPECT_EQ('b', abc[1]);
@@ -32,9 +40,19 @@ TEST(ByteString, ElementAccess) {
   EXPECT_EQ(3u, abc_span.size());
   EXPECT_EQ(0, memcmp(abc_span.data(), "abc", 3));
 
+  pdfium::span<const char> abc_span_with_terminator =
+      abc.span_with_terminator();
+  EXPECT_EQ(4u, abc_span_with_terminator.size());
+  EXPECT_EQ(0, memcmp(abc_span_with_terminator.data(), "abc", 4));
+
   pdfium::span<const uint8_t> abc_raw_span = abc.unsigned_span();
   EXPECT_EQ(3u, abc_raw_span.size());
   EXPECT_EQ(0, memcmp(abc_raw_span.data(), "abc", 3));
+
+  pdfium::span<const uint8_t> abc_raw_span_with_terminator =
+      abc.unsigned_span_with_terminator();
+  EXPECT_EQ(4u, abc_raw_span_with_terminator.size());
+  EXPECT_EQ(0, memcmp(abc_raw_span_with_terminator.data(), "abc", 4));
 
   ByteString mutable_abc = abc;
   EXPECT_EQ(abc.c_str(), mutable_abc.c_str());
@@ -1204,7 +1222,9 @@ TEST(ByteStringView, NotNull) {
   ByteStringView string3("abc");
   ByteStringView string6("abcdef");
   ByteStringView alternate_string3("abcdef", 3);
-  ByteStringView span_string4(pdfium::as_bytes(pdfium::make_span("abcd", 4u)));
+  const char abcd[] = "abcd";
+  ByteStringView span_string4(
+      pdfium::as_bytes(pdfium::make_span(abcd).first(4u)));
   ByteStringView embedded_nul_string7("abc\0def", 7);
   ByteStringView illegal_string7("abcdef", 7);
 
@@ -1393,7 +1413,7 @@ TEST(ByteStringView, TrimmedRight) {
   EXPECT_EQ("FRED", fred.TrimmedRight('E'));
   EXPECT_EQ("FRE", fred.TrimmedRight('D'));
   ByteStringView fredd("FREDD");
-  EXPECT_EQ("FRE", fred.TrimmedRight('D'));
+  EXPECT_EQ("FRE", fredd.TrimmedRight('D'));
 }
 
 TEST(ByteStringView, ElementAccess) {
@@ -1518,8 +1538,9 @@ TEST(ByteStringView, OperatorEQ) {
   EXPECT_FALSE(c_string2 == byte_string_c);
   EXPECT_FALSE(c_string3 == byte_string_c);
 
+  const char kHello[] = "hello";
   pdfium::span<const uint8_t> span5(
-      pdfium::as_bytes(pdfium::make_span("hello", 5u)));
+      pdfium::as_bytes(pdfium::make_span(kHello).first(5u)));
   auto raw_span = byte_string_c.unsigned_span();
   EXPECT_TRUE(
       std::equal(raw_span.begin(), raw_span.end(), span5.begin(), span5.end()));

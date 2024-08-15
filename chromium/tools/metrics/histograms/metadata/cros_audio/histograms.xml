@@ -22,8 +22,64 @@ incoming reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histograms>
 
+<histogram name="ChromeOS.AudioSelection" enum="AudioSelectionEvents"
+    expires_after="2025-03-31">
+  <owner>zhangwenyu@google.com</owner>
+  <owner>cros-peripherals@google.com</owner>
+  <summary>
+    Recorded when audio selection events described in AudioSelectionEvents
+    happen. For example, the system switches or does not switch active audio
+    device after the device is added or removed, the user overrides the system
+    switching or not switching decision, etc. The user-override metrics are only
+    recorded if they occur within the first hour after the system decision was
+    made. Do not record if there is no alternative available audio device.
+  </summary>
+</histogram>
+
+<histogram name="ChromeOS.AudioSelection.ExceptionRulesMet"
+    enum="AudioSelectionExceptionRules" expires_after="2025-03-31">
+  <owner>zhangwenyu@google.com</owner>
+  <owner>cros-peripherals@google.com</owner>
+  <summary>
+    Recorded when audio selection exception rules are met. Exception rules are
+    detailed in enum AudioSelectionExceptionRules.
+  </summary>
+</histogram>
+
+<histogram name="ChromeOS.AudioSelection.Notification"
+    enum="AudioSelectionNotificationEvents" expires_after="2025-03-31">
+  <owner>zhangwenyu@google.com</owner>
+  <owner>cros-peripherals@google.com</owner>
+  <summary>
+    Recorded when audio selection notification events described in
+    AudioSelectionNotificationEvents happen. For example, when a new input
+    device is connected for the first time, a notification with a switch button
+    shows up and allows users to quickly activate this input device.
+  </summary>
+</histogram>
+
+<histogram
+    name="ChromeOS.AudioSelection.{AudioType}.ConsecutiveDevicesChangeTimeElapsed.{ChangeType}"
+    units="seconds" expires_after="2025-02-25">
+  <owner>zhangwenyu@google.com</owner>
+  <owner>cros-peripherals@google.com</owner>
+  <summary>
+    Recorded when {AudioType} audio devices have changed, including
+    {ChangeType}. Record the time elaspsed between two consecutive devices
+    change event.
+  </summary>
+  <token key="AudioType">
+    <variant name="Input" summary="input"/>
+    <variant name="Output" summary="output"/>
+  </token>
+  <token key="ChangeType">
+    <variant name="Add" summary="devices added"/>
+    <variant name="Any" summary="devices added/removed and devices changed"/>
+  </token>
+</histogram>
+
 <histogram name="ChromeOS.AudioSelection.{AudioType}.SystemSwitchAudio"
-    enum="BooleanSwitched" expires_after="2024-09-01">
+    enum="BooleanSwitched" expires_after="2024-11-03">
   <owner>zhangwenyu@google.com</owner>
   <owner>cros-peripherals@google.com</owner>
   <summary>
@@ -190,8 +246,28 @@ incoming reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram
+    name="ChromeOS.AudioSelection.{AudioType}.UserOverrideSystem{SwitchDecision}Audio.BeforeAndAfterAudioDeviceSet"
+    units="counts" expires_after="2025-02-25">
+  <owner>zhangwenyu@google.com</owner>
+  <owner>cros-peripherals@google.com</owner>
+  <summary>
+    Record all the connected audio device types when users override the system
+    decision of {SwitchDecision} {AudioType} audio devices. Record both before
+    and after condition of audio device set.
+  </summary>
+  <token key="AudioType">
+    <variant name="Input" summary="input"/>
+    <variant name="Output" summary="output"/>
+  </token>
+  <token key="SwitchDecision">
+    <variant name="NotSwitch" summary="not switching"/>
+    <variant name="Switch" summary="switching"/>
+  </token>
+</histogram>
+
+<histogram
     name="ChromeOS.AudioSelection.{AudioType}.UserOverrideSystem{SwitchDecision}TimeElapsed"
-    units="minutes" expires_after="2024-09-01">
+    units="minutes" expires_after="2024-11-03">
   <owner>zhangwenyu@google.com</owner>
   <owner>cros-peripherals@google.com</owner>
   <summary>
@@ -211,6 +287,30 @@ incoming reviews. Googlers can read more about this at go/gwsq-gerrit.
   </token>
 </histogram>
 
+<histogram
+    name="ChromeOS.AudioSelection.{AudioType}.UserOverrideSystem{SwitchDecision}TimeElapsed.{IsChromeRestarts}"
+    units="minutes" expires_after="2025-02-25">
+  <owner>zhangwenyu@google.com</owner>
+  <owner>cros-peripherals@google.com</owner>
+  <summary>
+    Similar to
+    ChromeOS.AudioSelection.{AudioType}.UserOverrideSystem{SwitchDecision}TimeElapsed
+    but only recorded in cases of {IsChromeRestarts}.
+  </summary>
+  <token key="AudioType">
+    <variant name="Input" summary="input"/>
+    <variant name="Output" summary="output"/>
+  </token>
+  <token key="SwitchDecision">
+    <variant name="NotSwitch" summary="not switching"/>
+    <variant name="Switch" summary="switching"/>
+  </token>
+  <token key="IsChromeRestarts">
+    <variant name="ChromeRestarts" summary="chrome restarts"/>
+    <variant name="NonChromeRestarts" summary="non chrome restarts"/>
+  </token>
+</histogram>
+
 <histogram name="ChromeOS.CrosAudioConfig.DeviceChange"
     enum="AudioDeviceChange" expires_after="2024-06-30">
   <owner>zhangwenyu@google.com</owner>
@@ -223,7 +323,7 @@ incoming reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ChromeOS.CrosAudioConfig.InputDeviceTypeChangedTo"
-    enum="AudioDeviceType" expires_after="2024-09-01">
+    enum="AudioDeviceType" expires_after="2024-11-03">
   <owner>zhangwenyu@google.com</owner>
   <owner>cros-peripherals@google.com</owner>
   <summary>
@@ -234,7 +334,7 @@ incoming reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ChromeOS.CrosAudioConfig.InputGainSetTo" units="%"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>zhangwenyu@google.com</owner>
   <owner>cros-peripherals@google.com</owner>
   <summary>
@@ -256,7 +356,7 @@ incoming reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ChromeOS.CrosAudioConfig.NoiseCancellationEnabled"
-    enum="BooleanEnabled" expires_after="2024-09-01">
+    enum="BooleanEnabled" expires_after="2024-11-03">
   <owner>zhangwenyu@google.com</owner>
   <owner>cros-peripherals@google.com</owner>
   <summary>
@@ -266,7 +366,7 @@ incoming reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ChromeOS.CrosAudioConfig.OutputDeviceTypeChangedTo"
-    enum="AudioDeviceType" expires_after="2024-09-01">
+    enum="AudioDeviceType" expires_after="2024-11-03">
   <owner>zhangwenyu@google.com</owner>
   <owner>cros-peripherals@google.com</owner>
   <summary>
@@ -277,7 +377,7 @@ incoming reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ChromeOS.CrosAudioConfig.OutputMuteStateChange"
-    enum="AudioMuteButtonAction" expires_after="2024-09-01">
+    enum="AudioMuteButtonAction" expires_after="2024-11-03">
   <owner>zhangwenyu@google.com</owner>
   <owner>cros-peripherals@google.com</owner>
   <summary>
@@ -287,7 +387,7 @@ incoming reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ChromeOS.CrosAudioConfig.OutputVolumeSetTo" units="%"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>zhangwenyu@google.com</owner>
   <owner>cros-peripherals@google.com</owner>
   <summary>

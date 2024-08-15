@@ -24,7 +24,7 @@ namespace internal {
  */
 template <typename Scalar>
 struct scalar_opposite_op {
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const Scalar operator()(const Scalar& a) const { return -a; }
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const Scalar operator()(const Scalar& a) const { return numext::negate(a); }
   template <typename Packet>
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const Packet packetOp(const Packet& a) const {
     return internal::pnegate(a);
@@ -219,7 +219,9 @@ struct functor_traits<core_cast_op<SrcType, DstType>> {
  */
 template <typename Scalar, int N>
 struct scalar_shift_right_op {
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const Scalar operator()(const Scalar& a) const { return a >> N; }
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const Scalar operator()(const Scalar& a) const {
+    return numext::arithmetic_shift_right(a);
+  }
   template <typename Packet>
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const Packet packetOp(const Packet& a) const {
     return internal::parithmetic_shift_right<N>(a);
@@ -237,7 +239,9 @@ struct functor_traits<scalar_shift_right_op<Scalar, N>> {
  */
 template <typename Scalar, int N>
 struct scalar_shift_left_op {
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const Scalar operator()(const Scalar& a) const { return a << N; }
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const Scalar operator()(const Scalar& a) const {
+    return numext::logical_shift_left(a);
+  }
   template <typename Packet>
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const Packet packetOp(const Packet& a) const {
     return internal::plogical_shift_left<N>(a);
@@ -286,9 +290,10 @@ struct functor_traits<scalar_imag_op<Scalar>> {
 template <typename Scalar>
 struct scalar_real_ref_op {
   typedef typename NumTraits<Scalar>::Real result_type;
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE result_type& operator()(const Scalar& a) const {
-    return numext::real_ref(*const_cast<Scalar*>(&a));
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const result_type& operator()(const Scalar& a) const {
+    return numext::real_ref(a);
   }
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE result_type& operator()(Scalar& a) const { return numext::real_ref(a); }
 };
 template <typename Scalar>
 struct functor_traits<scalar_real_ref_op<Scalar>> {
@@ -303,8 +308,9 @@ struct functor_traits<scalar_real_ref_op<Scalar>> {
 template <typename Scalar>
 struct scalar_imag_ref_op {
   typedef typename NumTraits<Scalar>::Real result_type;
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE result_type& operator()(const Scalar& a) const {
-    return numext::imag_ref(*const_cast<Scalar*>(&a));
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE result_type& operator()(Scalar& a) const { return numext::imag_ref(a); }
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const result_type& operator()(const Scalar& a) const {
+    return numext::imag_ref(a);
   }
 };
 template <typename Scalar>
@@ -453,8 +459,9 @@ struct functor_traits<scalar_log10_op<Scalar>> {
  */
 template <typename Scalar>
 struct scalar_log2_op {
+  using RealScalar = typename NumTraits<Scalar>::Real;
   EIGEN_DEVICE_FUNC inline const Scalar operator()(const Scalar& a) const {
-    return Scalar(EIGEN_LOG2E) * numext::log(a);
+    return Scalar(RealScalar(EIGEN_LOG2E)) * numext::log(a);
   }
   template <typename Packet>
   EIGEN_DEVICE_FUNC inline Packet packetOp(const Packet& a) const {
@@ -879,7 +886,7 @@ template <typename Scalar>
 struct functor_traits<scalar_floor_op<Scalar>> {
   enum {
     Cost = NumTraits<Scalar>::MulCost,
-    PacketAccess = packet_traits<Scalar>::HasFloor || NumTraits<Scalar>::IsInteger
+    PacketAccess = packet_traits<Scalar>::HasRound || NumTraits<Scalar>::IsInteger
   };
 };
 
@@ -899,7 +906,7 @@ template <typename Scalar>
 struct functor_traits<scalar_rint_op<Scalar>> {
   enum {
     Cost = NumTraits<Scalar>::MulCost,
-    PacketAccess = packet_traits<Scalar>::HasRint || NumTraits<Scalar>::IsInteger
+    PacketAccess = packet_traits<Scalar>::HasRound || NumTraits<Scalar>::IsInteger
   };
 };
 
@@ -919,7 +926,27 @@ template <typename Scalar>
 struct functor_traits<scalar_ceil_op<Scalar>> {
   enum {
     Cost = NumTraits<Scalar>::MulCost,
-    PacketAccess = packet_traits<Scalar>::HasCeil || NumTraits<Scalar>::IsInteger
+    PacketAccess = packet_traits<Scalar>::HasRound || NumTraits<Scalar>::IsInteger
+  };
+};
+
+/** \internal
+ * \brief Template functor to compute the truncation of a scalar
+ * \sa class CwiseUnaryOp, ArrayBase::floor()
+ */
+template <typename Scalar>
+struct scalar_trunc_op {
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const Scalar operator()(const Scalar& a) const { return numext::trunc(a); }
+  template <typename Packet>
+  EIGEN_DEVICE_FUNC inline Packet packetOp(const Packet& a) const {
+    return internal::ptrunc(a);
+  }
+};
+template <typename Scalar>
+struct functor_traits<scalar_trunc_op<Scalar>> {
+  enum {
+    Cost = NumTraits<Scalar>::MulCost,
+    PacketAccess = packet_traits<Scalar>::HasRound || NumTraits<Scalar>::IsInteger
   };
 };
 
@@ -1124,7 +1151,7 @@ struct scalar_logistic_op : scalar_logistic_op_impl<T> {};
 
 // TODO(rmlarsen): Enable the following on host when integer_packet is defined
 // for the relevant packet types.
-#ifdef EIGEN_GPU_CC
+#ifndef EIGEN_GPUCC
 
 /** \internal
  * \brief Template specialization of the logistic function for float.

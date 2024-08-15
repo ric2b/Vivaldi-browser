@@ -26,7 +26,7 @@
 #include "ui/base/ui_base_features.h"
 
 UserNotesSidePanelUI::UserNotesSidePanelUI(content::WebUI* web_ui)
-    : ui::MojoBubbleWebUIController(web_ui, true) {
+    : TopChromeWebUIController(web_ui, true) {
   if (!user_notes::IsUserNotesEnabled()) {
     return;
   }
@@ -66,8 +66,6 @@ UserNotesSidePanelUI::UserNotesSidePanelUI(content::WebUI* web_ui)
                        pref_service->GetBoolean(prefs::kUserNotesSortByNewest));
   }
   source->AddBoolean("guestMode", profile->IsGuestSession());
-
-  webui::SetupChromeRefresh2023(source);
 
   webui::SetupWebUIDataSource(source,
                               base::make_span(kSidePanelUserNotesResources,

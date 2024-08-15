@@ -4,7 +4,8 @@
     "files": [
       "Vivaldi.app"
     ],
-    "archive_type": "ARCHIVE_TYPE_ZIP"
+    "archive_type": "ARCHIVE_TYPE_ZIP",
+    "versioned": true
   },
   "Vivaldi*.dmg": {
     "file_globs": [ "Vivaldi*.dmg" ],
@@ -12,13 +13,13 @@
   },
   "dump_syms": {},
   "minidump_stackwalk": {},
-  "Vivaldi.dSYM.tar.bz2": {},
-  "background-bundle.js.map": {},
-  "bundle.js.map": {},
-  "inject-root-bundle.js.map": {},
-  "background-common-bundle.js.map": {},
-  "bundle-mailreader-worker.js.map": {},
-  "inject-all-bundle.js.map": {},
-  "translate-bundle.js.map": {},
-  "vendor-bundle.js.map": {}
+  "Vivaldi.dSYM.tar.bz2": { "versioned": true },
+  "background-bundle.js.map": { "versioned": true },
+  "bundle.js.map": { "versioned": true },
+  "inject-root-bundle.js.map": { "versioned": true },
+  "background-common-bundle.js.map": { "versioned": true },
+  "bundle-mailreader-worker.js.map": { "versioned": true },
+  "inject-all-bundle.js.map": { "versioned": true },
+  "translate-bundle.js.map": { "versioned": true },
+  "vendor-bundle.js.map": { "versioned": true }
 }

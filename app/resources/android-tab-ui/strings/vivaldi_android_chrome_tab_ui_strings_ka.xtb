@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ka">
+<translation id="2947471979790858922">თქვენი აქტივობები ამ პირად ჩანართებში წაიშლება ამ მოწყობილობიდან</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {დახურული ჩანართები Vivaldi-ის მთავარ მენიუში უახლესი ჩანართების მენიუში შეგიძლიათ, იპოვოთ. თქვენი პირადი ჩანართები ხელმისაწვდომი არ იქნება.}
+        other {დახურული ჩანართები Vivaldi-ის მთავარ მენიუში უახლესი ჩანართების მენიუში შეგიძლიათ, იპოვოთ. თქვენი პირადი ჩანართების # ხელმისაწვდომი არ იქნება.}}</translation>
+<translation id="4871187110787939393">დავხურო ყველა პირადი ჩანართი?</translation>
 </translationbundle>

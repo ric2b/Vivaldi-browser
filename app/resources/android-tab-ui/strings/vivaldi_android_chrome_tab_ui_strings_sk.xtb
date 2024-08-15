@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sk">
+<translation id="2947471979790858922">Vaša aktivita na týchto súkromných kartách bude z tohto zariadenia odstránená</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Zatvorené karty nájdete v časti Nedávne karty v hlavnom menu Vivaldi. Vaše súkromné karty nebudú k dispozícii.}
+        other {Vaše zatvorené karty nájdete v časti Nedávne karty pod hlavnou ponukou Vivaldi. Vaše # súkromné karty nebudú dostupné.}}</translation>
+<translation id="4871187110787939393">Zavrieť všetky súkromné karty?</translation>
 </translationbundle>

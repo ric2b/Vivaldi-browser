@@ -22,7 +22,6 @@
 <translation id="2470702053775288986">תוספים שלא נתמכים הושבתו</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">הפוך מחדש לפעיל</translation>
-<translation id="2809586584051668049">ועוד <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2850541429955027218">הוסף את העיצוב</translation>
 <translation id="2861941300086904918">‏מנהל האבטחה של Native Client</translation>
 <translation id="2932883381142163287">דווח על שימוש לרעה</translation>
@@ -31,7 +30,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3222066309010235055">קדם-עיבוד: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">בחר את ספריית הבסיס של התוסף שיש לארוז. כדי לעדכן תוסף, בחר גם את קובץ המפתח הפרטי שבו ניתן להשתמש שוב.</translation>
-<translation id="3288047731229977326">תוספים הרצים במצב מפתח יכולים להזיק למחשב שלך. אם אינך מפתח, עליך להשבית את התוספים הרצים במצב מפתח כדי לשמור על ביטחונך.</translation>
 <translation id="3378572629723696641">ייתכן שתוסף זה פגום.</translation>
 <translation id="3678156199662914018">תוסף: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">תקן את היישום</translation>
@@ -42,7 +40,6 @@
 <translation id="4087089424473531098">יצר את ההרחבה:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">השבתת תוספים של מצב מפתח</translation>
 <translation id="4100839878934973028">‏תכנית אחרת במחשב שלך הוסיפה יישום שעשוי לשנות את אופן הפעולה של Vivaldi.</translation>
 <translation id="4176463684765177261">מושבת</translation>
 <translation id="4309420042698375243">‏‎<ph name="NUM_KILOBYTES" />K ‏‎(<ph name="NUM_KILOBYTES_LIVE" />K בשימוש)‎‎</translation>
@@ -56,7 +53,6 @@
 <translation id="5143374789336132547">התוסף "<ph name="EXTENSION_NAME" />" שינה את הדף שמוצג כשאתה לוחץ על הלחצן 'דף הבית'.</translation>
 <translation id="5233231016133573565">זיהוי תהליך</translation>
 <translation id="52912272896845572">קובץ המפתח הפרטי אינו חוקי</translation>
-<translation id="5301954838959518834">בסדר גמור, הבנתי</translation>
 <translation id="5362741141255528695">בחר קובץ מפתח פרטי.</translation>
 <translation id="5485102783864353244">הוסף יישום</translation>
 <translation id="5521078259930077036">האם זהו דף הבית שציפית לראות?</translation>

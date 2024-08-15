@@ -250,7 +250,6 @@ void AgentSchedulingGroupHost::AddFilter(BrowserMessageFilter* filter) {
     return;
   }
 
-  filter->RegisterAssociatedInterfaces(channel_.get());
   channel_->AddFilter(filter->GetFilter());
 }
 #endif
@@ -455,7 +454,7 @@ void AgentSchedulingGroupHost::SetUpIPC() {
                              /*listener_task_runner=*/
                              base::SingleThreadTaskRunner::GetCurrentDefault());
 
-    // TODO(crbug.com/1111231): Add necessary filters.
+    // TODO(crbug.com/40142495): Add necessary filters.
     // Most of the filters currently installed on the process-wide channel are:
     // 1. "Process-bound", that is, they do not handle messages sent using ASG,
     // 2. Pepper/NaCl-related, that are going away, and are not supported, or

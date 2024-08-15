@@ -288,37 +288,8 @@ bool HUPSearchDatabase();
 // ---------------------------------------------------------
 // For UI experiments.
 
-// Returns true if the fuzzy URL suggestions feature is enabled.
-bool IsFuzzyUrlSuggestionsEnabled();
-// Indicates whether fuzzy match behavior is counterfactual.
-extern const base::FeatureParam<bool> kFuzzyUrlSuggestionsCounterfactual;
-// Indicates whether to bypass fuzzy processing when `IsLowEndDevice` is true.
-extern const base::FeatureParam<bool> kFuzzyUrlSuggestionsLowEndBypass;
-// Indicates whether to support transpose edit operations in fuzzy search.
-extern const base::FeatureParam<bool> kFuzzyUrlSuggestionsTranspose;
-// The minimum length of input that will be checked for fuzzy URL
-// suggestions. Note, this is a threshold independent of the fuzzy
-// search tolerance schedule.
-extern const base::FeatureParam<int> kFuzzyUrlSuggestionsMinInputLength;
-
-// The *Penalty* parameters below provide control over how fuzzy matches
-// are penalized according to input length. The relevance from the source
-// match is reduced because the match is inexact (typo-corrected) but
-// when the input is very short, such corrections are more likely and
-// therefore confidence is lower. Hence the high penalty is applied
-// to the shortest inputs and the low is applied to longer inputs, with
-// a linear taper for input length to smooth the effect.
-
-// Highest penalty percentage that will be applied to fuzzy URL suggestions.
-extern const base::FeatureParam<int> kFuzzyUrlSuggestionsPenaltyHigh;
-// Lowest penalty percentage that will be applied to fuzzy URL suggestions.
-extern const base::FeatureParam<int> kFuzzyUrlSuggestionsPenaltyLow;
-// The number of input characters between where the high penalty will be
-// applied and where the low penalty will be applied.
-extern const base::FeatureParam<int> kFuzzyUrlSuggestionsPenaltyTaperLength;
-
 // On Device Suggestions feature and its helper functions.
-// TODO(crbug.com/1307005): clean up head suggest flags once crbug.com/1307005
+// TODO(crbug.com/40218594): clean up head suggest flags once crbug.com/1307005
 // no longer happens.
 bool IsOnDeviceHeadSuggestEnabledForIncognito();
 bool IsOnDeviceHeadSuggestEnabledForNonIncognito();
@@ -356,24 +327,6 @@ extern const base::FeatureParam<int> kSuggestionRowHeight;
 // suggestions.
 extern const base::FeatureParam<int> kRichSuggestionVerticalMargin;
 
-// Omnibox CR23 - icons.
-// Returns true if the feature to enable CR23 icons is enabled.
-bool IsChromeRefreshIconsEnabled();
-// Omnibox CR23 - suggestion icons.
-// Returns true if the feature to enable CR23 suggestion icons is enabled.
-bool IsChromeRefreshSuggestIconsEnabled();
-// Omnibox CR23 - action chip icons.
-// Returns true if the feature to enable CR23 action chip icons is enabled.
-bool IsChromeRefreshActionChipIconsEnabled();
-
-// Omnibox CR23 - action chip shape.
-// Returns true if the feature to enable CR23 action chip shape is enabled.
-bool IsChromeRefreshActionChipShapeEnabled();
-// Omnibox CR23 - suggestion hover fill shape.
-// Returns true if the feature to enable CR23 suggestion hover fill shape is
-// enabled.
-bool IsChromeRefreshSuggestHoverFillShapeEnabled();
-
 // Omnibox GM3 - text style.
 // Returns true if the feature to enable GM3 text styling is enabled.
 bool IsGM3TextStyleEnabled();
@@ -381,15 +334,6 @@ bool IsGM3TextStyleEnabled();
 extern const base::FeatureParam<int> kFontSizeTouchUI;
 // Specifies the omnibox font size (non-Touch UI).
 extern const base::FeatureParam<int> kFontSizeNonTouchUI;
-
-// Omnibox CR23 - layout.
-// Returns true if `kExpandedLayout` is enabled.
-bool IsCr23LayoutEnabled();
-
-// Omnibox CR23 - steady state background color.
-// Returns true if the feature to enable CR23 omnibox steady state background
-// color is enabled.
-bool IsChromeRefreshSteadyStateBackgroundColorEnabled();
 
 // ---------------------------------------------------------
 // Clipboard URL suggestions:
@@ -711,20 +655,6 @@ bool IsMlUrlScoreCachingEnabled();
 
 // Specify number of additional Related and Trending queries appended to the
 // suggestion list, when the Inspire Me feature is enabled.
-constexpr base::FeatureParam<int> kInspireMeAdditionalRelatedQueries(
-    &omnibox::kInspireMe,
-    "AdditionalRelatedQueries",
-    0);
-
-constexpr base::FeatureParam<int> kInspireMeAdditionalTrendingQueries(
-    &omnibox::kInspireMe,
-    "AdditionalTrendingQueries",
-    5);
-
-constexpr base::FeatureParam<int> kInspireMePsuggestQueries(
-    &omnibox::kInspireMe,
-    "PersonalizedSuggestQueries",
-    20);
 
 constexpr base::FeatureParam<int> kQueryTilesCacheMaxAge(
     &omnibox::kQueryTilesInZPSOnNTP,
@@ -749,7 +679,7 @@ constexpr base::FeatureParam<bool> kQueryTilesShowAsCarousel(
 constexpr base::FeatureParam<bool> kActionsInSuggestPromoteEntitySuggestion(
     &omnibox::kActionsInSuggest,
     "PromoteEntitySuggestion",
-    !!BUILDFLAG(IS_ANDROID));
+    (!!BUILDFLAG(IS_ANDROID) || !!BUILDFLAG(IS_IOS)));
 
 // Specifies which actions in suggest will be offered to users.
 constexpr base::FeatureParam<omnibox::ActionInfo::ActionType>::Option
@@ -808,6 +738,15 @@ extern const base::FeatureParam<std::string> kGeminiUrlOverride;
 
 // Whether the expansion pack for the site search starter pack is enabled.
 bool IsStarterPackExpansionEnabled();
+
+// The max number of times, per session, the IPH row can be shown. Set to
+// INT_MAX for unlimited.
+extern const base::FeatureParam<int> kStarterPackIPHPerSessionLimit;
+
+// When true, enables an informational IPH message at the bottom of the Omnibox
+// directing users to certain starter pack engines.
+bool IsStarterPackIPHEnabled();
+
 // <- Site Search Starter Pack
 // ---------------------------------------------------------
 

@@ -80,14 +80,12 @@ RulesetManager::~RulesetManager() {
 void RulesetManager::AddRuleset(const ExtensionId& extension_id,
                                 std::unique_ptr<CompositeMatcher> matcher) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(!GetMatcherForExtension(extension_id))
+      << "AddRuleset called twice in succession for " << extension_id;
 
-  bool inserted =
-      rulesets_
-          .emplace(extension_id, prefs_->GetLastUpdateTime(extension_id),
-                   std::move(matcher))
-          .second;
-  DCHECK(inserted) << "AddRuleset called twice in succession for "
-                   << extension_id;
+  base::Time update_time = prefs_->GetLastUpdateTime(extension_id);
+  rulesets_.emplace(extension_id, update_time, std::move(matcher));
+  extension_install_times_[extension_id] = update_time;
 
   if (test_observer_)
     test_observer_->OnRulesetCountChanged(rulesets_.size());
@@ -104,6 +102,7 @@ void RulesetManager::RemoveRuleset(const ExtensionId& extension_id) {
         return ruleset_data.extension_id == extension_id;
       };
 
+  extension_install_times_.erase(extension_id);
   size_t erased_count = base::EraseIf(rulesets_, compare_by_id);
   DCHECK_EQ(1u, erased_count)
       << "RemoveRuleset called without a corresponding AddRuleset for "
@@ -231,6 +230,38 @@ bool RulesetManager::HasRulesets(RulesetMatchingStage stage) const {
                               });
 }
 
+std::vector<RequestAction> RulesetManager::MergeModifyHeaderActions(
+    std::vector<RequestAction> lhs_actions,
+    std::vector<RequestAction> rhs_actions) const {
+  std::vector<RequestAction> merged_actions;
+  merged_actions.reserve(lhs_actions.size() + rhs_actions.size());
+
+  merged_actions.insert(merged_actions.end(),
+                        std::make_move_iterator(lhs_actions.begin()),
+                        std::make_move_iterator(lhs_actions.end()));
+  merged_actions.insert(merged_actions.end(),
+                        std::make_move_iterator(rhs_actions.begin()),
+                        std::make_move_iterator(rhs_actions.end()));
+
+  std::sort(
+      merged_actions.begin(), merged_actions.end(),
+      [this](const RequestAction& lhs, const RequestAction& rhs) {
+        auto lhs_install_time_it =
+            extension_install_times_.find(lhs.extension_id);
+        DCHECK(lhs_install_time_it != extension_install_times_.end());
+
+        auto rhs_install_time_it =
+            extension_install_times_.find(rhs.extension_id);
+        DCHECK(rhs_install_time_it != extension_install_times_.end());
+
+        // Same comparator as ExtensionRulesetData's for actions from different
+        // extensions. Otherwise, default to RequestAction's comparator.
+        return std::tie(lhs_install_time_it->second, lhs.extension_id, lhs) >
+               std::tie(rhs_install_time_it->second, rhs.extension_id, rhs);
+      });
+  return merged_actions;
+}
+
 void RulesetManager::SetObserverForTest(TestObserver* observer) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!(test_observer_ && observer))
@@ -307,6 +338,8 @@ std::optional<RequestAction> RulesetManager::GetAction(
       continue;
     }
 
+    // If there is a tie here, `action` (from the more recently installed
+    // extension) wins.
     if (action_priority(action_info.action) > action_priority(action))
       action = std::move(action_info.action);
   }
@@ -317,7 +350,8 @@ std::optional<RequestAction> RulesetManager::GetAction(
 std::vector<RequestAction> RulesetManager::GetModifyHeadersActions(
     const std::vector<RulesetAndPageAccess>& rulesets,
     const WebRequestInfo& request,
-    const RequestParams& params) const {
+    const RequestParams& params,
+    RulesetMatchingStage stage) const {
   DCHECK(std::is_sorted(rulesets.begin(), rulesets.end(),
                         [](RulesetAndPageAccess a, RulesetAndPageAccess b) {
                           return *a.first < *b.first;
@@ -334,7 +368,7 @@ std::vector<RequestAction> RulesetManager::GetModifyHeadersActions(
 
     const ExtensionRulesetData* ruleset = ruleset_and_access.first;
     std::vector<RequestAction> actions_for_matcher =
-        ruleset->matcher->GetModifyHeadersActions(params);
+        ruleset->matcher->GetModifyHeadersActions(params, stage);
 
     // Evaluate modifyHeaders rules for this extension if and only if it has
     // host permissions for the request url and initiator.
@@ -352,7 +386,7 @@ std::vector<RequestAction> RulesetManager::GetModifyHeadersActions(
     }
   }
 
-  // |modify_headers_actions| is implicitly sorted in descreasing order by
+  // `modify_headers_actions` is implicitly sorted in decreasing order by
   // priority.
   //  - Within an extension: each CompositeMatcher returns a vector sorted by
   //  priority.
@@ -402,6 +436,11 @@ std::vector<RequestAction> RulesetManager::EvaluateRequestInternal(
     rulesets_to_evaluate.emplace_back(&ruleset, host_permission_access);
   }
 
+  // Check that the allow rule priority cache from `request` is empty if the
+  // request has not been evaluated yet in the kOnBeforeRequest stage.
+  CHECK(stage != RulesetMatchingStage::kOnBeforeRequest ||
+        request.allow_rule_max_priority.empty());
+
   const RequestParams params(request, response_headers);
   std::optional<RequestAction> action =
       GetAction(rulesets_to_evaluate, request, params, stage);
@@ -419,7 +458,12 @@ std::vector<RequestAction> RulesetManager::EvaluateRequestInternal(
   // This returns any matching modifyHeaders rules with priority greater than
   // matching allow/allowAllRequests rules.
   std::vector<RequestAction> modify_headers_actions =
-      GetModifyHeadersActions(rulesets_to_evaluate, request, params);
+      GetModifyHeadersActions(rulesets_to_evaluate, request, params, stage);
+
+  // Pass the allow rule priority cache to `request` so its current value can be
+  // reused in later rule matching stages.
+  request.allow_rule_max_priority = params.allow_rule_max_priority;
+
   if (!modify_headers_actions.empty())
     return modify_headers_actions;
 

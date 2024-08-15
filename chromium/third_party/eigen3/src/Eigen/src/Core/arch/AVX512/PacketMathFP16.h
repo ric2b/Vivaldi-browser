@@ -60,11 +60,7 @@ struct packet_traits<half> : default_packet_traits {
     HasCos = EIGEN_FAST_MATH,
     HasTanh = EIGEN_FAST_MATH,
     HasErf = 0,  // EIGEN_FAST_MATH,
-    HasBlend = 0,
-    HasRound = 1,
-    HasFloor = 1,
-    HasCeil = 1,
-    HasRint = 1
+    HasBlend = 0
   };
 };
 
@@ -388,6 +384,13 @@ EIGEN_STRONG_INLINE Packet32h pceil<Packet32h>(const Packet32h& a) {
 template <>
 EIGEN_STRONG_INLINE Packet32h pfloor<Packet32h>(const Packet32h& a) {
   return _mm512_roundscale_ph(a, _MM_FROUND_TO_NEG_INF);
+}
+
+// ptrunc
+
+template <>
+EIGEN_STRONG_INLINE Packet32h ptrunc<Packet32h>(const Packet32h& a) {
+  return _mm512_roundscale_ph(a, _MM_FROUND_TO_ZERO);
 }
 
 // predux

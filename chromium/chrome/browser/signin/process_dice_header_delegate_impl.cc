@@ -37,17 +37,17 @@ DiceTabHelper* GetDiceTabHelperFromWebContents(content::WebContents* contents) {
   return DiceTabHelper::FromWebContents(contents);
 }
 
-// Should Sign in to Chrome for all access points except Web Signin when Uno is
-// enabled.
+// Should Sign in to Chrome for all access points when Uno is enabled. Except
+// for Web Signin where we first check the user choice first on whether to
+// automatically sign in or not.
 void AttemptChromeSignin(CoreAccountId account_id,
                          Profile& profile,
                          signin_metrics::AccessPoint access_point) {
   CHECK(!account_id.empty());
 
-  // For the non-Uno equivalent counterpart, the code takes care of in
-  // `SigninManager::UpdateUnconsentedPrimaryAccount()`.
-  if (!switches::IsExplicitBrowserSigninUIOnDesktopEnabled(
-          switches::ExplicitBrowserSigninPhase::kExperimental)) {
+  // For the non-ExplicitBrowserSignin equivalent counterpart, the code takes
+  // care of in `SigninManager::UpdateUnconsentedPrimaryAccount()`.
+  if (!switches::IsExplicitBrowserSigninUIOnDesktopEnabled()) {
     return;
   }
 
@@ -59,24 +59,20 @@ void AttemptChromeSignin(CoreAccountId account_id,
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForProfile(&profile);
   if (access_point == signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN) {
-    if (switches::IsExplicitBrowserSigninUIOnDesktopEnabled(
-            switches::ExplicitBrowserSigninPhase::kFull)) {
+    if (switches::IsExplicitBrowserSigninUIOnDesktopEnabled()) {
       AccountInfo account_info =
           identity_manager->FindExtendedAccountInfoByAccountId(account_id);
       // If the user did not choose the signin choice, do not proceed with a
       // sign in from a Web Signin.
-      if (DiceWebSigninInterceptor::GetChromeSigninUserChoice(
-              *profile.GetPrefs(), account_info.email) !=
+      if (SigninPrefs(*profile.GetPrefs())
+              .GetChromeSigninInterceptionUserChoice(account_info.gaia) !=
           ChromeSigninUserChoice::kSignin) {
         return;
       }
-    } else {
-      CHECK(switches::IsExplicitBrowserSigninUIOnDesktopEnabled(
-          switches::ExplicitBrowserSigninPhase::kExperimental));
-      // Do not signin to chrome if we are accessing through WebSignin, the
-      // Chrome Signin Bubble Intercept should be shown and the choice given to
-      // the user.
-      return;
+
+      // Proceed with the access point as the choice remembered.
+      access_point =
+          signin_metrics::AccessPoint::ACCESS_POINT_SIGNIN_CHOICE_REMEMBERED;
     }
   }
 

@@ -123,6 +123,8 @@ StyleRule::RuleType RuleTypeForMutableDeclaration(
       return StyleRule::kProperty;
     case kCSSFontPaletteValuesRuleMode:
       return StyleRule::kFontPaletteValues;
+    case kCSSPositionTryRuleMode:
+      return StyleRule::kPositionTry;
     default:
       return StyleRule::kStyle;
   }
@@ -170,9 +172,14 @@ MutableCSSPropertyValueSet::SetResult CSSParserImpl::ParseValue(
   CSSParserTokenStream stream(tokenizer);
   CSSTokenizedValue tokenized_value = ConsumeRestrictedPropertyValue(stream);
   parser.ConsumeDeclarationValue(tokenized_value, unresolved_property,
-                                 important, rule_type);
+                                 /*is_in_declaration_list=*/false, rule_type);
   if (parser.parsed_properties_.empty()) {
     return MutableCSSPropertyValueSet::kParseError;
+  }
+  if (important) {
+    for (CSSPropertyValue& property : parser.parsed_properties_) {
+      property.SetImportant();
+    }
   }
   return declaration->AddParsedProperties(parser.parsed_properties_);
 }
@@ -255,6 +262,7 @@ static ImmutableCSSPropertyValueSet* CreateCSSPropertyValueSet(
   FilterProperties(false, parsed_properties, results, unused_entries,
                    seen_properties, seen_custom_properties);
 
+  bool count_cursor_hand = false;
   if (document && mode == kHTMLQuirksMode &&
       seen_properties.test(GetCSSPropertyIDIndex(CSSPropertyID::kCursor))) {
     // See if the properties contain “cursor: hand” without also containing
@@ -278,11 +286,13 @@ static ImmutableCSSPropertyValueSet* CreateCSSPropertyValueSet(
     }
     if (contains_cursor_hand && !contains_cursor_pointer) {
       document->CountUse(WebFeature::kQuirksModeCursorHand);
+      count_cursor_hand = true;
     }
   }
 
   ImmutableCSSPropertyValueSet* result = ImmutableCSSPropertyValueSet::Create(
-      results.data() + unused_entries, results.size() - unused_entries, mode);
+      results.data() + unused_entries, results.size() - unused_entries, mode,
+      count_cursor_hand);
   parsed_properties.clear();
   return result;
 }
@@ -1785,8 +1795,6 @@ StyleRuleBase* CSSParserImpl::ConsumeScopeRule(
     CSSParserTokenStream& stream,
     CSSNestingType nesting_type,
     StyleRule* parent_rule_for_nesting) {
-  DCHECK(RuntimeEnabledFeatures::CSSScopeEnabled());
-
   wtf_size_t prelude_offset_start = stream.LookAheadOffset();
   CSSParserTokenRange prelude = ConsumeAtRulePrelude(stream);
   wtf_size_t prelude_offset_end = stream.LookAheadOffset();
@@ -2044,7 +2052,7 @@ StyleRulePositionTry* CSSParserImpl::ConsumePositionTryRule(
 
   return MakeGarbageCollected<StyleRulePositionTry>(
       AtomicString(name),
-      CreateCSSPropertyValueSet(parsed_properties_, context_->Mode(),
+      CreateCSSPropertyValueSet(parsed_properties_, kCSSPositionTryRuleMode,
                                 context_->GetDocument()));
 }
 
@@ -2812,14 +2820,20 @@ bool CSSParserImpl::ConsumeDeclaration(CSSParserTokenStream& stream,
       } else if (unresolved_property != CSSPropertyID::kInvalid) {
         CSSTokenizedValue tokenized_value =
             ConsumeRestrictedPropertyValue(stream);
-        important = RemoveImportantAnnotationIfPresent(tokenized_value);
-        if (important && (rule_type == StyleRule::kKeyframe ||
-                          rule_type == StyleRule::kPositionTry)) {
-          return false;
-        }
         if (stream.AtEnd()) {
           ConsumeDeclarationValue(tokenized_value, unresolved_property,
-                                  important, rule_type);
+                                  /*is_in_declaration_list=*/true, rule_type);
+        }
+        if (observer_) {
+          // The observer would like to know (below) whether this declaration
+          // was !important or not. If our parse succeeded, we can just pick it
+          // out from the list of properties. If not, we'll need to look at the
+          // tokens ourselves.
+          if (parsed_properties_.size() != properties_count) {
+            important = parsed_properties_.back().IsImportant();
+          } else {
+            important = RemoveImportantAnnotationIfPresent(tokenized_value);
+          }
         }
       }
     }
@@ -2866,10 +2880,14 @@ void CSSParserImpl::ConsumeVariableValue(
 void CSSParserImpl::ConsumeDeclarationValue(
     const CSSTokenizedValue& tokenized_value,
     CSSPropertyID unresolved_property,
-    bool important,
+    bool is_in_declaration_list,
     StyleRule::RuleType rule_type) {
-  CSSPropertyParser::ParseValue(unresolved_property, important, tokenized_value,
-                                context_, parsed_properties_, rule_type);
+  const bool allow_important_annotation = is_in_declaration_list &&
+                                          rule_type != StyleRule::kKeyframe &&
+                                          rule_type != StyleRule::kPositionTry;
+  CSSPropertyParser::ParseValue(unresolved_property, allow_important_annotation,
+                                tokenized_value, context_, parsed_properties_,
+                                rule_type);
 }
 
 template <typename ConsumeFunction>

@@ -74,7 +74,7 @@ BindGroup::BindGroup(Device* device,
         // local to the allocation with OffsetFrom().
         MatchVariant(
             bindingInfo.bindingLayout,
-            [&](const BufferBindingLayout& layout) {
+            [&](const BufferBindingInfo& layout) {
                 BufferBinding binding = GetBindingAsBufferBinding(bindingIndex);
 
                 ID3D12Resource* resource = ToBackend(binding.buffer)->GetD3D12Resource();
@@ -144,7 +144,7 @@ BindGroup::BindGroup(Device* device,
                         DAWN_UNREACHABLE();
                 }
             },
-            [&](const TextureBindingLayout&) {
+            [&](const TextureBindingInfo&) {
                 auto* view = ToBackend(GetBindingAsTextureView(bindingIndex));
                 auto& srv = view->GetSRVDescriptor();
 
@@ -161,7 +161,7 @@ BindGroup::BindGroup(Device* device,
                     viewAllocation.OffsetFrom(viewSizeIncrement,
                                               descriptorHeapOffsets[bindingIndex]));
             },
-            [&](const StorageTextureBindingLayout& layout) {
+            [&](const StorageTextureBindingInfo& layout) {
                 TextureView* view = ToBackend(GetBindingAsTextureView(bindingIndex));
 
                 ID3D12Resource* resource = ToBackend(view->GetTexture())->GetD3D12Resource();
@@ -194,8 +194,14 @@ BindGroup::BindGroup(Device* device,
                         DAWN_UNREACHABLE();
                 }
             },
+            [](const StaticSamplerBindingInfo&) {
+                // Static samplers are handled in the frontend.
+                // TODO(crbug.com/dawn/2483): Implement static samplers in the
+                // D3D12 backend.
+                DAWN_UNREACHABLE();
+            },
             // No-op as samplers will be later initialized by CreateSamplers().
-            [](const SamplerBindingLayout&) {});
+            [](const SamplerBindingInfo&) {});
     }
 
     // Loop through the dynamic storage buffers and build a flat map from the index of the

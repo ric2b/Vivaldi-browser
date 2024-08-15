@@ -17,6 +17,7 @@ is_ios = os.access(os.path.join(sourcedir, ".enable_ios"), os.F_OK)
 use_gn_ide_all = os.access(os.path.join(sourcedir, ".enable_gn_all_ide"), os.F_OK)
 use_gn_unique_name = os.access(os.path.join(sourcedir, ".enable_gn_unique_name"), os.F_OK)
 use_gn_goma = os.access(os.path.join(sourcedir, ".enable_gn_goma"), os.F_OK)
+use_gn_reclient = os.access(os.path.join(sourcedir, ".enable_gn_reclient"), os.F_OK)
 
 # Check python version
 try:
@@ -214,6 +215,8 @@ if args.static or is_ios: # IOS requires static linking
 if args.no_hermetic:
   gn_defines += " use_hermetic_toolchain=false"
 
+assert not (use_gn_reclient and use_gn_goma), "only enable either Reclient or Goma"
+
 if  args.goma or use_gn_goma:
   _paths = os.environ["PATH"].split(os.pathsep)
   goma_path = "bin/goma/goma-"
@@ -238,6 +241,8 @@ if  args.goma or use_gn_goma:
     gn_defines += ' use_goma=true goma_dir="{}"'.format(os.path.join(_p, goma_path))
   else:
     print("NOTE! Goma was not found and has not been enabled!")
+elif use_gn_reclient:
+  gn_defines += ' vivaldi_enable_reclient=true'
 
 if args.refresh or not args.args:
   is_builder = os.environ.get("CHROME_HEADLESS", 0) != 0

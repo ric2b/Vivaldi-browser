@@ -38,7 +38,7 @@ constexpr NetworkInterfaceIndex kNetworkInterface = 0;
 
 class MockDnsSdService : public DnsSdService {
  public:
-  MockDnsSdService() : querier_(this) {}
+  MockDnsSdService() : querier_(*this) {}
 
   DnsSdQuerier* GetQuerier() override { return &querier_; }
   DnsSdPublisher* GetPublisher() override { return nullptr; }
@@ -52,26 +52,24 @@ class MockDnsSdService : public DnsSdService {
  private:
   class MockQuerier : public DnsSdQuerier {
    public:
-    explicit MockQuerier(MockDnsSdService* service) : mock_service_(service) {
-      OSP_CHECK(service);
-    }
+    explicit MockQuerier(MockDnsSdService& service) : mock_service_(service) {}
 
     void StartQuery(const std::string& service,
                     DnsSdQuerier::Callback* cb) override {
-      mock_service_->StartQuery(service, cb);
+      mock_service_.StartQuery(service, cb);
     }
 
     void StopQuery(const std::string& service,
                    DnsSdQuerier::Callback* cb) override {
-      mock_service_->StopQuery(service, cb);
+      mock_service_.StopQuery(service, cb);
     }
 
     void ReinitializeQueries(const std::string& service) override {
-      mock_service_->ReinitializeQueries(service);
+      mock_service_.ReinitializeQueries(service);
     }
 
    private:
-    MockDnsSdService* const mock_service_;
+    MockDnsSdService& mock_service_;
   };
 
   MockQuerier querier_;

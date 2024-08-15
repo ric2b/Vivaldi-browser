@@ -193,6 +193,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   Vector<WebInputEventAttribution> GetPendingUserInputInfo(
       bool include_continuous) const override;
   void StartIdlePeriodForTesting() override;
+  void SetRendererBackgroundedForTesting(bool backgrounded) override;
 
   // ThreadScheduler implementation:
   bool ShouldYieldForHighPriorityWork() override;
@@ -219,8 +220,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
   // RenderWidgetSignals::Observer implementation:
   void SetAllRenderWidgetsHidden(bool hidden) override;
-  void SetHasVisibleRenderWidgetWithTouchHandler(
-      bool has_visible_render_widget_with_touch_handler) override;
 
   scoped_refptr<WidgetScheduler> CreateWidgetScheduler();
   void WillBeginFrame(const viz::BeginFrameArgs& args);
@@ -238,13 +237,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
       const WebInputEventAttribution& web_input_event_attribution);
   void DidHandleInputEventOnMainThread(const WebInputEvent& web_input_event,
                                        WebInputEventResult result);
-  void DidAnimateForInputOnCompositorThread();
-
-  // Returns true if the scheduler has reason to believe that high priority work
-  // may soon arrive on the main thread, e.g., if gesture events were observed
-  // recently.
-  // Must be called from the main thread.
-  bool IsHighPriorityWorkAnticipated();
 
   // Use a separate task runner so that IPC tasks are not logged via the same
   // task queue that executes them. Otherwise this would result in an infinite
@@ -521,14 +513,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   // renderer has been hidden, before going to sleep for good.
   static const int kEndIdleWhenHiddenDelayMillis = 10000;
 
-  // The amount of time in milliseconds we have to respond to user input as
-  // defined by RAILS.
-  static const int kRailsResponseTimeMillis = 50;
-
-  // The time we should stay in a priority-escalated mode after a call to
-  // DidAnimateForInputOnCompositorThread().
-  static const int kFlingEscalationLimitMillis = 100;
-
   // Schedules an immediate PolicyUpdate, if there isn't one already pending and
   // sets |policy_may_need_update_|. Note |any_thread_lock_| must be
   // locked.
@@ -572,10 +556,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   // The task cost estimators and the UserModel need to be reset upon page
   // nagigation. This function does that. Must be called from the main thread.
   void ResetForNavigationLocked();
-
-  // Estimates the maximum task length that won't cause a jank based on the
-  // current system state. Must be called from the main thread.
-  base::TimeDelta EstimateLongestJankFreeTaskDuration() const;
 
   // Report an intervention to all WebViews in this process.
   void BroadcastIntervention(const String& message);
@@ -640,8 +620,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
       const base::sequence_manager::TaskQueue::TaskTiming& task_timing,
       FrameSchedulerImpl* frame_scheduler,
       bool precise_attribution);
-
-  void SetNumberOfCompositingTasksToPrioritize(int number_of_tasks);
 
   void ShutdownAllQueues();
 
@@ -727,8 +705,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     base::TimeTicks estimated_next_frame_begin;
     base::TimeTicks current_task_start_time;
     base::TimeDelta compositor_frame_interval;
-    TraceableCounter<base::TimeDelta, TracingCategory::kDebug>
-        longest_jank_free_task_duration;
     TraceableCounter<int, TracingCategory::kInfo>
         renderer_pause_count;  // Renderer is paused if non-zero.
 
@@ -742,8 +718,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
         renderer_backgrounded;
     TraceableState<bool, TracingCategory::kDefault>
         blocking_input_expected_soon;
-    TraceableState<bool, TracingCategory::kDebug>
-        has_visible_render_widget_with_touch_handler;
     TraceableState<bool, TracingCategory::kDebug> in_idle_period_for_testing;
     TraceableState<bool, TracingCategory::kTopLevel> is_audio_playing;
     TraceableState<bool, TracingCategory::kDebug>
@@ -810,7 +784,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
     PendingUserInput::Monitor pending_input_monitor;
     base::TimeTicks last_idle_period_end_time;
-    base::TimeTicks fling_compositor_escalation_deadline;
     UserModel user_model;
     TraceableState<bool, TracingCategory::kInfo> awaiting_touch_start_response;
     TraceableState<bool, TracingCategory::kInfo> in_idle_period;

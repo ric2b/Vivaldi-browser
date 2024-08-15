@@ -815,19 +815,13 @@ bool TCompiler::checkAndSimplifyAST(TIntermBlock *root,
         parseContext.isExtensionEnabled(TExtension::APPLE_clip_distance))
     {
         bool isClipDistanceUsed = false;
-        if (!ValidateClipCullDistance(
-                root, &mDiagnostics, mResources.MaxCullDistances,
-                mResources.MaxCombinedClipAndCullDistances, &mClipDistanceSize, &mCullDistanceSize,
-                &mClipDistanceRedeclared, &mCullDistanceRedeclared, &isClipDistanceUsed))
+        if (!ValidateClipCullDistance(this, root, &mDiagnostics,
+                                      mResources.MaxCombinedClipAndCullDistances,
+                                      &mClipDistanceSize, &mCullDistanceSize, &isClipDistanceUsed))
         {
             return false;
         }
         mMetadataFlags[MetadataFlags::HasClipDistance] = isClipDistanceUsed;
-
-        if (!resizeClipAndCullDistanceBuiltins(root))
-        {
-            return false;
-        }
     }
 
     // Validate no barrier() after return before prunning it in |PruneNoOps()| below.
@@ -1261,39 +1255,6 @@ bool TCompiler::checkAndSimplifyAST(TIntermBlock *root,
     return true;
 }
 
-bool TCompiler::resizeClipAndCullDistanceBuiltins(TIntermBlock *root)
-{
-    auto resizeVariable = [=](const ImmutableString &name, uint32_t size, uint32_t maxSize) {
-        // Skip if the variable is not used or implicitly has the maximum size
-        if (size == 0 || size == maxSize)
-            return true;
-        ASSERT(size < maxSize);
-        const TVariable *builtInVar =
-            static_cast<const TVariable *>(mSymbolTable.findBuiltIn(name, getShaderVersion()));
-        TType *resizedType = new TType(builtInVar->getType());
-        resizedType->setArraySize(0, size);
-
-        TVariable *resizedVar =
-            new TVariable(&mSymbolTable, name, resizedType, SymbolType::BuiltIn);
-
-        return ReplaceVariable(this, root, builtInVar, resizedVar);
-    };
-
-    if (!mClipDistanceRedeclared && !resizeVariable(ImmutableString("gl_ClipDistance"),
-                                                    mClipDistanceSize, mResources.MaxClipDistances))
-    {
-        return false;
-    }
-
-    if (!mCullDistanceRedeclared && !resizeVariable(ImmutableString("gl_CullDistance"),
-                                                    mCullDistanceSize, mResources.MaxCullDistances))
-    {
-        return false;
-    }
-
-    return true;
-}
-
 bool TCompiler::postParseChecks(const TParseContext &parseContext)
 {
     std::stringstream errorMessage;
@@ -1435,6 +1396,7 @@ void TCompiler::setResourceString()
         << ":EXT_draw_buffers:" << mResources.EXT_draw_buffers
         << ":FragmentPrecisionHigh:" << mResources.FragmentPrecisionHigh
         << ":MaxExpressionComplexity:" << mResources.MaxExpressionComplexity
+        << ":MaxStatementDepth:" << mResources.MaxStatementDepth
         << ":MaxCallStackDepth:" << mResources.MaxCallStackDepth
         << ":MaxFunctionParameters:" << mResources.MaxFunctionParameters
         << ":EXT_blend_func_extended:" << mResources.EXT_blend_func_extended
@@ -1576,10 +1538,8 @@ void TCompiler::clearResults()
 
     mNumViews = -1;
 
-    mClipDistanceSize       = 0;
-    mCullDistanceSize       = 0;
-    mClipDistanceRedeclared = false;
-    mCullDistanceRedeclared = false;
+    mClipDistanceSize = 0;
+    mCullDistanceSize = 0;
 
     mGeometryShaderInputPrimitiveType  = EptUndefined;
     mGeometryShaderOutputPrimitiveType = EptUndefined;

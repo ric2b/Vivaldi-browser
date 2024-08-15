@@ -81,7 +81,7 @@ bool DownloadPathIsDangerous(const base::FilePath& download_path) {
   }
 #endif
 
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
+#if BUILDFLAG(IS_ANDROID)
   // Neither Fuchsia nor Android have a desktop dir.
   return false;
 #else
@@ -211,9 +211,7 @@ DownloadPrefs::DownloadPrefs(Profile* profile) : profile_(profile) {
   prompt_for_download_android_.Init(prefs::kPromptForDownloadAndroid, prefs);
   RecordDownloadPromptStatus(
       static_cast<DownloadPromptStatus>(*prompt_for_download_android_));
-  if (base::FeatureList::IsEnabled(chrome::android::kOpenDownloadDialog)) {
-    auto_open_pdf_enabled_.Init(prefs::kAutoOpenPdfEnabled, prefs);
-  }
+  auto_open_pdf_enabled_.Init(prefs::kAutoOpenPdfEnabled, prefs);
 #endif
   download_path_.Init(prefs::kDownloadDefaultDirectory, prefs);
   save_file_path_.Init(prefs::kSaveFileDefaultDirectory, prefs);
@@ -319,9 +317,7 @@ void DownloadPrefs::RegisterProfilePrefs(
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
   registry->RegisterBooleanPref(prefs::kShowMissingSdCardErrorAndroid, true);
-  if (base::FeatureList::IsEnabled(chrome::android::kOpenDownloadDialog)) {
-    registry->RegisterBooleanPref(prefs::kAutoOpenPdfEnabled, false);
-  }
+  registry->RegisterBooleanPref(prefs::kAutoOpenPdfEnabled, false);
 #endif
 }
 
@@ -518,9 +514,6 @@ void DownloadPrefs::SkipSanitizeDownloadTargetPathForTesting() {
 
 #if BUILDFLAG(IS_ANDROID)
 bool DownloadPrefs::IsAutoOpenPdfEnabled() {
-  if (!base::FeatureList::IsEnabled(chrome::android::kOpenDownloadDialog)) {
-    return false;
-  }
   return *auto_open_pdf_enabled_;
 }
 #endif
@@ -558,7 +551,7 @@ base::FilePath DownloadPrefs::SanitizeDownloadTargetPath(
     return path;
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // TODO(https://crbug.com/1148848): Sort out path sanitization for Lacros.
+  // TODO(crbug.com/40731523): Sort out path sanitization for Lacros.
   // This will require refactoring the ash-only code below so it can be shared.
   base::FilePath migrated_drive_path;
   if (download_dir_util::ExpandDrivePolicyVariable(profile_, path,

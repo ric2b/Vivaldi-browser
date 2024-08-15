@@ -155,7 +155,8 @@ class OmniboxEditModel {
   std::u16string GetPermanentDisplayText() const;
 
   // Sets the user_text_ to |text|. Also enters user-input-in-progress mode.
-  void SetUserText(const std::u16string& text);
+  // Virtual for testing.
+  virtual void SetUserText(const std::u16string& text);
 
   // If the omnibox is currently displaying elided text, this method will
   // restore the full URL into the user text. After unelision, this selects-all,
@@ -306,6 +307,13 @@ class OmniboxEditModel {
   // Returns true if the space is handled in a special way, for example
   // entering keyword mode on a match somewhere down the list.
   bool OnSpacePressed();
+
+  // Checks for special input conditions to accelerate keyword mode entry
+  // for starter pack '@' keywords. Returns true if keyword mode was
+  // entered; returns false if feature is disabled or special input
+  // conditions were not detected, in which case this is a no-op.
+  bool MaybeAccelerateKeywordSelection(const std::u16string& input_text,
+                                       char16_t ch);
 
   // Called when any relevant data changes.  This rolls together several
   // separate pieces of data into one call so we can update all the UI

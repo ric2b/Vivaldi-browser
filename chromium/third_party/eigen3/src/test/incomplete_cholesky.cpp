@@ -54,10 +54,28 @@ void bug1150() {
   }
 }
 
+void test_non_spd() {
+  Eigen::SparseMatrix<double> A(2, 2);
+  A.insert(0, 0) = 0;
+  A.insert(1, 1) = 3;
+
+  Eigen::IncompleteCholesky<double> solver(A);
+
+  // Recover original matrix.
+  Eigen::MatrixXd M = solver.permutationP().transpose() *
+                      (solver.scalingS().asDiagonal().inverse() *
+                       (solver.matrixL() * solver.matrixL().transpose() -
+                        solver.shift() * Eigen::MatrixXd::Identity(A.rows(), A.cols())) *
+                       solver.scalingS().asDiagonal().inverse()) *
+                      solver.permutationP();
+  VERIFY_IS_APPROX(A.toDense(), M);
+}
+
 EIGEN_DECLARE_TEST(incomplete_cholesky) {
   CALL_SUBTEST_1((test_incomplete_cholesky_T<double, int>()));
   CALL_SUBTEST_2((test_incomplete_cholesky_T<std::complex<double>, int>()));
   CALL_SUBTEST_3((test_incomplete_cholesky_T<double, long int>()));
 
-  CALL_SUBTEST_1((bug1150<0>()));
+  CALL_SUBTEST_4((bug1150<0>()));
+  CALL_SUBTEST_4(test_non_spd());
 }

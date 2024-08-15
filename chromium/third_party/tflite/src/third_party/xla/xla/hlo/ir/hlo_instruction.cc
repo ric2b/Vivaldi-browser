@@ -22,7 +22,6 @@ limitations under the License.
 #include <functional>
 #include <iostream>
 #include <iterator>
-#include <list>
 #include <memory>
 #include <optional>
 #include <ostream>
@@ -46,9 +45,9 @@ limitations under the License.
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
-#include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
 #include "xla/comparison_util.h"
+#include "xla/hlo/ir/collective_device_list.h"
 #include "xla/hlo/ir/dfs_hlo_visitor.h"
 #include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/hlo/ir/hlo_clone_context.h"
@@ -62,7 +61,6 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_sharding.h"
 #include "xla/hlo/ir/hlo_sharding_metadata.h"
 #include "xla/hlo/ir/ptrvec.h"
-#include "xla/iterator_util.h"
 #include "xla/layout.h"
 #include "xla/literal.h"
 #include "xla/map_util.h"
@@ -76,7 +74,6 @@ limitations under the License.
 #include "xla/shape_util.h"
 #include "xla/status.h"
 #include "xla/status_macros.h"
-#include "xla/statusor.h"
 #include "xla/util.h"
 #include "xla/xla_data.pb.h"
 #include "tsl/lib/gtl/iterator_range.h"
@@ -234,7 +231,7 @@ HloInstruction* HloInstruction::AddInstruction(
 }
 
 /* static */
-StatusOr<std::unique_ptr<HloInstruction>> HloInstruction::CreateFromProto(
+absl::StatusOr<std::unique_ptr<HloInstruction>> HloInstruction::CreateFromProto(
     const HloInstructionProto& proto,
     const absl::flat_hash_map<int64_t, HloInstruction*>& instruction_map,
     const absl::flat_hash_map<int64_t, HloComputation*>& computation_map,
@@ -681,15 +678,15 @@ StatusOr<std::unique_ptr<HloInstruction>> HloInstruction::CreateFromProto(
       if (opcode == HloOpcode::kAllGather) {
         instruction = CreateAllGather(
             shape, all_operands(), all_gather_dimension,
-            std::vector<ReplicaGroup>(proto.replica_groups().begin(),
-                                      proto.replica_groups().end()),
+            CollectiveDeviceList(std::vector<ReplicaGroup>(
+                proto.replica_groups().begin(), proto.replica_groups().end())),
             proto.constrain_layout(), channel_id,
             proto.use_global_device_ids());
       } else {
         instruction = CreateAllGatherStart(
             shape, all_operands(), all_gather_dimension,
-            std::vector<ReplicaGroup>(proto.replica_groups().begin(),
-                                      proto.replica_groups().end()),
+            CollectiveDeviceList(std::vector<ReplicaGroup>(
+                proto.replica_groups().begin(), proto.replica_groups().end())),
             proto.constrain_layout(), channel_id,
             proto.use_global_device_ids());
       }
@@ -712,23 +709,24 @@ StatusOr<std::unique_ptr<HloInstruction>> HloInstruction::CreateFromProto(
       }
       std::vector<ReplicaGroup> replica_groups(proto.replica_groups().begin(),
                                                proto.replica_groups().end());
+      CollectiveDeviceList device_list(replica_groups);
       if (opcode == HloOpcode::kAllReduce) {
         instruction =
-            CreateAllReduce(shape, all_operands(), computations(0),
-                            replica_groups, proto.constrain_layout(),
-                            channel_id, proto.use_global_device_ids());
+            CreateAllReduce(shape, all_operands(), computations(0), device_list,
+                            proto.constrain_layout(), channel_id,
+                            proto.use_global_device_ids());
       } else if (opcode == HloOpcode::kReduceScatter) {
         TF_RET_CHECK(proto.dimensions_size() == 1)
             << "ReduceScatter cannot have more than 1 scatter dimensions";
         int64_t scatter_dimension = proto.dimensions(0);
         instruction = CreateReduceScatter(
-            shape, all_operands(), computations(0), replica_groups,
+            shape, all_operands(), computations(0), device_list,
             proto.constrain_layout(), channel_id, proto.use_global_device_ids(),
             scatter_dimension);
       } else {
         instruction =
             CreateAllReduceStart(shape, all_operands(), computations(0),
-                                 replica_groups, proto.constrain_layout(),
+                                 device_list, proto.constrain_layout(),
                                  channel_id, proto.use_global_device_ids());
       }
       break;
@@ -750,8 +748,8 @@ StatusOr<std::unique_ptr<HloInstruction>> HloInstruction::CreateFromProto(
       instruction = CreateAllToAll(
           shape, all_operands(),
           /*replica_groups=*/
-          std::vector<ReplicaGroup>(proto.replica_groups().begin(),
-                                    proto.replica_groups().end()),
+          CollectiveDeviceList(std::vector<ReplicaGroup>(
+              proto.replica_groups().begin(), proto.replica_groups().end())),
           /*constrain_layout=*/proto.constrain_layout(),
           /*channel_id=*/channel_id, split_dimension);
       break;
@@ -764,7 +762,8 @@ StatusOr<std::unique_ptr<HloInstruction>> HloInstruction::CreateFromProto(
       auto replica_groups = std::vector<ReplicaGroup>(
           proto.replica_groups().begin(), proto.replica_groups().end());
       instruction = CreateCollectiveBroadcast(
-          shape, all_operands(), replica_groups, false, channel_id);
+          shape, all_operands(), CollectiveDeviceList(replica_groups), false,
+          channel_id);
       break;
     }
     case HloOpcode::kCollectivePermute:
@@ -1492,12 +1491,35 @@ HloInstruction::CreateReducePrecision(const Shape& shape,
 
 /* static */ std::unique_ptr<HloInstruction> HloInstruction::CreateAllGather(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    int64_t all_gather_dimension, absl::Span<const ReplicaGroup> replica_groups,
+    int64_t all_gather_dimension, const CollectiveDeviceList& device_list,
     bool constrain_layout, const std::optional<int64_t>& channel_id,
     bool use_global_device_ids) {
   return std::make_unique<HloAllGatherInstruction>(
-      HloOpcode::kAllGather, shape, operands, all_gather_dimension,
-      replica_groups, constrain_layout, channel_id, use_global_device_ids);
+      HloOpcode::kAllGather, shape, operands, all_gather_dimension, device_list,
+      constrain_layout, channel_id, use_global_device_ids);
+}
+
+/* static */ std::unique_ptr<HloInstruction> HloInstruction::CreateAllGather(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    int64_t all_gather_dimension, absl::Span<const ReplicaGroup> replica_groups,
+    bool constrain_layout, const std::optional<int64_t>& channel_id,
+    bool use_global_device_ids) {
+  return CreateAllGather(shape, operands, all_gather_dimension,
+                         CollectiveDeviceList(replica_groups), constrain_layout,
+                         channel_id, use_global_device_ids);
+}
+
+/* static */ std::unique_ptr<HloInstruction>
+HloInstruction::CreateAllGatherStart(const Shape& shape,
+                                     absl::Span<HloInstruction* const> operands,
+                                     int64_t all_gather_dimension,
+                                     const CollectiveDeviceList& device_list,
+                                     bool constrain_layout,
+                                     const std::optional<int64_t>& channel_id,
+                                     bool use_global_device_ids) {
+  return std::make_unique<HloAllGatherInstruction>(
+      HloOpcode::kAllGatherStart, shape, operands, all_gather_dimension,
+      device_list, constrain_layout, channel_id, use_global_device_ids);
 }
 
 /* static */ std::unique_ptr<HloInstruction>
@@ -1506,9 +1528,20 @@ HloInstruction::CreateAllGatherStart(
     int64_t all_gather_dimension, absl::Span<const ReplicaGroup> replica_groups,
     bool constrain_layout, const std::optional<int64_t>& channel_id,
     bool use_global_device_ids) {
-  return std::make_unique<HloAllGatherInstruction>(
-      HloOpcode::kAllGatherStart, shape, operands, all_gather_dimension,
-      replica_groups, constrain_layout, channel_id, use_global_device_ids);
+  return CreateAllGatherStart(shape, operands, all_gather_dimension,
+                              CollectiveDeviceList(replica_groups),
+                              constrain_layout, channel_id,
+                              use_global_device_ids);
+}
+
+/* static */ std::unique_ptr<HloInstruction> HloInstruction::CreateAllReduce(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    HloComputation* reduce_computation, const CollectiveDeviceList& device_list,
+    bool constrain_layout, const std::optional<int64_t>& channel_id,
+    bool use_global_device_ids) {
+  return std::make_unique<HloAllReduceInstruction>(
+      HloOpcode::kAllReduce, shape, operands, reduce_computation, device_list,
+      constrain_layout, channel_id, use_global_device_ids);
 }
 
 /* static */ std::unique_ptr<HloInstruction> HloInstruction::CreateAllReduce(
@@ -1516,9 +1549,20 @@ HloInstruction::CreateAllGatherStart(
     HloComputation* reduce_computation,
     absl::Span<const ReplicaGroup> replica_groups, bool constrain_layout,
     const std::optional<int64_t>& channel_id, bool use_global_device_ids) {
-  return std::make_unique<HloAllReduceInstruction>(
-      HloOpcode::kAllReduce, shape, operands, reduce_computation,
-      replica_groups, constrain_layout, channel_id, use_global_device_ids);
+  return CreateAllReduce(shape, operands, reduce_computation,
+                         CollectiveDeviceList(replica_groups), constrain_layout,
+                         channel_id, use_global_device_ids);
+}
+
+/* static */ std::unique_ptr<HloInstruction>
+HloInstruction::CreateReduceScatter(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    HloComputation* reduce_computation, const CollectiveDeviceList& device_list,
+    bool constrain_layout, const std::optional<int64_t>& channel_id,
+    bool use_global_device_ids, int64_t scatter_dimension) {
+  return std::make_unique<HloReduceScatterInstruction>(
+      shape, operands, reduce_computation, device_list, constrain_layout,
+      channel_id, use_global_device_ids, scatter_dimension);
 }
 
 /* static */ std::unique_ptr<HloInstruction>
@@ -1528,9 +1572,22 @@ HloInstruction::CreateReduceScatter(
     absl::Span<const ReplicaGroup> replica_groups, bool constrain_layout,
     const std::optional<int64_t>& channel_id, bool use_global_device_ids,
     int64_t scatter_dimension) {
-  return std::make_unique<HloReduceScatterInstruction>(
-      shape, operands, reduce_computation, replica_groups, constrain_layout,
-      channel_id, use_global_device_ids, scatter_dimension);
+  return CreateReduceScatter(
+      shape, operands, reduce_computation, CollectiveDeviceList(replica_groups),
+      constrain_layout, channel_id, use_global_device_ids, scatter_dimension);
+}
+
+/* static */ std::unique_ptr<HloInstruction>
+HloInstruction::CreateAllReduceStart(const Shape& shape,
+                                     absl::Span<HloInstruction* const> operands,
+                                     HloComputation* reduce_computation,
+                                     const CollectiveDeviceList& device_list,
+                                     bool constrain_layout,
+                                     const std::optional<int64_t>& channel_id,
+                                     bool use_global_device_ids) {
+  return std::make_unique<HloAllReduceInstruction>(
+      HloOpcode::kAllReduceStart, shape, operands, reduce_computation,
+      device_list, constrain_layout, channel_id, use_global_device_ids);
 }
 
 /* static */ std::unique_ptr<HloInstruction>
@@ -1539,9 +1596,19 @@ HloInstruction::CreateAllReduceStart(
     HloComputation* reduce_computation,
     absl::Span<const ReplicaGroup> replica_groups, bool constrain_layout,
     const std::optional<int64_t>& channel_id, bool use_global_device_ids) {
-  return std::make_unique<HloAllReduceInstruction>(
-      HloOpcode::kAllReduceStart, shape, operands, reduce_computation,
-      replica_groups, constrain_layout, channel_id, use_global_device_ids);
+  return CreateAllReduceStart(
+      shape, operands, reduce_computation, CollectiveDeviceList(replica_groups),
+      constrain_layout, channel_id, use_global_device_ids);
+}
+
+/* static */ std::unique_ptr<HloInstruction> HloInstruction::CreateAllToAll(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    const CollectiveDeviceList& device_list, bool constrain_layout,
+    const std::optional<int64_t>& channel_id,
+    const std::optional<int64_t>& split_dimension) {
+  return std::make_unique<HloAllToAllInstruction>(shape, operands, device_list,
+                                                  constrain_layout, channel_id,
+                                                  split_dimension);
 }
 
 /* static */ std::unique_ptr<HloInstruction> HloInstruction::CreateAllToAll(
@@ -1549,9 +1616,18 @@ HloInstruction::CreateAllReduceStart(
     absl::Span<const ReplicaGroup> replica_groups, bool constrain_layout,
     const std::optional<int64_t>& channel_id,
     const std::optional<int64_t>& split_dimension) {
-  return std::make_unique<HloAllToAllInstruction>(
-      shape, operands, replica_groups, constrain_layout, channel_id,
-      split_dimension);
+  return CreateAllToAll(shape, operands, CollectiveDeviceList(replica_groups),
+                        constrain_layout, channel_id, split_dimension);
+}
+
+/* static */ std::unique_ptr<HloInstruction>
+HloInstruction::CreateCollectiveBroadcast(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    const CollectiveDeviceList& device_list, bool constrain_layout,
+    const std::optional<int64_t>& channel_id) {
+  return std::make_unique<HloCollectiveBroadcastInstruction>(
+      HloOpcode::kCollectiveBroadcast, shape, operands, device_list,
+      constrain_layout, channel_id);
 }
 
 /* static */ std::unique_ptr<HloInstruction>
@@ -1559,9 +1635,9 @@ HloInstruction::CreateCollectiveBroadcast(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     absl::Span<const ReplicaGroup> replica_groups, bool constrain_layout,
     const std::optional<int64_t>& channel_id) {
-  return std::make_unique<HloCollectiveBroadcastInstruction>(
-      HloOpcode::kCollectiveBroadcast, shape, operands, replica_groups,
-      constrain_layout, channel_id);
+  return CreateCollectiveBroadcast(shape, operands,
+                                   CollectiveDeviceList(replica_groups),
+                                   constrain_layout, channel_id);
 }
 
 /* static */ std::unique_ptr<HloInstruction>
@@ -2021,12 +2097,6 @@ HloInstruction::CreateBroadcastSequence(
 
 /* static */ std::unique_ptr<HloInstruction> HloInstruction::CreateReshape(
     const Shape& shape, HloInstruction* operand, int64_t inferred_dimension) {
-  CHECK(operand->shape().is_unbounded_dynamic() ||
-        ShapeUtil::StaticExtentProduct(shape) ==
-            ShapeUtil::StaticExtentProduct(operand->shape()))
-      << "shape: " << ShapeUtil::HumanString(shape)
-      << " operand: " << ShapeUtil::HumanString(operand->shape());
-
   return std::make_unique<HloReshapeInstruction>(shape, operand,
                                                  inferred_dimension);
 }
@@ -2088,7 +2158,7 @@ void HloInstruction::SetupDerivedInstruction(
     // compatible because copying it between differently shaped instructions
     // can produce invalid shardings.
     derived_instruction->set_sharding(*sharding_);
-  } else {
+  } else if (!ShapeUtil::CompatibleKind(shape_, derived_instruction->shape())) {
     derived_instruction->clear_sharding();
   }
   derived_instruction->set_metadata(*metadata_);
@@ -2098,6 +2168,11 @@ void HloInstruction::SetupDerivedInstruction(
   } else if (derived_instruction->has_rare()) {
     derived_instruction->mutable_rare()->frontend_attributes.Clear();
     derived_instruction->mutable_rare()->statistics_viz.Clear();
+  }
+  // If the derived instruction has the same opcode as current,
+  // then the backend config is also applicable.
+  if (opcode() == derived_instruction->opcode() && has_backend_config()) {
+    derived_instruction->CopyBackendConfigFrom(this);
   }
 }
 
@@ -4580,7 +4655,7 @@ absl::string_view ToString(HloInstruction::FusionKind kind) {
   }
 }
 
-StatusOr<HloInstruction::FusionKind> StringToFusionKind(
+absl::StatusOr<HloInstruction::FusionKind> StringToFusionKind(
     absl::string_view kind_name) {
   if (kind_name == "kLoop") {
     return HloInstruction::FusionKind::kLoop;
@@ -4739,7 +4814,8 @@ std::string ReplicaGroupsToString(
   return StrCat("{", StrJoin(replica_group_str, ","), "}");
 }
 
-StatusOr<RandomAlgorithm> StringToRandomAlgorithm(const std::string& name) {
+absl::StatusOr<RandomAlgorithm> StringToRandomAlgorithm(
+    const std::string& name) {
   static absl::flat_hash_map<std::string, RandomAlgorithm>* map = [] {
     static auto* map = new absl::flat_hash_map<std::string, RandomAlgorithm>;
     for (int i = 0; i < RandomAlgorithm_ARRAYSIZE; i++) {
@@ -4757,7 +4833,7 @@ StatusOr<RandomAlgorithm> StringToRandomAlgorithm(const std::string& name) {
   return found->second;
 }
 
-StatusOr<RandomDistribution> StringToRandomDistribution(
+absl::StatusOr<RandomDistribution> StringToRandomDistribution(
     const std::string& name) {
   static absl::flat_hash_map<std::string, RandomDistribution>* map = [] {
     static auto* map = new absl::flat_hash_map<std::string, RandomDistribution>;
@@ -4776,7 +4852,7 @@ StatusOr<RandomDistribution> StringToRandomDistribution(
   return found->second;
 }
 
-StatusOr<PrecisionConfig::Precision> StringToPrecision(
+absl::StatusOr<PrecisionConfig::Precision> StringToPrecision(
     const std::string& name) {
   static absl::flat_hash_map<std::string, PrecisionConfig::Precision>* map =
       [] {
@@ -4818,7 +4894,7 @@ absl::StatusOr<PrecisionConfig::Algorithm> StringToAlgorithm(
   return found->second;
 }
 
-StatusOr<CustomCallSchedule> StringToCustomCallSchedule(
+absl::StatusOr<CustomCallSchedule> StringToCustomCallSchedule(
     absl::string_view name) {
   static const absl::flat_hash_map<std::string, CustomCallSchedule>* map = [] {
     static auto* map = new absl::flat_hash_map<std::string, CustomCallSchedule>;
@@ -4837,7 +4913,7 @@ StatusOr<CustomCallSchedule> StringToCustomCallSchedule(
   return found->second;
 }
 
-StatusOr<CustomCallApiVersion> StringToCustomCallApiVersion(
+absl::StatusOr<CustomCallApiVersion> StringToCustomCallApiVersion(
     absl::string_view name) {
   static const absl::flat_hash_map<std::string, CustomCallApiVersion>* map =
       [] {
@@ -4887,10 +4963,12 @@ Status HloInstruction::GetBackendConfigInternal(
   proto->Clear();
 
   if (auto* proto_ptr = backend_config_.GetProtoPtr()) {
-    if (proto_ptr->GetDescriptor() == proto->GetDescriptor()) {
-      proto->CopyFrom(*proto_ptr);
-      return OkStatus();
+    if (proto_ptr->GetDescriptor() != proto->GetDescriptor()) {
+      return Internal("Mismatched backend config descriptors.");
     }
+
+    proto->CopyFrom(*proto_ptr);
+    return OkStatus();
   }
 
   auto& raw_string = raw_backend_config_string();
@@ -4902,74 +4980,6 @@ Status HloInstruction::GetBackendConfigInternal(
   TF_RETURN_IF_ERROR(tsl::HumanReadableJsonToProto(raw_string, proto));
   backend_config_.SetProto(*proto);
   return OkStatus();
-}
-
-const std::string& HloInstruction::BackendConfigRep::GetRawString() const {
-  absl::WriterMutexLock lock{&mutex_};
-  if (proto_ && raw_string_.empty()) {
-    raw_string_ = BackendConfigToRawString(*proto_).value();
-  }
-  return raw_string_;
-}
-
-HloInstruction::BackendConfigRep HloInstruction::BackendConfigRep::Clone()
-    const {
-  // Prefer cloning protobuf, raw_string_ will be lazily generated if accessed.
-  BackendConfigRep cloned;
-  if (auto* proto = GetProtoPtr()) {
-    cloned.SetProto(*proto);
-  } else {
-    absl::MutexLock source_lock{&mutex_};
-    absl::MutexLock target_lock{&cloned.mutex_};
-    cloned.raw_string_ = raw_string_;
-  }
-  return cloned;
-}
-
-HloInstruction::BackendConfigRep& HloInstruction::BackendConfigRep::operator=(
-    std::string raw_string) {
-  absl::MutexLock lock{&mutex_};
-  raw_string_ = std::move(raw_string);
-  proto_.reset();
-  return *this;
-}
-
-HloInstruction::BackendConfigRep& HloInstruction::BackendConfigRep::operator=(
-    const tsl::protobuf::Message& proto) {
-  SetProto(proto);
-  absl::MutexLock lock{&mutex_};
-  raw_string_.clear();
-  return *this;
-}
-
-void HloInstruction::BackendConfigRep::SetProto(
-    const tsl::protobuf::Message& proto) {
-  proto_.reset(proto.New());
-  proto_->CopyFrom(proto);
-}
-
-bool HloInstruction::BackendConfigRep::operator==(
-    const BackendConfigRep& other) const {
-  auto* proto_a = GetProtoPtr();
-  auto* proto_b = other.GetProtoPtr();
-  if (proto_a != nullptr && proto_b != nullptr) {
-    using ::tsl::protobuf::util::MessageDifferencer;
-    return MessageDifferencer::Equals(*proto_a, *proto_b);
-  }
-  // TODO(b/225956414): Consider canonicalizing raw string form.
-  return GetRawString() == other.GetRawString();
-}
-
-/* static */ StatusOr<std::string> HloInstruction::BackendConfigToRawString(
-    const tsl::protobuf::Message& proto) {
-  std::string ret;
-  // Pass ignore_accuracy_loss = true because estimated_cycles field can be
-  // INT64_MAX. If ignore_accuracy_loss = false and estimated_cycles =
-  // INT64_MAX, JsonFormat will return an error status, although there is no
-  // accuracy loss for int64_t.
-  TF_RETURN_IF_ERROR(tsl::ProtoToHumanReadableJson(
-      proto, &ret, /*ignore_accuracy_loss=*/true));
-  return ret;
 }
 
 const PrecisionConfig& HloInstruction::precision_config() const {
@@ -5279,6 +5289,10 @@ const std::vector<ReplicaGroup>& HloInstruction::replica_groups() const {
   return Cast<HloCollectiveInstruction>(this)->replica_groups();
 }
 
+const CollectiveDeviceList& HloInstruction::device_list() const {
+  return Cast<HloCollectiveInstruction>(this)->device_list();
+}
+
 const std::vector<std::pair<int64_t, int64_t>>&
 HloInstruction::source_target_pairs() const {
   return Cast<HloCollectivePermuteInstruction>(this)->source_target_pairs();
@@ -5482,6 +5496,13 @@ const CholeskyOptions& HloInstruction::cholesky_options() const {
 const std::vector<std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>&
 HloInstruction::output_operand_aliasing() const {
   return Cast<HloCallableInstruction>(this)->output_to_operand_aliasing();
+}
+
+void HloInstruction::set_output_to_operand_aliasing(
+    std::vector<std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+        aliasing) {
+  Cast<HloCallableInstruction>(this)->set_output_to_operand_aliasing(
+      std::move(aliasing));
 }
 
 }  // namespace xla

@@ -80,7 +80,7 @@ MaybeError InitializeDebugLayerFilters(ComPtr<ID3D11Device> d3d11Device) {
 }  // namespace
 
 PhysicalDevice::PhysicalDevice(Backend* backend,
-                               ComPtr<IDXGIAdapter3> hardwareAdapter,
+                               ComPtr<IDXGIAdapter4> hardwareAdapter,
                                ComPtr<ID3D11Device> d3d11Device)
     : Base(backend, std::move(hardwareAdapter), wgpu::BackendType::D3D11),
       mIsSharedD3D11Device(!!d3d11Device),
@@ -186,12 +186,15 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     EnableFeature(Feature::TextureCompressionBC);
     EnableFeature(Feature::SurfaceCapabilities);
     EnableFeature(Feature::D3D11MultithreadProtected);
-    EnableFeature(Feature::MSAARenderToSingleSampled);
     EnableFeature(Feature::DualSourceBlending);
+    EnableFeature(Feature::Unorm16TextureFormats);
+    EnableFeature(Feature::Snorm16TextureFormats);
     EnableFeature(Feature::Norm16TextureFormats);
     EnableFeature(Feature::AdapterPropertiesMemoryHeaps);
     EnableFeature(Feature::AdapterPropertiesD3D);
     EnableFeature(Feature::R8UnormStorage);
+    EnableFeature(Feature::ShaderModuleCompilationOptions);
+    EnableFeature(Feature::DawnLoadResolveTexture);
 
     // Multi planar formats are always supported since Feature Level 11.0
     // https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/format-support-for-direct3d-11-0-feature-level-hardware
@@ -203,11 +206,13 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
         EnableFeature(Feature::PixelLocalStorageCoherent);
     }
 
-    // Always expose SharedTextureMemoryDXGISharedHandle, since the d3d11 should be able to
-    // import shared handles which are exported from d3d device.
-    EnableFeature(Feature::SharedTextureMemoryDXGISharedHandle);
     EnableFeature(Feature::SharedTextureMemoryD3D11Texture2D);
-    EnableFeature(Feature::SharedFenceDXGISharedHandle);
+    if (mDeviceInfo.supportsSharedResourceCapabilityTier2) {
+        EnableFeature(Feature::SharedTextureMemoryDXGISharedHandle);
+    }
+    if (mDeviceInfo.supportsMonitoredFence || mDeviceInfo.supportsNonMonitoredFence) {
+        EnableFeature(Feature::SharedFenceDXGISharedHandle);
+    }
 
     UINT formatSupport = 0;
     HRESULT hr = mD3D11Device->CheckFormatSupport(DXGI_FORMAT_B8G8R8A8_UNORM, &formatSupport);
@@ -313,13 +318,15 @@ void PhysicalDevice::SetupBackendDeviceToggles(TogglesState* deviceToggles) cons
     // D3D11 can only clear RTV with float values.
     deviceToggles->Default(Toggle::ApplyClearBigIntegerColorValueWithDraw, true);
     deviceToggles->Default(Toggle::UseBlitForBufferToStencilTextureCopy, true);
+    deviceToggles->Default(Toggle::D3D11UseUnmonitoredFence, !mDeviceInfo.supportsMonitoredFence);
 }
 
 ResultOrError<Ref<DeviceBase>> PhysicalDevice::CreateDeviceImpl(
     AdapterBase* adapter,
     const UnpackedPtr<DeviceDescriptor>& descriptor,
-    const TogglesState& deviceToggles) {
-    return Device::Create(adapter, descriptor, deviceToggles);
+    const TogglesState& deviceToggles,
+    Ref<DeviceBase::DeviceLostEvent>&& lostEvent) {
+    return Device::Create(adapter, descriptor, deviceToggles, std::move(lostEvent));
 }
 
 // Resets the backend device and creates a new one. If any D3D11 objects belonging to the

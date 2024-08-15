@@ -286,7 +286,8 @@ exception from the API owners.
 If you haven't already received [signals on their opinion of the
 API](https://docs.google.com/document/d/1xkHRXnFS8GDqZi7E0SSbR3a7CZsGScdxPUWBsNgo-oo/edit#heading=h.tgzhprxcmw4u)
 from other browser vendors and the web developer community, now is the time to
-pursue getting those signals.
+pursue getting those signals. You should ask at least a month ahead of sending
+an Intent to Ship, to give reviewers sufficient time for meaningful feedback.
 
 You should also work with the documentation team to ensure your features will be
 documented when shipped, and estimate when (in what milestone) you would like to
@@ -320,7 +321,7 @@ Once you have a complete specification:
    be able to influence the design anymore. If that happens, it's best to notify the TAG so
    that they can close the issue and prioritize other issues.
 
-#### Step 5 (Optional): Origin Trial {:#origin-trials}
+#### Step 5 (Optional): Origin Trial or other Experiments {:#origin-trials}
 
 If you want to gather data on the usability of your feature that an [Origin
 Trial](/blink/origin-trials/running-an-origin-trial) can help collect, proceed
@@ -337,12 +338,13 @@ to Prepare to Ship, or park the feature.
 As noted above, a specification is recommended but not required for an Origin
 Trial.
 
-Please note that Origin Trials are not exempt from requiring cross-functional
-approvals from the Chrome launch review process.
+Please note that neither Origin Trials nor other experiments are exempt from
+requiring cross-functional approvals from the Chrome launch review process.
 
-Depending on your feature and your experimentation goals, running an experiment
-via Finch on a percentage of the user populations may be useful. Features that
-are going through the intent process should adhere to the following guidelines:
+Depending on your feature and your experimentation goals, running a non-Origin
+Trial experiment via Finch on a percentage of the user population may be
+useful. Features that are going through the intent process should adhere to the
+following guidelines:
 * Canary, Dev, and Beta channel experimentation does not require API owners'
   approval.
 * Experimentation on 1% of Stable channel population requires an Intent to
@@ -354,10 +356,10 @@ are going through the intent process should adhere to the following guidelines:
 Note that if your plan for shipping involves a gradual ramp-up on Stable channel,
 this is not considered experimentation, and instead follows the usual Intent to Ship process.
 
-An initial origin trial for a feature may only run for *6 milestones of Chromium*.
-Each request to extend beyond that limit may only be for *3 milestones* at a time,
-and will not be approved unless substantial progress is demonstrated in all of
-these areas:
+An initial origin trial or experiment for a feature may only run for
+*6 milestones of Chromium*. Each request to extend beyond that limit may only be
+for *3 milestones* at a time, and will not be approved unless substantial
+progress is demonstrated in all of these areas:
 * Draft spec (early draft is ok, but must be spec-like and associated with the
   appropriate standardization venue, or WICG)
 * TAG review (see [exceptions](/blink/guidelines/api-owners/process-exceptions/))
@@ -366,7 +368,7 @@ these areas:
 * WPT tests
 
 Each subsequent request to extend an origin trial must provide substantial
-*additional*  progress on top of the previous extension request.
+*additional* progress on top of the previous extension request.
 
 *Technical note:* Origin Trials are nowadays "gapless", which means they are
 configured to end after the version of Chrome with the feature enabled by default
@@ -383,7 +385,8 @@ discuss this option.
 #### Step 6: Prepare to Ship {:#new-feature-prepare-to-ship}
 
 By this stage, you need to have a complete specification available that matches
-what you have implemented, and you should have given the TAG at least a month to
+what you have implemented, and you should have given the TAG and [other
+browser vendors](https://bit.ly/blink-signals) at least a month to
 comment on that specification. If you are a Googler you should get a final spec
 review from your [spec mentor](/blink/spec-mentors), and discuss options for
 moving your spec to a final standardization venue. You should get final signoff
@@ -685,6 +688,9 @@ demonstrated in at least one of the following areas:
    feedback from developers currently relying on the deprecation trial.
  * Driving the number of origins signed up for the deprecation trial down to
    zero.
+
+Requests for a deprecation trial or deprecation trial renewal that extend beyond
+these limits will require sufficient justification and 3 LGTMs from API owners.
 
 If significant progress cannot be demonstrated towards removing the need for the
 deprecation trial, it will be necessary to un-deprecate the API to acknowledge

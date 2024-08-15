@@ -61,18 +61,18 @@ struct CrossOriginEmbedderPolicy;
 
 namespace content {
 
-class ServiceWorkerContainerHost;
-class ServiceWorkerRegistration;
-class DedicatedWorkerServiceImpl;
-class ServiceWorkerMainResourceHandle;
-class ServiceWorkerObjectHost;
-class StoragePartitionImpl;
 class CrossOriginEmbedderPolicyReporter;
+class DedicatedWorkerServiceImpl;
+class ServiceWorkerClient;
+class ServiceWorkerMainResourceHandle;
+class ServiceWorkerRegistration;
+class StoragePartitionImpl;
+struct WorkerScriptFetcherResult;
 
 // A host for a single dedicated worker. It deletes itself upon Mojo
 // disconnection from the worker in the renderer or when the RenderProcessHost
 // of the worker is destroyed. This lives on the UI thread.
-// TODO(crbug.com/1273717): Align this class's lifetime with the associated
+// TODO(crbug.com/40807127): Align this class's lifetime with the associated
 // frame.
 class CONTENT_EXPORT DedicatedWorkerHost final
     : public blink::mojom::DedicatedWorkerHost,
@@ -177,14 +177,14 @@ class CONTENT_EXPORT DedicatedWorkerHost final
 
   void ReportNoBinderForInterface(const std::string& error);
 
-  // TODO(crbug.com/906991): Remove this method once PlzDedicatedWorker is
+  // TODO(crbug.com/40093136): Remove this method once PlzDedicatedWorker is
   // enabled by default.
   void MaybeCountWebFeature(const GURL& script_url);
-  // TODO(crbug.com/906991): Remove this method once PlzDedicatedWorker is
+  // TODO(crbug.com/40093136): Remove this method once PlzDedicatedWorker is
   // enabled by default.
   void ContinueOnMaybeCountWebFeature(
       const GURL& script_url,
-      base::WeakPtr<ServiceWorkerContainerHost> container_host,
+      base::WeakPtr<ServiceWorkerClient> service_worker_client,
       blink::ServiceWorkerStatusCode status,
       const std::vector<scoped_refptr<ServiceWorkerRegistration>>&
           registrations);
@@ -256,7 +256,7 @@ class CONTENT_EXPORT DedicatedWorkerHost final
   const BackForwardCacheBlockingDetails& GetBackForwardCacheBlockingDetails()
       const;
 
-  base::WeakPtr<ServiceWorkerContainerHost> GetServiceWorkerContainerHost();
+  base::WeakPtr<ServiceWorkerClient> GetServiceWorkerClient();
 
   mojo::PendingRemote<blink::mojom::BackForwardCacheControllerHost>
   BindAndPassRemoteForBackForwardCacheControllerHost();
@@ -274,37 +274,9 @@ class CONTENT_EXPORT DedicatedWorkerHost final
 
   // Called from `WorkerScriptFetcher`. Continues starting the dedicated worker
   // in the renderer process.
-  //
-  // `main_script_load_params` is not nullptr iff the fetch succeeded. This is
-  // sent to the renderer process and to be used to load the dedicated worker
-  // main script pre-requested by the browser process.
-  //
-  // The following parameters are valid iff `main_script_load_params` is not
-  // nullptr, i.e. iff the fetch succeeded.
-  //
-  // `subresource_loader_factories` is sent to the renderer process and is to be
-  // used to request subresources where applicable. For example, this allows the
-  // dedicated worker to load chrome-extension:// URLs which the renderer's
-  // default loader factory can't load.
-  //
-  // `controller` contains information about the service worker controller. Once
-  // a ServiceWorker object about the controller is prepared, it is registered
-  // to `controller_service_worker_object_host`.
-  //
-  // `final_response_url` is the URL calculated from the initial request URL,
-  // redirect chain, and URLs fetched via service worker.
-  // https://fetch.spec.whatwg.org/#concept-response-url
-  void DidStartScriptLoad(
-      std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
-          subresource_loader_factories,
-      blink::mojom::WorkerMainScriptLoadParamsPtr main_script_load_params,
-      blink::mojom::ControllerServiceWorkerInfoPtr controller,
-      base::WeakPtr<ServiceWorkerObjectHost>
-          controller_service_worker_object_host,
-      const GURL& final_response_url);
+  void DidStartScriptLoad(std::optional<WorkerScriptFetcherResult> result);
 
-  void ScriptLoadStartFailed(const GURL& url,
-                             const network::URLLoaderCompletionStatus& status);
+  void ScriptLoadStartFailed(const network::URLLoaderCompletionStatus& status);
 
   // Sets up the observer of network service crash.
   void ObserveNetworkServiceCrash(StoragePartitionImpl* storage_partition_impl);
@@ -370,7 +342,7 @@ class CONTENT_EXPORT DedicatedWorkerHost final
   // The client security state of the creator execution context. Never nullptr.
   // Copied at construction time.
   //
-  // TODO(https://crbug.com/1177652): Consider removing this member once the
+  // TODO(crbug.com/40054797): Consider removing this member once the
   // creator always outlives this instance. In that case, we could copy the
   // creator's client security state lazily instead of eagerly.
   const network::mojom::ClientSecurityStatePtr creator_client_security_state_;
@@ -396,6 +368,10 @@ class CONTENT_EXPORT DedicatedWorkerHost final
 
   std::unique_ptr<PressureServiceForWorker<DedicatedWorkerHost>>
       pressure_service_;
+
+  // Script request URL used, only for DevTools and tracing. Only set after
+  // `StartScriptLoad()`. Only set and used if PlzDedicatedWorker is enabled.
+  GURL script_request_url_;
 
   // BrowserInterfaceBroker implementation through which this
   // DedicatedWorkerHost exposes worker-scoped Mojo services to the
@@ -424,14 +400,14 @@ class CONTENT_EXPORT DedicatedWorkerHost final
   // For the PlzDedicatedWorker case. `coep_reporter_` is valid after
   // DidStartScriptLoad() and remains non-null for the lifetime of `this`.
   std::unique_ptr<CrossOriginEmbedderPolicyReporter> coep_reporter_;
-  // TODO(crbug.com/1177652): Remove `creator_coep_reporter_` after this class's
-  // lifetime is aligned with the associated frame.
+  // TODO(crbug.com/40054797): Remove `creator_coep_reporter_` after this
+  // class's lifetime is aligned with the associated frame.
   base::WeakPtr<CrossOriginEmbedderPolicyReporter> creator_coep_reporter_;
 
   // For the non-PlzDedicatedWorker case. Sending reports to the ancestor frame
   // is not the behavior defined in the spec, but keep the current behavior and
   // not to lose reports.
-  // TODO(crbug.com/906991): Remove `ancestor_coep_reporter_` once
+  // TODO(crbug.com/40093136): Remove `ancestor_coep_reporter_` once
   // PlzDedicatedWorker is enabled by default.
   base::WeakPtr<CrossOriginEmbedderPolicyReporter> ancestor_coep_reporter_;
 

@@ -65,6 +65,7 @@ namespace blink {
 
 class BarProp;
 class CSSStyleDeclaration;
+class ComputedAccessibleNode;
 class CustomElementRegistry;
 class Document;
 class DocumentInit;
@@ -85,7 +86,6 @@ class NavigationApi;
 class Navigator;
 class Screen;
 class ScriptController;
-class ScriptPromise;
 class ScriptState;
 class ScrollToOptions;
 class SecurityOrigin;
@@ -212,6 +212,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   // UseCounter orverrides:
   void CountUse(mojom::WebFeature feature) final;
+  void CountWebDXFeature(mojom::blink::WebDXFeature feature) final;
 
   // Count |feature| only when this window is associated with a cross-origin
   // iframe.
@@ -342,7 +343,8 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
       const String& pseudo_elt = String()) const;
 
   // Acessibility Object Model
-  ScriptPromise getComputedAccessibleNode(ScriptState*, Element*);
+  ScriptPromise<ComputedAccessibleNode> getComputedAccessibleNode(ScriptState*,
+                                                                  Element*);
 
   // WebKit animation extensions
   int requestAnimationFrame(V8FrameRequestCallback*);

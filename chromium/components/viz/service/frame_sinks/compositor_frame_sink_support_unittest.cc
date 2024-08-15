@@ -31,6 +31,7 @@
 #include "components/viz/test/fake_external_begin_frame_source.h"
 #include "components/viz/test/fake_surface_observer.h"
 #include "components/viz/test/mock_compositor_frame_sink_client.h"
+#include "components/viz/test/test_context_provider.h"
 #include "components/viz/test/viz_test_suite.h"
 #include "services/viz/privileged/mojom/compositing/frame_sink_manager.mojom.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
@@ -113,6 +114,10 @@ class MockFrameSinkManagerClient : public mojom::FrameSinkManagerClient {
       const std::vector<int32_t>& thread_ids,
       VerifyThreadIdsDoNotBelongToHostCallback callback) override {}
 #endif
+  void OnScreenshotCaptured(
+      const blink::SameDocNavigationScreenshotDestinationToken&
+          destination_token,
+      std::unique_ptr<CopyOutputResult> copy_output_result) override {}
 };
 
 class CompositorFrameSinkSupportTest : public testing::Test {
@@ -144,8 +149,8 @@ class CompositorFrameSinkSupportTest : public testing::Test {
     for (size_t i = 0u; i < num_resource_ids; ++i) {
       TransferableResource resource;
       resource.id = resource_ids[i];
-      resource.mailbox_holder.texture_target = GL_TEXTURE_2D;
-      resource.mailbox_holder.sync_token = frame_sync_token_;
+      resource.set_texture_target(GL_TEXTURE_2D);
+      resource.set_sync_token(frame_sync_token_);
       frame->resource_list.push_back(resource);
     }
   }
@@ -261,8 +266,8 @@ class CompositorFrameSinkSupportTest : public testing::Test {
                                   /*flags=*/0));
   }
 
-  bool HasAnimationManagerForNavigation(NavigationId id) const {
-    return manager_.navigation_to_animation_manager_.contains(id);
+  bool HasAnimationManagerForToken(blink::ViewTransitionToken token) const {
+    return manager_.transition_token_to_animation_manager_.contains(token);
   }
 
   void ProcessCompositorFrameTransitionDirective(
@@ -274,7 +279,7 @@ class CompositorFrameSinkSupportTest : public testing::Test {
 
   bool SupportHasSurfaceAnimationManager(
       CompositorFrameSinkSupport* support) const {
-    return !!support->surface_animation_manager_;
+    return !support->view_transition_token_to_animation_manager_.empty();
   }
 
  protected:
@@ -853,7 +858,7 @@ TEST_P(OnBeginFrameAcksCompositorFrameSinkSupportTest,
 
   TransferableResource resource;
   resource.id = ResourceId(1);
-  resource.mailbox_holder.texture_target = GL_TEXTURE_2D;
+  resource.set_texture_target(GL_TEXTURE_2D);
   auto frame = CompositorFrameBuilder()
                    .AddDefaultRenderPass()
                    .AddTransferableResource(resource)
@@ -2043,27 +2048,34 @@ TEST_F(CompositorFrameSinkSupportTest,
       mojom::CompositorFrameSink::SubmitCompositorFrameSyncCallback());
   EXPECT_EQ(SubmitResult::ACCEPTED, result);
 
-  NavigationId navigation_id = NavigationId::Create();
+  blink::ViewTransitionToken transition_token;
+  const bool maybe_cross_frame_sink = true;
   Surface* surface = support_->GetLastCreatedSurfaceForTesting();
   ASSERT_TRUE(surface);
 
+  auto test_context_provider = TestContextProvider::CreateRaster();
+  TestSharedImageInterface* sii = test_context_provider->SharedImageInterface();
+  ReservedResourceIdTracker id_tracker;
+
   std::unique_ptr<SurfaceAnimationManager> animation_manager =
       SurfaceAnimationManager::CreateWithSave(
-          CompositorFrameTransitionDirective::CreateSave(navigation_id,
+          CompositorFrameTransitionDirective::CreateSave(transition_token,
+                                                         maybe_cross_frame_sink,
                                                          /*sequence_id=*/1, {}),
-          surface, &shared_bitmap_manager_, base::DoNothing());
+          surface, &shared_bitmap_manager_, sii, &id_tracker,
+          base::DoNothing());
   ASSERT_TRUE(animation_manager);
 
-  EXPECT_FALSE(HasAnimationManagerForNavigation(navigation_id));
-  manager_.CacheSurfaceAnimationManager(navigation_id,
+  EXPECT_FALSE(HasAnimationManagerForToken(transition_token));
+  manager_.CacheSurfaceAnimationManager(transition_token,
                                         std::move(animation_manager));
-  EXPECT_TRUE(HasAnimationManagerForNavigation(navigation_id));
+  EXPECT_TRUE(HasAnimationManagerForToken(transition_token));
 
   auto release_directive = CompositorFrameTransitionDirective::CreateRelease(
-      navigation_id, /*sequence_id=*/2);
+      transition_token, maybe_cross_frame_sink, /*sequence_id=*/2);
   ProcessCompositorFrameTransitionDirective(support_.get(), release_directive,
                                             surface);
-  EXPECT_FALSE(HasAnimationManagerForNavigation(navigation_id));
+  EXPECT_FALSE(HasAnimationManagerForToken(transition_token));
   EXPECT_FALSE(SupportHasSurfaceAnimationManager(support_.get()));
 }
 

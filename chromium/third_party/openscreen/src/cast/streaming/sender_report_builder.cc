@@ -9,10 +9,8 @@
 
 namespace openscreen::cast {
 
-SenderReportBuilder::SenderReportBuilder(RtcpSession* session)
-    : session_(session) {
-  OSP_CHECK(session_);
-}
+SenderReportBuilder::SenderReportBuilder(RtcpSession& session)
+    : session_(session) {}
 
 SenderReportBuilder::~SenderReportBuilder() = default;
 
@@ -34,9 +32,9 @@ std::pair<ByteBuffer, StatusReportId> SenderReportBuilder::BuildPacket(
   }
   header.AppendFields(buffer);
 
-  AppendField<uint32_t>(session_->sender_ssrc(), buffer);
+  AppendField<uint32_t>(session_.sender_ssrc(), buffer);
   const NtpTimestamp ntp_timestamp =
-      session_->ntp_converter().ToNtpTimestamp(sender_report.reference_time);
+      session_.ntp_converter().ToNtpTimestamp(sender_report.reference_time);
   AppendField<uint64_t>(ntp_timestamp, buffer);
   AppendField<uint32_t>(sender_report.rtp_timestamp.lower_32_bits(), buffer);
   AppendField<uint32_t>(sender_report.send_packet_count, buffer);
@@ -61,7 +59,7 @@ Clock::time_point SenderReportBuilder::GetRecentReportTime(
   // Compute the maximum possible NtpTimestamp. Then, use its uppermost 16 bits
   // and the 32 bits from the report_id to produce a reconstructed NtpTimestamp.
   const NtpTimestamp max_timestamp =
-      session_->ntp_converter().ToNtpTimestamp(on_or_before);
+      session_.ntp_converter().ToNtpTimestamp(on_or_before);
   // max_timestamp: HH......
   //     report_id:     LLLL
   //                ↓↓ ↙↙↙↙
@@ -75,7 +73,7 @@ Clock::time_point SenderReportBuilder::GetRecentReportTime(
     reconstructed -= uint64_t{1} << 48;
   }
 
-  return session_->ntp_converter().ToLocalTime(reconstructed);
+  return session_.ntp_converter().ToLocalTime(reconstructed);
 }
 
 }  // namespace openscreen::cast

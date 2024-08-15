@@ -84,6 +84,20 @@ chromium-metrics-reviews@google.com.
   <int value="5" label="[Deprecated] Host Model Features"/>
 </enum>
 
+<enum name="OnDeviceModelAdaptationAvailability">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="Adaptation model was available"/>
+  <int value="2" label="Base model was not available"/>
+  <int value="3"
+      label="Base model spec was invalid, so adaptation model cannot be
+             fetched"/>
+  <int value="4" label="Adaptation model was not available"/>
+  <int value="5" label="The recieved adaptation model was invalid"/>
+  <int value="6"
+      label="The received adaptation model was incompatible with the base
+             model"/>
+</enum>
+
 <enum name="OnDeviceModelLoadResult">
   <int value="0" label="Unknown"/>
   <int value="1" label="Success"/>
@@ -238,8 +252,9 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Net Error">
     Upload was not successful because of network error.
   </int>
-  <int value="4" label="No User Metrics Consent">
-    Upload was not allowed due to user metrics consent.
+  <int value="4" label="Metrics reporting disabled">
+    Upload was not allowed due to metrics reporting being disabled in
+    chrome://settings.
   </int>
   <int value="5" label="Disabled due to Enterprise Policy">
     Upload was disabled due to enterprise policy.
@@ -303,6 +318,21 @@ chromium-metrics-reviews@google.com.
     Used on-device and got output, but the detected output language is not
     supported by the safety model
   </int>
+  <int value="14"
+      label="Used on-device and got output, but failed to create remote text
+             safety request">
+    Used on-device and got output, but failed to create the remote text safety
+    request to evaluate safety of the response.
+  </int>
+  <int value="15"
+      label="Used on-device and got output, but remote text safety request
+             failed">
+    Used on-device and got output, but the remote text safety request failed to
+    evaluate safety of the response.
+  </int>
+  <int value="16" label="Used on-device, but a request safety check failed">
+    Used on-device, but a request safety check failed.
+  </int>
 </enum>
 
 <enum name="OptimizationGuideOnDeviceModelEligibilityReason">
@@ -340,6 +370,10 @@ chromium-metrics-reviews@google.com.
   <int value="11" label="On-device execution is not enabled for this feature">
     The feature is enabled, and on-device execution is available, but it is not
     enabled for this feature.
+  </int>
+  <int value="12" label="On-device model adaptation not available">
+    The feature is enabled with model adaptation, and on-device foundation model
+    is available, but model adaptation is not available for this feature.
   </int>
 </enum>
 
@@ -650,6 +684,7 @@ chromium-metrics-reviews@google.com.
   <int value="46" label="CAPITAL_ONE_CREDIT_CARD_STREAMING_BENEFITS"/>
   <int value="47" label="AMERICAN_EXPRESS_CREDIT_CARD_FLIGHT_BENEFITS"/>
   <int value="48" label="AMERICAN_EXPRESS_CREDIT_CARD_SUBSCRIPTION_BENEFITS"/>
+  <int value="55" label="CAPITAL_ONE_CREDIT_CARD_BENEFITS_BLOCKED"/>
 </enum>
 
 <enum name="PageContentAnnotationsStorageStatus">

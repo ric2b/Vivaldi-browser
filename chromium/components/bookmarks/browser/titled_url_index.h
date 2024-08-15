@@ -160,6 +160,9 @@ class TitledUrlIndex {
   std::map<std::u16string, size_t> path_index_;
 
   std::unique_ptr<TitledUrlNodeSorter> sorter_;
+
+  #include "components/bookmarks/vivaldi_titled_url_index.h.inc"
+
 };
 
 }  // namespace bookmarks

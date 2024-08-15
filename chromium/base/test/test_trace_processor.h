@@ -18,13 +18,12 @@
 #include "base/types/expected.h"
 #include "build/build_config.h"
 
-#if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY) && !BUILDFLAG(IS_WIN)
+#if !BUILDFLAG(IS_WIN)
 #define TEST_TRACE_PROCESSOR_ENABLED
 #endif
 
 namespace base::test {
 
-#if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
 
 using perfetto::protos::gen::TraceConfig;
 
@@ -58,6 +57,9 @@ class TestTraceProcessor {
   TestTraceProcessor();
   ~TestTraceProcessor();
 
+  // Privacy filtering removes high entropy and high information fields and
+  // only allows categories, event names, and arguments listed in
+  // `services/tracing/perfetto/privacy_filtered_fields-inl.h`
   void StartTrace(std::string_view category_filter_string,
                   bool privacy_filtering = false);
   void StartTrace(
@@ -73,7 +75,6 @@ class TestTraceProcessor {
   std::unique_ptr<perfetto::TracingSession> session_;
 };
 
-#endif  // BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
 
 }  // namespace base::test
 

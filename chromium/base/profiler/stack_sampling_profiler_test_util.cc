@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/profiler/stack_sampling_profiler_test_util.h"
 
 #include <string_view>
@@ -432,7 +437,7 @@ NativeLibrary LoadTestLibrary(std::string_view library_name) {
   const auto load = [&](NativeLibrary* library) {
     FilePath library_path;
 #if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_IOS)
-    // TODO(crbug.com/1262430): Find a solution that works across platforms.
+    // TODO(crbug.com/40799492): Find a solution that works across platforms.
     ASSERT_TRUE(PathService::Get(DIR_ASSETS, &library_path));
 #else
     // The module is next to the test module rather than with test data.

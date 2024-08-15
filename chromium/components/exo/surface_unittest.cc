@@ -179,12 +179,103 @@ class SurfaceTest : public test::ExoTestBase,
 INSTANTIATE_TEST_SUITE_P(
     All,
     SurfaceTest,
-    testing::Combine(
-        testing::Values(
-            test::FrameSubmissionType::kNoReactive,
-            test::FrameSubmissionType::kReactive_NoAutoNeedsBeginFrame,
-            test::FrameSubmissionType::kReactive_AutoNeedsBeginFrame),
-        testing::Values(1.0f, 1.25f, 2.0f)));
+    testing::Combine(testing::Values(test::FrameSubmissionType::kNoReactive,
+                                     test::FrameSubmissionType::kReactive),
+                     testing::Values(1.0f, 1.25f, 2.0f)));
+
+TEST_P(SurfaceTest, AttachOffset) {
+  gfx::Size buffer_size(256, 256);
+  auto buffer = test::ExoTestHelper::CreateBuffer(buffer_size);
+  auto surface = std::make_unique<Surface>();
+  auto shell_surface = std::make_unique<ShellSurface>(surface.get());
+
+  surface->Attach(buffer.get(), gfx::Vector2d(0, 0));
+  surface->Commit();
+  EXPECT_EQ(surface->GetBufferOffset(), gfx::Vector2d(0, 0));
+
+  surface->Attach(buffer.get(), gfx::Vector2d(1, 2));
+  surface->Commit();
+  EXPECT_EQ(surface->GetBufferOffset(), gfx::Vector2d(1, 2));
+
+  surface->Attach(buffer.get(), gfx::Vector2d(1, 2));
+  surface->Commit();
+  EXPECT_EQ(surface->GetBufferOffset(), gfx::Vector2d(2, 4));
+
+  surface->Attach(buffer.get(), gfx::Vector2d(-2, -4));
+  surface->Commit();
+  EXPECT_EQ(surface->GetBufferOffset(), gfx::Vector2d(0, 0));
+
+  // Pending updates for the offset should not be accumulated.
+  surface->Attach(buffer.get(), gfx::Vector2d(1, 2));
+  surface->Attach(buffer.get(), gfx::Vector2d(3, 4));
+  surface->Attach(buffer.get(), gfx::Vector2d(5, 6));
+  surface->Commit();
+  EXPECT_EQ(surface->GetBufferOffset(), gfx::Vector2d(5, 6));
+}
+
+TEST_P(SurfaceTest, AttachOffsetSynchronizedSubsurface) {
+  gfx::Size buffer_size(256, 256);
+  auto buffer = test::ExoTestHelper::CreateBuffer(buffer_size);
+  auto surface = std::make_unique<Surface>();
+  auto shell_surface = std::make_unique<ShellSurface>(surface.get());
+
+  gfx::Size child_buffer_size(128, 128);
+  auto child_buffer = test::ExoTestHelper::CreateBuffer(child_buffer_size);
+  auto child_surface = std::make_unique<Surface>();
+  auto sub = std::make_unique<SubSurface>(child_surface.get(), surface.get());
+  sub->surface()->Attach(child_buffer.get(), gfx::Vector2d(0, 0));
+  sub->SetCommitBehavior(/*synchronized=*/true);
+  EXPECT_EQ(sub->surface()->GetBufferOffset(), gfx::Vector2d(0, 0));
+
+  sub->surface()->Attach(child_buffer.get(), gfx::Vector2d(1, 2));
+  sub->surface()->Commit();
+  sub->surface()->Attach(child_buffer.get(), gfx::Vector2d(1, 2));
+  sub->surface()->Commit();
+
+  // The offset should not be updated by subsurface commits since this
+  // subsurface is in the synchronized mode.
+  EXPECT_EQ(sub->surface()->GetBufferOffset(), gfx::Vector2d(0, 0));
+
+  // Once parent surface is committed, the offset should be updated. The cached
+  // offset should be accumulated.
+  surface->Commit();
+  EXPECT_EQ(sub->surface()->GetBufferOffset(), gfx::Vector2d(2, 4));
+
+  // Try again.
+  sub->surface()->Attach(child_buffer.get(), gfx::Vector2d(1, 2));
+  sub->surface()->Commit();
+  surface->Commit();
+  EXPECT_EQ(sub->surface()->GetBufferOffset(), gfx::Vector2d(3, 6));
+}
+
+TEST_P(SurfaceTest, AttachOffsetDesynchronizedSubsurface) {
+  gfx::Size buffer_size(256, 256);
+  auto buffer = test::ExoTestHelper::CreateBuffer(buffer_size);
+  auto surface = std::make_unique<Surface>();
+  auto shell_surface = std::make_unique<ShellSurface>(surface.get());
+
+  gfx::Size child_buffer_size(128, 128);
+  auto child_buffer = test::ExoTestHelper::CreateBuffer(child_buffer_size);
+  auto child_surface = std::make_unique<Surface>();
+  auto sub = std::make_unique<SubSurface>(child_surface.get(), surface.get());
+  sub->surface()->Attach(child_buffer.get(), gfx::Vector2d(0, 0));
+  sub->SetCommitBehavior(/*synchronized=*/false);
+  EXPECT_EQ(sub->surface()->GetBufferOffset(), gfx::Vector2d(0, 0));
+
+  sub->surface()->Attach(child_buffer.get(), gfx::Vector2d(1, 2));
+
+  // Parent's commit does not take affect for the subsurface.
+  surface->Commit();
+  EXPECT_EQ(sub->surface()->GetBufferOffset(), gfx::Vector2d(0, 0));
+
+  // This should replace the pending offset because the previous one is not
+  // committed.
+  sub->surface()->Attach(child_buffer.get(), gfx::Vector2d(10, 20));
+
+  // The offset should be updated by subsurface commit.
+  sub->surface()->Commit();
+  EXPECT_EQ(sub->surface()->GetBufferOffset(), gfx::Vector2d(10, 20));
+}
 
 TEST_P(SurfaceTest, Damage) {
   gfx::Size buffer_size(256, 256);
@@ -612,8 +703,7 @@ TEST_P(SurfaceTest, SetBufferScale) {
       surface->window()->bounds().size().ToString());
   gfx::SizeF buffer_size_float = gfx::SizeF(buffer_size);
   buffer_size_float.Scale(1.0f / kBufferScale);
-  EXPECT_EQ(buffer_size_float.ToString(),
-            surface->visual_rect().size().ToString());
+  EXPECT_EQ(buffer_size_float.ToString(), surface->content_size().ToString());
 
   test::WaitForLastFrameAck(shell_surface.get());
 
@@ -636,8 +726,8 @@ void SurfaceTest::SetBufferTransformHelperTransformAndTest(
   surface->Commit();
   EXPECT_EQ(gfx::Size(expected_size.width(), expected_size.height()),
             surface->window()->bounds().size());
-  EXPECT_EQ(gfx::RectF(0, 0, expected_size.width(), expected_size.height()),
-            surface->visual_rect());
+  EXPECT_EQ(gfx::SizeF(expected_size.width(), expected_size.height()),
+            surface->content_size());
 
   test::WaitForLastFrameAck(shell_surface);
 
@@ -703,7 +793,7 @@ TEST_P(SurfaceTest, MAYBE_SetBufferTransform) {
       child_surface->window()->bounds().size());
   EXPECT_EQ(
       gfx::ScaleToRoundedSize(child_buffer_size, 1.0f / kChildBufferScale),
-      gfx::ToRoundedSize(child_surface->visual_rect().size()));
+      gfx::ToRoundedSize(child_surface->content_size()));
 
   test::WaitForLastFrameAck(shell_surface.get());
 
@@ -757,7 +847,7 @@ TEST_P(SurfaceTest, SetViewport) {
   gfx::SizeF viewport(256, 256);
   surface->SetViewport(viewport);
   surface->Commit();
-  EXPECT_EQ(viewport.ToString(), surface->visual_rect().size().ToString());
+  EXPECT_EQ(viewport.ToString(), surface->content_size().ToString());
 
   // This will update the bounds of the surface and take the viewport2 into
   // account.
@@ -766,7 +856,7 @@ TEST_P(SurfaceTest, SetViewport) {
   surface->Commit();
   EXPECT_EQ(viewport2.ToString(),
             gfx::SizeF(surface->window()->bounds().size()).ToString());
-  EXPECT_EQ(viewport2.ToString(), surface->visual_rect().size().ToString());
+  EXPECT_EQ(viewport2.ToString(), surface->content_size().ToString());
 
   test::WaitForLastFrameAck(shell_surface.get());
 
@@ -777,7 +867,7 @@ TEST_P(SurfaceTest, SetViewport) {
   // This will make the surface have no content regardless of the viewport.
   surface->Attach(nullptr);
   surface->Commit();
-  EXPECT_TRUE(surface->visual_rect().size().IsEmpty());
+  EXPECT_TRUE(surface->content_size().IsEmpty());
 }
 
 TEST_P(SurfaceTest, SubpixelCoordinate) {
@@ -876,7 +966,7 @@ TEST_P(SurfaceTest, SetCrop) {
   EXPECT_EQ(crop_size.ToString(),
             surface->window()->bounds().size().ToString());
   EXPECT_EQ(gfx::SizeF(crop_size).ToString(),
-            surface->visual_rect().size().ToString());
+            surface->content_size().ToString());
 
   test::WaitForLastFrameAck(shell_surface.get());
 
@@ -887,7 +977,7 @@ TEST_P(SurfaceTest, SetCrop) {
   // This will make the surface have no content regardless of the crop.
   surface->Attach(nullptr);
   surface->Commit();
-  EXPECT_TRUE(surface->visual_rect().size().IsEmpty());
+  EXPECT_TRUE(surface->content_size().IsEmpty());
 }
 
 void SurfaceTest::SetCropAndBufferTransformHelperTransformAndTest(
@@ -1073,9 +1163,11 @@ TEST_P(SurfaceTest, SetAlpha) {
     const viz::CompositorFrame& frame =
         GetFrameFromSurface(shell_surface.get());
     ASSERT_EQ(1u, frame.render_pass_list.size());
-    // No quad if alpha is 0.
+    // We always need to submit surface resources because we have created shared
+    // images that have release callbacks that will only fire when releasing a
+    // compositor frame.
+    ASSERT_EQ(1u, frame.resource_list.size());
     ASSERT_EQ(0u, frame.render_pass_list.back()->quad_list.size());
-    ASSERT_EQ(0u, frame.resource_list.size());
     EXPECT_EQ(gfx::Rect(buffer_size), ToTargetSpaceDamage(frame));
   }
 
@@ -1231,7 +1323,7 @@ TEST_P(SurfaceTest, DestroyAttachedBuffer) {
   // Make sure surface size is still valid after buffer is destroyed.
   buffer.reset();
   surface->Commit();
-  EXPECT_FALSE(surface->visual_rect().size().IsEmpty());
+  EXPECT_FALSE(surface->content_size().IsEmpty());
 }
 
 TEST_P(SurfaceTest, SetClientSurfaceId) {
@@ -1861,10 +1953,7 @@ TEST_P(SurfaceTest, LayerSharedQuadState) {
 class ReactiveFrameSubmissionSurfaceTest : public SurfaceTest {
  public:
   ReactiveFrameSubmissionSurfaceTest() {
-    DCHECK(GetFrameSubmissionType() ==
-               test::FrameSubmissionType::kReactive_NoAutoNeedsBeginFrame ||
-           GetFrameSubmissionType() ==
-               test::FrameSubmissionType::kReactive_AutoNeedsBeginFrame);
+    DCHECK_EQ(GetFrameSubmissionType(), test::FrameSubmissionType::kReactive);
   }
 
   ReactiveFrameSubmissionSurfaceTest(
@@ -1880,11 +1969,8 @@ class ReactiveFrameSubmissionSurfaceTest : public SurfaceTest {
 INSTANTIATE_TEST_SUITE_P(
     All,
     ReactiveFrameSubmissionSurfaceTest,
-    testing::Combine(
-        testing::Values(
-            test::FrameSubmissionType::kReactive_NoAutoNeedsBeginFrame,
-            test::FrameSubmissionType::kReactive_AutoNeedsBeginFrame),
-        testing::Values(1.0f, 1.25f, 2.0f)));
+    testing::Combine(testing::Values(test::FrameSubmissionType::kReactive),
+                     testing::Values(1.0f, 1.25f, 2.0f)));
 
 TEST_P(ReactiveFrameSubmissionSurfaceTest, FullDamageAfterDiscardingFrame) {
   gfx::Size buffer_size(256, 256);

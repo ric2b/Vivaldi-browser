@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: ui-tast-tests
 title: UI selection in Tast tests
 ---

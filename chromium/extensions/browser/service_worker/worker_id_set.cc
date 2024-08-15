@@ -8,6 +8,7 @@
 #include <iterator>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/containers/flat_map.h"
 #include "base/debug/crash_logging.h"
@@ -91,9 +92,9 @@ void WorkerIdSet::Add(const WorkerId& worker_id,
       kMaxWorkerCountToReport);
 
   if (!g_allow_multiple_workers_per_extension) {
-    // TODO(crbug.com/1493391):Enable this CHECK once multiple active workers is
-    // resolved.
-    // CHECK_LE(new_size, 1u) << "Extension with worker id " << worker_id
+    // TODO(crbug.com/40936639):Enable this CHECK once multiple active workers
+    // is resolved. CHECK_LE(new_size, 1u) << "Extension with worker id " <<
+    // worker_id
     //                        << " added additional worker";
   }
 
@@ -141,6 +142,19 @@ std::vector<WorkerId> WorkerIdSet::GetAllForExtension(
   while (end_range != workers_.end() && end_range->extension_id == extension_id)
     ++end_range;
   return std::vector<WorkerId>(begin_range, end_range);
+}
+
+std::vector<WorkerId> WorkerIdSet::GetAllForExtension(
+    const ExtensionId& extension_id,
+    int64_t worker_version_id) const {
+  std::vector<WorkerId> worker_ids;
+  for (const auto& worker_id : workers_) {
+    if (worker_id.version_id == worker_version_id &&
+        worker_id.extension_id == extension_id) {
+      worker_ids.push_back(worker_id);
+    }
+  }
+  return worker_ids;
 }
 
 bool WorkerIdSet::Contains(const WorkerId& worker_id) const {

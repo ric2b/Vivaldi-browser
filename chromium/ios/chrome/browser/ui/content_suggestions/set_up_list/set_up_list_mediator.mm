@@ -11,7 +11,10 @@
 #import "base/strings/sys_string_conversions.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_service.h"
+#import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
+#import "ios/chrome/browser/content_notification/model/content_notification_util.h"
+#import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/ntp/model/set_up_list.h"
 #import "ios/chrome/browser/ntp/model/set_up_list_delegate.h"
 #import "ios/chrome/browser/ntp/model/set_up_list_item.h"
@@ -46,6 +49,25 @@ bool CredentialProviderPromoDismissed(PrefService* local_state) {
       static_cast<IOSCredentialProviderPromoAction>(local_state->GetInteger(
           prefs::kIosCredentialProviderPromoLastActionTaken));
   return last_action == IOSCredentialProviderPromoAction::kNo;
+}
+
+// Returns true if a Default Browser Promo was completed, outside of SetUpList.
+// This includes the FRE.
+bool DefaultBrowserPromoCompleted() {
+  std::optional<IOSDefaultBrowserPromoAction> action =
+      DefaultBrowserPromoLastAction();
+  if (!action.has_value()) {
+    return false;
+  }
+
+  switch (action.value()) {
+    case IOSDefaultBrowserPromoAction::kActionButton:
+    case IOSDefaultBrowserPromoAction::kCancel:
+      return true;
+    case IOSDefaultBrowserPromoAction::kRemindMeLater:
+    case IOSDefaultBrowserPromoAction::kDismiss:
+      return false;
+  }
 }
 
 }  // namespace
@@ -120,6 +142,9 @@ bool CredentialProviderPromoDismissed(PrefService* local_state) {
         prefs::kIosCredentialProviderPromoLastActionTaken,
         &_localStatePrefChangeRegistrar);
     _prefObserverBridge->ObserveChangesForPreference(
+        prefs::kIosDefaultBrowserPromoLastAction,
+        &_localStatePrefChangeRegistrar);
+    _prefObserverBridge->ObserveChangesForPreference(
         set_up_list_prefs::kDisabled, &_localStatePrefChangeRegistrar);
     if (IsIOSTipsNotificationsEnabled()) {
       _prefObserverBridge->ObserveChangesForPreference(
@@ -135,13 +160,25 @@ bool CredentialProviderPromoDismissed(PrefService* local_state) {
       [self checkIfCPEEnabled];
     }
 
+    if (DefaultBrowserPromoCompleted()) {
+      set_up_list_prefs::MarkItemComplete(_localState,
+                                          SetUpListItemType::kDefaultBrowser);
+    }
+
     _sceneState = sceneState;
     [_sceneState addObserver:self];
+
+    BOOL isContentNotificationEnabled =
+        IsContentNotificationExperimentEnalbed() &&
+        IsContentNotificationSetUpListEnabled(
+            identityManager->HasPrimaryAccount(signin::ConsentLevel::kSignin),
+            self.isDefaultSearchEngine, prefService);
 
     _setUpList = [SetUpList buildFromPrefs:prefService
                                 localState:_localState
                                syncService:syncService
-                     authenticationService:authService];
+                     authenticationService:authService
+                contentNotificationEnabled:isContentNotificationEnabled];
     _setUpList.delegate = self;
 
     _consumers = [SetUpListConsumerList
@@ -208,12 +245,14 @@ bool CredentialProviderPromoDismissed(PrefService* local_state) {
 }
 
 - (void)showSetUpList {
-  NSArray<SetUpListItemViewData*>* items = [self setUpListItems];
-    DCHECK(!IsIOSMagicStackCollectionViewEnabled());
-    [self.consumer showSetUpListModuleWithConfigs:[self setUpListConfigs]];
+  DCHECK(!IsIOSMagicStackCollectionViewEnabled());
+  [self.consumer showSetUpListModuleWithConfigs:[self setUpListConfigs]];
   [self.contentSuggestionsMetricsRecorder recordSetUpListShown];
-  for (SetUpListItemViewData* item in items) {
-    [self.contentSuggestionsMetricsRecorder recordSetUpListItemShown:item.type];
+  for (SetUpListConfig* config in [self setUpListConfigs]) {
+    for (SetUpListItemViewData* item in config.setUpListItems) {
+      [self.contentSuggestionsMetricsRecorder
+          recordSetUpListItemShown:item.type];
+    }
   }
 }
 
@@ -322,6 +361,9 @@ bool CredentialProviderPromoDismissed(PrefService* local_state) {
   if (preferenceName == prefs::kIosCredentialProviderPromoLastActionTaken &&
       CredentialProviderPromoDismissed(_localState)) {
     [self markSetUpListItemPrefComplete:SetUpListItemType::kAutofill];
+  } else if (preferenceName == prefs::kIosDefaultBrowserPromoLastAction &&
+             DefaultBrowserPromoCompleted()) {
+    [self markSetUpListItemPrefComplete:SetUpListItemType::kDefaultBrowser];
   } else if (preferenceName == set_up_list_prefs::kDisabled &&
              set_up_list_prefs::IsSetUpListDisabled(_localState)) {
     [self hideSetUpList];

@@ -45,6 +45,7 @@
 #include "libavutil/intreadwrite.h"
 #include "libavutil/libm.h"
 #include "libavutil/mathematics.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/slicethread.h"
@@ -268,6 +269,34 @@ static const FormatEntry format_entries[] = {
     [AV_PIX_FMT_XV30LE]      = { 1, 1 },
     [AV_PIX_FMT_XV36LE]      = { 1, 1 },
 };
+
+/**
+ * Allocate and return an SwsContext without performing initialization.
+ */
+static SwsContext *alloc_set_opts(int srcW, int srcH, enum AVPixelFormat srcFormat,
+                                  int dstW, int dstH, enum AVPixelFormat dstFormat,
+                                  int flags, const double *param)
+{
+    SwsContext *c = sws_alloc_context();
+
+    if (!c)
+        return NULL;
+
+    c->flags     = flags;
+    c->srcW      = srcW;
+    c->srcH      = srcH;
+    c->dstW      = dstW;
+    c->dstH      = dstH;
+    c->srcFormat = srcFormat;
+    c->dstFormat = dstFormat;
+
+    if (param) {
+        c->param[0] = param[0];
+        c->param[1] = param[1];
+    }
+
+    return c;
+}
 
 int ff_shuffle_filter_coefficients(SwsContext *c, int *filterPos,
                                    int filterSize, int16_t *filter,
@@ -564,7 +593,7 @@ static av_cold int initFilter(int16_t **outFilter, int32_t **filterPos,
                 filter[i * filterSize + j] = coeff;
                 xx++;
             }
-            xDstInSrc += 2 * xInc;
+            xDstInSrc += 2LL * xInc;
         }
     }
 
@@ -1049,8 +1078,12 @@ int sws_setColorspaceDetails(struct SwsContext *c, const int inv_table[4],
     c->srcRange   = srcRange;
     c->dstRange   = dstRange;
 
-    if (need_reinit)
+    if (need_reinit) {
         ff_sws_init_range_convert(c);
+#if ARCH_LOONGARCH64
+        ff_sws_init_range_convert_loongarch(c);
+#endif
+    }
 
     c->dstFormatBpp = av_get_bits_per_pixel(desc_dst);
     c->srcFormatBpp = av_get_bits_per_pixel(desc_src);
@@ -1101,9 +1134,9 @@ int sws_setColorspaceDetails(struct SwsContext *c, const int inv_table[4],
             if (ret < 0)
                 return ret;
 
-            c->cascaded_context[0] = sws_alloc_set_opts(srcW, srcH, c->srcFormat,
-                                                        tmp_width, tmp_height, tmp_format,
-                                                        c->flags, c->param);
+            c->cascaded_context[0] = alloc_set_opts(srcW, srcH, c->srcFormat,
+                                                    tmp_width, tmp_height, tmp_format,
+                                                    c->flags, c->param);
             if (!c->cascaded_context[0])
                 return -1;
 
@@ -1116,9 +1149,9 @@ int sws_setColorspaceDetails(struct SwsContext *c, const int inv_table[4],
                                      srcRange, table, dstRange,
                                      brightness, contrast, saturation);
 
-            c->cascaded_context[1] = sws_alloc_set_opts(tmp_width, tmp_height, tmp_format,
-                                                        dstW, dstH, c->dstFormat,
-                                                        c->flags, c->param);
+            c->cascaded_context[1] = alloc_set_opts(tmp_width, tmp_height, tmp_format,
+                                                    dstW, dstH, c->dstFormat,
+                                                    c->flags, c->param);
             if (!c->cascaded_context[1])
                 return -1;
             c->cascaded_context[1]->srcRange = srcRange;
@@ -1682,9 +1715,9 @@ static av_cold int sws_init_single_context(SwsContext *c, SwsFilter *srcFilter,
                 if (ret < 0)
                     return ret;
 
-                c->cascaded_context[0] = sws_alloc_set_opts(srcW, srcH, srcFormat,
-                                                            srcW, srcH, tmpFormat,
-                                                            flags, c->param);
+                c->cascaded_context[0] = alloc_set_opts(srcW, srcH, srcFormat,
+                                                        srcW, srcH, tmpFormat,
+                                                        flags, c->param);
                 if (!c->cascaded_context[0])
                     return AVERROR(EINVAL);
                 c->cascaded_context[0]->alphablend = c->alphablend;
@@ -1692,9 +1725,9 @@ static av_cold int sws_init_single_context(SwsContext *c, SwsFilter *srcFilter,
                 if (ret < 0)
                     return ret;
 
-                c->cascaded_context[1] = sws_alloc_set_opts(srcW, srcH, tmpFormat,
-                                                            dstW, dstH, dstFormat,
-                                                            flags, c->param);
+                c->cascaded_context[1] = alloc_set_opts(srcW, srcH, tmpFormat,
+                                                        dstW, dstH, dstFormat,
+                                                        flags, c->param);
                 if (!c->cascaded_context[1])
                     return AVERROR(EINVAL);
 
@@ -2066,31 +2099,6 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
     return sws_init_single_context(c, srcFilter, dstFilter);
 }
 
-SwsContext *sws_alloc_set_opts(int srcW, int srcH, enum AVPixelFormat srcFormat,
-                               int dstW, int dstH, enum AVPixelFormat dstFormat,
-                               int flags, const double *param)
-{
-    SwsContext *c;
-
-    if (!(c = sws_alloc_context()))
-        return NULL;
-
-    c->flags     = flags;
-    c->srcW      = srcW;
-    c->srcH      = srcH;
-    c->dstW      = dstW;
-    c->dstH      = dstH;
-    c->srcFormat = srcFormat;
-    c->dstFormat = dstFormat;
-
-    if (param) {
-        c->param[0] = param[0];
-        c->param[1] = param[1];
-    }
-
-    return c;
-}
-
 SwsContext *sws_getContext(int srcW, int srcH, enum AVPixelFormat srcFormat,
                            int dstW, int dstH, enum AVPixelFormat dstFormat,
                            int flags, SwsFilter *srcFilter,
@@ -2098,9 +2106,9 @@ SwsContext *sws_getContext(int srcW, int srcH, enum AVPixelFormat srcFormat,
 {
     SwsContext *c;
 
-    c = sws_alloc_set_opts(srcW, srcH, srcFormat,
-                           dstW, dstH, dstFormat,
-                           flags, param);
+    c = alloc_set_opts(srcW, srcH, srcFormat,
+                       dstW, dstH, dstFormat,
+                       flags, param);
     if (!c)
         return NULL;
 

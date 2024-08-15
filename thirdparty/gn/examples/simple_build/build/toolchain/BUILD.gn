@@ -22,7 +22,7 @@ toolchain("gcc") {
   }
 
   tool("alink") {
-    command = "rm -f {{output}} && ar rcs {{output}} {{inputs}}"
+    command = "ar rcs {{output}} {{inputs}}"
     description = "AR {{target_output_name}}{{output_extension}}"
 
     outputs =

@@ -13,12 +13,12 @@
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/signin/dice_web_signin_interceptor.h"
-#include "chrome/browser/signin/signin_features.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/policy/core/common/management/scoped_management_service_override_for_testing.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_web_contents_factory.h"
@@ -199,7 +199,10 @@ class DiceWebSigninInterceptHandlerTest
       public testing::WithParamInterface<TestParam> {
  public:
   DiceWebSigninInterceptHandlerTest()
-      : profile_manager_(TestingBrowserProcess::GetGlobal()) {}
+      : profile_manager_(TestingBrowserProcess::GetGlobal()) {
+    feature_list_.InitWithFeatures(
+        {}, {switches::kExplicitBrowserSigninUIOnDesktop});
+  }
 
   base::Value::Dict GetInterceptionParameters() {
     Profile* profile = profile_manager_.CreateTestingProfile("Primary Profile");
@@ -241,6 +244,7 @@ class DiceWebSigninInterceptHandlerTest
 
  private:
   content::BrowserTaskEnvironment task_environment_;
+  base::test::ScopedFeatureList feature_list_;
   TestingProfileManager profile_manager_;
   content::TestWebContentsFactory web_contents_factory_;
   content::TestWebUI web_ui_;

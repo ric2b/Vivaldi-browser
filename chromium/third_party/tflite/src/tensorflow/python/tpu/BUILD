@@ -1,3 +1,5 @@
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+
 # Description: Operations defined for Cloud TPUs
 load("//tensorflow:pytype.default.bzl", "pytype_strict_library")
 load("//tensorflow:strict.default.bzl", "py_strict_library", "py_strict_test")
@@ -6,7 +8,6 @@ load("//tensorflow:strict.default.bzl", "py_strict_library", "py_strict_test")
 load("//tensorflow:tensorflow.default.bzl", "tf_py_strict_test", "tf_python_pybind_extension")
 load("//tensorflow/core/platform:build_config.bzl", "tf_proto_library")
 load("//tensorflow/python/tpu:tpu.bzl", "internal_create_sanitizer_settings", "tpu_py_strict_test")
-load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 
 # Do not add anymore paths here. You do not need to be in the visibility list
 # to use TPU symbols. They are accessible from tf.contrib.tpu in TF 1.x and
@@ -62,6 +63,29 @@ py_strict_test(
         "//tensorflow/python/platform:client_testlib",
         "//tensorflow/python/platform:flags",
         "@absl_py//absl/testing:flagsaver",
+    ],
+)
+
+tf_py_strict_test(
+    name = "tpu_embedding_v3_cpu_ops_test",
+    srcs = ["tpu_embedding_v3_cpu_ops_test.py"],
+    shard_count = 8,
+    tags = ["no_oss"],
+    deps = [
+        # copybara:uncomment "//tensorflow/core/tpu/kernels",
+        "//tensorflow/python/compat:v2_compat",
+        "//tensorflow/python/framework:constant_op",
+        "//tensorflow/python/framework:dtypes",
+        "//tensorflow/python/framework:ops",
+        "//tensorflow/python/framework:sparse_tensor",
+        "//tensorflow/python/ops:array_ops",
+        "//tensorflow/python/ops:bitwise_ops",
+        "//tensorflow/python/ops:math_ops",
+        "//tensorflow/python/ops:sparse_ops",
+        "//tensorflow/python/platform:client_testlib",
+        "//tensorflow/python/tpu/ops:gen_xla_ops",
+        "//third_party/py/numpy",
+        "@absl_py//absl/testing:parameterized",
     ],
 )
 
@@ -1020,6 +1044,7 @@ py_strict_library(
         ":tpu_embedding_v2_utils",
         ":tpu_replication",
         "//tensorflow/core:protos_all_py",
+        "//tensorflow/core/tpu/kernels:sparse_core_layout_proto_py",
         "//tensorflow/python/checkpoint:saveable_compat",
         "//tensorflow/python/distribute:device_util",
         "//tensorflow/python/distribute:distribute_lib",
@@ -1036,8 +1061,6 @@ py_strict_library(
         "//tensorflow/python/framework:tensor",
         "//tensorflow/python/framework:tensor_shape",
         "//tensorflow/python/ops:array_ops",
-        "//tensorflow/python/ops:collective_ops_gen",
-        "//tensorflow/python/ops:cond",
         "//tensorflow/python/ops:control_flow_ops",
         "//tensorflow/python/ops:math_ops",
         "//tensorflow/python/ops:resource_variable_ops_gen",
@@ -1052,6 +1075,45 @@ py_strict_library(
         "//tensorflow/python/util:tf_export",
         "//tensorflow/python/util:tf_inspect",
         "@absl_py//absl/logging",
+    ],
+)
+
+tpu_py_strict_test(
+    name = "tpu_embedding_v3_test",
+    srcs = ["tpu_embedding_v3_test.py"],
+    disable_experimental = True,
+    disable_tfrt = False,
+    disable_v2 = True,
+    disable_v3 = True,
+    # copybara:uncomment disable_v4i = True,
+    # copybara:uncomment disable_v5 = False,
+    # copybara:uncomment disable_v5_grm = True,
+    python_version = "PY3",
+    shard_count = 4,
+    srcs_version = "PY3",
+    # copybara:uncomment use_tpu_plugin_and_capi = True,
+    deps = [
+        ":tpu_embedding_for_serving",
+        ":tpu_embedding_v2_utils",
+        ":tpu_embedding_v3",
+        ":tpu_replication",
+        "//tensorflow/python/compat:v2_compat",
+        "//tensorflow/python/data/ops:dataset_ops",
+        "//tensorflow/python/distribute:distribute_lib",
+        "//tensorflow/python/distribute:tpu_strategy",
+        "//tensorflow/python/distribute/cluster_resolver:tpu_cluster_resolver_py",
+        "//tensorflow/python/eager:def_function",
+        "//tensorflow/python/eager:remote",
+        "//tensorflow/python/framework:config",
+        "//tensorflow/python/framework:sparse_tensor",
+        "//tensorflow/python/ops:array_ops",
+        "//tensorflow/python/ops:init_ops_v2",
+        "//tensorflow/python/ops:sparse_ops",
+        "//tensorflow/python/ops:variables",
+        "//tensorflow/python/platform:client_testlib",
+        "//tensorflow/python/util:nest",
+        "//third_party/py/numpy",
+        "@absl_py//absl/testing:parameterized",
     ],
 )
 

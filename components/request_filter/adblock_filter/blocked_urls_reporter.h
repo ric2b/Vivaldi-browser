@@ -9,7 +9,7 @@
 #include "base/observer_list.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
-#include "components/ad_blocker/adblock_metadata.h"
+#include "components/ad_blocker/adblock_types.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -44,7 +44,8 @@ class BlockedUrlsReporter {
     return weak_factory_.GetWeakPtr();
   }
 
-  void OnTrackerInfosUpdated(const RuleSource& source,
+  void OnTrackerInfosUpdated(RuleGroup group,
+                             const ActiveRuleSource& source,
                              base::Value::Dict new_tracker_infos);
 
   void OnUrlBlocked(RuleGroup group,

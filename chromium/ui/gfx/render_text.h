@@ -39,11 +39,11 @@
 #include "ui/gfx/shadow_value.h"
 #include "ui/gfx/text_constants.h"
 
-class SkDrawLooper;
 struct SkPoint;
 class SkTypeface;
 
 namespace cc {
+class DrawLooper;
 class PaintCanvas;
 }
 
@@ -68,7 +68,7 @@ class GFX_EXPORT SkiaTextRenderer {
   SkiaTextRenderer& operator=(const SkiaTextRenderer&) = delete;
   virtual ~SkiaTextRenderer();
 
-  void SetDrawLooper(sk_sp<SkDrawLooper> draw_looper);
+  void SetDrawLooper(sk_sp<cc::DrawLooper> draw_looper);
   void SetFontRenderParams(const FontRenderParams& params,
                            bool subpixel_rendering_suppressed);
   void SetTypeface(sk_sp<SkTypeface> typeface);
@@ -552,7 +552,7 @@ class GFX_EXPORT RenderText {
   // is longer than the textfield. Subsequent text, cursor, or bounds changes
   // may invalidate returned values. Note that |caret| must be placed at
   // grapheme boundary, i.e. caret.caret_pos() must be a cursorable position.
-  // TODO(crbug.com/248597): Add multiline support.
+  // TODO(crbug.com/40321377): Add multiline support.
   Rect GetCursorBounds(const SelectionModel& caret, bool insert_mode);
 
   // Compute the current cursor bounds, panning the text to show the cursor in

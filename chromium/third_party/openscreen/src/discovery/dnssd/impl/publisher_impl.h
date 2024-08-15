@@ -22,10 +22,10 @@ class ReportingClient;
 class PublisherImpl : public DnsSdPublisher,
                       public MdnsDomainConfirmedProvider {
  public:
-  PublisherImpl(MdnsService* publisher,
-                ReportingClient* reporting_client,
+  PublisherImpl(MdnsService& publisher,
+                ReportingClient& reporting_client,
                 TaskRunner& task_runner,
-                const NetworkInterfaceConfig* network_config);
+                const NetworkInterfaceConfig& network_config);
   ~PublisherImpl() override;
 
   // DnsSdPublisher overrides.
@@ -49,10 +49,10 @@ class PublisherImpl : public DnsSdPublisher,
   // instances should be the instance name.
   std::map<DnsSdInstance, DnsSdInstanceEndpoint> published_instances_;
 
-  MdnsService* const mdns_publisher_;
-  ReportingClient* const reporting_client_;
+  MdnsService& mdns_publisher_;
+  ReportingClient& reporting_client_;
   TaskRunner& task_runner_;
-  const NetworkInterfaceConfig* const network_config_;
+  const NetworkInterfaceConfig& network_config_;
 
   friend class PublisherTesting;
 };

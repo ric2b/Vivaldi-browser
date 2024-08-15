@@ -4,8 +4,15 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #ifndef CORE_FXCODEC_JBIG2_JBIG2_IMAGE_H_
 #define CORE_FXCODEC_JBIG2_JBIG2_IMAGE_H_
+
+#include <stdint.h>
 
 #include <memory>
 

@@ -4,6 +4,11 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "core/fpdfapi/font/cpdf_type1font.h"
 
 #include <algorithm>
@@ -12,6 +17,7 @@
 
 #include "build/build_config.h"
 #include "core/fpdfapi/parser/cpdf_dictionary.h"
+#include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/span_util.h"
 #include "core/fxge/cfx_fontmapper.h"
@@ -71,7 +77,7 @@ CPDF_Type1Font::CPDF_Type1Font(CPDF_Document* pDocument,
                                RetainPtr<CPDF_Dictionary> pFontDict)
     : CPDF_SimpleFont(pDocument, std::move(pFontDict)) {
 #if BUILDFLAG(IS_APPLE)
-  memset(m_ExtGID, 0xff, sizeof(m_ExtGID));
+  m_ExtGID.fill(0xffff);
 #endif
 }
 
@@ -163,8 +169,9 @@ void CPDF_Type1Font::LoadGlyphMap() {
       }
       if (bGotOne) {
 #if BUILDFLAG(IS_APPLE)
-        if (!bCoreText)
-          memcpy(m_ExtGID, m_GlyphIndex, sizeof(m_ExtGID));
+        if (!bCoreText) {
+          m_ExtGID = m_GlyphIndex;
+        }
 #endif
         return;
       }
@@ -195,8 +202,7 @@ void CPDF_Type1Font::LoadGlyphMap() {
     }
 #if BUILDFLAG(IS_APPLE)
     if (!bCoreText) {
-      fxcrt::spancpy(pdfium::make_span(m_ExtGID),
-                     pdfium::make_span(m_GlyphIndex));
+      m_ExtGID = m_GlyphIndex;
     }
 #endif
     return;
@@ -276,8 +282,9 @@ void CPDF_Type1Font::LoadGlyphMap() {
       }
     }
 #if BUILDFLAG(IS_APPLE)
-    if (!bCoreText)
-      memcpy(m_ExtGID, m_GlyphIndex, sizeof(m_ExtGID));
+    if (!bCoreText) {
+      m_ExtGID = m_GlyphIndex;
+    }
 #endif
     return;
   }
@@ -304,8 +311,9 @@ void CPDF_Type1Font::LoadGlyphMap() {
     }
   }
 #if BUILDFLAG(IS_APPLE)
-  if (!bCoreText)
-    memcpy(m_ExtGID, m_GlyphIndex, sizeof(m_ExtGID));
+  if (!bCoreText) {
+    m_ExtGID = m_GlyphIndex;
+  }
 #endif
 }
 

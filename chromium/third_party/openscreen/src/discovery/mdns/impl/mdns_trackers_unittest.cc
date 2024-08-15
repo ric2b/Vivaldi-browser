@@ -52,7 +52,7 @@ ACTION_P(VerifyRecordCount, record_count) {
 
 class MockMdnsSender : public MdnsSender {
  public:
-  explicit MockMdnsSender(UdpSocket* socket) : MdnsSender(socket) {}
+  explicit MockMdnsSender(UdpSocket& socket) : MdnsSender(socket) {}
 
   MOCK_METHOD1(SendMulticast, Error(const MdnsMessage&));
   MOCK_METHOD2(SendMessage, Error(const MdnsMessage&, const IPEndpoint&));
@@ -70,8 +70,8 @@ class MdnsTrackerTest : public testing::Test {
  public:
   MdnsTrackerTest()
       : clock_(Clock::now()),
-        task_runner_(&clock_),
-        sender_(&socket_),
+        task_runner_(clock_),
+        sender_(socket_),
         a_question_(DomainName{"testing", "local"},
                     DnsType::kANY,
                     DnsClass::kIN,
@@ -102,7 +102,7 @@ class MdnsTrackerTest : public testing::Test {
       const MdnsRecord& record,
       DnsType type) {
     return std::make_unique<MdnsRecordTracker>(
-        record, type, &sender_, task_runner_, &FakeClock::now, &random_,
+        record, type, sender_, task_runner_, &FakeClock::now, random_,
         [this](const MdnsRecordTracker*, const MdnsRecord&) {
           expiration_called_ = true;
         });
@@ -117,9 +117,9 @@ class MdnsTrackerTest : public testing::Test {
       const MdnsQuestion& question,
       MdnsQuestionTracker::QueryType query_type =
           MdnsQuestionTracker::QueryType::kContinuous) {
-    return std::make_unique<MdnsQuestionTracker>(question, &sender_,
+    return std::make_unique<MdnsQuestionTracker>(question, sender_,
                                                  task_runner_, &FakeClock::now,
-                                                 &random_, config_, query_type);
+                                                 random_, config_, query_type);
   }
 
  protected:

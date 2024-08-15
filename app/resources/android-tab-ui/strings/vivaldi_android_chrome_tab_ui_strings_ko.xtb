@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ko">
+<translation id="2947471979790858922">이 시크릿 탭에서의 활동이 기기에서 제거됩니다</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Vivaldi 메인 메뉴 아래의 최근 탭에서 닫은 탭을 확인할 수 있습니다. 시크릿 탭은 확인할 수 없습니다.}
+        other {Vivaldi 메인 메뉴 아래의 최근 탭에서 닫은 탭을 확인할 수 있습니다. #개의 시크릿 탭은 확인할 수 없습니다.}}</translation>
+<translation id="4871187110787939393">모든 시크릿 탭을 닫으시겠어요?</translation>
 </translationbundle>

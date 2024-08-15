@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <bitset>
 #include <optional>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -115,7 +116,7 @@ bool WebAppRegistrar::IsPlaceholderApp(
   return it->second.is_placeholder;
 }
 
-// TODO(crbug.com/1434692): Revert changes back to old code
+// TODO(crbug.com/40264854): Revert changes back to old code
 // once the system starts enforcing a single install URL per
 // app_id.
 std::optional<webapps::AppId> WebAppRegistrar::LookupPlaceholderAppId(
@@ -303,7 +304,7 @@ GURL WebAppRegistrar::GetAppLaunchUrl(const webapps::AppId& app_id) const {
   }
 
   if (start_url.query_piece().find(*launch_query_params) !=
-      base::StringPiece::npos) {
+      std::string_view::npos) {
     return start_url;
   }
 
@@ -414,7 +415,8 @@ std::optional<webapps::AppId> WebAppRegistrar::FindAppWithUrlInScope(
   bool best_app_is_shortcut = true;
 
   for (const webapps::AppId& app_id : GetAppIdsForAppSet(GetApps())) {
-    // TODO(crbug.com/1469482): Consider treating shortcuts differently to PWAs.
+    // TODO(crbug.com/40277513): Consider treating shortcuts differently to
+    // PWAs.
     bool app_is_shortcut = IsShortcutApp(app_id);
     if (app_is_shortcut && !best_app_is_shortcut)
       continue;
@@ -428,13 +430,6 @@ std::optional<webapps::AppId> WebAppRegistrar::FindAppWithUrlInScope(
       best_app_is_shortcut = app_is_shortcut;
     }
   }
-#if BUILDFLAG(IS_CHROMEOS)
-  // With project shortstand, shortcuts are no longer considered apps,
-  // so we should ignore results within the scope of shortcuts.
-  if (chromeos::features::IsCrosShortstandEnabled() && best_app_is_shortcut) {
-    return std::nullopt;
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS)
   return best_app_id;
 }
 
@@ -487,7 +482,8 @@ std::optional<webapps::AppId> WebAppRegistrar::FindInstalledAppWithUrlInScope(
   bool best_app_is_shortcut = true;
 
   for (const webapps::AppId& app_id : GetAppIds()) {
-    // TODO(crbug.com/1469482): Consider treating shortcuts differently to PWAs.
+    // TODO(crbug.com/40277513): Consider treating shortcuts differently to
+    // PWAs.
     bool app_is_shortcut = IsShortcutApp(app_id);
     if (app_is_shortcut && !best_app_is_shortcut) {
       continue;
@@ -543,13 +539,9 @@ bool WebAppRegistrar::IsShortcutApp(const webapps::AppId& app_id) const {
   if (!GetAppById(app_id)) {
     return false;
   }
-  // TODO(crbug.com/1469482): Record shortcut distinction explicitly instead of
+  // TODO(crbug.com/40277513): Record shortcut distinction explicitly instead of
   // using scope.
-#if BUILDFLAG(IS_CHROMEOS)
-  return IsShortcutAppChromeOs(app_id);
-#else
   return !GetAppScopeInternal(app_id).has_value();
-#endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
 bool WebAppRegistrar::IsSystemApp(const webapps::AppId& app_id) const {
@@ -738,7 +730,11 @@ void WebAppRegistrar::Start() {
   if (ProfileManager* profile_manager = g_browser_process->profile_manager())
     profile_manager_observation_.Observe(profile_manager);
 
-  int num_user_installed_apps = CountUserInstalledApps();
+  int num_user_installed_apps =
+      std::get<InstallableAppCount>(CountTotalUserInstalledAppsIncludingDiy())
+          .value();
+  int num_user_installed_diy_apps =
+      std::get<DiyAppCount>(CountTotalUserInstalledAppsIncludingDiy()).value();
   int num_non_locally_installed = CountUserInstalledNotLocallyInstalledApps();
 
   base::UmaHistogramCounts1000("WebApp.InstalledCount.ByUser",
@@ -746,6 +742,8 @@ void WebAppRegistrar::Start() {
   base::UmaHistogramCounts1000(
       "WebApp.InstalledCount.ByUserNotLocallyInstalled",
       num_non_locally_installed);
+  base::UmaHistogramCounts1000("WebApp.DiyAppsInstalledCount.ByUser",
+                               num_user_installed_diy_apps);
 
 #if BUILDFLAG(IS_MAC)
   auto multi_profile_app_ids =
@@ -809,7 +807,7 @@ bool WebAppRegistrar::IsInstalled(const webapps::AppId& app_id) const {
   WebAppManagementTypes sources_except_sync = web_app->GetSources();
   sources_except_sync.Remove(WebAppManagement::kSync);
   return !(web_app->is_from_sync_and_pending_installation() &&
-           sources_except_sync.Empty());
+           sources_except_sync.empty());
 }
 
 bool WebAppRegistrar::IsUninstalling(const webapps::AppId& app_id) const {
@@ -856,6 +854,9 @@ bool WebAppRegistrar::IsInstalledByPolicy(const webapps::AppId& app_id) const {
   }
 
   WebAppManagementTypes sources = web_app->GetSources();
+  if (web_app->isolation_data().has_value()) {
+    return sources.Has(WebAppManagement::Type::kIwaPolicy);
+  }
   return sources.Has(WebAppManagement::Type::kPolicy);
 }
 
@@ -940,22 +941,14 @@ base::flat_set<std::string> WebAppRegistrar::GetAllDisallowedLaunchProtocols()
 }
 
 int WebAppRegistrar::CountUserInstalledApps() const {
-  int num_user_installed = 0;
-  for (const WebApp& app : GetApps()) {
-    if (app.is_locally_installed() && app.WasInstalledByUser())
-      ++num_user_installed;
-  }
-  return num_user_installed;
+  return std::get<InstallableAppCount>(
+             CountTotalUserInstalledAppsIncludingDiy())
+      .value();
 }
 
-int WebAppRegistrar::CountUserInstalledNotLocallyInstalledApps() const {
-  int num_non_locally_installed = 0;
-  for (const WebApp& app : GetApps()) {
-    if (!app.is_locally_installed() && app.WasInstalledByUser()) {
-      ++num_non_locally_installed;
-    }
-  }
-  return num_non_locally_installed;
+int WebAppRegistrar::CountUserInstalledDiyApps() const {
+  return std::get<DiyAppCount>(CountTotalUserInstalledAppsIncludingDiy())
+      .value();
 }
 
 std::vector<content::StoragePartitionConfig>
@@ -1100,9 +1093,13 @@ std::optional<webapps::AppId> WebAppRegistrar::FindAppThatCapturesLinksInScope(
     if (!CanCaptureLinksInScope(app_id)) {
       continue;
     }
-    // TODO(dmurph): Switch to GetAppExtendedScopeScore if the
-    // kWebAppEnableScopeExtensions feature is enabled. b/294079334
-    size_t score = GetUrlInAppScopeScore(url.spec(), app_id);
+    size_t score;
+    if (base::FeatureList::IsEnabled(
+            features::kDesktopPWAsLinkCapturingWithScopeExtensions)) {
+      score = GetAppExtendedScopeScore(url, app_id);
+    } else {
+      score = GetUrlInAppScopeScore(url.spec(), app_id);
+    }
     // A score of 0 means it doesn't apply at all.
     if (score == 0 || score < top_score) {
       continue;
@@ -1128,17 +1125,27 @@ std::optional<webapps::AppId> WebAppRegistrar::FindAppThatCapturesLinksInScope(
 bool WebAppRegistrar::IsLinkCapturableByApp(const webapps::AppId& app,
                                             const GURL& url) const {
   CHECK(url.is_valid());
-  // TODO(dmurph): Switch to GetAppExtendedScopeScore if the
-  // kWebAppEnableScopeExtensions feature is enabled. b/294079334
-  size_t app_score = GetUrlInAppScopeScore(url.spec(), app);
+  size_t app_score;
+  if (base::FeatureList::IsEnabled(
+          features::kDesktopPWAsLinkCapturingWithScopeExtensions)) {
+    app_score = GetAppExtendedScopeScore(url, app);
+  } else {
+    app_score = GetUrlInAppScopeScore(url.spec(), app);
+  }
   if (app_score == 0) {
     return false;
   }
   return base::ranges::none_of(GetAppIds(), [&](const webapps::AppId& app_id) {
-    // TODO(b/294079334): Switch to GetAppExtendedScopeScore if the
-    // kWebAppEnableScopeExtensions feature is enabled.
+    size_t other_score;
+    if (base::FeatureList::IsEnabled(
+            features::kDesktopPWAsLinkCapturingWithScopeExtensions)) {
+      other_score = GetAppExtendedScopeScore(url, app_id);
+
+    } else {
+      other_score = GetUrlInAppScopeScore(url.spec(), app_id);
+    }
     return IsLocallyInstalled(app_id) && !IsShortcutApp(app_id) &&
-           GetUrlInAppScopeScore(url.spec(), app_id) > app_score;
+           other_score > app_score;
   });
 }
 
@@ -1347,7 +1354,7 @@ std::optional<GURL> WebAppRegistrar::GetAppScopeInternal(
   if (!web_app)
     return std::nullopt;
 
-  // TODO(crbug.com/1469482): Record shortcut distinction explicitly instead of
+  // TODO(crbug.com/40277513): Record shortcut distinction explicitly instead of
   // using scope.
   // Shortcuts on the WebApp system have empty scopes, while the implementation
   // of IsShortcutApp just checks if the scope is |std::nullopt|, so make sure
@@ -1370,16 +1377,6 @@ std::optional<mojom::UserDisplayMode> WebAppRegistrar::GetAppUserDisplayMode(
   if (web_app == nullptr) {
     return std::nullopt;
   }
-
-#if BUILDFLAG(IS_CHROMEOS)
-  if (base::FeatureList::IsEnabled(
-          features::kPreinstalledWebAppWindowExperiment)) {
-    auto it = user_display_mode_overrides_for_experiment_.find(app_id);
-    if (it != user_display_mode_overrides_for_experiment_.end()) {
-      return it->second;
-    }
-  }
-#endif
 
   return web_app->user_display_mode();
 }
@@ -1610,15 +1607,6 @@ WebAppRegistrar::AppSet WebAppRegistrar::GetApps() const {
       /*empty=*/registry_profile_being_deleted_);
 }
 
-#if BUILDFLAG(IS_CHROMEOS)
-void WebAppRegistrar::SetUserDisplayModeOverridesForExperiment(
-    base::flat_map<webapps::AppId, mojom::UserDisplayMode> overrides) {
-  DCHECK(base::FeatureList::IsEnabled(
-      features::kPreinstalledWebAppWindowExperiment));
-  user_display_mode_overrides_for_experiment_ = std::move(overrides);
-}
-#endif
-
 base::Value WebAppRegistrar::AsDebugValue() const {
   base::Value::Dict root;
 
@@ -1765,64 +1753,29 @@ std::vector<webapps::AppId> WebAppRegistrar::GetAppIdsForAppSet(
   return app_ids;
 }
 
-#if BUILDFLAG(IS_CHROMEOS)
-bool WebAppRegistrar::IsShortcutAppChromeOs(
-    const webapps::AppId& app_id) const {
-  const WebApp* web_app = GetAppById(app_id);
-  if (!web_app) {
-    return false;
+int WebAppRegistrar::CountUserInstalledNotLocallyInstalledApps() const {
+  int num_non_locally_installed = 0;
+  for (const WebApp& app : GetApps()) {
+    if (!app.is_locally_installed() && app.WasInstalledByUser()) {
+      ++num_non_locally_installed;
+    }
   }
-
-  // See go/shortstand-prd#bookmark=id.mbe9ojau9umf for detail.
-  if (!chromeos::features::IsCrosShortstandEnabled()) {
-    return !GetAppScopeInternal(app_id).has_value();
-  }
-
-  // Avoid opening Workspace apps in standalone windows if they are set to open
-  // in browser.
-  // TODO(b/312854225): Remove this special case once Workspace makes use of
-  // tabbed web app display mode.
-  if (web_app->app_id() == kGoogleDocsAppId ||
-      web_app->app_id() == kGoogleSheetsAppId ||
-      web_app->app_id() == kGoogleSlidesAppId) {
-    return web_app->user_display_mode() == mojom::UserDisplayMode::kBrowser;
-  }
-
-  // For policy installed apps/shortcuts, it is a shortcut if admin set to open
-  // in browser or install_as_shortcut is set to true.
-  if (web_app->IsPolicyInstalledApp()) {
-    // TODO(b/304660867): Check the required field for policy installed apps.
-    return !GetAppScopeInternal(app_id).has_value();
-  }
-
-  // System web apps should always be considered as apps.
-  if (web_app->IsSystemApp()) {
-    return false;
-  }
-
-  // For web apps installed from Chrome Browser and play store by the user,
-  // everything is considered as app instead of shortcut.
-  if (web_app->WasInstalledByUser() &&
-      GetAppScopeInternal(app_id).has_value()) {
-    return false;
-  }
-
-  // Any default installed apps are considered as apps not shortcut.
-  if (web_app->GetSources().Has(WebAppManagement::kDefault) ||
-      web_app->GetSources().Has(WebAppManagement::kOem) ||
-      web_app->GetSources().Has(WebAppManagement::kApsDefault)) {
-    return false;
-  }
-
-  // For user created shortcuts via Chrome, we considered whether it is shortcut
-  // based on the display mode setting. If will be considered as shortcut only
-  // when it is set to open in the browser tab.
-  if (web_app->WasInstalledByUser() &&
-      !GetAppScopeInternal(app_id).has_value()) {
-    return web_app->user_display_mode() == mojom::UserDisplayMode::kBrowser;
-  }
-  return false;
+  return num_non_locally_installed;
 }
-#endif  // BUILDFLAG(IS_CHROMEOS)
+
+std::tuple<DiyAppCount, InstallableAppCount>
+WebAppRegistrar::CountTotalUserInstalledAppsIncludingDiy() const {
+  InstallableAppCount num_user_installed(0);
+  DiyAppCount num_diy_apps_user_installed(0);
+  for (const WebApp& app : GetApps()) {
+    if (app.is_locally_installed() && app.WasInstalledByUser()) {
+      if (app.is_diy_app()) {
+        ++num_diy_apps_user_installed.value();
+      }
+      ++num_user_installed.value();
+    }
+  }
+  return std::make_tuple(num_diy_apps_user_installed, num_user_installed);
+}
 
 }  // namespace web_app

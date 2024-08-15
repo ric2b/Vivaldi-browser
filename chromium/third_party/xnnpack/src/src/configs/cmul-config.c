@@ -4,6 +4,7 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <stddef.h>
 
 #ifdef _WIN32
   #include <windows.h>
@@ -13,8 +14,8 @@
 
 #include <xnnpack/common.h>
 #include <xnnpack/config.h>
+#include <xnnpack/microfnptr.h>
 #include <xnnpack/vbinary.h>
-
 
 #if XNN_ARCH_ARM || XNN_ARCH_ARM64
   static struct xnn_cmul_config f16_cmul_config = {0};
@@ -62,13 +63,7 @@ static void init_f32_cmul_config(void) {
   #elif XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
     f32_cmul_config.ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vcmul_ukernel__wasmsimd_u8;
     f32_cmul_config.element_tile = 8;
-  #elif XNN_ARCH_WASM
-    f32_cmul_config.ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vcmul_ukernel__scalar_u4;
-    f32_cmul_config.element_tile = 4;
-  #elif XNN_ARCH_RISCV
-    f32_cmul_config.ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vcmul_ukernel__scalar_u4;
-    f32_cmul_config.element_tile = 4;
-  #elif XNN_ARCH_PPC64
+  #else
     f32_cmul_config.ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vcmul_ukernel__scalar_u4;
     f32_cmul_config.element_tile = 4;
   #endif

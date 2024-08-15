@@ -83,6 +83,6 @@ interface VivaldiFrameService {
 
   // Indicates that the frame should collect draggable regions set using the
   // app-region CSS property.
-  SetSupportsAppRegion(bool supports_app_region);
+  SetSupportsDraggableRegions(bool supports_draggable_regions);
 
 };

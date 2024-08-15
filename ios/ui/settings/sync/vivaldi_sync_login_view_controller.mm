@@ -17,16 +17,9 @@
 #import "ios/ui/settings/sync/vivaldi_sync_settings_constants.h"
 #import "ios/ui/table_view/cells/vivaldi_input_error_item.h"
 #import "ios/ui/table_view/cells/vivaldi_table_view_illustrated_item.h"
+#import "ios/ui/table_view/cells/vivaldi_table_view_text_spinner_button_item.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
-namespace {
-const CGFloat forgotUsernamePasswordSectionHeaderHeight = 12;
-}
 
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierHeader = kSectionIdentifierEnumZero,
@@ -34,6 +27,7 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierSavePassword,
   SectionIdentifierLoginButton,
   SectionIdentifierForgotUsernamePassword,
+  SectionIdentifierUserDetails,
 };
 
 typedef NS_ENUM(NSInteger, ItemType) {
@@ -43,6 +37,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypePassword,
   ItemTypeSavePasswordSwitch,
   ItemTypeForgotUsernamePassword,
+  ItemTypeDeviceName,
   ItemTypeLoginButton,
   ItemTypeError,
 };
@@ -55,6 +50,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 @property(nonatomic, strong) VivaldiTableViewTextEditItem* usernameItem;
 @property(nonatomic, strong) VivaldiTableViewTextEditItem* passwordItem;
 @property(nonatomic, strong) TableViewSwitchItem* switchItemSavePassword;
+@property(nonatomic, strong) VivaldiTableViewTextEditItem* deviceNameItem;
+@property(nonatomic, strong) VivaldiTableViewTextSpinnerButtonItem* loginButton;
 
 @property(nonatomic, weak) id<ModalPageCommands> modalPageHandler;
 
@@ -90,6 +87,16 @@ typedef NS_ENUM(NSInteger, ItemType) {
                         itemType:ItemTypeError];
 }
 
+- (void)setupLeftCancelButton {
+  UIBarButtonItem* cancelButton =
+      [[UIBarButtonItem alloc]
+          initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
+                               target:self
+                               action:@selector(dismissView)];
+  self.backButtonItem = cancelButton;
+  self.navigationItem.leftBarButtonItem = self.backButtonItem;
+}
+
 #pragma mark - TableViewModel
 
 - (void)loadModel {
@@ -98,6 +105,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   TableViewModel* model = self.tableViewModel;
   [model addSectionWithIdentifier:SectionIdentifierHeader];
   [model addSectionWithIdentifier:SectionIdentifierUsernamePassword];
+  [model addSectionWithIdentifier:SectionIdentifierUserDetails];
   [model addSectionWithIdentifier:SectionIdentifierSavePassword];
   [model addSectionWithIdentifier:SectionIdentifierLoginButton];
   [model addSectionWithIdentifier:SectionIdentifierForgotUsernamePassword];
@@ -168,17 +176,32 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [model addItem:self.switchItemSavePassword
       toSectionWithIdentifier:SectionIdentifierSavePassword];
 
-  TableViewTextButtonItem* loginButton =
-      [[TableViewTextButtonItem alloc] initWithType:ItemTypeLoginButton];
-  loginButton.buttonText =
-      l10n_util::GetNSString(IDS_VIVALDI_ACCOUNT_LOG_IN);
-  loginButton.textAlignment = NSTextAlignmentNatural;
-  loginButton.buttonBackgroundColor = [UIColor colorNamed:kBlueColor];
-  loginButton.buttonTextColor = [UIColor colorNamed:kSolidButtonTextColor];
-  loginButton.cellBackgroundColor = loginButton.buttonBackgroundColor;
-  loginButton.disableButtonIntrinsicWidth = YES;
+  self.deviceNameItem =
+      [[VivaldiTableViewTextEditItem alloc] initWithType:ItemTypeDeviceName];
+  self.deviceNameItem.textFieldPlaceholder =
+      l10n_util::GetNSString(IDS_VIVALDI_SYNC_DEVICE_NAME);
+  self.deviceNameItem.hideIcon = YES;
+  self.deviceNameItem.textFieldEnabled = YES;
+  self.deviceNameItem.autoCapitalizationType = UITextAutocapitalizationTypeNone;
+  self.deviceNameItem.identifyingIconAccessibilityLabel =
+      l10n_util::GetNSString(IDS_VIVALDI_SYNC_DEVICE_NAME);
+  self.deviceNameItem.keyboardType = UIKeyboardTypeDefault;
+  [model addItem:self.deviceNameItem
+      toSectionWithIdentifier:SectionIdentifierUserDetails];
 
-  [self.tableViewModel addItem:loginButton
+  self.loginButton =
+      [[VivaldiTableViewTextSpinnerButtonItem alloc]
+          initWithType:ItemTypeLoginButton];
+  self.loginButton.activityInProgress = NO;
+  self.loginButton.buttonText =
+      l10n_util::GetNSString(IDS_VIVALDI_ACCOUNT_LOG_IN);
+  self.loginButton.textAlignment = NSTextAlignmentNatural;
+  self.loginButton.buttonBackgroundColor = [UIColor colorNamed:kBlueColor];
+  self.loginButton.buttonTextColor = [UIColor colorNamed:kSolidButtonTextColor];
+  self.loginButton.cellBackgroundColor = _loginButton.buttonBackgroundColor;
+  self.loginButton.disableButtonIntrinsicWidth = YES;
+
+  [self.tableViewModel addItem:self.loginButton
       toSectionWithIdentifier:SectionIdentifierLoginButton];
 
   [self addForgotUsernamePasswordSection];
@@ -188,16 +211,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (CGFloat)tableView:(UITableView*)tableView
     heightForFooterInSection:(NSInteger)section {
-  NSInteger sectionIdentifier =
-      [self.tableViewModel sectionIdentifierForSectionIndex:section];
-
-  switch (sectionIdentifier) {
-  case SectionIdentifierUsernamePassword:
-  case SectionIdentifierForgotUsernamePassword:
-    return 0;
-  default:
-    return kFooterSectionHeight;
-  }
+  return 0;
 }
 
 - (CGFloat)tableView:(UITableView*)tableView
@@ -206,10 +220,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [self.tableViewModel sectionIdentifierForSectionIndex:section];
 
   if (sectionIdentifier == SectionIdentifierForgotUsernamePassword) {
-    return forgotUsernamePasswordSectionHeaderHeight;
+    return kPasswordSectionHeaderHeight;
   }
 
-  return kHeaderSectionHeight;
+  return kCommonHeaderSectionHeight;
 }
 
 #pragma mark - UITableViewDataSource
@@ -224,12 +238,15 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   switch (itemType) {
     case ItemTypeLoginButton: {
-      TableViewTextButtonCell* tableViewTextButtonCell =
-          base::apple::ObjCCastStrict<TableViewTextButtonCell>(cell);
+      VivaldiTableViewTextSpinnerButtonCell* tableViewTextButtonCell =
+          base::apple::ObjCCastStrict<VivaldiTableViewTextSpinnerButtonCell>
+              (cell);
       [tableViewTextButtonCell.button
                  addTarget:self
                     action:@selector(logInButtonPressed:)
           forControlEvents:UIControlEventTouchUpInside];
+      [tableViewTextButtonCell
+          setActivityIndicatorEnabled:self.loginButton.activityInProgress];
       break;
     }
     case ItemTypePassword: {
@@ -362,8 +379,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
     errorMessage = l10n_util::GetNSString(IDS_VIVALDI_ACCOUNT_PASSWORD_REQUIRED);
   }
 
-    [self removeErrorCell:SectionIdentifierUsernamePassword
-                 itemType:ItemTypeError];
+  [self removeErrorCell:SectionIdentifierUsernamePassword
+               itemType:ItemTypeError];
   if (errorMessage) {
     [self showErrorCellWithMessage:errorMessage
                            section:SectionIdentifierUsernamePassword
@@ -371,9 +388,17 @@ typedef NS_ENUM(NSInteger, ItemType) {
     return;
   }
 
+  self.loginButton.activityInProgress = YES;
+  [self reloadSection:SectionIdentifierLoginButton];
+
   [self.delegate logInButtonPressed:self.usernameItem.textFieldValue
                            password:self.passwordItem.textFieldValue
+                         deviceName:self.deviceNameItem.textFieldValue
                        savePassword:self.switchItemSavePassword.on];
+}
+
+- (void)dismissView {
+  [self.delegate dismissVivaldiSyncLoginViewController];
 }
 
 @end

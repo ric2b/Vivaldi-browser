@@ -31,6 +31,7 @@
 #include "chrome/browser/safe_browsing/download_protection/download_feedback_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/safe_browsing/download_type_util.h"
 #include "components/download/public/common/download_danger_type.h"
 #include "components/policy/core/common/policy_pref_names.h"
@@ -96,7 +97,6 @@ void MaybeOverrideScanResult(DownloadCheckResultReason reason,
     case DownloadCheckResult::BLOCKED_PASSWORD_PROTECTED:
     case DownloadCheckResult::BLOCKED_TOO_LARGE:
     case DownloadCheckResult::SENSITIVE_CONTENT_BLOCK:
-    case DownloadCheckResult::BLOCKED_UNSUPPORTED_FILE_TYPE:
     case DownloadCheckResult::ALLOWLISTED_BY_POLICY:
     case DownloadCheckResult::BLOCKED_SCAN_FAILED:
       callback.Run(deep_scan_result);
@@ -105,6 +105,20 @@ void MaybeOverrideScanResult(DownloadCheckResultReason reason,
 
   // This function should always run |callback| and return before reaching this.
   CHECK(false);
+}
+
+void LogNoticeSeenMetrics(PrefService* prefs) {
+  bool has_seen =
+      prefs->GetBoolean(prefs::kSafeBrowsingAutomaticDeepScanningIPHSeen);
+  if (prefs->GetBoolean(prefs::kDownloadBubblePartialViewEnabled)) {
+    base::UmaHistogramBoolean(
+        "SBClientDownload.AutomaticDeepScanNoticeSeen.PartialViewEnabled",
+        has_seen);
+  } else {
+    base::UmaHistogramBoolean(
+        "SBClientDownload.AutomaticDeepScanNoticeSeen.PartialViewSuppressed",
+        has_seen);
+  }
 }
 
 }  // namespace
@@ -182,7 +196,7 @@ bool CheckClientDownloadRequest::IsSupportedDownload(
     *reason = REASON_UNSUPPORTED_URL_SCHEME;
     return false;
   }
-  // TODO(crbug.com/814813): Remove duplicated counting of REMOTE_FILE
+  // TODO(crbug.com/41372015): Remove duplicated counting of REMOTE_FILE
   // and LOCAL_FILE in SBClientDownload.UnsupportedScheme.*.
   if (final_url.SchemeIsFile()) {
     *reason = final_url.has_host() ? REASON_REMOTE_FILE : REASON_LOCAL_FILE;
@@ -362,6 +376,12 @@ bool CheckClientDownloadRequest::ShouldImmediatelyDeepScan(
   }
 
   if (DownloadItemWarningData::IsEncryptedArchive(item_)) {
+    return false;
+  }
+
+  LogNoticeSeenMetrics(profile->GetPrefs());
+  if (!profile->GetPrefs()->GetBoolean(
+          prefs::kSafeBrowsingAutomaticDeepScanningIPHSeen)) {
     return false;
   }
 

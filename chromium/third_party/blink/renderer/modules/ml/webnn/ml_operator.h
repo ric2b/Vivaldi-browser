@@ -69,6 +69,7 @@ class MODULES_EXPORT MLOperator : public GarbageCollected<MLOperator> {
   bool IsConnected() const;
   const HeapVector<Member<const MLOperand>>& Inputs() const;
   const HeapVector<Member<const MLOperand>>& Outputs() const;
+  MLGraphBuilder const* Builder() const { return builder_.Get(); }
 
   // According to WebNN programming model
   // https://www.w3.org/TR/webnn/#programming-model, neural networks are
@@ -133,6 +134,23 @@ class MODULES_EXPORT MLLstmOperator : public MLOperator {
   uint32_t hidden_size_;
 };
 
+class MODULES_EXPORT MLLstmCellOperator : public MLOperator {
+ public:
+  MLLstmCellOperator(MLGraphBuilder* builder,
+                     uint32_t hidden_size,
+                     const bindings::DictionaryBase* options);
+
+  MLLstmCellOperator(const MLLstmCellOperator&) = delete;
+  MLLstmCellOperator& operator=(const MLLstmCellOperator&) = delete;
+
+  ~MLLstmCellOperator() override;
+
+  uint32_t hidden_size() const;
+
+ private:
+  const uint32_t hidden_size_;
+};
+
 class MODULES_EXPORT MLGruOperator : public MLOperator {
  public:
   MLGruOperator(MLGraphBuilder* builder,
@@ -149,8 +167,25 @@ class MODULES_EXPORT MLGruOperator : public MLOperator {
   uint32_t hidden_size() const { return hidden_size_; }
 
  private:
-  uint32_t steps_;
-  uint32_t hidden_size_;
+  const uint32_t steps_;
+  const uint32_t hidden_size_;
+};
+
+class MODULES_EXPORT MLGruCellOperator : public MLOperator {
+ public:
+  MLGruCellOperator(MLGraphBuilder* builder,
+                    uint32_t hidden_size,
+                    const bindings::DictionaryBase* options);
+
+  MLGruCellOperator(const MLGruCellOperator&) = delete;
+  MLGruCellOperator& operator=(const MLGruCellOperator&) = delete;
+
+  ~MLGruCellOperator() override;
+
+  uint32_t hidden_size() const { return hidden_size_; }
+
+ private:
+  const uint32_t hidden_size_;
 };
 
 class MODULES_EXPORT MLPadOperator : public MLOperator {

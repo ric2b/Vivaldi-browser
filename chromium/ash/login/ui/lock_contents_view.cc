@@ -255,9 +255,11 @@ class UserAddingScreenIndicator : public views::View {
   ~UserAddingScreenIndicator() override = default;
 
   // views::View:
-  gfx::Size CalculatePreferredSize() const override {
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override {
     return gfx::Size(kUserAddingScreenIndicatorWidth,
-                     GetHeightForWidth(kUserAddingScreenIndicatorWidth));
+                     GetLayoutManager()->GetPreferredHeightForWidth(
+                         this, kUserAddingScreenIndicatorWidth));
   }
 
  private:
@@ -708,6 +710,8 @@ void LockContentsView::ApplyUserChanges(
         main_view_->AddChildView(std::make_unique<LoginCameraTimeoutView>(
             base::BindRepeating(&LockContentsView::OnBackToSigninButtonTapped,
                                 weak_ptr_factory_.GetWeakPtr())));
+    // TODO(b/333882432): Remove this log after the bug fixed.
+    LOG(WARNING) << " b/333882432: LockContentsView::ApplyUserChanges";
     Shell::Get()->login_screen_controller()->ShowGaiaSignin(
         /*prefilled_account=*/EmptyAccountId());
     return;
@@ -1099,9 +1103,9 @@ void LockContentsView::OnSystemInfoChanged(
 
   LayoutTopHeader();
 
-  // TODO(crbug.com/1141348): Separate ADB sideloading from system info changed.
-  // Note that if ADB is enabled and the device is enrolled, only the ADB
-  // warning message will be displayed.
+  // TODO(crbug.com/40727114): Separate ADB sideloading from system info
+  // changed. Note that if ADB is enabled and the device is enrolled, only the
+  // ADB warning message will be displayed.
   if (adb_sideloading_enabled) {
     ShowAdbEnabled();
   }
@@ -2315,6 +2319,18 @@ void LockContentsView::OnBottomStatusIndicatorTapped() {
 }
 
 void LockContentsView::OnBackToSigninButtonTapped() {
+  // TODO(b/333882432): Remove this log after the bug fixed.
+  LOG(WARNING) << "b/333882432: LockContentsView::OnBackToSigninButtonTapped";
+  // Prevent starting a gaia signin in a transition state.
+  session_manager::SessionState current_state =
+      Shell::Get()->session_controller()->GetSessionState();
+  if (current_state != session_manager::SessionState::OOBE &&
+      current_state != session_manager::SessionState::LOGIN_PRIMARY) {
+    LOG(WARNING) << "Back to signin button was called in an unexpected state: "
+                 << static_cast<int>(current_state)
+                 << " skip to call ShowGaiaSignin.";
+    return;
+  }
   Shell::Get()->login_screen_controller()->ShowGaiaSignin(
       /*prefilled_account=*/EmptyAccountId());
 }

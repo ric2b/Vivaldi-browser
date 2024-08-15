@@ -7,6 +7,7 @@ import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_icons.css.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
+import 'chrome://resources/cr_elements/cr_tooltip/cr_tooltip.js';
 import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/cr_elements/policy/cr_tooltip_icon.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
@@ -16,7 +17,6 @@ import 'chrome://resources/cr_elements/action_link.css.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/paper-spinner/paper-spinner-lite.js';
-import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
 import './host_permissions_toggle_list.js';
 import './runtime_host_permissions.js';
 import './shared_style.css.js';
@@ -37,7 +37,7 @@ import {afterNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/p
 import {getTemplate} from './detail_view.html.js';
 import type {ItemDelegate} from './item.js';
 import {ItemMixin} from './item_mixin.js';
-import {computeInspectableViewLabel, EnableControl, getEnableControl, getEnableToggleAriaLabel, getEnableToggleTooltipText, getItemSource, getItemSourceString, isEnabled, sortViews, userCanChangeEnablement} from './item_util.js';
+import {computeInspectableViewLabel, convertSafetyCheckReason, EnableControl, getEnableControl, getEnableToggleAriaLabel, getEnableToggleTooltipText, getItemSource, getItemSourceString, isEnabled, SAFETY_HUB_EXTENSION_KEPT_HISTOGRAM_NAME, SAFETY_HUB_EXTENSION_REMOVED_HISTOGRAM_NAME, SAFETY_HUB_WARNING_REASON_MAX_SIZE, sortViews, userCanChangeEnablement} from './item_util.js';
 import {navigation, Page} from './navigation_helper.js';
 import type {ExtensionsToggleRowElement} from './toggle_row.js';
 
@@ -109,11 +109,27 @@ export class ExtensionsDetailViewElement extends
         observer: 'onShowSafetyCheckChanged_',
       },
 
+      /** Whether the mv2 deprecation message warning is shown. */
+      showMv2DeprecationMessage_: {
+        type: Boolean,
+        computed: 'computeShowMv2DeprecationMessage_(' +
+            'data.isAffectedByMV2Deprecation)',
+      },
+
       /** Whether the extensions blocklist text is shown. */
       showBlocklistText_: {
         type: Boolean,
         computed: 'computeShowBlocklistText_(data.blacklistText)',
       },
+
+      // <if expr="chromeos_ash">
+      /** Whether Lacros is enabled. */
+      isLacrosEnabled_: {
+        type: Boolean,
+        readOnly: true,
+        value: () => loadTimeData.getBoolean('isLacrosEnabled'),
+      },
+      // </if>
     };
   }
 
@@ -129,14 +145,23 @@ export class ExtensionsDetailViewElement extends
   showActivityLog: boolean;
   fromActivityLog: boolean;
   private showSafetyCheck_: boolean;
+  private showMv2DeprecationMessage_: boolean;
   private showBlocklistText_: boolean;
   private size_: string;
   private sortedViews_: chrome.developerPrivate.ExtensionView[];
-  private safetyCheckExtensionsEnabled_: boolean;
+
+  // <if expr="chromeos_ash">
+  private readonly isLacrosEnabled_: boolean;
+  // </if>
 
   override ready() {
     super.ready();
     this.addEventListener('view-enter-start', this.onViewEnterStart_);
+  }
+
+  private fire_(eventName: string, detail?: any) {
+    this.dispatchEvent(
+        new CustomEvent(eventName, {bubbles: true, composed: true, detail}));
   }
 
   /**
@@ -219,6 +244,10 @@ export class ExtensionsDetailViewElement extends
         this.data.runtimeWarnings.length > 0;
   }
 
+  private computeDevReloadButtonHidden_(): boolean {
+    return !this.canReloadItem();
+  }
+
   private computeEnabledStyle_(): string {
     return this.isEnabled_() ? 'enabled-text' : '';
   }
@@ -271,15 +300,16 @@ export class ExtensionsDetailViewElement extends
   }
 
   private onReloadClick_() {
-    this.delegate.reloadItem(this.data.id).catch(loadError => {
-      this.dispatchEvent(new CustomEvent(
-          'load-error', {bubbles: true, composed: true, detail: loadError}));
-    });
+    this.reloadItem().catch((loadError) => this.fire_('load-error', loadError));
   }
 
   private onRemoveClick_() {
     if (this.showSafetyCheck_) {
       chrome.metricsPrivate.recordUserAction('SafetyCheck.DetailRemoveClicked');
+      chrome.metricsPrivate.recordEnumerationValue(
+          SAFETY_HUB_EXTENSION_REMOVED_HISTOGRAM_NAME,
+          convertSafetyCheckReason(this.data.safetyCheckWarningReason),
+          SAFETY_HUB_WARNING_REASON_MAX_SIZE);
     }
     this.delegate.deleteItem(this.data.id);
   }
@@ -287,8 +317,25 @@ export class ExtensionsDetailViewElement extends
   private onKeepClick_() {
     if (this.showSafetyCheck_) {
       chrome.metricsPrivate.recordUserAction('SafetyCheck.DetailKeepClicked');
+      chrome.metricsPrivate.recordEnumerationValue(
+          SAFETY_HUB_EXTENSION_KEPT_HISTOGRAM_NAME,
+          convertSafetyCheckReason(this.data.safetyCheckWarningReason),
+          SAFETY_HUB_WARNING_REASON_MAX_SIZE);
     }
-    this.delegate.setItemSafetyCheckWarningAcknowledged(this.data.id);
+    this.delegate.setItemSafetyCheckWarningAcknowledged(
+        this.data.id, this.data.safetyCheckWarningReason);
+  }
+
+  /**
+   * Opens a URL in the Web Store with extensions recommendations for the
+   * extension.
+   */
+  private onFindAlternativeButtonClick_(): void {
+    chrome.metricsPrivate.recordUserAction(
+        'Extensions.Mv2Deprecation.Warning.FindAlternativeForExtension.Entry');
+    const recommendationsUrl: string|undefined = this.data.recommendationsUrl;
+    assert(!!recommendationsUrl);
+    this.delegate.openUrl(recommendationsUrl);
   }
 
   private onRepairClick_() {
@@ -425,6 +472,14 @@ export class ExtensionsDetailViewElement extends
     return !!(
         this.data.safetyCheckText && this.data.safetyCheckText.detailString &&
         this.data.acknowledgeSafetyCheckWarning !== true);
+  }
+
+  /**
+   * Returns whether the mv2 deprecation message warning should be displayed.
+   */
+  private computeShowMv2DeprecationMessage_(): boolean {
+    return loadTimeData.getBoolean('MV2DeprecationPanelEnabled') &&
+        this.data.isAffectedByMV2Deprecation;
   }
 
   private onShowSafetyCheckChanged_() {

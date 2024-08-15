@@ -851,11 +851,11 @@ int RunGen(const std::vector<std::string>& args) {
   if (!CheckForInvalidGeneratedInputs(setup))
     return 1;
 
-  if (command_line->HasSwitch(kSwitchIde) &&
-      !RunIdeWriter(command_line->GetSwitchValueString(kSwitchIde),
-                    &setup->build_settings(), setup->builder(), &err)) {
-    err.PrintToStdout();
-    return 1;
+  for (auto&& ide : command_line->GetSwitchValueStrings(kSwitchIde)) {
+    if (!RunIdeWriter(ide, &setup->build_settings(), setup->builder(), &err)) {
+      err.PrintToStdout();
+      return 1;
+    }
   }
 
   if (!RunCompileCommandsWriter(*setup, &err)) {

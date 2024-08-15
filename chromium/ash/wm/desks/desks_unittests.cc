@@ -47,6 +47,7 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/test_widget_builder.h"
+#include "ash/utility/forest_util.h"
 #include "ash/wm/desks/default_desk_button.h"
 #include "ash/wm/desks/desk.h"
 #include "ash/wm/desks/desk_action_button.h"
@@ -78,7 +79,7 @@
 #include "ash/wm/desks/templates/saved_desk_test_util.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_controller.h"
-#include "ash/wm/overview/overview_focus_cycler.h"
+#include "ash/wm/overview/overview_focus_cycler_old.h"
 #include "ash/wm/overview/overview_focusable_view.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_grid_test_api.h"
@@ -1084,17 +1085,25 @@ TEST_P(DesksTest, WindowStackingAfterWindowMoveToAnotherDesk) {
 
   // The global MRU order should be {win0, win3, win2, win1}.
   auto* mru_tracker = Shell::Get()->mru_window_tracker();
-  EXPECT_EQ(std::vector<vector_experimental_raw_ptr<aura::Window>>(
-                {win0.get(), win3.get(), win2.get(), win1.get()}),
-            mru_tracker->BuildMruWindowList(DesksMruType::kAllDesks));
+  EXPECT_EQ(mru_tracker->BuildMruWindowList(DesksMruType::kAllDesks),
+            aura::WindowTracker::WindowList({
+                win0.get(),
+                win3.get(),
+                win2.get(),
+                win1.get(),
+            }));
 
   // Now move back to desk_2, and move its windows to desk_1. Their window
   // stacking should match their order in the MRU.
   ActivateDesk(desk_2);
   // The global MRU order is updated to be {win3, win0, win2, win1}.
-  EXPECT_EQ(std::vector<vector_experimental_raw_ptr<aura::Window>>(
-                {win3.get(), win0.get(), win2.get(), win1.get()}),
-            mru_tracker->BuildMruWindowList(DesksMruType::kAllDesks));
+  EXPECT_EQ(mru_tracker->BuildMruWindowList(DesksMruType::kAllDesks),
+            aura::WindowTracker::WindowList({
+                win3.get(),
+                win0.get(),
+                win2.get(),
+                win1.get(),
+            }));
 
   // Moving |win2| should be enough to get its transient parent |win1| moved as
   // well.
@@ -1410,9 +1419,12 @@ TEST_P(DesksTest, RemoveInactiveDeskFromOverview) {
   EXPECT_EQ(win0.get(), window_util::GetActiveWindow());
 
   auto* mru_tracker = Shell::Get()->mru_window_tracker();
-  EXPECT_EQ(std::vector<vector_experimental_raw_ptr<aura::Window>>(
-                {win0.get(), win2.get(), win1.get()}),
-            mru_tracker->BuildMruWindowList(DesksMruType::kActiveDesk));
+  EXPECT_EQ(mru_tracker->BuildMruWindowList(DesksMruType::kActiveDesk),
+            aura::WindowTracker::WindowList({
+                win0.get(),
+                win2.get(),
+                win1.get(),
+            }));
 
   // Active desk_4 and enter overview mode, and add a single window.
   Desk* desk_4 = controller->GetDeskAtIndex(3);
@@ -1486,13 +1498,21 @@ TEST_P(DesksTest, RemoveInactiveDeskFromOverview) {
 
   // Verify that the stacking order is correct (top-most comes last, and
   // top-most is the same as MRU).
-  EXPECT_EQ(std::vector<vector_experimental_raw_ptr<aura::Window>>(
-                {win3.get(), win0.get(), win2.get(), win1.get()}),
-            mru_tracker->BuildMruWindowList(DesksMruType::kActiveDesk));
-  EXPECT_EQ(std::vector<vector_experimental_raw_ptr<aura::Window>>(
-                {win1.get(), win2.get(), win0.get(), win3.get()}),
-            desk_4->GetDeskContainerForRoot(Shell::GetPrimaryRootWindow())
-                ->children());
+  EXPECT_EQ(mru_tracker->BuildMruWindowList(DesksMruType::kActiveDesk),
+            aura::WindowTracker::WindowList({
+                win3.get(),
+                win0.get(),
+                win2.get(),
+                win1.get(),
+            }));
+  EXPECT_EQ(desk_4->GetDeskContainerForRoot(Shell::GetPrimaryRootWindow())
+                ->children(),
+            aura::WindowTracker::WindowList({
+                win1.get(),
+                win2.get(),
+                win0.get(),
+                win3.get(),
+            }));
 }
 
 TEST_P(DesksTest, RemoveActiveDeskFromOverview) {
@@ -1519,9 +1539,13 @@ TEST_P(DesksTest, RemoveActiveDeskFromOverview) {
 
   // The MRU across all desks is now {win2, win3, win0, win1}.
   auto* mru_tracker = Shell::Get()->mru_window_tracker();
-  EXPECT_EQ(std::vector<vector_experimental_raw_ptr<aura::Window>>(
-                {win2.get(), win3.get(), win0.get(), win1.get()}),
-            mru_tracker->BuildMruWindowList(DesksMruType::kAllDesks));
+  EXPECT_EQ(mru_tracker->BuildMruWindowList(DesksMruType::kAllDesks),
+            aura::WindowTracker::WindowList({
+                win2.get(),
+                win3.get(),
+                win0.get(),
+                win1.get(),
+            }));
 
   // Enter overview mode, and remove desk_2 from its mini-view close button.
   auto* overview_controller = OverviewController::Get();
@@ -1570,9 +1594,13 @@ TEST_P(DesksTest, RemoveActiveDeskFromOverview) {
   EXPECT_TRUE(overview_grid->GetOverviewItemContaining(win3.get()));
 
   // The new MRU order is {win0, win1, win2, win3}.
-  EXPECT_EQ(std::vector<vector_experimental_raw_ptr<aura::Window>>(
-                {win0.get(), win1.get(), win2.get(), win3.get()}),
-            mru_tracker->BuildMruWindowList(DesksMruType::kActiveDesk));
+  EXPECT_EQ(mru_tracker->BuildMruWindowList(DesksMruType::kActiveDesk),
+            aura::WindowTracker::WindowList({
+                win0.get(),
+                win1.get(),
+                win2.get(),
+                win3.get(),
+            }));
   EXPECT_EQ(overview_grid->GetOverviewItemContaining(win0.get()),
             overview_grid->window_list()[0].get());
   EXPECT_EQ(overview_grid->GetOverviewItemContaining(win1.get()),
@@ -3501,6 +3529,9 @@ TEST_P(
   auto* desks_controller = DesksController::Get();
   NewDesk();
   ASSERT_EQ(2u, desks_controller->desks().size());
+
+  // Create one window for snapping, and two windows whose minimum size is too
+  // big for half snap.
   const gfx::Rect work_area =
       screen_util::GetDisplayWorkAreaBoundsInScreenForActiveDeskContainer(
           Shell::GetPrimaryRootWindow());
@@ -3515,8 +3546,8 @@ TEST_P(
   win3_delegate.set_minimum_size(big);
   std::unique_ptr<aura::Window> win3(CreateTestWindowInShellWithDelegate(
       &win3_delegate, /*id=*/-1, gfx::Rect(big)));
-  OverviewController* overview_controller = OverviewController::Get();
-  EXPECT_TRUE(EnterOverview());
+
+  ASSERT_TRUE(EnterOverview());
   split_view_controller()->SnapWindow(win1.get(), SnapPosition::kPrimary);
   EXPECT_EQ(win1.get(), split_view_controller()->primary_window());
   EXPECT_FALSE(split_view_controller()->CanSnapWindow(
@@ -3524,42 +3555,24 @@ TEST_P(
   EXPECT_FALSE(split_view_controller()->CanSnapWindow(
       win3.get(), chromeos::kDefaultSnapRatio));
 
-  // Switch to |desk_2| using its |mini_view|. Split view and overview should
-  // end, but |win1| should retain its snapped state.
-  ASSERT_TRUE(overview_controller->InOverviewSession());
-  auto* overview_grid = GetOverviewGridForRoot(Shell::GetPrimaryRootWindow());
-  auto* desks_bar_view = overview_grid->desks_bar_view();
-  auto* mini_view = desks_bar_view->mini_views()[1].get();
-  Desk* desk_2 = desks_controller->GetDeskAtIndex(1);
-  EXPECT_EQ(desk_2, mini_view->desk());
-  {
-    DeskSwitchAnimationWaiter waiter;
-    ClickOnView(mini_view, GetEventGenerator());
-    waiter.Wait();
-  }
+  // Use `Search + ]` to switch to `desk2`. Split view should end, but `win1`
+  // should retain its snapped state.
+  PressAndReleaseKey(ui::VKEY_OEM_6, ui::EF_COMMAND_DOWN);
+  DeskSwitchAnimationWaiter().Wait();
   EXPECT_TRUE(WindowState::Get(win1.get())->IsSnapped());
   EXPECT_EQ(SplitViewController::State::kNoSnap,
             split_view_controller()->state());
-  EXPECT_FALSE(overview_controller->InOverviewSession());
 
-  // Switch back to |desk_1| and verify that split view is arranged as before.
-  EXPECT_TRUE(EnterOverview());
-  ASSERT_TRUE(overview_controller->InOverviewSession());
-  overview_grid = GetOverviewGridForRoot(Shell::GetPrimaryRootWindow());
-  desks_bar_view = overview_grid->desks_bar_view();
-  mini_view = desks_bar_view->mini_views()[0];
-  Desk* desk_1 = desks_controller->GetDeskAtIndex(0);
-  EXPECT_EQ(desk_1, mini_view->desk());
-  {
-    DeskSwitchAnimationWaiter waiter;
-    ClickOnView(mini_view, GetEventGenerator());
-    waiter.Wait();
-  }
+  // Use `Search + [` to switch back to `desk_1` and verify that split view is
+  // arranged as before.
+  ASSERT_TRUE(OverviewController::Get()->InOverviewSession());
+  PressAndReleaseKey(ui::VKEY_OEM_4, ui::EF_COMMAND_DOWN);
+  DeskSwitchAnimationWaiter().Wait();
+
   EXPECT_TRUE(WindowState::Get(win1.get())->IsSnapped());
   EXPECT_EQ(SplitViewController::State::kPrimarySnapped,
             split_view_controller()->state());
   EXPECT_EQ(win1.get(), split_view_controller()->primary_window());
-  EXPECT_TRUE(overview_controller->InOverviewSession());
 }
 
 TEST_P(TabletModeDesksTest, OverviewStateOnSwitchToDeskWithSplitView) {
@@ -5131,9 +5144,11 @@ TEST_F(DesksMultiUserTest, RemoveDesks) {
   EXPECT_TRUE(win0->IsVisible());
   ActivateDesk(desk_2);
   auto win1 = CreateAppWindow(gfx::Rect(50, 50, 200, 200));
-  auto win2 = CreateAppWindow(gfx::Rect(50, 50, 200, 200), AppType::ARC_APP);
+  auto win2 =
+      CreateAppWindow(gfx::Rect(50, 50, 200, 200), chromeos::AppType::ARC_APP);
   // Non-app window.
-  auto win3 = CreateAppWindow(gfx::Rect(50, 50, 200, 200), AppType::NON_APP);
+  auto win3 =
+      CreateAppWindow(gfx::Rect(50, 50, 200, 200), chromeos::AppType::NON_APP);
   multi_user_window_manager()->SetWindowOwner(win2.get(), GetUser1AccountId());
   multi_user_window_manager()->SetWindowOwner(win1.get(), GetUser1AccountId());
   multi_user_window_manager()->SetWindowOwner(win3.get(), GetUser1AccountId());
@@ -7364,7 +7379,7 @@ TEST_P(DesksTest, ReorderDesksByKeyboard) {
   EXPECT_THAT(GetDeskRestoreNames(prefs), ElementsAre("0", "1", "2"));
 
   // Focus the second desk.
-  overview_controller->overview_session()->focus_cycler()->MoveFocusToView(
+  overview_controller->overview_session()->focus_cycler_old()->MoveFocusToView(
       mini_view_1->desk_preview());
 
   // Swap the positions of the second desk and the third desk by pressing Ctrl +
@@ -7485,7 +7500,7 @@ TEST_P(DesksTest, ReorderDesksInRTLMode) {
   event_generator->ReleaseTouch();
 
   // Swap the positions of `desk_0` and `desk_2` by keyboard. Focus `desk_0`.
-  overview_controller->overview_session()->focus_cycler()->MoveFocusToView(
+  overview_controller->overview_session()->focus_cycler_old()->MoveFocusToView(
       mini_view_0->desk_preview());
 
   // Swap the positions of the |desk_0| and the |desk_2| by pressing Ctrl + ->.
@@ -8611,7 +8626,7 @@ TEST_P(DesksCloseAllTest, ShortcutCloseAll) {
   SendKey(ui::VKEY_TAB);
   SendKey(ui::VKEY_TAB);
   ASSERT_EQ(mini_view->desk_preview(),
-            overview_session->focus_cycler()->focused_view());
+            overview_session->focus_cycler_old()->focused_view());
 
   // Tests that after hitting Ctrl + Shift + W, the desk is destroyed along with
   // all it's app windows.
@@ -8681,9 +8696,9 @@ TEST_P(DesksCloseAllTest, CloseActiveDeskCloseWindows) {
 TEST_P(DesksCloseAllTest, ForceCloseWindows) {
   WindowHolder window1(CreateAppWindow());
 
-  WindowHolder window2(CreateAppWindow(gfx::Rect(), AppType::SYSTEM_APP,
-                                       ShellWindowId::kShellWindowId_Invalid,
-                                       new StuckWidgetDelegate()));
+  WindowHolder window2(CreateAppWindow(
+      gfx::Rect(), chromeos::AppType::SYSTEM_APP,
+      ShellWindowId::kShellWindowId_Invalid, new StuckWidgetDelegate()));
 
   NewDesk();
   auto* controller = DesksController::Get();
@@ -9088,9 +9103,9 @@ TEST_P(DesksCloseAllTest, CanAddLastDeskWhileUndoToastIsBeingDisplayed) {
 // Tests that windows in CloseAll will not be unparented while they are closing
 // asynchronously.
 TEST_P(DesksCloseAllTest, ClosingWindowsHaveParent) {
-  WindowHolder window(CreateAppWindow(gfx::Rect(), AppType::SYSTEM_APP,
-                                      ShellWindowId::kShellWindowId_Invalid,
-                                      new StuckWidgetDelegate()));
+  WindowHolder window(CreateAppWindow(
+      gfx::Rect(), chromeos::AppType::SYSTEM_APP,
+      ShellWindowId::kShellWindowId_Invalid, new StuckWidgetDelegate()));
 
   NewDesk();
   auto* controller = DesksController::Get();
@@ -9595,6 +9610,9 @@ struct DeskBarTestBasicCase {
 TEST_P(DeskBarTest, Basic) {
   UpdateDisplay("800x600");
 
+  const int expected_expanded_overview_height =
+      IsForestFeatureEnabled() ? 114 : 98;
+
   const DeskBarTestBasicCase tests[] = {
       {.test_name = "single desk + bottom shelf + saved desks",
        .desks = {0},
@@ -9639,8 +9657,10 @@ TEST_P(DeskBarTest, Basic) {
        .has_saved_desks = true,
        .desk_button_bar_widget_bounds = {221, 446, 358, 98},
        .desk_button_bar_view_bounds = {0, 0, 358, 98},
-       .overview_bar_widget_bounds = {0, 0, 800, 98},
-       .overview_bar_view_bounds = {0, 0, 800, 98}},
+       .overview_bar_widget_bounds = {0, 0, 800,
+                                      expected_expanded_overview_height},
+       .overview_bar_view_bounds = {0, 0, 800,
+                                    expected_expanded_overview_height}},
   };
 
   auto* desks_controller = DesksController::Get();
@@ -9724,10 +9744,14 @@ TEST_P(DeskBarTest, BasicSecondaryDisplay) {
   auto* desk_bar_widget = desk_bar_view->GetWidget();
   ASSERT_TRUE(desk_bar_widget);
 
+  const int expected_expanded_overview_height =
+      IsForestFeatureEnabled() ? 114 : 98;
+
   if (bar_type_ == DeskBarViewBase::Type::kOverview) {
     EXPECT_THAT(desk_bar_widget->GetWindowBoundsInScreen(),
-                gfx::Rect(800, 0, 800, 98));
-    EXPECT_THAT(desk_bar_view->bounds(), gfx::Rect(0, 0, 800, 98));
+                gfx::Rect(800, 0, 800, expected_expanded_overview_height));
+    EXPECT_THAT(desk_bar_view->bounds(),
+                gfx::Rect(0, 0, 800, expected_expanded_overview_height));
     EXPECT_FALSE(desk_bar_view->IsZeroState());
   } else {
     EXPECT_THAT(desk_bar_widget->GetWindowBoundsInScreen(),
@@ -10850,7 +10874,7 @@ TEST_P(DeskBarTest, CanUndoDeskClosureThroughKeyboardNavigation) {
         ASSERT_EQ(mini_views[0]->desk_preview(), Shell::Get()
                                                      ->overview_controller()
                                                      ->overview_session()
-                                                     ->focus_cycler()
+                                                     ->focus_cycler_old()
                                                      ->focused_view());
       }
 
@@ -10867,7 +10891,7 @@ TEST_P(DeskBarTest, CanUndoDeskClosureThroughKeyboardNavigation) {
         ASSERT_EQ(mini_views[0]->desk_preview(), Shell::Get()
                                                      ->overview_controller()
                                                      ->overview_session()
-                                                     ->focus_cycler()
+                                                     ->focus_cycler_old()
                                                      ->focused_view());
       }
 
@@ -10934,6 +10958,30 @@ TEST_P(DeskBarTest, DeskProfilesUsageMetrics) {
                                        DeskProfilesUsageStatus::kEnabled, 1);
     CloseDeskBar();
   }
+}
+
+TEST_P(DeskBarTest, DeskActionButtonTooltipForNewDesk) {
+  OpenDeskBar();
+
+  // Click the new desk button and verify the desk action buttons' tooltip.
+  auto* desk_bar_view = GetDeskBarView();
+  ClickOrPressOnView(desk_bar_view->new_desk_button());
+  auto* desk_action_view = desk_bar_view->mini_views()[1]->desk_action_view();
+  EXPECT_THAT(desk_action_view->combine_desks_button()->GetTooltipText(),
+              u"Combine with Desk 1");
+  EXPECT_THAT(desk_action_view->close_all_button()->GetTooltipText(),
+              u"Close Desk 2 and windows");
+
+  // Rename desk 2 to `D2` and verify the desk action buttons' tooltip.
+  SendKey(ui::VKEY_D, ui::EF_SHIFT_DOWN);
+  SendKey(ui::VKEY_2);
+  SendKey(ui::VKEY_RETURN);
+  EXPECT_THAT(desk_action_view->combine_desks_button()->GetTooltipText(),
+              u"Combine with Desk 1");
+  EXPECT_THAT(desk_action_view->close_all_button()->GetTooltipText(),
+              u"Close D2 and windows");
+
+  CloseDeskBar();
 }
 
 struct DeskButtonTestParams {
@@ -11201,7 +11249,7 @@ TEST_P(DeskButtonTest, OverviewDeskSwitch) {
 }
 
 // Tests that switching the shelf alignment correctly repositions the desk
-// button.
+// button and updates their colors.
 TEST_P(DeskButtonTest, UpdateShelfAlignmentDuringTest) {
   // Desk button will be forced to be zero state for display that is narrower
   // than 1280.
@@ -11214,11 +11262,33 @@ TEST_P(DeskButtonTest, UpdateShelfAlignmentDuringTest) {
   const bool bottom_at_start = GetParam().alignment == ShelfAlignment::kBottom;
   auto* desk_button = GetDeskButton();
   ASSERT_TRUE(desk_button);
+  // Verify desk names and color changes.
   ASSERT_EQ(bottom_at_start ? u"school" : u"s",
             desk_button->desk_name_label()->GetText());
+  auto* color_provider = desk_button->GetColorProvider();
+  ASSERT_EQ(color_provider->GetColor(bottom_at_start
+                                         ? cros_tokens::kCrosSysSystemOnBase1
+                                         : cros_tokens::kCrosSysSystemOnBase),
+            desk_button->GetBackground()->get_color());
 
+  // Activate/Deactivate the desk button and verify color changes.
+  ClickDeskButton();
+  ASSERT_EQ(
+      color_provider->GetColor(cros_tokens::kCrosSysSystemPrimaryContainer),
+      desk_button->GetBackground()->get_color());
+  ClickDeskButton();
+  ASSERT_EQ(color_provider->GetColor(bottom_at_start
+                                         ? cros_tokens::kCrosSysSystemOnBase1
+                                         : cros_tokens::kCrosSysSystemOnBase),
+            desk_button->GetBackground()->get_color());
+
+  // Update shelf alignment and verify desk names and color changes.
   GetPrimaryShelf()->SetAlignment(bottom_at_start ? ShelfAlignment::kLeft
                                                   : ShelfAlignment::kBottom);
+  ASSERT_EQ(color_provider->GetColor(bottom_at_start
+                                         ? cros_tokens::kCrosSysSystemOnBase
+                                         : cros_tokens::kCrosSysSystemOnBase1),
+            desk_button->GetBackground()->get_color());
   EXPECT_EQ(bottom_at_start ? u"s" : u"school",
             desk_button->desk_name_label()->GetText());
 }
@@ -11277,7 +11347,7 @@ TEST_P(DeskButtonTest, ValidateDeskButtonPosition) {
     if (GetParam().alignment == ShelfAlignment::kBottom) {
       EXPECT_TRUE(gfx::Rect(4, 4, 128, 28).Contains(desk_button->bounds()));
       EXPECT_TRUE(
-          gfx::Rect(12, 0, 104, 28).Contains(desk_name_label->bounds()));
+          gfx::Rect(10, 0, 102, 28).Contains(desk_name_label->bounds()));
     } else {
       EXPECT_EQ(desk_button->bounds(), gfx::Rect(0, 0, 36, 36));
       EXPECT_EQ(desk_name_label->bounds(), gfx::Rect(4, 4, 28, 28));

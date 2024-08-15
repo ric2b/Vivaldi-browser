@@ -46,6 +46,7 @@ bool AreCredentialsEligibleForFilling(
 
 FillData::FillData() = default;
 FillData::~FillData() = default;
+FillData::FillData(const FillData& other) = default;
 
 FormInfo::FormInfo() = default;
 FormInfo::~FormInfo() = default;
@@ -141,7 +142,7 @@ std::vector<UsernameAndRealm> AccountSelectFillData::RetrieveSuggestions(
 std::unique_ptr<FillData> AccountSelectFillData::GetFillData(
     const std::u16string& username) const {
   if (!last_requested_form_) {
-    NOTREACHED();
+    DUMP_WILL_BE_NOTREACHED_NORETURN();
     return nullptr;
   }
 

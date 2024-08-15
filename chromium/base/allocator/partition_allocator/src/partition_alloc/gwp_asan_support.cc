@@ -4,9 +4,9 @@
 
 #include "partition_alloc/gwp_asan_support.h"
 
-#if BUILDFLAG(ENABLE_GWP_ASAN_SUPPORT)
+#if PA_BUILDFLAG(ENABLE_GWP_ASAN_SUPPORT)
 
-#include "build/build_config.h"
+#include "partition_alloc/build_config.h"
 #include "partition_alloc/freeslot_bitmap_constants.h"
 #include "partition_alloc/in_slot_metadata.h"
 #include "partition_alloc/page_allocator_constants.h"
@@ -129,4 +129,4 @@ bool GwpAsanSupport::CanReuse(uintptr_t slot_start) {
 
 }  // namespace partition_alloc
 
-#endif  // BUILDFLAG(ENABLE_GWP_ASAN_SUPPORT)
+#endif  // PA_BUILDFLAG(ENABLE_GWP_ASAN_SUPPORT)

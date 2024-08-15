@@ -4,10 +4,14 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "core/fxge/win32/cfx_psrenderer.h"
 
 #include <math.h>
-#include <string.h>
 
 #include <algorithm>
 #include <array>
@@ -18,11 +22,13 @@
 #include "core/fxcrt/bytestring.h"
 #include "core/fxcrt/check_op.h"
 #include "core/fxcrt/fx_extension.h"
+#include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_memory.h"
 #include "core/fxcrt/fx_memory_wrappers.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/fx_stream.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/span_util.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
 #include "core/fxge/cfx_font.h"
@@ -275,15 +281,15 @@ void CFX_PSRenderer::EndRendering() {
   std::streamoff preamble_pos = m_PreambleOutput.tellp();
   if (preamble_pos > 0) {
     m_pStream->WriteBlock(
-        {reinterpret_cast<const uint8_t*>(m_PreambleOutput.str().c_str()),
-         pdfium::checked_cast<size_t>(preamble_pos)});
+        pdfium::as_byte_span(m_PreambleOutput.str())
+            .first(pdfium::checked_cast<size_t>(preamble_pos)));
     m_PreambleOutput.str("");
   }
 
   // Flush `m_Output`. It's never empty because of the WriteString() call above.
-  m_pStream->WriteBlock(
-      {reinterpret_cast<const uint8_t*>(m_Output.str().c_str()),
-       pdfium::checked_cast<size_t>(std::streamoff(m_Output.tellp()))});
+  m_pStream->WriteBlock(pdfium::as_byte_span(m_Output.str())
+                            .first(pdfium::checked_cast<size_t>(
+                                std::streamoff(m_Output.tellp()))));
   m_Output.str("");
 }
 
@@ -598,10 +604,12 @@ bool CFX_PSRenderer::DrawDIBits(RetainPtr<const CFX_DIBBase> bitmap,
             src_scan += 3;
           }
         } else {
-          memcpy(dest_scan, src_scan, src_pitch);
+          FXSYS_memcpy(dest_scan, src_scan, src_pitch);
         }
       }
-      compress_result = PSCompressData({output_buf, output_size});
+      // SAFETY: `output_size` passed to FX_Alloc() of `output_buf`.
+      compress_result = PSCompressData(
+          UNSAFE_BUFFERS(pdfium::make_span(output_buf, output_size)));
       if (compress_result.has_value()) {
         FX_Free(output_buf);
         output_buf_is_owned = false;
@@ -620,7 +628,8 @@ bool CFX_PSRenderer::DrawDIBits(RetainPtr<const CFX_DIBBase> bitmap,
     buf << " colorimage\n";
     WriteStream(buf);
 
-    WritePSBinary({output_buf, output_size});
+    // SAFETY: `output_size` passed to FX_Alloc() of `output_buf`.
+    WritePSBinary(UNSAFE_BUFFERS(pdfium::make_span(output_buf, output_size)));
     if (output_buf_is_owned)
       FX_Free(output_buf);
   }

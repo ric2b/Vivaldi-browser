@@ -27,7 +27,7 @@ class MockPasswordFormManagerForUI : public PasswordFormManagerForUI {
               GetBestMatches,
               (),
               (const override));
-  MOCK_METHOD(std::vector<vector_experimental_raw_ptr<const PasswordForm>>,
+  MOCK_METHOD((std::vector<raw_ptr<const PasswordForm, VectorExperimental>>),
               GetFederatedMatches,
               (),
               (const override));
@@ -41,14 +41,13 @@ class MockPasswordFormManagerForUI : public PasswordFormManagerForUI {
               GetInteractionsStats,
               (),
               (const override));
-  MOCK_METHOD(std::vector<vector_experimental_raw_ptr<const PasswordForm>>,
+  MOCK_METHOD((std::vector<raw_ptr<const PasswordForm, VectorExperimental>>),
               GetInsecureCredentials,
               (),
               (const override));
   MOCK_METHOD(bool, IsBlocklisted, (), (const override));
   MOCK_METHOD(bool, IsMovableToAccountStore, (), (const override));
   MOCK_METHOD(void, Save, (), (override));
-  MOCK_METHOD(void, Update, (const PasswordForm&), (override));
   MOCK_METHOD(bool,
               IsUpdateAffectingPasswordsStoredInTheGoogleAccount,
               (),
@@ -68,6 +67,10 @@ class MockPasswordFormManagerForUI : public PasswordFormManagerForUI {
   MOCK_METHOD(void, OnPasswordsRevealed, (), (override));
   MOCK_METHOD(void, MoveCredentialsToAccountStore, (), (override));
   MOCK_METHOD(void, BlockMovingCredentialsToAccountStore, (), (override));
+  MOCK_METHOD(PasswordForm::Store,
+              GetPasswordStoreForSaving,
+              (const PasswordForm& password_form),
+              (const override));
 };
 
 }  // namespace password_manager

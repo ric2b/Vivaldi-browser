@@ -4,10 +4,12 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#include "core/fxge/dib/cfx_dibbase.h"
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
 
-#include <stdint.h>
-#include <string.h>
+#include "core/fxge/dib/cfx_dibbase.h"
 
 #include <algorithm>
 #include <utility>
@@ -18,6 +20,7 @@
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_2d_size.h"
 #include "core/fxcrt/fx_coordinates.h"
+#include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_memory.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/notreached.h"
@@ -353,7 +356,7 @@ void ConvertBuffer_1bppMask2Rgb(FXDIB_Format dest_format,
     for (int col = src_left; col < src_left + width; ++col) {
       uint8_t value =
           (src_scan[col / 8] & (1 << (7 - col % 8))) ? kSetGray : kResetGray;
-      memset(dest_scan, value, 3);
+      FXSYS_memset(dest_scan, value, 3);
       dest_scan += comps;
     }
   }
@@ -374,7 +377,7 @@ void ConvertBuffer_8bppMask2Rgb(FXDIB_Format dest_format,
     const uint8_t* src_scan =
         pSrcBitmap->GetScanline(src_top + row).subspan(src_left).data();
     for (int col = 0; col < width; ++col) {
-      memset(dest_scan, *src_scan, 3);
+      FXSYS_memset(dest_scan, *src_scan, 3);
       dest_scan += comps;
       ++src_scan;
     }
@@ -401,7 +404,7 @@ void ConvertBuffer_1bppPlt2Rgb(FXDIB_Format dest_format,
     const uint8_t* src_scan = pSrcBitmap->GetScanline(src_top + row).data();
     for (int col = src_left; col < src_left + width; ++col) {
       size_t offset = (src_scan[col / 8] & (1 << (7 - col % 8))) ? 3 : 0;
-      memcpy(dest_scan, dst_palette + offset, 3);
+      FXSYS_memcpy(dest_scan, dst_palette + offset, 3);
       dest_scan += comps;
     }
   }
@@ -430,7 +433,7 @@ void ConvertBuffer_8bppPlt2Rgb(FXDIB_Format dest_format,
         pSrcBitmap->GetScanline(src_top + row).subspan(src_left).data();
     for (int col = 0; col < width; ++col) {
       uint8_t* src_pixel = dst_palette + 3 * (*src_scan++);
-      memcpy(dest_scan, src_pixel, 3);
+      FXSYS_memcpy(dest_scan, src_pixel, 3);
       dest_scan += comps;
     }
   }
@@ -468,7 +471,7 @@ void ConvertBuffer_32bppRgb2Rgb24(
     const uint8_t* src_scan =
         pSrcBitmap->GetScanline(src_top + row).subspan(x_offset).data();
     for (int col = 0; col < width; ++col) {
-      memcpy(dest_scan, src_scan, 3);
+      FXSYS_memcpy(dest_scan, src_scan, 3);
       dest_scan += 3;
       src_scan += 4;
     }
@@ -490,7 +493,7 @@ void ConvertBuffer_Rgb2Rgb32(pdfium::span<uint8_t> dest_buf,
     const uint8_t* src_scan =
         pSrcBitmap->GetScanline(src_top + row).subspan(x_offset).data();
     for (int col = 0; col < width; ++col) {
-      memcpy(dest_scan, src_scan, 3);
+      FXSYS_memcpy(dest_scan, src_scan, 3);
       dest_scan += 4;
       src_scan += comps;
     }
@@ -691,7 +694,7 @@ RetainPtr<CFX_DIBitmap> CFX_DIBBase::ClipToInternal(
           GetScanline(row).subspan(offset.ValueOrDie()).data();
       uint8_t* dest_scan =
           pNewBitmap->GetWritableScanline(row - rect.top).data();
-      memcpy(dest_scan, src_scan, copy_len.value());
+      FXSYS_memcpy(dest_scan, src_scan, copy_len.value());
     }
   }
   return pNewBitmap;
@@ -897,11 +900,11 @@ RetainPtr<CFX_DIBitmap> CFX_DIBBase::FlipImage(bool bXFlip, bool bYFlip) const {
     uint8_t* dest_scan =
         pFlipped->GetWritableScanline(bYFlip ? m_Height - row - 1 : row).data();
     if (!bXFlip) {
-      memcpy(dest_scan, src_scan, m_Pitch);
+      FXSYS_memcpy(dest_scan, src_scan, m_Pitch);
       continue;
     }
     if (GetBppFromFormat(m_Format) == 1) {
-      memset(dest_scan, 0, m_Pitch);
+      FXSYS_memset(dest_scan, 0, m_Pitch);
       for (int col = 0; col < m_Width; ++col) {
         if (src_scan[col / 8] & (1 << (7 - col % 8))) {
           int dest_col = m_Width - col - 1;
@@ -920,7 +923,7 @@ RetainPtr<CFX_DIBitmap> CFX_DIBBase::FlipImage(bool bXFlip, bool bYFlip) const {
       }
     } else if (Bpp == 3) {
       for (int col = 0; col < m_Width; ++col) {
-        memcpy(dest_scan, src_scan, 3);
+        FXSYS_memcpy(dest_scan, src_scan, 3);
         dest_scan -= 3;
         src_scan += 3;
       }
@@ -1031,7 +1034,7 @@ RetainPtr<CFX_DIBitmap> CFX_DIBBase::SwapXY(bool bXFlip, bool bYFlip) const {
           }
         } else {
           for (int col = col_start; col < col_end; ++col) {
-            memcpy(dest_scan, src_scan, 3);
+            FXSYS_memcpy(dest_scan, src_scan, 3);
             dest_scan += 2 + dest_step;
             src_scan += 3;
           }

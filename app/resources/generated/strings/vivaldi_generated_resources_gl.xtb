@@ -89,7 +89,6 @@
 <translation id="2678063897982469759">Activar de novo</translation>
 <translation id="2721037002783622288">&amp;Buscar <ph name="SEARCH_ENGINE" /> por imaxe</translation>
 <translation id="2785873697295365461">Descritores do ficheiro</translation>
-<translation id="2809586584051668049">e <ph name="NUMBER_ADDITIONAL_DISABLED" /> máis</translation>
 <translation id="2850541429955027218">Engadir tema</translation>
 <translation id="2861941300086904918">Administrador de seguranza do cliente nativo</translation>
 <translation id="2881076733170862447">Cando premas na extensión</translation>
@@ -117,7 +116,6 @@
 <translation id="3275778913554317645">Abrir como unha xanela</translation>
 <translation id="3280237271814976245">G&amp;ardar como...</translation>
 <translation id="3285322247471302225">Nova &amp;lapela</translation>
-<translation id="3288047731229977326">As extensións que se executan no modo desenvolvedor poden danar o teu equipo. Se non es desenvolvedor, debes desactivar esas extensións para manterte protexido.</translation>
 <translation id="329838636886466101">Reparar</translation>
 <translation id="33022249435934718">GDI administra</translation>
 <translation id="3303818374450886607">Copias</translation>
@@ -163,7 +161,6 @@
 <translation id="4087089424473531098">Creada a extensión:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Desactivar extensións no modo desenvolvedor</translation>
 <translation id="4100839878934973028">Outro programa do teu equipo engadiu un aplicativo que pode cambiar o funcionamiento de Vivaldi.</translation>
 <translation id="4109898769411476438">Pechar navegador antes de importar</translation>
 <translation id="4131410914670010031">Negro e branco</translation>
@@ -216,7 +213,6 @@
 <translation id="5269977353971873915">Fallou a impresión</translation>
 <translation id="5284445933715251131">Continuar descargando</translation>
 <translation id="52912272896845572">O ficheiro de chave privada non é correcto.</translation>
-<translation id="5301954838959518834">Entendido</translation>
 <translation id="5317780077021120954">Gardar</translation>
 <translation id="5334142896108694079">Caché de secuencia de comandos</translation>
 <translation id="5360150013186312835">Amosar na barra de ferramentas</translation>

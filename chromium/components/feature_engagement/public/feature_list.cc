@@ -26,6 +26,7 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHAutoDarkOptOutFeature,
     &kIPHAutoDarkUserEducationMessageFeature,
     &kIPHAutoDarkUserEducationMessageOptInFeature,
+    &kIPHAppSpecificHistory,
     &kIPHCCTHistory,
     &kIPHCCTMinimized,
     &kIPHDataSaverDetailFeature,
@@ -62,7 +63,6 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHPageZoomFeature,
     &kIPHPreviewsOmniboxUIFeature,
     &kIPHPriceDropNTPFeature,
-    &kIPHPwaInstallAvailableFeature,
     &kIPHQuietNotificationPromptsFeature,
     &kIPHReadAloudAppMenuFeature,
     &kIPHReadLaterContextMenuFeature,
@@ -122,7 +122,6 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHiOSPromoWhatsNewFeature,
     &kIPHiOSPromoPostRestoreFeature,
     &kIPHiOSPromoCredentialProviderExtensionFeature,
-    &kIPHiOSPromoDefaultBrowserFeature,
     &kIPHiOSPromoDefaultBrowserReminderFeature,
     &kIPHiOSPromoOmniboxPositionFeature,
     &kIPHiOSNewTabToolbarItemFeature,
@@ -145,20 +144,25 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHiOSPostDefaultAbandonmentPromoFeature,
     &kIPHiOSPromoGenericDefaultBrowserFeature,
     &kIPHiOSOverflowMenuCustomizationFeature,
+    &kIPHiOSPageInfoRevampFeature,
+    &kIPHiOSInlineEnhancedSafeBrowsingPromoFeature,
 #endif  // BUILDFLAG(IS_IOS)
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
+    &kEsbDownloadRowPromoFeature,
     &kIPHBatterySaverModeFeature,
     &kIPHCompanionSidePanelFeature,
     &kIPHCompanionSidePanelRegionSearchFeature,
     &kIPHComposeMSBBSettingsFeature,
     &kIPHComposeNewBadgeFeature,
-    &kIPHDeepScanPromptRemovalFeature,
     &kIPHDesktopCustomizeChromeFeature,
     &kIPHDesktopCustomizeChromeRefreshFeature,
     &kIPHDesktopNewTabPageModulesCustomizeFeature,
+    &kIPHDesktopReEngagementFeature,
+    &kIPHDiscardRingFeature,
     &kIPHDownloadEsbPromoFeature,
     &kIPHExperimentalAIPromoFeature,
+    &kIPHExplicitBrowserSigninPreferenceRememberedFeature,
 #if BUILDFLAG(ENABLE_EXTENSIONS)
     &kIPHExtensionsMenuFeature,
     &kIPHExtensionsRequestAccessButtonFeature,
@@ -186,13 +190,16 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHShoppingCollectionFeature,
     &kIPHSidePanelGenericMenuFeature,
     &kIPHSidePanelGenericPinnableFeature,
+    &kIPHSidePanelLensOverlayPinnableFeature,
+    &kIPHSidePanelLensOverlayPinnableFollowupFeature,
     &kIPHSideSearchAutoTriggeringFeature,
-    &kIPHSideSearchFeature,
     &kIPHSideSearchPageActionLabelFeature,
+    &kIPHSignoutWebInterceptFeature,
     &kIPHTabOrganizationSuccessFeature,
     &kIPHTabSearchFeature,
     &kIPHTrackingProtectionOffboardingFeature,
     &kIPHTrackingProtectionOnboardingFeature,
+    &kIPHTrackingProtectionReminderFeature,
     &kIPHWebUITabStripFeature,
     &kIPHDesktopPwaInstallFeature,
     &kIPHProfileSwitchFeature,
@@ -205,17 +212,18 @@ const base::Feature* const kAllFeatures[] = {
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
+    &kIPHAutofillCreditCardBenefitFeature,
     &kIPHAutofillExternalAccountProfileSuggestionFeature,
     &kIPHAutofillManualFallbackFeature,
     &kIPHAutofillVirtualCardCVCSuggestionFeature,
     &kIPHAutofillVirtualCardSuggestionFeature,
     &kIPHCookieControlsFeature,
-    &kIPH3pcdUserBypassFeature,
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID) ||
         // BUILDFLAG(IS_FUCHSIA)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+    &kIPHGrowthFramework,
     &kIPHGoogleOneOfferNotificationFeature,
     &kIPHLauncherSearchHelpUiFeature,
     &kIPHScalableIphTimerBasedOneFeature,

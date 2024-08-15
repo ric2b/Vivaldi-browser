@@ -21,21 +21,20 @@ namespace openscreen::cast {
 
 static constexpr std::chrono::seconds kRequestTimeout = std::chrono::seconds(5);
 
-CastPlatformClient::CastPlatformClient(VirtualConnectionRouter* router,
+CastPlatformClient::CastPlatformClient(VirtualConnectionRouter& router,
                                        ClockNowFunctionPtr clock,
                                        TaskRunner& task_runner)
     : sender_id_(MakeUniqueSessionId("sender")),
       virtual_conn_router_(router),
       clock_(clock),
       task_runner_(task_runner) {
-  OSP_CHECK(virtual_conn_router_);
   OSP_CHECK(clock_);
-  virtual_conn_router_->AddHandlerForLocalId(sender_id_, this);
+  virtual_conn_router_.AddHandlerForLocalId(sender_id_, this);
 }
 
 CastPlatformClient::~CastPlatformClient() {
-  virtual_conn_router_->RemoveConnectionsByLocalId(sender_id_);
-  virtual_conn_router_->RemoveHandlerForLocalId(sender_id_);
+  virtual_conn_router_.RemoveConnectionsByLocalId(sender_id_);
+  virtual_conn_router_.RemoveHandlerForLocalId(sender_id_);
 
   for (auto& pending_requests : pending_requests_by_receiver_id_) {
     for (auto& avail_request : pending_requests.second.availability) {
@@ -71,13 +70,13 @@ std::optional<int> CastPlatformClient::RequestAppAvailability(
       request_id, app_id, std::move(timeout), std::move(callback)});
 
   VirtualConnection virtual_conn{sender_id_, kPlatformReceiverId, socket_id};
-  if (!virtual_conn_router_->GetConnectionData(virtual_conn)) {
-    virtual_conn_router_->AddConnection(virtual_conn,
-                                        VirtualConnection::AssociatedData{});
+  if (!virtual_conn_router_.GetConnectionData(virtual_conn)) {
+    virtual_conn_router_.AddConnection(virtual_conn,
+                                       VirtualConnection::AssociatedData{});
   }
 
-  virtual_conn_router_->Send(std::move(virtual_conn),
-                             std::move(message.value()));
+  virtual_conn_router_.Send(std::move(virtual_conn),
+                            std::move(message.value()));
 
   return request_id;
 }

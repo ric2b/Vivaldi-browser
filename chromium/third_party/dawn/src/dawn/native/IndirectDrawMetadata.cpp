@@ -28,6 +28,8 @@
 #include "dawn/native/IndirectDrawMetadata.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <tuple>
 #include <utility>
 
 #include "dawn/common/Constants.h"
@@ -229,6 +231,10 @@ void IndirectDrawMetadata::AddIndirectDraw(BufferBase* indirectBuffer,
     draw.numIndexBufferElements = 0;
     draw.cmd = cmd;
     it->second.AddIndirectDraw(mMaxDrawCallsPerBatch, mMaxBatchOffsetRange, draw);
+}
+
+void IndirectDrawMetadata::ClearIndexedIndirectBufferValidationInfo() {
+    mIndexedIndirectBufferValidationInfo.clear();
 }
 
 bool IndirectDrawMetadata::IndexedIndirectConfig::operator<(

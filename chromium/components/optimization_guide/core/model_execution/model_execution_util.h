@@ -12,6 +12,8 @@
 #include "components/optimization_guide/core/optimization_guide_prefs.h"
 #include "components/optimization_guide/core/optimization_guide_util.h"
 #include "components/optimization_guide/proto/model_quality_service.pb.h"
+#include "services/on_device_model/public/cpp/model_assets.h"
+#include "services/on_device_model/public/mojom/on_device_model_service.mojom.h"
 
 namespace optimization_guide {
 
@@ -54,13 +56,13 @@ void SetExecutionResponseTemplate(proto::LogAiDataRequest& log_ai_request,
 
 // Helper method matches feature to corresponding FeatureTypeMap to set
 // LogAiDataRequest's request data.
-void SetExecutionRequest(proto::ModelExecutionFeature feature,
+void SetExecutionRequest(ModelBasedCapabilityKey feature,
                          proto::LogAiDataRequest& log_ai_request,
                          const google::protobuf::MessageLite& request_metadata);
 
 // Helper method matches feature to corresponding FeatureTypeMap to set
 // LogAiDataRequest's response data.
-void SetExecutionResponse(proto::ModelExecutionFeature feature,
+void SetExecutionResponse(ModelBasedCapabilityKey feature,
                           proto::LogAiDataRequest& log_ai_request,
                           const proto::Any& response_metadata);
 
@@ -69,6 +71,15 @@ void SetExecutionResponse(proto::ModelExecutionFeature feature,
 prefs::GenAILocalFoundationalModelEnterprisePolicySettings
 GetGenAILocalFoundationalModelEnterprisePolicySettings(
     PrefService* local_state);
+
+// Returns the model adaptation override from the command line. The override can
+// be specified as feature|weigths_path|model_pb_path, where the paths are all
+// absolute. model_pb_path is optional.
+std::optional<on_device_model::AdaptationAssetPaths>
+GetOnDeviceModelAdaptationOverride(proto::ModelExecutionFeature feature);
+
+OnDeviceModelLoadResult ConvertToOnDeviceModelLoadResult(
+    on_device_model::mojom::LoadModelResult result);
 
 }  // namespace optimization_guide
 

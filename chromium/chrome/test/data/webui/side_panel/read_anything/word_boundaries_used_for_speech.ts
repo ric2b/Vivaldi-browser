@@ -1,13 +1,14 @@
 // Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-import 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything_toolbar.js';
+import 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 
 import {BrowserProxy} from '//resources/cr_components/color_change_listener/browser_proxy.js';
 import type {CrIconButtonElement} from '//resources/cr_elements/cr_icon_button/cr_icon_button.js';
-import type {ReadAnythingElement, WordBoundaryState} from 'chrome-untrusted://read-anything-side-panel.top-chrome/app.js';
-import {WordBoundaryMode} from 'chrome-untrusted://read-anything-side-panel.top-chrome/app.js';
-import {assertEquals} from 'chrome-untrusted://webui-test/chai_assert.js';
+import {flush} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import type {ReadAnythingElement, WordBoundaryState} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
+import {WordBoundaryMode} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
+import {assertEquals, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
 
 import {suppressInnocuousErrors} from './common.js';
 import {TestColorUpdaterBrowserProxy} from './test_color_updater_browser_proxy.js';
@@ -70,6 +71,14 @@ suite('WordBoundariesUsedForSpeech', () => {
 
     app = document.createElement('read-anything-app');
     document.body.appendChild(app);
+    // @ts-ignore
+    app.firstUtteranceSpoken = true;
+    // @ts-ignore
+    app.enabledLanguagesInPref = ['en-US'];
+    // @ts-ignore
+    app.selectedVoice = {lang: 'en', name: 'Kristi'} as SpeechSynthesisVoice;
+    app.getSpeechSynthesisVoice();
+    flush();
     playPauseButton =
         app.$.toolbar.shadowRoot!.querySelector<CrIconButtonElement>(
             '#play-pause')!;
@@ -79,7 +88,7 @@ suite('WordBoundariesUsedForSpeech', () => {
   suite('by default', () => {
     test('wordBoundaryState in default state', () => {
       const state: WordBoundaryState = app.wordBoundaryState;
-      assertEquals(state.mode, WordBoundaryMode.NO_BOUNDARIES);
+      assertEquals(state.mode, WordBoundaryMode.BOUNDARIES_NOT_SUPPORTED);
       assertEquals(state.previouslySpokenIndex, 0);
       assertEquals(state.speechUtteranceStartIndex, 0);
     });
@@ -92,7 +101,7 @@ suite('WordBoundariesUsedForSpeech', () => {
 
     test('wordBoundaryState in default state during speech', () => {
       const state: WordBoundaryState = app.wordBoundaryState;
-      assertEquals(state.mode, WordBoundaryMode.NO_BOUNDARIES);
+      assertEquals(state.mode, WordBoundaryMode.BOUNDARIES_NOT_SUPPORTED);
       assertEquals(state.previouslySpokenIndex, 0);
       assertEquals(state.speechUtteranceStartIndex, 0);
     });
@@ -101,7 +110,7 @@ suite('WordBoundariesUsedForSpeech', () => {
   suite('by default', () => {
     test('wordBoundaryState in default state', () => {
       const state: WordBoundaryState = app.wordBoundaryState;
-      assertEquals(state.mode, WordBoundaryMode.NO_BOUNDARIES);
+      assertEquals(state.mode, WordBoundaryMode.BOUNDARIES_NOT_SUPPORTED);
       assertEquals(state.previouslySpokenIndex, 0);
       assertEquals(state.speechUtteranceStartIndex, 0);
     });
@@ -127,6 +136,7 @@ suite('WordBoundariesUsedForSpeech', () => {
           playPauseButton.click();
           const state: WordBoundaryState = app.wordBoundaryState;
           assertEquals(state.mode, WordBoundaryMode.BOUNDARY_DETECTED);
+          assertTrue(app.getSpeechSynthesisVoice() !== undefined);
           assertEquals(state.previouslySpokenIndex, 0);
           assertEquals(state.speechUtteranceStartIndex, 10);
         });
@@ -155,6 +165,14 @@ suite('WordBoundariesUsedForSpeech', () => {
       assertEquals(state.mode, WordBoundaryMode.BOUNDARY_DETECTED);
       assertEquals(state.previouslySpokenIndex, 1);
       assertEquals(state.speechUtteranceStartIndex, 20);
+    });
+
+    test('sentence highlight used without flag', () => {
+      app.playSpeech();
+      const currentHighlight =
+          app.$.container.querySelector('.current-read-highlight');
+      assertTrue(currentHighlight !== undefined);
+      assertEquals(currentHighlight!.textContent, 'This is a link.');
     });
   });
 

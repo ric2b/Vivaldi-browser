@@ -37,7 +37,7 @@
 
 namespace content {
 class BrowserAccessibilityManager;
-
+class DumpAccessibilityTestBase;
 // A `BrowserAccessibility` object represents one node in the accessibility tree
 // on the browser side. It wraps an `AXNode` and assists in exposing
 // web-specific information from the node. It's owned by a
@@ -475,6 +475,10 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // starting point for tree dumps.
   friend class AccessibilityTreeFormatterUia;
 
+  // DumpAccessibilityTestBase needs to be able to set
+  // ignore_hovered_state_for_testing_ to avoid flaky tests.
+  friend class DumpAccessibilityTestBase;
+
  private:
   // Return the bounds after converting from this node's coordinate system
   // (which is relative to its nearest scrollable ancestor) to the coordinate
@@ -531,11 +535,19 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // attribute originating from ARIA.
   static bool HasInvalidAttribute(const ui::TextAttributeList& attributes);
 
+  // Disable hover state - needed just to avoid flaky tests.
+  // Accessibility objects can have the "hot tracked" state set when
+  // the mouse is hovering over them, but this makes tests flaky because
+  // the test behaves differently when the mouse happens to be over an
+  // element.  This is a global switch to not use the "hot tracked" state
+  // in a test.
+  static bool ignore_hovered_state_for_testing_;
+
   // A unique ID, since node IDs are frame-local.
   // TODO(accessibility) We should be able to get rid of this, because node IDs
   // are actually local to the renderer process, and each renderer process has
   // its own OS-level window, which is all the uniqueness we need.
-  ui::AXUniqueId unique_id_;
+  const ui::AXUniqueId unique_id_{ui::AXUniqueId::Create()};
 };
 
 }  // namespace content

@@ -31,7 +31,6 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1633720957382884102">Susijusios svetainės</translation>
 <translation id="1644574205037202324">Istorija</translation>
-<translation id="1647582022260550163">Ar tikrai norite nustatyti leidimus iš naujo ir išvalyti slapukus bei svetainių duomenis?</translation>
 <translation id="1652197001188145583">Įjungus svetainėse gali būti prašoma naudoti NFC įrenginius. Išjungus svetainėse negalima naudoti NFC įrenginių.</translation>
 <translation id="1660204651932907780">Leisti svetainėms leisti garsą (rekomenduojama)</translation>
 <translation id="1677097821151855053">Slapukai ir kiti svetainės duomenys naudojami siekiant jus prisiminti, pvz., prisijungiant ar suasmeninant skelbimus. Norėdami tvarkyti visų svetainių slapukus, žr. skiltį <ph name="BEGIN_LINK" />„Nustatymai“<ph name="END_LINK" />.</translation>
@@ -69,7 +68,6 @@
 <translation id="2241587408274973373">Naujų skirtukų puslapių kortelės</translation>
 <translation id="2241634353105152135">Tik vieną kartą</translation>
 <translation id="2253414712144136228">Pašalinti „<ph name="NAME_OF_LIST_ITEM" />“</translation>
-<translation id="2253989982043948086">{NUM_SELECTED,plural, =1{Užblokuota viena svetainė}one{Užblokuota # svetainė}few{Užblokuotos # svetainės}many{Užblokuota # svetainės}other{Užblokuota # svetainių}}</translation>
 <translation id="228293613124499805">Paprastai dauguma svetainių, kuriose lankotės, išsaugo duomenis įrenginyje, pvz., išsaugo jūsų nuostatas ar informaciją, kurią bendrinate su svetaine, kad jums būtų patogiau naudotis svetainių funkcijomis. Rekomenduojame palikti šį nustatymą įjungtą.</translation>
 <translation id="2289270750774289114">Paklausti, kai svetainė nori atrasti netoliese esančius „Bluetooth“ įrenginius (rekomenduojama)</translation>
 <translation id="2315043854645842844">Kliento pasirinkto sertifikato nepalaiko operacinė sistema.</translation>
@@ -94,7 +92,6 @@
 <translation id="2501278716633472235">Grįžti</translation>
 <translation id="2546283357679194313">Slapukai ir svetainės duomenys</translation>
 <translation id="2550801787432930915">Sumažintos kainos kortelė</translation>
-<translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{Užblokuotas 1 slapukas}one{Užblokuotas # slapukas}few{Užblokuoti # slapukai}many{Užblokuota # slapuko}other{Užblokuota # slapukų}}</translation>
 <translation id="2570922361219980984">Vietos prieiga taip pat išjungta šiame įrenginyje. Įjunkite ją skiltyje <ph name="BEGIN_LINK" />„Android“ nustatymai“<ph name="END_LINK" />.</translation>
 <translation id="257931822824936280">Išskleista – spustelėkite, kad sutrauktumėte</translation>
 <translation id="2586657967955657006">Iškarpinė</translation>
@@ -124,7 +121,6 @@
 <translation id="3008272652534848354">Iš naujo nustatyti leidimus</translation>
 <translation id="301521992641321250">Automatiškai užblokuota</translation>
 <translation id="3069226013421428034">Leisti trečiajai šaliai prisijungti prie konkrečios svetainės.</translation>
-<translation id="3082992102194421695">{COUNT,plural, =1{Galiojimo laikas baigsis rytoj}one{Galiojimo laikas baigsis po # dienos}few{Galiojimo laikas baigsis po # dienų}many{Galiojimo laikas baigsis po # dienos}other{Galiojimo laikas baigsis po # dienų}}</translation>
 <translation id="310297983047869047">Ankstesnė skaidrė</translation>
 <translation id="3109724472072898302">Suskleista</translation>
 <translation id="3114012059975132928">Vaizdo įrašų leistuvė</translation>
@@ -136,6 +132,7 @@
 <translation id="3198916472715691905">Išsaugota duomenų: <ph name="STORAGE_AMOUNT" /></translation>
 <translation id="321187648315454507">Norėdami leisti „<ph name="APP_NAME" />“ siųsti pranešimus, taip pat įjunkite juos <ph name="BEGIN_LINK" />„Android“ nustatymuose<ph name="END_LINK" />.</translation>
 <translation id="3227137524299004712">Mikrofonas</translation>
+<translation id="3232293466644486101">Ištrinti naršymo duomenis…</translation>
 <translation id="3242646949159196181">Įjungus svetainėse galima leisti garsą. Išjungus svetainėse negalima leisti garso.</translation>
 <translation id="3277252321222022663">Leidžiama svetainėms pasiekti jutiklius (rekomenduojama)</translation>
 <translation id="3285500645985761267">Leisti susijusioms svetainėms peržiūrėti jūsų veiklą grupėje</translation>
@@ -177,6 +174,7 @@
 <translation id="3895926599014793903">Priverstinai įgalinti mastelio keitimą</translation>
 <translation id="3908288065506437185">Blokuoti trečiųjų šalių slapukus inkognito režimu</translation>
 <translation id="3918378745482005425">Gali neveikti kai kurios funkcijos. Susijusios svetainės vis tiek gali naudoti trečiųjų šalių slapukus.</translation>
+<translation id="3933121352599513978">Sutraukti nepageidaujamas užklausas (rekomenduojama)</translation>
 <translation id="3955193568934677022">Leisti svetainėms paleisti apsaugotą turinį (rekomenduojama)</translation>
 <translation id="3967822245660637423">Atsisiuntimas baigtas</translation>
 <translation id="3974105241379491420">Svetainės gali prašyti naudoti savo išsaugotą informaciją apie jus</translation>
@@ -198,7 +196,9 @@
 <translation id="4278390842282768270">Leidžiama</translation>
 <translation id="429312253194641664">Svetainėje leidžiama medija</translation>
 <translation id="42981349822642051">Išskleisti</translation>
+<translation id="4336219115486912529">{COUNT,plural, =1{Galiojimo laikas baigsis rytoj}one{Galiojimo laikas baigsis po # dienos}few{Galiojimo laikas baigsis po # dienų}many{Galiojimo laikas baigsis po # dienos}other{Galiojimo laikas baigsis po # dienų}}</translation>
 <translation id="4336566011000459927">„Chrome“ šiandien vėl apribos slapukus</translation>
+<translation id="4336836404251800362"><ph name="RECENCY" /> <ph name="SEPARATOR" /> Jūsų paskutinis skirtukas</translation>
 <translation id="4338831206024587507">Visos svetainės su domenu <ph name="DOMAIN" /></translation>
 <translation id="4402755511846832236">Neleisti svetainėms žinoti, kada aktyviai naudojate šį įrenginį</translation>
 <translation id="4412992751769744546">Leisti trečiųjų šalių slapukus</translation>
@@ -289,6 +289,7 @@
 <translation id="5853982612236235577">Įjungus svetainėse gali būti prašoma siųsti pranešimus. Išjungus svetainės negali siųsti pranešimų.</translation>
 <translation id="5860033963881614850">Išjungta</translation>
 <translation id="5876056640971328065">Pristabdyti vaizdo įrašą</translation>
+<translation id="5877248419911025165">Sutraukti visas užklausas</translation>
 <translation id="5884085660368669834">Svetainės nuostata</translation>
 <translation id="5887687176710214216">Paskutinį kartą lankytasi vakar</translation>
 <translation id="5916664084637901428">Įjungta</translation>
@@ -303,9 +304,11 @@
 <translation id="6015775454662021376">Valdykite šios svetainės prieigą prie jūsų įrenginio</translation>
 <translation id="6040143037577758943">Uždaryti</translation>
 <translation id="6042308850641462728">Daugiau</translation>
+<translation id="6060464773477604108"><ph name="HOST_NAME" /> <ph name="SEPARATOR1" /> <ph name="RECENCY" /> <ph name="SEPARATOR2" /> Jūsų paskutinis skirtukas</translation>
 <translation id="6064125863973209585">Baigti atsisiuntimai</translation>
 <translation id="6071501408666570960">Galite būti atjungti šioje svetainėje</translation>
 <translation id="6120483543004435978">Įjungus svetainėse gali būti prašoma leisti sužinoti, kada aktyviai naudojate įrenginį. Išjungus svetainės nežino, kada aktyviai naudojate įrenginį.</translation>
+<translation id="6140839633433422817">Ar tikrai norite nustatyti leidimus iš naujo ir ištrinti slapukus bei svetainių duomenis?</translation>
 <translation id="6165508094623778733">Sužinokite daugiau</translation>
 <translation id="6171020522141473435">Įjungus svetainėse gali būti prašoma naudoti „Bluetooth“ įrenginius. Išjungus svetainėse negalima naudoti „Bluetooth“ įrenginių.</translation>
 <translation id="6177111841848151710">Užblokuota dabartiniam paieškos varikliui</translation>
@@ -339,6 +342,7 @@
 <translation id="6545864417968258051">„Bluetooth“ nuskaitymas</translation>
 <translation id="6552800053856095716">{PERMISSIONS_SUMMARY_BLOCKED,plural, =1{Užblokuota: <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> ir dar <ph name="NUM_MORE" />}one{Užblokuota: <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> ir dar <ph name="NUM_MORE" />}few{Užblokuota: <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> ir dar <ph name="NUM_MORE" />}many{Užblokuota: <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> ir dar <ph name="NUM_MORE" />}other{Užblokuota: <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> ir dar <ph name="NUM_MORE" />}}</translation>
 <translation id="6554732001434021288">Paskutinį kartą lankytasi prieš <ph name="NUM_DAYS" /> d.</translation>
+<translation id="656065428026159829">Žr. daugiau</translation>
 <translation id="6561560012278703671">Naudoti tylesnio susirašinėjimo funkcijas (blokuojami pranešimų įspėjimai, kad jūsų neblaškytų)</translation>
 <translation id="6593061639179217415">Svetainė kompiuteriams</translation>
 <translation id="6608650720463149374"><ph name="GIGABYTES" /> GB</translation>
@@ -399,7 +403,6 @@
 <translation id="7561196759112975576">Visada</translation>
 <translation id="757524316907819857">Užblokuoti svetaines, kad neleistų apsaugoto turinio</translation>
 <translation id="7594634374516752650">Prijungta prie „Bluetooth“ įrenginio</translation>
-<translation id="7641339528570811325">Valyti naršymo duomenis...</translation>
 <translation id="7649070708921625228">Pagalba</translation>
 <translation id="7658239707568436148">Atšaukti</translation>
 <translation id="7667547420449112975">Nuostabusis Ozo šalies burtininkas</translation>
@@ -423,6 +426,7 @@
 <translation id="7986741934819883144">Pasirinkite kontaktą</translation>
 <translation id="7990211076305263060">Įjungus svetainėse gali būti prašoma naudoti mikrofoną. Išjungus svetainės negali naudoti mikrofono.</translation>
 <translation id="8007176423574883786">Išjungta šiame įrenginyje</translation>
+<translation id="8009579582995973057"><ph name="HOST_NAME" /> <ph name="SEPARATOR1" /> <ph name="RECENCY" /> <ph name="SEPARATOR2" /> Iš „<ph name="FROM_DEVICE" />“</translation>
 <translation id="802154636333426148">Įvyko atsisiuntimo klaida</translation>
 <translation id="8042586301629853791">Rūšiuoti pagal:</translation>
 <translation id="8067883171444229417">Leisti vaizdo įrašą</translation>
@@ -457,7 +461,6 @@
 <translation id="8441146129660941386">Ieškoti einant atgal</translation>
 <translation id="8444433999583714703">Norėdami leisti „<ph name="APP_NAME" />“ pasiekti jūsų vietovę, taip pat įjunkite ją <ph name="BEGIN_LINK" />„Android“ nustatymuose<ph name="END_LINK" />.</translation>
 <translation id="8447861592752582886">Anuliuoti įrenginio leidimą</translation>
-<translation id="8451050538944905715">{NUM_SELECTED,plural, =1{Naudojamas 1 slapukas}one{Naudojamas # slapukas}few{Naudojami # slapukai}many{Naudojama # slapuko}other{Naudojama # slapukų}}</translation>
 <translation id="8487700953926739672">Pasiekiama neprisijungus</translation>
 <translation id="848952951823693243">Visada galite pateikti užklausą dėl svetainės mobiliesiems</translation>
 <translation id="8499083585497694743">Įjungti mikrofono garsą</translation>
@@ -478,7 +481,6 @@
 <translation id="8721719390026067591">Įjungus svetainėse gali būti prašoma ieškoti „Bluetooth“ įrenginių. Išjungus svetainėse negalima ieškoti „Bluetooth“ įrenginių.</translation>
 <translation id="8725066075913043281">Bandyti dar kartą</translation>
 <translation id="8730621377337864115">Atlikta</translation>
-<translation id="8736193154595564524">{NUM_SELECTED,plural, =1{Leidžiama viena svetainė}one{Leidžiama # svetainė}few{Leidžiamos # svetainės}many{Leidžiama # svetainės}other{Leidžiama # svetainių}}</translation>
 <translation id="8751914237388039244">Pasirinkti vaizdą</translation>
 <translation id="8800034312320686233">Neveikia svetainė?</translation>
 <translation id="8801436777607969138">Blokuoti „JavaScript“ konkrečioje svetainėje.</translation>
@@ -497,6 +499,7 @@
 <translation id="8959122750345127698">Naršymas nepasiekiamas: <ph name="URL" /></translation>
 <translation id="8986362086234534611">Pamiršti</translation>
 <translation id="8990043154272859344">Būsite atjungti nuo visų svetainių</translation>
+<translation id="8993853206419610596">Išskleisti visas užklausas</translation>
 <translation id="9002538116239926534">Įjungus svetainės gali išsaugoti duomenis įrenginyje. Išjungus svetainės negali išsaugoti duomenų įrenginyje.</translation>
 <translation id="9011903857143958461">Leidžiama: <ph name="SITE_NAME" /></translation>
 <translation id="9019902583201351841">Tvarko jūsų tėvai</translation>

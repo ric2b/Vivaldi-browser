@@ -29,11 +29,13 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "base/system/sys_info.h"
 #include "device/udev_linux/scoped_udev.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/events/ash/event_rewriter_ash.h"
 #include "ui/events/ash/keyboard_info_metrics.h"
 #include "ui/events/ash/keyboard_layout_util.h"
+#include "ui/events/ash/modifier_split_dogfood_controller.h"
 #include "ui/events/ash/mojom/modifier_key.mojom-shared.h"
 #include "ui/events/devices/device_data_manager.h"
 #include "ui/events/devices/input_device.h"
@@ -74,6 +76,9 @@ const int kCustomNullScanCode = 0xC0000;
 const int kHotrodRemoteVendorId = 0x0471;
 const int kHotrodRemoteProductId = 0x21cc;
 
+constexpr auto kRightAltBlocklist =
+    base::MakeFixedFlatSet<std::string_view>({"eve", "nocturne", "atlas"});
+
 constexpr char kLayoutProperty[] = "CROS_KEYBOARD_TOP_ROW_LAYOUT";
 constexpr char kCustomTopRowLayoutAttribute[] = "function_row_physmap";
 constexpr char kCustomTopRowLayoutProperty[] = "FUNCTION_ROW_PHYSMAP";
@@ -112,6 +117,7 @@ constexpr auto kVKeyToTopRowActionKeyMap =
         {VKEY_EMOJI_PICKER, TopRowActionKey::kEmojiPicker},
         {VKEY_DICTATE, TopRowActionKey::kDictation},
         {VKEY_PRIVACY_SCREEN_TOGGLE, TopRowActionKey::kPrivacyScreenToggle},
+        {VKEY_ACCESSIBILITY, TopRowActionKey::kAccessibility},
     });
 
 // Some ChromeOS compatible keyboards have a capslock key.
@@ -206,7 +212,7 @@ base::ScopedFD GetEventDeviceNameFd(const KeyboardDevice& keyboard) {
 
   base::ScopedFD fd(open(dev_name.c_str(), O_RDONLY));
   if (fd.get() < 0) {
-    LOG(ERROR) << "Cannot open " << dev_name.c_str() << " : " << errno;
+    PLOG(ERROR) << "Cannot open " << dev_name.c_str();
     return base::ScopedFD();
   }
 
@@ -467,8 +473,6 @@ std::vector<TopRowActionKey> IdentifyTopRowActionKeys(
           std::begin(kLayoutWilcoDrallionTopRowActionKeys),
           std::end(kLayoutWilcoDrallionTopRowActionKeys));
     case KeyboardCapability::KeyboardTopRowLayout::kKbdTopRowLayoutCustom:
-    case KeyboardCapability::KeyboardTopRowLayout::
-        kKbdTopRowLayoutSplitModifiers:
       return IdentifyCustomTopRowActionKeys(scan_code_to_evdev_key_converter,
                                             keyboard, top_row_scan_codes);
   }
@@ -491,16 +495,21 @@ bool HasExternalKeyboardConnected() {
 
 }  // namespace
 
-KeyboardCapability::KeyboardCapability() {
-  scan_code_to_evdev_key_converter_ =
-      base::BindRepeating(&ConvertScanCodeToEvdevKey);
+KeyboardCapability::KeyboardCapability()
+    : scan_code_to_evdev_key_converter_(
+          base::BindRepeating(&ConvertScanCodeToEvdevKey)),
+      board_name_(base::ToLowerASCII(base::SysInfo::HardwareModelName())),
+      modifier_split_dogfood_controller_(
+          std::make_unique<ModifierSplitDogfoodController>()) {
   DeviceDataManager::GetInstance()->AddObserver(this);
 }
 
 KeyboardCapability::KeyboardCapability(
     ScanCodeToEvdevKeyConverter scan_code_to_evdev_key_converter)
     : scan_code_to_evdev_key_converter_(
-          std::move(scan_code_to_evdev_key_converter)) {
+          std::move(scan_code_to_evdev_key_converter)),
+      modifier_split_dogfood_controller_(
+          std::make_unique<ModifierSplitDogfoodController>()) {
   DeviceDataManager::GetInstance()->AddObserver(this);
 }
 
@@ -589,7 +598,6 @@ std::optional<KeyboardCode> KeyboardCapability::GetMappedFKeyIfExists(
       }
       break;
     case KeyboardTopRowLayout::kKbdTopRowLayoutCustom:
-    case KeyboardTopRowLayout::kKbdTopRowLayoutSplitModifiers:
       // TODO(zhangwenyu): Handle custom vivaldi layout.
       return std::nullopt;
   }
@@ -650,7 +658,6 @@ bool KeyboardCapability::HasLauncherButton(
     case KeyboardTopRowLayout::kKbdTopRowLayoutWilco:
     case KeyboardTopRowLayout::kKbdTopRowLayoutDrallion:
     case KeyboardTopRowLayout::kKbdTopRowLayoutCustom:
-    case KeyboardTopRowLayout::kKbdTopRowLayoutSplitModifiers:
       return true;
   }
 }
@@ -795,12 +802,6 @@ const KeyboardCapability::KeyboardInfo* KeyboardCapability::GetKeyboardInfo(
       scan_code_to_evdev_key_converter_, keyboard, keyboard_info.device_type,
       keyboard_info.top_row_layout, keyboard_info.top_row_scan_codes);
 
-  if (ash::features::IsSplitKeyboardRefactorEnabled() &&
-      IsInternalKeyboard(keyboard)) {
-    keyboard_info.top_row_layout =
-        KeyboardTopRowLayout::kKbdTopRowLayoutSplitModifiers;
-  }
-
   // If we are unable to identify the device, erase the entry from the map.
   if (keyboard_info.device_type == DeviceType::kDeviceUnknown) {
     keyboard_info_map_.erase(keyboard.id);
@@ -936,10 +937,17 @@ const std::vector<TopRowActionKey>* KeyboardCapability::GetTopRowActionKeys(
 }
 
 bool KeyboardCapability::HasAssistantKey(const KeyboardDevice& keyboard) const {
+  if (HasRightAltKey(keyboard)) {
+    return false;
+  }
+
+  if (ash::features::IsSplitKeyboardRefactorEnabled()) {
+    return false;
+  }
+
   // Some external keyboards falsely claim to have assistant keys. However, this
   // can be trusted for internal + ChromeOS external keyboards.
-  return keyboard.has_assistant_key && IsChromeOSKeyboard(keyboard.id) &&
-         !IsSplitModifierKeyboard(keyboard);
+  return keyboard.has_assistant_key && IsChromeOSKeyboard(keyboard.id);
 }
 
 bool KeyboardCapability::HasAssistantKeyOnAnyKeyboard() const {
@@ -959,22 +967,62 @@ bool KeyboardCapability::HasCapsLockKey(const KeyboardDevice& keyboard) const {
 }
 
 bool KeyboardCapability::HasFunctionKey(const KeyboardDevice& keyboard) const {
-  return IsSplitModifierKeyboard(keyboard);
-}
-
-bool KeyboardCapability::HasRightAltKey(const KeyboardDevice& keyboard) const {
-  return IsSplitModifierKeyboard(keyboard);
-}
-
-bool KeyboardCapability::IsSplitModifierKeyboard(
-    const KeyboardDevice& keyboard) const {
-  const auto* keyboard_info = GetKeyboardInfo(keyboard);
-  if (!keyboard_info) {
+  if (!modifier_split_dogfood_controller_->IsEnabled()) {
     return false;
   }
 
-  return keyboard_info->top_row_layout ==
-         KeyboardTopRowLayout::kKbdTopRowLayoutSplitModifiers;
+  if (ash::features::IsSplitKeyboardRefactorEnabled()) {
+    return true;
+  }
+
+  return ash::features::IsModifierSplitEnabled() &&
+         keyboard.type == InputDeviceType::INPUT_DEVICE_INTERNAL &&
+         keyboard.has_function_key;
+}
+
+bool KeyboardCapability::HasFunctionKey(int device_id) const {
+  auto keyboard = FindKeyboardWithId(device_id);
+  if (!keyboard) {
+    return false;
+  }
+
+  return HasFunctionKey(*keyboard);
+}
+
+bool KeyboardCapability::HasFunctionKeyOnAnyKeyboard() const {
+  for (const ui::KeyboardDevice& keyboard :
+       ui::DeviceDataManager::GetInstance()->GetKeyboardDevices()) {
+    if (HasFunctionKey(keyboard)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool KeyboardCapability::HasRightAltKey(const KeyboardDevice& keyboard) const {
+  if (!modifier_split_dogfood_controller_->IsEnabled()) {
+    return false;
+  }
+
+  if (ash::features::IsSplitKeyboardRefactorEnabled()) {
+    return true;
+  }
+
+  if (kRightAltBlocklist.contains(board_name_)) {
+    return false;
+  }
+
+  return keyboard.type == InputDeviceType::INPUT_DEVICE_INTERNAL &&
+         keyboard.has_assistant_key;
+}
+
+bool KeyboardCapability::HasRightAltKey(int device_id) const {
+  auto keyboard = FindKeyboardWithId(device_id);
+  if (!keyboard) {
+    return false;
+  }
+
+  return HasRightAltKey(*keyboard);
 }
 
 void KeyboardCapability::OnDeviceListsComplete() {
@@ -1088,6 +1136,15 @@ bool KeyboardCapability::IsChromeOSKeyboard(int device_id) const {
   const auto device_type = GetDeviceType(device_id);
   return device_type == DeviceType::kDeviceInternalKeyboard ||
          device_type == DeviceType::kDeviceExternalChromeOsKeyboard;
+}
+
+void KeyboardCapability::SetBoardNameForTesting(const std::string& board_name) {
+  board_name_ = board_name;
+}
+
+void KeyboardCapability::ResetModifierSplitDogfoodControllerForTesting() {
+  modifier_split_dogfood_controller_ =
+      std::make_unique<ModifierSplitDogfoodController>();  // IN-TEST
 }
 
 }  // namespace ui

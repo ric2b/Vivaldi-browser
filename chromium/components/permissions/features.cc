@@ -50,6 +50,13 @@ BASE_FEATURE(kFailFastQuietChip,
              "FailFastQuietChip",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Enables different positioning of the permission dialog, so that it's placed
+// near the permission element, if possible.
+// This feature should be enabled with blink::features::kPermissionElement.
+BASE_FEATURE(kPermissionElementDialogPositioning,
+             "PermissionElementDialogPositioning",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // When enabled, use the value of the `service_url` FeatureParam as the url
 // for the Web Permission Predictions Service.
 BASE_FEATURE(kPermissionPredictionServiceUseUrlOverride,
@@ -96,6 +103,16 @@ BASE_FEATURE(kBlockNotificationPromptsIfDisabledOnAppLevel,
              "BlockNotificationPromptsIfDisabledOnAppLevel",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kPermissionDedicatedCpssSettingAndroid,
+             "PermissionDedicatedCpssSettingAndroid",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, permissions grants with a durable session model will have
+// an expiration date set.
+BASE_FEATURE(kRecordPermissionExpirationTimestamps,
+             "RecordPermissionExpirationTimestamps",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 #else
 
 // When enabled, chooser permissions grants will have a last visited timestamp
@@ -111,13 +128,6 @@ BASE_FEATURE(kMitigateUnpartitionedWebviewPermissions,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 #endif  // BUILDFLAG(IS_ANDROID)
-
-// When enabled "window-placement" may be used as an alias for
-// "window-management". Additionally, reverse mappings (i.e. enum to string)
-// will default to the legacy strings ("window-placement").
-BASE_FEATURE(kWindowPlacementPermissionAlias,
-             "WindowPlacementPermissionAlias",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, blocks condition to exclude auto granted permissions for
 // storage access exceptions. This will allow RWS permission grants to be
@@ -137,6 +147,12 @@ namespace feature_params {
 
 const base::FeatureParam<bool> kUseStrongerPromptLanguage{
     &features::kOneTimePermission, "use_stronger_prompt_language", false};
+
+const base::FeatureParam<bool> kUseWhileVisitingLanguage{
+    &features::kOneTimePermission, "use_while_visiting_language", false};
+
+const base::FeatureParam<bool> kShowAllowAlwaysAsFirstButton{
+    &features::kOneTimePermission, "show_allow_always_as_first_button", false};
 
 const base::FeatureParam<base::TimeDelta> kOneTimePermissionTimeout{
     &features::kOneTimePermission, "one_time_permission_timeout",

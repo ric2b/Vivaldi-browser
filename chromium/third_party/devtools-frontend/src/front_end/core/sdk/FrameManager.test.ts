@@ -2,11 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
+import type * as Protocol from '../../generated/protocol.js';
+import * as Common from '../common/common.js';
 
 import * as SDK from './sdk.js';
-import * as Common from '../common/common.js';
-import type * as Protocol from '../../generated/protocol.js';
 
 class MockResourceTreeModel extends Common.ObjectWrapper.ObjectWrapper<SDK.ResourceTreeModel.EventTypes> {
   private targetId: Protocol.Target.TargetID|'main';
@@ -242,12 +241,9 @@ describe('FrameManager', () => {
         SDK.ResourceTreeModel.Events.FrameDetached, {frame: frameOldTarget, isSwap: true});
 
     const frame = frameManager.getFrame(frameId);
-    assert.isNotNull(frame);
-    if (frame) {
-      const {creationStackTrace, creationStackTraceTarget} = frame.getCreationStackTraceData();
-      assert.deepEqual(creationStackTrace, trace);
-      assert.strictEqual(creationStackTraceTarget.id(), parentTargetId);
-    }
+    const {creationStackTrace, creationStackTraceTarget} = frame!.getCreationStackTraceData();
+    assert.deepEqual(creationStackTrace, trace);
+    assert.strictEqual(creationStackTraceTarget.id(), parentTargetId);
   });
 
   it('transfers frame creation stack traces during OOPIF transfer (case 2)', () => {
@@ -286,12 +282,9 @@ describe('FrameManager', () => {
     mockChildModel.dispatchEventToListeners(SDK.ResourceTreeModel.Events.FrameAdded, frameNewTarget);
 
     const frame = frameManager.getFrame(frameId);
-    assert.isNotNull(frame);
-    if (frame) {
-      const {creationStackTrace, creationStackTraceTarget} = frame.getCreationStackTraceData();
-      assert.deepEqual(creationStackTrace, trace);
-      assert.strictEqual(creationStackTraceTarget.id(), parentTargetId);
-    }
+    const {creationStackTrace, creationStackTraceTarget} = frame!.getCreationStackTraceData();
+    assert.deepEqual(creationStackTrace, trace);
+    assert.strictEqual(creationStackTraceTarget.id(), parentTargetId);
   });
 
   describe('getOutermostFrame', () => {

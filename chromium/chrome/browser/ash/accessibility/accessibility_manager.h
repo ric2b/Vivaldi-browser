@@ -9,6 +9,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "ash/public/cpp/window_tree_host_lookup.h"
@@ -41,6 +42,7 @@
 #include "ui/accessibility/ax_enums.mojom-forward.h"
 #include "ui/base/ime/ash/input_method_manager.h"
 #include "ui/events/base_event_utils.h"
+#include "ui/events/devices/input_device_event_observer.h"
 #include "ui/wm/core/coordinate_conversion.h"
 
 namespace content {
@@ -128,7 +130,8 @@ class AccessibilityManager
       public input_method::InputMethodManager::Observer,
       public CrasAudioHandler::AudioObserver,
       public ProfileObserver,
-      public speech::SodaInstaller::Observer {
+      public speech::SodaInstaller::Observer,
+      public ui::InputDeviceEventObserver {
  public:
   AccessibilityManager(const AccessibilityManager&) = delete;
   AccessibilityManager& operator=(const AccessibilityManager&) = delete;
@@ -433,6 +436,10 @@ class AccessibilityManager
   void OnSodaProgress(speech::LanguageCode language_code,
                       int progress) override;
 
+  // ui::InputDeviceEventObserver
+  void OnInputDeviceConfigurationChanged(uint8_t input_device_type) override;
+  void OnDeviceListsComplete() override;
+
   // Test helpers:
   void SetProfileForTest(Profile* profile);
   static void SetBrailleControllerForTest(
@@ -611,12 +618,14 @@ class AccessibilityManager
 
   // Pumpkin-related methods.
   void OnPumpkinInstalled(bool success, const std::string& root_path);
-  void OnPumpkinError(const std::string& error);
+  void OnPumpkinError(std::string_view error);
   void OnPumpkinDataCreated(
       std::optional<::extensions::api::accessibility_private::PumpkinData>
           data);
 
   void OnAppTerminating();
+
+  void MaybeLogBrailleDisplayConnectedTime();
 
   // Profile which has the current a11y context.
   raw_ptr<Profile> profile_ = nullptr;
@@ -644,6 +653,7 @@ class AccessibilityManager
   std::unique_ptr<AccessibilityServiceClient> accessibility_service_client_;
 
   bool braille_display_connected_ = false;
+  base::Time braille_display_connect_time_;
   base::ScopedObservation<
       extensions::api::braille_display_private::BrailleController,
       extensions::api::braille_display_private::BrailleObserver>

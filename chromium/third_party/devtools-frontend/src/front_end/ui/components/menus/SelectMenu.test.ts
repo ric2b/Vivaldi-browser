@@ -2,17 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
-import * as Menus from './menus.js';
-import * as Dialogs from '../dialogs/dialogs.js';
 import * as Helpers from '../../../testing/DOMHelpers.js';  // eslint-disable-line rulesdir/es_modules_import
-import * as Coordinator from '../render_coordinator/render_coordinator.js';
-import * as LitHtml from '../../lit-html/lit-html.js';
-
 import {
   describeWithLocale,
 } from '../../../testing/EnvironmentHelpers.js';
+import * as LitHtml from '../../lit-html/lit-html.js';
+import * as Dialogs from '../dialogs/dialogs.js';
+import * as Coordinator from '../render_coordinator/render_coordinator.js';
+
+import * as Menus from './menus.js';
 
 const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
@@ -64,13 +62,13 @@ describeWithLocale('SelectMenu', () => {
     menu.buttonTitle = 'Override Title';
     Helpers.renderElementIntoDOM(menu);
     await coordinator.done();
-    Helpers.assertShadowRoot(menu.shadowRoot);
+    assert.isNotNull(menu.shadowRoot);
     const button = menu.shadowRoot.querySelector('devtools-select-menu-button');
     if (!button) {
       assert.fail('devtools-select-menu-button not found');
       return;
     }
-    Helpers.assertElement(button, HTMLElement);
+    assert.instanceOf(button, HTMLElement);
     assert.strictEqual(button.innerText, 'Override Title');
   });
 
@@ -85,13 +83,13 @@ describeWithLocale('SelectMenu', () => {
     menu.buttonTitle = () => LitHtml.html`Override Title`;
     Helpers.renderElementIntoDOM(menu);
     await coordinator.done();
-    Helpers.assertShadowRoot(menu.shadowRoot);
+    assert.isNotNull(menu.shadowRoot);
     const button = menu.shadowRoot.querySelector('devtools-select-menu-button');
     if (!button) {
       assert.fail('devtools-select-menu-button not found');
       return;
     }
-    Helpers.assertElement(button, HTMLElement);
+    assert.instanceOf(button, HTMLElement);
     assert.strictEqual(button.innerText, 'Override Title');
   });
 
@@ -100,7 +98,7 @@ describeWithLocale('SelectMenu', () => {
     Helpers.renderElementIntoDOM(selectMenu);
     [...selectMenu.querySelectorAll('devtools-menu-item')][0].selected = true;
     [...selectMenu.querySelectorAll('devtools-menu-item')][1].selected = true;
-    Helpers.assertShadowRoot(selectMenu.shadowRoot);
+    assert.isNotNull(selectMenu.shadowRoot);
     const devtoolsMenu = selectMenu.shadowRoot.querySelector('devtools-menu');
     const devtoolsDialog = devtoolsMenu?.shadowRoot?.querySelector('devtools-dialog');
     await devtoolsDialog?.setDialogVisible(true);

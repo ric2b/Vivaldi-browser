@@ -73,12 +73,6 @@ BASE_FEATURE(kWebViewDisplayCutout,
              "WebViewDisplayCutout",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Fake empty component to measure component updater performance impact on
-// WebView clients.
-BASE_FEATURE(kWebViewEmptyComponentLoaderPolicy,
-             "WebViewEmptyComponentLoaderPolicy",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enable the WebView Media Integrity API.
 // This feature requires `kWebViewInjectPlatformJsApis` to be enabled as well.
 BASE_FEATURE(kWebViewMediaIntegrityApi,
@@ -116,11 +110,6 @@ BASE_FEATURE(kWebViewExtraHeadersSameOriginOnly,
 BASE_FEATURE(kWebViewJavaJsBridgeMojo,
              "WebViewJavaJsBridgeMojo",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Field trial feature for controlling support of Origin Trials on WebView.
-BASE_FEATURE(kWebViewOriginTrials,
-             "WebViewOriginTrials",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Whether to record size of the embedding app's data directory to the UMA
 // histogram Android.WebView.AppDataDirectorySize.
@@ -188,7 +177,7 @@ BASE_FEATURE(kWebViewPropagateNetworkChangeSignals,
 // Provide the unreduced product version from the AwContentBrowserClient API,
 // regardless of the user agent reduction policy.
 BASE_FEATURE(kWebViewUnreducedProductVersion,
-             "WebViewUnreducedPrductVersion",
+             "WebViewUnreducedProductVersion",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enable raster in wide color gamut for apps that use webview in a wide color
@@ -198,7 +187,7 @@ BASE_FEATURE(kWebViewWideColorGamutSupport,
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Control the default behaviour for the XRequestedWith header.
-// TODO(crbug.com/1493963): enable by default after M120 branch point.
+// TODO(crbug.com/40286009): enable by default after M120 branch point.
 BASE_FEATURE(kWebViewXRequestedWithHeaderControl,
              "WebViewXRequestedWithHeaderControl",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -214,7 +203,7 @@ const base::FeatureParam<int> kWebViewXRequestedWithHeaderMode{
 // the manifest.
 BASE_FEATURE(kWebViewXRequestedWithHeaderManifestAllowList,
              "WebViewXRequestedWithHeaderManifestAllowList",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // This enables image drage out for Webview.
 BASE_FEATURE(kWebViewImageDrag,
@@ -226,11 +215,12 @@ BASE_FEATURE(kWebViewInjectPlatformJsApis,
              "WebViewInjectPlatformJsApis",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// This enables uploading UMA data with a higher frequency.
-// This Feature is checked and used in downstream internal code.
-BASE_FEATURE(kWebViewUmaUploadQualityOfServiceSetToDefault,
-             "WebViewUmaUploadQualityOfServiceSetToDefault",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+// If enabled zoom picker is invoked on every kGestureScrollUpdate consumed ack,
+// otherwise the zoom picker is persistently shown from scroll start to scroll
+// end plus the usual delay in hiding.
+BASE_FEATURE(kWebViewInvokeZoomPickerOnGSU,
+             "WebViewInvokeZoomPickerOnGSU",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Whether to use initial network state during initialization to speed up
 // startup.
@@ -252,6 +242,21 @@ BASE_FEATURE(kWebViewReduceUAAndroidVersionDeviceModel,
 BASE_FEATURE(kWebViewEnableCrash,
              "WebViewEnableCrash",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables the built-in DNS resolver (Async DNS) on WebView.
+BASE_FEATURE(kWebViewAsyncDns,
+             "WebViewAsyncDns",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Preloads expensive classes during WebView startup.
+BASE_FEATURE(kWebViewPreloadClasses,
+             "WebViewPreloadClasses",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Creates a spare renderer on browser context creation.
+BASE_FEATURE(kCreateSpareRendererOnBrowserContextCreation,
+             "CreateSpareRendererOnBrowserContextCreation",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace features
 }  // namespace android_webview

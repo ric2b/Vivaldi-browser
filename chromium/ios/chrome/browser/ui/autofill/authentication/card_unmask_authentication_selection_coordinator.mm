@@ -8,15 +8,23 @@
 #import "ios/chrome/browser/autofill/model/bottom_sheet/autofill_bottom_sheet_tab_helper.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/autofill/authentication/card_unmask_authentication_selection_mediator.h"
+#import "ios/chrome/browser/ui/autofill/authentication/card_unmask_authentication_selection_mediator_delegate.h"
+#import "ios/chrome/browser/ui/autofill/authentication/card_unmask_authentication_selection_view_controller.h"
+
+@interface CardUnmaskAuthenticationSelectionCoordinator () <
+    CardUnmaskAuthenticationSelectionMediatorDelegate>
+@end
 
 @implementation CardUnmaskAuthenticationSelectionCoordinator {
   // A reference to the base view controller with UINavigationController type.
   __weak UINavigationController* _baseNavigationController;
 
-  // TODO(crbug.com/40282545) Implement the authentication selection view and
-  // update the type here.
-  __weak UIViewController* _selectionViewController;
+  // The authentication selection view controlling displaying challenge options.
+  __weak CardUnmaskAuthenticationSelectionViewController*
+      _selectionViewController;
 
   // The controller providing the UI assets (titles, messages, authentication
   // options, etc.). In the Coordinator-Mediator-ViewController pattern this
@@ -26,6 +34,8 @@
       _modelController;
 
   std::unique_ptr<CardUnmaskAuthenticationSelectionMediator> _mediator;
+
+  id<BrowserCoordinatorCommands> _browserCoordinatorCommands;
 }
 
 - (instancetype)initWithBaseNavigationController:
@@ -39,20 +49,23 @@
             browser->GetWebStateList()->GetActiveWebState());
     _modelController =
         tabHelper->GetCardUnmaskAuthenticationSelectionDialogController();
+    _browserCoordinatorCommands = HandlerForProtocol(
+        browser->GetCommandDispatcher(), BrowserCoordinatorCommands);
     CHECK(_modelController);
   }
   return self;
 }
 
 - (void)start {
-  // TODO(crbug.com/40282545): Remove placeholder view and implement card
-  // unmask authentication.
-  UIViewController* selectionViewController = [[UIViewController alloc] init];
+  // TODO(crbug.com/40282545) Connect the view controllers Mutator, an
+  // Objective-C protocol to the Mediator (a C++ class).
+  CardUnmaskAuthenticationSelectionViewController* selectionViewController =
+      [[CardUnmaskAuthenticationSelectionViewController alloc] init];
   _mediator = std::make_unique<CardUnmaskAuthenticationSelectionMediator>(
       _modelController->GetWeakPtr(),
-      /*consumer=*/nil);
-  selectionViewController.view.backgroundColor = [UIColor redColor];
-  selectionViewController.title = @"TODO";
+      /*consumer=*/selectionViewController);
+  _mediator->set_delegate(self);
+  selectionViewController.mutator = _mediator->AsMutator();
   _selectionViewController = selectionViewController;
 
   [_baseNavigationController pushViewController:_selectionViewController
@@ -61,6 +74,13 @@
 
 - (void)stop {
   [_baseNavigationController popViewControllerAnimated:YES];
+  _selectionViewController.mutator = nil;
+}
+
+#pragma mark - CardUnmaskAuthenticationSelectionMediatorDelegate
+
+- (void)dismissAuthenticationSelection {
+  [_browserCoordinatorCommands dismissCardUnmaskAuthentication];
 }
 
 @end

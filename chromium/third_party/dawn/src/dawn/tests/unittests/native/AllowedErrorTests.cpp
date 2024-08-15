@@ -76,7 +76,7 @@ class AllowedErrorTests : public DawnMockTest {
                                           mDeviceErrorCb.MakeUserdata(this));
     }
 
-    ~AllowedErrorTests() override { device = nullptr; }
+    ~AllowedErrorTests() override { DropDevice(); }
 
   protected:
     // Device mock callbacks used throughout the tests.
@@ -323,7 +323,7 @@ TEST_F(AllowedErrorTests, CreateComputePipelineAsync) {
         .Times(1);
 
     device.CreateComputePipelineAsync(ToCppAPI(&desc), cb.Callback(), cb.MakeUserdata(this));
-    device.Tick();
+    ProcessEvents();
 
     // Device lost should only happen because of destruction.
     EXPECT_CALL(mDeviceLostCb, Call(WGPUDeviceLostReason_Destroyed, _, this)).Times(1);
@@ -348,7 +348,7 @@ TEST_F(AllowedErrorTests, CreateRenderPipelineAsync) {
         .Times(1);
 
     device.CreateRenderPipelineAsync(ToCppAPI(&desc), cb.Callback(), cb.MakeUserdata(this));
-    device.Tick();
+    ProcessEvents();
 
     // Device lost should only happen because of destruction.
     EXPECT_CALL(mDeviceLostCb, Call(WGPUDeviceLostReason_Destroyed, _, this)).Times(1);
@@ -374,7 +374,7 @@ TEST_F(AllowedErrorTests, CreateComputePipelineAsyncInternalError) {
         .Times(1);
 
     device.CreateComputePipelineAsync(ToCppAPI(&desc), cb.Callback(), cb.MakeUserdata(this));
-    device.Tick();
+    ProcessEvents();
 
     // Device lost should only happen because of destruction.
     EXPECT_CALL(mDeviceLostCb, Call(WGPUDeviceLostReason_Destroyed, _, this)).Times(1);
@@ -400,7 +400,7 @@ TEST_F(AllowedErrorTests, CreateRenderPipelineAsyncInternalError) {
         .Times(1);
 
     device.CreateRenderPipelineAsync(ToCppAPI(&desc), cb.Callback(), cb.MakeUserdata(this));
-    device.Tick();
+    ProcessEvents();
 
     // Device lost should only happen because of destruction.
     EXPECT_CALL(mDeviceLostCb, Call(WGPUDeviceLostReason_Destroyed, _, this)).Times(1);

@@ -30,7 +30,7 @@ std::string ReplacePlaceholders(base::StringPiece format_string,
 
   const int kPlaceHolderLength = 5;
 
-  for (const auto* c = format_string.begin(); c != format_string.end(); ++c) {
+  for (auto c = format_string.begin(); c != format_string.end(); ++c) {
     if (*c == '{' && format_string.end() - c >= kPlaceHolderLength) {
       if (*(c + 1) == '{' && base::IsAsciiDigit(*(c + 2)) && *(c + 3) == '}' &&
           *(c + 4) == '}') {
@@ -217,7 +217,7 @@ bool FrameHandler::InjectScript(const std::string& key,
       InjectCSS(key, content, metadata.stylesheet_origin);
       break;
     case mojom::ItemType::kJS:
-      InjectJS(content, metadata.javascript_world_id);
+      InjectJS(key, content, metadata.javascript_world_id);
       break;
   }
 
@@ -249,9 +249,9 @@ void FrameHandler::RemoveInjectedCSS(const std::string& key,
       style_sheet_key, blink_css_origin);
 }
 
-void FrameHandler::InjectJS(const std::string& content, int world_id) {
+void FrameHandler::InjectJS(const std::string& key, const std::string& content, int world_id) {
   std::vector<blink::WebScriptSource> sources(
-      1, blink::WebScriptSource(blink::WebString::FromUTF8(content), GURL()));
+      1, blink::WebScriptSource(blink::WebString::FromUTF8(content), GURL(key)));
 
   render_frame()->GetWebFrame()->RequestExecuteScript(
       world_id, sources, blink::mojom::UserActivationOption::kDoNotActivate,

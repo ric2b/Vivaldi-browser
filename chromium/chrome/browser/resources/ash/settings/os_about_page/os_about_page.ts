@@ -8,7 +8,7 @@
  */
 
 import 'chrome://resources/ash/common/cr_elements/localized_link/localized_link.js';
-import 'chrome://resources/cr_components/settings_prefs/prefs.js';
+import '/shared/settings/prefs/prefs.js';
 import 'chrome://resources/ash/common/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/ash/common/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/ash/common/cr_elements/cr_link_row/cr_link_row.js';
@@ -56,6 +56,7 @@ export interface OsAboutPageElement {
   $: {
     buttonContainer: HTMLElement,
     checkForUpdatesButton: CrButtonElement,
+    extendedUpdatesButton: CrButtonElement,
     productLogo: HTMLImageElement,
     regulatoryInfo: HTMLElement,
     relaunchButton: CrButtonElement,
@@ -275,10 +276,38 @@ export class OsAboutPageElement extends OsAboutPageBase {
 
       /**
        * Controls whether the extended updates opt-in option is shown.
-       *
-       * TODO(b/322418004): Implement logic.
        */
       showExtendedUpdatesOption_: {
+        type: Boolean,
+        value: false,
+        computed: 'computeShowExtendedUpdatesOption_(' +
+            'isExtendedUpdatesOptInEligible_,' +
+            'currentUpdateStatusEvent_)',
+      },
+
+      /**
+       * Whether the device is eligible to opt into extended updates.
+       * Value is obtained from the extended updates controller.
+       */
+      isExtendedUpdatesOptInEligible_: {
+        type: Boolean,
+        value: false,
+      },
+
+      /**
+       * Whether extended updates date has passed.
+       * Value is derived from update engine.
+       */
+      isExtendedUpdatesDatePassed_: {
+        type: Boolean,
+        value: false,
+      },
+
+      /**
+       * Whether user opt-in is required to receive extended updates.
+       * Value is updated from update engine.
+       */
+      isExtendedUpdatesOptInRequired_: {
         type: Boolean,
         value: false,
       },
@@ -292,6 +321,9 @@ export class OsAboutPageElement extends OsAboutPageBase {
       'updateShowButtonContainer_(showRelaunch_, showCheckUpdates_,' +
           'showExtendedUpdatesOption_)',
       'handleCrostiniEnabledChanged_(prefs.crostini.enabled.value)',
+      'updateIsExtendedUpdatesOptInEligible_(' +
+          'hasEndOfLife_, isExtendedUpdatesDatePassed_,' +
+          'isExtendedUpdatesOptInRequired_)',
     ];
   }
 
@@ -325,6 +357,9 @@ export class OsAboutPageElement extends OsAboutPageBase {
   private isPendingOsUpdateDeepLink_: boolean;
   private isRevampWayfindingEnabled_: boolean;
   private showExtendedUpdatesOption_: boolean;
+  private isExtendedUpdatesOptInEligible_: boolean;
+  private isExtendedUpdatesDatePassed_: boolean;
+  private isExtendedUpdatesOptInRequired_: boolean;
 
   private aboutBrowserProxy_: AboutPageBrowserProxy;
 
@@ -363,6 +398,9 @@ export class OsAboutPageElement extends OsAboutPageBase {
       this.eolMessageWithMonthAndYear_ = result.aboutPageEndOfLifeMessage || '';
       this.showEolIncentive_ = !!result.shouldShowEndOfLifeIncentive;
       this.shouldShowOfferText_ = !!result.shouldShowOfferText;
+      this.isExtendedUpdatesDatePassed_ = !!result.isExtendedUpdatesDatePassed;
+      this.isExtendedUpdatesOptInRequired_ =
+          !!result.isExtendedUpdatesOptInRequired;
     });
 
     this.aboutBrowserProxy_.checkInternetConnection().then(result => {
@@ -377,6 +415,8 @@ export class OsAboutPageElement extends OsAboutPageBase {
         'true') {
       this.onCheckUpdatesClick_();
     }
+
+    this.registerExtendedUpdatesObserver_();
   }
 
   override ready(): void {
@@ -412,6 +452,9 @@ export class OsAboutPageElement extends OsAboutPageBase {
         'tpm-firmware-update-status-changed',
         this.onTpmFirmwareUpdateStatusChanged_.bind(this));
     this.aboutBrowserProxy_.refreshTpmFirmwareUpdateStatus();
+    this.addWebUiListener(
+        'extended-updates-setting-changed',
+        this.onExtendedUpdatesSettingChanged_.bind(this));
   }
 
   private onUpdateStatusChanged_(event: UpdateStatusChangedEvent): void {
@@ -614,7 +657,7 @@ export class OsAboutPageElement extends OsAboutPageBase {
             'cr:error-outline';
       case UpdateStatus.UPDATED:
       case UpdateStatus.NEARLY_UPDATED:
-        // TODO(crbug.com/986596): Don't use browser icons here. Fork them.
+        // TODO(crbug.com/40637166): Don't use browser icons here. Fork them.
         return this.isRevampWayfindingEnabled_ ?
             'os-settings:about-update-complete' :
             'settings:check-circle';
@@ -824,8 +867,42 @@ export class OsAboutPageElement extends OsAboutPageBase {
     return null;
   }
 
+  private computeShowExtendedUpdatesOption_(): boolean {
+    return this.isExtendedUpdatesOptInEligible_ &&
+        this.checkStatus_(UpdateStatus.UPDATED);
+  }
+
+  private updateIsExtendedUpdatesOptInEligible_(): void {
+    this.aboutBrowserProxy_
+        .isExtendedUpdatesOptInEligible(
+            this.hasEndOfLife_, this.isExtendedUpdatesDatePassed_,
+            this.isExtendedUpdatesOptInRequired_)
+        .then(result => {
+          this.isExtendedUpdatesOptInEligible_ = result;
+        });
+  }
+
+  private onExtendedUpdatesSettingChanged_(): void {
+    this.updateIsExtendedUpdatesOptInEligible_();
+  }
+
   private onExtendedUpdatesButtonClick_(): void {
     this.aboutBrowserProxy_.openExtendedUpdatesDialog();
+  }
+
+  private registerExtendedUpdatesObserver_(): void {
+    const extendedUpdatesObserver = new IntersectionObserver(
+        (entries: IntersectionObserverEntry[],
+         observer: IntersectionObserver) => {
+          entries.forEach((entry: IntersectionObserverEntry) => {
+            if (entry.isIntersecting) {
+              this.aboutBrowserProxy_.recordExtendedUpdatesShown();
+              observer.disconnect();
+              return;
+            }
+          });
+        });
+    extendedUpdatesObserver.observe(this.$.extendedUpdatesButton);
   }
 }
 

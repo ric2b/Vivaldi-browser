@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-CN">
+<translation id="2947471979790858922">您在这些隐身标签页中的活动将从该设备中删除</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {您可以在 Vivaldi 主菜单下的 "最近标签页 "中找到已关闭的标签页。您的隐身标签页将不可用。}
+        other {您可以在 Vivaldi 主菜单下的 "最近标签页 "中找到已关闭的标签页。您的 # 个隐身标签页将不可用。}}</translation>
+<translation id="4871187110787939393">是否关闭所有隐身标签页？</translation>
 </translationbundle>

@@ -4,6 +4,8 @@
 
 #include "content/browser/private_aggregation/private_aggregation_manager_impl.h"
 
+#include <stddef.h>
+
 #include <memory>
 #include <numeric>
 #include <optional>
@@ -21,6 +23,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/not_fatal_until.h"
 #include "base/numerics/checked_math.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -38,7 +41,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "third_party/blink/public/common/features.h"
-#include "third_party/blink/public/mojom/private_aggregation/aggregatable_report.mojom.h"
+#include "third_party/blink/public/mojom/aggregation_service/aggregatable_report.mojom.h"
 #include "third_party/blink/public/mojom/private_aggregation/private_aggregation_host.mojom.h"
 #include "url/origin.h"
 
@@ -96,8 +99,8 @@ PrivateAggregationManagerImpl::PrivateAggregationManagerImpl(
     : budgeter_(std::move(budgeter)),
       host_(std::move(host)),
       storage_partition_(storage_partition) {
-  DCHECK(budgeter_);
-  DCHECK(host_);
+  CHECK(budgeter_, base::NotFatalUntil::M128);
+  CHECK(host_, base::NotFatalUntil::M128);
 }
 
 PrivateAggregationManagerImpl::~PrivateAggregationManagerImpl() = default;
@@ -109,12 +112,14 @@ bool PrivateAggregationManagerImpl::BindNewReceiver(
     std::optional<std::string> context_id,
     std::optional<base::TimeDelta> timeout,
     std::optional<url::Origin> aggregation_coordinator_origin,
+    size_t filtering_id_max_bytes,
     mojo::PendingReceiver<blink::mojom::PrivateAggregationHost>
         pending_receiver) {
   return host_->BindNewReceiver(
       std::move(worklet_origin), std::move(top_frame_origin), api_for_budgeting,
       std::move(context_id), std::move(timeout),
-      std::move(aggregation_coordinator_origin), std::move(pending_receiver));
+      std::move(aggregation_coordinator_origin), filtering_id_max_bytes,
+      std::move(pending_receiver));
 }
 
 void PrivateAggregationManagerImpl::ClearBudgetData(
@@ -174,7 +179,7 @@ void PrivateAggregationManagerImpl::OnReportRequestDetailsReceivedFromHost(
 }
 
 AggregationService* PrivateAggregationManagerImpl::GetAggregationService() {
-  DCHECK(storage_partition_);
+  CHECK(storage_partition_, base::NotFatalUntil::M128);
   return AggregationService::GetService(storage_partition_->browser_context());
 }
 
@@ -216,8 +221,9 @@ void PrivateAggregationManagerImpl::OnContributionsFinalized(
     PrivateAggregationBudgetKey::Api api_for_budgeting) {
   // Temporary feature until change is approved.
   // TODO(alexmt): Remove once approved.
-  if (contributions.empty() && !base::FeatureList::IsEnabled(
-                                   kPrivateAggregationApiBundledEnhancements)) {
+  if (contributions.empty() &&
+      !base::FeatureList::IsEnabled(
+          kPrivateAggregationApiContextIdEnhancements)) {
     return;
   }
 
@@ -244,7 +250,7 @@ void PrivateAggregationManagerImpl::OnContributionsFinalized(
             report_request.shared_info().Clone(),
             std::move(immediate_debug_reporting_path),
             report_request.debug_key(), report_request.additional_fields());
-    DCHECK(debug_request.has_value());
+    CHECK(debug_request.has_value(), base::NotFatalUntil::M128);
 
     aggregation_service->AssembleAndSendReport(
         std::move(debug_request.value()));

@@ -35,15 +35,13 @@
 
 #include "config_components.h"
 
-#include <float.h>
-
 #include "libavutil/avassert.h"
 #include "libavutil/common.h"
 #include "libavutil/ffmath.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/intreadwrite.h"
-#include "libavutil/parseutils.h"
 #include "libavutil/xga_font_data.h"
 #include "avfilter.h"
 #include "drawutils.h"
@@ -202,11 +200,6 @@ static int activate(AVFilterContext *ctx)
         return AVERROR(ENOMEM);
     frame->pts                 = test->pts;
     frame->duration            = 1;
-#if FF_API_PKT_DURATION
-FF_DISABLE_DEPRECATION_WARNINGS
-    frame->key_frame           = 1;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
     frame->flags              |= AV_FRAME_FLAG_KEY;
 #if FF_API_INTERLACED_FRAME
 FF_DISABLE_DEPRECATION_WARNINGS

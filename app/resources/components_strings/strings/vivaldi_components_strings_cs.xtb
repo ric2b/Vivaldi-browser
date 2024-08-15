@@ -164,7 +164,6 @@ Kontaktujte administrátora systému.</translation>
 <translation id="7353601530677266744">Parametry spuštění</translation>
 <translation id="7364115444476960850">Stránka, kterou se pokoušíte navštívit, byla zablokována <ph name="BLOCKER_NAME" /> prohlížečem Vivaldi</translation>
 <translation id="7419106976560586862">Cesta k profilu</translation>
-<translation id="7445762425076701745">Totožnost serveru, k němuž jste připojeni, nelze plně ověřit. Jste připojeni k serveru, který používá název platný pouze v rámci vaší sítě. Externí certifikační autorita nemůže vlastnictví názvu nijak ověřit. Některé certifikační autority však vydají certifikát i pro takové názvy, a nelze tedy zaručit, že jste připojeni k požadovanému webu a nikoli k webu útočníka.</translation>
 <translation id="7455133967321480974">Použít výchozí hodnotu (blokovat)</translation>
 <translation id="7518003948725431193">Na webové adrese <ph name="URL" /> se nepodařilo nalézt žádnou webovou stránku.</translation>
 <translation id="7549584377607005141">Tato stránka potřebuje ke správnému zobrazení data, která jste zadali dříve. Tyto údaje můžete odeslat znovu, ale zopakujete tím všechny akce, které tato stránka již předtím provedla.</translation>

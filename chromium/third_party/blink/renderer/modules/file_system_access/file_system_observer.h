@@ -36,11 +36,10 @@ class FileSystemObserver : public ScriptWrappable,
       mojo::PendingRemote<mojom::blink::FileSystemAccessObserverHost>
           host_remote);
 
-  ScriptPromiseTyped<IDLUndefined> observe(
-      ScriptState*,
-      FileSystemHandle* handle,
-      FileSystemObserverObserveOptions* options,
-      ExceptionState&);
+  ScriptPromise<IDLUndefined> observe(ScriptState*,
+                                      FileSystemHandle* handle,
+                                      FileSystemObserverObserveOptions* options,
+                                      ExceptionState&);
   void unobserve(FileSystemHandle* handle);
   void disconnect();
 
@@ -51,12 +50,7 @@ class FileSystemObserver : public ScriptWrappable,
   void Trace(Visitor* visitor) const override;
 
  private:
-  // TODO(https://crbug.com/1488875): Extend
-  // ExecutionContextLifecycleStateObserver to pause file system change
-  // notifications while the page is frozen and to destroy `this` when the
-  // ExecutionContext is destroyed.
-
-  void DidObserve(ScriptPromiseResolverTyped<IDLUndefined>* resolver,
+  void DidObserve(ScriptPromiseResolver<IDLUndefined>* resolver,
                   mojom::blink::FileSystemAccessErrorPtr result,
                   mojo::PendingReceiver<mojom::blink::FileSystemAccessObserver>
                       observer_receiver);

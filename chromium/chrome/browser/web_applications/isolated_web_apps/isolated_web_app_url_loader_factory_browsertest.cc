@@ -64,8 +64,7 @@ std::u16string MessagesAsString(
   return text;
 }
 
-class IsolatedWebAppURLLoaderFactoryBrowserTest
-    : public WebAppControllerBrowserTest {
+class IsolatedWebAppURLLoaderFactoryBrowserTest : public WebAppBrowserTestBase {
  public:
   IsolatedWebAppURLLoaderFactoryBrowserTest() {
     scoped_feature_list_.InitAndEnableFeature(features::kIsolatedWebApps);
@@ -74,7 +73,7 @@ class IsolatedWebAppURLLoaderFactoryBrowserTest
  protected:
   void TearDown() override {
     SetTrustedWebBundleIdsForTesting({});
-    WebAppControllerBrowserTest::TearDown();
+    WebAppBrowserTestBase::TearDown();
   }
 
   void TrustWebBundleId() {
@@ -131,8 +130,8 @@ class IsolatedWebAppURLLoaderFactoryBrowserTest
 
   base::FilePath SignAndWriteBundleToDisk(
       const std::vector<uint8_t>& unsigned_bundle) {
-    web_package::WebBundleSigner::KeyPair key_pair(kTestPublicKey,
-                                                   kTestPrivateKey);
+    web_package::WebBundleSigner::Ed25519KeyPair key_pair(kTestPublicKey,
+                                                          kTestPrivateKey);
     auto signed_bundle =
         web_package::WebBundleSigner::SignBundle(unsigned_bundle, {key_pair});
     return WriteBundleToDisk(signed_bundle);

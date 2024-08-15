@@ -29,6 +29,7 @@
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
@@ -36,6 +37,7 @@
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "chrome/browser/favicon/favicon_utils.h"
+#include "chrome/browser/shortcuts/shortcut_icon_generator.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/os_integration/web_app_file_handler_manager.h"
@@ -48,6 +50,7 @@
 #include "chrome/browser/web_applications/web_app_icon_generator.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_install_params.h"
+#include "chrome/browser/web_applications/web_app_proto_utils.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/chrome_features.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
@@ -55,6 +58,7 @@
 #include "components/services/app_service/public/cpp/protocol_handler_info.h"
 #include "components/services/app_service/public/cpp/share_target.h"
 #include "components/services/app_service/public/cpp/url_handler_info.h"
+#include "components/sync/protocol/web_app_specifics.pb.h"
 #include "components/webapps/browser/banners/app_banner_settings_helper.h"
 #include "components/webapps/browser/installable/installable_evaluator.h"
 #include "components/webapps/browser/installable/installable_manager.h"
@@ -173,7 +177,7 @@ void PopulateWebAppShortcutsMenuItemInfos(
             });
         if (valid_size_it == icon.sizes.end())
           continue;
-        // TODO(https://crbug.com/1071308): Take the declared icon density and
+        // TODO(crbug.com/40126722): Take the declared icon density and
         // sizes into account.
         info.square_size_px = valid_size_it->width();
 
@@ -623,7 +627,7 @@ void UpdateWebAppInstallInfoIconsFromManifestIfNeeded(
           continue;
         }
 
-        // TODO(https://crbug.com/1071308): Take the declared icon density and
+        // TODO(crbug.com/40126722): Take the declared icon density and
         // sizes into account.
         info.square_size_px = valid_size->width();
       }
@@ -789,7 +793,7 @@ void UpdateWebAppInfoFromManifest(const blink::mojom::Manifest& manifest,
   UpdateWebAppInstallInfoIconsFromManifestIfNeeded(manifest.icons,
                                                    web_app_info);
 
-  // TODO(crbug.com/1218210): Confirm incoming icons to write to web_app_info.
+  // TODO(crbug.com/40185556): Confirm incoming icons to write to web_app_info.
   PopulateFileHandlerInfoFromManifest(manifest.file_handlers,
                                       web_app_info->scope, web_app_info);
 
@@ -919,14 +923,14 @@ void PopulateProductIcons(WebAppInstallInfo* web_app_info,
 
   char32_t icon_letter =
       web_app_info->title.empty()
-          ? GenerateIconLetterFromUrl(web_app_info->start_url)
-          : GenerateIconLetterFromAppName(web_app_info->title);
+          ? shortcuts::GenerateIconLetterFromUrl(web_app_info->start_url)
+          : shortcuts::GenerateIconLetterFromName(web_app_info->title);
 
   // Ensure that all top-level icons that are in web_app_info with  Purpose::ANY
   // are present, by generating icons for any sizes that have failed to
   // download. This ensures that the created manifest for the web app does not
   // contain links to icons that are not actually created and linked on disk.
-  // TODO(https://crbug.com/1029223): Don't resize before writing to disk, it's
+  // TODO(crbug.com/40661228): Don't resize before writing to disk, it's
   // not necessary and would simplify this code path to remove.
   SizeToBitmap size_to_icons = ResizeIconsAndGenerateMissing(
       square_icons_any, SizesToGenerate(), icon_letter,
@@ -1062,10 +1066,15 @@ WebAppManagement::Type ConvertInstallSurfaceToWebAppSource(
     case webapps::WebappInstallSource::MENU_CREATE_SHORTCUT:
     case webapps::WebappInstallSource::CHROME_SERVICE:
     case webapps::WebappInstallSource::PROFILE_MENU:
+    case webapps::WebappInstallSource::ALMANAC_INSTALL_APP_URI:
+    case webapps::WebappInstallSource::WEBAPK_RESTORE:
+    case webapps::WebappInstallSource::OOBE_APP_RECOMMENDATIONS:
       return WebAppManagement::kSync;
 
-    case webapps::WebappInstallSource::ISOLATED_APP_DEV_INSTALL:
-      return WebAppManagement::kCommandLine;
+    case webapps::WebappInstallSource::IWA_GRAPHICAL_INSTALLER:
+    case webapps::WebappInstallSource::IWA_DEV_UI:
+    case webapps::WebappInstallSource::IWA_DEV_COMMAND_LINE:
+      return WebAppManagement::kIwaUserInstalled;
 
     case webapps::WebappInstallSource::INTERNAL_DEFAULT:
     case webapps::WebappInstallSource::EXTERNAL_DEFAULT:
@@ -1077,8 +1086,14 @@ WebAppManagement::Type ConvertInstallSurfaceToWebAppSource(
     case webapps::WebappInstallSource::PRELOADED_OEM:
       return WebAppManagement::kOem;
 
+    case webapps::WebappInstallSource::IWA_SHIMLESS_RMA:
+      return WebAppManagement::kIwaShimlessRma;
+
     case webapps::WebappInstallSource::EXTERNAL_POLICY:
       return WebAppManagement::kPolicy;
+
+    case webapps::WebappInstallSource::IWA_EXTERNAL_POLICY:
+      return WebAppManagement::kIwaPolicy;
 
     case webapps::WebappInstallSource::KIOSK:
       return WebAppManagement::kKiosk;
@@ -1147,12 +1162,25 @@ void SetWebAppManifestFields(const WebAppInstallInfo& web_app_info,
              SK_AlphaOPAQUE);
   web_app.SetDarkModeBackgroundColor(web_app_info.dark_mode_background_color);
 
-  WebApp::SyncFallbackData sync_fallback_data;
-  sync_fallback_data.name = base::UTF16ToUTF8(web_app_info.title);
-  sync_fallback_data.theme_color = web_app_info.theme_color;
-  sync_fallback_data.scope = web_app_info.scope;
-  sync_fallback_data.icon_infos = web_app_info.manifest_icons;
-  web_app.SetSyncFallbackData(std::move(sync_fallback_data));
+  sync_pb::WebAppSpecifics sync_proto = web_app.sync_proto();
+  // Sync proto has already been initialized by setting the start_url and/or
+  // manifest_id above.
+  CHECK(sync_proto.has_start_url(), base::NotFatalUntil::M126);
+  CHECK(sync_proto.has_relative_manifest_id(), base::NotFatalUntil::M126);
+  sync_proto.set_name(base::UTF16ToUTF8(web_app_info.title));
+  sync_proto.clear_theme_color();
+  if (web_app_info.theme_color.has_value()) {
+    sync_proto.set_theme_color(web_app_info.theme_color.value());
+  }
+  sync_proto.clear_scope();
+  if (web_app_info.scope.is_valid()) {
+    sync_proto.set_scope(web_app_info.scope.spec());
+  }
+  sync_proto.clear_icon_infos();
+  for (const apps::IconInfo& icon_info : web_app_info.manifest_icons) {
+    *(sync_proto.add_icon_infos()) = AppIconInfoToSyncProto(icon_info);
+  }
+  web_app.SetSyncProto(std::move(sync_proto));
 
   if (!skip_icons_on_download_failure) {
     SetWebAppProductIconFields(web_app_info, web_app);
@@ -1205,27 +1233,6 @@ void SetWebAppProductIconFields(const WebAppInstallInfo& web_app_info,
   web_app.SetIsGeneratedIcon(web_app_info.is_generated_icon);
 }
 
-void MaybeDisableOsIntegration(const WebAppRegistrar* app_registrar,
-                               const webapps::AppId& app_id,
-                               InstallOsHooksOptions* options) {
-#if !BUILDFLAG(IS_CHROMEOS)  // Deeper OS integration is expected on ChromeOS.
-  DCHECK(app_registrar);
-
-  // Disable OS integration if the app was installed by default only, and not
-  // through any other means like an enterprise policy or store.
-  if (app_registrar->WasInstalledByDefaultOnly(app_id)) {
-    options->add_to_desktop = false;
-    options->add_to_quick_launch_bar = false;
-    options->os_hooks[OsHookType::kShortcuts] = false;
-    options->os_hooks[OsHookType::kRunOnOsLogin] = false;
-    options->os_hooks[OsHookType::kShortcutsMenu] = false;
-    options->os_hooks[OsHookType::kUninstallationViaOsSettings] = false;
-    options->os_hooks[OsHookType::kFileHandlers] = false;
-    options->os_hooks[OsHookType::kProtocolHandlers] = false;
-    options->os_hooks[OsHookType::kUrlHandlers] = false;
-  }
-#endif  // !BUILDFLAG(IS_CHROMEOS)
-}
 
 bool CanWebAppUpdateIdentity(const WebApp* web_app) {
   if (web_app->IsPolicyInstalledApp() &&

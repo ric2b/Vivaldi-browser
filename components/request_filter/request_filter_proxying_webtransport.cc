@@ -33,7 +33,7 @@ net::HttpRequestHeaders GetRequestHeaders() {
   //     loading case. Extension authors can use the "initiator" property to
   //     observe it.
   auto headers = net::HttpRequestHeaders();
-  // TODO(1240935): Share the code with
+  // TODO(crbug.com/40194454): Share the code with
   // DedicatedWebTransportHttp3Client::DoSendRequest.
   headers.SetHeader("sec-webtransport-http3-draft02", "1");
   return headers;

@@ -543,8 +543,8 @@ int VivaldiSessionService::Load(const base::FilePath& path,
     std::vector<std::unique_ptr<sessions::SessionCommand>> commands;
     for (auto &item: cmds) {
       if (item->id() == sessions::GetVivCreateThumbnailCommandId()) {
-        std::unique_ptr<base::Pickle> pickle(item->PayloadAsPickle());
-        base::PickleIterator iterator(*pickle);
+        base::Pickle pickle = item->PayloadAsPickle();
+        base::PickleIterator iterator(pickle);
         int format;
         if (!iterator.ReadInt(&format)) {
           continue;

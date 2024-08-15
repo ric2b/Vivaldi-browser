@@ -11,8 +11,10 @@
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/thread_annotations.h"
+#include "base/time/time.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/url_row.h"
+#include "components/history_embeddings/embedder.h"
 #include "components/history_embeddings/proto/history_embeddings.pb.h"
 #include "components/history_embeddings/vector_database.h"
 #include "sql/database.h"
@@ -34,6 +36,10 @@ class SqlDatabase : public VectorDatabase {
   SqlDatabase& operator=(const SqlDatabase&) = delete;
   ~SqlDatabase() override;
 
+  // Provides embedder metadata to the database. The database cannot be
+  // initialized until valid metadata is provided.
+  void SetEmbedderMetadata(EmbedderMetadata embedder_metadata);
+
   // Inserts or replaces `passages` keyed by `url_id`. `visit_id` and
   // `visit_time` are needed too, to respect History deletions and expirations.
   // If there are existing passages for `url_id`, they are replaced. Returns
@@ -47,7 +53,14 @@ class SqlDatabase : public VectorDatabase {
   // VectorDatabase:
   size_t GetEmbeddingDimensions() const override;
   bool AddUrlEmbeddings(const UrlEmbeddings& url_embeddings) override;
-  std::unique_ptr<EmbeddingsIterator> MakeEmbeddingsIterator() override;
+  std::unique_ptr<EmbeddingsIterator> MakeEmbeddingsIterator(
+      std::optional<base::Time> time_range_start) override;
+
+  // These three methods are used to keep the on-disk persistence in sync with
+  // History deletions, either from user action or time-based expiration.
+  bool DeleteDataForUrlId(history::URLID url_id);
+  bool DeleteDataForVisitId(history::VisitID visit_id);
+  bool DeleteAllData();
 
  private:
   // Initializes the database, if it's not already initialized. Returns true if
@@ -61,6 +74,9 @@ class SqlDatabase : public VectorDatabase {
 
   // The directory storing the database.
   const base::FilePath storage_dir_;
+
+  // Metadata of the embeddings model.
+  std::optional<EmbedderMetadata> embedder_metadata_;
 
   // The underlying SQL database.
   sql::Database db_ GUARDED_BY_CONTEXT(sequence_checker_);

@@ -7,8 +7,6 @@ import {describeWithLocale} from '../../../../testing/EnvironmentHelpers.js';
 
 import * as InlineEditor from './inline_editor.js';
 
-const {assert} = chai;
-
 function assertVarSwatch(swatch: InlineEditor.LinkSwatch.CSSVarSwatch, expected: {
   valueTooltip: string|null,
   linkTooltip: string,
@@ -165,8 +163,8 @@ describeWithLocale('LinkSwatch', () => {
     };
 
     const element = renderElementIntoDOM(component)!.shadowRoot!.querySelector('devtools-base-link-swatch')!.shadowRoot!
-                        .querySelector('.link-swatch-link');
-    element!.dispatchEvent(new MouseEvent('mousedown'));
+                        .querySelector('.link-swatch-link') as HTMLButtonElement;
+    element.click();
 
     assert.isTrue(callbackCalled);
   });

@@ -91,7 +91,7 @@ def RunSteps(api):
   for config_name in TEST_CONFIGS:
     api.gclient.make_config(config_name)
 
-  src_cfg = api.gclient.make_config(CACHE_DIR=api.path['cache'].join('git'))
+  src_cfg = api.gclient.make_config(CACHE_DIR=api.path.cache_dir / 'git')
   soln = src_cfg.solutions.add()
   soln.name = 'src'
   soln.url = 'https://chromium.googlesource.com/chromium/src.git'
@@ -109,7 +109,7 @@ def RunSteps(api):
   bl_cfg.revisions['src/third_party/angle'] = 'refs/heads/lkgr'
 
   bl_cfg.got_revision_mapping['src/blatley'] = 'got_blatley_revision'
-  with api.context(cwd=api.path['start_dir'].join('src', 'third_party')):
+  with api.context(cwd=api.path.start_dir.joinpath('src', 'third_party')):
     api.gclient.checkout(
         gclient_config=bl_cfg)
 

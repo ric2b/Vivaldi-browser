@@ -348,34 +348,11 @@ auto RunVideoCapture(
 }
 
 #if BUILDFLAG(ENABLE_VIDEO_EFFECTS)
-
-class VizGpuChannelHostProvider : public video_effects::GpuChannelHostProvider {
- public:
-  explicit VizGpuChannelHostProvider(std::unique_ptr<viz::Gpu> viz_gpu)
-      : viz_gpu_(std::move(viz_gpu)) {
-    CHECK(viz_gpu_);
-  }
-
-  scoped_refptr<gpu::GpuChannelHost> GetGpuChannelHost() override {
-    return viz_gpu_->GetGpuChannel();
-  }
-
- private:
-  std::unique_ptr<viz::Gpu> viz_gpu_;
-};
-
 auto RunVideoEffects(
     mojo::PendingReceiver<video_effects::mojom::VideoEffectsService> receiver) {
   if (base::FeatureList::IsEnabled(media::kCameraMicEffects)) {
-    mojo::PendingRemote<viz::mojom::Gpu> remote_gpu;
-    UtilityThread::Get()->BindHostReceiver(
-        remote_gpu.InitWithNewPipeAndPassReceiver());
-    std::unique_ptr<viz::Gpu> viz_gpu = viz::Gpu::Create(
-        std::move(remote_gpu), UtilityThread::Get()->GetIOTaskRunner());
-
     return std::make_unique<video_effects::VideoEffectsServiceImpl>(
-        std::move(receiver),
-        std::make_unique<VizGpuChannelHostProvider>(std::move(viz_gpu)));
+        std::move(receiver), UtilityThread::Get()->GetIOTaskRunner());
   }
 
   return std::unique_ptr<video_effects::VideoEffectsServiceImpl>{};

@@ -663,6 +663,7 @@ TEST_P(SequenceManagerTest,
   // Now is called when we start work and then for each task when it's
   // completed. 1 + 6  = 7 calls.
   EXPECT_EQ(7 + GetExtraNowSampleCount(), GetNowTicksCallCount());
+  sequence_manager()->RemoveTaskTimeObserver(&time_observer);
 }
 
 TEST_P(SequenceManagerTest,
@@ -688,6 +689,7 @@ TEST_P(SequenceManagerTest,
   // Now is called each time a task is queued, when first task is started
   // running, and when a task is completed. 1 + 6 * 2 = 13 calls.
   EXPECT_EQ(13 + GetExtraNowSampleCount(), GetNowTicksCallCount());
+  sequence_manager()->RemoveTaskTimeObserver(&time_observer);
 }
 
 void NullTask() {}
@@ -4191,6 +4193,7 @@ TEST_P(SequenceManagerTest, ProcessTasksWithTaskTimeObservers) {
   EXPECT_TRUE(GetTaskQueueImpl(queue.get())->RequiresTaskTiming());
   EXPECT_THAT(run_order, ElementsAre(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u));
   UnsetOnTaskHandlers(queue.get());
+  sequence_manager()->RemoveTaskTimeObserver(&test_task_time_observer);
 }
 
 TEST_P(SequenceManagerTest, ObserverNotFiredAfterTaskQueueDestructed) {
@@ -5792,31 +5795,35 @@ TEST_F(SequenceManagerRunOrPostTaskTest,
 // task from starting on the bound thread.
 TEST_F(SequenceManagerRunOrPostTaskTest,
        MainThreadCantStartTaskDuringRunOrPostTask) {
-  SimulateInsideRunLoop();
-  WaitableEvent sync_task_started;
+  RunLoop run_loop;
+
   bool sync_task_done = true;
 
-  EXPECT_TRUE(other_thread_task_runner()->PostTask(
-      FROM_HERE, BindLambdaForTesting([&]() {
-        EXPECT_TRUE(task_runner()->RunOrPostTask(
-            subtle::RunOrPostTaskPassKeyForTesting(), FROM_HERE,
-            BindLambdaForTesting([&]() {
-              sync_task_started.Signal();
-              // Wait to increase chances that the main thread will attempt to
-              // schedule its task.
-              PlatformThread::Sleep(TestTimeouts::tiny_timeout());
-              sync_task_done = true;
-            })));
-        EXPECT_TRUE(sync_task_done);
-      })));
+  task_runner()->PostTask(
+      FROM_HERE, base::BindLambdaForTesting([&]() {
+        EXPECT_TRUE(other_thread_task_runner()->PostTask(
+            FROM_HERE, BindLambdaForTesting([&]() {
+              EXPECT_TRUE(task_runner()->RunOrPostTask(
+                  subtle::RunOrPostTaskPassKeyForTesting(), FROM_HERE,
+                  BindLambdaForTesting([&]() {
+                    task_runner()->PostTask(FROM_HERE,
+                                            BindLambdaForTesting([&]() {
+                                              // Must deterministically run
+                                              // after the sync task is
+                                              // complete.
+                                              EXPECT_TRUE(sync_task_done);
+                                              run_loop.Quit();
+                                            }));
 
-  sync_task_started.Wait();
-  RunLoop run_loop;
-  task_runner()->PostTask(FROM_HERE, BindLambdaForTesting([&]() {
-                            // Must deterministically run after the sync task.
-                            EXPECT_TRUE(sync_task_done);
-                            run_loop.Quit();
-                          }));
+                    // Wait to increase chances that the main thread will
+                    // attempt to schedule its task.
+                    PlatformThread::Sleep(TestTimeouts::tiny_timeout());
+                    sync_task_done = true;
+                  })));
+              EXPECT_TRUE(sync_task_done);
+            })));
+      }));
+
   run_loop.Run();
   FlushOtherThread();
 }

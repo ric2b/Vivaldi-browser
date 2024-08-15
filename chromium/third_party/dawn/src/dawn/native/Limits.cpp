@@ -93,7 +93,7 @@
 // Tiers for limits related to inter-stage shader variables.
 //                                                             compat      tier0       tier1
 #define LIMITS_INTER_STAGE_SHADER_VARIABLES(X) \
-    X(Maximum,               maxInterStageShaderComponents,       60,        60,        112) \
+    X(Maximum,               maxInterStageShaderComponents,       60,        64,        112) \
     X(Maximum,               maxInterStageShaderVariables,        15,        16,         28) \
 
 // Tiered limits for texture dimensions.
@@ -104,7 +104,7 @@
     X(Maximum,                       maxTextureDimension1D,      4096,      8192,      16384) \
     X(Maximum,                       maxTextureDimension2D,      4096,      8192,      16384) \
     X(Maximum,                       maxTextureDimension3D,      1024,      2048,       2048) \
-    X(Maximum,                       maxTextureArrayLayers,       256,       256,        256)
+    X(Maximum,                       maxTextureArrayLayers,       256,       256,       2048)
 
 // TODO(crbug.com/dawn/685):
 // These limits don't have tiers yet. Define two tiers with the same values since the macros
@@ -157,8 +157,7 @@ constexpr void StaticAssertSame() {
 
 template <uint32_t I, uint32_t... Is>
 constexpr uint32_t ReduceSameValue(std::integer_sequence<uint32_t, I, Is...>) {
-    int unused[] = {0, (StaticAssertSame<I, Is>(), 0)...};
-    DAWN_UNUSED(unused);
+    [[maybe_unused]] int unused[] = {0, (StaticAssertSame<I, Is>(), 0)...};
     return I;
 }
 

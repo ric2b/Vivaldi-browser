@@ -65,6 +65,8 @@ TARGET_INFO = {
     'seekable_roundtrip': TargetInfo(InputType.RAW_DATA),
     'huf_round_trip': TargetInfo(InputType.RAW_DATA),
     'huf_decompress': TargetInfo(InputType.RAW_DATA),
+    'decompress_cross_format': TargetInfo(InputType.RAW_DATA),
+    'generate_sequences': TargetInfo(InputType.RAW_DATA),
 }
 TARGETS = list(TARGET_INFO.keys())
 ALL_TARGETS = TARGETS + ['all']
@@ -405,7 +407,11 @@ def build(args):
     cxxflags = shlex.split(args.cxxflags)
     mflags = shlex.split(args.mflags)
     # Flags to be added to both cflags and cxxflags
-    common_flags = []
+    common_flags = [
+        '-Wno-error=declaration-after-statement',
+        '-Wno-error=c++-compat',
+        '-Wno-error=deprecated' # C files are sometimes compiled with CXX
+    ]
 
     cppflags += [
         '-DDEBUGLEVEL={}'.format(args.debug),

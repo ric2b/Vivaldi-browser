@@ -68,7 +68,7 @@ void BookmarkProvider::DoAutocomplete(const AutocompleteInput& input) {
           input, client_->GetTemplateURLService());
 
   const query_parser::MatchingAlgorithm matching_algorithm =
-#if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
+#if defined(VIVALDI_BUILD)
       query_parser::MatchingAlgorithm::ALWAYS_PREFIX_SEARCH;
 #else
       GetMatchingAlgorithm(adjusted_input);
@@ -115,6 +115,9 @@ void BookmarkProvider::DoAutocomplete(const AutocompleteInput& input) {
         match.keyword = starter_pack_engine->keyword();
         match.transition = ui::PAGE_TRANSITION_KEYWORD;
       }
+
+      // Vivaldi
+      match.allowed_to_be_default_match = true;
 
       matches_.push_back(match);
     }

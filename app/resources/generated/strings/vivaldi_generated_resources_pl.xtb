@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">Nie później niż</translation>
 <translation id="2749881179542288782">Sprawdzaj gramatykę oraz pisownię</translation>
 <translation id="2785873697295365461">Deskryptory plików</translation>
-<translation id="2809586584051668049">i <ph name="NUMBER_ADDITIONAL_DISABLED" /> więcej</translation>
 <translation id="2825758591930162672">Klucz publiczny podmiotu</translation>
 <translation id="2850541429955027218">Dodaj motyw</translation>
 <translation id="2861941300086904918">Menedżer zabezpieczeń klienta natywnego</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">Otwórz jako okno</translation>
 <translation id="3280237271814976245">Zapisz &amp;jako...</translation>
 <translation id="3285322247471302225">Nowa &amp;karta</translation>
-<translation id="3288047731229977326">Rozszerzenia działające w trybie programisty mogą uszkodzić twój komputer. Jeśli nie jesteś programistą, wyłącz je dla bezpieczeństwa.</translation>
 <translation id="329838636886466101">Napraw</translation>
 <translation id="33022249435934718">Uchwyty GDI</translation>
 <translation id="3303818374450886607">Kopie</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">Utworzono rozszerzenie:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Wyłącz rozszerzenia trybu programisty</translation>
 <translation id="4100839878934973028">Inny program na twoim komputerze dodał aplikację, która może zmienić działanie Vivaldi.</translation>
 <translation id="4104163789986725820">E&amp;ksportuj...</translation>
 <translation id="4109898769411476438">Zamknij przeglądarkę przed rozpoczęciem importu</translation>
@@ -261,7 +258,6 @@
 <translation id="5269977353971873915">Drukowanie nie powiodło się</translation>
 <translation id="5284445933715251131">Kontynuuj pobieranie</translation>
 <translation id="52912272896845572">Plik kluczy prywatnych jest nieprawidłowy.</translation>
-<translation id="5301954838959518834">OK, rozumiem</translation>
 <translation id="5302932258331363306">Pokaż zamienniki</translation>
 <translation id="5317780077021120954">Zapisz</translation>
 <translation id="5334142896108694079">Pamięć podręczna skryptów</translation>

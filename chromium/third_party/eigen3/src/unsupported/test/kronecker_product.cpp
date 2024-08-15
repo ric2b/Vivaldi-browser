@@ -168,12 +168,12 @@ EIGEN_DECLARE_TEST(kronecker_product) {
   CALL_SUBTEST(check_sparse_kronecker_product(SM_ab));
 
   // test dimension of result of DM = kroneckerProduct(DM,DM)
-  MatrixXd DM_a2(2, 1);
-  MatrixXd DM_b2(5, 4);
+  MatrixXd DM_a2 = Eigen::MatrixXd::Random(2, 1);
+  MatrixXd DM_b2 = Eigen::MatrixXd::Random(5, 4);
   MatrixXd DM_ab2 = kroneckerProduct(DM_a2, DM_b2);
   CALL_SUBTEST(check_dimension(DM_ab2, 2 * 5, 1 * 4));
-  DM_a2.resize(10, 9);
-  DM_b2.resize(4, 8);
+  DM_a2 = Eigen::MatrixXd::Random(10, 9);
+  DM_b2 = Eigen::MatrixXd::Random(4, 8);
   DM_ab2 = kroneckerProduct(DM_a2, DM_b2);
   CALL_SUBTEST(check_dimension(DM_ab2, 10 * 4, 9 * 8));
 

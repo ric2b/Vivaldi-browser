@@ -8,12 +8,14 @@
 #include <utility>
 
 #include "base/compiler_specific.h"
+#include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
+#include "base/hash/sha1.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -21,6 +23,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/histogram_macros_local.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/pickle.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
@@ -64,6 +67,14 @@ bool g_init_cache = false;
 // True if split cache is enabled by default. Must be set before any HTTP cache
 // has been initialized.
 bool g_enable_split_cache = false;
+
+base::SHA1Digest GetHashForKey(const std::string& key) {
+  base::SHA1Digest sha_hash;
+  base::SHA1HashBytes(reinterpret_cast<const unsigned char*>(key.data()),
+                      key.size(), sha_hash.data());
+  return sha_hash;
+}
+
 }  // namespace
 
 const char HttpCache::kDoubleKeyPrefix[] = "_dk_";
@@ -393,7 +404,9 @@ HttpCache::HttpCache(std::unique_ptr<HttpTransactionFactory> network_layer,
       backend_factory_(std::move(backend_factory)),
 
       network_layer_(std::move(network_layer)),
-      clock_(base::DefaultClock::GetInstance()) {
+      clock_(base::DefaultClock::GetInstance()),
+      keys_marked_no_store_(
+          features::kAvoidEntryCreationForNoStoreCacheSize.Get()) {
   g_init_cache = true;
   HttpNetworkSession* session = network_layer_->GetSession();
   // Session may be NULL in unittests.
@@ -472,7 +485,8 @@ bool HttpCache::ParseResponseInfo(const char* data,
                                   int len,
                                   HttpResponseInfo* response_info,
                                   bool* response_truncated) {
-  base::Pickle pickle(data, len);
+  base::Pickle pickle = base::Pickle::WithUnownedBuffer(
+      base::as_bytes(base::span(data, base::checked_cast<size_t>(len))));
   return response_info->InitFromPickle(pickle, response_truncated);
 }
 
@@ -1348,6 +1362,15 @@ bool HttpCache::RemovePendingTransactionFromPendingOp(
     }
   }
   return false;
+}
+
+void HttpCache::MarkKeyNoStore(const std::string& key) {
+  keys_marked_no_store_.Put(GetHashForKey(key));
+}
+
+bool HttpCache::DidKeyLeadToNoStoreResponse(const std::string& key) {
+  return keys_marked_no_store_.Get(GetHashForKey(key)) !=
+         keys_marked_no_store_.end();
 }
 
 void HttpCache::OnProcessQueuedTransactions(scoped_refptr<ActiveEntry> entry) {

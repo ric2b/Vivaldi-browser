@@ -81,6 +81,7 @@ Configuration options:
     decoding will be used if |threads| > |tile_count| * this multiplier. Has to
     be an integer > 0. The default value is 4. This is an advanced setting
     intended for testing purposes.
+*   `CHROMIUM`: apply Chromium-specific changes if set.
 
 For additional options see:
 

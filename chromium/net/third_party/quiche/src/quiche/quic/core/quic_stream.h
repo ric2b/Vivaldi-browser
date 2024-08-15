@@ -221,6 +221,10 @@ class QUICHE_EXPORT QuicStream : public QuicStreamSequencer::StreamInterface {
   QuicRstStreamErrorCode stream_error() const {
     return stream_error_.internal_code();
   }
+  // Application error code of RESET_STREAM.
+  uint64_t ietf_application_error() const {
+    return stream_error_.ietf_application_code();
+  }
   QuicErrorCode connection_error() const { return connection_error_; }
 
   bool reading_stopped() const {
@@ -258,6 +262,9 @@ class QUICHE_EXPORT QuicStream : public QuicStreamSequencer::StreamInterface {
   bool IsFlowControlBlocked() const;
   QuicStreamOffset highest_received_byte_offset() const;
   void UpdateReceiveWindowSize(QuicStreamOffset size);
+  QuicStreamOffset NumBytesConsumed() const {
+    return sequencer()->NumBytesConsumed();
+  }
 
   // Called when endpoint receives a frame which could increase the highest
   // offset.

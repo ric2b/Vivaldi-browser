@@ -10,7 +10,6 @@ import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
 
-import androidx.annotation.OptIn;
 import androidx.core.os.BuildCompat;
 
 import org.chromium.base.ActivityState;
@@ -75,7 +74,6 @@ class ChromeLifetimeController
     }
 
     @Override
-    @OptIn(markerClass = androidx.core.os.BuildCompat.PrereleaseSdkCheck.class)
     public void onTerminate(boolean restart) {
         mRestartChromeOnDestroy = restart;
 

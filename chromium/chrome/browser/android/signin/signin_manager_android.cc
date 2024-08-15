@@ -7,21 +7,16 @@
 #include <utility>
 #include <vector>
 
+#include "base/android/callback_android.h"
 #include "base/android/jni_string.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/time/time.h"
 #include "chrome/android/chrome_jni_headers/SigninManagerImpl_jni.h"
-#include "chrome/browser/sync/sync_service_factory.h"
-#include "chrome/common/pref_names.h"
-#include "components/prefs/pref_service.h"
-#include "components/signin/public/base/signin_pref_names.h"
-#include "components/sync/service/sync_service.h"
-#include "google_apis/gaia/gaia_auth_util.h"
-
-#include "base/android/callback_android.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
 #include "chrome/browser/enterprise/util/managed_browser_utils.h"
@@ -31,20 +26,35 @@
 #include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/signin/account_id_from_account_info.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/sync/sync_service_factory.h"
+#include "chrome/common/pref_names.h"
 #include "components/google/core/common/google_util.h"
 #include "components/password_manager/core/browser/password_store/split_stores_and_local_upm.h"
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
+#include "components/policy/core/common/policy_switches.h"
+#include "components/prefs/pref_service.h"
+#include "components/signin/internal/identity_manager/account_tracker_service.h"
+#include "components/signin/public/base/signin_pref_names.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_managed_status_finder.h"
 #include "components/signin/public/identity_manager/accounts_cookie_mutator.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/sync/service/sync_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/storage_partition.h"
+#include "google_apis/gaia/gaia_auth_util.h"
 
 using base::android::JavaParamRef;
 
 namespace {
+
+// The cache expiration time for IsAccountManaged(), i.e. the maximum time
+// interval between two calls to IsAccountManaged() where the second may return
+// the cached outcome of the first (for the same user).
+constexpr base::TimeDelta kIsAccountManagedCacheExpirationTime =
+    base::Minutes(1);
 
 // A BrowsingDataRemover::Observer that clears Profile data and then invokes
 // a callback and deletes itself. It can be configured to delete all data
@@ -112,6 +122,8 @@ class ProfileDataRemover : public content::BrowsingDataRemover::Observer {
       profile_->GetPrefs()->ClearPref(prefs::kGoogleServicesLastSyncingGaiaId);
       profile_->GetPrefs()->ClearPref(
           prefs::kGoogleServicesLastSyncingUsername);
+      profile_->GetPrefs()->ClearPref(
+          prefs::kGoogleServicesLastSignedInUsername);
     }
 
     origin_runner_->PostTask(FROM_HERE, std::move(callback_));
@@ -200,6 +212,14 @@ jboolean SigninManagerAndroid::IsForceSigninEnabled(JNIEnv* env) {
   return force_browser_signin_.GetValue();
 }
 
+// static
+bool SigninManagerAndroid::MatchesCachedIsAccountManagedEntry(
+    const CachedIsAccountManaged& cached_entry,
+    const CoreAccountInfo& account) {
+  return cached_entry.gaia_id == account.gaia &&
+         cached_entry.expiration_time > base::Time::Now();
+}
+
 void SigninManagerAndroid::OnSigninAllowedPrefChanged() const {
   VLOG(1) << "::OnSigninAllowedPrefChanged() " << IsSigninAllowed();
   Java_SigninManagerImpl_onSigninAllowedByPolicyChanged(
@@ -280,19 +300,56 @@ void SigninManagerAndroid::FetchPolicyBeforeSignIn(
 
 void SigninManagerAndroid::IsAccountManaged(
     JNIEnv* env,
+    const JavaParamRef<jobject>& j_account_tracker_service,
     const JavaParamRef<jobject>& j_account_info,
     const JavaParamRef<jobject>& j_callback) {
+  base::Time start_time = base::Time::Now();
   CoreAccountInfo account = ConvertFromJavaCoreAccountInfo(env, j_account_info);
   base::android::ScopedJavaGlobalRef<jobject> callback(env, j_callback);
 
+  if (cached_is_account_managed_.has_value() &&
+      MatchesCachedIsAccountManagedEntry(*cached_is_account_managed_,
+                                         account)) {
+    // Cache hit, return cached value without issuing any request.
+    bool is_managed = cached_is_account_managed_->is_account_managed;
+    base::android::RunBooleanCallbackAndroid(callback, is_managed);
+    return;
+  }
+
+  if (!base::FeatureList::IsEnabled(switches::kSeedAccountsRevamp) &&
+      base::FeatureList::IsEnabled(switches::kEnterprisePolicyOnSignin)) {
+    // Force seed the account, since requesting management status would require
+    // access token, and this operation would result in a crash if done on a
+    // non seeded account. See https://crbug.com/332900316.
+    AccountTrackerService* account_tracker_service =
+        AccountTrackerService::FromAccountTrackerServiceAndroid(
+            j_account_tracker_service);
+
+    account_tracker_service->SeedAccountInfo(account.gaia, account.email);
+  }
+
   RegisterPolicyWithAccount(
-      account, base::BindOnce(
-                   [](base::android::ScopedJavaGlobalRef<jobject> callback,
-                      const std::optional<ManagementCredentials>& credentials) {
-                     base::android::RunBooleanCallbackAndroid(
-                         callback, credentials.has_value());
-                   },
-                   callback));
+      account,
+      base::BindOnce(
+          &SigninManagerAndroid::OnPolicyRegisterDoneForIsAccountManaged,
+          weak_factory_.GetWeakPtr(), account, std::move(callback),
+          start_time));
+}
+
+void SigninManagerAndroid::OnPolicyRegisterDoneForIsAccountManaged(
+    const CoreAccountInfo& account,
+    base::android::ScopedJavaGlobalRef<jobject> callback,
+    base::Time start_time,
+    const std::optional<ManagementCredentials>& credentials) {
+  UMA_HISTOGRAM_MEDIUM_TIMES("Signin.Android.IsAccountManagedDuration",
+                             (base::Time::Now() - start_time));
+
+  bool is_managed = credentials.has_value();
+  // Cache result in case IsAccountManaged() is invoked again for the same user.
+  cached_is_account_managed_.emplace(
+      account.gaia, is_managed,
+      base::Time::Now() + kIsAccountManagedCacheExpirationTime);
+  base::android::RunBooleanCallbackAndroid(callback, is_managed);
 }
 
 base::android::ScopedJavaLocalRef<jstring>
@@ -335,12 +392,9 @@ void SigninManagerAndroid::WipeData(Profile* profile,
   new ProfileDataRemover(profile, all_data, std::move(callback));
 }
 
-base::android::ScopedJavaLocalRef<jstring>
-JNI_SigninManagerImpl_ExtractDomainName(JNIEnv* env,
-                                        const JavaParamRef<jstring>& j_email) {
-  std::string email = base::android::ConvertJavaStringToUTF8(env, j_email);
-  std::string domain = gaia::ExtractDomainName(email);
-  return base::android::ConvertUTF8ToJavaString(env, domain);
+std::string JNI_SigninManagerImpl_ExtractDomainName(JNIEnv* env,
+                                                    std::string& email) {
+  return gaia::ExtractDomainName(email);
 }
 
 void SigninManagerAndroid::SetUserAcceptedAccountManagement(

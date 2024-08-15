@@ -19,12 +19,9 @@
 #import "ios/ui/settings/sync/vivaldi_sync_settings_constants.h"
 #import "ios/ui/table_view/cells/vivaldi_input_error_item.h"
 #import "ios/ui/table_view/cells/vivaldi_table_view_illustrated_item.h"
+#import "ios/ui/table_view/cells/vivaldi_table_view_text_spinner_button_item.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierHeader = kSectionIdentifierEnumZero,
@@ -143,8 +140,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
 #pragma mark - UITableViewDelegate
 
 - (CGFloat)tableView:(UITableView*)tableView
-    heightForFooterInSection:(NSInteger)section {
-  return kFooterSectionHeight;
+heightForFooterInSection:(NSInteger)section {
+  return 0;
+}
+
+- (CGFloat)tableView:(UITableView*)tableView
+heightForHeaderInSection:(NSInteger)section {
+  return kCommonHeaderSectionHeight;
 }
 
 #pragma mark - UITableViewDataSource

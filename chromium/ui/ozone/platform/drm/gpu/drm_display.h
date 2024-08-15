@@ -106,6 +106,7 @@ class DrmDisplay {
  private:
   gfx::HDRStaticMetadata::Eotf GetEotf(
       const gfx::ColorSpace::TransferID transfer_id);
+  bool ClearHdrOutputMetadata();
 
   const int64_t display_id_;
   const int64_t base_connector_id_;
@@ -116,7 +117,6 @@ class DrmDisplay {
   gfx::Point origin_;
   bool is_hdr_capable_ = false;
   std::optional<gfx::HDRStaticMetadata> hdr_static_metadata_;
-  gfx::ColorSpace current_color_space_;
   std::unique_ptr<PrivacyScreenProperty> privacy_screen_property_;
 };
 

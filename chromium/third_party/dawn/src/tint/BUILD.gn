@@ -139,6 +139,10 @@ config("tint_config") {
   }
 }
 
+source_set("dl") {
+  # GN doesn't appear to need to depend on any dl libraries.
+}
+
 source_set("thread") {
   # GN doesn't appear to need to depend on any thread libraries.
 }
@@ -238,10 +242,10 @@ if (tint_build_benchmarks) {
 }
 
 group("abseil") {
-  # When build_with_chromium=true we need to include "//third_party/abseil-cpp:absl" while
+  # When building within Chromium or ANGLE we need to include "//third_party/abseil-cpp:absl" while
   # it's beneficial to be more specific with standalone Dawn, especially when it comes to
   # including it as a dependency in other projects (such as Skia).
-  if (build_with_chromium) {
+  if (build_with_chromium || build_with_angle) {
     public_deps = [ "$dawn_abseil_dir:absl" ]
   } else {
     public_deps = [ "${dawn_root}/third_party/gn/abseil-cpp:strings" ]
@@ -250,6 +254,13 @@ group("abseil") {
 
 source_set("winsock") {
   libs = [ "ws2_32.lib" ]
+}
+
+config("dxc-include-config") {
+  include_dirs = [ "${dawn_dxc_dir}/include" ]
+}
+source_set("dxc-include") {
+  public_configs = [ ":dxc-include-config" ]
 }
 
 ###############################################################################
@@ -293,10 +304,7 @@ group("fuzzers") {
   testonly = true
   deps = []
   if (tint_has_fuzzers) {
-    deps += [
-      "${tint_src_dir}/cmd/fuzz/wgsl",
-      "${tint_src_dir}/fuzzers",
-    ]
+    deps += [ "${tint_src_dir}/cmd/fuzz/wgsl" ]
   }
 }
 

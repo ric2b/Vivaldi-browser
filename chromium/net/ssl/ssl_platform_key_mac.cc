@@ -90,7 +90,7 @@ class SSLPlatformKeySecKey : public ThreadedSSLPrivateKey::Delegate {
   ~SSLPlatformKeySecKey() override = default;
 
   std::string GetProviderName() override {
-    // TODO(https://crbug.com/900721): Is there a more descriptive name to
+    // TODO(crbug.com/41423739): Is there a more descriptive name to
     // return?
     return "SecKey";
   }
@@ -194,6 +194,20 @@ scoped_refptr<SSLPrivateKey> CreateSSLPrivateKeyForSecKey(
 
   return base::MakeRefCounted<ThreadedSSLPrivateKey>(
       std::make_unique<SSLPlatformKeySecKey>(std::move(pubkey), key),
+      GetSSLPlatformKeyTaskRunner());
+}
+
+scoped_refptr<SSLPrivateKey> WrapUnexportableKey(
+    const crypto::UnexportableSigningKey& unexportable_key) {
+  bssl::UniquePtr<EVP_PKEY> pubkey =
+      ParseSpki(unexportable_key.GetSubjectPublicKeyInfo());
+  if (!pubkey) {
+    return nullptr;
+  }
+
+  return base::MakeRefCounted<ThreadedSSLPrivateKey>(
+      std::make_unique<SSLPlatformKeySecKey>(std::move(pubkey),
+                                             unexportable_key.GetSecKeyRef()),
       GetSSLPlatformKeyTaskRunner());
 }
 

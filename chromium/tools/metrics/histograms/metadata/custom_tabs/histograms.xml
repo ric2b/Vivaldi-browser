@@ -35,6 +35,17 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="CustomTabs.AuthView.UrlParams" units="bit field"
+    expires_after="2024-12-01">
+  <owner>sinansahin@google.com</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    A bit field with each bit representing the presence of a potential OAuth
+    query param in the URL. Recorded when the Custom Tab receives and handles
+    the initial intent. Android only.
+  </summary>
+</histogram>
+
 <histogram name="CustomTabs.AutoclosedSessionDuration" units="ms"
     expires_after="2023-08-20">
   <owner>jinsukkim@chromium.org</owner>
@@ -53,7 +64,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.Branding.AppIdType"
-    enum="CustomTabsBrandingAppIdType" expires_after="2024-08-24">
+    enum="CustomTabsBrandingAppIdType" expires_after="2024-10-28">
   <owner>jinsukkim@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -70,7 +81,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.Branding.BrandingCheckDuration" units="ms"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>wenyufu@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -81,25 +92,8 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="CustomTabs.Branding.BrandingDecision"
-    enum="CustomTabsBrandingDecision" expires_after="2024-04-28">
-  <owner>wenyufu@chromium.org</owner>
-  <owner>chrome-connective-tissue@google.com</owner>
-  <summary>
-    For every CCT launch, Chrome will start an async task in the background
-    checking the last time branding is shown for the client app. When such task
-    completed, a branding decision will be made based on the last time branding
-    was shown, and the task completion time. (e.g. show a &quot;chrome logo +
-    text&quot; combination on the toolbar). See go/clank-cct-branding-dd for
-    detail.
-
-    Record what branding decision will be used for the current CCT session when
-    the branding check is finished or canceled. Record for Android CCT only.
-  </summary>
-</histogram>
-
 <histogram name="CustomTabs.Branding.NumberOfClients" units="count"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>wenyufu@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -112,7 +106,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.ClientAppId" enum="ClientAppId"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>yusufo@chromium.org</owner>
   <summary>
     Android: AppId declared by the launching application in EXTRA_APPLICATION_ID
@@ -144,7 +138,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.CloseCause" enum="CustomTabsCloseCause"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>jinsukkim@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <owner>cct-team@google.com</owner>
@@ -156,7 +150,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.ConnectionStatusOnReturn.GSA"
-    enum="CustomTabsConnection" expires_after="2024-09-01">
+    enum="CustomTabsConnection" expires_after="2024-11-03">
   <owner>kgrosu@google.com</owner>
   <owner>jinsukkim@chromium.org</owner>
   <owner>cct-team@google.com</owner>
@@ -170,7 +164,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.ConnectionStatusOnReturn.NonGSA"
-    enum="CustomTabsConnection" expires_after="2024-09-01">
+    enum="CustomTabsConnection" expires_after="2024-11-03">
   <owner>kgrosu@google.com</owner>
   <owner>jinsukkim@chromium.org</owner>
   <owner>cct-team@google.com</owner>
@@ -195,7 +189,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.DetachedResourceRequest.FinalStatus"
-    enum="NetErrorCodes" expires_after="2024-07-21">
+    enum="NetErrorCodes" expires_after="2024-09-22">
   <owner>lizeb@chromium.org</owner>
   <owner>cct-team@google.com</owner>
   <summary>
@@ -232,7 +226,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.FeatureUsage" enum="CustomTabsFeatureUsed"
-    expires_after="2024-07-21">
+    expires_after="2024-09-22">
   <owner>donnd@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -245,8 +239,54 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="CustomTabs.GoogleBottomBar.ButtonClicked"
+    enum="GoogleBottomBarButtonEvent" expires_after="2025-05-16">
+  <owner>tivi@google.com</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    Recorded only on Android. Records clicks on GoogleBottomBar buttons in the
+    GoogleBottomBar. Logged when a button is clicked in the GoogleBottomBar
+    (when the GoogleBottomBar feature is enabled and visible at the bottom of
+    the CCT).
+  </summary>
+</histogram>
+
+<histogram name="CustomTabs.GoogleBottomBar.ButtonShown"
+    enum="GoogleBottomBarButtonEvent" expires_after="2025-05-16">
+  <owner>tivi@google.com</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    Recorded only on Android. Records GoogleBottomBar buttons that are shown.
+    Logged when a button is displayed in the GoogleBottomBar (when the
+    GoogleBottomBar feature is enabled and visible at the bottom of the CCT).
+  </summary>
+</histogram>
+
+<histogram name="CustomTabs.GoogleBottomBar.ButtonUpdated"
+    enum="GoogleBottomBarButtonEvent" expires_after="2025-05-16">
+  <owner>tivi@google.com</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    Recorded only on Android. Records GoogleBottomBar(GBB) buttons that are
+    updated. Logged when embedder send request to update a button that is
+    displayed in the GoogleBottomBar (when the GoogleBottomBar feature is
+    enabled and visible at the bottom of the CCT).
+  </summary>
+</histogram>
+
+<histogram name="CustomTabs.GoogleBottomBar.Created"
+    enum="GoogleBottomBarCreatedEvent" expires_after="2025-05-16">
+  <owner>tivi@google.com</owner>
+  <owner>chrome-connective-tissue@google.com</owner>
+  <summary>
+    Recorded only on Android. Records type of the layout used to create the
+    GoogleBottomBar. Logged when the GoogleBottomBar is displayed (when the
+    GoogleBottomBar feature is enabled and visible at the bottom of the CCT).
+  </summary>
+</histogram>
+
 <histogram name="CustomTabs.HadInteractionOnClose.Form" enum="Boolean"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>katzz@google.com</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -258,7 +298,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.HadInteractionOnClose.FormStillActive"
-    enum="Boolean" expires_after="2024-07-28">
+    enum="Boolean" expires_after="2024-09-29">
   <owner>katzz@google.com</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -270,7 +310,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.HadInteractionOnClose.Navigation" enum="Boolean"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>katzz@google.com</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -283,7 +323,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.HasNonSpoofablePackageName" enum="Boolean"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>katzz@google.com</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -349,7 +389,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.MayLaunchUrlType" enum="MayLaunchUrlType"
-    expires_after="2024-07-28">
+    expires_after="2024-09-29">
   <owner>lizeb@chromium.org</owner>
   <summary>
     Android only. Which flavors of mayLaunchUrl() were used before a tab launch.
@@ -364,7 +404,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.Minimized.MinimizeSuccess" enum="Boolean"
-    expires_after="2024-08-11">
+    expires_after="2024-10-13">
   <owner>sinansahin@google.com</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -375,7 +415,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.Minimized.ReceivedIntentReusingSession"
-    enum="Boolean" expires_after="2024-08-04">
+    enum="Boolean" expires_after="2024-10-06">
   <owner>sinansahin@google.com</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -385,7 +425,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.MinimizedEvents" enum="CustomTabsMinimizedEvents"
-    expires_after="2024-08-04">
+    expires_after="2024-10-13">
   <owner>katzz@google.com</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -397,7 +437,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.MinimizedFeatureAvailability"
-    enum="CustomTabsMinimizedFeatureAvailability" expires_after="2024-08-04">
+    enum="CustomTabsMinimizedFeatureAvailability" expires_after="2024-10-06">
   <owner>sinansahin@google.com</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -427,8 +467,42 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
+<histogram name="CustomTabs.Omnibox.EnabledState" units="BooleanEnabled"
+    expires_after="2025-05-01">
+  <owner>ender@google.com</owner>
+  <owner>sinansahin@google.com</owner>
+  <summary>
+    Records whether a CustomTab was requested to include an interactive Omnibox.
+    Recorded once per CCT instantiation event. Android only.
+  </summary>
+</histogram>
+
+<histogram name="CustomTabs.Omnibox.FocusResultedInNavigation" units="Boolean"
+    expires_after="2025-05-01">
+  <owner>ender@google.com</owner>
+  <owner>sinansahin@google.com</owner>
+  <summary>
+    Records whether user initiated navigation after focusing the Omnibox. Value
+    of 'true' indicates user chose to initiate navigation, whereas value of
+    'false' suggests the user abandoned the interaction with the Omnibox.
+    Recorded once per interaction with Omnibox on CCT when the CCT receives a
+    response from SearchActivity. Android only.
+  </summary>
+</histogram>
+
+<histogram name="CustomTabs.Omnibox.NumNavigationsPerSession" units="count"
+    expires_after="2025-05-01">
+  <owner>ender@google.com</owner>
+  <owner>sinansahin@google.com</owner>
+  <summary>
+    Records the number of navigations issued on CustomTab during its lifetime.
+    Recorded only on CCTs that feature an interactive Omnibox. Recorded once per
+    CCT when CCT is about to be destroyed. Android only.
+  </summary>
+</histogram>
+
 <histogram name="CustomTabs.PageInsights.Event" enum="PageInsightsEvent"
-    expires_after="2024-08-04">
+    expires_after="2024-10-06">
   <owner>jinsukkim@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -462,7 +536,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.PartialCustomTabType"
-    enum="CustomTabsPartialCustomTabType" expires_after="2024-09-01">
+    enum="CustomTabsPartialCustomTabType" expires_after="2024-11-03">
   <owner>kgrosu@google.com</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -475,7 +549,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.PostMessage.OnMessage" enum="Boolean"
-    expires_after="2024-08-23">
+    expires_after="2024-11-03">
   <owner>sinansahin@google.com</owner>
   <owner>jinsukkim@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
@@ -512,7 +586,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="CustomTabs.PostMessage.RequestPostMessageChannelWithTargetOrigin"
-    enum="Boolean" expires_after="2024-05-26">
+    enum="Boolean" expires_after="2024-10-28">
   <owner>elabadysayed@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -535,7 +609,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="CustomTabs.RetainableSessionsV2.TimeBetweenLaunch{IdentifierType}"
-    units="seconds" expires_after="2024-09-01">
+    units="seconds" expires_after="2024-11-03">
   <owner>wenyufu@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -576,7 +650,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.SessionDisconnectStatus"
-    enum="CustomTabsSessionDisconnectStatus" expires_after="2024-07-28">
+    enum="CustomTabsSessionDisconnectStatus" expires_after="2024-09-29">
   <owner>kgrosu@google.com</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -631,7 +705,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.Startup.TimeToFirstCommitNavigation2.{suffix}"
-    units="ms" expires_after="2024-08-25">
+    units="ms" expires_after="2024-10-28">
   <owner>mthiesse@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -660,7 +734,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.Startup.TimeToLargestContentfulPaint2.{suffix}"
-    units="ms" expires_after="2024-08-25">
+    units="ms" expires_after="2024-10-28">
   <owner>mthiesse@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -688,7 +762,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.TabCounts.OnClosingAllTabs" units="count"
-    expires_after="2024-07-07">
+    expires_after="2024-09-15">
   <owner>wenyufu@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -700,7 +774,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.TabCounts.UniqueTabsSeen" units="count"
-    expires_after="2024-07-14">
+    expires_after="2024-09-15">
   <owner>wenyufu@chromium.org</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -715,7 +789,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.TimeElapsedSinceMinimized.Destroyed" units="s"
-    expires_after="2024-08-04">
+    expires_after="2024-10-06">
   <owner>katzz@google.com</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
@@ -727,25 +801,13 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.TimeElapsedSinceMinimized.Maximized" units="s"
-    expires_after="2024-08-04">
+    expires_after="2024-10-06">
   <owner>katzz@google.com</owner>
   <owner>chrome-connective-tissue@google.com</owner>
   <summary>
     Android only. Starts tracking system time when minimization begins and
     records the difference if the PiP window is maximized (the tab goes back to
     its original state). Emitted when tab is maximized.
-  </summary>
-</histogram>
-
-<histogram name="CustomTabs.TimeScrollUpdateReceivedAfterScrollEnd" units="ms"
-    expires_after="2024-05-26">
-  <owner>sinansahin@google.com</owner>
-  <owner>chrome-connective-tissue@google.com</owner>
-  <summary>
-    Android only. Recorded when the RealtimeEngagementSignalObserver receives a
-    scroll-update signal after the scroll-end signal from the renderer. This is
-    the time it took to receive the scroll-update after the scroll-end signal in
-    milliseconds.
   </summary>
 </histogram>
 
@@ -768,7 +830,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.WarmupStateOnLaunch" enum="WarmupStateOnLaunch"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>lizeb@chromium.org</owner>
   <summary>
     Recorded only on Android. Reports whether warmup() has been called when a
@@ -779,7 +841,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CustomTabs.WebContentsStateOnLaunch" enum="WebContentsState"
-    expires_after="2024-07-28">
+    expires_after="2024-09-29">
   <owner>lizeb@chromium.org</owner>
   <summary>
     Android: When a CustomTabActivity creates its Tab, whether we use a
@@ -788,7 +850,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TrustedWebActivity.ClearDataDialogOnClearAppDataAccepted"
-    enum="Boolean" expires_after="M126">
+    enum="Boolean" expires_after="M132">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -798,7 +860,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TrustedWebActivity.ClearDataDialogOnUninstallAccepted"
-    enum="Boolean" expires_after="M126">
+    enum="Boolean" expires_after="M132">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -809,7 +871,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="TrustedWebActivity.DelegatedNotificationSmallIconFallback"
     enum="TrustedWebActivityDelegatedNotificationSmallIconFallback"
-    expires_after="M126">
+    expires_after="M132">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -862,7 +924,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TrustedWebActivity.ShareTargetRequest"
-    enum="WebShareTargetMethod" expires_after="M126">
+    enum="WebShareTargetMethod" expires_after="M132">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>Recorded when data is shared via a Trusted Web Activity.</summary>
@@ -879,7 +941,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TrustedWebActivity.TimeInVerifiedOrigin.V2" units="ms"
-    expires_after="M126">
+    expires_after="M132">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -889,7 +951,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TrustedWebActivity.TimeOutOfVerifiedOrigin.V2" units="ms"
-    expires_after="M126">
+    expires_after="M132">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>

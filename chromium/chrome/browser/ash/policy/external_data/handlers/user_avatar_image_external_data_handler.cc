@@ -6,16 +6,16 @@
 
 #include <utility>
 
-#include "chrome/browser/ash/login/users/avatar/user_image_manager.h"
+#include "chrome/browser/ash/login/users/avatar/user_image_manager_impl.h"
 #include "chrome/browser/ash/login/users/avatar/user_image_manager_registry.h"
-#include "chrome/browser/ash/settings/cros_settings.h"
+#include "chromeos/ash/components/settings/cros_settings.h"
 #include "components/policy/policy_constants.h"
 
 namespace policy {
 
 namespace {
 
-ash::UserImageManager* GetUserImageManager(const std::string& user_id) {
+ash::UserImageManagerImpl* GetUserImageManager(const std::string& user_id) {
   return ash::UserImageManagerRegistry::Get()->GetManager(
       CloudExternalDataPolicyHandler::GetAccountId(user_id));
 }

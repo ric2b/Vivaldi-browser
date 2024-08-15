@@ -59,7 +59,7 @@ Looking at the RPC doc from the server itself can be useful.
 
 Most tests are checked in under third_party/autotest/files/ (autotest.git
 chromium-os project). Some may be scattered around other locations. See
-[link](/chromium-os/testing/building-and-running-tests#TOC-Q1:-What-autotest-ebuilds-are-out-there-)
+[link](/chromium-os/developer-library/guides/testing/building-and-running-tests/#TOC-Q1:-What-autotest-ebuilds-are-out-there-)
 to find out the complete list.
 
 **Test cases are not upstreamed to the general autotest repository as most are

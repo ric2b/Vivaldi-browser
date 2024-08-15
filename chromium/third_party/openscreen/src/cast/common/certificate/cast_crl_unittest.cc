@@ -11,8 +11,8 @@
 #include "cast/common/public/trust_store.h"
 #include "gtest/gtest.h"
 #include "platform/test/paths.h"
-#include "testing/util/read_file.h"
 #include "util/osp_logging.h"
+#include "util/read_file.h"
 
 namespace openscreen::cast {
 

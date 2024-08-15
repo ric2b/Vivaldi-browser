@@ -74,10 +74,14 @@ void TouchObserverHud::OnWidgetDestroying(views::Widget* widget) {
   delete this;
 }
 
-void TouchObserverHud::OnDisplayRemoved(const display::Display& old_display) {
-  if (old_display.id() != display_id_)
-    return;
-  widget_->CloseNow();
+void TouchObserverHud::OnDisplaysRemoved(
+    const display::Displays& removed_displays) {
+  for (const auto& display : removed_displays) {
+    if (display.id() == display_id_) {
+      widget_->CloseNow();
+      break;
+    }
+  }
 }
 
 void TouchObserverHud::OnDisplayMetricsChanged(const display::Display& display,
@@ -88,10 +92,10 @@ void TouchObserverHud::OnDisplayMetricsChanged(const display::Display& display,
   widget_->SetSize(display.size());
 }
 
-void TouchObserverHud::OnDisplayModeChanged(
+void TouchObserverHud::OnDisplayConfigurationChanged(
     const display::DisplayConfigurator::DisplayStateList& outputs) {
-  // Clear touch HUD for any change in display mode (single, dual extended, dual
-  // mirrored, ...).
+  // Clear touch HUD for any change in display state (single, dual extended,
+  // dual mirrored, ...).
   Clear();
 }
 

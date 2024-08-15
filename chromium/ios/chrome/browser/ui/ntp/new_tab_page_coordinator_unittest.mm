@@ -75,7 +75,7 @@ using variations::VariationsServiceClient;
 
 namespace {
 
-// TODO(crbug.com/1167566): Remove when fake VariationsServiceClient created.
+// TODO(crbug.com/40742801): Remove when fake VariationsServiceClient created.
 class TestVariationsServiceClient : public VariationsServiceClient {
  public:
   TestVariationsServiceClient() = default;
@@ -187,11 +187,11 @@ class NewTabPageCoordinatorTest : public PlatformTest {
 
   std::unique_ptr<web::FakeWebState> CreateWebState(const char* url) {
     auto test_web_state = std::make_unique<web::FakeWebState>();
+    test_web_state->SetBrowserState(browser_state_.get());
     NewTabPageTabHelper::CreateForWebState(test_web_state.get());
     test_web_state->SetCurrentURL(GURL(url));
     test_web_state->SetNavigationManager(
         std::make_unique<web::FakeNavigationManager>());
-    test_web_state->SetBrowserState(browser_state_.get());
     return test_web_state;
   }
 
@@ -218,7 +218,7 @@ class NewTabPageCoordinatorTest : public PlatformTest {
     // Mocks the component factory so that the NTP is tested with a fake feed.
     // This allows testing of feed-dependent views, such as the feed top
     // section.
-    // TODO(crbug.com/1441139): Replace this with a
+    // TODO(crbug.com/40266435): Replace this with a
     // FakeNewTabPageComponentFactory implementation.
     component_factory_mock_ =
         OCMPartialMock([[NewTabPageComponentFactory alloc] init]);
@@ -264,6 +264,7 @@ class NewTabPageCoordinatorTest : public PlatformTest {
   std::unique_ptr<web::WebState> CreateWebStateWithURL(const GURL& url) {
     std::unique_ptr<web::FakeWebState> web_state =
         std::make_unique<web::FakeWebState>();
+    web_state->SetBrowserState(browser_state_.get());
     NewTabPageTabHelper::CreateForWebState(web_state.get());
     web_state->SetVisibleURL(url);
     auto navigation_manager = std::make_unique<web::FakeNavigationManager>();
@@ -461,6 +462,9 @@ TEST_F(NewTabPageCoordinatorTest, ShortcutsStartMetricLogging) {
 
   histogram_tester_->ExpectUniqueSample("IOS.Start.Click",
                                         IOSHomeActionType::kShortcuts, 0);
+  histogram_tester_->ExpectUniqueSample(
+      "IOS.MagicStack.Module.Click.OnStart",
+      ContentSuggestionsModuleType::kShortcuts, 0);
   histogram_tester_->ExpectTotalCount(kStartTimeSpentHistogram, 0);
   histogram_tester_->ExpectTotalCount(kStartImpressionHistogram, 1);
 
@@ -484,6 +488,9 @@ TEST_F(NewTabPageCoordinatorTest, ShortcutsStartMetricLogging) {
   // ShouldShowStartSurface() to false.
   histogram_tester_->ExpectUniqueSample("IOS.Start.Click",
                                         IOSHomeActionType::kShortcuts, 1);
+  histogram_tester_->ExpectUniqueSample(
+      "IOS.MagicStack.Module.Click.OnStart",
+      ContentSuggestionsModuleType::kShortcuts, 1);
   histogram_tester_->ExpectTotalCount(kStartTimeSpentHistogram, 1);
   histogram_tester_->ExpectTotalCount(kStartImpressionHistogram, 1);
   EXPECT_FALSE(
@@ -590,7 +597,6 @@ TEST_F(NewTabPageCoordinatorTest, ProxiesNTPViewControllerMethods) {
   [coordinator_ start];
   [coordinator_ didNavigateToNTPInWebState:web_state_];
 
-  ExpectMethodToProxyToVC(@selector(stopScrolling), @selector(stopScrolling));
   ExpectMethodToProxyToVC(@selector(isScrolledToTop),
                           @selector(isNTPScrolledToTop));
   ExpectMethodToProxyToVC(@selector(willUpdateSnapshot),

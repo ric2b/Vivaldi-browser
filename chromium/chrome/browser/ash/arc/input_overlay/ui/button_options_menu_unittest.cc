@@ -11,7 +11,9 @@
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/style/icon_button.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/ash/arc/input_overlay/actions/action.h"
+#include "chrome/browser/ash/arc/input_overlay/arc_input_overlay_metrics.h"
 #include "chrome/browser/ash/arc/input_overlay/db/proto/app_data.pb.h"
 #include "chrome/browser/ash/arc/input_overlay/test/overlay_view_test_base.h"
 #include "chrome/browser/ash/arc/input_overlay/test/test_utils.h"
@@ -25,6 +27,7 @@
 #include "chrome/browser/ash/arc/input_overlay/ui/editing_list.h"
 #include "chrome/browser/ash/arc/input_overlay/ui/input_mapping_view.h"
 #include "chrome/browser/ash/arc/input_overlay/ui/touch_point.h"
+#include "components/ukm/test_ukm_recorder.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/views/view.h"
 #include "ui/views/view_utils.h"
@@ -244,16 +247,11 @@ TEST_F(ButtonOptionsMenuTest, TestActionMoveDefaultInputBinding) {
 }
 
 TEST_F(ButtonOptionsMenuTest, TestClickActionEdit) {
-  // Tap action menu.
   auto* menu = ShowButtonOptionsMenu(tap_action_);
-  // The first label is auto focused when the menu shows up.
-  EXPECT_TRUE(IsEditLabelFocused(menu, /*index=*/0));
   PressActionEdit(menu);
   EXPECT_TRUE(IsEditLabelFocused(menu, /*index=*/0));
-
-  // Move action menu.
   menu = ShowButtonOptionsMenu(move_action_);
-  // The first label is auto focused when the menu shows up.
+  PressActionEdit(menu);
   EXPECT_TRUE(IsEditLabelFocused(menu, /*index=*/0));
   PressActionEdit(menu);
   EXPECT_FALSE(IsEditLabelFocused(menu, /*index=*/0));
@@ -285,6 +283,31 @@ TEST_F(ButtonOptionsMenuTest, TestDisplayRelatedToShelf) {
   // Menu should align to the bottom of the root window if the shelf is hidden.
   EXPECT_EQ(root_window->bounds().bottom(),
             menu->GetWidget()->GetNativeWindow()->bounds().bottom());
+}
+
+TEST_F(ButtonOptionsMenuTest, TestHistograms) {
+  base::HistogramTester histograms;
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  const std::string histogram_name = BuildGameControlsHistogramName(
+      kButtonOptionsMenuFunctionTriggeredHistogram);
+  std::map<ButtonOptionsMenuFunction, int> expected_histogram_values;
+
+  auto* menu = ShowButtonOptionsMenu(tap_action_);
+  PressActionMoveButton(menu);
+  MapIncreaseValueByOne(expected_histogram_values,
+                        ButtonOptionsMenuFunction::kOptionJoystick);
+  VerifyHistogramValues(histograms, histogram_name, expected_histogram_values);
+  VerifyButtonOptionsMenuFunctionTriggeredUkmEvent(
+      ukm_recorder, /*expected_entry_size=*/1u, /*index=*/0u,
+      static_cast<int64_t>(ButtonOptionsMenuFunction::kOptionJoystick));
+
+  PressTapButton(menu);
+  MapIncreaseValueByOne(expected_histogram_values,
+                        ButtonOptionsMenuFunction::kOptionSingleButton);
+  VerifyHistogramValues(histograms, histogram_name, expected_histogram_values);
+  VerifyButtonOptionsMenuFunctionTriggeredUkmEvent(
+      ukm_recorder, /*expected_entry_size=*/2u, /*index=*/1u,
+      static_cast<int64_t>(ButtonOptionsMenuFunction::kOptionSingleButton));
 }
 
 }  // namespace arc::input_overlay

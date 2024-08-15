@@ -5,46 +5,48 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
+#include <xnnpack.h>
+#include <xnnpack/microfnptr.h>
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <cstddef>
 #include <cstdlib>
 #include <functional>
 #include <random>
 #include <vector>
 
-#include <xnnpack.h>
-#include <xnnpack/microfnptr.h>
-
+#include "replicable_random_device.h"
+#include <gtest/gtest.h>
 
 class RAddExtExpMicrokernelTester {
  public:
-  inline RAddExtExpMicrokernelTester& elements(size_t elements) {
+  RAddExtExpMicrokernelTester& elements(size_t elements) {
     assert(elements != 0);
     this->elements_ = elements;
     return *this;
   }
 
-  inline size_t elements() const {
+  size_t elements() const {
     return this->elements_;
   }
 
-  inline RAddExtExpMicrokernelTester& iterations(size_t iterations) {
+  RAddExtExpMicrokernelTester& iterations(size_t iterations) {
     this->iterations_ = iterations;
     return *this;
   }
 
-  inline size_t iterations() const {
+  size_t iterations() const {
     return this->iterations_;
   }
 
   void Test(xnn_f32_raddextexp_ukernel_fn raddextexp) const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     // Choose such range that expf(x[i]) overflows, but double-precision exp doesn't overflow.
-    auto f32rng = std::bind(std::uniform_real_distribution<float>(90.0f, 100.0f), rng);
+    auto f32rng = [&rng]() {
+      return std::uniform_real_distribution<float>(90.0f, 100.0f)(rng);
+    };
 
     std::vector<float> x(elements() + XNN_EXTRA_BYTES / sizeof(float));
     for (size_t iteration = 0; iteration < iterations(); iteration++) {

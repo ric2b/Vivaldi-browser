@@ -21,7 +21,6 @@
 #import "components/prefs/pref_service.h"
 #import "components/signin/public/base/signin_pref_names.h"
 #import "components/signin/public/identity_manager/account_info.h"
-#import "components/sync/base/features.h"
 #import "components/sync/base/user_selectable_type.h"
 #import "components/sync/service/local_data_description.h"
 #import "components/sync/service/sync_service.h"
@@ -59,7 +58,11 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmarks_sorting_mode.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmark_prefs.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -221,7 +224,13 @@ bool IsABookmarkNodeSectionForIdentifier(
     [self updateTableViewBackground];
     return;
   }
+
+  if (IsVivaldiRunning()) {
+    [self generateVivaldiTableViewData];
+  } else {
   [self generateTableViewData];
+  } // End Vivaldi
+
   [self updateTableViewBackground];
 }
 
@@ -235,12 +244,6 @@ bool IsABookmarkNodeSectionForIdentifier(
       shouldDisplayCloudSlashIconWithBookmarkModel:self.displayedBookmarkModel];
   // Add all bookmarks and folders of the currently displayed node to the table.
   for (const auto& child : self.displayedNode->children()) {
-
-    // Vivaldi
-    if (vivaldi_bookmark_kit::IsSeparator(child.get()))
-      continue;
-    // End Vivaldi
-
     BookmarksHomeNodeItem* nodeItem = [[BookmarksHomeNodeItem alloc]
         initWithType:BookmarksHomeItemTypeBookmark
         bookmarkNode:child.get()];
@@ -256,9 +259,14 @@ bool IsABookmarkNodeSectionForIdentifier(
 - (void)generateTableViewDataForRootNode {
   BOOL showProfileSection =
       [self hasBookmarksOrFoldersInModel:_localOrSyncableBookmarkModel.get()];
+  // Whether the account part should be displayed, if possible.
+  BOOL shouldShowIfPossible =
+      [self hasBookmarksOrFoldersInModel:_accountBookmarkModel.get()] ||
+      showProfileSection;
   BOOL showAccountSection =
-      bookmark_utils_ios::IsAccountBookmarkStorageOptedIn(_syncService) &&
-      [self hasBookmarksOrFoldersInModel:_accountBookmarkModel.get()];
+      shouldShowIfPossible &&
+      bookmark_utils_ios::IsAccountBookmarkStorageAvailable(
+          _syncService, _accountBookmarkModel.get());
   if (showProfileSection) {
     [self
         generateTableViewDataForModel:_localOrSyncableBookmarkModel.get()
@@ -310,7 +318,7 @@ bool IsABookmarkNodeSectionForIdentifier(
                      toSectionWithIdentifier:sectionIdentifier];
 
     // Add trash folder
-    const BookmarkNode* trashNode = model->trash_node();
+    const BookmarkNode* trashNode = model->getUnderlyingModel()->trash_node();
     BookmarksHomeNodeItem* trashBarItem =
         [[BookmarksHomeNodeItem alloc] initWithType:BookmarksHomeItemTypeBookmark
                                       bookmarkNode:trashNode];
@@ -367,7 +375,8 @@ bool IsABookmarkNodeSectionForIdentifier(
   *query.word_phrase_query = base::SysNSStringToUTF16(searchText);
   // Total count of search result for both models.
   int totalSearchResultCount = 0;
-  if (bookmark_utils_ios::IsAccountBookmarkStorageOptedIn(self.syncService)) {
+  if (bookmark_utils_ios::IsAccountBookmarkStorageAvailable(
+          self.syncService, _accountBookmarkModel.get())) {
     totalSearchResultCount =
         [self populateNodeItemWithQuery:query
                           bookmarkModel:_accountBookmarkModel.get()
@@ -502,8 +511,13 @@ bool IsABookmarkNodeSectionForIdentifier(
       base::BindOnce(^(std::map<syncer::ModelType, syncer::LocalDataDescription>
                            description) {
         auto it = description.find(syncer::BOOKMARKS);
-        CHECK(it != description.end());
-        completion(it->second.item_count, std::move(user_email));
+        // GetLocalDataDescriptions() can return an empty result if data type is
+        // still in configuration, or has an error.
+        if (it != description.end()) {
+          completion(it->second.item_count, std::move(user_email));
+          return;
+        }
+        completion(0, std::move(user_email));
       }));
 }
 
@@ -566,6 +580,21 @@ bool IsABookmarkNodeSectionForIdentifier(
 }
 
 #pragma mark - BookmarkModelBridgeObserver
+
+- (void)bookmarkModelWillRemoveAllNodes:(const LegacyBookmarkModel*)model {
+  CHECK(model);
+  if (model == [self displayedBookmarkModel]) {
+    if (self.displayedNode && self.displayedNode->is_permanent_node()) {
+      // All Bookmarks home mediators will receive
+      // `bookmarkModelWillRemoveAllNodes:`. However, the navigation controller
+      // should be edited only once. In order to ensure a single Bookmarks home
+      // view controller request the navigation controller to change we call
+      // `displayRoot` a single time, in the permanent folder.
+      [self.consumer displayRoot];
+    }
+    self.displayedNode = nullptr;
+  }
+}
 
 // BookmarkModelBridgeObserver Callbacks
 // Instances of this class automatically observe the bookmark model.
@@ -632,8 +661,8 @@ bool IsABookmarkNodeSectionForIdentifier(
        willDeleteNode:(const bookmarks::BookmarkNode*)node
            fromFolder:(const bookmarks::BookmarkNode*)folder {
   DCHECK(node);
-  if (self.displayedNode && self.displayedNode->HasAncestor(node)) {
-    self.displayedNode = nullptr;
+  if (self.displayedNode == node) {
+    [self.consumer closeThisFolder];
   }
 }
 
@@ -646,7 +675,7 @@ bool IsABookmarkNodeSectionForIdentifier(
 
 // All non-permanent nodes have been removed.
 - (void)bookmarkModelRemovedAllNodes:(LegacyBookmarkModel*)model {
-  // TODO(crbug.com/695749) Check if this case is applicable in the new UI.
+  // TODO(crbug.com/40508042) Check if this case is applicable in the new UI.
 }
 
 - (void)bookmarkModel:(LegacyBookmarkModel*)model
@@ -732,7 +761,7 @@ bool IsABookmarkNodeSectionForIdentifier(
   if (!_browser.get()) {
     // If `_browser` has been removed, the mediator can be disconnected and the
     // event can be ignored. See http://crbug.com/1442174.
-    // TODO(crbug.com/1440937): This `if` is a workaround until this bug is
+    // TODO(crbug.com/40064261): This `if` is a workaround until this bug is
     // fixed. This if should be remove when the bug will be closed.
     [self disconnect];
     return;
@@ -933,7 +962,8 @@ bool IsABookmarkNodeSectionForIdentifier(
             hasBookmarksOrFoldersInModel:_localOrSyncableBookmarkModel.get()]) {
       return YES;
     }
-    return bookmark_utils_ios::IsAccountBookmarkStorageOptedIn(_syncService) &&
+    return bookmark_utils_ios::IsAccountBookmarkStorageAvailable(
+               _syncService, _accountBookmarkModel.get()) &&
            [self hasBookmarksOrFoldersInModel:_accountBookmarkModel.get()];
   }
   return self.displayedNode && !self.displayedNode->children().empty();
@@ -1026,6 +1056,113 @@ bool IsABookmarkNodeSectionForIdentifier(
 // as metadata. This method is a part of BookmarkModelObserver.
 - (void)bookmarkMetaInfoChanged:(const bookmarks::BookmarkNode*)bookmarkNode {
   [self.consumer refreshContents];
+}
+
+#pragma mark - Sorting
+
+/// Returns current sorting mode
+- (VivaldiBookmarksSortingMode)currentSortingMode {
+  return [VivaldiBookmarkPrefs getBookmarksSortingMode];
+}
+
+/// Returns current sorting order
+- (VivaldiBookmarksSortingOrder)currentSortingOrder {
+  return [VivaldiBookmarkPrefs getBookmarksSortingOrder];
+}
+
+// Generate and sort the data for the table view
+- (void)generateVivaldiTableViewData {
+  if (!self.displayedNode) {
+    return;
+  }
+
+  BOOL shouldDisplayCloudSlashIcon = [self
+      shouldDisplayCloudSlashIconWithBookmarkModel:self.displayedBookmarkModel];
+  // Add all bookmarks and folders of the currently displayed node to the table.
+
+  NSMutableArray<BookmarksHomeNodeItem*>
+      *bookmarkItems = [NSMutableArray array];
+
+  for (const auto& child : self.displayedNode->children()) {
+    if (vivaldi_bookmark_kit::IsSeparator(child.get()))
+      continue;
+
+    BookmarksHomeNodeItem* nodeItem =
+      [[BookmarksHomeNodeItem alloc]
+        initWithType:BookmarksHomeItemTypeBookmark
+        bookmarkNode:child.get()];
+    nodeItem.shouldDisplayCloudSlashIcon = shouldDisplayCloudSlashIcon;
+    [bookmarkItems addObject:nodeItem];
+  }
+
+  // Sort the bookmarkItems array based on the current sorting mode
+  NSArray* sortedArray = [bookmarkItems sortedArrayUsingComparator:
+                          ^NSComparisonResult(BookmarksHomeNodeItem *first,
+                                              BookmarksHomeNodeItem *second) {
+    switch (self.currentSortingMode) {
+      case VivaldiBookmarksSortingModeManual:
+        // Return as it is coming from bookmark model by default
+        return NSOrderedAscending;
+      case VivaldiBookmarksSortingModeByTitle:
+        // Sort by title
+        return [first.title compare:second.title
+                            options:NSCaseInsensitiveSearch];
+      case VivaldiBookmarksSortingModeByAddress:
+        // Sort by address
+        return [self compare:first.urlString
+                      second:second.urlString];
+      case VivaldiBookmarksSortingModeByNickname:
+        // Sort by nickname
+        return [self compare:first.nickname
+                      second:second.nickname];
+      case VivaldiBookmarksSortingModeByDescription:
+        // Sort by description
+        return [self compare:first.description
+                      second:second.description];
+      case VivaldiBookmarksSortingModeByDate:
+        // Sort by date
+        return [first.createdAt compare:second.createdAt];
+      case VivaldiBookmarksSortingModeByKind:
+        // Sort by kind
+        return [self compare:first.isFolder
+                      second:second.isFolder
+                foldersFirst:YES];
+      default:
+        // Return as it is coming from bookmark model by default
+        return NSOrderedAscending;
+    }
+  }];
+
+  // If the current sorting order is descending
+  // Reverse the array & check it is not sort by
+  // VivaldiBookmarksSortingModeManual
+  if (self.currentSortingOrder == VivaldiBookmarksSortingOrderDescending &&
+      self.currentSortingMode != VivaldiBookmarksSortingModeManual) {
+    sortedArray =
+        [[[sortedArray reverseObjectEnumerator] allObjects] mutableCopy];
+  }
+
+  // Add all the nodes to tableViewModel
+  for (BookmarksHomeNodeItem* nodeItem in sortedArray) {
+    [self.consumer.tableViewModel
+                        addItem:nodeItem
+        toSectionWithIdentifier:BookmarksHomeSectionIdentifierBookmarks];
+  }
+}
+
+/// Returns sorted result from two provided NSString keys.
+- (NSComparisonResult)compare:(NSString*)first
+             second:(NSString*)second {
+  return [VivaldiGlobalHelpers compare:first second:second];
+}
+
+/// Returns sorted result from two provided BOOL keys, and sorting order.
+- (NSComparisonResult)compare:(BOOL)first
+                       second:(BOOL)second
+                 foldersFirst:(BOOL)foldersFirst {
+  return [VivaldiGlobalHelpers compare:first
+                                second:second
+                          foldersFirst:foldersFirst];
 }
 
 @end

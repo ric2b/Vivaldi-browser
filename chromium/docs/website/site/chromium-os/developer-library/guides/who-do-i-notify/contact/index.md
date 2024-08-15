@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: contact
 title: ChromiumOS contact
 ---
@@ -71,7 +71,7 @@ That covers all types of reports: public, private, security, etc...
 
 ## Code reviews
 
-Please see the [Contributing](./contributing.md#reviewers) document.
+Please see the [Contributing](/chromium-os/developer-library/guides/development/contributing/#reviewers) document.
 It includes tips for finding suitable reviewers.
 
 ## Private discussion groups
@@ -143,5 +143,5 @@ It has a section specifically about filing security sensitive bugs.
 [Google Chrome Help Center]: https://www.google.com/support/chrome/
 [Report a problem or send feedback]: https://support.google.com/chromebook/answer/2982029
 [Reporting a Crash Bug]: https://dev.chromium.org/for-testers/bug-reporting-guidelines/reporting-crash-bug
-[Reporting ChromeOS bugs]: reporting_bugs.md
-[VM/containers]: containers_and_vms.md
+[Reporting ChromeOS bugs]: /chromium-os/developer-library/guides/bugs/reporting-bugs/
+[VM/containers]: /chromium-os/developer-library/guides/containers/containers-and-vms/

@@ -161,6 +161,10 @@ class FedCmAccountSelectionView : public AccountSelectionView,
                            IdpSigninStatusPopupClosedBeforeAccountsPopulated);
   FRIEND_TEST_ALL_PREFIXES(FedCmAccountSelectionViewDesktopTest,
                            IdpSigninStatusPopupClosedAfterAccountsPopulated);
+  FRIEND_TEST_ALL_PREFIXES(FedCmAccountSelectionViewDesktopTest,
+                           UserClosingPopupAfterVerifyingSheetShouldNotify);
+  FRIEND_TEST_ALL_PREFIXES(FedCmAccountSelectionViewDesktopTest,
+                           AccountChooserResultMetric);
 
   enum class State {
     // User is shown message that they are not currently signed-in to IdP.
@@ -193,7 +197,10 @@ class FedCmAccountSelectionView : public AccountSelectionView,
 
     // Shown after the user has triggered a button flow and while the accounts
     // are being fetched.
-    LOADING
+    LOADING,
+
+    // Shown when we wish to display only a single returning account.
+    SINGLE_RETURNING_ACCOUNT_PICKER
   };
 
   // This enum describes the outcome of the mismatch dialog and is used for
@@ -222,6 +229,19 @@ class FedCmAccountSelectionView : public AccountSelectionView,
     kMaxValue = kAccountsNotReceivedAndPopupNotClosedByIdp
   };
 
+  // This enum describes the outcome an account chooser and is used for
+  // histograms. Do not remove or modify existing values, but you may add new
+  // values at the end. This enum should be kept in sync with
+  // FedCmAccountChooserResult in tools/metrics/histograms/enums.xml.
+  enum class AccountChooserResult {
+    kAccountRow,
+    kCancelButton,
+    kUseOtherAccountButton,
+    kTabClosed,
+
+    kMaxValue = kTabClosed
+  };
+
   // views::WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
 
@@ -239,11 +259,15 @@ class FedCmAccountSelectionView : public AccountSelectionView,
                     const ui::Event& event) override;
   void OnGotIt(const ui::Event& event) override;
   void OnMoreDetails(const ui::Event& event) override;
+  void OnChooseAnAccount() override;
 
   // Returns false if `this` got deleted. In that case, the caller should not
   // access any further member variables.
   bool ShowVerifyingSheet(const Account& account,
                           const IdentityProviderDisplayData& idp_display_data);
+
+  // Shows the dialog widget.
+  void ShowDialogWidget();
 
   // Returns the SheetType to be used for metrics reporting.
   SheetType GetSheetType();
@@ -261,8 +285,11 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   base::WeakPtr<views::Widget> GetDialogWidget();
 
   // Resets `account_selection_view_`. Typically, to recreate it later to show a
-  // different kind of dialog.
-  void ResetAccountSelectionView();
+  // different kind of dialog. Virtual for testing purposes.
+  virtual void MaybeResetAccountSelectionView();
+
+  // Returns whether an IDP sign-in pop-up window is currently open.
+  bool IsIdpSigninPopupOpen();
 
   std::vector<IdentityProviderDisplayData> idp_display_data_list_;
 
@@ -306,13 +333,6 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   // pop-up window has already been closed.
   bool is_modal_closed_but_accounts_fetch_pending_{false};
 
-  // If IDP sign-in pop-up window is closed through means other than
-  // IdentityProvider.close() such as the user closing the pop-up window or
-  // window.close(), we should destroy the widget and reject the
-  // navigator.credentials.get promise. This boolean tracks whether
-  // IdentityProvider.close() was called.
-  bool should_destroy_dialog_widget_{true};
-
   // Whether the associated WebContents is visible or not.
   bool is_web_contents_visible_;
 
@@ -325,12 +345,21 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   // Blink.FedCm.IdpSigninStatus.MismatchDialogResult metric.
   bool is_mismatch_continue_clicked_{false};
 
+  // Whether the current dialog started as a single returning account dialog.
+  // Used to determine whether the multi IDP picker needs to show a back button
+  // or not.
+  bool started_as_single_returning_account_{false};
+
   // Time when IdentityProvider.close() was called for metrics purposes.
   base::TimeTicks idp_close_popup_time_;
 
   // The current state of the IDP sign-in pop-up window, if initiated by user.
   // This is nullopt when no popup window has been opened.
   std::optional<PopupWindowResult> popup_window_state_;
+
+  // The current state of the modal account chooser, if initiated by user. This
+  // is nullopt when no modal account chooser has been opened.
+  std::optional<AccountChooserResult> modal_account_chooser_state_;
 
   // An AccountSelectionViewBase to render bubble dialogs for widget flows,
   // otherwise returns an AccountSelectionViewBase to render modal dialogs

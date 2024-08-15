@@ -86,7 +86,6 @@
 <translation id="2678063897982469759">Slå på att</translation>
 <translation id="2721037002783622288">Søk hos <ph name="SEARCH_ENGINE" /> etter &amp;bilde</translation>
 <translation id="2785873697295365461">Fildeskriptorar</translation>
-<translation id="2809586584051668049">og <ph name="NUMBER_ADDITIONAL_DISABLED" /> fleire</translation>
 <translation id="2850541429955027218">Legg til drakta</translation>
 <translation id="2861941300086904918">Tryggleiksstyrar lokalklient</translation>
 <translation id="2881076733170862447">Når du vel utvidinga</translation>
@@ -112,7 +111,6 @@
 <translation id="3241680850019875542">Vel rotkatalogen til utvidinga som skal pakkast. For å oppdatera utvidinga må du ogso velja den private nøkkelen som skal brukast på nytt.</translation>
 <translation id="3280237271814976245">Lagra &amp;som …</translation>
 <translation id="3285322247471302225">Ny &amp;fane</translation>
-<translation id="3288047731229977326">Utvidingar som køyrer i utviklarmodus kan skada maskina di. Om du ikkje er ein utviklar, bør du slå av dei utvidingane som nyttar utviklarmodus for å vera trygg.</translation>
 <translation id="329838636886466101">Reparer</translation>
 <translation id="33022249435934718">GDI-referansar</translation>
 <translation id="3303818374450886607">Tal</translation>
@@ -155,7 +153,6 @@
 <translation id="4087089424473531098">Laga utvidinga:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Slå av utviklarmodus-utvidingar</translation>
 <translation id="4100839878934973028">Eit anna program på maskina di la til ein app som kanskje endrar måten Vivaldi oppfører seg på.</translation>
 <translation id="4109898769411476438">Lukk nettlesar før du importerer</translation>
 <translation id="4131410914670010031">Monokrom</translation>
@@ -206,7 +203,6 @@
 <translation id="5269977353971873915">Utskrifta feila</translation>
 <translation id="5284445933715251131">Hald fram med nedlastinga</translation>
 <translation id="52912272896845572">Privatnøkkelfila er ugyldig.</translation>
-<translation id="5301954838959518834">Den er grei</translation>
 <translation id="5317780077021120954">Lagra</translation>
 <translation id="5334142896108694079">Skriptmellomlager</translation>
 <translation id="5360150013186312835">Syn på verktøylinja</translation>

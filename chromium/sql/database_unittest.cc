@@ -6,43 +6,50 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include <memory>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
+#include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/functional/bind.h"
-#include "base/functional/callback_helpers.h"
+#include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/run_loop.h"
 #include "base/sequence_checker.h"
-#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/test/bind.h"
 #include "base/test/gtest_util.h"
-#include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
 #include "base/thread_annotations.h"
+#include "base/trace_event/memory_dump_request_args.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "build/build_config.h"
 #include "sql/database_memory_dump_provider.h"
 #include "sql/meta_table.h"
 #include "sql/recovery.h"
-#include "sql/sql_features.h"
 #include "sql/statement.h"
+#include "sql/statement_id.h"
 #include "sql/test/scoped_error_expecter.h"
 #include "sql/test/test_helpers.h"
 #include "sql/transaction.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/sqlite/sqlite3.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "base/strings/strcat.h"
+#endif
 
 namespace sql {
 
@@ -127,7 +134,7 @@ class SQLDatabaseTest : public testing::Test,
   DatabaseOptions GetDBOptions() {
     DatabaseOptions options;
     options.wal_mode = IsWALEnabled();
-    // TODO(crbug.com/1120969): Remove after switching to exclusive mode on by
+    // TODO(crbug.com/40146017): Remove after switching to exclusive mode on by
     // default.
     options.exclusive_locking = false;
 #if BUILDFLAG(IS_FUCHSIA)  // Exclusive mode needs to be enabled to enter WAL

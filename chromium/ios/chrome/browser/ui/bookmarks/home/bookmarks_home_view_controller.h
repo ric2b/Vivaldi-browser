@@ -40,6 +40,20 @@ class GURL;
                                      inIncognito:(BOOL)inIncognito
                                           newTab:(BOOL)newTab;
 
+#if defined(VIVALDI_BUILD)
+// Note: (prio@vivaldi.com) - Add open in background option in the parameter
+// of protocol methods.
+
+// The view controller wants to be dismissed. If `urls` is not empty, then
+// the user has selected to navigate to those URLs with specified tab mode.
+- (void)bookmarkHomeViewControllerWantsDismissal:
+            (BookmarksHomeViewController*)controller
+                                navigationToUrls:(const std::vector<GURL>&)urls
+                                     inIncognito:(BOOL)inIncognito
+                                          newTab:(BOOL)newTab
+                                openInBackground:(BOOL)openInBackground;
+#endif // End Vivaldi
+
 @end
 
 // Class to navigate the bookmark hierarchy.

@@ -145,15 +145,6 @@ void VivaldiSyncServiceImpl::OnEngineInitialized(
                                 weak_factory_.GetWeakPtr(), error));
 }
 
-void VivaldiSyncServiceImpl::ResetEngine(syncer::ShutdownReason reason,
-                                         ResetEngineReason reset_reason) {
-  if (reason == syncer::ShutdownReason::DISABLE_SYNC_AND_CLEAR_DATA) {
-    sync_client_->GetPrefService()->ClearPref(
-        vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword);
-  }
-  SyncServiceImpl::ResetEngine(reason, reset_reason);
-}
-
 void VivaldiSyncServiceImpl::OnClearDataComplete(
     scoped_refptr<net::HttpResponseHeaders> headers) {
   is_clearing_sync_data_ = false;
@@ -163,7 +154,7 @@ void VivaldiSyncServiceImpl::OnClearDataComplete(
 void VivaldiSyncServiceImpl::ResetEncryptionBootstrapToken(
     const std::string& token) {
   StopAndClear();
-  sync_prefs_.SetEncryptionBootstrapToken(token);
+  SetEncryptionBootstrapToken(token);
   SetSyncFeatureRequested();
 }
 }  // namespace vivaldi

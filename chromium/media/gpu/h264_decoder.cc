@@ -320,8 +320,7 @@ bool H264Decoder::CalculatePicOrderCounts(scoped_refptr<H264Picture> pic) {
       base::CheckedNumeric<int> expected_pic_order_cnt = 0;
       if (abs_frame_num > 0) {
         if (sps->num_ref_frames_in_pic_order_cnt_cycle == 0) {
-          DVLOG(1) << "Invalid num_ref_frames_in_pic_order_cnt_cycle "
-                   << "in stream";
+          DVLOG(1) << "Invalid num_ref_frames_in_pic_order_cnt_cycle.";
           return false;
         }
 
@@ -332,8 +331,8 @@ bool H264Decoder::CalculatePicOrderCounts(scoped_refptr<H264Picture> pic) {
 
         expected_pic_order_cnt =
             base::CheckedNumeric<int>(pic_order_cnt_cycle_cnt) *
-            base::CheckedNumeric<int>(
-                sps->expected_delta_per_pic_order_cnt_cycle);
+            sps->expected_delta_per_pic_order_cnt_cycle;
+
         // frame_num_in_pic_order_cnt_cycle is verified < 255 in parser
         for (int i = 0; i <= frame_num_in_pic_order_cnt_cycle; ++i)
           expected_pic_order_cnt += sps->offset_for_ref_frame[i];
@@ -342,19 +341,24 @@ bool H264Decoder::CalculatePicOrderCounts(scoped_refptr<H264Picture> pic) {
       if (!pic->nal_ref_idc)
         expected_pic_order_cnt += sps->offset_for_non_ref_pic;
 
-      if (!expected_pic_order_cnt.IsValid()) {
-        DVLOG(1) << "Invalid expected_pic_order_cnt for stream.";
+      base::CheckedNumeric<int> top_field_order_cnt =
+          expected_pic_order_cnt + pic->delta_pic_order_cnt0;
+      base::CheckedNumeric<int> bottom_field_order_cnt =
+          top_field_order_cnt + sps->offset_for_top_to_bottom_field +
+          pic->delta_pic_order_cnt1;
+
+      if (!top_field_order_cnt.IsValid()) {
+        DVLOG(1) << "Invalid top_field_order_cnt.";
         return false;
       }
 
-      pic->top_field_order_cnt =
-          (expected_pic_order_cnt +
-           base::CheckedNumeric<int>(pic->delta_pic_order_cnt0))
-              .ValueOrDie();
-      pic->bottom_field_order_cnt = pic->top_field_order_cnt +
-                                    sps->offset_for_top_to_bottom_field +
-                                    pic->delta_pic_order_cnt1;
+      if (!bottom_field_order_cnt.IsValid()) {
+        DVLOG(1) << "Invalid bottom_field_order_cnt.";
+        return false;
+      }
 
+      pic->top_field_order_cnt = top_field_order_cnt.ValueOrDie();
+      pic->bottom_field_order_cnt = bottom_field_order_cnt.ValueOrDie();
       break;
     }
 
@@ -843,7 +847,7 @@ bool H264Decoder::HandleMemoryManagementOps(scoped_refptr<H264Picture> pic) {
         if (to_mark) {
           to_mark->ref = false;
         } else {
-          // TODO(crbug.com/1402627): consider doing the same for mmco 2 when
+          // TODO(crbug.com/40251206): consider doing the same for mmco 2 when
           // we can have testing for it, as how we handle missing |to_mark| for
           // mmco 1.
           DVLOG(1) << "Invalid long term ref pic num to unmark";
@@ -1230,6 +1234,15 @@ bool H264Decoder::ProcessSPS(int sps_id, bool* need_new_buffers) {
     new_color_space = container_color_space_;
   }
 
+  if (new_color_space.matrix == VideoColorSpace::MatrixID::RGB) {
+    // Some H.264 videos contain a VUI that specifies a color matrix of GBR,
+    // when they are actually ordinary YUV. H264 only supports 4:2:0 subsampling
+    // and BGR should only be used with 4:4:4, hence default to Rec709. See
+    // crbug.com/341266991.
+    CHECK_NE(chroma_sampling_, VideoChromaSampling::k444);
+    new_color_space = VideoColorSpace::REC709();
+  }
+
   bool is_color_space_change = false;
   if (base::FeatureList::IsEnabled(kAVDColorSpaceChanges)) {
     is_color_space_change = new_color_space.IsSpecified() &&
@@ -1440,7 +1453,7 @@ H264Decoder::H264Accelerator::Status H264Decoder::ProcessCurrentSlice() {
 
 void H264Decoder::SetStream(int32_t id, const DecoderBuffer& decoder_buffer) {
   const uint8_t* ptr = decoder_buffer.data();
-  const size_t size = decoder_buffer.data_size();
+  const size_t size = decoder_buffer.size();
   const DecryptConfig* decrypt_config = decoder_buffer.decrypt_config();
 
   DCHECK(ptr);
@@ -1635,7 +1648,7 @@ H264Decoder::DecodeResult H264Decoder::Decode() {
           ref_pic_list_b0_.clear();
           ref_pic_list_b1_.clear();
         }
-        // Perfer config changes over color space changes.
+        // Prefer config changes over color space changes.
         if (need_new_buffers) {
           return kConfigChange;
         }

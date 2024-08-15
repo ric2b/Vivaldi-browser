@@ -2408,6 +2408,50 @@ static int basicUnitTests(U32 seed, double compressibility, int bigTests)
     }
     DISPLAYLEVEL(3, "OK \n");
 
+    DISPLAYLEVEL(3, "test%3i : Decoder should reject invalid frame header on legacy frames: ", testNb++);
+    {
+        const unsigned char compressed[] = { 0x26,0xb5,0x2f,0xfd,0x50,0x91,0xfd,0xd8,0xb5 };
+        const size_t compressedSize = 9;
+        size_t const dSize = ZSTD_decompress(NULL, 0, compressed, compressedSize);
+        CHECK(!ZSTD_isError(dSize), "must reject when legacy frame header is invalid");
+    }
+    DISPLAYLEVEL(3, "OK \n");
+
+    DISPLAYLEVEL(3, "test%3i : Test single-shot fallback for magicless mode: ", testNb++);
+    {
+        // Aquire resources
+        size_t const srcSize = COMPRESSIBLE_NOISE_LENGTH;
+        void* src = malloc(srcSize);
+        size_t const dstSize = ZSTD_compressBound(srcSize);
+        void* dst = malloc(dstSize);
+        size_t const valSize = srcSize;
+        void* val = malloc(valSize);
+        ZSTD_inBuffer inBuf = { dst, dstSize, 0 };
+        ZSTD_outBuffer outBuf = { val, valSize, 0 };
+        ZSTD_CCtx* cctx = ZSTD_createCCtx();
+        ZSTD_DCtx* dctx = ZSTD_createDCtx();
+        CHECK(!src || !dst || !val || !dctx || !cctx, "memory allocation failure");
+
+        // Write test data for decompression to dst
+        RDG_genBuffer(src, srcSize, compressibility, 0.0, 0xdeadbeef);
+        CHECK_Z(ZSTD_CCtx_setParameter(cctx, ZSTD_c_format, ZSTD_f_zstd1_magicless));
+        CHECK_Z(ZSTD_compress2(cctx, dst, dstSize, src, srcSize));
+
+        // Run decompression
+        CHECK_Z(ZSTD_DCtx_setParameter(dctx, ZSTD_d_format, ZSTD_f_zstd1_magicless));
+        CHECK_Z(ZSTD_decompressStream(dctx, &outBuf, &inBuf));
+
+        // Validate
+        CHECK(outBuf.pos != srcSize, "decompressed size must match");
+        CHECK(memcmp(src, val, srcSize) != 0, "decompressed data must match");
+        
+        // Cleanup
+        free(src); free(dst); free(val);
+        ZSTD_freeCCtx(cctx);
+        ZSTD_freeDCtx(dctx);
+    }
+    DISPLAYLEVEL(3, "OK \n");
+
 _end:
     FUZ_freeDictionary(dictionary);
     ZSTD_freeCStream(zc);

@@ -119,6 +119,7 @@
 #include "third_party/blink/renderer/core/editing/visible_position.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
 #include "third_party/blink/renderer/core/execution_context/window_agent.h"
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
@@ -154,10 +155,13 @@
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/fullscreen/scoped_allow_fullscreen.h"
+#include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
+#include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html/html_link_element.h"
 #include "third_party/blink/renderer/core/html/html_object_element.h"
 #include "third_party/blink/renderer/core/html/html_plugin_element.h"
+#include "third_party/blink/renderer/core/html/media/html_audio_element.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
 #include "third_party/blink/renderer/core/html/media/html_video_element.h"
 #include "third_party/blink/renderer/core/html/plugin_document.h"
@@ -170,6 +174,7 @@
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer_controller.h"
 #include "third_party/blink/renderer/core/layout/anchor_position_scroll_data.h"
+#include "third_party/blink/renderer/core/layout/anchor_position_visibility_observer.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/text_autosizer.h"
@@ -201,6 +206,7 @@
 #include "third_party/blink/renderer/platform/bindings/script_forbidden_scope.h"
 #include "third_party/blink/renderer/platform/bindings/source_location.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
+#include "third_party/blink/renderer/platform/bindings/v8_histogram_accumulator.h"
 #include "third_party/blink/renderer/platform/blob/blob_data.h"
 #include "third_party/blink/renderer/platform/graphics/image_data_buffer.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
@@ -291,25 +297,32 @@ RemoteFrame* SourceFrameForOptionalToken(
 void SetViewportSegmentVariablesForRect(StyleEnvironmentVariables& vars,
                                         gfx::Rect segment_rect,
                                         unsigned first_dimension,
-                                        unsigned second_dimension) {
+                                        unsigned second_dimension,
+                                        const ExecutionContext* context) {
   vars.SetVariable(UADefinedTwoDimensionalVariable::kViewportSegmentTop,
                    first_dimension, second_dimension,
-                   StyleEnvironmentVariables::FormatPx(segment_rect.y()));
+                   StyleEnvironmentVariables::FormatPx(segment_rect.y()),
+                   context);
   vars.SetVariable(UADefinedTwoDimensionalVariable::kViewportSegmentRight,
                    first_dimension, second_dimension,
-                   StyleEnvironmentVariables::FormatPx(segment_rect.right()));
+                   StyleEnvironmentVariables::FormatPx(segment_rect.right()),
+                   context);
   vars.SetVariable(UADefinedTwoDimensionalVariable::kViewportSegmentBottom,
                    first_dimension, second_dimension,
-                   StyleEnvironmentVariables::FormatPx(segment_rect.bottom()));
+                   StyleEnvironmentVariables::FormatPx(segment_rect.bottom()),
+                   context);
   vars.SetVariable(UADefinedTwoDimensionalVariable::kViewportSegmentLeft,
                    first_dimension, second_dimension,
-                   StyleEnvironmentVariables::FormatPx(segment_rect.x()));
+                   StyleEnvironmentVariables::FormatPx(segment_rect.x()),
+                   context);
   vars.SetVariable(UADefinedTwoDimensionalVariable::kViewportSegmentWidth,
                    first_dimension, second_dimension,
-                   StyleEnvironmentVariables::FormatPx(segment_rect.width()));
+                   StyleEnvironmentVariables::FormatPx(segment_rect.width()),
+                   context);
   vars.SetVariable(UADefinedTwoDimensionalVariable::kViewportSegmentHeight,
                    first_dimension, second_dimension,
-                   StyleEnvironmentVariables::FormatPx(segment_rect.height()));
+                   StyleEnvironmentVariables::FormatPx(segment_rect.height()),
+                   context);
 }
 
 mojom::blink::BlockingDetailsPtr CreateBlockingDetailsMojom(
@@ -322,7 +335,7 @@ mojom::blink::BlockingDetailsPtr CreateBlockingDetailsMojom(
       blocking_details.ColumnNumber() > 0) {
     // `Url()` and `Function()` may return nullptr.
     auto source_location = mojom::blink::ScriptSourceLocation::New(
-        blocking_details.Url() ? blocking_details.Url() : "",
+        blocking_details.Url() ? KURL(blocking_details.Url()) : KURL(),
         blocking_details.Function() ? blocking_details.Function() : "",
         blocking_details.LineNumber(), blocking_details.ColumnNumber());
     feature_location_to_report->source = std::move(source_location);
@@ -354,6 +367,27 @@ bool IsNavigationBlockedByCoopRestrictProperties(
   }
 
   return false;
+}
+
+// TODO: b/338175253 - remove the need for this conversion
+mojom::blink::StorageTypeAccessed ToMojoStorageType(
+    blink::WebContentSettingsClient::StorageType storage_type) {
+  switch (storage_type) {
+    case blink::WebContentSettingsClient::StorageType::kDatabase:
+      return mojom::blink::StorageTypeAccessed::kDatabase;
+    case blink::WebContentSettingsClient::StorageType::kCacheStorage:
+      return mojom::blink::StorageTypeAccessed::kCacheStorage;
+    case blink::WebContentSettingsClient::StorageType::kIndexedDB:
+      return mojom::blink::StorageTypeAccessed::kIndexedDB;
+    case blink::WebContentSettingsClient::StorageType::kFileSystem:
+      return mojom::blink::StorageTypeAccessed::kFileSystem;
+    case blink::WebContentSettingsClient::StorageType::kWebLocks:
+      return mojom::blink::StorageTypeAccessed::kWebLocks;
+    case blink::WebContentSettingsClient::StorageType::kLocalStorage:
+      return mojom::blink::StorageTypeAccessed::kLocalStorage;
+    case blink::WebContentSettingsClient::StorageType::kSessionStorage:
+      return mojom::blink::StorageTypeAccessed::kSessionStorage;
+  }
 }
 
 }  // namespace
@@ -1025,6 +1059,12 @@ void LocalFrame::DocumentDetached() {
   // WebLinkPreviewInitiator depends on document.
   is_link_preivew_triggerer_initialized_ = false;
   link_preview_triggerer_.reset();
+
+  if (LocalFrameView* view = View()) {
+    // Pagination layout may hold on to layout objects that are not part of the
+    // Document's DOM. Destroy them now.
+    view->DestroyPaginationLayout();
+  }
 }
 
 void LocalFrame::SetPagePopupOwner(Element& owner) {
@@ -1076,7 +1116,7 @@ void LocalFrame::HookBackForwardCacheEviction() {
   static_cast<LocalWindowProxyManager*>(GetWindowProxyManager())
       ->SetAbortScriptExecution(
           [](v8::Isolate* isolate, v8::Local<v8::Context> context) {
-            ScriptState* script_state = ScriptState::From(context);
+            ScriptState* script_state = ScriptState::From(isolate, context);
             LocalDOMWindow* window = LocalDOMWindow::From(script_state);
             DCHECK(window);
             LocalFrame* frame = window->GetFrame();
@@ -1372,6 +1412,8 @@ void LocalFrame::SetPrinting(bool printing, float maximum_shrink_ratio) {
     }
     GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kPrinting);
     View()->AdjustViewSize();
+
+    View()->DestroyPaginationLayout();
   }
 
   // Subframes of the one we're printing don't lay out to the page size.
@@ -1551,7 +1593,8 @@ void LocalFrame::MediaQueryAffectingValueChangedForLocalSubtree(
 
 void LocalFrame::ViewportSegmentsChanged(
     const WebVector<gfx::Rect>& viewport_segments) {
-  if (!RuntimeEnabledFeatures::ViewportSegmentsEnabled()) {
+  if (!RuntimeEnabledFeatures::ViewportSegmentsEnabled(
+          GetDocument()->GetExecutionContext())) {
     return;
   }
 
@@ -1577,7 +1620,8 @@ void LocalFrame::ViewportSegmentsChanged(
 
 void LocalFrame::UpdateViewportSegmentCSSEnvironmentVariables(
     const WebVector<gfx::Rect>& viewport_segments) {
-  DCHECK(RuntimeEnabledFeatures::ViewportSegmentsEnabled());
+  DCHECK(RuntimeEnabledFeatures::ViewportSegmentsEnabled(
+      GetDocument()->GetExecutionContext()));
 
   // Update the variable values on the root instance so that documents that
   // are created after the values change automatically have the right values.
@@ -1608,8 +1652,14 @@ void LocalFrame::UpdateViewportSegmentCSSEnvironmentVariables(
       UADefinedTwoDimensionalVariable::kViewportSegmentWidth,
       UADefinedTwoDimensionalVariable::kViewportSegmentHeight,
   };
+  ExecutionContext* context =
+      GetDocument() ? GetDocument()->GetExecutionContext() : nullptr;
+  if (!context) {
+    return;
+  }
+
   for (auto var : vars_to_remove) {
-    vars.RemoveVariable(var);
+    vars.RemoveVariable(var, context);
   }
 
   // Per [css-env-1], only set the segment variables if there is more than one.
@@ -1620,12 +1670,12 @@ void LocalFrame::UpdateViewportSegmentCSSEnvironmentVariables(
     unsigned x_index = 0;
     unsigned y_index = 0;
     SetViewportSegmentVariablesForRect(vars, viewport_segments[0], x_index,
-                                       y_index);
+                                       y_index, context);
     for (size_t i = 1; i < viewport_segments.size(); i++) {
       if (viewport_segments[i].y() == current_y_position) {
         x_index++;
         SetViewportSegmentVariablesForRect(vars, viewport_segments[i], x_index,
-                                           y_index);
+                                           y_index, context);
       } else {
         // If there is a different y value, this is the next row so increase
         // y index and start again from 0 for x.
@@ -1633,7 +1683,7 @@ void LocalFrame::UpdateViewportSegmentCSSEnvironmentVariables(
         x_index = 0;
         current_y_position = viewport_segments[i].y();
         SetViewportSegmentVariablesForRect(vars, viewport_segments[i], x_index,
-                                           y_index);
+                                           y_index, context);
       }
     }
   }
@@ -2642,6 +2692,8 @@ void LocalFrame::MainFrameInteractive() {
   }
   constexpr bool kIsFinalData = true;
   v8_local_compile_hints_producer_->GenerateData(kIsFinalData);
+
+  V8HistogramAccumulator::GetInstance()->GenerateDataInteractive();
 }
 
 void LocalFrame::MainFrameFirstMeaningfulPaint() {
@@ -3202,7 +3254,7 @@ void LocalFrame::EvictFromBackForwardCache(
   mojom::blink::ScriptSourceLocationPtr source = nullptr;
   if (source_location) {
     source = mojom::blink::ScriptSourceLocation::New(
-        source_location->Url() ? source_location->Url() : "",
+        source_location->Url() ? KURL(source_location->Url()) : KURL(),
         source_location->Function() ? source_location->Function() : "",
         source_location->LineNumber(), source_location->ColumnNumber());
   }
@@ -3875,6 +3927,28 @@ void LocalFrame::ScheduleNextServiceForScrollSnapshotClients() {
   }
 }
 
+void LocalFrame::CheckPositionAnchorsForCssVisibilityChanges() {
+  if (!RuntimeEnabledFeatures::CSSPositionVisibilityEnabled()) {
+    return;
+  }
+  for (auto& client : scroll_snapshot_clients_) {
+    if (AnchorPositionScrollData* scroll_data =
+            DynamicTo<AnchorPositionScrollData>(client.Get())) {
+      if (auto* observer = scroll_data->GetAnchorPositionVisibilityObserver()) {
+        observer->UpdateForCssAnchorVisibility();
+      }
+    }
+  }
+}
+
+void LocalFrame::CheckPositionAnchorsForChainedVisibilityChanges() {
+  if (!RuntimeEnabledFeatures::CSSPositionVisibilityEnabled()) {
+    return;
+  }
+  AnchorPositionVisibilityObserver::UpdateForChainedAnchorVisibility(
+      scroll_snapshot_clients_);
+}
+
 bool LocalFrame::IsSameOrigin() {
   const SecurityOrigin* security_origin =
       GetSecurityContext()->GetSecurityOrigin();
@@ -3947,6 +4021,43 @@ void LocalFrame::SetLinkPreviewTriggererForTesting(
     std::unique_ptr<WebLinkPreviewTriggerer> trigger) {
   link_preview_triggerer_ = std::move(trigger);
   is_link_preivew_triggerer_initialized_ = true;
+}
+
+void LocalFrame::AllowStorageAccessAndNotify(
+    blink::WebContentSettingsClient::StorageType storage_type,
+    base::OnceCallback<void(bool)> callback) {
+  mojom::blink::StorageTypeAccessed mojo_storage_type =
+      ToMojoStorageType(storage_type);
+  auto wrapped_callback = WTF::BindOnce(&LocalFrame::OnStorageAccessCallback,
+                                        WrapWeakPersistent(this),
+                                        std::move(callback), mojo_storage_type);
+  if (WebContentSettingsClient* content_settings_client =
+          GetContentSettingsClient()) {
+    content_settings_client->AllowStorageAccess(storage_type,
+                                                std::move(wrapped_callback));
+  } else {
+    std::move(wrapped_callback).Run(true);
+  }
+}
+
+bool LocalFrame::AllowStorageAccessSyncAndNotify(
+    blink::WebContentSettingsClient::StorageType storage_type) {
+  bool allowed = true;
+  if (WebContentSettingsClient* content_settings_client =
+          GetContentSettingsClient()) {
+    allowed = content_settings_client->AllowStorageAccessSync(storage_type);
+  }
+  GetLocalFrameHostRemote().NotifyStorageAccessed(
+      ToMojoStorageType(storage_type), !allowed);
+  return allowed;
+}
+
+void LocalFrame::OnStorageAccessCallback(
+    base::OnceCallback<void(bool)> callback,
+    mojom::blink::StorageTypeAccessed storage_type,
+    bool is_allowed) {
+  GetLocalFrameHostRemote().NotifyStorageAccessed(storage_type, !is_allowed);
+  std::move(callback).Run(is_allowed);
 }
 
 }  // namespace blink

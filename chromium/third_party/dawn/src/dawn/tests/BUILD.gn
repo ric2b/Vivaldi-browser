@@ -287,7 +287,7 @@ dawn_test("dawn_unittests") {
     ":native_mocks_sources",
     ":partition_alloc_support",
     ":platform_mocks_sources",
-    "${dawn_root}/src/dawn:cpp",
+    "${dawn_root}/include/dawn:cpp_headers",
     "${dawn_root}/src/dawn:proc",
     "${dawn_root}/src/dawn/common",
     "${dawn_root}/src/dawn/native:sources",
@@ -325,8 +325,8 @@ dawn_test("dawn_unittests") {
     "unittests/BuddyMemoryAllocatorTests.cpp",
     "unittests/ChainUtilsTests.cpp",
     "unittests/CommandAllocatorTests.cpp",
-    "unittests/ConcurrentCacheTests.cpp",
     "unittests/ContentLessObjectCacheTests.cpp",
+    "unittests/DefaultTests.cpp",
     "unittests/EnumClassBitmasksTests.cpp",
     "unittests/EnumMaskIteratorTests.cpp",
     "unittests/EnumeratorTests.cpp",
@@ -355,7 +355,6 @@ dawn_test("dawn_unittests") {
     "unittests/SerialMapTests.cpp",
     "unittests/SerialQueueTests.cpp",
     "unittests/SlabAllocatorTests.cpp",
-    "unittests/StackContainerTests.cpp",
     "unittests/SubresourceStorageTests.cpp",
     "unittests/SystemUtilsTests.cpp",
     "unittests/ToBackendTests.cpp",
@@ -367,11 +366,12 @@ dawn_test("dawn_unittests") {
     "unittests/native/BlobTests.cpp",
     "unittests/native/CacheRequestTests.cpp",
     "unittests/native/CommandBufferEncodingTests.cpp",
-    "unittests/native/CreatePipelineAsyncTaskTests.cpp",
+    "unittests/native/CreatePipelineAsyncEventTests.cpp",
     "unittests/native/DestroyObjectTests.cpp",
     "unittests/native/DeviceAsyncTaskTests.cpp",
     "unittests/native/DeviceCreationTests.cpp",
     "unittests/native/LimitsTests.cpp",
+    "unittests/native/MemoryInstrumentationTests.cpp",
     "unittests/native/ObjectContentHasherTests.cpp",
     "unittests/native/StreamTests.cpp",
     "unittests/validation/BindGroupValidationTests.cpp",
@@ -435,6 +435,7 @@ dawn_test("dawn_unittests") {
     "unittests/wire/WireExtensionTests.cpp",
     "unittests/wire/WireFutureTest.cpp",
     "unittests/wire/WireFutureTest.h",
+    "unittests/wire/WireInjectBufferTests.cpp",
     "unittests/wire/WireInjectInstanceTests.cpp",
     "unittests/wire/WireInjectSwapChainTests.cpp",
     "unittests/wire/WireInjectTextureTests.cpp",
@@ -460,6 +461,10 @@ dawn_test("dawn_unittests") {
 
   if (dawn_enable_d3d12) {
     sources += [ "unittests/d3d12/CopySplitTests.cpp" ]
+  }
+
+  if (dawn_enable_vulkan) {
+    sources += [ "unittests/validation/YCbCrInfoValidationTests.cpp" ]
   }
 
   # When building inside Chromium, use their gtest main function because it is
@@ -500,7 +505,7 @@ source_set("test_infra_sources") {
 
   deps = [
     ":partition_alloc_support",
-    "${dawn_root}/src/dawn:cpp",
+    "${dawn_root}/include/dawn:cpp_headers",
     "${dawn_root}/src/dawn:proc",
     "${dawn_root}/src/dawn/common",
     "${dawn_root}/src/dawn/native:sources",
@@ -559,7 +564,7 @@ source_set("end2end_tests_sources") {
   deps = [
     ":platform_mocks_sources",
     ":test_infra_sources",
-    "${dawn_root}/src/dawn:cpp",
+    "${dawn_root}/include/dawn:cpp_headers",
     "${dawn_root}/src/dawn:proc",
     "${dawn_root}/src/dawn/common",
     "${dawn_root}/src/dawn/native:headers",
@@ -572,6 +577,7 @@ source_set("end2end_tests_sources") {
   sources = [
     "end2end/AdapterCreationTests.cpp",
     "end2end/AdapterEnumerationTests.cpp",
+    "end2end/AdapterFormatCapabilitiesVkTests.cpp",
     "end2end/AdapterPropertiesD3DTests.cpp",
     "end2end/AdapterPropertiesVkTests.cpp",
     "end2end/BasicTests.cpp",
@@ -709,10 +715,16 @@ source_set("end2end_tests_sources") {
 
   if (dawn_supports_glfw_for_windowing) {
     sources += [
+      "end2end/SurfaceConfigurationValidationTests.cpp",
+      "end2end/SurfaceTests.cpp",
       "end2end/SwapChainTests.cpp",
       "end2end/SwapChainValidationTests.cpp",
       "end2end/WindowSurfaceTests.cpp",
     ]
+  }
+
+  if (dawn_enable_vulkan) {
+    sources += [ "end2end/YCbCrInfoTests.cpp" ]
   }
 
   if (dawn_enable_d3d11 || dawn_enable_d3d12 ||
@@ -734,7 +746,7 @@ source_set("white_box_tests_sources") {
 
   deps = [
     ":test_infra_sources",
-    "${dawn_root}/src/dawn:cpp",
+    "${dawn_root}/include/dawn:cpp_headers",
     "${dawn_root}/src/dawn:proc",
     "${dawn_root}/src/dawn/common",
     "${dawn_root}/src/dawn/partition_alloc:raw_ptr",
@@ -870,7 +882,7 @@ dawn_test("dawn_end2end_tests") {
 dawn_test("dawn_perf_tests") {
   deps = [
     ":test_infra_sources",
-    "${dawn_root}/src/dawn:cpp",
+    "${dawn_root}/include/dawn:cpp_headers",
     "${dawn_root}/src/dawn:proc",
     "${dawn_root}/src/dawn/common",
     "${dawn_root}/src/dawn/partition_alloc:raw_ptr",

@@ -112,6 +112,20 @@ class WebState;
 // Creates a UIAction instance for searching for the text in the pasteboard.
 - (UIAction*)actionToSearchCopiedText;
 
+#if defined(VIVALDI_BUILD)
+// Creates a UIAction instance configured for opening the `URL` in a background
+// tab and which will invoke the given `completion` block after execution.
+- (UIAction*)actionToOpenInNewBackgroundTabWithURL:(const GURL)URL
+                                        completion:(ProceduralBlock)completion;
+
+// Creates a UIAction instance for opening an image `params` in a new tab and
+// invoke the given `completion` block after execution.
+- (UIAction*)actionOpenImageInNewBackgroundTabWithUrlLoadParams:
+    (UrlLoadParams)params
+                                                     completion:
+    (ProceduralBlock)completion;
+#endif // End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_MENU_BROWSER_ACTION_FACTORY_H_

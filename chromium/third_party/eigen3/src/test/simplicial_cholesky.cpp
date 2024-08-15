@@ -20,6 +20,12 @@ void test_simplicial_cholesky_T() {
   SimplicialLDLT<SparseMatrixType, Upper> ldlt_colmajor_upper_amd;
   SimplicialLDLT<SparseMatrixType, Lower, NaturalOrdering<I_> > ldlt_colmajor_lower_nat;
   SimplicialLDLT<SparseMatrixType, Upper, NaturalOrdering<I_> > ldlt_colmajor_upper_nat;
+  SimplicialNonHermitianLLT<SparseMatrixType, Lower> nhllt_colmajor_lower_amd;
+  SimplicialNonHermitianLLT<SparseMatrixType, Upper> nhllt_colmajor_upper_amd;
+  SimplicialNonHermitianLDLT<SparseMatrixType, Lower> nhldlt_colmajor_lower_amd;
+  SimplicialNonHermitianLDLT<SparseMatrixType, Upper> nhldlt_colmajor_upper_amd;
+  SimplicialNonHermitianLDLT<SparseMatrixType, Lower, NaturalOrdering<I_> > nhldlt_colmajor_lower_nat;
+  SimplicialNonHermitianLDLT<SparseMatrixType, Upper, NaturalOrdering<I_> > nhldlt_colmajor_upper_nat;
 
   check_sparse_spd_solving(chol_colmajor_lower_amd);
   check_sparse_spd_solving(chol_colmajor_upper_amd);
@@ -27,6 +33,10 @@ void test_simplicial_cholesky_T() {
   check_sparse_spd_solving(llt_colmajor_upper_amd);
   check_sparse_spd_solving(ldlt_colmajor_lower_amd);
   check_sparse_spd_solving(ldlt_colmajor_upper_amd);
+  check_sparse_nonhermitian_solving(nhllt_colmajor_lower_amd);
+  check_sparse_nonhermitian_solving(nhllt_colmajor_upper_amd);
+  check_sparse_nonhermitian_solving(nhldlt_colmajor_lower_amd);
+  check_sparse_nonhermitian_solving(nhldlt_colmajor_upper_amd);
 
   check_sparse_spd_determinant(chol_colmajor_lower_amd);
   check_sparse_spd_determinant(chol_colmajor_upper_amd);
@@ -34,9 +44,15 @@ void test_simplicial_cholesky_T() {
   check_sparse_spd_determinant(llt_colmajor_upper_amd);
   check_sparse_spd_determinant(ldlt_colmajor_lower_amd);
   check_sparse_spd_determinant(ldlt_colmajor_upper_amd);
+  check_sparse_nonhermitian_determinant(nhllt_colmajor_lower_amd);
+  check_sparse_nonhermitian_determinant(nhllt_colmajor_upper_amd);
+  check_sparse_nonhermitian_determinant(nhldlt_colmajor_lower_amd);
+  check_sparse_nonhermitian_determinant(nhldlt_colmajor_upper_amd);
 
   check_sparse_spd_solving(ldlt_colmajor_lower_nat, (std::min)(300, EIGEN_TEST_MAX_SIZE), 1000);
   check_sparse_spd_solving(ldlt_colmajor_upper_nat, (std::min)(300, EIGEN_TEST_MAX_SIZE), 1000);
+  check_sparse_nonhermitian_solving(nhldlt_colmajor_lower_nat, (std::min)(300, EIGEN_TEST_MAX_SIZE), 1000);
+  check_sparse_nonhermitian_solving(nhldlt_colmajor_upper_nat, (std::min)(300, EIGEN_TEST_MAX_SIZE), 1000);
 }
 
 EIGEN_DECLARE_TEST(simplicial_cholesky) {

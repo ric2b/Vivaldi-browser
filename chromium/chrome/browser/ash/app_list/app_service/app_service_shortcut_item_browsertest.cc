@@ -46,7 +46,6 @@
 #include "components/sync/test/sync_change_processor_wrapper_for_test.h"
 #include "components/vector_icons/vector_icons.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -101,8 +100,8 @@ class AppServiceShortcutItemBrowserTest
   std::string CreateWebApp(const GURL& app_url,
                            const std::u16string& app_name) {
     // Create web app.
-    auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
-    web_app_info->start_url = app_url;
+    auto web_app_info =
+        web_app::WebAppInstallInfo::CreateWithStartUrlForTesting(app_url);
     web_app_info->title = app_name;
     web_app_info->scope = app_url;
     auto web_app_id = web_app::test::InstallWebApp(
@@ -191,8 +190,7 @@ IN_PROC_BROWSER_TEST_F(AppServiceShortcutItemBrowserTest, ContextMenuOpen) {
                 .GetVectorIcon()
                 .vector_icon());
 
-  ui_test_utils::UrlLoadObserver url_observer(
-      app_url, content::NotificationService::AllSources());
+  ui_test_utils::UrlLoadObserver url_observer(app_url);
   menu_model->ActivatedAt(launch_new_command_index.value());
   url_observer.Wait();
 }
@@ -208,8 +206,7 @@ IN_PROC_BROWSER_TEST_F(AppServiceShortcutItemBrowserTest, Activate) {
   ChromeAppListItem* item = model_updater->FindItem(shortcut_id.value());
   ASSERT_TRUE(item);
 
-  ui_test_utils::UrlLoadObserver url_observer(
-      app_url, content::NotificationService::AllSources());
+  ui_test_utils::UrlLoadObserver url_observer(app_url);
   item->PerformActivate(ui::EF_NONE);
   url_observer.Wait();
 }
@@ -450,7 +447,7 @@ IN_PROC_BROWSER_TEST_F(AppServiceShortcutItemBrowserTest, LoadIcon) {
 
   gfx::ImageSkia stub_icon(gfx::ImageSkiaRep(gfx::Size(1, 1), 1.0f));
 
-  // TODO(crbug.com/1480423): Remove this when the actual visual is done in the
+  // TODO(crbug.com/40281395): Remove this when the actual visual is done in the
   // UI.
   gfx::ImageSkia icon_with_badge =
       gfx::ImageSkiaOperations::CreateIconWithBadge(stub_icon, stub_icon);

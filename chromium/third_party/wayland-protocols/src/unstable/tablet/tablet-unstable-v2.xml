@@ -596,14 +596,23 @@
 
     <event name="name">
       <description summary="tablet device name">
+        A descriptive name for the tablet device.
+
+	If the device has no descriptive name, this event is not sent.
+
 	This event is sent in the initial burst of events before the
-	wp_tablet.done event.
+        wp_tablet.done event.
       </description>
       <arg name="name" type="string" summary="the device name"/>
     </event>
 
     <event name="id">
       <description summary="tablet device USB vendor/product id">
+	The USB vendor and product IDs for the tablet device.
+
+	If the device has no USB vendor/product ID, this event is not sent.
+	This can happen for virtual devices or non-USB devices, for instance.
+
 	This event is sent in the initial burst of events before the
 	wp_tablet.done event.
       </description>

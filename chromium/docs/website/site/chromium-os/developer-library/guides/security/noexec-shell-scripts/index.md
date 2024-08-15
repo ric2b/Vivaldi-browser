@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: noexec-shell-scripts
 title: Shell scripts & noexec mounts
 ---

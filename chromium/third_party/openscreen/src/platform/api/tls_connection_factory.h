@@ -45,7 +45,7 @@ class TlsConnectionFactory {
                                     const IPEndpoint& remote_address) = 0;
 
     // Called when a non-recoverable error occurs.
-    virtual void OnError(TlsConnectionFactory* factory, Error error) = 0;
+    virtual void OnError(TlsConnectionFactory* factory, const Error& error) = 0;
 
    protected:
     virtual ~Client();
@@ -55,7 +55,7 @@ class TlsConnectionFactory {
   // asynchronously, as well as a task runner it can use to for running
   // callbacks both on the factory and on created TlsConnection instances.
   static std::unique_ptr<TlsConnectionFactory> CreateFactory(
-      Client* client,
+      Client& client,
       TaskRunner& task_runner);
 
   virtual ~TlsConnectionFactory();

@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
 import {createTarget} from '../../testing/EnvironmentHelpers.js';
@@ -11,8 +10,6 @@ import {
 } from '../../testing/MockConnection.js';
 
 import type * as WebauthnModule from './webauthn.js';
-
-const {assert} = chai;
 
 describeWithMockConnection('WebAuthn pane', () => {
   // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -58,15 +55,17 @@ describeWithMockConnection('WebAuthn pane', () => {
     assert.isFalse(largeBlob.checked);
   });
 
-  const tests = (targetFactory: () => SDK.Target.Target, inScope: boolean) => {
+  const tests = (inScope: boolean) => {
     let target: SDK.Target.Target;
     let model: SDK.WebAuthnModel.WebAuthnModel;
     let panel: WebauthnModule.WebauthnPane.WebauthnPaneImpl;
     beforeEach(() => {
-      target = targetFactory();
+      const tabTarget = createTarget({type: SDK.Target.Type.Tab});
+      createTarget({parentTarget: tabTarget, subtype: 'prerender'});
+      target = createTarget({parentTarget: tabTarget});
       SDK.TargetManager.TargetManager.instance().setScopeTarget(inScope ? target : null);
       model = target.model(SDK.WebAuthnModel.WebAuthnModel) as SDK.WebAuthnModel.WebAuthnModel;
-      assertNotNullOrUndefined(model);
+      assert.exists(model);
       panel = new Webauthn.WebauthnPane.WebauthnPaneImpl();
     });
 
@@ -159,7 +158,7 @@ describeWithMockConnection('WebAuthn pane', () => {
 
       // Remove the credential.
       const removeCredential = sinon.stub(model, 'removeCredential').resolves();
-      dataGrid.element.querySelectorAll('button')[1].click();
+      dataGrid.element.querySelectorAll('devtools-button')[1].click();
       assert.strictEqual(dataGrid.rootNode().children.length, 1);
       emptyNode = dataGrid.rootNode().children[0];
       assert.isOk(emptyNode);
@@ -246,16 +245,6 @@ describeWithMockConnection('WebAuthn pane', () => {
     });
   };
 
-  describe('without tab target in scope', () => tests(() => createTarget(), true));
-  describe('without tab target out of scope', () => tests(() => createTarget(), false));
-  describe('with tab target in scope', () => tests(() => {
-                                         const tabTarget = createTarget({type: SDK.Target.Type.Tab});
-                                         createTarget({parentTarget: tabTarget, subtype: 'prerender'});
-                                         return createTarget({parentTarget: tabTarget});
-                                       }, true));
-  describe('with tab target out of scope', () => tests(() => {
-                                             const tabTarget = createTarget({type: SDK.Target.Type.Tab});
-                                             createTarget({parentTarget: tabTarget, subtype: 'prerender'});
-                                             return createTarget({parentTarget: tabTarget});
-                                           }, false));
+  describe('in scope', () => tests(true));
+  describe('out of scope', () => tests(false));
 });

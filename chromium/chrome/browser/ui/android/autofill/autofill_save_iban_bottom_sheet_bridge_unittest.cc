@@ -20,10 +20,11 @@
 namespace autofill {
 namespace {
 
-using SaveIbanOfferUserDecision = AutofillClient::SaveIbanOfferUserDecision;
+using SaveIbanOfferUserDecision =
+    payments::PaymentsAutofillClient::SaveIbanOfferUserDecision;
 
 std::u16string_view kIbanLabel = u"CH56 0483 5012 3456 7800 9";
-std::u16string_view kUserProvidedNickname = u"My Doctor's IBAN";
+std::u16string kUserProvidedNickname = u"My Doctor's IBAN";
 
 class AutofillSaveIbanBottomSheetBridgeTest
     : public ChromeRenderViewHostTestHarness {
@@ -33,7 +34,7 @@ class AutofillSaveIbanBottomSheetBridgeTest
     base::DoNothing();
   }
 
-  AutofillClient::SaveIbanPromptCallback MakeLocalCallback() {
+  payments::PaymentsAutofillClient::SaveIbanPromptCallback MakeLocalCallback() {
     return base::BindOnce(&AutofillSaveIbanBottomSheetBridgeTest::LocalCallback,
                           base::Unretained(this));
   }
@@ -41,9 +42,9 @@ class AutofillSaveIbanBottomSheetBridgeTest
 
 class MockDelegate : public AutofillSaveIbanDelegate {
  public:
-  explicit MockDelegate(
-      AutofillClient::SaveIbanPromptCallback save_iban_callback,
-      content::WebContents* web_contents)
+  explicit MockDelegate(payments::PaymentsAutofillClient::SaveIbanPromptCallback
+                            save_iban_callback,
+                        content::WebContents* web_contents)
       : AutofillSaveIbanDelegate(std::move(save_iban_callback), web_contents) {}
   MOCK_METHOD(void, OnUiAccepted, (base::OnceClosure, std::u16string_view));
   MOCK_METHOD(void, OnUiCanceled, ());
@@ -62,12 +63,7 @@ TEST_F(AutofillSaveIbanBottomSheetBridgeTest, BridgeCallsOnUiAccepted) {
   EXPECT_CALL(delegate_reference, OnUiAccepted);
 
   JNIEnv* env = base::android::AttachCurrentThread();
-  auto j_string =
-      base::android::ConvertUTF16ToJavaString(env, kUserProvidedNickname);
-  base::android::JavaParamRef<jstring> user_provided_nickname(env,
-                                                              j_string.obj());
-
-  bridge.OnUiAccepted(env, user_provided_nickname);
+  bridge.OnUiAccepted(env, kUserProvidedNickname);
 }
 
 // Check OnUiCanceled() is called in delegate.

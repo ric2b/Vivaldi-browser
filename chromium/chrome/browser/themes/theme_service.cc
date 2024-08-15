@@ -30,7 +30,6 @@
 #include "base/task/thread_pool.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "chrome/browser/browser_features.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/theme_installed_infobar_delegate.h"
 #include "chrome/browser/new_tab_page/chrome_colors/chrome_colors_service.h"
@@ -41,13 +40,13 @@
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/themes/theme_service_observer.h"
+#include "chrome/browser/themes/theme_service_utils.h"
 #include "chrome/browser/themes/theme_syncable_service.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_constants.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/infobars/content/content_infobar_manager.h"
@@ -590,9 +589,7 @@ void ThemeService::SetUserColor(std::optional<SkColor> user_color) {
 }
 
 std::optional<SkColor> ThemeService::GetUserColor() const {
-  auto user_color = profile_->GetPrefs()->GetInteger(prefs::kUserColor);
-  return user_color == SK_ColorTRANSPARENT ? std::nullopt
-                                           : std::optional<SkColor>(user_color);
+  return CurrentThemeUserColor(profile_->GetPrefs());
 }
 
 void ThemeService::SetBrowserColorVariant(
@@ -635,7 +632,7 @@ void ThemeService::SetIsGrayscale(bool is_grayscale) {
 }
 
 bool ThemeService::GetIsGrayscale() const {
-  return profile_->GetPrefs()->GetBoolean(prefs::kGrayscaleThemeEnabled);
+  return CurrentThemeIsGrayscale(profile_->GetPrefs());
 }
 
 bool ThemeService::GetIsBaseline() const {
@@ -710,8 +707,7 @@ void ThemeService::ClearThemeData(bool clear_ntp_background) {
 
   SwapThemeSupplier(nullptr);
   ClearThemePrefs();
-  if (base::FeatureList::IsEnabled(features::kCustomizeChromeSidePanel) &&
-      clear_ntp_background) {
+  if (clear_ntp_background) {
     NtpCustomBackgroundService::ResetNtpTheme(profile_);
   }
 
@@ -963,14 +959,12 @@ void ThemeService::ClearThemePrefs() {
 void ThemeService::SetThemePrefsForExtension(
     const extensions::Extension* extension) {
   ClearThemePrefs();
-  if (base::FeatureList::IsEnabled(features::kCustomizeChromeSidePanel)) {
-    NtpCustomBackgroundService::ResetNtpTheme(profile_);
-    // Extensions are incompatible with device themes so turn them off.
-    // TODO(crbug.com/1477021): Remove this if we can otherwise separate
-    // extension and device themes from attempting to apply at the same time.
-    profile_->GetPrefs()->SetBoolean(prefs::kBrowserFollowsSystemThemeColors,
-                                     false);
-  }
+  NtpCustomBackgroundService::ResetNtpTheme(profile_);
+  // Extensions are incompatible with device themes so turn them off.
+  // TODO(crbug.com/40280173): Remove this if we can otherwise separate
+  // extension and device themes from attempting to apply at the same time.
+  profile_->GetPrefs()->SetBoolean(prefs::kBrowserFollowsSystemThemeColors,
+                                   false);
 
   profile_->GetPrefs()->SetString(prefs::kCurrentThemeID, extension->id());
 

@@ -27,7 +27,7 @@ class UdpSocketReaderPosix : public SocketHandleWaiter::Subscriber {
 
   // Creates a new instance of this object.
   // NOTE: The provided NetworkWaiter must outlive this object.
-  explicit UdpSocketReaderPosix(SocketHandleWaiter* waiter);
+  explicit UdpSocketReaderPosix(SocketHandleWaiter& waiter);
   ~UdpSocketReaderPosix() override;
 
   // Waits for |socket| to be readable and then calls the socket's
@@ -65,7 +65,7 @@ class UdpSocketReaderPosix : public SocketHandleWaiter::Subscriber {
   std::mutex mutex_;
 
   // NetworkWaiter watching this NetworkReader.
-  SocketHandleWaiter* const waiter_;
+  SocketHandleWaiter& waiter_;
 
   friend class TestingUdpSocketReader;
 };

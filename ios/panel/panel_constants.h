@@ -30,5 +30,7 @@ extern NSString* vPanelHistoryActive;
 extern NSString* vPanelReadingList;
 extern NSString* vPanelReadingListActive;
 
+extern NSString* vPanelMoreAction;
+extern NSString* vPanelSortOrderAction;
 
 #endif // IOS_PANEL_PANEL_CONSTANTS_H_

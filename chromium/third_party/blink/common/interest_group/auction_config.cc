@@ -9,6 +9,7 @@
 #include <tuple>
 
 #include "base/strings/to_string.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/interest_group/ad_display_size_utils.h"
 #include "third_party/blink/public/mojom/interest_group/ad_auction_service.mojom.h"
 
@@ -144,6 +145,20 @@ int AuctionConfig::NumPromises() const {
 bool AuctionConfig::IsHttpsAndMatchesSellerOrigin(const GURL& url) const {
   return url.scheme() == url::kHttpsScheme &&
          url::Origin::Create(url) == seller;
+}
+
+bool AuctionConfig::IsValidTrustedScoringSignalsURL(const GURL& url) const {
+  if (url.has_query() || url.has_ref() || url.has_username() ||
+      url.has_password()) {
+    return false;
+  }
+
+  if (base::FeatureList::IsEnabled(
+          blink::features::kFledgePermitCrossOriginTrustedSignals)) {
+    return url.scheme() == url::kHttpsScheme;
+  } else {
+    return IsHttpsAndMatchesSellerOrigin(url);
+  }
 }
 
 bool AuctionConfig::IsDirectFromSellerSignalsValid(

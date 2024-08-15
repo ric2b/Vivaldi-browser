@@ -19,11 +19,12 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
+import org.chromium.chrome.browser.tab_ui.RecyclerViewPosition;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.TabListEditorCoordinator.TabListEditorNavigationProvider;
-import org.chromium.chrome.browser.tasks.tab_management.TabProperties.UiType;
+import org.chromium.chrome.browser.tasks.tab_management.TabProperties.TabActionState;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiMetricsHelper.TabListEditorExitMetricGroups;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.components.browser_ui.styles.ChromeColors;
@@ -86,7 +87,7 @@ class TabListEditorMediator
             boolean actionOnRelatedTabs,
             SnackbarManager snackbarManager,
             TabListEditorLayout tabListEditorLayout,
-            @UiType int itemType) {
+            @TabActionState int initialTabActionState) {
         mContext = context;
         mCurrentTabModelFilterSupplier = currentTabModelFilterSupplier;
         mTabListCoordinator = tabListCoordinator;
@@ -133,17 +134,19 @@ class TabListEditorMediator
                     }
 
                     @Override
-                    public void willCloseTab(Tab tab, boolean animate, boolean didCloseAlone) {
-                        if (itemType != TabProperties.UiType.CLOSABLE) {
+                    public void willCloseTab(Tab tab, boolean didCloseAlone) {
+                        // TODO(crbug.com/338103697): Query the TabList for the current tab action
+                        // state.
+                        if (initialTabActionState != TabProperties.TabActionState.CLOSABLE) {
                             hide();
                         }
                     }
 
-                    // TODO(crbug.com/1504605): Revisit after adding the inactive tab model for
+                    // TODO(crbug.com/40945153): Revisit after adding the inactive tab model for
                     // using a custom click handler when selecting tabs.
                     @Override
                     public void didSelectTab(Tab tab, @TabSelectionType int type, int lastId) {
-                        if (itemType == TabProperties.UiType.CLOSABLE
+                        if (initialTabActionState == TabProperties.TabActionState.CLOSABLE
                                 && type == TabSelectionType.FROM_USER) {
                             hide();
                         }

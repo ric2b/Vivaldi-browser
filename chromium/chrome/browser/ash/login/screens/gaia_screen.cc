@@ -15,13 +15,12 @@
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/wizard_context.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
-#include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/policy/enrollment/account_status_check_fetcher.h"
-#include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/enterprise/util/managed_browser_utils.h"
 #include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
+#include "chromeos/ash/components/install_attributes/install_attributes.h"
+#include "chromeos/ash/components/settings/cros_settings.h"
 #include "chromeos/ash/services/auth_factor_config/auth_factor_config_utils.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/known_user.h"
@@ -86,6 +85,7 @@ bool ShouldUseReauthEndpoint(const AccountId& account_id,
 
 // static
 std::string GaiaScreen::GetResultString(Result result) {
+  // LINT.IfChange(UsageMetrics)
   switch (result) {
     case Result::BACK:
       return "Back";
@@ -102,6 +102,7 @@ std::string GaiaScreen::GetResultString(Result result) {
     case Result::QUICK_START_ONGOING:
       return BaseScreen::kNotApplicable;
   }
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/oobe/histograms.xml)
 }
 
 GaiaScreen::GaiaScreen(base::WeakPtr<TView> view,
@@ -117,7 +118,9 @@ GaiaScreen::~GaiaScreen() {
 
 bool GaiaScreen::MaybeSkip(WizardContext& context) {
   // Continue QuickStart flow if there is an ongoing setup.
-  if (context.quick_start_setup_ongoing) {
+  if (context.quick_start_setup_ongoing &&
+      context.gaia_config.gaia_path !=
+          WizardContext::GaiaPath::kQuickStartFallback) {
     exit_callback_.Run(Result::QUICK_START_ONGOING);
     return true;
   }
@@ -135,6 +138,7 @@ void GaiaScreen::LoadOnlineGaia() {
     case WizardContext::GaiaPath::kDefault:
     case WizardContext::GaiaPath::kSamlRedirect:
     case WizardContext::GaiaPath::kReauth:
+    case WizardContext::GaiaPath::kQuickStartFallback:
       LoadDefaultOnlineGaia(context->gaia_config.prefilled_account);
       break;
     case WizardContext::GaiaPath::kChildSignin:
@@ -216,12 +220,19 @@ void GaiaScreen::ShowImpl() {
   context()->skip_to_login_for_tests = false;
   view_->Show();
 
-  // Determine the QuickStart button visibility
-  WizardController::default_controller()
-      ->quick_start_controller()
-      ->DetermineEntryPointVisibility(
-          base::BindOnce(&GaiaScreen::SetQuickStartButtonVisibility,
-                         weak_ptr_factory_.GetWeakPtr()));
+  // QuickStart entry point may only be visible for the default flow.
+  // TODO(b/334944713) - Cover with tests for the other paths.
+  if (LoginDisplayHost::default_host()
+          ->GetWizardContext()
+          ->gaia_config.gaia_path == WizardContext::GaiaPath::kDefault) {
+    WizardController::default_controller()
+        ->quick_start_controller()
+        ->DetermineEntryPointVisibility(
+            base::BindRepeating(&GaiaScreen::SetQuickStartButtonVisibility,
+                                weak_ptr_factory_.GetWeakPtr()));
+  } else {
+    SetQuickStartButtonVisibility(/*visible=*/false);
+  }
 }
 
 void GaiaScreen::HideImpl() {
@@ -394,10 +405,7 @@ void GaiaScreen::OnAccountStatusFetched(const std::string& user_email,
 
 bool GaiaScreen::ShouldFetchEnrollmentNudgePolicy(
     const std::string& user_email) {
-  const bool is_enterprise_managed = g_browser_process->platform_part()
-                                         ->browser_policy_connector_ash()
-                                         ->IsDeviceEnterpriseManaged();
-  if (is_enterprise_managed) {
+  if (ash::InstallAttributes::Get()->IsEnterpriseManaged()) {
     // Device either already went through enterprise enrollment flow or goes
     // through it right now. No need for nudging.
     return false;
@@ -422,8 +430,8 @@ void GaiaScreen::OnQuickStartButtonClicked() {
 }
 
 void GaiaScreen::SetQuickStartButtonVisibility(bool visible) {
-  if (visible && view_) {
-    view_->SetQuickStartEnabled();
+  if (view_) {
+    view_->SetQuickStartEntryPointVisibility(visible);
   }
 }
 

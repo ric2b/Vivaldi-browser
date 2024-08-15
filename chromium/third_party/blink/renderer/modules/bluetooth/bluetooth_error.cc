@@ -118,6 +118,8 @@ DOMException* BluetoothError::CreateDOMException(
                 "Connection Error: Already exists.");
       MAP_ERROR(CONNECT_NOT_CONNECTED, DOMExceptionCode::kInvalidStateError,
                 "Connection Error: Not connected.");
+      MAP_ERROR(CONNECT_NON_AUTH_TIMEOUT, DOMExceptionCode::kInvalidStateError,
+                "Connection Error: Non-authentication timeout.");
 
       // NetworkErrors:
       MAP_ERROR(CONNECT_ALREADY_IN_PROGRESS, DOMExceptionCode::kNetworkError,
@@ -226,6 +228,16 @@ DOMException* BluetoothError::CreateDOMException(
       // NotAllowedErrors:
       MAP_ERROR(SCANNING_BLOCKED, DOMExceptionCode::kNotAllowedError,
                 "requestLEScan() call is blocked by user.");
+
+      // UnknownErrors:
+      MAP_ERROR(CONNECT_NO_MEMORY, DOMExceptionCode::kUnknownError,
+                "Connection Error: An internal error has occurred.");
+      MAP_ERROR(CONNECT_JNI_ENVIRONMENT, DOMExceptionCode::kUnknownError,
+                "Connection Error: An internal error has occurred.");
+      MAP_ERROR(CONNECT_JNI_THREAD_ATTACH, DOMExceptionCode::kUnknownError,
+                "Connection Error: An internal error has occurred.");
+      MAP_ERROR(CONNECT_WAKELOCK, DOMExceptionCode::kUnknownError,
+                "Connection Error: An internal error has occurred.");
 
 #undef MAP_ERROR
   }

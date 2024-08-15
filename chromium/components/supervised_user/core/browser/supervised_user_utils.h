@@ -5,10 +5,10 @@
 #ifndef COMPONENTS_SUPERVISED_USER_CORE_BROWSER_SUPERVISED_USER_UTILS_H_
 #define COMPONENTS_SUPERVISED_USER_CORE_BROWSER_SUPERVISED_USER_UTILS_H_
 
-#include <optional>
 #include <string>
 #include <vector>
 
+#include "base/memory/raw_ref.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/supervised_user/core/browser/family_link_user_log_record.h"
 #include "components/supervised_user/core/browser/proto/families_common.pb.h"
@@ -62,7 +62,7 @@ enum class LocallyParentApprovedExtensionsMigrationState : int {
 };
 
 // Converts FamilyRole enum to string format.
-std::string FamilyRoleToString(kids_chrome_management::FamilyRole role);
+std::string FamilyRoleToString(kidsmanagement::FamilyRole role);
 
 // Converts FilteringBehaviorReason enum to string format.
 std::string FilteringBehaviorReasonToString(FilteringBehaviorReason reason);
@@ -79,6 +79,21 @@ bool AreWebFilterPrefsDefault(const PrefService& pref_service);
 // Returns true if one or more histograms were emitted.
 bool EmitLogRecordHistograms(
     const std::vector<FamilyLinkUserLogRecord>& records);
+
+// Url formatter helper.
+// Decisions on how to format the url depend on the filtering reason,
+// the manual parental url block-list.
+class UrlFormatter {
+ public:
+  UrlFormatter(const SupervisedUserURLFilter& supervised_user_url_filter,
+               FilteringBehaviorReason filtering_behavior_reason);
+  ~UrlFormatter();
+  GURL FormatUrl(const GURL& url) const;
+
+ private:
+  const raw_ref<const SupervisedUserURLFilter> supervised_user_url_filter_;
+  const FilteringBehaviorReason filtering_behavior_reason_;
+};
 
 }  // namespace supervised_user
 

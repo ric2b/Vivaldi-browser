@@ -17,24 +17,24 @@ export function optionEnabled(
   return val !== null && val !== '0';
 }
 
-/** Parse a runner option that is always string-typed. If the option is missing, returns `''`. */
+/** Parse a runner option that is string-typed. If the option is missing, returns `null`. */
 export function optionString(
   opt: string,
   searchParams: URLSearchParams = getWindowURL().searchParams
-): string {
-  return searchParams.get(opt) || '';
+): string | null {
+  return searchParams.get(opt);
 }
 
-/** Runtime modes for whether to run tests in a worker. '0' means no worker. */
-type WorkerMode = '0' | 'dedicated' | 'service' | 'shared';
-/** Parse a runner option for different worker modes (as in `?worker=shared`). */
+/** Runtime modes for running tests in different types of workers. */
+export type WorkerMode = 'dedicated' | 'service' | 'shared';
+/** Parse a runner option for different worker modes (as in `?worker=shared`). Null if no worker. */
 export function optionWorkerMode(
   opt: string,
   searchParams: URLSearchParams = getWindowURL().searchParams
-): WorkerMode {
+): WorkerMode | null {
   const value = searchParams.get(opt);
   if (value === null || value === '0') {
-    return '0';
+    return null;
   } else if (value === 'service') {
     return 'service';
   } else if (value === 'shared') {
@@ -49,21 +49,23 @@ export function optionWorkerMode(
  * The possible options for the tests.
  */
 export interface CTSOptions {
-  worker: WorkerMode;
+  worker: WorkerMode | null;
   debug: boolean;
   compatibility: boolean;
   forceFallbackAdapter: boolean;
   unrollConstEvalLoops: boolean;
-  powerPreference: GPUPowerPreference | '';
+  powerPreference: GPUPowerPreference | null;
+  logToWebSocket: boolean;
 }
 
 export const kDefaultCTSOptions: CTSOptions = {
-  worker: '0',
+  worker: null,
   debug: true,
   compatibility: false,
   forceFallbackAdapter: false,
   unrollConstEvalLoops: false,
-  powerPreference: '',
+  powerPreference: null,
+  logToWebSocket: false,
 };
 
 /**
@@ -71,8 +73,8 @@ export const kDefaultCTSOptions: CTSOptions = {
  */
 export interface OptionInfo {
   description: string;
-  parser?: (key: string, searchParams?: URLSearchParams) => boolean | string;
-  selectValueDescriptions?: { value: string; description: string }[];
+  parser?: (key: string, searchParams?: URLSearchParams) => boolean | string | null;
+  selectValueDescriptions?: { value: string | null; description: string }[];
 }
 
 /**
@@ -89,7 +91,7 @@ export const kCTSOptionsInfo: OptionsInfos<CTSOptions> = {
     description: 'run in a worker',
     parser: optionWorkerMode,
     selectValueDescriptions: [
-      { value: '0', description: 'no worker' },
+      { value: null, description: 'no worker' },
       { value: 'dedicated', description: 'dedicated worker' },
       { value: 'shared', description: 'shared worker' },
       { value: 'service', description: 'service worker' },
@@ -103,11 +105,12 @@ export const kCTSOptionsInfo: OptionsInfos<CTSOptions> = {
     description: 'set default powerPreference for some tests',
     parser: optionString,
     selectValueDescriptions: [
-      { value: '', description: 'default' },
+      { value: null, description: 'default' },
       { value: 'low-power', description: 'low-power' },
       { value: 'high-performance', description: 'high-performance' },
     ],
   },
+  logToWebSocket: { description: 'send some logs to ws://localhost:59497/' },
 };
 
 /**
@@ -131,7 +134,7 @@ function getOptionsInfoFromSearchString<Type extends CTSOptions>(
   searchString: string
 ): Type {
   const searchParams = new URLSearchParams(searchString);
-  const optionValues: Record<string, boolean | string> = {};
+  const optionValues: Record<string, boolean | string | null> = {};
   for (const [optionName, info] of Object.entries(optionsInfos)) {
     const parser = info.parser || optionEnabled;
     optionValues[optionName] = parser(camelCaseToSnakeCase(optionName), searchParams);

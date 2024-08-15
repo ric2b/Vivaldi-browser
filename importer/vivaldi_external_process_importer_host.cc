@@ -15,32 +15,25 @@ void ExternalProcessImporterHost::NotifyImportItemFailed(
 }
 
 void ExternalProcessImporterHost::ShowChromeWarningDialog() {
-  std::u16string importerLockString;
+  int importerLockString_id=0;
 
   if (source_profile_.importer_type == importer::TYPE_CHROME ||
       source_profile_.importer_type == importer::TYPE_CHROMIUM) {
-    importerLockString =
-        l10n_util::GetStringUTF16(IDS_CHROME_IMPORTER_LOCK_TEXT);
+    importerLockString_id = IDS_CHROME_IMPORTER_LOCK_TEXT;
   } else if (source_profile_.importer_type == importer::TYPE_OPERA_OPIUM ||
              source_profile_.importer_type == importer::TYPE_OPERA_OPIUM_BETA ||
              source_profile_.importer_type == importer::TYPE_OPERA_OPIUM_DEV) {
-    importerLockString =
-        l10n_util::GetStringUTF16(IDS_OPIUM_IMPORTER_LOCK_TEXT);
+    importerLockString_id = IDS_OPIUM_IMPORTER_LOCK_TEXT;
   } else if (source_profile_.importer_type == importer::TYPE_YANDEX) {
-    importerLockString =
-        l10n_util::GetStringUTF16(IDS_YANDEX_IMPORTER_LOCK_TEXT);
+    importerLockString_id = IDS_YANDEX_IMPORTER_LOCK_TEXT;
   } else if (source_profile_.importer_type == importer::TYPE_BRAVE) {
-    importerLockString =
-        l10n_util::GetStringUTF16(IDS_BRAVE_IMPORTER_LOCK_TEXT);
+    importerLockString_id = IDS_BRAVE_IMPORTER_LOCK_TEXT;
   } else if (source_profile_.importer_type == importer::TYPE_EDGE_CHROMIUM) {
-    importerLockString =
-        l10n_util::GetStringUTF16(IDS_EDGE_CHROMIUM_IMPORTER_LOCK_TEXT);
+    importerLockString_id = IDS_EDGE_CHROMIUM_IMPORTER_LOCK_TEXT;
   } else if (source_profile_.importer_type == importer::TYPE_ARC) {
-    importerLockString =
-        l10n_util::GetStringUTF16(IDS_ARC_IMPORTER_LOCK_TEXT);
+    importerLockString_id = IDS_ARC_IMPORTER_LOCK_TEXT;
   } else if (source_profile_.importer_type == importer::TYPE_OPERA_GX) {
-    importerLockString =
-        l10n_util::GetStringUTF16(IDS_OPERA_GX_IMPORTER_LOCK_TEXT);
+    importerLockString_id = IDS_OPERA_GX_IMPORTER_LOCK_TEXT;
   }
 
   DCHECK(!headless_);
@@ -49,7 +42,8 @@ void ExternalProcessImporterHost::ShowChromeWarningDialog() {
       base::BindOnce(
           &ExternalProcessImporterHost::OnChromiumImportLockDialogEnd,
           weak_ptr_factory_.GetWeakPtr()),
-      importerLockString);
+      IDS_IMPORTER_LOCK_TITLE,
+      importerLockString_id);
 }
 
 void ExternalProcessImporterHost::OnChromiumImportLockDialogEnd(

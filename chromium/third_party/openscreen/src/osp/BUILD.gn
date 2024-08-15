@@ -2,9 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build_overrides/build.gni")
 import("../gni/openscreen.gni")
 
-if (!is_win && !is_mac) {
+if (!is_win) {
   visibility = [ "./*" ]
   openscreen_source_set("osp") {
     visibility += [ "../*" ]
@@ -38,6 +39,7 @@ if (!is_win && !is_mac) {
       "../third_party/abseil",
       "../third_party/googletest:gmock",
       "../third_party/googletest:gtest",
+      "../third_party/quiche",
       "../third_party/tinycbor",
       "../util",
       "impl",
@@ -45,5 +47,21 @@ if (!is_win && !is_mac) {
       "public",
       "public:test_support",
     ]
+  }
+
+  if (!build_with_chromium) {
+    openscreen_executable("osp_demo") {
+      visibility += [ "../*" ]
+      sources = [ "demo/osp_demo.cc" ]
+      deps = [
+        "../platform:base",
+        "../platform:standalone_impl",
+        "../third_party/quiche",
+        "../third_party/tinycbor",
+        "../util",
+        "impl",
+        "public",
+      ]
+    }
   }
 }

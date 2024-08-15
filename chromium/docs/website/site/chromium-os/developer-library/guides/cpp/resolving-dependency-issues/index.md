@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: resolving-dependency-issues
 title: Using delegates to Resolve Dependency Issues
 ---
@@ -15,7 +15,7 @@ depend on the top level **//ui**, **//chrome**, or **//content** directories.
 
 Directly from the **//chromeos** [README](http://chromeos/README.md):
 
-*   “This directory contains low-level support for Chrome running on Chrome OS.”
+*   “This directory contains low-level support for Chrome running on ChromeOS.”
 *   “//chromeos does not contain any user-facing UI code, and hence it has "-ui"
     in its DEPS. The contents of //chromeos should also not depend on //chrome
     or //content.”
@@ -43,7 +43,7 @@ There were Python 3 presubmit errors.
 The diagram below gives a rough visualization of the separation of components in
 ChromeOS.
 
-![ChromeOS Dependency Chart](/chromium-os/developer-library/guides/cpp/resolving-dependency-issues/chromeos_dependency_chart.png) *Chrome OS
+![ChromeOS Dependency Chart](/chromium-os/developer-library/guides/cpp/resolving-dependency-issues/chromeos_dependency_chart.png) *ChromeOS
 architecture pre-LaCrOs*
 
 ## Delegate pattern to use Chrome from Ash

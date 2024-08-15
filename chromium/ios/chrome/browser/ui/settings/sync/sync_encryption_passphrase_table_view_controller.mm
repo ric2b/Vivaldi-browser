@@ -99,7 +99,7 @@ const CGFloat kSpinnerButtonPadding = 18;
   ChromeBrowserState* browserState = _browser->GetBrowserState();
   syncer::SyncService* service =
       SyncServiceFactory::GetForBrowserState(browserState);
-  // TODO(crbug.com/1208307): The reason this is an if and not a DCHECK is
+  // TODO(crbug.com/40765960): The reason this is an if and not a DCHECK is
   // because SyncCreatePassphraseTableViewController inherits from this class.
   // This should be changed, i.e. either extract the minimum common logic
   // between the 2 to a new base class, or not share code at all.
@@ -519,7 +519,7 @@ const CGFloat kSpinnerButtonPadding = 18;
     // change when the user is in the Advanced Settings (e.g., if the user
     // confirms a Sync passphrase). Because these navigation controllers are
     // not directly related to Settings, we check the type before dismissal.
-    // TODO(crbug.com/1151287): Revisit with Advanced Sync Settings changes.
+    // TODO(crbug.com/40158230): Revisit with Advanced Sync Settings changes.
     if (settingsNavigationController) {
       [settingsNavigationController
           popViewControllerOrCloseSettingsAnimated:YES];

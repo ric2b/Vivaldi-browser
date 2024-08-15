@@ -63,8 +63,7 @@ class DisplayParameterizedCaptureModePixelTest
 
   void SetUp() override {
     scoped_features_.InitWithFeatures({::features::kChromeRefresh2023,
-                                       ::features::kChromeRefreshSecondary2023,
-                                       ::features::kChromeRefresh2023NTB},
+                                       ::features::kChromeRefreshSecondary2023},
                                       {});
 
     AshTestBase::SetUp();
@@ -132,7 +131,7 @@ TEST_P(DisplayParameterizedCaptureModePixelTest,
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
       base::StrCat({"screen_capture_popup_notification_",
                     GetDisplayTypeName(GetDisplayType())}),
-      /*revision_number=*/0,
+      /*revision_number=*/1,
       test_api()->GetPopupViewForId(kScreenCaptureNotificationId)));
 }
 
@@ -164,7 +163,7 @@ TEST_P(DisplayParameterizedCaptureModePixelTest, VideoCaptureNotification) {
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
       base::StrCat({"video_capture_notification_popup_",
                     GetDisplayTypeName(GetDisplayType())}),
-      /*revision_number=*/2, notification_popup_view));
+      /*revision_number=*/4, notification_popup_view));
 
   test_api()->ToggleBubble();
   auto* notification_view =
@@ -172,7 +171,7 @@ TEST_P(DisplayParameterizedCaptureModePixelTest, VideoCaptureNotification) {
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
       base::StrCat({"video_capture_notification_view_",
                     GetDisplayTypeName(GetDisplayType())}),
-      /*revision_number=*/2, notification_view));
+      /*revision_number=*/4, notification_view));
 }
 
 }  // namespace ash

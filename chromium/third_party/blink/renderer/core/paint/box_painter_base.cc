@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/core/style/style_mask_source_image.h"
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
 #include "third_party/blink/renderer/platform/graphics/bitmap_image.h"
+#include "third_party/blink/renderer/platform/graphics/draw_looper_builder.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context_state_saver.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_controller.h"
@@ -489,6 +490,7 @@ BoxPainterBase::FillLayerInfo::FillLayerInfo(
     if (image || should_paint_background_color) {
       color = Color::kWhite;
       image = nullptr;
+      background_forced_to_white = true;
     }
   }
 
@@ -723,14 +725,8 @@ scoped_refptr<Image> GetBGColorPaintWorkletImage(const Document& document,
   // The generator can be null in testing environment.
   if (!generator)
     return nullptr;
-  Vector<Color> animated_colors;
-  Vector<double> offsets;
-  std::optional<double> progress;
-  if (!generator->GetBGColorPaintWorkletParams(node, &animated_colors, &offsets,
-                                               &progress)) {
-    return nullptr;
-  }
-  return generator->Paint(image_size, node, animated_colors, offsets, progress);
+
+  return generator->Paint(image_size, node);
 }
 
 // Returns true if the background color was painted by the paint worklet.
@@ -746,12 +742,13 @@ bool PaintBGColorWithPaintWorklet(const Document& document,
   CompositedPaintStatus status = CompositedBackgroundColorStatus(node);
 
   switch (status) {
+    case CompositedPaintStatus::kNoAnimation:
     case CompositedPaintStatus::kNotComposited:
       // Once an animation has been downgraded to run on the main thread, it
       // cannot restart on the compositor without a pending animation update.
       return false;
 
-    case CompositedPaintStatus::kNeedsRepaintOrNoAnimation:
+    case CompositedPaintStatus::kNeedsRepaint:
     case CompositedPaintStatus::kComposited:
       if (CanCompositeBackgroundColorAnimation(node)) {
         SetHasNativeBackgroundPainter(node, true);
@@ -1160,6 +1157,11 @@ void BoxPainterBase::PaintFillLayer(
   if (!fill_layer_info.should_paint_image &&
       !fill_layer_info.should_paint_color)
     return;
+
+  if (fill_layer_info.background_forced_to_white &&
+      bg_paint_context.ShouldSkipBackgroundIfWhite()) {
+    return;
+  }
 
   GraphicsContext& context = paint_info.context;
   GraphicsContextStateSaver clip_with_scrolling_state_saver(

@@ -71,7 +71,7 @@ class NativePixmapFrameResource : public FrameResource {
   uint8_t* GetWritableVisibleData(size_t plane) override;
   size_t NumDmabufFds() const override;
   int GetDmabufFd(size_t i) const override;
-  scoped_refptr<gfx::NativePixmapDmaBuf> CreateNativePixmapDmaBuf()
+  scoped_refptr<const gfx::NativePixmapDmaBuf> GetNativePixmapDmaBuf()
       const override;
   // CreateGpuMemoryBufferHandle() will duplicate file descriptors to make a
   // gfx::GpuMemoryBufferHandle. The GpuMemoryBufferId will match
@@ -111,11 +111,6 @@ class NativePixmapFrameResource : public FrameResource {
   // frame equals |this->id_|. This is important to allow for frame pool frame
   // reclamation.
   scoped_refptr<VideoFrame> CreateVideoFrame() const;
-
-  // Returns a reference to |this|'s backing NativePixmap. Ownership of
-  // the NativePixmap is retained by |this|.
-  const scoped_refptr<const gfx::NativePixmapDmaBuf>& GetNativePixmapDmaBuf()
-      const;
 
  private:
   ~NativePixmapFrameResource() override;

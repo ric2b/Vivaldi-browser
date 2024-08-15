@@ -196,7 +196,7 @@ export class ObjectPropertiesSection extends UI.TreeOutline.TreeOutlineInShadow 
       readOnly?: boolean): ObjectPropertiesSection {
     const titleElement = document.createElement('span');
     titleElement.classList.add('source-code');
-    const shadowRoot = UI.Utils.createShadowRootWithCoreStyles(titleElement, {
+    const shadowRoot = UI.UIUtils.createShadowRootWithCoreStyles(titleElement, {
       cssFile: [objectValueStyles],
       delegatesFocus: undefined,
     });
@@ -442,6 +442,7 @@ export class ObjectPropertiesSection extends UI.TreeOutline.TreeOutlineInShadow 
       event.consume();
       void Common.Revealer.reveal(new SDK.RemoteObject.LinearMemoryInspectable(object, expression));
     });
+    memoryIcon.setAttribute('jslog', `${VisualLogging.action('open-memory-inspector').track({click: true})}`);
 
     const revealText = i18nString(UIStrings.revealInMemoryInpector);
     UI.Tooltip.Tooltip.install(memoryIcon, revealText);

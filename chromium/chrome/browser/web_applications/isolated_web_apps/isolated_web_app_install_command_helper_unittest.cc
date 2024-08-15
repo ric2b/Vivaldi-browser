@@ -9,6 +9,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -19,7 +20,6 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
-#include "base/strings/string_piece.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/gmock_expected_support.h"
@@ -43,11 +43,11 @@
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_contents/web_app_data_retriever.h"
-#include "chrome/browser/web_applications/web_contents/web_app_url_loader.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/web_package/signed_web_bundles/ed25519_public_key.h"
 #include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
+#include "components/webapps/browser/web_contents/web_app_url_loader.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_task_environment.h"
@@ -90,7 +90,7 @@ using ::testing::WithArg;
 
 IsolatedWebAppUrlInfo CreateRandomIsolatedWebAppUrlInfo() {
   web_package::SignedWebBundleId signed_web_bundle_id =
-      web_package::SignedWebBundleId::CreateRandomForDevelopment();
+      web_package::SignedWebBundleId::CreateRandomForProxyMode();
   return IsolatedWebAppUrlInfo::CreateFromSignedWebBundleId(
       signed_web_bundle_id);
 }
@@ -105,7 +105,7 @@ IsolatedWebAppUrlInfo CreateEd25519IsolatedWebAppUrlInfo() {
 }
 
 IwaSourceWithMode CreateDevProxySource(
-    base::StringPiece dev_mode_proxy_url = "http://default-proxy-url.org/") {
+    std::string_view dev_mode_proxy_url = "http://default-proxy-url.org/") {
   return IwaSourceProxy{url::Origin::Create(GURL(dev_mode_proxy_url))};
 }
 
@@ -238,7 +238,7 @@ TEST_P(IsolatedWebAppInstallCommandHelperTrustAndSignaturesBundleTest,
   IsolatedWebAppUrlInfo url_info = CreateEd25519IsolatedWebAppUrlInfo();
   auto command_helper = std::make_unique<IsolatedWebAppInstallCommandHelper>(
       url_info, CreateDefaultDataRetriever(url_info.origin().GetURL()),
-      std::make_unique<FakeResponseReaderFactory>(base::ok()));
+      std::make_unique<FakeResponseReaderFactory>(*profile(), base::ok()));
 
   base::test::TestFuture<base::expected<void, std::string>> future;
   command_helper->CheckTrustAndSignatures(source_, &*profile(),
@@ -252,6 +252,7 @@ TEST_P(IsolatedWebAppInstallCommandHelperTrustAndSignaturesBundleTest,
   auto command_helper = std::make_unique<IsolatedWebAppInstallCommandHelper>(
       url_info, CreateDefaultDataRetriever(url_info.origin().GetURL()),
       std::make_unique<FakeResponseReaderFactory>(
+          *profile(),
           base::unexpected(UnusableSwbnFileError(
               UnusableSwbnFileError::Error::kMetadataParserVersionError,
               "test error"))));
@@ -270,7 +271,7 @@ TEST_P(IsolatedWebAppInstallCommandHelperTrustAndSignaturesBundleTest,
   IsolatedWebAppUrlInfo url_info = CreateEd25519IsolatedWebAppUrlInfo();
   auto command_helper = std::make_unique<IsolatedWebAppInstallCommandHelper>(
       url_info, CreateDefaultDataRetriever(url_info.origin().GetURL()),
-      std::make_unique<FakeResponseReaderFactory>(base::ok()));
+      std::make_unique<FakeResponseReaderFactory>(*profile(), base::ok()));
   base::test::TestFuture<base::expected<void, std::string>> future;
   command_helper->CheckTrustAndSignatures(source_, &*profile(),
                                           future.GetCallback());
@@ -340,13 +341,13 @@ TEST_F(IsolatedWebAppInstallCommandHelperLoadUrlTest,
   url_loader->SetNextLoadUrlResult(
       url_info.origin().GetURL().Resolve(
           ".well-known/_generated_install_page.html"),
-      WebAppUrlLoader::Result::kUrlLoaded);
+      webapps::WebAppUrlLoaderResult::kUrlLoaded);
 
-  std::optional<WebAppUrlLoader::UrlComparison> last_url_comparison =
+  std::optional<webapps::WebAppUrlLoader::UrlComparison> last_url_comparison =
       std::nullopt;
   url_loader->TrackLoadUrlCalls(base::BindLambdaForTesting(
       [&](const GURL& unused_url, content::WebContents* unused_web_contents,
-          WebAppUrlLoader::UrlComparison url_comparison) {
+          webapps::WebAppUrlLoader::UrlComparison url_comparison) {
         last_url_comparison = url_comparison;
       }));
 
@@ -354,8 +355,9 @@ TEST_F(IsolatedWebAppInstallCommandHelperLoadUrlTest,
   command_helper->LoadInstallUrl(CreateDevProxySource(), web_contents(),
                                  *url_loader, future.GetCallback());
   EXPECT_THAT(future.Get(), HasValue());
-  EXPECT_THAT(last_url_comparison,
-              Eq(WebAppUrlLoader::UrlComparison::kIgnoreQueryParamsAndRef));
+  EXPECT_THAT(
+      last_url_comparison,
+      Eq(webapps::WebAppUrlLoader::UrlComparison::kIgnoreQueryParamsAndRef));
 }
 
 TEST_F(IsolatedWebAppInstallCommandHelperLoadUrlTest,
@@ -369,12 +371,12 @@ TEST_F(IsolatedWebAppInstallCommandHelperLoadUrlTest,
   url_loader->SetNextLoadUrlResult(
       url_info.origin().GetURL().Resolve(
           ".well-known/_generated_install_page.html"),
-      WebAppUrlLoader::Result::kUrlLoaded);
+      webapps::WebAppUrlLoaderResult::kUrlLoaded);
 
   std::optional<IwaSourceWithMode> source = std::nullopt;
   url_loader->TrackLoadUrlCalls(base::BindLambdaForTesting(
       [&](const GURL& unused_url, content::WebContents* web_contents,
-          WebAppUrlLoader::UrlComparison unused_url_comparison) {
+          webapps::WebAppUrlLoader::UrlComparison unused_url_comparison) {
         source =
             IsolatedWebAppPendingInstallInfo::FromWebContents(*web_contents)
                 .source();
@@ -401,12 +403,12 @@ TEST_F(IsolatedWebAppInstallCommandHelperLoadUrlTest,
   url_loader->SetNextLoadUrlResult(
       url_info.origin().GetURL().Resolve(
           ".well-known/_generated_install_page.html"),
-      WebAppUrlLoader::Result::kUrlLoaded);
+      webapps::WebAppUrlLoaderResult::kUrlLoaded);
 
   std::optional<IwaSourceWithMode> source = std::nullopt;
   url_loader->TrackLoadUrlCalls(base::BindLambdaForTesting(
       [&](const GURL& unused_url, content::WebContents* web_contents,
-          WebAppUrlLoader::UrlComparison unused_url_comparison) {
+          webapps::WebAppUrlLoader::UrlComparison unused_url_comparison) {
         source =
             IsolatedWebAppPendingInstallInfo::FromWebContents(*web_contents)
                 .source();
@@ -432,7 +434,7 @@ TEST_F(IsolatedWebAppInstallCommandHelperLoadUrlTest, HandlesFailure) {
   url_loader->SetNextLoadUrlResult(
       url_info.origin().GetURL().Resolve(
           ".well-known/_generated_install_page.html"),
-      WebAppUrlLoader::Result::kFailedErrorPageLoaded);
+      webapps::WebAppUrlLoaderResult::kFailedErrorPageLoaded);
 
   base::test::TestFuture<base::expected<void, std::string>> future;
   command_helper->LoadInstallUrl(CreateDevProxySource(), web_contents(),

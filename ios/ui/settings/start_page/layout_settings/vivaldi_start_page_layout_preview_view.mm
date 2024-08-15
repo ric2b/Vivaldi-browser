@@ -24,6 +24,11 @@ namespace {
 NSString* cellIdRegular = @"cellIdRegular";
 NSString* cellIdSmall = @"cellIdSmall";
 NSString* cellIdList = @"cellIdList";
+
+// A constant high enough to render 2 or more rows of preview.
+// However, preview will always show rows depending on numberOfRows value passed
+// on init regardless of numberOfItems rendered.
+const CGFloat numberOfItems = 30;
 }
 
 @interface VivaldiStartPageLayoutPreviewView()<UICollectionViewDataSource>
@@ -32,20 +37,25 @@ NSString* cellIdList = @"cellIdList";
 @property(nonatomic,strong) VivaldiSpeedDialViewContainerViewFlowLayout *layout;
 // Currently selected layout
 @property(nonatomic,assign) VivaldiStartPageLayoutStyle selectedLayout;
+// Currently selected layout state
+@property(nonatomic,assign) VivaldiStartPageLayoutState selectedLayoutState;
 // Currently selected maximum columns
 @property(nonatomic,assign) VivaldiStartPageLayoutColumn selectedColumn;
+// Collection view height constraint
+@property(nonatomic, strong) NSLayoutConstraint* cvHeightConstraint;
 @end
 
 @implementation VivaldiStartPageLayoutPreviewView
 
 @synthesize collectionView = _collectionView;
 @synthesize selectedLayout = _selectedLayout;
+@synthesize selectedLayoutState = _selectedLayoutState;
 @synthesize selectedColumn = _selectedColumn;
 
 #pragma mark - INITIALIZER
-- (instancetype)initWithItemConfig:(PreviewItemConfig)itemConfig {
+- (instancetype)initWithNumberOfRows:(NSInteger)rows {
   if (self = [super initWithFrame:CGRectZero]) {
-    _itemConfig = itemConfig;
+    _numberOfRows = rows;
     self.backgroundColor = UIColor.clearColor;
     [self setUpUI];
   }
@@ -57,7 +67,6 @@ NSString* cellIdList = @"cellIdList";
 
   VivaldiSpeedDialViewContainerViewFlowLayout *layout =
       [VivaldiSpeedDialViewContainerViewFlowLayout new];
-  layout.isPreview = YES;
   self.layout = layout;
   UICollectionView* collectionView =
       [[UICollectionView alloc] initWithFrame:CGRectZero
@@ -78,25 +87,56 @@ NSString* cellIdList = @"cellIdList";
   [collectionView setBackgroundColor:[UIColor clearColor]];
 
   [self addSubview:_collectionView];
-  [_collectionView fillSuperview];
+  [_collectionView anchorTop:self.topAnchor
+                     leading:self.leadingAnchor
+                      bottom:nil
+                    trailing:self.trailingAnchor];
+
+  self.cvHeightConstraint =
+      [self.collectionView.heightAnchor constraintEqualToConstant:0];
+  self.cvHeightConstraint.active = YES;
 }
 
 #pragma mark - SETTERS
 - (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style
+                  layoutState:(VivaldiStartPageLayoutState)state
                  layoutColumn:(VivaldiStartPageLayoutColumn)column {
+  [self reloadLayoutWithStyle:style
+                  layoutState:state
+                 layoutColumn:column
+            heightUpdateBlock:nil];
+}
+
+- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style
+                  layoutState:(VivaldiStartPageLayoutState)state
+                 layoutColumn:(VivaldiStartPageLayoutColumn)column
+            heightUpdateBlock:(LayoutHeightUpdatedBlock)callback {
   self.selectedLayout = style;
+  self.selectedLayoutState = state;
   self.selectedColumn = column;
   self.layout.layoutStyle = style;
+  self.layout.layoutState = state;
   self.layout.numberOfColumns = column;
+  self.layout.maxNumberOfRows = _numberOfRows;
+
+  // Force layout reload so that we get final height in the callback.
+  [self.layout prepareLayout];
   [self.collectionView.collectionViewLayout invalidateLayout];
   [self.collectionView reloadData];
+
+  self.cvHeightConstraint.constant = [self.layout heightNeededForContents];
+  [self.layout adjustCollectionViewHeight];
+
+  if (callback) {
+    callback([self.layout heightNeededForContents]);
+  }
 }
 
 #pragma mark - COLLECTIONVIEW DATA SOURCE
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView
      numberOfItemsInSection:(NSInteger)section {
-  return [self numberOfItemsInSection];
+  return numberOfItems;
 }
 
 - (UICollectionViewCell*)collectionView:(UICollectionView*)collectionView
@@ -128,38 +168,10 @@ NSString* cellIdList = @"cellIdList";
   }
 }
 
-/// Returns the number of items to render on preview based on device trait, type
-/// and selected layout.
-- (NSInteger)numberOfItemsInSection {
-  if (self.isCurrentDeviceTablet) {
-    switch (_selectedLayout) {
-      case VivaldiStartPageLayoutStyleLarge:
-        return _itemConfig.numberOfItemsLargeiPad;
-      case VivaldiStartPageLayoutStyleMedium:
-        return _itemConfig.numberOfItemsMediumiPad;
-      case VivaldiStartPageLayoutStyleSmall:
-        return _itemConfig.numberOfItemsSmalliPad;
-      case VivaldiStartPageLayoutStyleList:
-        return _itemConfig.numberOfItemsListiPad;
-    }
-  } else {
-    switch (_selectedLayout) {
-      case VivaldiStartPageLayoutStyleLarge:
-        return _itemConfig.numberOfItemsLarge;
-      case VivaldiStartPageLayoutStyleMedium:
-        return _itemConfig.numberOfItemsMedium;
-      case VivaldiStartPageLayoutStyleSmall:
-        return _itemConfig.numberOfItemsSmall;
-      case VivaldiStartPageLayoutStyleList:
-        return _itemConfig.numberOfItemsList;
-    }
-  }
-}
-
 /// Returns whether current device is iPhone or iPad.
 - (BOOL)isCurrentDeviceTablet {
   return GetDeviceFormFactor() == DEVICE_FORM_FACTOR_TABLET &&
-  VivaldiGlobalHelpers.isHorizontalTraitRegular;
+      VivaldiGlobalHelpers.isHorizontalTraitRegular;
 }
 
 @end

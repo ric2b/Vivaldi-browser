@@ -27,9 +27,6 @@ class ServicePublisher {
   };
 
   struct Metrics {
-    Metrics();
-    ~Metrics();
-
     // The range of time over which the metrics were collected; end_timestamp >
     // start_timestamp
     timestamp_t start_timestamp = 0;
@@ -56,29 +53,26 @@ class ServicePublisher {
     virtual void OnSuspended() = 0;
 
     // Reports an error.
-    virtual void OnError(Error) = 0;
+    virtual void OnError(const Error&) = 0;
 
     // Reports metrics.
     virtual void OnMetrics(Metrics) = 0;
   };
 
   struct Config {
-    Config();
-    ~Config();
-
     // The human readable friendly name of the service being published in
     // UTF-8.
     std::string friendly_name;
-
-    // The DNS hostname (as a single label) that should be used to advertise the
-    // host's interface addresses.
-    std::string hostname;
 
     // The DNS domain name label that should be used to identify this service
     // within the openscreen service type.
     // TODO(btolsch): This could be derived from |friendly_name| but we will
     // leave it as an arbitrary name until the spec is finalized.
     std::string service_instance_name;
+
+    // The fingerprint of the server's certificate and it is included in DNS TXT
+    // records.
+    std::string fingerprint;
 
     // The port where openscreen connections are accepted.
     // Normally this should not be set, and must be identical to the port
@@ -123,18 +117,21 @@ class ServicePublisher {
   // Resumes publishing.  Returns true if state() == kSuspended.
   virtual bool Resume() = 0;
 
+  virtual void AddObserver(Observer& observer) = 0;
+  virtual void RemoveObserver(Observer& observer) = 0;
+
   // Returns the current state of the publisher.
   State state() const { return state_; }
 
   // Returns the last error reported by this publisher.
-  Error last_error() const { return last_error_; }
+  const Error& last_error() const { return last_error_; }
 
  protected:
-  explicit ServicePublisher(Observer* observer);
+  ServicePublisher();
 
   State state_;
   Error last_error_;
-  Observer* observer_;
+  std::vector<Observer*> observers_;
   Config config_;
 
   OSP_DISALLOW_COPY_AND_ASSIGN(ServicePublisher);

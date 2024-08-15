@@ -40,7 +40,6 @@ limitations under the License.
 #include "third_party/nanobind/include/nanobind/stl/string_view.h"  // IWYU pragma: keep
 #include "third_party/nanobind/include/nanobind/stl/variant.h"  // IWYU pragma: keep
 #include "third_party/nanobind/include/nanobind/stl/vector.h"  // IWYU pragma: keep
-#include "pybind11/pybind11.h"  // from @pybind11
 #include "xla/array.h"
 #include "xla/client/executable_build_options.h"
 #include "xla/client/xla_builder.h"
@@ -140,7 +139,7 @@ static std::string UniquifyName(const std::string& name) {
 }
 
 // Converts a computation to a serialized HloModuleProto.
-StatusOr<nb::bytes> GetComputationSerializedProto(
+absl::StatusOr<nb::bytes> GetComputationSerializedProto(
     const XlaComputation& computation) {
   std::string result;
   if (!tsl::SerializeToStringDeterministic(computation.proto(), &result)) {
@@ -150,7 +149,7 @@ StatusOr<nb::bytes> GetComputationSerializedProto(
 }
 
 // Converts a hlo module to a serialized HloModuleProto.
-StatusOr<nb::bytes> GetHloModuleSerializedProto(const HloModule& module) {
+absl::StatusOr<nb::bytes> GetHloModuleSerializedProto(const HloModule& module) {
   std::string result;
   if (!tsl::SerializeToStringDeterministic(module.ToProto(), &result)) {
     return Unknown("Failed to serialize the HloModuleProto.");
@@ -159,7 +158,7 @@ StatusOr<nb::bytes> GetHloModuleSerializedProto(const HloModule& module) {
 }
 
 // Converts a serialized HloModuleProto into a HloModule.
-StatusOr<std::shared_ptr<HloModule>> HloModuleFromSerializedProto(
+absl::StatusOr<std::shared_ptr<HloModule>> HloModuleFromSerializedProto(
     const nb::bytes& bytes) {
   HloModuleProto proto;
   proto.ParseFromArray(bytes.c_str(), bytes.size());
@@ -171,7 +170,7 @@ StatusOr<std::shared_ptr<HloModule>> HloModuleFromSerializedProto(
   return std::shared_ptr<HloModule>(std::move(module));
 }
 
-StatusOr<std::shared_ptr<HloModule>> GetHloModule(
+absl::StatusOr<std::shared_ptr<HloModule>> GetHloModule(
     const XlaComputation& computation) {
   TF_ASSIGN_OR_RETURN(const HloModuleConfig module_config,
                       HloModule::CreateModuleConfigFromProto(
@@ -183,7 +182,7 @@ StatusOr<std::shared_ptr<HloModule>> GetHloModule(
 }
 
 // Converts a computation to textual HLO form.
-StatusOr<std::string> GetComputationHloText(
+absl::StatusOr<std::string> GetComputationHloText(
     const XlaComputation& computation, bool print_large_constants = false) {
   TF_ASSIGN_OR_RETURN(std::shared_ptr<HloModule> hlo_module,
                       GetHloModule(computation));
@@ -194,7 +193,7 @@ StatusOr<std::string> GetComputationHloText(
 }
 
 // Converts a computation to HLO dot graph form.
-StatusOr<std::string> GetComputationHloDotGraph(
+absl::StatusOr<std::string> GetComputationHloDotGraph(
     const XlaComputation& computation) {
   TF_ASSIGN_OR_RETURN(std::shared_ptr<HloModule> hlo_module,
                       GetHloModule(computation));
@@ -204,14 +203,14 @@ StatusOr<std::string> GetComputationHloDotGraph(
 }
 
 // Hashes the HLO module.
-StatusOr<uint64_t> HashComputation(const XlaComputation& computation) {
+absl::StatusOr<uint64_t> HashComputation(const XlaComputation& computation) {
   TF_ASSIGN_OR_RETURN(std::shared_ptr<HloModule> hlo_module,
                       GetHloModule(computation));
   return absl::HashOf(*hlo_module);
 }
 // Safe version of ShapeUtil::MakeShapeWithDenseLayout that fails gracefully on
 // invalid input.
-StatusOr<Shape> MakeShapeWithDenseLayout(
+absl::StatusOr<Shape> MakeShapeWithDenseLayout(
     PrimitiveType element_type, absl::Span<const int64_t> dims,
     std::optional<absl::Span<const int64_t>> minor_to_major,
     std::optional<const std::vector<bool>> dynamic_dimensions) {
@@ -256,7 +255,7 @@ StatusOr<Shape> MakeShapeWithDenseLayout(
 // transpose_perm=[0,1,2] (no transpose)
 // PartitionSpec('B', 'A', 'C') corresponds to reshape_dims=[4,2,2],
 // transpose_perm=[1,0,2] (swap A and B)
-StatusOr<HloSharding> IotaTileHelper(
+absl::StatusOr<HloSharding> IotaTileHelper(
     absl::Span<const int64_t> dims, absl::Span<const int64_t> reshape_dims,
     absl::Span<const int> transpose_perm,
     absl::Span<const OpSharding::Type> subgroup_types) {
@@ -292,20 +291,13 @@ StatusOr<HloSharding> IotaTileHelper(
                    subgroup_types);
 }
 
-// Registers a 'fn_capsule' as a CPU custom call target.
-// 'fn_capsule' must be a void* pointer encapsulated in a PyCapsule object,
-// with name "xla._CUSTOM_CALL_TARGET".
+// Registers a 'fn_capsule' as a custom call target.
+// 'fn_capsule' must be a void* pointer encapsulated in a PyCapsule object.
 // 'platform' is an XLA platform name, e.g., "Host" or "CUDA".
 absl::Status PyRegisterCustomCallTarget(const std::string& fn_name,
                                         nb::capsule capsule,
                                         const std::string& platform,
                                         int api_version) {
-  static const char* const kName = "xla._CUSTOM_CALL_TARGET";
-  if (absl::string_view(capsule.name()) != kName) {
-    return InvalidArgument(
-        "Argument to RegisterCustomCallTarget was not a "
-        "xla._CUSTOM_CALL_TARGET capsule.");
-  }
   switch (api_version) {
     case 0:
       CustomCallTargetRegistry::Global()->Register(
@@ -398,7 +390,7 @@ void BuildXlaCompilerSubmodule(nb::module_& m) {
                       [](PrimitiveType type, nb::sequence dims_seq,
                          std::optional<nb::sequence> layout_seq,
                          std::optional<std::vector<bool>> dynamic_dimensions)
-                          -> StatusOr<Shape> {
+                          -> absl::StatusOr<Shape> {
                         std::vector<int64_t> dims =
                             SequenceToVector<int64_t>(dims_seq);
                         if (layout_seq) {
@@ -420,7 +412,7 @@ void BuildXlaCompilerSubmodule(nb::module_& m) {
               [](nb_dtype dtype, nb::sequence dims_seq,
                  std::optional<nb::sequence> layout_seq,
                  std::optional<std::vector<bool>> dynamic_dimensions)
-                  -> StatusOr<Shape> {
+                  -> absl::StatusOr<Shape> {
                 PrimitiveType type = ValueOrThrow(DtypeToPrimitiveType(dtype));
                 std::vector<int64_t> dims = SequenceToVector<int64_t>(dims_seq);
                 if (layout_seq) {
@@ -722,9 +714,8 @@ void BuildXlaCompilerSubmodule(nb::module_& m) {
         });
   m.def(
       "hlo_module_cost_analysis",
-      xla::ValueOrThrowWrapper([](nb::handle client_py, const HloModule& module)
-                                   -> StatusOr<nb::dict> {
-        PyClient* client = pybind11::cast<PyClient*>(client_py.ptr());
+      xla::ValueOrThrowWrapper([](PyClient* client, const HloModule& module)
+                                   -> absl::StatusOr<nb::dict> {
         TF_ASSIGN_OR_RETURN(auto analysis,
                             client->pjrt_client()->GetHloCostAnalysis());
         TF_RETURN_IF_ERROR(module.entry_computation()->Accept(analysis.get()));
@@ -737,14 +728,15 @@ void BuildXlaCompilerSubmodule(nb::module_& m) {
         return ret;
       }));
   m.def("hlo_module_from_text",
-        xla::ValueOrThrowWrapper([](const std::string& hlo_module_text)
-                                     -> StatusOr<std::shared_ptr<HloModule>> {
-          auto hlo_module =
-              xla::ParseAndReturnUnverifiedModule(hlo_module_text);
-          TF_RETURN_IF_ERROR(hlo_module.status());
-          std::shared_ptr<HloModule> result(std::move(*hlo_module));
-          return result;
-        }));
+        xla::ValueOrThrowWrapper(
+            [](const std::string& hlo_module_text)
+                -> absl::StatusOr<std::shared_ptr<HloModule>> {
+              auto hlo_module =
+                  xla::ParseAndReturnUnverifiedModule(hlo_module_text);
+              TF_RETURN_IF_ERROR(hlo_module.status());
+              std::shared_ptr<HloModule> result(std::move(*hlo_module));
+              return result;
+            }));
 
   nb::class_<XlaOp> xla_op_class(m, "XlaOp");
 
@@ -774,7 +766,7 @@ void BuildXlaCompilerSubmodule(nb::module_& m) {
       .def(
           "get_program_shape",
           [](const XlaBuilder& builder,
-             std::optional<XlaOp> root) -> StatusOr<ProgramShape> {
+             std::optional<XlaOp> root) -> absl::StatusOr<ProgramShape> {
             return root ? builder.GetProgramShape(*root)
                         : builder.GetProgramShape();
           },
@@ -799,7 +791,7 @@ void BuildXlaCompilerSubmodule(nb::module_& m) {
       .def_static(
           "create",
           xla::ValueOrThrowWrapper([](nb::ndarray<int, nb::ndim<2>> array)
-                                       -> StatusOr<DeviceAssignment> {
+                                       -> absl::StatusOr<DeviceAssignment> {
             if (array.ndim() != 2) {
               return InvalidArgument(
                   "Argument to DeviceAssignment constructor must be a "
@@ -817,16 +809,18 @@ void BuildXlaCompilerSubmodule(nb::module_& m) {
       .def("replica_count", &DeviceAssignment::replica_count)
       .def("computation_count", &DeviceAssignment::computation_count)
       .def("__repr__", &DeviceAssignment::ToString)
-      .def("serialize", xla::ValueOrThrowWrapper([](const DeviceAssignment& da)
-                                                     -> StatusOr<nb::bytes> {
-             DeviceAssignmentProto proto;
-             TF_RETURN_IF_ERROR(da.Serialize(&proto));
-             std::string result;
-             if (!tsl::SerializeToStringDeterministic(proto, &result)) {
-               return Unknown("Failed to serialize the DeviceAssignmentProto.");
-             }
-             return nb::bytes(result.data(), result.size());
-           }));
+      .def("serialize",
+           xla::ValueOrThrowWrapper(
+               [](const DeviceAssignment& da) -> absl::StatusOr<nb::bytes> {
+                 DeviceAssignmentProto proto;
+                 TF_RETURN_IF_ERROR(da.Serialize(&proto));
+                 std::string result;
+                 if (!tsl::SerializeToStringDeterministic(proto, &result)) {
+                   return Unknown(
+                       "Failed to serialize the DeviceAssignmentProto.");
+                 }
+                 return nb::bytes(result.data(), result.size());
+               }));
 
   nb::class_<CompileOptions> compile_options(m, "CompileOptions");
   compile_options
@@ -950,10 +944,10 @@ void BuildXlaCompilerSubmodule(nb::module_& m) {
           targets[nb::str(name.data(), name.size())] = nb::capsule(target);
         }
 
-        for (const auto& [name, target] :
+        for (const auto& [name, registration] :
              ffi::StaticRegisteredHandlers(platform)) {
           targets[nb::str(name.data(), name.size())] =
-              nb::capsule(reinterpret_cast<void*>(target));
+              nb::capsule(reinterpret_cast<void*>(registration.handler));
         }
         return targets;
       },
@@ -1087,24 +1081,11 @@ void BuildXlaCompilerSubmodule(nb::module_& m) {
                    [](DebugOptions* self, std::string value) {
                      self->set_xla_dump_hlo_pipeline_re(value);
                    })
-      .def_prop_rw("xla_gpu_enable_async_all_reduce",
-                   &DebugOptions::xla_gpu_enable_async_all_reduce,
-                   &DebugOptions::set_xla_gpu_enable_async_all_reduce)
-      .def_prop_rw("xla_gpu_enable_async_all_gather",
-                   &DebugOptions::xla_gpu_enable_async_all_gather,
-                   &DebugOptions::set_xla_gpu_enable_async_all_gather)
-      .def_prop_rw("xla_gpu_enable_async_collective_broadcast",
-                   &DebugOptions::xla_gpu_enable_async_collective_broadcast,
-                   &DebugOptions::set_xla_gpu_enable_async_collective_broadcast)
-      .def_prop_rw("xla_gpu_enable_async_collective_permute",
-                   &DebugOptions::xla_gpu_enable_async_collective_permute,
-                   &DebugOptions::set_xla_gpu_enable_async_collective_permute)
-      .def_prop_rw("xla_gpu_enable_async_all_to_all",
-                   &DebugOptions::xla_gpu_enable_async_all_to_all,
-                   &DebugOptions::set_xla_gpu_enable_async_all_to_all)
-      .def_prop_rw("xla_gpu_enable_async_reduce_scatter",
-                   &DebugOptions::xla_gpu_enable_async_reduce_scatter,
-                   &DebugOptions::set_xla_gpu_enable_async_reduce_scatter);
+      .def_prop_rw("xla_gpu_dump_autotune_logs_to",
+                   &DebugOptions::xla_gpu_dump_autotune_logs_to,
+                   [](DebugOptions* self, std::string value) {
+                     self->set_xla_gpu_dump_autotune_logs_to(value);
+                   });
 
   nb::class_<ExecutableBuildOptions>(m, "ExecutableBuildOptions")
       .def(nb::init<>())

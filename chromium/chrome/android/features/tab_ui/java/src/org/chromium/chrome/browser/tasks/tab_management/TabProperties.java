@@ -13,10 +13,12 @@ import android.view.View.AccessibilityDelegate;
 
 import androidx.annotation.IntDef;
 
+import org.chromium.chrome.browser.tab_ui.TabListFaviconProvider;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModel.WritableBooleanPropertyKey;
+import org.chromium.ui.modelutil.PropertyModel.WritableIntPropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.WritableObjectPropertyKey;
 
 import java.lang.annotation.Retention;
@@ -26,8 +28,7 @@ import java.lang.annotation.RetentionPolicy;
 public class TabProperties {
     /** IDs for possible types of UI in the tab list. */
     @IntDef({
-        UiType.SELECTABLE,
-        UiType.CLOSABLE,
+        UiType.TAB,
         UiType.STRIP,
         UiType.MESSAGE,
         UiType.DIVIDER,
@@ -37,24 +38,34 @@ public class TabProperties {
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface UiType {
-        int SELECTABLE = 0;
-        int CLOSABLE = 1;
-        int STRIP = 2;
-        int MESSAGE = 3;
-        int DIVIDER = 4;
-        int NEW_TAB_TILE_DEPRECATED = 5;
-        int LARGE_MESSAGE = 6;
-        int CUSTOM_MESSAGE = 7;
+        int TAB = 0;
+        int STRIP = 1;
+        int MESSAGE = 2;
+        int DIVIDER = 3;
+        int NEW_TAB_TILE_DEPRECATED = 4;
+        int LARGE_MESSAGE = 5;
+        int CUSTOM_MESSAGE = 6;
     }
 
-    public static final PropertyModel.WritableIntPropertyKey TAB_ID =
-            new PropertyModel.WritableIntPropertyKey();
+    /** IDs for possible tab action states. */
+    @IntDef({TabActionState.UNSET, TabActionState.SELECTABLE, TabActionState.CLOSABLE})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface TabActionState {
+        int UNSET = 0;
+        int SELECTABLE = 1;
+        int CLOSABLE = 2;
+    }
+
+    /** The {@link TabActionState} for the view, either CLOSABLE or SELECTABLE. */
+    public static final WritableIntPropertyKey TAB_ACTION_STATE = new WritableIntPropertyKey();
+
+    public static final WritableIntPropertyKey TAB_ID = new WritableIntPropertyKey();
 
     public static final WritableObjectPropertyKey<TabListMediator.TabActionListener>
             TAB_SELECTED_LISTENER = new WritableObjectPropertyKey<>();
 
     public static final WritableObjectPropertyKey<TabListMediator.TabActionListener>
-            TAB_CLOSED_LISTENER = new WritableObjectPropertyKey<>();
+            TAB_ACTION_BUTTON_LISTENER = new WritableObjectPropertyKey<>();
 
     /**
      * Indicator that a {@link TabProperties.FAVICON_FETCHER} has completed fetching a favicon. Only
@@ -83,11 +94,7 @@ public class TabProperties {
     public static final WritableObjectPropertyKey<ColorStateList> CHECKED_DRAWABLE_STATE_LIST =
             new WritableObjectPropertyKey<>();
 
-    public static final WritableObjectPropertyKey<TabListMediator.TabActionListener>
-            CREATE_GROUP_LISTENER = new WritableObjectPropertyKey<>();
-
-    public static final PropertyModel.WritableIntPropertyKey CARD_ANIMATION_STATUS =
-            new PropertyModel.WritableIntPropertyKey();
+    public static final WritableIntPropertyKey CARD_ANIMATION_STATUS = new WritableIntPropertyKey();
 
     public static final PropertyModel.WritableObjectPropertyKey<TabListMediator.TabActionListener>
             SELECTABLE_TAB_CLICKED_LISTENER = new PropertyModel.WritableObjectPropertyKey<>();
@@ -124,23 +131,28 @@ public class TabProperties {
     public static final WritableObjectPropertyKey<String> CONTENT_DESCRIPTION_STRING =
             new WritableObjectPropertyKey<>();
 
-    public static final WritableObjectPropertyKey<String> CLOSE_BUTTON_DESCRIPTION_STRING =
+    public static final WritableObjectPropertyKey<String> ACTION_BUTTON_DESCRIPTION_STRING =
             new WritableObjectPropertyKey<>();
     public static final WritableBooleanPropertyKey SHOULD_SHOW_PRICE_DROP_TOOLTIP =
             new WritableBooleanPropertyKey();
 
-    public static final PropertyModel.WritableIntPropertyKey QUICK_DELETE_ANIMATION_STATUS =
-            new PropertyModel.WritableIntPropertyKey();
+    public static final WritableIntPropertyKey QUICK_DELETE_ANIMATION_STATUS =
+            new WritableIntPropertyKey();
 
     /** The {@link TabGroupColorId} for a tab group representation's color in TabListMode only. */
-    public static final PropertyModel.WritableIntPropertyKey TAB_GROUP_COLOR_ID =
-            new PropertyModel.WritableIntPropertyKey();
+    public static final WritableIntPropertyKey TAB_GROUP_COLOR_ID = new WritableIntPropertyKey();
+
+    public static final WritableObjectPropertyKey<TabListMediator.TabGroupInfo> TAB_GROUP_INFO =
+            new WritableObjectPropertyKey<>();
+    public static final WritableObjectPropertyKey<TabListGroupMenuCoordinator.OnItemClickedCallback>
+            ON_MENU_ITEM_CLICKED_CALLBACK = new WritableObjectPropertyKey<>();
 
     public static final PropertyKey[] ALL_KEYS_TAB_GRID =
             new PropertyKey[] {
+                TAB_ACTION_STATE,
                 TAB_ID,
                 TAB_SELECTED_LISTENER,
-                TAB_CLOSED_LISTENER,
+                TAB_ACTION_BUTTON_LISTENER,
                 FAVICON_FETCHED,
                 FAVICON_FETCHER,
                 IS_SELECTED,
@@ -150,7 +162,6 @@ public class TabProperties {
                 IPH_PROVIDER,
                 TITLE,
                 CHECKED_DRAWABLE_STATE_LIST,
-                CREATE_GROUP_LISTENER,
                 CARD_ALPHA,
                 CARD_ANIMATION_STATUS,
                 SELECTABLE_TAB_CLICKED_LISTENER,
@@ -163,18 +174,20 @@ public class TabProperties {
                 ACCESSIBILITY_DELEGATE,
                 CARD_TYPE,
                 CONTENT_DESCRIPTION_STRING,
-                CLOSE_BUTTON_DESCRIPTION_STRING,
+                ACTION_BUTTON_DESCRIPTION_STRING,
                 SHOPPING_PERSISTED_TAB_DATA_FETCHER,
                 SHOULD_SHOW_PRICE_DROP_TOOLTIP,
                 QUICK_DELETE_ANIMATION_STATUS,
-                TAB_GROUP_COLOR_ID
+                TAB_GROUP_COLOR_ID,
+                TAB_GROUP_INFO,
+                ON_MENU_ITEM_CLICKED_CALLBACK
             };
 
     public static final PropertyKey[] ALL_KEYS_TAB_STRIP =
             new PropertyKey[] {
                 TAB_ID,
                 TAB_SELECTED_LISTENER,
-                TAB_CLOSED_LISTENER,
+                TAB_ACTION_BUTTON_LISTENER,
                 FAVICON_FETCHED,
                 FAVICON_FETCHER,
                 IS_SELECTED,

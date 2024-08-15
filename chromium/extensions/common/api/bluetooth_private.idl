@@ -58,7 +58,12 @@ namespace bluetoothPrivate {
     alreadyExists,
     notConnected,
     doesNotExist,
-    invalidArgs
+    invalidArgs,
+    nonAuthTimeout,
+    noMemory,
+    jniEnvironment,
+    jniThreadAttach,
+    wakelock
   };
 
   // Valid pairing responses.

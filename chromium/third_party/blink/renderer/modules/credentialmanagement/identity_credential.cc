@@ -31,7 +31,7 @@ enum class FedCmCspStatus {
   kMaxValue = kFailedOrigin
 };
 
-void OnDisconnect(ScriptPromiseResolverTyped<IDLUndefined>* resolver,
+void OnDisconnect(ScriptPromiseResolver<IDLUndefined>* resolver,
                   DisconnectStatus status) {
   if (status != DisconnectStatus::kSuccess) {
     resolver->RejectWithDOMException(DOMExceptionCode::kNetworkError,
@@ -44,17 +44,18 @@ void OnDisconnect(ScriptPromiseResolverTyped<IDLUndefined>* resolver,
 }  // namespace
 
 IdentityCredential* IdentityCredential::Create(const String& token,
-                                               bool is_auto_selected) {
-  if (RuntimeEnabledFeatures::FedCmAutoSelectedFlagEnabled()) {
-    return MakeGarbageCollected<IdentityCredential>(token, is_auto_selected);
-  } else {
-    return MakeGarbageCollected<IdentityCredential>(token);
+                                               bool is_auto_selected,
+                                               const String& config_url) {
+  if (!RuntimeEnabledFeatures::FedCmAutoSelectedFlagEnabled()) {
+    is_auto_selected = false;
   }
+  return MakeGarbageCollected<IdentityCredential>(token, is_auto_selected,
+                                                  config_url);
 }
 
 bool IdentityCredential::IsRejectingPromiseDueToCSP(
     ContentSecurityPolicy* policy,
-    ScriptPromiseResolver* resolver,
+    ScriptPromiseResolverBase* resolver,
     const KURL& provider_url) {
   if (policy->AllowConnectToSource(provider_url, provider_url,
                                    RedirectStatus::kNoRedirect,
@@ -86,23 +87,24 @@ bool IdentityCredential::IsRejectingPromiseDueToCSP(
 }
 
 IdentityCredential::IdentityCredential(const String& token,
-                                       bool is_auto_selected)
+                                       bool is_auto_selected,
+                                       const String& config_url)
     : Credential(/* id = */ "", kIdentityCredentialType),
       token_(token),
-      is_auto_selected_(is_auto_selected) {}
+      is_auto_selected_(is_auto_selected),
+      config_url_(config_url) {}
 
 bool IdentityCredential::IsIdentityCredential() const {
   return true;
 }
 
 // static
-ScriptPromiseTyped<IDLUndefined> IdentityCredential::disconnect(
+ScriptPromise<IDLUndefined> IdentityCredential::disconnect(
     ScriptState* script_state,
     const blink::IdentityCredentialDisconnectOptions* options,
     ExceptionState& exception_state) {
   auto* resolver =
-      MakeGarbageCollected<ScriptPromiseResolverTyped<IDLUndefined>>(
-          script_state);
+      MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(script_state);
   auto promise = resolver->Promise();
 
   if (!options->hasConfigURL()) {
@@ -119,7 +121,7 @@ ScriptPromiseTyped<IDLUndefined> IdentityCredential::disconnect(
           mojom::blink::PermissionsPolicyFeature::kIdentityCredentialsGet)) {
     resolver->RejectWithDOMException(
         DOMExceptionCode::kNotAllowedError,
-        "The 'identity-credentials-get` feature is not enabled in this "
+        "The 'identity-credentials-get' feature is not enabled in this "
         "document.");
     return promise;
   }

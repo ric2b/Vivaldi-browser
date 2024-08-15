@@ -396,8 +396,19 @@ void HTMLImageElement::ParseAttribute(
   } else if (name == html_names::kAttributionsrcAttr) {
     LocalDOMWindow* window = GetDocument().domWindow();
     if (window && window->GetFrame()) {
+      // Copied from `ImageLoader::DoUpdateFromElement()`.
+      network::mojom::ReferrerPolicy referrer_policy =
+          network::mojom::ReferrerPolicy::kDefault;
+      AtomicString referrer_policy_attribute =
+          FastGetAttribute(html_names::kReferrerpolicyAttr);
+      if (!referrer_policy_attribute.IsNull()) {
+        SecurityPolicy::ReferrerPolicyFromString(
+            referrer_policy_attribute, kSupportReferrerPolicyLegacyKeywords,
+            &referrer_policy);
+      }
       window->GetFrame()->GetAttributionSrcLoader()->Register(params.new_value,
-                                                              /*element=*/this);
+                                                              /*element=*/this,
+                                                              referrer_policy);
     }
   } else if (name == html_names::kSharedstoragewritableAttr &&
              RuntimeEnabledFeatures::SharedStorageAPIM118Enabled(
@@ -563,7 +574,9 @@ Node::InsertionNotificationRequest HTMLImageElement::InsertedInto(
     }
   }
 
-  if (blink::LcppScriptObserverEnabled()) {
+  static const bool is_lcp_script_observer_enabled =
+      blink::LcppScriptObserverEnabled();
+  if (is_lcp_script_observer_enabled) {
     if (LocalFrame* frame = GetDocument().GetFrame()) {
       if (LCPScriptObserver* script_observer = frame->GetScriptObserver()) {
         // Record scripts that inserted this HTMLImageElement.
@@ -574,7 +587,10 @@ Node::InsertionNotificationRequest HTMLImageElement::InsertedInto(
     }
   }
 
-  if (features::
+  static const bool is_lcpp_enabled =
+      base::FeatureList::IsEnabled(features::kLCPCriticalPathPredictor);
+  if (is_lcpp_enabled &&
+      features::
           kLCPCriticalPathPredictorImageLoadPriorityEnabledForHTMLImageElement
               .Get()) {
     if (LocalFrame* frame = GetDocument().GetFrame()) {
@@ -837,7 +853,7 @@ int HTMLImageElement::y() const {
   return abs_pos.top.ToInt();
 }
 
-ScriptPromiseTyped<IDLUndefined> HTMLImageElement::decode(
+ScriptPromise<IDLUndefined> HTMLImageElement::decode(
     ScriptState* script_state,
     ExceptionState& exception_state) {
   return GetImageLoader().Decode(script_state, exception_state);
@@ -915,9 +931,15 @@ static SourceSizeValueResult SourceSizeValue(const Element* element,
   SourceSizeValueResult result;
 
   auto* img = DynamicTo<HTMLImageElement>(element);
-  if (auto* picture_parent =
-          DynamicTo<HTMLPictureElement>(element->parentNode())) {
-    img = DynamicTo<HTMLImageElement>(picture_parent->lastChild());
+
+  if (!img) {
+    // Lookup the <img> from the parent <picture>. The content model for
+    // <picture> is "zero or more source elements, followed by one img element,
+    // optionally intermixed with script-supporting elements."
+    // https://html.spec.whatwg.org/multipage/embedded-content.html#the-picture-element
+    if (auto* picture = DynamicTo<HTMLPictureElement>(element->parentNode())) {
+      img = Traversal<HTMLImageElement>::LastChild(*picture);
+    }
   }
 
   String sizes = element->FastGetAttribute(html_names::kSizesAttr);
@@ -1109,7 +1131,7 @@ void HTMLImageElement::SetLayoutDisposition(
 
 void HTMLImageElement::AdjustStyle(ComputedStyleBuilder& builder) {
   DCHECK_EQ(layout_disposition_, LayoutDisposition::kFallbackContent);
-  HTMLImageFallbackHelper::CustomStyleForAltText(*this, builder);
+  HTMLImageFallbackHelper::AdjustHostStyle(*this, builder);
 }
 
 void HTMLImageElement::AssociateWith(HTMLFormElement* form) {

@@ -8,6 +8,7 @@
 #include "cc/resources/ui_resource_client.h"
 #include "content/browser/navigation_transitions/physics_model.h"
 #include "content/browser/renderer_host/navigation_request.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/back_forward_transition_animation_manager.h"
 #include "content/public/browser/render_frame_metadata_provider.h"
 #include "content/public/browser/render_widget_host_observer.h"
@@ -18,6 +19,7 @@
 
 namespace cc::slim {
 class SolidColorLayer;
+class SurfaceLayer;
 class UIResourceLayer;
 }
 
@@ -150,7 +152,7 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
     // responded, we will skip this state.
     kWaitingForBeforeUnloadResponse,
 
-    // TODO(https://crbug.com/1421082): If we were to bring the active page back
+    // TODO(crbug.com/40896070): If we were to bring the active page back
     // to let the user interact with the prompt (e.g., camera access), we need a
     // state for that.
 
@@ -255,12 +257,16 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
       cc::UIResourceId resource_id);
 
   // Apply the `result` to the screenshot and the web page, and tick the
-  // animation effector.
-  void SetLayerTransformationAndTickEffect(const PhysicsModel::Result& result);
+  // animation effector. Returns a boolean indicating if both the `PhysicsModel`
+  // and the `gfx::KeyFrameModels` have finished playing.
+  [[nodiscard]] bool SetLayerTransformationAndTickEffect(
+      const PhysicsModel::Result& result);
 
   void CloneOldSurfaceLayerAndRegisterNewFrameActivationObserver(
       RenderFrameHostImpl* old_host,
       RenderFrameHostImpl* new_host);
+
+  void CloneOldSurfaceLayer(RenderWidgetHostViewBase* old_main_frame_view);
 
   void UnregisterNewFrameActivationObserver();
 
@@ -291,6 +297,11 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
 
   // New layer for `screenshot_`.
   scoped_refptr<cc::slim::UIResourceLayer> ui_resource_layer_;
+
+  // A copy of old surface, covering the entire old page from when the
+  // navigation commits to the end of the invoke animation (where the old page
+  // is completely out of the viewport).
+  scoped_refptr<cc::slim::SurfaceLayer> old_surface_clone_;
 
   // The pre-captured screenshot used for previewing. The ownership of the
   // screenshot is transferred from the cache to this manager when the gesture
@@ -332,6 +343,9 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
 
   // Set by the latest `OnGestureProgressed()`.
   ui::BackGestureEvent latest_progress_gesture_;
+
+  // A transition always suppresses sending input events to the renderer.
+  WebContentsImpl::ScopedIgnoreInputEvents ignore_input_scope_;
 
   State state_;
 };

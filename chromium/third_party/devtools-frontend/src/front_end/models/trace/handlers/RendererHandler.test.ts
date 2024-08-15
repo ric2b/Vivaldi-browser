@@ -17,8 +17,6 @@ import {
 import {TraceLoader} from '../../../testing/TraceLoader.js';
 import * as TraceModel from '../trace.js';
 
-const {assert} = chai;
-
 const MAIN_FRAME_PID = 2154214;
 const SUB_FRAME_PID = 2236065;
 const SUB_FRAME_PID_2 = 2236084;
@@ -813,6 +811,7 @@ describeWithEnvironment('RendererHandler', function() {
     const {Renderer: renderers} = await handleEventsFromTraceFile(this, 'multiple-navigations-with-iframes.json.gz');
     assert.strictEqual(renderers.entryToNode.size, 3591);
   });
+
   describe('Synthetic complete events', () => {
     async function handleEvents(traceEvents: TraceModel.Types.TraceEvents.TraceEventData[]):
         Promise<TraceModel.Handlers.ModelHandlers.Renderer.RendererHandlerData> {
@@ -925,7 +924,26 @@ describeWithEnvironment('RendererHandler', function() {
     -FunctionCall [0.001ms]
   -Layout [0.003ms]`);
     });
+
+    it('keeps a FunctionCall that has the end event missing', async () => {
+      const traceEvents = [
+        ...defaultTraceEvents, makeBeginEvent('RunMicrotasks', 1, '*', pid, tid),  // 1..4
+        makeBeginEvent('FunctionCall', 2, '*', pid, tid),                          // 2..3
+      ];
+
+      const data = await handleEvents(traceEvents);
+      assert.strictEqual(data.processes.size, 1);
+      const [process] = data.processes.values();
+      assert.strictEqual(process.threads.size, 1);
+      const [thread] = process.threads.values();
+      if (!thread.tree) {
+        throw new Error('thread should have a tree');
+      }
+      // Ensure that the FunctionCall event has been kept despite not having an END event.
+      assert.deepEqual(thread.entries.map(e => e.name), ['RunMicrotasks', 'FunctionCall']);
+    });
   });
+
   describe('building hierarchies trace events and profile calls', () => {
     it('build a hierarchy using data from real world trace file', async () => {
       const {Renderer} = await handleEventsFromTraceFile(this, 'recursive-counting-js.json.gz');
@@ -1002,7 +1020,7 @@ describeWithEnvironment('RendererHandler', function() {
     assert.strictEqual(AuctionWorklets.worklets.size, 3);
     for (const [pid] of AuctionWorklets.worklets) {
       const process = Renderer.processes.get(pid);
-      assert.isDefined(process);
+      assert.exists(process);
       // Ensure that the URL was set properly based on the AuctionWorklets metadata event.
       assert.isTrue(process?.url?.includes('fledge-demo.glitch.me'));
     }

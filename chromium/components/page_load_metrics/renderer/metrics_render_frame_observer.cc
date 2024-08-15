@@ -84,7 +84,7 @@ class MojoPageTimingSender : public PageTimingSender {
  private:
   // Indicates that this sender should not send timing updates or frame render
   // data updates.
-  // TODO(https://crbug.com/1097127): When timing updates are handled for cases
+  // TODO(crbug.com/40136524): When timing updates are handled for cases
   // where we have a subframe document and no committed navigation, this can be
   // removed.
   bool limited_sending_mode_ = false;
@@ -146,16 +146,17 @@ void MetricsRenderFrameObserver::DidChangePerformanceTiming() {
 
 void MetricsRenderFrameObserver::DidObserveUserInteraction(
     base::TimeTicks max_event_start,
-    base::TimeTicks max_event_end,
     base::TimeTicks max_event_queued_main_thread,
+    base::TimeTicks max_event_commit_finish,
+    base::TimeTicks max_event_end,
     blink::UserInteractionType interaction_type,
     uint64_t interaction_offset) {
   if (!page_timing_metrics_sender_ || HasNoRenderFrame()) {
     return;
   }
   page_timing_metrics_sender_->DidObserveUserInteraction(
-      max_event_start, max_event_end, max_event_queued_main_thread,
-      interaction_type, interaction_offset);
+      max_event_start, max_event_queued_main_thread, max_event_commit_finish,
+      max_event_end, interaction_type, interaction_offset);
 }
 
 void MetricsRenderFrameObserver::DidChangeCpuTiming(base::TimeDelta time) {
@@ -209,7 +210,7 @@ void MetricsRenderFrameObserver::DidObserveSoftNavigation(
     soft_nav_metrics.start_time = CreateTimeDeltaFromTimestampsInSeconds(
         soft_nav_metrics.start_time.InSecondsF(), metrics.NavigationStart());
 
-    // TODO(crbug.com/1489583): Avoid a crash here, while further investigating
+    // TODO(crbug.com/40074158): Avoid a crash here, while further investigating
     // its causes.
     if (soft_nav_metrics.start_time.is_zero()) {
       // When soft navigation start time relative to navigation start is 0, the
@@ -331,7 +332,8 @@ void MetricsRenderFrameObserver::DidStartNavigation(
   // If that happens, it will be too late to send the metrics from WillDetach
   // or the destructor, because the browser ignores metrics update from
   // non-current RenderFrameHosts. See crbug.com/1150242 for more details.
-  // TODO(crbug.com/1150242): Remove this when we have the full fix for the bug.
+  // TODO(crbug.com/40157795): Remove this when we have the full fix for the
+  // bug.
   if (page_timing_metrics_sender_) {
     page_timing_metrics_sender_->SendLatest();
   }
@@ -343,7 +345,8 @@ void MetricsRenderFrameObserver::DidSetPageLifecycleState(
   // RenderFrame or its process might be killed, and this might be the last
   // point we can send the metrics to the browser. See crbug.com/1150242 for
   // more details.
-  // TODO(crbug.com/1150242): Remove this when we have the full fix for the bug.
+  // TODO(crbug.com/40157795): Remove this when we have the full fix for the
+  // bug.
   if (page_timing_metrics_sender_) {
     page_timing_metrics_sender_->SendLatest();
   }
@@ -386,7 +389,7 @@ void MetricsRenderFrameObserver::DidCreateDocumentElement() {
   // will only send resource usage updates to the browser process. There
   // currently is not infrastructure in the browser process to monitor this case
   // and properly handle timing updates without a committed load.
-  // TODO(https://crbug.com/1097127): Implement proper handling of timing
+  // TODO(crbug.com/40136524): Implement proper handling of timing
   // updates in the browser process and create a normal page timing sender.
 
   // It should not be possible to have a |provisional_frame_resource_data_use_|

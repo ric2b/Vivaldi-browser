@@ -10,6 +10,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/views/bookmarks/saved_tab_groups/saved_tab_group_button.h"
+#include "chrome/browser/ui/views/bookmarks/saved_tab_groups/saved_tab_group_everything_menu.h"
 #include "components/saved_tab_groups/saved_tab_group_model.h"
 #include "components/saved_tab_groups/saved_tab_group_model_observer.h"
 #include "content/public/browser/page.h"
@@ -50,12 +51,14 @@ class SavedTabGroupBar : public views::AccessiblePaneView,
   SavedTabGroupBar& operator=(const SavedTabGroupBar&) = delete;
   ~SavedTabGroupBar() override;
 
-  // Sets the stored page navigator
+  // Sets the stored page navigator.
+  // TODO(pengchaocai): Navigator seems not needed. Investigate and remove.
   void SetPageNavigator(content::PageNavigator* page_navigator) {
     page_navigator_ = page_navigator;
   }
 
   content::PageNavigator* page_navigator() { return page_navigator_; }
+  views::View* overflow_button() { return overflow_button_; }
 
   // views::AccessiblePaneView
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
@@ -151,6 +154,11 @@ class SavedTabGroupBar : public views::AccessiblePaneView,
   // group into the tabstrip.
   void MaybeShowOverflowMenu();
 
+  // When called, display a menu that shows a "Create new tab group" option and
+  // all the saved tab groups (if there are any). Pressing on the saved tab
+  // groups opens the group into the tab strip.
+  void ShowEverythingMenu();
+
   // Updates the contents of the overflow menu if it is open.
   void UpdateOverflowMenu();
 
@@ -165,7 +173,7 @@ class SavedTabGroupBar : public views::AccessiblePaneView,
   // Updates the visibilites of all buttons up to `last_index_visible`. The
   // overflow button will be displayed based on `should_show_overflow`.
   void UpdateButtonVisibilities(bool should_show_overflow,
-                                size_t last_visible_button_index);
+                                int last_visible_button_index);
 
   // Returns true if we should show the overflow button because there is not
   // enough space to display all the buttons or if there are more buttons than
@@ -204,6 +212,8 @@ class SavedTabGroupBar : public views::AccessiblePaneView,
 
   raw_ptr<views::MenuButton, AcrossTasksDanglingUntriaged> overflow_button_;
 
+  std::unique_ptr<STGEverythingMenu> everything_menu_;
+
   // Used to show the overflow menu when clicked.
   raw_ptr<views::BubbleDialogDelegate> bubble_delegate_ = nullptr;
 
@@ -228,6 +238,9 @@ class SavedTabGroupBar : public views::AccessiblePaneView,
   // this boolean lets the SavedTabGroupButton choose whether they want to
   // animate or not.
   const bool animations_enabled_ = true;
+
+  // Whether the kTabGroupsSaveUIUpdate flag is enabled.
+  const bool v2_ui_enabled_;
 
   // Returns WeakPtrs used in GetPageNavigatorGetter(). Used to ensure
   // safety if BookmarkBarView is deleted after getting the callback.

@@ -50,10 +50,9 @@ class CORE_EXPORT PhysicalBoxFragment final : public PhysicalFragment {
                       BoxFragmentBuilder* builder,
                       bool has_scrollable_overflow,
                       const PhysicalRect& scrollable_overflow,
-                      bool has_borders,
-                      const PhysicalBoxStrut& borders,
-                      bool has_padding,
-                      const PhysicalBoxStrut& padding,
+                      const PhysicalBoxStrut* borders,
+                      const PhysicalBoxStrut* scrollbar,
+                      const PhysicalBoxStrut* padding,
                       const std::optional<PhysicalRect>& inflow_bounds,
                       bool has_fragment_items,
                       WritingMode block_or_line_writing_mode);
@@ -235,6 +234,13 @@ class CORE_EXPORT PhysicalBoxFragment final : public PhysicalFragment {
     return PhysicalBoxStrut();
   }
 
+  const PhysicalBoxStrut Scrollbar() const {
+    if (const auto* field = GetRareField(FieldId::kScrollbar)) {
+      return field->scrollbar;
+    }
+    return PhysicalBoxStrut();
+  }
+
   const PhysicalBoxStrut Padding() const {
     if (const auto* field = GetRareField(FieldId::kPadding)) {
       return field->padding;
@@ -249,7 +255,7 @@ class CORE_EXPORT PhysicalBoxFragment final : public PhysicalFragment {
     return PhysicalBoxStrut();
   }
 
-  const PhysicalOffset ContentOffset() const {
+  PhysicalOffset ContentOffset() const {
     if (!HasBorders() && !HasPadding())
       return PhysicalOffset();
     PhysicalOffset offset;
@@ -259,6 +265,8 @@ class CORE_EXPORT PhysicalBoxFragment final : public PhysicalFragment {
       offset += Padding().Offset();
     return offset;
   }
+
+  PhysicalRect ContentRect() const;
 
   // Returns the bounds of any inflow children for this fragment (specifically
   // no out-of-flow positioned objects). This will return |std::nullopt| if:
@@ -407,6 +415,12 @@ class CORE_EXPORT PhysicalBoxFragment final : public PhysicalFragment {
 
   bool IsFragmentationContextRoot() const {
     return bit_field_.get<IsFragmentationContextRootFlag>();
+  }
+
+  // Return true if this is the layout root fragment for pagination
+  // (aka. printing).
+  bool IsPaginatedRoot() const {
+    return IsFragmentationContextRoot() && layout_object_->IsLayoutView();
   }
 
   bool IsMonolithic() const { return bit_field_.get<IsMonolithicFlag>(); }

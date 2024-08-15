@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import type {ElementObject} from '../../prod/file_manager/shared_types.js';
-import {getCaller, pending, repeatUntil, sendTestMessage} from '../../test_util.js';
+import {getCaller, pending, repeatUntil} from '../../test_util.js';
 import {remoteCall} from '../background.js';
 
 
@@ -34,8 +34,7 @@ export class DirectoryTreePageObject {
    * the directory tree DOM element is ready.
    */
   static async create(appId: string): Promise<DirectoryTreePageObject> {
-    const useNewTree =
-        await sendTestMessage({name: 'isNewDirectoryTreeEnabled'}) === 'true';
+    const useNewTree = true;
     const directoryTree = new DirectoryTreePageObject(appId, useNewTree);
     remoteCall.waitForElement(appId, directoryTree.rootSelector);
     return directoryTree;
@@ -946,6 +945,19 @@ export class DirectoryTreePageObject {
    */
   async showContextMenuForItemByLabel(label: string): Promise<void> {
     await this.showItemContextMenu_(this.selectors_.itemByLabel(label));
+  }
+
+  /**
+   * Long press the tree item by its label to trigger context menu.
+   *
+   * @param label Label of the tree item.
+   */
+  async longPressItemByLabel(label: string): Promise<void> {
+    chrome.test.assertTrue(
+        !!await remoteCall.callRemoteTestUtil(
+            'fakeContextMenu', this.appId_,
+            [this.selectors_.itemByLabel(label)]),
+        'fakeContextMenu failed');
   }
 
   /**

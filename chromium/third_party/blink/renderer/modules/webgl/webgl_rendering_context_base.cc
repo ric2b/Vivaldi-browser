@@ -334,10 +334,6 @@ void WebGLRenderingContextBase::ForciblyLoseOldestContext(
                               WebGLRenderingContextBase::kWhenAvailable);
 }
 
-NoAllocDirectCallHost* WebGLRenderingContextBase::AsNoAllocDirectCallHost() {
-  return this;
-}
-
 WebGLRenderingContextBase* WebGLRenderingContextBase::OldestContext() {
   if (ActiveContexts().empty())
     return nullptr;
@@ -877,28 +873,29 @@ scoped_refptr<StaticBitmapImage> WebGLRenderingContextBase::GetImage(
   return resource_provider->Snapshot(reason);
 }
 
-ScriptPromise WebGLRenderingContextBase::makeXRCompatible(
+ScriptPromise<IDLUndefined> WebGLRenderingContextBase::makeXRCompatible(
     ScriptState* script_state,
     ExceptionState& exception_state) {
   if (isContextLost()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "Context lost.");
-    return ScriptPromise();
+    return ScriptPromise<IDLUndefined>();
   }
 
   // Return a resolved promise if we're already xr compatible. Once we're
   // compatible, we should always be compatible unless a context lost occurs.
   // DispatchContextLostEvent() resets this flag to false.
   if (xr_compatible_)
-    return ScriptPromise::CastUndefined(script_state);
+    return ToResolvedUndefinedPromise(script_state);
 
   // If there's a request currently in progress, return the same promise.
   if (make_xr_compatible_resolver_)
     return make_xr_compatible_resolver_->Promise();
 
-  make_xr_compatible_resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(
-      script_state, exception_state.GetContext());
-  ScriptPromise promise = make_xr_compatible_resolver_->Promise();
+  make_xr_compatible_resolver_ =
+      MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
+          script_state, exception_state.GetContext());
+  auto promise = make_xr_compatible_resolver_->Promise();
 
   MakeXrCompatibleAsync();
 
@@ -4260,9 +4257,7 @@ ScriptValue WebGLRenderingContextBase::getUniform(
   if (!ValidateWebGLProgramOrShader("getUniform", program))
     return ScriptValue::CreateNull(script_state->GetIsolate());
   DCHECK(uniform_location);
-  if (uniform_location->Program() != program) {
-    SynthesizeGLError(GL_INVALID_OPERATION, "getUniform",
-                      "no uniformlocation or not valid for this program");
+  if (!ValidateUniformLocation("getUniform", uniform_location, program)) {
     return ScriptValue::CreateNull(script_state->GetIsolate());
   }
   GLint location = uniform_location->Location();
@@ -5677,7 +5672,7 @@ void WebGLRenderingContextBase::TexImageHelperDOMArrayBufferView(
     TexImageParams params,
     DOMArrayBufferView* pixels,
     NullDisposition null_disposition,
-    GLuint src_offset) {
+    int64_t src_offset) {
   const char* func_name = GetTexImageFunctionName(params.function_id);
   if (isContextLost())
     return;
@@ -6711,9 +6706,7 @@ void WebGLRenderingContextBase::uniform1f(const WebGLUniformLocation* location,
   if (isContextLost() || !location)
     return;
 
-  if (location->Program() != current_program_) {
-    SynthesizeGLError(GL_INVALID_OPERATION, "uniform1f",
-                      "location not for current program");
+  if (!ValidateUniformLocation("uniform1f", location, current_program_)) {
     return;
   }
 
@@ -6749,9 +6742,7 @@ void WebGLRenderingContextBase::uniform1i(const WebGLUniformLocation* location,
   if (isContextLost() || !location)
     return;
 
-  if (location->Program() != current_program_) {
-    SynthesizeGLError(GL_INVALID_OPERATION, "uniform1i",
-                      "location not for current program");
+  if (!ValidateUniformLocation("uniform1i", location, current_program_)) {
     return;
   }
 
@@ -6788,9 +6779,7 @@ void WebGLRenderingContextBase::uniform2f(const WebGLUniformLocation* location,
   if (isContextLost() || !location)
     return;
 
-  if (location->Program() != current_program_) {
-    SynthesizeGLError(GL_INVALID_OPERATION, "uniform2f",
-                      "location not for current program");
+  if (!ValidateUniformLocation("uniform2f", location, current_program_)) {
     return;
   }
 
@@ -6827,9 +6816,7 @@ void WebGLRenderingContextBase::uniform2i(const WebGLUniformLocation* location,
   if (isContextLost() || !location)
     return;
 
-  if (location->Program() != current_program_) {
-    SynthesizeGLError(GL_INVALID_OPERATION, "uniform2i",
-                      "location not for current program");
+  if (!ValidateUniformLocation("uniform2i", location, current_program_)) {
     return;
   }
 
@@ -6867,9 +6854,7 @@ void WebGLRenderingContextBase::uniform3f(const WebGLUniformLocation* location,
   if (isContextLost() || !location)
     return;
 
-  if (location->Program() != current_program_) {
-    SynthesizeGLError(GL_INVALID_OPERATION, "uniform3f",
-                      "location not for current program");
+  if (!ValidateUniformLocation("uniform3f", location, current_program_)) {
     return;
   }
 
@@ -6907,9 +6892,7 @@ void WebGLRenderingContextBase::uniform3i(const WebGLUniformLocation* location,
   if (isContextLost() || !location)
     return;
 
-  if (location->Program() != current_program_) {
-    SynthesizeGLError(GL_INVALID_OPERATION, "uniform3i",
-                      "location not for current program");
+  if (!ValidateUniformLocation("uniform3i", location, current_program_)) {
     return;
   }
 
@@ -6948,9 +6931,7 @@ void WebGLRenderingContextBase::uniform4f(const WebGLUniformLocation* location,
   if (isContextLost() || !location)
     return;
 
-  if (location->Program() != current_program_) {
-    SynthesizeGLError(GL_INVALID_OPERATION, "uniform4f",
-                      "location not for current program");
+  if (!ValidateUniformLocation("uniform4f", location, current_program_)) {
     return;
   }
 
@@ -6989,9 +6970,7 @@ void WebGLRenderingContextBase::uniform4i(const WebGLUniformLocation* location,
   if (isContextLost() || !location)
     return;
 
-  if (location->Program() != current_program_) {
-    SynthesizeGLError(GL_INVALID_OPERATION, "uniform4i",
-                      "location not for current program");
+  if (!ValidateUniformLocation("uniform4i", location, current_program_)) {
     return;
   }
 
@@ -8187,7 +8166,7 @@ bool WebGLRenderingContextBase::ValidateTexFuncData(
     const TexImageParams& params,
     DOMArrayBufferView* pixels,
     NullDisposition disposition,
-    GLuint src_offset) {
+    int64_t src_offset) {
   const char* function_name = GetTexImageFunctionName(params.function_id);
   TexImageDimension tex_dimension;
   if (params.function_id == kTexImage2D || params.function_id == kTexSubImage2D)
@@ -8378,38 +8357,24 @@ void WebGLRenderingContextBase::PrintGLErrorToConsole(const String& message) {
 
 void WebGLRenderingContextBase::PrintWarningToConsole(const String& message) {
   blink::ExecutionContext* context = Host()->GetTopExecutionContext();
-  PostDeferrableAction(WTF::BindOnce(
-      [](blink::ExecutionContext* context, const String& message) {
-        if (context && !context->IsContextDestroyed()) {
-          context->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
-              mojom::blink::ConsoleMessageSource::kRendering,
-              mojom::blink::ConsoleMessageLevel::kWarning, message));
-        }
-      },
-      WrapPersistent(context), message));
+  if (context && !context->IsContextDestroyed()) {
+    context->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::blink::ConsoleMessageSource::kRendering,
+        mojom::blink::ConsoleMessageLevel::kWarning, message));
+  }
 }
 
 void WebGLRenderingContextBase::NotifyWebGLErrorOrWarning(
     const String& message) {
-  PostDeferrableAction(WTF::BindOnce(
-      [](HTMLCanvasElement* canvas, const String& message) {
-        probe::DidFireWebGLErrorOrWarning(canvas, message);
-      },
-      WrapPersistent(canvas()), message));
+  probe::DidFireWebGLErrorOrWarning(canvas(), message);
 }
 
 void WebGLRenderingContextBase::NotifyWebGLError(const String& error_type) {
-  PostDeferrableAction(WTF::BindOnce(
-      [](HTMLCanvasElement* canvas, const String& error_type) {
-        probe::DidFireWebGLError(canvas, error_type);
-      },
-      WrapPersistent(canvas()), error_type));
+  probe::DidFireWebGLError(canvas(), error_type);
 }
 
 void WebGLRenderingContextBase::NotifyWebGLWarning() {
-  PostDeferrableAction(WTF::BindOnce(
-      [](HTMLCanvasElement* canvas) { probe::DidFireWebGLWarning(canvas); },
-      WrapPersistent(canvas())));
+  probe::DidFireWebGLWarning(canvas());
 }
 
 bool WebGLRenderingContextBase::ValidateFramebufferFuncParameters(

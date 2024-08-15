@@ -4,9 +4,15 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#include "core/fdrm/fx_crypt.h"
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
 
-#include <string.h>
+#include "core/fdrm/fx_crypt_sha.h"
+
+#include "core/fxcrt/fx_memcpy_wrappers.h"
+#include "core/fxcrt/stl_util.h"
 
 #define SHA_GET_UINT32(n, b, i)                                         \
   {                                                                     \
@@ -367,13 +373,14 @@ void CRYPT_SHA1Update(CRYPT_sha1_context* context,
                       uint32_t size) {
   context->total_bytes += size;
   if (context->blkused && size < 64 - context->blkused) {
-    memcpy(context->block + context->blkused, data, size);
+    FXSYS_memcpy(context->block + context->blkused, data, size);
     context->blkused += size;
     return;
   }
   uint32_t wordblock[16];
   while (size >= 64 - context->blkused) {
-    memcpy(context->block + context->blkused, data, 64 - context->blkused);
+    FXSYS_memcpy(context->block + context->blkused, data,
+                 64 - context->blkused);
     data += 64 - context->blkused;
     size -= 64 - context->blkused;
     for (int i = 0; i < 16; i++) {
@@ -385,7 +392,7 @@ void CRYPT_SHA1Update(CRYPT_sha1_context* context,
     SHATransform(context->h, wordblock);
     context->blkused = 0;
   }
-  memcpy(context->block, data, size);
+  FXSYS_memcpy(context->block, data, size);
   context->blkused = size;
 }
 
@@ -398,7 +405,7 @@ void CRYPT_SHA1Finish(CRYPT_sha1_context* context, uint8_t digest[20]) {
   } else {
     pad = 56 - context->blkused;
   }
-  memset(c, 0, pad);
+  FXSYS_memset(c, 0, pad);
   c[0] = 0x80;
   CRYPT_SHA1Update(context, c, pad);
   c[0] = (total_bits >> 56) & 0xFF;
@@ -437,7 +444,7 @@ void CRYPT_SHA256Start(CRYPT_sha2_context* context) {
   context->state[5] = 0x9B05688C;
   context->state[6] = 0x1F83D9AB;
   context->state[7] = 0x5BE0CD19;
-  memset(context->buffer, 0, sizeof(context->buffer));
+  fxcrt::Fill(context->buffer, 0);
 }
 
 void CRYPT_SHA256Update(CRYPT_sha2_context* context,
@@ -450,7 +457,7 @@ void CRYPT_SHA256Update(CRYPT_sha2_context* context,
   uint32_t fill = 64 - left;
   context->total_bytes += size;
   if (left && size >= fill) {
-    memcpy(context->buffer + left, data, fill);
+    FXSYS_memcpy(context->buffer + left, data, fill);
     sha256_process(context, context->buffer);
     size -= fill;
     data += fill;
@@ -462,7 +469,7 @@ void CRYPT_SHA256Update(CRYPT_sha2_context* context,
     data += 64;
   }
   if (size)
-    memcpy(context->buffer + left, data, size);
+    FXSYS_memcpy(context->buffer + left, data, size);
 }
 
 void CRYPT_SHA256Finish(CRYPT_sha2_context* context, uint8_t digest[32]) {
@@ -502,7 +509,7 @@ void CRYPT_SHA384Start(CRYPT_sha2_context* context) {
   context->state[5] = 0x8eb44a8768581511ULL;
   context->state[6] = 0xdb0c2e0d64f98fa7ULL;
   context->state[7] = 0x47b5481dbefa4fa4ULL;
-  memset(context->buffer, 0, sizeof(context->buffer));
+  fxcrt::Fill(context->buffer, 0);
 }
 
 void CRYPT_SHA384Update(CRYPT_sha2_context* context,
@@ -515,7 +522,7 @@ void CRYPT_SHA384Update(CRYPT_sha2_context* context,
   uint32_t fill = 128 - left;
   context->total_bytes += size;
   if (left && size >= fill) {
-    memcpy(context->buffer + left, data, fill);
+    FXSYS_memcpy(context->buffer + left, data, fill);
     sha384_process(context, context->buffer);
     size -= fill;
     data += fill;
@@ -527,7 +534,7 @@ void CRYPT_SHA384Update(CRYPT_sha2_context* context,
     data += 128;
   }
   if (size)
-    memcpy(context->buffer + left, data, size);
+    FXSYS_memcpy(context->buffer + left, data, size);
 }
 
 void CRYPT_SHA384Finish(CRYPT_sha2_context* context, uint8_t digest[48]) {
@@ -566,7 +573,7 @@ void CRYPT_SHA512Start(CRYPT_sha2_context* context) {
   context->state[5] = 0x9b05688c2b3e6c1fULL;
   context->state[6] = 0x1f83d9abfb41bd6bULL;
   context->state[7] = 0x5be0cd19137e2179ULL;
-  memset(context->buffer, 0, sizeof(context->buffer));
+  fxcrt::Fill(context->buffer, 0);
 }
 
 void CRYPT_SHA512Update(CRYPT_sha2_context* context,

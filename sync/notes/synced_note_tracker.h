@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
@@ -51,7 +52,7 @@ class SyncedNoteTracker {
 
   // Loads a tracker from a proto (usually from disk) after enforcing the
   // consistency of the metadata against the NotesModel. Returns null if the
-  // data is inconsistent with sync metadata (i.e. corrupt). |model| must not be
+  // data is inconsistent with sync metadata (i.e. corrupt). `model` must not be
   // null.
   static std::unique_ptr<SyncedNoteTracker> CreateFromNotesModelAndMetadata(
       const NoteModelView* model,
@@ -82,7 +83,7 @@ class SyncedNoteTracker {
   const SyncedNoteTrackerEntity* GetEntityForNoteNode(
       const vivaldi::NoteNode* node) const;
 
-  // Starts tracking local note |note_node|, which must not be tracked
+  // Starts tracking local note `note_node`, which must not be tracked
   // beforehand. The rest of the arguments represent the initial metadata.
   // Returns the tracked entity.
   const SyncedNoteTrackerEntity* Add(const vivaldi::NoteNode* note_node,
@@ -91,33 +92,35 @@ class SyncedNoteTracker {
                                      base::Time creation_time,
                                      const sync_pb::EntitySpecifics& specifics);
 
-  // Updates the sync metadata for a tracked entity. |entity| must be owned by
+  // Updates the sync metadata for a tracked entity. `entity` must be owned by
   // this tracker.
   void Update(const SyncedNoteTrackerEntity* entity,
               int64_t server_version,
               base::Time modification_time,
               const sync_pb::EntitySpecifics& specifics);
 
-  // Updates the server version of an existing entity. |entity| must be owned by
+  // Updates the server version of an existing entity. `entity` must be owned by
   // this tracker.
   void UpdateServerVersion(const SyncedNoteTrackerEntity* entity,
                            int64_t server_version);
 
   // Marks an existing entry that a commit request might have been sent to the
-  // server. |entity| must be owned by this tracker.
+  // server. `entity` must be owned by this tracker.
   void MarkCommitMayHaveStarted(const SyncedNoteTrackerEntity* entity);
 
   // This class maintains the order of calls to this method and the same order
   // is guaranteed when returning local changes in
   // GetEntitiesWithLocalChanges() as well as in BuildNoteModelMetadata().
-  // |entity| must be owned by this tracker.
-  void MarkDeleted(const SyncedNoteTrackerEntity* entity);
+  // `entity` must be owned by this tracker.
+  void MarkDeleted(const SyncedNoteTrackerEntity* entity,
+                   const base::Location& location);
 
-  // Untracks an entity, which also invalidates the pointer. |entity| must be
-  // owned by this tracker.
+  // Untracks an entity, which also invalidates the pointer. `entity` must be
+  // owned by this tracker. `location` is used to propagate
+  // debug information about which piece of code triggered the deletion.
   void Remove(const SyncedNoteTrackerEntity* entity);
 
-  // Increment sequence number in the metadata for |entity|. |entity| must be
+  // Increment sequence number in the metadata for `entity`. `entity` must be
   // owned by this tracker.
   void IncrementSequenceNumber(const SyncedNoteTrackerEntity* entity);
 
@@ -139,30 +142,30 @@ class SyncedNoteTracker {
   std::vector<const SyncedNoteTrackerEntity*> GetEntitiesWithLocalChanges()
       const;
 
-  // Updates the tracker after receiving the commit response. |sync_id| should
-  // match the already tracked sync ID for |entity|, with the exception of the
+  // Updates the tracker after receiving the commit response. `sync_id` should
+  // match the already tracked sync ID for `entity`, with the exception of the
   // initial commit, where the temporary client-generated ID will be overridden
-  // by the server-provided final ID. |entity| must be owned by this tracker.
+  // by the server-provided final ID. `entity` must be owned by this tracker.
   void UpdateUponCommitResponse(const SyncedNoteTrackerEntity* entity,
                                 const std::string& sync_id,
                                 int64_t server_version,
                                 int64_t acked_sequence_number);
 
-  // Informs the tracker that the sync ID for |entity| has changed. It updates
-  // the internal state of the tracker accordingly. |entity| must be owned by
+  // Informs the tracker that the sync ID for `entity` has changed. It updates
+  // the internal state of the tracker accordingly. `entity` must be owned by
   // this tracker.
   void UpdateSyncIdIfNeeded(const SyncedNoteTrackerEntity* entity,
                             const std::string& sync_id);
 
   // Used to start tracking an entity that overwrites a previous local tombstone
-  // (e.g. user-initiated note deletion undo). |entity| must be owned by
+  // (e.g. user-initiated note deletion undo). `entity` must be owned by
   // this tracker.
   void UndeleteTombstoneForNoteNode(const SyncedNoteTrackerEntity* entity,
                                     const vivaldi::NoteNode* node);
 
-  // Set the value of |EntityMetadata.acked_sequence_number| for |entity| to be
-  // equal to |EntityMetadata.sequence_number| such that it is not returned in
-  // GetEntitiesWithLocalChanges(). |entity| must be owned by this tracker.
+  // Set the value of `EntityMetadata.acked_sequence_number` for `entity` to be
+  // equal to `EntityMetadata.sequence_number` such that it is not returned in
+  // GetEntitiesWithLocalChanges(). `entity` must be owned by this tracker.
   void AckSequenceNumber(const SyncedNoteTrackerEntity* entity);
 
   // Whether the tracker is empty or not.
@@ -181,16 +184,16 @@ class SyncedNoteTracker {
   // Returns number of tracked entities. Used only in test.
   size_t TrackedEntitiesCountForTest() const;
 
-  // Checks whether all nodes in |note_model| that *should* be tracked as
+  // Checks whether all nodes in `note_model` that *should* be tracked as
   // per IsNodeSyncable() are tracked.
   void CheckAllNodesTracked(const NoteModelView* notes_model) const;
 
   // This method is used to mark all entities except permanent nodes as
   // unsynced. This will cause reuploading of all notes. The reupload will be
-  // initiated only when the |notes_hierarchy_fields_reuploaded| field in
+  // initiated only when the `notes_hierarchy_fields_reuploaded` field in
   // NotesMetadata is false. This field is used to prevent reuploading after
   // each browser restart. Returns true if the reupload was initiated.
-  // TODO(crbug.com/1232951): remove this code when most of notes are
+  // TODO(crbug.com/40780588): remove this code when most of notes are
   // reuploaded.
   bool ReuploadNotesOnLoadIfNeeded();
 
@@ -213,27 +216,27 @@ class SyncedNoteTracker {
           max_version_among_ignored_updates_due_to_missing_parent,
       file_sync::SyncedFileStore* synced_file_store);
 
-  // Add entities to |this| tracker based on the content of |*model| and
-  // |model_metadata|. Validates the integrity of |*model| and |model_metadata|
+  // Add entities to `this` tracker based on the content of `*model` and
+  // `model_metadata`. Validates the integrity of `*model` and `model_metadata`
   // and returns an enum representing any inconsistency.
   bool InitEntitiesFromModelAndMetadata(
       const NoteModelView* model,
       sync_pb::NotesModelMetadata model_metadata);
 
-  // Conceptually, find a tracked entity that matches |entity| and returns a
+  // Conceptually, find a tracked entity that matches `entity` and returns a
   // non-const pointer of it. The actual implementation is a const_cast.
-  // |entity| must be owned by this tracker.
+  // `entity` must be owned by this tracker.
   SyncedNoteTrackerEntity* AsMutableEntity(
       const SyncedNoteTrackerEntity* entity);
 
-  // Reorders |entities| that represents local non-deletions such that parent
+  // Reorders `entities` that represents local non-deletions such that parent
   // creation/update is before child creation/update. Returns the ordered list.
   std::vector<const SyncedNoteTrackerEntity*>
   ReorderUnsyncedEntitiesExceptDeletions(
       const std::vector<const SyncedNoteTrackerEntity*>& entities) const;
 
-  // Recursive method that starting from |node| appends all corresponding
-  // entities with updates in top-down order to |ordered_entities|.
+  // Recursive method that starting from `node` appends all corresponding
+  // entities with updates in top-down order to `ordered_entities`.
   void TraverseAndAppend(
       const vivaldi::NoteNode* node,
       std::vector<const SyncedNoteTrackerEntity*>* ordered_entities) const;

@@ -10,6 +10,7 @@
 #include "base/mac/mac_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/run_loop.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/global_keyboard_shortcuts_mac.h"
@@ -30,6 +31,10 @@
 #include "ui/snapshot/snapshot.h"
 #include "ui/views/view.h"
 
+#include "app/vivaldi_apptools.h"
+#include "extensions/common/constants.h"
+#include "ui/vivaldi_browser_window.h"
+
 // Private method, used to identify instantiated services.
 @interface NSSharingService (ExposeName)
 @property(readonly) NSString* name;
@@ -44,6 +49,21 @@ NSString* const kRemindersSharingServiceName =
 
 bool CanShare() {
   Browser* last_active_browser = chrome::FindLastActive();
+  if (vivaldi::IsVivaldiRunning()) {
+    // Exclude vivaldi, chrome, chrome-extension URLs from sharing
+    const std::optional<GURL> last_commited_url =
+        last_active_browser &&
+                last_active_browser->location_bar_model()->ShouldDisplayURL() &&
+                last_active_browser->tab_strip_model()->GetActiveWebContents()
+            ? last_active_browser->tab_strip_model()
+                  ->GetActiveWebContents()
+                  ->GetLastCommittedURL()
+            : std::optional<GURL>();
+    return last_commited_url && last_commited_url->is_valid() &&
+           !last_commited_url->SchemeIs(vivaldi::kVivaldiUIScheme) &&
+           !last_commited_url->SchemeIs(content::kChromeUIScheme) &&
+           !last_commited_url->SchemeIs(extensions::kExtensionScheme);
+  }
   return last_active_browser &&
          last_active_browser->location_bar_model()->ShouldDisplayURL() &&
          last_active_browser->tab_strip_model()->GetActiveWebContents() &&
@@ -75,7 +95,7 @@ bool CanShare() {
                       target:(id*)target
                       action:(SEL*)action {
   // Load the menu if it hasn't loaded already.
-  if ([menu numberOfItems] == 0) {
+  if (!menu.numberOfItems) {
     [self menuNeedsUpdate:menu];
   }
   // Per tapted@'s comment in BookmarkMenuCocoaController, it's fine
@@ -86,9 +106,7 @@ bool CanShare() {
 
 - (void)menuNeedsUpdate:(NSMenu*)menu {
   [menu removeAllItems];
-  [menu setAutoenablesItems:NO];
 
-  bool canShare = CanShare();
   // Using a real URL instead of empty string to avoid system log about relative
   // URLs in the pasteboard. This URL will not actually be shared to, just used
   // to fetch sharing services that can handle the NSURL type.
@@ -96,11 +114,10 @@ bool CanShare() {
       sharingServicesForItems:@[ [NSURL URLWithString:@"https://google.com"] ]];
   for (NSSharingService* service in services) {
     // Don't include "Add to Reading List".
-    if ([[service name]
+    if ([service.name
             isEqualToString:NSSharingServiceNameAddToSafariReadingList])
       continue;
     NSMenuItem* item = [self menuItemForService:service];
-    [item setEnabled:canShare];
     [menu addItem:item];
   }
   NSMenuItem* moreItem = [[NSMenuItem alloc]
@@ -110,6 +127,16 @@ bool CanShare() {
   moreItem.target = self;
   moreItem.image = [self moreImage];
   [menu addItem:moreItem];
+}
+
+// NSMenuItemValidation
+
+- (BOOL)validateMenuItem:(NSMenuItem*)menuItem {
+  if (menuItem.action == @selector(openSharingPrefs:)) {
+    return YES;
+  }
+
+  return CanShare();
 }
 
 // NSSharingServiceDelegate
@@ -152,12 +179,20 @@ bool CanShare() {
 - (void)saveTransitionDataFromBrowser:(Browser*)browser
                          whenComplete:(base::OnceClosure)closure {
   _windowForShare = browser->window()->GetNativeWindow().GetNativeNSWindow();
+#ifdef VIVALDI_BUILD
+  // TODO (konrad@vivaldi.com) : Implement a getbrowserviewforbrowser for
+  // Vivaldi. See VB-96376.
+  views::View* browserView =
+      static_cast<VivaldiBrowserWindow*>(browser->window())->GetWebView();
+  views::View* contentsView = browserView;
+#else   // VIVALDI_BUILD
   BrowserView* browserView = BrowserView::GetBrowserViewForBrowser(browser);
   if (!browserView) {
     return;
   }
 
   views::View* contentsView = browserView->contents_container();
+#endif  // VIVALDI_BUILD
   if (!contentsView) {
     return;
   }
@@ -217,11 +252,14 @@ bool CanShare() {
     _activity.title = title;
     [_activity becomeCurrent];
   }
-
+  base::RunLoop run_loop;
+  auto done = run_loop.QuitClosure();
   [self saveTransitionDataFromBrowser:browser
                          whenComplete:base::BindOnce(^{
                            [service performWithItems:@[ url ]];
+                           std::move(done).Run();
                          })];
+  run_loop.Run();
 }
 
 // Opens the "Sharing" subpane of the "Extensions" macOS preference pane.
@@ -243,7 +281,7 @@ bool CanShare() {
 
 // Creates a menu item that calls |service| when invoked.
 - (NSMenuItem*)menuItemForService:(NSSharingService*)service {
-  BOOL isMail = [[service name] isEqual:NSSharingServiceNameComposeEmail];
+  BOOL isMail = [service.name isEqual:NSSharingServiceNameComposeEmail];
   NSString* keyEquivalent = isMail ? [self keyEquivalentForMail] : @"";
   NSString* title = isMail ? l10n_util::GetNSString(IDS_EMAIL_LINK_MAC)
                            : service.menuItemTitle;
@@ -251,7 +289,7 @@ bool CanShare() {
                                                 action:@selector(performShare:)
                                          keyEquivalent:keyEquivalent];
   item.target = self;
-  item.image = [service image];
+  item.image = service.image;
   item.representedObject = service;
   return item;
 }

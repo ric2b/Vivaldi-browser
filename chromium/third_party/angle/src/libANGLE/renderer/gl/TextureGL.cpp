@@ -664,6 +664,7 @@ angle::Result TextureGL::setCompressedSubImage(const gl::Context *context,
         nativegl::GetCompressedSubTexImageFormat(functions, features, format);
 
     stateManager->bindTexture(getType(), mTextureID);
+    ANGLE_TRY(stateManager->setPixelUnpackState(context, unpack));
     if (nativegl::UseTexImage2D(getType()))
     {
         ASSERT(area.z == 0 && area.depth == 1);
@@ -1761,6 +1762,7 @@ angle::Result TextureGL::syncState(const gl::Context *context,
                 break;
             case gl::Texture::DIRTY_BIT_BOUND_AS_IMAGE:
             case gl::Texture::DIRTY_BIT_BOUND_AS_ATTACHMENT:
+            case gl::Texture::DIRTY_BIT_BOUND_TO_MSRTT_FRAMEBUFFER:
                 // Only used for Vulkan.
                 break;
 

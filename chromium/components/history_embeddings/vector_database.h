@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_HISTORY_EMBEDDINGS_VECTOR_DATABASE_H_
 #define COMPONENTS_HISTORY_EMBEDDINGS_VECTOR_DATABASE_H_
 
+#include <optional>
 #include <vector>
 
 #include "base/time/time.h"
@@ -33,6 +34,7 @@ struct UrlPassages {
 class Embedding {
  public:
   explicit Embedding(std::vector<float> data);
+  Embedding();
   ~Embedding();
   Embedding(const Embedding&);
   Embedding& operator=(const Embedding&);
@@ -82,6 +84,18 @@ struct UrlEmbeddings {
 };
 
 struct ScoredUrl {
+  ScoredUrl(history::URLID url_id,
+            history::VisitID visit_id,
+            base::Time visit_time,
+            float score,
+            size_t index,
+            Embedding passage_embedding);
+  ~ScoredUrl();
+  ScoredUrl(ScoredUrl&&);
+  ScoredUrl& operator=(ScoredUrl&&);
+  ScoredUrl(const ScoredUrl&);
+  ScoredUrl& operator=(ScoredUrl&);
+
   // Basic data about the found URL/visit.
   history::URLID url_id;
   history::VisitID visit_id;
@@ -94,9 +108,31 @@ struct ScoredUrl {
   // passage used to compute the embedding.
   size_t index;
 
+  // The embedding for the source passage. Preserved during search.
+  Embedding passage_embedding;
+
   // Source passage; may not be populated during search, but kept in this
   // struct for convenience when passing finished results to service callers.
   std::string passage;
+};
+
+struct SearchInfo {
+  SearchInfo();
+  SearchInfo(SearchInfo&&);
+  ~SearchInfo();
+
+  // Result of the search, the best scored URLs.
+  std::vector<ScoredUrl> scored_urls;
+
+  // The number of URLs searched to find this result.
+  size_t searched_url_count = 0u;
+
+  // The number of embeddings searched to find this result.
+  size_t searched_embedding_count = 0u;
+
+  // Whether the search completed without interruption. Starting a new search
+  // may cause a search to halt, and in that case this member will be false.
+  bool completed = false;
 };
 
 // This base class decouples storage classes and inverts the dependency so that
@@ -124,11 +160,15 @@ class VectorDatabase {
 
   // Create an iterator that steps through database items.
   // Null may be returned if there are none.
-  virtual std::unique_ptr<EmbeddingsIterator> MakeEmbeddingsIterator() = 0;
+  virtual std::unique_ptr<EmbeddingsIterator> MakeEmbeddingsIterator(
+      std::optional<base::Time> time_range_start) = 0;
 
   // Searches the database for embeddings near given `query` and returns
   // information about where they were found and how nearly the query matched.
-  std::vector<ScoredUrl> FindNearest(size_t count, const Embedding& query);
+  SearchInfo FindNearest(std::optional<base::Time> time_range_start,
+                         size_t count,
+                         const Embedding& query,
+                         base::RepeatingCallback<bool()> is_search_halted);
 };
 
 // This is an in-memory vector store that supports searching and saving to
@@ -146,7 +186,8 @@ class VectorDatabaseInMemory : public VectorDatabase {
   // VectorDatabase:
   size_t GetEmbeddingDimensions() const override;
   bool AddUrlEmbeddings(const UrlEmbeddings& url_embeddings) override;
-  std::unique_ptr<EmbeddingsIterator> MakeEmbeddingsIterator() override;
+  std::unique_ptr<EmbeddingsIterator> MakeEmbeddingsIterator(
+      std::optional<base::Time> time_range_start) override;
 
  private:
   std::vector<UrlEmbeddings> data_;

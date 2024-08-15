@@ -57,7 +57,7 @@ class SDLPlayerBase : public Receiver::Consumer, public Decoder::Client {
   // or "video" (only used when logging).
   SDLPlayerBase(ClockNowFunctionPtr now_function,
                 TaskRunner& task_runner,
-                Receiver* receiver,
+                Receiver& receiver,
                 const std::string& codec_name,
                 std::function<void()> error_callback,
                 const char* media_type);
@@ -66,7 +66,7 @@ class SDLPlayerBase : public Receiver::Consumer, public Decoder::Client {
 
   // Called back from either |decoder_| or a player subclass to handle a fatal
   // error event.
-  void OnFatalError(std::string message) final;
+  void OnFatalError(const std::string& message) final;
 
   // Renders the |frame| and returns its [possibly adjusted] presentation time.
   virtual ErrorOr<Clock::time_point> RenderNextFrame(
@@ -105,7 +105,7 @@ class SDLPlayerBase : public Receiver::Consumer, public Decoder::Client {
   // AVCodecDecoder::Client implementation. These are called-back from
   // |decoder_| to provide results.
   void OnFrameDecoded(FrameId frame_id, const AVFrame& frame) final;
-  void OnDecodeError(FrameId frame_id, std::string message) final;
+  void OnDecodeError(FrameId frame_id, const std::string& message) final;
 
   // Calls RenderNextFrame() on the next available decoded frame, and schedules
   // its presentation. If no decoded frame is available, RenderWhileIdle() is
@@ -126,7 +126,7 @@ class SDLPlayerBase : public Receiver::Consumer, public Decoder::Client {
   void ResumeRendering();
 
   const ClockNowFunctionPtr now_;
-  Receiver* const receiver_;
+  Receiver& receiver_;
   std::function<void()> error_callback_;  // Run once by OnFatalError().
   const char* const media_type_;          // For logging only.
 

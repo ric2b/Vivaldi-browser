@@ -2227,6 +2227,18 @@ Reduction JSNativeContextSpecialization::ReduceElementAccess(
     }
   }
 
+  // Do not optimize Float16 typed arrays, since they are not yet supported by
+  // the rest of the compiler.
+  // TODO(v8:14012): We could lower further here and emit LoadTypedElement (like
+  // we do for other typed arrays). However, given the lack of hardware support
+  // for Float16 operations, it's not clear whether optimizing further would be
+  // really useful.
+  for (const ElementAccessInfo& access_info : access_infos) {
+    if (IsFloat16TypedArrayElementsKind(access_info.elements_kind())) {
+      return NoChange();
+    }
+  }
+
   // For holey stores or growing stores, we need to check that the prototype
   // chain contains no setters for elements, and we need to guard those checks
   // via code dependencies on the relevant prototype maps.
@@ -3066,6 +3078,7 @@ JSNativeContextSpecialization::BuildPropertyStore(
       case MachineRepresentation::kBit:
       case MachineRepresentation::kCompressedPointer:
       case MachineRepresentation::kCompressed:
+      case MachineRepresentation::kProtectedPointer:
       case MachineRepresentation::kIndirectPointer:
       case MachineRepresentation::kSandboxedPointer:
       case MachineRepresentation::kWord8:
@@ -3172,24 +3185,6 @@ Reduction JSNativeContextSpecialization::ReduceJSToObject(Node* node) {
   ReplaceWithValue(node, receiver, effect);
   return Replace(receiver);
 }
-
-namespace {
-
-ExternalArrayType GetArrayTypeFromElementsKind(ElementsKind kind) {
-  switch (kind) {
-#define TYPED_ARRAY_CASE(Type, type, TYPE, ctype) \
-  case TYPE##_ELEMENTS:                           \
-  case RAB_GSAB_##TYPE##_ELEMENTS:                \
-    return kExternal##Type##Array;
-    TYPED_ARRAYS(TYPED_ARRAY_CASE)
-#undef TYPED_ARRAY_CASE
-    default:
-      break;
-  }
-  UNREACHABLE();
-}
-
-}  // namespace
 
 JSNativeContextSpecialization::ValueEffectControl
 JSNativeContextSpecialization::BuildElementAccess(
@@ -3729,6 +3724,7 @@ JSNativeContextSpecialization::
   // Access the actual element.
   ExternalArrayType external_array_type =
       GetArrayTypeFromElementsKind(elements_kind);
+  DCHECK_NE(external_array_type, ExternalArrayType::kExternalFloat16Array);
   switch (keyed_mode.access_mode()) {
     case AccessMode::kLoad: {
       // Check if we can return undefined for out-of-bounds loads.

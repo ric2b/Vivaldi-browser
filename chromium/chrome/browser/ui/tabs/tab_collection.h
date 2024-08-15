@@ -16,6 +16,11 @@ namespace tabs {
 
 class TabModel;
 
+// This is an interface that representing the hierarchical storage of tabs.
+// This can be used to access and manipulate tabs and the state of the tabstrip.
+// Different types of collections should implement this base class based on how
+// their feature works. For example, a pinned collection can implement tab
+// collection that does not store any collection.
 class TabCollection {
  public:
   TabCollection() = default;
@@ -35,7 +40,7 @@ class TabCollection {
 
   // Recursively get the index of the tab_model among all the leaf tab_models.
   virtual std::optional<size_t> GetIndexOfTabRecursive(
-      TabModel* tab_model) const = 0;
+      const TabModel* tab_model) const = 0;
 
   // Non-recursively get the index of a collection.
   virtual std::optional<size_t> GetIndexOfCollection(
@@ -68,7 +73,9 @@ class TabCollection {
   void OnReparented(TabCollection* new_parent) { parent_ = new_parent; }
 
  protected:
-  base::PassKey<TabCollection> GetPassKey() {
+  // Returns the pass key to be used by derived classes as operations such as
+  // setting the parent of a tab can only be performed by a `TabCollection`.
+  base::PassKey<TabCollection> GetPassKey() const {
     return base::PassKey<TabCollection>();
   }
 

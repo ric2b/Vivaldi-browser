@@ -3,8 +3,6 @@
 // found in the LICENSE file.
 
 import {
-  assertElement,
-  assertShadowRoot,
   getElementWithinComponent,
   getEventPromise,
   renderElementIntoDOM,
@@ -12,8 +10,6 @@ import {
 import {describeWithLocale} from '../../../testing/EnvironmentHelpers.js';
 
 import * as LinearMemoryInspectorComponents from './components.js';
-
-const {assert} = chai;
 
 export const HIGHLIGHT_CHIP = '.highlight-chip';
 export const HIGHLIGHT_PILL_JUMP_BUTTON_SELECTOR = '.jump-to-highlight-button';
@@ -42,20 +38,16 @@ describeWithLocale('LinearMemoryInspectorHighlightChipList', () => {
   }
 
   it('renders a highlight chip button', () => {
-    const shadowRoot = component.shadowRoot;
-    assertShadowRoot(shadowRoot);
-    const button = shadowRoot.querySelector(HIGHLIGHT_PILL_JUMP_BUTTON_SELECTOR);
-    assertElement(button, HTMLButtonElement);
-    const expressionName = shadowRoot.querySelector(HIGHLIGHT_PILL_VARIABLE_NAME);
-    assertElement(expressionName, HTMLSpanElement);
+    const button = component.shadowRoot!.querySelector(HIGHLIGHT_PILL_JUMP_BUTTON_SELECTOR);
+    assert.instanceOf(button, HTMLButtonElement);
+    const expressionName = component.shadowRoot!.querySelector(HIGHLIGHT_PILL_VARIABLE_NAME);
+    assert.instanceOf(expressionName, HTMLSpanElement);
     assert.strictEqual(expressionName.innerText, 'myNumber');
   });
 
   it('focuses a highlight chip button', async () => {
-    const shadowRoot = component.shadowRoot;
-    assertShadowRoot(shadowRoot);
-    const chip = shadowRoot.querySelector(HIGHLIGHT_CHIP);
-    assertElement(chip, HTMLDivElement);
+    const chip = component.shadowRoot!.querySelector(HIGHLIGHT_CHIP);
+    assert.instanceOf(chip, HTMLDivElement);
     assert.isTrue(!chip.classList.contains('focused'));
 
     const highlightedMemory = {
@@ -73,7 +65,6 @@ describeWithLocale('LinearMemoryInspectorHighlightChipList', () => {
   });
 
   it('renders multiple chips', () => {
-    const shadowRoot = component.shadowRoot;
     const highlightInfos = [
       {
         startAddress: 10,
@@ -91,8 +82,7 @@ describeWithLocale('LinearMemoryInspectorHighlightChipList', () => {
     component.data = {
       highlightInfos: highlightInfos,
     };
-    assertShadowRoot(shadowRoot);
-    const chips = shadowRoot.querySelectorAll(HIGHLIGHT_CHIP);
+    const chips = component.shadowRoot!.querySelectorAll(HIGHLIGHT_CHIP);
     assert.strictEqual(chips.length, highlightInfos.length);
   });
 
@@ -102,10 +92,8 @@ describeWithLocale('LinearMemoryInspectorHighlightChipList', () => {
             component,
             LinearMemoryInspectorComponents.LinearMemoryHighlightChipList.JumpToHighlightedMemoryEvent.eventName);
 
-    const shadowRoot = component.shadowRoot;
-    assertShadowRoot(shadowRoot);
-    const button = shadowRoot.querySelector(HIGHLIGHT_PILL_JUMP_BUTTON_SELECTOR);
-    assertElement(button, HTMLButtonElement);
+    const button = component.shadowRoot!.querySelector(HIGHLIGHT_PILL_JUMP_BUTTON_SELECTOR);
+    assert.instanceOf(button, HTMLButtonElement);
     button.click();
 
     assert.isNotNull(await eventPromise);
@@ -117,10 +105,8 @@ describeWithLocale('LinearMemoryInspectorHighlightChipList', () => {
             component,
             LinearMemoryInspectorComponents.LinearMemoryHighlightChipList.DeleteMemoryHighlightEvent.eventName);
 
-    const shadowRoot = component.shadowRoot;
-    assertShadowRoot(shadowRoot);
-    const button = shadowRoot.querySelector(HIGHLIGHT_ROW_REMOVE_BUTTON_SELECTOR);
-    assertElement(button, HTMLButtonElement);
+    const button = component.shadowRoot!.querySelector(HIGHLIGHT_ROW_REMOVE_BUTTON_SELECTOR);
+    assert.instanceOf(button, HTMLButtonElement);
     button.click();
 
     assert.isNotNull(await eventPromise);

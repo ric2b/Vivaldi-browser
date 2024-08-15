@@ -12,12 +12,12 @@
 <translation id="1588438908519853928">Uobičajeno</translation>
 <translation id="1591562245178063882">Ovaj mjesec</translation>
 <translation id="1637811476055996098">Odabir datoteka</translation>
+<translation id="1680090928918677457">Upotrijebi kameru</translation>
 <translation id="1681022320378710418">trenutačno vrijeme</translation>
 <translation id="1727839386348365796">Uzorkovanje boje kapaljkom</translation>
 <translation id="1729654308190250600">Unesite e-adresu koja nije prazna vrijednost.</translation>
 <translation id="1758486001363313524">Drugo...</translation>
 <translation id="1787192514241997742">ukupno vrijeme: <ph name="REMAINING_TIME" /></translation>
-<translation id="1800494066469288780">Dopusti pristup kameri</translation>
 <translation id="1822429046913737220">prijepodne/poslijepodne</translation>
 <translation id="1832974991323546415">reproduciraj na udaljenom uređaju</translation>
 <translation id="1921819250265091946">dd</translation>
@@ -54,7 +54,6 @@
 <translation id="3220661731597678625">trenutačni korak</translation>
 <translation id="3321030238473337787">Brzina reprodukcije</translation>
 <translation id="3329013043687509092">Zasićenje</translation>
-<translation id="3377518164566272702">Dopusti pristup mikrofonu i kameri</translation>
 <translation id="3450233048674729344">Vrijednost mora biti <ph name="MAXIMUM" /> ili manja.</translation>
 <translation id="3732799496749320381">mm</translation>
 <translation id="3754210790023674521">Zatvori sliku u slici</translation>
@@ -62,6 +61,7 @@
 <translation id="3822383571486410024">Produljite broj znakova u tekstu na minimalno <ph name="MIN_CHARACTERS" />. Trenutačno imate premalo znakova (<ph name="CURRENT_LENGTH" />).</translation>
 <translation id="383465348367842624">Dio adrese ispred znaka "<ph name="ATSIGN" />" ne smije sadržavati simbol "<ph name="INVALIDCHARACTER" />".</translation>
 <translation id="3846214748874656680">Izlaz iz punog zaslona</translation>
+<translation id="3914173277599553213">Obavezno</translation>
 <translation id="4031179711345676612">Mikrofon je dopušten</translation>
 <translation id="4103419683916926126">Milisekunde</translation>
 <translation id="4201051445878709314">Prikaži prethodni mjesec</translation>
@@ -77,6 +77,7 @@
 <translation id="4912200001568447310">trenutačna stavka</translation>
 <translation id="4915360478455618802">Prikaži alat za odabir vremena</translation>
 <translation id="4924138096460353083">neodređeno</translation>
+<translation id="49269513399674318">Upotrijebi mikrofon</translation>
 <translation id="4950364064308314478">Prikaži alat za odabir lokalnog datuma i vremena</translation>
 <translation id="4971739861736909480">Odabranih stavki: <ph name="ACCNAME" /></translation>
 <translation id="4975562563186953947">Odabrano: <ph name="SELECTED_COUNT" /></translation>
@@ -144,6 +145,7 @@
 <translation id="7080893216867146095">Dopušteno je dijeljenje lokacije</translation>
 <translation id="709897737746224366">Udovoljite zadanom formatu.</translation>
 <translation id="7102274145889307184">trenutačna lokacija</translation>
+<translation id="7134810312945846184">Upotrijebi mikrofon i kameru</translation>
 <translation id="7263440858009898357">Odaberite stavku s popisa.</translation>
 <translation id="7320576522385648310">pohranjivanje u međuspremnik</translation>
 <translation id="7341556277900466204">Spektar boja</translation>
@@ -188,7 +190,6 @@
 <translation id="9132465097189459683">Drugo...</translation>
 <translation id="9155987714137265666"><ph name="WEEK" />, počevši od <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Slika u slici</translation>
-<translation id="918430632320614861">Dopusti pristup mikrofonu</translation>
 <translation id="945780513535800434">Djelomično označeno</translation>
 <translation id="954003015749068518">pokretanje načina slika u slici</translation>
 </translationbundle>

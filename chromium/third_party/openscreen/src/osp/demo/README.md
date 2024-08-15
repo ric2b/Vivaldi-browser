@@ -38,8 +38,8 @@ Then `cat` them in separate terminals while the demo is running.
 
  - `avail <url>`: Begin listening for receivers that support the presentation of
    `url`.
- - `start <url> <service_id>`: Start a presentation of `url` on the receiver
-   specified by the ID `service_id`.  `service_id` will be printed in the output
+ - `start <url> <instance_id>`: Start a presentation of `url` on the receiver
+   specified by the ID `instance_id`.  `instance_id` will be printed in the output
    log once `avail` has been run.  The demo only supports starting one
    presentation at a time.
  - `msg <string>`: Sends a string message on the open presentation connection.

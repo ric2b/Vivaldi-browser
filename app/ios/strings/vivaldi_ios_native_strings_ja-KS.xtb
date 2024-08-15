@@ -38,13 +38,13 @@
 <translation id="1659112017960130179">韓国語 (<ph name="ORIGIN" />)</translation>
 <translation id="1689333818294560261">ニックネーム</translation>
 <translation id="1711184756728070210"><ph name="BEGIN_LINK" />利用規約 ➔ <ph name="END_LINK" />     <ph name="BEGIN_LINK2" />プライバシーポリシー ➔ <ph name="END_LINK2" /></translation>
-<translation id="1721552494230946796">さらのスピードダイヤルフォルダー</translation>
 <translation id="173924678149983125">URL入れてブロックルールインポートして</translation>
 <translation id="1751280147639351837">広告・トラッカーブロッカー</translation>
 <translation id="1752547299766512813">パスワード保存</translation>
 <translation id="1754797958074421486">利用規約</translation>
 <translation id="1771413903824396513">ニックネーム順</translation>
 <translation id="1804522390855853698">中国語 (<ph name="ORIGIN" />)</translation>
+<translation id="1807246157184219062">ライト</translation>
 <translation id="1809939268435598390">フォルダーほかす</translation>
 <translation id="1813686536470127172">他のフォルダー</translation>
 <translation id="1828800626900562968">さらのタブ開くんやったら、下のプラスアイコンをタップして。</translation>
@@ -55,7 +55,6 @@
 <translation id="2034405583989639424">スピードダイヤル編集</translation>
 <translation id="2048247880942380698">アラビア語 (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">元に戻す</translation>
-<translation id="2117093051794889870">内容順</translation>
 <translation id="2129408066358825297">年齢</translation>
 <translation id="2148384276939959392">選んだデータ項目同期</translation>
 <translation id="2195713384412091023">これしたら、サーバー上の同期データ全部ほかされて、暗号化パスワードもリセットされて、ログアウトされるで。</translation>
@@ -70,6 +69,7 @@
 <translation id="2388224692799337242">ブラウジングしたら、ここに履歴出るで</translation>
 <translation id="2391028308389203648">トルコ語 (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">有効化</translation>
+<translation id="2414886740292270097">ダーク</translation>
 <translation id="2434910957904013691">全部同期</translation>
 <translation id="2448144008809286557"><ph name="BEGIN_LINK" />ユーザーネーム<ph name="END_LINK" /> か <ph name="BEGIN_LINK" />パスワード<ph name="END_LINK" />忘れた？</translation>
 <translation id="2536780277491102902">例外</translation>
@@ -77,6 +77,7 @@
 <translation id="2562040727226360285">イライラさいなら、サイト正常に読み込まんかもしれんけど (<ph name="ORIGIN" />)</translation>
 <translation id="2577446409661931381">さらのメモ</translation>
 <translation id="2619628557366098325">ポルトガル語 (<ph name="ORIGIN" />)</translation>
+<translation id="2620436844016719705">システム</translation>
 <translation id="2666092431469916601">上</translation>
 <translation id="2677862276555105603">広告
 ブロック数</translation>
@@ -135,7 +136,6 @@
 <translation id="3858860766373142691">名前</translation>
 <translation id="3866249974567520381">説明</translation>
 <translation id="3872195896030547485">有効なメールアドレス入れて。</translation>
-<translation id="3894427358181296146">フォルダー追加</translation>
 <translation id="3897092660631435901">メニュー</translation>
 <translation id="3921585859122905677">アドレスバーの位置</translation>
 <translation id="3953599441418463312">日本語 (<ph name="ORIGIN" />)</translation>
@@ -196,7 +196,6 @@
 <translation id="4821701638681626529">Vivaldiはプライベートタブ使用中の閲覧履歴は記録せえへんで</translation>
 <translation id="4833044618885331665">同期使うんやったらVivaldiアップグレードせなあかんで。</translation>
 <translation id="4852383705713307704">ブロックした広告数</translation>
-<translation id="4871370605780490696">ブックマーク追加</translation>
 <translation id="4903325570808402486">Vivaldiの設定同期（一部の設定だけやけど）</translation>
 <translation id="4929196061847506605">パワフル。パーソナル。プライベート。</translation>
 <translation id="4936710149174207991">同期されてへんで</translation>
@@ -248,7 +247,6 @@
 <translation id="6147094071357011481">最近閉じたタブないわ</translation>
 <translation id="6193995664633100765">インド (<ph name="ORIGIN" />)</translation>
 <translation id="6365929278691047681">ドイツ語 (<ph name="ORIGIN" />)</translation>
-<translation id="6404511346730675251">ブックマーク編集</translation>
 <translation id="6406506848690869874">同期</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> 件選び中</translation>
 <translation id="6468130661190228905">ごめんやけど、コミュニティ参加はもうちょい待ってもらわなあかんみたいやわ。16歳以上やないとメンバーになられへんねん。</translation>
@@ -258,7 +256,6 @@
 <translation id="6535988230515403205">ポーランド語 (<ph name="ORIGIN" />)</translation>
 <translation id="659351303388691480">ブラウジングデータほかす...</translation>
 <translation id="6614744450826097546">広告詳細</translation>
-<translation id="6627583120233659107">フォルダー編集</translation>
 <translation id="6631760746795162665">コロンビア (<ph name="ORIGIN" />)</translation>
 <translation id="6639866709520319699">トラッカーと広告がブロックされてるわ。一部のサイトは正しく表示されへんかも。</translation>
 <translation id="6642196070615520677">リモート同期データほかす</translation>
@@ -288,7 +285,6 @@
 <translation id="7210372243397300116">フォルダー検索</translation>
 <translation id="7215420652436283416">アドレス順</translation>
 <translation id="7229439505896086266">メモ作成</translation>
-<translation id="7299721129597238157">ブックマークほかす</translation>
 <translation id="7311118006561484338">タイトル順</translation>
 <translation id="7325310788570036874">Vivaldiやったらブラウジングがもっとスマートでスムーズで高速になるで。</translation>
 <translation id="734110743815267231">ヘブライ語 (<ph name="ORIGIN" />)</translation>

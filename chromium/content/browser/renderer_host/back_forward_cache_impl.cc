@@ -7,6 +7,7 @@
 #include <list>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/barrier_closure.h"
@@ -237,13 +238,13 @@ WebSchedulerTrackedFeatures GetAllowedWebSchedulerTrackedFeatures() {
       // This is handled in |UpdateCanStoreToIncludeCacheControlNoStore()|,
       // and no need to include in |GetDisallowedFeatures()|.
       WebSchedulerTrackedFeature::kMainResourceHasCacheControlNoStore,
-      // TODO(crbug.com/1357482): Figure out if these two should be allowed.
+      // TODO(crbug.com/40236669): Figure out if these two should be allowed.
       WebSchedulerTrackedFeature::kOutstandingNetworkRequestDirectSocket,
       WebSchedulerTrackedFeature::kRequestedStorageAccessGrant,
       // We don't block on subresource cache-control:no-store or no-cache.
       WebSchedulerTrackedFeature::kSubresourceHasCacheControlNoCache,
       WebSchedulerTrackedFeature::kSubresourceHasCacheControlNoStore,
-      // TODO(crbug.com/1357482): Figure out if this should be allowed.
+      // TODO(crbug.com/40236669): Figure out if this should be allowed.
       WebSchedulerTrackedFeature::kWebNfc,
   };
 }
@@ -292,7 +293,7 @@ std::string GetBlockedCgiParams() {
 // Parses the “allowed_websites” and "blocked_websites" field trial parameters
 // and creates a map to represent hosts and corresponding path prefixes.
 base::flat_map<std::string, std::vector<std::string>> ParseCommaSeparatedURLs(
-    base::StringPiece comma_separated_urls) {
+    std::string_view comma_separated_urls) {
   base::flat_map<std::string, std::vector<std::string>> urls;
   for (auto& it :
        base::SplitString(comma_separated_urls, ",", base::TRIM_WHITESPACE,
@@ -305,7 +306,7 @@ base::flat_map<std::string, std::vector<std::string>> ParseCommaSeparatedURLs(
 
 // Parses the "cgi_params" field trial parameter into a set by splitting on "|".
 base::flat_set<std::string> ParseBlockedCgiParams(
-    base::StringPiece cgi_params_string) {
+    std::string_view cgi_params_string) {
   return base::SplitString(cgi_params_string, "|", base::TRIM_WHITESPACE,
                            base::SplitResult::SPLIT_WANT_NONEMPTY);
 }
@@ -769,7 +770,7 @@ BackForwardCacheImpl::PopulateReasonsForPage(
     RenderFrameHostImpl* rfh,
     BackForwardCacheCanStoreDocumentResult& flattened_result,
     RequestedFeatures requested_features) {
-  // TODO(crbug.com/1275977): This function should only be called when |rfh| is
+  // TODO(crbug.com/40207294): This function should only be called when |rfh| is
   // the primary main frame. Fix |ShouldProactivelySwapBrowsingInstance()| and
   // |UnloadOldFrame()| so that it will not check bfcache eligibility if not
   // primary main frame.
@@ -855,7 +856,7 @@ void BackForwardCacheImpl::PopulateReasonsForMainDocument(
   // GetCurrentBackForwardCacheEligibility because it's needed to determine
   // whether to do a proactive BrowsingInstance swap or not, which should not be
   // done if the page has related active contents.
-  // TODO(https://crbug.com/1464335): The check below prevents usage of the
+  // TODO(crbug.com/40922919): The check below prevents usage of the
   // BackForwardCache for navigations that result in a browsing context group
   // swap in the same CoopRelatedGroup. The check below should probably be
   // adapted, to allow usage of the BackForwardCache in those cases.
@@ -1024,7 +1025,7 @@ void BackForwardCacheImpl::NotRestoredReasonBuilder::
   // as well.
   if (!Intersection(banned_features,
                     GetDisallowedForCacheControlNoStoreFeatures())
-           .Empty()) {
+           .empty()) {
     banned_features.Put(
         WebSchedulerTrackedFeature::kMainResourceHasCacheControlNoStore);
     // Record the feature usage in `rfh`. This is needed because all
@@ -1037,7 +1038,7 @@ void BackForwardCacheImpl::NotRestoredReasonBuilder::
     rfh->RecordBackForwardCacheDisablingReason(
         WebSchedulerTrackedFeature::kMainResourceHasCacheControlNoStore);
   }
-  if (!banned_features.Empty()) {
+  if (!banned_features.empty()) {
     if (!ShouldIgnoreBlocklists()) {
       MarkNoWithMultipleFeatures(&result, rfh, banned_features);
     }
@@ -1061,7 +1062,7 @@ void BackForwardCacheImpl::NotRestoredReasonBuilder::
   WebSchedulerTrackedFeatures banned_features = Intersection(
       GetDisallowedFeatures(RequestedFeatures::kAll, kNotInCCNSContext),
       rfh->GetBackForwardCacheDisablingFeatures());
-  if (!banned_features.Empty() && !ShouldIgnoreBlocklists()) {
+  if (!banned_features.empty() && !ShouldIgnoreBlocklists()) {
     if (requested_features == RequestedFeatures::kAll ||
         (requested_features == RequestedFeatures::kAllIfAcked &&
          rfh->render_view_host()->DidReceiveBackForwardCacheAck())) {
@@ -1643,7 +1644,7 @@ void BackForwardCacheImpl::VlogUnexpectedRendererToBrowserMessage(
   VLOG(1) << "BackForwardCacheMessageFilter::WillDispatch bad_message "
           << "interface_name " << interface_name << " message_name "
           << message_name;
-  // TODO(https://crbug.com/1379490): Remove these when bug is fixed.
+  // TODO(crbug.com/40244391): Remove these when bug is fixed.
   PageLifecycleStateManager* page_lifecycle_state_manager =
       rfh->render_view_host()->GetPageLifecycleStateManager();
   VLOG(1) << "URL: " << rfh->GetLastCommittedURL() << " current "

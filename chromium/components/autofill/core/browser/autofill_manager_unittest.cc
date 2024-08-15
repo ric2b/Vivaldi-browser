@@ -131,7 +131,6 @@ void OnFormsSeenWithExpectations(MockAutofillManager& manager,
   EXPECT_CALL(manager, ShouldParseForms).Times(1).WillOnce(Return(true));
   EXPECT_CALL(manager, OnBeforeProcessParsedForms()).Times(num > 0);
   EXPECT_CALL(manager, OnFormProcessed).Times(num);
-  EXPECT_CALL(manager, OnAfterProcessParsedForms).Times(num > 0);
   TestAutofillManagerWaiter waiter(manager, {AutofillManagerEvent::kFormsSeen});
   manager.OnFormsSeen(updated_forms, removed_forms);
   ASSERT_TRUE(waiter.Wait());
@@ -291,7 +290,7 @@ TEST_F(AutofillManagerTest, ObserverReceiveCalls) {
   EXPECT_CALL(manager(), ShouldParseForms)
       .Times(AtLeast(0))
       .WillRepeatedly(Return(true));
-  EXPECT_CALL(manager(), OnFocusNoLongerOnFormImpl).Times(AtLeast(0));
+  EXPECT_CALL(manager(), OnFocusOnNonFormFieldImpl).Times(AtLeast(0));
   EXPECT_CALL(manager(), OnDidFillAutofillFormDataImpl).Times(AtLeast(0));
   EXPECT_CALL(manager(), OnDidEndTextFieldEditingImpl).Times(AtLeast(0));
   EXPECT_CALL(manager(), OnSelectOrSelectListFieldOptionsDidChangeImpl)
@@ -306,7 +305,6 @@ TEST_F(AutofillManagerTest, ObserverReceiveCalls) {
   EXPECT_CALL(manager(), OnSelectControlDidChangeImpl).Times(AtLeast(0));
   EXPECT_CALL(manager(), OnBeforeProcessParsedForms).Times(AtLeast(0));
   EXPECT_CALL(manager(), OnFormProcessed).Times(AtLeast(0));
-  EXPECT_CALL(manager(), OnAfterProcessParsedForms).Times(AtLeast(0));
 
   // Reset the manager, the observers should stick around.
   EXPECT_CALL(observer, OnAutofillManagerReset(m));
@@ -331,19 +329,19 @@ TEST_F(AutofillManagerTest, ObserverReceiveCalls) {
   task_environment_.RunUntilIdle();
 
   form.fields.push_back(form.fields.back());
-  form.fields.back().renderer_id = test::MakeFieldRendererId();
+  form.fields.back().set_renderer_id(test::MakeFieldRendererId());
 
   // The form was just changed, which causes a reparse. The reparse is
   // asynchronous, so OnAfterTextFieldDidChange() is asynchronous, too.
   EXPECT_CALL(observer, OnBeforeTextFieldDidChange(m, f, ff));
-  manager().OnTextFieldDidChange(form, field, {}, {});
+  manager().OnTextFieldDidChange(form, field, {});
   EXPECT_CALL(observer, OnAfterTextFieldDidChange(m, f, ff, std::u16string()));
   EXPECT_CALL(observer, OnFieldTypesDetermined(m, f, heuristics));
   task_environment_.RunUntilIdle();
 
   EXPECT_CALL(observer, OnBeforeTextFieldDidScroll(m, f, ff));
   EXPECT_CALL(observer, OnAfterTextFieldDidScroll(m, f, ff));
-  manager().OnTextFieldDidScroll(form, field, {});
+  manager().OnTextFieldDidScroll(form, field);
 
   EXPECT_CALL(observer, OnBeforeDidFillAutofillFormData(m, f));
   EXPECT_CALL(observer, OnAfterDidFillAutofillFormData(m, f));
@@ -351,15 +349,17 @@ TEST_F(AutofillManagerTest, ObserverReceiveCalls) {
 
   EXPECT_CALL(observer, OnBeforeAskForValuesToFill(m, f, ff, Ref(form)));
   EXPECT_CALL(observer, OnAfterAskForValuesToFill(m, f, ff));
-  manager().OnAskForValuesToFill(form, field, {}, {});
+  manager().OnAskForValuesToFill(form, field, gfx::Rect(),
+                                 AutofillSuggestionTriggerSource::kUnspecified);
 
   EXPECT_CALL(observer, OnBeforeFocusOnFormField(m, f, ff, Ref(form)));
   EXPECT_CALL(observer, OnAfterFocusOnFormField(m, f, ff));
-  manager().OnFocusOnFormField(form, field, {});
+  manager().OnFocusOnFormField(form, field);
 
   EXPECT_CALL(observer, OnBeforeJavaScriptChangedAutofilledValue(m, f, ff));
   EXPECT_CALL(observer, OnAfterJavaScriptChangedAutofilledValue(m, f, ff));
-  manager().OnJavaScriptChangedAutofilledValue(form, field, {});
+  manager().OnJavaScriptChangedAutofilledValue(form, field, {},
+                                               /*formatting_only=*/false);
 
   // TODO(crbug.com/) Test in browser_autofill_manager_unittest.cc that
   // FillOrPreviewForm() triggers OnFillOrPreviewDataModelForm().

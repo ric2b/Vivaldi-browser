@@ -13,6 +13,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <unordered_set>
 #include <utility>
@@ -46,7 +47,6 @@
 #include "base/sequence_checker.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -88,6 +88,7 @@
 #include "net/dns/host_resolver_internal_result.h"
 #include "net/dns/host_resolver_manager_job.h"
 #include "net/dns/host_resolver_manager_request_impl.h"
+#include "net/dns/host_resolver_manager_service_endpoint_request_impl.h"
 #include "net/dns/host_resolver_mdns_listener_impl.h"
 #include "net/dns/host_resolver_mdns_task.h"
 #include "net/dns/host_resolver_nat64_task.h"
@@ -156,7 +157,7 @@ const uint8_t kIPv6ProbeAddress[] = {0x20, 0x01, 0x48, 0x60, 0x48, 0x60,
                                      0x00, 0x00, 0x88, 0x88};
 
 // True if |hostname| ends with either ".local" or ".local.".
-bool ResemblesMulticastDNSName(base::StringPiece hostname) {
+bool ResemblesMulticastDNSName(std::string_view hostname) {
   return hostname.ends_with(".local") || hostname.ends_with(".local.");
 }
 
@@ -213,7 +214,7 @@ PrioritizedDispatcher::Limits GetDispatcherLimits(
   // The format of the group name is a list of non-negative integers separated
   // by ':'. Each of the elements in the list corresponds to an element in
   // |reserved_slots|, except the last one which is the |total_jobs|.
-  std::vector<base::StringPiece> group_parts = base::SplitStringPiece(
+  std::vector<std::string_view> group_parts = base::SplitStringPiece(
       group, ":", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (group_parts.size() != NUM_PRIORITIES + 1) {
     NOTREACHED();
@@ -255,7 +256,7 @@ base::Value::Dict NetLogResults(const HostCache::Entry& results) {
 std::vector<IPEndPoint> FilterAddresses(std::vector<IPEndPoint> addresses,
                                         DnsQueryTypeSet query_types) {
   DCHECK(!query_types.Has(DnsQueryType::UNSPECIFIED));
-  DCHECK(!query_types.Empty());
+  DCHECK(!query_types.empty());
 
   const AddressFamily want_family =
       HostResolver::DnsQueryTypeSetToAddressFamily(query_types);
@@ -281,11 +282,45 @@ int GetPortForGloballyReachableCheck() {
   return features::kAlternativePortForGloballyReachableCheck.Get();
 }
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// LINT.IfChange(DnsClientCapability)
+enum class DnsClientCapability {
+  kSecureDisabledInsecureDisabled = 0,
+  kSecureDisabledInsecureEnabled = 1,
+  kSecureEnabledInsecureDisabled = 2,
+  kSecureEnabledInsecureEnabled = 3,
+  kMaxValue = kSecureEnabledInsecureEnabled,
+};
+// LINT.ThenChange(/tools/metrics/histograms/metadata/net/enums.xml:DnsClientCapability)
+
+void RecordDnsClientCapabilityMetrics(const DnsClient* dns_client) {
+  if (!dns_client) {
+    return;
+  }
+  DnsClientCapability capability;
+  if (dns_client->CanUseSecureDnsTransactions()) {
+    if (dns_client->CanUseInsecureDnsTransactions()) {
+      capability = DnsClientCapability::kSecureEnabledInsecureEnabled;
+    } else {
+      capability = DnsClientCapability::kSecureEnabledInsecureDisabled;
+    }
+  } else {
+    if (dns_client->CanUseInsecureDnsTransactions()) {
+      capability = DnsClientCapability::kSecureDisabledInsecureEnabled;
+    } else {
+      capability = DnsClientCapability::kSecureDisabledInsecureDisabled;
+    }
+  }
+  base::UmaHistogramEnumeration("Net.DNS.DnsConfig.DnsClientCapability",
+                                capability);
+}
 }  // namespace
 
 //-----------------------------------------------------------------------------
 
-bool ResolveLocalHostname(base::StringPiece host,
+bool ResolveLocalHostname(std::string_view host,
                           std::vector<IPEndPoint>* address_list) {
   address_list->clear();
   if (!IsLocalHostname(host))
@@ -533,6 +568,27 @@ HostResolverManager::CreateMdnsListener(const HostPortPair& host,
     listener->set_initialization_error(rv);
   }
   return listener;
+}
+
+std::unique_ptr<HostResolver::ServiceEndpointRequest>
+HostResolverManager::CreateServiceEndpointRequest(
+    url::SchemeHostPort scheme_host_port,
+    NetworkAnonymizationKey network_anonymization_key,
+    NetLogWithSource net_log,
+    ResolveHostParameters parameters,
+    ResolveContext* resolve_context) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(!invalidation_in_progress_);
+  DCHECK_EQ(resolve_context->GetTargetNetwork(), target_network_);
+  if (resolve_context) {
+    DCHECK(registered_contexts_.HasObserver(resolve_context));
+  }
+
+  return std::make_unique<ServiceEndpointRequestImpl>(
+      std::move(scheme_host_port), std::move(network_anonymization_key),
+      std::move(net_log), std::move(parameters),
+      resolve_context ? resolve_context->GetWeakPtr() : nullptr,
+      weak_ptr_factory_.GetWeakPtr(), tick_clock_);
 }
 
 void HostResolverManager::SetInsecureDnsClientEnabled(
@@ -821,7 +877,7 @@ HostCache::Entry HostResolverManager::ResolveLocally(
             NetLogEventType::HOST_RESOLVER_MANAGER_CACHE_HIT,
             [&] { return NetLogResults(resolved.value()); });
 
-        // TODO(crbug.com/1200908): Call StartBootstrapFollowup() if the Secure
+        // TODO(crbug.com/40178456): Call StartBootstrapFollowup() if the Secure
         // DNS Policy is kBootstrap and the result is not secure.  Note: A naive
         // implementation could cause an infinite loop if |resolved| always
         // expires or is evicted before the followup runs.
@@ -891,6 +947,24 @@ HostResolverManager::Job* HostResolverManager::AddJobWithoutRequest(
   auto& job = iterator->second;
   job->OnAddedToJobMap(iterator);
   return job.get();
+}
+
+void HostResolverManager::CreateAndStartJobForServiceEndpointRequest(
+    JobKey key,
+    std::deque<TaskType> tasks,
+    ServiceEndpointRequestImpl* request) {
+  CHECK(!tasks.empty());
+
+  auto jobit = jobs_.find(key);
+  if (jobit == jobs_.end()) {
+    Job* job = AddJobWithoutRequest(key, request->parameters().cache_usage,
+                                    request->host_cache(), std::move(tasks),
+                                    request->priority(), request->net_log());
+    job->AddServiceEndpointRequest(request);
+    job->RunNextTask();
+  } else {
+    jobit->second->AddServiceEndpointRequest(request);
+  }
 }
 
 HostCache::Entry HostResolverManager::ResolveAsIP(DnsQueryTypeSet query_types,
@@ -996,7 +1070,7 @@ void HostResolverManager::StartBootstrapFollowup(
 }
 
 std::optional<HostCache::Entry> HostResolverManager::ServeFromHosts(
-    base::StringPiece hostname,
+    std::string_view hostname,
     DnsQueryTypeSet query_types,
     bool default_family_due_to_no_ipv6,
     const std::deque<TaskType>& tasks) {
@@ -1053,7 +1127,7 @@ std::optional<HostCache::Entry> HostResolverManager::ServeFromHosts(
 }
 
 std::optional<HostCache::Entry> HostResolverManager::ServeLocalhost(
-    base::StringPiece hostname,
+    std::string_view hostname,
     DnsQueryTypeSet query_types,
     bool default_family_due_to_no_ipv6) {
   DCHECK(!query_types.Has(DnsQueryType::UNSPECIFIED));
@@ -1247,6 +1321,10 @@ void HostResolverManager::CreateTaskSequence(
 
   switch (job_key.source) {
     case HostResolverSource::ANY:
+      // Records DnsClient capability metrics, only when `source` is ANY. This
+      // is to avoid the metrics being skewed by mechanical requests of other
+      // source types.
+      RecordDnsClientCapabilityMetrics(dns_client_.get());
       // Force address queries with canonname to use HostResolverSystemTask to
       // counter poor CNAME support in DnsTask. See https://crbug.com/872665
       //
@@ -1518,7 +1596,7 @@ void HostResolverManager::AbortInsecureDnsTasks(int error, bool fallback_only) {
   dispatcher_->SetLimits(limits);
 }
 
-// TODO(crbug.com/995984): Consider removing this and its usage.
+// TODO(crbug.com/40641277): Consider removing this and its usage.
 void HostResolverManager::TryServingAllJobsFromHosts() {
   if (!dns_client_ || !dns_client_->GetEffectiveConfig())
     return;

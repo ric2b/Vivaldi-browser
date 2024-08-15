@@ -12,12 +12,11 @@
   #include <pthread.h>
 #endif
 
+#include <xnnpack/avgpool.h>
 #include <xnnpack/common.h>
 #include <xnnpack/config.h>
+#include <xnnpack/microfnptr.h>
 #include <xnnpack/microparams-init.h>
-#include <xnnpack/avgpool.h>
-#include <xnnpack/vunary.h>
-
 
 static struct xnn_avgpool_config f16_avgpool_config = {0};
 static struct xnn_avgpool_config f32_avgpool_config = {0};
@@ -128,14 +127,7 @@ static void init_f32_avgpool_config(void) {
     f32_avgpool_config.primary_tile = 9;
     f32_avgpool_config.incremental_tile = 8;
     f32_avgpool_config.channel_tile = 1;
-  #elif XNN_ARCH_RISCV
-    f32_avgpool_config.unipass = (xnn_avgpool_unipass_ukernel_fn) xnn_f32_avgpool_minmax_ukernel_9x__scalar_c1;
-    f32_avgpool_config.multipass = (xnn_avgpool_multipass_ukernel_fn) xnn_f32_avgpool_minmax_ukernel_9p8x__scalar_c1;
-    f32_avgpool_config.init.f32 = xnn_init_f32_scaleminmax_scalar_params;
-    f32_avgpool_config.primary_tile = 9;
-    f32_avgpool_config.incremental_tile = 8;
-    f32_avgpool_config.channel_tile = 1;
-  #elif XNN_ARCH_PPC64
+  #else
     f32_avgpool_config.unipass = (xnn_avgpool_unipass_ukernel_fn) xnn_f32_avgpool_minmax_ukernel_9x__scalar_c1;
     f32_avgpool_config.multipass = (xnn_avgpool_multipass_ukernel_fn) xnn_f32_avgpool_minmax_ukernel_9p8x__scalar_c1;
     f32_avgpool_config.init.f32 = xnn_init_f32_scaleminmax_scalar_params;
@@ -178,28 +170,7 @@ static void init_qu8_avgpool_config(void) {
     qu8_avgpool_config.primary_tile = 9;
     qu8_avgpool_config.incremental_tile = 8;
     qu8_avgpool_config.channel_tile = 8;
-  #elif XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
-    qu8_avgpool_config.unipass = (xnn_avgpool_unipass_ukernel_fn) xnn_qu8_avgpool_minmax_fp32_ukernel_9x__scalar_imagic_c1;
-    qu8_avgpool_config.multipass = (xnn_avgpool_multipass_ukernel_fn) xnn_qu8_avgpool_minmax_fp32_ukernel_9p8x__scalar_imagic_c1;
-    qu8_avgpool_config.init.qu8 = xnn_init_qu8_avgpool_minmax_fp32_scalar_imagic_params;
-    qu8_avgpool_config.primary_tile = 9;
-    qu8_avgpool_config.incremental_tile = 8;
-    qu8_avgpool_config.channel_tile = 1;
-  #elif XNN_ARCH_WASM
-    qu8_avgpool_config.unipass = (xnn_avgpool_unipass_ukernel_fn) xnn_qu8_avgpool_minmax_fp32_ukernel_9x__scalar_imagic_c1;
-    qu8_avgpool_config.multipass = (xnn_avgpool_multipass_ukernel_fn) xnn_qu8_avgpool_minmax_fp32_ukernel_9p8x__scalar_imagic_c1;
-    qu8_avgpool_config.init.qu8 = xnn_init_qu8_avgpool_minmax_fp32_scalar_imagic_params;
-    qu8_avgpool_config.primary_tile = 9;
-    qu8_avgpool_config.incremental_tile = 8;
-    qu8_avgpool_config.channel_tile = 1;
-  #elif XNN_ARCH_RISCV
-    qu8_avgpool_config.unipass = (xnn_avgpool_unipass_ukernel_fn) xnn_qu8_avgpool_minmax_fp32_ukernel_9x__scalar_imagic_c1;
-    qu8_avgpool_config.multipass = (xnn_avgpool_multipass_ukernel_fn) xnn_qu8_avgpool_minmax_fp32_ukernel_9p8x__scalar_imagic_c1;
-    qu8_avgpool_config.init.qu8 = xnn_init_qu8_avgpool_minmax_fp32_scalar_imagic_params;
-    qu8_avgpool_config.primary_tile = 9;
-    qu8_avgpool_config.incremental_tile = 8;
-    qu8_avgpool_config.channel_tile = 1;
-  #elif XNN_ARCH_PPC64
+  #else
     qu8_avgpool_config.unipass = (xnn_avgpool_unipass_ukernel_fn) xnn_qu8_avgpool_minmax_fp32_ukernel_9x__scalar_imagic_c1;
     qu8_avgpool_config.multipass = (xnn_avgpool_multipass_ukernel_fn) xnn_qu8_avgpool_minmax_fp32_ukernel_9p8x__scalar_imagic_c1;
     qu8_avgpool_config.init.qu8 = xnn_init_qu8_avgpool_minmax_fp32_scalar_imagic_params;

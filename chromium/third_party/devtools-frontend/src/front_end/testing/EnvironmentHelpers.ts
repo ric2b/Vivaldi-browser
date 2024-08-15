@@ -113,22 +113,20 @@ const REGISTERED_EXPERIMENTS = [
   'timeline-show-all-events',
   'timeline-v8-runtime-call-stats',
   'timeline-invalidation-tracking',
-  'ignore-list-js-frames-on-timeline',
   Root.Runtime.ExperimentName.INSTRUMENTATION_BREAKPOINTS,
   'css-type-component-length-deprecate',
   Root.Runtime.ExperimentName.STYLES_PANE_CSS_CHANGES,
-  Root.Runtime.ExperimentName.TIMELINE_AS_CONSOLE_PROFILE_RESULT_PANEL,
   Root.Runtime.ExperimentName.HEADER_OVERRIDES,
   Root.Runtime.ExperimentName.HIGHLIGHT_ERRORS_ELEMENTS_PANEL,
-  Root.Runtime.ExperimentName.SET_ALL_BREAKPOINTS_EAGERLY,
-  'evaluate-expressions-with-source-maps',
   Root.Runtime.ExperimentName.USE_SOURCE_MAP_SCOPES,
   'font-editor',
   Root.Runtime.ExperimentName.NETWORK_PANEL_FILTER_BAR_REDESIGN,
   Root.Runtime.ExperimentName.INDENTATION_MARKERS_TEMP_DISABLE,
   Root.Runtime.ExperimentName.AUTOFILL_VIEW,
-  Root.Runtime.ExperimentName.SAVE_AND_LOAD_TRACE_WITH_ANNOTATIONS,
-  Root.Runtime.ExperimentName.TIMELINE_TRACK_CONFIGURATION,
+  Root.Runtime.ExperimentName.PERF_PANEL_ANNOTATIONS,
+  Root.Runtime.ExperimentName.TIMELINE_EXTENSIONS,
+  Root.Runtime.ExperimentName.TIMELINE_EXECUTE_OLD_ENGINE,
+  Root.Runtime.ExperimentName.TIMELINE_DEBUG_MODE,
 ];
 
 export async function initializeGlobalVars({reset = true} = {}) {
@@ -199,6 +197,7 @@ export async function initializeGlobalVars({reset = true} = {}) {
     createSettingValue(Common.Settings.SettingCategory.SOURCES, 'show-whitespaces-in-editor', 'none'),
     createSettingValue(Common.Settings.SettingCategory.SOURCES, 'text-editor-autocompletion', true),
     createSettingValue(Common.Settings.SettingCategory.SOURCES, 'text-editor-auto-detect-indent', false),
+    createSettingValue(Common.Settings.SettingCategory.SOURCES, 'text-editor-bracket-closing', true),
     createSettingValue(Common.Settings.SettingCategory.SOURCES, 'text-editor-bracket-matching', true),
     createSettingValue(Common.Settings.SettingCategory.SOURCES, 'text-editor-code-folding', true),
     createSettingValue(Common.Settings.SettingCategory.SOURCES, 'text-editor-indent', '    '),
@@ -290,6 +289,10 @@ export async function initializeGlobalVars({reset = true} = {}) {
   for (const experimentName of REGISTERED_EXPERIMENTS) {
     Root.Runtime.experiments.register(experimentName, '');
   }
+
+  Root.Runtime.experiments.enableExperimentsByDefault([
+    Root.Runtime.ExperimentName.TIMELINE_EXECUTE_OLD_ENGINE,
+  ]);
 
   // Dynamically import UI after the rest of the environment is set up, otherwise it will fail.
   UI = await import('../ui/legacy/legacy.js');

@@ -21,7 +21,6 @@
 <translation id="2470702053775288986">ปิดใช้ส่วนขยายที่ไม่สนับสนุนแล้ว</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">เปิดการใช้งานอีกครั้ง</translation>
-<translation id="2809586584051668049">และอีก <ph name="NUMBER_ADDITIONAL_DISABLED" /> รายการ</translation>
 <translation id="2850541429955027218">เพิ่มธีม</translation>
 <translation id="2861941300086904918">ตัวจัดการความปลอดภัยไคลเอ็นต์ในระบบ</translation>
 <translation id="2932883381142163287">รายงานการละเมิด</translation>
@@ -30,7 +29,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3222066309010235055">Prerender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">เลือกไดเรกทอรีหลักของส่วนขยายที่จะแพค หากคุณต้องการอัปเดตส่วนขยาย ให้เลือกไฟล์กุญแจส่วนตัวที่จะใช้ซ้ำด้วย</translation>
-<translation id="3288047731229977326">ส่วนขยายที่ทำงานอยู่ในโหมดนักพัฒนาซอฟต์แวร์อาจเป็นอันตรายต่อคอมพิวเตอร์ของคุณ หากคุณไม่ใช่นักพัฒนาซอฟต์แวร์ คุณควรปิดส่วนขยายที่ทำงานอยู่ในโหมดนักพัฒนาซอฟต์แวร์เพื่อรักษาความปลอดภัย</translation>
 <translation id="3378572629723696641">ส่วนขยายนี้อาจเสียหาย</translation>
 <translation id="3678156199662914018">ส่วนขยาย: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">ซ่อมแอป</translation>
@@ -41,7 +39,6 @@
 <translation id="4087089424473531098">สร้างส่วนขยายแล้ว:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">ปิดส่วนขยายโหมดนักพัฒนาซอฟต์แวร์</translation>
 <translation id="4100839878934973028">โปรแกรมอื่นในคอมพิวเตอร์ของคุณเพิ่มแอปพลิเคชันที่อาจเปลี่ยนวิธีการทำงานของ Vivaldi</translation>
 <translation id="4176463684765177261">ปิดการใช้งานแล้ว</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (แสดงอยู่ <ph name="NUM_KILOBYTES_LIVE" />K)</translation>
@@ -54,7 +51,6 @@
 <translation id="5143374789336132547">ส่วนขยาย "<ph name="EXTENSION_NAME" />" ได้เปลี่ยนหน้าที่จะแสดงเมื่อคุณคลิกปุ่มหน้าแรก</translation>
 <translation id="5233231016133573565">รหัสดำเนินการ</translation>
 <translation id="52912272896845572">ไฟล์กุญแจส่วนตัวไม่ถูกต้อง</translation>
-<translation id="5301954838959518834">ตกลง เข้าใจแล้ว</translation>
 <translation id="5362741141255528695">เลือกไฟล์กุญแจส่วนตัว</translation>
 <translation id="5485102783864353244">เพิ่มแอป</translation>
 <translation id="5521078259930077036">นี่คือ "หน้าแรก" ที่คุณต้องการใช่ไหม</translation>

@@ -59,7 +59,13 @@ public:
 
     sk_sp<ComputePipeline> findOrCreateComputePipeline(const ComputePipelineDesc&);
 
-    sk_sp<Texture> findOrCreateScratchTexture(SkISize, const TextureInfo&, skgpu::Budgeted);
+    sk_sp<Texture> findOrCreateScratchTexture(SkISize,
+                                              const TextureInfo&,
+                                              std::string_view label,
+                                              skgpu::Budgeted);
+    // TODO: Consider having this take a label that is provided by the client. If we do this,
+    // should we be setting the label on the backend object or do we assume the client already did
+    // that if they wanted to?
     virtual sk_sp<Texture> createWrappedTexture(const BackendTexture&) = 0;
 
     sk_sp<Texture> findOrCreateDepthStencilAttachment(SkISize dimensions,
@@ -68,11 +74,12 @@ public:
     sk_sp<Texture> findOrCreateDiscardableMSAAAttachment(SkISize dimensions,
                                                          const TextureInfo&);
 
-    sk_sp<Buffer> findOrCreateBuffer(size_t size, BufferType type, AccessPattern);
+    sk_sp<Buffer> findOrCreateBuffer(size_t size,
+                                     BufferType type,
+                                     AccessPattern,
+                                     std::string_view label);
 
-    sk_sp<Sampler> findOrCreateCompatibleSampler(const SkSamplingOptions&,
-                                                 SkTileMode xTileMode,
-                                                 SkTileMode yTileMode);
+    sk_sp<Sampler> findOrCreateCompatibleSampler(const SamplerDesc&);
 
     BackendTexture createBackendTexture(SkISize dimensions, const TextureInfo&);
     void deleteBackendTexture(const BackendTexture&);
@@ -120,16 +127,20 @@ private:
                                                            const GraphicsPipelineDesc&,
                                                            const RenderPassDesc&) = 0;
     virtual sk_sp<ComputePipeline> createComputePipeline(const ComputePipelineDesc&) = 0;
-    virtual sk_sp<Texture> createTexture(SkISize, const TextureInfo&, skgpu::Budgeted) = 0;
-    virtual sk_sp<Buffer> createBuffer(size_t size, BufferType type, AccessPattern) = 0;
-
-    virtual sk_sp<Sampler> createSampler(const SkSamplingOptions&,
-                                         SkTileMode xTileMode,
-                                         SkTileMode yTileMode) = 0;
+    virtual sk_sp<Texture> createTexture(SkISize,
+                                         const TextureInfo&,
+                                         std::string_view label,
+                                         skgpu::Budgeted) = 0;
+    virtual sk_sp<Buffer> createBuffer(size_t size,
+                                       BufferType type,
+                                       AccessPattern,
+                                       std::string_view label) = 0;
+    virtual sk_sp<Sampler> createSampler(const SamplerDesc&) = 0;
 
     sk_sp<Texture> findOrCreateTextureWithKey(SkISize dimensions,
                                               const TextureInfo& info,
                                               const GraphiteResourceKey& key,
+                                              std::string_view label,
                                               skgpu::Budgeted);
 
     virtual BackendTexture onCreateBackendTexture(SkISize dimensions, const TextureInfo&) = 0;

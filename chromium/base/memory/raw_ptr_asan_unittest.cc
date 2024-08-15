@@ -4,7 +4,7 @@
 
 #include "partition_alloc/partition_alloc_buildflags.h"
 
-#if BUILDFLAG(USE_ASAN_BACKUP_REF_PTR)
+#if PA_BUILDFLAG(USE_ASAN_BACKUP_REF_PTR)
 
 #include <sanitizer/asan_interface.h>
 #include <thread>
@@ -304,7 +304,7 @@ TEST_F(AsanBackupRefPtrTest, BoundArgumentsNotProtected) {
       [](AsanStruct* outer_ptr, base::OnceClosure inner_callback) {
         std::move(inner_callback).Run();
         // This will never be executed, as we will crash in inner_callback
-        NOTREACHED();
+        NOTREACHED_IN_MIGRATION();
       },
       base::Unretained(protected_ptr),
       base::BindOnce(
@@ -450,4 +450,4 @@ TEST_F(AsanBackupRefPtrTest, DanglingUnretained) {
 
 }  // namespace base::internal
 
-#endif  // BUILDFLAG(USE_ASAN_BACKUP_REF_PTR)
+#endif  // PA_BUILDFLAG(USE_ASAN_BACKUP_REF_PTR)

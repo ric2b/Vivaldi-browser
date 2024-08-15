@@ -49,8 +49,8 @@ interface ShadowRoot : DocumentFragment {
     [Affects=Nothing, MeasureAs=ElementGetHTML, RaisesException, RuntimeEnabled=ElementGetHTML] HTMLString getHTML(optional GetHTMLOptions options = {});
 
     // The serializable attribute controls whether the shadow root will be
-    // serialized by getHTML({includeShadowRoots:true}).
-    [RuntimeEnabled=ElementGetHTML] attribute boolean serializable;
+    // serialized by getHTML({serializableShadowRoots:true}).
+    [RuntimeEnabled=ElementGetHTML] readonly attribute boolean serializable;
 
     // The clonable attribute controls whether the shadow root will be
     // cloned by DOM cloning operations.

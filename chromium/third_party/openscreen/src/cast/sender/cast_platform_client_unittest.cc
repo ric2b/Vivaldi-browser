@@ -48,8 +48,8 @@ class CastPlatformClientTest : public ::testing::Test {
   MockSocketErrorHandler mock_error_handler_;
   VirtualConnectionRouter router_;
   FakeClock clock_{Clock::now()};
-  FakeTaskRunner task_runner_{&clock_};
-  CastPlatformClient platform_client_{&router_, &FakeClock::now, task_runner_};
+  FakeTaskRunner task_runner_{clock_};
+  CastPlatformClient platform_client_{router_, &FakeClock::now, task_runner_};
   ReceiverInfo receiver_;
 };
 

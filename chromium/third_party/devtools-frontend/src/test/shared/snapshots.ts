@@ -4,23 +4,12 @@
 
 import {assert} from 'chai';
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'fs';
-import {basename, dirname, extname, join, normalize} from 'path';
+import {dirname} from 'path';
 
-import {getTestRunnerConfigSetting} from '../conductor/test_runner_config.js';
+import {GEN_DIR, rebase, SOURCE_ROOT} from '../conductor/paths.js';
+import {TestConfig} from '../conductor/test_config.js';
 
-const CWD = getTestRunnerConfigSetting<string>('cwd', '');
-const TEST_SUITE_SOURCE_DIR = getTestRunnerConfigSetting<string>('test-suite-source-dir', '');
-const TEST_SUITE_PATH = getTestRunnerConfigSetting<string>('test-suite-path', '');
-if (!CWD || !TEST_SUITE_SOURCE_DIR) {
-  throw new Error('--cwd and --test-suite-source-dir must be provided when running the snapshot tests.');
-}
-if (!TEST_SUITE_PATH) {
-  throw new Error('--test-suite-path must be specified');
-}
-
-const SNAPSHOTS_DIR = join(CWD, TEST_SUITE_SOURCE_DIR, 'snapshots');
-
-const UPDATE_SNAPSHOTS = Boolean(process.env['UPDATE_SNAPSHOTS']);
+const UPDATE_SNAPSHOTS = Boolean(process.env['UPDATE_SNAPSHOTS']) || TestConfig.onDiff.update;
 
 let currentTestPath: string|undefined;
 let currentTestTitle: string|undefined;
@@ -45,7 +34,7 @@ beforeEach(function() {
       currentTestTitle = currentTestTitle.slice(0, -match[1].length);
     }
 
-    currentTestPath = testPath && normalize(testPath.trim());
+    currentTestPath = this.currentTest.file;
 
     snapshotIndex = 0;
   }
@@ -61,7 +50,8 @@ let currentSnapshotPath: string|undefined;
 let currentSnapshot: Record<string, unknown> = {};
 
 const saveSnapshotsIfTaken = () => {
-  if (currentSnapshotPath !== undefined && currentSnapshot !== undefined) {
+  if (currentSnapshotPath !== undefined && currentSnapshot !== undefined &&
+      (!Array.isArray(TestConfig.onDiff.update) || TestConfig.onDiff.update.includes(currentSnapshotPath))) {
     mkdirSync(dirname(currentSnapshotPath), {recursive: true});
     writeFileSync(currentSnapshotPath, JSON.stringify(currentSnapshot, undefined, 2));
   }
@@ -78,7 +68,7 @@ const restoreSnapshots = () => {
 };
 
 const getSnapshotPath = (testPath: string) => {
-  return join(SNAPSHOTS_DIR, dirname(testPath), `${basename(testPath, extname(testPath))}.json`);
+  return rebase(GEN_DIR, SOURCE_ROOT, testPath, '.json');
 };
 
 const getOrUpdateSnapshot = (value: unknown, options: SnapshotOptions) => {

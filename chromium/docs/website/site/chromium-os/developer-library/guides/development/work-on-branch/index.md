@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: work-on-branch
 title: ChromiumOS Guide to Working on Branches
 ---
@@ -139,7 +139,7 @@ repo init -u <URL> -b <branchname> [-g minilayout] [--reference /path/to/existin
 repo sync
 ```
 
-Example (See [developer_guide.md] if you are doing an internal build and
+Example (See the [developer guide][developer-guide] if you are doing an internal build and
 replace the manifest.git link with the appropriate one).
 
 ```bash
@@ -268,10 +268,9 @@ or even months later as a weird error in a seemingly unrelated location.
 
 This is why we only support the methods listed above.
 
-[contributing]: ./contributing.md#Getting-Code_Review
+[contributing]: /chromium-os/developer-library/guides/development/contributing/#Getting-Code_Review
 [drover]: https://dev.chromium.org/developers/how-tos/drover
-[developer-guide]: ./developer_guide.md
+[developer-guide]: /chromium-os/developer-library/guides/development/developer-guide/
 [experimental-branches]: https://dev.chromium.org/developers/experimental-branches
-[developer_guide.md]: developer_guide.md
 [merge request]: https://chromium.googlesource.com/chromium/src/+/HEAD/docs/process/merge_request.md
 [ToT]: /glossary

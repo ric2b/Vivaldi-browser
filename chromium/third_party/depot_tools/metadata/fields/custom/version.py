@@ -6,7 +6,7 @@
 import os
 import re
 import sys
-from typing import Union
+from typing import Optional
 
 _THIS_DIR = os.path.abspath(os.path.dirname(__file__))
 # The repo's root directory.
@@ -19,21 +19,20 @@ import metadata.fields.field_types as field_types
 import metadata.fields.util as util
 import metadata.validation_result as vr
 
-_PATTERN_NOT_APPLICABLE = re.compile(r"^N ?\/ ?A$", re.IGNORECASE)
 
-
-def is_unknown(value: str) -> bool:
+def version_is_unknown(value: str) -> bool:
     """Returns whether the value denotes the version being unknown."""
-    return (value == "0" or util.matches(_PATTERN_NOT_APPLICABLE, value)
+    return (value == "0" or util.is_not_applicable(value)
             or util.is_unknown(value))
 
 
-class VersionField(field_types.MetadataField):
+class VersionField(field_types.SingleLineTextField):
     """Custom field for the package version."""
-    def __init__(self):
-        super().__init__(name="Version", one_liner=True)
 
-    def validate(self, value: str) -> Union[vr.ValidationResult, None]:
+    def __init__(self):
+        super().__init__(name="Version")
+
+    def validate(self, value: str) -> Optional[vr.ValidationResult]:
         """Checks the given value is acceptable - there must be at least
         one non-whitespace character, and "N/A" is preferred over "0" if
         the version is unknown.
@@ -55,3 +54,16 @@ class VersionField(field_types.MetadataField):
                 ])
 
         return None
+
+    def narrow_type(self, value: str) -> Optional[str]:
+        value = super().narrow_type(value)
+        if not value:
+            return None
+
+        if version_is_unknown(value):
+            return None
+
+        if util.is_known_invalid_value(value):
+            return None
+
+        return value

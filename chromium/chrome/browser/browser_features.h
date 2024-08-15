@@ -33,13 +33,29 @@ extern const base::FeatureParam<bool>
 
 BASE_DECLARE_FEATURE(kDestroyProfileOnBrowserClose);
 BASE_DECLARE_FEATURE(kDestroySystemProfiles);
+
 BASE_DECLARE_FEATURE(kDevToolsConsoleInsights);
 extern const base::FeatureParam<std::string> kDevToolsConsoleInsightsAidaScope;
 extern const base::FeatureParam<std::string>
     kDevToolsConsoleInsightsAidaEndpoint;
 extern const base::FeatureParam<std::string> kDevToolsConsoleInsightsModelId;
 extern const base::FeatureParam<double> kDevToolsConsoleInsightsTemperature;
+extern const base::FeatureParam<bool> kDevToolsConsoleInsightsOptIn;
+
 BASE_DECLARE_FEATURE(kDevToolsConsoleInsightsDogfood);
+extern const base::FeatureParam<std::string>
+    kDevToolsConsoleInsightsDogfoodAidaScope;
+extern const base::FeatureParam<std::string>
+    kDevToolsConsoleInsightsDogfoodAidaEndpoint;
+extern const base::FeatureParam<std::string>
+    kDevToolsConsoleInsightsDogfoodModelId;
+extern const base::FeatureParam<double>
+    kDevToolsConsoleInsightsDogfoodTemperature;
+extern const base::FeatureParam<bool> kDevToolsConsoleInsightsDogfoodOptIn;
+
+BASE_DECLARE_FEATURE(kDevToolsConsoleInsightsSettingVisible);
+extern const base::FeatureParam<std::string>
+    kDevToolsConsoleInsightsSettingVisibleBlockedReason;
 BASE_DECLARE_FEATURE(kDevToolsSharedProcessInfobar);
 BASE_DECLARE_FEATURE(kDevToolsTabTarget);
 BASE_DECLARE_FEATURE(kDevToolsVeLogging);
@@ -50,6 +66,7 @@ BASE_DECLARE_FEATURE(kDoubleTapToZoomInTabletMode);
 
 #if BUILDFLAG(IS_WIN)
 BASE_DECLARE_FEATURE(kEnableDPAPIEncryptionProvider);
+BASE_DECLARE_FEATURE(kRegisterAppBoundEncryptionProvider);
 #endif
 
 BASE_DECLARE_FEATURE(kFedCmWithoutThirdPartyCookies);
@@ -80,10 +97,12 @@ const base::FeatureParam<int>
     kNewTabPagePreconnectStartDelayOnMouseHoverByMiliSeconds{
         &features::kNewTabPageTriggerForPrerender2,
         "preconnect_start_delay_on_mouse_hover_ms", 100};
-
-#if BUILDFLAG(IS_WIN)
-BASE_DECLARE_FEATURE(kNoAppCompatClearInChildren);
-#endif
+const base::FeatureParam<bool> kPrerenderNewTabPageOnMousePressedTrigger{
+    &features::kNewTabPageTriggerForPrerender2,
+    "prerender_new_tab_page_on_mouse_pressed_trigger", false};
+const base::FeatureParam<bool> kPrerenderNewTabPageOnMouseHoverTrigger{
+    &features::kNewTabPageTriggerForPrerender2,
+    "prerender_new_tab_page_on_mouse_hover_trigger", false};
 
 #if BUILDFLAG(IS_WIN)
 BASE_DECLARE_FEATURE(kNoPreReadMainDll);
@@ -93,7 +112,6 @@ BASE_DECLARE_FEATURE(kNoPreReadMainDll);
 BASE_DECLARE_FEATURE(kNotificationOneTapUnsubscribe);
 #endif
 
-BASE_DECLARE_FEATURE(kOmniboxTriggerForNoStatePrefetch);
 BASE_DECLARE_FEATURE(kOmniboxTriggerForPrerender2);
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -132,10 +150,7 @@ BASE_DECLARE_FEATURE(kTriggerNetworkDataMigration);
 BASE_DECLARE_FEATURE(kTabCaptureBlueBorderCrOS);
 #endif
 
-#if BUILDFLAG(IS_WIN)
 BASE_DECLARE_FEATURE(kUseOsCryptAsyncForCookieEncryption);
-#endif
-
 BASE_DECLARE_FEATURE(kWebUsbDeviceDetection);
 
 }  // namespace features

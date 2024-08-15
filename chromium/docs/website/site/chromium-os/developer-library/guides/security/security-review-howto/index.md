@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: security-review-howto
 title: ChromeOS security review HOWTO
 ---
@@ -401,12 +401,12 @@ These are our security principles:
     otherwise open it up to additional exposure. There is tension here to
     "secure by default" and *don't scapegoat the user* - this is intentional :-D
 
-[sandboxing guide]: sandboxing.md
+[sandboxing guide]: /chromium-os/developer-library/guides/development/sandboxing/
 [crbug.com]: https://crbug.com
 [chromeos-security@google.com]: mailto:chromeos-security@google.com
 [office hours]: https://goto.google.com/cros-security-office-hours
 [chromiumdash]: https://chromiumdash.appspot.com/schedule
-[fuzzing documentation]: testing/fuzzing.md
+[fuzzing documentation]: /chromium-os/developer-library/guides/testing/fuzzing/
 [BaseMessageLoop]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/libbrillo/brillo/message_loops/base_message_loop.h
 [newer list of cryptographic right answers]: http://latacora.singles/2018/04/03/cryptographic-right-answers.html
 [older reference of cryptographic right answers]: https://www.daemonology.net/blog/2009-06-11-cryptographic-right-answers.html

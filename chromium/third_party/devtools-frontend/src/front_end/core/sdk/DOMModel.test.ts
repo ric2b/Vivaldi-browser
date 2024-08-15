@@ -5,19 +5,16 @@
 import type * as Protocol from '../../generated/protocol.js';
 import {createTarget} from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
-import {assertNotNullOrUndefined} from '../platform/platform.js';
 
 import * as SDK from './sdk.js';
-
-const {assert} = chai;
 
 describeWithMockConnection('DOMModel', () => {
   it('updates the document on an documentUpdate event if there already is a previous document', async () => {
     const parentTarget = createTarget();
     const target = createTarget({parentTarget});
     const domModel = target.model(SDK.DOMModel.DOMModel);
-    assertNotNullOrUndefined(domModel);
-    assertNotNullOrUndefined(domModel.agent);
+    assert.exists(domModel);
+    assert.exists(domModel.agent);
 
     domModel.setDocumentForTest({nodeId: 0} as Protocol.DOM.Node);
     const spy = sinon.spy(domModel.agent, 'invoke_getDocument');
@@ -33,8 +30,8 @@ describeWithMockConnection('DOMModel', () => {
     const parentTarget = createTarget();
     const target = createTarget({parentTarget});
     const domModel = target.model(SDK.DOMModel.DOMModel);
-    assertNotNullOrUndefined(domModel);
-    assertNotNullOrUndefined(domModel.agent);
+    assert.exists(domModel);
+    assert.exists(domModel.agent);
 
     domModel.setDocumentForTest(null);
     const spy = sinon.spy(domModel.agent, 'invoke_getDocument');
@@ -54,7 +51,7 @@ describeWithMockConnection('DOMModel', () => {
         target = createTarget();
 
         const modelBeforeAssertion = target.model(SDK.DOMModel.DOMModel);
-        assertNotNullOrUndefined(modelBeforeAssertion);
+        assert.exists(modelBeforeAssertion);
         model = modelBeforeAssertion;
       });
 

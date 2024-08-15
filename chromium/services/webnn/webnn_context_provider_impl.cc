@@ -17,6 +17,7 @@
 #if BUILDFLAG(IS_WIN)
 #include <wrl.h>
 
+#include "base/notreached.h"
 #include "services/webnn/dml/adapter.h"
 #include "services/webnn/dml/command_queue.h"
 #include "services/webnn/dml/command_recorder.h"
@@ -29,7 +30,11 @@
 #endif
 
 #if BUILDFLAG(WEBNN_USE_TFLITE)
+#if BUILDFLAG(IS_CHROMEOS)
+#include "services/webnn/tflite/context_impl_cros.h"
+#else
 #include "services/webnn/tflite/context_impl.h"
+#endif
 #endif
 
 namespace webnn {
@@ -46,10 +51,10 @@ using webnn::mojom::CreateContextOptionsPtr;
 using webnn::mojom::WebNNContextProvider;
 
 #if BUILDFLAG(IS_WIN)
+constexpr DML_FEATURE_LEVEL kMinDMLFeatureLevelForWebNN = DML_FEATURE_LEVEL_4_0;
+
 base::expected<scoped_refptr<dml::Adapter>, mojom::ErrorPtr> GetDmlGpuAdapter(
     gpu::SharedContextState* shared_context_state) {
-  constexpr DML_FEATURE_LEVEL kMinDMLFeatureLevelForWebNN =
-      DML_FEATURE_LEVEL_4_0;
   if (!shared_context_state) {
     // Unit tests do not pass in a SharedContextState, since a reference to
     // a GpuServiceImpl must be initialized to obtain a SharedContextState.
@@ -76,31 +81,47 @@ base::expected<scoped_refptr<dml::Adapter>, mojom::ErrorPtr> GetDmlGpuAdapter(
   ComPtr<IDXGIAdapter> dxgi_adapter;
   // Asking for an adapter from IDXGIDevice is always expected to succeed.
   CHECK_EQ(dxgi_device->GetAdapter(&dxgi_adapter), S_OK);
-  return dml::Adapter::GetInstance(kMinDMLFeatureLevelForWebNN,
-                                   std::move(dxgi_adapter));
+  return dml::Adapter::GetGpuInstance(kMinDMLFeatureLevelForWebNN,
+                                      std::move(dxgi_adapter));
 }
 #endif
 
 }  // namespace
 
 WebNNContextProviderImpl::WebNNContextProviderImpl(
+#if !BUILDFLAG(IS_CHROMEOS)
     scoped_refptr<gpu::SharedContextState> shared_context_state,
-    gpu::GpuFeatureInfo gpu_feature_info)
+    gpu::GpuFeatureInfo gpu_feature_info
+#endif
+    )
+#if !BUILDFLAG(IS_CHROMEOS)
     : shared_context_state_(std::move(shared_context_state)),
-      gpu_feature_info_(std::move(gpu_feature_info)) {}
+      gpu_feature_info_(std::move(gpu_feature_info))
+#endif
+{
+}
 
 WebNNContextProviderImpl::~WebNNContextProviderImpl() = default;
 
 // static
 void WebNNContextProviderImpl::Create(
-    mojo::PendingReceiver<WebNNContextProvider> receiver,
+    mojo::PendingReceiver<WebNNContextProvider> receiver
+#if !BUILDFLAG(IS_CHROMEOS)
+    ,
     scoped_refptr<gpu::SharedContextState> shared_context_state,
-    gpu::GpuFeatureInfo gpu_feature_info) {
+    gpu::GpuFeatureInfo gpu_feature_info
+#endif
+) {
+#if BUILDFLAG(IS_CHROMEOS)
+  mojo::MakeSelfOwnedReceiver<WebNNContextProvider>(
+      std::make_unique<WebNNContextProviderImpl>(), std::move(receiver));
+#else
   CHECK_NE(shared_context_state, nullptr);
   mojo::MakeSelfOwnedReceiver<WebNNContextProvider>(
       std::make_unique<WebNNContextProviderImpl>(
           std::move(shared_context_state), std::move(gpu_feature_info)),
       std::move(receiver));
+#endif
 }
 
 // static
@@ -119,7 +140,10 @@ void WebNNContextProviderImpl::CreateForTesting(
 
   mojo::MakeSelfOwnedReceiver<WebNNContextProvider>(
       std::make_unique<WebNNContextProviderImpl>(
-          /*shared_context_state=*/nullptr, std::move(gpu_feature_info)),
+#if !BUILDFLAG(IS_CHROMEOS)
+          /*shared_context_state=*/nullptr, std::move(gpu_feature_info)
+#endif
+              ),
       std::move(receiver));
 }
 
@@ -145,24 +169,57 @@ void WebNNContextProviderImpl::CreateWebNNContext(
     return;
   }
 #if BUILDFLAG(WEBNN_USE_TFLITE)
+  // TODO: crbug.com/41486052 - Create the TFLite context using `options`.
+
   // The remote sent to the renderer.
   mojo::PendingRemote<mojom::WebNNContext> blink_remote;
-  impls_.push_back(base::WrapUnique<WebNNContextImpl>(new tflite::ContextImpl(
-      blink_remote.InitWithNewPipeAndPassReceiver(), this)));
+  auto receiver = blink_remote.InitWithNewPipeAndPassReceiver();
+#if BUILDFLAG(IS_CHROMEOS)
+  auto* context_impl = new tflite::ContextImplCrOS(std::move(receiver), this);
+#else
+  auto* context_impl =
+      new tflite::ContextImpl(std::move(receiver), this, std::move(options));
+#endif
+  impls_.push_back(base::WrapUnique<WebNNContextImpl>(context_impl));
   std::move(callback).Run(
       mojom::CreateContextResult::NewContextRemote(std::move(blink_remote)));
 #elif BUILDFLAG(IS_WIN)
+  // TODO: crbug.com/325612086 - Consider using TFLite to support CPU contexts
+  // on Windows.
+  if (options->device == mojom::CreateContextOptions::Device::kCpu) {
+    std::move(callback).Run(ToError<mojom::CreateContextResult>(
+        mojom::Error::Code::kNotSupportedError,
+        "The cpu device is not supported."));
+    LOG(ERROR) << "[WebNN] Service is not supported on CPU on Windows.";
+    return;
+  }
+
   DCHECK(gpu_feature_info_.IsInitialized());
   if (gpu_feature_info_.status_values[gpu::GPU_FEATURE_TYPE_WEBNN] !=
       gpu::kGpuFeatureStatusEnabled) {
     std::move(callback).Run(ToError<mojom::CreateContextResult>(
         mojom::Error::Code::kNotSupportedError,
         "WebNN is not compatible with GPU."));
-    DLOG(ERROR) << "WebNN is not compatible with GPU.";
+    LOG(ERROR) << "[WebNN] is not compatible with GPU.";
     return;
   }
 
-  auto adapter_creation_result = GetDmlGpuAdapter(shared_context_state_.get());
+  // Get the `Adapter` instance which is created for the adapter according to
+  // the device type. At the current stage, all `ContextImpl` share one instance
+  // for one device type.
+  base::expected<scoped_refptr<dml::Adapter>, mojom::ErrorPtr>
+      adapter_creation_result;
+  switch (options->device) {
+    case mojom::CreateContextOptions::Device::kCpu:
+      NOTREACHED_NORETURN();
+    case mojom::CreateContextOptions::Device::kGpu:
+      adapter_creation_result = GetDmlGpuAdapter(shared_context_state_.get());
+      break;
+    case mojom::CreateContextOptions::Device::kNpu:
+      adapter_creation_result =
+          dml::Adapter::GetNpuInstance(kMinDMLFeatureLevelForWebNN);
+      break;
+  }
   if (!adapter_creation_result.has_value()) {
     std::move(callback).Run(mojom::CreateContextResult::NewError(
         std::move(adapter_creation_result.error())));
@@ -174,10 +231,10 @@ void WebNNContextProviderImpl::CreateWebNNContext(
       dml::CommandRecorder::Create(adapter->command_queue(),
                                    adapter->dml_device());
   if (!command_recorder) {
-    std::move(callback).Run(ToError<mojom::CreateContextResult>(
-        mojom::Error::Code::kUnknownError,
-        "Failed to create a WebNN context."));
-    DLOG(ERROR) << "Failed to open the command recorder.";
+    std::move(callback).Run(mojom::CreateContextResult::NewError(
+        dml::CreateError(mojom::Error::Code::kUnknownError,
+                         "Failed to create a WebNN context.")));
+    LOG(ERROR) << "[WebNN] Failed to open the command recorder.";
     return;
   }
 
@@ -190,10 +247,12 @@ void WebNNContextProviderImpl::CreateWebNNContext(
   std::move(callback).Run(
       mojom::CreateContextResult::NewContextRemote(std::move(blink_remote)));
 #elif BUILDFLAG(IS_MAC)
-  if (__builtin_available(macOS 13, *)) {
+  if (__builtin_available(macOS 14, *)) {
     // The remote sent to the renderer.
     mojo::PendingRemote<mojom::WebNNContext> blink_remote;
     // The receiver bound to WebNNContextImpl.
+    //
+    // TODO: crbug.com/41481333 - Create the CoreML context using `options`.
     impls_.push_back(base::WrapUnique<WebNNContextImpl>(new coreml::ContextImpl(
         blink_remote.InitWithNewPipeAndPassReceiver(), this)));
     std::move(callback).Run(
@@ -202,14 +261,14 @@ void WebNNContextProviderImpl::CreateWebNNContext(
     std::move(callback).Run(ToError<mojom::CreateContextResult>(
         mojom::Error::Code::kNotSupportedError,
         "WebNN Service is not supported on this platform."));
-    DLOG(ERROR) << "WebNN Service is not supported on this platform.";
+    LOG(ERROR) << "[WebNN] Service is not supported on this platform.";
   }
 #else
-  // TODO(crbug.com/1273291): Supporting WebNN Service on the platform.
+  // TODO(crbug.com/40206287): Supporting WebNN Service on the platform.
   std::move(callback).Run(ToError<mojom::CreateContextResult>(
       mojom::Error::Code::kNotSupportedError,
       "WebNN Service is not supported on this platform."));
-  DLOG(ERROR) << "WebNN Service is not supported on this platform.";
+  LOG(ERROR) << "[WebNN] Service is not supported on this platform.";
 #endif
 }
 

@@ -5,7 +5,9 @@
 #                      \___/_/\_\ .__/ \__,_|\__|
 #                               |_| XML parser
 #
-# Copyright (c) 2021-2022 Sebastian Pipping <sebastian@pipping.org>
+# Copyright (c) 2021-2024 Sebastian Pipping <sebastian@pipping.org>
+# Copyright (c) 2023      Joyce Brum <joycebrum@google.com>
+# Copyright (c) 2023      Hanno Böck <hanno@gentoo.org>
 # Licensed under the MIT license:
 #
 # Permission is  hereby granted,  free of charge,  to any  person obtaining
@@ -27,13 +29,17 @@
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 # USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-name: Run Linux Travis CI tasks
+name: Run Linux CI tasks
 
 on:
   pull_request:
   push:
   schedule:
     - cron: '0 2 * * 5'  # Every Friday at 2am
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   checks:
@@ -47,21 +53,24 @@ jobs:
           - MODE: distcheck
           - MODE: qa-sh
             FLAT_ENV: CC=clang CXX=clang++ LD=clang++ QA_SANITIZER=address
-          - MODE: clang-format
           - MODE: cmake-oos
             FLAT_ENV: CMAKE_ARGS="-DEXPAT_ATTR_INFO=ON -DEXPAT_BUILD_FUZZERS=ON -DCMAKE_C_FLAGS=-fsanitize=address -DCMAKE_CXX_FLAGS=-fsanitize=address -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++"
           - MODE: qa-sh
             FLAT_ENV: CC=clang CXX=clang++ LD=clang++ QA_SANITIZER=address CMAKE_ARGS=-DEXPAT_ATTR_INFO=ON
           - MODE: qa-sh
-            FLAT_ENV: CC=clang CXX=clang++ LD=clang++ QA_SANITIZER=address CMAKE_ARGS=-DEXPAT_CONTEXT_BYTES=OFF
+            FLAT_ENV: CC=clang CXX=clang++ LD=clang++ QA_SANITIZER=address CMAKE_ARGS=-DEXPAT_CONTEXT_BYTES=0
           - MODE: qa-sh
-            FLAT_ENV: CC=clang CXX=clang++ LD=clang++ QA_SANITIZER=address CMAKE_ARGS=-DEXPAT_DTD=OFF
+            FLAT_ENV: CC=clang CXX=clang++ LD=clang++ QA_SANITIZER=address CMAKE_ARGS="-DEXPAT_DTD=OFF -DEXPAT_GE=ON"
+          - MODE: qa-sh
+            FLAT_ENV: CC=clang CXX=clang++ LD=clang++ QA_SANITIZER=address CMAKE_ARGS="-DEXPAT_DTD=OFF -DEXPAT_GE=OFF"
           - MODE: qa-sh
             FLAT_ENV: CC=clang CXX=clang++ LD=clang++ QA_SANITIZER=address CMAKE_ARGS=-DEXPAT_LARGE_SIZE=ON
           - MODE: qa-sh
             FLAT_ENV: CC=clang CXX=clang++ LD=clang++ QA_SANITIZER=address CMAKE_ARGS=-DEXPAT_MIN_SIZE=ON
           - MODE: qa-sh
             FLAT_ENV: CC=clang CXX=clang++ LD=clang++ QA_SANITIZER=address CMAKE_ARGS=-DEXPAT_NS=OFF
+          - MODE: qa-sh
+            FLAT_ENV: CC=clang CXX=clang++ LD=clang++ QA_SANITIZER=cfi
           - MODE: qa-sh
             FLAT_ENV: CC=clang CXX=clang++ LD=clang++ QA_SANITIZER=memory
           - MODE: qa-sh
@@ -80,7 +89,7 @@ jobs:
     env:
       CFLAGS: -g3 -pipe
     steps:
-    - uses: actions/checkout@v3.1.0
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
     - name: Install build dependencies (MinGW)
       if: "${{ contains(matrix.FLAT_ENV, 'mingw') }}"
       run: |-
@@ -112,13 +121,12 @@ jobs:
         set -x
         source /etc/os-release
         wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-        sudo add-apt-repository "deb http://apt.llvm.org/${UBUNTU_CODENAME}/ llvm-toolchain-${UBUNTU_CODENAME}-15 main"
+        sudo add-apt-repository "deb https://apt.llvm.org/${UBUNTU_CODENAME}/ llvm-toolchain-${UBUNTU_CODENAME}-18 main"
         sudo apt-get update  # due to new repository
-        # NOTE: Please note the version-specific ${PATH} extension for Clang in .travis.sh
+        # NOTE: Please note the version-specific ${PATH} extension for Clang adding /usr/lib/llvm-18/bin in .ci.sh
         sudo apt-get install --yes --no-install-recommends -V \
-            clang-15 \
-            clang-format-15 \
-            llvm-15
+            clang-18 \
+            libclang-rt-18-dev
     - name: Install build dependencies (common)
       run: |-
         sudo apt-get install --yes --no-install-recommends -V \
@@ -134,6 +142,5 @@ jobs:
     - name: Perform check "${{ matrix.MODE }}"
       env:
         MODE: ${{ matrix.MODE }}
-        TRAVIS_OS_NAME: linux
       run: |
-        env ${{ matrix.FLAT_ENV }} ./.travis.sh
+        env ${{ matrix.FLAT_ENV }} ./.ci.sh

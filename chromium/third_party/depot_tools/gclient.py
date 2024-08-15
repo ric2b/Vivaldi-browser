@@ -114,6 +114,7 @@ import scm as scm_git
 import setup_color
 import subcommand
 import subprocess2
+import upload_to_google_storage_first_class
 from third_party.repo.progress import Progress
 
 # TODO: Should fix these warnings.
@@ -294,7 +295,19 @@ class DependencySettings(object):
         # These are not mutable:
         self._parent = parent
         self._deps_file = deps_file
-        self._url = url
+
+        # Post process the url to remove trailing slashes.
+        if isinstance(url, str):
+            # urls are sometime incorrectly written as proto://host/path/@rev.
+            # Replace it to proto://host/path@rev.
+            self._url = url.replace('/@', '@')
+        elif isinstance(url, (None.__class__)):
+            self._url = url
+        else:
+            raise gclient_utils.Error(
+                ('dependency url must be either string or None, '
+                 'instead of %s') % url.__class__.__name__)
+
         # The condition as string (or None). Useful to keep e.g. for flatten.
         self._condition = condition
         # 'managed' determines whether or not this dependency is synced/updated
@@ -319,16 +332,6 @@ class DependencySettings(object):
         self._custom_vars = custom_vars or {}
         self._custom_deps = custom_deps or {}
         self._custom_hooks = custom_hooks or []
-
-        # Post process the url to remove trailing slashes.
-        if isinstance(self.url, str):
-            # urls are sometime incorrectly written as proto://host/path/@rev.
-            # Replace it to proto://host/path@rev.
-            self.set_url(self.url.replace('/@', '@'))
-        elif not isinstance(self.url, (None.__class__)):
-            raise gclient_utils.Error(
-                ('dependency url must be either string or None, '
-                 'instead of %s') % self.url.__class__.__name__)
 
         # Make any deps_file path platform-appropriate.
         if self._deps_file:
@@ -484,6 +487,9 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
         # custom_deps, if any.
         self._should_sync = True
 
+        self._known_dependency_diff = None
+        self._dependency_index_state = None
+
         self._OverrideUrl()
         # This is inherited from WorkItem.  We want the URL to be a resource.
         if self.url and isinstance(self.url, str):
@@ -562,6 +568,8 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
             package = self.GetExpandedPackageName()
             url = '%s/p/%s/+/%s' % (scm.GetActualRemoteURL(None), package,
                                     revision)
+        if scm.name == 'gcs':
+            url = self.url
 
         if os.path.isdir(scm.checkout_path):
             revision = scm.revinfo(None, None, None)
@@ -584,6 +592,14 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
             '',
         ])
         return s
+
+    @property
+    def known_dependency_diff(self):
+        return self._known_dependency_diff
+
+    @property
+    def dependency_index_state(self):
+        return self._dependency_index_state
 
     @property
     def requirements(self):
@@ -738,7 +754,7 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
                 should_process = should_process and cached_conditions[condition]
 
             # The following option is only set by the 'revinfo' command.
-            if self._get_option('ignore_dep_type', None) == dep_type:
+            if dep_type in self._get_option('ignore_dep_type', []):
                 continue
 
             if dep_type == 'cipd':
@@ -754,18 +770,32 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
                                        relative=use_relative_paths,
                                        condition=condition))
             elif dep_type == 'gcs':
-                deps_to_add.append(
-                    GcsDependency(parent=self,
-                                  name=name,
-                                  bucket=dep_value['bucket'],
-                                  object_name=dep_value['object_name'],
-                                  sha256sum=dep_value['sha256sum'],
-                                  output_file=dep_value.get('output_file'),
-                                  size_bytes=dep_value['size_bytes'],
-                                  custom_vars=self.custom_vars,
-                                  should_process=should_process,
-                                  relative=use_relative_paths,
-                                  condition=condition))
+                # Validate that all objects are unique
+                object_name_set = {
+                    o['object_name']
+                    for o in dep_value['objects']
+                }
+                if len(object_name_set) != len(dep_value['objects']):
+                    raise Exception('Duplicate object names detected in {} GCS '
+                                    'dependency.'.format(name))
+                gcs_root = self.GetGcsRoot()
+                for obj in dep_value['objects']:
+                    merged_condition = gclient_utils.merge_conditions(
+                        condition, obj.get('condition'))
+
+                    deps_to_add.append(
+                        GcsDependency(parent=self,
+                                      name=name,
+                                      bucket=dep_value['bucket'],
+                                      object_name=obj['object_name'],
+                                      sha256sum=obj['sha256sum'],
+                                      output_file=obj.get('output_file'),
+                                      size_bytes=obj['size_bytes'],
+                                      gcs_root=gcs_root,
+                                      custom_vars=self.custom_vars,
+                                      should_process=should_process,
+                                      relative=use_relative_paths,
+                                      condition=merged_condition))
             else:
                 url = dep_value.get('url')
                 deps_to_add.append(
@@ -783,8 +813,7 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
                         should_recurse=name in self.recursedeps,
                         relative=use_relative_paths,
                         condition=condition,
-                        protocol=self.protocol,
-                        git_dependencies_state=self.git_dependencies_state))
+                        protocol=self.protocol))
 
         # TODO(crbug.com/1341285): Understand why we need this and remove
         # it if we don't.
@@ -816,10 +845,13 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
         if getattr(self, "_preloaded_deps_content", None):
             deps_content = self._preloaded_deps_content
             logging.debug('ParseDepsFile(%s) read preloaded:\n%s', self.name, deps_content)
-        elif os.path.isfile(filepath):
-            deps_content = gclient_utils.FileRead(filepath)
-            logging.debug('ParseDepsFile(%s) read:\n%s', self.name,
-                          deps_content)
+        elif not os.path.isfile(filepath):
+            logging.warning('ParseDepsFile(%s): No DEPS file found', self.name)
+            self.add_dependencies_and_close([], [])
+            return
+        else:
+          deps_content = gclient_utils.FileRead(filepath)
+          logging.debug('ParseDepsFile(%s) read:\n%s', self.name, deps_content)
 
         local_scope = {}
         if deps_content:
@@ -831,7 +863,7 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
                 gclient_utils.SyntaxErrorToError(filepath, e)
 
         if 'git_dependencies' in local_scope:
-            self.git_dependencies_state = local_scope['git_dependencies']
+            self.git_dependencies_state = self.get_vars().get('git_dependencies', local_scope['git_dependencies'])
 
         if 'allowed_hosts' in local_scope:
             try:
@@ -917,6 +949,12 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
         # deps. We don't add for SYNC since we expect submodules to be in sync.
         if self.git_dependencies_state == gclient_eval.SUBMODULES:
             deps.update(self.ParseGitSubmodules())
+
+        if self.git_dependencies_state != gclient_eval.DEPS:
+            # Git submodules are used - get their state.
+            self._known_dependency_diff = self.CreateSCM().GetSubmoduleDiff()
+            self._dependency_index_state = self.CreateSCM(
+            ).GetSubmoduleStateFromIndex()
 
         deps_to_add = self._deps_to_objects(
             self._postprocess_deps(deps, rel_prefix), self._use_relative_paths)
@@ -1145,6 +1183,20 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
                 try:
                     start = time.time()
                     sync_status = metrics_utils.SYNC_STATUS_FAILURE
+                    if self.parent and self.parent.known_dependency_diff is not None:
+                        if self._use_relative_paths:
+                            path = self.name
+                        else:
+                            path = self.name[len(self.parent.name) + 1:]
+                        current_revision = None
+                        if path in self.parent.dependency_index_state:
+                            current_revision = self.parent.dependency_index_state[
+                                path]
+                        if path in self.parent.known_dependency_diff:
+                            current_revision = self.parent.known_dependency_diff[
+                                path][1]
+                        self._used_scm.current_revision = current_revision
+
                     self._got_revision = self._used_scm.RunCommand(
                         command, options, args, file_list)
                     latest_commit = self._got_revision
@@ -1214,6 +1266,12 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
 
         if self.should_recurse:
             self.ParseDepsFile()
+            gcs_root = self.GetGcsRoot()
+            if gcs_root:
+                if command == 'revert':
+                    gcs_root.clobber()
+                elif command == 'update':
+                    gcs_root.clobber_deps_with_updated_objects(self.name)
 
         self._run_is_done(file_list or [])
 
@@ -1227,6 +1285,9 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
             for s in self.dependencies:
                 if s.should_process:
                     work_queue.enqueue(s)
+            gcs_root = self.GetGcsRoot()
+            if gcs_root and command == 'update':
+                gcs_root.resolve_objects(self.name)
 
         if command == 'recurse':
             # Skip file only checkout.
@@ -1379,6 +1440,13 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
             # instance of GClient, do nothing.
             return None
         return self.root.GetCipdRoot()
+
+    def GetGcsRoot(self):
+        if self.root is self:
+            # Let's not infinitely recurse. If this is root and isn't an
+            # instance of GClient, do nothing.
+            return None
+        return self.root.GetGcsRoot()
 
     def subtree(self, include_all):
         """Breadth first recursion excluding root node."""
@@ -1593,8 +1661,7 @@ class GitDependency(Dependency):
     def _IsCog():
         """Returns true if the env is cog"""
         if GitDependency._is_env_cog is None:
-            GitDependency._is_env_cog = os.getcwd().startswith(
-                '/google/cog/cloud')
+            GitDependency._is_env_cog = gclient_utils.IsEnvCog()
 
         return GitDependency._is_env_cog
 
@@ -1700,6 +1767,7 @@ solutions = %(solution_list)s
         self._enforced_cpu = (detect_host_arch.HostArch(), )
         self._root_dir = root_dir
         self._cipd_root = None
+        self._gcs_root = None
         self.config_content = None
 
     def _CheckConfig(self):
@@ -2092,6 +2160,21 @@ it or fix the checkout.
 
         removed_cipd_entries = []
         read_entries = self._ReadEntries()
+        # Add known dependency state
+        queue = list(self.dependencies)
+        while len(queue) > 0:
+            dep = queue.pop()
+            queue.extend(dep.dependencies)
+            if not dep._known_dependency_diff:
+                continue
+
+            for k, v in dep._known_dependency_diff.items():
+                path = f'{dep.name}/{k}'
+                if path in read_entries:
+                    continue
+                read_entries[path] = f'https://unknown@{v[1]}'
+
+
         # We process entries sorted in reverse to ensure a child dir is
         # always deleted before its parent dir.
         # This is especially important for submodules with pinned revisions
@@ -2215,8 +2298,7 @@ it or fix the checkout.
                             should_recurse=False,
                             relative=None,
                             condition=None,
-                            protocol=self.protocol,
-                            git_dependencies_state=self.git_dependencies_state))
+                            protocol=self.protocol))
                     if modified_files and self._options.delete_unversioned_trees:
                         print(
                             '\nWARNING: \'%s\' is no longer part of this client.\n'
@@ -2485,6 +2567,11 @@ it or fix the checkout.
                 log_level='info' if self._options.verbose else None)
         return self._cipd_root
 
+    def GetGcsRoot(self):
+        if not self._gcs_root:
+            self._gcs_root = gclient_scm.GcsRoot(self.root_dir)
+        return self._gcs_root
+
     @property
     def root_dir(self):
         """Root directory of gclient checkout."""
@@ -2508,19 +2595,18 @@ class GcsDependency(Dependency):
     """A Dependency object that represents a single GCS bucket and object"""
 
     def __init__(self, parent, name, bucket, object_name, sha256sum,
-                 output_file, size_bytes, custom_vars, should_process, relative,
-                 condition):
+                 output_file, size_bytes, gcs_root, custom_vars, should_process,
+                 relative, condition):
         self.bucket = bucket
         self.object_name = object_name
         self.sha256sum = sha256sum
         self.output_file = output_file
         self.size_bytes = size_bytes
-        url = 'gs://{bucket}/{object_name}'.format(
-            bucket=self.bucket,
-            object_name=self.object_name,
-        )
+        url = f'gs://{self.bucket}/{self.object_name}'
+        self._gcs_root = gcs_root
+        self._gcs_root.add_object(parent.name, name, object_name)
         super(GcsDependency, self).__init__(parent=parent,
-                                            name=name,
+                                            name=f'{name}:{object_name}',
                                             url=url,
                                             managed=None,
                                             custom_deps=None,
@@ -2531,6 +2617,12 @@ class GcsDependency(Dependency):
                                             should_recurse=False,
                                             relative=relative,
                                             condition=condition)
+
+    #override
+    def verify_validity(self):
+        """GCS dependencies allow duplicate name for objects in same directory."""
+        logging.info('Dependency(%s).verify_validity()' % self.name)
+        return True
 
     #override
     def run(self, revision_overrides, command, args, work_queue, options,
@@ -2544,43 +2636,65 @@ class GcsDependency(Dependency):
               self).run(revision_overrides, command, args, work_queue, options,
                         patch_refs, target_branches, skip_sync_revisions)
 
-    def WriteFilenameHash(self, sha1, hash_file):
-        with open(hash_file, 'w') as f:
-            f.write(sha1)
+    def WriteToFile(self, content, file):
+        with open(file, 'w') as f:
+            f.write(content)
             f.write('\n')
 
-    def IsDownloadNeeded(self, output_dir, output_file):
+    def IsDownloadNeeded(self, output_dir, output_file, hash_file,
+                         migration_toggle_file):
         """Check if download and extract is needed."""
-        download_needed = False
         if not os.path.exists(output_file):
-            download_needed = True
+            return True
 
-        hash_file = os.path.join(output_dir, 'hash')
         existing_hash = None
         if os.path.exists(hash_file):
             try:
                 with open(hash_file, 'r') as f:
                     existing_hash = f.read().rstrip()
             except IOError:
-                download_needed = True
+                return True
         else:
-            download_needed = True
+            return True
+
+        # (b/328065301): Remove is_first_class_gcs_file logic when all GCS
+        # hooks are migrated to first class deps
+        is_first_class_gcs = os.path.exists(migration_toggle_file)
+        if not is_first_class_gcs:
+            return True
 
         if existing_hash != self.sha256sum:
-            download_needed = True
-        return download_needed
+            return True
+        return False
 
-    def GetSha256Sum(self, filename):
-        sha = hashlib.sha256()
-        with open(filename, 'rb') as f:
-            while True:
-                # Read in 1mb chunks, so it doesn't all have to be loaded into
-                # memory.
-                chunk = f.read(1024 * 1024)
-                if not chunk:
-                    break
-                sha.update(chunk)
-        return sha.hexdigest()
+    def ValidateTarFile(self, tar, prefixes):
+
+        def _validate(tarinfo):
+            """Returns false if the tarinfo is something we explicitly forbid."""
+            if tarinfo.issym() or tarinfo.islnk():
+                # For links, check if the destination is valid.
+                if os.path.isabs(tarinfo.linkname):
+                    return False
+                link_target = os.path.normpath(
+                    os.path.join(os.path.dirname(tarinfo.name),
+                                 tarinfo.linkname))
+                if not any(
+                        link_target.startswith(prefix) for prefix in prefixes):
+                    return False
+
+            if tarinfo.name == '.':
+                return True
+
+            # tarfile for sysroot has paths that start with ./
+            cleaned_name = tarinfo.name
+            if tarinfo.name.startswith('./') and len(tarinfo.name) > 2:
+                cleaned_name = tarinfo.name[2:]
+            if ('../' in cleaned_name or '..\\' in cleaned_name or not any(
+                    cleaned_name.startswith(prefix) for prefix in prefixes)):
+                return False
+            return True
+
+        return all(map(_validate, tar.getmembers()))
 
     def DownloadGoogleStorage(self):
         """Calls GCS."""
@@ -2588,15 +2702,22 @@ class GcsDependency(Dependency):
         root_dir = self.root.root_dir
 
         # Directory of the extracted tarfile contents
-        output_dir = os.path.join(root_dir, self.name)
+        output_dir = os.path.join(root_dir, self.name.split(':')[0])
         output_file = os.path.join(output_dir, self.output_file
-                                   or gcs_file_name)
+                                   or f'.{gcs_file_name}')
 
-        if not self.IsDownloadNeeded(output_dir, output_file):
+        # Remove any forward slashes and drop any extensions
+        file_prefix = self.object_name.replace('/', '_').replace('.', '_')
+        hash_file = os.path.join(output_dir, f'.{file_prefix}_hash')
+        migration_toggle_file = os.path.join(
+            output_dir,
+            download_from_google_storage.construct_migration_file_name(
+                self.object_name))
+        if not self.IsDownloadNeeded(output_dir, output_file, hash_file,
+                                     migration_toggle_file):
             return
 
         # Remove hashfile
-        hash_file = os.path.join(output_dir, 'hash')
         if os.path.exists(hash_file):
             os.remove(hash_file)
 
@@ -2604,11 +2725,13 @@ class GcsDependency(Dependency):
         if os.path.exists(output_file):
             os.remove(output_file)
 
-        # Remove extracted contents
-        if os.path.exists(output_dir):
-            shutil.rmtree(output_dir)
-        os.makedirs(output_dir)
+        # Another GCS dep could be using the same output_dir, so don't remove
+        # it
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
 
+        gsutil = download_from_google_storage.Gsutil(
+            download_from_google_storage.GSUTIL_DEFAULT_PATH)
         if os.getenv('GCLIENT_TEST') == '1':
             if 'no-extract' in output_file:
                 with open(output_file, 'w+') as f:
@@ -2616,7 +2739,7 @@ class GcsDependency(Dependency):
             else:
                 # Create fake tar file and extracted tar contents
                 tmpdir = tempfile.mkdtemp()
-                copy_dir = os.path.join(tmpdir, self.name, 'extracted_dir')
+                copy_dir = os.path.join(tmpdir, gcs_file_name, 'extracted_dir')
                 if os.path.exists(copy_dir):
                     shutil.rmtree(copy_dir)
                 os.makedirs(copy_dir)
@@ -2625,10 +2748,12 @@ class GcsDependency(Dependency):
                 with tarfile.open(output_file, "w:gz") as tar:
                     tar.add(copy_dir, arcname=os.path.basename(copy_dir))
         else:
-            gcs_url = 'gs://%s/%s' % (self.bucket, self.object_name)
-            gsutil = download_from_google_storage.Gsutil(
-                download_from_google_storage.GSUTIL_DEFAULT_PATH)
-            gsutil.check_call('cp', gcs_url, output_file)
+            code, _, err = gsutil.check_call('cp', self.url, output_file)
+            if code and err:
+                raise Exception(f'{code}: {err}')
+            # Check that something actually downloaded into the path
+            if not os.path.exists(output_file):
+                raise Exception(f'Nothing was downloaded into {output_file}')
 
         calculated_sha256sum = ''
         calculated_size_bytes = None
@@ -2636,7 +2761,8 @@ class GcsDependency(Dependency):
             calculated_sha256sum = 'abcd123'
             calculated_size_bytes = 10000
         else:
-            calculated_sha256sum = self.GetSha256Sum(output_file)
+            calculated_sha256sum = (
+                upload_to_google_storage_first_class.get_sha256sum(output_file))
             calculated_size_bytes = os.path.getsize(output_file)
 
         if calculated_sha256sum != self.sha256sum:
@@ -2655,8 +2781,33 @@ class GcsDependency(Dependency):
 
         if tarfile.is_tarfile(output_file):
             with tarfile.open(output_file, 'r:*') as tar:
+                formatted_names = []
+                for name in tar.getnames():
+                    if name.startswith('./') and len(name) > 2:
+                        formatted_names.append(name[2:])
+                    else:
+                        formatted_names.append(name)
+                possible_top_level_dirs = set(
+                    name.split('/')[0] for name in formatted_names)
+                is_valid_tar = self.ValidateTarFile(tar,
+                                                    possible_top_level_dirs)
+                if not is_valid_tar:
+                    raise Exception('tarfile contains invalid entries')
+
+                tar_content_file = os.path.join(
+                    output_dir, f'.{file_prefix}_content_names')
+                self.WriteToFile(json.dumps(tar.getnames()), tar_content_file)
+
                 tar.extractall(path=output_dir)
-        self.WriteFilenameHash(calculated_sha256sum, hash_file)
+
+        if os.getenv('GCLIENT_TEST') != '1':
+            code, err = download_from_google_storage.set_executable_bit(
+                output_file, self.url, gsutil)
+            if code != 0:
+                raise Exception(f'{code}: {err}')
+
+        self.WriteToFile(calculated_sha256sum, hash_file)
+        self.WriteToFile(str(1), migration_toggle_file)
 
     #override
     def GetScmName(self):
@@ -3046,6 +3197,10 @@ def CMDgitmodules(parser, args):
     It will create or update the .gitmodules file and include
     `gclient-condition` values. Commits in gitlinks will also be updated.
     """
+    if gclient_utils.IsEnvCog():
+        raise gclient_utils.Error(
+            'updating git submodules is not supported. Please upvote '
+            'b/340254045 if you require this functionality.')
     parser.add_option('--output-gitmodules',
                       help='name of the .gitmodules file to write to',
                       default='.gitmodules')
@@ -3095,7 +3250,7 @@ def CMDgitmodules(parser, args):
         for path, dep in ls.get('deps').items():
             if path in options.skip_dep:
                 continue
-            if dep.get('dep_type') == 'cipd':
+            if dep.get('dep_type') != 'git':
                 continue
             try:
                 url, commit = dep['url'].split('@', maxsplit=1)
@@ -3339,6 +3494,9 @@ def CMDgrep(parser, args):
             file=sys.stderr)
         return 1
 
+    if gclient_utils.IsEnvCog():
+        raise gclient_utils.Error('gclient grep command is not supported.')
+
     jobs_arg = ['--jobs=1']
     if re.match(r'(-j|--jobs=)\d+$', args[0]):
         jobs_arg, args = args[:1], args[1:]
@@ -3494,6 +3652,11 @@ def CMDpack(parser, args):
 @metrics.collector.collect_metrics('gclient status')
 def CMDstatus(parser, args):
     """Shows modification status for every dependencies."""
+    if gclient_utils.IsEnvCog():
+        raise gclient_utils.Error(
+            'gclient status command is not supported. Please navigate to '
+            'source control view in the activiy bar to view modification '
+            'status instead.')
     parser.add_option('--deps',
                       dest='deps_os',
                       metavar='OS_LIST',
@@ -3770,8 +3933,13 @@ def CMDdiff(parser, args):
 def CMDrevert(parser, args):
     """Reverts all modifications in every dependencies.
 
-    That's the nuclear option to get back to a 'clean' state. It removes anything
-    that shows up in git status."""
+    That's the nuclear option to get back to a 'clean' state. It removes
+    anything that shows up in git status."""
+    if gclient_utils.IsEnvCog():
+        raise gclient_utils.Error(
+            'gclient revert command is not supported. Please navigate to '
+            'source control view in the activiy bar to discard changes '
+            'instead.')
     parser.add_option('--deps',
                       dest='deps_os',
                       metavar='OS_LIST',
@@ -3892,7 +4060,9 @@ def CMDrevinfo(parser, args):
                       'information about the revisions.')
     parser.add_option(
         '--ignore-dep-type',
-        choices=['git', 'cipd'],
+        choices=['git', 'cipd', 'gcs'],
+        action='append',
+        default=[],
         help='Specify to skip processing of a certain type of dep.')
     (options, args) = parser.parse_args(args)
     client = GClient.LoadCurrentConfig(options)
@@ -4004,7 +4174,13 @@ def CMDsetdep(parser, args):
                       'reference (e.g. src/dep@deadbeef). If it is a CIPD '
                       'dependency, dep must be of the form path:package and '
                       'rev must be the package version '
-                      '(e.g. src/pkg:chromium/pkg@2.1-cr0).')
+                      '(e.g. src/pkg:chromium/pkg@2.1-cr0). '
+                      'If it is a GCS dependency, dep must be of the form '
+                      'path@object_name,sha256sum,size_bytes,generation?'
+                      'object_name2,sha256sum2,size_bytes2,generation2?... '
+                      'The number of revision objects for a given path must '
+                      'match the current number of revision objects for that '
+                      'path.')
     parser.add_option(
         '--deps-file',
         default='DEPS',
@@ -4041,14 +4217,25 @@ def CMDsetdep(parser, args):
     # Create a set of all git submodules.
     cwd = os.path.dirname(options.deps_file) or os.getcwd()
     git_modules = None
-    if 'git_dependencies' in local_scope and local_scope[
-            'git_dependencies'] in (gclient_eval.SUBMODULES, gclient_eval.SYNC):
-        try:
-            submodule_status = subprocess2.check_output(
-                ['git', 'submodule', 'status'], cwd=cwd).decode('utf-8')
-            git_modules = {l.split()[1] for l in submodule_status.splitlines()}
-        except subprocess2.CalledProcessError as e:
-            print('Warning: gitlinks won\'t be updated: ', e)
+    is_cog = gclient_utils.IsEnvCog()
+    if (not is_cog and 'git_dependencies' in local_scope
+            and local_scope['git_dependencies']
+            in (gclient_eval.SUBMODULES, gclient_eval.SYNC)):
+        cmd = ['git', 'ls-files', '--format=%(objectmode) %(path)']
+        with subprocess2.Popen(
+                cmd,
+                cwd=cwd,
+                stdout=subprocess2.PIPE,
+                stderr=None if options.verbose else subprocess2.DEVNULL,
+                text=True) as p:
+            git_modules = {
+                line.split()[1].strip()
+                for line in p.stdout if line.startswith('160000')
+            }
+        if p.returncode != 0:
+            print('Warning: gitlinks won\'t be updated because computing '
+                  'submodules has failed.')
+            git_modules = None
 
     for var in options.vars:
         name, _, value = var.partition('=')
@@ -4072,7 +4259,27 @@ def CMDsetdep(parser, args):
                     'Wrong CIPD format: %s:%s should be of the form path:pkg@version.'
                     % (name, package))
             gclient_eval.SetCIPD(local_scope, name, package, value)
-        else:
+        elif ',' in value:
+            objects = []
+            raw_objects = value.split('?')
+            for o in raw_objects:
+                object_info = o.split(',')
+                if len(object_info) != 4 and len(object_info) != 5:
+                    parser.error(
+                        'All values are required in the revision object: '
+                        'object_name, sha256sum, size_bytes, generation, '
+                        'and (optional) output_file.')
+                object_dict = {
+                    'object_name': object_info[0],
+                    'sha256sum': object_info[1],
+                    'size_bytes': object_info[2],
+                    'generation': object_info[3],
+                }
+                if len(object_info) == 5:
+                    object_dict['output_file'] = object_info[4]
+                objects.append(object_dict)
+            gclient_eval.SetGCS(local_scope, name, objects)
+        else:  # git dependencies
             # Update DEPS only when `git_dependencies` == DEPS or SYNC.
             # git_dependencies is defaulted to DEPS when not set.
             if 'git_dependencies' not in local_scope or local_scope[
@@ -4085,6 +4292,10 @@ def CMDsetdep(parser, args):
             if git_modules and 'git_dependencies' in local_scope and local_scope[
                     'git_dependencies'] in (gclient_eval.SUBMODULES,
                                             gclient_eval.SYNC):
+                if is_cog:
+                    parser.error(
+                        f'Set git dependency "{name}" is currently not '
+                        'supported.')
                 git_module_name = name
                 if not 'use_relative_paths' in local_scope or \
                     local_scope['use_relative_paths'] != True:

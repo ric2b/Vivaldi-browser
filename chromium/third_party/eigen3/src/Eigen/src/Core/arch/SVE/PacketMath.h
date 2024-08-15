@@ -353,7 +353,6 @@ struct packet_traits<float> : default_packet_traits {
     HasReduxp = 0,  // Not implemented in SVE
 
     HasDiv = 1,
-    HasFloor = 1,
 
     HasSin = EIGEN_FAST_MATH,
     HasCos = EIGEN_FAST_MATH,

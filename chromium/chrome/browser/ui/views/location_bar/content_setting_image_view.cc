@@ -101,7 +101,7 @@ ContentSettingImageView::ContentSettingImageView(
 
   // Because this view is focusable, it should always have an accessible name,
   // even if an announcement is not to be made.
-  // TODO(crbug.com/1411342): `IconLabelBubbleView::GetAccessibleNodeData`
+  // TODO(crbug.com/40890218): `IconLabelBubbleView::GetAccessibleNodeData`
   // would set the name to explicitly empty when the name was missing.
   // That function no longer exists. As a result we need to handle that here.
   // There appear to be cases in which `Update` is never called and we lack
@@ -156,7 +156,7 @@ void ContentSettingImageView::Update() {
     SetAccessibleName(name);
     const std::u16string& accessible_description =
         l10n_util::GetStringUTF16(IDS_A11Y_OMNIBOX_CHIP_HINT);
-    SetAccessibleDescription(accessible_description);
+    GetViewAccessibility().SetDescription(accessible_description);
     NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
     content_setting_image_model_->AccessibilityWasNotified(web_contents);
   }

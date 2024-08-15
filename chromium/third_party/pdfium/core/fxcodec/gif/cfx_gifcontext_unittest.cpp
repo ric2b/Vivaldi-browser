@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "core/fxcodec/gif/cfx_gifcontext.h"
 
 #include <stdint.h>
@@ -40,11 +45,11 @@ TEST(CFX_GifContext, SetInputBuffer) {
   EXPECT_EQ(0u, context.InputBuffer()->GetSize());
   EXPECT_EQ(0u, context.InputBuffer()->GetPosition());
 
-  context.SetTestInputBuffer({buffer, 0u});
+  context.SetTestInputBuffer(pdfium::make_span(buffer).first(0u));
   EXPECT_EQ(0u, context.InputBuffer()->GetSize());
   EXPECT_EQ(0u, context.InputBuffer()->GetPosition());
 
-  context.SetTestInputBuffer({buffer, 3u});
+  context.SetTestInputBuffer(buffer);
   EXPECT_EQ(3u, context.InputBuffer()->GetSize());
   EXPECT_EQ(0u, context.InputBuffer()->GetPosition());
 }
@@ -62,11 +67,11 @@ TEST(CFX_GifContext, ReadAllOrNone) {
   EXPECT_FALSE(context.ReadAllOrNone(dest_buffer.data(), 0));
   EXPECT_FALSE(context.ReadAllOrNone(dest_buffer.data(), 10));
 
-  context.SetTestInputBuffer({src_buffer, 0u});
+  context.SetTestInputBuffer(pdfium::make_span(src_buffer).first(0u));
   dest_buffer.resize(sizeof(src_buffer));
   EXPECT_FALSE(context.ReadAllOrNone(dest_buffer.data(), sizeof(src_buffer)));
 
-  context.SetTestInputBuffer({src_buffer, 1u});
+  context.SetTestInputBuffer(pdfium::make_span(src_buffer).first(1u));
   EXPECT_FALSE(context.ReadAllOrNone(dest_buffer.data(), sizeof(src_buffer)));
   EXPECT_EQ(0u, context.InputBuffer()->GetPosition());
   EXPECT_FALSE(context.ReadAllOrNone(nullptr, sizeof(src_buffer)));
@@ -91,7 +96,7 @@ TEST(CFX_GifContext, ReadGifSignature) {
   CFX_GifContextForTest context;
   {
     uint8_t data[1];
-    context.SetTestInputBuffer({data, 0u});
+    context.SetTestInputBuffer(pdfium::make_span(data).first(0u));
     EXPECT_EQ(GifDecoder::Status::kUnfinished, context.ReadGifSignature());
     EXPECT_EQ(0u, context.InputBuffer()->GetPosition());
     context.SetTestInputBuffer({});
@@ -149,15 +154,14 @@ TEST(CFX_GifContext, ReadLocalScreenDescriptor) {
   CFX_GifContextForTest context;
   {
     uint8_t data[1];
-    context.SetTestInputBuffer({data, 0u});
+    context.SetTestInputBuffer(pdfium::make_span(data).first(0u));
     EXPECT_EQ(GifDecoder::Status::kUnfinished,
               context.ReadLogicalScreenDescriptor());
     context.SetTestInputBuffer({});
   }
   // LSD with all the values zero'd
   {
-    uint8_t lsd[sizeof(CFX_GifLocalScreenDescriptor)];
-    memset(&lsd, 0, sizeof(CFX_GifLocalScreenDescriptor));
+    uint8_t lsd[sizeof(CFX_GifLocalScreenDescriptor)] = {};
     context.SetTestInputBuffer(lsd);
 
     EXPECT_EQ(GifDecoder::Status::kSuccess,

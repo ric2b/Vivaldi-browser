@@ -276,7 +276,7 @@ class ChromeBrowserCloudManagementServiceIntegrationTest
     }
 
     auto params = DMServerJobConfiguration::CreateParams::WithoutClient(
-        DeviceManagementService::JobConfiguration::TYPE_TOKEN_ENROLLMENT,
+        DeviceManagementService::JobConfiguration::TYPE_BROWSER_REGISTRATION,
         service_.get(), kClientID,
         g_browser_process->system_network_context_manager()
             ->GetSharedURLLoaderFactory());
@@ -719,7 +719,7 @@ class MachineLevelUserCloudPolicyPolicyFetchTest
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
     BUILDFLAG(IS_WIN)
-// TODO(crbug.com/1235367): Test is flaky.
+// TODO(crbug.com/40782028): Test is flaky.
 IN_PROC_BROWSER_TEST_P(MachineLevelUserCloudPolicyPolicyFetchTest,
                        DISABLED_Test) {
 #else

@@ -35,10 +35,13 @@ BASE_FEATURE(kBookmarkTriggerForPrerender2,
              "BookmarkTriggerForPrerender2",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Enables Certificate Transparency on Desktop.
+// Enables Certificate Transparency on Desktop and Android Browser (CT is
+// disabled in Android Webview, see aw_browser_context.cc).
 // Enabling CT enforcement requires maintaining a log policy, and the ability to
 // update the list of accepted logs. Embedders who are planning to enable this
 // should first reach out to chrome-certificate-transparency@google.com.
+// On builds where CT is enabled, this flag is also used as an emergency kill
+// switch.
 BASE_FEATURE(kCertificateTransparencyAskBeforeEnabling,
              "CertificateTransparencyAskBeforeEnabling",
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -55,14 +58,17 @@ BASE_FEATURE(kClosedTabCache,
 
 // When enabled, a new spare renderer is created at a later time if the previous
 // spare renderer was taken by top chrome WebUI.
+// TODO(crbug.com/41490050): clean up the feature.
 BASE_FEATURE(kDeferredSpareRendererForTopChromeWebUI,
              "DeferredSpareRendererForTopChromeWebUI",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 // The delay time to create a new spare renderer since the previous spare
 // renderer is taken. This is not effective when
 // `delay_until_page_stopped_loading` is true.
+// Experiments have shown that delaying 2s brings the most significant
+// improvements to Top Chrome WebUIs.
 const base::FeatureParam<base::TimeDelta> kSpareRendererWarmupDelay{
-    &kDeferredSpareRendererForTopChromeWebUI, "delay", base::Seconds(1)};
+    &kDeferredSpareRendererForTopChromeWebUI, "delay", base::Seconds(2)};
 // If true, a new spare renderer is not created until the last page stops
 // loading.
 const base::FeatureParam<bool> kSpareRendererWarmupDelayUntilPageStopsLoading{
@@ -101,17 +107,40 @@ const base::FeatureParam<std::string> kDevToolsConsoleInsightsModelId{
     &kDevToolsConsoleInsights, "aida_model_id", /*default*/ ""};
 const base::FeatureParam<double> kDevToolsConsoleInsightsTemperature{
     &kDevToolsConsoleInsights, "aida_temperature", /*default*/ 0.2};
+const base::FeatureParam<bool> kDevToolsConsoleInsightsOptIn{
+    &kDevToolsConsoleInsights, "opt_in", /*default*/ true};
 
 // Separate dogfood feature for DevTools console insights,
 // not restricted by enterprise policy or location.
 BASE_FEATURE(kDevToolsConsoleInsightsDogfood,
              "DevToolsConsoleInsightsDogfood",
              base::FEATURE_DISABLED_BY_DEFAULT);
+const base::FeatureParam<std::string> kDevToolsConsoleInsightsDogfoodAidaScope{
+    &kDevToolsConsoleInsightsDogfood, "aida_scope", /*default*/ ""};
+const base::FeatureParam<std::string>
+    kDevToolsConsoleInsightsDogfoodAidaEndpoint{
+        &kDevToolsConsoleInsightsDogfood, "aida_endpoint", /*default*/ ""};
+const base::FeatureParam<std::string> kDevToolsConsoleInsightsDogfoodModelId{
+    &kDevToolsConsoleInsightsDogfood, "aida_model_id", /*default*/ ""};
+const base::FeatureParam<double> kDevToolsConsoleInsightsDogfoodTemperature{
+    &kDevToolsConsoleInsightsDogfood, "aida_temperature", /*default*/ 0.2};
+const base::FeatureParam<bool> kDevToolsConsoleInsightsDogfoodOptIn{
+    &kDevToolsConsoleInsightsDogfood, "opt_in", /*default*/ true};
+
+// Whether DevTools shows the setting for console insights. The setting can be
+// shown in a disabled state, even if the feature itself is not available.
+BASE_FEATURE(kDevToolsConsoleInsightsSettingVisible,
+             "DevToolsConsoleInsightsSettingVisible",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+const base::FeatureParam<std::string>
+    kDevToolsConsoleInsightsSettingVisibleBlockedReason{
+        &kDevToolsConsoleInsightsSettingVisible, "blocked_reason",
+        /*default*/ ""};
 
 // Whether an infobar is shown when the process is shared.
 BASE_FEATURE(kDevToolsSharedProcessInfobar,
              "DevToolsSharedProcessInfobar",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Let DevTools front-end talk to the target of type "tab" rather than
 // "frame" when inspecting a WebContents.
@@ -140,6 +169,12 @@ BASE_FEATURE(kDoubleTapToZoomInTabletMode,
 BASE_FEATURE(kEnableDPAPIEncryptionProvider,
              "EnableDPAPIEncryptionProvider",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// When this feature is enabled, the App-Bound encryption provider is registered
+// with Chrome.
+BASE_FEATURE(kRegisterAppBoundEncryptionProvider,
+             "RegisterAppBoundEncryptionProvider",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_WIN)
 
 // Enables usage of the FedCM API without third party cookies at the same time.
@@ -181,7 +216,7 @@ const base::FeatureParam<int> kLargeFaviconFromGoogleSizeInDip{
 
 #if BUILDFLAG(IS_WIN)
 // Enables locking the cookie database for profiles.
-// TODO(crbug.com/1430226): Remove after fully launched.
+// TODO(crbug.com/40901624): Remove after fully launched.
 BASE_FEATURE(kLockProfileCookieDatabase,
              "LockProfileCookieDatabase",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -205,16 +240,7 @@ BASE_FEATURE(kNetworkAnnotationMonitoring,
 // crbug.com/1462832 for more details of New Tab Page triggered prerendering.
 BASE_FEATURE(kNewTabPageTriggerForPrerender2,
              "NewTabPageTriggerForPrerender2",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-#if BUILDFLAG(IS_WIN)
-// Don't try to clear downlevel OS appcompat layers out of Chrome's
-// AppCompatFlags\Layers value in the Windows registry on process startup in
-// child processes; see https://crbug.com/1482568.
-BASE_FEATURE(kNoAppCompatClearInChildren,
-             "NoAppCompatClearInChildren",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_WIN)
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_WIN)
 // Don't call the Win32 API PrefetchVirtualMemory when loading chrome.dll inside
@@ -235,15 +261,6 @@ BASE_FEATURE(kNotificationOneTapUnsubscribe,
              "NotificationOneTapUnsubscribe",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
-
-// Enables omnibox trigger no state prefetch. Only one of
-// kOmniboxTriggerForPrerender2 or kOmniboxTriggerForNoStatePrefetch can be
-// enabled in the experiment. If both are enabled, only
-// kOmniboxTriggerForPrerender2 takes effect.
-// TODO(crbug.com/1267731): Remove this flag once the experiments are completed.
-BASE_FEATURE(kOmniboxTriggerForNoStatePrefetch,
-             "OmniboxTriggerForNoStatePrefetch",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // This flag is used for enabling Omnibox triggered prerendering. See
 // crbug.com/1166085 for more details of Omnibox triggered prerendering.
@@ -374,7 +391,7 @@ BASE_FEATURE(kTriggerNetworkDataMigration,
 //  there). This flag is introduced as means of disabling this feature in case
 //  of possible future regressions.
 //
-// TODO(crbug.com/1251999): Remove this flag once we confirm that blue border
+// TODO(crbug.com/40198577): Remove this flag once we confirm that blue border
 // works fine on ChromeOS.
 //
 // b/279051234: We suspect the tab sharing blue border may cause a bad issue
@@ -385,14 +402,12 @@ BASE_FEATURE(kTabCaptureBlueBorderCrOS,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
-#if BUILDFLAG(IS_WIN)
 // When this feature is enabled, the network service will be passed an
 // OSCryptAsync crypto cookie delegate meaning that OSCryptAsync will be used
 // for cookie encryption.
 BASE_FEATURE(kUseOsCryptAsyncForCookieEncryption,
              "UseOsCryptAsyncForCookieEncryption",
              base::FEATURE_ENABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_WIN)
 
 // Enables runtime detection of USB devices which provide a WebUSB landing page
 // descriptor.

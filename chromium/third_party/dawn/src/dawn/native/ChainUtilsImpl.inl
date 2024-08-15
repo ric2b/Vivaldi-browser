@@ -49,6 +49,10 @@ namespace opengl {
 struct RequestAdapterOptionsGetGLProc;
 }
 
+namespace vulkan {
+struct YCbCrVulkanDescriptor;
+}
+
 namespace detail {
 
 template <>

@@ -4,7 +4,8 @@
 
 #include "gpu/vulkan/vulkan_util.h"
 
-#include "base/functional/callback_helpers.h"
+#include <string_view>
+
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
@@ -18,6 +19,7 @@
 #include "gpu/config/gpu_info.h"  //nogncheck
 #include "gpu/config/vulkan_info.h"
 #include "gpu/vulkan/vulkan_function_pointers.h"
+#include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #include "ui/gl/gl_switches.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -46,7 +48,7 @@ namespace {
 
 #if BUILDFLAG(IS_ANDROID)
 
-bool IsDeviceBlocked(base::StringPiece field, base::StringPiece block_list) {
+bool IsDeviceBlocked(std::string_view field, std::string_view block_list) {
   auto disable_patterns = base::SplitString(
       block_list, "|", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   for (const auto& disable_pattern : disable_patterns) {
@@ -59,9 +61,9 @@ bool IsDeviceBlocked(base::StringPiece field, base::StringPiece block_list) {
 
 int GetEMUIVersion() {
   const auto* build_info = base::android::BuildInfo::GetInstance();
-  base::StringPiece manufacturer(build_info->manufacturer());
+  std::string_view manufacturer(build_info->manufacturer());
 
-  // TODO(crbug.com/1096222): check Honor devices as well.
+  // TODO(crbug.com/40136096): check Honor devices as well.
   if (manufacturer != "HUAWEI")
     return -1;
 
@@ -188,7 +190,7 @@ bool IsVulkanV2Allowed() {
 }
 
 bool IsVulkanV2Enabled(const GPUInfo& gpu_info,
-                       base::StringPiece experiment_arm) {
+                       std::string_view experiment_arm) {
   if (!IsVulkanV2Allowed()) {
     return false;
   }
@@ -246,7 +248,7 @@ bool IsVulkanV1EnabledForAdreno(
   }
 
   // https:://crbug.com/1165783: Performance is not yet as good as GL.
-  return device_properties.device_name == base::StringPiece("Adreno (TM) 630");
+  return device_properties.device_name == std::string_view("Adreno (TM) 630");
 }
 
 // Adreno 630+ and 2022 deQP tests.
@@ -405,14 +407,13 @@ VkResult CreateGraphicsPipelinesHook(
     const VkGraphicsPipelineCreateInfo* pCreateInfos,
     const VkAllocationCallbacks* pAllocator,
     VkPipeline* pPipelines) {
-  base::ScopedClosureRunner uma_runner(base::BindOnce(
-      [](base::Time time) {
-        UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
-            "GPU.Vulkan.PipelineCache.vkCreateGraphicsPipelines",
-            base::Time::Now() - time, base::Microseconds(100),
-            base::Microseconds(50000), 50);
-      },
-      base::Time::Now()));
+  absl::Cleanup uma_runner = [start_time = base::TimeTicks::Now()] {
+    UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+        "GPU.Vulkan.PipelineCache.vkCreateGraphicsPipelines",
+        base::TimeTicks::Now() - start_time, base::Microseconds(100),
+        base::Microseconds(50000), 50);
+  };
+  TRACE_EVENT0("gpu", "VulkanCreateGraphicsPipelines");
   return vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount,
                                    pCreateInfos, pAllocator, pPipelines);
 }
@@ -480,7 +481,7 @@ bool CheckVulkanCompatibilities(
 
   if (device_properties.vendor_id == kVendorARM) {
     int emui_version = GetEMUIVersion();
-    // TODO(crbug.com/1096222) Display problem with Huawei EMUI < 11 and Honor
+    // TODO(crbug.com/40136096) Display problem with Huawei EMUI < 11 and Honor
     // devices with Mali GPU. The Mali driver version is < 19.0.0.
     if (device_properties.driver_version < VK_MAKE_VERSION(19, 0, 0) &&
         emui_version < 11) {
@@ -488,7 +489,7 @@ bool CheckVulkanCompatibilities(
     }
 
     // Remove "Mali-" prefix.
-    base::StringPiece device_name(device_properties.device_name);
+    std::string_view device_name(device_properties.device_name);
     if (!base::StartsWith(device_name, "Mali-")) {
       LOG(ERROR) << "Unexpected device_name " << device_name;
       return false;
@@ -502,7 +503,7 @@ bool CheckVulkanCompatibilities(
     // gen, Midgard gen, and some Bifrost 1st & 2nd gen.
     std::vector<const char*> slow_gpus = {"2??", "3??", "4??", "T???",
                                           "G31", "G51", "G52"};
-    for (base::StringPiece slow_gpu : slow_gpus) {
+    for (std::string_view slow_gpu : slow_gpus) {
       if (base::MatchPattern(device_name, slow_gpu)) {
         return false;
       }

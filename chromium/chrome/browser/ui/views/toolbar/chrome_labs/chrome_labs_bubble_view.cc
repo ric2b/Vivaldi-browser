@@ -96,7 +96,9 @@ END_METADATA
 
 ChromeLabsBubbleView::ChromeLabsBubbleView(ChromeLabsButton* anchor_view)
     : BubbleDialogDelegateView(anchor_view,
-                               views::BubbleBorder::Arrow::TOP_RIGHT) {
+                               views::BubbleBorder::Arrow::TOP_RIGHT,
+                               views::BubbleBorder::DIALOG_SHADOW,
+                               true) {
   SetProperty(views::kElementIdentifierKey, kToolbarChromeLabsBubbleElementId);
   SetButtons(ui::DIALOG_BUTTON_NONE);
   SetShowCloseButton(true);
@@ -113,8 +115,8 @@ ChromeLabsBubbleView::ChromeLabsBubbleView(ChromeLabsButton* anchor_view)
   // behavior was confusing.
   SetAccessibleWindowRole(ax::mojom::Role::kDialog);
 
-  // TODO(crbug.com/1259763): Currently basing this off what extension menu uses
-  // for sizing as suggested as an initial fix by UI. Discuss a more formal
+  // TODO(crbug.com/40797818): Currently basing this off what extension menu
+  // uses for sizing as suggested as an initial fix by UI. Discuss a more formal
   // solution.
   constexpr int kMaxChromeLabsHeightDp = 448;
   auto scroll_view = std::make_unique<views::ScrollView>(
@@ -214,8 +216,6 @@ void ChromeLabsBubbleView::ShowRelaunchPrompt() {
         l10n_util::GetStringUTF16(IDS_CHROMELABS_RELAUNCH_FOOTER_MESSAGE));
   }
 #endif
-
-  SizeToContents();
 }
 
 void ChromeLabsBubbleView::NotifyRestartCallback() {

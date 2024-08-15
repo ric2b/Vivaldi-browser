@@ -83,11 +83,11 @@
 <translation id="3914946330804881301">Zaimportowane z Opery</translation>
 <translation id="3921292902397893431">Potwór 8</translation>
 <translation id="3943857333388298514">Wklej</translation>
-<translation id="3974783668264968389">Vivaldi nie mógł odblokować Twojego bezpiecznego magazynu kluczy. Bez magazynu kluczy utracisz zapisane dane logowania, bezpieczne pliki ciasteczek, a niektóre funkcje, takie jak synchronizacja, poczta i kalendarz, przestaną działać.
-
-     Zamknij przeglądarkę, odblokuj lub napraw magazyn kluczy i spróbuj ponownie. Jeśli naprawdę chcesz kontynuować, kliknij pole wyboru i naciśnij przycisk „Kontynuuj z utratą danych”.</translation>
 <translation id="4005270918754737597">Pomiń tę wersję</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi nie mógł odblokować Twojego bezpiecznego magazynu kluczy (keystore). Bez magazynu kluczy utracisz zapisane dane logowania, bezpieczne pliki ciasteczek, a niektóre funkcje, takie jak synchronizacja, poczta i kalendarz, przestaną działać.
+
+     Zakończ teraz, odblokuj lub napraw magazyn kluczy i spróbuj ponownie. Czy na pewno chcesz kontynuować z utratą danych?</translation>
 <translation id="4074744496918018786">Otwórz obraz w oknie prywatnym</translation>
 <translation id="410351446219883937">Autoodtwarzanie</translation>
 <translation id="4281844954008187215">Warunki usługi</translation>
@@ -178,6 +178,7 @@
 <translation id="8669345741879513971">Potwór 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Zbadaj portal-document</translation>
+<translation id="875142999698251063">Zamknij teraz</translation>
 <translation id="8768970203213061953">Krajobraz 14</translation>
 <translation id="8773635261052182196">Nie będziesz już widzieć tych powiadomień. Możesz je ponownie aktywować z poziomu ustawień Vivaldi.</translation>
 <translation id="8774017153185436870">Strony mogą automatycznie odtwarzać pliki wideo</translation>

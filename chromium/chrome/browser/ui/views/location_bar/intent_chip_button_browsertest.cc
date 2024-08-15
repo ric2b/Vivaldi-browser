@@ -194,7 +194,7 @@ IN_PROC_BROWSER_TEST_P(IntentChipButtonBrowserTest,
   EXPECT_FALSE(GetIntentChip()->GetVisible());
 }
 
-// TODO(crbug.com/1515480): This test is flaky on Mac.
+// TODO(crbug.com/41488032): This test is flaky on Mac.
 #if BUILDFLAG(IS_MAC)
 #define MAYBE_IconVisibilityAfterTabSwitching \
   DISABLED_IconVisibilityAfterTabSwitching
@@ -374,6 +374,12 @@ class IntentChipButtonBrowserUiTest : public UiBrowserTest {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_F(IntentChipButtonBrowserUiTest, InvokeUi_default) {
+// TODO(crbug.com/340814277): Flaky on Windows.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_InvokeUi_default DISABLED_InvokeUi_default
+#else
+#define MAYBE_InvokeUi_default InvokeUi_default
+#endif
+IN_PROC_BROWSER_TEST_F(IntentChipButtonBrowserUiTest, MAYBE_InvokeUi_default) {
   ShowAndVerifyUi();
 }

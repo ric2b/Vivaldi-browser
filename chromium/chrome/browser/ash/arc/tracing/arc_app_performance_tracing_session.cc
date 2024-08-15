@@ -52,7 +52,7 @@ double CalcJanksPerMinute(const std::deque<int64_t>& presents,
                           const base::TimeDelta& duration) {
   int jank_count = 0;
   ArcGraphicsJankDetector jank_detector(base::BindRepeating(
-      [](int* out_count, const base::Time& timestamp) { (*out_count)++; },
+      [](int* out_count, base::Time timestamp) { (*out_count)++; },
       &jank_count));
 
   // Feed minimum samples into detector to obtain sampling rate.
@@ -204,7 +204,11 @@ void ArcAppPerformanceTracingSession::OnCommit(exo::Surface* surface) {
   }
 
   frame_times_.emplace_back(ticks_now_callback_.Run());
-  frames_->ListenForPresent(surface);
+  if (trace_real_presents_) {
+    frames_->ListenForPresent(surface);
+  } else {
+    frames_->AddPresent(ticks_now_callback_.Run());
+  }
 }
 
 void ArcAppPerformanceTracingSession::Analyze(base::TimeDelta tracing_period) {

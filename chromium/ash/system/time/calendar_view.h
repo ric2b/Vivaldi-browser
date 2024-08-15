@@ -10,6 +10,7 @@
 #include "ash/ash_export.h"
 #include "ash/shell.h"
 #include "ash/system/model/system_tray_model.h"
+#include "ash/system/time/calendar_list_model.h"
 #include "ash/system/time/calendar_model.h"
 #include "ash/system/time/calendar_up_next_view.h"
 #include "ash/system/time/calendar_view_controller.h"
@@ -85,9 +86,7 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
 
   // CalendarModel::Observer:
   void OnEventsFetched(const CalendarModel::FetchingStatus status,
-                       const base::Time start_time,
-                       const google_apis::calendar::EventList* events) override;
-  void OnTimeout(base::Time start_of_month) override;
+                       const base::Time start_time) override;
 
   // CalendarViewController::Observer:
   void OnMonthChanged() override;
@@ -222,10 +221,6 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
   // Returns the calculated height of a single visible row.
   int GetSingleVisibleRowHeight() const;
 
-  // Returns the height under todays row. This is needed for scrolling to show
-  // more future dates.
-  int GetHeightUnderTodaysRow() const;
-
   // Adds a month label.
   views::View* AddLabelWithId(LabelType type, bool add_at_front = false);
 
@@ -279,8 +274,14 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
   // Updates the on-screen month map with the current months on screen.
   void UpdateOnScreenMonthMap();
 
+  // Returns true if there is no Calendar List fetch in progress.
+  bool CalendarsFetchComplete();
+
   // Returns whether or not we've finished fetching CalendarEvents.
   bool EventsFetchComplete();
+
+  // Creates and adds the `up_next_view_` if it's not created yet.
+  void MaybeCreateUpNextView();
 
   // Checks if all months in the visible window have finished fetching. If so,
   // stop showing the loading bar.
@@ -376,14 +377,6 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
   // Removes the `up_next_view_`.
   void RemoveUpNextView();
 
-  // Animates scrolling the Calendar `scroll_view_` by the given offset. Uses
-  // layer transforms to mimic scrolling and then sets a final scroll position
-  // on the scroll view to give the illusion of animating scrolling.
-  void AnimateScrollByOffset(int offset);
-
-  // Post animation callback for `AnimateScrollByOffset()`.
-  void OnAnimateScrollByOffsetComplete(int offset);
-
   // Used by the `CalendarUpNextView` to open the event list for today's date.
   void OpenEventListForTodaysDate();
 
@@ -456,6 +449,8 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
   // Owned by CalendarView.
   raw_ptr<CalendarUpNextView, DanglingUntriaged> up_next_view_ = nullptr;
   std::map<base::Time, CalendarModel::FetchingStatus> on_screen_month_;
+  raw_ptr<CalendarListModel> calendar_list_model_ =
+      Shell::Get()->system_tray_model()->calendar_list_model();
   raw_ptr<CalendarModel> calendar_model_ =
       Shell::Get()->system_tray_model()->calendar_model();
 

@@ -294,6 +294,7 @@ def gn_cflags_to_blueprint_cflags(target_info):
     # regexs of allowlisted cflags
     cflag_allowlist = [
         r'^-Wno-.*$',  # forward cflags that disable warnings
+        r'^-fvisibility.*$',  # forward visibility (https://gcc.gnu.org/wiki/Visibility) flags for better perf on x86
         r'-mpclmul'  # forward "-mpclmul" (used by zlib)
     ]
 
@@ -630,7 +631,7 @@ def main():
             'name':
                 'angle_common_library_cflags',
             'cpp_std':
-                'gnu++17',  # TODO(b/175635923): std::popcount missing from external/libcxx
+                'gnu++17',  # TODO(b/330910097): std::popcount missing from external/libcxx
             'cflags': [
                 # Chrome and Android use different versions of Clang which support differnt warning options.
                 # Ignore errors about unrecognized warning flags.
@@ -638,6 +639,8 @@ def main():
                 '-O2',
                 # Override AOSP build flags to match ANGLE's CQ testing and reduce binary size
                 '-fno-unwind-tables',
+                # Disable stack protector to reduce cpu overhead.
+                '-fno-stack-protector',
             ],
         }))
 

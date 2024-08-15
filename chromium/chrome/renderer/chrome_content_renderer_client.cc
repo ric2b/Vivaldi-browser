@@ -35,7 +35,6 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
-#include "chrome/common/pdf_util.h"
 #include "chrome/common/pepper_permission_util.h"
 #include "chrome/common/ppapi_utils.h"
 #include "chrome/common/profiler/thread_profiler.h"
@@ -61,6 +60,7 @@
 #include "chrome/renderer/net_benchmarking_extension.h"
 #include "chrome/renderer/plugins/non_loadable_plugin_placeholder.h"
 #include "chrome/renderer/plugins/pdf_plugin_placeholder.h"
+#include "chrome/renderer/supervised_user/supervised_user_error_page_controller_delegate_impl.h"
 #include "chrome/renderer/trusted_vault_encryption_keys_extension.h"
 #include "chrome/renderer/url_loader_throttle_provider_impl.h"
 #include "chrome/renderer/v8_unwinder.h"
@@ -78,6 +78,7 @@
 #include "components/content_capture/renderer/content_capture_sender.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/continuous_search/renderer/search_result_extractor_impl.h"
+#include "components/country_codes/country_codes.h"
 #include "components/dom_distiller/content/renderer/distillability_agent.h"
 #include "components/dom_distiller/content/renderer/distiller_js_render_frame_observer.h"
 #include "components/dom_distiller/core/dom_distiller_features.h"
@@ -86,6 +87,7 @@
 #include "components/error_page/common/error.h"
 #include "components/error_page/common/localized_error.h"
 #include "components/feed/buildflags.h"
+#include "components/feed/feed_feature_list.h"
 #include "components/grit/components_scaled_resources.h"
 #include "components/heap_profiling/in_process/heap_profiler_controller.h"
 #include "components/history_clusters/core/config.h"
@@ -101,6 +103,7 @@
 #include "components/paint_preview/buildflags/buildflags.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/pdf/common/constants.h"
+#include "components/pdf/common/pdf_util.h"
 #include "components/permissions/features.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/renderer/threat_dom_details.h"
@@ -108,7 +111,6 @@
 #include "components/subresource_filter/content/renderer/subresource_filter_agent.h"
 #include "components/subresource_filter/content/renderer/unverified_ruleset_dealer.h"
 #include "components/subresource_filter/core/common/common_features.h"
-#include "components/supervised_user/core/common/buildflags.h"
 #include "components/variations/net/variations_http_headers.h"
 #include "components/variations/variations_switches.h"
 #include "components/version_info/version_info.h"
@@ -250,10 +252,6 @@
 #include "components/spellcheck/renderer/spellcheck_panel.h"
 #endif  // BUILDFLAG(HAS_SPELLCHECK_PANEL)
 #endif  // BUILDFLAG(ENABLE_SPELLCHECK)
-
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "chrome/renderer/supervised_user/supervised_user_error_page_controller_delegate_impl.h"
-#endif
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
 #include "chrome/renderer/media/chrome_key_systems.h"
@@ -566,14 +564,13 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   // This doesn't work in single-process mode.
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kSingleProcess)) {
-    using HeapProfilerController = heap_profiling::HeapProfilerController;
+    const auto* heap_profiler_controller =
+        heap_profiling::HeapProfilerController::GetInstance();
     // The HeapProfilerController should have been created in
     // ChromeMainDelegate::PostEarlyInitialization.
-    DCHECK_NE(HeapProfilerController::GetProfilingEnabled(),
-              HeapProfilerController::ProfilingEnabled::kNoController);
+    CHECK(heap_profiler_controller);
     if (ThreadProfiler::ShouldCollectProfilesForChildProcess() ||
-        HeapProfilerController::GetProfilingEnabled() ==
-            HeapProfilerController::ProfilingEnabled::kEnabled) {
+        heap_profiler_controller->IsEnabled()) {
       ThreadProfiler::SetMainThreadTaskRunner(
           base::SingleThreadTaskRunner::GetCurrentDefault());
       mojo::PendingRemote<metrics::mojom::CallStackProfileCollector> collector;
@@ -660,16 +657,14 @@ void ChromeContentRendererClient::RenderFrameCreated(
 
   const bool search_result_extractor_enabled =
       render_frame->IsMainFrame() &&
-      page_content_annotations::features::IsPageContentAnnotationEnabled();
+      page_content_annotations::features::ShouldExtractRelatedSearches();
   if (search_result_extractor_enabled) {
     continuous_search::SearchResultExtractorImpl::Create(render_frame);
   }
 
   new NetErrorHelper(render_frame);
 
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   new SupervisedUserErrorPageControllerDelegateImpl(render_frame);
-#endif
 
   if (!render_frame->IsMainFrame()) {
     auto* main_frame_no_state_prefetch_helper =
@@ -778,7 +773,7 @@ void ChromeContentRendererClient::RenderFrameCreated(
 #endif
 #if BUILDFLAG(ENABLE_FEED_V2)
   if (render_frame->IsMainFrame() &&
-      base::FeatureList::IsEnabled(feed::kWebFeed)) {
+      feed::IsWebFeedEnabledForLocale(country_codes::GetCurrentCountryCode())) {
     new feed::RssLinkReader(render_frame, registry);
   }
 #endif
@@ -1228,7 +1223,7 @@ GURL ChromeContentRendererClient::GetNaClContentHandlerURL(
 void ChromeContentRendererClient::GetInterface(
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  // TODO(crbug.com/977637): Get rid of the use of this implementation of
+  // TODO(crbug.com/40633267): Get rid of the use of this implementation of
   // |service_manager::LocalInterfaceProvider|. This was done only to avoid
   // churning spellcheck code while eliminting the "chrome" and
   // "chrome_renderer" services. Spellcheck is (and should remain) the only
@@ -1363,10 +1358,8 @@ void ChromeContentRendererClient::PrepareErrorPage(
           http_method == "POST", std::move(alternative_error_page_info),
           error_html);
 
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   SupervisedUserErrorPageControllerDelegateImpl::Get(render_frame)
       ->PrepareForErrorPage();
-#endif
 }
 
 void ChromeContentRendererClient::PrepareErrorPageForHttpStatusError(
@@ -1595,11 +1588,12 @@ ChromeContentRendererClient::CreateWebSocketHandshakeThrottleProvider() {
       browser_interface_broker_.get());
 }
 
-std::unique_ptr<media::KeySystemSupportObserver>
+std::unique_ptr<media::KeySystemSupportRegistration>
 ChromeContentRendererClient::GetSupportedKeySystems(
+    content::RenderFrame* render_frame,
     media::GetSupportedKeySystemsCB cb) {
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
-  return GetChromeKeySystems(std::move(cb));
+  return GetChromeKeySystems(render_frame, std::move(cb));
 #else
   std::move(cb).Run({});
   return nullptr;
@@ -1844,7 +1838,7 @@ void ChromeContentRendererClient::AppendContentSecurityPolicy(
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #if BUILDFLAG(ENABLE_PDF)
   // Don't apply default CSP to PDF renderers.
-  // TODO(crbug.com/1252096): Lock down the CSP once style and script are no
+  // TODO(crbug.com/40792950): Lock down the CSP once style and script are no
   // longer injected inline by `pdf::PluginResponseWriter`. That class may be a
   // better place to define such CSP, or we may continue doing so here.
   if (pdf::IsPdfRenderer())

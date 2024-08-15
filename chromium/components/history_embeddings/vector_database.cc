@@ -6,6 +6,8 @@
 
 #include <queue>
 
+#include "base/timer/elapsed_timer.h"
+
 namespace history_embeddings {
 
 // Standard normalized magnitude for all embeddings.
@@ -29,6 +31,7 @@ UrlPassages& UrlPassages::operator=(UrlPassages&&) = default;
 ////////////////////////////////////////////////////////////////////////////////
 
 Embedding::Embedding(std::vector<float> data) : data_(std::move(data)) {}
+Embedding::Embedding() = default;
 Embedding::~Embedding() = default;
 Embedding::Embedding(const Embedding&) = default;
 Embedding& Embedding::operator=(const Embedding&) = default;
@@ -98,13 +101,43 @@ std::pair<float, size_t> UrlEmbeddings::BestScoreWith(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::vector<ScoredUrl> VectorDatabase::FindNearest(size_t count,
-                                                   const Embedding& query) {
+ScoredUrl::ScoredUrl(history::URLID url_id,
+                     history::VisitID visit_id,
+                     base::Time visit_time,
+                     float score,
+                     size_t index,
+                     Embedding passage_embedding)
+    : url_id(url_id),
+      visit_id(visit_id),
+      visit_time(visit_time),
+      score(score),
+      index(index),
+      passage_embedding(std::move(passage_embedding)) {}
+ScoredUrl::~ScoredUrl() = default;
+ScoredUrl::ScoredUrl(ScoredUrl&&) = default;
+ScoredUrl& ScoredUrl::operator=(ScoredUrl&&) = default;
+ScoredUrl::ScoredUrl(const ScoredUrl&) = default;
+ScoredUrl& ScoredUrl::operator=(ScoredUrl&) = default;
+
+////////////////////////////////////////////////////////////////////////////////
+
+SearchInfo::SearchInfo() = default;
+SearchInfo::SearchInfo(SearchInfo&&) = default;
+SearchInfo::~SearchInfo() = default;
+
+////////////////////////////////////////////////////////////////////////////////
+
+SearchInfo VectorDatabase::FindNearest(
+    std::optional<base::Time> time_range_start,
+    size_t count,
+    const Embedding& query,
+    base::RepeatingCallback<bool()> is_search_halted) {
   if (count == 0) {
     return {};
   }
 
-  std::unique_ptr<EmbeddingsIterator> iterator = MakeEmbeddingsIterator();
+  std::unique_ptr<EmbeddingsIterator> iterator =
+      MakeEmbeddingsIterator(time_range_start);
   if (!iterator) {
     return {};
   }
@@ -115,7 +148,6 @@ std::vector<ScoredUrl> VectorDatabase::FindNearest(size_t count,
   // Magnitudes are also assumed equal; they are provided normalized by design.
   CHECK_LT(std::abs(query.Magnitude() - kUnitLength), kEpsilon);
 
-  // TODO(orinj): Manage a heap for speed.
   struct Compare {
     bool operator()(const ScoredUrl& a, const ScoredUrl& b) {
       return a.score < b.score;
@@ -123,27 +155,46 @@ std::vector<ScoredUrl> VectorDatabase::FindNearest(size_t count,
   };
   std::priority_queue<ScoredUrl, std::vector<ScoredUrl>, Compare> q;
 
+  SearchInfo search_info;
+  search_info.completed = true;
+
+  base::ElapsedTimer total_timer;
+  base::TimeDelta scoring_elapsed;
   while (const UrlEmbeddings* item = iterator->Next()) {
+    if (is_search_halted.Run()) {
+      search_info.completed = false;
+      break;
+    }
+    search_info.searched_url_count++;
+    search_info.searched_embedding_count += item->embeddings.size();
+
+    base::ElapsedTimer scoring_timer;
     while (q.size() > count) {
       q.pop();
     }
     const auto [score, score_index] = item->BestScoreWith(query);
-    q.push(ScoredUrl{
-        .url_id = item->url_id,
-        .visit_id = item->visit_id,
-        .visit_time = item->visit_time,
-        .score = score,
-        .index = score_index,
-    });
+    q.emplace(item->url_id, item->visit_id, item->visit_time, score,
+              score_index, std::move(item->embeddings[score_index]));
+    scoring_elapsed += scoring_timer.Elapsed();
   }
 
+  base::TimeDelta total_elapsed = total_timer.Elapsed();
+  if (total_elapsed.is_zero()) {
+    // Note, base::Nanoseconds(1) is still treated as zero by the time code,
+    // so at least milliseconds are required here.
+    scoring_elapsed = base::Milliseconds(0);
+    total_elapsed = base::Milliseconds(1);
+  }
+  VLOG(1) << "Inner search total (ns): " << total_elapsed.InNanoseconds()
+          << " ; scoring (ns): " << scoring_elapsed.InNanoseconds()
+          << " ; scoring %: " << scoring_elapsed * 100 / total_elapsed;
+
   // Empty queue into vector and return result.
-  std::vector<ScoredUrl> nearest;
   while (!q.empty()) {
-    nearest.push_back(q.top());
+    search_info.scored_urls.push_back(q.top());
     q.pop();
   }
-  return nearest;
+  return search_info;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -178,13 +229,27 @@ bool VectorDatabaseInMemory::AddUrlEmbeddings(
 }
 
 std::unique_ptr<VectorDatabase::EmbeddingsIterator>
-VectorDatabaseInMemory::MakeEmbeddingsIterator() {
+VectorDatabaseInMemory::MakeEmbeddingsIterator(
+    std::optional<base::Time> time_range_start) {
   struct SimpleEmbeddingsIterator : public EmbeddingsIterator {
-    explicit SimpleEmbeddingsIterator(const std::vector<UrlEmbeddings>& source)
-        : iterator_(source.cbegin()), end_(source.cend()) {}
+    explicit SimpleEmbeddingsIterator(
+        const std::vector<UrlEmbeddings>& source,
+        std::optional<base::Time> time_range_start)
+        : iterator_(source.cbegin()),
+          end_(source.cend()),
+          time_range_start_(time_range_start) {}
     ~SimpleEmbeddingsIterator() override = default;
 
     const UrlEmbeddings* Next() override {
+      if (time_range_start_.has_value()) {
+        while (iterator_ != end_) {
+          if (iterator_->visit_time >= time_range_start_.value()) {
+            break;
+          }
+          iterator_++;
+        }
+      }
+
       if (iterator_ == end_) {
         return nullptr;
       }
@@ -193,13 +258,14 @@ VectorDatabaseInMemory::MakeEmbeddingsIterator() {
 
     std::vector<UrlEmbeddings>::const_iterator iterator_;
     std::vector<UrlEmbeddings>::const_iterator end_;
+    const std::optional<base::Time> time_range_start_;
   };
 
   if (data_.empty()) {
     return nullptr;
   }
 
-  return std::make_unique<SimpleEmbeddingsIterator>(data_);
+  return std::make_unique<SimpleEmbeddingsIterator>(data_, time_range_start);
 }
 
 }  // namespace history_embeddings

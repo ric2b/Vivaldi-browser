@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/ash/common/network/onc_mojo.js';
+import '//resources/ash/common/network/onc_mojo.js';
 
-import {MojoInterfaceProviderImpl} from 'chrome://resources/ash/common/network/mojo_interface_provider.js';
-import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
-import {ApnProperties, DeviceStateProperties, FilterType, ManagedProperties, NetworkStateProperties, NO_LIMIT} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
-import {ConnectionStateType, NetworkType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
+import {MojoInterfaceProviderImpl} from '//resources/ash/common/network/mojo_interface_provider.js';
+import {OncMojo} from '//resources/ash/common/network/onc_mojo.js';
+import {ApnProperties, ApnType, DeviceStateProperties, FilterType, ManagedProperties, NetworkStateProperties, NO_LIMIT} from '//resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
+import {ConnectionStateType, NetworkType} from '//resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 
 /**
  * TODO(b/162365553): Implement Edit mode.
@@ -238,4 +238,22 @@ export function getApnDisplayName(i18nFunction, apn) {
 
   // If APN has no name, it's an APN detected by the modem (b/295588352).
   return i18nFunction('apnNameModem');
+}
+
+/**
+ * Returns true if the |apn| can be used as a attach APN.
+ * @param {ApnProperties} apn
+ * @return {boolean}
+ */
+export function isAttachApn(apn) {
+  return !!apn.apnTypes && apn.apnTypes.includes(ApnType.kAttach);
+}
+
+/**
+ * Returns true if the |apn| can be used as a default APN.
+ * @param {ApnProperties} apn
+ * @return {boolean}
+ */
+export function isDefaultApn(apn) {
+  return !!apn.apnTypes && apn.apnTypes.includes(ApnType.kDefault);
 }

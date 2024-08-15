@@ -12,7 +12,7 @@
 
 #include "base/files/file_path.h"
 #include "base/observer_list_types.h"
-#include "components/ad_blocker/adblock_metadata.h"
+#include "components/ad_blocker/adblock_types.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "url/origin.h"
 

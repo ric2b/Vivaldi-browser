@@ -1,7 +1,9 @@
 
 vivaldi_provisioningprofile_files = []
 
-foreach(suffix, [".2953f34141632c2344c96222789fa2bbb718640e"]) {
+foreach(suffix, [".2953f34141632c2344c96222789fa2bbb718640e",
+                 ".463ea99a25b3526e26638f43837715313fe51d7e", # New cert April 2024
+                 ]) {
   vivaldi_provisioningprofile_files += [
       "//vivaldi/installer/mac/profiles/Vivaldi${suffix}.provisionprofile",
       "//vivaldi/installer/mac/profiles/Vivaldi_Internal${suffix}.provisionprofile",

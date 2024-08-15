@@ -56,8 +56,8 @@ rtc_source_set("enable_media_with_defaults") {
   deps = [
     ":enable_media",
     ":libjingle_peerconnection_api",
-    "../modules/audio_processing:api",
     "../rtc_base/system:rtc_export",
+    "audio:audio_processing",
     "audio_codecs:builtin_audio_decoder_factory",
     "audio_codecs:builtin_audio_encoder_factory",
     "task_queue:default_task_queue_factory",
@@ -76,16 +76,18 @@ if (!build_with_chromium) {
     ]
     deps = [
       ":enable_media",
+      ":field_trials_view",
       ":libjingle_peerconnection_api",
       ":scoped_refptr",
       "../api/rtc_event_log:rtc_event_log_factory",
-      "../modules/audio_device:audio_device_api",
-      "../modules/audio_processing:api",
       "../pc:peer_connection_factory",
       "../pc:webrtc_sdp",
       "../rtc_base:threading",
+      "../rtc_base/system:rtc_export",
       "../stats:rtc_stats",
+      "audio:audio_device",
       "audio:audio_mixer_api",
+      "audio:audio_processing",
       "audio_codecs:audio_codecs_api",
       "task_queue:default_task_queue_factory",
       "transport:field_trial_based_config",
@@ -162,10 +164,10 @@ rtc_library("media_stream_interface") {
     ":scoped_refptr",
     ":sequence_checker",
     ":video_track_source_constraints",
-    "../modules/audio_processing:audio_processing_statistics",
     "../rtc_base:checks",
     "../rtc_base/system:no_unique_address",
     "../rtc_base/system:rtc_export",
+    "audio:audio_processing_statistics",
     "video:recordable_encoded_frame",
     "video:video_frame",
   ]
@@ -375,7 +377,6 @@ rtc_library("libjingle_peerconnection_api") {
     # targets like pnacl. API should not depend on anything outside of this
     # file, really. All these should arguably go away in time.
     "../media:rtc_media_config",
-    "../modules/audio_processing:audio_processing_statistics",
     "../rtc_base:checks",
     "../rtc_base:ip_address",
     "../rtc_base:socket_address",
@@ -428,7 +429,6 @@ rtc_source_set("packet_socket_factory") {
   deps = [
     ":async_dns_resolver",
     "../rtc_base:async_packet_socket",
-    "../rtc_base:proxy_info",
     "../rtc_base:socket_address",
     "../rtc_base/system:rtc_export",
   ]
@@ -585,7 +585,6 @@ rtc_source_set("peer_connection_quality_test_fixture_api") {
     ":track_id_stream_info_map",
     ":video_quality_analyzer_api",
     "../media:media_constants",
-    "../modules/audio_processing:api",
     "../rtc_base:checks",
     "../rtc_base:network",
     "../rtc_base:rtc_certificate_generator",
@@ -594,6 +593,7 @@ rtc_source_set("peer_connection_quality_test_fixture_api") {
     "../rtc_base:threading",
     "../test:fileutils",
     "audio:audio_mixer_api",
+    "audio:audio_processing",
     "rtc_event_log",
     "task_queue",
     "test/pclf:media_configuration",
@@ -727,8 +727,14 @@ rtc_library("create_frame_generator") {
     "../rtc_base:checks",
     "../system_wrappers",
     "../test:frame_generator_impl",
+    "environment",
+    "environment:environment_factory",
   ]
-  absl_deps = [ "//third_party/abseil-cpp/absl/types:optional" ]
+  absl_deps = [
+    "//third_party/abseil-cpp/absl/base:nullability",
+    "//third_party/abseil-cpp/absl/strings:string_view",
+    "//third_party/abseil-cpp/absl/types:optional",
+  ]
 }
 
 rtc_library("create_peer_connection_quality_test_frame_generator") {
@@ -842,8 +848,12 @@ rtc_source_set("simulated_network_api") {
   deps = [
     "../rtc_base:macromagic",
     "../rtc_base:random",
+    "units:data_rate",
   ]
-  absl_deps = [ "//third_party/abseil-cpp/absl/types:optional" ]
+  absl_deps = [
+    "//third_party/abseil-cpp/absl/functional:any_invocable",
+    "//third_party/abseil-cpp/absl/types:optional",
+  ]
 }
 
 # TODO(srte): Move to network_emulation sub directory.
@@ -859,7 +869,7 @@ rtc_source_set("network_emulation_manager_api") {
     ":peer_network_dependencies",
     ":simulated_network_api",
     ":time_controller",
-    "../call:simulated_network",
+    "..//test/network:simulated_network",
     "../rtc_base:checks",
     "../rtc_base:network",
     "../rtc_base:network_constants",
@@ -956,6 +966,7 @@ rtc_library("neteq_simulator_api") {
     "test/neteq_simulator.cc",
     "test/neteq_simulator.h",
   ]
+  deps = [ "neteq:neteq_api" ]
 }
 
 rtc_source_set("function_view") {
@@ -986,8 +997,8 @@ if (rtc_include_tests) {
 
       deps = [
         "../modules/audio_processing",
-        "../modules/audio_processing:api",
         "../modules/audio_processing:audioproc_f_impl",
+        "audio:audio_processing",
       ]
     }
 

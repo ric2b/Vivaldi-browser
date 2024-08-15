@@ -69,19 +69,19 @@ class LinkTaskVk final : public vk::Context, public LinkTask
     {}
     ~LinkTaskVk() override = default;
 
-    std::vector<std::shared_ptr<LinkSubTask>> link(const gl::ProgramLinkedResources &resources,
-                                                   const gl::ProgramMergedVaryings &mergedVaryings,
-                                                   bool *areSubTasksOptionalOut) override
+    void link(const gl::ProgramLinkedResources &resources,
+              const gl::ProgramMergedVaryings &mergedVaryings,
+              std::vector<std::shared_ptr<LinkSubTask>> *linkSubTasksOut,
+              std::vector<std::shared_ptr<LinkSubTask>> *postLinkSubTasksOut) override
     {
-        std::vector<std::shared_ptr<LinkSubTask>> subTasks;
-        angle::Result result = linkImpl(resources, mergedVaryings, &subTasks);
-        ASSERT((result == angle::Result::Continue) == (mErrorCode == VK_SUCCESS));
+        ASSERT(linkSubTasksOut && linkSubTasksOut->empty());
+        ASSERT(postLinkSubTasksOut && postLinkSubTasksOut->empty());
 
         // In the Vulkan backend, the only subtasks are pipeline warm up, which is not required for
-        // link.  Setting this flag allows the expensive warm up to be run in a thread without
+        // link.  Running as a post-link task, the expensive warm up is run in a thread without
         // holding up the link results.
-        *areSubTasksOptionalOut = true;
-        return subTasks;
+        angle::Result result = linkImpl(resources, mergedVaryings, postLinkSubTasksOut);
+        ASSERT((result == angle::Result::Continue) == (mErrorCode == VK_SUCCESS));
     }
 
     void handleError(VkResult result,
@@ -119,9 +119,16 @@ class LinkTaskVk final : public vk::Context, public LinkTask
             ANGLE_TRY(contextVk->switchToFramebufferFetchMode(true));
         }
 
-        // Update the relevant perf counters
-        angle::VulkanPerfCounters &from = contextVk->getPerfCounters();
-        angle::VulkanPerfCounters &to   = getPerfCounters();
+        // Forward any errors
+        if (mErrorCode != VK_SUCCESS)
+        {
+            contextVk->handleError(mErrorCode, mErrorFile, mErrorFunction, mErrorLine);
+            return angle::Result::Stop;
+        }
+
+        // Accumulate relevant perf counters
+        const angle::VulkanPerfCounters &from = getPerfCounters();
+        angle::VulkanPerfCounters &to         = contextVk->getPerfCounters();
 
         to.pipelineCreationCacheHits += from.pipelineCreationCacheHits;
         to.pipelineCreationCacheMisses += from.pipelineCreationCacheMisses;
@@ -130,19 +137,13 @@ class LinkTaskVk final : public vk::Context, public LinkTask
         to.pipelineCreationTotalCacheMissesDurationNs +=
             from.pipelineCreationTotalCacheMissesDurationNs;
 
-        // Forward any errors
-        if (mErrorCode != VK_SUCCESS)
-        {
-            contextVk->handleError(mErrorCode, mErrorFile, mErrorFunction, mErrorLine);
-            return angle::Result::Stop;
-        }
         return angle::Result::Continue;
     }
 
   private:
     angle::Result linkImpl(const gl::ProgramLinkedResources &resources,
                            const gl::ProgramMergedVaryings &mergedVaryings,
-                           std::vector<std::shared_ptr<LinkSubTask>> *subTasksOut);
+                           std::vector<std::shared_ptr<LinkSubTask>> *postLinkSubTasksOut);
 
     void linkResources(const gl::ProgramLinkedResources &resources);
     angle::Result initDefaultUniformBlocks();
@@ -169,139 +170,9 @@ class LinkTaskVk final : public vk::Context, public LinkTask
     unsigned int mErrorLine    = 0;
 };
 
-using SharedRenderPass = vk::AtomicShared<vk::RenderPass>;
-class WarmUpTaskCommon : public vk::Context, public LinkSubTask
-{
-  public:
-    WarmUpTaskCommon(vk::Renderer *renderer) : vk::Context(renderer) {}
-    WarmUpTaskCommon(vk::Renderer *renderer,
-                     ProgramExecutableVk *executableVk,
-                     vk::PipelineRobustness pipelineRobustness,
-                     vk::PipelineProtectedAccess pipelineProtectedAccess)
-        : vk::Context(renderer),
-          mExecutableVk(executableVk),
-          mPipelineRobustness(pipelineRobustness),
-          mPipelineProtectedAccess(pipelineProtectedAccess)
-    {}
-    WarmUpTaskCommon(vk::Renderer *renderer,
-                     ProgramExecutableVk *executableVk,
-                     vk::PipelineRobustness pipelineRobustness,
-                     vk::PipelineProtectedAccess pipelineProtectedAccess,
-                     const SharedRenderPass &compatibleRenderPass)
-        : vk::Context(renderer),
-          mExecutableVk(executableVk),
-          mPipelineRobustness(pipelineRobustness),
-          mPipelineProtectedAccess(pipelineProtectedAccess),
-          mCompatibleRenderPass(compatibleRenderPass)
-    {}
-    ~WarmUpTaskCommon() override = default;
-
-    void handleError(VkResult result,
-                     const char *file,
-                     const char *function,
-                     unsigned int line) override
-    {
-        mErrorCode     = result;
-        mErrorFile     = file;
-        mErrorFunction = function;
-        mErrorLine     = line;
-    }
-
-    void operator()() override { UNREACHABLE(); }
-    angle::Result getResult(const gl::Context *context, gl::InfoLog &infoLog) override
-    {
-        ContextVk *contextVk = vk::GetImpl(context);
-
-        // Clean up temporary object first, it's done no matter what may fail below.
-        mCompatibleRenderPass.reset(contextVk->getDevice());
-
-        // Forward any errors
-        if (mErrorCode != VK_SUCCESS)
-        {
-            contextVk->handleError(mErrorCode, mErrorFile, mErrorFunction, mErrorLine);
-            return angle::Result::Stop;
-        }
-        return angle::Result::Continue;
-    }
-
-  protected:
-    // The front-end ensures that the program is not modified while the subtask is running, so it is
-    // safe to directly access the executable from this parallel job.  Note that this is the reason
-    // why the front-end does not let the parallel job continue when a relink happens or the first
-    // draw with this program.
-    ProgramExecutableVk *mExecutableVk;
-    const vk::PipelineRobustness mPipelineRobustness = vk::PipelineRobustness::NonRobust;
-    const vk::PipelineProtectedAccess mPipelineProtectedAccess =
-        vk::PipelineProtectedAccess::Unprotected;
-
-    // Temporary objects to clean up at the end
-    SharedRenderPass mCompatibleRenderPass;
-
-    // Error handling
-    VkResult mErrorCode        = VK_SUCCESS;
-    const char *mErrorFile     = nullptr;
-    const char *mErrorFunction = nullptr;
-    unsigned int mErrorLine    = 0;
-};
-
-class WarmUpComputeTask : public WarmUpTaskCommon
-{
-  public:
-    WarmUpComputeTask(vk::Renderer *renderer,
-                      ProgramExecutableVk *executableVk,
-                      vk::PipelineRobustness pipelineRobustness,
-                      vk::PipelineProtectedAccess pipelineProtectedAccess)
-        : WarmUpTaskCommon(renderer, executableVk, pipelineRobustness, pipelineProtectedAccess)
-    {}
-    ~WarmUpComputeTask() override = default;
-
-    void operator()() override
-    {
-        angle::Result result = mExecutableVk->warmUpComputePipelineCache(this, mPipelineRobustness,
-                                                                         mPipelineProtectedAccess);
-        ASSERT((result == angle::Result::Continue) == (mErrorCode == VK_SUCCESS));
-    }
-};
-
-class WarmUpGraphicsTask : public WarmUpTaskCommon
-{
-  public:
-    WarmUpGraphicsTask(vk::Renderer *renderer,
-                       ProgramExecutableVk *executableVk,
-                       vk::PipelineRobustness pipelineRobustness,
-                       vk::PipelineProtectedAccess pipelineProtectedAccess,
-                       const SharedRenderPass &compatibleRenderPass,
-                       vk::GraphicsPipelineSubset subset,
-                       const bool isSurfaceRotated,
-                       const vk::GraphicsPipelineDesc &graphicsPipelineDesc)
-        : WarmUpTaskCommon(renderer,
-                           executableVk,
-                           pipelineRobustness,
-                           pipelineProtectedAccess,
-                           compatibleRenderPass),
-          mPipelineSubset(subset),
-          mIsSurfaceRotated(isSurfaceRotated),
-          mGraphicsPipelineDesc(graphicsPipelineDesc)
-    {}
-    ~WarmUpGraphicsTask() override = default;
-
-    void operator()() override
-    {
-        angle::Result result = mExecutableVk->warmUpGraphicsPipelineCache(
-            this, mPipelineRobustness, mPipelineProtectedAccess, mPipelineSubset, mIsSurfaceRotated,
-            mGraphicsPipelineDesc, mCompatibleRenderPass.get());
-        ASSERT((result == angle::Result::Continue) == (mErrorCode == VK_SUCCESS));
-    }
-
-  private:
-    vk::GraphicsPipelineSubset mPipelineSubset;
-    bool mIsSurfaceRotated;
-    vk::GraphicsPipelineDesc mGraphicsPipelineDesc;
-};
-
 angle::Result LinkTaskVk::linkImpl(const gl::ProgramLinkedResources &resources,
                                    const gl::ProgramMergedVaryings &mergedVaryings,
-                                   std::vector<std::shared_ptr<LinkSubTask>> *subTasksOut)
+                                   std::vector<std::shared_ptr<LinkSubTask>> *postLinkSubTasksOut)
 {
     ANGLE_TRACE_EVENT0("gpu.angle", "LinkTaskVk::linkImpl");
     ProgramExecutableVk *executableVk = vk::GetImpl(mExecutable);
@@ -345,28 +216,6 @@ angle::Result LinkTaskVk::linkImpl(const gl::ProgramLinkedResources &resources,
     // - Individual GLES1 tests are long, and this adds a considerable overhead to those tests
     if (!mState.isSeparable() && !mIsGLES1 && getFeatures().warmUpPipelineCacheAtLink.enabled)
     {
-        bool isCompute                                        = false;
-        angle::FixedVector<bool, 2> surfaceRotationVariations = {false};
-        vk::GraphicsPipelineDesc graphicsPipelineDesc;
-        vk::RenderPass compatibleRenderPass;
-
-        WarmUpTaskCommon prepForWarmUpContext(mRenderer);
-        ANGLE_TRY(executableVk->prepareForWarmUpPipelineCache(
-            &prepForWarmUpContext, mPipelineRobustness, mPipelineProtectedAccess, &isCompute,
-            &surfaceRotationVariations, &graphicsPipelineDesc, &compatibleRenderPass));
-
-        if (isCompute)
-        {
-            ASSERT(!compatibleRenderPass.valid());
-
-            subTasksOut->push_back(std::make_shared<WarmUpComputeTask>(
-                mRenderer, executableVk, mPipelineRobustness, mPipelineProtectedAccess));
-            return angle::Result::Continue;
-        }
-
-        SharedRenderPass sharedRenderPass;
-        sharedRenderPass.set(mRenderer->getDevice(), std::move(compatibleRenderPass));
-
         // Only build the shaders subset of the pipeline if VK_EXT_graphics_pipeline_library is
         // supported.
         const vk::GraphicsPipelineSubset subset =
@@ -374,14 +223,8 @@ angle::Result LinkTaskVk::linkImpl(const gl::ProgramLinkedResources &resources,
                 ? vk::GraphicsPipelineSubset::Shaders
                 : vk::GraphicsPipelineSubset::Complete;
 
-        for (bool surfaceRotation : surfaceRotationVariations)
-        {
-            subTasksOut->push_back(std::make_shared<WarmUpGraphicsTask>(
-                mRenderer, executableVk, mPipelineRobustness, mPipelineProtectedAccess,
-                sharedRenderPass, subset, surfaceRotation, graphicsPipelineDesc));
-        }
-
-        sharedRenderPass.reset(mRenderer->getDevice());
+        ANGLE_TRY(executableVk->getPipelineCacheWarmUpTasks(
+            mRenderer, mPipelineRobustness, mPipelineProtectedAccess, subset, postLinkSubTasksOut));
     }
 
     return angle::Result::Continue;

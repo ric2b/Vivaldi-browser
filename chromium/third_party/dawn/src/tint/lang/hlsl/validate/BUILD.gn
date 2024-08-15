@@ -56,5 +56,12 @@ if (tint_build_hlsl_writer) {
       "${tint_src_dir}/utils/text",
       "${tint_src_dir}/utils/traits",
     ]
+
+    if (tint_build_hlsl_writer) {
+      deps += [
+        "${tint_src_dir}:dl",
+        "${tint_src_dir}:dxc-include",
+      ]
+    }
   }
 }

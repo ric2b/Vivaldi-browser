@@ -4,9 +4,11 @@
 
 #include <map>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "base/containers/fixed_flat_map.h"
+#include "base/containers/fixed_flat_set.h"
 #include "base/i18n/case_conversion.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/notreached.h"
@@ -18,6 +20,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "components/ad_blocker/parse_utils.h"
+#include "net/base/ip_address.h"
 
 namespace adblock_filter {
 
@@ -42,7 +45,7 @@ enum class OptionType {
 };
 
 constexpr auto kOptionMap =
-    base::MakeFixedFlatMap<base::StringPiece, OptionType>(
+    base::MakeFixedFlatMap<std::string_view, OptionType>(
         {{"third-party", OptionType::kThirdParty},
          {"match-case", OptionType::kMatchCase},
          {"domain", OptionType::kDomain},
@@ -57,16 +60,25 @@ struct ActivationTypeDetails {
 };
 
 constexpr auto kActivationStringMap =
-    base::MakeFixedFlatMap<base::StringPiece, ActivationTypeDetails>(
+    base::MakeFixedFlatMap<std::string_view, ActivationTypeDetails>(
         {{"popup", {RequestFilterRule::kPopup, false}},
          {"document", {RequestFilterRule::kDocument, false}},
          {"elemhide", {RequestFilterRule::kElementHide, true}},
          {"generichide", {RequestFilterRule::kGenericHide, true}},
          {"genericblock", {RequestFilterRule::kGenericBlock, true}}});
 
-bool GetMetadata(base::StringPiece comment,
+constexpr auto kAbpMainSnippetNames = base::MakeFixedFlatSet<std::string_view>({
+#include "vivaldi/components/ad_blocker/abp_snippets_lists/main.inc"
+});
+
+constexpr auto kAbpIsolatedSnippetNames =
+    base::MakeFixedFlatSet<std::string_view>({
+#include "vivaldi/components/ad_blocker/abp_snippets_lists/isolated.inc"
+    });
+
+bool GetMetadata(std::string_view comment,
                  const std::string& tag_name,
-                 base::StringPiece* result) {
+                 std::string_view* result) {
   if (!base::StartsWith(comment, tag_name))
     return false;
 
@@ -76,11 +88,12 @@ bool GetMetadata(base::StringPiece comment,
 }
 }  // namespace
 
-RuleParser::RuleParser(ParseResult* parse_result, bool allow_abp_snippets)
-    : parse_result_(parse_result), allow_abp_snippets_(allow_abp_snippets) {}
+RuleParser::RuleParser(ParseResult* parse_result,
+                       RuleSourceSettings source_settings)
+    : parse_result_(parse_result), source_settings_(source_settings) {}
 RuleParser::~RuleParser() = default;
 
-RuleParser::Result RuleParser::Parse(base::StringPiece rule_string) {
+RuleParser::Result RuleParser::Parse(std::string_view rule_string) {
   // Empty line are treated as a comment.
   if (rule_string.empty()) {
     return kComment;
@@ -97,7 +110,15 @@ RuleParser::Result RuleParser::Parse(base::StringPiece rule_string) {
     return kUnsupported;
   }
 
-  if (rule_string[0] == '[') {
+  if (base::ToLowerASCII(rule_string).starts_with("[adblock")) {
+    return kComment;
+  }
+
+  if (rule_string[0] == '#' && base::IsAsciiWhitespace(rule_string[1])) {
+    return kComment;
+  }
+
+  if (rule_string.starts_with("####")) {
     return kComment;
   }
 
@@ -110,15 +131,15 @@ RuleParser::Result RuleParser::Parse(base::StringPiece rule_string) {
     return kComment;
   }
 
-  size_t selector_separator_2 = base::StringPiece::npos;
+  size_t selector_separator_2 = std::string_view::npos;
   size_t maybe_selector_separator = rule_string.find('#');
-  if (maybe_selector_separator != base::StringPiece::npos) {
+  if (maybe_selector_separator != std::string_view::npos) {
     selector_separator_2 = rule_string.find('#', maybe_selector_separator + 1);
   }
 
-  if (selector_separator_2 != base::StringPiece::npos) {
+  if (selector_separator_2 != std::string_view::npos) {
     ContentInjectionRuleCore content_injection_rule_core;
-    base::StringPiece body = rule_string.substr(selector_separator_2 + 1);
+    std::string_view body = rule_string.substr(selector_separator_2 + 1);
     Result result = IsContentInjectionRule(
         rule_string, maybe_selector_separator, &content_injection_rule_core);
     switch (result) {
@@ -138,6 +159,11 @@ RuleParser::Result RuleParser::Parse(base::StringPiece rule_string) {
       default:
         return result;
     }
+  }
+
+  std::optional<Result> host_result = ParseHostsFileOrNakedHost(rule_string);
+  if (host_result) {
+    return *host_result;
   }
 
   RequestFilterRule rule;
@@ -172,13 +198,13 @@ uBO = uBlock Origin
 // clang-format on
 
 RuleParser::Result RuleParser::IsContentInjectionRule(
-    base::StringPiece rule_string,
+    std::string_view rule_string,
     size_t separator,
     ContentInjectionRuleCore* core) {
   // This assumes we have another '#' separator to look forward to.Under that
   // assumption, the following parsing code is safe until it encounters the
   // second separator.
-  DCHECK(rule_string.find('#', separator + 1) != base::StringPiece::npos);
+  DCHECK(rule_string.find('#', separator + 1) != std::string_view::npos);
 
   size_t position = separator + 1;
   if (rule_string[position] == '@') {
@@ -193,7 +219,7 @@ RuleParser::Result RuleParser::IsContentInjectionRule(
     position++;
   } else if (rule_string[position] == '$') {
     // "#$..." or "#@$..."
-    if (!allow_abp_snippets_) {
+    if (!source_settings_.allow_abp_snippets) {
       // Assume that if abp snippet rules are not allowed, we are dealing with
       // an adg CSS injection rule and vice-versa
       result = Result::kUnsupported;
@@ -207,7 +233,7 @@ RuleParser::Result RuleParser::IsContentInjectionRule(
 
     if (rule_string[position] == '?') {
       // "#$?..." or "#@$?..."
-      if (allow_abp_snippets_) {
+      if (source_settings_.allow_abp_snippets) {
         // adg rules in abp-specific rule file is considered an error.
         result = Result::kError;
       }
@@ -232,11 +258,11 @@ RuleParser::Result RuleParser::IsContentInjectionRule(
   return result;
 }
 
-bool RuleParser::ParseCosmeticRule(base::StringPiece body,
+bool RuleParser::ParseCosmeticRule(std::string_view body,
                                    ContentInjectionRuleCore rule_core) {
   // Rules should consist of a list of selectors. No actual CSS rules allowed.
-  if (body.empty() || body.find('{') != base::StringPiece::npos ||
-      body.find('}') != base::StringPiece::npos)
+  if (body.empty() || body.find('{') != std::string_view::npos ||
+      body.find('}') != std::string_view::npos)
     return false;
 
   CosmeticRule rule;
@@ -247,22 +273,27 @@ bool RuleParser::ParseCosmeticRule(base::StringPiece body,
 }
 
 bool RuleParser::ParseScriptletInjectionRule(
-    base::StringPiece body,
+    std::string_view body,
     ContentInjectionRuleCore rule_core) {
-  ScriptletInjectionRule rule;
-  rule.core = std::move(rule_core);
-  // Use this name to signal an abp snippet filter.
-  rule.scriptlet_name = kAbpSnippetsScriptletName;
-  base::Value arguments_list(base::Value::Type::LIST);
+  ScriptletInjectionRule main_world_rule;
+  ScriptletInjectionRule isolated_world_rule;
+  main_world_rule.core = rule_core.Clone();
+  isolated_world_rule.core = std::move(rule_core);
+  // Use these names to signal an abp snippet filter.
+  main_world_rule.scriptlet_name = kAbpSnippetsMainScriptletName;
+  isolated_world_rule.scriptlet_name = kAbpSnippetsIsolatedScriptletName;
 
-  for (base::StringPiece injection : base::SplitStringPiece(
+  std::string main_world_arguments_list;
+  std::string isolated_world_arguments_list;
+
+  for (std::string_view injection : base::SplitStringPiece(
            body, ";", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
     bool escaped = false;
     bool in_quotes = false;
     bool after_quotes = false;
     bool parsing_code_point = false;
     std::string code_point_str;
-    base::Value arguments(base::Value::Type::LIST);
+    base::Value::List arguments;
     std::string argument;
 
     for (const char c : injection) {
@@ -301,7 +332,7 @@ bool RuleParser::ParseScriptletInjectionRule(
       } else if (in_quotes || !base::IsAsciiWhitespace(c)) {
         argument += c;
       } else if (!argument.empty() || after_quotes) {
-        arguments.GetList().Append(std::move(argument));
+        arguments.Append(std::move(argument));
       }
 
       if (c != '\'')
@@ -309,28 +340,61 @@ bool RuleParser::ParseScriptletInjectionRule(
     }
 
     if (!argument.empty() || after_quotes) {
-      arguments.GetList().Append(std::move(argument));
+      arguments.Append(std::move(argument));
     }
 
     // Can happen if we have an argument string containing only a '\\' or a '\''
-    if (arguments.GetList().size() == 0)
+    if (arguments.size() == 0)
       continue;
 
-    arguments_list.GetList().Append(std::move(arguments));
+    std::string command_name = arguments.front().GetString();
+    std::string serialized_arguments;
+    JSONStringValueSerializer(&serialized_arguments)
+        .Serialize(base::Value(std::move(arguments)));
+    bool valid = false;
+
+    auto add_to_list = [&serialized_arguments, &valid](std::string& list) {
+      list.append(serialized_arguments);
+      list.append(",");
+      valid = true;
+    };
+
+    if (kAbpMainSnippetNames.contains(command_name)) {
+      add_to_list(main_world_arguments_list);
+    }
+
+    if (kAbpIsolatedSnippetNames.contains(command_name)) {
+      add_to_list(isolated_world_arguments_list);
+    }
+
+    if (!valid) {
+      return false;
+    }
   }
 
-  std::string serialized_arguments;
-  JSONStringValueSerializer(&serialized_arguments).Serialize(arguments_list);
-  rule.arguments.push_back(std::move(serialized_arguments));
-  parse_result_->scriptlet_injection_rules.push_back(std::move(rule));
+  // We purposefully leave a trailing comma after the last item of the list
+  // here. It will be taken into account in
+  // ContentInjectionIndexTraversalResults::ToInjectionData
+
+  if (!main_world_arguments_list.empty()) {
+    main_world_rule.arguments.push_back(std::move(main_world_arguments_list));
+    parse_result_->scriptlet_injection_rules.push_back(
+        std::move(main_world_rule));
+  }
+
+  if (!isolated_world_arguments_list.empty()) {
+    isolated_world_rule.arguments.push_back(
+        std::move(isolated_world_arguments_list));
+    parse_result_->scriptlet_injection_rules.push_back(
+        std::move(isolated_world_rule));
+  }
+
   return true;
 }
 
 RuleParser::Result RuleParser::ParseRequestFilterRule(
-    base::StringPiece rule_string,
+    std::string_view rule_string,
     RequestFilterRule* rule) {
-  // TODO(julien): Add optional support for plain hostnames
-
   if (base::StartsWith(rule_string, "@@")) {
     rule->is_allow_rule = true;
     rule_string.remove_prefix(2);
@@ -340,18 +404,18 @@ RuleParser::Result RuleParser::ParseRequestFilterRule(
   // those rules can contain a '$' as an end-of-string marker, we only try to
   // find a '$' marking the beginning of the options section if the pattern
   // doesn't look like a whole-line regex
-  size_t options_start = base::StringPiece::npos;
+  size_t options_start = std::string_view::npos;
   if (rule_string[0] != '/' || rule_string.back() != '/') {
     options_start = rule_string.rfind('$');
   }
-  if (options_start != base::StringPiece::npos && options_start != 0 &&
+  if (options_start != std::string_view::npos && options_start != 0 &&
       rule_string[options_start - 1] == '$') {
     // AdGuard HTML filtering rules use $$ as separator
     return kUnsupported;
   }
 
-  base::StringPiece options_string;
-  if (options_start != base::StringPiece::npos)
+  std::string_view options_string;
+  if (options_start != std::string_view::npos)
     options_string = rule_string.substr(options_start);
 
   // Even if the options string is empty, there is some common setup code
@@ -360,7 +424,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRule(
   if (result != kRequestFilterRule)
     return result;
 
-  base::StringPiece pattern = rule_string.substr(0, options_start);
+  std::string_view pattern = rule_string.substr(0, options_start);
 
   if (base::StartsWith(pattern, "/") && base::EndsWith(pattern, "/") &&
       pattern.length() > 1) {
@@ -430,7 +494,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRule(
     pattern.remove_suffix(1);
   }
 
-  if (pattern.find_first_of("*") != base::StringPiece::npos) {
+  if (pattern.find_first_of("*") != std::string_view::npos) {
     rule->pattern_type = RequestFilterRule::kWildcarded;
   }
 
@@ -459,8 +523,8 @@ RuleParser::Result RuleParser::ParseRequestFilterRule(
 
   size_t authority_end = pattern.find_first_of("/^*?");
   size_t authority_length;
-  if (authority_end == base::StringPiece::npos) {
-    authority_length = base::StringPiece::npos;
+  if (authority_end == std::string_view::npos) {
+    authority_length = std::string_view::npos;
   } else {
     authority_length = authority_end - authority_begin;
     // ^ allows to match any url with the given host part, similarly to a
@@ -481,9 +545,6 @@ RuleParser::Result RuleParser::ParseRequestFilterRule(
       if (!rule->host.empty())
         return kError;
       rule->host = validation_url.host();
-      // TODO(julien): Match host-specific rules using a trie, so that
-      // pure host rules don't require extra pattern-matching.
-      // return kRequestFilterRule;
     }
     canonicalized_pattern += validation_url.host();
     if (validation_url.has_port()) {
@@ -493,7 +554,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRule(
     canonicalized_pattern += potential_authority;
   }
 
-  if (authority_end != base::StringPiece::npos) {
+  if (authority_end != std::string_view::npos) {
     canonicalized_pattern += std::string(pattern.substr(authority_end));
   }
 
@@ -509,8 +570,99 @@ RuleParser::Result RuleParser::ParseRequestFilterRule(
   return kRequestFilterRule;
 }
 
+bool RuleParser::MaybeAddPureHostRule(std::string_view maybe_hostname) {
+  // Implement  /^([\da-z][\da-z_-]*\.)*[\da-z][\da-z-]*[\da-z]$/ to match
+  // ublock
+
+  bool last_component_has_underscore = false;
+  char last_char = '.';
+  bool has_multiple_components = false;
+  for (const char c : maybe_hostname) {
+    if (last_char == '.') {
+      // These characters can't be the first of a component
+      if (c == '.' || c == '-' || c == '_') {
+        return false;
+      }
+    }
+    last_char = c;
+
+    if (base::IsAsciiAlphaNumeric(c) || c == '-') {
+      continue;
+    }
+
+    if (c == '.') {
+      last_component_has_underscore = false;
+      has_multiple_components = true;
+      continue;
+    }
+
+    if (c == '_') {
+      last_component_has_underscore = true;
+      continue;
+    }
+
+    // Unsupported character
+    return false;
+  }
+
+  if (last_component_has_underscore || last_char == '.' || last_char == '-' ||
+      !has_multiple_components) {
+    return false;
+  }
+
+  RequestFilterRule rule;
+  rule.anchor_type.set(RequestFilterRule::kAnchorHost);
+  rule.host = maybe_hostname;
+  rule.party.set();
+  rule.resource_types.set();
+  rule.pattern_type = RequestFilterRule::kPlain;
+  rule.pattern = maybe_hostname;
+  rule.pattern.append("^");
+  parse_result_->request_filter_rules.push_back(std::move(rule));
+
+  return true;
+}
+
+std::optional<RuleParser::Result> RuleParser::ParseHostsFileOrNakedHost(
+    std::string_view rule_string) {
+  size_t first_space = rule_string.find_first_of(" \t");
+  if (first_space == std::string_view::npos) {
+    if (source_settings_.naked_hostname_is_pure_host &&
+        MaybeAddPureHostRule(rule_string)) {
+      return kRequestFilterRule;
+    }
+    return std::nullopt;
+  }
+  // See if we have a hosts file entry.
+  if (net::IPAddress::FromIPLiteral(rule_string.substr(0, first_space)) ==
+      std::nullopt) {
+    return std::nullopt;
+  }
+  rule_string.remove_prefix(first_space + 1);
+
+  Result result = kUnsupported;
+  for (auto hostname : base::SplitStringPiece(
+           rule_string, base::kWhitespaceASCII, base::KEEP_WHITESPACE,
+           base::SPLIT_WANT_NONEMPTY)) {
+    if (net::IPAddress::FromIPLiteral(rule_string.substr(0, first_space)) !=
+            std::nullopt ||
+        hostname == "broadcasthost" || hostname == "local" ||
+        hostname == "localhost" || hostname.starts_with("localhost.") ||
+        hostname.starts_with("ip6-")) {
+      // This is a valid entry, but we don't have a use for it.
+      if (result != kRequestFilterRule) {
+        result = kComment;
+      }
+      continue;
+    }
+    result = MaybeAddPureHostRule(hostname) ? kRequestFilterRule : result;
+  }
+
+  return result;
+}
+
 RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
-    base::StringPiece options,
+    std::string_view options,
     RequestFilterRule* rule) {
   if (!options.empty()) {
     DCHECK_EQ('$', options[0]);
@@ -521,7 +673,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
   std::bitset<RequestFilterRule::kTypeCount> types_unset;
   std::bitset<RequestFilterRule::kActivationCount> activations_set;
   std::bitset<RequestFilterRule::kActivationCount> activations_unset;
-  for (base::StringPiece option : base::SplitStringPiece(
+  for (std::string_view option : base::SplitStringPiece(
            options, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
     bool invert = false;
     if (base::StartsWith(option, "~", base::CompareCase::SENSITIVE)) {
@@ -530,9 +682,9 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
     }
 
     size_t option_name_end = option.find('=');
-    base::StringPiece option_name = option.substr(0, option_name_end);
+    std::string_view option_name = option.substr(0, option_name_end);
 
-    auto* type_option = kTypeStringMap.find(option_name);
+    auto type_option = kTypeStringMap.find(option_name);
     if (type_option != kTypeStringMap.end()) {
       if (invert)
         types_unset.set(type_option->second);
@@ -541,7 +693,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
       continue;
     }
 
-    auto* activation_option = kActivationStringMap.find(option_name);
+    auto activation_option = kActivationStringMap.find(option_name);
     if (activation_option != kActivationStringMap.end()) {
       if (activation_option->second.allow_only && !rule->is_allow_rule)
         return kError;
@@ -552,7 +704,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
       continue;
     }
 
-    auto* other_option = kOptionMap.find(option_name);
+    auto other_option = kOptionMap.find(option_name);
     if (other_option == kOptionMap.end())
       return kUnsupported;
 
@@ -576,7 +728,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
     if (option_type == OptionType::kCSP)
       rule->is_csp_rule = true;
 
-    if (option_name_end == base::StringPiece::npos) {
+    if (option_name_end == std::string_view::npos) {
       if (rule->is_csp_rule && rule->is_allow_rule) {
         // Allow CSP rules without a value for CSP are legal.
         continue;
@@ -584,7 +736,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
       return kError;
     }
 
-    base::StringPiece option_value = option.substr(option_name_end + 1);
+    std::string_view option_value = option.substr(option_name_end + 1);
 
     switch (option_type) {
       case OptionType::kDomain:
@@ -625,7 +777,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
         if (!rule->host.empty())
           return kError;
 
-        if (option_value.find_first_of("/?") != base::StringPiece::npos)
+        if (option_value.find_first_of("/?") != std::string_view::npos)
           return kError;
         std::string host_str(option_value);
 
@@ -671,8 +823,8 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
   return kRequestFilterRule;
 }
 
-bool RuleParser::MaybeParseMetadata(base::StringPiece comment) {
-  base::StringPiece metadata;
+bool RuleParser::MaybeParseMetadata(std::string_view comment) {
+  std::string_view metadata;
   if (GetMetadata(comment, kTitleTag, &metadata)) {
     parse_result_->metadata.title = std::string(metadata);
   } else if (GetMetadata(comment, kHomepageTag, &metadata)) {
@@ -710,7 +862,7 @@ bool RuleParser::MaybeParseMetadata(base::StringPiece comment) {
   return true;
 }
 
-bool RuleParser::ParseDomains(base::StringPiece domain_string,
+bool RuleParser::ParseDomains(std::string_view domain_string,
                               std::string separator,
                               std::vector<std::string>* included_domains,
                               std::vector<std::string>* excluded_domains) {
@@ -722,7 +874,7 @@ bool RuleParser::ParseDomains(base::StringPiece domain_string,
       domain.remove_prefix(1);
     std::string domain_str(domain);
 
-    if (domain.find_first_of("/?") != base::StringPiece::npos)
+    if (domain.find_first_of("/?") != std::string_view::npos)
       return false;
 
     // This should result in a valid URL with only a host part.

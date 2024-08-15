@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: overlay-faq
 title: Overlay FAQ
 ---
@@ -49,7 +49,7 @@ which configs are pulled.
 
 The `src/third_party/portage-stable/` tree is an overlay containing the majority
 of the unmodified packages from upstream Gentoo.  Developers can utilize the
-[`cros_portage_upgrade`](package_upgrade_process.md) tool to automatically
+[`cros_portage_upgrade`](/chromium-os/developer-library/guides/portage/package-upgrade-process/) tool to automatically
 import packages.
 
 "Unmodified" isn't exactly true.  A number of modifications are made to ebuilds
@@ -90,7 +90,7 @@ the software meets the hardware.
 
 
 [Portage]: https://wiki.gentoo.org/wiki/Portage
-[Ebuild FAQ]: ebuild_faq.md
+[Ebuild FAQ]: /chromium-os/developer-library/guides/portage/ebuild-faq/
 [ebuild repositories]: https://wiki.gentoo.org/wiki/Ebuild_repository
 [repository format]: https://wiki.gentoo.org/wiki/Repository_format
 [metadata/layout.conf]: https://wiki.gentoo.org/wiki/Repository_format/metadata/layout.conf

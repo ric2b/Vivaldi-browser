@@ -8,30 +8,13 @@
 
 namespace metrics::structured {
 
-BASE_FEATURE(kEventSequenceLogging,
-             "EnableEventSequenceLogging",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// TODO(b/181724341): Remove this experimental once the feature is rolled out.
-BASE_FEATURE(kBluetoothSessionizedMetrics,
-             "BluetoothSessionizedMetrics",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kFastPairMetrics,
-             "FastPairMetrics",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kNearbyShareMetrics,
-             "NearbyShareMetrics",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kEnabledStructuredMetricsService,
              "EnableStructuredMetricsService",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kPhoneHubStructuredMetrics,
              "PhoneHubStructuredMetrics",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 constexpr base::FeatureParam<int> kLimitFilesPerScanParam{
     &features::kStructuredMetrics, "file_limit", 100};
@@ -70,11 +53,6 @@ constexpr base::FeatureParam<int> kStructuredMetricsUploadCadenceMinutes{
 
 constexpr base::FeatureParam<int> kMaxProtoKiBSize{
     &features::kStructuredMetrics, "max_proto_size_kib", 25};
-
-bool IsIndependentMetricsUploadEnabled() {
-  return base::GetFieldTrialParamByFeatureAsBool(
-      features::kStructuredMetrics, "enable_independent_metrics_upload", true);
-}
 
 int GetFileLimitPerScan() {
   return kLimitFilesPerScanParam.Get();

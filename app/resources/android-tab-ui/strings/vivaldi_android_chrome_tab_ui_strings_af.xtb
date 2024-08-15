@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="af">
+<translation id="2947471979790858922">U aktiwiteit in hierdie privaat oortjies word van hierdie toestel verwyder</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {U kan u geslote oortjies in Onlangse oortjies onder Vivaldi se hoofkieslys vind. U privaat oortjie is nie beskikbaar nie.}
+        other {U kan u geslote oortjies in Onlangse oortjies onder Vivaldi se hoofkieslys vind. U # privaat oortjies is nie beskikbaar nie.}}</translation>
+<translation id="4871187110787939393">Sluit alle privaat oortjies?</translation>
 </translationbundle>

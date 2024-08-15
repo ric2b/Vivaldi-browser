@@ -666,11 +666,11 @@ class ShowPopupInterceptor
   ShowPopupInterceptor(WebContentsImpl* web_contents,
                        RenderFrameHostImpl* frame_host,
                        const gfx::Rect& overriden_bounds)
-      : overriden_bounds_(overriden_bounds),
-        frame_host_(frame_host->GetWeakPtr()) {
-    frame_host_->SetCreateNewPopupCallbackForTesting(base::BindRepeating(
-        &ShowPopupInterceptor::DidCreatePopupWidget, base::Unretained(this)));
-  }
+      : create_new_popup_widget_interceptor_(
+            frame_host,
+            base::BindOnce(&ShowPopupInterceptor::DidCreatePopupWidget,
+                           base::Unretained(this))),
+        overriden_bounds_(overriden_bounds) {}
 
   ShowPopupInterceptor(const ShowPopupInterceptor&) = delete;
   ShowPopupInterceptor& operator=(const ShowPopupInterceptor&) = delete;
@@ -681,8 +681,6 @@ class ShowPopupInterceptor
           rwhi->popup_widget_host_receiver_for_testing().SwapImplForTesting(
               rwhi);
     }
-
-    frame_host_->SetCreateNewPopupCallbackForTesting(base::NullCallback());
   }
 
   void Wait() { run_loop_.Run(); }
@@ -711,11 +709,11 @@ class ShowPopupInterceptor
   int last_routing_id() const { return routing_id_; }
 
  private:
+  CreateNewPopupWidgetInterceptor create_new_popup_widget_interceptor_;
   base::RunLoop run_loop_;
   gfx::Rect overriden_bounds_;
   int32_t routing_id_ = MSG_ROUTING_NONE;
   int32_t process_id_ = 0;
-  base::WeakPtr<RenderFrameHostImpl> frame_host_;
 };
 
 #if BUILDFLAG(IS_MAC)
@@ -729,15 +727,14 @@ class ShowPopupMenuInterceptor
   explicit ShowPopupMenuInterceptor(RenderFrameHostImpl* render_frame_host,
                                     const gfx::Rect& overriden_bounds)
       : overriden_bounds_(overriden_bounds),
-        render_frame_host_(render_frame_host->GetWeakPtr()),
         swapped_impl_(
-            render_frame_host_->local_frame_host_receiver_for_testing(),
+            render_frame_host->local_frame_host_receiver_for_testing(),
             this) {}
 
   ~ShowPopupMenuInterceptor() override = default;
 
   LocalFrameHost* GetForwardingInterface() override {
-    return render_frame_host_.get();
+    return swapped_impl_.old_impl();
   }
 
   void Wait() { run_loop_.Run(); }
@@ -774,9 +771,7 @@ class ShowPopupMenuInterceptor
   base::RunLoop run_loop_;
   bool is_cancelled_{false};
   gfx::Rect overriden_bounds_;
-  base::WeakPtr<RenderFrameHostImpl> render_frame_host_;
-  mojo::test::ScopedSwapImplForTesting<
-      mojo::AssociatedReceiver<blink::mojom::LocalFrameHost>>
+  mojo::test::ScopedSwapImplForTesting<blink::mojom::LocalFrameHost>
       swapped_impl_;
   mojo::Receiver<blink::mojom::PopupMenuClient> receiver_{this};
 };
@@ -794,7 +789,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostSitePerProcessTest,
   FrameTreeNode* root = contents->GetPrimaryFrameTree().root();
   RenderFrameHostImpl* root_frame_host = root->current_frame_host();
 
-  // TODO(crbug.com/1181150): Crash when we attempt to use a mock prompt here.
+  // TODO(crbug.com/40750695): Crash when we attempt to use a mock prompt here.
   // After the ticket is fixed, remove the shortcut of getting bounds and use
   // the `MockPermissionPromptFactory` instead.
   // Create a popup widget and wait for the RenderWidgetHost to be shown.
@@ -961,7 +956,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
 
 // Tests that the renderer receives the root widget's viewport segments and
 // correctly exposes those via CSS.
-// TODO(crbug.com/1098549) Convert this to a WPT once emulation is available
+// TODO(crbug.com/40137084) Convert this to a WPT once emulation is available
 // via WebDriver.
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
                        FoldablesCSSWithOverrides) {
@@ -1191,8 +1186,8 @@ class RenderWidgetHostDelegatedInkMetadataTest
 
 // Confirm that using the |updateInkTrailStartPoint| JS API results in the
 // |request_points_for_delegated_ink_| flag being set on the RWHVB.
-// TODO(crbug.com/1344023). Flaky on Linux.
-// TODO(crbug.com/1479339): Failing on ChromesOS MSan.
+// TODO(crbug.com/40852704). Flaky on Linux.
+// TODO(crbug.com/40929902): Failing on ChromesOS MSan.
 #if BUILDFLAG(IS_LINUX) || (BUILDFLAG(IS_CHROMEOS) && defined(MEMORY_SANITIZER))
 #define MAYBE_FlagGetsSetFromRenderFrameMetadata \
   DISABLED_FlagGetsSetFromRenderFrameMetadata
@@ -1257,7 +1252,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostDelegatedInkMetadataTest,
 
 // If the DelegatedInkTrailPresenter creates a metadata that has the same
 // timestamp as the previous one, it does not set the metadata.
-// TODO(crbug.com/1344023). Flaky.
+// TODO(crbug.com/40852704). Flaky.
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostDelegatedInkMetadataTest,
                        DISABLED_DuplicateMetadata) {
   ASSERT_TRUE(ExecJs(shell()->web_contents(), R"(

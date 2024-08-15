@@ -45,13 +45,13 @@ cc_test(
     srcs = ["analytics_recorder_test.cc"],
     deps = [
         ":analytics",
-        "//internal/analytics:event_logger",
+        "//internal/analytics:mock_event_logger",
         "//internal/platform/implementation/g3",  # fixdeps: keep
         "//proto:sharing_enums_cc_proto",
         "//sharing:types",
         "//sharing/common:enum",
         "//sharing/proto:enums_cc_proto",
-        "//sharing/proto:share_cc_proto",
+        "//sharing/proto:wire_format_cc_proto",
         "//sharing/proto/analytics:sharing_log_cc_proto",
         "@com_github_protobuf_matchers//protobuf-matchers",
         "@com_google_absl//absl/strings",

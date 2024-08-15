@@ -9,7 +9,6 @@
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
-#include "base/functional/callback_helpers.h"
 #include "base/memory/memory_pressure_monitor.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/notreached.h"
@@ -20,6 +19,7 @@
 #include "build/build_config.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
+#include "content/browser/preloading/preloading_data_impl.h"
 #include "content/browser/preloading/preloading_trigger_type_impl.h"
 #include "content/browser/preloading/prerender/devtools_prerender_attempt.h"
 #include "content/browser/preloading/prerender/prerender_features.h"
@@ -42,6 +42,7 @@
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/global_memory_dump.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/memory_instrumentation.h"
+#include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #include "third_party/blink/public/common/features.h"
 #include "url/gurl.h"
 
@@ -86,7 +87,7 @@ bool DeviceHasEnoughMemoryForPrerender() {
   // which report lower RAM due to carveouts.
   // Previously used the same default threshold as the back/forward cache. See
   // comments in DeviceHasEnoughMemoryForBackForwardCache().
-  // TODO(https://crbug.com/1470820): experiment with 1200 MB threshold like
+  // TODO(crbug.com/40277975): experiment with 1200 MB threshold like
   // back/forward cache.
   static constexpr int kDefaultMemoryThresholdMb =
 #if BUILDFLAG(IS_ANDROID)
@@ -316,6 +317,10 @@ PreloadingEligibility ToEligibility(PrerenderFinalStatus status) {
     case PrerenderFinalStatus::kRedirectedPrerenderingUrlHasEffectiveUrl:
     case PrerenderFinalStatus::kActivationUrlHasEffectiveUrl:
       return PreloadingEligibility::kHasEffectiveUrl;
+    case PrerenderFinalStatus::kJavaScriptInterfaceAdded:
+    case PrerenderFinalStatus::kJavaScriptInterfaceRemoved:
+    case PrerenderFinalStatus::kAllPrerenderingCanceled:
+      NOTREACHED_NORETURN();
   }
 
   NOTREACHED_NORETURN();
@@ -350,7 +355,7 @@ class PrerenderHostBuilder {
   bool CheckIfShouldHoldback();
 
   // Public only for exceptional case.
-  // TODO(https://crbug.com/1435376): Make this private again.
+  // TODO(crbug.com/40904828): Make this private again.
   void Drop();
   bool IsDropped();
 
@@ -538,15 +543,15 @@ int PrerenderHostRegistry::CreateAndStartHost(
                   attributes.initiator_frame_token.value());
 
     // Ensure observers are notified that a trigger occurred.
-    base::ScopedClosureRunner notify_trigger(
-        base::BindOnce(&PrerenderHostRegistry::NotifyTrigger,
-                       base::Unretained(this), attributes.prerendering_url));
+    absl::Cleanup notify_trigger = [this, &attributes] {
+      NotifyTrigger(attributes.prerendering_url);
+    };
 
     auto builder = PrerenderHostBuilder(attempt);
 
     // We don't know the root cause, but there is a case this is null.
     //
-    // TODO(https://crbug.com/1435376): Continue investigation and fix the root
+    // TODO(crbug.com/40904828): Continue investigation and fix the root
     // cause.
     if (initiator_web_contents.GetDelegate() == nullptr) {
       // Note that return without consuming `builder` is exceptional.
@@ -624,7 +629,7 @@ int PrerenderHostRegistry::CreateAndStartHost(
     // Allow prerendering only for same-site. The initiator origin is nullopt
     // when prerendering is initiated by the browser (not by a renderer using
     // Speculation Rules API). In that case, skip this same-site check.
-    // TODO(crbug.com/1176054): Support cross-site prerendering.
+    // TODO(crbug.com/40168192): Support cross-site prerendering.
     if (!attributes.IsBrowserInitiated() &&
         !prerender_navigation_utils::IsSameSite(
             attributes.prerendering_url, attributes.initiator_origin.value())) {
@@ -709,7 +714,7 @@ int PrerenderHostRegistry::CreateAndStartHost(
     // case, we want to control the limit based on the initiator
     // WebContents.
     //
-    // TODO(crbug.com/1355151): Enqueue the request exceeding the number limit
+    // TODO(crbug.com/40235847): Enqueue the request exceeding the number limit
     // until the forerunners are cancelled, and suspend starting a new prerender
     // when the number reaches the limit.
     if (!initiator_web_contents.GetPrerenderHostRegistry()
@@ -798,7 +803,9 @@ int PrerenderHostRegistry::CreateAndStartHost(
 
 int PrerenderHostRegistry::CreateAndStartHostForNewTab(
     const PrerenderAttributes& attributes,
-    PreloadingPredictor preloading_predictor) {
+    const PreloadingPredictor& creating_predictor,
+    const PreloadingPredictor& enacting_predictor,
+    PreloadingConfidence confidence) {
   CHECK(base::FeatureList::IsEnabled(blink::features::kPrerender2InNewTab));
   CHECK(IsSpeculationRuleType(attributes.trigger_type));
   std::string recorded_url =
@@ -811,7 +818,8 @@ int PrerenderHostRegistry::CreateAndStartHostForNewTab(
 
   auto handle = std::make_unique<PrerenderNewTabHandle>(
       attributes, *web_contents()->GetBrowserContext());
-  int prerender_host_id = handle->StartPrerendering(preloading_predictor);
+  int prerender_host_id = handle->StartPrerendering(
+      creating_predictor, enacting_predictor, confidence);
   if (prerender_host_id == RenderFrameHost::kNoFrameTreeNodeId)
     return RenderFrameHost::kNoFrameTreeNodeId;
   prerender_new_tab_handle_by_frame_tree_node_id_[prerender_host_id] =
@@ -828,7 +836,7 @@ int PrerenderHostRegistry::CreateAndStartHostForNewTab(
 }
 
 int PrerenderHostRegistry::StartPrerendering(int frame_tree_node_id) {
-  // TODO(https://crbug.com/1424425): Don't start prerendering if the current
+  // TODO(crbug.com/40260412): Don't start prerendering if the current
   // memory pressure level is critical, and then retry prerendering when the
   // memory pressure level goes down.
 
@@ -1177,7 +1185,7 @@ void PrerenderHostRegistry::OnActivationFinished(int frame_tree_node_id) {
   // page, which means the activation failed.
   CHECK_EQ(frame_tree_node_id, reserved_prerender_host_->frame_tree_node_id());
 
-  // TODO(https://crbug.com/1378151): Monitor the final status metric and see
+  // TODO(crbug.com/40243805): Monitor the final status metric and see
   // whether it could be possible.
   ScheduleToDeleteAbandonedHost(
       std::move(reserved_prerender_host_),
@@ -1274,8 +1282,8 @@ void PrerenderHostRegistry::BackNavigationLikely(
     return;
   }
 
-  PreloadingData* preloading_data =
-      PreloadingData::GetOrCreateForWebContents(web_contents());
+  PreloadingDataImpl* preloading_data =
+      PreloadingDataImpl::GetOrCreateForWebContents(web_contents());
   preloading_data->SetIsNavigationInDomainCallback(
       predictor,
       base::BindRepeating(IsNavigationInSessionHistoryPredictorDomain));
@@ -1307,7 +1315,7 @@ void PrerenderHostRegistry::BackNavigationLikely(
       PreloadingData::GetSameURLMatcher(back_url);
   ukm::SourceId triggered_primary_page_source_id =
       web_contents()->GetPrimaryMainFrame()->GetPageUkmSourceId();
-  preloading_data->AddPreloadingPrediction(predictor, /*confidence=*/100,
+  preloading_data->AddPreloadingPrediction(predictor, PreloadingConfidence{100},
                                            same_url_matcher,
                                            triggered_primary_page_source_id);
   PreloadingAttempt* attempt = preloading_data->AddPreloadingAttempt(
@@ -1567,6 +1575,7 @@ int PrerenderHostRegistry::FindHostToActivateInternal(
   if (navigation_request.IsInPrerenderedMainFrame())
     return RenderFrameHost::kNoFrameTreeNodeId;
 
+  // TODO(crbug.com/331591646): Add No Vary Search hint functionality.
   // Find an available host for the navigation URL.
   PrerenderHost* host = nullptr;
   for (const auto& [host_id, it_prerender_host] :
@@ -1599,9 +1608,9 @@ int PrerenderHostRegistry::FindHostToActivateInternal(
     return RenderFrameHost::kNoFrameTreeNodeId;
   }
 
-  // TODO(crbug.com/1399709): Remove the restriction after further investigation
-  // and discussion.
-  // Disallow activation when the navigation happens in the hidden tab.
+  // TODO(crbug.com/40249964): Remove the restriction after further
+  // investigation and discussion. Disallow activation when the navigation
+  // happens in the hidden tab.
   if (web_contents()->GetVisibility() == Visibility::HIDDEN &&
       !IsAllowedToActivateInBackgroundForTesting()) {
     CancelHost(host->frame_tree_node_id(),

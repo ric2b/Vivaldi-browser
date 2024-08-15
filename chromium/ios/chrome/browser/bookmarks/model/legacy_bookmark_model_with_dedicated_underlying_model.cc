@@ -54,13 +54,6 @@ LegacyBookmarkModelWithDedicatedUnderlyingModel::managed_node() const {
                                    : nullptr;
 }
 
-// Vivaldi
-const bookmarks::BookmarkNode*
-LegacyBookmarkModelWithDedicatedUnderlyingModel::trash_node() const {
-  return underlying_model()->trash_node();
-}
-// End Vivaldi
-
 bool LegacyBookmarkModelWithDedicatedUnderlyingModel::IsBookmarked(
     const GURL& url) const {
   return underlying_model()->IsBookmarked(url);

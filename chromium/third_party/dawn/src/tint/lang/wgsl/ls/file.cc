@@ -25,6 +25,8 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include <optional>
+#include <string_view>
 #include <utility>
 
 #include "src/tint/lang/wgsl/ast/identifier.h"
@@ -39,6 +41,7 @@
 #include "src/tint/lang/wgsl/sem/type_expression.h"
 #include "src/tint/lang/wgsl/sem/variable.h"
 #include "src/tint/utils/rtti/switch.h"
+#include "src/tint/utils/text/unicode.h"
 
 namespace tint::wgsl::ls {
 
@@ -129,28 +132,124 @@ std::vector<Source::Range> File::References(Source::Location l, bool include_dec
     return references;
 }
 
-std::optional<File::TextAndRange> File::Definition(Source::Location l) {
-    auto* ident = Switch<const ast::Identifier*>(
+std::optional<File::DefinitionResult> File::Definition(Source::Location l) {
+    return Switch<std::optional<DefinitionResult>>(
         Unwrap(NodeAt<CastableBase>(l)),  //
-        [&](const sem::VariableUser* v) { return v->Variable()->Declaration()->name; },
-        [&](const sem::Variable* v) { return v->Declaration()->name; },
-        [&](const sem::FunctionExpression* f) { return f->Function()->Declaration()->name; },
-        [&](const sem::Function* f) { return f->Declaration()->name; },
-        [&](const sem::StructMemberAccess* a) -> const ast::Identifier* {
-            if (auto* member = a->Member()->As<sem::StructMember>()) {
-                return member->Declaration()->name;
-            }
-            return nullptr;
+        [&](const sem::VariableUser* u) {
+            auto* v = u->Variable();
+            return DefinitionResult{
+                v->Declaration()->name->symbol.Name(),
+                v->Declaration()->name->source.range,
+                u->Declaration()->source.range,
+            };
         },
-        [&](const sem::StructMember* m) { return m->Declaration()->name; },
+        [&](const sem::Variable* v) {
+            return DefinitionResult{
+                v->Declaration()->name->symbol.Name(),
+                v->Declaration()->name->source.range,
+                v->Declaration()->name->source.range,
+            };
+        },
+        [&](const sem::FunctionExpression* e) {
+            auto* f = e->Function();
+            return DefinitionResult{
+                f->Declaration()->name->symbol.Name(),
+                f->Declaration()->name->source.range,
+                e->Declaration()->source.range,
+            };
+        },
+        [&](const sem::Function* f) {
+            return DefinitionResult{
+                f->Declaration()->name->symbol.Name(),
+                f->Declaration()->name->source.range,
+                f->Declaration()->name->source.range,
+            };
+        },
+        [&](const sem::StructMemberAccess* a) -> std::optional<DefinitionResult> {
+            if (auto* m = a->Member()->As<sem::StructMember>()) {
+                return DefinitionResult{
+                    m->Declaration()->name->symbol.Name(),
+                    m->Declaration()->name->source.range,
+                    a->Declaration()->member->source.range,
+                };
+            }
+            return std::nullopt;
+        },
+        [&](const sem::StructMember* m) {
+            return DefinitionResult{
+                m->Declaration()->name->symbol.Name(),
+                m->Declaration()->name->source.range,
+                m->Declaration()->name->source.range,
+            };
+        },
         [&](const sem::TypeExpression* te) {
-            return Switch(te->Type(),  //
-                          [&](const sem::Struct* s) { return s->Declaration()->name; });
+            return Switch<std::optional<DefinitionResult>>(
+                te->Type(),  //
+                [&](const sem::Struct* s) {
+                    return DefinitionResult{
+                        s->Declaration()->name->symbol.Name(),
+                        s->Declaration()->name->source.range,
+                        te->Declaration()->source.range,
+                    };
+                });
         });
-    if (ident) {
-        return TextAndRange{ident->symbol.Name(), ident->source.range};
+}
+
+Source::Location File::Conv(langsvr::lsp::Position pos) const {
+    Source::Location loc;
+    loc.line = static_cast<uint32_t>(pos.line + 1);
+    loc.column = 0;
+
+    // Convert utf-16 code points -> utf-8 code points
+    if (pos.line < source->content.lines.size()) {
+        std::string_view utf8 = source->content.lines[pos.line];
+        for (langsvr::lsp::Uinteger i = 0; i < pos.character;) {
+            const auto [code_point, n] = utf8::Decode(utf8.substr(loc.column));
+            if (n == 0) {
+                break;
+            }
+            loc.column += n;
+            i += utf16::Encode(code_point, nullptr);
+        }
     }
-    return std::nullopt;
+
+    loc.column++;  // one-based index
+    return loc;
+}
+
+langsvr::lsp::Position File::Conv(Source::Location loc) const {
+    langsvr::lsp::Position pos;
+    pos.line = loc.line - 1;
+    pos.character = 0;
+
+    // Convert utf-8 code points -> utf-16 code points
+    if (pos.line < source->content.lines.size()) {
+        std::string_view utf8 = source->content.lines[pos.line];
+        for (uint32_t i = 0; i < loc.column - 1;) {
+            const auto [code_point, n] = utf8::Decode(utf8.substr(i));
+            if (n == 0) {
+                break;
+            }
+            pos.character += utf16::Encode(code_point, nullptr);
+            i += n;
+        }
+    }
+
+    return pos;
+}
+
+langsvr::lsp::Range File::Conv(Source::Range rng) const {
+    langsvr::lsp::Range out;
+    out.start = Conv(rng.begin);
+    out.end = Conv(rng.end);
+    return out;
+}
+
+Source::Range File::Conv(langsvr::lsp::Range rng) const {
+    Source::Range out;
+    out.begin = Conv(rng.start);
+    out.end = Conv(rng.end);
+    return out;
 }
 
 }  // namespace tint::wgsl::ls

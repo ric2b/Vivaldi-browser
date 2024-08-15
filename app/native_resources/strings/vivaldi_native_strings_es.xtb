@@ -83,11 +83,11 @@
 <translation id="3914946330804881301">Importado de Opera</translation>
 <translation id="3921292902397893431">Monstruo 8</translation>
 <translation id="3943857333388298514">Pegar</translation>
-<translation id="3974783668264968389">No se ha podido desbloquear tu almacén de claves seguras. Si procedes, se perderán tus datos de inicio de sesión y cookies seguras, y algunas funciones como Sync, Correo y Calendario dejarán de funcionar.
-
-    Cierra el programa, desbloquea o repara tu almacén de claves, e inténtalo de nuevo. Si aún así deseas continuar, haz clic en la casilla y selecciona el botón "Continuar con pérdida de datos".</translation>
 <translation id="4005270918754737597">Omitir esta versión</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi no ha podido desbloquear tu almacén de claves seguras. Sin la clave, perderás tus credenciales, cookies, y algunas funciones como Sync, Mail y Calendar dejarán de funcionar.
+
+    Sal, desbloquea o repara tu almacén de claves, y prueba de nuevo. ¿Quieres continuar pese a la pérdida de datos?</translation>
 <translation id="4074744496918018786">Abrir imagen en una ventana privada</translation>
 <translation id="410351446219883937">Autoreproducción</translation>
 <translation id="4281844954008187215">Condiciones de servicio</translation>
@@ -178,6 +178,7 @@
 <translation id="8669345741879513971">Monstruo 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Inspeccionar documento del portal</translation>
+<translation id="875142999698251063">Salir ahora</translation>
 <translation id="8768970203213061953">Paisaje 14</translation>
 <translation id="8773635261052182196">No volverás a ver estas notificaciones. Puedes reactivarlas desde los ajustes de Vivaldi.</translation>
 <translation id="8774017153185436870">Los sitios pueden reproducir vídeos automáticamente</translation>

@@ -16,6 +16,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
@@ -32,8 +33,11 @@
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/download/download_query.h"
 #include "chrome/browser/download/download_ui_safe_browsing_util.h"
+#include "chrome/browser/download/download_warning_desktop_hats_utils.h"
 #include "chrome/browser/download/drag_download_item.h"
 #include "chrome/browser/download/offline_item_utils.h"
+#include "chrome/browser/feature_engagement/tracker_factory.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
@@ -210,6 +214,7 @@ DownloadsDOMHandler::DownloadsDOMHandler(
 }
 
 DownloadsDOMHandler::~DownloadsDOMHandler() {
+  OnDownloadsPageDismissed();
   list_tracker_.Stop();
   list_tracker_.Reset();
   if (!render_process_gone_) {
@@ -326,6 +331,8 @@ void DownloadsDOMHandler::SaveSuspiciousRequiringGesture(
   } else if (file->IsDangerous()) {
     MaybeReportBypassAction(file, WarningSurface::DOWNLOADS_PAGE,
                             WarningAction::PROCEED);
+    MaybeTriggerDownloadWarningHatsSurvey(
+        file, DownloadWarningHatsType::kDownloadsPageBypass);
     MaybeTriggerTrustSafetySurvey(file, WarningSurface::DOWNLOADS_PAGE,
                                   WarningAction::PROCEED);
 
@@ -372,6 +379,8 @@ void DownloadsDOMHandler::SaveDangerousFromPromptRequiringGesture(
 
   MaybeReportBypassAction(file, WarningSurface::DOWNLOAD_PROMPT,
                           WarningAction::PROCEED);
+  MaybeTriggerDownloadWarningHatsSurvey(
+      file, DownloadWarningHatsType::kDownloadsPageBypass);
   MaybeTriggerTrustSafetySurvey(file, WarningSurface::DOWNLOAD_PROMPT,
                                 WarningAction::PROCEED);
 
@@ -402,6 +411,8 @@ void DownloadsDOMHandler::DiscardDangerous(const std::string& id) {
   if (download && !download->IsDone() && download->IsDangerous()) {
     MaybeReportBypassAction(download, WarningSurface::DOWNLOADS_PAGE,
                             WarningAction::DISCARD);
+    MaybeTriggerDownloadWarningHatsSurvey(
+        download, DownloadWarningHatsType::kDownloadsPageHeed);
     MaybeTriggerTrustSafetySurvey(download, WarningSurface::DOWNLOADS_PAGE,
                                   WarningAction::DISCARD);
   }
@@ -648,6 +659,10 @@ void DownloadsDOMHandler::BypassDeepScanRequiringGesture(
   CountDownloadsDOMEvents(DOWNLOADS_DOM_EVENT_BYPASS_DEEP_SCAN);
   download::DownloadItem* download = GetDownloadByStringId(id);
   if (download) {
+    if (CanShowDownloadWarningHatsSurvey(download)) {
+      MaybeTriggerDownloadWarningHatsSurvey(
+          download, DownloadWarningHatsType::kDownloadsPageBypass);
+    }
     DownloadItemModel model(download);
     DownloadCommands commands(model.GetWeakPtr());
     // Under ImprovedDownloadPageWarnings, the button says "Download suspicious
@@ -676,6 +691,10 @@ void DownloadsDOMHandler::ReviewDangerousRequiringGesture(
   }
 }
 
+// This function will be called when a user clicks on the ESB
+// (Enhanced Safe Browsing) download row promo. It will notify
+// the feature engagement backend to record the event that the
+// promo was clicked.
 void DownloadsDOMHandler::OpenEsbSettings() {
   Browser* browser = chrome::FindBrowserWithTab(GetWebUIWebContents());
   if (!browser) {
@@ -684,18 +703,59 @@ void DownloadsDOMHandler::OpenEsbSettings() {
   chrome::ShowSafeBrowsingEnhancedProtectionWithIph(
       browser,
       safe_browsing::SafeBrowsingSettingReferralMethod::kDownloadPageRowPromo);
+
+  feature_engagement::Tracker* tracker =
+      feature_engagement::TrackerFactory::GetForBrowserContext(
+          browser->profile());
+  tracker->NotifyEvent("esb_download_promo_row_clicked");
+  base::RecordAction(
+      base::UserMetricsAction("SafeBrowsing.EsbDownloadRowPromo.Click"));
+  base::UmaHistogramEnumeration(
+      "SafeBrowsing.EsbDownloadRowPromo.Outcome",
+      SafeBrowsingEsbDownloadRowPromoOutcome::kClicked);
 }
 
 void DownloadsDOMHandler::IsEligibleForEsbPromo(
     IsEligibleForEsbPromoCallback callback) {
   content::DownloadManager* manager = GetMainNotifierManager();
-  if (manager) {
-    std::move(callback).Run(
-        safe_browsing::SafeBrowsingService::IsUserEligibleForESBPromo(
-            Profile::FromBrowserContext(manager->GetBrowserContext())));
-  } else {
+  if (!manager) {
     std::move(callback).Run(false);
+    return;
   }
+
+  content::BrowserContext* browser_context = manager->GetBrowserContext();
+
+  if (!safe_browsing::SafeBrowsingService::IsUserEligibleForESBPromo(
+          Profile::FromBrowserContext(browser_context))) {
+    std::move(callback).Run(false);
+    return;
+  }
+
+  bool should_show_esb_promo = false;
+  if (feature_engagement::Tracker* tracker =
+          feature_engagement::TrackerFactory::GetForBrowserContext(
+              browser_context);
+      tracker && tracker->ShouldTriggerHelpUI(
+                     feature_engagement::kEsbDownloadRowPromoFeature)) {
+    should_show_esb_promo = true;
+    // since the promotion row is not an IPH, it never calls dismissed, so we
+    // need to do it artificially here or we can trigger a DCHECK.
+    tracker->Dismissed(feature_engagement::kEsbDownloadRowPromoFeature);
+  }
+  std::move(callback).Run(should_show_esb_promo);
+}
+
+void DownloadsDOMHandler::LogEsbPromotionRowViewed() {
+  content::DownloadManager* manager = GetMainNotifierManager();
+  if (!manager) {
+    return;
+  }
+  feature_engagement::Tracker* tracker =
+      feature_engagement::TrackerFactory::GetForBrowserContext(
+          manager->GetBrowserContext());
+  tracker->NotifyEvent("esb_download_promo_row_viewed");
+  base::UmaHistogramEnumeration("SafeBrowsing.EsbDownloadRowPromo.Outcome",
+                                SafeBrowsingEsbDownloadRowPromoOutcome::kShown);
 }
 
 // DownloadsDOMHandler, private: --------------------------------------------
@@ -769,6 +829,43 @@ void DownloadsDOMHandler::DangerPromptDone(
   RecordDownloadsPageValidatedHistogram(item);
 
   item->ValidateDangerousDownload();
+}
+
+void DownloadsDOMHandler::MaybeTriggerDownloadWarningHatsSurvey(
+    download::DownloadItem* item,
+    DownloadWarningHatsType survey_type) {
+  CHECK(CanShowDownloadWarningHatsSurvey(item));
+
+  content::DownloadManager* manager = GetMainNotifierManager();
+  Profile* profile = Profile::FromBrowserContext(manager->GetBrowserContext());
+  if (!profile) {
+    return;
+  }
+
+  auto psd = DownloadWarningHatsProductSpecificData::Create(survey_type, item);
+  psd.AddNumPageWarnings(list_tracker_.NumDangerousItemsSent());
+
+  MaybeLaunchDownloadWarningHatsSurvey(profile, psd);
+}
+
+void DownloadsDOMHandler::OnDownloadsPageDismissed() {
+  // If the chrome://downloads page is closed as part of the browser shutting
+  // down, do not run the HaTS survey because that would call into the network
+  // stack and try to use objects that are already being torn down.
+  if (browser_shutdown::HasShutdownStarted()) {
+    return;
+  }
+
+  // There's no specific warning associated with navigating away from
+  // chrome://downloads or closing the tab, so let's just launch the survey on
+  // the topmost download with a warning.
+  if (download::DownloadItem* first_dangerous_item =
+          list_tracker_.GetFirstActiveWarningItem();
+      first_dangerous_item &&
+      CanShowDownloadWarningHatsSurvey(first_dangerous_item)) {
+    MaybeTriggerDownloadWarningHatsSurvey(
+        first_dangerous_item, DownloadWarningHatsType::kDownloadsPageIgnore);
+  }
 }
 
 bool DownloadsDOMHandler::IsDeletingHistoryAllowed() {

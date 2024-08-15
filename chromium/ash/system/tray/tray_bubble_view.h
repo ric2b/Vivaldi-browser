@@ -142,7 +142,7 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
     bool set_can_activate_on_click_or_tap = false;
     // Indicates whether tray bubble view should add a pre target event handler.
     bool reroute_event_handler = false;
-    int corner_radius = kBubbleCornerRadius;
+    int corner_radius = GetBubbleCornerRadius();
     std::optional<gfx::Insets> insets;
     std::optional<gfx::Insets> margin;
     // If the view has a large corner radius(e.g. slider bubble), we should
@@ -240,7 +240,8 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
 
   // views::View:
   void AddedToWidget() override;
-  gfx::Size CalculatePreferredSize() const override;
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override;
   int GetHeightForWidth(int width) const override;
   void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
@@ -280,6 +281,9 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
 
   void CloseBubbleView();
 
+  views::BoxLayout* box_layout() { return layout_; }
+  const views::BoxLayout* box_layout() const { return layout_; }
+
  protected:
   // views::View:
   void ChildPreferredSizeChanged(View* child) override;
@@ -287,9 +291,6 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
   // Changes the insets from the bubble border. These were initially set using
   // the InitParams.insets, but may need to be reset programmatically.
   void SetBubbleBorderInsets(gfx::Insets insets);
-
-  views::BoxLayout* box_layout() { return layout_; }
-  const views::BoxLayout* box_layout() const { return layout_; }
 
  private:
   // This reroutes receiving key events to the TrayBubbleView passed in the

@@ -110,8 +110,7 @@ enum HtmlFieldType {
   kCreditCardExp2DigitYear = 44,
   kCreditCardExp4DigitYear = 45,
 
-  // Universal Payment Interface - Virtual Payment Address.
-  kUpiVpa = 46,
+  // kUpiVpa = 46 is deprecated.
 
   // Phone number verification one-time-codes.
   kOneTimeCode = 47,
@@ -199,7 +198,7 @@ enum ButtonTitleType {
 // Describes various criteria (e.g. there are empty fields in the form) that
 // affect whether a form is ready for submission. Don't change IDs as they are
 // used for metrics.
-// TODO(crbug.com/1283004): Basically, the browser needs just a boolean: submit
+// TODO(crbug.com/40209736): Basically, the browser needs just a boolean: submit
 // or not. Once related projects (crbug.com/1393043, crbug.com/1319364) are
 // done or archived, this enum can be removed.
 enum SubmissionReadinessState {
@@ -212,7 +211,7 @@ enum SubmissionReadinessState {
 
   // Various blockers of forms submission.
   // There is only a sole password field.
-  // TODO(crbug.com/1319364): For now this entry doesn't trigger submission,
+  // TODO(crbug.com/40223173): For now this entry doesn't trigger submission,
   // but ideally Touch-To-Fill should be able to log a user in with just one
   // tap, i.e. TTF should submit both single username and single password
   // forms.
@@ -233,7 +232,7 @@ enum SubmissionReadinessState {
   kTwoFields = 7,
 
   // There is only a sole username field.
-  // TODO(crbug.com/1319364): For now this entry doesn't trigger submission,
+  // TODO(crbug.com/40223173): For now this entry doesn't trigger submission,
   // but ideally Touch-To-Fill should be able to log a user in with just one
   // tap, i.e. TTF should submit both single username and single password
   // forms.
@@ -378,6 +377,7 @@ struct FormFieldData {
   bool is_enabled;
   bool is_readonly;
   mojo_base.mojom.String16 user_input;
+  bool allows_writing_suggestions;
 
   array<SelectOption> options;
 
@@ -397,7 +397,6 @@ struct FormFieldData_FillData {
   FieldRendererId renderer_id;
   FormRendererId host_form_id;
   bool is_autofilled;
-  Section section;
   bool force_override;
 };
 
@@ -557,6 +556,8 @@ enum FieldActionType {
 // This then invokes `AutofillManager::OnAskForValuesToFill()` in the browser
 // process. In some cases, suggestions get updated. This happens solely in the
 // browser process.
+// Must stay in sync with AutofillSuggestionTriggerSource in
+// histograms/enums.xml. Do not reorder or remove items.
 enum AutofillSuggestionTriggerSource {
   // Used as a default value and cannot be used to trigger suggestions.
   kUnspecified,
@@ -566,7 +567,8 @@ enum AutofillSuggestionTriggerSource {
   // Suggestion of this type can trigger FastCheckout or TouchToFill.
   kFormControlElementClicked,
   // Suggestions triggered by focusing a textarea without click or tab
-  // interaction. Currently, this only generates suggestions from Compose.
+  // interaction. Currently, this is only triggered on Desktop platforms and
+  // only generates Compose suggestions.
   kTextareaFocusedWithoutClick,
   // Suggestions triggered as above except that the target is a
   // contenteditable element rather than a form control element.
@@ -581,7 +583,7 @@ enum AutofillSuggestionTriggerSource {
   // as a kFormControlElementClicked event, it is triggered slightly later.
   // As of crrev.com/c/107353005, prefix matching for such suggestions is
   // skipped, to make them behave more like a <select>.
-  // TODO(crbug.com/1007974): It's unclear if this is still necessary.
+  // TODO(crbug.com/40100455): It's unclear if this is still necessary.
   kOpenTextDataListChooser,
   // Credit card suggestions offer users with Sync transport eligiblity an
   // option to display cards from their account. This causes the suggestions to
@@ -620,4 +622,10 @@ enum AutofillSuggestionTriggerSource {
   // The compose saved state notification is triggered when the compose dialog
   // loses focus and is closed.
   kComposeDialogLostFocus,
+  // The compose proactive nudge is triggered after a delay by the compose
+  // manager.
+  kComposeDelayedProactiveNudge,
+  // Password manager renderer received password suggestions from the browser
+  // after the field was focused (likely due to autofocus on the page load).
+  kPasswordManagerProcessedFocusedField,
 };

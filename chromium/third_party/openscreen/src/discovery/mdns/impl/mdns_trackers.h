@@ -45,10 +45,10 @@ class MdnsTracker {
   // MdnsTracker does not own |sender|, |task_runner| and |random_delay|
   // and expects that the lifetime of these objects exceeds the lifetime of
   // MdnsTracker.
-  MdnsTracker(MdnsSender* sender,
+  MdnsTracker(MdnsSender& sender,
               TaskRunner& task_runner,
               ClockNowFunctionPtr now_function,
-              MdnsRandom* random_delay,
+              MdnsRandom& random_delay,
               TrackerType tracker_type);
   MdnsTracker(const MdnsTracker& other) = delete;
   MdnsTracker(MdnsTracker&& other) noexcept = delete;
@@ -79,11 +79,11 @@ class MdnsTracker {
     return adjacent_nodes_;
   }
 
-  MdnsSender* const sender_;
+  MdnsSender& sender_;
   TaskRunner& task_runner_;
   const ClockNowFunctionPtr now_function_;
   Alarm send_alarm_;
-  MdnsRandom* const random_delay_;
+  MdnsRandom& random_delay_;
   TrackerType tracker_type_;
 
  private:
@@ -108,10 +108,10 @@ class MdnsRecordTracker : public MdnsTracker {
   // differ from |record|'s type.
   MdnsRecordTracker(MdnsRecord record,
                     DnsType dns_type,
-                    MdnsSender* sender,
+                    MdnsSender& sender,
                     TaskRunner& task_runner,
                     ClockNowFunctionPtr now_function,
-                    MdnsRandom* random_delay,
+                    MdnsRandom& random_delay,
                     RecordExpiredCallback record_expired_callback);
 
   ~MdnsRecordTracker() override;
@@ -204,10 +204,10 @@ class MdnsQuestionTracker : public MdnsTracker {
   enum class QueryType { kOneShot, kContinuous };
 
   MdnsQuestionTracker(MdnsQuestion question,
-                      MdnsSender* sender,
+                      MdnsSender& sender,
                       TaskRunner& task_runner,
                       ClockNowFunctionPtr now_function,
-                      MdnsRandom* random_delay,
+                      MdnsRandom& random_delay,
                       const Config& config,
                       QueryType query_type = QueryType::kContinuous);
 

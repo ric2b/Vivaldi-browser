@@ -4,6 +4,11 @@
 
 
 ------------------------------------------------------------------
+
+Affects:
+    configure
+
+------------------------------------------------------------------
 commit 3a43b481b78e54009e293c6c6172fc6c68990d8c
 Author: Will Harris <wfh@chromium.org>
 Date:   Wed Jan 21 20:33:15 2015 -0800
@@ -431,27 +436,6 @@ Affects:
     libavutil/encryption_info.c
 
 ------------------------------------------------------------------
-commit 81f7d1dd5fa4ff50d9a8cd86e7b76796c056459d
-Author: Dale Curtis <dalecurtis@chromium.org>
-Date:   Thu Nov 8 10:55:58 2018 -0800
-
-    Drop function: prefix in x86util.asm for macOS ffmpeg builds.
-
-    nasm doesn't want the function prefix before the visibliity
-    on macOS (which remains private_extern). I'm not sure why it's
-    fine with it on other platforms, but it is ¯\_(ツ)_/¯
-
-    BUG=766721
-    R=chcunningham
-
-    Change-Id: I3f20ca7268eb482198c51647caf8c9cc9d52bb1e
-    Reviewed-on: https://chromium-review.googlesource.com/c/1327383
-    Reviewed-by: Chrome Cunningham <chcunningham@chromium.org>
-
-Affects:
-    libavutil/x86/x86inc.asm
-
-------------------------------------------------------------------
 commit 6a44f89787a6103bf85825aac5b7bcfdba0dde5f
 Merge: c5003c8e13 acbd950ed2
 Author: John Rummell <jrummell@chromium.org>
@@ -761,26 +745,6 @@ Affects:
     libavutil/tx.c
 
 ------------------------------------------------------------------
-commit 346d30b3f6631f2d47fa310f7dfeb78215706fc3
-Author: Frank Liberato <liberato@chromium.org>
-Date:   Tue Feb 14 00:04:02 2023 +0000
-
-    FFmpeg roll with new ios configs
-
-    As part of this, undeprecate `reordered_opaque` with a patch on
-    the chromium side, due to unrelated upstream changes.
-
-    Bug: 1414135
-    Change-Id: Ia2a3f25f7672452ae5a0b15ca0450f67c119eee1
-    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/4246712
-    Reviewed-by: Dale Curtis <dalecurtis@chromium.org>
-
-Affects:
-    libavcodec/avcodec.h
-    libavcodec/libx264.c
-    libavutil/frame.h
-
-------------------------------------------------------------------
 commit 125536d78f103ff44efeb26c4d7c98413a5a618f
 Merge: 0d75f366d5 9240035c0e
 Author: John Rummell <jrummell@chromium.org>
@@ -822,22 +786,104 @@ Affects:
     libavformat/mov.c
 
 ------------------------------------------------------------------
-commit a6fd62c6a9a1c26be133de0dfdc0a34a61260f36
-Author: Eugene Zemtsov <eugene@chromium.org>
-Date:   Tue Feb 27 13:48:38 2024 -0800
+commit a21071589971c54596dbbccbccdbac7bdd9d4e4c
+Author: Dale Curtis <dalecurtis@chromium.org>
+Date:   Mon Apr 1 23:39:47 2024 +0000
 
-    Make Immersive Audio Model optional for MOV demuxing
+    Revert "avutil/tx_template: extend to 2M" and asm changes.
+
+    This causes unnecessary startup memory regressions on Windows
+    since Windows counts BSS as private memory even if it's never
+    used. We only use the MDCT parts of the TX float for AAC.
+
+    This reverts commit 8f48a62151f4a299574959df9a48813303ef4edb.
+    This reverts commit bd3e71b21ec3786ec6fc00ef260af0150f31b71b.
+
+    R=tmathmeyer
+
+    Bug: 40936872
+    Change-Id: I14f3adbebbb581f98e70e98793b7fcb9634d516a
+    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5411272
+    Reviewed-by: Ted (Chromium) Meyer <tmathmeyer@chromium.org>
 
 Affects:
-    libavformat/mov.c
+    libavutil/tx_template.c
+    libavutil/x86/tx_float.asm
 
 ------------------------------------------------------------------
-commit 84c486596980cfe307c863b9595ea699fb032e46
-Author: Eugene Zemtsov <eugene@chromium.org>
-Date:   Tue Feb 27 15:25:30 2024 -0800
+commit c061281207072075c3f8c4b16895be3b6567e581
+Author: Ted Meyer <tmathmeyer@chromium.org>
+Date:   Tue Apr 2 14:26:12 2024 -0700
 
-    Disable Immersive Audio Model be default in MOV demuxing
+    Add AAC_xHE case to aacdec_template.c for demuxing
+
+    The parser needs to be able to be created when demuxing, otherwise the
+    channel count and layout can't be successfully generated.
+
+    Bug: 330573128
+    Change-Id: Ib1404541e7cde321131efa6fcd2f991e398fe7b9
+    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5406620
+    Reviewed-by: Frank Liberato <liberato@chromium.org>
+
+Affects:
+    libavcodec/aacdec_template.c
+
+------------------------------------------------------------------
+commit bdcb0b447f433de3b69f0252732791b9f7e26f37
+Author: Ted Meyer <tmathmeyer@chromium.org>
+Date:   Tue Apr 2 18:49:30 2024 -0700
+
+    Set max size of single packet
+
+    Upstream switched this to autodetect the packet size, but this breaks
+    our use of `avformat_find_stream_info`, causing
+    FFmpegDemuxer::OnOpenContextDone to never post a callback to
+    FFmpegDemuxer::OnFindStreamInfoDone, breaking the pipeline
+    initialization step.
+
+    Bug: 330573128
+    Change-Id: Id578b4a08a3f68668172165e36e93ad283aea487
+    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5416659
+    Reviewed-by: Eugene Zemtsov <eugene@chromium.org>
+
+Affects:
+    libavformat/wavdec.c
+
+------------------------------------------------------------------
+commit fecf1c679ad49ca33f9fb8f951f2a1f30481e5f3
+Merge: 901248a373 65c1c83ca4
+Author: Frank Liberato <liberato@chromium.org>
+Date:   Fri Apr 12 18:06:19 2024 +0000
+
+    Merge remote-tracking branch 'upstream/master' into sushi-2024-04-12-17-46-24
+
+     Conflicts:
+            configure
+            libavcodec/fraps.c
+            libavcodec/jpeglsenc.c
+            libavutil/x86/x86inc.asm
 
 Affects:
     configure
+
+------------------------------------------------------------------
+commit dd45b7c227a4d4ba5e48be0434034e84853a0b41
+Author: Frank Liberato <liberato@chromium.org>
+Date:   Mon Apr 22 22:11:09 2024 +0000
+
+    Turn off PIC for x86.
+
+    PIC was turned off for x86 by x86inc.asm.
+
+    Commit afa471d0e removed this, but some PIC code assumes that we
+    have quad registers that don't exist on x86.
+
+    This CL puts the check back, at least until we can sort out what
+    the right behavior in upstream is.  Probably, this will be put
+    back into upstream so this patch can go away.
+
+    Bug: b/334192344
+
+Affects:
+    libavutil/x86/x86inc.asm
 

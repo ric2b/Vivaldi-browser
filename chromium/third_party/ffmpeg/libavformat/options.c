@@ -29,6 +29,7 @@
 #include "libavutil/iamf.h"
 #include "libavutil/internal.h"
 #include "libavutil/intmath.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 
 /**
@@ -152,13 +153,6 @@ static int io_open_default(AVFormatContext *s, AVIOContext **pb,
     return ffio_open_whitelist(pb, url, flags, &s->interrupt_callback, options, s->protocol_whitelist, s->protocol_blacklist);
 }
 
-#if FF_API_AVFORMAT_IO_CLOSE
-void ff_format_io_close_default(AVFormatContext *s, AVIOContext *pb)
-{
-    avio_close(pb);
-}
-#endif
-
 static int io_close2_default(AVFormatContext *s, AVIOContext *pb)
 {
     return avio_close(pb);
@@ -175,11 +169,6 @@ AVFormatContext *avformat_alloc_context(void)
     s = &si->pub;
     s->av_class = &av_format_context_class;
     s->io_open  = io_open_default;
-#if FF_API_AVFORMAT_IO_CLOSE
-FF_DISABLE_DEPRECATION_WARNINGS
-    s->io_close = ff_format_io_close_default;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
     s->io_close2= io_close2_default;
 
     av_opt_set_defaults(s);
@@ -198,10 +187,12 @@ FF_ENABLE_DEPRECATION_WARNINGS
     return s;
 }
 
+#if FF_API_GET_DUR_ESTIMATE_METHOD
 enum AVDurationEstimationMethod av_fmt_ctx_get_duration_estimation_method(const AVFormatContext* ctx)
 {
     return ctx->duration_estimation_method;
 }
+#endif
 
 const AVClass *avformat_get_class(void)
 {
@@ -341,6 +332,28 @@ fail:
     return NULL;
 }
 
+#define FLAGS AV_OPT_FLAG_ENCODING_PARAM | AV_OPT_FLAG_VIDEO_PARAM
+#define OFFSET(x) offsetof(AVStreamGroupTileGrid, x)
+static const AVOption tile_grid_options[] = {
+    { "grid_size", "size of the output canvas", OFFSET(coded_width),
+        AV_OPT_TYPE_IMAGE_SIZE, { .str = NULL }, 0, INT_MAX, FLAGS },
+    { "output_size", "size of valid pixels in output image meant for presentation", OFFSET(width),
+        AV_OPT_TYPE_IMAGE_SIZE, { .str = NULL }, 0, INT_MAX, FLAGS },
+    { "background_color", "set a background color for unused pixels",
+        OFFSET(background), AV_OPT_TYPE_COLOR, { .str = "black"}, 0, 0, FLAGS },
+    { "horizontal_offset", NULL, OFFSET(horizontal_offset), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, FLAGS },
+    { "vertical_offset",   NULL, OFFSET(vertical_offset),   AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, FLAGS },
+    { NULL },
+};
+#undef FLAGS
+#undef OFFSET
+
+static const AVClass tile_grid_class = {
+    .class_name = "AVStreamGroupTileGrid",
+    .version    = LIBAVUTIL_VERSION_INT,
+    .option     = tile_grid_options,
+};
+
 static void *stream_group_child_next(void *obj, void *prev)
 {
     AVStreamGroup *stg = obj;
@@ -350,6 +363,8 @@ static void *stream_group_child_next(void *obj, void *prev)
             return stg->params.iamf_audio_element;
         case AV_STREAM_GROUP_PARAMS_IAMF_MIX_PRESENTATION:
             return stg->params.iamf_mix_presentation;
+        case AV_STREAM_GROUP_PARAMS_TILE_GRID:
+            return stg->params.tile_grid;
         default:
             break;
         }
@@ -371,6 +386,9 @@ static const AVClass *stream_group_child_iterate(void **opaque)
         break;
     case AV_STREAM_GROUP_PARAMS_IAMF_MIX_PRESENTATION:
         ret = av_iamf_mix_presentation_get_class();
+        break;
+    case AV_STREAM_GROUP_PARAMS_TILE_GRID:
+        ret = &tile_grid_class;
         break;
     default:
         break;
@@ -433,6 +451,13 @@ AVStreamGroup *avformat_stream_group_create(AVFormatContext *s,
         stg->params.iamf_mix_presentation = av_iamf_mix_presentation_alloc();
         if (!stg->params.iamf_mix_presentation)
             goto fail;
+        break;
+    case AV_STREAM_GROUP_PARAMS_TILE_GRID:
+        stg->params.tile_grid = av_mallocz(sizeof(*stg->params.tile_grid));
+        if (!stg->params.tile_grid)
+            goto fail;
+        stg->params.tile_grid->av_class = &tile_grid_class;
+        av_opt_set_defaults(stg->params.tile_grid);
         break;
     default:
         goto fail;

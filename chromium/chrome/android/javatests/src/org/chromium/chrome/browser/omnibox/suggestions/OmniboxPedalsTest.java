@@ -10,9 +10,6 @@ import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
-import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -44,11 +41,13 @@ import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.JniMocker;
+import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.accessibility.settings.AccessibilitySettings;
 import org.chromium.chrome.browser.autofill.settings.AutofillPaymentMethodsFragment;
 import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFragmentAdvanced;
@@ -76,9 +75,13 @@ import org.chromium.components.omnibox.AutocompleteResult;
 import org.chromium.components.omnibox.OmniboxSuggestionType;
 import org.chromium.components.omnibox.action.OmniboxActionJni;
 import org.chromium.components.omnibox.action.OmniboxPedalId;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.test.util.DisableAnimationsTestRule;
+import org.chromium.ui.test.util.GmsCoreVersionRestriction;
+import org.chromium.ui.test.util.UiDisableIf;
 
 import java.util.Arrays;
 import java.util.List;
@@ -95,7 +98,6 @@ public class OmniboxPedalsTest {
     public @Rule MockitoRule mMockitoRule = MockitoJUnit.rule();
     public @Rule JniMocker mJniMocker = new JniMocker();
     public @Rule TestRule mFeaturesProcessor = new Features.JUnitProcessor();
-    private @Mock AutocompleteController.Natives mAutocompleteControllerJniMock;
     private @Mock OmniboxActionJni mOmniboxActionJni;
 
     private OmniboxTestUtils mOmniboxUtils;
@@ -112,10 +114,7 @@ public class OmniboxPedalsTest {
     public void setUp() throws InterruptedException {
         sActivityTestRule.loadUrl("about:blank");
         mOmniboxUtils = new OmniboxTestUtils(sActivityTestRule.getActivity());
-        mJniMocker.mock(AutocompleteControllerJni.TEST_HOOKS, mAutocompleteControllerJniMock);
         mJniMocker.mock(OmniboxActionJni.TEST_HOOKS, mOmniboxActionJni);
-
-        doReturn(1L).when(mAutocompleteControllerJniMock).create(any(), any(), anyBoolean());
     }
 
     @After
@@ -147,10 +146,9 @@ public class OmniboxPedalsTest {
         mOmniboxUtils.requestFocus();
         // Ensure we start from empty suggestions list; don't carry over suggestions from previous
         // run.
-        mOmniboxUtils.setSuggestions(AutocompleteResult.fromCache(null, null), "");
+        mOmniboxUtils.setSuggestions(AutocompleteResult.fromCache(null, null));
 
-        mOmniboxUtils.setSuggestions(
-                AutocompleteResult.fromCache(Arrays.asList(matches), null), "");
+        mOmniboxUtils.setSuggestions(AutocompleteResult.fromCache(Arrays.asList(matches), null));
         mOmniboxUtils.checkSuggestionsShown();
         SuggestionInfo<BaseSuggestionView> info = mOmniboxUtils.findSuggestionWithActionChips();
         Assert.assertNotNull("No suggestions with actions", info);
@@ -220,7 +218,17 @@ public class OmniboxPedalsTest {
 
     @Test
     @MediumTest
-    public void testManagePasswords() throws InterruptedException {
+    @DisableIf.Device(type = {UiDisableIf.TABLET}) // https://crbug.com/338976917
+    @Restriction(GmsCoreVersionRestriction.RESTRICTION_TYPE_VERSION_GE_22W30)
+    public void testManagePasswordsNoUpmFlow() throws InterruptedException {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    PrefService prefService = UserPrefs.get(sActivityTestRule.getProfile(false));
+                    prefService.setInteger(
+                            "passwords_use_upm_local_and_separate_stores",
+                            /*UseUpmLocalAndSeparateStoresState = Off*/ 0);
+                });
+
         setSuggestions(createPedalSuggestion(OmniboxPedalId.MANAGE_PASSWORDS));
         clickOnPedalToSettings(() -> mOmniboxUtils.clickOnAction(0, 0), PasswordSettings.class);
         verify(mOmniboxActionJni, times(1))

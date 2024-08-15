@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import '//resources/polymer/v3_0/paper-styles/color.js';
-
 import {assert} from '//resources/js/assert.js';
 import type {PropertyValues} from '//resources/lit/v3_0/lit.rollup.js';
 import {CrLitElement} from '//resources/lit/v3_0/lit.rollup.js';
@@ -159,7 +157,10 @@ export class CrInputElement extends CrLitElement {
         notify: true,
       },
 
-      internalValue_: {type: String},
+      internalValue_: {
+        type: String,
+        state: true,
+      },
     };
   }
 
@@ -244,7 +245,7 @@ export class CrInputElement extends CrLitElement {
 
   /**
    * Focuses the input element.
-   * TODO(crbug.com/882612): Replace this with focus() after resolving the text
+   * TODO(crbug.com/40593040): Replace this with focus() after resolving the text
    * selection issue described in onFocus_().
    * @return Whether the <input> element was focused.
    */

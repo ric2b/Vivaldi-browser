@@ -76,19 +76,19 @@ IpProtectionConfigHttp::IpProtectionConfigHttp(
 IpProtectionConfigHttp::~IpProtectionConfigHttp() = default;
 
 void IpProtectionConfigHttp::DoRequest(
-    quiche::BlindSignHttpRequestType request_type,
+    quiche::BlindSignMessageRequestType request_type,
     std::optional<std::string_view> authorization_header,
     const std::string& body,
-    quiche::BlindSignHttpCallback callback) {
+    quiche::BlindSignMessageCallback callback) {
   GURL::Replacements replacements;
   switch (request_type) {
-    case quiche::BlindSignHttpRequestType::kGetInitialData:
+    case quiche::BlindSignMessageRequestType::kGetInitialData:
       replacements.SetPathStr(ip_protection_server_get_initial_data_path_);
       break;
-    case quiche::BlindSignHttpRequestType::kAuthAndSign:
+    case quiche::BlindSignMessageRequestType::kAuthAndSign:
       replacements.SetPathStr(ip_protection_server_get_tokens_path_);
       break;
-    case quiche::BlindSignHttpRequestType::kUnknown:
+    case quiche::BlindSignMessageRequestType::kUnknown:
       NOTREACHED_NORETURN();
   }
 
@@ -112,6 +112,11 @@ void IpProtectionConfigHttp::DoRequest(
   std::unique_ptr<network::SimpleURLLoader> url_loader =
       network::SimpleURLLoader::Create(std::move(resource_request),
                                        kGetTokenTrafficAnnotation);
+
+  // Retry on network changes, for consistency with GetProxyConfig requests.
+  url_loader->SetRetryOptions(
+      2, network::SimpleURLLoader::RETRY_ON_NETWORK_CHANGE);
+
   url_loader->AttachStringForUpload(body, kProtobufContentType);
   auto* url_loader_ptr = url_loader.get();
   url_loader_ptr->DownloadToString(
@@ -124,7 +129,7 @@ void IpProtectionConfigHttp::DoRequest(
 
 void IpProtectionConfigHttp::OnDoRequestCompleted(
     std::unique_ptr<network::SimpleURLLoader> url_loader,
-    quiche::BlindSignHttpCallback callback,
+    quiche::BlindSignMessageCallback callback,
     std::unique_ptr<std::string> response) {
   int response_code = 0;
   if (url_loader->ResponseInfo() && url_loader->ResponseInfo()->headers) {
@@ -133,7 +138,9 @@ void IpProtectionConfigHttp::OnDoRequestCompleted(
 
   // Short-circuit non-200 HTTP responses to an OK response with that code.
   if (response_code != 200 && response_code != 0) {
-    std::move(callback)(quiche::BlindSignHttpResponse(response_code, ""));
+    std::move(callback)(quiche::BlindSignMessageResponse(
+        quiche::BlindSignMessageResponse::HttpCodeToStatusCode(response_code),
+        ""));
     return;
   }
 
@@ -143,8 +150,9 @@ void IpProtectionConfigHttp::OnDoRequestCompleted(
     return;
   }
 
-  quiche::BlindSignHttpResponse bsa_response(response_code,
-                                             std::move(*response));
+  quiche::BlindSignMessageResponse bsa_response(
+      quiche::BlindSignMessageResponse::HttpCodeToStatusCode(response_code),
+      std::move(*response));
 
   std::move(callback)(std::move(bsa_response));
 }

@@ -101,7 +101,6 @@
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/navigator.h"
-#include "third_party/blink/renderer/core/frame/pending_beacon_dispatcher.h"
 #include "third_party/blink/renderer/core/frame/permissions_policy_violation_report_body.h"
 #include "third_party/blink/renderer/core/frame/report.h"
 #include "third_party/blink/renderer/core/frame/reporting_context.h"
@@ -748,6 +747,15 @@ void LocalDOMWindow::CountUse(mojom::WebFeature feature) {
     loader->CountUse(feature);
 }
 
+void LocalDOMWindow::CountWebDXFeature(mojom::blink::WebDXFeature feature) {
+  if (!GetFrame()) {
+    return;
+  }
+  if (auto* loader = GetFrame()->Loader().GetDocumentLoader()) {
+    loader->CountWebDXFeature(feature);
+  }
+}
+
 void LocalDOMWindow::CountPermissionsPolicyUsage(
     mojom::blink::PermissionsPolicyFeature feature,
     UseCounterImpl::PermissionsPolicyUsageType type) {
@@ -898,13 +906,6 @@ void LocalDOMWindow::DispatchPagehideEvent(
     // FrameTree.
     // TODO(crbug.com/1119291): Investigate whether this is possible or not.
     return;
-  }
-
-  if (base::FeatureList::IsEnabled(features::kPendingBeaconAPI)) {
-    if (auto* dispatcher =
-            PendingBeaconDispatcher::From(*GetExecutionContext())) {
-      dispatcher->OnDispatchPagehide();
-    }
   }
 
   DispatchEvent(
@@ -1639,7 +1640,7 @@ double LocalDOMWindow::scrollX() const {
 
   // TODO(bokan): This is wrong when the document.rootScroller is non-default.
   // crbug.com/505516.
-  double viewport_x = view->LayoutViewport()->GetScrollOffset().x();
+  double viewport_x = view->LayoutViewport()->GetWebExposedScrollOffset().x();
   return AdjustForAbsoluteZoom::AdjustScroll(viewport_x,
                                              GetFrame()->PageZoomFactor());
 }
@@ -1660,7 +1661,7 @@ double LocalDOMWindow::scrollY() const {
 
   // TODO(bokan): This is wrong when the document.rootScroller is non-default.
   // crbug.com/505516.
-  double viewport_y = view->LayoutViewport()->GetScrollOffset().y();
+  double viewport_y = view->LayoutViewport()->GetWebExposedScrollOffset().y();
   return AdjustForAbsoluteZoom::AdjustScroll(viewport_y,
                                              GetFrame()->PageZoomFactor());
 }
@@ -1714,13 +1715,13 @@ CSSStyleDeclaration* LocalDOMWindow::getComputedStyle(
                                                            pseudo_elt);
 }
 
-ScriptPromise LocalDOMWindow::getComputedAccessibleNode(
+ScriptPromise<ComputedAccessibleNode> LocalDOMWindow::getComputedAccessibleNode(
     ScriptState* script_state,
     Element* element) {
   DCHECK(element);
   auto* resolver = MakeGarbageCollected<ComputedAccessibleNodePromiseResolver>(
       script_state, *element);
-  ScriptPromise promise = resolver->Promise();
+  auto promise = resolver->Promise();
   resolver->ComputeAccessibleNode();
   return promise;
 }
@@ -1972,7 +1973,6 @@ void LocalDOMWindow::cancelAnimationFrame(int id) {
 }
 
 void LocalDOMWindow::queueMicrotask(V8VoidFunction* callback) {
-  SetCurrentTaskAsCallbackParent(callback);
   GetAgent()->event_loop()->EnqueueMicrotask(
       WTF::BindOnce(&V8VoidFunction::InvokeAndReportException,
                     WrapPersistent(callback), nullptr));
@@ -2247,9 +2247,9 @@ DOMWindow* LocalDOMWindow::open(v8::Isolate* isolate,
   // for generating an embedder-initiated navigation's referrer, so we need to
   // ensure the proper referrer is set now.
   Referrer referrer = SecurityPolicy::GenerateReferrer(
-      entered_window->GetReferrerPolicy(), completed_url,
-      window_features.noreferrer ? Referrer::NoReferrer()
-                                 : entered_window->OutgoingReferrer());
+      window_features.noreferrer ? network::mojom::ReferrerPolicy::kNever
+                                 : entered_window->GetReferrerPolicy(),
+      completed_url, entered_window->OutgoingReferrer());
   frame_request.GetResourceRequest().SetReferrerString(referrer.referrer);
   frame_request.GetResourceRequest().SetReferrerPolicy(
       referrer.referrer_policy);
@@ -2267,7 +2267,8 @@ DOMWindow* LocalDOMWindow::open(v8::Isolate* isolate,
                                     ->RegisterNavigation(
                                         /*navigation_url=*/completed_url,
                                         *window_features.attribution_srcs,
-                                        has_user_gesture));
+                                        has_user_gesture,
+                                        referrer.referrer_policy));
   }
 
   FrameTree::FindResult result =

@@ -5,6 +5,8 @@
 
 #import <Foundation/Foundation.h>
 
+#import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_consumer.h"
+
 @protocol VivaldiBookmarksEditorConsumer;
 class ChromeBrowserState;
 @protocol SnackbarCommands;
@@ -15,7 +17,8 @@ class BookmarkNode;
 }  // namespace bookmarks
 
 // Mediator for the bookmark editor
-@interface VivaldiBookmarksEditorMediator : NSObject
+@interface VivaldiBookmarksEditorMediator :
+    NSObject<VivaldiBookmarksEditorConsumer>
 
 // BookmarkNode to edit.
 @property(nonatomic, readonly) const bookmarks::BookmarkNode* bookmark;
@@ -48,6 +51,8 @@ class BookmarkNode;
                          parentNode:(const bookmarks::BookmarkNode*)parentNode;
 
 - (void)deleteBookmark;
+
+- (void)setPreferenceShowSpeedDials:(BOOL)showSpeedDials;
 
 @end
 

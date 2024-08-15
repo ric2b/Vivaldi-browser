@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: cpp-writing-tests
 title: Writing Tests in C++
 ---
@@ -477,5 +477,5 @@ TEST_P(UniqueTestSuiteName, Flag0Enabled_Test) {
 
 ## Mojo
 
-See [Stubbing Mojo Pipes](https://www.chromium.org/chromium-os/developer-library/reference/cpp/cpp_mojo) for pointers on how
+See [Stubbing Mojo Pipes](https://www.chromium.org/chromium-os/developer-library/reference/cpp/cpp-mojo/#stubbing-mojo-pipes) for pointers on how
 to unit test Mojo calls.

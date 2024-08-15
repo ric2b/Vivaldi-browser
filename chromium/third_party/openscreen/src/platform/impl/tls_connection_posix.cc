@@ -67,9 +67,9 @@ void TlsConnectionPosix::TryReceiveMessage() {
   // no application data available, an error occurred, or we have to take an
   // action.
   if (bytes_read <= 0) {
-    const Error error = GetSSLError(ssl_.get(), bytes_read);
+    Error error = GetSSLError(ssl_.get(), bytes_read);
     if (!error.ok() && (error != Error::Code::kAgain)) {
-      DispatchError(error);
+      DispatchError(std::move(error));
     }
     return;
   }
@@ -121,9 +121,9 @@ void TlsConnectionPosix::SendAvailableBytes() {
   const int result =
       SSL_write(ssl_.get(), sendable_bytes.data(), sendable_bytes.size());
   if (result <= 0) {
-    const Error result_error = GetSSLError(ssl_.get(), result);
+    Error result_error = GetSSLError(ssl_.get(), result);
     if (!result_error.ok() && (result_error.code() != Error::Code::kAgain)) {
-      DispatchError(result_error);
+      DispatchError(std::move(result_error));
     }
   } else {
     buffer_.Consume(static_cast<size_t>(result));

@@ -87,6 +87,8 @@ class CommandRecordingContext {
 
     void ReleaseKeyedMutexes();
 
+    bool AcquireNeedsFence();
+
   private:
     template <typename Ctx, typename Traits>
     friend class CommandRecordingContextGuard;
@@ -109,6 +111,8 @@ class CommandRecordingContext {
     bool mUniformBufferDirty = true;
 
     absl::flat_hash_set<Ref<d3d::KeyedMutex>> mAcquiredKeyedMutexes;
+
+    bool mNeedsFence = false;
 
     Ref<Device> mDevice;
 };
@@ -151,12 +155,15 @@ class ScopedCommandRecordingContext : public CommandRecordingContext::Guard {
     void Unmap(ID3D11Resource* pResource, UINT Subresource) const;
     HRESULT Signal(ID3D11Fence* pFence, UINT64 Value) const;
     HRESULT Wait(ID3D11Fence* pFence, UINT64 Value) const;
+    void Flush1(D3D11_CONTEXT_TYPE ContextType, HANDLE hEvent) const;
 
     // Write the built-in variable value to the uniform buffer.
     void WriteUniformBuffer(uint32_t offset, uint32_t element) const;
     MaybeError FlushUniformBuffer() const;
 
     MaybeError AcquireKeyedMutex(Ref<d3d::KeyedMutex> keyedMutex) const;
+
+    void SetNeedsFence() const;
 };
 
 // For using ID3D11DeviceContext directly. It swaps and resets ID3DDeviceContextState of

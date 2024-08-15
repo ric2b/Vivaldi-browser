@@ -8,10 +8,9 @@ import {
   describeWithMockConnection,
   setMockConnectionResponseHandler,
 } from '../../testing/MockConnection.js';
+import {getMainFrame, navigate} from '../../testing/ResourceTreeHelpers.js';
 
 import * as SDK from './sdk.js';
-
-const {assert} = chai;
 
 describeWithMockConnection('CookieModel', () => {
   const PROTOCOL_COOKIE = {
@@ -77,7 +76,6 @@ describeWithMockConnection('CookieModel', () => {
 
   it('clears stored blocked cookies on primary page change', async () => {
     const target = createTarget();
-    const resourceTreeModel = target.model(SDK.ResourceTreeModel.ResourceTreeModel);
     const cookieModel = new SDK.CookieModel.CookieModel(target);
     const cookie = new SDK.Cookie.Cookie('name', 'value');
     const blockedReason = {
@@ -90,10 +88,7 @@ describeWithMockConnection('CookieModel', () => {
     assert.strictEqual(cookieToBlockedReasons.size, 1);
     assert.deepStrictEqual(cookieToBlockedReasons.get(cookie), [blockedReason]);
 
-    resourceTreeModel!.dispatchEventToListeners(SDK.ResourceTreeModel.Events.PrimaryPageChanged, {
-      frame: {} as SDK.ResourceTreeModel.ResourceTreeFrame,
-      type: SDK.ResourceTreeModel.PrimaryPageChangeType.Navigation,
-    });
+    navigate(getMainFrame(target));
     assert.strictEqual(cookieModel.getCookieToBlockedReasonsMap().size, 0);
   });
 

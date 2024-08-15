@@ -23,10 +23,6 @@
 #import "sync/vivaldi_sync_service_impl.h"
 #import "vivaldi_account/vivaldi_account_manager.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 @interface VivaldiSyncCoordinator () <
   VivaldiSyncActivateAccountViewControllerDelegate,
   VivaldiSyncCreateAccountUserViewControllerDelegate,
@@ -118,6 +114,10 @@
   self.syncCreateAccountPasswordViewController = nil;
   self.syncActivateAccountViewController = nil;
   self.mediator = nil;
+  if (self.showCancelButton) {
+    [self.baseNavigationController dismissViewControllerAnimated:YES
+                                                      completion:nil];
+  }
 }
 
 #pragma mark - VivaldiSyncSettingsCommandHandler
@@ -179,6 +179,7 @@
             initWithStyle:ChromeTableViewStyle()
     ];
   }
+  self.syncCreateAccountUserViewController.shouldHideDoneButton = YES;
   self.syncCreateAccountUserViewController.delegate = self;
   self.mediator.settingsConsumer = nil;
 
@@ -215,6 +216,7 @@
                                style:ChromeTableViewStyle()
     ];
   }
+  self.syncCreateAccountPasswordViewController.shouldHideDoneButton = YES;
   self.syncCreateAccountPasswordViewController.delegate = self;
   self.mediator.settingsConsumer = nil;
 
@@ -246,6 +248,7 @@
     ];
   }
 
+  self.syncEncryptionPasswordViewController.shouldHideDoneButton = YES;
   self.syncEncryptionPasswordViewController.delegate = self;
   self.mediator.settingsConsumer = nil;
   [controllers addObject:self.syncEncryptionPasswordViewController];
@@ -261,12 +264,12 @@
       self.baseNavigationController.viewControllers];
 
   if (!self.syncCreateEncryptionPasswordViewController) {
-    self.syncCreateEncryptionPasswordViewController =[
+    self.syncCreateEncryptionPasswordViewController = [
         [VivaldiSyncCreateEncryptionPasswordViewController alloc]
             initWithStyle:ChromeTableViewStyle()
     ];
   }
-
+  self.syncCreateEncryptionPasswordViewController.shouldHideDoneButton = YES;
   self.syncCreateEncryptionPasswordViewController.delegate = self;
   self.mediator.settingsConsumer = nil;
   [controllers addObject:self.syncCreateEncryptionPasswordViewController];
@@ -397,17 +400,25 @@
 
 - (void)logInButtonPressed:(NSString*)username
                   password:(NSString*)password
+                deviceName:(NSString*)deviceName
               savePassword:(BOOL)savePassword {
   if (!username || !password) {
     return;
   }
   [self.mediator login:base::SysNSStringToUTF8(username)
-                 password:base::SysNSStringToUTF8(password)
-                 save_password:savePassword];
+              password:base::SysNSStringToUTF8(password)
+            deviceName:deviceName
+         save_password:savePassword];
 }
 
 - (void)createAccountLinkPressed {
   [self showSyncCreateAccountUserView];
+}
+
+- (void)dismissVivaldiSyncLoginViewController {
+  if (!self.syncLoginViewController)
+    return;
+  [self.delegate vivaldiSyncCoordinatorWasRemoved:self];
 }
 
 #pragma mark - VivaldiSyncSettingsViewControllerDelegate
@@ -493,6 +504,10 @@
 
 - (void)logOutButtonPressed {
   [self.mediator logOutButtonPressed];
+}
+
+- (void)deleteRemoteData {
+  [self.mediator clearSyncDataWithNoWarning];
 }
 
 #pragma mark - VivaldiSyncCreateAccountUserViewControllerDelegate
@@ -598,6 +613,10 @@
         [[VivaldiSyncLoginViewController alloc]
           initWithModalPageHandler:modalPageHandler
                              style:ChromeTableViewStyle()];
+    if (self.showCancelButton) {
+      [self.syncLoginViewController setupLeftCancelButton];
+    }
+    self.syncLoginViewController.shouldHideDoneButton = YES;
     self.syncLoginViewController.delegate = self;
   }
   self.mediator.settingsConsumer = nil;

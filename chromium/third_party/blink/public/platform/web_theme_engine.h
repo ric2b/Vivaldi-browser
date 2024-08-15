@@ -39,7 +39,6 @@
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/css/forced_colors.h"
 #include "third_party/blink/public/mojom/frame/color_scheme.mojom-shared.h"
-#include "third_party/blink/public/platform/web_scrollbar_overlay_color_theme.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/color/color_provider_utils.h"
 #include "ui/gfx/color_palette.h"
@@ -192,8 +191,6 @@ class WebThemeEngine {
 
   // Extra parameters for scrollbar thumb.
   struct ScrollbarThumbExtraParams {
-    WebScrollbarOverlayColorTheme scrollbar_theme =
-        WebScrollbarOverlayColorTheme::kWebScrollbarOverlayColorThemeDark;
     std::optional<SkColor> thumb_color;
     bool is_thumb_minimal_mode = false;
     bool is_web_test = false;
@@ -209,12 +206,6 @@ class WebThemeEngine {
     std::optional<SkColor> track_color;
   };
 
-  // Represents ui::NativeTheme System Info
-  struct SystemColorInfoState {
-    bool is_dark_mode = false;
-    bool forced_colors = false;
-  };
-
 #if BUILDFLAG(IS_MAC)
   enum ScrollbarOrientation {
     // Vertical scrollbar on the right side of content.
@@ -228,7 +219,6 @@ class WebThemeEngine {
   struct ScrollbarExtraParams {
     bool is_hovering = false;
     bool is_overlay = false;
-    mojom::ColorScheme scrollbar_theme = mojom::ColorScheme::kLight;
     ScrollbarOrientation orientation = ScrollbarOrientation::kVerticalOnRight;
     float scale_from_dip = 0;
     std::optional<SkColor> thumb_color;
@@ -292,20 +282,11 @@ class WebThemeEngine {
       const gfx::Rect&,
       const ExtraParams*,
       blink::mojom::ColorScheme,
+      bool in_forced_colors,
       const ui::ColorProvider*,
       const std::optional<SkColor>& accent_color = std::nullopt) {}
 
   virtual std::optional<SkColor> GetAccentColor() const { return std::nullopt; }
-
-  virtual ForcedColors GetForcedColors() const { return ForcedColors::kNone; }
-  virtual void OverrideForcedColorsTheme() {}
-  virtual void SetForcedColors(const blink::ForcedColors forced_colors) {}
-  virtual void ResetToSystemColors(
-      SystemColorInfoState system_color_info_state) {}
-  virtual SystemColorInfoState GetSystemColorInfo() {
-    SystemColorInfoState state;
-    return state;
-  }
 };
 
 }  // namespace blink

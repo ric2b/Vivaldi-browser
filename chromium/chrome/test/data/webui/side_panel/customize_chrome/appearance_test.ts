@@ -14,9 +14,8 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import type {MetricsTracker} from 'chrome://webui-test/metrics_test_support.js';
 import {fakeMetricsPrivate} from 'chrome://webui-test/metrics_test_support.js';
-import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import type {TestMock} from 'chrome://webui-test/test_mock.js';
-import {eventToPromise} from 'chrome://webui-test/test_util.js';
+import {eventToPromise, microtasksFinished} from 'chrome://webui-test/test_util.js';
 
 import {$$, assertNotStyle, assertStyle, createBackgroundImage, createTheme, createThirdPartyThemeInfo, installMock} from './test_support.js';
 
@@ -93,10 +92,10 @@ suite('AppearanceTest', () => {
     theme.backgroundManagedByPolicy = true;
     callbackRouterRemote.setTheme(theme);
     await callbackRouterRemote.$.flushForTesting();
-    await waitAfterNextRender(appearanceElement);
+    await microtasksFinished();
 
     appearanceElement.$.editThemeButton.click();
-    await waitAfterNextRender(appearanceElement);
+    await microtasksFinished();
 
     const managedDialog =
         $$<ManagedDialogElement>(appearanceElement, 'managed-dialog');
@@ -109,10 +108,10 @@ suite('AppearanceTest', () => {
     theme.backgroundManagedByPolicy = true;
     callbackRouterRemote.setTheme(theme);
     await callbackRouterRemote.$.flushForTesting();
-    await waitAfterNextRender(appearanceElement);
+    await microtasksFinished();
 
     appearanceElement.$.setClassicChromeButton.click();
-    await waitAfterNextRender(appearanceElement);
+    await microtasksFinished();
 
     const managedDialog =
         $$<ManagedDialogElement>(appearanceElement, 'managed-dialog');
@@ -271,72 +270,60 @@ suite('AppearanceTest', () => {
     });
   });
 
-  suite('GM3', async () => {
-    suiteSetup(() => {
-      document.documentElement.toggleAttribute('chrome-refresh-2023', true);
-    });
+  test('uploaded image shows button and no snapshot', async () => {
+    const theme = createTheme();
+    theme.backgroundImage = createBackgroundImage('local');
+    theme.backgroundImage.isUploadedImage = true;
 
-    test('uploaded image shows button and no snapshot', async () => {
-      const theme = createTheme();
-      theme.backgroundImage = createBackgroundImage('local');
-      theme.backgroundImage.isUploadedImage = true;
+    callbackRouterRemote.setTheme(theme);
+    await callbackRouterRemote.$.flushForTesting();
 
-      callbackRouterRemote.setTheme(theme);
-      await callbackRouterRemote.$.flushForTesting();
+    assertStyle(appearanceElement.$.thirdPartyLinkButton, 'display', 'none');
+    assertNotStyle(appearanceElement.$.uploadedImageButton, 'display', 'none');
+    assertStyle(appearanceElement.$.searchedImageButton, 'display', 'none');
+    assertNotStyle(
+        appearanceElement.$.setClassicChromeButton, 'display', 'none');
+    assertStyle(appearanceElement.$.themeSnapshot, 'display', 'none');
+    assertNotStyle(appearanceElement.$.chromeColors, 'display', 'none');
+  });
 
-      assertStyle(appearanceElement.$.thirdPartyLinkButton, 'display', 'none');
-      assertNotStyle(
-          appearanceElement.$.uploadedImageButton, 'display', 'none');
-      assertStyle(appearanceElement.$.searchedImageButton, 'display', 'none');
-      assertNotStyle(
-          appearanceElement.$.setClassicChromeButton, 'display', 'none');
-      assertStyle(appearanceElement.$.themeSnapshot, 'display', 'none');
-      assertNotStyle(appearanceElement.$.chromeColors, 'display', 'none');
-    });
+  test('uploadedImageButton opens upload image dialog', async () => {
+    const theme = createTheme();
+    theme.backgroundImage = createBackgroundImage('local');
+    theme.backgroundImage.isUploadedImage = true;
 
-    test('uploadedImageButton opens upload image dialog', async () => {
-      const theme = createTheme();
-      theme.backgroundImage = createBackgroundImage('local');
-      theme.backgroundImage.isUploadedImage = true;
+    callbackRouterRemote.setTheme(theme);
+    await callbackRouterRemote.$.flushForTesting();
 
-      callbackRouterRemote.setTheme(theme);
-      await callbackRouterRemote.$.flushForTesting();
+    assertNotStyle(appearanceElement.$.uploadedImageButton, 'display', 'none');
+    appearanceElement.$.uploadedImageButton.click();
+    assertEquals(1, handler.getCallCount('chooseLocalCustomBackground'));
+  });
 
-      assertNotStyle(
-          appearanceElement.$.uploadedImageButton, 'display', 'none');
-      appearanceElement.$.uploadedImageButton.click();
-      assertEquals(1, handler.getCallCount('chooseLocalCustomBackground'));
-    });
+  test('searched image shows button', async () => {
+    const theme = createTheme();
+    theme.backgroundImage = createBackgroundImage('searched');
+    theme.backgroundImage.isUploadedImage = true;
+    theme.backgroundImage.localBackgroundId = {
+      low: BigInt(10),
+      high: BigInt(20),
+    };
+    callbackRouterRemote.setTheme(theme);
+    await callbackRouterRemote.$.flushForTesting();
 
-    test('searched image shows button', async () => {
-      const theme = createTheme();
-      theme.backgroundImage = createBackgroundImage('searched');
-      theme.backgroundImage.isUploadedImage = true;
-      theme.backgroundImage.localBackgroundId = {
-        low: BigInt(10),
-        high: BigInt(20),
-      };
-      callbackRouterRemote.setTheme(theme);
-      await callbackRouterRemote.$.flushForTesting();
+    assertStyle(appearanceElement.$.thirdPartyLinkButton, 'display', 'none');
+    assertStyle(appearanceElement.$.uploadedImageButton, 'display', 'none');
+    assertNotStyle(appearanceElement.$.searchedImageButton, 'display', 'none');
+    assertNotStyle(
+        appearanceElement.$.setClassicChromeButton, 'display', 'none');
+    assertStyle(appearanceElement.$.themeSnapshot, 'display', 'none');
+    assertNotStyle(appearanceElement.$.chromeColors, 'display', 'none');
+  });
 
-      assertStyle(appearanceElement.$.thirdPartyLinkButton, 'display', 'none');
-      assertStyle(appearanceElement.$.uploadedImageButton, 'display', 'none');
-      assertNotStyle(
-          appearanceElement.$.searchedImageButton, 'display', 'none');
-      assertNotStyle(
-          appearanceElement.$.setClassicChromeButton, 'display', 'none');
-      assertStyle(appearanceElement.$.themeSnapshot, 'display', 'none');
-      assertNotStyle(appearanceElement.$.chromeColors, 'display', 'none');
-    });
-
-    test(
-        'searched image button opens themes when feature disabled',
-        async () => {
-          const clickEvent =
-              eventToPromise('edit-theme-click', appearanceElement);
-          appearanceElement.$.searchedImageButton.click();
-          await clickEvent;
-        });
+  test('searched image button opens themes when feature disabled', async () => {
+    const clickEvent = eventToPromise('edit-theme-click', appearanceElement);
+    appearanceElement.$.searchedImageButton.click();
+    await clickEvent;
   });
 
   suite('WallpaperSearch', async () => {
@@ -454,10 +441,10 @@ suite('AppearanceTest', () => {
       theme.backgroundManagedByPolicy = true;
       callbackRouterRemote.setTheme(theme);
       await callbackRouterRemote.$.flushForTesting();
-      await waitAfterNextRender(appearanceElement);
+      await microtasksFinished();
 
       $$<HTMLElement>(appearanceElement, '#wallpaperSearchButton')!.click();
-      await waitAfterNextRender(appearanceElement);
+      await microtasksFinished();
 
       const managedDialog =
           $$<ManagedDialogElement>(appearanceElement, 'managed-dialog');

@@ -2,69 +2,78 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="sk">
 <translation id="1397811292916898096">Hľadať pomocou vyhľadávača <ph name="PRODUCT_NAME" /></translation>
-<translation id="1598449788754183301">Prepnúť normálne/súkromné listy</translation>
+<translation id="1456207338570705181">Funkcia Touch to Search je k dispozícii len vtedy, keď je Google nastavený ako predvolený vyhľadávač v aplikácii Vivaldi. Odošle vybrané slovo a aktuálnu stránku ako kontext do vyhľadávača Google. Môžete ju vypnúť v <ph name="BEGIN_LINK" />Nastavenia<ph name="END_LINK" />.</translation>
+<translation id="1598449788754183301">Prepnúť normálne/súkromné karty</translation>
 <translation id="1644574205037202324">História</translation>
-<translation id="17513872634828108">Otvorené listy</translation>
+<translation id="17513872634828108">Otvorené karty</translation>
 <translation id="1829244130665387512">Nájsť na stránke</translation>
-<translation id="1910514478706885609">Otvoriť v novom zoskupení listov</translation>
+<translation id="1910514478706885609">Otvoriť v novom zoskupení kariet</translation>
 <translation id="1925021887439448749">Zadajte vlastnú webovú adresu</translation>
-<translation id="2038563949887743358">Zapnúť žiadosti o verziu stránok pre počítače</translation>
+<translation id="2038563949887743358">Zapnúť žiadosť o verziu stránok pre počítače</translation>
 <translation id="2139186145475833000">Pridať na domovskú obrazovku</translation>
 <translation id="2149973817440762519">Upraviť záložku</translation>
 <translation id="2306442503286132111">Záložka uložená v priečinku <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Vzhľad</translation>
 <translation id="2501278716633472235">Prejsť späť</translation>
-<translation id="2633278372998075009">Súkromné listy</translation>
-<translation id="2951071800649516099">Pridanie stránok do zoznamu na čítanie na neskôr</translation>
+<translation id="2633278372998075009">Súkromné karty</translation>
+<translation id="272026394418727548">Domovská stránka Vivaldi</translation>
+<translation id="2951071800649516099">Pridať stránky do zoznamu čítania na neskôr</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> záložka}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> záložiek}}</translation>
 <translation id="3076631378407175873">© Copyright <ph name="YEAR" /> Vivaldi a.s. Všetky práva vyhradené.</translation>
-<translation id="3234355010754616171">Nový súkromný list</translation>
-<translation id="3377025655491224618">Súkromný list</translation>
-<translation id="3504699618187058974">Zoskupené listy</translation>
+<translation id="3234355010754616171">Nová súkromná karta</translation>
+<translation id="3377025655491224618">Súkromná karta</translation>
+<translation id="3504699618187058974">Zoskupenie kariet</translation>
 <translation id="3518985090088779359">Prijať a pokračovať</translation>
 <translation id="3571177741182643350">Neprečítané články - dostupné offline:</translation>
+<translation id="3602290021589620013">Náhľad</translation>
 <translation id="3700829948786686853">Vitajte v prehliadači Vivaldi</translation>
 <translation id="3719826155360621982">Domovská stránka</translation>
 <translation id="385051799172605136">Späť</translation>
 <translation id="399014816462153200">Prečítané články:</translation>
 <translation id="4121750346708795461">Používaním tejto aplikácie vyjadrujete súhlas so <ph name="BEGIN_LINK1" />zmluvnými podmienkami<ph name="END_LINK1" /> a <ph name="BEGIN_LINK2" />oznámením o ochrane súkromia<ph name="END_LINK2" /> prehliadača Vivaldi.</translation>
 <translation id="4137746084635924146">Aktuálny jazyk zariadenia</translation>
-<translation id="4167670741834902166">Nový súkromný list</translation>
-<translation id="4243710787042215766">Otvoriť v súkromnom liste</translation>
-<translation id="4526803704855831732">Súkromné listy</translation>
+<translation id="4167670741834902166">Nová súkromná karta</translation>
+<translation id="4195643157523330669">Otvoriť v novej karte</translation>
+<translation id="4243710787042215766">Otvoriť v súkromnej karte</translation>
+<translation id="451872707440238414">Prehľadávať záložky</translation>
+<translation id="4526803704855831732">Súkromné karty</translation>
 <translation id="4719086422742491124">Získajte informácie o témach na webových stránkach bez opustenia stránky. Vyberte jedno alebo viac slov na stránke a vyhľadajte ich.
 
 Touch to Search je funkcia, ktorá je dostupná len vtedy, keď je Google nastavený ako predvolený vyhľadávací nástroj vo Vivaldi.</translation>
 <translation id="4759238208242260848">Sťahovania</translation>
+<translation id="4850886885716139402">Zobraziť</translation>
 <translation id="4883379392681899581">Opustiť súkromný režim</translation>
 <translation id="4943872375798546930">Žiadne výsledky</translation>
-<translation id="49576331685473090">Blokovanie obsahu</translation>
+<translation id="49576331685473090">Blokovač obsahu</translation>
 <translation id="5079259810715830221">Keď Google požiada o súkromné prednačítanie odkazov na ich stránke, Vivaldi zašifruje a prednačíta stránky pomocou Google serverov bez cookies. Tým je vaša identita skrytá pred prednačítanou stránkou.</translation>
 <translation id="5118676864324397542">Úložisko aplikácie <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Súkromné</translation>
-<translation id="5233638681132016545">Nový list</translation>
+<translation id="5233638681132016545">Nová karta</translation>
 <translation id="5375131951310889874">Získajte informácie o témach na webových stránkach bez opustenia stránky. Touch to Search je funkcia, ktorá je k dispozícii len vtedy, keď je Google nastavený ako predvolený vyhľadávací nástroj vo Vivaldi. Odošle slovo a jeho okolitý kontext do Vyhľadávania Google a vráti definície, obrázky, výsledky vyhľadávania a ďalšie podrobnosti.
 
 Ak chcete upraviť hľadaný výraz, vyberte ho dlhým stlačením. Ak chcete spresniť vyhľadávanie, posuňte panel úplne nahor a klepnite na pole vyhľadávania.</translation>
-<translation id="572328651809341494">Nedávne listy</translation>
+<translation id="572328651809341494">Nedávne karty</translation>
 <translation id="6150320133806434356">Záložka uložená</translation>
-<translation id="6336451774241870485">Nový súkromný list</translation>
+<translation id="6336451774241870485">Nová súkromná karta</translation>
 <translation id="6404511346730675251">Upraviť záložku</translation>
 <translation id="6585139692466700358">Ponúka možnosť prekladu stránok do iných jazykov s použitím prekladateľskej služby Vivaldi</translation>
 <translation id="6593061639179217415">Stránka pre počítače</translation>
-<translation id="6610147964972079463">Zatvoriť súkromné listy</translation>
+<translation id="6610147964972079463">Zatvoriť súkromné karty</translation>
 <translation id="7029995644714925509">Keď web požiada o súkromné prednačítanie odkazov na ich stránke, Vivaldi zašifruje a prednačíta stránky pomocou Google serverov bez cookies. Tým je vaša identita skrytá pred prednačítanou stránkou.</translation>
-<translation id="706339621163631076">Zaobchádzanie so súkromím</translation>
+<translation id="706339621163631076">Zásady ochrany osobných údajov prehliadača</translation>
 <translation id="732145680195464316">Záložka uložená v <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">O aplikácií Vivaldi</translation>
-<translation id="7465104139234185284">Zatvoriť všetky súkromné listy</translation>
-<translation id="7968014550143838305">Pridané do zoznamu na čítanie</translation>
+<translation id="7465104139234185284">Zatvoriť všetky súkromné karty</translation>
+<translation id="7481312909269577407">Vpred</translation>
+<translation id="7968014550143838305">Pridané do zoznamu čítania</translation>
 <translation id="804786196054284061">Zmluvné podmienky prehliadača Vivaldi</translation>
 <translation id="8127542551745560481">Úprava domovskej stránky</translation>
+<translation id="8560602726703398413">Zoznam čítania nájdete v záložkách</translation>
 <translation id="85991616550051997">Prejsť na domovskú stránku</translation>
 <translation id="8820817407110198400">Záložky</translation>
 <translation id="9063523880881406963">Vypnúť žiadosti o verziu stránok pre počítače</translation>
 <translation id="9080642952018487277">Vstúpiť do súkromného režimu</translation>
+<translation id="96681097142096641">Zobraziť zjednodušenú stránku?</translation>
 </translationbundle>

@@ -22,10 +22,9 @@ static constexpr std::chrono::minutes kRefreshThreshold =
 }  // namespace
 
 CastAppDiscoveryServiceImpl::CastAppDiscoveryServiceImpl(
-    CastPlatformClient* platform_client,
+    CastPlatformClient& platform_client,
     ClockNowFunctionPtr clock)
     : platform_client_(platform_client), clock_(clock), weak_factory_(this) {
-  OSP_CHECK(platform_client_);
   OSP_CHECK(clock_);
 }
 
@@ -99,7 +98,7 @@ void CastAppDiscoveryServiceImpl::RequestAppAvailability(
     const std::string& receiver_id,
     const std::string& app_id) {
   if (ShouldRefreshAppAvailability(receiver_id, app_id, clock_())) {
-    platform_client_->RequestAppAvailability(
+    platform_client_.RequestAppAvailability(
         receiver_id, app_id,
         [self = weak_factory_.GetWeakPtr(), receiver_id](
             const std::string& id, AppAvailabilityResult availability) {

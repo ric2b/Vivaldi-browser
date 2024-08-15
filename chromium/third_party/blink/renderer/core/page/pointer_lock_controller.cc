@@ -69,7 +69,7 @@ bool PointerLockController::RequestPointerLock(Element* target,
 }
 
 void PointerLockController::RequestPointerLock(
-    ScriptPromiseResolverTyped<IDLUndefined>* resolver,
+    ScriptPromiseResolver<IDLUndefined>* resolver,
     Element* target,
     ExceptionState& exception_state,
     const PointerLockOptions* options) {
@@ -140,7 +140,7 @@ void PointerLockController::RequestPointerLock(
           WTF::BindOnce(
               &PointerLockController::ChangeLockRequestCallback,
               WrapWeakPersistent(this), WrapWeakPersistent(target),
-              WTF::BindOnce(&PointerLockController::ProcessResultScriptPromise,
+              WTF::BindOnce(&PointerLockController::ProcessResultPromise,
                             WrapPersistent(resolver)),
               unadjusted_movement_requested));
       return;
@@ -158,7 +158,7 @@ void PointerLockController::RequestPointerLock(
         WTF::BindOnce(
             &PointerLockController::LockRequestCallback,
             WrapWeakPersistent(this),
-            WTF::BindOnce(&PointerLockController::ProcessResultScriptPromise,
+            WTF::BindOnce(&PointerLockController::ProcessResultPromise,
                           WrapPersistent(resolver)),
             unadjusted_movement_requested));
     lock_pending_ = true;
@@ -199,8 +199,8 @@ void PointerLockController::LockRequestCallback(
   }
 }
 
-void PointerLockController::ProcessResultScriptPromise(
-    ScriptPromiseResolverTyped<IDLUndefined>* resolver,
+void PointerLockController::ProcessResultPromise(
+    ScriptPromiseResolver<IDLUndefined>* resolver,
     mojom::blink::PointerLockResult result) {
   if (result == mojom::blink::PointerLockResult::kSuccess) {
     resolver->Resolve();

@@ -30,12 +30,15 @@
 #include <utility>
 
 #include "src/tint/lang/core/builtin_fn.h"
+#include "src/tint/lang/core/ir/builder.h"
 #include "src/tint/lang/core/ir/core_builtin_call.h"
 #include "src/tint/lang/core/ir/load.h"
 #include "src/tint/lang/core/type/pointer.h"
 #include "src/tint/lang/wgsl/builtin_fn.h"
 #include "src/tint/lang/wgsl/ir/builtin_call.h"
+#include "src/tint/lang/wgsl/writer/raise/ptr_to_ref.h"
 #include "src/tint/lang/wgsl/writer/raise/rename_conflicts.h"
+#include "src/tint/lang/wgsl/writer/raise/value_to_let.h"
 
 namespace tint::wgsl::writer {
 namespace {
@@ -106,6 +109,10 @@ wgsl::BuiltinFn Convert(core::BuiltinFn fn) {
         CASE(kPack2X16Unorm)
         CASE(kPack4X8Snorm)
         CASE(kPack4X8Unorm)
+        CASE(kPack4XI8)
+        CASE(kPack4XU8)
+        CASE(kPack4XI8Clamp)
+        CASE(kPack4XU8Clamp)
         CASE(kPow)
         CASE(kQuantizeToF16)
         CASE(kRadians)
@@ -131,6 +138,8 @@ wgsl::BuiltinFn Convert(core::BuiltinFn fn) {
         CASE(kUnpack2X16Unorm)
         CASE(kUnpack4X8Snorm)
         CASE(kUnpack4X8Unorm)
+        CASE(kUnpack4XI8)
+        CASE(kUnpack4XU8)
         CASE(kWorkgroupBarrier)
         CASE(kTextureBarrier)
         CASE(kTextureDimensions)
@@ -161,22 +170,21 @@ wgsl::BuiltinFn Convert(core::BuiltinFn fn) {
         CASE(kAtomicCompareExchangeWeak)
         CASE(kSubgroupBallot)
         CASE(kSubgroupBroadcast)
-        default:
-            TINT_ICE() << "unhandled builtin function: " << fn;
-            return wgsl::BuiltinFn::kNone;
+        case core::BuiltinFn::kNone:
+            break;
     }
+    TINT_ICE() << "unhandled builtin function: " << fn;
 }
 
-void ReplaceBuiltinFnCall(core::ir::Module& mod, core::ir::CoreBuiltinCall* call) {
+void ReplaceBuiltinFnCall(core::ir::Builder& b, core::ir::CoreBuiltinCall* call) {
     Vector<core::ir::Value*, 8> args(call->Args());
-    auto* replacement = mod.instructions.Create<wgsl::ir::BuiltinCall>(
-        call->Result(0), Convert(call->Func()), std::move(args));
+    auto* replacement = b.CallWithResult<wgsl::ir::BuiltinCall>(
+        call->DetachResult(), Convert(call->Func()), std::move(args));
     call->ReplaceWith(replacement);
-    call->ClearResults();
     call->Destroy();
 }
 
-void ReplaceWorkgroupBarrier(core::ir::Module& mod, core::ir::CoreBuiltinCall* call) {
+void ReplaceWorkgroupBarrier(core::ir::Builder& b, core::ir::CoreBuiltinCall* call) {
     // Pattern match:
     //    call workgroupBarrier
     //    %value = load &ptr
@@ -188,14 +196,14 @@ void ReplaceWorkgroupBarrier(core::ir::Module& mod, core::ir::CoreBuiltinCall* c
     if (!load || load->From()->Type()->As<core::type::Pointer>()->AddressSpace() !=
                      core::AddressSpace::kWorkgroup) {
         // No match
-        ReplaceBuiltinFnCall(mod, call);
+        ReplaceBuiltinFnCall(b, call);
         return;
     }
 
     auto* post_load = As<core::ir::CoreBuiltinCall>(load->next.Get());
     if (!post_load || post_load->Func() != core::BuiltinFn::kWorkgroupBarrier) {
         // No match
-        ReplaceBuiltinFnCall(mod, call);
+        ReplaceBuiltinFnCall(b, call);
         return;
     }
 
@@ -204,33 +212,36 @@ void ReplaceWorkgroupBarrier(core::ir::Module& mod, core::ir::CoreBuiltinCall* c
     call->Destroy();
 
     // Replace load with workgroupUniformLoad
-    auto* replacement = mod.instructions.Create<wgsl::ir::BuiltinCall>(
-        load->Result(0), wgsl::BuiltinFn::kWorkgroupUniformLoad, Vector{load->From()});
+    auto* replacement = b.CallWithResult<wgsl::ir::BuiltinCall>(
+        load->DetachResult(), wgsl::BuiltinFn::kWorkgroupUniformLoad, Vector{load->From()});
     load->ReplaceWith(replacement);
-    load->ClearResults();
     load->Destroy();
 }
 
 }  // namespace
 
 Result<SuccessType> Raise(core::ir::Module& mod) {
-    for (auto* inst : mod.instructions.Objects()) {
-        if (!inst->Alive()) {
-            continue;
-        }
+    core::ir::Builder b{mod};
+    for (auto* inst : mod.Instructions()) {
         if (auto* call = inst->As<core::ir::CoreBuiltinCall>()) {
             switch (call->Func()) {
                 case core::BuiltinFn::kWorkgroupBarrier:
-                    ReplaceWorkgroupBarrier(mod, call);
+                    ReplaceWorkgroupBarrier(b, call);
                     break;
                 default:
-                    ReplaceBuiltinFnCall(mod, call);
+                    ReplaceBuiltinFnCall(b, call);
                     break;
             }
         }
     }
 
     if (auto result = raise::RenameConflicts(mod); result != Success) {
+        return result.Failure();
+    }
+    if (auto result = raise::ValueToLet(mod); result != Success) {
+        return result.Failure();
+    }
+    if (auto result = raise::PtrToRef(mod); result != Success) {
         return result.Failure();
     }
 

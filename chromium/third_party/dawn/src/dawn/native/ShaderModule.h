@@ -155,43 +155,8 @@ ResultOrError<tint::Program> RunTransforms(tint::ast::transform::Manager* transf
                                            tint::ast::transform::DataMap* outputs,
                                            OwnedCompilationMessages* messages);
 
-// Mirrors wgpu::SamplerBindingLayout but instead stores a single boolean
-// for isComparison instead of a wgpu::SamplerBindingType enum.
-struct SamplerBindingInfo {
-    bool isComparison;
-};
-
-// Mirrors wgpu::TextureBindingLayout but instead has a set of compatible sampleTypes
-// instead of a single enum.
-struct SampledTextureBindingInfo {
-    SampleTypeBit compatibleSampleTypes;
-    wgpu::TextureViewDimension viewDimension;
-    bool multisampled;
-};
-
-// Mirrors wgpu::ExternalTextureBindingLayout
-struct ExternalTextureBindingInfo {};
-
-// Mirrors wgpu::BufferBindingLayout
-struct BufferBindingInfo {
-    wgpu::BufferBindingType type;
-    uint64_t minBindingSize;
-};
-
-// Mirrors wgpu::StorageTextureBindingLayout
-struct StorageTextureBindingInfo {
-    wgpu::TextureFormat format;
-    wgpu::TextureViewDimension viewDimension;
-    wgpu::StorageTextureAccess access;
-};
-
-// Per-binding shader metadata contains some SPIRV specific information in addition to
-// most of the frontend per-binding information.
+// Shader metadata for a binding, very similar to information contained in a pipeline layout.
 struct ShaderBindingInfo {
-    // The SPIRV ID of the resource.
-    uint32_t id;
-    uint32_t base_type_id;
-
     BindingNumber binding;
 
     // The variable name of the binding resource.
@@ -199,7 +164,7 @@ struct ShaderBindingInfo {
 
     std::variant<BufferBindingInfo,
                  SamplerBindingInfo,
-                 SampledTextureBindingInfo,
+                 TextureBindingInfo,
                  StorageTextureBindingInfo,
                  ExternalTextureBindingInfo>
         bindingInfo;
@@ -228,8 +193,7 @@ struct EntryPointMetadata {
     // tries to use the entry point.
     std::vector<std::string> infringedLimitErrors;
 
-    // bindings[G][B] is the reflection data for the binding defined with
-    // @group(G) @binding(B) in WGSL / SPIRV.
+    // bindings[G][B] is the reflection data for the binding defined with @group(G) @binding(B)
     BindingInfoArray bindings;
 
     struct SamplerTexturePair {
@@ -347,6 +311,8 @@ class ShaderModuleBase : public RefCountedWithExternalCountBase<ApiObjectBase>,
         bool operator()(const ShaderModuleBase* a, const ShaderModuleBase* b) const;
     };
 
+    std::optional<bool> GetStrictMath() const;
+
     using ScopedUseTintProgram = APIRef<ShaderModuleBase>;
     ScopedUseTintProgram UseTintProgram();
 
@@ -376,6 +342,10 @@ class ShaderModuleBase : public RefCountedWithExternalCountBase<ApiObjectBase>,
     Type mType;
     std::vector<uint32_t> mOriginalSpirv;
     std::string mWgsl;
+
+    // TODO(dawn:2503): Remove the optional when Dawn can has a consistent default across backends.
+    // Right now D3D uses strictness by default, and Vulkan/Metal use fast math by default.
+    std::optional<bool> mStrictMath;
 
     EntryPointMetadataTable mEntryPoints;
     PerStage<std::string> mDefaultEntryPointNames;

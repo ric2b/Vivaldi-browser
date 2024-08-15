@@ -7,7 +7,7 @@
 #include <functional>
 #include <type_traits>
 
-// TODO(crbug.com/957519): including logging.h is required because of the
+// TODO(crbug.com/41455655): including logging.h is required because of the
 // raw_ptr_traits definition that actually requires all types pointed with
 // raw_ptr to be defined.
 #include "base/logging.h"
@@ -18,10 +18,10 @@
 #include "partition_alloc/pointers/raw_ptr_counting_impl_for_test.h"
 #include "partition_alloc/pointers/raw_ptr_test_support.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#if BUILDFLAG(USE_ASAN_BACKUP_REF_PTR)
+#if PA_BUILDFLAG(USE_ASAN_BACKUP_REF_PTR)
 #include "base/debug/asan_service.h"
 #include "base/memory/raw_ptr_asan_service.h"
-#endif  // BUILDFLAG(USE_ASAN_BACKUP_REF_PTR)
+#endif  // PA_BUILDFLAG(USE_ASAN_BACKUP_REF_PTR)
 
 namespace {
 
@@ -557,12 +557,12 @@ TEST(RawRef, GreaterThanOrEqual) {
 }
 
 // Death Tests: If we're only using the no-op version of `raw_ptr` and
-// have `!BUILDFLAG(PA_DCHECK_IS_ON)`, the `PA_RAW_PTR_CHECK()`s used in
+// have `!PA_BUILDFLAG(PA_DCHECK_IS_ON)`, the `PA_RAW_PTR_CHECK()`s used in
 // `raw_ref` evaluate to nothing. Therefore, death tests relying on
 // these CHECKs firing are disabled in their absence.
 
-#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT) || \
-    BUILDFLAG(USE_ASAN_BACKUP_REF_PTR) || BUILDFLAG(PA_DCHECK_IS_ON)
+#if PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT) || \
+    PA_BUILDFLAG(USE_ASAN_BACKUP_REF_PTR) || PA_BUILDFLAG(PA_DCHECK_IS_ON)
 
 TEST(RawRefDeathTest, CopyConstructAfterMove) {
   int i = 1;
@@ -802,9 +802,9 @@ TEST(RawRefDeathTest, GreaterThanOrEqualAfterMove) {
   }
 }
 
-#endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT) ||
-        // BUILDFLAG(USE_ASAN_BACKUP_REF_PTR) ||
-        // BUILDFLAG(PA_DCHECK_IS_ON)
+#endif  // PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT) ||
+        // PA_BUILDFLAG(USE_ASAN_BACKUP_REF_PTR) ||
+        // PA_BUILDFLAG(PA_DCHECK_IS_ON)
 
 TEST(RawRef, CTAD) {
   int i = 1;
@@ -962,7 +962,7 @@ TEST(RawRef, CrossKindAssignment) {
               CountersMatch());
 }
 
-#if BUILDFLAG(USE_ASAN_BACKUP_REF_PTR)
+#if PA_BUILDFLAG(USE_ASAN_BACKUP_REF_PTR)
 
 TEST(AsanBackupRefPtrImpl, RawRefGet) {
   base::debug::AsanService::GetInstance()->Initialize();
@@ -1016,6 +1016,6 @@ TEST(AsanBackupRefPtrImpl, RawRefOperatorStar) {
   [[maybe_unused]] volatile int& ref = *safe_ref;
 }
 
-#endif  // BUILDFLAG(USE_ASAN_BACKUP_REF_PTR)
+#endif  // PA_BUILDFLAG(USE_ASAN_BACKUP_REF_PTR)
 
 }  // namespace

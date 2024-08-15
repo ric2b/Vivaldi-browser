@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">Ne posle</translation>
 <translation id="2749881179542288782">Proveri gramatiku sa pravopisom</translation>
 <translation id="2785873697295365461">Deskriptori datoteka</translation>
-<translation id="2809586584051668049">i još <ph name="NUMBER_ADDITIONAL_DISABLED" /> drugih</translation>
 <translation id="2825758591930162672">Javni ključ subjekta</translation>
 <translation id="2850541429955027218">Dodaj temu</translation>
 <translation id="2861941300086904918">Menadžer bezbednosti osnovnog klijenta</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">Otvori kao prozor</translation>
 <translation id="3280237271814976245">&amp;Sačuvaj kao...</translation>
 <translation id="3285322247471302225">Nova &amp;kartica</translation>
-<translation id="3288047731229977326">Proširenja pokrenuta u režimu programera mogu da naškode računaru. Ako niste programer, trebalo bi da onemogućite ova proširenja pokrenuta u režimu programera da biste se zaštitili.</translation>
 <translation id="329838636886466101">Popravi</translation>
 <translation id="33022249435934718">GDI regulatori</translation>
 <translation id="3303818374450886607">Primeraka</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">Kreirano je proširenje:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Onemogući proširenja pokrenuta u režimu programera</translation>
 <translation id="4100839878934973028">Drugi program na računaru je dodao aplikaciju koja može da promeni način na koji Vivaldi funkcioniše.</translation>
 <translation id="4104163789986725820">I&amp;zvezi...</translation>
 <translation id="4109898769411476438">Zatvorite pregledač pre uvoza</translation>
@@ -261,11 +258,10 @@
 <translation id="5269977353971873915">Štampanje nije uspelo</translation>
 <translation id="5284445933715251131">Nastavi preuzimanje</translation>
 <translation id="52912272896845572">Datoteka privatnog ključa je nevažeća.</translation>
-<translation id="5301954838959518834">U redu, shvatam</translation>
 <translation id="5302932258331363306">Prikaži zamene</translation>
 <translation id="5317780077021120954">Sačuvaj</translation>
 <translation id="5334142896108694079">Keš skripte</translation>
-<translation id="5360150013186312835">Prikaži na traci alata</translation>
+<translation id="5360150013186312835">Prikaži na alatnoj traci</translation>
 <translation id="5362741141255528695">Izaberite datoteku privatnog ključa.</translation>
 <translation id="536638840841140142">Nema</translation>
 <translation id="5370819323174483825">&amp;Ponovo &amp;učitaj</translation>
@@ -368,7 +364,7 @@
 <translation id="7121728544325372695">Pametne crtice</translation>
 <translation id="7144856456372460176">&amp;Instaliraj <ph name="APP" />...</translation>
 <translation id="7175353351958621980">Učitano iz:</translation>
-<translation id="7186088072322679094">Zadrži na traci alata</translation>
+<translation id="7186088072322679094">Zadrži na alatnoj traci</translation>
 <translation id="7287143125007575591">Pristup je odbijen.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> tpi</translation>
 <translation id="7339785458027436441">Proveri pravopis tokom kucanja</translation>

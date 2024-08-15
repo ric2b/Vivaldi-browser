@@ -134,33 +134,33 @@ enum class UpgradedMedium {
 };
 
 AttachmentType FileMetadataTypeToAttachmentType(
-    sharing::mojom::FileMetadata::Type type) {
+    ::sharing::mojom::FileMetadata::Type type) {
   switch (type) {
-    case sharing::mojom::FileMetadata::Type::kUnknown:
+    case ::sharing::mojom::FileMetadata::Type::kUnknown:
       return AttachmentType::kUnknownFileType;
-    case sharing::mojom::FileMetadata::Type::kImage:
+    case ::sharing::mojom::FileMetadata::Type::kImage:
       return AttachmentType::kImage;
-    case sharing::mojom::FileMetadata::Type::kVideo:
+    case ::sharing::mojom::FileMetadata::Type::kVideo:
       return AttachmentType::kVideo;
-    case sharing::mojom::FileMetadata::Type::kApp:
+    case ::sharing::mojom::FileMetadata::Type::kApp:
       return AttachmentType::kApp;
-    case sharing::mojom::FileMetadata::Type::kAudio:
+    case ::sharing::mojom::FileMetadata::Type::kAudio:
       return AttachmentType::kAudio;
   }
 }
 
 AttachmentType TextMetadataTypeToAttachmentType(
-    sharing::mojom::TextMetadata::Type type) {
+    ::sharing::mojom::TextMetadata::Type type) {
   switch (type) {
-    case sharing::mojom::TextMetadata::Type::kUnknown:
+    case ::sharing::mojom::TextMetadata::Type::kUnknown:
       return AttachmentType::kUnknownTextType;
-    case sharing::mojom::TextMetadata::Type::kText:
+    case ::sharing::mojom::TextMetadata::Type::kText:
       return AttachmentType::kText;
-    case sharing::mojom::TextMetadata::Type::kUrl:
+    case ::sharing::mojom::TextMetadata::Type::kUrl:
       return AttachmentType::kUrl;
-    case sharing::mojom::TextMetadata::Type::kAddress:
+    case ::sharing::mojom::TextMetadata::Type::kAddress:
       return AttachmentType::kAddress;
-    case sharing::mojom::TextMetadata::Type::kPhoneNumber:
+    case ::sharing::mojom::TextMetadata::Type::kPhoneNumber:
       return AttachmentType::kPhoneNumber;
   }
 }
@@ -428,6 +428,31 @@ bool IsShareCacheFilePath(Profile* profile, const base::FilePath& file_path) {
       file_manager::util::GetShareCacheFilePath(profile).value());
 }
 
+// Returns true if |medium| is one that the transfer is completed
+// over. This is in contrast to a discovery medium, such as BLE,
+// which performs discovery but not transfer. This should reflect
+// the TransferMedium variants described in
+// tools/metrics/histograms/metadata/nearby/histograms.xml on as-needed basis so
+// we don't create blank metrics.
+bool IsTransferMedium(nearby::connections::mojom::Medium medium) {
+  switch (medium) {
+    case nearby::connections::mojom::Medium::kBluetooth:
+    case nearby::connections::mojom::Medium::kWebRtc:
+    case nearby::connections::mojom::Medium::kWifiLan:
+    case nearby::connections::mojom::Medium::kWifiDirect:
+      return true;
+    case nearby::connections::mojom::Medium::kUnknown:
+    case nearby::connections::mojom::Medium::kMdns:
+    case nearby::connections::mojom::Medium::kWifiHotspot:
+    case nearby::connections::mojom::Medium::kBle:
+    case nearby::connections::mojom::Medium::kWifiAware:
+    case nearby::connections::mojom::Medium::kNfc:
+    case nearby::connections::mojom::Medium::kBleL2Cap:
+    case nearby::connections::mojom::Medium::kUsb:
+      return false;
+  }
+}
+
 }  // namespace
 
 std::string GetMediumName(nearby::connections::mojom::Medium medium) {
@@ -499,7 +524,7 @@ void RecordNearbyShareTimeFromLocalAcceptToTransferStartMetric(
 }
 
 void RecordNearbySharePayloadFileAttachmentTypeMetric(
-    sharing::mojom::FileMetadata::Type type,
+    ::sharing::mojom::FileMetadata::Type type,
     bool is_incoming,
     bool is_contact,
     bool for_self_share,
@@ -510,7 +535,7 @@ void RecordNearbySharePayloadFileAttachmentTypeMetric(
 }
 
 void RecordNearbySharePayloadTextAttachmentTypeMetric(
-    sharing::mojom::TextMetadata::Type type,
+    ::sharing::mojom::TextMetadata::Type type,
     bool is_incoming,
     bool is_contact,
     bool for_self_share,
@@ -662,7 +687,7 @@ void RecordNearbyShareStartAdvertisingResultMetric(
     bool is_high_visibility,
     nearby::connections::mojom::Status status) {
   const std::string mode_suffix =
-      is_high_visibility ? ".HighVisibility" : ".BLE";
+      is_high_visibility ? ".HighVisibility" : ".ContactsVisibility";
   const bool success = status == nearby::connections::mojom::Status::kSuccess;
 
   const std::string result_prefix = "Nearby.Share.StartAdvertising.Result";
@@ -836,13 +861,14 @@ void RecordNearbyShareEndpointDecodedToReceivedIntroductionFrameDuration(
 void RecordNearbyShareConnectionEstablishedToBandwidthUpgradeDuration(
     nearby::connections::mojom::Medium medium,
     base::TimeDelta delta) {
+  CHECK(IsTransferMedium(medium));
   base::UmaHistogramMediumTimes(
       "Nearby.Share.TransferDuration.Sender."
-      "ConnectionEstablishedToBandwidthUpgrade",
+      "ConnectionEstablishedToBandwidthUpgrade2",
       delta);
   base::UmaHistogramMediumTimes(
       "Nearby.Share.TransferDuration.Sender."
-      "ConnectionEstablishedToBandwidthUpgrade." +
+      "ConnectionEstablishedToBandwidthUpgrade2." +
           GetMediumName(medium),
       delta);
 }
@@ -850,13 +876,14 @@ void RecordNearbyShareConnectionEstablishedToBandwidthUpgradeDuration(
 void RecordNearbyShareHighVisibilityEndpointDecodedToBandwidthUpgradeDuration(
     nearby::connections::mojom::Medium medium,
     base::TimeDelta delta) {
+  CHECK(IsTransferMedium(medium));
   base::UmaHistogramMediumTimes(
       "Nearby.Share.TransferDuration.Receiver."
-      "HighVisibilityEndpointDecodedToBandwidthUpgrade",
+      "HighVisibilityEndpointDecodedToBandwidthUpgrade2",
       delta);
   base::UmaHistogramMediumTimes(
       "Nearby.Share.TransferDuration.Receiver."
-      "HighVisibilityEndpointDecodedToBandwidthUpgrade." +
+      "HighVisibilityEndpointDecodedToBandwidthUpgrade2." +
           GetMediumName(medium),
       delta);
 }
@@ -864,13 +891,14 @@ void RecordNearbyShareHighVisibilityEndpointDecodedToBandwidthUpgradeDuration(
 void RecordNearbyShareNonHighVisibilityPairedKeyCompleteToBandwidthUpgradeDuration(
     nearby::connections::mojom::Medium medium,
     base::TimeDelta delta) {
+  CHECK(IsTransferMedium(medium));
   base::UmaHistogramMediumTimes(
       "Nearby.Share.TransferDuration.Receiver."
-      "NonHighVisibilityPairedKeyCompleteToBandwidthUpgrade",
+      "NonHighVisibilityPairedKeyCompleteToBandwidthUpgrade2",
       delta);
   base::UmaHistogramMediumTimes(
       "Nearby.Share.TransferDuration.Receiver."
-      "NonHighVisibilityPairedKeyCompleteToBandwidthUpgrade." +
+      "NonHighVisibilityPairedKeyCompleteToBandwidthUpgrade2." +
           GetMediumName(medium),
       delta);
 }
@@ -878,13 +906,14 @@ void RecordNearbyShareNonHighVisibilityPairedKeyCompleteToBandwidthUpgradeDurati
 void RecordNearbyShareBandwidthUpgradeToAllFilesReceivedDuration(
     nearby::connections::mojom::Medium medium,
     base::TimeDelta delta) {
+  CHECK(IsTransferMedium(medium));
   base::UmaHistogramLongTimes(
       "Nearby.Share.TransferDuration.Receiver."
-      "BandwidthUpgradeToAllFilesReceived",
+      "BandwidthUpgradeToAllFilesReceived2",
       delta);
   base::UmaHistogramLongTimes(
       "Nearby.Share.TransferDuration.Receiver."
-      "BandwidthUpgradeToAllFilesReceived." +
+      "BandwidthUpgradeToAllFilesReceived2." +
           GetMediumName(medium),
       delta);
 }
@@ -908,11 +937,13 @@ void RecordNearbyShareReceivedIntroductionFrameToAllFilesReceivedDuration(
 void RecordNearbyShareBandwidthUpgradeToAllFilesSentDuration(
     nearby::connections::mojom::Medium medium,
     base::TimeDelta delta) {
+  CHECK(IsTransferMedium(medium));
   base::UmaHistogramLongTimes(
-      "Nearby.Share.TransferDuration.Sender.BandwidthUpgradeToAllFilesSent",
+      "Nearby.Share.TransferDuration.Sender."
+      "BandwidthUpgradeToAllFilesSent2",
       delta);
   base::UmaHistogramLongTimes(
-      "Nearby.Share.TransferDuration.Sender.BandwidthUpgradeToAllFilesSent." +
+      "Nearby.Share.TransferDuration.Sender.BandwidthUpgradeToAllFilesSent2." +
           GetMediumName(medium),
       delta);
 }

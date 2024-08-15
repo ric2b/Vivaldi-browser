@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "partition_alloc/partition_alloc.h"
+
 #include <algorithm>
 #include <atomic>
 #include <limits>
@@ -10,9 +12,8 @@
 
 #include "base/debug/debugging_buildflags.h"
 #include "base/timer/lap_timer.h"
-#include "build/build_config.h"
+#include "partition_alloc/build_config.h"
 #include "partition_alloc/extended_api.h"
-#include "partition_alloc/partition_alloc.h"
 #include "partition_alloc/partition_alloc_base/logging.h"
 #include "partition_alloc/partition_alloc_base/strings/stringprintf.h"
 #include "partition_alloc/partition_alloc_base/threading/platform_thread_for_testing.h"
@@ -138,7 +139,7 @@ class PartitionAllocatorWithThreadCache : public Allocator {
  private:
   static constexpr partition_alloc::PartitionOptions kOpts = []() {
     partition_alloc::PartitionOptions opts;
-#if !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#if !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
     opts.thread_cache = PartitionOptions::kEnabled;
 #endif
     return opts;

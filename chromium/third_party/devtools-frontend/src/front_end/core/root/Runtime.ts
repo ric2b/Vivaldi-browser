@@ -282,18 +282,17 @@ export const enum ExperimentName {
   IMPORTANT_DOM_PROPERTIES = 'important-dom-properties',
   JUST_MY_CODE = 'just-my-code',
   PRELOADING_STATUS_PANEL = 'preloading-status-panel',
-  TIMELINE_AS_CONSOLE_PROFILE_RESULT_PANEL = 'timeline-as-console-profile-result-panel',
   OUTERMOST_TARGET_SELECTOR = 'outermost-target-selector',
   HIGHLIGHT_ERRORS_ELEMENTS_PANEL = 'highlight-errors-elements-panel',
-  SET_ALL_BREAKPOINTS_EAGERLY = 'set-all-breakpoints-eagerly',
   USE_SOURCE_MAP_SCOPES = 'use-source-map-scopes',
-  STORAGE_BUCKETS_TREE = 'storage-buckets-tree',
   NETWORK_PANEL_FILTER_BAR_REDESIGN = 'network-panel-filter-bar-redesign',
   AUTOFILL_VIEW = 'autofill-view',
   INDENTATION_MARKERS_TEMP_DISABLE = 'sources-frame-indentation-markers-temporarily-disable',
   TIMELINE_SHOW_POST_MESSAGE_EVENTS = 'timeline-show-postmessage-events',
-  SAVE_AND_LOAD_TRACE_WITH_ANNOTATIONS = 'save-and-load-trace-with-annotations',
-  TIMELINE_TRACK_CONFIGURATION = 'timeline-track-configuration',
+  PERF_PANEL_ANNOTATIONS = 'perf-panel-annotations',
+  TIMELINE_EXTENSIONS = 'timeline-extensions',
+  TIMELINE_DEBUG_MODE = 'timeline-debug-mode',
+  TIMELINE_EXECUTE_OLD_ENGINE = 'timeline-enable-old-timeline-model-engine',
 }
 
 /**

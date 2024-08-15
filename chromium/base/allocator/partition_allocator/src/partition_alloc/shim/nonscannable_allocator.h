@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_SHIM_NONSCANNABLE_ALLOCATOR_H_
-#define BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_SHIM_NONSCANNABLE_ALLOCATOR_H_
+#ifndef PARTITION_ALLOC_SHIM_NONSCANNABLE_ALLOCATOR_H_
+#define PARTITION_ALLOC_SHIM_NONSCANNABLE_ALLOCATOR_H_
 
 #include <atomic>
 #include <cstddef>
@@ -14,17 +14,17 @@
 #include "partition_alloc/partition_alloc_base/no_destructor.h"
 #include "partition_alloc/partition_alloc_buildflags.h"
 
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 #include "partition_alloc/partition_alloc.h"
 
-#if BUILDFLAG(USE_STARSCAN)
+#if PA_BUILDFLAG(USE_STARSCAN)
 #include "partition_alloc/internal_allocator_forward.h"
 #endif
-#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 
 namespace allocator_shim {
 
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 namespace internal {
 
 // Represents allocator that contains memory for data-like objects (that don't
@@ -46,14 +46,14 @@ class NonScannableAllocatorImpl final {
   // Returns PartitionRoot corresponding to the allocator, or nullptr if the
   // allocator is not enabled.
   partition_alloc::PartitionRoot* root() {
-#if BUILDFLAG(USE_STARSCAN)
+#if PA_BUILDFLAG(USE_STARSCAN)
     if (!allocator_.get()) {
       return nullptr;
     }
     return allocator_->root();
 #else
     return nullptr;
-#endif  // BUILDFLAG(USE_STARSCAN)
+#endif  // PA_BUILDFLAG(USE_STARSCAN)
   }
 
   void NotifyPCScanEnabled();
@@ -65,12 +65,12 @@ class NonScannableAllocatorImpl final {
   NonScannableAllocatorImpl();
   ~NonScannableAllocatorImpl();
 
-#if BUILDFLAG(USE_STARSCAN)
+#if PA_BUILDFLAG(USE_STARSCAN)
   std::unique_ptr<partition_alloc::PartitionAllocator,
                   partition_alloc::internal::InternalPartitionDeleter>
       allocator_;
   std::atomic_bool pcscan_enabled_{false};
-#endif  // BUILDFLAG(USE_STARSCAN)
+#endif  // PA_BUILDFLAG(USE_STARSCAN)
 };
 
 extern template class PA_EXPORT_TEMPLATE_DECLARE(
@@ -83,8 +83,8 @@ extern template class PA_EXPORT_TEMPLATE_DECLARE(
 using NonScannableAllocator = internal::NonScannableAllocatorImpl<true>;
 using NonQuarantinableAllocator = internal::NonScannableAllocatorImpl<false>;
 
-#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 
 }  // namespace allocator_shim
 
-#endif  // BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_SHIM_NONSCANNABLE_ALLOCATOR_H_
+#endif  // PARTITION_ALLOC_SHIM_NONSCANNABLE_ALLOCATOR_H_

@@ -361,6 +361,12 @@ declare global {
         CANNOT_ENABLE_DOCS_OFFLINE = 'cannot_enable_docs_offline',
       }
 
+      export enum DefaultLocation {
+        MY_FILES = 'my_files',
+        GOOGLE_DRIVE = 'google_drive',
+        ONEDRIVE = 'onedrive',
+      }
+
       export interface FileTaskDescriptor {
         appId: string;
         taskType: string;
@@ -547,6 +553,7 @@ declare global {
         driveFsBulkPinningAvailable: boolean;
         driveFsBulkPinningEnabled: boolean;
         localUserFilesAllowed: boolean;
+        defaultLocation: DefaultLocation;
       }
 
       export interface PreferencesChange {
@@ -778,6 +785,15 @@ declare global {
         remainingSeconds: number;
         shouldPin: boolean;
         emptiedQueue: boolean;
+      }
+
+      export interface MaterializedView {
+        viewId: number;
+        name: string;
+      }
+
+      export interface EntryData {
+        entryUrl: string;
       }
 
       export function cancelDialog(): void;
@@ -1036,6 +1052,11 @@ declare global {
           callback: (progress: BulkPinProgress) => void): void;
 
       export function calculateBulkPinRequiredSpace(callback: () => void): void;
+
+      export function getMaterializedViews(): Promise<MaterializedView[]>;
+
+      export function readMaterializedView(viewId: number):
+          Promise<EntryData[]>;
 
       export const onMountCompleted:
           ChromeEvent<(event: MountCompletedEvent) => void>;

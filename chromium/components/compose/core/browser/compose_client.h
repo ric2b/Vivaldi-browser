@@ -42,11 +42,22 @@ class ComposeClient {
 
   // Checks if the popup (aka nudge) should be presented for the provided field.
   virtual bool ShouldTriggerPopup(
+      const autofill::FormData& form_data,
       const autofill::FormFieldData& trigger_field,
       autofill::AutofillSuggestionTriggerSource trigger_source) = 0;
 
   // Getter for the PageUkmTracker instance for the currently loaded page.
-  virtual PageUkmTracker* getPageUkmTracker() = 0;
+  virtual PageUkmTracker* GetPageUkmTracker() = 0;
+
+  // Disable the global preference controlling the proactive nudge.
+  virtual void DisableProactiveNudge() = 0;
+
+  // Open the "Offer writing help" settings page in a new active tab.
+  virtual void OpenProactiveNudgeSettings() = 0;
+
+  // Add `origin` to the preference managing sites on which the proactive nudge
+  // is disabled.
+  virtual void AddSiteToNeverPromptList(const url::Origin& origin) = 0;
 };
 
 }  // namespace compose

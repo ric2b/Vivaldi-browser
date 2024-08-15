@@ -29,6 +29,7 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension_l10n_util.h"
 #include "extensions/common/file_util.h"
+#include "ui/gfx/animation/animation.h"
 
 // static
 EmbeddedA11yManagerLacros* EmbeddedA11yManagerLacros::GetInstance() {
@@ -110,6 +111,19 @@ void EmbeddedA11yManagerLacros::Init() {
       base::BindRepeating(
           &EmbeddedA11yManagerLacros::OnPdfOcrAlwaysActiveChanged,
           weak_ptr_factory_.GetWeakPtr()));
+
+  reduced_animations_enabled_observer_ = std::make_unique<CrosapiPrefObserver>(
+      crosapi::mojom::PrefPath::kAccessibilityReducedAnimationsEnabled,
+      base::BindRepeating(
+          &EmbeddedA11yManagerLacros::OnReducedAnimationsEnabledChanged,
+          weak_ptr_factory_.GetWeakPtr()));
+
+  overscroll_history_navigation_enabled_observer_ =
+      std::make_unique<CrosapiPrefObserver>(
+          crosapi::mojom::PrefPath::kOverscrollHistoryNavigationEnabled,
+          base::BindRepeating(&EmbeddedA11yManagerLacros::
+                                  OnOverscrollHistoryNavigationEnabledChanged,
+                              weak_ptr_factory_.GetWeakPtr()));
 
   EmbeddedA11yExtensionLoader::GetInstance()->Init();
 
@@ -195,6 +209,14 @@ void EmbeddedA11yManagerLacros::UpdatePdfOcrEnabledOnProfile(Profile* profile) {
   }
 }
 
+void EmbeddedA11yManagerLacros::UpdateOverscrollHistoryNavigationEnabled() {
+  if (overscroll_history_navigation_enabled_.has_value()) {
+    g_browser_process->local_state()->SetBoolean(
+        prefs::kOverscrollHistoryNavigationEnabled,
+        overscroll_history_navigation_enabled_.value());
+  }
+}
+
 void EmbeddedA11yManagerLacros::OnChromeVoxEnabledChanged(base::Value value) {
   CHECK(value.is_bool());
   chromevox_enabled_ = value.GetBool();
@@ -230,11 +252,24 @@ void EmbeddedA11yManagerLacros::OnFocusHighlightEnabledChanged(
 }
 
 void EmbeddedA11yManagerLacros::OnPdfOcrAlwaysActiveChanged(base::Value value) {
-  // TODO(crbug.com/1443346): Add browser test to ensure the pref is synced on
+  // TODO(crbug.com/40267312): Add browser test to ensure the pref is synced on
   // all profiles.
   CHECK(value.is_bool());
   pdf_ocr_always_active_enabled_ = value.GetBool();
   UpdatePdfOcrEnabledOnAllProfiles();
+}
+
+void EmbeddedA11yManagerLacros::OnReducedAnimationsEnabledChanged(
+    base::Value value) {
+  CHECK(value.is_bool());
+  gfx::Animation::SetPrefersReducedMotionForA11y(value.GetBool());
+}
+
+void EmbeddedA11yManagerLacros::OnOverscrollHistoryNavigationEnabledChanged(
+    base::Value value) {
+  CHECK(value.is_bool());
+  overscroll_history_navigation_enabled_ = value.GetBool();
+  UpdateOverscrollHistoryNavigationEnabled();
 }
 
 void EmbeddedA11yManagerLacros::OnFocusChangedInPage(
@@ -247,10 +282,22 @@ void EmbeddedA11yManagerLacros::OnFocusChangedInPage(
   }
 }
 
+void EmbeddedA11yManagerLacros::SetReadingModeEnabled(bool enabled) {
+  if (reading_mode_enabled_ != enabled) {
+    reading_mode_enabled_ = enabled;
+    UpdateEmbeddedA11yHelperExtension();
+  }
+}
+
+bool EmbeddedA11yManagerLacros::IsReadingModeEnabled() {
+  return reading_mode_enabled_;
+}
+
 void EmbeddedA11yManagerLacros::UpdateEmbeddedA11yHelperExtension() {
   // Switch Access and Select to Speak share a helper extension which has a
   // manifest content script to tell Google Docs to annotate the HTML canvas.
-  if (select_to_speak_enabled_ || switch_access_enabled_) {
+  if (select_to_speak_enabled_ || switch_access_enabled_ ||
+      reading_mode_enabled_) {
     EmbeddedA11yExtensionLoader::GetInstance()->InstallExtensionWithId(
         extension_misc::kEmbeddedA11yHelperExtensionId,
         extension_misc::kEmbeddedA11yHelperExtensionPath,

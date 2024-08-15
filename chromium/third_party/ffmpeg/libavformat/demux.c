@@ -29,6 +29,7 @@
 #include "libavutil/internal.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mathematics.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixfmt.h"
 #include "libavutil/time.h"
@@ -199,18 +200,6 @@ static int update_stream_avctx(AVFormatContext *s)
             sti->parser = NULL;
         }
 
-#if FF_API_OLD_CHANNEL_LAYOUT
-FF_DISABLE_DEPRECATION_WARNINGS
-        if (st->codecpar->ch_layout.nb_channels &&
-            !st->codecpar->channels) {
-            st->codecpar->channels = st->codecpar->ch_layout.nb_channels;
-            st->codecpar->channel_layout = st->codecpar->ch_layout.order == AV_CHANNEL_ORDER_NATIVE ?
-                                           st->codecpar->ch_layout.u.mask : 0;
-
-        }
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
-
         /* update internal codec context, for the parser */
         ret = avcodec_parameters_to_context(sti->avctx, st->codecpar);
         if (ret < 0)
@@ -295,8 +284,8 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
     s->duration = s->start_time = AV_NOPTS_VALUE;
 
     /* Allocate private data. */
-    if (s->iformat->priv_data_size > 0) {
-        if (!(s->priv_data = av_mallocz(s->iformat->priv_data_size))) {
+    if (ffifmt(s->iformat)->priv_data_size > 0) {
+        if (!(s->priv_data = av_mallocz(ffifmt(s->iformat)->priv_data_size))) {
             ret = AVERROR(ENOMEM);
             goto fail;
         }
@@ -312,9 +301,9 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
     if (s->pb)
         ff_id3v2_read_dict(s->pb, &si->id3v2_meta, ID3v2_DEFAULT_MAGIC, &id3v2_extra_meta);
 
-    if (s->iformat->read_header)
-        if ((ret = s->iformat->read_header(s)) < 0) {
-            if (s->iformat->flags_internal & FF_FMT_INIT_CLEANUP)
+    if (ffifmt(s->iformat)->read_header)
+        if ((ret = ffifmt(s->iformat)->read_header(s)) < 0) {
+            if (ffifmt(s->iformat)->flags_internal & FF_INFMT_FLAG_INIT_CLEANUP)
                 goto close;
             goto fail;
         }
@@ -359,8 +348,8 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
     return 0;
 
 close:
-    if (s->iformat->read_close)
-        s->iformat->read_close(s);
+    if (ffifmt(s->iformat)->read_close)
+        ffifmt(s->iformat)->read_close(s);
 fail:
     ff_id3v2_free_extra_meta(&id3v2_extra_meta);
     av_dict_free(&tmp);
@@ -387,8 +376,8 @@ void avformat_close_input(AVFormatContext **ps)
         pb = NULL;
 
     if (s->iformat)
-        if (s->iformat->read_close)
-            s->iformat->read_close(s);
+        if (ffifmt(s->iformat)->read_close)
+            ffifmt(s->iformat)->read_close(s);
 
     avformat_free_context(s);
 
@@ -544,9 +533,6 @@ static void update_timestamps(AVFormatContext *s, AVStream *st, AVPacket *pkt)
 {
     FFStream *const sti = ffstream(st);
 
-    av_assert0(pkt->stream_index < (unsigned)s->nb_streams &&
-               "Invalid stream index.\n");
-
     if (update_wrap_reference(s, st, pkt->stream_index, pkt) && sti->pts_wrap_behavior == AV_PTS_WRAP_SUB_OFFSET) {
         // correct first time stamps to negative values
         if (!is_relative(sti->first_dts))
@@ -567,26 +553,42 @@ static void update_timestamps(AVFormatContext *s, AVStream *st, AVPacket *pkt)
         pkt->dts = pkt->pts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, st->time_base);
 }
 
-int ff_buffer_packet(AVFormatContext *s, AVPacket *pkt)
+/**
+ * Handle a new packet and either return it directly if possible and
+ * allow_passthrough is true or queue the packet (or drop the packet
+ * if corrupt).
+ *
+ * @return < 0 on error, 0 if the packet was passed through,
+ *         1 if it was queued or dropped
+ */
+static int handle_new_packet(AVFormatContext *s, AVPacket *pkt, int allow_passthrough)
 {
     FFFormatContext *const si = ffformatcontext(s);
-    AVStream *st  = s->streams[pkt->stream_index];
-    FFStream *sti = ffstream(st);
+    AVStream *st;
+    FFStream *sti;
     int err;
+
+    av_assert0(pkt->stream_index < (unsigned)s->nb_streams &&
+               "Invalid stream index.\n");
 
     if (pkt->flags & AV_PKT_FLAG_CORRUPT) {
         av_log(s, AV_LOG_WARNING,
-               "Packet corrupt (stream = %d, dts = %s)",
-               pkt->stream_index, av_ts2str(pkt->dts));
+               "Packet corrupt (stream = %d, dts = %s)%s.\n",
+               pkt->stream_index, av_ts2str(pkt->dts),
+               s->flags & AVFMT_FLAG_DISCARD_CORRUPT ? ", dropping it" : "");
         if (s->flags & AVFMT_FLAG_DISCARD_CORRUPT) {
-            av_log(s, AV_LOG_WARNING, ", dropping it.\n");
             av_packet_unref(pkt);
-            return 0;
+            return 1;
         }
-        av_log(s, AV_LOG_WARNING, ".\n");
     }
 
+    st  = s->streams[pkt->stream_index];
+    sti = ffstream(st);
+
     update_timestamps(s, st, pkt);
+
+    if (sti->request_probe <= 0 && allow_passthrough && !si->raw_packet_buffer.head)
+        return 0;
 
     err = avpriv_packet_list_put(&si->raw_packet_buffer, pkt, NULL, 0);
     if (err < 0) {
@@ -597,14 +599,18 @@ int ff_buffer_packet(AVFormatContext *s, AVPacket *pkt)
     pkt = &si->raw_packet_buffer.tail->pkt;
     si->raw_packet_buffer_size += pkt->size;
 
-    if (sti->request_probe <= 0)
-        return 0;
-
     err = probe_codec(s, st, pkt);
     if (err < 0)
         return err;
 
-    return 0;
+    return 1;
+}
+
+int ff_buffer_packet(AVFormatContext *s, AVPacket *pkt)
+{
+    int err = handle_new_packet(s, pkt, 0);
+
+    return err < 0 ? err : 0;
 }
 
 int ff_read_packet(AVFormatContext *s, AVPacket *pkt)
@@ -624,9 +630,6 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
     for (;;) {
         PacketListEntry *pktl = si->raw_packet_buffer.head;
-        AVStream *st;
-        FFStream *sti;
-        const AVPacket *pkt1;
 
         if (pktl) {
             AVStream *const st = s->streams[pktl->pkt.stream_index];
@@ -640,7 +643,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
             }
         }
 
-        err = s->iformat->read_packet(s, pkt);
+        err = ffifmt(s->iformat)->read_packet(s, pkt);
         if (err < 0) {
             av_packet_unref(pkt);
 
@@ -668,36 +671,8 @@ FF_ENABLE_DEPRECATION_WARNINGS
             return err;
         }
 
-        if (pkt->flags & AV_PKT_FLAG_CORRUPT) {
-            av_log(s, AV_LOG_WARNING,
-                   "Packet corrupt (stream = %d, dts = %s)",
-                   pkt->stream_index, av_ts2str(pkt->dts));
-            if (s->flags & AVFMT_FLAG_DISCARD_CORRUPT) {
-                av_log(s, AV_LOG_WARNING, ", dropping it.\n");
-                av_packet_unref(pkt);
-                continue;
-            }
-            av_log(s, AV_LOG_WARNING, ".\n");
-        }
-
-        st  = s->streams[pkt->stream_index];
-        sti = ffstream(st);
-
-        update_timestamps(s, st, pkt);
-
-        if (!pktl && sti->request_probe <= 0)
-            return 0;
-
-        err = avpriv_packet_list_put(&si->raw_packet_buffer,
-                                     pkt, NULL, 0);
-        if (err < 0) {
-            av_packet_unref(pkt);
-            return err;
-        }
-        pkt1 = &si->raw_packet_buffer.tail->pkt;
-        si->raw_packet_buffer_size += pkt1->size;
-
-        if ((err = probe_codec(s, st, pkt1)) < 0)
+        err = handle_new_packet(s, pkt, 1);
+        if (err <= 0) /* Error or passthrough */
             return err;
     }
 }
@@ -1452,13 +1427,6 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
                 return ret;
             st->codecpar->sample_rate = sti->avctx->sample_rate;
             st->codecpar->bit_rate = sti->avctx->bit_rate;
-#if FF_API_OLD_CHANNEL_LAYOUT
-FF_DISABLE_DEPRECATION_WARNINGS
-            st->codecpar->channels = sti->avctx->ch_layout.nb_channels;
-            st->codecpar->channel_layout = sti->avctx->ch_layout.order == AV_CHANNEL_ORDER_NATIVE ?
-                                           sti->avctx->ch_layout.u.mask : 0;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
             ret = av_channel_layout_copy(&st->codecpar->ch_layout, &sti->avctx->ch_layout);
             if (ret < 0)
                 return ret;
@@ -1836,8 +1804,9 @@ static void estimate_timings_from_bit_rate(AVFormatContext *ic)
                "Estimating duration from bitrate, this may be inaccurate\n");
 }
 
-#define DURATION_MAX_READ_SIZE 250000LL
-#define DURATION_MAX_RETRY 6
+#define DURATION_DEFAULT_MAX_READ_SIZE 250000LL
+#define DURATION_DEFAULT_MAX_RETRY 6
+#define DURATION_MAX_RETRY 1
 
 /* only usable for MPEG-PS streams */
 static void estimate_timings_from_pts(AVFormatContext *ic, int64_t old_offset)
@@ -1845,6 +1814,8 @@ static void estimate_timings_from_pts(AVFormatContext *ic, int64_t old_offset)
     FFFormatContext *const si = ffformatcontext(ic);
     AVPacket *const pkt = si->pkt;
     int num, den, read_size, ret;
+    int64_t duration_max_read_size = ic->duration_probesize ? ic->duration_probesize >> DURATION_MAX_RETRY : DURATION_DEFAULT_MAX_READ_SIZE;
+    int duration_max_retry = ic->duration_probesize ? DURATION_MAX_RETRY : DURATION_DEFAULT_MAX_RETRY;
     int found_duration = 0;
     int is_end;
     int64_t filesize, offset, duration;
@@ -1880,7 +1851,7 @@ static void estimate_timings_from_pts(AVFormatContext *ic, int64_t old_offset)
     filesize = ic->pb ? avio_size(ic->pb) : 0;
     do {
         is_end = found_duration;
-        offset = filesize - (DURATION_MAX_READ_SIZE << retry);
+        offset = filesize - (duration_max_read_size << retry);
         if (offset < 0)
             offset = 0;
 
@@ -1889,7 +1860,7 @@ static void estimate_timings_from_pts(AVFormatContext *ic, int64_t old_offset)
         for (;;) {
             AVStream *st;
             FFStream *sti;
-            if (read_size >= DURATION_MAX_READ_SIZE << (FFMAX(retry - 1, 0)))
+            if (read_size >= duration_max_read_size << (FFMAX(retry - 1, 0)))
                 break;
 
             do {
@@ -1943,7 +1914,7 @@ static void estimate_timings_from_pts(AVFormatContext *ic, int64_t old_offset)
         }
     } while (!is_end &&
              offset &&
-             ++retry <= DURATION_MAX_RETRY);
+             ++retry <= duration_max_retry);
 
     av_opt_set_int(ic, "skip_changes", 0, AV_OPT_SEARCH_CHILDREN);
 

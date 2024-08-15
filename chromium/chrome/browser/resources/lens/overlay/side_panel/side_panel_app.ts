@@ -2,13 +2,39 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../strings.m.js';
+import '//resources/cr_components/searchbox/realbox.js';
+
+import {ColorChangeUpdater} from '//resources/cr_components/color_change_listener/colors_css_updater.js';
 import {assert} from '//resources/js/assert.js';
+import {loadTimeData} from '//resources/js/load_time_data.js';
 import type {Url} from '//resources/mojo/url/mojom/url.mojom-webui.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import type {LensSidePanelPageHandlerInterface} from '../lens.mojom-webui.js';
 
 import {getTemplate} from './side_panel_app.html.js';
 import {SidePanelBrowserProxyImpl} from './side_panel_browser_proxy.js';
 import type {SidePanelBrowserProxy} from './side_panel_browser_proxy.js';
+
+// The url query parameter keys for the viewport size.
+const VIEWPORT_HEIGHT_KEY = 'bih';
+const VIEWPORT_WIDTH_KEY = 'biw';
+
+// Closes overlay if the escape key is pressed.
+function maybeCloseOverlay(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    SidePanelBrowserProxyImpl.getInstance()
+        .handler.closeRequestedBySidePanelEscapeKeyPress();
+  }
+}
+
+export interface LensSidePanelAppElement {
+  $: {
+    results: HTMLIFrameElement,
+    loadingResultsImage: HTMLImageElement,
+  };
+}
 
 export class LensSidePanelAppElement extends PolymerElement {
   static get is() {
@@ -21,36 +47,130 @@ export class LensSidePanelAppElement extends PolymerElement {
 
   static get properties() {
     return {
-      resultsUrl_: {
+      isBackArrowVisible: {
+        type: Boolean,
+        value: false,
+        reflectToAttribute: true,
+      },
+      /* Used to decide whether to show back arrow onFocusOut in searchbox. */
+      wasBackArrowAvailable: {
+        type: Boolean,
+        value: false,
+      },
+      isLoadingResults: {
+        type: Boolean,
+        value: true,
+        reflectToAttribute: true,
+      },
+      loadingImageUrl: {
         type: String,
+        value: loadTimeData.getString('resultsLoadingUrl'),
+        readOnly: true,
+      },
+      darkMode: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('darkMode'),
+        reflectToAttribute: true,
       },
     };
   }
 
-  private browserProxy_: SidePanelBrowserProxy =
+  // Public for use in browser tests.
+  isBackArrowVisible: boolean;
+  // Whether the results iframe is currently loading. This needs to be done via
+  // browser because the iframe is cross-origin. Default true since the side
+  // panel can open before a navigation has started.
+  private isLoadingResults: boolean;
+  // The URL for the loading image shown when results frame is loading a new
+  // page.
+  private readonly loadingImageUrl: string;
+
+  private browserProxy: SidePanelBrowserProxy =
       SidePanelBrowserProxyImpl.getInstance();
-  private listenerIds_: number[];
-  private resultsUrl_: string;
+  private darkMode: boolean;
+  private listenerIds: number[];
+  private pageHandler: LensSidePanelPageHandlerInterface;
+  private wasBackArrowAvailable: boolean;
+
+  constructor() {
+    super();
+    this.pageHandler = SidePanelBrowserProxyImpl.getInstance().handler;
+    ColorChangeUpdater.forDocument().start();
+  }
+
+  override ready() {
+    super.ready();
+
+    this.shadowRoot!.querySelector<HTMLElement>('cr-realbox')
+        ?.addEventListener('focusin', () => this.onSearchboxFocusIn_());
+    this.shadowRoot!.querySelector<HTMLElement>('cr-realbox')
+        ?.addEventListener('focusout', () => this.onSearchboxFocusOut_());
+  }
 
   override connectedCallback() {
     super.connectedCallback();
 
-    this.listenerIds_ = [
-      this.browserProxy_.callbackRouter.loadResultsInFrame.addListener(
-          this.loadResultsInFrame_.bind(this)),
+    this.listenerIds = [
+      this.browserProxy.callbackRouter.loadResultsInFrame.addListener(
+          this.loadResultsInFrame.bind(this)),
+      this.browserProxy.callbackRouter.setIsLoadingResults.addListener(
+          this.setIsLoadingResults.bind(this)),
+      this.browserProxy.callbackRouter.setBackArrowVisible.addListener(
+          this.setBackArrowVisible.bind(this)),
     ];
+    window.addEventListener('keyup', maybeCloseOverlay);
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
 
-    this.listenerIds_.forEach(
-        id => assert(this.browserProxy_.callbackRouter.removeListener(id)));
-    this.listenerIds_ = [];
+    this.listenerIds.forEach(
+        id => assert(this.browserProxy.callbackRouter.removeListener(id)));
+    this.listenerIds = [];
+    window.removeEventListener('keyup', maybeCloseOverlay);
   }
 
-  private loadResultsInFrame_(resultsUrl: Url) {
-    this.resultsUrl_ = resultsUrl.url;
+  private onBackArrowClick() {
+    this.pageHandler.popAndLoadQueryFromHistory();
+  }
+
+  private setIsLoadingResults(isLoading: boolean) {
+    this.isLoadingResults = isLoading;
+  }
+
+  private loadResultsInFrame(resultsUrl: Url) {
+    const url = new URL(resultsUrl.url);
+    const resultsBoundingRect = this.$.results.getBoundingClientRect();
+    if (resultsBoundingRect.width > 0) {
+      url.searchParams.set(
+          VIEWPORT_WIDTH_KEY, resultsBoundingRect.width.toString());
+    }
+    if (resultsBoundingRect.height > 0) {
+      url.searchParams.set(
+          VIEWPORT_HEIGHT_KEY, resultsBoundingRect.height.toString());
+    }
+    // The src needs to be reset explicitly every time this function is called
+    // to force a reload. We cannot get the currently displayed URL from the
+    // frame because of cross-origin restrictions.
+    this.$.results.src = url.href;
+    // Remove focus from the input when results are loaded. Does not have
+    // any effect if input is not focused.
+    this.shadowRoot!.querySelector<HTMLElement>('cr-realbox')
+        ?.shadowRoot!.querySelector<HTMLElement>('input')
+        ?.blur();
+  }
+
+  private setBackArrowVisible(visible: boolean) {
+    this.isBackArrowVisible = visible;
+    this.wasBackArrowAvailable = visible;
+  }
+
+  private onSearchboxFocusIn_() {
+    this.isBackArrowVisible = false;
+  }
+
+  private onSearchboxFocusOut_() {
+    this.isBackArrowVisible = this.wasBackArrowAvailable;
   }
 }
 

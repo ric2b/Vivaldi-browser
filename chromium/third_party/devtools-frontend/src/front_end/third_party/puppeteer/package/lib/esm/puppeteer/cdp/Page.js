@@ -89,8 +89,8 @@ function convertConsoleMessageLevel(method) {
  * @internal
  */
 export class CdpPage extends Page {
-    static async _create(client, target, ignoreHTTPSErrors, defaultViewport) {
-        const page = new CdpPage(client, target, ignoreHTTPSErrors);
+    static async _create(client, target, defaultViewport) {
+        const page = new CdpPage(client, target);
         await page.#initialize();
         if (defaultViewport) {
             try {
@@ -209,7 +209,7 @@ export class CdpPage extends Page {
         ['Log.entryAdded', this.#onLogEntryAdded.bind(this)],
         ['Page.fileChooserOpened', this.#onFileChooser.bind(this)],
     ];
-    constructor(client, target, ignoreHTTPSErrors) {
+    constructor(client, target) {
         super();
         this.#primaryTargetClient = client;
         this.#tabTargetClient = client.parentSession();
@@ -222,7 +222,7 @@ export class CdpPage extends Page {
         this.#mouse = new CdpMouse(client, this.#keyboard);
         this.#touchscreen = new CdpTouchscreen(client, this.#keyboard);
         this.#accessibility = new Accessibility(client);
-        this.#frameManager = new FrameManager(client, this, ignoreHTTPSErrors, this._timeoutSettings);
+        this.#frameManager = new FrameManager(client, this, this._timeoutSettings);
         this.#emulationManager = new EmulationManager(client);
         this.#tracing = new Tracing(client);
         this.#coverage = new Coverage(client);
@@ -683,7 +683,10 @@ export class CdpPage extends Page {
     }
     async reload(options) {
         const [result] = await Promise.all([
-            this.waitForNavigation(options),
+            this.waitForNavigation({
+                ...options,
+                ignoreSameDocumentNavigation: true,
+            }),
             this.#primaryTargetClient.send('Page.reload'),
         ]);
         return result;
@@ -815,6 +818,11 @@ export class CdpPage extends Page {
         if (omitBackground) {
             await this.#emulationManager.setTransparentBackgroundColor();
         }
+        await firstValueFrom(from(this.mainFrame()
+            .isolatedRealm()
+            .evaluate(() => {
+            return document.fonts.ready;
+        })).pipe(raceWith(timeout(ms))));
         const printCommandPromise = this.#primaryTargetClient.send('Page.printToPDF', {
             transferMode: 'ReturnAsStream',
             landscape,

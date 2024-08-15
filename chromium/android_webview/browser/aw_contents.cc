@@ -67,7 +67,7 @@
 #include "base/trace_event/typed_macros.h"
 #include "components/android_autofill/browser/android_autofill_client.h"
 #include "components/android_autofill/browser/android_autofill_manager.h"
-#include "components/android_autofill/browser/autofill_provider_android.h"
+#include "components/android_autofill/browser/android_autofill_provider.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
@@ -102,6 +102,8 @@
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
+#include "third_party/blink/public/common/navigation/navigation_params.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -233,7 +235,9 @@ AwRenderProcessGoneDelegate* AwRenderProcessGoneDelegate::FromWebContents(
 
 AwContents::AwContents(std::unique_ptr<WebContents> web_contents)
     : content::WebContentsObserver(web_contents.get()),
-      browser_view_renderer_(this, content::GetUIThreadTaskRunner({})),
+      browser_view_renderer_(this,
+                             content::GetUIThreadTaskRunner({}),
+                             content::GetIOThreadTaskRunner({})),
       web_contents_(std::move(web_contents)) {
   TRACE_EVENT_BEGIN("android_webview.timeline", "WebView Instance",
                     perfetto::Track::FromPointer(this));
@@ -307,23 +311,12 @@ void AwContents::InitializeAndroidAutofill(JNIEnv* env) {
     return;
   }
   android_autofill::AndroidAutofillClient::CreateForWebContents(
-      web_contents_.get(), [&](const JavaRef<jobject>& client) {
-        SetAndroidAutofillClient(client);
-      });
+      web_contents_.get());
 
   // We need to initialize the keyboard suppressor before creating any
   // AutofillManagers and after the autofill client is available.
   autofill::AutofillProvider::FromWebContents(web_contents_.get())
       ->MaybeInitKeyboardSuppressor();
-}
-
-void AwContents::SetAndroidAutofillClient(const JavaRef<jobject>& client) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (!obj)
-    return;
-  Java_AwContents_setAndroidAutofillClient(env, obj, client);
 }
 
 AwContents::~AwContents() {
@@ -353,7 +346,7 @@ AwContents::~AwContents() {
   // Corresponds to "WebView Instance" in AwContents's constructor.
   TRACE_EVENT_END("android_webview.timeline",
                   perfetto::Track::FromPointer(this));
-  // TODO(crbug.com/1021571): Remove this once fixed.
+  // TODO(crbug.com/40657156): Remove this once fixed.
   PERFETTO_INTERNAL_ADD_EMPTY_EVENT();
 }
 
@@ -1039,7 +1032,7 @@ jboolean AwContents::RestoreFromOpaqueState(
   std::vector<uint8_t> state_vector;
   base::android::JavaByteArrayToByteVector(env, state, &state_vector);
 
-  base::Pickle pickle(state_vector);
+  base::Pickle pickle = base::Pickle::WithUnownedBuffer(state_vector);
   base::PickleIterator iterator(pickle);
 
   return RestoreFromPickle(&iterator, web_contents_.get());
@@ -1394,6 +1387,10 @@ AwContents::GetDocumentStartupJavascripts(JNIEnv* env) {
   return script_objects;
 }
 
+void AwContents::FlushBackForwardCache(JNIEnv* env) {
+  web_contents()->GetController().GetBackForwardCache().Flush();
+}
+
 void AwContents::ClearView(JNIEnv* env) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   browser_view_renderer_.ClearView();
@@ -1531,6 +1528,24 @@ void AwContents::DidFinishNavigation(
                                net::HttpRequestHeaders());
   request.is_renderer_initiated = navigation_handle->IsRendererInitiated();
   client->OnReceivedError(request, error_code, false, false);
+}
+
+void AwContents::ReadyToCommitNavigation(
+    content::NavigationHandle* navigation_handle) {
+  // In Android WebView, mixed content auto-upgrade is determined by an
+  // AwSetting. The result is computed and stored on WebPreferences. However on
+  // other platforms this setting is determined on a per-navigation basis. Thus,
+  // we need to propagate this information to the navigation.
+  auto content_settings = blink::CreateDefaultRendererContentSettings();
+  content_settings->allow_mixed_content = navigation_handle->GetWebContents()
+                                              ->GetOrCreateWebPreferences()
+                                              .allow_mixed_content_upgrades;
+  navigation_handle->SetContentSettings(std::move(content_settings));
+}
+
+void AwContents::RenderViewReady() {
+  AwRenderProcess::SetRenderViewReady(
+      web_contents_->GetPrimaryMainFrame()->GetProcess());
 }
 
 bool AwContents::CanShowInterstitial() {

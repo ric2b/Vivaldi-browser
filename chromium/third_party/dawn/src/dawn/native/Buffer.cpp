@@ -33,6 +33,7 @@
 #include <string>
 #include <utility>
 
+#include "absl/strings/str_format.h"
 #include "dawn/common/Alloc.h"
 #include "dawn/common/Assert.h"
 #include "dawn/native/Adapter.h"
@@ -235,7 +236,6 @@ struct BufferBase::MapAsyncEvent final : public EventManager::TrackedEvent {
                 (*buffer)->mState = BufferState::Mapped;
 
                 pendingMapEvent = std::move((*buffer)->mPendingMapEvent);
-                (*buffer)->mPendingMapFutureID = kNullFutureID;
             }
         });
         mCallback(ToAPI(status), mUserdata);
@@ -317,7 +317,7 @@ ResultOrError<UnpackedPtr<BufferDescriptor>> ValidateBufferDescriptor(
 // Buffer
 
 BufferBase::BufferBase(DeviceBase* device, const UnpackedPtr<BufferDescriptor>& descriptor)
-    : ApiObjectBase(device, descriptor->label),
+    : SharedResource(device, descriptor->label),
       mSize(descriptor->size),
       mUsage(AddInternalUsages(device, descriptor->usage)),
       mState(descriptor.Get<BufferHostMappedPointer>() ? BufferState::HostMappedPersistent
@@ -328,7 +328,7 @@ BufferBase::BufferBase(DeviceBase* device, const UnpackedPtr<BufferDescriptor>& 
 BufferBase::BufferBase(DeviceBase* device,
                        const BufferDescriptor* descriptor,
                        ObjectBase::ErrorTag tag)
-    : ApiObjectBase(device, tag, descriptor->label),
+    : SharedResource(device, tag, descriptor->label),
       mSize(descriptor->size),
       mUsage(descriptor->usage),
       mState(descriptor->mappedAtCreation ? BufferState::MappedAtCreation : BufferState::Unmapped) {
@@ -444,7 +444,7 @@ MaybeError BufferBase::MapAtCreation() {
     }
     // Mark the buffer as initialized since we don't want to later clear it using the GPU since that
     // would overwrite what the client wrote using the CPU.
-    SetIsDataInitialized();
+    SetInitialized(true);
 
     return {};
 }
@@ -512,7 +512,7 @@ std::function<void()> BufferBase::PrepareMappingCallback(MapRequestID mapID,
 
     if (mMapCallback != nullptr && mapID == mLastMapID) {
         auto callback = std::move(mMapCallback);
-        auto userdata = std::move(mMapUserdata);
+        void* userdata = std::move(mMapUserdata);
         WGPUBufferMapAsyncStatus actualStatus;
         if (GetDevice()->IsLost()) {
             actualStatus = WGPUBufferMapAsyncStatus_DeviceLost;
@@ -636,9 +636,6 @@ Future BufferBase::APIMapAsyncF(wgpu::MapMode mode,
     }
 
     FutureID futureID = GetInstance()->GetEventManager()->TrackEvent(std::move(event));
-    if (!earlyStatus) {
-        mPendingMapFutureID = futureID;
-    }
     return {futureID};
 }
 
@@ -689,7 +686,8 @@ void BufferBase::APIUnmap() {
     if (GetDevice()->ConsumedError(ValidateUnmap(), "calling %s.Unmap().", this)) {
         return;
     }
-    DAWN_UNUSED(GetDevice()->ConsumedError(Unmap(), "calling %s.Unmap().", this));
+    [[maybe_unused]] bool hadError =
+        GetDevice()->ConsumedError(Unmap(), "calling %s.Unmap().", this);
 }
 
 MaybeError BufferBase::Unmap() {
@@ -712,10 +710,8 @@ void BufferBase::UnmapInternal(WGPUBufferMapAsyncStatus callbackStatus) {
         // state and pending map event needs to be atomic w.r.t. MapAsyncEvent::Complete.
         Ref<MapAsyncEvent> pendingMapEvent = std::move(mPendingMapEvent);
         if (pendingMapEvent != nullptr) {
-            DAWN_ASSERT(mPendingMapFutureID != kNullFutureID);
             pendingMapEvent->UnmapEarly(static_cast<wgpu::BufferMapAsyncStatus>(callbackStatus));
-            GetInstance()->GetEventManager()->SetFutureReady(mPendingMapFutureID);
-            mPendingMapFutureID = kNullFutureID;
+            GetInstance()->GetEventManager()->SetFutureReady(pendingMapEvent.Get());
         } else {
             GetDevice()->GetCallbackTaskManager()->AddCallbackTask(
                 PrepareMappingCallback(mLastMapID, callbackStatus));
@@ -763,7 +759,7 @@ MaybeError BufferBase::ValidateMapAsync(wgpu::MapMode mode,
         case BufferState::HostMappedPersistent:
             return DAWN_VALIDATION_ERROR("Host-mapped %s cannot be mapped again.", this);
         case BufferState::SharedMemoryNoAccess:
-            return DAWN_VALIDATION_ERROR("%s used in submit without shared memory access.", this);
+            return DAWN_VALIDATION_ERROR("%s used without shared memory access.", this);
         case BufferState::Unmapped:
             break;
     }
@@ -863,26 +859,69 @@ bool BufferBase::NeedsInitialization() const {
     return !mIsDataInitialized && GetDevice()->IsToggleEnabled(Toggle::LazyClearResourceOnFirstUse);
 }
 
-bool BufferBase::IsDataInitialized() const {
-    return mIsDataInitialized;
-}
-
-void BufferBase::SetIsDataInitialized() {
-    mIsDataInitialized = true;
-}
-
 void BufferBase::MarkUsedInPendingCommands() {
     ExecutionSerial serial = GetDevice()->GetQueue()->GetPendingCommandSerial();
     DAWN_ASSERT(serial >= mLastUsageSerial);
     mLastUsageSerial = serial;
 }
 
+ExecutionSerial BufferBase::GetLastUsageSerial() const {
+    return mLastUsageSerial;
+}
+
+MaybeError BufferBase::UploadData(uint64_t bufferOffset, const void* data, size_t size) {
+    if (size == 0) {
+        return {};
+    }
+
+    DeviceBase* device = GetDevice();
+
+    UploadHandle uploadHandle;
+    DAWN_TRY_ASSIGN(uploadHandle, device->GetDynamicUploader()->Allocate(
+                                      size, device->GetQueue()->GetPendingCommandSerial(),
+                                      kCopyBufferToBufferOffsetAlignment));
+    DAWN_ASSERT(uploadHandle.mappedBuffer != nullptr);
+
+    memcpy(uploadHandle.mappedBuffer, data, size);
+
+    return device->CopyFromStagingToBuffer(uploadHandle.stagingBuffer, uploadHandle.startOffset,
+                                           this, bufferOffset, size);
+}
+
 void BufferBase::SetHasAccess(bool hasAccess) {
     mState = hasAccess ? BufferState::Unmapped : BufferState::SharedMemoryNoAccess;
 }
 
+bool BufferBase::HasAccess() const {
+    return mState != BufferState::SharedMemoryNoAccess;
+}
+
+bool BufferBase::IsDestroyed() const {
+    return mState == BufferState::Destroyed;
+}
+
+void BufferBase::SetInitialized(bool initialized) {
+    mIsDataInitialized = initialized;
+}
+
+bool BufferBase::IsInitialized() const {
+    return mIsDataInitialized;
+}
+
 bool BufferBase::IsFullBufferRange(uint64_t offset, uint64_t size) const {
     return offset == 0 && size == GetSize();
+}
+
+void BufferBase::DumpMemoryStatistics(MemoryDump* dump, const char* prefix) const {
+    // Do not emit for destroyed buffers.
+    if (!IsAlive()) {
+        return;
+    }
+    std::string name = absl::StrFormat("%s/buffer_%p", prefix, static_cast<const void*>(this));
+    dump->AddScalar(name.c_str(), MemoryDump::kNameSize, MemoryDump::kUnitsBytes,
+                    GetAllocatedSize());
+    dump->AddString(name.c_str(), "label", GetLabel());
+    dump->AddString(name.c_str(), "usage", absl::StrFormat("%s", GetUsage()));
 }
 
 }  // namespace dawn::native

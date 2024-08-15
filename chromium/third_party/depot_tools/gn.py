@@ -80,12 +80,18 @@ def main(args):
             'path.\nThis must be run inside a checkout.',
             file=sys.stderr)
         return 1
-    gn_path = os.path.join(bin_path, 'gn' + gclient_paths.GetExeSuffix())
-    if not os.path.exists(gn_path):
-        print('gn.py: Could not find gn executable at: %s' % gn_path,
-              file=sys.stderr)
-        return 2
-    return subprocess.call([gn_path] + args[1:])
+    # TODO(b/328065301): Once chromium/src CL has landed to migrate
+    # buildtools/<platform>/gn to buildtools/<platform>/gn/gn, only return
+    # gn/gn path.
+    old_gn_path = os.path.join(bin_path, 'gn' + gclient_paths.GetExeSuffix())
+    new_gn_path = os.path.join(bin_path, 'gn',
+                               'gn' + gclient_paths.GetExeSuffix())
+    paths = [new_gn_path, old_gn_path]
+    for path in paths:
+        if os.path.isfile(path):
+            return subprocess.call([path] + args[1:])
+    print('gn.py: Could not find gn executable at: %s' % paths, file=sys.stderr)
+    return 2
 
 
 if __name__ == '__main__':

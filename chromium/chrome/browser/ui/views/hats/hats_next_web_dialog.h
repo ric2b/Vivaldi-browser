@@ -50,7 +50,8 @@ class HatsNextWebDialog : public views::BubbleDialogDelegateView,
   HatsNextWebDialog& operator=(const HatsNextWebDialog&) = delete;
 
   // BubbleDialogDelegateView:
-  gfx::Size CalculatePreferredSize() const override;
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override;
 
   // ProfileObserver:
   void OnProfileWillBeDestroyed(Profile* profile) override;
@@ -61,6 +62,7 @@ class HatsNextWebDialog : public views::BubbleDialogDelegateView,
   std::vector<std::string> GetLanguageList() override;
   base::Value::Dict GetProductSpecificDataJson() override;
   void OnSurveyLoaded() override;
+  void OnSurveyCompleted() override;
   void OnSurveyClosed() override;
 
  protected:
@@ -105,10 +107,6 @@ class HatsNextWebDialog : public views::BubbleDialogDelegateView,
   // closed. After the widget is closed, both the widget and this class are
   // destroyed. Virtual to allow mocking in tests.
   virtual void CloseWidget();
-
-  // Updates dialog size to desired contents size. Virtual to allow mocking in
-  // tests.
-  virtual void UpdateWidgetSize();
 
   // Returns whether the dialog is still waiting for the survey to load.
   bool IsWaitingForSurveyForTesting();

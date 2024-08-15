@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/metrics/persistent_histogram_allocator.h"
 
 #include <atomic>
@@ -112,8 +117,8 @@ void MergeSamplesToExistingHistogram(
   // things may happen further down the line. This may be indicative that a
   // child process is emitting a histogram with different parameters than the
   // browser process, for example.
-  // TODO(crbug/1432981): Remove this. Used to investigate failures when merging
-  // histograms from an allocator to the global StatisticsRecorder.
+  // TODO(crbug.com/40064026): Remove this. Used to investigate failures when
+  // merging histograms from an allocator to the global StatisticsRecorder.
   bool histograms_match = true;
   HistogramType existing_type = existing->GetHistogramType();
   if (histogram->GetHistogramType() != existing_type) {
@@ -141,11 +146,11 @@ void MergeSamplesToExistingHistogram(
 
   if (!histograms_match) {
     // If the histograms do not match, then the call to AddSamples() below might
-    // trigger a NOTREACHED(). Include the histogram name here for debugging
-    // purposes. This is not done in GetOrCreateStatisticsRecorderHistogram()
-    // directly, since that could incorrectly create crash reports for enum
-    // histograms that have newly appended entries (different bucket max and
-    // count).
+    // trigger a NOTREACHED_IN_MIGRATION(). Include the histogram name here for
+    // debugging purposes. This is not done in
+    // GetOrCreateStatisticsRecorderHistogram() directly, since that could
+    // incorrectly create crash reports for enum histograms that have newly
+    // appended entries (different bucket max and count).
     SCOPED_CRASH_KEY_STRING256("PersistentHistogramAllocator", "histogram",
                                existing->histogram_name());
     existing->AddSamples(*samples);
@@ -389,7 +394,7 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::AllocateHistogram(
     // should always be the case, manually zero it out again here in case there
     // was memory corruption (e.g. if the memory was mapped from a corrupted
     // spare file).
-    // TODO(crbug.com/1432981): Remove this if this has no effect, and try to
+    // TODO(crbug.com/40064026): Remove this if this has no effect, and try to
     // understand better why there is sometimes garbage written in this field.
     histogram_data->counts_ref.store(0, std::memory_order_relaxed);
   }
@@ -740,7 +745,7 @@ PersistentHistogramAllocator::GetOrCreateStatisticsRecorderHistogram(
 GlobalHistogramAllocator::~GlobalHistogramAllocator() {
   // GlobalHistogramAllocator should never be destroyed because Histogram
   // objects may keep pointers to its memory.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 // static
@@ -966,9 +971,9 @@ void GlobalHistogramAllocator::Set(GlobalHistogramAllocator* allocator) {
   // Record the number of histograms that were sampled before the global
   // histogram allocator was initialized.
   //
-  // TODO(crbug/1504919): CHECK(histogram_count == 0) and remove emit of early
-  // histogram count once |histogram_count| is reliably zero (0) for all process
-  // types.
+  // TODO(crbug.com/40945497): CHECK(histogram_count == 0) and remove emit of
+  // early histogram count once |histogram_count| is reliably zero (0) for all
+  // process types.
   size_t histogram_count = StatisticsRecorder::GetHistogramCount();
   if (histogram_count != 0) {
     DVLOG(1) << histogram_count
@@ -1041,13 +1046,14 @@ bool GlobalHistogramAllocator::MovePersistentFile(const FilePath& dir) {
 bool GlobalHistogramAllocator::WriteToPersistentLocation() {
 #if BUILDFLAG(IS_NACL)
   // NACL doesn't support file operations, including ImportantFileWriter.
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 #else
   // Stop if no destination is set.
   if (!HasPersistentLocation()) {
-    NOTREACHED() << "Could not write \"" << Name() << "\" persistent histograms"
-                 << " to file because no location was set.";
+    NOTREACHED_IN_MIGRATION()
+        << "Could not write \"" << Name() << "\" persistent histograms"
+        << " to file because no location was set.";
     return false;
   }
 
@@ -1067,7 +1073,7 @@ void GlobalHistogramAllocator::DeletePersistentLocation() {
   memory_allocator()->SetMemoryState(PersistentMemoryAllocator::MEMORY_DELETED);
 
 #if BUILDFLAG(IS_NACL)
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #else
   if (!HasPersistentLocation()) {
     return;

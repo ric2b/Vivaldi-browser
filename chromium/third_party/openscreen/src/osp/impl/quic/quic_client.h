@@ -8,11 +8,13 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
-#include "osp/impl/quic/quic_connection_factory.h"
+#include "osp/impl/quic/quic_connection_factory_client.h"
 #include "osp/impl/quic/quic_service_common.h"
+#include "osp/public/endpoint_config.h"
 #include "osp/public/protocol_connection_client.h"
 #include "platform/api/task_runner.h"
 #include "platform/api/time.h"
@@ -24,11 +26,11 @@ namespace openscreen::osp {
 // This class is the default implementation of ProtocolConnectionClient for the
 // library.  It manages connections to other endpoints as well as the lifetime
 // of each incoming and outgoing stream.  It works in conjunction with a
-// QuicConnectionFactory implementation and MessageDemuxer.
-// QuicConnectionFactory provides the actual ability to make a new QUIC
+// QuicConnectionFactoryClient and MessageDemuxer.
+// QuicConnectionFactoryClient provides the actual ability to make a new QUIC
 // connection with another endpoint.  Incoming data is given to the QuicClient
-// by the underlying QUIC implementation (through QuicConnectionFactory) and
-// this is in turn handed to MessageDemuxer for routing CBOR messages.
+// by the underlying QUIC implementation (through QuicConnectionFactoryClient)
+// and this is in turn handed to MessageDemuxer for routing CBOR messages.
 //
 // The two most significant methods of this class are Connect and
 // CreateProtocolConnection.  Both will return a new QUIC stream to a given
@@ -37,12 +39,16 @@ namespace openscreen::osp {
 // endpoint, Connect will start a connection attempt and store the callback for
 // when the connection completes.  CreateProtocolConnection simply returns
 // nullptr if there's no existing connection.
+//
+// TODO(issuetracker.google.com/155337369): Need a consistent way of referring
+// to an endpoint that is tied to authentication.
 class QuicClient final : public ProtocolConnectionClient,
                          public ServiceConnectionDelegate::ServiceDelegate {
  public:
-  QuicClient(MessageDemuxer* demuxer,
-             std::unique_ptr<QuicConnectionFactory> connection_factory,
-             ProtocolConnectionServiceObserver* observer,
+  QuicClient(const EndpointConfig& config,
+             MessageDemuxer& demuxer,
+             std::unique_ptr<QuicConnectionFactoryClient> connection_factory,
+             ProtocolConnectionServiceObserver& observer,
              ClockNowFunctionPtr now_function,
              TaskRunner& task_runner);
   ~QuicClient() override;
@@ -60,15 +66,16 @@ class QuicClient final : public ProtocolConnectionClient,
 
   // ServiceConnectionDelegate::ServiceDelegate overrides.
   uint64_t OnCryptoHandshakeComplete(ServiceConnectionDelegate* delegate,
-                                     uint64_t connection_id) override;
+                                     std::string connection_id) override;
   void OnIncomingStream(
       std::unique_ptr<QuicProtocolConnection> connection) override;
   void OnConnectionClosed(uint64_t endpoint_id,
-                          uint64_t connection_id) override;
+                          std::string connection_id) override;
   void OnDataReceived(uint64_t endpoint_id,
-                      uint64_t connection_id,
-                      const uint8_t* data,
-                      size_t data_size) override;
+                      uint64_t protocol_connection_id,
+                      const ByteView& bytes) override;
+
+  std::map<IPEndpoint, std::string>& fingerprints() { return fingerprints_; }
 
  private:
   struct PendingConnectionData {
@@ -82,6 +89,18 @@ class QuicClient final : public ProtocolConnectionClient,
     // Pairs of request IDs and the associated connection callback.
     std::vector<std::pair<uint64_t, ConnectionRequestCallback*>> callbacks;
   };
+
+  // ServiceListener::Observer overrides.
+  void OnStarted() override;
+  void OnStopped() override;
+  void OnSuspended() override;
+  void OnSearching() override;
+  void OnReceiverAdded(const ServiceInfo& info) override;
+  void OnReceiverChanged(const ServiceInfo& info) override;
+  void OnReceiverRemoved(const ServiceInfo& info) override;
+  void OnAllReceiversRemoved() override;
+  void OnError(const Error& error) override;
+  void OnMetrics(ServiceListener::Metrics) override;
 
   ConnectRequest CreatePendingConnection(const IPEndpoint& endpoint,
                                          ConnectionRequestCallback* request);
@@ -99,7 +118,9 @@ class QuicClient final : public ProtocolConnectionClient,
   // method should be run again.
   void Cleanup();
 
-  std::unique_ptr<QuicConnectionFactory> connection_factory_;
+  std::unique_ptr<QuicConnectionFactoryClient> connection_factory_;
+
+  std::vector<IPEndpoint> connection_endpoints_;
 
   // Maps an IPEndpoint to a generated endpoint ID.  This is used to insulate
   // callers from post-handshake changes to a connections actual peer endpoint.
@@ -124,6 +145,8 @@ class QuicClient final : public ProtocolConnectionClient,
   // Maps endpoint IDs to data about connections that have successfully
   // completed the QUIC handshake.
   std::map<uint64_t, ServiceConnectionData> connections_;
+
+  std::map<IPEndpoint, std::string> fingerprints_;
 
   // Connections (endpoint IDs) that need to be destroyed, but have to wait for
   // the next event loop due to the underlying QUIC implementation's way of

@@ -1,8 +1,7 @@
 {
   "$build/chromium_orchestrator": {
     "compilator": "android-arm64-rel-compilator",
-    "compilator_watcher_git_revision": "27c191f304c8d7329a393d8a69020fc14032c3c3",
-    "propagate_properties_to_compilator": true
+    "compilator_watcher_git_revision": "27c191f304c8d7329a393d8a69020fc14032c3c3"
   },
   "$build/chromium_tests_builder_config": {
     "builder_config": {
@@ -15,7 +14,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Android Release (Nexus 5X)",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-gpu-archive",
@@ -46,7 +45,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-pie-arm64-rel",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -79,12 +78,12 @@
         {
           "bucket": "ci",
           "builder": "Android Release (Nexus 5X)",
-          "project": "chromium-m124"
+          "project": "chromium-m126"
         },
         {
           "bucket": "ci",
           "builder": "android-pie-arm64-rel",
-          "project": "chromium-m124"
+          "project": "chromium-m126"
         }
       ]
     }
@@ -102,7 +101,6 @@
   },
   "$build/reclient": {
     "instance": "rbe-chromium-untrusted",
-    "jobs": 500,
     "metrics_project": "chromium-reclient-metrics",
     "scandeps_server": true
   },
@@ -113,7 +111,8 @@
     "enable_cloud_profiler": true,
     "enable_cloud_trace": true,
     "experiments": [],
-    "project": "rbe-chromium-untrusted"
+    "project": "rbe-chromium-untrusted",
+    "remote_jobs": -1
   },
   "$recipe_engine/resultdb/test_presentation": {
     "column_keys": [],

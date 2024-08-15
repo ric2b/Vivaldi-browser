@@ -83,11 +83,11 @@
 <translation id="3914946330804881301">Operast imporditud</translation>
 <translation id="3921292902397893431">Koll 8</translation>
 <translation id="3943857333388298514">Aseta</translation>
-<translation id="3974783668264968389">Vivaldil ei õnnestunud sinu turvalist võtmehoidlat lukust avada. Ilma võtmehoidlata jätkates lähevad kaotsi salvestatud sisselogimisandmed ja turvalised küpsised ning lõpetavad töö funktsioonid nagu sünkimine, meil ja kalender.
-
-    Peaksid Vivaldi sulgema, oma võtmehoidla lukust avama või parandama ja seejärel uuesti proovima. Kui aga kindlasti soovid ilma seda tegemata jätkata, aktiveeri märkeruut ja klõpsa „Jätka andmekaoga”.</translation>
 <translation id="4005270918754737597">Jäta see versioon vahele</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldil ei õnnestunud sinu turvalist võtmehoidlat lukust avada. Ilma võtmehoidlata jätkates lähevad kaotsi salvestatud sisselogimisandmed ja turvalised küpsised ning lõpetavad töö funktsioonid nagu sünkimine, meil ja kalender.
+
+    Peaksid Vivaldi sulgema, oma võtmehoidla lukust avama või parandama ja seejärel uuesti proovima. Kas soovid siiski jätkata ja mainitud andmed kaotada?</translation>
 <translation id="4074744496918018786">Ava pilt uues privaatses aknas</translation>
 <translation id="410351446219883937">Automaatesitus</translation>
 <translation id="4281844954008187215">Teenusetingimused</translation>
@@ -178,6 +178,7 @@
 <translation id="8669345741879513971">Koll 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Inspekteeri portaalidokumenti</translation>
+<translation id="875142999698251063">Sulge</translation>
 <translation id="8768970203213061953">Maastik 14</translation>
 <translation id="8773635261052182196">Neid märguandeid rohkem ei näidata. Kui soovid need hiljem taas sisse lülitada, saad seda teha Vivaldi seadetes.</translation>
 <translation id="8774017153185436870">Saidid võivad automaatselt videosisu esitada</translation>

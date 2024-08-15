@@ -209,7 +209,7 @@ using web::wk_navigation_util::IsRestoreSessionUrl;
 
 // Called when WKWebView URL has been changed.
 - (void)webViewURLDidChange {
-  // TODO(crbug.com/966412): Determine if there are any cases where this still
+  // TODO(crbug.com/41460688): Determine if there are any cases where this still
   // happens, and if so whether anything should be done when it does.
   if (self.webView.URL.absoluteString.length == 0) {
     DVLOG(1) << "Received nil/empty URL callback";
@@ -267,8 +267,8 @@ using web::wk_navigation_util::IsRestoreSessionUrl;
     //    synced to self.webView.URL.
     // This needs to be done before `URLDidChangeWithoutDocumentChange` so any
     // WebStateObserver callbacks will see the updated URL.
-    // TODO(crbug.com/809287) use currentItem.URL instead of self.webView.URL to
-    // update NavigationItem URL.
+    // TODO(crbug.com/41368944) use currentItem.URL instead of self.webView.URL
+    // to update NavigationItem URL.
     const GURL webViewURL = net::GURLWithNSURL(self.webView.URL);
     web::NavigationItem* currentItem = nullptr;
     if (self.webView.backForwardList.currentItem) {
@@ -320,7 +320,7 @@ using web::wk_navigation_util::IsRestoreSessionUrl;
                self.documentURL.DeprecatedGetOriginAsURL() ==
                URL.DeprecatedGetOriginAsURL();
            // Check that the web view URL still matches the new URL.
-           // TODO(crbug.com/563568): webViewURLMatchesNewURL check
+           // TODO(crbug.com/41224497): webViewURLMatchesNewURL check
            // may drop same document URL changes if pending URL
            // change occurs immediately after. Revisit heuristics to
            // prevent this.
@@ -333,8 +333,8 @@ using web::wk_navigation_util::IsRestoreSessionUrl;
            // completion block fires. Check WKNavigationState to make sure this
            // navigation has started in WKWebView. If so, don't run the block to
            // avoid clobbering global states. See crbug.com/788452.
-           // TODO(crbug.com/788465): simplify hisgtory state handling to avoid
-           // this hack.
+           // TODO(crbug.com/40551549): simplify hisgtory state handling to
+           // avoid this hack.
            WKNavigation* last_added_navigation =
                [self.navigationHandler.navigationStates lastAddedNavigation];
            BOOL differentDocumentNavigationStarted =

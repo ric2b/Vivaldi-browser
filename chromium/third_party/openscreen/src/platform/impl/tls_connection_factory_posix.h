@@ -23,7 +23,7 @@ class StreamSocket;
 class TlsConnectionFactoryPosix : public TlsConnectionFactory,
                                   public TlsDataRouterPosix::SocketObserver {
  public:
-  TlsConnectionFactoryPosix(Client* client,
+  TlsConnectionFactoryPosix(Client& client,
                             TaskRunner& task_runner,
                             PlatformClientPosix* platform_client =
                                 PlatformClientPosix::GetInstance());
@@ -78,7 +78,7 @@ class TlsConnectionFactoryPosix : public TlsConnectionFactory,
   // from the SSL_CTX is non-trivial, so we store a property instead.
   bool listen_credentials_set_ = false;
 
-  Client* const client_;
+  Client& client_;
   TaskRunner& task_runner_;
   PlatformClientPosix* const platform_client_;
 

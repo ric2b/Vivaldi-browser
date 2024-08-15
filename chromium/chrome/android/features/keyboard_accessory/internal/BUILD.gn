@@ -24,7 +24,7 @@ android_library("internal_java") {
     "//components/favicon/android:java",
     "//third_party/jni_zero:jni_zero_java",
 
-    # TODO(crbug/951695): Cyclic dependency. Depend on public only when ready.
+    # TODO(crbug.com/41452318): Cyclic dependency. Depend on public only when ready.
     "//chrome/android:chrome_java",
     "//chrome/android/features/keyboard_accessory/public:public_java",
     "//chrome/browser/autofill/android:java",
@@ -118,6 +118,7 @@ android_library("internal_java") {
     "java/src/org/chromium/chrome/browser/keyboard_accessory/sheet_tabs/CreditCardAccessorySheetCoordinator.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/sheet_tabs/CreditCardAccessorySheetViewBinder.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/sheet_tabs/DynamicInfoViewBottomSpacer.java",
+    "java/src/org/chromium/chrome/browser/keyboard_accessory/sheet_tabs/IbanAccessoryInfoView.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/sheet_tabs/PasswordAccessoryInfoView.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/sheet_tabs/PasswordAccessorySheetCoordinator.java",
     "java/src/org/chromium/chrome/browser/keyboard_accessory/sheet_tabs/PasswordAccessorySheetMediator.java",
@@ -142,6 +143,7 @@ android_resources("java_resources") {
     "java/res/layout/keyboard_accessory_sheet.xml",
     "java/res/layout/keyboard_accessory_sheet_tab_address_info.xml",
     "java/res/layout/keyboard_accessory_sheet_tab_credit_card_info.xml",
+    "java/res/layout/keyboard_accessory_sheet_tab_iban_info.xml",
     "java/res/layout/keyboard_accessory_sheet_tab_legacy_title.xml",
     "java/res/layout/keyboard_accessory_sheet_tab_option_toggle.xml",
     "java/res/layout/keyboard_accessory_sheet_tab_password_info.xml",

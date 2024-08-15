@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="tr">
+<translation id="2947471979790858922">Bu özel sekmelerdeki etkinliğiniz bu cihazdan kaldırılacak</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Kapalı sekmelerinizi Vivaldi ana menüsünün altındaki Son sekmeler bölümünde bulabilirsiniz. Özel sekmeniz kullanılamayacak.}
+        other {Kapalı sekmelerinizi Vivaldi ana menüsünün altındaki Son sekmeler bölümünde bulabilirsiniz. # özel sekmeniz kullanılamayacak.}}</translation>
+<translation id="4871187110787939393">Tüm özel sekmeler kapatılsın mı?</translation>
 </translationbundle>

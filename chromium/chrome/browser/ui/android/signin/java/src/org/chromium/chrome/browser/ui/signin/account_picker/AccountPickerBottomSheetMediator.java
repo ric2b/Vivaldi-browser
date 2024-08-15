@@ -9,11 +9,13 @@ import android.app.Activity;
 import android.content.Intent;
 import android.text.TextUtils;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.signin.services.ProfileDataCache;
 import org.chromium.chrome.browser.signin.services.SigninMetricsUtils;
 import org.chromium.chrome.browser.signin.services.SigninPreferencesManager;
@@ -55,7 +57,7 @@ public class AccountPickerBottomSheetMediator
     private final boolean mIsWebSignin;
     private final @SigninAccessPoint int mSigninAccessPoint;
 
-    // TODO(crbug.com/1515277): Use CoreAccountInfo here instead.
+    // TODO(crbug.com/41487829): Use CoreAccountInfo here instead.
     private @Nullable String mSelectedAccountEmail;
     private @Nullable String mDefaultAccountEmail;
     private @Nullable String mAddedAccountEmail;
@@ -116,27 +118,33 @@ public class AccountPickerBottomSheetMediator
         mAccountManagerFacade.addObserver(this);
     }
 
-    /**
-     * Notifies that the user has selected an account.
-     *
-     * @param accountName The email of the selected account.
-     *
-     * TODO(https://crbug.com/1115965): Use CoreAccountInfo instead of account's email
-     * as the first argument of the method.
-     */
+    /** Implements {@link AccountPickerCoordinator.Listener}. */
     @Override
     public void onAccountSelected(String accountName) {
-        // Clicking on one account in the account list when the account list is expanded
-        // will collapse it to the selected account
-        mModel.set(AccountPickerBottomSheetProperties.VIEW_STATE, ViewState.COLLAPSED_ACCOUNT_LIST);
         setSelectedAccountName(accountName);
+        if (ChromeFeatureList.isEnabled(
+                ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)) {
+            launchDeviceLockIfNeededAndSignIn();
+        } else {
+            // Clicking on one account in the account list when the account list is expanded
+            // will collapse it to the selected account
+            mModel.set(
+                    AccountPickerBottomSheetProperties.VIEW_STATE,
+                    ViewState.COLLAPSED_ACCOUNT_LIST);
+        }
     }
 
-    /** Notifies when the user clicked the "add account" button. */
+    /** Implements {@link AccountPickerCoordinator.Listener}. */
     @Override
     public void addAccount() {
         SigninMetricsUtils.logAccountConsistencyPromoAction(
                 AccountConsistencyPromoAction.ADD_ACCOUNT_STARTED, mSigninAccessPoint);
+
+        if (mAccountPickerDelegate.canHandleAddAccount()) {
+            mAccountPickerDelegate.addAccount();
+            return;
+        }
+
         final WindowAndroid.IntentCallback onAddAccountCompleted =
                 (int resultCode, Intent data) -> {
                     if (resultCode != Activity.RESULT_OK) {
@@ -162,6 +170,18 @@ public class AccountPickerBottomSheetMediator
     }
 
     /**
+     * Called by the embedder when an account is added through the latter. Sign-in the just added
+     * user.
+     */
+    public void onAccountAdded(@NonNull String accountEmail) {
+        SigninMetricsUtils.logAccountConsistencyPromoAction(
+                AccountConsistencyPromoAction.ADD_ACCOUNT_COMPLETED, mSigninAccessPoint);
+
+        assert mAccountPickerDelegate.canHandleAddAccount();
+        onAccountSelected(accountEmail);
+    }
+
+    /**
      * Notifies when user clicks the back-press button.
      *
      * @return true if the listener handles the back press, false if not.
@@ -169,9 +189,7 @@ public class AccountPickerBottomSheetMediator
     @Override
     public boolean onBackPressed() {
         if (shouldHandleBackPress()) {
-            mModel.set(
-                    AccountPickerBottomSheetProperties.VIEW_STATE,
-                    ViewState.COLLAPSED_ACCOUNT_LIST);
+            mModel.set(AccountPickerBottomSheetProperties.VIEW_STATE, mInitialViewState);
             return true;
         }
         return false;
@@ -321,21 +339,7 @@ public class AccountPickerBottomSheetMediator
     private void onContinueAsClicked() {
         @ViewState int viewState = mModel.get(AccountPickerBottomSheetProperties.VIEW_STATE);
         if (viewState == ViewState.COLLAPSED_ACCOUNT_LIST) {
-            if (BuildInfo.getInstance().isAutomotive) {
-                mDeviceLockActivityLauncher.launchDeviceLockActivity(
-                        mActivity,
-                        mSelectedAccountEmail,
-                        /* requireDeviceLockReauthentication= */ true,
-                        mWindowAndroid,
-                        (resultCode, data) -> {
-                            if (resultCode == Activity.RESULT_OK) {
-                                signIn();
-                            }
-                        },
-                        DeviceLockActivityLauncher.Source.ACCOUNT_PICKER);
-            } else {
-                signIn();
-            }
+            launchDeviceLockIfNeededAndSignIn();
         } else if (viewState == ViewState.SIGNIN_GENERAL_ERROR) {
             // User already accepted account management and is re-trying login.
             signInAfterCheckingManagement();
@@ -348,6 +352,24 @@ public class AccountPickerBottomSheetMediator
             SigninMetricsUtils.logAccountConsistencyPromoAction(
                     AccountConsistencyPromoAction.CONFIRM_MANAGEMENT_ACCEPTED, mSigninAccessPoint);
             signInAfterCheckingManagement();
+        }
+    }
+
+    private void launchDeviceLockIfNeededAndSignIn() {
+        if (BuildInfo.getInstance().isAutomotive) {
+            mDeviceLockActivityLauncher.launchDeviceLockActivity(
+                    mActivity,
+                    mSelectedAccountEmail,
+                    /* requireDeviceLockReauthentication= */ true,
+                    mWindowAndroid,
+                    (resultCode, data) -> {
+                        if (resultCode == Activity.RESULT_OK) {
+                            signIn();
+                        }
+                    },
+                    DeviceLockActivityLauncher.Source.ACCOUNT_PICKER);
+        } else {
+            signIn();
         }
     }
 

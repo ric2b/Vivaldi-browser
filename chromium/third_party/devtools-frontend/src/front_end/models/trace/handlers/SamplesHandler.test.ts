@@ -8,8 +8,6 @@ import {getAllNodes, getMainThread} from '../../../testing/TraceHelpers.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
 import * as TraceModel from '../trace.js';
 
-const {assert} = chai;
-
 async function handleEventsFromTraceFile(context: Mocha.Context|Mocha.Suite|null, name: string):
     Promise<TraceModel.Handlers.ModelHandlers.Samples.SamplesHandlerData> {
   const traceEvents = await TraceLoader.rawEvents(context, name);
@@ -44,15 +42,15 @@ describeWithEnvironment('SamplesHandler', function() {
 
     const profilesFirstProcess = data.profilesInProcess.get(firstProcessId);
     assert.strictEqual(profilesFirstProcess?.size, 1);
-    assert.isDefined(profilesFirstProcess?.get(threadId));
+    assert.exists(profilesFirstProcess?.get(threadId));
 
     const profilesSecondProcess = data.profilesInProcess.get(secondProcessId);
     assert.strictEqual(profilesSecondProcess?.size, 1);
-    assert.isDefined(profilesSecondProcess?.get(threadId));
+    assert.exists(profilesSecondProcess?.get(threadId));
 
     const profilesThirdProcess = data.profilesInProcess.get(thirdProcessId);
     assert.strictEqual(profilesThirdProcess?.size, 1);
-    assert.isDefined(profilesThirdProcess?.get(threadId));
+    assert.exists(profilesThirdProcess?.get(threadId));
   });
   describe('profile calls building', () => {
     const pid = TraceModel.Types.TraceEvents.ProcessID(0);

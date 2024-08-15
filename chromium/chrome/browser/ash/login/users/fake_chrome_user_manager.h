@@ -123,30 +123,19 @@ class FakeChromeUserManager : public user_manager::UserManagerBase {
   void AsyncRemoveCryptohome(const AccountId& account_id) const override;
   bool IsDeprecatedSupervisedAccountId(
       const AccountId& account_id) const override;
-  void ScheduleResolveLocale(const std::string& locale,
-                             base::OnceClosure on_resolved_callback,
-                             std::string* out_resolved_locale) const override;
   bool IsValidDefaultUserImageId(int image_index) const override;
-  user_manager::MultiUserSignInPolicyController*
-  GetMultiUserSignInPolicyController() override;
 
   // user_manager::UserManagerBase override.
-  const std::string& GetApplicationLocale() const override;
   void LoadDeviceLocalAccounts(std::set<AccountId>* users_set) override;
-  bool IsEnterpriseManaged() const override;
-  void PerformPostUserLoggedInActions(bool browser_restart) override;
   bool IsDeviceLocalAccountMarkedForRemoval(
       const AccountId& account_id) const override;
-  void KioskAppLoggedIn(user_manager::User* user) override;
-  void PublicAccountUserLoggedIn(user_manager::User* user) override;
   // Just make it public for tests.
   using UserManagerBase::SetOwnerId;
 
   // UserManager:
-  void SetUserAffiliation(
-      const AccountId& account_id,
-      const base::flat_set<std::string>& user_affiliation_ids) override;
-
+  void SetUserAffiliated(const AccountId& account_id,
+                         bool is_affiliated) override;
+  // TODO(b/278643115): merged into SetUserAffiliated.
   void SetUserAffiliationForTesting(const AccountId& account_id,
                                     bool is_affliated);
 
@@ -154,20 +143,11 @@ class FakeChromeUserManager : public user_manager::UserManagerBase {
     fake_ephemeral_mode_config_ = std::move(ephemeral_mode_config);
   }
 
-  void set_multi_user_sign_in_policy_controller(
-      user_manager::MultiUserSignInPolicyController* controller) {
-    multi_user_sign_in_policy_controller_ = controller;
-  }
-
   void set_current_user_ephemeral(bool user_ephemeral) {
     current_user_ephemeral_ = user_ephemeral;
   }
   void set_current_user_child(bool child_user) {
     current_user_child_ = child_user;
-  }
-
-  void set_is_enterprise_managed(bool is_enterprise_managed) {
-    is_enterprise_managed_ = is_enterprise_managed;
   }
 
   void set_last_session_active_account_id(
@@ -185,9 +165,6 @@ class FakeChromeUserManager : public user_manager::UserManagerBase {
   EphemeralModeConfig fake_ephemeral_mode_config_;
   bool current_user_ephemeral_ = false;
   bool current_user_child_ = false;
-
-  raw_ptr<user_manager::MultiUserSignInPolicyController>
-      multi_user_sign_in_policy_controller_ = nullptr;
 
   // If set this is the active user. If empty, the first created user is the
   // active user.

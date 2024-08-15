@@ -36,6 +36,7 @@ const char kGetLog[] = "GetLog";
 const char kGetAllLogs[] = "GetAllLogs";
 const char kGetFeedbackLogs[] = "GetFeedbackLogs";
 const char kGetFeedbackLogsV3[] = "GetFeedbackLogsV3";
+const char kGetFeedbackBinaryLogs[] = "GetFeedbackBinaryLogs";
 const char kKstaledSetRatio[] = "KstaledSetRatio";
 const char kTestICMP[] = "TestICMP";
 const char kTestICMPWithOptions[] = "TestICMPWithOptions";
@@ -158,6 +159,12 @@ enum FeedbackLogType {
   // The dumps may be added to feedback reports only if the
   // UserFeedbackWithLowLevelDebugDataAllowed policy is enabled for all or wifi.
   WIFI_FIRMWARE_DUMPS = 11,
+};
+
+// FeedbackBinaryLogType contains the enum representation of different
+// categories of binary data that can be added to feedback reports.
+enum FeedbackBinaryLogType {
+  WIFI_FIRMWARE_DUMP = 0,
 };
 
 // PrintscanDebugCategories flags. These values must align with those in

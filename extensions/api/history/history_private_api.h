@@ -145,6 +145,9 @@ class HistoryPrivateGetTypedHistoryFunction
   ~HistoryPrivateGetTypedHistoryFunction() override = default;
   ExtensionFunction::ResponseAction Run() override;
   void TypedHistorySearchComplete(const history::TypedUrlResults& results);
+  bool HasTermInResponse(
+      std::vector<vivaldi::history_private::TypedHistoryItem>& response,
+      std::string term);
 };
 
 class HistoryPrivateGetDetailedHistoryFunction
@@ -160,6 +163,16 @@ class HistoryPrivateGetDetailedHistoryFunction
   void SearchComplete(const history::DetailedUrlResults& results);
 };
 
+class HistoryPrivateUpdateTopSitesFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("historyPrivate.updateTopSites",
+                             HISTORYPRIVATE_UPDATE_TOP_SITES)
+   HistoryPrivateUpdateTopSitesFunction() = default;
+
+ private:
+   ~HistoryPrivateUpdateTopSitesFunction() override = default;
+  ResponseAction Run() override;
+};
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_HISTORY_HISTORY_PRIVATE_API_H_

@@ -8,7 +8,10 @@
 
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
+#include "ash/style/rounded_label_widget.h"
 #include "ash/wm/desks/desks_util.h"
+#include "ash/wm/desks/templates/saved_desk_animations.h"
+#include "ash/wm/drag_window_controller.h"
 #include "ash/wm/overview/overview_constants.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
@@ -47,7 +50,8 @@ std::unique_ptr<OverviewItemBase> OverviewItemBase::Create(
             snap_group_controller->GetSnapGroupForGivenWindow(window)) {
       return std::make_unique<OverviewGroupItem>(
           std::vector<raw_ptr<aura::Window, VectorExperimental>>{
-              snap_group->window1(), snap_group->window2()},
+              snap_group->GetPhysicallyLeftOrTopWindow(),
+              snap_group->GetPhysicallyRightOrBottomWindow()},
           overview_session, overview_grid);
     }
   }
@@ -59,20 +63,40 @@ std::unique_ptr<OverviewItemBase> OverviewItemBase::Create(
 }
 
 bool OverviewItemBase::IsDragItem() const {
-  return overview_session_->GetCurrentDraggedOverviewItem() == this;
+  // `overview_session_` may be null in tests.
+  // TODO(https://b/299391958): `overview_session_` should not be null even in
+  // tests.
+  return overview_session_ &&
+         overview_session_->GetCurrentDraggedOverviewItem() == this;
+}
+
+void OverviewItemBase::SetVisibleDuringItemDragging(bool visible,
+                                                    bool animate) {
+  SetWindowsVisibleDuringItemDragging(GetWindowsForHomeGesture(), visible,
+                                      animate);
 }
 
 void OverviewItemBase::RefreshShadowVisuals(bool shadow_visible) {
-  // Shadow is normally turned off during animations and reapplied when on
-  // animation complete. On destruction, `shadow_` is cleaned up before
-  // `transform_window_`, which may call this function, so early exit if
-  // `shadow_` is nullptr.
+  const bool should_have_shadow = ShouldHaveShadow();
+  if (should_have_shadow != !!shadow_) {
+    if (should_have_shadow) {
+      CreateShadow();
+    } else {
+      shadow_.reset();
+    }
+  }
+
+  // On destruction, `shadow_` is cleaned up before `transform_window_`, which
+  // may call this function, so early exit if `shadow_` is nullptr.
   if (!shadow_) {
     return;
   }
 
   const gfx::RectF shadow_bounds_in_screen = target_bounds_;
   auto* shadow_layer = shadow_->GetLayer();
+
+  // Shadow is normally turned off during animations and reapplied when on
+  // animation complete.
   if (!shadow_visible || shadow_bounds_in_screen.IsEmpty()) {
     shadow_layer->SetVisible(false);
     return;
@@ -88,7 +112,9 @@ void OverviewItemBase::RefreshShadowVisuals(bool shadow_visible) {
 }
 
 void OverviewItemBase::UpdateShadowTypeForDrag(bool is_dragging) {
-  shadow_->SetType(is_dragging ? kDraggedShadowType : kDefaultShadowType);
+  if (shadow_) {
+    shadow_->SetType(is_dragging ? kDraggedShadowType : kDefaultShadowType);
+  }
 }
 
 void OverviewItemBase::HandleGestureEventForTabletModeLayout(
@@ -220,6 +246,84 @@ void OverviewItemBase::HandleGestureEvent(ui::GestureEvent* event,
   }
 }
 
+void OverviewItemBase::SetOpacity(float opacity) {
+  item_widget_->SetOpacity(opacity);
+  if (cannot_snap_widget_) {
+    cannot_snap_widget_->SetOpacity(opacity);
+  }
+}
+
+aura::Window::Windows OverviewItemBase::GetWindowsForHomeGesture() {
+  aura::Window::Windows windows = {item_widget_->GetNativeWindow()};
+
+  if (cannot_snap_widget_) {
+    windows.push_back(cannot_snap_widget_->GetNativeWindow());
+  }
+
+  return windows;
+}
+
+void OverviewItemBase::HideForSavedDeskLibrary(bool animate) {
+  // Temporarily hide this window in overview, so that dark/light theme change
+  // does not reset the layer visible. If `animate` is false, the callback will
+  // not run in `PerformFadeOutLayer`. Thus, here we make sure the window is
+  // also hidden in that case.
+  DCHECK(item_widget_);
+  hide_window_in_overview_callback_.Reset(base::BindOnce(
+      &OverviewItemBase::HideItemWidgetWindow, weak_ptr_factory_.GetWeakPtr()));
+  PerformFadeOutLayer(item_widget_->GetLayer(), animate,
+                      hide_window_in_overview_callback_.callback());
+  if (!animate) {
+    // Cancel the callback if we are going to run it directly.
+    hide_window_in_overview_callback_.Cancel();
+    HideItemWidgetWindow();
+  }
+
+  item_widget_event_blocker_ =
+      std::make_unique<aura::ScopedWindowEventTargetingBlocker>(
+          item_widget_->GetNativeWindow());
+
+  // TODO(http://b/339108996): Determine how to inform users when a group item
+  // cannot be snapped.
+  HideCannotSnapWarning(animate);
+}
+
+void OverviewItemBase::RevertHideForSavedDeskLibrary(bool animate) {
+  // This might run before `HideForSavedDeskLibrary()`, thus cancel the
+  // callback to prevent such case.
+  hide_window_in_overview_callback_.Cancel();
+
+  // Restore and show the window back to overview.
+  ShowItemWidgetWindow();
+
+  // `item_widget_` may be null during shutdown if the window is minimized.
+  if (item_widget_) {
+    PerformFadeInLayer(item_widget_->GetLayer(), animate);
+  }
+
+  item_widget_event_blocker_.reset();
+
+  // TODO(http://b/339108996): Determine how to inform users when a group item
+  // cannot be snapped.
+  UpdateCannotSnapWarningVisibility(animate);
+}
+
+void OverviewItemBase::UpdateMirrorsForDragging(bool is_touch_dragging) {
+  CHECK_GT(Shell::GetAllRootWindows().size(), 1u);
+
+  if (!item_mirror_for_dragging_) {
+    item_mirror_for_dragging_ = std::make_unique<DragWindowController>(
+        item_widget_->GetNativeWindow(), is_touch_dragging);
+  }
+
+  item_mirror_for_dragging_->Update();
+}
+
+// Resets the mirrors needed for multi display dragging.
+void OverviewItemBase::DestroyMirrorsForDragging() {
+  item_mirror_for_dragging_.reset();
+}
+
 views::Widget::InitParams OverviewItemBase::CreateOverviewItemWidgetParams(
     aura::Window* parent_window,
     const std::string& widget_name,
@@ -236,8 +340,9 @@ views::Widget::InitParams OverviewItemBase::CreateOverviewItemWidgetParams(
   return params;
 }
 
-void OverviewItemBase::ConfigureTheShadow() {
-  shadow_ = SystemShadow::CreateShadowOnNinePatchLayer(kDefaultShadowType);
+void OverviewItemBase::CreateShadow() {
+  shadow_ = SystemShadow::CreateShadowOnNinePatchLayer(
+      kDefaultShadowType, SystemShadow::LayerRecreatedCallback());
   auto* shadow_layer = shadow_->GetLayer();
   auto* widget_layer = item_widget_->GetLayer();
   widget_layer->Add(shadow_layer);
@@ -248,6 +353,31 @@ void OverviewItemBase::ConfigureTheShadow() {
 void OverviewItemBase::HandleDragEvent(const gfx::PointF& location_in_screen) {
   if (IsDragItem()) {
     overview_session_->Drag(this, location_in_screen);
+  }
+}
+
+void OverviewItemBase::HideItemWidgetWindow() {
+  ScopedOverviewHideWindows* hide_windows =
+      overview_session_->hide_windows_for_saved_desks_grid();
+  DCHECK(hide_windows);
+
+  // Hide the overview item window.
+  if (item_widget_ &&
+      !hide_windows->HasWindow(item_widget_->GetNativeWindow())) {
+    hide_windows->AddWindow(item_widget_->GetNativeWindow());
+  }
+}
+
+void OverviewItemBase::ShowItemWidgetWindow() {
+  ScopedOverviewHideWindows* hide_windows =
+      overview_session_->hide_windows_for_saved_desks_grid();
+  DCHECK(hide_windows);
+
+  // Show the overview item window.
+  if (item_widget_ &&
+      hide_windows->HasWindow(item_widget_->GetNativeWindow())) {
+    hide_windows->RemoveWindow(item_widget_->GetNativeWindow(),
+                               /*show_window=*/true);
   }
 }
 

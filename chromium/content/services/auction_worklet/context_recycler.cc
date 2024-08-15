@@ -12,9 +12,11 @@
 #include "content/services/auction_worklet/bidder_lazy_filler.h"
 #include "content/services/auction_worklet/for_debugging_only_bindings.h"
 #include "content/services/auction_worklet/private_aggregation_bindings.h"
+#include "content/services/auction_worklet/real_time_reporting_bindings.h"
 #include "content/services/auction_worklet/register_ad_beacon_bindings.h"
 #include "content/services/auction_worklet/register_ad_macro_bindings.h"
 #include "content/services/auction_worklet/report_bindings.h"
+#include "content/services/auction_worklet/seller_lazy_filler.h"
 #include "content/services/auction_worklet/set_bid_bindings.h"
 #include "content/services/auction_worklet/set_priority_bindings.h"
 #include "content/services/auction_worklet/set_priority_signals_override_bindings.h"
@@ -39,7 +41,7 @@ ContextRecycler::~ContextRecycler() = default;
 void ContextRecycler::AddForDebuggingOnlyBindings() {
   DCHECK(!for_debugging_only_bindings_);
   for_debugging_only_bindings_ =
-      std::make_unique<ForDebuggingOnlyBindings>(v8_helper_);
+      std::make_unique<ForDebuggingOnlyBindings>(v8_helper_, v8_logger_.get());
   AddBindings(for_debugging_only_bindings_.get());
 }
 
@@ -51,20 +53,17 @@ void ContextRecycler::AddPrivateAggregationBindings(
   AddBindings(private_aggregation_bindings_.get());
 }
 
-void ContextRecycler::AddSharedStorageBindings(
-    mojom::AuctionSharedStorageHost* shared_storage_host,
-    bool shared_storage_permissions_policy_allowed) {
-  DCHECK(!shared_storage_bindings_);
-  shared_storage_bindings_ = std::make_unique<SharedStorageBindings>(
-      v8_helper_, shared_storage_host,
-      shared_storage_permissions_policy_allowed);
-  AddBindings(shared_storage_bindings_.get());
+void ContextRecycler::AddRealTimeReportingBindings() {
+  DCHECK(!real_time_reporting_bindings_);
+  real_time_reporting_bindings_ =
+      std::make_unique<RealTimeReportingBindings>(v8_helper_);
+  AddBindings(real_time_reporting_bindings_.get());
 }
 
 void ContextRecycler::AddRegisterAdBeaconBindings() {
   DCHECK(!register_ad_beacon_bindings_);
   register_ad_beacon_bindings_ =
-      std::make_unique<RegisterAdBeaconBindings>(v8_helper_);
+      std::make_unique<RegisterAdBeaconBindings>(v8_helper_, v8_logger_.get());
   AddBindings(register_ad_beacon_bindings_.get());
 }
 
@@ -77,7 +76,8 @@ void ContextRecycler::AddRegisterAdMacroBindings() {
 
 void ContextRecycler::AddReportBindings() {
   DCHECK(!report_bindings_);
-  report_bindings_ = std::make_unique<ReportBindings>(v8_helper_);
+  report_bindings_ =
+      std::make_unique<ReportBindings>(v8_helper_, v8_logger_.get());
   AddBindings(report_bindings_.get());
 }
 
@@ -93,6 +93,16 @@ void ContextRecycler::AddSetPriorityBindings() {
   AddBindings(set_priority_bindings_.get());
 }
 
+void ContextRecycler::AddSharedStorageBindings(
+    mojom::AuctionSharedStorageHost* shared_storage_host,
+    bool shared_storage_permissions_policy_allowed) {
+  DCHECK(!shared_storage_bindings_);
+  shared_storage_bindings_ = std::make_unique<SharedStorageBindings>(
+      v8_helper_, shared_storage_host,
+      shared_storage_permissions_policy_allowed);
+  AddBindings(shared_storage_bindings_.get());
+}
+
 void ContextRecycler::AddInterestGroupLazyFiller() {
   DCHECK(!interest_group_lazy_filler_);
   interest_group_lazy_filler_ =
@@ -103,6 +113,29 @@ void ContextRecycler::AddBiddingBrowserSignalsLazyFiller() {
   DCHECK(!bidding_browser_signals_lazy_filler_);
   bidding_browser_signals_lazy_filler_ =
       std::make_unique<BiddingBrowserSignalsLazyFiller>(v8_helper_);
+}
+
+void ContextRecycler::AddSellerBrowserSignalsLazyFiller() {
+  DCHECK(!seller_browser_signals_lazy_filler_);
+  seller_browser_signals_lazy_filler_ =
+      std::make_unique<SellerBrowserSignalsLazyFiller>(v8_helper_,
+                                                       v8_logger_.get());
+}
+
+void ContextRecycler::EnsureAuctionConfigLazyFillers(size_t required) {
+  // We may see different limits in the same worklet if it's used for multiple
+  // auctions.  In that case, we have to be sure to never shrink the vector
+  // since there may be pointers to entries beyond the current need floating
+  // around.
+  size_t cur_size = auction_config_lazy_fillers_.size();
+  if (cur_size >= required) {
+    return;
+  }
+  auction_config_lazy_fillers_.resize(required);
+  for (size_t pos = cur_size; pos < required; ++pos) {
+    auction_config_lazy_fillers_[pos] =
+        std::make_unique<AuctionConfigLazyFiller>(v8_helper_, v8_logger_.get());
+  }
 }
 
 void ContextRecycler::AddSetPrioritySignalsOverrideBindings() {
@@ -136,6 +169,12 @@ void ContextRecycler::ResetForReuse() {
     bidding_browser_signals_lazy_filler_->Reset();
   if (interest_group_lazy_filler_)
     interest_group_lazy_filler_->Reset();
+  if (seller_browser_signals_lazy_filler_) {
+    seller_browser_signals_lazy_filler_->Reset();
+  }
+  for (const auto& auction_config_lazy_filler : auction_config_lazy_fillers_) {
+    auction_config_lazy_filler->Reset();
+  }
 }
 
 ContextRecyclerScope::ContextRecyclerScope(ContextRecycler& context_recycler)

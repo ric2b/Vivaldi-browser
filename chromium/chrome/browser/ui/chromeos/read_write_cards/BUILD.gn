@@ -8,11 +8,15 @@ source_set("read_write_cards") {
   sources = [
     "read_write_cards_ui_controller.cc",
     "read_write_cards_ui_controller.h",
+    "read_write_cards_view.cc",
+    "read_write_cards_view.h",
   ]
   deps = [
     "//base",
+    "//chrome/browser/ui/views/editor_menu:utils",
     "//ui/aura",
     "//ui/base",
+    "//ui/gfx",
     "//ui/views",
     "//ui/wm",
   ]

@@ -42,7 +42,7 @@ It is of color type 3 (PNG_COLOR_TYPE_PALETTE) and has a tRNS chunk.
 
 License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
 
-Source: from `GetWhiteSinglePixelAvif()` in `avif_fuzztest_helpers.cc`.
+Source: single white pixel encoded with libavif at default quality.
 
 ### Files `kodim*`
 
@@ -303,6 +303,8 @@ It's a color image tagged as sRGB.
 
 License: Creative Commons Attribution-NonCommercial 2.5 License
 
+Attribution: Greg Roelofs
+
 Source: Picture from the libpng test page
 http://www.libpng.org/pub/png/png-colortest.html.
 
@@ -313,6 +315,8 @@ It's a image tagged as gamma 2.2 and BT709 primaries.
 ![](ArcTriomphe-cHRM-red-green-swap.png)
 
 License: Creative Commons Attribution-NonCommercial 2.5 License
+
+Attribution: Greg Roelofs
 
 Source: Picture from the libpng test page
 http://www.libpng.org/pub/png/png-colortest.html.
@@ -325,12 +329,28 @@ It's a image tagged as gamma 2.2 and BT709 primaries but red and green swapped.
 
 License: Creative Commons Attribution-NonCommercial 2.5 License
 
+Attribution: Greg Roelofs
+
 Source: Picture from the libpng test page
 http://www.libpng.org/pub/png/png-colortest.html.
 
 It's [ArcTriomphe-cHRM-red-green-swap.png](ArcTriomphe-cHRM-red-green-swap.png)
 converted into sRGB colorspace by Chrome using "Capture Node Screenshot"
 in DevTools.
+
+### File [arc_triomphe_extent1000_nullbyte_extent1310.avif](arc_triomphe_extent1000_nullbyte_extent1310.avif)
+
+![](arc_triomphe_extent1000_nullbyte_extent1310.avif)
+
+License: Creative Commons Attribution-NonCommercial 2.5 License
+
+Attribution: Greg Roelofs
+
+Source: `ArcTriomphe-cHRM-orig.png` compressed with
+`avifenc --ignore-exif --ignore-xmp --ignore-icc`.
+
+The file is manually edited. The `iloc` property of the primary item has two
+extents. A null byte was inserted between the two extents in the `mdat` payload.
 
 ## Grid
 
@@ -605,6 +625,15 @@ An animated AVIF image file with the following attributes:
 * YUV Format: 420
 * Repetition Count: 0
 * Frame count: 5
+
+### File [colors-animated-8bpc-alpha-exif-xmp.avif](colors-animated-8bpc-alpha-exif-xmp.avif)
+
+![](colors-animated-8bpc-alpha-exif-xmp.avif)
+
+License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
+
+Source: `colors-animated-8bpc.avif` but translucent and with the Exif/XMP chunks of
+`paris_exif_xmp_icc.jpg`. The repetition is infinite.
 
 # Other Test Files
 

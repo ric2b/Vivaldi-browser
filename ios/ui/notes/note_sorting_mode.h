@@ -9,6 +9,7 @@ typedef NS_ENUM(NSUInteger, NotesSortingMode) {
   NotesSortingModeTitle = 1,
   NotesSortingModeDateCreated = 2,
   NotesSortingModeDateEdited = 3,
+  NotesSortingModeByKind = 4,
 };
 
 typedef NS_ENUM(NSUInteger, NotesSortingOrder) {

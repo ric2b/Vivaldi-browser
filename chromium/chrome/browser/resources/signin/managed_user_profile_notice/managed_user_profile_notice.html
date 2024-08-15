@@ -1,6 +1,5 @@
 <!doctype html>
-<html dir="$i18n{textdirection}" lang="$i18n{language}"
-    $i18n{chromeRefresh2023Attribute}>
+<html dir="$i18n{textdirection}" lang="$i18n{language}">
   <head>
     <meta charset="utf-8">
     <meta name="color-scheme" content="light dark">
@@ -21,6 +20,10 @@
     <title>$i18n{enterpriseProfileWelcomeTitle}</title>
   </head>
   <body>
+    <legacy-managed-user-profile-notice-app>
+    </legacy-managed-user-profile-notice-app>
+    <script type="module" src="legacy_managed_user_profile_notice_app.js">
+    </script>
     <managed-user-profile-notice-app></managed-user-profile-notice-app>
     <script type="module" src="managed_user_profile_notice_app.js"></script>
   </body>

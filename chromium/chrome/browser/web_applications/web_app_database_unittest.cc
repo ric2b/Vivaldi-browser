@@ -15,6 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
 #include "base/time/time.h"
@@ -27,6 +28,7 @@
 #include "chrome/browser/web_applications/test/fake_web_app_provider.h"
 #include "chrome/browser/web_applications/test/web_app_test.h"
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
+#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
@@ -63,14 +65,8 @@ using ::testing::NotNull;
 using ::testing::Property;
 using ::testing::VariantWith;
 
-class WebAppDatabaseTest : public WebAppTest,
-                           public testing::WithParamInterface<bool> {
+class WebAppDatabaseTest : public WebAppTest {
  public:
-  WebAppDatabaseTest() {
-    feature_list_.InitWithFeatureState(kSeparateUserDisplayModeForCrOS,
-                                       GetParam());
-  }
-
   void SetUp() override {
     WebAppTest::SetUp();
     provider_ = FakeWebAppProvider::Get(profile());
@@ -140,23 +136,21 @@ class WebAppDatabaseTest : public WebAppTest,
   }
 
   void EnsureHasUserDisplayModeForCurrentPlatform(WebApp& app) {
-    if (!base::FeatureList::IsEnabled(kSeparateUserDisplayModeForCrOS)) {
-      DCHECK(app.user_display_mode_default());
-      return;
-    }
     // Avoid using `WebApp::user_display_mode` because it DCHECKs for a valid
     // UDM.
 #if BUILDFLAG(IS_CHROMEOS)
-    if (app.user_display_mode_cros()) {
+    if (app.sync_proto().has_user_display_mode_cros()) {
       return;
     }
 #else
-    if (app.user_display_mode_default()) {
+    if (app.sync_proto().has_user_display_mode_default()) {
       return;
     }
 #endif  // BUILDFLAG(IS_CHROMEOS)
-    app.SetUserDisplayMode(app.user_display_mode_default().value_or(
-        mojom::UserDisplayMode::kStandalone));
+    app.SetUserDisplayMode(ToMojomUserDisplayMode(
+        app.sync_proto().has_user_display_mode_default()
+            ? app.sync_proto().user_display_mode_default()
+            : sync_pb::WebAppSpecifics_UserDisplayMode_STANDALONE));
   }
 
  protected:
@@ -203,7 +197,7 @@ class WebAppDatabaseTest : public WebAppTest,
   testing::NiceMock<syncer::MockModelTypeChangeProcessor> mock_processor_;
 };
 
-TEST_P(WebAppDatabaseTest, WriteAndReadRegistry) {
+TEST_F(WebAppDatabaseTest, WriteAndReadRegistry) {
   InitSyncBridge();
   EXPECT_TRUE(registrar().is_empty());
 
@@ -227,7 +221,7 @@ TEST_P(WebAppDatabaseTest, WriteAndReadRegistry) {
   EXPECT_TRUE(IsDatabaseRegistryEqualToRegistrar());
 }
 
-TEST_P(WebAppDatabaseTest, WriteAndDeleteAppsWithCallbacks) {
+TEST_F(WebAppDatabaseTest, WriteAndDeleteAppsWithCallbacks) {
   InitSyncBridge();
   EXPECT_TRUE(registrar().is_empty());
 
@@ -287,7 +281,7 @@ TEST_P(WebAppDatabaseTest, WriteAndDeleteAppsWithCallbacks) {
 
 // Read a database where all apps are already in a valid state, so there should
 // be no difference between the apps written and read.
-TEST_P(WebAppDatabaseTest, OpenDatabaseAndReadRegistry) {
+TEST_F(WebAppDatabaseTest, OpenDatabaseAndReadRegistry) {
   Registry registry = WriteWebApps(100, /*ensure_no_migration_needed=*/true);
 
   InitSyncBridge();
@@ -295,15 +289,14 @@ TEST_P(WebAppDatabaseTest, OpenDatabaseAndReadRegistry) {
 }
 
 // Read a database where some apps will be migrated at read time.
-TEST_P(WebAppDatabaseTest, OpenDatabaseAndReadRegistryWithMigration) {
+TEST_F(WebAppDatabaseTest, OpenDatabaseAndReadRegistryWithMigration) {
   Registry registry = WriteWebApps(100, /*ensure_no_migration_needed=*/false);
 
   InitSyncBridge();
 
-  if (base::FeatureList::IsEnabled(kSeparateUserDisplayModeForCrOS)) {
-    // Some apps should have been migrated from an invalid state at read time.
-    EXPECT_FALSE(IsRegistryEqual(mutable_registrar().registry(), registry));
-  }
+  // Some apps should have been migrated from an invalid state (missing
+  // UserDisplayMode setting for the current platform) at read time.
+  EXPECT_FALSE(IsRegistryEqual(mutable_registrar().registry(), registry));
 
   // Update the registry so apps reflect expected migrated state.
   for (auto& [app_id, app] : registry) {
@@ -319,7 +312,7 @@ TEST_P(WebAppDatabaseTest, OpenDatabaseAndReadRegistryWithMigration) {
   EXPECT_TRUE(IsRegistryEqual(mutable_registrar().registry(), registry));
 }
 
-TEST_P(WebAppDatabaseTest, BackwardCompatibility_WebAppWithOnlyRequiredFields) {
+TEST_F(WebAppDatabaseTest, BackwardCompatibility_WebAppWithOnlyRequiredFields) {
   const GURL start_url{"https://example.com/"};
   const webapps::AppId app_id =
       GenerateAppId(/*manifest_id=*/std::nullopt, start_url);
@@ -381,7 +374,7 @@ TEST_P(WebAppDatabaseTest, BackwardCompatibility_WebAppWithOnlyRequiredFields) {
   }
 }
 
-TEST_P(WebAppDatabaseTest, UserDisplayModeCrosOnly_MigratesToCurrentPlatform) {
+TEST_F(WebAppDatabaseTest, UserDisplayModeCrosOnly_MigratesToCurrentPlatform) {
   std::unique_ptr<WebApp> base_app = test::CreateRandomWebApp({});
   std::unique_ptr<WebAppProto> base_proto =
       WebAppDatabase::CreateWebAppProto(*base_app);
@@ -400,26 +393,12 @@ TEST_P(WebAppDatabaseTest, UserDisplayModeCrosOnly_MigratesToCurrentPlatform) {
   std::unique_ptr<WebAppProto> new_proto =
       WebAppDatabase::CreateWebAppProto(*app);
 
-  if (!base::FeatureList::IsEnabled(kSeparateUserDisplayModeForCrOS)) {
-    // Default to standalone if we don't have a platform-specific value and the
-    // flag is turned off. Safer than trying to migrate back.
-    EXPECT_EQ(app->user_display_mode().value(),
-              mojom::UserDisplayMode::kStandalone);
-    EXPECT_EQ(new_proto->sync_data().user_display_mode_default(),
-              sync_pb::WebAppSpecifics_UserDisplayMode_STANDALONE);
-    EXPECT_FALSE(new_proto->sync_data().has_user_display_mode_cros());
-    return;
-  }
-
-  // Regardless of platform, the current platform's UDM should be set.
-  EXPECT_TRUE(app->user_display_mode().has_value());
-
 #if BUILDFLAG(IS_CHROMEOS)
-  // On CrOS, the non-CrOS field should remain absent.
+  // On CrOS, the default field should remain absent.
   EXPECT_EQ(new_proto->sync_data().user_display_mode_cros(),
             sync_pb::WebAppSpecifics_UserDisplayMode_BROWSER);
   EXPECT_FALSE(new_proto->sync_data().has_user_display_mode_default());
-  EXPECT_EQ(app->user_display_mode().value(), mojom::UserDisplayMode::kBrowser);
+  EXPECT_EQ(app->user_display_mode(), mojom::UserDisplayMode::kBrowser);
 #else
   // On non-CrOS, both platform's fields should now be populated.
   EXPECT_EQ(new_proto->sync_data().user_display_mode_cros(),
@@ -428,12 +407,11 @@ TEST_P(WebAppDatabaseTest, UserDisplayModeCrosOnly_MigratesToCurrentPlatform) {
   // standalone.
   EXPECT_EQ(new_proto->sync_data().user_display_mode_default(),
             sync_pb::WebAppSpecifics_UserDisplayMode_STANDALONE);
-  EXPECT_EQ(app->user_display_mode().value(),
-            mojom::UserDisplayMode::kStandalone);
+  EXPECT_EQ(app->user_display_mode(), mojom::UserDisplayMode::kStandalone);
 #endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
-TEST_P(WebAppDatabaseTest,
+TEST_F(WebAppDatabaseTest,
        UserDisplayModeDefaultOnly_MigratesToCurrentPlatform) {
   std::unique_ptr<WebApp> base_app = test::CreateRandomWebApp({});
   std::unique_ptr<WebAppProto> base_proto =
@@ -453,17 +431,10 @@ TEST_P(WebAppDatabaseTest,
 
   // Regardless of platform, the current platform's UDM should be set: the
   // default value should have been migrated in CrOS.
-  EXPECT_EQ(app->user_display_mode().value(), mojom::UserDisplayMode::kBrowser);
+  EXPECT_EQ(app->user_display_mode(), mojom::UserDisplayMode::kBrowser);
 
   std::unique_ptr<WebAppProto> new_proto =
       WebAppDatabase::CreateWebAppProto(*app);
-
-  if (!base::FeatureList::IsEnabled(kSeparateUserDisplayModeForCrOS)) {
-    EXPECT_EQ(new_proto->sync_data().user_display_mode_default(),
-              sync_pb::WebAppSpecifics_UserDisplayMode_BROWSER);
-    EXPECT_FALSE(new_proto->sync_data().has_user_display_mode_cros());
-    return;
-  }
 
 #if BUILDFLAG(IS_CHROMEOS)
   // On CrOS, both platform's fields should now be populated.
@@ -479,7 +450,7 @@ TEST_P(WebAppDatabaseTest,
 #endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
-TEST_P(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
+TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   InitSyncBridge();
 
   const auto start_url = GURL("https://example.com/");
@@ -520,10 +491,10 @@ TEST_P(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   EXPECT_TRUE(app->downloaded_icon_sizes(IconPurpose::MONOCHROME).empty());
   EXPECT_FALSE(app->is_generated_icon());
   EXPECT_FALSE(app->is_from_sync_and_pending_installation());
-  EXPECT_TRUE(app->sync_fallback_data().name.empty());
-  EXPECT_FALSE(app->sync_fallback_data().theme_color.has_value());
-  EXPECT_FALSE(app->sync_fallback_data().scope.is_valid());
-  EXPECT_TRUE(app->sync_fallback_data().icon_infos.empty());
+  EXPECT_FALSE(app->sync_proto().has_name());
+  EXPECT_FALSE(app->sync_proto().has_theme_color());
+  EXPECT_FALSE(app->sync_proto().has_scope());
+  EXPECT_EQ(app->sync_proto().icon_infos_size(), 0);
   EXPECT_TRUE(app->file_handlers().empty());
   EXPECT_FALSE(app->share_target().has_value());
   EXPECT_TRUE(app->additional_search_terms().empty());
@@ -595,10 +566,10 @@ TEST_P(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   EXPECT_TRUE(app_copy->downloaded_icon_sizes(IconPurpose::MONOCHROME).empty());
   EXPECT_FALSE(app_copy->is_generated_icon());
   EXPECT_FALSE(app_copy->is_from_sync_and_pending_installation());
-  EXPECT_TRUE(app_copy->sync_fallback_data().name.empty());
-  EXPECT_FALSE(app_copy->sync_fallback_data().theme_color.has_value());
-  EXPECT_FALSE(app_copy->sync_fallback_data().scope.is_valid());
-  EXPECT_TRUE(app_copy->sync_fallback_data().icon_infos.empty());
+  EXPECT_FALSE(app_copy->sync_proto().has_name());
+  EXPECT_FALSE(app_copy->sync_proto().has_theme_color());
+  EXPECT_FALSE(app_copy->sync_proto().has_scope());
+  EXPECT_EQ(app_copy->sync_proto().icon_infos_size(), 0);
   EXPECT_TRUE(app_copy->file_handlers().empty());
   EXPECT_FALSE(app_copy->share_target().has_value());
   EXPECT_TRUE(app_copy->additional_search_terms().empty());
@@ -616,7 +587,7 @@ TEST_P(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   EXPECT_TRUE(app_copy->latest_install_time().is_null());
 }
 
-TEST_P(WebAppDatabaseTest, WebAppWithManyIcons) {
+TEST_F(WebAppDatabaseTest, WebAppWithManyIcons) {
   InitSyncBridge();
 
   const GURL base_url("https://example.com/path");
@@ -664,7 +635,7 @@ TEST_P(WebAppDatabaseTest, WebAppWithManyIcons) {
   EXPECT_FALSE(app_copy->is_generated_icon());
 }
 
-TEST_P(WebAppDatabaseTest, MigrateOldLaunchHandlerSyntax) {
+TEST_F(WebAppDatabaseTest, MigrateOldLaunchHandlerSyntax) {
   std::unique_ptr<WebApp> base_app = test::CreateRandomWebApp({});
   std::unique_ptr<WebAppProto> base_proto =
       WebAppDatabase::CreateWebAppProto(*base_app);
@@ -734,7 +705,7 @@ TEST_P(WebAppDatabaseTest, MigrateOldLaunchHandlerSyntax) {
 }
 
 // Tests handling crashes fixed in crbug.com/1417955.
-TEST_P(WebAppDatabaseTest, MigrateFromMissingShortcutsSizes) {
+TEST_F(WebAppDatabaseTest, MigrateFromMissingShortcutsSizes) {
   std::unique_ptr<WebApp> base_app = test::CreateRandomWebApp({});
   WebAppShortcutsMenuItemInfo shortcut_item_info{};
   shortcut_item_info.name = u"shortcut";
@@ -769,10 +740,38 @@ TEST_P(WebAppDatabaseTest, MigrateFromMissingShortcutsSizes) {
             base::ToString(*app_with_empty_downloaded_sizes));
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    /*no prefix*/,
-    WebAppDatabaseTest,
-    /*kSeparateUserDisplayModeForCrOS enabled*/ testing::Bool());
+// Old versions of Chrome may have stored sync data with a manifest_id_path
+// containing a fragment part in the URL. It should be stripped out, because the
+// spec requires that ManifestIds with different fragments are considered
+// equivalent.
+TEST_F(WebAppDatabaseTest, RemovesFragmentFromSyncProtoManifestIdPath) {
+  base::HistogramTester histogram_tester;
+
+  std::unique_ptr<WebApp> app = test::CreateRandomWebApp({});
+  // Apps must always have a valid manifest ID without a ref.
+  EXPECT_TRUE(app->manifest_id().is_valid());
+  EXPECT_FALSE(app->manifest_id().has_ref());
+  std::string relative_manifest_id_path =
+      app->sync_proto().relative_manifest_id();
+
+  std::unique_ptr<WebAppProto> proto = WebAppDatabase::CreateWebAppProto(*app);
+  proto->mutable_sync_data()->set_relative_manifest_id(
+      relative_manifest_id_path + "#fragment");
+  EXPECT_EQ(proto->sync_data().relative_manifest_id(),
+            relative_manifest_id_path + "#fragment");
+
+  // Re-parse the app from the proto.
+  auto roundtrip_app = WebAppDatabase::CreateWebApp(*proto);
+  ASSERT_TRUE(roundtrip_app);
+
+  // Loaded app should have had the fragment stripped.
+  EXPECT_EQ(roundtrip_app->sync_proto().relative_manifest_id(),
+            relative_manifest_id_path);
+  EXPECT_FALSE(roundtrip_app->manifest_id().has_ref());
+
+  histogram_tester.ExpectUniqueSample("WebApp.CreateWebApp.ManifestIdMatch",
+                                      false, 1);
+}
 
 class WebAppDatabaseProtoDataTest : public ::testing::Test {
  public:

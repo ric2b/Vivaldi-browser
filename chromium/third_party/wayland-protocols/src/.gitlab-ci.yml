@@ -1,4 +1,4 @@
-.templates_sha: &template_sha fb33e1b244ec2a0b8edf8ee5590a96369c3b4666
+.templates_sha: &template_sha d11c0dd4c1c9a69c14b4af9b50cdd12b89d24672
 
 include:
   - project: 'freedesktop/ci-templates'
@@ -23,9 +23,9 @@ workflow:
 
 .debian:
   variables:
-    FDO_DISTRIBUTION_VERSION: bullseye
+    FDO_DISTRIBUTION_VERSION: bookworm
     FDO_DISTRIBUTION_PACKAGES: 'build-essential pkg-config meson git ca-certificates libffi-dev libexpat1-dev libxml2-dev'
-    FDO_DISTRIBUTION_TAG: '2022-01-19.0'
+    FDO_DISTRIBUTION_TAG: '2023-12-27.0'
     FDO_DISTRIBUTION_EXEC: 'env FDO_CI_CONCURRENT=${FDO_CI_CONCURRENT} ./.gitlab-ci/debian-install.sh'
 
 check-commit:

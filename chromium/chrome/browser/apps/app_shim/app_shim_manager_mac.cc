@@ -67,7 +67,6 @@
 #include "components/crash/core/common/crash_key.h"
 #include "components/crx_file/id_util.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/notification_service.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
@@ -486,7 +485,7 @@ void AppShimManager::UpdateAppBadge(
     Profile* profile,
     const webapps::AppId& app_id,
     const std::optional<badging::BadgeManager::BadgeValue>& badge) {
-  // TODO(https://crbug.com/1199624): Support updating the app badge for apps
+  // TODO(crbug.com/40761338): Support updating the app badge for apps
   // that aren't currently running.
   auto found_app = apps_.find(app_id);
   if (found_app == apps_.end()) {
@@ -739,7 +738,9 @@ void AppShimManager::OnShimLaunchRequested(
   // TODO(mek): Rather than this workaround, we should make sure to destroy
   // AppShimHost and terminate app shims when an app is uninstalled.
   if (web_app::RecreateShimsRequested(update_behavior) &&
-      !delegate_->AppIsInstalled(profile, host->GetAppId())) {
+      (!delegate_->AppIsInstalled(profile, host->GetAppId()) ||
+       !AppShimRegistry::Get()->IsAppInstalledInProfile(host->GetAppId(),
+                                                        profile->GetPath()))) {
     LOG(ERROR)
         << "Attempting to launch shim for an app that is no longer installed.";
     std::move(terminated_callback).Run();
@@ -973,7 +974,7 @@ bool AppShimManager::LoadAndLaunchApp_TryExistingProfileStates(
       // If `profiles_with_handlers` is empty, either because `params` does not
       // contains files or urls, or because there are no profiles that can
       // handle the files or urls, select the first open profile encountered.
-      // TODO(https://crbug.com/829689): This should select the
+      // TODO(crbug.com/40570436): This should select the
       // most-recently-used profile, not the first profile encountered.
       auto it = app_state->profiles.begin();
       if (it != app_state->profiles.end()) {
@@ -1149,6 +1150,9 @@ void AppShimManager::LoadAndLaunchApp_LaunchIfAppropriate(
   bool do_launch = params.HasFilesOrURLs();
 
   // Otherwise, only launch if there are no open windows.
+  // TODO(https://crbug.com/331931430): This code should ignore browsers that
+  // are closing (where IsBrowserClosing() returns true), but doing so is
+  // tricky.
   if (!do_launch) {
     bool had_windows = delegate_->ShowAppWindows(profile, params.app_id);
     if (!had_windows && profile_state && !profile_state->browsers.empty()) {
@@ -1471,8 +1475,13 @@ void AppShimManager::OnShimOpenedFiles(
 
 void AppShimManager::OnShimSelectedProfile(AppShimHost* host,
                                            const base::FilePath& profile_path) {
+  LaunchAppInProfile(host->GetAppId(), profile_path);
+}
+
+void AppShimManager::LaunchAppInProfile(const webapps::AppId& app_id,
+                                        const base::FilePath& profile_path) {
   LoadAndLaunchAppParams params;
-  params.app_id = host->GetAppId();
+  params.app_id = app_id;
   LoadAndLaunchApp(profile_path, params, base::DoNothing());
 }
 
@@ -1634,7 +1643,7 @@ void AppShimManager::OnAppDeactivated(content::BrowserContext* context,
   // Check the integrity of AppState::profiles across all apps. Include the app
   // ID in the dump, to help pin down the cause.
   //
-  // TODO(crbug.com/1302722): Remove this once we're confident this never
+  // TODO(crbug.com/40217091): Remove this once we're confident this never
   // happens.
   std::string inconsistent_app_ids;
   for (const auto& [id, state] : apps_) {

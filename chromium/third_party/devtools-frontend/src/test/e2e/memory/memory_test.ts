@@ -25,15 +25,19 @@ import {describe, it} from '../../shared/mocha-extensions.js';
 import {
   changeAllocationSampleViewViaDropdown,
   changeViewViaDropdown,
+  clickOnContextMenuForRetainer,
   expandFocusedRow,
   findSearchResult,
   focusTableRow,
+  getCategoryRow,
   getDataGridRows,
   getDistanceFromCategoryRow,
   getSizesFromCategoryRow,
   getSizesFromSelectedRow,
   navigateToMemoryTab,
+  restoreIgnoredRetainers,
   setClassFilter,
+  setFilterDropdown,
   setSearchFilter,
   takeAllocationProfile,
   takeAllocationTimelineProfile,
@@ -474,5 +478,42 @@ describe('The Memory Panel', function() {
     assert.isTrue((await getSizesFromCategoryRow('CustomClass3Key')).retainedSize < 2 ** 15);
     assert.isTrue((await getSizesFromCategoryRow('CustomClass4Key')).retainedSize < 2 ** 15);
     assert.isTrue((await getSizesFromCategoryRow('CustomClass4Retainer')).retainedSize >= 2 ** 15);
+  });
+
+  it('Allows ignoring retainers', async () => {
+    await goToResource('memory/ignoring-retainers.html');
+    await navigateToMemoryTab();
+    await takeHeapSnapshot();
+    await waitForNonEmptyHeapSnapshotData();
+    await setSearchFilter('searchable_string');
+    await waitForSearchResultNumber(2);
+    await findSearchResult('"searchable_string"');
+    await waitForRetainerChain(['Object', 'KeyType', 'Window']);
+    await clickOnContextMenuForRetainer('KeyType', 'Ignore this retainer');
+    await waitForRetainerChain(['Object', 'Object', 'Window']);
+    await clickOnContextMenuForRetainer('x', 'Ignore this retainer');
+    await waitForRetainerChain(['Object', '(internal array)[]', 'WeakMap', 'Window']);
+    await clickOnContextMenuForRetainer('(internal array)[]', 'Ignore this retainer');
+    await waitForRetainerChain(['Object', 'Object', 'Object', 'Object', 'Object', 'Window']);
+    await clickOnContextMenuForRetainer('b', 'Ignore this retainer');
+    await waitForRetainerChain(['(Internalized strings)', '(GC roots)']);
+    await restoreIgnoredRetainers();
+    await waitForRetainerChain(['Object', 'KeyType', 'Window']);
+  });
+
+  it('Can filter the summary view', async () => {
+    await goToResource('memory/filtering.html');
+    await navigateToMemoryTab();
+    await takeHeapSnapshot();
+    await waitForNonEmptyHeapSnapshotData();
+    await setFilterDropdown('Duplicated strings');
+    await setSearchFilter('"duplicatedKey":"duplicatedValue"');
+    await waitForSearchResultNumber(2);
+    await setFilterDropdown('Objects retained by detached DOM nodes');
+    await getCategoryRow('ObjectRetainedByDetachedDom');
+    assert.isTrue(!(await getCategoryRow('ObjectRetainedByBothDetachedDomAndConsole', false)));
+    await setFilterDropdown('Objects retained by the DevTools console');
+    await getCategoryRow('ObjectRetainedByConsole');
+    assert.isTrue(!(await getCategoryRow('ObjectRetainedByBothDetachedDomAndConsole', false)));
   });
 });

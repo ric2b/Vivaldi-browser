@@ -4,6 +4,8 @@
 
 #include "content/browser/interest_group/test_interest_group_private_aggregation_manager.h"
 
+#include <stddef.h>
+
 #include <map>
 #include <optional>
 #include <string>
@@ -25,7 +27,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/mojom/private_aggregation/aggregatable_report.mojom.h"
+#include "third_party/blink/public/mojom/aggregation_service/aggregatable_report.mojom.h"
 #include "third_party/blink/public/mojom/private_aggregation/private_aggregation_host.mojom.h"
 #include "url/origin.h"
 
@@ -46,6 +48,7 @@ bool TestInterestGroupPrivateAggregationManager::BindNewReceiver(
     std::optional<std::string> context_id,
     std::optional<base::TimeDelta> timeout,
     std::optional<url::Origin> aggregation_coordinator_origin,
+    size_t filtering_id_max_bytes,
     mojo::PendingReceiver<blink::mojom::PrivateAggregationHost>
         pending_receiver) {
   EXPECT_EQ(expected_top_frame_origin_, top_frame_origin);
@@ -53,6 +56,7 @@ bool TestInterestGroupPrivateAggregationManager::BindNewReceiver(
             api_for_budgeting);
   EXPECT_FALSE(context_id.has_value());
   EXPECT_FALSE(timeout.has_value());
+  EXPECT_EQ(filtering_id_max_bytes, 1u);
 
   // TODO(alexmt): Change once selecting the origin is possible.
   EXPECT_FALSE(aggregation_coordinator_origin.has_value());

@@ -83,6 +83,3 @@ call "%~dp0\cipd_bin_setup.bat"
 
 :: Update git and python.
 call "%DEPOT_TOOLS_DIR%bootstrap\win_tools.bat"
-
-:: Restart goma if it is updated.
-call "%~dp0\goma_ctl.bat" update_hook

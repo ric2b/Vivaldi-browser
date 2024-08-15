@@ -48,7 +48,6 @@
 #include "vivaldi/prefs/vivaldi_gen_pref_enums.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
-
 // locked keystore handling
 #include "extraparts/vivaldi_keystore_checker.h"
 
@@ -168,7 +167,9 @@ void VivaldiInitProfile(Profile* profile) {
 
     vivaldi::NotesModel* notes_model =
         vivaldi::NotesModelFactory::GetForBrowserContext(profile);
-    notes_model->AddObserver(new vivaldi::NotesModelLoadedObserver(profile));
+    // `BookmarkModelLoadedObserver` destroys itself eventually, when loading
+    // completes.
+      new vivaldi::NotesModelLoadedObserver(profile, notes_model);
   }
   PerformUpdates(profile);
 
@@ -182,9 +183,11 @@ void VivaldiInitProfile(Profile* profile) {
 #if !BUILDFLAG(IS_ANDROID)
     // Workaround for VB-105645. The menu configuration code is located in a
     // module that does not link to prefs and more.
-    bool compact =
-        profile->GetPrefs()->GetBoolean(vivaldiprefs::kMenuCompact);
-    vivaldi::SetUsingCompactLegacyMenu(compact);
+    if (!profile->IsGuestSession()) {
+      bool compact = profile->GetPrefs()->GetBoolean(
+          vivaldiprefs::kMenuCompact);
+      vivaldi::SetUsingCompactLegacyMenu(compact);
+    }
 #endif
 
     // Manages its own lifetime.

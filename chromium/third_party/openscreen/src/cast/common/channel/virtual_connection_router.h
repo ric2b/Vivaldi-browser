@@ -49,7 +49,7 @@ class VirtualConnectionRouter final : public CastSocket::Client {
   class SocketErrorHandler {
    public:
     virtual void OnClose(CastSocket* socket) = 0;
-    virtual void OnError(CastSocket* socket, Error error) = 0;
+    virtual void OnError(CastSocket* socket, const Error& error) = 0;
 
    protected:
     virtual ~SocketErrorHandler();
@@ -103,7 +103,7 @@ class VirtualConnectionRouter final : public CastSocket::Client {
                                ::cast::channel::CastMessage message);
 
   // CastSocket::Client overrides.
-  void OnError(CastSocket* socket, Error error) override;
+  void OnError(CastSocket* socket, const Error& error) override;
   void OnMessage(CastSocket* socket,
                  ::cast::channel::CastMessage message) override;
 

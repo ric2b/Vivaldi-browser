@@ -18,6 +18,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/ash/accessibility/accessibility_test_utils.h"
 #include "chrome/browser/ash/accessibility/dictation_test_utils.h"
 #include "chrome/browser/ash/accessibility/magnification_manager.h"
@@ -80,6 +81,7 @@ using ::testing::WithParamInterface;
 // Use a real domain to avoid policy loading problems.
 constexpr char kTestUserName[] = "owner@gmail.com";
 constexpr char kTestUserGaiaId[] = "9876543210";
+constexpr char kSodaUnsupportedLocale[] = "af-ZA";
 
 // Dictation notification titles and descriptions. '*'s are used as placeholders
 // for languages, which are substituted in at a later time.
@@ -534,6 +536,8 @@ class AccessibilityManagerTest : public MixinBasedInProcessBrowserTest {
   ChromeVoxPanel* GetChromeVoxPanel() {
     return AccessibilityManager::Get()->chromevox_panel_;
   }
+
+  base::HistogramTester histogram_tester_;
 
  protected:
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -1163,13 +1167,13 @@ IN_PROC_BROWSER_TEST_F(AccessibilityManagerDlcTest,
                        SodaDownloadTriggeredByLocaleChange) {
   EXPECT_FALSE(IsSodaDownloading());
 
-  // it-IT is not supported by SODA, so download shouldn't trigger.
-  SetDictationLocale("it-IT");
+  // af-ZA is not supported by SODA, so download shouldn't trigger.
+  SetDictationLocale(kSodaUnsupportedLocale);
   SetDictationEnabled(true);
   EXPECT_FALSE(IsSodaDownloading());
   // The nudge should not be requested to be shown because this is not an
   // offline language.
-  EXPECT_FALSE(GetDictationOfflineNudgePref("it-IT"));
+  EXPECT_FALSE(GetDictationOfflineNudgePref(kSodaUnsupportedLocale));
 
   // Change the locale to one supported by SODA without changing Dictation
   // enabled. This mocks selecting a new locale from settings.
@@ -1310,8 +1314,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityManagerDlcTest, SodaWrongLanguage) {
 
 IN_PROC_BROWSER_TEST_F(AccessibilityManagerDlcTest,
                        SodaNotificationShownOnDictationLocaleChange) {
-  // it-IT is not supported by SODA.
-  SetDictationLocale("it-IT");
+  // af-ZA is not supported by SODA.
+  SetDictationLocale(kSodaUnsupportedLocale);
   EnableDictationTriggeredByUser(/*soda_uninstalled_first=*/false);
   AssertMessageCenterEmpty();
 
@@ -1576,7 +1580,7 @@ class AccessibilityManagerDictationDialogTest
     // Set the device language to one that is not supported by SODA on Chrome
     // OS. This will force Dictation to show the confirmation dialog when
     // enabled.
-    locale_ = "it-IT";
+    locale_ = kSodaUnsupportedLocale;
     command_line->AppendSwitchASCII(::switches::kLang, locale_);
 
     std::vector<base::test::FeatureRef> enabled_features;
@@ -1630,8 +1634,7 @@ IN_PROC_BROWSER_TEST_P(AccessibilityManagerDictationDialogTest,
     EXPECT_TRUE(ShouldShowNetworkDictationDialog("en-US"));
   }
   EXPECT_TRUE(ShouldShowNetworkDictationDialog(""));
-  EXPECT_TRUE(ShouldShowNetworkDictationDialog("fr-FR"));
-  EXPECT_TRUE(ShouldShowNetworkDictationDialog("ja-JP"));
+  EXPECT_TRUE(ShouldShowNetworkDictationDialog(kSodaUnsupportedLocale));
 
   PrefService* prefs = GetActiveUserPrefs();
   prefs->SetBoolean(prefs::kDictationAcceleratorDialogHasBeenAccepted, true);
@@ -1662,7 +1665,8 @@ IN_PROC_BROWSER_TEST_P(AccessibilityManagerDictationDialogTest, AcceptDialog) {
   PrefService* prefs = GetActiveUserPrefs();
   EXPECT_FALSE(
       prefs->GetBoolean(prefs::kDictationAcceleratorDialogHasBeenAccepted));
-  EXPECT_TRUE(ShouldShowNetworkDictationDialog(locale()));
+  EXPECT_TRUE(ShouldShowNetworkDictationDialog(locale()))
+      << " locale " << locale();
 
   SetDictationEnabled(true);
   EXPECT_TRUE(IsDictationEnabled());
@@ -1873,8 +1877,8 @@ class AccessibilityManagerUserTypeTest
       guest_session_ = std::make_unique<GuestSessionMixin>(&mixin_host_);
     } else if (GetParam() == user_manager::UserType::kChild) {
       logged_in_user_mixin_ = std::make_unique<LoggedInUserMixin>(
-          &mixin_host_, LoggedInUserMixin::LogInType::kChild,
-          embedded_test_server(), this);
+          &mixin_host_, /*test_base=*/this, embedded_test_server(),
+          LoggedInUserMixin::LogInType::kChild);
     }
   }
 
@@ -1919,6 +1923,15 @@ IN_PROC_BROWSER_TEST_P(AccessibilityManagerUserTypeTest, BrailleWhenLoggedIn) {
     logged_in_user_mixin_->LogInUser();
   }
 
+  histogram_tester_.ExpectBucketCount(
+      "Accessibility.CrosSpokenFeedback.BrailleDisplayConnected."
+      "ConnectionChanged",
+      /*sample=*/true, 0);
+  histogram_tester_.ExpectBucketCount(
+      "Accessibility.CrosSpokenFeedback.BrailleDisplayConnected."
+      "ConnectionChanged",
+      /*sample=*/false, 0);
+
   // This object watches for IME preference changes and reflects those in
   // the IME framework state.
   Preferences prefs;
@@ -1939,6 +1952,21 @@ IN_PROC_BROWSER_TEST_P(AccessibilityManagerUserTypeTest, BrailleWhenLoggedIn) {
   EXPECT_TRUE(IsSpokenFeedbackEnabled());
   EXPECT_TRUE(IsBrailleImeEnabled());
 
+  // A metric should have been logged for braille display connected but not
+  // disconnect or duration.
+  histogram_tester_.ExpectBucketCount(
+      "Accessibility.CrosSpokenFeedback.BrailleDisplayConnected."
+      "ConnectionChanged",
+      /*sample=*/true, 1);
+  histogram_tester_.ExpectBucketCount(
+      "Accessibility.CrosSpokenFeedback.BrailleDisplayConnected."
+      "ConnectionChanged",
+      /*sample=*/false, 0);
+  histogram_tester_.ExpectTotalCount(
+      "Accessibility.CrosSpokenFeedback.BrailleDisplayConnected."
+      "ConnectionDuration",
+      0);
+
   // Send a braille dots key event and make sure that the braille IME is
   // activated.
   KeyEvent event;
@@ -1954,11 +1982,38 @@ IN_PROC_BROWSER_TEST_P(AccessibilityManagerUserTypeTest, BrailleWhenLoggedIn) {
   EXPECT_FALSE(IsBrailleImeEnabled());
   EXPECT_FALSE(IsBrailleImeCurrent());
 
+  // Check metrics.
+  histogram_tester_.ExpectBucketCount(
+      "Accessibility.CrosSpokenFeedback.BrailleDisplayConnected."
+      "ConnectionChanged",
+      /*sample=*/true, 1);
+  histogram_tester_.ExpectBucketCount(
+      "Accessibility.CrosSpokenFeedback.BrailleDisplayConnected."
+      "ConnectionChanged",
+      /*sample=*/false, 1);
+  histogram_tester_.ExpectTotalCount(
+      "Accessibility.CrosSpokenFeedback.BrailleDisplayConnected."
+      "ConnectionDuration",
+      1);
+
   // Plugging in a display while spoken feedback is enabled should enable
   // the Braille IME.
   SetBrailleDisplayAvailability(true);
   EXPECT_TRUE(IsSpokenFeedbackEnabled());
   EXPECT_TRUE(IsBrailleImeEnabled());
+
+  histogram_tester_.ExpectBucketCount(
+      "Accessibility.CrosSpokenFeedback.BrailleDisplayConnected."
+      "ConnectionChanged",
+      /*sample=*/true, 2);
+  histogram_tester_.ExpectBucketCount(
+      "Accessibility.CrosSpokenFeedback.BrailleDisplayConnected."
+      "ConnectionChanged",
+      /*sample=*/false, 1);
+  histogram_tester_.ExpectTotalCount(
+      "Accessibility.CrosSpokenFeedback.BrailleDisplayConnected."
+      "ConnectionDuration",
+      1);
 }
 
 class AccessibilityManagerWithAccessibilityServiceTest
@@ -2085,10 +2140,8 @@ class AccessibilityManagerDictationKeyboardImprovementsTest
   void SetUpCommandLine(base::CommandLine* command_line) override {
     // Set the device language to one that is not supported by SODA on ChromeOS.
     // This will force Dictation to show the confirmation dialog when enabled.
-    command_line->AppendSwitchASCII(::switches::kLang, "it-IT");
+    command_line->AppendSwitchASCII(::switches::kLang, kSodaUnsupportedLocale);
     AccessibilityManagerTest::SetUpCommandLine(command_line);
-    scoped_feature_list_.InitAndEnableFeature(
-        ::features::kAccessibilityDictationKeyboardImprovements);
   }
 
   void SetUpOnMainThread() override {
@@ -2121,7 +2174,6 @@ class AccessibilityManagerDictationKeyboardImprovementsTest
 
  private:
   std::unique_ptr<AccessibilityControllerTestApi> test_api_;
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 INSTANTIATE_TEST_SUITE_P(

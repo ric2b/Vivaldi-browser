@@ -52,12 +52,12 @@ ImageProcessorBackend::PortConfig::PortConfig(
     const gfx::Size& size,
     const std::vector<ColorPlaneLayout>& planes,
     const gfx::Rect& visible_rect,
-    const std::vector<VideoFrame::StorageType>& preferred_storage_types)
+    VideoFrame::StorageType storage_type)
     : fourcc(fourcc),
       size(size),
       planes(planes),
       visible_rect(visible_rect),
-      preferred_storage_types(preferred_storage_types) {}
+      storage_type(storage_type) {}
 
 ImageProcessorBackend::PortConfig::~PortConfig() = default;
 
@@ -67,7 +67,7 @@ std::string ImageProcessorBackend::PortConfig::ToString() const {
       "storage_types:%s)",
       fourcc.ToString().c_str(), size.ToString().c_str(),
       VectorToString(planes).c_str(), visible_rect.ToString().c_str(),
-      VectorToString(preferred_storage_types).c_str());
+      VideoFrame::StorageTypeToString(storage_type).c_str());
 }
 
 ImageProcessorBackend::ImageProcessorBackend(
@@ -131,6 +131,15 @@ namespace std {
 
 void default_delete<media::ImageProcessorBackend>::operator()(
     media::ImageProcessorBackend* ptr) const {
+  CHECK(ptr->backend_task_runner_);
+  if (!ptr->backend_task_runner_->RunsTasksInCurrentSequence()) {
+    // base::Unretained() is safe because ImageProcessorBackend::Destroy() *is*
+    // the thing that destroys *|ptr|.
+    ptr->backend_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&media::ImageProcessorBackend::Destroy,
+                                  base::Unretained(ptr)));
+    return;
+  }
   ptr->Destroy();
 }
 

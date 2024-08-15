@@ -4,6 +4,11 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "core/fxge/win32/cgdi_device_driver.h"
 
 #include <math.h>
@@ -487,8 +492,7 @@ bool CGdiDeviceDriver::GDI_StretchBitMask(RetainPtr<const CFX_DIBBase> source,
   struct {
     BITMAPINFOHEADER bmiHeader;
     uint32_t bmiColors[2];
-  } bmi;
-  memset(&bmi.bmiHeader, 0, sizeof(BITMAPINFOHEADER));
+  } bmi = {};
   bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
   bmi.bmiHeader.biBitCount = 1;
   bmi.bmiHeader.biCompression = BI_RGB;

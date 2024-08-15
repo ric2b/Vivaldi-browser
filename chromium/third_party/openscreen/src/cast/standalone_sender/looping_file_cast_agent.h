@@ -93,11 +93,11 @@ class LoopingFileCastAgent final
                    std::unique_ptr<CastSocket> socket) override;
   void OnError(SenderSocketFactory* factory,
                const IPEndpoint& endpoint,
-               Error error) override;
+               const Error& error) override;
 
   // VirtualConnectionRouter::SocketErrorHandler overrides.
   void OnClose(CastSocket* cast_socket) override;
-  void OnError(CastSocket* socket, Error error) override;
+  void OnError(CastSocket* socket, const Error& error) override;
 
   // ConnectionNamespaceHandler::VirtualConnectionPolicy overrides.
   bool IsConnectionAllowed(
@@ -139,7 +139,7 @@ class LoopingFileCastAgent final
                     SenderSession::ConfiguredSenders senders,
                     capture_recommendations::Recommendations
                         capture_recommendations) override;
-  void OnError(const SenderSession* session, Error error) override;
+  void OnError(const SenderSession* session, const Error& error) override;
 
   // SenderStatsClient overrides.
   void OnStatisticsUpdated(const SenderStats& updated_stats) override;

@@ -53,6 +53,7 @@ class RecurrrenceExceptionTable {
 
   bool DoesRecurrenceExceptionExistForEvent(EventID event_id);
   bool GetAllEventExceptionIds(EventID event_id, EventIDs* event_ids);
+  EventID GetParentExceptionEventId(EventID exception_event_id);
 
  protected:
   virtual sql::Database& GetDB() = 0;

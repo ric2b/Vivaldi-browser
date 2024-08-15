@@ -16,11 +16,11 @@
 #include "chrome/browser/screen_ai/screen_ai_service_router_factory.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/common/pdf_util.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/language/core/common/language_util.h"
+#include "components/pdf/common/pdf_util.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/render_view_host.h"
@@ -44,25 +44,6 @@
 namespace {
 
 constexpr char kHtmlMimeType[] = "text/html";
-
-// Returns true if a screen reader is present or (on Chrome OS only) if
-// select-to-speak is enabled.
-bool IsAccessibilityEnabled() {
-  // Active if a screen reader is present.
-  if (accessibility_state_utils::IsScreenReaderEnabled()) {
-    return true;
-  }
-
-#if BUILDFLAG(IS_CHROMEOS)
-  // Conditionally active if select-to-speak is enabled.
-  if (features::IsAccessibilityPdfOcrForSelectToSpeakEnabled() &&
-      accessibility_state_utils::IsSelectToSpeakEnabled()) {
-    return true;
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS)
-
-  return false;
-}
 
 // For a PDF tab, there are two associated processes (and two WebContentses):
 // (i) PDF Viewer Mimehandler (mime type = text/html) and (ii) PDF renderer
@@ -106,12 +87,37 @@ std::vector<content::WebContents*> GetPdfHtmlWebContentses(Profile* profile) {
   return result;
 }
 
+// Returns true if a screen reader is present, if the screen reader AXMode is
+// enabled on any PDF web contents, or (on Chrome OS only) if select-to-speak is
+// enabled.
+bool IsAccessibilityEnabled(Profile* profile) {
+  // Active if a screen reader is present.
+  if (accessibility_state_utils::IsScreenReaderEnabled()) {
+    return true;
+  }
+
+#if BUILDFLAG(IS_CHROMEOS)
+  // Conditionally active if select-to-speak is enabled.
+  if (features::IsAccessibilityPdfOcrForSelectToSpeakEnabled() &&
+      accessibility_state_utils::IsSelectToSpeakEnabled()) {
+    return true;
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
+  // Check all web contentses. If any of them have screen reader mode enabled,
+  // return true.
+  auto contentses = GetPdfHtmlWebContentses(profile);
+  for (auto contents : contentses) {
+    if (contents->GetAccessibilityMode().has_mode(ui::AXMode::kScreenReader)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 // Invoke screen reader alert to notify the user of the state.
 void AnnounceToScreenReader(const int message_id) {
-// TODO(crbug.com/1442928): Sending announcements results in a failure in
-// `AuraLinuxAccessibilityInProcessBrowserTest::IndexInParentWithModal` and
-// flaky fail when running Chrome.
-#if !BUILDFLAG(IS_LINUX)
   const Browser* browser = BrowserList::GetInstance()->GetLastActive();
   if (!browser) {
     VLOG(2) << "Browser is not ready to announce";
@@ -125,7 +131,6 @@ void AnnounceToScreenReader(const int message_id) {
 
   browser_view->GetViewAccessibility().AnnounceText(
       l10n_util::GetStringUTF16(message_id));
-#endif
 }
 
 void RecordAcceptLanguages(const std::string& accept_languages) {
@@ -135,7 +140,7 @@ void RecordAcceptLanguages(const std::string& accept_languages) {
     // Convert to a Chrome language code synonym. This language synonym is then
     // converted into a `LocaleCodeISO639` enum value for a UMA histogram.
     language::ToChromeLanguageSynonym(&language);
-    // TODO(crbug.com/1443346): Add a browser test to validate this UMA metric.
+    // TODO(crbug.com/40267312): Add a browser test to validate this UMA metric.
     base::UmaHistogramSparse("Accessibility.PdfOcr.UserAcceptLanguage",
                              base::HashMetricName(language));
   }
@@ -224,7 +229,7 @@ void PdfOcrController::OnAccessibilityStatusEvent(
 
 void PdfOcrController::OnActivationChanged() {
   const bool is_always_active =
-      IsAccessibilityEnabled() &&
+      IsAccessibilityEnabled(profile_) &&
       profile_->GetPrefs()->GetBoolean(prefs::kAccessibilityPdfOcrAlwaysActive);
 
   if (is_always_active == IsEnabled()) {
@@ -304,6 +309,10 @@ void PdfOcrController::StateChanged(ScreenAIInstallState::State state) {
       AnnounceToScreenReader(IDS_SETTINGS_PDF_OCR_DOWNLOAD_COMPLETE);
       break;
   }
+}
+
+void PdfOcrController::Activate() {
+  OnActivationChanged();
 }
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)

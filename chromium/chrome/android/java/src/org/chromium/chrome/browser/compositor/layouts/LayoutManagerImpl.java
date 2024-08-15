@@ -29,7 +29,6 @@ import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
 import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPanel;
 import org.chromium.chrome.browser.compositor.layouts.Layout.Orientation;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
-import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.gesturenav.HistoryNavigationCoordinator;
@@ -51,6 +50,7 @@ import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabHidingType;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
+import org.chromium.chrome.browser.tab_ui.TabContentManager;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
@@ -64,7 +64,6 @@ import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.chrome.browser.toolbar.bottom.ScrollingBottomViewSceneLayer;
 import org.chromium.chrome.browser.toolbar.top.TopToolbarOverlayCoordinator;
-import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.SwipeHandler;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -126,7 +125,7 @@ public class LayoutManagerImpl
 
     // External Observers
     private final ObserverList<LayoutStateObserver> mLayoutObservers = new ObserverList<>();
-    // TODO(crbug.com/1108496): Remove after all SceneChangeObserver migrates to
+    // TODO(crbug.com/40141330): Remove after all SceneChangeObserver migrates to
     // LayoutStateObserver.
     private final ObserverList<SceneChangeObserver> mSceneChangeObservers = new ObserverList<>();
 
@@ -211,7 +210,8 @@ public class LayoutManagerImpl
                     || type == TabLaunchType.FROM_EXTERNAL_APP
                     || type == TabLaunchType.FROM_LAUNCHER_SHORTCUT
                     || type == TabLaunchType.FROM_STARTUP
-                    || type == TabLaunchType.FROM_APP_WIDGET) {
+                    || type == TabLaunchType.FROM_APP_WIDGET
+                    || type == TabLaunchType.FROM_SYNC_BACKGROUND) {
                 return;
             }
 
@@ -235,6 +235,7 @@ public class LayoutManagerImpl
                                                 != TabLaunchType.FROM_LONGPRESS_BACKGROUND_IN_GROUP
                                         && launchType != TabLaunchType.FROM_RECENT_TABS
                                         && launchType != TabLaunchType.FROM_RESTORE_TABS_UI
+                                        && launchType != TabLaunchType.FROM_SYNC_BACKGROUND
                                 || (!getTabModelSelector().isIncognitoSelected() && incognito);
                 float lastTapX = LocalizationUtils.isLayoutRtl() ? mHost.getWidth() * mPxToDp : 0.f;
                 float lastTapY = 0.f;
@@ -594,7 +595,7 @@ public class LayoutManagerImpl
         }
         mUpdateRequested = false;
 
-        // TODO(crbug.com/1070281): Remove after the FrameRequestSupplier migrates to the animation
+        // TODO(crbug.com/40126259): Remove after the FrameRequestSupplier migrates to the animation
         //  system.
         final Layout layout = getActiveLayout();
 
@@ -605,7 +606,7 @@ public class LayoutManagerImpl
             areAnimatorsComplete &= !layout.isRunningAnimations();
         }
 
-        // TODO(crbug.com/1070281): Layout itself should decide when it's done hiding and done
+        // TODO(crbug.com/40126259): Layout itself should decide when it's done hiding and done
         //  showing.
         if (layout != null && layout.onUpdate(timeMs, dtMs) && areAnimatorsComplete) {
             if (layout.isStartingToHide()) {
@@ -615,7 +616,7 @@ public class LayoutManagerImpl
             }
         }
 
-        // TODO(1100332): Once overlays are MVC, this should no longer be needed.
+        // TODO(crbug.com/40137900): Once overlays are MVC, this should no longer be needed.
         for (int i = 0; i < mSceneOverlays.size(); i++) {
             mSceneOverlays.get(i).updateOverlay(timeMs, dtMs);
         }
@@ -1020,8 +1021,7 @@ public class LayoutManagerImpl
 
     // Whether the tab is ready to display or it should be faded in as it loads.
     private static boolean shouldStall(Tab tab) {
-        return (tab.isFrozen() || tab.needsReload())
-                && !NativePage.isNativePageUrl(tab.getUrl(), tab.isIncognito());
+        return (tab.isFrozen() || tab.needsReload()) && !tab.isNativePage();
     }
 
     @Override
@@ -1171,7 +1171,8 @@ public class LayoutManagerImpl
      * @return The layout implementation for the provided type.
      */
     protected Layout getLayoutForType(@LayoutType int layoutType) {
-        // TODO(1248073): Register these types and look them up in a map rather than overriding this
+        // TODO(crbug.com/40790324): Register these types and look them up in a map rather than
+        // overriding this
         //                method in multiple places.
         // Use the static layout by default or if explicitly specified.
         if (layoutType == LayoutType.NONE || layoutType == LayoutType.BROWSING) {
@@ -1205,7 +1206,7 @@ public class LayoutManagerImpl
                 oldLayout.forceAnimationToFinish();
                 oldLayout.detachViews();
 
-                // TODO(crbug.com/1108496): hide oldLayout if it's not hidden.
+                // TODO(crbug.com/40141330): hide oldLayout if it's not hidden.
             }
             layout.contextChanged(mHost.getContext());
             layout.attachViews(mContentContainer);
@@ -1244,7 +1245,7 @@ public class LayoutManagerImpl
                     getActiveLayout().canHostBeFocusable());
             requestUpdate();
 
-            // TODO(crbug.com/1108496): Remove after migrates to
+            // TODO(crbug.com/40141330): Remove after migrates to
             // LayoutStateObserver#onStartedShowing. Notify observers about the new scene.
             for (SceneChangeObserver observer : mSceneChangeObservers) {
                 observer.onSceneChange(getActiveLayout());

@@ -4,8 +4,6 @@
 
 import type * as Protocol from '../../../generated/protocol.js';
 import {
-  assertElement,
-  assertShadowRoot,
   dispatchClickEvent,
   getCleanTextContentFromElements,
   getElementWithinComponent,
@@ -18,8 +16,6 @@ import * as ReportView from '../../../ui/components/report_view/report_view.js';
 import * as ApplicationComponents from './components.js';
 
 const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
-
-const {assert} = chai;
 
 function makeView(origin: string, metadata: Protocol.Storage.SharedStorageMetadata, resetBudget?: () => Promise<void>) {
   return new ApplicationComponents.SharedStorageMetadataView.SharedStorageMetadataView(
@@ -40,7 +36,7 @@ describeWithLocale('SharedStorageMetadataView', () => {
     });
     renderElementIntoDOM(component);
 
-    assertShadowRoot(component.shadowRoot);
+    assert.isNotNull(component.shadowRoot);
     await coordinator.done();
     const report = getElementWithinComponent(component, 'devtools-report', ReportView.ReportView.Report);
 
@@ -57,7 +53,7 @@ describeWithLocale('SharedStorageMetadataView', () => {
     });
     renderElementIntoDOM(component);
 
-    assertShadowRoot(component.shadowRoot);
+    assert.isNotNull(component.shadowRoot);
     await coordinator.done({waitForWork: true});
 
     const keys = getCleanTextContentFromElements(component.shadowRoot, 'devtools-report-key');
@@ -83,7 +79,7 @@ describeWithLocale('SharedStorageMetadataView', () => {
     const component = makeView('', {} as Protocol.Storage.SharedStorageMetadata);
     renderElementIntoDOM(component);
 
-    assertShadowRoot(component.shadowRoot);
+    assert.isNotNull(component.shadowRoot);
     await coordinator.done({waitForWork: true});
 
     const keys = getCleanTextContentFromElements(component.shadowRoot, 'devtools-report-key');
@@ -120,7 +116,7 @@ describeWithLocale('SharedStorageMetadataView', () => {
     await coordinator.done({waitForWork: true});
 
     const resetButtonComponent = component.shadowRoot!.querySelector('devtools-button');
-    assertElement(resetButtonComponent, HTMLElement);
+    assert.instanceOf(resetButtonComponent, HTMLElement);
     dispatchClickEvent(resetButtonComponent);
 
     assert.isTrue(resetBudgetHandlerSpy.calledOnce);

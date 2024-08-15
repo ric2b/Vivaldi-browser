@@ -75,9 +75,11 @@ class Extension;
 //   from |pending_tasks_|.
 //
 // TODO(lazyboy): Clean up queue when extension is unloaded/uninstalled.
-class ServiceWorkerTaskQueue : public KeyedService,
-                               public LazyContextTaskQueue,
-                               public content::ServiceWorkerContextObserver {
+class ServiceWorkerTaskQueue
+    : public KeyedService,
+      public LazyContextTaskQueue,
+      public content::ServiceWorkerContextObserver,
+      public content::ServiceWorkerContextObserverSynchronous {
  public:
   explicit ServiceWorkerTaskQueue(content::BrowserContext* browser_context);
 
@@ -95,9 +97,8 @@ class ServiceWorkerTaskQueue : public KeyedService,
   bool ShouldEnqueueTask(content::BrowserContext* context,
                          const Extension* extension) const override;
 
-  // Returns true if the service worker is blink::EmbeddedWorkerStatus::Running.
-  // This could, once service worker start logic is refactored in
-  // crbug.com/1467015, be refactored into `ShouldEnqueueTask()`.
+  // Returns true if the service worker seems ready to run pending tasks. It
+  // only informs metrics data, not task dispatching logic.
   bool IsReadyToRunTasks(content::BrowserContext* context,
                          const Extension* extension) const override;
 
@@ -153,6 +154,8 @@ class ServiceWorkerTaskQueue : public KeyedService,
   base::Version RetrieveRegisteredServiceWorkerVersion(
       const ExtensionId& extension_id);
 
+  // TODO(crbug.com/334940006): Convert these completely to
+  // ServiceWorkerContextObserverSynchronous.
   // content::ServiceWorkerContextObserver:
   void OnRegistrationStored(int64_t registration_id,
                             const GURL& scope) override;
@@ -160,6 +163,9 @@ class ServiceWorkerTaskQueue : public KeyedService,
                               const GURL& scope,
                               const content::ConsoleMessage& message) override;
   void OnDestruct(content::ServiceWorkerContext* context) override;
+
+  // content::ServiceWorkerContextObserverSynchronous:
+  void OnStopped(int64_t version_id, const GURL& scope) override;
 
   class TestObserver {
    public:
@@ -187,17 +193,33 @@ class ServiceWorkerTaskQueue : public KeyedService,
 
     // Called when SW was re-registered to fix missing registration, and that
     // step finished to mitigate the problem.
-    virtual void RegistrationMismatchMitigated(bool mitigation_succeeded) {}
+    virtual void RegistrationMismatchMitigated(const ExtensionId& extension_id,
+                                               bool mitigation_succeeded) {}
 
     // Called when a service worker is registered for the extension with the
     // associated `extension_id`.
     virtual void DidInitializeServiceWorkerContext(
         const ExtensionId& extension_id) {}
+
+    // Called when a service worker is fully started (DidStartWorkerForScope()
+    // and DidStartServiceWorkerContext() were called) for the extension with
+    // the associated `extension_id`.
+    virtual void DidStartWorker(const ExtensionId& extension_id) {}
+
+    // Called when a service worker registered for the extension with the
+    // `extension_id` has notified the task queue that the render worker thread
+    // is preparing to terminate.
+    virtual void DidStopServiceWorkerContext(const ExtensionId& extension_id) {}
   };
+
+  void StopObservingContextForTest(
+      content::ServiceWorkerContext* service_worker_context);
 
   static void SetObserverForTest(TestObserver* observer);
 
   size_t GetNumPendingTasksForTest(const LazyContextId& lazy_context_id);
+
+  static base::AutoReset<bool> AllowMultipleWorkersPerExtensionForTesting();
 
  private:
   struct SequencedContextId {
@@ -296,7 +318,7 @@ class ServiceWorkerTaskQueue : public KeyedService,
   // A map of Service Worker registrations if this instance is for an
   // off-the-record BrowserContext. These are stored in the ExtensionPrefs
   // for a regular profile.
-  // TODO(crbug.com/939664): Make this better by passing in something that
+  // TODO(crbug.com/40617251): Make this better by passing in something that
   // will manage storing and retrieving this data.
   base::flat_map<ExtensionId, base::Version> off_the_record_registrations_;
 
@@ -310,6 +332,12 @@ class ServiceWorkerTaskQueue : public KeyedService,
   // The key is the extension's ID and the value is the activation token
   // expected for that registration.
   std::map<ExtensionId, base::UnguessableToken> pending_registrations_;
+
+  // TODO(crbug.com/40276609): Do we need to track this by `SequencedContextId`
+  // or could we used `ExtensionId` instead?
+  // The activated extensions that have workers that are registered with the
+  // //content layer.
+  std::set<SequencedContextId> worker_registered_;
 
   base::WeakPtrFactory<ServiceWorkerTaskQueue> weak_factory_{this};
 };

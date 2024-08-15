@@ -6,8 +6,11 @@
 
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/no_destructor.h"
+#include "base/strings/string_split.h"
 #include "chrome/browser/predictors/resource_prefetch_predictor_tables.h"
 #include "net/base/network_change_notifier.h"
+#include "net/base/url_util.h"
 #include "third_party/blink/public/common/features.h"
 
 namespace predictors {
@@ -49,17 +52,17 @@ bool IsValidUrlInLcppStringFrequencyStatData(const std::string& url) {
   return true;
 }
 
-// Returns LCP element locators in the past loads for a given `data`.  The
+// Returns LCP element locators in the past loads for a given `stat`.  The
 // returned LCP element locators are ordered by descending frequency (the
 // most frequent one comes first). If there is no data, it returns an empty
 // vector.
-std::vector<std::string> PredictLcpElementLocators(const LcppData& data) {
+std::vector<std::string> PredictLcpElementLocators(const LcppStat& stat) {
   // We do not use `ConvertToFrequencyStringPair` for the following code
   // because the core part of the code is converting `std::map` to
   // `std::vector<std::pair<double, std::string>>`, which we need the different
   // logic due to the `bytes` protobuf type.
   const auto& buckets =
-      data.lcpp_stat().lcp_element_locator_stat().lcp_element_locator_buckets();
+      stat.lcp_element_locator_stat().lcp_element_locator_buckets();
   std::vector<std::pair<double, std::string>>
       lcp_element_locators_with_frequency;
   lcp_element_locators_with_frequency.reserve(buckets.size());
@@ -80,13 +83,13 @@ std::vector<std::string> PredictLcpElementLocators(const LcppData& data) {
   return lcp_element_locators;
 }
 
-// Returns LCP influencer scripts from past loads for a given `data`.
+// Returns LCP influencer scripts from past loads for a given `stat`.
 // The returned script urls are ordered by descending frequency (the most
 // frequent one comes first). If there is no data, it returns an empty
 // vector.
-std::vector<GURL> PredictLcpInfluencerScripts(const LcppData& data) {
+std::vector<GURL> PredictLcpInfluencerScripts(const LcppStat& stat) {
   std::vector<std::pair<double, std::string>> lcp_script_urls_with_frequency =
-      ConvertToFrequencyStringPair(data.lcpp_stat().lcp_script_url_stat());
+      ConvertToFrequencyStringPair(stat.lcp_script_url_stat());
 
   std::vector<GURL> lcp_script_urls;
   lcp_script_urls.reserve(lcp_script_urls_with_frequency.size());
@@ -121,11 +124,12 @@ double SumOfFrequency(const std::map<std::string, double>& histogram,
 // // Instantiate.
 // LcppFrequencyStatDataUpdater updater =
 // LcppFrequencyStatDataUpdater::FromLcppStringFrequencyStatData(
-//     config, *data.mutable_lcpp_stat()->mutable_lcp_script_url_stat());
+//    sliding_window_size, max_histogram_buckets,
+//    *stat.mutable_lcp_script_url_stat());
 // // Update.
 // updater.Update(url);
 // // Extract.
-// *data.mutable_lcpp_stat()->mutable_lcp_script_url_stat() =
+// *stat.mutable_lcp_script_url_stat() =
 //     updater.ToLcppStringFrequencyStatData();
 // ```
 //
@@ -202,14 +206,15 @@ class LcppFrequencyStatDataUpdater {
 
   static std::unique_ptr<LcppFrequencyStatDataUpdater>
   FromLcppStringFrequencyStatData(
-      const LoadingPredictorConfig& config,
+      size_t sliding_window_size,
+      size_t max_histogram_buckets,
       const LcppStringFrequencyStatData& lcpp_stat_data) {
     // Prepare working variables (histogram and other_bucket_frequency) from
     // proto. If the data is corrupted, the previous data will be cleared.
     bool corrupted = false;
     double other_bucket_frequency = lcpp_stat_data.other_bucket_frequency();
-    if (other_bucket_frequency < 0 || lcpp_stat_data.main_buckets().size() >
-                                          config.max_lcpp_histogram_buckets) {
+    if (other_bucket_frequency < 0 ||
+        lcpp_stat_data.main_buckets().size() > max_histogram_buckets) {
       corrupted = true;
     }
     std::map<std::string, double> histogram;
@@ -225,7 +230,8 @@ class LcppFrequencyStatDataUpdater {
       histogram.clear();
     }
     return base::WrapUnique(new LcppFrequencyStatDataUpdater(
-        config, histogram, other_bucket_frequency));
+        sliding_window_size, max_histogram_buckets, histogram,
+        other_bucket_frequency));
   }
 
   static std::unique_ptr<LcppFrequencyStatDataUpdater>
@@ -257,7 +263,8 @@ class LcppFrequencyStatDataUpdater {
       histogram.clear();
     }
     return base::WrapUnique(new LcppFrequencyStatDataUpdater(
-        config, histogram, other_bucket_frequency));
+        config.lcpp_histogram_sliding_window_size,
+        config.max_lcpp_histogram_buckets, histogram, other_bucket_frequency));
   }
 
   void Update(const std::string& new_entry) {
@@ -305,6 +312,7 @@ class LcppFrequencyStatDataUpdater {
                              return lhs.second < rhs.second;
                            });
       other_bucket_frequency_ += least_frequent_bucket->second;
+      dropped_entries_.push_back(least_frequent_bucket->first);
       histogram_.erase(least_frequent_bucket);
     }
     has_updated_ = true;
@@ -336,15 +344,19 @@ class LcppFrequencyStatDataUpdater {
   }
 
   bool has_updated() const { return has_updated_; }
+  const std::vector<std::string>& dropped_entries() const {
+    return dropped_entries_;
+  }
 
   size_t num_matched() const { return num_matched_; }
 
  private:
-  LcppFrequencyStatDataUpdater(const LoadingPredictorConfig& config,
+  LcppFrequencyStatDataUpdater(size_t sliding_window_size,
+                               size_t max_histogram_buckets,
                                std::map<std::string, double> histogram,
                                double other_bucket_frequency)
-      : sliding_window_size_(config.lcpp_histogram_sliding_window_size),
-        max_histogram_buckets_(config.max_lcpp_histogram_buckets),
+      : sliding_window_size_(sliding_window_size),
+        max_histogram_buckets_(max_histogram_buckets),
         histogram_(histogram),
         other_bucket_frequency_(other_bucket_frequency) {}
 
@@ -354,11 +366,12 @@ class LcppFrequencyStatDataUpdater {
   double other_bucket_frequency_;
   bool has_updated_ = false;
   size_t num_matched_ = 0;
+  std::vector<std::string> dropped_entries_;
 };
 
 bool RecordLcpElementLocatorHistogram(const LoadingPredictorConfig& config,
                                       const std::string& lcp_element_locator,
-                                      LcppData& data) {
+                                      LcppStat& stat) {
   if (lcp_element_locator.size() >
           ResourcePrefetchPredictorTables::kMaxStringLength ||
       lcp_element_locator.empty()) {
@@ -366,23 +379,23 @@ bool RecordLcpElementLocatorHistogram(const LoadingPredictorConfig& config,
   }
   std::unique_ptr<LcppFrequencyStatDataUpdater> updater =
       LcppFrequencyStatDataUpdater::FromLcpElementLocatorStat(
-          config, data.mutable_lcpp_stat()->lcp_element_locator_stat());
+          config, stat.lcp_element_locator_stat());
   CHECK(updater);
   updater->Update(lcp_element_locator);
-  *data.mutable_lcpp_stat()->mutable_lcp_element_locator_stat() =
-      updater->ToLcpElementLocatorStat();
+  *stat.mutable_lcp_element_locator_stat() = updater->ToLcpElementLocatorStat();
   return true;
 }
 
 bool RecordLcpInfluencerScriptUrlsHistogram(
     const LoadingPredictorConfig& config,
     const std::vector<GURL>& lcp_influencer_scripts,
-    LcppData& data) {
+    LcppStat& stat) {
   // Contrasting to LCPP Element locator, there are multiple LCP dependency URLs
   // for an origin. Record each in a separate histogram.
   std::unique_ptr<LcppFrequencyStatDataUpdater> updater =
       LcppFrequencyStatDataUpdater::FromLcppStringFrequencyStatData(
-          config, data.mutable_lcpp_stat()->lcp_script_url_stat());
+          config.lcpp_histogram_sliding_window_size,
+          config.max_lcpp_histogram_buckets, stat.lcp_script_url_stat());
   CHECK(updater);
   for (auto& script_url : lcp_influencer_scripts) {
     const auto& lcpp_script = script_url.spec();
@@ -391,19 +404,20 @@ bool RecordLcpInfluencerScriptUrlsHistogram(
     }
     updater->Update(lcpp_script);
   }
-  *data.mutable_lcpp_stat()->mutable_lcp_script_url_stat() =
+  *stat.mutable_lcp_script_url_stat() =
       updater->ToLcppStringFrequencyStatData();
   return updater->has_updated();
 }
 
 bool RecordPreconnectOriginsHistogram(const LoadingPredictorConfig& config,
                                       const std::vector<GURL>& origins,
-                                      LcppData& data) {
+                                      LcppStat& stat) {
   // There could be multiple preconnect origins. Record each in a separate
   // histogram.
   std::unique_ptr<LcppFrequencyStatDataUpdater> updater =
       LcppFrequencyStatDataUpdater::FromLcppStringFrequencyStatData(
-          config, data.mutable_lcpp_stat()->preconnect_origin_stat());
+          config.lcpp_histogram_sliding_window_size,
+          config.max_lcpp_histogram_buckets, stat.preconnect_origin_stat());
   CHECK(updater);
   for (auto& origin : origins) {
     const auto& origin_spec = origin.spec();
@@ -412,20 +426,21 @@ bool RecordPreconnectOriginsHistogram(const LoadingPredictorConfig& config,
     }
     updater->Update(origin_spec);
   }
-  *data.mutable_lcpp_stat()->mutable_preconnect_origin_stat() =
+  *stat.mutable_preconnect_origin_stat() =
       updater->ToLcppStringFrequencyStatData();
   return updater->has_updated();
 }
 
 bool RecordFetchedFontUrlsHistogram(const LoadingPredictorConfig& config,
                                     const std::vector<GURL>& fetched_font_urls,
-                                    LcppData& data) {
+                                    LcppStat& stat) {
   // Due to LCPP data structure, histogram is saved per origin.
   // Therefore, it sounds better to have this as a histogram instead of
   // a static data.
   std::unique_ptr<LcppFrequencyStatDataUpdater> updater =
       LcppFrequencyStatDataUpdater::FromLcppStringFrequencyStatData(
-          config, data.mutable_lcpp_stat()->fetched_font_url_stat());
+          config.lcpp_histogram_sliding_window_size,
+          config.max_lcpp_histogram_buckets, stat.fetched_font_url_stat());
   std::set<GURL> used_urls;
   size_t max_url_length = 0;
   for (const auto& url : fetched_font_urls) {
@@ -440,7 +455,7 @@ bool RecordFetchedFontUrlsHistogram(const LoadingPredictorConfig& config,
     }
     updater->Update(font_spec);
   }
-  *data.mutable_lcpp_stat()->mutable_fetched_font_url_stat() =
+  *stat.mutable_fetched_font_url_stat() =
       updater->ToLcppStringFrequencyStatData();
 
   base::UmaHistogramCounts10000(
@@ -452,6 +467,9 @@ bool RecordFetchedFontUrlsHistogram(const LoadingPredictorConfig& config,
       "Blink.LCPP.RecordedFontUrlMatchCount",
       base::checked_cast<int>(updater->num_matched()));
   if (!fetched_font_urls.empty()) {
+    base::UmaHistogramCounts10000(
+        "Blink.LCPP.RecordedFontUrlMatchCountForPagesWithFonts",
+        base::checked_cast<int>(updater->num_matched()));
     base::UmaHistogramPercentage(
         "Blink.LCPP.RecordedFontUrlPredictionMatchPercent",
         base::checked_cast<int>(100 * updater->num_matched() /
@@ -464,7 +482,7 @@ bool RecordFetchedFontUrlsHistogram(const LoadingPredictorConfig& config,
 bool RecordFetchedSubresourceUrlsHistogram(
     const LoadingPredictorConfig& config,
     const std::map<GURL, base::TimeDelta>& fetched_subresource_urls,
-    LcppData& data) {
+    LcppStat& stat) {
   // `time_and_urls` keeps URLs (and its fetch timings) in a reversed
   // event order. The URL count that can be stored in the database is
   // limited. By processing recently fetched URLs first, we can keep the
@@ -481,14 +499,16 @@ bool RecordFetchedSubresourceUrlsHistogram(
 
   std::unique_ptr<LcppFrequencyStatDataUpdater> updater =
       LcppFrequencyStatDataUpdater::FromLcppStringFrequencyStatData(
-          config, data.mutable_lcpp_stat()->fetched_subresource_url_stat());
+          config.lcpp_histogram_sliding_window_size,
+          config.max_lcpp_histogram_buckets,
+          stat.fetched_subresource_url_stat());
   for (const auto& [resource_load_start, subresource_url] : time_and_urls) {
     if (!IsValidUrlInLcppStringFrequencyStatData(subresource_url)) {
       continue;
     }
     updater->Update(subresource_url);
   }
-  *data.mutable_lcpp_stat()->mutable_fetched_subresource_url_stat() =
+  *stat.mutable_fetched_subresource_url_stat() =
       updater->ToLcppStringFrequencyStatData();
   return updater->has_updated();
 }
@@ -508,6 +528,26 @@ bool IsValidLcpElementLocatorHistogram(
   return true;
 }
 
+bool RecordUnusedPreloadUrlsHistogram(const LoadingPredictorConfig& config,
+                                      const std::vector<GURL>& unused_preloads,
+                                      LcppStat& stat) {
+  std::unique_ptr<LcppFrequencyStatDataUpdater> updater =
+      LcppFrequencyStatDataUpdater::FromLcppStringFrequencyStatData(
+          config.lcpp_histogram_sliding_window_size,
+          config.max_lcpp_histogram_buckets, stat.unused_preload_stat());
+  CHECK(updater);
+  for (auto& url : unused_preloads) {
+    if (!IsValidUrlInLcppStringFrequencyStatData(url.spec())) {
+      continue;
+    }
+    updater->Update(url.spec());
+  }
+  *stat.mutable_unused_preload_stat() =
+      updater->ToLcppStringFrequencyStatData();
+
+  return updater->has_updated();
+}
+
 bool IsValidLcpUrlsHistogram(
     const LcppStringFrequencyStatData& lcpp_stat_data) {
   if (lcpp_stat_data.other_bucket_frequency() < 0.0) {
@@ -524,34 +564,127 @@ bool IsValidLcpUrlsHistogram(
   return true;
 }
 
+size_t GetLCPPMultipleKeyMaxPathLength() {
+  static const size_t max_length = base::checked_cast<size_t>(
+      blink::features::kLCPPMultipleKeyMaxPathLength.Get());
+  return max_length;
+}
+
+bool IsKeyLengthValidForMultipleKey(const std::string& host,
+                                    const std::string& first_level_path) {
+  CHECK(base::FeatureList::IsEnabled(blink::features::kLCPPMultipleKey));
+  // The key must not be longer than `kMaxStringLength`.
+  // Note that we confirmed that url.host() is less than the limit in
+  // `IsURLValidForLcpp()`.
+  return host.length() + first_level_path.length() <=
+         ResourcePrefetchPredictorTables::kMaxStringLength;
+}
+
+bool IsLcppMultipleKeyKeyStatEnabled() {
+  return base::FeatureList::IsEnabled(blink::features::kLCPPMultipleKey) &&
+         (blink::features::kLcppMultipleKeyType.Get() ==
+          blink::features::LcppMultipleKeyTypes::kLcppKeyStat);
+}
+
+std::string GetLCPPDatabaseKey(const GURL& url) {
+  CHECK(IsURLValidForLcpp(url));
+
+  if (!base::FeatureList::IsEnabled(blink::features::kLCPPMultipleKey) ||
+      IsLcppMultipleKeyKeyStatEnabled()) {
+    return url.host();
+  }
+
+  const std::string first_level_path = GetFirstLevelPath(url);
+  if (!IsKeyLengthValidForMultipleKey(url.host(), first_level_path)) {
+    return url.host();
+  }
+  return url.host() + first_level_path;
+}
+
+// Returns LcppStat from `data`.
+// If LcppMultipleKeyKeyStat is enabled, this function can modify `data`
+// to emplace new LcppStat. `data_updated` is true on the case and
+// the caller should update the stored data.
+// TODO(yoichio): Updating data in "Get" function sounds weird. It could be
+// nice if we could restructure the functions or rename them.
+LcppStat* GetLcppStatToUpdate(const LoadingPredictorConfig& config,
+                              const GURL& url,
+                              LcppData& data,
+                              bool& data_updated) {
+  if (!IsLcppMultipleKeyKeyStatEnabled()) {
+    return data.mutable_lcpp_stat();
+  }
+
+  const std::string first_level_path = GetFirstLevelPath(url);
+  if (first_level_path.empty() ||
+      !IsKeyLengthValidForMultipleKey(url.host(), first_level_path)) {
+    return data.mutable_lcpp_stat();
+  }
+
+  LcppKeyStat& key_stat = *data.mutable_lcpp_key_stat();
+  auto& lcpp_stat_map = *key_stat.mutable_lcpp_stat_map();
+
+  std::optional<std::string> dropped_entry;
+  UpdateLcppStringFrequencyStatData(
+      config.lcpp_multiple_key_histogram_sliding_window_size,
+      config.lcpp_multiple_key_max_histogram_buckets, first_level_path,
+      *key_stat.mutable_key_frequency_stat(), dropped_entry);
+  // Since UpdateLcppStringFrequencyStatData modifies a part of `data`,
+  // caller should update the stored data if the function is called.
+  data_updated = true;
+  if (dropped_entry) {
+    if (*dropped_entry == first_level_path) {
+      // This means `key_stat` is already full of well-used other
+      // first-level-path entries.
+      // However since the frequency map is updated, we need to update
+      // root `data` too via `data_updated` flag.
+      return nullptr;
+    } else {
+      lcpp_stat_map.erase(*dropped_entry);
+    }
+  }
+  return &lcpp_stat_map[first_level_path];
+}
+
+bool IsLCPPFontPrefetchExcludedHost(const GURL& url) {
+  static const base::NoDestructor<base::flat_set<std::string>> excluded_hosts(
+      base::SplitString(
+          blink::features::kLCPPFontURLPredictorExcludedHosts.Get(), ",",
+          base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY));
+  return base::Contains(*excluded_hosts, url.host());
+}
+
 }  // namespace
 
 std::optional<blink::mojom::LCPCriticalPathPredictorNavigationTimeHint>
-ConvertLcppDataToLCPCriticalPathPredictorNavigationTimeHint(
-    const LcppData& lcpp_data) {
+ConvertLcppStatToLCPCriticalPathPredictorNavigationTimeHint(
+    const LcppStat& lcpp_stat) {
   std::vector<std::string> lcp_element_locators =
-      PredictLcpElementLocators(lcpp_data);
+      PredictLcpElementLocators(lcpp_stat);
   std::vector<GURL> lcp_influencer_scripts =
-      PredictLcpInfluencerScripts(lcpp_data);
-  std::vector<GURL> fetched_fonts = PredictFetchedFontUrls(lcpp_data);
+      PredictLcpInfluencerScripts(lcpp_stat);
+  std::vector<GURL> fetched_fonts = PredictFetchedFontUrls(lcpp_stat);
   std::vector<GURL> preconnect_origins =
-      PredictPreconnectableOrigins(lcpp_data);
+      PredictPreconnectableOrigins(lcpp_stat);
+  std::vector<GURL> unused_preloads = PredictUnusedPreloads(lcpp_stat);
 
   if (!lcp_element_locators.empty() || !lcp_influencer_scripts.empty() ||
-      !fetched_fonts.empty() || !preconnect_origins.empty()) {
+      !fetched_fonts.empty() || !preconnect_origins.empty() ||
+      !unused_preloads.empty()) {
     return blink::mojom::LCPCriticalPathPredictorNavigationTimeHint(
         std::move(lcp_element_locators), std::move(lcp_influencer_scripts),
-        std::move(fetched_fonts), std::move(preconnect_origins));
+        std::move(fetched_fonts), std::move(preconnect_origins),
+        std::move(unused_preloads));
   }
   return std::nullopt;
 }
 
-std::vector<GURL> PredictFetchedFontUrls(const LcppData& data) {
+std::vector<GURL> PredictFetchedFontUrls(const LcppStat& stat) {
   if (!base::FeatureList::IsEnabled(blink::features::kLCPPFontURLPredictor)) {
     return std::vector<GURL>();
   }
   std::vector<std::pair<double, std::string>> font_urls_with_frequency =
-      ConvertToFrequencyStringPair(data.lcpp_stat().fetched_font_url_stat());
+      ConvertToFrequencyStringPair(stat.fetched_font_url_stat());
 
   const double threshold =
       blink::features::kLCPPFontURLPredictorFrequencyThreshold.Get();
@@ -607,10 +740,10 @@ std::vector<GURL> PredictFetchedFontUrls(const LcppData& data) {
   return font_urls;
 }
 
-std::vector<GURL> PredictPreconnectableOrigins(const LcppData& data) {
+std::vector<GURL> PredictPreconnectableOrigins(const LcppStat& stat) {
   std::vector<std::pair<double, std::string>>
-      preconnect_origins_with_frequency = ConvertToFrequencyStringPair(
-          data.lcpp_stat().preconnect_origin_stat());
+      preconnect_origins_with_frequency =
+          ConvertToFrequencyStringPair(stat.preconnect_origin_stat());
 
   const double frequency_threshold =
       blink::features::kLCPPAutoPreconnectFrequencyThreshold.Get();
@@ -641,10 +774,10 @@ std::vector<GURL> PredictPreconnectableOrigins(const LcppData& data) {
   return preconnect_origins;
 }
 
-std::vector<GURL> PredictFetchedSubresourceUrls(const LcppData& data) {
+std::vector<GURL> PredictFetchedSubresourceUrls(const LcppStat& stat) {
   std::vector<GURL> subresource_urls;
-  for (const auto& [frequency, subresource_url] : ConvertToFrequencyStringPair(
-           data.lcpp_stat().fetched_subresource_url_stat())) {
+  for (const auto& [frequency, subresource_url] :
+       ConvertToFrequencyStringPair(stat.fetched_subresource_url_stat())) {
     GURL parsed_url(subresource_url);
     if (!parsed_url.is_valid() || !parsed_url.SchemeIsHTTPOrHTTPS()) {
       continue;
@@ -654,26 +787,90 @@ std::vector<GURL> PredictFetchedSubresourceUrls(const LcppData& data) {
   return subresource_urls;
 }
 
+std::vector<GURL> PredictUnusedPreloads(const LcppStat& stat) {
+  const double frequency_threshold =
+      blink::features::kLCPPDeferUnusedPreloadFrequencyThreshold.Get();
+  std::vector<GURL> unused_preloads;
+  if (!base::FeatureList::IsEnabled(blink::features::kLCPPDeferUnusedPreload)) {
+    return unused_preloads;
+  }
+
+  for (const auto& [frequency, url] :
+       ConvertToFrequencyStringPair(stat.unused_preload_stat())) {
+    // The frequencies are reverse sorted by `ConvertToFrequencyStringPair`.
+    if (frequency < frequency_threshold) {
+      break;
+    }
+    GURL parsed_url(url);
+    if (!parsed_url.is_valid() || !parsed_url.SchemeIsHTTPOrHTTPS()) {
+      continue;
+    }
+    unused_preloads.push_back(std::move(parsed_url));
+  }
+  return unused_preloads;
+}
+
 LcppDataInputs::LcppDataInputs() = default;
 LcppDataInputs::~LcppDataInputs() = default;
 
-bool UpdateLcppDataWithLcppDataInputs(const LoadingPredictorConfig& config,
+bool UpdateLcppStatWithLcppDataInputs(const LoadingPredictorConfig& config,
                                       const LcppDataInputs& inputs,
-                                      LcppData& data) {
+                                      LcppStat& stat) {
   bool data_updated = false;
   data_updated |= RecordLcpElementLocatorHistogram(
-      config, inputs.lcp_element_locator, data);
+      config, inputs.lcp_element_locator, stat);
   data_updated |= RecordLcpInfluencerScriptUrlsHistogram(
-      config, inputs.lcp_influencer_scripts, data);
+      config, inputs.lcp_influencer_scripts, stat);
   data_updated |=
-      RecordFetchedFontUrlsHistogram(config, inputs.font_urls, data);
+      RecordFetchedFontUrlsHistogram(config, inputs.font_urls, stat);
   data_updated |= RecordFetchedSubresourceUrlsHistogram(
-      config, inputs.subresource_urls, data);
+      config, inputs.subresource_urls, stat);
   data_updated |=
-      RecordPreconnectOriginsHistogram(config, inputs.preconnect_origins, data);
+      RecordPreconnectOriginsHistogram(config, inputs.preconnect_origins, stat);
+  data_updated |= RecordUnusedPreloadUrlsHistogram(
+      config, inputs.unused_preload_resources, stat);
   base::UmaHistogramCounts10000("Blink.LCPP.ReportedFontCount",
                                 base::checked_cast<int>(inputs.font_url_count));
+  if (inputs.font_url_count > 0 && inputs.font_urls.size() > 0) {
+    base::UmaHistogramCounts10000(
+        "Blink.LCPP.RecordedFontUrlHitCountForPagesWithFonts",
+        base::checked_cast<int>(inputs.font_url_hit_count));
+    base::UmaHistogramPercentage(
+        "Blink.LCPP.RecordedFontUrlPredictionHitPercent",
+        base::checked_cast<int>(100 * inputs.font_url_hit_count /
+                                inputs.font_url_count));
+    base::UmaHistogramPercentage(
+        "Blink.LCPP.RecordedFontUrlPredictionHitPercentInRecordedFonts",
+        base::checked_cast<int>(100 * inputs.font_url_hit_count /
+                                inputs.font_urls.size()));
+    base::UmaHistogramCounts10000(
+        "Blink.LCPP.RecordedFontUrlReenterCountForPagesWithFonts",
+        base::checked_cast<int>(inputs.font_url_reenter_count));
+    base::UmaHistogramPercentage(
+        "Blink.LCPP.RecordedFontUrlReenterPercentInRecordedFonts",
+        base::checked_cast<int>(100 * inputs.font_url_reenter_count /
+                                inputs.font_urls.size()));
+  }
   return data_updated;
+}
+
+void UpdateLcppStringFrequencyStatData(
+    size_t sliding_window_size,
+    size_t max_histogram_buckets,
+    const std::string& new_entry,
+    LcppStringFrequencyStatData& lcpp_stat_data,
+    std::optional<std::string>& dropped_entry) {
+  dropped_entry = std::nullopt;
+  std::unique_ptr<LcppFrequencyStatDataUpdater> updater =
+      LcppFrequencyStatDataUpdater::FromLcppStringFrequencyStatData(
+          sliding_window_size, max_histogram_buckets, lcpp_stat_data);
+  updater->Update(new_entry);
+  lcpp_stat_data = updater->ToLcppStringFrequencyStatData();
+  if (auto dropped_entries = updater->dropped_entries();
+      !dropped_entries.empty()) {
+    CHECK_EQ(dropped_entries.size(), 1U);
+    dropped_entry = dropped_entries.back();
+  }
 }
 
 bool IsValidLcppStat(const LcppStat& lcpp_stat) {
@@ -698,7 +895,154 @@ bool IsValidLcppStat(const LcppStat& lcpp_stat) {
       !IsValidLcpUrlsHistogram(lcpp_stat.preconnect_origin_stat())) {
     return false;
   }
+  if (lcpp_stat.has_unused_preload_stat() &&
+      !IsValidLcpUrlsHistogram(lcpp_stat.unused_preload_stat())) {
+    return false;
+  }
   return true;
+}
+
+bool IsURLValidForLcpp(const GURL& url) {
+  return url.is_valid() && !url.host().empty() && !net::IsLocalhost(url) &&
+         url.SchemeIsHTTPOrHTTPS() &&
+         url.host().size() <= ResourcePrefetchPredictorTables::kMaxStringLength;
+}
+
+std::string GetFirstLevelPath(const GURL& url) {
+  CHECK(IsURLValidForLcpp(url));
+
+  const std::string path = url.path();
+  if (path.length() < 2) {  // path == "/"
+    return std::string();
+  }
+  // Say path is "/foo/baz", find second '/' to cut out the first level path
+  // "/foo".
+  const size_t max_path_length = GetLCPPMultipleKeyMaxPathLength();
+  // Say `max_path_length` is 6, create a string view "/abcdef". If 'f' is
+  // slash, "/abcde" is the first level path but if 'f' is not, the path is
+  // longer than `max_path_length`.
+  std::string_view path_view(path.data(),
+                             std::min(path.length(), max_path_length + 1));
+  const size_t second_slash_pos = path_view.find('/', 1);
+  size_t first_level_path_length;
+  if (second_slash_pos == std::string::npos) {
+    if (url.ExtractFileName().find('.') != std::string::npos ||
+        path_view.length() == max_path_length + 1) {
+      // Assume having a file extension is a file and
+      // path should not be a file name nor exceed the length limit
+      return std::string();
+    }
+    first_level_path_length = path_view.length();
+  } else {
+    first_level_path_length = second_slash_pos;
+  }
+  return url.path().substr(0, first_level_path_length);
+}
+
+LcppDataMap::LcppDataMap(ResourcePrefetchPredictorTables& tables,
+                         const LoadingPredictorConfig& config)
+    : config_(config),
+      data_map_(&tables,
+                tables.lcpp_table(),
+                config.max_hosts_to_track_for_lcpp,
+                base::Seconds(config.flush_data_to_disk_delay_seconds)) {}
+
+LcppDataMap::~LcppDataMap() = default;
+
+void LcppDataMap::InitializeOnDBSequence() {
+  data_map_.InitializeOnDBSequence();
+}
+
+// Record LCP element locators after a page has finished loading and LCP has
+// been determined.
+bool LcppDataMap::LearnLcpp(const GURL& url, const LcppDataInputs& inputs) {
+  if (!IsURLValidForLcpp(url)) {
+    return false;
+  }
+  const std::string key = GetLCPPDatabaseKey(url);
+  LcppData lcpp_data;
+  bool exists = data_map_.TryGetData(key, &lcpp_data);
+  lcpp_data.set_last_visit_time(
+      base::Time::Now().ToDeltaSinceWindowsEpoch().InMicroseconds());
+
+  if (!exists) {
+    lcpp_data.set_host(key);
+  }
+
+  if (!IsLcppMultipleKeyKeyStatEnabled()) {
+    lcpp_data.mutable_lcpp_key_stat()->Clear();
+  }
+
+  bool data_updated = false;
+  LcppStat* lcpp_stat =
+      GetLcppStatToUpdate(config_, url, lcpp_data, data_updated);
+  if (lcpp_stat) {
+    if (!IsValidLcppStat(*lcpp_stat)) {
+      lcpp_stat->Clear();
+      base::UmaHistogramBoolean("LoadingPredictor.LcppStatCorruptedAtLearnTime",
+                                true);
+    }
+    data_updated |=
+        UpdateLcppStatWithLcppDataInputs(config_, inputs, *lcpp_stat);
+    if (IsLCPPFontPrefetchExcludedHost(url) &&
+        lcpp_stat->has_fetched_font_url_stat()) {
+      lcpp_stat->clear_fetched_font_url_stat();
+      data_updated = true;
+    }
+    DCHECK(IsValidLcppStat(*lcpp_stat));
+  }
+  if (data_updated) {
+    data_map_.UpdateData(key, lcpp_data);
+  }
+  return data_updated;
+}
+
+// Returns LcppStat for the `url`, or std::nullopt on failure.
+std::optional<LcppStat> LcppDataMap::GetLcppStat(const GURL& url) const {
+  if (!IsURLValidForLcpp(url)) {
+    return std::nullopt;
+  }
+  const std::string key = GetLCPPDatabaseKey(url);
+
+  LcppData data;
+  if (!data_map_.TryGetData(key, &data)) {
+    return std::nullopt;
+  }
+  if (IsLcppMultipleKeyKeyStatEnabled()) {
+    const std::string first_level_path = GetFirstLevelPath(url);
+    if (first_level_path.empty() ||
+        !IsKeyLengthValidForMultipleKey(url.host(), first_level_path)) {
+      return data.lcpp_stat();
+    }
+    const auto& lcpp_stat_map = data.lcpp_key_stat().lcpp_stat_map();
+    if (auto flp_stat = lcpp_stat_map.find(first_level_path);
+        flp_stat != lcpp_stat_map.end()) {
+      return flp_stat->second;
+    }
+    return std::nullopt;
+  }
+  return data.lcpp_stat();
+}
+
+void LcppDataMap::DeleteUrls(const std::vector<GURL>& urls) {
+  std::vector<std::string> keys_to_delete;
+  for (const GURL& url : urls) {
+    if (!IsURLValidForLcpp(url)) {
+      continue;
+    }
+
+    const std::string key = GetLCPPDatabaseKey(url);
+    keys_to_delete.emplace_back(key);
+  }
+  data_map_.DeleteData(keys_to_delete);
+}
+
+void LcppDataMap::DeleteAllData() {
+  data_map_.DeleteAllData();
+}
+
+const std::map<std::string, LcppData>& LcppDataMap::GetAllCachedForTesting() {
+  return data_map_.GetAllCached();
 }
 
 }  // namespace predictors

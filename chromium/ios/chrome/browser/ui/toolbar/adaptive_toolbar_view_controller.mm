@@ -242,11 +242,16 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
     [self updateLocationBarHeightForFullscreenProgress:
               self.previousFullscreenProgress];
   }
+
+  // Vivaldi
+  [self.vivaldiDelegate traitCollectionDidChange:previousTraitCollection];
+  // End Vivaldi
+
 }
 
 - (void)viewDidLayoutSubviews {
   [super viewDidLayoutSubviews];
-  // TODO(crbug.com/882723): Remove this call once iPad trait collection
+  // TODO(crbug.com/41413004): Remove this call once iPad trait collection
   // override issue is fixed.
   [self updateAllButtonsVisibility];
 }
@@ -278,7 +283,6 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
     // centered.
     [locationBarViewController.view updateConstraintsIfNeeded];
   } else {
-    CHECK(IsBottomOmniboxSteadyStateEnabled());
     [self.view setLocationBarView:nil];
     self.view.locationBarContainer.hidden = YES;
   }

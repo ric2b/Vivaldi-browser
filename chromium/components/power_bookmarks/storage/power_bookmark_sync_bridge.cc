@@ -6,6 +6,7 @@
 
 #include "components/power_bookmarks/common/power.h"
 #include "components/power_bookmarks/storage/power_bookmark_sync_metadata_database.h"
+#include "components/sync/base/deletion_origin.h"
 #include "components/sync/model/in_memory_metadata_change_list.h"
 #include "components/sync/model/metadata_batch.h"
 #include "components/sync/model/metadata_change_list.h"
@@ -108,13 +109,13 @@ void PowerBookmarkSyncBridge::NotifySyncForDeletion(const std::string& guid) {
   if (!change_processor()->IsTrackingMetadata()) {
     return;
   }
-  change_processor()->Delete(guid,
+  change_processor()->Delete(guid, syncer::DeletionOrigin::Unspecified(),
                              CreateMetadataChangeListInTransaction().get());
 }
 
 std::unique_ptr<syncer::MetadataChangeList>
 PowerBookmarkSyncBridge::CreateMetadataChangeListInTransaction() {
-  // TODO(crbug.com/1392502): Add a DCHECK to make sure this is called inside a
+  // TODO(crbug.com/40247772): Add a DCHECK to make sure this is called inside a
   // transaction.
   return std::make_unique<syncer::SyncMetadataStoreChangeList>(
       meta_db_, syncer::POWER_BOOKMARK,

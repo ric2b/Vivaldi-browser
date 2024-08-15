@@ -2,14 +2,20 @@
 
 #import "ios/ui/settings/tabs/vivaldi_tab_settings_coordinator.h"
 
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/tabs/model/inactive_tabs/features.h"
+#import "ios/chrome/browser/ui/settings/tabs/inactive_tabs/inactive_tabs_settings_coordinator.h"
 #import "ios/ui/settings/tabs/vivaldi_tab_settings_mediator.h"
 #import "ios/ui/settings/tabs/vivaldi_tab_settings_swift.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-@interface VivaldiTabSettingsCoordinator ()
+@interface VivaldiTabSettingsCoordinator () {
+  // Coordinator for the inactive tabs settings.
+  InactiveTabsSettingsCoordinator* _inactiveTabsSettingsCoordinator;
+}
 @property(nonatomic, strong) VivaldiTabsSettingsViewProvider* viewProvider;
 // View controller for the Address bar setting.
 @property(nonatomic, strong) UIViewController* viewController;
@@ -39,7 +45,13 @@
 
 - (void)start {
   self.viewProvider = [[VivaldiTabsSettingsViewProvider alloc] init];
-  self.viewController = [VivaldiTabsSettingsViewProvider makeViewController];
+
+  self.viewController =
+      [VivaldiTabsSettingsViewProvider
+          makeViewControllerWithOnInactiveTabsSelectionTap:^{
+      [self showInactiveTabsSettings];
+  }];
+
   self.viewController.title =
       l10n_util::GetNSString(IDS_IOS_PREFS_VIVALDI_TABS);
   self.viewController.navigationItem.largeTitleDisplayMode =
@@ -47,10 +59,19 @@
 
   self.mediator = [[VivaldiTabSettingsMediator alloc]
       initWithOriginalPrefService:self.browser->GetBrowserState()
-                                      ->GetOriginalChromeBrowserState()
-                                      ->GetPrefs()];
+                                 ->GetOriginalChromeBrowserState()
+                                 ->GetPrefs()
+                 localPrefService:GetApplicationContext()->GetLocalState()];
   self.mediator.consumer = self.viewProvider;
   self.viewProvider.settingsStateConsumer = self.mediator;
+
+  // Add Done button
+  UIBarButtonItem* doneItem =
+    [[UIBarButtonItem alloc]
+        initWithBarButtonSystemItem:UIBarButtonSystemItemDone
+                             target:self
+                             action:@selector(handleDoneButtonTap)];
+  self.viewController.navigationItem.rightBarButtonItem = doneItem;
 
   [self.baseNavigationController pushViewController:self.viewController
                                            animated:YES];
@@ -62,6 +83,25 @@
   [self.mediator disconnect];
   self.mediator = nil;
   self.viewProvider = nil;
+
+  [_inactiveTabsSettingsCoordinator stop];
+  _inactiveTabsSettingsCoordinator = nil;
+}
+
+#pragma mark - Private
+- (void)showInactiveTabsSettings {
+  if (!IsInactiveTabsAvailable())
+    return;
+  _inactiveTabsSettingsCoordinator = [[InactiveTabsSettingsCoordinator alloc]
+      initWithBaseNavigationController:self.baseNavigationController
+                               browser:self.browser];
+  [_inactiveTabsSettingsCoordinator start];
+}
+
+- (void)handleDoneButtonTap {
+  [self stop];
+  [self.baseNavigationController dismissViewControllerAnimated:YES
+                                                    completion:nil];
 }
 
 @end

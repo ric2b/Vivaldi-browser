@@ -21,6 +21,7 @@
 #include "chrome/browser/download/download_item_warning_data.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/download/offline_item_utils.h"
+#include "chrome/browser/enterprise/connectors/analysis/content_analysis_features.h"
 #include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/enterprise/connectors/connectors_service.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
@@ -44,6 +45,7 @@
 #include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/policy/core/common/cloud/dm_token.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing/content/browser/web_ui/safe_browsing_ui.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/proto/csd.pb.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
@@ -71,7 +73,6 @@ DownloadCheckResult GetHighestPrecedenceResult(DownloadCheckResult result_1,
       DownloadCheckResult::SENSITIVE_CONTENT_BLOCK,
       DownloadCheckResult::BLOCKED_TOO_LARGE,
       DownloadCheckResult::BLOCKED_PASSWORD_PROTECTED,
-      DownloadCheckResult::BLOCKED_UNSUPPORTED_FILE_TYPE,
       DownloadCheckResult::BLOCKED_SCAN_FAILED,
       DownloadCheckResult::POTENTIALLY_UNWANTED,
       DownloadCheckResult::SENSITIVE_CONTENT_WARNING,
@@ -197,7 +198,6 @@ EventResult GetEventResult(download::DownloadDangerType danger_type,
     case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK:
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_TOO_LARGE:
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED:
-    case download::DOWNLOAD_DANGER_TYPE_BLOCKED_UNSUPPORTED_FILETYPE:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_FAILED:
     case download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING:
@@ -246,7 +246,6 @@ EventResult GetEventResult(DownloadCheckResult download_result,
     case DownloadCheckResult::BLOCKED_PASSWORD_PROTECTED:
     case DownloadCheckResult::BLOCKED_TOO_LARGE:
     case DownloadCheckResult::SENSITIVE_CONTENT_BLOCK:
-    case DownloadCheckResult::BLOCKED_UNSUPPORTED_FILE_TYPE:
     case DownloadCheckResult::BLOCKED_SCAN_FAILED:
       return EventResult::BLOCKED;
 
@@ -332,6 +331,28 @@ bool HasDecryptionFailedResult(
   }
 
   return false;
+}
+
+bool EnterpriseResultIsFailure(BinaryUploadService::Result result,
+                               bool block_large_files,
+                               bool block_password_protected_files) {
+  return enterprise_connectors::IsResumableUploadEnabled()
+             ? enterprise_connectors::CloudResumableResultIsFailure(
+                   result, block_large_files, block_password_protected_files)
+             : enterprise_connectors::CloudMultipartResultIsFailure(result);
+}
+
+void RecordEnterpriseScan(std::unique_ptr<FileAnalysisRequest> request,
+                          BinaryUploadService::Result result) {
+  const std::string result_info =
+      safe_browsing::BinaryUploadService::ResultToString(result);
+  safe_browsing::WebUIInfoSingleton::GetInstance()->AddToDeepScanRequests(
+      request->per_profile_request(), /*access_token*/ "",
+      /*upload_info*/ base::StrCat({"Skipped - ", result_info}),
+      request->content_analysis_request());
+  safe_browsing::WebUIInfoSingleton::GetInstance()->AddToDeepScanResponses(
+      /*token=*/"", result_info,
+      enterprise_connectors::ContentAnalysisResponse());
 }
 
 }  // namespace
@@ -476,8 +497,12 @@ void DeepScanningRequest::StartSingleFileScan() {
 
   base::UmaHistogramEnumeration("SBClientDownload.DeepScanTrigger", trigger_);
 
-  PopulateRequest(request.get(), profile, item_->GetFullPath());
-  PrepareClientDownloadRequest(item_->GetFullPath(), std::move(request));
+  FileAnalysisRequest* request_raw = request.get();
+  PopulateRequest(request_raw, profile, item_->GetFullPath());
+  request_raw->GetRequestData(
+      base::BindOnce(&DeepScanningRequest::OnGetFileRequestData,
+                     weak_ptr_factory_.GetWeakPtr(), item_->GetFullPath(),
+                     std::move(request)));
 }
 
 void DeepScanningRequest::StartSavePackageScan() {
@@ -507,8 +532,9 @@ void DeepScanningRequest::StartSavePackageScan() {
     FileAnalysisRequest* request_raw = request.get();
     PopulateRequest(request_raw, profile, file_location);
     request_raw->GetRequestData(base::BindOnce(
-        &DeepScanningRequest::OnGotRequestData, weak_ptr_factory_.GetWeakPtr(),
-        tmp_path_and_final_path.second, file_location, std::move(request)));
+        &DeepScanningRequest::OnGetPackageFileRequestData,
+        weak_ptr_factory_.GetWeakPtr(), tmp_path_and_final_path.second,
+        file_location, std::move(request)));
     DCHECK_LT(i, tasks.size());
     tasks[i++].request = request_raw;
   }
@@ -567,7 +593,7 @@ void DeepScanningRequest::PrepareClientDownloadRequest(
   }
 }
 
-void DeepScanningRequest::OnGotRequestData(
+void DeepScanningRequest::OnGetPackageFileRequestData(
     const base::FilePath& final_path,
     const base::FilePath& current_path,
     std::unique_ptr<FileAnalysisRequest> request,
@@ -576,14 +602,37 @@ void DeepScanningRequest::OnGotRequestData(
   file_metadata_.insert({current_path, enterprise_connectors::FileMetadata(
                                            final_path.AsUTF8Unsafe(), data.hash,
                                            data.mime_type, data.size)});
-
-  if (result == BinaryUploadService::Result::SUCCESS) {
-    OnDownloadRequestReady(current_path, std::move(request), nullptr);
+  if (ShouldTerminateEarly(result)) {
+    // We record the scan here because the request is terminated early and won't
+    // be uploaded to CloudBinaryUploadService.
+    if (IsEnterpriseTriggered()) {
+      RecordEnterpriseScan(std::move(request), result);
+    }
+    OnScanComplete(current_path, result,
+                   enterprise_connectors::ContentAnalysisResponse());
     return;
   }
 
-  OnScanComplete(current_path, result,
-                 enterprise_connectors::ContentAnalysisResponse());
+  OnDownloadRequestReady(current_path, std::move(request), nullptr);
+}
+
+void DeepScanningRequest::OnGetFileRequestData(
+    const base::FilePath& file_path,
+    std::unique_ptr<FileAnalysisRequest> request,
+    BinaryUploadService::Result result,
+    BinaryUploadService::Request::Data data) {
+  if (ShouldTerminateEarly(result)) {
+    // We record the scan here because the request is terminated early and won't
+    // be uploaded to CloudBinaryUploadService.
+    if (IsEnterpriseTriggered()) {
+      RecordEnterpriseScan(std::move(request), result);
+    }
+    OnScanComplete(file_path, result,
+                   enterprise_connectors::ContentAnalysisResponse());
+    return;
+  }
+
+  PrepareClientDownloadRequest(file_path, std::move(request));
 }
 
 void DeepScanningRequest::OnDownloadRequestReady(
@@ -684,8 +733,11 @@ void DeepScanningRequest::OnEnterpriseScanComplete(
   } else if (result == BinaryUploadService::Result::FILE_ENCRYPTED &&
              analysis_settings_.block_password_protected_files) {
     download_result = DownloadCheckResult::BLOCKED_PASSWORD_PROTECTED;
+  } else if (enterprise_connectors::ResultIsFailClosed(result) &&
+             analysis_settings_.default_action ==
+                 enterprise_connectors::DefaultAction::kBlock) {
+    download_result = DownloadCheckResult::BLOCKED_SCAN_FAILED;
   }
-  // TODO(b/327392327): Add fail closed enum (`BLOCKED_SCAN_FAILED`) logic here.
 
   LogDeepScanResult(download_result, trigger_,
                     DownloadItemWarningData::IsEncryptedArchive(item_));
@@ -890,6 +942,17 @@ bool DeepScanningRequest::MaybeShowDeepScanFailureModalDialog(
       std::move(accept_callback), std::move(cancel_callback),
       std::move(close_callback), std::move(open_now_callback));
   return true;
+}
+
+bool DeepScanningRequest::ShouldTerminateEarly(
+    BinaryUploadService::Result result) {
+  CHECK(analysis_settings_.cloud_or_local_settings.is_cloud_analysis());
+
+  return IsEnterpriseTriggered()
+             ? EnterpriseResultIsFailure(
+                   result, analysis_settings_.block_large_files,
+                   analysis_settings_.block_password_protected_files)
+             : result != BinaryUploadService::Result::SUCCESS;
 }
 
 void DeepScanningRequest::OpenDownload() {

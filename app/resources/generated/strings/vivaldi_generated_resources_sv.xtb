@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">Inte efter</translation>
 <translation id="2749881179542288782">Kontrollera grammatik och stavning</translation>
 <translation id="2785873697295365461">Filbeskrielser</translation>
-<translation id="2809586584051668049">och ytterligare <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2825758591930162672">Mottagarens publika nyckel</translation>
 <translation id="2850541429955027218">Lägg till tema</translation>
 <translation id="2861941300086904918">Lokal Klient säkerhetshanterare</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">Öppna som fönster</translation>
 <translation id="3280237271814976245">Spara &amp;som...</translation>
 <translation id="3285322247471302225">Ny &amp;flik</translation>
-<translation id="3288047731229977326">Tillägg som körs i utvecklarläge kan skada datorn. Om du inte är en utvecklare bör du inaktivera tillägg som körs i utvecklarläge för att skydda dig.</translation>
 <translation id="329838636886466101">Reparera</translation>
 <translation id="33022249435934718">GDI-handtag</translation>
 <translation id="3303818374450886607">Kopior</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">Skapade tillägget:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Inaktivera tillägg i utvecklarläge</translation>
 <translation id="4100839878934973028">Ett annat program i datorn har lagt till en app som kan ändra hur Vivaldi fungerar.</translation>
 <translation id="4104163789986725820">E&amp;xportera...</translation>
 <translation id="4109898769411476438">Stäng webbläsare innan import</translation>
@@ -261,7 +258,6 @@
 <translation id="5269977353971873915">Utskrift misslyckades</translation>
 <translation id="5284445933715251131">Fortsätt ladda ner</translation>
 <translation id="52912272896845572">Den privata nyckelfilen är ogiltig.</translation>
-<translation id="5301954838959518834">OK, jag fattar</translation>
 <translation id="5302932258331363306">Visa ersättningar</translation>
 <translation id="5317780077021120954">Spara</translation>
 <translation id="5334142896108694079">Cacheminne för skript</translation>

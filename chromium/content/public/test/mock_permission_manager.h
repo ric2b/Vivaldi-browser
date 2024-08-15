@@ -36,10 +36,11 @@ class MockPermissionManager : public PermissionControllerDelegate {
                PermissionResult(blink::PermissionType permission,
                                 const url::Origin& requesting_origin,
                                 const url::Origin& embedding_origin));
-  MOCK_METHOD2(
+  MOCK_METHOD3(
       GetPermissionStatusForCurrentDocument,
       blink::mojom::PermissionStatus(blink::PermissionType permission,
-                                     RenderFrameHost* render_frame_host));
+                                     RenderFrameHost* render_frame_host,
+                                     bool should_include_device_status));
   MOCK_METHOD3(
       GetPermissionStatusForWorker,
       blink::mojom::PermissionStatus(blink::PermissionType permission,
@@ -65,12 +66,13 @@ class MockPermissionManager : public PermissionControllerDelegate {
       base::OnceCallback<
           void(const std::vector<blink::mojom::PermissionStatus>&)> callback)
       override;
-  MOCK_METHOD5(SubscribeToPermissionStatusChange,
+  MOCK_METHOD6(SubscribeToPermissionStatusChange,
                SubscriptionId(
                    blink::PermissionType permission,
                    RenderProcessHost* render_process_host,
                    RenderFrameHost* render_frame_host,
                    const GURL& requesting_origin,
+                   bool should_include_device_status,
                    base::RepeatingCallback<void(blink::mojom::PermissionStatus)>
                        callback));
   MOCK_METHOD1(UnsubscribeFromPermissionStatusChange,

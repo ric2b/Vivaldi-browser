@@ -16,6 +16,7 @@
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/containers/flat_set.h"
+#include "base/not_fatal_until.h"
 #include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
@@ -53,7 +54,7 @@ bool IsStrictlyIncreasing(const std::vector<base::TimeDelta>& end_times) {
 base::Time ReportTimeFromDeadline(base::Time source_time,
                                   base::TimeDelta deadline) {
   // Valid conversion reports should always have a valid reporting deadline.
-  DCHECK(deadline.is_positive());
+  CHECK(deadline.is_positive(), base::NotFatalUntil::M128);
   return source_time + deadline;
 }
 
@@ -129,17 +130,25 @@ EventReportWindows::EventReportWindows(EventReportWindows&&) = default;
 EventReportWindows& EventReportWindows::operator=(EventReportWindows&&) =
     default;
 
+// Follows the steps detailed in
+// https://wicg.github.io/attribution-reporting-api/#obtain-an-event-level-report-delivery-time
+// Starting from step 2.
 base::Time EventReportWindows::ComputeReportTime(
     base::Time source_time,
     base::Time trigger_time) const {
-  // Follows the steps detailed in
-  // https://wicg.github.io/attribution-reporting-api/#obtain-an-event-level-report-delivery-time
-  // Starting from step 2.
-  DCHECK_LE(source_time, trigger_time);
+  // It is possible for a source to have an assigned time of T and a trigger
+  // that is attributed to it to have a time of T-X e.g. due to user-initiated
+  // clock changes.
+  //
+  // TODO(crbug.com/40282914): Assume `source_time` is smaller than
+  // `trigger_time` once attribution time resolution is implemented in storage.
+  const base::Time trigger_time_floored =
+      source_time < trigger_time ? trigger_time
+                                 : source_time + base::Microseconds(1);
   base::TimeDelta reporting_window_to_use = *end_times_.rbegin();
 
   for (base::TimeDelta reporting_window : end_times_) {
-    if (source_time + reporting_window <= trigger_time) {
+    if (source_time + reporting_window <= trigger_time_floored) {
       continue;
     }
     reporting_window_to_use = reporting_window;
@@ -150,8 +159,9 @@ base::Time EventReportWindows::ComputeReportTime(
 
 base::Time EventReportWindows::ReportTimeAtWindow(base::Time source_time,
                                                   int window_index) const {
-  DCHECK_GE(window_index, 0);
-  DCHECK_LT(static_cast<size_t>(window_index), end_times_.size());
+  CHECK_GE(window_index, 0, base::NotFatalUntil::M128);
+  CHECK_LT(static_cast<size_t>(window_index), end_times_.size(),
+           base::NotFatalUntil::M128);
 
   return ReportTimeFromDeadline(source_time,
                                 *std::next(end_times_.begin(), window_index));
@@ -163,7 +173,7 @@ EventReportWindows::WindowResult EventReportWindows::FallsWithin(
   // that is attributed to it to have a time of T-X e.g. due to user-initiated
   // clock changes.
   //
-  // TODO(crbug.com/1489333): Assume trigger moment is not negative once
+  // TODO(crbug.com/40283992): Assume trigger moment is not negative once
   // attribution time resolution is implemented in storage.
   base::TimeDelta bounded_trigger_moment =
       trigger_moment.is_negative() ? base::Microseconds(0) : trigger_moment;

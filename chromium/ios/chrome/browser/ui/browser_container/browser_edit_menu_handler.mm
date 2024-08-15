@@ -8,9 +8,23 @@
 #import "ios/chrome/browser/ui/partial_translate/partial_translate_delegate.h"
 #import "ios/chrome/browser/ui/search_with/search_with_delegate.h"
 
+#if defined(VIVALDI_BUILD)
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/copy_to_note/copy_to_note_delegate.h"
+#endif // End Vivaldi
+
 @implementation BrowserEditMenuHandler
 
 - (void)buildMenuWithBuilder:(id<UIMenuBuilder>)builder {
+
+#if defined(__IPHONE_16_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_16_0
+  if (@available(iOS 16, *)) {
+    if (vivaldi::IsVivaldiRunning()) {
+      [self.vivaldiCopyToNoteDelegate buildMenuWithBuilder:builder];
+    }
+  }
+#endif // End Vivaldi
+
   [self.linkToTextDelegate buildMenuWithBuilder:builder];
   [self.searchWithDelegate buildMenuWithBuilder:builder];
   [self.partialTranslateDelegate buildMenuWithBuilder:builder];

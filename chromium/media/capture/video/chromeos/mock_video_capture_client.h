@@ -8,7 +8,7 @@
 #include "media/capture/video/video_capture_device.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
-// TODO(crbug.com/838774):
+// TODO(crbug.com/41386548):
 // Consolidate the MockVideoCaptureClient implementations
 
 namespace media {
@@ -68,7 +68,9 @@ class MockVideoCaptureClient : public VideoCaptureDevice::Client {
   ReserveResult ReserveOutputBuffer(const gfx::Size& dimensions,
                                     VideoPixelFormat format,
                                     int frame_feedback_id,
-                                    Buffer* buffer) override;
+                                    Buffer* buffer,
+                                    int* require_new_buffer_id,
+                                    int* retire_old_buffer_id) override;
   void OnIncomingCapturedBuffer(
       Buffer buffer,
       const VideoCaptureFormat& format,

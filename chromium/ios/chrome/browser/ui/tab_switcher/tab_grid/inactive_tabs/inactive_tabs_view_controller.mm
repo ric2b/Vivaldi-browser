@@ -11,6 +11,12 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 @interface InactiveTabsViewController () <UINavigationBarDelegate>
 
 // The embedded navigation bar.
@@ -34,6 +40,12 @@
     _gridViewController = [[InactiveGridViewController alloc] init];
     _gridViewController.theme = GridThemeLight;
     _gridViewController.mode = TabGridModeInactive;
+
+    if (IsVivaldiRunning()) {
+      _gridViewController.view.backgroundColor =
+          [UIColor colorNamed:kGridBackgroundColor];
+    } // End Vivaldi
+
   }
   return self;
 }
@@ -56,16 +68,30 @@
     [[UINavigationItem alloc] init],  // To have a Back button.
     [[UINavigationItem alloc] initWithTitle:title],
   ];
+
+  if (IsVivaldiRunning()) {
+    _navigationBar.barStyle = UIBarStyleDefault;
+    _navigationBar.translucent = NO;
+  } else {
   _navigationBar.barStyle = UIBarStyleBlack;
   _navigationBar.translucent = YES;
+  } // End Vivaldi
+
   _navigationBar.delegate = self;
   _navigationBar.translatesAutoresizingMaskIntoConstraints = NO;
   [self.view addSubview:_navigationBar];
 
   // Add the bottom toolbar with the Close All Inactive button.
   _bottomBar = [[UIToolbar alloc] init];
+
+  if (IsVivaldiRunning()) {
+    _bottomBar.barStyle = UIBarStyleDefault;
+    _bottomBar.translucent = NO;
+  } else {
   _bottomBar.barStyle = UIBarStyleBlack;
   _bottomBar.translucent = YES;
+  } // End Vivaldi
+
   _bottomBar.tintColor = [UIColor colorNamed:kRed500Color];
   _bottomBar.translatesAutoresizingMaskIntoConstraints = NO;
   [self.view addSubview:_bottomBar];

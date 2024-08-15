@@ -32,7 +32,7 @@ class SenderSocketFactory final : public TlsConnectionFactory::Client,
                              std::unique_ptr<CastSocket> socket) = 0;
     virtual void OnError(SenderSocketFactory* factory,
                          const IPEndpoint& endpoint,
-                         Error error) = 0;
+                         const Error& error) = 0;
 
    protected:
     virtual ~Client();
@@ -46,8 +46,8 @@ class SenderSocketFactory final : public TlsConnectionFactory::Client,
 
   // |client| and |task_runner| must outlive |this|.  If no trust stores are
   // passed, the default production certificates are used.
-  SenderSocketFactory(Client* client, TaskRunner& task_runner);
-  SenderSocketFactory(Client* client,
+  SenderSocketFactory(Client& client, TaskRunner& task_runner);
+  SenderSocketFactory(Client& client,
                       TaskRunner& task_runner,
                       std::unique_ptr<TrustStore> cast_trust_store,
                       std::unique_ptr<TrustStore> crl_trust_store);
@@ -76,7 +76,7 @@ class SenderSocketFactory final : public TlsConnectionFactory::Client,
                    std::unique_ptr<TlsConnection> connection) override;
   void OnConnectionFailed(TlsConnectionFactory* factory,
                           const IPEndpoint& remote_address) override;
-  void OnError(TlsConnectionFactory* factory, Error error) override;
+  void OnError(TlsConnectionFactory* factory, const Error& error) override;
 
  private:
   struct PendingConnection {
@@ -101,11 +101,11 @@ class SenderSocketFactory final : public TlsConnectionFactory::Client,
       const IPEndpoint& endpoint);
 
   // CastSocket::Client overrides.
-  void OnError(CastSocket* socket, Error error) override;
+  void OnError(CastSocket* socket, const Error& error) override;
   void OnMessage(CastSocket* socket,
                  ::cast::channel::CastMessage message) override;
 
-  Client* const client_;
+  Client& client_;
   TaskRunner& task_runner_;
   TlsConnectionFactory* factory_ = nullptr;
   std::vector<PendingConnection> pending_connections_;

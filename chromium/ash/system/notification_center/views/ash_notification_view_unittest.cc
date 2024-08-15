@@ -225,10 +225,10 @@ class AshNotificationViewTestBase : public AshTestBase,
         message_center::NotifierId(message_center::NotifierType::APPLICATION,
                                    "extension_id"),
         data, delegate_);
-    notification->set_small_image(gfx::test::CreateImage(/*size=*/16));
+    notification->SetSmallImage(gfx::test::CreateImage(/*size=*/16));
 
     if (has_image) {
-      notification->set_image(gfx::test::CreateImage(320, 240));
+      notification->SetImage(gfx::test::CreateImage(320, 240));
     }
 
     message_center::MessageCenter::Get()->AddNotification(
@@ -257,10 +257,10 @@ class AshNotificationViewTestBase : public AshTestBase,
         ui::ImageModel::FromImage(gfx::test::CreateImage(/*size=*/80)),
         u"display source", GURL(u"http://test-url.com"), notifier_id,
         rich_notification_data, delegate_);
-    notification->set_small_image(gfx::test::CreateImage(/*size=*/16));
+    notification->SetSmallImage(gfx::test::CreateImage(/*size=*/16));
 
     if (has_image) {
-      notification->set_image(gfx::test::CreateImage(320, 240));
+      notification->SetImage(gfx::test::CreateImage(320, 240));
     }
 
     message_center::MessageCenter::Get()->AddNotification(
@@ -307,7 +307,7 @@ class AshNotificationViewTestBase : public AshTestBase,
   // a particular view.
   void CheckSmoothnessRecorded(base::HistogramTester& histograms,
                                views::View* view,
-                               const char* animation_histogram_name,
+                               const std::string& animation_histogram_name,
                                int data_point_count = 1) {
     ui::Compositor* compositor = view->layer()->GetCompositor();
 
@@ -570,8 +570,7 @@ TEST_F(AshNotificationViewTest, GroupedNotificationStartsCollapsed) {
   // Grouped notification should start collapsed.
   EXPECT_FALSE(notification_view()->IsExpanded());
   EXPECT_TRUE(GetHeaderRow(notification_view())->GetVisible());
-  EXPECT_TRUE(
-      GetExpandButton(notification_view())->label_for_test()->GetVisible());
+  EXPECT_TRUE(GetExpandButton(notification_view())->label()->GetVisible());
 }
 
 TEST_F(AshNotificationViewTest, GroupedNotificationCounterVisibility) {
@@ -581,8 +580,7 @@ TEST_F(AshNotificationViewTest, GroupedNotificationCounterVisibility) {
       notification_view(),
       message_center_style::kMaxGroupedNotificationsInCollapsedState + 1);
 
-  EXPECT_TRUE(
-      GetExpandButton(notification_view())->label_for_test()->GetVisible());
+  EXPECT_TRUE(GetExpandButton(notification_view())->label()->GetVisible());
 
   auto* child_view = GetFirstGroupedChildNotificationView(notification_view());
   EXPECT_TRUE(GetCollapsedSummaryView(child_view)->GetVisible());
@@ -604,8 +602,7 @@ TEST_F(AshNotificationViewTest, GroupedNotificationExpandState) {
   // timestamp invisible and the child notifications should now have the main
   // view visible instead of the summary.
   notification_view()->SetExpanded(true);
-  EXPECT_FALSE(
-      GetExpandButton(notification_view())->label_for_test()->GetVisible());
+  EXPECT_FALSE(GetExpandButton(notification_view())->label()->GetVisible());
   EXPECT_FALSE(GetTimestamp(notification_view())->GetVisible());
   EXPECT_FALSE(GetCollapsedSummaryView(child_view)->GetVisible());
   EXPECT_TRUE(GetMainView(child_view)->GetVisible());
@@ -883,7 +880,7 @@ TEST_F(AshNotificationViewTest, ExpandCollapseAnimationsRecordSmoothness) {
       "Ash.NotificationView.ActionsRow.FadeIn.AnimationSmoothness");
 }
 
-// TODO(crbug.com/1522231): Re-enable this test
+// TODO(crbug.com/41495194): Re-enable this test
 TEST_F(AshNotificationViewTest, ImageExpandCollapseAnimationsRecordSmoothness) {
   // Enable animations.
   ui::ScopedAnimationDurationScaleMode duration(
@@ -971,6 +968,8 @@ TEST_F(AshNotificationViewTest, GroupExpandCollapseAnimationsRecordSmoothness) {
   notification_view->ToggleExpand();
   EXPECT_TRUE(notification_view->IsExpanded());
 
+  auto* const expand_button = GetExpandButton(notification_view);
+
   // All the animations of views in expanded state should be performed and
   // recorded here.
   CheckSmoothnessRecorded(
@@ -983,11 +982,13 @@ TEST_F(AshNotificationViewTest, GroupExpandCollapseAnimationsRecordSmoothness) {
       GetMainView(GetFirstGroupedChildNotificationView(notification_view)),
       "Ash.NotificationView.MainView.FadeIn.AnimationSmoothness");
   CheckSmoothnessRecorded(
-      histograms_expanded, GetExpandButton(notification_view)->label_for_test(),
-      "Ash.NotificationView.ExpandButtonLabel.FadeOut.AnimationSmoothness");
+      histograms_expanded, expand_button->label(),
+      expand_button->GetAnimationHistogramName(
+          AshNotificationExpandButton::AnimationType::kFadeOutLabel));
   CheckSmoothnessRecorded(
-      histograms_expanded, GetExpandButton(notification_view),
-      "Ash.NotificationView.ExpandButton.BoundsChange.AnimationSmoothness");
+      histograms_expanded, expand_button,
+      expand_button->GetAnimationHistogramName(
+          AshNotificationExpandButton::AnimationType::kBoundsChange));
 
   base::HistogramTester histograms_collapsed;
   notification_view->ToggleExpand();
@@ -1005,13 +1006,13 @@ TEST_F(AshNotificationViewTest, GroupExpandCollapseAnimationsRecordSmoothness) {
           GetFirstGroupedChildNotificationView(notification_view)),
       "Ash.NotificationView.CollapsedSummaryView.FadeIn.AnimationSmoothness");
   CheckSmoothnessRecorded(
-      histograms_collapsed,
-      GetExpandButton(notification_view)->label_for_test(),
-      "Ash.NotificationView.ExpandButtonLabel.FadeIn.AnimationSmoothness");
+      histograms_collapsed, expand_button->label(),
+      expand_button->GetAnimationHistogramName(
+          AshNotificationExpandButton::AnimationType::kFadeInLabel));
   CheckSmoothnessRecorded(
-      histograms_collapsed,
-      GetExpandButton(notification_view)->label_for_test(),
-      "Ash.NotificationView.ExpandButton.BoundsChange.AnimationSmoothness");
+      histograms_collapsed, expand_button->label(),
+      expand_button->GetAnimationHistogramName(
+          AshNotificationExpandButton::AnimationType::kBoundsChange));
 }
 
 TEST_F(AshNotificationViewTest, SingleToGroupAnimationsRecordSmoothness) {
@@ -1039,7 +1040,7 @@ TEST_F(AshNotificationViewTest, SingleToGroupAnimationsRecordSmoothness) {
       histograms, GetGroupedNotificationsContainer(notification_view),
       "Ash.NotificationView.ConvertSingleToGroup.FadeIn.AnimationSmoothness");
   CheckSmoothnessRecorded(
-      histograms, GetExpandButton(notification_view)->label_for_test(),
+      histograms, GetExpandButton(notification_view)->label(),
       "Ash.NotificationView.ExpandButton.ConvertSingleToGroup."
       "FadeIn.AnimationSmoothness");
   CheckSmoothnessRecorded(
@@ -1690,9 +1691,10 @@ TEST_P(AshNotificationViewDragAsyncDropTest, Basics) {
   // Configure `dlp_controller_` to hold the drop callback. `drop_callback` will
   // run later if drop is allowed.
   base::OnceClosure drop_callback;
-  EXPECT_CALL(dlp_controller_, DropIfAllowed(_, _, _))
-      .WillOnce([&](const ui::OSExchangeData* drag_data,
-                    base::optional_ref<const ui::DataTransferEndpoint> data_dst,
+  EXPECT_CALL(dlp_controller_, DropIfAllowed(_, _, _, _))
+      .WillOnce([&](std::optional<ui::DataTransferEndpoint> data_src,
+                    std::optional<ui::DataTransferEndpoint> data_dst,
+                    std::optional<std::vector<ui::FileInfo>> filenames,
                     base::OnceClosure drop_cb) {
         drop_callback = std::move(drop_cb);
       });
@@ -1728,20 +1730,20 @@ TEST_P(AshNotificationViewDragAsyncDropTest,
   {
     // Configure `dlp_controller_` to hold all drop callbacks.
     testing::InSequence s;
-    EXPECT_CALL(dlp_controller_, DropIfAllowed(_, _, _))
-        .WillOnce(
-            [&](const ui::OSExchangeData* drag_data,
-                base::optional_ref<const ui::DataTransferEndpoint> data_dst,
-                base::OnceClosure drop_cb) {
-              first_drop_callback = std::move(drop_cb);
-            });
-    EXPECT_CALL(dlp_controller_, DropIfAllowed(_, _, _))
-        .WillOnce(
-            [&](const ui::OSExchangeData* drag_data,
-                base::optional_ref<const ui::DataTransferEndpoint> data_dst,
-                base::OnceClosure drop_cb) {
-              second_drop_callback = std::move(drop_cb);
-            });
+    EXPECT_CALL(dlp_controller_, DropIfAllowed(_, _, _, _))
+        .WillOnce([&](std::optional<ui::DataTransferEndpoint> data_src,
+                      std::optional<ui::DataTransferEndpoint> data_dst,
+                      std::optional<std::vector<ui::FileInfo>> filenames,
+                      base::OnceClosure drop_cb) {
+          first_drop_callback = std::move(drop_cb);
+        });
+    EXPECT_CALL(dlp_controller_, DropIfAllowed(_, _, _, _))
+        .WillOnce([&](std::optional<ui::DataTransferEndpoint> data_src,
+                      std::optional<ui::DataTransferEndpoint> data_dst,
+                      std::optional<std::vector<ui::FileInfo>> filenames,
+                      base::OnceClosure drop_cb) {
+          second_drop_callback = std::move(drop_cb);
+        });
   }
 
   // Add one image notification then perform drag-and-drop.
@@ -1787,20 +1789,20 @@ TEST_P(AshNotificationViewDragAsyncDropTest, InterruptAsyncDropWithViewDrag) {
   {
     // Configure `dlp_controller_` to hold all drop callbacks.
     testing::InSequence s;
-    EXPECT_CALL(dlp_controller_, DropIfAllowed(_, _, _))
-        .WillOnce(
-            [&](const ui::OSExchangeData* drag_data,
-                base::optional_ref<const ui::DataTransferEndpoint> data_dst,
-                base::OnceClosure drop_cb) {
-              first_drop_callback = std::move(drop_cb);
-            });
-    EXPECT_CALL(dlp_controller_, DropIfAllowed(_, _, _))
-        .WillOnce(
-            [&](const ui::OSExchangeData* drag_data,
-                base::optional_ref<const ui::DataTransferEndpoint> data_dst,
-                base::OnceClosure drop_cb) {
-              second_drop_callback = std::move(drop_cb);
-            });
+    EXPECT_CALL(dlp_controller_, DropIfAllowed(_, _, _, _))
+        .WillOnce([&](std::optional<ui::DataTransferEndpoint> data_src,
+                      std::optional<ui::DataTransferEndpoint> data_dst,
+                      std::optional<std::vector<ui::FileInfo>> filenames,
+                      base::OnceClosure drop_cb) {
+          first_drop_callback = std::move(drop_cb);
+        });
+    EXPECT_CALL(dlp_controller_, DropIfAllowed(_, _, _, _))
+        .WillOnce([&](std::optional<ui::DataTransferEndpoint> data_src,
+                      std::optional<ui::DataTransferEndpoint> data_dst,
+                      std::optional<std::vector<ui::FileInfo>> filenames,
+                      base::OnceClosure drop_cb) {
+          second_drop_callback = std::move(drop_cb);
+        });
   }
 
   // Add one image notification then perform drag-and-drop.

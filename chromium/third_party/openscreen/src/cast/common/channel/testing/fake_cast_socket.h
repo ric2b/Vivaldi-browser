@@ -20,7 +20,10 @@ class MockCastSocketClient final : public CastSocket::Client {
  public:
   ~MockCastSocketClient() override = default;
 
-  MOCK_METHOD(void, OnError, (CastSocket * socket, Error error), (override));
+  MOCK_METHOD(void,
+              OnError,
+              (CastSocket * socket, const Error& error),
+              (override));
   MOCK_METHOD(void,
               OnMessage,
               (CastSocket * socket, ::cast::channel::CastMessage message),

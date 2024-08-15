@@ -94,7 +94,7 @@ subscribed the full historic archives are available.
 *   [rendering-core-dev@chromium.org](https://groups.google.com/a/chromium.org/forum/#!forum/rendering-core-dev)
     Primary list for the team. Used for non-technical and generic technical
     discussions as well as for announcements.
-*   [dom-dev@chromium.org](mailto:dom-dev@chromium.org)
+*   [dom-dev@google.com](mailto:dom-dev@google.com)
 *   DOM team-specific list for technical and standards discussions.
 *   [style-dev@chromium.org](https://groups.google.com/a/chromium.org/forum/#!forum/style-dev)
     Style (CSS) specific list for technical and standards discussions.

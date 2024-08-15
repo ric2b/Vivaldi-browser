@@ -49,8 +49,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, NoModify_NoOperands) {
     });
 
     auto* src = R"(
-%foo = func():mat3x3<f32> -> %b1 {
-  %b1 = block {
+%foo = func():mat3x3<f32> {
+  $B1: {
     %2:mat3x3<f32> = construct
     ret %2
   }
@@ -76,8 +76,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, NoModify_Identity) {
     });
 
     auto* src = R"(
-%foo = func(%value:mat3x3<f32>):mat3x3<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%value:mat3x3<f32>):mat3x3<f32> {
+  $B1: {
     %3:mat3x3<f32> = construct %value
     ret %3
   }
@@ -105,8 +105,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, NoModify_Vectors) {
     });
 
     auto* src = R"(
-%foo = func(%v1:vec3<f32>, %v2:vec3<f32>, %v3:vec3<f32>):mat3x3<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:vec3<f32>, %v2:vec3<f32>, %v3:vec3<f32>):mat3x3<f32> {
+  $B1: {
     %5:mat3x3<f32> = construct %v1, %v2, %v3
     ret %5
   }
@@ -135,8 +135,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat2x2) {
     });
 
     auto* src = R"(
-%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32):mat2x2<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32):mat2x2<f32> {
+  $B1: {
     %6:mat2x2<f32> = construct %v1, %v2, %v3, %v4
     ret %6
   }
@@ -145,8 +145,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat2x2) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32):mat2x2<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32):mat2x2<f32> {
+  $B1: {
     %6:vec2<f32> = construct %v1, %v2
     %7:vec2<f32> = construct %v3, %v4
     %8:mat2x2<f32> = construct %6, %7
@@ -176,8 +176,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat2x3) {
     });
 
     auto* src = R"(
-%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32):mat2x3<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32):mat2x3<f32> {
+  $B1: {
     %8:mat2x3<f32> = construct %v1, %v2, %v3, %v4, %v5, %v6
     ret %8
   }
@@ -186,8 +186,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat2x3) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32):mat2x3<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32):mat2x3<f32> {
+  $B1: {
     %8:vec3<f32> = construct %v1, %v2, %v3
     %9:vec3<f32> = construct %v4, %v5, %v6
     %10:mat2x3<f32> = construct %8, %9
@@ -219,8 +219,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat2x4) {
     });
 
     auto* src = R"(
-%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32):mat2x4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32):mat2x4<f32> {
+  $B1: {
     %10:mat2x4<f32> = construct %v1, %v2, %v3, %v4, %v5, %v6, %v7, %v8
     ret %10
   }
@@ -229,8 +229,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat2x4) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32):mat2x4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32):mat2x4<f32> {
+  $B1: {
     %10:vec4<f32> = construct %v1, %v2, %v3, %v4
     %11:vec4<f32> = construct %v5, %v6, %v7, %v8
     %12:mat2x4<f32> = construct %10, %11
@@ -260,8 +260,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat3x2) {
     });
 
     auto* src = R"(
-%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32):mat3x2<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32):mat3x2<f32> {
+  $B1: {
     %8:mat3x2<f32> = construct %v1, %v2, %v3, %v4, %v5, %v6
     ret %8
   }
@@ -270,8 +270,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat3x2) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32):mat3x2<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32):mat3x2<f32> {
+  $B1: {
     %8:vec2<f32> = construct %v1, %v2
     %9:vec2<f32> = construct %v3, %v4
     %10:vec2<f32> = construct %v5, %v6
@@ -305,8 +305,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat3x3) {
     });
 
     auto* src = R"(
-%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32, %v9:f32):mat3x3<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32, %v9:f32):mat3x3<f32> {
+  $B1: {
     %11:mat3x3<f32> = construct %v1, %v2, %v3, %v4, %v5, %v6, %v7, %v8, %v9
     ret %11
   }
@@ -315,8 +315,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat3x3) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32, %v9:f32):mat3x3<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32, %v9:f32):mat3x3<f32> {
+  $B1: {
     %11:vec3<f32> = construct %v1, %v2, %v3
     %12:vec3<f32> = construct %v4, %v5, %v6
     %13:vec3<f32> = construct %v7, %v8, %v9
@@ -353,8 +353,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat3x4) {
     });
 
     auto* src = R"(
-%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32, %v9:f32, %v10:f32, %v11:f32, %v12:f32):mat3x4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32, %v9:f32, %v10:f32, %v11:f32, %v12:f32):mat3x4<f32> {
+  $B1: {
     %14:mat3x4<f32> = construct %v1, %v2, %v3, %v4, %v5, %v6, %v7, %v8, %v9, %v10, %v11, %v12
     ret %14
   }
@@ -363,8 +363,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat3x4) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32, %v9:f32, %v10:f32, %v11:f32, %v12:f32):mat3x4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32, %v9:f32, %v10:f32, %v11:f32, %v12:f32):mat3x4<f32> {
+  $B1: {
     %14:vec4<f32> = construct %v1, %v2, %v3, %v4
     %15:vec4<f32> = construct %v5, %v6, %v7, %v8
     %16:vec4<f32> = construct %v9, %v10, %v11, %v12
@@ -397,8 +397,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat4x2) {
     });
 
     auto* src = R"(
-%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32):mat4x2<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32):mat4x2<f32> {
+  $B1: {
     %10:mat4x2<f32> = construct %v1, %v2, %v3, %v4, %v5, %v6, %v7, %v8
     ret %10
   }
@@ -407,8 +407,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat4x2) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32):mat4x2<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32):mat4x2<f32> {
+  $B1: {
     %10:vec2<f32> = construct %v1, %v2
     %11:vec2<f32> = construct %v3, %v4
     %12:vec2<f32> = construct %v5, %v6
@@ -446,8 +446,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat4x3) {
     });
 
     auto* src = R"(
-%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32, %v9:f32, %v10:f32, %v11:f32, %v12:f32):mat4x3<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32, %v9:f32, %v10:f32, %v11:f32, %v12:f32):mat4x3<f32> {
+  $B1: {
     %14:mat4x3<f32> = construct %v1, %v2, %v3, %v4, %v5, %v6, %v7, %v8, %v9, %v10, %v11, %v12
     ret %14
   }
@@ -456,8 +456,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat4x3) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32, %v9:f32, %v10:f32, %v11:f32, %v12:f32):mat4x3<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32, %v9:f32, %v10:f32, %v11:f32, %v12:f32):mat4x3<f32> {
+  $B1: {
     %14:vec3<f32> = construct %v1, %v2, %v3
     %15:vec3<f32> = construct %v4, %v5, %v6
     %16:vec3<f32> = construct %v7, %v8, %v9
@@ -500,8 +500,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat4x4) {
     });
 
     auto* src = R"(
-%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32, %v9:f32, %v10:f32, %v11:f32, %v12:f32, %v13:f32, %v14:f32, %v15:f32, %v16:f32):mat4x4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32, %v9:f32, %v10:f32, %v11:f32, %v12:f32, %v13:f32, %v14:f32, %v15:f32, %v16:f32):mat4x4<f32> {
+  $B1: {
     %18:mat4x4<f32> = construct %v1, %v2, %v3, %v4, %v5, %v6, %v7, %v8, %v9, %v10, %v11, %v12, %v13, %v14, %v15, %v16
     ret %18
   }
@@ -510,8 +510,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat4x4) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32, %v9:f32, %v10:f32, %v11:f32, %v12:f32, %v13:f32, %v14:f32, %v15:f32, %v16:f32):mat4x4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f32, %v2:f32, %v3:f32, %v4:f32, %v5:f32, %v6:f32, %v7:f32, %v8:f32, %v9:f32, %v10:f32, %v11:f32, %v12:f32, %v13:f32, %v14:f32, %v15:f32, %v16:f32):mat4x4<f32> {
+  $B1: {
     %18:vec4<f32> = construct %v1, %v2, %v3, %v4
     %19:vec4<f32> = construct %v5, %v6, %v7, %v8
     %20:vec4<f32> = construct %v9, %v10, %v11, %v12
@@ -546,8 +546,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat3x3_F16) {
     });
 
     auto* src = R"(
-%foo = func(%v1:f16, %v2:f16, %v3:f16, %v4:f16, %v5:f16, %v6:f16, %v7:f16, %v8:f16, %v9:f16):mat3x3<f16> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f16, %v2:f16, %v3:f16, %v4:f16, %v5:f16, %v6:f16, %v7:f16, %v8:f16, %v9:f16):mat3x3<f16> {
+  $B1: {
     %11:mat3x3<f16> = construct %v1, %v2, %v3, %v4, %v5, %v6, %v7, %v8, %v9
     ret %11
   }
@@ -556,8 +556,8 @@ TEST_F(IR_VectorizeScalarMatrixConstructorsTest, Mat3x3_F16) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%v1:f16, %v2:f16, %v3:f16, %v4:f16, %v5:f16, %v6:f16, %v7:f16, %v8:f16, %v9:f16):mat3x3<f16> -> %b1 {
-  %b1 = block {
+%foo = func(%v1:f16, %v2:f16, %v3:f16, %v4:f16, %v5:f16, %v6:f16, %v7:f16, %v8:f16, %v9:f16):mat3x3<f16> {
+  $B1: {
     %11:vec3<f16> = construct %v1, %v2, %v3
     %12:vec3<f16> = construct %v4, %v5, %v6
     %13:vec3<f16> = construct %v7, %v8, %v9

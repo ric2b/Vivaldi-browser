@@ -9,9 +9,10 @@
 
 namespace adblock_filter {
 
-constexpr char kAbpSnippetsScriptletName[] = "snippets.js";
+constexpr char kAbpSnippetsMainScriptletName[] = "abp-main.js";
+constexpr char kAbpSnippetsIsolatedScriptletName[] = "abp-isolated.js";
 
-constexpr auto kTypeStringMap = base::MakeFixedFlatMap<base::StringPiece, int>(
+constexpr auto kTypeStringMap = base::MakeFixedFlatMap<std::string_view, int>(
     {{"script", RequestFilterRule::kScript},
      {"image", RequestFilterRule::kImage},
      {"background",
@@ -30,7 +31,7 @@ constexpr auto kTypeStringMap = base::MakeFixedFlatMap<base::StringPiece, int>(
      {"xbl", RequestFilterRule::kOther},  // Compat with older filter formats
      {"dtd", RequestFilterRule::kOther}});
 
-std::string BuildNgramSearchString(const base::StringPiece& pattern);
+std::string BuildNgramSearchString(const std::string_view& pattern);
 }  // namespace adblock_filter
 
 #endif  // COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_PARSE_UTILS_H_

@@ -6,6 +6,7 @@
 
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/forms/text_control_element.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
@@ -202,8 +203,11 @@ bool SelectionBoundsRecorder::IsVisible(const LayoutObject& rect_layout_object,
   if (!layout_object || !layout_object->IsBox())
     return true;
 
-  const PhysicalOffset sample_point = GetSamplePointForVisibility(
+  PhysicalOffset sample_point = GetSamplePointForVisibility(
       edge_start, edge_end, rect_layout_object.GetFrame()->PageZoomFactor());
+
+  // Convert from paint coordinates to local layout coordinates.
+  sample_point -= layout_object->FirstFragment().PaintOffset();
 
   auto* const text_control_object = To<LayoutBox>(layout_object);
   const PhysicalOffset position_in_input =

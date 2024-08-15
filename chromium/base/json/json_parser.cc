@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/json/json_parser.h"
 
 #include <cmath>
@@ -59,7 +64,7 @@ std::string ErrorCodeToString(JSONParser::JsonParseError error_code) {
     case JSONParser::JSON_PARSE_ERROR_COUNT:
       break;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return std::string();
 }
 
@@ -86,7 +91,8 @@ enum class ChromiumJsonExtension {
   kXEscape,
   kVerticalTabEscape,
   kControlCharacter,
-  kMaxValue = kControlCharacter,
+  kNewlineInString,
+  kMaxValue = kNewlineInString,
 };
 
 const char kExtensionHistogramName[] =
@@ -230,10 +236,19 @@ std::string JSONParser::StringBuilder::DestructiveAsString() {
 // JSONParser private //////////////////////////////////////////////////////////
 
 std::optional<std::string_view> JSONParser::PeekChars(size_t count) {
-  if (index_ + count > input_.length())
+  if (count > input_.length() - index_) {
     return std::nullopt;
-  // Using StringPiece::substr() is significantly slower (according to
-  // base_perftests) than constructing a substring manually.
+  }
+  // Using string_view::substr() was historically significantly slower
+  // (according to base_perftests) than constructing a substring manually.
+  //
+  // TODO(crbug.com/40284755): Is this still the case? Ideally the bounds check
+  // performed by substr would be deleted by the optimizer for being redundant
+  // with the runtime check above. However, to do so, the compiler would need
+  // to know `index_ <= input_.length()` is a class invariant. If we
+  // restructured the code so that we only stored the remaining data, that
+  // would avoid this, but it would prevent rewinding (the places in this file
+  // which look at `input_[index_ - 1]`.)
   return std::string_view(input_.data() + index_, count);
 }
 
@@ -561,7 +576,15 @@ bool JSONParser::ConsumeStringRaw(StringBuilder* out) {
       // quotation marks, except for the characters that MUST be escaped:
       // quotation mark, reverse solidus, and the control characters (U+0000
       // through U+001F)".
-      if (next_char <= 0x1F) {
+      if (next_char == '\n' || next_char == '\r') {
+        UmaHistogramEnumeration(kExtensionHistogramName,
+                                ChromiumJsonExtension::kNewlineInString);
+        if (!(options_ &
+              (JSON_ALLOW_NEWLINES_IN_STRINGS | JSON_ALLOW_CONTROL_CHARS))) {
+          ReportError(JSON_UNSUPPORTED_ENCODING, -1);
+          return false;
+        }
+      } else if (next_char <= 0x1F) {
         UmaHistogramEnumeration(kExtensionHistogramName,
                                 ChromiumJsonExtension::kControlCharacter);
         if (!(options_ & JSON_ALLOW_CONTROL_CHARS)) {

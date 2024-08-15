@@ -15,3 +15,9 @@ copy("manifestjson") {
   sources = [ "src/manifest.template.json" ]
   outputs =  [ "$target_gen_dir/manifest.json" ]
 }
+
+group("vivapp") {
+  public_deps = [
+    ":vivaldi_app",
+  ]
+}

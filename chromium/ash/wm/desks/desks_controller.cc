@@ -63,6 +63,8 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#include "chromeos/ui/base/app_types.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "chromeos/utils/haptics_util.h"
 #include "components/app_restore/full_restore_utils.h"
 #include "components/app_restore/window_properties.h"
@@ -1723,12 +1725,13 @@ void DesksController::ActivateDeskInternal(const Desk* desk,
     overview_controller->EndOverview(OverviewEndAction::kDeskActivation,
                                      OverviewEnterExitType::kImmediateExit);
   }
+
   // We should always end split view during a desk change in order to update the
   // divider widget.
-  SplitViewController* split_view_controller =
-      SplitViewController::Get(Shell::GetPrimaryRootWindow());
-  split_view_controller->EndSplitView(
-      SplitViewController::EndReason::kDesksChange);
+  for (aura::Window* root_window : Shell::GetAllRootWindows()) {
+    SplitViewController::Get(root_window)
+        ->EndSplitView(SplitViewController::EndReason::kDesksChange);
+  }
 
   MoveVisibleOnAllDesksWindowsFromActiveDeskTo(const_cast<Desk*>(desk));
   active_desk_ = const_cast<Desk*>(desk);
@@ -2145,6 +2148,8 @@ void DesksController::FinalizeDeskRemoval(RemovedDeskData* removed_desk_data) {
   // while-loop.
   aura::WindowTracker unclosed_windows_tracker(app_windows);
 
+  aura::Window* floated_window =
+      Shell::Get()->float_controller()->FindFloatedWindowOfDesk(removed_desk);
   while (!unclosed_windows_tracker.windows().empty()) {
     aura::Window* window = unclosed_windows_tracker.Pop();
     views::Widget* widget = views::Widget::GetWidgetForNativeView(window);
@@ -2159,16 +2164,17 @@ void DesksController::FinalizeDeskRemoval(RemovedDeskData* removed_desk_data) {
     // container are removed from the container in case we want to immediately
     // reuse that container. Since floated window doesn't belong to desk
     // container, handle it separately.
-    aura::Window* floated_window =
-        Shell::Get()->float_controller()->FindFloatedWindowOfDesk(removed_desk);
 
     // When windows are being closed, they do so asynchronously. So, to free up
     // the desk container while the windows are being closed, we want to move
     // those windows to the container `kShellWindowId_UnparentedContainer`.
-    if (window != floated_window) {
-      window->GetRootWindow()
-          ->GetChildById(kShellWindowId_UnparentedContainer)
-          ->AddChild(window);
+    // If we move one of the windows in a snap group, the `SnapGroup` will take
+    // care of moving the other to be under the same parent, so we don't need to
+    // move it here again.
+    auto* unparented_container = window->GetRootWindow()->GetChildById(
+        kShellWindowId_UnparentedContainer);
+    if (window != floated_window && unparented_container != window->parent()) {
+      unparented_container->AddChild(window);
     }
 
     // We need to ensure that `widget->Close()` is called after we move the
@@ -2320,7 +2326,8 @@ void DesksController::RestackVisibleOnAllDesksWindowsOnActiveDesk() {
       // we'll log some info and skip the window.
       SCOPED_CRASH_KEY_NUMBER(
           "Restack", "adw_app_type",
-          visible_on_all_desks_window->GetProperty(aura::client::kAppType));
+          static_cast<int>(
+              visible_on_all_desks_window->GetProperty(chromeos::kAppTypeKey)));
       SCOPED_CRASH_KEY_STRING32(
           "Restack", "adw_app_id",
           ::full_restore::GetAppId(visible_on_all_desks_window));

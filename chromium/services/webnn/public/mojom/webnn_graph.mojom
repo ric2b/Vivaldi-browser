@@ -5,6 +5,7 @@
 module webnn.mojom;
 
 import "mojo/public/mojom/base/big_buffer.mojom";
+import "mojo/public/mojom/base/unguessable_token.mojom";
 import "services/webnn/public/mojom/webnn_error.mojom";
 
 // Represents the `MLOperand` which describes not only input and constant
@@ -230,13 +231,13 @@ struct ElementWiseBinary {
   Kind kind;
   // The id of lhs operand is used to get the `Operand` description from
   // `GraphInfo.id_to_operand_map`.
-  uint64 lhs_operand;
+  uint64 lhs_operand_id;
   // The id of rhs operand is used to get the `Operand` description from
   // `GraphInfo.id_to_operand_map`.
-  uint64 rhs_operand;
+  uint64 rhs_operand_id;
   // The id of output operand is used to get the `Operand` description from
   // `GraphInfo.id_to_operand_map`.
-  uint64 output_operand;
+  uint64 output_operand_id;
 };
 
 // Represents an element-wise unary operation, mathematically equivalent to:
@@ -515,6 +516,16 @@ struct Gather {
   uint32 axis = 0;
 };
 
+// Corresponds to `MLOperand gelu(MLOperand input)` that computes the gelu
+// function of the input tensor following the expression
+// 0.5 * x * (1 + erf(x / sqrt(2))).
+struct Gelu {
+  // The input operand (referenced by input_operand_id) must be distinct from
+  // the output operand (referenced by output_operand_id).
+  uint64 input_operand_id;
+  uint64 output_operand_id;
+};
+
 // Represents the processing direction of the input sequence for the recurrent
 // network.
 enum RecurrentNetworkDirection {
@@ -523,14 +534,14 @@ enum RecurrentNetworkDirection {
   kBoth,
 };
 
+// The ordering of the weight for the update (z), reset (r), new (n) gates.
+enum GruWeightLayout {
+  kZrn,
+  kRzn,
+};
+
 // Represents the Gated Recurrent Unit [GRU] recurrent network.
 struct Gru {
-  // The ordering of the weight for the update (z), reset (r), new (n) gates.
-  enum GruWeightLayout {
-    kZrn,
-    kRzn,
-  };
-
   // The id of the input operand.
   uint64 input_operand_id;
   // The id of the weight operand.
@@ -558,6 +569,35 @@ struct Gru {
   bool return_sequence;
   // The processing direction of the input sequence.
   RecurrentNetworkDirection direction;
+  // The ordering of the weight and bias vectors for the internal gates of GRU.
+  GruWeightLayout layout;
+  // Specifies a pair of activation functions for the update, reset and new
+  // gates.
+  array<Activation, 2> activations;
+};
+
+// Represents a single step of Gated Recurrent Unit [GRU] recurrent network.
+struct GruCell {
+  // The id of the input operand.
+  uint64 input_operand_id;
+  // The id of the weight operand.
+  uint64 weight_operand_id;
+  // The id of the recurrent weight operand.
+  uint64 recurrent_weight_operand_id;
+  // The id of the hidden state operand.
+  uint64 hidden_state_operand_id;
+  // The number of features in the hidden state.
+  uint32 hidden_size;
+  // The id of the output operand must be distinct from other operand ids.
+  uint64 output_operand_id;
+
+  // The id of the bias operand.
+  uint64? bias_operand_id;
+  // The id of the recurrent bias operand.
+  uint64? recurrent_bias_operand_id;
+  // Indicates whether to apply the reset gate after or before matrix
+  // multiplication.
+  bool reset_after;
   // The ordering of the weight and bias vectors for the internal gates of GRU.
   GruWeightLayout layout;
   // Specifies a pair of activation functions for the update, reset and new
@@ -670,15 +710,15 @@ struct Linear {
   float beta = 0;
 };
 
+// The ordering of the weight for the input (i), output (o), forget (f) and
+// cell (g) gates.
+enum LstmWeightLayout {
+  kIofg,
+  kIfgo,
+};
+
 // Represents an operation of Long Short-Term Memory (LSTM) recurrent network.
 struct Lstm {
-  // The ordering of the weight for the input (i), output (o), forget (f) and
-  // cell (g) gates.
-  enum WeightLayout {
-    kIofg,
-    kIfgo,
-  };
-
   // The id of the input operand.
   uint64 input_operand_id;
   // The id of the weight operand.
@@ -706,11 +746,42 @@ struct Lstm {
 
   // Indicates whether to return the entire sequence of outputs from each time
   // step.
-  bool return_sequence = false;
+  bool return_sequence;
   // The processing direction of the input sequence.
   RecurrentNetworkDirection direction;
   // The ordering of both weight and bias vectors.
-  WeightLayout layout;
+  LstmWeightLayout layout;
+  // The activation functions for the input, output and forget gates.
+  array<Activation, 3> activations;
+};
+
+// Represents a single step of Long Short-Term Memory (LSTM) recurrent network.
+struct LstmCell {
+  // The id of the input operand.
+  uint64 input_operand_id;
+  // The id of the weight operand.
+  uint64 weight_operand_id;
+  // The id of the recurrent weight operand.
+  uint64 recurrent_weight_operand_id;
+  // The id of the hidden state operand.
+  uint64 hidden_state_operand_id;
+  // The id of the cell state operand.
+  uint64 cell_state_operand_id;
+  // The ids of the output operands must be distinct from other operand ids.
+  array<uint64, 2> output_operand_ids;
+
+  // The number of features in the hidden state.
+  uint32 hidden_size;
+
+  // The id of the bias operand.
+  uint64? bias_operand_id;
+  // The id of the recurrent bias operand.
+  uint64? recurrent_bias_operand_id;
+  // The id of the peephole weight operand.
+  uint64? peephole_weight_operand_id;
+
+  // The ordering of both weight and bias vectors.
+  LstmWeightLayout layout;
   // The activation functions for the input, output and forget gates.
   array<Activation, 3> activations;
 };
@@ -775,16 +846,12 @@ struct Softmax {
 };
 
 // Corresponds to `MLOperand softplus(MLOperand x)` that computes the softplus
-// function of the input tensor following the expression
-// ln(1 + exp(steepness * x)) / steepness.
+// function of the input tensor following the expression ln(1 + exp(x)).
 struct Softplus {
   // The input operand (referenced by input_operand_id) must be distinct from
   // the output operand (referenced by output_operand_id).
   uint64 input_operand_id;
   uint64 output_operand_id;
-
-  // The steepness value defaults to 1.0.
-  float steepness = 1.0;
 };
 
 // Corresponds to `MLOperand softsign(MLOperand x)` that computes the softsign
@@ -914,6 +981,7 @@ struct Where {
 union Activation {
   Clamp clamp;
   Elu elu;
+  Gelu gelu;
   HardSigmoid hard_sigmoid;
   LeakyRelu leaky_relu;
   Linear linear;
@@ -938,8 +1006,10 @@ union Operation {
   ElementWiseUnary element_wise_unary;
   Expand expand;
   Gather gather;
+  Gelu gelu;
   Gemm gemm;
   Gru gru;
+  GruCell gru_cell;
   HardSigmoid hard_sigmoid;
   HardSwish hard_swish;
   LayerNormalization layer_normalization;
@@ -947,6 +1017,7 @@ union Operation {
   LeakyRelu leaky_relu;
   Linear linear;
   Lstm lstm;
+  LstmCell lstm_cell;
   Matmul matmul;
   Pad pad;
   Pool2d pool2d;
@@ -1001,4 +1072,12 @@ interface WebNNGraph {
   // copy for inference.
   Compute(map<string, mojo_base.mojom.BigBuffer> named_inputs)
       => (ComputeResult result);
+
+  // Called by the renderer process to carry out the computational workload of
+  // the compiled graph. The key of map is the name of input/output to identify
+  // the tensor in the graph, the value is the MLBuffer containing the tensor
+  // data.
+  // TODO(crbug.com/331351967): remove Compute().
+  Dispatch(map<string, mojo_base.mojom.UnguessableToken> named_inputs,
+    map<string, mojo_base.mojom.UnguessableToken> named_outputs);
 };

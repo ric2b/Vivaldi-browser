@@ -14,6 +14,7 @@
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/files/important_file_writer.h"
+#include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
 #include "base/hash/md5.h"
 #include "base/logging.h"
@@ -303,7 +304,7 @@ StandaloneTrustedVaultBackend::StandaloneTrustedVaultBackend(
       connection_(std::move(connection)),
       clock_(base::DefaultClock::GetInstance()) {
   if (recovery_key_provider) {
-    // TODO(crbug.com/1223853): Initialize/recreate in SetPrimaryAccount().
+    // TODO(crbug.com/40187814): Initialize/recreate in SetPrimaryAccount().
     CHECK(recovery_key_store_connection);
     recovery_key_store_controller_ =
         std::make_unique<RecoveryKeyStoreController>(
@@ -424,7 +425,7 @@ void StandaloneTrustedVaultBackend::FetchKeys(
                                  .private_key_material()));
   if (!key_pair) {
     // Corrupted state: device is registered, but |key_pair| can't be imported.
-    // TODO(crbug.com/1094326): restore from this state (throw away the key and
+    // TODO(crbug.com/40699425): restore from this state (throw away the key and
     // trigger device registration again).
     FulfillFetchKeys(account_info.gaia, std::move(callback),
                      TrustedVaultDownloadKeysStatusForUMA::
@@ -500,7 +501,7 @@ void StandaloneTrustedVaultBackend::SetPrimaryAccount(
       MaybeRegisterDevice();
 
       CHECK(degraded_recoverability_handler_);
-      // TODO(crbug.com/1247990): Add Integration test.
+      // TODO(crbug.com/40790270): Add Integration test.
       degraded_recoverability_handler_->HintDegradedRecoverabilityChanged(
           TrustedVaultHintDegradedRecoverabilityChangedReasonForUMA::
               kPersistentAuthErrorResolved);
@@ -533,7 +534,7 @@ void StandaloneTrustedVaultBackend::SetPrimaryAccount(
           per_user_vault->degraded_recoverability_state());
   // Should process `pending_get_is_recoverability_degraded_` if it belongs to
   // the current primary account.
-  // TODO(crbug.com/1413179): |pending_get_is_recoverability_degraded_| should
+  // TODO(crbug.com/40255601): |pending_get_is_recoverability_degraded_| should
   // be redundant now. GetRecoverabilityIsDegraded() should be called after
   // SetPrimaryAccount(). This logic is similar to FetchKeys() reporting
   // kNoPrimaryAccount, once there is data confirming that this bucked is not
@@ -688,8 +689,11 @@ void StandaloneTrustedVaultBackend::AddTrustedRecoveryMethod(
   // base::Unretained() here.
   ongoing_add_recovery_method_request_ =
       connection_->RegisterAuthenticationFactor(
-          *primary_account_, GetAllVaultKeys(*per_user_vault),
-          per_user_vault->last_vault_key_version(), *imported_public_key,
+          *primary_account_,
+          GetTrustedVaultKeysWithVersions(
+              GetAllVaultKeys(*per_user_vault),
+              per_user_vault->last_vault_key_version()),
+          *imported_public_key,
           UnspecifiedAuthenticationFactorType(method_type_hint),
           base::IgnoreArgs<TrustedVaultRegistrationStatus, int>(base::BindOnce(
               &StandaloneTrustedVaultBackend::OnTrustedRecoveryMethodAdded,
@@ -722,7 +726,7 @@ void StandaloneTrustedVaultBackend::SetRecoveryKeyStoreUploadEnabled(
   // method is called.
   CHECK(recovery_key_store_controller_);
 
-  // TODO(crbug.com/1223853): Shift responsibility for updating the enabled bit
+  // TODO(crbug.com/40187814): Shift responsibility for updating the enabled bit
   // in the state to the RecoveryKeyStoreController.
   trusted_vault_pb::LocalTrustedVaultPerUser* per_user_vault =
       FindUserVault(account_info.gaia);
@@ -836,7 +840,7 @@ bool StandaloneTrustedVaultBackend::AreConnectionRequestsThrottledForTesting() {
 
 std::optional<TrustedVaultDeviceRegistrationStateForUMA>
 StandaloneTrustedVaultBackend::MaybeRegisterDevice() {
-  // TODO(crbug.com/1413179): in case of transient failure this function is
+  // TODO(crbug.com/40255601): in case of transient failure this function is
   // likely to be not called until the browser restart; implement retry logic.
   if (!connection_) {
     // Feature disabled.
@@ -901,9 +905,11 @@ StandaloneTrustedVaultBackend::MaybeRegisterDevice() {
   if (HasNonConstantKey(*per_user_vault)) {
     ongoing_device_registration_request_ =
         connection_->RegisterAuthenticationFactor(
-            *primary_account_, GetAllVaultKeys(*per_user_vault),
-            per_user_vault->last_vault_key_version(), key_pair->public_key(),
-            PhysicalDevice(),
+            *primary_account_,
+            GetTrustedVaultKeysWithVersions(
+                GetAllVaultKeys(*per_user_vault),
+                per_user_vault->last_vault_key_version()),
+            key_pair->public_key(), PhysicalDevice(),
             base::BindOnce(&StandaloneTrustedVaultBackend::OnDeviceRegistered,
                            base::Unretained(this)));
   } else {
@@ -1246,6 +1252,52 @@ void StandaloneTrustedVaultBackend::WriteRecoveryKeyStoreState(
       FindUserVault(primary_account_->gaia);
   *per_user_vault->mutable_recovery_key_store_state() = state;
   WriteDataToDisk();
+}
+
+void StandaloneTrustedVaultBackend::AddRecoveryKeyToSecurityDomain(
+    const std::vector<uint8_t>& public_key_bytes,
+    RecoveryKeyRegistrationCallback callback) {
+  CHECK(primary_account_);
+  trusted_vault_pb::LocalTrustedVaultPerUser* per_user_vault =
+      FindUserVault(primary_account_->gaia);
+  CHECK(per_user_vault);
+
+  std::unique_ptr<SecureBoxPublicKey> public_key =
+      SecureBoxPublicKey::CreateByImport(public_key_bytes);
+  if (!public_key) {
+    // Invalid public key.
+    return;
+  }
+
+  // Resetting `ongoing_recovery_key_registration_request_` will cancel any
+  // other recovery key registration request that is already in progress.
+  //
+  // AreConnectionRequestsThrottled() isn't used because we ensure externally
+  // that this doesn't spam the server.
+  ongoing_recovery_key_registration_request_ =
+      connection_->RegisterAuthenticationFactor(
+          *primary_account_,
+          GetTrustedVaultKeysWithVersions(
+              GetAllVaultKeys(*per_user_vault),
+              per_user_vault->last_vault_key_version()),
+          *public_key, LockScreenKnowledgeFactor(),
+          base::BindOnce(&StandaloneTrustedVaultBackend::
+                             OnRecoveryKeyAddedToSecurityDomain,
+                         base::Unretained(this), std::move(callback)));
+}
+
+void StandaloneTrustedVaultBackend::OnRecoveryKeyAddedToSecurityDomain(
+    RecoveryKeyRegistrationCallback callback,
+    TrustedVaultRegistrationStatus status,
+    int key_version_unused) {
+  // |key_version_unused| is unused because this callback is invoked when
+  // adding a member to an existing security domain. In this case the key
+  // version is already known.
+  CHECK(primary_account_);
+  CHECK(ongoing_recovery_key_registration_request_);
+
+  ongoing_recovery_key_registration_request_.reset();
+  std::move(callback).Run(status);
 }
 
 }  // namespace trusted_vault

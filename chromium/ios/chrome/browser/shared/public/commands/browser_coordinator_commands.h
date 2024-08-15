@@ -12,8 +12,8 @@
 class GURL;
 
 // Protocol for commands that will be handled by the BrowserCoordinator.
-// TODO(crbug.com/906662) : Rename this protocol to one that is more descriptive
-// and representative of the contents.
+// TODO(crbug.com/41427057) : Rename this protocol to one that is more
+// descriptive and representative of the contents.
 @protocol BrowserCoordinatorCommands
 
 // Prints the currently active tab.
@@ -49,6 +49,9 @@ class GURL;
 - (void)showHistoryPanel;
 - (void)showPanel;
 - (void)dismissPanel;
+
+// Show In App Default Rating Prompt
+- (void)showDefaultReviewPrompt;
 // End Vivaldi
 
 // Shows recent tabs.
@@ -87,7 +90,7 @@ class GURL;
 - (void)focusFakebox;
 
 // Closes the current tab.
-// TODO(crbug.com/1272498): Refactor this command away; call sites should close
+// TODO(crbug.com/40806293): Refactor this command away; call sites should close
 // via the WebStateList.
 - (void)closeCurrentTab;
 
@@ -108,6 +111,9 @@ class GURL;
 
 // Dismiss the payments suggestions.
 - (void)dismissPaymentSuggestions;
+
+// Dismiss the password suggestions.
+- (void)dismissPasswordSuggestions;
 
 // Dismiss the card unmask authentication prompt.
 - (void)dismissCardUnmaskAuthentication;

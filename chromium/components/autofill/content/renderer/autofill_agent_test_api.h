@@ -25,6 +25,22 @@ class AutofillAgentTestApi {
     return agent_->provisionally_saved_form();
   }
 
+  void FocusedElementChanged(blink::WebElement new_focused_element) {
+    agent_->FocusedElementChanged(new_focused_element);
+  }
+
+  void QueryAutofillSuggestions(
+      const blink::WebFormControlElement& element,
+      AutofillSuggestionTriggerSource trigger_source) {
+    agent_->QueryAutofillSuggestions(element, trigger_source);
+  }
+
+  void ShowSuggestionsForContentEditable(
+      const blink::WebElement& element,
+      AutofillSuggestionTriggerSource trigger_source) {
+    agent_->ShowSuggestionsForContentEditable(element, trigger_source);
+  }
+
  private:
   const raw_ref<AutofillAgent> agent_;
 };

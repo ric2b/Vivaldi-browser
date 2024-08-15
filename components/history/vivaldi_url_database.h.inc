@@ -10,9 +10,9 @@
 
   history::TypedUrlResults GetVivaldiTypedHistory(
                         const std::string query,
-                        KeywordID prefix_keyword,
                         int max_results);
 
 bool CreateVivaldiURLsLastVisitIndex();
 
+bool CreateVivaldiURLScoreIndex();
 #endif

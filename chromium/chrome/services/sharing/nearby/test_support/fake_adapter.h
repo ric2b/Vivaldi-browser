@@ -52,14 +52,19 @@ class FakeAdapter : public mojom::Adapter {
       const device::BluetoothUUID& service_id,
       mojo::PendingRemote<mojom::GattServiceObserver> observer,
       CreateLocalGattServiceCallback callback) override;
+  void IsLeScatternetDualRoleSupported(
+      IsLeScatternetDualRoleSupportedCallback callback) override;
 
   void SetAdvertisementDestroyedCallback(base::OnceClosure callback);
   const std::vector<uint8_t>* GetRegisteredAdvertisementServiceData(
       const device::BluetoothUUID& service_uuid);
+  void SetShouldAdvertisementRegistrationSucceed(
+      bool should_advertisement_registration_succeed);
   void SetShouldDiscoverySucceed(bool should_discovery_succeed);
   void SetCreateLocalGattServiceCallback(base::OnceClosure callback);
   void SetCreateLocalGattServiceResult(
       std::unique_ptr<FakeGattService> fake_gatt_service);
+  void SetExtendedAdvertisementSupport(bool extended_advertisement_support);
   void SetDiscoverySessionDestroyedCallback(base::OnceClosure callback);
   bool IsDiscoverySessionActive();
   void NotifyDeviceAdded(mojom::DeviceInfoPtr device_info);
@@ -75,10 +80,12 @@ class FakeAdapter : public mojom::Adapter {
   mojo::Receiver<mojom::Adapter> adapter_{this};
   std::string address_ = "AdapterAddress";
   std::string name_ = "AdapterName";
+  bool extended_advertisement_support_ = false;
   bool present_ = true;
   bool powered_ = true;
   bool discoverable_ = false;
   bool discovering_ = false;
+  bool is_dual_role_supported_ = false;
 
  private:
   void OnAdvertisementDestroyed(const device::BluetoothUUID& service_uuid);

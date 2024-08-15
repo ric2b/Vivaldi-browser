@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "core/fpdfapi/parser/cpdf_parser.h"
 
 #include <limits>
@@ -725,7 +730,7 @@ TEST_F(ParserXRefTest, XrefIndexWithRepeatedObject) {
       {.type = CPDF_CrossRefTable::ObjectType::kNormal, .pos = 0},
       // Since the /Index does not follow the spec, this is one of the 2
       // possible values that a parser can come up with.
-      {.type = CPDF_CrossRefTable::ObjectType::kNormal, .pos = 15}};
+      {.type = CPDF_CrossRefTable::ObjectType::kNormal, .pos = 18}};
 
   EXPECT_THAT(objects_info, ElementsAre(Pair(2, expected_result[0]),
                                         Pair(3, expected_result[1])));

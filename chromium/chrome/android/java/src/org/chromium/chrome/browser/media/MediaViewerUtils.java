@@ -76,7 +76,7 @@ public class MediaViewerUtils {
 
         if (allowExternalAppHandlers && !willExposeFileUri(contentUri)) {
             // Create a PendingIntent that can be used to view the file externally.
-            // TODO(https://crbug.com/795968): Check if this is problematic in multi-window mode,
+            // TODO(crbug.com/40555252): Check if this is problematic in multi-window mode,
             //                                 where two different viewers could be visible at the
             //                                 same time.
             Intent viewIntent = createViewIntentForUri(contentUri, mimeType, null, null);
@@ -84,7 +84,7 @@ public class MediaViewerUtils {
             chooserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             String openWithStr = context.getString(R.string.download_manager_open_with);
 
-            // TODO(https://crbug.com/1428364): PendingIntents are no longer allowed to be both
+            // TODO(crbug.com/40262179): PendingIntents are no longer allowed to be both
             // mutable and implicit. Since this must be mutable, we need to set a component and then
             // remove the FLAG_ALLOW_UNSAFE_IMPLICIT_INTENT flag.
             PendingIntent pendingViewIntent =
@@ -106,7 +106,7 @@ public class MediaViewerUtils {
                     BitmapFactory.decodeResource(
                             context.getResources(), R.drawable.ic_share_white_24dp);
 
-            // TODO(https://crbug.com/1428364): PendingIntents are no longer allowed to be both
+            // TODO(crbug.com/40262179): PendingIntents are no longer allowed to be both
             // mutable and implicit. Since this must be mutable, we need to set a component and then
             // remove the FLAG_ALLOW_UNSAFE_IMPLICIT_INTENT flag.
             PendingIntent pendingShareIntent =

@@ -17,6 +17,7 @@
 #import "components/feed/core/v2/public/ios/prefs.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/metrics/model/constants.h"
+#import "ios/chrome/browser/ntp/model/new_tab_page_state.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/ntp/feed_control_delegate.h"
 #import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_constants.h"
@@ -64,7 +65,7 @@ using feed::FeedUserActionType;
     BOOL engagedWithLatestRefreshedContent;
 
 // Tracking property to record a scroll for Good Visits.
-// TODO(crbug.com/1373650) separate the property below in two, one for each
+// TODO(crbug.com/40871863) separate the property below in two, one for each
 // feed.
 @property(nonatomic, assign) BOOL goodVisitScroll;
 // The timestamp when the first metric is being recorded for this session.
@@ -126,7 +127,7 @@ using feed::FeedUserActionType;
   }
 
   // Log scrolled into Discover feed.
-  if ([self.feedControlDelegate selectedFeed] == FeedTypeDiscover &&
+  if (self.NTPState.selectedFeed == FeedTypeDiscover &&
       !self.scrolledReportedDiscover) {
     UMA_HISTOGRAM_ENUMERATION(kDiscoverFeedEngagementTypeHistogram,
                               FeedEngagementType::kFeedScrolled);
@@ -134,7 +135,7 @@ using feed::FeedUserActionType;
   }
 
   // Log scrolled into Following feed.
-  if ([self.feedControlDelegate selectedFeed] == FeedTypeFollowing &&
+  if (self.NTPState.selectedFeed == FeedTypeFollowing &&
       !self.scrolledReportedFollowing) {
     UMA_HISTOGRAM_ENUMERATION(kFollowingFeedEngagementTypeHistogram,
                               FeedEngagementType::kFeedScrolled);
@@ -204,7 +205,7 @@ using feed::FeedUserActionType;
     self.followingPreviousTimeInFeedGV =
         self.prefService->GetDouble(kLongFollowingFeedVisitTimeAggregateKey);
 
-    // TODO(crbug.com/1497419) This scenario can happen (this is very rare)
+    // TODO(crbug.com/40075889) This scenario can happen (this is very rare)
     // because key kLongFeedVisitTimeAggregateKey was moved out of
     // NSUserDefaults later than kLongDiscoverFeedVisitTimeAggregateKey and
     // kLongFollowingFeedVisitTimeAggregateKey. Clean this code in the future.
@@ -450,7 +451,7 @@ using feed::FeedUserActionType;
 }
 
 - (void)recordCardShownAtIndex:(NSUInteger)index {
-  switch ([self.feedControlDelegate selectedFeed]) {
+  switch (self.NTPState.selectedFeed) {
     case FeedTypeDiscover:
       UMA_HISTOGRAM_EXACT_LINEAR(kDiscoverFeedCardShownAtIndex, index,
                                  kMaxCardsInFeed);
@@ -462,7 +463,7 @@ using feed::FeedUserActionType;
 }
 
 - (void)recordCardTappedAtIndex:(NSUInteger)index {
-  // TODO(crbug.com/1174088): No-op since this function gets called multiple
+  // TODO(crbug.com/40746586): No-op since this function gets called multiple
   // times for a tap. Log index when this is fixed.
 }
 
@@ -575,7 +576,7 @@ using feed::FeedUserActionType;
 - (void)recordFeedWillRefresh {
   base::RecordAction(base::UserMetricsAction(kFeedWillRefresh));
   // The feed will have new content so reset the engagement tracking variable.
-  // TODO(crbug.com/1423467): We need to know whether the feed was actually
+  // TODO(crbug.com/40260057): We need to know whether the feed was actually
   // refreshed, and not just when it was triggered.
   self.engagedWithLatestRefreshedContent = NO;
 }
@@ -806,20 +807,6 @@ using feed::FeedUserActionType;
                                 asInteraction:NO];
 }
 
-- (void)recordSignInPromoUIContinueTapped {
-  [self recordDiscoverFeedUserActionHistogram:
-            FeedUserActionType::kTappedFeedSignInPromoUIContinue
-                                asInteraction:NO];
-  base::RecordAction(base::UserMetricsAction(kFeedSignInPromoUIContinueTapped));
-}
-
-- (void)recordSignInPromoUICancelTapped {
-  [self recordDiscoverFeedUserActionHistogram:FeedUserActionType::
-                                                  kTappedFeedSignInPromoUICancel
-                                asInteraction:NO];
-  base::RecordAction(base::UserMetricsAction(kFeedSignInPromoUICancelTapped));
-}
-
 - (void)recordShowSignInOnlyUIWithUserId:(BOOL)hasUserId {
   base::RecordAction(
       hasUserId ? base::UserMetricsAction(kShowFeedSignInOnlyUIWithUserId)
@@ -829,9 +816,6 @@ using feed::FeedUserActionType;
 - (void)recordShowSignInRelatedUIWithType:(feed::FeedSignInUI)type {
   base::UmaHistogramEnumeration(kFeedSignInUI, type);
   switch (type) {
-    case feed::FeedSignInUI::kShowSyncHalfSheet:
-      return base::RecordAction(
-          base::UserMetricsAction(kShowSyncHalfSheetFromFeed));
     case feed::FeedSignInUI::kShowSignInOnlyFlow:
       return base::RecordAction(
           base::UserMetricsAction(kShowSignInOnlyFlowFromFeed));
@@ -1068,10 +1052,10 @@ using feed::FeedUserActionType;
     }
   }
   self.lastInteractionTimeForGoodVisits = now;
-  if ([self.feedControlDelegate selectedFeed] == FeedTypeDiscover) {
+  if (self.NTPState.selectedFeed == FeedTypeDiscover) {
     self.lastInteractionTimeForDiscoverGoodVisits = now;
   }
-  if ([self.feedControlDelegate selectedFeed] == FeedTypeFollowing) {
+  if (self.NTPState.selectedFeed == FeedTypeFollowing) {
     self.lastInteractionTimeForFollowingGoodVisits = now;
   }
   // If the session hasn't been reset and a GoodVisit has already been
@@ -1087,18 +1071,16 @@ using feed::FeedUserActionType;
   // new incognito tab ...).
 
   if (interacted) {
-    [self recordEngagedGoodVisits:[self.feedControlDelegate selectedFeed]
-                     allFeedsOnly:NO];
+    [self recordEngagedGoodVisits:self.NTPState.selectedFeed allFeedsOnly:NO];
     return;
   }
   // 2. Good time in feed (`kGoodVisitTimeInFeedSeconds` with >= 1 scroll in an
   // entire session).
-  if (([self timeSpentForCurrentGoodVisitSessionInFeed:[self.feedControlDelegate
-                                                               selectedFeed]] >
+  if (([self timeSpentForCurrentGoodVisitSessionInFeed:self.NTPState
+                                                           .selectedFeed] >
        kGoodVisitTimeInFeedSeconds) &&
       self.goodVisitScroll) {
-    [self recordEngagedGoodVisits:[self.feedControlDelegate selectedFeed]
-                     allFeedsOnly:YES];
+    [self recordEngagedGoodVisits:self.NTPState.selectedFeed allFeedsOnly:YES];
 
     // Check if Good Visit should be triggered for Discover feed.
     if (self.discoverPreviousTimeInFeedGV > kGoodVisitTimeInFeedSeconds) {
@@ -1121,13 +1103,13 @@ using feed::FeedUserActionType;
                             FeedEngagementType::kFeedInteracted);
 
   // Log interaction for Discover feed.
-  if ([self.feedControlDelegate selectedFeed] == FeedTypeDiscover) {
+  if (self.NTPState.selectedFeed == FeedTypeDiscover) {
     UMA_HISTOGRAM_ENUMERATION(kDiscoverFeedEngagementTypeHistogram,
                               FeedEngagementType::kFeedInteracted);
   }
 
   // Log interaction for Following feed.
-  if ([self.feedControlDelegate selectedFeed] == FeedTypeFollowing) {
+  if (self.NTPState.selectedFeed == FeedTypeFollowing) {
     UMA_HISTOGRAM_ENUMERATION(kFollowingFeedEngagementTypeHistogram,
                               FeedEngagementType::kFeedInteracted);
   }
@@ -1143,7 +1125,7 @@ using feed::FeedUserActionType;
   }
 
   // Log simple engagment for Discover feed.
-  if ([self.feedControlDelegate selectedFeed] == FeedTypeDiscover &&
+  if (self.NTPState.selectedFeed == FeedTypeDiscover &&
       !self.engagedSimpleReportedDiscover) {
     UMA_HISTOGRAM_ENUMERATION(kDiscoverFeedEngagementTypeHistogram,
                               FeedEngagementType::kFeedEngagedSimple);
@@ -1151,7 +1133,7 @@ using feed::FeedUserActionType;
   }
 
   // Log simple engagement for Following feed.
-  if ([self.feedControlDelegate selectedFeed] == FeedTypeFollowing &&
+  if (self.NTPState.selectedFeed == FeedTypeFollowing &&
       !self.engagedSimpleReportedFollowing) {
     UMA_HISTOGRAM_ENUMERATION(kFollowingFeedEngagementTypeHistogram,
                               FeedEngagementType::kFeedEngagedSimple);
@@ -1177,7 +1159,7 @@ using feed::FeedUserActionType;
   }
 
   // Log engagment for Discover feed.
-  if ([self.feedControlDelegate selectedFeed] == FeedTypeDiscover &&
+  if (self.NTPState.selectedFeed == FeedTypeDiscover &&
       !self.engagedReportedDiscover) {
     UMA_HISTOGRAM_ENUMERATION(kDiscoverFeedEngagementTypeHistogram,
                               FeedEngagementType::kFeedEngaged);
@@ -1185,23 +1167,22 @@ using feed::FeedUserActionType;
   }
 
   // Log engagement for Following feed.
-  if ([self.feedControlDelegate selectedFeed] == FeedTypeFollowing &&
+  if (self.NTPState.selectedFeed == FeedTypeFollowing &&
       !self.engagedReportedFollowing) {
     UMA_HISTOGRAM_ENUMERATION(kFollowingFeedEngagementTypeHistogram,
                               FeedEngagementType::kFeedEngaged);
-    UMA_HISTOGRAM_ENUMERATION(
-        kFollowingFeedSortTypeWhenEngaged,
-        [self convertFollowingFeedSortTypeForHistogram:
-                  [self.feedControlDelegate followingFeedSortType]]);
+    UMA_HISTOGRAM_ENUMERATION(kFollowingFeedSortTypeWhenEngaged,
+                              [self convertFollowingFeedSortTypeForHistogram:
+                                        self.NTPState.followingFeedSortType]);
     self.engagedReportedFollowing = YES;
 
     // Log follow count when engaging with Following feed.
-    // TODO(crbug.com/1322640): `followDelegate` is nil when navigating to an
+    // TODO(crbug.com/40838123): `followDelegate` is nil when navigating to an
     // article, since NTPCoordinator is stopped first. When this is fixed,
     // `recordFollowCount` should be called here.
   }
 
-  // TODO(crbug.com/1322640): Separate user action for Following feed.
+  // TODO(crbug.com/40838123): Separate user action for Following feed.
   base::RecordAction(base::UserMetricsAction(kDiscoverFeedUserActionEngaged));
 }
 
@@ -1248,16 +1229,15 @@ using feed::FeedUserActionType;
   base::Time now = base::Time::Now();
   base::TimeDelta additionalTimeInFeed = now - self.feedBecameVisibleTime;
 
-  if (self.feedBecameVisibleTime.is_null()) {
-    base::debug::DumpWithoutCrashing();
-  }
   if (additionalTimeInFeed.is_negative()) {
-    base::debug::DumpWithoutCrashing();
+    // TODO(crbug.com/340554892): Fix Good Visits metric.
+    // Temporary fix, but it should reduce the number of occurances.
+    self.feedBecameVisibleTime = base::Time::Now();
+    additionalTimeInFeed = now - self.feedBecameVisibleTime;
   }
   // Temporary fix to resolve negative values in prefs.
   // TODO(crbug.com/329274886): Remove fix once crashes are down to zero.
   if (self.previousTimeInFeedForGoodVisitSession < 0) {
-    base::debug::DumpWithoutCrashing();
     self.previousTimeInFeedForGoodVisitSession = 0;
   }
   self.previousTimeInFeedForGoodVisitSession =
@@ -1395,11 +1375,11 @@ using feed::FeedUserActionType;
   self.prefService->SetTime(kArticleVisitTimestampKey, base::Time::Now());
 
   self.prefService->SetInteger(kLastUsedFeedForGoodVisitsKey,
-                               [self.feedControlDelegate selectedFeed]);
+                               self.NTPState.selectedFeed);
 
   [self.NTPMetricsDelegate feedArticleOpened];
 
-  switch ([self.feedControlDelegate selectedFeed]) {
+  switch (self.NTPState.selectedFeed) {
     case FeedTypeDiscover:
       UMA_HISTOGRAM_EXACT_LINEAR(kDiscoverFeedURLOpened, 0, 1);
       break;

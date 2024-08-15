@@ -170,7 +170,7 @@ def datetime_now():
 # Deletes the tree at dir if it exists.
 def rmtree_if_exists(rm_dir):
     if os.path.exists(rm_dir) and os.path.isdir(rm_dir):
-        shutil.rmtree(rm_dir)
+        shutil.rmtree(rm_dir, ignore_errors=True)
 
 
 def set_reproxy_path_flags(out_dir, make_dirs=True):
@@ -281,6 +281,15 @@ def set_win_defaults():
     # Reduce local resource fraction used to do local compile actions on
     # windows, to try and prevent machine saturation.
     os.environ.setdefault("RBE_local_resource_fraction", "0.05")
+    # Set execution strategy to remote_local_fallback while racing performance
+    # on windows is addressed.
+    os.environ.setdefault("RBE_exec_strategy", "remote_local_fallback")
+    # Turn off creds caching for windows, as luci-auth as credshelper shouldn't
+    # use it.
+    os.environ.setdefault("RBE_enable_creds_cache", "false")
+    # Extend timeouts on windows
+    os.environ.setdefault("RBE_exec_timeout","4m")
+    os.environ.setdefault("RBE_reclient_timeout","8m")
 
 
 def workspace_is_cog():
@@ -350,7 +359,7 @@ def build_context(argv, tool):
     reproxy_ret_code = start_reproxy(reclient_cfg, reclient_bin_dir)
     if os.environ.get('NINJA_SUMMARIZE_BUILD') == '1':
         elapsed = time.time() - start
-        print('%1.3f s to start reproxy' % elapsed)
+        print('%1.3fs to start reproxy' % elapsed)
     if reproxy_ret_code != 0:
         print(f'''Failed to start reproxy!
 See above error message for details.
@@ -366,4 +375,4 @@ Ensure you have completed the reproxy setup instructions:
         stop_reproxy(reclient_cfg, reclient_bin_dir)
         if os.environ.get('NINJA_SUMMARIZE_BUILD') == '1':
             elapsed = time.time() - start
-            print('%1.3f s to stop reproxy' % elapsed)
+            print('%1.3fs to stop reproxy' % elapsed)

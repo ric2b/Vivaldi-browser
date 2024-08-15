@@ -172,16 +172,17 @@ Widget* CreateBubbleWidget(BubbleDialogDelegate* bubble) {
   bubble_params.accept_events = bubble->accept_events();
   bubble_params.remove_standard_frame = true;
   bubble_params.layer_type = bubble->GetLayerType();
+  // TODO(crbug.com/41493925): Remove CHECK once native frame dialogs support
+  // autosize.
+  CHECK(!bubble->is_autosized() || bubble->use_custom_frame())
+      << "Autosizing native frame dialogs is not supported.";
+  bubble_params.autosize = bubble->is_autosized();
 
   // Use a window default shadow if the bubble doesn't provides its own.
   if (bubble->GetShadow() == BubbleBorder::NO_SHADOW)
     bubble_params.shadow_type = Widget::InitParams::ShadowType::kDefault;
   else
     bubble_params.shadow_type = Widget::InitParams::ShadowType::kNone;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  bubble_params.background_elevation =
-      ui::ColorProviderKey::ElevationMode::kHigh;
-#endif
   gfx::NativeView parent = gfx::NativeView();
   if (bubble->has_parent()) {
     if (bubble->parent_window()) {
@@ -436,9 +437,11 @@ BubbleDialogDelegate::CloseOnDeactivatePin::~CloseOnDeactivatePin() {
 
 BubbleDialogDelegate::BubbleDialogDelegate(View* anchor_view,
                                            BubbleBorder::Arrow arrow,
-                                           BubbleBorder::Shadow shadow)
+                                           BubbleBorder::Shadow shadow,
+                                           bool autosize)
     : arrow_(arrow),
       shadow_(shadow),
+      autosize_(autosize),
       close_on_deactivate_pins_(std::make_unique<CloseOnDeactivatePin::Pins>()),
       bubble_created_time_(base::TimeTicks::Now()) {
   bubble_uma_logger().set_delegate(this);
@@ -453,6 +456,9 @@ BubbleDialogDelegate::BubbleDialogDelegate(View* anchor_view,
   set_title_margins(layout_provider->GetInsetsMetric(INSETS_DIALOG_TITLE));
   set_footnote_margins(
       layout_provider->GetInsetsMetric(INSETS_DIALOG_FOOTNOTE));
+
+  set_desired_bounds_delegate(base::BindRepeating(
+      &BubbleDialogDelegate::GetDesiredBubbleBounds, base::Unretained(this)));
 
   RegisterWidgetInitializedCallback(base::BindOnce(
       [](BubbleDialogDelegate* bubble_delegate) {
@@ -539,8 +545,9 @@ BubbleDialogDelegateView::BubbleDialogDelegateView()
 
 BubbleDialogDelegateView::BubbleDialogDelegateView(View* anchor_view,
                                                    BubbleBorder::Arrow arrow,
-                                                   BubbleBorder::Shadow shadow)
-    : BubbleDialogDelegate(anchor_view, arrow, shadow) {
+                                                   BubbleBorder::Shadow shadow,
+                                                   bool autosize)
+    : BubbleDialogDelegate(anchor_view, arrow, shadow, autosize) {
   bubble_uma_logger().set_bubble_view(this);
 }
 
@@ -933,7 +940,7 @@ gfx::Rect BubbleDialogDelegate::GetBubbleBounds() {
   gfx::Rect anchor_rect = GetAnchorRect();
   bool has_anchor = GetAnchorView() || anchor_rect != gfx::Rect();
   return GetBubbleFrameView()->GetUpdatedWindowBounds(
-      anchor_rect, arrow(), GetWidget()->client_view()->GetPreferredSize(),
+      anchor_rect, arrow(), GetWidget()->client_view()->GetPreferredSize({}),
       adjust_if_offscreen_ && !anchor_minimized && has_anchor);
 }
 
@@ -954,6 +961,23 @@ ax::mojom::Role BubbleDialogDelegate::GetAccessibleWindowRole() {
   // readers announce the contents of the bubble dialog as soon as it appears,
   // as long as we also fire |ax::mojom::Event::kAlert|.
   return ax::mojom::Role::kAlertDialog;
+}
+
+gfx::Rect BubbleDialogDelegate::GetDesiredBubbleBounds() {
+  CHECK(use_custom_frame())
+      << "GetBubbleBounds() for native frame dialogs is not supported.";
+
+  gfx::Rect bubble_bounds = GetBubbleBounds();
+
+#if BUILDFLAG(IS_MAC)
+  // GetBubbleBounds() doesn't take the Mac NativeWindow's style mask into
+  // account, so we need to adjust the size.
+  gfx::Size actual_size =
+      GetWindowSizeForClientSize(GetWidget(), bubble_bounds.size());
+  bubble_bounds.set_size(actual_size);
+#endif
+
+  return bubble_bounds;
 }
 
 gfx::Size BubbleDialogDelegateView::GetMinimumSize() const {
@@ -1018,16 +1042,7 @@ void BubbleDialogDelegate::SetAnchorRect(const gfx::Rect& rect) {
 }
 
 void BubbleDialogDelegate::SizeToContents() {
-  gfx::Rect bubble_bounds = GetBubbleBounds();
-#if BUILDFLAG(IS_MAC)
-  // GetBubbleBounds() doesn't take the Mac NativeWindow's style mask into
-  // account, so we need to adjust the size.
-  gfx::Size actual_size =
-      GetWindowSizeForClientSize(GetWidget(), bubble_bounds.size());
-  bubble_bounds.set_size(actual_size);
-#endif
-
-  GetWidget()->SetBounds(bubble_bounds);
+  GetWidget()->SetBounds(GetDesiredWidgetBounds());
 }
 
 std::u16string BubbleDialogDelegate::GetSubtitle() const {

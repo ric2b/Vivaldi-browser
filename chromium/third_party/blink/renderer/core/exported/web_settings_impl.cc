@@ -757,6 +757,11 @@ void WebSettingsImpl::SetInForcedColors(bool in_forced_colors) {
   settings_->SetInForcedColors(in_forced_colors);
 }
 
+void WebSettingsImpl::SetPreferredRootScrollbarColorScheme(
+    mojom::blink::PreferredColorScheme color_scheme) {
+  settings_->SetPreferredRootScrollbarColorScheme(color_scheme);
+}
+
 void WebSettingsImpl::SetPreferredColorScheme(
     mojom::blink::PreferredColorScheme color_scheme) {
   settings_->SetPreferredColorScheme(color_scheme);
@@ -774,10 +779,6 @@ void WebSettingsImpl::SetNavigationControls(
 
 void WebSettingsImpl::SetAriaModalPrunesAXTree(bool enabled) {
   settings_->SetAriaModalPrunesAXTree(enabled);
-}
-
-void WebSettingsImpl::SetUseAXMenuList(bool enabled) {
-  settings_->SetUseAXMenuList(enabled);
 }
 
 void WebSettingsImpl::SetSelectionClipboardBufferAvailable(bool available) {

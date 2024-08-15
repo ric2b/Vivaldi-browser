@@ -13,6 +13,7 @@
 <translation id="1462666970065907900">Haluatko varmasti sulkea ikkunan?</translation>
 <translation id="1480046233931937785">Kiitokset</translation>
 <translation id="1526344461589023948">Ladattua päivitystä tallennettaessa tapahtui virhe. Tarkista, että laitteella on riittävästi tallennustilaa ja yritä myöhemmin uudelleen.</translation>
+<translation id="1635542496948266458">Vaihda profiilia</translation>
 <translation id="1657174850639146440">Hirviö 9</translation>
 <translation id="1676595396635191120">Uusi yksityisikkuna</translation>
 <translation id="1702758681952953055">Jos virhe toistuu, ilmoita siitä mainiten seuraavat tiedot:</translation>
@@ -28,6 +29,7 @@
 <translation id="1985669426322966465">Ohjelmistopäivitys</translation>
 <translation id="2079036669923635404">Päivitä Vivaldi versioon <ph name="VERSION" /> painamalla tästä.</translation>
 <translation id="2141974047387702305">Päivitystiedostoja ladattaessa tapahtui virhe. Tarkista Internet-yhteys ja yritä myöhemmin uudelleen.</translation>
+<translation id="2226825946708954262">⚠ Jatka menettämällä tietoa</translation>
 <translation id="2339641773402824483">Tarkistetaan päivityksiä…</translation>
 <translation id="2441056087170876076">Hirviö 2</translation>
 <translation id="2444387452209867610">Lisää muistiinpano</translation>
@@ -104,6 +106,7 @@
 <translation id="498766871928286903"><ph name="DOWNLOADED" />/<ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Tuodut pikavalinnat</translation>
 <translation id="5092656712000637858">Lisää sivu verkkopaneeliin</translation>
+<translation id="5106275083540628394">Salauksen purku epäonnistui: vaara tiedon menetyksestä</translation>
 <translation id="5177818338935286353">Hirviö 7</translation>
 <translation id="5213743983876949565">Eläin 1</translation>
 <translation id="5238244642230426581">Tuodut kirjanmerkit</translation>
@@ -125,6 +128,7 @@
 <translation id="6229528619562190452">Päivitä Vivaldi painamalla tästä.</translation>
 <translation id="6234173136417926046">Käytä kuvaa aloitussivun taustana</translation>
 <translation id="6339818817272922368">Paikallinen tili</translation>
+<translation id="6398710281890660037">Salaa profiilini</translation>
 <translation id="6438786710866753178">Maisema 4</translation>
 <translation id="6477028720702061455">Valitse Operan profiilikansio tuomista varten</translation>
 <translation id="6510706699590490869">Päivitä &amp;Vivaldi</translation>
@@ -136,7 +140,9 @@
 <translation id="6726279523566323394">Valitse tuotava Braven profiilikansio</translation>
 <translation id="6892812721183419409">Avaa linkki käyttäjänä <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopioi</translation>
+<translation id="6960139763942959188">Profiili on tallennettu turvattomasti salaamattomana. Vivaldi päivittää profiilin turvallisempaan salattuun muotoon. Lopeta ja varmuuskopioi profiili ennen kuin jatkat.</translation>
 <translation id="7086554968911045110">Maisema 7</translation>
+<translation id="7099506190679014195">Salatun avaintaltion päivitys</translation>
 <translation id="7111492742514999492">Maisema 9</translation>
 <translation id="7208252576848052204">Valitettavasti Arc-selaimesi asetukset eivät ole käytettävissä sen ollessa avoinna. Tuodaksesi ne Vivaldiin, tallenna tilanteesi ja sulje kaikki Arcin ikkunat, ja paina lopuksi "Jatka".</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -180,6 +186,7 @@
 <translation id="9048058608784130603">Odottava päivitys <ph name="VERSION" /></translation>
 <translation id="9048224371732578627">Videoiden automaattitoisto on sallittu</translation>
 <translation id="9065203028668620118">Muokkaa</translation>
+<translation id="9090254883741610153">Salli jatkaa</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Avaa kuva käyttäjänä <ph name="USER" /></translation>
 <translation id="9157539936604258187">Avaa linkki</translation>

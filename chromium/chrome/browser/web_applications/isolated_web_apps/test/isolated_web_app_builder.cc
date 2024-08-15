@@ -9,6 +9,7 @@
 #include <string>
 #include <string_view>
 
+#include "base/base_paths.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_file.h"
@@ -16,6 +17,7 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/to_string.h"
@@ -31,6 +33,7 @@
 #include "chrome/browser/web_applications/test/web_app_icon_test_utils.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
 #include "components/web_package/test_support/signed_web_bundles/web_bundle_signer.h"
 #include "components/web_package/web_bundle_builder.h"
 #include "net/http/http_request_headers.h"
@@ -93,7 +96,8 @@ void FakeInstallPageState(Profile* profile,
   GURL install_url = base_url.Resolve(kInstallPagePath);
   FakeWebContentsManager::FakePageState& install_page_state =
       fake_web_contents_manager.GetOrCreatePageState(install_url);
-  install_page_state.url_load_result = WebAppUrlLoaderResult::kUrlLoaded;
+  install_page_state.url_load_result =
+      webapps::WebAppUrlLoaderResult::kUrlLoaded;
   install_page_state.error_code =
       webapps::InstallableStatusCode::NO_ERROR_DETECTED;
   install_page_state.manifest_url = base_url.Resolve(kManifestPath);
@@ -140,6 +144,23 @@ base::expected<IsolatedWebAppUrlInfo, std::string> Install(
   }
 
   return url_info;
+}
+
+web_package::SignedWebBundleId CreateSignedWebBundleIdFromKeyPair(
+    const web_package::WebBundleSigner::KeyPair& key_pair) {
+  return absl::visit(
+      base::Overloaded{
+          [](const web_package::WebBundleSigner::Ed25519KeyPair&
+                 ed25519_key_pair) {
+            return web_package::SignedWebBundleId::CreateForEd25519PublicKey(
+                ed25519_key_pair.public_key);
+          },
+          [](const web_package::WebBundleSigner::EcdsaP256KeyPair&
+                 ecdsa_p256_key_pair) {
+            return web_package::SignedWebBundleId::CreateForEcdsaP256PublicKey(
+                ecdsa_p256_key_pair.public_key);
+          }},
+      key_pair);
 }
 
 }  // namespace
@@ -234,7 +255,7 @@ IsolatedWebAppUrlInfo ScopedProxyIsolatedWebApp::InstallChecked(
 base::expected<IsolatedWebAppUrlInfo, std::string>
 ScopedProxyIsolatedWebApp::Install(Profile* profile) {
   return Install(profile,
-                 web_package::SignedWebBundleId::CreateRandomForDevelopment());
+                 web_package::SignedWebBundleId::CreateRandomForProxyMode());
 }
 
 base::expected<IsolatedWebAppUrlInfo, std::string>
@@ -628,10 +649,11 @@ IsolatedWebAppBuilder& IsolatedWebAppBuilder::AddFolderFromDisk(
 IsolatedWebAppBuilder& IsolatedWebAppBuilder::AddFolderFromDisk(
     std::string_view resource_path,
     const std::string& chrome_test_data_relative_path) {
+  base::FilePath base_path;
+  CHECK(base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &base_path));
   base::FilePath absolute_path =
-      base::FilePath(FILE_PATH_LITERAL("chrome/test/data"))
-          .Append(
-              base::FilePath::FromUTF8Unsafe(chrome_test_data_relative_path));
+      base_path.AppendASCII("chrome/test/data")
+          .AppendASCII(chrome_test_data_relative_path);
   return AddFolderFromDisk(resource_path, absolute_path);
 }
 
@@ -655,29 +677,29 @@ IsolatedWebAppBuilder::BuildAndStartProxyServer() {
 
 std::unique_ptr<ScopedBundledIsolatedWebApp>
 IsolatedWebAppBuilder::BuildBundle() {
-  return BuildBundle(web_package::WebBundleSigner::KeyPair::CreateRandom());
+  return BuildBundle(
+      web_package::WebBundleSigner::Ed25519KeyPair::CreateRandom());
 }
 
 std::unique_ptr<ScopedBundledIsolatedWebApp> IsolatedWebAppBuilder::BuildBundle(
     const web_package::WebBundleSigner::KeyPair& key_pair) {
   return ScopedBundledIsolatedWebApp::Create(
-      web_package::SignedWebBundleId::CreateForEd25519PublicKey(
-          key_pair.public_key),
+      CreateSignedWebBundleIdFromKeyPair(key_pair),
       BuildInMemoryBundle(key_pair), manifest_builder_);
 }
 
 std::unique_ptr<BundledIsolatedWebApp> IsolatedWebAppBuilder::BuildBundle(
     const base::FilePath& bundle_path) {
-  return BuildBundle(bundle_path,
-                     web_package::WebBundleSigner::KeyPair::CreateRandom());
+  return BuildBundle(
+      bundle_path,
+      web_package::WebBundleSigner::Ed25519KeyPair::CreateRandom());
 }
 
 std::unique_ptr<BundledIsolatedWebApp> IsolatedWebAppBuilder::BuildBundle(
     const base::FilePath& bundle_path,
     const web_package::WebBundleSigner::KeyPair& key_pair) {
   return std::make_unique<BundledIsolatedWebApp>(
-      web_package::SignedWebBundleId::CreateForEd25519PublicKey(
-          key_pair.public_key),
+      CreateSignedWebBundleIdFromKeyPair(key_pair),
       BuildInMemoryBundle(key_pair), bundle_path, manifest_builder_);
 }
 

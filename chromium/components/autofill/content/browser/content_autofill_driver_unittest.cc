@@ -84,12 +84,11 @@ const char kAppLocale[] = "en-US";
 MATCHER(EqualsFillData, "") {
   FormFieldData lhs_field = std::get<0>(arg);
   FormFieldData::FillData rhs_field = std::get<1>(arg);
-  return lhs_field.value == rhs_field.value &&
-         lhs_field.renderer_id == rhs_field.renderer_id &&
-         lhs_field.host_form_id == rhs_field.host_form_id &&
-         lhs_field.section == rhs_field.section &&
-         lhs_field.is_autofilled == rhs_field.is_autofilled &&
-         lhs_field.force_override == rhs_field.force_override;
+  return lhs_field.value() == rhs_field.value &&
+         lhs_field.renderer_id() == rhs_field.renderer_id &&
+         lhs_field.host_form_id() == rhs_field.host_form_id &&
+         lhs_field.is_autofilled() == rhs_field.is_autofilled &&
+         lhs_field.force_override() == rhs_field.force_override;
 }
 
 class FakeAutofillAgent : public mojom::AutofillAgent {
@@ -127,10 +126,6 @@ class FakeAutofillAgent : public mojom::AutofillAgent {
   GetFieldTypePredictionsAvailable() {
     return predictions_;
   }
-
-  // Returns whether mojo interface method mojom::AutofillAgent::ClearForm() got
-  // called.
-  bool GetCalledClearSection() { return called_clear_section_; }
 
   // Returns whether mojo interface method
   // mojom::AutofillAgent::ClearPreviewedForm() got called.
@@ -239,11 +234,6 @@ class FakeAutofillAgent : public mojom::AutofillAgent {
     CallDone();
   }
 
-  void ClearSection() override {
-    called_clear_section_ = true;
-    CallDone();
-  }
-
   void ClearPreviewedForm() override {
     called_clear_previewed_form_ = true;
     CallDone();
@@ -293,8 +283,6 @@ class FakeAutofillAgent : public mojom::AutofillAgent {
   std::optional<std::vector<FormFieldData::FillData>> preview_form_fields_;
   // Records data received from FieldTypePredictionsAvailable() call.
   std::optional<std::vector<FormDataPredictions>> predictions_;
-  // Records whether ClearSection() got called.
-  bool called_clear_section_ = false;
   // Records whether ClearPreviewedForm() got called.
   bool called_clear_previewed_form_ = false;
   // Records the trigger source received from a TriggerSuggestions() call.
@@ -568,14 +556,15 @@ TEST_F(ContentAutofillDriverTest, SetFrameAndFormMetaDataOfForm) {
   EXPECT_EQ(form.main_frame_origin,
             url::Origin::CreateFromNormalizedTuple("https", "hostname", 443));
   ASSERT_EQ(form.fields.size(), 1u);
-  EXPECT_EQ(form.fields.front().host_frame, frame_token());
+  EXPECT_EQ(form.fields.front().host_frame(), frame_token());
 
   EXPECT_EQ(form2.host_frame, form.host_frame);
   EXPECT_EQ(form2.url, form.url);
   EXPECT_EQ(form2.full_url, form.full_url);
   EXPECT_EQ(form2.main_frame_origin, form.main_frame_origin);
   ASSERT_EQ(form2.fields.size(), 1u);
-  EXPECT_EQ(form2.fields.front().host_frame, form2.fields.front().host_frame);
+  EXPECT_EQ(form2.fields.front().host_frame(),
+            form2.fields.front().host_frame());
 }
 
 // Test that forms in "about:" without parents have an empty FormData::url.
@@ -647,13 +636,14 @@ TEST_F(ContentAutofillDriverTest, SetFrameAndFormMetaDataOfField) {
   test_api(driver()).SetFrameAndFormMetaData(form, &field);
 
   EXPECT_NE(signature_without_meta_data, CalculateFormSignature(form));
-  EXPECT_EQ(field.host_frame, frame_token());
-  EXPECT_EQ(field.host_form_id, form.renderer_id);
-  EXPECT_EQ(field.host_form_signature, CalculateFormSignature(form));
+  EXPECT_EQ(field.host_frame(), frame_token());
+  EXPECT_EQ(field.host_form_id(), form.renderer_id);
+  EXPECT_EQ(field.host_form_signature(), CalculateFormSignature(form));
 
-  EXPECT_EQ(field.host_frame, form.fields.front().host_frame);
-  EXPECT_EQ(field.host_form_id, form.fields.front().host_form_id);
-  EXPECT_EQ(field.host_form_signature, form.fields.front().host_form_signature);
+  EXPECT_EQ(field.host_frame(), form.fields.front().host_frame());
+  EXPECT_EQ(field.host_form_id(), form.fields.front().host_form_id());
+  EXPECT_EQ(field.host_form_signature(),
+            form.fields.front().host_form_signature());
 }
 
 // Tests that FormsSeen() for an updated form arrives in the AutofillManager.
@@ -713,8 +703,8 @@ TEST_F(ContentAutofillDriverTestWithAddressForm,
        FormDataSentToRenderer_FillForm) {
   url::Origin triggered_origin;
   for (FormFieldData& field : address_form().fields) {
-    field.origin = triggered_origin;
-    field.value = u"dummy_value";
+    field.set_origin(triggered_origin);
+    field.set_value(u"dummy_value");
   }
   base::RunLoop run_loop;
   agent().SetQuitLoopClosure(run_loop.QuitClosure());
@@ -736,12 +726,12 @@ TEST_F(ContentAutofillDriverTestWithAddressForm,
        FormDataSentToRenderer_PreviewForm) {
   url::Origin triggered_origin;
   for (FormFieldData& field : address_form().fields) {
-    field.origin = triggered_origin;
-    field.value = u"dummy_value";
+    field.set_origin(triggered_origin);
+    field.set_value(u"dummy_value");
   }
-  ASSERT_TRUE(base::ranges::all_of(address_form().fields,
-                                   std::not_fn(&std::u16string::empty),
-                                   &FormFieldData::value));
+  ASSERT_TRUE(base::ranges::all_of(
+      address_form().fields,
+      [](const FormFieldData& field) { return !field.value().empty(); }));
   base::RunLoop run_loop;
   agent().SetQuitLoopClosure(run_loop.QuitClosure());
   driver().browser_events().ApplyFormAction(
@@ -800,16 +790,6 @@ TEST_F(ContentAutofillDriverTestWithAddressForm, AcceptDataListSuggestion) {
   run_loop.RunUntilIdle();
 
   EXPECT_EQ(input_value, agent().GetString16AcceptDataListSuggestion(field));
-}
-
-TEST_F(ContentAutofillDriverTestWithAddressForm,
-       ClearFilledSectionSentToRenderer) {
-  base::RunLoop run_loop;
-  agent().SetQuitLoopClosure(run_loop.QuitClosure());
-  driver().browser_events().RendererShouldClearFilledSection();
-  run_loop.RunUntilIdle();
-
-  EXPECT_TRUE(agent().GetCalledClearSection());
 }
 
 TEST_F(ContentAutofillDriverTestWithAddressForm,

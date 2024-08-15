@@ -531,7 +531,7 @@ static void test_decompressBound(unsigned tnb)
             CHECK_EQ( ZSTD_flushStream(cctx, &out), 0 );
         }
         CHECK_EQ( ZSTD_endStream(cctx, &out), 0 );
-        CHECK( ZSTD_decompressBound(outBuffer, out.pos) > 0x100000000LLU /* 4 GB */ );
+        CHECK( ZSTD_decompressBound(outBuffer, out.pos) > 0x100000000ULL /* 4 GB */ );
         ZSTD_freeCCtx(cctx);
         free(outBuffer);
     }
@@ -952,7 +952,7 @@ static int basicUnitTests(U32 const seed, double compressibility)
         ZSTD_freeCDict(cdict);
         ZSTD_freeCCtx(cctx);
     }
-    
+
     DISPLAYLEVEL(3, "test%3i : maxBlockSize = 2K", testNb++);
     {
         ZSTD_CCtx* cctx = ZSTD_createCCtx();
@@ -1374,7 +1374,7 @@ static int basicUnitTests(U32 const seed, double compressibility)
     }
     DISPLAYLEVEL(3, "OK \n");
 
-    DISPLAYLEVEL(3, "test%3d: superblock uncompressible data, too many nocompress superblocks : ", testNb++);
+    DISPLAYLEVEL(3, "test%3d : superblock uncompressible data: too many nocompress superblocks : ", testNb++);
     {
         ZSTD_CCtx* const cctx = ZSTD_createCCtx();
         const BYTE* src = (BYTE*)CNBuffer; BYTE* dst = (BYTE*)compressedBuffer;
@@ -3695,6 +3695,31 @@ static int basicUnitTests(U32 const seed, double compressibility)
         CHECK_Z(seqsSize);
         FUZ_decodeSequences(decoded, seqs, seqsSize, src, srcSize, ZSTD_sf_noBlockDelimiters);
         assert(!memcmp(CNBuffer, compressedBuffer, srcSize));
+
+        ZSTD_freeCCtx(cctx);
+        free(seqs);
+    }
+    DISPLAYLEVEL(3, "OK \n");
+
+    DISPLAYLEVEL(3, "test%3i : ZSTD_generateSequences too small output buffer : ", testNb++);
+    {
+        const size_t seqsCapacity = 10;
+        const size_t srcSize = 150 KB;
+        const BYTE* src = (BYTE*)CNBuffer;
+
+        ZSTD_CCtx* const cctx = ZSTD_createCCtx();
+        ZSTD_Sequence* const seqs = (ZSTD_Sequence*)malloc(seqsCapacity * sizeof(ZSTD_Sequence));
+
+        if (seqs == NULL) goto _output_error;
+        if (cctx == NULL) goto _output_error;
+        /* Populate src with random data */
+        RDG_genBuffer(CNBuffer, srcSize, compressibility, 0.5, seed);
+
+        /* Test with block delimiters roundtrip */
+        {
+            size_t const seqsSize = ZSTD_generateSequences(cctx, seqs, seqsCapacity, src, srcSize);
+            if (!ZSTD_isError(seqsSize)) goto _output_error;
+        }
 
         ZSTD_freeCCtx(cctx);
         free(seqs);

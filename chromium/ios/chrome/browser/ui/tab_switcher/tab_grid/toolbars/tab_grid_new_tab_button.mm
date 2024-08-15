@@ -92,6 +92,7 @@ const CGFloat kLargeSymbolSize = 37;
           forState:UIControlStateNormal];
       break;
     case TabGridPageRemoteTabs:
+    case TabGridPageTabGroups:
 
       // Vivaldi
     case TabGridPageClosedTabs:
@@ -119,6 +120,7 @@ const CGFloat kLargeSymbolSize = 37;
       break;
     case TabGridPageRemoteTabs:
     case TabGridPageClosedTabs:
+    case TabGridPageTabGroups:
       break;
   }
   _page = page;

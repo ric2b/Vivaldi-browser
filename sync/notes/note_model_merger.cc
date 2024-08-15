@@ -66,15 +66,6 @@ using UpdatesPerParentUuid =
                        std::list<syncer::UpdateResponseData>,
                        base::UuidHash>;
 
-enum class NotesUuidDuplicates {
-  // Both entities are notes.
-  kBothNotes = 0,
-  // Both entities are folders.
-  kBothFolders = 1,
-  // Entities have different types.
-  kDifferentTypes = 2,
-};
-
 // Gets the note node corresponding to a permanent folder identified by
 // |server_defined_unique_tag| or null of the tag is unknown. |notes_model|
 // must not be null and |server_defined_unique_tag| must not be empty.
@@ -636,7 +627,7 @@ void NoteModelMerger::MergeSubtree(const vivaldi::NoteNode* local_subtree_root,
   // If there are remote child updates, try to match them.
   for (size_t remote_index = 0; remote_index < remote_node.children().size();
        ++remote_index) {
-    // TODO(crbug.com/1050776): change to DCHECK after investigating.
+    // TODO(crbug.com/40118203): change to DCHECK after investigating.
     // Here is expected that all nodes to the left of current |remote_index| are
     // filled with remote updates. All local nodes which are not merged will be
     // added later.
@@ -788,7 +779,7 @@ void NoteModelMerger::ProcessRemoteCreation(
   // child remote nodes.
   size_t i = 0;
   for (const RemoteTreeNode& remote_child : remote_node.children()) {
-    // TODO(crbug.com/1050776): change to DCHECK after investigating of some
+    // TODO(crbug.com/40118203): change to DCHECK after investigating of some
     // crashes.
     CHECK_LE(i, note_node->children().size());
     const vivaldi::NoteNode* local_child =

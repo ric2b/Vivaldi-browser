@@ -13,7 +13,7 @@ DEPS = [
 ]
 
 def RunSteps(api):
-  src_cfg = api.gclient.make_config(CACHE_DIR=api.path['cache'].join('git'))
+  src_cfg = api.gclient.make_config(CACHE_DIR=api.path.cache_dir / 'git')
   api.gclient.sync(src_cfg)
 
 def GenTests(api):

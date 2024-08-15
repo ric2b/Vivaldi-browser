@@ -36,6 +36,7 @@
 #include "chrome/browser/history/history_tab_helper.h"
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/history_clusters/history_clusters_tab_helper.h"
+#include "chrome/browser/history_embeddings/history_embeddings_tab_helper.h"
 #include "chrome/browser/image_fetcher/image_fetcher_service_factory.h"
 #include "chrome/browser/login_detection/login_detection_tab_helper.h"
 #include "chrome/browser/lookalikes/safety_tip_web_contents_observer.h"
@@ -57,6 +58,7 @@
 #include "chrome/browser/predictors/loading_predictor_tab_helper.h"
 #include "chrome/browser/preloading/prefetch/no_state_prefetch/no_state_prefetch_manager_factory.h"
 #include "chrome/browser/preloading/prefetch/no_state_prefetch/no_state_prefetch_tab_helper.h"
+#include "chrome/browser/privacy_sandbox/tracking_protection_settings_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_key.h"
 #include "chrome/browser/resource_coordinator/tab_helper.h"
@@ -76,6 +78,7 @@
 #include "chrome/browser/storage_access_api/storage_access_api_service_impl.h"
 #include "chrome/browser/storage_access_api/storage_access_api_tab_helper.h"
 #include "chrome/browser/subresource_filter/chrome_content_subresource_filter_web_contents_helper_factory.h"
+#include "chrome/browser/supervised_user/supervised_user_navigation_observer.h"
 #include "chrome/browser/sync/sessions/sync_sessions_router_tab_helper.h"
 #include "chrome/browser/sync/sessions/sync_sessions_web_contents_router_factory.h"
 #include "chrome/browser/tab_contents/navigation_metrics_recorder.h"
@@ -117,6 +120,7 @@
 #include "components/blocked_content/popup_blocker_tab_helper.h"
 #include "components/blocked_content/popup_opener_tab_helper.h"
 #include "components/breadcrumbs/core/breadcrumbs_status.h"
+#include "components/browsing_topics/browsing_topics_redirect_observer.h"
 #include "components/captive_portal/core/buildflags.h"
 #include "components/client_hints/browser/client_hints_web_contents_observer.h"
 #include "components/commerce/content/browser/commerce_tab_helper.h"
@@ -127,6 +131,8 @@
 #include "components/download/content/factory/navigation_monitor_factory.h"
 #include "components/download/content/public/download_navigation_observer.h"
 #include "components/feed/buildflags.h"
+#include "components/fingerprinting_protection_filter/browser/fingerprinting_protection_filter_features.h"
+#include "components/fingerprinting_protection_filter/browser/fingerprinting_protection_web_contents_helper.h"
 #include "components/history/content/browser/web_contents_top_sites_observer.h"
 #include "components/history/core/browser/top_sites.h"
 #include "components/infobars/content/content_infobar_manager.h"
@@ -147,10 +153,9 @@
 #include "components/safe_browsing/content/browser/safe_browsing_tab_observer.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/search/ntp_features.h"
-#include "components/search_engines/search_engine_choice_utils.h"
+#include "components/search_engines/search_engine_choice/search_engine_choice_utils.h"
 #include "components/site_engagement/content/site_engagement_helper.h"
 #include "components/site_engagement/content/site_engagement_service.h"
-#include "components/supervised_user/core/common/buildflags.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "components/user_notes/user_notes_features.h"
@@ -219,6 +224,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/boot_times_recorder_tab_helper.h"
+#include "chrome/browser/ash/growth/campaigns_manager_session_tab_helper.h"
 #include "chrome/browser/ui/ash/google_one_offer_iph_tab_helper.h"
 #endif
 
@@ -227,13 +233,15 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
+#include "chrome/browser/chromeos/container_app/container_app_tab_helper.h"
 #include "chrome/browser/chromeos/cros_apps/cros_apps_tab_helper.h"
 #include "chrome/browser/chromeos/mahi/mahi_tab_helper.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_tab_helper.h"
+#include "chrome/browser/chromeos/printing/print_preview/printing_init_cros.h"
 #endif
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
+    BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ui/blocked_content/framebust_block_tab_helper.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/hats/hats_helper.h"
@@ -278,9 +286,6 @@
 #include "chrome/browser/printing/printing_init.h"
 #endif
 
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/supervised_user/supervised_user_navigation_observer.h"
-#endif
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/privacy_sandbox/tracking_protection_notice_service.h"
@@ -316,6 +321,9 @@ const char kTabContentsAttachedTabHelpersUserDataKey[] =
 }  // namespace
 
 // static
+// WARNING: Do not use this class for desktop chrome. Use TabFeatures instead.
+// See
+// https://chromium.googlesource.com/chromium/src/+/main/docs/chrome_browser_design_principles.md
 void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   // If already adopted, nothing to be done.
   base::SupportsUserData::Data* adoption_tag =
@@ -377,6 +385,8 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   if (breadcrumbs::IsEnabled(g_browser_process->local_state())) {
     BreadcrumbManagerTabHelper::CreateForWebContents(web_contents);
   }
+  browsing_topics::BrowsingTopicsRedirectObserver::MaybeCreateForWebContents(
+      web_contents);
   chrome::ChainedBackNavigationTracker::CreateForWebContents(web_contents);
   chrome_browser_net::NetErrorTabHelper::CreateForWebContents(web_contents);
   if (!autofill_client_provider.uses_platform_autofill()) {
@@ -407,6 +417,13 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   FileSystemAccessPermissionRequestManager::CreateForWebContents(web_contents);
   FileSystemAccessTabHelper::CreateForWebContents(web_contents);
   FindBarState::ConfigureWebContents(web_contents);
+  if (base::FeatureList::IsEnabled(fingerprinting_protection_filter::features::
+                                       kEnableFingerprintingProtectionFilter)) {
+    fingerprinting_protection_filter::
+        FingerprintingProtectionWebContentsHelper::CreateForWebContents(
+            web_contents, profile->GetPrefs(),
+            TrackingProtectionSettingsFactory::GetForProfile(profile));
+  }
   download::DownloadNavigationObserver::CreateForWebContents(
       web_contents,
       download::NavigationMonitorFactory::GetForKey(profile->GetProfileKey()));
@@ -414,6 +431,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
       web_contents, TopSitesFactory::GetForProfile(profile).get());
   HistoryTabHelper::CreateForWebContents(web_contents);
   HistoryClustersTabHelper::CreateForWebContents(web_contents);
+  HistoryEmbeddingsTabHelper::CreateForWebContents(web_contents);
   HttpsOnlyModeTabHelper::CreateForWebContents(web_contents);
   webapps::InstallableManager::CreateForWebContents(web_contents);
   login_detection::LoginDetectionTabHelper::MaybeCreateForWebContents(
@@ -445,7 +463,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
 #if BUILDFLAG(IS_ANDROID)
     // If enabled, save sensitivity data for each non-incognito non-custom
     // android tab
-    // TODO(crbug.com/1466970): Consider moving check conditions or the
+    // TODO(crbug.com/40276584): Consider moving check conditions or the
     // registration logic to sensitivity_persisted_tab_data_android.*
     if (!profile->IsOffTheRecord()) {
       if (auto* tab = TabAndroid::FromWebContents(web_contents);
@@ -532,6 +550,10 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   StorageAccessAPITabHelper::CreateForWebContents(
       web_contents, StorageAccessAPIServiceFactory::GetForBrowserContext(
                         web_contents->GetBrowserContext()));
+  // Do not create for Incognito mode.
+  if (!profile->IsOffTheRecord()) {
+    SupervisedUserNavigationObserver::CreateForWebContents(web_contents);
+  }
   HttpErrorTabHelper::CreateForWebContents(web_contents);
   sync_sessions::SyncSessionsRouterTabHelper::CreateForWebContents(
       web_contents,
@@ -547,11 +569,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   v8_compile_hints::V8CompileHintsTabHelper::MaybeCreateForWebContents(
       web_contents);
   vr::VrTabHelper::CreateForWebContents(web_contents);
-  if (base::FeatureList::IsEnabled(permissions::features::kOneTimePermission) ||
-      base::FeatureList::IsEnabled(
-          features::kFileSystemAccessPersistentPermissions)) {
-    OneTimePermissionsTrackerHelper::CreateForWebContents(web_contents);
-  }
+  OneTimePermissionsTrackerHelper::CreateForWebContents(web_contents);
 
   // NO! Do not just add your tab helper here. This is a large alphabetized
   // block; please insert your tab helper above in alphabetical order.
@@ -647,11 +665,11 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   if (commerce::isContextualConsentEnabled()) {
     commerce_hint::CommerceHintTabHelper::CreateForWebContents(web_contents);
   }
-    auto* service = UnusedSitePermissionsServiceFactory::GetForProfile(profile);
-    if (service) {
-      UnusedSitePermissionsService::TabHelper::CreateForWebContents(
-          web_contents, service);
-    }
+  auto* service = UnusedSitePermissionsServiceFactory::GetForProfile(profile);
+  if (service) {
+    UnusedSitePermissionsService::TabHelper::CreateForWebContents(web_contents,
+                                                                  service);
+  }
   if (base::FeatureList::IsEnabled(ntp_features::kNtpHistoryClustersModule)) {
     side_panel::HistoryClustersTabHelper::CreateForWebContents(web_contents);
   }
@@ -680,6 +698,10 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   GoogleOneOfferIphTabHelper::CreateForWebContents(web_contents);
+  // Do not create for Incognito mode.
+  if (!profile->IsOffTheRecord()) {
+    CampaignsManagerSessionTabHelper::CreateForWebContents(web_contents);
+  }
   ash::BootTimesRecorderTabHelper::MaybeCreateForWebContents(web_contents);
 #endif
 
@@ -688,6 +710,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
+  ContainerAppTabHelper::MaybeCreateForWebContents(web_contents);
   CrosAppsTabHelper::MaybeCreateForWebContents(web_contents);
   mahi::MahiTabHelper::MaybeCreateForWebContents(web_contents);
   policy::DlpContentTabHelper::MaybeCreateForWebContents(web_contents);
@@ -697,7 +720,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   webapps::PreRedirectionURLObserver::CreateForWebContents(web_contents);
 #endif
 
-// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// TODO(crbug.com/40118868): Revisit the macro expression once build flag switch
 // of lacros-chrome is complete.
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
     (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
@@ -729,7 +752,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   }
 
   if (!profile->IsIncognitoProfile()) {
-    // TODO(1360846): Consider using the in-memory cache instead.
+    // TODO(crbug.com/40863325): Consider using the in-memory cache instead.
     commerce::CommerceUiTabHelper::CreateForWebContents(
         web_contents,
         commerce::ShoppingServiceFactory::GetForBrowserContext(profile),
@@ -750,9 +773,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
 #endif
 
 #if !BUILDFLAG(IS_ANDROID)
-  if (customize_chrome::IsSidePanelEnabled()) {
-    CustomizeChromeTabHelper::CreateForWebContents(web_contents);
-  }
+  CustomizeChromeTabHelper::CreateForWebContents(web_contents);
 #endif
 
   // --- Section 3: Feature tab helpers behind BUILDFLAGs ---
@@ -800,15 +821,16 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   PluginObserver::CreateForWebContents(web_contents);
 #endif
 
-#if BUILDFLAG(ENABLE_PRINTING)
-  printing::InitializePrintingForWebContents(web_contents);
-#endif
-
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-  // Do not create for Incognito mode.
-  if (!profile->IsOffTheRecord()) {
-    SupervisedUserNavigationObserver::CreateForWebContents(web_contents);
+// Only enable ChromeOS print preview if `kPrintPreviewCrosPrimary` is enabled
+// and is a ChromeOS build. Otherwise instantiate browser print preview.
+#if BUILDFLAG(ENABLE_PRINTING) && BUILDFLAG(IS_CHROMEOS)
+  if (base::FeatureList::IsEnabled(::features::kPrintPreviewCrosPrimary)) {
+    chromeos::printing::InitializePrintingForWebContents(web_contents);
+  } else {
+    printing::InitializePrintingForWebContents(web_contents);
   }
+#elif BUILDFLAG(ENABLE_PRINTING)
+  printing::InitializePrintingForWebContents(web_contents);
 #endif
 
   // --- Section 4: The warning ---

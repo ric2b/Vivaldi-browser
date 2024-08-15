@@ -116,7 +116,7 @@ class AddressEditorMediator {
         return mAddressFields.get(fieldType);
     }
 
-    // TODO(crbug.com/1432505): remove temporary unsupported countries filtering.
+    // TODO(crbug.com/40263955): remove temporary unsupported countries filtering.
     private static List<DropdownKeyValue> getSupportedCountries(
             PersonalDataManager personalDataManager, boolean filterOutUnsupportedCountries) {
         List<DropdownKeyValue> supportedCountries = AutofillProfileBridge.getSupportedCountries();
@@ -188,7 +188,7 @@ class AddressEditorMediator {
                         .with(VALUE, mProfileToEdit.getInfo(FieldType.EMAIL_ADDRESS))
                         .build();
 
-        // TODO(crbug.com/1445020): Use localized string.
+        // TODO(crbug.com/40267973): Use localized string.
         mNicknameField =
                 ChromeFeatureList.isEnabled(
                                 ChromeFeatureList

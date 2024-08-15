@@ -161,7 +161,7 @@ class AuraLinuxApplication : public ui::AXPlatformNodeDelegate,
   }
 
   bool IsChildOfLeaf() const override {
-    // TODO(crbug.com/1100047): Needed to prevent endless loops only on Linux
+    // TODO(crbug.com/40702759): Needed to prevent endless loops only on Linux
     // ATK.
     return false;
   }
@@ -187,7 +187,7 @@ class AuraLinuxApplication : public ui::AXPlatformNodeDelegate,
   // TODO(nektar): Make this into a const pointer so that it can't be set
   // outside the class's constructor.
   raw_ptr<ui::AXPlatformNode> ax_platform_node_;
-  ui::AXUniqueId unique_id_;
+  const ui::AXUniqueId unique_id_{ui::AXUniqueId::Create()};
   mutable ui::AXNodeData data_;
   std::vector<raw_ptr<Widget, VectorExperimental>> widgets_;
   base::ScopedMultiSourceObservation<Widget, WidgetObserver>
@@ -237,7 +237,8 @@ gfx::NativeViewAccessible ViewAXPlatformNodeDelegateAuraLinux::GetParent()
 }
 
 bool ViewAXPlatformNodeDelegateAuraLinux::IsChildOfLeaf() const {
-  // TODO(crbug.com/1100047): Needed to prevent endless loops only on Linux ATK.
+  // TODO(crbug.com/40702759): Needed to prevent endless loops only on Linux
+  // ATK.
   return false;
 }
 

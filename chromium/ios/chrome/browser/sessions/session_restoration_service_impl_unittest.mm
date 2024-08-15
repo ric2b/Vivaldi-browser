@@ -14,6 +14,7 @@
 #import "base/files/scoped_temp_dir.h"
 #import "base/functional/bind.h"
 #import "base/memory/raw_ptr.h"
+#import "base/memory/weak_ptr.h"
 #import "base/run_loop.h"
 #import "base/scoped_multi_source_observation.h"
 #import "base/test/metrics/histogram_tester.h"
@@ -72,7 +73,7 @@ struct Wrapper {
  private:
   using Callback = base::OnceCallback<Ret(Args...)>;
 
-  struct Flag : base::SupportsWeakPtr<Flag> {
+  struct Flag final {
     explicit Flag(Wrapper* owner, Callback callback)
         : owner_(owner), callback_(std::move(callback)) {}
 
@@ -87,12 +88,13 @@ struct Wrapper {
 
     raw_ptr<Wrapper<Ret, Args...>> owner_;
     Callback callback_;
+    base::WeakPtrFactory<Flag> weak_ptr_factory_{this};
   };
 
  public:
   Wrapper(Callback callback) {
     auto flag = std::make_unique<Flag>(this, std::move(callback));
-    flag_ = flag->AsWeakPtr();
+    flag_ = flag->weak_ptr_factory_.GetWeakPtr();
 
     callback_ = base::BindOnce(&Flag::Run, std::move(flag));
   }
@@ -322,7 +324,6 @@ class SessionRestorationServiceImplTest : public PlatformTest {
     // Configure a WebTaskEnvironment with mocked time to be able to
     // fast-forward time and skip the delay before saving the data.
     web_task_environment_ = std::make_unique<web::WebTaskEnvironment>(
-        web::WebTaskEnvironment::Options::DEFAULT,
         base::test::TaskEnvironment::TimeSource::MOCK_TIME);
 
     // Create a test ChromeBrowserState and an object to track the files
@@ -330,12 +331,10 @@ class SessionRestorationServiceImplTest : public PlatformTest {
     browser_state_ = TestChromeBrowserState::Builder().Build();
     file_tracker_.Start(browser_state_->GetStatePath());
 
-    // Create the service, force enabling the pinned tab support (since
-    // the code using the `enable_pinned_web_states` is tested by the
-    // deserialization code and does not need to be tested again here).
+    // Create the service, force enabling features support.
     service_ = std::make_unique<SessionRestorationServiceImpl>(
         kSaveDelay, /*enable_pinned_web_states=*/true,
-        browser_state_->GetStatePath(),
+        /*enable_tab_groups=*/true, browser_state_->GetStatePath(),
         base::SequencedTaskRunner::GetCurrentDefault());
   }
 

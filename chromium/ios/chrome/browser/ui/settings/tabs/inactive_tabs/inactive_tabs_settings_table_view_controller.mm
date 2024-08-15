@@ -21,6 +21,10 @@
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 namespace {
 
 // Sections identifier.
@@ -85,6 +89,7 @@ int InactiveDaysThresholdWithItemType(ItemType item_type) {
   TableViewModel<TableViewItem*>* model = self.tableViewModel;
   [model addSectionWithIdentifier:SectionIdentifierOptions];
 
+  if (!vivaldi::IsVivaldiRunning()) {
   // Header item.
   TableViewLinkHeaderFooterItem* headerItem =
       [[TableViewLinkHeaderFooterItem alloc] initWithType:ItemTypeHeader];
@@ -92,6 +97,7 @@ int InactiveDaysThresholdWithItemType(ItemType item_type) {
       l10n_util::GetNSString(IDS_IOS_INACTIVE_TABS_SETTINGS_HEADER);
   [model setHeader:headerItem
       forSectionWithIdentifier:SectionIdentifierOptions];
+  } // End Vivaldi
 
   // Option items.
   [model addItem:[self createItemWithType:ItemTypeOptionsNever]

@@ -71,6 +71,7 @@ namespace internal {
   V(StoreToConstant, "Storing to a constant field")                            \
   V(SuspendGeneratorIsDead, "SuspendGenerator is in a dead branch")            \
   V(Unknown, "(unknown)")                                                      \
+  V(UnoptimizedCatch, "First use of catch block")                              \
   V(ValueMismatch, "value mismatch")                                           \
   V(WrongCallTarget, "wrong call target")                                      \
   V(WrongEnumIndices, "wrong enum indices")                                    \
@@ -82,6 +83,8 @@ namespace internal {
   V(WrongValue, "wrong value")                                                 \
   V(NoInitialElement, "no initial element")                                    \
   V(ArrayLengthChanged, "the array length changed")                            \
+  V(GreaterThanMaxFastElementArray,                                            \
+    "length is greater than the maximum for fast elements array")              \
   V(Float16NotYetSupported, "float16 is not supported as machine operation")
 
 enum class DeoptimizeReason : uint8_t {

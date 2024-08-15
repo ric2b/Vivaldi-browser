@@ -687,13 +687,6 @@ static int pulse_write_frame(AVFormatContext *h, int stream_index,
     pkt.data     = (*frame)->data[0];
     pkt.size     = (*frame)->nb_samples * av_get_bytes_per_sample((*frame)->format) * (*frame)->ch_layout.nb_channels;
     pkt.dts      = (*frame)->pkt_dts;
-#if FF_API_PKT_DURATION
-FF_DISABLE_DEPRECATION_WARNINGS
-    if ((*frame)->pkt_duration)
-        pkt.duration = (*frame)->pkt_duration;
-    else
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
     pkt.duration = (*frame)->duration;
     return pulse_write_packet(h, &pkt);
 }
@@ -808,5 +801,5 @@ const FFOutputFormat ff_pulse_muxer = {
     .p.flags              = AVFMT_NOFILE,
 #endif
     .p.priv_class         = &pulse_muxer_class,
-    .flags_internal       = FF_FMT_ALLOW_FLUSH,
+    .flags_internal       = FF_OFMT_FLAG_ALLOW_FLUSH,
 };

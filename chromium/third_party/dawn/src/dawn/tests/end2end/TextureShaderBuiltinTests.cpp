@@ -116,11 +116,13 @@ class TextureShaderBuiltinTests : public DawnTest {
     }
 };
 
-// Note: the following tests testing textureNumLevels and textureNumSamples behavior is mainly
+// Note: the following tests for various texture method behavior is mainly
 // targeted at OpenGL/OpenGLES backend without native GLSL support for these builtins.
 // These tests should be trivial for otherbackend, and thus can be used as control case.
 
-// Test calling textureNumLevels & textureNumSamples in one shader.
+// Test calling textureNumLevels & textureNumSamples & textureDimensions in one shader.
+// Note: textureDimensions implicitly calls textureNumLevels after tint shader transform to clamp
+// mip levels.
 TEST_P(TextureShaderBuiltinTests, Basic) {
     constexpr uint32_t kLayers = 3;
     constexpr uint32_t kMipLevels = 2;
@@ -141,12 +143,10 @@ TEST_P(TextureShaderBuiltinTests, Basic) {
                                                 : wgpu::TextureViewDimension::e2D,
                           1, kMipLevelsView);
 
-    const uint32_t expected[] = {
-        kLayers,
-        kMipLevels,
-        kSampleCount,
-        kMipLevelsView,
-    };
+    const uint32_t textureWidthLevel0 = 1 << kMipLevels;
+    const uint32_t textureWidthLevel1 = textureWidthLevel0 >> 1;
+    const uint32_t expected[] = {kLayers,        kMipLevels,         kSampleCount,
+                                 kMipLevelsView, textureWidthLevel0, textureWidthLevel1};
 
     wgpu::BufferDescriptor bufferDesc;
     bufferDesc.size = sizeof(expected);
@@ -169,6 +169,8 @@ TEST_P(TextureShaderBuiltinTests, Basic) {
         dstBuf[1] = textureNumLevels(tex1);
         dstBuf[2] = textureNumSamples(tex2);
         dstBuf[3] = textureNumLevels(tex3);
+        dstBuf[4] = textureDimensions(tex1, 0).x;
+        dstBuf[5] = textureDimensions(tex1, 1).x;
         }
         )";
     // clang-format on
@@ -190,6 +192,138 @@ TEST_P(TextureShaderBuiltinTests, Basic) {
         pass.SetBindGroup(1, utils::MakeBindGroup(device, pipeline.GetBindGroupLayout(1),
                                                   {
                                                       {3, texView3},
+                                                  }));
+        pass.DispatchWorkgroups(1);
+        pass.End();
+    }
+
+    wgpu::CommandBuffer commands = encoder.Finish();
+    queue.Submit(1, &commands);
+
+    EXPECT_BUFFER_U32_RANGE_EQ(expected, buffer, 0, sizeof(expected) / sizeof(uint32_t));
+}
+
+// Testing that baseMipLevel is handled correctly.
+TEST_P(TextureShaderBuiltinTests, BaseMipLevelTextureView) {
+    // TODO(dawn:2538): failing on OpenGLES Angle backed by D3D11.
+    DAWN_SUPPRESS_TEST_IF(IsANGLED3D11());
+    constexpr uint32_t kLayers = 1;
+    constexpr uint32_t kMipLevels = 3;
+    wgpu::Texture tex =
+        CreateTexture("tex", kLayers, kMipLevels, 1, wgpu::TextureViewDimension::e2D);
+
+    constexpr uint32_t kBaseMipLevel = 1;
+    constexpr uint32_t kViewMipLevelCount = 2;
+    DAWN_ASSERT(kBaseMipLevel + kViewMipLevelCount <= kMipLevels);
+    wgpu::TextureView texView = CreateTextureView(tex, "texView", wgpu::TextureViewDimension::e2D,
+                                                  kBaseMipLevel, kViewMipLevelCount);
+
+    const uint32_t textureWidthLevel0 = 1 << kMipLevels;
+    const uint32_t textureWidthLevel1 = textureWidthLevel0 >> 1;
+    const uint32_t textureWidthLevel2 = textureWidthLevel1 >> 1;
+    const uint32_t expected[] = {
+        textureWidthLevel1,
+        textureWidthLevel1,
+        textureWidthLevel2,
+    };
+
+    wgpu::BufferDescriptor bufferDesc;
+    bufferDesc.size = sizeof(expected);
+    bufferDesc.usage = wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopySrc;
+    wgpu::Buffer buffer = device.CreateBuffer(&bufferDesc);
+
+    std::ostringstream shaderSource;
+    // clang-format off
+    shaderSource << R"(
+    @group(0) @binding(0) var<storage, read_write> dstBuf : array<u32>;
+    @group(0) @binding(1) var tex : texture_2d<f32>;
+
+    @compute @workgroup_size(1, 1, 1) fn main() {
+        dstBuf[0] = textureDimensions(tex).x;
+        dstBuf[1] = textureDimensions(tex, 0).x;
+        dstBuf[2] = textureDimensions(tex, 1).x;
+    }
+    )";
+    // clang-format on
+
+    wgpu::ComputePipelineDescriptor pipelineDescriptor;
+    pipelineDescriptor.compute.module = utils::CreateShaderModule(device, shaderSource.str());
+    wgpu::ComputePipeline pipeline = device.CreateComputePipeline(&pipelineDescriptor);
+
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    {
+        wgpu::ComputePassEncoder pass = encoder.BeginComputePass();
+        pass.SetPipeline(pipeline);
+        pass.SetBindGroup(0, utils::MakeBindGroup(device, pipeline.GetBindGroupLayout(0),
+                                                  {
+                                                      {0, buffer},
+                                                      {1, texView},
+                                                  }));
+        pass.DispatchWorkgroups(1);
+        pass.End();
+    }
+
+    wgpu::CommandBuffer commands = encoder.Finish();
+    queue.Submit(1, &commands);
+
+    EXPECT_BUFFER_U32_RANGE_EQ(expected, buffer, 0, sizeof(expected) / sizeof(uint32_t));
+}
+
+// Testing that baseMipLevel is handled correctly for texture_cube.
+TEST_P(TextureShaderBuiltinTests, BaseMipLevelTextureViewCube) {
+    // TODO(crbug.com/dawn/2442): diagnose this failure on Win Angle D3D11
+    DAWN_SUPPRESS_TEST_IF(IsANGLED3D11());
+
+    constexpr uint32_t kCubeLayers = 6;
+    constexpr uint32_t kMipLevels = 3;
+    wgpu::Texture texCube =
+        CreateTexture("texCube", kCubeLayers, kMipLevels, 1, wgpu::TextureViewDimension::Cube);
+
+    constexpr uint32_t kBaseMipLevel = 1;
+    constexpr uint32_t kViewMipLevelCount = 2;
+    DAWN_ASSERT(kBaseMipLevel + kViewMipLevelCount <= kMipLevels);
+    wgpu::TextureView texViewCube =
+        CreateTextureView(texCube, "texViewCube", wgpu::TextureViewDimension::Cube, kBaseMipLevel,
+                          kViewMipLevelCount);
+
+    const uint32_t textureWidthLevel0 = 1 << kMipLevels;
+    const uint32_t textureWidthLevel1 = textureWidthLevel0 >> 1;
+    const uint32_t textureWidthLevel2 = textureWidthLevel1 >> 1;
+    const uint32_t expected[] = {textureWidthLevel1, textureWidthLevel1, textureWidthLevel2,
+                                 kViewMipLevelCount};
+
+    wgpu::BufferDescriptor bufferDesc;
+    bufferDesc.size = sizeof(expected);
+    bufferDesc.usage = wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopySrc;
+    wgpu::Buffer buffer = device.CreateBuffer(&bufferDesc);
+
+    std::ostringstream shaderSource;
+    // clang-format off
+    shaderSource << R"(
+    @group(0) @binding(0) var<storage, read_write> dstBuf : array<u32>;
+    @group(0) @binding(1) var tex_cube : texture_cube<f32>;
+
+    @compute @workgroup_size(1, 1, 1) fn main() {
+        dstBuf[0] = textureDimensions(tex_cube).x;
+        dstBuf[1] = textureDimensions(tex_cube, 0).x;
+        dstBuf[2] = textureDimensions(tex_cube, 1).x;
+        dstBuf[3] = textureNumLevels(tex_cube);
+    }
+    )";
+    // clang-format on
+
+    wgpu::ComputePipelineDescriptor pipelineDescriptor;
+    pipelineDescriptor.compute.module = utils::CreateShaderModule(device, shaderSource.str());
+    wgpu::ComputePipeline pipeline = device.CreateComputePipeline(&pipelineDescriptor);
+
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    {
+        wgpu::ComputePassEncoder pass = encoder.BeginComputePass();
+        pass.SetPipeline(pipeline);
+        pass.SetBindGroup(0, utils::MakeBindGroup(device, pipeline.GetBindGroupLayout(0),
+                                                  {
+                                                      {0, buffer},
+                                                      {1, texViewCube},
                                                   }));
         pass.DispatchWorkgroups(1);
         pass.End();

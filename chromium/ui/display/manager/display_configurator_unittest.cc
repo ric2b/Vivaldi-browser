@@ -94,13 +94,13 @@ class TestObserver : public DisplayConfigurator::Observer {
   }
 
   // DisplayConfigurator::Observer overrides:
-  void OnDisplayModeChanged(
+  void OnDisplayConfigurationChanged(
       const DisplayConfigurator::DisplayStateList& outputs) override {
     num_changes_++;
     latest_outputs_ = outputs;
   }
 
-  void OnDisplayModeChangeFailed(
+  void OnDisplayConfigurationChangeFailed(
       const DisplayConfigurator::DisplayStateList& outputs,
       MultipleDisplayState failed_new_state) override {
     num_failures_++;
@@ -505,7 +505,7 @@ TEST_F(DisplayConfiguratorTest, ConnectSecondOutput) {
   EXPECT_EQ(1, observer_.num_changes());
 
   observer_.Reset();
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
+  configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
   EXPECT_EQ(
       JoinActions(
           kTestModesetStr,
@@ -550,7 +550,7 @@ TEST_F(DisplayConfiguratorTest, ConnectSecondOutput) {
   EXPECT_FALSE(mirroring_controller_.SoftwareMirroringEnabled());
 
   observer_.Reset();
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
+  configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
   EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
   EXPECT_EQ(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED,
             configurator_.display_state());
@@ -560,14 +560,14 @@ TEST_F(DisplayConfiguratorTest, ConnectSecondOutput) {
 
   // Setting MULTIPLE_DISPLAY_STATE_DUAL_MIRROR should try to reconfigure.
   observer_.Reset();
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED);
+  configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED);
   EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
   EXPECT_FALSE(mirroring_controller_.SoftwareMirroringEnabled());
   EXPECT_EQ(1, observer_.num_changes());
 
   // Set back to software mirror mode.
   observer_.Reset();
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
+  configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
   EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
   EXPECT_EQ(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED,
             configurator_.display_state());
@@ -952,37 +952,37 @@ TEST_F(DisplayConfiguratorTest, InvalidMultipleDisplayStates) {
   Init(false);
   configurator_.ForceInitialConfigure();
   observer_.Reset();
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_HEADLESS);
+  configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_HEADLESS);
   EXPECT_EQ(1, observer_.num_changes());
   EXPECT_EQ(0, observer_.num_failures());
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_SINGLE);
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED);
+  configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_SINGLE);
+  configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
+  configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED);
   EXPECT_EQ(1, observer_.num_changes());
   EXPECT_EQ(3, observer_.num_failures());
 
   UpdateOutputs(1, true);
   observer_.Reset();
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_HEADLESS);
+  configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_HEADLESS);
   EXPECT_EQ(0, observer_.num_changes());
   EXPECT_EQ(1, observer_.num_failures());
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_SINGLE);
+  configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_SINGLE);
   EXPECT_EQ(1, observer_.num_changes());
   EXPECT_EQ(1, observer_.num_failures());
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED);
+  configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
+  configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED);
   EXPECT_EQ(1, observer_.num_changes());
   EXPECT_EQ(3, observer_.num_failures());
 
   state_controller_.set_state(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED);
   UpdateOutputs(2, true);
   observer_.Reset();
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_HEADLESS);
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_SINGLE);
+  configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_HEADLESS);
+  configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_SINGLE);
   EXPECT_EQ(0, observer_.num_changes());
   EXPECT_EQ(2, observer_.num_failures());
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED);
+  configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
+  configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED);
   EXPECT_EQ(2, observer_.num_changes());
   EXPECT_EQ(2, observer_.num_failures());
 }
@@ -1114,7 +1114,7 @@ TEST_F(DisplayConfiguratorTest, DoNotConfigureWithSuspendedDisplays) {
             log_->GetActionsAndClear());
 
   UpdateOutputs(2, false);
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
+  configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
   EXPECT_EQ(
       JoinActions(
           kTestModesetStr,
@@ -2020,33 +2020,31 @@ TEST_F(DisplayConfiguratorTest, RefreshRateThrottle_SingleDisplay) {
   observer_.Reset();
 
   // Set throttle state noop.
-  configurator_.MaybeSetRefreshRateThrottleState(GetOutput(0)->display_id(),
-                                                 kRefreshRateThrottleDisabled);
+  configurator_.SetRefreshRateOverrides({});
   EXPECT_EQ(120.0f, GetOutput(0)->current_mode()->refresh_rate());
   EXPECT_EQ(0, observer_.num_changes());
   EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
 
   // Set throttle state enabled.
-  configurator_.MaybeSetRefreshRateThrottleState(GetOutput(0)->display_id(),
-                                                 kRefreshRateThrottleEnabled);
+  configurator_.SetRefreshRateOverrides(
+      {std::make_pair(GetOutput(0)->display_id(), 60.f)});
   EXPECT_EQ(60.0f, GetOutput(0)->current_mode()->refresh_rate());
   EXPECT_EQ(1, observer_.num_changes());
   EXPECT_EQ(JoinActions(kTestModesetStr, kSeamlessModesetStr,
                         GetCrtcAction({GetOutput(0)->display_id(),
-                                       gfx::Point(0, 0), modes[1].get()})
+                                       gfx::Point(0, 0), modes[1].get(), false})
                             .c_str(),
                         kModesetOutcomeSuccess, kCommitModesetStr,
                         kSeamlessModesetStr,
                         GetCrtcAction({GetOutput(0)->display_id(),
-                                       gfx::Point(0, 0), modes[1].get()})
+                                       gfx::Point(0, 0), modes[1].get(), false})
                             .c_str(),
                         kModesetOutcomeSuccess, nullptr),
             log_->GetActionsAndClear());
   observer_.Reset();
 
   // Set throttle state disabled.
-  configurator_.MaybeSetRefreshRateThrottleState(GetOutput(0)->display_id(),
-                                                 kRefreshRateThrottleDisabled);
+  configurator_.SetRefreshRateOverrides({});
   EXPECT_EQ(120.0f, GetOutput(0)->current_mode()->refresh_rate());
   EXPECT_EQ(1, observer_.num_changes());
   EXPECT_EQ(JoinActions(kTestModesetStr, kSeamlessModesetStr,
@@ -2060,6 +2058,141 @@ TEST_F(DisplayConfiguratorTest, RefreshRateThrottle_SingleDisplay) {
                             .c_str(),
                         kModesetOutcomeSuccess, nullptr),
             log_->GetActionsAndClear());
+}
+
+TEST_F(DisplayConfiguratorTest, RefreshRateThrottle_AlreadyThrottled) {
+  InitWithOutputs(&small_mode_);
+  // Set up display with HRR native mode and eligible throttle candidate mode.
+  std::vector<std::unique_ptr<const DisplayMode>> modes;
+  modes.push_back(MakeDisplayMode(1366, 768, false, 120.0));
+  modes.push_back(MakeDisplayMode(1366, 768, false, 60.0));
+  SetOutput(0, FakeDisplaySnapshot::Builder()
+                   .SetId(kDisplayIds[0])
+                   .SetNativeMode(modes[0]->Clone())
+                   .SetCurrentMode(modes[0]->Clone())
+                   .AddMode(modes[1]->Clone())
+                   .SetType(DISPLAY_CONNECTION_TYPE_INTERNAL)
+                   .SetBaseConnectorId(kEdpConnectorId)
+                   .SetIsAspectPreservingScaling(true)
+                   .Build());
+  state_controller_.set_state(MULTIPLE_DISPLAY_STATE_SINGLE);
+  UpdateOutputs(1, true);
+  EXPECT_EQ(120.0f, GetOutput(0)->current_mode()->refresh_rate());
+  log_->GetActionsAndClear();
+  observer_.Reset();
+
+  // Set throttle state enabled.
+  configurator_.SetRefreshRateOverrides(
+      {std::make_pair(GetOutput(0)->display_id(), 60.f)});
+  EXPECT_EQ(60.0f, GetOutput(0)->current_mode()->refresh_rate());
+  EXPECT_EQ(1, observer_.num_changes());
+  EXPECT_EQ(JoinActions(kTestModesetStr, kSeamlessModesetStr,
+                        GetCrtcAction({GetOutput(0)->display_id(),
+                                       gfx::Point(0, 0), modes[1].get(), false})
+                            .c_str(),
+                        kModesetOutcomeSuccess, kCommitModesetStr,
+                        kSeamlessModesetStr,
+                        GetCrtcAction({GetOutput(0)->display_id(),
+                                       gfx::Point(0, 0), modes[1].get(), false})
+                            .c_str(),
+                        kModesetOutcomeSuccess, nullptr),
+            log_->GetActionsAndClear());
+  observer_.Reset();
+
+  // Set the same throttle state. This should be a no-op.
+  configurator_.SetRefreshRateOverrides(
+      {std::make_pair(GetOutput(0)->display_id(), 60.f)});
+  EXPECT_EQ(60.0f, GetOutput(0)->current_mode()->refresh_rate());
+  EXPECT_EQ(0, observer_.num_changes());
+  EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
+}
+
+TEST_F(DisplayConfiguratorTest, RefreshRateThrottle_OverrideWithNative) {
+  InitWithOutputs(&small_mode_);
+  // Set up display with HRR native mode and eligible throttle candidate mode.
+  std::vector<std::unique_ptr<const DisplayMode>> modes;
+  modes.push_back(MakeDisplayMode(1366, 768, false, 120.0));
+  modes.push_back(MakeDisplayMode(1366, 768, false, 60.0));
+  SetOutput(0, FakeDisplaySnapshot::Builder()
+                   .SetId(kDisplayIds[0])
+                   .SetNativeMode(modes[0]->Clone())
+                   .SetCurrentMode(modes[0]->Clone())
+                   .AddMode(modes[1]->Clone())
+                   .SetType(DISPLAY_CONNECTION_TYPE_INTERNAL)
+                   .SetBaseConnectorId(kEdpConnectorId)
+                   .SetIsAspectPreservingScaling(true)
+                   .Build());
+  state_controller_.set_state(MULTIPLE_DISPLAY_STATE_SINGLE);
+  UpdateOutputs(1, true);
+  EXPECT_EQ(120.0f, GetOutput(0)->current_mode()->refresh_rate());
+  log_->GetActionsAndClear();
+  observer_.Reset();
+
+  // Set throttle state enabled.
+  configurator_.SetRefreshRateOverrides(
+      {std::make_pair(GetOutput(0)->display_id(), 60.f)});
+  EXPECT_EQ(60.0f, GetOutput(0)->current_mode()->refresh_rate());
+  EXPECT_EQ(1, observer_.num_changes());
+  EXPECT_EQ(JoinActions(kTestModesetStr, kSeamlessModesetStr,
+                        GetCrtcAction({GetOutput(0)->display_id(),
+                                       gfx::Point(0, 0), modes[1].get(), false})
+                            .c_str(),
+                        kModesetOutcomeSuccess, kCommitModesetStr,
+                        kSeamlessModesetStr,
+                        GetCrtcAction({GetOutput(0)->display_id(),
+                                       gfx::Point(0, 0), modes[1].get(), false})
+                            .c_str(),
+                        kModesetOutcomeSuccess, nullptr),
+            log_->GetActionsAndClear());
+  observer_.Reset();
+
+  // Specifying the native mode's refresh rate as an override.
+  configurator_.SetRefreshRateOverrides(
+      {std::make_pair(GetOutput(0)->display_id(), 120.f)});
+  EXPECT_EQ(120.0f, GetOutput(0)->current_mode()->refresh_rate());
+  EXPECT_EQ(1, observer_.num_changes());
+
+  // No override should be set.
+  EXPECT_EQ(JoinActions(kTestModesetStr, kSeamlessModesetStr,
+                        GetCrtcAction({GetOutput(0)->display_id(),
+                                       gfx::Point(0, 0), modes[0].get(), false})
+                            .c_str(),
+                        kModesetOutcomeSuccess, kCommitModesetStr,
+                        kSeamlessModesetStr,
+                        GetCrtcAction({GetOutput(0)->display_id(),
+                                       gfx::Point(0, 0), modes[0].get(), false})
+                            .c_str(),
+                        kModesetOutcomeSuccess, nullptr),
+            log_->GetActionsAndClear());
+  observer_.Reset();
+}
+
+TEST_F(DisplayConfiguratorTest, RefreshRateThrottle_WrongDisplayId) {
+  InitWithOutputs(&small_mode_);
+  // Set up display with HRR native mode and eligible throttle candidate mode.
+  std::vector<std::unique_ptr<const DisplayMode>> modes;
+  modes.push_back(MakeDisplayMode(1366, 768, false, 120.0));
+  modes.push_back(MakeDisplayMode(1366, 768, false, 60.0));
+  SetOutput(0, FakeDisplaySnapshot::Builder()
+                   .SetId(kDisplayIds[0])
+                   .SetNativeMode(modes[0]->Clone())
+                   .SetCurrentMode(modes[0]->Clone())
+                   .AddMode(modes[1]->Clone())
+                   .SetType(DISPLAY_CONNECTION_TYPE_INTERNAL)
+                   .SetBaseConnectorId(kEdpConnectorId)
+                   .SetIsAspectPreservingScaling(true)
+                   .Build());
+  state_controller_.set_state(MULTIPLE_DISPLAY_STATE_SINGLE);
+  UpdateOutputs(1, true);
+  EXPECT_EQ(120.0f, GetOutput(0)->current_mode()->refresh_rate());
+  log_->GetActionsAndClear();
+  observer_.Reset();
+
+  // Set throttle state for wrong display id.
+  configurator_.SetRefreshRateOverrides(
+      {std::make_pair(GetOutput(0)->display_id() + 100, 60.f)});
+  EXPECT_EQ(0, observer_.num_changes());
+  EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
 }
 
 TEST_F(DisplayConfiguratorTest, RefreshRateThrottle_MultipleDisplays) {
@@ -2095,17 +2228,16 @@ TEST_F(DisplayConfiguratorTest, RefreshRateThrottle_MultipleDisplays) {
   log_->GetActionsAndClear();
   observer_.Reset();
 
-  // Set throttle state noop.
-  configurator_.MaybeSetRefreshRateThrottleState(GetOutput(0)->display_id(),
-                                                 kRefreshRateThrottleDisabled);
+  // Set refresh rate override noop.
+  configurator_.SetRefreshRateOverrides({});
   EXPECT_EQ(120.0f, GetOutput(0)->current_mode()->refresh_rate());
   EXPECT_EQ(120.0f, GetOutput(1)->current_mode()->refresh_rate());
   EXPECT_EQ(0, observer_.num_changes());
   EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
 
-  // Set throttle state enabled.
-  configurator_.MaybeSetRefreshRateThrottleState(GetOutput(0)->display_id(),
-                                                 kRefreshRateThrottleEnabled);
+  // Set refresh rate override for internal display.
+  configurator_.SetRefreshRateOverrides(
+      {std::make_pair(GetOutput(0)->display_id(), 60.f)});
   EXPECT_EQ(60.0f, GetOutput(0)->current_mode()->refresh_rate());
   EXPECT_EQ(120.0f, GetOutput(1)->current_mode()->refresh_rate());
   EXPECT_EQ(1, observer_.num_changes());
@@ -2129,10 +2261,10 @@ TEST_F(DisplayConfiguratorTest, RefreshRateThrottle_MultipleDisplays) {
                 kModesetOutcomeSuccess, nullptr),
             log_->GetActionsAndClear());
   observer_.Reset();
+  observer_.Reset();
 
-  // Set throttle state disabled.
-  configurator_.MaybeSetRefreshRateThrottleState(GetOutput(0)->display_id(),
-                                                 kRefreshRateThrottleDisabled);
+  // Remove refresh rate overrides.
+  configurator_.SetRefreshRateOverrides({});
   EXPECT_EQ(120.0f, GetOutput(0)->current_mode()->refresh_rate());
   EXPECT_EQ(120.0f, GetOutput(1)->current_mode()->refresh_rate());
   EXPECT_EQ(1, observer_.num_changes());
@@ -2192,7 +2324,7 @@ TEST_F(DisplayConfiguratorTest, RefreshRateThrottle_RaceWithDockMode) {
   test_api_.GetDisplayLayoutManager()->GetDisplayLayout(
       native_display_delegate_->GetOutputs(), MULTIPLE_DISPLAY_STATE_SINGLE,
       chromeos::DISPLAY_POWER_INTERNAL_OFF_EXTERNAL_ON,
-      kRefreshRateThrottleEnabled, /*new_vrr_enabled_state=*/{}, &requests);
+      /*new_vrr_enabled_state=*/{}, &requests);
 
   bool has_internal_request = false;
   for (auto& request: requests) {
@@ -2230,8 +2362,9 @@ TEST_F(DisplayConfiguratorTest,
   observer_.Reset();
 
   // Set throttle state enabled.
-  configurator_.MaybeSetRefreshRateThrottleState(GetOutput(0)->display_id(),
-                                                 kRefreshRateThrottleEnabled);
+  configurator_.SetRefreshRateOverrides(
+      {std::make_pair(GetOutput(0)->display_id(), 60.f)});
+
   EXPECT_EQ(60.0f, GetOutput(0)->current_mode()->refresh_rate());
   EXPECT_EQ(1, observer_.num_changes());
   EXPECT_EQ(JoinActions(kTestModesetStr, kSeamlessModesetStr,
@@ -2265,8 +2398,8 @@ TEST_F(DisplayConfiguratorTest,
   observer_.Reset();
 
   // Set throttle state disabled.
-  configurator_.MaybeSetRefreshRateThrottleState(GetOutput(0)->display_id(),
-                                                 kRefreshRateThrottleDisabled);
+  configurator_.SetRefreshRateOverrides({});
+
   EXPECT_EQ(1, observer_.num_changes());
   EXPECT_TRUE(GetOutput(0)->IsVrrEnabled());
   EXPECT_EQ(JoinActions(
@@ -2306,8 +2439,9 @@ TEST_F(DisplayConfiguratorTest,
   observer_.Reset();
 
   // Set throttle state enabled.
-  configurator_.MaybeSetRefreshRateThrottleState(GetOutput(0)->display_id(),
-                                                 kRefreshRateThrottleEnabled);
+  configurator_.SetRefreshRateOverrides(
+      {std::make_pair(GetOutput(0)->display_id(), 60.f)});
+
   EXPECT_EQ(60.0f, GetOutput(0)->current_mode()->refresh_rate());
   EXPECT_EQ(1, observer_.num_changes());
   EXPECT_EQ(JoinActions(kTestModesetStr, kSeamlessModesetStr,
@@ -2467,8 +2601,9 @@ TEST_F(DisplayConfiguratorTest, RefreshRateThrottle_VrrEnabled) {
   observer_.Reset();
 
   // Set throttle state enabled.
-  configurator_.MaybeSetRefreshRateThrottleState(GetOutput(0)->display_id(),
-                                                 kRefreshRateThrottleEnabled);
+  configurator_.SetRefreshRateOverrides(
+      {std::make_pair(GetOutput(0)->display_id(), 60.f)});
+
   EXPECT_EQ(60.0f, GetOutput(0)->current_mode()->refresh_rate());
   EXPECT_EQ(1, observer_.num_changes());
   // Throttling should be unaffected by the internal display VRR state and still
@@ -2487,8 +2622,8 @@ TEST_F(DisplayConfiguratorTest, RefreshRateThrottle_VrrEnabled) {
   observer_.Reset();
 
   // Set throttle state disabled.
-  configurator_.MaybeSetRefreshRateThrottleState(GetOutput(0)->display_id(),
-                                                 kRefreshRateThrottleDisabled);
+  configurator_.SetRefreshRateOverrides({});
+
   EXPECT_EQ(120.0f, GetOutput(0)->current_mode()->refresh_rate());
   EXPECT_EQ(1, observer_.num_changes());
   // Unthrottling should be unaffected by the internal display VRR state and
@@ -2548,8 +2683,9 @@ TEST_F(DisplayConfiguratorTest,
   observer_.Reset();
 
   // Set throttle state enabled.
-  configurator_.MaybeSetRefreshRateThrottleState(GetOutput(0)->display_id(),
-                                                 kRefreshRateThrottleEnabled);
+  configurator_.SetRefreshRateOverrides(
+      {std::make_pair(GetOutput(0)->display_id(), 60.f)});
+
   EXPECT_EQ(60.0f, GetOutput(0)->current_mode()->refresh_rate());
   EXPECT_EQ(60.0f, GetOutput(1)->current_mode()->refresh_rate());
   EXPECT_EQ(1, observer_.num_changes());
@@ -2579,8 +2715,8 @@ TEST_F(DisplayConfiguratorTest,
   observer_.Reset();
 
   // Set throttle state disabled.
-  configurator_.MaybeSetRefreshRateThrottleState(GetOutput(0)->display_id(),
-                                                 kRefreshRateThrottleDisabled);
+  configurator_.SetRefreshRateOverrides({});
+
   EXPECT_EQ(120.0f, GetOutput(0)->current_mode()->refresh_rate());
   EXPECT_EQ(60.0f, GetOutput(1)->current_mode()->refresh_rate());
   EXPECT_EQ(1, observer_.num_changes());
@@ -2627,7 +2763,7 @@ class DisplayConfiguratorMultiMirroringTest : public DisplayConfiguratorTest {
     UpdateOutputs(3, true);
     log_->GetActionsAndClear();
     observer_.Reset();
-    configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
+    configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
     EXPECT_EQ(
         JoinActions(kTestModesetStr,
                     GetCrtcActions(
@@ -2651,7 +2787,7 @@ class DisplayConfiguratorMultiMirroringTest : public DisplayConfiguratorTest {
     UpdateOutputs(3, true);
     log_->GetActionsAndClear();
     observer_.Reset();
-    configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
+    configurator_.SetMultipleDisplayState(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
     EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
     EXPECT_TRUE(mirroring_controller_.SoftwareMirroringEnabled());
     EXPECT_EQ(1, observer_.num_changes());

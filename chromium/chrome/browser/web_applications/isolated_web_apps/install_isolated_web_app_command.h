@@ -9,12 +9,12 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <type_traits>
 
 #include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
-#include "base/strings/string_piece.h"
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "base/version.h"
@@ -22,12 +22,10 @@
 #include "chrome/browser/web_applications/commands/web_app_command.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_install_command_helper.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_install_source.h"
-
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_response_reader_factory.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_storage_location.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
 #include "chrome/browser/web_applications/locks/app_lock.h"
-#include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/webapps/browser/install_result_code.h"
@@ -41,11 +39,12 @@ namespace content {
 class WebContents;
 }  // namespace content
 
-namespace web_app {
-
+namespace webapps {
 class WebAppUrlLoader;
-
 enum class WebAppUrlLoaderResult;
+}  // namespace webapps
+
+namespace web_app {
 
 struct InstallIsolatedWebAppCommandSuccess {
   InstallIsolatedWebAppCommandSuccess(base::Version installed_version,
@@ -123,7 +122,7 @@ class InstallIsolatedWebAppCommand
   void StartWithLock(std::unique_ptr<AppLock> lock) override;
 
  private:
-  void ReportFailure(base::StringPiece message);
+  void ReportFailure(std::string_view message);
   void ReportSuccess();
 
   template <typename T, std::enable_if_t<std::is_void_v<T>, bool> = true>
@@ -177,13 +176,12 @@ class InstallIsolatedWebAppCommand
 
   void FinalizeInstall(WebAppInstallInfo info);
   void OnFinalizeInstall(const webapps::AppId& unused_app_id,
-                         webapps::InstallResultCode install_result_code,
-                         OsHooksErrors unused_os_hooks_errors);
+                         webapps::InstallResultCode install_result_code);
 
   SEQUENCE_CHECKER(sequence_checker_);
 
   std::unique_ptr<AppLock> lock_;
-  std::unique_ptr<WebAppUrlLoader> url_loader_;
+  std::unique_ptr<webapps::WebAppUrlLoader> url_loader_;
 
   const std::unique_ptr<IsolatedWebAppInstallCommandHelper> command_helper_;
 

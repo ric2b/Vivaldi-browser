@@ -2,9 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-import * as TraceEngine from '../trace.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
+import * as TraceEngine from '../trace.js';
 
 describe('AuctionWorkletsHandler', function() {
   beforeEach(() => {
@@ -113,8 +112,8 @@ describe('AuctionWorkletsHandler', function() {
     assert.strictEqual(data.worklets.size, 3);
 
     for (const worklet of data.worklets.values()) {
-      assert.isDefined(worklet.args.data.runningInProcessEvent);
-      assert.isDefined(worklet.args.data.doneWithProcessEvent);
+      assert.exists(worklet.args.data.runningInProcessEvent);
+      assert.exists(worklet.args.data.doneWithProcessEvent);
     }
   });
 

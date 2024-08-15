@@ -5,9 +5,14 @@
 #ifndef ASH_SYSTEM_MAHI_SUMMARY_OUTLINES_SECTION_H_
 #define ASH_SYSTEM_MAHI_SUMMARY_OUTLINES_SECTION_H_
 
+#include <optional>
+#include <string>
+#include <vector>
+
 #include "ash/ash_export.h"
+#include "ash/system/mahi/mahi_ui_controller.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "chromeos/components/mahi/public/cpp/mahi_manager.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/layout/box_layout_view.h"
@@ -21,35 +26,40 @@ class Label;
 namespace ash {
 
 // The view containing the summary and outlines section within the Mahi panel.
-class ASH_EXPORT SummaryOutlinesSection : public views::BoxLayoutView {
+class ASH_EXPORT SummaryOutlinesSection : public views::BoxLayoutView,
+                                          public MahiUiController::Delegate {
   METADATA_HEADER(SummaryOutlinesSection, views::BoxLayoutView)
 
  public:
-  SummaryOutlinesSection();
+  explicit SummaryOutlinesSection(MahiUiController* ui_controller);
   SummaryOutlinesSection(const SummaryOutlinesSection&) = delete;
   SummaryOutlinesSection& operator=(const SummaryOutlinesSection&) = delete;
   ~SummaryOutlinesSection() override;
 
  private:
+  // MahiUiController::Delegate:
+  views::View* GetView() override;
+  bool GetViewVisibility(VisibilityState state) const override;
+  void OnUpdated(const MahiUiUpdate& update) override;
+
+  void HandleOutlinesLoaded(const std::vector<chromeos::MahiOutline>& outlines);
+
+  void HandleSummaryLoaded(const std::u16string& summary_text);
+
   // Requests summary and outlines data from `MahiManager` for the currently
   // active content and starts playing the loading animations.
   void LoadSummaryAndOutlines();
 
-  // Callback provided to the `MahiManager` which runs when the summary is
-  // available.
-  void OnSummaryLoaded(std::u16string summary,
-                       chromeos::MahiResponseStatus status);
+  // `ui_controller_` will outlive `this`.
+  const raw_ptr<MahiUiController> ui_controller_;
 
-  // Callback provided to the `MahiManager` which runs when all outlines are
-  // available.
-  void OnOutlinesLoaded(std::vector<chromeos::MahiOutline> outlines,
-                        chromeos::MahiResponseStatus status);
-
+  // Owned by the views hierarchy.
   raw_ptr<views::AnimatedImageView> summary_loading_animated_image_ = nullptr;
   raw_ptr<views::AnimatedImageView> outlines_loading_animated_image_ = nullptr;
   raw_ptr<views::Label> summary_label_ = nullptr;
+  raw_ptr<views::View> outlines_container_ = nullptr;
 
-  base::WeakPtrFactory<SummaryOutlinesSection> weak_ptr_factory_{this};
+  base::Time summary_start_loading_time_;
 };
 
 BEGIN_VIEW_BUILDER(ASH_EXPORT, SummaryOutlinesSection, views::BoxLayoutView)

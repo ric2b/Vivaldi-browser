@@ -25,8 +25,8 @@ import java.util.Calendar;
 import android.os.Build;
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.profiles.ProfileManager;
-import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.browser_ui.accessibility.PageZoomUtils;
+import org.vivaldi.browser.oem_extensions.CarDataProvider;
 import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoExtensions;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
@@ -77,12 +77,15 @@ public class AboutChromeSettings extends PreferenceFragmentCompat
         // Vivaldi
         if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
             if (!BuildConfig.IS_FINAL_BUILD) {
-                int ui_dpi = VivaldiPreferences.getSharedPreferencesManager().readInt(
-                        VivaldiPreferences.UI_SCALE_VALUE);
-                version = version.concat(" [ui=" + ui_dpi);
-                version = version.concat(" page=" + PageZoomUtils.getDefaultZoomAsSeekBarValue(
-                        ProfileManager.getLastUsedRegularProfile()) + "]");
+                try {
+                    int ui_dpi = VivaldiPreferences.getSharedPreferencesManager()
+                            .readInt(VivaldiPreferences.UI_SCALE_VALUE);
+                    version = version.concat(" [ui=" + ui_dpi);
+                    version = version.concat(" page=" + PageZoomUtils.getDefaultZoomAsSeekBarValue(
+                            ProfileManager.getLastUsedRegularProfile()) + "]");
+                } catch (Exception ignored) {}
             }
+
             version = version.concat(" (OEM)");
 
             if (BuildConfig.IS_OEM_POLESTAR_BUILD) {
@@ -104,8 +107,14 @@ public class AboutChromeSettings extends PreferenceFragmentCompat
             } else if (BuildConfig.IS_OEM_MAHINDRA_BUILD) {
                 version = version.concat("(MM)");
             }
-        // Add brand and model
-            version = version.concat(" ").concat(Build.BRAND).concat("/").concat(Build.MODEL);
+            // Add make and model
+            if (BuildConfig.IS_OEM_RENAULT_BUILD) {
+                version = version.concat(" ")
+                        .concat(CarDataProvider.getVhalInfoMake()).concat("/")
+                        .concat(CarDataProvider.getVhalInfoModel());
+            } else {
+                version = version.concat(" ").concat(Build.BRAND).concat("/").concat(Build.MODEL);
+            }
         }
 
         if (VersionInfo.isOfficialBuild()) {

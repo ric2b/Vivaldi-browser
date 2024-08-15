@@ -123,6 +123,9 @@ class CONTENT_EXPORT InterestGroupAuctionReporter {
   using LogPrivateAggregationRequestsCallback = base::RepeatingCallback<void(
       const PrivateAggregationRequests& private_aggregation_requests)>;
 
+  using RealTimeReportingContributions =
+      std::vector<auction_worklet::mojom::RealTimeReportingContributionPtr>;
+
   // Seller-specific information about the winning bid. The top-level seller and
   // (if present) component seller associated with the winning bid have separate
   // SellerWinningBidInfos.
@@ -239,6 +242,9 @@ class CONTENT_EXPORT InterestGroupAuctionReporter {
   // `private_aggregation_requests_non_reserved` Requests made to the Private
   //  Aggregation API contributeToHistogramOnEvent() with non-reserved event
   //  type like "click". Keyed by event type of the associated requests.
+  //
+  // `real_time_contributions` Real time reporting contributions, including both
+  //  from the Real Time Reporting APIs, and platform contributions.
   InterestGroupAuctionReporter(
       InterestGroupManagerImpl* interest_group_manager,
       AuctionWorkletManager* auction_worklet_manager,
@@ -264,7 +270,9 @@ class CONTENT_EXPORT InterestGroupAuctionReporter {
       std::map<PrivateAggregationKey, PrivateAggregationRequests>
           private_aggregation_requests_reserved,
       std::map<std::string, PrivateAggregationRequests>
-          private_aggregation_requests_non_reserved);
+          private_aggregation_requests_non_reserved,
+      std::map<url::Origin, RealTimeReportingContributions>
+          real_time_contributions);
 
   ~InterestGroupAuctionReporter();
 
@@ -279,7 +287,7 @@ class CONTENT_EXPORT InterestGroupAuctionReporter {
   // at which point reports not managed by the InterestGroupAuctionReporter
   // should be sent, and the reporter can be destroyed.
   //
-  // TODO(https://crbug.com/1394777): Make InterestGroupAuctionReporter send all
+  // TODO(crbug.com/40248758): Make InterestGroupAuctionReporter send all
   // reports itself, and decouple its lifetime from the frame, so that it can
   // continue running scripts after a frame is navigated away from.
   void Start(base::OnceClosure callback);
@@ -530,6 +538,12 @@ class CONTENT_EXPORT InterestGroupAuctionReporter {
       private_aggregation_requests_reserved_;
   std::map<std::string, PrivateAggregationRequests>
       private_aggregation_requests_non_reserved_;
+
+  // Stores all received pending Real Time Reporting contributions. until their
+  // converted histograms flushed. Keyed by the origin of the script that issued
+  // the request (i.e. the reporting origin).
+  std::map<url::Origin, RealTimeReportingContributions>
+      real_time_contributions_;
 
   std::vector<GURL> pending_report_urls_;
 

@@ -4,9 +4,14 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "core/fxcodec/jbig2/JBig2_SddProc.h"
 
-#include <string.h>
+#include <stddef.h>
 
 #include <algorithm>
 #include <memory>
@@ -20,6 +25,7 @@
 #include "core/fxcodec/jbig2/JBig2_HuffmanTable.h"
 #include "core/fxcodec/jbig2/JBig2_SymbolDict.h"
 #include "core/fxcodec/jbig2/JBig2_TrdProc.h"
+#include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_safe_types.h"
 
 CJBig2_SDDProc::CJBig2_SDDProc() = default;
@@ -436,8 +442,8 @@ std::unique_ptr<CJBig2_SymbolDict> CJBig2_SDDProc::DecodeHuffman(
 
         BHC = std::make_unique<CJBig2_Image>(TOTWIDTH, HCHEIGHT);
         for (uint32_t i = 0; i < HCHEIGHT; ++i) {
-          memcpy(BHC->data() + i * BHC->stride(), pStream->getPointer(),
-                 stride);
+          FXSYS_memcpy(BHC->data() + i * BHC->stride(), pStream->getPointer(),
+                       stride);
           pStream->offset(stride);
         }
       } else {

@@ -97,11 +97,12 @@ const util_js_1 = require("../common/util.js");
 const assert_js_1 = require("../util/assert.js");
 const decorators_js_1 = require("../util/decorators.js");
 const ErrorLike_js_1 = require("../util/ErrorLike.js");
-const ElementHandle_js_1 = require("./ElementHandle.js");
 const Frame_js_1 = require("./Frame.js");
 const Input_js_1 = require("./Input.js");
 const util_js_2 = require("./util.js");
 /**
+ * Implements Page using WebDriver BiDi.
+ *
  * @internal
  */
 let BidiPage = (() => {
@@ -162,12 +163,54 @@ let BidiPage = (() => {
                 this.#workers.delete(worker);
             });
         }
+        /**
+         * @internal
+         */
+        _userAgentHeaders = {};
+        #userAgentInterception;
+        #userAgentPreloadScript;
         async setUserAgent(userAgent, userAgentMetadata) {
-            // TODO: handle CDP-specific cases such as mprach.
-            await this._client().send('Network.setUserAgentOverride', {
-                userAgent: userAgent,
-                userAgentMetadata: userAgentMetadata,
-            });
+            if (!this.#browserContext.browser().cdpSupported && userAgentMetadata) {
+                throw new Errors_js_1.UnsupportedOperation('Current Browser does not support `userAgentMetadata`');
+            }
+            else if (this.#browserContext.browser().cdpSupported &&
+                userAgentMetadata) {
+                return await this._client().send('Network.setUserAgentOverride', {
+                    userAgent: userAgent,
+                    userAgentMetadata: userAgentMetadata,
+                });
+            }
+            const enable = userAgent !== '';
+            userAgent = userAgent ?? (await this.#browserContext.browser().userAgent());
+            this._userAgentHeaders = enable
+                ? {
+                    'User-Agent': userAgent,
+                }
+                : {};
+            this.#userAgentInterception = await this.#toggleInterception(["beforeRequestSent" /* Bidi.Network.InterceptPhase.BeforeRequestSent */], this.#userAgentInterception, enable);
+            const changeUserAgent = (userAgent) => {
+                Object.defineProperty(navigator, 'userAgent', {
+                    value: userAgent,
+                });
+            };
+            const frames = [this.#frame];
+            for (const frame of frames) {
+                frames.push(...frame.childFrames());
+            }
+            if (this.#userAgentPreloadScript) {
+                await this.removeScriptToEvaluateOnNewDocument(this.#userAgentPreloadScript);
+            }
+            const [evaluateToken] = await Promise.all([
+                enable
+                    ? this.evaluateOnNewDocument(changeUserAgent, userAgent)
+                    : undefined,
+                // When we disable the UserAgent we want to
+                // evaluate the original value in all Browsing Contexts
+                frames.map(frame => {
+                    return frame.evaluate(changeUserAgent, userAgent);
+                }),
+            ]);
+            this.#userAgentPreloadScript = evaluateToken?.identifier;
         }
         async setBypassCSP(enabled) {
             // TODO: handle CDP-specific cases such as mprach.
@@ -196,21 +239,26 @@ let BidiPage = (() => {
         async focusedFrame() {
             const env_1 = { stack: [], error: void 0, hasError: false };
             try {
-                const frame = __addDisposableResource(env_1, await this.mainFrame()
+                const handle = __addDisposableResource(env_1, (await this.mainFrame()
                     .isolatedRealm()
                     .evaluateHandle(() => {
-                    let frame;
                     let win = window;
-                    while (win?.document.activeElement instanceof HTMLIFrameElement) {
-                        frame = win.document.activeElement;
-                        win = frame.contentWindow;
+                    while (win.document.activeElement instanceof win.HTMLIFrameElement ||
+                        win.document.activeElement instanceof win.HTMLFrameElement) {
+                        if (win.document.activeElement.contentWindow === null) {
+                            break;
+                        }
+                        win = win.document.activeElement.contentWindow;
                     }
-                    return frame;
-                }), false);
-                if (!(frame instanceof ElementHandle_js_1.BidiElementHandle)) {
-                    return this.mainFrame();
-                }
-                return await frame.contentFrame();
+                    return win;
+                })), false);
+                const value = handle.remoteValue();
+                (0, assert_js_1.assert)(value.type === 'window');
+                const frame = this.frames().find(frame => {
+                    return frame._id === value.value.context;
+                });
+                (0, assert_js_1.assert)(frame);
+                return frame;
             }
             catch (e_1) {
                 env_1.error = e_1;
@@ -310,6 +358,11 @@ let BidiPage = (() => {
             const { timeout: ms = this._timeoutSettings.timeout(), path = undefined } = options;
             const { printBackground: background, margin, landscape, width, height, pageRanges: ranges, scale, preferCSSPageSize, } = (0, util_js_1.parsePDFOptions)(options, 'cm');
             const pageRanges = ranges ? ranges.split(', ') : [];
+            await (0, rxjs_js_1.firstValueFrom)((0, rxjs_js_1.from)(this.mainFrame()
+                .isolatedRealm()
+                .evaluate(() => {
+                return document.fonts.ready;
+            })).pipe((0, rxjs_js_1.raceWith)((0, util_js_1.timeout)(ms))));
             const data = await (0, rxjs_js_1.firstValueFrom)((0, rxjs_js_1.from)(this.#frame.browsingContext.print({
                 background,
                 margin,
@@ -437,8 +490,44 @@ let BidiPage = (() => {
         workers() {
             return [...this.#workers];
         }
-        setRequestInterception() {
-            throw new Errors_js_1.UnsupportedOperation();
+        #userInterception;
+        async setRequestInterception(enable) {
+            this.#userInterception = await this.#toggleInterception(["beforeRequestSent" /* Bidi.Network.InterceptPhase.BeforeRequestSent */], this.#userInterception, enable);
+        }
+        /**
+         * @internal
+         */
+        _extraHTTPHeaders = {};
+        #extraHeadersInterception;
+        async setExtraHTTPHeaders(headers) {
+            const extraHTTPHeaders = {};
+            for (const [key, value] of Object.entries(headers)) {
+                (0, assert_js_1.assert)((0, util_js_1.isString)(value), `Expected value of header "${key}" to be String, but "${typeof value}" is found.`);
+                extraHTTPHeaders[key.toLowerCase()] = value;
+            }
+            this._extraHTTPHeaders = extraHTTPHeaders;
+            this.#extraHeadersInterception = await this.#toggleInterception(["beforeRequestSent" /* Bidi.Network.InterceptPhase.BeforeRequestSent */], this.#extraHeadersInterception, Boolean(Object.keys(this._extraHTTPHeaders).length));
+        }
+        /**
+         * @internal
+         */
+        _credentials = null;
+        #authInterception;
+        async authenticate(credentials) {
+            this.#authInterception = await this.#toggleInterception(["authRequired" /* Bidi.Network.InterceptPhase.AuthRequired */], this.#authInterception, Boolean(credentials));
+            this._credentials = credentials;
+        }
+        async #toggleInterception(phases, interception, expected) {
+            if (expected && !interception) {
+                return await this.#frame.browsingContext.addIntercept({
+                    phases,
+                });
+            }
+            else if (!expected && interception) {
+                await this.#frame.browsingContext.userContext.browser.removeIntercept(interception);
+                return;
+            }
+            return interception;
         }
         setDragInterception() {
             throw new Errors_js_1.UnsupportedOperation();
@@ -512,12 +601,6 @@ let BidiPage = (() => {
         }
         async removeExposedFunction(name) {
             await this.#frame.removeExposedFunction(name);
-        }
-        authenticate() {
-            throw new Errors_js_1.UnsupportedOperation();
-        }
-        setExtraHTTPHeaders() {
-            throw new Errors_js_1.UnsupportedOperation();
         }
         metrics() {
             throw new Errors_js_1.UnsupportedOperation();

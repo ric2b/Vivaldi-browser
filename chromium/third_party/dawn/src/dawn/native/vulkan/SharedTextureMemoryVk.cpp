@@ -105,43 +105,6 @@ ResultOrError<wgpu::TextureFormat> FormatFromDrmFormat(uint32_t drmFormat) {
     }
 }
 
-// Get the properties for the (format, modifier) pair.
-// https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkDrmFormatModifierPropertiesEXT.html
-ResultOrError<VkDrmFormatModifierPropertiesEXT> GetFormatModifierProps(
-    const VulkanFunctions& fn,
-    VkPhysicalDevice vkPhysicalDevice,
-    VkFormat format,
-    uint64_t modifier) {
-    VkFormatProperties2 formatProps = {};
-    formatProps.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
-    PNextChainBuilder formatPropsChain(&formatProps);
-
-    // Obtain the list of Linux DRM format modifiers compatible with a VkFormat
-    VkDrmFormatModifierPropertiesListEXT formatModifierPropsList = {};
-    formatModifierPropsList.drmFormatModifierCount = 0;
-    formatModifierPropsList.pDrmFormatModifierProperties = nullptr;
-    formatPropsChain.Add(&formatModifierPropsList,
-                         VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT);
-
-    fn.GetPhysicalDeviceFormatProperties2(vkPhysicalDevice, format, &formatProps);
-
-    const uint32_t modifierCount = formatModifierPropsList.drmFormatModifierCount;
-
-    std::vector<VkDrmFormatModifierPropertiesEXT> formatModifierPropsVector;
-    formatModifierPropsVector.resize(modifierCount);
-    formatModifierPropsList.pDrmFormatModifierProperties = formatModifierPropsVector.data();
-
-    fn.GetPhysicalDeviceFormatProperties2(vkPhysicalDevice, format, &formatProps);
-
-    // Find the modifier props that match the modifier, and return them.
-    for (const auto& props : formatModifierPropsVector) {
-        if (props.drmFormatModifier == modifier) {
-            return VkDrmFormatModifierPropertiesEXT{props};
-        }
-    }
-    return DAWN_VALIDATION_ERROR("DRM format modifier %u not supported.", modifier);
-}
-
 #endif  // DAWN_PLATFORM_IS(LINUX)
 
 // Creates a VkImage with VkExternalMemoryImageCreateInfo::handlesTypes set to
@@ -171,10 +134,10 @@ ResultOrError<VkImage> CreateExternalVkImage(
     createInfo.pQueueFamilyIndices = nullptr;
     createInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    PNextChainBuilder createInfoChain(&createInfo);
-
     VkExternalMemoryImageCreateInfo externalMemoryImageCreateInfo = {};
     externalMemoryImageCreateInfo.handleTypes = externalMemoryHandleTypeFlagBits;
+
+    PNextChainBuilder createInfoChain(&createInfo);
     createInfoChain.Add(&externalMemoryImageCreateInfo,
                         VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO);
 
@@ -197,20 +160,20 @@ MaybeError CheckExternalImageFormatSupport(
     VkPhysicalDeviceImageFormatInfo2* imageFormatInfo,
     VkExternalMemoryHandleTypeFlagBits externalMemoryHandleTypeFlagBits,
     AdditionalChains*... additionalChains) {
-    PNextChainBuilder imageFormatInfoChain(imageFormatInfo);
-
     VkPhysicalDeviceExternalImageFormatInfo externalImageFormatInfo = {};
     externalImageFormatInfo.handleType = externalMemoryHandleTypeFlagBits;
+
+    PNextChainBuilder imageFormatInfoChain(imageFormatInfo);
     imageFormatInfoChain.Add(&externalImageFormatInfo,
                              VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO);
-
     (imageFormatInfoChain.Add(additionalChains), ...);
 
     VkImageFormatProperties2 imageFormatProps = {};
     imageFormatProps.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2;
-    PNextChainBuilder imageFormatPropsChain(&imageFormatProps);
 
     VkExternalImageFormatProperties externalImageFormatProps = {};
+
+    PNextChainBuilder imageFormatPropsChain(&imageFormatProps);
     imageFormatPropsChain.Add(&externalImageFormatProps,
                               VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES);
 
@@ -554,9 +517,8 @@ ResultOrError<Ref<SharedTextureMemory>> SharedTextureMemory::Create(
 
     // Query the properties to find the appropriate VkFormat and memory type.
     {
-        PNextChainBuilder bufferPropertiesChain(&bufferProperties);
-
         VkAndroidHardwareBufferFormatPropertiesANDROID bufferFormatProperties;
+        PNextChainBuilder bufferPropertiesChain(&bufferProperties);
         bufferPropertiesChain.Add(
             &bufferFormatProperties,
             VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_FORMAT_PROPERTIES_ANDROID);
@@ -702,20 +664,11 @@ ResultOrError<Ref<SharedTextureMemory>> SharedTextureMemory::Create(
         dedicatedAllocateInfo.image = sharedTextureMemory->mVkImage->Get();
         dedicatedAllocateInfo.buffer = VkBuffer{};
 
-        // Add a reference because we will transfer ownership to the
-        // VkDeviceMemory.
-        ahbFunctions->Acquire(aHardwareBuffer);
-
         // Import the AHardwareBuffer as VkDeviceMemory
         VkDeviceMemory vkDeviceMemory;
-        DAWN_TRY_ASSIGN_WITH_CLEANUP(
-            vkDeviceMemory,
-            AllocateDeviceMemory(device, &memoryAllocateInfo, &dedicatedAllocateInfo,
-                                 &importMemoryAHBInfo),
-            {
-                // Release the reference because the VkDeviceMemory did not take ownership of it.
-                ahbFunctions->Release(aHardwareBuffer);
-            });
+        DAWN_TRY_ASSIGN(vkDeviceMemory,
+                        AllocateDeviceMemory(device, &memoryAllocateInfo, &dedicatedAllocateInfo,
+                                             &importMemoryAHBInfo));
 
         sharedTextureMemory->mVkDeviceMemory =
             AcquireRef(new RefCountedVkHandle<VkDeviceMemory>(device, vkDeviceMemory));

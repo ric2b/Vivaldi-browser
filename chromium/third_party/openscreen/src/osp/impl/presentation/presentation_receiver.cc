@@ -129,11 +129,11 @@ ErrorOr<size_t> Receiver::OnStreamMessage(uint64_t endpoint_id,
         return Error::Code::kParseError;
       }
 
-      msgs::PresentationUrlAvailabilityResponse response;
-      response.request_id = request.request_id;
-
-      response.url_availabilities = delegate_->OnUrlAvailabilityRequest(
-          request.watch_id, request.watch_duration, std::move(request.urls));
+      msgs::PresentationUrlAvailabilityResponse response = {
+          .request_id = request.request_id,
+          .url_availabilities = delegate_->OnUrlAvailabilityRequest(
+              request.watch_id, request.watch_duration,
+              std::move(request.urls))};
       WritePresentationUrlAvailabilityResponse(
           response, GetProtocolConnection(endpoint_id).get());
       return decode_result;
@@ -156,10 +156,11 @@ ErrorOr<size_t> Receiver::OnStreamMessage(uint64_t endpoint_id,
 
       PresentationID presentation_id(std::move(request.presentation_id));
       if (!presentation_id) {
-        msgs::PresentationStartResponse response;
-        response.request_id = request.request_id;
-        response.result =
-            msgs::PresentationStartResponse_result::kInvalidPresentationId;
+        msgs::PresentationStartResponse response = {
+            .request_id = request.request_id,
+            .result =
+                msgs::PresentationStartResponse_result::kInvalidPresentationId,
+        };
         Error write_error = WritePresentationInitiationResponse(
             response, GetProtocolConnection(endpoint_id).get());
 
@@ -187,9 +188,9 @@ ErrorOr<size_t> Receiver::OnStreamMessage(uint64_t endpoint_id,
         return result;
 
       queued_responses_.erase(presentation_id);
-      msgs::PresentationStartResponse response;
-      response.request_id = request.request_id;
-      response.result = msgs::PresentationStartResponse_result::kUnknownError;
+      msgs::PresentationStartResponse response = {
+          .request_id = request.request_id,
+          .result = msgs::PresentationStartResponse_result::kUnknownError};
       Error write_error = WritePresentationInitiationResponse(
           response, GetProtocolConnection(endpoint_id).get());
       if (!write_error.ok()) {
@@ -222,10 +223,10 @@ ErrorOr<size_t> Receiver::OnStreamMessage(uint64_t endpoint_id,
       // we get a request right before the beginning of the presentation.
       if (!presentation_id || started_presentations_.find(presentation_id) ==
                                   started_presentations_.end()) {
-        msgs::PresentationConnectionOpenResponse response;
-        response.request_id = request.request_id;
-        response.result = msgs::PresentationConnectionOpenResponse_result::
-            kInvalidPresentationId;
+        msgs::PresentationConnectionOpenResponse response = {
+            .request_id = request.request_id,
+            .result = msgs::PresentationConnectionOpenResponse_result::
+                kInvalidPresentationId};
         Error write_error = WritePresentationConnectionOpenResponse(
             response, GetProtocolConnection(endpoint_id).get());
         if (!write_error.ok()) {
@@ -254,10 +255,10 @@ ErrorOr<size_t> Receiver::OnStreamMessage(uint64_t endpoint_id,
       if (responses.empty())
         queued_responses_.erase(presentation_id);
 
-      msgs::PresentationConnectionOpenResponse response;
-      response.request_id = request.request_id;
-      response.result =
-          msgs::PresentationConnectionOpenResponse_result::kUnknownError;
+      msgs::PresentationConnectionOpenResponse response = {
+          .request_id = request.request_id,
+          .result =
+              msgs::PresentationConnectionOpenResponse_result::kUnknownError};
       Error write_error = WritePresentationConnectionOpenResponse(
           response, GetProtocolConnection(endpoint_id).get());
       if (!write_error.ok()) {
@@ -297,10 +298,10 @@ ErrorOr<size_t> Receiver::OnStreamMessage(uint64_t endpoint_id,
         delegate_->TerminatePresentation(
             presentation_id, TerminationSource::kController, reason);
 
-        msgs::PresentationTerminationResponse response;
-        response.request_id = request.request_id;
-        response.result = msgs::PresentationTerminationResponse_result::
-            kInvalidPresentationId;
+        msgs::PresentationTerminationResponse response = {
+            .request_id = request.request_id,
+            .result = msgs::PresentationTerminationResponse_result::
+                kInvalidPresentationId};
         Error write_error = WritePresentationTerminationResponse(
             response, GetProtocolConnection(endpoint_id).get());
         if (!write_error.ok()) {
@@ -344,7 +345,7 @@ void Receiver::Deinit() {
 }
 
 void Receiver::SetReceiverDelegate(ReceiverDelegate* delegate) {
-  OSP_DCHECK(!delegate_ || !delegate);
+  OSP_CHECK(!delegate_ || !delegate);
   delegate_ = delegate;
 
   MessageDemuxer* demuxer = GetServerDemuxer();
@@ -388,8 +389,9 @@ Error Receiver::OnPresentationStarted(const std::string& presentation_id,
   }
 
   QueuedResponse& initiation_response = responses.front();
-  msgs::PresentationStartResponse response;
-  response.request_id = initiation_response.request_id;
+  msgs::PresentationStartResponse response = {
+      .request_id = initiation_response.request_id,
+      .result = msgs::PresentationStartResponse_result::kUnknownError};
   auto protocol_connection =
       GetProtocolConnection(initiation_response.endpoint_id);
   auto* raw_protocol_connection_ptr = protocol_connection.get();
@@ -397,8 +399,6 @@ Error Receiver::OnPresentationStarted(const std::string& presentation_id,
   OSP_VLOG << "presentation started with protocol_connection id: "
            << protocol_connection->id();
   if (result != ResponseResult::kSuccess) {
-    response.result = msgs::PresentationStartResponse_result::kUnknownError;
-
     queued_responses_.erase(queued_responses_entry);
     return WritePresentationInitiationResponse(response,
                                                raw_protocol_connection_ptr);
@@ -444,10 +444,10 @@ Error Receiver::OnConnectionCreated(uint64_t request_id,
   started_presentations_[presentation_id].connections.push_back(connection);
   connection_manager_->AddConnection(connection);
 
-  msgs::PresentationConnectionOpenResponse response;
-  response.request_id = request_id;
-  response.result = msgs::PresentationConnectionOpenResponse_result::kSuccess;
-  response.connection_id = connection->connection_id();
+  msgs::PresentationConnectionOpenResponse response = {
+      .request_id = request_id,
+      .result = msgs::PresentationConnectionOpenResponse_result::kSuccess,
+      .connection_id = connection->connection_id()};
 
   auto protocol_connection =
       GetProtocolConnection(connection_response.value()->endpoint_id);
@@ -466,11 +466,11 @@ Error Receiver::CloseConnection(Connection* connection,
   if (!protocol_connection)
     return Error::Code::kNoActiveConnection;
 
-  msgs::PresentationConnectionCloseEvent event;
-  event.connection_id = connection->connection_id();
-  event.reason = GetEventCloseReason(reason);
-  event.has_error_message = false;
-  event.connection_count = connection_manager_->ConnectionCount();
+  msgs::PresentationConnectionCloseEvent event = {
+      .connection_id = connection->connection_id(),
+      .reason = GetEventCloseReason(reason),
+      .has_error_message = false,
+      .connection_count = connection_manager_->ConnectionCount()};
   msgs::CborEncodeBuffer buffer;
   return protocol_connection->WriteMessage(
       event, msgs::EncodePresentationConnectionCloseEvent);
@@ -496,18 +496,18 @@ Error Receiver::OnPresentationTerminated(const std::string& presentation_id,
 
   if (presentation.terminate_request_id) {
     // TODO(btolsch): Also timeout if this point isn't reached.
-    msgs::PresentationTerminationResponse response;
-    response.request_id = presentation.terminate_request_id;
-    response.result = msgs::PresentationTerminationResponse_result::kSuccess;
+    msgs::PresentationTerminationResponse response = {
+        .request_id = presentation.terminate_request_id,
+        .result = msgs::PresentationTerminationResponse_result::kSuccess};
     started_presentations_.erase(presentation_entry);
     return WritePresentationTerminationResponse(response,
                                                 protocol_connection.get());
   }
 
-  msgs::PresentationTerminationEvent event;
-  event.presentation_id = presentation_id;
-  event.source = GetTerminationSource(source);
-  event.reason = GetTerminationReason(reason);
+  msgs::PresentationTerminationEvent event = {
+      .presentation_id = presentation_id,
+      .source = GetTerminationSource(source),
+      .reason = GetTerminationReason(reason)};
   started_presentations_.erase(presentation_entry);
   return WritePresentationTerminationEvent(event, protocol_connection.get());
 }

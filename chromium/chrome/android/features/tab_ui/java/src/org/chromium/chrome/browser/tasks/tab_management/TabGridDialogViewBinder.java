@@ -16,6 +16,7 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProp
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.DIALOG_UNGROUP_BAR_BACKGROUND_COLOR;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.DIALOG_UNGROUP_BAR_HOVERED_BACKGROUND_COLOR;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.DIALOG_UNGROUP_BAR_HOVERED_TEXT_COLOR;
+import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.DIALOG_UNGROUP_BAR_TEXT;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.DIALOG_UNGROUP_BAR_TEXT_COLOR;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.HEADER_TITLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.INITIAL_SCROLL_INDEX;
@@ -133,7 +134,7 @@ class TabGridDialogViewBinder {
                 ViewUtils.requestLayout(viewHolder.contentView, "TabGridDialogViewBinder.bind");
             }
         } else if (PRIMARY_COLOR == propertyKey) {
-            viewHolder.toolbarView.setPrimaryColor(model.get(PRIMARY_COLOR));
+            viewHolder.toolbarView.setContentBackgroundColor(model.get(PRIMARY_COLOR));
             viewHolder.contentView.setBackgroundColor(model.get(PRIMARY_COLOR));
         } else if (TINT == propertyKey) {
             if (model.get(TINT) != null) {
@@ -180,6 +181,10 @@ class TabGridDialogViewBinder {
             if (viewHolder.dialogView != null) {
                 viewHolder.dialogView.updateUngroupBarHoveredTextColor(
                         model.get(DIALOG_UNGROUP_BAR_HOVERED_TEXT_COLOR));
+            }
+        } else if (DIALOG_UNGROUP_BAR_TEXT == propertyKey) {
+            if (viewHolder.dialogView != null) {
+                viewHolder.dialogView.updateUngroupBarText(model.get(DIALOG_UNGROUP_BAR_TEXT));
             }
         } else if (INITIAL_SCROLL_INDEX == propertyKey) {
             if (model.get(INITIAL_SCROLL_INDEX) != null) {
@@ -239,7 +244,7 @@ class TabGridDialogViewBinder {
             viewHolder.toolbarView.setColorIconOnClickListener(
                     model.get(COLOR_ICON_CLICK_LISTENER));
         } else if (IS_SHARE_SHEET_VISIBLE == propertyKey) {
-            if (!model.get(IS_SHARE_SHEET_VISIBLE)) {
+            if (!model.get(IS_SHARE_SHEET_VISIBLE) && model.get(IS_DIALOG_VISIBLE)) {
                 // Fit the scrim to the TabGridDialog again after the bottom sheet visibility
                 // changes.
                 viewHolder.dialogView.refreshScrim();

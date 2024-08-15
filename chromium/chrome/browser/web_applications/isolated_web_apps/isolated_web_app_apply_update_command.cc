@@ -9,6 +9,7 @@
 #include <ostream>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "base/check.h"
@@ -19,7 +20,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/sequence_checker.h"
 #include "base/strings/strcat.h"
-#include "base/strings/string_piece.h"
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
@@ -30,7 +30,6 @@
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_version.h"
 #include "chrome/browser/web_applications/isolated_web_apps/pending_install_info.h"
 #include "chrome/browser/web_applications/locks/app_lock.h"
-#include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
@@ -38,9 +37,9 @@
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
-#include "chrome/browser/web_applications/web_contents/web_app_url_loader.h"
 #include "chrome/browser/web_applications/web_contents/web_contents_manager.h"
 #include "components/webapps/browser/install_result_code.h"
+#include "components/webapps/browser/web_contents/web_app_url_loader.h"
 #include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
@@ -246,8 +245,7 @@ void IsolatedWebAppApplyUpdateCommand::Finalize(WebAppInstallInfo info) {
 
 void IsolatedWebAppApplyUpdateCommand::OnFinalized(
     const webapps::AppId& app_id,
-    webapps::InstallResultCode update_result_code,
-    OsHooksErrors unused_os_hooks_errors) {
+    webapps::InstallResultCode update_result_code) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK_EQ(app_id, url_info_.app_id());
 
@@ -261,8 +259,7 @@ void IsolatedWebAppApplyUpdateCommand::OnFinalized(
   }
 }
 
-void IsolatedWebAppApplyUpdateCommand::ReportFailure(
-    base::StringPiece message) {
+void IsolatedWebAppApplyUpdateCommand::ReportFailure(std::string_view message) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   IsolatedWebAppApplyUpdateCommandError error{.message = std::string(message)};

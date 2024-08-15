@@ -15,12 +15,9 @@ extern const int kSyncStatusRedBackgroundColor;
 extern const int kSyncStatusYellowColor;
 extern const int kSyncStatusYellowBackgroundColor;
 
-extern const CGFloat kFooterSectionHeight;
-extern const CGFloat kPasswordSectionFooterHeight;
-extern const CGFloat kHeaderSectionHeight;
+extern const CGFloat kCommonHeaderSectionHeight;
+extern const CGFloat kPasswordSectionHeaderHeight;
 extern const CGFloat kLogoutSectionHeaderHeight;
-extern const CGFloat kDecryptSectionHeaderHeight;
-extern const CGFloat kSaveSectionHeaderHeight;
 
 extern NSString* const kShowPasswordIcon;
 extern NSString* const kHidePasswordIcon;

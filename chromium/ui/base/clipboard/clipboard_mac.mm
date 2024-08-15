@@ -8,11 +8,11 @@
 #include <stdint.h>
 
 #include <limits>
+#include <string_view>
 
 #include "base/apple/foundation_util.h"
 #include "base/apple/scoped_cftyperef.h"
 #include "base/containers/span.h"
-#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/mac/mac_util.h"
@@ -36,7 +36,6 @@
 #include "ui/base/clipboard/clipboard_util_mac.h"
 #include "ui/base/clipboard/custom_data_helper.h"
 #include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
-#include "ui/base/ui_base_features.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size.h"
@@ -455,6 +454,10 @@ void ClipboardMac::WritePortableAndPlatformRepresentationsInternal(
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(buffer, ClipboardBuffer::kCopyPaste);
 
+  if (privacy_types & Clipboard::PrivacyTypes::kNoCloudClipboard) {
+    WriteUploadCloudClipboard();
+  }
+
   [pasteboard declareTypes:@[] owner:nil];
 
   DispatchPlatformRepresentations(std::move(platform_representations));
@@ -470,14 +473,13 @@ void ClipboardMac::WritePortableAndPlatformRepresentationsInternal(
   }
 }
 
-void ClipboardMac::WriteText(base::StringPiece text) {
+void ClipboardMac::WriteText(std::string_view text) {
   [GetPasteboard() setString:base::SysUTF8ToNSString(text)
                      forType:NSPasteboardTypeString];
 }
 
-void ClipboardMac::WriteHTML(
-    base::StringPiece markup,
-    std::optional<base::StringPiece> /* source_url */) {
+void ClipboardMac::WriteHTML(std::string_view markup,
+                             std::optional<std::string_view> /* source_url */) {
   // We need to mark it as utf-8. (see crbug.com/40759159)
   std::string html_fragment_str("<meta charset='utf-8'>");
   html_fragment_str.append(markup);
@@ -486,12 +488,12 @@ void ClipboardMac::WriteHTML(
   [GetPasteboard() setString:html_fragment forType:NSPasteboardTypeHTML];
 }
 
-void ClipboardMac::WriteSvg(base::StringPiece markup) {
+void ClipboardMac::WriteSvg(std::string_view markup) {
   [GetPasteboard() setString:base::SysUTF8ToNSString(markup)
                      forType:ClipboardFormatType::SvgType().ToNSString()];
 }
 
-void ClipboardMac::WriteRTF(base::StringPiece rtf) {
+void ClipboardMac::WriteRTF(std::string_view rtf) {
   WriteData(ClipboardFormatType::RtfType(),
             base::as_bytes(base::make_span(rtf)));
 }
@@ -500,8 +502,7 @@ void ClipboardMac::WriteFilenames(std::vector<ui::FileInfo> filenames) {
   clipboard_util::WriteFilesToPasteboard(GetPasteboard(), filenames);
 }
 
-void ClipboardMac::WriteBookmark(base::StringPiece title,
-                                 base::StringPiece url) {
+void ClipboardMac::WriteBookmark(std::string_view title, std::string_view url) {
   NSArray<NSPasteboardItem*>* items = clipboard_util::PasteboardItemsFromUrls(
       @[ base::SysUTF8ToNSString(url) ], @[ base::SysUTF8ToNSString(title) ]);
   clipboard_util::AddDataToPasteboard(GetPasteboard(), items.firstObject);
@@ -527,7 +528,9 @@ void ClipboardMac::WriteClipboardHistory() {
 }
 
 void ClipboardMac::WriteUploadCloudClipboard() {
-  // TODO(crbug.com/40945200): Add support for this.
+  // Make the pasteboard content current host only.
+  [GetPasteboard()
+      prepareForNewContentsWithOptions:NSPasteboardContentsCurrentHostOnly];
 }
 
 void ClipboardMac::WriteConfidentialDataForPassword() {
@@ -581,16 +584,6 @@ void ClipboardMac::WriteBitmapInternal(const SkBitmap& bitmap,
   // to an NSImage would not explode if we got this wrong, so this is not a
   // security CHECK.
   DCHECK_EQ(bitmap.colorType(), kN32_SkColorType);
-
-  if (!base::FeatureList::IsEnabled(features::kMacClipboardWriteImageWithPng)) {
-    NSImage* image = skia::SkBitmapToNSImage(bitmap);
-    if (!image) {
-      NOTREACHED() << "SkBitmapToNSImage failed";
-      return;
-    }
-    [pasteboard writeObjects:@[ image ]];
-    return;
-  }
 
   NSBitmapImageRep* image_rep = skia::SkBitmapToNSBitmapImageRep(bitmap);
   if (!image_rep) {

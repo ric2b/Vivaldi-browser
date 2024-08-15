@@ -54,6 +54,15 @@ struct QUICHE_EXPORT HttpValidationPolicy {
   // invalid character. Invalid characters are always disallowed according to
   // InvalidCharsLevel in request headers.
   bool disallow_invalid_header_characters_in_response = false;
+
+  // If true, then signal an INVALID_HEADER_CHARACTER warning or error, or
+  // neither, depending on InvalidCharsLevel, if a request header value contains
+  // a carriage return that is not succeeded by a line feed.
+  bool disallow_lone_cr_in_request_headers = false;
+
+  // The RFC is quite specific about chunk extensions formatting, but we only
+  // verify that there are no CR without a subsequent LF.
+  bool disallow_lone_cr_in_chunk_extension = false;
 };
 
 }  // namespace quiche

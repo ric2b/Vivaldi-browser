@@ -47,6 +47,8 @@ constexpr char kAddPasspointCredentialsFunction[] = "AddPasspointCredentials";
 constexpr char kRemovePasspointCredentialsFunction[] =
     "RemovePasspointCredentials";
 constexpr char kSetTetheringEnabledFunction[] = "SetTetheringEnabled";
+constexpr char kEnableTetheringFunction[] = "EnableTethering";
+constexpr char kDisableTetheringFunction[] = "DisableTethering";
 constexpr char kCheckTetheringReadinessFunction[] = "CheckTetheringReadiness";
 constexpr char kConnectToP2PGroupFunction[] = "ConnectToP2PGroup";
 constexpr char kDisconnectFromP2PGroupFunction[] = "DisconnectFromP2PGroup";
@@ -97,7 +99,6 @@ constexpr char kUpdateConnectionStateFunction[] = "UpdateConnectionState";
 constexpr char kActiveProfileProperty[] = "ActiveProfile";
 constexpr char kAlwaysOnVpnPackageProperty[] = "AlwaysOnVpnPackage";
 constexpr char kAvailableTechnologiesProperty[] = "AvailableTechnologies";
-constexpr char kBlockedDevicesProperty[] = "BlockedDevices";
 constexpr char kClaimedDevicesProperty[] = "ClaimedDevices";
 constexpr char kConnectedTechnologiesProperty[] = "ConnectedTechnologies";
 constexpr char kConnectionStateProperty[] = "ConnectionState";
@@ -275,9 +276,6 @@ constexpr char kPhysicalTechnologyProperty[] = "PhysicalTechnology";
 constexpr char kProviderProperty[] = "Provider";
 constexpr char kProviderHostProperty[] = "Provider.Host";
 constexpr char kProviderTypeProperty[] = "Provider.Type";
-
-// ArcVpn Service property names.
-constexpr char kArcVpnTunnelChromeProperty[] = "ArcVpn.TunnelChrome";
 
 // IKEv2 VPN Service property names.
 constexpr char kIKEv2AuthenticationTypeProperty[] = "IKEv2.AuthenticationType";
@@ -483,8 +481,6 @@ constexpr char kMacAddressRandomizationSupportedProperty[] =
     "MACAddressRandomizationSupported";
 constexpr char kNetDetectScanPeriodSecondsProperty[] =
     "NetDetectScanPeriodSeconds";
-constexpr char kPasspointInterworkingSelectEnabledProperty[] =
-    "PasspointInterworkingSelectEnabled";
 constexpr char kWakeOnWiFiSupportedProperty[] = "WakeOnWiFiSupported";
 constexpr char kWakeOnWiFiAllowedProperty[] = "WakeOnWiFiAllowed";
 constexpr char kWakeOnWiFiFeaturesEnabledProperty[] =
@@ -513,17 +509,16 @@ constexpr char kStateConfiguration[] = "configuration";
 constexpr char kStateReady[] = "ready";
 constexpr char kStateNoConnectivity[] = "no-connectivity";
 constexpr char kStateRedirectFound[] = "redirect-found";
-constexpr char kStatePortalSuspected[] = "portal-suspected";
-// TODO(b/260792466): This state is only used in the State property of Manager.
-// Consider changing the to kStateIdle too, or removing the State property
-// altogether if nothing depends on it.
-constexpr char kStateOffline[] = "offline";
 constexpr char kStateOnline[] = "online";
-constexpr char kStateDisconnect[] = "disconnecting";
+constexpr char kStateDisconnecting[] = "disconnecting";
 constexpr char kStateFailure[] = "failure";
+// Deprecated. TODO(b/333634158): Remove after all usage in Chrome has been
+// removed.
+constexpr char kStatePortalSuspected[] = "portal-suspected";
 
 // Shill CheckPortal property values.
 constexpr char kCheckPortalTrue[] = "true";
+constexpr char kCheckPortalAuto[] = "auto";
 constexpr char kCheckPortalFalse[] = "false";
 constexpr char kCheckPortalHTTPOnly[] = "http-only";
 
@@ -601,6 +596,8 @@ constexpr char kApnTypeDun[] = "DUN";
 // APN source property values.
 constexpr char kApnSourceAdmin[] = "admin";
 constexpr char kApnSourceUi[] = "ui";
+constexpr char kApnSourceMoDb[] = "modb";
+constexpr char kApnSourceModem[] = "modem";
 
 // APN IsRequiredByCarrierSpec values.
 constexpr char kApnIsRequiredByCarrierSpecTrue[] = "1";
@@ -1038,10 +1035,14 @@ constexpr char kTetheringIdleReasonDownstreamNetworkDisconnect[] =
 constexpr char kTetheringIdleReasonError[] = "error";
 constexpr char kTetheringIdleReasonInactive[] = "inactive";
 constexpr char kTetheringIdleReasonInitialState[] = "initial_state";
+constexpr char kTetheringIdleReasonResourceBusy[] = "resource_busy";
+constexpr char kTetheringIdleReasonStartTimeout[] = "start_timeout";
 constexpr char kTetheringIdleReasonSuspend[] = "suspend";
 constexpr char kTetheringIdleReasonUpstreamDisconnect[] = "upstream_disconnect";
 constexpr char kTetheringIdleReasonUpstreamNoInternet[] =
     "upstream_no_internet";
+constexpr char kTetheringIdleReasonUpstreamNotAvailable[] =
+    "upstream_not_available";
 constexpr char kTetheringIdleReasonUserExit[] = "user_exit";
 
 // kTetheringStatusStateProperty values
@@ -1051,9 +1052,11 @@ constexpr char kTetheringStateRestarting[] = "restarting";
 constexpr char kTetheringStateStarting[] = "starting";
 constexpr char kTetheringStateStopping[] = "stopping";
 
-// SetTetheringEnabled result values
+// SetTetheringEnabled and {Enable,Disable}Tethering result values
 constexpr char kTetheringEnableResultAbort[] = "abort";
 constexpr char kTetheringEnableResultBusy[] = "busy";
+constexpr char kTetheringEnableResultConcurrencyNotSupported[] =
+    "concurrency_not_supported";
 constexpr char kTetheringEnableResultDownstreamWiFiFailure[] =
     "downstream_wifi_failure";
 constexpr char kTetheringEnableResultFailure[] = "failure";
@@ -1127,6 +1130,7 @@ constexpr char kP2PGroupInfoBSSIDProperty[] = "bssid";
 constexpr char kP2PGroupInfoIPv4AddressProperty[] = "ipv4_address";
 constexpr char kP2PGroupInfoIPv6AddressProperty[] = "ipv6_address";
 constexpr char kP2PGroupInfoMACAddressProperty[] = "mac_address";
+constexpr char kP2PGroupInfoNetworkIDProperty[] = "network_id";
 constexpr char kP2PGroupInfoFrequencyProperty[] = "frequency";
 constexpr char kP2PGroupInfoClientsProperty[] = "clients";
 
@@ -1154,6 +1158,7 @@ constexpr char kP2PClientInfoGroupBSSIDProperty[] = "group_bssid";
 constexpr char kP2PClientInfoIPv4AddressProperty[] = "ipv4_address";
 constexpr char kP2PClientInfoIPv6AddressProperty[] = "ipv6_address";
 constexpr char kP2PClientInfoMACAddressProperty[] = "mac_address";
+constexpr char kP2PClientInfoNetworkIDProperty[] = "network_id";
 constexpr char kP2PClientInfoFrequencyProperty[] = "frequency";
 constexpr char kP2PClientInfoGroupOwnerProperty[] = "group_owner";
 
@@ -1192,6 +1197,7 @@ constexpr char kCreateP2PGroupResultTimeout[] = "timeout";
 constexpr char kCreateP2PGroupResultFrequencyNotSupported[] =
     "frequency_not_supported";
 constexpr char kCreateP2PGroupResultBadSSID[] = "bad_ssid";
+constexpr char kCreateP2PGroupResultInvalidArguments[] = "invalid_arguments";
 constexpr char kCreateP2PGroupResultOperationInProgress[] =
     "operation_in_progress";
 constexpr char kCreateP2PGroupResultOperationFailed[] = "operation_failed";
@@ -1233,6 +1239,9 @@ constexpr char kDisconnectFromP2PGroupResultOperationInProgress[] =
     "operation_in_progress";
 constexpr char kDisconnectFromP2PGroupResultOperationFailed[] =
     "operation_failed";
+
+// Manager DNSProxyDOHProviders wildcard IP address value.
+constexpr char kDNSProxyDOHProvidersMatchAnyIPAddress[] = "*";
 
 }  // namespace shill
 

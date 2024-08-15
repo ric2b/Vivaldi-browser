@@ -23,6 +23,7 @@ void verify_euler(const Matrix<Scalar, 3, 1>& ea, int i, int j, int k) {
   typedef AngleAxis<Scalar> AngleAxisx;
   const Matrix3 m(AngleAxisx(ea[0], Vector3::Unit(i)) * AngleAxisx(ea[1], Vector3::Unit(j)) *
                   AngleAxisx(ea[2], Vector3::Unit(k)));
+  const Scalar kPi = Scalar(EIGEN_PI);
 
   // Test non-canonical eulerAngles
   {
@@ -33,11 +34,11 @@ void verify_euler(const Matrix<Scalar, 3, 1>& ea, int i, int j, int k) {
 
     // approx_or_less_than does not work for 0
     VERIFY(0 < eabis[0] || test_isMuchSmallerThan(eabis[0], Scalar(1)));
-    VERIFY_IS_APPROX_OR_LESS_THAN(eabis[0], Scalar(EIGEN_PI));
-    VERIFY_IS_APPROX_OR_LESS_THAN(-Scalar(EIGEN_PI), eabis[1]);
-    VERIFY_IS_APPROX_OR_LESS_THAN(eabis[1], Scalar(EIGEN_PI));
-    VERIFY_IS_APPROX_OR_LESS_THAN(-Scalar(EIGEN_PI), eabis[2]);
-    VERIFY_IS_APPROX_OR_LESS_THAN(eabis[2], Scalar(EIGEN_PI));
+    VERIFY_IS_APPROX_OR_LESS_THAN(eabis[0], kPi);
+    VERIFY_IS_APPROX_OR_LESS_THAN(-kPi, eabis[1]);
+    VERIFY_IS_APPROX_OR_LESS_THAN(eabis[1], kPi);
+    VERIFY_IS_APPROX_OR_LESS_THAN(-kPi, eabis[2]);
+    VERIFY_IS_APPROX_OR_LESS_THAN(eabis[2], kPi);
   }
 
   // Test canonicalEulerAngles
@@ -47,20 +48,20 @@ void verify_euler(const Matrix<Scalar, 3, 1>& ea, int i, int j, int k) {
                  AngleAxisx(eabis[2], Vector3::Unit(k)));
     VERIFY_IS_APPROX(m, mbis);
 
-    VERIFY_IS_APPROX_OR_LESS_THAN(-Scalar(EIGEN_PI), eabis[0]);
-    VERIFY_IS_APPROX_OR_LESS_THAN(eabis[0], Scalar(EIGEN_PI));
+    VERIFY_IS_APPROX_OR_LESS_THAN(-kPi, eabis[0]);
+    VERIFY_IS_APPROX_OR_LESS_THAN(eabis[0], kPi);
     if (i != k) {
       // Tait-Bryan sequence
-      VERIFY_IS_APPROX_OR_LESS_THAN(-Scalar(EIGEN_PI / 2), eabis[1]);
-      VERIFY_IS_APPROX_OR_LESS_THAN(eabis[1], Scalar(EIGEN_PI / 2));
+      VERIFY_IS_APPROX_OR_LESS_THAN(-Scalar(kPi / 2), eabis[1]);
+      VERIFY_IS_APPROX_OR_LESS_THAN(eabis[1], Scalar(kPi / 2));
     } else {
       // Proper Euler sequence
       // approx_or_less_than does not work for 0
       VERIFY(0 < eabis[1] || test_isMuchSmallerThan(eabis[1], Scalar(1)));
-      VERIFY_IS_APPROX_OR_LESS_THAN(eabis[1], Scalar(EIGEN_PI));
+      VERIFY_IS_APPROX_OR_LESS_THAN(eabis[1], kPi);
     }
-    VERIFY_IS_APPROX_OR_LESS_THAN(-Scalar(EIGEN_PI), eabis[2]);
-    VERIFY_IS_APPROX_OR_LESS_THAN(eabis[2], Scalar(EIGEN_PI));
+    VERIFY_IS_APPROX_OR_LESS_THAN(-kPi, eabis[2]);
+    VERIFY_IS_APPROX_OR_LESS_THAN(eabis[2], kPi);
   }
 }
 
@@ -100,7 +101,10 @@ void eulerangles() {
   typedef Quaternion<Scalar> Quaternionx;
   typedef AngleAxis<Scalar> AngleAxisx;
 
-  Scalar a = internal::random<Scalar>(-Scalar(EIGEN_PI), Scalar(EIGEN_PI));
+  const Scalar kPi = Scalar(EIGEN_PI);
+  const Scalar smallVal = static_cast<Scalar>(0.001);
+
+  Scalar a = internal::random<Scalar>(-kPi, kPi);
   Quaternionx q1;
   q1 = AngleAxisx(a, Vector3::Random().normalized());
   Matrix3 m;
@@ -120,65 +124,65 @@ void eulerangles() {
   check_all_var(ea);
 
   // Check with random angles in range [-pi:pi]x[-pi:pi]x[-pi:pi].
-  ea = Array3::Random() * Scalar(EIGEN_PI);
+  ea = Array3::Random() * kPi;
   check_all_var(ea);
 
-  auto test_with_some_zeros = [](const Vector3& eaz) {
+  auto test_with_some_zeros = [=](const Vector3& eaz) {
     check_all_var(eaz);
     Vector3 ea_glz = eaz;
     ea_glz[0] = Scalar(0);
     check_all_var(ea_glz);
-    ea_glz[0] = internal::random<Scalar>(-0.001, 0.001);
+    ea_glz[0] = internal::random<Scalar>(-smallVal, smallVal);
     check_all_var(ea_glz);
     ea_glz[2] = Scalar(0);
     check_all_var(ea_glz);
-    ea_glz[2] = internal::random<Scalar>(-0.001, 0.001);
+    ea_glz[2] = internal::random<Scalar>(-smallVal, smallVal);
     check_all_var(ea_glz);
   };
   // Check gimbal lock configurations and a bit noisy gimbal locks
   Vector3 ea_gl = ea;
-  ea_gl[1] = EIGEN_PI / 2;
+  ea_gl[1] = kPi / 2;
   test_with_some_zeros(ea_gl);
-  ea_gl[1] += internal::random<Scalar>(-0.001, 0.001);
+  ea_gl[1] += internal::random<Scalar>(-smallVal, smallVal);
   test_with_some_zeros(ea_gl);
-  ea_gl[1] = -EIGEN_PI / 2;
+  ea_gl[1] = -kPi / 2;
   test_with_some_zeros(ea_gl);
-  ea_gl[1] += internal::random<Scalar>(-0.001, 0.001);
+  ea_gl[1] += internal::random<Scalar>(-smallVal, smallVal);
   test_with_some_zeros(ea_gl);
-  ea_gl[1] = EIGEN_PI / 2;
+  ea_gl[1] = kPi / 2;
   ea_gl[2] = ea_gl[0];
   test_with_some_zeros(ea_gl);
-  ea_gl[1] += internal::random<Scalar>(-0.001, 0.001);
+  ea_gl[1] += internal::random<Scalar>(-smallVal, smallVal);
   test_with_some_zeros(ea_gl);
-  ea_gl[1] = -EIGEN_PI / 2;
+  ea_gl[1] = -kPi / 2;
   test_with_some_zeros(ea_gl);
-  ea_gl[1] += internal::random<Scalar>(-0.001, 0.001);
+  ea_gl[1] += internal::random<Scalar>(-smallVal, smallVal);
   test_with_some_zeros(ea_gl);
 
   // Similar to above, but with pi instead of pi/2
   Vector3 ea_pi = ea;
-  ea_pi[1] = EIGEN_PI;
+  ea_pi[1] = kPi;
   test_with_some_zeros(ea_gl);
-  ea_pi[1] += internal::random<Scalar>(-0.001, 0.001);
+  ea_pi[1] += internal::random<Scalar>(-smallVal, smallVal);
   test_with_some_zeros(ea_gl);
-  ea_pi[1] = -EIGEN_PI;
+  ea_pi[1] = -kPi;
   test_with_some_zeros(ea_gl);
-  ea_pi[1] += internal::random<Scalar>(-0.001, 0.001);
+  ea_pi[1] += internal::random<Scalar>(-smallVal, smallVal);
   test_with_some_zeros(ea_gl);
-  ea_pi[1] = EIGEN_PI;
+  ea_pi[1] = kPi;
   ea_pi[2] = ea_pi[0];
   test_with_some_zeros(ea_gl);
-  ea_pi[1] += internal::random<Scalar>(-0.001, 0.001);
+  ea_pi[1] += internal::random<Scalar>(-smallVal, smallVal);
   test_with_some_zeros(ea_gl);
-  ea_pi[1] = -EIGEN_PI;
+  ea_pi[1] = -kPi;
   test_with_some_zeros(ea_gl);
-  ea_pi[1] += internal::random<Scalar>(-0.001, 0.001);
+  ea_pi[1] += internal::random<Scalar>(-smallVal, smallVal);
   test_with_some_zeros(ea_gl);
 
-  ea[2] = ea[0] = internal::random<Scalar>(0, Scalar(EIGEN_PI));
+  ea[2] = ea[0] = internal::random<Scalar>(0, kPi);
   check_all_var(ea);
 
-  ea[0] = ea[1] = internal::random<Scalar>(0, Scalar(EIGEN_PI));
+  ea[0] = ea[1] = internal::random<Scalar>(0, kPi);
   check_all_var(ea);
 
   ea[1] = 0;

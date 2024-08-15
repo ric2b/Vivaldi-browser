@@ -1,13 +1,13 @@
 ---
 breadcrumbs:
 - - /chromium-os
-  - Chromium OS
+  - ChromiumOS
 page_name: developing-apps-on-your-chromium-os-device
 title: Developing apps on your Chromebook
 ---
 
 Here’s a running list of apps from the Chrome Web Store that can help you
-develop on your Chromebook or Chromium OS device:
+develop on your Chromebook or ChromiumOS device:
 
 Chrome Dev Editor (Developer Preview) - Editor for building Web Apps and Chrome
 Apps, in JavaScript or Dart. CDE also supports Git and Polymer development.
@@ -23,7 +23,7 @@ your computer securely over the Internet
 
 <https://chrome.google.com/webstore/detail/chrome-remote-desktop/gbchcmhmhahfdphkhkmpfmihenigjmpp>
 
-Text - A basic text editor for Chrome OS and Chrome
+Text - A basic text editor for ChromeOS and Chrome
 
 <https://chrome.google.com/webstore/detail/text/mmfbcljfglbokpmkimbfghdkjmjhdgbg>
 
@@ -40,5 +40,5 @@ Runnable - Cloud-based IDE
 
 <http://runnable.com/>
 
-To test your Android apps on Chrome OS, learn how to [sideload Android apps on
+To test your Android apps on ChromeOS, learn how to [sideload Android apps on
 your Chromebook](/chromium-os/sideload-android-apps-on-chromebook)

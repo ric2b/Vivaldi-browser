@@ -31,6 +31,8 @@ import org.chromium.base.ApplicationStatus;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.DisableIf;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
@@ -47,6 +49,7 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.ui.test.util.UiDisableIf;
 
 import java.io.IOException;
 
@@ -134,6 +137,7 @@ public class TabSwitcherIncognitoReauthViewTest {
     @Test
     @MediumTest
     @Feature("RenderTest")
+    @DisableIf.Device(type = {UiDisableIf.TABLET}) // https://crbug.com/338972172
     @DisableFeatures(ChromeFeatureList.ANDROID_HUB)
     public void testIncognitoReauthView_TabSwitcherRenderTest() throws IOException {
         final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
@@ -190,6 +194,7 @@ public class TabSwitcherIncognitoReauthViewTest {
 
     @Test
     @LargeTest
+    @DisabledTest(message = "crbug.com/330226530")
     public void testIncognitoReauthViewIsRestored_WhenActivityIsKilled() {
         final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         openIncognitoReauth(cta);
@@ -202,7 +207,9 @@ public class TabSwitcherIncognitoReauthViewTest {
 
         mActivityTestRule.recreateActivity();
 
-        onViewWaiting(withId(R.id.incognito_reauth_unlock_incognito_button))
+        onViewWaiting(
+                        withId(R.id.incognito_reauth_unlock_incognito_button),
+                        true) // checkRootDialog=true ensures dialog is in focus, avoids flakiness.
                 .check(matches(isDisplayed()));
     }
 }

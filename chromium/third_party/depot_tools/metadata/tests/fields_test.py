@@ -42,8 +42,7 @@ class FieldValidationTest(unittest.TestCase):
         # Check validation of a freeform text field that should be on
         # one line.
         self._run_field_validation(
-            field=field_types.FreeformTextField("Freeform single",
-                                                one_liner=True),
+            field=field_types.SingleLineTextField("Text single line"),
             valid_values=["Text on single line", "a", "1"],
             error_values=["", "\n", " "],
         )
@@ -51,8 +50,7 @@ class FieldValidationTest(unittest.TestCase):
         # Check validation of a freeform text field that can span
         # multiple lines.
         self._run_field_validation(
-            field=field_types.FreeformTextField("Freeform multi",
-                                                one_liner=False),
+            field=field_types.FreeformTextField("Freeform multi"),
             valid_values=[
                 "This is text spanning multiple lines:\n"
                 "    * with this point\n"
@@ -97,17 +95,18 @@ class FieldValidationTest(unittest.TestCase):
     def test_date_validation(self):
         self._run_field_validation(
             field=known_fields.DATE,
-            valid_values=[
-                "2012-03-04", "2012-03-04 UTC", "2012-03-04 UTC+10:00"
-            ],
+            valid_values=["2012-03-04"],
             error_values=[
                 "",
                 "\n",
                 "N/A",
+                "03-04-12",  # Ambiguous month and day.
+                "04/03/2012",  # Ambiguous month and day.
             ],
             warning_values=[
+                "2012-03-04 UTC", "2012-03-04 UTC+10:00",
                 "2012/03/04 UTC+10:00", "20120304", "April 3, 2012",
-                "3 Apr 2012", "03-04-12", "04/03/2012",
+                "3 Apr 2012", "30/12/2000", "20-03-2020",
                 "Tue Apr 3 05:06:07 2012 +0800"
             ],
         )
@@ -183,14 +182,18 @@ class FieldValidationTest(unittest.TestCase):
                 "https://www.example.com/a",
                 "http://www.example.com/b",
                 "ftp://www.example.com/c,git://www.example.com/d",
+                "https://www.example.com/a\n  https://example.com/b",
                 "This is the canonical public repository",
+            ],
+            warning_values=[
+                # Scheme is case-insensitive, but should be lower case.
+                "Https://www.example.com/g",
             ],
             error_values=[
                 "",
                 "\n",
                 "ghttps://www.example.com/e",
                 "https://www.example.com/ f",
-                "Https://www.example.com/g",
                 "This is an unrecognized message for the URL",
             ],
         )
@@ -203,6 +206,23 @@ class FieldValidationTest(unittest.TestCase):
             warning_values=["0", "unknown"],
         )
 
+    def test_local_modifications(self):
+        # Checks local modifications field early terminates when we can reasonably infer there's no modification.
+        _NO_MODIFICATION_VALUES = [
+            "None", "None.", "N/A.", "(none).", "No modification", "\nNone."
+        ]
+        for value in _NO_MODIFICATION_VALUES:
+            self.assertTrue(
+                known_fields.LOCAL_MODIFICATIONS.should_terminate_field(value))
+
+        # Checks ambiguous values won't early terminate the field.
+        _MAY_CONTAIN_MODIFICATION_VALUES = [
+            "None. Except doing something.",
+            "Modify file X to include ....",
+        ]
+        for value in _MAY_CONTAIN_MODIFICATION_VALUES:
+            self.assertFalse(
+                known_fields.LOCAL_MODIFICATIONS.should_terminate_field(value))
 
 if __name__ == "__main__":
     unittest.main()

@@ -19,6 +19,7 @@
 #include "base/trace_event/memory_usage_estimator.h"
 #include "base/uuid.h"
 #include "components/notes/note_node.h"
+#include "components/sync/base/deletion_origin.h"
 #include "components/sync/base/time.h"
 #include "components/sync/engine/commit_and_get_updates_types.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
@@ -26,6 +27,7 @@
 #include "components/sync/protocol/notes_model_metadata.pb.h"
 #include "components/sync/protocol/proto_memory_estimations.h"
 #include "components/sync_bookmarks/switches.h"
+#include "components/version_info/version_info.h"
 #include "sync/file_sync/file_store.h"
 #include "sync/notes/note_model_view.h"
 #include "sync/notes/synced_note_tracker_entity.h"
@@ -262,7 +264,8 @@ void SyncedNoteTracker::MarkCommitMayHaveStarted(
   AsMutableEntity(entity)->set_commit_may_have_started(true);
 }
 
-void SyncedNoteTracker::MarkDeleted(const SyncedNoteTrackerEntity* entity) {
+void SyncedNoteTracker::MarkDeleted(const SyncedNoteTrackerEntity* entity,
+                                    const base::Location& location) {
   DCHECK(entity);
   DCHECK(!entity->metadata().is_deleted());
   DCHECK(entity->note_node());
@@ -270,6 +273,10 @@ void SyncedNoteTracker::MarkDeleted(const SyncedNoteTrackerEntity* entity) {
 
   SyncedNoteTrackerEntity* mutable_entity = AsMutableEntity(entity);
   mutable_entity->MutableMetadata()->set_is_deleted(true);
+  *mutable_entity->MutableMetadata()->mutable_deletion_origin() =
+      syncer::DeletionOrigin::FromLocation(location).ToProto(
+          version_info::GetVersionNumber());
+
   // Clear all references to the deleted note node.
   note_node_to_entities_map_.erase(mutable_entity->note_node());
   mutable_entity->clear_note_node();

@@ -117,8 +117,8 @@ void ChromeFeedbackPrivateDelegate::FetchSystemInformation(
     content::BrowserContext* context,
     system_logs::SysLogsFetcherCallback callback) const {
   // self-deleting object
-  auto* fetcher =
-      system_logs::BuildChromeSystemLogsFetcher(/*scrub_data=*/true);
+  auto* fetcher = system_logs::BuildChromeSystemLogsFetcher(
+      Profile::FromBrowserContext(context), /*scrub_data=*/true);
   fetcher->Fetch(std::move(callback));
 }
 
@@ -275,7 +275,7 @@ void ChromeFeedbackPrivateDelegate::OpenFeedback(
 
   Profile* profile = Profile::FromBrowserContext(context);
   chrome::ShowFeedbackPage(url, profile,
-                           /*source=*/chrome::kFeedbackSourceQuickOffice,
+                           /*source=*/feedback::kFeedbackSourceQuickOffice,
                            /*description_template=*/std::string(),
                            /*description_placeholder_text=*/std::string(),
                            /*category_tag=*/std::string(),

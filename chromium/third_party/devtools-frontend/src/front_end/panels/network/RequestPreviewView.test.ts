@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 import * as Platform from '../../core/platform/platform.js';
-import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
 import * as TextUtils from '../../models/text_utils/text_utils.js';
@@ -42,7 +41,7 @@ describeWithLocale('RequestPreviewView', () => {
     component.detach();
   });
 
-  it('does not add utf-8 charset to the data URL for the HTML preview for already decoded content', async () => {
+  it('does add utf-8 charset to the data URL for the HTML preview for already decoded content', async () => {
     const request = SDK.NetworkRequest.NetworkRequest.create(
         'requestId' as Protocol.Network.RequestId,
         'http://devtools-frontend.test/index.html' as Platform.DevToolsPath.UrlString,
@@ -58,9 +57,9 @@ describeWithLocale('RequestPreviewView', () => {
     const component = renderPreviewView(request);
     const widget = await component.showPreview();
     const frame = widget.contentElement.querySelector('iframe');
-    assertNotNullOrUndefined(frame);
+    assert.exists(frame);
 
-    assert.notInclude(frame.src, 'charset=utf-8');
+    assert.include(frame.src, 'charset=utf-8');
     assert.notInclude(frame.src, ' base64');
   });
 
@@ -82,7 +81,7 @@ describeWithLocale('RequestPreviewView', () => {
     const component = renderPreviewView(request);
     const widget = await component.showPreview();
     const frame = widget.contentElement.querySelector('iframe');
-    assertNotNullOrUndefined(frame);
+    assert.exists(frame);
 
     assert.include(frame.src, 'charset=utf-16');
     assert.include(frame.src, 'base64');

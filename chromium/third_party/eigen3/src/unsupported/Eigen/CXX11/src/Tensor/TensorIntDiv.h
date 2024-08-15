@@ -101,6 +101,8 @@ EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE uint64_t muluh(const uint64_t a, const T b
   return __umul64hi(a, b);
 #elif defined(SYCL_DEVICE_ONLY)
   return cl::sycl::mul_hi(a, static_cast<uint64_t>(b));
+#elif EIGEN_COMP_MSVC && (EIGEN_ARCH_x86_64 || EIGEN_ARCH_ARM64)
+  return __umulh(a, static_cast<uint64_t>(b));
 #elif EIGEN_HAS_BUILTIN_INT128
   __uint128_t v = static_cast<__uint128_t>(a) * static_cast<__uint128_t>(b);
   return static_cast<uint64_t>(v >> 64);

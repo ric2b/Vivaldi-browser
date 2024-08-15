@@ -273,6 +273,7 @@ class WebViewTest : public testing::Test {
     MemoryCache::Get()->EvictResources();
     // Clear lazily loaded style sheets.
     CSSDefaultStyleSheets::Instance().PrepareForLeakDetection();
+    ThreadState::Current()->CollectAllGarbageForTesting();
   }
 
  protected:
@@ -608,8 +609,7 @@ TEST_F(WebViewTest, SetBaseBackgroundColorWithColorScheme) {
   web_view->SetPageBaseBackgroundColor(SK_ColorBLUE);
   EXPECT_EQ(Color(0x12, 0x12, 0x12), frame_view->BaseBackgroundColor());
 
-  color_scheme_helper.SetForcedColors(*(web_view->GetPage()),
-                                      ForcedColors::kActive);
+  color_scheme_helper.SetInForcedColors(/*in_forced_colors=*/true);
   UpdateAllLifecyclePhases();
 
   mojom::blink::ColorScheme color_scheme = mojom::blink::ColorScheme::kLight;
@@ -619,8 +619,7 @@ TEST_F(WebViewTest, SetBaseBackgroundColorWithColorScheme) {
           color_scheme, /*in_forced_colors=*/true));
   EXPECT_EQ(system_background_color, frame_view->BaseBackgroundColor());
 
-  color_scheme_helper.SetForcedColors(*(web_view->GetPage()),
-                                      ForcedColors::kNone);
+  color_scheme_helper.SetInForcedColors(/*in_forced_colors=*/false);
   UpdateAllLifecyclePhases();
   EXPECT_EQ(Color(0x12, 0x12, 0x12), frame_view->BaseBackgroundColor());
 

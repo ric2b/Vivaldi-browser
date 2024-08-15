@@ -16,6 +16,7 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_empty_state_view_delegate.h"
 #import "ios/ui/helpers/vivaldi_colors_helper.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
@@ -41,6 +42,8 @@ UIImage* ImageForPage(TabGridPage page) {
         return [UIImage imageNamed:vTabGridEmptyStateSyncedTabsImage];
       case TabGridPageClosedTabs:
         return [UIImage imageNamed:vTabGridEmptyStateClosedTabsImage];
+      case TabGridPageTabGroups:
+        return [[UIImage alloc] init];
     }
   } // End Vivaldi
 
@@ -52,6 +55,8 @@ UIImage* ImageForPage(TabGridPage page) {
     case TabGridPageRemoteTabs:
       // No-op. Empty page.
       break;
+    case TabGridPageTabGroups:
+      return [UIImage imageNamed:@"tab_grid_tab_groups_empty"];
 
     // Vivaldi
     case TabGridPageClosedTabs:
@@ -82,6 +87,8 @@ NSString* TitleForPageAndMode(TabGridPage page, TabGridMode mode) {
       case TabGridPageClosedTabs:
         return l10n_util::GetNSString(
             IDS_VIVALDI_TAB_SWITCHER_RECENTLY_CLOSED_TABS_EMPTY_TITLE);
+      case TabGridPageTabGroups:
+        return @"";
     }
   } // End Vivaldi
 
@@ -94,6 +101,9 @@ NSString* TitleForPageAndMode(TabGridPage page, TabGridMode mode) {
     case TabGridPageRemoteTabs:
       // No-op. Empty page.
       break;
+    case TabGridPageTabGroups:
+      return l10n_util::GetNSString(IDS_IOS_TAB_GRID_TAB_GROUPS_EMPTY_TITLE);
+
 
     // Vivaldi
     // The enum case has to be covered within switch statement
@@ -126,6 +136,8 @@ NSString* BodyTextForPageAndMode(TabGridPage page, TabGridMode mode) {
       case TabGridPageClosedTabs:
         return l10n_util::GetNSString(
             IDS_VIVALDI_TAB_SWITCHER_RECENTLY_CLOSED_TABS_EMPTY_MESSAGE);
+      case TabGridPageTabGroups:
+        return @"";
     }
   } // End Vivaldi
 
@@ -139,6 +151,8 @@ NSString* BodyTextForPageAndMode(TabGridPage page, TabGridMode mode) {
     case TabGridPageRemoteTabs:
       // No-op. Empty page.
       break;
+    case TabGridPageTabGroups:
+      return l10n_util::GetNSString(IDS_IOS_TAB_GRID_TAB_GROUPS_EMPTY_MESSAGE);
 
     // Vivaldi
     case TabGridPageClosedTabs:
@@ -236,6 +250,10 @@ const CGFloat buttonContentsPadding = 20;
     buttonsContainerVisibleConstraint;
 @property(nonatomic,strong) NSLayoutConstraint*
     syncButtonSyncingStateWidthConstraint;
+
+// Constraints for image view
+@property (strong, nonatomic) NSLayoutConstraint *imageHeightConstraint;
+@property (strong, nonatomic) NSLayoutConstraint *imageWidthConstraint;
 // End Vivaldi
 
 @end
@@ -421,14 +439,24 @@ const CGFloat buttonContentsPadding = 20;
       container, scrollView,
       self.scrollViewContentInsets.top + self.scrollViewContentInsets.bottom);
 
-  [NSLayoutConstraint activateConstraints:@[
-    [imageView.topAnchor constraintEqualToAnchor:container.topAnchor],
-    [imageView.widthAnchor constraintEqualToConstant:kImageWidth],
-    [imageView.heightAnchor constraintEqualToConstant:kImageHeight],
-    [imageView.centerXAnchor constraintEqualToAnchor:container.centerXAnchor],
-  ]];
-
   if (IsVivaldiRunning()) {
+    // Constraint references
+    self.imageHeightConstraint =
+        [imageView.heightAnchor constraintEqualToConstant:kImageHeight];
+    self.imageWidthConstraint =
+        [imageView.widthAnchor constraintEqualToConstant:kImageWidth];
+
+    // Activating constraints
+    [NSLayoutConstraint activateConstraints:@[
+      [imageView.topAnchor constraintEqualToAnchor:container.topAnchor],
+      self.imageWidthConstraint,
+      self.imageHeightConstraint,
+      [imageView.centerXAnchor constraintEqualToAnchor:container.centerXAnchor]
+    ]];
+
+    // Update constraint if needed.
+    [self updateImageViewConstraint];
+
     [self setUpConstraintsForVivaldi:scrollView
                            container:container
                            imageView:imageView
@@ -436,6 +464,14 @@ const CGFloat buttonContentsPadding = 20;
                          bottomLabel:bottomLabel
                     buttonsContainer:_buttonsContainer];
   } else {
+
+  [NSLayoutConstraint activateConstraints:@[
+    [imageView.topAnchor constraintEqualToAnchor:container.topAnchor],
+    [imageView.widthAnchor constraintEqualToConstant:kImageWidth],
+    [imageView.heightAnchor constraintEqualToConstant:kImageHeight],
+    [imageView.centerXAnchor constraintEqualToAnchor:container.centerXAnchor],
+  ]];
+
   [NSLayoutConstraint activateConstraints:@[
     [topLabel.topAnchor constraintEqualToAnchor:imageView.bottomAnchor
                                        constant:kVerticalMargin],
@@ -466,6 +502,12 @@ const CGFloat buttonContentsPadding = 20;
 }
 
 #pragma mark - VIVALDI
+
+#pragma mark - Trait Collection
+- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
+  [super traitCollectionDidChange:previousTraitCollection];
+  [self updateImageViewConstraint];
+}
 
 - (void)setUpConstraintsForVivaldi:(UIScrollView*)scrollView
                          container:(UIView*)container
@@ -626,6 +668,23 @@ const CGFloat buttonContentsPadding = 20;
     break;
   }
   }
+}
+
+- (void)updateImageViewConstraint {
+  if ([VivaldiGlobalHelpers isDeviceTablet])
+    return;
+
+  if (self.traitCollection.verticalSizeClass ==
+      UIUserInterfaceSizeClassCompact) {
+    self.imageHeightConstraint.constant = 0;
+    self.imageWidthConstraint.constant = 0;
+    self.imageView.alpha = 0;
+  } else {
+    self.imageHeightConstraint.constant = kImageHeight;
+    self.imageWidthConstraint.constant = kImageWidth;
+    self.imageView.alpha = 1;
+  }
+  [self layoutIfNeeded];
 }
 
 #pragma mark - ACTIONS

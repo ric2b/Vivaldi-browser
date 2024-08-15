@@ -13,9 +13,30 @@
 #include "components/datasource/resource_reader.h"
 #include "components/datasource/vivaldi_data_url_utils.h"
 
+#if BUILDFLAG(IS_ANDROID)
+#include "base/system/sys_info.h"
+#if defined(OEM_RENAULT_BUILD)
+#include "base/android/jni_android.h"
+#include "base/android/jni_string.h"
+#include "chrome/android/chrome_jni_headers/CarDataProvider_jni.h"
+#endif
+#endif
+
 namespace vivaldi_partners {
 
-const char kBookmarkResourceDir[] = "default-bookmarks";
+const std::string GetBookmarkResourceDir() {
+  std::string bookmark_resource_dir = "default-bookmarks";
+#if BUILDFLAG(IS_ANDROID) && defined(OEM_RENAULT_BUILD)
+  // Append subfolder for XDD (LCV/Master) bookmarks
+  const std::string lcv_master_vehicle("XDD");
+  JNIEnv* env = base::android::AttachCurrentThread();
+  if (Java_CarDataProvider_isModel(env,
+      base::android::ConvertUTF8ToJavaString(env, lcv_master_vehicle))) {
+    bookmark_resource_dir += "/" + lcv_master_vehicle;
+  }
+#endif
+  return bookmark_resource_dir;
+}
 
 namespace {
 
@@ -233,12 +254,12 @@ const PartnerDatabase* g_partner_db = nullptr;
 // static
 std::unique_ptr<PartnerDatabase> PartnerDatabase::Read() {
   std::optional<base::Value> partner_db_value =
-      ResourceReader::ReadJSON(kBookmarkResourceDir, kPartnerDBFile);
+      ResourceReader::ReadJSON(GetBookmarkResourceDir(), kPartnerDBFile);
   if (!partner_db_value)
     return nullptr;
 
   std::optional<base::Value> partners_locale_value =
-      ResourceReader::ReadJSON(kBookmarkResourceDir, kPartnerLocaleMapFile);
+      ResourceReader::ReadJSON(GetBookmarkResourceDir(), kPartnerLocaleMapFile);
   if (!partners_locale_value)
     return nullptr;
 

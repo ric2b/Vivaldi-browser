@@ -7,7 +7,7 @@
 #include "base/strings/utf_string_conversions.h"
 
 namespace adblock_filter {
-std::string BuildNgramSearchString(const base::StringPiece& pattern) {
+std::string BuildNgramSearchString(const std::string_view& pattern) {
   // Build a suitable search string for NGrams, allowing for indexing and fast
   // retrieval of the pattern when matching the url.
   // The '*' wildcard is treated as a separator during NGram search, so we use
@@ -17,7 +17,7 @@ std::string BuildNgramSearchString(const base::StringPiece& pattern) {
   // parsing of the regex.
   bool done = false;
   std::string ngram_search_string;
-  for (const auto* c = pattern.begin(); c < pattern.end() && !done; c++) {
+  for (auto c = pattern.begin(); c < pattern.end() && !done; c++) {
     switch (*c) {
       case '|':
         // Alternatives at the top level means we can't easily find a substring

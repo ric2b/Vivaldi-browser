@@ -5,7 +5,7 @@
 #include "components/global_media_controls/public/views/media_item_ui_updated_view.h"
 
 #include "components/global_media_controls/public/media_item_ui_observer.h"
-#include "components/global_media_controls/views/media_action_button.h"
+#include "components/global_media_controls/public/views/media_progress_view.h"
 #include "components/media_message_center/media_notification_item.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
@@ -32,12 +32,14 @@ constexpr gfx::Insets kInfoColumnInsets = gfx::Insets::TLBR(4, 0, 0, 0);
 constexpr int kBackgroundCornerRadius = 8;
 constexpr int kArtworkCornerRadius = 8;
 
+constexpr int kBackgroundSeparator = 16;
 constexpr int kArtworkRowSeparator = 12;
 constexpr int kMediaInfoSeparator = 8;
 constexpr int kSourceRowSeparator = 16;
-constexpr int kSourceRowButtonContainerSeparator = 8;
+constexpr int kSourceRowButtonContainerSeparator = 4;
 constexpr int kMetadataRowSeparator = 16;
 constexpr int kMetadataColumnSeparator = 4;
+constexpr int kProgressRowSeparator = 4;
 
 constexpr int kPlayPauseButtonIconSize = 24;
 constexpr int kMediaActionButtonIconSize = 20;
@@ -48,6 +50,8 @@ constexpr gfx::Size kBackgroundSize = gfx::Size(400, 150);
 constexpr gfx::Size kArtworkSize = gfx::Size(80, 80);
 constexpr gfx::Size kPlayPauseButtonSize = gfx::Size(48, 48);
 constexpr gfx::Size kMediaActionButtonSize = gfx::Size(24, 24);
+
+constexpr base::TimeDelta kSeekTime = base::Seconds(10);
 
 // If the image does not fit the square view, scale the image to fill the view
 // even if part of the image is cropped.
@@ -64,7 +68,8 @@ gfx::Size ScaleImageSizeToFitView(const gfx::Size& image_size,
 MediaItemUIUpdatedView::MediaItemUIUpdatedView(
     const std::string& id,
     base::WeakPtr<media_message_center::MediaNotificationItem> item,
-    media_message_center::MediaColorTheme media_color_theme)
+    media_message_center::MediaColorTheme media_color_theme,
+    std::unique_ptr<MediaItemUIDeviceSelector> device_selector_view)
     : id_(id), item_(std::move(item)), media_color_theme_(media_color_theme) {
   CHECK(item_);
 
@@ -72,7 +77,8 @@ MediaItemUIUpdatedView::MediaItemUIUpdatedView(
   SetBackground(views::CreateThemedRoundedRectBackground(
       media_color_theme_.background_color_id, kBackgroundCornerRadius));
   SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, kBackgroundInsets));
+      views::BoxLayout::Orientation::kVertical, kBackgroundInsets,
+      kBackgroundSeparator));
 
   views::FocusRing::Install(this);
   views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
@@ -124,6 +130,18 @@ MediaItemUIUpdatedView::MediaItemUIUpdatedView(
   source_row_button_container->SetBetweenChildSpacing(
       kSourceRowButtonContainerSeparator);
 
+  // Create the start casting button.
+  if (device_selector_view) {
+    start_casting_button_ = CreateMediaActionButton(
+        source_row_button_container, kEmptyMediaActionButtonId,
+        vector_icons::kCastIcon,
+        IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACTION_SHOW_DEVICE_LIST);
+    start_casting_button_->SetCallback(
+        base::BindRepeating(&MediaItemUIUpdatedView::StartCastingButtonPressed,
+                            base::Unretained(this)));
+    start_casting_button_->SetVisible(false);
+  }
+
   // Create the picture-in-picture button.
   picture_in_picture_button_ = CreateMediaActionButton(
       source_row_button_container,
@@ -165,6 +183,56 @@ MediaItemUIUpdatedView::MediaItemUIUpdatedView(
       media_color_theme_.play_button_container_color_id,
       kPlayPauseButtonSize.height() / 2));
 
+  // |progress_row| holds some media action buttons and the progress view.
+  auto* progress_row = AddChildView(std::make_unique<views::BoxLayoutView>());
+  progress_row->SetBetweenChildSpacing(kProgressRowSeparator);
+
+  // Create the previous track button.
+  CreateMediaActionButton(
+      progress_row, static_cast<int>(MediaSessionAction::kPreviousTrack),
+      vector_icons::kSkipPreviousIcon,
+      IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACTION_PREVIOUS_TRACK);
+
+  // Create the replay 10 button.
+  CreateMediaActionButton(
+      progress_row, static_cast<int>(MediaSessionAction::kSeekBackward),
+      vector_icons::kReplay10Icon,
+      IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACTION_REPLAY_10);
+
+  // Create the progress view.
+  progress_view_ =
+      progress_row->AddChildView(std::make_unique<MediaProgressView>(
+          /*use_squiggly_line=*/false,
+          media_color_theme_.playing_progress_foreground_color_id,
+          media_color_theme_.playing_progress_background_color_id,
+          media_color_theme_.paused_progress_foreground_color_id,
+          media_color_theme_.paused_progress_background_color_id,
+          media_color_theme_.focus_ring_color_id,
+          base::BindRepeating(&MediaItemUIUpdatedView::OnProgressDragging,
+                              base::Unretained(this)),
+          base::BindRepeating(&MediaItemUIUpdatedView::SeekTo,
+                              base::Unretained(this)),
+          /*on_update_progress_callback=*/base::DoNothing()));
+  progress_row->SetFlexForView(progress_view_, 1);
+
+  // Create the forward 10 button.
+  CreateMediaActionButton(
+      progress_row, static_cast<int>(MediaSessionAction::kSeekForward),
+      vector_icons::kForward10Icon,
+      IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACTION_FORWARD_10);
+
+  // Create the next track button.
+  CreateMediaActionButton(
+      progress_row, static_cast<int>(MediaSessionAction::kNextTrack),
+      vector_icons::kSkipNextIcon,
+      IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACTION_NEXT_TRACK);
+
+  // Add the device selector view below the |progress_row| if there is one.
+  if (device_selector_view) {
+    device_selector_view_ = AddChildView(std::move(device_selector_view));
+    device_selector_view_->SetMediaItemUIUpdatedView(this);
+  }
+
   item_->SetView(this);
 }
 
@@ -180,11 +248,25 @@ MediaItemUIUpdatedView::~MediaItemUIUpdatedView() {
 ///////////////////////////////////////////////////////////////////////////////
 // views::View implementations:
 
+void MediaItemUIUpdatedView::AddedToWidget() {
+  // Ink drop on the start casting button requires color provider to be ready,
+  // so we need to update the state after the widget is ready.
+  if (device_selector_view_) {
+    UpdateCastingState();
+  }
+}
+
 void MediaItemUIUpdatedView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   View::GetAccessibleNodeData(node_data);
   node_data->role = ax::mojom::Role::kListItem;
   node_data->SetNameChecked(l10n_util::GetStringUTF8(
       IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACCESSIBLE_NAME));
+}
+
+bool MediaItemUIUpdatedView::OnKeyPressed(const ui::KeyEvent& event) {
+  // As soon as the media view gets the focus, it should be able to handle key
+  // events that can change the progress.
+  return progress_view_->OnKeyPressed(event);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -234,14 +316,16 @@ void MediaItemUIUpdatedView::UpdateWithMediaSessionInfo(
         static_cast<int>(MediaSessionAction::kExitPictureInPicture),
         vector_icons::kPictureInPictureAltIcon,
         IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACTION_EXIT_PIP,
-        media_color_theme_.primary_foreground_color_id);
+        media_color_theme_.secondary_foreground_color_id);
   } else {
     picture_in_picture_button_->Update(
         static_cast<int>(MediaSessionAction::kEnterPictureInPicture),
         vector_icons::kPictureInPictureAltIcon,
         IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACTION_ENTER_PIP,
-        media_color_theme_.primary_foreground_color_id);
+        media_color_theme_.secondary_foreground_color_id);
   }
+
+  UpdateMediaActionButtonsVisibility();
 }
 
 void MediaItemUIUpdatedView::UpdateWithMediaMetadata(
@@ -255,10 +339,19 @@ void MediaItemUIUpdatedView::UpdateWithMediaMetadata(
 }
 
 void MediaItemUIUpdatedView::UpdateWithMediaActions(
-    const base::flat_set<media_session::mojom::MediaSessionAction>& actions) {}
+    const base::flat_set<media_session::mojom::MediaSessionAction>& actions) {
+  media_actions_ = actions;
+  UpdateMediaActionButtonsVisibility();
+  for (auto& observer : observers_) {
+    observer.OnMediaItemUIActionsChanged();
+  }
+}
 
 void MediaItemUIUpdatedView::UpdateWithMediaPosition(
-    const media_session::MediaPosition& position) {}
+    const media_session::MediaPosition& position) {
+  position_ = position;
+  progress_view_->UpdateProgress(position);
+}
 
 void MediaItemUIUpdatedView::UpdateWithMediaArtwork(
     const gfx::ImageSkia& image) {
@@ -280,6 +373,24 @@ void MediaItemUIUpdatedView::UpdateWithMediaArtwork(
   SchedulePaint();
 }
 
+void MediaItemUIUpdatedView::UpdateDeviceSelectorVisibility(bool visible) {
+  // The device selector view can change its device list visibility and we need
+  // to update the casting state for it too.
+  UpdateCastingState();
+}
+
+void MediaItemUIUpdatedView::UpdateDeviceSelectorAvailability(
+    bool has_devices) {
+  CHECK(start_casting_button_);
+  // Do not show the start casting button if this media item is being casted to
+  // another device and has a footer view of stop casting button.
+  // TODO(yrw): Add "&& !footer_view_" when it is ready.
+  bool visible = has_devices;
+  if (visible != start_casting_button_->GetVisible()) {
+    start_casting_button_->SetVisible(visible);
+  }
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // MediaItemUIUpdatedView implementations:
 
@@ -297,7 +408,7 @@ MediaActionButton* MediaItemUIUpdatedView::CreateMediaActionButton(
       (button_id == static_cast<int>(MediaSessionAction::kPlay)
            ? kPlayPauseButtonSize
            : kMediaActionButtonSize),
-      media_color_theme_.primary_foreground_color_id,
+      media_color_theme_.secondary_foreground_color_id,
       media_color_theme_.secondary_foreground_color_id,
       media_color_theme_.focus_ring_color_id);
   auto* button_ptr = parent->AddChildView(std::move(button));
@@ -312,8 +423,85 @@ MediaActionButton* MediaItemUIUpdatedView::CreateMediaActionButton(
 }
 
 void MediaItemUIUpdatedView::MediaActionButtonPressed(views::Button* button) {
+  if (button->GetID() == static_cast<int>(MediaSessionAction::kSeekBackward)) {
+    item_->SeekTo(
+        std::max(base::Seconds(0), position_.GetPosition() - kSeekTime));
+    return;
+  }
+  if (button->GetID() == static_cast<int>(MediaSessionAction::kSeekForward)) {
+    item_->SeekTo(
+        std::min(position_.GetPosition() + kSeekTime, position_.duration()));
+    return;
+  }
   item_->OnMediaSessionActionButtonPressed(
       static_cast<MediaSessionAction>(button->GetID()));
+}
+
+void MediaItemUIUpdatedView::UpdateMediaActionButtonsVisibility() {
+  bool should_invalidate_layout = false;
+
+  for (views::Button* button : media_action_buttons_) {
+    bool should_show = base::Contains(
+        media_actions_, static_cast<MediaSessionAction>(button->GetID()));
+    if (should_show != button->GetVisible()) {
+      button->SetVisible(should_show);
+      should_invalidate_layout = true;
+    }
+  }
+
+  if (should_invalidate_layout) {
+    InvalidateLayout();
+  }
+}
+
+void MediaItemUIUpdatedView::OnProgressDragging(bool pause) {
+  const auto action =
+      (pause ? MediaSessionAction::kPause : MediaSessionAction::kPlay);
+  item_->OnMediaSessionActionButtonPressed(action);
+}
+
+void MediaItemUIUpdatedView::SeekTo(double seek_progress) {
+  item_->SeekTo(seek_progress * position_.duration());
+}
+
+void MediaItemUIUpdatedView::StartCastingButtonPressed() {
+  CHECK(device_selector_view_);
+  if (device_selector_view_->IsDeviceSelectorExpanded()) {
+    device_selector_view_->HideDevices();
+  } else {
+    device_selector_view_->ShowDevices();
+  }
+}
+
+void MediaItemUIUpdatedView::UpdateCastingState() {
+  CHECK(start_casting_button_);
+  CHECK(device_selector_view_);
+
+  if (start_casting_button_->GetVisible()) {
+    bool is_expanded = device_selector_view_->IsDeviceSelectorExpanded();
+    if (is_expanded) {
+      // Use the ink drop color as the button background if user clicks the
+      // button to show devices.
+      views::InkDrop::Get(start_casting_button_)
+          ->GetInkDrop()
+          ->SnapToActivated();
+
+      // Indicate the user can hide the device list.
+      start_casting_button_->UpdateText(
+          IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACTION_HIDE_DEVICE_LIST);
+    } else {
+      // Hide the ink drop color if user clicks the button to hide devices.
+      views::InkDrop::Get(start_casting_button_)->GetInkDrop()->SnapToHidden();
+
+      // Indicate the user can show the device list.
+      start_casting_button_->UpdateText(
+          IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACTION_SHOW_DEVICE_LIST);
+    }
+  }
+
+  for (auto& observer : observers_) {
+    observer.OnMediaItemUISizeChanged();
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -333,6 +521,26 @@ views::Label* MediaItemUIUpdatedView::GetTitleLabelForTesting() {
 
 views::Label* MediaItemUIUpdatedView::GetArtistLabelForTesting() {
   return artist_label_;
+}
+
+MediaActionButton* MediaItemUIUpdatedView::GetMediaActionButtonForTesting(
+    MediaSessionAction action) {
+  const auto i = base::ranges::find(
+      media_action_buttons_, static_cast<int>(action), &views::View::GetID);
+  return (i == media_action_buttons_.end()) ? nullptr : *i;
+}
+
+MediaProgressView* MediaItemUIUpdatedView::GetProgressViewForTesting() {
+  return progress_view_;
+}
+
+MediaActionButton* MediaItemUIUpdatedView::GetStartCastingButtonForTesting() {
+  return start_casting_button_;
+}
+
+MediaItemUIDeviceSelector*
+MediaItemUIUpdatedView::GetDeviceSelectorForTesting() {
+  return device_selector_view_;
 }
 
 BEGIN_METADATA(MediaItemUIUpdatedView)

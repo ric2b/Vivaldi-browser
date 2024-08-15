@@ -24,6 +24,10 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogManagerObserver;
 import org.chromium.ui.modelutil.PropertyModel;
 
+// Vivaldi
+import org.chromium.components.embedder_support.util.UrlUtilities;
+import org.vivaldi.browser.common.VivaldiUrlConstants;
+
 /** Base class for button data providers used on the adaptive toolbar. */
 public abstract class BaseButtonDataProvider implements ButtonDataProvider, OnClickListener {
     protected final ButtonDataImpl mButtonData;
@@ -107,6 +111,12 @@ public abstract class BaseButtonDataProvider implements ButtonDataProvider, OnCl
      */
     @CallSuper
     protected boolean shouldShowButton(Tab tab) {
+        // Note(david@vivaldi.com): We don't show the button on internal pages.
+        if (tab != null) {
+            return !(VivaldiUrlConstants.VIVALDI_SCHEME.equalsIgnoreCase(tab.getUrl().getScheme())
+                    || UrlUtilities.isInternalScheme(tab.getUrl()));
+        }
+
         if (tab == null) return false;
 
         if (tab.isIncognito() && !mShouldShowOnIncognitoTabs) return false;

@@ -130,7 +130,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       const content::SocketPermissionRequest* params) override;
   bool IsPepperVpnProviderAPIAllowed(content::BrowserContext* browser_context,
                                      const GURL& url) override;
-  content::TracingDelegate* GetTracingDelegate() override;
+  std::unique_ptr<content::TracingDelegate> CreateTracingDelegate() override;
   void GetAdditionalMappedFilesForChildProcess(
       const base::CommandLine& command_line,
       int child_process_id,
@@ -225,6 +225,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       int render_process_id,
       URLLoaderFactoryType type,
       const url::Origin& request_initiator,
+      const net::IsolationInfo& isolation_info,
       std::optional<int64_t> navigation_id,
       ukm::SourceIdObj ukm_source_id,
       network::URLLoaderFactoryBuilder& factory_builder,
@@ -283,7 +284,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       const url::Origin* destination_origin,
       const url::Origin* reporting_origin,
       bool* can_bypass) override;
-  AttributionReportingOsReportTypes GetAttributionReportingOsReportTypes(
+  AttributionReportingOsRegistrars GetAttributionReportingOsRegistrars(
       content::WebContents* web_contents) override;
   blink::mojom::OriginTrialsSettingsPtr GetOriginTrialsSettings() override;
   network::mojom::IpProtectionProxyBypassPolicy

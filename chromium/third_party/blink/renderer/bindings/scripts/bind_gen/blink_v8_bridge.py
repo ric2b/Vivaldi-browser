@@ -382,7 +382,7 @@ def blink_type_info(idl_type):
         if "IDLTypeImplementedAsV8Promise" in real_type.extended_attributes:
             type_name = "v8::Local<v8::Promise>"
         else:
-            type_name = "ScriptPromise"
+            type_name = "ScriptPromiseUntyped"
         return TypeInfo(type_name,
                         ref_fmt="{}&",
                         const_ref_fmt="const {}&",
@@ -444,6 +444,20 @@ def _native_value_tag_impl(idl_type):
         return "IDL{}".format(idl_type.identifier)
 
     real_type = idl_type.unwrap(typedef=True)
+
+    if "PassAsSpan" in idl_type.effective_annotations:
+        types = real_type.flattened_member_types if real_type.is_union else [
+            real_type
+        ]
+        is_buffer_source_type = all(t.is_buffer_source_type for t in types)
+        assert is_buffer_source_type, (
+            "PassAsSpan is only supported for buffer source types")
+        allow_shared = "AllowShared" in idl_type.effective_annotations or any(
+            "AllowShared" in t.effective_annotations for t in types)
+        marker = "PassAsSpan<PassAsSpanMarkerBase::AllowSharedFlag::{}>"
+        if allow_shared:
+            return marker.format("kAllowShared")
+        return marker.format("kDoNotAllowShared")
 
     if (real_type.is_boolean or real_type.is_numeric or real_type.is_string
             or real_type.is_any or real_type.is_object or real_type.is_bigint):
@@ -733,7 +747,7 @@ def make_v8_to_blink_value(blink_var_name,
                            v8_value_expr,
                            idl_type,
                            argument=None,
-                           error_exit_return_statement="return;",
+                           error_exit_return_statement=None,
                            cg_context=None):
     """
     Returns a SymbolNode whose definition converts a v8::Value to a Blink value.

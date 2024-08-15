@@ -14,7 +14,6 @@ limitations under the License.
 ==============================================================================*/
 #include "xla/service/gpu/tree_reduction_rewriter.h"
 
-#include <array>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -56,7 +55,14 @@ class ReductionRewriterVisitor : public DfsHloRewriteVisitor {
       : gpu_version_(gpu_version) {}
 
   absl::Status HandleReduce(HloInstruction *hlo) override {
-    if (IsMinMaxReduction(hlo)) {
+    // MLIR emitters only support race-free reductions.
+    // TODO(jreiffers: Verify performance and implement atomics for reductions
+    // if needed.
+    if (!hlo->GetModule()
+             ->config()
+             .debug_options()
+             .xla_gpu_enable_mlir_emitters() &&
+        IsMinMaxReduction(hlo)) {
       // TODO(cheshire): Also enable for integers.
       VLOG(1) << "Not performing tree expansion on min/max-reduction: "
               << hlo->ToString() << " since min/max operations are associative";

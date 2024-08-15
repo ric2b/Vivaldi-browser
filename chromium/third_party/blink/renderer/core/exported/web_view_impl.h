@@ -239,7 +239,7 @@ class CORE_EXPORT WebViewImpl final : public WebView,
   int32_t HistoryListLength() const { return history_list_length_; }
   const SessionStorageNamespaceId& GetSessionStorageNamespaceId() override;
   bool IsFencedFrameRoot() const override;
-  void SetSupportsAppRegion(bool supports_app_region) override;
+  void SetSupportsDraggableRegions(bool supports_draggable_regions) override;
 
   // Functions to add and remove observers for this object.
   void AddObserver(WebViewObserver* observer);
@@ -634,7 +634,9 @@ class CORE_EXPORT WebViewImpl final : public WebView,
   scheduler::WebAgentGroupScheduler& GetWebAgentGroupScheduler();
 
   // Returns true if the page supports app-region: drag/no-drag.
-  bool SupportsAppRegion();
+  bool SupportsDraggableRegions();
+  // Called when draggable regions in the page change.
+  void DraggableRegionsChanged();
 
   // Vivaldi start
   void SetImagesEnabled(const bool images_enabled) override;
@@ -1007,7 +1009,7 @@ class CORE_EXPORT WebViewImpl final : public WebView,
 
   // Indicates whether the page supports draggable regions via the app-region
   // CSS property.
-  bool supports_app_region_ = false;
+  bool supports_draggable_regions_ = false;
 
   // All the registered observers.
   base::ObserverList<WebViewObserver> observers_;

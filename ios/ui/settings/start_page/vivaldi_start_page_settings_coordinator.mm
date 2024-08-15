@@ -57,6 +57,7 @@
 
   [self.baseNavigationController pushViewController:self.viewController
                                            animated:YES];
+  self.viewController.consumer = self.mediator;
 }
 
 - (void)stop {

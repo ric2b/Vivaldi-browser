@@ -131,7 +131,7 @@ std::optional<Color> DefaultForegroundColor(
           color_scheme);
     case kPseudoIdTargetText:
       return LayoutTheme::GetTheme().PlatformTextSearchColor(
-          false /* active match */, color_scheme,
+          false /* active match */, document.InForcedColorsMode(), color_scheme,
           document.GetColorProviderForPainting(color_scheme));
     case kPseudoIdSpellingError:
     case kPseudoIdGrammarError:
@@ -536,7 +536,7 @@ HighlightStyleUtils::HighlightPaintingStyle(
 void HighlightStyleUtils::ResolveColorsFromPreviousLayer(
     HighlightTextPaintStyle& text_style,
     const HighlightTextPaintStyle& previous_layer_style) {
-  if (text_style.properties_using_current_color.Empty()) {
+  if (text_style.properties_using_current_color.empty()) {
     return;
   }
 

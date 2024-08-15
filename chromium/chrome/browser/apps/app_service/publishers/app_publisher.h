@@ -26,7 +26,7 @@
 #include "ui/base/resource/resource_scale_factor.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/apps/app_service/publishers/compressed_icon_getter.h"
+#include "chrome/browser/apps/app_service/app_icon/compressed_icon_getter.h"
 #endif
 
 namespace apps {
@@ -88,7 +88,7 @@ class AppPublisher
   //
   // NOTE: On Ash, App Service will not call this method, and instead will call
   // `GetCompressedIconData()` to load raw icon data from the Publisher.
-  // TODO(crbug.com/1380608): Clean up/simplify remaining usages of LoadIcon.
+  // TODO(crbug.com/40244797): Clean up/simplify remaining usages of LoadIcon.
   virtual void LoadIcon(const std::string& app_id,
                         const IconKey& icon_key,
                         apps::IconType icon_type,
@@ -120,7 +120,7 @@ class AppPublisher
 
   // DEPRECATED. Prefer passing the files in an Intent through
   // LaunchAppWithIntent.
-  // TODO(crbug.com/1264164): Remove this method.
+  // TODO(crbug.com/40203246): Remove this method.
   virtual void LaunchAppWithFiles(const std::string& app_id,
                                   int32_t event_flags,
                                   LaunchSource launch_source,
@@ -180,6 +180,12 @@ class AppPublisher
   // Publishers are expected to update the app icon to remove the kPaused
   // icon effect. Nothing should happen if an unpaused app is unpaused again.
   virtual void UnpauseApp(const std::string& app_id);
+
+  // Blocks the given app.
+  virtual void BlockApp(const std::string& app_id);
+
+  // Unblocks the given app.
+  virtual void UnblockApp(const std::string& app_id);
 
   // Stops all running instances of `app_id`.
   virtual void StopApp(const std::string& app_id);

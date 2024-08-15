@@ -2,6 +2,8 @@
 
 #import "components/remote_cocoa/app_shim/vivaldi_window_size_helper.h"
 
+#import "base/mac/mac_util.h"
+
 namespace vivaldi {
 
 unsigned int getDisplayId(NSScreen* screen) {
@@ -9,7 +11,7 @@ unsigned int getDisplayId(NSScreen* screen) {
       objectForKey:@"NSScreenNumber"] unsignedIntValue];
 }
 
-void VerifyWindowSize(NSWindow* window, const display::Display& old_display) {
+void VerifyWindowSizeInternal(NSWindow* window, const display::Display& old_display) {
   // The screen that the window is on
   unsigned int window_screen_display_id = getDisplayId([window screen]);
 
@@ -73,6 +75,18 @@ void VerifyWindowSize(NSWindow* window, const display::Display& old_display) {
       [window setFrame:CGRectMake(x_pos, y_pos, window_width, window_height)
               display:YES];
     }
+  }
+}
+
+void VerifyWindowSize(NSWindow* window, const display::Displays& old_displays) {
+  if (base::mac::MacOSVersion() >= 14'00'00) {
+    // TODO(tomas@vivaldi.com): This is not needed on macOS 14+.
+    // Remove this when minimum supported version is macOS 14.x
+    return;
+  }
+
+  for (const auto& display : old_displays) {
+    VerifyWindowSizeInternal(window, display);
   }
 }
 

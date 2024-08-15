@@ -22,8 +22,10 @@
 namespace ash::file_system_provider {
 
 // Callback type used when an FSP has been intiialized.
+using FileErrorOrContentCache =
+    base::FileErrorOr<std::unique_ptr<ContentCache>>;
 using FileErrorOrContentCacheCallback =
-    base::OnceCallback<void(base::FileErrorOr<std::unique_ptr<ContentCache>>)>;
+    base::OnceCallback<void(FileErrorOrContentCache)>;
 
 // The root directory name that houses all FSP content caches.
 inline constexpr char kFspContentCacheDirName[] = "FspContentCache";
@@ -39,45 +41,33 @@ class CacheManager {
   // Observer class to be notified about changes happening in the CacheManager.
   class Observer : public base::CheckedObserver {
    public:
-    // Called when the initialization for a ContentCache for a
-    // FileSystemProvider is complete.
-    virtual void OnContentCacheInitializeComplete(base::FilePath mount_path,
-                                                  base::File::Error result) {}
+    // Called when the initialization for a provider is complete.
+    virtual void OnProviderInitializationComplete(
+        base::FilePath base64_encoded_provider_folder_name,
+        base::File::Error result) {}
+
+    // Called when a provider has been uninitialized.
+    virtual void OnProviderUninitialized(
+        base::FilePath base64_encoded_provider_folder_name,
+        base::File::Error result) {}
   };
 
-  explicit CacheManager(const base::FilePath& profile_path,
-                        bool in_memory_only = false);
-
-  CacheManager(const CacheManager&) = delete;
-  CacheManager& operator=(const CacheManager&) = delete;
-
-  ~CacheManager();
+  virtual ~CacheManager() = default;
 
   // Setup the cache directory for the specific FSP.
-  void InitializeForProvider(const base::FilePath& provider_mount_path,
-                             FileErrorOrContentCacheCallback callback);
+  virtual void InitializeForProvider(
+      const ProvidedFileSystemInfo& file_system_info,
+      FileErrorOrContentCacheCallback callback) = 0;
 
-  void AddObserver(Observer* observer);
-  void RemoveObserver(Observer* observer);
+  // Destruction of the cache directory for the specific FSP.
+  virtual void UninitializeForProvider(
+      const ProvidedFileSystemInfo& file_system_info) = 0;
 
- private:
-  // Responds to the FSP with the a `ContentCache` instance if directory
-  // creation was successful (or `in_memory_only` is true).
-  void OnInitializeForProvider(FileErrorOrContentCacheCallback callback,
-                               base::FilePath mount_path,
-                               base::File::Error result);
+  virtual bool IsProviderInitialized(
+      const ProvidedFileSystemInfo& file_system_info) = 0;
 
-  const base::FilePath profile_path_;
-  bool in_memory_only_ = false;
-  std::set<base::FilePath> initialized_providers_;
-  base::ObserverList<Observer> observers_;
-
-  scoped_refptr<base::SequencedTaskRunner> blocking_task_runner_{
-      base::ThreadPool::CreateSequencedTaskRunner(
-          {base::MayBlock(),
-           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})};
-
-  base::WeakPtrFactory<CacheManager> weak_ptr_factory_{this};
+  virtual void AddObserver(Observer* observer) = 0;
+  virtual void RemoveObserver(Observer* observer) = 0;
 };
 
 }  // namespace ash::file_system_provider

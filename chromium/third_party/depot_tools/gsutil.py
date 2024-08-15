@@ -17,8 +17,6 @@ import tempfile
 import time
 import urllib.request
 
-import zipfile
-
 GSUTIL_URL = 'https://storage.googleapis.com/pub/'
 API_URL = 'https://www.googleapis.com/storage/v1/b/pub/o/'
 
@@ -101,42 +99,37 @@ def ensure_gsutil(version, target, clean):
         return gsutil_bin
 
     if not os.path.exists(target):
-        try:
-            os.makedirs(target)
-        except FileExistsError:
-            # Another process is prepping workspace, so let's check if
-            # gsutil_bin is present.  If after several checks it's still not,
-            # continue with downloading gsutil.
-            delay = 2  # base delay, in seconds
-            for _ in range(3):  # make N attempts
-                # sleep first as it's not expected to have file ready just yet.
-                time.sleep(delay)
-                delay *= 1.5  # next delay increased by that factor
-                if os.path.isfile(gsutil_bin):
-                    return gsutil_bin
+        os.makedirs(target, exist_ok=True)
 
-    with temporary_directory(target) as instance_dir:
-        # Clean up if we're redownloading a corrupted gsutil.
-        cleanup_path = os.path.join(instance_dir, 'clean')
-        try:
-            os.rename(bin_dir, cleanup_path)
-        except (OSError, IOError):
-            cleanup_path = None
-        if cleanup_path:
-            shutil.rmtree(cleanup_path)
+    import lockfile
+    import zipfile
+    with lockfile.lock(bin_dir, timeout=30):
+        # Check if gsutil is ready (another process may have had lock).
+        if not clean and os.path.isfile(gsutil_flag):
+            return gsutil_bin
 
-        download_dir = os.path.join(instance_dir, 'd')
-        target_zip_filename = download_gsutil(version, instance_dir)
-        with zipfile.ZipFile(target_zip_filename, 'r') as target_zip:
-            target_zip.extractall(download_dir)
+        with temporary_directory(target) as instance_dir:
+            download_dir = os.path.join(instance_dir, 'd')
+            target_zip_filename = download_gsutil(version, instance_dir)
+            with zipfile.ZipFile(target_zip_filename, 'r') as target_zip:
+                target_zip.extractall(download_dir)
 
-        shutil.move(download_dir, bin_dir)
-        # Final check that the gsutil bin exists.  This should never fail.
-        if not os.path.isfile(gsutil_bin):
-            raise InvalidGsutilError()
-        # Drop a flag file.
-        with open(gsutil_flag, 'w') as f:
-            f.write('This flag file is dropped by gsutil.py')
+            # Clean up if we're redownloading a corrupted gsutil.
+            cleanup_path = os.path.join(instance_dir, 'clean')
+            try:
+                os.rename(bin_dir, cleanup_path)
+            except (OSError, IOError):
+                cleanup_path = None
+            if cleanup_path:
+                shutil.rmtree(cleanup_path)
+
+            shutil.move(download_dir, bin_dir)
+            # Final check that the gsutil bin exists.  This should never fail.
+            if not os.path.isfile(gsutil_bin):
+                raise InvalidGsutilError()
+            # Drop a flag file.
+            with open(gsutil_flag, 'w') as f:
+                f.write('This flag file is dropped by gsutil.py')
 
     return gsutil_bin
 

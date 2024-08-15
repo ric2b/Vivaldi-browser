@@ -10,6 +10,7 @@
 #include "components/password_manager/core/browser/password_form_digest.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/password_save_manager_impl.h"
+#include "components/password_manager/core/browser/possible_username_data.h"
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
 #include "components/password_manager/core/browser/stub_password_manager_driver.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -27,6 +28,7 @@ using autofill::test::AutofillUnitTestEnvironment;
 using autofill::test::CreateTestPasswordFormData;
 using autofill::test::MakeFieldRendererId;
 using autofill::test::MakeFormRendererId;
+using testing::IsEmpty;
 using testing::IsNull;
 using testing::NotNull;
 
@@ -56,10 +58,12 @@ class PasswordFormCacheTest : public testing::Test {
     // Fill values into the fields to save the form.
     FormData filled_form = form;
     EXPECT_EQ(filled_form.fields.size(), 2u);
-    filled_form.fields[0].value = u"username";
-    filled_form.fields[1].value = u"password";
-    form_manager->ProvisionallySave(filled_form, &driver(),
-                                    /*possible_usernames=*/nullptr);
+    filled_form.fields[0].set_value(u"username");
+    filled_form.fields[1].set_value(u"password");
+    form_manager->ProvisionallySave(
+        filled_form, &driver(),
+        base::LRUCache<PossibleUsernameFieldIdentifier, PossibleUsernameData>(
+            /*max_size=*/2));
     EXPECT_TRUE(form_manager->is_submitted());
     return form_manager;
   }
@@ -105,9 +109,9 @@ TEST_F(PasswordFormCacheTest, GetMatchedManager) {
 
   ASSERT_TRUE(matched_manager->DoesManage(form.renderer_id, &driver()));
   for (const FormFieldData& field : form.fields) {
-    ASSERT_TRUE(matched_manager->DoesManage(field.renderer_id, &driver()));
+    ASSERT_TRUE(matched_manager->DoesManage(field.renderer_id(), &driver()));
     ASSERT_EQ(matched_manager,
-              cache().GetMatchedManager(&driver(), field.renderer_id));
+              cache().GetMatchedManager(&driver(), field.renderer_id()));
   }
 }
 
@@ -196,6 +200,29 @@ TEST_F(PasswordFormCacheTest, ResetSubmittedManager_NoSubmittedManager) {
   EXPECT_FALSE(cache().IsEmpty());
   EXPECT_THAT(cache().GetMatchedManager(&driver(), form.renderer_id),
               NotNull());
+}
+
+// Test that the cache returns the view over internally stored password form
+// managers with expected properties.
+TEST_F(PasswordFormCacheTest, GetFormManagers) {
+  // Check that cache is empty in the beginning.
+  EXPECT_THAT(cache().GetFormManagers(), IsEmpty());
+
+  FormData form = CreateTestPasswordFormData();
+  auto form_manager = std::make_unique<PasswordFormManager>(
+      &client(), driver().AsWeakPtr(), form, &form_fetcher(),
+      std::make_unique<PasswordSaveManagerImpl>(&client()),
+      /*metrics_recorder=*/nullptr);
+
+  cache().AddFormManager(std::move(form_manager));
+  // Check that the size of the data view changed.
+  EXPECT_EQ(cache().GetFormManagers().size(), 1u);
+
+  // Check that iterators point to the expected password form managers.
+  PasswordFormManager* matched_manager =
+      cache().GetMatchedManager(&driver(), form.renderer_id);
+  EXPECT_THAT(matched_manager, NotNull());
+  EXPECT_EQ(matched_manager, cache().GetFormManagers()[0].get());
 }
 
 }  // namespace password_manager

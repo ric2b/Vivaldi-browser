@@ -35,8 +35,6 @@ suite('ExtensionsReviewPanel', function() {
         id: 'a'.repeat(32),
         safetyCheckText: {panelString: 'This extension contains malware.'},
       }),
-      createExtensionInfo({name: 'Bravo', id: 'b'.repeat(32)}),
-      createExtensionInfo({name: 'Charlie', id: 'c'.repeat(29)}),
     ];
     element.extensions = extensionItems;
     document.body.appendChild(element);
@@ -76,7 +74,7 @@ suite('ExtensionsReviewPanel', function() {
     const expandButton = element.$.expandButton;
     assertTrue(!!expandButton);
 
-    const extensionsList = element.shadowRoot!.querySelector('iron-collapse');
+    const extensionsList = element.shadowRoot!.querySelector('cr-collapse');
     assertTrue(!!extensionsList);
 
     // Button and list start out expanded.
@@ -102,13 +100,25 @@ suite('ExtensionsReviewPanel', function() {
 
   test('ReviewPanelUnsafeExtensionRowsExist', async function() {
     const extensionNameContainers =
-        element.shadowRoot!.querySelectorAll('.extension-row');
+        element.shadowRoot!.querySelectorAll('.panel-extension-row');
     assertEquals(extensionNameContainers.length, 1);
     assertEquals(
         extensionNameContainers[0]
             ?.querySelector('.extension-representation')
             ?.textContent,
         'Alpha');
+  });
+
+  test('CompletionStateShouldBeShownIfNoExtensions', async function() {
+    const completionTextContainer =
+        element.shadowRoot!.querySelector('.completion-container');
+    assertTrue(!!completionTextContainer);
+    assertFalse(isVisible(completionTextContainer));
+
+    element.set('extensions', []);
+    await flushTasks();
+
+    assertTrue(isVisible(completionTextContainer));
   });
 
   test('CompletionStateShouldBeShownAfterDeletingItems', async function() {
@@ -185,23 +195,15 @@ suite('ExtensionsReviewPanel', function() {
         element.shadowRoot!.querySelector('.completion-container');
     class MockKeepItemDelegate extends MockItemDelegate {
       override setItemSafetyCheckWarningAcknowledged(): void {
-        const extensionItems = [
-          createExtensionInfo({
-            name: 'Alpha',
-            id: 'a'.repeat(32),
-            safetyCheckText: {panelString: 'This extension contains malware.'},
-            acknowledgeSafetyCheckWarning: true,
-          }),
-          createExtensionInfo({name: 'Bravo', id: 'b'.repeat(32)}),
-          createExtensionInfo({name: 'Charlie', id: 'c'.repeat(29)}),
-        ];
-        element.extensions = extensionItems;
+        // Update extensions to be an empty list since the only previous
+        // extension was marked as acknowledged.
+        element.set('extensions', []);
       }
     }
     element.delegate = new MockKeepItemDelegate();
     assertFalse(isVisible(completionTextContainer));
     const extensionRowContainers =
-        element.shadowRoot!.querySelectorAll('.extension-row');
+        element.shadowRoot!.querySelectorAll('.panel-extension-row');
     assertEquals(1, extensionRowContainers.length);
     const menuButton = extensionRowContainers[0]!.querySelector<HTMLElement>(
         '.icon-more-vert')!;
@@ -215,7 +217,6 @@ suite('ExtensionsReviewPanel', function() {
 
     // Click the Keep the Extension button.
     actionMenu.querySelector('button')!.click();
-    await flushTasks();
     await browserProxy.whenCalled('extensionKeptAction');
 
     // The extension row should be removed and the completion state should be

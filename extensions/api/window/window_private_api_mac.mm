@@ -40,4 +40,13 @@ void WindowPrivateSetControlButtonsPaddingFunction::RequestChange(
                   userInfo:userInfo];
 }
 
+void WindowPrivatePerformHapticFeedbackFunction::PerformHapticFeedback() {
+  if (@available(macos 12.0.1, *)) {
+    [[NSHapticFeedbackManager defaultPerformer]
+        performFeedbackPattern:NSHapticFeedbackPatternAlignment
+              performanceTime:NSHapticFeedbackPerformanceTimeNow
+    ];
+  }
+}
+
 }  // namespace extensions

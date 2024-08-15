@@ -31,7 +31,6 @@
 <translation id="1620510694547887537">Cámara</translation>
 <translation id="1633720957382884102">Sitios relacionados</translation>
 <translation id="1644574205037202324">Historial</translation>
-<translation id="1647582022260550163">Seguro que queres restablecer os permisos, así como borrar as cookies e os datos do sitio?</translation>
 <translation id="1652197001188145583">Cando esta opción está activada, os sitios poden pedirche permiso para utilizar dispositivos NFC. Cando esta opción está desactivada, os sitios non poden utilizar dispositivos NFC.</translation>
 <translation id="1660204651932907780">Permite que os sitios reproduzan son (recomendado)</translation>
 <translation id="1677097821151855053">As cookies e outros datos do sitio utilízanse para lembrarte (por exemplo, á hora de iniciar de sesión ou de personalizar anuncios). Se queres xestionar as cookies para todos os sitios, vai a <ph name="BEGIN_LINK" />Configuración<ph name="END_LINK" />.</translation>
@@ -69,7 +68,6 @@
 <translation id="2241587408274973373">Tarxetas da páxina Nova pestana</translation>
 <translation id="2241634353105152135">Só unha vez</translation>
 <translation id="2253414712144136228">Eliminar <ph name="NAME_OF_LIST_ITEM" /></translation>
-<translation id="2253989982043948086">{NUM_SELECTED,plural, =1{1 sitio bloqueado}other{# sitios bloqueados}}</translation>
 <translation id="228293613124499805">A maioría dos sitios que visitas poden gardar datos no teu dispositivo. A miúdo, gardan as túas preferencias ou a información que compartes co sitio para mellorar a túa experiencia. É recomendable manter activada esta opción de configuración.</translation>
 <translation id="2289270750774289114">Preguntar cando un sitio web queira detectar dispositivos Bluetooth próximos (recomendado)</translation>
 <translation id="2315043854645842844">A selección do certificado do cliente non é compatible co sistema operativo.</translation>
@@ -94,7 +92,6 @@
 <translation id="2501278716633472235">Ir atrás</translation>
 <translation id="2546283357679194313">Cookies e datos dos sitios</translation>
 <translation id="2550801787432930915">Tarxeta de baixada de prezo</translation>
-<translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{Bloqueouse 1 cookie}other{Bloqueáronse # cookies}}</translation>
 <translation id="2570922361219980984">O acceso á localización tamén está desactivado neste dispositivo. Actívao na <ph name="BEGIN_LINK" />configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="257931822824936280">Vista ampliada (fai clic para contraela).</translation>
 <translation id="2586657967955657006">Portapapeis</translation>
@@ -124,7 +121,6 @@
 <translation id="3008272652534848354">Restablecer permisos</translation>
 <translation id="301521992641321250">Bloqueado automaticamente</translation>
 <translation id="3069226013421428034">Permite o inicio de sesión de terceiros para un sitio específico.</translation>
-<translation id="3082992102194421695">{COUNT,plural, =1{Caduca mañá}other{Caduca dentro de # días}}</translation>
 <translation id="310297983047869047">Diapositiva anterior</translation>
 <translation id="3109724472072898302">Contraído</translation>
 <translation id="3114012059975132928">Reprodutor de vídeo</translation>
@@ -136,6 +132,7 @@
 <translation id="3198916472715691905"><ph name="STORAGE_AMOUNT" /> de datos almacenados</translation>
 <translation id="321187648315454507">Para permitir que <ph name="APP_NAME" /> che envíe notificacións, actívaas tamén en <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="3227137524299004712">Micrófono</translation>
+<translation id="3232293466644486101">Eliminar datos de navegación…</translation>
 <translation id="3242646949159196181">Cando esta opción está activada, os sitios poden reproducir son. Cando esta opción está desactivada, os sitios non poden reproducir son.</translation>
 <translation id="3277252321222022663">Permitir que os sitios accedan aos sensores (recomendado)</translation>
 <translation id="3285500645985761267">Permitir que os sitios relacionados vexan a túa actividade no grupo</translation>
@@ -177,6 +174,7 @@
 <translation id="3895926599014793903">Forzar a activación do zoom</translation>
 <translation id="3908288065506437185">Bloquear cookies de terceiros no modo de incógnito</translation>
 <translation id="3918378745482005425">É posible que algunhas funcións non estean operativas. Os sitios relacionados poden seguir usando cookies de terceiros.</translation>
+<translation id="3933121352599513978">Contraer solicitudes non desexadas (recomendado)</translation>
 <translation id="3955193568934677022">Permitir que os sitios reproduzan contido protexido (recomendado)</translation>
 <translation id="3967822245660637423">Descarga completa</translation>
 <translation id="3974105241379491420">Os sitios poderán usar a información que garden sobre ti</translation>
@@ -198,7 +196,9 @@
 <translation id="4278390842282768270">Permitida</translation>
 <translation id="429312253194641664">Un sitio está reproducindo contido multimedia</translation>
 <translation id="42981349822642051">Ampliar</translation>
+<translation id="4336219115486912529">{COUNT,plural, =1{Caduca mañá}other{Caduca dentro de # días}}</translation>
 <translation id="4336566011000459927">Chrome volverá limitar as cookies hoxe</translation>
+<translation id="4336836404251800362"><ph name="RECENCY" /> <ph name="SEPARATOR" /> A túa última pestana</translation>
 <translation id="4338831206024587507">Todos os sitios do dominio <ph name="DOMAIN" /></translation>
 <translation id="4402755511846832236">Impide que os sitios saiban se estás utilizando este dispositivo de maneira activa</translation>
 <translation id="4412992751769744546">Permitir cookies de terceiros</translation>
@@ -289,6 +289,7 @@
 <translation id="5853982612236235577">Cando esta opción está activada, os sitios poden pedirche permiso para enviar notificacións. Cando esta opción está desactivada, os sitios non poden enviar notificacións.</translation>
 <translation id="5860033963881614850">Non</translation>
 <translation id="5876056640971328065">Pór en pausa o vídeo</translation>
+<translation id="5877248419911025165">Contraer todas as solicitudes</translation>
 <translation id="5884085660368669834">Preferencia do sitio</translation>
 <translation id="5887687176710214216">Visitouse onte por última vez</translation>
 <translation id="5916664084637901428">Si</translation>
@@ -303,9 +304,11 @@
 <translation id="6015775454662021376">Controla o acceso deste sitio ao dispositivo</translation>
 <translation id="6040143037577758943">Pechar</translation>
 <translation id="6042308850641462728">Máis</translation>
+<translation id="6060464773477604108"><ph name="HOST_NAME" /> <ph name="SEPARATOR1" /> <ph name="RECENCY" /> <ph name="SEPARATOR2" /> A túa última pestana</translation>
 <translation id="6064125863973209585">Descargas completadas</translation>
 <translation id="6071501408666570960">É posible que se che peche a sesión neste sitio</translation>
 <translation id="6120483543004435978">Cando esta opción está activada, os sitios poden pedirche permiso para saber se estás utilizando o dispositivo de maneira activa. Cando esta opción está desactivada, os sitios non poden saber se estás utilizando o dispositivo de maneira activa.</translation>
+<translation id="6140839633433422817">Seguro que queres restablecer os permisos e eliminar as cookies e os datos dos sitios?</translation>
 <translation id="6165508094623778733">Máis información</translation>
 <translation id="6171020522141473435">Cando esta opción está activada, os sitios poden pedirche permiso para utilizar dispositivos Bluetooth. Cando esta opción está desactivada, os sitios non poden utilizar dispositivos Bluetooth.</translation>
 <translation id="6177111841848151710">Bloqueado para o motor de busca actual</translation>
@@ -339,6 +342,7 @@
 <translation id="6545864417968258051">Busca de dispositivos Bluetooth</translation>
 <translation id="6552800053856095716">{PERMISSIONS_SUMMARY_BLOCKED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> e <ph name="NUM_MORE" /> máis (bloqueados)}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> e <ph name="NUM_MORE" /> máis (bloqueados)}}</translation>
 <translation id="6554732001434021288">Visitouse hai <ph name="NUM_DAYS" /> días por última vez</translation>
+<translation id="656065428026159829">Ver máis</translation>
 <translation id="6561560012278703671">Utilizar mensaxaría máis silenciosa (impide que as notificacións te interrompan)</translation>
 <translation id="6593061639179217415">Sitio para ordenadores</translation>
 <translation id="6608650720463149374"><ph name="GIGABYTES" /> GB</translation>
@@ -399,7 +403,6 @@
 <translation id="7561196759112975576">Sempre</translation>
 <translation id="757524316907819857">Non permite que os sitios reproduzan o contido protexido</translation>
 <translation id="7594634374516752650">Estableceuse conexión cun dispositivo Bluetooth</translation>
-<translation id="7641339528570811325">Borrar datos de navegación…</translation>
 <translation id="7649070708921625228">Axuda</translation>
 <translation id="7658239707568436148">Cancelar</translation>
 <translation id="7667547420449112975">O marabilloso mago de Oz</translation>
@@ -423,6 +426,7 @@
 <translation id="7986741934819883144">Seleccionar contacto</translation>
 <translation id="7990211076305263060">Cando esta opción está activada, os sitios poden pedirche permiso para utilizar o micrófono. Cando esta opción está desactivada, os sitios non poden utilizar o micrófono.</translation>
 <translation id="8007176423574883786">Desactivada para este dispositivo</translation>
+<translation id="8009579582995973057"><ph name="HOST_NAME" /> <ph name="SEPARATOR1" /> <ph name="RECENCY" /> <ph name="SEPARATOR2" /> De <ph name="FROM_DEVICE" /></translation>
 <translation id="802154636333426148">Produciuse un erro na descarga</translation>
 <translation id="8042586301629853791">Ordenar por:</translation>
 <translation id="8067883171444229417">Reproducir vídeo</translation>
@@ -457,7 +461,6 @@
 <translation id="8441146129660941386">Buscar cara atrás</translation>
 <translation id="8444433999583714703">Para permitir que <ph name="APP_NAME" /> acceda á túa localización, actívaa tamén en <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="8447861592752582886">Revoga o permiso do dispositivo</translation>
-<translation id="8451050538944905715">{NUM_SELECTED,plural, =1{1 cookie en uso}other{# cookies en uso}}</translation>
 <translation id="8487700953926739672">Dispoñible sen conexión</translation>
 <translation id="848952951823693243">Solicitar sempre o sitio para móbiles</translation>
 <translation id="8499083585497694743">Activar son do micro</translation>
@@ -478,7 +481,6 @@
 <translation id="8721719390026067591">Cando esta opción está activada, os sitios poden pedirche permiso para buscar dispositivos Bluetooth. Cando esta opción está desactivada, os sitios non poden buscar dispositivos Bluetooth.</translation>
 <translation id="8725066075913043281">Tentar de novo</translation>
 <translation id="8730621377337864115">Feito</translation>
-<translation id="8736193154595564524">{NUM_SELECTED,plural, =1{1 sitio permitido}other{# sitios permitidos}}</translation>
 <translation id="8751914237388039244">Selecciona unha imaxe</translation>
 <translation id="8800034312320686233">O sitio non funciona?</translation>
 <translation id="8801436777607969138">Bloquea JavaScript para un sitio específico.</translation>
@@ -497,6 +499,7 @@
 <translation id="8959122750345127698">A navegación é inaccesible: <ph name="URL" /></translation>
 <translation id="8986362086234534611">Borrar</translation>
 <translation id="8990043154272859344">Pecharase a sesión en todos os sitios</translation>
+<translation id="8993853206419610596">Despregar todas as solicitudes</translation>
 <translation id="9002538116239926534">Cando esta opción está activada, os sitios poden gardar datos no teu dispositivo. Cando esta opción está desactivada, os sitios non poden gardar datos no teu dispositivo.</translation>
 <translation id="9011903857143958461"><ph name="SITE_NAME" /> permitido</translation>
 <translation id="9019902583201351841">Xestionado por teus pais</translation>

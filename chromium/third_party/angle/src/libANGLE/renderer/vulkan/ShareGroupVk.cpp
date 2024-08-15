@@ -17,11 +17,11 @@
 #include "libANGLE/renderer/vulkan/ContextVk.h"
 #include "libANGLE/renderer/vulkan/DeviceVk.h"
 #include "libANGLE/renderer/vulkan/ImageVk.h"
-#include "libANGLE/renderer/vulkan/RendererVk.h"
 #include "libANGLE/renderer/vulkan/SurfaceVk.h"
 #include "libANGLE/renderer/vulkan/SyncVk.h"
 #include "libANGLE/renderer/vulkan/TextureVk.h"
 #include "libANGLE/renderer/vulkan/VkImageImageSiblingVk.h"
+#include "libANGLE/renderer/vulkan/vk_renderer.h"
 
 namespace rx
 {
@@ -157,7 +157,8 @@ angle::Result ShareGroupVk::updateContextsPriority(ContextVk *contextVk,
 
 void ShareGroupVk::onDestroy(const egl::Display *display)
 {
-    vk::Renderer *renderer = vk::GetImpl(display)->getRenderer();
+    DisplayVk *displayVk   = vk::GetImpl(display);
+    vk::Renderer *renderer = displayVk->getRenderer();
 
     for (std::unique_ptr<vk::BufferPool> &pool : mDefaultBufferPools)
     {
@@ -179,6 +180,9 @@ void ShareGroupVk::onDestroy(const egl::Display *display)
 
     mFramebufferCache.destroy(renderer);
     resetPrevTexture();
+
+    mVertexInputGraphicsPipelineCache.destroy(displayVk);
+    mFragmentOutputGraphicsPipelineCache.destroy(displayVk);
 }
 
 angle::Result ShareGroupVk::onMutableTextureUpload(ContextVk *contextVk, TextureVk *newTexture)

@@ -59,10 +59,10 @@ constexpr std::chrono::seconds kGoodbyeRecordTtl{1};
 
 }  // namespace
 
-MdnsTracker::MdnsTracker(MdnsSender* sender,
+MdnsTracker::MdnsTracker(MdnsSender& sender,
                          TaskRunner& task_runner,
                          ClockNowFunctionPtr now_function,
-                         MdnsRandom* random_delay,
+                         MdnsRandom& random_delay,
                          TrackerType tracker_type)
     : sender_(sender),
       task_runner_(task_runner),
@@ -71,8 +71,6 @@ MdnsTracker::MdnsTracker(MdnsSender* sender,
       random_delay_(random_delay),
       tracker_type_(tracker_type) {
   OSP_CHECK(now_function_);
-  OSP_CHECK(random_delay_);
-  OSP_CHECK(sender_);
 }
 
 MdnsTracker::~MdnsTracker() {
@@ -125,10 +123,10 @@ void MdnsTracker::RemovedReverseAdjacency(const MdnsTracker* node) const {
 MdnsRecordTracker::MdnsRecordTracker(
     MdnsRecord record,
     DnsType dns_type,
-    MdnsSender* sender,
+    MdnsSender& sender,
     TaskRunner& task_runner,
     ClockNowFunctionPtr now_function,
-    MdnsRandom* random_delay,
+    MdnsRandom& random_delay,
     RecordExpiredCallback record_expired_callback)
     : MdnsTracker(sender,
                   task_runner,
@@ -275,7 +273,7 @@ Clock::time_point MdnsRecordTracker::GetNextSendTime() {
 
   // Do not add random variation to the expiration time (last fraction of TTL)
   if (attempt_count_ != countof(kTtlFractions)) {
-    ttl_fraction += random_delay_->GetRecordTtlVariation();
+    ttl_fraction += random_delay_.GetRecordTtlVariation();
   }
 
   const Clock::duration delay =
@@ -284,10 +282,10 @@ Clock::time_point MdnsRecordTracker::GetNextSendTime() {
 }
 
 MdnsQuestionTracker::MdnsQuestionTracker(MdnsQuestion question,
-                                         MdnsSender* sender,
+                                         MdnsSender& sender,
                                          TaskRunner& task_runner,
                                          ClockNowFunctionPtr now_function,
-                                         MdnsRandom* random_delay,
+                                         MdnsRandom& random_delay,
                                          const Config& config,
                                          QueryType query_type)
     : MdnsTracker(sender,
@@ -319,7 +317,7 @@ MdnsQuestionTracker::MdnsQuestionTracker(MdnsQuestion question,
             MdnsQuestionTracker::SendQuery();
             ScheduleFollowUpQuery();
           },
-          random_delay_->GetInitialQueryDelay());
+          random_delay_.GetInitialQueryDelay());
     }
   }
 }
@@ -395,11 +393,11 @@ bool MdnsQuestionTracker::SendQuery() const {
       it++;
     } else {
       message.set_truncated();
-      sender_->SendMulticast(message);
+      sender_.SendMulticast(message);
       message = MdnsMessage(CreateMessageId(), MessageType::Query);
     }
   }
-  sender_->SendMulticast(message);
+  sender_.SendMulticast(message);
   return true;
 }
 

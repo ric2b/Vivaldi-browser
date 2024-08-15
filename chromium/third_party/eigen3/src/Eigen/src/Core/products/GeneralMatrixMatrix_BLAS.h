@@ -59,7 +59,7 @@ namespace internal {
                     Index rhsStride, EIGTYPE* res, Index resIncr, Index resStride, EIGTYPE alpha,                   \
                     level3_blocking<EIGTYPE, EIGTYPE>& /*blocking*/, GemmParallelInfo<Index>* /*info = 0*/) {       \
       using std::conj;                                                                                              \
-                                                                                                                    \
+      if (rows == 0 || cols == 0 || depth == 0) return;                                                             \
       EIGEN_ONLY_USED_FOR_DEBUG(resIncr);                                                                           \
       eigen_assert(resIncr == 1);                                                                                   \
       char transa, transb;                                                                                          \

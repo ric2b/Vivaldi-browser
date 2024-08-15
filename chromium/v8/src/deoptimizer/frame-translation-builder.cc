@@ -40,11 +40,7 @@ class UnsignedOperand : public OperandBase {
   explicit UnsignedOperand(uint32_t value) : OperandBase(value) {}
   void WriteVLQ(ZoneVector<uint8_t>* buffer) {
     base::VLQEncodeUnsigned(
-        [buffer](uint8_t value) {
-          buffer->push_back(value);
-          return &buffer->back();
-        },
-        value());
+        [buffer](uint8_t value) { buffer->push_back(value); }, value());
   }
   bool IsSigned() const { return false; }
 };
@@ -239,24 +235,42 @@ FrameTranslationBuilder::ToFrameTranslation(LocalFactory* factory) {
   if (SizeInBytes() == 0) return result;
   memcpy(result->begin(), contents_.data(), contents_.size() * sizeof(uint8_t));
 #ifdef ENABLE_SLOW_DCHECKS
+  DeoptimizationFrameTranslation::Iterator iter(*result, 0);
+  ValidateBytes(iter);
+#endif
+  return result;
+}
+
+base::Vector<const uint8_t> FrameTranslationBuilder::ToFrameTranslationWasm() {
+  DCHECK(!v8_flags.turbo_compress_frame_translations);
+  FinishPendingInstructionIfNeeded();
+  base::Vector<const uint8_t> result = base::VectorOf(contents_);
+#ifdef ENABLE_SLOW_DCHECKS
+  DeoptTranslationIterator iter(result, 0);
+  ValidateBytes(iter);
+#endif
+  return result;
+}
+
+void FrameTranslationBuilder::ValidateBytes(
+    DeoptTranslationIterator& iter) const {
+#ifdef ENABLE_SLOW_DCHECKS
   if (v8_flags.enable_slow_asserts) {
     // Check that we can read back all of the same content we intended to write.
-    DeoptimizationFrameTranslation::Iterator it(*result, 0);
     for (size_t i = 0; i < all_instructions_.size(); ++i) {
-      CHECK(it.HasNextOpcode());
+      CHECK(iter.HasNextOpcode());
       const Instruction& instruction = all_instructions_[i];
-      CHECK_EQ(instruction.opcode, it.NextOpcode());
+      CHECK_EQ(instruction.opcode, iter.NextOpcode());
       for (int j = 0; j < TranslationOpcodeOperandCount(instruction.opcode);
            ++j) {
         uint32_t operand = instruction.is_operand_signed[j]
-                               ? it.NextOperand()
-                               : it.NextOperandUnsigned();
+                               ? iter.NextOperand()
+                               : iter.NextOperandUnsigned();
         CHECK_EQ(instruction.operands[j], operand);
       }
     }
   }
 #endif
-  return result;
 }
 
 void FrameTranslationBuilder::BeginBuiltinContinuationFrame(
@@ -282,6 +296,12 @@ void FrameTranslationBuilder::BeginWasmInlinedIntoJSFrame(
   auto opcode = TranslationOpcode::WASM_INLINED_INTO_JS_FRAME;
   Add(opcode, SignedOperand(bailout_id.ToInt()), SignedOperand(literal_id),
       SignedOperand(height));
+}
+
+void FrameTranslationBuilder::BeginLiftoffFrame(BytecodeOffset bailout_id,
+                                                unsigned height) {
+  auto opcode = TranslationOpcode::LIFTOFF_FRAME;
+  Add(opcode, SignedOperand(bailout_id.ToInt()), SignedOperand(height));
 }
 #endif  // V8_ENABLE_WEBASSEMBLY
 
@@ -339,6 +359,11 @@ void FrameTranslationBuilder::ArgumentsElements(CreateArgumentsType type) {
 
 void FrameTranslationBuilder::ArgumentsLength() {
   auto opcode = TranslationOpcode::ARGUMENTS_LENGTH;
+  Add(opcode);
+}
+
+void FrameTranslationBuilder::RestLength() {
+  auto opcode = TranslationOpcode::REST_LENGTH;
   Add(opcode);
 }
 

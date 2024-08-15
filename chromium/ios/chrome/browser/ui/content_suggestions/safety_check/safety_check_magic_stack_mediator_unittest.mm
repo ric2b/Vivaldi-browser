@@ -62,6 +62,9 @@ class SafetyCheckMagicStackMediatorTest : public PlatformTest {
         safety_check_prefs::kSafetyCheckInMagicStackDisabledPref, false);
     local_registry->RegisterTimePref(prefs::kIosSettingsSafetyCheckLastRunTime,
                                      base::Time());
+    local_registry->RegisterDictionaryPref(
+        prefs::kIosSafetyCheckManagerInsecurePasswordCounts,
+        PrefRegistry::LOSSY_PREF);
 
     TestChromeBrowserState::Builder builder;
 
@@ -104,7 +107,6 @@ class SafetyCheckMagicStackMediatorTest : public PlatformTest {
 
  protected:
   web::WebTaskEnvironment task_environment_{
-      web::WebTaskEnvironment::Options::DEFAULT,
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   id mock_app_state_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;

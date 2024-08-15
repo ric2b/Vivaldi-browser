@@ -15,6 +15,11 @@ cipd_pick_list = [
   "third_party/lzma_sdk/bin/host_platform",
   "third_party/lzma_sdk/bin/win64",
   "ui/gl/resources/angle-metal",
+  "build/linux/debian_bullseye_amd64-sysroot",
+  "build/linux/debian_bullseye_arm64-sysroot",
+  "build/linux/debian_bullseye_armhf-sysroot",
+  "third_party/test_fonts",
+  "third_party/subresource-filter-ruleset/data",
   ]
 
 exclude_cipd = [
@@ -35,15 +40,15 @@ excluded_modules = [
   "third_party/chromium-variations",
   "third_party/speedometer/v3.0",
   "third_party/google-truth/src",
+  "testing/libfuzzer/fuzzers/wasm_corpus",
+  "third_party/crabbyavif/src",
+  "third_party/instrumented_libs",
   ]
 
 def main():
   variables = vivdeps.get_chromium_variables()
   if variables.get("checkout_android", False):
     variables["checkout_android_native_support"] = True
-
-  # Temp: Freeze reclient version to 112, due to breakage in 114
-  variables["reclient_version"] = "re_client_version:0.96.2.d36a87c-gomaip"
 
   deps = vivdeps.ChromiumDeps(variables=variables)
 

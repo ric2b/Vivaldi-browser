@@ -42,7 +42,7 @@ class SimpleMessagePort : public MessagePort {
     client_->OnMessage(sender_id, namespace_, message);
   }
 
-  void ReceiveError(Error error) {
+  void ReceiveError(const Error& error) {
     ASSERT_NE(client_, nullptr);
     client_->OnError(error);
   }

@@ -15,7 +15,7 @@ vivaldi_name = "Vivaldi"
 vivaldi_app_name = vivaldi_name
 input_app_folder_for_dmg = "$root_build_dir/$vivaldi_name.app"
 
-universal_suffix = ""
+arch_suffix = ""
 
 perform_signing = vivaldi_signing_key != "" && vivaldi_signing_id != ""
 
@@ -30,7 +30,9 @@ if (perform_signing) {
   signing_input_dir = "."
   if (generate_universal_mac) {
     signing_input_dir = "universal"
-    universal_suffix = ".universal"
+    arch_suffix = ".universal"
+  } else if (target_cpu == "arm64") {
+    arch_suffix = ".arm64"
   }
 
   name_prefix = ""
@@ -52,7 +54,7 @@ if (perform_signing) {
 }
 
 # NOTE(tomas@vivaldi.com): Don't change the names of these files based on channel
-dmg_name = "$vivaldi_name.${vivaldi_version_full}${universal_suffix}.dmg"
+dmg_name = "$vivaldi_name.${vivaldi_version_full}${arch_suffix}.dmg"
 
 
 group("mac") {
@@ -109,7 +111,7 @@ command_bash("build_dmg") {
 }
 
 if (perform_signing) {
-  tar_name = "$vivaldi_name.$vivaldi_version_full${universal_suffix}.tar.xz"
+  tar_name = "$vivaldi_name.$vivaldi_version_full${arch_suffix}.tar.xz"
   group("sign_mac") {
     deps = [
       ":sign_package",

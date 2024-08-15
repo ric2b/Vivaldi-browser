@@ -15,7 +15,7 @@ import java.nio.ByteBuffer;
 class AndroidUrlRequestWrapper extends org.chromium.net.ExperimentalUrlRequest {
     private final android.net.http.UrlRequest mBackend;
 
-    private AndroidUrlRequestWrapper(android.net.http.UrlRequest backend) {
+    AndroidUrlRequestWrapper(android.net.http.UrlRequest backend) {
         this.mBackend = backend;
     }
 
@@ -56,14 +56,10 @@ class AndroidUrlRequestWrapper extends org.chromium.net.ExperimentalUrlRequest {
      * @param callback the stream's callback
      * @return the wrapped request
      */
-    static AndroidUrlRequestWrapper withRecordingToCallback(
+    static AndroidUrlRequestWrapper createAndAddToCallback(
             android.net.http.UrlRequest backend, AndroidUrlRequestCallbackWrapper callback) {
         AndroidUrlRequestWrapper wrappedRequest = new AndroidUrlRequestWrapper(backend);
-        callback.recordWrappedRequest(wrappedRequest);
+        callback.setRequest(wrappedRequest);
         return wrappedRequest;
-    }
-
-    android.net.http.UrlRequest getBackend() {
-        return mBackend;
     }
 }

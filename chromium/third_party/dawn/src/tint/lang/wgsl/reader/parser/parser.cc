@@ -28,6 +28,7 @@
 #include "src/tint/lang/wgsl/reader/parser/parser.h"
 
 #include <limits>
+#include <utility>
 
 #include "src/tint/lang/core/attribute.h"
 #include "src/tint/lang/core/type/depth_texture.h"
@@ -50,6 +51,7 @@
 #include "src/tint/lang/wgsl/ast/stage_attribute.h"
 #include "src/tint/lang/wgsl/ast/switch_statement.h"
 #include "src/tint/lang/wgsl/ast/unary_op_expression.h"
+#include "src/tint/lang/wgsl/ast/var.h"
 #include "src/tint/lang/wgsl/ast/variable_decl_statement.h"
 #include "src/tint/lang/wgsl/ast/workgroup_attribute.h"
 #include "src/tint/lang/wgsl/reader/parser/classify_template_args.h"
@@ -242,28 +244,27 @@ Parser::Failure::Errored Parser::AddError(const Token& t, std::string_view err) 
 
 Parser::Failure::Errored Parser::AddError(const Source& source, std::string_view err) {
     if (silence_diags_ == 0) {
-        builder_.Diagnostics().AddError(diag::System::Reader, source) << err;
+        builder_.Diagnostics().AddError(source) << err;
     }
     return Failure::kErrored;
 }
 
 Parser::Failure::Errored Parser::AddError(const Source& source, StyledText&& err) {
     if (silence_diags_ == 0) {
-        builder_.Diagnostics().AddError(diag::System::Reader, source) << std::move(err);
+        builder_.Diagnostics().AddError(source) << std::move(err);
     }
     return Failure::kErrored;
 }
 
 void Parser::AddNote(const Source& source, std::string_view err) {
     if (silence_diags_ == 0) {
-        builder_.Diagnostics().AddNote(diag::System::Reader, source) << err;
+        builder_.Diagnostics().AddNote(source) << err;
     }
 }
 
 void Parser::deprecated(const Source& source, std::string_view msg) {
     if (silence_diags_ == 0) {
-        builder_.Diagnostics().AddWarning(diag::System::Reader, source)
-            << "use of deprecated language feature: " << msg;
+        builder_.Diagnostics().AddWarning(source) << "use of deprecated language feature: " << msg;
     }
 }
 
@@ -1440,17 +1441,12 @@ Maybe<const ast::ReturnStatement*> Parser::return_statement() {
         return Failure::kNoMatch;
     }
 
-    if (peek_is(Token::Type::kSemicolon)) {
-        return builder_.Return(source, nullptr);
-    }
-
     auto expr = expression();
     if (expr.errored) {
         return Failure::kErrored;
     }
 
-    // TODO(bclayton): Check matched?
-    return builder_.Return(source, expr.value);
+    return expr.matched ? builder_.Return(source, expr.value) : builder_.Return(source);
 }
 
 // variable_statement

@@ -116,7 +116,8 @@ mojom::blink::ScrollBehavior ScrollableArea::DetermineScrollBehavior(
 
 ScrollableArea::ScrollableArea(
     scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner)
-    : scrollbar_overlay_color_theme_(kScrollbarOverlayColorThemeDark),
+    : overlay_scrollbar_color_scheme__(
+          static_cast<unsigned>(mojom::blink::ColorScheme::kLight)),
       horizontal_scrollbar_needs_paint_invalidation_(false),
       vertical_scrollbar_needs_paint_invalidation_(false),
       scroll_corner_needs_paint_invalidation_(false),
@@ -157,6 +158,10 @@ const ui::ColorProvider* ScrollableArea::GetColorProvider(
     mojom::blink::ColorScheme color_scheme) const {
   return GetLayoutBox()->GetDocument().GetColorProviderForPainting(
       color_scheme);
+}
+
+bool ScrollableArea::InForcedColorsMode() const {
+  return GetLayoutBox()->GetDocument().InForcedColorsMode();
 }
 
 MacScrollbarAnimator* ScrollableArea::GetMacScrollbarAnimator() const {
@@ -527,7 +532,8 @@ void ScrollableArea::ScrollToScrollStartTarget(
   params->behavior = mojom::blink::ScrollBehavior::kInstant;
   params->type = mojom::blink::ScrollType::kScrollStart;
   ScrollIntoView(
-      scroll_start_target->AbsoluteBoundingBoxRectForScrollIntoView(), params);
+      scroll_start_target->AbsoluteBoundingBoxRectForScrollIntoView(),
+      PhysicalBoxStrut(), params);
 }
 
 void ScrollableArea::ScrollToScrollStartTargets(
@@ -551,18 +557,27 @@ void ScrollableArea::ScrollToScrollStartTargets(
 }
 
 void ScrollableArea::ApplyScrollStart() {
-  if (const auto* scroll_start_targets = GetScrollStartTargets()) {
-    ScrollToScrollStartTargets(scroll_start_targets);
-    // scroll-start-target takes precedence over scroll-start, so we should
-    // return here.
-    return;
+  if (RuntimeEnabledFeatures::CSSScrollStartTargetEnabled()) {
+    if (const auto* scroll_start_targets = GetScrollStartTargets()) {
+      if (auto* box = GetLayoutBox()) {
+        UseCounter::Count(box->GetDocument(),
+                          WebFeature::kCSSScrollStartTarget);
+      }
+      ScrollToScrollStartTargets(scroll_start_targets);
+      // scroll-start-target takes precedence over scroll-start, so we should
+      // return here.
+      return;
+    }
   }
-  const auto& y_data = GetLayoutBox()->Style()->ScrollStartY();
-  const auto& x_data = GetLayoutBox()->Style()->ScrollStartX();
-  ScrollOffset scroll_start_offset =
-      ScrollOffsetFromScrollStartData(y_data, x_data);
-  SetScrollOffset(scroll_start_offset, mojom::blink::ScrollType::kScrollStart,
-                  mojom::blink::ScrollBehavior::kInstant);
+
+  if (RuntimeEnabledFeatures::CSSScrollStartEnabled()) {
+    const auto& y_data = GetLayoutBox()->Style()->ScrollStartY();
+    const auto& x_data = GetLayoutBox()->Style()->ScrollStartX();
+    ScrollOffset scroll_start_offset =
+        ScrollOffsetFromScrollStartData(y_data, x_data);
+    SetScrollOffset(scroll_start_offset, mojom::blink::ScrollType::kScrollStart,
+                    mojom::blink::ScrollBehavior::kInstant);
+  }
 }
 
 void ScrollableArea::ScrollBy(const ScrollOffset& delta,
@@ -655,6 +670,7 @@ void ScrollableArea::UserScrollHelper(
 
 PhysicalRect ScrollableArea::ScrollIntoView(
     const PhysicalRect& rect_in_absolute,
+    const PhysicalBoxStrut& scroll_margin,
     const mojom::blink::ScrollIntoViewParamsPtr& params) {
   // TODO(bokan): This should really be implemented here but ScrollAlignment is
   // in Core which is a dependency violation.
@@ -816,7 +832,7 @@ void ScrollableArea::DidAddScrollbar(Scrollbar& scrollbar,
 
   // <rdar://problem/9797253> AppKit resets the scrollbar's style when you
   // attach a scrollbar
-  SetScrollbarOverlayColorTheme(GetScrollbarOverlayColorTheme());
+  SetOverlayScrollbarColorScheme(GetOverlayScrollbarColorScheme());
 }
 
 void ScrollableArea::WillRemoveScrollbar(Scrollbar& scrollbar,
@@ -842,30 +858,25 @@ bool ScrollableArea::HasOverlayScrollbars() const {
   return h_scrollbar && h_scrollbar->IsOverlayScrollbar();
 }
 
-void ScrollableArea::SetScrollbarOverlayColorTheme(
-    ScrollbarOverlayColorTheme overlay_theme) {
-  scrollbar_overlay_color_theme_ = overlay_theme;
+void ScrollableArea::SetOverlayScrollbarColorScheme(
+    mojom::blink::ColorScheme overlay_theme) {
+  overlay_scrollbar_color_scheme__ = static_cast<unsigned>(overlay_theme);
 
   if (Scrollbar* scrollbar = HorizontalScrollbar()) {
-    GetPageScrollbarTheme().UpdateScrollbarOverlayColorTheme(*scrollbar);
     scrollbar->SetNeedsPaintInvalidation(kAllParts);
   }
 
   if (Scrollbar* scrollbar = VerticalScrollbar()) {
-    GetPageScrollbarTheme().UpdateScrollbarOverlayColorTheme(*scrollbar);
     scrollbar->SetNeedsPaintInvalidation(kAllParts);
   }
 }
 
-void ScrollableArea::RecalculateScrollbarOverlayColorTheme() {
-  ScrollbarOverlayColorTheme old_overlay_theme =
-      GetScrollbarOverlayColorTheme();
+void ScrollableArea::RecalculateOverlayScrollbarColorScheme() {
+  mojom::blink::ColorScheme old_overlay_theme =
+      GetOverlayScrollbarColorScheme();
 
   // Start with a scrollbar overlay theme based on the used color scheme.
-  ScrollbarOverlayColorTheme overlay_theme =
-      UsedColorSchemeScrollbars() == mojom::blink::ColorScheme::kDark
-          ? kScrollbarOverlayColorThemeLight
-          : kScrollbarOverlayColorThemeDark;
+  mojom::blink::ColorScheme overlay_theme = UsedColorSchemeScrollbars();
 
   // If there is a background color set on the scroller, use the lightness of
   // the background color for the scrollbar overlay color theme.
@@ -875,13 +886,14 @@ void ScrollableArea::RecalculateScrollbarOverlayColorTheme() {
     if (!background_color.IsFullyTransparent()) {
       double hue, saturation, lightness;
       background_color.GetHSL(hue, saturation, lightness);
-      overlay_theme = lightness <= 0.5 ? kScrollbarOverlayColorThemeLight
-                                       : kScrollbarOverlayColorThemeDark;
+      overlay_theme = lightness <= 0.5 ? mojom::blink::ColorScheme::kDark
+                                       : mojom::blink::ColorScheme::kLight;
     }
   }
 
-  if (old_overlay_theme != overlay_theme)
-    SetScrollbarOverlayColorTheme(overlay_theme);
+  if (old_overlay_theme != overlay_theme) {
+    SetOverlayScrollbarColorScheme(overlay_theme);
+  }
 }
 
 void ScrollableArea::SetScrollbarNeedsPaintInvalidation(
@@ -1424,6 +1436,17 @@ void ScrollableArea::EnqueueSnapChangingEvent() const {
       event_type_names::kSnapchanging, cc::SnapAxis::kInline);
   target_node->GetDocument().EnqueueSnapChangingEvent(target_node, block_target,
                                                       inline_target);
+}
+
+ScrollOffset ScrollableArea::GetWebExposedScrollOffset() const {
+  ScrollOffset scroll_offset = GetScrollOffset();
+  if (RuntimeEnabledFeatures::WebExposedScrollOffsetEnabled()) {
+    return gfx::ToFlooredVector2d(scroll_offset);
+  }
+  // Ensure that, if fractional scroll offsets are not enabled, the scroll
+  // offset is an floored value.
+  CHECK_EQ(gfx::ToFlooredVector2d(scroll_offset), scroll_offset);
+  return scroll_offset;
 }
 
 }  // namespace blink

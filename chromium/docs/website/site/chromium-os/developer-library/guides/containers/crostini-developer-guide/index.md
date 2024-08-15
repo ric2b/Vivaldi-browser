@@ -1,13 +1,13 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: crostini-developer-guide
 title: Crostini developer guide
 ---
 
 If you just want to use Linux, you should read the [Running Custom
-Containers Under ChromeOS](containers_and_vms.md) doc. This doc is all about
+Containers Under ChromeOS](/chromium-os/developer-library/guides/containers/containers-and-vms/) doc. This doc is all about
 how the crostini is made, not how to use it. :)
 
 [TOC]
@@ -76,7 +76,7 @@ Googlers: update this image at [go/termina-rpc]
 
 ### General prerequisites
 
-*   Follow the [ChromiumOS Developer Guide](developer_guide.md) for setup.
+*   Follow the [ChromiumOS Developer Guide](/chromium-os/developer-library/guides/development/developer-guide/) for setup.
 *   Device with test image in developer mode.
 
 Ensure you are able to SSH to the device:
@@ -88,7 +88,7 @@ Ensure you are able to SSH to the device:
 
 For the rest of this document, it will be assumed that the `BOARD` environment
 variable in `cros_sdk` is set to the board name of your test device as explained
-in the [Select a board](developer_guide.md#Select-a-board)
+in the [Select a board](/chromium-os/developer-library/guides/development/developer-guide/#Select-a-board)
 section of the ChromiumOS Developer Guide.
 
 Crostini requires a signed-in, non-guest user account to run. You can either use
@@ -379,7 +379,7 @@ You can now connect to Crostini the same as you would the host.
 
 ### Chrome
 
-See [Chrome Logging on Chrome OS](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/chrome_os_logging.md).
+See [Chrome Logging on ChromeOS](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/chrome_os_logging.md).
 
 ### Host Services
 
@@ -406,7 +406,7 @@ Their logs can be viewed by running `journalctl` inside the container.
 ### Host Services
 
 Host service changes can be debugged the same as any other host service. See the
-[main developer guide](developer_guide.md#Remote-Debugging) for details.
+[main developer guide](/chromium-os/developer-library/guides/development/developer-guide/#Remote-Debugging) for details.
 
 ### Termina Services
 
@@ -431,7 +431,7 @@ but will get you symbols and source code.
     `sudo apt install gdbserver binutils`
 
 Now you can follow the instructions in the
-[main developer guide](developer_guide.md#Remote-Debugging) to debug
+[main developer guide](/chromium-os/developer-library/guides/development/developer-guide/#Remote-Debugging) to debug
 chroot-built services inside Crostini the same as you would on the host (except
 use tatl/tael as your board).
 

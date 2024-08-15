@@ -1047,12 +1047,6 @@ void GLES2InterfaceStub::DrawElementsInstancedBaseVertexBaseInstanceANGLE(
     GLuint /* baseinstance */) {}
 void GLES2InterfaceStub::VertexAttribDivisorANGLE(GLuint /* index */,
                                                   GLuint /* divisor */) {}
-void GLES2InterfaceStub::ProduceTextureDirectCHROMIUM(GLuint /* texture */,
-                                                      GLbyte* /* mailbox */) {}
-GLuint GLES2InterfaceStub::CreateAndConsumeTextureCHROMIUM(
-    const GLbyte* /* mailbox */) {
-  return 0;
-}
 void GLES2InterfaceStub::BindUniformLocationCHROMIUM(GLuint /* program */,
                                                      GLint /* location */,
                                                      const char* /* name */) {}

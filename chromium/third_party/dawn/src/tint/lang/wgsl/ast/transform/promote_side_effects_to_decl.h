@@ -36,6 +36,8 @@ namespace tint::ast::transform {
 /// declarations before the statement of usage with the goal of ensuring
 /// left-to-right order of evaluation, while respecting short-circuit
 /// evaluation.
+/// As `@diagnostic` statements can be decomposed, this transform requires that the
+/// DisableUniformityAnalysis transform is run first.
 class PromoteSideEffectsToDecl final : public Castable<PromoteSideEffectsToDecl, Transform> {
   public:
     /// Constructor

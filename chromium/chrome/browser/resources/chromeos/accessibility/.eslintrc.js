@@ -64,7 +64,11 @@ module.exports = {
                 filter: {
                   regex: '^(' +
                       // Exclude initialisms such as JSON and IME
-                      'toJSON|describeTextChangedByIME' +
+                      'toJSON|describeTextChangedByIME|' +
+                      // Exclude the short name CVox
+                      'isCVoxModifierActive|' +
+                      // Exclude the phrase OS.
+                      'addOSKeyboardShortcutsMenuItem' +
                       ')$',
                   match: false,
                 },

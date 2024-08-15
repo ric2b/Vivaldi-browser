@@ -133,8 +133,8 @@ CredentialsItemView::CredentialsItemView(
     lower_label_ = text_container->AddChildView(std::move(lower_label));
   }
 
-  // Add info icon with a tooltip providing the source of the credential if
-  // this is not an exact match.
+  // Add info icon with a tooltip providing the source of the PSL, affiliated
+  // and grouped credentials.
   if (form->match_type.has_value() &&
       password_manager_util::GetMatchType(*form) !=
           password_manager_util::GetLoginMatchType::kExact) {
@@ -163,27 +163,6 @@ CredentialsItemView::CredentialsItemView(
 }
 
 CredentialsItemView::~CredentialsItemView() = default;
-
-void CredentialsItemView::SetStoreIndicatorIcon(
-    password_manager::PasswordForm::Store store) {
-  if (store == password_manager::PasswordForm::Store::kAccountStore &&
-      !store_indicator_icon_view_) {
-    store_indicator_icon_view_ =
-        AddChildView(std::make_unique<views::ImageView>());
-    store_indicator_icon_view_->SetCanProcessEventsWithinSubtree(false);
-    store_indicator_icon_view_->SetImage(ui::ImageModel::FromVectorIcon(
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-        vector_icons::kGoogleGLogoIcon,
-#else
-        vector_icons::kSyncIcon,
-#endif  // !BUILDFLAG(GOOGLE_CHROME_BRANDING)
-        gfx::kPlaceholderColor));
-  } else if (store == password_manager::PasswordForm::Store::kProfileStore &&
-             store_indicator_icon_view_) {
-    RemoveChildView(store_indicator_icon_view_);
-    store_indicator_icon_view_ = nullptr;
-  }
-}
 
 void CredentialsItemView::UpdateAvatar(const gfx::ImageSkia& image) {
   image_view_->SetImage(

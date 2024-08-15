@@ -266,6 +266,9 @@
 #ifdef __AVX512BF16__
 #define EIGEN_VECTORIZE_AVX512BF16
 #endif
+#ifdef __AVX512VL__
+#define EIGEN_VECTORIZE_AVX512VL
+#endif
 #ifdef __AVX512FP16__
 #ifdef __AVX512VL__
 #define EIGEN_VECTORIZE_AVX512FP16

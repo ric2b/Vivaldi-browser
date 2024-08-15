@@ -214,12 +214,12 @@ void RemoveInvalidNsecFlags(std::vector<MdnsRecord>* records) {
 }  // namespace
 
 MdnsQuerier::RecordTrackerLruCache::RecordTrackerLruCache(
-    MdnsQuerier* querier,
-    MdnsSender* sender,
-    MdnsRandom* random_delay,
+    MdnsQuerier& querier,
+    MdnsSender& sender,
+    MdnsRandom& random_delay,
     TaskRunner& task_runner,
     ClockNowFunctionPtr now_function,
-    ReportingClient* reporting_client,
+    ReportingClient& reporting_client,
     const Config& config)
     : querier_(querier),
       sender_(sender),
@@ -228,9 +228,6 @@ MdnsQuerier::RecordTrackerLruCache::RecordTrackerLruCache(
       now_function_(now_function),
       reporting_client_(reporting_client),
       config_(config) {
-  OSP_CHECK(sender_);
-  OSP_CHECK(random_delay_);
-  OSP_CHECK(reporting_client_);
   OSP_CHECK_GT(config_.querier_max_records_cached, 0);
 }
 
@@ -305,7 +302,7 @@ int MdnsQuerier::RecordTrackerLruCache::Update(
       auto result = it->second->Update(record);
 
       if (result.is_error()) {
-        reporting_client_->OnRecoverableError(
+        reporting_client_.OnRecoverableError(
             Error(Error::Code::kUpdateReceivedRecordFailure,
                   result.error().ToString()));
         continue;
@@ -332,7 +329,7 @@ const MdnsRecordTracker& MdnsQuerier::RecordTrackerLruCache::StartTracking(
     DnsType dns_type) {
   auto expiration_callback = [this](const MdnsRecordTracker* tracker,
                                     const MdnsRecord& r) {
-    querier_->OnRecordExpired(tracker, r);
+    querier_.OnRecordExpired(tracker, r);
   };
 
   while (lru_order_.size() >=
@@ -364,38 +361,34 @@ void MdnsQuerier::RecordTrackerLruCache::MoveToEnd(
   it->second = --lru_order_.end();
 }
 
-MdnsQuerier::MdnsQuerier(MdnsSender* sender,
-                         MdnsReceiver* receiver,
+MdnsQuerier::MdnsQuerier(MdnsSender& sender,
+                         MdnsReceiver& receiver,
                          TaskRunner& task_runner,
                          ClockNowFunctionPtr now_function,
-                         MdnsRandom* random_delay,
-                         ReportingClient* reporting_client,
-                         Config config)
+                         MdnsRandom& random_delay,
+                         ReportingClient& reporting_client,
+                         const Config& config)
     : sender_(sender),
       receiver_(receiver),
       task_runner_(task_runner),
       now_function_(now_function),
       random_delay_(random_delay),
       reporting_client_(reporting_client),
-      config_(std::move(config)),
-      records_(this,
+      config_(config),
+      records_(*this,
                sender_,
                random_delay_,
                task_runner_,
                now_function_,
                reporting_client_,
                config_) {
-  OSP_CHECK(sender_);
-  OSP_CHECK(receiver_);
   OSP_CHECK(now_function_);
-  OSP_CHECK(random_delay_);
-  OSP_CHECK(reporting_client_);
 
-  receiver_->AddResponseCallback(this);
+  receiver_.AddResponseCallback(this);
 }
 
 MdnsQuerier::~MdnsQuerier() {
-  receiver_->RemoveResponseCallback(this);
+  receiver_.RemoveResponseCallback(this);
 }
 
 // NOTE: The code below is range loops instead of std:find_if, for better
@@ -406,7 +399,6 @@ void MdnsQuerier::StartQuery(const DomainName& name,
                              DnsType dns_type,
                              DnsClass dns_class,
                              MdnsRecordChangedCallback* callback) {
-  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
   OSP_CHECK(callback);
   OSP_CHECK(CanBeQueried(dns_type));
 
@@ -464,7 +456,6 @@ void MdnsQuerier::StopQuery(const DomainName& name,
                             DnsType dns_type,
                             DnsClass dns_class,
                             MdnsRecordChangedCallback* callback) {
-  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
   OSP_CHECK(callback);
 
   if (!CanBeQueried(dns_type)) {
@@ -506,8 +497,6 @@ void MdnsQuerier::StopQuery(const DomainName& name,
 }
 
 void MdnsQuerier::ReinitializeQueries(const DomainName& name) {
-  OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
-
   // Get the ongoing queries and their callbacks.
   std::vector<CallbackInfo> callbacks;
   auto its = callbacks_.equal_range(name);

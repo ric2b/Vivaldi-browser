@@ -28,12 +28,12 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#import "components/remote_cocoa/app_shim/NSToolbar+Private.h"
 #import "components/remote_cocoa/app_shim/bridged_content_view.h"
 #import "components/remote_cocoa/app_shim/browser_native_widget_window_mac.h"
 #import "components/remote_cocoa/app_shim/context_menu_runner.h"
 #import "components/remote_cocoa/app_shim/mouse_capture.h"
 #import "components/remote_cocoa/app_shim/native_widget_mac_frameless_nswindow.h"
-#import "components/remote_cocoa/app_shim/vivaldi_native_widget_mac_frameless_nswindow.h"
 #import "components/remote_cocoa/app_shim/native_widget_mac_nswindow.h"
 #import "components/remote_cocoa/app_shim/native_widget_ns_window_host_helper.h"
 #include "components/remote_cocoa/app_shim/select_file_dialog_bridge.h"
@@ -58,8 +58,9 @@
 #import "ui/gfx/mac/coordinate_conversion.h"
 #import "ui/gfx/mac/nswindow_frame_controls.h"
 
+// Vivaldi
 #include "app/vivaldi_apptools.h"
-#include "components/remote_cocoa/app_shim/vivaldi_window_size_helper.h"
+#import "components/remote_cocoa/app_shim/vivaldi_window_size_helper.h"
 
 using remote_cocoa::mojom::VisibilityTransition;
 using remote_cocoa::mojom::WindowVisibilityState;
@@ -309,14 +310,6 @@ NativeWidgetMacNSWindow* NativeWidgetNSWindowBridge::CreateNSWindow(
                         defer:NO];
       break;
     case mojom::WindowClass::kFrameless:
-      if (vivaldi::IsVivaldiRunning()) {
-        ns_window = [[VivaldiNativeWidgetMacFramelessNSWindow alloc]
-          initWithContentRect:ui::kWindowSizeDeterminedLater
-                    styleMask:params->style_mask
-                      backing:NSBackingStoreBuffered
-                        defer:NO];
-        break;
-      }
       ns_window = [[NativeWidgetMacFramelessNSWindow alloc]
           initWithContentRect:ui::kWindowSizeDeterminedLater
                     styleMask:params->style_mask
@@ -450,7 +443,13 @@ void NativeWidgetNSWindowBridge::ShowCertificateViewer(
 void NativeWidgetNSWindowBridge::StackAbove(uint64_t sibling_id) {
   NativeWidgetNSWindowBridge* sibling_bridge =
       NativeWidgetNSWindowBridge::GetFromId(sibling_id);
-  DCHECK(sibling_bridge);
+  if (!sibling_bridge) {
+    // When the OS tells us a window is closing it is removed from the id map.
+    // Since nothing is stopping the browser process from still trying to use
+    // that id until the browser process has been informed that the window is
+    // gone, it is totally possible to be passed no longer valid ids here.
+    return;
+  }
 
   NSInteger sibling = sibling_bridge->ns_window().windowNumber;
   [window_ orderWindowByShuffling:NSWindowAbove relativeTo:sibling];
@@ -637,17 +636,6 @@ void NativeWidgetNSWindowBridge::CreateContentView(uint64_t ns_view_id,
       ui::RemoteAccessibility::GetTokenForLocalElement(window_),
       ui::RemoteAccessibility::GetTokenForLocalElement(bridged_view_));
 
-  if (vivaldi::IsVivaldiRunning()) {
-    // NOTE(tomas@vivaldi.com): Added for VB-47090
-    // Set the layer first to create a layer-hosting view (not layer-backed), and
-    // set the compositor output to go to that layer.
-    // TODO: Test properly for problems wrt ARC transition
-    auto* background_layer = [[CALayer layer] init]; // maybe [CALayer layer];
-    display_ca_layer_tree_ =
-          std::make_unique<ui::DisplayCALayerTree>(background_layer);
-      [bridged_view_ setLayer:background_layer];
-      [bridged_view_ setWantsLayer:YES];
-  } else {
   // Beware: This view was briefly removed (in favor of a bare CALayer) in
   // https://crrev.com/c/1236675. The ordering of unassociated layers relative
   // to NSView layers is undefined on macOS 10.12 and earlier, so the compositor
@@ -662,7 +650,6 @@ void NativeWidgetNSWindowBridge::CreateContentView(uint64_t ns_view_id,
   [compositor_view setLayer:background_layer];
   [compositor_view setWantsLayer:YES];
   [bridged_view_ addSubview:compositor_view];
-  }
 
   [bridged_view_ setWantsLayer:YES];
   [window_ setContentView:bridged_view_];
@@ -1332,11 +1319,13 @@ void NativeWidgetNSWindowBridge::OnDisplayAdded(
   UpdateWindowDisplay();
 }
 
-void NativeWidgetNSWindowBridge::OnDisplayRemoved(
-    const display::Display& display) {
+void NativeWidgetNSWindowBridge::OnDisplaysRemoved(
+    const display::Displays& removed_displays) {
   UpdateWindowDisplay();
-  if (vivaldi::IsVivaldiRunning()) {
-    vivaldi::VerifyWindowSize(window_, display);
+  if (base::mac::MacOSVersion() < 14'00'00 && vivaldi::IsVivaldiRunning()) {
+    // TODO(tomas@vivaldi.com): This is not needed on macOS 14+.
+    // Remove this when minimum supported version is macOS 14.x
+    vivaldi::VerifyWindowSize(window_, removed_displays);
   }
 }
 
@@ -1843,7 +1832,10 @@ void NativeWidgetNSWindowBridge::ShowAsModalSheet() {
               if (!window.delegate) {
                 return;
               }
-
+              // Make sure to mark ourselves as not wanting to be visible.
+              // Otherwise if during the orderOut call our parent becomes the
+              // key window, it would try to show us as a new modal sheet.
+              wants_to_be_visible_ = false;
               [window orderOut:nil];
               OnWindowWillClose();
             }];

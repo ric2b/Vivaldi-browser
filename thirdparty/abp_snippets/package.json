@@ -1,0 +1,86 @@
+{
+  "name": "@eyeo/snippets",
+  "version": "1.3.0",
+  "main": "./index.mjs",
+  "module": "./index.mjs",
+  "type": "module",
+  "scripts": {
+    "build": "npm run build.clean && npm run rollup:isolated && npm run rollup:main && npm run rollup:snippets && npm run rollup:ml && npm run rollup:chromium-all && node ./bundle/callbacks.js && node ./bundle/isolated-first.js && node ./bundle/dependencies.js && node ./bundle/build-service.js && npm run test",
+    "build.assets": "node ./bundle/assets.js $1",
+    "build.clean": "rm -rf dist webext; mkdir dist webext",
+    "rollup:isolated": "rollup --config rollup/isolated.config.js",
+    "rollup:main": "rollup --config rollup/main.config.js",
+    "rollup:ml": "rollup --config rollup/ml.config.js",
+    "rollup:snippets": "rollup --config rollup/snippets.config.js",
+    "rollup:chromium-all": "rollup --config rollup/chromium-all.config.js",
+    "test": "node ./test/webext.js && node ./test/callback.js && node ./test/service.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./index.mjs"
+    },
+    "./main": {
+      "import": "./webext/main.mjs"
+    },
+    "./injected": {
+      "import": "./webext/main.mjs"
+    },
+    "./isolated": {
+      "import": "./webext/ml.mjs"
+    },
+    "./all": {
+      "import": "./webext/snippets.mjs"
+    },
+    "./source": {
+      "import": "./webext/index.source.mjs"
+    },
+    "./source/main": {
+      "import": "./webext/main.source.mjs"
+    },
+    "./source/injected": {
+      "import": "./webext/main.source.mjs"
+    },
+    "./source/isolated": {
+      "import": "./webext/ml.source.mjs"
+    },
+    "./source/all": {
+      "import": "./webext/snippets.source.mjs"
+    },
+    "./mlaf": {
+      "import": "./dist/service/mlaf.mjs"
+    },
+    "./source/mlaf": {
+      "import": "./dist/service/mlaf.source.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "license": "GPL-3.0-only",
+  "description": "eye/o snippets for Ads blocker",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@gitlab.com/eyeo/snippets.git"
+  },
+  "keywords": [
+    "adblocker",
+    "ABP",
+    "snippets",
+    "eyeo"
+  ],
+  "author": "Eyeo GmbH",
+  "bugs": {
+    "url": "https://gitlab.com/eyeo/snippets/issues"
+  },
+  "homepage": "https://gitlab.com/eyeo/snippets#readme",
+  "dependencies": {
+    "@eyeo/mlaf": "^0.5.1"
+  },
+  "devDependencies": {
+    "@rollup/plugin-inject": "^5.0.3",
+    "@rollup/plugin-node-resolve": "^13.3.0",
+    "@rollup/plugin-terser": "^0.4.4",
+    "proxy-pants": "^0.8.3",
+    "rollup": "^2.79.0",
+    "rollup-plugin-cleanup": "^3.2.1",
+    "transform-once": "^0.1.2"
+  }
+}

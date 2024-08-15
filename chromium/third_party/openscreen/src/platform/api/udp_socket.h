@@ -41,10 +41,10 @@ class UdpSocket {
     //   UdpSocket::SetMulticastOutboundInterface(...)
     //   UdpSocket::JoinMulticastGroup(...)
     //   UdpSocket::SetDscp(...)
-    virtual void OnError(UdpSocket* socket, Error error) = 0;
+    virtual void OnError(UdpSocket* socket, const Error& error) = 0;
 
     // Method called when an error occurs during a SendMessage call.
-    virtual void OnSendError(UdpSocket* socket, Error error) = 0;
+    virtual void OnSendError(UdpSocket* socket, const Error& error) = 0;
 
     // Method called when a packet is read.
     virtual void OnRead(UdpSocket* socket, ErrorOr<UdpPacket> packet) = 0;

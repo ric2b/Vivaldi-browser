@@ -47,7 +47,12 @@ bool FakeLocalGattService::IsPrimary() const {
 
 void FakeLocalGattService::Register(base::OnceClosure callback,
                                     ErrorCallback error_callback) {
-  NOTIMPLEMENTED();
+  if (set_should_registration_succeed_) {
+    std::move(callback).Run();
+    return;
+  }
+
+  std::move(error_callback).Run(BluetoothGattService::GattErrorCode::kFailed);
 }
 
 void FakeLocalGattService::Unregister(base::OnceClosure callback,
@@ -61,7 +66,11 @@ bool FakeLocalGattService::IsRegistered() {
 }
 
 void FakeLocalGattService::Delete() {
-  NOTIMPLEMENTED();
+  deleted_ = true;
+
+  if (on_deleted_callback_) {
+    std::move(on_deleted_callback_).Run();
+  }
 }
 
 device::BluetoothLocalGattCharacteristic*

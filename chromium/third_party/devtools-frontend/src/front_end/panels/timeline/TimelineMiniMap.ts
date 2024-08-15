@@ -4,6 +4,7 @@
 
 import * as Common from '../../core/common/common.js';
 import * as TraceEngine from '../../models/trace/trace.js';
+import * as AnnotationsManager from '../../services/annotations_manager/annotations_manager.js';
 import * as TraceBounds from '../../services/trace_bounds/trace_bounds.js';
 import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as UI from '../../ui/legacy/legacy.js';
@@ -134,19 +135,16 @@ export class TimelineMiniMap extends
     const newVisibleTraceWindow =
         TraceEngine.Helpers.Timing.traceWindowFromMilliSeconds(breadcrumbTimes.startTime, breadcrumbTimes.endTime);
 
-    // When you create a breadcrumb, both the minimap bounds and the visible
-    // window get set to that breadcrumb's window.
-    TraceBounds.TraceBounds.BoundsManager.instance().setMiniMapBounds(
-        newVisibleTraceWindow,
-    );
-    TraceBounds.TraceBounds.BoundsManager.instance().setTimelineVisibleWindow(
-        newVisibleTraceWindow,
-    );
-
     if (this.breadcrumbs === null) {
-      this.breadcrumbs = new TimelineComponents.Breadcrumbs.Breadcrumbs(newVisibleTraceWindow);
+      this.breadcrumbs =
+          AnnotationsManager.AnnotationsManager.AnnotationsManager.maybeInstance()?.getTimelineBreadcrumbs() ?? null;
     } else {
       this.breadcrumbs.add(newVisibleTraceWindow);
+    }
+
+    if (!this.breadcrumbs) {
+      console.warn('AnnotationsManager has not been created, therefore Breadcrumbs can not be added');
+      return;
     }
 
     this.#breadcrumbsUI.data = {
@@ -154,29 +152,17 @@ export class TimelineMiniMap extends
     };
   }
 
-  #removeBreadcrumb(breadcrumb: TimelineComponents.Breadcrumbs.Breadcrumb): void {
+  #removeBreadcrumb(breadcrumb: TraceEngine.Types.File.Breadcrumb): void {
     // Note this is slightly confusing: when the user clicks on a breadcrumb,
     // we do not remove it, but we do remove all of its children, and make it
     // the new active breadcrumb.
-    const visibleTimesMilli = TraceEngine.Helpers.Timing.traceWindowMilliSeconds(breadcrumb.window);
     if (this.breadcrumbs) {
-      this.breadcrumbs.makeBreadcrumbActive(breadcrumb);
+      this.breadcrumbs.setLastBreadcrumb(breadcrumb);
       // Only the initial breadcrumb is passed in because breadcrumbs are stored in a linked list and breadcrumbsUI component iterates through them
       this.#breadcrumbsUI.data = {
         breadcrumb: this.breadcrumbs.initialBreadcrumb,
       };
     }
-    const newVisibleTraceWindow = TraceEngine.Helpers.Timing.traceWindowFromMilliSeconds(
-        visibleTimesMilli.min,
-        visibleTimesMilli.max,
-    );
-
-    TraceBounds.TraceBounds.BoundsManager.instance().setMiniMapBounds(
-        newVisibleTraceWindow,
-    );
-    TraceBounds.TraceBounds.BoundsManager.instance().setTimelineVisibleWindow(
-        newVisibleTraceWindow,
-    );
   }
 
   override wasShown(): void {

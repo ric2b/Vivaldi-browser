@@ -2,11 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
-import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import * as TraceEngine from '../../models/trace/trace.js';
 import {TraceLoader} from '../../testing/TraceLoader.js';
+
 import * as Timeline from './timeline.js';
 
 describe('Initiators', () => {
@@ -15,9 +13,9 @@ describe('Initiators', () => {
 
     const timerFireEvent = Array.from(traceData.Initiators.eventToInitiator.keys())
                                .find(TraceEngine.Types.TraceEvents.isTraceEventTimerFire);
-    assertNotNullOrUndefined(timerFireEvent);
+    assert.exists(timerFireEvent);
     const timerInstallEvent = traceData.Initiators.eventToInitiator.get(timerFireEvent);
-    assertNotNullOrUndefined(timerInstallEvent);
+    assert.exists(timerInstallEvent);
     const initiatorData = Timeline.Initiators.initiatorsDataToDraw(traceData, timerFireEvent, [], []);
 
     assert.deepEqual(initiatorData, [{
@@ -34,13 +32,13 @@ describe('Initiators', () => {
     const fibonacciCall = traceData.Renderer.allTraceEntries.find(entry => {
       return TraceEngine.Types.TraceEvents.isProfileCall(entry) && entry.callFrame.functionName === 'fibonacci';
     });
-    assertNotNullOrUndefined(fibonacciCall);
+    assert.exists(fibonacciCall);
 
     const timerFireEvent = Array.from(traceData.Initiators.eventToInitiator.keys())
                                .find(TraceEngine.Types.TraceEvents.isTraceEventTimerFire);
-    assertNotNullOrUndefined(timerFireEvent);
+    assert.exists(timerFireEvent);
     const timerInstallEvent = traceData.Initiators.eventToInitiator.get(timerFireEvent);
-    assertNotNullOrUndefined(timerInstallEvent);
+    assert.exists(timerInstallEvent);
 
     // Find the initator data but starting at the fibonacci()
     // call.
@@ -60,7 +58,7 @@ describe('Initiators', () => {
     const fibonacciCall = traceData.Renderer.allTraceEntries.find(entry => {
       return TraceEngine.Types.TraceEvents.isProfileCall(entry) && entry.callFrame.functionName === 'fibonacci';
     });
-    assertNotNullOrUndefined(fibonacciCall);
+    assert.exists(fibonacciCall);
 
     // Find the initators data but starting at the fibonacci()
     // call. We expect to find two initiatorData objects here:
@@ -83,7 +81,7 @@ describe('Initiators', () => {
     const timerInstall = traceData.Renderer.allTraceEntries.find(entry => {
       return entry.name === TraceEngine.Types.TraceEvents.KnownEventName.TimerInstall;
     });
-    assertNotNullOrUndefined(timerInstall);
+    assert.exists(timerInstall);
 
     // Find the initatorData objects starting at the TimerInstall
     // call. We expect to find one initatorData here:
@@ -107,11 +105,11 @@ describe('Initiators', () => {
        const timerInstall = traceData.Renderer.allTraceEntries.find(entry => {
          return entry.name === TraceEngine.Types.TraceEvents.KnownEventName.TimerInstall;
        });
-       assertNotNullOrUndefined(timerInstall);
+       assert.exists(timerInstall);
        // Get the parent of InstallTimer to add to the modified events array.
        // When we add TimerInstall to hidden entries list, it will be the closest modified parent and the initiator should point to it.
        const timerInstallParent = traceData.Renderer.entryToNode.get(timerInstall)?.parent;
-       assertNotNullOrUndefined(timerInstallParent);
+       assert.exists(timerInstallParent);
 
        // Find the initatorData objects starting at the TimerInstall
        // call. We expect to find one initatorData here:
@@ -127,7 +125,6 @@ describe('Initiators', () => {
          // Ensure the modified entry is marked as hidden
          assert.strictEqual(initiatorData.isInitiatorHidden, true);
        }
-
      });
 
   it('will return the closest modified ancestor as an initiated event in a pair if the event itself is hidden',
@@ -139,7 +136,7 @@ describe('Initiators', () => {
        const fibonacciCall = traceData.Renderer.allTraceEntries.find(entry => {
          return TraceEngine.Types.TraceEvents.isProfileCall(entry) && entry.callFrame.functionName === 'fibonacci';
        });
-       assertNotNullOrUndefined(fibonacciCall);
+       assert.exists(fibonacciCall);
 
        // Find the initatorData objects but starting at the fibonacci()
        // call. We expect to find two initiatorData objects here:

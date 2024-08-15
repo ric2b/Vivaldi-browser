@@ -237,7 +237,7 @@ ResultOrError<Ref<Texture>> Texture::CreateFromSharedTextureMemory(
     Ref<Texture> texture = AcquireRef(new Texture(device, descriptor));
     DAWN_TRY(texture->InitializeAsExternalTexture(memory->GetD3DResource(), memory->GetKeyedMutex(),
                                                   {}, false));
-    texture->mSharedTextureMemoryContents = memory->GetContents();
+    texture->mSharedResourceMemoryContents = memory->GetContents();
     return texture;
 }
 
@@ -438,11 +438,11 @@ MaybeError Texture::SynchronizeTextureBeforeUse(CommandRecordingContext* command
     // Perform the wait only on the first call.
     std::vector<FenceAndSignalValue> waitFences = std::move(mWaitFences);
 
-    if (SharedTextureMemoryContents* contents = GetSharedTextureMemoryContents()) {
+    if (SharedResourceMemoryContents* contents = GetSharedResourceMemoryContents()) {
         SharedTextureMemoryBase::PendingFenceList fences;
         contents->AcquirePendingFences(&fences);
-        waitFences.insert(waitFences.end(), std::make_move_iterator(fences->begin()),
-                          std::make_move_iterator(fences->end()));
+        waitFences.insert(waitFences.end(), std::make_move_iterator(fences.begin()),
+                          std::make_move_iterator(fences.end()));
         contents->SetLastUsageSerial(queue->GetPendingCommandSerial());
     }
 
@@ -475,6 +475,10 @@ void Texture::NotifySwapChainPresentToPIX() {
             d3dSharingContract->Present(mResourceAllocation.GetD3D12Resource(), 0, 0);
         }
     }
+}
+
+void Texture::SetIsSwapchainTexture(bool isSwapChainTexture) {
+    mSwapChainTexture = isSwapChainTexture;
 }
 
 void Texture::TrackUsageAndTransitionNow(CommandRecordingContext* commandContext,
@@ -577,7 +581,7 @@ void Texture::TransitionSubresourceRange(std::vector<D3D12_RESOURCE_BARRIER>* ba
         }
     }
 
-    if (mSharedTextureMemoryContents) {
+    if (mSharedResourceMemoryContents) {
         // SharedTextureMemory supports concurrent reads of the underlying D3D12
         // texture via multiple TextureD3D12 instances created from a single
         // SharedTextureMemory instance. Concurrent read access requires that the
@@ -585,8 +589,8 @@ void Texture::TransitionSubresourceRange(std::vector<D3D12_RESOURCE_BARRIER>* ba
         // state at all times that read accesses are happening; otherwise, the
         // texture can enter a state where it could be modified by one read access
         // (e.g., to be compressed or decrompessed) while being read by another.
-        bool inReadAccess = HasAccess() && IsReadOnly();
-        DAWN_ASSERT(state->isValidToDecay || !inReadAccess);
+        DAWN_ASSERT(state->isValidToDecay || mSharedResourceMemoryContents->HasWriteAccess() ||
+                    mSharedResourceMemoryContents->HasExclusiveReadAccess());
     }
 
     D3D12_RESOURCE_BARRIER barrier;
@@ -952,11 +956,11 @@ bool Texture::StateAndDecay::operator==(const Texture::StateAndDecay& other) con
 
 // static
 Ref<TextureView> TextureView::Create(TextureBase* texture,
-                                     const TextureViewDescriptor* descriptor) {
+                                     const UnpackedPtr<TextureViewDescriptor>& descriptor) {
     return AcquireRef(new TextureView(texture, descriptor));
 }
 
-TextureView::TextureView(TextureBase* texture, const TextureViewDescriptor* descriptor)
+TextureView::TextureView(TextureBase* texture, const UnpackedPtr<TextureViewDescriptor>& descriptor)
     : TextureViewBase(texture, descriptor) {
     mSrvDesc.Format = d3d::DXGITextureFormat(descriptor->format);
     mSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;

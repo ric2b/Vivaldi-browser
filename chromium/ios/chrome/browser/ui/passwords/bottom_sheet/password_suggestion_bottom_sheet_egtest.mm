@@ -110,9 +110,6 @@ void CheckPasswordDetailsVisitMetricCount(int count) {
   net::test_server::RegisterDefaultHandlers(self.testServer);
   GREYAssertTrue(self.testServer->Start(), @"Server did not start.");
 
-  // Prefs aren't reset between tests, crbug.com/1069086. Most tests don't care
-  // about the account storage notice, so suppress it by marking it as shown.
-  [PasswordManagerAppInterface setAccountStorageNoticeShown:YES];
   // Also reset the dismiss count pref to 0 to make sure the bottom sheet is
   // enabled by default.
   [PasswordSuggestionBottomSheetAppInterface setDismissCount:0];
@@ -123,7 +120,8 @@ void CheckPasswordDetailsVisitMetricCount(int count) {
 }
 
 - (void)tearDown {
-  [PasswordManagerAppInterface clearCredentials];
+  GREYAssertTrue([PasswordManagerAppInterface clearCredentials],
+                 @"Clearing credentials wasn't done.");
   [PasswordSettingsAppInterface removeMockReauthenticationModule];
   [PasswordSuggestionBottomSheetAppInterface removeMockReauthenticationModule];
 
@@ -787,7 +785,7 @@ id<GREYMatcher> OpenKeyboardButton() {
   GREYWaitForAppToIdle(@"App failed to idle");
 }
 
-// TODO(crbug.com/1474949): Fix flaky test & re-enable.
+// TODO(crbug.com/40279461): Fix flaky test & re-enable.
 - (void)DISABLED_testOpenPasswordBottomSheetExpand {
   [SigninEarlGrey signinWithFakeIdentity:[FakeSystemIdentity fakeIdentity1]];
   NSURL* URL = net::NSURLWithGURL(
@@ -892,7 +890,7 @@ id<GREYMatcher> OpenKeyboardButton() {
   GREYAssert(WaitForKeyboardToAppear(), @"Keyboard didn't appear.");
 }
 
-// TODO(crbug.com/1474949): Fix flaky test & re-enable.
+// TODO(crbug.com/40279461): Fix flaky test & re-enable.
 - (void)DISABLED_testOpenPasswordBottomSheetNoUsername {
   [PasswordSuggestionBottomSheetAppInterface setUpMockReauthenticationModule];
   [PasswordSuggestionBottomSheetAppInterface

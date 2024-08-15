@@ -11,6 +11,7 @@ import '//resources/polymer/v3_0/iron-location/iron-location.js';
 import {ColorChangeUpdater, COLORS_CSS_SELECTOR} from '//resources/cr_components/color_change_listener/colors_css_updater.js';
 import type {CrMenuSelector} from '//resources/cr_elements/cr_menu_selector/cr_menu_selector.js';
 import {assert} from '//resources/js/assert.js';
+import {CrRouter} from '//resources/js/cr_router.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './app.html.js';
@@ -94,14 +95,9 @@ export class WebuiGalleryAppElement extends PolymerElement {
               src: 'nav_menu/nav_menu_demo.js',
             },
             {
-              name: 'Progress indicators, Polymer',
-              path: 'progress-polymer',
-              src: 'progress_indicators/progress_indicator_polymer_demo.js',
-            },
-            {
-              name: 'Progress indicators, non-Polymer',
-              path: 'progress-nonpolymer',
-              src: 'progress_indicators/progress_indicator_native_demo.js',
+              name: 'Progress indicators',
+              path: 'progress',
+              src: 'progress_indicators/progress_indicator_demo.js',
             },
             {
               name: 'Radio buttons and groups',
@@ -154,6 +150,11 @@ export class WebuiGalleryAppElement extends PolymerElement {
               src: 'cr_toolbar/cr_toolbar_demo.js',
             },
             {
+              name: 'Tooltip',
+              path: 'tooltip',
+              src: 'cr_tooltip/cr_tooltip_demo.js',
+            },
+            {
               name: 'Tree, non-Polymer',
               path: 'tree',
               src: 'cr_tree/cr_tree_demo.js',
@@ -166,11 +167,6 @@ export class WebuiGalleryAppElement extends PolymerElement {
           ];
         },
       },
-
-      path_: {
-        type: String,
-        observer: 'onPathChanged_',
-      },
     };
   }
 
@@ -180,10 +176,20 @@ export class WebuiGalleryAppElement extends PolymerElement {
   override ready() {
     super.ready();
     ColorChangeUpdater.forDocument().start();
+    const router = CrRouter.getInstance();
+    this.onPathChanged_(router.getPath());
+    router.addEventListener(
+        'cr-router-path-changed',
+        (e: Event) => this.onPathChanged_((e as CustomEvent<string>).detail));
   }
 
-  private async onPathChanged_() {
-    const path = this.path_.substring(1);
+  private onMenuItemSelect_(e: CustomEvent<{item: HTMLAnchorElement}>): void {
+    const newUrl = new URL(e.detail.item.href);
+    CrRouter.getInstance().setPath(newUrl.pathname);
+  }
+
+  private async onPathChanged_(newPath: string) {
+    const path = newPath.substring(1);
     const demoIndex =
         path === '' ? 0 : this.demos_.findIndex(demo => demo.path === path);
     assert(demoIndex !== -1);

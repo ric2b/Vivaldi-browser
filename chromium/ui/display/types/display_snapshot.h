@@ -34,7 +34,7 @@ class DISPLAY_TYPES_EXPORT DisplaySnapshot {
 
   struct ColorInfo {
     // The color space of the display.
-    // TODO(https://crbug.com/1505062): This should be derived from other
+    // TODO(crbug.com/40945652): This should be derived from other
     // members.
     gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
 
@@ -145,8 +145,6 @@ class DISPLAY_TYPES_EXPORT DisplaySnapshot {
   const DrmFormatsAndModifiers& GetDRMFormatsAndModifiers() const {
     return drm_formats_and_modifiers_;
   }
-
-  void add_mode(const DisplayMode* mode) { modes_.push_back(mode->Clone()); }
 
   // Clones display state.
   std::unique_ptr<DisplaySnapshot> Clone() const;

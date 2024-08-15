@@ -2502,7 +2502,7 @@ TEST_F(RenderTextTest, MultilineElideWrap) {
   }
 }
 
-// TODO(crbug.com/866720): The current implementation of eliding is not aware
+// TODO(crbug.com/40586307): The current implementation of eliding is not aware
 // of text styles. The elide text algorithm doesn't take into account the style
 // properties when eliding the text. This lead to incorrect text size when the
 // styles are applied.
@@ -2564,7 +2564,7 @@ TEST_F(RenderTextTest, MultilineElideWrapStress) {
   }
 }
 
-// TODO(crbug.com/866720): The current implementation of eliding is not aware
+// TODO(crbug.com/40586307): The current implementation of eliding is not aware
 // of text styles. The elide text algorithm doesn't take into account the style
 // properties when eliding the text. This lead to incorrect text size when the
 // styles are applied.
@@ -4735,7 +4735,7 @@ TEST_F(RenderTextTest, MoveLeftRightByWordInThaiText) {
   EXPECT_EQ(0U, render_text->cursor_position());
 }
 
-// TODO(crbug.com/865527): Chinese and Japanese tokenization doesn't work on
+// TODO(crbug.com/40585744): Chinese and Japanese tokenization doesn't work on
 // mobile.
 #if !BUILDFLAG(IS_ANDROID)
 TEST_F(RenderTextTest, MoveLeftRightByWordInChineseText) {
@@ -6893,7 +6893,7 @@ TEST_F(RenderTextTest, HarfBuzz_BreakRunsByEmojiVariationSelectors) {
   EXPECT_EQ(gfx::Range(1, 1), render_text->selection());
   EXPECT_EQ(1 * kGlyphWidth, render_text->GetUpdatedCursorBounds().x());
 
-  // TODO(865709): make this work on Android.
+  // TODO(crbug.com/40585824): make this work on Android.
 #if !BUILDFLAG(IS_ANDROID)
   // Jump over the telephone: two codepoints, but a single glyph.
   render_text->MoveCursor(CHARACTER_BREAK, CURSOR_RIGHT, SELECTION_NONE);
@@ -7134,7 +7134,7 @@ TEST_F(RenderTextTest, StringFitsOwnWidth) {
   EXPECT_EQ(kString, render_text->GetDisplayText());
 }
 
-// TODO(865715): Figure out why this fails on Android.
+// TODO(crbug.com/40585825): Figure out why this fails on Android.
 #if !BUILDFLAG(IS_ANDROID)
 // Ensure that RenderText examines all of the fonts in its FontList before
 // falling back to other fonts.
@@ -7796,7 +7796,7 @@ TEST_F(RenderTextTest, GetWordLookupDataAtPoint_LTR) {
   // Set an integer glyph width; GetCursorBounds() and
   // GetWordLookupDataAtPoint() use different rounding internally.
   //
-  // TODO(crbug.com/1111044): this shouldn't be necessary once RenderText keeps
+  // TODO(crbug.com/40142424): this shouldn't be necessary once RenderText keeps
   // float precision through GetCursorBounds().
   SetGlyphWidth(5);
   const std::u16string ltr = u"  ab  c ";
@@ -7881,7 +7881,7 @@ TEST_F(RenderTextTest, GetWordLookupDataAtPoint_RTL) {
   // Set an integer glyph width; GetCursorBounds() and
   // GetWordLookupDataAtPoint() use different rounding internally.
   //
-  // TODO(crbug.com/1111044): this shouldn't be necessary once RenderText keeps
+  // TODO(crbug.com/40142424): this shouldn't be necessary once RenderText keeps
   // float precision through GetCursorBounds().
   SetGlyphWidth(5);
   const std::u16string rtl = u" \u0634\u0632  \u0634";
@@ -8748,7 +8748,8 @@ TEST_F(RenderTextTest, GetLookupDataForRange_Obscured) {
     // VerifyDecoratedWordsAreEqual, that we use to validate the expected
     // attributes, iterates over all codepoints instead of the graphemes.
     //
-    // TODO(1498166): Remove the last two ranged attributes once this is fixed.
+    // TODO(crbug.com/40287345): Remove the last two ranged attributes once this
+    // is fixed.
     expected_word_2.text = u"\U0001F44D\uFE0F";
     expected_word_2.attributes.push_back(CreateRangedAttribute(
         font_spans, 0, kWordRange2.start(), Font::Weight::NORMAL, STRIKE_MASK));

@@ -5,33 +5,43 @@
 #include "chrome/browser/ash/login/app_mode/kiosk_launch_controller.h"
 
 #include <memory>
+#include <optional>
+#include <string>
+#include <utility>
 #include <variant>
 
 #include "ash/accelerators/accelerator_controller_impl.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_accelerators.h"
 #include "ash/shell.h"
+#include "base/auto_reset.h"
 #include "base/check.h"
 #include "base/check_deref.h"
 #include "base/check_is_test.h"
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/syslog_logging.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/app_mode/app_launch_utils.h"
-#include "chrome/browser/ash/app_mode/arc/arc_kiosk_app_manager.h"
 #include "chrome/browser/ash/app_mode/arc/arc_kiosk_app_service.h"
 #include "chrome/browser/ash/app_mode/kiosk_app.h"
+#include "chrome/browser/ash/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_launcher.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_types.h"
 #include "chrome/browser/ash/app_mode/kiosk_chrome_app_manager.h"
+#include "chrome/browser/ash/app_mode/kiosk_controller.h"
 #include "chrome/browser/ash/app_mode/kiosk_profile_loader.h"
 #include "chrome/browser/ash/app_mode/lacros_launcher.h"
 #include "chrome/browser/ash/app_mode/startup_app_launcher.h"
@@ -47,7 +57,6 @@
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/ui/webui_login_view.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
-#include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -55,7 +64,12 @@
 #include "chrome/browser/ui/webui/ash/login/app_launch_splash_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/encryption_migration_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/oobe_ui.h"
+#include "chromeos/ash/components/install_attributes/install_attributes.h"
+#include "chromeos/ash/components/network/network_handler.h"
+#include "chromeos/ash/components/network/network_state.h"
 #include "components/crash/core/common/crash_key.h"
+#include "components/session_manager/core/session_manager.h"
+#include "components/session_manager/session_manager_types.h"
 #include "ui/gfx/image/image_skia.h"
 #include "url/gurl.h"
 
@@ -65,6 +79,7 @@ namespace {
 // Whether we should skip the wait for minimum screen show time.
 bool g_skip_splash_wait_for_testing = false;
 bool g_block_app_launch_for_testing = false;
+bool g_block_system_session_creation_for_testing = false;
 // Whether we should prevent Kiosk launcher from exiting when launch fails.
 bool g_block_exit_on_failure_for_testing = false;
 
@@ -78,15 +93,11 @@ enum KioskLaunchType {
   KIOSK_LAUNCH_TYPE_COUNT  // This must be the last entry.
 };
 
-bool IsDeviceEnterpriseManaged() {
-  return g_browser_process->platform_part()
-      ->browser_policy_connector_ash()
-      ->IsDeviceEnterpriseManaged();
-}
-
 void RecordKioskLaunchUMA(bool is_auto_launch) {
+  bool is_enterprise_managed =
+      ash::InstallAttributes::Get()->IsEnterpriseManaged();
   const KioskLaunchType launch_type =
-      IsDeviceEnterpriseManaged()
+      is_enterprise_managed
           ? (is_auto_launch ? KIOSK_LAUNCH_ENTERPRISE_AUTO_LAUNCH
                             : KIOKS_LAUNCH_ENTERPRISE_MANUAL_LAUNCH)
           : (is_auto_launch ? KIOSK_LAUNCH_CONSUMER_AUTO_LAUNCH
@@ -95,7 +106,7 @@ void RecordKioskLaunchUMA(bool is_auto_launch) {
   UMA_HISTOGRAM_ENUMERATION("Kiosk.LaunchType", launch_type,
                             KIOSK_LAUNCH_TYPE_COUNT);
 
-  if (IsDeviceEnterpriseManaged()) {
+  if (is_enterprise_managed) {
     enterprise_user_session_metrics::RecordSignInEvent(
         is_auto_launch
             ? enterprise_user_session_metrics::SignInEventType::AUTOMATIC_KIOSK
@@ -290,6 +301,8 @@ std::string ToString(KioskAppLaunchError::Error error) {
     CASE(kExtensionsLoadTimeout);
     CASE(kExtensionsPolicyInvalid);
     CASE(kUserNotAllowlisted);
+    CASE(kLacrosDataMigrationStarted);
+    CASE(kLacrosBackwardDataMigrationStarted);
   }
   NOTREACHED_NORETURN();
 #undef CASE
@@ -339,18 +352,28 @@ class KioskLaunchController::ScopedAcceleratorDisabler {
   raw_ref<AcceleratorController> controller_;
 };
 
-KioskLaunchController::KioskLaunchController(OobeUI* oobe_ui)
-    : KioskLaunchController(LoginDisplayHost::default_host(),
-                            oobe_ui->GetView<AppLaunchSplashScreenHandler>(),
-                            base::BindOnce(&LoadProfile),
-                            base::BindRepeating(&BuildKioskAppLauncher),
-                            std::make_unique<DefaultNetworkMonitor>(),
-                            std::make_unique<DefaultAcceleratorController>()) {}
+KioskLaunchController::KioskLaunchController(
+    LoginDisplayHost* host,
+    OobeUI* oobe_ui,
+    LaunchCompleteCallback done_callback)
+    : KioskLaunchController(
+          host,
+          oobe_ui->GetView<AppLaunchSplashScreenHandler>(),
+          /*profile_loader=*/base::BindOnce(&LoadProfile),
+          /*done_callback=*/std::move(done_callback),
+          /*attempt_relaunch=*/base::BindOnce(chrome::AttemptRelaunch),
+          /*attempt_logout=*/base::BindOnce(chrome::AttemptUserExit),
+          /*app_launcher_factory=*/base::BindRepeating(&BuildKioskAppLauncher),
+          std::make_unique<DefaultNetworkMonitor>(),
+          std::make_unique<DefaultAcceleratorController>()) {}
 
 KioskLaunchController::KioskLaunchController(
     LoginDisplayHost* host,
     AppLaunchSplashScreenView* splash_screen,
     LoadProfileCallback profile_loader,
+    LaunchCompleteCallback done_callback,
+    base::OnceClosure attempt_relaunch,
+    base::OnceClosure attempt_logout,
     KioskAppLauncherFactory app_launcher_factory,
     std::unique_ptr<NetworkUiController::NetworkMonitor> network_monitor,
     std::unique_ptr<AcceleratorController> accelerator_controller)
@@ -362,6 +385,9 @@ KioskLaunchController::KioskLaunchController(
           host_,
           CHECK_DEREF(splash_screen_view_.get()),
           std::move(network_monitor))),
+      done_callback_(std::move(done_callback)),
+      attempt_logout_(std::move(attempt_logout)),
+      attempt_relaunch_(std::move(attempt_relaunch)),
       profile_loader_(std::move(profile_loader)),
       accelerator_controller_(std::move(accelerator_controller)) {
   if (!host_) {
@@ -465,6 +491,7 @@ void KioskLaunchController::StartAppLaunch(Profile& profile) {
           user.GetAccountId(), user.username_hash(),
           crosapi::browser_util::PolicyInitState::kAfterInit)) {
     LOG(WARNING) << "Restarting chrome to run profile migration.";
+    OnLaunchFailed(KioskAppLaunchError::Error::kLacrosDataMigrationStarted);
     return;
   }
 
@@ -472,6 +499,8 @@ void KioskLaunchController::StartAppLaunch(Profile& profile) {
           user.GetAccountId(), user.username_hash(),
           crosapi::browser_util::PolicyInitState::kAfterInit)) {
     LOG(WARNING) << "Restarting chrome to run backward profile migration.";
+    OnLaunchFailed(
+        KioskAppLaunchError::Error::kLacrosBackwardDataMigrationStarted);
     return;
   }
 
@@ -537,9 +566,7 @@ void KioskLaunchController::OnCancelAppLaunch() {
 
   SYSLOG(INFO) << "Canceling kiosk app launch.";
 
-  KioskAppLaunchError::Save(KioskAppLaunchError::Error::kUserCancel);
-  CleanUp();
-  chrome::AttemptUserExit();
+  OnLaunchFailed(KioskAppLaunchError::Error::kUserCancel);
 }
 
 AppLaunchSplashScreenView::Data
@@ -573,6 +600,7 @@ void KioskLaunchController::CleanUp() {
 
   if (host_) {
     host_->Finalize(base::OnceClosure());
+    host_ = nullptr;
   } else {
     CHECK_IS_TEST();
   }
@@ -586,7 +614,7 @@ void KioskLaunchController::CleanUp() {
 
 void KioskLaunchController::OnTimerFire() {
   if (app_state_ == AppState::kLaunched) {
-    CloseSplashScreen();
+    FinishLaunchWithSuccess();
   } else if (app_state_ == AppState::kInstalled) {
     LaunchApp();
   }
@@ -650,7 +678,16 @@ void KioskLaunchController::OnLaunchFailed(KioskAppLaunchError::Error error) {
       error == KioskAppLaunchError::Error::kAlreadyMounted) {
     // Do not save the error because saved errors would stop app from launching
     // on the next run.
-    chrome::AttemptRelaunch();
+    std::move(attempt_relaunch_).Run();
+    FinishLaunchWithError(error);
+    return;
+  }
+
+  if (error == KioskAppLaunchError::Error::kLacrosDataMigrationStarted ||
+      error ==
+          KioskAppLaunchError::Error::kLacrosBackwardDataMigrationStarted) {
+    // The Lacros migration code handles the chrome restart, so nothing to do.
+    FinishLaunchWithError(error);
     return;
   }
 
@@ -663,8 +700,8 @@ void KioskLaunchController::OnLaunchFailed(KioskAppLaunchError::Error error) {
 
   // Saves the error and ends the session to go back to login screen.
   KioskAppLaunchError::Save(error);
-  CleanUp();
-  chrome::AttemptUserExit();
+  std::move(attempt_logout_).Run();
+  FinishLaunchWithError(error);
 }
 
 void KioskLaunchController::FinishForcedExtensionsInstall(
@@ -712,15 +749,20 @@ void KioskLaunchController::OnAppWindowCreated(
     const std::optional<std::string>& app_name) {
   SYSLOG(INFO) << "App window created, closing splash screen.";
 
-  SetKioskLaunchStateCrashKey(KioskLaunchState::kAppWindowCreated);
+  // Not receiving the `OnAppLaunched` event before we come here leads to bugs
+  // like b/335158496.
+  DUMP_WILL_BE_CHECK_EQ(app_state_, AppState::kLaunched);
 
-  CreateKioskSystemSession(kiosk_app_id_, profile_, app_name);
+  SetKioskLaunchStateCrashKey(KioskLaunchState::kAppWindowCreated);
+  if (!g_block_system_session_creation_for_testing) {
+    CreateKioskSystemSession(kiosk_app_id_, profile_, app_name);
+  }
   // If timer is running, do not remove splash screen for a few
   // more seconds to give the user ability to exit kiosk session.
   if (splash_wait_timer_.IsRunning()) {
     return;
   }
-  CloseSplashScreen();
+  FinishLaunchWithSuccess();
 }
 
 void KioskLaunchController::OnAppDataUpdated() {
@@ -818,6 +860,17 @@ void KioskLaunchController::LaunchApp() {
   app_launcher_->LaunchApp();
 }
 
+void KioskLaunchController::FinishLaunchWithSuccess() {
+  CloseSplashScreen();
+  std::move(done_callback_).Run(std::nullopt);
+}
+
+void KioskLaunchController::FinishLaunchWithError(
+    KioskAppLaunchError::Error error) {
+  CloseSplashScreen();
+  std::move(done_callback_).Run(error);
+}
+
 NetworkUiController* KioskLaunchController::GetNetworkUiControllerForTesting() {
   return network_ui_controller_.get();
 }
@@ -830,6 +883,13 @@ base::AutoReset<bool> KioskLaunchController::SkipSplashScreenWaitForTesting() {
 // static
 base::AutoReset<bool> KioskLaunchController::BlockAppLaunchForTesting() {
   return base::AutoReset<bool>(&g_block_app_launch_for_testing, true);
+}
+
+// static
+base::AutoReset<bool>
+KioskLaunchController::BlockSystemSessionCreationForTesting() {
+  return base::AutoReset<bool>(&g_block_system_session_creation_for_testing,
+                               true);
 }
 
 // static

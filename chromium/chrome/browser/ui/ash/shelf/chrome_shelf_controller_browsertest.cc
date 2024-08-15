@@ -320,7 +320,7 @@ class ShelfPlatformAppBrowserTest : public extensions::PlatformAppBrowserTest {
 class ShelfAppBrowserTest : public extensions::ExtensionBrowserTest {
  protected:
   ShelfAppBrowserTest() {
-    // TODO(crbug.com/1258445): Update expectations to support Lacros.
+    // TODO(crbug.com/40201067): Update expectations to support Lacros.
     scoped_feature_list_.InitWithFeatures(
         /*enabled_features=*/{},
         /*disabled_features=*/ash::standalone_browser::GetFeatureRefs());
@@ -468,8 +468,8 @@ class ShelfWebAppBrowserTest : public ShelfAppBrowserTest {
   }
 
   webapps::AppId InstallWebApp(const GURL& start_url) {
-    auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
-    web_app_info->start_url = start_url;
+    auto web_app_info =
+        web_app::WebAppInstallInfo::CreateWithStartUrlForTesting(start_url);
     web_app_info->scope = start_url.GetWithoutFilename();
     return web_app::test::InstallWebApp(browser()->profile(),
                                         std::move(web_app_info));
@@ -765,7 +765,8 @@ IN_PROC_BROWSER_TEST_F(ShelfPlatformAppBrowserTest, MultipleApps) {
 
 // Confirm that app windows can be reactivated by clicking their icons and that
 // the correct activation order is maintained.
-IN_PROC_BROWSER_TEST_F(ShelfPlatformAppBrowserTest, WindowActivation) {
+// TODO(crbug.com/331536126): This test is flaky.
+IN_PROC_BROWSER_TEST_F(ShelfPlatformAppBrowserTest, DISABLED_WindowActivation) {
   int item_count = shelf_model()->item_count();
 
   // First run app.
@@ -1721,7 +1722,9 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, AltNumberTabsTabbing) {
 
 // Check that the keyboard activation of a shelf item tabs properly through
 // the items at hand.
-IN_PROC_BROWSER_TEST_F(ShelfPlatformAppBrowserTest, AltNumberAppsTabbing) {
+// TODO(crbug.com/331536126): This test is flaky.
+IN_PROC_BROWSER_TEST_F(ShelfPlatformAppBrowserTest,
+                       DISABLED_AltNumberAppsTabbing) {
   // First run app.
   const Extension* extension1 = LoadAndLaunchPlatformApp("launch", "Launched");
   ui::BaseWindow* window1 =
@@ -2436,9 +2439,8 @@ IN_PROC_BROWSER_TEST_F(ShelfWebAppBrowserTest, WindowedHostedAndWebApps) {
                             extensions::LAUNCH_TYPE_WINDOW);
   WebAppProvider* provider = WebAppProvider::GetForTest(browser()->profile());
   DCHECK(provider);
-  provider->sync_bridge_unsafe().SetAppUserDisplayMode(
-      web_app_id, web_app::mojom::UserDisplayMode::kStandalone,
-      /*is_user_action=*/false);
+  provider->sync_bridge_unsafe().SetAppUserDisplayModeForTesting(
+      web_app_id, web_app::mojom::UserDisplayMode::kStandalone);
 
   // The apps should be closed.
   EXPECT_EQ(ash::STATUS_CLOSED,
@@ -2566,8 +2568,8 @@ IN_PROC_BROWSER_TEST_F(ShelfWebAppBrowserTest, WebAppPolicy) {
 IN_PROC_BROWSER_TEST_F(ShelfWebAppBrowserTest, WebAppPolicyUpdate) {
   // Install web app.
   GURL app_url = GURL("https://example.org/");
-  auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
-  web_app_info->start_url = app_url;
+  auto web_app_info =
+      web_app::WebAppInstallInfo::CreateWithStartUrlForTesting(app_url);
   web_app_info->scope = app_url;
   web_app_info->title = u"Example";
   webapps::AppId app_id =
@@ -3113,8 +3115,8 @@ class AppServiceShortcutShelfBrowserTest : public ShelfAppBrowserTest {
   std::string CreateWebApp(const GURL& app_url,
                            const std::u16string& app_name) {
     // Create web app.
-    auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
-    web_app_info->start_url = app_url;
+    auto web_app_info =
+        web_app::WebAppInstallInfo::CreateWithStartUrlForTesting(app_url);
     web_app_info->title = app_name;
     web_app_info->scope = app_url;
     auto web_app_id = web_app::test::InstallWebApp(

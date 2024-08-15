@@ -18,7 +18,7 @@ using testing::_;
 TEST(SocketIntegrationTest, ResolvesLocalEndpoint_IPv4) {
   const uint8_t kIpV4AddrAny[4] = {};
   FakeClock clock(Clock::now());
-  FakeTaskRunner task_runner(&clock);
+  FakeTaskRunner task_runner(clock);
   testing::StrictMock<FakeUdpSocket::MockClient> client;
   ErrorOr<std::unique_ptr<UdpSocket>> create_result = UdpSocket::Create(
       task_runner, &client, IPEndpoint{IPAddress(kIpV4AddrAny), 0});
@@ -36,7 +36,7 @@ TEST(SocketIntegrationTest, ResolvesLocalEndpoint_IPv4) {
 TEST(SocketIntegrationTest, ResolvesLocalEndpoint_IPv6) {
   const uint16_t kIpV6AddrAny[8] = {};
   FakeClock clock(Clock::now());
-  FakeTaskRunner task_runner(&clock);
+  FakeTaskRunner task_runner(clock);
   testing::StrictMock<FakeUdpSocket::MockClient> client;
   ErrorOr<std::unique_ptr<UdpSocket>> create_result = UdpSocket::Create(
       task_runner, &client, IPEndpoint{IPAddress(kIpV6AddrAny), 0});

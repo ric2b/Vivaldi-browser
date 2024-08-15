@@ -131,7 +131,7 @@ void NigoriModelTypeProcessor::OnUpdateReceived(
     return;
   }
 
-  // TODO(crbug.com/1356900): validate incoming updates, e.g. |gc_directive|
+  // TODO(crbug.com/40860698): validate incoming updates, e.g. |gc_directive|
   // must be empty for Nigori.
   std::optional<ModelError> error;
 
@@ -320,8 +320,6 @@ void NigoriModelTypeProcessor::ModelReadyToSync(
   if (model_error_) {
     return;
   }
-
-  MigrateLegacyInitialSyncDone(nigori_metadata.model_type_state, NIGORI);
 
   if (IsInitialSyncDone(
           nigori_metadata.model_type_state.initial_sync_state()) &&

@@ -35,11 +35,11 @@ class WindowsSDKApi(recipe_api.RecipeApi):
 
     Args:
       * path (path): Path to a directory where to install the SDK
-        (default is '[CACHE]/windows_sdk')
+        (default is api.path.cache_dir / 'windows_sdk')
       * version (str): CIPD version of the SDK
         (default is set via $infra/windows_sdk.version property)
       * enabled (bool): Whether the SDK should be used or not.
-      * target_arch (str): 'x86' or 'x64'.
+      * target_arch (str): 'x86', 'x64', or 'arm64'
 
     Yields:
       If enabled, yields SDKPaths object with paths to well-known roots within
@@ -53,13 +53,13 @@ class WindowsSDKApi(recipe_api.RecipeApi):
     """
     if enabled:
       sdk_dir = self._ensure_sdk(
-          path or self.m.path['cache'].join('windows_sdk'),
+          path or self.m.path.cache_dir / 'windows_sdk',
           version or self._sdk_properties['version'])
       try:
         with self.m.context(**self._sdk_env(sdk_dir, target_arch)):
           yield WindowsSDKApi.SDKPaths(
-              sdk_dir.join('win_sdk'),
-              sdk_dir.join('DIA SDK'))
+              sdk_dir / 'win_sdk',
+              sdk_dir / 'DIA SDK')
       finally:
         # cl.exe automatically starts background mspdbsrv.exe daemon which
         # needs to be manually stopped so Swarming can tidy up after itself.
@@ -94,7 +94,7 @@ class WindowsSDKApi(recipe_api.RecipeApi):
 
     Args:
       * sdk_dir (path): Path to a directory containing the SDK.
-      * target_arch (str): 'x86' or 'x64'
+      * target_arch (str): 'x86', 'x64', or 'arm64'
     """
     env = {}
     env_prefixes = {}
@@ -123,7 +123,7 @@ class WindowsSDKApi(recipe_api.RecipeApi):
       #  "INCLUDE": [["..","..","win_sdk","Include","10.0.17134.0","um"], and
       # recipes' Path() does not like .., ., \, or /, so this is cumbersome.
       # What we want to do is:
-      #   [sdk_bin_dir.join(*e) for e in env[k]]
+      #   [sdk_bin_dir.joinpath(*e) for e in env[k]]
       # Instead do that badly, and rely (but verify) on the fact that the paths
       # are all specified relative to the root, but specified relative to
       # win_sdk/bin (i.e. everything starts with "../../".)
@@ -134,9 +134,9 @@ class WindowsSDKApi(recipe_api.RecipeApi):
       results = []
       for value in data[key]:
         if value[0] == '..' and (value[1] == '..' or value[1] == '..\\'):
-          results.append('%s' % sdk_dir.join(*value[2:]))
+          results.append('%s' % sdk_dir.joinpath(*value[2:]))
         else:
-          results.append('%s' % sdk_dir.join(*value))
+          results.append('%s' % sdk_dir.joinpath(*value))
 
       # PATH is special-cased because we don't want to overwrite other things
       # like C:\Windows\System32. Others are replacements because prepending

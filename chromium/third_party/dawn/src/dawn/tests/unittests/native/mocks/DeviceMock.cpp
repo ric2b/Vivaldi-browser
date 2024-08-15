@@ -104,8 +104,8 @@ DeviceMock::DeviceMock() {
         }));
     ON_CALL(*this, CreateTextureViewImpl)
         .WillByDefault(WithArgs<0, 1>(
-            [](TextureBase* texture,
-               const TextureViewDescriptor* descriptor) -> ResultOrError<Ref<TextureViewBase>> {
+            [](TextureBase* texture, const UnpackedPtr<TextureViewDescriptor>& descriptor)
+                -> ResultOrError<Ref<TextureViewBase>> {
                 return AcquireRef(new NiceMock<TextureViewMock>(texture, descriptor));
             }));
     ON_CALL(*this, CreateUninitializedComputePipelineImpl)
@@ -123,6 +123,7 @@ DeviceMock::DeviceMock() {
     ON_CALL(*this, TickImpl).WillByDefault([]() -> MaybeError { return {}; });
 
     // Initialize the device.
+    GetInstance()->GetEventManager()->TrackEvent(mLostEvent);
     QueueDescriptor desc = {};
     EXPECT_FALSE(Initialize(AcquireRef(new NiceMock<QueueMock>(this, &desc))).IsError());
 }
@@ -131,6 +132,10 @@ DeviceMock::~DeviceMock() = default;
 
 dawn::platform::Platform* DeviceMock::GetPlatform() const {
     return mInstance->GetPlatform();
+}
+
+dawn::native::InstanceBase* DeviceMock::GetInstance() const {
+    return mInstance.Get();
 }
 
 QueueMock* DeviceMock::GetQueueMock() {

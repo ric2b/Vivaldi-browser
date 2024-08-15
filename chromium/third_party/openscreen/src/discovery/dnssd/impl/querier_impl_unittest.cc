@@ -90,12 +90,12 @@ using testing::StrictMock;
 class QuerierImplTesting : public QuerierImpl {
  public:
   QuerierImplTesting()
-      : QuerierImpl(&mock_service_,
+      : QuerierImpl(mock_service_,
                     task_runner_,
-                    &reporting_client_,
-                    &network_config_),
+                    reporting_client_,
+                    network_config_),
         clock_(Clock::now()),
-        task_runner_(&clock_) {}
+        task_runner_(clock_) {}
 
   StrictMock<MockMdnsService>& service() { return mock_service_; }
 

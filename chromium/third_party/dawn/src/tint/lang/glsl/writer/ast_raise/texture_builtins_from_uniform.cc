@@ -74,7 +74,7 @@ struct TextureBuiltinsFromUniform::State {
     ApplyResult Run() {
         auto* cfg = inputs.Get<Config>();
         if (cfg == nullptr) {
-            b.Diagnostics().AddError(diag::System::Transform, Source{})
+            b.Diagnostics().AddError(Source{})
                 << "missing transform data for "
                 << tint::TypeInfo::Of<TextureBuiltinsFromUniform>().name;
             return resolver::Resolve(b);
@@ -334,7 +334,6 @@ struct TextureBuiltinsFromUniform::State {
                     if (TINT_UNLIKELY(!str)) {
                         TINT_ICE()
                             << "existing ubo binding " << cfg->ubo_binding << " is not a struct.";
-                        return ctx.Clone(ubo->name->symbol);
                     }
 
                     for (auto new_member : new_members) {

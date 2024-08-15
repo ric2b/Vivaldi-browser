@@ -852,7 +852,7 @@ VivaldiRenderViewContextMenu::HandleCommand(int command_id, int event_flags) {
       gfx::PointF p = source_web_contents_->GetRenderViewHost()
                           ->GetWidget()
                           ->GetView()
-                          ->TransformRootPointToViewCoordSpace(
+                          ->TransformPointToRootCoordSpaceF(
                               gfx::PointF(params_.x, params_.y));
       source_web_contents_->GetRenderViewHost()->LoadImageAt(
           static_cast<int>(p.x()), static_cast<int>(p.y()));

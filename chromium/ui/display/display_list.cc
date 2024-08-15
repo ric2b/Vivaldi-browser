@@ -133,8 +133,7 @@ void DisplayList::RemoveDisplay(int64_t id) {
   const Display display = *iter;
   displays_.erase(iter);
   for (DisplayObserver& observer : observers_) {
-    observer.OnDisplayRemoved(display);
-    observer.OnDidRemoveDisplays();
+    observer.OnDisplaysRemoved({display});
   }
   DCHECK(IsValid());
 }

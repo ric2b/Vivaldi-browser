@@ -101,6 +101,16 @@ class JavaClass:
   def class_without_prefix(self):
     return self._class_without_prefix if self._class_without_prefix else self
 
+  @property
+  def outer_class_name(self):
+    return self.name.split('$', 1)[0]
+
+  def is_nested(self):
+    return '$' in self.name
+
+  def get_outer_class(self):
+    return JavaClass(f'{self.package_with_slashes}/{self.outer_class_name}')
+
   def is_system_class(self):
     return self._fqn.startswith(('android/', 'java/'))
 
@@ -255,6 +265,11 @@ class JavaParam:
     """Converts to types used over JNI boundary."""
     return JavaParam(self.java_type.to_proxy(), self.name)
 
+  def cpp_name(self):
+    if self.name in ('env', 'jcaller'):
+      return f'_{self.name}'
+    return self.name
+
 
 class JavaParamList(tuple):
   """Represents a parameter list."""
@@ -365,9 +380,7 @@ class TypeResolver:
       if name in (clazz.name, clazz.nested_name):
         return clazz
 
-    # Is it from an import? (e.g. referecing Class from import pkg.Class;
-    # note that referencing an inner class Inner from import pkg.Class.Inner
-    # is not supported).
+    # Is it from an import? (e.g. referencing Class from import pkg.Class).
     for clazz in self.imports:
       if name in (clazz.name, clazz.nested_name):
         return clazz
@@ -402,6 +415,6 @@ OBJECT_CLASS = JavaClass('java/lang/Object')
 STRING_CLASS = JavaClass('java/lang/String')
 _EMPTY_TYPE_RESOLVER = TypeResolver(OBJECT_CLASS)
 CLASS = JavaType(java_class=CLASS_CLASS)
-LONG = JavaType(primitive_name='long')
+INT = JavaType(primitive_name='int')
 VOID = JavaType(primitive_name='void')
 EMPTY_PARAM_LIST = JavaParamList()

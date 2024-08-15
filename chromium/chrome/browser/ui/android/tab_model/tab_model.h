@@ -116,6 +116,8 @@ class TabModel {
     // Used for tab pre-warming where the reason for tab creation is not yet
     // known.
     UNSET,
+    // Used when creating a tab to keep synced tab groups up to date.
+    FROM_SYNC_BACKGROUND,
     // Must be last.
     SIZE
   };
@@ -202,6 +204,17 @@ class TabModel {
 
   // Removes an observer from this TabModel.
   virtual void RemoveObserver(TabModelObserver* observer) = 0;
+
+  // Return the count of non-custom tabs that were created or had a navigation
+  // committed within the time range [`begin_time`, `end_time`).
+  virtual int GetTabCountNavigatedInTimeWindow(
+      const base::Time& begin_time,
+      const base::Time& end_time) const = 0;
+
+  // Closes non-custom tabs that were created or had a navigation
+  // committed within the time range [`begin_time`, `end_time`).
+  virtual void CloseTabsNavigatedInTimeWindow(const base::Time& begin_time,
+                                              const base::Time& end_time) = 0;
 
   chrome::android::ActivityType activity_type() const { return activity_type_; }
 

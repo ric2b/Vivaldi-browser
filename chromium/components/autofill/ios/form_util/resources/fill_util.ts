@@ -77,6 +77,12 @@ declare interface FrameTokenWithPredecessor {
 const elementMap = new Map();
 
 /**
+ * Stores the next available ID for forms and fields. By convention, 0 means
+ * null, so we start at 1 and increment from there.
+ */
+document[gCrWeb.fill.ID_SYMBOL] = 1;
+
+/**
  * Acquires the specified DOM `attribute` from the DOM `element` and returns
  * its lower-case value, or null if not present.
  *
@@ -682,25 +688,14 @@ gCrWeb.fill.isElementInsideFormOrFieldSet = function(
 };
 
 /**
- * @param nextAvailableID Next available integer.
- */
-gCrWeb.fill['setUpForUniqueIDs'] = function(nextAvailableID: number): void {
-  const uniqueID = gCrWeb.fill.ID_SYMBOL;
-  document[uniqueID] = nextAvailableID;
-};
-
-/**
  * @param element Form or form input element.
  */
 gCrWeb.fill.setUniqueIDIfNeeded = function(element: IndexableElement): void {
   try {
     const uniqueID = gCrWeb.fill.ID_SYMBOL;
-    // Do not assign element id value if the base value for the document
-    // is not set.
-    if (typeof document[uniqueID] !== 'undefined' &&
-        typeof element[uniqueID] === 'undefined') {
+    if (typeof element[uniqueID] === 'undefined') {
       element[uniqueID] = document[uniqueID]++;
-      // TODO(crbug.com/1350973): WeakRef starts in 14.5, remove checks once 14
+      // TODO(crbug.com/40856841): WeakRef starts in 14.5, remove checks once 14
       // is deprecated.
       elementMap.set(
           element[uniqueID], window.WeakRef ? new WeakRef(element) : element);
@@ -733,7 +728,7 @@ gCrWeb.fill.getUniqueID = function(element: any): string {
  */
 gCrWeb.fill.getElementByUniqueID = function(id: number): Element | null {
   try {
-    // TODO(crbug.com/1350973): WeakRef starts in 14.5, remove checks once 14 is
+    // TODO(crbug.com/40856841): WeakRef starts in 14.5, remove checks once 14 is
     // deprecated.
     return window.WeakRef ? elementMap.get(id).deref() : elementMap.get(id);
   } catch (e) {

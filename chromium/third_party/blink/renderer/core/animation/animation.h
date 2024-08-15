@@ -57,6 +57,7 @@ namespace blink {
 class AnimationTimeline;
 class Element;
 class PaintArtifactCompositor;
+class StyleChangeReasonForTracing;
 class TreeScope;
 class TimelineRange;
 
@@ -151,6 +152,9 @@ class CORE_EXPORT Animation : public EventTarget,
 
   std::optional<AnimationTimeDelta> UnlimitedCurrentTime() const;
 
+  // https://drafts.csswg.org/web-animations-2/#the-progress-of-an-animation
+  std::optional<double> progress() const;
+
   // https://w3.org/TR/web-animations-1/#play-states
   String PlayStateString() const;
   static const char* PlayStateString(AnimationPlayState);
@@ -175,8 +179,8 @@ class CORE_EXPORT Animation : public EventTarget,
   void updatePlaybackRate(double playback_rate,
                           ExceptionState& = ASSERT_NO_EXCEPTION);
 
-  ScriptPromiseTyped<Animation> finished(ScriptState*);
-  ScriptPromiseTyped<Animation> ready(ScriptState*);
+  ScriptPromise<Animation> finished(ScriptState*);
+  ScriptPromise<Animation> ready(ScriptState*);
 
   bool Paused() const {
     return CalculateAnimationPlayState() == kPaused && !is_paused_for_testing_;
@@ -330,7 +334,8 @@ class CORE_EXPORT Animation : public EventTarget,
   bool EffectSuppressed() const override { return effect_suppressed_; }
   void SetEffectSuppressed(bool);
 
-  void InvalidateKeyframeEffect(const TreeScope&);
+  void InvalidateKeyframeEffect(const TreeScope&,
+                                const StyleChangeReasonForTracing&);
   void InvalidateEffectTargetStyle();
   void InvalidateNormalizedTiming();
 

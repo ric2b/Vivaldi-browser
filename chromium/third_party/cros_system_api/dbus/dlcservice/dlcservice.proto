@@ -23,10 +23,8 @@ message InstallRequest {
   // Temporary flags, put at end of 2-byte boundary to avoid collisions with
   // long-term values.
 
-  // This DLC will use the newer infrastructure, only works for legacy DLCs.
-  // TODO(b/306737055): deprecate after pseudo-scaled termina-dlc is fully
-  // launched.
-  bool force_ota = 2047;
+  // Deprecated. Use DLC_FORCE_OTA via ebuilds.
+  bool force_ota = 2047 [deprecated = true];
 }
 
 // DLCs that have the selected manifest fields set to true.

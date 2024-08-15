@@ -25,19 +25,20 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-cmake_minimum_required(VERSION 3.10.2)
+# As per https://github.com/google/oss-policies-info/blob/main/foundational-cxx-support-matrix.md
+cmake_minimum_required(VERSION 3.13)
 
-# When upgrading to CMake 3.11 we can remove DAWN_PLACEHOLDER_FILE because source-less add_library
-# becomes available.
-# When upgrading to CMake 3.12 we should add CONFIGURE_DEPENDS to DawnGenerator to rerun CMake in
-# case any of the generator files changes. We should also remove the CACHE "" FORCE stuff to
-# override options in third_party dependencies. We can also add the HOMEPAGE_URL
-# entry to the project `HOMEPAGE_URL "https://dawn.googlesource.com/dawn"`
+# - Since we are past CMake 3.12 we can add CONFIGURE_DEPENDS to DawnGenerator to rerun CMake
+#   in case any of the generator files changes. We should also remove the CACHE "" FORCE stuff to
+#   override options in third_party dependencies.
+# - When upgrading to CMake 3.20 we can take advantage of the GENERATED property being global in
+#   DawnGenerator. We should also use the path utilities in install_if_enabled.
 
 project(
     Dawn
     DESCRIPTION "Dawn, a WebGPU implementation"
     LANGUAGES C CXX
+    HOMEPAGE_URL "https://dawn.googlesource.com/dawn"
 )
 enable_testing()
 
@@ -59,8 +60,6 @@ set(DAWN_GENERATOR_DIR "${Dawn_SOURCE_DIR}/generator")
 set(DAWN_SRC_DIR "${Dawn_SOURCE_DIR}/src")
 set(DAWN_INCLUDE_DIR "${Dawn_SOURCE_DIR}/include")
 set(DAWN_TEMPLATE_DIR "${DAWN_GENERATOR_DIR}/templates")
-
-set(DAWN_PLACEHOLDER_FILE "${DAWN_SRC_DIR}/Placeholder.cpp")
 
 ################################################################################
 # Configuration options
@@ -197,6 +196,7 @@ option_if_not_defined(DAWN_USE_X11 "Enable support for X11 surface" ${USE_X11})
 option_if_not_defined(DAWN_USE_GLFW "Enable compilation of the GLFW windowing utils" ${DAWN_SUPPORTS_GLFW_FOR_WINDOWING})
 option_if_not_defined(DAWN_USE_WINDOWS_UI "Enable support for Windows UI surface" ${USE_WINDOWS_UI})
 option_if_not_defined(DAWN_USE_BUILT_DXC "Enable building and using DXC by the D3D12 backend" OFF)
+option_if_not_defined(DAWN_DXC_DISABLE_ASSERTS_DEBUG "Disable asserts in DXC in debug builds" OFF)
 option_if_not_defined(DAWN_TARGET_MACOS "Manually link Apple core frameworks" ${TARGET_MACOS})
 
 option_if_not_defined(DAWN_BUILD_SAMPLES "Enables building Dawn's samples" ${BUILD_SAMPLES})
@@ -204,6 +204,7 @@ option_if_not_defined(DAWN_BUILD_NODE_BINDINGS "Enables building Dawn's NodeJS b
 option_if_not_defined(DAWN_ENABLE_SWIFTSHADER "Enables building Swiftshader as part of the build and Vulkan adapter discovery" OFF)
 option_if_not_defined(DAWN_BUILD_BENCHMARKS "Build Dawn benchmarks" OFF)
 
+option_if_not_defined(DAWN_WERROR "Build with -Werror (or equivalent)" OFF)
 option_if_not_defined(DAWN_ENABLE_PIC "Build with Position-Independent-Code enabled" OFF)
 
 option_if_not_defined(DAWN_EMIT_COVERAGE "Emit code coverage information" OFF)
@@ -241,7 +242,6 @@ option_if_not_defined(TINT_BUILD_TESTS "Build tests" ON)
 option_if_not_defined(TINT_BUILD_AS_OTHER_OS "Override OS detection to force building of *_other.cc files" OFF)
 
 option_if_not_defined(TINT_BUILD_TINTD "Build the WGSL language server" OFF)
-option_if_not_defined(TINT_INSTALL_TINTD "Install the WGSL language server" OFF)
 
 set_if_not_defined(TINT_EXTERNAL_BENCHMARK_CORPUS_DIR "" "Directory that holds a corpus of external shaders to benchmark.")
 
@@ -335,6 +335,7 @@ message(STATUS "Dawn build X11 support: ${DAWN_USE_X11}")
 message(STATUS "Dawn build GLFW support: ${DAWN_USE_GLFW}")
 message(STATUS "Dawn build Windows UI support: ${DAWN_USE_WINDOWS_UI}")
 message(STATUS "Dawn build and use DXC: ${DAWN_USE_BUILT_DXC}")
+message(STATUS "Dawn disable DXC asserts in debug builds: ${DAWN_DXC_DISABLE_ASSERTS_DEBUG}")
 
 message(STATUS "Dawn build samples: ${DAWN_BUILD_SAMPLES}")
 message(STATUS "Dawn build Node bindings: ${DAWN_BUILD_NODE_BINDINGS}")
@@ -371,8 +372,8 @@ if (NOT ${TINT_LIB_FUZZING_ENGINE_LINK_OPTIONS} STREQUAL "")
   message(STATUS "Using provided LIB_FUZZING_ENGINE options: ${TINT_LIB_FUZZING_ENGINE_LINK_OPTIONS}")
 endif()
 
-message(STATUS "Using python3")
-find_package(PythonInterp 3 REQUIRED)
+find_package(Python3 REQUIRED)
+message(STATUS "Dawn: using python at ${Python3_EXECUTABLE}")
 
 ################################################################################
 # common_compile_options - sets compiler and linker options common for dawn and
@@ -388,19 +389,26 @@ function(common_compile_options TARGET)
       -Wno-unknown-warning-option
       -Wno-switch-default
     )
+    if (${DAWN_WERROR})
+        target_compile_options(${TARGET} PRIVATE -Werror)
+    endif()
 
+    set(SANITIZER_OPTIONS "")
     if (${DAWN_ENABLE_MSAN})
-      target_compile_options(${TARGET} PUBLIC -fsanitize=memory)
-      target_link_options(${TARGET} PUBLIC -fsanitize=memory)
-    elseif (${DAWN_ENABLE_ASAN})
-      target_compile_options(${TARGET} PUBLIC -fsanitize=address)
-      target_link_options(${TARGET} PUBLIC -fsanitize=address)
-    elseif (${DAWN_ENABLE_TSAN})
-      target_compile_options(${TARGET} PUBLIC -fsanitize=thread)
-      target_link_options(${TARGET} PUBLIC -fsanitize=thread)
-    elseif (${DAWN_ENABLE_UBSAN})
-      target_compile_options(${TARGET} PUBLIC -fsanitize=undefined -fsanitize=float-divide-by-zero)
-      target_link_options(${TARGET} PUBLIC -fsanitize=undefined -fsanitize=float-divide-by-zero)
+      list(APPEND SANITIZER_OPTIONS "-fsanitize=memory")
+    endif()
+    if (${DAWN_ENABLE_ASAN})
+      list(APPEND SANITIZER_OPTIONS "-fsanitize=address")
+    endif()
+    if (${DAWN_ENABLE_TSAN})
+      list(APPEND SANITIZER_OPTIONS "-fsanitize=thread")
+    endif()
+    if (${DAWN_ENABLE_UBSAN})
+      list(APPEND SANITIZER_OPTIONS "-fsanitize=undefined" "-fsanitize=float-divide-by-zero")
+    endif()
+    if (SANITIZER_OPTIONS)
+      target_compile_options(${TARGET} PUBLIC ${SANITIZER_OPTIONS})
+      target_link_options(${TARGET} PUBLIC ${SANITIZER_OPTIONS})
     endif()
   endif(COMPILER_IS_LIKE_GNU)
 
@@ -560,7 +568,6 @@ set(BUILD_SHARED_LIBS_SAVED ${BUILD_SHARED_LIBS})
 set(BUILD_SHARED_LIBS 0)
 add_subdirectory(src/tint)
 set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVED})
-
 add_subdirectory(generator)
 add_subdirectory(src/dawn)
 

@@ -741,6 +741,17 @@ VAR_FN(8, 32, 8, 8)
 
 #undef VAR_FN
 
+unsigned int aom_highbd_10_mse16x16_avx2(const uint8_t *src8, int src_stride,
+                                         const uint8_t *ref8, int ref_stride,
+                                         unsigned int *sse) {
+  int sum;
+  uint16_t *src = CONVERT_TO_SHORTPTR(src8);
+  uint16_t *ref = CONVERT_TO_SHORTPTR(ref8);
+  highbd_10_variance_avx2(src, src_stride, ref, ref_stride, 16, 16, sse, &sum,
+                          highbd_calc16x16var_avx2, 16);
+  return *sse;
+}
+
 #define SSE2_HEIGHT(H)                                                 \
   uint32_t aom_highbd_10_sub_pixel_variance8x##H##_sse2(               \
       const uint8_t *src8, int src_stride, int x_offset, int y_offset, \
@@ -749,7 +760,7 @@ VAR_FN(8, 32, 8, 8)
 SSE2_HEIGHT(8)
 SSE2_HEIGHT(16)
 
-#undef SSE2_Height
+#undef SSE2_HEIGHT
 
 #define HIGHBD_SUBPIX_VAR(W, H)                                              \
   uint32_t aom_highbd_10_sub_pixel_variance##W##x##H##_avx2(                 \

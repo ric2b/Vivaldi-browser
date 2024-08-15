@@ -267,7 +267,7 @@ ResultOrError<Ref<Texture>> Texture::CreateFromSharedTextureMemory(
     Ref<Texture> texture = AcquireRef(new Texture(device, descriptor, Kind::Normal));
     DAWN_TRY(
         texture->InitializeAsExternalTexture(memory->GetD3DResource(), memory->GetKeyedMutex()));
-    texture->mSharedTextureMemoryContents = memory->GetContents();
+    texture->mSharedResourceMemoryContents = memory->GetContents();
     return texture;
 }
 
@@ -502,7 +502,7 @@ ResultOrError<ComPtr<ID3D11DepthStencilView>> Texture::CreateD3D11DepthStencilVi
 
 MaybeError Texture::SynchronizeTextureBeforeUse(
     const ScopedCommandRecordingContext* commandContext) {
-    if (auto* contents = GetSharedTextureMemoryContents()) {
+    if (auto* contents = GetSharedResourceMemoryContents()) {
         SharedTextureMemoryBase::PendingFenceList fences;
         contents->AcquirePendingFences(&fences);
         contents->SetLastUsageSerial(GetDevice()->GetQueue()->GetPendingCommandSerial());
@@ -511,6 +511,7 @@ MaybeError Texture::SynchronizeTextureBeforeUse(
                 commandContext->Wait(ToBackend(fence.object)->GetD3DFence(), fence.signaledValue),
                 "ID3D11DeviceContext4::Wait"));
         }
+        commandContext->SetNeedsFence();
     }
     if (mKeyedMutex != nullptr) {
         DAWN_TRY(commandContext->AcquireKeyedMutex(mKeyedMutex));
@@ -1228,7 +1229,7 @@ ResultOrError<ComPtr<ID3D11ShaderResourceView>> Texture::GetStencilSRV(
 
 // static
 Ref<TextureView> TextureView::Create(TextureBase* texture,
-                                     const TextureViewDescriptor* descriptor) {
+                                     const UnpackedPtr<TextureViewDescriptor>& descriptor) {
     return AcquireRef(new TextureView(texture, descriptor));
 }
 

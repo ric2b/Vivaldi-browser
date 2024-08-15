@@ -10,6 +10,7 @@
 #include "base/feature_list.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/user_education/recent_session_tracker.h"
 #include "chrome/browser/user_education/user_education_service_factory.h"
 #include "components/feature_engagement/public/tracker.h"
 #include "components/user_education/common/feature_promo_registry.h"
@@ -19,15 +20,18 @@
 #include "components/user_education/common/new_badge_policy.h"
 #include "components/user_education/common/user_education_features.h"
 
+BASE_FEATURE(kAllowRecentSessionTracking,
+             "AllowRecentSessionTracking",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 const char kSidePanelCustomizeChromeTutorialId[] =
     "Side Panel Customize Chrome Tutorial";
 const char kTabGroupTutorialId[] = "Tab Group Tutorial";
 const char kSavedTabGroupTutorialId[] = "Saved Tab Group Tutorial";
-const char kSideSearchTutorialId[] = "Side Search Tutorial";
 const char kPasswordManagerTutorialId[] = "Password Manager Tutorial";
 
 UserEducationService::UserEducationService(
-    std::unique_ptr<user_education::FeaturePromoStorageService> storage_service,
+    std::unique_ptr<BrowserFeaturePromoStorageService> storage_service,
     bool allows_promos)
     : tutorial_service_(&tutorial_registry_, &help_bubble_factory_registry_),
       feature_promo_storage_service_(std::move(storage_service)),
@@ -43,6 +47,17 @@ UserEducationService::UserEducationService(
         std::make_unique<user_education::NewBadgeController>(
             *new_badge_registry_, *feature_promo_storage_service_,
             std::make_unique<user_education::NewBadgePolicy>());
+  }
+
+  if (base::FeatureList::IsEnabled(kAllowRecentSessionTracking)) {
+    // Only create the recent session tracker if recent session tracking is
+    // allowed (default).
+    recent_session_tracker_ = std::make_unique<RecentSessionTracker>(
+        feature_promo_session_manager_, *feature_promo_storage_service_,
+        *feature_promo_storage_service_);
+  } else {
+    // If the feature is disabled, ensure that we clear any old data.
+    feature_promo_storage_service_->ResetRecentSessionData();
   }
 }
 

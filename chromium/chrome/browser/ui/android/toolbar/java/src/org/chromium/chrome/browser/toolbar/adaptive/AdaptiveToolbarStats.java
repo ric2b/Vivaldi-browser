@@ -46,7 +46,9 @@ public class AdaptiveToolbarStats {
         int AUTO_WITH_ADD_TO_BOOKMARKS = 10;
         int READ_ALOUD = 11;
         int AUTO_WITH_READ_ALOUD = 12;
-        int NUM_ENTRIES = 13;
+        int TRACKER_SHIELD = 13; // Vivaldi
+        int AUTO_WITH_TRACKER_SHIELD = 14; // Vivaldi
+        int NUM_ENTRIES = 15;
     }
 
     /**
@@ -109,6 +111,8 @@ public class AdaptiveToolbarStats {
                 return AdaptiveToolbarRadioButtonState.TRANSLATE;
             case AdaptiveToolbarButtonVariant.READ_ALOUD:
                 return AdaptiveToolbarRadioButtonState.READ_ALOUD;
+            case AdaptiveToolbarButtonVariant.TRACKER_SHIELD: // Vivaldi
+                return AdaptiveToolbarRadioButtonState.TRACKER_SHIELD;
             case AdaptiveToolbarButtonVariant.AUTO:
                 switch (uiState.autoButtonCaption) {
                     case AdaptiveToolbarButtonVariant.NEW_TAB:
@@ -123,6 +127,8 @@ public class AdaptiveToolbarStats {
                         return AdaptiveToolbarRadioButtonState.AUTO_WITH_TRANSLATE;
                     case AdaptiveToolbarButtonVariant.READ_ALOUD:
                         return AdaptiveToolbarRadioButtonState.AUTO_WITH_READ_ALOUD;
+                    case AdaptiveToolbarButtonVariant.TRACKER_SHIELD: // Vivaldi
+                        return AdaptiveToolbarRadioButtonState.AUTO_WITH_TRACKER_SHIELD;
                 }
         }
         assert false : "Invalid radio button state";

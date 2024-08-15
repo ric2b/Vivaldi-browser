@@ -64,6 +64,11 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
    public:
     virtual ~Delegate() {}
 
+    virtual void CreateDisplay(const Display& display) = 0;
+    virtual void RemoveDisplay(const Display& display) = 0;
+    virtual void UpdateDisplayMetrics(const Display& display,
+                                      uint32_t metrics) = 0;
+
     // Create or updates the mirroring window with |display_info_list|.
     virtual void CreateOrUpdateMirroringDisplay(
         const DisplayInfoList& display_info_list) = 0;
@@ -497,7 +502,8 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // Notifies observers of display configuration changes.
   void NotifyMetricsChanged(const Display& display, uint32_t metrics);
   void NotifyDisplayAdded(const Display& display);
-  void NotifyDisplayRemoved(const Display& display);
+  void NotifyWillRemoveDisplays(const Displays& display);
+  void NotifyDisplaysRemoved(const Displays& displays);
   void NotifyWillProcessDisplayChanges();
   void NotifyDidProcessDisplayChanges(
       const DisplayManagerObserver::DisplayConfigurationChange& config_change);
@@ -594,6 +600,11 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // be different from |new_info| (due to overscan state), so you must use
   // |GetDisplayInfo| to get the correct ManagedDisplayInfo for a display.
   void InsertAndUpdateDisplayInfo(const ManagedDisplayInfo& new_info);
+
+  // Applies recommended zoom factor when necessary, only used when an external
+  // display is connected for the first time. e.g. when a 4K native mode is used
+  // when firstly connected, the content is almost certainly too small.
+  void ApplyDefaultZoomFactorIfNecessary(ManagedDisplayInfo& info);
 
   // Creates a display object from the ManagedDisplayInfo for
   // |display_id|.
@@ -740,6 +751,7 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // time.
   base::OnceClosure created_mirror_window_;
 
+  // TODO(oshima): Make this non reentrant.
   base::ObserverList<DisplayObserver> display_observers_;
 
   base::ObserverList<DisplayManagerObserver> manager_observers_;
@@ -769,6 +781,11 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // Temporary changes may include things like the user trying out different
   // zoom levels before making the final decision.
   base::CancelableOnceClosure on_display_zoom_modify_timeout_;
+
+  // Stores the id of the display being added during creation process. This is
+  // used to skip updating.
+  // TODO(crbug.com/329003664): Consolidate this logic and BeginEndNotifier.
+  std::optional<int64_t> in_creating_display_;
 
   display::TabletState tablet_state_ = display::TabletState::kInClamshellMode;
 

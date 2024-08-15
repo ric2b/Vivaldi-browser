@@ -5,9 +5,10 @@
 #import "ios/chrome/browser/parcel_tracking/parcel_tracking_util.h"
 
 #import "base/memory/raw_ptr.h"
-#import "base/test/scoped_feature_list.h"
 #import "components/commerce/core/mock_shopping_service.h"
-#import "ios/chrome/browser/parcel_tracking/features.h"
+#import "components/variations/service/variations_service.h"
+#import "components/variations/service/variations_service_client.h"
+#import "components/variations/synthetic_trial_registry.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
@@ -18,7 +19,10 @@
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity_manager.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
+#import "ios/chrome/test/ios_chrome_scoped_testing_variations_service.h"
+#import "ios/chrome/test/testing_application_context.h"
 #import "ios/web/public/test/web_task_environment.h"
+#import "services/network/test/test_network_connection_tracker.h"
 #import "testing/platform_test.h"
 
 class ParcelTrackingUtilTest : public PlatformTest {
@@ -68,7 +72,6 @@ class ParcelTrackingUtilTest : public PlatformTest {
   std::unique_ptr<commerce::MockShoppingService> shopping_service_;
   IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
-  base::test::ScopedFeatureList scoped_feature_list_;
   raw_ptr<AuthenticationService> auth_service_ = nullptr;
   FakeSystemIdentity* fake_identity_ = nullptr;
 };
@@ -76,9 +79,10 @@ class ParcelTrackingUtilTest : public PlatformTest {
 // Tests that IsUserEligibleParcelTrackingOptInPrompt returns true when the user
 // is eligible.
 TEST_F(ParcelTrackingUtilTest, UserIsEligibleForPrompt) {
-  scoped_feature_list_.InitAndEnableFeature(kIOSParcelTracking);
   SignIn();
   SetPromptDisplayedStatus(false);
+  IOSChromeScopedTestingVariationsService scoped_variations_service;
+  scoped_variations_service.Get()->OverrideStoredPermanentCountry("us");
   EXPECT_TRUE(IsUserEligibleParcelTrackingOptInPrompt(
       browser_state_->GetPrefs(), shopping_service_.get()));
 }
@@ -86,20 +90,11 @@ TEST_F(ParcelTrackingUtilTest, UserIsEligibleForPrompt) {
 // Tests that IsUserEligibleParcelTrackingOptInPrompt returns false when the
 // user is not signed in.
 TEST_F(ParcelTrackingUtilTest, NotSignedIn) {
-  scoped_feature_list_.InitAndEnableFeature(kIOSParcelTracking);
   SignOut();
   SetPromptDisplayedStatus(false);
   shopping_service_->SetIsParcelTrackingEligible(false);
-  EXPECT_FALSE(IsUserEligibleParcelTrackingOptInPrompt(
-      browser_state_->GetPrefs(), shopping_service_.get()));
-}
-
-// Tests that IsUserEligibleParcelTrackingOptInPrompt returns false when the
-// feature is disabled.
-TEST_F(ParcelTrackingUtilTest, FeatureDisabled) {
-  scoped_feature_list_.InitAndDisableFeature(kIOSParcelTracking);
-  SignIn();
-  SetPromptDisplayedStatus(false);
+  IOSChromeScopedTestingVariationsService scoped_variations_service;
+  scoped_variations_service.Get()->OverrideStoredPermanentCountry("us");
   EXPECT_FALSE(IsUserEligibleParcelTrackingOptInPrompt(
       browser_state_->GetPrefs(), shopping_service_.get()));
 }
@@ -107,7 +102,17 @@ TEST_F(ParcelTrackingUtilTest, FeatureDisabled) {
 // Tests that IsUserEligibleParcelTrackingOptInPrompt returns false when the
 // user has seen the prompt.
 TEST_F(ParcelTrackingUtilTest, UserHasSeenPrompt) {
-  scoped_feature_list_.InitAndEnableFeature(kIOSParcelTracking);
+  SignIn();
+  SetPromptDisplayedStatus(true);
+  IOSChromeScopedTestingVariationsService scoped_variations_service;
+  scoped_variations_service.Get()->OverrideStoredPermanentCountry("us");
+  EXPECT_FALSE(IsUserEligibleParcelTrackingOptInPrompt(
+      browser_state_->GetPrefs(), shopping_service_.get()));
+}
+
+// Tests that IsUserEligibleParcelTrackingOptInPrompt returns false when the
+// permanent country is not set to US.
+TEST_F(ParcelTrackingUtilTest, CountryNotUS) {
   SignIn();
   SetPromptDisplayedStatus(true);
   EXPECT_FALSE(IsUserEligibleParcelTrackingOptInPrompt(

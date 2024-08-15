@@ -964,7 +964,7 @@ bool LayerTreeHost::DoUpdateLayers() {
   }
 #else
   // This is a quick sanity check for readiness of paint properties.
-  // TODO(crbug.com/913464): This is to help analysis of crashes of the bug.
+  // TODO(crbug.com/40605801): This is to help analysis of crashes of the bug.
   // Remove this CHECK when we close the bug.
   CHECK(
       property_trees()->effect_tree().Node(root_layer()->effect_tree_index()));
@@ -1508,7 +1508,7 @@ void LayerTreeHost::SetDisplayColorSpaces(
     const gfx::DisplayColorSpaces& display_color_spaces) {
   if (pending_commit_state()->display_color_spaces == display_color_spaces)
     return;
-  bool only_hdr_changed = gfx::DisplayColorSpaces::EqualExceptForHdrParameters(
+  bool only_hdr_changed = gfx::DisplayColorSpaces::EqualExceptForHdrHeadroom(
       pending_commit_state()->display_color_spaces, display_color_spaces);
   pending_commit_state()->display_color_spaces = display_color_spaces;
 
@@ -1616,6 +1616,15 @@ void LayerTreeHost::SetLocalSurfaceIdFromParent(
     return;
   }
   UpdateDeferMainFrameUpdateInternal();
+  SetNeedsCommit();
+}
+
+void LayerTreeHost::RequestViewportScreenshot(
+    const base::UnguessableToken& token) {
+  CHECK(pending_commit_state()->new_local_surface_id_request)
+      << "Must have requested a new LocalSurfaceID before making "
+         "this request";
+  pending_commit_state()->screenshot_destination_token = token;
   SetNeedsCommit();
 }
 
@@ -2055,6 +2064,12 @@ LayerTreeHost::TakeViewTransitionCallbacksForTesting() {
 double LayerTreeHost::GetPercentDroppedFrames() const {
   DCHECK(IsMainThread());
   return proxy_->GetPercentDroppedFrames();
+}
+
+void LayerTreeHost::DropActiveScrollDeltaNextCommit(ElementId scroll_element) {
+  pending_commit_state()->scrollers_clobbering_active_value.insert(
+      scroll_element);
+  SetNeedsCommit();
 }
 
 }  // namespace cc

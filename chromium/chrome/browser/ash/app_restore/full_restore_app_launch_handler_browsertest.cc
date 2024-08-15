@@ -292,8 +292,9 @@ class FullRestoreAppLaunchHandlerTestBase
   }
 
   void CreateWebApp() {
-    auto web_app_install_info = std::make_unique<web_app::WebAppInstallInfo>();
-    web_app_install_info->start_url = GURL("https://example.org");
+    auto web_app_install_info =
+        web_app::WebAppInstallInfo::CreateWithStartUrlForTesting(
+            GURL("https://example.org"));
     web_app::test::InstallWebApp(profile(), std::move(web_app_install_info));
   }
 
@@ -504,25 +505,6 @@ IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
 
   // Verify there is a new browser launched.
   EXPECT_EQ(count + 1, BrowserList::GetInstance()->size());
-}
-
-IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
-                       FullRestoreMetrics) {
-  base::HistogramTester histogram_tester;
-
-  // Add app launch infos.
-  SaveBrowserAppLaunchInfo(kWindowId1);
-  SaveBrowserAppLaunchInfo(kWindowId2);
-  AppLaunchInfoSaveWaiter::Wait();
-
-  // Create FullRestoreAppLaunchHandler and launch the browser.
-  auto app_launch_handler =
-      std::make_unique<FullRestoreAppLaunchHandler>(profile());
-  app_launch_handler->LaunchBrowserWhenReady(/*first_run_full_restore=*/false);
-  SetShouldRestore(app_launch_handler.get());
-  content::RunAllTasksUntilIdle();
-
-  histogram_tester.ExpectBucketCount("Apps.FullRestoreWindowCount", 2, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest, NotRestore) {
@@ -932,8 +914,8 @@ IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
   EXPECT_EQ(kCurrentBounds, browser_bounds);
 }
 
-// TODO(crbug/1512721): Re-enable this test when the flakiness issue is fixed.
-// Test Lacros window properties and bounds are restored correctly.
+// TODO(crbug.com/41485298): Re-enable this test when the flakiness issue is
+// fixed. Test Lacros window properties and bounds are restored correctly.
 IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
                        DISABLED_RestoreLacrosWindowProperties) {
   gfx::Size size(32, 32);

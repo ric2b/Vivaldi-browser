@@ -161,7 +161,7 @@ tree](https://chromium.googlesource.com/chromium/src/+/HEAD/android_webview/docs
 
 1.  Put the device into [dev mode, disable rootfs verification, and
             bring up a command
-            prompt](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/developer_mode.md).
+            prompt](/chromium-os/developer-library/guides/device/developer-mode/).
 2.  Modify /etc/chrome_dev.conf (read the comments in the file for more
             details).
 3.  Restart the UI via:

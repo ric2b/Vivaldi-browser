@@ -71,8 +71,8 @@ const char* ToString(ax::mojom::Event event) {
       return "mediaStoppedPlaying";
     case ax::mojom::Event::kMenuEnd:
       return "menuEnd";
-    case ax::mojom::Event::kMenuListValueChanged:
-      return "menuListValueChanged";
+    case ax::mojom::Event::kMenuListValueChangedDeprecated:
+      return "menuListValueChangedDeprecated";
     case ax::mojom::Event::kMenuPopupEnd:
       return "menuPopupEnd";
     case ax::mojom::Event::kMenuPopupStart:
@@ -210,8 +210,8 @@ const char* ToString(ax::mojom::Role role) {
       return "details";
     case ax::mojom::Role::kDialog:
       return "dialog";
-    case ax::mojom::Role::kDirectory:
-      return "directory";
+    case ax::mojom::Role::kDirectoryDeprecated:
+      return "directoryDeprecated";
     case ax::mojom::Role::kDisclosureTriangle:
       return "disclosureTriangle";
     case ax::mojom::Role::kDisclosureTriangleGrouped:
@@ -486,6 +486,8 @@ const char* ToString(ax::mojom::Role role) {
       return "rubyAnnotation";
     case ax::mojom::Role::kSection:
       return "section";
+    case ax::mojom::Role::kSectionWithoutName:
+      return "sectionWithoutName";
     case ax::mojom::Role::kStrong:
       return "strong";
     case ax::mojom::Role::kSubscript:
@@ -638,8 +640,8 @@ ax::mojom::Role StringToRole(const std::string& role) {
     return ax::mojom::Role::kDetails;
   } else if (role == "kDialog") {
     return ax::mojom::Role::kDialog;
-  } else if (role == "kDirectory") {
-    return ax::mojom::Role::kDirectory;
+  } else if (role == "kDirectoryDeprecated") {
+    return ax::mojom::Role::kDirectoryDeprecated;
   } else if (role == "kDisclosureTriangle") {
     return ax::mojom::Role::kDisclosureTriangle;
   } else if (role == "kDisclosureTriangleGrouped") {
@@ -914,6 +916,8 @@ ax::mojom::Role StringToRole(const std::string& role) {
     return ax::mojom::Role::kRubyAnnotation;
   } else if (role == "kSection") {
     return ax::mojom::Role::kSection;
+  } else if (role == "kSectionWithoutName") {
+    return ax::mojom::Role::kSectionWithoutName;
   } else if (role == "kStrong") {
     return ax::mojom::Role::kStrong;
   } else if (role == "kSubscript") {
@@ -2034,6 +2038,8 @@ const char* ToString(ax::mojom::InputEventType input_event_type) {
       return "insertReplacementText";
     case ax::mojom::InputEventType::kInsertCompositionText:
       return "insertCompositionText";
+    case ax::mojom::InputEventType::kInsertLink:
+      return "insertLink";
     case ax::mojom::InputEventType::kDeleteWordBackward:
       return "deleteWordBackward";
     case ax::mojom::InputEventType::kDeleteWordForward:
@@ -2518,25 +2524,6 @@ const char* ToString(ax::mojom::ImageAnnotationStatus status) {
       return "annotationAdult";
     case ax::mojom::ImageAnnotationStatus::kAnnotationProcessFailed:
       return "annotationProcessFailed";
-  }
-
-  return "";
-}
-
-const char* ToString(ax::mojom::Dropeffect dropeffect) {
-  switch (dropeffect) {
-    case ax::mojom::Dropeffect::kCopy:
-      return "copy";
-    case ax::mojom::Dropeffect::kExecute:
-      return "execute";
-    case ax::mojom::Dropeffect::kLink:
-      return "link";
-    case ax::mojom::Dropeffect::kMove:
-      return "move";
-    case ax::mojom::Dropeffect::kPopup:
-      return "popup";
-    case ax::mojom::Dropeffect::kNone:
-      return "none";
   }
 
   return "";

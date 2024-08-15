@@ -8,6 +8,9 @@ import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
 
+import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.content_public.browser.RenderFrameHost;
+
 /** Native bridge for facilitated payment APIs, such as PIX. */
 @JNINamespace("payments::facilitated")
 public class FacilitatedPaymentsApiClientBridge implements FacilitatedPaymentsApiClient.Delegate {
@@ -19,11 +22,14 @@ public class FacilitatedPaymentsApiClientBridge implements FacilitatedPaymentsAp
      *
      * @param nativeFacilitatedPaymentsApiClientAndroid The pointer to the C++ object that receives
      *     responses from the API.
+     * @param renderFrameHost The RenderFrameHost used for retrieving the Android context.
      */
     @CalledByNative
-    public FacilitatedPaymentsApiClientBridge(long nativeFacilitatedPaymentsApiClientAndroid) {
+    public FacilitatedPaymentsApiClientBridge(
+            long nativeFacilitatedPaymentsApiClientAndroid, RenderFrameHost renderFrameHost) {
         mNativeFacilitatedPaymentsApiClientAndroid = nativeFacilitatedPaymentsApiClientAndroid;
-        mApiClient = FacilitatedPaymentsApiClient.create(/* delegate= */ this);
+        mApiClient = FacilitatedPaymentsApiClient.create(renderFrameHost, /* delegate= */ this);
+        assert mApiClient != null;
     }
 
     /**
@@ -57,13 +63,14 @@ public class FacilitatedPaymentsApiClientBridge implements FacilitatedPaymentsAp
 
     /**
      * Initiates the payment flow UI by invoking the payment manager with the action token. The
-     * result is received back in the onPurchaseActionResult(boolean) method.
+     * result is received back in the onPurchaseActionResultEnum(PurchaseActionResult) method.
      *
+     * @param primaryAccount User's signed in account.
      * @param actionToken An opaque token used for invoking the purchase action.
      */
     @CalledByNative
-    public void invokePurchaseAction(byte[] actionToken) {
-        mApiClient.invokePurchaseAction(actionToken);
+    public void invokePurchaseAction(CoreAccountInfo primaryAccount, byte[] actionToken) {
+        mApiClient.invokePurchaseAction(primaryAccount, actionToken);
     }
 
     // FacilitatedPaymentsApiClient.Delegate implementation:
@@ -84,11 +91,10 @@ public class FacilitatedPaymentsApiClientBridge implements FacilitatedPaymentsAp
 
     // FacilitatedPaymentsApiClient.Delegate implementation:
     @Override
-    public void onPurchaseActionResult(boolean isPurchaseActionSuccessful) {
+    public void onPurchaseActionResultEnum(@PurchaseActionResult int purchaseActionResult) {
         if (mNativeFacilitatedPaymentsApiClientAndroid == 0) return;
-        FacilitatedPaymentsApiClientBridgeJni.get()
-                .onPurchaseActionResult(
-                        mNativeFacilitatedPaymentsApiClientAndroid, isPurchaseActionSuccessful);
+        FacilitatedPaymentsApiClientBridgeJni.get().onPurchaseActionResultEnum(
+                mNativeFacilitatedPaymentsApiClientAndroid, purchaseActionResult);
     }
 
     @NativeMethods
@@ -97,7 +103,7 @@ public class FacilitatedPaymentsApiClientBridge implements FacilitatedPaymentsAp
 
         void onGetClientToken(long nativeFacilitatedPaymentsApiClientAndroid, byte[] clientToken);
 
-        void onPurchaseActionResult(
-                long nativeFacilitatedPaymentsApiClientAndroid, boolean isPurchaseActionSuccessful);
+        void onPurchaseActionResultEnum(long nativeFacilitatedPaymentsApiClientAndroid,
+                @PurchaseActionResult int purchaseActionResult);
     }
 }

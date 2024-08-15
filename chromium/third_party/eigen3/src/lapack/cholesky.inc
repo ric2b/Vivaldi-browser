@@ -28,9 +28,9 @@ EIGEN_LAPACK_FUNC(potrf)(char *uplo, int *n, RealScalar *pa, int *lda, int *info
   MatrixType A(a, *n, *n, *lda);
   int ret;
   if (UPLO(*uplo) == UP)
-    ret = int(internal::llt_inplace<Scalar, Upper>::blocked(A));
+    ret = int(Eigen::internal::llt_inplace<Scalar, Eigen::Upper>::blocked(A));
   else
-    ret = int(internal::llt_inplace<Scalar, Lower>::blocked(A));
+    ret = int(Eigen::internal::llt_inplace<Scalar, Eigen::Lower>::blocked(A));
 
   if (ret >= 0) *info = ret + 1;
 }
@@ -61,10 +61,10 @@ EIGEN_LAPACK_FUNC(potrs)(char *uplo, int *n, int *nrhs, RealScalar *pa, int *lda
   MatrixType B(b, *n, *nrhs, *ldb);
 
   if (UPLO(*uplo) == UP) {
-    A.triangularView<Upper>().adjoint().solveInPlace(B);
-    A.triangularView<Upper>().solveInPlace(B);
+    A.triangularView<Eigen::Upper>().adjoint().solveInPlace(B);
+    A.triangularView<Eigen::Upper>().solveInPlace(B);
   } else {
-    A.triangularView<Lower>().solveInPlace(B);
-    A.triangularView<Lower>().adjoint().solveInPlace(B);
+    A.triangularView<Eigen::Lower>().solveInPlace(B);
+    A.triangularView<Eigen::Lower>().adjoint().solveInPlace(B);
   }
 }

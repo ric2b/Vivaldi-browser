@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: cpp-pref
 title: C++ Prefs
 ---
@@ -28,6 +28,14 @@ which is often triggered by
 For prefs to be recognized in the ChromeOS UI, the pref name must be added to
 `GetAllowlistedKeys()` in
 [`prefs_util.cc`](https://source.chromium.org/chromium/chromium/src/+/main:chrome/browser/extensions/api/settings_private/prefs_util.cc;l=176)
+
+Active prefs can be viewed on Chromebooks by entering `chrome://prefs-internals`
+and `chrome://local-state` into the Chrome tab search bar to view active Profile
+Prefs and Local State Prefs, respectively.
+* Note that not all Local State prefs will be shown on Chromebooks as some contain
+PII: to view these removed prefs on a test Chromebook, deploy code with the
+[pref removing
+logic](https://source.chromium.org/chromium/chromium/src/+/main:chrome/browser/ui/webui/local_state/local_state_ui.cc;l=45-54;drc=a0f1d14499cc76db560360f1286b25584e2aee91) commented out.
 
 To learn more about using Prefs to write code, see
 go/chromium-cookbook-policy-prefs. If you'd like to understand prefs more

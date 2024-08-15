@@ -29,18 +29,22 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
-import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
+import org.chromium.chrome.browser.data_sharing.DataSharingInvitationDialogCoordinator;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileProvider;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab_ui.RecyclerViewPosition;
+import org.chromium.chrome.browser.tab_ui.TabContentManager;
+import org.chromium.chrome.browser.tab_ui.TabSwitcherCustomViewManager;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
 import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab.TitleProvider;
+import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.TabGridDialogMediator.DialogController;
 import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListMode;
 import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.GridCardOnClickListenerProvider;
@@ -60,6 +64,7 @@ import java.util.List;
 public class TabSwitcherPaneCoordinator implements BackPressHandler {
     private static final String COMPONENT_NAME = "GridTabSwitcher";
 
+    private final Activity mActivity;
     private final OneshotSupplier<ProfileProvider> mProfileProviderSupplier;
     private final Callback<Boolean> mOnVisibilityChanged = this::onVisibilityChanged;
     private final ObservableSupplier<Boolean> mIsVisibleSupplier;
@@ -72,9 +77,12 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
     private final LazyOneshotSupplier<DialogController> mDialogControllerSupplier;
     private final TabListEditorManager mTabListEditorManager;
     private final TabSwitcherMessageManager mMessageManager;
+    private final ModalDialogManager mModalDialogManager;
 
     /** Lazily initialized when shown. */
     private @Nullable TabGridDialogCoordinator mTabGridDialogCoordinator;
+
+    private @Nullable DataSharingInvitationDialogCoordinator mDataSharingDialogCoordinator;
 
     /**
      * @param activity The {@link Activity} that hosts the pane.
@@ -124,6 +132,8 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
         try (TraceEvent e = TraceEvent.scoped("TabSwitcherPaneCoordinator.constructor")) {
             mProfileProviderSupplier = profileProviderSupplier;
             mIsVisibleSupplier = isVisibleSupplier;
+            mActivity = activity;
+            mModalDialogManager = modalDialogManager;
             isVisibleSupplier.addObserver(mOnVisibilityChanged);
             assert mode != TabListMode.STRIP : "TabListMode.STRIP not supported.";
 
@@ -135,6 +145,10 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
                             .with(MODE, mode)
                             .build();
             mContainerViewModel = containerViewModel;
+            Profile profile = mProfileProviderSupplier.get().getOriginalProfile();
+            TabGroupModelFilter filter = (TabGroupModelFilter) tabModelFilterSupplier.get();
+            ActionConfirmationManager actionConfirmationManager =
+                    new ActionConfirmationManager(profile, mActivity, filter, mModalDialogManager);
 
             mDialogControllerSupplier =
                     LazyOneshotSupplier.fromSupplier(
@@ -155,7 +169,8 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
                                                         ::getTabGridDialogAnimationSourceView,
                                                 scrimCoordinator,
                                                 getTabGroupTitleEditor(),
-                                                /* rootView= */ coordinatorView);
+                                                /* rootView= */ coordinatorView,
+                                                actionConfirmationManager);
                                 return mTabGridDialogCoordinator.getDialogController();
                             });
 
@@ -190,6 +205,7 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
                             mode,
                             activity,
                             browserControlsStateProvider,
+                            mModalDialogManager,
                             tabModelFilterSupplier,
                             regularTabModelSupplier,
                             mMultiThumbnailCardProvider,
@@ -197,7 +213,7 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
                             /* actionOnRelatedTabs= */ true,
                             getGridCardOnClickListenerProvider(),
                             /* dialogHandler= */ null,
-                            TabProperties.UiType.CLOSABLE,
+                            TabProperties.TabActionState.CLOSABLE,
                             /* selectionDelegateProvider= */ null,
                             this::getPriceWelcomeMessageController,
                             parentView,
@@ -320,7 +336,7 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
     /** Performs hard cleanup which saves price drop information. */
     public void hardCleanup() {
         mTabListCoordinator.hardCleanup();
-        // TODO(crbug/1505772): The pre-fork implementation resets the tab list, this seems
+        // TODO(crbug.com/40946413): The pre-fork implementation resets the tab list, this seems
         // suboptimal. Consider not doing this.
         resetWithTabList(null);
     }
@@ -400,6 +416,17 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
         mTabListCoordinator.waitForLayoutWithTab(tabId, r);
     }
 
+    /**
+     * Scrolls to the specified group and animates open a dialog. It is the caller's responsibility
+     * to ensure that this pane is showing before calling this.
+     *
+     * @param tabId The id of any tab in the group.
+     */
+    public void requestOpenTabGroupDialog(int tabId) {
+        mMediator.scrollToTabById(tabId);
+        mMediator.openTabGroupDialog(tabId);
+    }
+
     @Override
     public @BackPressResult int handleBackPress() {
         return mMediator.handleBackPress();
@@ -423,7 +450,7 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
         int index = coordinator.getTabIndexFromTabId(tabId);
         ViewHolder sourceViewHolder =
                 coordinator.getContainerView().findViewHolderForAdapterPosition(index);
-        // TODO(crbug.com/999372): This is band-aid fix that will show basic fade-in/fade-out
+        // TODO(crbug.com/41479135): This is band-aid fix that will show basic fade-in/fade-out
         // animation when we cannot find the animation source view holder. This is happening due to
         // current group id in TabGridDialog can not be indexed in TabListModel, which should never
         // happen. Remove this when figure out the actual cause.
@@ -464,5 +491,22 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
 
     public void showQuickDeleteAnimation(Runnable onAnimationEnd, List<Tab> tabs) {
         mTabListCoordinator.showQuickDeleteAnimation(onAnimationEnd, tabs);
+    }
+
+    /**
+     * Open the invitation modal on top of the tab switcher view when an invitation intent is
+     * intercepted.
+     *
+     * @param invitationId The id of the invitation.
+     */
+    public void openInvitationModal(String invitationId) {
+        if (mTabGridDialogCoordinator == null) return;
+        mTabGridDialogCoordinator.hideDialog(true);
+
+        if (mDataSharingDialogCoordinator == null) {
+            mDataSharingDialogCoordinator =
+                    new DataSharingInvitationDialogCoordinator(mActivity, mModalDialogManager);
+        }
+        mDataSharingDialogCoordinator.show();
     }
 }

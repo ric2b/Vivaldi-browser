@@ -23,15 +23,13 @@ install:
  - dav1d.cmd
  - libjpeg.cmd
  - zlibpng.cmd
- - set "CC=clang-cl" && set "CXX=clang-cl"
- - libyuv.cmd
  - set "CC=" && set "CXX="
  - cd ..
  # Configure with CMake
  - mkdir build
  - cd build
  - cmake --version
- - cmake .. -DAVIF_CODEC_AOM=LOCAL -DAVIF_CODEC_DAV1D=LOCAL  -DBUILD_SHARED_LIBS=OFF -DAVIF_LOCAL_JPEG=ON -DAVIF_LOCAL_ZLIBPNG=ON -DAVIF_LIBYUV=LOCAL -DAVIF_BUILD_APPS=ON -DAVIF_ENABLE_WERROR=ON
+ - cmake .. -DAVIF_CODEC_AOM=LOCAL -DAVIF_CODEC_DAV1D=LOCAL  -DBUILD_SHARED_LIBS=OFF -DAVIF_JPEG=JPEG -DAVIF_ZLIBPNG=LOCAL -DAVIF_LIBYUV=LOCAL -DAVIF_BUILD_APPS=ON -DAVIF_ENABLE_WERROR=ON
 
 build:
   project: build/libavif.sln

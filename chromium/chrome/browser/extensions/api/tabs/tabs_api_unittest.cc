@@ -30,6 +30,7 @@
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/test_browser_window.h"
+#include "components/saved_tab_groups/features.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "content/public/browser/navigation_entry.h"
@@ -511,8 +512,6 @@ TEST_F(TabsApiUnitTest, TabsUpdate) {
 
 // Tests that calling chrome.tabs.update does not update a saved tab.
 TEST_F(TabsApiUnitTest, TabsUpdateSavedTabGroupTab) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({features::kTabGroupsSave}, {});
   const GURL kExampleCom("http://example.com");
   const GURL kChromiumOrg("https://chromium.org");
 
@@ -564,7 +563,11 @@ TEST_F(TabsApiUnitTest, TabsUpdateSavedTabGroupTab) {
       tab_groups::SavedTabGroupServiceFactory::GetInstance()->GetForProfile(
           browser()->profile());
   ASSERT_NE(saved_service, nullptr);
-  saved_service->SaveGroup(group);
+  if (!tab_groups::IsTabGroupsSaveV2Enabled()) {
+    // The group is not saved by default if we enter here. Manually save it.
+    saved_service->SaveGroup(group);
+  }
+
   EXPECT_TRUE(ExtensionTabUtil::TabIsInSavedTabGroup(
       raw_contents, browser()->tab_strip_model()));
 
@@ -700,8 +703,6 @@ TEST_F(TabsApiUnitTest, TabsUpdateSavedTabGroupTab) {
 // only.
 TEST_F(TabsApiUnitTest,
        TabsUpdateSavedTabGroupTabAllowedForLockedFullscreenPermission) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({features::kTabGroupsSave}, {});
   scoped_refptr<const Extension> extension =
       ExtensionBuilder("UpdateTest")
           .SetID("pmgljoohajacndjcjlajcopidgnhphcl")
@@ -923,8 +924,6 @@ TEST_F(TabsApiUnitTest, TabsMoveAcrossWindows) {
 
 // Tests that calling chrome.tabs.move doesn't move a saved tab.
 TEST_F(TabsApiUnitTest, TabsMoveSavedTabGroupTabNotAllowed) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({features::kTabGroupsSave}, {});
   scoped_refptr<const Extension> extension =
       ExtensionBuilder("MoveWithinWindowTest").Build();
 
@@ -991,8 +990,6 @@ TEST_F(TabsApiUnitTest, TabsMoveSavedTabGroupTabNotAllowed) {
 // locked fullscreen permission. Locked fullscreen permission is ChromeOS only.
 TEST_F(TabsApiUnitTest,
        TabsMoveSavedTabGroupTabAllowedForLockedFullscreenPermission) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({features::kTabGroupsSave}, {});
   scoped_refptr<const Extension> extension =
       ExtensionBuilder("MoveWithinWindowTest")
           .SetID("pmgljoohajacndjcjlajcopidgnhphcl")
@@ -1293,8 +1290,6 @@ TEST_F(TabsApiUnitTest, TabsGroupAcrossWindows) {
 
 // Test that grouping tabs that are in a saved group should fail.
 TEST_F(TabsApiUnitTest, TabsGroupForSavedTabGroupTabNotAllowed) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({features::kTabGroupsSave}, {});
   ASSERT_TRUE(browser()->tab_strip_model()->SupportsTabGroups());
 
   scoped_refptr<const Extension> extension =
@@ -1371,8 +1366,6 @@ TEST_F(TabsApiUnitTest, TabsGroupForSavedTabGroupTabNotAllowed) {
 // is ChromeOS only.
 TEST_F(TabsApiUnitTest,
        TabsGroupForSavedTabGroupTabAllowedForLockedFullscreenPermission) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({features::kTabGroupsSave}, {});
   ASSERT_TRUE(browser()->tab_strip_model()->SupportsTabGroups());
 
   scoped_refptr<const Extension> extension =
@@ -1490,8 +1483,6 @@ TEST_F(TabsApiUnitTest, TabsUngroupSingleGroup) {
 
 // Test that the tabs.ungroup does not ungroup a SavedTabGroup.
 TEST_F(TabsApiUnitTest, TabsUngroupSingleGroupForSavedTabGroupNotAllowed) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({features::kTabGroupsSave}, {});
   ASSERT_TRUE(browser()->tab_strip_model()->SupportsTabGroups());
 
   scoped_refptr<const Extension> extension =
@@ -1560,8 +1551,6 @@ TEST_F(TabsApiUnitTest, TabsUngroupSingleGroupForSavedTabGroupNotAllowed) {
 TEST_F(
     TabsApiUnitTest,
     TabsUngroupSingleGroupForSavedTabGroupAllowedForLockedFullscreenPermission) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({features::kTabGroupsSave}, {});
   ASSERT_TRUE(browser()->tab_strip_model()->SupportsTabGroups());
 
   scoped_refptr<const Extension> extension =
@@ -1750,8 +1739,6 @@ TEST_F(TabsApiUnitTest, TabsGoForwardAndBack) {
 }
 
 TEST_F(TabsApiUnitTest, TabsGoForwardAndBackSavedTabGroupTabNotAllowed) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({features::kTabGroupsSave}, {});
   scoped_refptr<const Extension> extension_with_tabs_permission =
       CreateTabsExtension();
 
@@ -1830,8 +1817,6 @@ TEST_F(TabsApiUnitTest, TabsGoForwardAndBackSavedTabGroupTabNotAllowed) {
 TEST_F(
     TabsApiUnitTest,
     TabsGoForwardAndBackSavedTabGroupTabAllowedForLockedFullscreenPermission) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({features::kTabGroupsSave}, {});
   scoped_refptr<const Extension> extension =
       ExtensionBuilder("GoForwardAndBackTest")
           .SetID("pmgljoohajacndjcjlajcopidgnhphcl")
@@ -2165,8 +2150,6 @@ TEST_F(TabsApiUnitTest, TabsDiscard) {
 
 // Tests that calling chrome.tabs.discard on a saved tab does not discard.
 TEST_F(TabsApiUnitTest, TabsDiscardSavedTabGroupTabNotAllowed) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({features::kTabGroupsSave}, {});
   scoped_refptr<const Extension> extension =
       ExtensionBuilder("DiscardTest").Build();
   const GURL kExampleCom("http://example.com");
@@ -2227,8 +2210,6 @@ TEST_F(TabsApiUnitTest, TabsDiscardSavedTabGroupTabNotAllowed) {
 // is ChromeOS only.
 TEST_F(TabsApiUnitTest,
        TabsDiscardSavedTabGroupTabAllowedForLockedFullscreenPermission) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({features::kTabGroupsSave}, {});
   scoped_refptr<const Extension> extension =
       ExtensionBuilder("DiscardTest")
           .SetID("pmgljoohajacndjcjlajcopidgnhphcl")

@@ -424,52 +424,52 @@ class TestConnection : public QuicConnection {
 
   TestAlarmFactory::TestAlarm* GetAckAlarm() {
     return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        QuicConnectionPeer::GetAckAlarm(this));
+        &QuicConnectionPeer::GetAckAlarm(this));
   }
 
   TestAlarmFactory::TestAlarm* GetPingAlarm() {
     return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        QuicConnectionPeer::GetPingAlarm(this));
+        &QuicConnectionPeer::GetPingAlarm(this));
   }
 
   TestAlarmFactory::TestAlarm* GetRetransmissionAlarm() {
     return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        QuicConnectionPeer::GetRetransmissionAlarm(this));
+        &QuicConnectionPeer::GetRetransmissionAlarm(this));
   }
 
   TestAlarmFactory::TestAlarm* GetSendAlarm() {
     return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        QuicConnectionPeer::GetSendAlarm(this));
+        &QuicConnectionPeer::GetSendAlarm(this));
   }
 
   TestAlarmFactory::TestAlarm* GetTimeoutAlarm() {
     return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        QuicConnectionPeer::GetIdleNetworkDetectorAlarm(this));
+        &QuicConnectionPeer::GetIdleNetworkDetectorAlarm(this));
   }
 
   TestAlarmFactory::TestAlarm* GetMtuDiscoveryAlarm() {
     return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        QuicConnectionPeer::GetMtuDiscoveryAlarm(this));
+        &QuicConnectionPeer::GetMtuDiscoveryAlarm(this));
   }
 
   TestAlarmFactory::TestAlarm* GetProcessUndecryptablePacketsAlarm() {
     return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        QuicConnectionPeer::GetProcessUndecryptablePacketsAlarm(this));
+        &QuicConnectionPeer::GetProcessUndecryptablePacketsAlarm(this));
   }
 
   TestAlarmFactory::TestAlarm* GetDiscardPreviousOneRttKeysAlarm() {
     return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        QuicConnectionPeer::GetDiscardPreviousOneRttKeysAlarm(this));
+        &QuicConnectionPeer::GetDiscardPreviousOneRttKeysAlarm(this));
   }
 
   TestAlarmFactory::TestAlarm* GetDiscardZeroRttDecryptionKeysAlarm() {
     return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        QuicConnectionPeer::GetDiscardZeroRttDecryptionKeysAlarm(this));
+        &QuicConnectionPeer::GetDiscardZeroRttDecryptionKeysAlarm(this));
   }
 
   TestAlarmFactory::TestAlarm* GetBlackholeDetectorAlarm() {
     return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        QuicConnectionPeer::GetBlackholeDetectorAlarm(this));
+        &QuicConnectionPeer::GetBlackholeDetectorAlarm(this));
   }
 
   TestAlarmFactory::TestAlarm* GetRetirePeerIssuedConnectionIdAlarm() {
@@ -484,7 +484,7 @@ class TestConnection : public QuicConnection {
 
   TestAlarmFactory::TestAlarm* GetMultiPortProbingAlarm() {
     return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        QuicConnectionPeer::GetMultiPortProbingAlarm(this));
+        &QuicConnectionPeer::GetMultiPortProbingAlarm(this));
   }
 
   void PathDegradingTimeout() {
@@ -700,7 +700,7 @@ class QuicConnectionTest : public QuicTestWithParam<TestParams> {
     EXPECT_CALL(visitor_, OnCongestionWindowChange(_)).Times(AnyNumber());
     EXPECT_CALL(visitor_, OnPacketReceived(_, _, _)).Times(AnyNumber());
     EXPECT_CALL(visitor_, OnSuccessfulVersionNegotiation(_)).Times(AnyNumber());
-    if (GetQuicRestartFlag(quic_opport_bundle_qpack_decoder_data3)) {
+    if (GetQuicRestartFlag(quic_opport_bundle_qpack_decoder_data5)) {
       EXPECT_CALL(visitor_, MaybeBundleOpportunistically()).Times(AnyNumber());
       EXPECT_CALL(visitor_, GetFlowControlSendWindowSize(_)).Times(AnyNumber());
     }
@@ -1236,7 +1236,7 @@ class QuicConnectionTest : public QuicTestWithParam<TestParams> {
   }
 
   QuicTime::Delta DefaultDelayedAckTime() {
-    return QuicTime::Delta::FromMilliseconds(kDefaultDelayedAckTimeMs);
+    return QuicTime::Delta::FromMilliseconds(GetDefaultDelayedAckTimeMs());
   }
 
   const QuicStopWaitingFrame InitStopWaitingFrame(uint64_t least_unacked) {
@@ -1484,7 +1484,7 @@ class QuicConnectionTest : public QuicTestWithParam<TestParams> {
     QuicConfig config;
     EXPECT_CALL(*send_algorithm_, SetFromConfig(_, _));
     connection_.SetFromConfig(config);
-    connection_.set_sent_server_preferred_address(kServerPreferredAddress);
+    connection_.set_expected_server_preferred_address(kServerPreferredAddress);
   }
 
   // Receive server preferred address.
@@ -12936,7 +12936,7 @@ TEST_P(QuicConnectionTest, SendAckFrequencyFrame) {
 
   EXPECT_EQ(captured_frame.packet_tolerance, 10u);
   EXPECT_EQ(captured_frame.max_ack_delay,
-            QuicTime::Delta::FromMilliseconds(kDefaultDelayedAckTimeMs));
+            QuicTime::Delta::FromMilliseconds(GetDefaultDelayedAckTimeMs()));
 
   // Sending packet 102 does not trigger sending another AckFrequencyFrame.
   SendStreamDataToPeer(/*id=*/1, "baz", /*offset=*/6, NO_FIN, nullptr);
@@ -12974,7 +12974,7 @@ TEST_P(QuicConnectionTest, SendAckFrequencyFrameUponHandshakeCompletion) {
 
   EXPECT_EQ(captured_frame.packet_tolerance, 2u);
   EXPECT_EQ(captured_frame.max_ack_delay,
-            QuicTime::Delta::FromMilliseconds(kDefaultDelayedAckTimeMs));
+            QuicTime::Delta::FromMilliseconds(GetDefaultDelayedAckTimeMs()));
 }
 
 TEST_P(QuicConnectionTest, FastRecoveryOfLostServerHello) {
@@ -15730,8 +15730,8 @@ TEST_P(QuicConnectionTest,
   connection_.SendStreamDataWithString(0, std::string(10, 'a'), 0, FIN);
 
   // Receives 1-RTT ACK for 0-RTT packet after RTT + ack_delay.
-  clock_.AdvanceTime(
-      kTestRTT + QuicTime::Delta::FromMilliseconds(kDefaultDelayedAckTimeMs));
+  clock_.AdvanceTime(kTestRTT + QuicTime::Delta::FromMilliseconds(
+                                    GetDefaultDelayedAckTimeMs()));
   EXPECT_EQ(0u, QuicConnectionPeer::NumUndecryptablePackets(&connection_));
   peer_framer_.SetEncrypter(
       ENCRYPTION_FORWARD_SECURE,
@@ -15739,7 +15739,7 @@ TEST_P(QuicConnectionTest,
   QuicAckFrame ack_frame = InitAckFrame(1);
   // Peer reported ACK delay.
   ack_frame.ack_delay_time =
-      QuicTime::Delta::FromMilliseconds(kDefaultDelayedAckTimeMs);
+      QuicTime::Delta::FromMilliseconds(GetDefaultDelayedAckTimeMs());
   QuicFrames frames;
   frames.push_back(QuicFrame(&ack_frame));
   QuicPacketHeader header =

@@ -143,6 +143,12 @@ std::unique_ptr<compose::ComposeDialogController> ShowComposeDialog(
     const gfx::RectF& element_bounds_in_screen);
 #endif
 
+// Shows the 'Create Shortcut' dialog to create fire and forget entities on the
+// desktop of the OS. Before the dialog is shown, the necessary metadata is
+// gathered from the browser's active WebContents.
+// Triggered from the three-dot menu on Chrome, Save & Share > Create Shortcut.
+void CreateDesktopShortcutForActiveWebContents(Browser* browser);
+
 }  // namespace chrome
 
 void ShowFolderUploadConfirmationDialog(

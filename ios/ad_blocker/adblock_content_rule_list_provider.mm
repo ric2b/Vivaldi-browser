@@ -66,8 +66,8 @@ class AdBlockerContentRuleListProviderImpl
   void ApplyContentRuleListsForController(
       __weak WKUserContentController* user_content_controller);
 
-  web::BrowserState* browser_state_;
-  web::BrowserState* incognito_browser_state_ = nullptr;
+  base::WeakPtr<web::WKWebViewConfigurationProvider> config_provider_;
+  base::WeakPtr<web::WKWebViewConfigurationProvider> incognito_config_provider_;
   bool can_apply_rules_ = false;
   RuleGroup group_;
   __weak WKUserContentController* user_content_controller_;
@@ -85,14 +85,14 @@ AdBlockerContentRuleListProviderImpl::AdBlockerContentRuleListProviderImpl(
     RuleGroup group,
     base::OnceClosure on_loaded,
     base::RepeatingClosure on_done_applying_rules)
-    : browser_state_(browser_state),
+    : config_provider_(
+          web::WKWebViewConfigurationProvider::FromBrowserState(browser_state)
+              .AsWeakPtr()),
       group_(group),
       on_done_applying_rules_(std::move(on_done_applying_rules)) {
-  web::WKWebViewConfigurationProvider& config_provider =
-      web::WKWebViewConfigurationProvider::FromBrowserState(browser_state_);
-  DidCreateNewConfiguration(&config_provider,
-                            config_provider.GetWebViewConfiguration());
-  config_provider.AddObserver(this);
+  DidCreateNewConfiguration(config_provider_.get(),
+                            config_provider_->GetWebViewConfiguration());
+  config_provider_->AddObserver(this);
 
   base::WeakPtr<AdBlockerContentRuleListProviderImpl> weak_this =
       weak_ptr_factory_.GetWeakPtr();
@@ -128,8 +128,12 @@ AdBlockerContentRuleListProviderImpl::AdBlockerContentRuleListProviderImpl(
 }
 
 AdBlockerContentRuleListProviderImpl::~AdBlockerContentRuleListProviderImpl() {
-  web::WKWebViewConfigurationProvider::FromBrowserState(browser_state_)
-      .RemoveObserver(this);
+  if (config_provider_) {
+    config_provider_->RemoveObserver(this);
+  }
+  if (incognito_config_provider_) {
+    incognito_config_provider_->RemoveObserver(this);
+  }
 }
 
 void AdBlockerContentRuleListProviderImpl::ApplyLoadedRules() {
@@ -139,14 +143,21 @@ void AdBlockerContentRuleListProviderImpl::ApplyLoadedRules() {
 
 void AdBlockerContentRuleListProviderImpl::SetIncognitoBrowserState(
     web::BrowserState* browser_state) {
-  incognito_browser_state_ = browser_state;
-  if (incognito_browser_state_) {
-    web::WKWebViewConfigurationProvider& config_provider =
-        web::WKWebViewConfigurationProvider::FromBrowserState(
-            incognito_browser_state_);
-    DidCreateNewConfiguration(&config_provider,
-                              config_provider.GetWebViewConfiguration());
+  if (incognito_config_provider_) {
+    incognito_config_provider_->RemoveObserver(this);
+    incognito_config_provider_.reset();
   }
+
+  if (!browser_state) {
+    return;
+  }
+  incognito_config_provider_ =
+      web::WKWebViewConfigurationProvider::FromBrowserState(browser_state)
+          .AsWeakPtr();
+  DidCreateNewConfiguration(
+      incognito_config_provider_.get(),
+      incognito_config_provider_->GetWebViewConfiguration());
+  incognito_config_provider_->AddObserver(this);
 }
 
 void AdBlockerContentRuleListProviderImpl::InstallContentRuleLists(
@@ -199,14 +210,10 @@ void AdBlockerContentRuleListProviderImpl::InstallContentRuleLists(
 void AdBlockerContentRuleListProviderImpl::DidCreateNewConfiguration(
     web::WKWebViewConfigurationProvider* config_provider,
     WKWebViewConfiguration* new_config) {
-  if (config_provider ==
-      &web::WKWebViewConfigurationProvider::FromBrowserState(browser_state_)) {
+  if (config_provider == config_provider_.get()) {
     user_content_controller_ = new_config.userContentController;
     ApplyContentRuleListsForController(user_content_controller_);
-  } else if (incognito_browser_state_ &&
-             config_provider ==
-                 &web::WKWebViewConfigurationProvider::FromBrowserState(
-                     incognito_browser_state_)) {
+  } else if (config_provider == incognito_config_provider_.get()) {
     incognito_user_content_controller_ = new_config.userContentController;
     ApplyContentRuleListsForController(incognito_user_content_controller_);
   }

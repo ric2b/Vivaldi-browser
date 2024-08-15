@@ -126,10 +126,12 @@ class PermissionManager : public KeyedService,
       const url::Origin& embedding_origin) override;
   PermissionStatus GetPermissionStatusForCurrentDocument(
       blink::PermissionType permission,
-      content::RenderFrameHost* render_frame_host) override;
+      content::RenderFrameHost* render_frame_host,
+      bool should_include_device_status) override;
   content::PermissionResult GetPermissionResultForCurrentDocument(
       blink::PermissionType permission,
-      content::RenderFrameHost* render_frame_host) override;
+      content::RenderFrameHost* render_frame_host,
+      bool should_include_device_status) override;
   PermissionStatus GetPermissionStatusForWorker(
       blink::PermissionType permission,
       content::RenderProcessHost* render_process_host,
@@ -146,6 +148,7 @@ class PermissionManager : public KeyedService,
       content::RenderProcessHost* render_process_host,
       content::RenderFrameHost* render_frame_host,
       const GURL& requesting_origin,
+      bool should_include_device_status,
       base::RepeatingCallback<void(PermissionStatus)> callback) override;
   void UnsubscribeFromPermissionStatusChange(
       SubscriptionId subscription_id) override;
@@ -175,7 +178,8 @@ class PermissionManager : public KeyedService,
       content::RenderProcessHost* render_process_host,
       content::RenderFrameHost* render_frame_host,
       const GURL& requesting_origin,
-      const GURL& embedding_origin);
+      const GURL& embedding_origin,
+      bool should_include_device_status);
 
   raw_ptr<content::BrowserContext> browser_context_;
 

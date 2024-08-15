@@ -56,11 +56,14 @@ class CameraAppEventsSender : public camera_app::mojom::EventsSender {
 
   void SendPerfEvent(camera_app::mojom::PerfEventParamsPtr params) override;
 
+  void SendUnsupportedProtocolEvent() override;
+
   void UpdateMemoryUsageEventParams(
       camera_app::mojom::MemoryUsageEventParamsPtr params) override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(CameraAppEventsSenderTest, EndSession);
+  FRIEND_TEST_ALL_PREFIXES(CameraAppEventsSenderTest, MemoryUsage);
 
   friend class CameraAppEventsSenderTest;
 

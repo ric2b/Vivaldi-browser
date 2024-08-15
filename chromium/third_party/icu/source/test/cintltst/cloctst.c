@@ -4609,8 +4609,8 @@ const char* const full_data[][3] = {
     "am"
   }, {
     "und_Ethi_ER",
-    "am_Ethi_ER",
-    "am_ER"
+    "ti_Ethi_ER",
+    "ti_ER"
   }, {
     "und_FI",
     "fi_Latn_FI",
@@ -5341,8 +5341,8 @@ const char* const full_data[][3] = {
     "zh_HK"
   }, {
     "und_AQ",
-    "_Latn_AQ",
-    "_AQ"
+    "en_Latn_AQ",
+    "en_AQ"
   }, {
     "und_Zzzz",
     "en_Latn_US",
@@ -5365,8 +5365,8 @@ const char* const full_data[][3] = {
     "zh_HK"
   }, {
     "und_Zzzz_AQ",
-    "_Latn_AQ",
-    "_AQ"
+    "en_Latn_AQ",
+    "en_AQ"
   }, {
     "und_Latn",
     "en_Latn_US",
@@ -5385,12 +5385,12 @@ const char* const full_data[][3] = {
     "trv"
   }, {
     "und_Latn_HK",
-    "zh_Latn_HK",
-    "zh_Latn_HK"
+    "en_Latn_HK",
+    "en_HK"
   }, {
     "und_Latn_AQ",
-    "_Latn_AQ",
-    "_AQ"
+    "en_Latn_AQ",
+    "en_AQ"
   }, {
     "und_Hans",
     "zh_Hans_CN",
@@ -5461,8 +5461,8 @@ const char* const full_data[][3] = {
     "zh_Moon_HK"
   }, {
     "und_Moon_AQ",
-    "_Moon_AQ",
-    "_Moon_AQ"
+    "en_Moon_AQ",
+    "en_Moon_AQ"
   }, {
     "es",
     "es_Latn_ES",
@@ -6890,6 +6890,10 @@ static void TestIsRightToLeft() {
     if(uloc_isRightToLeft("root") || !uloc_isRightToLeft("EN-HEBR")) {
         log_err("uloc_isRightToLeft() failed");
     }
+    // ICU-22466 Make sure no crash when locale is bogus
+    uloc_isRightToLeft(
+        "uF-Vd_u-VaapoPos-u1-Pos-u1-Pos-u1-Pos-u1-oPos-u1-Pufu1-PuosPos-u1-Pos-u1-Pos-u1-Pzghu1-Pos-u1-PoP-u1@osus-u1");
+    uloc_isRightToLeft("-Xa");
 }
 
 typedef struct {
@@ -7067,7 +7071,7 @@ static const UldnItem zh_DiaMidLong[] = {
 static const UldnItem zh_Hant_DiaMidLong[] = {
     // zh and zh_Hant both have dialect names for the following in ICU 73
     { "ar_001",                 TEST_ULDN_LOCALE, u"現代標準阿拉伯文" },
-    { "nl_BE",                  TEST_ULDN_LOCALE, u"佛蘭芒文" },
+    { "nl_BE",                  TEST_ULDN_LOCALE, u"法蘭德斯文" },
     { "ro_MD",                  TEST_ULDN_LOCALE, u"摩爾多瓦文" },
     // zh_Hant no dialect names for the following in ICU-73,
     // use standard name

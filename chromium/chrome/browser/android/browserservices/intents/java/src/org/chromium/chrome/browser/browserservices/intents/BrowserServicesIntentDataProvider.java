@@ -242,8 +242,15 @@ public abstract class BrowserServicesIntentDataProvider {
     }
 
     /**
+     * @return The list of params representing the custom buttons on the Google Bottom Bar.
+     */
+    public List<CustomButtonParams> getCustomButtonsOnGoogleBottomBar() {
+        return Collections.emptyList();
+    }
+
+    /**
      * @return The {@link RemoteViews} to show on the bottom bar, or null if the extra is not
-     *         specified.
+     *     specified.
      */
     public @Nullable RemoteViews getBottomBarRemoteViews() {
         return null;
@@ -592,5 +599,10 @@ public abstract class BrowserServicesIntentDataProvider {
     /** Return the default position. */
     public int getSideSheetPosition() {
         return ACTIVITY_SIDE_SHEET_POSITION_END;
+    }
+
+    /** Return whether calling package should be allowed to present an interactive Omnibox. */
+    public boolean isInteractiveOmniboxAllowed() {
+        return false;
     }
 }

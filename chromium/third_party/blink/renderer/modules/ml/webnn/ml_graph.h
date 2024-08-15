@@ -17,6 +17,7 @@
 #include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
 
 namespace blink {
+class MLBuffer;
 class MLComputeResult;
 class MLContext;
 
@@ -24,6 +25,8 @@ class MLContext;
 // https://www.w3.org/TR/webnn/#typedefdef-mlnamedarraybufferviews
 typedef HeapVector<std::pair<String, NotShared<DOMArrayBufferView>>>
     MLNamedArrayBufferViews;
+
+typedef HeapVector<std::pair<String, Member<MLBuffer>>> MLNamedBuffers;
 
 class MODULES_EXPORT MLGraph : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
@@ -59,8 +62,19 @@ class MODULES_EXPORT MLGraph : public ScriptWrappable {
   void Compute(ScopedMLTrace scoped_trace,
                const MLNamedArrayBufferViews& inputs,
                const MLNamedArrayBufferViews& outputs,
-               ScriptPromiseResolverTyped<MLComputeResult>* resolver,
+               ScriptPromiseResolver<MLComputeResult>* resolver,
                ExceptionState& exception_state);
+
+  // This method validates the input and output MLNamedBuffers against
+  // the graph's input and output resources info. If there are no errors, it
+  // passes the buffers to DispatchImpl() implemented by an MLGraph backend that
+  // binds the buffers and executes the compiled platform graph.
+  // This method is called by MLContext to implement MLContext.dispatch()
+  // method.
+  void Dispatch(ScopedMLTrace scoped_trace,
+                const MLNamedBuffers& inputs,
+                const MLNamedBuffers& outputs,
+                ExceptionState& exception_state);
 
   const MLContext* Context() const;
 
@@ -74,7 +88,7 @@ class MODULES_EXPORT MLGraph : public ScriptWrappable {
   // specific graph.
   void Build(ScopedMLTrace scoped_trace,
              const MLNamedOperands& named_outputs,
-             ScriptPromiseResolverTyped<MLGraph>* resolver);
+             ScriptPromiseResolver<MLGraph>* resolver);
 
   // An MLGraph backend should implement this method to build and compile a
   // platform specific graph asynchronously. The actual graph construction and
@@ -84,7 +98,7 @@ class MODULES_EXPORT MLGraph : public ScriptWrappable {
   // rejected with a DOMException accordingly.
   virtual void BuildImpl(ScopedMLTrace scoped_trace,
                          const MLNamedOperands& outputs,
-                         ScriptPromiseResolverTyped<MLGraph>* resolver) = 0;
+                         ScriptPromiseResolver<MLGraph>* resolver) = 0;
 
   // An MLGraph backend should implement this method to execute the compiled
   // platform graph asynchronously. The actual graph execution work should be
@@ -98,12 +112,16 @@ class MODULES_EXPORT MLGraph : public ScriptWrappable {
   // the resolver will be resolved with an MLComputeResult that contains the
   // input and output buffers. Otherwise, the resolver will be rejected with a
   // DOMException accordingly.
-  virtual void ComputeImpl(
-      ScopedMLTrace scoped_trace,
-      const MLNamedArrayBufferViews& inputs,
-      const MLNamedArrayBufferViews& outputs,
-      ScriptPromiseResolverTyped<MLComputeResult>* resolver,
-      ExceptionState& exception_state) = 0;
+  virtual void ComputeImpl(ScopedMLTrace scoped_trace,
+                           const MLNamedArrayBufferViews& inputs,
+                           const MLNamedArrayBufferViews& outputs,
+                           ScriptPromiseResolver<MLComputeResult>* resolver,
+                           ExceptionState& exception_state) = 0;
+
+  virtual void DispatchImpl(ScopedMLTrace scoped_trace,
+                            const MLNamedBuffers& inputs,
+                            const MLNamedBuffers& outputs,
+                            ExceptionState& exception_state) = 0;
 
   Member<MLContext> ml_context_;
   bool resources_info_initialized_{false};
@@ -113,8 +131,8 @@ class MODULES_EXPORT MLGraph : public ScriptWrappable {
  private:
   // This helper method is called by Build(). It validates named outputs
   // and initializes the input and output resources info by graph traversal.
-  bool ValidateAndInitializeResourcesInfo(const MLNamedOperands& named_outputs,
-                                          String& error_message);
+  base::expected<void, String> ValidateAndInitializeResourcesInfo(
+      const MLNamedOperands& named_outputs);
 };
 
 }  // namespace blink

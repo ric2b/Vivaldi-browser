@@ -44,9 +44,9 @@ typedef struct VkuInstanceDispatchTable_ {
 ''')
         guard_helper = PlatformGuardHelper()
         for command in [x for x in self.vk.commands.values() if x.instance]:
-            out.extend(guard_helper.addGuard(command.protect))
+            out.extend(guard_helper.add_guard(command.protect))
             out.append(f'    PFN_{command.name} {command.name[2:]};\n')
-        out.extend(guard_helper.addGuard(None))
+        out.extend(guard_helper.add_guard(None))
         out.append('} VkuInstanceDispatchTable;\n')
 
         out.append('''
@@ -54,9 +54,9 @@ typedef struct VkuInstanceDispatchTable_ {
 typedef struct VkuDeviceDispatchTable_ {
 ''')
         for command in [x for x in self.vk.commands.values() if x.device]:
-            out.extend(guard_helper.addGuard(command.protect))
+            out.extend(guard_helper.add_guard(command.protect))
             out.append(f'    PFN_{command.name} {command.name[2:]};\n')
-        out.extend(guard_helper.addGuard(None))
+        out.extend(guard_helper.add_guard(None))
         out.append('} VkuDeviceDispatchTable;\n')
 
         out.append('''
@@ -67,9 +67,9 @@ static inline void vkuInitDeviceDispatchTable(VkDevice device, VkuDeviceDispatch
 ''')
 
         for command in [x for x in self.vk.commands.values() if x.device and x.name != 'vkGetDeviceProcAddr']:
-            out.extend(guard_helper.addGuard(command.protect))
+            out.extend(guard_helper.add_guard(command.protect))
             out.append(f'    table->{command.name[2:]} = (PFN_{command.name})gdpa(device, "{command.name}");\n')
-        out.extend(guard_helper.addGuard(None))
+        out.extend(guard_helper.add_guard(None))
         out.append('}\n')
 
         out.append('''
@@ -89,9 +89,9 @@ static inline void vkuInitInstanceDispatchTable(VkInstance instance, VkuInstance
                 'vkEnumerateInstanceVersion',
                 'vkGetInstanceProcAddr',
         ]]:
-            out.extend(guard_helper.addGuard(command.protect))
+            out.extend(guard_helper.add_guard(command.protect))
             out.append(f'    table->{command.name[2:]} = (PFN_{command.name})gipa(instance, "{command.name}");\n')
-        out.extend(guard_helper.addGuard(None))
+        out.extend(guard_helper.add_guard(None))
         out.append('}\n')
 
         out.append('// clang-format on')

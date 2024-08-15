@@ -2,31 +2,36 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as Coordinator from '../components/render_coordinator/render_coordinator.js';
+
+const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
+
 import {
-  assertElement,
   dispatchClickEvent,
   renderElementIntoDOM,
 } from '../../testing/DOMHelpers.js';
+import {describeWithLocale} from '../../testing/EnvironmentHelpers.js';
 
 import * as UI from './legacy.js';
 
-const {assert} = chai;
-
 describe('Toolbar', () => {
-  describe('ToolbarInput', () => {
-    it('sets a title on the clear button', () => {
+  describeWithLocale('ToolbarInput', () => {
+    it('sets a title on the clear button', async () => {
       const input = new UI.Toolbar.ToolbarInput('placeholder');
       renderElementIntoDOM(input.element);
+      input.setValue('test value');
       const clearButton = input.element.querySelector('.toolbar-input-clear-button');
-      assertElement(clearButton, HTMLElement);
-      assert.strictEqual(clearButton.title, 'Clear input');
+      await coordinator.done();
+      const innerButton = clearButton?.shadowRoot?.querySelector('button');
+      assert.instanceOf(innerButton, HTMLElement);
+      assert.strictEqual(innerButton.title, 'Clear');
     });
 
     it('clears the input when the clear button is clicked', () => {
       const input = new UI.Toolbar.ToolbarInput('placeholder');
       renderElementIntoDOM(input.element);
       const clearButton = input.element.querySelector('.toolbar-input-clear-button');
-      assertElement(clearButton, HTMLElement);
+      assert.instanceOf(clearButton, HTMLElement);
       input.setValue('test value');
       dispatchClickEvent(clearButton);
       assert.strictEqual(input.value(), '');

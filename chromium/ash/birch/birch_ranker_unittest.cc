@@ -61,7 +61,9 @@ TEST(BirchRankerTest, RankCalendarItems_Morning) {
       /*start_time=*/TimeFromString("22 Feb 2024 08:00 UTC"),
       /*end_time=*/TimeFromString("22 Feb 2024 11:00 UTC"),
       /*calendar_url=*/GURL(),
-      /*conference_url=*/GURL());
+      /*conference_url=*/GURL(),
+      /*event_id=*/"",
+      /*all_day_event=*/false);
 
   // Create an upcoming event (10:00 - 10:30).
   BirchCalendarItem item1(
@@ -69,7 +71,9 @@ TEST(BirchRankerTest, RankCalendarItems_Morning) {
       /*start_time=*/TimeFromString("22 Feb 2024 10:00 UTC"),
       /*end_time=*/TimeFromString("22 Feb 2024 10:30 UTC"),
       /*calendar_url=*/GURL(),
-      /*conference_url=*/GURL());
+      /*conference_url=*/GURL(),
+      /*event_id=*/"",
+      /*all_day_event=*/false);
 
   // Create another event later in the day. It isn't the first one, so it won't
   // be ranked.
@@ -78,7 +82,9 @@ TEST(BirchRankerTest, RankCalendarItems_Morning) {
       /*start_time=*/TimeFromString("22 Feb 2024 13:00 UTC"),
       /*end_time=*/TimeFromString("22 Feb 2024 13:30 UTC"),
       /*calendar_url=*/GURL(),
-      /*conference_url=*/GURL());
+      /*conference_url=*/GURL(),
+      /*event_id=*/"",
+      /*all_day_event=*/false);
 
   // Put the items in the vector in reverse order to validate that they are
   // still handled in the correct order (by time) inside the ranker.
@@ -110,7 +116,9 @@ TEST(BirchRankerTest, RankCalendarItems_Evening) {
       /*start_time=*/TimeFromString("22 Feb 2024 18:15 UTC"),
       /*end_time=*/TimeFromString("22 Feb 2024 18:45 UTC"),
       /*calendar_url=*/GURL(),
-      /*conference_url=*/GURL());
+      /*conference_url=*/GURL(),
+      /*event_id=*/"",
+      /*all_day_event=*/false);
 
   // Create an event starting more than 30 minutes from now (7 PM).
   BirchCalendarItem item1(
@@ -118,7 +126,9 @@ TEST(BirchRankerTest, RankCalendarItems_Evening) {
       /*start_time=*/TimeFromString("22 Feb 2024 19:00 UTC"),
       /*end_time=*/TimeFromString("22 Feb 2024 19:30 UTC"),
       /*calendar_url=*/GURL(),
-      /*conference_url=*/GURL());
+      /*conference_url=*/GURL(),
+      /*event_id=*/"",
+      /*all_day_event=*/false);
 
   // Create an event for 9 AM tomorrow morning.
   BirchCalendarItem item2(
@@ -126,7 +136,9 @@ TEST(BirchRankerTest, RankCalendarItems_Evening) {
       /*start_time=*/TimeFromString("23 Feb 2024 09:00 UTC"),
       /*end_time=*/TimeFromString("23 Feb 2024 09:30 UTC"),
       /*calendar_url=*/GURL(),
-      /*conference_url=*/GURL());
+      /*conference_url=*/GURL(),
+      /*event_id=*/"",
+      /*all_day_event=*/false);
 
   // Put the items in the vector in reverse order to validate that they are
   // still handled in the correct order (by time) inside the ranker.
@@ -158,7 +170,9 @@ TEST(BirchRankerTest, RankCalendarItems_OngoingInAfternoon) {
                          /*start_time=*/TimeFromString("22 Feb 2024 14:00 UTC"),
                          /*end_time=*/TimeFromString("22 Feb 2024 16:00 UTC"),
                          /*calendar_url=*/GURL(),
-                         /*conference_url=*/GURL());
+                         /*conference_url=*/GURL(),
+                         /*event_id=*/"",
+                         /*all_day_event=*/false);
   std::vector<BirchCalendarItem> items = {item};
 
   ranker.RankCalendarItems(&items);
@@ -183,7 +197,8 @@ TEST(BirchRankerTest, RankAttachmentItems_Morning) {
       /*file_url=*/GURL(),
       /*icon_url=*/GURL(),
       /*start_time=*/TimeFromString("22 Feb 2024 08:00 UTC"),
-      /*end_time=*/TimeFromString("22 Feb 2024 10:00 UTC"));
+      /*end_time=*/TimeFromString("22 Feb 2024 10:00 UTC"),
+      /*file_id=*/"");
 
   // Create an attachment for an upcoming event (9:15 to 9:45).
   BirchAttachmentItem item1(
@@ -191,7 +206,8 @@ TEST(BirchRankerTest, RankAttachmentItems_Morning) {
       /*file_url=*/GURL(),
       /*icon_url=*/GURL(),
       /*start_time=*/TimeFromString("22 Feb 2024 09:15 UTC"),
-      /*end_time=*/TimeFromString("22 Feb 2024 09:45 UTC"));
+      /*end_time=*/TimeFromString("22 Feb 2024 09:45 UTC"),
+      /*file_id=*/"");
 
   // Create an attachment for another event later in the day (1 PM).
   BirchAttachmentItem item2(
@@ -199,7 +215,8 @@ TEST(BirchRankerTest, RankAttachmentItems_Morning) {
       /*file_url=*/GURL(),
       /*icon_url=*/GURL(),
       /*start_time=*/TimeFromString("22 Feb 2024 13:00 UTC"),
-      /*end_time=*/TimeFromString("22 Feb 2024 13:30 UTC"));
+      /*end_time=*/TimeFromString("22 Feb 2024 13:30 UTC"),
+      /*file_id=*/"");
 
   // Put the items in the vector in reverse order to validate that they are
   // still handled in the correct order (by time) inside the ranker.
@@ -233,7 +250,8 @@ TEST(BirchRankerTest, RankAttachmentItems_Evening) {
       /*file_url=*/GURL(),
       /*icon_url=*/GURL(),
       /*start_time=*/TimeFromString("22 Feb 2024 17:00 UTC"),
-      /*end_time=*/TimeFromString("22 Feb 2024 19:00 UTC"));
+      /*end_time=*/TimeFromString("22 Feb 2024 19:00 UTC"),
+      /*file_id=*/"");
 
   // Create an attachment for an upcoming event (6:15 PM).
   BirchAttachmentItem item1(
@@ -241,7 +259,8 @@ TEST(BirchRankerTest, RankAttachmentItems_Evening) {
       /*file_url=*/GURL(),
       /*icon_url=*/GURL(),
       /*start_time=*/TimeFromString("22 Feb 2024 18:15 UTC"),
-      /*end_time=*/TimeFromString("22 Feb 2024 18:45 UTC"));
+      /*end_time=*/TimeFromString("22 Feb 2024 18:45 UTC"),
+      /*file_id=*/"");
 
   // Create an attachment for another event later in the evening (8 PM).
   BirchAttachmentItem item2(
@@ -249,7 +268,8 @@ TEST(BirchRankerTest, RankAttachmentItems_Evening) {
       /*file_url=*/GURL(),
       /*icon_url=*/GURL(),
       /*start_time=*/TimeFromString("22 Feb 2024 20:00 UTC"),
-      /*end_time=*/TimeFromString("22 Feb 2024 20:30 UTC"));
+      /*end_time=*/TimeFromString("22 Feb 2024 20:30 UTC"),
+      /*file_id=*/"");
 
   // Put the items in the vector in reverse order to validate that they are
   // still handled in the correct order (by time) inside the ranker.
@@ -278,19 +298,23 @@ TEST(BirchRankerTest, RankFileSuggestItems) {
 
   // Create a file shared in the last hour.
   BirchFileItem item0(base::FilePath("/item0"), u"suggested",
-                      TimeFromString("22 Feb 2024 08:45 UTC"));
+                      TimeFromString("22 Feb 2024 08:45 UTC"), "id_0",
+                      "icon_url");
 
   // Create a file shared in the last day.
   BirchFileItem item1(base::FilePath("/item1"), u"suggested",
-                      TimeFromString("21 Feb 2024 09:15 UTC"));
+                      TimeFromString("21 Feb 2024 09:15 UTC"), "id_1",
+                      "icon_url");
 
   // Create a file shared in the last week.
   BirchFileItem item2(base::FilePath("/item2"), u"suggested",
-                      TimeFromString("15 Feb 2024 09:15 UTC"));
+                      TimeFromString("15 Feb 2024 09:15 UTC"), "id_2",
+                      "icon_url");
 
   // Create a file shared more than a week ago.
   BirchFileItem item3(base::FilePath("/item3"), u"suggested",
-                      TimeFromString("14 Feb 2024 09:15 UTC"));
+                      TimeFromString("14 Feb 2024 09:15 UTC"), "id_3",
+                      "icon_url");
 
   // Put the items in the vector in reverse order to validate that they are
   // still handled in the correct order (by time) inside the ranker.
@@ -324,45 +348,59 @@ TEST(BirchRankerTest, RankRecentTabItems) {
   base::Time now = TimeFromString("22 Feb 2024 09:00 UTC");
   BirchRanker ranker(now);
 
-  // Create tab with a timestamp in the last 5 minutes.
+  // Create phone tab with a timestamp in the last 5 minutes.
   BirchTabItem item0(u"item0", GURL(), TimeFromString("22 Feb 2024 08:59 UTC"),
-                     GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop);
+                     GURL(), "", BirchTabItem::DeviceFormFactor::kPhone);
 
-  // Create a tab with timestamp in the last hour.
-  BirchTabItem item1(u"item1", GURL(), TimeFromString("22 Feb 2024 08:30 UTC"),
+  // Create tablet tab with a timestamp in the last 5 minutes.
+  BirchTabItem item1(u"item1", GURL(), TimeFromString("22 Feb 2024 08:58 UTC"),
+                     GURL(), "", BirchTabItem::DeviceFormFactor::kTablet);
+
+  // Create phone tab with a timestamp in the last hour.
+  BirchTabItem item2(u"item2", GURL(), TimeFromString("22 Feb 2024 08:31 UTC"),
+                     GURL(), "", BirchTabItem::DeviceFormFactor::kPhone);
+
+  // Create a desktop tab with timestamp in the last hour.
+  BirchTabItem item3(u"item3", GURL(), TimeFromString("22 Feb 2024 08:30 UTC"),
                      GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop);
 
   // Create a tab with timestamp in the last day.
-  BirchTabItem item2(u"item2", GURL(), TimeFromString("21 Feb 2024 09:01 UTC"),
+  BirchTabItem item4(u"item4", GURL(), TimeFromString("21 Feb 2024 09:01 UTC"),
                      GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop);
 
   // Create a tab with timestamp more than a day ago.
-  BirchTabItem item3(u"item3", GURL(), TimeFromString("21 Feb 2024 08:59 UTC"),
+  BirchTabItem item5(u"item5", GURL(), TimeFromString("21 Feb 2024 08:59 UTC"),
                      GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop);
 
   // Put the items in the vector in reverse order to validate that they are
   // still handled in the correct order (by time) inside the ranker.
-  std::vector<BirchTabItem> items = {item3, item2, item1, item0};
+  std::vector<BirchTabItem> items = {item5, item4, item3, item2, item1, item0};
 
   ranker.RankRecentTabItems(&items);
 
-  ASSERT_EQ(4u, items.size());
+  ASSERT_EQ(6u, items.size());
 
-  // The tab with a timestamp in the last 5 minutes has high priority.
+  // The mobile tabs with a timestamp in the last 5 minutes has high priority.
   EXPECT_EQ(items[0].title(), u"item0");
   EXPECT_FLOAT_EQ(items[0].ranking(), 14.f);
-
-  // The tab with a timestamp in the last hour has medium priority.
   EXPECT_EQ(items[1].title(), u"item1");
-  EXPECT_FLOAT_EQ(items[1].ranking(), 17.f);
+  EXPECT_FLOAT_EQ(items[1].ranking(), 14.f);
 
-  // The tab with a timestamp in the last day has low priority.
+  // The mobile tab with a timestamp in the last hour is unranked.
   EXPECT_EQ(items[2].title(), u"item2");
-  EXPECT_FLOAT_EQ(items[2].ranking(), 30.f);
+  EXPECT_FLOAT_EQ(items[2].ranking(), std::numeric_limits<float>::max());
+
+  // The desktop tab with a timestamp in the last hour has medium priority.
+  EXPECT_EQ(items[3].title(), u"item3");
+  EXPECT_FLOAT_EQ(items[3].ranking(), 17.f);
+
+  // The desktop tab with a timestamp in the last day has low priority.
+  EXPECT_EQ(items[4].title(), u"item4");
+  EXPECT_FLOAT_EQ(items[4].ranking(), 30.f);
 
   // The tab with a timestamp more than a day ago wasn't ranked.
-  EXPECT_EQ(items[3].title(), u"item3");
-  EXPECT_FLOAT_EQ(items[3].ranking(), std::numeric_limits<float>::max());
+  EXPECT_EQ(items[5].title(), u"item5");
+  EXPECT_FLOAT_EQ(items[5].ranking(), std::numeric_limits<float>::max());
 }
 
 TEST(BirchRankerTest, RankWeatherItems_Morning) {
@@ -388,7 +426,7 @@ TEST(BirchRankerTest, RankWeatherItems_Morning) {
 TEST(BirchRankerTest, RankWeatherItems_Afternoon) {
   base::test::ScopedRestoreDefaultTimezone timezone("Etc/GMT");
 
-  // Simulate 1 PM in the afternoon. Weather should not show.
+  // Simulate 1 PM in the afternoon.
   base::Time now = TimeFromString("22 Feb 2024 13:00 UTC");
   BirchRanker ranker(now);
   ASSERT_FALSE(ranker.IsMorning());
@@ -401,8 +439,8 @@ TEST(BirchRankerTest, RankWeatherItems_Afternoon) {
 
   ASSERT_EQ(1u, items.size());
 
-  // The item did not have a ranking assigned.
-  EXPECT_FLOAT_EQ(items[0].ranking(), std::numeric_limits<float>::max());
+  // The item had a lower priority ranking assigned.
+  EXPECT_FLOAT_EQ(items[0].ranking(), 36.f);
 }
 
 }  // namespace

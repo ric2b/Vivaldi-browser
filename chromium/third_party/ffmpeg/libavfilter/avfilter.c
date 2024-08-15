@@ -29,6 +29,7 @@
 #include "libavutil/frame.h"
 #include "libavutil/hwcontext.h"
 #include "libavutil/internal.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/rational.h"
@@ -192,7 +193,7 @@ int avfilter_link(AVFilterContext *src, unsigned srcpad,
     return 0;
 }
 
-void avfilter_link_free(AVFilterLink **link)
+static void link_free(AVFilterLink **link)
 {
     FilterLinkInternal *li;
 
@@ -206,6 +207,17 @@ void avfilter_link_free(AVFilterLink **link)
 
     av_freep(link);
 }
+
+#if FF_API_LINK_PUBLIC
+void avfilter_link_free(AVFilterLink **link)
+{
+    link_free(link);
+}
+int avfilter_config_links(AVFilterContext *filter)
+{
+    return ff_filter_config_links(filter);
+}
+#endif
 
 static void update_link_current_pts(FilterLinkInternal *li, int64_t pts)
 {
@@ -315,7 +327,7 @@ int avfilter_insert_filter(AVFilterLink *link, AVFilterContext *filt,
     return 0;
 }
 
-int avfilter_config_links(AVFilterContext *filter)
+int ff_filter_config_links(AVFilterContext *filter)
 {
     int (*config_link)(AVFilterLink *);
     unsigned i;
@@ -346,7 +358,7 @@ int avfilter_config_links(AVFilterContext *filter)
         case AVLINK_UNINIT:
             li->init_state = AVLINK_STARTINIT;
 
-            if ((ret = avfilter_config_links(link->src)) < 0)
+            if ((ret = ff_filter_config_links(link->src)) < 0)
                 return ret;
 
             if (!(config_link = link->srcpad->config_props)) {
@@ -640,7 +652,8 @@ static const AVOption avfilter_options[] = {
         { "slice", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AVFILTER_THREAD_SLICE }, .flags = FLAGS, .unit = "thread_type" },
     { "enable", "set enable expression", OFFSET(enable_str), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = TFLAGS },
     { "threads", "Allowed number of threads", OFFSET(nb_threads), AV_OPT_TYPE_INT,
-        { .i64 = 0 }, 0, INT_MAX, FLAGS },
+        { .i64 = 0 }, 0, INT_MAX, FLAGS, .unit = "threads" },
+        {"auto", "autodetect a suitable number of threads to use", 0, AV_OPT_TYPE_CONST, {.i64 = 0 }, .flags = FLAGS, .unit = "threads"},
     { "extra_hw_frames", "Number of extra hardware frames to allocate for the user",
         OFFSET(extra_hw_frames), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, INT_MAX, FLAGS },
     { NULL },
@@ -763,7 +776,7 @@ static void free_link(AVFilterLink *link)
     ff_formats_unref(&link->outcfg.samplerates);
     ff_channel_layouts_unref(&link->incfg.channel_layouts);
     ff_channel_layouts_unref(&link->outcfg.channel_layouts);
-    avfilter_link_free(&link);
+    link_free(&link);
 }
 
 void avfilter_free(AVFilterContext *filter)
@@ -823,19 +836,18 @@ int ff_filter_opt_parse(void *logctx, const AVClass *priv_class,
 {
     const AVOption *o = NULL;
     int ret;
-    char *av_uninit(parsed_key), *av_uninit(value);
-    const char *key;
     int offset= -1;
 
     if (!args)
         return 0;
 
     while (*args) {
+        char *parsed_key, *value;
+        const char *key;
         const char *shorthand = NULL;
+        int additional_flags  = 0;
 
-        if (priv_class)
-            o = av_opt_next(&priv_class, o);
-        if (o) {
+        if (priv_class && (o = av_opt_next(&priv_class, o))) {
             if (o->type == AV_OPT_TYPE_CONST || o->offset == offset)
                 continue;
             offset = o->offset;
@@ -857,20 +869,16 @@ int ff_filter_opt_parse(void *logctx, const AVClass *priv_class,
             args++;
         if (parsed_key) {
             key = parsed_key;
-
-            /* discard all remaining shorthand */
-            if (priv_class)
-                while ((o = av_opt_next(&priv_class, o)));
+            additional_flags = AV_DICT_DONT_STRDUP_KEY;
+            priv_class = NULL; /* reject all remaining shorthand */
         } else {
             key = shorthand;
         }
 
         av_log(logctx, AV_LOG_DEBUG, "Setting '%s' to value '%s'\n", key, value);
 
-        av_dict_set(options, key, value, AV_DICT_MULTIKEY);
-
-        av_free(value);
-        av_free(parsed_key);
+        av_dict_set(options, key, value,
+                    additional_flags | AV_DICT_DONT_STRDUP_VAL | AV_DICT_MULTIKEY);
     }
 
     return 0;
@@ -1039,11 +1047,6 @@ int ff_filter_frame(AVFilterLink *link, AVFrame *frame)
 
         frame->duration = av_rescale_q(frame->nb_samples, (AVRational){ 1, frame->sample_rate },
                                        link->time_base);
-#if FF_API_PKT_DURATION
-FF_DISABLE_DEPRECATION_WARNINGS
-        frame->pkt_duration = frame->duration;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
     }
 
     li->frame_blocked_in = link->frame_wanted_out = 0;
@@ -1430,7 +1433,8 @@ static void consume_update(FilterLinkInternal *li, const AVFrame *frame)
     AVFilterLink *const link = &li->l;
     update_link_current_pts(li, frame->pts);
     ff_inlink_process_commands(link, frame);
-    link->dst->is_disabled = !ff_inlink_evaluate_timeline_at_frame(link, frame);
+    if (link == link->dst->inputs[0])
+        link->dst->is_disabled = !ff_inlink_evaluate_timeline_at_frame(link, frame);
     link->frame_count_out++;
     link->sample_count_out += frame->nb_samples;
 }
@@ -1563,7 +1567,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
 void ff_inlink_request_frame(AVFilterLink *link)
 {
-    FilterLinkInternal *li = ff_link_internal(link);
+    av_unused FilterLinkInternal *li = ff_link_internal(link);
     av_assert1(!li->status_in);
     av_assert1(!li->status_out);
     link->frame_wanted_out = 1;

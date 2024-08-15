@@ -21,6 +21,7 @@ enum class GlanceablesViewId {
   // `ClassroomBubbleBaseView`.
   kClassroomBubbleHeaderIcon,
   kClassroomBubbleComboBox,
+  kClassroomBubbleExpandButton,
   kClassroomBubbleListContainer,
   kClassroomBubbleEmptyListLabel,
   kClassroomBubbleListFooter,
@@ -31,11 +32,11 @@ enum class GlanceablesViewId {
   kClassroomItemCourseTitleLabel,
   kClassroomItemDueDateLabel,
   kClassroomItemDueTimeLabel,
-  kClassroomItemTurnedInAndGradedLabel,
 
   // `GlanceablesTasksView` or `TasksBubbleView`.
   kTasksBubbleComboBox,
   kTasksBubbleListScrollView,
+  kTasksBubbleExpandButton,
   kTasksBubbleListContainer,
   kTasksBubbleAddNewButton,
   kTasksBubbleListFooter,

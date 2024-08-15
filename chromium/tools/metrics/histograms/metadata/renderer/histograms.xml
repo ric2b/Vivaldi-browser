@@ -45,7 +45,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="Renderer.BrowserLaunchToRunLoopStart" units="ms"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>sky@chromium.org</owner>
   <owner>jam@chromium.org</owner>
   <summary>
@@ -56,7 +56,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Renderer.Core.Timing.Performance.SwapsPerPerformanceEntryInsertion"
-    units="swaps" expires_after="2024-08-25">
+    units="swaps" expires_after="2024-10-28">
   <owner>iclelland@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -300,8 +300,25 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
+<histogram name="Renderer.DelegatedInkTrail.{Renderer}.TimeToDrawPointsMillis"
+    units="ms" expires_after="2025-04-01">
+  <owner>jonross@chromium.org</owner>
+  <owner>gastonr@microsoft.com</owner>
+  <owner>gerchiko@microsoft.com</owner>
+  <owner>sahir.vellani@microsoft.com</owner>
+  <improvement direction="LOWER_IS_BETTER"/>
+  <summary>
+    Span of time in milliseconds between the creation of pointer events in the
+    browser process and sending the draw operation to the OS.
+  </summary>
+  <token key="Renderer">
+    <variant name="OS" summary="OS backed DelegatedInk renderer."/>
+    <variant name="Skia" summary="Skia backed DelegatedInk renderer."/>
+  </token>
+</histogram>
+
 <histogram name="Renderer.Font.PrimaryFont.DomContentLoaded" units="ms"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>kojii@chromium.org</owner>
   <owner>tkent@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
@@ -313,7 +330,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Font.PrimaryFont.DomContentLoaded.Style" units="ms"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>kojii@chromium.org</owner>
   <owner>tkent@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
@@ -325,7 +342,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Font.PrimaryFont.FCP" units="ms"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>kojii@chromium.org</owner>
   <owner>tkent@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
@@ -337,7 +354,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Font.PrimaryFont.FCP.Style" units="ms"
-    expires_after="2024-04-28">
+    expires_after="2024-11-03">
   <owner>kojii@chromium.org</owner>
   <owner>tkent@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
@@ -349,7 +366,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Font.SystemFallback.DomContentLoaded" units="ms"
-    expires_after="2024-04-28">
+    expires_after="2024-09-01">
   <owner>kojii@chromium.org</owner>
   <owner>tkent@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
@@ -361,7 +378,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Font.SystemFallback.FCP" units="ms"
-    expires_after="2024-04-28">
+    expires_after="2024-11-03">
   <owner>kojii@chromium.org</owner>
   <owner>tkent@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
@@ -373,7 +390,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Images.HasOverfetchedCappedPixels" enum="Boolean"
-    expires_after="2024-08-04">
+    expires_after="2024-10-06">
   <owner>iclelland@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -383,7 +400,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Images.HasOverfetchedPixels" enum="Boolean"
-    expires_after="2024-09-03">
+    expires_after="2024-11-03">
   <owner>iclelland@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -404,7 +421,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Images.OverfetchedCappedPixels" units="px^2"
-    expires_after="2024-09-03">
+    expires_after="2024-11-03">
   <owner>iclelland@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -417,7 +434,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Images.OverfetchedPixels" units="px^2"
-    expires_after="2024-07-28">
+    expires_after="2024-09-29">
   <owner>iclelland@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -470,7 +487,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.PaintPreview.Capture.MainFrameBlinkCaptureDuration"
-    units="ms" expires_after="2024-08-11">
+    units="ms" expires_after="2024-10-13">
   <owner>ckitagawa@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
   <owner>chrome-fdt@google.com</owner>
@@ -481,7 +498,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.PaintPreview.Capture.MainFrameSuccess"
-    enum="BooleanSuccess" expires_after="2024-08-11">
+    enum="BooleanSuccess" expires_after="2024-10-28">
   <owner>ckitagawa@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
   <owner>chrome-fdt@google.com</owner>
@@ -491,7 +508,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.PaintPreview.Capture.SubframeBlinkCaptureDuration"
-    units="ms" expires_after="2024-08-11">
+    units="ms" expires_after="2024-10-28">
   <owner>ckitagawa@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
   <owner>chrome-fdt@google.com</owner>
@@ -502,7 +519,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.PaintPreview.Capture.SubframeSuccess"
-    enum="BooleanSuccess" expires_after="2024-08-11">
+    enum="BooleanSuccess" expires_after="2024-10-28">
   <owner>ckitagawa@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
   <owner>chrome-fdt@google.com</owner>
@@ -526,7 +543,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Preload.UnusedResource" enum="BooleanSuccess"
-    expires_after="2024-08-11">
+    expires_after="2024-10-13">
   <owner>iclelland@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -540,7 +557,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Preload.UnusedResource2{Trigger}" enum="ResourceType"
-    expires_after="2024-07-28">
+    expires_after="2024-09-29">
   <owner>sisidovski@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -558,7 +575,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Preload.UnusedResourceCount" units="count"
-    expires_after="2024-07-28">
+    expires_after="2024-09-29">
   <owner>sisidovski@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -581,7 +598,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.ReduceSubresourceResponseIPC.DidNotifyBrowser"
-    enum="Boolean" expires_after="2024-09-01">
+    enum="Boolean" expires_after="2024-11-03">
   <owner>amanvr@chromium.org</owner>
   <owner>carlscab@chromium.org</owner>
   <owner>woa-performance@google.com</owner>
@@ -595,7 +612,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.RenderThreadImpl.Init" units="ms"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>jam@chromium.org</owner>
   <owner>sky@chromium.org</owner>
   <summary>
@@ -605,7 +622,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="RendererScheduler.QueueingDuration.{Priority}Priority"
-    units="microseconds" expires_after="2024-09-01">
+    units="microseconds" expires_after="2024-11-03">
   <owner>szager@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -633,7 +650,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="RendererScheduler.RendererMainThreadLoad5" units="%"
-    expires_after="2024-07-28">
+    expires_after="2024-09-29">
   <owner>altimin@chromium.org</owner>
   <summary>
     Renderer main thread load (percentage of time spent in tasks), reported in

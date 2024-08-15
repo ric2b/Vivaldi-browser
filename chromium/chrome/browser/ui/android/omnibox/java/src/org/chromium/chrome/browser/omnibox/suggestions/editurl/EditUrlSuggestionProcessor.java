@@ -12,7 +12,6 @@ import androidx.annotation.NonNull;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.history_clusters.HistoryClustersTabHelper;
-import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxDrawableState;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxImageSupplier;
@@ -34,6 +33,7 @@ import org.chromium.ui.base.Clipboard;
 import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.Arrays;
+import java.util.Optional;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -50,7 +50,7 @@ public class EditUrlSuggestionProcessor extends BaseSuggestionViewProcessor {
     public EditUrlSuggestionProcessor(
             Context context,
             SuggestionHost suggestionHost,
-            OmniboxImageSupplier imageSupplier,
+            Optional<OmniboxImageSupplier> imageSupplier,
             Supplier<Tab> tabSupplier,
             Supplier<ShareDelegate> shareDelegateSupplier) {
         super(context, suggestionHost, imageSupplier);
@@ -60,7 +60,7 @@ public class EditUrlSuggestionProcessor extends BaseSuggestionViewProcessor {
     }
 
     @Override
-    public boolean doesProcessSuggestion(AutocompleteMatch suggestion, int position) {
+    public boolean doesProcessSuggestion(@NonNull AutocompleteMatch suggestion, int position) {
         // The what-you-typed suggestion can potentially appear as the second suggestion in some
         // cases. If the first suggestion isn't the one we want, ignore all subsequent suggestions.
         if (position != 0) return false;
@@ -87,12 +87,13 @@ public class EditUrlSuggestionProcessor extends BaseSuggestionViewProcessor {
     }
 
     @Override
-    public PropertyModel createModel() {
+    public @NonNull PropertyModel createModel() {
         return new PropertyModel(SuggestionViewProperties.ALL_KEYS);
     }
 
     @Override
-    public void populateModel(AutocompleteMatch suggestion, PropertyModel model, int position) {
+    public void populateModel(
+            @NonNull AutocompleteMatch suggestion, @NonNull PropertyModel model, int position) {
         super.populateModel(suggestion, model, position);
 
         var tab = mTabSupplier.get();
@@ -137,7 +138,7 @@ public class EditUrlSuggestionProcessor extends BaseSuggestionViewProcessor {
                                         mContext, R.drawable.ic_content_copy_black, true),
                                 OmniboxResourceProvider.getString(mContext, R.string.copy_link),
                                 () -> onCopyLink(suggestion)),
-                        // TODO(https://crbug.com/1090187): do not re-use bookmark_item_edit here.
+                        // TODO(crbug.com/40697047): do not re-use bookmark_item_edit here.
                         new Action(
                                 OmniboxDrawableState.forSmallIcon(
                                         mContext, R.drawable.bookmark_edit_active, true),
@@ -149,13 +150,8 @@ public class EditUrlSuggestionProcessor extends BaseSuggestionViewProcessor {
     }
 
     @Override
-    protected void onSuggestionClicked(AutocompleteMatch suggestion, int position) {
+    protected void onSuggestionClicked(@NonNull AutocompleteMatch suggestion, int position) {
         RecordUserAction.record("Omnibox.EditUrlSuggestion.Tap");
-        if (OmniboxFeatures.noopEditUrlSuggestionClicks()) {
-            mSuggestionHost.finishInteraction();
-            return;
-        }
-
         super.onSuggestionClicked(suggestion, position);
     }
 

@@ -15,12 +15,9 @@
 using FeatureType = blink::mojom::UseCounterFeatureType;
 using UkmFeatureList = UseCounterMetricsRecorder::UkmFeatureList;
 using WebFeature = blink::mojom::WebFeature;
+using WebDXFeature = blink::mojom::WebDXFeature;
 using CSSSampleId = blink::mojom::CSSSampleId;
 using PermissionsPolicyFeature = blink::mojom::PermissionsPolicyFeature;
-
-#define FEATURE_HISTOGRAM_NAME(name, is_in_fenced_frames)     \
-  is_in_fenced_frames ? "Blink.UseCounter.FencedFrames." name \
-                      : "Blink.UseCounter." name
 
 namespace {
 
@@ -63,31 +60,35 @@ bool TestAndSet(std::bitset<N>& bitset,
 
 }  // namespace
 
-UseCounterMetricsRecorder::UseCounterMetricsRecorder(bool is_in_fenced_frame)
+UseCounterMetricsRecorder::UseCounterMetricsRecorder(
+    bool is_in_fenced_frames_page)
     : uma_features_(AtMostOnceEnumUmaDeferrer<blink::mojom::WebFeature>(
-          FEATURE_HISTOGRAM_NAME("Features", is_in_fenced_frame))),
+          "Blink.UseCounter.Features")),
       uma_main_frame_features_(
           AtMostOnceEnumUmaDeferrer<blink::mojom::WebFeature>(
-              FEATURE_HISTOGRAM_NAME("MainFrame.Features",
-                                     is_in_fenced_frame))),
-      uma_css_properties_(AtMostOnceEnumUmaDeferrer<blink::mojom::CSSSampleId>(
-          FEATURE_HISTOGRAM_NAME("CSSProperties", is_in_fenced_frame))),
-      uma_animated_css_properties_(
-          AtMostOnceEnumUmaDeferrer<blink::mojom::CSSSampleId>(
-              FEATURE_HISTOGRAM_NAME("AnimatedCSSProperties",
-                                     is_in_fenced_frame))),
-      uma_permissions_policy_violation_enforce_(
-          AtMostOnceEnumUmaDeferrer<blink::mojom::PermissionsPolicyFeature>(
-              FEATURE_HISTOGRAM_NAME("PermissionsPolicy.Violation.Enforce",
-                                     is_in_fenced_frame))),
-      uma_permissions_policy_allow2_(
-          AtMostOnceEnumUmaDeferrer<blink::mojom::PermissionsPolicyFeature>(
-              FEATURE_HISTOGRAM_NAME("PermissionsPolicy.Allow2",
-                                     is_in_fenced_frame))),
-      uma_permissions_policy_header2_(
-          AtMostOnceEnumUmaDeferrer<blink::mojom::PermissionsPolicyFeature>(
-              FEATURE_HISTOGRAM_NAME("PermissionsPolicy.Header2",
-                                     is_in_fenced_frame))) {}
+              "Blink.UseCounter.MainFrame.Features")),
+      uma_webdx_features_(AtMostOnceEnumUmaDeferrer<blink::mojom::WebDXFeature>(
+          "Blink.UseCounter.WebDXFeatures")) {
+  // Other instances are prepared only for non FencedFrames pages.
+  if (is_in_fenced_frames_page) {
+    return;
+  }
+  uma_css_properties_ =
+      std::make_unique<AtMostOnceEnumUmaDeferrer<blink::mojom::CSSSampleId>>(
+          "Blink.UseCounter.CSSProperties");
+  uma_animated_css_properties_ =
+      std::make_unique<AtMostOnceEnumUmaDeferrer<blink::mojom::CSSSampleId>>(
+          "Blink.UseCounter.AnimatedCSSProperties");
+  uma_permissions_policy_violation_enforce_ = std::make_unique<
+      AtMostOnceEnumUmaDeferrer<blink::mojom::PermissionsPolicyFeature>>(
+      "Blink.UseCounter.PermissionsPolicy.Violation.Enforce");
+  uma_permissions_policy_allow2_ = std::make_unique<
+      AtMostOnceEnumUmaDeferrer<blink::mojom::PermissionsPolicyFeature>>(
+      "Blink.UseCounter.PermissionsPolicy.Allow2");
+  uma_permissions_policy_header2_ = std::make_unique<
+      AtMostOnceEnumUmaDeferrer<blink::mojom::PermissionsPolicyFeature>>(
+      "Blink.UseCounter.PermissionsPolicy.Header2");
+}
 
 UseCounterMetricsRecorder::~UseCounterMetricsRecorder() = default;
 
@@ -95,14 +96,27 @@ void UseCounterMetricsRecorder::AssertNoMetricsRecordedOrDeferred() {
   // Verify that no feature usage is observed before commit
   DCHECK_EQ(uma_features_.recorded_or_deferred().count(), 0ul);
   DCHECK_EQ(uma_main_frame_features_.recorded_or_deferred().count(), 0ul);
-  DCHECK_EQ(uma_css_properties_.recorded_or_deferred().count(), 0ul);
-  DCHECK_EQ(uma_animated_css_properties_.recorded_or_deferred().count(), 0ul);
-  DCHECK_EQ(
-      uma_permissions_policy_violation_enforce_.recorded_or_deferred().count(),
-      0ul);
-  DCHECK_EQ(uma_permissions_policy_allow2_.recorded_or_deferred().count(), 0ul);
-  DCHECK_EQ(uma_permissions_policy_header2_.recorded_or_deferred().count(),
-            0ul);
+  DCHECK_EQ(uma_webdx_features_.recorded_or_deferred().count(), 0ul);
+  if (uma_css_properties_) {
+    DCHECK_EQ(uma_css_properties_->recorded_or_deferred().count(), 0ul);
+  }
+  if (uma_animated_css_properties_) {
+    DCHECK_EQ(uma_animated_css_properties_->recorded_or_deferred().count(),
+              0ul);
+  }
+  if (uma_permissions_policy_violation_enforce_) {
+    DCHECK_EQ(uma_permissions_policy_violation_enforce_->recorded_or_deferred()
+                  .count(),
+              0ul);
+  }
+  if (uma_permissions_policy_allow2_) {
+    DCHECK_EQ(uma_permissions_policy_allow2_->recorded_or_deferred().count(),
+              0ul);
+  }
+  if (uma_permissions_policy_header2_) {
+    DCHECK_EQ(uma_permissions_policy_header2_->recorded_or_deferred().count(),
+              0ul);
+  }
 
   DCHECK_EQ(ukm_features_recorded_.count(), 0ul);
   DCHECK_EQ(webdev_metrics_ukm_features_recorded_.count(), 0ul);
@@ -123,11 +137,22 @@ void UseCounterMetricsRecorder::RecordUkmPageVisits(
 void UseCounterMetricsRecorder::DisableDeferAndFlush() {
   uma_features_.DisableDeferAndFlush();
   uma_main_frame_features_.DisableDeferAndFlush();
-  uma_css_properties_.DisableDeferAndFlush();
-  uma_animated_css_properties_.DisableDeferAndFlush();
-  uma_permissions_policy_violation_enforce_.DisableDeferAndFlush();
-  uma_permissions_policy_allow2_.DisableDeferAndFlush();
-  uma_permissions_policy_header2_.DisableDeferAndFlush();
+  uma_webdx_features_.DisableDeferAndFlush();
+  if (uma_css_properties_) {
+    uma_css_properties_->DisableDeferAndFlush();
+  }
+  if (uma_animated_css_properties_) {
+    uma_animated_css_properties_->DisableDeferAndFlush();
+  }
+  if (uma_permissions_policy_violation_enforce_) {
+    uma_permissions_policy_violation_enforce_->DisableDeferAndFlush();
+  }
+  if (uma_permissions_policy_allow2_) {
+    uma_permissions_policy_allow2_->DisableDeferAndFlush();
+  }
+  if (uma_permissions_policy_header2_) {
+    uma_permissions_policy_header2_->DisableDeferAndFlush();
+  }
 }
 
 void UseCounterMetricsRecorder::RecordOrDeferUseCounterFeature(
@@ -142,6 +167,10 @@ void UseCounterMetricsRecorder::RecordOrDeferUseCounterFeature(
         uma_features_.RecordOrDefer(sample);
       }
     } break;
+    case FeatureType::kWebDXFeature:
+      uma_webdx_features_.RecordOrDefer(
+          static_cast<WebDXFeature>(feature.value()));
+      break;
     // There are about 600 enums, so the memory required for a vector
     // histogram is about 600 * 8 bytes = 5KB 50% of the time there are about
     // 100 CSS properties recorded per page load. Storage in sparce
@@ -152,24 +181,34 @@ void UseCounterMetricsRecorder::RecordOrDeferUseCounterFeature(
     // better to use a vector histogram here since it is faster to access
     // and merge and uses about same amount of memory.
     case FeatureType::kCssProperty:
-      uma_css_properties_.RecordOrDefer(
-          static_cast<CSSSampleId>(feature.value()));
+      if (uma_css_properties_) {
+        uma_css_properties_->RecordOrDefer(
+            static_cast<CSSSampleId>(feature.value()));
+      }
       break;
     case FeatureType::kAnimatedCssProperty:
-      uma_animated_css_properties_.RecordOrDefer(
-          static_cast<CSSSampleId>(feature.value()));
+      if (uma_animated_css_properties_) {
+        uma_animated_css_properties_->RecordOrDefer(
+            static_cast<CSSSampleId>(feature.value()));
+      }
       break;
     case FeatureType::kPermissionsPolicyViolationEnforce:
-      uma_permissions_policy_violation_enforce_.RecordOrDefer(
-          static_cast<PermissionsPolicyFeature>(feature.value()));
+      if (uma_permissions_policy_violation_enforce_) {
+        uma_permissions_policy_violation_enforce_->RecordOrDefer(
+            static_cast<PermissionsPolicyFeature>(feature.value()));
+      }
       break;
     case FeatureType::kPermissionsPolicyHeader:
-      uma_permissions_policy_header2_.RecordOrDefer(
-          static_cast<PermissionsPolicyFeature>(feature.value()));
+      if (uma_permissions_policy_header2_) {
+        uma_permissions_policy_header2_->RecordOrDefer(
+            static_cast<PermissionsPolicyFeature>(feature.value()));
+      }
       break;
     case FeatureType::kPermissionsPolicyIframeAttribute:
-      uma_permissions_policy_allow2_.RecordOrDefer(
-          static_cast<PermissionsPolicyFeature>(feature.value()));
+      if (uma_permissions_policy_allow2_) {
+        uma_permissions_policy_allow2_->RecordOrDefer(
+            static_cast<PermissionsPolicyFeature>(feature.value()));
+      }
       break;
   }
 }
@@ -186,7 +225,7 @@ void UseCounterMetricsRecorder::RecordOrDeferMainFrameWebFeature(
   uma_main_frame_features_.RecordOrDefer(web_feature);
 }
 
-void UseCounterMetricsRecorder::RecordUkmFeatures(ukm::SourceId ukm_source_id) {
+void UseCounterMetricsRecorder::RecordWebFeatures(ukm::SourceId ukm_source_id) {
   for (WebFeature web_feature : GetAllowedUkmFeatures()) {
     auto feature_enum_value =
         static_cast<blink::UseCounterFeature::EnumValue>(web_feature);
@@ -219,6 +258,16 @@ void UseCounterMetricsRecorder::RecordUkmFeatures(ukm::SourceId ukm_source_id) {
   }
 }
 
+void UseCounterMetricsRecorder::RecordWebDXFeatures(
+    ukm::SourceId ukm_source_id) {
+  // For WebDXFeature use counter(s) where the actual use counter value can come
+  // from a WebFeature use counter, this is where those use counter values can
+  // be copied over to the matching WebDXFeature counters.
+
+  // TODO(crbug.com/339271460): Add mapping of existing use counters to their
+  // respective WebDXFeature use counters here.
+}
+
 UseCounterPageLoadMetricsObserver::UseCounterPageLoadMetricsObserver() =
     default;
 
@@ -231,7 +280,7 @@ UseCounterPageLoadMetricsObserver::OnStart(
     const GURL& currently_committed_url,
     bool started_in_foreground) {
   recorder_ = std::make_unique<UseCounterMetricsRecorder>(
-      /* is_in_fenced_frame */ false);
+      /*is_in_fenced_frame_page=*/false);
   return CONTINUE_OBSERVING;
 }
 
@@ -240,9 +289,9 @@ UseCounterPageLoadMetricsObserver::OnFencedFramesStart(
     content::NavigationHandle* navigation_handle,
     const GURL& currently_committed_url) {
   // Continue even if this instance is bound to a FencedFrames page. In such
-  // cases, report metrics prefixed by "Blink.UseCounter.FencedFrames".
+  // cases, report only UKMs.
   recorder_ = std::make_unique<UseCounterMetricsRecorder>(
-      /* is_in_fenced_frame */ true);
+      /*is_in_fenced_frame_page=*/true);
   return CONTINUE_OBSERVING;
 }
 
@@ -253,7 +302,7 @@ UseCounterPageLoadMetricsObserver::OnPrerenderStart(
   // Works as same as non prerendered case. UMAs/UKMs are not recorded for
   // cancelled prerendering.
   recorder_ = std::make_unique<UseCounterMetricsRecorder>(
-      /* is_in_fenced_frame */ false);
+      /*is_in_fenced_frame_page=*/false);
   return CONTINUE_OBSERVING;
 }
 
@@ -321,7 +370,9 @@ void UseCounterPageLoadMetricsObserver::OnComplete(
   if (IsInPrerenderingBeforeActivation())
     return;
 
-  recorder_->RecordUkmFeatures(GetDelegate().GetPageUkmSourceId());
+  auto source_id = GetDelegate().GetPageUkmSourceId();
+  recorder_->RecordWebDXFeatures(source_id);
+  recorder_->RecordWebFeatures(source_id);
 }
 
 void UseCounterPageLoadMetricsObserver::OnFailedProvisionalLoad(
@@ -330,7 +381,9 @@ void UseCounterPageLoadMetricsObserver::OnFailedProvisionalLoad(
   if (IsInPrerenderingBeforeActivation())
     return;
 
-  recorder_->RecordUkmFeatures(GetDelegate().GetPageUkmSourceId());
+  auto source_id = GetDelegate().GetPageUkmSourceId();
+  recorder_->RecordWebDXFeatures(source_id);
+  recorder_->RecordWebFeatures(source_id);
 }
 
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
@@ -339,7 +392,9 @@ UseCounterPageLoadMetricsObserver::FlushMetricsOnAppEnterBackground(
   if (IsInPrerenderingBeforeActivation())
     return CONTINUE_OBSERVING;
 
-  recorder_->RecordUkmFeatures(GetDelegate().GetPageUkmSourceId());
+  auto source_id = GetDelegate().GetPageUkmSourceId();
+  recorder_->RecordWebDXFeatures(source_id);
+  recorder_->RecordWebFeatures(source_id);
   return CONTINUE_OBSERVING;
 }
 

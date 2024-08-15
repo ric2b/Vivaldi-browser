@@ -14,6 +14,7 @@
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/ash/printing/specifics_translation.h"
 #include "chromeos/printing/printer_configuration.h"
+#include "components/sync/base/deletion_origin.h"
 #include "components/sync/base/report_unrecoverable_error.h"
 #include "components/sync/model/client_tag_based_model_type_processor.h"
 #include "components/sync/model/model_type_change_processor.h"
@@ -283,8 +284,8 @@ PrintersSyncBridge::ApplyIncrementalSyncChanges(
   return {};
 }
 
-void PrintersSyncBridge::GetData(StorageKeyList storage_keys,
-                                 DataCallback callback) {
+void PrintersSyncBridge::GetDataForCommit(StorageKeyList storage_keys,
+                                          DataCallback callback) {
   auto batch = std::make_unique<syncer::MutableDataBatch>();
   {
     base::AutoLock lock(data_lock_);
@@ -397,7 +398,8 @@ bool PrintersSyncBridge::RemovePrinter(const std::string& id) {
   }
 
   if (change_processor()->IsTrackingMetadata()) {
-    change_processor()->Delete(id, batch->GetMetadataChangeList());
+    change_processor()->Delete(id, syncer::DeletionOrigin::Unspecified(),
+                               batch->GetMetadataChangeList());
   }
   store_delegate_->Commit(std::move(batch));
 

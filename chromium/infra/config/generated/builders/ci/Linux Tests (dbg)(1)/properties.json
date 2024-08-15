@@ -7,7 +7,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux Builder (dbg)",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-linux-archive",
@@ -23,6 +23,9 @@
                 "target_platform": "linux"
               },
               "legacy_gclient_config": {
+                "apply_configs": [
+                  "chromium_with_telemetry_dependencies"
+                ],
                 "config": "chromium"
               }
             }
@@ -31,7 +34,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux Tests (dbg)(1)",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-linux-archive",
@@ -52,7 +55,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Linux Builder (dbg)",
-                "project": "chromium-m124"
+                "project": "chromium-m126"
               }
             }
           }
@@ -62,7 +65,7 @@
         {
           "bucket": "ci",
           "builder": "Linux Tests (dbg)(1)",
-          "project": "chromium-m124"
+          "project": "chromium-m126"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -74,7 +77,9 @@
           "builder": "linux_chromium_dbg_ng",
           "group": "tryserver.chromium.linux"
         }
-      ]
+      ],
+      "retry_failed_shards": true,
+      "targets_spec_directory": "src/infra/config/generated/builders/ci/Linux Tests (dbg)(1)/targets"
     }
   },
   "$recipe_engine/resultdb/test_presentation": {

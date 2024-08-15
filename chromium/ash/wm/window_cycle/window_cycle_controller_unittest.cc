@@ -40,7 +40,6 @@
 #include "ash/wm/desks/desks_test_util.h"
 #include "ash/wm/gestures/wm_gesture_handler.h"
 #include "ash/wm/overview/overview_controller.h"
-#include "ash/wm/overview/overview_focus_cycler.h"
 #include "ash/wm/overview/overview_session.h"
 #include "ash/wm/overview/overview_test_util.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
@@ -917,7 +916,7 @@ TEST_F(WindowCycleControllerTest, FrameThrottling) {
       {1u, 1u}, {2u, 2u}, {3u, 3u}, {4u, 4u}, {5u, 5u}};
   std::unique_ptr<aura::Window> windows[window_count];
   for (int i = 0; i < window_count; ++i) {
-    windows[i] = CreateAppWindow(gfx::Rect(), AppType::BROWSER);
+    windows[i] = CreateAppWindow(gfx::Rect(), chromeos::AppType::BROWSER);
     windows[i]->SetEmbedFrameSinkId(ids[i]);
   }
 
@@ -1054,7 +1053,7 @@ TEST_F(WindowCycleControllerTest, AltTabMultiDisplay) {
   std::unique_ptr<Window> w1 = CreateTestWindow(gfx::Rect(420, 10, 200, 200));
   // |w0| needs to be activated to ensure it is the display for new windows.
   wm::ActivateWindow(w0.get());
-  // TODO(crbug.com/990589): Unit tests should be able to simulate mouse input
+  // TODO(crbug.com/40638870): Unit tests should be able to simulate mouse input
   // without having to call |CursorManager::SetDisplay|.
   Shell::Get()->cursor_manager()->SetDisplay(
       display::Screen::GetScreen()->GetDisplayNearestWindow(w1.get()));

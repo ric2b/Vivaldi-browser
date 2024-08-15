@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_AUTOFILL_IOS_BROWSER_AUTOFILL_DRIVER_IOS_H_
 #define COMPONENTS_AUTOFILL_IOS_BROWSER_AUTOFILL_DRIVER_IOS_H_
 
+#import <set>
 #import <string>
 
 #import "base/containers/flat_map.h"
@@ -27,6 +28,30 @@ class WebState;
 @protocol AutofillDriverIOSBridge;
 
 namespace autofill {
+
+// Histogram for recording the renderer event used to infer a form submission.
+inline constexpr char kAutofillSubmissionDetectionSourceHistogram[] =
+    "Autofill.SubmissionDetectionSource.AutofillAgent";
+
+// Histogram for recording whether the form detected as submitted after a form
+// removal event was the synthetic form. Recorded when a submission is detected
+// after a form removal event.
+inline constexpr char kFormlessSubmissionAfterFormRemovalHistogram[] =
+    "Autofill.iOS.FormRemoval.SubmissionDetected.IsFormless";
+
+// Histogram for recording whether a form submission was detected after a form
+// removal event.
+inline constexpr char kFormSubmissionAfterFormRemovalHistogram[] =
+    "Autofill.iOS.FormRemoval.SubmissionDetected";
+
+// Histogram for recording the number of removed forms in a form removal event.
+inline constexpr char kFormRemovalRemovedFormsHistogram[] =
+    "Autofill.iOS.FormRemoval.RemovedForms";
+
+// Histogram for recording the number of removed unowned fields in a form
+// removal event.
+inline constexpr char kFormRemovalRemovedUnownedFieldsHistogram[] =
+    "Autofill.iOS.FormRemoval.RemovedUnownedFields";
 
 class AutofillDriverIOSFactory;
 
@@ -85,7 +110,6 @@ class AutofillDriverIOS : public AutofillDriver,
   void SendAutofillTypePredictionsToRenderer(
       const std::vector<raw_ptr<FormStructure, VectorExperimental>>& forms)
       override;
-  void RendererShouldClearFilledSection() override;
   void RendererShouldClearPreviewedForm() override;
   void RendererShouldTriggerSuggestions(
       const FieldGlobalId& field_id,
@@ -110,7 +134,6 @@ class AutofillDriverIOS : public AutofillDriver,
   void RendererShouldSetSuggestionAvailability(
       const FieldGlobalId& field,
       mojom::AutofillSuggestionAvailability suggestion_availability) override;
-  void PopupHidden() override;
   net::IsolationInfo IsolationInfo() override;
 
   bool is_processed() const { return processed_; }
@@ -129,12 +152,33 @@ class AutofillDriverIOS : public AutofillDriver,
   void FormSubmitted(const FormData& form,
                      bool known_success,
                      mojom::SubmissionSource submission_source);
+  void CaretMovedInFormField(const FormData& form,
+                             const FormFieldData& field,
+                             const gfx::Rect& caret_bounds);
   void TextFieldDidChange(const FormData& form,
                           const FormFieldData& field,
                           base::TimeTicks timestamp);
 
+  // AutofillDriverIOS:
+  // Notification that forms or formless fields have been removed. Since Bling's
+  // renderer does not have API's to detect async form submissions, we use he
+  // removal last interacted form or formless field as an indication that the
+  // form was submitted asynchronously.
+  void FormsRemoved(const std::set<FormRendererId>& removed_forms,
+                    const std::set<FieldRendererId>& removed_unowned_fields);
+
  private:
   friend AutofillDriverIOSFactory;
+
+  // Represents the last form or formless field where the user entered data.
+  struct LastInteractedForm {
+    // Snapshot of the last interacted form or formless form.
+    FormData form_data;
+
+    // Renderer id of the last interacted formless field or `FieldRendererId()`
+    // if the last interaction was not with a single formless field.
+    FieldRendererId formless_field;
+  };
 
   AutofillDriverIOS(web::WebState* web_state,
                     web::WebFrame* web_frame,
@@ -147,6 +191,30 @@ class AutofillDriverIOS : public AutofillDriver,
   // Sets `this` as the parent of the frame identified by `token`.
   void SetSelfAsParent(LocalFrameToken token);
 
+  // Updates the saved information about the last interacted form or formless
+  // field.
+  // - `form_data`: `FormData` version of the interacted form or
+  // formless form.
+  // - `formless_field`: Renderer id of the interacted formless
+  // field. Default to `FieldRendererId()` when the user interaction was not
+  // with a single formless field.
+  void UpdateLastInteractedForm(
+      const FormData& form_data,
+      const FieldRendererId& formless_field = FieldRendererId());
+  // Clears the saved information about the last interacted form or formless
+  // field.
+  void ClearLastInteractedForm();
+
+  // Updates the snapshot of the last interacted form or formless form with
+  // field data in `autofill::FieldDataManager`. Called before sending a
+  // submitted form to `autofill::AutofillManager`.
+  void UpdateLastInteractedFormFromFieldDataManager();
+
+  // Whether a form submission can be inferred after a form removal event.
+  bool DetectFormSubmissionAfterFormRemoval(
+      const std::set<FormRendererId>& removed_forms,
+      const std::set<FieldRendererId>& removed_unowned_fields) const;
+
   // Only used by the AutofillDriverIOSFactory.
   // Other callers should use FromWebStateAndWebFrame() instead.
   using web::WebFrameUserData<AutofillDriverIOS>::FromWebFrame;
@@ -155,6 +223,11 @@ class AutofillDriverIOS : public AutofillDriver,
   void OnAutofillManagerDestroyed(AutofillManager& manager) override;
   void OnAfterFormsSeen(AutofillManager& manager,
                         base::span<const FormGlobalId> forms) override;
+
+  // Logs metrics related to form removal events.
+  void RecordFormRemoval(bool submission_detected,
+                         int removed_forms_count,
+                         int removed_unowned_fields_count);
 
   // The WebState with which this object is associated.
   raw_ptr<web::WebState> web_state_ = nullptr;
@@ -181,6 +254,10 @@ class AutofillDriverIOS : public AutofillDriver,
   // Whether the initial processing has been done (JavaScript observers have
   // been enabled and the forms have been extracted).
   bool processed_ = false;
+
+  // Information about the last form or formless field where the user entered
+  // data. Used for form submission detection.
+  std::optional<LastInteractedForm> last_interacted_form_;
 
   // The embedder's AutofillClient instance.
   raw_ref<AutofillClient> client_;

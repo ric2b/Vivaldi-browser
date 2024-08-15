@@ -8,22 +8,29 @@
 #endif
 
 #include <assert.h>
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdio.h> // For snprintf.
+#include <stdio.h>  // For snprintf.
 #include <stdlib.h>
+#include <string.h>
 
 #include <xnnpack.h>
+#include <xnnpack/allocation-type.h>
 #include <xnnpack/allocator.h>
 #include <xnnpack/cache.h>
 #include <xnnpack/common.h>
 #include <xnnpack/log.h>
-#include <xnnpack/math.h>
 #include <xnnpack/memory-planner.h>
+#include <xnnpack/memory.h>
+#include <xnnpack/microkernel-type.h>
 #include <xnnpack/node-type.h>
+#include <xnnpack/operator-type.h>
 #include <xnnpack/operator.h>
 #include <xnnpack/params.h>
 #include <xnnpack/subgraph.h>
+
+#include "pthreadpool.h"
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten/emscripten.h>
@@ -643,9 +650,7 @@ enum xnn_status xnn_plan_memory(
       // Value is purely internal to the runtime, and must be allocated in its workspace.
       size_t tensor_size = xnn_tensor_get_rounded_size(value);
       if (value->datatype == xnn_datatype_qdint8) {
-        const size_t batch_dims_size = xnn_shape_multiply_batch_dims(&value->shape, value->quantization.num_nonbatch_dims);
-        tensor_size += xnn_get_rounded_size((batch_dims_size + XNN_EXTRA_QUANTIZATION_PARAMS)
-                                    * sizeof(struct xnn_dynamic_quantization_params));
+        tensor_size += xnn_tensor_get_rounded_dynamic_quant_param_size(value);
       }
       xnn_add_value_allocation_tracker(&mem_alloc_tracker, i, tensor_size);
     } else if (value->allocation_type == xnn_allocation_type_persistent) {
@@ -732,27 +737,31 @@ enum xnn_status xnn_setup_runtime(
     }
   }
 
-  // Apply runtime state changes.
 #ifdef XNN_SLINKY_ENABLED
   size_t input_id = 0, output_id = 0;
+  // Use the runtime values instead of the external values so the order is the
+  // same.
+  for (size_t i = 0; i < runtime->num_values; i++) {
+    struct xnn_value* value = &runtime->values[i];
+    if (xnn_value_is_static(value)) {
+      // The value is constant.
+    } else if (value->flags & XNN_VALUE_FLAG_EXTERNAL_INPUT) {
+      runtime->input_values[input_id++] = value;
+    } else if (value->flags & XNN_VALUE_FLAG_EXTERNAL_OUTPUT) {
+      runtime->output_values[output_id++] = value;
+    }
+  }
+  runtime->num_inputs = input_id;
+  runtime->num_outputs = output_id;
 #endif
+
+  // Apply runtime state changes.
   for (size_t i = 0; i < num_external_values; i++) {
     const struct xnn_external_value* external_value = &external_values[i];
     const uint32_t value_id = external_value->id;
     struct xnn_value* value = &runtime->values[value_id];
     value->data = external_value->data;
-#ifdef XNN_SLINKY_ENABLED
-    if (value->flags & XNN_VALUE_FLAG_EXTERNAL_INPUT) {
-      runtime->input_values[input_id++] = value;
-    } else if (value->flags & XNN_VALUE_FLAG_EXTERNAL_OUTPUT) {
-      runtime->output_values[output_id++] = value;
-    }
-#endif
   }
-#ifdef XNN_SLINKY_ENABLED
-  runtime->num_inputs = input_id;
-  runtime->num_outputs = output_id;
-#endif
 
   for (uint32_t opdata_id = 0; opdata_id < runtime->num_ops; opdata_id++) {
     struct xnn_operator_data* opdata = &runtime->opdata[opdata_id];

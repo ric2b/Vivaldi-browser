@@ -26,7 +26,6 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "src/tint/lang/core/ir/multi_in_block.h"
-#include "gtest/gtest-spi.h"
 #include "src/tint/lang/core/ir/block_param.h"
 #include "src/tint/lang/core/ir/ir_helper_test.h"
 
@@ -37,7 +36,7 @@ using namespace tint::core::number_suffixes;  // NOLINT
 using IR_MultiInBlockTest = IRTestHelper;
 
 TEST_F(IR_MultiInBlockTest, Fail_NullInboundBranch) {
-    EXPECT_FATAL_FAILURE(
+    EXPECT_DEATH_IF_SUPPORTED(
         {
             Module mod;
             Builder b{mod};
@@ -54,7 +53,9 @@ TEST_F(IR_MultiInBlockTest, CloneInto) {
     auto* blk = b.MultiInBlock();
     auto* add = b.Add(mod.Types().i32(), 1_i, 2_i);
     blk->Append(add);
-    blk->SetParams({b.BlockParam(mod.Types().i32()), b.BlockParam(mod.Types().f32())});
+    auto* param1 = b.BlockParam(mod.Types().i32());
+    auto* param2 = b.BlockParam(mod.Types().f32());
+    blk->SetParams({param1, param2});
     blk->SetParent(loop);
 
     auto* terminate = b.TerminateInvocation();
@@ -75,6 +76,12 @@ TEST_F(IR_MultiInBlockTest, CloneInto) {
     EXPECT_NE(add, new_blk->Front());
     EXPECT_TRUE(new_blk->Front()->Is<Binary>());
     EXPECT_EQ(BinaryOp::kAdd, new_blk->Front()->As<Binary>()->Op());
+
+    // Check parameter ownership is correct.
+    EXPECT_EQ(param1->Block(), blk);
+    EXPECT_EQ(param2->Block(), blk);
+    EXPECT_EQ(new_blk->Params()[0]->Block(), new_blk);
+    EXPECT_EQ(new_blk->Params()[1]->Block(), new_blk);
 }
 
 TEST_F(IR_MultiInBlockTest, CloneEmpty) {
@@ -84,6 +91,24 @@ TEST_F(IR_MultiInBlockTest, CloneEmpty) {
 
     EXPECT_EQ(0u, new_blk->InboundSiblingBranches().Length());
     EXPECT_EQ(0u, new_blk->Params().Length());
+}
+
+TEST_F(IR_MultiInBlockTest, Parameters) {
+    auto* blk = b.MultiInBlock();
+
+    auto* param1 = b.BlockParam("a", mod.Types().i32());
+    auto* param2 = b.BlockParam("b", mod.Types().f32());
+    auto* param3 = b.BlockParam("b", mod.Types().f32());
+
+    blk->SetParams({param1, param2});
+    EXPECT_EQ(param1->Block(), blk);
+    EXPECT_EQ(param2->Block(), blk);
+    EXPECT_EQ(param3->Block(), nullptr);
+
+    blk->SetParams({param1, param3});
+    EXPECT_EQ(param1->Block(), blk);
+    EXPECT_EQ(param2->Block(), nullptr);
+    EXPECT_EQ(param3->Block(), blk);
 }
 
 }  // namespace

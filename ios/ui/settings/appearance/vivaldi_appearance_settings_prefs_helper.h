@@ -14,6 +14,8 @@
 #pragma mark - Getters
 /// Returns the browser theme settings from prefs.
 + (NSString*)getBrowserTheme;
+/// Returns whether browser theme is dark
++ (BOOL)isBrowserThemeDark;
 /// Returns the preferred website apprearance style.
 + (int)getWebsiteAppearanceStyle;
 /// Returns whether force dark theme enabled for website appearance.

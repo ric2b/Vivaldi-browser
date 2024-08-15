@@ -226,9 +226,11 @@ state.GetFontBuilder().{{property.setter}}
     {% endcall %}
 
     {% call(property) apply_value(property) %}
+  const CSSValueList& list = To<CSSValueList>(value);
   CSS{{animation}}Data& data = state.StyleBuilder().Access{{animation}}s();
   data.{{vector}}.clear();
-  for (const CSSValue* list_value : To<CSSValueList>(value)) {
+  data.{{vector}}.reserve(list.length());
+  for (const CSSValue* list_value : list) {
     const auto& item = *list_value;
     data.{{vector}}.push_back(CSSToStyleMap::MapAnimation{{attribute}}(state, item));
   }
@@ -348,7 +350,7 @@ state.GetFontBuilder().{{property.setter}}
   for (const CSSValue* item : *list) {
     const auto& pair = To<CSSValuePair>(*item);
     AtomicString identifier(To<CSSCustomIdentValue>(pair.First()).Value());
-    int counter_value = To<CSSPrimitiveValue>(pair.Second()).GetIntValue();
+    int counter_value = To<CSSPrimitiveValue>(pair.Second()).ComputeInteger(state.CssToLengthConversionData());
     CounterDirectives& directives =
     map.insert(identifier, CounterDirectives()).stored_value->value;
         {% if action == 'Reset' %}

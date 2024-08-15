@@ -6,9 +6,10 @@
 
 #include "chrome/installer/setup/uninstall.h"
 
+#include <windows.h>
+
 #include <stddef.h>
 #include <stdint.h>
-#include <windows.h>
 
 #include <initializer_list>
 #include <memory>
@@ -626,7 +627,7 @@ bool DeleteChromeRegistrationKeys(const InstallerState& installer_state,
                                     browser_entry_suffix);
   DeleteProgIdFromSoftwareClasses(root, chrome_prog_id);
 
-  // TODO(https://crbug.com/414141): Delete ChromePDF ProgId once support for
+  // TODO(crbug.com/40384442): Delete ChromePDF ProgId once support for
   // PDF docs has landed.
 
   if (installer_state.system_install()) {

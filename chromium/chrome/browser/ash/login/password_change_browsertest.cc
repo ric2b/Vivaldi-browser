@@ -7,7 +7,6 @@
 #include <string>
 #include <utility>
 
-#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/login_screen_test_api.h"
 #include "base/auto_reset.h"
 #include "base/files/file_path.h"
@@ -36,6 +35,7 @@
 #include "chrome/browser/ash/login/test/user_auth_config.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/wizard_context.h"
+#include "chrome/browser/ash/net/delay_network_call.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
@@ -71,11 +71,6 @@ constexpr char kTokenHandle[] = "test_token_handle";
 constexpr char kTestingFileName[] = "testing-file.txt";
 
 using AuthOp = FakeUserDataAuthClient::Operation;
-
-bool HasPasswordConfirmationPage() {
-  return !base::FeatureList::IsEnabled(
-      ash::features::kCryptohomeRecoveryBeforeFlowSplit);
-}
 
 }  // namespace
 
@@ -181,11 +176,9 @@ IN_PROC_BROWSER_TEST_F(PasswordChangeTest, UpdateGaiaPassword) {
       test_user_info_.auth_config.online_password);
   test::PasswordChangedSubmitOldPassword();
 
-  if (HasPasswordConfirmationPage()) {
-    test::CreatePasswordUpdateNoticePageWaiter()->Wait();
-    test::PasswordUpdateNoticeExpectDone();
-    test::PasswordUpdateNoticeDoneAction();
-  }
+  test::CreatePasswordUpdateNoticePageWaiter()->Wait();
+  test::PasswordUpdateNoticeExpectDone();
+  test::PasswordUpdateNoticeDoneAction();
 
   // User session should start, and whole OOBE screen is expected to be hidden.
   OobeWindowVisibilityWaiter(false).Wait();
@@ -212,11 +205,9 @@ IN_PROC_BROWSER_TEST_F(PasswordChangeTest, SubmitOnEnterKeyPressed) {
       nullptr, ui::VKEY_RETURN, false /* control */, false /* shift */,
       false /* alt */, false /* command */));
 
-  if (HasPasswordConfirmationPage()) {
-    test::CreatePasswordUpdateNoticePageWaiter()->Wait();
-    test::PasswordUpdateNoticeExpectDone();
-    test::PasswordUpdateNoticeDoneAction();
-  }
+  test::CreatePasswordUpdateNoticePageWaiter()->Wait();
+  test::PasswordUpdateNoticeExpectDone();
+  test::PasswordUpdateNoticeDoneAction();
 
   // User session should start, and whole OOBE screen is expected to be hidden,
   OobeWindowVisibilityWaiter(false).Wait();
@@ -248,11 +239,9 @@ IN_PROC_BROWSER_TEST_F(PasswordChangeTest, RetryOnWrongPassword) {
       test_user_info_.auth_config.online_password);
   test::PasswordChangedSubmitOldPassword();
 
-  if (HasPasswordConfirmationPage()) {
-    test::CreatePasswordUpdateNoticePageWaiter()->Wait();
-    test::PasswordUpdateNoticeExpectDone();
-    test::PasswordUpdateNoticeDoneAction();
-  }
+  test::CreatePasswordUpdateNoticePageWaiter()->Wait();
+  test::PasswordUpdateNoticeExpectDone();
+  test::PasswordUpdateNoticeDoneAction();
 
   // User session should start, and whole OOBE screen is expected to be hidden.
   OobeWindowVisibilityWaiter(false).Wait();
@@ -261,6 +250,9 @@ IN_PROC_BROWSER_TEST_F(PasswordChangeTest, RetryOnWrongPassword) {
 }
 
 IN_PROC_BROWSER_TEST_F(PasswordChangeTest, SkipDataRecovery) {
+  // TODO(b/333450354): Determine why this is necessary and fix.
+  SetDelayNetworkCallsForTesting(true);
+
   CreateTestingFile();
   OpenGaiaDialog(test_account_id_);
   SetGaiaScreenCredentials(test_account_id_, test::kNewPassword);
@@ -309,11 +301,9 @@ IN_PROC_BROWSER_TEST_F(PasswordChangeTest, TryAgainAfterForgetLinkClick) {
       test_user_info_.auth_config.online_password);
   test::PasswordChangedSubmitOldPassword();
 
-  if (HasPasswordConfirmationPage()) {
-    test::CreatePasswordUpdateNoticePageWaiter()->Wait();
-    test::PasswordUpdateNoticeExpectDone();
-    test::PasswordUpdateNoticeDoneAction();
-  }
+  test::CreatePasswordUpdateNoticePageWaiter()->Wait();
+  test::PasswordUpdateNoticeExpectDone();
+  test::PasswordUpdateNoticeDoneAction();
 
   // User session should start, and whole OOBE screen is expected to be hidden,
   OobeWindowVisibilityWaiter(false).Wait();
@@ -512,7 +502,7 @@ class TokenAfterCrash : public MixinBasedInProcessBrowserTest {
  public:
   TokenAfterCrash() {
     login_mixin_.set_session_restore_enabled();
-    login_mixin_.set_should_obtain_handles(true);
+    login_mixin_.SetShouldObtainHandle(true);
     login_mixin_.AppendRegularUsers(1);
   }
 

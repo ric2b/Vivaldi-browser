@@ -10,6 +10,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_node_position.h"
@@ -109,6 +110,13 @@ bool AXComputedNodeData::HasOrCanComputeAttribute(
       // The value attribute could be computed on the browser for content
       // editables and ARIA text/search boxes.
       return owner_->data().IsNonAtomicTextField();
+
+    case ax::mojom::StringAttribute::kName:
+      return ::features::IsAccessibilityPruneRedundantInlineTextEnabled() &&
+             owner_->data().role == ax::mojom::Role::kInlineTextBox &&
+             owner_->GetParent()->data().HasStringAttribute(
+                 ax::mojom::StringAttribute::kName);
+
     default:
       return false;
   }
@@ -150,6 +158,16 @@ const std::string& AXComputedNodeData::GetOrComputeAttributeUTF8(
       // such controls on the browser. The same for all other controls, other
       // than non-atomic text fields.
       return base::EmptyString();
+
+    case ax::mojom::StringAttribute::kName:
+      // The name may be suppressed when serializing an AXInlineTextBox if it
+      // can be inferred from the parent.
+      if (::features::IsAccessibilityPruneRedundantInlineTextEnabled() &&
+          owner_->data().role == ax::mojom::Role::kInlineTextBox) {
+        return GetOrComputeTextContentUTF8();
+      }
+      return base::EmptyString();
+
     default:
       return base::EmptyString();
   }
@@ -274,7 +292,17 @@ int AXComputedNodeData::GetOrComputeTextContentLengthUTF8() const {
 }
 
 int AXComputedNodeData::GetOrComputeTextContentLengthUTF16() const {
-  return static_cast<int>(GetOrComputeTextContentUTF16().length());
+  if (utf16_length_) {
+    return utf16_length_.value();
+  }
+  if (text_content_utf16_) {
+    // Used the cached UTF16 representation if we have it already.
+    utf16_length_ = text_content_utf16_->length();
+  } else {
+    // Do not cache the text since used just to extract the length.
+    utf16_length_ = ComputeTextContentUTF16().length();
+  }
+  return utf16_length_.value();
 }
 
 void AXComputedNodeData::ComputeUnignoredValues(
@@ -446,6 +474,18 @@ void AXComputedNodeData::ComputeWordOffsetsIfNeeded() const {
 }
 
 std::string AXComputedNodeData::ComputeTextContentUTF8() const {
+  // Name is omitted from an inline text if an only child since its value is
+  // the same as the parent. We can differentiate this case from a specified
+  // but empty name based on the name from attribute, which is kFromContent if
+  // set and kNone if the text content is to be inferred from the parent.
+  if (::features::IsAccessibilityPruneRedundantInlineTextEnabled()) {
+    if (owner_->data().role == ax::mojom::Role::kInlineTextBox &&
+        !owner_->data().HasStringAttribute(ax::mojom::StringAttribute::kName)) {
+      return owner_->GetParent()->data().GetStringAttribute(
+          ax::mojom::StringAttribute::kName);
+    }
+  }
+
   // If a text field has no descendants, then we compute its text content from
   // its value or its placeholder. Otherwise we prefer to look at its descendant
   // text nodes because Blink doesn't always add all trailing white space to the

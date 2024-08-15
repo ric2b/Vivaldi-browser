@@ -2,11 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/buildflag_header.gni")
+import("//build/config/pch.gni")
 import("//build/config/rust.gni")
-import("clang.gni")
-
 import("//build/toolchain/goma.gni")
+import("clang.gni")
 
 if (is_ios) {
   import("//build/config/ios/config.gni")  # For `target_environment`
@@ -50,7 +49,7 @@ config("find_bad_constructs") {
       "-Xclang",
       "disable-check-raw-ptr-to-stack-allocated-error",
 
-      # TODO(https://crbug.com/1504043): Remove when raw_ptr check has been
+      # TODO(crbug.com/40944547): Remove when raw_ptr check has been
       # enabled for the dawn repo.
       "-Xclang",
       "-plugin-arg-find-bad-constructs",
@@ -88,9 +87,24 @@ config("find_bad_constructs") {
 }
 
 # A plugin for incrementally applying the -Wunsafe-buffer-usage warning.
+#
+# To use the plugin, the project must specify a path as
+# `clang_unsafe_buffers_paths` in the `//.gn` file. This path points to a text
+# file that controls where the warning is checked.
+#
+# See //build/config/unsafe_buffers_paths.txt for an example file, this it the
+# file used by Chromium.
+#
+# This build configuration is not supported when `enable_precompiled_headers`
+# is on because the pragmas that enable and disable unsafe-buffers warnings are
+# not serialized to precompiled header files, and thus we get warnings that we
+# should not.
 config("unsafe_buffers") {
-  if (clang_use_chrome_plugins && !use_goma) {
+  if (clang_use_chrome_plugins && clang_unsafe_buffers_paths != "" &&
+      !use_goma && !enable_precompiled_headers) {
     cflags = [
+      "-DUNSAFE_BUFFERS_BUILD",
+
       "-Xclang",
       "-add-plugin",
       "-Xclang",
@@ -99,14 +113,9 @@ config("unsafe_buffers") {
       "-Xclang",
       "-plugin-arg-unsafe-buffers",
       "-Xclang",
-      rebase_path("//build/config/unsafe_buffers_paths.txt", root_build_dir),
+      rebase_path(clang_unsafe_buffers_paths, root_build_dir),
     ]
   }
-}
-
-buildflag_header("unsafe_buffers_buildflags") {
-  header = "unsafe_buffers_buildflags.h"
-  flags = [ "UNSAFE_BUFFERS_WARNING_ENABLED=$clang_use_chrome_plugins" ]
 }
 
 # Enables some extra Clang-specific warnings. Some third-party code won't

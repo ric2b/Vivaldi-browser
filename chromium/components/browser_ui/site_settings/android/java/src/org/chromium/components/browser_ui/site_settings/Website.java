@@ -12,6 +12,7 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge.StorageInfoClearedCallback;
 import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.content_settings.ContentSettingsType;
+import org.chromium.components.content_settings.ProviderType;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.BrowserContextHandle;
 import org.chromium.url.GURL;
@@ -281,7 +282,7 @@ public final class Website implements WebsiteEntry {
                                 ContentSettingsType.ADS,
                                 getAddress().getOrigin(),
                                 ContentSettingValues.BLOCK,
-                                "",
+                                ProviderType.NONE,
                                 /* isEmbargoed= */ false);
                 setContentSettingException(type, exception);
             }
@@ -295,7 +296,7 @@ public final class Website implements WebsiteEntry {
                                 ContentSettingsType.JAVASCRIPT,
                                 getAddress().getHost(),
                                 value,
-                                "",
+                                ProviderType.NONE,
                                 /* isEmbargoed= */ false);
                 setContentSettingException(type, exception);
             }
@@ -315,7 +316,7 @@ public final class Website implements WebsiteEntry {
                                 ContentSettingsType.SOUND,
                                 getAddress().getHost(),
                                 value,
-                                "",
+                                ProviderType.NONE,
                                 /* isEmbargoed= */ false);
                 setContentSettingException(type, exception);
             }
@@ -329,7 +330,7 @@ public final class Website implements WebsiteEntry {
             // because we always show the autoplay permission in Site Settings.
             if (exception == null) {
                 exception = new ContentSettingException(ContentSettingsType.AUTOPLAY,
-                        getAddress().getHost(), value, "", /*isEmbargoed=*/false);
+                        getAddress().getHost(), value, ProviderType.NONE, /*isEmbargoed=*/false);
                 setContentSettingException(type, exception);
             }
         }
@@ -425,27 +426,46 @@ public final class Website implements WebsiteEntry {
     }
 
     public void clearAllStoredData(
-            BrowserContextHandle browserContextHandle, final StoredDataClearedCallback callback) {
-        // Wait for callbacks from each mStorageInfo and mSharedDictionaryInfo
-        // and a callback from mLocalStorageInfo.
-        int[] storageInfoCallbacksLeft = {mStorageInfo.size() + mSharedDictionaryInfo.size() + 1};
-        StorageInfoClearedCallback clearedCallback =
-                () -> {
-                    if (--storageInfoCallbacksLeft[0] == 0) callback.onStoredDataCleared();
-                };
-        if (mLocalStorageInfo != null) {
-            mLocalStorageInfo.clear(browserContextHandle, clearedCallback);
-            mLocalStorageInfo = null;
-        } else {
-            clearedCallback.onStorageInfoCleared();
-        }
-        for (StorageInfo info : mStorageInfo) info.clear(browserContextHandle, clearedCallback);
-        mStorageInfo.clear();
+            SiteSettingsDelegate siteSettingsDelegate, final StoredDataClearedCallback callback) {
+        var browserContextHandle = siteSettingsDelegate.getBrowserContextHandle();
 
-        for (SharedDictionaryInfo info : mSharedDictionaryInfo) {
-            info.clear(browserContextHandle, clearedCallback);
+        if (siteSettingsDelegate.isBrowsingDataModelFeatureEnabled()) {
+            siteSettingsDelegate.getBrowsingDataModel(
+                    (model) -> {
+                        String host = getAddress().getHost();
+                        model.removeBrowsingData(
+                                host,
+                                () -> {
+                                    callback.onStoredDataCleared();
+                                    mStorageInfo.clear();
+                                });
+                    });
+        } else {
+            // Here we need to delete localstorage e cookie info.
+
+            // Wait for callbacks from each mStorageInfo and mSharedDictionaryInfo
+            // and a callback from mLocalStorageInfo.
+            int[] storageInfoCallbacksLeft = {
+                mStorageInfo.size() + mSharedDictionaryInfo.size() + 1
+            };
+            StorageInfoClearedCallback clearedCallback =
+                    () -> {
+                        if (--storageInfoCallbacksLeft[0] == 0) callback.onStoredDataCleared();
+                    };
+            if (mLocalStorageInfo != null) {
+                mLocalStorageInfo.clear(browserContextHandle, clearedCallback);
+                mLocalStorageInfo = null;
+            } else {
+                clearedCallback.onStorageInfoCleared();
+            }
+            for (StorageInfo info : mStorageInfo) info.clear(browserContextHandle, clearedCallback);
+            mStorageInfo.clear();
+
+            for (SharedDictionaryInfo info : mSharedDictionaryInfo) {
+                info.clear(browserContextHandle, clearedCallback);
+            }
+            mSharedDictionaryInfo.clear();
         }
-        mSharedDictionaryInfo.clear();
     }
 
     /** An interface to implement to get a callback when storage info has been cleared. */
@@ -500,6 +520,24 @@ public final class Website implements WebsiteEntry {
     @Override
     public boolean matches(String search) {
         return getTitle().contains(search);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean isPartOfRws() {
+        return getFPSCookieInfo() != null;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public String getRwsOwner() {
+        return isPartOfRws() ? getFPSCookieInfo().getOwner() : null;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public int getRwsSize() {
+        return isPartOfRws() ? getFPSCookieInfo().getMembersCount() : 0;
     }
 
     @Override

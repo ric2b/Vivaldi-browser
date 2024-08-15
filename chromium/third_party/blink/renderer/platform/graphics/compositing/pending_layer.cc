@@ -36,8 +36,9 @@ void PreserveNearIntegralBounds(gfx::RectF& bounds) {
 
 }  // anonymous namespace
 
-PendingLayer::PendingLayer(scoped_refptr<const PaintArtifact> artifact,
-                           const PaintChunk& first_chunk)
+PendingLayer::PendingLayer(const PaintArtifact& artifact,
+                           const PaintChunk& first_chunk,
+                           CompositingType compositing_type)
     : bounds_(first_chunk.bounds),
       rect_known_to_be_opaque_(first_chunk.rect_known_to_be_opaque),
       has_text_(first_chunk.has_text),
@@ -46,9 +47,10 @@ PendingLayer::PendingLayer(scoped_refptr<const PaintArtifact> artifact,
           first_chunk.text_known_to_be_on_opaque_background),
       solid_color_chunk_index_(
           first_chunk.background_color.is_solid_color ? 0 : kNotFound),
-      chunks_(std::move(artifact), first_chunk),
+      chunks_(artifact, first_chunk),
       property_tree_state_(
           first_chunk.properties.GetPropertyTreeState().Unalias()),
+      compositing_type_(compositing_type),
       hit_test_opaqueness_(first_chunk.hit_test_opaqueness) {
   DCHECK(!ChunkRequiresOwnLayer() || first_chunk.size() <= 1u);
   // Though text_known_to_be_on_opaque_background is only meaningful when
@@ -63,6 +65,16 @@ PendingLayer::PendingLayer(scoped_refptr<const PaintArtifact> artifact,
     }
   }
   rect_known_to_be_opaque_.Intersect(bounds_);
+  if (compositing_type == kOther && first_chunk.hit_test_data &&
+      first_chunk.hit_test_data->scroll_translation) {
+    non_composited_scroll_translations_.push_back(
+        first_chunk.hit_test_data->scroll_translation.get());
+  }
+}
+
+void PendingLayer::Trace(Visitor* visitor) const {
+  visitor->Trace(chunks_);
+  visitor->Trace(content_layer_client_);
 }
 
 gfx::Vector2dF PendingLayer::LayerOffset() const {
@@ -351,6 +363,8 @@ bool PendingLayer::Merge(const PendingLayer& guest,
   change_of_decomposited_transforms_ = std::max(
       ChangeOfDecompositedTransforms(), guest.ChangeOfDecompositedTransforms());
   hit_test_opaqueness_ = merged_hit_test_opaqueness;
+  non_composited_scroll_translations_.AppendVector(
+      guest.non_composited_scroll_translations_);
   return true;
 }
 
@@ -365,8 +379,33 @@ std::optional<PropertyTreeState> PendingLayer::CanUpcastWith(
   if (&GetPropertyTreeState().Effect() != &guest_state.Effect()) {
     return std::nullopt;
   }
-  return GetPropertyTreeState().CanUpcastWith(guest_state,
-                                              is_composited_scroll);
+  std::optional<PropertyTreeState> result =
+      GetPropertyTreeState().CanUpcastWith(guest_state, is_composited_scroll);
+  if (!result || !RuntimeEnabledFeatures::HitTestOpaquenessEnabled()) {
+    return result;
+  }
+
+  // In HitTestOpaqueness, additionally check scroll translations to ensure
+  // they will be covered by the NonFastScrollableRegion of the merged layer if
+  // either of the scroll translations is not composited.
+  const auto& home_scroll_translation =
+      property_tree_state_.Transform().NearestScrollTranslationNode();
+  const auto& guest_scroll_translation =
+      guest.property_tree_state_.Transform().NearestScrollTranslationNode();
+  if (&home_scroll_translation == &guest_scroll_translation) {
+    return result;
+  }
+  const auto& lca_scroll_translation =
+      result->Transform().NearestScrollTranslationNode();
+  if ((&guest_scroll_translation == &lca_scroll_translation ||
+       non_composited_scroll_translations_.Contains(
+           &guest_scroll_translation)) &&
+      (&home_scroll_translation == &lca_scroll_translation ||
+       guest.non_composited_scroll_translations_.Contains(
+           &home_scroll_translation))) {
+    return result;
+  }
+  return std::nullopt;
 }
 
 bool PendingLayer::CanMergeWithDecompositedBlendMode(
@@ -423,7 +462,7 @@ bool PendingLayer::MightOverlap(const PendingLayer& other) const {
 //  10. All child transform nodes are also able to be de-composited.
 // This algorithm should be O(t+c+e) where t,c,e are the number of transform,
 // clip, and effect nodes in the full tree.
-void PendingLayer::DecompositeTransforms(Vector<PendingLayer>& pending_layers) {
+void PendingLayer::DecompositeTransforms(PendingLayers& pending_layers) {
   HashMap<const TransformPaintPropertyNode*, bool> can_be_decomposited;
   HashSet<const void*> clips_and_effects_seen;
   for (const PendingLayer& pending_layer : pending_layers) {
@@ -595,7 +634,7 @@ void PendingLayer::UpdateContentLayer(PendingLayer* old_pending_layer,
     content_layer_client_ = std::move(old_pending_layer->content_layer_client_);
   }
   if (!content_layer_client_) {
-    content_layer_client_ = std::make_unique<ContentLayerClientImpl>();
+    content_layer_client_ = MakeGarbageCollected<ContentLayerClientImpl>();
     content_layer_client_->GetRasterInvalidator().SetTracksRasterInvalidations(
         tracks_raster_invalidations);
   }
@@ -649,6 +688,9 @@ void PendingLayer::UpdateCompositedLayer(PendingLayer* old_pending_layer,
                                          cc::LayerSelection& layer_selection,
                                          bool tracks_raster_invalidations,
                                          cc::LayerTreeHost* layer_tree_host) {
+  // This is used during PaintArifactCompositor::CollectPendingLayers() only.
+  non_composited_scroll_translations_.clear();
+
   switch (compositing_type_) {
     case PendingLayer::kForeignLayer:
       UpdateForeignLayer();
@@ -688,7 +730,7 @@ void PendingLayer::UpdateCcLayerHitTestOpaqueness() const {
 }
 
 void PendingLayer::UpdateCompositedLayerForRepaint(
-    scoped_refptr<const PaintArtifact> repainted_artifact,
+    const PaintArtifact& repainted_artifact,
     cc::LayerSelection& layer_selection) {
   // Essentially replace the paint chunks of the pending layer with the
   // repainted chunks in |repainted_artifact|. The pending layer's paint
@@ -697,9 +739,9 @@ void PendingLayer::UpdateCompositedLayerForRepaint(
   // removed, or re-ordered, so we can simply swap in a repainted
   // |PaintArtifact| instead of copying |PaintChunk|s individually.
   const PaintArtifact& old_artifact = Chunks().GetPaintArtifact();
-  DCHECK_EQ(old_artifact.PaintChunks().size(),
-            repainted_artifact->PaintChunks().size());
-  SetPaintArtifact(std::move(repainted_artifact));
+  DCHECK_EQ(old_artifact.GetPaintChunks().size(),
+            repainted_artifact.GetPaintChunks().size());
+  SetPaintArtifact(repainted_artifact);
 
   bool chunks_unchanged = true;
   for (const auto& chunk : Chunks()) {
@@ -723,7 +765,7 @@ void PendingLayer::UpdateCompositedLayerForRepaint(
       if (chunks_unchanged) {
         // See RasterInvalidator::SetOldPaintArtifact() for the reason for this.
         content_layer_client_->GetRasterInvalidator().SetOldPaintArtifact(
-            &Chunks().GetPaintArtifact());
+            Chunks().GetPaintArtifact());
       } else {
         content_layer_client_->UpdateCcPictureLayer(*this);
       }

@@ -8,13 +8,12 @@ import type Protocol from 'devtools-protocol';
 import type { CDPSession } from '../api/CDPSession.js';
 import type { WaitForOptions } from '../api/Frame.js';
 import type { HTTPResponse } from '../api/HTTPResponse.js';
-import type { MediaFeature, GeolocationOptions, PageEvents } from '../api/Page.js';
+import type { Credentials, GeolocationOptions, MediaFeature, PageEvents } from '../api/Page.js';
 import { Page, type NewDocumentScriptEvaluation, type ScreenshotOptions } from '../api/Page.js';
 import { Accessibility } from '../cdp/Accessibility.js';
 import { Coverage } from '../cdp/Coverage.js';
 import { Tracing } from '../cdp/Tracing.js';
-import type { Cookie, CookieParam } from '../common/Cookie.js';
-import type { DeleteCookiesRequest } from '../common/Cookie.js';
+import type { Cookie, CookieParam, DeleteCookiesRequest } from '../common/Cookie.js';
 import { EventEmitter } from '../common/EventEmitter.js';
 import type { PDFOptions } from '../common/PDFOptions.js';
 import type { Awaitable } from '../common/types.js';
@@ -29,6 +28,8 @@ import { BidiKeyboard, BidiMouse, BidiTouchscreen } from './Input.js';
 import type { BidiJSHandle } from './JSHandle.js';
 import type { BidiWebWorker } from './WebWorker.js';
 /**
+ * Implements Page using WebDriver BiDi.
+ *
  * @internal
  */
 export declare class BidiPage extends Page {
@@ -43,7 +44,11 @@ export declare class BidiPage extends Page {
     readonly coverage: Coverage;
     _client(): BidiCdpSession;
     private constructor();
-    setUserAgent(userAgent: string, userAgentMetadata?: Protocol.Emulation.UserAgentMetadata | undefined): Promise<void>;
+    /**
+     * @internal
+     */
+    _userAgentHeaders: Record<string, string>;
+    setUserAgent(userAgent: string, userAgentMetadata?: Protocol.Emulation.UserAgentMetadata): Promise<void>;
     setBypassCSP(enabled: boolean): Promise<void>;
     queryObjects<Prototype>(prototypeHandle: BidiJSHandle<Prototype>): Promise<BidiJSHandle<Prototype[]>>;
     browser(): BidiBrowser;
@@ -90,7 +95,17 @@ export declare class BidiPage extends Page {
     target(): never;
     waitForFileChooser(): never;
     workers(): BidiWebWorker[];
-    setRequestInterception(): never;
+    setRequestInterception(enable: boolean): Promise<void>;
+    /**
+     * @internal
+     */
+    _extraHTTPHeaders: Record<string, string>;
+    setExtraHTTPHeaders(headers: Record<string, string>): Promise<void>;
+    /**
+     * @internal
+     */
+    _credentials: Credentials | null;
+    authenticate(credentials: Credentials | null): Promise<void>;
     setDragInterception(): never;
     setBypassServiceWorker(): never;
     setOfflineMode(): never;
@@ -98,8 +113,6 @@ export declare class BidiPage extends Page {
     setCookie(...cookies: CookieParam[]): Promise<void>;
     deleteCookie(...cookies: DeleteCookiesRequest[]): Promise<void>;
     removeExposedFunction(name: string): Promise<void>;
-    authenticate(): never;
-    setExtraHTTPHeaders(): never;
     metrics(): never;
     goBack(options?: WaitForOptions): Promise<HTTPResponse | null>;
     goForward(options?: WaitForOptions): Promise<HTTPResponse | null>;

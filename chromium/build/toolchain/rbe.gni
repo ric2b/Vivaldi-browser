@@ -91,6 +91,9 @@ if (is_mac || is_ios) {
 #
 # This is a comma-delimited list of paths relative to the source tree root. The
 # leading space is important, if the string is non-empty. :)
-unsafe_buffers_paths_txt =
-    rebase_path("//build/config/unsafe_buffers_paths.txt", rbe_exec_root)
-rbe_bug_326584510_missing_inputs = " -inputs=" + unsafe_buffers_paths_txt
+rbe_bug_326584510_missing_inputs = ""
+if (defined(clang_unsafe_buffers_paths) &&
+    "$clang_unsafe_buffers_paths" != "") {
+  from_exec_root = rebase_path(clang_unsafe_buffers_paths, rbe_exec_root)
+  rbe_bug_326584510_missing_inputs = " -inputs=$from_exec_root"
+}

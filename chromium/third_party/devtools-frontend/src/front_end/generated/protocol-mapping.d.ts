@@ -33,6 +33,10 @@ export namespace ProtocolMapping {
      * Event for animation that has been started.
      */
     'Animation.animationStarted': [Protocol.Animation.AnimationStartedEvent];
+    /**
+     * Event for animation that has been updated.
+     */
+    'Animation.animationUpdated': [Protocol.Animation.AnimationUpdatedEvent];
     'Audits.issueAdded': [Protocol.Audits.IssueAddedEvent];
     /**
      * Emitted when an address form is filled.
@@ -275,6 +279,12 @@ export namespace ProtocolMapping {
      * it, and responseReceivedExtraInfo may be fired before or after responseReceived.
      */
     'Network.responseReceivedExtraInfo': [Protocol.Network.ResponseReceivedExtraInfoEvent];
+    /**
+     * Fired when 103 Early Hints headers is received in addition to the common response.
+     * Not every responseReceived event will have an responseReceivedEarlyHints fired.
+     * Only one responseReceivedEarlyHints may be fired for eached responseReceived event.
+     */
+    'Network.responseReceivedEarlyHints': [Protocol.Network.ResponseReceivedEarlyHintsEvent];
     /**
      * Fired exactly once for each Trust Token operation. Depending on
      * the type of the operation and whether the operation succeeded or
@@ -932,6 +942,15 @@ export namespace ProtocolMapping {
     'Audits.checkFormsIssues': {
       paramsType: [];
       returnType: Protocol.Audits.CheckFormsIssuesResponse;
+    };
+    /**
+     * Installs an unpacked extension from the filesystem similar to
+     * --load-extension CLI flags. Returns extension ID once the extension
+     * has been installed.
+     */
+    'Extensions.loadUnpacked': {
+      paramsType: [Protocol.Extensions.LoadUnpackedRequest];
+      returnType: Protocol.Extensions.LoadUnpackedResponse;
     };
     /**
      * Trigger autofill on a form identified by the fieldId.
@@ -1649,6 +1668,13 @@ export namespace ProtocolMapping {
       returnType: Protocol.DOM.GetTopLayerElementsResponse;
     };
     /**
+     * Returns the NodeId of the matched element according to certain relations.
+     */
+    'DOM.getElementByRelation': {
+      paramsType: [Protocol.DOM.GetElementByRelationRequest];
+      returnType: Protocol.DOM.GetElementByRelationResponse;
+    };
+    /**
      * Re-does the last undone action.
      */
     'DOM.redo': {
@@ -2054,6 +2080,24 @@ export namespace ProtocolMapping {
      */
     'Emulation.setDeviceMetricsOverride': {
       paramsType: [Protocol.Emulation.SetDeviceMetricsOverrideRequest];
+      returnType: void;
+    };
+    /**
+     * Start reporting the given posture value to the Device Posture API.
+     * This override can also be set in setDeviceMetricsOverride().
+     */
+    'Emulation.setDevicePostureOverride': {
+      paramsType: [Protocol.Emulation.SetDevicePostureOverrideRequest];
+      returnType: void;
+    };
+    /**
+     * Clears a device posture override set with either setDeviceMetricsOverride()
+     * or setDevicePostureOverride() and starts using posture information from the
+     * platform again.
+     * Does nothing if no override is set.
+     */
+    'Emulation.clearDevicePostureOverride': {
+      paramsType: [];
       returnType: void;
     };
     'Emulation.setScrollbarsHidden': {
@@ -3124,8 +3168,15 @@ export namespace ProtocolMapping {
       paramsType: [];
       returnType: void;
     };
+    /**
+     * Gets the processed manifest for this current document.
+     *   This API always waits for the manifest to be loaded.
+     *   If manifestId is provided, and it does not match the manifest of the
+     *     current document, this API errors out.
+     *   If there is not a loaded page, this API errors out immediately.
+     */
     'Page.getAppManifest': {
-      paramsType: [];
+      paramsType: [Protocol.Page.GetAppManifestRequest?];
       returnType: Protocol.Page.GetAppManifestResponse;
     };
     'Page.getInstallabilityErrors': {
@@ -3834,6 +3885,14 @@ export namespace ProtocolMapping {
       returnType: void;
     };
     /**
+     * Sends all pending Attribution Reports immediately, regardless of their
+     * scheduled report time.
+     */
+    'Storage.sendPendingAttributionReports': {
+      paramsType: [];
+      returnType: Protocol.Storage.SendPendingAttributionReportsResponse;
+    };
+    /**
      * Returns the effective Related Website Sets in use by this profile for the browser
      * session. The effective Related Website Sets will not change during a browser session.
      */
@@ -4333,6 +4392,46 @@ export namespace ProtocolMapping {
     'FedCm.resetCooldown': {
       paramsType: [];
       returnType: void;
+    };
+    /**
+     * Returns the following OS state for the given manifest id.
+     */
+    'PWA.getOsAppState': {
+      paramsType: [Protocol.PWA.GetOsAppStateRequest];
+      returnType: Protocol.PWA.GetOsAppStateResponse;
+    };
+    /**
+     * Installs the given manifest identity, optionally using the given install_url
+     * or IWA bundle location.
+     *
+     * TODO(crbug.com/337872319) Support IWA to meet the following specific
+     * requirement.
+     * IWA-specific install description: If the manifest_id is isolated-app://,
+     * install_url_or_bundle_url is required, and can be either an http(s) URL or
+     * file:// URL pointing to a signed web bundle (.swbn). The .swbn file's
+     * signing key must correspond to manifest_id. If Chrome is not in IWA dev
+     * mode, the installation will fail, regardless of the state of the allowlist.
+     */
+    'PWA.install': {
+      paramsType: [Protocol.PWA.InstallRequest];
+      returnType: void;
+    };
+    /**
+     * Uninstals the given manifest_id and closes any opened app windows.
+     */
+    'PWA.uninstall': {
+      paramsType: [Protocol.PWA.UninstallRequest];
+      returnType: void;
+    };
+    /**
+     * Launches the installed web app, or an url in the same web app instead of the
+     * default start url if it is provided. Returns a tab / web contents based
+     * Target.TargetID which can be used to attach to via Target.attachToTarget or
+     * similar APIs.
+     */
+    'PWA.launch': {
+      paramsType: [Protocol.PWA.LaunchRequest];
+      returnType: Protocol.PWA.LaunchResponse;
     };
     /**
      * Continues execution until specific location is reached.

@@ -60,6 +60,9 @@ devtools_module("timeline") {
     "CountersGraph.ts",
     "EventUICategory.ts",
     "EventsTimelineTreeView.ts",
+    "ExtensionDataGatherer.ts",
+    "ExtensionTrackAppender.ts",
+    "FreshRecording.ts",
     "GPUTrackAppender.ts",
     "Initiators.ts",
     "InteractionsTrackAppender.ts",
@@ -69,6 +72,7 @@ devtools_module("timeline") {
     "PerformanceModel.ts",
     "SaveFileFormatter.ts",
     "SourceMapsResolver.ts",
+    "TargetForEvent.ts",
     "ThreadAppender.ts",
     "TimelineController.ts",
     "TimelineDetailsView.ts",
@@ -84,6 +88,7 @@ devtools_module("timeline") {
     "TimelinePaintProfilerView.ts",
     "TimelinePanel.ts",
     "TimelineSelection.ts",
+    "TimelineSelectorStatsView.ts",
     "TimelineTreeView.ts",
     "TimelineUIUtils.ts",
     "TimingsTrackAppender.ts",
@@ -106,7 +111,12 @@ devtools_module("timeline") {
     "../../panels/layer_viewer:bundle",
     "../../panels/mobile_throttling:bundle",
     "../../panels/profiler:bundle",
+    "../../services/annotations_manager:bundle",
     "../../services/trace_bounds:bundle",
+    "../../ui/components/buttons:bundle",
+    "../../ui/components/code_highlighter:bundle",  # trace event highlighting
+    "../../ui/components/data_grid:bundle",
+    "../../ui/components/linkifier:bundle",
     "../../ui/components/menus:bundle",
     "../../ui/components/panel_feedback:bundle",
     "../../ui/legacy/components/data_grid:bundle",
@@ -115,6 +125,7 @@ devtools_module("timeline") {
     "../../ui/legacy/theme_support:bundle",
     "../../ui/lit-html:bundle",
     "./components:bundle",
+    "./extensions:bundle",
   ]
 
   visibility = [ "../../component_docs/*" ]
@@ -138,7 +149,7 @@ devtools_entrypoint("bundle") {
     "../../testing/*",
     "../../ui/components/docs/performance_panel/*",
     "../input/*",
-    "../js_profiler/*",
+    "../js_timeline/*",
     "../lighthouse/*",
     "../recorder/*",
     "./track_appenders:unittests",
@@ -169,6 +180,7 @@ ts_library("unittests") {
   sources = [
     "Breadcrumbs.test.ts",
     "EventTypeHelpers.test.ts",
+    "FreshRecording.test.ts",
     "Initiators.test.ts",
     "SaveFileFormatter.test.ts",
     "SourceMapsResolver.test.ts",

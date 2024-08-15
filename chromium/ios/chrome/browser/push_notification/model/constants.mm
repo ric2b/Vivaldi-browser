@@ -12,3 +12,9 @@ const char kSportsNotificationKey[] = "SPORTS";
 NSString* const kContentNotificationFeedbackActionIdentifier = @"feedback";
 NSString* const kContentNotificationFeedbackCategoryIdentifier =
     @"FEEDBACK_IDENTIFIER";
+
+NSString* const kContentNotificationNAUBodyParameter =
+    @"kContentNotificationNAUBodyParameter";
+
+const char kNAUHistogramName[] =
+    "ContentNotifications.NotificationActionUpload.Success";

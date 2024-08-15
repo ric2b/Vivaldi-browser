@@ -8,54 +8,55 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
+#include <pthreadpool.h>
+#include <xnnpack.h>
+#include <xnnpack/aligned-allocator.h>
+#include <xnnpack/common.h>
 
-#include <cstddef>
-#include <cstdlib>
 #include <algorithm>
+#include <cassert>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
 #include <limits>
 #include <memory>
 #include <random>
 #include <vector>
 
+#include "replicable_random_device.h"
+#include <gtest/gtest.h>
 #include <fp16/fp16.h>
-#include <pthreadpool.h>
-
-#include <xnnpack.h>
-#include <xnnpack/aligned-allocator.h>
-#include <xnnpack/common.h>
-
 
 class GlobalAveragePoolingOperatorTester {
  public:
-  inline GlobalAveragePoolingOperatorTester& channels(size_t channels) {
+  GlobalAveragePoolingOperatorTester& channels(size_t channels) {
     assert(channels != 0);
     this->channels_ = channels;
     return *this;
   }
 
-  inline size_t channels() const {
+  size_t channels() const {
     return this->channels_;
   }
 
-  inline GlobalAveragePoolingOperatorTester& width(size_t width) {
+  GlobalAveragePoolingOperatorTester& width(size_t width) {
     assert(width != 0);
     this->width_ = width;
     return *this;
   }
 
-  inline size_t width() const {
+  size_t width() const {
     return this->width_;
   }
 
-  inline GlobalAveragePoolingOperatorTester& input_stride(size_t input_stride) {
+  GlobalAveragePoolingOperatorTester& input_stride(size_t input_stride) {
     assert(input_stride != 0);
     this->input_stride_ = input_stride;
     return *this;
   }
 
-  inline size_t input_stride() const {
+  size_t input_stride() const {
     if (this->input_stride_ == 0) {
       return channels();
     } else {
@@ -64,13 +65,13 @@ class GlobalAveragePoolingOperatorTester {
     }
   }
 
-  inline GlobalAveragePoolingOperatorTester& output_stride(size_t output_stride) {
+  GlobalAveragePoolingOperatorTester& output_stride(size_t output_stride) {
     assert(output_stride != 0);
     this->output_stride_ = output_stride;
     return *this;
   }
 
-  inline size_t output_stride() const {
+  size_t output_stride() const {
     if (this->output_stride_ == 0) {
       return channels();
     } else {
@@ -79,80 +80,80 @@ class GlobalAveragePoolingOperatorTester {
     }
   }
 
-  inline GlobalAveragePoolingOperatorTester& batch_size(size_t batch_size) {
+  GlobalAveragePoolingOperatorTester& batch_size(size_t batch_size) {
     assert(batch_size != 0);
     this->batch_size_ = batch_size;
     return *this;
   }
 
-  inline size_t batch_size() const {
+  size_t batch_size() const {
     return this->batch_size_;
   }
 
-  inline GlobalAveragePoolingOperatorTester& input_scale(float input_scale) {
+  GlobalAveragePoolingOperatorTester& input_scale(float input_scale) {
     assert(input_scale > 0.0f);
     assert(std::isnormal(input_scale));
     this->input_scale_ = input_scale;
     return *this;
   }
 
-  inline float input_scale() const {
+  float input_scale() const {
     return this->input_scale_;
   }
 
-  inline GlobalAveragePoolingOperatorTester& input_zero_point(uint8_t input_zero_point) {
+  GlobalAveragePoolingOperatorTester& input_zero_point(uint8_t input_zero_point) {
     this->input_zero_point_ = input_zero_point;
     return *this;
   }
 
-  inline uint8_t input_zero_point() const {
+  uint8_t input_zero_point() const {
     return this->input_zero_point_;
   }
 
-  inline GlobalAveragePoolingOperatorTester& output_scale(float output_scale) {
+  GlobalAveragePoolingOperatorTester& output_scale(float output_scale) {
     assert(output_scale > 0.0f);
     assert(std::isnormal(output_scale));
     this->output_scale_ = output_scale;
     return *this;
   }
 
-  inline float output_scale() const {
+  float output_scale() const {
     return this->output_scale_;
   }
 
-  inline GlobalAveragePoolingOperatorTester& output_zero_point(uint8_t output_zero_point) {
+  GlobalAveragePoolingOperatorTester& output_zero_point(uint8_t output_zero_point) {
     this->output_zero_point_ = output_zero_point;
     return *this;
   }
 
-  inline uint8_t output_zero_point() const {
+  uint8_t output_zero_point() const {
     return this->output_zero_point_;
   }
 
-  inline GlobalAveragePoolingOperatorTester& qmin(uint8_t qmin) {
+  GlobalAveragePoolingOperatorTester& qmin(uint8_t qmin) {
     this->qmin_ = qmin;
     return *this;
   }
 
-  inline uint8_t qmin() const {
+  uint8_t qmin() const {
     return this->qmin_;
   }
 
-  inline GlobalAveragePoolingOperatorTester& qmax(uint8_t qmax) {
+  GlobalAveragePoolingOperatorTester& qmax(uint8_t qmax) {
     this->qmax_ = qmax;
     return *this;
   }
 
-  inline uint8_t qmax() const {
+  uint8_t qmax() const {
     return this->qmax_;
   }
 
-  inline GlobalAveragePoolingOperatorTester& multithreaded(size_t multithreaded) {
+  GlobalAveragePoolingOperatorTester& multithreaded(size_t multithreaded) {
     this->multithreaded_ = multithreaded;
     return *this;
   }
 
-  inline size_t multithreaded() const {
+  size_t multithreaded() const {
     return this->multithreaded_;
   }
 
@@ -161,18 +162,17 @@ class GlobalAveragePoolingOperatorTester {
     return multithreaded() ? 5 : 1;
   }
 
-  inline GlobalAveragePoolingOperatorTester& iterations(size_t iterations) {
+  GlobalAveragePoolingOperatorTester& iterations(size_t iterations) {
     this->iterations_ = iterations;
     return *this;
   }
 
-  inline size_t iterations() const {
+  size_t iterations() const {
     return this->iterations_;
   }
 
   void TestNWCxQU8() const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_int_distribution<int32_t> u8dist(
       std::numeric_limits<uint8_t>::min(), std::numeric_limits<uint8_t>::max());
 
@@ -261,8 +261,7 @@ class GlobalAveragePoolingOperatorTester {
   }
 
   void TestNWCxQS8() const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_int_distribution<int32_t> i8dist(
       std::numeric_limits<int8_t>::min(), std::numeric_limits<int8_t>::max());
 
@@ -351,8 +350,7 @@ class GlobalAveragePoolingOperatorTester {
   }
 
   void TestNWCxF16() const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(1.0e-3f, 1.0f);
 
     std::vector<uint16_t> input((batch_size() * width() - 1) * input_stride() + channels() + XNN_EXTRA_BYTES / sizeof(uint16_t));
@@ -449,8 +447,7 @@ class GlobalAveragePoolingOperatorTester {
   }
 
   void TestNWCxF32() const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist;
 
     std::vector<float> input((batch_size() * width() - 1) * input_stride() + channels() + XNN_EXTRA_BYTES / sizeof(float));
@@ -549,8 +546,7 @@ class GlobalAveragePoolingOperatorTester {
   }
 
   void TestNCWxF16() const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(1.0e-3f, 1.0f);
 
     std::vector<uint16_t> input(batch_size() * channels() * width() + XNN_EXTRA_BYTES / sizeof(uint16_t));
@@ -637,8 +633,7 @@ class GlobalAveragePoolingOperatorTester {
   }
 
   void TestNCWxF32() const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist;
 
     std::vector<float> input(batch_size() * channels() * width() + XNN_EXTRA_BYTES / sizeof(float));

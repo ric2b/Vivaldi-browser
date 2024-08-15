@@ -30,6 +30,7 @@
 
 #include <string>
 
+#include "src/tint/utils/reflection/reflection.h"
 #include "src/tint/utils/result/result.h"
 
 // Forward declarations.
@@ -45,6 +46,9 @@ struct BinaryPolyfillConfig {
     bool bitshift_modulo = false;
     /// Should integer divide and modulo be polyfilled to avoid DBZ and integer overflow?
     bool int_div_mod = false;
+
+    /// Reflection for this class
+    TINT_REFLECT(BinaryPolyfillConfig, bitshift_modulo, int_div_mod);
 };
 
 /// BinaryPolyfill is a transform that modifies binary instructions to prepare them for raising to

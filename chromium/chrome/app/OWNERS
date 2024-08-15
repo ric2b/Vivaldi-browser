@@ -37,6 +37,7 @@ per-file profiles_strings.grdp=file://chrome/app/profiles_strings_grdp/OWNERS
 per-file *settings*strings*.grdp=file://chrome/browser/resources/settings/OWNERS
 per-file *settings*strings*.grdp=file://ui/webui/PLATFORM_OWNERS
 per-file *settings*strings*.grdp=sauski@google.com
+per-file *settings*strings*.grdp=rainhard@chromium.org
 
 per-file support_tool_strings.grdp=file://chrome/browser/support_tool/OWNERS
 
@@ -61,9 +62,3 @@ per-file main_dll_loader_win.cc=wfh@chromium.org
 
 per-file framework.exports=file://build/mac/OWNERS
 per-file framework.order=file://build/mac/OWNERS
-
-# Security-review owners for Fuchsia Component Manifests.
-per-file *.cml=set noparent
-per-file *.cml=file://build/fuchsia/SECURITY_OWNERS
-per-file *.cmx=set noparent
-per-file *.cmx=file://build/fuchsia/SECURITY_OWNERS

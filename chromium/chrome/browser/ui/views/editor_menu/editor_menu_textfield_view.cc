@@ -9,6 +9,7 @@
 
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
+#include "chrome/browser/ui/views/editor_menu/editor_menu_strings.h"
 #include "chrome/browser/ui/views/editor_menu/editor_menu_view_delegate.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/ime/text_input_flags.h"
@@ -35,27 +36,6 @@ namespace {
 constexpr gfx::Size kArrowButtonSize(20, 20);
 constexpr gfx::Insets kArrowButtonInsets(4);
 constexpr int kPaddingBetweenArrowButtonAndTextfield = 10;
-
-std::u16string GetPlaceholderText(EditorMenuMode editor_menu_mode, int width) {
-  int placeholder_text_id;
-
-  switch (editor_menu_mode) {
-    case EditorMenuMode::kWrite:
-      placeholder_text_id = IDS_EDITOR_MENU_WRITE_CARD_FREEFORM_PLACEHOLDER;
-      break;
-
-    case EditorMenuMode::kRewrite:
-      placeholder_text_id = IDS_EDITOR_MENU_REWRITE_CARD_FREEFORM_PLACEHOLDER;
-      break;
-
-    default:
-      // EditorMenuTextfieldView will only be created for write & rewrite mode.
-      // We should nevery reach here.
-      NOTREACHED();
-  }
-
-  return l10n_util::GetStringUTF16(placeholder_text_id);
-}
 
 }  // namespace
 
@@ -86,7 +66,7 @@ void EditorMenuTextfieldView::Layout(PassKey) {
 
   // Update the placeholder text based on the widget width.
   textfield_->SetPlaceholderText(
-      GetPlaceholderText(editor_menu_mode_, width()));
+      GetEditorMenuFreeformPromptInputFieldPlaceholder());
 }
 
 void EditorMenuTextfieldView::ContentsChanged(
@@ -116,7 +96,7 @@ void EditorMenuTextfieldView::InitLayout() {
   // issue in native views
   textfield_->SetTextInputFlags(ui::TEXT_INPUT_FLAG_AUTOCORRECT_OFF);
   textfield_->SetPlaceholderText(
-      GetPlaceholderText(editor_menu_mode_, width()));
+      GetEditorMenuFreeformPromptInputFieldPlaceholder());
   textfield_->SetBackgroundColor(SK_ColorTRANSPARENT);
   textfield_->RemoveHoverEffect();
   textfield_->SetExtraInsets(gfx::Insets::TLBR(
@@ -127,8 +107,7 @@ void EditorMenuTextfieldView::InitLayout() {
           &EditorMenuTextfieldView::OnTextfieldArrowButtonPressed,
           weak_factory_.GetWeakPtr()),
       vector_icons::kForwardArrowIcon,
-      l10n_util::GetStringUTF16(
-          IDS_EDITOR_MENU_FREEFORM_TEXTFIELD_ARROW_BUTTON_TOOLTIP)));
+      GetEditorMenuFreeformTextfieldArrowButtonTooltip()));
   arrow_button_->SetImageHorizontalAlignment(
       views::ImageButton::HorizontalAlignment::ALIGN_CENTER);
   arrow_button_->SetImageVerticalAlignment(

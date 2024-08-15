@@ -4,9 +4,6 @@
  * Copyright (c) 2011 Anatoliy Wasserman
  * Copyright (c) 2012 Konstantin Shishkov
  *
- * This encoder appears to be based on Anatoliy Wassermans considering
- * similarities in the bugs.
- *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -24,6 +21,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/mem.h"
 #include "libavutil/mem_internal.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"

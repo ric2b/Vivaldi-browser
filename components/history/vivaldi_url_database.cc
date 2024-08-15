@@ -7,41 +7,64 @@
 #include "base/i18n/case_conversion.h"
 #include "base/strings/utf_string_conversions.h"
 #include "db/vivaldi_history_types.h"
+#include "base/strings/string_split.h"
 
 namespace history {
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-
+std::string scoring("  visit_count "
+                    "+ 200 * (url LIKE '%/') "
+                    "- 100 * (LENGTH(url)-LENGTH(REPLACE(url,'/',''))-4) "
+);
 history::DetailedUrlResults URLDatabase::GetVivaldiDetailedHistory(
     const std::string query,
     int max_results) {
   history::DetailedUrlResults results;
 
   results.clear();
-  const char* sql_str =
-      "SELECT u.id, u.url, u.title, u.typed_count, u.visit_count, "
-      "	 u.last_visit_time, v.transition "
-      "  FROM "
-      "  ( "
-      "    SELECT "
-      "      id, url, title, typed_count,	visit_count, last_visit_time "
-      "      FROM urls "
-      "	     WHERE "
-      "		   hidden = 0 "
-      "		   AND (urls.url LIKE ? OR urls.title LIKE ?) "
-      "	   ORDER BY "
-      "		 last_visit_time DESC "
-      "	   LIMIT ? "
-      "  ) u "
-      "  JOIN visits v ON v.url = u.id "
-      "    AND v.visit_time = u.last_visit_time ";
 
-  std::u16string lower_query(base::i18n::ToLower(base::UTF8ToUTF16(query)));
-  sql::Statement statement(GetDB().GetUniqueStatement(sql_str));
-  const std::string wild8("%");
-  statement.BindString(0, wild8 + query + wild8);
-  statement.BindString(1, wild8 + query + wild8);
-  statement.BindInt(2, max_results);
+  std::string sql("SELECT u.id, u.url, u.title, u.typed_count, ");
+  sql.append("u.visit_count, u.last_visit_time, score ");
+  sql.append("FROM ( SELECT id, url, title, typed_count, ");
+  sql.append("visit_count, last_visit_time, ");
+  sql.append(scoring);
+  sql.append("as score ");
+  sql.append("FROM urls ");
+  sql.append("WHERE hidden = 0 ");
+  // Adds a search clause for every word of the input.
+  std::string word;
+  for(std::istringstream iterator(query);iterator;iterator>>word){
+  sql.append("AND (urls.url LIKE ? OR urls.title LIKE ?) ");
+  };
+  sql.append("AND LENGTH(urls.url) < 2048 ");
+  sql.append("AND NOT (urls.last_visit_time = 0) ");
+
+  sql.append("AND ( SUBSTR(urls.url,0,5) LIKE 'ftp:' "
+             "OR  SUBSTR(urls.url,0,6) LIKE 'file:' "
+             "OR  SUBSTR(urls.url,0,6) LIKE 'http:' "
+             "OR  SUBSTR(urls.url,0,7) LIKE 'https:') ");
+  sql.append("ORDER BY ");
+  sql.append(scoring);
+  sql.append("DESC limit ?) u ");
+  sql.append("JOIN visits ");
+  sql.append("ON (visits.url = u.id) AND visits.visit_time = u.last_visit_time ");
+  // TRANSITION_IS_REDIRECT_MASK = 0xC00000000
+  // PAGE_TRANSITION_CHAIN_START | PAGE_TRANSITON_PAGE_END = 0x30000000
+  // The following line excludes the middle of a redirect chain.
+  sql.append("AND NOT ((visits.transition & 0xC0000000) "
+             "AND NOT (visits.transition & 0x30000000 ))");
+
+  sql::Statement statement(GetDB().GetUniqueStatement(sql.c_str()));
+
+  int var = 0;
+for(std::istringstream iterator(query);iterator;iterator>>word){
+    std::string wild_wrapped = "%" + std::string(word) +"%";
+    // This needs to be repeated, the first binding is for url search
+    // the second binding is for title search.
+    statement.BindString(var++, wild_wrapped );
+    statement.BindString(var++, wild_wrapped );
+  };
+  statement.BindInt(var, max_results);
 
   while (statement.Step()) {
     DetailedUrlResult result;
@@ -51,7 +74,7 @@ history::DetailedUrlResults URLDatabase::GetVivaldiDetailedHistory(
     result.typed_count = statement.ColumnInt(3);
     result.visit_count = statement.ColumnInt(4);
     result.last_visit_time = statement.ColumnTime(5);
-    result.transition_type = ui::PageTransitionFromInt(statement.ColumnInt(6));
+    result.score = statement.ColumnInt(6);
     results.push_back(result);
   }
 
@@ -60,19 +83,16 @@ history::DetailedUrlResults URLDatabase::GetVivaldiDetailedHistory(
 
 history::TypedUrlResults URLDatabase::GetVivaldiTypedHistory(
     const std::string query,
-    KeywordID prefix_keyword,
     int max_results) {
   history::TypedUrlResults results;
   results.clear();
 
-  std::string sql("SELECT u.url, u.title, u.typed_count, ");
-  sql.append("k.url_id IS NOT NULL, k.keyword_id, k.normalized_term ");
+  std::string sql("SELECT u.url, u.title, u.visit_count, ");
+  sql.append("k.url_id IS NOT NULL, k.normalized_term ");
   sql.append("FROM urls AS u ");
   sql.append("LEFT JOIN keyword_search_terms AS k ON u.id = k.url_id ");
   sql.append("WHERE (u.typed_count > 0 AND u.url LIKE ?) ");
   sql.append("OR k.normalized_term LIKE ? ");
-  if (prefix_keyword != -1)
-    sql.append("OR (k.keyword_id = ? AND k.normalized_term LIKE ?) ");
   sql.append("ORDER BY u.last_visit_time DESC LIMIT ?");
 
   std::u16string lower_query(base::i18n::ToLower(base::UTF8ToUTF16(query)));
@@ -81,27 +101,16 @@ history::TypedUrlResults URLDatabase::GetVivaldiTypedHistory(
   const std::string wild8("%");
   statement.BindString(0, wild8 + query + wild8);
   statement.BindString16(1, wild + lower_query + wild);
-  if (prefix_keyword != -1) {
-    statement.BindInt64(2, prefix_keyword);
-    statement.BindString16(
-        3,
-        wild + lower_query.substr(lower_query.find_first_of(u" ") + 1) + wild);
-    statement.BindInt(4, max_results);
-  } else {
-    statement.BindInt(2, max_results);
-  }
+  statement.BindInt(2, max_results);
 
   while (statement.Step()) {
     TypedUrlResult result;
     result.url = GURL(statement.ColumnString(0));
     result.title = statement.ColumnString(1);
-    result.typed_count = statement.ColumnInt(2);
+    result.visit_count = statement.ColumnInt(2);
     bool is_keyword = statement.ColumnBool(3);
     if (is_keyword) {
-      result.keyword_id = statement.ColumnInt64(4);
-      result.terms = statement.ColumnString(5);
-    } else {
-      result.keyword_id = -1;
+      result.terms = statement.ColumnString(4);
     }
     results.push_back(result);
   }
@@ -113,6 +122,24 @@ bool URLDatabase::CreateVivaldiURLsLastVisitIndex() {
   return GetDB().Execute(
       "CREATE INDEX IF NOT EXISTS urls_idx_last_visit_time ON "
       "urls(last_visit_time desc);");
+}
+
+bool URLDatabase::CreateVivaldiURLScoreIndex() {
+  sql::Statement statement(GetDB().GetUniqueStatement(
+  "SELECT sql FROM sqlite_master WHERE type = 'index' AND name ='urls_score_index';"));
+  std::string sql("CREATE INDEX urls_score_index ON urls( ");
+  sql.append(scoring);
+  sql.append(")");
+  if(!statement.Step()){
+  return GetDB().Execute(sql.c_str());
+  }
+  if(sql.compare(statement.ColumnString(0))){
+    statement.Step();//Need to step beyond the last result to unlock the DB
+    std::ignore = GetDB().Execute("DROP INDEX IF EXISTS urls_score_index;");
+    return GetDB().Execute(sql.c_str());
+  }
+  return 0;
+
 }
 
 #endif

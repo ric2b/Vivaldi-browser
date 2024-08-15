@@ -1201,7 +1201,7 @@ HIGHBD_SMOOTH_H_NXM(8, 32)
 
 // For width 16 and above.
 #define HIGHBD_SMOOTH_H_PREDICTOR(W)                                          \
-  void highbd_smooth_h_##W##xh_neon(                                          \
+  static void highbd_smooth_h_##W##xh_neon(                                   \
       uint16_t *dst, ptrdiff_t stride, const uint16_t *const top_row,         \
       const uint16_t *const left_column, const int height) {                  \
     const uint16_t top_right = top_row[(W)-1];                                \

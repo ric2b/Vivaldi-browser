@@ -14,8 +14,9 @@
 
 import {searchSegment} from '../../base/binary_search';
 import {duration, Time, time} from '../../base/time';
+import {getLegacySelection} from '../../common/state';
 import {Actions} from '../../common/actions';
-import {colorForSample} from '../../common/colorizer';
+import {colorForSample} from '../../core/colorizer';
 import {TrackData} from '../../common/track_data';
 import {TimelineFetcher} from '../../common/track_helper';
 import {CpuProfileDetailsPanel} from '../../frontend/cpu_profile_panel';
@@ -25,7 +26,6 @@ import {TimeScale} from '../../frontend/time_scale';
 import {
   EngineProxy,
   Plugin,
-  PluginContext,
   PluginContextTrace,
   PluginDescriptor,
   Track,
@@ -117,7 +117,7 @@ class CpuProfileTrack implements Track {
 
     for (let i = 0; i < data.tsStarts.length; i++) {
       const centerX = Time.fromRaw(data.tsStarts[i]);
-      const selection = globals.state.currentSelection;
+      const selection = getLegacySelection(globals.state);
       const isHovered = this.hoveredTs === centerX;
       const isSelected =
         selection !== null &&
@@ -262,23 +262,20 @@ class CpuProfileTrack implements Track {
 }
 
 class CpuProfile implements Plugin {
-  onActivate(_ctx: PluginContext): void {}
-
   async onTraceLoad(ctx: PluginContextTrace): Promise<void> {
     const result = await ctx.engine.query(`
+      with thread_cpu_sample as (
+        select distinct utid
+        from cpu_profile_stack_sample
+        where utid != 0
+      )
       select
         utid,
         tid,
         upid,
         thread.name as threadName
-      from
-        thread
-        join (select utid
-            from cpu_profile_stack_sample group by utid
-        ) using(utid)
-        left join process using(upid)
-      where utid != 0
-      group by utid`);
+      from thread_cpu_sample
+      join thread using(utid)`);
 
     const it = result.iter({
       utid: NUM,

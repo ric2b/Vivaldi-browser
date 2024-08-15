@@ -19,6 +19,7 @@
 #include <filesystem>  // NOLINT
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "gmock/gmock.h"
@@ -26,12 +27,12 @@
 #include "absl/flags/reflection.h"
 #include "absl/log/check.h"
 #include "./centipede/blob_file.h"
+#include "./centipede/corpus_io.h"
 #include "./centipede/defs.h"
 #include "./centipede/environment.h"
 #include "./centipede/feature.h"
 #include "./centipede/resource_pool.h"
 #include "./centipede/rusage_stats.h"
-#include "./centipede/shard_reader.h"
 #include "./centipede/test_util.h"
 #include "./centipede/util.h"
 #include "./centipede/workdir.h"
@@ -86,9 +87,8 @@ std::vector<TestCorpusRecord> ReadFromDistilled(const WorkDir &wd) {
       wd.DistilledFeaturesFiles().MyShardPath();
 
   std::vector<TestCorpusRecord> result;
-  auto shard_reader_callback = [&result](const ByteArray &input,
-                                         FeatureVec &features) {
-    result.push_back({input, features});
+  auto shard_reader_callback = [&result](ByteArray input, FeatureVec features) {
+    result.push_back({std::move(input), std::move(features)});
   };
   ReadShard(distilled_corpus_path, distilled_features_path,
             shard_reader_callback);

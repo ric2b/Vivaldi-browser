@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: git-and-gerrit-intro
 title: Introduction to Git & Gerrit for CrOS contributors
 ---
@@ -11,7 +11,7 @@ reviewed on Gerrit, for those who have not used either system before. It assumes
 that you’ve already got a local copy of the repository you want to modify, and
 have [set up your Gerrit credentials][Gerrit guide].  For more details on the
 topics that this guide skims over (such as the commit queue and the review
-process) see the [Contributing Guide](contributing.md).
+process) see the [Contributing Guide](/chromium-os/developer-library/guides/development/contributing/).
 
 ## Terms
 
@@ -116,7 +116,7 @@ $ git commit
 ```
 
 In the editor, add a message for your commit. See
-[the Commit messages section of the Contributing Guide](contributing.md#Commit-messages)
+[the Commit messages section of the Contributing Guide](/chromium-os/developer-library/guides/development/contributing/#Commit-messages)
 for suggestions on what to put in it. (No need to add the `Change-Id` line shown
 there, Gerrit will do that for you.)
 
@@ -344,4 +344,4 @@ again, building on the changes you’ve already submitted.
 [Gerrit slides]: https://docs.google.com/presentation/d/1C73UgQdzZDw0gzpaEqIC6SPujZJhqamyqO1XOHjH-uk/edit?usp=sharing
 [Git slides]: https://docs.google.com/presentation/d/1IQCRPHEIX-qKo7QFxsD3V62yhyGA9_5YsYXFOiBpgkk/edit?usp=sharing
 [depot_tools]: https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up
-[repo sync tip]: tips-and-tricks.md#TOC-How-to-make-repo-sync-less-disruptive-by-running-the-stages-separately
+[repo sync tip]: /chromium-os/developer-library/guides/recipes/tips-and-tricks/#TOC-How-to-make-repo-sync-less-disruptive-by-running-the-stages-separately

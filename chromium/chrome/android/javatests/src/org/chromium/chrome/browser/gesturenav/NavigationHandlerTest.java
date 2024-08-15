@@ -24,6 +24,7 @@ import org.chromium.base.FeatureList;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.Restriction;
@@ -46,6 +47,7 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.base.PageTransition;
+import org.chromium.ui.test.util.UiDisableIf;
 import org.chromium.ui.test.util.UiRestriction;
 
 import java.util.Map;
@@ -126,6 +128,7 @@ public class NavigationHandlerTest {
 
     @Test
     @SmallTest
+    @DisableIf.Device(type = {UiDisableIf.TABLET}) // https://crbug.com/338972492
     public void testCloseChromeAtHistoryStackHead() {
         loadNewTabPage();
         AsyncInitializationActivity.interceptMoveTaskToBackForTesting();
@@ -172,24 +175,47 @@ public class NavigationHandlerTest {
 
     @Test
     @SmallTest
+    @DisableIf.Device(type = {UiDisableIf.TABLET}) // https://crbug.com/338972492
     public void testSwipeNavigateOnNativePage() {
         HistogramWatcher histogramWatcher =
                 HistogramWatcher.newBuilder()
                         .expectBooleanRecordTimes("Navigation.DuringGesture.NavStarted", false, 2)
                         .expectBooleanRecordTimes(
+                                "Navigation.DuringGesture.NavStarted.3ButtonMode", false, 2)
+                        .expectBooleanRecordTimes(
                                 "Navigation.OnGestureStart.NavigationInProgress", false, 2)
+                        .expectBooleanRecordTimes(
+                                "Navigation.OnGestureStart.NavigationInProgress.3ButtonMode",
+                                false,
+                                2)
                         .build();
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
         mActivityTestRule.loadUrl(UrlConstants.RECENT_TABS_URL);
         assertNavigateOnSwipeFrom(LEFT_EDGE, UrlConstants.NTP_URL);
         assertNavigateOnSwipeFrom(RIGHT_EDGE, UrlConstants.RECENT_TABS_URL);
         histogramWatcher.assertExpected("Wrong histogram recording");
+
+        histogramWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectNoRecords("Navigation.DuringGesture.NavStarted")
+                        .expectNoRecords("Navigation.DuringGesture.NavStarted.3ButtonMode")
+                        .expectNoRecords("Navigation.OnGestureStart.NavigationInProgress")
+                        .expectNoRecords(
+                                "Navigation.OnGestureStart.NavigationInProgress.3ButtonMode")
+                        .build();
+        mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
+        mActivityTestRule.loadUrl(UrlConstants.RECENT_TABS_URL);
+        TestThreadUtils.runOnUiThreadBlocking(
+                mActivityTestRule.getActivity().getOnBackPressedDispatcher()::onBackPressed);
+        TestThreadUtils.runOnUiThreadBlocking(
+                mActivityTestRule.getActivity().getOnBackPressedDispatcher()::onBackPressed);
+        histogramWatcher.assertExpected("Should not record when back is not triggered by swipe");
     }
 
     @Test
     @SmallTest
     public void testSwipeNavigateOnRenderedPage() {
-        // TODO(crbug.com/1426201): Write a test variation running with
+        // TODO(crbug.com/40899221): Write a test variation running with
         //     ChromeFeatureList.BACK_FORWARD_TRANSITIONS enabled when the feature is completed.
         mTestServer =
                 EmbeddedTestServer.createAndStartServer(

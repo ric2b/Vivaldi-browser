@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "osp/public/endpoint_config.h"
 #include "osp/public/protocol_connection_client.h"
 
 namespace openscreen {
@@ -18,8 +19,9 @@ namespace osp {
 class ProtocolConnectionClientFactory {
  public:
   static std::unique_ptr<ProtocolConnectionClient> Create(
-      MessageDemuxer* demuxer,
-      ProtocolConnectionServiceObserver* observer,
+      const EndpointConfig& config,
+      MessageDemuxer& demuxer,
+      ProtocolConnectionServiceObserver& observer,
       TaskRunner& task_runner);
 };
 

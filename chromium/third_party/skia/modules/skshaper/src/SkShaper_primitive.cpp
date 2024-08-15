@@ -4,9 +4,7 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 #include "include/core/SkFont.h"
-#include "include/core/SkFontMgr.h"
 #include "include/core/SkFontTypes.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkScalar.h"
@@ -14,6 +12,10 @@
 #include "include/private/base/SkTo.h"
 #include "modules/skshaper/include/SkShaper.h"
 #include "src/base/SkUTF.h"
+
+#if !defined(SK_DISABLE_LEGACY_SKSHAPER_FUNCTIONS)
+#include "include/core/SkFontMgr.h"
+#endif
 
 #include <cstdint>
 #include <cstring>
@@ -245,9 +247,9 @@ void SkShaperPrimitive::shape(const char* utf8,
 }
 
 #if !defined(SK_DISABLE_LEGACY_SKSHAPER_FUNCTIONS)
-std::unique_ptr<SkShaper> SkShaper::MakePrimitive() { return SkShapers::Primitive(); }
+std::unique_ptr<SkShaper> SkShaper::MakePrimitive() { return SkShapers::Primitive::PrimitiveText(); }
 #endif
 
-namespace SkShapers {
-std::unique_ptr<SkShaper> Primitive() { return std::make_unique<SkShaperPrimitive>(); }
+namespace SkShapers::Primitive {
+std::unique_ptr<SkShaper> PrimitiveText() { return std::make_unique<SkShaperPrimitive>(); }
 }  // namespace SkShapers

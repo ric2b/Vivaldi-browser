@@ -18,7 +18,6 @@
 #import "components/reading_list/features/reading_list_switches.h"
 #import "components/signin/public/base/signin_pref_names.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
-#import "components/sync/base/features.h"
 #import "components/sync/base/user_selectable_type.h"
 #import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_user_settings.h"
@@ -77,9 +76,11 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
-// TODO(crbug.com/1425862): SigninPromoViewMediator will be refactored so that
+// TODO(crbug.com/40898970): SigninPromoViewMediator will be refactored so that
 // we can move the SigninPromoViewConsumer implementation from the coordinator
 // to the view.
 @interface ReadingListCoordinator () <AccountSettingsPresenter,
@@ -328,7 +329,6 @@
     return;
   }
   [self loadEntryURL:entry->URL()
-          withOfflineURL:GURL()
       loadOfflineVersion:NO
                 inNewTab:NO
                incognito:NO];
@@ -345,7 +345,6 @@
     return;
   }
   [self loadEntryURL:entry->URL()
-          withOfflineURL:GURL()
       loadOfflineVersion:NO
                 inNewTab:YES
                incognito:incognito];
@@ -377,11 +376,7 @@
 // `newTab` and `incognito` can be used to optionally open the URL in a new tab
 // or in incognito.  The coordinator is also stopped after the load is
 // requested.
-// NOTE: `loadOfflineVersion` may not be used with `inNewTab`.
-// TODO(crbug.com/1313458):  Remove `inNewTab` and `withOfflineURL` when
-// migration is complete.
 - (void)loadEntryURL:(const GURL&)entryURL
-        withOfflineURL:(const GURL&)offlineURL
     loadOfflineVersion:(BOOL)loadOfflineVersion
               inNewTab:(BOOL)newTab
              incognito:(BOOL)incognito {
@@ -397,12 +392,10 @@
     if (reauthAgent.authenticationRequired) {
       // Copy C++ args to call later from the block.
       GURL copyEntryURL = GURL(entryURL);
-      GURL copyOfflineURL = GURL(offlineURL);
       [reauthAgent
           authenticateIncognitoContentWithCompletionBlock:^(BOOL success) {
             if (success) {
               [weakSelf loadEntryURL:copyEntryURL
-                      withOfflineURL:copyOfflineURL
                   loadOfflineVersion:YES
                             inNewTab:newTab
                            incognito:incognito];
@@ -421,16 +414,6 @@
       self.browser->GetBrowserState()->IsOffTheRecord(), is_ntp,
       new_tab_page_uma::ACTION_OPENED_READING_LIST_ENTRY);
 
-  // Load the offline URL if available.
-  GURL loadURL = entryURL;
-  if (offlineURL.is_valid() && !loadOfflineVersion) {
-    loadURL = offlineURL;
-    // Offline URLs should always be opened in new tabs.
-    newTab = YES;
-    const GURL updateURL = entryURL;
-    [self.mediator markEntryRead:updateURL];
-  }
-
   // Prepare the table for dismissal.
   [self.tableViewController willBeDismissed];
 
@@ -445,13 +428,13 @@
     // Use a referrer with a specific URL to signal that this entry should not
     // be taken into account for the Most Visited tiles.
   } else if (newTab) {
-    UrlLoadParams params = UrlLoadParams::InNewTab(loadURL, entryURL);
+    UrlLoadParams params = UrlLoadParams::InNewTab(entryURL, entryURL);
     params.in_incognito = incognito;
     params.web_params.referrer = web::Referrer(GURL(kReadingListReferrerURL),
                                                web::ReferrerPolicyDefault);
     UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
   } else {
-    UrlLoadParams params = UrlLoadParams::InCurrentTab(loadURL);
+    UrlLoadParams params = UrlLoadParams::InCurrentTab(entryURL);
     params.web_params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
     params.web_params.referrer = web::Referrer(GURL(kReadingListReferrerURL),
                                                web::ReferrerPolicyDefault);
@@ -471,21 +454,10 @@
 
   if (entry->DistilledState() == ReadingListEntry::PROCESSED) {
     const GURL entryURL = entry->URL();
-    GURL offlineURL = reading_list::OfflineURLForURL(entryURL);
-
-    if (web::features::IsLoadSimulatedRequestAPIEnabled()) {
-      [self loadEntryURL:entryURL
-              withOfflineURL:entryURL
-          loadOfflineVersion:YES
-                    inNewTab:NO
-                   incognito:offTheRecord];
-    } else {
-      [self loadEntryURL:entryURL
-              withOfflineURL:offlineURL
-          loadOfflineVersion:NO
-                    inNewTab:YES
-                   incognito:offTheRecord];
-    }
+    [self loadEntryURL:entryURL
+        loadOfflineVersion:YES
+                  inNewTab:NO
+                 incognito:offTheRecord];
   }
 }
 
@@ -522,7 +494,6 @@
             return;
 
           [weakSelf loadEntryURL:item.entryURL
-                  withOfflineURL:GURL()
               loadOfflineVersion:NO
                         inNewTab:YES
                        incognito:NO];
@@ -532,13 +503,25 @@
         }
         [menuElements addObject:openInNewTab];
 
+        // Vivaldi: Option for open tab in background.
+        if (IsVivaldiRunning()) {
+          UIAction* openNewBackgroundTab =
+              [actionFactory actionToOpenInNewBackgroundTabWithBlock:^{
+                [weakSelf loadEntryURL:item.entryURL
+                    loadOfflineVersion:NO
+                              inNewTab:NO
+                             incognito:NO
+                      openInBackground:YES];
+          }];
+          [menuElements addObject:openNewBackgroundTab];
+        } // End Vivaldi
+
         UIAction* openInNewIncognitoTab =
             [actionFactory actionToOpenInNewIncognitoTabWithBlock:^{
               if (![weakSelf isIncognitoAvailable])
                 return;
 
               [weakSelf loadEntryURL:item.entryURL
-                      withOfflineURL:GURL()
                   loadOfflineVersion:NO
                             inNewTab:YES
                            incognito:YES];
@@ -613,11 +596,8 @@
   CHECK(!_syncService->GetAccountInfo().IsEmpty())
       << base::SysNSStringToUTF8([self description]);
   SyncSettingsAccountState accountState =
-      (base::FeatureList::IsEnabled(
-           syncer::kReplaceSyncPromosWithSignInPromos) &&
-       !_syncService->HasSyncConsent())
-          ? SyncSettingsAccountState::kSignedIn
-          : SyncSettingsAccountState::kSyncing;
+      _syncService->HasSyncConsent() ? SyncSettingsAccountState::kSyncing
+                                     : SyncSettingsAccountState::kSignedIn;
   _manageSyncSettingsCoordinator = [[ManageSyncSettingsCoordinator alloc]
       initWithBaseViewController:self.tableViewController
                          browser:self.browser
@@ -649,7 +629,7 @@
   [self updateSignInPromoVisibility];
 }
 
-// TODO(crbug.com/1425862): This delegate's implementation will be moved to
+// TODO(crbug.com/40898970): This delegate's implementation will be moved to
 // SigninPromoViewMediator.
 #pragma mark - IdentityManagerObserverBridgeDelegate
 
@@ -682,8 +662,6 @@
 
   SigninPromoAction signinPromoAction = SigninPromoAction::kInstantSignin;
   if (_identityManager->HasPrimaryAccount(signin::ConsentLevel::kSignin) &&
-      base::FeatureList::IsEnabled(
-          syncer::kReplaceSyncPromosWithSignInPromos) &&
       base::FeatureList::IsEnabled(kEnableReviewAccountSettingsPromo) &&
       !_syncService->GetUserSettings()->GetSelectedTypes().Has(
           syncer::UserSelectableType::kReadingList)) {
@@ -702,16 +680,18 @@
   if (_identityManager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
     syncer::UserSelectableTypeSet selected_types =
         _syncService->GetUserSettings()->GetSelectedTypes();
-    if (base::FeatureList::IsEnabled(
-            syncer::kReplaceSyncPromosWithSignInPromos) &&
-        base::FeatureList::IsEnabled(kEnableReviewAccountSettingsPromo) &&
+    if (base::FeatureList::IsEnabled(kEnableReviewAccountSettingsPromo) &&
         !selected_types.Has(syncer::UserSelectableType::kReadingList)) {
       // Should remove the promo section completely in case it was showing
       // before with another action.
       self.shouldShowSignInPromo = NO;
-      _signinPromoViewMediator.signinPromoAction =
-          SigninPromoAction::kReviewAccountSettings;
-      self.shouldShowSignInPromo = YES;
+      if (!self.browser->GetBrowserState()->IsOffTheRecord()) {
+        // TODO(crbug.com/339472472): There is crash if the settings are
+        // opened from the incognito tab.
+        _signinPromoViewMediator.signinPromoAction =
+            SigninPromoAction::kReviewAccountSettings;
+        self.shouldShowSignInPromo = YES;
+      }
     } else {
       // If the user is signed-in with the promo (thus opted-in for Reading List
       // account storage), the promo should stay visible during the initial sync
@@ -815,5 +795,83 @@
 - (NSString*)manageSyncSettingsCoordinatorTitle {
   return l10n_util::GetNSString(IDS_IOS_GOOGLE_ACCOUNT_SETTINGS_TITLE);
 }
+
+#if defined(VIVALDI_BUILD)
+
+// Forked from Chromium implementation and adjusted to accomodate open in
+// background option
+- (void)loadEntryURL:(const GURL&)entryURL
+  loadOfflineVersion:(BOOL)loadOfflineVersion
+            inNewTab:(BOOL)newTab
+           incognito:(BOOL)incognito
+    openInBackground:(BOOL)openInBackground {
+  // Override incognito opening using enterprise policy.
+  incognito = incognito || self.isIncognitoForced;
+  incognito = incognito && self.isIncognitoAvailable;
+  // Only open a new incognito tab when incognito is authenticated. Prompt for
+  // auth otherwise.
+  if (incognito) {
+    IncognitoReauthSceneAgent* reauthAgent =
+        [IncognitoReauthSceneAgent
+            agentFromScene:self.browser->GetSceneState()];
+    __weak ReadingListCoordinator* weakSelf = self;
+    if (reauthAgent.authenticationRequired) {
+      // Copy C++ args to call later from the block.
+      GURL copyEntryURL = GURL(entryURL);
+      [reauthAgent
+       authenticateIncognitoContentWithCompletionBlock:^(BOOL success) {
+        if (success) {
+          [weakSelf loadEntryURL:copyEntryURL
+              loadOfflineVersion:YES
+                        inNewTab:newTab
+                       incognito:incognito
+                openInBackground:openInBackground];
+        }
+      }];
+      return;
+    }
+  }
+
+  DCHECK(entryURL.is_valid());
+  // Prepare the table for dismissal.
+  [self.tableViewController willBeDismissed];
+
+  if (loadOfflineVersion) {
+    DCHECK(!newTab);
+    web::WebState* activeWebState =
+        self.browser->GetWebStateList()->GetActiveWebState();
+    OfflinePageTabHelper* offlinePageTabHelper =
+        OfflinePageTabHelper::FromWebState(activeWebState);
+    if (offlinePageTabHelper &&
+        offlinePageTabHelper->CanHandleErrorLoadingURL(entryURL)) {
+      offlinePageTabHelper->LoadOfflinePage(entryURL);
+    }
+    // Use a referrer with a specific URL to signal that this entry should not
+    // be taken into account for the Most Visited tiles.
+  } else if (newTab) {
+    UrlLoadParams params = UrlLoadParams::InNewTab(entryURL, entryURL);
+    params.in_incognito = incognito;
+    params.web_params.referrer = web::Referrer(GURL(kReadingListReferrerURL),
+                                               web::ReferrerPolicyDefault);
+    UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
+  } else if (openInBackground) {
+    UrlLoadParams params = UrlLoadParams::InNewTab(entryURL, entryURL);
+    params.SetInBackground(openInBackground);
+    params.in_incognito = incognito;
+    params.web_params.referrer = web::Referrer(GURL(kReadingListReferrerURL),
+                                               web::ReferrerPolicyDefault);
+    UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
+  } else {
+    UrlLoadParams params = UrlLoadParams::InCurrentTab(entryURL);
+    params.web_params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
+    params.web_params.referrer = web::Referrer(GURL(kReadingListReferrerURL),
+                                               web::ReferrerPolicyDefault);
+    UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
+  }
+
+  [_delegate closeReadingList];
+}
+
+#endif // End Vivaldi
 
 @end

@@ -115,13 +115,12 @@ std::optional<std::vector<uint8_t>> GetBluetoothMacAddressFromCertificate(
 }
 
 std::optional<std::string> GetDeviceName(
-    const Advertisement* advertisement,
+    const Advertisement& advertisement,
     const std::optional<NearbyShareDecryptedPublicCertificate>& certificate) {
-  NL_DCHECK(advertisement);
 
   // Device name is always included when visible to everyone.
-  if (advertisement->device_name().has_value()) {
-    return advertisement->device_name();
+  if (advertisement.device_name().has_value()) {
+    return advertisement.device_name();
   }
 
   // For contacts only advertisements, we can't do anything without the
@@ -216,8 +215,6 @@ AttachmentTransmissionStatus ConvertToTransmissionStatus(
       return AttachmentTransmissionStatus::FAILED_NO_SHARE_TARGET_ENDPOINT;
     case TransferMetadata::Status::kMissingPayloads:
       return AttachmentTransmissionStatus::FAILED_NO_PAYLOAD;
-    case TransferMetadata::Status::kMissingTransferUpdateCallback:
-      return AttachmentTransmissionStatus::FAILED_NO_TRANSFER_UPDATE_CALLBACK;
     case TransferMetadata::Status::kPairedKeyVerificationFailed:
       return AttachmentTransmissionStatus::FAILED_PAIRED_KEYHANDSHAKE;
     case TransferMetadata::Status::kRejected:

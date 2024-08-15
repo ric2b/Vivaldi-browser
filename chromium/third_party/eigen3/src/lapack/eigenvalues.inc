@@ -47,9 +47,10 @@ EIGEN_LAPACK_FUNC(syev)
     mat = matrix(a, *n, *n, *lda);
 
   bool computeVectors = *jobz == 'V' || *jobz == 'v';
-  SelfAdjointEigenSolver<PlainMatrixType> eig(mat, computeVectors ? ComputeEigenvectors : EigenvaluesOnly);
+  Eigen::SelfAdjointEigenSolver<PlainMatrixType> eig(
+      mat, computeVectors ? Eigen::ComputeEigenvectors : Eigen::EigenvaluesOnly);
 
-  if (eig.info() == NoConvergence) {
+  if (eig.info() == Eigen::NoConvergence) {
     make_vector(w, *n).setZero();
     if (computeVectors) matrix(a, *n, *n, *lda).setIdentity();
     //*info = 1;

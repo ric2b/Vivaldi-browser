@@ -6,6 +6,7 @@
 
 #include "base/containers/to_vector.h"
 #include "base/feature_list.h"
+#include "base/json/values_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
 #include "base/test/gtest_util.h"
@@ -91,6 +92,10 @@ using testing::ElementsAre;
 using PromptAction = PrivacySandboxService::PromptAction;
 using PromptSuppressedReason = PrivacySandboxService::PromptSuppressedReason;
 using PromptType = PrivacySandboxService::PromptType;
+
+#if BUILDFLAG(IS_ANDROID)
+using ActivityType = PrivacySandboxService::PrivacySandboxStorageActivityType;
+#endif  // BUILDFLAG(IS_ANDROID)
 
 using enum privacy_sandbox_test_util::StateKey;
 using enum privacy_sandbox_test_util::InputKey;
@@ -364,10 +369,10 @@ class PrivacySandboxServiceTest : public testing::Test {
     auto* managed_provider_raw = managed_provider.get();
     content_settings::TestUtils::OverrideProvider(
         host_content_settings_map(), std::move(user_provider),
-        HostContentSettingsMap::PREF_PROVIDER);
+        content_settings::ProviderType::kPrefProvider);
     content_settings::TestUtils::OverrideProvider(
         host_content_settings_map(), std::move(managed_provider),
-        HostContentSettingsMap::POLICY_PROVIDER);
+        content_settings::ProviderType::kPolicyProvider);
     auto service_wrapper = TestPrivacySandboxService(privacy_sandbox_service());
 
     privacy_sandbox_test_util::RunTestCase(
@@ -579,7 +584,8 @@ TEST_F(PrivacySandboxServiceTest, PromptActionsUMAActions) {
 
   feature_list()->Reset();
   feature_list()->InitAndEnableFeatureWithParameters(
-      privacy_sandbox::kPrivacySandboxSettings4, {{"notice-required", "true"}});
+      privacy_sandbox::kPrivacySandboxSettings4,
+      {{privacy_sandbox::kPrivacySandboxSettings4NoticeRequiredName, "true"}});
   privacy_sandbox_service()->PromptActionOccurred(PromptAction::kNoticeShown);
   EXPECT_EQ(1, user_action_tester.GetActionCount(
                    "Settings.PrivacySandbox.Notice.Shown"));
@@ -631,7 +637,7 @@ TEST_F(PrivacySandboxServiceTest, PromptActionsUMAActions) {
   feature_list()->Reset();
   feature_list()->InitAndEnableFeatureWithParameters(
       privacy_sandbox::kPrivacySandboxSettings4,
-      {{"consent-required", "true"}});
+      {{privacy_sandbox::kPrivacySandboxSettings4ConsentRequiredName, "true"}});
 
   privacy_sandbox_service()->PromptActionOccurred(PromptAction::kConsentShown);
   EXPECT_EQ(1, user_action_tester.GetActionCount(
@@ -665,7 +671,9 @@ TEST_F(PrivacySandboxServiceTest, PromptActionsUMAActions) {
   feature_list()->Reset();
   feature_list()->InitAndEnableFeatureWithParameters(
       privacy_sandbox::kPrivacySandboxSettings4,
-      {{"consent-required", "true"}, {"restricted-notice", "true"}});
+      {{privacy_sandbox::kPrivacySandboxSettings4ConsentRequiredName, "true"},
+       {privacy_sandbox::kPrivacySandboxSettings4RestrictedNoticeName,
+        "true"}});
 
   privacy_sandbox_service()->PromptActionOccurred(
       PromptAction::kRestrictedNoticeOpenSettings);
@@ -1819,7 +1827,9 @@ class PrivacySandboxServiceM1RestrictedNoticeTest
   void InitializeFeaturesBeforeStart() override {
     feature_list()->InitAndEnableFeatureWithParameters(
         privacy_sandbox::kPrivacySandboxSettings4,
-        {{"notice-required", "true"}, {"restricted-notice", "true"}});
+        {{privacy_sandbox::kPrivacySandboxSettings4NoticeRequiredName, "true"},
+         {privacy_sandbox::kPrivacySandboxSettings4RestrictedNoticeName,
+          "true"}});
   }
 };
 
@@ -1888,7 +1898,8 @@ TEST_F(PrivacySandboxServiceM1DelayCreation,
        PromptSuppressReasonClearedWhenRestrictedNoticeEnabled) {
   feature_list()->InitAndEnableFeatureWithParameters(
       privacy_sandbox::kPrivacySandboxSettings4,
-      {{"restricted-notice", "true"}});
+      {{privacy_sandbox::kPrivacySandboxSettings4RestrictedNoticeName,
+        "true"}});
 
   prefs()->SetInteger(prefs::kPrivacySandboxM1PromptSuppressed,
                       static_cast<int>(PromptSuppressedReason::kRestricted));
@@ -1903,7 +1914,8 @@ TEST_F(PrivacySandboxServiceM1DelayCreation,
        PromptSuppressReasonNotClearedWhenRestrictedNoticeDisabled) {
   feature_list()->InitAndEnableFeatureWithParameters(
       privacy_sandbox::kPrivacySandboxSettings4,
-      {{"restricted-notice", "false"}});
+      {{privacy_sandbox::kPrivacySandboxSettings4RestrictedNoticeName,
+        "false"}});
 
   prefs()->SetInteger(prefs::kPrivacySandboxM1PromptSuppressed,
                       static_cast<int>(PromptSuppressedReason::kRestricted));
@@ -1964,7 +1976,8 @@ TEST_F(PrivacySandboxServiceM1DelayCreationRestricted,
        RestrictedEnabledDoesntClearAdMeasurementPref) {
   feature_list()->InitAndEnableFeatureWithParameters(
       privacy_sandbox::kPrivacySandboxSettings4,
-      {{"restricted-notice", "true"}});
+      {{privacy_sandbox::kPrivacySandboxSettings4RestrictedNoticeName,
+        "true"}});
 
   prefs()->SetBoolean(prefs::kPrivacySandboxM1TopicsEnabled, true);
   prefs()->SetBoolean(prefs::kPrivacySandboxM1FledgeEnabled, true);
@@ -1983,7 +1996,9 @@ class PrivacySandboxServiceM1PromptTest : public PrivacySandboxServiceTest {
   void InitializeFeaturesBeforeStart() override {
     feature_list()->InitAndEnableFeatureWithParameters(
         privacy_sandbox::kPrivacySandboxSettings4,
-        {{"consent-required", "true"}, {"notice-required", "false"}});
+        {{privacy_sandbox::kPrivacySandboxSettings4ConsentRequiredName, "true"},
+         {privacy_sandbox::kPrivacySandboxSettings4NoticeRequiredName,
+          "false"}});
   }
 };
 
@@ -2088,9 +2103,10 @@ TEST_F(PrivacySandboxServiceM1PromptTest, PromptActionsSentimentService) {
   feature_list()->Reset();
   feature_list()->InitAndEnableFeatureWithParameters(
       privacy_sandbox::kPrivacySandboxSettings4,
-      {{"consent-required", "true"},
-       {"notice-required", "true"},
-       {"restricted-notice", "true"}});
+      {{privacy_sandbox::kPrivacySandboxSettings4ConsentRequiredName, "true"},
+       {privacy_sandbox::kPrivacySandboxSettings4NoticeRequiredName, "true"},
+       {privacy_sandbox::kPrivacySandboxSettings4RestrictedNoticeName,
+        "true"}});
 
   std::map<PromptAction, TrustSafetySentimentService::FeatureArea>
       expected_feature_areas;
@@ -2306,7 +2322,10 @@ class PrivacySandboxServiceM1NoticePromptTest
   void InitializeFeaturesBeforeStart() override {
     feature_list()->InitAndEnableFeatureWithParameters(
         privacy_sandbox::kPrivacySandboxSettings4,
-        {{"consent-required", "false"}, {"notice-required", "true"}});
+        {{privacy_sandbox::kPrivacySandboxSettings4ConsentRequiredName,
+          "false"},
+         {privacy_sandbox::kPrivacySandboxSettings4NoticeRequiredName,
+          "true"}});
   }
 };
 
@@ -2477,7 +2496,7 @@ TEST_F(PrivacySandboxServiceTest, DisablePrivacySandboxAdMeasurementPolicy) {
                          {kIsAttributionReportingAllowed, false}});
 }
 
-// TODO(crbug.com/1428506): consider parameterizing other tests for the various
+// TODO(crbug.com/40262246): consider parameterizing other tests for the various
 // feature flags, particularly `kPrivacySandboxSettings4RestrictedNotice`.
 class PrivacySandboxServiceM1RestrictedNoticePromptTest
     : public PrivacySandboxServiceM1PromptTest {
@@ -2493,9 +2512,10 @@ class PrivacySandboxServiceM1RestrictedNoticePromptTest
   void InitializeFeaturesBeforeStart() override {
     feature_list()->InitAndEnableFeatureWithParameters(
         privacy_sandbox::kPrivacySandboxSettings4,
-        {{"consent-required", "false"},
-         {"notice-required", "true"},
-         {privacy_sandbox::kPrivacySandboxSettings4RestrictedNotice.name,
+        {{privacy_sandbox::kPrivacySandboxSettings4ConsentRequiredName,
+          "false"},
+         {privacy_sandbox::kPrivacySandboxSettings4NoticeRequiredName, "true"},
+         {privacy_sandbox::kPrivacySandboxSettings4RestrictedNoticeName,
           "true"}});
   }
 };
@@ -2641,9 +2661,10 @@ class PrivacySandboxServiceM1RestrictedNoticeUserCurrentlyUnrestricted
   void InitializeFeaturesBeforeStart() override {
     feature_list()->InitAndEnableFeatureWithParameters(
         privacy_sandbox::kPrivacySandboxSettings4,
-        {{"consent-required", "false"},
-         {"notice-required", "true"},
-         {privacy_sandbox::kPrivacySandboxSettings4RestrictedNotice.name,
+        {{privacy_sandbox::kPrivacySandboxSettings4ConsentRequiredName,
+          "false"},
+         {privacy_sandbox::kPrivacySandboxSettings4NoticeRequiredName, "true"},
+         {privacy_sandbox::kPrivacySandboxSettings4RestrictedNoticeName,
           "true"}});
   }
 };
@@ -2734,9 +2755,10 @@ class PrivacySandboxServiceM1RestrictedNoticeUserCurrentlyRestricted
   void InitializeFeaturesBeforeStart() override {
     feature_list()->InitAndEnableFeatureWithParameters(
         privacy_sandbox::kPrivacySandboxSettings4,
-        {{"consent-required", "false"},
-         {"notice-required", "true"},
-         {privacy_sandbox::kPrivacySandboxSettings4RestrictedNotice.name,
+        {{privacy_sandbox::kPrivacySandboxSettings4ConsentRequiredName,
+          "false"},
+         {privacy_sandbox::kPrivacySandboxSettings4NoticeRequiredName, "true"},
+         {privacy_sandbox::kPrivacySandboxSettings4RestrictedNoticeName,
           "true"}});
   }
 };
@@ -2812,9 +2834,10 @@ class PrivacySandboxServiceM1RestrictedNoticeShownToGuardianTest
   void InitializeFeaturesBeforeStart() override {
     feature_list()->InitAndEnableFeatureWithParameters(
         privacy_sandbox::kPrivacySandboxSettings4,
-        {{"consent-required", "false"},
-         {"notice-required", "true"},
-         {privacy_sandbox::kPrivacySandboxSettings4RestrictedNotice.name,
+        {{privacy_sandbox::kPrivacySandboxSettings4ConsentRequiredName,
+          "false"},
+         {privacy_sandbox::kPrivacySandboxSettings4NoticeRequiredName, "true"},
+         {privacy_sandbox::kPrivacySandboxSettings4RestrictedNoticeName,
           "true"}});
   }
 };
@@ -2869,9 +2892,10 @@ class PrivacySandboxServiceM1RestrictedNoticeEnabledNoRestrictionsTest
   void InitializeFeaturesBeforeStart() override {
     feature_list()->InitAndEnableFeatureWithParameters(
         privacy_sandbox::kPrivacySandboxSettings4,
-        {{"consent-required", "false"},
-         {"notice-required", "true"},
-         {privacy_sandbox::kPrivacySandboxSettings4RestrictedNotice.name,
+        {{privacy_sandbox::kPrivacySandboxSettings4ConsentRequiredName,
+          "false"},
+         {privacy_sandbox::kPrivacySandboxSettings4NoticeRequiredName, "true"},
+         {privacy_sandbox::kPrivacySandboxSettings4RestrictedNoticeName,
           "true"}});
   }
 };
@@ -2890,3 +2914,168 @@ TEST_F(PrivacySandboxServiceM1RestrictedNoticeEnabledNoRestrictionsTest,
                  {kM1PromptSuppressedReason,
                   static_cast<int>(PromptSuppressedReason::kNone)}});
 }
+
+#if BUILDFLAG(IS_ANDROID)
+class PrivacySandboxActivityTypeStorageTests
+    : public PrivacySandboxServiceTest {
+  void InitializeFeaturesBeforeStart() override {
+    feature_list()->InitAndEnableFeatureWithParameters(
+        privacy_sandbox::kPrivacySandboxActivityTypeStorage,
+        {{"last-n-launches", "5"}, {"within-x-days", "2"}});
+  }
+};
+
+TEST_F(PrivacySandboxActivityTypeStorageTests, VerifyListOverflow) {
+  privacy_sandbox_service()->RecordActivityType(ActivityType::kAGSACustomTab);
+  EXPECT_EQ(1u,
+            prefs()->GetList(prefs::kPrivacySandboxActivityTypeRecord).size());
+  privacy_sandbox_service()->RecordActivityType(
+      ActivityType::kNonAGSACustomTab);
+  EXPECT_EQ(2u,
+            prefs()->GetList(prefs::kPrivacySandboxActivityTypeRecord).size());
+  privacy_sandbox_service()->RecordActivityType(ActivityType::kTabbed);
+  EXPECT_EQ(3u,
+            prefs()->GetList(prefs::kPrivacySandboxActivityTypeRecord).size());
+  privacy_sandbox_service()->RecordActivityType(ActivityType::kWebApk);
+  EXPECT_EQ(4u,
+            prefs()->GetList(prefs::kPrivacySandboxActivityTypeRecord).size());
+  privacy_sandbox_service()->RecordActivityType(ActivityType::kWebapp);
+  EXPECT_EQ(5u,
+            prefs()->GetList(prefs::kPrivacySandboxActivityTypeRecord).size());
+  //   Since we are already at a size of 5, and last-n-launches is set to 5, the
+  //   next call of another launch will remove the first element in the list
+  //   before adding the newly created one. The size should still be 5.
+  privacy_sandbox_service()->RecordActivityType(
+      ActivityType::kTrustedWebActivity);
+  EXPECT_EQ(5u,
+            prefs()->GetList(prefs::kPrivacySandboxActivityTypeRecord).size());
+}
+
+// This test is ensuring that the start of the list is represented as the newest
+// records and the end is the oldest records.
+TEST_F(PrivacySandboxActivityTypeStorageTests, VerifyListOrder) {
+  privacy_sandbox_service()->RecordActivityType(ActivityType::kAGSACustomTab);
+  EXPECT_EQ(static_cast<int>(ActivityType::kAGSACustomTab),
+            *prefs()
+                 ->GetList(prefs::kPrivacySandboxActivityTypeRecord)[0]
+                 .GetDict()
+                 .Find("activity_type"));
+
+  browser_task_environment()->FastForwardBy(base::Minutes(5));
+  privacy_sandbox_service()->RecordActivityType(
+      ActivityType::kNonAGSACustomTab);
+  EXPECT_EQ(static_cast<int>(ActivityType::kNonAGSACustomTab),
+            *prefs()
+                 ->GetList(prefs::kPrivacySandboxActivityTypeRecord)[0]
+                 .GetDict()
+                 .Find("activity_type"));
+
+  privacy_sandbox_service()->RecordActivityType(
+      ActivityType::kTrustedWebActivity);
+  EXPECT_EQ(static_cast<int>(ActivityType::kTrustedWebActivity),
+            *prefs()
+                 ->GetList(prefs::kPrivacySandboxActivityTypeRecord)[0]
+                 .GetDict()
+                 .Find("activity_type"));
+
+  privacy_sandbox_service()->RecordActivityType(ActivityType::kTabbed);
+  privacy_sandbox_service()->RecordActivityType(ActivityType::kWebapp);
+  EXPECT_EQ(static_cast<int>(ActivityType::kWebapp),
+            *prefs()
+                 ->GetList(prefs::kPrivacySandboxActivityTypeRecord)[0]
+                 .GetDict()
+                 .Find("activity_type"));
+
+  browser_task_environment()->FastForwardBy(base::Minutes(5));
+  privacy_sandbox_service()->RecordActivityType(ActivityType::kWebApk);
+  privacy_sandbox_service()->RecordActivityType(ActivityType::kAGSACustomTab);
+  EXPECT_EQ(static_cast<int>(ActivityType::kAGSACustomTab),
+            *prefs()
+                 ->GetList(prefs::kPrivacySandboxActivityTypeRecord)[0]
+                 .GetDict()
+                 .Find("activity_type"));
+  EXPECT_EQ(static_cast<int>(ActivityType::kWebApk),
+            *prefs()
+                 ->GetList(prefs::kPrivacySandboxActivityTypeRecord)[1]
+                 .GetDict()
+                 .Find("activity_type"));
+  EXPECT_EQ(static_cast<int>(ActivityType::kWebapp),
+            *prefs()
+                 ->GetList(prefs::kPrivacySandboxActivityTypeRecord)[2]
+                 .GetDict()
+                 .Find("activity_type"));
+  EXPECT_EQ(static_cast<int>(ActivityType::kTabbed),
+            *prefs()
+                 ->GetList(prefs::kPrivacySandboxActivityTypeRecord)[3]
+                 .GetDict()
+                 .Find("activity_type"));
+  EXPECT_EQ(static_cast<int>(ActivityType::kTrustedWebActivity),
+            *prefs()
+                 ->GetList(prefs::kPrivacySandboxActivityTypeRecord)[4]
+                 .GetDict()
+                 .Find("activity_type"));
+}
+
+TEST_F(PrivacySandboxActivityTypeStorageTests, VerifyListExpiration) {
+  privacy_sandbox_service()->RecordActivityType(ActivityType::kAGSACustomTab);
+  EXPECT_EQ(1u,
+            prefs()->GetList(prefs::kPrivacySandboxActivityTypeRecord).size());
+  privacy_sandbox_service()->RecordActivityType(
+      ActivityType::kNonAGSACustomTab);
+  EXPECT_EQ(2u,
+            prefs()->GetList(prefs::kPrivacySandboxActivityTypeRecord).size());
+  // Even though within-x-days is set to 2 days, we still include records that
+  // are inclusive of the time boundary. When we fast forward by 2 days and add
+  // a third record, all three entries are still in the record list.
+  browser_task_environment()->FastForwardBy(base::Days(2));
+  privacy_sandbox_service()->RecordActivityType(ActivityType::kTabbed);
+  EXPECT_EQ(3u,
+            prefs()->GetList(prefs::kPrivacySandboxActivityTypeRecord).size());
+  // Now by fast forwarding by 1 more day, we have exceeded the within-x-days of
+  // 2 days, so the first two entries should be removed and the size should
+  // be 2.
+  browser_task_environment()->FastForwardBy(base::Days(1));
+  privacy_sandbox_service()->RecordActivityType(ActivityType::kWebApk);
+  EXPECT_EQ(2u,
+            prefs()->GetList(prefs::kPrivacySandboxActivityTypeRecord).size());
+}
+
+TEST_F(PrivacySandboxActivityTypeStorageTests, VerifyTimeBackwards) {
+  // Initializing the activity type record list with entries that have
+  // timestamps set for future dates (e.g., 5 and 7 days from now).
+  base::Value::List old_records;
+  base::Value::Dict first_record;
+  base::Value::Dict second_record;
+
+  first_record.Set("timestamp",
+                   base::TimeToValue(base::Time::Now() + base::Days(5)));
+  first_record.Set("activity_type",
+                   static_cast<int>(ActivityType::kAGSACustomTab));
+
+  second_record.Set("timestamp",
+                    base::TimeToValue(base::Time::Now() + base::Days(7)));
+  second_record.Set("activity_type", static_cast<int>(ActivityType::kTabbed));
+
+  old_records.Append(std::move(first_record));
+  old_records.Append(std::move(second_record));
+
+  prefs()->SetList(prefs::kPrivacySandboxActivityTypeRecord,
+                   std::move(old_records));
+
+  EXPECT_EQ(2u,
+            prefs()->GetList(prefs::kPrivacySandboxActivityTypeRecord).size());
+
+  // After recording a new activity, any previous records with timestamps in the
+  // future (greater than the current timestamp) are not added to the updated
+  // list.
+  privacy_sandbox_service()->RecordActivityType(
+      ActivityType::kTrustedWebActivity);
+  EXPECT_EQ(1u,
+            prefs()->GetList(prefs::kPrivacySandboxActivityTypeRecord).size());
+  EXPECT_EQ(static_cast<int>(ActivityType::kTrustedWebActivity),
+            *prefs()
+                 ->GetList(prefs::kPrivacySandboxActivityTypeRecord)[0]
+                 .GetDict()
+                 .Find("activity_type"));
+}
+#endif  // BUIDLFLAG(IS_ANDROID)

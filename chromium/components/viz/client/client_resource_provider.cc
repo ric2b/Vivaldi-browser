@@ -138,7 +138,7 @@ struct ClientResourceProvider::ImportedResource {
         // If the resource is immediately deleted, it returns the same SyncToken
         // it came with. The client may need to wait on that before deleting the
         // backing or reusing it.
-        returned_sync_token(resource.mailbox_holder.sync_token),
+        returned_sync_token(resource.sync_token()),
         evicted_callback(std::move(evicted_callback)) {
     // We should never have no ReleaseCallback.
     DCHECK(this->impl_release_callback || this->main_thread_release_callback);
@@ -163,7 +163,7 @@ struct ClientResourceProvider::ImportedResource {
     // start/stop, we cannot batch them. Instead maintain previous behaviour
     // of just calling these directly.
     //
-    // TODO(crbug.com/1449273): Create a "Scoped Resources Release" class that
+    // TODO(crbug.com/40269731): Create a "Scoped Resources Release" class that
     // can collect all of the `main_thread_release_callbacks` being removed
     // independently. Which can then perform a single thread hop to run them.
     if (main_thread_release_callback) {
@@ -257,9 +257,9 @@ void ClientResourceProvider::PrepareSendToParentInternal(
   std::vector<GLbyte*> unverified_sync_tokens;
   for (ImportedResource* imported : imports) {
     if (!imported->resource.is_software &&
-        !imported->resource.mailbox_holder.sync_token.verified_flush()) {
+        !imported->resource.sync_token().verified_flush()) {
       unverified_sync_tokens.push_back(
-          imported->resource.mailbox_holder.sync_token.GetData());
+          imported->resource.mutable_sync_token().GetData());
     }
   }
 

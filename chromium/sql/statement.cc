@@ -7,16 +7,27 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include "base/check.h"
+#include "base/check_op.h"
 #include "base/containers/span.h"
 #include "base/dcheck_is_on.h"
+#include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/sequence_checker.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "base/time/time.h"
+#include "sql/database.h"
 #include "sql/sqlite_result_code.h"
 #include "sql/sqlite_result_code_values.h"
 #include "third_party/sqlite/sqlite3.h"
@@ -311,7 +322,7 @@ void Statement::BindCString(int param_index, const char* val) {
   DCHECK_EQ(sqlite_result_code, SQLITE_OK);
 }
 
-void Statement::BindString(int param_index, base::StringPiece value) {
+void Statement::BindString(int param_index, std::string_view value) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
 #if DCHECK_IS_ON()
@@ -347,7 +358,7 @@ void Statement::BindString(int param_index, base::StringPiece value) {
   DCHECK_EQ(sqlite_result_code, SQLITE_OK);
 }
 
-void Statement::BindString16(int param_index, base::StringPiece16 value) {
+void Statement::BindString16(int param_index, std::u16string_view value) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   return BindString(param_index, base::UTF16ToUTF8(value));

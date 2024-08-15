@@ -1,6 +1,5 @@
 # wayland-protocols members
 
-- EFL/Enlightenment: Mike Blumenkrantz <michael.blumenkrantz@gmail.com> (@zmike)
 - GTK/Mutter: Jonas Ådahl <jadahl@gmail.com> (@jadahl),
   Carlos Garnacho <carlosg@gnome.org> (@carlosg)
 - KWin: Vlad Zahorodnii <vlad.zahorodnii@kde.org> (@zzag),

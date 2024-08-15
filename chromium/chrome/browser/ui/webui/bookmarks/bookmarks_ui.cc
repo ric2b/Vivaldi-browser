@@ -49,11 +49,10 @@ content::WebUIDataSource* CreateAndAddBookmarksUIHTMLSource(Profile* profile) {
   webui::SetupWebUIDataSource(
       source, base::make_span(kBookmarksResources, kBookmarksResourcesSize),
       IDR_BOOKMARKS_BOOKMARKS_HTML);
-  webui::SetupChromeRefresh2023(source);
 
   // Build an Accelerator to describe undo shortcut
   // NOTE: the undo shortcut is also defined in bookmarks/command_manager.js
-  // TODO(crbug/893033): de-duplicate shortcut by moving all shortcut
+  // TODO(crbug.com/40597071): de-duplicate shortcut by moving all shortcut
   // definitions from JS to C++.
   ui::Accelerator undo_accelerator(ui::VKEY_Z, ui::EF_PLATFORM_ACCELERATOR);
   source->AddString("undoDescription", l10n_util::GetStringFUTF16(

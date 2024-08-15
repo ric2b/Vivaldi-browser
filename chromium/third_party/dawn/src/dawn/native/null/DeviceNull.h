@@ -104,7 +104,8 @@ class Device final : public DeviceBase {
   public:
     static ResultOrError<Ref<Device>> Create(AdapterBase* adapter,
                                              const UnpackedPtr<DeviceDescriptor>& descriptor,
-                                             const TogglesState& deviceToggles);
+                                             const TogglesState& deviceToggles,
+                                             Ref<DeviceBase::DeviceLostEvent>&& lostEvent);
     ~Device() override;
 
     MaybeError Initialize(const UnpackedPtr<DeviceDescriptor>& descriptor);
@@ -164,12 +165,12 @@ class Device final : public DeviceBase {
     ResultOrError<Ref<SwapChainBase>> CreateSwapChainImpl(
         Surface* surface,
         SwapChainBase* previousSwapChain,
-        const SwapChainDescriptor* descriptor) override;
+        const SurfaceConfiguration* config) override;
     ResultOrError<Ref<TextureBase>> CreateTextureImpl(
         const UnpackedPtr<TextureDescriptor>& descriptor) override;
     ResultOrError<Ref<TextureViewBase>> CreateTextureViewImpl(
         TextureBase* texture,
-        const TextureViewDescriptor* descriptor) override;
+        const UnpackedPtr<TextureViewDescriptor>& descriptor) override;
 
     ResultOrError<wgpu::TextureUsage> GetSupportedSurfaceUsageImpl(
         const Surface* surface) const override;
@@ -194,6 +195,9 @@ class PhysicalDevice : public PhysicalDeviceBase {
 
     bool SupportsFeatureLevel(FeatureLevel featureLevel) const override;
 
+    ResultOrError<PhysicalDeviceSurfaceCapabilities> GetSurfaceCapabilities(
+        const Surface* surface) const override;
+
     // Used for the tests that intend to use an adapter without all features enabled.
     using PhysicalDeviceBase::SetSupportedFeaturesForTesting;
 
@@ -208,9 +212,11 @@ class PhysicalDevice : public PhysicalDeviceBase {
 
     void SetupBackendAdapterToggles(TogglesState* adapterToggles) const override;
     void SetupBackendDeviceToggles(TogglesState* deviceToggles) const override;
-    ResultOrError<Ref<DeviceBase>> CreateDeviceImpl(AdapterBase* adapter,
-                                                    const UnpackedPtr<DeviceDescriptor>& descriptor,
-                                                    const TogglesState& deviceToggles) override;
+    ResultOrError<Ref<DeviceBase>> CreateDeviceImpl(
+        AdapterBase* adapter,
+        const UnpackedPtr<DeviceDescriptor>& descriptor,
+        const TogglesState& deviceToggles,
+        Ref<DeviceBase::DeviceLostEvent>&& lostEvent) override;
 
     void PopulateBackendProperties(UnpackedPtr<AdapterProperties>& properties) const override;
 };
@@ -321,7 +327,7 @@ class SwapChain final : public SwapChainBase {
     static ResultOrError<Ref<SwapChain>> Create(Device* device,
                                                 Surface* surface,
                                                 SwapChainBase* previousSwapChain,
-                                                const SwapChainDescriptor* descriptor);
+                                                const SurfaceConfiguration* config);
     ~SwapChain() override;
 
   private:
@@ -331,7 +337,7 @@ class SwapChain final : public SwapChainBase {
     Ref<Texture> mTexture;
 
     MaybeError PresentImpl() override;
-    ResultOrError<Ref<TextureBase>> GetCurrentTextureImpl() override;
+    ResultOrError<SwapChainTextureInfo> GetCurrentTextureImpl() override;
     void DetachFromSurfaceImpl() override;
 };
 

@@ -30,6 +30,9 @@ import org.chromium.ui.UiUtils;
 import org.chromium.ui.interpolators.Interpolators;
 import org.chromium.ui.util.ColorUtils;
 
+// Vivaldi
+import org.vivaldi.browser.preferences.VivaldiPreferences;
+
 /**
  * Progress bar for use in the Toolbar view. If no progress updates are received for 5 seconds, an
  * indeterminate animation will begin playing and the animation will move across the screen smoothly
@@ -443,7 +446,7 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
         // All colors use a single path if using the status bar color as the background.
         if (mUseStatusBarColorAsBackground) {
             if (isDefaultTheme) color = Color.BLACK;
-            setForegroundColor(getContext().getColor(R.color.modern_grey_400));
+            setForegroundColor(getContext().getColor(R.color.baseline_neutral_60));
             setBackgroundColor(ColorUtils.getDarkenedColorForStatusBar(color));
             return;
         }
@@ -538,6 +541,10 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
      */
     private void updateTopMargin() {
         int topMargin = (mAnchorView != null ? mAnchorView.getBottom() : 0) - mProgressBarHeight;
+        if (VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                VivaldiPreferences.ADDRESS_BAR_TO_BOTTOM,false)) {
+            topMargin = 0; // Ref. VAB-9326
+        }
         if (mMarginTop != topMargin) {
             setTopMargin(topMargin);
         }

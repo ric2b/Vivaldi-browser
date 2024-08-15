@@ -15,6 +15,7 @@
 #include "base/apple/scoped_cftyperef.h"
 #include "base/command_line.h"
 #include "base/containers/flat_set.h"
+#include "base/containers/heap_array.h"
 #include "base/functional/bind.h"
 #include "base/mac/mac_util.h"
 #include "base/memory/free_deleter.h"
@@ -273,9 +274,9 @@ static bool GetDeviceTotalChannelCount(AudioDeviceID device,
     return false;
   }
 
-  std::unique_ptr<uint8_t[]> list_storage(new uint8_t[size]);
+  auto list_storage = base::HeapArray<uint8_t>::Uninit(size);
   AudioBufferList* buffer_list =
-      reinterpret_cast<AudioBufferList*>(list_storage.get());
+      reinterpret_cast<AudioBufferList*>(list_storage.data());
 
   result = AudioObjectGetPropertyData(device, &pa, 0, 0, &size, buffer_list);
   if (result != noErr) {
@@ -327,7 +328,7 @@ static bool GetInputDeviceChannels(AudioDeviceID device, int* channels) {
 
   // For input, get the channel count directly from the AudioUnit's stream
   // format.
-  // TODO(https://crbug.com/796163): Find out if we can use channel layout on
+  // TODO(crbug.com/41361558): Find out if we can use channel layout on
   // input element, or confirm that we can't.
   ScopedAudioUnit au(device, AUElement::INPUT);
   if (!au.is_valid()) {
@@ -787,8 +788,9 @@ AudioOutputStream* AudioManagerMac::MakeLowLatencyOutputStream(
     // CoreAudio drivers will fire the callbacks during stream creation, leading
     // to re-entrancy issues otherwise.  See http://crbug.com/349604
     output_device_listener_ = AudioDeviceListenerMac::Create(
-        base::BindPostTaskToCurrentDefault(base::BindRepeating(
-            &AudioManagerMac::HandleDeviceChanges, base::Unretained(this))),
+        base::BindPostTaskToCurrentDefault(
+            base::BindRepeating(&AudioManagerMac::HandleDeviceChanges,
+                                weak_ptr_factory_.GetWeakPtr())),
         /*monitor_sample_rate_changes=*/
         base::FeatureList::IsEnabled(kMonitorOutputSampleRateChangesMac),
         /*monitor_default_input=*/false,
@@ -1414,7 +1416,7 @@ int AudioManagerMac::HardwareSampleRateForDevice(AudioDeviceID device_id) {
   if (result != noErr) {
     OSSTATUS_DLOG(WARNING, result)
         << "Could not get default sample rate for device: " << device_id
-        << ", returing fallback sample rate " << kFallbackSampleRate;
+        << ", returning fallback sample rate " << kFallbackSampleRate;
     return kFallbackSampleRate;
   }
 

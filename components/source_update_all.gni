@@ -2,10 +2,12 @@ import ("//vivaldi/testing/testing.gni")
 
 update_target("//components/bookmarks/browser:browser") {
   sources += [
+    "//vivaldi/components/bookmarks/vivaldi_bookmark_model.cc",
     "//vivaldi/components/bookmarks/vivaldi_bookmark_node.cc",
     "//vivaldi/components/bookmarks/vivaldi_bookmark_kit.cc",
     "//vivaldi/components/bookmarks/vivaldi_partners.cc",
     "//vivaldi/components/bookmarks/vivaldi_partners.h",
+    "//vivaldi/components/bookmarks/vivaldi_titled_url_index.cc",
     "//vivaldi/components/locale/locale_kit.cc",
     "//vivaldi/components/locale/locale_kit.h",
   ]
@@ -14,6 +16,9 @@ update_target("//components/bookmarks/browser:browser") {
     "//vivaldi/components/bookmarks/vivaldi_partners.h",
   ]
   deps += [ "//vivaldi/components/datasource:resource_reader" ]
+  if (is_vivaldi_automotive) {
+    deps += [ "//chrome/android:chrome_jni_headers", ]
+  }
 }
 
 update_target("//components/sync_bookmarks:sync_bookmarks") {
@@ -31,10 +36,17 @@ update_target("//components/history/core/browser:browser") {
   ]
 }
 
-update_target("//components/sessions:sessions") {
+update_target("//components/omnibox/browser:browser") {
   sources += [
-    "//vivaldi/components/sessions/live_tab_context.cc",
-    "//vivaldi/components/sessions/tab_restore_service_client.cc",
+    "//vivaldi/components/omnibox/bookmark_nickname_provider.h",
+    "//vivaldi/components/omnibox/bookmark_nickname_provider.cc",
+  ]
+}
+
+update_target("//components/sessions:shared") {
+  sources += [
+    "//vivaldi/components/sessions/vivaldi_live_tab_context.cc",
+    "//vivaldi/components/sessions/vivaldi_tab_restore_service_client.cc",
   ]
 }
 
@@ -60,7 +72,7 @@ update_target("//components/search_engines:search_engines") {
 
   if (!is_android) {
     sources -= [
-      "generated_marketing_snippets.cc",
+      "search_engine_choice/generated_marketing_snippets.cc",
     ]
       sources += [
       "//vivaldi/components/search_engines/vivaldi_marketting_snippets_and_engine_resource_ids.cc"

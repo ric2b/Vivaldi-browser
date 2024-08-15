@@ -22,6 +22,7 @@ cc_library(
         "//internal/platform/implementation:__subpackages__",
         "//internal/test:__subpackages__",
         "//location/nearby/cpp/sharing/clients/cpp:__subpackages__",
+        "//location/nearby/sharing/sdk/quick_share_server:__pkg__",
         "//sharing:__subpackages__",
     ],
     deps = [
@@ -74,6 +75,7 @@ cc_library(
     deps = [
         "//internal/crypto_cros",
         "//internal/platform:base",
+        "//internal/platform/implementation/shared:crypto",  # Non-chromium impl
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/strings",

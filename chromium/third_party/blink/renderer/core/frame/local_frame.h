@@ -67,6 +67,7 @@
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_background_resource_fetch_assets.h"
+#include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_print_params.h"
 #include "third_party/blink/public/web/web_script_execution_callback.h"
@@ -908,6 +909,11 @@ class CORE_EXPORT LocalFrame final
 
   void ScheduleNextServiceForScrollSnapshotClients();
 
+  void CheckPositionAnchorsForCssVisibilityChanges();
+  // This is called after all other position-visibility conditions have been
+  // checked.
+  void CheckPositionAnchorsForChainedVisibilityChanges();
+
   using BlockingDetailsList = Vector<mojom::blink::BlockingDetailsPtr>;
   static BlockingDetailsList ConvertFeatureAndLocationToMojomStruct(
       const BFCacheBlockingFeatureAndLocations&,
@@ -948,6 +954,13 @@ class CORE_EXPORT LocalFrame final
   WebLinkPreviewTriggerer* GetOrCreateLinkPreviewTriggerer();
   void SetLinkPreviewTriggererForTesting(
       std::unique_ptr<WebLinkPreviewTriggerer> trigger);
+
+  void AllowStorageAccessAndNotify(
+      blink::WebContentSettingsClient::StorageType storage_type,
+      base::OnceCallback<void(bool)> callback);
+
+  bool AllowStorageAccessSyncAndNotify(
+      blink::WebContentSettingsClient::StorageType storage_type);
 
  private:
   friend class FrameNavigationDisabler;
@@ -1224,6 +1237,10 @@ class CORE_EXPORT LocalFrame final
   // initialization.
   bool is_link_preivew_triggerer_initialized_ = false;
   std::unique_ptr<WebLinkPreviewTriggerer> link_preview_triggerer_;
+
+  void OnStorageAccessCallback(base::OnceCallback<void(bool)> callback,
+                               mojom::blink::StorageTypeAccessed storage_type,
+                               bool isAllowed);
 };
 
 inline FrameLoader& LocalFrame::Loader() const {

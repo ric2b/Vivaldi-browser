@@ -484,7 +484,7 @@ void DownloadBubbleSecurityView::AddSecondaryIconAndText() {
 void DownloadBubbleSecurityView::AddProgressBar() {
   const int side_margin = ChromeLayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_RELATED_CONTROL_VERTICAL);
-  // TODO(crbug.com/1379447): Remove the progress bar holder view here.
+  // TODO(crbug.com/40875578): Remove the progress bar holder view here.
   // Currently the animation does not show up on deep scanning without
   // the holder.
   views::FlexLayoutView* progress_bar_holder =
@@ -539,8 +539,8 @@ bool DownloadBubbleSecurityView::ProcessButtonClick(
     return true;
   }
 
-  // TODO(crbug/1482901): Remove the special-cased DownloadCommands by creating
-  // a dedicated View for local decryption prompts and deep scanning.
+  // TODO(crbug.com/40931768): Remove the special-cased DownloadCommands by
+  // creating a dedicated View for local decryption prompts and deep scanning.
   if (command == DownloadCommands::DEEP_SCAN) {
     if (info_->danger_type() ==
         download::DownloadDangerType::
@@ -689,8 +689,6 @@ void DownloadBubbleSecurityView::ClearWideFields() {
   secondary_styled_label_->PreferredSizeChanged();
 
   title_->SetText(std::u16string());
-
-  PreferredSizeChanged();
 }
 
 void DownloadBubbleSecurityView::RecordWarningActionTime(
@@ -727,8 +725,6 @@ void DownloadBubbleSecurityView::UpdateViews() {
   UpdateSecondaryIconAndText();
   UpdateProgressBar();
   UpdatePasswordPrompt();
-
-  bubble_delegate_->SizeToContents();
 }
 
 void DownloadBubbleSecurityView::UpdateAccessibilityTextAndFocus() {
@@ -801,7 +797,6 @@ bool DownloadBubbleSecurityView::ProcessDeepScanClick() {
   if (delegate_->IsEncryptedArchive(content_id()) && password->empty()) {
     password_prompt_->SetState(
         DownloadBubblePasswordPromptView::State::kInvalidEmpty);
-    bubble_delegate_->SizeToContents();
     return false;
   }
 
@@ -811,7 +806,6 @@ bool DownloadBubbleSecurityView::ProcessDeepScanClick() {
                 TRIGGER_ENCRYPTED_CONSUMER_PROMPT
           : DownloadItemWarningData::DeepScanTrigger::TRIGGER_CONSUMER_PROMPT;
   delegate_->ProcessDeepScanPress(content_id(), trigger, password);
-  bubble_delegate_->SizeToContents();
   return false;
 }
 
@@ -824,12 +818,10 @@ bool DownloadBubbleSecurityView::ProcessLocalPasswordDecryptionClick() {
   if (password.empty()) {
     password_prompt_->SetState(
         DownloadBubblePasswordPromptView::State::kInvalidEmpty);
-    bubble_delegate_->SizeToContents();
     return false;
   }
 
   delegate_->ProcessLocalDecryptionPress(content_id(), password);
-  bubble_delegate_->SizeToContents();
   return false;
 }
 

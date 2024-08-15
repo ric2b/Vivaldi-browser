@@ -96,7 +96,6 @@ class FakePageContentAnnotationsService : public PageContentAnnotationsService {
       ZeroSuggestCacheService* zero_suggest_cache_service,
       TemplateURLService* template_url_service)
       : PageContentAnnotationsService(
-            std::make_unique<FakeAutocompleteProviderClient>(),
             "en-US",
             "us",
             optimization_guide_model_provider,
@@ -154,17 +153,18 @@ std::unique_ptr<KeyedService> BuildTestTemplateURLService(
   return std::move(template_url_service);
 }
 
-
-std::unique_ptr<KeyedService> BuildTestPageContentAnnotationsService(optimization_guide::TestOptimizationGuideModelProvider * optimization_guide_model_provider,
+std::unique_ptr<KeyedService> BuildTestPageContentAnnotationsService(
+    optimization_guide::TestOptimizationGuideModelProvider*
+        optimization_guide_model_provider,
     content::BrowserContext* context) {
   auto* profile = Profile::FromBrowserContext(context);
   return std::make_unique<FakePageContentAnnotationsService>(
-optimization_guide_model_provider,      HistoryServiceFactory::GetForProfile(profile,
+      optimization_guide_model_provider,
+      HistoryServiceFactory::GetForProfile(profile,
                                            ServiceAccessType::EXPLICIT_ACCESS),
       ZeroSuggestCacheServiceFactory::GetForProfile(profile),
       TemplateURLServiceFactory::GetForProfile(profile));
 }
-
 
 std::unique_ptr<KeyedService> BuildTestHistoryService(
     content::BrowserContext* context) {
@@ -188,6 +188,10 @@ class PageContentAnnotationsWebContentsObserverTest
 
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
 
+    // Overwrite Google base URL.
+    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+        ::switches::kGoogleBaseURL, "http://default-engine.com/");
+
     HistoryServiceFactory::GetInstance()->SetTestingFactory(
         profile(), base::BindRepeating(&BuildTestHistoryService));
     TemplateURLServiceFactory::GetInstance()->SetTestingFactory(
@@ -201,10 +205,6 @@ class PageContentAnnotationsWebContentsObserverTest
 
     PageContentAnnotationsWebContentsObserver::CreateForWebContents(
         web_contents());
-
-    // Overwrite Google base URL.
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        ::switches::kGoogleBaseURL, "http://default-engine.com/");
   }
 
   void TearDown() override {
@@ -434,7 +434,7 @@ TEST_F(PageContentAnnotationsWebContentsObserverRelatedSearchesFromZPSCacheTest,
     EXPECT_TRUE(last_results.has_value());
 
     auto related_searches = last_results.value();
-    EXPECT_FALSE(related_searches.empty());
+    ASSERT_EQ(related_searches.size(), 4u);
 
     // The full set of "related searches" for this visit should be a combination
     // of those obtained via SRP DOM extraction and those sourced from ZPS

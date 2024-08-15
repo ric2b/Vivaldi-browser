@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "build/build_config.h"
+#include "partition_alloc/build_config.h"
 #include "partition_alloc/partition_alloc_base/compiler_specific.h"
 #include "partition_alloc/partition_alloc_base/numerics/checked_math.h"
 #include "partition_alloc/partition_alloc_buildflags.h"
 #include "partition_alloc/shim/allocator_shim.h"
 #include "partition_alloc/shim/checked_multiply_win.h"
 
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 #include "partition_alloc/shim/allocator_shim_default_dispatch_to_partition_alloc.h"
 #endif
 

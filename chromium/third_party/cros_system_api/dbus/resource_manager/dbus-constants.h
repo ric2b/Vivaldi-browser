@@ -79,7 +79,6 @@ const char kSetGameModeWithTimeoutMethod[] = "SetGameModeWithTimeout";
 const char kSetMemoryMarginsBps[] = "SetMemoryMarginsBps";
 const char kSetFullscreenVideoWithTimeout[] = "SetFullscreenVideoWithTimeout";
 const char kSetVmBootModeWithTimeoutMethod[] = "SetVmBootModeWithTimeout";
-const char kReportBackgroundProcessesMethod[] = "ReportBackgroundProcesses";
 const char kReportBrowserProcessesMethod[] = "ReportBrowserProcesses";
 const char kSetProcessStateMethod[] = "SetProcessState";
 const char kSetThreadStateMethod[] = "SetThreadState";

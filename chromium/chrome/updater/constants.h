@@ -80,17 +80,17 @@ extern const char kCrashHandlerSwitch[];
 // Updates the updater.
 extern const char kUpdateSwitch[];
 
-// Installs the updater.
+// Installs the updater. Takes an optional argument for the meta installer tag.
+// The tag is a string of arguments, separated by a delimiter (in this case, the
+// delimiter is `&`). The tag is typically embedded in the program image of the
+// metainstaller, but for testing purposes, the tag could be passed directly as
+// a command line argument. The tag is currently encoded as an ASCII string.
 extern const char kInstallSwitch[];
-extern const char kRuntimeSwitch[];
+
 extern const char kEulaRequiredSwitch[];
 
-// Contains the meta installer tag. The tag is a string of arguments, separated
-// by a delimiter (in this case, the delimiter is =). The tag is typically
-// embedded in the program image of the metainstaller, but for testing purposes,
-// the tag could be passed directly as a command line argument. The tag is
-// currently encoded as a ASCII string.
-extern const char kTagSwitch[];
+// Specifies that this is an OEM install in audit mode.
+extern const char kOemSwitch[];
 
 // The --installerdata=file.dat switch is passed to an installer if an
 // installdataindex is specified in the tag or if installerdata is passed in via
@@ -135,6 +135,10 @@ extern const char kAppGuidSwitch[];
 // Disables throttling for the crash reported until the following bug is fixed:
 // https://bugs.chromium.org/p/crashpad/issues/detail?id=23
 extern const char kNoRateLimitSwitch[];
+
+// Causes crashpad handler to start a second instance, to monitor the first
+// instance for exceptions.
+extern const char kMonitorSelfSwitch[];
 
 // The handle of an event to signal when the initialization of the main process
 // is complete.
@@ -426,6 +430,9 @@ inline constexpr int kErrorIdle = 45;
 // The call was rejected because the user needs to accept the EULA / Terms of
 // service.
 inline constexpr int kErrorEulaRequired = 46;
+
+// The current operating system is not supported.
+inline constexpr int kErrorUnsupportedOperatingSystem = 47;
 
 inline constexpr int kErrorTagParsing = 50;
 

@@ -148,7 +148,7 @@ int QuicProxyDatagramClientSocket::SetSendBufferSize(int32_t size) {
 
 void QuicProxyDatagramClientSocket::OnHttp3Datagram(
     quic::QuicStreamId stream_id,
-    absl::string_view payload) {
+    std::string_view payload) {
   DCHECK_EQ(stream_id, stream_handle_->id())
       << "Received datagram for unexpected stream.";
 
@@ -164,7 +164,7 @@ void QuicProxyDatagramClientSocket::OnHttp3Datagram(
                   << context_id;
     return;
   }
-  absl::string_view http_payload = reader.ReadRemainingPayload();
+  std::string_view http_payload = reader.ReadRemainingPayload();
 
   // If there's a read callback, process the payload immediately.
   if (read_callback_) {
@@ -185,8 +185,8 @@ void QuicProxyDatagramClientSocket::OnHttp3Datagram(
     std::move(read_callback_).Run(result);
 
   } else {
-    // TODO(b/41497362): Add histogram for metrics on how often we reach
-    // datagram queue limit.
+    base::UmaHistogramBoolean(kMaxQueueSizeHistogram,
+                              datagrams_.size() >= kMaxDatagramQueueSize);
     if (datagrams_.size() >= kMaxDatagramQueueSize) {
       DLOG(WARNING) << "Dropping datagram because queue is full";
       return;
@@ -202,12 +202,12 @@ void QuicProxyDatagramClientSocket::OnUnknownCapsule(
     quic::QuicStreamId stream_id,
     const quiche::UnknownCapsule& capsule) {}
 
-// TODO(crbug.com/1524411) Implement method.
+// TODO(crbug.com/41497362) Implement method.
 handles::NetworkHandle QuicProxyDatagramClientSocket::GetBoundNetwork() const {
   return handles::kInvalidNetworkHandle;
 }
 
-// TODO(crbug.com/1524411): Implement method.
+// TODO(crbug.com/41497362): Implement method.
 void QuicProxyDatagramClientSocket::ApplySocketTag(const SocketTag& tag) {}
 
 int QuicProxyDatagramClientSocket::SetMulticastInterface(
@@ -315,7 +315,7 @@ int QuicProxyDatagramClientSocket::Write(
   net_log_.AddByteTransferEvent(NetLogEventType::SOCKET_BYTES_SENT, buf_len,
                                 buf->data());
 
-  absl::string_view packet(buf->data(), buf_len);
+  std::string_view packet(buf->data(), buf_len);
   int rv = stream_handle_->WriteConnectUdpPayload(packet);
   if (rv == OK) {
     return buf_len;
@@ -390,8 +390,11 @@ int QuicProxyDatagramClientSocket::DoSendRequest() {
 
   if (proxy_delegate_) {
     HttpRequestHeaders proxy_delegate_headers;
-    proxy_delegate_->OnBeforeTunnelRequest(proxy_chain(), proxy_chain_index(),
-                                           &proxy_delegate_headers);
+    int result = proxy_delegate_->OnBeforeTunnelRequest(
+        proxy_chain(), proxy_chain_index(), &proxy_delegate_headers);
+    if (result < 0) {
+      return result;
+    }
     request_.extra_headers.MergeFrom(proxy_delegate_headers);
   }
 

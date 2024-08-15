@@ -6,6 +6,7 @@
 
 #include "cc/slim/layer.h"
 #include "cc/slim/solid_color_layer.h"
+#include "cc/slim/surface_layer.h"
 #include "cc/slim/ui_resource_layer.h"
 #include "content/browser/navigation_transitions/back_forward_transition_animation_manager_android.h"
 #include "content/browser/renderer_host/compositor_impl_android.h"
@@ -56,51 +57,72 @@ void PutScreenshotBack(NavigationControllerImpl* controller,
 //
 // Note: The timing function is linear.
 
-constexpr base::TimeTicks kFittedStart;
-constexpr base::TimeDelta kFittedTimelineDuration = base::Seconds(1);
+static constexpr base::TimeTicks kFittedStart;
+static constexpr base::TimeDelta kFittedTimelineDuration = base::Seconds(1);
 
 base::TimeTicks GetFittedTimeTicksForForegroundProgress(float progress) {
   return kFittedStart + kFittedTimelineDuration * progress;
 }
 
-//============================= Crossfade animation ============================
-constexpr base::TimeDelta kCrossfadeDuration = base::Milliseconds(100);
-
-//=============================== Scrim animation ==============================
-
-// The scim animations have two timelines:
-// - The fist timeline for while the screenshot layer is moving across the
-//   screen. The scrim goes from `kScrimStart` to
-//   `kScrimEndForLayerTransform`.
-// - The second timeline while the screenshot layer is cross-fading into the
-//   new content page. The scrim goes from `kScrimEndForLayerTransform` to
-//   `kScrimEnd`.
-static constexpr float kScrimStart = 0.8;
-static constexpr float kScrimEndForLayerTransform = 0.3;
-static constexpr float kScrimEnd = 0.f;
-
 // 0-indexed as the value will be stored in a bitset.
 enum class TargetProperty {
-  kScreenshotScrim = 0,
+  kScrim = 0,
+  kCrossFade,
 };
 
-// Add a scrim model to `effect_`.
-void AddScrimModelToEffect(float start,
-                           float end,
-                           base::TimeDelta duration,
+struct ScrimAndCrossFadeAnimaitonConfig {
+  TargetProperty target_property;
+  float start;
+  float end;
+  base::TimeDelta duration;
+};
+
+//============================= Crossfade animation ============================
+static constexpr base::TimeDelta kCrossfadeDuration = base::Milliseconds(100);
+
+static constexpr ScrimAndCrossFadeAnimaitonConfig kCrossFadeAnimation{
+    .target_property = TargetProperty::kCrossFade,
+    .start = 1.0f,
+    .end = 0.0f,
+    .duration = kCrossfadeDuration};
+
+//=============================== Scrim animation ==============================
+// The scim animations have two timelines:
+// - The fist timeline for while the screenshot layer is moving across the
+//   screen.
+// - The second timeline while the screenshot layer is cross-fading into the
+//   new content page.
+
+static constexpr ScrimAndCrossFadeAnimaitonConfig
+    kScrimAnimationDuringGestureProgress{
+        .target_property = TargetProperty::kScrim,
+        .start = 0.8f,
+        .end = 0.3f,
+        .duration = kFittedTimelineDuration};
+
+static constexpr ScrimAndCrossFadeAnimaitonConfig
+    kScrimAnimationDuringCrossFade{.target_property = TargetProperty::kScrim,
+                                   .start = 0.3f,
+                                   .end = 0.0f,
+                                   .duration = kCrossfadeDuration};
+
+void AddFloatModelToEffect(ScrimAndCrossFadeAnimaitonConfig config,
                            gfx::FloatAnimationCurve::Target* target,
                            gfx::KeyframeEffect& effect) {
-  auto curve(gfx::KeyframedFloatAnimationCurve::Create());
-  curve->AddKeyframe(
-      gfx::FloatKeyframe::Create(base::TimeDelta(), start, nullptr));
-  curve->AddKeyframe(gfx::FloatKeyframe::Create(duration, end, nullptr));
+  auto curve = gfx::KeyframedFloatAnimationCurve::Create();
+  curve->AddKeyframe(gfx::FloatKeyframe::Create(/*time=*/base::TimeDelta(),
+                                                /*value=*/config.start,
+                                                /*timing_function=*/nullptr));
+  curve->AddKeyframe(gfx::FloatKeyframe::Create(/*time=*/config.duration,
+                                                /*value=*/config.end,
+                                                /*timing_function=*/nullptr));
   curve->set_target(target);
 
   auto model = gfx::KeyframeModel::Create(
       /*curve=*/std::move(curve),
       /*keyframe_model_id=*/effect.GetNextKeyframeModelId(),
       /*target_property_id=*/
-      static_cast<int>(TargetProperty::kScreenshotScrim));
+      static_cast<int>(config.target_property));
 
   effect.AddKeyframeModel(std::move(model));
 }
@@ -125,7 +147,8 @@ BackForwardTransitionAnimator::~BackForwardTransitionAnimator() {
 
   ResetTransformForLayer(animation_manager_->web_contents_view_android()
                              ->parent_for_web_page_widgets());
-  // TODO(https://crbug.com/1488075): If there is the old visual state hovering
+
+  // TODO(crbug.com/40283503): If there is the old visual state hovering
   // above the RWHV layer, we need to remove that as well.
 
   if (ui_resource_layer_) {
@@ -134,6 +157,11 @@ BackForwardTransitionAnimator::~BackForwardTransitionAnimator() {
 
     ui_resource_layer_->RemoveFromParent();
     ui_resource_layer_.reset();
+  }
+
+  if (old_surface_clone_) {
+    old_surface_clone_->RemoveFromParent();
+    old_surface_clone_.reset();
   }
 
   CHECK_NE(ui_resource_id_, cc::UIResourceClient::kUninitializedUIResourceId);
@@ -173,7 +201,10 @@ BackForwardTransitionAnimator::BackForwardTransitionAnimator(
                          ->GetPhysicalBackingSize()
                          .width(),
                      web_contents_view_android->GetNativeView()->GetDipScale()),
-      latest_progress_gesture_(gesture) {
+      latest_progress_gesture_(gesture),
+      ignore_input_scope_(
+          web_contents_view_android->web_contents()->IgnoreInputEvents(
+              /*audit_callback=*/std::nullopt)) {
   state_ = State::kStarted;
   ProcessState();
 }
@@ -185,7 +216,7 @@ void BackForwardTransitionAnimator::OnGestureProgressed(
   // and 1.0 to 0.0 from right to left.
   CHECK_GE(gesture.progress(), 0.f);
   CHECK_LE(gesture.progress(), 1.f);
-  // TODO(https://crbug.com/1499915): Should check the number of KeyFrameModels
+  // TODO(crbug.com/40287990): Should check the number of KeyFrameModels
   // is 1 (for scrim).
 
   float progress_delta =
@@ -200,7 +231,9 @@ void BackForwardTransitionAnimator::OnGestureProgressed(
   const PhysicsModel::Result result =
       physics_model_.OnGestureProgressed(movement, base::TimeTicks::Now());
   CHECK(!result.done);
-  SetLayerTransformationAndTickEffect(result);
+  // The gesture animations are never considered "finished".
+  bool animations_finished = SetLayerTransformationAndTickEffect(result);
+  CHECK(!animations_finished);
 }
 
 void BackForwardTransitionAnimator::OnGestureCancelled() {
@@ -228,11 +261,11 @@ void BackForwardTransitionAnimator::OnDidNavigatePrimaryMainFramePreCommit(
     RenderFrameHostImpl* old_host,
     RenderFrameHostImpl* new_host) {
   // Ignore all the subframe requests. Safe to do so as a start point because:
-  // 1. TODO(https://crbug.com/1421377): We don't capture the screenshot for
+  // 1. TODO(crbug.com/40896219): We don't capture the screenshot for
   //    subframe navigations.
   // 2. (Implicitly) Because of 1, we don't animate subframe history
   //    navigations.
-  // 3. TODO(https://crbug.com/1515916): For now, subframe navigations won't
+  // 3. TODO(crbug.com/41488906): For now, subframe navigations won't
   //    cancel the main frame history naivgations.
   //
   // Note: Also implicitly, all the subframes' DidFinishNavigation()s are
@@ -266,13 +299,13 @@ void BackForwardTransitionAnimator::OnDidNavigatePrimaryMainFramePreCommit(
         navigation_state_ = NavigationState::kCommitted;
         physics_model_.OnNavigationFinished(/*navigation_committed=*/true);
         if (navigation_request.DidEncounterError()) {
-          // TODO(https://crbug.com/1509887): Implement a different UX if we
+          // TODO(crbug.com/41482489): Implement a different UX if we
           // decide not show the animation at all (i.e. abort animation early
           // when we receive the response header).
         }
         CloneOldSurfaceLayerAndRegisterNewFrameActivationObserver(old_host,
                                                                   new_host);
-        // TODO(https://crbug.com/1519149): Handle the cross-origin server
+        // TODO(crbug.com/41492130): Handle the cross-origin server
         // redirect. We cannot show a cross-origin fullscreen overlay of a.com
         // if a.com redirect the user to b.com.
       } else {
@@ -316,10 +349,6 @@ void BackForwardTransitionAnimator::OnDidNavigatePrimaryMainFramePreCommit(
       // to whatever is underneath the screenshot.
       CHECK_EQ(navigation_state_, NavigationState::kCommitted);
       CHECK(primary_main_frame_navigation_request_id_of_gesture_nav_);
-      // TODO(https://crbug.com/1426457): This switch branch isn't reachable for
-      // now because we don't have the cross-fade animation. The transition from
-      // kDisplayingCrossFadeAnimation to kAnimationFinished is atomic. Make
-      // sure we test this branch when we implement the cross-fade animation.
       skip_all_animations_and_self_destroy = true;
       break;
     }
@@ -388,7 +417,7 @@ void BackForwardTransitionAnimator::OnNavigationCancelledBeforeStart(
 // `CloneOldSurfaceLayerAndRegisterNewFrameActivationObserver()` on how we guard
 // this case.
 //
-// TODO(https://crbug.com/1515590): Should consider subscribe to FCP. FCP
+// TODO(crbug.com/41488142): Should consider subscribe to FCP. FCP
 // works mainframe as well as subframes navigations, with the exceptions of
 // same-doc navigations.
 void BackForwardTransitionAnimator::OnRenderFrameMetadataChangedAfterActivation(
@@ -439,16 +468,26 @@ void BackForwardTransitionAnimator::OnAnimate(
   bool animation_finished = false;
 
   switch (state_) {
-    case State::kDisplayingCancelAnimation:
-    case State::kDisplayingInvokeAnimation: {
+    case State::kDisplayingCancelAnimation: {
       PhysicsModel::Result result = physics_model_.OnAnimate(frame_begin_time);
-      SetLayerTransformationAndTickEffect(result);
+      std::ignore = SetLayerTransformationAndTickEffect(result);
       animation_finished = result.done;
       break;
     }
+    case State::kDisplayingInvokeAnimation: {
+      PhysicsModel::Result result = physics_model_.OnAnimate(frame_begin_time);
+      animation_finished = SetLayerTransformationAndTickEffect(result);
+      break;
+    }
     case State::kDisplayingCrossFadeAnimation: {
-      // TODO(https://crbug.com/1426457): Tick for cross-fade.
-      animation_finished = true;
+      // One cross-fade and one scrim models.
+      CHECK_EQ(effect_.keyframe_models().size(), 2U);
+      effect_.Tick(frame_begin_time);
+      // `Tick()` has the side effect of removing all the finished models. At
+      // the last frame of `OnFloatAnimated()`, the model is still running, but
+      // is immediately removed after the `Tick()` WITHOUT advancing to the
+      // finished or pending deletion state.
+      animation_finished = effect_.keyframe_models().empty();
       break;
     }
     case State::kStarted:
@@ -541,7 +580,7 @@ void BackForwardTransitionAnimator::DidFinishNavigation(
   // 204/205/Download, or the ongoing navigation is cancelled. We need
   // to animate the old page back.
   //
-  // TODO(https://crbug.com/1509886): We might need a better UX than
+  // TODO(crbug.com/41482488): We might need a better UX than
   // just display the cancel animation.
   AdvanceAndProcessState(State::kDisplayingCancelAnimation);
 }
@@ -567,10 +606,18 @@ void BackForwardTransitionAnimator::OnFloatAnimated(
     gfx::KeyframeModel* keyframe_model) {
   TargetProperty property = static_cast<TargetProperty>(target_property_id);
   switch (property) {
-    case TargetProperty::kScreenshotScrim: {
+    case TargetProperty::kScrim: {
+      CHECK(screenshot_scrim_);
       auto scrim = SkColors::kBlack;
       scrim.fA = value;
       screenshot_scrim_->SetBackgroundColor(scrim);
+      return;
+    }
+    case TargetProperty::kCrossFade: {
+      CHECK(ui_resource_layer_);
+      // Scrim (second timeline) and the crossfade model.
+      CHECK_EQ(effect_.keyframe_models().size(), 2u);
+      ui_resource_layer_->SetOpacity(value);
       return;
     }
   }
@@ -578,17 +625,29 @@ void BackForwardTransitionAnimator::OnFloatAnimated(
 }
 
 void BackForwardTransitionAnimator::OnCancelAnimationDisplayed() {
+  CHECK_EQ(effect_.keyframe_models().size(), 1U);
+  CHECK_EQ(effect_.keyframe_models()[0]->TargetProperty(),
+           static_cast<int>(TargetProperty::kScrim));
   if (navigation_state_ == NavigationState::kBeforeUnloadDispatched) {
     AdvanceAndProcessState(State::kWaitingForBeforeUnloadResponse);
     return;
   }
-
   effect_.RemoveAllKeyframeModels();
   AdvanceAndProcessState(State::kAnimationFinished);
 }
 
 void BackForwardTransitionAnimator::OnInvokeAnimationDisplayed() {
-  effect_.RemoveAllKeyframeModels();
+  // There is no `old_surface_clone_` when navigating from a crashed page.
+  if (old_surface_clone_) {
+    old_surface_clone_->RemoveFromParent();
+    old_surface_clone_.reset();
+  }
+
+  // The first scrim timeline is a function of the top layer's position. At the
+  // end of the invoke animation, the top layer is completely out of the
+  // viewport, so the `KeyFrameModel` for the scrim should also be exhausted and
+  // removed.
+  CHECK(effect_.keyframe_models().empty());
   if (viz_has_activated_first_frame_) {
     AdvanceAndProcessState(State::kDisplayingCrossFadeAnimation);
   } else {
@@ -597,7 +656,7 @@ void BackForwardTransitionAnimator::OnInvokeAnimationDisplayed() {
 }
 
 void BackForwardTransitionAnimator::OnCrossFadeAnimationDisplayed() {
-  effect_.RemoveAllKeyframeModels();
+  CHECK(effect_.keyframe_models().empty());
   AdvanceAndProcessState(State::kAnimationFinished);
 }
 
@@ -682,20 +741,18 @@ void BackForwardTransitionAnimator::
   CHECK(effect_.keyframe_models().empty());
 
   // First scrim timeline for the screenshot layer's transform.
-  AddScrimModelToEffect(kScrimStart, kScrimEndForLayerTransform,
-                        kFittedTimelineDuration, this, effect_);
+  AddFloatModelToEffect(kScrimAnimationDuringGestureProgress, this, effect_);
 }
 
 void BackForwardTransitionAnimator::InitializeEffectForCrossfadeAnimation() {
-  // At the the end if the invoke animation and before the cross-fade, the model
-  // for the first timeline is finished (and removed).
+  // At the the end if the invoke animation and before the cross-fade, the scrim
+  // model for the first timeline is finished (and removed).
   CHECK(effect_.keyframe_models().empty());
 
-  // Second scrim timeline for the cross-fade animation.
-  AddScrimModelToEffect(kScrimEndForLayerTransform, kScrimEnd,
-                        kCrossfadeDuration, this, effect_);
+  AddFloatModelToEffect(kCrossFadeAnimation, this, effect_);
 
-  // TODO(https://crbug.com/1426457): Add two models for cross-fade.
+  // Second scrim timeline for the cross-fade animation.
+  AddFloatModelToEffect(kScrimAnimationDuringCrossFade, this, effect_);
 }
 
 void BackForwardTransitionAnimator::AdvanceAndProcessState(State state) {
@@ -792,10 +849,6 @@ void BackForwardTransitionAnimator::ProcessState() {
       // No-op. Waiting for `OnRenderFrameMetadataChangedAfterActivation()`.
       break;
     case State::kDisplayingCrossFadeAnimation: {
-      // TODO(https://crbug.com/1426457):
-      // - Dismiss the active layer visual copy.
-      // - Move the screenshot to the very top before cross-fading.
-
       // Before we start displaying the crossfade animation,
       // `parent_for_web_page_widgets()` is completely out of the viewport. This
       // layer is reused for new content. For this reason, before we can start
@@ -804,12 +857,21 @@ void BackForwardTransitionAnimator::ProcessState() {
                                  ->parent_for_web_page_widgets());
       ResetTransformForLayer(ui_resource_layer_.get());
 
+      // Move the screenshot to the very top, so we can cross-fade from the
+      // screenshot (top) into the active page (bottom).
+      CHECK(ui_resource_layer_->parent());
+      ui_resource_layer_->RemoveFromParent();
+      animation_manager_->web_contents_view_android()
+          ->AddScreenshotLayerForNavigationTransitions(
+              ui_resource_layer_.get(), /*screenshot_layer_on_top=*/true);
+
       InitializeEffectForCrossfadeAnimation();
 
-      // TODO(https://crbug.com/1426457): Register `this` as a
-      // WindowAndroidObserver, and remove `OnCrossFadeAnimationDisplayed()`.
-      OnCrossFadeAnimationDisplayed();
-
+      CHECK(animation_manager_->web_contents_view_android()
+                ->GetTopLevelNativeWindow());
+      animation_manager_->web_contents_view_android()
+          ->GetTopLevelNativeWindow()
+          ->SetNeedsAnimate();
       break;
     }
     case State::kAnimationFinished: {
@@ -852,6 +914,7 @@ void BackForwardTransitionAnimator::SetupForScreenshotPreview(
   //
   // `WebContentsViewAndroid::view_->GetLayer()`
   //            |
+  //            |- `old_surface_clone_` (only set during the invoke animation).
   //            |- `parent_for_web_page_widgets_` (RWHVAndroid, Overscroll etc).
   //            |
   //            |- `NavigationEntryScreenshot`
@@ -928,7 +991,7 @@ bool BackForwardTransitionAnimator::StartNavigationAndTrackRequest() {
   }
   // TOOD(https://crbug.com/1518341): Collect the requests for the same-doc
   // navigations.
-  // TODO(https://crbug.com/1517736): Collect subframe requests from the
+  // TODO(crbug.com/41490714): Collect subframe requests from the
   // subframe FrameTreeNodes.
   return false;
 }
@@ -958,14 +1021,23 @@ void BackForwardTransitionAnimator::
   static_cast<CompositorImpl*>(compositor)->DeleteUIResource(ui_resource_id_);
 }
 
-void BackForwardTransitionAnimator::SetLayerTransformationAndTickEffect(
+bool BackForwardTransitionAnimator::SetLayerTransformationAndTickEffect(
     const PhysicsModel::Result& result) {
   ui_resource_layer_->SetTransform(
       gfx::Transform::MakeTranslation(result.background_offset_physical, 0.f));
+
+  const auto foreground_transform =
+      gfx::Transform::MakeTranslation(result.foreground_offset_physical, 0.f);
   animation_manager_->web_contents_view_android()
       ->parent_for_web_page_widgets()
-      ->SetTransform(gfx::Transform::MakeTranslation(
-          result.foreground_offset_physical, 0.f));
+      ->SetTransform(foreground_transform);
+
+  if (old_surface_clone_) {
+    CHECK_EQ(navigation_state_, NavigationState::kCommitted);
+    CHECK_EQ(state_, State::kDisplayingInvokeAnimation);
+    old_surface_clone_->SetTransform(foreground_transform);
+  }
+
   float screenshot_layer_progress =
       result.foreground_offset_physical /
       animation_manager_->web_contents_view_android()
@@ -976,6 +1048,7 @@ void BackForwardTransitionAnimator::SetLayerTransformationAndTickEffect(
   CHECK_LE(screenshot_layer_progress, 1.f);
   effect_.Tick(
       GetFittedTimeTicksForForegroundProgress(screenshot_layer_progress));
+  return result.done && effect_.keyframe_models().empty();
 }
 
 void BackForwardTransitionAnimator::
@@ -989,17 +1062,11 @@ void BackForwardTransitionAnimator::
     // The RFH for the old page is early-swapped out. This can only happen to
     // navigation from a crashed page.
     //
-    // TODO(https://crbug.com/1488075): The Clank's interstitial page isn't
+    // TODO(crbug.com/40283503): The Clank's interstitial page isn't
     // drawn by `old_view`. We need to address as part of "navigating from NTP"
     // animation.
   } else {
-    // TODO(https://crbug.com/1488075): There might be a visual glitch if the
-    // old page is unloaded while we are still displaying the invoke animation.
-    // For now, make a deep copy of the old surface layer from `old_rwhva` and
-    // put the deep copy on top of the `WCVA::parent_for_web_page_widgets_`.
-    //
-    // Ideally, we need a way to preserve a minimal visual state of the old
-    // page.
+    CloneOldSurfaceLayer(old_host->GetView());
   }
   CHECK(new_host);
   auto* new_widget_host = new_host->GetRenderWidgetHost();
@@ -1041,13 +1108,43 @@ void BackForwardTransitionAnimator::
   // draws a new frame, so we can start cross-fading from the preview screenshot
   // to the new page's live content.
   //
-  // TODO(https://crbug.com/1510570): This won't work for same-doc navigations.
+  // TODO(crbug.com/41483162): This won't work for same-doc navigations.
   // We need to listen to `OnLocalSurfaceIdChanged` when we bump the `SurfaceId`
   // for same-doc navigations.
   CHECK(!new_render_widget_host_);
   new_render_widget_host_ = RenderWidgetHostImpl::From(new_widget_host);
   new_render_widget_host_->AddObserver(this);
   new_render_widget_host_->render_frame_metadata_provider()->AddObserver(this);
+}
+
+void BackForwardTransitionAnimator::CloneOldSurfaceLayer(
+    RenderWidgetHostViewBase* old_main_frame_view) {
+  // The old View must be still alive (and its renderer).
+  CHECK(old_main_frame_view);
+
+  CHECK(!old_surface_clone_);
+
+  old_surface_clone_ = cc::slim::SurfaceLayer::Create();
+  const auto* old_surface_layer =
+      static_cast<RenderWidgetHostViewAndroid*>(old_main_frame_view)
+          ->GetSurfaceLayer();
+  // Use a zero deadline because this is a copy of a surface being actively
+  // shown. The surface textures are ready (i.e. won't be GC'ed) because
+  // `old_surface_clone_` references to them.
+  old_surface_clone_->SetSurfaceId(old_surface_layer->surface_id(),
+                                   cc::DeadlinePolicy::UseSpecifiedDeadline(0));
+  old_surface_clone_->SetPosition(old_surface_layer->position());
+  old_surface_clone_->SetBounds(old_surface_layer->bounds());
+  old_surface_clone_->SetTransform(old_surface_layer->transform());
+  old_surface_clone_->SetIsDrawable(true);
+  auto* parent_for_web_widgets = animation_manager_->web_contents_view_android()
+                                     ->parent_for_web_page_widgets();
+  CHECK_EQ(animation_manager_->web_contents_view_android()
+               ->GetNativeView()
+               ->GetLayer(),
+           parent_for_web_widgets->parent());
+
+  parent_for_web_widgets->parent()->AddChild(old_surface_clone_);
 }
 
 void BackForwardTransitionAnimator::UnregisterNewFrameActivationObserver() {

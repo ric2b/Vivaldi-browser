@@ -7,9 +7,15 @@
 
 #include "ui/display/display.h"
 
+namespace display {
+
+using Displays = std::vector<Display>;
+
+} // namespace display
+
 namespace vivaldi {
 
-void VerifyWindowSize(NSWindow* window, const display::Display& old_display);
+void VerifyWindowSize(NSWindow* window, const display::Displays& old_displays);
 
 }  // namespace vivaldi
 

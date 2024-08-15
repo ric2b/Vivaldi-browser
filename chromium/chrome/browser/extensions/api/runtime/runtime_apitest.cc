@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <string_view>
 
 #include "base/json/json_reader.h"
 #include "base/memory/raw_ptr.h"
@@ -669,7 +670,7 @@ class RuntimeGetContextsApiTest : public ExtensionApiTest {
 
   // Runs `chrome.runtime.getContexts()` and returns the result as a
   // base::Value.
-  base::Value GetContexts(base::StringPiece filter) {
+  base::Value GetContexts(std::string_view filter) {
     static constexpr char kScriptTemplate[] =
         R"((async () => {
              chrome.test.sendScriptResult(
@@ -685,7 +686,7 @@ class RuntimeGetContextsApiTest : public ExtensionApiTest {
   // of strongly-typed `ExtensionContext`s. Expects the getContexts() call to
   // return a valid value (i.e., not throw an error).
   std::vector<api::runtime::ExtensionContext> GetContextStructs(
-      base::StringPiece filter) {
+      std::string_view filter) {
     base::Value value = GetContexts(filter);
     return ContextValueToContextStructs(value);
   }
@@ -753,7 +754,7 @@ class RuntimeGetContextsApiTest : public ExtensionApiTest {
 // Tests retrieving the background service worker context using
 // `chrome.runtime.getContexts()`.
 
-// TODO(https://crbug.com/1429463): failed on "chromium/ci/Mac12 Tests"
+// TODO(crbug.com/40901108): failed on "chromium/ci/Mac12 Tests"
 #if BUILDFLAG(IS_MAC)
 #define MAYBE_GetServiceWorkerContext DISABLED_GetServiceWorkerContext
 #else

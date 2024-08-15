@@ -164,9 +164,41 @@ void test_complex_generic(int nfft) {
 }
 
 template <typename T>
+void test_complex_strided(int nfft) {
+  typedef typename FFT<T>::Complex Complex;
+  typedef typename Eigen::Vector<Complex, Dynamic> ComplexVector;
+  constexpr int kInputStride = 3;
+  constexpr int kOutputStride = 7;
+  constexpr int kInvOutputStride = 13;
+
+  FFT<T> fft;
+
+  ComplexVector inbuf(nfft * kInputStride);
+  inbuf.setRandom();
+  ComplexVector outbuf(nfft * kOutputStride);
+  outbuf.setRandom();
+  ComplexVector invoutbuf(nfft * kInvOutputStride);
+  invoutbuf.setRandom();
+
+  using StridedComplexVector = Map<ComplexVector, /*MapOptions=*/0, InnerStride<Dynamic>>;
+  StridedComplexVector input(inbuf.data(), nfft, InnerStride<Dynamic>(kInputStride));
+  StridedComplexVector output(outbuf.data(), nfft, InnerStride<Dynamic>(kOutputStride));
+  StridedComplexVector inv_output(invoutbuf.data(), nfft, InnerStride<Dynamic>(kInvOutputStride));
+
+  for (int k = 0; k < nfft; ++k)
+    input[k] = Complex((T)(rand() / (double)RAND_MAX - .5), (T)(rand() / (double)RAND_MAX - .5));
+  fft.fwd(output, input);
+
+  VERIFY(T(fft_rmse(output, input)) < test_precision<T>());  // gross check
+  fft.inv(inv_output, output);
+  VERIFY(T(dif_rmse(inv_output, input)) < test_precision<T>());  // gross check
+}
+
+template <typename T>
 void test_complex(int nfft) {
   test_complex_generic<StdVectorContainer, T>(nfft);
   test_complex_generic<EigenVectorContainer, T>(nfft);
+  test_complex_strided<T>(nfft);
 }
 
 template <typename T, int nrows, int ncols>

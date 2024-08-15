@@ -1648,6 +1648,43 @@ void av1_nonrd_pick_intra_mode(AV1_COMP *cpi, MACROBLOCK *x, RD_STATS *rd_cost,
     }
   }
 
+  const unsigned int thresh_sad = cpi->sf.rt_sf.prune_palette_nonrd ? 100 : 20;
+  const unsigned int best_sad_norm =
+      args.best_sad >>
+      (b_width_log2_lookup[bsize] + b_height_log2_lookup[bsize]);
+
+  // Try palette if it's enabled.
+  bool try_palette =
+      (!args.prune_mode_based_on_sad || best_sad_norm > thresh_sad) &&
+      cpi->oxcf.tool_cfg.enable_palette && bsize <= BLOCK_16X16 &&
+      x->source_variance > 200 &&
+      av1_allow_palette(cpi->common.features.allow_screen_content_tools,
+                        mi->bsize);
+  if (try_palette) {
+    const TxfmSearchInfo *txfm_info = &x->txfm_search_info;
+    const unsigned int intra_ref_frame_cost = 0;
+    // Search palette mode for Luma plane in intra frame.
+    av1_search_palette_mode_luma(cpi, x, bsize, intra_ref_frame_cost, ctx,
+                                 &this_rdc, best_rdc.rdcost);
+    // Update best mode data.
+    if (this_rdc.rdcost < best_rdc.rdcost) {
+      best_mode = DC_PRED;
+      mi->mv[0].as_int = INVALID_MV;
+      mi->mv[1].as_int = INVALID_MV;
+      best_rdc.rate = this_rdc.rate;
+      best_rdc.dist = this_rdc.dist;
+      best_rdc.rdcost = this_rdc.rdcost;
+      if (!this_rdc.skip_txfm) {
+        memcpy(ctx->blk_skip, txfm_info->blk_skip,
+               sizeof(txfm_info->blk_skip[0]) * ctx->num_4x4_blk);
+      }
+      if (xd->tx_type_map[0] != DCT_DCT)
+        av1_copy_array(ctx->tx_type_map, xd->tx_type_map, ctx->num_4x4_blk);
+    } else {
+      av1_zero(mi->palette_mode_info);
+    }
+  }
+
   mi->mode = best_mode;
   // Keep DC for UV since mode test is based on Y channel only.
   mi->uv_mode = UV_DC_PRED;
@@ -1886,14 +1923,17 @@ static AOM_INLINE int skip_mode_by_low_temp(
 
 static AOM_INLINE int skip_mode_by_bsize_and_ref_frame(
     PREDICTION_MODE mode, MV_REFERENCE_FRAME ref_frame, BLOCK_SIZE bsize,
-    int extra_prune, unsigned int sse_zeromv_norm, int more_prune) {
+    int extra_prune, unsigned int sse_zeromv_norm, int more_prune,
+    int skip_nearmv) {
   const unsigned int thresh_skip_golden = 500;
 
   if (ref_frame != LAST_FRAME && sse_zeromv_norm < thresh_skip_golden &&
       mode == NEWMV)
     return 1;
 
-  if (bsize == BLOCK_128X128 && mode == NEWMV) return 1;
+  if ((bsize == BLOCK_128X128 && mode == NEWMV) ||
+      (skip_nearmv && mode == NEARMV))
+    return 1;
 
   // Skip testing non-LAST if this flag is set.
   if (extra_prune) {
@@ -2357,6 +2397,22 @@ static AOM_FORCE_INLINE bool skip_inter_mode_nonrd(
     *ref_frame2 = NONE_FRAME;
   }
 
+  if (segfeature_active(&cm->seg, segment_id, SEG_LVL_SKIP) &&
+      (*this_mode != GLOBALMV || *ref_frame != LAST_FRAME))
+    return true;
+
+  // Skip the mode if use reference frame mask flag is not set.
+  if (!search_state->use_ref_frame_mask[*ref_frame]) return true;
+
+  // Skip mode for some modes and reference frames when
+  // force_zeromv_skip_for_blk flag is true.
+  if (x->force_zeromv_skip_for_blk &&
+      ((!(*this_mode == NEARESTMV &&
+          search_state->frame_mv[*this_mode][*ref_frame].as_int == 0) &&
+        *this_mode != GLOBALMV) ||
+       *ref_frame != LAST_FRAME))
+    return true;
+
   if (x->sb_me_block && *ref_frame == LAST_FRAME) {
     // We want to make sure to test the superblock MV:
     // so don't skip (return false) for NEAREST_LAST or NEAR_LAST if they
@@ -2395,18 +2451,6 @@ static AOM_FORCE_INLINE bool skip_inter_mode_nonrd(
   mi->mode = *this_mode;
   mi->ref_frame[0] = *ref_frame;
   mi->ref_frame[1] = *ref_frame2;
-
-  // Skip the mode if use reference frame mask flag is not set.
-  if (!search_state->use_ref_frame_mask[*ref_frame]) return true;
-
-  // Skip mode for some modes and reference frames when
-  // force_zeromv_skip_for_blk flag is true.
-  if (x->force_zeromv_skip_for_blk &&
-      ((!(*this_mode == NEARESTMV &&
-          search_state->frame_mv[*this_mode][*ref_frame].as_int == 0) &&
-        *this_mode != GLOBALMV) ||
-       *ref_frame != LAST_FRAME))
-    return true;
 
   // Skip compound mode based on variance of previously evaluated single
   // reference modes.
@@ -2462,7 +2506,9 @@ static AOM_FORCE_INLINE bool skip_inter_mode_nonrd(
         return true;
     }
     // Skip NEWMV search for flat blocks.
-    if (*this_mode == NEWMV && x->source_variance < 100) return true;
+    if (rt_sf->skip_newmv_flat_blocks_screen && *this_mode == NEWMV &&
+        x->source_variance < 100)
+      return true;
     // Skip non-LAST for color on flat blocks.
     if (*ref_frame > LAST_FRAME && x->source_variance == 0 &&
         (x->color_sensitivity[COLOR_SENS_IDX(AOM_PLANE_U)] == 1 ||
@@ -2474,7 +2520,8 @@ static AOM_FORCE_INLINE bool skip_inter_mode_nonrd(
   // properties.
   if (skip_mode_by_bsize_and_ref_frame(
           *this_mode, *ref_frame, bsize, x->nonrd_prune_ref_frame_search,
-          sse_zeromv_norm, rt_sf->nonrd_aggressive_skip))
+          sse_zeromv_norm, rt_sf->nonrd_aggressive_skip,
+          rt_sf->increase_source_sad_thresh))
     return true;
 
   // Skip mode based on low temporal variance and souce sad.
@@ -2952,9 +2999,9 @@ static AOM_FORCE_INLINE void handle_screen_content_mode_nonrd(
 
   // TODO(marpan): Only allow for 8 bit-depth for now, re-enable for 10/12 bit
   // when issue 3359 is fixed.
-  if (cm->seq_params->bit_depth == 8 &&
-      cpi->oxcf.tune_cfg.content == AOM_CONTENT_SCREEN && !skip_idtx_palette &&
-      !cpi->oxcf.txfm_cfg.use_inter_dct_only && !x->force_zeromv_skip_for_blk &&
+  if (cm->seq_params->bit_depth == 8 && rt_sf->use_idtx_nonrd &&
+      !skip_idtx_palette && !cpi->oxcf.txfm_cfg.use_inter_dct_only &&
+      !x->force_zeromv_skip_for_blk &&
       is_inter_mode(best_pickmode->best_mode) &&
       best_pickmode->best_pred != NULL &&
       (!rt_sf->prune_idtx_nonrd ||

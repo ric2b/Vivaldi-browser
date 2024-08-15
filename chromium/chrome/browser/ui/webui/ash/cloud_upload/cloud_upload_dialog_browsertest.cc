@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <string>
+#include <string_view>
 
 #include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload_dialog_browsertest.h"
 
@@ -111,8 +112,9 @@ void CreateFakeWebApps(
   for (int i = 0; i < n; ++i) {
     std::string start_url =
         "https://www.example" + base::NumberToString(i) + ".com";
-    auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
-    web_app_info->start_url = GURL(start_url);
+    auto web_app_info =
+        web_app::WebAppInstallInfo::CreateWithStartUrlForTesting(
+            GURL(start_url));
     web_app_info->scope = GURL(start_url);
     apps::FileHandler handler;
     std::string url = start_url + "/handle_file";
@@ -753,7 +755,7 @@ IN_PROC_BROWSER_TEST_P(CloudUploadDialogHandlerDisabledBrowserTest,
                      chromeos::cloud_upload::kCloudUploadPolicyAllowed);
 
     // Perform the necessary OneDrive & Microsoft365 setup.
-    file_manager::test::CreateFakeProvidedFileSystemOneDrive(profile());
+    file_manager::test::MountFakeProvidedFileSystemOneDrive(profile());
     file_manager::test::AddFakeWebApp(
         web_app::kMicrosoft365AppId, kDocMimeType, kDocFileExtension, "", true,
         apps::AppServiceProxyFactory::GetForProfile(profile()));
@@ -825,7 +827,7 @@ IN_PROC_BROWSER_TEST_F(
 class FileHandlerDialogBrowserTestWithAutomatedFlow
     : public FileHandlerDialogBrowserTest,
       public testing::WithParamInterface<
-          std::tuple<base::StringPiece, base::StringPiece>> {
+          std::tuple<std::string_view, std::string_view>> {
  protected:
   // Tests that there are no explicit file handlers set for office extensions &
   // mime types.
@@ -892,7 +894,7 @@ class FileHandlerDialogBrowserTestWithAutomatedFlow
   bool ExplicitFileHandlersForExtensionsAndMimeTypesSetTo(
       const std::set<std::string>& extensions,
       const std::set<std::string>& mime_types,
-      base::StringPiece action_id) {
+      std::string_view action_id) {
     return ExplicitFileHandlersForExtensionsAndMimeTypesSetTo(
         extensions, mime_types,
         /*task=*/
@@ -949,7 +951,7 @@ IN_PROC_BROWSER_TEST_P(FileHandlerDialogBrowserTestWithAutomatedFlow,
   if (chromeos::cloud_upload::IsMicrosoftOfficeCloudUploadAutomated(
           profile())) {
     // Perform the necessary OneDrive & Microsoft365 setup.
-    file_manager::test::CreateFakeProvidedFileSystemOneDrive(profile());
+    file_manager::test::MountFakeProvidedFileSystemOneDrive(profile());
     file_manager::test::AddFakeWebApp(
         web_app::kMicrosoft365AppId, kDocMimeType, kDocFileExtension, "", true,
         apps::AppServiceProxyFactory::GetForProfile(profile()));
@@ -1105,7 +1107,7 @@ INSTANTIATE_TEST_SUITE_P(
     /**/,
     FileHandlerDialogBrowserTestWithAutomatedFlow,
     testing::ValuesIn(
-        std::vector<std::tuple<base::StringPiece, base::StringPiece>>(
+        std::vector<std::tuple<std::string_view, std::string_view>>(
             {{kCloudUploadPolicyAutomated, kCloudUploadPolicyAllowed},
              {kCloudUploadPolicyAutomated, kCloudUploadPolicyDisallowed},
              {kCloudUploadPolicyAllowed, kCloudUploadPolicyAutomated},
@@ -1231,7 +1233,7 @@ class FixUpFlowBrowserTest : public InProcessBrowserTest {
   }
 
   void AddFakeODFS() {
-    file_manager::test::CreateFakeProvidedFileSystemOneDrive(profile());
+    file_manager::test::MountFakeProvidedFileSystemOneDrive(profile());
   }
 
   void AddFakeOfficePWA() {
@@ -1522,6 +1524,14 @@ class CloudOpenTaskBrowserTest : public InProcessBrowserTest {
 
   CloudOpenTaskBrowserTest(const CloudOpenTaskBrowserTest&) = delete;
   CloudOpenTaskBrowserTest& operator=(const CloudOpenTaskBrowserTest&) = delete;
+
+  void TearDownOnMainThread() override {
+    // Explictly destroy the `upload_task_` before the Profile* is destroyed.
+    // Otherwise the `upload_task_` will be destroyed afterwards and the profile
+    // pointer owned by the `upload_task_` will become dangling
+    upload_task_.reset();
+    InProcessBrowserTest::TearDownOnMainThread();
+  }
 
   void SetUpLocalToDriveTask() {
     SetUpMyFiles();

@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: firmware-config
 title: SKU and FW Configuration Fields
 ---
@@ -91,7 +91,7 @@ The following are restrictions placed on the FW Configuration field:
 
 *   Different values should have different code paths in firmware
 *   A DesignConfigId value implies the one correct value for the FW
-    Configuration field. The DesignConfigId is the foriegn key into the master
+    Configuration field. The DesignConfigId is the foreign key into the master
     config, which is the ultimate source of truth for FW Configuration data.
 
 ### Adding new Configuration Options

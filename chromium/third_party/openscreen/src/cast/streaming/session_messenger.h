@@ -29,7 +29,7 @@ class SessionMessenger : public MessagePort::Client {
  public:
   using ErrorCallback = std::function<void(Error)>;
 
-  SessionMessenger(MessagePort* message_port,
+  SessionMessenger(MessagePort& message_port,
                    std::string source_id,
                    ErrorCallback cb);
   ~SessionMessenger() override;
@@ -41,12 +41,12 @@ class SessionMessenger : public MessagePort::Client {
                                   const Json::Value& message_root);
 
   // Used to report errors in subclasses.
-  void ReportError(Error error);
+  void ReportError(const Error& error);
 
   const std::string& source_id() override { return source_id_; }
 
  private:
-  MessagePort* const message_port_;
+  MessagePort& message_port_;
   const std::string source_id_;
   ErrorCallback error_callback_;
 };
@@ -59,7 +59,7 @@ class SenderSessionMessenger final : public SessionMessenger {
  public:
   using ReplyCallback = std::function<void(ErrorOr<ReceiverMessage>)>;
 
-  SenderSessionMessenger(MessagePort* message_port,
+  SenderSessionMessenger(MessagePort& message_port,
                          std::string source_id,
                          std::string receiver_id,
                          ErrorCallback cb,
@@ -86,7 +86,7 @@ class SenderSessionMessenger final : public SessionMessenger {
   void OnMessage(const std::string& source_id,
                  const std::string& message_namespace,
                  const std::string& message) override;
-  void OnError(Error error) override;
+  void OnError(const Error& error) override;
 
  private:
   TaskRunner& task_runner_;
@@ -112,7 +112,7 @@ class ReceiverSessionMessenger final : public SessionMessenger {
  public:
   using RequestCallback =
       std::function<void(const std::string&, SenderMessage)>;
-  ReceiverSessionMessenger(MessagePort* message_port,
+  ReceiverSessionMessenger(MessagePort& message_port,
                            std::string source_id,
                            ErrorCallback cb);
 
@@ -128,7 +128,7 @@ class ReceiverSessionMessenger final : public SessionMessenger {
   void OnMessage(const std::string& source_id,
                  const std::string& message_namespace,
                  const std::string& message) override;
-  void OnError(Error error) override;
+  void OnError(const Error& error) override;
 
  private:
   FlatMap<SenderMessage::Type, RequestCallback> callbacks_;

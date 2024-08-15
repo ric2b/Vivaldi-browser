@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: enterprise-policy
 title: Enterprise policy
 ---
@@ -198,7 +198,7 @@ found
 ## Dpanel RPC studio instructions
 
 Note that the following instructions assumes you've completed the
-[steps](https://g3doc.corp.google.com/chrome/chromeos/system_services_team/dev_instructions/g3doc/enterprise_policy.md#building-a-local-instance-of-the-network-admin-dpanel-for-development)
+[steps](/chromium-os/developer-library/guides/enterprise/enterprise-policy#building-a-local-instance-of-the-network-admin-dpanel-for-development)
 to build a local instance of the Network Admin Dpanel. This section describes
 how you can verify fetching and updating protos (new or existing) by sending
 traffic to the Dpanel data node.

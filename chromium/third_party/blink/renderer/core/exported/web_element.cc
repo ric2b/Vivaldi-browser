@@ -55,6 +55,7 @@
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "ui/gfx/geometry/size.h"
@@ -98,8 +99,10 @@ WebString WebElement::GetIdAttribute() const {
 }
 
 bool WebElement::HasHTMLTagName(const WebString& tag_name) const {
-  const Element* element = ConstUnwrap<Element>();
-  return element->IsHTMLWithTagName(String(tag_name));
+  const auto* html_element =
+      blink::DynamicTo<HTMLElement>(ConstUnwrap<Element>());
+  return html_element &&
+         html_element->localName() == String(tag_name).LowerASCII();
 }
 
 bool WebElement::HasAttribute(const WebString& attr_name) const {
@@ -137,6 +140,17 @@ bool WebElement::IsContentEditable() const {
       html_element->contentEditableNormalized();
   return normalized_value == ContentEditableType::kContentEditable ||
          normalized_value == ContentEditableType::kPlaintextOnly;
+}
+
+bool WebElement::WritingSuggestions() const {
+  if (!RuntimeEnabledFeatures::WritingSuggestionsEnabled()) {
+    return true;
+  }
+  const auto* html_element =
+      blink::DynamicTo<HTMLElement>(ConstUnwrap<Element>());
+  return html_element &&
+         !EqualIgnoringASCIICase(html_element->writingSuggestions(),
+                                 keywords::kFalse);
 }
 
 bool WebElement::ContainsFrameSelection() const {

@@ -155,7 +155,7 @@ Combobox::Combobox(ui::ComboboxModel* model) {
           &Combobox::ArrowButtonPressed, base::Unretained(this))));
 
   if (features::IsChromeRefresh2023()) {
-    // TODO(crbug.com/1400024): This setter should be removed and the behavior
+    // TODO(crbug.com/40250124): This setter should be removed and the behavior
     // made default when ChromeRefresh2023 is finalized.
     SetEventHighlighting(true);
     enabled_changed_subscription_ =
@@ -351,7 +351,8 @@ base::CallbackListSubscription Combobox::AddMenuWillShowCallback(
 ////////////////////////////////////////////////////////////////////////////////
 // Combobox, View overrides:
 
-gfx::Size Combobox::CalculatePreferredSize() const {
+gfx::Size Combobox::CalculatePreferredSize(
+    const SizeBounds& /*available_size*/) const {
   // Limit how small a combobox can be.
   constexpr int kMinComboboxWidth = 25;
 
@@ -652,7 +653,7 @@ void Combobox::PaintIconAndText(gfx::Canvas* canvas) {
   canvas->DrawStringRect(text, font_list, text_color, text_bounds);
 
   // Draw the arrow.
-  // TODO(crbug.com/1392549): Replace placeholder spacing and color values for
+  // TODO(crbug.com/40247801): Replace placeholder spacing and color values for
   // ChromeRefresh2023.
   if (should_show_arrow_) {
     gfx::Rect arrow_bounds(width() - GetComboboxArrowContainerWidthAndMargins(),

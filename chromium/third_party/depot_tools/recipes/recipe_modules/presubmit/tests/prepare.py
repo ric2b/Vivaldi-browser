@@ -27,7 +27,7 @@ PROPERTIES = {
 
 def RunSteps(api, patch_project, patch_repository_url):
   api.gclient.set_config('infra')
-  with api.context(cwd=api.path['cache'].join('builder')):
+  with api.context(cwd=api.path.cache_dir / 'builder'):
     bot_update_step = api.presubmit.prepare()
 
 

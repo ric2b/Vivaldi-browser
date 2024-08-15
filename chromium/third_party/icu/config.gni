@@ -37,6 +37,13 @@ if (defined(is_fuchsia_tree) && is_fuchsia_tree) {
     # Fuchsia. This flag allows us to define the flag ahead of time in
     # //build/icu.gni, and remove the rollout issues.
     icu_fuchsia_extra_compile_flags = []
+
+    # Similar to above, except it allows adding an entire `config` target.
+    icu_fuchsia_extra_configs = []
+
+    # Similar to above, except it allows removing an entire `config` target, if
+    # it exists.
+    icu_fuchsia_remove_configs = []
   }
 
   # Set to true if icu is being built from the Fuchsia tree.

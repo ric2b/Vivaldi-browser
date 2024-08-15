@@ -21,7 +21,6 @@
 <translation id="2470702053775288986">Nepalaikomi plėtiniai išjungti</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Iš naujo įgalinti</translation>
-<translation id="2809586584051668049">ir dar <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2850541429955027218">Pridėti temą</translation>
 <translation id="2861941300086904918">„Native Client“ saugos valdytojas</translation>
 <translation id="2932883381142163287">Pranešti apie piktnaudžiavimą</translation>
@@ -30,7 +29,6 @@
 <translation id="3122464029669770682">Centrinis procesorius</translation>
 <translation id="3222066309010235055">Iš anksto pateikti: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Pasirinkite norimo pakuoti plėtinio šakninį katalogą. Norėdami atnaujinti plėtinį, pasirinkite ir asmeninio rakto failą, kuris bus naudojamas iš naujo.</translation>
-<translation id="3288047731229977326">Kūrėjo režimu veikiantys plėtiniai gali padaryti žalos kompiuteryje. Jei nesate kūrėjai, turėtumėte išjungti šių plėtinių veikimą kūrėjo režimu, kad išliktumėte saugūs.</translation>
 <translation id="3378572629723696641">Šis plėtinys gali būti sugadintas.</translation>
 <translation id="3678156199662914018">Plėtinys: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">Pataisyti programą</translation>
@@ -41,7 +39,6 @@
 <translation id="4087089424473531098">Sukurtas plėtinys:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Išjunkite kūrėjo režimu veikiančius plėtinius</translation>
 <translation id="4100839878934973028">Kita jūsų kompiuteryje esanti programa pridėjo programą, kuri gali pakeisti „Vivaldi“ veikimo būdą.</translation>
 <translation id="4176463684765177261">Neleista</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> KB (<ph name="NUM_KILOBYTES_LIVE" /> KB tiesiogiai)</translation>
@@ -54,7 +51,6 @@
 <translation id="5143374789336132547">Plėtinys „<ph name="EXTENSION_NAME" />“ pakeitė puslapį, kuris rodomas spustelėjus pagrindinio puslapio mygtuką.</translation>
 <translation id="5233231016133573565">Apdoroti ID</translation>
 <translation id="52912272896845572">Asmeninio rakto failas neteisingas.</translation>
-<translation id="5301954838959518834">Gerai, supratau</translation>
 <translation id="5362741141255528695">Pasirinkti asmeninio rakto failą.</translation>
 <translation id="5485102783864353244">Pridėti programą</translation>
 <translation id="5521078259930077036">Ar tai pagrindinis puslapis, kurį tikėjotės išvysti?</translation>

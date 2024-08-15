@@ -57,6 +57,11 @@ class CONTENT_EXPORT SpeechRecognitionManagerImpl
   // issued when it is not created yet or destroyed (by BrowserMainLoop).
   static SpeechRecognitionManagerImpl* GetInstance();
 
+#if !BUILDFLAG(IS_FUCHSIA) && !BUILDFLAG(IS_ANDROID)
+  static bool IsOnDeviceSpeechRecognitionAvailable(
+      const SpeechRecognitionSessionConfig& config);
+#endif  // !BUILDFLAG(IS_FUCHSIA) && !BUILDFLAG(IS_ANDROID)
+
   // SpeechRecognitionManager implementation.
   int CreateSession(const SpeechRecognitionSessionConfig& config) override;
   void StartSession(int session_id) override;
@@ -71,7 +76,6 @@ class CONTENT_EXPORT SpeechRecognitionManagerImpl
   // SpeechRecognitionEventListener methods.
   void OnRecognitionStart(int session_id) override;
   void OnAudioStart(int session_id) override;
-  void OnEnvironmentEstimationComplete(int session_id) override;
   void OnSoundStart(int session_id) override;
   void OnSoundEnd(int session_id) override;
   void OnAudioEnd(int session_id) override;

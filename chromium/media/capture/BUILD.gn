@@ -6,6 +6,7 @@ import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//media/media_options.gni")
+import("//services/video_effects/args.gni")
 import("//testing/test.gni")
 
 group("capture") {
@@ -157,10 +158,18 @@ component("capture_lib") {
     "//media/mojo/mojom",
     "//services/service_manager/public/cpp",
     "//services/video_capture/public/mojom",
+    "//services/video_effects:buildflags",
     "//third_party/libyuv",
     "//ui/display",
     "//ui/gfx",
   ]
+
+  if (enable_video_effects) {
+    sources += [
+      "video/video_capture_effects_processor.cc",
+      "video/video_capture_effects_processor.h",
+    ]
+  }
 
   if (is_android) {
     public_deps += [ "video/android" ]
@@ -252,7 +261,7 @@ component("capture_lib") {
   }
 
   # Establish GPU Channel
-  if (is_linux || is_win || is_chromeos_ash) {
+  if (is_linux || is_win || is_chromeos_ash || is_mac) {
     sources += [
       "video/video_capture_gpu_channel_host.cc",
       "video/video_capture_gpu_channel_host.h",
@@ -340,14 +349,18 @@ component("capture_lib") {
       "//components/device_event_log",
       "//gpu/ipc/common:common",
       "//media/capture/video/chromeos/mojom:cros_camera",
+      "//media/capture/video/chromeos/mojom:document_scanner",
       "//media/capture/video/chromeos/mojom:jpeg_accelerator",
       "//media/capture/video/chromeos/mojom:system_event_monitor",
+      "//media/capture/video/chromeos/mojom:video_capture_device_info_monitor",
       "//third_party/libsync",
     ]
     data_deps = [
       ":camera_hal_dispatcher_mojo_policy",
+      ":document_scanner_mojo_policy",
       ":jpeg_accelerator_mojo_policy",
       ":system_event_monitor_mojo_policy",
+      ":video_capture_device_info_monitor_mojo_policy",
     ]
   }
 
@@ -440,6 +453,10 @@ test("capture_unittests") {
     "video_capture_types_unittest.cc",
   ]
 
+  if (enable_video_effects) {
+    sources += [ "video/video_capture_effects_processor_unittest.cc" ]
+  }
+
   data = [ "//media/test/data/bear.mjpeg" ]
 
   deps = [
@@ -453,11 +470,16 @@ test("capture_unittests") {
     "//media/capture/mojom:image_capture_types",
     "//mojo/core/embedder",
     "//services/video_capture/public/mojom",
+    "//services/video_effects/test:test_support",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/libyuv:libyuv",
     "//ui/gfx:test_support",
   ]
+
+  if (enable_video_effects) {
+    deps += [ "//components/viz/test:test_support" ]
+  }
 
   if (is_linux || is_chromeos_lacros) {
     sources += [
@@ -538,7 +560,7 @@ test("capture_unittests") {
     deps += [ "//chromeos/dbus/power" ]
   }
 
-  # TODO(https://crbug.com/1043007): use is_linux.
+  # TODO(crbug.com/40115082): use is_linux.
   if (is_chromeos_ash) {
     deps += [ "//media/gpu/test:local_gpu_memory_buffer_manager" ]
   }
@@ -564,7 +586,7 @@ test("capture_unittests") {
   }
 }
 
-# TODO(crbug.com/1484229): Move platform-specific files/targets into subdirectories.
+# TODO(crbug.com/40932597): Move platform-specific files/targets into subdirectories.
 copy("camera_hal_dispatcher_mojo_policy") {
   sources = [ "video/chromeos/camera_hal_dispatcher_mojo_policy.jsonc" ]
   outputs = [ "$root_out_dir/mojo_service_manager/{{source_file_part}}" ]
@@ -577,5 +599,15 @@ copy("jpeg_accelerator_mojo_policy") {
 
 copy("system_event_monitor_mojo_policy") {
   sources = [ "video/chromeos/system_event_monitor.jsonc" ]
+  outputs = [ "$root_out_dir/mojo_service_manager/{{source_file_part}}" ]
+}
+
+copy("video_capture_device_info_monitor_mojo_policy") {
+  sources = [ "video/chromeos/video_capture_device_info_monitor.jsonc" ]
+  outputs = [ "$root_out_dir/mojo_service_manager/{{source_file_part}}" ]
+}
+
+copy("document_scanner_mojo_policy") {
+  sources = [ "video/chromeos/document_scanner_mojo_policy.jsonc" ]
   outputs = [ "$root_out_dir/mojo_service_manager/{{source_file_part}}" ]
 }

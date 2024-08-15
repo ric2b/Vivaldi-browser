@@ -10,7 +10,6 @@ import android.util.Pair;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 
-import androidx.annotation.IntDef;
 import androidx.annotation.LayoutRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -24,17 +23,21 @@ import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
-import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
+import org.chromium.chrome.browser.hub.HubManager;
 import org.chromium.chrome.browser.hub.Pane;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthController;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.profiles.ProfileProvider;
+import org.chromium.chrome.browser.tab_group_sync.TabGroupUiActionHandler;
+import org.chromium.chrome.browser.tab_ui.TabContentManager;
+import org.chromium.chrome.browser.tab_ui.TabSwitcher;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_management.ColorPickerCoordinator.ColorPickerLayoutType;
+import org.chromium.chrome.browser.ui.desktop_windowing.DesktopWindowStateProvider;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
@@ -42,38 +45,26 @@ import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
 import java.util.List;
 import java.util.function.DoubleConsumer;
 
 /** Interface to get access to components concerning tab management. */
 public interface TabManagementDelegate {
-    @IntDef({
-        TabSwitcherType.GRID,
-        TabSwitcherType.SINGLE,
-        TabSwitcherType.NONE
-    })
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface TabSwitcherType {
-        int GRID = 0;
-        // int CAROUSEL_DEPRECATED = 1;
-        int SINGLE = 2;
-        int NONE = 3;
-    }
-
     /**
      * Create the {@link TabSwitcherLayout}.
+     *
      * @param context The current Android's context.
      * @param updateHost The parent {@link LayoutUpdateHost}.
      * @param layoutStateProvider The {@link LayoutStateProvider} to provide layout state changes.
      * @param renderHost The parent {@link LayoutRenderHost}.
      * @param browserControlsStateProvider The {@link BrowserControlsStateProvider} for the top
-     *         controls.
+     *     controls.
      * @param tabSwitcher The {@link TabSwitcher} the layout should own.
      * @param tabSwitcherScrimAnchor {@link ViewGroup} used by tab switcher layout to show scrim
-     *         when overview is visible.
+     *     when overview is visible.
      * @param scrimCoordinator {@link ScrimCoordinator} to show/hide scrim.
+     * @param desktopWindowStateProvider The {@link DesktopWindowStateProvider} instance for the
+     *     current activity.
      * @return The {@link TabSwitcherLayout}.
      */
     Layout createTabSwitcherLayout(
@@ -84,7 +75,8 @@ public interface TabManagementDelegate {
             BrowserControlsStateProvider browserControlsStateProvider,
             TabSwitcher tabSwitcher,
             ViewGroup tabSwitcherScrimAnchor,
-            ScrimCoordinator scrimCoordinator);
+            ScrimCoordinator scrimCoordinator,
+            DesktopWindowStateProvider desktopWindowStateProvider);
 
     /**
      * Create the {@link TabSwitcher} to display Tabs in grid.
@@ -151,6 +143,7 @@ public interface TabManagementDelegate {
      * @param tabCreatorManager Manages creation of tabs.
      * @param layoutStateProviderSupplier Supplies the {@link LayoutStateProvider}.
      * @param snackbarManager Manages the display of snackbars.
+     * @param modalDialogManager Used to show confirmation dialogs.
      * @return The {@link TabGroupUi}.
      */
     TabGroupUi createTabGroupUi(
@@ -169,7 +162,8 @@ public interface TabManagementDelegate {
             @NonNull Supplier<DynamicResourceLoader> dynamicResourceLoaderSupplier,
             @NonNull TabCreatorManager tabCreatorManager,
             @NonNull OneshotSupplier<LayoutStateProvider> layoutStateProviderSupplier,
-            @NonNull SnackbarManager snackbarManager);
+            @NonNull SnackbarManager snackbarManager,
+            @NonNull ModalDialogManager modalDialogManager);
 
     /**
      * Create a {@link TabSwitcher} and {@link Pane} for the Hub.
@@ -216,12 +210,21 @@ public interface TabManagementDelegate {
      * @param context Used to inflate UI.
      * @param tabModelSelector Used to pull tab data from.
      * @param onToolbarAlphaChange Observer to notify when alpha changes during animations.
+     * @param profileProviderSupplier The supplier for profiles.
+     * @param hubManagerSupplier Supplier ultimately used to get the pane manager to switch panes.
+     * @param tabGroupUiActionHandlerSupplier Supplier for the controller used to open hidden
+     *     groups.
+     * @param modalDialogManagerSupplier Used to show confirmation dialogs.
      * @return The pane implementation that displays and allows interactions with tab groups.
      */
     Pane createTabGroupsPane(
             @NonNull Context context,
             @NonNull TabModelSelector tabModelSelector,
-            @NonNull DoubleConsumer onToolbarAlphaChange);
+            @NonNull DoubleConsumer onToolbarAlphaChange,
+            @NonNull OneshotSupplier<ProfileProvider> profileProviderSupplier,
+            @NonNull OneshotSupplier<HubManager> hubManagerSupplier,
+            @NonNull Supplier<TabGroupUiActionHandler> tabGroupUiActionHandlerSupplier,
+            @NonNull Supplier<ModalDialogManager> modalDialogManagerSupplier);
 
     /**
      * Create a TabGroupCreationDialogManager when creating a new tab group.
@@ -229,16 +232,18 @@ public interface TabManagementDelegate {
      * @param activity The {@link Activity} that hosts this dialog.
      * @param modalDialogManager The modal dialog manager for the activity.
      * @param tabModelSelector The current {@link TabModelSelector}.
+     * @param onDialogAccepted The action to run when the dialog is accepted.
      */
     Destroyable createTabGroupCreationDialogManager(
             @NonNull Activity activity,
             @NonNull ModalDialogManager modalDialogManager,
-            @NonNull TabModelSelector tabModelSelector);
+            @NonNull TabModelSelector tabModelSelector,
+            @NonNull Runnable onDialogAccepted);
 
     /**
      * Create a {@link ColorPicker} when creating a custom color picker component.
      *
-     * @param activity The current Android's context.
+     * @param context The current Android's context.
      * @param colors The list of colors used for this color picker component.
      * @param colorPickerLayout The layout resource to be inflated.
      * @param colorPickerType The {@link ColorPickerType} that this color picker use.

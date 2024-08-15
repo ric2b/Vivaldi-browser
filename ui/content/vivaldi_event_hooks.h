@@ -15,7 +15,7 @@ class WebMouseWheelEvent;
 namespace content {
 struct NativeWebKeyboardEvent;
 class RenderWidgetHostImpl;
-class RenderWidgetHostViewBase;
+class RenderWidgetHostViewInput;
 class WebContents;
 }  // namespace content
 
@@ -31,13 +31,13 @@ class CONTENT_EXPORT VivaldiEventHooks : public base::SupportsUserData::Data {
   // Check for a mouse gesture event before it is dispatched to the web page
   // or default chromium handlers. Return true to stop further event
   // propagation or false to allow normal event flow.
-  static bool HandleMouseEvent(content::RenderWidgetHostViewBase* root_view,
+  static bool HandleMouseEvent(content::RenderWidgetHostViewInput* root_view,
                                const blink::WebMouseEvent& event);
 
   // Check for a wheel gesture event before it is dispatched to the web page
   // or default chromium handlers. Return true to stop further event
   // propagation or false to allow normal event flow.
-  static bool HandleWheelEvent(content::RenderWidgetHostViewBase* root_view,
+  static bool HandleWheelEvent(content::RenderWidgetHostViewInput* root_view,
                                const blink::WebMouseWheelEvent& event,
                                const ui::LatencyInfo& latency);
 
@@ -45,7 +45,7 @@ class CONTENT_EXPORT VivaldiEventHooks : public base::SupportsUserData::Data {
   // view. Return true to stop further event propagation or false to allow
   // normal event flow.
   static bool HandleWheelEventAfterChild(
-      content::RenderWidgetHostViewBase* root_view,
+      content::RenderWidgetHostViewInput* root_view,
       const blink::WebMouseWheelEvent& event);
 
   // Handle a keyboard event before it is send to the renderer process. Return
@@ -67,15 +67,15 @@ class CONTENT_EXPORT VivaldiEventHooks : public base::SupportsUserData::Data {
 
   static void InitInstance(VivaldiEventHooks& instance);
 
-  virtual bool DoHandleMouseEvent(content::RenderWidgetHostViewBase* root_view,
+  virtual bool DoHandleMouseEvent(content::RenderWidgetHostViewInput* root_view,
                                   const blink::WebMouseEvent& event) = 0;
 
-  virtual bool DoHandleWheelEvent(content::RenderWidgetHostViewBase* root_view,
+  virtual bool DoHandleWheelEvent(content::RenderWidgetHostViewInput* root_view,
                                   const blink::WebMouseWheelEvent& event,
                                   const ui::LatencyInfo& latency) = 0;
 
   virtual bool DoHandleWheelEventAfterChild(
-      content::RenderWidgetHostViewBase* root_view,
+      content::RenderWidgetHostViewInput* root_view,
       const blink::WebMouseWheelEvent& event) = 0;
 
   virtual bool DoHandleKeyboardEvent(

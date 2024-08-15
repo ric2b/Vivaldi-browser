@@ -5,6 +5,7 @@
 #include "components/search_engines/template_url.h"
 
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <vector>
 
@@ -26,7 +27,6 @@
 #include "base/strings/escape.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -134,7 +134,7 @@ bool TryEncoding(const std::u16string& terms,
 // Finds the position of the search terms' parameter in the URL component.
 class SearchTermLocation {
  public:
-  SearchTermLocation(const base::StringPiece& url_component,
+  SearchTermLocation(std::string_view url_component,
                      url::Parsed::ComponentType url_component_type)
       : found_(false) {
     if (url_component_type == url::Parsed::PATH) {
@@ -148,7 +148,7 @@ class SearchTermLocation {
       query.len = static_cast<int>(url_component.size());
       while (url::ExtractQueryKeyValue(url_component, &query, &key, &value)) {
         if (key.is_nonempty() && value.is_nonempty()) {
-          const base::StringPiece value_string =
+          const std::string_view value_string =
               url_component.substr(value.begin, value.len);
           if (TryMatchSearchParam(value_string, kSearchTermsParameterFull) ||
               TryMatchSearchParam(value_string,
@@ -173,11 +173,11 @@ class SearchTermLocation {
  private:
   // Returns true if the search term placeholder is present, and also assigns
   // the constant prefix/suffix found.
-  bool TryMatchSearchParam(const base::StringPiece& value,
-                           const base::StringPiece& pattern) {
+  bool TryMatchSearchParam(std::string_view value, std::string_view pattern) {
     size_t pos = value.find(pattern);
-    if (pos == base::StringPiece::npos)
+    if (pos == std::string_view::npos) {
       return false;
+    }
     value_prefix_ = std::string(value.substr(0, pos));
     value_suffix_ = std::string(value.substr(pos + pattern.size()));
     return true;
@@ -553,7 +553,7 @@ const std::string& TemplateURLRef::GetSearchTermValueSuffix(
 }
 
 std::u16string TemplateURLRef::SearchTermToString16(
-    const base::StringPiece& term) const {
+    std::string_view term) const {
   const std::vector<std::string>& encodings = owner_->input_encodings();
   std::u16string result;
 
@@ -616,7 +616,7 @@ bool TemplateURLRef::ExtractSearchTermsFromURL(
     return false;
   }
 
-  base::StringPiece source;
+  std::string_view source;
   url::Component position;
 
   if (search_term_key_location_ == url::Parsed::PATH) {
@@ -651,8 +651,8 @@ bool TemplateURLRef::ExtractSearchTermsFromURL(
 
           // If the query parameter does not contain the expected prefix and
           // suffix, then this is not a match.
-          base::StringPiece search_term =
-              base::StringPiece(source).substr(value.begin, value.len);
+          std::string_view search_term =
+              std::string_view(source).substr(value.begin, value.len);
           if (search_term.size() < (search_term_value_prefix_.size() +
                                     search_term_value_suffix_.size()) ||
               !base::StartsWith(search_term, search_term_value_prefix_) ||
@@ -703,7 +703,7 @@ bool TemplateURLRef::ParseParameter(size_t start,
   size_t length = end - start - 1;
   bool optional = false;
   // Make a copy of |url| that can be referenced in StringPieces below. |url| is
-  // modified, so that can't be used in StringPiece.
+  // modified, so that can't be used in std::string_view.
   const std::string original_url(*url);
   if (original_url[end - 1] == kOptional) {
     optional = true;
@@ -764,8 +764,15 @@ bool TemplateURLRef::ParseParameter(size_t start,
   } else if (parameter == "google:omniboxFocusType") {
     replacements->push_back(
         Replacement(TemplateURLRef::GOOGLE_OMNIBOX_FOCUS_TYPE, start));
+  } else if (parameter == "google:language") {
+    replacements->push_back(Replacement(GOOGLE_LANGUAGE, start));
   } else if (parameter == "google:iOSSearchLanguage") {
-    replacements->push_back(Replacement(GOOGLE_IOS_SEARCH_LANGUAGE, start));
+    // TODO(b/343792225): Do not remove this.
+    // The google:iOSSearchLanguage parameter does not appear in any template
+    // URL in components/search_engines/prepopulated_engines.json. However,
+    // template URLs may be served from other sources so even though the value
+    // is no longer required, the parameter still needs to be handled. Doing
+    // nothing here will result in simply removing the parameter from the URL.
   } else if (parameter == "google:contextualSearchVersion") {
     replacements->push_back(
         Replacement(GOOGLE_CONTEXTUAL_SEARCH_VERSION, start));
@@ -885,9 +892,9 @@ std::string TemplateURLRef::ParseURL(const std::string& url,
   // Handles the post parameters.
   const std::string& post_params_string = GetPostParamsString();
   if (!post_params_string.empty()) {
-    for (const base::StringPiece& cur : base::SplitStringPiece(
-             post_params_string, ",",
-             base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
+    for (std::string_view cur :
+         base::SplitStringPiece(post_params_string, ",", base::TRIM_WHITESPACE,
+                                base::SPLIT_WANT_ALL)) {
       // The '=' delimiter is required and the name must be not empty.
       std::vector<std::string> parts = base::SplitString(
           cur, "=", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
@@ -962,7 +969,7 @@ void TemplateURLRef::ParsePath(const std::string& path) const {
 }
 
 bool TemplateURLRef::PathIsEqual(const GURL& url) const {
-  base::StringPiece path = url.path_piece();
+  std::string_view path = url.path_piece();
   if (!path_wildcard_present_)
     return path == path_prefix_;
   return ((path.length() >= path_prefix_.length() + path_suffix_.length()) &&
@@ -1303,11 +1310,20 @@ std::string TemplateURLRef::HandleReplacements(
 
       case GOOGLE_SEARCH_SOURCE_ID: {
         DCHECK(!replacement.is_post_param);
+        switch (search_terms_args.request_source) {
+          case RequestSource::CONTEXTUAL_SEARCHBOX:
+          case RequestSource::SEARCH_SIDE_PANEL_SEARCHBOX:
+          case RequestSource::LENS_SIDE_PANEL_SEARCHBOX:
+            HandleReplacement("source", "chrome.gsc", replacement, &url);
+            break;
+          default:
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
-        HandleReplacement("sourceid", "chrome-mobile", replacement, &url);
+            HandleReplacement("sourceid", "chrome-mobile", replacement, &url);
 #else
-        HandleReplacement("sourceid", "chrome", replacement, &url);
+            HandleReplacement("sourceid", "chrome", replacement, &url);
 #endif
+            break;
+        }
         break;
       }
 
@@ -1323,17 +1339,65 @@ std::string TemplateURLRef::HandleReplacements(
       }
 
       case GOOGLE_SUGGEST_CLIENT:
-        HandleReplacement(std::string(),
-                          search_terms_data.GetSuggestClient(
-                              search_terms_args.request_source),
-                          replacement, &url);
+        switch (search_terms_args.request_source) {
+          case RequestSource::NTP_MODULE:
+#if BUILDFLAG(IS_ANDROID)
+            HandleReplacement(std::string(),
+                              "chrome-android-search-resumption-module",
+                              replacement, &url);
+#elif BUILDFLAG(IS_IOS)
+            HandleReplacement(std::string(), "chrome-ios-ntp", replacement,
+                              &url);
+#else
+            NOTREACHED();
+#endif
+            break;
+          case RequestSource::CONTEXTUAL_SEARCHBOX:
+          case RequestSource::SEARCH_SIDE_PANEL_SEARCHBOX:
+            HandleReplacement(std::string(), "chrome-contextual", replacement,
+                              &url);
+            break;
+          case RequestSource::LENS_SIDE_PANEL_SEARCHBOX:
+            HandleReplacement(std::string(), "chrome-multimodal", replacement,
+                              &url);
+            break;
+          case RequestSource::SEARCHBOX:
+          case RequestSource::CROS_APP_LIST:
+#if BUILDFLAG(IS_ANDROID)
+            if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE) {
+              HandleReplacement(std::string(), "chrome", replacement, &url);
+              break;
+            }
+            HandleReplacement(std::string(), "chrome-omni", replacement, &url);
+#elif BUILDFLAG(IS_IOS)
+            HandleReplacement(std::string(), "chrome", replacement, &url);
+#else
+            HandleReplacement(std::string(), "chrome-omni", replacement, &url);
+#endif
+            break;
+        }
         break;
 
       case GOOGLE_SUGGEST_REQUEST_ID:
-        HandleReplacement(std::string(),
-                          search_terms_data.GetSuggestRequestIdentifier(
-                              search_terms_args.request_source),
-                          replacement, &url);
+        switch (search_terms_args.request_source) {
+          case RequestSource::NTP_MODULE:
+          case RequestSource::CONTEXTUAL_SEARCHBOX:
+          case RequestSource::SEARCH_SIDE_PANEL_SEARCHBOX:
+          case RequestSource::LENS_SIDE_PANEL_SEARCHBOX:
+            break;
+          case RequestSource::SEARCHBOX:
+          case RequestSource::CROS_APP_LIST:
+#if BUILDFLAG(IS_ANDROID)
+            if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE) {
+              HandleReplacement(std::string(), "chrome-mobile-ext-ansg",
+                                replacement, &url);
+              break;
+            }
+#endif
+            HandleReplacement(std::string(), "chrome-ext-ansg", replacement,
+                              &url);
+            break;
+        }
         break;
 
       case GOOGLE_UNESCAPED_SEARCH_TERMS: {
@@ -1426,10 +1490,13 @@ std::string TemplateURLRef::HandleReplacements(
                           replacement, &url);
         break;
 
-      case GOOGLE_IOS_SEARCH_LANGUAGE:
+      case GOOGLE_LANGUAGE:
 #if BUILDFLAG(IS_IOS)
-        HandleReplacement("hl", search_terms_data.GetApplicationLocale(),
-                          replacement, &url);
+        if (base::FeatureList::IsEnabled(
+                omnibox::kReportApplicationLanguageInSearchRequest)) {
+          HandleReplacement("hl", search_terms_data.GetApplicationLocale(),
+                            replacement, &url);
+        }
 #endif
         break;
 

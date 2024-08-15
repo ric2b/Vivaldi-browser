@@ -298,7 +298,9 @@ class ProtoTraceParserTest : public ::testing::Test {
 
   bool HasArg(ArgSetId set_id, StringId key_id, Variadic value) {
     const auto& args = storage_->arg_table();
-    RowMap rm = args.QueryToRowMap({args.arg_set_id().eq(set_id)}, {});
+    Query q;
+    q.constraints = {args.arg_set_id().eq(set_id)};
+    RowMap rm = args.QueryToRowMap(q);
     bool found = false;
     for (auto it = rm.IterateRows(); it; it.Next()) {
       if (args.key()[it.index()] == key_id) {
@@ -448,7 +450,9 @@ TEST_F(ProtoTraceParserTest, LoadGenericFtrace) {
   auto set_id = raw.arg_set_id()[raw.row_count() - 1];
 
   const auto& args = storage_->arg_table();
-  RowMap rm = args.QueryToRowMap({args.arg_set_id().eq(set_id)}, {});
+  Query q;
+  q.constraints = {args.arg_set_id().eq(set_id)};
+  RowMap rm = args.QueryToRowMap(q);
 
   auto row = rm.Get(0);
 
@@ -2901,7 +2905,8 @@ TEST_F(ProtoTraceParserTest, ConfigUuid) {
   ASSERT_TRUE(Tokenize().ok());
   context_.sorter->ExtractEventsForced();
 
-  SqlValue value = context_.metadata_tracker->GetMetadata(metadata::trace_uuid);
+  SqlValue value =
+      context_.metadata_tracker->GetMetadata(metadata::trace_uuid).value();
   EXPECT_STREQ(value.string_value, "00000000-0000-0002-0000-000000000001");
   ASSERT_TRUE(context_.uuid_found_in_trace);
 }
@@ -2914,7 +2919,8 @@ TEST_F(ProtoTraceParserTest, PacketUuid) {
   ASSERT_TRUE(Tokenize().ok());
   context_.sorter->ExtractEventsForced();
 
-  SqlValue value = context_.metadata_tracker->GetMetadata(metadata::trace_uuid);
+  SqlValue value =
+      context_.metadata_tracker->GetMetadata(metadata::trace_uuid).value();
   EXPECT_STREQ(value.string_value, "00000000-0000-0002-0000-000000000001");
   ASSERT_TRUE(context_.uuid_found_in_trace);
 }
@@ -2933,7 +2939,8 @@ TEST_F(ProtoTraceParserTest, PacketAndConfigUuid) {
   ASSERT_TRUE(Tokenize().ok());
   context_.sorter->ExtractEventsForced();
 
-  SqlValue value = context_.metadata_tracker->GetMetadata(metadata::trace_uuid);
+  SqlValue value =
+      context_.metadata_tracker->GetMetadata(metadata::trace_uuid).value();
   EXPECT_STREQ(value.string_value, "00000000-0000-0002-0000-000000000001");
   ASSERT_TRUE(context_.uuid_found_in_trace);
 }
@@ -2946,7 +2953,8 @@ TEST_F(ProtoTraceParserTest, ConfigPbtxt) {
   context_.sorter->ExtractEventsForced();
 
   SqlValue value =
-      context_.metadata_tracker->GetMetadata(metadata::trace_config_pbtxt);
+      context_.metadata_tracker->GetMetadata(metadata::trace_config_pbtxt)
+          .value();
   EXPECT_THAT(value.string_value, HasSubstr("size_kb: 42"));
 }
 

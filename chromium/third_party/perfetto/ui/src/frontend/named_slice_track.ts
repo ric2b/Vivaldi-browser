@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {Actions} from '../common/actions';
-import {getColorForSlice} from '../common/colorizer';
+import {getColorForSlice} from '../core/colorizer';
 import {STR_NULL} from '../trace_processor/query_result';
 
 import {
@@ -77,16 +76,21 @@ export abstract class NamedSliceTrack<
   }
 
   onSliceClick(args: OnSliceClickArgs<T['slice']>) {
-    globals.makeSelection(
-      Actions.selectChromeSlice({
+    globals.setLegacySelection(
+      {
+        kind: 'CHROME_SLICE',
         id: args.slice.id,
         trackKey: this.trackKey,
-
         // |table| here can be either 'slice' or 'annotation'. The
         // AnnotationSliceTrack overrides the onSliceClick and sets this to
         // 'annotation'
         table: 'slice',
-      }),
+      },
+      {
+        clearSearch: true,
+        pendingScrollId: undefined,
+        switchToCurrentSelectionTab: true,
+      },
     );
   }
 }

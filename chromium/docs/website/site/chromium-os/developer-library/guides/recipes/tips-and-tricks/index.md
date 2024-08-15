@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: tips-and-tricks
 title: Tips And Tricks for ChromiumOS Developers
 ---
@@ -279,6 +279,7 @@ Follow these instructions to make `sudo` request your password less frequently:
 cd /tmp
 cat > ./sudo_editor <<EOF
 #!/bin/sh
+[ "\$1" == "--" ] && shift                 # visudo might pass '--' arg
 echo Defaults \!tty_tickets > \$1          # Entering your password in one shell affects all shells
 echo Defaults timestamp_timeout=180 >> \$1 # Time between re-requesting your password, in minutes
 EOF
@@ -438,15 +439,15 @@ repo download -b test-branch 344778
 ```
 
 
-[ChromiumOS Developer Guide]: developer_guide.md
+[ChromiumOS Developer Guide]: /chromium-os/developer-library/guides/development/developer-guide/
 [ChromiumOS Developer FAQ]: https://dev.chromium.org/chromium-os/how-tos-and-troubleshooting/developer-faq
 [repo\_bash\_completion]: https://chromium.googlesource.com/chromiumos/platform/dev-util/+/HEAD/host/repo_bash_completion
 [repo Manifest format docs]: https://gerrit.googlesource.com/git-repo/+/HEAD/docs/manifest-format.md
 [installed depot\_tools]: https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up
 [depo_tools info page]: https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools.html
-[enable the chronos account]: developer_guide.md#Set-the-chronos-user-password
+[enable the chronos account]: /chromium-os/developer-library/guides/development/developer-guide/#Set-the-chronos-user-password
 [internal workstation notes]: https://g3doc.corp.google.com/company/teams/chrome/ops/chromeos/chromeos-infra/resources/glinux_build_sudo_config.md?cl=head#configuring-etcsudoers
 [sudoers man page]: https://www.sudo.ws/man/1.9.1/sudo.man.html
 [chromium-review.googlesource.com]: https://chromium-review.googlesource.com/
 [Silversearcher]: https://github.com/ggreer/the_silver_searcher
-[git and gerrit intro]: developer_guide.md
+[git and gerrit intro]: /chromium-os/developer-library/guides/development/developer-guide/

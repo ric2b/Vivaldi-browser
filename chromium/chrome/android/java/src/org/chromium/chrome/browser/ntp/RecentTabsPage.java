@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.ntp;
 import android.app.Activity;
 import android.content.res.Resources;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
 import android.view.LayoutInflater;
@@ -19,16 +18,18 @@ import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
-import org.chromium.chrome.browser.compositor.layouts.content.InvalidationAwareThumbnailProvider;
+import org.chromium.chrome.browser.tab_ui.InvalidationAwareThumbnailProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.chrome.browser.ui.native_page.NativePageHost;
+import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.ViewUtils;
 
 // Vivaldi
 import android.content.Intent;
+import android.graphics.Color;
 
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 
@@ -158,7 +159,7 @@ public class RecentTabsPage
 
     @Override
     public int getBackgroundColor() {
-        return Color.WHITE;
+        return SemanticColorUtils.getDefaultBgColor(mActivity);
     }
 
     @Override

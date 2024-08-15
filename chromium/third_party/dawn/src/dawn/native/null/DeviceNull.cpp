@@ -66,6 +66,15 @@ bool PhysicalDevice::SupportsFeatureLevel(FeatureLevel) const {
     return true;
 }
 
+ResultOrError<PhysicalDeviceSurfaceCapabilities> PhysicalDevice::GetSurfaceCapabilities(
+    const Surface* surface) const {
+    PhysicalDeviceSurfaceCapabilities capabilities;
+    capabilities.formats = {wgpu::TextureFormat::BGRA8Unorm};
+    capabilities.presentModes = {wgpu::PresentMode::Fifo};
+    capabilities.alphaModes = {wgpu::CompositeAlphaMode::Auto};
+    return capabilities;
+}
+
 MaybeError PhysicalDevice::InitializeImpl() {
     return {};
 }
@@ -92,8 +101,9 @@ void PhysicalDevice::SetupBackendDeviceToggles(TogglesState* deviceToggles) cons
 ResultOrError<Ref<DeviceBase>> PhysicalDevice::CreateDeviceImpl(
     AdapterBase* adapter,
     const UnpackedPtr<DeviceDescriptor>& descriptor,
-    const TogglesState& deviceToggles) {
-    return Device::Create(adapter, descriptor, deviceToggles);
+    const TogglesState& deviceToggles,
+    Ref<DeviceBase::DeviceLostEvent>&& lostEvent) {
+    return Device::Create(adapter, descriptor, deviceToggles, std::move(lostEvent));
 }
 
 void PhysicalDevice::PopulateBackendProperties(UnpackedPtr<AdapterProperties>& properties) const {
@@ -165,8 +175,10 @@ struct CopyFromStagingToBufferOperation : PendingOperation {
 // static
 ResultOrError<Ref<Device>> Device::Create(AdapterBase* adapter,
                                           const UnpackedPtr<DeviceDescriptor>& descriptor,
-                                          const TogglesState& deviceToggles) {
-    Ref<Device> device = AcquireRef(new Device(adapter, descriptor, deviceToggles));
+                                          const TogglesState& deviceToggles,
+                                          Ref<DeviceBase::DeviceLostEvent>&& lostEvent) {
+    Ref<Device> device =
+        AcquireRef(new Device(adapter, descriptor, deviceToggles, std::move(lostEvent)));
     DAWN_TRY(device->Initialize(descriptor));
     return device;
 }
@@ -223,11 +235,10 @@ ResultOrError<Ref<ShaderModuleBase>> Device::CreateShaderModuleImpl(
     DAWN_TRY(module->Initialize(parseResult, compilationMessages));
     return module;
 }
-ResultOrError<Ref<SwapChainBase>> Device::CreateSwapChainImpl(
-    Surface* surface,
-    SwapChainBase* previousSwapChain,
-    const SwapChainDescriptor* descriptor) {
-    return SwapChain::Create(this, surface, previousSwapChain, descriptor);
+ResultOrError<Ref<SwapChainBase>> Device::CreateSwapChainImpl(Surface* surface,
+                                                              SwapChainBase* previousSwapChain,
+                                                              const SurfaceConfiguration* config) {
+    return SwapChain::Create(this, surface, previousSwapChain, config);
 }
 ResultOrError<Ref<TextureBase>> Device::CreateTextureImpl(
     const UnpackedPtr<TextureDescriptor>& descriptor) {
@@ -235,7 +246,7 @@ ResultOrError<Ref<TextureBase>> Device::CreateTextureImpl(
 }
 ResultOrError<Ref<TextureViewBase>> Device::CreateTextureViewImpl(
     TextureBase* texture,
-    const TextureViewDescriptor* descriptor) {
+    const UnpackedPtr<TextureViewDescriptor>& descriptor) {
     return AcquireRef(new TextureView(texture, descriptor));
 }
 
@@ -270,7 +281,7 @@ MaybeError Device::CopyFromStagingToBufferImpl(BufferBase* source,
                                                uint64_t destinationOffset,
                                                uint64_t size) {
     if (IsToggleEnabled(Toggle::LazyClearResourceOnFirstUse)) {
-        destination->SetIsDataInitialized();
+        destination->SetInitialized(true);
     }
 
     auto operation = std::make_unique<CopyFromStagingToBufferOperation>();
@@ -507,8 +518,8 @@ MaybeError RenderPipeline::InitializeImpl() {
 ResultOrError<Ref<SwapChain>> SwapChain::Create(Device* device,
                                                 Surface* surface,
                                                 SwapChainBase* previousSwapChain,
-                                                const SwapChainDescriptor* descriptor) {
-    Ref<SwapChain> swapchain = AcquireRef(new SwapChain(device, surface, descriptor));
+                                                const SurfaceConfiguration* config) {
+    Ref<SwapChain> swapchain = AcquireRef(new SwapChain(device, surface, config));
     DAWN_TRY(swapchain->Initialize(previousSwapChain));
     return swapchain;
 }
@@ -533,10 +544,14 @@ MaybeError SwapChain::PresentImpl() {
     return {};
 }
 
-ResultOrError<Ref<TextureBase>> SwapChain::GetCurrentTextureImpl() {
+ResultOrError<SwapChainTextureInfo> SwapChain::GetCurrentTextureImpl() {
     TextureDescriptor textureDesc = GetSwapChainBaseTextureDescriptor(this);
     mTexture = AcquireRef(new Texture(GetDevice(), Unpack(&textureDesc)));
-    return mTexture;
+    SwapChainTextureInfo info;
+    info.texture = mTexture;
+    info.status = wgpu::SurfaceGetCurrentTextureStatus::Success;
+    info.suboptimal = false;
+    return info;
 }
 
 void SwapChain::DetachFromSurfaceImpl() {

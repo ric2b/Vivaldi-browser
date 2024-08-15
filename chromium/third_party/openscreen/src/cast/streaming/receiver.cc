@@ -28,39 +28,38 @@ using clock_operators::operator<<;
 #define RECEIVER_LOG(level) OSP_LOG_##level << "[SSRC:" << ssrc() << "] "
 #define RECEIVER_VLOG OSP_VLOG << "[SSRC:" << ssrc() << "] "
 
-Receiver::Receiver(Environment* environment,
-                   ReceiverPacketRouter* packet_router,
+Receiver::Receiver(Environment& environment,
+                   ReceiverPacketRouter& packet_router,
                    SessionConfig config)
-    : now_(environment->now_function()),
+    : now_(environment.now_function()),
       packet_router_(packet_router),
       config_(config),
       rtcp_session_(config.sender_ssrc, config.receiver_ssrc, now_()),
-      rtcp_parser_(&rtcp_session_),
-      rtcp_builder_(&rtcp_session_),
+      rtcp_parser_(rtcp_session_),
+      rtcp_builder_(rtcp_session_),
       stats_tracker_(config.rtp_timebase),
       rtp_parser_(config.sender_ssrc),
       rtp_timebase_(config.rtp_timebase),
       crypto_(config.aes_secret_key, config.aes_iv_mask),
       is_pli_enabled_(config.is_pli_enabled),
-      rtcp_alarm_(environment->now_function(), environment->task_runner()),
+      rtcp_alarm_(environment.now_function(), environment.task_runner()),
       smoothed_clock_offset_(ClockDriftSmoother::kDefaultTimeConstant),
-      consumption_alarm_(environment->now_function(),
-                         environment->task_runner()) {
-  OSP_CHECK(packet_router_);
+      consumption_alarm_(environment.now_function(),
+                         environment.task_runner()) {
   OSP_CHECK_EQ(checkpoint_frame(), FrameId::leader());
 
-  rtcp_buffer_.assign(environment->GetMaxPacketSize(), 0);
+  rtcp_buffer_.assign(environment.GetMaxPacketSize(), 0);
   OSP_CHECK_GT(rtcp_buffer_.size(), 0);
 
   rtcp_builder_.SetPlayoutDelay(config.target_playout_delay);
   playout_delay_changes_.emplace_back(FrameId::leader(),
                                       config.target_playout_delay);
 
-  packet_router_->OnReceiverCreated(rtcp_session_.sender_ssrc(), this);
+  packet_router_.OnReceiverCreated(rtcp_session_.sender_ssrc(), this);
 }
 
 Receiver::~Receiver() {
-  packet_router_->OnReceiverDestroyed(rtcp_session_.sender_ssrc());
+  packet_router_.OnReceiverDestroyed(rtcp_session_.sender_ssrc());
 }
 
 const SessionConfig& Receiver::config() const {
@@ -351,7 +350,7 @@ void Receiver::SendRtcp() {
   rtcp_builder_.IncludeFeedbackInNextPacket(std::move(packet_nacks),
                                             std::move(frame_acks));
   last_rtcp_send_time_ = now_();
-  packet_router_->SendRtcpPacket(
+  packet_router_.SendRtcpPacket(
       rtcp_builder_.BuildPacket(last_rtcp_send_time_, rtcp_buffer_));
 
   // Schedule the automatic sending of another RTCP packet, if this method is

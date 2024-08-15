@@ -11,9 +11,9 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
-#include "components/ad_blocker/adblock_metadata.h"
 #include "components/ad_blocker/adblock_rule_manager.h"
 #include "components/ad_blocker/adblock_rule_service.h"
+#include "components/ad_blocker/adblock_types.h"
 #include "ios/ad_blocker/adblock_rules_organizer.h"
 
 namespace adblock_filter {
@@ -57,13 +57,14 @@ class OrganizedRulesManager : public RuleManager::Observer {
   RuleService::IndexBuildResult build_result() const { return build_result_; }
 
  private:
-  void OnRulesSourceUpdated(const RuleSource& rule_source) override;
+  void OnRuleSourceUpdated(RuleGroup group,
+                           const ActiveRuleSource& rule_source) override;
   void OnRuleSourceDeleted(uint32_t source_id, RuleGroup group) override;
   void OnExceptionListStateChanged(RuleGroup group) override;
   void OnExceptionListChanged(RuleGroup group,
                               RuleManager::ExceptionsList list) override;
 
-  void ReadCompiledRules(const RuleSource& rule_source);
+  void ReadCompiledRules(const ActiveRuleSource& rule_source);
   void OnRulesRead(uint32_t source_id,
                    const std::string& checksum,
                    std::unique_ptr<base::Value> compiled_rules);
@@ -86,7 +87,7 @@ class OrganizedRulesManager : public RuleManager::Observer {
   bool is_loaded_;
   RuleService::IndexBuildResult build_result_ = RuleService::kBuildSuccess;
 
-  std::map<uint32_t, RuleSource> rule_sources_;
+  std::map<uint32_t, ActiveRuleSource> rule_sources_;
   base::FilePath rules_list_folder_;
 
   base::CancelableOnceCallback<void(base::Value)>

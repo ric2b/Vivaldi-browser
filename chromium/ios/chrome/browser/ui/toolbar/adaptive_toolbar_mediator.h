@@ -9,6 +9,10 @@
 
 #import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_menus_provider.h"
 
+// Vivaldi
+#import "ios/chrome/browser/ui/toolbar/vivaldi_adaptive_toolbar_viewcontroller_delegate.h"
+// End Vivaldi
+
 namespace web {
 class WebState;
 }
@@ -19,9 +23,14 @@ class TemplateURLService;
 class WebNavigationBrowserAgent;
 class WebStateList;
 
+#if defined(VIVALDI_BUILD)
+@interface AdaptiveToolbarMediator : NSObject <AdaptiveToolbarMenusProvider,
+                                VivaldiAdaptiveToolbarViewControllerDelegate>
+#else
 /// A mediator object that provides the relevant properties of a web state
 /// to a consumer.
 @interface AdaptiveToolbarMediator : NSObject <AdaptiveToolbarMenusProvider>
+#endif // End Vivaldi
 
 /// Whether the search icon should be in dark mode or not.
 @property(nonatomic, assign, getter=isIncognito) BOOL incognito;

@@ -170,7 +170,8 @@ func (c *Content) appendConsumedResultsForSkippedTests(results result.List,
 				for _, qd := range glob {
 					// If we don't have a result for the test, then append a
 					// synthetic 'consumed' result.
-					if !resultsForVariant.Contains(qd.Query.String()) {
+					if query := qd.Query.String(); !resultsForVariant.Contains(query) {
+						resultsForVariant.Add(query)
 						results = append(results, result.Result{
 							Query:  qd.Query,
 							Tags:   variant,
@@ -448,7 +449,9 @@ func (u *updater) chunk(in Chunk, isImmutable bool, progress *Progress) Chunk {
 	}
 
 	// Sort the expectations to keep things clean and tidy.
-	return Chunk{Comments: in.Comments, Expectations: newExpectations.Values()}
+	out := Chunk{Comments: in.Comments, Expectations: newExpectations.Values()}
+	out.Expectations.Sort()
+	return out
 }
 
 // expectation returns a new list of Expectations, based on the Expectation 'in',
@@ -519,7 +522,6 @@ func (u *updater) addExpectations(out container.Map[string, Expectation], in Exp
 	if !out.Contains(keyOf(in)) && len(expectations) == 0 {
 		switch {
 		case somePass && someConsumed:
-			fmt.Println("\n", strings.Join(out.Keys(), "\n"))
 			u.diag(Note, in.Line, "expectation is partly covered by previous expectations and the remaining tests all pass")
 		case someConsumed:
 			u.diag(Note, in.Line, "expectation is fully covered by previous expectations")
@@ -595,13 +597,14 @@ func (u *updater) addNewExpectations() error {
 
 	// Create chunks for any flakes and failures, in that order.
 	for _, group := range []struct {
-		results []Expectation
+		results Expectations
 		comment string
 	}{
 		{flakes, newFlakesComment},
 		{failures, newFailuresComment},
 	} {
 		if len(group.results) > 0 {
+			group.results.Sort()
 			u.out.Chunks = append(u.out.Chunks, Chunk{
 				Comments: []string{
 					"################################################################################",

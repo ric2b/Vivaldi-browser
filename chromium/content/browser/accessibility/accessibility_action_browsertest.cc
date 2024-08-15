@@ -12,7 +12,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/run_until.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "content/browser/accessibility/browser_accessibility.h"
@@ -30,6 +32,7 @@
 #include "content/test/content_browser_test_utils_internal.h"
 #include "net/base/data_url.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/features_generated.h"
 #include "ui/accessibility/accessibility_switches.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_position.h"
@@ -47,8 +50,7 @@ class AccessibilityActionBrowserTest : public ContentBrowserTest {
   ~AccessibilityActionBrowserTest() override {}
 
   void SetUp() override {
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        ::switches::kDisableAXMenuList);
+    feature_list_.InitWithFeatures({blink::features::kPermissionElement}, {});
     ContentBrowserTest::SetUp();
   }
 
@@ -88,7 +90,7 @@ class AccessibilityActionBrowserTest : public ContentBrowserTest {
     GURL html_data_url("data:text/html," +
                        base::EscapeQueryParamValue(html, false));
     EXPECT_TRUE(NavigateToURL(shell(), html_data_url));
-    // TODO(crbug.com/1337353): This should ASSERT_TRUE the result, but was
+    // TODO(crbug.com/40848306): This should ASSERT_TRUE the result, but was
     // causing flakes when doing so.
     std::ignore = waiter.WaitForNotification();
   }
@@ -159,6 +161,8 @@ class AccessibilityActionBrowserTest : public ContentBrowserTest {
     }
     return nullptr;
   }
+
+  base::test::ScopedFeatureList feature_list_;
 };
 
 }  // namespace
@@ -204,6 +208,46 @@ IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest, DoDefaultAction) {
   BrowserAccessibility* focus = GetManager()->GetFocus();
   ASSERT_NE(nullptr, focus);
   EXPECT_EQ(target->GetId(), focus->GetId());
+}
+
+IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest,
+                       DoDefaultActionOnObjectWithRole) {
+  LoadInitialAccessibilityTreeFromHtml(R"HTML(
+      <button>Click1</button>
+      <div role="link" tabindex=0>Click2</div>
+      <div role="link" tabindex=0>Click3</div>
+      <p>Initial text</p>
+      <script>
+        document.querySelector('button').addEventListener('click', () => {
+          document.querySelector('p').setAttribute('aria-label', 'Success1');
+        });
+        document.querySelectorAll('div')[0].addEventListener('click', () => {
+          document.querySelector('p').setAttribute('aria-label', 'Success2');
+        });
+        document.querySelectorAll('div')[1].addEventListener('click', () => {
+          document.querySelector('p').setAttribute('aria-label', 'Failure');
+        });
+      </script>
+      )HTML");
+
+  ui::AXActionData action_data;
+  action_data.action = ax::mojom::Action::kDoDefault;
+
+  AccessibilityNotificationWaiter waiter1(
+      shell()->web_contents(), ui::kAXModeComplete, ax::mojom::Event::kClicked);
+  action_data.target_role = ax::mojom::Role::kButton;
+  GetManager()->delegate()->AccessibilityPerformAction(action_data);
+  ASSERT_TRUE(waiter1.WaitForNotification());
+  WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
+                                                "Success1");
+
+  AccessibilityNotificationWaiter waiter2(
+      shell()->web_contents(), ui::kAXModeComplete, ax::mojom::Event::kClicked);
+  action_data.target_role = ax::mojom::Role::kLink;
+  GetManager()->delegate()->AccessibilityPerformAction(action_data);
+  ASSERT_TRUE(waiter2.WaitForNotification());
+  WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
+                                                "Success2");
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest, FocusAction) {
@@ -458,7 +502,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityCanvasActionBrowserTest,
                                           ui::kAXModeComplete,
                                           ax::mojom::Event::kImageFrameUpdated);
   GetManager()->GetImageData(*target, gfx::Size());
-  // TODO(crbug.com/1337353): This should ASSERT_TRUE the result, but was
+  // TODO(crbug.com/40848306): This should ASSERT_TRUE the result, but was
   // causing flakes when doing so.
   std::ignore = waiter2.WaitForNotification();
 
@@ -505,7 +549,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityCanvasActionBrowserTest,
                                           ui::kAXModeComplete,
                                           ax::mojom::Event::kImageFrameUpdated);
   GetManager()->GetImageData(*target, gfx::Size(4, 4));
-  // TODO(crbug.com/1337353): This should ASSERT_TRUE the result, but was
+  // TODO(crbug.com/40848306): This should ASSERT_TRUE the result, but was
   // causing flakes when doing so.
   std::ignore = waiter2.WaitForNotification();
 
@@ -1299,7 +1343,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest, StitchChildTree) {
   link->AccessibilityPerformAction(action_data);
   ASSERT_TRUE(waiter.WaitForNotification());
 
-  // TODO(crbug.com/1468416): Platform nodes are not yet supported in
+  // TODO(crbug.com/40924888): Platform nodes are not yet supported in
   // stitched child trees but will be after the AX Views project is completed.
   // For now, we compare with `ui::AXNode`s.
   const ui::AXNode* child_tree_root_node =
@@ -1352,7 +1396,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest, ClickSVG) {
 #endif  // !BUILDFLAG(IS_ANDROID)
 }
 
-// TODO(crbug.com/1476956) Disabled due to flakiness.
+// TODO(crbug.com/40928581) Disabled due to flakiness.
 IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest,
                        DISABLED_ClickAXNodeGeneratedFromCSSContent) {
   LoadInitialAccessibilityTreeFromHtml(R"HTML(
@@ -1373,13 +1417,11 @@ IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest,
   ASSERT_TRUE(click_waiter.WaitForNotification());
 }
 
-// These tests only makes sense on platforms where the popup menu is implemented
-// internally as an HTML page in a popup, not where it's a native popup.
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(USE_ATK)
-IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest,
-                       OpenSelectPopupWithNoAXMenuList) {
+// Only run this test on platforms where Blink expands and draws a popup.
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_IOS)
+IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest, OpenSelectPopup) {
   LoadInitialAccessibilityTreeFromHtml(R"HTML(
-      <head><title>No AXMenuList</title></head>
+      <head><title>OpenSelectPopup</title></head>
       <body>
         <select>
           <option selected>One</option>
@@ -1392,9 +1434,20 @@ IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest,
   BrowserAccessibility* target =
       FindNode(ax::mojom::Role::kComboBoxSelect, "One");
   ASSERT_NE(nullptr, target);
-
-  EXPECT_EQ(0U, target->PlatformChildCount());
-  EXPECT_EQ(nullptr, FindNode(ax::mojom::Role::kListBox, ""));
+  EXPECT_EQ(1U, target->InternalChildCount());
+  EXPECT_TRUE(target->HasState(ax::mojom::State::kCollapsed));
+  EXPECT_FALSE(target->HasState(ax::mojom::State::kExpanded));
+#if BUILDFLAG(IS_WIN)
+  // On Windows, a collapsed menulist is not in the platform tree, to prevent
+  // screen readers from reading all options -- AXNode::IsLeaf() returns true.
+  EXPECT_EQ(nullptr, FindNode(ax::mojom::Role::kMenuListPopup, ""));
+#else
+  EXPECT_NE(nullptr, FindNode(ax::mojom::Role::kMenuListPopup, ""));
+#endif
+  BrowserAccessibility* closed_popup = target->InternalGetChild(0);
+  EXPECT_EQ(ax::mojom::Role::kMenuListPopup, closed_popup->GetRole());
+  EXPECT_TRUE(closed_popup->HasState(ax::mojom::State::kInvisible));
+  EXPECT_EQ(3U, closed_popup->InternalChildCount());
 
   // Call DoDefaultAction.
   AccessibilityNotificationWaiter waiter2(
@@ -1405,44 +1458,47 @@ IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest,
   WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
                                                 "Three");
 
-  ASSERT_EQ(1U, target->PlatformChildCount());
-  BrowserAccessibility* popup_web_area = target->PlatformGetChild(0);
-  EXPECT_EQ(ax::mojom::Role::kGroup, popup_web_area->GetRole());
-
-  BrowserAccessibility* listbox = FindNode(ax::mojom::Role::kListBox, "");
-  ASSERT_TRUE(listbox);
-  EXPECT_EQ(3U, listbox->PlatformChildCount());
+  EXPECT_TRUE(target->HasState(ax::mojom::State::kExpanded));
+  EXPECT_FALSE(target->HasState(ax::mojom::State::kCollapsed));
+  ASSERT_EQ(1U, target->InternalChildCount());
+  BrowserAccessibility* open_popup = target->PlatformGetChild(0);
+  EXPECT_EQ(1U, target->InternalChildCount());
+  EXPECT_EQ(ax::mojom::Role::kMenuListPopup, open_popup->GetRole());
+  EXPECT_FALSE(open_popup->HasState(ax::mojom::State::kInvisible));
+  EXPECT_EQ(3U, open_popup->InternalChildCount());
 }
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_MAC) && !(BUILDFLAG(IS_IOS)
 
-// This test was added after a bug was causing popup's accessible nodes to not
-// be added to the tree when the AXMenuList feature was disabled to prevent a
-// similar regression to occur again.
-IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest,
-                       OpenInputColorPopupWithNoAXMenuList) {
+IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest, FocusPermissionElement) {
   LoadInitialAccessibilityTreeFromHtml(R"HTML(
       <body>
-        <input type="color" aria-label="color picker">
+        <permission type="invalid" aria-label="invalid-pepc">
+        <permission type="camera" aria-label="valid-pepc">
       </body>
       )HTML");
 
-  BrowserAccessibility* target =
-      FindNode(ax::mojom::Role::kColorWell, "color picker");
-  ASSERT_NE(nullptr, target);
+  BrowserAccessibility* invalid_pepc =
+      FindNode(ax::mojom::Role::kButton, "invalid-pepc");
+  BrowserAccessibility* valid_pepc =
+      FindNode(ax::mojom::Role::kButton, "valid-pepc");
+  ASSERT_NE(nullptr, invalid_pepc);
+  ASSERT_NE(nullptr, valid_pepc);
 
-  EXPECT_EQ(0U, target->PlatformChildCount());
-
-  // Call DoDefaultAction.
   AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete, ax::mojom::Event::kClicked);
-  GetManager()->DoDefaultAction(*target);
+      shell()->web_contents(), ui::kAXModeComplete, ax::mojom::Event::kFocus);
+
+  ui::AXActionData action_data;
+  action_data.action = ax::mojom::Action::kFocus;
+
+  invalid_pepc->AccessibilityPerformAction(action_data);
+  ASSERT_FALSE(waiter.WaitForNotificationWithTimeout(base::Milliseconds(500)));
+  ASSERT_FALSE(invalid_pepc->IsFocused());
+  valid_pepc->AccessibilityPerformAction(action_data);
+
+  // Only the valid permission element is focusable.
   ASSERT_TRUE(waiter.WaitForNotification());
-
-  WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
-                                                "Format toggler");
-
-  ASSERT_EQ(1U, target->PlatformChildCount());
-  BrowserAccessibility* popup_web_area = target->PlatformGetChild(0);
-  EXPECT_EQ(ax::mojom::Role::kGroup, popup_web_area->GetRole());
+  ASSERT_EQ(waiter.event_target_id(), valid_pepc->GetId());
+  ASSERT_TRUE(valid_pepc->IsFocused());
 }
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(USE_ATK)
+
 }  // namespace content

@@ -8,3 +8,5 @@ UNKNOWN focusable
 ++++++++++UNKNOWN label='Link inside the dialog.'
 ++++UNKNOWN hidden
 ++++++UNKNOWN hidden
+++++++++UNKNOWN hidden
+++++++++++UNKNOWN hidden

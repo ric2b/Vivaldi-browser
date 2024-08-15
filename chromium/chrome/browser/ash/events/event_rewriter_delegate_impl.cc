@@ -75,6 +75,10 @@ EventRewriterDelegateImpl::GetKeyboardRemappedModifierValue(
     const std::string& pref_name) const {
   // `modifier_key` and `device_id` are unused when the flag is disabled.
   if (!ash::features::IsInputDeviceSettingsSplitEnabled()) {
+    if (pref_name.empty()) {
+      return std::nullopt;
+    }
+
     // If we're at the login screen, try to get the pref from the global prefs
     // dictionary.
     int value;
@@ -347,6 +351,13 @@ EventRewriterDelegateImpl::GetExtendedFkeySetting(int device_id,
     return settings->f11;
   }
   return settings->f12;
+}
+
+void EventRewriterDelegateImpl::NotifySixPackRewriteBlockedByFnKey(
+    ui::KeyboardCode key_code,
+    ui::mojom::SixPackShortcutModifier modifier) {
+  input_device_settings_notification_controller_->ShowSixPackKeyRewritingNudge(
+      key_code, modifier);
 }
 
 }  // namespace ash

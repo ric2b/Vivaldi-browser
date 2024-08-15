@@ -9,7 +9,6 @@
 #import "base/memory/raw_ptr.h"
 #import "base/memory/scoped_refptr.h"
 #import "base/strings/sys_string_conversions.h"
-#import "base/test/scoped_feature_list.h"
 #import "base/time/default_clock.h"
 #import "components/bookmarks/browser/bookmark_utils.h"
 #import "components/bookmarks/browser/core_bookmark_model.h"
@@ -561,7 +560,7 @@ TEST_F(PopupMenuMediatorTest, TestBookmarksToolsMenuButtons) {
       ios::AccountBookmarkModelFactory::GetForBrowserState(
           browser_state_.get()));
   ios::BookmarkModelFactory::GetForBrowserState(browser_state_.get())
-      ->RemoveAllUserBookmarks();
+      ->RemoveAllUserBookmarks(FROM_HERE);
   EXPECT_TRUE(HasItem(consumer, kToolsMenuAddToBookmarks, /*enabled=*/YES));
   EXPECT_FALSE(HasItem(consumer, kToolsMenuEditBookmark, /*enabled=*/YES));
 }

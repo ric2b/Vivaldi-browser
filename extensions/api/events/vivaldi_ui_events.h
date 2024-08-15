@@ -77,19 +77,19 @@ class VivaldiUIEvents : public VivaldiEventHooks {
     bool eat_next_right_mouseup = false;
   };
 
-  bool CheckMouseMove(content::RenderWidgetHostViewBase* root_view,
+  bool CheckMouseMove(content::RenderWidgetHostViewInput* root_view,
                       const blink::WebMouseEvent& mouse_event);
-  bool CheckRockerGesture(content::RenderWidgetHostViewBase* root_view,
+  bool CheckRockerGesture(content::RenderWidgetHostViewInput* root_view,
                           const blink::WebMouseEvent& mouse_event);
-  bool CheckMouseGesture(content::RenderWidgetHostViewBase* root_view,
+  bool CheckMouseGesture(content::RenderWidgetHostViewInput* root_view,
                          const blink::WebMouseEvent& mouse_event);
-  void CheckWebviewClick(content::RenderWidgetHostViewBase* root_view,
+  void CheckWebviewClick(content::RenderWidgetHostViewInput* root_view,
                          const blink::WebMouseEvent& mouse_event);
-  bool CheckBackForward(content::RenderWidgetHostViewBase* root_view,
+  bool CheckBackForward(content::RenderWidgetHostViewInput* root_view,
                         const blink::WebMouseEvent& mouse_event);
   bool HandleMouseGestureMove(const blink::WebMouseEvent& mouse_event);
 
-  void StartMouseGestureDetection(content::RenderWidgetHostViewBase* root_view,
+  void StartMouseGestureDetection(content::RenderWidgetHostViewInput* root_view,
                                   const blink::WebMouseEvent& mouse_event,
                                   bool with_alt);
   bool FinishMouseOrWheelGesture(bool with_alt);
@@ -100,15 +100,15 @@ class VivaldiUIEvents : public VivaldiEventHooks {
       content::RenderWidgetHostImpl* widget_host,
       const content::NativeWebKeyboardEvent& event) override;
 
-  bool DoHandleMouseEvent(content::RenderWidgetHostViewBase* root_view,
+  bool DoHandleMouseEvent(content::RenderWidgetHostViewInput* root_view,
                           const blink::WebMouseEvent& event) override;
 
-  bool DoHandleWheelEvent(content::RenderWidgetHostViewBase* root_view,
+  bool DoHandleWheelEvent(content::RenderWidgetHostViewInput* root_view,
                           const blink::WebMouseWheelEvent& event,
                           const ui::LatencyInfo& latency) override;
 
   bool DoHandleWheelEventAfterChild(
-      content::RenderWidgetHostViewBase* root_view,
+      content::RenderWidgetHostViewInput* root_view,
       const blink::WebMouseWheelEvent& event) override;
 
   bool DoHandleDragEnd(content::WebContents* web_contents,

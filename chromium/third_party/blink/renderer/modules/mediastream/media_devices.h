@@ -69,22 +69,18 @@ class MODULES_EXPORT MediaDevices final
   explicit MediaDevices(Navigator&);
   ~MediaDevices() override;
 
-  ScriptPromiseTyped<IDLSequence<MediaDeviceInfo>> enumerateDevices(
-      ScriptState*,
-      ExceptionState&);
+  ScriptPromise<IDLSequence<MediaDeviceInfo>> enumerateDevices(ScriptState*,
+                                                               ExceptionState&);
   MediaTrackSupportedConstraints* getSupportedConstraints() const;
-  ScriptPromiseTyped<MediaStream> getUserMedia(
-      ScriptState*,
-      const UserMediaStreamConstraints*,
-      ExceptionState&);
-  ScriptPromiseTyped<IDLSequence<MediaStream>> getAllScreensMedia(
-      ScriptState*,
-      ExceptionState&);
+  ScriptPromise<MediaStream> getUserMedia(ScriptState*,
+                                          const UserMediaStreamConstraints*,
+                                          ExceptionState&);
+  ScriptPromise<IDLSequence<MediaStream>> getAllScreensMedia(ScriptState*,
+                                                             ExceptionState&);
 
-  ScriptPromiseTyped<MediaStream> getDisplayMedia(
-      ScriptState*,
-      const DisplayMediaStreamOptions*,
-      ExceptionState&);
+  ScriptPromise<MediaStream> getDisplayMedia(ScriptState*,
+                                             const DisplayMediaStreamOptions*,
+                                             ExceptionState&);
 
   void setCaptureHandleConfig(ScriptState*,
                               const CaptureHandleConfig*,
@@ -94,11 +90,12 @@ class MODULES_EXPORT MediaDevices final
   // with the browser process through the mojom pipe that `this` owns.
   // TODO(crbug.com/1332628): Move most of the logic into
   // sub_capture_target.cc/h, leaving only communication in MediaDevices.
-  ScriptPromiseTyped<CropTarget> ProduceCropTarget(ScriptState*,
-                                                   Element*,
-                                                   ExceptionState&);
-  ScriptPromiseTyped<RestrictionTarget>
-  ProduceRestrictionTarget(ScriptState*, Element*, ExceptionState&);
+  ScriptPromise<CropTarget> ProduceCropTarget(ScriptState*,
+                                              Element*,
+                                              ExceptionState&);
+  ScriptPromise<RestrictionTarget> ProduceRestrictionTarget(ScriptState*,
+                                                            Element*,
+                                                            ExceptionState&);
 
   // EventTarget overrides.
   const AtomicString& InterfaceName() const override;
@@ -133,7 +130,7 @@ class MODULES_EXPORT MediaDevices final
   FRIEND_TEST_ALL_PREFIXES(MediaDevicesTest, ObserveDeviceChangeEvent);
 
   template <typename IDLResolvedType>
-  ScriptPromiseTyped<IDLResolvedType> SendUserMediaRequest(
+  ScriptPromise<IDLResolvedType> SendUserMediaRequest(
       UserMediaRequestType,
       ScriptPromiseResolverWithTracker<UserMediaRequestResult,
                                        IDLResolvedType>*,
@@ -159,7 +156,7 @@ class MODULES_EXPORT MediaDevices final
   void OnDispatcherHostConnectionError();
   mojom::blink::MediaDevicesDispatcherHost& GetDispatcherHost(LocalFrame*);
 
-#if !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   // Manage the window of opportunity that occurs immediately after
   // display-capture starts. The application can call
   // CaptureController.setFocusBehavior() on the microtask where the
@@ -194,13 +191,12 @@ class MODULES_EXPORT MediaDevices final
                                               IDLSequence<MediaDeviceInfo>>>>
       enumerate_device_requests_;
 
-#if !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   using ElementToCropTargetResolverMap =
-      HeapHashMap<Member<Element>,
-                  Member<ScriptPromiseResolverTyped<CropTarget>>>;
+      HeapHashMap<Member<Element>, Member<ScriptPromiseResolver<CropTarget>>>;
   using ElementToRestrictionTargetResolverMap =
       HeapHashMap<Member<Element>,
-                  Member<ScriptPromiseResolverTyped<RestrictionTarget>>>;
+                  Member<ScriptPromiseResolver<RestrictionTarget>>>;
 
   // 1. When CropTarget.fromElement() is first called for an Element,
   //    it has no CropTarget associated with it, and similarly for

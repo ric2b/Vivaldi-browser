@@ -32,6 +32,7 @@
 
 #include "dawn/common/Log.h"
 #include "dawn/wire/client/Client.h"
+#include "dawn/wire/client/webgpu.h"
 #include "partition_alloc/pointers/raw_ptr.h"
 
 namespace dawn::wire::client {
@@ -73,20 +74,35 @@ class RequestDeviceEvent : public TrackedEvent {
             mStatus = WGPURequestDeviceStatus_InstanceDropped;
             mMessage = "A valid external Instance reference no longer exists.";
         }
-        if (mStatus != WGPURequestDeviceStatus_Success && mDevice != nullptr) {
-            // If there was an error, we may need to reclaim the device allocation, otherwise the
-            // device is returned to the user who owns it.
-            mDevice->GetClient()->Free(mDevice.get());
-            mDevice = nullptr;
-        }
+
+        Device* device = mDevice.ExtractAsDangling();
         if (mCallback) {
-            mCallback(mStatus, ToAPI(mDevice), mMessage ? mMessage->c_str() : nullptr, mUserdata);
+            // Callback needs to happen before device lost handling to ensure resolution order.
+            mCallback(mStatus, ToAPI(mStatus == WGPURequestDeviceStatus_Success ? device : nullptr),
+                      mMessage ? mMessage->c_str() : nullptr, mUserdata.ExtractAsDangling());
+        }
+
+        if (mStatus != WGPURequestDeviceStatus_Success) {
+            // If there was an error and we didn't return a device, we need to call the device lost
+            // callback and reclaim the device allocation.
+            if (mStatus == WGPURequestDeviceStatus_InstanceDropped) {
+                device->HandleDeviceLost(WGPUDeviceLostReason_InstanceDropped,
+                                         "A valid external Instance reference no longer exists.");
+            } else {
+                device->HandleDeviceLost(WGPUDeviceLostReason_FailedCreation,
+                                         "Device failed at creation.");
+            }
+        }
+
+        if (mCallback == nullptr) {
+            // If there's no callback, clean up the resources.
+            device->Release();
+            mUserdata.ExtractAsDangling();
         }
     }
 
     WGPURequestDeviceCallback mCallback;
-    // TODO(https://crbug.com/dawn/2345): Investigate `DanglingUntriaged` in dawn/wire.
-    raw_ptr<void, DanglingUntriaged> mUserdata;
+    raw_ptr<void> mUserdata;
 
     // Note that the message is optional because we want to return nullptr when it wasn't set
     // instead of a pointer to an empty string.
@@ -97,8 +113,7 @@ class RequestDeviceEvent : public TrackedEvent {
     // throughout the duration of a RequestDeviceEvent because the Event essentially takes
     // ownership of it until either an error occurs at which point the Event cleans it up, or it
     // returns the device to the user who then takes ownership as the Event goes away.
-    // TODO(https://crbug.com/dawn/2345): Investigate `DanglingUntriaged` in dawn/wire.
-    raw_ptr<Device, DanglingUntriaged> mDevice = nullptr;
+    raw_ptr<Device> mDevice = nullptr;
 };
 
 }  // anonymous namespace
@@ -223,16 +238,6 @@ void Adapter::GetProperties(WGPUAdapterProperties* properties) const {
     ptr += driverDescriptionCLen;
 }
 
-void ClientAdapterPropertiesFreeMembers(WGPUAdapterProperties properties) {
-    // This single delete is enough because everything is a single allocation.
-    delete[] properties.vendorName;
-}
-
-void ClientAdapterPropertiesMemoryHeapsFreeMembers(
-    WGPUAdapterPropertiesMemoryHeaps memoryHeapProperties) {
-    delete[] memoryHeapProperties.heapInfo;
-}
-
 void Adapter::RequestDevice(const WGPUDeviceDescriptor* descriptor,
                             WGPURequestDeviceCallback callback,
                             void* userdata) {
@@ -253,13 +258,17 @@ WGPUFuture Adapter::RequestDeviceF(const WGPUDeviceDescriptor* descriptor,
         return {futureIDInternal};
     }
 
-    // Ensure the device lost callback isn't serialized as part of the command, as it cannot be
-    // passed between processes.
+    // Ensure callbacks are not serialized as part of the command, as they cannot be passed between
+    // processes.
     WGPUDeviceDescriptor wireDescriptor = {};
     if (descriptor) {
         wireDescriptor = *descriptor;
         wireDescriptor.deviceLostCallback = nullptr;
         wireDescriptor.deviceLostUserdata = nullptr;
+        wireDescriptor.deviceLostCallbackInfo.callback = nullptr;
+        wireDescriptor.deviceLostCallbackInfo.userdata = nullptr;
+        wireDescriptor.uncapturedErrorCallbackInfo.callback = nullptr;
+        wireDescriptor.uncapturedErrorCallbackInfo.userdata = nullptr;
     }
 
     AdapterRequestDeviceCmd cmd;
@@ -267,6 +276,7 @@ WGPUFuture Adapter::RequestDeviceF(const WGPUDeviceDescriptor* descriptor,
     cmd.eventManagerHandle = GetEventManagerHandle();
     cmd.future = {futureIDInternal};
     cmd.deviceObjectHandle = device->GetWireHandle();
+    cmd.deviceLostFuture = device->GetDeviceLostFuture();
     cmd.descriptor = &wireDescriptor;
 
     client->SerializeCommand(cmd);
@@ -295,4 +305,26 @@ WGPUDevice Adapter::CreateDevice(const WGPUDeviceDescriptor*) {
     return nullptr;
 }
 
+bool Adapter::GetFormatCapabilities(WGPUTextureFormat format,
+                                    WGPUFormatCapabilities* capabilities) {
+    dawn::ErrorLog() << "adapter.GetFormatCapabilities not supported with dawn_wire.";
+    return false;
+}
+
 }  // namespace dawn::wire::client
+
+DAWN_WIRE_EXPORT void wgpuDawnWireClientAdapterPropertiesFreeMembers(
+    WGPUAdapterProperties properties) {
+    // This single delete is enough because everything is a single allocation.
+    delete[] properties.vendorName;
+}
+
+DAWN_WIRE_EXPORT void wgpuDawnWireClientAdapterPropertiesMemoryHeapsFreeMembers(
+    WGPUAdapterPropertiesMemoryHeaps memoryHeapProperties) {
+    delete[] memoryHeapProperties.heapInfo;
+}
+
+DAWN_WIRE_EXPORT void wgpuDawnWireClientDrmFormatCapabilitiesFreeMembers(
+    WGPUDrmFormatCapabilities capabilities) {
+    delete[] capabilities.properties;
+}

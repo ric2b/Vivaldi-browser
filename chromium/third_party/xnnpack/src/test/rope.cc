@@ -3,31 +3,27 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <xnnpack.h>
+#include <xnnpack/node-type.h>
+#include <xnnpack/operator.h>
+#include <xnnpack/subgraph.h>
+
 #include <algorithm>  // For std::generate, std::min.
 #include <array>      // For std::array.
 #include <cmath>      // For std::lrintf.
 #include <cstddef>    // For size_t.
 #include <cstdint>    // For uint32_t.
-#include <limits>     // For std::numeric_limits.
 #include <memory>     // For std::unique_ptr.
-#include <numeric>    // For std::accumulate.
-#include <random>     // For std::random_device, std::mt19937, std::uniform_real_distribution.
+#include <random>     // For std::uniform_real_distribution.
 #include <vector>     // For std::vector.
 
-#include <fp16/fp16.h>
+#include "replicable_random_device.h"
 #include <gtest/gtest.h>
-
-#include <xnnpack.h>
-#include <xnnpack/operator.h>
-#include <xnnpack/requantization.h>
-#include <xnnpack/subgraph.h>
+#include <fp16/fp16.h>
 
 template <class T> class RoPETestBase : public ::testing::Test {
-protected:
-  RoPETestBase()
-  {
-    random_device = std::make_unique<std::random_device>();
-    rng = std::mt19937((*random_device)());
+ protected:
+  RoPETestBase() {
     f32dist = std::uniform_real_distribution<float>(0.1f, 1.0f);
     dim_dist = std::uniform_int_distribution<size_t>(5, 15);
 
@@ -39,14 +35,15 @@ protected:
     heads = dim_dist(rng);
     channels = dim_dist(rng) * 2;  // ensure the number of channels is even
 
-    input = std::vector<T>(XNN_EXTRA_BYTES / sizeof(T) + batch_size * tokens * heads * channels);
-    weights = std::vector<T>(XNN_EXTRA_BYTES / sizeof(T) + max_tokens * channels);
+    input = std::vector<T>(XNN_EXTRA_BYTES / sizeof(T) +
+                           batch_size * tokens * heads * channels);
+    weights =
+        std::vector<T>(XNN_EXTRA_BYTES / sizeof(T) + max_tokens * channels);
     operator_output = std::vector<T>(batch_size * tokens * heads * channels);
     subgraph_output = std::vector<T>(operator_output.size());
   }
 
-  std::unique_ptr<std::random_device> random_device;
-  std::mt19937 rng;
+  xnnpack::ReplicableRandomDevice rng;
   std::uniform_real_distribution<float> f32dist;
   std::uniform_int_distribution<size_t> dim_dist;
 
@@ -163,8 +160,8 @@ TEST_F(RoPETestF16, matches_operator_api)
 
   std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
   std::generate(weights.begin(), weights.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-  std::fill(operator_output.begin(), operator_output.end(), fp16_ieee_from_fp32_value(nanf("")));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), fp16_ieee_from_fp32_value(nanf("")));
+  std::fill(operator_output.begin(), operator_output.end(), UINT16_C(0x7E00) /* NaN */);
+  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT16_C(0x7E00) /* NaN */);
 
   const xnn_status status = xnn_create_rope_nthc_f16(max_tokens, /*flags=*/0, &op);
   if (status == xnn_status_unsupported_hardware) {

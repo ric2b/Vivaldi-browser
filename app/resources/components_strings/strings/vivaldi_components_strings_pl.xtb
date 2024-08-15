@@ -169,7 +169,6 @@
 <translation id="7353601530677266744">Wiersz poleceń</translation>
 <translation id="7364115444476960850">Strona, którą próbujesz odwiedzić została zablokowana przez <ph name="BLOCKER_NAME" /> przeglądarki Vivaldi</translation>
 <translation id="7419106976560586862">Ścieżka profilu</translation>
-<translation id="7445762425076701745">Nie można w pełni zweryfikować tożsamości serwera, z którym nawiązano połączenie. Nawiązano połączenie z serwerem przy użyciu nazwy obowiązującej jedynie w twojej sieci i której własności zewnętrzny urząd certyfikacji nie jest w stanie zweryfikować. Niektóre urzędy certyfikacji wydają certyfikaty dla takich nazw bez względu na to, że nie można upewnić się, iż nawiązano połączenie z witryną, z którą zamierzano, a nie z intruzem.</translation>
 <translation id="7455133967321480974">Użyj globalnej wartości domyślnej (Blokuj)</translation>
 <translation id="7518003948725431193">Nie znaleziono strony internetowej pod adresem <ph name="URL" /></translation>
 <translation id="7549584377607005141">Do poprawnego wyświetlenia tej strony internetowej wymagane są dane wpisane przez Ciebie wcześniej. Możesz wysłać je ponownie, ale spowoduje to powtórzenie wszystkich działań wykonanych poprzednio przez stronę.</translation>

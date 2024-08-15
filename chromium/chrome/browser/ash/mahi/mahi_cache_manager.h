@@ -8,6 +8,7 @@
 #include <map>
 #include <string>
 
+#include "base/timer/timer.h"
 #include "ui/gfx/image/image_skia.h"
 #include "url/gurl.h"
 
@@ -26,9 +27,9 @@ class MahiCacheManager {
     MahiData();
     MahiData(const std::string& url,
              const std::u16string& title,
-             const std::optional<gfx::ImageSkia>& favicon_image,
              const std::u16string& page_content,
-             const std::u16string& summary,
+             const std::optional<gfx::ImageSkia>& favicon_image,
+             const std::optional<std::u16string>& summary,
              const std::vector<MahiQA>& previous_qa);
     MahiData(const MahiData&);
     MahiData& operator=(const MahiData&);
@@ -38,14 +39,17 @@ class MahiCacheManager {
     std::string url;
     // The title of the page.
     std::u16string title;
-    // The favicon of the page.
-    std::optional<gfx::ImageSkia> favicon_image;
     // The extracted content of the page.
     std::u16string page_content;
+    // The favicon of the page.
+    std::optional<gfx::ImageSkia> favicon_image;
     // The summary of the page;
-    std::u16string summary;
+    std::optional<std::u16string> summary;
     // List of previous questions and answers for this page.
     std::vector<MahiQA> previous_qa;
+
+    // Time of creation of this object.
+    base::Time creation_time;
   };
 
   MahiCacheManager();
@@ -59,6 +63,9 @@ class MahiCacheManager {
   // with the new one.
   void AddCacheForUrl(const std::string& url, const MahiData& data);
 
+  // Return the content for the given url.
+  std::u16string GetPageContentForUrl(const std::string& url) const;
+
   // Return the summary for the given url. If it's not in the cache, return
   // nullopt.
   std::optional<std::u16string> GetSummaryForUrl(const std::string& url) const;
@@ -71,6 +78,12 @@ class MahiCacheManager {
 
  private:
   friend class MahiCacheManagerTest;
+
+  // Called when the |periodic_timer_| triggers.
+  void OnTimerFired();
+
+  // Timer to trigger periodically for clearing cache.
+  std::unique_ptr<base::RepeatingTimer> periodic_timer_;
 
   // A map from a url to it's corresponding data. It's used to store the cache
   // for mahi.

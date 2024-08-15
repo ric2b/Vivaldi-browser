@@ -174,6 +174,16 @@ static INLINE void load_u8_8x4(const uint8_t *s, const ptrdiff_t p,
   *s3 = vld1_u8(s);
 }
 
+static INLINE void load_u8_8x3(const uint8_t *s, const ptrdiff_t p,
+                               uint8x8_t *const s0, uint8x8_t *const s1,
+                               uint8x8_t *const s2) {
+  *s0 = vld1_u8(s);
+  s += p;
+  *s1 = vld1_u8(s);
+  s += p;
+  *s2 = vld1_u8(s);
+}
+
 static INLINE void load_u16_4x4(const uint16_t *s, const ptrdiff_t p,
                                 uint16x4_t *const s0, uint16x4_t *const s1,
                                 uint16x4_t *const s2, uint16x4_t *const s3) {
@@ -219,6 +229,16 @@ static INLINE void load_u16_8x2(const uint16_t *s, const ptrdiff_t p,
   *s0 = vld1q_u16(s);
   s += p;
   *s1 = vld1q_u16(s);
+}
+
+static INLINE void load_u16_8x3(const uint16_t *s, const ptrdiff_t p,
+                                uint16x8_t *const s0, uint16x8_t *const s1,
+                                uint16x8_t *const s2) {
+  *s0 = vld1q_u16(s);
+  s += p;
+  *s1 = vld1q_u16(s);
+  s += p;
+  *s2 = vld1q_u16(s);
 }
 
 static INLINE void load_u16_8x4(const uint16_t *s, const ptrdiff_t p,
@@ -537,6 +557,16 @@ static INLINE void store_u16_8x8(uint16_t *s, ptrdiff_t dst_stride,
   vst1q_u16(s, s7);
 }
 
+static INLINE void store_u16_4x3(uint16_t *s, ptrdiff_t dst_stride,
+                                 const uint16x4_t s0, const uint16x4_t s1,
+                                 const uint16x4_t s2) {
+  vst1_u16(s, s0);
+  s += dst_stride;
+  vst1_u16(s, s1);
+  s += dst_stride;
+  vst1_u16(s, s2);
+}
+
 static INLINE void store_u16_4x4(uint16_t *s, ptrdiff_t dst_stride,
                                  const uint16x4_t s0, const uint16x4_t s1,
                                  const uint16x4_t s2, const uint16x4_t s3) {
@@ -554,6 +584,16 @@ static INLINE void store_u16_8x2(uint16_t *s, ptrdiff_t dst_stride,
   vst1q_u16(s, s0);
   s += dst_stride;
   vst1q_u16(s, s1);
+}
+
+static INLINE void store_u16_8x3(uint16_t *s, ptrdiff_t dst_stride,
+                                 const uint16x8_t s0, const uint16x8_t s1,
+                                 const uint16x8_t s2) {
+  vst1q_u16(s, s0);
+  s += dst_stride;
+  vst1q_u16(s, s1);
+  s += dst_stride;
+  vst1q_u16(s, s2);
 }
 
 static INLINE void store_u16_8x4(uint16_t *s, ptrdiff_t dst_stride,

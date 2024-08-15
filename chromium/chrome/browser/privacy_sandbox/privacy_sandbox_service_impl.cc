@@ -52,6 +52,11 @@
 #include "ui/views/widget/widget.h"
 #endif  // !BUILDFLAG(IS_ANDROID)
 
+#if BUILDFLAG(IS_ANDROID)
+#include "base/json/values_util.h"
+#include "base/time/time.h"
+#endif  // BUILDFLAG(IS_ANDROID)
+
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chromeos/components/kiosk/kiosk_utils.h"
@@ -286,7 +291,7 @@ PrivacySandboxServiceImpl::PrivacySandboxServiceImpl(
     // notice feature is enabled.
     pref_service_->SetBoolean(prefs::kPrivacySandboxM1TopicsEnabled, false);
     pref_service_->SetBoolean(prefs::kPrivacySandboxM1FledgeEnabled, false);
-    if (!privacy_sandbox::kPrivacySandboxSettings4RestrictedNotice.Get()) {
+    if (!privacy_sandbox::IsRestrictedNoticeRequired()) {
       pref_service_->SetBoolean(prefs::kPrivacySandboxM1AdMeasurementEnabled,
                                 false);
     }
@@ -302,7 +307,7 @@ PrivacySandboxServiceImpl::PrivacySandboxServiceImpl(
 
   // kRestricted prompt suppression reason must be cleared at startup when
   // restricted notice feature is enabled.
-  if (privacy_sandbox::kPrivacySandboxSettings4RestrictedNotice.Get() &&
+  if (privacy_sandbox::IsRestrictedNoticeRequired() &&
       static_cast<PromptSuppressedReason>(
           pref_service->GetInteger(prefs::kPrivacySandboxM1PromptSuppressed)) ==
           PromptSuppressedReason::kRestricted) {
@@ -310,7 +315,7 @@ PrivacySandboxServiceImpl::PrivacySandboxServiceImpl(
   }
 
   // Check for FPS pref init at each startup.
-  // TODO(crbug.com/1351327): Remove this logic when most users have run init.
+  // TODO(crbug.com/40234448): Remove this logic when most users have run init.
   MaybeInitializeFirstPartySetsPref();
 
   // Record preference state for UMA at each startup.
@@ -375,7 +380,7 @@ void PrivacySandboxServiceImpl::PromptActionOccurred(PromptAction action) {
         privacy_sandbox::TopicsConsentUpdateSource::kConfirmation, false);
   } else if (PromptAction::kRestrictedNoticeAcknowledge == action ||
              PromptAction::kRestrictedNoticeOpenSettings == action) {
-    CHECK(privacy_sandbox::kPrivacySandboxSettings4RestrictedNotice.Get());
+    CHECK(privacy_sandbox::IsRestrictedNoticeRequired());
     pref_service_->SetBoolean(
         prefs::kPrivacySandboxM1RestrictedNoticeAcknowledged, true);
     pref_service_->SetBoolean(prefs::kPrivacySandboxM1AdMeasurementEnabled,
@@ -815,7 +820,7 @@ void PrivacySandboxServiceImpl::ConvertInterestGroupDataKeysForDisplay(
     // A host or site is expected in other parts of the UI, so we cannot simply
     // display the origin directly (it may also be empty). Instead, we elide it
     // but record a metric to understand how widespread this is.
-    // TODO(crbug.com/1489306) - Investigate how much of an issue this is.
+    // TODO(crbug.com/40283983) - Investigate how much of an issue this is.
     RecordProtectedAudienceJoiningTopFrameDisplayedHistogram(false);
   }
 
@@ -1051,14 +1056,14 @@ PrivacySandboxServiceImpl::GetRequiredPromptTypeInternal(
   // If the Privacy Sandbox is restricted, set the suppression reason as such,
   // and do not show a prompt.
   if (privacy_sandbox_settings->IsPrivacySandboxRestricted() &&
-      !privacy_sandbox::kPrivacySandboxSettings4RestrictedNotice.Get()) {
+      !privacy_sandbox::IsRestrictedNoticeRequired()) {
     pref_service->SetInteger(
         prefs::kPrivacySandboxM1PromptSuppressed,
         static_cast<int>(PromptSuppressedReason::kRestricted));
     return PromptType::kNone;
   }
 
-  if (privacy_sandbox::kPrivacySandboxSettings4RestrictedNotice.Get()) {
+  if (privacy_sandbox::IsRestrictedNoticeRequired()) {
     CHECK(privacy_sandbox::IsConsentRequired() ||
           privacy_sandbox::IsNoticeRequired());
     if (!pref_service->GetBoolean(
@@ -1424,3 +1429,45 @@ bool PrivacySandboxServiceImpl::IsM1PrivacySandboxEffectivelyManaged(
          pref_service->IsManagedPreference(
              prefs::kPrivacySandboxM1AdMeasurementEnabled);
 }
+
+#if BUILDFLAG(IS_ANDROID)
+void PrivacySandboxServiceImpl::RecordActivityType(
+    PrivacySandboxStorageActivityType type) const {
+  // Activity type launches can only be recorded if they fall within a specific
+  // timeframe. This timeframe is determined by the within-x-days parameter,
+  // where oldest_timestamp_allowed marks the end of the timeframe and
+  // current_time marks the beginning.
+  base::Time current_time = base::Time::Now();
+  base::Time oldest_timestamp_allowed =
+      current_time -
+      base::Days(
+          privacy_sandbox::kPrivacySandboxActivityTypeStorageWithinXDays.Get());
+
+  base::Value::Dict new_dict;
+  new_dict.Set("timestamp", base::TimeToValue(current_time));
+  new_dict.Set("activity_type", static_cast<int>(type));
+
+  const base::Value::List& old_activity_type_record =
+      pref_service_->GetList(prefs::kPrivacySandboxActivityTypeRecord);
+
+  base::Value::List new_activity_type_record;
+  new_activity_type_record.Append(std::move(new_dict));
+
+  int last_n_launches =
+      privacy_sandbox::kPrivacySandboxActivityTypeStorageLastNLaunches.Get();
+  // The list is ordered from most recent records in the beginning of the list
+  // and old records at the end of the list.
+  for (const base::Value& child : old_activity_type_record) {
+    auto child_timestamp =
+        base::ValueToTime(*(child.GetDict().Find("timestamp"))).value();
+    if (current_time >= child_timestamp &&
+        child_timestamp >= oldest_timestamp_allowed &&
+        new_activity_type_record.size() <
+            static_cast<size_t>(last_n_launches)) {
+      new_activity_type_record.Append(child.Clone());
+    }
+  }
+  pref_service_->SetList(prefs::kPrivacySandboxActivityTypeRecord,
+                         std::move(new_activity_type_record));
+}
+#endif  // BUILDFLAG(IS_ANDROID)

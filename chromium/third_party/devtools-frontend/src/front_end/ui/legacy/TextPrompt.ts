@@ -146,11 +146,17 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
       element.parentElement.insertBefore(this.proxyElement, element);
     }
     this.contentElement.appendChild(element);
-    let jslog = VisualLogging.textField().track({keydown: 'Enter|Escape', change: true});
+    let jslog = VisualLogging.textField().track({
+      keydown: 'ArrowLeft|ArrowUp|PageUp|Home|PageDown|ArrowRight|ArrowDown|End|Space|Tab|Enter|Escape',
+      change: true,
+    });
+
     if (this.jslogContext) {
       jslog = jslog.context(this.jslogContext);
     }
-    this.elementInternal.setAttribute('jslog', `${jslog}`);
+    if (!this.elementInternal.hasAttribute('jslog')) {
+      this.elementInternal.setAttribute('jslog', `${jslog}`);
+    }
     this.elementInternal.classList.add('text-prompt');
     ARIAUtils.markAsTextBox(this.elementInternal);
     ARIAUtils.setAutocomplete(this.elementInternal, ARIAUtils.AutocompleteInteractionModel.Both);
@@ -179,7 +185,6 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
   }
 
   detach(): void {
-    this.maybeDispatchChange();
     this.removeFromElement();
     if (this.focusRestorer) {
       this.focusRestorer.restore();
@@ -338,6 +343,7 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
     let handled = false;
     const event = (ev as KeyboardEvent);
     if (this.isSuggestBoxVisible() && this.suggestBox && this.suggestBox.keyPressed(event)) {
+      void VisualLogging.logKeyDown(this.suggestBox.element, event);
       event.consume(true);
       return;
     }
@@ -471,16 +477,8 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
     }
   }
 
-  private maybeDispatchChange(): void {
-    if (this.changed && this.elementInternal) {
-      this.elementInternal.dispatchEvent(new Event('change'));
-      this.changed = false;
-    }
-  }
-
   private onBlur(): void {
     this.clearAutocomplete();
-    this.maybeDispatchChange();
   }
 
   private refreshGhostText(): void {

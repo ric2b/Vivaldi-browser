@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ja">
+<translation id="2947471979790858922">これらのプライベートタブでのアクティビティは、このデバイスから削除されます</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {閉じたタブは、Vivaldi のメインメニューにある「最近のタブ」にあります。プライベートタブは表示されません。}
+        other {閉じたタブは、Vivaldiのメインメニューにある「最近のタブ」にあります。 # つのプライベートタブは表示されません。}}</translation>
+<translation id="4871187110787939393">プライベートタブを全て閉じますか？</translation>
 </translationbundle>

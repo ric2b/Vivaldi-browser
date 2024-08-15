@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="az">
+<translation id="2947471979790858922">Sizin bu məxfi vərəqlərdəki fəaliyyətləriniz bu cihazdan silinəcək</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Məxfi vərəqləriniz istisna olmaqla, bağladığınız vərəqləri, Vivaldinin əsas menyusundakı "Sonuncu vərəqlər"də tapa bilərsiniz.}
+        other {# məxfi vərəqləriniz istisna olmaqla, bağladığınız vərəqləri, Vivaldinin əsas menyusundakı "Sonuncu vərəqlər"də tapa bilərsiniz.}</translation>
+<translation id="4871187110787939393">Bütün məxfi vərəqlər bağlansın?</translation>
 </translationbundle>

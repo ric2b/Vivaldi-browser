@@ -4,30 +4,36 @@
 
 #include "content/browser/interest_group/interest_group_manager_impl.h"
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "base/check_op.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
+#include "base/json/json_writer.h"
 #include "base/json/values_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/observer_list.h"
+#include "base/rand_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/to_string.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "base/unguessable_token.h"
+#include "base/values.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
 #include "content/browser/devtools/network_service_devtools_observer.h"
 #include "content/browser/interest_group/interest_group_caching_storage.h"
+#include "content/browser/interest_group/interest_group_real_time_report_util.h"
 #include "content/browser/interest_group/interest_group_storage.h"
 #include "content/browser/interest_group/interest_group_update.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
@@ -98,9 +104,13 @@ std::unique_ptr<network::ResourceRequest> BuildUncredentialedRequest(
     GURL url,
     const url::Origin& frame_origin,
     int frame_tree_node_id,
-    const network::mojom::ClientSecurityState& client_security_state) {
+    const network::mojom::ClientSecurityState& client_security_state,
+    bool is_post_method) {
   auto resource_request = std::make_unique<network::ResourceRequest>();
   resource_request->url = std::move(url);
+  if (is_post_method) {
+    resource_request->method = net::HttpRequestHeaders::kPostMethod;
+  }
   resource_request->devtools_request_id =
       base::UnguessableToken::Create().ToString();
   resource_request->redirect_mode = network::mojom::RedirectMode::kError;
@@ -136,12 +146,24 @@ std::unique_ptr<network::ResourceRequest> BuildUncredentialedRequest(
 // which will be used to report the result of an in-browser interest group based
 // ad auction to an auction participant.
 std::unique_ptr<network::SimpleURLLoader> BuildSimpleUrlLoader(
-    std::unique_ptr<network::ResourceRequest> resource_request) {
+    std::unique_ptr<network::ResourceRequest> resource_request,
+    std::optional<std::vector<uint8_t>> real_time_histogram) {
   auto simple_url_loader = network::SimpleURLLoader::Create(
       std::move(resource_request), kTrafficAnnotation);
   simple_url_loader->SetTimeoutDuration(base::Seconds(30));
-
   simple_url_loader->SetAllowHttpErrorResults(true);
+
+  if (real_time_histogram.has_value()) {
+    base::Value::List histogram_list;
+    histogram_list.reserve(real_time_histogram->size());
+    for (uint8_t value : *real_time_histogram) {
+      histogram_list.Append(value);
+    }
+    std::optional<std::string> contents_json = base::WriteJson(histogram_list);
+    CHECK(contents_json.has_value());
+    simple_url_loader->AttachStringForUpload(*contents_json,
+                                             "application/json");
+  }
 
   return simple_url_loader;
 }
@@ -345,6 +367,12 @@ void InterestGroupManagerImpl::UpdateInterestGroupsOfOwnersWithDelay(
       delay);
 }
 
+void InterestGroupManagerImpl::AllowUpdateIfOlderThan(
+    const blink::InterestGroupKey& group_key,
+    base::TimeDelta update_if_older_than) {
+  caching_storage_.AllowUpdateIfOlderThan(group_key, update_if_older_than);
+}
+
 void InterestGroupManagerImpl::RecordInterestGroupBids(
     const blink::InterestGroupSet& group_keys) {
   if (group_keys.empty()) {
@@ -373,8 +401,8 @@ void InterestGroupManagerImpl::RecordDebugReportCooldown(
 }
 
 void InterestGroupManagerImpl::RegisterAdKeysAsJoined(
-    base::flat_set<std::string> keys) {
-  k_anonymity_manager_->RegisterAdKeysAsJoined(std::move(keys));
+    base::flat_set<std::string> hashed_keys) {
+  k_anonymity_manager_->RegisterAdKeysAsJoined(std::move(hashed_keys));
 }
 
 void InterestGroupManagerImpl::GetInterestGroup(
@@ -476,6 +504,48 @@ void InterestGroupManagerImpl::EnqueueReports(
   }
 }
 
+void InterestGroupManagerImpl::EnqueueRealTimeReports(
+    std::map<url::Origin, RealTimeReportingContributions> contributions,
+    int frame_tree_node_id,
+    const url::Origin& frame_origin,
+    const network::mojom::ClientSecurityState& client_security_state,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+  if (contributions.empty()) {
+    return;
+  }
+
+  // For memory usage reasons, purge the queue if it has at least
+  // `max_report_queue_length_` entries at the time we're about to add new
+  // entries.
+  if (report_requests_.size() >=
+      static_cast<unsigned int>(max_report_queue_length_)) {
+    report_requests_.clear();
+  }
+
+  std::map<url::Origin, std::vector<uint8_t>> histograms =
+      CalculateRealTimeReportingHistograms(std::move(contributions));
+
+  for (auto& [origin, histogram] : histograms) {
+    auto report_request = std::make_unique<ReportRequest>();
+    GURL report_url = GetRealTimeReportDestination(origin);
+    report_request->request_url_size_bytes = report_url.spec().size();
+    report_request->report_url = std::move(report_url);
+    report_request->real_time_histogram = std::move(histogram);
+    report_request->frame_origin = frame_origin;
+    report_request->client_security_state = client_security_state;
+    report_request->name = "RealTimeReport";
+    report_request->url_loader_factory = url_loader_factory;
+    report_request->frame_tree_node_id = frame_tree_node_id;
+    report_requests_.emplace_back(std::move(report_request));
+  }
+
+  while (!report_requests_.empty() &&
+         num_active_ < max_active_report_requests_) {
+    ++num_active_;
+    TrySendingOneReport();
+  }
+}
+
 void InterestGroupManagerImpl::SetInterestGroupPriority(
     const blink::InterestGroupKey& group_key,
     double priority) {
@@ -522,27 +592,71 @@ void InterestGroupManagerImpl::UpdateKAnonymity(
 }
 
 void InterestGroupManagerImpl::GetLastKAnonymityReported(
-    const std::string& key,
+    const std::string& hashed_key,
     base::OnceCallback<void(std::optional<base::Time>)> callback) {
-  caching_storage_.GetLastKAnonymityReported(key, std::move(callback));
+  caching_storage_.GetLastKAnonymityReported(hashed_key, std::move(callback));
 }
 
 void InterestGroupManagerImpl::UpdateLastKAnonymityReported(
-    const std::string& key) {
-  caching_storage_.UpdateLastKAnonymityReported(key);
+    const std::string& hashed_key) {
+  caching_storage_.UpdateLastKAnonymityReported(hashed_key);
 }
 
 void InterestGroupManagerImpl::GetInterestGroupAdAuctionData(
     url::Origin top_level_origin,
     base::Uuid generation_id,
+    blink::mojom::AuctionDataConfigPtr config,
     base::OnceCallback<void(BiddingAndAuctionData)> callback) {
   AdAuctionDataLoaderState state;
   state.serializer.SetPublisher(top_level_origin.host());
   state.serializer.SetGenerationId(std::move(generation_id));
   state.callback = std::move(callback);
-  GetAllInterestGroupOwners(base::BindOnce(
-      &InterestGroupManagerImpl::LoadNextInterestGroupAdAuctionData,
-      weak_factory_.GetWeakPtr(), std::move(state)));
+  if (config->per_buyer_configs.size() == 0) {
+    state.serializer.SetConfig(std::move(config));
+    GetAllInterestGroupOwners(
+        base::BindOnce(&InterestGroupManagerImpl::
+                           ShuffleOwnersThenLoadInterestGroupAdAuctionData,
+                       weak_factory_.GetWeakPtr(), std::move(state)));
+  } else {
+    std::vector<url::Origin> owners;
+    owners.reserve(config->per_buyer_configs.size());
+    std::vector<url::Origin> sized_owners;
+    for (const auto& buyer_config : config->per_buyer_configs) {
+      if (buyer_config.second->target_size) {
+        sized_owners.push_back(buyer_config.first);
+      } else {
+        owners.push_back(buyer_config.first);
+      }
+    }
+    // Shuffle the owners. The algorithm for serializing interest groups is
+    // slightly unfair in that owners that are serialize first can't take
+    // advantage of space left over from when subsequent owners don't use all
+    // their assigned space. Randomizing the order avoids always penalizing the
+    // same owner.
+    base::RandomShuffle(owners.begin(), owners.end());
+    base::RandomShuffle(sized_owners.begin(), sized_owners.end());
+
+    // Move sized owners to the end. We load groups in reverse order and then
+    // serialize them in order, so this means we process the sized owners first.
+    // Unsized owners share the remaining space so we want to process them last.
+    std::move(sized_owners.begin(), sized_owners.end(),
+              std::back_inserter(owners));
+
+    state.serializer.SetConfig(std::move(config));
+    LoadNextInterestGroupAdAuctionData(std::move(state), std::move(owners));
+  }
+}
+
+void InterestGroupManagerImpl::ShuffleOwnersThenLoadInterestGroupAdAuctionData(
+    AdAuctionDataLoaderState state,
+    std::vector<url::Origin> owners) {
+  // Shuffle the owners. The algorithm for serializing interest groups is
+  // slightly unfair in that owners that are serialize first can't take
+  // advantage of space left over from when subsequent owners don't use all
+  // their assigned space. Randomizing the order avoids always penalizing the
+  // same owner.
+  base::RandomShuffle(owners.begin(), owners.end());
+  LoadNextInterestGroupAdAuctionData(std::move(state), std::move(owners));
 }
 
 void InterestGroupManagerImpl::LoadNextInterestGroupAdAuctionData(
@@ -797,10 +911,13 @@ void InterestGroupManagerImpl::TrySendingOneReport() {
       0);
 
   std::unique_ptr<network::ResourceRequest> resource_request =
-      BuildUncredentialedRequest(report_request->report_url,
-                                 report_request->frame_origin,
-                                 report_request->frame_tree_node_id,
-                                 report_request->client_security_state);
+      BuildUncredentialedRequest(
+          report_request->report_url, report_request->frame_origin,
+          report_request->frame_tree_node_id,
+          report_request->client_security_state,
+          /*is_post_method=*/report_request->real_time_histogram.has_value()
+              ? true
+              : false);
 
   std::string devtools_request_id =
       resource_request->devtools_request_id.value();
@@ -810,7 +927,8 @@ void InterestGroupManagerImpl::TrySendingOneReport() {
       base::TimeTicks::Now());
 
   std::unique_ptr<network::SimpleURLLoader> simple_url_loader =
-      BuildSimpleUrlLoader(std::move(resource_request));
+      BuildSimpleUrlLoader(std::move(resource_request),
+                           report_request->real_time_histogram);
 
   // Pass simple_url_loader to keep it alive until the request fails or succeeds
   // to prevent cancelling the request.

@@ -16,11 +16,6 @@
 # For these, the git revision is the one of
 # https://chromium.googlesource.com/infra/infra.git.
 #
-# For goma client, generated via builders at
-# https://ci.chromium.org/p/infra-internal/g/goma-client/console
-# the git revision is the one of
-# https://chromium.googlesource.com/infra/goma/client.git
-#
 # To regenerate them (after modifying this file):
 #   cipd ensure-file-resolve -ensure-file cipd_manifest_cros_python2.txt
 $ResolvedVersions cipd_manifest_cros_python2.versions

@@ -102,6 +102,21 @@
         }
       },
       {
+        "id": "RuleSourceSettings",
+        "description": "Parameters used when parsing the rules list. Can only be modified when the source is disabled",
+        "type": "object",
+        "properties": {
+          "allow_abp_snippets": {
+            "description": "If false, any present abp snippet rules will be ignored.",
+            "type": "boolean"
+          },
+          "naked_hostname_is_pure_host": {
+            "description": "If true, any rule that looks like just a host name will be converted to match only the host part of the url.",
+            "type": "boolean"
+          }
+        }
+      },
+      {
         "id": "RuleSource",
         "description": "Information about a loaded rule source, including its fetching status and metadata retrieved when extracting rules from it",
         "type": "object",
@@ -118,9 +133,9 @@
             "description": "indicates whether the rule source is online or local, and which of the source_url and source_file fields is valid",
             "type": "boolean"
           },
-          "group": {
-            "description": "which rule group the source is part of",
-            "$ref": "RuleGroup"
+          "settings": {
+            "description": "See RuleSourceSettings.",
+            "$ref": "RuleSourceSettings"
           },
           "id": {
             "type": "integer"
@@ -301,6 +316,11 @@
           {
             "name": "url",
             "type": "string"
+          },
+          {
+            "name": "source_settings",
+            "$ref": "RuleSourceSettings",
+            "optional": true
           }
         ],
         "returns_async": {
@@ -325,6 +345,11 @@
           {
             "name": "file",
             "type": "string"
+          },
+          {
+            "name": "source_settings",
+            "$ref": "RuleSourceSettings",
+            "optional": true
           }
         ],
         "returns_async": {
@@ -333,6 +358,34 @@
             {
               "name": "source_id",
               "type": "integer"
+            }
+          ]
+        }
+      },
+      {
+        "name": "setKnownSourceSettings",
+        "type": "function",
+        "description": "Changes the settings used when parsing the rules",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "source_id",
+            "type": "integer"
+          },
+          {
+            "name": "source_settings",
+            "$ref": "RuleSourceSettings"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "success",
+              "type": "boolean"
             }
           ]
         }
@@ -749,17 +802,25 @@
           {
             "name" : "rule_source",
             "$ref": "RuleSource"
+          },
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
           }
         ]
       },
       {
-        "name": "onRulesSourceUpdated",
+        "name": "onRuleSourceUpdated",
         "type": "function",
         "description": "The properties of a rule source have been updated, either because a fetch started or completed.",
         "parameters": [
           {
             "name" : "rule_source",
             "$ref": "RuleSource"
+          },
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
           }
         ]
       },

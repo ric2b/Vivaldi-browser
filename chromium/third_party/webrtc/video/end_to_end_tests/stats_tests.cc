@@ -16,7 +16,6 @@
 #include "api/test/simulated_network.h"
 #include "api/test/video/function_video_encoder_factory.h"
 #include "call/fake_network_pipe.h"
-#include "call/simulated_network.h"
 #include "modules/rtp_rtcp/source/rtp_packet.h"
 #include "modules/video_coding/include/video_coding_defines.h"
 #include "rtc_base/strings/string_builder.h"
@@ -27,6 +26,7 @@
 #include "test/call_test.h"
 #include "test/fake_encoder.h"
 #include "test/gtest.h"
+#include "test/network/simulated_network.h"
 #include "test/rtcp_packet_parser.h"
 #include "test/video_test_constants.h"
 
@@ -53,10 +53,10 @@ TEST_F(StatsEndToEndTest, GetStats) {
    public:
     StatsObserver()
         : EndToEndTest(test::VideoTestConstants::kLongTimeout),
-          encoder_factory_([]() {
-            return std::make_unique<test::DelayedEncoder>(
-                Clock::GetRealTimeClock(), 10);
-          }) {}
+          encoder_factory_(
+              [](const Environment& env, const SdpVideoFormat& format) {
+                return std::make_unique<test::DelayedEncoder>(env, 10);
+              }) {}
 
    private:
     Action OnSendRtp(rtc::ArrayView<const uint8_t> packet) override {

@@ -456,6 +456,14 @@ void Scheduler::SetVideoNeedsBeginFrames(bool video_needs_begin_frames) {
   ProcessScheduledActions();
 }
 
+void Scheduler::SetIsScrolling(bool is_scrolling) {
+  state_machine_.set_is_scrolling(is_scrolling);
+}
+
+void Scheduler::SetWaitingForScrollEvent(bool waiting_for_scroll_event) {
+  state_machine_.set_waiting_for_scroll_event(waiting_for_scroll_event);
+}
+
 void Scheduler::OnDrawForLayerTreeFrameSink(bool resourceless_software_draw,
                                             bool skip_draw) {
   DCHECK(settings_.using_synchronous_renderer_compositor);
@@ -753,6 +761,11 @@ void Scheduler::ScheduleBeginImplFrameDeadline() {
       // base::TimeTicks() achieves the same result.
       new_deadline = base::TimeTicks();
       break;
+    case DeadlineMode::WAIT_FOR_SCROLL:
+      new_deadline = begin_impl_frame_tracker_.Current().frame_time +
+                     begin_impl_frame_tracker_.Current().interval *
+                         settings_.scroll_deadline_ratio;
+      break;
   }
 
   // Post deadline task only if we didn't have one already or something caused
@@ -789,7 +802,6 @@ void Scheduler::OnBeginImplFrameDeadline() {
     //     order to wait for more user-input before starting the next commit.
     // * Creating a new OutputSurface will not occur during the deadline in
     //     order to allow the state machine to "settle" first.
-    compositor_timing_history_->RecordDeadlineMode(deadline_mode_);
     if (!settings_.using_synchronous_renderer_compositor) {
       compositor_timing_history_->WillFinishImplFrame(
           state_machine_.needs_redraw());

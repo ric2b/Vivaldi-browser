@@ -436,12 +436,6 @@ TEST_P(DeviceLostTest, LoseDeviceForTestingOnce) {
     // First LoseDeviceForTesting call should occur normally. The callback is already set in SetUp.
     LoseDeviceForTesting();
 
-    // Second LoseDeviceForTesting call should result in no callbacks. Note we also reset the
-    // callback first since by default the device clears the callback after the device is lost.
-    device.SetDeviceLostCallback(mDeviceLostCallback.Callback(),
-                                 mDeviceLostCallback.MakeUserdata(device.Get()));
-    EXPECT_CALL(mDeviceLostCallback, Call(WGPUDeviceLostReason_Undefined, testing::_, device.Get()))
-        .Times(0);
     device.ForceLoss(wgpu::DeviceLostReason::Undefined, "Device lost for testing");
     FlushWire();
     testing::Mock::VerifyAndClearExpectations(&mDeviceLostCallback);
@@ -472,6 +466,11 @@ TEST_P(DeviceLostTest, DeviceLostBeforeCreatePipelineAsyncCallback) {
 
     device.CreateComputePipelineAsync(&descriptor, callback, nullptr);
     LoseDeviceForTesting();
+    // Need to call ProcessEvents, otherwise it will be an instance drop as LoseDeviceForTesting
+    // is the last statement of the test body.
+    // TODO(dawn:2353): Update to use WGPUCreateComputePipelineAsyncCallbackInfo version of
+    // CreateComputePipelineAsync and then we don't need to call ProcessEvents explicitly
+    GetInstance().ProcessEvents();
 }
 
 // This is a regression test for crbug.com/1212385 where Dawn didn't clean up all

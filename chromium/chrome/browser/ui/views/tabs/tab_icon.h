@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_TABS_TAB_ICON_H_
 #define CHROME_BROWSER_UI_VIEWS_TABS_TAB_ICON_H_
 
+#include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "chrome/browser/ui/tabs/tab_network_state.h"
@@ -65,6 +66,7 @@ class TabIcon : public views::View, public views::AnimationDelegateViews {
 
   bool GetShowingLoadingAnimation() const;
   bool GetShowingAttentionIndicator() const;
+  bool GetShowingDiscardIndicator() const;
 
   // Sets whether this object can paint to a layer. When the loading animation
   // is running, painting to a layer saves painting overhead. But if the tab is
@@ -80,10 +82,14 @@ class TabIcon : public views::View, public views::AnimationDelegateViews {
   gfx::ImageSkia GetThemedIconForTesting() { return themed_favicon_; }
   bool GetActiveStateForTesting() { return is_active_tab_; }
 
+  void EnlargeDiscardIndicatorRadius(int radius);
+
  private:
   class CrashAnimation;
   friend CrashAnimation;
   friend class TabTest;
+  FRIEND_TEST_ALL_PREFIXES(TabTestWithDiscardRingImprovements,
+                           DiscardIndicatorResponsiveness);
 
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override;
@@ -198,6 +204,8 @@ class TabIcon : public views::View, public views::AnimationDelegateViews {
   bool is_active_tab_ = false;
 
   bool is_monochrome_favicon_ = false;
+
+  int increased_discard_indicator_radius_ = 0;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_TABS_TAB_ICON_H_

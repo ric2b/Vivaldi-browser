@@ -8,12 +8,12 @@
 //   Generator: tools/generate-raddstoreexpminusmax-test.py
 
 
-#include <gtest/gtest.h>
-
 #include <xnnpack/common.h>
 #include <xnnpack/isa-checks.h>
-
+#include <xnnpack/microparams-init.h>
 #include <xnnpack/raddstoreexpminusmax.h>
+
+#include <gtest/gtest.h>
 #include "raddstoreexpminusmax-microkernel-tester.h"
 
 
@@ -792,6 +792,80 @@
     }
   }
 #endif  // XNN_ENABLE_ARM_FP16_VECTOR && (XNN_ARCH_ARM || XNN_ARCH_ARM64)
+
+
+#if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  TEST(F16_RADDSTOREEXPMINUSMAX__AVX2_RR1_P2_U16, elements_eq_16) {
+    TEST_REQUIRES_X86_AVX2;
+    RAddStoreExpMinusMaxMicrokernelTester()
+      .elements(16)
+      .Test(xnn_f16_raddstoreexpminusmax_ukernel__avx2_rr1_p2_u16, xnn_init_f16_expminus_avx2_rr1_p2_params);
+  }
+
+  TEST(F16_RADDSTOREEXPMINUSMAX__AVX2_RR1_P2_U16, elements_div_16) {
+    TEST_REQUIRES_X86_AVX2;
+    for (size_t elements = 32; elements < 160; elements += 16) {
+      RAddStoreExpMinusMaxMicrokernelTester()
+        .elements(elements)
+        .Test(xnn_f16_raddstoreexpminusmax_ukernel__avx2_rr1_p2_u16, xnn_init_f16_expminus_avx2_rr1_p2_params);
+    }
+  }
+
+  TEST(F16_RADDSTOREEXPMINUSMAX__AVX2_RR1_P2_U16, elements_lt_16) {
+    TEST_REQUIRES_X86_AVX2;
+    for (size_t elements = 1; elements < 16; elements++) {
+      RAddStoreExpMinusMaxMicrokernelTester()
+        .elements(elements)
+        .Test(xnn_f16_raddstoreexpminusmax_ukernel__avx2_rr1_p2_u16, xnn_init_f16_expminus_avx2_rr1_p2_params);
+    }
+  }
+
+  TEST(F16_RADDSTOREEXPMINUSMAX__AVX2_RR1_P2_U16, elements_gt_16) {
+    TEST_REQUIRES_X86_AVX2;
+    for (size_t elements = 17; elements < 32; elements++) {
+      RAddStoreExpMinusMaxMicrokernelTester()
+        .elements(elements)
+        .Test(xnn_f16_raddstoreexpminusmax_ukernel__avx2_rr1_p2_u16, xnn_init_f16_expminus_avx2_rr1_p2_params);
+    }
+  }
+#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
+
+
+#if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  TEST(F16_RADDSTOREEXPMINUSMAX__AVX2_RR1_P2_U16_ACC2, elements_eq_16) {
+    TEST_REQUIRES_X86_AVX2;
+    RAddStoreExpMinusMaxMicrokernelTester()
+      .elements(16)
+      .Test(xnn_f16_raddstoreexpminusmax_ukernel__avx2_rr1_p2_u16_acc2, xnn_init_f16_expminus_avx2_rr1_p2_params);
+  }
+
+  TEST(F16_RADDSTOREEXPMINUSMAX__AVX2_RR1_P2_U16_ACC2, elements_div_16) {
+    TEST_REQUIRES_X86_AVX2;
+    for (size_t elements = 32; elements < 160; elements += 16) {
+      RAddStoreExpMinusMaxMicrokernelTester()
+        .elements(elements)
+        .Test(xnn_f16_raddstoreexpminusmax_ukernel__avx2_rr1_p2_u16_acc2, xnn_init_f16_expminus_avx2_rr1_p2_params);
+    }
+  }
+
+  TEST(F16_RADDSTOREEXPMINUSMAX__AVX2_RR1_P2_U16_ACC2, elements_lt_16) {
+    TEST_REQUIRES_X86_AVX2;
+    for (size_t elements = 1; elements < 16; elements++) {
+      RAddStoreExpMinusMaxMicrokernelTester()
+        .elements(elements)
+        .Test(xnn_f16_raddstoreexpminusmax_ukernel__avx2_rr1_p2_u16_acc2, xnn_init_f16_expminus_avx2_rr1_p2_params);
+    }
+  }
+
+  TEST(F16_RADDSTOREEXPMINUSMAX__AVX2_RR1_P2_U16_ACC2, elements_gt_16) {
+    TEST_REQUIRES_X86_AVX2;
+    for (size_t elements = 17; elements < 32; elements++) {
+      RAddStoreExpMinusMaxMicrokernelTester()
+        .elements(elements)
+        .Test(xnn_f16_raddstoreexpminusmax_ukernel__avx2_rr1_p2_u16_acc2, xnn_init_f16_expminus_avx2_rr1_p2_params);
+    }
+  }
+#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
 
 #if XNN_ARCH_X86 || XNN_ARCH_X86_64

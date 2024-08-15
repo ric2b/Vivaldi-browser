@@ -31,6 +31,8 @@ static PrefService *_prefService = nil;
   registry->RegisterIntegerPref(vivaldiprefs::kVivaldiStartPageSDMaximumColumns,
                                 VivaldiStartPageLayoutColumnUnlimited);
   registry->RegisterBooleanPref(
+      vivaldiprefs::kVivaldiStartPageShowFrequentlyVisited, NO);
+  registry->RegisterBooleanPref(
       vivaldiprefs::kVivaldiStartPageShowSpeedDials, YES);
   registry->RegisterBooleanPref(
       vivaldiprefs::kVivaldiStartPageShowCustomizeButton, NO);
@@ -132,6 +134,12 @@ static PrefService *_prefService = nil;
   }
 }
 
++ (BOOL)showFrequentlyVisitedPages {
+  PrefService *prefService = [VivaldiStartPagePrefs prefService];
+  return prefService->GetBoolean(
+      vivaldiprefs::kVivaldiStartPageShowFrequentlyVisited);
+}
+
 + (BOOL)showSpeedDials {
   PrefService *prefService = [VivaldiStartPagePrefs prefService];
   return prefService->GetBoolean(
@@ -191,6 +199,12 @@ static PrefService *_prefService = nil;
   PrefService *prefService = [VivaldiStartPagePrefs prefService];
   prefService->SetInteger(vivaldiprefs::kVivaldiStartPageSDMaximumColumns,
                           columns);
+}
+
++ (void)setShowFrequentlyVisitedPages:(BOOL)show {
+  PrefService *prefService = [VivaldiStartPagePrefs prefService];
+  prefService->SetBoolean(
+      vivaldiprefs::kVivaldiStartPageShowFrequentlyVisited, show);
 }
 
 + (void)setShowSpeedDials:(BOOL)show {

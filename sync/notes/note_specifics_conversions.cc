@@ -345,7 +345,7 @@ const vivaldi::NoteNode* ReplaceNoteNodeUuid(const vivaldi::NoteNode* node,
         node->GetCreationTime(), node->GetLastModificationTime(), guid);
     MoveAllChildren(model, node, new_node);
   }
-  model->Remove(node);
+  model->Remove(node, FROM_HERE);
 
   return new_node;
 }

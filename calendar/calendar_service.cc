@@ -544,6 +544,21 @@ base::CancelableTaskTracker::TaskId CalendarService::DeleteEventTemplate(
       std::move(callback));
 }
 
+base::CancelableTaskTracker::TaskId CalendarService::GetParentExceptionEventId(
+    calendar::EventID exception_event_id,
+    base::OnceCallback<void(calendar::EventID)> callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
+
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  return tracker->PostTaskAndReplyWithResult(
+      backend_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&CalendarBackend::GetParentExceptionEventId,
+                     calendar_backend_, exception_event_id),
+      std::move(callback));
+}
+
 void CalendarService::ScheduleTask(base::OnceClosure task) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK(backend_task_runner_);

@@ -28,14 +28,15 @@ ShellSpeechRecognitionManagerDelegate::
 ~ShellSpeechRecognitionManagerDelegate() {
 }
 
+#if !BUILDFLAG(IS_FUCHSIA) && !BUILDFLAG(IS_ANDROID)
+void ShellSpeechRecognitionManagerDelegate::BindSpeechRecognitionContext(
+    mojo::PendingReceiver<media::mojom::SpeechRecognitionContext> receiver) {}
+#endif  // !BUILDFLAG(IS_FUCHSIA) && !BUILDFLAG(IS_ANDROID)
+
 void ShellSpeechRecognitionManagerDelegate::OnRecognitionStart(int session_id) {
 }
 
 void ShellSpeechRecognitionManagerDelegate::OnAudioStart(int session_id) {
-}
-
-void ShellSpeechRecognitionManagerDelegate::OnEnvironmentEstimationComplete(
-    int session_id) {
 }
 
 void ShellSpeechRecognitionManagerDelegate::OnSoundStart(int session_id) {

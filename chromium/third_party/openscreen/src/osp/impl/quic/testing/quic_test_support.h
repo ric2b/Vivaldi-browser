@@ -6,6 +6,7 @@
 #define OSP_IMPL_QUIC_TESTING_QUIC_TEST_SUPPORT_H_
 
 #include <memory>
+#include <string>
 
 #include "gmock/gmock.h"
 #include "osp/impl/quic/quic_client.h"
@@ -60,6 +61,7 @@ class FakeQuicBridge {
 
   const IPEndpoint kControllerEndpoint{{192, 168, 1, 3}, 4321};
   const IPEndpoint kReceiverEndpoint{{192, 168, 1, 17}, 1234};
+  const std::string kFingerprint{"test fringprint"};
 
   std::unique_ptr<MessageDemuxer> controller_demuxer;
   std::unique_ptr<MessageDemuxer> receiver_demuxer;

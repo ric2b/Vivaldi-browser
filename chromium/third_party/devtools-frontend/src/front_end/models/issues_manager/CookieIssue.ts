@@ -45,6 +45,14 @@ const UIStrings = {
    * @description Label for a link for cross-site redirect Issues.
    */
   fileCrosSiteRedirectBug: 'File a bug',
+  /**
+   * @description text to show in Console panel when a third-party cookie will be blocked in Chrome.
+   */
+  consoleTpcdWarningMessage: 'Third-party cookie will be blocked in future Chrome versions as part of Privacy Sandbox.',
+  /**
+   * @description text to show in Console panel when a third-party cookie is blocked in Chrome.
+   */
+  consoleTpcdErrorMessage: 'Third-party cookie is blocked in Chrome as part of Privacy Sandbox.',
 
 };
 const str_ = i18n.i18n.registerUIStrings('models/issues_manager/CookieIssue.ts', UIStrings);
@@ -61,8 +69,9 @@ export class CookieIssue extends Issue {
   #issueDetails: Protocol.Audits.CookieIssueDetails;
 
   constructor(
-      code: string, issueDetails: Protocol.Audits.CookieIssueDetails, issuesModel: SDK.IssuesModel.IssuesModel) {
-    super(code, issuesModel);
+      code: string, issueDetails: Protocol.Audits.CookieIssueDetails, issuesModel: SDK.IssuesModel.IssuesModel,
+      issueId: Protocol.Audits.IssueId|undefined) {
+    super(code, issuesModel, issueId);
     this.#issueDetails = issueDetails;
   }
 
@@ -84,7 +93,8 @@ export class CookieIssue extends Issue {
    * Returns an array of issues from a given CookieIssueDetails.
    */
   static createIssuesFromCookieIssueDetails(
-      cookieIssueDetails: Protocol.Audits.CookieIssueDetails, issuesModel: SDK.IssuesModel.IssuesModel): CookieIssue[] {
+      cookieIssueDetails: Protocol.Audits.CookieIssueDetails, issuesModel: SDK.IssuesModel.IssuesModel,
+      issueId: Protocol.Audits.IssueId|undefined): CookieIssue[] {
     const issues: CookieIssue[] = [];
 
     // Exclusion reasons have priority. It means a cookie was blocked. Create an issue
@@ -96,7 +106,7 @@ export class CookieIssue extends Issue {
             exclusionReason, cookieIssueDetails.cookieWarningReasons, cookieIssueDetails.operation,
             cookieIssueDetails.cookieUrl as Platform.DevToolsPath.UrlString | undefined);
         if (code) {
-          issues.push(new CookieIssue(code, cookieIssueDetails, issuesModel));
+          issues.push(new CookieIssue(code, cookieIssueDetails, issuesModel, issueId));
         }
       }
       return issues;
@@ -109,7 +119,7 @@ export class CookieIssue extends Issue {
             warningReason, [], cookieIssueDetails.operation,
             cookieIssueDetails.cookieUrl as Platform.DevToolsPath.UrlString | undefined);
         if (code) {
-          issues.push(new CookieIssue(code, cookieIssueDetails, issuesModel));
+          issues.push(new CookieIssue(code, cookieIssueDetails, issuesModel, issueId));
         }
       }
     }
@@ -223,7 +233,7 @@ export class CookieIssue extends Issue {
 
   override isCausedByThirdParty(): boolean {
     const outermostFrame = SDK.FrameManager.FrameManager.instance().getOutermostFrame();
-    return isCausedByThirdParty(outermostFrame, this.#issueDetails.cookieUrl);
+    return isCausedByThirdParty(outermostFrame, this.#issueDetails.cookieUrl, this.#issueDetails.siteForCookies);
   }
 
   getKind(): IssueKind {
@@ -241,7 +251,7 @@ export class CookieIssue extends Issue {
       return [];
     }
 
-    return CookieIssue.createIssuesFromCookieIssueDetails(cookieIssueDetails, issuesModel);
+    return CookieIssue.createIssuesFromCookieIssueDetails(cookieIssueDetails, issuesModel, inspectorIssue.issueId);
   }
 
   static getSubCategory(code: string): CookieIssueSubCategory {
@@ -253,17 +263,39 @@ export class CookieIssue extends Issue {
     }
     return CookieIssueSubCategory.GenericCookie;
   }
+
+  override maybeCreateConsoleMessage(): SDK.ConsoleModel.ConsoleMessage|undefined {
+    const issuesModel = this.model();
+    if (issuesModel && CookieIssue.getSubCategory(this.code()) === CookieIssueSubCategory.ThirdPartyPhaseoutCookie) {
+      return new SDK.ConsoleModel.ConsoleMessage(
+          issuesModel.target().model(SDK.RuntimeModel.RuntimeModel), SDK.ConsoleModel.FrontendMessageSource.IssuePanel,
+          Protocol.Log.LogEntryLevel.Warning,
+          this.getKind() === IssueKind.PageError ? UIStrings.consoleTpcdErrorMessage :
+                                                   UIStrings.consoleTpcdWarningMessage,
+          {
+            url: this.#issueDetails.request?.url as Platform.DevToolsPath.UrlString | undefined,
+            affectedResources: {requestId: this.#issueDetails.request?.requestId, issueId: this.issueId},
+          });
+    }
+    return;
+  }
 }
 
 /**
  * Exported for unit test.
  */
 export function isCausedByThirdParty(
-    outermostFrame: SDK.ResourceTreeModel.ResourceTreeFrame|null, cookieUrl?: string): boolean {
+    outermostFrame: SDK.ResourceTreeModel.ResourceTreeFrame|null, cookieUrl?: string,
+    siteForCookies?: string): boolean {
   if (!outermostFrame) {
     // The outermost frame is not yet available. Consider this issue as a third-party issue
     // until the outermost frame is available. This will prevent the issue from being visible
     // for only just a split second.
+    return true;
+  }
+  // The value that should be consulted for the third-partiness as defined in
+  // https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-cookie-same-site#section-2.1.1
+  if (!siteForCookies) {
     return true;
   }
 

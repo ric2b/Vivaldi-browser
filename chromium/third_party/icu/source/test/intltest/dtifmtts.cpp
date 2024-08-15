@@ -66,6 +66,8 @@ void DateIntervalFormatTest::runIndexedTest( int32_t index, UBool exec, const ch
     TESTCASE_AUTO(testTicket21222ROCEraDiff);
     TESTCASE_AUTO(testTicket21222JapaneseEraDiff);
     TESTCASE_AUTO(testTicket21939);
+    TESTCASE_AUTO(testTicket20710_FieldIdentity);
+    TESTCASE_AUTO(testTicket20710_IntervalIdentity);
     TESTCASE_AUTO_END;
 }
 
@@ -855,7 +857,7 @@ void DateIntervalFormatTest::testFormat() {
 
         "zh", "CE 2007 11 10 10:10:10", "CE 2007 11 20 10:10:10", "dM", "11/10 \\u2013 11/20",
 
-        "zh", "CE 2007 11 10 10:10:10", "CE 2007 11 20 10:10:10", "My", "2007\\u5E7411\\u6708",
+        "zh", "CE 2007 11 10 10:10:10", "CE 2007 11 20 10:10:10", "My", "2007/11",
 
         "zh", "CE 2007 11 10 10:10:10", "CE 2007 11 20 10:10:10", "EdM", "11/10\\u5468\\u516d\\u81f311/20\\u5468\\u4e8c",
 
@@ -876,15 +878,15 @@ void DateIntervalFormatTest::testFormat() {
         "zh", "CE 2007 01 10 10:00:10", "CE 2007 01 10 14:10:10", "hm", "\\u4e0a\\u534810:00\\u81f3\\u4e0b\\u53482:10",
 
 
-        "zh", "CE 2007 01 10 10:00:10", "CE 2007 01 10 14:10:10", "hmz", "GMT-8 \\u4e0a\\u534810:00\\u81f3\\u4e0b\\u53482:10",
+        "zh", "CE 2007 01 10 10:00:10", "CE 2007 01 10 14:10:10", "hmz", "GMT-8\\u4e0a\\u534810:00\\u81f3\\u4e0b\\u53482:10",
 
         "zh", "CE 2007 01 10 10:00:10", "CE 2007 01 10 14:10:10", "h", "\\u4e0a\\u534810\\u65F6\\u81f3\\u4e0b\\u53482\\u65f6",
 
-        "zh", "CE 2007 01 10 10:00:10", "CE 2007 01 10 14:10:10", "hv", "\\u6D1B\\u6749\\u77F6\\u65F6\\u95F4 \\u4E0A\\u534810\\u65F6\\u81F3\\u4E0B\\u53482\\u65F6",
+        "zh", "CE 2007 01 10 10:00:10", "CE 2007 01 10 14:10:10", "hv", "\\u6D1B\\u6749\\u77F6\\u65F6\\u95F4\\u4E0A\\u534810\\u65F6\\u81F3\\u4E0B\\u53482\\u65F6",
 
         "zh", "CE 2007 01 10 10:00:10", "CE 2007 01 10 10:20:10", "hm", "\\u4e0a\\u534810:00\\u81f310:20",
 
-        "zh", "CE 2007 01 10 10:00:10", "CE 2007 01 10 10:20:10", "hmv", "\\u6D1B\\u6749\\u77F6\\u65F6\\u95F4 \\u4E0A\\u534810:00\\u81F310:20",
+        "zh", "CE 2007 01 10 10:00:10", "CE 2007 01 10 10:20:10", "hmv", "\\u6D1B\\u6749\\u77F6\\u65F6\\u95F4\\u4E0A\\u534810:00\\u81F310:20",
 
         "zh", "CE 2007 01 10 10:00:10", "CE 2007 01 10 10:20:10", "hz", "GMT-8\\u4e0a\\u534810\\u65f6",
 
@@ -2159,7 +2161,8 @@ void DateIntervalFormatTest::testTicket20707() {
             calendar->setTime(UDate(1563235200000), status);
             dtifmt->format(*calendar, *calendar, result, fposition, status);
 
-            assertEquals("Formatted result", expected[i][j++], result);
+            const char* localeID = locale.getName();
+            assertEquals(localeID, expected[i][j++], result);
         }
         i++;
     }
@@ -2383,6 +2386,81 @@ void DateIntervalFormatTest::testTicket21939() {
         UnicodeString pattern;
         assertEquals("Wrong pattern", u"M/d/r, h:mm\u202Fa", sdf->toPattern(pattern));
     }
+}
+
+void DateIntervalFormatTest::testTicket20710_FieldIdentity() {
+    IcuTestErrorCode status(*this, "testTicket20710_FieldIdentity");
+    LocalPointer<DateIntervalFormat> dtifmt(DateIntervalFormat::createInstance("eeeeMMMddyyhhmma", "de-CH", status));
+    LocalPointer<Calendar> calendar1(Calendar::createInstance(TimeZone::createTimeZone(u"CET"), status));
+    calendar1->setTime(UDate(1563235200000), status);
+    LocalPointer<Calendar> calendar2(Calendar::createInstance(TimeZone::createTimeZone(u"CET"), status));
+    calendar2->setTime(UDate(1564235200000), status);
+
+    {
+        auto fv = dtifmt->formatToValue(*calendar1, *calendar2, status);
+        ConstrainedFieldPosition cfp;
+        cfp.constrainCategory(UFIELD_CATEGORY_DATE_INTERVAL_SPAN);
+        assertTrue("Span field should be in non-identity formats", fv.nextPosition(cfp, status));
+    }
+    {
+        auto fv = dtifmt->formatToValue(*calendar1, *calendar1, status);
+        ConstrainedFieldPosition cfp;
+        cfp.constrainCategory(UFIELD_CATEGORY_DATE_INTERVAL_SPAN);
+        assertFalse("Span field should not be in identity formats", fv.nextPosition(cfp, status));
+    }
+}
+
+void DateIntervalFormatTest::testTicket20710_IntervalIdentity() {
+    IcuTestErrorCode status(*this, "testTicket20710_IntervalIdentity");
+
+    const char16_t timeZone[] = u"PST";
+    int32_t count = 0;
+    const Locale* locales = Locale::getAvailableLocales(count);
+    const UnicodeString skeletons[] = {
+        u"EEEEMMMMdyhmmssazzzz",
+        u"EEEEMMMMdyhhmmssazzzz",
+        u"EEEEMMMMddyyyyhhmmssvvvva",
+        u"EEEEMMMMddhmszza",
+        u"EEMMMMddyyhhzza",
+        u"eeeeMMMddyyhhmma",
+        u"MMddyyyyhhmmazzzz",
+        u"hhmmazzzz",
+        u"hmmssazzzz",
+        u"hhmmsszzzz",
+        u"MMddyyyyhhmmzzzz"
+    };
+
+    Locale quickLocales[] = {
+        {"en"}, {"es"}, {"sr"}, {"zh"}
+    };
+    if (quick) {
+        locales = quickLocales;
+        count = UPRV_LENGTHOF(quickLocales);
+    }
+
+    for (int32_t i = 0; i < count; i++) {
+        const Locale locale = locales[i];
+        LocalPointer<DateTimePatternGenerator> gen(DateTimePatternGenerator::createInstance(locale, status));
+        LocalPointer<Calendar> calendar(Calendar::createInstance(TimeZone::createTimeZone(timeZone), status));
+        calendar->setTime(UDate(1563235200000), status);
+        for (auto skeleton : skeletons) {
+            LocalPointer<DateIntervalFormat> dtifmt(DateIntervalFormat::createInstance(skeleton, locale, status));
+
+            FieldPosition fposition;
+            UnicodeString resultIntervalFormat;
+            dtifmt->format(*calendar, *calendar, resultIntervalFormat, fposition, status);
+
+            UnicodeString pattern = gen->getBestPattern(skeleton, status);
+            SimpleDateFormat dateFormat(pattern, locale, status);
+
+            FieldPositionIterator fpositer;
+            UnicodeString resultDateFormat;
+
+            dateFormat.format(*calendar, resultDateFormat, &fpositer, status);
+            assertEquals("DateIntervalFormat should fall back to DateFormat in the identity format", resultDateFormat, resultIntervalFormat);
+        }
+    }
+    
 }
 
 #endif /* #if !UCONFIG_NO_FORMATTING */

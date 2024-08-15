@@ -5,6 +5,7 @@
 #include "chrome/browser/extensions/api/developer_private/developer_private_api.h"
 
 #include <memory>
+#include <string_view>
 #include <utility>
 
 #include "base/base_paths.h"
@@ -32,10 +33,11 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_with_install.h"
 #include "chrome/browser/extensions/extension_util.h"
-#include "chrome/browser/extensions/permissions_test_util.h"
-#include "chrome/browser/extensions/permissions_updater.h"
-#include "chrome/browser/extensions/scripting_permissions_modifier.h"
-#include "chrome/browser/extensions/site_permissions_helper.h"
+#include "chrome/browser/extensions/manifest_v2_experiment_manager.h"
+#include "chrome/browser/extensions/permissions/permissions_test_util.h"
+#include "chrome/browser/extensions/permissions/permissions_updater.h"
+#include "chrome/browser/extensions/permissions/scripting_permissions_modifier.h"
+#include "chrome/browser/extensions/permissions/site_permissions_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/common/extensions/api/developer_private.h"
@@ -45,7 +47,7 @@
 #include "components/crx_file/id_util.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/supervised_user/core/browser/supervised_user_preferences.h"
-#include "components/supervised_user/core/common/buildflags.h"
+#include "components/supervised_user/core/common/features.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/web_contents_tester.h"
@@ -76,11 +78,6 @@
 #include "extensions/test/test_extension_dir.h"
 #include "services/data_decoder/data_decoder_service.h"
 #include "services/service_manager/public/cpp/test/test_connector_factory.h"
-
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "components/supervised_user/core/browser/supervised_user_preferences.h"
-#include "components/supervised_user/core/common/features.h"
-#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 namespace extensions {
 
@@ -189,7 +186,7 @@ void AddExtensionAndGrantPermissions(Profile* profile,
 
 void RunAddHostPermission(Profile* profile,
                           const Extension& extension,
-                          base::StringPiece host,
+                          std::string_view host,
                           bool should_succeed,
                           const char* expected_error) {
   SCOPED_TRACE(host);
@@ -334,7 +331,7 @@ class DeveloperPrivateApiUnitTest : public ExtensionServiceTestWithInstall {
   // Runs the API function to update host access for the given |extension| to
   // |new_access|.
   void RunUpdateHostAccess(const Extension& extension,
-                           base::StringPiece new_access);
+                           std::string_view new_access);
 
   virtual bool ProfileIsSupervised() const { return false; }
 
@@ -522,7 +519,7 @@ void DeveloperPrivateApiUnitTest::GetProfileConfiguration(
 
 void DeveloperPrivateApiUnitTest::RunUpdateHostAccess(
     const Extension& extension,
-    base::StringPiece new_access) {
+    std::string_view new_access) {
   SCOPED_TRACE(new_access);
   ExtensionFunction::ScopedUserGestureForTests scoped_user_gesture;
   auto function = base::MakeRefCounted<
@@ -609,6 +606,14 @@ TEST_F(DeveloperPrivateApiUnitTest,
                           base::Unretained(&helper), id),
       "showAccessRequestsInToolbar", id, /*expected_default_value=*/true);
 
+  // Check to ensure the `kPrefAcknowledgeSafetyCheckWarningReason` is not
+  // set yet.
+  int warning_reason = 0;
+  ExtensionPrefs* extension_prefs = ExtensionPrefs::Get(profile());
+  EXPECT_FALSE(extension_prefs->ReadPrefAsInteger(
+      id, extensions::kPrefAcknowledgeSafetyCheckWarningReason,
+      &warning_reason));
+
   auto has_acknowledged_safety_check = [&]() {
     bool has_acknowledged = false;
     return ExtensionPrefs::Get(profile())->ReadPrefAsBoolean(
@@ -619,6 +624,37 @@ TEST_F(DeveloperPrivateApiUnitTest,
   TestExtensionPrefSetting(
       base::BindLambdaForTesting(has_acknowledged_safety_check),
       "acknowledgeSafetyCheckWarning", id, /*expected_default_value=*/false);
+
+  api::developer_private::SafetyCheckWarningReason warning_reason_enum;
+  EXPECT_TRUE(extension_prefs->ReadPrefAsInteger(
+      id, extensions::kPrefAcknowledgeSafetyCheckWarningReason,
+      &warning_reason));
+  warning_reason_enum =
+      static_cast<api::developer_private::SafetyCheckWarningReason>(
+          warning_reason);
+  EXPECT_EQ(warning_reason_enum,
+            api::developer_private::SafetyCheckWarningReason::kNone);
+
+  // Test `acknowledgeSafetyCheckWarningReason` pref.
+  base::Value::List args;
+  args.Append(base::Value::Dict()
+                  .Set("extensionId", id)
+                  .Set("acknowledgeSafetyCheckWarning", true)
+                  .Set("acknowledgeSafetyCheckWarningReason", "MALWARE"));
+
+  ExtensionFunction::ScopedUserGestureForTests scoped_user_gesture;
+  auto function = base::MakeRefCounted<
+      api::DeveloperPrivateUpdateExtensionConfigurationFunction>();
+  EXPECT_TRUE(RunFunction(function, args));
+
+  extension_prefs->ReadPrefAsInteger(
+      id, extensions::kPrefAcknowledgeSafetyCheckWarningReason,
+      &warning_reason);
+  warning_reason_enum =
+      static_cast<api::developer_private::SafetyCheckWarningReason>(
+          warning_reason);
+  EXPECT_EQ(warning_reason_enum,
+            api::developer_private::SafetyCheckWarningReason::kMalware);
 }
 
 // Test developerPrivate.reload.
@@ -1626,7 +1662,7 @@ TEST_F(DeveloperPrivateApiUnitTest, RemoveHostPermission) {
   modifier.SetWithholdHostPermissions(true);
 
   auto run_remove_host_permission = [this, extension](
-                                        base::StringPiece host,
+                                        std::string_view host,
                                         bool should_succeed,
                                         const char* expected_error) {
     SCOPED_TRACE(host);
@@ -3070,7 +3106,6 @@ TEST_F(DeveloperPrivateApiAllowlistUnitTest,
       api::developer_private::EventType::kPrefsChanged));
 }
 
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 class DeveloperPrivateApiSupervisedUserUnitTest
     : public DeveloperPrivateApiUnitTest,
       public testing::WithParamInterface<bool> {
@@ -3145,6 +3180,61 @@ INSTANTIATE_TEST_SUITE_P(
     ExtensionsPermissionsForSupervisedUsersOnDesktopFeature,
     DeveloperPrivateApiSupervisedUserUnitTest,
     testing::Bool());
-#endif
+
+class DeveloperPrivateApiWithMV2DeprecationUnitTest
+    : public DeveloperPrivateApiUnitTest {
+ public:
+  DeveloperPrivateApiWithMV2DeprecationUnitTest() {
+    feature_list_.InitAndEnableFeature(
+        extensions_features::kExtensionManifestV2DeprecationWarning);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+TEST_F(DeveloperPrivateApiWithMV2DeprecationUnitTest,
+       TestAcknowledgingAGivenExtension) {
+  scoped_refptr<const Extension> extension =
+      ExtensionBuilder("ext").SetManifestVersion(2).Build();
+  service()->AddExtension(extension.get());
+
+  ManifestV2ExperimentManager* experiment_manager =
+      ManifestV2ExperimentManager::Get(browser_context());
+  EXPECT_TRUE(experiment_manager->IsExtensionAffected(*extension));
+  EXPECT_FALSE(experiment_manager->DidUserAcknowledgeWarning(extension->id()));
+
+  auto update_function = base::MakeRefCounted<
+      api::DeveloperPrivateUpdateExtensionConfigurationFunction>();
+  update_function->set_source_context_type(mojom::ContextType::kWebUi);
+
+  base::Value::List args;
+  args.Append(base::Value::Dict()
+                  .Set("extensionId", extension->id())
+                  .Set("acknowledgeMv2DeprecationWarning", true));
+
+  EXPECT_TRUE(RunFunction(update_function, args));
+
+  EXPECT_TRUE(experiment_manager->IsExtensionAffected(*extension));
+  EXPECT_TRUE(experiment_manager->DidUserAcknowledgeWarning(extension->id()));
+}
+
+TEST_F(DeveloperPrivateApiWithMV2DeprecationUnitTest,
+       TestAcknowledgingWarningGlobally) {
+  ManifestV2ExperimentManager* experiment_manager =
+      ManifestV2ExperimentManager::Get(browser_context());
+  EXPECT_FALSE(experiment_manager->DidUserAcknowledgeWarningGlobally());
+
+  auto update_profile_function = base::MakeRefCounted<
+      api::DeveloperPrivateUpdateProfileConfigurationFunction>();
+  update_profile_function->set_source_context_type(mojom::ContextType::kWebUi);
+
+  base::Value::List args;
+  args.Append(
+      base::Value::Dict().Set("isMv2DeprecationWarningDismissed", true));
+  EXPECT_TRUE(RunFunction(update_profile_function, args));
+
+  EXPECT_TRUE(experiment_manager->DidUserAcknowledgeWarningGlobally());
+}
 
 }  // namespace extensions

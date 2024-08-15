@@ -614,4 +614,44 @@ using vivaldi::IsVivaldiRunning;
                          }];
 }
 
+#if defined(VIVALDI_BUILD)
+- (UIAction*)actionToOpenInNewBackgroundTabWithURL:(const GURL)URL
+                                        completion:(ProceduralBlock)completion {
+  UrlLoadParams params = UrlLoadParams::InNewTab(URL);
+  params.SetInBackground(YES);
+  UrlLoadingBrowserAgent* loadingAgent =
+      UrlLoadingBrowserAgent::FromBrowser(self.browser);
+  return [self actionToOpenInNewBackgroundTabWithBlock:^{
+    loadingAgent->Load(params);
+    if (completion) {
+      completion();
+    }
+  }];
+}
+
+- (UIAction*)actionOpenImageInNewBackgroundTabWithUrlLoadParams:
+    (UrlLoadParams)params
+                                                     completion:
+    (ProceduralBlock)completion {
+
+  UrlLoadingBrowserAgent* loadingAgent =
+      UrlLoadingBrowserAgent::FromBrowser(self.browser);
+  UIImage* image = [UIImage imageNamed:vMenuNewBackgroundTab];
+
+  UIAction* action =
+    [self actionWithTitle:
+                l10n_util::GetNSString(
+                    IDS_IOS_CONTENT_CONTEXT_OPENIMAGENEWBACKGROUNDTAB)
+                    image:image
+                     type:MenuActionType::OpenImageInNewTab
+                    block:^{
+      loadingAgent->Load(params);
+      if (completion) {
+        completion();
+      }
+    }];
+  return action;
+}
+#endif // End Vivaldi
+
 @end

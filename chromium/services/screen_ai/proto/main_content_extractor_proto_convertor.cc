@@ -11,6 +11,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "services/screen_ai/proto/view_hierarchy.pb.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node.h"
@@ -30,32 +31,32 @@ std::string GetMainContentExtractorRoleFromChromeRole(ax::mojom::Role role) {
 
   constexpr auto kRolesWithSimilarName =
       base::MakeFixedFlatSet<ax::mojom::Role>({
-          ax::mojom::Role::kAlert,       ax::mojom::Role::kArticle,
-          ax::mojom::Role::kBanner,      ax::mojom::Role::kBlockquote,
-          ax::mojom::Role::kButton,      ax::mojom::Role::kCaption,
-          ax::mojom::Role::kCell,        ax::mojom::Role::kCode,
-          ax::mojom::Role::kComment,     ax::mojom::Role::kComplementary,
-          ax::mojom::Role::kDefinition,  ax::mojom::Role::kDialog,
-          ax::mojom::Role::kDirectory,   ax::mojom::Role::kDocument,
-          ax::mojom::Role::kEmphasis,    ax::mojom::Role::kFeed,
-          ax::mojom::Role::kFigure,      ax::mojom::Role::kForm,
-          ax::mojom::Role::kGrid,        ax::mojom::Role::kGroup,
-          ax::mojom::Role::kHeading,     ax::mojom::Role::kLink,
-          ax::mojom::Role::kList,        ax::mojom::Role::kLog,
-          ax::mojom::Role::kMain,        ax::mojom::Role::kMarquee,
-          ax::mojom::Role::kMath,        ax::mojom::Role::kMenu,
-          ax::mojom::Role::kMark,        ax::mojom::Role::kMeter,
-          ax::mojom::Role::kNavigation,  ax::mojom::Role::kNone,
-          ax::mojom::Role::kNote,        ax::mojom::Role::kParagraph,
-          ax::mojom::Role::kRegion,      ax::mojom::Role::kRow,
-          ax::mojom::Role::kSearch,      ax::mojom::Role::kSlider,
-          ax::mojom::Role::kStatus,      ax::mojom::Role::kStrong,
-          ax::mojom::Role::kSubscript,   ax::mojom::Role::kSuggestion,
-          ax::mojom::Role::kSuperscript, ax::mojom::Role::kSwitch,
-          ax::mojom::Role::kTab,         ax::mojom::Role::kTable,
-          ax::mojom::Role::kTerm,        ax::mojom::Role::kTime,
-          ax::mojom::Role::kTimer,       ax::mojom::Role::kToolbar,
-          ax::mojom::Role::kTooltip,     ax::mojom::Role::kTree,
+          ax::mojom::Role::kAlert,      ax::mojom::Role::kArticle,
+          ax::mojom::Role::kBanner,     ax::mojom::Role::kBlockquote,
+          ax::mojom::Role::kButton,     ax::mojom::Role::kCaption,
+          ax::mojom::Role::kCell,       ax::mojom::Role::kCode,
+          ax::mojom::Role::kComment,    ax::mojom::Role::kComplementary,
+          ax::mojom::Role::kDefinition, ax::mojom::Role::kDialog,
+          ax::mojom::Role::kDocument,   ax::mojom::Role::kEmphasis,
+          ax::mojom::Role::kFeed,       ax::mojom::Role::kFigure,
+          ax::mojom::Role::kForm,       ax::mojom::Role::kGrid,
+          ax::mojom::Role::kGroup,      ax::mojom::Role::kHeading,
+          ax::mojom::Role::kLink,       ax::mojom::Role::kList,
+          ax::mojom::Role::kLog,        ax::mojom::Role::kMain,
+          ax::mojom::Role::kMarquee,    ax::mojom::Role::kMath,
+          ax::mojom::Role::kMenu,       ax::mojom::Role::kMark,
+          ax::mojom::Role::kMeter,      ax::mojom::Role::kNavigation,
+          ax::mojom::Role::kNone,       ax::mojom::Role::kNote,
+          ax::mojom::Role::kParagraph,  ax::mojom::Role::kRegion,
+          ax::mojom::Role::kRow,        ax::mojom::Role::kSearch,
+          ax::mojom::Role::kSlider,     ax::mojom::Role::kStatus,
+          ax::mojom::Role::kStrong,     ax::mojom::Role::kSubscript,
+          ax::mojom::Role::kSuggestion, ax::mojom::Role::kSuperscript,
+          ax::mojom::Role::kSwitch,     ax::mojom::Role::kTab,
+          ax::mojom::Role::kTable,      ax::mojom::Role::kTerm,
+          ax::mojom::Role::kTime,       ax::mojom::Role::kTimer,
+          ax::mojom::Role::kToolbar,    ax::mojom::Role::kTooltip,
+          ax::mojom::Role::kTree,
       });
   if (base::Contains(kRolesWithSimilarName, role)) {
     return role_name;
@@ -159,11 +160,29 @@ std::string GetMainContentExtractorRoleFromChromeRole(ax::mojom::Role role) {
 }
 
 void AddAttribute(const std::string& name,
+                  bool value,
+                  screenai::UiElement& ui_element) {
+  screenai::UiElementAttribute attrib;
+  attrib.set_name(name);
+  attrib.set_bool_value(value);
+  ui_element.add_attributes()->Swap(&attrib);
+}
+
+void AddAttribute(const std::string& name,
                   int value,
                   screenai::UiElement& ui_element) {
   screenai::UiElementAttribute attrib;
   attrib.set_name(name);
   attrib.set_int_value(value);
+  ui_element.add_attributes()->Swap(&attrib);
+}
+
+void AddAttribute(const std::string& name,
+                  float value,
+                  screenai::UiElement& ui_element) {
+  screenai::UiElementAttribute attrib;
+  attrib.set_name(name);
+  attrib.set_float_value(value);
   ui_element.add_attributes()->Swap(&attrib);
 }
 
@@ -201,8 +220,12 @@ screenai::UiElement CreateUiElementProto(const ui::AXTree* tree,
       node_data.GetStringAttribute(ax::mojom::StringAttribute::kDisplay);
   if (!display_value.empty())
     AddAttribute("/extras/styles/display", display_value, uie);
-  AddAttribute("/extras/styles/visibility",
-               node_data.IsInvisible() ? "hidden" : "visible", uie);
+  if (features::UseScreen2xV2()) {
+    AddAttribute("/extras/styles/visibility", !node_data.IsInvisible(), uie);
+  } else {
+    AddAttribute("/extras/styles/visibility",
+                 node_data.IsInvisible() ? "hidden" : "visible", uie);
+  }
   // Add extra CSS attributes, such as text-align, hierarchical level, font
   // size, and font weight supported by both AXTree/AXNode and screen2x.
   // Screen2x expects these properties to be in the string format, so we
@@ -222,19 +245,32 @@ screenai::UiElement CreateUiElementProto(const ui::AXTree* tree,
   float float_attribute_value;
   if (node_data.GetFloatAttribute(ax::mojom::FloatAttribute::kFontSize,
                                   &float_attribute_value)) {
-    AddAttribute("/extras/styles/font-size",
-                 base::StringPrintf("%.0fpx", float_attribute_value), uie);
+    if (features::UseScreen2xV2()) {
+      AddAttribute("/extras/styles/font-size", float_attribute_value, uie);
+    } else {
+      AddAttribute("/extras/styles/font-size",
+                   base::StringPrintf("%.0fpx", float_attribute_value), uie);
+    }
   }
   if (node_data.GetFloatAttribute(ax::mojom::FloatAttribute::kFontWeight,
                                   &float_attribute_value)) {
-    AddAttribute("/extras/styles/font-weight",
-                 base::StringPrintf("%.0f", float_attribute_value), uie);
+    if (features::UseScreen2xV2()) {
+      AddAttribute("/extras/styles/font-weight", float_attribute_value, uie);
+    } else {
+      AddAttribute("/extras/styles/font-weight",
+                   base::StringPrintf("%.0f", float_attribute_value), uie);
+    }
   }
 
   // This is a fixed constant for Chrome requests to Screen2x.
   AddAttribute("class_name", "chrome.unicorn", uie);
-  AddAttribute("chrome_role",
-               GetMainContentExtractorRoleFromChromeRole(node_data.role), uie);
+  if (features::UseScreen2xV2()) {
+    AddAttribute("chrome_role", ui::ToString(node_data.role), uie);
+  } else {
+    AddAttribute("chrome_role",
+                 GetMainContentExtractorRoleFromChromeRole(node_data.role),
+                 uie);
+  }
   AddAttribute("text",
                node_data.GetStringAttribute(ax::mojom::StringAttribute::kName),
                uie);
@@ -303,6 +339,8 @@ void AddSubTree(const ui::AXTree* tree,
 namespace screen_ai {
 
 std::string SnapshotToViewHierarchy(const ui::AXTree* tree) {
+  // TODO(https://crbug.com/40851192): Consider adding Chrome version.
+
   // To be computed based on the max dimensions of all elements in the tree.
   // TODO(https://crbug.com/40851192): Consider using combination of scroll
   // max and view port size to find the tree dimensions. Screen2x is getting the

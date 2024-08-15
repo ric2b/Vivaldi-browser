@@ -12,7 +12,10 @@
 
 #include "base/check.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_forward.h"
 #include "base/notreached.h"
+#include "base/strings/strcat.h"
 #include "base/test/bind.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -145,22 +148,29 @@ InteractiveFamilyLiveTest::InteractiveFamilyLiveTest(
                                               extra_enabled_hosts) {}
 
 ui::test::internal::InteractiveTestPrivate::MultiStep
-InteractiveFamilyLiveTest::DefineChromeTestState(
-    ui::test::StateIdentifier<ChromeTestStateObserver> id,
-    const std::vector<GURL>& allowed_urls,
-    const std::vector<GURL>& blocked_urls) {
-  return Steps(ObserveState(id, std::make_unique<DefineChromeTestStateObserver>(
-                                    head_of_household(), child(), allowed_urls,
-                                    blocked_urls)),
-               WaitForState(id, ChromeTestStateSeedingResult::kIntendedState));
-}
-
-ui::test::internal::InteractiveTestPrivate::MultiStep
-InteractiveFamilyLiveTest::ResetChromeTestState(
-    ui::test::StateIdentifier<ChromeTestStateObserver> id) {
-  return Steps(ObserveState(id, std::make_unique<ResetChromeTestStateObserver>(
-                                    head_of_household(), child())),
-               WaitForState(id, ChromeTestStateSeedingResult::kIntendedState));
+InteractiveFamilyLiveTest::WaitForStateSeeding(
+    ui::test::StateIdentifier<BrowserState::Observer> id,
+    const FamilyMember& rpc_issuer,
+    const FamilyMember& browser_user,
+    const BrowserState& state) {
+  return Steps(
+      Log(base::StrCat({"WaitForState[", state.ToString(), "]: start"})),
+      If(state.GetIntendedStateCheck(browser_user),
+         /* then_steps= */
+         Log(base::StrCat(
+             {"WaitForState[", state.ToString(), "]: not needed"})),
+         /* else_steps= */
+         Steps(
+             ObserveState(id,
+                          base::BindOnce(&FamilyMember::supervised_user_service,
+                                         base::Unretained(&browser_user)),
+                          base::BindOnce(&BrowserState::GetIntendedStateCheck,
+                                         base::Unretained(&state),
+                                         std::ref(browser_user))),
+             Do([&]() { state.Seed(rpc_issuer, browser_user); }),
+             WaitForState(id, BrowserState::SeedingStatus::kCompleted),
+             StopObservingState(id))),
+      Log(base::StrCat({"WaitForState[", state.ToString(), "]: completed"})));
 }
 
 }  // namespace supervised_user

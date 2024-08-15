@@ -29,6 +29,7 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/functional/any_invocable.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
@@ -87,6 +88,7 @@ class NearbyShareContactManager;
 
 namespace NearbySharingServiceUnitTests {
 class NearbySharingServiceImplTest_CreateShareTarget_Test;
+class NearbySharingServiceImplTest_RemoveIncomingPayloads_Test;
 };
 
 // All methods should be called from the same sequence that created the service.
@@ -102,6 +104,8 @@ class NearbySharingServiceImpl
       public NearbyConnectionsManager::DiscoveryListener {
   FRIEND_TEST(NearbySharingServiceUnitTests::NearbySharingServiceImplTest,
               CreateShareTarget);
+  FRIEND_TEST(NearbySharingServiceUnitTests::NearbySharingServiceImplTest,
+              RemoveIncomingPayloads);
 
  public:
   NearbySharingServiceImpl(
@@ -147,19 +151,19 @@ class NearbySharingServiceImpl
   bool IsWifiPowered() const override;
   std::string GetQrCodeUrl() const override;
   void SendAttachments(
-      const ShareTarget& share_target,
+      int64_t share_target_id,
       std::vector<std::unique_ptr<Attachment>> attachments,
       std::function<void(StatusCodes)> status_codes_callback) override;
-  void Accept(const ShareTarget& share_target,
+  void Accept(int64_t share_target_id,
               std::function<void(StatusCodes status_codes)>
                   status_codes_callback) override;
-  void Reject(const ShareTarget& share_target,
+  void Reject(int64_t share_target_id,
               std::function<void(StatusCodes status_codes)>
                   status_codes_callback) override;
-  void Cancel(const ShareTarget& share_target,
+  void Cancel(int64_t share_target_id,
               std::function<void(StatusCodes status_codes)>
                   status_codes_callback) override;
-  bool DidLocalUserCancelTransfer(const ShareTarget& share_target) override;
+  bool DidLocalUserCancelTransfer(int64_t share_target_id) override;
   void Open(const ShareTarget& share_target,
             std::function<void(StatusCodes status_codes)> status_codes_callback)
       override;
@@ -244,6 +248,7 @@ class NearbySharingServiceImpl
       ReceiveSurfaceState state);
   bool IsVisibleInBackground(proto::DeviceVisibility visibility);
   std::optional<std::vector<uint8_t>> CreateEndpointInfo(
+      proto::DeviceVisibility visibility,
       const std::optional<std::string>& device_name) const;
   void StartFastInitiationAdvertising();
   void OnStartFastInitiationAdvertising();
@@ -267,7 +272,7 @@ class NearbySharingServiceImpl
       std::unique_ptr<Advertisement> advertisement);
   void OnOutgoingDecryptedCertificate(
       absl::string_view endpoint_id, absl::Span<const uint8_t> endpoint_info,
-      std::unique_ptr<Advertisement> advertisement,
+      const Advertisement& advertisement,
       std::optional<NearbyShareDecryptedPublicCertificate> certificate);
   void ScheduleCertificateDownloadDuringDiscovery(size_t attempt_count);
   void OnCertificateDownloadDuringDiscoveryTimerFired(size_t attempt_count);
@@ -335,22 +340,21 @@ class NearbySharingServiceImpl
   void WriteProgressUpdateFrame(NearbyConnection& connection,
                                 std::optional<bool> start_transfer,
                                 std::optional<float> progress);
-  void Fail(const ShareTarget& share_target, TransferMetadata::Status status);
+  void Fail(int64_t share_target_id, TransferMetadata::Status status);
   void OnIncomingAdvertisementDecoded(
-      absl::string_view endpoint_id, ShareTarget placeholder_share_target,
+      absl::string_view endpoint_id, int64_t placeholder_share_target_id,
       std::unique_ptr<Advertisement> advertisement);
   void OnIncomingTransferUpdate(const ShareTarget& share_target,
                                 const TransferMetadata& metadata);
   void OnOutgoingTransferUpdate(const ShareTarget& share_target,
                                 const TransferMetadata& metadata);
-  void CloseConnection(const ShareTarget& share_target);
+  void CloseConnection(int64_t share_target_id);
   void OnIncomingDecryptedCertificate(
-      absl::string_view endpoint_id,
-      std::unique_ptr<Advertisement> advertisement,
-      ShareTarget placeholder_share_target,
+      absl::string_view endpoint_id, const Advertisement& advertisement,
+      int64_t placeholder_share_target_id,
       std::optional<NearbyShareDecryptedPublicCertificate> certificate);
   void RunPairedKeyVerification(
-      const ShareTarget& share_target, absl::string_view endpoint_id,
+      int64_t share_target_id, absl::string_view endpoint_id,
       std::function<
           void(PairedKeyVerificationRunner::PairedKeyVerificationResult,
                ::location::nearby::proto::sharing::OSType)>
@@ -364,7 +368,6 @@ class NearbySharingServiceImpl
       std::optional<std::string> four_digit_token,
       PairedKeyVerificationRunner::PairedKeyVerificationResult result,
       ::location::nearby::proto::sharing::OSType share_target_os_type);
-  void RefreshUIOnDisconnection(ShareTarget share_target);
   void ReceiveIntroduction(ShareTarget share_target,
                            std::optional<std::string> four_digit_token);
   void OnReceivedIntroduction(
@@ -380,54 +383,49 @@ class NearbySharingServiceImpl
   void OnFrameRead(
       ShareTarget share_target,
       std::optional<nearby::sharing::service::proto::V1Frame> frame);
-  void HandleCertificateInfoFrame(
-      const nearby::sharing::service::proto::CertificateInfoFrame&
-          certificate_frame);
   void HandleProgressUpdateFrame(
       const ShareTarget& share_target,
       const nearby::sharing::service::proto::ProgressUpdateFrame&
           progress_update_frame);
 
-  void OnIncomingConnectionDisconnected(const ShareTarget& share_target);
-  void OnOutgoingConnectionDisconnected(const ShareTarget& share_target);
+  void OnConnectionDisconnected(int64_t share_target_id,
+                                TransferMetadata::Status status);
 
-  void OnIncomingMutualAcceptanceTimeout(const ShareTarget& share_target);
-  void OnOutgoingMutualAcceptanceTimeout(const ShareTarget& share_target);
+  void OnIncomingMutualAcceptanceTimeout(int64_t share_target_id);
+  void OnOutgoingMutualAcceptanceTimeout(int64_t share_target_id);
 
   void Cleanup();
 
   std::optional<ShareTarget> CreateShareTarget(
       absl::string_view endpoint_id,
-      std::unique_ptr<Advertisement> advertisement,
+      const Advertisement& advertisement,
       std::optional<NearbyShareDecryptedPublicCertificate> certificate,
       bool is_incoming);
 
-  void OnPayloadTransferUpdate(ShareTarget share_target,
+  void OnPayloadTransferUpdate(int64_t share_target_id,
                                TransferMetadata metadata);
   bool OnIncomingPayloadsComplete(ShareTarget& share_target);
   void RemoveIncomingPayloads(ShareTarget share_target);
-  void Disconnect(const ShareTarget& share_target, TransferMetadata metadata);
+  void Disconnect(int64_t share_target_id, TransferMetadata metadata);
   void OnDisconnectingConnectionTimeout(absl::string_view endpoint_id);
-  void OnDisconnectingConnectionDisconnected(const ShareTarget& share_target,
+  void OnDisconnectingConnectionDisconnected(int64_t share_target_id,
                                              absl::string_view endpoint_id);
 
   ShareTargetInfo& GetOrCreateShareTargetInfo(const ShareTarget& share_target,
                                               absl::string_view endpoint_id);
 
-  ShareTargetInfo* GetShareTargetInfo(const ShareTarget& share_target);
-  IncomingShareTargetInfo* GetIncomingShareTargetInfo(
-      const ShareTarget& share_target);
-  OutgoingShareTargetInfo* GetOutgoingShareTargetInfo(
-      const ShareTarget& share_target);
+  ShareTargetInfo* GetShareTargetInfo(int64_t share_target_id);
+  IncomingShareTargetInfo* GetIncomingShareTargetInfo(int64_t share_target_id);
+  OutgoingShareTargetInfo* GetOutgoingShareTargetInfo(int64_t share_target_id);
 
-  NearbyConnection* GetConnection(const ShareTarget& share_target);
+  NearbyConnection* GetConnection(int64_t share_target_id);
   std::optional<std::vector<uint8_t>> GetBluetoothMacAddressForShareTarget(
-      const ShareTarget& share_target);
+      int64_t share_target_id);
 
   void ClearOutgoingShareTargetInfoMap();
   void SetAttachmentPayloadId(const Attachment& attachment, int64_t payload_id);
   std::optional<int64_t> GetAttachmentPayloadId(int64_t attachment_id);
-  void UnregisterShareTarget(const ShareTarget& share_target);
+  void UnregisterShareTarget(int64_t share_target_id);
 
   void OnStartAdvertisingResult(bool used_device_name, Status status);
   void OnStopAdvertisingResult(Status status);
@@ -438,12 +436,12 @@ class NearbySharingServiceImpl
   // reference could likely be invalidated by the owner during the multistep
   // cancellation process.
   void DoCancel(
-      ShareTarget share_target,
+       int64_t share_target_id,
       std::function<void(StatusCodes status_codes)> status_codes_callback,
       bool is_initiator_of_cancellation);
 
   void AbortAndCloseConnectionIfNecessary(TransferMetadata::Status status,
-                                          const ShareTarget& share_target);
+                                          int64_t share_target_id);
 
   // Monitor connectivity changes.
   void OnNetworkChanged(nearby::ConnectivityManager::ConnectionType type);
@@ -456,24 +454,22 @@ class NearbySharingServiceImpl
   // `contacts` -> `off`.
   void ResetAllSettings(bool logout);
 
-  // Checks whether SDK should auto-accept remote attachments.
-  bool ShouldSelfShareAutoAccept(const ShareTarget& share_target) const;
-
   // Checks whether we should accept transfer.
-  bool ReadyToAccept(const ShareTarget& share_target,
+  bool ReadyToAccept(bool for_self_share,
                      TransferMetadata::Status status) const;
 
   // Runs API/task on the service thread to avoid UI block.
   void RunOnNearbySharingServiceThread(absl::string_view task_name,
-                                       std::function<void()> task);
+                                       absl::AnyInvocable<void()> task);
 
   // Runs API/task on the service thread with delayed time.
   void RunOnNearbySharingServiceThreadDelayed(absl::string_view task_name,
                                               absl::Duration delay,
-                                              std::function<void()> task);
+                                              absl::AnyInvocable<void()> task);
 
   // Runs API/task on a random thread.
-  void RunOnAnyThread(absl::string_view task_name, std::function<void()> task);
+  void RunOnAnyThread(absl::string_view task_name,
+                      absl::AnyInvocable<void()> task);
 
   // Returns a 1-based position.It is used by group share feature.
   int GetConnectedShareTargetPos(const ShareTarget& target);

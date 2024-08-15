@@ -35,7 +35,6 @@
 #include "langsvr/lsp/primitives.h"
 #include "langsvr/lsp/printer.h"
 #include "src/tint/lang/wgsl/ls/helpers_test.h"
-#include "src/tint/utils/text/unicode.h"
 
 namespace tint::wgsl::ls {
 namespace {
@@ -52,7 +51,7 @@ std::ostream& operator<<(std::ostream& stream, const Case& c) {
 }
 
 using LsReferencesTest = LsTestWithParam<Case>;
-TEST_P(LsReferencesTest, Symbols) {
+TEST_P(LsReferencesTest, References) {
     auto parsed = ParseMarkers(GetParam().markup);
     ASSERT_EQ(parsed.positions.size(), 1u);
 
@@ -85,7 +84,7 @@ TEST_P(LsReferencesTest, Symbols) {
     }
 }
 
-// TODO(bclayton): Type aliases.
+// TODO(crbug.com/tint/2127): Type aliases.
 INSTANTIATE_TEST_SUITE_P(IncludeDeclaration,
                          LsReferencesTest,
                          ::testing::ValuesIn(std::vector<Case>{

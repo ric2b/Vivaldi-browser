@@ -4,6 +4,11 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "xfa/fgas/graphics/cfgas_gegraphics.h"
 
 #include <math.h>
@@ -246,7 +251,7 @@ void CFGAS_GEGraphics::FillPathWithPattern(
   int32_t width = bitmap->GetWidth();
   int32_t height = bitmap->GetHeight();
   auto bmp = pdfium::MakeRetain<CFX_DIBitmap>();
-  bmp->Create(width, height, FXDIB_Format::kArgb);
+  CHECK(bmp->Create(width, height, FXDIB_Format::kArgb));
   m_renderDevice->GetDIBits(bmp, 0, 0);
 
   CFGAS_GEPattern::HatchStyle hatchStyle =
@@ -255,7 +260,7 @@ void CFGAS_GEGraphics::FillPathWithPattern(
       GetHatchBitmapData(static_cast<size_t>(hatchStyle));
 
   auto mask = pdfium::MakeRetain<CFX_DIBitmap>();
-  mask->Create(data.width, data.height, FXDIB_Format::k1bppMask);
+  CHECK(mask->Create(data.width, data.height, FXDIB_Format::k1bppMask));
   fxcrt::spancpy(
       mask->GetWritableBuffer(),
       pdfium::make_span(data.maskBits).first(mask->GetPitch() * data.height));
@@ -289,7 +294,7 @@ void CFGAS_GEGraphics::FillPathWithShading(
   float end_x = m_info.fillColor.GetShading()->GetEndPoint().x;
   float end_y = m_info.fillColor.GetShading()->GetEndPoint().y;
   auto bmp = pdfium::MakeRetain<CFX_DIBitmap>();
-  bmp->Create(width, height, FXDIB_Format::kArgb);
+  CHECK(bmp->Create(width, height, FXDIB_Format::kArgb));
   m_renderDevice->GetDIBits(bmp, 0, 0);
   bool result = false;
   switch (m_info.fillColor.GetShading()->GetType()) {

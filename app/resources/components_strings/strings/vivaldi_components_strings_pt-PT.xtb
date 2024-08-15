@@ -169,7 +169,6 @@
 <translation id="7353601530677266744">Linha de comandos</translation>
 <translation id="7364115444476960850">Esta página foi bloqueada pelo <ph name="BLOCKER_NAME" /> do Vivaldi</translation>
 <translation id="7419106976560586862">Caminho do Perfil</translation>
-<translation id="7445762425076701745">Não é possível validar totalmente a identidade do servidor ao qual está ligado. Está ligado a um servidor com um nome que apenas é válido na sua rede, que não permite que uma autoridade de certificação externa valide a respetiva propriedade. Ainda assim, algumas autoridades emitem certificados para esses nomes, pelo que não há forma de garantir que está ligado ao website que pretende e não a um website pirata.</translation>
 <translation id="7455133967321480974">Utilizar pré-definição global (Bloquear)</translation>
 <translation id="7518003948725431193">Não foi encontrada qualquer página Web para o endereço Web: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Esta página Web requer os dados introduzidos anteriormente para ser corretamente apresentada. Pode enviar novamente esses dados, mas ao fazê-lo, irá repetir as ações que esta página executou anteriormente.</translation>

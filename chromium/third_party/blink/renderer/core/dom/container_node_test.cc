@@ -163,4 +163,96 @@ TEST_F(ContainerNodeTest, FindTextInElementWithSubstringIgnoresComments) {
   EXPECT_EQ(String(" Before comment,  after comment. "), text);
 }
 
+TEST_F(ContainerNodeTest, FindTextInElementWithSubstringIgnoresAsciiCase) {
+  SetBodyContent(R"HTML(
+    <body>
+      <p id="id"> MaGiC RaInBoW. </p>
+    </body>
+  )HTML");
+
+  String text = GetDocument().FindTextInElementWith(
+      AtomicString("magic"), [](const String&) { return true; });
+
+  EXPECT_EQ(String(" MaGiC RaInBoW. "), text);
+}
+
+TEST_F(ContainerNodeTest, CanFindTextInReadonlyTextInputElement) {
+  SetBodyContent(R"HTML(
+    <body>
+      <p><input id="id" type="text" readonly="" value=" MaGiC RaInBoW. "></p>
+    </body>
+  )HTML");
+
+  String text = GetDocument().FindTextInElementWith(
+      AtomicString("magic"), [](const String&) { return true; });
+
+  EXPECT_EQ(String(" MaGiC RaInBoW. "), text);
+}
+
+TEST_F(ContainerNodeTest, CannotFindTextInNonReadonlyTextInputElement) {
+  SetBodyContent(R"HTML(
+    <body>
+      <p><input id="id" type="text" value=" MaGiC RaInBoW. "></p>
+    </body>
+  )HTML");
+
+  String text = GetDocument().FindTextInElementWith(
+      AtomicString("magic"), [](const String&) { return true; });
+
+  EXPECT_TRUE(text.empty());
+}
+
+TEST_F(ContainerNodeTest, CannotFindTextInNonTextInputElement) {
+  SetBodyContent(R"HTML(
+    <body>
+      <p><input id="id" type="url" readonly="" value=" MaGiC RaInBoW. "></p>
+    </body>
+  )HTML");
+
+  String text = GetDocument().FindTextInElementWith(
+      AtomicString("magic"), [](const String&) { return true; });
+
+  EXPECT_TRUE(text.empty());
+}
+
+TEST_F(ContainerNodeTest, FindTextInTheValueOfTheReadonlyInputFirst) {
+  SetBodyContent(R"HTML(
+    <body>
+      <p><input id="id" type="text" readonly="" value="lookup value">lookup
+        text children</input></p>
+    </body>
+  )HTML");
+
+  String text = GetDocument().FindTextInElementWith(
+      AtomicString("lookup"), [](const String&) { return true; });
+
+  EXPECT_EQ(String("lookup value"), text);
+}
+
+TEST_F(ContainerNodeTest, FindTextInTheValueOfTheReadonlyInputWithTypeTEXT) {
+  SetBodyContent(R"HTML(
+    <body>
+      <p><input id="id" type="TEXT" readonly="" value="lookup value"></p>
+    </body>
+  )HTML");
+
+  String text = GetDocument().FindTextInElementWith(
+      AtomicString("lookup"), [](const String&) { return true; });
+
+  EXPECT_EQ(String("lookup value"), text);
+}
+
+TEST_F(ContainerNodeTest, CanFindTextInTextarea) {
+  SetBodyContent(R"HTML(
+    <body>
+      <p><textarea id="id">lookup text children</textarea></p>
+    </body>
+  )HTML");
+
+  String text = GetDocument().FindTextInElementWith(
+      AtomicString("lookup"), [](const String&) { return true; });
+
+  EXPECT_EQ(String("lookup text children"), text);
+}
+
 }  // namespace blink

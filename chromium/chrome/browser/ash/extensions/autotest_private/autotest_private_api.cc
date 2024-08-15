@@ -22,10 +22,10 @@
 #include "ash/components/arc/session/arc_bridge_service.h"
 #include "ash/components/arc/session/arc_service_manager.h"
 #include "ash/components/arc/system_ui/arc_system_ui_bridge.h"
-#include "ash/constants/app_types.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
+#include "ash/metrics/login_unlock_throughput_recorder.h"
 #include "ash/public/cpp/accelerators.h"
 #include "ash/public/cpp/ambient/ambient_prefs.h"
 #include "ash/public/cpp/ambient/ambient_ui_model.h"
@@ -126,7 +126,6 @@
 #include "chrome/browser/ash/printing/cups_printers_manager.h"
 #include "chrome/browser/ash/printing/cups_printers_manager_factory.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
-#include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/ash/settings/stats_reporting_controller.h"
 #include "chrome/browser/ash/system/input_device_settings.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
@@ -167,6 +166,7 @@
 #include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "chromeos/ash/components/metrics/login_event_recorder.h"
+#include "chromeos/ash/components/settings/cros_settings.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "chromeos/ash/services/assistant/assistant_manager_service_impl.h"
 #include "chromeos/ash/services/assistant/public/cpp/assistant_prefs.h"
@@ -175,7 +175,9 @@
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/printing/printer_configuration.h"
 #include "chromeos/services/machine_learning/public/cpp/service_connection.h"
+#include "chromeos/ui/base/app_types.h"
 #include "chromeos/ui/base/window_properties.h"
+#include "chromeos/ui/frame/caption_buttons/caption_button_model.h"
 #include "chromeos/ui/frame/default_frame_header.h"
 #include "chromeos/ui/frame/frame_header.h"
 #include "chromeos/ui/frame/immersive/immersive_fullscreen_controller.h"
@@ -248,6 +250,7 @@
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/system_input_injector.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/window/caption_button_types.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/core/cursor_manager.h"
 #include "ui/wm/core/window_properties.h"
@@ -453,21 +456,21 @@ api::autotest_private::AppInstallSource GetAppInstallSource(
   return api::autotest_private::AppInstallSource::kNone;
 }
 
-api::autotest_private::AppWindowType GetAppWindowType(ash::AppType type) {
+api::autotest_private::AppWindowType GetAppWindowType(chromeos::AppType type) {
   switch (type) {
-    case ash::AppType::ARC_APP:
+    case chromeos::AppType::ARC_APP:
       return api::autotest_private::AppWindowType::kArcApp;
-    case ash::AppType::SYSTEM_APP:
+    case chromeos::AppType::SYSTEM_APP:
       return api::autotest_private::AppWindowType::kSystemApp;
-    case ash::AppType::CROSTINI_APP:
+    case chromeos::AppType::CROSTINI_APP:
       return api::autotest_private::AppWindowType::kCrostiniApp;
-    case ash::AppType::CHROME_APP:
+    case chromeos::AppType::CHROME_APP:
       return api::autotest_private::AppWindowType::kExtensionApp;
-    case ash::AppType::BROWSER:
+    case chromeos::AppType::BROWSER:
       return api::autotest_private::AppWindowType::kBrowser;
-    case ash::AppType::LACROS:
+    case chromeos::AppType::LACROS:
       return api::autotest_private::AppWindowType::kLacros;
-    case ash::AppType::NON_APP:
+    case chromeos::AppType::NON_APP:
       return api::autotest_private::AppWindowType::kNone;
       // TODO(oshima): Investigate if we want to have "extension" type.
   }
@@ -493,6 +496,8 @@ api::autotest_private::AppReadiness GetAppReadiness(apps::Readiness readiness) {
       return api::autotest_private::AppReadiness::kRemoved;
     case apps::Readiness::kUninstalledByNonUser:
       return api::autotest_private::AppReadiness::kUninstalledByMigration;
+    case apps::Readiness::kDisabledByLocalSettings:
+      return api::autotest_private::AppReadiness::kDisabledByLocalSettings;
     case apps::Readiness::kUnknown:
       return api::autotest_private::AppReadiness::kNone;
   }
@@ -1492,6 +1497,33 @@ ExtensionFunction::ResponseAction AutotestPrivateLoginStatusFunction::Run() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateWaitForLoginAnimationEndFunction
+///////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateWaitForLoginAnimationEndFunction::
+    ~AutotestPrivateWaitForLoginAnimationEndFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateWaitForLoginAnimationEndFunction::Run() {
+  DVLOG(1) << "AutotestPrivateWaitForLoginAnimationEndFunction";
+  ash::Shell::Get()
+      ->login_unlock_throughput_recorder()
+      ->post_login_deferred_task_runner()
+      ->PostTask(
+          FROM_HERE,
+          base::BindOnce(&AutotestPrivateWaitForLoginAnimationEndFunction::
+                             OnLoginAnimationEnd,
+                         this));
+  return RespondLater();
+}
+
+void AutotestPrivateWaitForLoginAnimationEndFunction::OnLoginAnimationEnd() {
+  DVLOG(1)
+      << "AutotestPrivateWaitForLoginAnimationEndFunction::OnLoginAnimationEnd";
+  Respond(NoArguments());
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // AutotestPrivateLockScreenFunction
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1637,7 +1669,7 @@ AutotestPrivateGetExtensionsInfoFunction::Run() {
             .Set("allowedInIncognito",
                  util::IsIncognitoEnabled(id, browser_context()))
             .Set("hasPageAction",
-                 action && action->action_type() == ActionInfo::TYPE_PAGE));
+                 action && action->action_type() == ActionInfo::Type::kPage));
   }
 
   return RespondNow(WithArguments(
@@ -2921,7 +2953,7 @@ AutotestPrivateRegisterComponentFunction::Run() {
            << ", " << params->path;
 
   g_browser_process->platform_part()
-      ->cros_component_manager()
+      ->component_manager_ash()
       ->RegisterCompatiblePath(params->name,
                                component_updater::CompatibleComponentInfo(
                                    base::FilePath(params->path), std::nullopt));
@@ -4534,8 +4566,8 @@ AutotestPrivateGetAppWindowListFunction::Run() {
     api::autotest_private::AppWindowInfo window_info;
     window_info.id = window->GetId();
     window_info.name = window->GetName();
-    window_info.window_type = GetAppWindowType(
-        static_cast<ash::AppType>(window->GetProperty(aura::client::kAppType)));
+    window_info.window_type =
+        GetAppWindowType(window->GetProperty(chromeos::kAppTypeKey));
     window_info.state_type =
         ToWindowStateType(window->GetProperty(chromeos::kWindowStateTypeKey));
     window_info.bounds_in_root =
@@ -4571,8 +4603,8 @@ AutotestPrivateGetAppWindowListFunction::Run() {
       }
     }
 
-    if (window->GetProperty(aura::client::kAppType) ==
-        static_cast<int>(ash::AppType::ARC_APP)) {
+    if (window->GetProperty(chromeos::kAppTypeKey) ==
+        chromeos::AppType::ARC_APP) {
       std::string* package_name = window->GetProperty(ash::kArcPackageNameKey);
       if (package_name) {
         window_info.arc_package_name = *package_name;
@@ -6631,8 +6663,8 @@ AutotestPrivateInstallBruschettaFunction::Run() {
   // This API is available only on test images.
   base::SysInfo::CrashIfChromeOSNonTestImage();
 
-  std::optional<api::autotest_private::RemoveBruschetta::Params> params =
-      api::autotest_private::RemoveBruschetta::Params::Create(args());
+  std::optional<api::autotest_private::InstallBruschetta::Params> params =
+      api::autotest_private::InstallBruschetta::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
@@ -6735,8 +6767,7 @@ AutotestPrivateIsFeatureEnabledFunction::Run() {
   // of features instead.
   static const base::Feature* const kAllowList[] = {
       // clang-format off
-      &ash::features::kPrivacyIndicators,
-      &ash::features::kVideoConference,
+      &ash::features::kFeatureManagementVideoConference,
       &chromeos::features::kJelly,
       &kDisabledFeatureForTest,
       &kEnabledFeatureForTest,

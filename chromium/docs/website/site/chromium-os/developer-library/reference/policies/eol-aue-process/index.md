@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: eol-aue-process
 title: End of Life (EOL) / Auto Update Expiration (AUE) Process
 ---

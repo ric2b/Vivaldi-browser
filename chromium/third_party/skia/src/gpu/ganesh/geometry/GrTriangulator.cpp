@@ -7,15 +7,26 @@
 
 #include "src/gpu/ganesh/geometry/GrTriangulator.h"
 
+#include "include/core/SkPathTypes.h"
+#include "include/core/SkRect.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkFloatingPoint.h"
+#include "include/private/base/SkMath.h"
+#include "include/private/base/SkTPin.h"
+#include "src/base/SkVx.h"
+#include "src/core/SkGeometry.h"
+#include "src/core/SkPointPriv.h"
 #include "src/gpu/BufferWriter.h"
+#include "src/gpu/ganesh/GrColor.h"
 #include "src/gpu/ganesh/GrEagerVertexAllocator.h"
 #include "src/gpu/ganesh/geometry/GrPathUtils.h"
 
-#include "src/core/SkGeometry.h"
-#include "src/core/SkPointPriv.h"
-
 #include <algorithm>
+#include <cstddef>
+#include <limits>
+#include <memory>
 #include <tuple>
+#include <utility>
 
 #if !defined(SK_ENABLE_OPTIMIZE_SIZE)
 
@@ -125,8 +136,8 @@ void GrTriangulator::VertexList::remove(Vertex* v) {
 // Round to nearest quarter-pixel. This is used for screenspace tessellation.
 
 static inline void round(SkPoint* p) {
-    p->fX = SkScalarRoundToScalar(p->fX * SkFloatToScalar(4.0f)) * SkFloatToScalar(0.25f);
-    p->fY = SkScalarRoundToScalar(p->fY * SkFloatToScalar(4.0f)) * SkFloatToScalar(0.25f);
+    p->fX = SkScalarRoundToScalar(p->fX * 4.0f) * 0.25f;
+    p->fY = SkScalarRoundToScalar(p->fY * 4.0f) * 0.25f;
 }
 
 static inline SkScalar double_to_clamped_scalar(double d) {
@@ -509,8 +520,7 @@ void GrTriangulator::generateCubicPoints(const SkPoint& p0, const SkPoint& p1, c
                                          int pointsLeft) const {
     SkScalar d1 = SkPointPriv::DistanceToLineSegmentBetweenSqd(p1, p0, p3);
     SkScalar d2 = SkPointPriv::DistanceToLineSegmentBetweenSqd(p2, p0, p3);
-    if (pointsLeft < 2 || (d1 < tolSqd && d2 < tolSqd) ||
-        !SkScalarIsFinite(d1) || !SkScalarIsFinite(d2)) {
+    if (pointsLeft < 2 || (d1 < tolSqd && d2 < tolSqd) || !SkIsFinite(d1, d2)) {
         this->appendPointToContour(p3, contour);
         return;
     }
@@ -1430,6 +1440,7 @@ GrTriangulator::SimplifyResult GrTriangulator::simplify(VertexList* mesh,
     TESS_LOG("simplifying complex polygons\n");
 
     int initialNumEdges = fNumEdges;
+    int numSelfIntersections = 0;
 
     EdgeList activeEdges;
     auto result = SimplifyResult::kAlreadySimple;
@@ -1442,6 +1453,12 @@ GrTriangulator::SimplifyResult GrTriangulator::simplify(VertexList* mesh,
         // renderers enabled and with the triangulator's maxVerbCount set to the Chrome value is
         // 17x.
         if (fNumEdges > 170*initialNumEdges) {
+            return SimplifyResult::kFailed;
+        }
+
+        // In pathological cases, a path can intersect itself millions of times. After 500,000
+        // self-intersections are found, reject the path.
+        if (numSelfIntersections > 500000) {
             return SimplifyResult::kFailed;
         }
 
@@ -1461,12 +1478,14 @@ GrTriangulator::SimplifyResult GrTriangulator::simplify(VertexList* mesh,
                             leftEnclosingEdge, edge, &activeEdges, &v, mesh, c);
                     if (l == BoolFail::kFail) {
                         return SimplifyResult::kFailed;
-                    } else if (l == BoolFail::kFalse) {
+                    }
+                    if (l == BoolFail::kFalse) {
                         BoolFail r = this->checkForIntersection(
                                 edge, rightEnclosingEdge, &activeEdges, &v, mesh, c);
                         if (r == BoolFail::kFail) {
                             return SimplifyResult::kFailed;
-                        } else if (r == BoolFail::kFalse) {
+                        }
+                        if (r == BoolFail::kFalse) {
                             // Neither l and r are both false.
                             continue;
                         }
@@ -1475,6 +1494,7 @@ GrTriangulator::SimplifyResult GrTriangulator::simplify(VertexList* mesh,
                     // Either l or r are true.
                     result = SimplifyResult::kFoundSelfIntersection;
                     restartChecks = true;
+                    ++numSelfIntersections;
                     break;
                 }  // for
             } else {
@@ -1486,8 +1506,8 @@ GrTriangulator::SimplifyResult GrTriangulator::simplify(VertexList* mesh,
                 if (bf == BoolFail::kTrue) {
                     result = SimplifyResult::kFoundSelfIntersection;
                     restartChecks = true;
+                    ++numSelfIntersections;
                 }
-
             }
         } while (restartChecks);
 #ifdef SK_DEBUG

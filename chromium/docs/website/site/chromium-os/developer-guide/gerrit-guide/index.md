@@ -65,7 +65,7 @@ must link your accounts to have proper access in Gerrit.
 ## **Using Gerrit**
 
 Check out the [Contributing
-Guide](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/contributing.md)
+Guide](/chromium-os/developer-library/guides/development/contributing/)
 for using Gerrit and getting through the Chromium OS review process.
 
 ## More Gerrit Tips

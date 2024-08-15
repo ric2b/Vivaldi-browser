@@ -19,11 +19,11 @@
 #include "vpx_dsp/psnr.h"
 #include "vpx_ports/static_assert.h"
 #include "vpx_ports/system_state.h"
-#include "vpx_util/vpx_thread.h"
 #include "vpx_util/vpx_timestamp.h"
 #include "vpx/internal/vpx_codec_internal.h"
 #include "./vpx_version.h"
 #include "vp9/encoder/vp9_encoder.h"
+#include "vp9/encoder/vp9_ethread.h"
 #include "vpx/vp8cx.h"
 #include "vp9/common/vp9_alloccommon.h"
 #include "vp9/common/vp9_scale.h"
@@ -132,6 +132,8 @@ struct vpx_codec_alg_priv {
   vpx_codec_priv_output_cx_pkt_cb_pair_t output_cx_pkt_cb;
   // BufferPool that holds all reference frames.
   BufferPool *buffer_pool;
+  vpx_fixed_buf_t global_headers;
+  int global_header_subsampling;
 };
 
 // Called by encoder_set_config() and encoder_encode() only. Must not be called
@@ -1142,6 +1144,7 @@ static vpx_codec_err_t encoder_init(vpx_codec_ctx_t *ctx,
 
     if (res == VPX_CODEC_OK) {
       priv->pts_offset_initialized = 0;
+      priv->global_header_subsampling = -1;
       set_encoder_config(&priv->oxcf, &priv->cfg, &priv->extra_cfg);
 #if CONFIG_VP9_HIGHBITDEPTH
       priv->oxcf.use_highbitdepth =
@@ -1158,6 +1161,7 @@ static vpx_codec_err_t encoder_init(vpx_codec_ctx_t *ctx,
 
 static vpx_codec_err_t encoder_destroy(vpx_codec_alg_priv_t *ctx) {
   free(ctx->cx_data);
+  free(ctx->global_headers.buf);
   vp9_remove_compressor(ctx->cpi);
   vpx_free(ctx->buffer_pool);
   vpx_free(ctx);
@@ -1350,6 +1354,20 @@ static vpx_codec_err_t encoder_encode(vpx_codec_alg_priv_t *ctx,
           return VPX_CODEC_MEM_ERROR;
         }
       }
+
+      int chroma_subsampling = -1;
+      if ((img->fmt & VPX_IMG_FMT_I420) == VPX_IMG_FMT_I420 ||
+          (img->fmt & VPX_IMG_FMT_NV12) == VPX_IMG_FMT_NV12 ||
+          (img->fmt & VPX_IMG_FMT_YV12) == VPX_IMG_FMT_YV12) {
+        chroma_subsampling = 1;  // matches default for Codec Parameter String
+      } else if ((img->fmt & VPX_IMG_FMT_I422) == VPX_IMG_FMT_I422) {
+        chroma_subsampling = 2;
+      } else if ((img->fmt & VPX_IMG_FMT_I444) == VPX_IMG_FMT_I444) {
+        chroma_subsampling = 3;
+      }
+      if (chroma_subsampling > ctx->global_header_subsampling) {
+        ctx->global_header_subsampling = chroma_subsampling;
+      }
     }
   }
 
@@ -1450,13 +1468,14 @@ static vpx_codec_err_t encoder_encode(vpx_codec_alg_priv_t *ctx,
 
     /* Any pending invisible frames? */
     if (ctx->pending_cx_data) {
+      assert(cx_data_sz >= ctx->pending_cx_data_sz);
       memmove(cx_data, ctx->pending_cx_data, ctx->pending_cx_data_sz);
       ctx->pending_cx_data = cx_data;
       cx_data += ctx->pending_cx_data_sz;
       cx_data_sz -= ctx->pending_cx_data_sz;
 
-      /* TODO: this is a minimal check, the underlying codec doesn't respect
-       * the buffer size anyway.
+      /* TODO(webm:1844): this is a minimal check, the underlying codec doesn't
+       * respect the buffer size anyway.
        */
       if (cx_data_sz < ctx->cx_data_sz / 2) {
         vpx_internal_error(&cpi->common.error, VPX_CODEC_ERROR,
@@ -1475,9 +1494,9 @@ static vpx_codec_err_t encoder_encode(vpx_codec_alg_priv_t *ctx,
         ENCODE_FRAME_RESULT encode_frame_result;
         vp9_init_encode_frame_result(&encode_frame_result);
         // TODO(angiebird): Call vp9_first_pass directly
-        ret = vp9_get_compressed_data(cpi, &lib_flags, &size, cx_data,
-                                      &dst_time_stamp, &dst_end_time_stamp,
-                                      !img, &encode_frame_result);
+        ret = vp9_get_compressed_data(
+            cpi, &lib_flags, &size, cx_data, cx_data_sz, &dst_time_stamp,
+            &dst_end_time_stamp, !img, &encode_frame_result);
         assert(size == 0);  // There is no compressed data in the first pass
         (void)ret;
         assert(ret == 0);
@@ -1501,8 +1520,9 @@ static vpx_codec_err_t encoder_encode(vpx_codec_alg_priv_t *ctx,
       vp9_init_encode_frame_result(&encode_frame_result);
       while (cx_data_sz >= ctx->cx_data_sz / 2 &&
              -1 != vp9_get_compressed_data(cpi, &lib_flags, &size, cx_data,
-                                           &dst_time_stamp, &dst_end_time_stamp,
-                                           !img, &encode_frame_result)) {
+                                           cx_data_sz, &dst_time_stamp,
+                                           &dst_end_time_stamp, !img,
+                                           &encode_frame_result)) {
         // Pack psnr pkt
         if (size > 0 && !cpi->use_svc) {
           // TODO(angiebird): Figure out while we don't need psnr pkt when
@@ -1519,7 +1539,7 @@ static vpx_codec_err_t encoder_encode(vpx_codec_alg_priv_t *ctx,
           if (!cpi->common.show_frame ||
               (cpi->use_svc && cpi->svc.spatial_layer_id <
                                    cpi->svc.number_spatial_layers - 1)) {
-            if (ctx->pending_cx_data == 0) ctx->pending_cx_data = cx_data;
+            if (ctx->pending_cx_data == NULL) ctx->pending_cx_data = cx_data;
             ctx->pending_cx_data_sz += size;
             if (size)
               ctx->pending_frame_sizes[ctx->pending_frame_count++] = size;
@@ -1670,6 +1690,34 @@ static vpx_codec_err_t ctrl_set_previewpp(vpx_codec_alg_priv_t *ctx,
   (void)args;
   return VPX_CODEC_INCAPABLE;
 #endif
+}
+
+// Returns the contents of CodecPrivate described in:
+// https://www.webmproject.org/docs/container/#vp9-codec-feature-metadata-codecprivate
+// This includes Profile, Level, Bit depth and Chroma subsampling. Each entry
+// is 3 bytes. 1 byte ID, 1 byte length (= 1) and 1 byte value.
+static vpx_fixed_buf_t *encoder_get_global_headers(vpx_codec_alg_priv_t *ctx) {
+  if (!ctx->cpi) return NULL;
+
+  const unsigned int profile = ctx->cfg.g_profile;
+  const VP9_LEVEL level = vp9_get_level(&ctx->cpi->level_info.level_spec);
+  const vpx_bit_depth_t bit_depth = ctx->cfg.g_bit_depth;
+  const int subsampling = ctx->global_header_subsampling;
+  const uint8_t buf[12] = {
+    1, 1, (uint8_t)profile,   2, 1, (uint8_t)level,
+    3, 1, (uint8_t)bit_depth, 4, 1, (uint8_t)subsampling
+  };
+
+  if (ctx->global_headers.buf) free(ctx->global_headers.buf);
+  ctx->global_headers.buf = malloc(sizeof(buf));
+  if (!ctx->global_headers.buf) return NULL;
+
+  ctx->global_headers.sz = sizeof(buf);
+  // No data or I440, which isn't mapped.
+  if (ctx->global_header_subsampling == -1) ctx->global_headers.sz -= 3;
+  memcpy(ctx->global_headers.buf, buf, ctx->global_headers.sz);
+
+  return &ctx->global_headers;
 }
 
 static vpx_image_t *encoder_get_preview(vpx_codec_alg_priv_t *ctx) {
@@ -2226,14 +2274,14 @@ CODEC_INTERFACE(vpx_codec_vp9_cx) = {
   },
   {
       // NOLINT
-      1,                      // 1 cfg map
-      encoder_usage_cfg_map,  // vpx_codec_enc_cfg_map_t
-      encoder_encode,         // vpx_codec_encode_fn_t
-      encoder_get_cxdata,     // vpx_codec_get_cx_data_fn_t
-      encoder_set_config,     // vpx_codec_enc_config_set_fn_t
-      NULL,                   // vpx_codec_get_global_headers_fn_t
-      encoder_get_preview,    // vpx_codec_get_preview_frame_fn_t
-      NULL                    // vpx_codec_enc_mr_get_mem_loc_fn_t
+      1,                           // 1 cfg map
+      encoder_usage_cfg_map,       // vpx_codec_enc_cfg_map_t
+      encoder_encode,              // vpx_codec_encode_fn_t
+      encoder_get_cxdata,          // vpx_codec_get_cx_data_fn_t
+      encoder_set_config,          // vpx_codec_enc_config_set_fn_t
+      encoder_get_global_headers,  // vpx_codec_get_global_headers_fn_t
+      encoder_get_preview,         // vpx_codec_get_preview_frame_fn_t
+      NULL                         // vpx_codec_enc_mr_get_mem_loc_fn_t
   }
 };
 

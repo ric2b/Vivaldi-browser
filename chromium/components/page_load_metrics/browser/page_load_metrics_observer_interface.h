@@ -178,7 +178,7 @@ class PageLoadMetricsObserverInterface {
   // Returns the observer name. It should points a fixed address that is bound
   // to the class as we use the pointer as a key in a map at PageLoadTracker.
   // Should be implemented when the class needs to return FORWARD_OBSERVING.
-  // TODO(https://crbug.com/1301880): Make all inheritances override this method
+  // TODO(crbug.com/40216775): Make all inheritances override this method
   // and make it pure virtual method.
   virtual const char* GetObserverName() const = 0;
 
@@ -213,7 +213,7 @@ class PageLoadMetricsObserverInterface {
   //   affect per-outermost page lifecycle events that are preprocessed in the
   //   PageLoadTracker
   //
-  // TODO(crbug.com/1317494): FencedFrames support is still in progress. Update
+  // TODO(crbug.com/40222513): FencedFrames support is still in progress. Update
   // the above description once we fixed all subclasses.
   virtual ObservePolicy OnFencedFramesStart(
       content::NavigationHandle* navigation_handle,
@@ -466,7 +466,8 @@ class PageLoadMetricsObserverInterface {
   // subframe's position is updated explicitly or inherently (e.g. sticky
   // position while the page is being scrolled).
   //
-  // TODO(crbug/1048175): Expose intersections to observers via shared delegate.
+  // TODO(crbug.com/40117157): Expose intersections to observers via shared
+  // delegate.
   virtual void OnMainFrameIntersectionRectChanged(
       content::RenderFrameHost* rfh,
       const gfx::Rect& main_frame_intersection_rect) = 0;
@@ -600,6 +601,10 @@ class PageLoadMetricsObserverInterface {
 
   // Called when a `SharedStorageWorkletHost` is created.
   virtual void OnSharedStorageWorkletHostCreated() = 0;
+
+  // Called when `sharedStorage.selectURL()` is called for some frame on the
+  // page tracked.
+  virtual void OnSharedStorageSelectURLCalled() = 0;
 
  private:
   base::WeakPtrFactory<PageLoadMetricsObserverInterface> weak_factory_{this};

@@ -219,6 +219,46 @@ Since there is no decoding or encoding, it is very fast and there is no quality
 loss. However, it might not work in some cases because of many factors. Applying
 filters is obviously also impossible, since filters work on uncompressed data.
 
+@section Loopback decoders
+While decoders are normally associated with demuxer streams, it is also possible
+to create "loopback" decoders that decode the output from some encoder and allow
+it to be fed back to complex filtergraphs. This is done with the @code{-dec}
+directive, which takes as a parameter the index of the output stream that should
+be decoded. Every such directive creates a new loopback decoder, indexed with
+successive integers starting at zero. These indices should then be used to refer
+to loopback decoders in complex filtergraph link labels, as described in the
+documentation for @option{-filter_complex}.
+
+Decoding AVOptions can be passed to loopback decoders by placing them before
+@code{-dec}, analogously to input/output options.
+
+E.g. the following example:
+
+@example
+ffmpeg -i INPUT                                        \
+  -map 0:v:0 -c:v libx264 -crf 45 -f null -            \
+  -threads 3 -dec 0:0                                  \
+  -filter_complex '[0:v][dec:0]hstack[stack]'          \
+  -map '[stack]' -c:v ffv1 OUTPUT
+@end example
+
+reads an input video and
+@itemize
+@item
+(line 2) encodes it with @code{libx264} at low quality;
+
+@item
+(line 3) decodes this encoded stream using 3 threads;
+
+@item
+(line 4) places decoded video side by side with the original input video;
+
+@item
+(line 5) combined video is then losslessly encoded and written into
+@file{OUTPUT}.
+
+@end itemize
+
 @c man end DETAILED DESCRIPTION
 
 @chapter Stream selection
@@ -1230,10 +1270,6 @@ list separated with slashes. Two first values are the beginning and
 end frame numbers, last one is quantizer to use if positive, or quality
 factor if negative.
 
-@item -psnr
-Calculate PSNR of compressed frames. This option is deprecated, pass the
-PSNR flag to the encoder instead, using @code{-flags +psnr}.
-
 @item -vstats
 Dump video coding statistics to @file{vstats_HHMMSS.log}. See the
 @ref{vstats_file_format,,vstats file format} section for the format description.
@@ -1806,77 +1842,6 @@ such streams is attempted.
 Allow input streams with unknown type to be copied instead of failing if copying
 such streams is attempted.
 
-@item -map_channel [@var{input_file_id}.@var{stream_specifier}.@var{channel_id}|-1][?][:@var{output_file_id}.@var{stream_specifier}]
-This option is deprecated and will be removed. It can be replaced by the
-@var{pan} filter. In some cases it may be easier to use some combination of the
-@var{channelsplit}, @var{channelmap}, or @var{amerge} filters.
-
-Map an audio channel from a given input to an output. If
-@var{output_file_id}.@var{stream_specifier} is not set, the audio channel will
-be mapped on all the audio streams.
-
-Using "-1" instead of
-@var{input_file_id}.@var{stream_specifier}.@var{channel_id} will map a muted
-channel.
-
-A trailing @code{?} will allow the map_channel to be
-optional: if the map_channel matches no channel the map_channel will be ignored instead
-of failing.
-
-For example, assuming @var{INPUT} is a stereo audio file, you can switch the
-two audio channels with the following command:
-@example
-ffmpeg -i INPUT -map_channel 0.0.1 -map_channel 0.0.0 OUTPUT
-@end example
-
-If you want to mute the first channel and keep the second:
-@example
-ffmpeg -i INPUT -map_channel -1 -map_channel 0.0.1 OUTPUT
-@end example
-
-The order of the "-map_channel" option specifies the order of the channels in
-the output stream. The output channel layout is guessed from the number of
-channels mapped (mono if one "-map_channel", stereo if two, etc.). Using "-ac"
-in combination of "-map_channel" makes the channel gain levels to be updated if
-input and output channel layouts don't match (for instance two "-map_channel"
-options and "-ac 6").
-
-You can also extract each channel of an input to specific outputs; the following
-command extracts two channels of the @var{INPUT} audio stream (file 0, stream 0)
-to the respective @var{OUTPUT_CH0} and @var{OUTPUT_CH1} outputs:
-@example
-ffmpeg -i INPUT -map_channel 0.0.0 OUTPUT_CH0 -map_channel 0.0.1 OUTPUT_CH1
-@end example
-
-The following example splits the channels of a stereo input into two separate
-streams, which are put into the same output file:
-@example
-ffmpeg -i stereo.wav -map 0:0 -map 0:0 -map_channel 0.0.0:0.0 -map_channel 0.0.1:0.1 -y out.ogg
-@end example
-
-Note that currently each output stream can only contain channels from a single
-input stream; you can't for example use "-map_channel" to pick multiple input
-audio channels contained in different streams (from the same or different files)
-and merge them into a single output stream. It is therefore not currently
-possible, for example, to turn two separate mono streams into a single stereo
-stream. However splitting a stereo stream into two single channel mono streams
-is possible.
-
-If you need this feature, a possible workaround is to use the @emph{amerge}
-filter. For example, if you need to merge a media (here @file{input.mkv}) with 2
-mono audio streams into one single stereo channel audio stream (and keep the
-video stream), you can use the following command:
-@example
-ffmpeg -i input.mkv -filter_complex "[0:1] [0:2] amerge" -c:a pcm_s16le -c:v copy output.mkv
-@end example
-
-To map the first two audio channels from the first input, and using the
-trailing @code{?}, ignore the audio channel mapping if the first input is
-mono instead of stereo:
-@example
-ffmpeg -i INPUT -map_channel 0.0.0 -map_channel 0.0.1? OUTPUT
-@end example
-
 @item -map_metadata[:@var{metadata_spec_out}] @var{infile}[:@var{metadata_spec_in}] (@emph{output,per-metadata})
 Set metadata information of the next output file from @var{infile}. Note that
 those are file indices (zero-based), not filenames.
@@ -2178,13 +2143,67 @@ Define a complex filtergraph, i.e. one with arbitrary number of inputs and/or
 outputs. For simple graphs -- those with one input and one output of the same
 type -- see the @option{-filter} options. @var{filtergraph} is a description of
 the filtergraph, as described in the ``Filtergraph syntax'' section of the
-ffmpeg-filters manual.
+ffmpeg-filters manual. This option may be specified multiple times - each use
+creates a new complex filtergraph.
 
-Input link labels must refer to input streams using the
-@code{[file_index:stream_specifier]} syntax (i.e. the same as @option{-map}
-uses). If @var{stream_specifier} matches multiple streams, the first one will be
-used. An unlabeled input will be connected to the first unused input stream of
-the matching type.
+Inputs to a complex filtergraph may come from different source types,
+distinguished by the format of the corresponding link label:
+@itemize
+@item
+To connect an input stream, use @code{[file_index:stream_specifier]} (i.e. the
+same syntax as @option{-map}). If @var{stream_specifier} matches multiple
+streams, the first one will be used.
+
+@item
+To connect a loopback decoder use [dec:@var{dec_idx}], where @var{dec_idx} is
+the index of the loopback decoder to be connected to given input.
+
+@item
+To connect an output from another complex filtergraph, use its link label. E.g
+the following example:
+
+@example
+ffmpeg -i input.mkv \
+  -filter_complex '[0:v]scale=size=hd1080,split=outputs=2[for_enc][orig_scaled]' \
+  -c:v libx264 -map '[for_enc]' output.mkv \
+  -dec 0:0 \
+  -filter_complex '[dec:0][orig_scaled]hstack[stacked]' \
+  -map '[stacked]' -c:v ffv1 comparison.mkv
+@end example
+
+reads an input video and
+@itemize
+@item
+(line 2) uses a complex filtergraph with one input and two outputs
+to scale the video to 1920x1080 and duplicate the result to both
+outputs;
+
+@item
+(line 3) encodes one scaled output with @code{libx264} and writes the result to
+@file{output.mkv};
+
+@item
+(line 4) decodes this encoded stream with a loopback decoder;
+
+@item
+(line 5) places the output of the loopback decoder (i.e. the
+@code{libx264}-encoded video) side by side with the scaled original input;
+
+@item
+(line 6) combined video is then losslessly encoded and written into
+@file{comparison.mkv}.
+
+@end itemize
+
+Note that the two filtergraphs cannot be combined into one, because then there
+would be a cycle in the transcoding pipeline (filtergraph output goes to
+encoding, from there to decoding, then back to the same graph), and such cycles
+are not allowed.
+
+@end itemize
+
+An unlabeled input will be connected to the first unused input stream of the
+matching type.
 
 Output link labels are referred to with @option{-map}. Unlabeled outputs are
 added to the first output file.

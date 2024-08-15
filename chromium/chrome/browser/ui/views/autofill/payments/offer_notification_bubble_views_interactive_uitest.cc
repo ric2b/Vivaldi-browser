@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/autofill/payments/offer_notification_bubble_views_test_base.h"
 
+#include <string_view>
+
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -203,7 +205,7 @@ class OfferNotificationBubbleViewsInteractiveUiTest
   base::CallbackListSubscription create_services_subscription_;
 };
 
-// TODO(https://crbug.com/1334806): Split parameterized tests that are
+// TODO(crbug.com/40228302): Split parameterized tests that are
 // applicable for only one offer type.
 INSTANTIATE_TEST_SUITE_P(
     GPayCardLinked,
@@ -248,7 +250,7 @@ INSTANTIATE_TEST_SUITE_P(
                {commerce::kMerchantWideBehaviorParam, "2"},
                {commerce::kNonMerchantWideBehaviorParam, "2"}}}})}));
 
-// TODO(crbug.com/1491942): This fails with the field trial testing config.
+// TODO(crbug.com/40285326): This fails with the field trial testing config.
 class OfferNotificationBubbleViewsInteractiveUiTestNoTestingConfig
     : public OfferNotificationBubbleViewsInteractiveUiTest {
  public:
@@ -264,7 +266,7 @@ INSTANTIATE_TEST_SUITE_P(
     testing::Values(OfferNotificationBubbleViewsInteractiveUiTestData{
         "GPayPromoCode", AutofillOfferData::OfferType::GPAY_PROMO_CODE_OFFER}));
 
-// TODO(https://crbug.com/1289161): Flaky failures.
+// TODO(crbug.com/40817360): Flaky failures.
 #if BUILDFLAG(IS_LINUX)
 #define MAYBE_Navigation DISABLED_Navigation
 #else
@@ -706,7 +708,7 @@ IN_PROC_BROWSER_TEST_P(OfferNotificationBubbleViewsInteractiveUiTest,
   CloseBubbleWithReason(views::Widget::ClosedReason::kCloseButtonClicked);
 
   // Simulate the user clearing server data.
-  personal_data()->ClearAllServerDataForTesting();
+  personal_data()->payments_data_manager().ClearAllServerDataForTesting();
 
   // Simulate the user re-showing the bubble by clicking on the icon.
   SimulateClickOnIconAndReshowBubble();
@@ -793,13 +795,13 @@ IN_PROC_BROWSER_TEST_P(
     auto* promo_code_label_view =
         GetOfferNotificationBubbleViews()->promo_code_label_view_.get();
     EXPECT_TRUE(promo_code_label_view);
-    EXPECT_EQ(base::ASCIIToUTF16(base::StringPiece(kDiscountCode)),
+    EXPECT_EQ(base::ASCIIToUTF16(std::string_view(kDiscountCode)),
               promo_code_label_view->GetPromoCodeLabelTextForTesting());
   } else {
     auto* promo_code_label_button =
         GetOfferNotificationBubbleViews()->promo_code_label_button_.get();
     EXPECT_TRUE(promo_code_label_button);
-    EXPECT_EQ(base::ASCIIToUTF16(base::StringPiece(kDiscountCode)),
+    EXPECT_EQ(base::ASCIIToUTF16(std::string_view(kDiscountCode)),
               promo_code_label_button->GetText());
   }
   EXPECT_EQ(nullptr,
@@ -1019,7 +1021,7 @@ IN_PROC_BROWSER_TEST_P(OfferNotificationBubbleViewsInteractiveUiTest,
                           GetOfferNotificationBubbleViews())));
 }
 
-// TODO(crbug.com/1491942): This fails with the field trial testing config.
+// TODO(crbug.com/40285326): This fails with the field trial testing config.
 class OfferNotificationBubbleViewsWithDiscountOnChromeHistoryClusterTest
     : public OfferNotificationBubbleViewsInteractiveUiTest {
  public:

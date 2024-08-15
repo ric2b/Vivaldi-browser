@@ -7,7 +7,6 @@
 
 #include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility/test_accessibility_controller_client.h"
-#include "ash/constants/app_types.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/desk_template.h"
 #include "ash/public/cpp/multi_user_window_manager.h"
@@ -22,6 +21,7 @@
 #include "ash/shell.h"
 #include "ash/style/close_button.h"
 #include "ash/style/icon_button.h"
+#include "ash/utility/forest_util.h"
 #include "ash/wm/desks/desk_action_button.h"
 #include "ash/wm/desks/desk_action_view.h"
 #include "ash/wm/desks/desk_mini_view.h"
@@ -45,7 +45,7 @@
 #include "ash/wm/desks/templates/saved_desk_util.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_controller.h"
-#include "ash/wm/overview/overview_focus_cycler.h"
+#include "ash/wm/overview/overview_focus_cycler_old.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_item.h"
 #include "ash/wm/overview/overview_item_view.h"
@@ -68,6 +68,8 @@
 #include "base/time/time.h"
 #include "base/uuid.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "chromeos/ui/base/app_types.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "components/account_id/account_id.h"
 #include "components/app_constants/constants.h"
 #include "components/app_restore/app_launch_info.h"
@@ -332,7 +334,7 @@ class SavedDeskTest : public OverviewTestBase,
   }
 
   OverviewFocusableView* GetFocusedView() {
-    return GetOverviewSession()->focus_cycler()->focused_view();
+    return GetOverviewSession()->focus_cycler_old()->focused_view();
   }
 
   // Opens overview mode and then clicks the save desk as template button. This
@@ -383,8 +385,9 @@ class SavedDeskTest : public OverviewTestBase,
       ASSERT_TRUE(overview_grid->IsShowingSavedDeskLibrary());
   }
 
-  void SetDisableAppIdCheckForSavedDesks(bool disabled) {
-    OverviewController::Get()->disable_app_id_check_for_saved_desks_ = disabled;
+  void SetDisableAppIdCheckForSavedDesks(bool should_disable) {
+    OverviewController::Get()
+        ->set_disable_app_id_check_for_saved_desks_for_test(should_disable);
   }
 
   SkBitmap GetBitmapWithInnerRoundedRect(gfx::Size size,
@@ -629,6 +632,13 @@ TEST_F(SavedDeskTest, NoItemsLabelOnDeletingLastSavedDesk) {
 // Tests that the "App does not support split-screen" label is hidden when the
 // saved desk grid is shown.
 TEST_F(SavedDeskTest, NoAppSplitScreenLabelOnSavedDeskGridShow) {
+  // With forest, the saved desk library button is hidden once we snap a
+  // window. Therefore, we cannot show the grid while the labels are shown.
+  // TODO(sammiequon): Remove this test once forest is fully launched.
+  if (IsForestFeatureEnabled()) {
+    return;
+  }
+
   std::unique_ptr<aura::Window> unsnappable_window = CreateUnsnappableWindow();
   auto test_window = CreateAppWindow();
 
@@ -814,7 +824,7 @@ TEST_F(SavedDeskTest, DialogSystemModal) {
 
   // Checks that pressing tab does not trigger overview keyboard traversal.
   SendKey(ui::VKEY_TAB);
-  EXPECT_FALSE(GetOverviewSession()->focus_cycler()->IsFocusVisible());
+  EXPECT_FALSE(GetOverviewSession()->focus_cycler_old()->IsFocusVisible());
 
   // Fetch the widget for the dialog and test that it appears on the primary
   // root window.
@@ -2066,8 +2076,8 @@ TEST_F(SavedDeskTest, DesksBarDoesNotReturnToZeroState) {
 TEST_F(SavedDeskTest, UnsupportedAppsDialog) {
   // Create a crostini window.
   auto crostini_window = CreateAppWindow();
-  crostini_window->SetProperty(aura::client::kAppType,
-                               static_cast<int>(AppType::CROSTINI_APP));
+  crostini_window->SetProperty(chromeos::kAppTypeKey,
+                               chromeos::AppType::CROSTINI_APP);
 
   // Create a normal window.
   auto test_window = CreateAppWindow();
@@ -2303,11 +2313,11 @@ TEST_F(SavedDeskTest, ShowTemplatesInAlphabeticalOrder) {
   ASSERT_EQ(5ul, grid_items.size());
 
   // Tests that templates are sorted in alphabetical order.
-  EXPECT_EQ(u"1_template", grid_items[0]->GetAccessibleName());
-  EXPECT_EQ(u"a_template", grid_items[1]->GetAccessibleName());
-  EXPECT_EQ(u"A_template", grid_items[2]->GetAccessibleName());
-  EXPECT_EQ(u"b_template", grid_items[3]->GetAccessibleName());
-  EXPECT_EQ(u"B_template", grid_items[4]->GetAccessibleName());
+  EXPECT_EQ(u"Template, 1_template", grid_items[0]->GetAccessibleName());
+  EXPECT_EQ(u"Template, a_template", grid_items[1]->GetAccessibleName());
+  EXPECT_EQ(u"Template, A_template", grid_items[2]->GetAccessibleName());
+  EXPECT_EQ(u"Template, b_template", grid_items[3]->GetAccessibleName());
+  EXPECT_EQ(u"Template, B_template", grid_items[4]->GetAccessibleName());
 }
 
 // Tests that the color of the library button focus ring is as expected.
@@ -3064,8 +3074,8 @@ TEST_F(SavedDeskTest, UnsupportedAppDialogRecordsMetric) {
 
   // Create a crostini window.
   auto crostini_window = CreateAppWindow();
-  crostini_window->SetProperty(aura::client::kAppType,
-                               static_cast<int>(AppType::CROSTINI_APP));
+  crostini_window->SetProperty(chromeos::kAppTypeKey,
+                               chromeos::AppType::CROSTINI_APP);
 
   // Create a normal window.
   auto test_window = CreateAppWindow();

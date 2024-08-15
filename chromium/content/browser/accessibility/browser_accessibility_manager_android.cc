@@ -10,7 +10,6 @@
 #include "base/i18n/char_iterator.h"
 #include "content/browser/accessibility/browser_accessibility_android.h"
 #include "content/browser/accessibility/web_contents_accessibility_android.h"
-#include "third_party/blink/public/mojom/render_accessibility.mojom.h"
 #include "ui/accessibility/ax_event_generator.h"
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/ax_selection.h"
@@ -103,7 +102,7 @@ BrowserAccessibility* BrowserAccessibilityManagerAndroid::GetFocus() const {
 ui::AXNode* BrowserAccessibilityManagerAndroid::RetargetForEvents(
     ui::AXNode* node,
     RetargetEventType type) const {
-  // TODO(crbug.com/1350627): Node should not be null. But this seems to be
+  // TODO(crbug.com/40856596): Node should not be null. But this seems to be
   // happening in the wild for reasons not yet determined. Because the only
   // consequence of node being null is that we'll fail to fire an event on a
   // non-existent object, the style guide's suggestion of using a CHECK
@@ -352,13 +351,11 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::DESCRIBED_BY_CHANGED:
     case ui::AXEventGenerator::Event::DESCRIPTION_CHANGED:
     case ui::AXEventGenerator::Event::DOCUMENT_TITLE_CHANGED:
-    case ui::AXEventGenerator::Event::DROPEFFECT_CHANGED:
     case ui::AXEventGenerator::Event::EDITABLE_TEXT_CHANGED:
     case ui::AXEventGenerator::Event::ENABLED_CHANGED:
     case ui::AXEventGenerator::Event::FOCUS_CHANGED:
     case ui::AXEventGenerator::Event::FLOW_FROM_CHANGED:
     case ui::AXEventGenerator::Event::FLOW_TO_CHANGED:
-    case ui::AXEventGenerator::Event::GRABBED_CHANGED:
     case ui::AXEventGenerator::Event::HASPOPUP_CHANGED:
     case ui::AXEventGenerator::Event::HIERARCHICAL_LEVEL_CHANGED:
     case ui::AXEventGenerator::Event::IGNORED_CHANGED:
@@ -404,8 +401,24 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
   }
 }
 
+void BrowserAccessibilityManagerAndroid::FireAriaNotificationEvent(
+    BrowserAccessibility* node,
+    const std::string& announcement,
+    const std::string& notification_id,
+    ax::mojom::AriaNotificationInterrupt interrupt_property,
+    ax::mojom::AriaNotificationPriority priority_property) {
+  DCHECK(node);
+
+  auto* wcax = GetWebContentsAXFromRootManager();
+  if (!wcax) {
+    return;
+  }
+
+  wcax->AnnounceLiveRegionText(base::UTF8ToUTF16(announcement));
+}
+
 void BrowserAccessibilityManagerAndroid::SendLocationChangeEvents(
-    const std::vector<blink::mojom::LocationChangesPtr>& changes) {
+    const std::vector<ui::AXLocationChanges>& changes) {
   // Android is not very efficient at handling notifications, and location
   // changes in particular are frequent and not time-critical. If a lot of
   // nodes changed location, just send a single notification after a short

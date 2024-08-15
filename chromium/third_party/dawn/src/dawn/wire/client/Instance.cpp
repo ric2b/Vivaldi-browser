@@ -33,8 +33,10 @@
 
 #include "dawn/common/Log.h"
 #include "dawn/common/WGSLFeatureMapping.h"
+#include "dawn/wire/client/ApiObjects_autogen.h"
 #include "dawn/wire/client/Client.h"
 #include "dawn/wire/client/EventManager.h"
+#include "dawn/wire/client/webgpu.h"
 #include "partition_alloc/pointers/raw_ptr.h"
 #include "tint/lang/wgsl/features/language_feature.h"
 #include "tint/lang/wgsl/features/status.h"
@@ -49,7 +51,14 @@ class RequestAdapterEvent : public TrackedEvent {
     RequestAdapterEvent(const WGPURequestAdapterCallbackInfo& callbackInfo, Adapter* adapter)
         : TrackedEvent(callbackInfo.mode),
           mCallback(callbackInfo.callback),
-          mUserdata(callbackInfo.userdata),
+          mUserdata1(callbackInfo.userdata),
+          mAdapter(adapter) {}
+
+    RequestAdapterEvent(const WGPURequestAdapterCallbackInfo2& callbackInfo, Adapter* adapter)
+        : TrackedEvent(callbackInfo.mode),
+          mCallback2(callbackInfo.callback),
+          mUserdata1(callbackInfo.userdata1),
+          mUserdata2(callbackInfo.userdata2),
           mAdapter(adapter) {}
 
     EventType GetType() override { return kType; }
@@ -76,24 +85,36 @@ class RequestAdapterEvent : public TrackedEvent {
 
   private:
     void CompleteImpl(FutureID futureID, EventCompletionType completionType) override {
+        if (mCallback == nullptr && mCallback2 == nullptr) {
+            // If there's no callback, just clean up the resources.
+            mAdapter.ExtractAsDangling()->Release();
+            mUserdata1.ExtractAsDangling();
+            mUserdata2.ExtractAsDangling();
+            return;
+        }
+
         if (completionType == EventCompletionType::Shutdown) {
             mStatus = WGPURequestAdapterStatus_InstanceDropped;
             mMessage = "A valid external Instance reference no longer exists.";
         }
-        if (mStatus != WGPURequestAdapterStatus_Success && mAdapter != nullptr) {
-            // If there was an error, we may need to reclaim the adapter allocation, otherwise the
-            // adapter is returned to the user who owns it.
-            mAdapter->GetClient()->Free(mAdapter.get());
-            mAdapter = nullptr;
-        }
+
+        Adapter* adapter = mAdapter.ExtractAsDangling();
         if (mCallback) {
-            mCallback(mStatus, ToAPI(mAdapter), mMessage ? mMessage->c_str() : nullptr, mUserdata);
+            mCallback(mStatus,
+                      ToAPI(mStatus == WGPURequestAdapterStatus_Success ? adapter : nullptr),
+                      mMessage ? mMessage->c_str() : nullptr, mUserdata1.ExtractAsDangling());
+        } else {
+            mCallback2(mStatus,
+                       ToAPI(mStatus == WGPURequestAdapterStatus_Success ? adapter : nullptr),
+                       mMessage ? mMessage->c_str() : nullptr, mUserdata1.ExtractAsDangling(),
+                       mUserdata2.ExtractAsDangling());
         }
     }
 
-    WGPURequestAdapterCallback mCallback;
-    // TODO(https://crbug.com/dawn/2345): Investigate `DanglingUntriaged` in dawn/wire.
-    raw_ptr<void, DanglingUntriaged> mUserdata;
+    WGPURequestAdapterCallback mCallback = nullptr;
+    WGPURequestAdapterCallback2 mCallback2 = nullptr;
+    raw_ptr<void> mUserdata1;
+    raw_ptr<void> mUserdata2;
 
     // Note that the message is optional because we want to return nullptr when it wasn't set
     // instead of a pointer to an empty string.
@@ -104,8 +125,7 @@ class RequestAdapterEvent : public TrackedEvent {
     // throughout the duration of a RequestAdapterEvent because the Event essentially takes
     // ownership of it until either an error occurs at which point the Event cleans it up, or it
     // returns the adapter to the user who then takes ownership as the Event goes away.
-    // TODO(https://crbug.com/dawn/2345): Investigate `DanglingUntriaged` in dawn/wire.
-    raw_ptr<Adapter, DanglingUntriaged> mAdapter = nullptr;
+    raw_ptr<Adapter> mAdapter = nullptr;
 };
 
 WGPUWGSLFeatureName ToWGPUFeature(tint::wgsl::LanguageFeature f) {
@@ -119,23 +139,6 @@ WGPUWGSLFeatureName ToWGPUFeature(tint::wgsl::LanguageFeature f) {
 }
 
 }  // anonymous namespace
-
-// Free-standing API functions
-
-WGPUBool ClientGetInstanceFeatures(WGPUInstanceFeatures* features) {
-    if (features->nextInChain != nullptr) {
-        return false;
-    }
-
-    features->timedWaitAnyEnable = false;
-    features->timedWaitAnyMaxCount = kTimedWaitAnyMaxCountDefault;
-    return true;
-}
-
-WGPUInstance ClientCreateInstance(WGPUInstanceDescriptor const* descriptor) {
-    DAWN_UNREACHABLE();
-    return nullptr;
-}
 
 // Instance
 
@@ -213,6 +216,29 @@ WGPUFuture Instance::RequestAdapterF(const WGPURequestAdapterOptions* options,
     cmd.future = {futureIDInternal};
     cmd.adapterObjectHandle = adapter->GetWireHandle();
     cmd.options = options;
+    cmd.userdataCount = 1;
+
+    client->SerializeCommand(cmd);
+    return {futureIDInternal};
+}
+
+WGPUFuture Instance::RequestAdapter2(const WGPURequestAdapterOptions* options,
+                                     const WGPURequestAdapterCallbackInfo2& callbackInfo) {
+    Client* client = GetClient();
+    Adapter* adapter = client->Make<Adapter>(GetEventManagerHandle());
+    auto [futureIDInternal, tracked] =
+        GetEventManager().TrackEvent(std::make_unique<RequestAdapterEvent>(callbackInfo, adapter));
+    if (!tracked) {
+        return {futureIDInternal};
+    }
+
+    InstanceRequestAdapterCmd cmd;
+    cmd.instanceId = GetWireId();
+    cmd.eventManagerHandle = GetEventManagerHandle();
+    cmd.future = {futureIDInternal};
+    cmd.adapterObjectHandle = adapter->GetWireHandle();
+    cmd.options = options;
+    cmd.userdataCount = 2;
 
     client->SerializeCommand(cmd);
     return {futureIDInternal};
@@ -337,3 +363,21 @@ size_t Instance::EnumerateWGSLLanguageFeatures(WGPUWGSLFeatureName* features) co
 }
 
 }  // namespace dawn::wire::client
+
+// Free-standing API functions
+
+DAWN_WIRE_EXPORT WGPUBool wgpuDawnWireClientGetInstanceFeatures(WGPUInstanceFeatures* features) {
+    if (features->nextInChain != nullptr) {
+        return false;
+    }
+
+    features->timedWaitAnyEnable = false;
+    features->timedWaitAnyMaxCount = dawn::kTimedWaitAnyMaxCountDefault;
+    return true;
+}
+
+DAWN_WIRE_EXPORT WGPUInstance
+wgpuDawnWireClientCreateInstance(WGPUInstanceDescriptor const* descriptor) {
+    DAWN_UNREACHABLE();
+    return nullptr;
+}

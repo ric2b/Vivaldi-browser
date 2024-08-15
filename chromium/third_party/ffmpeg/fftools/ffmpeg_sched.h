@@ -35,21 +35,25 @@
  * - demuxers, each containing any number of demuxed streams; demuxed packets
  *   belonging to some stream are sent to any number of decoders (transcoding)
  *   and/or muxers (streamcopy);
- * - decoders, which receive encoded packets from some demuxed stream, decode
- *   them, and send decoded frames to any number of filtergraph inputs
- *   (audio/video) or encoders (subtitles);
+ * - decoders, which receive encoded packets from some demuxed stream or
+ *   encoder, decode them, and send decoded frames to any number of filtergraph
+ *   inputs (audio/video) or encoders (subtitles);
  * - filtergraphs, each containing zero or more inputs (0 in case the
  *   filtergraph contains a lavfi source filter), and one or more outputs; the
  *   inputs and outputs need not have matching media types;
- *   each filtergraph input receives decoded frames from some decoder;
+ *   each filtergraph input receives decoded frames from some decoder or another
+ *   filtergraph output;
  *   filtered frames from each output are sent to some encoder;
  * - encoders, which receive decoded frames from some decoder (subtitles) or
  *   some filtergraph output (audio/video), encode them, and send encoded
- *   packets to some muxed stream;
+ *   packets to any number of muxed streams or decoders;
  * - muxers, each containing any number of muxed streams; each muxed stream
  *   receives encoded packets from some demuxed stream (streamcopy) or some
  *   encoder (transcoding); those packets are interleaved and written out by the
  *   muxer.
+ *
+ * The structure formed by the above components is a directed acyclic graph
+ * (absence of cycles is checked at startup).
  *
  * There must be at least one muxer instance, otherwise the transcode produces
  * no output and is meaningless. Otherwise, in a generic transcoding scenario
@@ -102,7 +106,7 @@ typedef struct SchedulerNode {
     unsigned                idx_stream;
 } SchedulerNode;
 
-typedef void* (*SchThreadFunc)(void *arg);
+typedef int (*SchThreadFunc)(void *arg);
 
 #define SCH_DSTREAM(file, stream)                           \
     (SchedulerNode){ .type = SCH_NODE_TYPE_DEMUX,           \
@@ -233,6 +237,18 @@ int sch_add_filtergraph(Scheduler *sch, unsigned nb_inputs, unsigned nb_outputs,
  */
 int sch_add_mux(Scheduler *sch, SchThreadFunc func, int (*init)(void *),
                 void *ctx, int sdp_auto, unsigned thread_queue_size);
+
+/**
+ * Default size of a packet thread queue.  For muxing this can be overridden by
+ * the thread_queue_size option as passed to a call to sch_add_mux().
+ */
+#define DEFAULT_PACKET_THREAD_QUEUE_SIZE 8
+
+/**
+ * Default size of a frame thread queue.
+ */
+#define DEFAULT_FRAME_THREAD_QUEUE_SIZE 8
+
 /**
  * Add a muxed stream for a previously added muxer.
  *

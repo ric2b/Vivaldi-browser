@@ -902,7 +902,7 @@ TEST_F(UkmPageLoadMetricsObserverTest, LargestTextPaint) {
 }
 
 TEST_F(UkmPageLoadMetricsObserverTest, LargestContentfulPaint_Trace) {
-  // TODO(https://crbug.com/1266001): Improve unit tests support for tracing.
+  // TODO(crbug.com/40801822): Improve unit tests support for tracing.
   // In particular, the initialization call below is most likely too narrow /
   // doesn't take care of everything that is needed.  In the future we might
   // need to 1) initialize tracing from a better place (maybe
@@ -3008,7 +3008,6 @@ TEST_F(UkmPageLoadMetricsObserverTest, TestRefreshRateThrottled) {
 // The following tests are ensure that Page Load metrics are recorded in a
 // trace. Currently enabled only for platforms where USE_PERFETTO_CLIENT_LIBRARY
 // is true (Android, Linux) as test infra (TestTraceProcessor) requires it.
-#if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
 class TracingWebContentsObserver : public content::WebContentsObserver {
  public:
   explicit TracingWebContentsObserver(content::WebContents* contents)
@@ -3101,4 +3100,3 @@ TEST_F(UkmPageLoadMetricsObserverTest, TestTracingUserTimingMetrics) {
                                      std::vector<std::string>{
                                          base::NumberToString(navigation_id)}));
 }
-#endif

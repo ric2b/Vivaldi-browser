@@ -84,7 +84,6 @@
 <translation id="2678063897982469759">Kích hoạt lại</translation>
 <translation id="2721037002783622288">&amp;Tìm kiếm hình ảnh trên <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2785873697295365461">Phần mô tả tệp</translation>
-<translation id="2809586584051668049">và <ph name="NUMBER_ADDITIONAL_DISABLED" /> mục khác</translation>
 <translation id="2850541429955027218">Thêm chủ đề</translation>
 <translation id="2861941300086904918">Trình quản lý bảo mật Native Client</translation>
 <translation id="2881076733170862447">Khi Bạn Nhấp vào Tiện ích</translation>
@@ -110,7 +109,6 @@
 <translation id="3241680850019875542">Chọn thư mục gốc của tiện ích để đóng gói. Để cập nhật tiện ích, bạn cũng chọn tệp khóa cá nhân để sử dụng lại.</translation>
 <translation id="3280237271814976245">Lưu &amp;dưới dạng...</translation>
 <translation id="3285322247471302225">&amp;Tab Mới</translation>
-<translation id="3288047731229977326">Tiện ích chạy ở chế độ nhà phát triển có thể gây hại cho máy tính của bạn. Nếu bạn không phải là nhà phát triển, bạn nên vô hiệu hóa các tiện ích này chạy trong chế độ nhà phát triển để giữ an toàn.</translation>
 <translation id="329838636886466101">Sửa chữa</translation>
 <translation id="33022249435934718">Xử lý GDI</translation>
 <translation id="3303818374450886607">Bản sao</translation>
@@ -149,7 +147,6 @@
 <translation id="4087089424473531098">Đã tạo tiện ích:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Vô hiệu hóa tiện ích chế độ nhà phát triển</translation>
 <translation id="4100839878934973028">Một chương trình khác trên máy tính của bạn đã thêm một ứng dụng có thể thay đổi cách Vivaldi hoạt động.</translation>
 <translation id="4109898769411476438">Đóng Trình duyệt Trước khi Nhập</translation>
 <translation id="4131410914670010031">Đen và trắng</translation>
@@ -196,7 +193,6 @@
 <translation id="5269977353971873915">Lỗi In</translation>
 <translation id="5284445933715251131">Tiếp tục Tải xuống</translation>
 <translation id="52912272896845572">Tệp khóa cá nhân không hợp lệ.</translation>
-<translation id="5301954838959518834">OK</translation>
 <translation id="5317780077021120954">Lưu</translation>
 <translation id="5334142896108694079">Bộ nhớ đệm Tập lệnh</translation>
 <translation id="5362741141255528695">Chọn tệp khóa cá nhân.</translation>

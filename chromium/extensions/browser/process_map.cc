@@ -8,6 +8,8 @@
 #include <tuple>
 
 #include "base/containers/contains.h"
+#include "base/containers/map_util.h"
+#include "base/types/optional_util.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/url_constants.h"
@@ -19,6 +21,12 @@
 #include "extensions/common/extension_id.h"
 #include "extensions/common/features/feature.h"
 #include "extensions/common/mojom/context_type.mojom.h"
+#include "pdf/buildflags.h"
+
+#if BUILDFLAG(ENABLE_PDF)
+#include "extensions/common/constants.h"
+#include "pdf/pdf_features.h"
+#endif
 
 namespace extensions {
 
@@ -26,7 +34,7 @@ namespace {
 
 // Returns true if `process_id` is associated with a WebUI process.
 bool ProcessHasWebUIBindings(int process_id) {
-  // TODO(crbug.com/1055656): HasWebUIBindings does not always return true for
+  // TODO(crbug.com/40676401): HasWebUIBindings does not always return true for
   // WebUIs. This should be changed to use something else.
   return content::ChildProcessSecurityPolicy::GetInstance()->HasWebUIBindings(
       process_id);
@@ -51,9 +59,14 @@ bool IsWebViewProcessForExtension(int process_id,
 }  // namespace
 
 // ProcessMap
-ProcessMap::ProcessMap() = default;
+ProcessMap::ProcessMap(content::BrowserContext* browser_context)
+    : browser_context_(browser_context) {}
 
 ProcessMap::~ProcessMap() = default;
+
+void ProcessMap::Shutdown() {
+  browser_context_ = nullptr;
+}
 
 // static
 ProcessMap* ProcessMap::Get(content::BrowserContext* browser_context) {
@@ -61,32 +74,35 @@ ProcessMap* ProcessMap::Get(content::BrowserContext* browser_context) {
 }
 
 bool ProcessMap::Insert(const ExtensionId& extension_id, int process_id) {
-  return items_.emplace(extension_id, process_id).second;
+  return items_.emplace(process_id, extension_id).second;
 }
 
-int ProcessMap::RemoveAllFromProcess(int process_id) {
-  return std::erase_if(
-      items_, [&](const auto& item) { return item.second == process_id; });
+int ProcessMap::Remove(int process_id) {
+  return items_.erase(process_id);
 }
 
-bool ProcessMap::Contains(const ExtensionId& extension_id,
+bool ProcessMap::Contains(const ExtensionId& extension_id_in,
                           int process_id) const {
-  return items_.contains({extension_id, process_id});
+  auto* extension_id = base::FindOrNull(items_, process_id);
+  return extension_id && *extension_id == extension_id_in;
 }
 
 bool ProcessMap::Contains(int process_id) const {
-  return base::Contains(items_, process_id, &Item::second);
+  return base::Contains(items_, process_id);
 }
 
-std::set<ExtensionId> ProcessMap::GetExtensionsInProcess(
-    int process_id_in) const {
-  std::set<ExtensionId> result;
-  for (const auto& [extension_id, process_id] : items_) {
-    if (process_id == process_id_in) {
-      result.insert(extension_id);
-    }
-  }
-  return result;
+const Extension* ProcessMap::GetEnabledExtensionByProcessID(
+    int process_id) const {
+  auto* extension_id = base::FindOrNull(items_, process_id);
+  return extension_id ? ExtensionRegistry::Get(browser_context_)
+                            ->enabled_extensions()
+                            .GetByID(*extension_id)
+                      : nullptr;
+}
+
+std::optional<ExtensionId> ProcessMap::GetExtensionIdForProcess(
+    int process_id) const {
+  return base::OptionalFromPtr(base::FindOrNull(items_, process_id));
 }
 
 bool ProcessMap::IsPrivilegedExtensionProcess(const Extension& extension,
@@ -124,7 +140,7 @@ bool ProcessMap::CanProcessHostContextType(
              IsWebViewProcessForExtension(process_id, extension->id());
     case mojom::ContextType::kContentScript:
       // Currently, we assume any process can host a content script.
-      // TODO(crbug.com/1186557): This could be better by looking at
+      // TODO(crbug.com/40055126): This could be better by looking at
       // ScriptInjectionTracker, as we do for user scripts below.
       return !!extension;
     case mojom::ContextType::kUserScript:
@@ -168,7 +184,7 @@ mojom::ContextType ProcessMap::GetMostLikelyContextType(
   // WARNING: This logic must match ScriptContextSet::ClassifyJavaScriptContext,
   // as much as possible.
 
-  // TODO(crbug.com/1055168): Move this into the !extension if statement below
+  // TODO(crbug.com/40676105): Move this into the !extension if statement below
   // or document why we want to return WEBUI_CONTEXT for content scripts in
   // WebUIs.
   if (ProcessHasWebUIBindings(process_id)) {
@@ -184,7 +200,8 @@ mojom::ContextType ProcessMap::GetMostLikelyContextType(
     return mojom::ContextType::kWebPage;
   }
 
-  if (!Contains(extension->id(), process_id)) {
+  const ExtensionId& extension_id = extension->id();
+  if (!Contains(extension_id, process_id)) {
     // If the process map doesn't contain the process, it might be an extension
     // frame in a webview.
     // We (deliberately) don't add webview-hosted frames to the process map and
@@ -192,6 +209,16 @@ mojom::ContextType ProcessMap::GetMostLikelyContextType(
     if (url && extension->origin().IsSameOriginWith(*url) &&
         IsWebViewProcessForExtension(process_id, extension->id())) {
       // Yep, it's an extension frame in a webview.
+#if BUILDFLAG(ENABLE_PDF)
+      // The PDF Viewer extension is an exception, since webviews need to be
+      // able to load the PDF Viewer. The PDF extension needs a
+      // kPrivilegedExtension context to load, so the PDF extension frame is
+      // added to the process map and shouldn't reach here.
+      if (chrome_pdf::features::IsOopifPdfEnabled()) {
+        CHECK_NE(extension_id, extension_misc::kPdfExtensionId);
+      }
+#endif  // BUILDFLAG(ENABLE_PDF)
+
       return mojom::ContextType::kUnprivilegedExtension;
     }
 
@@ -205,7 +232,7 @@ mojom::ContextType ProcessMap::GetMostLikelyContextType(
     return mojom::ContextType::kPrivilegedWebPage;
   }
 
-  // TODO(https://crbug.com/1339382): Currently, offscreen document contexts
+  // TODO(crbug.com/40849649): Currently, offscreen document contexts
   // are misclassified as kPrivilegedExtension contexts. This is not ideal
   // because there is a mismatch between the browser and the renderer), but it's
   // not a security issue because, while offscreen documents have fewer

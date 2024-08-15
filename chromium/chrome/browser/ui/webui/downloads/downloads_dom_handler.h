@@ -13,6 +13,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/download/download_danger_prompt.h"
+#include "chrome/browser/download/download_warning_desktop_hats_utils.h"
 #include "chrome/browser/ui/webui/downloads/downloads.mojom-forward.h"
 #include "chrome/browser/ui/webui/downloads/downloads_list_tracker.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -29,6 +30,20 @@ class WebUI;
 namespace download {
 class DownloadItem;
 }
+
+// Represents the possible outcomes of showing a ESB download row promotion.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// LINT.IfChange(SafeBrowsingEsbDownloadRowPromoOutcome)
+enum class SafeBrowsingEsbDownloadRowPromoOutcome {
+  // The kShown and kClicked values are not meant to be mutually exclusive,
+  // the same promo row can be shown AND clicked.
+  kShown = 0,
+  kClicked = 1,
+  kMaxValue = kClicked,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/safe_browsing/enums.xml:SafeBrowsingEsbDownloadRowPromoOutcome)
 
 // The handler for Javascript messages related to the "downloads" view,
 // also observes changes to the download manager.
@@ -76,6 +91,7 @@ class DownloadsDOMHandler : public content::WebContentsObserver,
   void BypassDeepScanRequiringGesture(const std::string& id) override;
   void OpenEsbSettings() override;
   void IsEligibleForEsbPromo(IsEligibleForEsbPromoCallback callback) override;
+  void LogEsbPromotionRowViewed() override;
 
  protected:
   // These methods are for mocking so that most of this class does not actually
@@ -115,6 +131,16 @@ class DownloadsDOMHandler : public content::WebContentsObserver,
   // Conveys danger acceptance from the DownloadDangerPrompt to the
   // DownloadItem.
   void DangerPromptDone(int download_id, DownloadDangerPrompt::Action action);
+
+  // Launches a HaTS survey for a download warning that is heeded, bypassed, or
+  // ignored (if all preconditions are met).
+  void MaybeTriggerDownloadWarningHatsSurvey(
+      download::DownloadItem* item,
+      DownloadWarningHatsType survey_type);
+
+  // Called when the downloads page is dismissed by closing the tab, or
+  // navigating the tab to another page.
+  void OnDownloadsPageDismissed();
 
   // Returns true if the records of any downloaded items are allowed (and able)
   // to be deleted.

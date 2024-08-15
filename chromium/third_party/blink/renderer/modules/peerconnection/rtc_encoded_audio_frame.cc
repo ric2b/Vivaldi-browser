@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_encoded_audio_frame_metadata.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_encoded_audio_frame_options.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_encoded_audio_frame_delegate.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
@@ -73,7 +74,7 @@ RTCEncodedAudioFrame* RTCEncodedAudioFrame::Create(
 
 RTCEncodedAudioFrame* RTCEncodedAudioFrame::Create(
     RTCEncodedAudioFrame* original_frame,
-    RTCEncodedAudioFrameMetadata* new_metadata,
+    const RTCEncodedAudioFrameOptions* options_dict,
     ExceptionState& exception_state) {
   RTCEncodedAudioFrame* new_frame;
   if (original_frame) {
@@ -85,12 +86,13 @@ RTCEncodedAudioFrame* RTCEncodedAudioFrame::Create(
         "Cannot create a new AudioFrame: input Audioframe is empty.");
     return nullptr;
   }
-  if (new_metadata) {
-    String error_message;
-    if (!new_frame->SetMetadata(new_metadata, error_message)) {
+  if (options_dict && options_dict->hasMetadata()) {
+    base::expected<void, String> set_metadata =
+        new_frame->SetMetadata(options_dict->metadata());
+    if (!set_metadata.has_value()) {
       exception_state.ThrowDOMException(
           DOMExceptionCode::kInvalidModificationError,
-          "Cannot create a new AudioFrame: " + error_message);
+          "Cannot create a new AudioFrame: " + set_metadata.error());
       return nullptr;
     }
   }
@@ -145,41 +147,31 @@ RTCEncodedAudioFrameMetadata* RTCEncodedAudioFrame::getMetadata() const {
   return metadata;
 }
 
-bool RTCEncodedAudioFrame::SetMetadata(
-    const RTCEncodedAudioFrameMetadata* metadata,
-    String& error_message) {
+base::expected<void, String> RTCEncodedAudioFrame::SetMetadata(
+    const RTCEncodedAudioFrameMetadata* metadata) {
   SetMetadataValidationOutcome validation =
       IsAllowedSetMetadataChange(getMetadata(), metadata);
   if (!validation.allowed) {
-    error_message = "Invalid modification of RTCEncodedAudioFrameMetadata. " +
-                    validation.error_msg;
-    return false;
+    return base::unexpected(
+        "Invalid modification of RTCEncodedAudioFrameMetadata. " +
+        validation.error_msg);
   }
 
-  return delegate_->SetRtpTimestamp(metadata->rtpTimestamp(), error_message);
+  return delegate_->SetRtpTimestamp(metadata->rtpTimestamp());
 }
 
 void RTCEncodedAudioFrame::setMetadata(RTCEncodedAudioFrameMetadata* metadata,
                                        ExceptionState& exception_state) {
-  String error_message;
-  if (!SetMetadata(metadata, error_message)) {
+  base::expected<void, String> set_metadata = SetMetadata(metadata);
+  if (!set_metadata.has_value()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidModificationError,
-        "Cannot setMetadata: " + error_message);
+        "Cannot setMetadata: " + set_metadata.error());
   }
 }
 
 void RTCEncodedAudioFrame::setData(DOMArrayBuffer* data) {
   frame_data_ = data;
-}
-
-void RTCEncodedAudioFrame::setTimestamp(uint32_t timestamp,
-                                        ExceptionState& exception_state) {
-  String error_message;
-  if (!delegate_->SetRtpTimestamp(timestamp, error_message)) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                      "Cannot setTimestamp: " + error_message);
-  }
 }
 
 String RTCEncodedAudioFrame::toString() const {

@@ -72,10 +72,8 @@ extern NSString* const kNoteCreateNewFolderCellIdentifier;
 // Accessibility identifier for the explanatory label in the empty state.
 extern NSString* const kNoteEmptyStateExplanatoryLabelIdentifier;
 
-#if BUILDFLAG(IS_IOS)
 extern NSString* const kToolsMenuNotesId;
 extern NSString* const kToolsMenuAddToNotes;
-#endif
 
 #pragma mark - ICONS
 // Image name for the note icon.
@@ -102,5 +100,9 @@ extern CGFloat vNoteFolderSelectionHeaderViewHeight;
 #pragma mark - OTHERS
 // Maximum number of entries to fetch when searching on notes folder page.
 extern const int vMaxNoteFolderSearchResults; // TODO
+
+#pragma mark - MARKDOWN
+extern NSString* vMarkdownLibraryBundleName;
+extern NSString* vMarkdownHTMLFilename;
 
 #endif  // IOS_UI_NOTES_NOTE_UI_CONSTANTS_H_

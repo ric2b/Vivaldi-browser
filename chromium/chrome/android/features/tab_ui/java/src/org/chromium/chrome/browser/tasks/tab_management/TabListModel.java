@@ -19,7 +19,7 @@ import androidx.annotation.IntDef;
 
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
+import org.chromium.chrome.browser.tasks.tab_management.TabGridView.AnimationStatus;
 import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyListModel;
@@ -130,28 +130,8 @@ class TabListModel extends ModelList {
     }
 
     /**
-     * Gets the new position of the Tab with {@link tabId} from a sorted list with MRU order.
-     * @param tabId The id of the Tab to insert into the list.
-     */
-    public int getNewPositionInMruOrderList(int tabId) {
-        long timestamp = PseudoTab.fromTabId(tabId).getTimestampMillis();
-        int pos = 0;
-        while (pos < size()) {
-            PropertyModel model = get(pos).model;
-            if (model.get(CARD_TYPE) != TAB
-                    || (PseudoTab.fromTabId(model.get(TabProperties.TAB_ID)).getTimestampMillis()
-                                    - timestamp
-                            >= 0)) {
-                pos++;
-            } else {
-                break;
-            }
-        }
-        return pos;
-    }
-
-    /**
      * Get the index that matches a message item that has the given message type.
+     *
      * @param messageType The message type to match.
      * @return The index within the model.
      */
@@ -263,8 +243,8 @@ class TabListModel extends ModelList {
 
         int status =
                 isSelected
-                        ? ClosableTabGridView.AnimationStatus.SELECTED_CARD_ZOOM_IN
-                        : ClosableTabGridView.AnimationStatus.SELECTED_CARD_ZOOM_OUT;
+                        ? AnimationStatus.SELECTED_CARD_ZOOM_IN
+                        : AnimationStatus.SELECTED_CARD_ZOOM_OUT;
         if (get(index).model.get(TabProperties.CARD_ANIMATION_STATUS) == status) return;
 
         get(index).model.set(TabProperties.CARD_ANIMATION_STATUS, status);
@@ -286,8 +266,8 @@ class TabListModel extends ModelList {
 
         int status =
                 isHovered
-                        ? ClosableTabGridView.AnimationStatus.HOVERED_CARD_ZOOM_IN
-                        : ClosableTabGridView.AnimationStatus.HOVERED_CARD_ZOOM_OUT;
+                        ? AnimationStatus.HOVERED_CARD_ZOOM_IN
+                        : AnimationStatus.HOVERED_CARD_ZOOM_OUT;
         if (get(index).model.get(TabProperties.CARD_ANIMATION_STATUS) == status) return;
 
         get(index).model.set(TabProperties.CARD_ANIMATION_STATUS, status);

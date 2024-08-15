@@ -305,9 +305,6 @@ message PowerManagementPolicy {
   // supported if Adaptive Charging is supported.
   optional bool charge_limit_enabled = 31;
 
-  // The minimum duration in system sleep before transitioning to hibernate.
-  optional uint32 hibernate_delay_sec = 32;
-
   // To improve the accuracy of Adaptive Charging, we require that
   // there be at least `min_days_history` days tracked in ChargeHistory and
   // that `min_full_on_ac_ratio` of the time on AC has a full charge.

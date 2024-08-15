@@ -41,10 +41,6 @@ const base::FilePath::CharType kOldOptimizationGuidePredictionModelDownloads[] =
 const base::FilePath::CharType kOptimizationGuideModelStoreDirPrefix[] =
     FILE_PATH_LITERAL("optimization_guide_model_store");
 
-const base::FilePath::CharType kSpModelFile[] = FILE_PATH_LITERAL("spm.model");
-
-const base::FilePath::CharType kModelFile[] = FILE_PATH_LITERAL("model.pb");
-
 const base::FilePath::CharType kWeightsFile[] =
     FILE_PATH_LITERAL("weights.bin");
 
@@ -55,5 +51,11 @@ const base::FilePath::CharType kTsSpModelFile[] =
 
 const base::FilePath::CharType kOnDeviceModelExecutionConfigFile[] =
     FILE_PATH_LITERAL("on_device_model_execution_config.pb");
+
+const base::FilePath::CharType kOnDeviceModelAdaptationModelFile[] =
+    FILE_PATH_LITERAL("adaptation_model.pb");
+
+const base::FilePath::CharType kOnDeviceModelAdaptationWeightsFile[] =
+    FILE_PATH_LITERAL("adaptation_weights.bin");
 
 }  // namespace optimization_guide

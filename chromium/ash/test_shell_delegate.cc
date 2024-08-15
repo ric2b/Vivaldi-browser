@@ -18,6 +18,7 @@
 #include "ash/public/cpp/test/test_desk_profiles_delegate.h"
 #include "ash/public/cpp/test/test_nearby_share_delegate.h"
 #include "ash/public/cpp/test/test_saved_desk_delegate.h"
+#include "ash/system/focus_mode/test/test_focus_mode_delegate.h"
 #include "ash/system/geolocation/test_geolocation_url_loader_factory.h"
 #include "ash/system/test_system_sounds_delegate.h"
 #include "ash/user_education/user_education_delegate.h"
@@ -28,7 +29,9 @@
 
 namespace ash {
 
-TestShellDelegate::TestShellDelegate() = default;
+TestShellDelegate::TestShellDelegate()
+    : url_loader_factory_(
+          base::MakeRefCounted<network::TestSharedURLLoaderFactory>()) {}
 
 TestShellDelegate::~TestShellDelegate() = default;
 
@@ -92,6 +95,11 @@ std::unique_ptr<api::TasksDelegate> TestShellDelegate::CreateTasksDelegate()
   return std::make_unique<api::TestTasksDelegate>();
 }
 
+std::unique_ptr<FocusModeDelegate> TestShellDelegate::CreateFocusModeDelegate()
+    const {
+  return std::make_unique<TestFocusModeDelegate>();
+}
+
 std::unique_ptr<UserEducationDelegate>
 TestShellDelegate::CreateUserEducationDelegate() const {
   return user_education_delegate_factory_
@@ -100,9 +108,8 @@ TestShellDelegate::CreateUserEducationDelegate() const {
 }
 
 scoped_refptr<network::SharedURLLoaderFactory>
-TestShellDelegate::GetGeolocationUrlLoaderFactory() const {
-  return static_cast<scoped_refptr<network::SharedURLLoaderFactory>>(
-      base::MakeRefCounted<TestGeolocationUrlLoaderFactory>());
+TestShellDelegate::GetBrowserProcessUrlLoaderFactory() const {
+  return url_loader_factory_;
 }
 
 bool TestShellDelegate::CanGoBack(gfx::NativeWindow window) const {

@@ -71,11 +71,6 @@ inline constexpr char kIntranetRedirectBehavior[] =
 inline constexpr char kKeywordSpaceTriggeringEnabled[] =
     "omnibox.keyword_space_triggering_enabled";
 
-// Boolean that specifies whether user has successfully used the instant
-// keyword mode feature.
-inline constexpr char kOmniboxInstantKeywordUsed[] =
-    "omnibox.instant_keyword_used";
-
 // A dictionary of visibility preferences for suggestion groups. The key is the
 // suggestion group ID serialized as a string, and the value is
 // SuggestionGroupVisibility serialized as an integer.
@@ -94,6 +89,11 @@ inline constexpr char kZeroSuggestCachedResults[] = "zerosuggest.cachedresults";
 // into a string keyed off the page URL.
 inline constexpr char kZeroSuggestCachedResultsWithURL[] =
     "zerosuggest.cachedresults_with_url";
+
+// Boolean that specifies whether to show the "Type @gemini to Chat with Gemini"
+// IPH suggestion at the bottom of the Omnibox in ZPS. This is true until a
+// user deletes (presses the X button on) the suggestion.
+inline constexpr char kShowGeminiIPH[] = "omnibox.show_gemini_iph";
 
 void RegisterProfilePrefs(PrefRegistrySimple* registry);
 

@@ -7,8 +7,10 @@
 #include <iterator>
 #include <memory>
 
+#include "base/test/scoped_feature_list.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/omnibox_feature_configs.h"
+#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/omnibox_proto/groups.pb.h"
@@ -117,7 +119,8 @@ TEST(AutocompleteGrouperSectionsTest, DesktopNTPZpsSection) {
   auto test = [](ACMatches matches, std::vector<int> expected_relevances) {
     PSections sections;
     omnibox::GroupConfigMap group_configs;
-    sections.push_back(std::make_unique<DesktopNTPZpsSection>(group_configs));
+    sections.push_back(
+        std::make_unique<DesktopNTPZpsSection>(group_configs, 8u));
     auto out_matches = Section::GroupMatches(std::move(sections), matches);
     VerifyMatches(out_matches, expected_relevances);
   };
@@ -246,6 +249,177 @@ TEST(AutocompleteGrouperSectionsTest, DesktopNTPZpsSection) {
             90,
             89,
             88,
+        });
+  }
+}
+
+// Tests the groups, limits, and rules for the Desktop NTP ZPS section.
+TEST(AutocompleteGrouperSectionsTest, DesktopNTPZpsSection_WithIPH) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(omnibox::kStarterPackIPH);
+
+  auto test = [](ACMatches matches, std::vector<int> expected_relevances) {
+    PSections sections;
+    omnibox::GroupConfigMap group_configs;
+    sections.push_back(
+        std::make_unique<DesktopNTPZpsSection>(group_configs, 7u));
+    sections.push_back(
+        std::make_unique<DesktopNTPZpsIPHSection>(group_configs));
+    auto out_matches = Section::GroupMatches(std::move(sections), matches);
+    VerifyMatches(out_matches, expected_relevances);
+  };
+  {
+    SCOPED_TRACE("Given no matches, should return no matches.");
+    test({}, {});
+  }
+  {
+    SCOPED_TRACE("Matches that qualify for no groups should not be added.");
+    test(
+        {
+            CreateMatch(100, omnibox::GROUP_DOCUMENT),
+            CreateMatch(99, omnibox::GROUP_SEARCH),
+            CreateMatch(98, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+        },
+        {98});
+  }
+  {
+    SCOPED_TRACE(
+        "Matches should be ranked by group, not relevance or add order.");
+    test(
+        {
+            // `GROUP_TRENDS` matches come 2nd and should not be added.
+            CreateMatch(90, omnibox::GROUP_TRENDS),
+            CreateMatch(89, omnibox::GROUP_TRENDS),
+            CreateMatch(88, omnibox::GROUP_TRENDS),
+            CreateMatch(87, omnibox::GROUP_TRENDS),
+            CreateMatch(86, omnibox::GROUP_TRENDS),
+            CreateMatch(85, omnibox::GROUP_TRENDS),
+            CreateMatch(84, omnibox::GROUP_TRENDS),
+            CreateMatch(83, omnibox::GROUP_TRENDS),
+            CreateMatch(82, omnibox::GROUP_TRENDS),
+            CreateMatch(81, omnibox::GROUP_TRENDS),
+            // `GROUP_PERSONALIZED_ZERO_SUGGEST` matches come 1st and should be
+            // added.
+            CreateMatch(80, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(79, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(78, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(77, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(76, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(75, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(74, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(73, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(72, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(71, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            // `GROUP_PREVIOUS_SEARCH_RELATED` matches should not be added.
+            CreateMatch(70, omnibox::GROUP_PREVIOUS_SEARCH_RELATED),
+            CreateMatch(69, omnibox::GROUP_PREVIOUS_SEARCH_RELATED),
+            CreateMatch(68, omnibox::GROUP_PREVIOUS_SEARCH_RELATED),
+            CreateMatch(67, omnibox::GROUP_PREVIOUS_SEARCH_RELATED),
+            CreateMatch(66, omnibox::GROUP_PREVIOUS_SEARCH_RELATED),
+            CreateMatch(65, omnibox::GROUP_PREVIOUS_SEARCH_RELATED),
+            CreateMatch(64, omnibox::GROUP_PREVIOUS_SEARCH_RELATED),
+            CreateMatch(63, omnibox::GROUP_PREVIOUS_SEARCH_RELATED),
+            CreateMatch(62, omnibox::GROUP_PREVIOUS_SEARCH_RELATED),
+            CreateMatch(61, omnibox::GROUP_PREVIOUS_SEARCH_RELATED),
+            // `GROUP_ZERO_SUGGEST_IN_PRODUCT_HELP` suggestions have their
+            // own section, so one should be added.
+            CreateMatch(60, omnibox::GROUP_ZERO_SUGGEST_IN_PRODUCT_HELP),
+            CreateMatch(59, omnibox::GROUP_ZERO_SUGGEST_IN_PRODUCT_HELP),
+        },
+        {
+            80,
+            79,
+            78,
+            77,
+            76,
+            75,
+            74,
+            60,
+        });
+  }
+  {
+    SCOPED_TRACE("Matches should be added up to their group limit.");
+    test(
+        {
+            CreateMatch(80, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(79, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(78, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(77, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(76, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(75, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(74, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(73, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(72, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(71, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+        },
+        {
+            80,
+            79,
+            78,
+            77,
+            76,
+            75,
+            74,
+        });
+  }
+  {
+    SCOPED_TRACE("Matches should be added up to the section limit.");
+    test(
+        {
+            // `GROUP_TRENDS` matches should be added up to the remaining
+            // section limit
+            // (2).
+            CreateMatch(90, omnibox::GROUP_TRENDS),
+            CreateMatch(89, omnibox::GROUP_TRENDS),
+            CreateMatch(88, omnibox::GROUP_TRENDS),
+            CreateMatch(87, omnibox::GROUP_TRENDS),
+            CreateMatch(86, omnibox::GROUP_TRENDS),
+            CreateMatch(85, omnibox::GROUP_TRENDS),
+            CreateMatch(84, omnibox::GROUP_TRENDS),
+            CreateMatch(83, omnibox::GROUP_TRENDS),
+            CreateMatch(82, omnibox::GROUP_TRENDS),
+            CreateMatch(81, omnibox::GROUP_TRENDS),
+            // `GROUP_PERSONALIZED_ZERO_SUGGEST` matches should all be added.
+            CreateMatch(80, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(79, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(78, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(77, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(76, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            // `GROUP_ZERO_SUGGEST_IN_PRODUCT_HELP` should be added up to its
+            // section limit (1).
+            CreateMatch(75, omnibox::GROUP_ZERO_SUGGEST_IN_PRODUCT_HELP),
+            CreateMatch(74, omnibox::GROUP_ZERO_SUGGEST_IN_PRODUCT_HELP),
+        },
+        {
+            80,
+            79,
+            78,
+            77,
+            76,
+            90,
+            89,
+            75,
+        });
+  }
+  {
+    SCOPED_TRACE(
+        "IPH match should be added regardless of matches in first section.");
+    test(
+        {
+            // `GROUP_PERSONALIZED_ZERO_SUGGEST` matches should all be added.
+            CreateMatch(80, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(77, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            CreateMatch(76, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
+            // `GROUP_ZERO_SUGGEST_IN_PRODUCT_HELP` should be added up to its
+            // section limit even if the first section is not full. (1).
+            CreateMatch(75, omnibox::GROUP_ZERO_SUGGEST_IN_PRODUCT_HELP),
+            CreateMatch(74, omnibox::GROUP_ZERO_SUGGEST_IN_PRODUCT_HELP),
+        },
+        {
+            80,
+            77,
+            76,
+            75,
         });
   }
 }
@@ -1253,12 +1427,9 @@ TEST(AutocompleteGrouperSectionsTest, AndroidWebZpsSection_mostVisitedTiles) {
 // Tests the groups, limits, and rules for the iOS NTP ZPS.
 TEST(AutocompleteGrouperSectionsTest, IOSNTPZpsSection) {
   auto test = [](ACMatches matches, std::vector<int> expected_relevances) {
-    size_t max_trending_queries = 3;
-    size_t max_psuggest_queries = 3;
     PSections sections;
     omnibox::GroupConfigMap group_configs;
-    sections.push_back(std::make_unique<IOSNTPZpsSection>(
-        max_trending_queries, max_psuggest_queries, group_configs));
+    sections.push_back(std::make_unique<IOSNTPZpsSection>(group_configs));
     auto out_matches = Section::GroupMatches(std::move(sections), matches);
     VerifyMatches(out_matches, expected_relevances);
   };
@@ -1276,7 +1447,7 @@ TEST(AutocompleteGrouperSectionsTest, IOSNTPZpsSection) {
           CreateMatch(99, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
           CreateMatch(98, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST),
           CreateMatch(97, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST)},
-         {100, 99, 98});
+         {100, 99, 98, 97});
   }
 
   {
@@ -1286,8 +1457,10 @@ TEST(AutocompleteGrouperSectionsTest, IOSNTPZpsSection) {
     test({CreateMatch(100, omnibox::GROUP_TRENDS),
           CreateMatch(99, omnibox::GROUP_TRENDS),
           CreateMatch(98, omnibox::GROUP_TRENDS),
-          CreateMatch(97, omnibox::GROUP_TRENDS)},
-         {100, 99, 98});
+          CreateMatch(97, omnibox::GROUP_TRENDS),
+          CreateMatch(96, omnibox::GROUP_TRENDS),
+          CreateMatch(95, omnibox::GROUP_TRENDS)},
+         {100, 99, 98, 97, 96});
   }
 
   {
@@ -1302,7 +1475,7 @@ TEST(AutocompleteGrouperSectionsTest, IOSNTPZpsSection) {
           CreateMatch(95, omnibox::GROUP_TRENDS),
           CreateMatch(94, omnibox::GROUP_TRENDS),
           CreateMatch(93, omnibox::GROUP_TRENDS)},
-         {100, 99, 98, 96, 95, 94});
+         {100, 99, 98, 97, 96, 95, 94, 93});
   }
 }
 
@@ -1438,7 +1611,8 @@ TEST(AutocompleteGrouperSectionsTest,
         omnibox::GroupConfig_SideType_SECONDARY);
     group_configs[group4].set_side_type(
         omnibox::GroupConfig_SideType_SECONDARY);
-    sections.push_back(std::make_unique<DesktopNTPZpsSection>(group_configs));
+    sections.push_back(
+        std::make_unique<DesktopNTPZpsSection>(group_configs, 8u));
     sections.push_back(
         std::make_unique<DesktopSecondaryNTPZpsSection>(group_configs));
     auto out_matches = Section::GroupMatches(std::move(sections), matches);
@@ -1522,10 +1696,12 @@ TEST(AutocompleteGrouperSectionsTest,
 #if BUILDFLAG(IS_ANDROID)
 TEST(AutocompleteGrouperSectionsTest,
      AndroidNonZPSSection_groupsBySearchVsUrl) {
-  auto test = [](ACMatches matches, std::vector<int> expected_relevances) {
+  auto test = [](bool show_only_search_suggestions, ACMatches matches,
+                 std::vector<int> expected_relevances) {
     PSections sections;
     omnibox::GroupConfigMap group_configs;
-    sections.push_back(std::make_unique<AndroidNonZPSSection>(group_configs));
+    sections.push_back(std::make_unique<AndroidNonZPSSection>(
+        show_only_search_suggestions, group_configs));
     auto out_matches = Section::GroupMatches(std::move(sections), matches);
     VerifyMatches(out_matches, expected_relevances);
   };
@@ -1542,56 +1718,206 @@ TEST(AutocompleteGrouperSectionsTest,
     return match;
   };
 
+  constexpr bool kSearchesOnly = true;
+  constexpr bool kSearchesAndUrls = false;
+
   {
     SCOPED_TRACE("No matches = no crashes.");
-    test({}, {});
+    test(kSearchesAndUrls, {}, {});
+    test(kSearchesOnly, {}, {});
   }
   {
-    SCOPED_TRACE("Grouping top section only.");
-    test({make_search(100)}, {100});
+    SCOPED_TRACE("Grouping top section only w/ Search.");
+    test(kSearchesAndUrls, {make_search(100)}, {100});
+    test(kSearchesOnly, {make_search(100)}, {100});
+  }
+  {
+    SCOPED_TRACE("Grouping top section only w/ URL.");
+    test(kSearchesAndUrls, {make_url(100)}, {100});
+    // Top URL is allowed.
+    test(kSearchesOnly, {make_url(100)}, {100});
+  }
+  {
+    SCOPED_TRACE("Grouping top section only w/ multiple URLs.");
+    ACMatches matches{
+        make_url(20),
+        make_url(19),
+        make_url(18),
+    };
+    test(kSearchesAndUrls, matches, {20, 19, 18});
+    // Only top URL is allowed.
+    test(kSearchesOnly, matches, {20});
   }
   {
     SCOPED_TRACE("Grouping top two sections.");
-    test(
-        {
-            make_url(20),
-            make_url(19),
-            make_url(18),
-            make_search(10),
-            make_search(9),
-        },
-        // 20     -- default match.
-        // 10, 9  -- top searches.
-        // 19, 18 -- top URLs.
-        {20, 10, 9, 19, 18});
+    ACMatches matches{
+        make_url(20),    make_url(19),   make_url(18),
+        make_search(10), make_search(9),
+    };
+
+    test(kSearchesAndUrls, matches,
+         // 20     -- default match.
+         // 10, 9  -- top searches.
+         // 19, 18 -- top URLs.
+         {20, 10, 9, 19, 18});
+
+    test(kSearchesOnly, matches,
+         // 20     -- default match (url).
+         // 10, 9  -- top searches.
+         {20, 10, 9});
   }
   {
     SCOPED_TRACE("Grouping all sections.");
-    test(
-        {
-            make_url(20),
-            // top adaptive group
-            make_url(19),
-            make_url(18),
-            make_search(10),
-            make_search(9),
-            make_url(17),
-            // bottom adaptive group
-            make_url(16),
-            make_search(8),
-            make_search(7),
-            make_url(15),
-            make_url(14),
-            make_search(6),
-            make_search(5),
-            make_url(13),
-            make_url(12),
-        },
-        {
-            20,                             // the default match
-            10, 9, 19, 18, 17,              // the top adaptive group
-            8, 7, 6, 5, 16, 15, 14, 13, 12  // the bottom adaptive group.
-        });
+    ACMatches matches{
+        make_url(20),
+        // top adaptive group
+        make_url(19),
+        make_url(18),
+        make_search(10),
+        make_search(9),
+        make_url(17),
+        // bottom adaptive group
+        make_url(16),
+        make_search(8),
+        make_search(7),
+        make_url(15),
+        make_url(14),
+        make_search(6),
+        make_search(5),
+        make_url(13),
+        make_url(12),
+    };
+
+    test(kSearchesAndUrls, matches,
+         {
+             20,                             // the default match
+             10, 9, 19, 18, 17,              // the top adaptive group
+             8, 7, 6, 5, 16, 15, 14, 13, 12  // the bottom adaptive group.
+         });
+
+    test(kSearchesOnly, matches,
+         {
+             20,                 // Default match is URL
+             10, 9, 8, 7, 6, 5,  // top adaptive group.
+         });
   }
 }
+
+TEST(AutocompleteGrouperSectionsTest,
+     AndroidNonZPSSection_richCardInFirstPosition) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeatureWithParameters(
+      omnibox::kOmniboxAnswerActions,
+      {{OmniboxFieldTrial::kAnswerActionsShowRichCard.name, "true"}});
+  auto test = [](ACMatches matches, std::vector<int> expected_relevances) {
+    PSections sections;
+    omnibox::GroupConfigMap group_configs;
+    AndroidNonZPSSection::set_num_visible_matches(5);
+    sections.push_back(
+        std::make_unique<AndroidNonZPSSection>(false, group_configs));
+    auto out_matches = Section::GroupMatches(std::move(sections), matches);
+    VerifyMatches(out_matches, expected_relevances);
+  };
+
+  auto make_search = [](int score) {
+    auto match = CreateMatch(score, omnibox::GROUP_SEARCH);
+    match.type = AutocompleteMatchType::SEARCH_HISTORY;
+    return match;
+  };
+
+  auto make_url = [](int score) {
+    auto match = CreateMatch(score, omnibox::GROUP_OTHER_NAVS);
+    match.type = AutocompleteMatchType::NAVSUGGEST;
+    return match;
+  };
+
+  auto make_rich_card = [](int score) {
+    auto match = CreateMatch(score, omnibox::GROUP_MOBILE_RICH_ANSWER);
+    match.type = AutocompleteMatchType::SEARCH_HISTORY;
+    SuggestionAnswer answer;
+    match.answer = answer;
+    return match;
+  };
+
+  {
+    SCOPED_TRACE("No matches, no crashes.");
+    test({}, {});
+  }
+
+  SCOPED_TRACE("Card in first position");
+  test(
+      {
+          make_rich_card(20),
+          make_url(19),
+          make_url(18),
+          make_search(10),
+          make_search(9),
+      },
+      // 20     -- rich answer card
+      // 10, 9  -- top searches.
+      // 19, 18 -- top URLs.
+      {20, 10, 9, 19, 18});
+}
+
+TEST(AutocompleteGrouperSectionsTest,
+     AndroidNonZPSSection_richCardAboveKeyboard) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeatureWithParameters(
+      omnibox::kOmniboxAnswerActions,
+      {{OmniboxFieldTrial::kAnswerActionsShowRichCard.name, "true"},
+       {OmniboxFieldTrial::kAnswerActionsShowAboveKeyboard.name, "true"}});
+  auto test = [](ACMatches matches, std::vector<int> expected_relevances) {
+    PSections sections;
+    omnibox::GroupConfigMap group_configs;
+    AndroidNonZPSSection::set_num_visible_matches(5);
+    sections.push_back(
+        std::make_unique<AndroidNonZPSSection>(false, group_configs));
+    auto out_matches = Section::GroupMatches(std::move(sections), matches);
+    VerifyMatches(out_matches, expected_relevances);
+  };
+
+  auto make_search = [](int score) {
+    auto match = CreateMatch(score, omnibox::GROUP_SEARCH);
+    match.type = AutocompleteMatchType::SEARCH_HISTORY;
+    return match;
+  };
+
+  auto make_url = [](int score) {
+    auto match = CreateMatch(score, omnibox::GROUP_OTHER_NAVS);
+    match.type = AutocompleteMatchType::NAVSUGGEST;
+    return match;
+  };
+
+  auto make_rich_card = [](int score) {
+    auto match = CreateMatch(score, omnibox::GROUP_MOBILE_RICH_ANSWER);
+    match.type = AutocompleteMatchType::SEARCH_HISTORY;
+    SuggestionAnswer answer;
+    match.answer = answer;
+    return match;
+  };
+
+  {
+    SCOPED_TRACE("No matches, no crashes.");
+    test({}, {});
+  }
+
+  SCOPED_TRACE("Card in last position of visible matches");
+  test(
+      {
+          make_url(19),
+          make_url(18),
+          make_rich_card(20),
+          make_search(10),
+          make_search(9),
+          make_search(8),
+          make_search(7),
+      },
+      // 19     -- default match url
+      // 10, 9  -- top searches.
+      // 18 -- remaining URL.
+      // 20 -- rich answer card
+      // 8, 7 -- below the fold matches
+      {19, 10, 9, 18, 20, 8, 7});
+}
+
 #endif

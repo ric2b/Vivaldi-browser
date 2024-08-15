@@ -252,6 +252,13 @@ public class PageInfoViewTest {
         return view;
     }
 
+    private void enableTrackingProtectionFixedExpiration() {
+        PageInfoController controller = PageInfoController.getLastPageInfoControllerForTesting();
+        assertNotNull(controller);
+        var tpController = controller.getTrackingProtectionControllerForTesting();
+        tpController.setFixedExceptionExpirationForTesting(true);
+    }
+
     private void setThirdPartyCookieBlocking(@CookieControlsMode int value) {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -419,7 +426,8 @@ public class PageInfoViewTest {
     public void tearDown() throws TimeoutException {
         LocationUtils.setFactory(null);
         // Notification channels don't get cleaned up automatically.
-        // TODO(crbug.com/951402): Find a general solution to avoid leaking channels between tests.
+        // TODO(crbug.com/41452182): Find a general solution to avoid leaking channels between
+        // tests.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             TestThreadUtils.runOnUiThreadBlocking(
                     () -> {
@@ -691,11 +699,11 @@ public class PageInfoViewTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    @DisabledTest(message = "https://crbug.com/1510968")
     public void testShowCookiesSubpageTrackingProtection() throws IOException {
         enableTrackingProtection();
         setThirdPartyCookieBlocking(CookieControlsMode.BLOCK_THIRD_PARTY);
         loadUrlAndOpenPageInfo(mTestServerRule.getServer().getURL(sSimpleHtml));
+        enableTrackingProtectionFixedExpiration();
         onView(withId(R.id.page_info_cookies_row)).perform(click());
         onViewWaiting(
                 allOf(
@@ -719,12 +727,12 @@ public class PageInfoViewTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    @DisabledTest(message = "https://crbug.com/1510968")
     public void testShowCookiesSubpageTrackingProtectionBlockAll() throws IOException {
         enableTrackingProtection();
         blockAll3PC();
         setThirdPartyCookieBlocking(CookieControlsMode.BLOCK_THIRD_PARTY);
         loadUrlAndOpenPageInfo(mTestServerRule.getServer().getURL(sSimpleHtml));
+        enableTrackingProtectionFixedExpiration();
         onView(withId(R.id.page_info_cookies_row)).perform(click());
         onViewWaiting(
                 allOf(withText(containsString("You blocked sites from using")), isDisplayed()));
@@ -1116,5 +1124,6 @@ public class PageInfoViewTest {
         onView(withText(R.string.ad_privacy_page_topics_link_row_label)).check(doesNotExist());
     }
 
-    // TODO(1071762): Add tests for preview pages, offline pages, offline state and other states.
+    // TODO(crbug.com/40685274): Add tests for preview pages, offline pages, offline state and other
+    // states.
 }

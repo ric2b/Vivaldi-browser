@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">نه بعد از</translation>
 <translation id="2749881179542288782">بررسی املا و دستور زبان</translation>
 <translation id="2785873697295365461">توصیف‌گرهای فایل</translation>
-<translation id="2809586584051668049">و <ph name="NUMBER_ADDITIONAL_DISABLED" /> مورد دیگر</translation>
 <translation id="2825758591930162672">کلید عمومی موضوع</translation>
 <translation id="2850541429955027218">افزودن قالب</translation>
 <translation id="2861941300086904918">‏مدیر امنیت Native Client</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">باز کردن به‌عنوان پنجره</translation>
 <translation id="3280237271814976245">ذخیره &amp;به‌عنوان...</translation>
 <translation id="3285322247471302225">&amp;زبانه‌ی جدید</translation>
-<translation id="3288047731229977326">افزونه‌هایی که در حالت برنامه‌نوبس اجرا می‌شوند می‌توانند به رایانه شما آسیب برسانند. اگر برنامه‌نویس نیستید، باید این برنامه‌های افزودنی را که در حالت برنامه‌نویس اجرا می‌شوند غیرفعال کنید تا ایمن بمانید.</translation>
 <translation id="329838636886466101">تعمیر</translation>
 <translation id="33022249435934718">‏کنترل‌کننده‌های GDI</translation>
 <translation id="3303818374450886607">کپی‌ها</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">برنامهٔ افزودنی ایجاد شده:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">غیرفعال کردن افزونه‌های حالت برنامه‌نویس</translation>
 <translation id="4100839878934973028">یکی از نرم‌افزارهای رایانه‌ی شما، برنامه‌ای را اضافه نموده که ممکن است بر کارکرد ویوالدی تأثیر بگذارد.</translation>
 <translation id="4104163789986725820">خ&amp;ارج کردن...</translation>
 <translation id="4109898769411476438">‏پیش از وارد کردن اطلاعات مرورگر را ببندید</translation>
@@ -261,7 +258,6 @@
 <translation id="5269977353971873915">چاپ نشد</translation>
 <translation id="5284445933715251131">ادامه‌ی دانلود</translation>
 <translation id="52912272896845572">فایل کلید خصوصی نامعتبر است.</translation>
-<translation id="5301954838959518834">بله، متوجه شدم</translation>
 <translation id="5302932258331363306">نمایش جایگزین‌ها</translation>
 <translation id="5317780077021120954">ذخیره</translation>
 <translation id="5334142896108694079">حافظه‌ی نهان اسکریپت</translation>

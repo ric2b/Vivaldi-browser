@@ -6,10 +6,11 @@
 
 #import "base/check_op.h"
 #import "base/time/time.h"
-#import "components/search_engines/search_engine_choice_utils.h"
+#import "components/search_engines/search_engine_choice/search_engine_choice_utils.h"
 #import "components/search_engines/search_engines_switches.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
+#import "ios/chrome/browser/search_engines/model/search_engine_choice_service_factory.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
@@ -78,16 +79,20 @@
 
 - (void)start {
   [super start];
-  ChromeBrowserState* browserState = self.browser->GetBrowserState();
-  ui::DeviceFormFactor deviceFormFactor = ui::GetDeviceFormFactor();
-  _viewController = [[SearchEngineChoiceViewController alloc]
-      initWithFirstRunMode:_firstRun
-           wideMarginWidth:(deviceFormFactor != ui::DEVICE_FORM_FACTOR_PHONE)];
+  // Make sure we use the original browser state (non-incognito).
+  ChromeBrowserState* originalBrowserState =
+      self.browser->GetBrowserState()->GetOriginalChromeBrowserState();
+  _viewController =
+      [[SearchEngineChoiceViewController alloc] initWithFirstRunMode:_firstRun];
   _viewController.actionDelegate = self;
+  TemplateURLService* templateURLService =
+      ios::TemplateURLServiceFactory::GetForBrowserState(originalBrowserState);
+  search_engines::SearchEngineChoiceService* searchEngineChoiceService =
+      ios::SearchEngineChoiceServiceFactory::GetForBrowserState(
+          originalBrowserState);
   _mediator = [[SearchEngineChoiceMediator alloc]
-      initWithTemplateURLService:ios::TemplateURLServiceFactory::
-                                     GetForBrowserState(browserState)
-                     prefService:browserState->GetPrefs()];
+      initWithTemplateURLService:templateURLService
+       searchEngineChoiceService:searchEngineChoiceService];
   _mediator.consumer = _viewController;
   _viewController.mutator = _mediator;
   _viewController.modalInPresentation = YES;
@@ -99,6 +104,7 @@
         search_engines::SearchEngineChoiceScreenEvents::
             kFreChoiceScreenWasDisplayed);
   } else {
+    ui::DeviceFormFactor deviceFormFactor = ui::GetDeviceFormFactor();
     if (deviceFormFactor == ui::DEVICE_FORM_FACTOR_PHONE) {
       AppState* appState = self.browser->GetSceneState().appState;
       _scopedIphonePortraitOnly =

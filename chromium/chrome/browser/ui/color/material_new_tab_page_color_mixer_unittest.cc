@@ -26,7 +26,6 @@ class MaterialNewTabPageColorMixerTest : public testing::Test {
   void AddMaterialColorMixers() {
     AddColorMixers(&color_provider_, color_provider_key_);
     AddChromeColorMixers(&color_provider_, color_provider_key_);
-    color_provider_.GenerateColorMap();
   }
 
  private:
@@ -37,8 +36,7 @@ class MaterialNewTabPageColorMixerTest : public testing::Test {
 
 TEST_F(MaterialNewTabPageColorMixerTest, NtpModulesRedesignedDisabled) {
   feature_list().InitWithFeatures(
-      /* enabled_features */ {features::kChromeRefresh2023,
-                              features::kChromeWebuiRefresh2023},
+      /* enabled_features */ {features::kChromeRefresh2023},
       /* disabled_features */ {ntp_features::kNtpModulesRedesigned});
 
   AddMaterialColorMixers();
@@ -52,8 +50,7 @@ TEST_F(MaterialNewTabPageColorMixerTest, NtpModulesRedesignedDisabled) {
 TEST_F(MaterialNewTabPageColorMixerTest, NtpModulesRedesignedEnabled) {
   feature_list().InitWithFeatures(
       /* enabled_features */ {ntp_features::kNtpModulesRedesigned,
-                              features::kChromeRefresh2023,
-                              features::kChromeWebuiRefresh2023},
+                              features::kChromeRefresh2023},
       /* disabled_features */ {});
 
   AddMaterialColorMixers();

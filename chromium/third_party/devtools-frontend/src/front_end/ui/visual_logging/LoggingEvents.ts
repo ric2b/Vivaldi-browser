@@ -6,9 +6,9 @@ import type * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 
-import {showDebugPopoverForEvent} from './Debugging.js';
+import {processEventForDebugging, processImpressionsForDebugging} from './Debugging.js';
 import {type Loggable} from './Loggable.js';
-import {getLoggingState} from './LoggingState.js';
+import {getLoggingState, type LoggingState} from './LoggingState.js';
 
 export async function logImpressions(loggables: Loggable[]): Promise<void> {
   const impressions = await Promise.all(loggables.map(async loggable => {
@@ -23,17 +23,18 @@ export async function logImpressions(loggables: Loggable[]): Promise<void> {
       impression.parent = loggingState.parent.veid;
     }
     if (loggingState.size) {
-      impression.width = loggingState.size.width;
-      impression.height = loggingState.size.height;
+      impression.width = Math.round(loggingState.size.width);
+      impression.height = Math.round(loggingState.size.height);
     }
     return impression;
   }));
   if (impressions.length) {
     Host.InspectorFrontendHost.InspectorFrontendHostInstance.recordImpression({impressions});
+    processImpressionsForDebugging(loggables.map(l => getLoggingState(l) as LoggingState));
   }
 }
 
-export const logResize = (throttler: Common.Throttler.Throttler) => (loggable: Loggable, size: DOMRect) => {
+export const logResize = (loggable: Loggable, size: DOMRect): void => {
   const loggingState = getLoggingState(loggable);
   if (!loggingState) {
     return;
@@ -41,10 +42,8 @@ export const logResize = (throttler: Common.Throttler.Throttler) => (loggable: L
   loggingState.size = size;
   const resizeEvent: Host.InspectorFrontendHostAPI
       .ResizeEvent = {veid: loggingState.veid, width: loggingState.size.width, height: loggingState.size.height};
-  void throttler.schedule(async () => {
-    Host.InspectorFrontendHost.InspectorFrontendHostInstance.recordResize(resizeEvent);
-    showDebugPopoverForEvent('Resize', loggingState?.config);
-  });
+  Host.InspectorFrontendHost.InspectorFrontendHostInstance.recordResize(resizeEvent);
+  processEventForDebugging('Resize', loggingState, {width: Math.round(size.width), height: Math.round(size.height)});
 };
 
 export const logClick = (throttler: Common.Throttler.Throttler) => (
@@ -53,12 +52,15 @@ export const logClick = (throttler: Common.Throttler.Throttler) => (
   if (!loggingState) {
     return;
   }
-  const button = event instanceof MouseEvent ? event.button : 0;
-  const clickEvent: Host.InspectorFrontendHostAPI
-      .ClickEvent = {veid: loggingState.veid, mouseButton: button, doubleClick: Boolean(options?.doubleClick)};
+  const clickEvent:
+      Host.InspectorFrontendHostAPI.ClickEvent = {veid: loggingState.veid, doubleClick: Boolean(options?.doubleClick)};
+  if (event instanceof MouseEvent && 'sourceCapabilities' in event && event.sourceCapabilities) {
+    clickEvent.mouseButton = event.button;
+  }
   void throttler.schedule(async () => {
     Host.InspectorFrontendHost.InspectorFrontendHostInstance.recordClick(clickEvent);
-    showDebugPopoverForEvent('Click', loggingState?.config);
+    processEventForDebugging(
+        'Click', loggingState, {mouseButton: clickEvent.mouseButton, doubleClick: clickEvent.doubleClick});
   });
 };
 
@@ -66,10 +68,10 @@ export const logHover = (throttler: Common.Throttler.Throttler) => async (event:
   const loggingState = getLoggingState(event.currentTarget as Element);
   assertNotNullOrUndefined(loggingState);
   const hoverEvent: Host.InspectorFrontendHostAPI.HoverEvent = {veid: loggingState.veid};
-  void throttler.schedule(async () => {});  // Ensure the logging won't get scheduled immediately
+  await throttler.schedule(async () => {});  // Ensure the logging won't get scheduled immediately
   void throttler.schedule(async () => {
     Host.InspectorFrontendHost.InspectorFrontendHostInstance.recordHover(hoverEvent);
-    showDebugPopoverForEvent('Hover', loggingState?.config);
+    processEventForDebugging('Hover', loggingState);
   });
 };
 
@@ -80,7 +82,7 @@ export const logDrag = (throttler: Common.Throttler.Throttler) => async (event: 
   await throttler.schedule(async () => {});  // Ensure the logging won't get scheduled immediately
   void throttler.schedule(async () => {
     Host.InspectorFrontendHost.InspectorFrontendHostInstance.recordDrag(dragEvent);
-    showDebugPopoverForEvent('Drag', loggingState?.config);
+    processEventForDebugging('Drag', loggingState);
   });
 };
 
@@ -88,8 +90,13 @@ export async function logChange(event: Event): Promise<void> {
   const loggingState = getLoggingState(event.currentTarget as Element);
   assertNotNullOrUndefined(loggingState);
   const changeEvent: Host.InspectorFrontendHostAPI.ChangeEvent = {veid: loggingState.veid};
+  const context = loggingState.lastInputEventType;
+  delete loggingState.lastInputEventType;
+  if (context) {
+    changeEvent.context = await contextAsNumber(context);
+  }
   Host.InspectorFrontendHost.InspectorFrontendHostInstance.recordChange(changeEvent);
-  showDebugPopoverForEvent('Change', loggingState?.config);
+  processEventForDebugging('Change', loggingState, {context});
 }
 
 let pendingKeyDownContext: string|null = null;
@@ -119,7 +126,7 @@ export const logKeyDown =
       pendingKeyDownContext = context || null;
       void throttler.schedule(async () => {
         Host.InspectorFrontendHost.InspectorFrontendHostInstance.recordKeyDown(keyDownEvent);
-        showDebugPopoverForEvent('KeyDown', loggingState?.config, context);
+        processEventForDebugging('KeyDown', loggingState, {context});
         pendingKeyDownContext = null;
       });
     };
@@ -160,5 +167,5 @@ async function contextAsNumber(context: string|undefined): Promise<number|undefi
   const encoder = new TextEncoder();
   const data = encoder.encode(context);
   const digest = await crypto.subtle.digest('SHA-1', data);
-  return new DataView(digest).getUint32(0, true);
+  return new DataView(digest).getInt32(0, true);
 }

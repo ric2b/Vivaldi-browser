@@ -32,43 +32,46 @@ FX_ARGB CXFA_Color::StringToFXARGB(WideStringView view) {
   if (view.IsEmpty())
     return kDefaultValue;
 
-  const wchar_t* str = view.unterminated_c_str();
-  size_t len = view.GetLength();
+  pdfium::span<const wchar_t> str = view.span();
   size_t cc = 0;
-  while (cc < len && FXSYS_iswspace(str[cc]))
+  while (cc < str.size() && FXSYS_iswspace(str[cc])) {
     cc++;
+  }
 
-  if (cc >= len)
+  if (cc >= str.size()) {
     return kDefaultValue;
+  }
 
   uint8_t r = 0;
   uint8_t g = 0;
   uint8_t b = 0;
-  while (cc < len) {
+  while (cc < str.size()) {
     if (str[cc] == ',' || !FXSYS_IsDecimalDigit(str[cc]))
       break;
 
     r = r * 10 + str[cc] - '0';
     cc++;
   }
-  if (cc < len && str[cc] == ',') {
+  if (cc < str.size() && str[cc] == ',') {
     cc++;
-    while (cc < len && FXSYS_iswspace(str[cc]))
+    while (cc < str.size() && FXSYS_iswspace(str[cc])) {
       cc++;
+    }
 
-    while (cc < len) {
+    while (cc < str.size()) {
       if (str[cc] == ',' || !FXSYS_IsDecimalDigit(str[cc]))
         break;
 
       g = g * 10 + str[cc] - '0';
       cc++;
     }
-    if (cc < len && str[cc] == ',') {
+    if (cc < str.size() && str[cc] == ',') {
       cc++;
-      while (cc < len && FXSYS_iswspace(str[cc]))
+      while (cc < str.size() && FXSYS_iswspace(str[cc])) {
         cc++;
+      }
 
-      while (cc < len) {
+      while (cc < str.size()) {
         if (str[cc] == ',' || !FXSYS_IsDecimalDigit(str[cc]))
           break;
 

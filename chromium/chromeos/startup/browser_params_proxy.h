@@ -114,6 +114,8 @@ class COMPONENT_EXPORT(CHROMEOS_STARTUP) BrowserParamsProxy {
 
   bool IsFlossAvailabilityCheckNeeded() const;
 
+  bool IsLLPrivacyAvailable() const;
+
   bool IsCurrentUserDeviceOwner() const;
 
   bool IsCurrentUserEphemeral() const;
@@ -168,11 +170,21 @@ class COMPONENT_EXPORT(CHROMEOS_STARTUP) BrowserParamsProxy {
 
   bool IsFileSystemProviderCloudFileSystemEnabled() const;
 
+  bool IsFileSystemProviderContentCacheEnabled() const;
+
   bool IsOrcaEnabled() const;
 
   bool IsCrosMallEnabled() const;
 
   bool IsMahiEnabled() const;
+
+  bool IsContainerAppPreinstallEnabled() const;
+
+  bool IsOrcaUseL10nStringsEnabled() const;
+
+  bool IsMahiSupportedWithCorrectFeatureKey() const;
+
+  bool IsOrcaInternationalizeEnabled() const;
 
  private:
   friend base::NoDestructor<BrowserParamsProxy>;

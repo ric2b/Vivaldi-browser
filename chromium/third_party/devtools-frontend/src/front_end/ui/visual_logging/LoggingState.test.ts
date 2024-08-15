@@ -6,8 +6,6 @@ import {stabilizeState} from '../../testing/VisualLoggingHelpers.js';
 
 import * as VisualLogging from './visual_logging-testing.js';
 
-const {assert} = chai;
-
 describe('LoggingState', () => {
   let parent: Element;
   let element: Element;
@@ -25,12 +23,14 @@ describe('LoggingState', () => {
       config: {ve: 1, context: '42'},
       veid: 0,
       processed: false,
+      size: new DOMRect(0, 0, 0, 0),
       parent: {
         impressionLogged: false,
         config: {ve: 1},
         veid: 1,
         processed: false,
         parent: null,
+        size: new DOMRect(0, 0, 0, 0),
       },
     });
   });

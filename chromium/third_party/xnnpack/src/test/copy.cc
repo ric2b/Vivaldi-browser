@@ -3,20 +3,21 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <algorithm>   // For std::generate.
-#include <array>       // For std::array.
-#include <cstddef>     // For size_t.
-#include <memory>      // For std::unique_ptr.
-
-#include <fp16/fp16.h>
-#include <gtest/gtest.h>
-
 #include <xnnpack.h>
 #include <xnnpack/node-type.h>
 #include <xnnpack/operator.h>
 #include <xnnpack/subgraph.h>
 
+#include <algorithm>  // For std::generate.
+#include <array>      // For std::array.
+#include <cmath>
+#include <cstddef>  // For size_t.
+#include <cstdint>
+#include <memory>  // For std::unique_ptr.
+
 #include "subgraph-unary-tester.h"
+#include <gtest/gtest.h>
+#include <fp16/fp16.h>
 
 using CopyTestQS8 = UnaryTest<int8_t>;
 using CopyTestQU8 = UnaryTest<uint8_t>;
@@ -288,8 +289,8 @@ TEST_F(CopyTestQU8, matches_operator_api)
 TEST_F(CopyTestF16, matches_operator_api)
 {
   std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-  std::fill(operator_output.begin(), operator_output.end(), fp16_ieee_from_fp32_value(nanf("")));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), fp16_ieee_from_fp32_value(nanf("")));
+  std::fill(operator_output.begin(), operator_output.end(), UINT16_C(0x7E00) /* NaN */);
+  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT16_C(0x7E00) /* NaN */);
 
   ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));
 

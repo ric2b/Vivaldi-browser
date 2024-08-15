@@ -480,41 +480,6 @@ describeWithEnvironment('Inline variable view scope value resolution', () => {
 });
 
 describe('DebuggerPlugin', () => {
-  describe('computeExecutionDecorations', () => {
-    const {computeExecutionDecorations} = Sources.DebuggerPlugin;
-    const extensions = [CodeMirror.javascript.javascript()];
-
-    it('correctly returns no decorations when line is outside of the document', () => {
-      const doc = 'console.log("Hello World!");';
-      const state = CodeMirror.EditorState.create({doc, extensions});
-      const decorations = computeExecutionDecorations(state, 1, 0);
-      assert.strictEqual(decorations.size, 0, 'Expected to have no decorations');
-    });
-
-    it('correctly returns line and token decorations', () => {
-      const doc = 'function foo() {\n  debugger;\n }';
-      const state = CodeMirror.EditorState.create({doc, extensions});
-      const decorations = computeExecutionDecorations(state, 1, 2);
-      assert.strictEqual(decorations.size, 2, 'Expected to have execution line and token decoration');
-    });
-
-    it('correctly returns line and token decorations even for long documents', () => {
-      const doc = 'console.log("Hello World!");\n'.repeat(10_000);
-      const state = CodeMirror.EditorState.create({doc, extensions});
-      const decorations = computeExecutionDecorations(state, 9_998, 0);
-      assert.strictEqual(decorations.size, 2, 'Expected to have execution line and token decoration');
-    });
-
-    it('correctly returns line decorations for documents that don\'t have syntax highlighting', () => {
-      const doc = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml"></html>`;
-      const state = CodeMirror.EditorState.create({doc});
-      const decorations = computeExecutionDecorations(state, 1, 0);
-      assert.strictEqual(decorations.size, 1, 'Expected to have execution line decoration');
-    });
-  });
-
   describe('computePopoverHighlightRange', () => {
     const {computePopoverHighlightRange} = Sources.DebuggerPlugin;
 
@@ -622,7 +587,7 @@ describe('DebuggerPlugin', () => {
         );
       });
 
-      it('correct reports postfix decrements in property accesses as potentially side-effecting', () => {
+      it('correctly reports postfix decrements in property accesses as potentially side-effecting', () => {
         const doc = 'a[i--]';
         const state = CodeMirror.EditorState.create({doc, extensions});
 
@@ -636,7 +601,7 @@ describe('DebuggerPlugin', () => {
         );
       });
 
-      it('correct reports prefix increments in property accesses as potentially side-effecting', () => {
+      it('correctly reports prefix increments in property accesses as potentially side-effecting', () => {
         const doc = 'array[++index]';
         const state = CodeMirror.EditorState.create({doc, extensions});
 
@@ -650,7 +615,7 @@ describe('DebuggerPlugin', () => {
         );
       });
 
-      it('correct reports prefix decrements in property accesses as potentially side-effecting', () => {
+      it('correctly reports prefix decrements in property accesses as potentially side-effecting', () => {
         const doc = 'array[--index]';
         const state = CodeMirror.EditorState.create({doc, extensions});
 
@@ -664,7 +629,7 @@ describe('DebuggerPlugin', () => {
         );
       });
 
-      it('correct reports assignment expressions in property accesses as potentially side-effecting', () => {
+      it('correctly reports assignment expressions in property accesses as potentially side-effecting', () => {
         const doc = 'array[index *= 5]';
         const state = CodeMirror.EditorState.create({doc, extensions});
 
@@ -676,6 +641,25 @@ describe('DebuggerPlugin', () => {
             computePopoverHighlightRange(state, 'text/javascript', doc.indexOf(']')),
             {containsSideEffects: true, from: 0, to: doc.length},
         );
+      });
+
+      it('correctly reports potential side-effects within a larger script', () => {
+        const doc = `var a = new Array();
+var i = 0;
+a[i++];
+a[i--];
+a[++i];
+a[--i];
+a[i *= 5];
+a[foo()];`;
+        const state = CodeMirror.EditorState.create({doc, extensions});
+
+        for (let offset = 0; (offset = doc.indexOf('a[', offset) + 1) !== 0;) {
+          assert.deepInclude(
+              computePopoverHighlightRange(state, 'text/javascript', offset),
+              {containsSideEffects: true},
+          );
+        }
       });
     });
 

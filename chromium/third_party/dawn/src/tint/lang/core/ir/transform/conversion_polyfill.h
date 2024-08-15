@@ -30,6 +30,7 @@
 
 #include <string>
 
+#include "src/tint/utils/reflection/reflection.h"
 #include "src/tint/utils/result/result.h"
 
 // Forward declarations.
@@ -43,6 +44,9 @@ namespace tint::core::ir::transform {
 struct ConversionPolyfillConfig {
     /// Should converting floating point values to integers be polyfilled?
     bool ftoi = false;
+
+    /// Reflection for this class
+    TINT_REFLECT(ConversionPolyfillConfig, ftoi);
 };
 
 /// ConversionPolyfill is a transform that modifies convert instructions to prepare them for raising

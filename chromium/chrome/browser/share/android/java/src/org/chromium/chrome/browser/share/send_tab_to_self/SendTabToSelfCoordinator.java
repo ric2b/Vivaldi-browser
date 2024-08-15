@@ -107,9 +107,26 @@ public class SendTabToSelfCoordinator {
             mSigninManager = signinManager;
         }
 
+        /** Implements {@link AccountPickerDelegate}. */
         @Override
         public void onAccountPickerDestroy() {}
 
+        /** Implements {@link AccountPickerDelegate}. */
+        @Override
+        public boolean canHandleAddAccount() {
+            return false;
+        }
+
+        /** Implements {@link AccountPickerDelegate}. */
+        @Override
+        public void addAccount() {
+            // TODO(b/326019991): Remove this exception along with the delegate implementation once
+            // all bottom sheet entry points will be started from `SigninAndHistoryOptInActivity`.
+            throw new UnsupportedOperationException(
+                    "SendTabToSelfAccountPickerDelegate.addAccount() should never be called.");
+        }
+
+        /** Implements {@link AccountPickerDelegate}. */
         @Override
         public void signIn(CoreAccountInfo accountInfo, AccountPickerBottomSheetMediator mediator) {
             mSigninManager.signin(
@@ -128,16 +145,19 @@ public class SendTabToSelfCoordinator {
                     });
         }
 
+        /** Implements {@link AccountPickerDelegate}. */
         @Override
         public void isAccountManaged(CoreAccountInfo accountInfo, Callback<Boolean> callback) {
             mSigninManager.isAccountManaged(accountInfo, callback);
         }
 
+        /** Implements {@link AccountPickerDelegate}. */
         @Override
         public void setUserAcceptedAccountManagement(boolean confirmed) {
             mSigninManager.setUserAcceptedAccountManagement(confirmed);
         }
 
+        /** Implements {@link AccountPickerDelegate}. */
         @Override
         public String extractDomainName(String accountEmail) {
             return mSigninManager.extractDomainName(accountEmail);
@@ -178,7 +198,7 @@ public class SendTabToSelfCoordinator {
             case EntryPointDisplayReason.INFORM_NO_TARGET_DEVICE:
                 MetricsRecorder.recordSendingEvent(SendingEvent.SHOW_NO_TARGET_DEVICE_MESSAGE);
                 mController.requestShowContent(
-                        new NoTargetDeviceBottomSheetContent(mContext), true);
+                        new NoTargetDeviceBottomSheetContent(mContext, mProfile), true);
                 return;
             case EntryPointDisplayReason.OFFER_FEATURE:
                 MetricsRecorder.recordSendingEvent(SendingEvent.SHOW_DEVICE_LIST);
@@ -193,12 +213,14 @@ public class SendTabToSelfCoordinator {
                 {
                     MetricsRecorder.recordSendingEvent(SendingEvent.SHOW_SIGNIN_PROMO);
                     AccountPickerBottomSheetStrings strings =
-                            new AccountPickerBottomSheetStrings(
-                                    R.string
-                                            .signin_account_picker_bottom_sheet_title_for_send_tab_to_self,
-                                    R.string
-                                            .signin_account_picker_bottom_sheet_subtitle_for_send_tab_to_self,
-                                    R.string.cancel);
+                            new AccountPickerBottomSheetStrings.Builder(
+                                            R.string
+                                                    .signin_account_picker_bottom_sheet_title_for_send_tab_to_self)
+                                    .setSubtitleStringId(
+                                            R.string
+                                                    .signin_account_picker_bottom_sheet_subtitle_for_send_tab_to_self)
+                                    .setDismissButtonStringId(R.string.cancel)
+                                    .build();
                     new AccountPickerBottomSheetCoordinator(
                             mWindowAndroid,
                             mController,

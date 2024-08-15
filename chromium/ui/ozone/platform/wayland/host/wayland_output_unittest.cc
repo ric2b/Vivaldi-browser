@@ -96,13 +96,38 @@ TEST_F(WaylandOutputTest, ScaleFactorFallback) {
   wl_output->xdg_output_->is_ready_ = true;
   wl_output->UpdateMetrics();
   EXPECT_EQ(kDefaultScaleFactor, wl_output->scale_factor());
+}
 
-  // When xdg_output is ready and surface_submission_in_pixel_coordinates is
-  // true, scale_factor should be calculated as the ratio of physical to logical
-  // size.
-  connection_->set_surface_submission_in_pixel_coordinates(true);
+// Test that if using xdg output and viewporter surface scaling is enabled
+// the scale factor calculation based on xdg-output's logical size is no-op when
+// physical and logical sizes are equal.
+//
+// Regression test for https://crbug.com/339681887.
+TEST_F(WaylandOutputTest, ScaleFactorCalculationNoop) {
+  auto* const output_manager = connection_->wayland_output_manager();
+  ASSERT_TRUE(output_manager);
+
+  auto* wl_output = output_manager->GetPrimaryOutput();
+  ASSERT_TRUE(wl_output);
+  EXPECT_FALSE(wl_output->xdg_output_);
+
+  ASSERT_FALSE(connection_->surface_submission_in_pixel_coordinates());
+  connection_->set_supports_viewporter_surface_scaling(true);
+  ASSERT_TRUE(connection_->supports_viewporter_surface_scaling());
+
+  constexpr float kWlOutputScale = 3.f;
+  wl_output->xdg_output_ = std::make_unique<XDGOutput>(nullptr);
+  wl_output->xdg_output_->logical_size_ = gfx::Size(100, 100);
+  wl_output->physical_size_ = gfx::Size(100, 100);
+  wl_output->scale_factor_ = kWlOutputScale;
+
+  // Since the logical size is the same as physical size, scale_factor should
+  // fall back to the value sent in wl_output::scale.
+  wl_output->is_ready_ = true;
+  wl_output->xdg_output_->is_ready_ = true;
+
   wl_output->UpdateMetrics();
-  EXPECT_EQ(2.5f, wl_output->scale_factor());
+  EXPECT_EQ(kWlOutputScale, wl_output->scale_factor());
 }
 
 TEST_F(WaylandOutputTest, WaylandOutputIsReady) {
@@ -137,78 +162,6 @@ TEST_F(WaylandOutputTest, WaylandOutputIsReady) {
     test_output->Flush();
   });
   EXPECT_TRUE(new_output->IsReady());
-}
-
-class WaylandOutputWithAuraOutputManagerTest : public WaylandTestSimple {
- protected:
-  WaylandOutputWithAuraOutputManagerTest()
-      : WaylandTestSimple(wl::ServerConfig{
-            .enable_aura_shell = wl::EnableAuraShellProtocol::kEnabled,
-            .aura_output_manager_protocol =
-                wl::AuraOutputManagerProtocol::kEnabledV1}) {}
-
-  WaylandOutputManager* wayland_output_manager() {
-    auto* wayland_output_manager = connection_->wayland_output_manager();
-    EXPECT_TRUE(wayland_output_manager);
-    return wayland_output_manager;
-  }
-
-  WaylandOutput* primary_output() {
-    return wayland_output_manager()->GetPrimaryOutput();
-  }
-};
-
-// Tests that WaylandOutput only reports as ready if metrics has been set when
-// the aura output manager is bound.
-TEST_F(WaylandOutputWithAuraOutputManagerTest, WaylandOutputIsReady) {
-  auto* output_manager = connection_->wayland_output_manager();
-  const auto* primary_output = output_manager->GetPrimaryOutput();
-
-  // Create a new output but suppress metrics and wl_output.done.
-  wl::TestOutput* test_output = nullptr;
-  PostToServerAndWait([&test_output](wl::TestWaylandServerThread* server) {
-    test_output = server->CreateAndInitializeOutput();
-    ASSERT_TRUE(test_output);
-    test_output->set_suppress_implicit_flush(true);
-  });
-  auto& all_outputs = output_manager->GetAllOutputs();
-  ASSERT_EQ(2u, all_outputs.size());
-
-  // Get the newly created WaylandOutput.
-  auto pair_it = base::ranges::find_if_not(all_outputs, [&](auto& pair) {
-    return pair.first == primary_output->output_id();
-  });
-  ASSERT_NE(all_outputs.end(), pair_it);
-  auto* new_output = pair_it->second.get();
-  EXPECT_NE(nullptr, new_output);
-
-  // The output should not be marked ready since metrics have not yet been
-  // explicitly set.
-  EXPECT_FALSE(new_output->IsReady());
-
-  // Set the output metrics without sending the wl_output.done event. The
-  // WaylandOutput should report as ready.
-  WaylandOutput::Metrics metrics;
-  metrics.output_id = new_output->output_id();
-  new_output->SetMetrics(metrics);
-  EXPECT_TRUE(new_output->IsReady());
-}
-
-// Tests that delegate notifications are not triggered when the wl_output.done
-// event is received. It is instead expected to be triggered by the aura output
-// manager.
-TEST_F(WaylandOutputWithAuraOutputManagerTest,
-       SuppressesDelegateNotifications) {
-  testing::NiceMock<MockWaylandOutputDelegate> output_delegate;
-  EXPECT_CALL(output_delegate, OnOutputHandleMetrics(testing::_)).Times(0);
-  primary_output()->set_delegate_for_testing(&output_delegate);
-
-  // Send the wl_output.done event.
-  PostToServerAndWait([](wl::TestWaylandServerThread* server) {
-    wl_output_send_done(server->output()->resource());
-  });
-
-  primary_output()->set_delegate_for_testing(nullptr);
 }
 
 }  // namespace ui

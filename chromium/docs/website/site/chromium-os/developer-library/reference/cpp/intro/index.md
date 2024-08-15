@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: cpp-intro
 title: C++ intro
 ---
@@ -76,7 +76,7 @@ Resources:
 Learn more about callbacks and how they are used within Chromium
 [here](https://source.chromium.org/chromium/chromium/src/+/main:docs/callback.md).
 See also talk
-["Callbacks in Chromium" in CrOS 101](/chrome/chromeos/system_services_team/dev_instructions/g3doc/cros_101.md).
+["Callbacks in Chromium" in CrOS 101](/chromium-os/developer-library/training).
 
 ## Switch statements
 

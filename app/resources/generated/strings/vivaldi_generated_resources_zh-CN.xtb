@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">不晚于</translation>
 <translation id="2749881179542288782">检查拼写和语法</translation>
 <translation id="2785873697295365461">文件描述符数量</translation>
-<translation id="2809586584051668049">及另外<ph name="NUMBER_ADDITIONAL_DISABLED" />个扩展程序</translation>
 <translation id="2825758591930162672">证书持有者的公共密钥</translation>
 <translation id="2850541429955027218">添加主题背景</translation>
 <translation id="2861941300086904918">Native Client 安全管理器</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">在窗口中打开</translation>
 <translation id="3280237271814976245">另存为(&amp;A)...</translation>
 <translation id="3285322247471302225">新建标签页(&amp;T)</translation>
-<translation id="3288047731229977326">以开发者模式运行的扩展程序可能会损害您的计算机。如果您不是开发者，那么，为安全起见，应停用以开发者模式运行的扩展程序。</translation>
 <translation id="329838636886466101">修复</translation>
 <translation id="33022249435934718">GDI 句柄</translation>
 <translation id="3303818374450886607">份数</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">已创建扩展程序：
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">请停用以开发者模式运行的扩展程序</translation>
 <translation id="4100839878934973028">您计算机上的其他程序添加了一个应用，该应用可能会改变 Vivaldi 的工作方式。</translation>
 <translation id="4104163789986725820">导出(&amp;X)...</translation>
 <translation id="4109898769411476438">导入之前关闭浏览器</translation>
@@ -261,7 +258,6 @@
 <translation id="5269977353971873915">打印失败</translation>
 <translation id="5284445933715251131">继续下载</translation>
 <translation id="52912272896845572">私钥文件无效。</translation>
-<translation id="5301954838959518834">知道了</translation>
 <translation id="5302932258331363306">显示替换</translation>
 <translation id="5317780077021120954">保存</translation>
 <translation id="5334142896108694079">脚本缓存</translation>

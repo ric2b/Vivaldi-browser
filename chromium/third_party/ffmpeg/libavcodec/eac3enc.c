@@ -27,6 +27,7 @@
 #define AC3ENC_FLOAT 1
 
 #include "libavutil/attributes.h"
+#include "libavutil/thread.h"
 #include "ac3enc.h"
 #include "codec_internal.h"
 #include "eac3enc.h"
@@ -47,7 +48,10 @@ static const AVClass eac3enc_class = {
 static int8_t eac3_frame_expstr_index_tab[3][4][4][4][4][4];
 
 
-av_cold void ff_eac3_exponent_init(void)
+/**
+ * Initialize E-AC-3 exponent tables.
+ */
+static av_cold void eac3_exponent_init(void)
 {
     int i;
 
@@ -122,8 +126,10 @@ void ff_eac3_set_cpl_states(AC3EncodeContext *s)
     }
 }
 
-
-void ff_eac3_output_frame_header(AC3EncodeContext *s)
+/**
+ * Write the E-AC-3 frame header to the output bitstream.
+ */
+static void eac3_output_frame_header(AC3EncodeContext *s)
 {
     int blk, ch;
     AC3EncOptions *opt = &s->options;
@@ -134,13 +140,8 @@ void ff_eac3_output_frame_header(AC3EncodeContext *s)
     put_bits(&s->pb,  2, 0);                        /* stream type = independent */
     put_bits(&s->pb,  3, 0);                        /* substream id = 0 */
     put_bits(&s->pb, 11, (s->frame_size / 2) - 1);  /* frame size */
-    if (s->bit_alloc.sr_shift) {
-        put_bits(&s->pb, 2, 0x3);                   /* fscod2 */
-        put_bits(&s->pb, 2, s->bit_alloc.sr_code);  /* sample rate code */
-    } else {
-        put_bits(&s->pb, 2, s->bit_alloc.sr_code);  /* sample rate code */
-        put_bits(&s->pb, 2, s->num_blks_code);      /* number of blocks */
-    }
+    put_bits(&s->pb, 2, s->bit_alloc.sr_code);      /* sample rate code */
+    put_bits(&s->pb, 2, s->num_blks_code);          /* number of blocks */
     put_bits(&s->pb, 3, s->channel_mode);           /* audio coding mode */
     put_bits(&s->pb, 1, s->lfe_on);                 /* LFE channel indicator */
     put_bits(&s->pb, 5, s->bitstream_id);           /* bitstream id (EAC3=16) */
@@ -248,6 +249,18 @@ void ff_eac3_output_frame_header(AC3EncodeContext *s)
         put_bits(&s->pb, 1, 0);
 }
 
+static av_cold int eac3_encode_init(AVCodecContext *avctx)
+{
+    static AVOnce init_static_once = AV_ONCE_INIT;
+    AC3EncodeContext *s = avctx->priv_data;
+
+    s->eac3 = 1;
+    s->output_frame_header = eac3_output_frame_header;
+
+    ff_thread_once(&init_static_once, eac3_exponent_init);
+
+    return ff_ac3_float_encode_init(avctx);
+}
 
 const FFCodec ff_eac3_encoder = {
     .p.name          = "eac3",
@@ -256,14 +269,13 @@ const FFCodec ff_eac3_encoder = {
     .p.id            = AV_CODEC_ID_EAC3,
     .p.capabilities  = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE,
     .priv_data_size  = sizeof(AC3EncodeContext),
-    .init            = ff_ac3_float_encode_init,
-    FF_CODEC_ENCODE_CB(ff_ac3_float_encode_frame),
+    .init            = eac3_encode_init,
+    FF_CODEC_ENCODE_CB(ff_ac3_encode_frame),
     .close           = ff_ac3_encode_close,
     .p.sample_fmts   = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_FLTP,
                                                       AV_SAMPLE_FMT_NONE },
     .p.priv_class    = &eac3enc_class,
     .p.supported_samplerates = ff_ac3_sample_rate_tab,
-    CODEC_OLD_CHANNEL_LAYOUTS_ARRAY(ff_ac3_channel_layouts)
     .p.ch_layouts    = ff_ac3_ch_layouts,
     .defaults        = ff_ac3_enc_defaults,
     .caps_internal   = FF_CODEC_CAP_INIT_CLEANUP,

@@ -8,6 +8,11 @@
   --ref-typeface-weight-regular: 400;
   --ref-typeface-weight-medium: 500;
   --ref-typeface-weight-bold: 700;
+  --sys-elevation-level1: 0 1px 2px 0 rgb(0 0 0 / 30%), 0 1px 3px 1px rgb(0 0 0 / 15%);
+  --sys-elevation-level2: 0 1px 2px 0 rgb(0 0 0 / 30%), 0 2px 6px 2px rgb(0 0 0 / 15%);
+  --sys-elevation-level3: 0 4px 8px 3px rgb(0 0 0 / 15%), 0 1px 3px 0 rgb(0 0 0 / 30%);
+  --sys-elevation-level4: 0 6px 10px 4px rgb(0 0 0 / 15%), 0 2px 3px 0 rgb(0 0 0 / 30%);
+  --sys-elevation-level5: 0 8px 12px 6px rgb(0 0 0 / 15%), 0 4px 4px 0 rgb(0 0 0 / 30%);
   --sys-size-1: 1px;
   --sys-size-2: 0.125rem;
   --sys-size-3: 0.25rem;
@@ -30,11 +35,11 @@
   --sys-shape-corner-full: 9999px;
 
   /* weight size/line-height */
-  --sys-typescale-body1-medium: var(--ref-typeface-weight-medium) var(--sys-typescale-body1-size)/var(--sys-typescale-body1-line-height);
-  --sys-typescale-body2-medium: var(--ref-typeface-weight-medium) var(--sys-typescale-body2-size)/var(--sys-typescale-body2-line-height);
-  --sys-typescale-body3-medium: var(--ref-typeface-weight-medium) var(--sys-typescale-body3-size)/var(--sys-typescale-body3-line-height);
-  --sys-typescale-body4-medium: var(--ref-typeface-weight-medium) var(--sys-typescale-body4-size)/var(--sys-typescale-body4-line-height);
-  --sys-typescale-body5-medium: var(--ref-typeface-weight-medium) var(--sys-typescale-body5-size)/var(--sys-typescale-body5-line-height);
+  --sys-typescale-body1-medium: var(--ref-typeface-weight-medium) var(--sys-typescale-body1-size)/var(--sys-typescale-body1-line-height) var(--default-font-family);
+  --sys-typescale-body2-medium: var(--ref-typeface-weight-medium) var(--sys-typescale-body2-size)/var(--sys-typescale-body2-line-height) var(--default-font-family);
+  --sys-typescale-body3-medium: var(--ref-typeface-weight-medium) var(--sys-typescale-body3-size)/var(--sys-typescale-body3-line-height) var(--default-font-family);
+  --sys-typescale-body4-medium: var(--ref-typeface-weight-medium) var(--sys-typescale-body4-size)/var(--sys-typescale-body4-line-height) var(--default-font-family);
+  --sys-typescale-body5-medium: var(--ref-typeface-weight-medium) var(--sys-typescale-body5-size)/var(--sys-typescale-body5-line-height) var(--default-font-family);
   --sys-typescale-headline1-size: 24px;
   --sys-typescale-headline2-size: 20px;
   --sys-typescale-headline3-size: 18px;

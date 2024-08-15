@@ -10,7 +10,7 @@
 
 #include "libANGLE/Display.h"
 #include "libANGLE/renderer/vulkan/DisplayVk.h"
-#include "libANGLE/renderer/vulkan/RendererVk.h"
+#include "libANGLE/renderer/vulkan/vk_renderer.h"
 
 namespace rx
 {
@@ -73,7 +73,8 @@ angle::Result VkImageImageSiblingVk::initImpl(DisplayVk *displayVk)
     constexpr bool kIsRobustInitEnabled = false;
     mImage                              = new vk::ImageHelper();
     mImage->init2DWeakReference(displayVk, mVkImage.release(), getSize(), false, intendedFormatID,
-                                actualImageFormatID, mVkImageInfo.usage, 1, kIsRobustInitEnabled);
+                                actualImageFormatID, mVkImageInfo.flags, mVkImageInfo.usage, 1,
+                                kIsRobustInitEnabled);
 
     return angle::Result::Continue;
 }

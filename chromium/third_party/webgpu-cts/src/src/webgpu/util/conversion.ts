@@ -1,4 +1,5 @@
 import { Colors } from '../../common/util/colors.js';
+import { objectsToRecord } from '../../common/util/data_tables.js';
 import { ROArrayArray } from '../../common/util/types.js';
 import { assert, objectEquals, TypedArrayBufferView, unreachable } from '../../common/util/util.js';
 import { Float16Array } from '../../external/petamoriken/float16/float16.js';
@@ -17,6 +18,30 @@ import {
 } from './math.js';
 
 /**
+ * Encode a JS `number` into the "normalized" (unorm/snorm) integer scale with `bits` bits but
+ * remain unquantized. Input must be between -1 and 1 if signed, or 0 and 1 if unsigned.
+ * e.g. float 0.5 -> "unorm8" 127.5
+ *
+ * MAINTENANCE_TODO: See if performance of texel_data improves if this function is pre-specialized
+ * for a particular `bits`/`signed`.
+ */
+export function floatAsNormalizedIntegerUnquantized(
+  float: number,
+  bits: number,
+  signed: boolean
+): number {
+  if (signed) {
+    assert(float >= -1 && float <= 1, () => `${float} out of bounds of snorm`);
+    const max = Math.pow(2, bits - 1) - 1;
+    return float * max;
+  } else {
+    assert(float >= 0 && float <= 1, () => `${float} out of bounds of unorm`);
+    const max = Math.pow(2, bits) - 1;
+    return float * max;
+  }
+}
+
+/**
  * Encodes a JS `number` into a "normalized" (unorm/snorm) integer representation with `bits` bits.
  * Input must be between -1 and 1 if signed, or 0 and 1 if unsigned.
  *
@@ -24,15 +49,7 @@ import {
  * for a particular `bits`/`signed`.
  */
 export function floatAsNormalizedInteger(float: number, bits: number, signed: boolean): number {
-  if (signed) {
-    assert(float >= -1 && float <= 1, () => `${float} out of bounds of snorm`);
-    const max = Math.pow(2, bits - 1) - 1;
-    return Math.round(float * max);
-  } else {
-    assert(float >= 0 && float <= 1, () => `${float} out of bounds of unorm`);
-    const max = Math.pow(2, bits) - 1;
-    return Math.round(float * max);
-  }
+  return Math.round(floatAsNormalizedIntegerUnquantized(float, bits, signed));
 }
 
 /**
@@ -628,6 +645,15 @@ export class ScalarType {
     return this._signed;
   }
 
+  // This allows width to be checked in cases where scalar and vector types are mixed.
+  public get width(): number {
+    return 1;
+  }
+
+  public requiresF16(): boolean {
+    return this.kind === 'f16';
+  }
+
   /** Constructs a ScalarValue of this type with `value` */
   public create(value: number | bigint): ScalarValue {
     switch (typeof value) {
@@ -734,6 +760,10 @@ export class VectorType {
     }
     return new VectorValue(value.map(v => this.elementType.create(v)));
   }
+
+  public requiresF16(): boolean {
+    return this.elementType.requiresF16();
+  }
 }
 
 /** MatrixType describes the type of WGSL Matrix. */
@@ -800,6 +830,10 @@ export class MatrixType {
     return VectorType.alignmentOf(this.rows, this.elementType);
   }
 
+  public requiresF16(): boolean {
+    return this.elementType.requiresF16();
+  }
+
   /** Constructs a Matrix of this type with the given values */
   public create(value: (number | bigint) | readonly (number | bigint)[]): MatrixValue {
     if (value instanceof Array) {
@@ -818,7 +852,7 @@ export class MatrixType {
 
 /** ArrayType describes the type of WGSL Array. */
 export class ArrayType {
-  readonly count: number; // Number of elements in the array
+  readonly count: number; // Number of elements in the array. Zero represents a runtime-sized array.
   readonly elementType: Type; // Element type
 
   // Maps a string representation of a array type to array type.
@@ -855,7 +889,9 @@ export class ArrayType {
   }
 
   public toString(): string {
-    return `array<${this.elementType}, ${this.count}>`;
+    return this.count !== 0
+      ? `array<${this.elementType}, ${this.count}>`
+      : `array<${this.elementType}>`;
   }
 
   public get stride(): number {
@@ -868,6 +904,20 @@ export class ArrayType {
 
   public get alignment(): number {
     return this.elementType.alignment;
+  }
+
+  public requiresF16(): boolean {
+    return this.elementType.requiresF16();
+  }
+
+  /** Constructs an Array of this type with the given values */
+  public create(value: (number | bigint) | readonly (number | bigint)[]): ArrayValue {
+    if (value instanceof Array) {
+      assert(value.length === this.count);
+    } else {
+      value = Array(this.count).fill(value);
+    }
+    return new ArrayValue(value.map(v => this.elementType.create(v)));
   }
 }
 
@@ -929,6 +979,51 @@ const boolType = new ScalarType('bool', 4, false, (buf: Uint8Array, offset: numb
 /** Type is a ScalarType, VectorType, MatrixType or ArrayType. */
 export type Type = ScalarType | VectorType | MatrixType | ArrayType;
 
+const kVecTypes = {
+  vec2ai: VectorType.create(2, abstractIntType),
+  vec2i: VectorType.create(2, i32Type),
+  vec2u: VectorType.create(2, u32Type),
+  vec2af: VectorType.create(2, abstractFloatType),
+  vec2f: VectorType.create(2, f32Type),
+  vec2h: VectorType.create(2, f16Type),
+  vec2b: VectorType.create(2, boolType),
+  vec3ai: VectorType.create(3, abstractIntType),
+  vec3i: VectorType.create(3, i32Type),
+  vec3u: VectorType.create(3, u32Type),
+  vec3af: VectorType.create(3, abstractFloatType),
+  vec3f: VectorType.create(3, f32Type),
+  vec3h: VectorType.create(3, f16Type),
+  vec3b: VectorType.create(3, boolType),
+  vec4ai: VectorType.create(4, abstractIntType),
+  vec4i: VectorType.create(4, i32Type),
+  vec4u: VectorType.create(4, u32Type),
+  vec4af: VectorType.create(4, abstractFloatType),
+  vec4f: VectorType.create(4, f32Type),
+  vec4h: VectorType.create(4, f16Type),
+  vec4b: VectorType.create(4, boolType),
+} as const;
+
+const kMatTypes = {
+  mat2x2f: MatrixType.create(2, 2, f32Type),
+  mat2x2h: MatrixType.create(2, 2, f16Type),
+  mat3x2f: MatrixType.create(3, 2, f32Type),
+  mat3x2h: MatrixType.create(3, 2, f16Type),
+  mat4x2f: MatrixType.create(4, 2, f32Type),
+  mat4x2h: MatrixType.create(4, 2, f16Type),
+  mat2x3f: MatrixType.create(2, 3, f32Type),
+  mat2x3h: MatrixType.create(2, 3, f16Type),
+  mat3x3f: MatrixType.create(3, 3, f32Type),
+  mat3x3h: MatrixType.create(3, 3, f16Type),
+  mat4x3f: MatrixType.create(4, 3, f32Type),
+  mat4x3h: MatrixType.create(4, 3, f16Type),
+  mat2x4f: MatrixType.create(2, 4, f32Type),
+  mat2x4h: MatrixType.create(2, 4, f16Type),
+  mat3x4f: MatrixType.create(3, 4, f32Type),
+  mat3x4h: MatrixType.create(3, 4, f16Type),
+  mat4x4f: MatrixType.create(4, 4, f32Type),
+  mat4x4h: MatrixType.create(4, 4, f16Type),
+} as const;
+
 /** Type holds pre-declared Types along with helper constructor functions. */
 export const Type = {
   abstractInt: abstractIntType,
@@ -950,46 +1045,34 @@ export const Type = {
 
   vec: (width: number, elementType: ScalarType) => VectorType.create(width, elementType),
 
-  vec2i: VectorType.create(2, i32Type),
-  vec2u: VectorType.create(2, u32Type),
-  vec2af: VectorType.create(2, abstractFloatType),
-  vec2f: VectorType.create(2, f32Type),
-  vec2h: VectorType.create(2, f16Type),
-  vec3i: VectorType.create(3, i32Type),
-  vec3u: VectorType.create(3, u32Type),
-  vec3af: VectorType.create(3, abstractFloatType),
-  vec3f: VectorType.create(3, f32Type),
-  vec3h: VectorType.create(3, f16Type),
-  vec4i: VectorType.create(4, i32Type),
-  vec4u: VectorType.create(4, u32Type),
-  vec4af: VectorType.create(4, abstractFloatType),
-  vec4f: VectorType.create(4, f32Type),
-  vec4h: VectorType.create(4, f16Type),
+  // add vec types like vec2i, vec3f,
+  ...kVecTypes,
+  // add vec<> types like vec2<i32>, vec3<f32>
+  ...objectsToRecord(Object.values(kVecTypes)),
 
   mat: (cols: number, rows: number, elementType: ScalarType) =>
     MatrixType.create(cols, rows, elementType),
 
-  mat2x2f: MatrixType.create(2, 2, f32Type),
-  mat2x2h: MatrixType.create(2, 2, f16Type),
-  mat3x2f: MatrixType.create(3, 2, f32Type),
-  mat3x2h: MatrixType.create(3, 2, f16Type),
-  mat4x2f: MatrixType.create(4, 2, f32Type),
-  mat4x2h: MatrixType.create(4, 2, f16Type),
-  mat2x3f: MatrixType.create(2, 3, f32Type),
-  mat2x3h: MatrixType.create(2, 3, f16Type),
-  mat3x3f: MatrixType.create(3, 3, f32Type),
-  mat3x3h: MatrixType.create(3, 3, f16Type),
-  mat4x3f: MatrixType.create(4, 3, f32Type),
-  mat4x3h: MatrixType.create(4, 3, f16Type),
-  mat2x4f: MatrixType.create(2, 4, f32Type),
-  mat2x4h: MatrixType.create(2, 4, f16Type),
-  mat3x4f: MatrixType.create(3, 4, f32Type),
-  mat3x4h: MatrixType.create(3, 4, f16Type),
-  mat4x4f: MatrixType.create(4, 4, f32Type),
-  mat4x4h: MatrixType.create(4, 4, f16Type),
+  // add mat types like mat2x2f,
+  ...kMatTypes,
+  // add mat<> types like mat2x2<f32>,
+  ...objectsToRecord(Object.values(kVecTypes)),
 
   array: (count: number, elementType: Type) => ArrayType.create(count, elementType),
 };
+
+/**
+ * @returns a type from a string
+ * eg:
+ *  'f32' -> Type.f32
+ *  'vec4<f32>' -> Type.vec4f
+ *  'vec3i' -> Type.vec3i
+ */
+export function stringToType(s: string): Type {
+  const t = (Type as unknown as { [key: string]: Type })[s];
+  assert(!!t);
+  return t;
+}
 
 /** @returns the ScalarType from the ScalarKind */
 export function scalarType(kind: ScalarKind): ScalarType {
@@ -1093,6 +1176,59 @@ export function scalarTypeOf(ty: Type): ScalarType {
   }
   if (ty instanceof ArrayType) {
     return scalarTypeOf(ty.elementType);
+  }
+  throw new Error(`unhandled type ${ty}`);
+}
+
+/**
+ * @returns the implicit concretized type of the given Type.
+ * @param abstractIntToF32 if true, returns f32 for abstractInt else i32
+ * Example: vec3<abstract-float> -> vec3<float>
+ */
+export function concreteTypeOf(ty: Type, allowedScalarTypes?: Type[]): Type {
+  if (allowedScalarTypes && allowedScalarTypes.length > 0) {
+    // https://www.w3.org/TR/WGSL/#conversion-rank
+    switch (ty) {
+      case Type.abstractInt:
+        if (allowedScalarTypes.includes(Type.i32)) {
+          return Type.i32;
+        }
+        if (allowedScalarTypes.includes(Type.u32)) {
+          return Type.u32;
+        }
+      // fallthrough.
+      case Type.abstractFloat:
+        if (allowedScalarTypes.includes(Type.f32)) {
+          return Type.f32;
+        }
+        if (allowedScalarTypes.includes(Type.f16)) {
+          return Type.f32;
+        }
+        throw new Error(`no ${ty}`);
+    }
+  } else {
+    switch (ty) {
+      case Type.abstractInt:
+        return Type.i32;
+      case Type.abstractFloat:
+        return Type.f32;
+    }
+  }
+  if (ty instanceof ScalarType) {
+    return ty;
+  }
+  if (ty instanceof VectorType) {
+    return Type.vec(ty.width, concreteTypeOf(ty.elementType, allowedScalarTypes) as ScalarType);
+  }
+  if (ty instanceof MatrixType) {
+    return Type.mat(
+      ty.cols,
+      ty.rows,
+      concreteTypeOf(ty.elementType, allowedScalarTypes) as ScalarType
+    );
+  }
+  if (ty instanceof ArrayType) {
+    return Type.array(ty.count, concreteTypeOf(ty.elementType, allowedScalarTypes));
   }
   throw new Error(`unhandled type ${ty}`);
 }
@@ -1787,6 +1923,11 @@ export class VectorValue {
   }
 }
 
+/** Helper for constructing a new vector with the provided values */
+export function vec(...elements: ScalarValue[]) {
+  return new VectorValue(elements);
+}
+
 /** Helper for constructing a new two-element vector with the provided values */
 export function vec2(x: ScalarValue, y: ScalarValue) {
   return new VectorValue([x, y]);
@@ -2248,6 +2389,44 @@ export function isFloatType(ty: Type): boolean {
 }
 
 /**
+ * @returns if `ty` is an integer point type.
+ * @note this does not consider composite types.
+ * Use elementType() if you want to test the element type.
+ */
+export function isIntegerType(ty: Type): boolean {
+  if (ty instanceof ScalarType) {
+    return (
+      ty.kind === 'abstract-int' ||
+      ty.kind === 'i32' ||
+      ty.kind === 'i16' ||
+      ty.kind === 'i8' ||
+      ty.kind === 'u32' ||
+      ty.kind === 'u16' ||
+      ty.kind === 'u8'
+    );
+  }
+  return false;
+}
+
+/**
+ * @returns if `ty` is a type convertible to floating point type.
+ * @note this does not consider composite types.
+ * Use elementType() if you want to test the element type.
+ */
+export function isConvertibleToFloatType(ty: Type): boolean {
+  if (ty instanceof ScalarType) {
+    return (
+      ty.kind === 'abstract-int' ||
+      ty.kind === 'abstract-float' ||
+      ty.kind === 'f64' ||
+      ty.kind === 'f32' ||
+      ty.kind === 'f16'
+    );
+  }
+  return false;
+}
+
+/**
  * @returns if `ty` is an unsigned type.
  */
 export function isUnsignedType(ty: Type): boolean {
@@ -2264,11 +2443,23 @@ export function isConvertible(src: Type, dst: Type) {
     return true;
   }
 
-  const widthOf = (ty: Type) => {
-    return ty instanceof VectorType ? ty.width : 1;
+  const shapeOf = (ty: Type) => {
+    if (ty instanceof ScalarType) {
+      return `scalar`;
+    }
+    if (ty instanceof VectorType) {
+      return `vec${ty.width}`;
+    }
+    if (ty instanceof MatrixType) {
+      return `mat${ty.cols}x${ty.rows}`;
+    }
+    if (ty instanceof ArrayType) {
+      return `array<${ty.count}>`;
+    }
+    unreachable(`unhandled type: ${ty}`);
   };
 
-  if (widthOf(src) !== widthOf(dst)) {
+  if (shapeOf(src) !== shapeOf(dst)) {
     return false;
   }
 
@@ -2309,16 +2500,26 @@ export function isConvertible(src: Type, dst: Type) {
 }
 
 /// All floating-point scalar types
-const kFloatScalars = [Type.abstractFloat, Type.f32, Type.f16] as const;
+export const kFloatScalars = [Type.abstractFloat, Type.f32, Type.f16] as const;
+
+/// All concrete floating-point scalar types
+export const kConcreteFloatScalars = [Type.f32, Type.f16] as const;
 
 /// All floating-point vec2 types
-const kFloatVec2 = [Type.vec(2, Type.abstractFloat), Type.vec2f, Type.vec2h] as const;
+const kFloatVec2 = [Type.vec2af, Type.vec2f, Type.vec2h] as const;
 
 /// All floating-point vec3 types
-const kFloatVec3 = [Type.vec(3, Type.abstractFloat), Type.vec3f, Type.vec3h] as const;
+const kFloatVec3 = [Type.vec3af, Type.vec3f, Type.vec3h] as const;
 
 /// All floating-point vec4 types
-const kFloatVec4 = [Type.vec(4, Type.abstractFloat), Type.vec4f, Type.vec4h] as const;
+const kFloatVec4 = [Type.vec4af, Type.vec4f, Type.vec4h] as const;
+
+export const kConcreteF32ScalarsAndVectors = [
+  Type.f32,
+  Type.vec2f,
+  Type.vec3f,
+  Type.vec4f,
+] as const;
 
 /// All f16 floating-point scalar and vector types
 export const kConcreteF16ScalarsAndVectors = [
@@ -2328,13 +2529,11 @@ export const kConcreteF16ScalarsAndVectors = [
   Type.vec4h,
 ] as const;
 
+/// All floating-point vector types
+export const kFloatVectors = [...kFloatVec2, ...kFloatVec3, ...kFloatVec4] as const;
+
 /// All floating-point scalar and vector types
-export const kFloatScalarsAndVectors = [
-  ...kFloatScalars,
-  ...kFloatVec2,
-  ...kFloatVec3,
-  ...kFloatVec4,
-] as const;
+export const kFloatScalarsAndVectors = [...kFloatScalars, ...kFloatVectors] as const;
 
 // Abstract and concrete integer types are not grouped into an 'all' type,
 // because for many validation tests there is a valid conversion of
@@ -2343,53 +2542,61 @@ export const kFloatScalarsAndVectors = [
 // integers will not be. For many tests the pattern is to have separate fixtures
 // for the things that might be valid and those that are never valid.
 
-/// All concrete integer scalar and vector types
-export const kConcreteIntegerScalarsAndVectors = [
-  Type.i32,
-  Type.vec2i,
-  Type.vec3i,
-  Type.vec4i,
-  Type.u32,
-  Type.vec2u,
-  Type.vec3u,
-  Type.vec4u,
+/// All signed integer vector types
+export const kConcreteSignedIntegerVectors = [Type.vec2i, Type.vec3i, Type.vec4i] as const;
+
+/// All unsigned integer vector types
+export const kConcreteUnsignedIntegerVectors = [Type.vec2u, Type.vec3u, Type.vec4u] as const;
+
+/// All concrete integer vector types
+export const kConcreteIntegerVectors = [
+  ...kConcreteSignedIntegerVectors,
+  ...kConcreteUnsignedIntegerVectors,
 ] as const;
 
 /// All signed integer scalar and vector types
 export const kConcreteSignedIntegerScalarsAndVectors = [
   Type.i32,
-  Type.vec2i,
-  Type.vec3i,
-  Type.vec4i,
+  ...kConcreteSignedIntegerVectors,
 ] as const;
 
 /// All unsigned integer scalar and vector types
 export const kConcreteUnsignedIntegerScalarsAndVectors = [
   Type.u32,
-  Type.vec2u,
-  Type.vec3u,
-  Type.vec4u,
+  ...kConcreteUnsignedIntegerVectors,
+] as const;
+
+/// All concrete integer scalar and vector types
+export const kConcreteIntegerScalarsAndVectors = [
+  ...kConcreteSignedIntegerScalarsAndVectors,
+  ...kConcreteUnsignedIntegerScalarsAndVectors,
 ] as const;
 
 /// All types which are convertable to floating-point scalar types.
 export const kConvertableToFloatScalar = [Type.abstractInt, ...kFloatScalars] as const;
 
 /// All types which are convertable to floating-point vector 2 types.
-export const kConvertableToFloatVec2 = [Type.vec(2, Type.abstractInt), ...kFloatVec2] as const;
+export const kConvertableToFloatVec2 = [Type.vec2ai, ...kFloatVec2] as const;
 
 /// All types which are convertable to floating-point vector 3 types.
-export const kConvertableToFloatVec3 = [Type.vec(3, Type.abstractInt), ...kFloatVec3] as const;
+export const kConvertableToFloatVec3 = [Type.vec3ai, ...kFloatVec3] as const;
 
 /// All types which are convertable to floating-point vector 4 types.
-export const kConvertableToFloatVec4 = [Type.vec(4, Type.abstractInt), ...kFloatVec4] as const;
+export const kConvertableToFloatVec4 = [Type.vec4ai, ...kFloatVec4] as const;
+
+/// All the types which are convertable to floating-point vector types.
+export const kConvertableToFloatVectors = [
+  Type.vec2ai,
+  Type.vec3ai,
+  Type.vec4ai,
+  ...kFloatVectors,
+] as const;
 
 /// All types which are convertable to floating-point scalar or vector types.
 export const kConvertableToFloatScalarsAndVectors = [
   Type.abstractInt,
-  Type.vec(2, Type.abstractInt),
-  Type.vec(3, Type.abstractInt),
-  Type.vec(4, Type.abstractInt),
-  ...kFloatScalarsAndVectors,
+  ...kFloatScalars,
+  ...kConvertableToFloatVectors,
 ] as const;
 
 /// All the numeric scalar and vector types.
@@ -2398,11 +2605,24 @@ export const kAllNumericScalarsAndVectors = [
   ...kConcreteIntegerScalarsAndVectors,
 ] as const;
 
+/// All the concrete integer and floating point scalars and vectors.
+export const kConcreteNumericScalarsAndVectors = [
+  ...kConcreteIntegerScalarsAndVectors,
+  ...kConcreteF16ScalarsAndVectors,
+  ...kConcreteF32ScalarsAndVectors,
+] as const;
+
+/// All boolean types.
+export const kAllBoolScalarsAndVectors = [Type.bool, Type.vec2b, Type.vec3b, Type.vec4b] as const;
+
 /// All the scalar and vector types.
 export const kAllScalarsAndVectors = [
-  Type.bool,
-  Type.vec(2, Type.bool),
-  Type.vec(3, Type.bool),
-  Type.vec(4, Type.bool),
+  ...kAllBoolScalarsAndVectors,
   ...kAllNumericScalarsAndVectors,
 ] as const;
+
+/// All the vector types
+export const kAllVecTypes = Object.values(kVecTypes);
+
+/// All the matrix types
+export const kAllMatrices = Object.values(kMatTypes);

@@ -147,6 +147,7 @@
 #include <stdlib.h>
 
 #include <algorithm>
+#include <bitset>
 #include <initializer_list>
 #include <limits>
 #include <new>
@@ -227,11 +228,6 @@ template <typename T, typename... Args>
 UniquePtr<T> MakeUnique(Args &&... args) {
   return UniquePtr<T>(New<T>(std::forward<Args>(args)...));
 }
-
-// TODO(davidben): Remove these macros after April 2024, once the C++ runtime
-// dependency has stuck.
-#define HAS_VIRTUAL_DESTRUCTOR
-#define PURE_VIRTUAL = 0
 
 // Array<T> is an owning array of elements of |T|.
 template <typename T>
@@ -961,9 +957,9 @@ class SSLAEADContext {
 // DTLS1_BITMAP maintains a sliding window of 64 sequence numbers to detect
 // replayed packets. It should be initialized by zeroing every field.
 struct DTLS1_BITMAP {
-  // map is a bit mask of the last 64 sequence numbers. Bit
-  // |1<<i| corresponds to |max_seq_num - i|.
-  uint64_t map = 0;
+  // map is a bitset of sequence numbers that have been seen. Bit i corresponds
+  // to |max_seq_num - i|.
+  std::bitset<256> map;
   // max_seq_num is the largest sequence number seen so far as a 64-bit
   // integer.
   uint64_t max_seq_num = 0;
@@ -1122,18 +1118,17 @@ class SSLKeyShare {
  public:
   virtual ~SSLKeyShare() {}
   static constexpr bool kAllowUniquePtr = true;
-  HAS_VIRTUAL_DESTRUCTOR
 
   // Create returns a SSLKeyShare instance for use with group |group_id| or
   // nullptr on error.
   static UniquePtr<SSLKeyShare> Create(uint16_t group_id);
 
   // GroupID returns the group ID.
-  virtual uint16_t GroupID() const PURE_VIRTUAL;
+  virtual uint16_t GroupID() const = 0;
 
   // Generate generates a keypair and writes the public key to |out_public_key|.
   // It returns true on success and false on error.
-  virtual bool Generate(CBB *out_public_key) PURE_VIRTUAL;
+  virtual bool Generate(CBB *out_public_key) = 0;
 
   // Encap generates an ephemeral, symmetric secret and encapsulates it with
   // |peer_key|. On success, it returns true, writes the encapsulated secret to
@@ -1141,13 +1136,13 @@ class SSLKeyShare {
   // it returns false and sets |*out_alert| to an alert to send to the peer.
   virtual bool Encap(CBB *out_ciphertext, Array<uint8_t> *out_secret,
                      uint8_t *out_alert,
-                     Span<const uint8_t> peer_key) PURE_VIRTUAL;
+                     Span<const uint8_t> peer_key) = 0;
 
   // Decap decapsulates the symmetric secret in |ciphertext|. On success, it
   // returns true and sets |*out_secret| to the shared secret. On failure, it
   // returns false and sets |*out_alert| to an alert to send to the peer.
   virtual bool Decap(Array<uint8_t> *out_secret, uint8_t *out_alert,
-                     Span<const uint8_t> ciphertext) PURE_VIRTUAL;
+                     Span<const uint8_t> ciphertext) = 0;
 
   // SerializePrivateKey writes the private key to |out|, returning true if
   // successful and false otherwise. It should be called after |Generate|.

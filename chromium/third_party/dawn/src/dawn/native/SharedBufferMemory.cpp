@@ -32,6 +32,7 @@
 #include "dawn/native/Buffer.h"
 #include "dawn/native/ChainUtils.h"
 #include "dawn/native/Device.h"
+#include "dawn/native/Queue.h"
 
 namespace dawn::native {
 
@@ -42,10 +43,20 @@ class ErrorSharedBufferMemory : public SharedBufferMemoryBase {
     ErrorSharedBufferMemory(DeviceBase* device, const SharedBufferMemoryDescriptor* descriptor)
         : SharedBufferMemoryBase(device, descriptor, ObjectBase::kError) {}
 
+    Ref<SharedResourceMemoryContents> CreateContents() override { DAWN_UNREACHABLE(); }
     ResultOrError<Ref<BufferBase>> CreateBufferImpl(
         const UnpackedPtr<BufferDescriptor>& descriptor) override {
         DAWN_UNREACHABLE();
     }
+    MaybeError BeginAccessImpl(BufferBase* buffer,
+                               const UnpackedPtr<BeginAccessDescriptor>& descriptor) override {
+        DAWN_UNREACHABLE();
+    }
+    ResultOrError<FenceAndSignalValue> EndAccessImpl(BufferBase* buffer,
+                                                     UnpackedPtr<EndAccessState>& state) override {
+        DAWN_UNREACHABLE();
+    }
+    void DestroyImpl() override {}
 };
 
 }  // namespace
@@ -60,25 +71,18 @@ SharedBufferMemoryBase* SharedBufferMemoryBase::MakeError(
 SharedBufferMemoryBase::SharedBufferMemoryBase(DeviceBase* device,
                                                const SharedBufferMemoryDescriptor* descriptor,
                                                ObjectBase::ErrorTag tag)
-    : ApiObjectBase(device, tag, descriptor->label),
+    : SharedResourceMemory(device, tag, descriptor->label),
       mProperties{nullptr, wgpu::BufferUsage::None, 0} {}
 
 SharedBufferMemoryBase::SharedBufferMemoryBase(DeviceBase* device,
                                                const char* label,
                                                const SharedBufferMemoryProperties& properties)
-    : ApiObjectBase(device, label), mProperties(properties) {
+    : SharedResourceMemory(device, label), mProperties(properties) {
     GetObjectTrackingList()->Track(this);
 }
 
 ObjectType SharedBufferMemoryBase::GetType() const {
     return ObjectType::SharedBufferMemory;
-}
-
-void SharedBufferMemoryBase::DestroyImpl() {}
-
-void SharedBufferMemoryBase::Initialize() {
-    DAWN_ASSERT(!IsError());
-    mContents = CreateContents();
 }
 
 void SharedBufferMemoryBase::APIGetProperties(SharedBufferMemoryProperties* properties) const {
@@ -120,6 +124,12 @@ ResultOrError<Ref<BufferBase>> SharedBufferMemoryBase::CreateBuffer(
     UnpackedPtr<BufferDescriptor> descriptor;
     DAWN_TRY_ASSIGN(descriptor, ValidateBufferDescriptor(GetDevice(), rawDescriptor));
 
+    // Emit a specific error message if the user attempts to create a buffer with Uniform usage.
+    DAWN_INVALID_IF(descriptor->usage & wgpu::BufferUsage::Uniform,
+                    "The buffer usage (%s) contains (%s), which is not allowed on buffers created "
+                    "from SharedBufferMemory.",
+                    descriptor->usage, wgpu::BufferUsage::Uniform);
+
     // Ensure the buffer descriptor usage is a subset of the shared buffer memory's usage.
     DAWN_INVALID_IF(!IsSubset(descriptor->usage, mProperties.usage),
                     "The buffer usage (%s) is incompatible with the SharedBufferMemory usage (%s).",
@@ -135,35 +145,6 @@ ResultOrError<Ref<BufferBase>> SharedBufferMemoryBase::CreateBuffer(
     // Access is not allowed until BeginAccess has been called.
     buffer->SetHasAccess(false);
     return buffer;
-}
-
-Ref<SharedBufferMemoryContents> SharedBufferMemoryBase::CreateContents() {
-    return AcquireRef(new SharedBufferMemoryContents(GetWeakRef(this)));
-}
-
-SharedBufferMemoryContents* SharedBufferMemoryBase::GetContents() const {
-    return mContents.Get();
-}
-
-bool SharedBufferMemoryBase::APIBeginAccess(BufferBase* buffer,
-                                            const BeginAccessDescriptor* descriptor) {
-    return false;
-}
-
-bool SharedBufferMemoryBase::APIEndAccess(BufferBase* buffer, EndAccessState* state) {
-    return false;
-}
-
-bool SharedBufferMemoryBase::APIIsDeviceLost() {
-    return GetDevice()->IsLost();
-}
-
-SharedBufferMemoryContents::SharedBufferMemoryContents(
-    WeakRef<SharedBufferMemoryBase> sharedBufferMemory)
-    : mSharedBufferMemory(std::move(sharedBufferMemory)) {}
-
-const WeakRef<SharedBufferMemoryBase>& SharedBufferMemoryContents::GetSharedBufferMemory() const {
-    return mSharedBufferMemory;
 }
 
 void APISharedBufferMemoryEndAccessStateFreeMembers(WGPUSharedBufferMemoryEndAccessState cState) {

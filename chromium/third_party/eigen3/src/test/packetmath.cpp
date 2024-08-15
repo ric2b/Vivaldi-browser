@@ -34,11 +34,11 @@ inline T REF_MSUB(const T& a, const T& b, const T& c) {
 }
 template <typename T>
 inline T REF_NMADD(const T& a, const T& b, const T& c) {
-  return (-a * b) + c;
+  return c - a * b;
 }
 template <typename T>
 inline T REF_NMSUB(const T& a, const T& b, const T& c) {
-  return (-a * b) - c;
+  return test::negate(a * b + c);
 }
 template <typename T>
 inline T REF_DIV(const T& a, const T& b) {
@@ -277,6 +277,7 @@ struct packetmath_pcast_ops_runner<Scalar, Packet, std::enable_if_t<NumTraits<Sc
 
 template <typename Scalar, typename Packet>
 void packetmath_boolean_mask_ops() {
+  using RealScalar = typename NumTraits<Scalar>::Real;
   const int PacketSize = internal::unpacket_traits<Packet>::size;
   const int size = 2 * PacketSize;
   EIGEN_ALIGN_MAX Scalar data1[size];
@@ -289,7 +290,7 @@ void packetmath_boolean_mask_ops() {
   CHECK_CWISE1(internal::ptrue, internal::ptrue);
   CHECK_CWISE2_IF(true, internal::pandnot, internal::pandnot);
   for (int i = 0; i < PacketSize; ++i) {
-    data1[i] = Scalar(i);
+    data1[i] = Scalar(RealScalar(i));
     data1[i + PacketSize] = internal::random<bool>() ? data1[i] : Scalar(0);
   }
 
@@ -426,6 +427,32 @@ struct eigen_optimization_barrier_test<
   }
 };
 
+template <typename Scalar, typename Packet, bool HasNegate = internal::packet_traits<Scalar>::HasNegate>
+struct negate_test_impl {
+  static void run_negate(Scalar* data1, Scalar* data2, Scalar* ref, int PacketSize) {
+    CHECK_CWISE1_IF(HasNegate, test::negate, internal::pnegate);
+  }
+  static void run_nmsub(Scalar* data1, Scalar* data2, Scalar* ref, int PacketSize) {
+    CHECK_CWISE3_IF(HasNegate, REF_NMSUB, internal::pnmsub);
+  }
+};
+
+template <typename Scalar, typename Packet>
+struct negate_test_impl<Scalar, Packet, false> {
+  static void run_negate(Scalar*, Scalar*, Scalar*, int) {}
+  static void run_nmsub(Scalar*, Scalar*, Scalar*, int) {}
+};
+
+template <typename Scalar, typename Packet>
+void negate_test(Scalar* data1, Scalar* data2, Scalar* ref, int size) {
+  negate_test_impl<Scalar, Packet>::run_negate(data1, data2, ref, size);
+}
+
+template <typename Scalar, typename Packet>
+void nmsub_test(Scalar* data1, Scalar* data2, Scalar* ref, int size) {
+  negate_test_impl<Scalar, Packet>::run_negate(data1, data2, ref, size);
+}
+
 template <typename Scalar, typename Packet>
 void packetmath() {
   typedef internal::packet_traits<Scalar> PacketTraits;
@@ -532,7 +559,7 @@ void packetmath() {
   CHECK_CWISE2_IF(PacketTraits::HasMul, REF_MUL, internal::pmul);
   CHECK_CWISE2_IF(PacketTraits::HasDiv, REF_DIV, internal::pdiv);
 
-  CHECK_CWISE1_IF(PacketTraits::HasNegate, test::negate, internal::pnegate);
+  negate_test<Scalar, Packet>(data1, data2, ref, PacketSize);
   CHECK_CWISE1_IF(PacketTraits::HasReciprocal, REF_RECIPROCAL, internal::preciprocal);
   CHECK_CWISE1(numext::conj, internal::pconj);
   CHECK_CWISE1_IF(PacketTraits::HasSign, numext::sign, internal::psign);
@@ -596,6 +623,16 @@ void packetmath() {
     VERIFY(test::areApprox(ref, data2, HalfPacketSize) && "internal::predux_half_dowto4");
   }
 
+  // Avoid overflows.
+  if (NumTraits<Scalar>::IsInteger && NumTraits<Scalar>::IsSigned &&
+      Eigen::internal::unpacket_traits<Packet>::size > 1) {
+    Scalar limit =
+        static_cast<Scalar>(std::pow(static_cast<double>(numext::real(NumTraits<Scalar>::highest())),
+                                     1.0 / static_cast<double>(Eigen::internal::unpacket_traits<Packet>::size)));
+    for (int i = 0; i < PacketSize; ++i) {
+      data1[i] = internal::random<Scalar>(-limit, limit);
+    }
+  }
   ref[0] = Scalar(1);
   for (int i = 0; i < PacketSize; ++i) ref[0] = REF_MUL(ref[0], data1[i]);
   VERIFY(internal::isApprox(ref[0], internal::predux_mul(internal::pload<Packet>(data1))) && "internal::predux_mul");
@@ -688,7 +725,7 @@ void packetmath() {
   CHECK_CWISE1_IF(PacketTraits::HasRsqrt, numext::rsqrt, internal::prsqrt);
   CHECK_CWISE3_IF(true, REF_MADD, internal::pmadd);
   if (!std::is_same<Scalar, bool>::value && NumTraits<Scalar>::IsSigned) {
-    CHECK_CWISE3_IF(PacketTraits::HasNegate, REF_NMSUB, internal::pnmsub);
+    nmsub_test<Scalar, Packet>(data1, data2, ref, PacketSize);
   }
 
   // For pmsub, pnmadd, the values can cancel each other to become near zero,
@@ -697,11 +734,11 @@ void packetmath() {
   for (int i = 0; i < PacketSize; ++i) {
     data1[i] = numext::abs(internal::random<Scalar>());
     data1[i + PacketSize] = numext::abs(internal::random<Scalar>());
-    data1[i + 2 * PacketSize] = -numext::abs(internal::random<Scalar>());
+    data1[i + 2 * PacketSize] = Scalar(0) - numext::abs(internal::random<Scalar>());
   }
   if (!std::is_same<Scalar, bool>::value && NumTraits<Scalar>::IsSigned) {
     CHECK_CWISE3_IF(true, REF_MSUB, internal::pmsub);
-    CHECK_CWISE3_IF(PacketTraits::HasNegate, REF_NMADD, internal::pnmadd);
+    CHECK_CWISE3_IF(true, REF_NMADD, internal::pnmadd);
   }
 }
 
@@ -829,15 +866,16 @@ void packetmath_real() {
   CHECK_CWISE1_IF(PacketTraits::HasTan, std::tan, internal::ptan);
 
   CHECK_CWISE1_EXACT_IF(PacketTraits::HasRound, numext::round, internal::pround);
-  CHECK_CWISE1_EXACT_IF(PacketTraits::HasCeil, numext::ceil, internal::pceil);
-  CHECK_CWISE1_EXACT_IF(PacketTraits::HasFloor, numext::floor, internal::pfloor);
-  CHECK_CWISE1_EXACT_IF(PacketTraits::HasRint, numext::rint, internal::print);
+  CHECK_CWISE1_EXACT_IF(PacketTraits::HasRound, numext::ceil, internal::pceil);
+  CHECK_CWISE1_EXACT_IF(PacketTraits::HasRound, numext::floor, internal::pfloor);
+  CHECK_CWISE1_EXACT_IF(PacketTraits::HasRound, numext::rint, internal::print);
+  CHECK_CWISE1_EXACT_IF(PacketTraits::HasRound, numext::trunc, internal::ptrunc);
   CHECK_CWISE1_IF(PacketTraits::HasSign, numext::sign, internal::psign);
 
   packetmath_boolean_mask_ops_real<Scalar, Packet>();
 
   // Rounding edge cases.
-  if (PacketTraits::HasRound || PacketTraits::HasCeil || PacketTraits::HasFloor || PacketTraits::HasRint) {
+  if (PacketTraits::HasRound) {
     typedef typename internal::make_integer<Scalar>::type IntType;
     // Start with values that cannot fit inside an integer, work down to less than one.
     Scalar val =
@@ -871,9 +909,10 @@ void packetmath_real() {
     for (size_t k = 0; k < values.size(); ++k) {
       data1[0] = values[k];
       CHECK_CWISE1_EXACT_IF(PacketTraits::HasRound, numext::round, internal::pround);
-      CHECK_CWISE1_EXACT_IF(PacketTraits::HasCeil, numext::ceil, internal::pceil);
-      CHECK_CWISE1_EXACT_IF(PacketTraits::HasFloor, numext::floor, internal::pfloor);
-      CHECK_CWISE1_EXACT_IF(PacketTraits::HasRint, numext::rint, internal::print);
+      CHECK_CWISE1_EXACT_IF(PacketTraits::HasRound, numext::ceil, internal::pceil);
+      CHECK_CWISE1_EXACT_IF(PacketTraits::HasRound, numext::floor, internal::pfloor);
+      CHECK_CWISE1_EXACT_IF(PacketTraits::HasRound, numext::rint, internal::print);
+      CHECK_CWISE1_EXACT_IF(PacketTraits::HasRound, numext::trunc, internal::ptrunc);
     }
   }
 
@@ -1332,6 +1371,138 @@ void test_conj_helper(Scalar* data1, Scalar* data2, Scalar* ref, Scalar* pval) {
   VERIFY(test::areApprox(ref, pval, PacketSize) && "conj_helper pmadd");
 }
 
+template <typename Scalar, typename Packet, bool HasExp = internal::packet_traits<Scalar>::HasExp>
+struct exp_complex_test_impl {
+  typedef typename Scalar::value_type RealScalar;
+
+  static Scalar pexp1(const Scalar& x) {
+    Packet px = internal::pset1<Packet>(x);
+    Packet py = internal::pexp(px);
+    return internal::pfirst(py);
+  }
+
+  static Scalar cis(const RealScalar& x) { return Scalar(numext::cos(x), numext::sin(x)); }
+
+  // Verify equality with signed zero.
+  static bool is_exactly_equal(RealScalar a, RealScalar b) {
+    // NaNs are always unsigned, and always compare not equal directly.
+    if ((numext::isnan)(a)) {
+      return (numext::isnan)(b);
+    }
+
+    RealScalar zero(0);
+#ifdef EIGEN_ARCH_ARM
+    // ARM automatically flushes denormals to zero.
+    // Preserve sign by multiplying by +0.
+    if (numext::abs(a) < (std::numeric_limits<RealScalar>::min)()) {
+      a = a * zero;
+    }
+    if (numext::abs(b) < (std::numeric_limits<RealScalar>::min)()) {
+      b = b * zero;
+    }
+#endif
+
+    // Signed zero.
+    if (a == zero) {
+      // Signs are either 0 or NaN, so verify that their comparisons to zero are equal.
+      return (a == b) && ((numext::signbit(a) == zero) == (numext::signbit(b) == zero));
+    }
+    // Allow _some_ tolerance.
+    return verifyIsApprox(a, b);
+  }
+
+  // Verify equality with signed zero.
+  static bool is_exactly_equal(const Scalar& a, const Scalar& b) {
+    bool result = is_exactly_equal(numext::real_ref(a), numext::real_ref(b)) &&
+                  is_exactly_equal(numext::imag_ref(a), numext::imag_ref(b));
+    if (!result) {
+      std::cout << a << " != " << b << std::endl;
+    }
+    return result;
+  }
+
+  static bool is_sign_exp_unspecified(const Scalar& z) {
+    const RealScalar inf = std::numeric_limits<RealScalar>::infinity();
+    // If z is (-∞,±∞), the result is (±0,±0) (signs are unspecified)
+    if (numext::real_ref(z) == -inf && (numext::isinf)(numext::imag_ref(z))) {
+      return true;
+    }
+    // If z is (+∞,±∞), the result is (±∞,NaN) and FE_INVALID is raised (the sign of the real part is unspecified)
+    if (numext::real_ref(z) == +inf && (numext::isinf)(numext::imag_ref(z))) {
+      return true;
+    }
+    // If z is (-∞,NaN), the result is (±0,±0) (signs are unspecified)
+    if (numext::real_ref(z) == -inf && (numext::isnan)(numext::imag_ref(z))) {
+      return true;
+    }
+    // If z is (+∞,NaN), the result is (±∞,NaN) (the sign of the real part is unspecified)
+    if (numext::real_ref(z) == +inf && (numext::isnan)(numext::imag_ref(z))) {
+      return true;
+    }
+    return false;
+  }
+
+  static void run(Scalar* data1, Scalar* data2, Scalar* ref, int size) {
+    const int PacketSize = internal::unpacket_traits<Packet>::size;
+
+    for (int i = 0; i < size; ++i) {
+      data1[i] = Scalar(internal::random<RealScalar>(), internal::random<RealScalar>());
+    }
+    CHECK_CWISE1_N(std::exp, internal::pexp, size);
+
+    // Test all corner cases (and more).
+    const RealScalar edges[] = {RealScalar(0),
+                                RealScalar(1),
+                                RealScalar(2),
+                                RealScalar(EIGEN_PI / 2),
+                                RealScalar(EIGEN_PI),
+                                RealScalar(3 * EIGEN_PI / 2),
+                                RealScalar(2 * EIGEN_PI),
+                                numext::log(NumTraits<RealScalar>::highest()) - 1,
+                                NumTraits<RealScalar>::highest(),
+                                std::numeric_limits<RealScalar>::infinity(),
+                                std::numeric_limits<RealScalar>::quiet_NaN(),
+                                -RealScalar(0),
+                                -RealScalar(1),
+                                -RealScalar(2),
+                                -RealScalar(EIGEN_PI / 2),
+                                -RealScalar(EIGEN_PI),
+                                -RealScalar(3 * EIGEN_PI / 2),
+                                -RealScalar(2 * EIGEN_PI),
+                                -numext::log(NumTraits<RealScalar>::highest()) + 1,
+                                -NumTraits<RealScalar>::highest(),
+                                -std::numeric_limits<RealScalar>::infinity(),
+                                -std::numeric_limits<RealScalar>::quiet_NaN()};
+
+    for (RealScalar x : edges) {
+      for (RealScalar y : edges) {
+        Scalar z = Scalar(x, y);
+        Scalar w = pexp1(z);
+        if (is_sign_exp_unspecified(z)) {
+          Scalar abs_w = Scalar(numext::abs(numext::real_ref(w)), numext::abs(numext::imag_ref(w)));
+          Scalar expected = numext::exp(z);
+          Scalar abs_expected =
+              Scalar(numext::abs(numext::real_ref(expected)), numext::abs(numext::imag_ref(expected)));
+          VERIFY(is_exactly_equal(abs_w, abs_expected));
+        } else {
+          VERIFY(is_exactly_equal(w, numext::exp(z)));
+        }
+      }
+    }
+  }
+};
+
+template <typename Scalar, typename Packet>
+struct exp_complex_test_impl<Scalar, Packet, false> {
+  typedef typename Scalar::value_type RealScalar;
+  static void run(Scalar*, Scalar*, Scalar*, int){};
+};
+
+template <typename Scalar, typename Packet>
+void exp_complex_test(Scalar* data1, Scalar* data2, Scalar* ref, int size) {
+  exp_complex_test_impl<Scalar, Packet>::run(data1, data2, ref, size);
+}
+
 template <typename Scalar, typename Packet>
 void packetmath_complex() {
   typedef internal::packet_traits<Scalar> PacketTraits;
@@ -1445,8 +1616,9 @@ void packetmath_complex() {
     data1[1] = Scalar(-inf, nan);
     data1[2] = Scalar(nan, inf);
     data1[3] = Scalar(nan, -inf);
-    CHECK_CWISE1_IM1ULP_N(std::log, internal::plog, 4);
+    CHECK_CWISE1_IM1ULP_N(numext::log, internal::plog, 4);
   }
+  exp_complex_test<Scalar, Packet>(data1, data2, ref, size);
 }
 
 template <typename Scalar, typename Packet>

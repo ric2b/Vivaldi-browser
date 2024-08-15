@@ -14,12 +14,12 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "components/ad_blocker/adblock_known_sources_handler_impl.h"
-#include "components/ad_blocker/adblock_metadata.h"
 #include "components/ad_blocker/adblock_resources.h"
 #include "components/ad_blocker/adblock_rule_manager_impl.h"
 #include "components/ad_blocker/adblock_rule_service.h"
 #include "components/ad_blocker/adblock_rule_service_storage.h"
 #include "components/ad_blocker/adblock_rule_source_handler.h"
+#include "components/ad_blocker/adblock_types.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "ios/ad_blocker/adblock_organized_rules_manager.h"
 

@@ -11,6 +11,7 @@
 
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/signin_promo_util.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/hats/hats_service.h"
 #include "chrome/browser/ui/hats/hats_service_factory.h"
@@ -21,6 +22,7 @@
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/passwords/credentials_item_view.h"
 #include "chrome/browser/ui/views/passwords/views_utils.h"
+#include "chrome/browser/ui/views/promos/autofill_bubble_signin_promo_view.h"
 #include "chrome/browser/ui/views/user_education/browser_feature_promo_controller.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -44,8 +46,9 @@
 #include "ui/views/interaction/element_tracker_views.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/flex_layout.h"
+#include "ui/views/view_class_properties.h"
 
-// TODO(crbug.com/1077706): come up with a more general solution for this.
+// TODO(crbug.com/40688828): come up with a more general solution for this.
 // This layout auto-resizes the host view to always adapt to changes in the size
 // of the child views.
 class PasswordSaveUpdateView::AutoResizingLayout : public views::FillLayout {
@@ -189,8 +192,12 @@ PasswordSaveUpdateView::PasswordSaveUpdateView(
       (dialog->controller_.*func)();
     };
 
-    SetAcceptCallback(base::BindOnce(button_clicked, base::Unretained(this),
-                                     &Controller::OnSaveClicked));
+    SetAcceptCallbackWithClose(
+        base::BindRepeating(button_clicked, base::Unretained(this),
+                            &Controller::OnSaveClicked)
+            .Then(base::BindRepeating(
+                &PasswordSaveUpdateView::CloseOrReplaceWithPromo,
+                base::Unretained(this))));
     SetCancelCallback(base::BindOnce(
         button_clicked, base::Unretained(this),
         is_update_bubble_ ? &Controller::OnNoThanksClicked
@@ -222,6 +229,59 @@ PasswordBubbleControllerBase* PasswordSaveUpdateView::GetController() {
 const PasswordBubbleControllerBase* PasswordSaveUpdateView::GetController()
     const {
   return &controller_;
+}
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+bool PasswordSaveUpdateView::OnCloseRequested(
+    views::Widget::ClosedReason close_reason) {
+  if (is_signin_promo_bubble_ &&
+      (close_reason == views::Widget::ClosedReason::kCloseButtonClicked ||
+       close_reason == views::Widget::ClosedReason::kEscKeyPressed)) {
+    AutofillBubbleSignInPromoView::RecordSignInPromoDismissed(web_contents());
+  }
+  return true;
+}
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+
+bool PasswordSaveUpdateView::CloseOrReplaceWithPromo() {
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  // Close the bubble if the sign in promo should not be shown.
+  if (!signin::ShouldShowSignInPromo(
+          *controller_.GetProfile(),
+          signin::SignInAutofillBubblePromoType::Passwords)) {
+    return true;
+  }
+
+  // Remove current elements.
+  animating_layout_for_iph_observation_.Reset();
+  animating_layout_for_username_dropdown_observation_.reset();
+  username_dropdown_ = nullptr;
+  password_dropdown_ = nullptr;
+  destination_dropdown_ = nullptr;
+  accessibility_alert_ = nullptr;
+  RemoveAllChildViews();
+  SetLayoutManager(std::make_unique<views::FillLayout>());
+  SetShowIcon(false);
+  SetButtons(ui::DIALOG_BUTTON_NONE);
+  GetBubbleFrameView()->SetFootnoteView(nullptr);
+  SetTitle(IDS_AUTOFILL_SIGNIN_PROMO_TITLE_PASSWORD);
+
+  // Show the sign in promo.
+  auto sign_in_promo = std::make_unique<AutofillBubbleSignInPromoView>(
+      controller_.GetWebContents(),
+      signin::SignInAutofillBubblePromoType::Passwords,
+      controller_.pending_password());
+  AddChildView(std::move(sign_in_promo));
+  SizeToContents();
+
+  is_signin_promo_bubble_ = true;
+  GetBubbleFrameView()->SetProperty(views::kElementIdentifierKey,
+                                    kPasswordBubble);
+
+  return false;
+#else
+  return true;
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 }
 
 void PasswordSaveUpdateView::DestinationChanged() {
@@ -520,3 +580,5 @@ void PasswordSaveUpdateView::TogglePasswordRevealed() {
       },
       base::Unretained(this), std::move(pin)));
 }
+
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(PasswordSaveUpdateView, kPasswordBubble);

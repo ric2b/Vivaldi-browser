@@ -1,3 +1,6 @@
+# Vivaldi section
+source ${OUTPUTDIR}/installer/common/vivaldi_installer.include
+
 # Shows the output of a given command only on failure, or when VERBOSE is set.
 log_cmd() {
   if [ "${VERBOSE:-}" ]; then
@@ -163,15 +166,6 @@ stage_install_common() {
     install -m 644 "${OUTPUTDIR}/theme_resources_100_percent.pak" "${STAGEDIR}/${INSTALLDIR}/"
     install -m 644 "${OUTPUTDIR}/ui_resources_100_percent.pak" "${STAGEDIR}/${INSTALLDIR}/"
   fi
-  # Vivaldi app resources
-  install -m 755 -d "${STAGEDIR}/${INSTALLDIR}/resources"
-  cp -rf "${OUTPUTDIR}/resources/vivaldi" "${STAGEDIR}/${INSTALLDIR}/resources/"
-  find "${STAGEDIR}/${INSTALLDIR}/resources/vivaldi" -type f -exec chmod 644 '{}' \;
-  find "${STAGEDIR}/${INSTALLDIR}/resources/vivaldi" -type d -exec chmod 755 '{}' \;
-  # The features file
-  if [ -f "${OUTPUTDIR}/features.json" ]; then
-    install -m 644 "${OUTPUTDIR}/features.json" "${STAGEDIR}/${INSTALLDIR}/"
-  fi
 
   # ICU data file; Necessary when the GN icu_use_data_file flag is true.
   install -m 644 "${OUTPUTDIR}/icudtl.dat" "${STAGEDIR}/${INSTALLDIR}/"
@@ -179,7 +173,7 @@ stage_install_common() {
   # V8 snapshot files; Necessary when the GN v8_use_external_startup_data flag
   # is true.
   # Use v8_context_snapshot.bin instead of snapshot_blob.bin if it is available.
-  # TODO(crbug.com/764576): Unship snapshot_blob.bin on ChromeOS and drop this branch
+  # TODO(crbug.com/40539769): Unship snapshot_blob.bin on ChromeOS and drop this branch
   if [ -f "${OUTPUTDIR}/v8_context_snapshot.bin" ]; then
     install -m 644 "${OUTPUTDIR}/v8_context_snapshot.bin" "${STAGEDIR}/${INSTALLDIR}/"
   else
@@ -201,7 +195,7 @@ stage_install_common() {
     cp -a '{}' "${STAGEDIR}/${INSTALLDIR}/locales/" \;
   find "${STAGEDIR}/${INSTALLDIR}/locales" -type f -exec chmod 644 '{}' \;
 
-  # TODO(https://crbug.com/1077934): The below conditions check for the
+  # TODO(crbug.com/40688962): The below conditions check for the
   # existence of files to determine if they should be copied to the staging
   # directory.  However, these may be stale if the build config no longer
   # builds these files.  The build config should be obtained from gn rather than
@@ -213,26 +207,6 @@ stage_install_common() {
     install -m 644 "${OUTPUTDIR}/MEIPreload/manifest.json" "${STAGEDIR}/${INSTALLDIR}/MEIPreload/"
     install -m 644 "${OUTPUTDIR}/MEIPreload/preloaded_data.pb" "${STAGEDIR}/${INSTALLDIR}/MEIPreload/"
   fi
-
-  # ffmpeg libs
-  if [ -f "${OUTPUTDIR}/libffmpeg.so" ]; then
-    for file in libffmpeg.so; do
-      buildfile="${OUTPUTDIR}/${file}"
-      strippedfile="${buildfile}.stripped"
-      debugfile="${buildfile}.debug"
-      if [ $ARCHITECTURE == "armhf" ] || [ $ARCHITECTURE == "armv7hl" ]; then
-        arm-linux-gnueabihf-strip -s -o "${strippedfile}" "${buildfile}"
-      else
-        "${OUTPUTDIR}/installer/common/eu-strip" -o "${strippedfile}" -f "${debugfile}" "${buildfile}"
-      fi
-      install -m 755 -d "${STAGEDIR}/${INSTALLDIR}/lib"
-      install -m 644 "${strippedfile}" "${STAGEDIR}/${INSTALLDIR}/lib/${file}"
-    done
-  fi
-
-  # Don't deploy the widevine stub, link to Google Chrome's.
-  ln -s "/opt/google/chrome/WidevineCdm" \
-    "${STAGEDIR}/${INSTALLDIR}/WidevineCdm"
 
   # Widevine CDM.
   if [ -d "${OUTPUTDIR}/WidevineCdm" ]; then
@@ -322,26 +296,6 @@ stage_install_common() {
       "${STAGEDIR}/usr/bin/${USR_BIN_SYMLINK_NAME}"
   fi
 
-  # Proprietary media update script
-  process_template "${OUTPUTDIR}/installer/common/update-ffmpeg" \
-    "${STAGEDIR}/${INSTALLDIR}/update-ffmpeg"
-  chmod 755 "${STAGEDIR}/${INSTALLDIR}/update-ffmpeg"
-
-  # Privacy Guard binary (vivaldi)
-  # Not all architectures (like arm) are supported.
-  if [ -f "${OUTPUTDIR}/installer/common/relayproxy-linux" ]; then
-    install -m 755 "${OUTPUTDIR}/installer/common/relayproxy-linux" \
-    "${STAGEDIR}/${INSTALLDIR}/relayproxy-linux"
-  fi
-  if [ -f "${OUTPUTDIR}/installer/common/relayproxy.pem" ]; then
-    install -m 644 "${OUTPUTDIR}/installer/common/relayproxy.pem" \
-    "${STAGEDIR}/${INSTALLDIR}/relayproxy.pem"
-  fi
-
-  # Add License
-  install -m 644 "${OUTPUTDIR}/installer/common/EULA.html" \
-    "${STAGEDIR}/${INSTALLDIR}/LICENSE.html"
-
   # app icons
   local icon_regex=".*product_logo_[0-9]\+\."
   if [ "$BRANDING" = "google_chrome" ]; then
@@ -349,6 +303,8 @@ stage_install_common() {
       icon_regex=".*product_logo_[0-9]\+_beta\."
     elif [ "$CHANNEL" = "unstable" ]; then
       icon_regex=".*product_logo_[0-9]\+_dev\."
+    elif [ "$CHANNEL" = "canary" ]; then
+      icon_regex=".*product_logo_[0-9]\+_canary\."
     fi
   fi
   LOGO_RESOURCES_PNG=$(find "${OUTPUTDIR}/installer/theme/" \
@@ -360,6 +316,9 @@ stage_install_common() {
       "${OUTPUTDIR}/installer/theme/${logo}" \
       "${STAGEDIR}/${INSTALLDIR}/"
   done
+
+  # Vivaldi install items
+  stage_install_vivaldi_common
 
   # desktop integration
   process_template "${OUTPUTDIR}/installer/common/appdata.xml.template" \

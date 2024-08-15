@@ -8,9 +8,11 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "base/check.h"
+#include "base/check_is_test.h"
 #include "base/compiler_specific.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -20,10 +22,12 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "build/chromeos_buildflags.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/pref_value_map.h"
+#include "components/search_engines/choice_made_location.h"
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_data_util.h"
@@ -114,6 +118,9 @@ const char DefaultSearchManager::kIsActive[] = "is_active";
 const char DefaultSearchManager::kStarterPackId[] = "starter_pack_id";
 const char DefaultSearchManager::kEnforcedByPolicy[] = "enforced_by_policy";
 
+const char DefaultSearchManager::kChoiceLocation[] = "choice_location";
+
+// Vivaldi
 const char DefaultSearchManager::kPosition[] = "position";
 
 DefaultSearchManager::DefaultSearchManager(
@@ -272,17 +279,28 @@ DefaultSearchManager::GetDefaultSearchEngineSource() const {
 search_engines::ChoiceMadeLocation
 DefaultSearchManager::GetChoiceMadeLocationForUserSelectedDefaultSearchEngine()
     const {
-  if (GetDefaultSearchEngineSource() != Source::FROM_USER) {
+  if (!pref_service_) {
+    CHECK_IS_TEST();
     return search_engines::ChoiceMadeLocation::kOther;
   }
-  int choice_made_location =
-      pref_service_->GetInteger(kDefaultSearchProviderChoiceLocationPrefName);
-  if (choice_made_location < 0 ||
-      choice_made_location >
+
+  const base::Value::Dict& template_url_dictionary =
+      pref_service_->GetDict(kDefaultSearchProviderDataPrefName);
+  std::optional<int> choice_made_location =
+      template_url_dictionary.FindInt(kChoiceLocation);
+
+  if (GetDefaultSearchEngineSource() != Source::FROM_USER ||
+      !choice_made_location.has_value()) {
+    return search_engines::ChoiceMadeLocation::kOther;
+  }
+
+  if (choice_made_location.value() < 0 ||
+      choice_made_location.value() >
           static_cast<int>(search_engines::ChoiceMadeLocation::kMaxValue)) {
     return search_engines::ChoiceMadeLocation::kOther;
   }
-  return static_cast<search_engines::ChoiceMadeLocation>(choice_made_location);
+  return static_cast<search_engines::ChoiceMadeLocation>(
+      choice_made_location.value());
 }
 
 const TemplateURLData* DefaultSearchManager::GetFallbackSearchEngine() const {
@@ -299,6 +317,9 @@ void DefaultSearchManager::SetUserSelectedDefaultSearchEngine(
     NotifyObserver();
     return;
   }
+  base::Value::Dict template_url_dictionary = TemplateURLDataToDictionary(data);
+  template_url_dictionary.Set(kChoiceLocation,
+                              static_cast<int>(choice_location));
 
   pref_service_->SetDict(vivaldi_default_pref_,
                          TemplateURLDataToDictionary(data));
@@ -312,6 +333,7 @@ void DefaultSearchManager::SetUserSelectedDefaultSearchEngine(
 
 void DefaultSearchManager::ClearUserSelectedDefaultSearchEngine() {
   if (pref_service_) {
+    pref_service_->ClearPref(kDefaultSearchProviderDataPrefName);
     pref_service_->ClearPref(vivaldi_default_pref_);
     pref_service_->ClearPref(kDefaultSearchProviderChoiceLocationPrefName);
   } else {
@@ -366,8 +388,8 @@ void DefaultSearchManager::MergePrefsDataWithPrepopulated() {
   if (!prefs_default_search_ || !prefs_default_search_->prepopulate_id)
     return;
 
-  // TODO(crbug.com/1049784): Parameters for search engine created from play api
-  // should be preserved even if corresponding prepopulated search engine
+  // TODO(crbug.com/40117818): Parameters for search engine created from play
+  // api should be preserved even if corresponding prepopulated search engine
   // exists. This logic will be revisited as part of implementation of
   // crbug.com/1049784, which will enable updating play api search engine
   // parameters with prepopulated data.

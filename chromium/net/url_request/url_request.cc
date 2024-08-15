@@ -217,8 +217,8 @@ bool URLRequest::has_upload() const {
   return upload_data_stream_.get() != nullptr;
 }
 
-void URLRequest::SetExtraRequestHeaderByName(base::StringPiece name,
-                                             base::StringPiece value,
+void URLRequest::SetExtraRequestHeaderByName(std::string_view name,
+                                             std::string_view value,
                                              bool overwrite) {
   DCHECK(!is_pending_ || is_redirecting_);
   if (overwrite) {
@@ -228,7 +228,7 @@ void URLRequest::SetExtraRequestHeaderByName(base::StringPiece name,
   }
 }
 
-void URLRequest::RemoveRequestHeaderByName(base::StringPiece name) {
+void URLRequest::RemoveRequestHeaderByName(std::string_view name) {
   DCHECK(!is_pending_ || is_redirecting_);
   extra_request_headers_.RemoveHeader(name);
 }
@@ -311,7 +311,7 @@ base::Value::Dict URLRequest::GetStateAsValue() const {
   return dict;
 }
 
-void URLRequest::LogBlockedBy(base::StringPiece blocked_by) {
+void URLRequest::LogBlockedBy(std::string_view blocked_by) {
   DCHECK(!blocked_by.empty());
 
   // Only log information to NetLog during startup and certain deferring calls
@@ -327,7 +327,7 @@ void URLRequest::LogBlockedBy(base::StringPiece blocked_by) {
                                       "delegate_blocked_by", blocked_by_);
 }
 
-void URLRequest::LogAndReportBlockedBy(base::StringPiece source) {
+void URLRequest::LogAndReportBlockedBy(std::string_view source) {
   LogBlockedBy(source);
   use_blocked_by_as_load_param_ = true;
 }
@@ -359,7 +359,7 @@ UploadProgress URLRequest::GetUploadProgress() const {
   return UploadProgress();
 }
 
-void URLRequest::GetResponseHeaderByName(base::StringPiece name,
+void URLRequest::GetResponseHeaderByName(std::string_view name,
                                          std::string* value) const {
   DCHECK(value);
   if (response_info_.headers.get()) {
@@ -470,6 +470,17 @@ void URLRequest::set_site_for_cookies(const SiteForCookies& site_for_cookies) {
   site_for_cookies_ = site_for_cookies;
 }
 
+void URLRequest::set_isolation_info(const IsolationInfo& isolation_info) {
+  isolation_info_ = isolation_info;
+
+  bool is_main_frame_navigation = isolation_info.IsMainFrameRequest() ||
+                                  force_main_frame_for_same_site_cookies();
+
+  cookie_partition_key_ = CookiePartitionKey::FromNetworkIsolationKey(
+      isolation_info.network_isolation_key(), isolation_info.site_for_cookies(),
+      net::SchemefulSite(original_url()), is_main_frame_navigation);
+}
+
 void URLRequest::set_isolation_info_from_network_anonymization_key(
     const NetworkAnonymizationKey& network_anonymization_key) {
   set_isolation_info(URLRequest::CreateIsolationInfoFromNetworkAnonymizationKey(
@@ -491,7 +502,7 @@ void URLRequest::set_initiator(const std::optional<url::Origin>& initiator) {
   initiator_ = initiator;
 }
 
-void URLRequest::set_method(base::StringPiece method) {
+void URLRequest::set_method(std::string_view method) {
   DCHECK(!is_pending_);
   method_ = std::string(method);
 }
@@ -503,7 +514,7 @@ void URLRequest::set_reporting_upload_depth(int reporting_upload_depth) {
 }
 #endif
 
-void URLRequest::SetReferrer(base::StringPiece referrer) {
+void URLRequest::SetReferrer(std::string_view referrer) {
   DCHECK(!is_pending_);
   GURL referrer_url(referrer);
   if (referrer_url.is_valid()) {
@@ -1213,7 +1224,7 @@ IsolationInfo URLRequest::CreateIsolationInfoFromNetworkAnonymizationKey(
       IsolationInfo::RequestType::kOther, top_frame_origin,
       frame_origin.value(), SiteForCookies(),
       network_anonymization_key.GetNonce());
-  // TODO(crbug/1343856): DCHECK isolation info is fully populated.
+  // TODO(crbug.com/40852603): DCHECK isolation info is fully populated.
   return isolation_info;
 }
 

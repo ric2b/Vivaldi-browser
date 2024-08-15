@@ -48,7 +48,10 @@
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/thread_safe_ref_counted.h"
-#include "third_party/blink/renderer/platform/wtf/threading_primitives.h"
+
+namespace media {
+struct AudioGlitchInfo;
+}
 
 namespace blink {
 
@@ -131,12 +134,10 @@ class PLATFORM_EXPORT AudioDestination final
   base::TimeDelta GetPlatformBufferDuration() const;
 
   // The maximum channel count of the current audio sink device.
-  uint32_t MaxChannelCount();
+  uint32_t MaxChannelCount() const;
 
   // Sets the detect silence flag for `web_audio_device_`.
   void SetDetectSilence(bool detect_silence);
-
-  unsigned RenderQuantumFrames() const;
 
   // Creates a new sink and return its device status. If the status is OK,
   // replace the existing sink with the new one. This function is called in
@@ -159,12 +160,14 @@ class PLATFORM_EXPORT AudioDestination final
   // AudioWorkletThread (dual-thread rendering).
   void RequestRenderWait(size_t frames_requested,
                          size_t frames_to_render,
-                         double delay,
-                         double delay_timestamp);
+                         base::TimeDelta delay,
+                         base::TimeTicks delay_timestamp,
+                         const media::AudioGlitchInfo& glitch_info);
   void RequestRender(size_t frames_requested,
                      size_t frames_to_render,
-                     double delay,
-                     double delay_timestamp);
+                     base::TimeDelta delay,
+                     base::TimeTicks delay_timestamp,
+                     const media::AudioGlitchInfo& glitch_info);
 
   // Provide input to the resampler (if used).
   void ProvideResamplerInput(int resampler_frame_delay, AudioBus* dest);

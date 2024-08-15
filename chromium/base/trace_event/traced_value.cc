@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/trace_event/traced_value.h"
 
 #include <inttypes.h>
@@ -314,7 +319,7 @@ class PickleWriter final : public TracedValue::Writer {
         }
 
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
       }
 
       state_stack[current_state_index].needs_comma = true;
@@ -440,7 +445,7 @@ class PickleWriter final : public TracedValue::Writer {
         } break;
 
         default:
-          NOTREACHED();
+          NOTREACHED_IN_MIGRATION();
       }
     }
     DCHECK(stack.empty());

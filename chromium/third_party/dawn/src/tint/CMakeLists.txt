@@ -82,13 +82,15 @@ function(tint_default_compile_options TARGET)
 
   set(COMMON_GNU_OPTIONS
     -Wall
-    -Werror
     -Wextra
     -Wno-documentation-unknown-command
     -Wno-padded
     -Wno-switch-enum
     -Wno-unknown-pragmas
   )
+  if (${DAWN_WERROR})
+      list(APPEND COMMON_GNU_OPTIONS -Werror)
+  endif()
 
   set(COMMON_CLANG_OPTIONS
     -Wno-c++98-compat
@@ -130,7 +132,6 @@ function(tint_default_compile_options TARGET)
       /bigobj
       /EHsc
       /W4
-      /WX
       /wd4068 # unknown pragma
       /wd4127 # conditional expression is constant
       /wd4244 # 'conversion' conversion from 'type1' to 'type2', possible loss of data
@@ -148,10 +149,19 @@ function(tint_default_compile_options TARGET)
       /wd5026 # 'type': move constructor was implicitly defined as deleted
       /wd5027 # 'type': move assignment operator was implicitly defined as deleted
     )
+    if (${DAWN_WERROR})
+      target_compile_options(${TARGET} PRIVATE /WX)
+    endif()
 
-    # When building with clang-cl on Windows, try to match our clang build
-    # options as much as possible.
+    # Some versions of MSVC ignores the [[noreturn]] on ~InternalCompilerError(), triggering a
+    # warning if its the last statement on a function that has a return value.
+    target_compile_options(${TARGET} PRIVATE
+      /wd4715 # not all control paths return a value
+    )
+
     if(COMPILER_IS_CLANG_CL)
+      # When building with clang-cl on Windows, try to match our clang build
+      # options as much as possible.
       target_compile_options(${TARGET} PRIVATE
         ${COMMON_GNU_OPTIONS}
         ${COMMON_CLANG_OPTIONS}
@@ -165,6 +175,14 @@ function(tint_default_compile_options TARGET)
         -Wno-reserved-id-macro
         -Wno-language-extension-token
       )
+    else()
+      if(NOT $CMAKE_BUILD_TYPE STREQUAL "Debug")
+        # MSVC sometimes warns code is unreachable after inlining of code, which
+        # is impossible to silence with pragmas.
+        target_compile_options(${TARGET} PRIVATE
+          /wd4702 # unreachable code
+        )
+      endif()
     endif()
   endif()
 
@@ -223,6 +241,7 @@ endfunction()
 
 function(tint_bench_compile_options TARGET)
   tint_core_compile_options(${TARGET})
+  set_target_properties(${TARGET} PROPERTIES FOLDER "Benchmarks")
 endfunction()
 
 function(tint_fuzz_compile_options TARGET)
@@ -269,7 +288,7 @@ function(tint_fuzz_cmd_compile_options TARGET)
   target_link_libraries(${TARGET} PRIVATE "tint_api_sanitize_fuzzer")
 endfunction()
 
-# TODO(bclayton): Remove this when fuzzers fully migrated to gen build
+# TODO(crbug.com/tint/2223): Remove this when fuzzers are fully migrated to gen build
 function(tint_fuzzer_compile_options TARGET)
   tint_fuzz_cmd_compile_options(${TARGET})
   target_link_libraries(${TARGET} PRIVATE "tint_api_sanitize_fuzzer")
@@ -501,6 +520,10 @@ function(tint_target_add_external_dependencies TARGET KIND)
       target_link_libraries(${TARGET} PRIVATE
         absl_strings
       )
+    elseif(${DEPENDENCY} STREQUAL "dl")
+      target_link_libraries(${TARGET} PRIVATE ${CMAKE_DL_LIBS})
+    elseif(${DEPENDENCY} STREQUAL "dxc-include")
+      target_include_directories(${TARGET} PRIVATE "${DAWN_THIRD_PARTY_DIR}/dxc/include")
     elseif(${DEPENDENCY} STREQUAL "jsoncpp")
       target_link_libraries(${TARGET} PRIVATE jsoncpp_static)
     elseif(${DEPENDENCY} STREQUAL "langsvr")
@@ -631,7 +654,6 @@ if(TINT_BUILD_FUZZERS)
   set(TINT_BUILD_TESTS FALSE)
   set(TINT_BUILD_BENCHMARKS FALSE)
   include("BUILD.cmake")
-  add_subdirectory(fuzzers)
 
   # Restore the build flags
   set(TINT_BUILD_CMD_TOOLS ${SAVE_TINT_BUILD_CMD_TOOLS})
@@ -661,7 +683,8 @@ endforeach()
 ################################################################################
 # tintd (VSCode WGSL language server)
 ################################################################################
-if(TINT_INSTALL_TINTD)
+if(TINT_BUILD_TINTD)
+  # Copy all the files out of cmd/tintd/vscode to {build}/vscode
   set(VSCODE_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmd/tintd/vscode")
   set(VSCODE_DST_DIR "${DAWN_BUILD_GEN_DIR}/vscode")
 
@@ -670,7 +693,7 @@ if(TINT_INSTALL_TINTD)
     configure_file("${VSCODE_SRC_DIR}/${FILE}" "${VSCODE_DST_DIR}/${FILE}" COPYONLY)
   endforeach()
   set_target_properties(tint_cmd_tintd_cmd PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${VSCODE_DST_DIR}")
-endif(TINT_INSTALL_TINTD)
+endif(TINT_BUILD_TINTD)
 
 
 ################################################################################
@@ -682,29 +705,22 @@ endif()
 
 
 ################################################################################
-# Additional fuzzer tests
+# Unit tests
 ################################################################################
 if(TINT_BUILD_TESTS)
-  if(${TINT_BUILD_FUZZERS})
-    target_sources(tint_cmd_test_test_cmd PRIVATE
-      fuzzers/mersenne_twister_engine.cc
-      fuzzers/mersenne_twister_engine.h
-      fuzzers/random_generator.cc
-      fuzzers/random_generator.h
-      fuzzers/random_generator_engine.cc
-      fuzzers/random_generator_engine.h
-      fuzzers/random_generator_test.cc
-    )
-  endif()
-
   add_test(NAME tint_unittests COMMAND tint_cmd_test_test_cmd)
 endif(TINT_BUILD_TESTS)
+
 
 ################################################################################
 # Target aliases
 ################################################################################
 add_library(libtint ALIAS tint_api)
 
+
+################################################################################
+# Install rules
+################################################################################
 if (TINT_ENABLE_INSTALL)
   # We need to recurse all folders and include all headers because tint.h includes most headers from src/tint
   file(GLOB TINT_HEADERS "${DAWN_INCLUDE_DIR}/tint/*.h")

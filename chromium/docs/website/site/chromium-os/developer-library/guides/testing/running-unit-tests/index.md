@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: running-unit-tests
 title: ChromiumOS unit testing
 ---
@@ -110,10 +110,6 @@ built for AMD systems may fail when your host system uses an Intel CPU.
 For packages using platform2, see the [biod ebuild] and [biod BUILD.gn] as
 a good example of adding your unit test. These steps include:
 
-*   Modifying the package ebuild.
-    *   Create a `platform_pkg_test()` with `platform test_all`. This will
-        run all unit tests registered in the GN files with `run_test =
-        true`
 *   Adding a `*_test.cc` test file (see [example file]).
     *   See `gtest` syntax and the usages from [Google Test] - Chromium's C++
         test harness.
@@ -216,16 +212,16 @@ that:
     *   inherit the `cros-go` eclass, or
     *   inherit the `tast-bundle` eclass.
 
-[Best practices for writing ChromeOS unit tests]: ./unit_tests.md
+[Best practices for writing ChromeOS unit tests]: /chromium-os/developer-library/guides/testing/unit-tests/
 [Introduction: Why Google C++ Testing Framework?]: https://github.com/google/googletest/blob/HEAD/docs/primer.md
 [GoogleTest FAQ]: https://github.com/google/googletest/blob/HEAD/docs/faq.md
 [`cros_run_unit_tests`]: https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/scripts/cros_run_unit_tests.py
-[platform2 testing section]: /platform2_primer.md#running-unit-tests
+[platform2 testing section]: /chromium-os/developer-library/guides/development/platform2-primer/#running-unit-tests
 [biod ebuild]: https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/chromeos-base/biod/biod-9999.ebuild
 [biod BUILD.gn]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/biod/BUILD.gn
 [Google Test]: https://github.com/google/googletest
 [Portage documentation]: https://devmanual.gentoo.org/ebuild-writing/functions/src_test/index.html
-[this doc]: ./qemu_unit_tests_design.md
+[this doc]: /chromium-os/developer-library/guides/testing/qemu-unit-tests-design/
 [file a bug]: https://crbug.com/new
 [example CL]: https://crrev.com/c/583938/
 [example file]: https://crrev.com/c/583578/7/src/manifest_unittest.cc

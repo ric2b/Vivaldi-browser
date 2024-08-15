@@ -4,14 +4,40 @@
 
 package org.chromium.chrome.browser.tasks.tab_groups;
 
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
+
 import org.chromium.base.Token;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.tab_groups.TabGroupColorId;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.List;
 
 /** An interface to be notified about changes to a {@link TabGroupModelFilter}. */
 public interface TabGroupModelFilterObserver {
+    /** The reason for the tab group being removed from {@link TabGroupModelFilter}. */
+    @IntDef({
+        DidRemoveTabGroupReason.MERGE,
+        DidRemoveTabGroupReason.UNGROUP,
+        DidRemoveTabGroupReason.CLOSE
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface DidRemoveTabGroupReason {
+        /** Groups are merged together. */
+        int MERGE = 0;
+
+        /** Tab group no longer exists because the last tab in the group was removed. */
+        int UNGROUP = 1;
+
+        /**
+         * The last tab in the group is closed. This can be from a tab group hide, tab group delete,
+         * or closing of individual tabs.
+         */
+        int CLOSE = 2;
+    }
+
     /**
      * This method is called before a tab is moved to form a group or moved into an existed group.
      *
@@ -83,6 +109,7 @@ public interface TabGroupModelFilterObserver {
      * @param tabOriginalTabGroupId The original tab group id for each modified tab.
      * @param destinationGroupTitle The original destination group title.
      * @param destinationGroupColorId The original destination group color id.
+     * @param destinationGroupTitleCollapsed Whether the destination group was originally collapsed.
      */
     default void didCreateGroup(
             List<Tab> tabs,
@@ -90,7 +117,8 @@ public interface TabGroupModelFilterObserver {
             List<Integer> tabOriginalRootId,
             List<Token> tabOriginalTabGroupId,
             String destinationGroupTitle,
-            int destinationGroupColorId) {}
+            int destinationGroupColorId,
+            boolean destinationGroupTitleCollapsed) {}
 
     /**
      * This method is called after a new tab group is created, either through drag and drop, the tab
@@ -116,4 +144,45 @@ public interface TabGroupModelFilterObserver {
      * @param newColor The new color.
      */
     default void didChangeTabGroupColor(int rootId, @TabGroupColorId int newColor) {}
+
+    /**
+     * This method is called when a tab group is collapsed or expanded on the tab strip.
+     *
+     * @param rootId The current rootId of the tab group.
+     * @param isCollapsed Whether or not the tab group is now collapsed.
+     */
+    default void didChangeTabGroupCollapsed(int rootId, boolean isCollapsed) {}
+
+    /**
+     * When a tab group's root id needs to change because the tab whose id was previously being used
+     * as the root ids is no longer part of the group. This could be a tab deletion that has not yet
+     * been committed. Undo operations will not reverse this operation, as it does not have any user
+     * facing effects.
+     *
+     * @param oldRootId The previous root id.
+     * @param newRootId The new root id.
+     */
+    default void didChangeGroupRootId(int oldRootId, int newRootId) {}
+
+    /**
+     * Called when a tab group is removed from tab group model filter. This could be the result of
+     * merging tabs, ungrouping tabs or closing tabs.
+     *
+     * @param oldRootId The root id the group previous used.
+     * @param oldTabGroupId The tab group ID the group previously used, may be null if being
+     *     re-used.
+     * @param removalReason The {@link DidRemoveTabGroupReason} for the group being removed.
+     */
+    default void didRemoveTabGroup(
+            int oldRootId,
+            @Nullable Token oldTabGroupId,
+            @DidRemoveTabGroupReason int removalReason) {}
+
+    /**
+     * Called when a tab group closure is fully committed.
+     *
+     * @param tabGroupId The tab group id.
+     * @param wasHiding Whether the tab group was set to hide when it started closing.
+     */
+    default void committedTabGroupClosure(Token tabGroupId, boolean wasHiding) {}
 }

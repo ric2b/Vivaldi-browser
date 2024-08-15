@@ -21,6 +21,8 @@ inline constexpr char16_t kAboutSrcdocPath16[] = u"srcdoc";
 
 inline constexpr char kAboutScheme[] = "about";
 inline constexpr char16_t kAboutScheme16[] = u"about";
+inline constexpr char kAndroidScheme[] = "android";
+inline constexpr char16_t kAndroidScheme16[] = u"android";
 inline constexpr char kBlobScheme[] = "blob";
 inline constexpr char16_t kBlobScheme16[] = u"blob";
 inline constexpr char kContentScheme[] = "content";
@@ -60,6 +62,8 @@ inline constexpr char16_t kWssScheme16[] = u"wss";
 inline constexpr char kStandardSchemeSeparator[] = "://";
 inline constexpr char16_t kStandardSchemeSeparator16[] = u"://";
 
+// Max GURL length passed between processes. See url::mojom::kMaxURLChars, which
+// has the same value, for more details.
 inline constexpr size_t kMaxURLChars = 2 * 1024 * 1024;
 
 }  // namespace url

@@ -277,7 +277,7 @@ int ff_iamf_add_audio_element(IAMFContext *iamf, const AVStreamGroup *stg, void 
 
     if (iamf_audio_element->demixing_info) {
         AVIAMFParamDefinition *param = iamf_audio_element->demixing_info;
-        IAMFParamDefinition *param_definition = ff_iamf_get_param_definition(iamf, param->parameter_id);
+        const IAMFParamDefinition *param_definition = ff_iamf_get_param_definition(iamf, param->parameter_id);
 
         if (param->nb_subblocks != 1) {
             av_log(log_ctx, AV_LOG_ERROR, "nb_subblocks in demixing_info for stream group %u is not 1\n", stg->index);
@@ -293,7 +293,7 @@ int ff_iamf_add_audio_element(IAMFContext *iamf, const AVStreamGroup *stg, void 
     }
     if (iamf_audio_element->recon_gain_info) {
         AVIAMFParamDefinition *param = iamf_audio_element->recon_gain_info;
-        IAMFParamDefinition *param_definition = ff_iamf_get_param_definition(iamf, param->parameter_id);
+        const IAMFParamDefinition *param_definition = ff_iamf_get_param_definition(iamf, param->parameter_id);
 
         if (param->nb_subblocks != 1) {
             av_log(log_ctx, AV_LOG_ERROR, "nb_subblocks in recon_gain_info for stream group %u is not 1\n", stg->index);
@@ -495,7 +495,7 @@ static int scalable_channel_layout_config(const IAMFAudioElement *audio_element,
     flush_put_bits(&pb);
     avio_write(dyn_bc, header, put_bytes_count(&pb, 1));
     for (int i = 0; i < element->nb_layers; i++) {
-        AVIAMFLayer *layer = element->layers[i];
+        const AVIAMFLayer *layer = element->layers[i];
         int layout;
         for (layout = 0; layout < FF_ARRAY_ELEMS(ff_iamf_scalable_ch_layouts); layout++) {
             if (!av_channel_layout_compare(&layer->ch_layout, &ff_iamf_scalable_ch_layouts[layout]))
@@ -524,7 +524,7 @@ static int ambisonics_config(const IAMFAudioElement *audio_element,
                              AVIOContext *dyn_bc)
 {
     const AVIAMFAudioElement *element = audio_element->celement;
-    AVIAMFLayer *layer = element->layers[0];
+    const AVIAMFLayer *layer = element->layers[0];
 
     ffio_write_leb(dyn_bc, 0); // ambisonics_mode
     ffio_write_leb(dyn_bc, layer->ch_layout.nb_channels); // output_channel_count
@@ -857,7 +857,7 @@ static int write_parameter_block(const IAMFContext *iamf, AVIOContext *pb,
                                  const AVIAMFParamDefinition *param, void *log_ctx)
 {
     uint8_t header[MAX_IAMF_OBU_HEADER_SIZE];
-    IAMFParamDefinition *param_definition = ff_iamf_get_param_definition(iamf, param->parameter_id);
+    const IAMFParamDefinition *param_definition = ff_iamf_get_param_definition(iamf, param->parameter_id);
     PutBitContext pbc;
     AVIOContext *dyn_bc;
     uint8_t *dyn_buf = NULL;
@@ -979,7 +979,7 @@ static int write_parameter_block(const IAMFContext *iamf, AVIOContext *pb,
 }
 
 int ff_iamf_write_parameter_blocks(const IAMFContext *iamf, AVIOContext *pb,
-                                   AVPacket *pkt, void *log_ctx)
+                                   const AVPacket *pkt, void *log_ctx)
 {
     AVIAMFParamDefinition *mix =
         (AVIAMFParamDefinition *)av_packet_get_side_data(pkt,
@@ -1013,13 +1013,29 @@ int ff_iamf_write_parameter_blocks(const IAMFContext *iamf, AVIOContext *pb,
     return 0;
 }
 
+static IAMFAudioElement *get_audio_element(const IAMFContext *c,
+                                           unsigned int audio_substream_id)
+{
+    for (int i = 0; i < c->nb_audio_elements; i++) {
+        IAMFAudioElement *audio_element = c->audio_elements[i];
+        for (int j = 0; j < audio_element->nb_substreams; j++) {
+            IAMFSubStream *substream = &audio_element->substreams[j];
+            if (substream->audio_substream_id == audio_substream_id)
+                return audio_element;
+        }
+    }
+
+    return NULL;
+}
+
 int ff_iamf_write_audio_frame(const IAMFContext *iamf, AVIOContext *pb,
-                              unsigned audio_substream_id, AVPacket *pkt)
+                              unsigned audio_substream_id, const AVPacket *pkt)
 {
     uint8_t header[MAX_IAMF_OBU_HEADER_SIZE];
     PutBitContext pbc;
     AVIOContext *dyn_bc;
-    uint8_t *side_data, *dyn_buf = NULL;
+    const uint8_t *side_data;
+    uint8_t *dyn_buf = NULL;
     unsigned int skip_samples = 0, discard_padding = 0;
     size_t side_data_size;
     int dyn_size, type = audio_substream_id <= 17 ?
@@ -1027,15 +1043,31 @@ int ff_iamf_write_audio_frame(const IAMFContext *iamf, AVIOContext *pb,
     int ret;
 
     if (!pkt->size) {
-        uint8_t *new_extradata = av_packet_get_side_data(pkt,
-                                                         AV_PKT_DATA_NEW_EXTRADATA,
-                                                         NULL);
+        const IAMFAudioElement *audio_element;
+        IAMFCodecConfig *codec_config;
+        size_t new_extradata_size;
+        const uint8_t *new_extradata = av_packet_get_side_data(pkt,
+                                                               AV_PKT_DATA_NEW_EXTRADATA,
+                                                               &new_extradata_size);
 
         if (!new_extradata)
             return AVERROR_INVALIDDATA;
+        audio_element = get_audio_element(iamf, audio_substream_id);
+        if (!audio_element)
+            return AVERROR(EINVAL);
+        codec_config = ff_iamf_get_codec_config(iamf, audio_element->codec_config_id);
+        if (!codec_config)
+            return AVERROR(EINVAL);
 
-        // TODO: update FLAC Streaminfo on seekable output
-        return 0;
+        av_free(codec_config->extradata);
+        codec_config->extradata = av_memdup(new_extradata, new_extradata_size);
+        if (!codec_config->extradata) {
+            codec_config->extradata_size = 0;
+            return AVERROR(ENOMEM);
+        }
+        codec_config->extradata_size = new_extradata_size;
+
+        return update_extradata(codec_config);
     }
 
     side_data = av_packet_get_side_data(pkt, AV_PKT_DATA_SKIP_SAMPLES,

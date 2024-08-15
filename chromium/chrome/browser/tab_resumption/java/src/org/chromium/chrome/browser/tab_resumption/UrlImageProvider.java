@@ -8,6 +8,11 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import org.chromium.base.Callback;
+import org.chromium.chrome.browser.page_image_service.ImageServiceBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
 import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
@@ -33,17 +38,39 @@ public class UrlImageProvider {
     protected final LargeIconBridge mLargeIconBridge;
     protected final RoundedIconGenerator mIconGenerator;
 
-    UrlImageProvider(UrlImageSource source, Context context) {
+    private final boolean mUseSalientImage;
+
+    @Nullable private ImageServiceBridge mImageServiceBridge;
+
+    private int mSalientImageSizeBigPx;
+
+    private int mSalientImageSizeSmallPx;
+
+    UrlImageProvider(
+            UrlImageSource source,
+            Context context,
+            @Nullable ImageServiceBridge imageServiceBridge) {
         Resources res = context.getResources();
-        mMinIconSizePx = (int) res.getDimensionPixelSize(R.dimen.default_favicon_min_size);
+        mMinIconSizePx = res.getDimensionPixelSize(R.dimen.default_favicon_min_size);
         mDesiredIconSizePx =
-                (int) res.getDimensionPixelSize(R.dimen.tab_resumption_module_icon_source_size);
+                res.getDimensionPixelSize(R.dimen.tab_resumption_module_icon_source_size);
         mLargeIconBridge = source.createLargeIconBridge();
         mIconGenerator = source.createIconGenerator();
+
+        mImageServiceBridge = imageServiceBridge;
+        mUseSalientImage = TabResumptionModuleUtils.TAB_RESUMPTION_USE_SALIENT_IMAGE.getValue();
+        if (mUseSalientImage) {
+            mSalientImageSizeBigPx =
+                    res.getDimensionPixelSize(R.dimen.tab_resumption_module_single_icon_size);
+            mSalientImageSizeSmallPx = mDesiredIconSizePx;
+        }
     }
 
-    UrlImageProvider(Profile profile, Context context) {
+    UrlImageProvider(
+            Profile profile, Context context, @Nullable ImageServiceBridge imageServiceBridge) {
         this(
+                // TODO(b/339269597): Moves the UrlImageSource into an separate java file and is
+                // owned by the TabResumptionModuleBuilder.
                 new UrlImageSource() {
                     @Override
                     public LargeIconBridge createLargeIconBridge() {
@@ -55,10 +82,22 @@ public class UrlImageProvider {
                         return FaviconUtils.createRoundedRectangleIconGenerator(context);
                     }
                 },
-                context);
+                context,
+                imageServiceBridge);
     }
 
-    public void destroy() {}
+    /**
+     * Clean up the C++ side of this class. After the call, this class instance shouldn't be used.
+     */
+    public void destroy() {
+        mLargeIconBridge.destroy();
+
+        // The ImageServiceBridge is owned by the TabResumptionModuleBuilder, and will be destroyed
+        // by TabResumptionModuleBuilder.
+        if (mImageServiceBridge != null) {
+            mImageServiceBridge = null;
+        }
+    }
 
     /**
      * Asynchronously fetches a large favicon for a URL, and passes it to `callback`. If
@@ -78,6 +117,32 @@ public class UrlImageProvider {
                         icon = mIconGenerator.generateIconForUrl(pageUrl);
                     }
                     callback.onBitmap(icon);
+                });
+    }
+
+    /**
+     * Asynchronously fetches a salient image for a URL, and fallback to fetch the favicon if there
+     * isn't any salient image available.
+     */
+    public void fetchSalientImageWithFallback(
+            @NonNull GURL pageUrl,
+            boolean showBigImage,
+            Callback<Bitmap> onSalientImageReadyCallback,
+            UrlImageCallback fallback) {
+        assert mUseSalientImage && mImageServiceBridge != null;
+        int imageSize = showBigImage ? mSalientImageSizeBigPx : mSalientImageSizeSmallPx;
+
+        mImageServiceBridge.fetchImageFor(
+                /* isAccountData= */ true,
+                pageUrl,
+                imageSize,
+                (bitmap) -> {
+                    if (bitmap != null) {
+                        onSalientImageReadyCallback.onResult((Bitmap) bitmap);
+                    } else {
+                        // Fallback to fetch the favicon.
+                        fetchImageForUrl(pageUrl, fallback);
+                    }
                 });
     }
 }

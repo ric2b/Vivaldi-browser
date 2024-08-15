@@ -57,7 +57,7 @@
 
 void VivaldiScheduleTabCommands(
     CommandStorageManager* command_storage_manager,
-    const TabRestoreService::Tab& tab) {
+    const tab_restore::Tab& tab) {
   if (!tab.viv_ext_data.empty()) {
     command_storage_manager->ScheduleCommand(
         vivaldi::CreateSetTabVivExtDataCommand(kCommandSetExtData, tab.id,
@@ -74,7 +74,7 @@ void VivaldiScheduleTabCommands(
 
 void VivaldiWindowsScheduleExtCommand(
     CommandStorageManager* command_storage_manager,
-    const TabRestoreService::Window& window) {
+    const tab_restore::Window& window) {
   if (!window.viv_ext_data.empty()) {
     command_storage_manager->ScheduleCommand(
         vivaldi::CreateSetWindowVivExtDataCommand(kCommandSetWindowExtData,

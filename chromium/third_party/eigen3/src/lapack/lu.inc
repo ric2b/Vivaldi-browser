@@ -62,6 +62,8 @@ EIGEN_LAPACK_FUNC(getrs)
   MatrixType lu(a, *n, *n, *lda);
   MatrixType B(b, *n, *nrhs, *ldb);
 
+  using Eigen::UnitLower;
+  using Eigen::Upper;
   for (int i = 0; i < *n; ++i) ipiv[i]--;
   if (OP(*trans) == NOTR) {
     B = PivotsType(ipiv, *n) * B;

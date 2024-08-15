@@ -1056,6 +1056,13 @@ bool CalendarBackend::DeleteEventTemplate(EventTemplateID event_template_id) {
   return db_->DeleteEventTemplate(event_template_id);
 }
 
+EventID CalendarBackend::GetParentExceptionEventId(EventID exception_event_id) {
+  if (!db_) {
+    return false;
+  }
+  return db_->GetParentExceptionEventId(exception_event_id);
+}
+
 void CalendarBackend::CloseAllDatabases() {
   if (db_) {
     // Commit the long-running transaction.

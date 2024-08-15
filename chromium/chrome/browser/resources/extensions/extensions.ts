@@ -7,6 +7,7 @@ import './manager.js';
 export {CrCheckboxElement} from 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
 export {getToastManager} from 'chrome://resources/cr_elements/cr_toast/cr_toast_manager.js';
 export {PluralStringProxyImpl} from 'chrome://resources/js/plural_string_proxy.js';
+export {getTrustedHTML} from 'chrome://resources/js/static_types.js';
 export {IronIconElement} from 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 export {ActivityLogExtensionPlaceholder, ExtensionsActivityLogElement} from './activity_log/activity_log.js';
 export {ActivityLogHistoryElement, ActivityLogPageState} from './activity_log/activity_log_history.js';
@@ -28,6 +29,7 @@ export {ExtensionsKioskDialogElement} from './kiosk_dialog.js';
 // </if>
 export {ExtensionsLoadErrorElement} from './load_error.js';
 export {ExtensionsManagerElement} from './manager.js';
+export {ExtensionsMv2DeprecationPanelElement} from './mv2_deprecation_panel.js';
 export {Dialog, navigation, NavigationHelper, Page, PageState} from './navigation_helper.js';
 export {ExtensionsOptionsDialogElement, OptionsDialogMaxHeight, OptionsDialogMinWidth} from './options_dialog.js';
 export {ExtensionsPackDialogElement, PackDialogDelegate} from './pack_dialog.js';

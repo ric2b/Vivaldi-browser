@@ -90,16 +90,15 @@ struct ArrayLengthFromUniform::State {
     /// @param program the source program
     /// @param in the input transform data
     /// @param out the output transform data
-    explicit State(const Program& program, const DataMap& in, DataMap& out)
+    State(const Program& program, const DataMap& in, DataMap& out)
         : src(program), outputs(out), cfg(in.Get<Config>()) {}
 
     /// Runs the transform
     /// @returns the new program or SkipTransform if the transform is not required
     ApplyResult Run() {
         if (cfg == nullptr) {
-            b.Diagnostics().AddError(diag::System::Transform, Source{})
-                << "missing transform data for "
-                << tint::TypeInfo::Of<ArrayLengthFromUniform>().name;
+            b.Diagnostics().AddError(Source{}) << "missing transform data for "
+                                               << tint::TypeInfo::Of<ArrayLengthFromUniform>().name;
             return resolver::Resolve(b);
         }
 
@@ -172,7 +171,6 @@ struct ArrayLengthFromUniform::State {
                                     return sem.Get(unary->expr);  // Follow the object
                                 default:
                                     TINT_ICE() << "unexpected unary op: " << unary->op;
-                                    return nullptr;
                             }
                         },
                         TINT_ICE_ON_NO_MATCH);
@@ -198,7 +196,7 @@ struct ArrayLengthFromUniform::State {
     /// the Config::bindpoint_to_size_index map.
     const ast::Expression* ArrayLengthOf(const sem::GlobalVariable* global) {
         auto binding = global->Attributes().binding_point;
-        TINT_ASSERT_OR_RETURN_VALUE(binding, nullptr);
+        TINT_ASSERT(binding);
 
         auto idx_it = cfg->bindpoint_to_size_index.find(*binding);
         if (idx_it == cfg->bindpoint_to_size_index.end()) {
@@ -225,7 +223,6 @@ struct ArrayLengthFromUniform::State {
         if (TINT_UNLIKELY(global->Type()->Is<core::type::Pointer>())) {
             TINT_ICE() << "storage buffer variable should not be a pointer. "
                           "These should have been removed by the SimplifyPointers transform";
-            return nullptr;
         }
         auto* storage_buffer_type = global->Type()->UnwrapRef();
         const core::type::Array* array_type = nullptr;
@@ -240,7 +237,6 @@ struct ArrayLengthFromUniform::State {
         } else {
             TINT_ICE() << "expected form of arrayLength argument to be &array_var or "
                           "&struct_var.array_member";
-            return nullptr;
         }
         return b.Div(total_size, u32(array_type->Stride()));
     }
@@ -333,6 +329,7 @@ Transform::ApplyResult ArrayLengthFromUniform::Apply(const Program& src,
     return State{src, inputs, outputs}.Run();
 }
 
+ArrayLengthFromUniform::Config::Config() = default;
 ArrayLengthFromUniform::Config::Config(BindingPoint ubo_bp) : ubo_binding(ubo_bp) {}
 ArrayLengthFromUniform::Config::Config(const Config&) = default;
 ArrayLengthFromUniform::Config& ArrayLengthFromUniform::Config::operator=(const Config&) = default;

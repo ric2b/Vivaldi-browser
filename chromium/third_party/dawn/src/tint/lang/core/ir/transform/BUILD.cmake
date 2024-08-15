@@ -34,6 +34,8 @@
 #                       Do not modify this file directly
 ################################################################################
 
+include(lang/core/ir/transform/common/BUILD.cmake)
+
 ################################################################################
 # Target:    tint_lang_core_ir_transform
 # Kind:      lib
@@ -84,6 +86,7 @@ tint_target_add_dependencies(tint_lang_core_ir_transform lib
   tint_lang_core_constant
   tint_lang_core_intrinsic
   tint_lang_core_ir
+  tint_lang_core_ir_transform_common
   tint_lang_core_type
   tint_utils_containers
   tint_utils_diagnostic
@@ -179,3 +182,52 @@ if(TINT_BUILD_WGSL_WRITER)
     tint_lang_wgsl_writer
   )
 endif(TINT_BUILD_WGSL_WRITER)
+
+################################################################################
+# Target:    tint_lang_core_ir_transform_fuzz
+# Kind:      fuzz
+################################################################################
+tint_add_target(tint_lang_core_ir_transform_fuzz fuzz
+  lang/core/ir/transform/add_empty_entry_point_fuzz.cc
+  lang/core/ir/transform/bgra8unorm_polyfill_fuzz.cc
+  lang/core/ir/transform/binary_polyfill_fuzz.cc
+  lang/core/ir/transform/binding_remapper_fuzz.cc
+  lang/core/ir/transform/block_decorated_structs_fuzz.cc
+  lang/core/ir/transform/builtin_polyfill_fuzz.cc
+  lang/core/ir/transform/combine_access_instructions_fuzz.cc
+  lang/core/ir/transform/conversion_polyfill_fuzz.cc
+  lang/core/ir/transform/demote_to_helper_fuzz.cc
+  lang/core/ir/transform/direct_variable_access_fuzz.cc
+  lang/core/ir/transform/multiplanar_external_texture_fuzz.cc
+  lang/core/ir/transform/preserve_padding_fuzz.cc
+  lang/core/ir/transform/robustness_fuzz.cc
+  lang/core/ir/transform/std140_fuzz.cc
+  lang/core/ir/transform/value_to_let_fuzz.cc
+  lang/core/ir/transform/vectorize_scalar_matrix_constructors_fuzz.cc
+  lang/core/ir/transform/zero_init_workgroup_memory_fuzz.cc
+)
+
+tint_target_add_dependencies(tint_lang_core_ir_transform_fuzz fuzz
+  tint_api_common
+  tint_api_options
+  tint_cmd_fuzz_ir_fuzz
+  tint_lang_core
+  tint_lang_core_constant
+  tint_lang_core_ir
+  tint_lang_core_ir_transform
+  tint_lang_core_type
+  tint_utils_bytes
+  tint_utils_containers
+  tint_utils_diagnostic
+  tint_utils_ice
+  tint_utils_id
+  tint_utils_macros
+  tint_utils_math
+  tint_utils_memory
+  tint_utils_reflection
+  tint_utils_result
+  tint_utils_rtti
+  tint_utils_symbol
+  tint_utils_text
+  tint_utils_traits
+)

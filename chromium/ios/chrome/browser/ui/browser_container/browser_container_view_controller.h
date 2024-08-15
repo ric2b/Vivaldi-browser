@@ -13,6 +13,10 @@
 
 @protocol LinkToTextDelegate;
 
+#if defined(VIVALDI_BUILD)
+@protocol CopyToNoteDelegate;
+#endif // End Vivaldi
+
 // UIViewController which allows displaying and removing a content view.
 @interface BrowserContainerViewController
     : UIViewController <BrowserContainerConsumer>
@@ -40,6 +44,11 @@
 // the previously added `contentViewController` if any.  Setting
 // `contentViewController` does not clear `contentView`.
 - (void)setContentViewController:(UIViewController*)contentViewController;
+
+#if defined(VIVALDI_BUILD)
+// The delegate to handle copy to note button selection.
+@property(nonatomic, weak) id<CopyToNoteDelegate> vivaldiCopyToNoteDelegate;
+#endif // End Vivaldi
 
 @end
 

@@ -23,12 +23,12 @@ MdnsProbe::~MdnsProbe() = default;
 
 MdnsProbeImpl::Observer::~Observer() = default;
 
-MdnsProbeImpl::MdnsProbeImpl(MdnsSender* sender,
-                             MdnsReceiver* receiver,
-                             MdnsRandom* random_delay,
+MdnsProbeImpl::MdnsProbeImpl(MdnsSender& sender,
+                             MdnsReceiver& receiver,
+                             MdnsRandom& random_delay,
                              TaskRunner& task_runner,
                              ClockNowFunctionPtr now_function,
-                             Observer* observer,
+                             Observer& observer,
                              DomainName target_name,
                              IPAddress address)
     : MdnsProbe(std::move(target_name), std::move(address)),
@@ -39,14 +39,9 @@ MdnsProbeImpl::MdnsProbeImpl(MdnsSender* sender,
       sender_(sender),
       receiver_(receiver),
       observer_(observer) {
-  OSP_CHECK(sender_);
-  OSP_CHECK(receiver_);
-  OSP_CHECK(random_delay_);
-  OSP_CHECK(observer_);
-
-  receiver_->AddResponseCallback(this);
+  receiver_.AddResponseCallback(this);
   alarm_.ScheduleFromNow([this]() { ProbeOnce(); },
-                         random_delay_->GetInitialProbeDelay());
+                         random_delay_.GetInitialProbeDelay());
 }
 
 MdnsProbeImpl::~MdnsProbeImpl() {
@@ -66,13 +61,13 @@ void MdnsProbeImpl::ProbeOnce() {
                                 ResponseType::kUnicast);
     probe_query.AddQuestion(probe_question);
     probe_query.AddAuthorityRecord(address_record());
-    sender_->SendMulticast(probe_query);
+    sender_.SendMulticast(probe_query);
 
     alarm_.ScheduleFromNow([this]() { ProbeOnce(); },
                            kDelayBetweenProbeQueries);
   } else {
     Stop();
-    observer_->OnProbeSuccess(this);
+    observer_.OnProbeSuccess(this);
   }
 }
 
@@ -81,7 +76,7 @@ void MdnsProbeImpl::Stop() {
 
   if (is_running_) {
     alarm_.Cancel();
-    receiver_->RemoveResponseCallback(this);
+    receiver_.RemoveResponseCallback(this);
     is_running_ = false;
   }
 }
@@ -101,7 +96,7 @@ void MdnsProbeImpl::OnMessageReceived(const MdnsMessage& message) {
   for (const auto& record : message.answers()) {
     if (record.name() == target_name()) {
       Stop();
-      observer_->OnProbeFailure(this);
+      observer_.OnProbeFailure(this);
     }
   }
 }

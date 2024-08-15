@@ -15,6 +15,7 @@
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "components/autofill/core/browser/ui/popup_open_enums.h"
 #include "components/password_manager/core/browser/features/password_features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -38,11 +39,12 @@ class MockPasswordGenerationPopupController
   ~MockPasswordGenerationPopupController() override = default;
 
   // AutofillPopupViewDelegate:
-  MOCK_METHOD(void, Hide, (autofill::PopupHidingReason), (override));
+  MOCK_METHOD(void, Hide, (autofill::SuggestionHidingReason), (override));
   MOCK_METHOD(void, ViewDestroyed, (), (override));
   MOCK_METHOD(gfx::NativeView, container_view, (), (const override));
   MOCK_METHOD(content::WebContents*, GetWebContents, (), (const override));
   MOCK_METHOD(const gfx::RectF&, element_bounds, (), (const override));
+  MOCK_METHOD(autofill::PopupAnchorType, anchor_type, (), (const override));
   MOCK_METHOD(base::i18n::TextDirection,
               GetElementTextDirection,
               (),

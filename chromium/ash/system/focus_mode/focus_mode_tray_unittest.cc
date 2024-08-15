@@ -5,7 +5,6 @@
 #include "ash/system/focus_mode/focus_mode_tray.h"
 
 #include "ash/accessibility/accessibility_controller.h"
-#include "ash/api/tasks/tasks_types.h"
 #include "ash/constants/ash_features.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
@@ -16,6 +15,7 @@
 #include "ash/system/focus_mode/focus_mode_controller.h"
 #include "ash/system/focus_mode/focus_mode_countdown_view.h"
 #include "ash/system/focus_mode/focus_mode_ending_moment_view.h"
+#include "ash/system/focus_mode/focus_mode_task_test_utils.h"
 #include "ash/system/focus_mode/focus_mode_util.h"
 #include "ash/system/progress_indicator/progress_indicator.h"
 #include "ash/system/status_area_widget_test_helper.h"
@@ -49,6 +49,11 @@ class FocusModeTrayTest : public AshTestBase {
   // AshTestBase:
   void SetUp() override {
     AshTestBase::SetUp();
+
+    auto& tasks_client =
+        CreateFakeTasksClient(AccountId::FromUserEmail("user0@tray"));
+    AddFakeTaskList(tasks_client, "default");
+    AddFakeTask(tasks_client, "default", "task1", "Task 1");
 
     focus_mode_tray_ =
         StatusAreaWidgetTestHelper::GetStatusAreaWidget()->focus_mode_tray();
@@ -186,16 +191,14 @@ TEST_F(FocusModeTrayTest, MarkTaskAsCompleted) {
   ui::ScopedAnimationDurationScaleMode duration(
       ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
 
+  FocusModeTask task;
+  task.task_list_id = "default";
+  task.task_id = "task1";
+  task.title = "make a travel plan";
+  task.updated = base::Time::Now();
+
   FocusModeController* controller = FocusModeController::Get();
-  controller->SetSelectedTask(
-      std::make_unique<api::Task>(
-          /*id=*/base::NumberToString(0), "make a travel plan",
-          /*due=*/std::nullopt, /*completed=*/false, /*has_subtasks=*/false,
-          /*has_email_link=*/false,
-          /*has_notes=*/false,
-          /*updated=*/base::Time::Now(),
-          /*web_view_link=*/GURL())
-          .get());
+  controller->SetSelectedTask(task);
 
   //  Start focus mode and click the tray to activate the button.
   controller->ToggleFocusMode();
@@ -296,15 +299,14 @@ TEST_F(FocusModeTrayTest, BubbleTabbingAndAccessibility) {
   const std::u16string time_remaining = focus_mode_util::GetDurationString(
       session_duration, /*digital_format=*/false);
   controller->SetInactiveSessionDuration(session_duration);
-  controller->SetSelectedTask(std::make_unique<api::Task>(
-                                  /*id=*/base::NumberToString(1), task_name,
-                                  /*due=*/std::nullopt, /*completed=*/false,
-                                  /*has_subtasks=*/false,
-                                  /*has_email_link=*/false,
-                                  /*has_notes=*/false,
-                                  /*updated=*/base::Time::Now(),
-                                  /*web_view_link=*/GURL())
-                                  .get());
+
+  FocusModeTask task;
+  task.task_list_id = "abc";
+  task.task_id = "1";
+  task.title = task_name;
+  task.updated = base::Time::Now();
+
+  controller->SetSelectedTask(task);
   controller->ToggleFocusMode();
 
   LeftClickOn(focus_mode_tray_);
@@ -316,19 +318,21 @@ TEST_F(FocusModeTrayTest, BubbleTabbingAndAccessibility) {
   PressAndReleaseKey(ui::VKEY_TAB, ui::EF_NONE);
   views::FocusManager* focus_manager =
       GetBubbleView()->GetWidget()->GetFocusManager();
-  EXPECT_EQ(l10n_util::GetStringUTF16(
-                IDS_ASH_STATUS_TRAY_FOCUS_MODE_TOGGLE_END_BUTTON),
-            focus_manager->GetFocusedView()->GetAccessibleName());
+  EXPECT_EQ(
+      l10n_util::GetStringUTF16(
+          IDS_ASH_STATUS_TRAY_FOCUS_MODE_TOGGLE_END_BUTTON_ACCESSIBLE_NAME),
+      focus_manager->GetFocusedView()->GetAccessibleName());
 
   PressAndReleaseKey(ui::VKEY_TAB, ui::EF_NONE);
   EXPECT_EQ(
       l10n_util::GetStringUTF16(
-          IDS_ASH_STATUS_TRAY_FOCUS_MODE_EXTEND_TEN_MINUTES_BUTTON_ACCESSIBLE_NAME),
+          IDS_ASH_STATUS_TRAY_FOCUS_MODE_INCREASE_TEN_MINUTES_BUTTON_ACCESSIBLE_NAME),
       focus_manager->GetFocusedView()->GetAccessibleName());
 
   PressAndReleaseKey(ui::VKEY_TAB, ui::EF_NONE);
-  EXPECT_EQ(l10n_util::GetStringUTF16(
-                IDS_ASH_STATUS_TRAY_FOCUS_MODE_TASK_RADIO_BUTTON),
+  EXPECT_EQ(l10n_util::GetStringFUTF16(
+                IDS_ASH_STATUS_TRAY_FOCUS_MODE_TRAY_RADIO_BUTTON,
+                base::UTF8ToUTF16(task_name)),
             focus_manager->GetFocusedView()->GetAccessibleName());
 }
 

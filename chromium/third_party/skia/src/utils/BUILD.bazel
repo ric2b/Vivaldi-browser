@@ -1,5 +1,8 @@
-load("//bazel:flags.bzl", "selects")
 load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_library", "skia_filegroup", "split_srcs_and_hdrs")
+
+package(
+    default_applicable_licenses = ["//:license"],
+)
 
 licenses(["notice"])
 
@@ -80,12 +83,6 @@ skia_filegroup(
         "SkJSON.h",
         "SkJSONWriter.h",
     ],
-    visibility = [
-        "//modules/skottie:__pkg__",
-        "//tools/debugger:__pkg__",
-        "//tools/testrunners/benchmark:__pkg__",
-        "//tools/testrunners/gm:__pkg__",
-    ],
 )
 
 skia_filegroup(
@@ -94,41 +91,15 @@ skia_filegroup(
         "SkJSON.cpp",
         "SkJSONWriter.cpp",
     ],
-    visibility = [
-        "//modules/skottie:__pkg__",
-        "//tools/debugger:__pkg__",
-        "//tools/testrunners/benchmark:__pkg__",
-        "//tools/testrunners/gm:__pkg__",
-    ],
-)
-
-selects.config_setting_group(
-    name = "needs_json",
-    match_any = [
-        "//src/gpu:enable_gpu_test_utils_true",
-        "//src/sksl:enable_sksl_tracing_true",
-    ],
-)
-
-skia_filegroup(
-    name = "chromium_hdrs",
-    # We allow chromium to use this as a diagnostic tool, but it is not
-    # part of Skia's public API. It is in its own filegroup to create
-    # a gni entry containing it.
-    srcs = [
-        "SkMultiPictureDocument.h",
-    ],
 )
 
 skia_filegroup(
     name = "srcs",
     srcs = [
+        ":json_srcs",
         ":utils_skslc_srcs",
         ":utils_srcs",
     ] + select({
-        ":needs_json": [":json_srcs"],
-        "//conditions:default": [],
-    }) + select({
         "//src/gpu:has_ganesh_backend": [":gpu_srcs"],
         "//conditions:default": [],
     }),
@@ -138,13 +109,10 @@ skia_filegroup(
 skia_filegroup(
     name = "private_hdrs",
     srcs = [
-        ":chromium_hdrs",
+        ":json_hdrs",
         ":utils_hdrs",
         ":utils_skslc_hdrs",
     ] + select({
-        ":needs_json": [":json_hdrs"],
-        "//conditions:default": [],
-    }) + select({
         "//src/gpu:has_ganesh_backend": [":gpu_hdrs"],
         "//conditions:default": [],
     }),
@@ -158,6 +126,8 @@ skia_filegroup(
         "SkCallableTraits.h",
         "SkCanvasStack.h",
         "SkDashPathPriv.h",
+        "SkJSON.h",
+        "SkJSONWriter.h",
         "SkMatrix22.h",
         "SkOSPath.h",
         "SkPatchUtils.h",
@@ -173,9 +143,12 @@ skia_filegroup(
         "SkCustomTypeface.cpp",
         "SkDashPath.cpp",
         "SkEventTracer.cpp",
+        "SkJSON.cpp",
+        "SkJSONWriter.cpp",
         "SkMatrix22.cpp",
         "SkNWayCanvas.cpp",
         "SkOSPath.cpp",
+        "SkOrderedFontMgr.cpp",
         "SkPaintFilterCanvas.cpp",
         "SkParse.cpp",
         "SkParseColor.cpp",
@@ -216,30 +189,9 @@ skia_filegroup(
 )
 
 skia_cc_library(
-    name = "json",
-    srcs = [
-        "SkJSON.cpp",
-        "SkJSONWriter.cpp",
-    ],
-    hdrs = [
-        "SkJSON.h",
-        "SkJSONWriter.h",
-    ],
-    visibility = [
-        "//bench:__pkg__",
-        "//gm:__pkg__",
-    ],
-    deps = [
-        "//:core",
-        "//src/base",
-    ],
-)
-
-skia_cc_library(
     name = "multi_picture_document",
     srcs = [
         "SkMultiPictureDocument.cpp",
-        "SkMultiPictureDocument.h",
         "SkMultiPictureDocumentPriv.h",
     ],
     hdrs = [

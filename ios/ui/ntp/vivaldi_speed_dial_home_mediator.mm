@@ -17,58 +17,80 @@
 #import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
 #import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/model/managed_bookmark_service_factory.h"
+#import "ios/chrome/browser/features/vivaldi_features.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
+#import "ios/chrome/browser/ui/content_suggestions/magic_stack/most_visited_tiles_config.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_prefs_helper.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_prefs.h"
+#import "ios/most_visited_sites/vivaldi_most_visited_sites_manager.h"
 #import "prefs/vivaldi_pref_names.h"
+#import "ui/base/l10n/l10n_util_mac.h"
+#import "url/gurl.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
-using vivaldi_bookmark_kit::GetSpeeddial;
-using vivaldi_bookmark_kit::SetNodeSpeeddial;
-using vivaldi_bookmark_kit::IsSeparator;
 using bookmarks::ManagedBookmarkService;
-
+using vivaldi_bookmark_kit::GetSpeeddial;
+using vivaldi_bookmark_kit::IsSeparator;
+using vivaldi_bookmark_kit::SetNodeSpeeddial;
+using l10n_util::GetNSString;
 
 @interface VivaldiSpeedDialHomeMediator ()<BookmarkModelBridgeObserver,
+                                           VivaldiMostVisitedSitesConsumer,
                                            PrefObserverDelegate,
                                            BooleanObserver> {
-  // Bridge to register for bookmark changes.
-  std::unique_ptr<BookmarkModelBridge> _model_bridge;
-
   // Preference service from the application context.
   PrefService* _prefs;
   // Pref observer to track changes to prefs.
   std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
   // Registrar for pref changes notifications.
   PrefChangeRegistrar _prefChangeRegistrar;
+  // The browser state for this mediator.
+  raw_ptr<ChromeBrowserState> _browserState;
+  // Observer for tab bar enabled/disabled state
+  PrefBackedBoolean* _tabBarEnabled;
+  // Observer for omnibox position
+  PrefBackedBoolean* _bottomOmniboxEnabled;
+  // Observer for frequently visited pages visibility state
+  PrefBackedBoolean* _showFrequentlyVisited;
   // Observer for speed dials visibility state
   PrefBackedBoolean* _showSpeedDials;
   // Observer for start page customize button visibility state
   PrefBackedBoolean* _showCustomizeStartPageButton;
 }
 
-// The browser state for this mediator.
-@property(nonatomic,assign) ChromeBrowserState* browserState;
-// The model holding bookmark data.
-@property(nonatomic,assign) LegacyBookmarkModel* bookmarkModel;
+// Manager that provides most visited sites
+@property(nonatomic,strong)
+    VivaldiMostVisitedSitesManager* mostVisitedSiteManager;
+// Most visited items from the MostVisitedSites service currently displayed.
+@property(nonatomic,strong) MostVisitedTilesConfig* mostVisitedConfig;
 // Speed dial folders collection
 @property(nonatomic,strong) NSMutableArray* speedDialFolders;
 // Bool to keep track the initial loading of the speed dial folders.
 @property(nonatomic,assign) BOOL isFirstLoad;
 // Bool to keep track of extensive changes.
 @property(nonatomic,assign) BOOL runningExtensiveChanges;
+// Bool to keep track if top sites result is ready. The results can be empty,
+// this only checks if we got a response from backend for the query.
+@property(nonatomic,assign) BOOL isTopSitesResultsAvailable;
 @end
 
-@implementation VivaldiSpeedDialHomeMediator
-@synthesize browserState = _browserState;
-@synthesize bookmarkModel = _bookmarkModel;
+@implementation VivaldiSpeedDialHomeMediator {
+  // The model holding bookmark data.
+  base::WeakPtr<LegacyBookmarkModel> _bookmarkModel;
+  // Bridge to register for bookmark changes in the bookmarkModel.
+  std::unique_ptr<BookmarkModelBridge> _bookmarkModelBridge;
+}
+
 @synthesize consumer = _consumer;
 @synthesize speedDialFolders = _speedDialFolders;
 @synthesize isFirstLoad = _isFirstLoad;
@@ -79,8 +101,15 @@ using bookmarks::ManagedBookmarkService;
                        bookmarkModel:(LegacyBookmarkModel*)bookmarkModel {
   if ((self = [super init])) {
     _browserState = browserState;
-    _bookmarkModel = bookmarkModel;
-    _model_bridge.reset(new BookmarkModelBridge(self,_bookmarkModel));
+    _bookmarkModel = bookmarkModel->AsWeakPtr();
+    _bookmarkModelBridge = std::make_unique<BookmarkModelBridge>(
+          self, _bookmarkModel.get());
+
+    VivaldiMostVisitedSitesManager* mostVisitedSiteManager =
+        [[VivaldiMostVisitedSitesManager alloc]
+            initWithBrowserState:browserState];
+    mostVisitedSiteManager.consumer = self;
+    _mostVisitedSiteManager = mostVisitedSiteManager;
 
     _prefs = browserState->GetPrefs();
     _prefChangeRegistrar.Init(_prefs);
@@ -90,6 +119,25 @@ using bookmarks::ManagedBookmarkService;
         vivaldiprefs::kVivaldiStartPageLayoutStyle, &_prefChangeRegistrar);
     _prefObserverBridge->ObserveChangesForPreference(
         vivaldiprefs::kVivaldiStartPageSDMaximumColumns, &_prefChangeRegistrar);
+
+    _tabBarEnabled =
+        [[PrefBackedBoolean alloc]
+             initWithPrefService:_prefs
+                prefName:vivaldiprefs::kVivaldiDesktopTabsEnabled];
+        [_tabBarEnabled setObserver:self];
+    [self booleanDidChange:_tabBarEnabled];
+
+    _bottomOmniboxEnabled =
+        [[PrefBackedBoolean alloc] initWithPrefService:_prefs
+                                              prefName:prefs::kBottomOmnibox];
+    [_bottomOmniboxEnabled setObserver:self];
+    [self booleanDidChange:_bottomOmniboxEnabled];
+
+    _showFrequentlyVisited =
+        [[PrefBackedBoolean alloc]
+            initWithPrefService:_prefs
+                prefName:vivaldiprefs::kVivaldiStartPageShowFrequentlyVisited];
+    [_showFrequentlyVisited setObserver:self];
 
     _showSpeedDials =
         [[PrefBackedBoolean alloc]
@@ -106,6 +154,8 @@ using bookmarks::ManagedBookmarkService;
     [self booleanDidChange:_showCustomizeStartPageButton];
 
     [VivaldiStartPagePrefs setPrefService:browserState->GetPrefs()];
+
+    self.isTopSitesResultsAvailable = NO;
   }
   return self;
 }
@@ -119,13 +169,31 @@ using bookmarks::ManagedBookmarkService;
 }
 
 - (void)disconnect {
-  self.browserState = nullptr;
-  self.bookmarkModel = nullptr;
+  _browserState = nil;
+  _bookmarkModel = nullptr;
+  _bookmarkModelBridge.reset();
   self.consumer = nil;
 
   _prefChangeRegistrar.RemoveAll();
   _prefObserverBridge.reset();
   _prefs = nil;
+
+  [_mostVisitedSiteManager stop];
+  _mostVisitedSiteManager.consumer = nil;
+  _mostVisitedSiteManager = nil;
+  _mostVisitedConfig = nil;
+
+  [_tabBarEnabled stop];
+  [_tabBarEnabled setObserver:nil];
+  _tabBarEnabled = nil;
+
+  [_bottomOmniboxEnabled stop];
+  [_bottomOmniboxEnabled setObserver:nil];
+  _bottomOmniboxEnabled = nil;
+
+  [_showFrequentlyVisited stop];
+  [_showFrequentlyVisited setObserver:nil];
+  _showFrequentlyVisited = nil;
 
   [_showSpeedDials stop];
   [_showSpeedDials setObserver:nil];
@@ -134,11 +202,20 @@ using bookmarks::ManagedBookmarkService;
   [_showCustomizeStartPageButton stop];
   [_showCustomizeStartPageButton setObserver:nil];
   _showCustomizeStartPageButton = nil;
+}
 
-  _model_bridge = nullptr;
+- (void)removeMostVisited:(VivaldiSpeedDialItem*)item {
+  for (ContentSuggestionsMostVisitedItem *tile in
+          _mostVisitedConfig.mostVisitedItems) {
+    if (tile.URL == item.url) {
+      [_mostVisitedSiteManager removeMostVisited:tile];
+      break;
+    }
+  }
 }
 
 - (void)computeSpeedDialFolders {
+  [_mostVisitedSiteManager start];
   if (_bookmarkModel && _bookmarkModel->loaded())
     [self fetchSpeedDialFolders];
 }
@@ -152,7 +229,8 @@ using bookmarks::ManagedBookmarkService;
     // Return the sorted items based on selected mode
     NSArray* sortedArray = [self sortSpeedDials:childItems
                                          byMode:self.currentSortingMode];
-    [self.consumer refreshChildItems:sortedArray];
+    [self.consumer refreshChildItems:sortedArray
+                   topSitesAvailable:self.isTopSitesResultsAvailable];
 
   } else {
 
@@ -176,12 +254,26 @@ using bookmarks::ManagedBookmarkService;
 
   NSMutableArray* sortedItems = [[NSMutableArray alloc] initWithArray:@[]];
 
+  if (IsNewStartPageIsEnabled() && [self showFrequentlyVisited]) {
+    NSMutableArray* frequentlyVisitedPages = [[NSMutableArray alloc] init];
+    for (ContentSuggestionsMostVisitedItem* tile in
+              _mostVisitedConfig.mostVisitedItems) {
+      VivaldiSpeedDialItem* item =
+          [[VivaldiSpeedDialItem alloc] initWithTitle:tile.title url:tile.URL];
+      item.imageDataSource = _mostVisitedConfig.imageDataSource;
+      [frequentlyVisitedPages addObject:item];
+    }
+    // Add frequently visited pages at the front.
+    [sortedItems addObject:frequentlyVisitedPages];
+  }
+
   for (id childItems in items) {
     NSArray* sortedArray = [self sortSpeedDials:childItems byMode:mode];
     [sortedItems addObject:sortedArray];
   }
 
-  [self.consumer refreshChildItems:sortedItems];
+  [self.consumer refreshChildItems:sortedItems
+                 topSitesAvailable:self.isTopSitesResultsAvailable];
 }
 
 #pragma mark - PRIVATE METHODS
@@ -205,7 +297,7 @@ using bookmarks::ManagedBookmarkService;
 - (void)fetchSpeedDialFolders {
 
   bookmarks::ManagedBookmarkService* managedBookmarkService =
-      ManagedBookmarkServiceFactory::GetForBrowserState(self.browserState);
+      ManagedBookmarkServiceFactory::GetForBrowserState(_browserState.get());
 
   _speedDialFolders = [[NSMutableArray alloc] init];
   NSMutableArray* speedDialFolderChildren = [[NSMutableArray alloc] init];
@@ -215,9 +307,9 @@ using bookmarks::ManagedBookmarkService;
   // Stack for Depth-First Search of bookmark model.
   base::stack<const BookmarkNode*> stk;
 
-  bookmarkList.push_back(self.bookmarkModel->mobile_node());
-  bookmarkList.push_back(self.bookmarkModel->bookmark_bar_node());
-  bookmarkList.push_back(self.bookmarkModel->other_node());
+  bookmarkList.push_back(_bookmarkModel.get()->mobile_node());
+  bookmarkList.push_back(_bookmarkModel.get()->bookmark_bar_node());
+  bookmarkList.push_back(_bookmarkModel.get()->other_node());
 
   // Push all top folders in stack and give them depth of 0.
   for (std::vector<const BookmarkNode*>::reverse_iterator it =
@@ -265,12 +357,28 @@ using bookmarks::ManagedBookmarkService;
   // Create a collection of array with speed dial folder item title.
   NSMutableArray *menuItems = [[NSMutableArray alloc] init];
 
-  // Only proceed to add dynamic items if they are visible
-  if ([self showSpeedDials]) {
+  if (IsNewStartPageIsEnabled()) {
+
+    if ([self showFrequentlyVisited]) {
+      [menuItems
+          addObject:GetNSString(IDS_IOS_START_PAGE_FREQUENTLY_VISITED_TITLE)];
+    }
+
+    // Only proceed to add dynamic items if they are visible
+    if ([self showSpeedDials]) {
+      for (VivaldiSpeedDialItem *item in self.speedDialFolders) {
+        [menuItems addObject:item.title];
+      }
+    }
+    // Add an extra menu item with empty string at the end for 'Add Group' page.
+    // We do not need the title since the item will not have any title.
+    [menuItems addObject:@""];
+  } else {
     for (VivaldiSpeedDialItem *item in self.speedDialFolders) {
       [menuItems addObject:item.title];
     }
   }
+
   // Refresh menu items
   [self.consumer refreshMenuItems:menuItems
                         SDFolders:self.speedDialFolders];
@@ -291,9 +399,9 @@ using bookmarks::ManagedBookmarkService;
   // Stack for Depth-First Search of bookmark model.
   base::stack<const BookmarkNode*> stk;
 
-  bookmarkList.push_back(self.bookmarkModel->mobile_node());
-  bookmarkList.push_back(self.bookmarkModel->bookmark_bar_node());
-  bookmarkList.push_back(self.bookmarkModel->other_node());
+  bookmarkList.push_back(_bookmarkModel.get()->mobile_node());
+  bookmarkList.push_back(_bookmarkModel.get()->bookmark_bar_node());
+  bookmarkList.push_back(_bookmarkModel.get()->other_node());
 
   // Push all top folders in stack and give them depth of 0.
   for (std::vector<const BookmarkNode*>::reverse_iterator it =
@@ -403,6 +511,12 @@ using bookmarks::ManagedBookmarkService;
   [self.consumer refreshContents];
 }
 
+- (BOOL)showFrequentlyVisited {
+  if (!_showFrequentlyVisited)
+    return YES;
+  return [_showFrequentlyVisited value];
+}
+
 - (BOOL)showSpeedDials {
   if (!_showSpeedDials)
     return YES;
@@ -414,12 +528,17 @@ using bookmarks::ManagedBookmarkService;
 - (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
   if (observableBoolean == _showSpeedDials) {
     [self.consumer setSpeedDialsEnabled:[observableBoolean value]];
+    [self refreshContents];
+  } else if (observableBoolean == _showFrequentlyVisited) {
+    [self.consumer setFrequentlyVisitedPagesEnabled:[observableBoolean value]];
+    [self refreshContents];
   } else if (observableBoolean == _showCustomizeStartPageButton) {
     [self.consumer
         setShowCustomizeStartPageButtonEnabled:[observableBoolean value]];
-    return;
+  } else if (observableBoolean == _tabBarEnabled ||
+             observableBoolean == _bottomOmniboxEnabled) {
+    [self handleLayoutChangeNotification];
   }
-  [self refreshContents];
 }
 
 #pragma mark - PrefObserverDelegate
@@ -490,6 +609,13 @@ using bookmarks::ManagedBookmarkService;
 
 - (void)extensiveBookmarkChangesEnded {
   _runningExtensiveChanges = NO;
+  [self refreshContents];
+}
+
+#pragma mark - VivaldiMostVisitedSitesConsumer
+- (void)setMostVisitedTilesConfig:(MostVisitedTilesConfig*)config {
+  _mostVisitedConfig = config;
+  self.isTopSitesResultsAvailable = YES;
   [self refreshContents];
 }
 

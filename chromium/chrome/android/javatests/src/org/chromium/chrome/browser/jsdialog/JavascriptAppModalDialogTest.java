@@ -167,8 +167,9 @@ public class JavascriptAppModalDialogTest {
         JavascriptAppModalDialog jsDialog = getCurrentDialog();
         Assert.assertNotNull("No dialog showing.", jsDialog);
 
-        onViewWaiting(withText(R.string.cancel)).check(matches(isDisplayed()));
-        onViewWaiting(withText(R.string.reload)).check(matches(isDisplayed()));
+        onViewWaiting(withText(R.string.cancel), /* checkRootDialog= */ true)
+                .check(matches(isDisplayed()));
+        onViewWaiting(withText(R.string.reload), true).check(matches(isDisplayed()));
     }
 
     /**

@@ -52,6 +52,7 @@ namespace internal {
     };                                                                                                              \
     static void run(Index size, Index otherSize, const EIGTYPE* _tri, Index triStride, EIGTYPE* _other,             \
                     Index otherIncr, Index otherStride, level3_blocking<EIGTYPE, EIGTYPE>& /*blocking*/) {          \
+      if (size == 0 || otherSize == 0) return;                                                                      \
       EIGEN_ONLY_USED_FOR_DEBUG(otherIncr);                                                                         \
       eigen_assert(otherIncr == 1);                                                                                 \
       BlasIndex m = convert_index<BlasIndex>(size), n = convert_index<BlasIndex>(otherSize), lda, ldb;              \
@@ -110,6 +111,7 @@ EIGEN_BLAS_TRSM_L(scomplex, float, ctrsm_)
     };                                                                                                              \
     static void run(Index size, Index otherSize, const EIGTYPE* _tri, Index triStride, EIGTYPE* _other,             \
                     Index otherIncr, Index otherStride, level3_blocking<EIGTYPE, EIGTYPE>& /*blocking*/) {          \
+      if (size == 0 || otherSize == 0) return;                                                                      \
       EIGEN_ONLY_USED_FOR_DEBUG(otherIncr);                                                                         \
       eigen_assert(otherIncr == 1);                                                                                 \
       BlasIndex m = convert_index<BlasIndex>(otherSize), n = convert_index<BlasIndex>(size), lda, ldb;              \

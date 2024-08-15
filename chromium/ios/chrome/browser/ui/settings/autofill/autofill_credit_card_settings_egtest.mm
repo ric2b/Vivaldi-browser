@@ -12,7 +12,7 @@
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/metrics/model/metrics_app_interface.h"
 #import "ios/chrome/browser/ui/autofill/autofill_app_interface.h"
-#import "ios/chrome/browser/ui/settings/autofill/autofill_constants.h"
+#import "ios/chrome/browser/ui/settings/autofill/autofill_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/settings_root_table_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
@@ -90,13 +90,6 @@ id<GREYMatcher> BottomToolbar() {
 @end
 
 @implementation AutofillCreditCardSettingsTestCase
-
-- (AppLaunchConfiguration)appConfigurationForTestCase {
-  AppLaunchConfiguration config;
-  config.features_enabled.push_back(
-      autofill::features::kAutofillEnablePaymentsMandatoryReauth);
-  return config;
-}
 
 - (void)setUp {
   [super setUp];

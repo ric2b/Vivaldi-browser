@@ -33,6 +33,7 @@
 #include "common.h"
 #include "error.h"
 #include "macros.h"
+#include "mem.h"
 #include "opt.h"
 
 #define CHAN_IS_AMBI(x) ((x) >= AV_CHAN_AMBISONIC_BASE &&\
@@ -76,14 +77,6 @@ static const struct channel_name channel_names[] = {
     [AV_CHAN_BOTTOM_FRONT_RIGHT   ] = { "BFR",       "bottom front right"    },
 };
 
-static const char *get_channel_name(enum AVChannel channel_id)
-{
-    if ((unsigned) channel_id >= FF_ARRAY_ELEMS(channel_names) ||
-        !channel_names[channel_id].name)
-        return NULL;
-    return channel_names[channel_id].name;
-}
-
 void av_channel_name_bprint(AVBPrint *bp, enum AVChannel channel_id)
 {
     if (channel_id >= AV_CHAN_AMBISONIC_BASE &&
@@ -94,6 +87,10 @@ void av_channel_name_bprint(AVBPrint *bp, enum AVChannel channel_id)
         av_bprintf(bp, "%s", channel_names[channel_id].name);
     else if (channel_id == AV_CHAN_NONE)
         av_bprintf(bp, "NONE");
+    else if (channel_id == AV_CHAN_UNKNOWN)
+        av_bprintf(bp, "UNK");
+    else if (channel_id == AV_CHAN_UNUSED)
+        av_bprintf(bp, "UNSD");
     else
         av_bprintf(bp, "USR%d", channel_id);
 }
@@ -123,6 +120,10 @@ void av_channel_description_bprint(AVBPrint *bp, enum AVChannel channel_id)
         av_bprintf(bp, "%s", channel_names[channel_id].description);
     else if (channel_id == AV_CHAN_NONE)
         av_bprintf(bp, "none");
+    else if (channel_id == AV_CHAN_UNKNOWN)
+        av_bprintf(bp, "unknown");
+    else if (channel_id == AV_CHAN_UNUSED)
+        av_bprintf(bp, "unused");
     else
         av_bprintf(bp, "user %d", channel_id);
 }
@@ -159,6 +160,11 @@ enum AVChannel av_channel_from_string(const char *str)
         if (channel_names[i].name && !strcmp(str, channel_names[i].name))
             return i;
     }
+    if (!strcmp(str, "UNK"))
+        return AV_CHAN_UNKNOWN;
+    if (!strcmp(str, "UNSD"))
+        return AV_CHAN_UNUSED;
+
     if (!strncmp(str, "USR", 3)) {
         const char *p = str + 3;
         id = strtol(p, &endptr, 0);
@@ -214,190 +220,6 @@ static const struct channel_layout_name channel_layout_map[] = {
     { "22.2",           AV_CHANNEL_LAYOUT_22POINT2,           },
 };
 
-#if FF_API_OLD_CHANNEL_LAYOUT
-FF_DISABLE_DEPRECATION_WARNINGS
-static uint64_t get_channel_layout_single(const char *name, int name_len)
-{
-    int i;
-    char *end;
-    int64_t layout;
-
-    for (i = 0; i < FF_ARRAY_ELEMS(channel_layout_map); i++) {
-        if (strlen(channel_layout_map[i].name) == name_len &&
-            !memcmp(channel_layout_map[i].name, name, name_len))
-            return channel_layout_map[i].layout.u.mask;
-    }
-    for (i = 0; i < FF_ARRAY_ELEMS(channel_names); i++)
-        if (channel_names[i].name &&
-            strlen(channel_names[i].name) == name_len &&
-            !memcmp(channel_names[i].name, name, name_len))
-            return (int64_t)1 << i;
-
-    errno = 0;
-    i = strtol(name, &end, 10);
-
-    if (!errno && (end + 1 - name == name_len && *end  == 'c'))
-        return av_get_default_channel_layout(i);
-
-    errno = 0;
-    layout = strtoll(name, &end, 0);
-    if (!errno && end - name == name_len)
-        return FFMAX(layout, 0);
-    return 0;
-}
-
-uint64_t av_get_channel_layout(const char *name)
-{
-    const char *n, *e;
-    const char *name_end = name + strlen(name);
-    int64_t layout = 0, layout_single;
-
-    for (n = name; n < name_end; n = e + 1) {
-        for (e = n; e < name_end && *e != '+' && *e != '|'; e++);
-        layout_single = get_channel_layout_single(n, e - n);
-        if (!layout_single)
-            return 0;
-        layout |= layout_single;
-    }
-    return layout;
-}
-
-int av_get_extended_channel_layout(const char *name, uint64_t* channel_layout, int* nb_channels)
-{
-    int nb = 0;
-    char *end;
-    uint64_t layout = av_get_channel_layout(name);
-
-    if (layout) {
-        *channel_layout = layout;
-        *nb_channels = av_get_channel_layout_nb_channels(layout);
-        return 0;
-    }
-
-    nb = strtol(name, &end, 10);
-    if (!errno && *end  == 'C' && *(end + 1) == '\0' && nb > 0 && nb < 64) {
-        *channel_layout = 0;
-        *nb_channels = nb;
-        return 0;
-    }
-
-    return AVERROR(EINVAL);
-}
-
-void av_bprint_channel_layout(struct AVBPrint *bp,
-                              int nb_channels, uint64_t channel_layout)
-{
-    int i;
-
-    if (nb_channels <= 0)
-        nb_channels = av_get_channel_layout_nb_channels(channel_layout);
-
-    for (i = 0; i < FF_ARRAY_ELEMS(channel_layout_map); i++)
-        if (nb_channels    == channel_layout_map[i].layout.nb_channels &&
-            channel_layout == channel_layout_map[i].layout.u.mask) {
-            av_bprintf(bp, "%s", channel_layout_map[i].name);
-            return;
-        }
-
-    av_bprintf(bp, "%d channels", nb_channels);
-    if (channel_layout) {
-        int i, ch;
-        av_bprintf(bp, " (");
-        for (i = 0, ch = 0; i < 64; i++) {
-            if ((channel_layout & (UINT64_C(1) << i))) {
-                const char *name = get_channel_name(i);
-                if (name) {
-                    if (ch > 0)
-                        av_bprintf(bp, "+");
-                    av_bprintf(bp, "%s", name);
-                }
-                ch++;
-            }
-        }
-        av_bprintf(bp, ")");
-    }
-}
-
-void av_get_channel_layout_string(char *buf, int buf_size,
-                                  int nb_channels, uint64_t channel_layout)
-{
-    AVBPrint bp;
-
-    av_bprint_init_for_buffer(&bp, buf, buf_size);
-    av_bprint_channel_layout(&bp, nb_channels, channel_layout);
-}
-
-int av_get_channel_layout_nb_channels(uint64_t channel_layout)
-{
-    return av_popcount64(channel_layout);
-}
-
-int64_t av_get_default_channel_layout(int nb_channels) {
-    int i;
-    for (i = 0; i < FF_ARRAY_ELEMS(channel_layout_map); i++)
-        if (nb_channels == channel_layout_map[i].layout.nb_channels)
-            return channel_layout_map[i].layout.u.mask;
-    return 0;
-}
-
-int av_get_channel_layout_channel_index(uint64_t channel_layout,
-                                        uint64_t channel)
-{
-    if (!(channel_layout & channel) ||
-        av_get_channel_layout_nb_channels(channel) != 1)
-        return AVERROR(EINVAL);
-    channel_layout &= channel - 1;
-    return av_get_channel_layout_nb_channels(channel_layout);
-}
-
-const char *av_get_channel_name(uint64_t channel)
-{
-    int i;
-    if (av_get_channel_layout_nb_channels(channel) != 1)
-        return NULL;
-    for (i = 0; i < 64; i++)
-        if ((1ULL<<i) & channel)
-            return get_channel_name(i);
-    return NULL;
-}
-
-const char *av_get_channel_description(uint64_t channel)
-{
-    int i;
-    if (av_get_channel_layout_nb_channels(channel) != 1)
-        return NULL;
-    for (i = 0; i < FF_ARRAY_ELEMS(channel_names); i++)
-        if ((1ULL<<i) & channel)
-            return channel_names[i].description;
-    return NULL;
-}
-
-uint64_t av_channel_layout_extract_channel(uint64_t channel_layout, int index)
-{
-    int i;
-
-    if (av_get_channel_layout_nb_channels(channel_layout) <= index)
-        return 0;
-
-    for (i = 0; i < 64; i++) {
-        if ((1ULL << i) & channel_layout && !index--)
-            return 1ULL << i;
-    }
-    return 0;
-}
-
-int av_get_standard_channel_layout(unsigned index, uint64_t *layout,
-                                   const char **name)
-{
-    if (index >= FF_ARRAY_ELEMS(channel_layout_map))
-        return AVERROR_EOF;
-    if (layout) *layout = channel_layout_map[index].layout.u.mask;
-    if (name)   *name   = channel_layout_map[index].name;
-    return 0;
-}
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
-
 int av_channel_layout_custom_init(AVChannelLayout *channel_layout, int nb_channels)
 {
     AVChannelCustom *map;
@@ -431,13 +253,58 @@ int av_channel_layout_from_mask(AVChannelLayout *channel_layout,
     return 0;
 }
 
+static int parse_channel_list(AVChannelLayout *ch_layout, const char *str)
+{
+    int ret;
+    int nb_channels = 0;
+    AVChannelCustom *map = NULL;
+    AVChannelCustom custom = {0};
+
+    while (*str) {
+        char *channel, *chname;
+        int ret = av_opt_get_key_value(&str, "@", "+", AV_OPT_FLAG_IMPLICIT_KEY, &channel, &chname);
+        if (ret < 0) {
+            av_freep(&map);
+            return ret;
+        }
+        if (*str)
+            str++; // skip separator
+        if (!channel) {
+            channel = chname;
+            chname = NULL;
+        }
+        av_strlcpy(custom.name, chname ? chname : "", sizeof(custom.name));
+        custom.id = av_channel_from_string(channel);
+        av_free(channel);
+        av_free(chname);
+        if (custom.id == AV_CHAN_NONE) {
+            av_freep(&map);
+            return AVERROR(EINVAL);
+        }
+
+        av_dynarray2_add((void **)&map, &nb_channels, sizeof(custom), (void *)&custom);
+        if (!map)
+            return AVERROR(ENOMEM);
+    }
+
+    if (!nb_channels)
+        return AVERROR(EINVAL);
+
+    ch_layout->order = AV_CHANNEL_ORDER_CUSTOM;
+    ch_layout->u.map = map;
+    ch_layout->nb_channels = nb_channels;
+
+    ret = av_channel_layout_retype(ch_layout, 0, AV_CHANNEL_LAYOUT_RETYPE_FLAG_CANONICAL);
+    av_assert0(ret == 0);
+
+    return 0;
+}
+
 int av_channel_layout_from_string(AVChannelLayout *channel_layout,
                                   const char *str)
 {
-    int i;
-    int channels = 0, nb_channels = 0, native = 1;
-    enum AVChannel highest_channel = AV_CHAN_NONE;
-    const char *dup;
+    int i, matches, ret;
+    int channels = 0, nb_channels = 0;
     char *chlist, *end;
     uint64_t mask = 0;
 
@@ -448,6 +315,10 @@ int av_channel_layout_from_string(AVChannelLayout *channel_layout,
             return 0;
         }
     }
+
+    /* This function is a channel layout initializer, so we have to
+     * zero-initialize before we start setting fields individually. */
+    memset(channel_layout, 0, sizeof(*channel_layout));
 
     /* ambisonic */
     if (!strncmp(str, "ambisonic ", 10)) {
@@ -490,6 +361,7 @@ int av_channel_layout_from_string(AVChannelLayout *channel_layout,
                 for (i = 0; i < extra.nb_channels; i++) {
                     enum AVChannel ch = av_channel_layout_channel_from_index(&extra, i);
                     if (CHAN_IS_AMBI(ch)) {
+                        av_channel_layout_uninit(channel_layout);
                         av_channel_layout_uninit(&extra);
                         return AVERROR(EINVAL);
                     }
@@ -513,121 +385,20 @@ int av_channel_layout_from_string(AVChannelLayout *channel_layout,
         return AVERROR(ENOMEM);
 
     /* channel names */
-    av_sscanf(str, "%d channels (%[^)]", &nb_channels, chlist);
-    end = strchr(str, ')');
-
-    dup = chlist;
-    while (*dup) {
-        char *channel, *chname;
-        int ret = av_opt_get_key_value(&dup, "@", "+", AV_OPT_FLAG_IMPLICIT_KEY, &channel, &chname);
-        if (ret < 0) {
-            av_free(chlist);
-            return ret;
-        }
-        if (*dup)
-            dup++; // skip separator
-        if (channel && !*channel)
-            av_freep(&channel);
-        for (i = 0; i < FF_ARRAY_ELEMS(channel_names); i++) {
-            if (channel_names[i].name && !strcmp(channel ? channel : chname, channel_names[i].name)) {
-                if (channel || i < highest_channel || mask & (1ULL << i))
-                    native = 0; // Not a native layout, use a custom one
-                highest_channel = i;
-                mask |= 1ULL << i;
-                break;
-            }
-        }
-
-        if (!channel && i >= FF_ARRAY_ELEMS(channel_names)) {
-            char *endptr = chname;
-            enum AVChannel id = AV_CHAN_NONE;
-
-            if (!strncmp(chname, "USR", 3)) {
-                const char *p = chname + 3;
-                id = strtol(p, &endptr, 0);
-            }
-            if (id < 0 || *endptr) {
-                native = 0; // Unknown channel name
-                channels = 0;
-                mask = 0;
-                av_free(chname);
-                break;
-            }
-            if (id > 63)
-                native = 0; // Not a native layout, use a custom one
-            else {
-                if (id < highest_channel || mask & (1ULL << id))
-                    native = 0; // Not a native layout, use a custom one
-                highest_channel = id;
-                mask |= 1ULL << id;
-            }
-        }
-        channels++;
-        av_free(channel);
-        av_free(chname);
-    }
-
-    if (mask && native) {
-        av_free(chlist);
-        if (nb_channels && ((nb_channels != channels) || (!end || *++end)))
-            return AVERROR(EINVAL);
-        av_channel_layout_from_mask(channel_layout, mask);
-        return 0;
-    }
-
-    /* custom layout of channel names */
-    if (channels && !native) {
-        int idx = 0;
-
-        if (nb_channels && ((nb_channels != channels) || (!end || *++end))) {
-            av_free(chlist);
-            return AVERROR(EINVAL);
-        }
-
-        channel_layout->u.map = av_calloc(channels, sizeof(*channel_layout->u.map));
-        if (!channel_layout->u.map) {
-            av_free(chlist);
-            return AVERROR(ENOMEM);
-        }
-
-        channel_layout->order = AV_CHANNEL_ORDER_CUSTOM;
-        channel_layout->nb_channels = channels;
-
-        dup = chlist;
-        while (*dup) {
-            char *channel, *chname;
-            int ret = av_opt_get_key_value(&dup, "@", "+", AV_OPT_FLAG_IMPLICIT_KEY, &channel, &chname);
-            if (ret < 0) {
-                av_freep(&channel_layout->u.map);
-                av_free(chlist);
-                return ret;
-            }
-            if (*dup)
-                dup++; // skip separator
-            for (i = 0; i < FF_ARRAY_ELEMS(channel_names); i++) {
-                if (channel_names[i].name && !strcmp(channel ? channel : chname, channel_names[i].name)) {
-                    channel_layout->u.map[idx].id = i;
-                    if (channel)
-                        av_strlcpy(channel_layout->u.map[idx].name, chname, sizeof(channel_layout->u.map[idx].name));
-                    idx++;
-                    break;
-                }
-            }
-            if (i >= FF_ARRAY_ELEMS(channel_names)) {
-                const char *p = (channel ? channel : chname) + 3;
-                channel_layout->u.map[idx].id = strtol(p, NULL, 0);
-                if (channel)
-                    av_strlcpy(channel_layout->u.map[idx].name, chname, sizeof(channel_layout->u.map[idx].name));
-                idx++;
-            }
-            av_free(channel);
-            av_free(chname);
-        }
-        av_free(chlist);
-
-        return 0;
-    }
+    matches = av_sscanf(str, "%d channels (%[^)]", &nb_channels, chlist);
+    ret = parse_channel_list(channel_layout, chlist);
     av_freep(&chlist);
+    if (ret < 0 && ret != AVERROR(EINVAL))
+        return ret;
+
+    if (ret >= 0) {
+        end = strchr(str, ')');
+        if (matches == 2 && (nb_channels != channel_layout->nb_channels || !end || *++end)) {
+            av_channel_layout_uninit(channel_layout);
+            return AVERROR(EINVAL);
+        }
+        return 0;
+    }
 
     errno = 0;
     mask = strtoull(str, &end, 0);
@@ -743,6 +514,33 @@ static int ambisonic_order(const AVChannelLayout *channel_layout)
         return AVERROR(EINVAL);
 
     return order;
+}
+
+static enum AVChannelOrder canonical_order(AVChannelLayout *channel_layout)
+{
+    int has_known_channel = 0;
+    int order;
+
+    if (channel_layout->order != AV_CHANNEL_ORDER_CUSTOM)
+        return channel_layout->order;
+
+    if (has_channel_names(channel_layout))
+        return AV_CHANNEL_ORDER_CUSTOM;
+
+    for (int i = 0; i < channel_layout->nb_channels && !has_known_channel; i++)
+        if (channel_layout->u.map[i].id != AV_CHAN_UNKNOWN)
+            has_known_channel = 1;
+    if (!has_known_channel)
+        return AV_CHANNEL_ORDER_UNSPEC;
+
+    if (masked_description(channel_layout, 0) > 0)
+        return AV_CHANNEL_ORDER_NATIVE;
+
+    order = ambisonic_order(channel_layout);
+    if (order >= 0 && masked_description(channel_layout, (order + 1) * (order + 1)) >= 0)
+        return AV_CHANNEL_ORDER_AMBISONIC;
+
+    return AV_CHANNEL_ORDER_CUSTOM;
 }
 
 /**
@@ -1084,6 +882,9 @@ int av_channel_layout_retype(AVChannelLayout *channel_layout, enum AVChannelOrde
     if (!av_channel_layout_check(channel_layout))
         return AVERROR(EINVAL);
 
+    if (flags & AV_CHANNEL_LAYOUT_RETYPE_FLAG_CANONICAL)
+        order = canonical_order(channel_layout);
+
     if (channel_layout->order == order)
         return 0;
 
@@ -1102,9 +903,11 @@ int av_channel_layout_retype(AVChannelLayout *channel_layout, enum AVChannelOrde
             lossy = 1;
         }
         if (!lossy || allow_lossy) {
+            void *opaque = channel_layout->opaque;
             av_channel_layout_uninit(channel_layout);
             channel_layout->order       = AV_CHANNEL_ORDER_UNSPEC;
             channel_layout->nb_channels = nb_channels;
+            channel_layout->opaque      = opaque;
             return lossy;
         }
         return AVERROR(ENOSYS);
@@ -1116,8 +919,10 @@ int av_channel_layout_retype(AVChannelLayout *channel_layout, enum AVChannelOrde
                 return AVERROR(ENOSYS);
             lossy = has_channel_names(channel_layout);
             if (!lossy || allow_lossy) {
+                void *opaque = channel_layout->opaque;
                 av_channel_layout_uninit(channel_layout);
                 av_channel_layout_from_mask(channel_layout, mask);
+                channel_layout->opaque = opaque;
                 return lossy;
             }
         }
@@ -1125,6 +930,7 @@ int av_channel_layout_retype(AVChannelLayout *channel_layout, enum AVChannelOrde
     case AV_CHANNEL_ORDER_CUSTOM: {
         AVChannelLayout custom = { 0 };
         int ret = av_channel_layout_custom_init(&custom, channel_layout->nb_channels);
+        void *opaque = channel_layout->opaque;
         if (ret < 0)
             return ret;
         if (channel_layout->order != AV_CHANNEL_ORDER_UNSPEC)
@@ -1132,6 +938,7 @@ int av_channel_layout_retype(AVChannelLayout *channel_layout, enum AVChannelOrde
                 custom.u.map[i].id = av_channel_layout_channel_from_index(channel_layout, i);
         av_channel_layout_uninit(channel_layout);
         *channel_layout = custom;
+        channel_layout->opaque = opaque;
         return 0;
         }
     case AV_CHANNEL_ORDER_AMBISONIC:
@@ -1146,10 +953,12 @@ int av_channel_layout_retype(AVChannelLayout *channel_layout, enum AVChannelOrde
                 return AVERROR(ENOSYS);
             lossy = has_channel_names(channel_layout);
             if (!lossy || allow_lossy) {
+                void *opaque = channel_layout->opaque;
                 av_channel_layout_uninit(channel_layout);
                 channel_layout->order       = AV_CHANNEL_ORDER_AMBISONIC;
                 channel_layout->nb_channels = nb_channels;
                 channel_layout->u.mask      = mask;
+                channel_layout->opaque      = opaque;
                 return lossy;
             }
         }

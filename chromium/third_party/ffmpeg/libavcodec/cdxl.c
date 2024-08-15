@@ -28,6 +28,7 @@
 // #define UNCHECKED_BITSTREAM_READER 1  // Chromium: Required for security.
 
 #include "libavutil/intreadwrite.h"
+#include "libavutil/mem.h"
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"

@@ -130,10 +130,6 @@ bool User::HasGaiaAccount() const {
   return TypeHasGaiaAccount(GetType());
 }
 
-bool User::IsActiveDirectoryUser() const {
-  return false;
-}
-
 bool User::IsChild() const {
   return GetType() == UserType::kChild;
 }
@@ -244,7 +240,7 @@ void User::IsAffiliatedAsync(
   }
 }
 
-void User::SetAffiliation(bool is_affiliated) {
+void User::SetAffiliated(bool is_affiliated) {
   // Device local accounts are always affiliated. No affiliation
   // modification must happen.
   CHECK(!IsDeviceLocalAccount());

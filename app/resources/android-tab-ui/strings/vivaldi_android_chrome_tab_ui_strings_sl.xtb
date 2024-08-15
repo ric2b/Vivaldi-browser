@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sl">
+<translation id="2947471979790858922">Vaša dejavnost v teh zasebnih zavihkih bo odstranjena iz te naprave</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Svoje zaprte zavihke najdete v Nedavnih zavihkih v glavnem meniju Vivaldi. Vaš zasebni zavihek ne bo na voljo.}
+        other {Zaprte zavihke lahko najdete v Nedavnih zavihkih v glavnem meniju Vivaldi. Vaših # zasebnih zavihkov ne bo na voljo.}}</translation>
+<translation id="4871187110787939393">Zapreti vse zasebne zavihke?</translation>
 </translationbundle>

@@ -94,7 +94,7 @@ SOURCELESS_BUILDER_CACHES = [
 defaults = args.defaults(
     extends = builders.defaults,
     check_for_flakiness = True,
-    # TODO(crbug/1456545) - Once we've migrated to the ResultDB-based solution
+    # TODO(crbug.com/40273153) - Once we've migrated to the ResultDB-based solution
     # this should be deprecated in favor for the original check_for_flakiness
     # argument.
     check_for_flakiness_with_resultdb = True,
@@ -108,7 +108,7 @@ defaults = args.defaults(
     # to the standard default.
     compilator_cores = args.DEFAULT,
     orchestrator_cores = args.DEFAULT,
-    orchestrator_reclient_jobs = args.DEFAULT,
+    orchestrator_siso_remote_jobs = args.DEFAULT,
 )
 
 def tryjob(
@@ -199,7 +199,7 @@ def try_builder(
       check_for_flakiness - If True, it checks for new tests in a given try
         build and reruns them multiple times to ensure that they are not
         flaky.
-      # TODO(crbug/1456545) - Once we've migrated to the ResultDB-based solution
+      # TODO(crbug.com/40273153) - Once we've migrated to the ResultDB-based solution
       # this should be deprecated in favor for the original check_for_flakiness
       # argument.
       check_for_flakiness_with_resultdb - If True, it checks for new tests in a
@@ -233,10 +233,10 @@ def try_builder(
 
     experiments = experiments or {}
 
-    # TODO(crbug.com/1346781): Remove when the experiment is the default.
+    # TODO(crbug.com/40232671): Remove when the experiment is the default.
     experiments.setdefault("chromium_swarming.expose_merge_script_failures", 100)
 
-    # TODO(crbug.com/1466962): Remove when the experiment is the default.
+    # TODO(crbug.com/40276579): Remove when the experiment is the default.
     experiments.setdefault("swarming.prpc.cli", 100)
 
     merged_resultdb_bigquery_exports = [
@@ -248,8 +248,9 @@ def try_builder(
             predicate = resultdb.test_result_predicate(
                 # Only match the telemetry_gpu_integration_test target and its
                 # Fuchsia and Android variants that have a suffix added to the
-                # end. Those are caught with [^/]*.
-                test_id_regexp = "ninja://chrome/test:telemetry_gpu_integration_test[^/]*/.+",
+                # end. Those are caught with [^/]*. The Fuchsia version is in
+                # //content/test since Fuchsia cannot depend on //chrome.
+                test_id_regexp = "ninja://(chrome|content)/test:telemetry_gpu_integration_test[^/]*/.+",
             ),
         ),
         resultdb.export_test_results(
@@ -293,7 +294,7 @@ def try_builder(
         cq_reason = "required" if not tryjob.location_filters else "path-based"
         properties["cq"] = cq_reason
 
-        # TODO(crbug/1456545) - Once we've migrated to the ResultDB-based solution
+        # TODO(crbug.com/40273153) - Once we've migrated to the ResultDB-based solution
         # check_for_flakiness_with_resultdb should be deprecated in favor for the
         # original check_for_flakiness argument.
         check_for_flakiness = defaults.get_value(
@@ -402,7 +403,7 @@ def _orchestrator_builder(
     if not builder_group:
         fail("builder_group must be specified")
 
-    # TODO(crbug/1287228): Make this the default once all CQ builders are
+    # TODO(crbug.com/40211151): Make this the default once all CQ builders are
     # migrated to be srcless
     if use_orchestrator_pool:
         kwargs.setdefault("pool", "luci.chromium.try.orchestrator")
@@ -421,7 +422,7 @@ def _orchestrator_builder(
     kwargs.setdefault("service_account", "chromium-orchestrator@chops-service-accounts.iam.gserviceaccount.com")
     kwargs.setdefault("ssd", None)
 
-    kwargs.setdefault("reclient_jobs", defaults.orchestrator_reclient_jobs.get())
+    kwargs.setdefault("siso_remote_jobs", defaults.orchestrator_siso_remote_jobs.get())
 
     ret = try_.builder(name = name, **kwargs)
     if ret:

@@ -110,6 +110,7 @@ foreach(target IN LISTS EIGEN_LAPACK_TARGETS)
   if(EIGEN_STANDARD_LIBRARIES_TO_LINK_TO)
     target_link_libraries(${target} ${EIGEN_STANDARD_LIBRARIES_TO_LINK_TO})
   endif()
+  target_link_libraries(${target} Eigen3::Eigen)
   add_dependencies(lapack ${target})
   install(TARGETS ${target}
           RUNTIME DESTINATION bin

@@ -20,8 +20,11 @@ import shutil
 import subprocess
 import sys
 
-class LZMA_OOM(Exception):
-    pass
+vivaldi_root = os.path.dirname(os.path.dirname(
+                  os.path.dirname(os.path.dirname(
+                  os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))))
+sys.path.insert(0,os.path.join(vivaldi_root, "installer", "win"))
+import vivaldi_signer
 
 ARCHIVE_DIR = "installer_archive"
 
@@ -44,9 +47,9 @@ TEMP_ARCHIVE_DIR = "temp_installer_archive"
 VERSION_FILE = "VERSION"
 
 g_archive_inputs = []
-g_signed_files = []
 
-def BuildVersion(vivaldi_version=None, vivaldi_build_version= None):
+
+def BuildVersion():
     """Returns the full build version string constructed from information in
     VERSION_FILE.  Any segment not found in that file will default to '0'.
     """
@@ -67,16 +70,6 @@ def BuildVersion(vivaldi_version=None, vivaldi_build_version= None):
             build = line[6:]
         elif line.startswith('PATCH='):
             patch = line[6:]
-    if vivaldi_version and vivaldi_build_version:
-        for line in open(os.path.join(os.path.dirname(__file__),  '../../..', '../..', 'VIVALDI_VERSION'), 'r'):
-            line = line.rstrip()
-            if line.startswith('VIVALDI_MAJOR='):
-              major = line[14:]
-            elif line.startswith('VIVALDI_MINOR='):
-              minor = line[14:]
-            elif line.startswith('VIVALDI_NIGHTLY='):
-              build = line[16:]
-        patch = vivaldi_build_version
     return '%s.%s.%s.%s' % (major, minor, build, patch)
 
 
@@ -121,15 +114,9 @@ def CompressUsingLZMA(build_dir,
     # See https://sourceforge.net/p/sevenzip/discussion/45797/thread/61905a4c.
     if strip_time:
         cmd.append('-mtm-')
-
-    def retry(exit_code):
-        if exit_code != 8:
-          return None
-        raise LZMA_OOM("Out of memory during compression")
-
     if os.path.exists(compressed_file):
         os.remove(compressed_file)
-    RunSystemCommand(cmd, verbose, retry_fun = retry)
+    RunSystemCommand(cmd, verbose)
 
 
 def OverwriteStagingBuildTime(timestamp_str):
@@ -224,106 +211,14 @@ def CopySectionFilesToStagingDir(config, section, staging_dir, src_dir,
                 for root, dirs, files in os.walk(src_path):
                     for f in files:
                         g_archive_inputs.append(os.path.join(root, f))
+                        vivaldi_signer.SignTarget(section, os.path.join(root, f))
                 shutil.copytree(src_path, dst_dir)
                 continue
             dst_path = os.path.join(dst_dir, os.path.basename(src_path))
             if not os.path.exists(dst_path):
                 g_archive_inputs.append(src_path)
+                vivaldi_signer.SignTarget(section, src_path)
                 shutil.copy(src_path, dst_dir)
-
-
-def SignTarget(options, target):
-  if not options.sign_executables:
-    return
-  if target.rpartition(".")[-1].lower() not in ["dll", "exe"]:
-    return
-
-  g_signed_files.append(target)
-
-  print("Starting Signing of", target)
-  signcommand = ([options.vivaldi_sign_cmd,
-      "sign",
-      "/v",
-      "/fd", "SHA256",
-    ] +
-    options.vivaldi_sign_key.split()+
-    [
-      target # target file
-    ])
-
-  ret = subprocess.call(signcommand)
-  if ret != 0:
-    raise Exception("Signing %s failed", target)
-
-def SignTargets(config, options, distribution, staging_dir,enable_hidpi):
-  print("Start Signing")
-  sections = ['GENERAL']
-  if distribution:
-    if len(distribution) > 1 and distribution[0] == '_':
-      distribution = distribution[1:]
-    sections.append(distribution.upper())
-  if enable_hidpi == '1':
-    sections.append('HIDPI')
-  if options.include_dxc == '1':
-    sections.append('DXC')
-
-  for section in sections:
-    assert "WIDEWINE_SIGN" not in section.capitalize() , "Should not happen"
-    for option in config.options(section):
-      if option.endswith('dir'):
-        continue
-      # We don't re-sign MS files.
-      if option in ["d3dcompiler_47.dll", "dxil.dll"] :
-        g_signed_files.append(option)
-        continue
-
-      src_dir = os.path.join(staging_dir, config.get(section, option))
-      src_paths = glob.glob(os.path.join(src_dir, os.path.basename(option) if src_dir[-1] in ["\\", "/"] else option))
-      for target in src_paths:
-        SignTarget(options, target)
-  print("Completed signing")
-
-def SignWidevineTargets(config, options, staging_dir, distro, blessed=0, versioned=False):
-  print ("Start Widevine Signing %s" % distro)
-  for option in config.options(distro):
-    if option.endswith('dir'):
-      continue
-
-    if versioned:
-      src_file = os.path.join(staging_dir, CHROME_DIR, versioned, option)
-    else:
-      src_file = os.path.join(staging_dir, CHROME_DIR, option)
-    target_file = os.path.join(staging_dir, config.get(distro, option))
-
-    cmd = [
-          "python",
-          options.vivaldi_widevine_sign_cmd,
-          "--input", src_file,
-          "--output", target_file,
-          "--private_key", options.vivaldi_widevine_private_key,
-          "--certificate", options.vivaldi_widevine_cert,
-          ]
-    if blessed:
-      cmd.extend(["--flags", "1"])
-
-    print ("Signing cmd: %s"% str(cmd))
-    subprocess.check_call(cmd, shell=True)
-
-    cmd = [
-          "python",
-          options.vivaldi_widevine_verify_cmd,
-          "--input", src_file,
-          "--sig_file", target_file,
-          ]
-    if blessed:
-      cmd.extend(["--flags", "1"])
-
-    print ("Verifying cmd: %s"% str(cmd))
-    subprocess.check_call(cmd, shell=True)
-
-    g_archive_inputs.append(target_file)
-
-  print ("Completed Widevine signing")
 
 
 def GenerateDiffPatch(options, orig_file, new_file, patch_file):
@@ -363,10 +258,10 @@ def GetPrevVersion(build_dir, temp_dir, last_chrome_installer, output_name):
         'x',
         '-o"%s"' % temp_dir,
         prev_archive_file,
-        'Chrome-bin/*/vivaldi.dll',
+        'Vivaldi-bin/*/vivaldi.dll',
     ]
     RunSystemCommand(cmd, options.verbose)
-    dll_path = glob.glob(os.path.join(temp_dir, 'Chrome-bin', '*',
+    dll_path = glob.glob(os.path.join(temp_dir, 'Vivaldi-bin', '*',
                                       'vivaldi.dll'))
     return os.path.split(os.path.split(dll_path[0])[0])[1]
 
@@ -395,7 +290,7 @@ def Readconfig(input_file, current_version):
     return config
 
 
-def RunSystemCommand(cmd, verbose, retry_fun=None, **kw):
+def RunSystemCommand(cmd, verbose):
     """Runs |cmd|, prints the |cmd| and its output if |verbose|; otherwise
     captures its output and only emits it on failure.
     """
@@ -405,7 +300,7 @@ def RunSystemCommand(cmd, verbose, retry_fun=None, **kw):
     try:
         # Run |cmd|, redirecting stderr to stdout in order for captured errors
         # to be inline with corresponding stdout.
-        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, **kw)
+        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
         if verbose:
             print(output)
     except subprocess.CalledProcessError as e:
@@ -510,19 +405,17 @@ def CreateArchiveFiles(options, staging_dir, current_version, prev_version):
 
     compressed_archive_file_path = os.path.join(options.output_dir,
                                                 compressed_archive_file)
-    try:
-        CompressUsingLZMA(
-            options.build_dir,
-            compressed_archive_file_path,
-            orig_file,
-            options.verbose,
-            options.fast_archive_compression,
-            # If build time is specified, the compressed artifact
-            # should be deterministic. So in the archive, aka
-            # chrome.packed.7z, strip chrome.7z's timestamp.
-            strip_time=True)
-    except LZMA_OOM:
-        return os.path.basename(orig_file)
+    CompressUsingLZMA(
+        options.build_dir,
+        compressed_archive_file_path,
+        orig_file,
+        options.verbose,
+        options.fast_archive_compression,
+        # If build time is specified, the compressed artifact
+        # should be deterministic. So in the archive, aka
+        # chrome.packed.7z, strip chrome.7z's timestamp.
+        strip_time=True)
+
     return compressed_archive_file, os.path.basename(archive_file)
 
 
@@ -530,7 +423,7 @@ def PrepareSetupExec(options, current_version, prev_version):
     """Prepares setup.exe for bundling in mini_installer based on options."""
     if options.setup_exe_format == 'FULL':
         setup_file = SETUP_EXEC
-        SignTarget(options, SETUP_EXEC)
+        vivaldi_signer.SignTarget("INSTALLER", SETUP_EXEC)
     elif options.setup_exe_format == 'DIFF':
         if not options.last_chrome_installer:
             raise Exception(
@@ -544,11 +437,11 @@ def PrepareSetupExec(options, current_version, prev_version):
         setup_file = SETUP_PATCH_FILE_PREFIX + '_' + current_version + \
                     '_from_' + prev_version + COMPRESSED_FILE_EXT
         setup_file_path = os.path.join(options.build_dir, setup_file)
-        SignTarget(options, setup_file_path)
+        vivaldi_signer.SignTarget("INSTALLER", setup_file_path)
         CompressUsingLZMA(options.build_dir, setup_file_path, patch_file,
                           options.verbose, options.fast_archive_compression)
     else:
-        SignTarget(options, os.path.join(options.build_dir, SETUP_EXEC))
+        vivaldi_signer.SignTarget("INSTALLER", os.path.join(options.build_dir, SETUP_EXEC))
         # Use makecab.py instead of makecab.exe so that this works when building
         # on non-Windows hosts too.
         makecab_py = os.path.join(os.path.dirname(__file__), 'makecab.py')
@@ -736,7 +629,7 @@ def main(options):
     """Main method that reads input file, creates archive file and writes
     resource input file.
     """
-    current_version = BuildVersion(vivaldi_version=options.vivaldi_version, vivaldi_build_version= options.vivaldi_build_version)
+    current_version = vivaldi_signer.BuildVersion()
 
     config = Readconfig(options.input_file, current_version)
 
@@ -753,23 +646,7 @@ def main(options):
                              options.component_build,
                              options.component_ffmpeg_build, options.verbose)
 
-    if options.sign_executables:
-        SignTargets(config, options, options.distribution,
-                    staging_dir,
-                    options.enable_hidpi)
-        # Need to compare lowercase basenames since case and paths can be different
-        binaries = set([os.path.basename(x).lower() for x in g_archive_inputs if x.rpartition(".")[-1].lower() in ["dll", "exe"]])
-        signed_binaries = set(os.path.basename(x).lower() for x in g_signed_files)
-        assert binaries == signed_binaries, "Missing signature of files: %s\nBinaries: %s\nSigned: %s\nList %s" % (
-              str(list(binaries-signed_binaries)),
-              str(binaries), str(signed_binaries), str(g_signed_files)
-        )
-    if options.vivaldi_widevine_sign_cmd:
-        assert options.vivaldi_widevine_verify_cmd
-        assert options.vivaldi_widevine_private_key
-        assert options.vivaldi_widevine_cert
-        SignWidevineTargets(config, options, staging_dir, "WIDEWINE_SIGN_BLESSED", blessed=1)
-        SignWidevineTargets(config, options, staging_dir, "WIDEWINE_SIGN_VERSIONED", versioned=current_version)
+    vivaldi_signer.SignWidevine(config, options, staging_dir, current_version, g_archive_inputs)
 
     if options.component_build == '1':
         DoComponentBuildTasks(staging_dir, options.build_dir,
@@ -931,26 +808,13 @@ def _ParseOptions():
                       default=False)
 
     #Vivaldi specific options
-    parser.add_option('--sign-executables', action='store_true',
-          help='Whether to sign the executables being archived first')
-    parser.add_option('--vivaldi-version', action="store_true")
-    parser.add_option('--vivaldi-build-version', default="", type="str")
-    parser.add_option("--vivaldi-sign-key", default="", type="str")
-    parser.add_option("--vivaldi-sign-cmd", default="", type="str")
-
-    parser.add_option("--vivaldi-widevine-sign-cmd", default="", type="str")
-    parser.add_option("--vivaldi-widevine-verify-cmd", default="", type="str")
-    parser.add_option("--vivaldi-widevine-private-key", default="", type="str")
-    parser.add_option("--vivaldi-widevine-cert", default="", type="str")
+    vivaldi_signer.AddOptionFlags(parser)
                       
     options, _ = parser.parse_args()
     if not options.build_dir:
         parser.error('You must provide a build dir.')
 
-    if options.sign_executables and not(options.vivaldi_sign_key and options.vivaldi_sign_cmd):
-        parser.error('When using --sign-executables both --vivaldi-sign-key and '
-                     '--vivaldi-sign-key must be provided.')
-
+    vivaldi_signer.Configure(options, parser)
 
     options.build_dir = os.path.normpath(options.build_dir)
 

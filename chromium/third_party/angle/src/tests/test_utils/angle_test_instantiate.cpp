@@ -372,8 +372,8 @@ bool IsNVIDIA()
 
 bool IsQualcomm()
 {
-    return IsNexus5X() || IsNexus9() || IsPixelXL() || IsPixel2() || IsPixel2XL() || IsPixel4() ||
-           IsPixel4XL();
+    return HasSystemVendorID(kVendorID_Qualcomm) || IsNexus5X() || IsNexus9() || IsPixelXL() ||
+           IsPixel2() || IsPixel2XL() || IsPixel4() || IsPixel4XL();
 }
 
 bool HasMesa()
@@ -472,6 +472,8 @@ bool IsConfigAllowlisted(const SystemInfo &systemInfo, const PlatformParameters 
 
                         // Win ES emulation is currently only supported on NVIDIA.
                         return IsNVIDIA(vendorID);
+                    case EGL_PLATFORM_ANGLE_TYPE_WEBGPU_ANGLE:
+                        return true;
                     default:
                         return false;
                 }

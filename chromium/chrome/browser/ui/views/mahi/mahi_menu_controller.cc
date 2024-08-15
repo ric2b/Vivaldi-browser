@@ -7,8 +7,11 @@
 #include <memory>
 
 #include "base/command_line.h"
+#include "base/metrics/histogram_functions.h"
 #include "chrome/browser/chromeos/mahi/mahi_web_contents_manager.h"
 #include "chrome/browser/ui/chromeos/read_write_cards/read_write_cards_ui_controller.h"
+#include "chrome/browser/ui/views/mahi/mahi_condensed_menu_view.h"
+#include "chrome/browser/ui/views/mahi/mahi_menu_constants.h"
 #include "chrome/browser/ui/views/mahi/mahi_menu_view.h"
 #include "chromeos/components/mahi/public/cpp/mahi_manager.h"
 #include "chromeos/components/mahi/public/cpp/mahi_switches.h"
@@ -27,15 +30,23 @@ void MahiMenuController::OnContextMenuShown(Profile* profile) {}
 void MahiMenuController::OnTextAvailable(const gfx::Rect& anchor_bounds,
                                          const std::string& selected_text,
                                          const std::string& surrounding_text) {
-  if (!chromeos::MahiManager::IsEnabledWithCorrectFeatureKey()) {
+  if (!chromeos::MahiManager::Get()->IsSupportedWithCorrectFeatureKey() ||
+      !::mahi::MahiWebContentsManager::Get()->GetPrefValue()) {
     return;
   }
 
+  bool page_distillable =
+      ::mahi::MahiWebContentsManager::Get()->IsFocusedPageDistillable();
+
+  // Records metric of whether the page is distillable when Mahi menu is
+  // requested to show.
+  base::UmaHistogramBoolean(kMahiContextMenuDistillableHistogram,
+                            page_distillable);
+
   // Only shows mahi menu for distillable pages or when the switch
   // `kUseFakeMahiManager` is enabled.
-  if (!::mahi::MahiWebContentsManager::Get()->IsFocusedPageDistillable() &&
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
-          chromeos::switches::kUseFakeMahiManager)) {
+  if (!page_distillable && !base::CommandLine::ForCurrentProcess()->HasSwitch(
+                               chromeos::switches::kUseFakeMahiManager)) {
     return;
   }
 
@@ -47,8 +58,8 @@ void MahiMenuController::OnTextAvailable(const gfx::Rect& anchor_bounds,
 
   // If there is selected text, we will show the condensed Mahi view alongside
   // quick answers.
-  // TODO(b/324647147): Use condensed view here instead of `MahiMenuView`.
-  read_write_cards_ui_controller_.SetMahiView(std::make_unique<MahiMenuView>());
+  read_write_cards_ui_controller_->SetMahiUi(
+      std::make_unique<MahiCondensedMenuView>());
 }
 
 void MahiMenuController::OnAnchorBoundsChanged(const gfx::Rect& anchor_bounds) {
@@ -65,7 +76,7 @@ void MahiMenuController::OnDismiss(bool is_other_command_executed) {
     menu_widget_.reset();
   }
 
-  read_write_cards_ui_controller_.RemoveMahiView();
+  read_write_cards_ui_controller_->RemoveMahiUi();
 }
 
 base::WeakPtr<MahiMenuController> MahiMenuController::GetWeakPtr() {

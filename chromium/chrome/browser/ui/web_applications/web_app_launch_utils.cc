@@ -62,7 +62,6 @@
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "chrome/browser/web_applications/web_app_ui_manager.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
-#include "chrome/common/chrome_features.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/site_engagement/content/site_engagement_service.h"
@@ -393,7 +392,7 @@ Browser* ReparentWebContentsIntoAppBrowser(content::WebContents* contents,
           .TargetsExistingClients() ||
       registrar.IsPreventCloseEnabled(web_app->app_id())) {
     if (AppBrowserController::FindForWebApp(*profile, app_id)) {
-      // TODO(crbug.com/1385226): Use apps::AppServiceProxy::LaunchAppWithUrl()
+      // TODO(crbug.com/40246677): Use apps::AppServiceProxy::LaunchAppWithUrl()
       // instead to ensure all the usual wrapping code around web app launches
       // gets executed.
       apps::AppLaunchParams params(
@@ -603,7 +602,7 @@ content::WebContents* NavigateWebAppUsingParams(const std::string& app_id,
   // storage partition.
   if (base::FeatureList::IsEnabled(
           chromeos::features::kExperimentalWebAppStoragePartitionIsolation)) {
-    // TODO(crbug.com/1425284): Cover other app launch paths (e.g. restore
+    // TODO(crbug.com/40260833): Cover other app launch paths (e.g. restore
     // apps).
     auto partition_config = content::StoragePartitionConfig::Create(
         nav_params.browser->profile(),
@@ -789,19 +788,6 @@ void LaunchWebApp(apps::AppLaunchParams params,
         break;
     }
   }
-
-#if BUILDFLAG(IS_CHROMEOS)
-  // With Shortstand enabled all browser shortcuts (backed by shortcut web apps)
-  // open in a browser tab and all non-shortcut web apps open in a standalone
-  // window.
-  if (chromeos::features::IsCrosShortstandEnabled()) {
-    bool is_shortcut_app = lock.registrar().IsShortcutApp(params.app_id);
-    params.container = is_shortcut_app
-                           ? apps::LaunchContainer::kLaunchContainerTab
-                           : apps::LaunchContainer::kLaunchContainerWindow;
-    debug_value.Set("is_shortcut", is_shortcut_app);
-  }
-#endif
 
   DCHECK_NE(params.container, apps::LaunchContainer::kLaunchContainerNone);
 

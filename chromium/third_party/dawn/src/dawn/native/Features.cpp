@@ -132,6 +132,26 @@ static constexpr FeatureEnumAndInfo kFeatureInfo[] = {
       "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
       "multi_planar_formats.md",
       FeatureInfo::FeatureState::Experimental}},
+    {Feature::MultiPlanarFormatNv16,
+     {"Import and use the NV16 multi-planar texture format with per plane views",
+      "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
+      "multi_planar_formats.md",
+      FeatureInfo::FeatureState::Experimental}},
+    {Feature::MultiPlanarFormatNv24,
+     {"Import and use the NV24 multi-planar texture format with per plane views",
+      "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
+      "multi_planar_formats.md",
+      FeatureInfo::FeatureState::Experimental}},
+    {Feature::MultiPlanarFormatP210,
+     {"Import and use the P210 multi-planar texture format with per plane views",
+      "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
+      "multi_planar_formats.md",
+      FeatureInfo::FeatureState::Experimental}},
+    {Feature::MultiPlanarFormatP410,
+     {"Import and use the P410 multi-planar texture format with per plane views",
+      "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
+      "multi_planar_formats.md",
+      FeatureInfo::FeatureState::Experimental}},
     {Feature::MultiPlanarRenderTargets,
      {"Import and use multi-planar texture formats as render attachments",
       "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
@@ -199,8 +219,18 @@ static constexpr FeatureEnumAndInfo kFeatureInfo[] = {
       "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
       "pixel_local_storage.md",
       FeatureInfo::FeatureState::Experimental}},
+    {Feature::Unorm16TextureFormats,
+     {"Supports R/RG/RGBA16 unorm texture formats",
+      "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
+      "norm16_texture_formats.md",
+      FeatureInfo::FeatureState::Stable}},
+    {Feature::Snorm16TextureFormats,
+     {"Supports R/RG/RGBA16 snorm texture formats",
+      "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
+      "norm16_texture_formats.md",
+      FeatureInfo::FeatureState::Stable}},
     {Feature::Norm16TextureFormats,
-     {"Supports R/RG/RGBA16 norm texture formats",
+     {"DEPRECATED Supports R/RG/RGBA16 norm texture formats.",
       "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
       "norm16_texture_formats.md",
       FeatureInfo::FeatureState::Stable}},
@@ -309,6 +339,38 @@ static constexpr FeatureEnumAndInfo kFeatureInfo[] = {
       "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
       "r8unorm_storage.md",
       FeatureInfo::FeatureState::Experimental}},
+    {Feature::FormatCapabilities,
+     {"Supports querying the capabilities of a texture format.",
+      "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
+      "format_capabilities.md",
+      FeatureInfo::FeatureState::Stable}},
+    {Feature::DrmFormatCapabilities,
+     {"Supports querying the DRM-related capabilities of a texture format.",
+      "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
+      "format_capabilities.md",
+      FeatureInfo::FeatureState::Stable}},
+    {Feature::StaticSamplers,
+     {"Support setting samplers statically as part of bind group layout",
+      "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
+      "static_samplers.md",
+      FeatureInfo::FeatureState::Experimental}},
+    {Feature::YCbCrVulkanSamplers,
+     {"Support setting VkSamplerYcbcrConversionCreateInfo as part of static vulkan sampler "
+      "descriptor",
+      "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
+      "y_cb_cr_vulkan_samplers.md",
+      FeatureInfo::FeatureState::Experimental}},
+    {Feature::ShaderModuleCompilationOptions,
+     {"Support overriding default shader module compilation options.",
+      "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
+      "shader_module_compilation_options.md",
+      FeatureInfo::FeatureState::Experimental}},
+    {Feature::DawnLoadResolveTexture,
+     {"Support ExpandResolveTexture as LoadOp for a render pass. This LoadOp will expand the "
+      "resolve texture into the MSAA texture as a load operation",
+      "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
+      "dawn_load_resolve_texture.md",
+      FeatureInfo::FeatureState::Stable}},
 };
 
 }  // anonymous namespace

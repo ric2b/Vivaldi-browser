@@ -59,12 +59,6 @@ AURA_EXPORT extern const WindowProperty<bool>* const kAnimationsDisabledKey;
 // This is not transported to the window service.
 AURA_EXPORT extern const WindowProperty<gfx::ImageSkia*>* const kAppIconKey;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-// A property key to store the type of window that will be used to record
-// pointer metrics. See AppType in ash/public/cpp/app_types.h for more details.
-AURA_EXPORT extern const WindowProperty<int>* const kAppType;
-#endif
-
 // A property key to store the aspect ratio of the window.
 AURA_EXPORT extern const WindowProperty<gfx::SizeF*>* const kAspectRatio;
 
@@ -127,7 +121,7 @@ AURA_EXPORT extern const WindowProperty<struct ui::OwnedWindowAnchor*>* const
 // in server side. Instead, the shadow waits for client content to catch up with
 // the new window bounds first to avoid a gap between shadow and content
 // (crbug.com/1199497).
-// TODO(crbug/1247880): all exo clients that use server side resize shadow
+// TODO(crbug.com/40197040): all exo clients that use server side resize shadow
 // should have this property set to true.
 AURA_EXPORT extern const WindowProperty<bool>* const kUseWindowBoundsForShadow;
 

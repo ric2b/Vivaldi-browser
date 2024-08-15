@@ -119,6 +119,7 @@ net::NetworkTrafficAnnotationTag FetchUtils::GetTrafficAnnotationTag(
     case network::mojom::RequestDestination::kFrame:
     case network::mojom::RequestDestination::kFencedframe:
     case network::mojom::RequestDestination::kWebIdentity:
+    case network::mojom::RequestDestination::kSharedStorageWorklet:
       NOTREACHED();
       [[fallthrough]];
 
@@ -272,7 +273,7 @@ void FetchUtils::LogFetchKeepAliveRequestMetric(
   }
   CHECK(!request_state_name.empty());
 
-  base::UmaHistogramEnumeration(base::StrCat({"FetchKeepAlive.Requests.",
+  base::UmaHistogramEnumeration(base::StrCat({"FetchKeepAlive.Requests2.",
                                               request_state_name, ".Renderer"}),
                                 sample_type);
 }

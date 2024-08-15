@@ -117,21 +117,30 @@ scoped_refptr<media::AudioRendererSink> GetNullAudioSink(
 
 std::unique_ptr<RendererWebAudioDeviceImpl> RendererWebAudioDeviceImpl::Create(
     const WebAudioSinkDescriptor& sink_descriptor,
-    media::ChannelLayout layout,
     int number_of_output_channels,
     const blink::WebAudioLatencyHint& latency_hint,
     media::AudioRendererSink::RenderCallback* callback) {
+  // The `number_of_output_channels` does not manifest the actual channel
+  // layout of the audio output device. We use the best guess to the channel
+  // layout based on the number of channels.
+  media::ChannelLayout layout =
+      media::GuessChannelLayout(number_of_output_channels);
+
+  // Use "discrete" channel layout when the best guess was not successful.
+  if (layout == media::CHANNEL_LAYOUT_UNSUPPORTED) {
+    layout = media::CHANNEL_LAYOUT_DISCRETE;
+  }
+
   return std::unique_ptr<RendererWebAudioDeviceImpl>(
       new RendererWebAudioDeviceImpl(
-          sink_descriptor, layout, number_of_output_channels, latency_hint,
+          sink_descriptor, {layout, number_of_output_channels}, latency_hint,
           callback, base::BindOnce(&GetOutputDeviceParameters),
           base::BindRepeating(&GetNullAudioSink)));
 }
 
 RendererWebAudioDeviceImpl::RendererWebAudioDeviceImpl(
     const WebAudioSinkDescriptor& sink_descriptor,
-    media::ChannelLayout layout,
-    int number_of_output_channels,
+    media::ChannelLayoutConfig layout_config,
     const blink::WebAudioLatencyHint& latency_hint,
     media::AudioRendererSink::RenderCallback* callback,
     OutputDeviceParamsCallback device_params_cb,
@@ -187,9 +196,9 @@ RendererWebAudioDeviceImpl::RendererWebAudioDeviceImpl(
       GetOutputBufferSize(latency_hint_, latency, original_sink_params_);
   DCHECK_NE(0, output_buffer_size);
 
-  current_sink_params_.Reset(
-      original_sink_params_.format(), {layout, number_of_output_channels},
-      original_sink_params_.sample_rate(), output_buffer_size);
+  current_sink_params_.Reset(original_sink_params_.format(), layout_config,
+                             original_sink_params_.sample_rate(),
+                             output_buffer_size);
 
   // Specify the latency info to be passed to the browser side.
   current_sink_params_.set_latency_tag(latency);

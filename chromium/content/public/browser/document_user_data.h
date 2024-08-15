@@ -107,6 +107,11 @@ class DocumentUserData : public base::SupportsUserData::Data {
     return static_cast<T*>(GetDocumentUserData(rfh, UserDataKey()));
   }
 
+  static const T* GetForCurrentDocument(const RenderFrameHost* rfh) {
+    DCHECK(rfh);
+    return static_cast<const T*>(GetDocumentUserData(rfh, UserDataKey()));
+  }
+
   static T* GetOrCreateForCurrentDocument(RenderFrameHost* rfh) {
     DCHECK(rfh);
     if (auto* data = GetForCurrentDocument(rfh)) {
@@ -134,7 +139,7 @@ class DocumentUserData : public base::SupportsUserData::Data {
   RenderFrameHost& render_frame_host() const { return *render_frame_host_; }
 
  protected:
-  // TODO(https://crbug.com/1252044): Take a reference instead of a pointer
+  // TODO(crbug.com/40198594): Take a reference instead of a pointer
   // (here + transitively/as-far-as-reasonably-possible in callers).
   explicit DocumentUserData(RenderFrameHost* rfh) : render_frame_host_(rfh) {
     CHECK(rfh);

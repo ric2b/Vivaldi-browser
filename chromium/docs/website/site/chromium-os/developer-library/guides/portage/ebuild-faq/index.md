@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: ebuild-faq
 title: Ebuild FAQ
 ---
@@ -44,7 +44,7 @@ In our chroot, Portage installs packages into multiple directories:
 To cross-compile, the SDK requires special tools which are installed via the
 `virtual/target-chromium-os-sdk` package. When additional tools are needed,
 this package can be upgraded and re-merged (see
-[Adding a Package to the SDK](https://www.chromium.org/chromium-os/build/add-sdk-package)).
+[Adding a package to the SDK](/chromium-os/developer-library/guides/portage/add-sdk-package)).
 The `cros build-packages` command ensures that re-merging will add required
 tools automatically.  Notice that since we are updating the chroot/host, we use
 the standard `emerge` command that installs packages at the root and uses the
@@ -127,15 +127,92 @@ host and per-target configs                           | `src/third_party/chromiu
 crossdev autoconf configs (in chroot)                 | `/usr/share/crossdev/include/site/`
 board sysroot (in chroot)                             | `/build/${BOARD}`
 
-## What are `USE` flags and why do I care?
+## What are `USE` flags?
 
-One of the interesting aspects of the Portage build system is parameterized
-dependencies and build options. Each package can declare a list of `USE` flags
-that can be turned on and off. Turning them on and off can affect the set of
-packages that they depend on. For example, if a package supports creating
-optional perl bindings, then it can declare a perl `USE` flag. If `-perl` is
-specified then the package can omit creation of the bindings and drop its
-dependency on perl.
+`USE` flags are boolean flags that can be used to provide conditional logic to
+packages.  They can be used to turn on or off certain parts of a package build
+(e.g., `USE=perl` may enable optional perl bindings), or even allow a package
+to be conditionally included in the build via dependencies that express `USE`
+constraints.
+
+`USE` flags may be enabled globally for a certain board, conditionally for
+certain packages via profiles, or even enabled by setting the `USE` environment
+variable.  To see the set of global `USE` flags for a board:
+
+```shellsession
+$ cros query boards -f "name == 'BOARDNAME'" -o "{use_flags}"
+```
+
+### How can I make use of `USE` flags in my ebuild?
+
+The `USE` variable is filtered down to only flags declared in `IUSE` (with the
+exception of `IUSE_IMPLICIT` flags), which allows us to make guarantees about
+which flags will affect your build, and only rebuild your package when required.
+
+First, add the flag you need to depend upon to `IUSE`.  Then, you can use it in
+a number of ways:
+
+1.  To express a conditional dependency in your ebuild:
+
+    ```bash
+    IUSE="ssl"
+    RDEPEND="
+        ssl? ( >=dev-libs/openssl-1.1.1:= )
+    "
+    ```
+2.  To conditionally execute logic in your ebuild:
+
+    ```bash
+    IUSE="ssl"
+
+    src_configure () {
+        if use ssl; then
+            : do something
+        fi
+        : ...
+    }
+    ```
+
+### How can I create new `USE` flags?
+
+There's no central location to define `USE` flags.  If a flag is listed in
+`IUSE`, it may be set in a profile or in the environment, and the flag will be
+set for the ebuild.
+
+To set the flag for a board, you're likely going to want to add it to the
+appropriate `make.defaults` file in the profile for that board.  For example:
+
+``` shell
+# src/overlays/overlay-amd64-generic/profiles/base/make.defaults
+# ...
+
+# Enable SSL support.
+USE="${USE} ssl"
+```
+
+Your next question is probably: how do I find the right `make.defaults` to add
+my flags to?  Profiles are structured hierarchically, and you may wish to add
+the flag to a general profile, or to a profile for a very specific board.
+
+To list all profiles visible to a board:
+
+```shellsession
+$ cros query boards -t -f "name == 'BOARDNAME'"
+```
+
+A common pattern is to enable a flag for all ChromeOS boards, and only disable
+the flag on certain boards which should not have the feature.  The file
+`src/third_party/chromiumos-overlay/profiles/targets/chromeos/make.defaults`
+will apply to all ChromeOS boards, and you can then disable the flag for certain
+boards:
+
+``` shell
+# src/overlays/overlay-amd64-generic/profiles/base/make.defaults
+# ...
+
+# Disable SSL support.
+USE="${USE} -ssl"
+```
 
 ## What are DEPEND, BDEPEND, and RDEPEND?
 
@@ -476,11 +553,11 @@ want to upload the files for the package to the localmirror. See the
 ### How do I write unit tests for my ebuild?
 
 See the
-[Best practices for writing ChromeOS unit tests](../testing/unit_tests.md) page.
+[Best practices for writing ChromeOS unit tests](/chromium-os/developer-library/guides/testing/unit-tests/) page.
 
 ### How do I run unit tests?
 
-See the [ChromiumOS Unit Testing](../testing/running_unit_tests.md) page.
+See the [ChromiumOS Unit Testing](/chromium-os/developer-library/guides/testing/running-unit-tests/) page.
 
 ## How do I store transient artifacts in an ebuild?
 
@@ -641,7 +718,7 @@ See
 
 ## How do I install a single package?
 
-Use [cros deploy](/cros_deploy.md).
+Use [cros deploy](/chromium-os/developer-library/reference/tools/cros-deploy/).
 
 ## How do I install a single package into a local disk image?
 
@@ -1292,18 +1369,18 @@ Instructions for building ChromiumOS can be found
 [here][chromium-os-dev-guide].
 
 [Portage]: https://wiki.gentoo.org/wiki/Portage
-[Overlay FAQ]: overlay_faq.md
+[Overlay FAQ]: /chromium-os/developer-library/guides/portage/overlay-faq/
 [Working with Gentoo]: https://www.gentoo.org/doc/en/handbook/handbook-x86.xml?part=2
 [Gentoo Development Guide]: https://devmanual.gentoo.org/
 [Portage]: https://wiki.gentoo.org/wiki/Portage
 [Gentoo]: https://www.gentoo.org/
-[localmirror]: ../archive_mirrors.md
+[localmirror]: /chromium-os/developer-library/reference/third-party/archive-mirrors/
 [devserver]: https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/docs/devserver.md
 [gentoo-blockers]: https://devmanual.gentoo.org/general-concepts/dependencies/#blockers
 [virtual/editor]: https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/virtual/editor/editor-1.ebuild
 [ChromiumOS's virtual/linux-sources ebuild]: https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/virtual/linux-sources/
 [package management specification]: https://projects.gentoo.org/pms/8/pms.html
-[chromium-os-dev-guide]: ../developer_guide.md
+[chromium-os-dev-guide]: /chromium-os/developer-library/guides/development/developer-guide/
 [cups-ebuild-use-debug]: https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/932089ace19442cbd1d72a9304226ab604984ac4/net-print/cups/cups-9999.ebuild#28
 [Slotting]: https://devmanual.gentoo.org/general-concepts/slotting/
 [Version Dependencies]: https://devmanual.gentoo.org/general-concepts/dependencies/index.html#version-dependencies

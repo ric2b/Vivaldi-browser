@@ -196,7 +196,7 @@ void NoteModelTypeProcessor::OnUpdateReceived(
   // `last_initial_merge_remote_updates_exceeded_limit_` is set.
   DCHECK(!last_initial_merge_remote_updates_exceeded_limit_);
 
-  // TODO(crbug.com/1356900): validate incoming updates, e.g. `gc_directive`
+  // TODO(crbug.com/40860698): validate incoming updates, e.g. `gc_directive`
   // must be empty for Notes.
 
   // Clients before M94 did not populate the parent UUID in specifics.
@@ -309,9 +309,6 @@ void NoteModelTypeProcessor::ModelReadyToSync(
 
   sync_pb::NotesModelMetadata model_metadata;
   model_metadata.ParseFromString(metadata_str);
-
-  syncer::MigrateLegacyInitialSyncDone(
-      *model_metadata.mutable_model_type_state(), syncer::NOTES);
 
   if (pending_clear_metadata_) {
     pending_clear_metadata_ = false;
@@ -434,7 +431,7 @@ void NoteModelTypeProcessor::ConnectIfReady() {
   }
 
   // Issue error and stop sync if notes exceed limit.
-  // TODO(crbug.com/1347466): Think about adding two different limits: one for
+  // TODO(crbug.com/40854724): Think about adding two different limits: one for
   // when sync just starts, the other (larger one) as hard limit, incl.
   // incremental changes.
   const size_t count = note_tracker_

@@ -30,6 +30,8 @@ component("service") {
     "gpu_channel_manager.cc",
     "gpu_channel_manager.h",
     "gpu_channel_manager_delegate.h",
+    "gpu_channel_shared_image_interface.cc",
+    "gpu_channel_shared_image_interface.h",
     "gpu_config.h",
     "gpu_init.cc",
     "gpu_init.h",
@@ -72,7 +74,6 @@ component("service") {
     "//url",
   ]
   deps = [
-    "//base/third_party/dynamic_annotations",
     "//build:chromeos_buildflags",
 
     # crbug.com/799267: crash_key needs to be added explicitly for Windows and
@@ -174,7 +175,7 @@ component("service") {
     ]
   }
   if (skia_use_dawn) {
-    deps += [ "//third_party/dawn/src/dawn:cpp" ]
+    deps += [ "//third_party/dawn/include/dawn:cpp_headers" ]
   }
 }
 

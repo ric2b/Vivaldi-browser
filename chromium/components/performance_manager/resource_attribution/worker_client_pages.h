@@ -7,17 +7,16 @@
 
 #include <set>
 
-#include "components/performance_manager/resource_attribution/graph_change.h"
 #include "components/performance_manager/resource_attribution/performance_manager_aliases.h"
+#include "content/public/browser/browsing_instance_id.h"
 
 namespace resource_attribution {
 
-// Returns the complete set of pages that are clients of `worker_node`.
-// `graph_change` is a change to the graph topology in progress that may affect
-// the client page set, or NoGraphChange.
-std::set<const PageNode*> GetWorkerClientPages(
-    const WorkerNode* worker_node,
-    GraphChange graph_change = NoGraphChange{});
+// Returns the set of pages and browsing instances that are clients of
+// `worker_node`. `graph_change` is a change to the graph topology in progress
+// that may affect the result, or NoGraphChange.
+std::pair<std::set<const PageNode*>, std::set<content::BrowsingInstanceId>>
+GetWorkerClientPagesAndBrowsingInstances(const WorkerNode* worker_node);
 
 }  // namespace resource_attribution
 

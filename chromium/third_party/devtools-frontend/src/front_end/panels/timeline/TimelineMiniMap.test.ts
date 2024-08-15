@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as AnnotationsManager from '../../services/annotations_manager/annotations_manager.js';
 import * as TraceBounds from '../../services/trace_bounds/trace_bounds.js';
 import {raf, renderElementIntoDOM} from '../../testing/DOMHelpers.js';
 import {describeWithEnvironment} from '../../testing/EnvironmentHelpers.js';
@@ -30,9 +31,9 @@ describeWithEnvironment('TimelineMiniMap', function() {
     });
 
     await raf();
-    assert.isDefined(container.querySelector('#timeline-overview-responsiveness'));
-    assert.isDefined(container.querySelector('#timeline-overview-cpu-activity'));
-    assert.isDefined(container.querySelector('#timeline-overview-network'));
+    assert.exists(container.querySelector('#timeline-overview-responsiveness'));
+    assert.exists(container.querySelector('#timeline-overview-cpu-activity'));
+    assert.exists(container.querySelector('#timeline-overview-network'));
     assert.isNull(container.querySelector('#timeline-overview-filmstrip'));
     assert.isNull(container.querySelector('#timeline-overview-memory'));
     minimap.detach();
@@ -57,18 +58,21 @@ describeWithEnvironment('TimelineMiniMap', function() {
     });
 
     await raf();
-    assert.isDefined(container.querySelector('#timeline-overview-responsiveness'));
-    assert.isDefined(container.querySelector('#timeline-overview-cpu-activity'));
-    assert.isDefined(container.querySelector('#timeline-overview-network'));
-    assert.isDefined(container.querySelector('#timeline-overview-filmstrip'));
-    assert.isDefined(container.querySelector('#timeline-overview-memory'));
+    assert.exists(container.querySelector('#timeline-overview-responsiveness'));
+    assert.exists(container.querySelector('#timeline-overview-cpu-activity'));
+    assert.exists(container.querySelector('#timeline-overview-network'));
+    assert.exists(container.querySelector('#timeline-overview-filmstrip'));
+    assert.exists(container.querySelector('#timeline-overview-memory'));
     minimap.detach();
   });
 
   it('creates the first breadcrumb', async function() {
     const traceParsedData = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
 
-    TraceBounds.TraceBounds.BoundsManager.instance().resetWithNewBounds(traceParsedData.Meta.traceBounds);
+    const boundsManager =
+        TraceBounds.TraceBounds.BoundsManager.instance().resetWithNewBounds(traceParsedData.Meta.traceBounds);
+    AnnotationsManager.AnnotationsManager.AnnotationsManager.maybeInstance(
+        {entryToNodeMap: new Map(), wholeTraceBounds: boundsManager.state()?.micro.entireTraceBounds});
 
     const container = document.createElement('div');
     renderElementIntoDOM(container);

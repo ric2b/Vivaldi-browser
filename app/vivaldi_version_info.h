@@ -27,6 +27,13 @@
 
 #define VIVALDI_BUILD_PUBLIC_RELEASE 1
 
+#define RELEASE_TYPE_ID_vivaldi_sopranos 0
+#define RELEASE_TYPE_ID_vivaldi_snapshot 1
+#define RELEASE_TYPE_ID_vivaldi_final 2
+
+#define S2(s) RELEASE_TYPE_ID_##s
+#define TO_RELEASE_TYPE_ID(s) S2(s)
+
 namespace base {
 class Version;
 }

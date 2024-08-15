@@ -16,11 +16,18 @@
 #include "importer/imported_speeddial_entry.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#include "importer/chromium_extension_importer.h"
+
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
 using vivaldi::NoteNode;
 using vivaldi::NotesModel;
 using vivaldi::NotesModelFactory;
+
+void ChromiumExtensionsImporterDeleter::operator()(
+    extension_importer::ChromiumExtensionsImporter* ptr) {
+  delete ptr;
+}
 
 namespace {
 
@@ -133,4 +140,14 @@ void ProfileWriter::AddNotes(const std::vector<ImportedNotesEntry>& notes,
     model->ImportNote(parent, parent->children().size(), *note);
   }
   model->EndExtensiveChanges();
+}
+
+void ProfileWriter::AddExtensions(
+    const std::vector<std::string>& extensions,
+    base::WeakPtr<ExternalProcessImporterHost> host) {
+  vivaldi_extensions_importer_ =
+      std::unique_ptr<extension_importer::ChromiumExtensionsImporter,
+                      ChromiumExtensionsImporterDeleter>(
+          new extension_importer::ChromiumExtensionsImporter(profile_, host));
+  vivaldi_extensions_importer_->AddExtensions(extensions);
 }

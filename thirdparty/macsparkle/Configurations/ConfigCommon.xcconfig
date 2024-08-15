@@ -76,7 +76,14 @@ XPC_SERVICE_BUNDLE_ID_PREFIX = org.sparkle-project
 INSTALLER_CONNECTION_BUNDLE_ID = ${XPC_SERVICE_BUNDLE_ID_PREFIX}.InstallerConnection
 INSTALLER_STATUS_BUNDLE_ID = ${XPC_SERVICE_BUNDLE_ID_PREFIX}.InstallerStatus
 INSTALLER_LAUNCHER_BUNDLE_ID = ${XPC_SERVICE_BUNDLE_ID_PREFIX}.InstallerLauncher
-DOWNLOADER_BUNDLE_ID = ${XPC_SERVICE_BUNDLE_ID_PREFIX}.Downloader
+DOWNLOADER_BUNDLE_ID = ${XPC_SERVICE_BUNDLE_ID_PREFIX}.DownloaderService
+
+// The Downloader XPC Service is not sandboxed by default.
+// Uncomment line to enable Sandboxing for this service.
+// If this is done, you *must* set a custom XPC_SERVICE_BUNDLE_ID_PREFIX for your app above.
+// Otherwise sandboxed apps that use the same sandboxed Downloader Service may conflict with each other.
+//DOWNLOADER_SANDBOXED_ENTITLEMENTS = Downloader/Downloader.entitlements
+
 
 // If your app file on disk is named "MyApp 1.1b4", Sparkle usually updates it
 // in place, giving you an app named 1.1b4 that is actually 1.2. Turn the
@@ -91,13 +98,13 @@ SPARKLE_ICON_NAME = AppIcon
 // If you change any of these version details, you must increase CURRENT_PROJECT_VERSION
 // These variables must have a space after the '=' too
 SPARKLE_VERSION_MAJOR = 2
-SPARKLE_VERSION_MINOR = 5
-SPARKLE_VERSION_PATCH = 0
+SPARKLE_VERSION_MINOR = 6
+SPARKLE_VERSION_PATCH = 3
 
 // This should be in SemVer format or empty, ie. "-beta.1"
 // These variables must have a space after the '=' too
 SPARKLE_VERSION_SUFFIX =
-CURRENT_PROJECT_VERSION = 2031
+CURRENT_PROJECT_VERSION = 2039
 
 MARKETING_VERSION = $(SPARKLE_VERSION_MAJOR).$(SPARKLE_VERSION_MINOR).$(SPARKLE_VERSION_PATCH)$(SPARKLE_VERSION_SUFFIX)
 ALWAYS_SEARCH_USER_PATHS = NO
@@ -162,4 +169,4 @@ GCC_WARN_UNUSED_PARAMETER = YES
 GCC_WARN_UNUSED_VARIABLE = YES
 
 // Turn on all warnings, then disable a few which are almost impossible to avoid
-WARNING_CFLAGS = -Wall -Weverything -Wno-unused-macros -Wno-gnu-statement-expression -Wno-auto-import -Wno-gnu-zero-variadic-macro-arguments -Wno-format-non-iso -Wno-direct-ivar-access -Wno-declaration-after-statement -Werror=undef
+WARNING_CFLAGS = -Wall -Weverything -Wno-unused-macros -Wno-gnu-statement-expression -Wno-auto-import -Wno-gnu-zero-variadic-macro-arguments -Wno-format-non-iso -Wno-direct-ivar-access -Wno-declaration-after-statement -Wno-gnu-conditional-omitted-operand -Werror=undef

@@ -49,6 +49,12 @@ BASE_FEATURE(kSearchEngineChoiceTrigger,
 
 );
 
+#if BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kPersistentSearchEngineChoiceImport,
+             "PersistentSearchEngineChoiceImport",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif
+
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 const base::FeatureParam<bool> kSearchEngineChoiceTriggerForTaggedProfilesOnly{
     &kSearchEngineChoiceTrigger, /*name=*/"for_tagged_profiles_only", true};
@@ -68,5 +74,23 @@ const base::FeatureParam<bool> kSearchEngineChoiceTriggerSkipFor3p{
     &kSearchEngineChoiceTrigger,
     /*name=*/"skip_for_3p",
     /*default_value=*/true};
+
+#if BUILDFLAG(IS_IOS)
+COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
+extern const base::FeatureParam<int> kSearchEngineChoiceMaximumSkipCount{
+    &kSearchEngineChoiceTrigger,
+    /*name=*/"maximum_skip_count",
+    /*default_value=*/10};
+#endif
+
+#if BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kSearchEngineChoice,
+             "SearchEngineChoice",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kSearchEnginePromoDialogRewrite,
+             "SearchEnginePromoDialogRewrite",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 }  // namespace switches

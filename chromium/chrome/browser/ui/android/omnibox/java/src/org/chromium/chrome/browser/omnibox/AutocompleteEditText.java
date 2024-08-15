@@ -12,7 +12,6 @@ import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
-import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.widget.EditText;
@@ -22,7 +21,6 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Log;
-import org.chromium.base.StrictModeContext;
 import org.chromium.components.browser_ui.widget.text.VerticallyFixedEditText;
 import org.chromium.ui.text.EmptyTextWatcher;
 
@@ -236,10 +234,7 @@ public class AutocompleteEditText extends VerticallyFixedEditText
         if (DEBUG) Log.i(TAG, "setText -- text: %s", text);
         mDisableTextScrollingFromAutocomplete = false;
 
-        // Certain OEM implementations of setText trigger disk reads. https://crbug.com/633298
-        try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
-            super.setText(text, type);
-        }
+        super.setText(text, type);
         if (mModel != null) mModel.onSetText(text);
     }
 
@@ -249,7 +244,10 @@ public class AutocompleteEditText extends VerticallyFixedEditText
             if (DEBUG) Log.i(TAG, "Ignoring accessibility event from autocomplete.");
             return;
         }
+        try { // Vivaldi: Catch potential exceptions here to avoid a crash. Ref. VAB-9232.
         super.sendAccessibilityEventUnchecked(event);
+        } catch (Exception ignored) {
+        }
     }
 
     @Override
@@ -263,15 +261,6 @@ public class AutocompleteEditText extends VerticallyFixedEditText
                         || (mModel != null && mModel.shouldIgnoreAccessibilityEvent()))
                 && (event.getEventType() == AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED
                         || event.getEventType() == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED);
-    }
-
-    @Override
-    public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
-        // Certain OEM implementations of onInitializeAccessibilityNodeInfo trigger disk reads
-        // to access the clipboard.  crbug.com/640993
-        try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
-            super.onInitializeAccessibilityNodeInfo(info);
-        }
     }
 
     @VisibleForTesting

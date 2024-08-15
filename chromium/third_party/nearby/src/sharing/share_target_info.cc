@@ -14,24 +14,55 @@
 
 #include "sharing/share_target_info.h"
 
+#include <functional>
 #include <string>
+#include <utility>
 
-#include "absl/time/time.h"
-#include "sharing/certificates/nearby_share_decrypted_public_certificate.h"
-#include "sharing/incoming_frames_reader.h"
-#include "sharing/paired_key_verification_runner.h"
-#include "sharing/transfer_update_callback.h"
+#include "sharing/internal/public/logging.h"
+#include "sharing/share_target.h"
+#include "sharing/transfer_metadata.h"
 
 namespace nearby {
 namespace sharing {
 
-ShareTargetInfo::ShareTargetInfo() = default;
+ShareTargetInfo::ShareTargetInfo(
+    std::string endpoint_id, const ShareTarget& share_target,
+    std::function<void(const ShareTarget&, const TransferMetadata&)>
+        transfer_update_callback)
+    : endpoint_id_(std::move(endpoint_id)),
+      self_share_(share_target.for_self_share),
+      share_target_(share_target),
+      transfer_update_callback_(std::move(transfer_update_callback)){}
 
 ShareTargetInfo::ShareTargetInfo(ShareTargetInfo&&) = default;
 
 ShareTargetInfo& ShareTargetInfo::operator=(ShareTargetInfo&&) = default;
 
 ShareTargetInfo::~ShareTargetInfo() = default;
+
+void ShareTargetInfo::set_share_target(const ShareTarget& share_target) {
+  NL_DCHECK(share_target.id == share_target_.id);
+  NL_DCHECK(share_target.for_self_share == share_target_.for_self_share);
+  share_target_ = share_target;
+}
+
+void ShareTargetInfo::UpdateTransferMetadata(
+    const TransferMetadata& transfer_metadata) {
+  if (transfer_update_callback_) {
+    if (got_final_status_) {
+      // If we already got a final status, we can ignore any subsequent final
+      // statuses caused by race conditions.
+      NL_VLOG(1)
+          << __func__ << ": Transfer update decorator swallowed "
+          << "status update because a final status was already received: "
+          << share_target_.id << ": "
+          << TransferMetadata::StatusToString(transfer_metadata.status());
+      return;
+    }
+    got_final_status_ = transfer_metadata.is_final_status();
+    transfer_update_callback_(share_target_, transfer_metadata);
+  }
+}
 
 }  // namespace sharing
 }  // namespace nearby

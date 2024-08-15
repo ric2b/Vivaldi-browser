@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: qemu-unit-tests-design
 title: Running unittests via QEMU
 ---
@@ -196,7 +196,7 @@ take care of the sysroots and stuff for us.
 $ ./helper-script.sh /tmp/portage/.../unittest
 ```
 
-[ChromiumOS Unit Testing]: ./running_unit_tests.md
+[ChromiumOS Unit Testing]: /chromium-os/developer-library/guides/testing/running-unit-tests/
 [QEMU]: https://qemu.org/
 [qemu python module]: https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/lib/qemu.py
 [`binfmt_misc`]: https://www.kernel.org/doc/html/latest/admin-guide/binfmt-misc.html

@@ -22,13 +22,11 @@
 #include <string.h>
 
 #include "checkasm.h"
-#include "libavcodec/avcodec.h"
-#include "libavcodec/vvc/vvc_ctu.h"
-#include "libavcodec/vvc/vvc_data.h"
+#include "libavcodec/vvc/ctu.h"
+#include "libavcodec/vvc/data.h"
+#include "libavcodec/vvc/dsp.h"
 
 #include "libavutil/common.h"
-#include "libavutil/internal.h"
-#include "libavutil/internal.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem_internal.h"
 
@@ -74,7 +72,7 @@ static void check_put_vvc_luma(void)
     LOCAL_ALIGNED_32(uint8_t, src1, [SRC_BUF_SIZE]);
     VVCDSPContext c;
 
-    declare_func_emms(AV_CPU_FLAG_MMX | AV_CPU_FLAG_MMXEXT, void, int16_t *dst, const uint8_t *src, const ptrdiff_t src_stride,
+    declare_func(void, int16_t *dst, const uint8_t *src, const ptrdiff_t src_stride,
         const int height, const int8_t *hf, const int8_t *vf, const int width);
 
     for (int bit_depth = 8; bit_depth <= 12; bit_depth += 2) {
@@ -122,7 +120,7 @@ static void check_put_vvc_luma_uni(void)
     LOCAL_ALIGNED_32(uint8_t, src1, [SRC_BUF_SIZE]);
 
     VVCDSPContext c;
-    declare_func_emms(AV_CPU_FLAG_MMX | AV_CPU_FLAG_MMXEXT, void, uint8_t *dst, ptrdiff_t dststride,
+    declare_func(void, uint8_t *dst, ptrdiff_t dststride,
         uint8_t *src, ptrdiff_t srcstride,  int height, const int8_t *hf, const int8_t *vf, int width);
 
     for (int bit_depth = 8; bit_depth <= 12; bit_depth += 2) {
@@ -172,7 +170,7 @@ static void check_put_vvc_chroma(void)
     LOCAL_ALIGNED_32(uint8_t, src1, [SRC_BUF_SIZE]);
     VVCDSPContext c;
 
-    declare_func_emms(AV_CPU_FLAG_MMX | AV_CPU_FLAG_MMXEXT, void, int16_t *dst, const uint8_t *src, const ptrdiff_t src_stride,
+    declare_func(void, int16_t *dst, const uint8_t *src, const ptrdiff_t src_stride,
         const int height, const int8_t *hf, const int8_t *vf, const int width);
 
     for (int bit_depth = 8; bit_depth <= 12; bit_depth += 2) {
@@ -220,7 +218,7 @@ static void check_put_vvc_chroma_uni(void)
     LOCAL_ALIGNED_32(uint8_t, src1, [SRC_BUF_SIZE]);
 
     VVCDSPContext c;
-    declare_func_emms(AV_CPU_FLAG_MMX | AV_CPU_FLAG_MMXEXT, void, uint8_t *dst, ptrdiff_t dststride,
+    declare_func(void, uint8_t *dst, ptrdiff_t dststride,
         uint8_t *src, ptrdiff_t srcstride,  int height, const int8_t *hf, const int8_t *vf, int width);
 
     for (int bit_depth = 8; bit_depth <= 12; bit_depth += 2) {
@@ -282,7 +280,7 @@ static void check_avg(void)
         for (int h = 2; h <= MAX_CTU_SIZE; h *= 2) {
             for (int w = 2; w <= MAX_CTU_SIZE; w *= 2) {
                 {
-                   declare_func_emms(AV_CPU_FLAG_MMX | AV_CPU_FLAG_MMXEXT, void, uint8_t *dst, ptrdiff_t dst_stride,
+                   declare_func(void, uint8_t *dst, ptrdiff_t dst_stride,
                         const int16_t *src0, const int16_t *src1, int width, int height);
                     if (check_func(c.inter.avg, "avg_%d_%dx%d", bit_depth, w, h)) {
                         memset(dst0, 0, AVG_DST_BUF_SIZE);
@@ -296,7 +294,7 @@ static void check_avg(void)
                     }
                 }
                 {
-                    declare_func_emms(AV_CPU_FLAG_MMX | AV_CPU_FLAG_MMXEXT, void, uint8_t *dst, ptrdiff_t dst_stride,
+                    declare_func(void, uint8_t *dst, ptrdiff_t dst_stride,
                         const int16_t *src0, const int16_t *src1, int width, int height,
                         int denom, int w0, int w1, int o0, int o1);
                     {

@@ -25,7 +25,6 @@
 
 #include "config.h"
 #include "config_components.h"
-#include <inttypes.h>
 #include <math.h>
 #include <limits.h>
 #include <signal.h>
@@ -33,13 +32,11 @@
 
 #include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
-#include "libavutil/eval.h"
 #include "libavutil/mathematics.h"
+#include "libavutil/mem.h"
 #include "libavutil/pixdesc.h"
-#include "libavutil/imgutils.h"
 #include "libavutil/dict.h"
 #include "libavutil/fifo.h"
-#include "libavutil/parseutils.h"
 #include "libavutil/samplefmt.h"
 #include "libavutil/time.h"
 #include "libavutil/bprint.h"
@@ -1731,16 +1728,14 @@ display:
 
             av_bprint_init(&buf, 0, AV_BPRINT_SIZE_AUTOMATIC);
             av_bprintf(&buf,
-                      "%7.2f %s:%7.3f fd=%4d aq=%5dKB vq=%5dKB sq=%5dB f=%"PRId64"/%"PRId64"   \r",
+                      "%7.2f %s:%7.3f fd=%4d aq=%5dKB vq=%5dKB sq=%5dB \r",
                       get_master_clock(is),
                       (is->audio_st && is->video_st) ? "A-V" : (is->video_st ? "M-V" : (is->audio_st ? "M-A" : "   ")),
                       av_diff,
                       is->frame_drops_early + is->frame_drops_late,
                       aqsize / 1024,
                       vqsize / 1024,
-                      sqsize,
-                      is->video_st ? is->viddec.avctx->pts_correction_num_faulty_dts : 0,
-                      is->video_st ? is->viddec.avctx->pts_correction_num_faulty_pts : 0);
+                      sqsize);
 
             if (show_status == 1 && AV_LOG_INFO > av_log_get_level())
                 fprintf(stderr, "%s", buf.str);
@@ -1928,7 +1923,8 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
 
     if ((ret = av_opt_set_int_list(filt_out, "pix_fmts", pix_fmts,  AV_PIX_FMT_NONE, AV_OPT_SEARCH_CHILDREN)) < 0)
         goto fail;
-    if ((ret = av_opt_set_int_list(filt_out, "color_spaces", sdl_supported_color_spaces,  AVCOL_SPC_UNSPECIFIED, AV_OPT_SEARCH_CHILDREN)) < 0)
+    if (!vk_renderer &&
+        (ret = av_opt_set_int_list(filt_out, "color_spaces", sdl_supported_color_spaces,  AVCOL_SPC_UNSPECIFIED, AV_OPT_SEARCH_CHILDREN)) < 0)
         goto fail;
 
     last_filter = filt_out;
@@ -2041,6 +2037,8 @@ static int configure_audio_filters(VideoState *is, const char *afilters, int for
         goto end;
 
     if (force_output_format) {
+        av_bprint_clear(&bp);
+        av_channel_layout_describe_bprint(&is->audio_tgt.ch_layout, &bp);
         sample_rates   [0] = is->audio_tgt.freq;
         if ((ret = av_opt_set_int(filt_asink, "all_channel_counts", 0, AV_OPT_SEARCH_CHILDREN)) < 0)
             goto end;

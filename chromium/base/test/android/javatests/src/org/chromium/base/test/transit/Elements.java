@@ -4,6 +4,13 @@
 
 package org.chromium.base.test.transit;
 
+import android.app.Activity;
+import android.view.View;
+
+import org.hamcrest.Matcher;
+
+import org.chromium.base.test.transit.ViewConditions.NotDisplayedAnymoreCondition;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,10 +25,6 @@ import java.util.List;
  * </pre>
  */
 public class Elements {
-
-    /** If passed as |id|, the description is considered the id. */
-    public static final String DESCRIPTION_AS_ID = "__DESCRIPTION_AS_ID";
-
     static final Elements EMPTY = new Elements();
 
     private ArrayList<ElementInState> mElementsInState = new ArrayList<>();
@@ -62,6 +65,13 @@ public class Elements {
             mElements = elements;
         }
 
+        /** Declare as an element an Android Activity of type |activityClass|. */
+        public <T extends Activity> ActivityElement<T> declareActivity(Class<T> activityClass) {
+            ActivityElement<T> element = new ActivityElement<>(activityClass);
+            mElements.mElementsInState.add(element);
+            return element;
+        }
+
         /** Declare as an element a View that matches |viewMatcher|. */
         public ViewElementInState declareView(ViewElement viewElement) {
             ViewElementInState inState = new ViewElementInState(viewElement, /* gate= */ null);
@@ -78,6 +88,11 @@ public class Elements {
             ViewElementInState inState = new ViewElementInState(viewElement, gate);
             mElements.mElementsInState.add(inState);
             return inState;
+        }
+
+        /** Declare as a Condition that a View is not displayed. */
+        public void declareNoView(Matcher<View> viewMatcher) {
+            mElements.mOtherEnterConditions.add(new NotDisplayedAnymoreCondition(viewMatcher));
         }
 
         /**
@@ -103,7 +118,7 @@ public class Elements {
          * <p>Further, no promises are made that the Condition is false after exiting the State. Use
          * a scoped {@link LogicalElement} in this case.
          */
-        public Condition declareEnterCondition(Condition condition) {
+        public <T extends Condition> T declareEnterCondition(T condition) {
             mElements.mOtherEnterConditions.add(condition);
             return condition;
         }
@@ -115,7 +130,7 @@ public class Elements {
          * <p>No promises are made that the Condition is false as long as the ConditionalState is
          * ACTIVE. For these cases, use a scoped {@link LogicalElement}.
          */
-        public Condition declareExitCondition(Condition condition) {
+        public <T extends Condition> T declareExitCondition(T condition) {
             mElements.mOtherExitConditions.add(condition);
             return condition;
         }

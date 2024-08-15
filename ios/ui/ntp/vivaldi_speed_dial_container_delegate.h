@@ -52,6 +52,30 @@
 /// dialog visible when there's no SD item, or user is beyond the last page
 /// of SD.
 - (void)didSelectAddNewGroupForParent:(VivaldiSpeedDialItem*)parent;
+
+/// Triggers when an item is instructed to open in new tab,
+/// provides the item itself and the parent if any.
+- (void)didSelectItemToOpenInNewTab:(VivaldiSpeedDialItem*)item
+                             parent:(VivaldiSpeedDialItem*)parent;
+
+/// Triggers when an item is instructed to open in new background tab,
+/// provides the item itself and the parent if any.
+- (void)didSelectItemToOpenInBackgroundTab:(VivaldiSpeedDialItem*)item
+                                    parent:(VivaldiSpeedDialItem*)parent;
+
+/// Triggers when an item is instructed to open in private tab,
+/// provides the item itself and the parent if any.
+- (void)didSelectItemToOpenInPrivateTab:(VivaldiSpeedDialItem*)item
+                                 parent:(VivaldiSpeedDialItem*)parent;
+
+/// Triggers when an item is instructed to open share sheet with
+/// the item to be shareable,
+/// provides the item itself and the parent if any. View is the source
+/// view from where share sheet should be originated.
+- (void)didSelectItemToShare:(VivaldiSpeedDialItem*)item
+                      parent:(VivaldiSpeedDialItem*)parent
+                    fromView:(UIView*)view;
+
 @end
 
 #endif  // IOS_UI_NTP_VIVALDI_SPEED_DIAL_CONTAINER_DELEGATE_H_

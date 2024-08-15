@@ -80,23 +80,21 @@ namespace dawn::wire::server {
     WireResult Server::DoDestroyObject(ObjectType objectType, ObjectId objectId) {
         switch(objectType) {
             {% for type in by_category["object"] %}
+                {% set cType = as_cType(type.name) %}
                 case ObjectType::{{type.name.CamelCase()}}: {
-                    Known<WGPU{{type.name.CamelCase()}}> obj;
-                    WIRE_TRY({{type.name.CamelCase()}}Objects().Get(objectId, &obj));
+                    Reserved<{{cType}}> obj;
+                    WIRE_TRY(Objects<{{cType}}>().Get(objectId, &obj));
 
                     if (obj->state == AllocationState::Allocated) {
                         DAWN_ASSERT(obj->handle != nullptr);
                         {% if type.name.get() == "device" %}
-                            if (obj->handle != nullptr) {
-                                //* Deregisters uncaptured error and device lost callbacks since
-                                //* they should not be forwarded if the device no longer exists on the wire.
-                                ClearDeviceCallbacks(obj->handle);
-                            }
+                            //* Deregisters uncaptured error and device lost callbacks since
+                            //* they should not be forwarded if the device no longer exists on the wire.
+                            ClearDeviceCallbacks(obj->handle);
                         {% endif %}
-
-                        mProcs.{{as_varName(type.name, Name("release"))}}(obj->handle);
+                        Release(mProcs, obj->handle);
                     }
-                    {{type.name.CamelCase()}}Objects().Free(objectId);
+                    Objects<{{cType}}>().Free(objectId);
                     return WireResult::Success;
                 }
             {% endfor %}

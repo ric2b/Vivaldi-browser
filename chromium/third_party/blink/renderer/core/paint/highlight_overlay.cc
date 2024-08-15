@@ -250,11 +250,13 @@ HighlightPart::HighlightPart(HighlightLayerType type,
                              uint16_t layer_index,
                              HighlightRange range,
                              TextPaintStyle style,
+                             float stroke_width,
                              Vector<HighlightDecoration> decorations)
     : type(type),
       layer_index(layer_index),
       range(range),
       style(style),
+      stroke_width(stroke_width),
       decorations(std::move(decorations)) {}
 
 HighlightPart::HighlightPart(HighlightLayerType type,
@@ -264,6 +266,7 @@ HighlightPart::HighlightPart(HighlightLayerType type,
                     layer_index,
                     range,
                     TextPaintStyle(),
+                    0,
                     Vector<HighlightDecoration>{}) {}
 
 String HighlightPart::ToString() const {
@@ -303,20 +306,34 @@ HeapVector<HighlightLayer> HighlightOverlay::ComputeLayers(
   HeapVector<HighlightLayer> layers{};
   layers.emplace_back(HighlightLayerType::kOriginating);
 
-  // We must be able to store the layer index within 16 bits. Enforce
-  // that now when making layers.
-  unsigned max_custom_layers =
-      std::numeric_limits<uint16_t>::max() -
-      static_cast<unsigned>(HighlightLayerType::kSelection);
-  for (const auto& marker : custom) {
-    auto* custom_marker = To<CustomHighlightMarker>(marker.Get());
-    HighlightLayer layer{HighlightLayerType::kCustom,
-                         custom_marker->GetHighlightName()};
-    if (!layers.Contains(layer)) {
+  const auto* text_node = DynamicTo<Text>(node);
+  if (!text_node) {
+    DCHECK(custom.empty() && grammar.empty() && spelling.empty() &&
+           target.empty())
+        << "markers can not be painted without a valid Text node";
+    if (selection) {
+      layers.emplace_back(HighlightLayerType::kSelection);
+    }
+    return layers;
+  }
+
+  if (!custom.empty()) {
+    // We must be able to store the layer index within 16 bits. Enforce
+    // that now when making layers.
+    unsigned max_custom_layers =
+        std::numeric_limits<uint16_t>::max() -
+        static_cast<unsigned>(HighlightLayerType::kSelection);
+    const HashSet<AtomicString>& active_highlights =
+        registry->GetActiveHighlights(*text_node);
+    auto highlight_iter = active_highlights.begin();
+    unsigned layer_count = 0;
+    while (highlight_iter != active_highlights.end() &&
+           layer_count < max_custom_layers) {
+      HighlightLayer layer{HighlightLayerType::kCustom, *highlight_iter};
+      DCHECK(!layers.Contains(layer));
       layers.push_back(layer);
-      if (layers.size() > max_custom_layers) {
-        break;
-      }
+      highlight_iter++;
+      layer_count++;
     }
   }
   if (!grammar.empty())
@@ -505,10 +522,12 @@ Vector<HighlightEdge> HighlightOverlay::ComputeEdges(
   return result;
 }
 
-Vector<HighlightPart> HighlightOverlay::ComputeParts(
+HeapVector<HighlightPart> HighlightOverlay::ComputeParts(
     const TextFragmentPaintInfo& content_offsets,
     const HeapVector<HighlightLayer>& layers,
     const Vector<HighlightEdge>& edges) {
+  const float originating_stroke_width =
+      layers[0].style ? layers[0].style->TextStrokeWidth() : 0;
   const HighlightStyleUtils::HighlightTextPaintStyle& originating_text_style =
       layers[0].text_style;
   const HighlightDecoration originating_decoration{
@@ -517,7 +536,7 @@ Vector<HighlightPart> HighlightOverlay::ComputeParts(
       {content_offsets.from, content_offsets.to},
       originating_text_style.text_decoration_color};
 
-  Vector<HighlightPart> result{};
+  HeapVector<HighlightPart> result;
   Vector<std::optional<HighlightRange>> active(layers.size());
   std::optional<unsigned> prev_offset{};
   if (edges.empty()) {
@@ -525,6 +544,7 @@ Vector<HighlightPart> HighlightOverlay::ComputeParts(
                                    0,
                                    {content_offsets.from, content_offsets.to},
                                    originating_text_style.style,
+                                   originating_stroke_width,
                                    {originating_decoration}});
     return result;
   }
@@ -535,6 +555,7 @@ Vector<HighlightPart> HighlightOverlay::ComputeParts(
                       {content_offsets.from,
                        ClampOffset(edges.front().Offset(), content_offsets)},
                       originating_text_style.style,
+                      originating_stroke_width,
                       {originating_decoration}});
   }
   for (const HighlightEdge& edge : edges) {
@@ -549,6 +570,7 @@ Vector<HighlightPart> HighlightOverlay::ComputeParts(
                            0,
                            {part_from, part_to},
                            originating_text_style.style,
+                           originating_stroke_width,
                            {originating_decoration}};
         HighlightStyleUtils::HighlightTextPaintStyle previous_layer_style =
             originating_text_style;
@@ -595,6 +617,7 @@ Vector<HighlightPart> HighlightOverlay::ComputeParts(
                       {ClampOffset(edges.back().Offset(), content_offsets),
                        content_offsets.to},
                       originating_text_style.style,
+                      originating_stroke_width,
                       {originating_decoration}});
   }
   return result;

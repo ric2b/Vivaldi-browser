@@ -10,9 +10,11 @@
 #include "chrome/installer/util/shell_util.h"
 
 #include <objbase.h>
+
+#include <shobjidl.h>
+
 #include <shellapi.h>
 #include <shlobj.h>
-#include <shobjidl.h>
 #include <wrl/client.h>
 
 #include <algorithm>
@@ -28,7 +30,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
-#include "base/functional/callback_helpers.h"
 #include "base/hash/md5.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
@@ -68,6 +69,7 @@
 #include "chrome/installer/util/util_constants.h"
 #include "chrome/installer/util/work_item.h"
 #include "components/base32/base32.h"
+#include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 
 #include "base/file_version_info.h"
 
@@ -140,7 +142,7 @@ std::wstring GetBrowserProgId(const std::wstring& suffix) {
       base::StrCat({install_static::GetBrowserProgIdPrefix(), suffix}), suffix);
 }
 
-// TODO(https://crbug.com/414141): Add method to get the PDF viewer's ProgId,
+// TODO(crbug.com/40384442): Add method to get the PDF viewer's ProgId,
 // which will also require LegalizeNewProgId.
 
 // Returns the browser's application name. This application name will be
@@ -1395,9 +1397,9 @@ bool RegisterChromeBrowserImpl(const base::FilePath& chrome_exe,
 
   // Ensure that the shell is notified of the mutations below. Specific exit
   // points may disable this if no mutations are made.
-  base::ScopedClosureRunner notify_on_exit(base::BindOnce([] {
+  absl::Cleanup notify_on_exit = [] {
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
-  }));
+  };
 
   // Do the full registration at user-level or if the user is an admin.
   if (root == HKEY_CURRENT_USER || IsUserAnAdmin()) {
@@ -1418,7 +1420,7 @@ bool RegisterChromeBrowserImpl(const base::FilePath& chrome_exe,
   // localization issues (see https://crbug.com/717913#c18). It likely is not,
   // so return success to allow Chrome to be made default.
   if (!user_level) {
-    notify_on_exit.Release().Reset();
+    std::move(notify_on_exit).Cancel();
     return true;
   }
   // Try to elevate and register if requested for per-user installs if the user
@@ -2574,7 +2576,7 @@ bool ShellUtil::DeleteFileAssociations(const std::wstring& app_prog_id) {
   const std::vector<std::wstring> file_handler_prog_ids =
       ShellUtil::GetFileHandlerProgIdsForAppId(app_prog_id);
 
-  // TODO(crbug.com/1247824): This can be replaced with DeleteApplicationClass
+  // TODO(crbug.com/40197012): This can be replaced with DeleteApplicationClass
   // once currently installed web apps have been upgraded to use per-file
   // handler ProgIds. Those web apps were only installed in Origin Trials so
   // this is just best effort.

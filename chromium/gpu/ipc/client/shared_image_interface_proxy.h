@@ -62,7 +62,7 @@ class SharedImageInterfaceProxy {
   };
 
   Mailbox CreateSharedImage(const SharedImageInfo& si_info);
-  Mailbox CreateSharedImage(const SharedImageInfo& si_info,
+  Mailbox CreateSharedImage(SharedImageInfo& si_info,
                             gfx::BufferUsage buffer_usage,
                             gfx::GpuMemoryBufferHandle* handle_to_populate);
   Mailbox CreateSharedImage(const SharedImageInfo& si_info,
@@ -78,6 +78,9 @@ class SharedImageInterfaceProxy {
 #if BUILDFLAG(IS_WIN)
   void CopyToGpuMemoryBuffer(const SyncToken& sync_token,
                              const Mailbox& mailbox);
+  void CopyToGpuMemoryBufferAsync(const SyncToken& sync_token,
+                                  const Mailbox& mailbox,
+                                  base::OnceCallback<void(bool)> callback);
   void UpdateSharedImage(const SyncToken& sync_token,
                          scoped_refptr<gfx::D3DSharedFence> d3d_shared_fence,
                          const Mailbox& mailbox);
@@ -140,7 +143,7 @@ class SharedImageInterfaceProxy {
   const raw_ptr<GpuChannelHost> host_;
   const int32_t route_id_;
   base::Lock lock_;
-  uint32_t next_release_id_ GUARDED_BY(lock_) = 0;
+  uint64_t next_release_id_ GUARDED_BY(lock_) = 0;
   uint32_t last_flush_id_ GUARDED_BY(lock_) = 0;
 
   // A buffer used to upload initial data during SharedImage creation.

@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: launch-swa-async
 title: How to finish a task before launching a System web app
 ---
@@ -19,7 +19,7 @@ before showing the UI to users.
 **Solution**
 
 -   **Step 1**: Implement a method that will complete a task async and once done
-    will invoke the callback passsed in.
+    will invoke the callback passed in.
 
 > ```
 > // Take a screenshot and invoke the callback when completed or failed.
@@ -34,7 +34,7 @@ before showing the UI to users.
 >                                        : nullptr;
 >     if (primary_window) {
 >       gfx::Rect rect = primary_window->bounds();
->       ui::GrabWindowSnapshotAsyncPNG(
+>       ui::GrabWindowSnapshotAsPNG(
 >           primary_window, rect,
 >           base::BindOnce(&OsFeedbackScreenshotManager::OnScreenshotTaken,
 >                          weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
@@ -138,6 +138,6 @@ before showing the UI to users.
 **Comment/Discussion**
 
 > Note: Simply fires an async operation when starting to launch the SWA may not
-> work because we have no control over the timing. If the UI is being drawed
+> work because we have no control over the timing. If the UI is being drawn
 > while the screenshot taking is in progress, the scrennshot will include some
 > of the UI elements of the feedback tool.

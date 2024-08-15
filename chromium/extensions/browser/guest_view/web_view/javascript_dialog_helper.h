@@ -5,8 +5,11 @@
 #ifndef EXTENSIONS_BROWSER_GUEST_VIEW_WEB_VIEW_JAVASCRIPT_DIALOG_HELPER_H_
 #define EXTENSIONS_BROWSER_GUEST_VIEW_WEB_VIEW_JAVASCRIPT_DIALOG_HELPER_H_
 
+#include "base/functional/callback.h"
+
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+
 #include "content/public/browser/javascript_dialog_manager.h"
 
 namespace extensions {
@@ -15,6 +18,7 @@ class WebViewGuest;
 
 class JavaScriptDialogHelper : public content::JavaScriptDialogManager {
  public:
+
   explicit JavaScriptDialogHelper(WebViewGuest* guest);
 
   JavaScriptDialogHelper(const JavaScriptDialogHelper&) = delete;
@@ -41,12 +45,14 @@ class JavaScriptDialogHelper : public content::JavaScriptDialogManager {
                      bool reset_state) override;
 
  private:
-  void OnPermissionResponse(DialogClosedCallback callback,
-                            bool allow,
+  void OnPermissionResponse(bool allow,
                             const std::string& user_input);
 
   // Pointer to the webview that is being helped.
   const raw_ptr<WebViewGuest> web_view_guest_;
+
+  // NOTE(andre@vivaldi.com) : Used to cancellling dialog without user.
+  DialogClosedCallback dialog_callback_;
 
   base::WeakPtrFactory<JavaScriptDialogHelper> weak_factory_{this};
 };

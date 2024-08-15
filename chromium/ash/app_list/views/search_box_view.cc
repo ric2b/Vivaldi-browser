@@ -437,7 +437,6 @@ class FilterMenuAdapter : public views::MenuModelAdapter {
   // Returns the menu item view at `index` in the category filter menu. This
   // should only be called when the menu is opened.
   views::MenuItemView* GetFilterMenuItemByIdx(int index) {
-    CHECK(IsFilterMenuOpen());
     return filter_menu_root_->GetSubmenu()->GetMenuItemAt(index);
   }
 
@@ -1403,8 +1402,10 @@ SearchBoxView::PlaceholderTextType SearchBoxView::SelectPlaceholderText()
   if (use_fixed_placeholder_text_for_test_)
     return kDefaultPlaceholders[0];
 
-  if (chromeos::features::IsCloudGamingDeviceEnabled())
+  if (chromeos::features::IsCloudGamingDeviceEnabled() ||
+      chromeos::features::IsAlmanacLauncherPayloadEnabled()) {
     return kGamingPlaceholders[rand() % std::size(kGamingPlaceholders)];
+  }
 
   return kDefaultPlaceholders[rand() % std::size(kDefaultPlaceholders)];
 }
@@ -1524,13 +1525,16 @@ bool SearchBoxView::HandleKeyEvent(views::Textfield* sender,
     ui::KeyEvent event(key_event);
     SearchResultBaseView* selected_result =
         result_selection_controller_->selected_result();
-    if (selected_result && selected_result->result())
+    if (selected_result) {
       selected_result->OnKeyEvent(&event);
-    // Reset the selected result to the default result.
-    result_selection_controller_->ResetSelection(nullptr,
-                                                 true /* default_selection */);
-    search_box()->SetText(std::u16string());
-    return true;
+      if (event.handled()) {
+        // Reset the selected result to the default result.
+        result_selection_controller_->ResetSelection(
+            nullptr, true /* default_selection */);
+        search_box()->SetText(std::u16string());
+        return true;
+      }
+    }
   }
 
   // Do not handle keys intended for result selection traversal here - these

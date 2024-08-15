@@ -658,7 +658,7 @@ gfx::Rect WindowTreeHost::GetTransformedRootWindowBoundsFromPixelSize(
 
 void WindowTreeHost::SetNativeWindowOcclusionEnabled(bool enable) {
   native_window_occlusion_enabled_ = enable;
-  // TODO(crbug.com/1051306) If enabled is false, make this
+  // TODO(crbug.com/40118412) If enabled is false, make this
   // turn off native window occlusion on this window.
 }
 
@@ -714,7 +714,7 @@ bool WindowTreeHost::CalculateCompositorVisibilityFromOcclusionState() const {
     case Window::OcclusionState::VISIBLE:
       return true;
     case Window::OcclusionState::OCCLUDED: {
-      // TODO(crbug.com/1278648): For lacros, make sure non-maximized but
+      // TODO(crbug.com/40208263): For lacros, make sure non-maximized but
       // occluded windows are visible.
       // The compositor needs to be visible when capturing video.
       return video_capture_count_ != 0;
@@ -789,7 +789,7 @@ void WindowTreeHost::MoveCursorToInternal(const gfx::Point& root_location,
   dispatcher()->OnCursorMovedToRootLocation(root_location);
 }
 
-void WindowTreeHost::OnCompositingEnded(ui::Compositor* compositor) {
+void WindowTreeHost::OnCompositingAckDeprecated(ui::Compositor* compositor) {
   // Currently, input is only throttled on ash and is not well supported on
   // other platforms. See crbug.com/41359082.
 #if BUILDFLAG(IS_CHROMEOS_ASH)

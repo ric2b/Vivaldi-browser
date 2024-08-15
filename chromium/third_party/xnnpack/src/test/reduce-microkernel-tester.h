@@ -5,24 +5,24 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
+#include <xnnpack.h>
+#include <xnnpack/microfnptr.h>
+#include <xnnpack/microparams.h>
 
 #include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <limits>
 #include <random>
 #include <tuple>
 #include <vector>
 
+#include "replicable_random_device.h"
+#include <gtest/gtest.h>
 #include <fp16/fp16.h>
-
-#include <xnnpack.h>
-#include <xnnpack/microfnptr.h>
-#include <xnnpack/microparams-init.h>
-
 
 class ReduceMicrokernelTester {
   using FloatIt = std::vector<float>::iterator;
@@ -34,28 +34,27 @@ class ReduceMicrokernelTester {
     MinMax,
   };
 
-  inline ReduceMicrokernelTester& batch_size(size_t batch_size) {
+  ReduceMicrokernelTester& batch_size(size_t batch_size) {
     assert(batch_size != 0);
     this->batch_size_ = batch_size;
     return *this;
   }
 
-  inline size_t batch_size() const {
+  size_t batch_size() const {
     return this->batch_size_;
   }
 
-  inline ReduceMicrokernelTester& iterations(size_t iterations) {
+  ReduceMicrokernelTester& iterations(size_t iterations) {
     this->iterations_ = iterations;
     return *this;
   }
 
-  inline size_t iterations() const {
+  size_t iterations() const {
     return this->iterations_;
   }
 
   void Test(xnn_f16_reduce_ukernel_fn reduce, OpType op_type, xnn_init_f16_default_params_fn init_params = nullptr) const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(-1.0f, 1.0f);
 
     std::vector<float> input_float(batch_size());
@@ -99,8 +98,7 @@ class ReduceMicrokernelTester {
   }
 
   void Test(xnn_f32_reduce_ukernel_fn reduce, OpType op_type, xnn_init_f32_default_params_fn init_params = nullptr) const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(-1.0f, 1.0f);
 
     std::vector<float> input(batch_size() + XNN_EXTRA_BYTES / sizeof(float));
@@ -142,8 +140,7 @@ class ReduceMicrokernelTester {
   }
 
   void Test(xnn_u8_reduce_ukernel_fn reduce, OpType op_type) const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_int_distribution<int32_t> u8dist(
       std::numeric_limits<uint8_t>::min(), std::numeric_limits<uint8_t>::max());
 

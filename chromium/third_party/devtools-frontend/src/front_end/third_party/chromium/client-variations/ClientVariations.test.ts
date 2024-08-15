@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
 import * as ClientVariations from './client-variations.js';
 
 describe('formatClientVariations', () => {
@@ -14,7 +12,7 @@ describe('formatClientVariations', () => {
     });
     assert.deepEqual(
         result,
-        'message ClientVariations {\n  // Active client experiment variation IDs.\n  repeated int32 variation_id = [111, 222, 333];\n  // Active client experiment variation IDs that trigger server-side behavior.\n  repeated int32 trigger_variation_id = [444, 555];\n}');
+        'message ClientVariations {\n  // Active Google-visible variation IDs on this client. These are reported for analysis, but do not directly affect any server-side behavior.\n  repeated int32 variation_id = [111, 222, 333];\n  // Active Google-visible variation IDs on this client that trigger server-side behavior. These are reported for analysis *and* directly affect server-side behavior.\n  repeated int32 trigger_variation_id = [444, 555];\n}');
   });
 
   it('formats input containing only plain variation IDs', () => {
@@ -24,7 +22,7 @@ describe('formatClientVariations', () => {
     });
     assert.deepEqual(
         result,
-        'message ClientVariations {\n  // Active client experiment variation IDs.\n  repeated int32 variation_id = [111, 222, 333];\n}');
+        'message ClientVariations {\n  // Active Google-visible variation IDs on this client. These are reported for analysis, but do not directly affect any server-side behavior.\n  repeated int32 variation_id = [111, 222, 333];\n}');
   });
 
   it('formats input containing only trigger variation IDs', () => {
@@ -34,7 +32,7 @@ describe('formatClientVariations', () => {
     });
     assert.deepEqual(
         result,
-        'message ClientVariations {\n  // Active client experiment variation IDs that trigger server-side behavior.\n  repeated int32 trigger_variation_id = [444, 555];\n}');
+        'message ClientVariations {\n  // Active Google-visible variation IDs on this client that trigger server-side behavior. These are reported for analysis *and* directly affect server-side behavior.\n  repeated int32 trigger_variation_id = [444, 555];\n}');
   });
 
   it('formats input containing no variation IDs', () => {

@@ -92,6 +92,9 @@ void MaybeEndSplitViewAndOverview() {
 }
 
 // Snap the carry over windows into splitview mode at |divider_position|.
+// TODO(b/327269057): Refactor split view transition. Also determine whether we
+// should snap the windows in mru order, since it can cause
+// `SplitViewDivider::observed_windows()` to get out of order.
 void DoSplitViewTransition(
     std::vector<std::pair<aura::Window*, WindowStateType>> windows,
     int divider_position,
@@ -483,8 +486,8 @@ void TabletModeWindowManager::OnDisplayAdded(const display::Display& display) {
   DisplayConfigurationChanged();
 }
 
-void TabletModeWindowManager::OnDisplayRemoved(
-    const display::Display& display) {
+void TabletModeWindowManager::OnDisplaysRemoved(
+    const display::Displays& removed_displays) {
   DisplayConfigurationChanged();
 }
 
@@ -737,9 +740,9 @@ void TabletModeWindowManager::TrackWindow(aura::Window* window,
   // Create and remember a tablet mode state which will attach itself to the
   // provided state object.
   window_state_map_.emplace(
-      window,
-      new TabletModeWindowState(window, this, snap, animate_bounds_on_attach,
-                                entering_tablet_mode));
+      window, new TabletModeWindowState(window, weak_ptr_factory_.GetWeakPtr(),
+                                        snap, animate_bounds_on_attach,
+                                        entering_tablet_mode));
 }
 
 void TabletModeWindowManager::ForgetWindow(aura::Window* window,

@@ -28,7 +28,6 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.TimingMetric;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
-import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.omnibox.OmniboxMetrics;
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdownEmbedder.OmniboxAlignment;
@@ -37,6 +36,7 @@ import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.chrome.browser.util.KeyNavigationUtil;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.RoundedCornerOutlineProvider;
+import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.ViewUtils;
@@ -81,6 +81,7 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
     private int mLastBroadcastedListViewMaxHeight;
     private @Nullable Callback<OmniboxAlignment> mOmniboxAlignmentObserver;
     private final boolean mForcePhoneStyleOmnibox;
+    private float mChildVerticalTranslation;
 
     // Vivaldi
     private LocationBarLayout mLocationBarLayout;
@@ -253,12 +254,11 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
         setItemAnimator(null);
 
         mLayoutScrollListener = new SuggestionLayoutScrollListener(context);
+        mLayoutScrollListener.setReverseLayout(shouldReverseSuggestionsList()); // Vivaldi
         setLayoutManager(mLayoutScrollListener);
         mSelectionController = new RecyclerViewSelectionController(mLayoutScrollListener);
         addOnChildAttachStateChangeListener(mSelectionController);
 
-        boolean shouldShowModernizeVisualUpdate =
-                OmniboxFeatures.shouldShowModernizeVisualUpdate(context);
         final Resources resources = context.getResources();
         int paddingBottom =
                 resources.getDimensionPixelOffset(R.dimen.omnibox_suggestion_list_padding_bottom);
@@ -268,17 +268,11 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
         ViewCompat.setPaddingRelative(this, 0, paddingTop, 0, paddingBottom);
 
         mStandardBgColor =
-                shouldShowModernizeVisualUpdate
-                        ? ChromeColors.getSurfaceColor(
-                                context, R.dimen.omnibox_suggestion_dropdown_bg_elevation)
-                        : ChromeColors.getDefaultThemeColor(context, false);
+                ChromeColors.getSurfaceColor(
+                        context, R.dimen.omnibox_suggestion_dropdown_bg_elevation);
         int incognitoBgColorRes = R.color.omnibox_dropdown_bg_incognito;
-        mIncognitoBgColor =
-                shouldShowModernizeVisualUpdate
-                        ? context.getColor(incognitoBgColorRes)
-                        : ChromeColors.getDefaultThemeColor(context, true);
+        mIncognitoBgColor = context.getColor(incognitoBgColorRes);
         if (!mForcePhoneStyleOmnibox
-                && OmniboxFeatures.shouldShowModernizeVisualUpdate(context)
                 && DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
                 && context.getResources().getConfiguration().screenWidthDp
                         >= DeviceFormFactor.MINIMUM_TABLET_WIDTH_DP) {
@@ -342,6 +336,30 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
     /** Resets selection typically in response to changes to the list. */
     public void resetSelection() {
         mSelectionController.resetSelection();
+    }
+
+    /**
+     * Translates all children by {@code translation}. This translation is applied to newly-added
+     * added children as well.
+     */
+    public void translateChildrenVertical(float translation) {
+        mChildVerticalTranslation = translation;
+        final int childCount = getChildCount();
+        for (int i = 0; i < childCount; i++) {
+            getChildAt(i).setTranslationY(translation);
+        }
+        invalidateItemDecorations();
+    }
+
+    @Override
+    public void onChildAttachedToWindow(@NonNull View child) {
+        if (mChildVerticalTranslation == 0.0f) return;
+        child.setTranslationY(mChildVerticalTranslation);
+    }
+
+    @Override
+    public void onChildDetachedFromWindow(@NonNull View child) {
+        child.setTranslationY(0.0f);
     }
 
     /** Resests the tracked keyboard shown state to properly respond to scroll events. */
@@ -624,18 +642,10 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
     }
 
     private void adjustHorizontalPosition() {
-        if (OmniboxFeatures.shouldShowModernizeVisualUpdate(getContext())) {
-            // Set our left edge using translation x. This avoids needing to relayout (like setting
-            // a left margin would) and is less risky than calling View#setLeft(), which is intended
-            // for use by the layout system.
-            setTranslationX(mOmniboxAlignment.left);
-        } else {
-            setPadding(
-                    mOmniboxAlignment.paddingLeft,
-                    getPaddingTop(),
-                    mOmniboxAlignment.paddingRight,
-                    getPaddingBottom());
-        }
+        // Set our left edge using translation x. This avoids needing to relayout (like setting
+        // a left margin would) and is less risky than calling View#setLeft(), which is intended
+        // for use by the layout system.
+        setTranslationX(mOmniboxAlignment.left);
     }
 
     private void setRoundBottomCorners(boolean roundBottomCorners) {
@@ -661,7 +671,7 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
 
         // Vivaldi - Note(nagamani@vivaldi.com): Scroll to the first element for the
         // suggestions to be clearly visible when reverse search suggestion is enabled.
-        if (shouldReverseSuggestionsList()) scrollToPosition(0);
+        if (shouldReverseSuggestionsList()) scrollToPosition(getEndScrollPosition());
     }
 
     @VisibleForTesting
@@ -728,8 +738,15 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
         // Note(nagamani@vivaldi.com): Reverse the list when reverse search suggestion is enabled
         // for better reachability of suggestions UI
         if (shouldReverseSuggestionsList() && layoutManager != null) {
-            layoutManager.setReverseLayout(true);
             layoutManager.setStackFromEnd(true);
         }
+    }
+
+    /** Vivaldi: Helps getting the correct position to scroll when using reversed list */
+    public int getEndScrollPosition() {
+        if (mLocationBarLayout == null) return 0;
+        final LinearLayoutManager layoutManager = (LinearLayoutManager) getLayoutManager();
+        if (layoutManager != null) return layoutManager.getItemCount() - 1;
+        else return 0;
     }
 }

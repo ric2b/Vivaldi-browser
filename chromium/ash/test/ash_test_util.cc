@@ -23,6 +23,7 @@
 #include "base/scoped_observation.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
+#include "chromeos/ui/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "chromeos/ui/frame/multitask_menu/multitask_menu.h"
 #include "chromeos/ui/frame/multitask_menu/multitask_menu_metrics.h"
 #include "ui/aura/client/aura_constants.h"
@@ -89,6 +90,27 @@ views::MenuItemView* FindMenuItemWithLabelFromWindow(
 
   for (aura::Window* const child : search_root->children()) {
     if (auto* found = FindMenuItemWithLabelFromWindow(child, label)) {
+      return found;
+    }
+  }
+
+  return nullptr;
+}
+
+// Returns a pointer to the `aura::Window` in the window tree associated with
+// the specified `window` which has the specified `name`. In the event that no
+// such `aura::Window` is found, `nullptr` is returned.
+aura::Window* FindWindowWithName(aura::Window* window, std::string_view name) {
+  if (!window) {
+    return nullptr;
+  }
+
+  if (window->GetName() == name) {
+    return window;
+  }
+
+  for (aura::Window* const child : window->children()) {
+    if (aura::Window* found = FindWindowWithName(child, name)) {
       return found;
     }
   }
@@ -331,6 +353,26 @@ ui::Layer* FindLayerWithName(views::View* view, std::string_view name) {
   }
 
   return nullptr;
+}
+
+views::Widget* FindWidgetWithName(std::string_view name) {
+  for (aura::Window* const root_window : Shell::Get()->GetAllRootWindows()) {
+    if (aura::Window* const found = FindWindowWithName(root_window, name)) {
+      return views::Widget::GetWidgetForNativeView(found);
+    }
+  }
+
+  return nullptr;
+}
+
+views::Widget* FindWidgetWithNameAndWaitIfNeeded(const std::string& name) {
+  if (views::Widget* const found = FindWidgetWithName(name)) {
+    return found;
+  }
+
+  return views::NamedWidgetShownWaiter(views::test::AnyWidgetTestPasskey(),
+                                       name)
+      .WaitIfNeededAndGet();
 }
 
 }  // namespace ash

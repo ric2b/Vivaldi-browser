@@ -26,42 +26,72 @@
 namespace {
 
 // Font size of button titles.
-const CGFloat kIpadFontSize = 15.0f;
-const CGFloat kIphoneFontSize = 14.0f;
+constexpr CGFloat kIpadFontSize = 15;
+constexpr CGFloat kIphoneFontSize = 14;
 
 // The horizontal space between the edge of the background and the text.
-const CGFloat kBorderWidth = 14.0f;
+constexpr CGFloat kBorderWidth = 14;
+// The horizontal space between the edge of the background and the text for the
+// large keyboard accessory.
+constexpr CGFloat kSmallBorderWidth = 12;
 // The space between items in the label.
-const CGFloat kSpacing = 4.0f;
+constexpr CGFloat kSpacing = 4;
 // The corner radius of the label.
-const CGFloat kCornerRadius = 8.0f;
+constexpr CGFloat kCornerRadius = 8;
+
+// The size adjustment for the subtitle font from the default font size.
+constexpr CGFloat kSubtitleFontPointSizeAdjustment = -1;
+// The size adjustment for the title font from the default font size.
+constexpr CGFloat kTitleFontPointSizeAdjustment = 1;
+// The extra space between the title label and the subtitle.
+constexpr CGFloat kVerticalSpacing = 2;
 
 // Shadow parameters.
-const CGFloat kShadowRadius = 0.5;
-const CGFloat kShadowVerticalOffset = 1.0;
-const CGFloat kShadowOpacity = 1.0;
+constexpr CGFloat kShadowRadius = 0.5;
+constexpr CGFloat kShadowVerticalOffset = 1.0;
+constexpr CGFloat kShadowOpacity = 1.0;
 
 // The preferred minimum width of the icon shown on the label.
-const CGFloat kSuggestionIconWidth = 40;
+constexpr CGFloat kSuggestionIconWidth = 40;
 
 // Offset required to see half of the icon of the 2nd credit card suggestion
 // when the first credit card suggestion is at maximum width. This number
 // represents the width of the stack view minus the width of the first
 // suggestion.
-const CGFloat kHalfCreditCardIconOffset =
-    2 * kBorderWidth + 2 * kSpacing + 0.5 * kSuggestionIconWidth;
+constexpr CGFloat kHalfCreditCardIconOffset =
+    2 * kSmallBorderWidth + 2 * kSpacing + 0.5 * kSuggestionIconWidth;
+
+// Returns the font for the title line of the suggestion.
+UIFont* TitleFont(CGFloat fontSize) {
+  return [UIFont systemFontOfSize:fontSize + kTitleFontPointSizeAdjustment
+                           weight:UIFontWeightMedium];
+}
+
+// Returns the font for the subtitle line of the suggestion.
+UIFont* SubtitleFont(CGFloat fontSize) {
+  UIFont* font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
+  return [font fontWithSize:fontSize + kSubtitleFontPointSizeAdjustment];
+}
 
 // Creates a label with the given `text` and `alpha` suitable for use in a
 // suggestion button in the keyboard accessory view.
-UILabel* TextLabel(NSString* text, UIColor* textColor, BOOL bold) {
+UILabel* TextLabel(NSString* text,
+                   UIColor* textColor,
+                   BOOL bold,
+                   BOOL isTitle) {
   UILabel* label = [[UILabel alloc] init];
   [label setText:text];
   CGFloat fontSize =
       (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET)
           ? kIpadFontSize
           : kIphoneFontSize;
-  UIFont* font = bold ? [UIFont boldSystemFontOfSize:fontSize]
-                      : [UIFont systemFontOfSize:fontSize];
+  UIFont* font;
+  if (IsKeyboardAccessoryUpgradeEnabled()) {
+    font = isTitle ? TitleFont(fontSize) : SubtitleFont(fontSize);
+  } else {
+    font = bold ? [UIFont boldSystemFontOfSize:fontSize]
+                : [UIFont systemFontOfSize:fontSize];
+  }
   [label setFont:font];
   label.textColor = textColor;
   [label setBackgroundColor:[UIColor clearColor]];
@@ -93,26 +123,21 @@ UILabel* TextLabel(NSString* text, UIColor* textColor, BOOL bold) {
     stackView.alignment = UIStackViewAlignmentCenter;
     stackView.layoutMarginsRelativeArrangement = YES;
     stackView.layoutMargins =
-        UIEdgeInsetsMake(0, kBorderWidth, 0, kBorderWidth);
+        UIEdgeInsetsMake(0, [self borderWidth], 0, [self borderWidth]);
     stackView.spacing = kSpacing;
     stackView.translatesAutoresizingMaskIntoConstraints = NO;
     [self addSubview:stackView];
     AddSameConstraints(stackView, self);
 
-    if (suggestion.icon != nil) {
-      UIImage* icon = suggestion.icon;
-      if (IsKeyboardAccessoryUpgradeEnabled()) {
-        if (icon && (icon.size.width > 0) &&
-            (icon.size.width < kSuggestionIconWidth)) {
-          // For a simple image resize, we can keep the same underlying image
-          // and only adjust the ratio.
-          CGFloat ratio = icon.size.width / kSuggestionIconWidth;
-          icon = [UIImage imageWithCGImage:[icon CGImage]
-                                     scale:icon.scale * ratio
-                               orientation:icon.imageOrientation];
-        }
-      }
-      UIImageView* iconView = [[UIImageView alloc] initWithImage:icon];
+    if (suggestion.icon) {
+      UIImageView* iconView = [[UIImageView alloc]
+          initWithImage:[self resizeIconIfNecessary:suggestion.icon]];
+      // If we have an icon, we want to see the icon and let the text be
+      // truncated rather than expanding the text area and hiding the icon.
+      [iconView
+          setContentCompressionResistancePriority:UILayoutPriorityRequired
+                                          forAxis:
+                                              UILayoutConstraintAxisHorizontal];
       [stackView addArrangedSubview:iconView];
     }
 
@@ -123,7 +148,9 @@ UILabel* TextLabel(NSString* text, UIColor* textColor, BOOL bold) {
       verticalStackView.axis = UILayoutConstraintAxisVertical;
       verticalStackView.alignment = UIStackViewAlignmentLeading;
       verticalStackView.layoutMarginsRelativeArrangement = YES;
-      verticalStackView.layoutMargins = UIEdgeInsetsMake(0, kBorderWidth, 0, 0);
+      verticalStackView.layoutMargins =
+          UIEdgeInsetsMake(0, suggestion.icon ? kSpacing : 0, 0, 0);
+      verticalStackView.spacing = kVerticalSpacing;
       [stackView addArrangedSubview:verticalStackView];
 
       // Insert the next subviews vertically instead of horizonatally.
@@ -133,23 +160,29 @@ UILabel* TextLabel(NSString* text, UIColor* textColor, BOOL bold) {
         suggestionText = [suggestionText
             substringToIndex:suggestionText.length -
                              kPasswordFormSuggestionSuffix.length];
+        if ([suggestionText length] == 0) {
+          suggestionText =
+              l10n_util::GetNSString(IDS_IOS_AUTOFILL_PASSWORD_NO_USERNAME);
+        }
       }
     }
 
     UILabel* valueLabel =
-        TextLabel(suggestionText, [UIColor colorNamed:kTextPrimaryColor], YES);
+        TextLabel(suggestionText, [UIColor colorNamed:kTextPrimaryColor],
+                  /*bold=*/YES, /*isTitle=*/YES);
     [stackView addArrangedSubview:valueLabel];
 
     if ([suggestion.minorValue length] > 0) {
       UILabel* minorValueLabel = TextLabel(
-          suggestion.minorValue, [UIColor colorNamed:kTextPrimaryColor], YES);
+          suggestion.minorValue, [UIColor colorNamed:kTextPrimaryColor],
+          /*bold=*/YES, /*isTitle=*/NO);
       [stackView addArrangedSubview:minorValueLabel];
     }
 
     if ([suggestion.displayDescription length] > 0) {
-      UILabel* description =
-          TextLabel(suggestion.displayDescription,
-                    [UIColor colorNamed:kTextSecondaryColor], NO);
+      UILabel* description = TextLabel(suggestion.displayDescription,
+                                       [UIColor colorNamed:kTextSecondaryColor],
+                                       /*bold=*/NO, /*isTitle=*/NO);
       [stackView addArrangedSubview:description];
     }
 
@@ -162,7 +195,9 @@ UILabel* TextLabel(NSString* text, UIColor* textColor, BOOL bold) {
                                     IDS_IOS_AUTOFILL_ACCNAME_SUGGESTION,
                                     base::SysNSStringToUTF16(suggestion.value),
                                     base::SysNSStringToUTF16(
-                                        suggestion.displayDescription),
+                                        suggestion.displayDescription))];
+    [self setAccessibilityValue:l10n_util::GetNSStringF(
+                                    IDS_IOS_AUTOFILL_SUGGESTION_INDEX_VALUE,
                                     base::NumberToString16(index + 1),
                                     base::NumberToString16(numSuggestions))];
     [self
@@ -187,7 +222,8 @@ UILabel* TextLabel(NSString* text, UIColor* textColor, BOOL bold) {
     self.layer.shadowRadius = kShadowRadius;
     self.layer.shadowOffset = CGSizeMake(0, kShadowVerticalOffset);
     self.layer.shadowOpacity = kShadowOpacity;
-    self.layer.shadowColor = [UIColor colorNamed:kGrey400Color].CGColor;
+    self.layer.shadowColor =
+        [UIColor colorNamed:kBackgroundShadowColor].CGColor;
     self.layer.masksToBounds = NO;
   }
 }
@@ -221,7 +257,7 @@ UILabel* TextLabel(NSString* text, UIColor* textColor, BOOL bold) {
 // Color of the suggestion chips.
 - (UIColor*)customBackgroundColor {
   return
-      [UIColor colorNamed:IsKeyboardAccessoryUpgradeEnabled() ? kSolidWhiteColor
+      [UIColor colorNamed:IsKeyboardAccessoryUpgradeEnabled() ? kBackgroundColor
                                                               : kGrey100Color];
 }
 
@@ -229,6 +265,32 @@ UILabel* TextLabel(NSString* text, UIColor* textColor, BOOL bold) {
 - (CGFloat)cornerRadius {
   return IsKeyboardAccessoryUpgradeEnabled() ? kCornerRadius
                                              : self.bounds.size.height / 2.0;
+}
+
+- (CGFloat)borderWidth {
+  return IsKeyboardAccessoryUpgradeEnabled() ? kSmallBorderWidth : kBorderWidth;
+}
+
+// Returns whether this label is for a credit card suggestion.
+- (BOOL)isCreditCardSuggestion {
+  return (_suggestion.popupItemId ==
+          autofill::SuggestionType::kCreditCardEntry) ||
+         (_suggestion.popupItemId ==
+          autofill::SuggestionType::kVirtualCreditCardEntry);
+}
+
+// Resize the icon if it's a credit card icon which requires an upscaling.
+- (UIImage*)resizeIconIfNecessary:(UIImage*)icon {
+  if (IsKeyboardAccessoryUpgradeEnabled() && [self isCreditCardSuggestion] &&
+      icon && icon.size.width > 0 && icon.size.width < kSuggestionIconWidth) {
+    // For a simple image resize, we can keep the same underlying image
+    // and only adjust the ratio.
+    CGFloat ratio = icon.size.width / kSuggestionIconWidth;
+    icon = [UIImage imageWithCGImage:[icon CGImage]
+                               scale:icon.scale * ratio
+                         orientation:icon.imageOrientation];
+  }
+  return icon;
 }
 
 // Computes the suggestion label's maximum width.
@@ -240,14 +302,15 @@ UILabel* TextLabel(NSString* text, UIColor* textColor, BOOL bold) {
   CGSize windowSize = [[UIScreen mainScreen] bounds].size;
   CGFloat portraitScreenWidth = MIN(windowSize.width, windowSize.height);
   switch (_suggestion.popupItemId) {
-    case autofill::PopupItemId::kCreditCardEntry: {
+    case autofill::SuggestionType::kCreditCardEntry:
+    case autofill::SuggestionType::kVirtualCreditCardEntry: {
       // Max width is just enough to show half of the credit card icon on the
       // 2nd suggestion, in portrait mode.
       CGFloat staticButtonsWidth = accessoryTrailingView.frame.size.width;
       maxWidth = (portraitScreenWidth - staticButtonsWidth) -
                  kHalfCreditCardIconOffset;
     } break;
-    case autofill::PopupItemId::kAddressEntry:
+    case autofill::SuggestionType::kAddressEntry:
       // Max width is half width, in portrait mode.
       maxWidth = portraitScreenWidth * 0.5;
       break;

@@ -12,22 +12,30 @@
 #import "base/timer/timer.h"
 #import "base/values.h"
 #import "components/prefs/pref_service.h"
+#import "components/search_engines/prepopulated_engines.h"
+#import "components/search_engines/template_url.h"
+#import "components/search_engines/template_url_prepopulate_data.h"
+#import "components/search_engines/template_url_service.h"
 #import "ios/chrome/app/startup/app_launch_metrics.h"
-#import "ios/chrome/browser/push_notification/model/constants.h"
+#import "ios/chrome/browser/content_notification/model/content_notification_nau_configuration.h"
+#import "ios/chrome/browser/content_notification/model/content_notification_service.h"
+#import "ios/chrome/browser/content_notification/model/content_notification_service_factory.h"
+#import "ios/chrome/browser/content_notification/model/content_notification_settings_action.h"
+#import "ios/chrome/browser/content_notification/model/content_notification_util.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_client_manager.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_configuration.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_delegate.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_service.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_util.h"
+#import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser_state/browser_state_info_cache.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state_manager.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/grit/ios_branded_strings.h"
-#import "ios/chrome/grit/ios_strings.h"
-#import "ui/base/l10n/l10n_util.h"
+#import "ios/chrome/browser/signin/model/authentication_service.h"
+#import "ios/chrome/browser/signin/model/authentication_service_factory.h"
 
 namespace {
 // The time range's expected min and max values for custom histograms.
@@ -96,25 +104,6 @@ GaiaIdToPushNotificationPreferenceMapFromCache(
 - (instancetype)initWithAppState:(AppState*)appState {
   [appState addObserver:self];
   return self;
-}
-
-- (void)registerNotificationCategories {
-  UNUserNotificationCenter* center =
-      UNUserNotificationCenter.currentNotificationCenter;
-  NSMutableSet<UNNotificationCategory*>* notificationCategories =
-      [[NSMutableSet alloc] init];
-  UNNotificationAction* feedbackAction = [UNNotificationAction
-      actionWithIdentifier:kContentNotificationFeedbackActionIdentifier
-                     title:l10n_util::GetNSString(
-                               IDS_IOS_CONTENT_NOTIFICATIONS_SEND_FEEDBACK)
-                   options:UNNotificationActionOptionForeground];
-  UNNotificationCategory* contentNotificationCategory = [UNNotificationCategory
-      categoryWithIdentifier:kContentNotificationFeedbackCategoryIdentifier
-                     actions:@[ feedbackAction ]
-           intentIdentifiers:@[]
-                     options:UNNotificationCategoryOptionCustomDismissAction];
-  [notificationCategories addObject:contentNotificationCategory];
-  [center setNotificationCategories:notificationCategories];
 }
 
 #pragma mark - UNUserNotificationCenterDelegate -
@@ -188,7 +177,8 @@ GaiaIdToPushNotificationPreferenceMapFromCache(
   return result;
 }
 
-- (void)applicationDidRegisterWithAPNS:(NSData*)deviceToken {
+- (void)applicationDidRegisterWithAPNS:(NSData*)deviceToken
+                          browserState:(ChromeBrowserState*)browserState {
   BrowserStateInfoCache* infoCache = GetApplicationContext()
                                          ->GetChromeBrowserStateManager()
                                          ->GetBrowserStateInfoCache();
@@ -215,7 +205,20 @@ GaiaIdToPushNotificationPreferenceMapFromCache(
   config.accountIDs = accountPreferenceMap.allKeys;
   config.preferenceMap = accountPreferenceMap;
   config.deviceToken = deviceToken;
-  config.ssoService = GetApplicationContext()->GetSSOService();
+  config.singleSignOnService =
+      GetApplicationContext()->GetSingleSignOnService();
+
+  if (browserState) {
+    config.shouldRegisterContentNotification =
+        [self isContentNotificationAvailable:browserState];
+    if (config.shouldRegisterContentNotification) {
+      AuthenticationService* authService =
+          AuthenticationServiceFactory::GetForBrowserState(browserState);
+      id<SystemIdentity> identity =
+          authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
+      config.primaryAccount = identity;
+    }
+  }
 
   notificationService->RegisterDevice(config, ^(NSError* error) {
     if (error) {
@@ -229,17 +232,65 @@ GaiaIdToPushNotificationPreferenceMapFromCache(
 }
 
 #pragma mark - AppStateObserver
+
+- (void)appState:(AppState*)appState
+    didTransitionFromInitStage:(InitStage)previousInitStage {
+  if (appState.initStage < InitStageFinal) {
+    return;
+  }
+  SceneState* sceneState = appState.foregroundActiveScene;
+  if (sceneState == nil) {
+    return;
+  }
+  [self appDidEnterForeground:sceneState];
+}
+
 - (void)appState:(AppState*)appState
     sceneDidBecomeActive:(SceneState*)sceneState {
   if (appState.initStage < InitStageFinal) {
     return;
   }
+  [self appDidEnterForeground:sceneState];
+}
+
+#pragma mark - Private
+
+// Notifies the client manager that the scene is "foreground active".
+- (void)appDidEnterForeground:(SceneState*)sceneState {
   PushNotificationClientManager* clientManager =
       GetApplicationContext()
           ->GetPushNotificationService()
           ->GetPushNotificationClientManager();
   DCHECK(clientManager);
   clientManager->OnSceneActiveForegroundBrowserReady();
+  // TODO(crbug.com/339102426): Cleanup browserStates.
+  ChromeBrowserState* browserState =
+      GetApplicationContext()
+          ->GetChromeBrowserStateManager()
+          ->GetLastUsedBrowserStateDeprecatedDoNotUse();
+  if ([self isContentNotificationAvailable:browserState]) {
+    // Send an NAU every time the OS authorization status changes.
+    [PushNotificationUtil
+        getPermissionSettings:^(UNNotificationSettings* settings) {
+          UNAuthorizationStatus previousAuthStatus =
+              [PushNotificationUtil getSavedPermissionSettings];
+          if (previousAuthStatus != settings.authorizationStatus) {
+            ContentNotificationNAUConfiguration* config =
+                [[ContentNotificationNAUConfiguration alloc] init];
+            ContentNotificationSettingsAction* settingsAction =
+                [[ContentNotificationSettingsAction alloc] init];
+            settingsAction.previousAuthorizationStatus = previousAuthStatus;
+            settingsAction.currentAuthorizationStatus =
+                settings.authorizationStatus;
+            config.settingsAction =
+                [[ContentNotificationSettingsAction alloc] init];
+            ContentNotificationService* contentNotificationService =
+                ContentNotificationServiceFactory::GetForBrowserState(
+                    browserState);
+            contentNotificationService->SendNAUForConfiguration(config);
+          }
+        }];
+  }
   [PushNotificationUtil
       getPermissionSettings:^(UNNotificationSettings* settings) {
         [PushNotificationUtil
@@ -247,9 +298,36 @@ GaiaIdToPushNotificationPreferenceMapFromCache(
       }];
 }
 
-#pragma mark - Private
 - (void)recordLifeCycleEvent:(PushNotificationLifecycleEvent)event {
   base::UmaHistogramEnumeration(kLifecycleEventsHistogram, event);
+}
+
+- (BOOL)isContentNotificationAvailable:(ChromeBrowserState*)browserState {
+  if (!IsContentNotificationExperimentEnalbed()) {
+    return false;
+  }
+  if (!browserState) {
+    return false;
+  }
+  AuthenticationService* authService =
+      AuthenticationServiceFactory::GetForBrowserState(browserState);
+  BOOL isSignedIn = authService && authService->HasPrimaryIdentity(
+                                       signin::ConsentLevel::kSignin);
+  const TemplateURL* defaultSearchURLTemplate =
+      ios::TemplateURLServiceFactory::GetForBrowserState(browserState)
+          ->GetDefaultSearchProvider();
+  bool isDefaultSearchEngine =
+      defaultSearchURLTemplate && defaultSearchURLTemplate->prepopulate_id() ==
+                                      TemplateURLPrepopulateData::google.id;
+  PrefService* prefService = browserState->GetPrefs();
+  // Created the local variables to make sure all experimental types have been
+  // checked, because multiple experimental types can be enabled at the same
+  // time, and the UMA will be active after the feature check.
+  bool contentNotificationEnabled = IsContentNotificationEnabled(
+      isSignedIn, isDefaultSearchEngine, prefService);
+  bool contentNotificationRegistered = IsContentNotificationRegistered(
+      isSignedIn, isDefaultSearchEngine, prefService);
+  return contentNotificationEnabled || contentNotificationRegistered;
 }
 
 @end

@@ -6,7 +6,7 @@
 import datetime
 import os
 import sys
-from typing import Union
+from typing import Optional, Tuple
 
 _THIS_DIR = os.path.abspath(os.path.dirname(__file__))
 # The repo's root directory.
@@ -59,21 +59,73 @@ _RECOGNIZED_DATE_FORMATS = (
 )
 
 
-def format_matches(value: str, date_format: str):
-    """Returns whether the given value matches the date format."""
+def parse_with_format(value: str,
+                      date_format: str) -> Optional[datetime.datetime]:
+    """Returns datetime object if `value` can be parsed with `date_format`"""
     try:
-        datetime.datetime.strptime(value, date_format)
+        return datetime.datetime.strptime(value, date_format)
     except ValueError:
-        return False
-    return True
+        return None
 
 
-class DateField(field_types.MetadataField):
+def to_preferred_format(dt: datetime.datetime) -> str:
+    return datetime.datetime.strftime(dt, _PREFERRED_PREFIX_FORMAT)
+
+
+def parse_date(value: str) -> Optional[Tuple[str, bool]]:
+    """Try to parse value into a YYYY-MM-DD date.
+
+       If successful: returns (str, int).
+       - The str is guaranteed to be in YYYY-MM-DD format.
+       - The bool indicates whether `value` is ambiguous.
+         For example, "2020/03/05" matches both "YYYY/MM/DD" and "YYYY/DD/MM".
+    """
+    matches = []
+    value = value.strip()
+    if not value:
+        return None
+
+    first_part = value.split()[0]
+
+    # Try to match preferred prefix.
+    if dt := parse_with_format(first_part, _PREFERRED_PREFIX_FORMAT):
+        matches.append(dt)
+
+    if not matches:
+        # Try alternative prefix formats.
+        for date_format in _RECOGNIZED_PREFIX_FORMATS:
+            if dt := parse_with_format(first_part, date_format):
+                matches.append(dt)
+
+    if not matches:
+        # Try matching the complete string.
+        for date_format in _RECOGNIZED_DATE_FORMATS:
+            if dt := parse_with_format(value, date_format):
+                matches.append(dt)
+
+    if not matches:
+        # Try ISO 8601.
+        try:
+            dt = datetime.datetime.fromisoformat(value)
+            matches.append(dt)
+        except ValueError:
+            pass
+
+    if not matches:
+        return None
+
+    # Determine if the value is parsed without ambiguity.
+    is_ambiguous = len(set(map(to_preferred_format, matches))) > 1
+
+    return to_preferred_format(matches[0]), is_ambiguous
+
+
+class DateField(field_types.SingleLineTextField):
     """Custom field for the date when the package was updated."""
     def __init__(self):
-        super().__init__(name="Date", one_liner=True)
+        super().__init__(name="Date")
 
-    def validate(self, value: str) -> Union[vr.ValidationResult, None]:
+    def validate(self, value: str) -> Optional[vr.ValidationResult]:
         """Checks the given value is a YYYY-MM-DD date."""
         value = value.strip()
         if not value:
@@ -81,32 +133,29 @@ class DateField(field_types.MetadataField):
                 reason=f"{self._name} is empty.",
                 additional=["Provide date in format YYYY-MM-DD."])
 
-        # Check if the first part (to ignore timezone info) uses the
-        # preferred format.
-        parts = value.split()
-        if format_matches(parts[0], _PREFERRED_PREFIX_FORMAT):
+        if not (parsed := parse_date(value)):
+            return vr.ValidationError(
+                reason=f"{self._name} is invalid.",
+                additional=["Use YYYY-MM-DD.", f"Current value is '{value}'."])
+
+        parsed_date, is_ambiguous = parsed
+        if is_ambiguous:
+            return vr.ValidationError(
+                reason=f"{self._name} is ambiguous.",
+                additional=["Use YYYY-MM-DD.", f"Current value is '{value}'."])
+
+        if not parse_with_format(value, _PREFERRED_PREFIX_FORMAT):
+            return vr.ValidationWarning(
+                reason=f"{self._name} isn't using the canonical format.",
+                additional=["Use YYYY-MM-DD.", f"Current value is '{value}'."])
+
+        return None
+
+    def narrow_type(self, value: str) -> Optional[str]:
+        """Returns ISO 8601 date string, guarantees to be YYYY-MM-DD or None."""
+        if not (parsed := parse_date(value)):
             return None
 
-        # Check if the first part (to ignore timezone info) uses a
-        # recognized format.
-        for prefix_format in _RECOGNIZED_PREFIX_FORMATS:
-            if format_matches(parts[0], prefix_format):
-                return vr.ValidationWarning(
-                    reason=f"{self._name} is not in the preferred format.",
-                    additional=[
-                        "Use YYYY-MM-DD.", f"Current value is '{value}'."
-                    ])
-
-        # Check the entire value for recognized date formats.
-        for date_format in _RECOGNIZED_DATE_FORMATS:
-            if format_matches(value, date_format):
-                return vr.ValidationWarning(
-                    reason=f"{self._name} is not in the preferred format.",
-                    additional=[
-                        "Use YYYY-MM-DD.", f"Current value is '{value}'."
-                    ])
-
-        # Return an error as the value's format was not recognized.
-        return vr.ValidationError(
-            reason=f"{self._name} is invalid.",
-            additional=["Use YYYY-MM-DD.", f"Current value is '{value}'."])
+        # We still return a date even if the parsing result is ambiguous. An
+        # date that's a few month off is better than nothing at all.
+        return parsed[0]

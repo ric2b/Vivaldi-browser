@@ -12,7 +12,7 @@
    Copyright (c) 2001-2003 Fred L. Drake, Jr. <fdrake@users.sourceforge.net>
    Copyright (c) 2004-2006 Karl Waclawek <karl@waclawek.net>
    Copyright (c) 2005-2007 Steven Solie <steven@solie.ca>
-   Copyright (c) 2016-2022 Sebastian Pipping <sebastian@pipping.org>
+   Copyright (c) 2016-2024 Sebastian Pipping <sebastian@pipping.org>
    Copyright (c) 2017      Rhodri James <rhodri@wildebeest.org.uk>
    Copyright (c) 2019      Zhongyuan Zhou <zhouzhongyuan@huawei.com>
    Licensed under the MIT license:
@@ -142,8 +142,7 @@ dumpContentModelElement(const XML_Content *model, unsigned level,
 static bool
 dumpContentModel(const XML_Char *name, const XML_Content *root) {
   printf("Element \"%" XML_FMT_STR "\":\n", name);
-  Stack *stackTop = NULL;
-  stackTop = stackPushMalloc(stackTop, root, 1);
+  Stack *stackTop = stackPushMalloc(NULL, root, 1);
   if (! stackTop) {
     return false;
   }
@@ -157,11 +156,17 @@ dumpContentModel(const XML_Char *name, const XML_Content *root) {
     stackTop = stackPopFree(stackTop);
 
     for (size_t u = model->numchildren; u >= 1; u--) {
-      stackTop
+      Stack *const newStackTop
           = stackPushMalloc(stackTop, model->children + (u - 1), level + 1);
-      if (! stackTop) {
+      if (! newStackTop) {
+        // We ran out of memory, so let's free all memory allocated
+        // earlier in this function, to be leak-clean:
+        while (stackTop != NULL) {
+          stackTop = stackPopFree(stackTop);
+        }
         return false;
       }
+      stackTop = newStackTop;
     }
   }
 

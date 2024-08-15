@@ -137,7 +137,7 @@ Node::InsertionNotificationRequest HTMLVideoElement::InsertedInto(
   auto insertion_notification_request =
       HTMLMediaElement::InsertedInto(insertion_point);
 
-  UpdateVisibilityTrackerStateIfExists();
+  UpdateVideoVisibilityTracker();
 
   return insertion_notification_request;
 }
@@ -145,13 +145,13 @@ Node::InsertionNotificationRequest HTMLVideoElement::InsertedInto(
 void HTMLVideoElement::RemovedFrom(ContainerNode& insertion_point) {
   HTMLMediaElement::RemovedFrom(insertion_point);
   custom_controls_fullscreen_detector_->Detach();
-  UpdateVisibilityTrackerStateIfExists();
+  UpdateVideoVisibilityTracker();
   SetPersistentState(false);
 }
 
 void HTMLVideoElement::ContextDestroyed() {
   custom_controls_fullscreen_detector_->ContextDestroyed();
-  UpdateVisibilityTrackerStateIfExists();
+  UpdateVideoVisibilityTracker();
   HTMLMediaElement::ContextDestroyed();
 }
 
@@ -342,14 +342,6 @@ void HTMLVideoElement::CreateVisibilityTrackerIfNeeded() {
       *this, kVisibilityThreshold, std::move(report_visibility_cb));
 }
 
-void HTMLVideoElement::UpdateVisibilityTrackerStateIfExists() {
-  if (!visibility_tracker_) {
-    return;
-  }
-
-  visibility_tracker_->UpdateVisibilityTrackerState();
-}
-
 void HTMLVideoElement::ReportVisibility(bool meets_visibility_threshold) {
   if (GetWebMediaPlayer()) {
     for (auto& observer : GetMediaPlayerObserverRemoteSet()) {
@@ -369,7 +361,7 @@ void HTMLVideoElement::OnPlay() {
   }
 
   CreateVisibilityTrackerIfNeeded();
-  UpdateVisibilityTrackerStateIfExists();
+  UpdateVideoVisibilityTracker();
 
   if (!RuntimeEnabledFeatures::VideoAutoFullscreenEnabled() ||
       FastHasAttribute(html_names::kPlaysinlineAttr)) {
@@ -377,10 +369,6 @@ void HTMLVideoElement::OnPlay() {
   }
 
   webkitEnterFullscreen();
-}
-
-void HTMLVideoElement::OnPause() {
-  UpdateVisibilityTrackerStateIfExists();
 }
 
 void HTMLVideoElement::OnLoadStarted() {
@@ -402,6 +390,14 @@ void HTMLVideoElement::OnLoadFinished() {
   }
 
   UpdatePictureInPictureAvailability();
+}
+
+void HTMLVideoElement::UpdateVideoVisibilityTracker() {
+  if (!visibility_tracker_) {
+    return;
+  }
+
+  visibility_tracker_->UpdateVisibilityTrackerState();
 }
 
 void HTMLVideoElement::RequestEnterPictureInPicture() {
@@ -529,10 +525,10 @@ void HTMLVideoElement::DidMoveToNewDocument(Document& old_document) {
     // Ensure that the |visibility_tracker_| is detached when |this| is moved to
     // a new document. Calling |ElementDidMoveToNewDocument| on the tracker at
     // this point prevents having the tracker attached to an old document. The
-    // subsequent call to |UpdateVisibilityTrackerStateIfExists| will re-attach
+    // subsequent call to |UpdateVideoVisibilityTracker| will re-attach
     // the tracker to the new document if needed.
     visibility_tracker_->ElementDidMoveToNewDocument();
-    UpdateVisibilityTrackerStateIfExists();
+    UpdateVideoVisibilityTracker();
   }
 
   HTMLMediaElement::DidMoveToNewDocument(old_document);
@@ -647,7 +643,7 @@ gfx::Size HTMLVideoElement::BitmapSourceSize() const {
   return gfx::Size(videoWidth(), videoHeight());
 }
 
-ScriptPromiseTyped<ImageBitmap> HTMLVideoElement::CreateImageBitmap(
+ScriptPromise<ImageBitmap> HTMLVideoElement::CreateImageBitmap(
     ScriptState* script_state,
     std::optional<gfx::Rect> crop_rect,
     const ImageBitmapOptions* options,
@@ -656,13 +652,13 @@ ScriptPromiseTyped<ImageBitmap> HTMLVideoElement::CreateImageBitmap(
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
         "The provided element has not retrieved data.");
-    return ScriptPromiseTyped<ImageBitmap>();
+    return ScriptPromise<ImageBitmap>();
   }
   if (!HasAvailableVideoFrame()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
         "The provided element's player has no current data.");
-    return ScriptPromiseTyped<ImageBitmap>();
+    return ScriptPromise<ImageBitmap>();
   }
 
   return ImageBitmapSource::FulfillImageBitmap(
@@ -824,6 +820,8 @@ void HTMLVideoElement::OnWebMediaPlayerCreated() {
 void HTMLVideoElement::OnWebMediaPlayerCleared() {
   if (auto* vfc_requester = VideoFrameCallbackRequester::From(*this))
     vfc_requester->OnWebMediaPlayerCleared();
+
+  UpdateVideoVisibilityTracker();
 }
 
 void HTMLVideoElement::AttributeChanged(

@@ -345,10 +345,8 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
     this.cacheStorageListTreeElement = new ServiceWorkerCacheTreeElement(panel);
     storageTreeElement.appendChild(this.cacheStorageListTreeElement);
 
-    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.STORAGE_BUCKETS_TREE)) {
-      this.storageBucketsTreeElement = new StorageBucketsTreeParentElement(panel);
-      storageTreeElement.appendChild(this.storageBucketsTreeElement);
-    }
+    this.storageBucketsTreeElement = new StorageBucketsTreeParentElement(panel);
+    storageTreeElement.appendChild(this.storageBucketsTreeElement);
 
     const backgroundServiceSectionTitle = i18nString(UIStrings.backgroundServices);
     const backgroundServiceTreeElement = this.addSidebarSection(backgroundServiceSectionTitle);
@@ -658,7 +656,7 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
   }
 
   private addCookieDocument(frame: SDK.ResourceTreeModel.ResourceTreeFrame): void {
-    // In case the current frame was unreachable, show it's cookies
+    // In case the current frame was unreachable, show its cookies
     // instead of the error interstitials because they might help to
     // debug why the frame was unreachable.
     const urlToParse = frame.unreachableUrl() || frame.url;

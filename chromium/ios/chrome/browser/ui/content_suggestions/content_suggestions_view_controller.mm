@@ -178,9 +178,7 @@ const float kMagicStackReplaceModuleFadeAnimationDistance = 50;
     [self createMagicStack];
     if (_magicStackRankReceived) {
       [self populateMagicStack];
-    } else if (base::FeatureList::IsEnabled(
-                   segmentation_platform::features::
-                       kSegmentationPlatformIosModuleRanker)) {
+    } else {
       // If Magic Stack rank has not been received from Segmentation, add
       // placeholders
       [self populateMagicStackWithPlaceholders];
@@ -242,7 +240,8 @@ const float kMagicStackReplaceModuleFadeAnimationDistance = 50;
         configureWithConfig:_mostVisitedTileConfig];
     // If viewDidLoad has been called before the first valid Most Visited Tiles
     // are available, construct `mostVisitedStackView`.
-    if (self.verticalStackView) {
+    if (self.verticalStackView &&
+        _mostVisitedTileConfig.mostVisitedItems.count > 0) {
       [self createAndInsertMostVisitedModule];
     }
 
@@ -278,9 +277,7 @@ const float kMagicStackReplaceModuleFadeAnimationDistance = 50;
   CHECK([order count] > 0);
   _magicStackRankReceived = YES;
   _magicStackModuleOrder = [order mutableCopy];
-  if (self.viewLoaded &&
-      base::FeatureList::IsEnabled(segmentation_platform::features::
-                                       kSegmentationPlatformIosModuleRanker)) {
+  if (self.viewLoaded) {
     // Magic Stack order is only passed to the VC late when fetching it from the
     // Segmentation Platform
     [self populateMagicStack];
@@ -528,6 +525,10 @@ const float kMagicStackReplaceModuleFadeAnimationDistance = 50;
   [self.audience enableNotifications:type];
 }
 
+- (void)disableNotifications:(ContentSuggestionsModuleType)type {
+  [self.audience disableNotifications:type];
+}
+
 #pragma mark - Private
 
 // Returns whether the Magic Stack has been constructed and has already been
@@ -562,6 +563,7 @@ const float kMagicStackReplaceModuleFadeAnimationDistance = 50;
         [self.mostVisitedModuleContainer.centerXAnchor
             constraintEqualToAnchor:self.view.centerXAnchor],
       ]];
+      [self.view layoutIfNeeded];
     }
 }
 
@@ -629,13 +631,10 @@ const float kMagicStackReplaceModuleFadeAnimationDistance = 50;
 // This method loops over any module types listed in `_magicStackModuleOrder`
 // and adds their respective views to the Magic Stack.
 - (void)populateMagicStack {
-  if (base::FeatureList::IsEnabled(segmentation_platform::features::
-                                       kSegmentationPlatformIosModuleRanker)) {
     // Clear out any placeholders.
     for (UIView* view in _magicStack.arrangedSubviews) {
       [view removeFromSuperview];
     }
-  }
 
   // Add Magic Stack modules in order dictated by `_magicStackModuleOrder`.
   for (NSNumber* moduleType in _magicStackModuleOrder) {

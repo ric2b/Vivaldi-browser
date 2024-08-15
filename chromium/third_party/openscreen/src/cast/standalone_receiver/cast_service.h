@@ -72,8 +72,8 @@ class CastService final : public discovery::ReportingClient {
       SerialDeletePtr<discovery::DnsSdServicePublisher<ReceiverInfo>>;
 
   // discovery::ReportingClient overrides.
-  void OnFatalError(Error error) final;
-  void OnRecoverableError(Error error) final;
+  void OnFatalError(const Error& error) final;
+  void OnRecoverableError(const Error& error) final;
 
   const IPEndpoint local_endpoint_;
   const GeneratedCredentials credentials_;

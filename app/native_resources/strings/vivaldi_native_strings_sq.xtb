@@ -63,7 +63,7 @@
 <translation id="3383198080133834965">Keni versionin e ri!</translation>
 <translation id="3451317331714872347">Peizazhi 8</translation>
 <translation id="3457498675806041407">Konfirmoni daljen</translation>
-<translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> është instaluar më parë dhe do të aktivizohet kur shfletuesit të hapet sërish.</translation>
+<translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> është instaluar dhe do të aktivizohet kur shfletuesi të hapet sërish.</translation>
 <translation id="3516213908976398531">Peizazhi 11</translation>
 <translation id="3521635864657970829">Vërtet do e mbyllni dritaren?</translation>
 <translation id="3540597690227428180">Kafsha 9</translation>
@@ -83,11 +83,11 @@
 <translation id="3914946330804881301">Të importuara nga Opera</translation>
 <translation id="3921292902397893431">Monstra 8</translation>
 <translation id="3943857333388298514">Ngjit</translation>
-<translation id="3974783668264968389">Vivaldi nuk arriti të hapë vendruajtjen e sigurt. Duke mos e pasur atë do të humbisni të dhënat identifikuese që keni regjistruar, cookies e sigurta dhe funksionet, si Sinkronizuesi, Postieri dhe Kalendari.
-
-    Lutemi ta mbyllni programin tani, hapeni ose riparojeni vendruajtjen dhe provojeni sërish. Nëse keni vendosur të vazhdoni, klikoni kutinë dhe shtypni butonin "Vazhdoj duke humbur të dhënat".</translation>
 <translation id="4005270918754737597">Kaloj këtë version</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi nuk mund të hapë depon e siguruar me kod. Nëse nuk keni kodin e depos do të humbisni kredencialet, cookies e sigurta dhe funksionet, si Sinkronizuesi, Postieri dhe Kalendari nuk do të punojnë më.
+
+    Lutemi të dilni tani, hapni ose riparoni depon  me kod dhe provojeni prapë. Vërtet doni të vijoni, pra, të humbni të dhënat?</translation>
 <translation id="4074744496918018786">Hap imazhin në dritare private</translation>
 <translation id="410351446219883937">Luajtje automatike</translation>
 <translation id="4281844954008187215">Kushtet e shërbimit</translation>
@@ -178,6 +178,7 @@
 <translation id="8669345741879513971">Monstra 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Inspektoj dokumentin portal</translation>
+<translation id="875142999698251063">Dal tani</translation>
 <translation id="8768970203213061953">Peizazhi 14</translation>
 <translation id="8773635261052182196">Nuk do të shfaqen më njoftimet. Mund të aktivizohen sërish te parametrat e Vivaldit.</translation>
 <translation id="8774017153185436870">Uebsajtet mund të luajnë automatikisht videot</translation>

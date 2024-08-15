@@ -8,6 +8,7 @@
 #include <optional>
 
 #include "base/command_line.h"
+#include "base/cpu_reduction_experiment.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/location.h"
@@ -254,7 +255,8 @@ void CommandBufferProxyImpl::OrderingBarrierHelper(int32_t put_offset) {
     return;
   last_put_offset_ = put_offset;
   last_flush_id_ = channel_->OrderingBarrier(
-      route_id_, put_offset, std::move(pending_sync_token_fences_));
+      route_id_, put_offset, std::move(pending_sync_token_fences_),
+      last_fence_sync_release_);
 }
 
 gpu::CommandBuffer::State CommandBufferProxyImpl::WaitForTokenInRange(
@@ -386,7 +388,8 @@ void CommandBufferProxyImpl::DestroyTransferBuffer(int32_t id) {
       mojom::DeferredRequestParams::NewCommandBufferRequest(
           mojom::DeferredCommandBufferRequest::New(
               route_id_, mojom::DeferredCommandBufferRequestParams::
-                             NewDestroyTransferBuffer(id))));
+                             NewDestroyTransferBuffer(id))),
+      /*sync_token_fences=*/{}, /*release_count=*/0);
 }
 
 void CommandBufferProxyImpl::ForceLostContext(error::ContextLostReason reason) {
@@ -439,12 +442,14 @@ void CommandBufferProxyImpl::EnsureWorkVisible() {
   TRACE_EVENT_NESTABLE_ASYNC_END0("gpu,login", kEnsureWorkVisible,
                                   TRACE_ID_LOCAL(kEnsureWorkVisible));
 
-  GetUMAHistogramEnsureWorkVisibleDuration()->Add(
-      elapsed_timer.Elapsed().InMicroseconds());
+  if (base::ShouldLogHistogramForCpuReductionExperiment()) {
+    GetUMAHistogramEnsureWorkVisibleDuration()->Add(
+        elapsed_timer.Elapsed().InMicroseconds());
 
-  UMA_HISTOGRAM_CUSTOM_TIMES("GPU.EnsureWorkVisibleDurationLowRes",
-                             elapsed_timer.Elapsed(), base::Milliseconds(1),
-                             base::Seconds(5), 100);
+    UMA_HISTOGRAM_CUSTOM_TIMES("GPU.EnsureWorkVisibleDurationLowRes",
+                               elapsed_timer.Elapsed(), base::Milliseconds(1),
+                               base::Seconds(5), 100);
+  }
 }
 
 gpu::CommandBufferNamespace CommandBufferProxyImpl::GetNamespaceID() const {
@@ -463,7 +468,7 @@ void CommandBufferProxyImpl::FlushPendingWork() {
 
 uint64_t CommandBufferProxyImpl::GenerateFenceSyncRelease() {
   CheckLock();
-  return next_fence_sync_release_++;
+  return ++last_fence_sync_release_;
 }
 
 // This can be called from any thread without holding |lock_|. Use a thread-safe
@@ -559,7 +564,7 @@ void CommandBufferProxyImpl::GetGpuFence(
   command_buffer_->GetGpuFenceHandle(
       gpu_fence_id,
       base::BindOnce(&CommandBufferProxyImpl::OnGetGpuFenceHandleComplete,
-                     // TODO(crbug.com/1380714): Remove
+                     // TODO(crbug.com/40061562): Remove
                      // `UnsafeDanglingUntriaged`
                      base::UnsafeDanglingUntriaged(this), gpu_fence_id,
                      std::move(callback)));
@@ -599,7 +604,7 @@ void CommandBufferProxyImpl::SetDefaultFramebufferSharedImage(
                       mojom::SetDefaultFramebufferSharedImageParams::New(
                           mailbox, samples_count, preserve, needs_depth,
                           needs_stencil)))),
-      {sync_token});
+      {sync_token}, /*release_count=*/0);
 }
 
 std::pair<base::UnsafeSharedMemoryRegion, base::WritableSharedMemoryMapping>

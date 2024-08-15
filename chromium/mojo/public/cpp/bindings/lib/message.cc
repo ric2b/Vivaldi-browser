@@ -156,7 +156,7 @@ void CreateSerializedMessageObject(uint32_t name,
       handles ? reinterpret_cast<MojoHandle*>(handles->data()) : nullptr,
       handles ? static_cast<uint32_t>(handles->size()) : 0, nullptr, &buffer,
       &buffer_size);
-  // TODO(crbug.com/1239934): Relax this assertion or fail more gracefully.
+  // TODO(crbug.com/40785088): Relax this assertion or fail more gracefully.
   CHECK_EQ(MOJO_RESULT_OK, rv);
   if (handles) {
     // Handle ownership has been taken by MojoAppendMessageData.
@@ -168,7 +168,7 @@ void CreateSerializedMessageObject(uint32_t name,
                                   buffer_size);
 
   // Make sure we zero the memory first!
-  memset(payload_buffer.data(), 0, total_allocation_size);
+  memset(payload_buffer.data(), 0, buffer_size);
   WriteMessageHeader(name, flags, trace_nonce, payload_interface_id_count,
                      &payload_buffer);
 
@@ -186,7 +186,7 @@ void SerializeUnserializedContext(MojoMessageHandle message,
                       *context->header());
   context->Serialize(new_message);
 
-  // TODO(crbug.com/753433): Support lazy serialization of associated endpoint
+  // TODO(crbug.com/41338252): Support lazy serialization of associated endpoint
   // handles.
   new_message.SerializeHandles(/*group_controller=*/nullptr);
 
@@ -279,6 +279,24 @@ Message::Message(uint32_t name,
               handles,
               estimated_payload_size) {}
 
+Message::Message(uint32_t name,
+                 uint32_t flags,
+                 MojoCreateMessageFlags create_message_flags,
+                 size_t estimated_payload_size)
+    : Message(name,
+              flags,
+              0,
+              0,
+              create_message_flags,
+              nullptr,
+              estimated_payload_size) {}
+
+Message::Message(uint32_t name, uint32_t flags, size_t estimated_payload_size)
+    : Message(name,
+              flags,
+              MOJO_CREATE_MESSAGE_FLAG_NONE,
+              estimated_payload_size) {}
+
 Message::Message(ScopedMessageHandle handle,
                  const internal::MessageHeaderV1& header)
     : handle_(std::move(handle)), transferable_(true) {
@@ -331,7 +349,7 @@ Message::Message(base::span<const uint8_t> payload,
       reinterpret_cast<MojoHandle*>(handles.data()),
       static_cast<uint32_t>(handles.size()), &options, &buffer, &buffer_size);
 
-  // TODO(crbug.com/1239934): Relax this assertion or fail more gracefully.
+  // TODO(crbug.com/40785088): Relax this assertion or fail more gracefully.
   CHECK_EQ(MOJO_RESULT_OK, rv);
 
   // Handle ownership has been taken by MojoAppendMessageData.
@@ -491,7 +509,7 @@ void Message::SerializeHandles(AssociatedGroupController* group_controller) {
     // modify the message header. Faster path for that.
     bool attached = payload_buffer_.AttachHandles(mutable_handles());
 
-    // TODO(crbug.com/1239934): Relax this assertion or fail more gracefully.
+    // TODO(crbug.com/40785088): Relax this assertion or fail more gracefully.
     CHECK(attached);
 
     return;
@@ -568,6 +586,19 @@ bool Message::DeserializeAssociatedEndpointHandles(
     ids[i] = kInvalidInterfaceId;
   }
   return result;
+}
+
+void Message::NotifyPeerClosureForSerializedHandles(
+    AssociatedGroupController* group_controller) {
+  const uint32_t num_ids = payload_num_interface_ids();
+  if (num_ids == 0) {
+    return;
+  }
+
+  const uint32_t* ids = header_v2()->payload_interface_ids.Get()->storage();
+  for (uint32_t i = 0; i < num_ids; ++i) {
+    group_controller->NotifyLocalEndpointOfPeerClosure(ids[i]);
+  }
 }
 
 void Message::SerializeIfNecessary() {

@@ -82,16 +82,20 @@ void OmniboxPopupViewWebUI::UpdatePopupAppearance() {
       omnibox_view_->IsImeShowingPopup()) {
     presenter_->Hide();
   } else {
+    const bool was_visible = presenter_->IsShown();
     presenter_->Show();
+    if (!was_visible) {
+      NotifyOpenListeners();
+    }
   }
 }
 
 void OmniboxPopupViewWebUI::ProvideButtonFocusHint(size_t line) {
-  // TODO(crbug.com/1396174): Not implemented for WebUI omnibox popup yet.
+  // TODO(crbug.com/40062053): Not implemented for WebUI omnibox popup yet.
 }
 
 void OmniboxPopupViewWebUI::OnMatchIconUpdated(size_t match_index) {
-  // TODO(crbug.com/1396174): Not implemented for WebUI omnibox popup yet.
+  // TODO(crbug.com/40062053): Not implemented for WebUI omnibox popup yet.
 }
 
 void OmniboxPopupViewWebUI::OnDragCanceled() {}
@@ -101,7 +105,7 @@ void OmniboxPopupViewWebUI::GetPopupAccessibleNodeData(
 
 void OmniboxPopupViewWebUI::AddPopupAccessibleNodeData(
     ui::AXNodeData* node_data) {
-  // TODO(crbug.com/1396174): Not implemented for WebUI omnibox popup yet.
+  // TODO(crbug.com/40062053): Not implemented for WebUI omnibox popup yet.
 }
 
 std::u16string OmniboxPopupViewWebUI::GetAccessibleButtonTextForResult(

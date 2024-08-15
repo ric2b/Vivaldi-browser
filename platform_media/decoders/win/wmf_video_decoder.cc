@@ -98,7 +98,7 @@ Microsoft::WRL::ComPtr<IMFSample> CreateSample(DWORD buffer_size,
 Microsoft::WRL::ComPtr<IMFSample> PrepareInputSample(const DecoderBuffer& input,
                                                      DWORD buffer_alignment) {
   Microsoft::WRL::ComPtr<IMFSample> sample =
-      CreateSample(input.data_size(), buffer_alignment);
+      CreateSample(input.size(), buffer_alignment);
   if (!sample)
     return nullptr;
 
@@ -111,12 +111,12 @@ Microsoft::WRL::ComPtr<IMFSample> PrepareInputSample(const DecoderBuffer& input,
   hr = buffer->Lock(&buff_ptr, nullptr, nullptr);
   RETURN_ON_HR_FAIL(hr, "IMFMediaBuffer::Lock()", nullptr);
 
-  memcpy(buff_ptr, input.data(), input.data_size());
+  memcpy(buff_ptr, input.data(), input.size());
 
   hr = buffer->Unlock();
   RETURN_ON_HR_FAIL(hr, "IMFMediaBuffer::Unlock()", nullptr);
 
-  hr = buffer->SetCurrentLength(input.data_size());
+  hr = buffer->SetCurrentLength(input.size());
   RETURN_ON_HR_FAIL(hr, "IMFMediaBuffer::SetCurrentLength()", nullptr);
 
   // IMFSample's timestamp is expressed in hundreds of nanoseconds.

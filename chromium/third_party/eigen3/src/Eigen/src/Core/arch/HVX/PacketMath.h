@@ -161,9 +161,6 @@ struct packet_traits<float> : default_packet_traits {
     HasBlend = 0,
 
     HasDiv = 0,
-    HasFloor = 0,
-    HasCeil = 0,
-    HasRint = 0,
 
     HasSin = 0,
     HasCos = 0,

@@ -7,7 +7,7 @@
  * 'settings-privacy-page' is the settings page containing privacy and
  * security settings.
  */
-import 'chrome://resources/cr_components/settings_prefs/prefs.js';
+import '/shared/settings/prefs/prefs.js';
 import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
@@ -20,12 +20,13 @@ import '../safety_hub/safety_hub_module.js';
 import '../settings_page/settings_animated_pages.js';
 import '../settings_page/settings_subpage.js';
 import '../settings_shared.css.js';
+import '../site_settings/offer_writing_help_page.js';
 import '../site_settings/settings_category_default_radio_group.js';
 import './privacy_guide/privacy_guide_dialog.js';
 
+import {PrefsMixin} from '/shared/settings/prefs/prefs_mixin.js';
 import type {PrivacyPageBrowserProxy} from '/shared/settings/privacy_page/privacy_page_browser_proxy.js';
 import {PrivacyPageBrowserProxyImpl} from '/shared/settings/privacy_page/privacy_page_browser_proxy.js';
-import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
 import type {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
@@ -193,6 +194,16 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         value: () => loadTimeData.getBoolean('autoPictureInPictureEnabled'),
       },
 
+      capturedSurfaceControlEnabled_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('capturedSurfaceControlEnabled'),
+      },
+
+      enableComposeProactiveNudge_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('enableComposeProactiveNudge'),
+      },
+
       /**
        * Whether the File System Access Persistent Permissions UI should be
        * displayed.
@@ -309,6 +320,22 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         },
       },
 
+      // <if expr="chrome_root_store_cert_management_ui">
+      enableCertManagementUIV2_: {
+        type: Boolean,
+        readOnly: true,
+        value: function() {
+          return loadTimeData.getBoolean('enableCertManagementUIV2');
+        },
+      },
+      // </if>
+
+      enableKeyboardAndPointerLockPrompt_: {
+        type: Boolean,
+        value: () =>
+            loadTimeData.getBoolean('enableKeyboardAndPointerLockPrompt'),
+      },
+
       isNotificationAllowed_: Boolean,
       isLocationAllowed_: Boolean,
       notificationPermissionsReviewHeader_: String,
@@ -337,6 +364,8 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   private is3pcdRedesignEnabled_: boolean;
   private privateStateTokensEnabled_: boolean;
   private autoPictureInPictureEnabled_: boolean;
+  private capturedSurfaceControlEnabled_: boolean;
+  private enableComposeProactiveNudge_: boolean;
   private enableSafetyHub_: boolean;
   private focusConfig_: FocusConfig;
   private searchFilter_: string;
@@ -353,6 +382,10 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   private isNotificationAllowed_: boolean;
   private isLocationAllowed_: boolean;
   private showDedicatedCpssSetting_: boolean;
+  // <if expr="chrome_root_store_cert_management_ui">
+  private enableCertManagementUIV2_: boolean;
+  // </if>
+  private enableKeyboardAndPointerLockPrompt_: boolean;
 
   override ready() {
     super.ready();
@@ -585,9 +618,15 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         this.isPrivacySandboxRestrictedNoticeEnabled_;
   }
 
+  // Only show Manage Topics page when PTB is enabled. If user is part of Mode B
+  // and include-mode-b feature param is false, don't show the page.
   private shouldShowManageTopics_(): boolean {
-    return this.isProactiveTopicsBlockingEnabled_ &&
-        !this.isPrivacySandboxRestricted_;
+    if (!this.isProactiveTopicsBlockingEnabled_ ||
+        this.isPrivacySandboxRestricted_) {
+      return false;
+    }
+    return loadTimeData.getBoolean('proactiveTopicsBlockingIncludesModeB') ||
+        !loadTimeData.getBoolean('isInCookieDeprecationFacilitatedTesting');
   }
 
   private onSafetyHubButtonClick_() {

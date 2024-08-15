@@ -40,7 +40,7 @@ langsvr::Result<langsvr::SuccessType> Server::PublishDiagnostics(File& file) {
     for (auto& diag : file.program.Diagnostics()) {
         lsp::Diagnostic d;
         d.message = diag.message.Plain();
-        d.range = Conv(diag.source.range);
+        d.range = file.Conv(diag.source.range);
         switch (diag.severity) {
             case diag::Severity::Note:
                 d.severity = lsp::DiagnosticSeverity::kInformation;
@@ -49,8 +49,6 @@ langsvr::Result<langsvr::SuccessType> Server::PublishDiagnostics(File& file) {
                 d.severity = lsp::DiagnosticSeverity::kWarning;
                 break;
             case diag::Severity::Error:
-            case diag::Severity::InternalCompilerError:
-            case diag::Severity::Fatal:
                 d.severity = lsp::DiagnosticSeverity::kError;
                 break;
         }

@@ -10,9 +10,11 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <xnnpack.h>
-#include <xnnpack/allocator.h>
+#include <xnnpack/allocation-type.h>
+#include <xnnpack/common.h>
 #include <xnnpack/log.h>
 #include <xnnpack/math.h>
 #include <xnnpack/params.h>
@@ -36,17 +38,6 @@ static void set_shape(struct xnn_value* value, size_t num_dims, const size_t* di
   value->shape.num_dims = num_dims;
   if (num_dims != 0) {
     memcpy(value->shape.dim, dims, num_dims * sizeof(size_t));
-  }
-  for (size_t i = 0; i < num_dims; i++) {
-    const size_t original_dim = value->shape.dim[i];
-    if (original_dim == 0) {
-      // Dimension of 0 implies an unknown dimension.
-      value->shape.minimum_dim[i] = 0;
-      value->shape.maximum_dim[i] = SIZE_MAX;
-    } else {
-      value->shape.minimum_dim[i] = original_dim;
-      value->shape.maximum_dim[i] = original_dim;
-    }
   }
 }
 
@@ -277,6 +268,7 @@ enum xnn_status xnn_define_dynamically_quantized_tensor_value(
   value->quantization.num_nonbatch_dims = num_nonbatch_dims;
   set_shape(value, num_dims, dims);
   value->size = xnn_tensor_get_size_by_id(subgraph, value->id);
+  value->quantization.dynamic_params_size =  xnn_tensor_get_dynamic_quant_param_size(value);
   value->flags = flags;
   value->data = NULL;
   set_allocation_type(value);
@@ -541,45 +533,19 @@ size_t xnn_tensor_get_size(const struct xnn_value* value)
   return size;
 }
 
+// Return size of the dynamic quantization params in this value
+size_t xnn_tensor_get_dynamic_quant_param_size(const struct xnn_value* value)
+{
+  assert (value->datatype == xnn_datatype_qdint8);
+
+  const size_t batch_dims_size = xnn_shape_multiply_batch_dims(&value->shape, value->quantization.num_nonbatch_dims);
+  return batch_dims_size * sizeof(struct xnn_dynamic_quantization_params);
+}
+
 size_t xnn_tensor_get_size_by_id(xnn_subgraph_t subgraph, uint32_t value_id)
 {
   assert(value_id < subgraph->num_values);
 
   const struct xnn_value* value = subgraph->values + value_id;
   return xnn_tensor_get_size(value);
-}
-
-static bool tensor_dim_is_static(const struct xnn_value* value, uint32_t dim_index)
-{
-  return (value->shape.dim[dim_index] == value->shape.minimum_dim[dim_index] &&
-          value->shape.dim[dim_index] == value->shape.maximum_dim[dim_index]);
-}
-
-bool xnn_tensor_shape_is_static(const struct xnn_value* value)
-{
-  for (size_t i = 0; i < value->shape.num_dims; i++) {
-    if (!tensor_dim_is_static(value, i)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-enum xnn_shape_inference_status xnn_tensor_propagate_dimension(
-  struct xnn_value* to,
-  uint32_t to_dim,
-  size_t inferred_dim)
-{
-  assert(to_dim < to->shape.num_dims);
-
-  // If inferred_dim is dynamic, then we don't have useful information to propagate.
-  if (to->shape.dim[to_dim] == inferred_dim) {
-    return xnn_shape_inference_status_no_change;
-  }
-
-  to->shape.dim[to_dim] = inferred_dim;
-  if (inferred_dim > to->shape.maximum_dim[to_dim]) {
-    to->shape.maximum_dim[to_dim] = inferred_dim;
-  }
-  return xnn_shape_inference_status_changed;
 }

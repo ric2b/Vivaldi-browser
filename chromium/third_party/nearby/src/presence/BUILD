@@ -66,8 +66,11 @@ cc_library(
     deps = [
         ":presence",
         ":types",
+        "//internal/interop:device",
+        "//internal/interop:test_support",
         "//internal/platform:types",
         "//internal/proto:metadata_cc_proto",
+        "//presence/implementation:internal",  # build_cleaner: keep
         "@com_google_absl//absl/status:statusor",
     ],
 )
@@ -202,6 +205,7 @@ cc_test(
         "//presence/proto:presence_frame_cc_proto",
         "@com_github_protobuf_matchers//protobuf-matchers",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",

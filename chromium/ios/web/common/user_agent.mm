@@ -17,6 +17,13 @@
 #import "base/system/sys_info.h"
 #import "ios/web/common/features.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "base/vivaldi_user_agent.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 namespace {
 
 const char kDesktopUserAgentProductPlaceholder[] =
@@ -96,6 +103,11 @@ std::string BuildDesktopUserAgent(const std::string& desktop_product) {
   std::string user_agent;
   base::StringAppendF(&user_agent, kDesktopUserAgentProductPlaceholder,
                       product.c_str());
+
+  if (IsVivaldiRunning()) {
+    vivaldi_user_agent::UpdateAgentString(/*reduced=*/false, user_agent);
+  } // End Vivaldi
+
   return user_agent;
 }
 
@@ -105,6 +117,10 @@ std::string BuildMobileUserAgent(const std::string& mobile_product) {
                       "Mozilla/5.0 (%s) AppleWebKit/605.1.15"
                       " (KHTML, like Gecko) %s Mobile/15E148 Safari/604.1",
                       BuildOSCpuInfo().c_str(), mobile_product.c_str());
+
+  if (IsVivaldiRunning()) {
+    vivaldi_user_agent::UpdateAgentString(/*reduced=*/false, user_agent);
+  } // End Vivaldi
 
   return user_agent;
 }

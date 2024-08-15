@@ -38,6 +38,24 @@ _ROLL_SUBJECT = re.compile(
     r'Roll recipe dependencies \(trivial\)\.'
     r')$')
 
+_PUBLIC_GERRIT_HOSTS = {
+    'android',
+    'aomedia',
+    'boringssl',
+    'chromium',
+    'dart',
+    'dawn',
+    'fuchsia',
+    'gn',
+    'go',
+    'llvm',
+    'pdfium',
+    'quiche',
+    'skia',
+    'swiftshader',
+    'webrtc',
+}
+
 
 class Error(Exception):
     pass
@@ -77,10 +95,15 @@ def is_pristine(root):
             and not check_output(diff_cmd + ['--cached'], cwd=root).strip())
 
 
+def get_gerrit_host(url):
+    """Returns the host for a given Gitiles URL."""
+    m = re.match(r'https://([^/]*)\.googlesource\.com/', url)
+    return m and m.group(1)
+
+
 def get_log_url(upstream_url, head, tot):
     """Returns an URL to read logs via a Web UI if applicable."""
-    if re.match(r'https://[^/]*\.googlesource\.com/', upstream_url):
-        # gitiles
+    if get_gerrit_host(upstream_url):
         return '%s/+log/%s..%s' % (upstream_url, head[:12], tot[:12])
     if upstream_url.startswith('https://github.com/'):
         upstream_url = upstream_url.rstrip('/')
@@ -97,7 +120,7 @@ def should_show_log(upstream_url):
         return False
     if 'webrtc' in upstream_url:
         return False
-    return True
+    return get_gerrit_host(upstream_url) in _PUBLIC_GERRIT_HOSTS
 
 
 def gclient(args):
@@ -105,14 +128,11 @@ def gclient(args):
     return check_output([sys.executable, GCLIENT_PATH] + args).strip()
 
 
-def generate_commit_message(full_dir, dependency, head, roll_to, no_log,
-                            log_limit):
+def generate_commit_message(full_dir, dependency, head, roll_to, upstream_url,
+                            show_log, log_limit):
     """Creates the commit message for this specific roll."""
     commit_range = '%s..%s' % (head, roll_to)
     commit_range_for_header = '%s..%s' % (head[:9], roll_to[:9])
-    upstream_url = check_output(['git', 'config', 'remote.origin.url'],
-                                cwd=full_dir).strip()
-    log_url = get_log_url(upstream_url, head, roll_to)
     cmd = ['git', 'log', commit_range, '--date=short', '--no-merges']
     logs = check_output(
         # Args with '=' are automatically quoted.
@@ -130,21 +150,21 @@ def generate_commit_message(full_dir, dependency, head, roll_to, no_log,
         's' if nb_commits > 1 else '',
         ('; %s trivial rolls' % rolls) if rolls else '')
     log_section = ''
-    if log_url:
+    if log_url := get_log_url(upstream_url, head, roll_to):
         log_section = log_url + '\n\n'
-    log_section += '$ %s ' % ' '.join(cmd)
-    log_section += '--format=\'%ad %ae %s\'\n'
-    log_section = log_section.replace(commit_range, commit_range_for_header)
     # It is important that --no-log continues to work, as it is used by
     # internal -> external rollers. Please do not remove or break it.
-    if not no_log and should_show_log(upstream_url):
+    if show_log:
+        log_section += '$ %s ' % ' '.join(cmd)
+        log_section += '--format=\'%ad %ae %s\'\n'
+        log_section = log_section.replace(commit_range, commit_range_for_header)
         if len(cleaned_lines) > log_limit:
             # Keep the first N/2 log entries and last N/2 entries.
             lines = logs.splitlines(True)
             lines = lines[:log_limit // 2] + ['(...)\n'
                                               ] + lines[-log_limit // 2:]
             logs = ''.join(lines)
-        log_section += logs
+        log_section += logs + '\n'
     return header + log_section
 
 
@@ -190,7 +210,7 @@ def gen_commit_msg(logs, cmdline, reviewers, bug):
     if len(logs) > 1:
         commit_msg = 'Rolling %d dependencies\n\n' % len(logs)
     commit_msg += '\n\n'.join(logs)
-    commit_msg += '\nCreated with:\n  ' + cmdline + '\n'
+    commit_msg += 'Created with:\n  ' + cmdline + '\n'
     commit_msg += 'R=%s\n' % ','.join(reviewers) if reviewers else ''
     commit_msg += '\nBug: %s\n' % bug if bug else ''
     return commit_msg
@@ -247,6 +267,10 @@ def main():
         '--no-log',
         action='store_true',
         help='Do not include the short log in the commit message')
+    parser.add_argument(
+        '--always-log',
+        action='store_true',
+        help='Always include the short log in the commit message')
     parser.add_argument('--log-limit',
                         type=int,
                         default=100,
@@ -270,6 +294,10 @@ def main():
         if args.key:
             parser.error(
                 'Can\'t use multiple paths to roll simultaneously and --key')
+
+    if args.no_log and args.always_log:
+        parser.error('Can\'t use both --no-log and --always-log')
+
     reviewers = None
     if args.reviewer:
         reviewers = list(itertools.chain(*[r.split(',')
@@ -315,8 +343,17 @@ def main():
         logs = []
         setdep_args = []
         for dependency, (head, roll_to, full_dir) in sorted(rolls.items()):
+            upstream_url = check_output(['git', 'config', 'remote.origin.url'],
+                                        cwd=full_dir).strip()
+            show_log = args.always_log or \
+                (not args.no_log and should_show_log(upstream_url))
+            if not show_log:
+                print(
+                    f'{dependency}: Omitting git log from the commit message. '
+                    'Use the `--always-log` flag to include it.')
             log = generate_commit_message(full_dir, dependency, head, roll_to,
-                                          args.no_log, args.log_limit)
+                                          upstream_url, show_log,
+                                          args.log_limit)
             logs.append(log)
             setdep_args.extend(['-r', '{}@{}'.format(dependency, roll_to)])
 

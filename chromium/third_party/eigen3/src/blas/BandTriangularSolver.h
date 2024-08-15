@@ -10,6 +10,7 @@
 #ifndef EIGEN_BAND_TRIANGULARSOLVER_H
 #define EIGEN_BAND_TRIANGULARSOLVER_H
 
+namespace Eigen {
 namespace internal {
 
 /* \internal
@@ -77,6 +78,7 @@ struct band_solve_triangular_selector<Index, Mode, LhsScalar, ConjLhs, RhsScalar
   }
 };
 
-}  // end namespace internal
+}  // namespace internal
+}  // namespace Eigen
 
 #endif  // EIGEN_BAND_TRIANGULARSOLVER_H

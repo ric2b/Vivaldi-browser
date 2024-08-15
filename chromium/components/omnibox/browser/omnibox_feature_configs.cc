@@ -109,6 +109,13 @@ RealboxContextualAndTrendingSuggestions::
 }
 
 // static
+BASE_FEATURE(ReportNumZPSInSession::kReportNumZPSInSession,
+             "ReportNumZPSInSession",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+ReportNumZPSInSession::ReportNumZPSInSession()
+    : enabled(base::FeatureList::IsEnabled(kReportNumZPSInSession)) {}
+
+// static
 BASE_FEATURE(ShortcutBoosting::kShortcutBoost,
              "OmniboxShortcutBoost",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -138,6 +145,14 @@ ShortcutBoosting::ShortcutBoosting() {
 }
 
 // static
+BASE_FEATURE(SuggestionAnswerMigration::kOmniboxSuggestionAnswerMigration,
+             "OmniboxSuggestionAnswerMigration",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+SuggestionAnswerMigration::SuggestionAnswerMigration() {
+  enabled = base::FeatureList::IsEnabled(kOmniboxSuggestionAnswerMigration);
+}
+
+// static
 BASE_FEATURE(VitalizeAutocompletedKeywords::kVitalizeAutocompletedKeywords,
              "OmniboxVitalizeAutocompletedKeywords",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -147,12 +162,5 @@ VitalizeAutocompletedKeywords::VitalizeAutocompletedKeywords() {
                                   "VitalizeAutocompletedKeywordsScore", 450)
               .Get();
 }
-
-// static
-BASE_FEATURE(ReportNumZPSInSession::kReportNumZPSInSession,
-             "ReportNumZPSInSession",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-ReportNumZPSInSession::ReportNumZPSInSession()
-    : enabled(base::FeatureList::IsEnabled(kReportNumZPSInSession)) {}
 
 }  // namespace omnibox_feature_configs

@@ -11,6 +11,7 @@
 
 #include "ash/app_list/app_collections_constants.h"
 #include "ash/app_list/app_list_controller_impl.h"
+#include "ash/app_list/app_list_metrics.h"
 #include "ash/app_list/app_list_model_provider.h"
 #include "ash/app_list/model/app_list_item.h"
 #include "ash/app_list/model/app_list_model.h"
@@ -22,14 +23,14 @@
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/view_utils.h"
 
 namespace ash {
-
-// Parameterized to test apps collections in the app list bubble apps collection
-// page.
+// Parameterized to test apps collections in the app list bubble apps
+// collection page.
 class AppsCollectionSectionViewTest : public AshTestBase {
  public:
   AppsCollectionSectionViewTest() = default;
@@ -273,6 +274,125 @@ TEST_F(AppsCollectionSectionViewTest, AddAppToModelOnDifferentCollection) {
 
   ASSERT_TRUE(collection);
   EXPECT_EQ(collection->GetItemViewCount(), 4u);
+}
+
+TEST_F(AppsCollectionSectionViewTest, RecordMetricsForAppLaunchByEntity) {
+  base::HistogramTester histograms;
+  AddAppListItemWithCollection("id1", AppCollection::kEntertainment);
+  AddAppListItemWithCollection("id2", AppCollection::kUnknown);
+
+  ShowAppList();
+
+  AppsCollectionSectionView* entertainment_collection =
+      GetViewForCollection(AppCollection::kEntertainment);
+  ASSERT_TRUE(entertainment_collection);
+  EXPECT_EQ(entertainment_collection->GetItemViewCount(), 1u);
+
+  AppsCollectionSectionView* unknown_collection =
+      GetViewForCollection(AppCollection::kUnknown);
+  ASSERT_TRUE(unknown_collection);
+  EXPECT_EQ(unknown_collection->GetItemViewCount(), 1u);
+
+  histograms.ExpectUniqueSample(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByEntity.Enabled",
+      AppEntity::kDefaultApp, 0);
+  histograms.ExpectUniqueSample(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByEntity.Enabled",
+      AppEntity::kThirdPartyApp, 0);
+
+  LeftClickOn(GetAppItemAtIndex(entertainment_collection, 0));
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByEntity.Enabled",
+      AppEntity::kDefaultApp, 1);
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByEntity.Enabled",
+      AppEntity::kThirdPartyApp, 0);
+
+  LeftClickOn(GetAppItemAtIndex(unknown_collection, 0));
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByEntity.Enabled",
+      AppEntity::kDefaultApp, 1);
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByEntity.Enabled",
+      AppEntity::kThirdPartyApp, 1);
+}
+
+TEST_F(AppsCollectionSectionViewTest, RecordMetricsForAppLaunchByCategory) {
+  base::HistogramTester histograms;
+  AddAppListItemWithCollection("id1", AppCollection::kEntertainment);
+  AddAppListItemWithCollection("id2", AppCollection::kProductivity);
+  AddAppListItemWithCollection("id3", AppCollection::kProductivity);
+  AddAppListItemWithCollection("id4", AppCollection::kUnknown);
+
+  ShowAppList();
+
+  AppsCollectionSectionView* entertainment_collection =
+      GetViewForCollection(AppCollection::kEntertainment);
+  ASSERT_TRUE(entertainment_collection);
+  ASSERT_EQ(entertainment_collection->GetItemViewCount(), 1u);
+
+  AppsCollectionSectionView* productivity_collection =
+      GetViewForCollection(AppCollection::kProductivity);
+  ASSERT_TRUE(productivity_collection);
+  ASSERT_EQ(productivity_collection->GetItemViewCount(), 2u);
+
+  AppsCollectionSectionView* unknown_collection =
+      GetViewForCollection(AppCollection::kUnknown);
+  ASSERT_TRUE(unknown_collection);
+  ASSERT_EQ(unknown_collection->GetItemViewCount(), 1u);
+
+  histograms.ExpectTotalCount(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByCategory.Enabled",
+      0);
+
+  // TODO(anasalazar): Investigate why after adding margin to the
+  // AppsCollections apps container, this tests fails to click on apps unless we
+  // request focus here.
+  GetAppItemAtIndex(entertainment_collection, 0)->RequestFocus();
+
+  LeftClickOn(GetAppItemAtIndex(entertainment_collection, 0));
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByCategory.Enabled",
+      AppCollection::kEntertainment, 1);
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByCategory.Enabled",
+      AppCollection::kProductivity, 0);
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByCategory.Enabled",
+      AppCollection::kUnknown, 0);
+
+  LeftClickOn(GetAppItemAtIndex(productivity_collection, 0));
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByCategory.Enabled",
+      AppCollection::kEntertainment, 1);
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByCategory.Enabled",
+      AppCollection::kProductivity, 1);
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByCategory.Enabled",
+      AppCollection::kUnknown, 0);
+
+  LeftClickOn(GetAppItemAtIndex(unknown_collection, 0));
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByCategory.Enabled",
+      AppCollection::kEntertainment, 1);
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByCategory.Enabled",
+      AppCollection::kProductivity, 1);
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByCategory.Enabled",
+      AppCollection::kUnknown, 1);
+
+  LeftClickOn(GetAppItemAtIndex(productivity_collection, 1));
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByCategory.Enabled",
+      AppCollection::kEntertainment, 1);
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByCategory.Enabled",
+      AppCollection::kProductivity, 2);
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsCollectionsPage.AppLaunchesByCategory.Enabled",
+      AppCollection::kUnknown, 1);
 }
 
 }  // namespace ash

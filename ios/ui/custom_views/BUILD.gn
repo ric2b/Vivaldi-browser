@@ -1,5 +1,7 @@
 # Copyright 2022 Vivaldi Technologies. All rights reserved.
 
+import("//build/config/ios/swift_source_set.gni")
+
 source_set("custom_views") {
   sources = [
     "custom_view_constants.h",
@@ -16,6 +18,16 @@ source_set("custom_views") {
 
   frameworks = [
     "Foundation.framework",
+    "UIKit.framework",
+  ]
+}
+
+swift_source_set("custom_views_swift") {
+  sources = [
+    "vivaldi_empty_message_view.swift",
+  ]
+
+  frameworks = [
     "UIKit.framework",
   ]
 }

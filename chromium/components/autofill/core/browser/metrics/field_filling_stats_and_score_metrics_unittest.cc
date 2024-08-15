@@ -126,7 +126,7 @@ class AutofillFieldFillingStatsAndScoreMetricsTest
 };
 
 // Test the logging of the field-wise filling stats.
-// TODO(crbug.com/1459990): Delete this test once cleanup starts.
+// TODO(crbug.com/40274514): Delete this test once cleanup starts.
 TEST_F(AutofillFieldFillingStatsAndScoreMetricsTest, FillingStats) {
   const FormData& form = GetAndAddSeenFormWithFields(GetTestFormDataFields());
   SimulationOfDefaultUserChangesOnAddedFormTextFields();
@@ -187,7 +187,7 @@ TEST_F(AutofillFieldFillingStatsAndScoreMetricsTest,
   // Make all other filled fields, be `FillingMethod::kFullForm`.
   for (size_t i = 3; i < form_structure->fields().size(); i++) {
     AutofillField* field = form_structure->field(i);
-    if (field->is_autofilled) {
+    if (field->is_autofilled()) {
       field->AppendLogEventIfNotRepeated(
           GetFillFieldLogEventWithFillingMethod(FillingMethod::kFullForm));
     }
@@ -345,11 +345,12 @@ TEST_F(AutocompleteUnrecognizedFieldFillingStatsTest, FieldFillingStats) {
   SubmitForm(form);
   EXPECT_THAT(
       histogram_tester.GetAllSamples(
-          "Autofill.AutocompleteUnrecognized.FieldFillingStats"),
-      base::BucketsAre(base::Bucket(FieldFillingStat::kAccepted, 4),
-                       base::Bucket(FieldFillingStat::kCorrected, 3),
-                       base::Bucket(FieldFillingStat::kManuallyFilled, 2),
-                       base::Bucket(FieldFillingStat::kLeftEmpty, 1)));
+          "Autofill.AutocompleteUnrecognized.FieldFillingStats2"),
+      base::BucketsAre(
+          base::Bucket(FieldFillingStatus::kAccepted, 4),
+          base::Bucket(FieldFillingStatus::kCorrectedToUnknownType, 3),
+          base::Bucket(FieldFillingStatus::kManuallyFilledToUnknownType, 2),
+          base::Bucket(FieldFillingStatus::kLeftEmpty, 1)));
 }
 
 }  // namespace autofill::autofill_metrics

@@ -4,13 +4,13 @@
 
 import type * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
+import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import * as ARIAUtils from './ARIAUtils.js';
 import infobarStyles from './infobar.css.legacy.js';
 import {Keys} from './KeyboardShortcut.js';
-import {createTextButton} from './UIUtils.js';
-import * as Utils from './utils/utils.js';
+import {createShadowRootWithCoreStyles, createTextButton} from './UIUtils.js';
 import {type Widget} from './Widget.js';
 
 const UIStrings = {
@@ -46,7 +46,7 @@ export class Infobar {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private readonly disableSetting: Common.Settings.Setting<any>|null;
   private readonly closeContainer: HTMLElement;
-  private readonly toggleElement: HTMLButtonElement;
+  private readonly toggleElement: Buttons.Button.Button;
   private readonly closeButton: HTMLElement;
   private closeCallback: (() => void)|null;
   #firstFocusableElement: HTMLElement|null = null;
@@ -64,8 +64,7 @@ export class Infobar {
           'jslog', `${VisualLogging.dialog(jslogContext).track({resize: true, keydown: 'Enter|Escape'})}`);
     }
     this.element.classList.add('flex-none');
-    this.shadowRoot =
-        Utils.createShadowRootWithCoreStyles(this.element, {cssFile: infobarStyles, delegatesFocus: undefined});
+    this.shadowRoot = createShadowRootWithCoreStyles(this.element, {cssFile: infobarStyles, delegatesFocus: undefined});
 
     this.contentElement = this.shadowRoot.createChild('div', 'infobar infobar-' + type) as HTMLDivElement;
 
@@ -117,7 +116,7 @@ export class Infobar {
     this.closeContainer = this.mainRow.createChild('div', 'infobar-close-container');
     this.toggleElement = createTextButton(
         i18nString(UIStrings.showMore), this.onToggleDetails.bind(this),
-        {className: 'link-style devtools-link hidden', jslogContext: 'show-more'});
+        {className: 'hidden show-more', jslogContext: 'show-more', variant: Buttons.Button.Variant.TEXT});
     this.toggleElement.setAttribute('role', 'link');
     this.closeContainer.appendChild(this.toggleElement);
     this.closeButton = this.closeContainer.createChild('div', 'close-button', 'dt-close-button');

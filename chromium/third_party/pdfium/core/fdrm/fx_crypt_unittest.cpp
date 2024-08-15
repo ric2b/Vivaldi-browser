@@ -2,20 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "core/fdrm/fx_crypt.h"
 
 #include <algorithm>
 #include <string>
 #include <vector>
 
+#include "core/fxcrt/bytestring.h"
+#include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/utils/hash.h"
 
 namespace {
 
 std::string CRYPT_MD5String(const char* str) {
-  return GenerateMD5Base16(
-      {reinterpret_cast<const uint8_t*>(str), strlen(str)});
+  return GenerateMD5Base16(ByteStringView(str).unsigned_span());
 }
 
 void CheckArcFourContext(const CRYPT_rc4_context& context,
@@ -330,8 +336,8 @@ TEST(FXCRYPT, CRYPT_ArcFourSetup) {
             184, 50,  190, 174, 71,  233, 235, 198, 95,  51,  110, 255, 253,
             72,  115, 0,   47,  94,  29,  45,  14,  111};
     CRYPT_rc4_context context;
-    static const uint8_t kFooBar[] = "foobar";
-    CRYPT_ArcFourSetup(&context, {kFooBar, std::size(kFooBar) - 1});
+    ByteStringView foobar = "foobar";
+    CRYPT_ArcFourSetup(&context, foobar.unsigned_span());
     CheckArcFourContext(context, 0, 0, kFoobarPermutation);
   }
 }
@@ -350,7 +356,7 @@ TEST(FXCRYPT, CRYPT_ArcFourCrypt) {
     CRYPT_ArcFourSetup(&context, {});
 
     uint8_t data_short[std::size(kDataShort)];
-    memcpy(data_short, kDataShort, std::size(kDataShort));
+    FXSYS_memcpy(data_short, kDataShort, std::size(kDataShort));
     static const uint8_t kExpectedEncryptedDataShort[] = {
         138, 112, 236, 97,  242, 66,  52,  89,  225, 38,  88,  8,
         47,  78,  216, 24,  170, 106, 26,  199, 208, 131, 157, 242,
@@ -390,7 +396,7 @@ TEST(FXCRYPT, CRYPT_ArcFourCrypt) {
     CRYPT_ArcFourSetup(&context, {});
 
     uint8_t data_long[std::size(kDataLong)];
-    memcpy(data_long, kDataLong, std::size(kDataLong));
+    FXSYS_memcpy(data_long, kDataLong, std::size(kDataLong));
     static const uint8_t kExpectedEncryptedDataLong[] = {
         138, 112, 236, 97,  242, 66,  52,  89,  225, 38,  88,  8,   47,  78,
         216, 24,  170, 106, 26,  199, 208, 131, 157, 242, 55,  11,  25,  90,
@@ -443,11 +449,11 @@ TEST(FXCRYPT, CRYPT_ArcFourCrypt) {
   }
   {
     CRYPT_rc4_context context;
-    static const uint8_t kFooBar[] = "foobar";
-    CRYPT_ArcFourSetup(&context, {kFooBar, std::size(kFooBar) - 1});
+    ByteStringView foobar = "foobar";
+    CRYPT_ArcFourSetup(&context, foobar.unsigned_span());
 
     uint8_t data_short[std::size(kDataShort)];
-    memcpy(data_short, kDataShort, std::size(kDataShort));
+    FXSYS_memcpy(data_short, kDataShort, std::size(kDataShort));
     static const uint8_t kExpectedEncryptedDataShort[] = {
         59,  193, 117, 206, 167, 54,  218, 7,   229, 214, 188, 55,
         90,  205, 196, 25,  36,  114, 199, 218, 161, 107, 122, 119,
@@ -484,11 +490,11 @@ TEST(FXCRYPT, CRYPT_ArcFourCrypt) {
   }
   {
     CRYPT_rc4_context context;
-    static const uint8_t kFooBar[] = "foobar";
-    CRYPT_ArcFourSetup(&context, {kFooBar, std::size(kFooBar) - 1});
+    ByteStringView foobar = "foobar";
+    CRYPT_ArcFourSetup(&context, foobar.unsigned_span());
 
     uint8_t data_long[std::size(kDataLong)];
-    memcpy(data_long, kDataLong, std::size(kDataLong));
+    FXSYS_memcpy(data_long, kDataLong, std::size(kDataLong));
     static const uint8_t kExpectedEncryptedDataLong[] = {
         59,  193, 117, 206, 167, 54,  218, 7,   229, 214, 188, 55,  90,  205,
         196, 25,  36,  114, 199, 218, 161, 107, 122, 119, 106, 167, 44,  175,

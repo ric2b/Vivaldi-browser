@@ -52,6 +52,8 @@ export interface EndOfLifeInfo {
   aboutPageEndOfLifeMessage: string;
   shouldShowEndOfLifeIncentive: boolean;
   shouldShowOfferText: boolean;
+  isExtendedUpdatesDatePassed: boolean;
+  isExtendedUpdatesOptInRequired: boolean;
 }
 
 export interface TpmFirmwareUpdateStatusChangedEvent {
@@ -233,9 +235,24 @@ export interface AboutPageBrowserProxy {
   setConsumerAutoUpdate(enable: boolean): void;
 
   /**
+   * Checks if the device is currently eligible for opt in.
+   * @param eolPassed Whether end of life date has passed.
+   * @param extendedDatePassed Whether extended updates date has passed.
+   * @param extendedOptInRequired Whether opt-in is required for the device.
+   */
+  isExtendedUpdatesOptInEligible(
+      eolPassed: boolean, extendedDatePassed: boolean,
+      extendedOptInRequired: boolean): Promise<boolean>;
+
+  /**
    * Opens the extended updates opt-in dialog.
    */
   openExtendedUpdatesDialog(): void;
+
+  /**
+   * Records that the Extended Updates option was shown to the user.
+   */
+  recordExtendedUpdatesShown(): void;
 }
 
 let instance: AboutPageBrowserProxy|null = null;
@@ -347,7 +364,19 @@ export class AboutPageBrowserProxyImpl implements AboutPageBrowserProxy {
     chrome.send('setConsumerAutoUpdate', [enable]);
   }
 
+  isExtendedUpdatesOptInEligible(
+      eolPassed: boolean, extendedDatePassed: boolean,
+      extendedOptInRequired: boolean): Promise<boolean> {
+    return sendWithPromise(
+        'isExtendedUpdatesOptInEligible', eolPassed, extendedDatePassed,
+        extendedOptInRequired);
+  }
+
   openExtendedUpdatesDialog(): void {
     chrome.send('openExtendedUpdatesDialog');
+  }
+
+  recordExtendedUpdatesShown(): void {
+    chrome.send('recordExtendedUpdatesShown');
   }
 }

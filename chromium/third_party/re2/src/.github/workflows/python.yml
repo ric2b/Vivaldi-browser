@@ -31,11 +31,11 @@ jobs:
       # Bazel fails if the username is unknown.
       USER: runner
     steps:
-      - uses: actions/checkout@v4.1.1
+      - uses: actions/checkout@v4.1.4
       # Stash the timestamp for the commit SHA that triggered the workflow.
       - run: echo "timestamp=$(git log -1 --pretty=%ct)" >> "${GITHUB_ENV}"
         shell: bash
-      - uses: bazel-contrib/setup-bazel@0.8.1
+      - uses: bazel-contrib/setup-bazel@0.8.2
         with:
           bazelisk-version: '1.x'
       - name: Prepare Python ${{ matrix.ver }} environment
@@ -58,7 +58,7 @@ jobs:
           "${PYTHON}" re2_test.py
         shell: bash
         working-directory: python
-      - uses: actions/upload-artifact@v4.3.1
+      - uses: actions/upload-artifact@v4.3.3
         with:
           name: ${{ hashFiles('python/google_re2-*.whl') }}
           path: python/google_re2-*.whl
@@ -80,18 +80,21 @@ jobs:
       BAZELISK_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BAZEL_CPU: darwin_${{ matrix.arch.bazel-name }}
       PLAT_NAME: macosx-${{ matrix.os }}.0-${{ matrix.arch.python-name }}
+      # Force a specific target version of macOS.
+      # Otherwise, `delocate` renames the wheels!
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.os }}.0
       # Stop macOS from reporting the system version as 10.x.
       # Otherwise, Python refuses to install the built wheel!
       SYSTEM_VERSION_COMPAT: 0
     steps:
-      - uses: actions/checkout@v4.1.1
+      - uses: actions/checkout@v4.1.4
       # Stash the timestamp for the commit SHA that triggered the workflow.
       - run: echo "timestamp=$(git log -1 --pretty=%ct)" >> "${GITHUB_ENV}"
         shell: bash
-      - uses: bazel-contrib/setup-bazel@0.8.1
+      - uses: bazel-contrib/setup-bazel@0.8.2
         with:
           bazelisk-version: '1.x'
-      - uses: actions/setup-python@v5.0.0
+      - uses: actions/setup-python@v5.1.0
         with:
           python-version: ${{ matrix.ver }}
       - name: Prepare Python ${{ matrix.ver }} environment
@@ -115,7 +118,7 @@ jobs:
           python re2_test.py
         shell: bash
         working-directory: python
-      - uses: actions/upload-artifact@v4.3.1
+      - uses: actions/upload-artifact@v4.3.3
         with:
           name: ${{ hashFiles('python/google_re2-*.whl') }}
           path: python/google_re2-*.whl
@@ -135,11 +138,11 @@ jobs:
       BAZEL_CPU: ${{ matrix.arch.bazel-name }}_windows
       PLAT_NAME: ${{ matrix.arch.python-name }}
     steps:
-      - uses: actions/checkout@v4.1.1
+      - uses: actions/checkout@v4.1.4
       # Stash the timestamp for the commit SHA that triggered the workflow.
       - run: echo "timestamp=$(git log -1 --pretty=%ct)" >> "${GITHUB_ENV}"
         shell: bash
-      - uses: bazel-contrib/setup-bazel@0.8.1
+      - uses: bazel-contrib/setup-bazel@0.8.2
         with:
           bazelisk-version: '1.x'
       # Lowercase the architecture name for `actions/setup-python`.
@@ -147,7 +150,7 @@ jobs:
           ARCHITECTURE=${{ matrix.arch.name }}
           echo "architecture=${ARCHITECTURE,,}" >> "${GITHUB_ENV}"
         shell: bash
-      - uses: actions/setup-python@v5.0.0
+      - uses: actions/setup-python@v5.1.0
         with:
           python-version: ${{ matrix.ver }}
           architecture: ${{ env.architecture }}
@@ -171,7 +174,7 @@ jobs:
           python re2_test.py
         shell: bash
         working-directory: python
-      - uses: actions/upload-artifact@v4.3.1
+      - uses: actions/upload-artifact@v4.3.3
         with:
           name: ${{ hashFiles('python/google_re2-*.whl') }}
           path: python/google_re2-*.whl
@@ -181,13 +184,17 @@ jobs:
       - wheel-linux
       - wheel-macos
       - wheel-windows
+    permissions:
+      contents: read
+      # Required for PyPI publishing.
+      id-token: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.1.1
+      - uses: actions/checkout@v4.1.4
       # Stash the timestamp for the commit SHA that triggered the workflow.
       - run: echo "timestamp=$(git log -1 --pretty=%ct)" >> "${GITHUB_ENV}"
         shell: bash
-      - uses: actions/setup-python@v5.0.0
+      - uses: actions/setup-python@v5.1.0
         with:
           python-version: '3.x'
       - name: Prepare Python 3.x environment
@@ -203,7 +210,7 @@ jobs:
           python -m build --sdist
         shell: bash
         working-directory: python
-      - uses: actions/download-artifact@v4.1.4
+      - uses: actions/download-artifact@v4.1.7
         with:
           path: python
       - name: Set build number to ${{ inputs.build }}
@@ -221,5 +228,4 @@ jobs:
       - if: inputs.build >= 1
         uses: pypa/gh-action-pypi-publish@v1.8.14
         with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
           packages-dir: python/dist

@@ -9,7 +9,6 @@
 
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
-import '../i18n_setup.js';
 import '../settings_shared.css.js';
 import './passwords_shared.css.js';
 import './screen_reader_only.css.js';
@@ -107,13 +106,17 @@ export class SettingsCreditCardListEntryElement extends
   /**
    * @returns the title for the More Actions button corresponding to the card
    *     which is described by the nickname or the network name and last 4
-   *     digits or name
+   *     digits or name. If a card has CVC saved, there will be additional
+   *     description to notify of the same.
    */
   private moreActionsTitle_(): string {
     const cardDescription = this.creditCard.nickname ||
         this.getCardNumberDescription_(this.creditCard) ||
         this.creditCard.name!;
-    return this.i18n('moreActionsForCreditCard', cardDescription);
+    return this.i18n(
+        this.creditCard.cvc ? 'moreActionsForCreditCardWithCvc' :
+                              'moreActionsForCreditCard',
+        cardDescription);
   }
 
   /**
@@ -141,6 +144,20 @@ export class SettingsCreditCardListEntryElement extends
       return this.i18n('creditCardA11yLabeled', cardNumberDescription);
     }
     return this.creditCard.metadata!.summaryLabel;
+  }
+
+  /**
+   * Returns an aria label for the benefits terms link such as "See terms for
+   * Amex ending in 0001". If no card description is available, then the
+   * default text such as "See terms here" is returned.
+   */
+  private getBenefitsTermsAriaLabel_(): string {
+    const cardNumberDescription =
+        this.getCardNumberDescription_(this.creditCard);
+    if (cardNumberDescription) {
+      return this.i18n('benefitsTermsAriaLabel', cardNumberDescription);
+    }
+    return this.i18n('benefitsTermsTagForCreditCardListEntry');
   }
 
   private getCardExpiryDate_(): string {
@@ -198,10 +215,6 @@ export class SettingsCreditCardListEntryElement extends
     if (this.isCardCvcAvailable_()) {
       summarySublabel += separator + this.i18n('cvcTagForCreditCardListEntry');
     }
-    if (this.isCardBenefitsProductUrlAvailable_()) {
-      summarySublabel +=
-          separator + this.i18n('benefitsAvailableTagForCreditCardListEntry');
-    }
     return summarySublabel;
   }
 
@@ -244,6 +257,26 @@ export class SettingsCreditCardListEntryElement extends
 
   private getCardBenefitsProductUrl_(): string {
     return this.creditCard.productTermsUrl || '';
+  }
+
+  /**
+   * When the provided `imageSrc` points toward a processor's default card art,
+   * this function returns a string that will scale the image based on the
+   * user's screen resolution, otherwise it will return the unmodified
+   * `imageSrc`.
+   */
+  private getCardImage_(imageSrc: string): string {
+    return imageSrc.startsWith('chrome://theme') ?
+        this.getScaledSrcSet_(imageSrc) :
+        imageSrc;
+  }
+
+  /**
+   * This function returns a string that can be used in a srcset to scale
+   * the provided `url` based on the user's screen resolution.
+   */
+  private getScaledSrcSet_(url: string): string {
+    return `${url} 1x, ${url}@2x 2x`;
   }
 }
 

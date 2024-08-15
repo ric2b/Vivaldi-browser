@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="hy">
+<translation id="2947471979790858922">Այս գաղտնի ներդիրներում Ձեր գործունեությունը սարքից կջնջվի</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Ձեր փակած ներդիրները կարող եք գտնել Վերջին ներդիրների ներքո, Vivaldi-ի գլխավոր մենյուից։ Ձեր գաղտնի ներդիրը հասանելի չի լինի։}
+        other {Ձեր փակած ներդիրները կարող եք գտնել Վերջին ներդիրների ներքո, Vivaldi-ի գլխավոր մենյուից։ Ձեր # գաղտնի ներդիրները հասանելի չեն լինի։}}</translation>
+<translation id="4871187110787939393">Փակե՞լ բոլոր գաղտնի ներդիրները</translation>
 </translationbundle>

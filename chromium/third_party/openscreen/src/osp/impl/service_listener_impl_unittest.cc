@@ -37,7 +37,7 @@ class MockObserver final : public ServiceListener::Observer {
   MOCK_METHOD1(OnReceiverRemoved, void(const ServiceInfo& info));
   MOCK_METHOD0(OnAllReceiversRemoved, void());
 
-  MOCK_METHOD1(OnError, void(Error));
+  MOCK_METHOD1(OnError, void(const Error& error));
 
   MOCK_METHOD1(OnMetrics, void(ServiceListener::Metrics));
 };
@@ -248,7 +248,7 @@ TEST_F(ServiceListenerImplTest, SuspendWhileSearching) {
 
 TEST_F(ServiceListenerImplTest, ObserveTransitions) {
   MockObserver observer;
-  service_listener_->AddObserver(&observer);
+  service_listener_->AddObserver(observer);
 
   service_listener_->Start();
   Expectation start_from_stopped = EXPECT_CALL(observer, OnStarted());
@@ -286,12 +286,12 @@ TEST_F(ServiceListenerImplTest, ObserveTransitions) {
   service_listener_->StartAndSuspend();
   EXPECT_CALL(observer, OnSuspended()).After(stop);
   mock_delegate_->SetState(State::kSuspended);
-  service_listener_->RemoveObserver(&observer);
+  service_listener_->RemoveObserver(observer);
 }
 
 TEST_F(ServiceListenerImplTest, ObserveFromSearching) {
   MockObserver observer;
-  service_listener_->AddObserver(&observer);
+  service_listener_->AddObserver(observer);
 
   EXPECT_CALL(observer, OnStarted());
   service_listener_->Start();
@@ -316,21 +316,21 @@ TEST_F(ServiceListenerImplTest, ObserveFromSearching) {
   service_listener_->Resume();
   EXPECT_CALL(observer, OnStarted());
   mock_delegate_->SetState(State::kRunning);
-  service_listener_->RemoveObserver(&observer);
+  service_listener_->RemoveObserver(observer);
   Mock::VerifyAndClearExpectations(&observer);
 }
 
 TEST_F(ServiceListenerImplTest, ReceiverObserverPassThrough) {
   const ServiceInfo receiver1{
-      "id1", "name1", 1, {{192, 168, 1, 10}, 12345}, {}};
+      "id1", "name1", "fingerprint1", 1, {{192, 168, 1, 10}, 12345}, {}};
   const ServiceInfo receiver2{
-      "id2", "name2", 1, {{192, 168, 1, 11}, 12345}, {}};
+      "id2", "name2", "fingerprint2", 1, {{192, 168, 1, 11}, 12345}, {}};
   const ServiceInfo receiver3{
-      "id3", "name3", 1, {{192, 168, 1, 12}, 12345}, {}};
+      "id3", "name3", "fingerprint3", 1, {{192, 168, 1, 12}, 12345}, {}};
   const ServiceInfo receiver1_alt_name{
-      "id1", "name1 alt", 1, {{192, 168, 1, 10}, 12345}, {}};
+      "id1", "name1 alt", "fingerprint1", 1, {{192, 168, 1, 10}, 12345}, {}};
   MockObserver observer;
-  service_listener_->AddObserver(&observer);
+  service_listener_->AddObserver(observer);
 
   std::vector<ServiceInfo> receivers;
   receivers.push_back(receiver1);
@@ -373,20 +373,20 @@ TEST_F(ServiceListenerImplTest, ReceiverObserverPassThrough) {
 
   EXPECT_CALL(observer, OnAllReceiversRemoved()).Times(0);
   service_listener_->OnReceiverUpdated(receivers);
-  service_listener_->RemoveObserver(&observer);
+  service_listener_->RemoveObserver(observer);
 }
 
 TEST_F(ServiceListenerImplTest, MultipleObservers) {
   MockObserver observer1;
   MockObserver observer2;
-  service_listener_->AddObserver(&observer1);
+  service_listener_->AddObserver(observer1);
 
   service_listener_->Start();
   EXPECT_CALL(observer1, OnStarted());
   EXPECT_CALL(observer2, OnStarted()).Times(0);
   mock_delegate_->SetState(State::kRunning);
 
-  service_listener_->AddObserver(&observer2);
+  service_listener_->AddObserver(observer2);
 
   service_listener_->SearchNow();
   EXPECT_CALL(observer1, OnSearching());
@@ -396,14 +396,14 @@ TEST_F(ServiceListenerImplTest, MultipleObservers) {
   EXPECT_CALL(observer2, OnStarted());
   mock_delegate_->SetState(State::kRunning);
 
-  service_listener_->RemoveObserver(&observer1);
+  service_listener_->RemoveObserver(observer1);
 
   service_listener_->Suspend();
   EXPECT_CALL(observer1, OnSuspended()).Times(0);
   EXPECT_CALL(observer2, OnSuspended());
   mock_delegate_->SetState(State::kSuspended);
 
-  service_listener_->RemoveObserver(&observer2);
+  service_listener_->RemoveObserver(observer2);
 
   service_listener_->Resume();
   EXPECT_CALL(observer1, OnStarted()).Times(0);

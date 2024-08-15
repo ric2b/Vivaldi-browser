@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: os-config
 title: ChromiumOS Configuration
 ---
@@ -554,5 +554,5 @@ Use some other knob to control behavior (such as [Finch]).
 [os-release]: #os-release
 [sysctl(8)]: https://man7.org/linux/man-pages/man8/sysctl.8.html
 [sysctl.conf(5)]: https://man7.org/linux/man-pages/man5/sysctl.conf.5.html
-[rewrite-shell]: ./development_basics.md#shell
+[rewrite-shell]: /chromium-os/developer-library/guides/development/development-basics/#shell
 [vpd]: https://chromium.googlesource.com/chromiumos/platform/vpd

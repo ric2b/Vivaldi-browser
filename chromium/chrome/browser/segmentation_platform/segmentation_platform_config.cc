@@ -5,12 +5,14 @@
 #include "chrome/browser/segmentation_platform/segmentation_platform_config.h"
 
 #include <memory>
+#include <string_view>
 #include <vector>
 
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "build/build_config.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
+#include "components/compose/buildflags.h"
 #include "components/search/ntp_features.h"
 #include "components/segmentation_platform/embedder/default_model/cross_device_user_segment.h"
 #include "components/segmentation_platform/embedder/default_model/database_api_clients.h"
@@ -46,6 +48,10 @@
 #include "components/segmentation_platform/embedder/default_model/most_visited_tiles_user.h"
 #include "components/segmentation_platform/embedder/default_model/power_user_segment.h"
 #include "components/segmentation_platform/embedder/default_model/tablet_productivity_user_model.h"
+#endif
+
+#if BUILDFLAG(ENABLE_COMPOSE)
+#include "components/segmentation_platform/embedder/default_model/compose_promotion.h"
 #endif
 
 namespace segmentation_platform {
@@ -164,6 +170,7 @@ std::vector<std::unique_ptr<Config>> GetSegmentationPlatformConfig(
   configs.emplace_back(TabletProductivityUserModel::GetConfig());
   configs.emplace_back(MostVisitedTilesUser::GetConfig());
   configs.emplace_back(AndroidHomeModuleRanker::GetConfig());
+  configs.emplace_back(GetConfigForWebAppInstallationPromo());
 #endif
   configs.emplace_back(LowUserEngagementModel::GetConfig());
   configs.emplace_back(SearchUserModel::GetConfig());
@@ -176,13 +183,15 @@ std::vector<std::unique_ptr<Config>> GetSegmentationPlatformConfig(
   configs.emplace_back(PasswordManagerUserModel::GetConfig());
   configs.emplace_back(DatabaseApiClients::GetConfig());
 
+#if BUILDFLAG(ENABLE_COMPOSE)
+  configs.emplace_back(ComposePromotion::GetConfig());
+#endif  // BUILDFLAG(ENABLE_COMPOSE)
+
   // Model used for testing.
   configs.emplace_back(OptimizationTargetSegmentationDummy::GetConfig());
 
   if (base::FeatureList::IsEnabled(
-          webapps::features::kWebAppsEnableMLModelForPromotion) ||
-      base::FeatureList::IsEnabled(
-          webapps::features::kInstallPromptSegmentation)) {
+          webapps::features::kWebAppsEnableMLModelForPromotion)) {
     configs.emplace_back(GetConfigForWebAppInstallationPromo());
   }
   if (base::FeatureList::IsEnabled(ntp_features::kNtpDriveModuleSegmentation)) {
@@ -224,8 +233,8 @@ void AppendConfigsFromExperiments(
 FieldTrialRegisterImpl::FieldTrialRegisterImpl() = default;
 FieldTrialRegisterImpl::~FieldTrialRegisterImpl() = default;
 
-void FieldTrialRegisterImpl::RegisterFieldTrial(base::StringPiece trial_name,
-                                                base::StringPiece group_name) {
+void FieldTrialRegisterImpl::RegisterFieldTrial(std::string_view trial_name,
+                                                std::string_view group_name) {
   // The register method is called early in startup once the platform is
   // initialized. So, in most cases the client will register the field trial
   // before uploading the first UMA log of the current session. We do not want
@@ -244,7 +253,7 @@ void FieldTrialRegisterImpl::RegisterFieldTrial(base::StringPiece trial_name,
 }
 
 void FieldTrialRegisterImpl::RegisterSubsegmentFieldTrialIfNeeded(
-    base::StringPiece trial_name,
+    std::string_view trial_name,
     SegmentId segment_id,
     int subsegment_rank) {
   std::optional<std::string> group_name;

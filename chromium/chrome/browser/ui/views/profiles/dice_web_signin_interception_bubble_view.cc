@@ -26,6 +26,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/profiles/avatar_toolbar_button.h"
+#include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/webui/signin/dice_web_signin_intercept_ui.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/branded_strings.h"
@@ -75,6 +76,7 @@ std::u16string InterceptionTypeToIdentityPillText(
     case WebSigninInterceptor::SigninInterceptionType::kEnterpriseForced:
     case WebSigninInterceptor::SigninInterceptionType::
         kEnterpriseAcceptManagement:
+    case WebSigninInterceptor::SigninInterceptionType::kEnterpriseOIDC:
     case WebSigninInterceptor::SigninInterceptionType::kProfileSwitchForced:
       // These intercept type do not show a bubble and should not need to change
       // the identity pill text.
@@ -140,8 +142,7 @@ void RecordChromeSigninInterceptResult(base::TimeTicks start_time,
 
 // New changes only in Full design.
 bool ShouldUseFullDesign() {
-  return switches::IsExplicitBrowserSigninUIOnDesktopEnabled(
-      switches::ExplicitBrowserSigninPhase::kFull);
+  return switches::IsExplicitBrowserSigninUIOnDesktopEnabled();
 }
 
 void RecordDismissReason(
@@ -410,8 +411,8 @@ void DiceWebSigninInterceptionBubbleView::ApplyAvatarButtonEffects() {
   AvatarToolbarButton* button = GetAvatarToolbarButton(*browser_);
   // Avatar text behavior
   if (ShouldUseFullDesign() || IsChromeSignin()) {
-    // Adapt the identity pill, show the appropriate intercept text and disable
-    // the button as long as the buble is opened.
+    // Adapt the identity pill, show the appropriate intercept text and
+    // highlight the button as long as the text is shown.
     hide_avatar_text_callback_ =
         button->ShowExplicitText(InterceptionTypeToIdentityPillText(
             bubble_parameters_.interception_type));
@@ -434,6 +435,7 @@ void DiceWebSigninInterceptionBubbleView::ClearAvatarButtonEffects() {
   // Changes done in this method should also be reflected in the method that
   // applies the effects `ApplyAvatarButtonEffects()`.
 
+  AvatarToolbarButton* button = GetAvatarToolbarButton(*browser_);
   // Avatar text behavior
   if (ShouldUseFullDesign() || IsChromeSignin()) {
     hide_avatar_text_callback_.RunAndReset();
@@ -442,7 +444,7 @@ void DiceWebSigninInterceptionBubbleView::ClearAvatarButtonEffects() {
   if (ShouldUseFullDesign()) {
     reset_avatar_button_action_callback_.RunAndReset();
   } else if (IsChromeSignin()) {
-    GetAvatarToolbarButton(*browser_)->SetButtonActionDisabled(false);
+    button->SetButtonActionDisabled(false);
   }
 }
 
@@ -452,8 +454,10 @@ void DiceWebSigninInterceptionBubbleView::ClearAvatarButtonEffects() {
 bool DiceWebSigninInterceptorDelegate::IsSigninInterceptionSupportedInternal(
     const Browser& browser) {
   // Some browsers, such as web apps, don't have an avatar toolbar button to
-  // anchor the bubble.
-  return GetAvatarToolbarButton(browser) != nullptr;
+  // anchor the bubble. Even if a web app has an avatar toolbar button, we
+  // still don't support signin interception.
+  return GetAvatarToolbarButton(browser) != nullptr &&
+         !web_app::AppBrowserController::IsWebApp(&browser);
 }
 
 std::unique_ptr<ScopedWebSigninInterceptionBubbleHandle>

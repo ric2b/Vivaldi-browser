@@ -419,7 +419,7 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
     content::OpenURLParams urlparams(GURL(tab_url), content::Referrer(),
                                      WindowOpenDisposition::NEW_FOREGROUND_TAB,
                                      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false);
-    window->browser()->OpenURL(urlparams);
+    window->browser()->OpenURL(urlparams, /* navigation_handle = */ {});
   }
 
   // TODO(pettern): If we ever need to open unfocused windows, we need to
@@ -629,6 +629,12 @@ WindowPrivateSetControlButtonsPaddingFunction::Run() {
   }
 
   RequestChange(window->GetNativeWindow(), params->padding);
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+WindowPrivatePerformHapticFeedbackFunction::Run() {
+  PerformHapticFeedback();
   return RespondNow(NoArguments());
 }
 

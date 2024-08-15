@@ -38,22 +38,19 @@ namespace content {
 ServiceWorkerHost::ServiceWorkerHost(
     mojo::PendingAssociatedReceiver<blink::mojom::ServiceWorkerContainerHost>
         host_receiver,
-    ServiceWorkerVersion* version,
+    ServiceWorkerVersion& version,
     base::WeakPtr<ServiceWorkerContextCore> context)
-    : version_(version),
+    : version_(&version),
       token_(blink::ServiceWorkerToken()),
       broker_(this),
-      container_host_(std::make_unique<content::ServiceWorkerContainerHost>(
-          std::move(context))),
+      container_host_(
+          std::make_unique<content::ServiceWorkerContainerHostForServiceWorker>(
+              std::move(context),
+              this,
+              version_->script_url(),
+              version_->key())),
       host_receiver_(container_host_.get(), std::move(host_receiver)) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(version_);
-
-  container_host_->set_service_worker_host(this);
-  container_host_->UpdateUrls(
-      version_->script_url(),
-      url::Origin::Create(version_->key().top_level_site().GetURL()),
-      version_->key());
 }
 
 ServiceWorkerHost::~ServiceWorkerHost() {
@@ -130,8 +127,7 @@ void ServiceWorkerHost::BindHidService(
 void ServiceWorkerHost::BindUsbService(
     mojo::PendingReceiver<blink::mojom::WebUsbService> receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(container_host_->top_frame_origin());
-  if (container_host_->top_frame_origin()->opaque()) {
+  if (container_host_->top_frame_origin().opaque()) {
     // Service worker should not be available to a window/worker client whose
     // origin is opaque according to Service Worker specification. However, this
     // can possibly be triggered by a compromised renderer, so reject it and
@@ -142,7 +138,7 @@ void ServiceWorkerHost::BindUsbService(
     return;
   }
   version_->embedded_worker()->BindUsbService(
-      *container_host_->top_frame_origin(), std::move(receiver));
+      container_host_->top_frame_origin(), std::move(receiver));
 }
 
 net::NetworkIsolationKey ServiceWorkerHost::GetNetworkIsolationKey() const {

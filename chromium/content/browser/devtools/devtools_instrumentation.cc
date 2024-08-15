@@ -367,6 +367,13 @@ FederatedAuthRequestResultToProtocol(
     case FederatedAuthRequestResult::kErrorNotSignedInWithIdp: {
       return FederatedAuthRequestIssueReasonEnum::NotSignedInWithIdp;
     }
+    case FederatedAuthRequestResult::kErrorMissingTransientUserActivation: {
+      return FederatedAuthRequestIssueReasonEnum::
+          MissingTransientUserActivation;
+    }
+    case FederatedAuthRequestResult::kErrorReplacedByButtonMode: {
+      return FederatedAuthRequestIssueReasonEnum::ReplacedByButtonMode;
+    }
     case FederatedAuthRequestResult::kSuccess: {
       NOTREACHED_NORETURN();
     }
@@ -530,31 +537,6 @@ std::unique_ptr<protocol::Audits::InspectorIssue> BuildBounceTrackingIssue(
               protocol::Audits::InspectorIssueCodeEnum::BounceTrackingIssue)
           .SetDetails(std::move(protocol_issue_details))
           .Build();
-
-  return issue;
-}
-
-std::unique_ptr<protocol::Audits::InspectorIssue>
-BuildCookieDeprecationMetadataIssue(
-    const blink::mojom::CookieDeprecationMetadataIssueDetailsPtr&
-        issue_details) {
-  auto metadata_issue_details =
-      protocol::Audits::CookieDeprecationMetadataIssueDetails::Create()
-          .SetAllowedSites(std::make_unique<protocol::Array<protocol::String>>(
-              issue_details->allowed_sites))
-          .Build();
-
-  auto protocol_issue_details =
-      protocol::Audits::InspectorIssueDetails::Create()
-          .SetCookieDeprecationMetadataIssueDetails(
-              std::move(metadata_issue_details))
-          .Build();
-
-  auto issue = protocol::Audits::InspectorIssue::Create()
-                   .SetCode(protocol::Audits::InspectorIssueCodeEnum::
-                                CookieDeprecationMetadataIssue)
-                   .SetDetails(std::move(protocol_issue_details))
-                   .Build();
 
   return issue;
 }
@@ -875,6 +857,31 @@ bool ShouldBypassCSP(const NavigationRequest& nav_request) {
   return false;
 }
 
+bool ShouldBypassCertificateErrors(DevToolsAgentHost* agent_host) {
+  if (!agent_host) {
+    return false;
+  }
+
+  DevToolsAgentHostImpl* host_impl =
+      static_cast<DevToolsAgentHostImpl*>(agent_host);
+  for (auto* security_handler :
+       protocol::SecurityHandler::ForAgentHost(host_impl)) {
+    if (security_handler->IsIgnoreCertificateErrorsSet()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool ShouldBypassCertificateErrors() {
+  for (auto* browser_agent_host : BrowserDevToolsAgentHost::Instances()) {
+    if (ShouldBypassCertificateErrors(browser_agent_host)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void ApplyNetworkOverridesForDownload(
     RenderFrameHostImpl* rfh,
     download::DownloadUrlParameters* parameters) {
@@ -1046,7 +1053,7 @@ void ThrottleServiceWorkerMainScriptFetch(
           ->GetDevToolsAgentHostForNewInstallingWorker(wrapper, version_id);
   DCHECK(agent_host);
 
-  // TODO(https://crbug.com/1467851): We should probably also add the
+  // TODO(crbug.com/40276949): We should probably also add the
   // possibility for Browser wide agents to throttle the request.
 
   // If we have a requesting_frame_id, we should have a frame and a frame tree
@@ -1781,6 +1788,34 @@ protocol::String BuildCookieOperation(blink::mojom::CookieOperation operation) {
   }
 }
 
+std::unique_ptr<protocol::Audits::InspectorIssue>
+BuildCookieDeprecationMetadataIssue(
+    const blink::mojom::CookieDeprecationMetadataIssueDetailsPtr&
+        issue_details) {
+  auto metadata_issue_details =
+      protocol::Audits::CookieDeprecationMetadataIssueDetails::Create()
+          .SetAllowedSites(std::make_unique<protocol::Array<protocol::String>>(
+              issue_details->allowed_sites))
+          .SetOptOutPercentage(issue_details->opt_out_percentage)
+          .SetIsOptOutTopLevel(issue_details->is_opt_out_top_level)
+          .SetOperation(BuildCookieOperation(issue_details->operation))
+          .Build();
+
+  auto protocol_issue_details =
+      protocol::Audits::InspectorIssueDetails::Create()
+          .SetCookieDeprecationMetadataIssueDetails(
+              std::move(metadata_issue_details))
+          .Build();
+
+  auto issue = protocol::Audits::InspectorIssue::Create()
+                   .SetCode(protocol::Audits::InspectorIssueCodeEnum::
+                                CookieDeprecationMetadataIssue)
+                   .SetDetails(std::move(protocol_issue_details))
+                   .Build();
+
+  return issue;
+}
+
 }  // namespace
 
 void ReportCookieIssue(
@@ -1789,7 +1824,8 @@ void ReportCookieIssue(
     const GURL& url,
     const net::SiteForCookies& site_for_cookies,
     blink::mojom::CookieOperation operation,
-    const std::optional<std::string>& devtools_request_id) {
+    const std::optional<std::string>& devtools_request_id,
+    const std::optional<std::string>& devtools_issue_id) {
   auto exclusion_reasons =
       BuildExclusionReasons(excluded_cookie->access_result.status);
   auto warning_reasons =
@@ -1846,6 +1882,9 @@ void ReportCookieIssue(
           .SetCode(protocol::Audits::InspectorIssueCodeEnum::CookieIssue)
           .SetDetails(std::move(details))
           .Build();
+  if (devtools_issue_id.has_value()) {
+    issue->SetIssueId(devtools_issue_id.value());
+  }
 
   ReportBrowserInitiatedIssue(render_frame_host_impl, issue.get());
 }
@@ -2285,18 +2324,11 @@ void DidCloseFedCmDialog(RenderFrameHost& render_frame_host) {
 
 void OnFencedFrameReportRequestSent(int initiator_frame_tree_node_id,
                                     const std::string& devtools_request_id,
-                                    network::ResourceRequest& request) {
-  const net::HttpRequestHeaders& headers = request.headers;
-  network::mojom::URLRequestDevToolsInfoPtr request_info =
-      network::ExtractDevToolsInfo(request);
-
+                                    network::ResourceRequest& request,
+                                    const std::string& event_data) {
   DispatchToAgents(initiator_frame_tree_node_id,
-                   &protocol::NetworkHandler::RequestSent,
-                   /*request_id=*/devtools_request_id,
-                   /*loader_id=*/devtools_request_id, headers, *request_info,
-                   protocol::Network::Initiator::TypeEnum::Other,
-                   /*initiator_url=*/std::nullopt,
-                   /*initiator_devtools_request_id=*/devtools_request_id,
+                   &protocol::NetworkHandler::FencedFrameReportRequestSent,
+                   /*request_id=*/devtools_request_id, request, event_data,
                    base::TimeTicks::Now());
 }
 

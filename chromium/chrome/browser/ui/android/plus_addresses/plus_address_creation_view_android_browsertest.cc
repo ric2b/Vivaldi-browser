@@ -20,7 +20,7 @@
 
 namespace plus_addresses {
 
-// TODO(crbug.com/1467623): Consolidate android/desktop controllers, and
+// TODO(crbug.com/40276862): Consolidate android/desktop controllers, and
 // presumably switch to the `PlatformBrowserTest` pattern.
 class PlusAddressCreationViewAndroidBrowserTest : public AndroidBrowserTest {
  public:
@@ -44,7 +44,7 @@ class PlusAddressCreationViewAndroidBrowserTest : public AndroidBrowserTest {
   }
 
  protected:
-  base::test::ScopedFeatureList features_{features::kFeature};
+  base::test::ScopedFeatureList features_{features::kPlusAddressesEnabled};
   profiles::testing::ScopedProfileSelectionsForFactoryTesting
       override_profile_selections_;
 };

@@ -6065,6 +6065,14 @@ bool ValidateGetProgramivBase(const Context *context,
         case GL_ACTIVE_UNIFORM_MAX_LENGTH:
             break;
 
+        case GL_PROGRAM_BINARY_READY_ANGLE:
+            if (!context->getExtensions().programBinaryReadinessQueryANGLE)
+            {
+                ANGLE_VALIDATION_ERRORF(GL_INVALID_ENUM, kEnumNotSupported, pname);
+                return false;
+            }
+            break;
+
         case GL_PROGRAM_BINARY_LENGTH:
             if (context->getClientMajorVersion() < 3 &&
                 !context->getExtensions().getProgramBinaryOES)
@@ -6746,32 +6754,6 @@ bool ValidateGetInternalformativRobustANGLE(const Context *context,
     }
 
     SetRobustLengthParam(length, numParams);
-
-    return true;
-}
-
-// Perform validation from WebGL 2 section 5.10 "Invalid Clears":
-// In the WebGL 2 API, trying to perform a clear when there is a mismatch between the type of the
-// specified clear value and the type of a buffer that is being cleared generates an
-// INVALID_OPERATION error instead of producing undefined results
-bool ValidateWebGLFramebufferAttachmentClearType(const Context *context,
-                                                 angle::EntryPoint entryPoint,
-                                                 GLint drawbuffer,
-                                                 const GLenum *validComponentTypes,
-                                                 size_t validComponentTypeCount)
-{
-    const FramebufferAttachment *attachment =
-        context->getState().getDrawFramebuffer()->getDrawBuffer(drawbuffer);
-    if (attachment)
-    {
-        GLenum componentType = attachment->getFormat().info->componentType;
-        const GLenum *end    = validComponentTypes + validComponentTypeCount;
-        if (std::find(validComponentTypes, end, componentType) == end)
-        {
-            ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kNoDefinedClearConversion);
-            return false;
-        }
-    }
 
     return true;
 }

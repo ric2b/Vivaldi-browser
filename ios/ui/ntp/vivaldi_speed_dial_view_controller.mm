@@ -238,17 +238,29 @@
   // No op here since there's no menu in this view.
 }
 
-- (void)refreshChildItems:(NSArray*)items {
+- (void)refreshChildItems:(NSArray*)items
+        topSitesAvailable:(BOOL)topSitesAvailable {
   if (!self.currentItem || !self.faviconLoader)
     return;
 
+  BrowserActionFactory* actionFactory =
+      [[BrowserActionFactory alloc] initWithBrowser:_browser
+              scenario:kMenuScenarioHistogramBookmarkEntry];
+  [self.speedDialContainerView configureActionFactory:actionFactory];
   [self.speedDialContainerView configureWith:items
                                       parent:self.currentItem
                                faviconLoader:self.faviconLoader
                                  layoutStyle:[self currentLayoutStyle]
                                 layoutColumn:[self currentLayoutColumn]
                                 showAddGroup:NO
-                           verticalSizeClass:self.view.traitCollection.verticalSizeClass];
+                           frequentlyVisited:NO
+                           topSitesAvailable:NO
+                           verticalSizeClass:
+                                self.view.traitCollection.verticalSizeClass];
+}
+
+- (void)setFrequentlyVisitedPagesEnabled:(BOOL)enabled {
+  // No op. Handled in base view controller.
 }
 
 - (void)setSpeedDialsEnabled:(BOOL)enabled {
@@ -328,6 +340,31 @@
 - (void)didSelectAddNewGroupForParent:(VivaldiSpeedDialItem*)parent {
   if (self.delegate)
     [self.delegate didSelectAddNewGroupForParent:parent];
+}
+
+- (void)didSelectItemToOpenInNewTab:(VivaldiSpeedDialItem*)item
+                             parent:(VivaldiSpeedDialItem*)parent {
+  if (self.delegate)
+    [self.delegate didSelectItemToOpenInNewTab:item parent:parent];
+}
+
+- (void)didSelectItemToOpenInBackgroundTab:(VivaldiSpeedDialItem*)item
+                                    parent:(VivaldiSpeedDialItem*)parent {
+  if (self.delegate)
+    [self.delegate didSelectItemToOpenInBackgroundTab:item parent:parent];
+}
+
+- (void)didSelectItemToOpenInPrivateTab:(VivaldiSpeedDialItem*)item
+                                 parent:(VivaldiSpeedDialItem*)parent {
+  if (self.delegate)
+    [self.delegate didSelectItemToOpenInPrivateTab:item parent:parent];
+}
+
+- (void)didSelectItemToShare:(VivaldiSpeedDialItem*)item
+                      parent:(VivaldiSpeedDialItem*)parent
+                    fromView:(UIView*)view {
+  if (self.delegate)
+    [self.delegate didSelectItemToShare:item parent:parent fromView:view];
 }
 
 @end

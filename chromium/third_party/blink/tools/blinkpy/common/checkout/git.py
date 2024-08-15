@@ -29,6 +29,7 @@
 
 import logging
 import re
+import os
 from typing import List, NamedTuple, Optional, Union
 
 from blinkpy.common.memoized import memoized
@@ -132,6 +133,8 @@ class Git:
 
     def find_checkout_root(self, path):
         """Returns the absolute path to the root of the repository."""
+        if os.getcwd().startswith('/google/cog/cloud'):
+            return os.getcwd()
         return self.run(['rev-parse', '--show-toplevel'], cwd=path).strip()
 
     @classmethod
@@ -251,6 +254,18 @@ class Git:
         """Return the commit hash of HEAD."""
         return self.run(['rev-parse', 'HEAD']).strip()
 
+    def new_branch(self, name: str, stack: bool = True):
+        """Create and switch to a new branch.
+
+        Arguments:
+            stack: If true, track the current branch (if it exists). Otherwise,
+                track tip-of-tree (origin/main).
+        """
+        if stack and self.current_branch():
+            self.run(['new-branch', '--upstream-current', name])
+        else:
+            self.run(['new-branch', name])
+
     def _upstream_branch(self):
         current_branch = self.current_branch()
         return self._branch_from_ref(
@@ -333,13 +348,38 @@ class Git:
     def display_name(self):
         return 'git'
 
-    def most_recent_log_matching(self, grep_str, path):
+    def most_recent_log_matching(self,
+                                 grep_str: str,
+                                 path: Optional[str] = None,
+                                 commits: Union[None, str, CommitRange] = None,
+                                 format_pattern: Optional[str] = None) -> str:
+        """Find and return the most recent commit message matching a pattern.
+
+        Arguments:
+            grep_str: A grep-style regular expression.
+            path: A path that matching commits should modify.
+            commits: A revision range to search, where:
+              * `None` searches the full history up to `HEAD` (inclusive).
+              * `str` searches the history up to that revision (inclusive).
+              * `CommitRange` searches between the explicit start (exclusive)
+                and end (inclusive) revisions.
+            format_pattern: How `git log` should format the message, if found.
+        """
         # We use '--grep=' + foo rather than '--grep', foo because
         # git 1.7.0.4 (and earlier) didn't support the separate arg.
-        return self.run([
-            'log', '-1', '--grep=' + grep_str, '--date=iso',
-            self.find_checkout_root(path)
-        ])
+        command = [
+            'log',
+            '-1',
+            f'--grep={grep_str}',
+            '--date=iso',
+        ]
+        if format_pattern:
+            command.append(f'--format={format_pattern}')
+        if commits:
+            command.append(str(commits))
+        if path:
+            command.extend(['--', path])
+        return self.run(command)
 
     def _commit_position_from_git_log(self, git_log):
         match = re.search(

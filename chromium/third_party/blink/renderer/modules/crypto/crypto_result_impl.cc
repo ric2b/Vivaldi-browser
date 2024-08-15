@@ -52,8 +52,8 @@
 namespace blink {
 
 static void RejectWithTypeError(const String& error_details,
-                                ScriptPromiseResolver* resolver) {
-  // Duplicate some of the checks done by ScriptPromiseResolver.
+                                ScriptPromiseResolverBase* resolver) {
+  // Duplicate some of the checks done by ScriptPromiseResolverBase.
   if (!resolver->GetExecutionContext() ||
       resolver->GetExecutionContext()->IsContextDestroyed())
     return;
@@ -92,16 +92,6 @@ void CryptoResultImpl::Trace(Visitor* visitor) const {
 
 void CryptoResultImpl::ClearResolver() {
   resolver_ = nullptr;
-}
-
-ExecutionContext* CryptoResultImpl::GetExecutionContext() {
-  // Duplicate some of the checks done by ScriptPromiseResolver.
-  if (!resolver_ || !resolver_->GetExecutionContext() ||
-      resolver_->GetExecutionContext()->IsContextDestroyed()) {
-    return nullptr;
-  }
-
-  return resolver_->GetExecutionContext();
 }
 
 void CryptoResultImpl::CompleteWithError(WebCryptoErrorType error_type,

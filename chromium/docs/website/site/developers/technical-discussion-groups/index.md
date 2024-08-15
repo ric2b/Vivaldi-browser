@@ -86,7 +86,7 @@ title: Technical Discussion Groups
 *   [devtools-dev](https://groups.google.com/a/chromium.org/g/devtools-dev)
     *   Discussion forum for [Chrome
                 DevTools](https://developers.google.com/web/tools/chrome-devtools).
-*   [dom-dev](https://groups.google.com/a/chromium.org/forum/#!forum/dom-dev)
+*   [dom-dev](https://groups.google.com/a/google.com/g/dom-dev)
     *   List for technical discussions related to DOM, HTML, Forms, and
                 the [DOM Team](/teams/dom-team).
 *   [ecosystem-infra](https://groups.google.com/a/chromium.org/forum/#!forum/ecosystem-infra)

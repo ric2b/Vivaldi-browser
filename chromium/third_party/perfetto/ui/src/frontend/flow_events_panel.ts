@@ -16,6 +16,7 @@ import m from 'mithril';
 
 import {Icons} from '../base/semantic_icons';
 import {Actions} from '../common/actions';
+import {getLegacySelection} from '../common/state';
 import {raf} from '../core/raf_scheduler';
 
 import {Flow, globals} from './globals';
@@ -39,7 +40,7 @@ export function getFlowCategories(flow: Flow): string[] {
 
 export class FlowEventsPanel implements m.ClassComponent {
   view() {
-    const selection = globals.state.currentSelection;
+    const selection = getLegacySelection(globals.state);
     if (!selection) {
       return m(
         EmptyState,
@@ -66,9 +67,18 @@ export class FlowEventsPanel implements m.ClassComponent {
     const flowClickHandler = (sliceId: number, trackId: number) => {
       const trackKey = globals.trackManager.trackKeyByTrackId.get(trackId);
       if (trackKey) {
-        globals.makeSelection(
-          Actions.selectChromeSlice({id: sliceId, trackKey, table: 'slice'}),
-          {switchToCurrentSelectionTab: false},
+        globals.setLegacySelection(
+          {
+            kind: 'CHROME_SLICE',
+            id: sliceId,
+            trackKey,
+            table: 'slice',
+          },
+          {
+            clearSearch: true,
+            pendingScrollId: undefined,
+            switchToCurrentSelectionTab: false,
+          },
         );
       }
     };
@@ -145,7 +155,7 @@ export class FlowEventsPanel implements m.ClassComponent {
 
 export class FlowEventsAreaSelectedPanel implements m.ClassComponent {
   view() {
-    const selection = globals.state.currentSelection;
+    const selection = getLegacySelection(globals.state);
     if (!selection || selection.kind !== 'AREA') {
       return;
     }

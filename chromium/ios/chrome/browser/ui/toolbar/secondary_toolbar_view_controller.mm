@@ -53,7 +53,7 @@ using vivaldi::IsVivaldiRunning;
   [self.layoutGuideCenter referenceView:self.view
                               underName:kSecondaryToolbarGuide];
 
-  if (IsBottomOmniboxSteadyStateEnabled()) {
+  if (IsBottomOmniboxAvailable()) {
     [[NSNotificationCenter defaultCenter]
         addObserver:self
            selector:@selector(keyboardWillHide:)
@@ -87,7 +87,6 @@ using vivaldi::IsVivaldiRunning;
     // has `isAccessibilityElement` equals NO to let the user interact with the
     // omnibox on voice over. In this mode, logic to dismiss the keyboard is
     // handled here in `SecondaryToolbarViewController`.
-    CHECK(IsBottomOmniboxSteadyStateEnabled());
     CHECK([self hasOmnibox]);
     UIResponder* responder = GetFirstResponder();
     [responder resignFirstResponder];
@@ -100,7 +99,7 @@ using vivaldi::IsVivaldiRunning;
   [super updateForFullscreenProgress:progress];
 
   CGFloat alphaValue = fmax(progress * 1.1 - 0.1, 0);
-  if (IsBottomOmniboxSteadyStateEnabled()) {
+  if (IsBottomOmniboxAvailable()) {
     self.view.buttonStackView.alpha = alphaValue;
   }
 
@@ -141,11 +140,16 @@ using vivaldi::IsVivaldiRunning;
         (clampedFontSizeMultiplier - 1) * kLocationBarVerticalMarginDynamicType);
   } // End Vivaldi
 
-  return AlignValueToPixel(
-      (kBottomAdaptiveLocationBarTopMargin * progress +
-       kBottomAdaptiveLocationBarVerticalMarginFullscreen * (1 - progress)) *
-          clampedFontSizeMultiplier +
-      (clampedFontSizeMultiplier - 1) * kLocationBarVerticalMarginDynamicType);
+  const BOOL hasBottomSafeArea = self.view.window.safeAreaInsets.bottom;
+  const CGFloat fullscreenMargin =
+      hasBottomSafeArea ? kBottomAdaptiveLocationBarVerticalMarginFullscreen
+                        : 0;
+
+  return AlignValueToPixel((kBottomAdaptiveLocationBarTopMargin * progress +
+                            fullscreenMargin * (1 - progress)) *
+                               clampedFontSizeMultiplier +
+                           (clampedFontSizeMultiplier - 1) *
+                               kLocationBarVerticalMarginDynamicType);
 }
 
 /// Collapses secondary toolbar when it's moved above the keyboard.
@@ -171,8 +175,6 @@ using vivaldi::IsVivaldiRunning;
 /// `constraintToKeyboard`, the toolbar is collapsed above the keyboard.
 - (void)constraintToKeyboard:(BOOL)constraintToKeyboard
             withNotification:(NSNotification*)notification {
-  CHECK(IsBottomOmniboxSteadyStateEnabled());
-
   if (constraintToKeyboard) {
     if ([self.keyboardStateProvider keyboardIsActiveForWebContent]) {
       // Enable the constraint only when the keyboard is showing for web
@@ -225,10 +227,11 @@ using vivaldi::IsVivaldiRunning;
 - (void)updateToolbarButtonsTintColor {
   UIColor* accentColor =
       [self toolbarBackgroundColorForType:ToolbarType::kSecondary];
-  UIColor* buttonsTintColor = self.isTabBarEnabled ?
-      [UIColor colorNamed:kToolbarButtonColor] :
-          [self.buttonFactory.toolbarConfiguration
-              buttonsTintColorForAccentColor:accentColor];
+  UIColor* buttonsTintColor = self.isTabBarEnabled ||
+      (!self.isTabBarEnabled && !self.isBottomOmniboxEnabled) ?
+        [UIColor colorNamed:kToolbarButtonColor] :
+            [self.buttonFactory.toolbarConfiguration
+                buttonsTintColorForAccentColor:accentColor];
   self.buttonFactory.toolbarConfiguration.buttonsTintColor = buttonsTintColor;
   for (ToolbarButton *button in self.view.buttonStackView.arrangedSubviews) {
     [button updateTintColor];

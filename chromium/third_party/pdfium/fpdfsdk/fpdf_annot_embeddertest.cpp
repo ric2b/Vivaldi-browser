@@ -2,12 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "public/fpdf_annot.h"
 
 #include <limits.h>
 
 #include <algorithm>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "build/build_config.h"
@@ -16,6 +22,7 @@
 #include "core/fpdfapi/parser/cpdf_array.h"
 #include "core/fpdfapi/parser/cpdf_dictionary.h"
 #include "core/fxcrt/containers/contains.h"
+#include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/span.h"
 #include "core/fxge/cfx_defaultrenderdevice.h"
@@ -1110,8 +1117,8 @@ TEST_F(FPDFAnnotEmbedderTest, RemoveAnnotation) {
   // TODO(npm): VerifySavedRendering changes annot rect dimensions by 1??
   // Open the saved document.
   std::string new_file = GetString();
-  FPDF_FILEACCESS file_access;
-  memset(&file_access, 0, sizeof(file_access));
+  FPDF_FILEACCESS file_access = {};  // Aggregate initialization
+  static_assert(std::is_aggregate_v<decltype(file_access)>);
   file_access.m_FileLen = new_file.size();
   file_access.m_GetBlock = GetBlockFromString;
   file_access.m_Param = &new_file;
@@ -1755,7 +1762,7 @@ TEST_F(FPDFAnnotEmbedderTest, GetSetAP) {
     // small. The result buffer should be overwritten with an empty string.
     std::vector<FPDF_WCHAR> buf = GetFPDFWideStringBuffer(normal_length_bytes);
     // Write in the buffer to verify it's not overwritten.
-    memcpy(buf.data(), "abcdefgh", 8);
+    FXSYS_memcpy(buf.data(), "abcdefgh", 8);
     EXPECT_EQ(kExpectNormalAPLength,
               FPDFAnnot_GetAP(annot.get(), FPDF_ANNOT_APPEARANCEMODE_NORMAL,
                               buf.data(), normal_length_bytes - 1));
@@ -1766,9 +1773,8 @@ TEST_F(FPDFAnnotEmbedderTest, GetSetAP) {
     EXPECT_EQ(kExpectNormalAPLength,
               FPDFAnnot_GetAP(annot.get(), FPDF_ANNOT_APPEARANCEMODE_NORMAL,
                               buf.data(), normal_length_bytes));
-    EXPECT_EQ(kMd5NormalAP,
-              GenerateMD5Base16({reinterpret_cast<uint8_t*>(buf.data()),
-                                 normal_length_bytes}));
+    EXPECT_EQ(kMd5NormalAP, GenerateMD5Base16(pdfium::as_byte_span(buf).first(
+                                normal_length_bytes)));
 
     // Check that the string value of an AP is returned through a buffer that is
     // larger than necessary.
@@ -1776,9 +1782,8 @@ TEST_F(FPDFAnnotEmbedderTest, GetSetAP) {
     EXPECT_EQ(kExpectNormalAPLength,
               FPDFAnnot_GetAP(annot.get(), FPDF_ANNOT_APPEARANCEMODE_NORMAL,
                               buf.data(), normal_length_bytes + 2));
-    EXPECT_EQ(kMd5NormalAP,
-              GenerateMD5Base16({reinterpret_cast<uint8_t*>(buf.data()),
-                                 normal_length_bytes}));
+    EXPECT_EQ(kMd5NormalAP, GenerateMD5Base16(pdfium::as_byte_span(buf).first(
+                                normal_length_bytes)));
 
     // Check that getting an AP for a mode that does not have an AP returns an
     // empty string.
@@ -1819,9 +1824,8 @@ TEST_F(FPDFAnnotEmbedderTest, GetSetAP) {
     EXPECT_EQ(kExpectNormalAPLength,
               FPDFAnnot_GetAP(annot.get(), FPDF_ANNOT_APPEARANCEMODE_NORMAL,
                               buf.data(), normal_length_bytes));
-    EXPECT_EQ(kMd5NormalAP,
-              GenerateMD5Base16({reinterpret_cast<uint8_t*>(buf.data()),
-                                 normal_length_bytes}));
+    EXPECT_EQ(kMd5NormalAP, GenerateMD5Base16(pdfium::as_byte_span(buf).first(
+                                normal_length_bytes)));
   }
 
   // Save the modified document, then reopen it.

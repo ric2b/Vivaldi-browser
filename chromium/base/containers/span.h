@@ -21,15 +21,12 @@
 #include "base/check.h"
 #include "base/compiler_specific.h"
 #include "base/containers/checked_iterators.h"
+#include "base/containers/dynamic_extent.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/template_util.h"
 #include "base/types/to_address.h"
 #include "third_party/abseil-cpp/absl/base/attributes.h"
 
 namespace base {
-
-// [views.constants]
-constexpr size_t dynamic_extent = std::numeric_limits<size_t>::max();
 
 template <typename T,
           size_t Extent = dynamic_extent,
@@ -53,15 +50,23 @@ concept CompatibleRange =
     LegalDataConversion<std::ranges::range_reference_t<R>, T> &&
     (std::ranges::borrowed_range<R> || std::is_const_v<T>);
 
+template <typename T>
+concept LegacyRangeDataIsPointer = std::is_pointer_v<T>;
+
+template <typename R>
+concept LegacyRange = requires(R& r) {
+  { std::ranges::data(r) } -> LegacyRangeDataIsPointer;
+  { std::ranges::size(r) } -> std::convertible_to<size_t>;
+};
+
 // NOTE: Ideally we'd just use `CompatibleRange`, however this currently breaks
 // code that was written prior to C++20 being standardized and assumes providing
 // .data() and .size() is sufficient.
 // TODO: https://crbug.com/1504998 - Remove in favor of CompatibleRange and fix
 // callsites.
 template <typename T, typename R>
-concept LegacyCompatibleRange = requires(R& r) {
+concept LegacyCompatibleRange = LegacyRange<R> && requires(R& r) {
   { *std::ranges::data(r) } -> LegalDataConversion<T>;
-  std::ranges::size(r);
 };
 
 template <size_t I>
@@ -549,7 +554,9 @@ class GSL_POINTER span {
   // # Checks
   // The function CHECKs that the `other` span has the same size as itself and
   // will terminate otherwise.
-  constexpr void copy_from(span<const T, N> other) {
+  constexpr void copy_from(span<const T, N> other)
+    requires(!std::is_const_v<T>)
+  {
     CHECK_EQ(size_bytes(), other.size_bytes());
     // Verify non-overlapping in developer builds.
     //
@@ -959,7 +966,9 @@ class GSL_POINTER span<T, dynamic_extent, InternalPtrType> {
   // # Checks
   // The function CHECKs that the `other` span has the same size as itself and
   // will terminate otherwise.
-  constexpr void copy_from(span<const T> other) {
+  constexpr void copy_from(span<const T> other)
+    requires(!std::is_const_v<T>)
+  {
     CHECK_EQ(size_bytes(), other.size_bytes());
     // Verify non-overlapping in developer builds.
     //
@@ -1042,12 +1051,20 @@ span(R&&)
     -> span<std::conditional_t<std::ranges::borrowed_range<R>, T, const T>,
             internal::ExtentV<R>>;
 
+// This guide prefers to let the contiguous_range guide match, since it can
+// produce a fixed-size span. Whereas, LegacyRange only produces a dynamic-sized
+// span.
+template <typename R>
+  requires(!std::ranges::contiguous_range<R> && internal::LegacyRange<R>)
+span(R&& r) noexcept
+    -> span<std::remove_reference_t<decltype(*std::ranges::data(r))>>;
+
 template <typename T, size_t N>
 span(const T (&)[N]) -> span<const T, N>;
 
 // [span.objectrep], views of object representation
 template <typename T, size_t X>
-auto as_bytes(span<T, X> s) noexcept {
+constexpr auto as_bytes(span<T, X> s) noexcept {
   constexpr size_t N = X == dynamic_extent ? dynamic_extent : sizeof(T) * X;
   // SAFETY: span provides that data() points to at least size_bytes() many
   // bytes. So since `uint8_t` has a size of 1 byte, the size_bytes() value is
@@ -1061,7 +1078,7 @@ auto as_bytes(span<T, X> s) noexcept {
 
 template <typename T, size_t X>
   requires(!std::is_const_v<T>)
-auto as_writable_bytes(span<T, X> s) noexcept {
+constexpr auto as_writable_bytes(span<T, X> s) noexcept {
   constexpr size_t N = X == dynamic_extent ? dynamic_extent : sizeof(T) * X;
   // SAFETY: span provides that data() points to at least size_bytes() many
   // bytes. So since `uint8_t` has a size of 1 byte, the size_bytes() value is a
@@ -1078,7 +1095,7 @@ auto as_writable_bytes(span<T, X> s) noexcept {
 // added since chrome still represents many things as char arrays which
 // rightfully should be uint8_t.
 template <typename T, size_t X>
-auto as_chars(span<T, X> s) noexcept {
+constexpr auto as_chars(span<T, X> s) noexcept {
   constexpr size_t N = X == dynamic_extent ? dynamic_extent : sizeof(T) * X;
   // SAFETY: span provides that data() points to at least size_bytes() many
   // bytes. So since `char` has a size of 1 byte, the size_bytes() value is a
@@ -1092,6 +1109,8 @@ auto as_chars(span<T, X> s) noexcept {
 
 // as_string_view() converts a span over byte-sized primitives (holding chars or
 // uint8_t) into a std::string_view, where each byte is represented as a char.
+// It also accepts any type that can implicitly convert to a span, such as
+// arrays.
 //
 // If you want to view an arbitrary span type as a string, first explicitly
 // convert it to bytes via `base::as_bytes()`.

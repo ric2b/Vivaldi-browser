@@ -5,13 +5,13 @@
 #include "chrome/browser/task_manager/sampling/task_group_sampler.h"
 
 #include <limits>
-#include <optional>
 #include <utility>
 
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/process/process_metrics.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/types/expected.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/task_manager/task_manager_observer.h"

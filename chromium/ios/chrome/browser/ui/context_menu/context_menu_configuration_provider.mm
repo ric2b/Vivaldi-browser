@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/context_menu/context_menu_configuration_provider.h"
-#import "ios/chrome/browser/ui/context_menu/context_menu_configuration_provider+Testing.h"
 
 #import "base/ios/ios_util.h"
 #import "base/metrics/histogram_functions.h"
@@ -23,6 +22,7 @@
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/web_state_list/tab_group_utils.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
@@ -36,6 +36,7 @@
 #import "ios/chrome/browser/shared/ui/util/image/image_saver.h"
 #import "ios/chrome/browser/shared/ui/util/pasteboard_util.h"
 #import "ios/chrome/browser/shared/ui/util/url_with_title.h"
+#import "ios/chrome/browser/ui/context_menu/context_menu_configuration_provider+Testing.h"
 #import "ios/chrome/browser/ui/context_menu/context_menu_utils.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_commands.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
@@ -145,7 +146,7 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
 
 #pragma mark - Private
 
-// TODO(crbug.com/1318432): rafactor long method.
+// TODO(crbug.com/40835387): rafactor long method.
 - (UIContextMenuActionProvider)
     contextMenuActionProviderForWebState:(web::WebState*)webState
                                   params:(web::ContextMenuParams)params {
@@ -172,7 +173,7 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
   web::Referrer referrer(lastCommittedURL, web::ReferrerPolicyDefault);
 
   NSMutableArray<UIMenuElement*>* menuElements = [[NSMutableArray alloc] init];
-  // TODO(crbug.com/1299758) add scenario for not a link and not an image.
+  // TODO(crbug.com/40823789) add scenario for not a link and not an image.
   MenuScenarioHistogram menuScenario =
       isImage && isLink ? kMenuScenarioHistogramContextMenuImageLink
       : isImage         ? kMenuScenarioHistogramContextMenuImage
@@ -185,6 +186,10 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
   __weak __typeof(self) weakSelf = self;
 
   if (isLink) {
+    // Array for the actions/menus used to open a link.
+    NSMutableArray<UIMenuElement*>* linkOpeningElements =
+        [[NSMutableArray alloc] init];
+
     _URLToLoad = linkURL;
     base::RecordAction(
         base::UserMetricsAction("MobileWebContextMenuLinkImpression"));
@@ -218,7 +223,36 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
         } // End Vivaldi
 
       }];
-      [menuElements addObject:openNewTab];
+      [linkOpeningElements addObject:openNewTab];
+
+      if (IsTabGroupInGridEnabled()) {
+        std::set<const TabGroup*> groups =
+            GetAllGroupsForBrowserState(self.browser->GetBrowserState());
+        auto actionResult = ^(const TabGroup* group) {
+          UrlLoadParams groupLoadParams = UrlLoadParams::InNewTab(linkURL);
+          groupLoadParams.SetInBackground(YES);
+          groupLoadParams.in_incognito = isOffTheRecord;
+          groupLoadParams.append_to = OpenPosition::kCurrentTab;
+          groupLoadParams.web_params.referrer = referrer;
+          groupLoadParams.origin_point =
+              [params.view convertPoint:params.location toView:nil];
+          groupLoadParams.load_in_group = true;
+          if (group) {
+            groupLoadParams.tab_group = group->GetWeakPtr();
+          }
+          ContextMenuConfigurationProvider* strongSelf = weakSelf;
+          if (!strongSelf) {
+            return;
+          }
+          UrlLoadingBrowserAgent::FromBrowser(strongSelf.browser)
+              ->Load(groupLoadParams);
+        };
+
+        UIMenuElement* openLinkInGroupMenu =
+            [actionFactory menuToOpenLinkInGroupWithGroups:groups
+                                                     block:actionResult];
+        [linkOpeningElements addObject:openLinkInGroupMenu];
+      }
 
       // Vivaldi: Option for open tab in background.
       UIAction* openNewBackgroundTab =
@@ -243,7 +277,7 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
         openIncognitoTab =
             [actionFactory actionToOpenInNewIncognitoTabWithURL:linkURL
                                                      completion:nil];
-        [menuElements addObject:openIncognitoTab];
+        [linkOpeningElements addObject:openIncognitoTab];
       }
 
       if (base::ios::IsMultipleScenesSupported()) {
@@ -254,8 +288,16 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
         UIAction* openNewWindow = [actionFactory
             actionToOpenInNewWindowWithActivity:newWindowActivity];
 
-        [menuElements addObject:openNewWindow];
+        [linkOpeningElements addObject:openNewWindow];
       }
+
+      UIMenu* linkOpeningMenu = [UIMenu menuWithTitle:@""
+                                                image:nil
+                                           identifier:nil
+                                              options:UIMenuOptionsDisplayInline
+                                             children:linkOpeningElements];
+
+      [menuElements addObject:linkOpeningMenu];
 
       if (linkURL.SchemeIsHTTPOrHTTPS()) {
         NSString* innerText = params.text;
@@ -343,7 +385,15 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
 
     // Open Image in new tab.
     UrlLoadParams loadParams = UrlLoadParams::InNewTab(imageURL);
+
+    // Note: (prio@vivaldi.com) - Do not open it in background if Open Image in
+    // new tab. We have a separate option to open image in background.
+    if (IsVivaldiRunning()) {
+      loadParams.SetInBackground(NO);
+    } else {
     loadParams.SetInBackground(YES);
+    } // End Vivaldi
+
     loadParams.web_params.referrer = referrer;
     loadParams.in_incognito = isOffTheRecord;
     loadParams.append_to = OpenPosition::kCurrentTab;
@@ -352,7 +402,77 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
     UIAction* openImageInNewTab =
         [actionFactory actionOpenImageInNewTabWithUrlLoadParams:loadParams
                                                      completion:nil];
-    [menuElements addObject:openImageInNewTab];
+
+#if defined(VIVALDI_BUILD)
+    UrlLoadParams loadParamsBackgroundTab = UrlLoadParams::InNewTab(imageURL);
+    loadParamsBackgroundTab.SetInBackground(YES);
+    loadParamsBackgroundTab.web_params.referrer = referrer;
+    loadParamsBackgroundTab.in_incognito = isOffTheRecord;
+    loadParamsBackgroundTab.append_to = OpenPosition::kCurrentTab;
+    loadParamsBackgroundTab.origin_point =
+        [params.view convertPoint:params.location toView:nil];
+    UIAction* openImageInNewBackgroundTab =
+        [actionFactory
+            actionOpenImageInNewBackgroundTabWithUrlLoadParams:
+                loadParamsBackgroundTab
+                    completion:nil];
+#endif // End Vivaldi
+
+    // Check if the URL was a valid link to avoid having the `Open in Tab Group`
+    // option twice.
+    if (IsTabGroupInGridEnabled() && !isLink) {
+      // Array for the actions/menus used to open an image in a new tab.
+      NSMutableArray<UIMenuElement*>* imageOpeningElements =
+          [[NSMutableArray alloc] init];
+
+      [imageOpeningElements addObject:openImageInNewTab];
+
+      if (IsVivaldiRunning()) {
+        [imageOpeningElements addObject:openImageInNewBackgroundTab];
+      } // End Vivaldi
+
+      std::set<const TabGroup*> groups =
+          GetAllGroupsForBrowserState(self.browser->GetBrowserState());
+      auto actionResult = ^(const TabGroup* group) {
+        UrlLoadParams groupLoadParams = UrlLoadParams::InNewTab(imageURL);
+        groupLoadParams.SetInBackground(YES);
+        groupLoadParams.in_incognito = isOffTheRecord;
+        groupLoadParams.append_to = OpenPosition::kCurrentTab;
+        groupLoadParams.web_params.referrer = referrer;
+        groupLoadParams.origin_point = [params.view convertPoint:params.location
+                                                          toView:nil];
+        groupLoadParams.load_in_group = true;
+        if (group) {
+          groupLoadParams.tab_group = group->GetWeakPtr();
+        }
+        ContextMenuConfigurationProvider* strongSelf = weakSelf;
+        if (!strongSelf) {
+          return;
+        }
+        UrlLoadingBrowserAgent::FromBrowser(strongSelf.browser)
+            ->Load(groupLoadParams);
+      };
+
+      UIMenuElement* openLinkInGroupMenu =
+          [actionFactory menuToOpenLinkInGroupWithGroups:groups
+                                                   block:actionResult];
+      [imageOpeningElements addObject:openLinkInGroupMenu];
+      UIMenu* imageOpeningMenu =
+          [UIMenu menuWithTitle:@""
+                          image:nil
+                     identifier:nil
+                        options:UIMenuOptionsDisplayInline
+                       children:imageOpeningElements];
+
+      [menuElements addObject:imageOpeningMenu];
+    } else {
+      [menuElements addObject:openImageInNewTab];
+
+      if (IsVivaldiRunning()) {
+        [menuElements addObject:openImageInNewBackgroundTab];
+      } // End Vivaldi
+
+    }
 
     // Search the image using Lens if Lens is enabled and available. Otherwise
     // fall back to a standard search by image experience.

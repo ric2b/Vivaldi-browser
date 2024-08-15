@@ -258,10 +258,12 @@ void OpenH264VideoEncoder::Initialize(VideoCodecProfile profile,
   output_cb_ = BindCallbackToCurrentLoopIfNeeded(std::move(output_cb));
   codec_ = std::move(codec);
 
-  VideoEncoderInfo info;
-  info.implementation_name = "OpenH264VideoEncoder";
-  info.is_hardware_accelerated = false;
-  BindCallbackToCurrentLoopIfNeeded(std::move(info_cb)).Run(info);
+  if (info_cb) {
+    VideoEncoderInfo info;
+    info.implementation_name = "OpenH264VideoEncoder";
+    info.is_hardware_accelerated = false;
+    BindCallbackToCurrentLoopIfNeeded(std::move(info_cb)).Run(info);
+  }
 
   std::move(done_cb).Run(EncoderStatus::Codes::kOk);
 }
@@ -281,8 +283,8 @@ EncoderStatus OpenH264VideoEncoder::DrainOutputs(const SFrameBSInfo& frame_info,
 
   result.key_frame = (frame_info.eFrameType == videoFrameTypeIDR);
   result.color_space = color_space;
-  result.data = std::make_unique<uint8_t[]>(total_chunk_size);
-  auto* gather_buffer = result.data.get();
+  result.data = base::HeapArray<uint8_t>::Uninit(total_chunk_size);
+  auto* gather_buffer = result.data.data();
 
   if (h264_converter_) {
     // Copy data to a temporary buffer instead.
@@ -322,9 +324,7 @@ EncoderStatus OpenH264VideoEncoder::DrainOutputs(const SFrameBSInfo& frame_info,
   size_t converted_output_size = 0;
   bool config_changed = false;
   auto status = h264_converter_->ConvertChunk(
-      conversion_buffer_,
-      base::span<uint8_t>(result.data.get(), total_chunk_size), &config_changed,
-      &converted_output_size);
+      conversion_buffer_, result.data, &config_changed, &converted_output_size);
 
   if (!status.is_ok())
     return EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode)
@@ -390,7 +390,7 @@ void OpenH264VideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
 
   if (frame->format() != PIXEL_FORMAT_I420) {
     // OpenH264 can resize frame automatically, but since we're converting
-    // pixel fromat anyway we can do resize as well.
+    // pixel format anyway we can do resize as well.
     auto i420_frame = frame_pool_.CreateFrame(
         PIXEL_FORMAT_I420, options_.frame_size, gfx::Rect(options_.frame_size),
         options_.frame_size, frame->timestamp());
@@ -423,14 +423,14 @@ void OpenH264VideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
   picture.iColorFormat = EVideoFormatType::videoFormatI420;
   picture.uiTimeStamp = frame->timestamp().InMilliseconds();
   picture.pData[0] =
-      const_cast<uint8_t*>(frame->visible_data(VideoFrame::kYPlane));
+      const_cast<uint8_t*>(frame->visible_data(VideoFrame::Plane::kY));
   picture.pData[1] =
-      const_cast<uint8_t*>(frame->visible_data(VideoFrame::kUPlane));
+      const_cast<uint8_t*>(frame->visible_data(VideoFrame::Plane::kU));
   picture.pData[2] =
-      const_cast<uint8_t*>(frame->visible_data(VideoFrame::kVPlane));
-  picture.iStride[0] = frame->stride(VideoFrame::kYPlane);
-  picture.iStride[1] = frame->stride(VideoFrame::kUPlane);
-  picture.iStride[2] = frame->stride(VideoFrame::kVPlane);
+      const_cast<uint8_t*>(frame->visible_data(VideoFrame::Plane::kV));
+  picture.iStride[0] = frame->stride(VideoFrame::Plane::kY);
+  picture.iStride[1] = frame->stride(VideoFrame::Plane::kU);
+  picture.iStride[2] = frame->stride(VideoFrame::Plane::kV);
 
   if (key_frame) {
     if (int err = codec_->ForceIntraFrame(true)) {

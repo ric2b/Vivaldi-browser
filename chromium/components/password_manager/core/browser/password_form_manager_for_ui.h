@@ -32,7 +32,7 @@ class PasswordFormManagerForUI {
   virtual base::span<const PasswordForm> GetBestMatches() const = 0;
 
   // Returns the federated saved matches for the observed form.
-  // TODO(crbug.com/831123): merge with GetBestMatches.
+  // TODO(crbug.com/40570965): merge with GetBestMatches.
   virtual std::vector<raw_ptr<const PasswordForm, VectorExperimental>>
   GetFederatedMatches() const = 0;
 
@@ -67,12 +67,6 @@ class PasswordFormManagerForUI {
 
   // Handles save-as-new or update of the form managed by this manager.
   virtual void Save() = 0;
-
-  // Updates the password store entry for |credentials_to_update|, using the
-  // password from the pending credentials. It modifies the pending credentials.
-  // |credentials_to_update| should be one of the best matches or the pending
-  // credentials.
-  virtual void Update(const PasswordForm& credentials_to_update) = 0;
 
   // This method returns true if the current "update" is to a password that is
   // saved in Google Account.
@@ -115,6 +109,13 @@ class PasswordFormManagerForUI {
   // GetPendingCredentials() to the account store of the currently signed in
   // user.
   virtual void BlockMovingCredentialsToAccountStore() = 0;
+
+  // Returns the password store type into which the form is going to be saved or
+  // updated. It might be that the credential is updated in both stores; in this
+  // case the result will be the enum value with both bits set (the account and
+  // the profile store bits).
+  virtual PasswordForm::Store GetPasswordStoreForSaving(
+      const PasswordForm& password_form) const = 0;
 };
 
 }  // namespace  password_manager

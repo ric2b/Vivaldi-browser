@@ -6,14 +6,17 @@ package org.chromium.chrome.browser.autofill.save_card;
 
 import android.content.Context;
 import android.net.Uri;
+import android.view.View;
 
-import androidx.annotation.VisibleForTesting;
 import androidx.browser.customtabs.CustomTabsIntent;
 
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.components.autofill.payments.AutofillSaveCardUiInfo;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.StateChangeReason;
+import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
 /**
  * Coordinator of the autofill save card UI.
@@ -22,51 +25,104 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
  * locally or uploaded).
  */
 public class AutofillSaveCardBottomSheetCoordinator {
+    /** Native callbacks from the save card bottom sheet. */
+    public interface NativeDelegate {
+        /** Called when the save card bottom sheet is shown to the user. */
+        void onUiShown();
+
+        /** Called when the user accepts the save card bottom sheet. */
+        void onUiAccepted();
+
+        /** Called when the user cancels the save card bottom sheet. */
+        void onUiCanceled();
+
+        /** Called when the user ignores the save card bottom sheet. */
+        void onUiIgnored();
+    }
+
     private final Context mContext;
-    private final AutofillSaveCardBottomSheetBridge mBridge;
+    private final AutofillSaveCardBottomSheetView mView;
     private final AutofillSaveCardBottomSheetMediator mMediator;
+    private PropertyModel mModel;
 
     /**
      * Creates the coordinator.
      *
      * @param context The context for this component.
+     * @param uiInfo An object providing initial values for the bottom sheet model.
      * @param bottomSheetController The bottom sheet controller where this bottom sheet will be
-     * shown.
+     *     shown.
      * @param layoutStateProvider The LayoutStateProvider used to detect when the bottom sheet needs
-     * to be hidden after a change of layout (e.g. to the tab switcher).
-     * @param tabModel The TabModel used to detect when the bottom sheet needs to be hidden after
-     * a tab change.
-     * @param uiInfo The assets (icons and text) displayed in the bottom sheet.
-     * @param bridge The bridge to signal UI flow events (OnUiShown, OnUiAccepted, etc.) to.
+     *     to be hidden after a change of layout (e.g. to the tab switcher).
+     * @param tabModel The TabModel used to detect when the bottom sheet needs to be hidden after a
+     *     tab change.
+     * @param delegate The native callbacks for user actions.
      */
     public AutofillSaveCardBottomSheetCoordinator(
             Context context,
+            AutofillSaveCardUiInfo uiInfo,
             BottomSheetController bottomSheetController,
             LayoutStateProvider layoutStateProvider,
             TabModel tabModel,
-            AutofillSaveCardUiInfo uiInfo,
-            AutofillSaveCardBottomSheetBridge bridge) {
+            NativeDelegate delegate) {
         mContext = context;
-        mBridge = bridge;
+        mView = new AutofillSaveCardBottomSheetView(context);
+
+        mModel =
+                new PropertyModel.Builder(AutofillSaveCardBottomSheetProperties.ALL_KEYS)
+                        .with(AutofillSaveCardBottomSheetProperties.TITLE, uiInfo.getTitleText())
+                        .with(
+                                AutofillSaveCardBottomSheetProperties.DESCRIPTION,
+                                uiInfo.getDescriptionText())
+                        .with(
+                                AutofillSaveCardBottomSheetProperties.LOGO_ICON,
+                                uiInfo.isForUpload() ? uiInfo.getLogoIcon() : 0)
+                        .with(
+                                AutofillSaveCardBottomSheetProperties.CARD_DESCRIPTION,
+                                uiInfo.getCardDescription())
+                        .with(
+                                AutofillSaveCardBottomSheetProperties.CARD_ICON,
+                                uiInfo.getCardDetail().issuerIconDrawableId)
+                        .with(
+                                AutofillSaveCardBottomSheetProperties.CARD_LABEL,
+                                uiInfo.getCardDetail().label)
+                        .with(
+                                AutofillSaveCardBottomSheetProperties.CARD_SUB_LABEL,
+                                uiInfo.getCardDetail().subLabel)
+                        .with(
+                                AutofillSaveCardBottomSheetProperties.LEGAL_MESSAGE,
+                                new AutofillSaveCardBottomSheetProperties.LegalMessage(
+                                        uiInfo.getLegalMessageLines(), this::openLegalMessageLink))
+                        .with(
+                                AutofillSaveCardBottomSheetProperties.ACCEPT_BUTTON_LABEL,
+                                uiInfo.getConfirmText())
+                        .with(
+                                AutofillSaveCardBottomSheetProperties.CANCEL_BUTTON_LABEL,
+                                uiInfo.getCancelText())
+                        .with(AutofillSaveCardBottomSheetProperties.SHOW_LOADING_STATE, false)
+                        .build();
+        PropertyModelChangeProcessor.create(
+                mModel, mView, AutofillSaveCardBottomSheetViewBinder::bind);
+
         mMediator =
                 new AutofillSaveCardBottomSheetMediator(
-                        new AutofillSaveCardBottomSheetContent(context),
-                        uiInfo,
+                        new AutofillSaveCardBottomSheetContent(
+                                mView.mContentView, mView.mScrollView),
+                        new AutofillSaveCardBottomSheetLifecycle(
+                                bottomSheetController, layoutStateProvider, tabModel),
                         bottomSheetController,
-                        layoutStateProvider,
-                        tabModel,
-                        this::launchCctOnLegalMessageClick,
-                        bridge);
-    }
+                        mModel,
+                        delegate,
+                        uiInfo.isForUpload());
 
-    @VisibleForTesting
-    /*package*/ AutofillSaveCardBottomSheetCoordinator(
-            Context context,
-            AutofillSaveCardBottomSheetBridge bridge,
-            AutofillSaveCardBottomSheetMediator mediator) {
-        mContext = context;
-        mBridge = bridge;
-        mMediator = mediator;
+        mView.mAcceptButton.setOnClickListener(
+                (View button) -> {
+                    mMediator.onAccepted();
+                });
+        mView.mCancelButton.setOnClickListener(
+                (View button) -> {
+                    mMediator.onCanceled();
+                });
     }
 
     /**
@@ -78,16 +134,23 @@ public class AutofillSaveCardBottomSheetCoordinator {
         mMediator.requestShowContent();
     }
 
-    @VisibleForTesting
-    /* package */ void launchCctOnLegalMessageClick(String url) {
+    /** Hides this component hiding the bottom sheet if needed. */
+    public void hide(@StateChangeReason int hideReason) {
+        mMediator.hide(hideReason);
+    }
+
+    AutofillSaveCardBottomSheetView getAutofillSaveCardBottomSheetViewForTesting() {
+        return mView;
+    }
+
+    PropertyModel getPropertyModelForTesting() {
+        return mModel;
+    }
+
+    void openLegalMessageLink(String url) {
         new CustomTabsIntent.Builder()
                 .setShowTitle(true)
                 .build()
                 .launchUrl(mContext, Uri.parse(url));
-    }
-
-    /** Destroys this component hiding the bottom sheet if needed. */
-    public void destroy() {
-        mMediator.destroy();
     }
 }

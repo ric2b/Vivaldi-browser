@@ -34,6 +34,11 @@ class ParseTest(unittest.TestCase):
                 ("Short Name", "metadata-test-valid"),
                 ("URL", "https://www.example.com/metadata,\n"
                  "     https://www.example.com/parser"),
+                ("Unknown Field",
+                 "Should be extracted into a field, because the preceding URL\n"
+                 "               field is structured, thus terminated by another field-like\n"
+                 "               line, even if the field name isn't well known to us."
+                 ),
                 ("Version", "1.0.12"),
                 ("Date", "2020-12-03"),
                 ("License", "Apache, 2.0 and MIT"),
@@ -43,7 +48,7 @@ class ParseTest(unittest.TestCase):
                 ("CPEPrefix", "unknown"),
                 ("Description", "A test metadata file, with a\n"
                  " multi-line description."),
-                ("Local Modifications", "None,\nEXCEPT:\n* nothing."),
+                ("Local Modifications", "None."),
             ],
         )
 
@@ -115,6 +120,47 @@ class ParseTest(unittest.TestCase):
             ],
         )
 
+    def test_parse_multiple_local_modifications(self):
+        """Check parsing works for multiple dependencies, each with different local modifications."""
+        filepath = os.path.join(
+            _THIS_DIR, "data", "README.chromium.test.multi-local-modifications")
+        content = gclient_utils.FileRead(filepath)
+        all_metadata = metadata.parse.parse_content(content)
+
+        self.assertEqual(len(all_metadata), 4)
+
+        self.assertListEqual(
+            all_metadata[0].get_entries(),
+            [
+                ("Name", "Test package 1"),
+                ("Local Modifications",
+                 "1. Modified X file\n2. Deleted Y file"),
+            ],
+        )
+
+        self.assertListEqual(
+            all_metadata[1].get_entries(),
+            [
+                ("Name", "Test package 2"),
+                ("Local Modifications", "None"),
+            ],
+        )
+
+        self.assertListEqual(
+            all_metadata[2].get_entries(),
+            [
+                ("Name", "Test package 3"),
+                ("Local Modifications", "None."),
+            ],
+        )
+
+        self.assertListEqual(
+            all_metadata[3].get_entries(),
+            [
+                ("Name", "Test package 4"),
+                ("Local Modifications", "None,\nExcept modified file X."),
+            ],
+        )
 
 if __name__ == "__main__":
     unittest.main()

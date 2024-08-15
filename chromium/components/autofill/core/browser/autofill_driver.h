@@ -211,9 +211,6 @@ class AutofillDriver {
       const FieldGlobalId& field_id,
       const std::u16string& value) = 0;
 
-  // Tells the renderer to clear the current section of the autofilled values.
-  virtual void RendererShouldClearFilledSection() = 0;
-
   // Tells the renderer to clear the currently previewed Autofill results.
   virtual void RendererShouldClearPreviewedForm() = 0;
 
@@ -228,9 +225,6 @@ class AutofillDriver {
   virtual void RendererShouldSetSuggestionAvailability(
       const FieldGlobalId& field_id,
       mojom::AutofillSuggestionAvailability suggestion_availability) = 0;
-
-  // Informs the renderer that the popup has been hidden.
-  virtual void PopupHidden() = 0;
 
   // Query's the DOM for four digit combinations that could potentially be of a
   // card number.

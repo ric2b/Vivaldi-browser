@@ -15,13 +15,14 @@
 import m from 'mithril';
 
 import {Actions} from '../common/actions';
+import {getLegacySelection} from '../common/state';
 import {
   AggregateData,
   Column,
   ThreadStateExtra,
   isEmptyData,
 } from '../common/aggregation_data';
-import {colorForState} from '../common/colorizer';
+import {colorForState} from '../core/colorizer';
 import {translateState} from '../common/thread_state';
 
 import {globals} from './globals';
@@ -39,7 +40,7 @@ export class AggregationPanel
   implements m.ClassComponent<AggregationPanelAttrs>
 {
   view({attrs}: m.CVnode<AggregationPanelAttrs>) {
-    if (!globals.state.currentSelection) {
+    if (!getLegacySelection(globals.state)) {
       return m(
         EmptyState,
         {
@@ -156,7 +157,7 @@ export class AggregationPanel
   }
 
   showTimeRange() {
-    const selection = globals.state.currentSelection;
+    const selection = getLegacySelection(globals.state);
     if (selection === null || selection.kind !== 'AREA') return undefined;
     const selectedArea = globals.state.areas[selection.areaId];
     const duration = selectedArea.end - selectedArea.start;

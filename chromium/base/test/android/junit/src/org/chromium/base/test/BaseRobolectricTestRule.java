@@ -13,6 +13,7 @@ import org.junit.runners.model.Statement;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.BundleUtils;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.FeatureParam;
 import org.chromium.base.Flag;
 import org.chromium.base.LifetimeAssert;
 import org.chromium.base.PathUtils;
@@ -24,6 +25,7 @@ import org.chromium.base.metrics.UmaRecorderHolder;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.test.BaseRobolectricTestRunner.HelperTestRunner;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Features;
 import org.chromium.build.NativeLibraries;
 
 import java.lang.reflect.Method;
@@ -84,6 +86,8 @@ public class BaseRobolectricTestRule implements TestRule {
         CommandLineFlags.setUpMethod(method);
         BundleUtils.resetForTesting();
         Flag.resetAllInMemoryCachedValuesForTesting();
+        FeatureParam.resetAllInMemoryCachedValuesForTesting();
+        Features.getInstance().applyFeaturesFromTestMethodForRobolectric(method);
     }
 
     static void tearDown(boolean testFailed) {
@@ -94,6 +98,7 @@ public class BaseRobolectricTestRule implements TestRule {
             HelperTestRunner.sTestFailed = true;
             throw new RuntimeException(e);
         } finally {
+            Features.resetAfterRobolectricTest();
             CommandLineFlags.tearDownMethod();
             CommandLineFlags.tearDownClass();
             ApplicationStatus.destroyForJUnitTests();

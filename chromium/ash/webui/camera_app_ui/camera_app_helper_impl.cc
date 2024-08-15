@@ -6,9 +6,11 @@
 
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/holding_space/holding_space_client.h"
 #include "ash/public/cpp/new_window_delegate.h"
 #include "ash/public/cpp/window_properties.h"
+#include "base/feature_list.h"
 #include "base/functional/callback_helpers.h"
 #include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
@@ -494,7 +496,12 @@ void CameraAppHelperImpl::ConvertToPdf(
     std::move(callback).Run({});
     return;
   }
-  std::move(callback).Run(std::move(pdf_data));
+  if (!base::FeatureList::IsEnabled(ash::features::kCameraAppPdfOcr)) {
+    std::move(callback).Run(std::move(pdf_data));
+    return;
+  }
+  camera_app_ui_->delegate()->Searchify(std::move(pdf_data),
+                                        std::move(callback));
 }
 
 void CameraAppHelperImpl::MaybeTriggerSurvey() {
@@ -558,8 +565,8 @@ void CameraAppHelperImpl::OnDisplayAdded(const display::Display& new_display) {
   CheckExternalScreenState();
 }
 
-void CameraAppHelperImpl::OnDisplayRemoved(
-    const display::Display& old_display) {
+void CameraAppHelperImpl::OnDisplaysRemoved(
+    const display::Displays& removed_displays) {
   CheckExternalScreenState();
 }
 
@@ -626,6 +633,16 @@ void CameraAppHelperImpl::ScreenLockedStateUpdated() {
   }
   screen_locked_monitor_->Update(
       ash::SessionManagerClient::Get()->IsScreenLocked());
+}
+
+void CameraAppHelperImpl::RenderPdfAsJpeg(const std::vector<uint8_t>& pdf_data,
+                                          RenderPdfAsJpegCallback callback) {
+  camera_app_ui_->delegate()->RenderPdfAsJpeg(pdf_data, std::move(callback));
+}
+
+void CameraAppHelperImpl::PerformOcr(const std::vector<uint8_t>& jpeg_data,
+                                     PerformOcrCallback callback) {
+  camera_app_ui_->delegate()->PerformOcr(jpeg_data, std::move(callback));
 }
 
 }  // namespace ash

@@ -20,6 +20,7 @@
 #include "components/autofill/core/browser/metrics/payments/virtual_card_standalone_cvc_suggestion_metrics.h"
 #include "components/autofill/core/browser/payments/autofill_offer_manager.h"
 #include "components/autofill/core/browser/payments/credit_card_access_manager.h"
+#include "components/autofill/core/browser/payments_data_manager.h"
 #include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_internals/log_message.h"
 #include "components/autofill/core/common/autofill_internals/logging_scope.h"
@@ -178,8 +179,8 @@ void CreditCardFormEventLogger::OnDidSelectCardSuggestion(
       if (!has_logged_masked_server_card_suggestion_selected_) {
         has_logged_masked_server_card_suggestion_selected_ = true;
         Log(FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_SELECTED_ONCE, form);
-        if (personal_data_manager_->IsCardPresentAsBothLocalAndServerCards(
-                credit_card)) {
+        if (personal_data_manager_->payments_data_manager()
+                .IsCardPresentAsBothLocalAndServerCards(credit_card)) {
           Log(FORM_EVENT_SERVER_CARD_SUGGESTION_SELECTED_FOR_AN_EXISTING_LOCAL_CARD_ONCE,
               form);
         }
@@ -260,9 +261,9 @@ void CreditCardFormEventLogger::OnDidSelectCardSuggestion(
       // selected. Can be none if there was only one card suggestion displayed
       // and that card was selected.
       for (const Suggestion& suggestion : suggestions_) {
-        // TODO(crbug.com/1121806): Use instrument ID for server credit cards.
+        // TODO(crbug.com/40146355): Use instrument ID for server credit cards.
         CreditCard* suggested_credit_card =
-            personal_data_manager_->GetCreditCardByGUID(
+            personal_data_manager_->payments_data_manager().GetCreditCardByGUID(
                 suggestion.GetBackendId<Suggestion::Guid>().value());
         if (!suggested_credit_card) {
           // Ignore non credit card suggestions in the popup like separators,
@@ -409,8 +410,8 @@ void CreditCardFormEventLogger::OnDidFillFormFillingSuggestion(
       case CreditCard::RecordType::kLocalCard:
         // Check if the local card is a duplicate of an existing server card
         // and log an additional metric if so.
-        if (personal_data_manager_->IsCardPresentAsBothLocalAndServerCards(
-                credit_card)) {
+        if (personal_data_manager_->payments_data_manager()
+                .IsCardPresentAsBothLocalAndServerCards(credit_card)) {
           Log(FORM_EVENT_LOCAL_SUGGESTION_FILLED_FOR_AN_EXISTING_SERVER_CARD_ONCE,
               form);
         }
@@ -418,8 +419,8 @@ void CreditCardFormEventLogger::OnDidFillFormFillingSuggestion(
         break;
       case CreditCard::RecordType::kMaskedServerCard:
         Log(FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_FILLED_ONCE, form);
-        if (personal_data_manager_->IsCardPresentAsBothLocalAndServerCards(
-                credit_card)) {
+        if (personal_data_manager_->payments_data_manager()
+                .IsCardPresentAsBothLocalAndServerCards(credit_card)) {
           Log(FORM_EVENT_SERVER_CARD_FILLED_FOR_AN_EXISTING_LOCAL_CARD_ONCE,
               form);
           server_card_with_local_duplicate_filled_ = true;
@@ -437,10 +438,6 @@ void CreditCardFormEventLogger::OnDidFillFormFillingSuggestion(
             ? FORM_EVENT_CARD_SUGGESTION_WITH_METADATA_FILLED_ONCE
             : FORM_EVENT_CARD_SUGGESTION_WITHOUT_METADATA_FILLED_ONCE,
         form);
-  }
-
-  if (has_logged_undo_after_fill_) {
-    has_logged_fill_after_undo_ = true;
   }
 
   base::RecordAction(
@@ -682,7 +679,8 @@ FormEvent CreditCardFormEventLogger::GetCardNumberStatusFormEvent(
   } else if (!PassesLuhnCheck(number)) {
     form_event =
         FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_FAIL_LUHN_CHECK_CARD;
-  } else if (personal_data_manager_->IsKnownCard(credit_card)) {
+  } else if (personal_data_manager_->payments_data_manager().IsKnownCard(
+                 credit_card)) {
     form_event = FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_KNOWN_CARD;
   }
 
@@ -714,10 +712,10 @@ void CreditCardFormEventLogger::RecordCardUnmaskFlowEvent(
       break;
     case UnmaskAuthFlowType::kThreeDomainSecure:
     case UnmaskAuthFlowType::kThreeDomainSecureConsentAlreadyGiven:
-      // TODO(crbug.com/1521960): Add logging for kThreeDomainSecure and
+      // TODO(crbug.com/41494927): Add logging for kThreeDomainSecure and
       // kThreeDomainSecureConsentAlreadyGiven.
     case UnmaskAuthFlowType::kNone:
-      // TODO(crbug.com/1300959): Fix Autofill.BetterAuth logging.
+      // TODO(crbug.com/40216473): Fix Autofill.BetterAuth logging.
       return;
   }
   std::string card_type_suffix =
@@ -743,7 +741,7 @@ bool CreditCardFormEventLogger::DoesCardHaveOffer(
 
 bool CreditCardFormEventLogger::DoSuggestionsIncludeVirtualCard() {
   auto is_virtual_card = [](const Suggestion& suggestion) {
-    return suggestion.popup_item_id == PopupItemId::kVirtualCreditCardEntry;
+    return suggestion.type == SuggestionType::kVirtualCreditCardEntry;
   };
   return base::ranges::any_of(suggestions_, is_virtual_card);
 }

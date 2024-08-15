@@ -163,7 +163,6 @@
 <translation id="7353601530677266744">Liña de ordes</translation>
 <translation id="7364115444476960850"><ph name="BLOCKER_NAME" /> de Vivaldi bloqueou a páxina á que estabas intentando acceder</translation>
 <translation id="7419106976560586862">Camiño ao perfil</translation>
-<translation id="7445762425076701745">A identidade do servidor ao que estás conectado non se pode validar por completo. Estás conectado a un servidor cun nombre que só é válido dentro da túa red e cuxa propiedade non pode ser validada por unha entidade externa emisora de certificados. A pesar de que algunhas entidades emisoras emiten certificados para eses nomes, non é posible garantir que esteas conectado ao sitio web que queres, e non ao dun atacante.</translation>
 <translation id="7455133967321480974">Usar valor por defecto global (Bloquear)</translation>
 <translation id="7518003948725431193">Non se atopou unha página web para o enderezo: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Esta páxina web require os datos que ingresaches anteriormente para amosarse correctamente. Podes volver a envialos, pero ao facelo, repetirás as accións que realizases a páxina.</translation>

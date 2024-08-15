@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #import "base/message_loop/message_pump_apple.h"
 
 #import <Foundation/Foundation.h>
@@ -729,11 +734,11 @@ MessagePumpUIApplication::MessagePumpUIApplication()
 MessagePumpUIApplication::~MessagePumpUIApplication() = default;
 
 void MessagePumpUIApplication::DoRun(Delegate* delegate) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 bool MessagePumpUIApplication::DoQuit() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return false;
 }
 

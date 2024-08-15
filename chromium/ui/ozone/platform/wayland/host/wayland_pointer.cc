@@ -23,7 +23,7 @@ namespace ui {
 
 namespace {
 
-// TODO(https://crbug.com/1353873): Remove this method when Compositors other
+// TODO(crbug.com/40235357): Remove this method when Compositors other
 // than Exo comply with `wl_pointer.frame`.
 wl::EventDispatchPolicy EventDispatchPolicyForPlatform() {
   return
@@ -135,7 +135,8 @@ void WaylandPointer::OnMotion(void* data,
 
   self->delegate_->OnPointerMotionEvent(
       self->connection_->MaybeConvertLocation(location, target),
-      wl::EventMillisecondsToTimeTicks(time), EventDispatchPolicyForPlatform());
+      wl::EventMillisecondsToTimeTicks(time), EventDispatchPolicyForPlatform(),
+      /*is_synthesized=*/false);
 }
 
 // static
@@ -177,7 +178,8 @@ void WaylandPointer::OnButton(void* data,
   }
   self->delegate_->OnPointerButtonEvent(
       type, changed_button, wl::EventMillisecondsToTimeTicks(time),
-      /*window=*/nullptr, EventDispatchPolicyForPlatform());
+      /*window=*/nullptr, EventDispatchPolicyForPlatform(),
+      /*allow_release_of_unpressed_button=*/false, /*is_synthesized=*/false);
 }
 
 // static
@@ -248,7 +250,7 @@ void WaylandPointer::OnAxisDiscrete(void* data,
                                     wl_pointer* pointer,
                                     uint32_t axis,
                                     int32_t discrete) {
-  // TODO(crbug.com/1129259): Use this event for better handling of mouse wheel
+  // TODO(crbug.com/40720099): Use this event for better handling of mouse wheel
   // events.
   NOTIMPLEMENTED_LOG_ONCE();
 }
@@ -260,7 +262,7 @@ void WaylandPointer::OnAxisValue120(void* data,
                                     wl_pointer* pointer,
                                     uint32_t axis,
                                     int32_t value120) {
-  // TODO(crbug.com/1129259): Use this event for better handling of mouse wheel
+  // TODO(crbug.com/40720099): Use this event for better handling of mouse wheel
   // events.
   NOTIMPLEMENTED_LOG_ONCE();
 }
@@ -328,9 +330,9 @@ void WaylandPointer::OnTilt(void* data,
 }
 
 // Enter/Leave events cause undesirable tab detaches in window dragging
-// sessions. At least KWin, Mutter, and old Exo versions (Ash < 112) are known
-// to send leave/enter events before the events currently used by the window
-// drag controller to detect drop, see the crbug linked below for more details.
+// sessions. At least KWin and Mutter are known to send leave/enter events
+// before the events currently used by the window drag controller to detect
+// drop, see the crbug linked below for more details.
 //
 // TODO(crbug.com/329479345): Move this suppression logic to drag controller
 // code once they're refactored to intercept events for the whole session. Also,
@@ -343,8 +345,7 @@ bool WaylandPointer::SuppressFocusChangeEvents() const {
     return false;
   }
   return connection_->window_drag_controller() &&
-         connection_->window_drag_controller()->state() !=
-             WaylandWindowDragController::State::kIdle;
+         connection_->window_drag_controller()->IsDragInProgress();
 }
 
 }  // namespace ui

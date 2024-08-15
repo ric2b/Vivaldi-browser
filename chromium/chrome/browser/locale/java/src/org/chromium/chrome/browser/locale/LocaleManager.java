@@ -25,8 +25,8 @@ import java.util.List;
 import org.chromium.build.BuildConfig;
 
 /**
- * Manager for some locale specific logics.
- * TODO(https://crbug.com/1198923) Turn this into a per-activity object.
+ * Manager for some locale specific logics. TODO(crbug.com/40177565) Turn this into a per-activity
+ * object.
  */
 public class LocaleManager implements DefaultSearchEngineDialogHelper.Delegate {
     private static final LocaleManager sInstance = new LocaleManager();

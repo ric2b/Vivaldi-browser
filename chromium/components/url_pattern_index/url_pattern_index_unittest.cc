@@ -9,6 +9,7 @@
 #include <memory>
 #include <numeric>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/containers/flat_set.h"
@@ -16,7 +17,7 @@
 #include "base/functional/callback.h"
 #include "base/rand_util.h"
 #include "base/ranges/algorithm.h"
-#include "base/strings/string_piece.h"
+#include "base/strings/string_number_conversions.h"
 #include "components/url_pattern_index/url_pattern.h"
 #include "components/url_pattern_index/url_rule_test_support.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -97,8 +98,8 @@ class UrlPatternIndexTest : public ::testing::Test {
   }
 
   const flat::UrlRule* FindMatch(
-      base::StringPiece url_string,
-      base::StringPiece document_origin_string = base::StringPiece(),
+      std::string_view url_string,
+      std::string_view document_origin_string = std::string_view(),
       proto::ElementType element_type = testing::kOther,
       proto::ActivationType activation_type = kNoActivation,
       bool disable_generic_rules = false,
@@ -114,8 +115,8 @@ class UrlPatternIndexTest : public ::testing::Test {
   }
 
   const flat::UrlRule* FindMatch(
-      base::StringPiece url_string,
-      base::StringPiece document_origin_string,
+      std::string_view url_string,
+      std::string_view document_origin_string,
       flat::ElementType element_type,
       flat::ActivationType activation_type,
       flat::RequestMethod request_method,
@@ -134,8 +135,8 @@ class UrlPatternIndexTest : public ::testing::Test {
   }
 
   std::vector<const flat::UrlRule*> FindAllMatches(
-      base::StringPiece url_string,
-      base::StringPiece document_origin_string,
+      std::string_view url_string,
+      std::string_view document_origin_string,
       proto::ElementType element_type,
       proto::ActivationType activation_type,
       bool disable_generic_rules,
@@ -150,7 +151,7 @@ class UrlPatternIndexTest : public ::testing::Test {
   }
 
   const flat::UrlRule* FindHighestPriorityMatch(
-      base::StringPiece url_string,
+      std::string_view url_string,
       const base::flat_set<int>& disabled_rule_ids = {}) const {
     return index_matcher_->FindMatch(
         GURL(url_string), url::Origin(), testing::kOther /*element_type*/,
@@ -190,7 +191,7 @@ class UrlPatternIndexTest : public ::testing::Test {
 
 TEST_F(UrlPatternIndexTest, EmptyIndex) {
   Finish();
-  EXPECT_FALSE(FindMatch(base::StringPiece() /* url */));
+  EXPECT_FALSE(FindMatch(std::string_view() /* url */));
   EXPECT_FALSE(FindMatch("http://example.com"));
   EXPECT_FALSE(FindMatch("http://another.example.com?param=val"));
 }
@@ -410,7 +411,7 @@ TEST_F(UrlPatternIndexTest, OneRuleWithThirdParty) {
 TEST_F(UrlPatternIndexTest, OneRuleWithDomainList) {
   const struct {
     std::vector<std::string> domains;
-    base::StringPiece url_or_origin;
+    std::string_view url_or_origin;
     bool expect_match;
   } kTestCases[] = {
       {std::vector<std::string>(), "", true},
@@ -620,7 +621,7 @@ TEST_F(UrlPatternIndexTest, OneRuleWithLongDomainList) {
 
   std::vector<std::string> domains;
   for (size_t i = 0; i < kDomains; ++i) {
-    const std::string domain = "domain" + std::to_string(i) + ".com";
+    const std::string domain = "domain" + base::NumberToString(i) + ".com";
     domains.push_back(domain);
     domains.push_back("~sub." + domain);
     domains.push_back("a.sub." + domain);
@@ -640,7 +641,7 @@ TEST_F(UrlPatternIndexTest, OneRuleWithLongDomainList) {
 
   for (size_t i = 0; i < kDomains; ++i) {
     SCOPED_TRACE(::testing::Message() << "Iteration: " << i);
-    const std::string domain = "domain" + std::to_string(i) + ".com";
+    const std::string domain = "domain" + base::NumberToString(i) + ".com";
 
     EXPECT_TRUE(FindMatch(kUrl, "http://" + domain));
     EXPECT_FALSE(FindMatch(kUrl, "http://sub." + domain));
@@ -974,7 +975,7 @@ TEST_F(UrlPatternIndexTest, FindMatchReturnsCorrectRules) {
 
   std::vector<std::string> url_patterns(kNumOfPatterns);
   for (size_t i = 0; i < kNumOfPatterns; ++i) {
-    url_patterns[i] = "http://example." + std::to_string(i) + ".com";
+    url_patterns[i] = "http://example." + base::NumberToString(i) + ".com";
     ASSERT_TRUE(
         AddUrlRule(MakeUrlRule(UrlPattern(url_patterns[i], kSubstring))))
         << "Rule #" << i;
@@ -992,11 +993,11 @@ TEST_F(UrlPatternIndexTest, FindMatchReturnsCorrectRules) {
     const flatbuffers::String* rule_pattern = rule->url_pattern();
     ASSERT_TRUE(rule_pattern);
     EXPECT_EQ(url_pattern,
-              base::StringPiece(rule_pattern->data(), rule_pattern->size()));
+              std::string_view(rule_pattern->data(), rule_pattern->size()));
   }
 
-  EXPECT_FALSE(
-      FindMatch("http://example." + std::to_string(kNumOfPatterns) + ".com"));
+  EXPECT_FALSE(FindMatch("http://example." +
+                         base::NumberToString(kNumOfPatterns) + ".com"));
 }
 
 // Tests UrlPatternIndexMatcher::FindMatch works with the kHighestPriority match
@@ -1006,7 +1007,7 @@ TEST_F(UrlPatternIndexTest, FindMatchHighestPriority) {
 
   int id = 1;
   auto pattern_for_number = [](size_t num) {
-    return "http://" + std::to_string(num) + ".com";
+    return "http://" + base::NumberToString(num) + ".com";
   };
 
   for (size_t i = 1; i <= kNumPatternTypes; i++) {
@@ -1211,7 +1212,7 @@ TEST_F(UrlPatternIndexTest, FindMatchWithDisabledRuleIds) {
                  << ::testing::PrintToString(test_case.disabled_rule_ids));
 
     const flat::UrlRule* rule = FindMatch(
-        test_case.url, base::StringPiece(), testing::kOther, kNoActivation,
+        test_case.url, std::string_view(), testing::kOther, kNoActivation,
         false /* disable_generic_rules */, test_case.disabled_rule_ids);
 
     EXPECT_EQ(test_case.expected_match, !!rule);

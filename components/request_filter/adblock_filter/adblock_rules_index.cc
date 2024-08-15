@@ -6,6 +6,7 @@
 
 #include "components/request_filter/adblock_filter/adblock_rules_index.h"
 
+#include <array>
 #include <utility>
 #include <vector>
 
@@ -53,6 +54,21 @@ struct ContentInjectionIndexTraversalResult {
   std::set<const T*, ContentInjectionRuleBodyCompare> exceptions;
 };
 
+void BuildAbpInjectionData(std::string snippets_arguments,
+                           std::string scriptlet_name,
+                           RulesIndex::InjectionData& injection_data) {
+  if (snippets_arguments.empty()) {
+    return;
+  }
+  DCHECK(snippets_arguments.back() == ',');
+  // Remove extra comma
+  snippets_arguments.pop_back();
+  RulesIndex::ScriptletInjection scriptlet_injection;
+  scriptlet_injection.first = std::move(scriptlet_name);
+  scriptlet_injection.second.push_back(std::move(snippets_arguments));
+  injection_data.scriptlet_injections.push_back(std::move(scriptlet_injection));
+}
+
 struct ContentInjectionIndexTraversalResults {
   ContentInjectionIndexTraversalResult<flat::CosmeticRule> cosmetic_rules;
   ContentInjectionIndexTraversalResult<flat::ScriptletInjectionRule>
@@ -62,12 +78,20 @@ struct ContentInjectionIndexTraversalResults {
     RulesIndex::InjectionData injection_data;
     injection_data.stylesheet = BuildStyleSheet(cosmetic_rules.selected);
 
-    std::string abp_snippets_arguments = "[";
+    std::string abp_snippets_main_arguments;
+    std::string abp_snippets_isolated_arguments;
     for (const flat::ScriptletInjectionRule* rule :
          scriptlet_injection_rules.selected) {
-      if (rule->scriptlet_name()->string_view() == kAbpSnippetsScriptletName) {
+      if (rule->scriptlet_name()->string_view() ==
+          kAbpSnippetsMainScriptletName) {
         DCHECK(rule->arguments()->size() == 1);
-        abp_snippets_arguments += rule->arguments()->Get(0)->str() + ",";
+        // The ABP snippet arguments were purposefully left with a trailing
+        // comma at the parsing stage. We can just concatenate them here.
+        abp_snippets_main_arguments += rule->arguments()->Get(0)->str();
+      } else if (rule->scriptlet_name()->string_view() ==
+                 kAbpSnippetsIsolatedScriptletName) {
+        DCHECK(rule->arguments()->size() == 1);
+        abp_snippets_isolated_arguments += rule->arguments()->Get(0)->str();
       } else {
         RulesIndex::ScriptletInjection scriptlet_injection;
         scriptlet_injection.first = rule->scriptlet_name()->str();
@@ -77,16 +101,11 @@ struct ContentInjectionIndexTraversalResults {
             std::move(scriptlet_injection));
       }
     }
-    if (abp_snippets_arguments != "[") {
-      // Remove extra comma
-      abp_snippets_arguments.pop_back();
-      abp_snippets_arguments.push_back(']');
-      RulesIndex::ScriptletInjection scriptlet_injection;
-      scriptlet_injection.first = kAbpSnippetsScriptletName;
-      scriptlet_injection.second.push_back(std::move(abp_snippets_arguments));
-      injection_data.scriptlet_injections.push_back(
-          std::move(scriptlet_injection));
-    }
+
+    BuildAbpInjectionData(std::move(abp_snippets_main_arguments),
+                          kAbpSnippetsMainScriptletName, injection_data);
+    BuildAbpInjectionData(std::move(abp_snippets_isolated_arguments),
+                          kAbpSnippetsIsolatedScriptletName, injection_data);
 
     return injection_data;
   }
@@ -548,10 +567,10 @@ bool RulesIndex::ActivationsFound::operator==(
 // static
 std::unique_ptr<RulesIndex> RulesIndex::CreateInstance(
     RulesBufferMap rules_buffers,
-    std::unique_ptr<std::string> rules_index_buffer,
+    std::string rules_index_buffer,
     bool* uses_all_buffers) {
   const flat::RulesIndex* const rules_index =
-      flat::GetRulesIndex(rules_index_buffer->data());
+      flat::GetRulesIndex(rules_index_buffer.data());
 
   *uses_all_buffers = false;
 
@@ -573,10 +592,10 @@ std::unique_ptr<RulesIndex> RulesIndex::CreateInstance(
 
 RulesIndex::RulesIndex(
     std::map<uint32_t, const RuleBufferHolder&> rules_buffers,
-    std::unique_ptr<std::string> rules_index_buffer,
+    std::string rules_index_buffer,
     const flat::RulesIndex* const rules_index)
     : rules_buffers_(std::move(rules_buffers)),
-      rules_index_buffer_(std::move(*rules_index_buffer)),
+      rules_index_buffer_(std::move(rules_index_buffer)),
       rules_index_(rules_index) {}
 
 RulesIndex::~RulesIndex() {

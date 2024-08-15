@@ -17,7 +17,7 @@ import {PersonalizationState} from '../personalization_state.js';
 import {DefaultImageSymbol, kDefaultImageSymbol} from './constants.js';
 import {findAlbumById, isDefaultImage, isImageEqualToSelected} from './utils.js';
 import {WallpaperActionName} from './wallpaper_actions.js';
-import {DailyRefreshType, WallpaperState} from './wallpaper_state.js';
+import {DailyRefreshType, FullscreenPreviewState, WallpaperState} from './wallpaper_state.js';
 
 function backdropReducer(
     state: WallpaperState['backdrop'], action: Actions,
@@ -155,6 +155,15 @@ function loadingReducer(
       return {...state, selected: {...state.selected, image: false}};
     case WallpaperActionName.SET_ATTRIBUTION:
       return {...state, selected: {...state.selected, attribution: false}};
+    case SeaPenActionName.END_SELECT_SEA_PEN_THUMBNAIL:
+    case SeaPenActionName.END_SELECT_RECENT_SEA_PEN_IMAGE:
+      // End loading state if selecting a SeaPen image failed. There are no
+      // incoming events from wallpaper_observer.ts to reset the loading state
+      // from wallpaper side, as the SeaPen image was not saved and applied.
+      if (!action.success) {
+        return {...state, selected: {image: false, attribution: false}};
+      }
+      return state;
     case WallpaperActionName.BEGIN_UPDATE_DAILY_REFRESH_IMAGE:
       return {...state, refreshWallpaper: true};
     case WallpaperActionName.SET_UPDATED_DAILY_REFRESH_IMAGE:
@@ -378,8 +387,8 @@ function pendingSelectedReducer(
         return null;
       }
       return state;
-    case WallpaperActionName.SET_FULLSCREEN_ENABLED:
-      if (!action.enabled) {
+    case WallpaperActionName.SET_FULLSCREEN_STATE:
+      if (action.state === FullscreenPreviewState.OFF) {
         // Clear the pending selected state after full screen is dismissed.
         return null;
       }
@@ -423,8 +432,8 @@ function fullscreenReducer(
     state: WallpaperState['fullscreen'], action: Actions,
     _: PersonalizationState): WallpaperState['fullscreen'] {
   switch (action.name) {
-    case WallpaperActionName.SET_FULLSCREEN_ENABLED:
-      return action.enabled;
+    case WallpaperActionName.SET_FULLSCREEN_STATE:
+      return action.state;
     default:
       return state;
   }

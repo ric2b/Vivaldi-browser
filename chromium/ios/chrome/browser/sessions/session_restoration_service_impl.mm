@@ -22,7 +22,6 @@
 #import "ios/chrome/browser/sessions/web_state_list_serialization.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/web/public/session/proto/metadata.pb.h"
 #import "ios/web/public/session/proto/storage.pb.h"
 #import "ios/web/public/web_state.h"
@@ -317,10 +316,12 @@ SessionRestorationServiceImpl::WebStateListInfo::~WebStateListInfo() {
 SessionRestorationServiceImpl::SessionRestorationServiceImpl(
     base::TimeDelta save_delay,
     bool enable_pinned_web_states,
+    bool enable_tab_groups,
     const base::FilePath& storage_path,
     scoped_refptr<base::SequencedTaskRunner> task_runner)
     : save_delay_(save_delay),
       enable_pinned_web_states_(enable_pinned_web_states),
+      enable_tab_groups_(enable_tab_groups),
       storage_path_(storage_path.Append(kSessionRestorationDirname)),
       task_runner_(task_runner) {
   DCHECK(storage_path_.IsAbsolute());
@@ -425,7 +426,7 @@ void SessionRestorationServiceImpl::LoadSession(Browser* browser) {
   // Deserialize the session from storage.
   const std::vector<web::WebState*> restored_web_states =
       DeserializeWebStateList(browser->GetWebStateList(), std::move(session),
-                              enable_pinned_web_states_,
+                              enable_pinned_web_states_, enable_tab_groups_,
                               base::BindRepeating(&CreateWebState, session_dir,
                                                   browser->GetBrowserState()));
 

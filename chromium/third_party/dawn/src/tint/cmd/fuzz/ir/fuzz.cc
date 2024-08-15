@@ -46,6 +46,7 @@ namespace {
 bool IsUnsupported(const ast::Enable* enable) {
     for (auto ext : enable->extensions) {
         switch (ext->name) {
+            case tint::wgsl::Extension::kChromiumExperimentalFramebufferFetch:
             case tint::wgsl::Extension::kChromiumExperimentalPixelLocal:
             case tint::wgsl::Extension::kChromiumExperimentalPushConstant:
             case tint::wgsl::Extension::kChromiumInternalDualSourceBlending:
@@ -63,7 +64,8 @@ bool IsUnsupported(const ast::Enable* enable) {
 void Register(const IRFuzzer& fuzzer) {
     wgsl::Register({
         fuzzer.name,
-        [fn = fuzzer.fn](const Program& program, Slice<const std::byte> data) {
+        [fn = fuzzer.fn](const Program& program, const fuzz::wgsl::Options& options,
+                         Slice<const std::byte> data) {
             if (program.AST().Enables().Any(IsUnsupported)) {
                 return;
             }
@@ -81,7 +83,6 @@ void Register(const IRFuzzer& fuzzer) {
 
             if (auto val = core::ir::Validate(ir.Get()); val != Success) {
                 TINT_ICE() << val.Failure();
-                return;
             }
 
             return fn(ir.Get(), data);

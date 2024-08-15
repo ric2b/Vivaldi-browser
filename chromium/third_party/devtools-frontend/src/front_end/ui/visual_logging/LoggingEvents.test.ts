@@ -4,11 +4,10 @@
 
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
+import {expectCalled} from '../../testing/ExpectStubCall.js';
 import {stabilizeEvent, stabilizeImpressions} from '../../testing/VisualLoggingHelpers.js';
 
 import * as VisualLogging from './visual_logging-testing.js';
-
-const {assert} = chai;
 
 describe('LoggingEvents', () => {
   let parent: Element;
@@ -39,7 +38,7 @@ describe('LoggingEvents', () => {
     assert.isTrue(recordImpression.calledOnce);
     assert.sameDeepMembers(
         stabilizeImpressions(recordImpression.firstCall.firstArg.impressions),
-        [{id: 0, type: 1, context: 42, parent: 1}, {id: 1, type: 1}]);
+        [{id: 0, type: 1, context: 42, parent: 1, height: 0, width: 0}, {id: 1, type: 1, height: 0, width: 0}]);
   });
 
   it('calls UI binding to log a click', async () => {
@@ -47,11 +46,23 @@ describe('LoggingEvents', () => {
         Host.InspectorFrontendHost.InspectorFrontendHostInstance,
         'recordClick',
     );
-    const event = new MouseEvent('click', {button: 1});
+    // @ts-ignore
+    const event = new MouseEvent('click', {button: 0, sourceCapabilities: new InputDeviceCapabilities()});
     VisualLogging.LoggingEvents.logClick(throttler)(element, event);
     await assertThrottled(recordClick);
     assert.deepStrictEqual(
-        stabilizeEvent(recordClick.firstCall.firstArg), {veid: 0, mouseButton: 1, doubleClick: false});
+        stabilizeEvent(recordClick.firstCall.firstArg), {veid: 0, mouseButton: 0, doubleClick: false});
+  });
+
+  it('does not set mouse button for synthetic clicks', async () => {
+    const recordClick = sinon.stub(
+        Host.InspectorFrontendHost.InspectorFrontendHostInstance,
+        'recordClick',
+    );
+    const event = new MouseEvent('click', {button: 0});
+    VisualLogging.LoggingEvents.logClick(throttler)(element, event);
+    await assertThrottled(recordClick);
+    assert.deepStrictEqual(stabilizeEvent(recordClick.firstCall.firstArg), {veid: 0, doubleClick: false});
   });
 
   it('calls UI binding to log a double click', async () => {
@@ -62,8 +73,7 @@ describe('LoggingEvents', () => {
     const event = new MouseEvent('dblclick', {button: 1});
     VisualLogging.LoggingEvents.logClick(throttler)(element, event, {doubleClick: true});
     await assertThrottled(recordClick);
-    assert.deepStrictEqual(
-        stabilizeEvent(recordClick.firstCall.firstArg), {veid: 0, mouseButton: 1, doubleClick: true});
+    assert.deepStrictEqual(stabilizeEvent(recordClick.firstCall.firstArg), {veid: 0, doubleClick: true});
   });
 
   it('calls UI binding to log a change', async () => {
@@ -76,6 +86,19 @@ describe('LoggingEvents', () => {
     await VisualLogging.LoggingEvents.logChange(event);
     assert.isTrue(recordChange.calledOnce);
     assert.deepStrictEqual(stabilizeEvent(recordChange.firstCall.firstArg), {veid: 0});
+  });
+
+  it('calls UI binding to log a change of specific type', async () => {
+    const recordChange = sinon.stub(
+        Host.InspectorFrontendHost.InspectorFrontendHostInstance,
+        'recordChange',
+    );
+    const event = new Event('change');
+    sinon.stub(event, 'currentTarget').value(element);
+    VisualLogging.LoggingState.getLoggingState(element)!.lastInputEventType = 'instertText';
+    await VisualLogging.LoggingEvents.logChange(event);
+    assert.isTrue(recordChange.calledOnce);
+    assert.deepStrictEqual(stabilizeEvent(recordChange.firstCall.firstArg), {veid: 0, context: 296063892});
   });
 
   it('calls UI binding to log a keydown with any code', async () => {
@@ -171,8 +194,8 @@ describe('LoggingEvents', () => {
     );
     const event = new MouseEvent('click', {button: 1});
     sinon.stub(event, 'currentTarget').value(element);
-    void VisualLogging.LoggingEvents.logHover(throttler)(event);
-    await assertThrottled(recordHover);
+    void VisualLogging.LoggingEvents.logHover(new Common.Throttler.Throttler(0))(event);
+    await expectCalled(recordHover);
     assert.deepStrictEqual(stabilizeEvent(recordHover.firstCall.firstArg), {veid: 0});
   });
 
@@ -194,8 +217,7 @@ describe('LoggingEvents', () => {
         Host.InspectorFrontendHost.InspectorFrontendHostInstance,
         'recordResize',
     );
-    VisualLogging.LoggingEvents.logResize(throttler)(element, new DOMRect(0, 0, 100, 50));
-    await assertThrottled(recordResize);
+    VisualLogging.LoggingEvents.logResize(element, new DOMRect(0, 0, 100, 50));
     assert.deepStrictEqual(stabilizeEvent(recordResize.firstCall.firstArg), {veid: 0, width: 100, height: 50});
   });
 
@@ -204,8 +226,7 @@ describe('LoggingEvents', () => {
         Host.InspectorFrontendHost.InspectorFrontendHostInstance,
         'recordResize',
     );
-    VisualLogging.LoggingEvents.logResize(throttler)(element, new DOMRect(0, 0, 100, 50));
-    await assertThrottled(recordResize);
+    VisualLogging.LoggingEvents.logResize(element, new DOMRect(0, 0, 100, 50));
     assert.deepStrictEqual(stabilizeEvent(recordResize.firstCall.firstArg), {veid: 0, width: 100, height: 50});
   });
 });

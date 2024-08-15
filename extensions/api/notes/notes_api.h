@@ -8,6 +8,10 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function.h"
 
+namespace vivaldi {
+class NotesModel;
+}
+
 namespace extensions {
 
 class NotesAPI : public BrowserContextKeyedAPI,
@@ -27,23 +31,19 @@ class NotesAPI : public BrowserContextKeyedAPI,
   void OnListenerAdded(const EventListenerInfo& details) override;
 
   // NotesModelObserver implementation.
-  void NotesNodeMoved(::vivaldi::NotesModel* model,
-                      const ::vivaldi::NoteNode* old_parent,
+  void NotesNodeMoved(const ::vivaldi::NoteNode* old_parent,
                       size_t old_index,
                       const ::vivaldi::NoteNode* new_parent,
                       size_t new_index) override;
 
-  void NotesNodeAdded(::vivaldi::NotesModel* model,
-                      const ::vivaldi::NoteNode* parent,
-                      size_t index) override;
-  void NotesNodeRemoved(::vivaldi::NotesModel* model,
-                        const ::vivaldi::NoteNode* parent,
+  void NotesNodeAdded(const ::vivaldi::NoteNode* parent, size_t index) override;
+  void NotesNodeRemoved(const ::vivaldi::NoteNode* parent,
                         size_t old_index,
-                        const ::vivaldi::NoteNode* node) override;
-  void NotesNodeChanged(::vivaldi::NotesModel* model,
-                        const ::vivaldi::NoteNode* node) override;
-  void ExtensiveNotesChangesBeginning(::vivaldi::NotesModel* model) override;
-  void ExtensiveNotesChangesEnded(::vivaldi::NotesModel* model) override;
+                        const ::vivaldi::NoteNode* node,
+                        const base::Location& location) override;
+  void NotesNodeChanged(const ::vivaldi::NoteNode* node) override;
+  void ExtensiveNotesChangesBeginning() override;
+  void ExtensiveNotesChangesEnded() override;
 
  private:
   friend class BrowserContextKeyedAPIFactory<NotesAPI>;
@@ -82,9 +82,8 @@ class NotesGetTreeFunction : public ExtensionFunction,
   ExtensionFunction::ResponseAction Run() override;
 
  private:
-  void NotesModelLoaded(::vivaldi::NotesModel* model,
-                        bool ids_reassigned) override;
-  void NotesModelBeingDeleted(::vivaldi::NotesModel* model) override;
+  void NotesModelLoaded(bool ids_reassigned) override;
+  void NotesModelBeingDeleted() override;
 
   void SendGetTreeResponse(::vivaldi::NotesModel* model);
 };

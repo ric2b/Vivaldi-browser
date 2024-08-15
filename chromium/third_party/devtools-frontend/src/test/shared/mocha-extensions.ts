@@ -6,6 +6,7 @@ import * as Mocha from 'mocha';
 import * as Path from 'path';
 
 import {getBrowserAndPages} from '../conductor/puppeteer-state.js';
+import {TestConfig} from '../conductor/test_config.js';
 import {ScreenshotError} from '../shared/screenshot-error.js';
 
 import {AsyncScope} from './async-scope.js';
@@ -29,16 +30,6 @@ export async function takeScreenshots(): Promise<{target?: string, frontend?: st
     console.error('Error taking a screenshot', err);
     return {};
   }
-}
-
-async function takeScreenshotsForError(): Promise<{target?: string, frontend?: string}> {
-  if (getEnvVar('LUCI_CONTEXT')) {
-    const screenshots = await takeScreenshots();
-    console.error('Screenshots will be uploaded to luci-milo invocation.');
-    return screenshots;
-  }
-  console.error('Screenshots skipped because we are not running under rdb; did you run `npm run auto-e2etest-rdb`?');
-  return {};
 }
 
 function wrapSuiteFunction(fn: (this: Mocha.Suite) => void) {
@@ -143,7 +134,7 @@ async function timeoutHook(this: Mocha.Runnable, done: Mocha.Done|undefined, err
     }
   }
   if (err && !getEnvVar('DEBUG_TEST') && !(err instanceof ScreenshotError)) {
-    const {target, frontend} = await takeScreenshotsForError();
+    const {target, frontend} = await takeScreenshots();
     err = ScreenshotError.fromBase64Images(err, target, frontend);
   }
   if (done) {
@@ -158,7 +149,7 @@ export const it = makeCustomWrappedIt();
 
 type MochaCallback = Mocha.Func|Mocha.AsyncFunc;
 
-const iterations = getEnvVar('ITERATIONS', 1);
+const iterations = getEnvVar('ITERATIONS', TestConfig.repetitions);
 
 function iterationSuffix(iteration: number): string {
   if (iteration === 0) {
@@ -226,7 +217,7 @@ function wrapMochaCall(
       async function onError(this: unknown, err?: unknown) {
         const isTimeoutError = err instanceof Error && err.message?.includes(TIMEOUT_ERROR_MESSAGE);
         if (err && !getEnvVar('DEBUG_TEST') && !(err instanceof ScreenshotError) && !isTimeoutError) {
-          const {target, frontend} = await takeScreenshotsForError();
+          const {target, frontend} = await takeScreenshots();
           err = ScreenshotError.fromBase64Images(err, target, frontend);
         }
         done.call(this, err);

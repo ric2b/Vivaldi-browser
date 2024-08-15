@@ -230,6 +230,18 @@ public class SigninFirstRunFragment extends Fragment
         return getPageDelegate().getNativeInitializationPromise();
     }
 
+    /** Implements {@link FullscreenSigninCoordinator.Delegate}. */
+    @Override
+    public boolean shouldDisplayManagementNoticeOnManagedDevices() {
+        return true;
+    }
+
+    /** Implements {@link FullscreenSigninCoordinator.Delegate}. */
+    @Override
+    public boolean shouldDisplayFooterText() {
+        return true;
+    }
+
     @MainThread
     private void exitFirstRun() {
         // Make sure this function is called at most once.

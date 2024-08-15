@@ -13,6 +13,7 @@ source_set("webui") {
   deps = [
     "../:shopping_service",
     "../mojom:mojo_bindings",
+    "../product_specifications",
     "//base",
     "//components/bookmarks/browser",
     "//components/commerce/core:commerce_constants",
@@ -38,10 +39,12 @@ source_set("unit_tests") {
 
   deps = [
     ":webui",
+    "../product_specifications",
     "//base/test:test_support",
     "//components/bookmarks/browser",
     "//components/bookmarks/test",
     "//components/commerce/core:feature_list",
+    "//components/commerce/core:account_checker_test_support",
     "//components/commerce/core:shopping_service_test_support",
     "//components/feature_engagement/test:test_support",
     "//components/ukm:test_support",

@@ -1,68 +1,39 @@
 # Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
 
-import("//build/config/ios/asset_catalog.gni")
+import("//build/config/ios/rules.gni")
 
-imageset("widget_vivaldi_logo") {
+bundle_data_xcassets("resources") {
+  catalog = "Assets.xcassets"
   sources = [
-    "widget_vivaldi_logo.imageset/Contents.json",
-    "widget_vivaldi_logo.imageset/widget_vivaldi_logo.png",
-    "widget_vivaldi_logo.imageset/widget_vivaldi_logo@2x.png",
-    "widget_vivaldi_logo.imageset/widget_vivaldi_logo@3x.png",
+    "Assets.xcassets/Contents.json",
+
+    # Colorsets
+    "Assets.xcassets/widget_search_bar_color.colorset/Contents.json",
+    "Assets.xcassets/widget_separator_color.colorset/Contents.json",
+    "Assets.xcassets/widget_text_color.colorset/Contents.json",
+    "Assets.xcassets/widget_background_color.colorset/Contents.json",
+    "Assets.xcassets/widget_button_background_color.colorset/Contents.json",
+
+    # Imagesets
+    "Assets.xcassets/widget_vivaldi_logo.imageset/Contents.json",
+    "Assets.xcassets/widget_vivaldi_logo.imageset/widget_vivaldi_logo.png",
+    "Assets.xcassets/widget_vivaldi_logo.imageset/widget_vivaldi_logo@2x.png",
+    "Assets.xcassets/widget_vivaldi_logo.imageset/widget_vivaldi_logo@3x.png",
+
+    "Assets.xcassets/widget_incognito_icon.imageset/Contents.json",
+    "Assets.xcassets/widget_incognito_icon.imageset/widget_incognito_icon.pdf",
+
+    "Assets.xcassets/widget_qr_icon.imageset/Contents.json",
+    "Assets.xcassets/widget_qr_icon.imageset/widget_qr_icon.pdf",
+
+    "Assets.xcassets/widget_lock_screen_search.imageset/Contents.json",
+    "Assets.xcassets/widget_lock_screen_search.imageset/widget_lock_screen_search.pdf",
+
+    "Assets.xcassets/widget_lock_screen_private_search.imageset/Contents.json",
+    "Assets.xcassets/widget_lock_screen_private_search.imageset/widget_lock_screen_private_search.pdf",
+
+    "Assets.xcassets/widget_password_manager_logo.imageset/Contents.json",
+    "Assets.xcassets/widget_password_manager_logo.imageset/widget_password_manager_logo@2x.png",
+    "Assets.xcassets/widget_password_manager_logo.imageset/widget_password_manager_logo@3x.png",
   ]
-}
-
-imageset("widget_incognito_icon") {
-  sources = [
-    "widget_incognito_icon.imageset/Contents.json",
-    "widget_incognito_icon.imageset/widget_incognito_icon.pdf",
-  ]
-}
-
-imageset("widget_qr_icon") {
-  sources = [
-    "widget_qr_icon.imageset/Contents.json",
-    "widget_qr_icon.imageset/widget_qr_icon.pdf",
-  ]
-}
-
-imageset("widget_lock_screen_search") {
-  sources = [
-    "widget_lock_screen_search.imageset/Contents.json",
-    "widget_lock_screen_search.imageset/widget_lock_screen_search.pdf",
-  ]
-}
-
-imageset("widget_lock_screen_private_search") {
-  sources = [
-    "widget_lock_screen_private_search.imageset/Contents.json",
-    "widget_lock_screen_private_search.imageset/widget_lock_screen_private_search.pdf",
-  ]
-}
-
-imageset("widget_password_manager_logo") {
-  sources = [
-    "widget_password_manager_logo.imageset/Contents.json",
-    "widget_password_manager_logo.imageset/widget_password_manager_logo@2x.png",
-    "widget_password_manager_logo.imageset/widget_password_manager_logo@3x.png",
-  ]
-}
-
-colorset("widget_search_bar_color") {
-  sources = [ "widget_search_bar_color.colorset/Contents.json" ]
-}
-
-colorset("widget_separator_color") {
-  sources = [ "widget_separator_color.colorset/Contents.json" ]
-}
-
-colorset("widget_text_color") {
-  sources = [ "widget_text_color.colorset/Contents.json" ]
-}
-
-colorset("widget_background_color") {
-  sources = [ "widget_background_color.colorset/Contents.json" ]
-}
-
-colorset("widget_button_background_color") {
-  sources = [ "widget_button_background_color.colorset/Contents.json" ]
 }

@@ -10,6 +10,7 @@
 #include "base/strings/strcat.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/default_tick_clock.h"
+#include "net/base/connection_endpoint_metadata.h"
 #include "net/base/network_anonymization_key.h"
 #include "net/base/privacy_mode.h"
 #include "net/base/proxy_chain.h"
@@ -191,8 +192,8 @@ void QuicProxyClientSocketTestBase::InitializeSession() {
       "CONNECTION_UNKNOWN", dns_start, dns_end,
       base::DefaultTickClock::GetInstance(),
       base::SingleThreadTaskRunner::GetCurrentDefault().get(),
-      /*socket_performance_watcher=*/nullptr, HostResolverEndpointResult(),
-      NetLog::Get());
+      /*socket_performance_watcher=*/nullptr, ConnectionEndpointMetadata(),
+      /*report_ecn=*/true, NetLogWithSource::Make(NetLogSourceType::NONE));
 
   writer->set_delegate(session_.get());
 

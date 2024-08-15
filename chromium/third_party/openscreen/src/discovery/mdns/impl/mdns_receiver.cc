@@ -14,7 +14,7 @@ namespace openscreen::discovery {
 
 MdnsReceiver::ResponseClient::~ResponseClient() = default;
 
-MdnsReceiver::MdnsReceiver(Config config) : config_(std::move(config)) {}
+MdnsReceiver::MdnsReceiver(const Config& config) : config_(config) {}
 
 MdnsReceiver::~MdnsReceiver() {
   if (state_ == State::kRunning) {

@@ -72,8 +72,8 @@ ScriptIterator::ScriptIterator(v8::Isolate* isolate,
                                v8::Local<v8::Object> iterator,
                                v8::Local<v8::Value> next_method)
     : isolate_(isolate),
-      iterator_(iterator),
-      next_method_(next_method),
+      iterator_(isolate, iterator),
+      next_method_(isolate, next_method),
       done_key_(V8AtomicString(isolate, "done")),
       value_key_(V8AtomicString(isolate, "value")),
       done_(false) {
@@ -85,7 +85,9 @@ bool ScriptIterator::Next(ExecutionContext* execution_context,
                           v8::Local<v8::Value> value) {
   DCHECK(!IsNull());
 
-  if (!next_method_->IsFunction()) {
+  ScriptState* script_state = ScriptState::ForCurrentRealm(isolate_);
+  v8::Local<v8::Value> next_method = next_method_.Get(script_state);
+  if (!next_method->IsFunction()) {
     exception_state.ThrowTypeError("Expected next() function on iterator.");
     done_ = true;
     return false;
@@ -93,8 +95,9 @@ bool ScriptIterator::Next(ExecutionContext* execution_context,
 
   v8::TryCatch try_catch(isolate_);
   v8::Local<v8::Value> result;
-  if (!V8ScriptRunner::CallFunction(next_method_.As<v8::Function>(),
-                                    execution_context, iterator_,
+  if (!V8ScriptRunner::CallFunction(next_method.As<v8::Function>(),
+                                    execution_context,
+                                    iterator_.Get(script_state),
                                     value.IsEmpty() ? 0 : 1, &value, isolate_)
            .ToLocal(&result)) {
     exception_state.RethrowV8Exception(try_catch.Exception());
@@ -109,9 +112,12 @@ bool ScriptIterator::Next(ExecutionContext* execution_context,
   }
   v8::Local<v8::Object> result_object = result.As<v8::Object>();
 
-  v8::Local<v8::Context> context = isolate_->GetCurrentContext();
-  value_ = result_object->Get(context, value_key_);
-  if (value_.IsEmpty()) {
+  v8::Local<v8::Context> context = script_state->GetContext();
+  v8::MaybeLocal<v8::Value> maybe_value =
+      result_object->Get(context, value_key_);
+  value_ = WorldSafeV8Reference(isolate_,
+                                maybe_value.FromMaybe(v8::Local<v8::Value>()));
+  if (maybe_value.IsEmpty()) {
     exception_state.RethrowV8Exception(try_catch.Exception());
     done_ = true;
     return false;

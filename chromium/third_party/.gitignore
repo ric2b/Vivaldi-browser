@@ -66,8 +66,8 @@
 /guava/lib/
 /hamcrest/lib/
 /icu4j/lib/
-/instrumented_libraries/scripts/*.tgz
-/instrumented_libraries/scripts/out/*
+/instrumented_libraries/
+/instrumented_libs/
 /jacoco/coverage/
 /jacoco/doc/
 /jacoco/index.html
@@ -78,6 +78,7 @@
 /jdk/current/
 /jdk/extras/java_8
 /jdk11/current
+/js_code_coverage/.*
 /js_code_coverage/*.tar.gz
 /js_code_coverage/node_modules/
 /jsr-305/src
@@ -99,6 +100,7 @@
 /llvm-build-tools
 /cronet_android_mainline_clang/linux-amd64
 /mesa/src
+/microsoft_dxheaders/src
 /mingw-w64
 /mkl
 /mocha
@@ -149,12 +151,13 @@
 /soda-win64
 /speex
 /sqlite4java/lib/
-/subresource-filter-ruleset/data/UnindexedRules
+/subresource-filter-ruleset/data/*
 /swift-format
 /swift-toolchain
 /swiftshader/
 /syzygy
 /syzygy/binaries
+/tfhub_models/.*
 /tfhub_models/*.tar.gz
 /tfhub_models/models/
 /tint/src

@@ -6,7 +6,6 @@
 #define COMPONENTS_AUTOFILL_CONTENT_RENDERER_AUTOFILL_RENDERER_TEST_H_
 
 #include <memory>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -49,23 +48,24 @@ class MockAutofillDriver : public mojom::AutofillDriver {
                mojom::SubmissionSource source),
               (override));
   MOCK_METHOD(void,
+              CaretMovedInFormField,
+              (const FormData& form,
+               const FormFieldData& field,
+               const gfx::Rect& caret_bounds),
+              (override));
+  MOCK_METHOD(void,
               TextFieldDidChange,
               (const FormData& form,
                const FormFieldData& field,
-               const gfx::RectF& bounding_box,
                base::TimeTicks timestamp),
               (override));
   MOCK_METHOD(void,
               TextFieldDidScroll,
-              (const FormData& form,
-               const FormFieldData& field,
-               const gfx::RectF& bounding_box),
+              (const FormData& form, const FormFieldData& field),
               (override));
   MOCK_METHOD(void,
               SelectControlDidChange,
-              (const FormData& form,
-               const FormFieldData& field,
-               const gfx::RectF& bounding_box),
+              (const FormData& form, const FormFieldData& field),
               (override));
   MOCK_METHOD(void,
               SelectOrSelectListFieldOptionsDidChange,
@@ -75,25 +75,24 @@ class MockAutofillDriver : public mojom::AutofillDriver {
               JavaScriptChangedAutofilledValue,
               (const FormData& form,
                const FormFieldData& field,
-               const std::u16string& old_value),
+               const std::u16string& old_value,
+               bool formatting_ony),
               (override));
   MOCK_METHOD(void,
               AskForValuesToFill,
               (const FormData& form,
                const FormFieldData& field,
-               const gfx::RectF& bounding_box,
+               const gfx::Rect& caret_bounds,
                AutofillSuggestionTriggerSource trigger_source),
               (override));
   MOCK_METHOD(void, HidePopup, (), (override));
   MOCK_METHOD(void,
-              FocusNoLongerOnForm,
+              FocusOnNonFormField,
               (bool had_interacted_form),
               (override));
   MOCK_METHOD(void,
               FocusOnFormField,
-              (const FormData& form,
-               const FormFieldData& field,
-               const gfx::RectF& bounding_box),
+              (const FormData& form, const FormFieldData& field),
               (override));
   MOCK_METHOD(void,
               DidFillAutofillFormData,
@@ -126,10 +125,14 @@ class AutofillRendererTest : public content::RenderViewTest {
   // is idle to ensure that the `AutofillDriver` is notified via mojo.
   bool SimulateElementClickAndWait(const std::string& element_id);
 
-  // Simulate focusing an element without clicking it. Waits until the
+  // Simulates focusing an element without clicking it. Waits until the
   // `TaskEnvironment` is idle to ensure that the `AutofillDriver` is notified
   // via mojo.
   void SimulateElementFocusAndWait(std::string_view element_id);
+
+  // Simulates scrolling. Waits until the `TaskEnvironment` is idle to ensure
+  // that the `AutofillDriver` is notified via mojo.
+  void SimulateScrollingAndWait();
 
   // AutofillDriver::FormsSeen() is throttled indirectly because some callsites
   // of AutofillAgent::ProcessForms() are throttled. This function blocks until

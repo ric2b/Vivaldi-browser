@@ -412,7 +412,7 @@ bool MediaRouterDesktop::RegisterMediaSinksObserver(
   // If the query isn't new, then there is no need to call MRPs.
   if (is_new_query) {
     for (const auto& provider : media_route_providers_) {
-      // TODO(crbug.com/1090890): Don't allow MediaSource::ForAnyTab().id() to
+      // TODO(crbug.com/40133937): Don't allow MediaSource::ForAnyTab().id() to
       // be passed here.
       provider.second->StartObservingMediaSinks(source.id());
     }
@@ -439,7 +439,7 @@ void MediaRouterDesktop::UnregisterMediaSinksObserver(
   // here.
   if (!it->second->HasObservers() && !source.IsTabMirroringSource()) {
     for (const auto& provider : media_route_providers_) {
-      // TODO(crbug.com/1090890): Don't allow MediaSource::ForAnyTab().id() to
+      // TODO(crbug.com/40133937): Don't allow MediaSource::ForAnyTab().id() to
       // be passed here.
       provider.second->StopObservingMediaSinks(source.id());
     }
@@ -970,6 +970,8 @@ void MediaRouterDesktop::RecordPresentationRequestUrlBySink(
     case mojom::MediaRouteProviderId::CAST:
       if (source.IsCastPresentationUrl()) {
         value = PresentationUrlBySink::kCastUrlToChromecast;
+      } else if (source.IsRemotePlaybackSource()) {
+        value = PresentationUrlBySink::kRemotePlayback;
       } else if (is_normal_url) {
         value = PresentationUrlBySink::kNormalUrlToChromecast;
       }
@@ -983,7 +985,7 @@ void MediaRouterDesktop::RecordPresentationRequestUrlBySink(
     case mojom::MediaRouteProviderId::TEST:
       break;
   }
-  base::UmaHistogramEnumeration("MediaRouter.PresentationRequest.UrlBySink",
+  base::UmaHistogramEnumeration("MediaRouter.PresentationRequest.UrlBySink2",
                                 value);
 }
 

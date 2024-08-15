@@ -5,7 +5,6 @@
 #include "ash/wm/window_restore/pine_test_base.h"
 
 #include "ash/constants/ash_pref_names.h"
-#include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/ash_prefs.h"
 #include "ash/wm/window_restore/window_restore_util.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -19,15 +18,15 @@ constexpr char kTestUserEmail[] = "testuser@pine";
 
 }  // namespace
 
-PineTestBase::PineTestBase() {
-  switches::SetIgnoreForestSecretKeyForTest(true);
+PineTestBase::PineTestBase() = default;
+
+PineTestBase::~PineTestBase() = default;
+
+PrefService* PineTestBase::GetTestPrefService() {
+  return GetSessionControllerClient()->GetUserPrefService(
+      AccountId::FromUserEmail(kTestUserEmail));
 }
 
-PineTestBase::~PineTestBase() {
-  switches::SetIgnoreForestSecretKeyForTest(false);
-}
-
-// AshTestBase:
 void PineTestBase::SetUp() {
   AshTestBase::SetUp();
 
@@ -57,11 +56,6 @@ void PineTestBase::SetUp() {
   session_controller->SwitchActiveUser(
       AccountId::FromUserEmail(kTestUserEmail));
   session_controller->SetSessionState(session_manager::SessionState::ACTIVE);
-}
-
-PrefService* PineTestBase::GetTestPrefService() {
-  return GetSessionControllerClient()->GetUserPrefService(
-      AccountId::FromUserEmail(kTestUserEmail));
 }
 
 }  // namespace ash

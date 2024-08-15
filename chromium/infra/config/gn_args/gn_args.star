@@ -63,6 +63,14 @@ gn_args.config(
     },
 )
 
+gn_args.config(
+    name = "android_asan",
+    args = {
+        "is_asan": True,
+        "default_min_sdk_version": 27,
+    },
+)
+
 # We build Android with codecs on most bots to ensure maximum test
 # coverage, but use 'android_builder_without_codecs' on bots responsible for
 # building publicly advertised non-Official Android builds --
@@ -113,7 +121,7 @@ gn_args.config(
     },
 )
 
-# TODO(https://crbug.com/1020714): This is temporary. We'd like to run a
+# TODO(crbug.com/40105916): This is temporary. We'd like to run a
 # smoke test on android_binary_sizes to ensure coverage of proguard, at
 # which point we can merge this into android_fastbuild. Until then, only
 # disable proguard on a few bots to gather metrics on the effect on build
@@ -164,6 +172,11 @@ gn_args.config(
 gn_args.config(
     name = "arm64-generic-crostoolchain",
     args_file = "//build/args/chromeos/arm64-generic-crostoolchain.gni",
+)
+
+gn_args.config(
+    name = "arm64-generic-vm",
+    args_file = "//build/args/chromeos/arm64-generic-vm.gni",
 )
 
 gn_args.config(
@@ -495,7 +508,7 @@ gn_args.config(
     },
 )
 
-# TODO(https://crbug.com/1010584): Explicitly enable DirectX 12.
+# TODO(crbug.com/40101527): Explicitly enable DirectX 12.
 gn_args.config(
     name = "dx12vk",
     configs = [
@@ -628,13 +641,6 @@ gn_args.config(
     name = "fuzzer",
     args = {
         "enable_ipc_fuzzer": True,
-    },
-)
-
-gn_args.config(
-    name = "goma",
-    args = {
-        "use_goma": True,
     },
 )
 
@@ -872,13 +878,6 @@ gn_args.config(
 )
 
 gn_args.config(
-    name = "no_goma",
-    args = {
-        "use_goma": False,
-    },
-)
-
-gn_args.config(
     name = "no_lld",
     args = {
         "use_lld": False,
@@ -998,13 +997,6 @@ gn_args.config(
     name = "pdf_xfa",
     args = {
         "pdf_enable_xfa": True,
-    },
-)
-
-gn_args.config(
-    name = "perfetto",
-    args = {
-        "use_perfetto_client_library": True,
     },
 )
 
@@ -1383,4 +1375,11 @@ gn_args.config(
     name = "xctest",
     args = {"enable_run_ios_unittests_with_xctest": True},
     configs = ["ios"],
+)
+
+gn_args.config(
+    name = "high_end_fuzzer_targets",
+    args = {
+        "high_end_fuzzer_targets": True,
+    },
 )

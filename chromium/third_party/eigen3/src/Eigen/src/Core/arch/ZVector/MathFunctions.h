@@ -220,7 +220,7 @@ EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet4f prsqrt<Packet4f>(co
 // Hyperbolic Tangent function.
 template <>
 EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet4f ptanh<Packet4f>(const Packet4f& x) {
-  return internal::generic_fast_tanh_float(x);
+  return ptanh_float(x);
 }
 
 }  // end namespace internal

@@ -37,7 +37,7 @@ namespace Eigen {
 
 template <Index n>
 struct type2index {
-  static const Index value = n;
+  static constexpr Index value = n;
   EIGEN_DEVICE_FUNC constexpr operator Index() const { return n; }
   EIGEN_DEVICE_FUNC void set(Index val) { eigen_assert(val == n); }
 };
@@ -46,8 +46,8 @@ struct type2index {
 // such as IndexPairList<type2indexpair<1,2>, type2indexpair<3,4>>().
 template <Index f, Index s>
 struct type2indexpair {
-  static const Index first = f;
-  static const Index second = s;
+  static constexpr Index first = f;
+  static constexpr Index second = s;
 
   constexpr EIGEN_DEVICE_FUNC operator IndexPair<Index>() const { return IndexPair<Index>(f, s); }
 
@@ -134,7 +134,7 @@ struct IndexTuple<T, O...> {
   EIGEN_DEVICE_FUNC constexpr IndexTuple() : head(), others() {}
   EIGEN_DEVICE_FUNC constexpr IndexTuple(const T& v, const O... o) : head(v), others(o...) {}
 
-  constexpr static int count = 1 + sizeof...(O);
+  static constexpr int count = 1 + sizeof...(O);
   T head;
   IndexTuple<O...> others;
   typedef T Head;
@@ -194,11 +194,11 @@ EIGEN_DEVICE_FUNC constexpr const typename IndexTupleExtractor<N, T, O...>::ValT
 }
 template <typename T, typename... O>
 struct array_size<IndexTuple<T, O...>> {
-  static const size_t value = IndexTuple<T, O...>::count;
+  static constexpr size_t value = IndexTuple<T, O...>::count;
 };
 template <typename T, typename... O>
 struct array_size<const IndexTuple<T, O...>> {
-  static const size_t value = IndexTuple<T, O...>::count;
+  static constexpr size_t value = IndexTuple<T, O...>::count;
 };
 
 template <Index Idx, typename ValueT>

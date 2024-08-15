@@ -1,20 +1,54 @@
 # Copyright 2022 Vivaldi Technologies. All rights reserved.
 
+import("//build/config/ios/swift_source_set.gni")
+
 source_set("layout_settings") {
   sources = [
-    "vivaldi_start_page_layout_settings_view_controller.h",
-    "vivaldi_start_page_layout_settings_view_controller.mm",
-    "vivaldi_start_page_layout_style.h",
     "vivaldi_start_page_layout_column.h",
     "vivaldi_start_page_layout_preview_view.h",
-    "vivaldi_start_page_layout_preview_view.mm"
+    "vivaldi_start_page_layout_preview_view.mm",
+    "vivaldi_start_page_layout_settings_coordinator.h",
+    "vivaldi_start_page_layout_settings_coordinator.mm",
+    "vivaldi_start_page_layout_settings_mediator.h",
+    "vivaldi_start_page_layout_settings_mediator.mm",
+    "vivaldi_start_page_layout_settings_view_controller.h",
+    "vivaldi_start_page_layout_settings_view_controller.mm",
+    "vivaldi_start_page_layout_state.h",
+    "vivaldi_start_page_layout_style.h",
   ]
   deps = [
     "//base",
-    "//services/network/public/mojom",
+    ":layout_settings_swift",
+    "//vivaldi/ios/ui/ntp:vivaldi_ntp"
   ]
   frameworks = [
     "Foundation.framework",
     "UIKit.framework"
+  ]
+}
+
+swift_source_set("layout_settings_swift") {
+  bridge_header = "vivaldi_start_page_layout_settings_swift_bridge.h"
+  sources = [
+    "vivaldi_start_page_layout_settings_view_provider.swift",
+    "vivaldi_start_page_layout_settings_view.swift",
+    "vivaldi_start_page_layout_settings_state.swift",
+    "vivaldi_start_page_layout_settings_constants.swift",
+    "vivaldi_start_page_layout_style+extension.swift",
+    "vivaldi_start_page_layout_column+extension.swift",
+  ]
+
+  deps = [
+    "//base",
+    "//ui/base",
+    "//ios/chrome/app/strings",
+    "//vivaldi/ios/ui/settings/start_page/wallpaper_settings",
+    "//vivaldi/ios/ui/settings/start_page/wallpaper_settings:wallpaper_settings_swift"
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework",
+    "SwiftUI.framework",
   ]
 }

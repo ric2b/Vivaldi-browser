@@ -31,21 +31,15 @@
 #define ABSL_CONTAINER_FLAT_HASH_MAP_H_
 
 #include <cstddef>
-#include <cstdint>
 #include <memory>
-#include <new>
-#include <string>
 #include <type_traits>
 #include <utility>
 
 #include "absl/algorithm/container.h"
-#include "absl/base/config.h"
 #include "absl/base/macros.h"
+#include "absl/container/hash_container_defaults.h"
 #include "absl/container/internal/container_memory.h"
-#include "absl/container/internal/hash_function_defaults.h"  // IWYU pragma: export
 #include "absl/container/internal/raw_hash_map.h"  // IWYU pragma: export
-#include "absl/container/internal/raw_hash_set.h"  // IWYU pragma: export
-#include "absl/memory/memory.h"
 
 namespace absl {
 ABSL_NAMESPACE_BEGIN
@@ -124,9 +118,8 @@ struct FlatHashMapPolicy;
 //  if (result != ducks.end()) {
 //    std::cout << "Result: " << result->second << std::endl;
 //  }
-template <class K, class V,
-          class Hash = absl::container_internal::hash_default_hash<K>,
-          class Eq = absl::container_internal::hash_default_eq<K>,
+template <class K, class V, class Hash = DefaultHashContainerHash<K>,
+          class Eq = DefaultHashContainerEq<K>,
           class Allocator = std::allocator<std::pair<const K, V>>>
 class flat_hash_map : public absl::container_internal::raw_hash_map<
                           absl::container_internal::FlatHashMapPolicy<K, V>,
@@ -636,42 +629,6 @@ struct IsUnorderedContainer<
     absl::flat_hash_map<Key, T, Hash, KeyEqual, Allocator>> : std::true_type {};
 
 }  // namespace container_algorithm_internal
-
-// Explicit template instantiations for common map types in order to decrease
-// linker input size. Note that explicitly instantiating flat_hash_map itself
-// doesn't help because it has no non-alias members. If we need to decrease
-// linker input size more, we could potentially (a) add more key/value types,
-// e.g. string_view/Cord, (b) instantiate some template member functions, e.g.
-// operator[]/find. The EXTERN argument is `extern` for the declaration and
-// empty for the definition.
-#define ABSL_INTERNAL_TEMPLATE_FLAT_HASH_MAP(TEMPLATE, KEY, VALUE) \
-  TEMPLATE class absl::container_internal::raw_hash_map<           \
-      absl::container_internal::FlatHashMapPolicy<KEY, VALUE>,     \
-      absl::container_internal::hash_default_hash<KEY>,            \
-      absl::container_internal::hash_default_eq<KEY>,              \
-      std::allocator<std::pair<const KEY, VALUE>>>;                \
-  TEMPLATE class absl::container_internal::raw_hash_set<           \
-      absl::container_internal::FlatHashMapPolicy<KEY, VALUE>,     \
-      absl::container_internal::hash_default_hash<KEY>,            \
-      absl::container_internal::hash_default_eq<KEY>,              \
-      std::allocator<std::pair<const KEY, VALUE>>>
-
-// We use exact-width integer types rather than `int`/`long`/`long long` because
-// these are the types recommended in the Google C++ style guide and which are
-// commonly used in Google code.
-ABSL_INTERNAL_TEMPLATE_FLAT_HASH_MAP(extern template, int32_t, int32_t);
-ABSL_INTERNAL_TEMPLATE_FLAT_HASH_MAP(extern template, std::string, int32_t);
-ABSL_INTERNAL_TEMPLATE_FLAT_HASH_MAP(extern template, int32_t, std::string);
-ABSL_INTERNAL_TEMPLATE_FLAT_HASH_MAP(extern template, int64_t, int64_t);
-ABSL_INTERNAL_TEMPLATE_FLAT_HASH_MAP(extern template, std::string, int64_t);
-ABSL_INTERNAL_TEMPLATE_FLAT_HASH_MAP(extern template, int64_t, std::string);
-ABSL_INTERNAL_TEMPLATE_FLAT_HASH_MAP(extern template, uint32_t, uint32_t);
-ABSL_INTERNAL_TEMPLATE_FLAT_HASH_MAP(extern template, std::string, uint32_t);
-ABSL_INTERNAL_TEMPLATE_FLAT_HASH_MAP(extern template, uint32_t, std::string);
-ABSL_INTERNAL_TEMPLATE_FLAT_HASH_MAP(extern template, uint64_t, uint64_t);
-ABSL_INTERNAL_TEMPLATE_FLAT_HASH_MAP(extern template, std::string, uint64_t);
-ABSL_INTERNAL_TEMPLATE_FLAT_HASH_MAP(extern template, uint64_t, std::string);
-ABSL_INTERNAL_TEMPLATE_FLAT_HASH_MAP(extern template, std::string, std::string);
 
 ABSL_NAMESPACE_END
 }  // namespace absl

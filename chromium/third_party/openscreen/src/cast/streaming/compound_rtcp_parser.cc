@@ -116,14 +116,11 @@ StatisticsEventType ToEventTypeFromWire(uint8_t wire_event) {
 
 }  // namespace
 
-CompoundRtcpParser::CompoundRtcpParser(RtcpSession* session,
-                                       CompoundRtcpParser::Client* client)
+CompoundRtcpParser::CompoundRtcpParser(RtcpSession& session,
+                                       CompoundRtcpParser::Client& client)
     : session_(session),
       client_(client),
-      latest_receiver_timestamp_(kNullTimePoint) {
-  OSP_CHECK(session_);
-  OSP_CHECK(client_);
-}
+      latest_receiver_timestamp_(kNullTimePoint) {}
 
 CompoundRtcpParser::~CompoundRtcpParser() = default;
 
@@ -218,30 +215,30 @@ bool CompoundRtcpParser::Parse(ByteView buffer, FrameId max_feedback_frame_id) {
       return true;
     }
     latest_receiver_timestamp_ = receiver_reference_time;
-    client_->OnReceiverReferenceTimeAdvanced(latest_receiver_timestamp_);
+    client_.OnReceiverReferenceTimeAdvanced(latest_receiver_timestamp_);
   }
 
   // At this point, the packet is known to be well-formed. Dispatch events of
   // interest to the Client.
   if (receiver_report) {
-    client_->OnReceiverReport(*receiver_report);
+    client_.OnReceiverReport(*receiver_report);
   }
   if (!log_messages.empty()) {
-    client_->OnCastReceiverFrameLogMessages(std::move(log_messages));
+    client_.OnCastReceiverFrameLogMessages(std::move(log_messages));
   }
   if (!checkpoint_frame_id.is_null()) {
-    client_->OnReceiverCheckpoint(checkpoint_frame_id, target_playout_delay);
+    client_.OnReceiverCheckpoint(checkpoint_frame_id, target_playout_delay);
   }
   if (!received_frames.empty()) {
     OSP_DCHECK(AreElementsSortedAndUnique(received_frames));
-    client_->OnReceiverHasFrames(std::move(received_frames));
+    client_.OnReceiverHasFrames(std::move(received_frames));
   }
   CanonicalizePacketNackVector(&packet_nacks);
   if (!packet_nacks.empty()) {
-    client_->OnReceiverIsMissingPackets(std::move(packet_nacks));
+    client_.OnReceiverIsMissingPackets(std::move(packet_nacks));
   }
   if (picture_loss_indicator) {
-    client_->OnReceiverIndicatesPictureLoss();
+    client_.OnReceiverIndicatesPictureLoss();
   }
 
   return true;
@@ -254,9 +251,9 @@ bool CompoundRtcpParser::ParseReceiverReport(
   if (in.size() < kRtcpReceiverReportSize) {
     return false;
   }
-  if (ConsumeField<uint32_t>(in) == session_->receiver_ssrc()) {
+  if (ConsumeField<uint32_t>(in) == session_.receiver_ssrc()) {
     receiver_report = RtcpReportBlock::ParseOne(in, num_report_blocks,
-                                                session_->sender_ssrc());
+                                                session_.sender_ssrc());
   }
   return true;
 }
@@ -269,7 +266,7 @@ bool CompoundRtcpParser::ParseApplicationDefined(
   const uint32_t name = ConsumeField<uint32_t>(in);
 
   // Just ignore events that aren't intended for us.
-  if (sender_ssrc != session_->receiver_ssrc()) {
+  if (sender_ssrc != session_.receiver_ssrc()) {
     return true;
   }
   if (name != kCastName) {
@@ -297,7 +294,7 @@ bool CompoundRtcpParser::ParseFrameLogMessages(
     // offset from when the first packet was sent.
     const uint32_t raw_timestamp = data & 0xFFFFFF;
     const Clock::time_point event_timestamp_base =
-        session_->start_time() + milliseconds(raw_timestamp);
+        session_.start_time() + milliseconds(raw_timestamp);
 
     // The 8 most significant bits contain the number of events.
     // NOTE: at least one event is required, so a value of "0" over the wire
@@ -356,8 +353,8 @@ bool CompoundRtcpParser::ParseFeedback(ByteView in,
   if (static_cast<int>(in.size()) < kRtcpFeedbackHeaderSize) {
     return false;
   }
-  if (ConsumeField<uint32_t>(in) != session_->receiver_ssrc() ||
-      ConsumeField<uint32_t>(in) != session_->sender_ssrc()) {
+  if (ConsumeField<uint32_t>(in) != session_.receiver_ssrc() ||
+      ConsumeField<uint32_t>(in) != session_.sender_ssrc()) {
     return true;  // Ignore report from mismatched SSRC(s).
   }
   if (ConsumeField<uint32_t>(in) != kRtcpCastIdentifierWord) {
@@ -447,7 +444,7 @@ bool CompoundRtcpParser::ParseExtendedReports(
   if (static_cast<int>(in.size()) < kRtcpExtendedReportHeaderSize) {
     return false;
   }
-  if (ConsumeField<uint32_t>(in) != session_->receiver_ssrc()) {
+  if (ConsumeField<uint32_t>(in) != session_.receiver_ssrc()) {
     return true;  // Ignore report from unknown receiver.
   }
 
@@ -467,7 +464,7 @@ bool CompoundRtcpParser::ParseExtendedReports(
       if (block_data_size != sizeof(uint64_t)) {
         return false;  // Length field must always be 2 words.
       }
-      receiver_reference_time = session_->ntp_converter().ToLocalTime(
+      receiver_reference_time = session_.ntp_converter().ToLocalTime(
           ReadBigEndian<uint64_t>(in.data()));
     } else {
       // Ignore any other type of extended report.
@@ -485,8 +482,8 @@ bool CompoundRtcpParser::ParsePictureLossIndicator(
     return false;
   }
   // Only set the flag if the PLI is from the Receiver and to this Sender.
-  if (ConsumeField<uint32_t>(in) == session_->receiver_ssrc() &&
-      ConsumeField<uint32_t>(in) == session_->sender_ssrc()) {
+  if (ConsumeField<uint32_t>(in) == session_.receiver_ssrc() &&
+      ConsumeField<uint32_t>(in) == session_.sender_ssrc()) {
     picture_loss_indicator = true;
   }
   return true;

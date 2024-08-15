@@ -13,10 +13,11 @@
 
 #include "common/Color.h"
 #include "common/FixedVector.h"
+#include "common/SimpleMutex.h"
 #include "common/WorkerThread.h"
 #include "libANGLE/Uniform.h"
-#include "libANGLE/renderer/vulkan/ResourceVk.h"
 #include "libANGLE/renderer/vulkan/ShaderInterfaceVariableInfoMap.h"
+#include "libANGLE/renderer/vulkan/vk_resource.h"
 #include "libANGLE/renderer/vulkan/vk_utils.h"
 
 namespace gl
@@ -158,10 +159,12 @@ class alignas(4) RenderPassDesc final
     void packColorUnresolveAttachment(size_t colorIndexGL);
     void removeColorUnresolveAttachment(size_t colorIndexGL);
     // Indicate that a depth/stencil attachment should have a corresponding resolve attachment.
-    void packDepthStencilResolveAttachment();
+    void packDepthResolveAttachment();
+    void packStencilResolveAttachment();
     // Indicate that a depth/stencil attachment should take its data from the resolve attachment
     // initially.
-    void packDepthStencilUnresolveAttachment(bool unresolveDepth, bool unresolveStencil);
+    void packDepthUnresolveAttachment();
+    void packStencilUnresolveAttachment();
     void removeDepthStencilUnresolveAttachment();
 
     void setWriteControlMode(gl::SrgbWriteControlMode mode);
@@ -175,8 +178,6 @@ class alignas(4) RenderPassDesc final
     bool isColorAttachmentEnabled(size_t colorIndexGL) const;
     bool hasYUVResolveAttachment() const { return mIsYUVResolve; }
     bool hasDepthStencilAttachment() const;
-    bool hasDepthAttachment() const;
-    bool hasStencilAttachment() const;
     gl::DrawBufferMask getColorResolveAttachmentMask() const { return mColorResolveAttachmentMask; }
     bool hasColorResolveAttachment(size_t colorIndexGL) const
     {
@@ -190,7 +191,9 @@ class alignas(4) RenderPassDesc final
     {
         return mColorUnresolveAttachmentMask.test(colorIndexGL);
     }
-    bool hasDepthStencilResolveAttachment() const { return mResolveDepthStencil; }
+    bool hasDepthStencilResolveAttachment() const { return mResolveDepth || mResolveStencil; }
+    bool hasDepthResolveAttachment() const { return mResolveDepth; }
+    bool hasStencilResolveAttachment() const { return mResolveStencil; }
     bool hasDepthStencilUnresolveAttachment() const { return mUnresolveDepth || mUnresolveStencil; }
     bool hasDepthUnresolveAttachment() const { return mUnresolveDepth; }
     bool hasStencilUnresolveAttachment() const { return mUnresolveStencil; }
@@ -247,9 +250,12 @@ class alignas(4) RenderPassDesc final
     // Framebuffer fetch
     uint8_t mHasFramebufferFetch : 1;
 
+    // Depth/stencil resolve
+    uint8_t mResolveDepth : 1;
+    uint8_t mResolveStencil : 1;
+
     // Multisampled render to texture
     uint8_t mIsRenderToTexture : 1;
-    uint8_t mResolveDepthStencil : 1;
     uint8_t mUnresolveDepth : 1;
     uint8_t mUnresolveStencil : 1;
 
@@ -263,7 +269,7 @@ class alignas(4) RenderPassDesc final
     uint8_t mHasFragmentShadingAttachment : 1;
 
     // Available space for expansion.
-    uint8_t mPadding2 : 7;
+    uint8_t mPadding2 : 6;
 
     // Whether each color attachment has a corresponding resolve attachment.  Color resolve
     // attachments can be used to optimize resolve through glBlitFramebuffer() as well as support
@@ -979,12 +985,11 @@ class GraphicsPipelineDesc final
 constexpr size_t kGraphicsPipelineDescSize = sizeof(GraphicsPipelineDesc);
 static_assert(kGraphicsPipelineDescSize == kGraphicsPipelineDescSumOfSizes, "Size mismatch");
 
-constexpr uint32_t kMaxDescriptorSetLayoutBindings =
-    std::max(gl::IMPLEMENTATION_MAX_ACTIVE_TEXTURES,
-             gl::IMPLEMENTATION_MAX_UNIFORM_BUFFER_BINDINGS);
-
+// Values are based on data recorded here -> https://anglebug.com/8677#c4
+constexpr size_t kDefaultDescriptorSetLayoutBindingsCount = 8;
+constexpr size_t kDefaultImmutableSamplerBindingsCount    = 1;
 using DescriptorSetLayoutBindingVector =
-    angle::FixedVector<VkDescriptorSetLayoutBinding, kMaxDescriptorSetLayoutBindings>;
+    angle::FastVector<VkDescriptorSetLayoutBinding, kDefaultDescriptorSetLayoutBindingsCount>;
 
 // A packed description of a descriptor set layout. Use similarly to RenderPassDesc and
 // GraphicsPipelineDesc. Currently we only need to differentiate layouts based on sampler and ubo
@@ -1006,41 +1011,55 @@ class DescriptorSetLayoutDesc final
                 VkShaderStageFlags stages,
                 const Sampler *immutableSampler);
 
-    void unpackBindings(DescriptorSetLayoutBindingVector *bindings,
-                        std::vector<VkSampler> *immutableSamplers) const;
+    void unpackBindings(DescriptorSetLayoutBindingVector *bindings) const;
 
-    bool empty() const { return *this == DescriptorSetLayoutDesc(); }
+    bool empty() const { return mDescriptorSetLayoutBindings.empty(); }
 
   private:
     // There is a small risk of an issue if the sampler cache is evicted but not the descriptor
     // cache we would have an invalid handle here. Thus propose follow-up work:
     // TODO: https://issuetracker.google.com/issues/159156775: Have immutable sampler use serial
-    struct PackedDescriptorSetBinding
+    union PackedDescriptorSetBinding
     {
-        uint8_t type;    // Stores a packed VkDescriptorType descriptorType.
-        uint8_t stages;  // Stores a packed VkShaderStageFlags.
-        uint16_t count;  // Stores a packed uint32_t descriptorCount.
-        uint32_t pad;
-        VkSampler immutableSampler;
+        struct
+        {
+            uint8_t type;                  // Stores a packed VkDescriptorType descriptorType.
+            uint8_t stages;                // Stores a packed VkShaderStageFlags.
+            uint16_t count;                // Stores a packed uint32_t descriptorCount
+            uint16_t bindingIndex;         // Stores the binding index
+            uint16_t hasImmutableSampler;  // Whether this binding has an immutable sampler
+        };
+        uint64_t value;
+
+        bool operator==(const PackedDescriptorSetBinding &other) const
+        {
+            return value == other.value;
+        }
     };
 
-    // 4x 32bit
-    static_assert(sizeof(PackedDescriptorSetBinding) == 16, "Unexpected size");
+    // 1x 64bit
+    static_assert(sizeof(PackedDescriptorSetBinding) == 8, "Unexpected size");
 
-    // This is a compact representation of a descriptor set layout.
-    std::array<PackedDescriptorSetBinding, kMaxDescriptorSetLayoutBindings>
-        mPackedDescriptorSetLayout;
+    angle::FastVector<PackedDescriptorSetBinding, kDefaultDescriptorSetLayoutBindingsCount>
+        mDescriptorSetLayoutBindings;
+    angle::FastVector<VkSampler, kDefaultImmutableSamplerBindingsCount> mImmutableSamplers;
 };
 
 // The following are for caching descriptor set layouts. Limited to max three descriptor set
 // layouts. This can be extended in the future.
-constexpr size_t kMaxDescriptorSetLayouts = 3;
+constexpr size_t kMaxDescriptorSetLayouts = ToUnderlying(DescriptorSetIndex::EnumCount);
 
-struct PackedPushConstantRange
+union PackedPushConstantRange
 {
-    uint8_t offset;
-    uint8_t size;
-    uint16_t stageMask;
+    struct
+    {
+        uint8_t offset;
+        uint8_t size;
+        uint16_t stageMask;
+    };
+    uint32_t value;
+
+    bool operator==(const PackedPushConstantRange &other) const { return value == other.value; }
 };
 
 static_assert(sizeof(PackedPushConstantRange) == sizeof(uint32_t), "Unexpected Size");
@@ -1288,7 +1307,7 @@ class PipelineCacheAccess
     PipelineCacheAccess()  = default;
     ~PipelineCacheAccess() = default;
 
-    void init(const vk::PipelineCache *pipelineCache, std::mutex *mutex)
+    void init(const vk::PipelineCache *pipelineCache, angle::SimpleMutex *mutex)
     {
         mPipelineCache = pipelineCache;
         mMutex         = mutex;
@@ -1306,10 +1325,10 @@ class PipelineCacheAccess
     bool isThreadSafe() const { return mMutex != nullptr; }
 
   private:
-    std::unique_lock<std::mutex> getLock();
+    std::unique_lock<angle::SimpleMutex> getLock();
 
     const vk::PipelineCache *mPipelineCache = nullptr;
-    std::mutex *mMutex;
+    angle::SimpleMutex *mMutex;
 };
 
 // Monolithic pipeline creation tasks are created as soon as a pipeline is created out of libraries.
@@ -1396,9 +1415,10 @@ class PipelineHelper final : public Resource
     PipelineHelper();
     ~PipelineHelper() override;
     inline explicit PipelineHelper(Pipeline &&pipeline, CacheLookUpFeedback feedback);
+    PipelineHelper &operator=(PipelineHelper &&other);
 
     void destroy(VkDevice device);
-    void release(ContextVk *contextVk);
+    void release(Context *context);
 
     bool valid() const { return mPipeline.valid(); }
     const Pipeline &getPipeline() const { return mPipeline; }
@@ -1486,7 +1506,7 @@ class FramebufferHelper : public Resource
     FramebufferHelper(FramebufferHelper &&other);
     FramebufferHelper &operator=(FramebufferHelper &&other);
 
-    angle::Result init(ContextVk *contextVk, const VkFramebufferCreateInfo &createInfo);
+    angle::Result init(Context *context, const VkFramebufferCreateInfo &createInfo);
     void destroy(Renderer *renderer);
     void release(ContextVk *contextVk);
 
@@ -1512,6 +1532,16 @@ class FramebufferHelper : public Resource
 ANGLE_INLINE PipelineHelper::PipelineHelper(Pipeline &&pipeline, CacheLookUpFeedback feedback)
     : mPipeline(std::move(pipeline)), mCacheLookUpFeedback(feedback)
 {}
+
+ANGLE_INLINE PipelineHelper &PipelineHelper::operator=(PipelineHelper &&other)
+{
+    ASSERT(!mPipeline.valid());
+
+    std::swap(mPipeline, other.mPipeline);
+    mCacheLookUpFeedback = other.mCacheLookUpFeedback;
+
+    return *this;
+}
 
 struct ImageSubresourceRange
 {
@@ -2457,10 +2487,12 @@ class GraphicsPipelineCache final : public HasCacheStats<VulkanCacheType::Graphi
     GraphicsPipelineCache() = default;
     ~GraphicsPipelineCache() override { ASSERT(mPayload.empty()); }
 
-    void destroy(ContextVk *contextVk);
-    void release(ContextVk *contextVk);
+    void destroy(vk::Context *context);
+    void release(vk::Context *context);
 
-    void populate(const vk::GraphicsPipelineDesc &desc, vk::Pipeline &&pipeline);
+    void populate(const vk::GraphicsPipelineDesc &desc,
+                  vk::Pipeline &&pipeline,
+                  vk::PipelineHelper **pipelineHelperOut);
 
     // Get a pipeline from the cache, if it exists
     ANGLE_INLINE bool getPipeline(const vk::GraphicsPipelineDesc &desc,
@@ -2536,8 +2568,12 @@ class DescriptorSetLayoutCache final : angle::NonCopyable
         const vk::DescriptorSetLayoutDesc &desc,
         vk::AtomicBindingPointer<vk::DescriptorSetLayout> *descriptorSetLayoutOut);
 
+    // Helpers for white box tests
+    size_t getCacheHitCount() const { return mCacheStats.getHitCount(); }
+    size_t getCacheMissCount() const { return mCacheStats.getMissCount(); }
+
   private:
-    mutable std::mutex mMutex;
+    mutable angle::SimpleMutex mMutex;
     std::unordered_map<vk::DescriptorSetLayoutDesc, vk::RefCountedDescriptorSetLayout> mPayload;
     CacheStats mCacheStats;
 };
@@ -2557,7 +2593,7 @@ class PipelineLayoutCache final : public HasCacheStats<VulkanCacheType::Pipeline
         vk::AtomicBindingPointer<vk::PipelineLayout> *pipelineLayoutOut);
 
   private:
-    mutable std::mutex mMutex;
+    mutable angle::SimpleMutex mMutex;
     std::unordered_map<vk::PipelineLayoutDesc, vk::RefCountedPipelineLayout> mPayload;
 };
 

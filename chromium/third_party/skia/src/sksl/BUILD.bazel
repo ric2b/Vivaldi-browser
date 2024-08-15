@@ -1,6 +1,10 @@
 load("//bazel:flags.bzl", "bool_flag", "selects")
 load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_deps", "skia_cc_library", "skia_filegroup", "split_srcs_and_hdrs")
 
+package(
+    default_applicable_licenses = ["//:license"],
+)
+
 licenses(["notice"])
 
 exports_files_legacy()
@@ -113,6 +117,12 @@ skia_filegroup(
     visibility = ["//src/sksl/codegen:__pkg__"],
 )
 
+# TODO(kjlubick) remove uses of this in G3 and Android and then delete
+bool_flag(
+    name = "enable_sksl_tracing",
+    default = False,
+)
+
 selects.config_setting_group(
     name = "use_sksl_gpu_srcs",
     match_any = [
@@ -124,11 +134,6 @@ selects.config_setting_group(
 
 bool_flag(
     name = "enable_skslc",
-    default = False,
-)
-
-bool_flag(
-    name = "enable_sksl_tracing",
     default = False,
 )
 

@@ -302,7 +302,7 @@ Examples (target input)
   gn refs out/Debug //gn:gn
       Find all targets depending on the given exact target name.
 
-  gn refs out/Debug //base:i18n --as=buildfiles | xargs gvim
+  gn refs out/Debug //base:i18n --as=buildfile | xargs gvim
       Edit all .gn files containing references to //base:i18n
 
   gn refs out/Debug //base --all

@@ -49,8 +49,10 @@ class MessageDemuxerTest : public ::testing::Test {
   const uint64_t connection_id_ = 45;
   FakeClock fake_clock_{Clock::time_point(std::chrono::milliseconds(1298424))};
   msgs::CborEncodeBuffer buffer_;
-  msgs::PresentationConnectionOpenRequest request_{1, "fry-am-the-egg-man",
-                                                   "url"};
+  msgs::PresentationConnectionOpenRequest request_ = {
+      .request_id = 1,
+      .presentation_id = "fry-am-the-egg-man",
+      .url = "url"};
   MockMessageCallback mock_callback_;
   MessageDemuxer demuxer_{FakeClock::now, MessageDemuxer::kDefaultBufferLimit};
 };
@@ -264,9 +266,8 @@ TEST_F(MessageDemuxerTest, WatchAfterMultipleData) {
                         buffer_.size());
 
   msgs::CborEncodeBuffer buffer;
-  msgs::PresentationStartRequest request;
-  request.request_id = 2;
-  request.url = "https://example.com/recv";
+  msgs::PresentationStartRequest request = {.request_id = 2,
+                                            .url = "https://example.com/recv"};
   ASSERT_TRUE(msgs::EncodePresentationStartRequest(request, &buffer));
   demuxer_.OnStreamData(endpoint_id_, connection_id_, buffer.data(),
                         buffer.size());

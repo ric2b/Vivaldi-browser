@@ -271,6 +271,10 @@ CompositorImpl::CompositorImpl(CompositorClient* client,
 }
 
 CompositorImpl::~CompositorImpl() {
+  for (auto& observer : simple_begin_frame_observers_) {
+    observer.OnBeginFrameSourceShuttingDown();
+  }
+
   DetachRootWindow();
   // Clean-up any surface references.
   SetSurface(nullptr, false);
@@ -407,7 +411,7 @@ void CompositorImpl::SetVisible(bool visible) {
 
 void CompositorImpl::TearDownDisplayAndUnregisterRootFrameSink() {
   // Make a best effort to try to complete pending readbacks.
-  // TODO(crbug.com/637035): Consider doing this in a better way,
+  // TODO(crbug.com/40480324): Consider doing this in a better way,
   // ideally with the guarantee of readbacks completing.
   if (display_private_ && pending_readbacks_) {
     // Note that while this is not a Sync IPC, the call to
@@ -910,17 +914,14 @@ void CompositorImpl::DecrementPendingReadbacks() {
 void CompositorImpl::AddSimpleBeginFrameObserver(
     ui::HostBeginFrameObserver::SimpleBeginFrameObserver* obs) {
   DCHECK(obs);
-  DCHECK(!base::Contains(simple_begin_frame_observers_, obs));
-  simple_begin_frame_observers_.insert(obs);
+  simple_begin_frame_observers_.AddObserver(obs);
   MaybeUpdateObserveBeginFrame();
 }
 
 void CompositorImpl::RemoveSimpleBeginFrameObserver(
     ui::HostBeginFrameObserver::SimpleBeginFrameObserver* obs) {
   DCHECK(obs);
-  DCHECK(base::Contains(simple_begin_frame_observers_, obs));
-
-  simple_begin_frame_observers_.erase(obs);
+  simple_begin_frame_observers_.RemoveObserver(obs);
   MaybeUpdateObserveBeginFrame();
 }
 

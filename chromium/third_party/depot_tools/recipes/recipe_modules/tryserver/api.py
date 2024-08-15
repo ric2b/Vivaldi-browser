@@ -244,7 +244,7 @@ class TryserverApi(recipe_api.RecipeApi):
 
     Returned paths will be relative to to api.path['root'].
     """
-    cwd = self.m.context.cwd or self.m.path['start_dir'].join(patch_root)
+    cwd = self.m.context.cwd or self.m.path.start_dir / patch_root
     with self.m.context(cwd=cwd):
       step_result = self.m.git(
           '-c', 'core.quotePath=false', 'diff', '--cached', '--name-only',

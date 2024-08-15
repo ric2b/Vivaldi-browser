@@ -29,7 +29,7 @@ export class ImageRequestTask {
    * The maximum milliseconds to load video. If loading video exceeds the limit,
    * we give up generating video thumbnail and free the consumed memory.
    */
-  static readonly MAX_MILLISECONDS_TO_LOAD_VIDEO: number = 3000;
+  static readonly MAX_MILLISECONDS_TO_LOAD_VIDEO: number = 10000;
 
   /**
    * The default width of a non-square thumbnail. The value is set to match the
@@ -410,8 +410,13 @@ export class ImageRequestTask {
                   video.addEventListener('loadeddata', () => resolve());
                 }
               });
-              const halfDuration = video.duration / 2;
-              video.currentTime = halfDuration;
+              // For videos with longer duration (>= 6 seconds), consider the
+              // frame at 3rd second, or use the frame at midpoint otherwise.
+              // This ensures the target position is always close to the
+              // beginning of the video. Seek operations may be costly if the
+              // video doesn't contain keyframes for referencing.
+              const thumbnailPosition = Math.min(video.duration / 2, 3);
+              video.currentTime = thumbnailPosition;
             });
             video.addEventListener('error', reject);
             video.preload = 'metadata';
@@ -425,8 +430,8 @@ export class ImageRequestTask {
             // If we can't get the frame at the midpoint of the video after 3
             // seconds have passed for some reason (e.g. unseekable video), we
             // give up generating thumbnail.
-            video.src =
-                '';  // Make sure to stop loading remaining part of the video.
+            // Make sure to stop loading remaining part of the video.
+            video.src = '';
             throw new Error('Seeking video failed.');
           }),
         ])
@@ -435,6 +440,8 @@ export class ImageRequestTask {
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
           canvas.getContext('2d')!.drawImage(video, 0, 0);
+          // Clearing the `src` helps the decoder to dispose its memory earlier.
+          video.src = '';
           return canvas.toDataURL();
         });
   }

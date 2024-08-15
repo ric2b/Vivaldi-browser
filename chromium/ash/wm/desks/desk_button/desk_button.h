@@ -43,10 +43,12 @@ class ASH_EXPORT DeskButton : public views::Button {
   bool is_activated() const { return is_activated_; }
 
   bool zero_state() const { return zero_state_; }
-  void set_zero_state(bool zero_state) { zero_state_ = zero_state; }
+
+  void SetZeroState(bool zero_state);
 
   // views::Button:
-  gfx::Size CalculatePreferredSize() const override;
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override;
   void Layout(PassKey) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnMouseEvent(ui::MouseEvent* event) override;
@@ -95,6 +97,8 @@ class ASH_EXPORT DeskButton : public views::Button {
   void UpdateShelfAutoHideDisabler(
       std::optional<Shelf::ScopedDisableAutoHide>& disabler,
       bool should_enable_shelf_auto_hide);
+
+  void UpdateBackground();
 
   // A view that displays the profile avatar of the current desk.
   raw_ptr<views::ImageView> desk_avatar_view_;

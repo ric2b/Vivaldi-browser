@@ -22,7 +22,6 @@
 #include "chrome/browser/importer/importer_list.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/common/chrome_paths_internal.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
@@ -31,10 +30,13 @@
 #include "components/os_crypt/sync/key_storage_config_linux.h"
 #include "components/os_crypt/sync/os_crypt.h"
 #include "components/password_manager/core/browser/password_form.h"
+#include "components/password_manager/core/browser/password_manager_switches.h"
 #include "importer/chrome_importer_utils.h"
 #include "sql/statement.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#include "importer/chromium_extension_importer.h"
 
 ChromiumImporter::ChromiumImporter() {}
 
@@ -77,8 +79,13 @@ void ChromiumImporter::StartImport(
     ImportPasswords(source_profile.importer_type);
     bridge_->NotifyItemEnded(importer::PASSWORDS);
   }
-
-  bridge_->NotifyEnded();
+  if ((items & importer::EXTENSIONS) && !cancelled()) {
+    ImportExtensions();
+  } else {
+    // When importing extensions Vivaldi ProfileWriter
+    // is responsible for reprorting that import has finished.
+    bridge_->NotifyEnded();
+  }
 }
 
 #if BUILDFLAG(IS_WIN)
@@ -233,10 +240,11 @@ bool ChromiumImporter::ReadAndParseSignons(
     const base::CommandLine& command_line =
         *base::CommandLine::ForCurrentProcess();
     std::unique_ptr<os_crypt::Config> config(new os_crypt::Config());
-    config->store = command_line.GetSwitchValueASCII(switches::kPasswordStore);
+    config->store =
+        command_line.GetSwitchValueASCII(password_manager::kPasswordStore);
     config->product_name = l10n_util::GetStringUTF8(IDS_PRODUCT_NAME);
     config->should_use_preference =
-        command_line.HasSwitch(switches::kEnableEncryptionSelection);
+        command_line.HasSwitch(password_manager::kEnableEncryptionSelection);
     chrome::GetDefaultUserDataDirectory(&config->user_data_path);
     OSCryptImpl::GetInstance()->SetConfig(std::move(config));
     OSCryptImpl::GetInstance()->DecryptString16(cipher_text, &plain_text);
@@ -300,4 +308,18 @@ bool ChromiumImporter::ReadAndParseHistory(const base::FilePath& sqlite_file,
     forms->push_back(row);
   }
   return true;
+}
+
+void ChromiumImporter::ImportExtensions() {
+  bridge_->NotifyItemStarted(importer::EXTENSIONS);
+
+  const auto extensions =
+      extension_importer::ChromiumExtensionsImporter::GetImportableExtensions(
+          profile_dir_);
+  if (!extensions.empty() && !cancelled()) {
+    bridge_->AddExtensions(extensions);
+  } else {
+    bridge_->NotifyItemEnded(importer::EXTENSIONS);
+    bridge_->NotifyEnded();
+  }
 }

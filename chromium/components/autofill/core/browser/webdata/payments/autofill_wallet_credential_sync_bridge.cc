@@ -11,10 +11,11 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "components/autofill/core/browser/webdata/autofill_change.h"
-#include "components/autofill/core/browser/webdata/payments/payments_sync_bridge_util.h"
 #include "components/autofill/core/browser/webdata/autofill_sync_metadata_table.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_backend.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
+#include "components/autofill/core/browser/webdata/payments/payments_sync_bridge_util.h"
+#include "components/sync/base/deletion_origin.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/model/client_tag_based_model_type_processor.h"
 #include "components/sync/model/metadata_change_list.h"
@@ -115,7 +116,7 @@ AutofillWalletCredentialSyncBridge::ApplyIncrementalSyncChanges(
               "Failed to delete the Wallet credential data from the table");
         }
         break;
-      // TODO(crbug/1472122): Merge the Add and Update APIs for
+      // TODO(crbug.com/40926464): Merge the Add and Update APIs for
       // PaymentsAutofillTable.
       case syncer::EntityChange::ACTION_ADD:
         if (!table ||
@@ -221,28 +222,6 @@ bool AutofillWalletCredentialSyncBridge::IsEntityDataValid(
              entity_data.specifics.autofill_wallet_credential());
 }
 
-void AutofillWalletCredentialSyncBridge::CreditCardChanged(
-    const CreditCardChange& change) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  // `ADD` and `UPDATE` changes for credit card can be ignored as there is no
-  // cvc field for the credit card sync entity.
-  if (change.type() != CreditCardChange::REMOVE) {
-    return;
-  }
-  std::unique_ptr<syncer::MetadataChangeList> metadata_change_list =
-      CreateMetadataChangeList();
-  // Delete the cvc from sync servers for server cards.
-  if (GetAutofillTable()->RemoveServerCvc(
-          change.data_model().instrument_id())) {
-    // We are extracting the `instrument_id` directly here instead of using
-    // `GetStorageKey`. This is to avoid additional processing of generating the
-    // entity data for the `change` and then extracting the `instrument_id`.
-    change_processor()->Delete(
-        base::NumberToString(change.data_model().instrument_id()),
-        metadata_change_list.get());
-  }
-}
-
 void AutofillWalletCredentialSyncBridge::ServerCvcChanged(
     const ServerCvcChange& change) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -284,6 +263,7 @@ void AutofillWalletCredentialSyncBridge::ActOnLocalChange(
       break;
     case ServerCvcChange::REMOVE:
       change_processor()->Delete(std::move(key_str),
+                                 syncer::DeletionOrigin::Unspecified(),
                                  metadata_change_list.get());
       break;
   }

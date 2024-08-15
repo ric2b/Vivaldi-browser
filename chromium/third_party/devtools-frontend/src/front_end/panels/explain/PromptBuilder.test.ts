@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 import type * as Platform from '../../core/platform/platform.js';
-import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as Bindings from '../../models/bindings/bindings.js';
@@ -21,8 +20,6 @@ import {
 } from '../../testing/UISourceCodeHelpers.js';
 
 import * as Explain from './explain.js';
-
-const {assert} = chai;
 
 describeWithLocale('PromptBuilder', () => {
   describe('allowHeader', () => {
@@ -263,7 +260,7 @@ export const y = "";
       const {uiSourceCode, project} =
           createContentProviderUISourceCode({url: URL, mimeType: 'text/javascript', content: RELATED_CODE});
       const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-      assertNotNullOrUndefined(debuggerModel);
+      assert.exists(debuggerModel);
       const mapping = createFakeScriptMapping(debuggerModel, uiSourceCode, LINE_NUMBER, SCRIPT_ID);
       debuggerWorkspaceBinding.addSourceMapping(mapping);
       const ERROR_MESSAGE = 'kaboom!';
@@ -310,7 +307,133 @@ export const y = "";
       const {uiSourceCode, project} =
           createContentProviderUISourceCode({url: URL, mimeType: 'text/javascript', content: RELATED_CODE});
       const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-      assertNotNullOrUndefined(debuggerModel);
+      assert.exists(debuggerModel);
+      const mapping = createFakeScriptMapping(debuggerModel, uiSourceCode, LINE_NUMBER, SCRIPT_ID);
+      debuggerWorkspaceBinding.addSourceMapping(mapping);
+      const ERROR_MESSAGE = 'kaboom!';
+      const rawMessage = new SDK.ConsoleModel.ConsoleMessage(
+          runtimeModel, SDK.ConsoleModel.FrontendMessageSource.ConsoleAPI, Protocol.Log.LogEntryLevel.Error,
+          ERROR_MESSAGE, messageDetails);
+      const {message} = createConsoleViewMessageWithStubDeps(rawMessage);
+      const promptBuilder = new Explain.PromptBuilder(message);
+      const {prompt, sources} = await promptBuilder.buildPrompt();
+      assert.strictEqual(prompt, [
+        PREAMBLE,
+        ERROR_MESSAGE,
+        STACK_TRACE,
+        RELATED_CODE_PREFIX,
+        '',
+        '```',
+        RELATED_CODE.trim(),
+        '```',
+      ].join('\n'));
+
+      assert.deepStrictEqual(sources, [
+        {type: 'message', value: ERROR_MESSAGE},
+        {type: 'stacktrace', value: STACK_TRACE},
+        {type: 'relatedCode', value: RELATED_CODE.trim()},
+      ]);
+
+      Workspace.Workspace.WorkspaceImpl.instance().removeProject(project);
+      Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance().removeSourceMapping(mapping);
+    });
+
+    it('trims a very long network request', async () => {
+      const runtimeModel = target.model(SDK.RuntimeModel.RuntimeModel);
+      const REQUEST_ID = '29.1' as Protocol.Network.RequestId;
+      const messageDetails = {
+        type: Protocol.Runtime.ConsoleAPICalledEventType.Log,
+        affectedResources: {
+          requestId: REQUEST_ID,
+        },
+      };
+      const NETWORK_REQUEST = {
+        url() {
+          return 'https://example.com' as Platform.DevToolsPath.UrlString;
+        },
+        requestHeaders() {
+          return Array(100).fill({
+            name: 'Origin',
+            value: 'https://example.com',
+          });
+        },
+        statusCode: 404,
+        statusText: 'Not found',
+        responseHeaders: Array(100).fill({
+          name: 'Origin',
+          value: 'https://example.com',
+        }),
+      } as SDK.NetworkRequest.NetworkRequest;
+      sinon.stub(Logs.NetworkLog.NetworkLog.instance(), 'requestsForId').withArgs(REQUEST_ID).returns([
+        NETWORK_REQUEST,
+      ]);
+      const RELATED_REQUEST = [
+        'Request: https://example.com',
+        '',
+        'Request headers:',
+        'Origin: https://example.com\n'.repeat(35),
+        'Response headers:',
+        'Origin: https://example.com\n'.repeat(35),
+        'Response status: 404 Not found',
+      ].join('\n');
+      const ERROR_MESSAGE = 'kaboom!';
+      const rawMessage = new SDK.ConsoleModel.ConsoleMessage(
+          runtimeModel, SDK.ConsoleModel.FrontendMessageSource.ConsoleAPI, /* level */ null, ERROR_MESSAGE,
+          messageDetails);
+      const {message} = createConsoleViewMessageWithStubDeps(rawMessage);
+      const promptBuilder = new Explain.PromptBuilder(message);
+      const {prompt, sources} = await promptBuilder.buildPrompt();
+      assert.strictEqual(prompt, [
+        PREAMBLE,
+        ERROR_MESSAGE,
+        RELATED_NETWORK_REQUEST_PREFIX,
+        '',
+        '```',
+        RELATED_REQUEST,
+        '```',
+      ].join('\n'));
+
+      assert.deepStrictEqual(
+          sources, [{type: 'message', value: ERROR_MESSAGE}, {type: 'networkRequest', value: RELATED_REQUEST}]);
+    });
+
+    it('trims a very long console message', async () => {
+      const runtimeModel = target.model(SDK.RuntimeModel.RuntimeModel);
+      const messageDetails = {
+        type: Protocol.Runtime.ConsoleAPICalledEventType.Log,
+      };
+      const ERROR_MESSAGE = 'a'.repeat(2000);
+      const TRIMMED_ERROR_MESSAGE = 'a'.repeat(1000);
+      const rawMessage = new SDK.ConsoleModel.ConsoleMessage(
+          runtimeModel, SDK.ConsoleModel.FrontendMessageSource.ConsoleAPI, /* level */ null, ERROR_MESSAGE,
+          messageDetails);
+      const {message} = createConsoleViewMessageWithStubDeps(rawMessage);
+      const promptBuilder = new Explain.PromptBuilder(message);
+      const {prompt, sources} = await promptBuilder.buildPrompt();
+      assert.strictEqual(prompt, [
+        PREAMBLE,
+        TRIMMED_ERROR_MESSAGE,
+      ].join('\n'));
+      assert.deepStrictEqual(sources, [{type: 'message', value: TRIMMED_ERROR_MESSAGE}]);
+    });
+
+    it('trims a very long stack trace', async () => {
+      const runtimeModel = target.model(SDK.RuntimeModel.RuntimeModel);
+      const SCRIPT_ID = '1' as Protocol.Runtime.ScriptId;
+      const LINE_NUMBER = 0;
+      const URL = `http://example.com/${'a'.repeat(100)}.js` as Platform.DevToolsPath.UrlString;
+      const STACK_FRAME = `${SCRIPT_ID}::userNestedFunction::${URL}::${LINE_NUMBER}::15`;
+      const stackTrace = createStackTrace(Array(80).fill(STACK_FRAME));
+      const STACK_TRACE = 'userNestedFunction @ \n'.repeat(45).trim();
+      const messageDetails = {
+        type: Protocol.Runtime.ConsoleAPICalledEventType.Log,
+        stackTrace,
+      };
+      const RELATED_CODE = 'console.error(\'kaboom!\')';
+      const {uiSourceCode, project} =
+          createContentProviderUISourceCode({url: URL, mimeType: 'text/javascript', content: RELATED_CODE});
+      const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
+      assert.isNotNull(debuggerModel);
       const mapping = createFakeScriptMapping(debuggerModel, uiSourceCode, LINE_NUMBER, SCRIPT_ID);
       debuggerWorkspaceBinding.addSourceMapping(mapping);
       const ERROR_MESSAGE = 'kaboom!';
@@ -370,7 +493,7 @@ export const y = "";
           messageDetails);
       const {message} = createConsoleViewMessageWithStubDeps(rawMessage);
       const promptBuilder = new Explain.PromptBuilder(message);
-      const {prompt, sources} = await promptBuilder.buildPrompt();
+      const {prompt, sources, isPageReloadRecommended} = await promptBuilder.buildPrompt();
       assert.strictEqual(prompt, [
         PREAMBLE,
         ERROR_MESSAGE,
@@ -381,9 +504,32 @@ export const y = "";
         '```',
       ].join('\n'));
 
+      assert.isNotTrue(isPageReloadRecommended, 'PromptBuilder did recommend reloading the page');
       assert.deepStrictEqual(
           sources, [{type: 'message', value: ERROR_MESSAGE}, {type: 'networkRequest', value: RELATED_REQUEST}]);
     });
+
+    it('recommends page reload if the sources are not complete', async () => {
+      const runtimeModel = target.model(SDK.RuntimeModel.RuntimeModel);
+      const REQUEST_ID = '29.1' as Protocol.Network.RequestId;
+      const messageDetails = {
+        type: Protocol.Runtime.ConsoleAPICalledEventType.Log,
+        affectedResources: {
+          requestId: REQUEST_ID,
+        },
+      };
+      sinon.stub(Logs.NetworkLog.NetworkLog.instance(), 'requestsForId').withArgs(REQUEST_ID).returns([]);
+      const ERROR_MESSAGE = 'kaboom!';
+      const rawMessage = new SDK.ConsoleModel.ConsoleMessage(
+          runtimeModel, SDK.ConsoleModel.FrontendMessageSource.ConsoleAPI, /* level */ null, ERROR_MESSAGE,
+          messageDetails);
+      const {message} = createConsoleViewMessageWithStubDeps(rawMessage);
+      const promptBuilder = new Explain.PromptBuilder(message);
+      const {sources, isPageReloadRecommended} = await promptBuilder.buildPrompt();
+      assert.isTrue(isPageReloadRecommended, 'PromptBuilder did not recommend reloading the page');
+      assert.isNotTrue(sources.some(source => source.type === Explain.SourceType.NETWORK_REQUEST));
+    });
+
   });
 
   describeWithMockConnection('getSearchQuery', () => {

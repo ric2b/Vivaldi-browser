@@ -48,6 +48,7 @@ class DefaultSearchManager {
   static constexpr char kDefaultImageSearchProviderDataPrefName[] =
       "default_search_provider_data.image_template_url_data";
 
+  // TODO(b/340826494): Deprecate this pref.
   static constexpr char kDefaultSearchProviderChoiceLocationPrefName[] =
       "default_search_provider_data.choice_location";
 
@@ -97,6 +98,13 @@ class DefaultSearchManager {
   static const char kStarterPackId[];
   static const char kEnforcedByPolicy[];
 
+  // This value is not read / written using `TemplateURLDataToDictionary` and
+  // `TemplateURLDataFromDictionary` as it's related to the default search
+  // engine state and not the template url one.
+  // It is only written when `SetUserSelectedDefaultSearchEngine` is called.
+  static const char kChoiceLocation[];
+
+  // Vivaldi
   static const char kPosition[];
 
   enum Source {

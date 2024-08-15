@@ -91,6 +91,7 @@ macro(ei_add_test_internal testname testname_with_suffix)
   if(EIGEN_TEST_CUSTOM_LINKER_FLAGS)
     target_link_libraries(${targetname} ${EIGEN_TEST_CUSTOM_LINKER_FLAGS})
   endif()
+  target_link_libraries(${targetname} Eigen3::Eigen)
 
   if(${ARGC} GREATER 3)
     set(libs_to_link ${ARGV3})

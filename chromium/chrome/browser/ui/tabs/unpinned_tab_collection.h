@@ -31,6 +31,18 @@ class UnpinnedTabCollection : public TabCollection {
   // Adds a `tab_model` to the collection at a particular index.
   void AddTab(std::unique_ptr<TabModel> tab_model, size_t direct_child_index);
 
+  // Adds a tab to a particular index in the collection in a
+  // recursive method. This method fails a check if the index is
+  // invalid or the parameters passed in are incorrect.
+  void AddTabRecursive(std::unique_ptr<TabModel> tab_model,
+                       size_t index,
+                       std::optional<tab_groups::TabGroupId> new_group_id);
+
+  // Returns the tab at a particular index from the collection tree.
+  // The index is a recursive index and if the index is invalid it returns
+  // nullptr.
+  tabs::TabModel* GetTabAtIndexRecursive(size_t index);
+
   // Appends a `tab_model` to the end of the collection.
   void AppendTab(std::unique_ptr<TabModel> tab_model);
 
@@ -42,9 +54,17 @@ class UnpinnedTabCollection : public TabCollection {
   // child of the collection.
   void CloseTab(TabModel* tab_model);
 
+  // Returns the direct child index of the collection containing the tab or the
+  // direct child index of the tab if it is a direct child of the unpinned
+  // collection.
+  std::optional<size_t> GetDirectChildIndexOfCollectionContainingTab(
+      const TabModel* tab_model) const;
+
   // Explicit tab group related operations.
   // Adds a group to the collection at a particular index.
-  void AddTabGroup(std::unique_ptr<TabGroupTabCollection> group, size_t index);
+  TabGroupTabCollection* AddTabGroup(
+      std::unique_ptr<TabGroupTabCollection> group,
+      size_t index);
 
   // Moves a group to the `direct_child_dst_index` within the collection.
   // This operation is not recursive.
@@ -73,7 +93,7 @@ class UnpinnedTabCollection : public TabCollection {
   bool ContainsCollection(TabCollection* collection) const override;
 
   std::optional<size_t> GetIndexOfTabRecursive(
-      TabModel* tab_model) const override;
+      const TabModel* tab_model) const override;
 
   std::optional<size_t> GetIndexOfCollection(
       TabCollection* collection) const override;
@@ -89,6 +109,9 @@ class UnpinnedTabCollection : public TabCollection {
   size_t TabCountRecursive() const override;
 
  private:
+  // Return the direct child index of a tab
+  std::optional<size_t> GetIndexOfTab(const TabModel* tab_model) const;
+
   // Underlying implementation for the storage of children.
   std::unique_ptr<TabCollectionStorage> impl_;
 };

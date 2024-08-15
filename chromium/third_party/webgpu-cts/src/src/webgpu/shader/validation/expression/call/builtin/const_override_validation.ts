@@ -1,6 +1,7 @@
 import { assert, unreachable } from '../../../../../../common/util/util.js';
 import { kValue } from '../../../../../util/constants.js';
 import {
+  ScalarType,
   Type,
   Value,
   elementTypeOf,
@@ -14,6 +15,9 @@ import {
   scalarF64Range,
   linearRange,
   linearRangeBigInt,
+  quantizeToF32,
+  quantizeToF16,
+  QuantizeFunc,
 } from '../../../../../util/math.js';
 import { ShaderValidationTest } from '../../../shader_validation_test.js';
 
@@ -127,6 +131,7 @@ export const sparseMinusThreePiToThreePiRangeForType = rangeForType(
 export const kConstantAndOverrideStages = ['constant', 'override'] as const;
 
 export type ConstantOrOverrideStage = 'constant' | 'override';
+export type ExecutionStage = 'constant' | 'override' | 'runtime';
 
 /**
  * @returns true if evaluation stage `stage` supports expressions of type @p.
@@ -147,23 +152,26 @@ export function stageSupportsType(stage: ConstantOrOverrideStage, type: Type) {
  * @param expectedResult false if an error is expected, true if no error is expected
  * @param args the arguments to pass to the builtin
  * @param stage the evaluation stage
+ * @param returnType the explicit return type of the result variable, if provided (implicit otherwise)
  */
 export function validateConstOrOverrideBuiltinEval(
   t: ShaderValidationTest,
   builtin: string,
   expectedResult: boolean,
   args: Value[],
-  stage: ConstantOrOverrideStage
+  stage: ConstantOrOverrideStage,
+  returnType?: Type
 ) {
   const elTys = args.map(arg => elementTypeOf(arg.type)!);
   const enables = elTys.some(ty => ty === Type.f16) ? 'enable f16;' : '';
+  const optionalVarType = returnType ? `: ${returnType.toString()}` : '';
 
   switch (stage) {
     case 'constant': {
       t.expectCompileResult(
         expectedResult,
         `${enables}
-const v = ${builtin}(${args.map(arg => arg.wgsl()).join(', ')});`
+const v ${optionalVarType} = ${builtin}(${args.map(arg => arg.wgsl()).join(', ')});`
       );
       break;
     }
@@ -187,7 +195,7 @@ const v = ${builtin}(${args.map(arg => arg.wgsl()).join(', ')});`
         expectedResult,
         code: `${enables}
 ${overrideDecls.join('\n')}
-var<private> v = ${builtin}(${callArgs.join(', ')});`,
+var<private> v ${optionalVarType} = ${builtin}(${callArgs.join(', ')});`,
         constants,
         reference: ['v'],
       });
@@ -196,6 +204,74 @@ var<private> v = ${builtin}(${callArgs.join(', ')});`,
   }
 }
 
+/**
+ * Runs a validation test to check that evaluation of `binaryOp` either evaluates with or without
+ * error at shader creation time or pipeline creation time.
+ * @param t the ShaderValidationTest
+ * @param binaryOp the symbol of the binary operator
+ * @param expectedResult false if an error is expected, true if no error is expected
+ * @param leftStage the evaluation stage for the left argument
+ * @param left the left-hand side of the binary operation
+ * @param rightStage the evaluation stage for the right argument
+ * @param right the right-hand side of the binary operation
+ */
+export function validateConstOrOverrideBinaryOpEval(
+  t: ShaderValidationTest,
+  binaryOp: string,
+  expectedResult: boolean,
+  leftStage: ExecutionStage,
+  left: Value,
+  rightStage: ExecutionStage,
+  right: Value
+) {
+  const allArgs = [left, right];
+  const elTys = allArgs.map(arg => elementTypeOf(arg.type)!);
+  const enables = elTys.some(ty => ty === Type.f16) ? 'enable f16;' : '';
+
+  const codeLines = [enables];
+  const constants: Record<string, number> = {};
+  let numOverrides = 0;
+
+  function addOperand(name: string, stage: ExecutionStage, value: Value) {
+    switch (stage) {
+      case 'runtime':
+        assert(!isAbstractType(value.type));
+        codeLines.push(`var<private> ${name} = ${value.wgsl()};`);
+        return name;
+
+      case 'constant':
+        codeLines.push(`const ${name} = ${value.wgsl()};`);
+        return name;
+
+      case 'override': {
+        assert(!isAbstractType(value.type));
+        const argOverrides: string[] = [];
+        for (const el of scalarElementsOf(value)) {
+          const elName = `o${numOverrides++}`;
+          codeLines.push(`override ${elName} : ${el.type};`);
+          constants[elName] = Number(el.value);
+          argOverrides.push(elName);
+        }
+        return `${value.type}(${argOverrides.join(', ')})`;
+      }
+    }
+  }
+
+  const leftOperand = addOperand('left', leftStage, left);
+  const rightOperand = addOperand('right', rightStage, right);
+
+  if (leftStage === 'override' || rightStage === 'override') {
+    t.expectPipelineResult({
+      expectedResult,
+      code: codeLines.join('\n'),
+      constants,
+      reference: [`${leftOperand} ${binaryOp} ${rightOperand}`],
+    });
+  } else {
+    codeLines.push(`fn f() { _ = ${leftOperand} ${binaryOp} ${rightOperand}; }`);
+    t.expectCompileResult(expectedResult, codeLines.join('\n'));
+  }
+}
 /** @returns a sweep of the representable values for element type of `type` */
 export function fullRangeForType(type: Type, count?: number): readonly (number | bigint)[] {
   if (count === undefined) {
@@ -239,4 +315,125 @@ export function unique<T>(...arrays: Array<readonly T[]>): T[] {
     }
   }
   return [...set];
+}
+
+interface FloatLimits {
+  positive: {
+    max: number;
+    min: number;
+  };
+  negative: {
+    max: number;
+    min: number;
+  };
+  emax: number;
+}
+
+/**
+ * Provides an easy way to validate steps in an equation that will trigger a validation error with
+ * constant or override values due to overflow/underflow. Typical call pattern is:
+ *
+ * const vCheck = new ConstantOrOverrideValueChecker(t, Type.f32);
+ * const c = vCheck.checkedResult(a + b);
+ * const d = vCheck.checkedResult(c * c);
+ * const expectedResult = vCheck.allChecksPassed();
+ */
+export class ConstantOrOverrideValueChecker {
+  #allChecksPassed = true;
+  #floatLimits?: FloatLimits;
+  #quantizeFn: QuantizeFunc<number>;
+
+  constructor(
+    private t: ShaderValidationTest,
+    type: ScalarType
+  ) {
+    switch (type) {
+      case Type.f32:
+        this.#quantizeFn = quantizeToF32;
+        this.#floatLimits = kValue.f32;
+        break;
+      case Type.f16:
+        this.#quantizeFn = quantizeToF16;
+        this.#floatLimits = kValue.f16;
+        break;
+      default:
+        this.#quantizeFn = (v: number) => v;
+        break;
+    }
+  }
+
+  quantize(value: number): number {
+    return this.#quantizeFn(value);
+  }
+
+  // Some overflow floating point values may fall into an abiguously rounded scenario, where they
+  // can either round up to Infinity or down to the maximum representable value. In these cases the
+  // test should be skipped, because it's valid for implementations to differ.
+  // See: https://www.w3.org/TR/WGSL/#floating-point-overflow
+  isAmbiguousOverflow(value: number): boolean {
+    // Non-finite values are not ambiguous, and can still be validated.
+    if (!Number.isFinite(value)) {
+      return false;
+    }
+
+    // Values within the min/max range for the given type are not ambiguous.
+    if (
+      !this.#floatLimits ||
+      (value <= this.#floatLimits.positive.max && value >= this.#floatLimits.negative.min)
+    ) {
+      return false;
+    }
+
+    // If a value falls outside the min/max range, check to see if it is under
+    // 2^(EMAX(T)+1). If so, the rounding behavior is implementation specific,
+    // and should not be validated.
+    return Math.abs(value) < Math.pow(2, this.#floatLimits.emax + 1);
+  }
+
+  // Returns true if the value may be quantized to zero with the given type.
+  isNearZero(value: number): boolean {
+    if (!Number.isFinite(value)) {
+      return false;
+    }
+    if (!this.#floatLimits) {
+      return value === 0;
+    }
+
+    return value < this.#floatLimits.positive.min && value > this.#floatLimits.negative.max;
+  }
+
+  checkedResult(value: number): number {
+    if (this.isAmbiguousOverflow(value)) {
+      this.t.skip(`Checked value, ${value}, was within the ambiguous overflow rounding range.`);
+    }
+
+    const quantizedValue = this.quantize(value);
+    if (!Number.isFinite(quantizedValue)) {
+      this.#allChecksPassed = false;
+    }
+    return quantizedValue;
+  }
+
+  checkedResultBigInt(value: bigint): bigint {
+    if (kValue.i64.isOOB(value)) {
+      this.#allChecksPassed = false;
+    }
+    return value;
+  }
+
+  skipIfCheckFails(value: number): number {
+    if (this.isAmbiguousOverflow(value)) {
+      this.t.skip(`Checked value, ${value}, was within the ambiguous overflow rounding range.`);
+    }
+
+    const quantizedValue = this.quantize(value);
+    if (!Number.isFinite(quantizedValue)) {
+      this.t.skip(`Checked value, ${value}, was not finite after quantization.`);
+    }
+    return value;
+  }
+
+  allChecksPassed(): boolean {
+    return this.#allChecksPassed;
+  }
 }

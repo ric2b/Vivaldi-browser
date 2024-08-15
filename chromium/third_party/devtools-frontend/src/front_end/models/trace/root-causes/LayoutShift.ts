@@ -84,12 +84,20 @@ function networkRequestIsRenderBlockingInFrame(
   return isRenderBlocking && event.args.data.frame === frameId;
 }
 
+interface Options {
+  /** Checking iframe root causes can be an expensive operation, so it is disabled by default. */
+  enableIframeRootCauses?: boolean;
+}
+
 export class LayoutShiftRootCauses {
   #protocolInterface: RootCauseProtocolInterface;
   #rootCauseCacheMap = new Map<Types.TraceEvents.TraceEventLayoutShift, LayoutShiftRootCausesData>();
+  #nodeDetailsCache = new Map<Protocol.DOM.NodeId, Protocol.DOM.Node|null>();
+  #iframeRootCausesEnabled: boolean;
 
-  constructor(protocolInterface: RootCauseProtocolInterface) {
+  constructor(protocolInterface: RootCauseProtocolInterface, options?: Options) {
     this.#protocolInterface = protocolInterface;
+    this.#iframeRootCausesEnabled = options?.enableIframeRootCauses ?? false;
   }
 
   /**
@@ -182,15 +190,12 @@ export class LayoutShiftRootCauses {
       const fontChangeRootCause = this.getFontChangeRootCause(layoutInvalidation, nextPrePaint, modelData);
       const renderBlockRootCause = this.getRenderBlockRootCause(layoutInvalidation, nextPrePaint, modelData);
       const layoutInvalidationNodeId = nodeIdsByBackendIdMap.get(layoutInvalidation.args.data.nodeId);
-      const layoutInvalidationNode = layoutInvalidationNodeId !== undefined ?
-          await this.#protocolInterface.getNode(layoutInvalidationNodeId) :
-          null;
       let unsizedMediaRootCause: UnsizedMedia|null = null;
       let iframeRootCause: InjectedIframe|null = null;
-      if (layoutInvalidationNode && layoutInvalidation.args.data.reason) {
-        unsizedMediaRootCause =
-            await this.getUnsizedMediaRootCause(layoutInvalidation.args.data.reason, layoutInvalidationNode);
-        iframeRootCause = this.getIframeRootCause(layoutInvalidation.args.data.reason, layoutInvalidationNode);
+      if (layoutInvalidationNodeId !== undefined &&
+          Types.TraceEvents.isTraceEventLayoutInvalidationTracking(layoutInvalidation)) {
+        unsizedMediaRootCause = await this.getUnsizedMediaRootCause(layoutInvalidation, layoutInvalidationNodeId);
+        iframeRootCause = await this.getIframeRootCause(layoutInvalidation, layoutInvalidationNodeId);
       }
 
       if (!unsizedMediaRootCause && !iframeRootCause && !fontChangeRootCause && !renderBlockRootCause) {
@@ -292,12 +297,18 @@ export class LayoutShiftRootCauses {
    * because a media element without dimensions was resized.
    */
   async getUnsizedMediaRootCause(
-      reason: Types.TraceEvents.LayoutInvalidationReason,
-      layoutInvalidationNode: Protocol.DOM.Node): Promise<UnsizedMedia|null> {
+      layoutInvalidation: Types.TraceEvents.TraceEventLayoutInvalidationTracking,
+      layoutInvalidationNodeId: Protocol.DOM.NodeId): Promise<UnsizedMedia|null> {
     // Filter events to resizes only.
-    if (reason !== Types.TraceEvents.LayoutInvalidationReason.SIZE_CHANGED) {
+    if (layoutInvalidation.args.data.reason !== Types.TraceEvents.LayoutInvalidationReason.SIZE_CHANGED) {
       return null;
     }
+
+    const layoutInvalidationNode = await this.getNodeDetails(layoutInvalidationNodeId);
+    if (!layoutInvalidationNode) {
+      return null;
+    }
+
     const computedStylesList = await this.#protocolInterface.getComputedStyleForNode(layoutInvalidationNode.nodeId);
     const computedStyles = new Map(computedStylesList.map(item => [item.name, item.value]));
     if (computedStyles && !(await nodeIsUnfixedMedia(layoutInvalidationNode, computedStyles))) {
@@ -316,18 +327,41 @@ export class LayoutShiftRootCauses {
    * Given a LayoutInvalidation trace event, determines if it was dispatched
    * because a node, which is an ancestor to an iframe, was injected.
    */
-  getIframeRootCause(reason: Types.TraceEvents.LayoutInvalidationReason, layoutInvalidationDOMNode: Protocol.DOM.Node):
-      InjectedIframe|null {
-    if (layoutInvalidationDOMNode.nodeName !== 'IFRAME' &&
-        reason !== Types.TraceEvents.LayoutInvalidationReason.STYLE_CHANGED &&
-        reason !== Types.TraceEvents.LayoutInvalidationReason.ADDED_TO_LAYOUT) {
+  async getIframeRootCause(
+      layoutInvalidation: Types.TraceEvents.TraceEventLayoutInvalidationTracking,
+      layoutInvalidationNodeId: Protocol.DOM.NodeId): Promise<InjectedIframe|null> {
+    if (!this.#iframeRootCausesEnabled) {
       return null;
     }
-    const iframe = firstIframeInDOMTree(layoutInvalidationDOMNode);
+
+    if (!layoutInvalidation.args.data.nodeName?.startsWith('IFRAME') &&
+        layoutInvalidation.args.data.reason !== Types.TraceEvents.LayoutInvalidationReason.STYLE_CHANGED &&
+        layoutInvalidation.args.data.reason !== Types.TraceEvents.LayoutInvalidationReason.ADDED_TO_LAYOUT) {
+      return null;
+    }
+
+    const layoutInvalidationNode = await this.getNodeDetails(layoutInvalidationNodeId);
+    if (!layoutInvalidationNode) {
+      return null;
+    }
+
+    const iframe = firstIframeInDOMTree(layoutInvalidationNode);
     if (!iframe) {
       return null;
     }
     return {iframe};
+  }
+
+  async getNodeDetails(nodeId: Protocol.DOM.NodeId): Promise<Protocol.DOM.Node|null> {
+    let nodeDetails = this.#nodeDetailsCache.get(nodeId);
+    if (nodeDetails !== undefined) {
+      return nodeDetails;
+    }
+
+    nodeDetails = await this.#protocolInterface.getNode(nodeId);
+    this.#nodeDetailsCache.set(nodeId, nodeDetails);
+
+    return nodeDetails;
   }
 
   /**

@@ -1,5 +1,9 @@
 load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup")
 
+package(
+    default_applicable_licenses = ["//:license"],
+)
+
 licenses(["notice"])
 
 exports_files_legacy()
@@ -8,6 +12,26 @@ skia_filegroup(
     name = "hdrs",
     srcs = [
         "SkUnicode.h",
+        "SkUnicode_client.h",
+        "SkUnicode_icu.h",
+        "SkUnicode_icu4x.h",
+        "SkUnicode_libgrapheme.h",
+    ],
+    visibility = ["//modules/skunicode:__pkg__"],
+)
+
+skia_filegroup(
+    name = "core_hdrs",
+    srcs = [
+        "SkUnicode.h",
+    ],
+    visibility = ["//modules/skunicode:__pkg__"],
+)
+
+skia_filegroup(
+    name = "icu_hdrs",
+    srcs = [
+        "SkUnicode_icu.h",
     ],
     visibility = ["//modules/skunicode:__pkg__"],
 )

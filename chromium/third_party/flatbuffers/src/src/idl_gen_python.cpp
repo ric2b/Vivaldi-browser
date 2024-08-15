@@ -18,7 +18,9 @@
 
 #include "idl_gen_python.h"
 
+#include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <set>
 #include <string>
 #include <unordered_set>
@@ -56,7 +58,7 @@ static Namer::Config PythonDefaultConfig() {
            /*variable=*/Case::kLowerCamel,
            /*variants=*/Case::kKeep,
            /*enum_variant_seperator=*/".",
-           /*escape_keywords=*/Namer::Config::Escape::BeforeConvertingCase,
+           /*escape_keywords=*/Namer::Config::Escape::AfterConvertingCase,
            /*namespaces=*/Case::kKeep,  // Packages in python.
            /*namespace_seperator=*/".",
            /*object_prefix=*/"",
@@ -424,16 +426,29 @@ class PythonGenerator : public BaseGenerator {
     code += Indent + Indent + "return None\n\n";
   }
 
+  template <typename T>
+  std::string ModuleFor(const T *def) const {
+    if (!parser_.opts.one_file) {
+      return namer_.NamespacedType(*def);
+    }
+
+    std::string filename =
+        StripExtension(def->file) + parser_.opts.filename_suffix;
+    if (parser_.file_being_parsed_ == def->file) {
+      return "." + StripPath(filename);  // make it a "local" import
+    }
+
+    std::string module = parser_.opts.include_prefix + filename;
+    std::replace(module.begin(), module.end(), '/', '.');
+    return module;
+  }
+
   // Generate the package reference when importing a struct or enum from its
   // module.
   std::string GenPackageReference(const Type &type) const {
-    if (type.struct_def) {
-      return namer_.NamespacedType(*type.struct_def);
-    } else if (type.enum_def) {
-      return namer_.NamespacedType(*type.enum_def);
-    } else {
-      return "." + GenTypeGet(type);
-    }
+    if (type.struct_def) return ModuleFor(type.struct_def);
+    if (type.enum_def) return ModuleFor(type.enum_def);
+    return "." + GenTypeGet(type);
   }
 
   // Get the value of a vector's struct member.
@@ -815,8 +830,12 @@ class PythonGenerator : public BaseGenerator {
 
     if (!parser_.opts.one_file && !parser_.opts.python_no_type_prefix_suffix) {
       // Generate method without struct name.
-      code += "def Start" + field_method +
-              "Vector(builder, numElems: int) -> int:\n";
+      if (parser_.opts.python_typing) {
+        code += "def Start" + field_method +
+                "Vector(builder, numElems: int) -> int:\n";
+      } else {
+        code += "def Start" + field_method + "Vector(builder, numElems):\n";
+      }
       code += Indent + "return " + struct_type + "Start";
       code += field_method + "Vector(builder, numElems)\n\n";
     }
@@ -2017,7 +2036,7 @@ class PythonGenerator : public BaseGenerator {
     if (!generateStructs(&one_file_code, one_file_imports)) return false;
 
     if (parser_.opts.one_file) {
-      const std::string mod = file_name_ + "_generated";
+      const std::string mod = file_name_ + parser_.opts.filename_suffix;
 
       // Legacy file format uses keep casing.
       return SaveType(mod + ".py", *parser_.current_namespace_, one_file_code,
@@ -2118,11 +2137,13 @@ class PythonGenerator : public BaseGenerator {
   bool SaveType(const std::string &defname, const Namespace &ns,
                 const std::string &classcode, const ImportMap &imports,
                 const std::string &mod, bool needs_imports) const {
-    if (!classcode.length()) return true;
-
     std::string code = "";
-    BeginFile(LastNamespacePart(ns), needs_imports, &code, mod, imports);
-    code += classcode;
+    if (classcode.empty()) {
+      BeginFile(LastNamespacePart(ns), false, &code, "", {});
+    } else {
+      BeginFile(LastNamespacePart(ns), needs_imports, &code, mod, imports);
+      code += classcode;
+    }
 
     const std::string directories =
         parser_.opts.one_file ? path_ : namer_.Directories(ns.components);

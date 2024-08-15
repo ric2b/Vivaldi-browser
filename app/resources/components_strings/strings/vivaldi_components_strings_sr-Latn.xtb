@@ -169,7 +169,6 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="7353601530677266744">Komandna linija</translation>
 <translation id="7364115444476960850">Stranicu kojoj ste pokušavali da pristupite je blokirao Vivaldi-jev <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Putanja profila</translation>
-<translation id="7445762425076701745">Nije moguće u potpunosti potvrditi identitet servera sa kojim ste povezani. Povezani ste sa serverom koji koristi naziv koji je važeći samo u vašoj mreži, a kojem spoljni autoritet za izdavanje sertifikata ne može da proveri vlasništvo. Budući da neki autoriteti za izdavanje sertifikata uprkos tome izdaju sertifikate za ove nazive, ni na koji način ne možete da budete sigurni da ste povezani sa željenim veb sajtom, a ne sa napadačem.</translation>
 <translation id="7455133967321480974">Koristi globalnu podrazumevanu vrednost (Blokiraj)</translation>
 <translation id="7518003948725431193">Nijedna veb stranica nije pronađena za veb adresu: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Ova veb stranica zahteva podatke koje ste uneli ranije da bi se pravilno prikazala. Možete ponovo da pošaljete te podatke, ali ako to uradite, ponovićete bilo koju radnju koju je ova stranica prethodno obavila.</translation>

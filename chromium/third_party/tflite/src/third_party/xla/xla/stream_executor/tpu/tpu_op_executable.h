@@ -20,6 +20,7 @@ limitations under the License.
 #include <memory>
 #include <vector>
 
+#include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/service/service_executable_run_options.h"
@@ -49,7 +50,7 @@ class TpuOpExecutable : public xla::TpuExecutableInterface {
   absl::string_view fingerprint() const override;
 
  private:
-  xla::Status LoadProgramAndEnqueueToStream(
+  absl::Status LoadProgramAndEnqueueToStream(
       const xla::ServiceExecutableRunOptions& run_options,
       absl::Span<const stream_executor::DeviceMemoryBase> arguments,
       stream_executor::DeviceMemoryBase result,

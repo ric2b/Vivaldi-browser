@@ -327,7 +327,7 @@ bool NotificationsApiFunction::CreateNotification(
   optional_fields.settings_button_handler =
       message_center::SettingsButtonHandler::INLINE;
 
-  // TODO(crbug.com/772004): Remove the manual limitation in favor of an IDL
+  // TODO(crbug.com/41348342): Remove the manual limitation in favor of an IDL
   // annotation once supported.
   if (id.size() > kNotificationIdLengthLimit) {
     *error =
@@ -408,7 +408,7 @@ bool NotificationsApiFunction::UpdateNotification(
       *error = kUnableToDecodeIconError;
       return false;
     }
-    notification->set_small_image(app_icon_mask);
+    notification->SetSmallImage(app_icon_mask);
     notification->set_small_image_needs_additional_masking(true);
   }
 
@@ -458,7 +458,7 @@ bool NotificationsApiFunction::UpdateNotification(
       *error = kExtraImageProvided;
       return false;
     }
-    notification->set_image(image);
+    notification->SetImage(image);
   }
 
   if (options->progress) {

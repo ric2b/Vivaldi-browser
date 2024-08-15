@@ -44,6 +44,10 @@ export function isPluginVmAvailable(): boolean {
   return loadTimeData.getBoolean('isPluginVmAvailable');
 }
 
+export function isAppParentalControlsFeatureAvailable(): boolean {
+  return loadTimeData.getBoolean('isAppParentalControlsFeatureAvailable');
+}
+
 // Crostini page
 export function isCrostiniAllowed(): boolean {
   return loadTimeData.getBoolean('isCrostiniAllowed');
@@ -60,6 +64,14 @@ export function isExternalStorageEnabled(): boolean {
 
 export function isInputDeviceSettingsSplitEnabled(): boolean {
   return loadTimeData.getBoolean('enableInputDeviceSettingsSplit');
+}
+
+export function isDisplayBrightnessControlInSettingsEnabled(): boolean {
+  return loadTimeData.getBoolean('enableDisplayBrightnessControlInSettings');
+}
+
+export function isSkyVaultEnabled(): boolean {
+  return loadTimeData.getBoolean('enableSkyVault');
 }
 
 // Kerberos page
@@ -94,6 +106,10 @@ export function isAssistantAllowed(): boolean {
 
 export function isQuickAnswersSupported(): boolean {
   return loadTimeData.getBoolean('isQuickAnswersSupported');
+}
+
+export function isMahiEnabled(): boolean {
+  return loadTimeData.getBoolean('isMahiEnabled');
 }
 
 // System preferences page

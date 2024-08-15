@@ -15,7 +15,7 @@ static_library("browser") {
       "//vivaldi/extensions",
       "//vivaldi/extensions/api:apis",
       "//vivaldi/extensions/schema",
-      "//vivaldi/vivapp:vivaldi_app",
+      "//vivaldi/vivapp",
     ]
   }
   deps = [

@@ -114,18 +114,13 @@ TEST_F(AccessibilityTest, HistogramTest) {
   }
 
   {
-    blink::WebPluginContainer* plugin_container = nullptr;
     std::vector<ui::AXTreeUpdate> updates;
     std::vector<ui::AXEvent> events;
     bool had_end_of_test_event = true;
     bool had_load_complete_messages = true;
-    bool need_to_send_location_changes = false;
-    bool mark_plugin_subtree_dirty = false;
     ScopedFreezeAXCache freeze(cache);
-    cache.SerializeDirtyObjectsAndEvents(
-        plugin_container, updates, events, had_end_of_test_event,
-        had_load_complete_messages, need_to_send_location_changes,
-        mark_plugin_subtree_dirty);
+    cache.GetUpdatesAndEventsForSerialization(
+        updates, events, had_end_of_test_event, had_load_complete_messages);
     histogram_tester.ExpectTotalCount(
         "Accessibility.Performance.AXObjectCacheImpl.Snapshot", 1);
     histogram_tester.ExpectTotalCount(
@@ -294,7 +289,7 @@ TEST_F(AXViewTransitionTest, TransitionPseudoNotRelevant) {
 
   MockFunctionScope funcs(script_state);
   auto* view_transition_callback =
-      V8ViewTransitionCallback::Create(funcs.ExpectCall());
+      V8ViewTransitionCallback::Create(funcs.ExpectCall()->V8Function());
 
   auto* transition = ViewTransitionSupplement::startViewTransition(
       script_state, GetDocument(), view_transition_callback, exception_state);

@@ -29,7 +29,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileProvider;
 import org.chromium.chrome.browser.search_engines.SearchEnginePromoType;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
-import org.chromium.chrome.browser.ui.signin.history_sync.HistorySyncUtils;
+import org.chromium.chrome.browser.ui.signin.history_sync.HistorySyncHelper;
 import org.chromium.components.crash.CrashKeyIndex;
 import org.chromium.components.crash.CrashKeys;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -85,11 +85,12 @@ public abstract class FirstRunFlowSequencer {
         boolean shouldShowHistorySyncOptIn(boolean isChild) {
             assert mProfileSupplier.get() != null;
             Profile profile = mProfileSupplier.get().getOriginalProfile();
+            HistorySyncHelper historySyncHelper = HistorySyncHelper.getForProfile(profile);
             if (isChild) {
-                return !HistorySyncUtils.isHistorySyncDisabledByCustodian(profile);
+                return !historySyncHelper.isHistorySyncDisabledByCustodian();
             }
-            if (HistorySyncUtils.isHistorySyncDisabledByPolicy(profile)
-                    || HistorySyncUtils.didAlreadyOptIn(profile)) {
+            if (historySyncHelper.isHistorySyncDisabledByPolicy()
+                    || historySyncHelper.didAlreadyOptIn()) {
                 return false;
             }
             // Show the page only to signed-in users.
@@ -150,11 +151,10 @@ public abstract class FirstRunFlowSequencer {
     }
 
     /**
-     * Starts determining parameters for the First Run.
-     * Once finished, calls onFlowIsKnown().
+     * Starts determining parameters for the First Run. Once finished, calls onFlowIsKnown().
      *
-     * TODO(https://crbug.com/1320487): Add Supplier to AccountManagerFacadeProvider and remove this
-     *                                  method.
+     * <p>TODO(crbug.com/40223527): Add Supplier to AccountManagerFacadeProvider and remove this
+     * method.
      */
     void start() {
         AccountManagerFacadeProvider.getInstance()

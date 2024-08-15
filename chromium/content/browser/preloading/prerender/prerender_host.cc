@@ -97,7 +97,7 @@ bool PrerenderHost::AreHttpRequestHeadersCompatible(
   prerender_headers.RemoveHeader("Downlink");
   potential_activation_headers.RemoveHeader("Downlink");
 
-  // TODO(https://crbug.com/1378921): Instead of handling headers added by
+  // TODO(crbug.com/40244149): Instead of handling headers added by
   // embedders specifically, prerender should expose an interface to embedders
   // to set url parameters.
 #if BUILDFLAG(IS_ANDROID)
@@ -188,7 +188,7 @@ PrerenderHost::PrerenderHost(
           .GetSessionStorageNamespace(
               site_instance->GetStoragePartitionConfig()));
 
-  // TODO(https://crbug.com/1199679): This should be moved to FrameTree::Init
+  // TODO(crbug.com/40177940): This should be moved to FrameTree::Init
   web_contents_->NotifySwappedFromRenderManager(
       /*old_frame=*/nullptr,
       frame_tree_->root()->render_manager()->current_frame_host());
@@ -348,7 +348,7 @@ bool PrerenderHost::ShouldPreserveAbortedURLs() {
   return false;
 }
 
-// TODO(https://crbug.com/1132746): Inspect diffs from the current
+// TODO(crbug.com/40150744): Inspect diffs from the current
 // no-state-prefetch implementation. See PrerenderContents::StartPrerendering()
 // for example.
 bool PrerenderHost::StartPrerendering() {
@@ -379,7 +379,7 @@ bool PrerenderHost::StartPrerendering() {
   // correct value. After fixing this, we can remove the check for UA headers
   // upon activation.
 
-  // TODO(https://crbug.com/1132746): Set up other fields of `load_url_params`
+  // TODO(crbug.com/40150744): Set up other fields of `load_url_params`
   // as well, and add tests for them.
   base::WeakPtr<NavigationHandle> created_navigation_handle =
       GetNavigationController().LoadURLWithParams(load_url_params);
@@ -419,7 +419,7 @@ bool PrerenderHost::StartPrerendering() {
     // prefetch-src was already deprecated, but this code path seems still
     // reachable. To be clarify the actual scenario, let's have the dump code.
     // We may eventually return false for this code path to make things simple.
-    // TODO(https://crbug.com/1394486): Monitor reports and decide if we
+    // TODO(crbug.com/40248615): Monitor reports and decide if we
     // continue to have the `is_ready_for_activation_` check in
     // CheckInitialPrerenderNavigationParamsCompatibleWithNavigation().
     net::Error net_error = created_navigation_handle->GetNetErrorCode();
@@ -534,7 +534,7 @@ std::unique_ptr<StoredPage> PrerenderHost::Activate(
   FrameTree& target_frame_tree = web_contents_->GetPrimaryFrameTree();
 
   // There should be no ongoing main-frame navigation during activation.
-  // TODO(https://crbug.com/1190644): Make sure sub-frame navigations are
+  // TODO(crbug.com/40174232): Make sure sub-frame navigations are
   // fine.
   CHECK(!frame_tree_->root()->HasNavigation());
 
@@ -592,7 +592,7 @@ std::unique_ptr<StoredPage> PrerenderHost::Activate(
   // Copy frame name into the replication state of the primary main frame to
   // ensure that the replication state of the primary main frame after
   // activation matches the replication state stored in the renderer.
-  // TODO(https://crbug.com/1237091): Copying frame name here is suboptimal
+  // TODO(crbug.com/40192974): Copying frame name here is suboptimal
   // and ideally we'd do this at the same time when transferring the proxies
   // from the StoredPage into RenderFrameHostManager. However, this is a
   // temporary solution until we move this into BrowsingContextState,
@@ -609,7 +609,7 @@ std::unique_ptr<StoredPage> PrerenderHost::Activate(
   // change, and FrameTree references in those FrameTreeNodes will be updated
   // through RenderFrameHosts.
   //
-  // TODO(https://crbug.com/1199693): Need to investigate if and how
+  // TODO(crbug.com/40177949): Need to investigate if and how
   // pending delete RenderFrameHost objects should be handled if prerendering
   // runs all of the unload handlers; they are not currently handled here.
   // This is because pending delete RenderFrameHosts can still receive and
@@ -696,7 +696,7 @@ bool PrerenderHost::IsFramePolicyCompatibleWithPrimaryFrameTree() {
 bool PrerenderHost::AreInitialPrerenderNavigationParamsCompatibleWithNavigation(
     NavigationRequest& navigation_request,
     PrerenderCancellationReason& reason) {
-  // TODO(crbug.com/1181763): compare the rest of the navigation parameters. We
+  // TODO(crbug.com/40170513): compare the rest of the navigation parameters. We
   // should introduce compile-time parameter checks as well, to ensure how new
   // fields should be compared for compatibility.
 
@@ -763,7 +763,7 @@ PrerenderHost::AreBeginNavigationParamsCompatibleWithNavigation(
   // Don't activate a prerendered page if the potential activation request
   // requires validation or bypass of the browser cache, as the prerendered page
   // is a kind of caches.
-  // TODO(https://crbug.com/1213299): Instead of checking the load flags on
+  // TODO(crbug.com/40183588): Instead of checking the load flags on
   // activation, we should cancel prerendering when the prerender initial
   // navigation has the flags.
   int cache_load_flags = net::LOAD_VALIDATE_CACHE | net::LOAD_BYPASS_CACHE |
@@ -847,7 +847,11 @@ PrerenderHost::AreCommonNavigationParamsCompatibleWithNavigation(
   if (attributes_.url_match_predicate) {
     CHECK(attributes_.url_match_predicate.Run(potential_activation.url));
   } else {
-    CHECK_EQ(potential_activation.url, common_params_->url);
+    // TODO(crbug.com/41494389): We should check for No-Vary-Search match
+    // here.
+    if (!base::FeatureList::IsEnabled(features::kPrerender2NoVarySearch)) {
+      CHECK_EQ(potential_activation.url, common_params_->url);
+    }
   }
   if (potential_activation.initiator_origin !=
       common_params_->initiator_origin) {
@@ -909,12 +913,12 @@ PrerenderHost::AreCommonNavigationParamsCompatibleWithNavigation(
 
   // has_user_gesture doesn't affect any of the security properties of the
   // document created by navigation, so equality of the values is not required.
-  // TODO(crbug.com/1232915): ensure that the user activation status is
+  // TODO(crbug.com/40191309): ensure that the user activation status is
   // propagated to the activated document.
 
   // text_fragment_token doesn't affect any of the security properties of the
   // document created by navigation, so equality of the values is not required.
-  // TODO(crbug.com/1232919): ensure the activated document consumes
+  // TODO(crbug.com/40191311): ensure the activated document consumes
   // text_fragment_token and scrolls to the corresponding viewport.
 
   // No need to compare should_check_main_world_csp, as if the CSP blocks the
@@ -983,7 +987,7 @@ void PrerenderHost::RecordActivation(NavigationRequest& navigation_request) {
   CHECK(!final_status_);
   final_status_ = PrerenderFinalStatus::kActivated;
 
-  // TODO(crbug.com/1299330): Replace
+  // TODO(crbug.com/40215894): Replace
   // `navigation_request.GetNextPageUkmSourceId()` with prerendered page's UKM
   // source ID.
   ReportSuccessActivation(attributes_,
@@ -1127,6 +1131,9 @@ void PrerenderHost::SetFailureReason(
     case PrerenderFinalStatus::kPrerenderingUrlHasEffectiveUrl:
     case PrerenderFinalStatus::kRedirectedPrerenderingUrlHasEffectiveUrl:
     case PrerenderFinalStatus::kActivationUrlHasEffectiveUrl:
+    case PrerenderFinalStatus::kJavaScriptInterfaceAdded:
+    case PrerenderFinalStatus::kJavaScriptInterfaceRemoved:
+    case PrerenderFinalStatus::kAllPrerenderingCanceled:
       if (attempt_) {
         attempt_->SetFailureReason(
             ToPreloadingFailureReason(reason.final_status()));
@@ -1150,17 +1157,23 @@ void PrerenderHost::SetFailureReason(
 }
 
 bool PrerenderHost::IsUrlMatch(const GURL& url) const {
-  if (!attributes_.url_match_predicate) {
-    return GetInitialUrl() == url;
-  }
-
   // Triggers are not allowed to treat a cross-origin url as a matched url. It
   // would cause security risks.
   if (!url::IsSameOriginWith(attributes_.prerendering_url, url)) {
     return false;
   }
 
-  return attributes_.url_match_predicate.Run(url);
+  if (attributes_.url_match_predicate) {
+    return attributes_.url_match_predicate.Run(url);
+  }
+
+  if (GetInitialUrl() == url) {
+    return true;
+  }
+
+  // Check No-Vary-Search header and try and match.
+  return no_vary_search_.has_value() &&
+         no_vary_search_->AreEquivalent(GetInitialUrl(), url);
 }
 
 void PrerenderHost::OnAcceptClientHintChanged(

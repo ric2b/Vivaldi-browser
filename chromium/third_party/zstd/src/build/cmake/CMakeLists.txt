@@ -114,10 +114,26 @@ endif ()
 #-----------------------------------------------------------------------------
 # External dependencies
 #-----------------------------------------------------------------------------
+# Define a function to handle special thread settings for HP-UX
+# See https://github.com/facebook/zstd/pull/3862 for details.
+function(setup_hpux_threads)
+    find_package(Threads)
+    if (NOT Threads_FOUND)
+        set(CMAKE_USE_PTHREADS_INIT 1 PARENT_SCOPE)
+        set(CMAKE_THREAD_LIBS_INIT -lpthread PARENT_SCOPE)
+        set(CMAKE_HAVE_THREADS_LIBRARY 1 PARENT_SCOPE)
+        set(Threads_FOUND TRUE PARENT_SCOPE)
+    endif()
+endfunction()
+
 if (ZSTD_MULTITHREAD_SUPPORT AND UNIX)
-    set(THREADS_PREFER_PTHREAD_FLAG ON)
-    find_package(Threads REQUIRED)
-    if(CMAKE_USE_PTHREADS_INIT)
+    if (CMAKE_SYSTEM_NAME MATCHES "HP-UX")
+        setup_hpux_threads()
+    else()
+        set(THREADS_PREFER_PTHREAD_FLAG ON)
+        find_package(Threads REQUIRED)
+    endif()
+    if (CMAKE_USE_PTHREADS_INIT)
         set(THREADS_LIBS "${CMAKE_THREAD_LIBS_INIT}")
     else()
         message(SEND_ERROR "ZSTD currently does not support thread libraries other than pthreads")
@@ -180,10 +196,6 @@ export(EXPORT zstdExports
     FILE "${CMAKE_CURRENT_BINARY_DIR}/zstdTargets.cmake"
     NAMESPACE zstd::
     )
-configure_file(zstdConfig.cmake
-    "${CMAKE_CURRENT_BINARY_DIR}/zstdConfig.cmake"
-    COPYONLY
-    )
 
 # A Package Config file that works from the installation directory
 set(ConfigPackageLocation ${CMAKE_INSTALL_LIBDIR}/cmake/zstd)
@@ -192,8 +204,13 @@ install(EXPORT zstdExports
     NAMESPACE zstd::
     DESTINATION ${ConfigPackageLocation}
     )
+configure_package_config_file(
+    zstdConfig.cmake.in
+    "${CMAKE_CURRENT_BINARY_DIR}/zstdConfig.cmake"
+    INSTALL_DESTINATION ${ConfigPackageLocation}
+)
 install(FILES
-    zstdConfig.cmake
+    "${CMAKE_CURRENT_BINARY_DIR}/zstdConfig.cmake"
     "${CMAKE_CURRENT_BINARY_DIR}/zstdConfigVersion.cmake"
     DESTINATION ${ConfigPackageLocation}
     )

@@ -42,7 +42,8 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
       const BookmarkNode* parent,
       size_t old_index,
       const BookmarkNode* node,
-      const std::set<GURL>& no_longer_bookmarked) override {}
+      const std::set<GURL>& no_longer_bookmarked,
+      const base::Location& location) override {}
 
   void BookmarkNodeAdded(const BookmarkNode* parent,
                          size_t index,
@@ -53,8 +54,8 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
   void BookmarkMetaInfoChanged(const BookmarkNode* node) override;
   void BookmarkNodeFaviconChanged(const BookmarkNode* node) override;
   void BookmarkNodeChildrenReordered(const BookmarkNode* node) override {}
-  void BookmarkAllUserNodesRemoved(
-      const std::set<GURL>& removed_urls) override {}
+  void BookmarkAllUserNodesRemoved(const std::set<GURL>& removed_urls,
+                                   const base::Location& location) override {}
 
   friend class BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI>;
 

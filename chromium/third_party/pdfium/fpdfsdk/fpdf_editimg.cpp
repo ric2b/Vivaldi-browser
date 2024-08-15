@@ -22,6 +22,7 @@
 #include "core/fpdfapi/render/cpdf_imagerenderer.h"
 #include "core/fpdfapi/render/cpdf_rendercontext.h"
 #include "core/fpdfapi/render/cpdf_renderstatus.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/notreached.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxge/cfx_defaultrenderdevice.h"
@@ -92,9 +93,11 @@ bool LoadJpegHelper(FPDF_PAGE* pages,
 
   if (pages) {
     for (int index = 0; index < count; index++) {
-      CPDF_Page* pPage = CPDFPageFromFPDFPage(pages[index]);
-      if (pPage)
+      // TODO(crbug.com/pdfium/2155): resolve safety issues.
+      CPDF_Page* pPage = CPDFPageFromFPDFPage(UNSAFE_BUFFERS(pages[index]));
+      if (pPage) {
         pImgObj->GetImage()->ResetCache(pPage);
+      }
     }
   }
 
@@ -172,9 +175,11 @@ FPDFImageObj_SetBitmap(FPDF_PAGE* pages,
 
   if (pages) {
     for (int index = 0; index < count; index++) {
-      CPDF_Page* pPage = CPDFPageFromFPDFPage(pages[index]);
-      if (pPage)
+      // TODO(crbug.com/pdfium/2155): resolve safety issues.
+      CPDF_Page* pPage = CPDFPageFromFPDFPage(UNSAFE_BUFFERS(pages[index]));
+      if (pPage) {
         pImgObj->GetImage()->ResetCache(pPage);
+      }
     }
   }
 
@@ -342,9 +347,11 @@ FPDFImageObj_GetImageDataDecoded(FPDF_PAGEOBJECT image_object,
   if (!pImgStream)
     return 0;
 
+  // SAFETY: caller ensures `buffer` points to at least `buflen` bytes.
   return DecodeStreamMaybeCopyAndReturnLength(
       std::move(pImgStream),
-      {static_cast<uint8_t*>(buffer), static_cast<size_t>(buflen)});
+      UNSAFE_BUFFERS(pdfium::make_span(static_cast<uint8_t*>(buffer),
+                                       static_cast<size_t>(buflen))));
 }
 
 FPDF_EXPORT unsigned long FPDF_CALLCONV
@@ -363,9 +370,11 @@ FPDFImageObj_GetImageDataRaw(FPDF_PAGEOBJECT image_object,
   if (!pImgStream)
     return 0;
 
+  // SAFETY: caller ensures `buffer` points to at least `buflen` bytes.
   return GetRawStreamMaybeCopyAndReturnLength(
       std::move(pImgStream),
-      {static_cast<uint8_t*>(buffer), static_cast<size_t>(buflen)});
+      UNSAFE_BUFFERS(pdfium::make_span(static_cast<uint8_t*>(buffer),
+                                       static_cast<size_t>(buflen))));
 }
 
 FPDF_EXPORT int FPDF_CALLCONV
@@ -411,7 +420,9 @@ FPDFImageObj_GetImageFilter(FPDF_PAGEOBJECT image_object,
                             ? pFilter->AsName()->GetString()
                             : pFilter->AsArray()->GetByteStringAt(index);
 
-  return NulTerminateMaybeCopyAndReturnLength(bsFilter, buffer, buflen);
+  // SAFETY: required from caller.
+  return NulTerminateMaybeCopyAndReturnLength(
+      bsFilter, UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, buflen)));
 }
 
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV

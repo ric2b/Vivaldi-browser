@@ -40,10 +40,6 @@ namespace history {
 class URLDatabase;
 }
 
-namespace prerender {
-class NoStatePrefetchHandle;
-}
-
 namespace predictors {
 // This class is responsible for determining the correct predictive network
 // action to take given for a given AutocompleteMatch and entered text. It can
@@ -64,7 +60,7 @@ class AutocompleteActionPredictor : public KeyedService,
   // An `Action` is a recommendation on what pre* technology to invoke on a
   // given `AutocompleteMatch`.
   enum Action {
-    // Trigger Prerender2 (or NoStatePrefetch if that's disabled).
+    // Trigger Prerendering.
     ACTION_PRERENDER = 0,
 
     // Invoke `LoadingPredictor::PrepareForPageLoad` to
@@ -124,9 +120,6 @@ class AutocompleteActionPredictor : public KeyedService,
   void StartPrerendering(const GURL& url,
                          content::WebContents& web_contents,
                          const gfx::Size& size);
-
-  // Cancels the current prerender, unless it has already been abandoned.
-  void CancelPrerender();
 
   // Returns true if the suggestion type warrants a TCP/IP preconnection.
   // i.e., it is now quite likely that the user will select the related domain.
@@ -244,8 +237,8 @@ class AutocompleteActionPredictor : public KeyedService,
   void Shutdown() override;
 
   // history::HistoryServiceObserver:
-  void OnURLsDeleted(history::HistoryService* history_service,
-                     const history::DeletionInfo& deletion_info) override;
+  void OnHistoryDeletions(history::HistoryService* history_service,
+                          const history::DeletionInfo& deletion_info) override;
   void OnHistoryServiceLoaded(
       history::HistoryService* history_service) override;
 
@@ -268,8 +261,6 @@ class AutocompleteActionPredictor : public KeyedService,
   // The aggregated size of all user text and GURLs in |transitional_matches_|.
   // This is used to limit the maximum size of |transitional_matches_|.
   size_t transitional_matches_size_ = 0;
-
-  std::unique_ptr<prerender::NoStatePrefetchHandle> no_state_prefetch_handle_;
 
   base::WeakPtr<content::PrerenderHandle> direct_url_input_prerender_handle_;
 

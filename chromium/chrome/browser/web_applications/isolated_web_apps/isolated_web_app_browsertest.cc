@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <optional>
+#include <string_view>
 
 #include "base/barrier_closure.h"
 #include "base/files/file_path.h"
@@ -12,6 +13,7 @@
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/test/gmock_expected_support.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
@@ -30,7 +32,7 @@
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/test/isolated_web_app_test_utils.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
-#include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
+#include "chrome/browser/ui/web_applications/web_app_browsertest_base.h"
 #include "chrome/browser/ui/web_applications/web_app_menu_model.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
 #include "chrome/browser/web_applications/isolated_web_apps/test/isolated_web_app_builder.h"
@@ -57,12 +59,15 @@
 #include "content/public/browser/service_worker_running_info.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_exposed_isolation_level.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "extensions/test/result_catcher.h"
+#include "net/base/net_errors.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_database.mojom-forward.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -74,6 +79,8 @@ namespace web_app {
 namespace {
 
 using ::testing::Eq;
+using ::testing::HasSubstr;
+using ::testing::Ne;
 using ::testing::StartsWith;
 
 const char kNonAppHost[] = "nonapp.com";
@@ -261,7 +268,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, NewManifestPathPreferred) {
 IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, FallsBackToOldManifestPath) {
   base::ScopedAllowBlockingForTesting allow_blocking;
 
-  auto key_pair = web_package::WebBundleSigner::KeyPair::CreateRandom();
+  auto key_pair = web_package::WebBundleSigner::Ed25519KeyPair::CreateRandom();
   auto web_bundle_id =
       web_package::SignedWebBundleId::CreateForEd25519PublicKey(
           key_pair.public_key);
@@ -342,9 +349,8 @@ IN_PROC_BROWSER_TEST_F(
 
   WebAppProvider::GetForTest(browser()->profile())
       ->sync_bridge_unsafe()
-      .SetAppUserDisplayMode(url_info.app_id(),
-                             mojom::UserDisplayMode::kBrowser,
-                             /*is_user_action=*/false);
+      .SetAppUserDisplayModeForTesting(url_info.app_id(),
+                                       mojom::UserDisplayMode::kBrowser);
 
   GURL app_url = url_info.origin().GetURL().Resolve("/index.html");
   auto* app_frame =
@@ -417,7 +423,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, WasmLoadableFromBytes) {
   EXPECT_EQ("loaded", result);
 }
 
-IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, BlobUrl) {
+IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, CanNavigateToBlobUrl) {
   web_app::IsolatedWebAppUrlInfo url_info = InstallDevModeProxyIsolatedWebApp(
       isolated_web_app_dev_server().GetOrigin());
   content::RenderFrameHost* app_frame = OpenApp(url_info.app_id());
@@ -433,6 +439,316 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, BlobUrl) {
   EXPECT_THAT(navigation_observer.last_net_error_code(), Eq(net::OK));
   EXPECT_THAT(navigation_observer.last_navigation_url().spec(),
               StartsWith("blob:" + url_info.origin().GetURL().spec()));
+}
+
+IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, WebCannotLoadIwaResources) {
+  std::unique_ptr<ScopedBundledIsolatedWebApp> app =
+      IsolatedWebAppBuilder(ManifestBuilder()).BuildBundle();
+  app->TrustSigningKey();
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info, app->Install(profile()));
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(content::NavigateToURL(
+      web_contents, isolated_web_app_dev_server().GetURL("/index.html")));
+
+  EXPECT_THAT(
+      EvalJs(web_contents, content::JsReplace(R"(
+    (async () => {
+      const response = await fetch($1);
+      return response.ok;
+    })();
+  )",
+                                              url_info.origin().Serialize()))
+          .error,
+      HasSubstr("Failed to fetch"));
+}
+
+IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest,
+                       IwaCannotLoadOtherIwaResources) {
+  std::unique_ptr<ScopedBundledIsolatedWebApp> app1 =
+      IsolatedWebAppBuilder(ManifestBuilder()).BuildBundle();
+  app1->TrustSigningKey();
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info1,
+                       app1->Install(profile()));
+
+  std::unique_ptr<ScopedBundledIsolatedWebApp> app2 =
+      IsolatedWebAppBuilder(ManifestBuilder()).BuildBundle();
+  app2->TrustSigningKey();
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info2,
+                       app2->Install(profile()));
+
+  content::RenderFrameHost* app1_frame = OpenApp(url_info1.app_id());
+  content::TestNavigationObserver navigation_observer(
+      content::WebContents::FromRenderFrameHost(app1_frame));
+  EXPECT_TRUE(
+      ExecJs(app1_frame, content::JsReplace(R"(
+    const iframe = document.createElement('iframe');
+    iframe.src = $1;
+    document.body.appendChild(iframe);
+  )",
+                                            url_info2.origin().Serialize())));
+  navigation_observer.Wait();
+  EXPECT_FALSE(navigation_observer.last_navigation_succeeded());
+  EXPECT_THAT(navigation_observer.last_net_error_code(),
+              Eq(net::ERR_BLOCKED_BY_CSP));
+
+  EXPECT_THAT(
+      EvalJs(app1_frame, content::JsReplace(R"(
+    (async () => {
+      const response = await fetch($1 + '/icon.png');
+      return response.ok;
+    })();
+  )",
+                                            url_info2.origin().Serialize()))
+          .error,
+      HasSubstr("Failed to fetch"));
+}
+
+class IsolatedWebAppApiAccessBrowserTest : public IsolatedWebAppBrowserTest {
+ protected:
+  std::unique_ptr<ScopedBundledIsolatedWebApp> CreateAppWithSocketPermission() {
+    return IsolatedWebAppBuilder(
+               ManifestBuilder().AddPermissionsPolicy(
+                   blink::mojom::PermissionsPolicyFeature::kDirectSockets,
+                   /*self=*/true, {}))
+        .AddJs("/csp_violation_handler.js", R"(
+            console.log('In bundled script');
+            window.addEventListener('securitypolicyviolation', (e) => {
+              window.cspViolation = e;
+            });
+            window.ranBundledScript = true;
+        )")
+        .BuildBundle();
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_{
+      blink::features::kIsolateSandboxedIframes};
+};
+
+IN_PROC_BROWSER_TEST_F(IsolatedWebAppApiAccessBrowserTest,
+                       NoApiAccessInDataIframe) {
+  std::unique_ptr<ScopedBundledIsolatedWebApp> app =
+      CreateAppWithSocketPermission();
+  app->TrustSigningKey();
+  ASSERT_OK_AND_ASSIGN(auto url_info, app->Install(profile()));
+  content::RenderFrameHost* app_frame = OpenApp(url_info.app_id());
+
+  ASSERT_THAT(EvalJs(app_frame, "'TCPSocket' in window"), Eq(true));
+
+  ASSERT_TRUE(ExecJs(app_frame, R"(
+      const src = '<!DOCTYPE html><p>data: URL</p>';
+      const url = `data:text/html;base64,${btoa(src)}`;
+      new Promise(resolve => {
+        const f = document.createElement('iframe');
+        f.src = url;
+        f.addEventListener('load', resolve);
+        document.body.appendChild(f);
+      });
+  )"));
+  content::RenderFrameHost* iframe = ChildFrameAt(app_frame, 0);
+  ASSERT_THAT(iframe, Ne(nullptr));
+
+  EXPECT_THAT(
+      EvalJs(iframe, "location.href"),
+      Eq("data:text/html;base64,PCFET0NUWVBFIGh0bWw+PHA+ZGF0YTogVVJMPC9wPg=="));
+  EXPECT_THAT(EvalJs(iframe, "window.origin"), Eq("null"));
+  EXPECT_THAT(EvalJs(iframe, "window.isSecureContext"), Eq(false));
+  EXPECT_THAT(EvalJs(iframe, "window.crossOriginIsolated"), Eq(false));
+  EXPECT_THAT(EvalJs(iframe, "'TCPSocket' in window"), Eq(false));
+  EXPECT_THAT(
+      iframe->GetLastCommittedURL(),
+      Eq("data:text/html;base64,PCFET0NUWVBFIGh0bWw+PHA+ZGF0YTogVVJMPC9wPg=="));
+  EXPECT_THAT(iframe->GetLastCommittedOrigin().opaque(), Eq(true));
+  EXPECT_THAT(iframe->GetWebExposedIsolationLevel(),
+              Eq(content::WebExposedIsolationLevel::kNotIsolated));
+}
+
+IN_PROC_BROWSER_TEST_F(IsolatedWebAppApiAccessBrowserTest,
+                       NoApiAccessInSandboxedIframe) {
+  std::unique_ptr<ScopedBundledIsolatedWebApp> app =
+      CreateAppWithSocketPermission();
+  app->TrustSigningKey();
+  ASSERT_OK_AND_ASSIGN(auto url_info, app->Install(profile()));
+  content::RenderFrameHost* app_frame = OpenApp(url_info.app_id());
+
+  ASSERT_THAT(EvalJs(app_frame, "'TCPSocket' in window"), Eq(true));
+
+  std::string start_url = url_info.origin().GetURL().spec();
+  ASSERT_TRUE(ExecJs(app_frame, content::JsReplace(R"(
+      new Promise(resolve => {
+        const f = document.createElement('iframe');
+        f.src = $1;
+        f.sandbox = 'allow-scripts';  // for EvalJs
+        f.addEventListener('load', resolve);
+        document.body.appendChild(f);
+      });
+  )",
+                                                   start_url)));
+  content::RenderFrameHost* iframe = ChildFrameAt(app_frame, 0);
+  ASSERT_THAT(iframe, Ne(nullptr));
+
+  EXPECT_THAT(EvalJs(iframe, "location.href"), Eq(start_url));
+  EXPECT_THAT(EvalJs(iframe, "window.origin"), Eq("null"));
+  EXPECT_THAT(EvalJs(iframe, "window.isSecureContext"), Eq(true));
+  EXPECT_THAT(EvalJs(iframe, "window.crossOriginIsolated"), Eq(false));
+  EXPECT_THAT(EvalJs(iframe, "'TCPSocket' in window"), Eq(false));
+  EXPECT_THAT(iframe->GetProcess()->GetWebExposedIsolationLevel(),
+              Eq(content::WebExposedIsolationLevel::kIsolated));
+  EXPECT_THAT(iframe->GetLastCommittedURL(), Eq(start_url));
+  EXPECT_THAT(iframe->GetLastCommittedOrigin().opaque(), Eq(true));
+  EXPECT_THAT(iframe->GetWebExposedIsolationLevel(),
+              Eq(content::WebExposedIsolationLevel::kNotIsolated));
+}
+
+IN_PROC_BROWSER_TEST_F(IsolatedWebAppApiAccessBrowserTest,
+                       CspInheritedInSrcdocIframe) {
+  std::unique_ptr<ScopedBundledIsolatedWebApp> app =
+      CreateAppWithSocketPermission();
+  app->TrustSigningKey();
+  ASSERT_OK_AND_ASSIGN(auto url_info, app->Install(profile()));
+  content::RenderFrameHost* app_frame = OpenApp(url_info.app_id());
+
+  // Create a srcdoc iframe with an inline <script> tag that should
+  // be blocked by the inherited CSP.
+  ASSERT_TRUE(ExecJs(app_frame, R"(
+      const noopPolicy = trustedTypes.createPolicy("policy", {
+        createHTML: (string) => string,
+      });
+      new Promise(resolve => {
+        const f = document.createElement('iframe');
+        f.srcdoc = noopPolicy.createHTML(`
+            <!DOCTYPE html>
+            <p>srcdoc iframe</p>
+            <script src="/csp_violation_handler.js"></script>
+            <script>window.ranScript = true;</script>
+        `);
+        f.addEventListener('load', resolve);
+        document.body.appendChild(f);
+      });
+  )"));
+  content::RenderFrameHost* iframe = ChildFrameAt(app_frame, 0);
+  ASSERT_THAT(iframe, Ne(nullptr));
+
+  EXPECT_THAT(EvalJs(iframe, "location.href"), Eq("about:srcdoc"));
+  EXPECT_THAT(EvalJs(iframe, "window.origin"),
+              Eq(url_info.origin().Serialize()));
+  EXPECT_THAT(EvalJs(iframe, "window.isSecureContext"), Eq(true));
+  EXPECT_THAT(EvalJs(iframe, "window.crossOriginIsolated"), Eq(true));
+  EXPECT_THAT(iframe->GetLastCommittedURL(), Eq("about:srcdoc"));
+  EXPECT_THAT(iframe->GetLastCommittedOrigin(), Eq(url_info.origin()));
+  // Non-sandboxed srcdoc iframes are same-origin with their parent, meaning
+  // they also have application isolation level (i.e. are IsolatedContexts).
+  // This is safe because they also inherit the strict CSP.
+  EXPECT_THAT(iframe->GetWebExposedIsolationLevel(),
+              Eq(content::WebExposedIsolationLevel::kIsolatedApplication));
+  EXPECT_THAT(EvalJs(iframe, "String(window.ranScript)"), Eq("undefined"));
+  EXPECT_THAT(EvalJs(iframe, "String(window.ranBundledScript)"), Eq("true"));
+  EXPECT_THAT(
+      EvalJs(iframe,
+             "window.cspViolation instanceof SecurityPolicyViolationEvent"),
+      Eq(true));
+}
+
+IN_PROC_BROWSER_TEST_F(IsolatedWebAppApiAccessBrowserTest,
+                       CspInheritedInBlobIframe) {
+  std::unique_ptr<ScopedBundledIsolatedWebApp> app =
+      CreateAppWithSocketPermission();
+  app->TrustSigningKey();
+  ASSERT_OK_AND_ASSIGN(auto url_info, app->Install(profile()));
+  content::RenderFrameHost* app_frame = OpenApp(url_info.app_id());
+
+  ASSERT_TRUE(
+      ExecJs(app_frame, content::JsReplace(R"(
+          const blobSource = `
+              <!DOCTYPE html>
+              <p>blob html page</p>
+              <script src=$1></script>
+              <script>window.ranScript = true;</script>
+          `;
+          const blob = new Blob([blobSource], {
+            type: 'text/html'
+          });
+          const url = URL.createObjectURL(blob);
+          new Promise(resolve => {
+            const f = document.createElement('iframe');
+            f.src = url;
+            f.addEventListener('load', resolve);
+            document.body.appendChild(f);
+          });
+      )",
+                                           url_info.origin().GetURL().Resolve(
+                                               "/csp_violation_handler.js"))));
+  content::RenderFrameHost* iframe = ChildFrameAt(app_frame, 0);
+  ASSERT_THAT(iframe, Ne(nullptr));
+
+  EXPECT_THAT(EvalJs(iframe, "location.href").ExtractString(),
+              StartsWith("blob:"));
+  EXPECT_THAT(EvalJs(iframe, "window.origin"),
+              Eq(url_info.origin().Serialize()));
+  EXPECT_THAT(EvalJs(iframe, "window.isSecureContext"), Eq(true));
+  EXPECT_THAT(EvalJs(iframe, "window.crossOriginIsolated"), Eq(true));
+  EXPECT_THAT(iframe->GetLastCommittedURL().SchemeIsBlob(), Eq(true));
+  EXPECT_THAT(iframe->GetLastCommittedOrigin(), Eq(url_info.origin()));
+  EXPECT_THAT(iframe->GetWebExposedIsolationLevel(),
+              Eq(content::WebExposedIsolationLevel::kIsolatedApplication));
+  EXPECT_THAT(EvalJs(iframe, "String(window.ranScript)"), Eq("undefined"));
+  EXPECT_THAT(EvalJs(iframe, "String(window.ranBundledScript)"), Eq("true"));
+  EXPECT_THAT(
+      EvalJs(iframe,
+             "window.cspViolation instanceof SecurityPolicyViolationEvent"),
+      Eq(true));
+}
+
+IN_PROC_BROWSER_TEST_F(IsolatedWebAppApiAccessBrowserTest,
+                       CspInheritedInBlobNavigation) {
+  std::unique_ptr<ScopedBundledIsolatedWebApp> app =
+      CreateAppWithSocketPermission();
+  app->TrustSigningKey();
+  ASSERT_OK_AND_ASSIGN(auto url_info, app->Install(profile()));
+  content::RenderFrameHost* app_frame = OpenApp(url_info.app_id());
+
+  content::TestNavigationObserver navigation_observer(
+      content::WebContents::FromRenderFrameHost(app_frame));
+  ASSERT_TRUE(
+      ExecJs(app_frame, content::JsReplace(R"(
+          const blobSource = `
+              <!DOCTYPE html>
+              <p>blob html page</p>
+              <script src=$1></script>
+              <script>window.ranScript = true;</script>
+          `;
+          const blob = new Blob([blobSource], {
+            type: 'text/html'
+          });
+          location.href = URL.createObjectURL(blob);
+      )",
+                                           url_info.origin().GetURL().Resolve(
+                                               "/csp_violation_handler.js"))));
+  navigation_observer.Wait();
+
+  EXPECT_THAT(navigation_observer.last_navigation_succeeded(), Eq(true));
+  EXPECT_THAT(navigation_observer.last_net_error_code(), Eq(net::OK));
+  EXPECT_THAT(navigation_observer.last_navigation_url().spec(),
+              StartsWith("blob:" + url_info.origin().GetURL().spec()));
+
+  EXPECT_THAT(EvalJs(app_frame, "location.href").ExtractString(),
+              StartsWith("blob:"));
+  EXPECT_THAT(EvalJs(app_frame, "window.origin"),
+              Eq(url_info.origin().Serialize()));
+  EXPECT_THAT(EvalJs(app_frame, "window.isSecureContext"), Eq(true));
+  EXPECT_THAT(EvalJs(app_frame, "window.crossOriginIsolated"), Eq(true));
+  EXPECT_THAT(app_frame->GetLastCommittedURL().SchemeIsBlob(), Eq(true));
+  EXPECT_THAT(app_frame->GetLastCommittedOrigin(), Eq(url_info.origin()));
+  EXPECT_THAT(app_frame->GetWebExposedIsolationLevel(),
+              Eq(content::WebExposedIsolationLevel::kIsolatedApplication));
+  EXPECT_THAT(EvalJs(app_frame, "String(window.ranScript)"), Eq("undefined"));
+  EXPECT_THAT(EvalJs(app_frame, "String(window.ranBundledScript)"), Eq("true"));
+  EXPECT_THAT(
+      EvalJs(app_frame,
+             "window.cspViolation instanceof SecurityPolicyViolationEvent"),
+      Eq(true));
 }
 
 class IsolatedWebAppBrowserCookieTest : public IsolatedWebAppBrowserTest {
@@ -853,7 +1169,7 @@ class IsolatedWebAppExtensionBrowserTest
 
   base::ScopedTempDir temp_dir_;
 
-  static constexpr base::StringPiece kExtensionManifest = R"({
+  static constexpr std::string_view kExtensionManifest = R"({
     "name": "foo",
     "description": "foo",
     "version": "0.1",
@@ -901,7 +1217,7 @@ IN_PROC_BROWSER_TEST_P(IsolatedWebAppExtensionBrowserTest,
   ASSERT_TRUE(IsChromeRuntimeDefined(app_frame));
 
   // IWA: Send a ping to the extension and wait for the pong.
-  constexpr base::StringPiece kSendPing = R"(
+  constexpr std::string_view kSendPing = R"(
     chrome.runtime.sendMessage($1, "iwa->extension: ping");
   )";
   EXPECT_EQ(EvalJs(app_frame, content::JsReplace(kSendPing, extension->id())),
@@ -944,7 +1260,7 @@ IN_PROC_BROWSER_TEST_P(IsolatedWebAppExtensionBrowserTest, ConnectToExtension) {
   ASSERT_TRUE(IsChromeRuntimeDefined(app_frame));
 
   // IWA: Send a ping to the extension and wait for the pong.
-  constexpr base::StringPiece kSendPing = R"(
+  constexpr std::string_view kSendPing = R"(
     new Promise((resolve, reject) => {
       const port = chrome.runtime.connect($1);
       port.onMessage.addListener((response) => resolve(response));

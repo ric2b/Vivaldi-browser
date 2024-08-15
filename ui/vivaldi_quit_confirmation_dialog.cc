@@ -110,7 +110,8 @@ bool VivaldiQuitConfirmationDialog::ShouldShowCloseButton() const {
   return false;
 }
 
-gfx::Size VivaldiQuitConfirmationDialog::CalculatePreferredSize() const {
+gfx::Size VivaldiQuitConfirmationDialog::CalculatePreferredSize(
+    const views::SizeBounds& available_size) const {
   return gfx::Size(
       kDefaultWidth,
       GetLayoutManager()->GetPreferredHeightForWidth(this, kDefaultWidth));

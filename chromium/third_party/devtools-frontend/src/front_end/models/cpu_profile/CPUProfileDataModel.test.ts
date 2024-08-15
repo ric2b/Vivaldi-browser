@@ -2,11 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
 import type * as Protocol from '../../generated/protocol.js';
-import * as CPUProfile from '../cpu_profile/cpu_profile.js';
-
 import {describeWithEnvironment} from '../../testing/EnvironmentHelpers.js';
+import * as CPUProfile from '../cpu_profile/cpu_profile.js';
 
 function makeCallFrame(functionName: string): Protocol.Runtime.CallFrame {
   return {
@@ -23,11 +21,13 @@ function getFrameTreeAsString(cpuProfileDataModel: CPUProfile.CPUProfileDataMode
   const trackingStack: Entry[] = [];
   const resultStack: Entry[] = [];
   let result = '\n';
-  const onFrameOpen = (depth: number, node: CPUProfile.ProfileTreeModel.ProfileNode, ts: number) => {
-    trackingStack.push({depth, id: node.id, name: node.callFrame.functionName, ts, selfTime: 0, dur: 0});
-  };
+  const onFrameOpen =
+      (depth: number, node: CPUProfile.ProfileTreeModel.ProfileNode, _sampleIndex: number, ts: number) => {
+        trackingStack.push({depth, id: node.id, name: node.callFrame.functionName, ts, selfTime: 0, dur: 0});
+      };
   const onFrameClose =
-      (_depth: number, node: CPUProfile.ProfileTreeModel.ProfileNode, _ts: number, dur: number, selfTime: number) => {
+      (_depth: number, node: CPUProfile.ProfileTreeModel.ProfileNode, _sampleIndex: number, _ts: number, dur: number,
+       selfTime: number) => {
         const entry = trackingStack.pop();
         if (!entry || entry.id !== node.id) {
           throw new Error('Frame open and Frame close callbacks are not balanced');

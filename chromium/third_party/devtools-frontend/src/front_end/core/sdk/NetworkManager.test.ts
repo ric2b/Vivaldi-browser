@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
-import * as Common from '../common/common.js';
-import * as Platform from '../platform/platform.js';
-import * as SDK from './sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as Persistence from '../../models/persistence/persistence.js';
@@ -15,6 +10,10 @@ import * as Workspace from '../../models/workspace/workspace.js';
 import {createTarget, describeWithEnvironment} from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
 import {createWorkspaceProject} from '../../testing/OverridesHelpers.js';
+import * as Common from '../common/common.js';
+import * as Platform from '../platform/platform.js';
+
+import * as SDK from './sdk.js';
 
 const LONG_URL_PART =
     'LoremIpsumDolorSitAmetConsecteturAdipiscingElitPhasellusVitaeOrciInAugueCondimentumTinciduntUtEgetDolorQuisqueEfficiturUltricesTinciduntVivamusVelitPurusCommodoQuisErosSitAmetTemporMalesuadaNislNullamTtempusVulputateAugueEgetScelerisqueLacusVestibulumNon/index.html';
@@ -43,7 +42,7 @@ describeWithMockConnection('MultitargetNetworkManager', () => {
     });
   });
 
-  it('uses main frame under tab target to get certificate', () => {
+  it('uses main frame to get certificate', () => {
     SDK.ChildTargetManager.ChildTargetManager.install();
     const tabTarget = createTarget({type: SDK.Target.Type.Tab});
     const mainFrameTarget = createTarget({parentTarget: tabTarget});
@@ -57,18 +56,6 @@ describeWithMockConnection('MultitargetNetworkManager', () => {
     for (const unexpectedCall of unexpectedCalls) {
       assert.isTrue(unexpectedCall.notCalled);
     }
-    assert.isTrue(expectedCall.calledOnceWith({origin: 'https://example.com'}));
-  });
-
-  it('uses main frame without tab target to get certificate', () => {
-    SDK.ChildTargetManager.ChildTargetManager.install();
-    const mainFrameTarget = createTarget();
-    const subframeTarget = createTarget({parentTarget: mainFrameTarget});
-
-    const unexpectedCall = sinon.spy(subframeTarget.networkAgent(), 'invoke_getCertificate');
-    const expectedCall = sinon.spy(mainFrameTarget.networkAgent(), 'invoke_getCertificate');
-    void SDK.NetworkManager.MultitargetNetworkManager.instance().getCertificate('https://example.com');
-    assert.isTrue(unexpectedCall.notCalled);
     assert.isTrue(expectedCall.calledOnceWith({origin: 'https://example.com'}));
   });
 });
@@ -192,6 +179,51 @@ describe('NetworkDispatcher', () => {
         {name: 'test-header', value: 'first'},
         {name: 'set-cookie', value: 'foo=bar'},
         {name: 'set-cookie', value: 'color=green'},
+      ]);
+    });
+
+    it('Correctly set early hints properties on receivedResponse event', () => {
+      const responseReceivedEvent = {
+        requestId: 'mockId',
+        loaderId: 'mockLoaderId',
+        frameId: 'mockFrameId',
+        timestamp: 581734.083213,
+        type: Protocol.Network.ResourceType.Document,
+        response: {
+          url: 'example.com',
+          status: 200,
+          statusText: '',
+          headers: {
+            'test-header': 'first',
+          } as Protocol.Network.Headers,
+          mimeType: 'text/html',
+          connectionReused: true,
+          connectionId: 12345,
+          encodedDataLength: 100,
+          securityState: 'secure',
+          fromEarlyHints: true,
+        } as Protocol.Network.Response,
+      } as Protocol.Network.ResponseReceivedEvent;
+
+      networkDispatcher.requestWillBeSent(requestWillBeSentEvent);
+      networkDispatcher.responseReceived(responseReceivedEvent);
+
+      assert.deepEqual(networkDispatcher.requestForId('mockId')?.fromEarlyHints(), true);
+    });
+
+    it('has populated early hints headers after receiving \'repsonseReceivedEarlyHints\'', () => {
+      const earlyHintsEvent = {
+        requestId: 'mockId' as Protocol.Network.RequestId,
+        headers: {
+          'link': '</style.css>; as=style;',
+        } as Protocol.Network.Headers,
+      };
+      networkDispatcher.requestWillBeSent(requestWillBeSentEvent);
+      networkDispatcher.loadingFinished(loadingFinishedEvent);
+      networkDispatcher.responseReceivedEarlyHints(earlyHintsEvent);
+
+      assert.deepEqual(networkDispatcher.requestForId('mockId')?.earlyHintsHeaders, [
+        {name: 'link', value: '</style.css>; as=style;'},
       ]);
     });
   });

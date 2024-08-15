@@ -30,6 +30,7 @@ import static org.mockito.Mockito.when;
 import static org.chromium.ui.test.util.ViewUtils.onViewWaiting;
 
 import android.app.Activity;
+import android.os.Build;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.util.Pair;
@@ -72,6 +73,7 @@ import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.JniMocker;
+import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.browser.firstrun.FirstRunPageDelegate;
 import org.chromium.chrome.browser.firstrun.SyncConsentFirstRunFragment;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -119,7 +121,7 @@ public class SyncConsentFragmentTest {
     private static final int RENDER_REVISION = 2;
     private static final String RENDER_DESCRIPTION = "Change button style";
     private static final String NEW_ACCOUNT_NAME = "new.account@gmail.com";
-    // TODO(https://crbug.com/1414078): Use ALL_SELECTABLE_TYPES defined in {@link SyncServiceImpl}
+    // TODO(crbug.com/40255946): Use ALL_SELECTABLE_TYPES defined in {@link SyncServiceImpl}
     // here.
     private static final AccountCapabilities MINOR_MODE_NOT_REQUIRED =
             new AccountCapabilities(
@@ -522,7 +524,7 @@ public class SyncConsentFragmentTest {
 
         launchActivityWithFragment(fragment);
         startPageHistogram.assertExpected();
-        // TODO(https://crbug.com/1291903): Rewrite this test when RenderTestRule is integrated with
+        // TODO(crbug.com/40212926): Rewrite this test when RenderTestRule is integrated with
         // Espresso.
         // We check the button is enabled rather than visible, as it may be off-screen on small
         // devices.
@@ -551,7 +553,7 @@ public class SyncConsentFragmentTest {
 
         launchActivityWithFragment(fragment);
         startPageHistogram.assertExpected();
-        // TODO(https://crbug.com/1291903): Rewrite this test when RenderTestRule is integrated with
+        // TODO(crbug.com/40212926): Rewrite this test when RenderTestRule is integrated with
         // Espresso.
         // We check the button is enabled rather than visible, as it may be off-screen on small
         // devices.
@@ -977,8 +979,59 @@ public class SyncConsentFragmentTest {
 
     @Test
     @LargeTest
+    @DisableFeatures({SigninFeatures.MINOR_MODE_RESTRICTIONS_FOR_HISTORY_SYNC_OPT_IN})
     public void testAutomotiveDevice_deviceLockCreated_syncAcceptedSuccessfully()
             throws IOException {
+        mAutoTestRule.setIsAutomotive(true);
+        mChromeActivityTestRule.startMainActivityOnBlankPage();
+        CoreAccountInfo accountInfo =
+                mSigninTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_EMAIL);
+        mSyncConsentActivity =
+                ActivityTestUtils.waitForActivity(
+                        InstrumentationRegistry.getInstrumentation(),
+                        SyncConsentActivity.class,
+                        () -> {
+                            SyncConsentActivityLauncherImpl.get()
+                                    .launchActivityForPromoDefaultFlow(
+                                            mChromeActivityTestRule.getActivity(),
+                                            SigninAccessPoint.BOOKMARK_MANAGER,
+                                            accountInfo.getEmail());
+                        });
+
+        // Should display the sync page, clicking the 'more' button to scroll down if needed.
+        if (mSyncConsentActivity.findViewById(R.id.more_button).isShown()) {
+            onView(withId(R.id.more_button)).perform(click());
+        }
+
+        onView(withText(R.string.signin_accept_button))
+                .check(matches(isDisplayed()))
+                .perform(click());
+
+        // Accepting the sync on an automotive device should take the user to the device lock page.
+        ViewUtils.waitForVisibleView(withId(R.id.device_lock_title));
+        onView(withText(R.string.signin_accept_button)).check(doesNotExist());
+
+        simulateDeviceLockReadyOnAutomotive();
+
+        // Wait for the sync consent to be set and the activity has finished.
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    return IdentityServicesProvider.get()
+                            .getIdentityManager(ProfileManager.getLastUsedRegularProfile())
+                            .hasPrimaryAccount(ConsentLevel.SYNC);
+                });
+        onView(withId(R.id.device_lock_title)).check(doesNotExist());
+        ApplicationTestUtils.waitForActivityState(mSyncConsentActivity, Stage.DESTROYED);
+    }
+
+    @Test
+    @LargeTest
+    @MinAndroidSdkLevel(Build.VERSION_CODES.R)
+    @EnableFeatures(SigninFeatures.MINOR_MODE_RESTRICTIONS_FOR_HISTORY_SYNC_OPT_IN)
+    @DisabledTest(message = "https://crbug.com/333735758")
+    public void
+            testAutomotiveDevice_deviceLockCreated_syncAcceptedSuccessfully_withMinorModeRestrictionsEnabled()
+                    throws IOException {
         mAutoTestRule.setIsAutomotive(true);
         mChromeActivityTestRule.startMainActivityOnBlankPage();
         CoreAccountInfo accountInfo =
@@ -1005,7 +1058,7 @@ public class SyncConsentFragmentTest {
         ViewUtils.onViewWaiting(withText(R.string.signin_accept_button)).perform(click());
 
         // Accepting the sync on an automotive device should take the user to the device lock page.
-        onView(withId(R.id.device_lock_title)).check(matches(isDisplayed()));
+        ViewUtils.waitForVisibleView(withId(R.id.device_lock_title));
         onView(withText(R.string.signin_accept_button)).check(doesNotExist());
 
         simulateDeviceLockReadyOnAutomotive();
@@ -1014,8 +1067,7 @@ public class SyncConsentFragmentTest {
         CriteriaHelper.pollUiThread(
                 () -> {
                     return IdentityServicesProvider.get()
-                            .getSigninManager(ProfileManager.getLastUsedRegularProfile())
-                            .getIdentityManager()
+                            .getIdentityManager(ProfileManager.getLastUsedRegularProfile())
                             .hasPrimaryAccount(ConsentLevel.SYNC);
                 });
         onView(withId(R.id.device_lock_title)).check(doesNotExist());
@@ -1024,7 +1076,59 @@ public class SyncConsentFragmentTest {
 
     @Test
     @LargeTest
-    public void testAutomotiveDevice_deviceLockRefused_syncRefused() throws IOException {
+    @DisableFeatures(SigninFeatures.MINOR_MODE_RESTRICTIONS_FOR_HISTORY_SYNC_OPT_IN)
+    public void testAutomotiveDevice_deviceLockRefused_syncRefused() throws Exception {
+        mAutoTestRule.setIsAutomotive(true);
+        mChromeActivityTestRule.startMainActivityOnBlankPage();
+        CoreAccountInfo accountInfo =
+                mSigninTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_EMAIL);
+        mSyncConsentActivity =
+                ActivityTestUtils.waitForActivity(
+                        InstrumentationRegistry.getInstrumentation(),
+                        SyncConsentActivity.class,
+                        () -> {
+                            SyncConsentActivityLauncherImpl.get()
+                                    .launchActivityForPromoDefaultFlow(
+                                            mChromeActivityTestRule.getActivity(),
+                                            SigninAccessPoint.BOOKMARK_MANAGER,
+                                            accountInfo.getEmail());
+                        });
+
+        // Should display the sync page, clicking the 'more' button to scroll down if needed.
+        if (mSyncConsentActivity.findViewById(R.id.more_button).isShown()) {
+            onView(withId(R.id.more_button)).perform(click());
+        }
+
+        onView(withText(R.string.signin_accept_button))
+                .check(matches(isDisplayed()))
+                .perform(click());
+
+        // Accepting the sync on an automotive device should take the user to the device lock page.
+        ViewUtils.waitForVisibleView(withId(R.id.device_lock_title));
+        onView(withText(R.string.signin_accept_button)).check(doesNotExist());
+
+        simulateDeviceLockRefused();
+
+        // Check that the user is not consented to sync and the activity has finished.
+        onView(withId(R.id.device_lock_title)).check(doesNotExist());
+        ApplicationTestUtils.waitForActivityState(mSyncConsentActivity, Stage.DESTROYED);
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    Assert.assertFalse(
+                            IdentityServicesProvider.get()
+                                    .getIdentityManager(ProfileManager.getLastUsedRegularProfile())
+                                    .hasPrimaryAccount(ConsentLevel.SYNC));
+                });
+    }
+
+    @Test
+    @LargeTest
+    @MinAndroidSdkLevel(Build.VERSION_CODES.R)
+    @EnableFeatures(SigninFeatures.MINOR_MODE_RESTRICTIONS_FOR_HISTORY_SYNC_OPT_IN)
+    @DisabledTest(message = "https://crbug.com/333735758")
+    public void
+            testAutomotiveDevice_deviceLockRefused_syncRefused_withMinorModeRestrictionsEnabled()
+                    throws Exception {
         mAutoTestRule.setIsAutomotive(true);
         mChromeActivityTestRule.startMainActivityOnBlankPage();
         CoreAccountInfo accountInfo =
@@ -1049,21 +1153,21 @@ public class SyncConsentFragmentTest {
         ViewUtils.onViewWaiting(withText(R.string.signin_accept_button)).perform(click());
 
         // Accepting the sync on an automotive device should take the user to the device lock page.
-        onView(withId(R.id.device_lock_title)).check(matches(isDisplayed()));
+        ViewUtils.waitForVisibleView(withId(R.id.device_lock_title));
         onView(withText(R.string.signin_accept_button)).check(doesNotExist());
 
         simulateDeviceLockRefused();
 
         // Check that the user is not consented to sync and the activity has finished.
-        CriteriaHelper.pollUiThread(
-                () -> {
-                    return !IdentityServicesProvider.get()
-                            .getSigninManager(ProfileManager.getLastUsedRegularProfile())
-                            .getIdentityManager()
-                            .hasPrimaryAccount(ConsentLevel.SYNC);
-                });
         onView(withId(R.id.device_lock_title)).check(doesNotExist());
         ApplicationTestUtils.waitForActivityState(mSyncConsentActivity, Stage.DESTROYED);
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    Assert.assertFalse(
+                            IdentityServicesProvider.get()
+                                    .getIdentityManager(ProfileManager.getLastUsedRegularProfile())
+                                    .hasPrimaryAccount(ConsentLevel.SYNC));
+                });
     }
 
     @Test
@@ -1172,6 +1276,108 @@ public class SyncConsentFragmentTest {
                 });
         onView(withId(R.id.device_lock_title)).check(doesNotExist());
         ApplicationTestUtils.waitForActivityState(mSyncConsentActivity, Stage.DESTROYED);
+    }
+
+    @Test
+    @LargeTest
+    @EnableFeatures(SigninFeatures.MINOR_MODE_RESTRICTIONS_FOR_HISTORY_SYNC_OPT_IN)
+    public void testSignedInWithMinorModeRequiredRecordsCancelButtonClicked() throws IOException {
+        HistogramWatcher histogramWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecord(
+                                "Signin.SyncButtons.Clicked",
+                                MinorModeHelper.SyncButtonClicked.SYNC_CANCEL_EQUAL_WEIGHTED)
+                        .expectIntRecord(
+                                "Signin.SyncButtons.Shown",
+                                MinorModeHelper.SyncButtonsType.SYNC_EQUAL_WEIGHTED)
+                        .build();
+
+        mChromeActivityTestRule.startMainActivityOnBlankPage();
+        CoreAccountInfo accountInfo =
+                mSigninTestRule.addAccount(
+                        AccountManagerTestRule.TEST_ACCOUNT_EMAIL, MINOR_MODE_REQUIRED);
+        mSigninTestRule.waitForSeeding();
+        SigninTestUtil.signin(accountInfo);
+        mSyncConsentActivity = waitForSyncConsentActivity(accountInfo);
+        onViewWaiting(withText(R.string.signin_sync_decline_button)).perform(click());
+        histogramWatcher.assertExpected();
+    }
+
+    @Test
+    @LargeTest
+    @EnableFeatures(SigninFeatures.MINOR_MODE_RESTRICTIONS_FOR_HISTORY_SYNC_OPT_IN)
+    public void testSignedInWithMinorModeNotRequiredRecordsCancelButtonClicked()
+            throws IOException {
+        HistogramWatcher histogramWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecord(
+                                "Signin.SyncButtons.Clicked",
+                                MinorModeHelper.SyncButtonClicked.SYNC_CANCEL_NOT_EQUAL_WEIGHTED)
+                        .expectIntRecord(
+                                "Signin.SyncButtons.Shown",
+                                MinorModeHelper.SyncButtonsType.SYNC_NOT_EQUAL_WEIGHTED)
+                        .build();
+
+        mChromeActivityTestRule.startMainActivityOnBlankPage();
+        CoreAccountInfo accountInfo =
+                mSigninTestRule.addAccount(
+                        AccountManagerTestRule.TEST_ACCOUNT_EMAIL, MINOR_MODE_NOT_REQUIRED);
+        mSigninTestRule.waitForSeeding();
+        SigninTestUtil.signin(accountInfo);
+        mSyncConsentActivity = waitForSyncConsentActivity(accountInfo);
+        onViewWaiting(withText(R.string.signin_sync_decline_button)).perform(click());
+        histogramWatcher.assertExpected();
+    }
+
+    @Test
+    @LargeTest
+    @EnableFeatures(SigninFeatures.MINOR_MODE_RESTRICTIONS_FOR_HISTORY_SYNC_OPT_IN)
+    public void testSignedInWithMinorModeRequiredRecordsAcceptButtonClicked() throws IOException {
+        HistogramWatcher histogramWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecord(
+                                "Signin.SyncButtons.Clicked",
+                                MinorModeHelper.SyncButtonClicked.SYNC_OPT_IN_EQUAL_WEIGHTED)
+                        .expectIntRecord(
+                                "Signin.SyncButtons.Shown",
+                                MinorModeHelper.SyncButtonsType.SYNC_EQUAL_WEIGHTED)
+                        .build();
+
+        mChromeActivityTestRule.startMainActivityOnBlankPage();
+        CoreAccountInfo accountInfo =
+                mSigninTestRule.addAccount(
+                        AccountManagerTestRule.TEST_ACCOUNT_EMAIL, MINOR_MODE_REQUIRED);
+        mSigninTestRule.waitForSeeding();
+        SigninTestUtil.signin(accountInfo);
+        mSyncConsentActivity = waitForSyncConsentActivity(accountInfo);
+        onViewWaiting(withText(R.string.signin_accept_button)).perform(click());
+        histogramWatcher.assertExpected();
+    }
+
+    @Test
+    @LargeTest
+    @EnableFeatures(SigninFeatures.MINOR_MODE_RESTRICTIONS_FOR_HISTORY_SYNC_OPT_IN)
+    public void testSignedInWithMinorModeNotRequiredRecordsAcceptButtonClicked()
+            throws IOException {
+        HistogramWatcher histogramWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecord(
+                                "Signin.SyncButtons.Clicked",
+                                MinorModeHelper.SyncButtonClicked.SYNC_OPT_IN_NOT_EQUAL_WEIGHTED)
+                        .expectIntRecord(
+                                "Signin.SyncButtons.Shown",
+                                MinorModeHelper.SyncButtonsType.SYNC_NOT_EQUAL_WEIGHTED)
+                        .build();
+
+        mChromeActivityTestRule.startMainActivityOnBlankPage();
+        CoreAccountInfo accountInfo =
+                mSigninTestRule.addAccount(
+                        AccountManagerTestRule.TEST_ACCOUNT_EMAIL, MINOR_MODE_NOT_REQUIRED);
+        mSigninTestRule.waitForSeeding();
+        SigninTestUtil.signin(accountInfo);
+        mSyncConsentActivity = waitForSyncConsentActivity(accountInfo);
+        onViewWaiting(withText(R.string.signin_accept_button)).perform(click());
+        histogramWatcher.assertExpected();
     }
 
     @Test

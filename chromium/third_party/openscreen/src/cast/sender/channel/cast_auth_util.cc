@@ -113,7 +113,7 @@ class CastNonce {
 //
 // TODO(issuetracker.google.com/193164666): It would be simpler
 // to just pass the underlying verification error directly to the client.
-Error MapToOpenscreenError(Error verify_error, bool crl_required) {
+Error MapToOpenscreenError(const Error& verify_error, bool crl_required) {
   switch (verify_error.code()) {
     case Error::Code::kErrCertsMissing:
       return Error(Error::Code::kCastV2PeerCertEmpty,

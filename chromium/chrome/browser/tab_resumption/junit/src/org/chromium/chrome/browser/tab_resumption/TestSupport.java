@@ -4,12 +4,22 @@
 
 package org.chromium.chrome.browser.tab_resumption;
 
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import android.graphics.Bitmap;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import org.junit.Assert;
 
 import org.chromium.chrome.browser.recent_tabs.ForeignSessionHelper.ForeignSession;
 import org.chromium.chrome.browser.recent_tabs.ForeignSessionHelper.ForeignSessionTab;
 import org.chromium.chrome.browser.recent_tabs.ForeignSessionHelper.ForeignSessionWindow;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.sync_device_info.FormFactor;
+import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
 
 import java.util.ArrayList;
@@ -143,5 +153,82 @@ public class TestSupport {
                         /* formFactor= */ FormFactor.TABLET);
 
         return new ArrayList<>(Arrays.asList(tabletForeignSession));
+    }
+
+    /** Makes a SuggestionEntry from ForeignSessionTab and `sourceName`. */
+    static SuggestionEntry makeEntryFromTabAndSourceName(ForeignSessionTab tab, String sourceName) {
+        return new SuggestionEntry(
+                /* sourceName= */ sourceName,
+                /* url= */ tab.url,
+                /* title= */ tab.title,
+                /* timestamp= */ tab.lastActiveTime,
+                /* id= */ tab.id);
+    }
+
+    /** Makes a list of sorted SuggestionEntry derived from makeForeignSessionsA(). */
+    static List<SuggestionEntry> makeForeignSessionSuggestionsA() {
+        // There are 7 tabs total, but TAB3 is invalid, and TAB2 is stale, resulting in 5:
+        // TAB6 < TAB5 < TAB1 "My Desktop" < TAB7 "My Tablet" < TAB4.
+        List<SuggestionEntry> suggestions = new ArrayList<SuggestionEntry>();
+        suggestions.add(makeEntryFromTabAndSourceName(TAB6, "My Tablet"));
+        suggestions.add(makeEntryFromTabAndSourceName(TAB5, "My Tablet"));
+        suggestions.add(makeEntryFromTabAndSourceName(TAB1, "My Desktop"));
+        suggestions.add(makeEntryFromTabAndSourceName(TAB7, "My Tablet"));
+        suggestions.add(makeEntryFromTabAndSourceName(TAB4, "My Desktop"));
+        return suggestions;
+    }
+
+    /** Makes a list of sorted SuggestionEntry derived from makeForeignSessionsB(). */
+    static List<SuggestionEntry> makeForeignSessionSuggestionsB() {
+        // Only TAB5 and TAB7 are open, and they got selected. TAB5 < TAB7.
+        List<SuggestionEntry> suggestions = new ArrayList<SuggestionEntry>();
+        suggestions.add(makeEntryFromTabAndSourceName(TAB5, "My Tablet"));
+        suggestions.add(makeEntryFromTabAndSourceName(TAB7, "My Tablet"));
+        return suggestions;
+    }
+
+    static SuggestionEntry makeSyncDerivedSuggestion(int index) {
+        assert index == 0 || index == 1;
+        GURL[] urlChoices = {JUnitTestGURLs.GOOGLE_URL_DOG, JUnitTestGURLs.GOOGLE_URL_CAT};
+        String[] titleChoices = {"Google Dog", "Google Cat"};
+        return new SuggestionEntry(
+                /* sourceName= */ "Desktop",
+                /* url= */ urlChoices[index],
+                /* title= */ titleChoices[index],
+                /* timestamp= */ makeTimestamp(16, 0, 0),
+                /* id= */ 45);
+    }
+
+    static Tab makeMockBrowserTab() {
+        Tab tab = mock(Tab.class);
+        when(tab.getUrl()).thenReturn(JUnitTestGURLs.BLUE_1);
+        when(tab.getTitle()).thenReturn("Blue 1");
+        when(tab.getTimestampMillis()).thenReturn(BASE_TIME_MS);
+        when(tab.getId()).thenReturn(42);
+        return tab;
+    }
+
+    /** Asserts that a List<SuggestionEntry> is empty but not null. */
+    static void assertEmptySuggestions(@Nullable List<SuggestionEntry> suggestions) {
+        Assert.assertNotNull(suggestions);
+        Assert.assertEquals(0, suggestions.size());
+    }
+
+    /** Asserts that two List<SuggestionEntry> contain identical data. */
+    static void assertSuggestionsEqual(
+            @NonNull List<SuggestionEntry> expectedSuggestions,
+            @Nullable List<SuggestionEntry> suggestions) {
+        Assert.assertNotNull(suggestions);
+        int n = expectedSuggestions.size();
+        Assert.assertEquals(n, suggestions.size());
+        for (int i = 0; i < n; ++i) {
+            SuggestionEntry expectedEntry = expectedSuggestions.get(i);
+            SuggestionEntry entry = suggestions.get(i);
+            Assert.assertEquals(expectedEntry.sourceName, entry.sourceName);
+            Assert.assertEquals(expectedEntry.url, entry.url);
+            Assert.assertEquals(expectedEntry.title, entry.title);
+            Assert.assertEquals(expectedEntry.lastActiveTime, entry.lastActiveTime);
+            Assert.assertEquals(expectedEntry.id, entry.id);
+        }
     }
 }

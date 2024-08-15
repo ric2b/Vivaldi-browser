@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ash/input_method/ui/undo_window.h"
 
+#include <iostream>
+
 #include "ash/public/cpp/style/color_provider.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ash/input_method/assistive_window_properties.h"
@@ -20,8 +22,6 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/wm/core/window_animations.h"
-
-#include <iostream>
 namespace ui {
 namespace ime {
 
@@ -45,13 +45,16 @@ void SetHighlighted(views::View& view, bool highlighted) {
 }  // namespace
 
 UndoWindow::UndoWindow(gfx::NativeView parent, AssistiveDelegate* delegate)
-    : delegate_(delegate) {
+    : BubbleDialogDelegateView(nullptr,
+                               views::BubbleBorder::Arrow::BOTTOM_LEFT,
+                               views::BubbleBorder::DIALOG_SHADOW,
+                               true),
+      delegate_(delegate) {
   DialogDelegate::SetButtons(ui::DIALOG_BUTTON_NONE);
   SetCanActivate(false);
   DCHECK(parent);
   set_parent_window(parent);
   set_margins(gfx::Insets(kPadding));
-  SetArrow(views::BubbleBorder::Arrow::BOTTOM_LEFT);
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal));
 
@@ -136,7 +139,6 @@ void UndoWindow::Hide() {
 void UndoWindow::Show(const bool show_setting_link) {
   learn_more_button_->SetVisible(show_setting_link);
   GetWidget()->Show();
-  SizeToContents();
 }
 
 void UndoWindow::SetBounds(const gfx::Rect& word_bounds) {

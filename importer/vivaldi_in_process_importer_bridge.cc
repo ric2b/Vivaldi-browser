@@ -17,6 +17,11 @@ void InProcessImporterBridge::AddSpeedDial(
   writer_->AddSpeedDial(speeddials);
 }
 
+void InProcessImporterBridge::AddExtensions(
+    const std::vector<std::string>& extensions) {
+  writer_->AddExtensions(extensions, host_);
+}
+
 void InProcessImporterBridge::NotifyItemFailed(importer::ImportItem item,
                                                const std::string& error) {
   host_->NotifyImportItemFailed(item, error);

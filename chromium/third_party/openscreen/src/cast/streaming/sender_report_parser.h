@@ -29,7 +29,7 @@ class SenderReportParser {
     StatusReportId report_id{};
   };
 
-  explicit SenderReportParser(RtcpSession* session);
+  explicit SenderReportParser(RtcpSession& session);
   ~SenderReportParser();
 
   // Parses the RTCP |packet|, and returns a parsed sender report if the packet
@@ -38,7 +38,7 @@ class SenderReportParser {
   std::optional<SenderReportWithId> Parse(ByteView packet);
 
  private:
-  RtcpSession* const session_;
+  RtcpSession& session_;
 
   // Tracks the recently-parsed RTP timestamps so that the truncated values can
   // be re-expanded into full-form.

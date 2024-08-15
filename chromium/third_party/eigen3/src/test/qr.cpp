@@ -82,6 +82,7 @@ void qr_invertible() {
   m1 = m3 * m1 * m3.adjoint();
   qr.compute(m1);
   VERIFY_IS_APPROX(log(absdet), qr.logAbsDeterminant());
+  VERIFY_IS_APPROX(numext::sign(det), qr.signDeterminant());
   // This test is tricky if the determinant becomes too small.
   // Since we generate random numbers with magnitude range [0,1], the average determinant is 0.5^size
   RealScalar tol =
@@ -102,7 +103,7 @@ void qr_verify_assert() {
   VERIFY_RAISES_ASSERT(qr.householderQ())
   VERIFY_RAISES_ASSERT(qr.determinant())
   VERIFY_RAISES_ASSERT(qr.absDeterminant())
-  VERIFY_RAISES_ASSERT(qr.logAbsDeterminant())
+  VERIFY_RAISES_ASSERT(qr.signDeterminant())
 }
 
 EIGEN_DECLARE_TEST(qr) {

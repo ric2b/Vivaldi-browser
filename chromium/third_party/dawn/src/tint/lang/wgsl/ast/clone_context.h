@@ -127,9 +127,7 @@ class CloneContext {
     ast::Type Clone(const ast::Type& ty);
 
     /// Clones the Source `s` into #dst
-    /// TODO(bclayton) - Currently this 'clone' is a shallow copy. If/when
-    /// `Source.File`s are owned by the Program this should make a copy of the
-    /// file.
+    /// @note this 'clone' is a shallow copy.
     /// @param s the `Source` to clone
     /// @return the cloned source
     Source Clone(const Source& s) const { return s; }
@@ -319,7 +317,6 @@ class CloneContext {
         if (TINT_UNLIKELY(symbol_transform_)) {
             TINT_ICE() << "ReplaceAll(const SymbolTransform&) called multiple times on the same "
                           "CloneContext";
-            return *this;
         }
         symbol_transform_ = replacer;
         return *this;
@@ -570,16 +567,14 @@ class CloneContext {
             return cast;
         }
         CheckedCastFailure(obj, tint::TypeInfo::Of<TO>());
-        return nullptr;
     }
 
     /// Clones a Node object, using any replacements or transforms that have
     /// been configured.
     const ast::Node* CloneNode(const ast::Node* object);
 
-    /// Adds an error diagnostic to Diagnostics() that the cloned object was not
-    /// of the expected type.
-    void CheckedCastFailure(const ast::Node* got, const TypeInfo& expected);
+    /// Aborts with an ICE describing that the cloned object type was not as required.
+    [[noreturn]] void CheckedCastFailure(const ast::Node* got, const TypeInfo& expected);
 
     /// @returns the diagnostic list of #dst
     diag::List& Diagnostics() const;

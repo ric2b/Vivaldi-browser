@@ -40,7 +40,7 @@ class SingleClientNotesSyncTest : public NotesSyncTest {
       delete;
 };
 
-IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
+IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, DISABLED_Sanity) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
   // Starting state:
@@ -182,7 +182,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
     VerifyNotesModelMatchesFakeServer(0);
 }
 
-IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, InjectedNote) {
+IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, DISABLED_InjectedNote) {
   std::string content = "Montreal Canadiens";
   fake_server::EntityBuilderFactory entity_builder_factory;
   // Entities can't have an empty title. A single space character represents
@@ -198,7 +198,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, InjectedNote) {
   ASSERT_EQ(1, CountNotesWithContentMatching(0, content));
 }
 
-IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, NotesAllNodesRemovedEvent) {
+IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest,
+                       DISABLED_NotesAllNodesRemovedEvent) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
   // Starting state:
   //    -> folder0

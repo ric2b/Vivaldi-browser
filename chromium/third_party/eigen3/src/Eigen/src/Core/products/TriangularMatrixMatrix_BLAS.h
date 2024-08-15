@@ -90,6 +90,7 @@ EIGEN_BLAS_TRMM_SPECIALIZE(scomplex, false)
     static void run(Index _rows, Index _cols, Index _depth, const EIGTYPE* _lhs, Index lhsStride, const EIGTYPE* _rhs, \
                     Index rhsStride, EIGTYPE* res, Index resStride, EIGTYPE alpha,                                     \
                     level3_blocking<EIGTYPE, EIGTYPE>& blocking) {                                                     \
+      if (_rows == 0 || _cols == 0 || _depth == 0) return;                                                             \
       Index diagSize = (std::min)(_rows, _depth);                                                                      \
       Index rows = IsLower ? _rows : diagSize;                                                                         \
       Index depth = IsLower ? diagSize : _depth;                                                                       \
@@ -211,6 +212,7 @@ EIGEN_BLAS_TRMM_L(scomplex, float, cf, ctrmm_)
     static void run(Index _rows, Index _cols, Index _depth, const EIGTYPE* _lhs, Index lhsStride, const EIGTYPE* _rhs, \
                     Index rhsStride, EIGTYPE* res, Index resStride, EIGTYPE alpha,                                     \
                     level3_blocking<EIGTYPE, EIGTYPE>& blocking) {                                                     \
+      if (_rows == 0 || _cols == 0 || _depth == 0) return;                                                             \
       Index diagSize = (std::min)(_cols, _depth);                                                                      \
       Index rows = _rows;                                                                                              \
       Index depth = IsLower ? _depth : diagSize;                                                                       \

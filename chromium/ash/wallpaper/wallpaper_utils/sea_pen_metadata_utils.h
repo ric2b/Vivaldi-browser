@@ -67,6 +67,13 @@ ASH_EXPORT void DecodeJsonMetadata(
     base::OnceCallback<
         void(personalization_app::mojom::RecentSeaPenImageInfoPtr)> callback);
 
+// Decodes the SeaPen metadata `json` string and extracts the template id from
+// it. Calls `callback` with nullopt if metadata is invalid or cannot be safely
+// decoded. `json` must not be wrapped in XMP metadata XML tags.
+ASH_EXPORT void DecodeJsonMetadataGetTemplateId(
+    const std::string& json,
+    base::OnceCallback<void(std::optional<int>)> callback);
+
 // Extract the id from a sea pen file name. SeaPen images must be saved to disk
 // as `/path/to/file/{id}.jpg` where id is a positive integer. `file_path` can
 // either include or omit the extension, and can include or omit leading
@@ -79,6 +86,13 @@ ASH_EXPORT std::optional<uint32_t> GetIdFromFileName(
 ASH_EXPORT std::vector<uint32_t> GetIdsFromFilePaths(
     const std::vector<base::FilePath>& file_paths);
 
+ASH_EXPORT bool IsValidTemplateQuery(
+    const personalization_app::mojom::SeaPenTemplateQueryPtr& query);
+
+// Extract the visible query string at the time of the image was saved from
+// RecentSeaPenImageInfo `ptr`, empty string if the query is null or invalid.
+ASH_EXPORT std::string GetQueryString(
+    const personalization_app::mojom::RecentSeaPenImageInfoPtr& ptr);
 }  // namespace ash
 
 #endif  // ASH_WALLPAPER_WALLPAPER_UTILS_SEA_PEN_METADATA_UTILS_H_

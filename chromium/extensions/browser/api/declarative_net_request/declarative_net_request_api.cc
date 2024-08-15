@@ -734,7 +734,7 @@ DeclarativeNetRequestTestMatchOutcomeFunction::Run() {
   auto method = params->request.method == dnr_api::RequestMethod::kNone
                     ? dnr_api::RequestMethod::kGet
                     : params->request.method;
-  // TODO(crbug.com/1141166): Add response header support for ruleset test
+  // TODO(crbug.com/40727004): Add response header support for ruleset test
   // matching.
   declarative_net_request::RequestParams request_params(
       url, initiator, params->request.type, method, tab_id,
@@ -782,7 +782,9 @@ DeclarativeNetRequestTestMatchOutcomeFunction::Run() {
     result.matched_rules.push_back(std::move(match));
   } else {
     // If none found, check for modify header matches.
-    for (auto& action : matcher->GetModifyHeadersActions(request_params)) {
+    for (auto& action : matcher->GetModifyHeadersActions(
+             request_params,
+             declarative_net_request::RulesetMatchingStage::kOnBeforeRequest)) {
       dnr_api::MatchedRule match;
       match.rule_id = action.rule_id;
       match.ruleset_id = GetPublicRulesetID(*extension(), action.ruleset_id);

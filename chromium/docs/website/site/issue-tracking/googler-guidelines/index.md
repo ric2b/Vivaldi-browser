@@ -68,3 +68,6 @@ to Chrome that we preserve our culture of being open by default.
   functional bug), also flip visibility to Default Access.** Don’t just remove
   the [**security@chromium.org**](mailto:security@chromium.org) collaborator,
   because then it will become an orphan bug which needs to be rescued.
+
+- Any additional issues, please reach out to
+[chromium-issue-tracker-admins@google.com](chromium-issue-tracker-admins@google.com)

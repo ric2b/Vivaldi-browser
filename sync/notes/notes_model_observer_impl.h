@@ -33,7 +33,7 @@ class NoteModelView;
 // those local changes to the sync engine.
 class NotesModelObserverImpl : public vivaldi::NotesModelObserver {
  public:
-  // |note_model| and |note_tracker| must not be null and must outlive
+  // `note_model` and `note_tracker` must not be null and must outlive
   // this object. Note that this class doesn't self register as observer.
   NotesModelObserverImpl(NoteModelView* note_model,
                          const base::RepeatingClosure& nudge_for_commit_closure,
@@ -46,31 +46,25 @@ class NotesModelObserverImpl : public vivaldi::NotesModelObserver {
   ~NotesModelObserverImpl() override;
 
   //  vivaldi::NotesModelObserver:
-  void NotesModelLoaded(vivaldi::NotesModel* /*unused*/,
-                        bool ids_reassigned) override;
-  void NotesModelBeingDeleted(vivaldi::NotesModel* /*unused*/) override;
-  void NotesNodeMoved(vivaldi::NotesModel* /*unused*/,
-                      const vivaldi::NoteNode* old_parent,
+  void NotesModelLoaded(bool ids_reassigned) override;
+  void NotesModelBeingDeleted() override;
+  void NotesNodeMoved(const vivaldi::NoteNode* old_parent,
                       size_t old_index,
                       const vivaldi::NoteNode* new_parent,
                       size_t new_index) override;
-  void NotesNodeAdded(vivaldi::NotesModel* /*unused*/,
-                      const vivaldi::NoteNode* parent,
-                      size_t index) override;
-  void OnWillRemoveNotes(vivaldi::NotesModel* /*unused*/,
-                         const vivaldi::NoteNode* parent,
+  void NotesNodeAdded(const vivaldi::NoteNode* parent, size_t index) override;
+  void OnWillRemoveNotes(const vivaldi::NoteNode* parent,
                          size_t old_index,
-                         const vivaldi::NoteNode* node) override;
-  void NotesNodeRemoved(vivaldi::NotesModel* /*unused*/,
-                        const vivaldi::NoteNode* parent,
+                         const vivaldi::NoteNode* node,
+                         const base::Location& location) override;
+  void NotesNodeRemoved(const vivaldi::NoteNode* parent,
                         size_t old_index,
-                        const vivaldi::NoteNode* node) override;
-  void OnWillRemoveAllNotes(vivaldi::NotesModel* /*unused*/) override;
-  void NotesAllNodesRemoved(vivaldi::NotesModel* /*unused*/) override;
-  void NotesNodeChanged(vivaldi::NotesModel* /*unused*/,
-                        const vivaldi::NoteNode* node) override;
-  void NotesNodeChildrenReordered(vivaldi::NotesModel* /*unused*/,
-                                  const vivaldi::NoteNode* node) override;
+                        const vivaldi::NoteNode* node,
+                        const base::Location& location) override;
+  void OnWillRemoveAllNotes(const base::Location& location) override;
+  void NotesAllNodesRemoved(const base::Location& location) override;
+  void NotesNodeChanged(const vivaldi::NoteNode* node) override;
+  void NotesNodeChildrenReordered(const vivaldi::NoteNode* node) override;
 
  private:
   syncer::UniquePosition ComputePosition(const vivaldi::NoteNode& parent,
@@ -78,25 +72,28 @@ class NotesModelObserverImpl : public vivaldi::NotesModelObserver {
                                          const std::string& sync_id);
 
   // Processes the deletion of a note node and updates the
-  // |note_tracker_| accordingly. If |node| is a note, it gets marked
+  // `note_tracker_` accordingly. If `node` is a note, it gets marked
   // as deleted and that it requires a commit. If it's a folder, it recurses
-  // over all children before processing the folder itself.
-  void ProcessDelete(const vivaldi::NoteNode* node);
+  // over all children before processing the folder itself. `location`
+  // represents the origin of the deletion, i.e. which specific codepath was
+  // responsible for deleting `node`.
+  void ProcessDelete(const vivaldi::NoteNode* node,
+                     const base::Location& location);
 
-  // Returns current unique_position from sync metadata for the tracked |node|.
+  // Returns current unique_position from sync metadata for the tracked `node`.
   syncer::UniquePosition GetUniquePositionForNode(
       const vivaldi::NoteNode* node) const;
 
-  // Updates the unique position in sync metadata for the tracked |node| and
+  // Updates the unique position in sync metadata for the tracked `node` and
   // returns the new position. A new position is generated based on the left and
-  // right node's positions. At least one of |prev| and |next| must be valid.
+  // right node's positions. At least one of `prev` and `next` must be valid.
   syncer::UniquePosition UpdateUniquePositionForNode(
       const vivaldi::NoteNode* node,
       const syncer::UniquePosition& prev,
       const syncer::UniquePosition& next);
 
-  // Updates unique positions for all children from |parent| starting from
-  // |start_index| (must not be 0).
+  // Updates unique positions for all children from `parent` starting from
+  // `start_index` (must not be 0).
   void UpdateAllUniquePositionsStartingAt(const vivaldi::NoteNode* parent,
                                           size_t start_index);
 

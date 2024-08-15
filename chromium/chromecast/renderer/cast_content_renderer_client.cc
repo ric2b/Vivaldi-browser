@@ -170,12 +170,14 @@ void CastContentRendererClient::RunScriptsAtDocumentStart(
 void CastContentRendererClient::RunScriptsAtDocumentEnd(
     content::RenderFrame* render_frame) {}
 
-std::unique_ptr<::media::KeySystemSupportObserver>
+std::unique_ptr<::media::KeySystemSupportRegistration>
 CastContentRendererClient::GetSupportedKeySystems(
+    content::RenderFrame* render_frame,
     ::media::GetSupportedKeySystemsCB cb) {
 #if BUILDFLAG(IS_ANDROID)
-  return cdm::GetSupportedKeySystemsUpdates(
-      /*can_persist_data=*/true, std::move(cb));
+  return cdm::GetSupportedKeySystemsUpdates(render_frame,
+                                            /*can_persist_data=*/true,
+                                            std::move(cb));
 #else
   ::media::KeySystemInfos key_systems;
   media::AddChromecastKeySystems(&key_systems,
@@ -242,7 +244,8 @@ bool CastContentRendererClient::IsSupportedVideoType(
     const ::media::VideoType& type) {
   // TODO(servolk): make use of eotf.
 
-  // TODO(1066567): Check attached screen for support of type.hdr_metadata_type.
+  // TODO(crbug.com/40124585): Check attached screen for support of
+  // type.hdr_metadata_type.
   if (type.hdr_metadata_type != ::gfx::HdrMetadataType::kNone) {
     NOTIMPLEMENTED() << "HdrMetadataType support signaling not implemented.";
     return false;

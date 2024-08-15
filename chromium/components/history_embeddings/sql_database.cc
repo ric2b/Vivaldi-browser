@@ -18,12 +18,6 @@ namespace history_embeddings {
 constexpr int kLowestSupportedDatabaseVersion = 1;
 constexpr int kCurrentDatabaseVersion = 1;
 
-// TODO(orinj): Use model metadata when available.
-// Dimensions can't change without also changing model version since a model
-// works with a fixed number of dimensions.
-constexpr int kModelVersion = 0;
-constexpr int kModelDimensions = 4;
-
 namespace {
 
 [[nodiscard]] bool InitSchema(sql::Database& db) {
@@ -48,7 +42,7 @@ namespace {
   // Create an index over visit_id so we can quickly delete passages associated
   // with visits that get deleted.
   if (!db.Execute("CREATE INDEX IF NOT EXISTS index_passages_visit_id ON "
-                  "passages (visit_id)")) {
+                  "passages(visit_id)")) {
     return false;
   }
 
@@ -71,6 +65,13 @@ namespace {
     return false;
   }
 
+  // Create an index over visit_id so we can quickly delete embeddings
+  // associated with visits that get deleted.
+  if (!db.Execute("CREATE INDEX IF NOT EXISTS index_embeddings_visit_id ON "
+                  "embeddings(visit_id)")) {
+    return false;
+  }
+
   return true;
 }
 
@@ -80,6 +81,10 @@ SqlDatabase::SqlDatabase(const base::FilePath& storage_dir)
     : storage_dir_(storage_dir), weak_ptr_factory_(this) {}
 
 SqlDatabase::~SqlDatabase() = default;
+
+void SqlDatabase::SetEmbedderMetadata(EmbedderMetadata embedder_metadata) {
+  embedder_metadata_ = embedder_metadata;
+}
 
 bool SqlDatabase::LazyInit() {
   // TODO(b/325524013): Decide on a number of retries for initialization.
@@ -101,7 +106,7 @@ sql::InitStatus SqlDatabase::InitInternal(const base::FilePath& storage_dir) {
 
   base::FilePath db_file_path = storage_dir.Append(kHistoryEmbeddingsName);
 
-  if (!db_.Open(db_file_path)) {
+  if (!db_.Open(db_file_path) || !embedder_metadata_) {
     return sql::InitStatus::INIT_FAILURE;
   }
 
@@ -141,12 +146,13 @@ sql::InitStatus SqlDatabase::InitInternal(const base::FilePath& storage_dir) {
   constexpr char kKeyModelVersion[] = "model_version";
   int model_version = 0;
   meta_table.GetValue(kKeyModelVersion, &model_version);
-  if (model_version != kModelVersion) {
+  if (model_version != embedder_metadata_->model_version) {
     // Old version embeddings can't be used with new model. Simply delete them
     // all and set new version. Passages can be used for reconstruction later.
     constexpr char kSqlDeleteFromEmbeddings[] = "DELETE FROM embeddings;";
     if (!db_.Execute(kSqlDeleteFromEmbeddings) ||
-        !meta_table.SetValue(kKeyModelVersion, kModelVersion)) {
+        !meta_table.SetValue(kKeyModelVersion,
+                             embedder_metadata_->model_version)) {
       return sql::InitStatus::INIT_FAILURE;
     }
   }
@@ -205,7 +211,7 @@ std::optional<proto::PassagesValue> SqlDatabase::GetPassages(
 }
 
 size_t SqlDatabase::GetEmbeddingDimensions() const {
-  return kModelDimensions;
+  return embedder_metadata_->output_size;
 }
 
 bool SqlDatabase::AddUrlEmbeddings(const UrlEmbeddings& url_embeddings) {
@@ -245,9 +251,13 @@ bool SqlDatabase::AddUrlEmbeddings(const UrlEmbeddings& url_embeddings) {
 
 constexpr char kSqlSelectEmbeddings[] =
     "SELECT url_id, visit_id, visit_time, embeddings_blob FROM embeddings";
+constexpr char kSqlSelectEmbeddingsWithinTimeRange[] =
+    "SELECT url_id, visit_id, visit_time, embeddings_blob FROM embeddings "
+    "WHERE visit_time >= ?";
 
 std::unique_ptr<VectorDatabase::EmbeddingsIterator>
-SqlDatabase::MakeEmbeddingsIterator() {
+SqlDatabase::MakeEmbeddingsIterator(
+    std::optional<base::Time> time_range_start) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!LazyInit()) {
@@ -255,14 +265,24 @@ SqlDatabase::MakeEmbeddingsIterator() {
   }
 
   DCHECK(db_.IsSQLValid(kSqlSelectEmbeddings));
+  DCHECK(db_.IsSQLValid(kSqlSelectEmbeddingsWithinTimeRange));
 
   struct RowEmbeddingsIterator : public EmbeddingsIterator {
-    explicit RowEmbeddingsIterator(base::WeakPtr<SqlDatabase> sql_database)
+    explicit RowEmbeddingsIterator(base::WeakPtr<SqlDatabase> sql_database,
+                                   std::optional<base::Time> time_range_start)
         : sql_database(sql_database) {
       CHECK(!sql_database->iteration_statement_);
-      sql_database->iteration_statement_ =
-          std::make_unique<sql::Statement>(sql_database->db_.GetCachedStatement(
-              SQL_FROM_HERE, kSqlSelectEmbeddings));
+      if (time_range_start.has_value()) {
+        sql_database->iteration_statement_ = std::make_unique<sql::Statement>(
+            sql_database->db_.GetCachedStatement(
+                SQL_FROM_HERE, kSqlSelectEmbeddingsWithinTimeRange));
+        sql_database->iteration_statement_->BindTime(0,
+                                                     time_range_start.value());
+      } else {
+        sql_database->iteration_statement_ = std::make_unique<sql::Statement>(
+            sql_database->db_.GetCachedStatement(SQL_FROM_HERE,
+                                                 kSqlSelectEmbeddings));
+      }
     }
     ~RowEmbeddingsIterator() override {
       if (sql_database) {
@@ -301,8 +321,83 @@ SqlDatabase::MakeEmbeddingsIterator() {
     UrlEmbeddings data;
   };
 
-  return std::make_unique<RowEmbeddingsIterator>(
-      weak_ptr_factory_.GetWeakPtr());
+  return std::make_unique<RowEmbeddingsIterator>(weak_ptr_factory_.GetWeakPtr(),
+                                                 time_range_start);
+}
+
+bool SqlDatabase::DeleteDataForUrlId(history::URLID url_id) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (!LazyInit()) {
+    return false;
+  }
+
+  bool delete_passages_success = false;
+  {
+    constexpr char kSqlDeleteFromPassagesByUrl[] =
+        "DELETE FROM passages WHERE url_id=?";
+    DCHECK(db_.IsSQLValid(kSqlDeleteFromPassagesByUrl));
+    sql::Statement statement(
+        db_.GetCachedStatement(SQL_FROM_HERE, kSqlDeleteFromPassagesByUrl));
+    statement.BindInt64(0, url_id);
+    delete_passages_success = statement.Run();
+  }
+  bool delete_embeddings_success = false;
+  {
+    constexpr char kSqlDeleteFromEmbeddingsByUrl[] =
+        "DELETE FROM embeddings WHERE url_id=?";
+    DCHECK(db_.IsSQLValid(kSqlDeleteFromEmbeddingsByUrl));
+    sql::Statement statement(
+        db_.GetCachedStatement(SQL_FROM_HERE, kSqlDeleteFromEmbeddingsByUrl));
+    statement.BindInt64(0, url_id);
+    delete_embeddings_success = statement.Run();
+  }
+
+  return delete_passages_success && delete_embeddings_success;
+}
+
+bool SqlDatabase::DeleteDataForVisitId(history::VisitID visit_id) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (!LazyInit()) {
+    return false;
+  }
+
+  bool delete_passages_success = false;
+  {
+    constexpr char kSqlDeleteFromPassagesByVisit[] =
+        "DELETE FROM passages WHERE visit_id=?";
+    DCHECK(db_.IsSQLValid(kSqlDeleteFromPassagesByVisit));
+    sql::Statement statement(
+        db_.GetCachedStatement(SQL_FROM_HERE, kSqlDeleteFromPassagesByVisit));
+    statement.BindInt64(0, visit_id);
+    delete_passages_success = statement.Run();
+  }
+  bool delete_embeddings_success = false;
+  {
+    constexpr char kSqlDeleteFromEmbeddingsByVisit[] =
+        "DELETE FROM embeddings WHERE visit_id=?";
+    DCHECK(db_.IsSQLValid(kSqlDeleteFromEmbeddingsByVisit));
+    sql::Statement statement(
+        db_.GetCachedStatement(SQL_FROM_HERE, kSqlDeleteFromEmbeddingsByVisit));
+    statement.BindInt64(0, visit_id);
+    delete_embeddings_success = statement.Run();
+  }
+
+  return delete_passages_success && delete_embeddings_success;
+}
+
+bool SqlDatabase::DeleteAllData() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (!LazyInit()) {
+    return false;
+  }
+
+  bool delete_passages_success = db_.Execute("DELETE FROM passages;");
+  bool delete_embeddings_success = db_.Execute("DELETE FROM embeddings;");
+
+  return delete_passages_success && delete_embeddings_success;
 }
 
 void SqlDatabase::DatabaseErrorCallback(int extended_error,

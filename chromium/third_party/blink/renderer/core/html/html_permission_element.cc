@@ -8,19 +8,28 @@
 
 #include "base/functional/bind.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "third_party/blink/public/common/input/web_pointer_properties.h"
 #include "third_party/blink/public/mojom/permissions/permission.mojom-blink.h"
 #include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/renderer/core/css/css_selector.h"
+#include "third_party/blink/renderer/core/css/font_size_functions.h"
+#include "third_party/blink/renderer/core/css/properties/css_property_instances.h"
+#include "third_party/blink/renderer/core/css/properties/longhand.h"
+#include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
+#include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/space_split_string.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_ukm_aggregator.h"
+#include "third_party/blink/renderer/core/frame/visual_viewport.h"
+#include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect.h"
 #include "third_party/blink/renderer/core/html/html_div_element.h"
 #include "third_party/blink/renderer/core/html/html_span_element.h"
@@ -28,7 +37,9 @@
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer_entry.h"
+#include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+#include "third_party/blink/renderer/core/style/computed_style_base_constants.h"
 #include "third_party/blink/renderer/platform/fonts/font_description.h"
 #include "third_party/blink/renderer/platform/fonts/font_selection_types.h"
 #include "third_party/blink/renderer/platform/geometry/calculation_expression_node.h"
@@ -37,6 +48,8 @@
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
+#include "ui/gfx/color_utils.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 
 namespace blink {
 
@@ -53,6 +66,17 @@ namespace {
 
 const base::TimeDelta kDefaultDisableTimeout = base::Milliseconds(500);
 constexpr FontSelectionValue kMinimumFontWeight = FontSelectionValue(200);
+constexpr float kMaximumWordSpacingToFontSizeRatio = 0.5;
+constexpr float kMinimumAllowedContrast = 3.;
+constexpr float kMaximumLetterSpacingToFontSizeRatio = 0.2;
+constexpr float kMinimumLetterSpacingToFontSizeRatio = -0.05;
+constexpr int kMaxLengthToFontSizeRatio = 3;
+constexpr int kMinLengthToFontSizeRatio = 1;
+constexpr int kMaxVerticalPaddingToFontSizeRatio = 1;
+constexpr int kMaxHorizontalPaddingToFontSizeRatio = 5;
+// Needed to avoid IntersectionObserver false-positives caused by other elements
+// being too close.
+constexpr int kMinMargin = 4;
 
 PermissionDescriptorPtr CreatePermissionDescriptor(PermissionName name) {
   auto descriptor = PermissionDescriptor::New();
@@ -110,24 +134,20 @@ Vector<PermissionDescriptorPtr> ParsePermissionDescriptorsFromString(
 
 // Helper to get permission text resource ID for the given map which has only
 // one element.
-int GetMessageIDSinglePermission(PermissionName name,
-                                 MojoPermissionStatus status) {
+int GetMessageIDSinglePermission(PermissionName name, bool granted) {
   if (name == PermissionName::VIDEO_CAPTURE) {
-    return status == MojoPermissionStatus::GRANTED
-               ? IDS_PERMISSION_REQUEST_CAMERA_ALLOWED
-               : IDS_PERMISSION_REQUEST_CAMERA;
+    return granted ? IDS_PERMISSION_REQUEST_CAMERA_ALLOWED
+                   : IDS_PERMISSION_REQUEST_CAMERA;
   }
 
   if (name == PermissionName::AUDIO_CAPTURE) {
-    return status == MojoPermissionStatus::GRANTED
-               ? IDS_PERMISSION_REQUEST_MICROPHONE_ALLOWED
-               : IDS_PERMISSION_REQUEST_MICROPHONE;
+    return granted ? IDS_PERMISSION_REQUEST_MICROPHONE_ALLOWED
+                   : IDS_PERMISSION_REQUEST_MICROPHONE;
   }
 
   if (name == PermissionName::GEOLOCATION) {
-    return status == MojoPermissionStatus::GRANTED
-               ? IDS_PERMISSION_REQUEST_GEOLOCATION_ALLOWED
-               : IDS_PERMISSION_REQUEST_GEOLOCATION;
+    return granted ? IDS_PERMISSION_REQUEST_GEOLOCATION_ALLOWED
+                   : IDS_PERMISSION_REQUEST_GEOLOCATION;
   }
 
   return 0;
@@ -136,21 +156,9 @@ int GetMessageIDSinglePermission(PermissionName name,
 // Helper to get permission text resource ID for the given map which has
 // multiple elements. Currently we only support "camera microphone" grouped
 // permissions.
-int GetMessageIDMultiplePermissions(
-    const HashMap<PermissionName, MojoPermissionStatus>&
-        permission_status_map) {
-  CHECK_EQ(permission_status_map.size(), 2U);
-  auto camera_it = permission_status_map.find(PermissionName::VIDEO_CAPTURE);
-  auto mic_it = permission_status_map.find(PermissionName::AUDIO_CAPTURE);
-  CHECK(camera_it != permission_status_map.end() &&
-        mic_it != permission_status_map.end());
-
-  if (camera_it->value == MojoPermissionStatus::GRANTED &&
-      mic_it->value == MojoPermissionStatus::GRANTED) {
-    return IDS_PERMISSION_REQUEST_CAMERA_MICROPHONE_ALLOWED;
-  }
-
-  return IDS_PERMISSION_REQUEST_CAMERA_MICROPHONE;
+int GetMessageIDMultiplePermissions(bool granted) {
+  return granted ? IDS_PERMISSION_REQUEST_CAMERA_MICROPHONE_ALLOWED
+                 : IDS_PERMISSION_REQUEST_CAMERA_MICROPHONE;
 }
 
 // Helper to get `PermissionsPolicyFeature` from permission name
@@ -183,17 +191,68 @@ String PermissionNameToString(PermissionName permission_name) {
   }
 }
 
-Length AdjustedMargin(const Length& margin) {
-  if (margin.IsCalculated()) {
-    if (margin.GetCalculationValue().IsNonNegative()) {
-      return margin;
-    }
+float ContrastBetweenColorAndBackgroundColor(const ComputedStyle* style) {
+  return color_utils::GetContrastRatio(
+      style->VisitedDependentColor(GetCSSPropertyColor()).toSkColor4f(),
+      style->VisitedDependentColor(GetCSSPropertyBackgroundColor())
+          .toSkColor4f());
+}
 
-    return Length(CalculationValue::CreateSimplified(
-        margin.GetCalculationValue().GetOrCreateExpression(),
-        Length::ValueRange::kNonNegative));
+// Returns true if the 'color' or 'background-color' properties have the
+// alphas set to anything else except fully opaque.
+bool AreColorsNonOpaque(const ComputedStyle* style) {
+  return style->VisitedDependentColor(GetCSSPropertyColor()).Alpha() != 1. ||
+         style->VisitedDependentColor(GetCSSPropertyBackgroundColor())
+                 .Alpha() != 1;
+}
+
+// Build an expression that is equivalent to `size * |factor|)`. To be used
+// inside a `calc-size` expression.
+scoped_refptr<const CalculationExpressionNode> BuildFitContentExpr(
+    float factor) {
+  auto constant_expr =
+      base::MakeRefCounted<CalculationExpressionNumberNode>(factor);
+  auto size_expr = base::MakeRefCounted<CalculationExpressionSizingKeywordNode>(
+      CalculationExpressionSizingKeywordNode::Keyword::kSize);
+  return CalculationExpressionOperationNode::CreateSimplified(
+      CalculationExpressionOperationNode::Children({constant_expr, size_expr}),
+      CalculationOperator::kMultiply);
+}
+
+// Builds an expression that takes a |length| and bounds it lower, higher, or on
+// both sides with the provided expressions.
+scoped_refptr<const CalculationExpressionNode> BuildLengthBoundExpr(
+    const Length& length,
+    std::optional<scoped_refptr<const CalculationExpressionNode>>
+        lower_bound_expr,
+    std::optional<scoped_refptr<const CalculationExpressionNode>>
+        upper_bound_expr) {
+  if (lower_bound_expr.has_value() && upper_bound_expr.has_value()) {
+    return CalculationExpressionOperationNode::CreateSimplified(
+        CalculationExpressionOperationNode::Children(
+            {lower_bound_expr.value(),
+             length.AsCalculationValue()->GetOrCreateExpression(),
+             upper_bound_expr.value()}),
+        CalculationOperator::kClamp);
   }
-  return (margin.Value() < 0) ? Length::FixedZero() : margin;
+
+  if (lower_bound_expr.has_value()) {
+    return CalculationExpressionOperationNode::CreateSimplified(
+        CalculationExpressionOperationNode::Children(
+            {lower_bound_expr.value(),
+             length.AsCalculationValue()->GetOrCreateExpression()}),
+        CalculationOperator::kMax);
+  }
+
+  if (upper_bound_expr.has_value()) {
+    return CalculationExpressionOperationNode::CreateSimplified(
+        CalculationExpressionOperationNode::Children(
+            {upper_bound_expr.value(),
+             length.AsCalculationValue()->GetOrCreateExpression()}),
+        CalculationOperator::kMin);
+  }
+
+  NOTREACHED_NORETURN();
 }
 
 }  // namespace
@@ -204,7 +263,8 @@ HTMLPermissionElement::HTMLPermissionElement(Document& document)
       permission_observer_receivers_(this, document.GetExecutionContext()),
       embedded_permission_control_receiver_(this,
                                             document.GetExecutionContext()) {
-  DCHECK(RuntimeEnabledFeatures::PermissionElementEnabled());
+  DCHECK(RuntimeEnabledFeatures::PermissionElementEnabled(
+      document.GetExecutionContext()));
   SetHasCustomStyleCallbacks();
   intersection_observer_ = IntersectionObserver::Create(
       GetDocument(),
@@ -221,6 +281,7 @@ HTMLPermissionElement::HTMLPermissionElement(Document& document)
 
   intersection_observer_->observe(this);
   EnsureUserAgentShadowRoot();
+  UseCounter::Count(document, WebFeature::kHTMLPermissionElement);
 }
 
 HTMLPermissionElement::~HTMLPermissionElement() = default;
@@ -233,7 +294,6 @@ void HTMLPermissionElement::Trace(Visitor* visitor) const {
   visitor->Trace(permission_service_);
   visitor->Trace(permission_observer_receivers_);
   visitor->Trace(embedded_permission_control_receiver_);
-  visitor->Trace(shadow_element_);
   visitor->Trace(permission_text_span_);
   visitor->Trace(intersection_observer_);
   HTMLElement::Trace(visitor);
@@ -241,8 +301,100 @@ void HTMLPermissionElement::Trace(Visitor* visitor) const {
 
 void HTMLPermissionElement::AttachLayoutTree(AttachContext& context) {
   Element::AttachLayoutTree(context);
-  DisableClickingTemporarily(DisableReason::kRecentlyAttachedToDOM,
+  if (permission_descriptors_.empty()) {
+    return;
+  }
+
+  if (GetDocument().GetFrame()->IsInFencedFrameTree()) {
+    AddConsoleError(
+        String::Format("The permission '%s' is not allowed in fenced frame",
+                       GetType().Utf8().c_str()));
+    return;
+  }
+
+  if (GetDocument().GetFrame()->IsCrossOriginToOutermostMainFrame() &&
+      !GetExecutionContext()
+           ->GetContentSecurityPolicy()
+           ->HasEnforceFrameAncestorsDirectives()) {
+    AddConsoleError(
+        String::Format("The permission '%s' is not allowed without the CSP "
+                       "'frame-ancestors' directive present.",
+                       GetType().Utf8().c_str()));
+    return;
+  }
+
+  for (const PermissionDescriptorPtr& descriptor : permission_descriptors_) {
+    if (!GetExecutionContext()->IsFeatureEnabled(
+            PermissionNameToPermissionsPolicyFeature(descriptor->name))) {
+      AddConsoleError(String::Format(
+          "The permission '%s' is not allowed in the current context due to "
+          "PermissionsPolicy",
+          PermissionNameToString(descriptor->name).Utf8().c_str()));
+      return;
+    }
+  }
+  DisableClickingTemporarily(DisableReason::kRecentlyAttachedToLayoutTree,
                              kDefaultDisableTimeout);
+  if (embedded_permission_control_receiver_.is_bound()) {
+    return;
+  }
+  mojo::PendingRemote<EmbeddedPermissionControlClient> client;
+  embedded_permission_control_receiver_.Bind(
+      client.InitWithNewPipeAndPassReceiver(), GetTaskRunner());
+  GetPermissionService()->RegisterPageEmbeddedPermissionControl(
+      mojo::Clone(permission_descriptors_), std::move(client));
+  CHECK(GetDocument().View());
+  GetDocument().View()->RegisterForLifecycleNotifications(this);
+}
+
+void HTMLPermissionElement::DetachLayoutTree(bool performing_reattach) {
+  Element::DetachLayoutTree(performing_reattach);
+  embedded_permission_control_receiver_.reset();
+  // We also need to remove all permission observer receivers from the set, to
+  // effectively stop listening the permission status change events.
+  permission_observer_receivers_.Clear();
+  permission_status_map_.clear();
+  permissions_granted_ = false;
+  if (auto* view = GetDocument().View()) {
+    view->UnregisterFromLifecycleNotifications(this);
+  }
+}
+
+void HTMLPermissionElement::Focus(const FocusParams& params) {
+  // This will only apply to `focus` and `blur` JS API. Other focus types (like
+  // accessibility focusing and manual user focus), will still be permitted as
+  // usual.
+  if (params.type == mojom::blink::FocusType::kScript) {
+    return;
+  }
+
+  HTMLElement::Focus(params);
+}
+
+bool HTMLPermissionElement::SupportsFocus(UpdateBehavior) const {
+  // The permission element is only focusable if it has a valid type.
+  return !permission_descriptors_.empty();
+}
+
+int HTMLPermissionElement::DefaultTabIndex() const {
+  // The permission element behaves similarly to a button and therefore is
+  // focusable via keyboard by default.
+  return 0;
+}
+
+CascadeFilter HTMLPermissionElement::GetCascadeFilter() const {
+  // Reject all properties for which 'kValidForPermissionElement' is false.
+  return CascadeFilter(CSSProperty::kValidForPermissionElement, false);
+}
+
+bool HTMLPermissionElement::CanGeneratePseudoElement(PseudoId id) const {
+  switch (id) {
+    case PseudoId::kPseudoIdAfter:
+    case PseudoId::kPseudoIdBefore:
+      return false;
+    default:
+      return Element::CanGeneratePseudoElement(id);
+  }
 }
 
 // static
@@ -250,6 +402,32 @@ Vector<PermissionDescriptorPtr>
 HTMLPermissionElement::ParsePermissionDescriptorsForTesting(
     const AtomicString& type) {
   return ParsePermissionDescriptorsFromString(type);
+}
+
+// static
+String HTMLPermissionElement::DisableReasonToString(DisableReason reason) {
+  switch (reason) {
+    case DisableReason::kRecentlyAttachedToLayoutTree:
+      return "being recently attached to layout tree";
+    case DisableReason::kIntersectionChanged:
+      return "intersection change";
+    case DisableReason::kInvalidStyle:
+      return "invalid style";
+  }
+}
+
+// static
+HTMLPermissionElement::UserInteractionDeniedReason
+HTMLPermissionElement::DisableReasonToUserInteractionDeniedReason(
+    DisableReason reason) {
+  switch (reason) {
+    case DisableReason::kRecentlyAttachedToLayoutTree:
+      return UserInteractionDeniedReason::kRecentlyAttachedToLayoutTree;
+    case DisableReason::kIntersectionChanged:
+      return UserInteractionDeniedReason::kIntersectionChanged;
+    case DisableReason::kInvalidStyle:
+      return UserInteractionDeniedReason::kInvalidStyle;
+  }
 }
 
 PermissionService* HTMLPermissionElement::GetPermissionService() {
@@ -292,7 +470,7 @@ void HTMLPermissionElement::AttributeChanged(
       case 1:
         permission_text_span_->setInnerText(
             GetLocale().QueryString(GetMessageIDSinglePermission(
-                permission_descriptors_[0]->name, MojoPermissionStatus::ASK)));
+                permission_descriptors_[0]->name, /*granted=*/false)));
         break;
       case 2:
         permission_text_span_->setInnerText(
@@ -302,45 +480,16 @@ void HTMLPermissionElement::AttributeChanged(
         NOTREACHED() << "Unexpected permissions size "
                      << permission_descriptors_.size();
     }
-
-    if (GetDocument().GetFrame()->IsInFencedFrameTree()) {
-      AddConsoleError(
-          String::Format("The permission '%s' is not allowed in fenced frame",
-                         GetType().Utf8().c_str()));
-      return;
-    }
-
-    for (const PermissionDescriptorPtr& descriptor : permission_descriptors_) {
-      if (!GetExecutionContext()->IsFeatureEnabled(
-              PermissionNameToPermissionsPolicyFeature(descriptor->name))) {
-        AddConsoleError(String::Format(
-            "The permission '%s' is not allowed in the current context due to "
-            "PermissionsPolicy",
-            PermissionNameToString(descriptor->name).Utf8().c_str()));
-        return;
-      }
-    }
-
-    // TODO(crbug.com/1462930): We might consider not displaying the element
-    // until the element is registered
-    mojo::PendingRemote<EmbeddedPermissionControlClient> client;
-    embedded_permission_control_receiver_.Bind(
-        client.InitWithNewPipeAndPassReceiver(), GetTaskRunner());
-    GetPermissionService()->RegisterPageEmbeddedPermissionControl(
-        mojo::Clone(permission_descriptors_), std::move(client));
   }
 
   HTMLElement::AttributeChanged(params);
 }
 
 void HTMLPermissionElement::DidAddUserAgentShadowRoot(ShadowRoot& root) {
-  CHECK(!shadow_element_);
-  shadow_element_ = MakeGarbageCollected<PermissionShadowElement>(*this);
-  root.AppendChild(shadow_element_);
   permission_text_span_ = MakeGarbageCollected<HTMLSpanElement>(GetDocument());
   permission_text_span_->SetShadowPseudoId(
       shadow_element_names::kPseudoInternalPermissionTextSpan);
-  shadow_element_->AppendChild(permission_text_span_);
+  root.AppendChild(permission_text_span_);
 }
 
 void HTMLPermissionElement::AdjustStyle(ComputedStyleBuilder& builder) {
@@ -348,10 +497,22 @@ void HTMLPermissionElement::AdjustStyle(ComputedStyleBuilder& builder) {
 
   builder.SetOutlineOffset(builder.OutlineOffset().ClampNegativeToZero());
 
-  builder.SetMarginLeft(AdjustedMargin(builder.MarginLeft()));
-  builder.SetMarginRight(AdjustedMargin(builder.MarginRight()));
-  builder.SetMarginTop(AdjustedMargin(builder.MarginTop()));
-  builder.SetMarginBottom(AdjustedMargin(builder.MarginBottom()));
+  builder.SetMarginLeft(
+      AdjustedBoundedLength(builder.MarginLeft(), /*lower_bound=*/kMinMargin,
+                            /*upper_bound=*/std::nullopt,
+                            /*should_multiply_by_content_size=*/false));
+  builder.SetMarginRight(
+      AdjustedBoundedLength(builder.MarginRight(), /*lower_bound=*/kMinMargin,
+                            /*upper_bound=*/std::nullopt,
+                            /*should_multiply_by_content_size=*/false));
+  builder.SetMarginTop(
+      AdjustedBoundedLength(builder.MarginTop(), /*lower_bound=*/kMinMargin,
+                            /*upper_bound=*/std::nullopt,
+                            /*should_multiply_by_content_size=*/false));
+  builder.SetMarginBottom(
+      AdjustedBoundedLength(builder.MarginBottom(), /*lower_bound=*/kMinMargin,
+                            /*upper_bound=*/std::nullopt,
+                            /*should_multiply_by_content_size=*/false));
 
   // Check and modify (if needed) properties related to the font.
   std::optional<FontDescription> new_font_description;
@@ -377,30 +538,122 @@ void HTMLPermissionElement::AdjustStyle(ComputedStyleBuilder& builder) {
     builder.SetFontDescription(*new_font_description);
   }
 
-  // TODO(crbug.com/1462930): Validate here that the 'background-color' and
-  // 'color' properties pass accessibility checks (and are at 100% alpha).
+  if (builder.GetFontDescription().WordSpacing() >
+      kMaximumWordSpacingToFontSizeRatio * builder.FontSize()) {
+    builder.SetWordSpacing(builder.FontSize() *
+                           kMaximumWordSpacingToFontSizeRatio);
+  } else if (builder.GetFontDescription().WordSpacing() < 0) {
+    builder.SetWordSpacing(0);
+  }
 
-  // TODO(crbug.com/1462930): Add here checks to force the min/max-width/height.
+  if (builder.GetDisplayStyle().Display() != EDisplay::kNone &&
+      builder.GetDisplayStyle().Display() != EDisplay::kInlineBlock) {
+    builder.SetDisplay(EDisplay::kInlineBlock);
+  }
 
-  // TODO(crbug.com/1462930): Validate here the `letter-spacing` property, and
-  // that it's not too big.
+  if (builder.GetFontDescription().LetterSpacing() >
+      kMaximumLetterSpacingToFontSizeRatio * builder.FontSize()) {
+    builder.SetLetterSpacing(builder.FontSize() *
+                             kMaximumLetterSpacingToFontSizeRatio);
+  } else if (builder.GetFontDescription().LetterSpacing() <
+             kMinimumLetterSpacingToFontSizeRatio * builder.FontSize()) {
+    builder.SetLetterSpacing(builder.FontSize() *
+                             kMinimumLetterSpacingToFontSizeRatio);
+  }
 
-  // TODO(crbug.com/1462930): Set text direction (ltr\rtl) based on language.
+  builder.SetMinHeight(AdjustedBoundedLength(
+      builder.MinHeight(),
+      /*lower_bound=*/builder.FontSize() * kMinLengthToFontSizeRatio,
+      /*upper_bound=*/builder.FontSize() * kMaxLengthToFontSizeRatio,
+      /*should_multiply_by_content_size=*/false));
+  builder.SetMaxHeight(AdjustedBoundedLength(
+      builder.MaxHeight(),
+      /*lower_bound=*/std::nullopt,
+      /*upper_bound=*/builder.FontSize() * kMaxLengthToFontSizeRatio,
+      /*should_multiply_by_content_size=*/false));
+  builder.SetMinWidth(
+      AdjustedBoundedLength(builder.MinWidth(),
+                            /*lower_bound=*/kMinLengthToFontSizeRatio,
+                            /*upper_bound=*/kMaxLengthToFontSizeRatio,
+                            /*should_multiply_by_content_size=*/true));
+  builder.SetMaxWidth(AdjustedBoundedLength(
+      builder.MaxWidth(),
+      /*lower_bound=*/std::nullopt, /*upper_bound=*/kMaxLengthToFontSizeRatio,
+      /*should_multiply_by_content_size=*/true));
 
-  // TODO(crbug.com/1462930): Set word-spacing so it's at most 5px.
+  // If width is set to auto and there is left padding specified, we will
+  // respect the padding (up to a certain maximum), otherwise the padding has no
+  // effect. We treat height and top/bottom padding similarly.
+  if (builder.Width().IsAuto() && builder.PaddingLeft().IsSpecified() &&
+      !builder.PaddingLeft().IsZero()) {
+    if (builder.PaddingRight().IsSpecified() &&
+        !builder.PaddingRight().IsZero() &&
+        builder.PaddingLeft() != builder.PaddingRight()) {
+      AddConsoleError(
+          "The permission element does not support 'padding-right'. "
+          "'padding-right' is always set to be identical to 'padding-left'.");
+    }
 
-  // TODO(crbug.com/1462930): Ensure font-size at least as large as the
-  // equivalent of 'small'.
+    builder.SetPaddingLeft(
+        AdjustedBoundedLength(builder.PaddingLeft(),
+                              /*lower_bound=*/std::nullopt,
+                              /*upper_bound=*/builder.FontSize() *
+                                  kMaxHorizontalPaddingToFontSizeRatio,
+                              /*should_multiply_by_content_size=*/false));
+    builder.SetPaddingRight(builder.PaddingLeft());
+  } else {
+    builder.ResetPaddingLeft();
+    builder.ResetPaddingRight();
+  }
 
-  // TODO(crbug.com/1462930): Ensure any value of display other than 'none' is
-  // converted to 'inline-block'.
+  if (builder.Height().IsAuto() && builder.PaddingTop().IsSpecified() &&
+      !builder.PaddingTop().IsZero()) {
+    if (builder.PaddingBottom().IsSpecified() &&
+        !builder.PaddingBottom().IsZero() &&
+        builder.PaddingTop() != builder.PaddingBottom()) {
+      AddConsoleError(
+          "The permission element does not support 'padding-bottom'. "
+          "'padding-bottom' is always set to be identical to 'padding-top'.");
+    }
+    builder.SetPaddingTop(AdjustedBoundedLength(
+        builder.PaddingTop(),
+        /*lower_bound=*/std::nullopt,
+        /*upper_bound=*/builder.FontSize() * kMaxVerticalPaddingToFontSizeRatio,
+        /*should_multiply_by_content_size=*/false));
+    builder.SetPaddingBottom(builder.PaddingTop());
+  } else {
+    builder.ResetPaddingTop();
+    builder.ResetPaddingBottom();
+  }
+}
+
+void HTMLPermissionElement::DidRecalcStyle(const StyleRecalcChange change) {
+  if (IsStyleValid()) {
+    EnableClickingAfterDelay(DisableReason::kInvalidStyle,
+                             kDefaultDisableTimeout);
+  } else {
+    DisableClickingIndefinitely(DisableReason::kInvalidStyle);
+  }
 }
 
 void HTMLPermissionElement::DefaultEventHandler(Event& event) {
   if (event.type() == event_type_names::kDOMActivate) {
     event.SetDefaultHandled();
-    if (IsClickingEnabled()) {
-      RequestPageEmbededPermissions();
+    if (event.IsFullyTrusted() ||
+        RuntimeEnabledFeatures::BypassPepcSecurityForTestingEnabled()) {
+      if (IsClickingEnabled()) {
+        RequestPageEmbededPermissions();
+      }
+    } else {
+      // For automated testing purposes this behavior can be overridden by
+      // adding '--enable-features=BypassPepcSecurityForTesting' to the
+      // command line when launching the browser.
+      AddConsoleError(
+          "The permission element can only be activated by actual user "
+          "clicks.");
+      base::UmaHistogramEnumeration(
+          "Blink.PermissionElement.UserInteractionDeniedReason",
+          UserInteractionDeniedReason::kUntrustedEvent);
     }
     return;
   }
@@ -431,7 +684,7 @@ void HTMLPermissionElement::RegisterPermissionObserver(
   mojo::PendingRemote<PermissionObserver> observer;
   permission_observer_receivers_.Add(observer.InitWithNewPipeAndPassReceiver(),
                                      descriptor->name, GetTaskRunner());
-  GetPermissionService()->AddPermissionObserver(
+  GetPermissionService()->AddPageEmbeddedPermissionObserver(
       descriptor.Clone(), current_status, std::move(observer));
 }
 
@@ -450,7 +703,10 @@ void HTMLPermissionElement::OnEmbeddedPermissionControlRegistered(
   CHECK_EQ(permission_status_map_.size(), 0U);
   CHECK(!permissions_granted_);
   if (!allowed) {
-    // TODO(crbug.com/1462930): We will not display the element in this case.
+    AddConsoleError(String::Format(
+        "The permission '%s' has not passed security checks or has surpassed "
+        "the maximum instances quota per page.",
+        GetType().Utf8().c_str()));
     return;
   }
 
@@ -480,6 +736,7 @@ void HTMLPermissionElement::OnEmbeddedPermissionsDecided(
       return;
     case EmbeddedPermissionControlResult::kGranted:
       permissions_granted_ = true;
+      UpdateAppearance();
       DispatchEvent(*Event::Create(event_type_names::kResolve));
       return;
     case EmbeddedPermissionControlResult::kDenied:
@@ -503,16 +760,30 @@ HTMLPermissionElement::GetTaskRunner() {
 }
 
 bool HTMLPermissionElement::IsClickingEnabled() {
-  // TODO(crbug.com/1462930): We might consider not displaying the element in
-  // some certain situations, such as when the permission type is invalid or the
-  // element was not able to be registered from browser process.
   if (permission_descriptors_.empty()) {
+    AddConsoleError(String::Format(
+        "The permission element '%s' cannot be activated due to invalid type.",
+        GetType().Utf8().c_str()));
+    base::UmaHistogramEnumeration(
+        "Blink.PermissionElement.UserInteractionDeniedReason",
+        UserInteractionDeniedReason::kInvalidType);
+    return false;
+  }
+
+  if (!IsRegisteredInBrowserProcess()) {
+    AddConsoleError(String::Format(
+        "The permission element '%s' cannot be activated because of security "
+        "checks or because the page's quota has been exceeded.",
+        GetType().Utf8().c_str()));
+    base::UmaHistogramEnumeration(
+        "Blink.PermissionElement.UserInteractionDeniedReason",
+        UserInteractionDeniedReason::kFailedOrHasNotBeenRegistered);
     return false;
   }
 
   // Do not check click-disabling reasons if the PEPC validation feature is
   // disabled. This should only occur in testing scenarios.
-  if (RuntimeEnabledFeatures::DisablePepcSecurityForTestingEnabled()) {
+  if (RuntimeEnabledFeatures::BypassPepcSecurityForTestingEnabled()) {
     return true;
   }
 
@@ -521,18 +792,24 @@ bool HTMLPermissionElement::IsClickingEnabled() {
   base::TimeTicks now = base::TimeTicks::Now();
   while (!clicking_disabled_reasons_.empty()) {
     auto it = clicking_disabled_reasons_.begin();
-    if (it->value < now) {
-      clicking_disabled_reasons_.erase(it);
-    } else {
+    if (it->value >= now) {
+      AddConsoleError(String::Format(
+          "The permission element '%s' cannot be activated due to %s.",
+          GetType().Utf8().c_str(),
+          DisableReasonToString(it->key).Utf8().c_str()));
+      base::UmaHistogramEnumeration(
+          "Blink.PermissionElement.UserInteractionDeniedReason",
+          DisableReasonToUserInteractionDeniedReason(it->key));
       return false;
     }
+    clicking_disabled_reasons_.erase(it);
   }
 
   return true;
 }
 
 void HTMLPermissionElement::DisableClickingIndefinitely(DisableReason reason) {
-  clicking_disabled_reasons_.insert(reason, base::TimeTicks::Max());
+  clicking_disabled_reasons_.Set(reason, base::TimeTicks::Max());
 }
 
 void HTMLPermissionElement::DisableClickingTemporarily(
@@ -552,7 +829,9 @@ void HTMLPermissionElement::DisableClickingTemporarily(
 void HTMLPermissionElement::EnableClickingAfterDelay(
     DisableReason reason,
     const base::TimeDelta& delay) {
-  clicking_disabled_reasons_.Set(reason, base::TimeTicks::Now() + delay);
+  if (clicking_disabled_reasons_.Contains(reason)) {
+    clicking_disabled_reasons_.Set(reason, base::TimeTicks::Now() + delay);
+  }
 }
 
 void HTMLPermissionElement::EnableClicking(DisableReason reason) {
@@ -567,11 +846,15 @@ void HTMLPermissionElement::UpdateAppearance() {
 void HTMLPermissionElement::UpdateText() {
   CHECK_GT(permission_status_map_.size(), 0U);
   CHECK_LE(permission_status_map_.size(), 2u);
-  int message_id =
-      permission_status_map_.size() == 1
-          ? GetMessageIDSinglePermission(permission_status_map_.begin()->key,
-                                         permission_status_map_.begin()->value)
-          : GetMessageIDMultiplePermissions(permission_status_map_);
+  bool granted =
+      base::ranges::all_of(permission_status_map_, [](const auto& status) {
+        return status.value == MojoPermissionStatus::GRANTED;
+      });
+
+  int message_id = permission_status_map_.size() == 1
+                       ? GetMessageIDSinglePermission(
+                             permission_status_map_.begin()->key, granted)
+                       : GetMessageIDMultiplePermissions(granted);
 
   CHECK(message_id);
   permission_text_span_->setInnerText(GetLocale().QueryString(message_id));
@@ -580,6 +863,11 @@ void HTMLPermissionElement::UpdateText() {
 void HTMLPermissionElement::AddConsoleError(String error) {
   AddConsoleMessage(mojom::blink::ConsoleMessageSource::kRendering,
                     mojom::blink::ConsoleMessageLevel::kError, error);
+}
+
+void HTMLPermissionElement::AddConsoleWarning(String warning) {
+  AddConsoleMessage(mojom::blink::ConsoleMessageSource::kRendering,
+                    mojom::blink::ConsoleMessageLevel::kWarning, warning);
 }
 
 void HTMLPermissionElement::OnIntersectionChanged(
@@ -598,6 +886,175 @@ void HTMLPermissionElement::OnIntersectionChanged(
     is_fully_visible_ = true;
     EnableClickingAfterDelay(DisableReason::kIntersectionChanged,
                              kDefaultDisableTimeout);
+  }
+}
+
+bool HTMLPermissionElement::IsStyleValid() {
+  // No computed style when using `display: none`.
+  if (!GetComputedStyle()) {
+    AddConsoleWarning(
+        String::Format("Cannot compute style for the permission element '%s'",
+                       GetType().Utf8().c_str()));
+    return false;
+  }
+
+  if (AreColorsNonOpaque(GetComputedStyle())) {
+    AddConsoleWarning(String::Format(
+        "Color or background color of the permission element '%s' is opaque",
+        GetType().Utf8().c_str()));
+    return false;
+  }
+
+  if (ContrastBetweenColorAndBackgroundColor(GetComputedStyle()) <
+      kMinimumAllowedContrast) {
+    AddConsoleWarning(
+        String::Format("Contrast between color and background color of the "
+                       "permission element '%s' is too low",
+                       GetType().Utf8().c_str()));
+    return false;
+  }
+
+  if (GetComputedStyle()->ComputedFontSize() <
+      FontSizeFunctions::FontSizeForKeyword(
+          &GetDocument(), FontSizeFunctions::KeywordSize(CSSValueID::kSmall),
+          GetComputedStyle()->GetFontDescription().IsMonospace())) {
+    AddConsoleWarning(
+        String::Format("Font size of the permission element '%s' is too small",
+                       GetType().Utf8().c_str()));
+    return false;
+  }
+
+  if (GetComputedStyle()->ComputedFontSize() >
+      FontSizeFunctions::FontSizeForKeyword(
+          &GetDocument(), FontSizeFunctions::KeywordSize(CSSValueID::kXxxLarge),
+          GetComputedStyle()->GetFontDescription().IsMonospace())) {
+    AddConsoleWarning(
+        String::Format("Font size of the permission element '%s' is too large",
+                       GetType().Utf8().c_str()));
+    return false;
+  }
+
+  return true;
+}
+
+Length HTMLPermissionElement::AdjustedBoundedLength(
+    const Length& length,
+    std::optional<float> lower_bound,
+    std::optional<float> upper_bound,
+    bool should_multiply_by_content_size) {
+  CHECK(lower_bound.has_value() || upper_bound.has_value());
+  bool is_content_or_stretch =
+      length.HasContentOrIntrinsic() || length.HasStretch();
+  if (is_content_or_stretch && !length_console_error_sent_) {
+    length_console_error_sent_ = true;
+    AddConsoleWarning(
+        "content, intrinsic, or stretch sizes are not supported as values for "
+        "the min/max width and height of the permission element");
+  }
+
+  const Length& length_to_use =
+      is_content_or_stretch || length.IsNone() ? Length::Auto() : length;
+
+  // If the |length| is not supported and the |bound| is static, return a simple
+  // fixed length.
+  if (length_to_use.IsAuto() && !should_multiply_by_content_size) {
+    return Length(
+        lower_bound.has_value() ? lower_bound.value() : upper_bound.value(),
+        Length::Type::kFixed);
+  }
+
+  // If the |length| is supported and the |bound| is static, return a
+  // min|max|clamp expression-type length.
+  if (!should_multiply_by_content_size) {
+    auto lower_bound_expr =
+        lower_bound.has_value()
+            ? std::optional(base::MakeRefCounted<
+                            blink::CalculationExpressionPixelsAndPercentNode>(
+                  PixelsAndPercent(lower_bound.value())))
+            : std::nullopt;
+
+    auto upper_bound_expr =
+        upper_bound.has_value()
+            ? std::optional(base::MakeRefCounted<
+                            blink::CalculationExpressionPixelsAndPercentNode>(
+                  PixelsAndPercent(upper_bound.value())))
+            : std::nullopt;
+
+    // expr = min|max|clamp(bound, length, [bound2])
+    auto expr =
+        BuildLengthBoundExpr(length_to_use, lower_bound_expr, upper_bound_expr);
+    return Length(CalculationValue::CreateSimplified(
+        std::move(expr), Length::ValueRange::kNonNegative));
+  }
+
+  // bound_expr = size * bound.
+  auto lower_bound_expr =
+      lower_bound.has_value()
+          ? std::optional(BuildFitContentExpr(lower_bound.value()))
+          : std::nullopt;
+  auto upper_bound_expr =
+      upper_bound.has_value()
+          ? std::optional(BuildFitContentExpr(upper_bound.value()))
+          : std::nullopt;
+
+  scoped_refptr<const CalculationExpressionNode> bound_expr;
+
+  if (!length_to_use.IsAuto()) {
+    // bound_expr = min|max|clamp(size * bound, length, [size * bound2])
+    bound_expr =
+        BuildLengthBoundExpr(length_to_use, lower_bound_expr, upper_bound_expr);
+  } else {
+    bound_expr = lower_bound_expr.has_value()
+                     ? std::move(lower_bound_expr.value())
+                     : std::move(upper_bound_expr.value());
+  }
+
+  // This uses internally the CalculationExpressionSizingKeywordNode to create
+  // an expression that depends on the size of the contents of the permission
+  // element, in order to set necessary min/max bounds on width and height. If
+  // https://drafts.csswg.org/css-values-5/#calc-size is ever abandoned,
+  // the functionality should still be kept around in some way that can
+  // facilitate this use case.
+
+  auto fit_content_expr =
+      base::MakeRefCounted<CalculationExpressionSizingKeywordNode>(
+          CalculationExpressionSizingKeywordNode::Keyword::kFitContent);
+
+  // expr = calc-size(fit-content, bound_expr)
+  auto expr = CalculationExpressionOperationNode::CreateSimplified(
+      CalculationExpressionOperationNode::Children(
+          {fit_content_expr, bound_expr}),
+      CalculationOperator::kCalcSize);
+
+  return Length(CalculationValue::CreateSimplified(
+      std::move(expr), Length::ValueRange::kNonNegative));
+}
+
+void HTMLPermissionElement::DidFinishLifecycleUpdate(
+    const LocalFrameView& local_frame_view) {
+  // This code monitors the stability of the HTMLPermissionElement and
+  // temporarily disables the element if it detects an unstable state.
+  // "Unstable state" in this context occurs when the intersection rectangle
+  // between the viewport and the element's layout box changes, indicating that
+  // the element has been moved or resized.
+  LayoutObject* layout_object = GetLayoutObject();
+  if (!layout_object) {
+    return;
+  }
+
+  gfx::Rect viewport_in_root_frame = ToEnclosingRect(
+      local_frame_view.GetFrame().GetPage()->GetVisualViewport().VisibleRect());
+  PhysicalRect rect = To<LayoutBox>(layout_object)->PhysicalBorderBoxRect();
+  // `MapToVisualRectInAncestorSpace` with a null `ancestor` argument will
+  // mutate `rect` to visible rect in the root frame's coordinate space.
+  layout_object->MapToVisualRectInAncestorSpace(/*ancestor*/ nullptr, rect);
+  gfx::Rect intersection_rect =
+      IntersectRects(viewport_in_root_frame, ToEnclosingRect(rect));
+
+  if (intersection_rect_ != intersection_rect) {
+    intersection_rect_ = intersection_rect;
+    DisableClickingTemporarily(DisableReason::kRecentlyAttachedToLayoutTree,
+                               kDefaultDisableTimeout);
   }
 }
 

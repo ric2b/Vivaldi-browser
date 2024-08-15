@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PAGE_ALLOCATOR_INTERNALS_POSIX_H_
-#define BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PAGE_ALLOCATOR_INTERNALS_POSIX_H_
+#ifndef PARTITION_ALLOC_PAGE_ALLOCATOR_INTERNALS_POSIX_H_
+#define PARTITION_ALLOC_PAGE_ALLOCATOR_INTERNALS_POSIX_H_
+
+#include <sys/mman.h>
 
 #include <algorithm>
 #include <atomic>
@@ -11,9 +13,7 @@
 #include <cstdint>
 #include <cstring>
 
-#include <sys/mman.h>
-
-#include "build/build_config.h"
+#include "partition_alloc/build_config.h"
 #include "partition_alloc/oom.h"
 #include "partition_alloc/page_allocator.h"
 #include "partition_alloc/page_allocator_constants.h"
@@ -150,7 +150,7 @@ bool UseMapJit() {
 #if TARGET_IPHONE_SIMULATOR
   return true;
 #else
-  // TODO(https://crbug.com/1413818): Fill this out when the API it is
+  // TODO(crbug.com/40255826): Fill this out when the API it is
   // available.
   return false;
 #endif  // TARGET_IPHONE_SIMULATOR
@@ -215,14 +215,14 @@ bool TrySetSystemPagesAccessInternal(
     uintptr_t address,
     size_t length,
     PageAccessibilityConfiguration accessibility) {
-#if BUILDFLAG(ENABLE_THREAD_ISOLATION)
+#if PA_BUILDFLAG(ENABLE_THREAD_ISOLATION)
   if (accessibility.thread_isolation.enabled) {
     return 0 == MprotectWithThreadIsolation(reinterpret_cast<void*>(address),
                                             length,
                                             GetAccessFlags(accessibility),
                                             accessibility.thread_isolation);
   }
-#endif  // BUILDFLAG(ENABLE_THREAD_ISOLATION)
+#endif  // PA_BUILDFLAG(ENABLE_THREAD_ISOLATION)
   return 0 == WrapEINTR(mprotect)(reinterpret_cast<void*>(address), length,
                                   GetAccessFlags(accessibility));
 }
@@ -233,13 +233,13 @@ void SetSystemPagesAccessInternal(
     PageAccessibilityConfiguration accessibility) {
   int access_flags = GetAccessFlags(accessibility);
   int ret;
-#if BUILDFLAG(ENABLE_THREAD_ISOLATION)
+#if PA_BUILDFLAG(ENABLE_THREAD_ISOLATION)
   if (accessibility.thread_isolation.enabled) {
     ret = MprotectWithThreadIsolation(reinterpret_cast<void*>(address), length,
                                       GetAccessFlags(accessibility),
                                       accessibility.thread_isolation);
   } else
-#endif  // BUILDFLAG(ENABLE_THREAD_ISOLATION)
+#endif  // PA_BUILDFLAG(ENABLE_THREAD_ISOLATION)
   {
     ret = WrapEINTR(mprotect)(reinterpret_cast<void*>(address), length,
                               GetAccessFlags(accessibility));
@@ -299,14 +299,14 @@ void DecommitSystemPagesInternal(
 
   bool change_permissions =
       accessibility_disposition == PageAccessibilityDisposition::kRequireUpdate;
-#if BUILDFLAG(PA_DCHECK_IS_ON)
+#if PA_BUILDFLAG(PA_DCHECK_IS_ON)
   // This is not guaranteed, show that we're serious.
   //
   // More specifically, several callers have had issues with assuming that
   // memory is zeroed, this would hopefully make these bugs more visible.  We
   // don't memset() everything, because ranges can be very large, and doing it
   // over the entire range could make Chrome unusable with
-  // BUILDFLAG(PA_DCHECK_IS_ON).
+  // PA_BUILDFLAG(PA_DCHECK_IS_ON).
   //
   // Only do it when we are about to change the permissions, since we don't know
   // the previous permissions, and cannot restore them.
@@ -431,4 +431,4 @@ void DiscardSystemPagesInternal(uintptr_t address, size_t length) {
 
 }  // namespace partition_alloc::internal
 
-#endif  // BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PAGE_ALLOCATOR_INTERNALS_POSIX_H_
+#endif  // PARTITION_ALLOC_PAGE_ALLOCATOR_INTERNALS_POSIX_H_

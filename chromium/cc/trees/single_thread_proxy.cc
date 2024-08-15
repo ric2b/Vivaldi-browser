@@ -11,6 +11,7 @@
 #include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/trace_event/trace_event.h"
@@ -614,20 +615,14 @@ void SingleThreadProxy::DidReceiveCompositorFrameAckOnImplThread() {
                "SingleThreadProxy::DidReceiveCompositorFrameAckOnImplThread");
   if (scheduler_on_impl_thread_)
     scheduler_on_impl_thread_->DidReceiveCompositorFrameAck();
-  bool send_ack;
-  {
-    DebugScopedSetMainThread main(task_runner_provider_);
-    send_ack = layer_tree_host_->GetSettings().send_compositor_frame_ack;
-  }
-  if (send_ack) {
-    // We do a PostTask here because freeing resources in some cases (such as in
-    // TextureLayer) is PostTasked and we want to make sure ack is received
-    // after resources are returned.
-    task_runner_provider_->MainThreadTaskRunner()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&SingleThreadProxy::DidReceiveCompositorFrameAck,
-                       frame_sink_bound_weak_ptr_));
-  }
+
+  // We do a PostTask here because freeing resources in some cases (such as in
+  // TextureLayer) is PostTasked and we want to make sure ack is received
+  // after resources are returned.
+  task_runner_provider_->MainThreadTaskRunner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&SingleThreadProxy::DidReceiveCompositorFrameAck,
+                     frame_sink_bound_weak_ptr_));
 }
 
 void SingleThreadProxy::OnDrawForLayerTreeFrameSink(
@@ -937,6 +932,25 @@ void SingleThreadProxy::ClearHistory() {
     scheduler_on_impl_thread_->ClearHistory();
 }
 
+void SingleThreadProxy::SetHasActiveThreadedScroll(bool is_scrolling) {
+  // Some tests use `SingleThreadProxy` however they are setup with
+  // `LayerTreeSettings.single_thread_proxy_scheduler` true. Meaning we are in
+  // a mixed state. This is done to support `CompositeImmediatelyForTest`.
+  //
+  // We do not want to run the checks while in this state. We only create
+  // `scheduler_on_impl_thread_` when properly created with
+  // `single_thread_proxy_scheduler`.
+  if (scheduler_on_impl_thread_) {
+    NOTREACHED();
+  }
+}
+void SingleThreadProxy::SetWaitingForScrollEvent(
+    bool waiting_for_scroll_event) {
+  if (scheduler_on_impl_thread_) {
+    NOTREACHED();
+  }
+}
+
 size_t SingleThreadProxy::CommitDurationSampleCountForTesting() const {
   DCHECK(scheduler_on_impl_thread_);
   return scheduler_on_impl_thread_
@@ -996,7 +1010,6 @@ void SingleThreadProxy::ScheduledActionSendBeginMainFrame(
   task_runner_provider_->MainThreadTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(&SingleThreadProxy::BeginMainFrame,
                                 weak_factory_.GetWeakPtr(), begin_frame_args));
-  host_impl_->DidSendBeginMainFrame(begin_frame_args);
 }
 
 void SingleThreadProxy::FrameIntervalUpdated(base::TimeDelta interval) {
@@ -1264,7 +1277,7 @@ void SingleThreadProxy::WillNotReceiveBeginFrame() {
 
 void SingleThreadProxy::DidReceiveCompositorFrameAck() {
   DebugScopedSetMainThread main(task_runner_provider_);
-  layer_tree_host_->DidReceiveCompositorFrameAck();
+  layer_tree_host_->DidReceiveCompositorFrameAckDeprecatedForCompositor();
 }
 
 }  // namespace cc

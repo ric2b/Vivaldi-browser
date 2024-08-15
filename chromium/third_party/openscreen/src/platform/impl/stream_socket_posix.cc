@@ -248,7 +248,7 @@ Error StreamSocketPosix::Initialize() {
   return Error::None();
 }
 
-Error StreamSocketPosix::CloseOnError(Error error) {
+Error StreamSocketPosix::CloseOnError(const Error& error) {
   last_error_code_ = error.code();
   Close();
   return error;

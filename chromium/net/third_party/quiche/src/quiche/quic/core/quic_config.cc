@@ -1010,7 +1010,7 @@ void QuicConfig::SetDefaults() {
 
   SetInitialStreamFlowControlWindowToSend(kMinimumFlowControlSendWindow);
   SetInitialSessionFlowControlWindowToSend(kMinimumFlowControlSendWindow);
-  SetMaxAckDelayToSendMs(kDefaultDelayedAckTimeMs);
+  SetMaxAckDelayToSendMs(GetDefaultDelayedAckTimeMs());
   SetAckDelayExponentToSend(kDefaultAckDelayExponent);
   SetMaxPacketSizeToSend(kMaxIncomingPacketSize);
   SetMaxDatagramFrameSizeToSend(kMaxAcceptedDatagramFrameSize);
@@ -1042,7 +1042,7 @@ void QuicConfig::ToHandshakeMessage(
     max_unidirectional_streams_.ToHandshakeMessage(out);
     ack_delay_exponent_.ToHandshakeMessage(out);
   }
-  if (max_ack_delay_ms_.GetSendValue() != kDefaultDelayedAckTimeMs) {
+  if (max_ack_delay_ms_.GetSendValue() != GetDefaultDelayedAckTimeMs()) {
     // Only send max ack delay if it is using a non-default value, because
     // the default value is used by QuicSentPacketManager if it is not
     // sent during the handshake, and we want to save bytes.
@@ -1417,6 +1417,34 @@ std::optional<QuicSocketAddress> QuicConfig::GetPreferredAddressToSend(
     return alternate_server_address_ipv4_.GetSendValue();
   }
   return std::nullopt;
+}
+
+void QuicConfig::SetIPv4AlternateServerAddressForDNat(
+    const QuicSocketAddress& alternate_server_address_ipv4_to_send,
+    const QuicSocketAddress& mapped_alternate_server_address_ipv4) {
+  SetIPv4AlternateServerAddressToSend(alternate_server_address_ipv4_to_send);
+  mapped_alternate_server_address_ipv4_ = mapped_alternate_server_address_ipv4;
+}
+
+void QuicConfig::SetIPv6AlternateServerAddressForDNat(
+    const QuicSocketAddress& alternate_server_address_ipv6_to_send,
+    const QuicSocketAddress& mapped_alternate_server_address_ipv6) {
+  SetIPv6AlternateServerAddressToSend(alternate_server_address_ipv6_to_send);
+  mapped_alternate_server_address_ipv6_ = mapped_alternate_server_address_ipv6;
+}
+
+std::optional<QuicSocketAddress> QuicConfig::GetMappedAlternativeServerAddress(
+    quiche::IpAddressFamily address_family) const {
+  if (mapped_alternate_server_address_ipv6_.has_value() &&
+      address_family == quiche::IpAddressFamily::IP_V6) {
+    return *mapped_alternate_server_address_ipv6_;
+  }
+
+  if (mapped_alternate_server_address_ipv4_.has_value() &&
+      address_family == quiche::IpAddressFamily::IP_V4) {
+    return *mapped_alternate_server_address_ipv4_;
+  }
+  return GetPreferredAddressToSend(address_family);
 }
 
 void QuicConfig::ClearAlternateServerAddressToSend(

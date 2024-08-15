@@ -5,7 +5,7 @@
 package org.chromium.chrome.test.transit;
 
 import org.chromium.base.test.transit.BatchedPublicTransitRule;
-import org.chromium.base.test.transit.TransitStation;
+import org.chromium.base.test.transit.Station;
 import org.chromium.base.test.transit.Trip;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -25,25 +25,28 @@ public class ChromeTabbedActivityPublicTransitEntryPoints {
     /**
      * Start the test in a blank page.
      *
-     * @return the active {@link EntryPageStation}
+     * @return the active entry {@link PageStation}
      */
-    public EntryPageStation startOnBlankPage() {
-        EntryPageStation entryPageStation = new EntryPageStation(mActivityTestRule, false);
+    public WebPageStation startOnBlankPageNonBatched() {
+        WebPageStation entryPageStation =
+                WebPageStation.newWebPageStationBuilder()
+                        .withActivityTestRule(mActivityTestRule)
+                        .withEntryPoint()
+                        .build();
         return Trip.travelSync(
-                null, entryPageStation, (t) -> mActivityTestRule.startMainActivityOnBlankPage());
+                null, entryPageStation, () -> mActivityTestRule.startMainActivityOnBlankPage());
     }
 
     /**
      * Start the batched test in a blank page.
      *
-     * @return the active {@link EntryPageStation}
+     * @return the active entry {@link PageStation}
      */
-    public BasePageStation startOnBlankPageBatched(
-            BatchedPublicTransitRule<BasePageStation> batchedRule) {
-        return startBatched(batchedRule, this::startOnBlankPage);
+    public PageStation startOnBlankPage(BatchedPublicTransitRule<PageStation> batchedRule) {
+        return startBatched(batchedRule, this::startOnBlankPageNonBatched);
     }
 
-    private <T extends TransitStation> T startBatched(
+    private <T extends Station> T startBatched(
             BatchedPublicTransitRule<T> batchedRule, Callable<T> entryPointCallable) {
         mActivityTestRule.setFinishActivity(false);
         T station = batchedRule.getHomeStation();

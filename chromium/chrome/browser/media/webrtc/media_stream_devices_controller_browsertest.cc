@@ -188,7 +188,8 @@ class MediaStreamDevicesControllerTest : public WebRtcTestBase {
         url::Origin::Create(example_url()), false, request_type,
         /*requested_audio_device_ids=*/{audio_id},
         /*requested_video_device_ids=*/{video_id}, audio_type, video_type,
-        /*disable_local_echo=*/false, request_pan_tilt_zoom_permission);
+        /*disable_local_echo=*/false, request_pan_tilt_zoom_permission,
+        /*captured_surface_control_active=*/false);
   }
 
   content::MediaStreamRequest CreateRequest(
@@ -204,7 +205,7 @@ class MediaStreamDevicesControllerTest : public WebRtcTestBase {
     DCHECK(example_url_.is_empty());
     example_url_ = url;
     ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), example_url_));
-    EXPECT_TRUE(GetContentSettings()->GetMicrophoneCameraState().Empty());
+    EXPECT_TRUE(GetContentSettings()->GetMicrophoneCameraState().empty());
   }
 
   virtual media::VideoCaptureControlSupport GetControlSupport() const {
@@ -965,7 +966,7 @@ IN_PROC_BROWSER_TEST_F(MediaStreamDevicesControllerTest,
 
   VerifyResultState(blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED,
                     false, false);
-  EXPECT_TRUE(GetContentSettings()->GetMicrophoneCameraState().Empty());
+  EXPECT_TRUE(GetContentSettings()->GetMicrophoneCameraState().empty());
 }
 
 IN_PROC_BROWSER_TEST_F(MediaStreamDevicesControllerTest,
@@ -996,7 +997,7 @@ IN_PROC_BROWSER_TEST_F(MediaStreamDevicesControllerTest,
 
   VerifyResultState(blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED,
                     false, false);
-  EXPECT_TRUE(GetContentSettings()->GetMicrophoneCameraState().Empty());
+  EXPECT_TRUE(GetContentSettings()->GetMicrophoneCameraState().empty());
 }
 
 IN_PROC_BROWSER_TEST_F(MediaStreamDevicesControllerTest,

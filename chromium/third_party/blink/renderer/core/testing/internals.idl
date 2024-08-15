@@ -215,7 +215,6 @@ interface Internals {
     sequence<DOMString> shortcutIconURLs(Document document);
     sequence<DOMString> allIconURLs(Document document);
     [RaisesException] long numberOfPages(optional double pageWidthInPixels = 800, optional double pageHeightInPixels = 600);
-    [RaisesException] DOMString pageProperty(DOMString propertyName, unsigned long pageNumber);
     [RaisesException] float pageScaleFactor();
     [RaisesException] void setPageScaleFactor(float scaleFactor);
     [RaisesException] void setPageScaleFactorLimits(float minScaleFactor, float maxScaleFactor);
@@ -264,7 +263,7 @@ interface Internals {
     // Overrides default behavior to support the app-region CSS property.
     // Setting to true enables collection of draggable/non-draggable
     // app regions.
-    void SetSupportsAppRegion(boolean supports_app_regions);
+    void SetSupportsDraggableRegions(boolean supports_draggable_regionss);
 
     // Returns a string with information about the mouse cursor used at the specified client location.
     DOMString getCurrentCursorInfo();
@@ -345,6 +344,7 @@ interface Internals {
     void setVisualViewportOffset(long x, long y);
 
     boolean isUseCounted(Document document, unsigned long feature);
+    boolean isWebDXFeatureUseCounted(Document document, unsigned long feature);
     boolean isCSSPropertyUseCounted(Document document, DOMString propertyName);
     boolean isAnimatedCSSPropertyUseCounted(Document document, DOMString propertyName);
     void clearUseCounter(Document document, unsigned long feature);
@@ -448,6 +448,10 @@ interface Internals {
     void setAllowPerChunkTransferring(ReadableStream stream);
 
     void setBackForwardCacheRestorationBufferSize(long maxSize);
+
+    void setEventTimingBufferSize(long maxSize);
+
+    void stopResponsivenessMetricsUkmSampling();
 
     sequence<DOMString> getCreatorScripts(HTMLImageElement img);
 

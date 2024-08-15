@@ -103,8 +103,8 @@ TestCase& TestCase::EnableSinglePartitionFormat() {
   return *this;
 }
 
-TestCase& TestCase::NewDirectoryTree() {
-  options.enable_new_directory_tree = true;
+TestCase& TestCase::EnableMaterializedViews() {
+  options.enable_materialized_views = true;
   return *this;
 }
 
@@ -219,6 +219,11 @@ TestCase& TestCase::EnableCrosComponents() {
   return *this;
 }
 
+TestCase& TestCase::EnableSkyVault() {
+  options.enable_skyvault = true;
+  return *this;
+}
+
 std::string TestCase::GetFullName() const {
   std::string full_name = name;
 
@@ -312,8 +317,8 @@ std::string TestCase::GetFullName() const {
     full_name += "_CrosComponents";
   }
 
-  if (options.enable_new_directory_tree) {
-    full_name += "_NewDirectoryTree";
+  if (options.enable_materialized_views) {
+    full_name += "_MaterializedViews";
   }
 
   switch (options.device_mode) {

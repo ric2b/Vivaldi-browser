@@ -17,6 +17,7 @@
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/display/screen.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/view_utils.h"
 
@@ -42,6 +43,26 @@ ArcGameControlsFlag UpdateFlag(ArcGameControlsFlag flags,
 bool ShouldEnableFeatures() {
   return !OverviewController::Get()->InOverviewSession() &&
          !display::Screen::GetScreen()->InTabletMode();
+}
+
+views::Widget* GetNextWidgetToFocus(
+    const std::vector<views::Widget*> widget_list,
+    const views::Widget* focused_widget,
+    bool reverse) {
+  if (auto it =
+          std::find(widget_list.begin(), widget_list.end(), focused_widget);
+      it != widget_list.end()) {
+    const int focused_widget_index =
+        std::distance(widget_list.begin(),
+                      it);  // it - widget_list_.begin();
+    const size_t widget_list_size = widget_list.size();
+    const size_t next_focus_widget_index =
+        (reverse ? (focused_widget_index + widget_list_size - 1u)
+                 : (focused_widget_index + 1u)) %
+        widget_list_size;
+    return widget_list[next_focus_widget_index];
+  }
+  return nullptr;
 }
 
 std::optional<ArcGameControlsFlag> GetGameControlsFlag(aura::Window* window) {
@@ -150,6 +171,25 @@ int GetFrameHeaderHeight(aura::Window* window) {
   return (frame_header && frame_header->view()->GetVisible())
              ? frame_header->GetHeaderHeight()
              : 0;
+}
+
+void UpdateAccessibilityTree(const std::vector<views::Widget*>& widget_list) {
+  const size_t widget_list_size = widget_list.size();
+  if (widget_list_size <= 1u) {
+    return;
+  }
+
+  for (size_t i = 0; i < widget_list_size; i++) {
+    auto* contents_view = widget_list[i]->GetContentsView();
+    auto& view_a11y = contents_view->GetViewAccessibility();
+    const size_t prev_index = (i + widget_list_size - 1u) % widget_list_size;
+    const size_t next_index = (i + 1u) % widget_list_size;
+
+    view_a11y.SetPreviousFocus(widget_list[prev_index]);
+    view_a11y.SetNextFocus(widget_list[next_index]);
+    contents_view->NotifyAccessibilityEvent(ax::mojom::Event::kTreeChanged,
+                                            /*send_native_event=*/true);
+  }
 }
 
 }  // namespace ash::game_dashboard_utils

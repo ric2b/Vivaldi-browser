@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Portret 12</translation>
 <translation id="1158503667684816647">Təsdiqləmə bir daha göstərilməsin</translation>
 <translation id="1222195720020481779">Quraşdırıcı işə düşür...</translation>
+<translation id="1270785070369717623">Təəssüf ki, bu veb-bələdçi işlədiyi zaman Opera GX ayarları əlçatan deyil. Bu ayarları Vivaldiyə daxil etmək üçün bütün Opera GX pəncərələrini bağlayın və sonra Davam edin düyməsinə vurun.</translation>
 <translation id="1276145862619442150">Sürətli Yığım</translation>
 <translation id="1281950884873973195">Heyvan 6</translation>
 <translation id="1411638389238344450">Keçidi poçt ilə göndərin</translation>
@@ -12,6 +13,7 @@
 <translation id="1462666970065907900">Bu pəncərəni doğrudan bağlamaq istəyirsiniz?</translation>
 <translation id="1480046233931937785">Minnətdarlıq</translation>
 <translation id="1526344461589023948">Endirilmiş yenilənmələrin saxlanılmasına cəhd edilərkən xəta baş verdi. Kompyuterinizin diskində kifayət qədər boş yer olduğunu yoxlayın və sonra yenidən cəhd edin.</translation>
+<translation id="1635542496948266458">Başqa profilə keçid</translation>
 <translation id="1657174850639146440">Canavar 9</translation>
 <translation id="1676595396635191120">Yeni məxfi pəncərə</translation>
 <translation id="1702758681952953055">Əgər xəta təkrar olunarsa, bu barədə, aşağıdakılarılarla bizə hesabat göndərin:</translation>
@@ -27,12 +29,14 @@
 <translation id="1985669426322966465">Proqram təminatı yenilənməsi</translation>
 <translation id="2079036669923635404">Vivaldi'ni <ph name="VERSION" />versiyasına yeniləmək üçün buraya vurun.</translation>
 <translation id="2141974047387702305">Yenilənmə fayllarının yüklənməsi zamanı xəta baş verdi. İnternet bağlantınızı yoxlayın və yenidən cəhd edin.</translation>
+<translation id="2226825946708954262">⚠ Məlumatları itirməklə davam edək</translation>
 <translation id="2339641773402824483">Yenilənmələr yoxlanılır...</translation>
 <translation id="2441056087170876076">Canavar 2</translation>
 <translation id="2444387452209867610">Qeyd əlavə etmək</translation>
 <translation id="2486841023299517366">Heyvan 4</translation>
 <translation id="2612127540243995147">Quraşdırılmağa hazırdır. Vivaldi bağlanacaq və yenidən açılacaq.</translation>
 <translation id="2613387515621326337">Yenilənmə səhifəsini göstərmək</translation>
+<translation id="2645477450146475243">Təəssüf ki, bu veb-bələdçi işlədiyi zaman Opera ayarları əlçatan deyil. Bu ayarları Vivaldiyə daxil etmək üçün bütün Opera pəncərələrini bağlayın və sonra Davam edin düyməsinə vurun.</translation>
 <translation id="2647368062414805334">Təssüf ki, veb-bələdçi işlədiyi müddətdə Edge ayarları əlçatan deyil. Bu ayarları Vivaıdiyə idxal etmək üçün, Edge'dəki işlərinizi yaddaşda saxlayın və bütün Edge pəncərələrini bağlayın. Bundan sonra idxalı davam etdirin.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Heyvan 3</translation>
@@ -41,11 +45,14 @@
 <translation id="2923448633003185837">Yerləşdirin və Açın</translation>
 <translation id="2953943267837858202">Videonun avtomatik göstərilməsinə icazə verilmir</translation>
 <translation id="2977472760057091832">Keçidi məxfi pəncərədə açın</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Yeni vərəqdə açmaq</translation>
 <translation id="3027988479108856431">Təəssüf ki, bu veb-bələdçi işləyərkən Yandex ayarları əlçatmazdır. Bu ayarları Vivaldiyə idxal etmək üçün işinizi saxlayın və bütün Yandex pəncərələrini bağlayın. Sonra "Davam edin" vurun.</translation>
 <translation id="3084011186245865060">Portret 6</translation>
+<translation id="3085906383264247940">Opera (Beta)</translation>
 <translation id="3093931836425623631">Vivaldi, Chrome açıq layihəsi və digər açıq qaynaq kodu ilə azad Proqram Təminatı əsasında yaradılıb.</translation>
 <translation id="3127383884976966729">Heyvan 7</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">Yeni əlfəcin</translation>
 <translation id="3255747772218936245">Yenilənməni quraşdırın</translation>
 <translation id="3259769196742189631">Təsdiqləmək</translation>
@@ -64,6 +71,7 @@
 <translation id="3588820906588687999">Şəkili yeni vərəqdə açın</translation>
 <translation id="3601066750251199488">Canavar 3</translation>
 <translation id="3620979700683094848">Saytlar videonu avtomatik göstərə bilər</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Yeni Vivaldi buraxılşı əlçatandır!</translation>
 <translation id="3708982624815781692">Endirilmə ləğv edildi.</translation>
 <translation id="3732157130969736834">Keçidi əlfəcinlərdə yerləşdirmək</translation>
@@ -77,6 +85,9 @@
 <translation id="3943857333388298514">Yerləşdirin</translation>
 <translation id="4005270918754737597">Bu buraxılışı ötürmək</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi sizin təhlükəsizlik açarınızın şifrəsini aça bilmədi. Bu açar olmadan saxladığınız istifadəçi girişləri, kuki faylları və eyniləşdirmə, poçt və təqvim kimi bəzi funksiyalar artıq işləməyəcəkdir.
+
+    İndi çıxın, açar yaddaşının şifrəsini açdıqdan və ya bərpa etdikdən sonra yenidən cəhd edin. Davam etmək, lakin məlumatları itirmək istəyirsiniz?</translation>
 <translation id="4074744496918018786">Şəkili yeni məxfi pəncərədə açın</translation>
 <translation id="410351446219883937">Avtomatik oynatma</translation>
 <translation id="4281844954008187215">Xidmətin şərtləri</translation>
@@ -98,11 +109,13 @@
 <translation id="498766871928286903"><ph name="TOTAL_SIZE_TO_DOWNLOAD" />-dan <ph name="DOWNLOADED" /></translation>
 <translation id="5014281392052865061">İdxal olunan Sürətli Yığım</translation>
 <translation id="5092656712000637858">Səhifəni veb-panelə əlavə edin</translation>
+<translation id="5106275083540628394">Şifrədən çıxartmaq mümkün olmadı: Verilənlərin silinməsi təhlükəsi var</translation>
 <translation id="5177818338935286353">Canavar 7</translation>
 <translation id="5213743983876949565">Heyvan 1</translation>
 <translation id="5238244642230426581">İdxal olunan əlfəcinlər</translation>
 <translation id="527605719918376753">Vərəqi susdurmaq</translation>
 <translation id="5305569355661722298">Pəncərənin bağlanmasını təsdiqləmək</translation>
+<translation id="5322922669477407077">Opera (Tərtibatçı)</translation>
 <translation id="5388358297987318779">Şəkili açın</translation>
 <translation id="5416008465899576639">Yeni Vivaldi versiyası əlçatandır.</translation>
 <translation id="5497042274492038489">Pəncərənin bağlanmasını təsdiqləmək</translation>
@@ -118,6 +131,7 @@
 <translation id="6229528619562190452">Vivaldini yeniləmək üçün buraya vurun.</translation>
 <translation id="6234173136417926046">Şəkili Başlanğıc Səhifə arxa fonu kimi istifadə edin</translation>
 <translation id="6339818817272922368">Yerli istifadəçi hesabı</translation>
+<translation id="6398710281890660037">Profilimi qorumaq</translation>
 <translation id="6438786710866753178">Portret 4</translation>
 <translation id="6477028720702061455">İdxal etmək üçün Opera profili qovluğunu seçin</translation>
 <translation id="6510706699590490869">&amp;Vivaldini yeniləmək</translation>
@@ -129,8 +143,11 @@
 <translation id="6726279523566323394">İdxal etmək üçün Brave profili qovluğunu seçin</translation>
 <translation id="6892812721183419409">Keçidi <ph name="USER" /> kimi açmaq</translation>
 <translation id="6896758677409633944">Kopyalayın</translation>
+<translation id="6960139763942959188">Bu profil hazırda şifrələnməmiş formatda qorunmadan saxlanılır. Vivaldi profilinizi daha təhlükəsiz şifrələmə formatına yeniləməyə hazırlaşır. İndi çıxmanız lazımdır və davam etmədən öncə profilinizin ehtiyyat nüsxəsini yaradın.</translation>
 <translation id="7086554968911045110">Portret 7</translation>
+<translation id="7099506190679014195">Açar saxlama yaddaşının təhlükəsiz yenilənməsi</translation>
 <translation id="7111492742514999492">Portret 9</translation>
+<translation id="7208252576848052204">Təəssüf ki, bu veb-bələdçi işlədiyi zaman Arc ayarları əlçatan deyil. Bu ayarları Vivaldiyə daxil etmək üçün bütün Arc pəncərələrini bağlayın və sonra Davam edin düyməsinə vurun.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Yenilənmə quraşdırıcısı başladıla bilmədi. Disk yaddaşında kifayət qədər yerin olmasını yoxlayın və yenidən cəhd edin.</translation>
 <translation id="7658239707568436148">İmtina</translation>
@@ -161,6 +178,7 @@
 <translation id="8669345741879513971">Canavar 10</translation>
 <translation id="867544375504146191">Yandeks</translation>
 <translation id="8689295374912158752">Portal-sənəd yoxlanılsın</translation>
+<translation id="875142999698251063">İndi çıxmaq</translation>
 <translation id="8768970203213061953">Portret 14</translation>
 <translation id="8773635261052182196">Siz artıq bu bildirişləri görməyəcəksiniz. Bunu istənilən vaxt Vivaldi ayarlarından aça bilərsiniz.</translation>
 <translation id="8774017153185436870">Saytlar videonu avtomatik göstərə bilərlər</translation>
@@ -172,6 +190,7 @@
 <translation id="9048058608784130603"><ph name="VERSION" /> yenilənməsi hazılrdır</translation>
 <translation id="9048224371732578627">Videonun avtomatik göstərilməsnə icazə verin</translation>
 <translation id="9065203028668620118">Düzəliş etmək</translation>
+<translation id="9090254883741610153">Davam etməyə icazə verin</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Şəkili <ph name="USER" /> kimi açmaq</translation>
 <translation id="9157539936604258187">Keçidi açmaq</translation>

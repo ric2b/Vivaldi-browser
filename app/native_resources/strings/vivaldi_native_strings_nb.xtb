@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Landskap 12</translation>
 <translation id="1158503667684816647">Ikke vis denne bekreftelsen igjen</translation>
 <translation id="1222195720020481779">Starter installasjonsprogrammet...</translation>
+<translation id="1270785070369717623">Dessverre er ikke dine Opera GX-innstillinger tilgjengelige mens den nettleseren kjører. For å importere disse instillingene til Vivaldi, lagre arbeidet ditt og lukk alle Opera GX-vinduer. Klikk deretter Fortsett.</translation>
 <translation id="1276145862619442150">Hurtigvalg</translation>
 <translation id="1281950884873973195">Dyr 6</translation>
 <translation id="1411638389238344450">Send lenken på e-post</translation>
@@ -12,6 +13,7 @@
 <translation id="1462666970065907900">Sikker på at du vil lukke dette vinduet?</translation>
 <translation id="1480046233931937785">Anerkjennelser</translation>
 <translation id="1526344461589023948">En feil oppstod ved lagring av en nedlastet oppdatering. Sjekk at datamaskinen har nok ledig diskplass og prøv igjen.</translation>
+<translation id="1635542496948266458">Bytt profil</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Nytt privatvindu</translation>
 <translation id="1702758681952953055">Hvis feilen ikke forsvinner, vennligst rapporter den med følgende detaljer:</translation>
@@ -27,12 +29,14 @@
 <translation id="1985669426322966465">Programoppdatering</translation>
 <translation id="2079036669923635404">Klikk her for å oppdatere Vivaldi til versjon <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">En feil oppstod under nedlasting av oppdateringsfilene. Sjekk internettilkoblingen din og prøv igjen.</translation>
+<translation id="2226825946708954262">⚠ Fortsett med tap av data</translation>
 <translation id="2339641773402824483">Ser etter oppdateringer...</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Lim inn notat</translation>
 <translation id="2486841023299517366">Dyr 4</translation>
 <translation id="2612127540243995147">Klar til å installere. Vivaldi vil bli lukket og startet på nytt etter installasjonen.</translation>
 <translation id="2613387515621326337">Vis oppdateringsnettsiden</translation>
+<translation id="2645477450146475243">Dessverre er ikke dine Opera-innstillinger tilgjengelige mens den nettleseren kjører. For å importere disse instillingene til Vivaldi, lagre arbeidet ditt og lukk alle Opera-vinduer. Klikk deretter Fortsett.</translation>
 <translation id="2647368062414805334">Dessverre er ikke Edge-innstillingene tilgjengelige når nettleseren kjører. For å importere innstillingene til Vivaldi, lagre arbeidet ditt og lukk alle Edge-vinduer. Klikk så fortsett.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Dyr 3</translation>
@@ -41,11 +45,14 @@
 <translation id="2923448633003185837">Lim inn og gå</translation>
 <translation id="2953943267837858202">Automatisk avspilling av video ikke tillatt</translation>
 <translation id="2977472760057091832">Åpne lenken i privatvindu</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Åpne i ny fane</translation>
 <translation id="3027988479108856431">Yandex innstillingene er ikke tilgjengelige når nettleseren kjører. Hvis du vil importere disse innstillingene til Vivaldi, lagre arbeidet ditt og lukk alle Yandex-vinduer. Deretter klikker du på Fortsett.</translation>
 <translation id="3084011186245865060">Landskap 6</translation>
+<translation id="3085906383264247940">Opera (beta)</translation>
 <translation id="3093931836425623631">Vivaldi er mulig takket være åpen kildekode-prosjektet Chromium, samt andre åpen kildekode-prosjekter.</translation>
 <translation id="3127383884976966729">Dyr 7</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">Nytt bokmerke</translation>
 <translation id="3255747772218936245">Installer oppdatering</translation>
 <translation id="3259769196742189631">Valider siden</translation>
@@ -64,6 +71,7 @@
 <translation id="3588820906588687999">Åpne bilde i ny fane</translation>
 <translation id="3601066750251199488">Monster 3</translation>
 <translation id="3620979700683094848">Nettsteder kan spille av video automatisk</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">En ny versjon av Vivaldi er tilgjengelig!</translation>
 <translation id="3708982624815781692">Nedlastningen ble avbrutt.</translation>
 <translation id="3732157130969736834">Bokmerk lenke</translation>
@@ -98,11 +106,13 @@
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> av <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Importert Speed Dial</translation>
 <translation id="5092656712000637858">Legg til siden som nettpanel</translation>
+<translation id="5106275083540628394">Dekryptering feilet: Risiko for tap av data</translation>
 <translation id="5177818338935286353">Monster 7</translation>
 <translation id="5213743983876949565">Dyr 1</translation>
 <translation id="5238244642230426581">Importerte bokmerker</translation>
 <translation id="527605719918376753">Slå av lyd for fane</translation>
 <translation id="5305569355661722298">Bekreft lukking av vinduer</translation>
+<translation id="5322922669477407077">Opera (Developer)</translation>
 <translation id="5388358297987318779">Åpne bilde</translation>
 <translation id="5416008465899576639">En ny versjon av Vivaldi er tilgjengelig.</translation>
 <translation id="5497042274492038489">Bekreft lukking av vindu</translation>
@@ -118,6 +128,7 @@
 <translation id="6229528619562190452">Klikk her for å oppdatere Vivaldi.</translation>
 <translation id="6234173136417926046">Bruk bildet som startsidebakgrunn</translation>
 <translation id="6339818817272922368">Lokal konto</translation>
+<translation id="6398710281890660037">Sikre profilen min</translation>
 <translation id="6438786710866753178">Landskap 4</translation>
 <translation id="6477028720702061455">Velg Opera profilkatalog for import</translation>
 <translation id="6510706699590490869">&amp;Oppdater Vivaldi</translation>
@@ -129,8 +140,11 @@
 <translation id="6726279523566323394">Velg mappen for Brave-profilen som skal importeres</translation>
 <translation id="6892812721183419409">Åpne lenken som <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopier</translation>
+<translation id="6960139763942959188">Denne profilen lagres for øyeblikket ikke sikkert, i et ukryptert format. Vivaldi er i ferd med å oppgradere profilen din til er mer sikkert, kryptert format. Du bør avslutte og ta en sikkerhetskopi av profilen din før du fortsetter.</translation>
 <translation id="7086554968911045110">Landskap 7</translation>
+<translation id="7099506190679014195">Sikker oppgradering av nøkkellager</translation>
 <translation id="7111492742514999492">Landskap 9</translation>
+<translation id="7208252576848052204">Dessverre er ikke dine Arc-innstillinger tilgjengelige mens den nettleseren kjører. For å importere disse instillingene til Vivaldi, lagre arbeidet ditt og lukk alle Arc-vinduer. Klikk deretter Fortsett.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Kunne ikke starte oppdateringsprogrammet. Sjekk at datamaskinen har nok ledig diskplass og arbeidsminne og prøv igjen.</translation>
 <translation id="7658239707568436148">Avbryt</translation>
@@ -172,6 +186,7 @@
 <translation id="9048058608784130603">Venter på oppdatering <ph name="VERSION" /></translation>
 <translation id="9048224371732578627">Tillatelse for automatisk avspilling av video</translation>
 <translation id="9065203028668620118">Rediger</translation>
+<translation id="9090254883741610153">La meg fortsette</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Åpne bilde som <ph name="USER" /></translation>
 <translation id="9157539936604258187">Åpne lenke</translation>

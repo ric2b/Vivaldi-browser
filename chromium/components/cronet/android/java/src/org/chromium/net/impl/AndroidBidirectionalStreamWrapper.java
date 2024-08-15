@@ -50,22 +50,18 @@ class AndroidBidirectionalStreamWrapper extends org.chromium.net.ExperimentalBid
     }
 
     /**
-     * Creates an {@link AndroidBidirectionalStreamWrapper} that is stored on the callback.
+     * Creates an {@link AndroidUrlRequestWrapper} that is stored on the callback.
      *
-     * @param backend the http BidirectionalStream
+     * @param backend the http UrlRequest
      * @param callback the stream's callback
-     * @return
+     * @return the wrapped request
      */
-    static AndroidBidirectionalStreamWrapper withRecordingToCallback(
+    static AndroidBidirectionalStreamWrapper createAndAddToCallback(
             android.net.http.BidirectionalStream backend,
             AndroidBidirectionalStreamCallbackWrapper callback) {
         AndroidBidirectionalStreamWrapper wrappedStream =
                 new AndroidBidirectionalStreamWrapper(backend);
-        callback.recordWrappedStream(wrappedStream);
+        callback.setStream(wrappedStream);
         return wrappedStream;
-    }
-
-    android.net.http.BidirectionalStream getBackend() {
-        return mBackend;
     }
 }

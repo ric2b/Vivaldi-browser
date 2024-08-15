@@ -740,6 +740,13 @@ message StartPreparedScanRequest {
   // Desired format for the returned scan data.  Must be one of the strings
   // returned in the `image_format` field of this scanners ScannerInfo.
   string image_format = 2;
+
+  // Maximum size of chunks returned from ReadScanData for this job.  If not
+  // provided, lorgnette will return arbitrarily large chunks up to the maximum
+  // supported by d-bus.  If provided, the minimum value accepted by lorgnette
+  // is 32KB.  Regardless of the value, smaller chunks can always be returned if
+  // not enough data is available.
+  optional uint32 max_read_size = 3;
 }
 
 // Response from the StartPreparedScan d-bus method.

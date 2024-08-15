@@ -191,16 +191,27 @@ HeadlessContentMainDelegate::~HeadlessContentMainDelegate() {
 std::optional<int> HeadlessContentMainDelegate::BasicStartupComplete() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 
+  content::Profiling::ProcessStarted();
+
+  // Note that on platforms where zygotes are used, this method is invoked
+  // before the zygote fork, so whatever switches are modified here get
+  // overridden when zygote forks, potentially causing differences with
+  // regard to the platforms that don't use zygotes. Therefore, we don't
+  // want this method to ever alter command line in child processes and
+  // only rely on flags set in the browsers getting propagated to children
+  // via regular flag propagation means. See crbug.com/338414704 for context.
+  if (command_line->HasSwitch(::switches::kProcessType)) {
+    return std::nullopt;
+  }
   // The DevTools remote debugging pipe file descriptors need to be checked
   // before any other files are opened, see https://crbug.com/1423048.
-  const bool is_browser = !command_line->HasSwitch(::switches::kProcessType);
 #if BUILDFLAG(IS_WIN)
   const bool pipes_are_specified_explicitly =
       command_line->HasSwitch(::switches::kRemoteDebuggingIoPipes);
 #else
   const bool pipes_are_specified_explicitly = false;
 #endif
-  if (is_browser && command_line->HasSwitch(::switches::kRemoteDebuggingPipe) &&
+  if (command_line->HasSwitch(::switches::kRemoteDebuggingPipe) &&
       !pipes_are_specified_explicitly &&
       !devtools_pipe::AreFileDescriptorsOpen()) {
     LOG(ERROR) << "Remote debugging pipe file descriptors are not open.";
@@ -238,8 +249,6 @@ std::optional<int> HeadlessContentMainDelegate::BasicStartupComplete() {
   command_line->AppendSwitch(
       ::switches::kDisableGpuProcessForDX12InfoCollection);
 #endif
-
-  content::Profiling::ProcessStarted();
   return std::nullopt;
 }
 
@@ -302,7 +311,7 @@ void HeadlessContentMainDelegate::InitLogging(
   // Otherwise we log to where the executable is.
   if (log_path.empty()) {
 #if BUILDFLAG(IS_FUCHSIA)
-    // TODO(crbug.com/1262330): Use the same solution as used for LOG_DIR.
+    // TODO(crbug.com/40202595): Use the same solution as used for LOG_DIR.
     // Use -1 to allow this to compile.
     if (base::PathService::Get(-1, &log_path)) {
 #else
@@ -352,7 +361,7 @@ void HeadlessContentMainDelegate::InitCrashReporter(
   }
 
 #if BUILDFLAG(IS_FUCHSIA)
-  // TODO(crbug.com/1226159): Implement this when crash reporting is available
+  // TODO(crbug.com/40188745): Implement this when crash reporting is available
   // for Fuchsia.
   NOTIMPLEMENTED();
 #else

@@ -138,7 +138,7 @@ ResultOrError<Ref<Buffer>> Buffer::CreateFromSharedBufferMemory(
     Device* device = ToBackend(memory->GetDevice());
     Ref<Buffer> buffer = AcquireRef(new Buffer(device, descriptor));
     DAWN_TRY(buffer->InitializeAsExternalBuffer(memory->GetD3DResource(), descriptor));
-    buffer->mSharedBufferMemoryContents = memory->GetContents();
+    buffer->mSharedResourceMemoryContents = memory->GetContents();
     return buffer;
 }
 
@@ -299,7 +299,7 @@ MaybeError Buffer::InitializeHostMapped(const BufferHostMappedPointer* hostMappe
     SetLabelImpl();
 
     // Assume the data is initialized since an external pointer was provided.
-    SetIsDataInitialized();
+    SetInitialized(true);
     return {};
 }
 
@@ -428,8 +428,10 @@ MaybeError Buffer::MapInternal(bool isWrite, size_t offset, size_t size, const c
     // evicted. This buffer should already have been made resident when it was created.
     TRACE_EVENT0(GetDevice()->GetPlatform(), General, "BufferD3D12::MapInternal");
 
-    Heap* heap = ToBackend(mResourceAllocation.GetResourceHeap());
-    DAWN_TRY(ToBackend(GetDevice())->GetResidencyManager()->LockAllocation(heap));
+    if (mResourceAllocation.GetInfo().mMethod != AllocationMethod::kExternal) {
+        Heap* heap = ToBackend(mResourceAllocation.GetResourceHeap());
+        DAWN_TRY(ToBackend(GetDevice())->GetResidencyManager()->LockAllocation(heap));
+    }
 
     D3D12_RANGE range = {offset, offset + size};
     // mMappedData is the pointer to the start of the resource, irrespective of offset.
@@ -481,8 +483,10 @@ void Buffer::UnmapImpl() {
 
     // When buffers are mapped, they are locked to keep them in resident memory. We must unlock
     // them when they are unmapped.
-    Heap* heap = ToBackend(mResourceAllocation.GetResourceHeap());
-    ToBackend(GetDevice())->GetResidencyManager()->UnlockAllocation(heap);
+    if (mResourceAllocation.GetInfo().mMethod != AllocationMethod::kExternal) {
+        Heap* heap = ToBackend(mResourceAllocation.GetResourceHeap());
+        ToBackend(GetDevice())->GetResidencyManager()->UnlockAllocation(heap);
+    }
 }
 
 void* Buffer::GetMappedPointer() {
@@ -571,7 +575,7 @@ ResultOrError<bool> Buffer::EnsureDataInitializedAsDestination(
     }
 
     if (IsFullBufferRange(offset, size)) {
-        SetIsDataInitialized();
+        SetInitialized(true);
         return {false};
     }
 
@@ -586,7 +590,7 @@ MaybeError Buffer::EnsureDataInitializedAsDestination(CommandRecordingContext* c
     }
 
     if (IsFullBufferOverwrittenInTextureToBufferCopy(copy)) {
-        SetIsDataInitialized();
+        SetInitialized(true);
     } else {
         DAWN_TRY(InitializeToZero(commandContext));
     }
@@ -605,7 +609,7 @@ MaybeError Buffer::InitializeToZero(CommandRecordingContext* commandContext) {
     // TODO(crbug.com/dawn/484): skip initializing the buffer when it is created on a heap
     // that has already been zero initialized.
     DAWN_TRY(ClearBuffer(commandContext, uint8_t(0u)));
-    SetIsDataInitialized();
+    SetInitialized(true);
     GetDevice()->IncrementLazyClearCountForTesting();
 
     return {};

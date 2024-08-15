@@ -32,10 +32,10 @@ class QuerierImpl : public DnsSdQuerier, public MdnsRecordChangedCallback {
  public:
   // |querier|, |task_runner|, and |network_config| must outlive the QuerierImpl
   // instance constructed.
-  QuerierImpl(MdnsService* querier,
+  QuerierImpl(MdnsService& querier,
               TaskRunner& task_runner,
-              ReportingClient* reporting_client,
-              const NetworkInterfaceConfig* network_config);
+              ReportingClient& reporting_client,
+              const NetworkInterfaceConfig& network_config);
   ~QuerierImpl() override;
 
   bool IsQueryRunning(const std::string& service) const;
@@ -70,10 +70,10 @@ class QuerierImpl : public DnsSdQuerier, public MdnsRecordChangedCallback {
   // callbacks to call when new InstanceEndpoints are available.
   std::map<ServiceKey, std::vector<Callback*>> callback_map_;
 
-  MdnsService* const mdns_querier_;
+  MdnsService& mdns_querier_;
   TaskRunner& task_runner_;
 
-  ReportingClient* reporting_client_;
+  ReportingClient& reporting_client_;
 };
 
 }  // namespace openscreen::discovery

@@ -7,6 +7,7 @@
 #include "include/v8-wasm.h"
 #include "src/base/memory.h"
 #include "src/base/platform/mutex.h"
+#include "src/builtins/builtins-inl.h"
 #include "src/execution/arguments-inl.h"
 #include "src/execution/frames-inl.h"
 #include "src/heap/heap-inl.h"
@@ -155,9 +156,11 @@ RUNTIME_FUNCTION(Runtime_CountUnoptimizedWasmToJSWrapper) {
                               ->code(Builtin::kWasmToJsWrapperAsm)
                               ->instruction_start();
   int result = 0;
-  int import_count = trusted_data->imported_function_targets()->length();
+  Tagged<WasmDispatchTable> dispatch_table =
+      trusted_data->dispatch_table_for_imports();
+  int import_count = dispatch_table->length();
   for (int i = 0; i < import_count; ++i) {
-    if (trusted_data->imported_function_targets()->get(i) == wrapper_start) {
+    if (dispatch_table->target(i) == wrapper_start) {
       ++result;
     }
   }
@@ -176,28 +179,17 @@ RUNTIME_FUNCTION(Runtime_CountUnoptimizedWasmToJSWrapper) {
 }
 
 RUNTIME_FUNCTION(Runtime_HasUnoptimizedWasmToJSWrapper) {
-  HandleScope shs(isolate);
+  SealHandleScope shs{isolate};
   DCHECK_EQ(1, args.length());
-  Tagged<WasmInternalFunction> internal;
-  Handle<Object> param = args.at<Object>(0);
-  if (WasmExportedFunction::IsWasmExportedFunction(*param)) {
-    Handle<WasmExportedFunction> exported =
-        Handle<WasmExportedFunction>::cast(param);
-    internal = exported->shared()->wasm_exported_function_data()->internal();
-  } else {
-    DCHECK(WasmJSFunction::IsWasmJSFunction(*param));
-    Handle<WasmJSFunction> wasm_js_function =
-        Handle<WasmJSFunction>::cast(param);
-    internal = wasm_js_function->shared()->wasm_js_function_data()->internal();
-  }
+  Tagged<JSFunction> function = JSFunction::cast(args[0]);
+  Tagged<SharedFunctionInfo> sfi = function->shared();
+  Tagged<Object> func_data = sfi->GetData(isolate);
+  if (!IsWasmFunctionData(func_data)) return isolate->heap()->ToBoolean(false);
+  Address call_target =
+      WasmFunctionData::cast(func_data)->internal()->call_target();
 
-  Tagged<Code> wrapper =
-      isolate->builtins()->code(Builtin::kWasmToJsWrapperAsm);
-  if (!internal->call_target()) {
-    return isolate->heap()->ToBoolean(internal->code(isolate) == wrapper);
-  }
-  return isolate->heap()->ToBoolean(internal->call_target() ==
-                                    wrapper->instruction_start());
+  Address wrapper = Builtins::EntryOf(Builtin::kWasmToJsWrapperAsm, isolate);
+  return isolate->heap()->ToBoolean(call_target == wrapper);
 }
 
 RUNTIME_FUNCTION(Runtime_HasUnoptimizedJSToJSWrapper) {
@@ -503,17 +495,17 @@ RUNTIME_FUNCTION(Runtime_WasmNumCodeSpaces) {
   DCHECK_EQ(1, args.length());
   HandleScope scope(isolate);
   Handle<JSObject> argument = args.at<JSObject>(0);
-  Handle<WasmModuleObject> module;
+  wasm::NativeModule* native_module;
   if (IsWasmInstanceObject(*argument)) {
-    module = handle(Handle<WasmInstanceObject>::cast(argument)
+    native_module = WasmInstanceObject::cast(*argument)
                         ->trusted_data(isolate)
-                        ->module_object(),
-                    isolate);
+                        ->native_module();
   } else if (IsWasmModuleObject(*argument)) {
-    module = Handle<WasmModuleObject>::cast(argument);
+    native_module = WasmModuleObject::cast(*argument)->native_module();
+  } else {
+    UNREACHABLE();
   }
-  size_t num_spaces =
-      module->native_module()->GetNumberOfCodeSpacesForTesting();
+  size_t num_spaces = native_module->GetNumberOfCodeSpacesForTesting();
   return *isolate->factory()->NewNumberFromSize(num_spaces);
 }
 
@@ -559,6 +551,11 @@ RUNTIME_FUNCTION(Runtime_WasmTierUpFunction) {
   int func_index = exp_fun->function_index();
   wasm::TierUpNowForTesting(isolate, trusted_data, func_index);
   return ReadOnlyRoots(isolate).undefined_value();
+}
+
+RUNTIME_FUNCTION(Runtime_WasmNull) {
+  HandleScope scope(isolate);
+  return ReadOnlyRoots(isolate).wasm_null();
 }
 
 RUNTIME_FUNCTION(Runtime_WasmEnterDebugging) {

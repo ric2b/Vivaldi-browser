@@ -41,7 +41,6 @@
 #include "base/test/test_future.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "components/services/storage/indexed_db/locks/partitioned_lock_id.h"
 #include "components/services/storage/privileged/mojom/indexed_db_control.mojom.h"
@@ -52,7 +51,6 @@
 #include "components/services/storage/public/cpp/buckets/constants.h"
 #include "components/services/storage/public/cpp/quota_error_or.h"
 #include "components/services/storage/public/mojom/storage_policy_update.mojom.h"
-#include "content/browser/indexed_db/features.h"
 #include "content/browser/indexed_db/indexed_db_backing_store.h"
 #include "content/browser/indexed_db/indexed_db_bucket_context.h"
 #include "content/browser/indexed_db/indexed_db_bucket_context_handle.h"
@@ -63,6 +61,7 @@
 #include "content/browser/indexed_db/indexed_db_pre_close_task_queue.h"
 #include "content/browser/indexed_db/mock_mojo_indexed_db_database_callbacks.h"
 #include "content/browser/indexed_db/mock_mojo_indexed_db_factory_client.h"
+#include "content/public/common/content_features.h"
 #include "env_chromium.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
@@ -103,7 +102,7 @@ namespace {
 constexpr char16_t kDatabaseName[] = u"db";
 constexpr char kOrigin[] = "https://www.example.com";
 
-// TODO(crbug.com/889590): Replace with common converter.
+// TODO(crbug.com/41417435): Replace with common converter.
 url::Origin ToOrigin(const std::string& url) {
   return url::Origin::Create(GURL(url));
 }
@@ -416,8 +415,7 @@ class IndexedDBTest
           checker_remote,
       mojo::PendingReceiver<blink::mojom::IDBFactory> receiver,
       storage::QuotaErrorOr<storage::BucketInfo> bucket_info) {
-    context()->BindIndexedDBImpl(std::move(checker_remote),
-                                 base::UnguessableToken(), std::move(receiver),
+    context()->BindIndexedDBImpl(std::move(checker_remote), std::move(receiver),
                                  bucket_info);
   }
 
@@ -687,7 +685,7 @@ TEST_P(IndexedDBTest, CloseAfterUpgrade) {
   connection.reset();
 }
 
-// TODO(crbug.com/1282613): Test is flaky on Mac in debug.
+// TODO(crbug.com/40813013): Test is flaky on Mac in debug.
 #if BUILDFLAG(IS_MAC) && !defined(NDEBUG)
 #define MAYBE_OpenNewConnectionWhileUpgrading \
   DISABLED_OpenNewConnectionWhileUpgrading
@@ -1706,8 +1704,7 @@ TEST_P(IndexedDBTest, CloseWithReceiversActive) {
   mojo::PendingRemote<storage::mojom::IndexedDBClientStateChecker>
       checker_remote;
   bucket_context_handle->AddReceiver(
-      std::move(checker_remote), /*client_token=*/{},
-      factory_remote.BindNewPipeAndPassReceiver());
+      std::move(checker_remote), factory_remote.BindNewPipeAndPassReceiver());
 
   // The bucket context and the backing store should exist.
   VerifyBucketContext(bucket_id, /*expected_context_exists=*/true,
@@ -1742,8 +1739,7 @@ TEST_P(IndexedDBTest, CloseWithReceiversInactive) {
   mojo::PendingRemote<storage::mojom::IndexedDBClientStateChecker>
       checker_remote;
   bucket_context_handle->AddReceiver(
-      std::move(checker_remote), /*client_token=*/{},
-      factory_remote.BindNewPipeAndPassReceiver());
+      std::move(checker_remote), factory_remote.BindNewPipeAndPassReceiver());
 
   // The bucket context and the backing store should exist.
   VerifyBucketContext(bucket_id, /*expected_context_exists=*/true,
@@ -2016,14 +2012,9 @@ TEST_P(IndexedDBTest, CloseThenAddReceiver) {
 
   ASSERT_TRUE(context()->BucketContextExists(bucket_locator.id));
 
-  // Remove the connection, then force close. This should trigger destruction of
-  // the bucket context.
+  // Remove the factory binding, and since there is no backing store yet, this
+  // should trigger the destruction of the bucket context.
   factory_remote1.reset();
-  RunPostedTasks();
-  context()->ForceClose(
-      bucket_locator.id,
-      storage::mojom::ForceCloseReason::FORCE_CLOSE_INTERNALS_PAGE,
-      base::DoNothing());
 
   if (BackingStoresSharded()) {
     // However, the bucket context still exists for now because shutdown is not
@@ -2048,6 +2039,8 @@ TEST_P(IndexedDBTest, CloseThenAddReceiver) {
     // as the old one, but there's no good way to identify them through mojo and
     // no guarantee their memory addresses are different either.
   } else {
+    ASSERT_TRUE(context()->BucketContextExists(bucket_locator.id));
+    RunPostedTasks();
     ASSERT_FALSE(context()->BucketContextExists(bucket_locator.id));
   }
 }

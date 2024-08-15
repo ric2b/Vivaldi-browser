@@ -31,7 +31,6 @@
 #include "chrome/browser/predictors/autocomplete_action_predictor.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor_factory.h"
 #include "chrome/browser/preloading/chrome_preloading.h"
-#include "chrome/browser/preloading/prefetch/no_state_prefetch/no_state_prefetch_manager_factory.h"
 #include "chrome/browser/preloading/prefetch/no_state_prefetch/no_state_prefetch_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/task_manager/task_manager_browsertest_util.h"
@@ -307,9 +306,6 @@ class NoStatePrefetchBrowserTest
   void SetUpOnMainThread() override {
     test_utils::PrerenderInProcessBrowserTest::SetUpOnMainThread();
     test_ukm_recorder_ = std::make_unique<ukm::TestAutoSetUkmRecorder>();
-    omnibox_attempt_entry_builder_ =
-        std::make_unique<content::test::PreloadingAttemptUkmEntryBuilder>(
-            chrome_preloading_predictor::kOmniboxDirectURLInput);
     link_rel_attempt_entry_builder_ =
         std::make_unique<content::test::PreloadingAttemptUkmEntryBuilder>(
             content::preloading_predictor::kLinkRel);
@@ -325,11 +321,6 @@ class NoStatePrefetchBrowserTest
 
   ukm::TestAutoSetUkmRecorder* test_ukm_recorder() {
     return test_ukm_recorder_.get();
-  }
-
-  const content::test::PreloadingAttemptUkmEntryBuilder&
-  omnibox_attempt_entry_builder() {
-    return *omnibox_attempt_entry_builder_;
   }
 
   const content::test::PreloadingAttemptUkmEntryBuilder&
@@ -472,8 +463,6 @@ class NoStatePrefetchBrowserTest
   // Disable sampling of UKM preloading logs.
   content::test::PreloadingConfigOverride preloading_config_override_;
   std::unique_ptr<ukm::TestAutoSetUkmRecorder> test_ukm_recorder_;
-  std::unique_ptr<content::test::PreloadingAttemptUkmEntryBuilder>
-      omnibox_attempt_entry_builder_;
   std::unique_ptr<content::test::PreloadingAttemptUkmEntryBuilder>
       link_rel_attempt_entry_builder_;
   std::unique_ptr<base::ScopedMockElapsedTimersForTest> test_timer_;
@@ -1471,9 +1460,9 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, MAYBE_RendererCrash) {
           FINAL_STATUS_RENDERER_CRASHED);
   content::ScopedAllowRendererCrashes scoped_allow_renderer_crashes;
   std::unique_ptr<NoStatePrefetchHandle> no_state_prefetch_handle(
-      GetNoStatePrefetchManager()->StartPrefetchingFromExternalRequest(
-          GURL(blink::kChromeUICrashURL), content::Referrer(),
-          storage_namespace, gfx::Rect(kSize)));
+      GetNoStatePrefetchManager()->StartPrefetchingFromOmnibox(
+          GURL(blink::kChromeUICrashURL), storage_namespace, kSize,
+          /*attempt=*/nullptr));
   ASSERT_EQ(no_state_prefetch_handle->contents(), test_prerender->contents());
   test_prerender->WaitForStop();
 }
@@ -1643,7 +1632,7 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchIncognitoBrowserTest,
 }
 
 // Checks that prerenders are aborted when an incognito profile is closed.
-// TODO(crbug.com/994068): The test is crashing on multiple platforms.
+// TODO(crbug.com/41476151): The test is crashing on multiple platforms.
 IN_PROC_BROWSER_TEST_F(NoStatePrefetchIncognitoBrowserTest,
                        DISABLED_PrerenderIncognitoClosed) {
   std::unique_ptr<TestPrerender> test_prerender =
@@ -1784,93 +1773,6 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, PrerenderExcessiveMemory) {
             content::PreloadingTriggeringOutcome::kFailure,
             ToPreloadingFailureReasonFromFinalStatus(
                 FINAL_STATUS_MEMORY_LIMIT_EXCEEDED),
-            /*accurate=*/false),
-    };
-    EXPECT_THAT(attempt_ukm_entries,
-                testing::UnorderedElementsAreArray(expected_attempt_entries))
-        << content::test::ActualVsExpectedUkmEntriesToString(
-               attempt_ukm_entries, expected_attempt_entries);
-  }
-}
-
-class NoStatePrefetchOmniboxBrowserTest : public NoStatePrefetchBrowserTest {
- public:
-  LocationBar* GetLocationBar() {
-    return current_browser()->window()->GetLocationBar();
-  }
-
-  OmniboxView* GetOmniboxView() { return GetLocationBar()->GetOmniboxView(); }
-
-  predictors::AutocompleteActionPredictor* GetAutocompleteActionPredictor() {
-    Profile* profile = current_browser()->profile();
-    return predictors::AutocompleteActionPredictorFactory::GetForProfile(
-        profile);
-  }
-
-  std::unique_ptr<TestPrerender> ExpectPrerender(
-      FinalStatus expected_final_status) {
-    return no_state_prefetch_contents_factory()->ExpectNoStatePrefetchContents(
-        expected_final_status);
-  }
-
-  std::unique_ptr<TestPrerender> StartOmniboxPrerender(
-      const GURL& url,
-      FinalStatus expected_final_status) {
-    std::unique_ptr<TestPrerender> prerender =
-        ExpectPrerender(expected_final_status);
-    content::WebContents* web_contents = GetActiveWebContents();
-    GetAutocompleteActionPredictor()->StartPrerendering(url, *web_contents,
-                                                        gfx::Size(50, 50));
-    prerender->WaitForStart();
-    return prerender;
-  }
-
- protected:
-  void SetUp() override {
-    // kOmniboxTriggerForNoStatePrefetch or kOmniboxTriggerForPrerender2 can be
-    // enabled in the experiment. Explicitly enable and disable these flags.
-    feature_list_.InitWithFeatures(
-        {features::kOmniboxTriggerForNoStatePrefetch},
-        {features::kOmniboxTriggerForPrerender2});
-
-    NoStatePrefetchBrowserTest::SetUp();
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-// Checks that closing the omnibox popup cancels an omnibox prerender.
-IN_PROC_BROWSER_TEST_F(NoStatePrefetchOmniboxBrowserTest,
-                       PrerenderOmniboxCancel) {
-  // Fake an omnibox prerender.
-  std::unique_ptr<TestPrerender> prerender = StartOmniboxPrerender(
-      embedded_test_server()->GetURL("/empty.html"), FINAL_STATUS_CANCELLED);
-
-  // Revert the location bar. This should cancel the prerender.
-  GetLocationBar()->Revert();
-  prerender->WaitForStop();
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      current_browser(), src_server()->GetURL(kPrefetchPage2)));
-  {
-    // Check that we store one entry corresponding to NoStatePrefetch attempt.
-    ukm::SourceId ukm_source_id =
-        GetActiveWebContents()->GetPrimaryMainFrame()->GetPageUkmSourceId();
-    auto attempt_ukm_entries = test_ukm_recorder()->GetEntries(
-        Preloading_Attempt::kEntryName,
-        content::test::kPreloadingAttemptUkmMetrics);
-    EXPECT_EQ(attempt_ukm_entries.size(), 1u);
-
-    // NoStatePrefetch should fail with canceled failure reason.
-    // AccurateTriggering should be false as we navigate to a different URL.
-    std::vector<UkmEntry> expected_attempt_entries = {
-        omnibox_attempt_entry_builder().BuildEntry(
-            ukm_source_id, content::PreloadingType::kNoStatePrefetch,
-            content::PreloadingEligibility::kEligible,
-            content::PreloadingHoldbackStatus::kAllowed,
-            content::PreloadingTriggeringOutcome::kFailure,
-            ToPreloadingFailureReasonFromFinalStatus(FINAL_STATUS_CANCELLED),
             /*accurate=*/false),
     };
     EXPECT_THAT(attempt_ukm_entries,

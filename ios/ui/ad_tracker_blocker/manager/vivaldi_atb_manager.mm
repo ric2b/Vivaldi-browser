@@ -6,9 +6,9 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "components/ad_blocker/adblock_known_sources_handler.h"
-#import "components/ad_blocker/adblock_metadata.h"
 #import "components/ad_blocker/adblock_rule_manager.h"
 #import "components/ad_blocker/adblock_rule_service.h"
+#import "components/ad_blocker/adblock_types.h"
 #import "components/url_formatter/url_fixer.h"
 #import "ios/ad_blocker/adblock_rule_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
@@ -30,7 +30,8 @@ using adblock_filter::RuleManager;
 using adblock_filter::RuleManager::kExemptList;
 using adblock_filter::RuleManager::kProcessList;
 using adblock_filter::RuleService;
-using adblock_filter::RuleSource;
+using adblock_filter::RuleSourceCore;
+using adblock_filter::ActiveRuleSource;
 
 // Namespace
 namespace {
@@ -450,10 +451,10 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   if (!sourceURL.is_valid()) {
     return;
   }
-  _ruleSourceHandler->AddSourceFromUrl(
+  _ruleSourceHandler->AddSource(
       sourceType == ATBSourceAds ?
       RuleGroup::kAdBlockingRules : RuleGroup::kTrackingRules,
-      sourceURL);
+      *RuleSourceCore::FromUrl(sourceURL));
 }
 
 /// Remove rule source of the given key and source type.
@@ -539,13 +540,13 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
   ruleSourceItem.key = key;
   NSString* sourceURL = base::SysUTF8ToNSString(
-      knownSource.is_from_url ? knownSource.source_url.spec() :
-      knownSource.source_file.AsUTF8Unsafe());
+      knownSource.core.is_from_url() ? knownSource.core.source_url().spec() :
+      knownSource.core.source_file().AsUTF8Unsafe());
 
   VivaldiATBManagerHelper* managerHelper
       = [[VivaldiATBManagerHelper alloc] init];
   ruleSourceItem.title = [managerHelper titleForSourceForKey:sourceURL];
-  ruleSourceItem.is_from_url = knownSource.is_from_url;
+  ruleSourceItem.is_from_url = knownSource.core.is_from_url();
   ruleSourceItem.source_url = sourceURL;
 
   BOOL isEnabled = _ruleSourceHandler->IsSourceEnabled(
@@ -560,15 +561,14 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
   // Check if the source is enabled. If 'Yes' get more info from the engine.
   if (isEnabled) {
-    std::optional<RuleSource> ruleSource =
+    std::optional<ActiveRuleSource> ruleSource =
         _ruleManager->GetRuleSource(
             sourceType == ATBSourceAds ?
             RuleGroup::kAdBlockingRules : RuleGroup::kTrackingRules,
             key);
-    RuleSource source = RuleSource(ruleSource.value());
-    ruleSourceItem.last_update = source.last_update;
-    ruleSourceItem.rules_list_checksum = source.rules_list_checksum;
-    ruleSourceItem.is_fetching = source.is_fetching;
+    ruleSourceItem.last_update = ruleSource->last_update;
+    ruleSourceItem.rules_list_checksum = ruleSource->rules_list_checksum;
+    ruleSourceItem.is_fetching = ruleSource->is_fetching;
     ruleSourceItem.is_loaded = YES;
   } else {
     ruleSourceItem.is_fetching = NO;

@@ -16,10 +16,6 @@ config("zlib_internal_config") {
 
     # Tracked upstream as https://github.com/madler/zlib/issues/633.
     "-Wno-deprecated-non-prototype",
-
-    # TODO(issuetracker.google.com/202964797): Switch to Chromium's clang version
-    # to eliminate version mismatch issues.
-    "-Wno-unknown-warning-option",
   ]
 
   # zlib does some strange things around macros, such as deleting fdopen.

@@ -12,12 +12,12 @@
 <translation id="1588438908519853928">सामान्य</translation>
 <translation id="1591562245178063882">इस माह</translation>
 <translation id="1637811476055996098">फ़ाइलें चुनें</translation>
+<translation id="1680090928918677457">कैमरे इस्तेमाल करने की अनुमति दें</translation>
 <translation id="1681022320378710418">मौजूदा समय</translation>
 <translation id="1727839386348365796">Eyedropper</translation>
 <translation id="1729654308190250600">कृपया गैर-खाली ईमेल पता डालें.</translation>
 <translation id="1758486001363313524">अन्य...</translation>
 <translation id="1787192514241997742">कुल समय: <ph name="REMAINING_TIME" /></translation>
-<translation id="1800494066469288780">कैमरा ऐक्सेस करने की अनुमति दें</translation>
 <translation id="1822429046913737220">पूर्वाह्न/अपराह्न</translation>
 <translation id="1832974991323546415">दूरस्थ डिवाइस पर चलाएं</translation>
 <translation id="1921819250265091946">dd</translation>
@@ -54,7 +54,6 @@
 <translation id="3220661731597678625">मौजूदा चरण</translation>
 <translation id="3321030238473337787">वीडियो चलाने की रफ़्तार</translation>
 <translation id="3329013043687509092">संतृप्तता</translation>
-<translation id="3377518164566272702">माइक्रोफ़ोन और कैमरा ऐक्सेस करने की अनुमति दें</translation>
 <translation id="3450233048674729344">मान <ph name="MAXIMUM" /> से कम या इसके बराबर होना चाहिए.</translation>
 <translation id="3732799496749320381">mm</translation>
 <translation id="3754210790023674521">'पिक्चर में पिक्चर' सुविधा से बाहर निकलें</translation>
@@ -62,6 +61,7 @@
 <translation id="3822383571486410024">कृपया इस लेख को <ph name="MIN_CHARACTERS" /> वर्णों या ज़्यादा तक बढ़ाएं (वर्तमान में आप <ph name="CURRENT_LENGTH" /> वर्णों का उपयोग कर रहे हैं).</translation>
 <translation id="383465348367842624">'<ph name="ATSIGN" />' के बाद आने वाले भाग में '<ph name="INVALIDCHARACTER" />' प्रतीक शामिल नहीं होना चाहिए.</translation>
 <translation id="3846214748874656680">पूर्णस्क्रीन से बाहर निकलें</translation>
+<translation id="3914173277599553213">आवश्यक</translation>
 <translation id="4031179711345676612">माइक्रोफ़ोन की अनुमति है</translation>
 <translation id="4103419683916926126">मिलीसेकंड</translation>
 <translation id="4201051445878709314">पिछला महीना दिखाएं</translation>
@@ -77,6 +77,7 @@
 <translation id="4912200001568447310">मौजूदा आइटम</translation>
 <translation id="4915360478455618802">समय चुनने वाला टूल दिखाएं</translation>
 <translation id="4924138096460353083">कोई वैल्यू नहीं है</translation>
+<translation id="49269513399674318">माइक्रोफ़ोन इस्तेमाल करने की अनुमति दें</translation>
 <translation id="4950364064308314478">स्थानीय तारीख और समय चुनने वाला टूल दिखाएं</translation>
 <translation id="4971739861736909480"><ph name="ACCNAME" /> चुना गया</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> चुने गए</translation>
@@ -144,6 +145,7 @@
 <translation id="7080893216867146095">जगह की जानकारी शेयर करने की अनुमति है</translation>
 <translation id="709897737746224366">कृपया अनुरोधित प्रारूप का मिलान करें.</translation>
 <translation id="7102274145889307184">मौजूदा जगह की जानकारी</translation>
+<translation id="7134810312945846184">माइक्रोफ़ोन और कैमरे इस्तेमाल करने की अनुमति दें</translation>
 <translation id="7263440858009898357">कृपया सूची में किसी आइटम को चुनें.</translation>
 <translation id="7320576522385648310">बफ़र हो रहा है</translation>
 <translation id="7341556277900466204">कलर वेल</translation>
@@ -188,7 +190,6 @@
 <translation id="9132465097189459683">अन्य...</translation>
 <translation id="9155987714137265666"><ph name="WEEK" />, <ph name="WEEK_START_DATE" /> से प्रारंभ हो रहा है</translation>
 <translation id="916607977885256133">पिक्चर में पिक्चर</translation>
-<translation id="918430632320614861">माइक्रोफ़ोन ऐक्सेस करने की अनुमति दें</translation>
 <translation id="945780513535800434">कुछ विकल्प चुने गए</translation>
 <translation id="954003015749068518">पिक्चर में पिक्चर चालू करें</translation>
 </translationbundle>

@@ -129,7 +129,6 @@ def validateJavaScriptAllowed(source_dir, out_dir, is_ios):
       # TODO(b/315002705): Migrate shimless_rma to TypeScript and remove
       # exception.
       'ash/webui/shimless_rma/',
-      'ash/webui/shortcut_customization_ui/',
       # TODO(b/267329383): Migrate A11y to TypeScript.
       'chrome/browser/resources/chromeos/accessibility',
       'ui/file_manager/',
@@ -140,26 +139,31 @@ def validateJavaScriptAllowed(source_dir, out_dir, is_ios):
 
   # Specific exceptions for directories that are still migrating to TS.
   migrating_directories = [
-      # TODO(crbug.com/1337318): Migrate bluetooth-internals to TypeScript and
+      # TODO(crbug.com/40848285): Migrate bluetooth-internals to TypeScript and
       # remove exception.
       'chrome/browser/resources/bluetooth_internals',
       'chrome/browser/resources/chromeos/accessibility',
-      # TODO(crbug.com/1511758): Migrate to TypeScript.
+      # TODO(crbug.com/41484340): Migrate to TypeScript.
       'chrome/browser/resources/device_log',
       'chrome/test/data/webui',
-      # TODO(crbug.com/1337318): Migrate bluetooth-internals to TypeScript and
+      # TODO(crbug.com/40848285): Migrate bluetooth-internals to TypeScript and
       # remove exception.
       'chrome/test/data/webui/bluetooth_internals',
       'chrome/test/data/webui/chromeos',
       'chrome/test/data/webui/chromeos/ash_common',
+      # TODO(b/245336251): Migrate diagnostics app tests to Typescript and
+      # remove exception.
+      'chrome/test/data/webui/chromeos/diagnostics',
+      # TODO(b/315002705): Migrate shimless rma app tests to Typescript and
+      # remove exception.
+      'chrome/test/data/webui/chromeos/shimless_rma',
       'chrome/test/data/webui/cr_components/chromeos',
       'chrome/test/data/webui/nearby_share',
-      'chrome/test/data/webui/settings/chromeos',
       'components/policy/resources/webui',
       'ui/webui/resources/js',
       'ui/webui/resources/mojo',
 
-      # TODO(crbug.com/1478961) : Migrate to TypeScript.
+      # TODO(crbug.com/40280699) : Migrate to TypeScript.
       'chrome/test/data/webui/media_internals',
       'content/browser/resources/media',
 

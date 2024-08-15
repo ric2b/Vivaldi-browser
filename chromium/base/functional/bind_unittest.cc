@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/functional/bind.h"
 
 #include <functional>
@@ -1893,7 +1898,8 @@ TEST(BindDeathTest, BanFirstOwnerOfRefCountedType) {
   });
 }
 
-#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
+#if PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT) && \
+    PA_BUILDFLAG(USE_RAW_PTR_BACKUP_REF_IMPL)
 
 void HandleOOM(size_t unused_size) {
   LOG(FATAL) << "Out of memory";
@@ -2137,7 +2143,8 @@ TEST_F(BindUnretainedDanglingDeathTest, UnretainedWeakReceiverDangling) {
 
 #endif  // defined(GTEST_HAS_DEATH_TEST) && !BUILDFLAG(IS_ANDROID)
 
-#endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
+#endif  // PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT) &&
+        // PA_BUILDFLAG(USE_RAW_PTR_BACKUP_REF_IMPL)
 
 }  // namespace
 }  // namespace base

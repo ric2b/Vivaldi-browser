@@ -56,6 +56,20 @@ class RuleMetaData {
     tpcd_metadata_rule_source_ = rule_source;
   }
 
+  mojom::TpcdMetadataCohort tpcd_metadata_cohort() const {
+    return tpcd_metadata_cohort_;
+  }
+  void set_tpcd_metadata_cohort(const mojom::TpcdMetadataCohort cohort) {
+    tpcd_metadata_cohort_ = cohort;
+  }
+
+  uint32_t tpcd_metadata_elected_dtrp() const {
+    return tpcd_metadata_elected_dtrp_;
+  }
+  void set_tpcd_metadata_elected_dtrp(uint32_t elected_dtrp) {
+    tpcd_metadata_elected_dtrp_ = elected_dtrp;
+  }
+
   base::TimeDelta lifetime() const { return lifetime_; }
 
   // Sets member variables based on `constraints`.
@@ -105,6 +119,9 @@ class RuleMetaData {
   // cleanup.
   mojom::TpcdMetadataRuleSource tpcd_metadata_rule_source_ =
       mojom::TpcdMetadataRuleSource::SOURCE_UNSPECIFIED;
+  mojom::TpcdMetadataCohort tpcd_metadata_cohort_ =
+      mojom::TpcdMetadataCohort::DEFAULT;
+  uint32_t tpcd_metadata_elected_dtrp_ = 0u;
 };
 
 }  // namespace content_settings

@@ -9,12 +9,12 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <type_traits>
 
 #include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
-#include "base/strings/string_piece.h"
 #include "base/types/expected.h"
 #include "base/types/optional_ref.h"
 #include "base/values.h"
@@ -37,11 +37,12 @@ namespace content {
 class WebContents;
 }  // namespace content
 
-namespace web_app {
-
+namespace webapps {
 class WebAppUrlLoader;
-
 enum class WebAppUrlLoaderResult;
+}  // namespace webapps
+
+namespace web_app {
 
 struct IsolatedWebAppUpdatePrepareAndStoreCommandSuccess {
   IsolatedWebAppUpdatePrepareAndStoreCommandSuccess(
@@ -131,7 +132,7 @@ class IsolatedWebAppUpdatePrepareAndStoreCommand
   void StartWithLock(std::unique_ptr<AppLock> lock) override;
 
  private:
-  void ReportFailure(base::StringPiece message);
+  void ReportFailure(std::string_view message);
   void ReportSuccess(const base::Version& update_version);
 
   template <typename T, std::enable_if_t<std::is_void_v<T>, bool> = true>
@@ -192,7 +193,7 @@ class IsolatedWebAppUpdatePrepareAndStoreCommand
   SEQUENCE_CHECKER(sequence_checker_);
 
   std::unique_ptr<AppLock> lock_;
-  std::unique_ptr<WebAppUrlLoader> url_loader_;
+  std::unique_ptr<webapps::WebAppUrlLoader> url_loader_;
 
   const std::unique_ptr<IsolatedWebAppInstallCommandHelper> command_helper_;
 

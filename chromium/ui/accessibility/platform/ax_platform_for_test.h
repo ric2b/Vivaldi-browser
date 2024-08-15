@@ -26,11 +26,12 @@ class AXPlatformForTest : public AXPlatform::Delegate {
   // AXPlatform::Delegate:
   AXMode GetProcessMode() override;
   void SetProcessMode(AXMode new_mode) override;
+  void OnAccessibilityApiUsage() override;
 
  private:
   friend class ScopedAXModeSetter;
 
-  AXPlatform ax_platform_{*this};
+  AXPlatform ax_platform_{*this, "", "", ""};
 
   AXMode mode_;
 };

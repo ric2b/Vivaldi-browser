@@ -98,6 +98,10 @@ bool ShouldAddExtendedFkeyProperties(const mojom::Keyboard& keyboard) {
 }
 
 const char* GetDefaultKeyboardPref(const mojom::Keyboard& keyboard) {
+  if (IsSplitModifierKeyboard(keyboard)) {
+    return prefs::kKeyboardDefaultSplitModifierSettings;
+  }
+
   return IsChromeOSKeyboard(keyboard)
              ? prefs::kKeyboardDefaultChromeOSSettings
              : prefs::kKeyboardDefaultNonChromeOSSettings;
@@ -350,6 +354,13 @@ RetrieveModifierRemappings(const mojom::Keyboard& keyboard,
     // Do not add modifier remappings for modifier keys that do not exist on the
     // given keyboard.
     if (!base::Contains(keyboard.modifier_keys, from_key)) {
+      continue;
+    }
+
+    // Do not add modifier remappings for function key if function key is not a
+    // modifier key.
+    if (to_key == ui::mojom::ModifierKey::kFunction &&
+        !base::Contains(keyboard.modifier_keys, to_key)) {
       continue;
     }
 
@@ -868,6 +879,20 @@ void KeyboardPrefHandlerImpl::UpdateDefaultNonChromeOSKeyboardSettings(
       keyboard, keyboard_policies, /*force_persistence=*/{true},
       /*existing_settings_dict=*/nullptr);
   pref_service->SetDict(prefs::kKeyboardDefaultNonChromeOSSettings,
+                        std::move(settings_dict));
+}
+
+void KeyboardPrefHandlerImpl::UpdateDefaultSplitModifierKeyboardSettings(
+    PrefService* pref_service,
+    const mojom::KeyboardPolicies& keyboard_policies,
+    const mojom::Keyboard& keyboard) {
+  CHECK(IsSplitModifierKeyboard(keyboard));
+
+  // All settings should be persisted fully when storing defaults.
+  auto settings_dict = ConvertSettingsToDict(
+      keyboard, keyboard_policies, /*force_persistence=*/{true},
+      /*existing_settings_dict=*/nullptr);
+  pref_service->SetDict(prefs::kKeyboardDefaultSplitModifierSettings,
                         std::move(settings_dict));
 }
 

@@ -16,7 +16,7 @@ DEPS = [
 
 def RunSteps(api):
   # Set the checkout_dir because the `git` module implicitly uses this.
-  api.path.checkout_dir = api.path['cache'].join('builder')
+  api.path.checkout_dir = api.path.cache_dir / 'builder'
 
   numbers = api.git.number(
       commitrefs=api.properties.get('commitrefs'),

@@ -2,7 +2,7 @@ name: "Create Draft Release"
 
 env:
   BUILDDIR: "build"
-  DEVELOPER_DIR: "/Applications/Xcode_14.3.1.app/Contents/Developer"
+  DEVELOPER_DIR: "/Applications/Xcode_15.2.app/Contents/Developer"
 
 on:
   workflow_dispatch:
@@ -33,7 +33,7 @@ jobs:
 
     steps:
       - name: "Checkout sources"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           token: ${{ secrets.BOT_PERSONAL_ACCESS_TOKEN }}
           submodules: true

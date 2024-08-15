@@ -28,6 +28,7 @@
 #include "libavutil/display.h"
 #include "libavutil/error.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/pixdesc.h"
@@ -64,6 +65,8 @@ typedef struct DemuxStream {
     int                      streamcopy_needed;
     int                      have_sub2video;
     int                      reinit_filters;
+    int                      autorotate;
+
 
     int                      wrap_correction_done;
     int                      saw_first_ts;
@@ -81,6 +84,8 @@ typedef struct DemuxStream {
     AVDictionary            *decoder_opts;
     DecoderOpts              dec_opts;
     char                     dec_name[16];
+    // decoded media properties, as estimated by opening the decoder
+    AVFrame                 *decoded_params;
 
     AVBSFContext            *bsf;
 
@@ -161,7 +166,7 @@ InputStream *ist_find_unused(enum AVMediaType type)
 
 static void report_new_stream(Demuxer *d, const AVPacket *pkt)
 {
-    AVStream *st = d->f.ctx->streams[pkt->stream_index];
+    const AVStream *st = d->f.ctx->streams[pkt->stream_index];
 
     if (pkt->stream_index < d->nb_streams_warn)
         return;
@@ -673,7 +678,7 @@ static int demux_thread_init(DemuxThreadContext *dt)
     return 0;
 }
 
-static void *input_thread(void *arg)
+static int input_thread(void *arg)
 {
     Demuxer   *d = arg;
     InputFile *f = &d->f;
@@ -778,7 +783,7 @@ static void *input_thread(void *arg)
 finish:
     demux_thread_uninit(&dt);
 
-    return (void*)(intptr_t)ret;
+    return ret;
 }
 
 static void demux_final_stats(Demuxer *d)
@@ -838,6 +843,8 @@ static void ist_free(InputStream **pist)
     av_freep(&ds->dec_opts.hwaccel_device);
 
     avcodec_parameters_free(&ist->par);
+
+    av_frame_free(&ds->decoded_params);
 
     av_bsf_free(&ds->bsf);
 
@@ -904,11 +911,11 @@ static int ist_use(InputStream *ist, int decoding_needed)
     if (decoding_needed && ds->sch_idx_dec < 0) {
         int is_audio = ist->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO;
 
-        ds->dec_opts.flags = (!!ist->fix_sub_duration * DECODER_FLAG_FIX_SUB_DURATION) |
-                             (!!(d->f.ctx->iformat->flags & AVFMT_NOTIMESTAMPS) * DECODER_FLAG_TS_UNRELIABLE) |
-                             (!!(d->loop && is_audio) * DECODER_FLAG_SEND_END_TS)
+        ds->dec_opts.flags |= (!!ist->fix_sub_duration * DECODER_FLAG_FIX_SUB_DURATION) |
+                              (!!(d->f.ctx->iformat->flags & AVFMT_NOTIMESTAMPS) * DECODER_FLAG_TS_UNRELIABLE) |
+                              (!!(d->loop && is_audio) * DECODER_FLAG_SEND_END_TS)
 #if FFMPEG_OPT_TOP
-                             | ((ist->top_field_first >= 0) * DECODER_FLAG_TOP_FIELD_FIRST)
+                              | ((ist->top_field_first >= 0) * DECODER_FLAG_TOP_FIELD_FIRST)
 #endif
                              ;
 
@@ -935,8 +942,12 @@ static int ist_use(InputStream *ist, int decoding_needed)
 
         ds->dec_opts.log_parent = ist;
 
-        ret = dec_open(&ist->decoder, d->sch,
-                       &ds->decoder_opts, &ds->dec_opts);
+        ds->decoded_params = av_frame_alloc();
+        if (!ds->decoded_params)
+            return AVERROR(ENOMEM);
+
+        ret = dec_init(&ist->decoder, d->sch,
+                       &ds->decoder_opts, &ds->dec_opts, ds->decoded_params);
         if (ret < 0)
             return ret;
         ds->sch_idx_dec = ret;
@@ -988,10 +999,6 @@ int ist_filter_add(InputStream *ist, InputFilter *ifilter, int is_simple,
 
     ist->filters[ist->nb_filters - 1] = ifilter;
 
-    ret = dec_add_filter(ist->decoder, ifilter);
-    if (ret < 0)
-        return ret;
-
     if (ist->par->codec_type == AVMEDIA_TYPE_VIDEO) {
         if (ist->framerate.num > 0 && ist->framerate.den > 0) {
             opts->framerate = ist->framerate;
@@ -1027,6 +1034,17 @@ int ist_filter_add(InputStream *ist, InputFilter *ifilter, int is_simple,
         ds->have_sub2video = 1;
     }
 
+    ret = av_frame_copy_props(opts->fallback, ds->decoded_params);
+    if (ret < 0)
+        return ret;
+    opts->fallback->format = ds->decoded_params->format;
+    opts->fallback->width  = ds->decoded_params->width;
+    opts->fallback->height = ds->decoded_params->height;
+
+    ret = av_channel_layout_copy(&opts->fallback->ch_layout, &ds->decoded_params->ch_layout);
+    if (ret < 0)
+        return ret;
+
     if (copy_ts) {
         tsoffset = d->f.start_time == AV_NOPTS_VALUE ? 0 : d->f.start_time;
         if (!start_at_zero && d->f.ctx->start_time != AV_NOPTS_VALUE)
@@ -1040,7 +1058,7 @@ int ist_filter_add(InputStream *ist, InputFilter *ifilter, int is_simple,
     if (!opts->name)
         return AVERROR(ENOMEM);
 
-    opts->flags |= IFILTER_FLAG_AUTOROTATE * !!(ist->autorotate) |
+    opts->flags |= IFILTER_FLAG_AUTOROTATE * !!(ds->autorotate) |
                    IFILTER_FLAG_REINIT     * !!(ds->reinit_filters);
 
     return ds->sch_idx_dec;
@@ -1220,8 +1238,8 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st)
     ds->ts_scale = 1.0;
     MATCH_PER_STREAM_OPT(ts_scale, dbl, ds->ts_scale, ic, st);
 
-    ist->autorotate = 1;
-    MATCH_PER_STREAM_OPT(autorotate, i, ist->autorotate, ic, st);
+    ds->autorotate = 1;
+    MATCH_PER_STREAM_OPT(autorotate, i, ds->autorotate, ic, st);
 
     MATCH_PER_STREAM_OPT(codec_tags, str, codec_tag, ic, st);
     if (codec_tag) {
@@ -1314,10 +1332,12 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st)
     if (ret < 0)
         return ret;
 
-    ret = filter_codec_opts(o->g->codec_opts, ist->st->codecpar->codec_id,
-                            ic, st, ist->dec, &ds->decoder_opts);
-    if (ret < 0)
-        return ret;
+    if (ist->dec) {
+        ret = filter_codec_opts(o->g->codec_opts, ist->st->codecpar->codec_id,
+                                ic, st, ist->dec, &ds->decoder_opts);
+        if (ret < 0)
+            return ret;
+    }
 
     ds->reinit_filters = -1;
     MATCH_PER_STREAM_OPT(reinit_filters, i, ds->reinit_filters, ic, st);
@@ -1340,8 +1360,7 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st)
         ist->user_set_discard = ist->st->discard;
     }
 
-    if (o->bitexact)
-        av_dict_set(&ds->decoder_opts, "flags", "+bitexact", AV_DICT_MULTIKEY);
+    ds->dec_opts.flags |= DECODER_FLAG_BITEXACT * !!o->bitexact;
 
     /* Attached pics are sparse, therefore we would not want to delay their decoding
      * till EOF. */

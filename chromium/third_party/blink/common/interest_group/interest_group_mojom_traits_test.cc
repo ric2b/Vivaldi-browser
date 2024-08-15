@@ -4,12 +4,18 @@
 
 #include "third_party/blink/public/common/interest_group/interest_group_mojom_traits.h"
 
+#include <limits>
 #include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
 
+#include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/common_export.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/interest_group/interest_group.h"
 #include "third_party/blink/public/mojom/interest_group/interest_group_types.mojom.h"
 #include "url/gurl.h"
@@ -52,6 +58,25 @@ void SerializeAndDeserializeAndCompare(InterestGroup& interest_group) {
   ASSERT_TRUE(mojo::test::SerializeAndDeserialize<blink::mojom::InterestGroup>(
       interest_group, interest_group_clone));
   EXPECT_TRUE(interest_group.IsEqualForTesting(interest_group_clone));
+}
+
+// A variant of SerializeAndDeserializeAndCompare() that expects serialization
+// to fail.
+//
+// **NOTE**: Most validation of invalid fields should be checked in
+// validate_blink_interest_group_test.cc, as it checks both against
+// validate_blink_interest_group.cc (which runs in the renderer) and
+// InterestGroup::IsValid() (which runs in the browser process). This method is
+// useful for cases where validation is performed by WebIDL instead of custom
+// renderer-side logic, but InterestGroup::IsValid() still needs to be checked.
+void SerializeAndDeserializeExpectFailure(InterestGroup& interest_group,
+                                          std::string_view tag = "") {
+  ASSERT_FALSE(interest_group.IsEqualForTesting(CreateInterestGroup()));
+
+  InterestGroup interest_group_clone;
+  EXPECT_FALSE(mojo::test::SerializeAndDeserialize<blink::mojom::InterestGroup>(
+      interest_group, interest_group_clone))
+      << tag;
 }
 
 }  // namespace
@@ -117,6 +142,37 @@ TEST(InterestGroupMojomTraitsTest,
   SerializeAndDeserializeAndCompare(interest_group);
 }
 
+TEST(InterestGroupMojomTraitsTest, SerializeAndDeserializeNonFinite) {
+  double test_cases[] = {
+      std::numeric_limits<double>::quiet_NaN(),
+      std::numeric_limits<double>::signaling_NaN(),
+      std::numeric_limits<double>::infinity(),
+      -std::numeric_limits<double>::infinity(),
+  };
+  size_t i = 0u;
+  for (double test_case : test_cases) {
+    SCOPED_TRACE(i++);
+
+    InterestGroup interest_group_bad_priority = CreateInterestGroup();
+    interest_group_bad_priority.priority = test_case;
+    SerializeAndDeserializeExpectFailure(interest_group_bad_priority,
+                                         "priority");
+
+    InterestGroup interest_group_bad_priority_vector = CreateInterestGroup();
+    interest_group_bad_priority_vector.priority_vector = {{"foo", test_case}};
+    SerializeAndDeserializeExpectFailure(interest_group_bad_priority_vector,
+                                         "priority_vector");
+
+    InterestGroup blink_interest_group_bad_priority_signals_overrides =
+        CreateInterestGroup();
+    blink_interest_group_bad_priority_signals_overrides
+        .priority_signals_overrides = {{"foo", test_case}};
+    SerializeAndDeserializeExpectFailure(
+        blink_interest_group_bad_priority_signals_overrides,
+        "priority_signals_overrides");
+  }
+}
+
 TEST(InterestGroupMojomTraitsTest, SerializeAndDeserializeSellerCapabilities) {
   InterestGroup interest_group = CreateInterestGroup();
 
@@ -171,6 +227,20 @@ TEST(InterestGroupMojomTraitsTest,
      SerializeAndDeserializeTrustedBiddingSignalsUrl) {
   InterestGroup interest_group = CreateInterestGroup();
   interest_group.trusted_bidding_signals_url = GURL(kUrl1);
+  SerializeAndDeserializeAndCompare(interest_group);
+}
+
+TEST(InterestGroupMojomTraitsTest,
+     SerializeAndDeserializeCrossOriginTrustedBiddingSignalsUrl) {
+  // Like with everything here, the negative test is in
+  // validate_blink_interest_group_test.cc
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      blink::features::kFledgePermitCrossOriginTrustedSignals);
+
+  InterestGroup interest_group = CreateInterestGroup();
+  interest_group.trusted_bidding_signals_url =
+      GURL("https://cross-origin.test/");
   SerializeAndDeserializeAndCompare(interest_group);
 }
 

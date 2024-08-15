@@ -3,17 +3,17 @@
 // found in the LICENSE file.
 
 import {
-  assertElement,
   dispatchClickEvent,
   renderElementIntoDOM,
 } from '../../../testing/DOMHelpers.js';
+import {describeWithLocale} from '../../../testing/EnvironmentHelpers.js';
 import * as Coordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
 
 import * as ElementsComponents from './components.js';
 
 const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
-describe('Elements tree expand button', () => {
+describeWithLocale('Elements tree expand button', () => {
   it('render and click handler trigger correctly', async () => {
     const component = new ElementsComponents.ElementsTreeExpandButton.ElementsTreeExpandButton();
 
@@ -27,7 +27,7 @@ describe('Elements tree expand button', () => {
     await coordinator.done();
 
     const button = component.shadowRoot!.querySelector('.expand-button');
-    assertElement(button, HTMLElement);
+    assert.instanceOf(button, HTMLElement);
 
     dispatchClickEvent(button);
     assert.strictEqual(clicks, 1);
@@ -45,7 +45,7 @@ describe('Elements tree expand button', () => {
     await coordinator.done();
 
     const button = component.shadowRoot!.querySelector('.expand-button');
-    assertElement(button, HTMLElement);
+    assert.instanceOf(button, HTMLElement);
 
     assert.strictEqual(button.innerText, '');
   });

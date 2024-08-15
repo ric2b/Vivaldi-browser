@@ -407,7 +407,7 @@ void VivVideoDecoder::DecodeTask(scoped_refptr<DecoderBuffer> buffer,
   // record parameter sets for VideoToolbox initialization.
   size_t data_size = 0;
   std::vector<H264NALU> nalus;
-  parser_.SetStream(buffer->data(), buffer->data_size());
+  parser_.SetStream(buffer->data(), buffer->size());
   while (true) {
     H264NALU nalu;
     H264Parser::Result result = parser_.AdvanceToNextNALU(&nalu);

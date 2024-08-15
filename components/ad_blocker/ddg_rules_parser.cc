@@ -430,7 +430,7 @@ DuckDuckGoRulesParser::GetTypes(const base::Value* rule_properties) {
     if (!type_name.is_string())
       continue;
 
-    auto* type = kTypeStringMap.find(type_name.GetString());
+    auto type = kTypeStringMap.find(type_name.GetString());
     if (type == kTypeStringMap.end())
       continue;
     else

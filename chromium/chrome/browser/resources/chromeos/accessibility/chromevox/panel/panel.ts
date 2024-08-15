@@ -5,13 +5,13 @@
 /**
  * @fileoverview The ChromeVox panel and menus.
  */
+import {BridgeHelper} from '/common/bridge_helper.js';
 import {BrowserUtil} from '/common/browser_util.js';
 import {constants} from '/common/constants.js';
 import {LocalStorage} from '/common/local_storage.js';
 
 import {BackgroundBridge} from '../common/background_bridge.js';
 import {BridgeConstants} from '../common/bridge_constants.js';
-import {BridgeHelper} from '../common/bridge_helper.js';
 import {Command} from '../common/command.js';
 import {LocaleOutputHelper} from '../common/locale_output_helper.js';
 import {Msgs} from '../common/msgs.js';
@@ -632,7 +632,6 @@ export class Panel implements PanelInterface {
     this.tutorial_ = tutorialElement;
 
     // Add listeners. These are custom events fired from custom components.
-    const backgroundPage = chrome.extension.getBackgroundPage();
 
     const elementInPage = $('chromevox-tutorial');
     if (!elementInPage) {
@@ -662,11 +661,11 @@ export class Panel implements PanelInterface {
     });
     elementInPage.addEventListener('requestearcon', evt => {
       const earconId = (evt as CustomEvent).detail.earconId;
-      backgroundPage['ChromeVox']['earcons']['playEarcon'](earconId);
+      BackgroundBridge.Earcons.playEarcon(earconId);
     });
     elementInPage.addEventListener('cancelearcon', evt => {
       const earconId = (evt as CustomEvent).detail.earconId;
-      backgroundPage['ChromeVox']['earcons']['cancelEarcon'](earconId);
+      BackgroundBridge.Earcons.cancelEarcon(earconId);
     });
     elementInPage.addEventListener('readyfortesting', () => {
       this.tutorialReadyForTesting_ ||= true;

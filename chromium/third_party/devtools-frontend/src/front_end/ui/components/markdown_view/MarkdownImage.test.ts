@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 import {
-  assertShadowRoot,
   getElementWithinComponent,
   renderElementIntoDOM,
 } from '../../../testing/DOMHelpers.js';
@@ -13,8 +12,6 @@ import * as Coordinator from '../render_coordinator/render_coordinator.js';
 import * as MarkdownView from './markdown_view.js';
 
 const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
-
-const {assert} = chai;
 
 describe('MarkdownImage', () => {
   const imageSource = 'Images/lighthouse_logo.svg';
@@ -37,7 +34,7 @@ describe('MarkdownImage', () => {
     component.data = {key: 'test-icon', title: 'Test icon'};
     renderElementIntoDOM(component);
     await coordinator.done();
-    assertShadowRoot(component.shadowRoot);
+    assert.isNotNull(component.shadowRoot);
     const iconComponent = getElementWithinComponent(component, 'devtools-icon', IconButton.Icon.Icon);
     assert.isNotNull(iconComponent);
     const boundingClient = iconComponent.getBoundingClientRect();
@@ -50,7 +47,7 @@ describe('MarkdownImage', () => {
     const markdownImageKey = 'test-image';
     component.data = {key: markdownImageKey, title: markdownImageTitle};
     renderElementIntoDOM(component);
-    assertShadowRoot(component.shadowRoot);
+    assert.isNotNull(component.shadowRoot);
     const imageComponent = getElementWithinComponent(component, 'img', HTMLImageElement);
     assert.isNotNull(imageComponent);
     assert.include(imageComponent.src, imageSource);

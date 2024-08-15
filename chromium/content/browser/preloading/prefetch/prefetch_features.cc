@@ -22,10 +22,6 @@ BASE_FEATURE(kPrefetchNIKScope,
              "PrefetchNIKScope",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kPrefetchBrowserInitiatedTriggers,
-             "PrefetchBrowserInitiatedTriggers",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kPrefetchClientHints,
              "PrefetchClientHints",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -42,6 +38,10 @@ const base::FeatureParam<PrefetchClientHintsCrossSiteBehavior>
         PrefetchClientHintsCrossSiteBehavior::kLowEntropy,
         &kPrefetchClientHintsCrossSiteBehaviorOptions};
 
+BASE_FEATURE(kPrefetchOffTheRecord,
+             "PrefetchOffTheRecord",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 BASE_FEATURE(kPrefetchStateContaminationMitigation,
              "PrefetchStateContaminationMitigation",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -51,5 +51,9 @@ const base::FeatureParam<bool>
         &kPrefetchStateContaminationMitigation, "swaps_bcg", false};
 
 BASE_FEATURE(kPrefetchProxy, "PrefetchProxy", base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPrefetchUnblockOnCancel,
+             "PrefetchUnblockOnCancel",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace features

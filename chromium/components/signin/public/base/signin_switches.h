@@ -33,6 +33,16 @@ BASE_DECLARE_FEATURE(kSeedAccountsRevamp);
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kEnterprisePolicyOnSignin);
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kSkipCheckForAccountManagementOnSignin);
+
+// Feature flag to hide signin promo in settings page.
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kHideSettingsSignInPromo);
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kUseConsentLevelSigninForLegacyAccountEmailPref);
 #endif
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
@@ -76,6 +86,11 @@ BASE_DECLARE_FEATURE(kEnableFetchingAccountCapabilities);
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kForceDisableExtendedSyncPromos);
 
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+extern const char kForceFreDefaultBrowserStep[];
+#endif
+
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kForceStartupSigninPromo);
@@ -86,20 +101,7 @@ COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kRestoreSignedInAccountAndSettingsFromBackup);
 #endif
 
-#if BUILDFLAG(IS_ANDROID)
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kSearchEngineChoice);
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kSearchEnginePromoDialogRewrite);
-#endif
-
-// Used to experiment and validate the UNO model on Desktop. Not meant to be
-// launched to stable for the moment, while it's still in a prototype state.
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kUnoDesktop);
-
-// Used for the launch of the UNO model on Desktop, as well as for the later
-// phases of the experiment.
+// Used for the launch of the UNO model on Desktop Phase 0.
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kExplicitBrowserSigninUIOnDesktop);
 // Param to control whether the bubbles are dismissible by pressing on the
@@ -108,18 +110,8 @@ COMPONENT_EXPORT(SIGNIN_SWITCHES)
 extern const base::FeatureParam<bool>
     kInterceptBubblesDismissibleByAvatarButton;
 
-enum class ExplicitBrowserSigninPhase {
-  // Used to enable the changes made for the experimental feature `kUnoDesktop`
-  // and for the full launch feature `kExplicitBrowserSigninUIOnDesktop`.
-  kExperimental = 0,
-  // Used to enable the changes made only for the full launch feature
-  // `kExplicitBrowserSigninUIOnDesktop`.
-  kFull = 1,
-};
-
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
-bool IsExplicitBrowserSigninUIOnDesktopEnabled(
-    ExplicitBrowserSigninPhase phase);
+bool IsExplicitBrowserSigninUIOnDesktopEnabled();
 
 // Controls the view mode for (history) sync screen.
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || \
@@ -134,10 +126,59 @@ extern const base::FeatureParam<int> kMinorModeRestrictionsFetchDeadlineMs;
 #if BUILDFLAG(IS_IOS)
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kUseSystemCapabilitiesForMinorModeRestrictions);
+
+// Short timeout to wait for asynchronously fetching already available system
+// capabilities.
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+extern const base::FeatureParam<int>
+    kFetchImmediatelyAvailableCapabilityDeadlineMs;
+
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kRemoveSignedInAccountsDialog);
 #endif
 
+// Pre-connectes the network socket for the Account Capabilities fetch, after
+// receiving the signin response header from Gaia.
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kPreconnectAccountCapabilitiesPostSignin);
+#endif
+
+#if BUILDFLAG(IS_ANDROID)
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kUpdateMetricsServicesStateInRestore);
+#endif
+
 }  // namespace switches
+
+// TODO(crbug.com/337879458): Move switches below into the switches namespace.
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kStableDeviceId);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kShowEnterpriseDialogForAllManagedAccountsSignin);
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kDisallowManagedProfileSignout);
+
+#if BUILDFLAG(ENABLE_MIRROR) && !BUILDFLAG(IS_IOS)
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kVerifyRequestInitiatorForMirrorHeaders);
+#endif  // BUILDFLAG(ENABLE_MIRROR) && !BUILDFLAG(IS_IOS)
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kProfilesReordering);
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kForceSigninFlowInProfilePicker);
+// Default value is false, and the URL used would be /AccountChooser.
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+extern const base::FeatureParam<bool>
+    kForceSigninReauthInProfilePickerUseAddSession;
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
 #endif  // COMPONENTS_SIGNIN_PUBLIC_BASE_SIGNIN_SWITCHES_H_

@@ -183,6 +183,7 @@ HandlePixelLocalStorageAndGetPixelLocalStorageUAVs(
                     break;
                 }
                 case wgpu::LoadOp::Load:
+                case wgpu::LoadOp::ExpandResolveTexture:
                     break;
                 case wgpu::LoadOp::Undefined:
                     DAWN_UNREACHABLE();
@@ -559,13 +560,14 @@ MaybeError CommandBuffer::ExecuteRenderPass(
     // Hold ID3D11RenderTargetView ComPtr to make attachments alive.
     PerColorAttachment<ID3D11RenderTargetView*> d3d11RenderTargetViews = {};
     ColorAttachmentIndex attachmentCount{};
+    bool clearWithDraw = GetDevice()->IsToggleEnabled(Toggle::ClearColorWithDraw);
     // TODO(dawn:1815): Shrink the sparse attachments to accommodate more UAVs.
     for (auto i : IterateBitSet(renderPass->attachmentState->GetColorAttachmentsMask())) {
         TextureView* colorTextureView = ToBackend(renderPass->colorAttachments[i].view.Get());
         DAWN_TRY_ASSIGN(d3d11RenderTargetViews[i],
                         colorTextureView->GetOrCreateD3D11RenderTargetView(
                             renderPass->colorAttachments[i].depthSlice));
-        if (renderPass->colorAttachments[i].loadOp == wgpu::LoadOp::Clear) {
+        if (!clearWithDraw && renderPass->colorAttachments[i].loadOp == wgpu::LoadOp::Clear) {
             std::array<float, 4> clearColor =
                 ConvertToFloatColor(renderPass->colorAttachments[i].clearColor);
             d3d11DeviceContext->ClearRenderTargetView(d3d11RenderTargetViews[i], clearColor.data());
@@ -906,7 +908,7 @@ void CommandBuffer::HandleDebugCommands(
         }
 
         case Command::PopDebugGroup: {
-            std::ignore = iter->NextCommand<PopDebugGroupCmd>();
+            [[maybe_unused]] auto cmd = iter->NextCommand<PopDebugGroupCmd>();
             commandContext->GetD3DUserDefinedAnnotation()->EndEvent();
             break;
         }

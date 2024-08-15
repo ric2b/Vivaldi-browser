@@ -291,6 +291,20 @@ HardwareDisplayController::ScheduleOrTestPageFlip(
                         : PageFlipResult::kFailedCommit;
 }
 
+bool HardwareDisplayController::TestSeamlessRefreshRate(
+    int32_t crtc_id,
+    const drmModeModeInfo& mode) {
+  // Don't consider modes that have a different visible size from the currently
+  // configured mode.
+  if (GetModeSize() != ui::ModeSize(mode)) {
+    LOG(WARNING) << "Requested mode's visible size differs from the currently "
+                    "configured mode.";
+    return false;
+  }
+
+  return GetDrmDevice()->plane_manager()->TestSeamlessMode(crtc_id, mode);
+}
+
 std::vector<uint64_t> HardwareDisplayController::GetFormatModifiers(
     uint32_t fourcc_format) const {
   if (crtc_controllers_.empty())
@@ -458,9 +472,14 @@ gfx::Size HardwareDisplayController::GetModeSize() const {
                    crtc_controllers_[0]->mode().vdisplay);
 }
 
+float HardwareDisplayController::GetRefreshRate() const {
+  // If there are multiple CRTCs they should all have the same refresh rate.
+  return ModeRefreshRate(crtc_controllers_[0]->mode());
+}
+
 base::TimeDelta HardwareDisplayController::GetRefreshInterval() const {
   // If there are multiple CRTCs they should all have the same refresh rate.
-  float vrefresh = ModeRefreshRate(crtc_controllers_[0]->mode());
+  float vrefresh = GetRefreshRate();
   return vrefresh ? base::Seconds(1) / vrefresh : base::TimeDelta();
 }
 
@@ -544,18 +563,22 @@ void HardwareDisplayController::AllocateCursorBuffers() {
 
 DrmDumbBuffer* HardwareDisplayController::NextCursorBuffer(
     const SkBitmap& image) {
-  DrmDumbBuffer* next_buffer = nullptr;
-  // Find the smallest buffer size that fits the |image| size and return the not
-  // in-use buffer with that size.
+  // Use the largest buffer as default.
+  int buffer_size = valid_cursor_sizes_.back();
+
+  // Find the smallest buffer size that fits the |image| size.
   for (auto size : valid_cursor_sizes_) {
     if (image.width() <= size && image.height() <= size) {
-      auto& active_buffers = cursor_buffer_map_[size];
-      next_buffer = active_buffers.front().get();
-      if (next_buffer == current_cursor_) {
-        next_buffer = active_buffers.back().get();
-      }
+      buffer_size = size;
       break;
     }
+  }
+
+  // Return the not in-use buffer with the |buffer_size|.
+  auto& active_buffers = cursor_buffer_map_[buffer_size];
+  DrmDumbBuffer* next_buffer = active_buffers.front().get();
+  if (next_buffer == current_cursor_) {
+    return active_buffers.back().get();
   }
   return next_buffer;
 }

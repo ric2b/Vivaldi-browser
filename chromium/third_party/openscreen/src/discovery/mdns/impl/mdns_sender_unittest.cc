@@ -105,7 +105,7 @@ TEST_F(MdnsSenderTest, SendMulticast) {
   StrictMock<MockUdpSocket> socket;
   EXPECT_CALL(socket, IsIPv4()).WillRepeatedly(Return(true));
   EXPECT_CALL(socket, IsIPv6()).WillRepeatedly(Return(true));
-  MdnsSender sender(&socket);
+  MdnsSender sender(socket);
   EXPECT_CALL(socket, SendMessage(_, kQueryBytes.size(), _))
       .WillOnce(WithArgs<0>(VoidPointerMatchesBytes(kQueryBytes)));
   EXPECT_EQ(sender.SendMulticast(query_message_), Error::Code::kNone);
@@ -115,7 +115,7 @@ TEST_F(MdnsSenderTest, SendUnicastIPv4) {
   IPEndpoint endpoint{.address = IPAddress{192, 168, 1, 1}, .port = 31337};
 
   StrictMock<MockUdpSocket> socket;
-  MdnsSender sender(&socket);
+  MdnsSender sender(socket);
   EXPECT_CALL(socket, SendMessage(_, kResponseBytes.size(), _))
       .WillOnce(WithArgs<0>(VoidPointerMatchesBytes(kResponseBytes)));
   EXPECT_EQ(sender.SendMessage(response_message_, endpoint),
@@ -129,7 +129,7 @@ TEST_F(MdnsSenderTest, SendUnicastIPv6) {
   IPEndpoint endpoint{.address = IPAddress(kIPv6AddressHextets), .port = 31337};
 
   StrictMock<MockUdpSocket> socket;
-  MdnsSender sender(&socket);
+  MdnsSender sender(socket);
   EXPECT_CALL(socket, SendMessage(_, kResponseBytes.size(), _))
       .WillOnce(WithArgs<0>(VoidPointerMatchesBytes(kResponseBytes)));
   EXPECT_EQ(sender.SendMessage(response_message_, endpoint),
@@ -146,7 +146,7 @@ TEST_F(MdnsSenderTest, MessageTooBig) {
   StrictMock<MockUdpSocket> socket;
   EXPECT_CALL(socket, IsIPv4()).WillRepeatedly(Return(true));
   EXPECT_CALL(socket, IsIPv6()).WillRepeatedly(Return(true));
-  MdnsSender sender(&socket);
+  MdnsSender sender(socket);
   EXPECT_EQ(sender.SendMulticast(big_message_),
             Error::Code::kInsufficientBuffer);
 }
@@ -154,7 +154,7 @@ TEST_F(MdnsSenderTest, MessageTooBig) {
 TEST_F(MdnsSenderTest, ReturnsErrorOnSocketFailure) {
   FakeUdpSocket::MockClient socket_client;
   FakeUdpSocket socket(&socket_client);
-  MdnsSender sender(&socket);
+  MdnsSender sender(socket);
   Error error = Error(Error::Code::kConnectionFailed, "error message");
   socket.EnqueueSendResult(error);
   EXPECT_CALL(socket_client, OnSendError(_, error)).Times(1);

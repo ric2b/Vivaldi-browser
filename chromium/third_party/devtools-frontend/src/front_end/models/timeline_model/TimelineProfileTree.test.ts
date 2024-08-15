@@ -14,8 +14,6 @@ import {TraceLoader} from '../../testing/TraceLoader.js';
 import * as TimelineModel from '../timeline_model/timeline_model.js';
 import * as TraceEngine from '../trace/trace.js';
 
-const {assert} = chai;
-
 describeWithEnvironment('TimelineProfileTree', () => {
   describe('TopDownRootNode', () => {
     it('builds the root node and its children properly from an event tree', () => {
@@ -30,7 +28,8 @@ describeWithEnvironment('TimelineProfileTree', () => {
         eventB,
         eventC,
       ];
-      const root = new TimelineModel.TimelineProfileTree.TopDownRootNode(events, [], 0, 200_000);
+      const root = new TimelineModel.TimelineProfileTree.TopDownRootNode(
+          events, [], TraceEngine.Types.Timing.MilliSeconds(0), TraceEngine.Types.Timing.MilliSeconds(200_000));
 
       const children = root.children();
       assert.strictEqual(children.size, 3);
@@ -57,7 +56,8 @@ describeWithEnvironment('TimelineProfileTree', () => {
         eventD,
         eventB,
       ];
-      const root = new TimelineModel.TimelineProfileTree.TopDownRootNode(events, [], 0, 200_000);
+      const root = new TimelineModel.TimelineProfileTree.TopDownRootNode(
+          events, [], TraceEngine.Types.Timing.MilliSeconds(0), TraceEngine.Types.Timing.MilliSeconds(200_000));
 
       const rootChildren = root.children();
       assert.strictEqual(rootChildren.size, 2);
@@ -91,7 +91,8 @@ describeWithEnvironment('TimelineProfileTree', () => {
         eventC,
         eventD,
       ];
-      const root = new TimelineModel.TimelineProfileTree.TopDownRootNode(events, [], 0, 200_000);
+      const root = new TimelineModel.TimelineProfileTree.TopDownRootNode(
+          events, [], TraceEngine.Types.Timing.MilliSeconds(0), TraceEngine.Types.Timing.MilliSeconds(200_000));
 
       const rootChildren = root.children();
       assert.strictEqual(rootChildren.size, 2);
@@ -128,7 +129,8 @@ describeWithEnvironment('TimelineProfileTree', () => {
         eventD,
         eventE,
       ];
-      const root = new TimelineModel.TimelineProfileTree.TopDownRootNode(events, [], 0, 200_000);
+      const root = new TimelineModel.TimelineProfileTree.TopDownRootNode(
+          events, [], TraceEngine.Types.Timing.MilliSeconds(0), TraceEngine.Types.Timing.MilliSeconds(200_000));
 
       const rootChildren = root.children();
       assert.strictEqual(rootChildren.size, 2);
@@ -174,7 +176,8 @@ describeWithEnvironment('TimelineProfileTree', () => {
         eventB,
         eventC,
       ];
-      const root = new TimelineModel.TimelineProfileTree.TopDownRootNode(events, [], 0, 200_000);
+      const root = new TimelineModel.TimelineProfileTree.TopDownRootNode(
+          events, [], TraceEngine.Types.Timing.MilliSeconds(0), TraceEngine.Types.Timing.MilliSeconds(200_000));
 
       const children = root.children();
       assert.strictEqual(children.size, 3);
@@ -202,7 +205,8 @@ describeWithEnvironment('TimelineProfileTree', () => {
         eventB,
       ];
       const root = new TimelineModel.TimelineProfileTree.BottomUpRootNode(
-          events, new TimelineModel.TimelineModelFilter.TimelineInvisibleEventsFilter([]), [], 0, 200_000, null);
+          events, new TimelineModel.TimelineModelFilter.TimelineInvisibleEventsFilter([]), [],
+          TraceEngine.Types.Timing.MilliSeconds(0), TraceEngine.Types.Timing.MilliSeconds(200_000), null);
       const rootChildren = root.children();
       assert.strictEqual(rootChildren.size, 4);
 
@@ -255,7 +259,8 @@ describeWithEnvironment('TimelineProfileTree', () => {
       ];
 
       const root = new TimelineModel.TimelineProfileTree.BottomUpRootNode(
-          events, new TimelineModel.TimelineModelFilter.TimelineInvisibleEventsFilter([]), [], 0, 200_000, null);
+          events, new TimelineModel.TimelineModelFilter.TimelineInvisibleEventsFilter([]), [],
+          TraceEngine.Types.Timing.MilliSeconds(0), TraceEngine.Types.Timing.MilliSeconds(200_000), null);
       const rootChildren = root.children();
       assert.strictEqual(rootChildren.size, 4);
 
@@ -310,7 +315,8 @@ describeWithEnvironment('TimelineProfileTree', () => {
         eventE,
       ];
       const root = new TimelineModel.TimelineProfileTree.BottomUpRootNode(
-          events, new TimelineModel.TimelineModelFilter.TimelineInvisibleEventsFilter([]), [], 0, 200_000, null);
+          events, new TimelineModel.TimelineModelFilter.TimelineInvisibleEventsFilter([]), [],
+          TraceEngine.Types.Timing.MilliSeconds(0), TraceEngine.Types.Timing.MilliSeconds(200_000), null);
 
       const rootChildren = root.children();
       assert.strictEqual(rootChildren.size, 5);
@@ -335,15 +341,17 @@ describeWithEnvironment('TimelineProfileTree', () => {
     });
 
     it('correctly keeps ProfileCall nodes and uses them to build up the tree', async function() {
-      const models = await TraceLoader.allModels(this, 'mainWasm_profile.json.gz');
-      const mainThread = getMainThread(models.traceParsedData.Renderer);
-      const bounds = TraceEngine.Helpers.Timing.traceWindowMilliSeconds(models.traceParsedData.Meta.traceBounds);
+      const traceParsedData = await TraceLoader.traceEngine(this, 'mainWasm_profile.json.gz');
+      const mainThread = getMainThread(traceParsedData.Renderer);
+      const bounds = TraceEngine.Helpers.Timing.traceWindowMilliSeconds(traceParsedData.Meta.traceBounds);
 
       // Replicate the filters as they would be when renderering in the actual panel.
       const textFilter = new Timeline.TimelineFilters.TimelineRegExp();
       const modelFilters = [
         Timeline.TimelineUIUtils.TimelineUIUtils.visibleEventsFilter(),
-        new TimelineModel.TimelineModelFilter.ExclusiveNameFilter(['RunTask']),
+        new TimelineModel.TimelineModelFilter.ExclusiveNameFilter([
+          TraceEngine.Types.TraceEvents.KnownEventName.RunTask,
+        ]),
       ];
       const root = new TimelineModel.TimelineProfileTree.BottomUpRootNode(
           mainThread.entries, textFilter, modelFilters, bounds.min, bounds.max, null);
@@ -352,8 +360,7 @@ describeWithEnvironment('TimelineProfileTree', () => {
       // Find the list of profile calls that have been calculated as the top level rows in the Bottom Up table.
       const profileCalls = values
                                .filter(
-                                   node => TraceEngine.Legacy.eventIsFromNewEngine(node.event) &&
-                                       TraceEngine.Types.TraceEvents.isProfileCall(node.event) &&
+                                   node => node.event && TraceEngine.Types.TraceEvents.isProfileCall(node.event) &&
                                        node.event.callFrame.functionName.length > 0)
                                .map(n => n.event as TraceEngine.Types.TraceEvents.SyntheticProfileCall);
       const functionNames = profileCalls.map(entry => entry.callFrame.functionName);
@@ -364,8 +371,8 @@ describeWithEnvironment('TimelineProfileTree', () => {
 
   describe('generateEventID', () => {
     it('generates the right ID for new engine profile call events', async function() {
-      const models = await TraceLoader.allModels(this, 'react-hello-world.json.gz');
-      const mainThread = getMainThread(models.traceParsedData.Renderer);
+      const traceParsedData = await TraceLoader.traceEngine(this, 'react-hello-world.json.gz');
+      const mainThread = getMainThread(traceParsedData.Renderer);
       const profileCallEntry = mainThread.entries.find(entry => {
         return TraceEngine.Types.TraceEvents.isProfileCall(entry) &&
             entry.callFrame.functionName === 'performConcurrentWorkOnRoot';
@@ -378,13 +385,14 @@ describeWithEnvironment('TimelineProfileTree', () => {
     });
 
     it('generates the right ID for new engine native profile call events', async function() {
-      const traceParsedData = await TraceLoader.traceEngine(this, 'invalid-animation-events.json.gz', {
-        ...TraceEngine.Types.Configuration.DEFAULT,
-        experiments: {
-          ...TraceEngine.Types.Configuration.DEFAULT.experiments,
-          timelineV8RuntimeCallStats: true,
-        },
-      });
+      const traceParsedData = await TraceLoader.traceEngine(
+          this, 'invalid-animation-events.json.gz', {
+            initTraceBounds: false,
+          },
+          {
+            ...TraceEngine.Types.Configuration.defaults(),
+            includeRuntimeCallStats: true,
+          });
 
       const mainThread = getMainThread(traceParsedData.Renderer);
       const profileCallEntry = mainThread.entries.find(entry => {

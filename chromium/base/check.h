@@ -15,7 +15,6 @@
 #include "base/location.h"
 #include "base/macros/if.h"
 #include "base/macros/is_empty.h"
-#include "base/memory/raw_ptr.h"
 #include "base/not_fatal_until.h"
 
 // This header defines the CHECK, DCHECK, and DPCHECK macros.
@@ -153,11 +152,11 @@ class BASE_EXPORT NotReachedError : public CheckError {
           base::NotFatalUntil::NoSpecifiedMilestoneInternal,
       const base::Location& location = base::Location::Current());
 
-  // Used to trigger a NOTREACHED() without providing file or line while also
-  // discarding log-stream arguments. See base/notreached.h.
+  // Used to trigger a NOTREACHED_IN_MIGRATION() without providing file or line
+  // while also discarding log-stream arguments. See base/notreached.h.
   NOMERGE NOINLINE NOT_TAIL_CALLED static void TriggerNotReached();
 
-  // TODO(crbug.com/851128): Mark [[noreturn]] once this is CHECK-fatal on all
+  // TODO(crbug.com/40580068): Mark [[noreturn]] once this is CHECK-fatal on all
   // builds.
   NOMERGE NOINLINE NOT_TAIL_CALLED ~NotReachedError();
 
@@ -165,8 +164,9 @@ class BASE_EXPORT NotReachedError : public CheckError {
   using CheckError::CheckError;
 };
 
-// TODO(crbug.com/851128): This should take the name of the above class once all
-// callers of NOTREACHED() have migrated to the CHECK-fatal version.
+// TODO(crbug.com/40580068): This should take the name of the above class once
+// all callers of NOTREACHED_IN_MIGRATION() have migrated to the CHECK-fatal
+// version.
 class BASE_EXPORT NotReachedNoreturnError : public CheckError {
  public:
   explicit NotReachedNoreturnError(
@@ -179,14 +179,14 @@ class BASE_EXPORT NotReachedNoreturnError : public CheckError {
 // compiler to identify and warn about dead code, e.g.:
 //
 //   return 2;
-//   NOTREACHED();
+//   NOTREACHED_IN_MIGRATION();
 //
 // The 'switch' is used to prevent the 'else' from being ambiguous when the
 // macro is used in an 'if' clause such as:
 // if (a == 1)
 //   CHECK(Foo());
 //
-// TODO(crbug.com/1380930): Remove the const bool when the blink-gc plugin has
+// TODO(crbug.com/40244950): Remove the const bool when the blink-gc plugin has
 // been updated to accept `if (LIKELY(!field_))` as well as `if (!field_)`.
 #define LOGGING_CHECK_FUNCTION_IMPL(check_stream, condition)              \
   switch (0)                                                              \

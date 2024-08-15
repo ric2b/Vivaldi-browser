@@ -385,7 +385,7 @@ struct ZeroInitWorkgroupMemory::State {
                 //      `(idx % modulo) / division`
                 auto count = arr->ConstantCount();
                 if (!count) {
-                    ctx.dst->Diagnostics().AddError(diag::System::Transform, Source{})
+                    ctx.dst->Diagnostics().AddError(Source{})
                         << core::type::Array::kErrExpectedConstantCount;
                     return Expression{};  // error
                 }
@@ -405,7 +405,6 @@ struct ZeroInitWorkgroupMemory::State {
         }
 
         TINT_UNREACHABLE() << "could not zero workgroup type: " << ty->FriendlyName();
-        return false;
     }
 
     /// DeclareArrayIndices returns a list of statements that contain the `let`

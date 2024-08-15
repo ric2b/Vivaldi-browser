@@ -11,6 +11,7 @@
 #include "skia/ext/font_utils.h"
 #include "third_party/skia/include/core/SkFont.h"
 #include "third_party/skia/include/core/SkFontMgr.h"
+#include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
 #include "ui/color/color_provider.h"
 #include "ui/gfx/geometry/rect.h"
@@ -43,9 +44,10 @@ void NativeThemeFluent::PaintArrowButton(
     Part direction,
     State state,
     ColorScheme color_scheme,
+    bool in_forced_colors,
     const ScrollbarArrowExtraParams& extra_params) const {
   PaintButton(canvas, color_provider, rect, direction, color_scheme,
-              extra_params);
+              in_forced_colors, extra_params);
   PaintArrow(canvas, color_provider, rect, direction, state, color_scheme,
              extra_params);
 }
@@ -57,9 +59,10 @@ void NativeThemeFluent::PaintScrollbarTrack(
     State state,
     const ScrollbarTrackExtraParams& extra_params,
     const gfx::Rect& rect,
-    ColorScheme color_scheme) const {
+    ColorScheme color_scheme,
+    bool in_forced_colors) const {
   gfx::Rect track_fill_rect = rect;
-  if (InForcedColorsMode()) {
+  if (in_forced_colors) {
     gfx::Insets edge_insets;
     if (part == NativeTheme::Part::kScrollbarHorizontalTrack) {
       edge_insets.set_left_right(-kFluentScrollbarTrackOutlineWidth,
@@ -116,7 +119,8 @@ void NativeThemeFluent::PaintScrollbarThumb(
     }
     return color_provider->GetColor(thumb_color_id);
   };
-  // TODO(crbug.com/891944): Adjust extra param `thumb_color` based on `state`.
+  // TODO(crbug.com/40596569): Adjust extra param `thumb_color` based on
+  // `state`.
   const SkColor thumb_color = extra_params.thumb_color.value_or(get_color());
 
   cc::PaintFlags flags;
@@ -184,6 +188,7 @@ void NativeThemeFluent::PaintButton(
     const gfx::Rect& rect,
     Part direction,
     ColorScheme color_scheme,
+    bool in_forced_colors,
     const ScrollbarArrowExtraParams& extra_params) const {
   cc::PaintFlags flags;
   const SkColor button_color =
@@ -192,7 +197,7 @@ void NativeThemeFluent::PaintButton(
           : color_provider->GetColor(kColorWebNativeControlScrollbarTrack);
   flags.setColor(button_color);
   gfx::Rect button_fill_rect = rect;
-  if (InForcedColorsMode()) {
+  if (in_forced_colors) {
     const gfx::InsetsF outline_insets(kFluentScrollbarTrackOutlineWidth / 2.0f);
     gfx::Insets edge_insets;
     if (direction == NativeTheme::Part::kScrollbarUpArrow) {
@@ -247,7 +252,7 @@ void NativeThemeFluent::PaintArrow(
       state == NativeTheme::kPressed || state == NativeTheme::kHovered
           ? kColorWebNativeControlScrollbarArrowForegroundPressed
           : kColorWebNativeControlScrollbarArrowForeground;
-  // TODO(crbug.com/891944): Adjust thumb_color based on `state`.
+  // TODO(crbug.com/40596569): Adjust thumb_color based on `state`.
   const SkColor arrow_color = extra_params.thumb_color.has_value()
                                   ? extra_params.thumb_color.value()
                                   : color_provider->GetColor(arrow_color_id);

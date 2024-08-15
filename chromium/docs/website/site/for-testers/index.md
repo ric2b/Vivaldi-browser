@@ -8,7 +8,7 @@ title: For Testers
 
 * [Bug reporting guidelines and how to report
   bugs](/for-testers/bug-reporting-guidelines)
-* [Glossary](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/glossary.md)
+* [Glossary](/chromium-os/developer-library/glossary/)
 * [Enable logging](/for-testers/enable-logging)
 * [Recording
   traces](/developers/how-tos/trace-event-profiling-tool/recording-tracing-runs)

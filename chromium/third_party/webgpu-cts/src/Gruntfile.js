@@ -311,6 +311,7 @@ module.exports = function (grunt) {
   ]);
 
   registerTaskAndAddToHelp('serve', 'Serve out/ (without building anything)', ['run:serve']);
+  registerTaskAndAddToHelp('lint', 'Check lint and formatting', ['run:lint']);
   registerTaskAndAddToHelp('fix', 'Fix lint and formatting', ['run:fix']);
 
   addExistingTaskToHelp('clean', 'Delete built and generated files');

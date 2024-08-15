@@ -61,10 +61,72 @@
       "@@@STEP_LOG_LINE@json.output@{@@@",
       "@@@STEP_LOG_LINE@json.output@  \"did_run\": true@@@",
       "@@@STEP_LOG_LINE@json.output@}@@@",
-      "@@@STEP_LOG_END@json.output@@@"
+      "@@@STEP_LOG_END@json.output@@@",
+      "@@@STEP_EXCEPTION@@@"
     ]
   },
   {
+    "cmd": [],
+    "name": "upload git traces"
+  },
+  {
+    "cmd": [
+      "vpython3",
+      "-u",
+      "RECIPE_MODULE[recipe_engine::archive]/resources/archive.py"
+    ],
+    "luci_context": {
+      "realm": {
+        "name": "chromium/src:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
+    "name": "upload git traces.compress traces",
+    "stdin": "{\"archive_type\": \"zip\", \"entries\": [{\"path\": \"[CLEANUP]/trace2-event\", \"type\": \"file\"}, {\"path\": \"[CLEANUP]/trace-curl\", \"type\": \"file\"}, {\"path\": \"[CLEANUP]/trace-packet\", \"type\": \"file\"}], \"output\": \"[CLEANUP]/8945511751514863184.zip\", \"root\": \"[CLEANUP]\"}",
+    "~followup_annotations": [
+      "@@@STEP_NEST_LEVEL@1@@@"
+    ]
+  },
+  {
+    "cmd": [
+      "python3",
+      "-u",
+      "RECIPE_MODULE[depot_tools::gsutil]/resources/gsutil_smart_retry.py",
+      "--",
+      "RECIPE_REPO[depot_tools]/gsutil.py",
+      "----",
+      "cp",
+      "[CLEANUP]/8945511751514863184.zip",
+      "gs://chrome-bot-traces"
+    ],
+    "infra_step": true,
+    "luci_context": {
+      "realm": {
+        "name": "chromium/src:ci"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
+    "name": "upload git traces.gsutil upload",
+    "~followup_annotations": [
+      "@@@STEP_NEST_LEVEL@1@@@"
+    ]
+  },
+  {
+    "failure": {
+      "humanReason": "Infra Failure: Step('bot_update (without patch)') (retcode: 1)"
+    },
     "name": "$result"
   }
 ]

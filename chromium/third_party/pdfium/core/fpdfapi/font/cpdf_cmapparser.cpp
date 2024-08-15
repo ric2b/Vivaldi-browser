@@ -8,6 +8,7 @@
 
 #include <ctype.h>
 
+#include <array>
 #include <iterator>
 
 #include "core/fpdfapi/cmaps/fpdf_cmaps.h"
@@ -199,10 +200,8 @@ std::optional<CPDF_CMap::CodeRange> CPDF_CMapParser::GetCodeRange(
 
 // static
 CIDSet CPDF_CMapParser::CharsetFromOrdering(ByteStringView ordering) {
-  static const char* const kCharsetNames[CIDSET_NUM_SETS] = {
-      nullptr, "GB1", "CNS1", "Japan1", "Korea1", "UCS"};
-  static_assert(std::size(kCharsetNames) == CIDSET_NUM_SETS,
-                "Too many CID sets");
+  static const std::array<const char*, CIDSET_NUM_SETS> kCharsetNames = {
+      {nullptr, "GB1", "CNS1", "Japan1", "Korea1", "UCS"}};
 
   for (size_t charset = 1; charset < std::size(kCharsetNames); ++charset) {
     if (ordering == kCharsetNames[charset])

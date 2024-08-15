@@ -97,16 +97,10 @@ HTMLFormElement* InputTypeView::FormForSubmission() const {
 LayoutObject* InputTypeView::CreateLayoutObject(
     const ComputedStyle& style) const {
   // Avoid LayoutInline, which can be split to multiple lines.
-  if (RuntimeEnabledFeatures::DateInputInlineBlockEnabled() &&
-      style.IsDisplayInlineType() && !style.IsDisplayReplacedType()) {
+  if (style.IsDisplayInlineType() && !style.IsDisplayReplacedType()) {
     return MakeGarbageCollected<LayoutNGBlockFlow>(&GetElement());
   }
   return LayoutObject::CreateObject(&GetElement(), style);
-}
-
-const ComputedStyle* InputTypeView::CustomStyleForLayoutObject(
-    const ComputedStyle* original_style) const {
-  return original_style;
 }
 
 ControlPart InputTypeView::AutoAppearance() const {

@@ -88,7 +88,7 @@
     <event name="finished">
       <description summary="the compositor has finished with the toplevel manager">
         This event indicates that the compositor is done sending events
-        to this object. The client should should destroy the object.
+        to this object. The client should destroy the object.
         See ext_foreign_toplevel_list_v1.destroy for more information.
 
         The compositor must not send any more toplevel events after this event.

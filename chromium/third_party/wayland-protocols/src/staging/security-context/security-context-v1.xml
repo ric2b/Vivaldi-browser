@@ -73,6 +73,9 @@
 
         The compositor must continue to accept connections on listen_fd when
         the Wayland client which created the security context disconnects.
+
+        After sending this request, closing listen_fd and close_fd remains the
+        only valid operation on them.
       </description>
       <arg name="id" type="new_id" interface="wp_security_context_v1"/>
       <arg name="listen_fd" type="fd" summary="listening socket FD"/>
@@ -111,7 +114,8 @@
 
     <request name="set_sandbox_engine">
       <description summary="set the sandbox engine">
-        Attach a unique sandbox engine name to the security context.
+        Attach a unique sandbox engine name to the security context. The name
+        should follow the reverse-DNS style (e.g. "org.flatpak").
 
         A list of well-known engines is maintained at:
         https://gitlab.freedesktop.org/wayland/wayland-protocols/-/blob/main/staging/security-context/engines.md
@@ -162,6 +166,11 @@
       <description summary="register the security context">
         Atomically register the new client and attach the security context
         metadata.
+
+        If the provided metadata is inconsistent or does not match with out of
+        band metadata (see
+        https://gitlab.freedesktop.org/wayland/wayland-protocols/-/blob/main/staging/security-context/engines.md),
+        the invalid_metadata error may be sent eventually.
 
         It's a protocol error to send any request other than "destroy" after
         this request. In this case, the already_used error is sent.

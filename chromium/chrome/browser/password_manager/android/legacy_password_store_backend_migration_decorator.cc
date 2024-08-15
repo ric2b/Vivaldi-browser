@@ -46,8 +46,7 @@ LegacyPasswordStoreBackendMigrationDecorator::
   CHECK(built_in_backend_);
   CHECK(android_backend_);
   active_backend_ = std::make_unique<PasswordStoreProxyBackend>(
-      std::move(built_in_backend), std::move(android_backend), prefs_,
-      password_manager::kProfileStore);
+      std::move(built_in_backend), std::move(android_backend), prefs_);
 }
 
 LegacyPasswordStoreBackendMigrationDecorator::
@@ -137,6 +136,7 @@ void LegacyPasswordStoreBackendMigrationDecorator::InitBackend(
 
 void LegacyPasswordStoreBackendMigrationDecorator::Shutdown(
     base::OnceClosure shutdown_completed) {
+  weak_ptr_factory_.InvalidateWeakPtrs();
   migrator_.reset();
   built_in_backend_ = nullptr;
   android_backend_ = nullptr;
@@ -209,28 +209,33 @@ void LegacyPasswordStoreBackendMigrationDecorator::UpdateLoginAsync(
 }
 
 void LegacyPasswordStoreBackendMigrationDecorator::RemoveLoginAsync(
+    const base::Location& location,
     const PasswordForm& form,
     PasswordChangesOrErrorReply callback) {
-  active_backend_->RemoveLoginAsync(form, std::move(callback));
+  active_backend_->RemoveLoginAsync(location, form, std::move(callback));
 }
 
-void LegacyPasswordStoreBackendMigrationDecorator::RemoveLoginsByURLAndTimeAsync(
-    const base::RepeatingCallback<bool(const GURL&)>& url_filter,
-    base::Time delete_begin,
-    base::Time delete_end,
-    base::OnceCallback<void(bool)> sync_completion,
-    PasswordChangesOrErrorReply callback) {
+void LegacyPasswordStoreBackendMigrationDecorator::
+    RemoveLoginsByURLAndTimeAsync(
+        const base::Location& location,
+        const base::RepeatingCallback<bool(const GURL&)>& url_filter,
+        base::Time delete_begin,
+        base::Time delete_end,
+        base::OnceCallback<void(bool)> sync_completion,
+        PasswordChangesOrErrorReply callback) {
   active_backend_->RemoveLoginsByURLAndTimeAsync(
-      url_filter, std::move(delete_begin), std::move(delete_end),
+      location, url_filter, std::move(delete_begin), std::move(delete_end),
       std::move(sync_completion), std::move(callback));
 }
 
-void LegacyPasswordStoreBackendMigrationDecorator::RemoveLoginsCreatedBetweenAsync(
-    base::Time delete_begin,
-    base::Time delete_end,
-    PasswordChangesOrErrorReply callback) {
+void LegacyPasswordStoreBackendMigrationDecorator::
+    RemoveLoginsCreatedBetweenAsync(const base::Location& location,
+                                    base::Time delete_begin,
+                                    base::Time delete_end,
+                                    PasswordChangesOrErrorReply callback) {
   active_backend_->RemoveLoginsCreatedBetweenAsync(
-      std::move(delete_begin), std::move(delete_end), std::move(callback));
+      location, std::move(delete_begin), std::move(delete_end),
+      std::move(callback));
 }
 
 void LegacyPasswordStoreBackendMigrationDecorator::DisableAutoSignInForOriginsAsync(
@@ -245,16 +250,8 @@ LegacyPasswordStoreBackendMigrationDecorator::GetSmartBubbleStatsStore() {
   return active_backend_->GetSmartBubbleStatsStore();
 }
 
-std::unique_ptr<syncer::ProxyModelTypeControllerDelegate>
+std::unique_ptr<syncer::ModelTypeControllerDelegate>
 LegacyPasswordStoreBackendMigrationDecorator::CreateSyncControllerDelegate() {
-  if (base::FeatureList::IsEnabled(
-          features::kUnifiedPasswordManagerSyncUsingAndroidBackendOnly)) {
-    // The android backend (PasswordStoreAndroidBackend) creates a controller
-    // delegate that prevents sync from actually communicating with the sync
-    // server using the built in SyncEngine.
-    return android_backend_->CreateSyncControllerDelegate();
-  }
-
   return built_in_backend_->CreateSyncControllerDelegate();
 }
 

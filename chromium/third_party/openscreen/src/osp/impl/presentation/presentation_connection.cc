@@ -40,7 +40,7 @@ Connection::~Connection() {
 }
 
 void Connection::OnConnecting() {
-  OSP_DCHECK(!protocol_connection_);
+  OSP_CHECK(!protocol_connection_);
   state_ = State::kConnecting;
 }
 
@@ -68,7 +68,7 @@ bool Connection::OnClosed() {
   return true;
 }
 
-void Connection::OnClosedByError(Error cause) {
+void Connection::OnClosedByError(const Error& cause) {
   if (OnClosed()) {
     std::ostringstream stream;
     stream << cause;
@@ -156,7 +156,7 @@ void ConnectionManager::AddConnection(Connection* connection) {
   auto emplace_result =
       connections_.emplace(connection->connection_id(), connection);
 
-  OSP_DCHECK(emplace_result.second);
+  OSP_CHECK(emplace_result.second);
 }
 
 void ConnectionManager::RemoveConnection(Connection* connection) {
@@ -216,17 +216,16 @@ ErrorOr<size_t> ConnectionManager::OnStreamMessage(uint64_t endpoint_id,
         return Error::Code::kCborInvalidMessage;
       }
 
-      msgs::PresentationConnectionCloseResponse response;
-      response.request_id = request.request_id;
+      msgs::PresentationConnectionCloseResponse response = {
+          .request_id = request.request_id,
+          .result = msgs::PresentationConnectionCloseResponse_result::
+              kInvalidConnectionId};
 
       Connection* connection = GetConnection(request.connection_id);
       if (connection) {
         response.result =
             msgs::PresentationConnectionCloseResponse_result::kSuccess;
         connection->OnClosedByRemote();
-      } else {
-        response.result = msgs::PresentationConnectionCloseResponse_result::
-            kInvalidConnectionId;
       }
 
       std::unique_ptr<ProtocolConnection> protocol_connection =

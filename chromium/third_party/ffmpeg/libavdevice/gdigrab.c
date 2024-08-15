@@ -29,7 +29,9 @@
  */
 
 #include "config.h"
+#include "libavformat/demux.h"
 #include "libavformat/internal.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/time.h"
 #include "libavutil/wchar_filename.h"
@@ -677,13 +679,13 @@ static const AVClass gdigrab_class = {
 };
 
 /** gdi grabber device demuxer declaration */
-const AVInputFormat ff_gdigrab_demuxer = {
-    .name           = "gdigrab",
-    .long_name      = NULL_IF_CONFIG_SMALL("GDI API Windows frame grabber"),
+const FFInputFormat ff_gdigrab_demuxer = {
+    .p.name         = "gdigrab",
+    .p.long_name    = NULL_IF_CONFIG_SMALL("GDI API Windows frame grabber"),
+    .p.flags        = AVFMT_NOFILE,
+    .p.priv_class   = &gdigrab_class,
     .priv_data_size = sizeof(struct gdigrab),
     .read_header    = gdigrab_read_header,
     .read_packet    = gdigrab_read_packet,
     .read_close     = gdigrab_read_close,
-    .flags          = AVFMT_NOFILE,
-    .priv_class     = &gdigrab_class,
 };

@@ -88,7 +88,7 @@ ExtensionFunction::ResponseAction ReadingListPrivateRemoveFunction::Run() {
     DCHECK(entry);
     success = entry != nullptr;
     if (entry) {
-      model->RemoveEntryByURL(url);
+      model->RemoveEntryByURL(url, FROM_HERE);
     }
   }
   return RespondNow(ArgumentList(Results::Create(success)));

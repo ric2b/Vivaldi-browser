@@ -88,7 +88,9 @@ constexpr CGFloat kFinalViewCornerRadius = 16;
 // is 5 element in total, then the range will only take 3 elements.
 - (NSRange)computedRangeStartIndex:(NSUInteger)start
           lengthWithoutLastElement:(NSUInteger)length {
-  if (start + length + 1 == _tabGroupTabNumber) {
+  NSUInteger computedNumberOfElement = start + length + 1;
+  if (computedNumberOfElement == _tabGroupTabNumber &&
+      computedNumberOfElement <= [_tabGroupInfos count]) {
     length += 1;
   }
   return NSMakeRange(start, length);
@@ -98,7 +100,11 @@ constexpr CGFloat kFinalViewCornerRadius = 16;
 - (NSMutableArray<UIImage*>*)faviconsFromRange:(NSRange)range {
   NSMutableArray<UIImage*>* faviconsSubArray = [[NSMutableArray alloc] init];
   for (GroupTabInfo* info : [_tabGroupInfos subarrayWithRange:range]) {
-    [faviconsSubArray addObject:info.favicon];
+    if (info.favicon) {
+      [faviconsSubArray addObject:info.favicon];
+    } else {
+      [faviconsSubArray addObject:[[UIImage alloc] init]];
+    }
   }
   return faviconsSubArray;
 }
@@ -145,27 +151,6 @@ constexpr CGFloat kFinalViewCornerRadius = 16;
   return completeView;
 }
 
-// Removes nil value and put an empty pictures instead.
-// TODO(crbug.com/1501837): Remove this onces we do not have nil value anymore.
-- (NSArray<GroupTabInfo*>*)prepareInfos:(NSArray<GroupTabInfo*>*)infos {
-  NSMutableArray<GroupTabInfo*>* preparedInfos = [[NSMutableArray alloc] init];
-  for (GroupTabInfo* info in infos) {
-    GroupTabInfo* newInfo = [[GroupTabInfo alloc] init];
-    if (info.snapshot) {
-      newInfo.snapshot = info.snapshot;
-    } else {
-      newInfo.snapshot = [[UIImage alloc] init];
-    }
-    if (info.favicon) {
-      newInfo.favicon = info.favicon;
-    } else {
-      newInfo.favicon = [[UIImage alloc] init];
-    }
-    [preparedInfos addObject:newInfo];
-  }
-  return preparedInfos;
-}
-
 // YES if the view is compact.
 - (BOOL)compactHeight {
   return self.traitCollection.verticalSizeClass ==
@@ -176,14 +161,14 @@ constexpr CGFloat kFinalViewCornerRadius = 16;
 - (void)configureTabGroupSnapshotsViewWithTabGroupInfos:
             (NSArray<GroupTabInfo*>*)tabGroupInfos
                                                    size:(NSUInteger)size {
-  _tabGroupInfos = [self prepareInfos:tabGroupInfos];
+  _tabGroupInfos = tabGroupInfos;
   _tabGroupTabNumber = size;
   if (!_isCell && (size == 1)) {
     _singleView.hidden = NO;
     _firstLine.hidden = YES;
     _secondLine.hidden = YES;
-    [_singleView configureWithSnapshot:tabGroupInfos.firstObject.snapshot
-                               favicon:tabGroupInfos.firstObject.favicon];
+    [_singleView configureWithSnapshot:_tabGroupInfos.firstObject.snapshot
+                               favicon:_tabGroupInfos.firstObject.favicon];
   } else {
     _singleView.hidden = YES;
     _firstLine.hidden = NO;

@@ -6,8 +6,6 @@ package org.chromium.android_webview.test;
 
 import androidx.test.filters.LargeTest;
 
-import com.google.common.util.concurrent.SettableFuture;
-
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -20,12 +18,13 @@ import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.common.AwFeatures;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DoNotBatch;
+import org.chromium.net.test.util.TestWebServer;
 
 /**
  * Tests for the various permutations of feature flags for the Android WebView Media Integrity API
  * to ensure that the various permutations of the flags all behave correctly.
  *
- * For more in-depth test of the API, see {@link AwMediaIntegrityApiTest}.
+ * <p>For more in-depth test of the API, see {@link AwMediaIntegrityApiTest}.
  */
 @DoNotBatch(reason = "Heavy feature manipulation.")
 @RunWith(Parameterized.class)
@@ -48,17 +47,13 @@ public class MediaIntegrityFeatureFlagTest extends AwParameterizedTest {
                         .createAwTestContainerViewOnMainSync(mContentsClient)
                         .getAwContents();
         AwActivityTestRule.enableJavaScriptOnUiThread(mAwContents);
-        mActivityTestRule.loadHtmlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(), "");
-    }
-
-    private String evaluateJavaScriptAndGetResult(String script) throws Throwable {
-        final SettableFuture<String> result = SettableFuture.create();
-        mActivityTestRule.runOnUiThread(
-                () -> {
-                    mAwContents.evaluateJavaScript(script, result::set);
-                });
-        AwActivityTestRule.waitForFuture(result);
-        return result.get();
+        // TODO(crbug.com/330151742): AWMI doesn't use the origin of the base URL set by loads from
+        // loadDataWithBaseUrl. For now, use a TestWebServer to load a default HTTPS page.
+        try (TestWebServer server = TestWebServer.startSsl()) {
+            String url = server.setEmptyResponse("");
+            mActivityTestRule.loadUrlSync(
+                    mAwContents, mContentsClient.getOnPageFinishedHelper(), url);
+        }
     }
 
     // Note that this doesn't make assertions about the non-existence of [window.]android or
@@ -76,7 +71,9 @@ public class MediaIntegrityFeatureFlagTest extends AwParameterizedTest {
                         + "} catch (e) {"
                         + "  e.toString()"
                         + "}";
-        final String result = evaluateJavaScriptAndGetResult(script);
+        final String result =
+                mActivityTestRule.executeJavaScriptAndWaitForResult(
+                        mAwContents, mContentsClient, script);
         final String expectedIfNative =
                 "\"function getExperimentalMediaIntegrityTokenProvider() { [native code] }\"";
         if (shouldEqual) {

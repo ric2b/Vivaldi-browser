@@ -8,7 +8,7 @@
 #include "base/files/file_path.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
-#include "components/ad_blocker/adblock_metadata.h"
+#include "components/ad_blocker/adblock_types.h"
 #include "components/ad_blocker/parse_result.h"
 
 namespace content {
@@ -25,15 +25,16 @@ namespace adblock_filter {
 class RuleSourceHandler {
  public:
   using OnUpdateCallback = base::RepeatingCallback<void(RuleSourceHandler*)>;
-  using OnTrackerInfosUpdateCallback =
-      base::RepeatingCallback<void(const RuleSource&, base::Value::Dict)>;
+  using OnTrackerInfosUpdateCallback = base::RepeatingCallback<
+      void(RuleGroup group, const ActiveRuleSource&, base::Value::Dict)>;
   using RulesCompiler =
       base::RepeatingCallback<bool(const ParseResult& parse_result,
                                    const base::FilePath& output_path,
                                    std::string& checksum)>;
 
   RuleSourceHandler(
-      RuleSource rule_source,
+      RuleGroup group,
+      ActiveRuleSource rule_source,
       const base::FilePath& profile_path,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       scoped_refptr<base::SequencedTaskRunner> file_task_runner,
@@ -44,7 +45,7 @@ class RuleSourceHandler {
   RuleSourceHandler(const RuleSourceHandler&) = delete;
   RuleSourceHandler& operator=(const RuleSourceHandler&) = delete;
 
-  const RuleSource& rule_source() const { return rule_source_; }
+  const ActiveRuleSource& rule_source() const { return rule_source_; }
 
   void FetchNow();
 
@@ -68,14 +69,15 @@ class RuleSourceHandler {
       const base::FilePath& output_path,
       const base::FilePath& tracker_info_output_path,
       RulesCompiler rules_compiler,
-      bool allow_abp_snippets,
+      RuleSourceSettings source_settings,
       bool delete_after_read);
 
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
   RulesCompiler rules_compiler_;
   OnUpdateCallback on_update_callback_;
   OnTrackerInfosUpdateCallback on_tracker_infos_update_callback_;
-  RuleSource rule_source_;
+  ActiveRuleSource rule_source_;
+  RuleGroup group_;
   base::FilePath rules_list_path_;
   base::FilePath tracker_infos_path_;
 

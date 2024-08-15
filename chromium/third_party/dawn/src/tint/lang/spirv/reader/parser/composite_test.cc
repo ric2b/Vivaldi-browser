@@ -57,7 +57,8 @@ TEST_F(SpirvParserTest, CompositeConstruct_Vector) {
                OpFunctionEnd
 )",
               R"(
-  %b2 = block {
+%2 = func():vec4<u32> {
+  $B2: {
     %3:vec4<u32> = construct 1u, 2u, 3u, 4u
     ret %3
   }
@@ -95,7 +96,8 @@ TEST_F(SpirvParserTest, CompositeConstruct_Matrix) {
                OpFunctionEnd
 )",
               R"(
-  %b2 = block {
+%2 = func():mat4x3<f32> {
+  $B2: {
     %3:vec3<f32> = construct 1.0f, 2.0f, 3.0f
     %4:vec3<f32> = construct 2.0f, 3.0f, 1.0f
     %5:vec3<f32> = construct 3.0f, 2.0f, 1.0f
@@ -133,7 +135,8 @@ TEST_F(SpirvParserTest, CompositeConstruct_Array) {
                OpFunctionEnd
 )",
               R"(
-  %b2 = block {
+%2 = func():array<u32, 4> {
+  $B2: {
     %3:array<u32, 4> = construct 1u, 2u, 3u, 4u
     ret %3
   }
@@ -172,7 +175,8 @@ TEST_F(SpirvParserTest, CompositeConstruct_ArrayOfVec) {
                OpFunctionEnd
 )",
               R"(
-  %b2 = block {
+%2 = func():array<vec4<u32>, 4> {
+  $B2: {
     %3:vec4<u32> = construct 1u, 2u, 3u, 4u
     %4:vec4<u32> = construct 2u, 3u, 4u, 1u
     %5:vec4<u32> = construct 3u, 4u, 1u, 2u
@@ -222,13 +226,13 @@ tint_symbol_3 = struct @align(16) {
   tint_symbol_2:array<vec4<u32>, 2> @offset(32)
 }
 
-%main = @compute @workgroup_size(1, 1, 1) func():void -> %b1 {
-  %b1 = block {
+%main = @compute @workgroup_size(1, 1, 1) func():void {
+  $B1: {
     ret
   }
 }
-%2 = func():tint_symbol_3 -> %b2 {
-  %b2 = block {
+%2 = func():tint_symbol_3 {
+  $B2: {
     %3:vec4<u32> = construct 1u, 2u, 3u, 4u
     %4:vec4<u32> = construct 2u, 3u, 4u, 1u
     %5:vec4<u32> = construct 3u, 4u, 1u, 2u
@@ -264,8 +268,8 @@ TEST_F(SpirvParserTest, CompositeExtract_Vector) {
                OpFunctionEnd
 )",
               R"(
-%2 = func(%3:vec4<u32>):u32 -> %b2 {
-  %b2 = block {
+%2 = func(%3:vec4<u32>):u32 {
+  $B2: {
     %4:u32 = access %3, 2u
     ret %4
   }
@@ -299,8 +303,8 @@ TEST_F(SpirvParserTest, CompositeExtract_MatrixColumn) {
                OpFunctionEnd
 )",
               R"(
-%2 = func(%3:mat4x3<f32>):vec3<f32> -> %b2 {
-  %b2 = block {
+%2 = func(%3:mat4x3<f32>):vec3<f32> {
+  $B2: {
     %4:vec3<f32> = access %3, 2u
     ret %4
   }
@@ -334,8 +338,8 @@ TEST_F(SpirvParserTest, CompositeExtract_MatrixElement) {
                OpFunctionEnd
 )",
               R"(
-%2 = func(%3:mat4x3<f32>):f32 -> %b2 {
-  %b2 = block {
+%2 = func(%3:mat4x3<f32>):f32 {
+  $B2: {
     %4:f32 = access %3, 2u, 1u
     ret %4
   }
@@ -368,8 +372,8 @@ TEST_F(SpirvParserTest, CompositeExtract_Array) {
                OpFunctionEnd
 )",
               R"(
-%2 = func(%3:array<u32, 4>):u32 -> %b2 {
-  %b2 = block {
+%2 = func(%3:array<u32, 4>):u32 {
+  $B2: {
     %4:u32 = access %3, 2u
     ret %4
   }
@@ -403,8 +407,8 @@ TEST_F(SpirvParserTest, CompositeExtract_ArrayOfVec) {
                OpFunctionEnd
 )",
               R"(
-%2 = func(%3:array<vec3<u32>, 4>):u32 -> %b2 {
-  %b2 = block {
+%2 = func(%3:array<vec3<u32>, 4>):u32 {
+  $B2: {
     %4:u32 = access %3, 1u, 2u
     ret %4
   }
@@ -441,13 +445,13 @@ tint_symbol_2 = struct @align(4) {
   tint_symbol_1:u32 @offset(4)
 }
 
-%main = @compute @workgroup_size(1, 1, 1) func():void -> %b1 {
-  %b1 = block {
+%main = @compute @workgroup_size(1, 1, 1) func():void {
+  $B1: {
     ret
   }
 }
-%2 = func(%3:tint_symbol_2):u32 -> %b2 {
-  %b2 = block {
+%2 = func(%3:tint_symbol_2):u32 {
+  $B2: {
     %4:u32 = access %3, 1u
     ret %4
   }

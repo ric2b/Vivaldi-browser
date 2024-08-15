@@ -136,7 +136,7 @@ AttributionInputEvent AttributionHost::GetMostRecentNavigationInputEvent()
 void AttributionHost::DidStartNavigation(NavigationHandle* navigation_handle) {
   const auto& impression = navigation_handle->GetImpression();
 
-  // TODO(crbug.com/1428315): Consider checking for navigations taking place in
+  // TODO(crbug.com/40262156): Consider checking for navigations taking place in
   // a prerendered main frame.
 
   // Impression navigations need to navigate the primary main frame to be valid.
@@ -276,7 +276,8 @@ void AttributionHost::NotifyNavigationRegistrationData(
 void AttributionHost::RegisterDataHost(
     mojo::PendingReceiver<blink::mojom::AttributionDataHost> data_host,
     attribution_reporting::mojom::RegistrationEligibility
-        registration_eligibility) {
+        registration_eligibility,
+    bool is_for_background_requests) {
   auto suitable_context = AttributionSuitableContext::Create(
       static_cast<RenderFrameHostImpl*>(receivers_.GetCurrentTargetFrame()));
   if (!suitable_context.has_value()) {
@@ -285,7 +286,8 @@ void AttributionHost::RegisterDataHost(
 
   AttributionDataHostManager* manager = suitable_context->data_host_manager();
   manager->RegisterDataHost(std::move(data_host), std::move(*suitable_context),
-                            registration_eligibility);
+                            registration_eligibility,
+                            is_for_background_requests);
 }
 
 void AttributionHost::NotifyNavigationWithBackgroundRegistrationsWillStart(

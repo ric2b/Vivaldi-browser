@@ -2661,6 +2661,7 @@ typename ParserBase<Impl>::BlockT ParserBase<Impl>::ParseClassStaticBlock(
   }
 
   FunctionState initializer_state(&function_state_, &scope_, initializer_scope);
+  FunctionParsingScope body_parsing_scope(impl());
   AcceptINScope accept_in(this, true);
 
   // Each static block has its own var and lexical scope, so make a new var
@@ -4210,8 +4211,8 @@ void ParserBase<Impl>::ParseVariableDeclarations(
       // using [no LineTerminator here] [lookahead ≠ await] BindingList[?In,
       // ?Yield, ?Await, ~Pattern] ;
       Consume(Token::kUsing);
-      DCHECK_NE(var_context, kStatement);
       DCHECK(v8_flags.js_explicit_resource_management);
+      DCHECK_NE(var_context, kStatement);
       DCHECK(is_using_allowed());
       DCHECK(peek() != Token::kAwait);
       DCHECK(!scanner()->HasLineTerminatorBeforeNext());
@@ -4482,7 +4483,7 @@ typename ParserBase<Impl>::StatementT ParserBase<Impl>::ParseClassDeclaration(
   // so rewrite it as such.
 
   int class_token_pos = position();
-  IdentifierT name = impl()->NullIdentifier();
+  IdentifierT name = impl()->EmptyIdentifierString();
   bool is_strict_reserved = Token::IsStrictReservedWord(peek());
   IdentifierT variable_name = impl()->NullIdentifier();
   if (default_export &&
@@ -4923,7 +4924,7 @@ typename ParserBase<Impl>::ExpressionT ParserBase<Impl>::ParseClassExpression(
     Scope* outer_scope) {
   Consume(Token::kClass);
   int class_token_pos = position();
-  IdentifierT name = impl()->NullIdentifier();
+  IdentifierT name = impl()->EmptyIdentifierString();
   bool is_strict_reserved_name = false;
   Scanner::Location class_name_location = Scanner::Location::invalid();
   if (peek_any_identifier()) {
@@ -4940,7 +4941,7 @@ template <typename Impl>
 typename ParserBase<Impl>::ExpressionT ParserBase<Impl>::ParseClassLiteral(
     Scope* outer_scope, IdentifierT name, Scanner::Location class_name_location,
     bool name_is_strict_reserved, int class_token_pos) {
-  bool is_anonymous = impl()->IsNull(name);
+  bool is_anonymous = impl()->IsEmptyIdentifier(name);
 
   // All parts of a ClassDeclaration and ClassExpression are strict code.
   if (!impl()->HasCheckedSyntax() && !is_anonymous) {

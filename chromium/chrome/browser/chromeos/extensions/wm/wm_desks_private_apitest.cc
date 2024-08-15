@@ -148,7 +148,7 @@ IN_PROC_BROWSER_TEST_F(WmDesksPrivateApiTest, LaunchAndAttemptUndo) {
   histogram_tester.ExpectBucketCount("Ash.DeskApi.RemoveDesk.Result", 1, 1);
 }
 
-// TODO(crbug.com/1474001): Re-enable test that flakily fails
+// TODO(crbug.com/40927214): Re-enable test that flakily fails
 #if defined(ADDRESS_SANITIZER) && defined(LEAK_SANITIZER)
 #define MAYBE_LaunchAndUndo DISABLED_LaunchAndUndo
 #else
@@ -474,7 +474,7 @@ IN_PROC_BROWSER_TEST_F(WmDesksPrivateApiTest,
 }
 
 // Tests save and recall a desk.
-// TODO(crbug.com/1430982): Test is flaky.
+// TODO(crbug.com/40902046): Test is flaky.
 IN_PROC_BROWSER_TEST_F(WmDesksPrivateApiTest, DISABLED_SaveAndRecallDeskTest) {
   // Save a desk.
   auto save_desk_function =
@@ -523,7 +523,7 @@ IN_PROC_BROWSER_TEST_F(WmDesksPrivateApiTest, DISABLED_SaveAndRecallDeskTest) {
 }
 
 // Tests save and delete a desk.
-// TODO(1430982): Flaky on linux-chromeos-rel.
+// TODO(crbug.com/40902046): Flaky on linux-chromeos-rel.
 #if defined(NDEBUG)
 #define MAYBE_SaveAndDeleteDeskTest DISABLED_SaveAndDeleteDeskTest
 #else

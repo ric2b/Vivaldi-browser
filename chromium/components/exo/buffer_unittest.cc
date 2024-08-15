@@ -7,6 +7,7 @@
 #include <GLES2/gl2extchromium.h>
 
 #include "base/barrier_closure.h"
+#include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
@@ -46,7 +47,7 @@ class BufferTest
 void VerifySyncTokensInCompositorFrame(viz::CompositorFrame* frame) {
   std::vector<GLbyte*> sync_tokens;
   for (auto& resource : frame->resource_list)
-    sync_tokens.push_back(resource.mailbox_holder.sync_token.GetData());
+    sync_tokens.push_back(resource.mutable_sync_token().GetData());
   gpu::raster::RasterInterface* ri =
       aura::Env::GetInstance()
           ->context_factory()
@@ -79,12 +80,10 @@ viz::CompositorFrame CreateCompositorFrame(
 }
 
 // Instantiate the values of frame submission types in the parameterized tests.
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    BufferTest,
-    testing::Values(test::FrameSubmissionType::kNoReactive,
-                    test::FrameSubmissionType::kReactive_NoAutoNeedsBeginFrame,
-                    test::FrameSubmissionType::kReactive_AutoNeedsBeginFrame));
+INSTANTIATE_TEST_SUITE_P(All,
+                         BufferTest,
+                         testing::Values(test::FrameSubmissionType::kNoReactive,
+                                         test::FrameSubmissionType::kReactive));
 
 TEST_P(BufferTest, ReleaseCallback) {
   gfx::Size buffer_size(256, 256);
@@ -116,7 +115,7 @@ TEST_P(BufferTest, ReleaseCallback) {
 
   // Release buffer.
   std::vector<viz::ReturnedResource> resources;
-  resources.emplace_back(resource.id, resource.mailbox_holder.sync_token,
+  resources.emplace_back(resource.id, resource.sync_token(),
                          /*release_fence=*/gfx::GpuFenceHandle(),
                          /*count=*/0, /*lost=*/false);
   frame_sink_holder->ReclaimResources(std::move(resources));
@@ -147,8 +146,8 @@ TEST_P(BufferTest, SolidColorReleaseCallback) {
   // Set the release callback.
   int release_call_count = 0;
   base::RunLoop run_loop;
-  buffer->set_release_callback(test::CreateReleaseBufferClosure(
-      &release_call_count, run_loop.QuitClosure()));
+  buffer->set_release_callback(
+      test::CreateReleaseBufferClosure(&release_call_count, /*closure=*/{}));
 
   buffer->OnAttach();
   viz::TransferableResource resource;
@@ -165,7 +164,7 @@ TEST_P(BufferTest, SolidColorReleaseCallback) {
 
   // Release buffer.
   std::vector<viz::ReturnedResource> resources;
-  resources.emplace_back(resource.id, resource.mailbox_holder.sync_token,
+  resources.emplace_back(resource.id, resource.sync_token(),
                          /*release_fence=*/gfx::GpuFenceHandle(),
                          /*count=*/0, /*lost=*/false);
   frame_sink_holder->ReclaimResources(std::move(resources));
@@ -179,9 +178,8 @@ TEST_P(BufferTest, SolidColorReleaseCallback) {
 
   buffer->OnDetach();
 
-  run_loop.Run();
-  // Release() should have been called exactly once.
-  EXPECT_EQ(release_call_count, 1);
+  // Release() should never be called.
+  EXPECT_EQ(release_call_count, 0);
 }
 
 TEST_P(BufferTest, IsLost) {
@@ -374,7 +372,7 @@ TEST_P(BufferTest, SurfaceTreeHostLastFrame) {
     // Try to release buffer in last frame. This can happen during a resize
     // when frame sink id changes.
     std::vector<viz::ReturnedResource> resources;
-    resources.emplace_back(resource.id, resource.mailbox_holder.sync_token,
+    resources.emplace_back(resource.id, resource.sync_token(),
                            /*release_fence=*/gfx::GpuFenceHandle(),
                            /*count=*/0, /*lost=*/false);
     frame_sink_holder->ReclaimResources(std::move(resources));
@@ -451,11 +449,9 @@ class TestLayerTreeFrameSinkHolder : public LayerTreeFrameSinkHolder {
 };
 
 // Instantiate the values of frame submission types in the parameterized tests.
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    ReactiveFrameSubmissionBufferTest,
-    testing::Values(test::FrameSubmissionType::kReactive_NoAutoNeedsBeginFrame,
-                    test::FrameSubmissionType::kReactive_AutoNeedsBeginFrame));
+INSTANTIATE_TEST_SUITE_P(All,
+                         ReactiveFrameSubmissionBufferTest,
+                         testing::Values(test::FrameSubmissionType::kReactive));
 
 TEST_P(ReactiveFrameSubmissionBufferTest,
        SurfaceTreeHostNotReclaimCachedFrameResources) {

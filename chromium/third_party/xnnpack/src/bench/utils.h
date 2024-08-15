@@ -166,10 +166,6 @@ bool CheckAVX(benchmark::State& state);
 // If F16C is unsupported, report error in benchmark state, and return false.
 bool CheckF16C(benchmark::State& state);
 
-// Check if x86 XOP extension is supported.
-// If XOP is unsupported, report error in benchmark state, and return false.
-bool CheckXOP(benchmark::State& state);
-
 // Check if x86 FMA3 extension is supported.
 // If FMA3 is unsupported, report error in benchmark state, and return false.
 bool CheckFMA3(benchmark::State& state);
@@ -201,6 +197,10 @@ bool CheckAVX512VNNIGFNI(benchmark::State& state);
 // Check if x86 VNNI + GFNI + SKX-level + AMX AVX512 extensions (AAVX512F, AVX512CD, AVX512BW, AVX512DQ, AVX512VL, GFNI and AMX) are supported.
 // If AVX512 or AMX are unsupported, report error in benchmark state, and return false.
 bool CheckAVX512AMX(benchmark::State& state);
+
+// Check if x86 VNNI + GFNI + SKX-level + FP16 AVX512 extensions (AAVX512F, AVX512CD, AVX512BW, AVX512DQ, AVX512VL, GFNI and FP16) are supported.
+// If AVX512 or FP16 are unsupported, report error in benchmark state, and return false.
+bool CheckAVX512FP16(benchmark::State& state);
 
 // Check if x86 AVX-VNNI extension is supported.
 // If AVX-VNNI extension is unsupported, report error in benchmark state, and return false.

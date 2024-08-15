@@ -431,17 +431,20 @@ void VivaldiSpatialNavigationController::MoveRect(
     blink::DOMRect* new_rect,
     std::string* href) {
   blink::Element* old_container = GetScrollContainerForCurrentElement();
-
   blink::Element* old_element =
       current_quad_ ? current_quad_->GetElement() : nullptr;
 
+  bool needs_init = !current_quad_;
   // In case we have a previously focused element on the page, we unfocus it.
   // It can mess up element activation and looks confusing if it persists while
   // using spatnav.
   if (old_element) {
-    blink::Document* old_document = old_element ? old_element->ownerDocument()
-                                                : GetDocumentFromRenderFrame();
-    if (old_document && old_document->FocusedElement())
+    blink::Document* old_document = old_element->ownerDocument();
+
+    blink::Element* old_focus = old_document->FocusedElement();
+    if (old_element != old_focus)
+      needs_init = old_document != GetDocumentFromRenderFrame();
+    if (old_document && old_focus)
       old_document->FocusedElement()->blur();
   }
 
@@ -449,7 +452,7 @@ void VivaldiSpatialNavigationController::MoveRect(
   // indicator has moved and current element updated.
   bool update_quads = false;
 
-  if (!current_quad_) {
+  if (needs_init) {
     UpdateQuads();
     current_quad_ = vivaldi::Quad::GetInitialQuad(spatnav_quads_, direction);
 

@@ -213,7 +213,7 @@
   <message name="IDS_VIVALDI_KEYSTORE_UNCRYPTED" desc="User is attempting to use profile which used encryption before without encryption now">
     Vivaldi could not unlock your secure key store. Without the key store, you will lose your saved logins, secure cookies, and some features like Sync, Mail, and Calendar will stop working.
 
-    Please quit now, unlock or repair your key store, and then try again. If you really want to continue, click the checkbox and press "Continue with Data Loss" button.
+    Please quit now, unlock or repair your key store, and then try again. Do you really want to continue, but lose data?
   </message>
   <message name="IDS_VIVALDI_KEYSTORE_CONTINUE_CHECKBOX" desc="User is sure they want to do this">
     Let me continue
@@ -223,6 +223,9 @@
   </message>
   <message name="IDS_VIVALDI_KEYSTORE_CANCEL" desc="User wants to cancel profile opening">
     Switch profiles
+  </message>
+  <message name="IDS_VIVALDI_KEYSTORE_QUIT" desc="User wants to quit vivaldi instead">
+    Quit now
   </message>
   <message name="IDS_VIVALDI_KEYSTORE_UPGRADE_TITLE" desc="Message box title for secure storage warnings.">
     Secure keystore upgrade

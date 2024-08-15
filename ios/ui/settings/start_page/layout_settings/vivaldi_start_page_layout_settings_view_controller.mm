@@ -46,20 +46,10 @@ namespace {
 const CGFloat tableViewFooterHeight = 700.f;
 const UIEdgeInsets footerViewPadding = UIEdgeInsetsMake(8, 8, 8, 8);
 const UIEdgeInsets previewLabelPadding = UIEdgeInsetsMake(0, 12, 0, 12);
-const UIEdgeInsets previewViewPadding = UIEdgeInsetsMake(12, 0, 0, 0);
-}
+const UIEdgeInsets previewViewPadding = UIEdgeInsetsMake(12, 16, 0, 16);
 
-// Item Configuration for for each layout and type of device.
-const PreviewItemConfig itemConfig = {
-    .numberOfItemsLarge = 4,
-    .numberOfItemsLargeiPad = 4,
-    .numberOfItemsMedium = 6,
-    .numberOfItemsMediumiPad = 6,
-    .numberOfItemsSmall = 8,
-    .numberOfItemsSmalliPad = 8,
-    .numberOfItemsList = 4,
-    .numberOfItemsListiPad = 4
-};
+const NSInteger numberOfPreviewRows = 2;
+}
 
 @interface VivaldiStartPageLayoutSettingsViewController()
 @property(nonatomic, weak) UIView* footerView;
@@ -145,7 +135,8 @@ const PreviewItemConfig itemConfig = {
                        padding: previewLabelPadding];
 
   VivaldiStartPageLayoutPreviewView *previewView =
-    [[VivaldiStartPageLayoutPreviewView alloc] initWithItemConfig:itemConfig];
+    [[VivaldiStartPageLayoutPreviewView alloc]
+        initWithNumberOfRows:numberOfPreviewRows];
 
   _previewView = previewView;
 
@@ -225,7 +216,8 @@ const PreviewItemConfig itemConfig = {
 
 - (void)updateUI {
   [_previewView reloadLayoutWithStyle:[self currentLayoutStyle]
-                         layoutColumn:[self currentLayoutColumn]];
+                      layoutState:VivaldiStartPageLayoutStatePreviewModalSmall
+                     layoutColumn:[self currentLayoutColumn]];
 }
 
 /// Returns current layout style
@@ -322,7 +314,8 @@ const PreviewItemConfig itemConfig = {
   }
 
   [_previewView reloadLayoutWithStyle:selectedLayout
-                         layoutColumn:[self currentLayoutColumn]];
+                      layoutState:VivaldiStartPageLayoutStatePreviewModalSmall
+                     layoutColumn:[self currentLayoutColumn]];
   [self setCurrentLayoutStyle:selectedLayout];
 }
 

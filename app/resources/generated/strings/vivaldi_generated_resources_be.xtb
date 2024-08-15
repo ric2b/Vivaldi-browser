@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">Не пазней</translation>
 <translation id="2749881179542288782">Праверыць граматыку і правапіс</translation>
 <translation id="2785873697295365461">Дэскрыптары файлаў</translation>
-<translation id="2809586584051668049">і яшчэ <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2825758591930162672">Публічны ключ суб'екта</translation>
 <translation id="2850541429955027218">Дадаць тэму</translation>
 <translation id="2861941300086904918">Кіраўнік бяспекі натыўнага кліента</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">Адкрываць як акно</translation>
 <translation id="3280237271814976245">Захаваць &amp;як...</translation>
 <translation id="3285322247471302225">Новая &amp;ўкладка</translation>
-<translation id="3288047731229977326">Пашырэнні, запушчаныя ў рэжыме распрацоўніка, могуць нашкодзіць вашаму камп'ютару. Калі вы не распрацоўнік, то іх трэба адключыць, каб даныя былі ў бяспецы.</translation>
 <translation id="329838636886466101">Аднавіць</translation>
 <translation id="33022249435934718">Апрацоўнікі GDI</translation>
 <translation id="3303818374450886607">Копіі</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">Створана пашырэнне:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Адключыць пашырэнні ў рэжыме распрацоўніка</translation>
 <translation id="4100839878934973028">Іншая праграма на вашым камп'ютары дадала тэму, якая можа ўплываць на працу Vivaldi.</translation>
 <translation id="4104163789986725820">Э&amp;кспартаванне...</translation>
 <translation id="4109898769411476438">Закрыйце браўзер перад імпартам</translation>
@@ -261,7 +258,6 @@
 <translation id="5269977353971873915">Не ўдалося надрукаваць</translation>
 <translation id="5284445933715251131">Працягнуць спампоўванне</translation>
 <translation id="52912272896845572">Хібны файл прыватнага ключа.</translation>
-<translation id="5301954838959518834">Зразумела</translation>
 <translation id="5302932258331363306">Паказваць прапановы замены</translation>
 <translation id="5317780077021120954">Захаваць</translation>
 <translation id="5334142896108694079">Кэш скрыпта</translation>

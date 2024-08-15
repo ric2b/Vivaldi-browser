@@ -1057,6 +1057,8 @@ __device__ __forceinline__ void EigenFloatContractionKernelInternal(const LhsMap
     __syncthreads();
   }  // end loop over k
 
+#undef add_vals
+
   __syncthreads();
   Index horiz_base = (threadIdx.y / 4) * 8 + base_n;
   if (!CHECK_LHS_BOUNDARY && !CHECK_RHS_BOUNDARY) {

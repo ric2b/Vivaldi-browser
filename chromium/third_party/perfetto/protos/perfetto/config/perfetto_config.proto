@@ -339,13 +339,10 @@ enum BuiltinClock {
   BUILTIN_CLOCK_MONOTONIC_COARSE = 4;
   BUILTIN_CLOCK_MONOTONIC_RAW = 5;
   BUILTIN_CLOCK_BOOTTIME = 6;
+  BUILTIN_CLOCK_TSC = 9;
   BUILTIN_CLOCK_MAX_ID = 63;
 
   reserved 7, 8;
-
-  // An internal CL (ag/16521245) has taken this for BUILTIN_CLOCK_TSC.
-  // That might get upstreamed later on. Avoid diverging on this ID in future.
-  reserved 9;
 }
 
 // End of protos/perfetto/common/builtin_clock.proto
@@ -663,6 +660,32 @@ message PackagesListConfig {
 
 // End of protos/perfetto/config/android/packages_list_config.proto
 
+// Begin of protos/perfetto/config/android/pixel_modem_config.proto
+
+// Data source that records events from the modem.
+message PixelModemConfig {
+  // Event group to record, as defined by the modem.
+  enum EventGroup {
+    EVENT_GROUP_UNKNOWN = 0;
+
+    // Events suitable for low bandwidth tracing only.
+    EVENT_GROUP_LOW_BANDWIDTH = 1;
+
+    // Events suitable for high and low bandwidth tracing.
+    EVENT_GROUP_HIGH_AND_LOW_BANDWIDTH = 2;
+  }
+
+  optional EventGroup event_group = 1;
+
+  // If set, record only events with these hashes.
+  repeated int64 pigweed_hash_allow_list = 2;
+
+  // If set and allow_list is not set, deny events with these hashes.
+  repeated int64 pigweed_hash_deny_list = 3;
+}
+
+// End of protos/perfetto/config/android/pixel_modem_config.proto
+
 // Begin of protos/perfetto/common/protolog_common.proto
 
 enum ProtoLogLevel {
@@ -975,9 +998,11 @@ message FtraceConfig {
   // Introduced in: Android T.
   optional bool disable_generic_events = 16;
 
-  // The subset of syscalls to record. Enables raw_syscalls/sys_{enter,exit}.
-  // To record all syscalls, leave this unset and add raw_syscalls to
-  // |ftrace_events|.
+  // The subset of syscalls to record. To record all syscalls, leave this unset
+  // and add "ftrace_events: raw_syscalls/sys_{enter,exit}" to the config.
+  // * before perfetto v43, requires the config to also enable
+  //   raw_syscalls/sys_{enter,exit}.
+  // * perfetto v43+ does the right thing if you set only this field.
   // Example: ["sys_read", "sys_open"].
   // Introduced in: Android U.
   repeated string syscall_events = 18;
@@ -3160,23 +3185,27 @@ message TrackEventConfig {
   //   7. Pattern matches in disabled categories.
   //   8. Pattern matches in disabled tags.
   //
-  // If none of the steps produced a match, the category is enabled by default.
+  // If none of the steps produced a match:
+  //  - In the C++ SDK (`perfetto::Category`), categories are enabled by
+  //  default.
+  //  - In the C SDK (`PerfettoTeCategory`), categories are disabled by default.
   //
   // Examples:
   //
   //  - To enable all non-slow/debug categories:
   //
-  //       No configuration needed, happens by default.
+  //       enabled_categories: "*"
   //
-  //  - To enable a specific category:
+  //  - To enable specific categories:
   //
-  //       disabled_categories = ["*"]
-  //       enabled_categories = ["my_category"]
+  //       disabled_categories: "*"
+  //       enabled_categories: "my_category"
+  //       enabled_categories: "my_category2"
   //
   //  - To enable only categories with a specific tag:
   //
-  //       disabled_tags = ["*"]
-  //       enabled_tags = ["my_tag"]
+  //       disabled_tags: "*"
+  //       enabled_tags: "my_tag"
   //
 
   // Default: []
@@ -3228,7 +3257,7 @@ message TrackEventConfig {
 // Begin of protos/perfetto/config/data_source_config.proto
 
 // The configuration that is passed to each data source when starting tracing.
-// Next id: 129
+// Next id: 130
 message DataSourceConfig {
   enum SessionInitiator {
     SESSION_INITIATOR_UNSPECIFIED = 0;
@@ -3375,6 +3404,9 @@ message DataSourceConfig {
 
   // Data source name: android.input.inputevent
   optional AndroidInputEventConfig android_input_event_config = 128 [lazy = true];
+
+  // Data source name: android.pixel.modem
+  optional PixelModemConfig pixel_modem_config = 129 [lazy = true];
 
   // This is a fallback mechanism to send a free-form text config to the
   // producer. In theory this should never be needed. All the code that

@@ -13,6 +13,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/cpu_reduction_experiment.h"
 #include "base/debug/alias.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
@@ -157,14 +158,9 @@ void ReportEventLatencyMetric(
     const std::string& name,
     int index,
     base::TimeDelta latency,
-    const std::optional<EventMetrics::HistogramBucketing>& bucketing) {
-  STATIC_HISTOGRAM_POINTER_GROUP(
-      name, index, kMaxEventLatencyHistogramIndex,
-      AddTimeMicrosecondsGranularity(latency),
-      base::Histogram::FactoryMicrosecondsTimeGet(
-          name, kEventLatencyHistogramMin, kEventLatencyHistogramMax,
-          kEventLatencyHistogramBucketCount,
-          base::HistogramBase::kUmaTargetedHistogramFlag));
+    const std::optional<EventMetrics::HistogramBucketing>& bucketing,
+    bool guiding_metric = false) {
+  // Various scrolling metrics have been updated to V2 bucketing
   if (bucketing) {
     std::string versioned_name = name + bucketing->version_suffix;
     STATIC_HISTOGRAM_POINTER_GROUP(
@@ -172,6 +168,20 @@ void ReportEventLatencyMetric(
         AddTimeMicrosecondsGranularity(latency),
         base::Histogram::FactoryMicrosecondsTimeGet(
             versioned_name, bucketing->min, bucketing->max, bucketing->count,
+            base::HistogramBase::kUmaTargetedHistogramFlag));
+  }
+
+  // Other metrics still used default bucketting. With validation done we no
+  // longer want to emit the V1 variants for metrics with bucketing. With the
+  // exception of `guiding_metric`. Which should emit both until such a time as
+  // we update the list of guiding metrics.
+  if (!bucketing || guiding_metric) {
+    STATIC_HISTOGRAM_POINTER_GROUP(
+        name, index, kMaxEventLatencyHistogramIndex,
+        AddTimeMicrosecondsGranularity(latency),
+        base::Histogram::FactoryMicrosecondsTimeGet(
+            name, kEventLatencyHistogramMin, kEventLatencyHistogramMax,
+            kEventLatencyHistogramBucketCount,
             base::HistogramBase::kUmaTargetedHistogramFlag));
   }
 }
@@ -960,7 +970,7 @@ void CompositorFrameReporter::EndCurrentStage(base::TimeTicks end_time) {
 
 void CompositorFrameReporter::ReportCompositorLatencyMetrics() const {
   // Subsampling these metrics reduced CPU utilization (crbug.com/1295441).
-  if (!metrics_subsampler_.ShouldSample(0.001)) {
+  if (!base::ShouldLogHistogramForCpuReductionExperiment()) {
     return;
   }
 
@@ -1272,9 +1282,18 @@ void CompositorFrameReporter::ReportEventLatencyMetrics() const {
             base::JoinString({histogram_base_name, gesture_type_name,
                               total_latency_stage_name},
                              ".");
+        // Currently EventLatency.GestureScrollUpdate.Touchscreen.TotalLatency
+        // is a guiding metric. So we want to have it emit both V1 and V2.
+        const bool guiding_metric =
+            scroll_metrics &&
+            event_metrics->type() ==
+                EventMetrics::EventType::kGestureScrollUpdate &&
+            scroll_metrics->scroll_type() ==
+                ScrollEventMetrics::ScrollType::kTouchscreen;
         ReportEventLatencyMetric(gesture_total_latency_histogram_name,
                                  gesture_histogram_index, total_latency,
-                                 event_metrics->GetHistogramBucketing());
+                                 event_metrics->GetHistogramBucketing(),
+                                 guiding_metric);
       }
 
       if (scroll_metrics) {
@@ -1458,7 +1477,7 @@ void CompositorFrameReporter::ReportCompositorLatencyTraceEvents(
           reporter->add_high_latency_contribution_stage(stage);
         }
 
-        // TODO(crbug.com/1086974): Set 'drop reason' if applicable.
+        // TODO(crbug.com/40132773): Set 'drop reason' if applicable.
       });
 
   for (const auto& stage : stage_history_) {
@@ -1769,7 +1788,7 @@ void CompositorFrameReporter::CalculateCompositorLatencyPrediction(
                                current_stage_durations.total_blink_latency);
     }
 
-    // TODO(crbug.com/1349930): implement check that ensure the prediction is
+    // TODO(crbug.com/40233949): implement check that ensure the prediction is
     // correct by checking if platform supports breakdown of the stage
     // SubmitCompositorFrameToPresentationCompositorFrame.SwapStartToSwapEnd,
     // then SwapStartToSwapEnd should always be 0s and data for breakdown of it
@@ -1799,7 +1818,7 @@ void CompositorFrameReporter::CalculateEventLatencyPrediction(
   if (events_metrics_.empty())
     return;
 
-  // TODO(crbug.com/1334827): Explore calculating predictions for multiple
+  // TODO(crbug.com/40228308): Explore calculating predictions for multiple
   // events. Currently only kGestureScrollUpdate event predictions
   // are being calculated, consider including other stages in future changes.
   auto event_it = base::ranges::find_if(
@@ -1923,7 +1942,7 @@ void CompositorFrameReporter::CalculateEventLatencyPrediction(
   }
 
   // Calculate new compositor stage predictions.
-  // TODO(crbug.com/1334827): Explore using existing PipelineReporter
+  // TODO(crbug.com/40228308): Explore using existing PipelineReporter
   // predictions for the compositor stage.
   for (int i = 0; i < kNumOfCompositorStages; i++) {
     if (actual_event_latency.compositor_durations[i].is_positive()) {

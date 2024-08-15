@@ -144,7 +144,4 @@ if [ "X$DEPOT_TOOLS_UPDATE" != "X0" ]; then
     bootstrap_python3
   fi
 
-  # Restart goma if it is updated.
-  goma_ctl update_hook
 fi
-

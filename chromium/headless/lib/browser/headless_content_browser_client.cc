@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/base_switches.h"
+#include "base/check_deref.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
@@ -134,7 +135,7 @@ void HeadlessContentBrowserClient::
     RegisterAssociatedInterfaceBindersForRenderFrameHost(
         content::RenderFrameHost& render_frame_host,
         blink::AssociatedInterfaceRegistry& associated_registry) {
-  // TODO(https://crbug.com/1265864): Move the registry logic below to a
+  // TODO(crbug.com/40203902): Move the registry logic below to a
   // dedicated file to ensure security review coverage.
 #if BUILDFLAG(ENABLE_PRINTING)
   associated_registry.AddInterface<printing::mojom::PrintManagerHost>(
@@ -193,17 +194,11 @@ void HeadlessContentBrowserClient::AppendExtraCommandLineSwitches(
   }
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 
-  const base::CommandLine& old_command_line(
-      *base::CommandLine::ForCurrentProcess());
-  if (old_command_line.HasSwitch(switches::kDisablePDFTagging))
-    command_line->AppendSwitch(switches::kDisablePDFTagging);
-  if (old_command_line.HasSwitch(switches::kGeneratePDFDocumentOutline)) {
-    command_line->AppendSwitch(switches::kGeneratePDFDocumentOutline);
-  }
-
   // If we're spawning a renderer, then override the language switch.
   std::string process_type =
       command_line->GetSwitchValueASCII(::switches::kProcessType);
+  const base::CommandLine& old_command_line =
+      CHECK_DEREF(base::CommandLine::ForCurrentProcess());
   if (process_type == ::switches::kRendererProcess) {
     // Renderer processes are initialized on the UI thread, so this is safe.
     content::RenderProcessHost* render_process_host =
@@ -223,11 +218,16 @@ void HeadlessContentBrowserClient::AppendExtraCommandLineSwitches(
     }
 
     // Please keep this in alphabetical order.
-    static const char* const kSwitchNames[] = {
+    static const char* const kForwardSwitches[] = {
         embedder_support::kOriginTrialDisabledFeatures,
         embedder_support::kOriginTrialPublicKey,
+        switches::kAllowVideoCodecs,
+        switches::kDisablePDFTagging,
     };
-    command_line->CopySwitchesFrom(old_command_line, kSwitchNames);
+    command_line->CopySwitchesFrom(old_command_line, kForwardSwitches);
+  } else if (process_type == ::switches::kGpuProcess) {
+    static const char* const kForwardSwitches[] = {switches::kEnableGPU};
+    command_line->CopySwitchesFrom(old_command_line, kForwardSwitches);
   }
 }
 
@@ -287,7 +287,8 @@ bool HeadlessContentBrowserClient::IsSharedStorageAllowed(
     content::RenderFrameHost* rfh,
     const url::Origin& top_frame_origin,
     const url::Origin& accessing_origin,
-    std::string* out_debug_message) {
+    std::string* out_debug_message,
+    bool* out_block_is_site_setting_specific) {
   return true;
 }
 
@@ -295,7 +296,8 @@ bool HeadlessContentBrowserClient::IsSharedStorageSelectURLAllowed(
     content::BrowserContext* browser_context,
     const url::Origin& top_frame_origin,
     const url::Origin& accessing_origin,
-    std::string* out_debug_message) {
+    std::string* out_debug_message,
+    bool* out_block_is_site_setting_specific) {
   return true;
 }
 

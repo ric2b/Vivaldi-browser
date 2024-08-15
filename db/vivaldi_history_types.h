@@ -23,7 +23,7 @@ struct TypedUrlResult {
   std::string title;
   KeywordID keyword_id = -1;
   std::string terms;
-  int typed_count;
+  int visit_count;
 };
 
 typedef std::vector<TypedUrlResult> TypedUrlResults;
@@ -43,6 +43,7 @@ struct DetailedUrlResult {
   bool is_bookmarked;
   ui::PageTransition transition_type;
   bool is_redirect;
+  int score;
 };
 
 typedef std::vector<DetailedUrlResult> DetailedUrlResults;

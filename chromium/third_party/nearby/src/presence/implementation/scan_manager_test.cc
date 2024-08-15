@@ -14,9 +14,7 @@
 
 #include "presence/implementation/scan_manager.h"
 
-#include <math.h>
-
-#include <algorithm>
+#include <atomic>
 #include <memory>
 #include <string>
 #include <utility>
@@ -25,17 +23,28 @@
 #include "gmock/gmock.h"
 #include "protobuf-matchers/protocol-buffer-matchers.h"
 #include "gtest/gtest.h"
-#include "absl/time/time.h"
+#include "absl/strings/escaping.h"
+#include "absl/types/variant.h"
 #include "internal/platform/bluetooth_adapter.h"
+#include "internal/platform/byte_array.h"
 #include "internal/platform/count_down_latch.h"
+#include "internal/platform/implementation/ble_v2.h"
+#include "internal/platform/implementation/credential_callbacks.h"
 #include "internal/platform/logging.h"
 #include "internal/platform/medium_environment.h"
 #include "internal/platform/single_thread_executor.h"
-#include "presence/implementation/advertisement_factory.h"
-#include "presence/implementation/base_broadcast_request.h"
+#include "internal/proto/credential.proto.h"
+#include "presence/data_element.h"
+#include "presence/data_types.h"
 #include "presence/implementation/credential_manager_impl.h"
+#include "presence/implementation/mediums/advertisement_data.h"
 #include "presence/implementation/mediums/ble.h"
 #include "presence/implementation/mediums/mediums.h"
+#include "presence/implementation/mock_credential_manager.h"
+#include "presence/power_mode.h"
+#include "presence/presence_action.h"
+#include "presence/presence_device.h"
+#include "presence/scan_request.h"
 
 namespace nearby {
 namespace presence {
@@ -59,20 +68,12 @@ class ScanManagerTest : public testing::Test {
   }
 
   std::unique_ptr<AdvertisingSession> StartAdvertisingOn(Ble& ble) {
-    PresenceBroadcast::BroadcastSection section = {
-        .identity = internal::IDENTITY_TYPE_PUBLIC,
-        .extended_properties = MakeDefaultExtendedProperties(),
-        .account_name = "Test account"};
-    PresenceBroadcast presence_request = {.sections = {section}};
-    BroadcastRequest input = {.tx_power = 30, .variant = presence_request};
-    absl::StatusOr<BaseBroadcastRequest> request =
-        BaseBroadcastRequest::Create(input);
-    EXPECT_OK(request);
-    absl::StatusOr<AdvertisementData> advertisement =
-        AdvertisementFactory().CreateAdvertisement(request.value());
-    EXPECT_OK(advertisement);
+    auto advertisement = AdvertisementData{
+        .is_extended_advertisement = false,
+        .content = {0x00, 0x26, 0x00, 0x40},
+    };
     std::unique_ptr<AdvertisingSession> session = ble.StartAdvertising(
-        advertisement.value(), PowerMode::kLowPower,
+        advertisement, PowerMode::kLowPower,
         AdvertisingCallback{.start_advertising_result = [](absl::Status) {}});
     env_.Sync();
     return session;
@@ -112,7 +113,7 @@ class ScanManagerTest : public testing::Test {
     };
   }
   std::vector<DataElement> MakeDefaultExtendedProperties() {
-    return {DataElement(ActionBit::kPresenceManagerAction)};
+    return {DataElement(ActionBit::kNearbyShareAction)};
   }
   SingleThreadExecutor executor_;
   CredentialManagerImpl credential_manager_{&executor_};
@@ -200,22 +201,15 @@ TEST_F(ScanManagerTest, PresenceMetadataIsRetained) {
           },
       .on_discovered_cb =
           [this, &address](PresenceDevice pd) {
-            if (pd.GetMetadata().bluetooth_mac_address() == address) {
-              EXPECT_THAT(
-                  pd.GetExtendedProperties(),
-                  Contains(
-                      DataElement(DataElement::kPublicIdentityFieldType, ""))
-                      .Times(1));
-              // MakeDefaultScanRequest() used kPresenceManagerAction for
-              // broadcasting. Thus verify DE and action got it recorded.
-              EXPECT_THAT(
-                  pd.GetExtendedProperties(),
-                  Contains(DataElement(ActionBit::kPresenceManagerAction))
-                      .Times(1));
-              EXPECT_THAT(pd.GetActions(),
-                          Contains(PresenceAction{
-                                       (int)ActionBit::kPresenceManagerAction})
+            if (pd.GetDeviceIdentityMetadata().bluetooth_mac_address() ==
+                address) {
+              EXPECT_THAT(pd.GetExtendedProperties(),
+                          Contains(DataElement(ActionBit::kNearbyShareAction))
                               .Times(1));
+              EXPECT_THAT(
+                  pd.GetActions(),
+                  Contains(PresenceAction{(int)ActionBit::kNearbyShareAction})
+                      .Times(1));
 
               found_latch_.CountDown();
             }
@@ -322,6 +316,83 @@ TEST_F(ScanManagerTest, NoDeviceFoundAfterStopScan) {
 
   EXPECT_EQ(manager.ScanningCallbacksLengthForTest(), 0);
   executor_.Shutdown();
+}
+
+internal::SharedCredential GetPublicCredential() {
+  // Values copied from LDT tests
+  ByteArray seed({
+      0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
+      0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
+      0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
+  });
+  ByteArray known_mac({0x09, 0xFE, 0x9E, 0x81, 0xB7, 0x3E, 0x5E, 0xCC,
+                       0x76, 0x59, 0x57, 0x71, 0xE0, 0x1F, 0xFB, 0x34,
+                       0x38, 0xE7, 0x5F, 0x24, 0xA7, 0x69, 0x56, 0xA0,
+                       0xB8, 0xEA, 0x67, 0xD1, 0x1C, 0x3E, 0x36, 0xFD});
+  internal::SharedCredential public_credential;
+  public_credential.set_key_seed(seed.AsStringView());
+  public_credential.set_metadata_encryption_key_tag_v0(
+      known_mac.AsStringView());
+  return public_credential;
+}
+
+std::vector<internal::SharedCredential> BuildSharedCredentials() {
+  return {GetPublicCredential()};
+}
+
+TEST_F(ScanManagerTest, ScanningE2EWithEncryptedAdvertisementAndCredentials) {
+  Mediums mediums;
+  auto mock_credential_manager = MockCredentialManager();
+  EXPECT_CALL(mock_credential_manager, GetPublicCredentials)
+      .WillOnce([&](const CredentialSelector& credential_selector,
+                    PublicCredentialType public_credential_type,
+                    GetPublicCredentialsResultCallback callback) {
+        callback.credentials_fetched_cb(BuildSharedCredentials());
+      });
+  ScanManager manager(mediums, mock_credential_manager, executor_);
+
+  // Set up advertiser to broadcast a private identity adv
+  nearby::BluetoothAdapter server_adapter;
+  Ble ble2(server_adapter);
+  std::string V0AdvEncryptedBytes = "042222D82212EF16DBF872F2A3A7C0FA5248EC";
+  std::string payload = absl::HexStringToBytes(V0AdvEncryptedBytes);
+  auto advertisement = AdvertisementData{
+      .is_extended_advertisement = false,
+      .content = payload,
+  };
+
+  std::unique_ptr<AdvertisingSession> session = ble2.StartAdvertising(
+      advertisement, PowerMode::kLowPower,
+      AdvertisingCallback{.start_advertising_result = [](absl::Status) {}});
+  env_.Sync();
+
+  std::vector<
+      absl::variant<PresenceScanFilter, LegacyPresenceScanFilter>>  // NOLINT
+      filters = {PresenceScanFilter{
+          .scan_type = ScanType::kPresenceScan,
+          .extended_properties = {DataElement(DataElement::kTxPowerFieldType,
+                                              3)},
+      }};
+
+  ScanRequest scan_request = {
+      .account_name = "Test account",
+      .identity_types =
+          {nearby::internal::IdentityType::IDENTITY_TYPE_PRIVATE_GROUP},
+      .scan_filters = filters,
+      .use_ble = true,
+      .scan_type = ScanType::kPresenceScan,
+      .power_mode = PowerMode::kBalanced,
+      .scan_only_when_screen_on = true,
+  };
+
+  // Start scanning
+  ScanSessionId scan_session =
+      manager.StartScan(scan_request, MakeDefaultScanCallback());
+  EXPECT_EQ(manager.ScanningCallbacksLengthForTest(), 1);
+  EXPECT_TRUE(start_latch_.Await().Ok());
+  EXPECT_TRUE(found_latch_.Await().Ok());
+  manager.StopScan(scan_session);
+  EXPECT_EQ(manager.ScanningCallbacksLengthForTest(), 0);
 }
 
 }  // namespace

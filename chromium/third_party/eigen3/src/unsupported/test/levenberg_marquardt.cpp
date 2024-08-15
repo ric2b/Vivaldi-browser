@@ -670,7 +670,7 @@ void testNistLanczos1(void) {
   // VERIFY_IS_EQUAL(lm.nfev(), 79);
   // VERIFY_IS_EQUAL(lm.njev(), 72);
   // check norm^2
-  VERIFY(lm.fvec().squaredNorm() <= 1.4307867721E-25);
+  VERIFY(lm.fvec().squaredNorm() <= 1.44E-25);
   // check x
   VERIFY_IS_APPROX(x[0], 9.5100000027E-02);
   VERIFY_IS_APPROX(x[1], 1.0000000001E+00);
@@ -692,7 +692,7 @@ void testNistLanczos1(void) {
   // VERIFY_IS_EQUAL(lm.nfev(), 9);
   // VERIFY_IS_EQUAL(lm.njev(), 8);
   // check norm^2
-  VERIFY(lm.fvec().squaredNorm() <= 1.4307867721E-25);
+  VERIFY(lm.fvec().squaredNorm() <= 1.44E-25);
   // check x
   VERIFY_IS_APPROX(x[0], 9.5100000027E-02);
   VERIFY_IS_APPROX(x[1], 1.0000000001E+00);

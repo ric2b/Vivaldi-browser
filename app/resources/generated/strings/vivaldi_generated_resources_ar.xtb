@@ -27,7 +27,6 @@
 <translation id="2470702053775288986">تم تعطيل الإضافات غير المدعومة</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">إعادة تمكين</translation>
-<translation id="2809586584051668049">و<ph name="NUMBER_ADDITIONAL_DISABLED" /> من الإضافات الأخرى</translation>
 <translation id="2850541429955027218">إضافة مظهر</translation>
 <translation id="2861941300086904918">‏إدارة الأمان لـ Native Client</translation>
 <translation id="2932883381142163287">الإبلاغ عن إساءة الاستخدام</translation>
@@ -37,7 +36,6 @@
 <translation id="3122464029669770682">وحدة المعالجة المركزية</translation>
 <translation id="3222066309010235055">Prerender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">حدد الدليل الجذر للإضافة المراد إنشاء حزمة لها، ولتحديث إضافة، حدد أيضًا ملف المفتاح الخاص لإعادة استخدامه.</translation>
-<translation id="3288047731229977326">يمكن أن تؤدي الإضافات التي تعمل في وضع مطور البرامج إلى إلحاق الضرر بجهاز الكمبيوتر. إذا لم تكن مطور برامج، فيجب تعطيل هذه الإضافات التي تعمل في وضع مطور البرامج للبقاء في أمان.</translation>
 <translation id="329838636886466101">إصلاح</translation>
 <translation id="3305661444342691068">فتح ملف PDF في المعاينة</translation>
 <translation id="3341703758641437857">السماح بالوصول إلى عناوين URL للملفات</translation>
@@ -52,7 +50,6 @@
 <translation id="4087089424473531098">تم إنشاء الإضافة:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">تعطيل إضافات وضع مطور البرامج</translation>
 <translation id="4100839878934973028">‏أضاف برنامج آخر بجهاز الكمبيوتر تطبيقًا قد يؤدي إلى تغيير طريقة عمل Vivaldi.</translation>
 <translation id="4176463684765177261">معطل</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />كيلوبايت (<ph name="NUM_KILOBYTES_LIVE" />كيلوبايت مباشرة)</translation>
@@ -67,7 +64,6 @@
 <translation id="5143374789336132547">غيّرت الإضافة "<ph name="EXTENSION_NAME" />" الصفحة التي تظهر عند النقر على زر الصفحة الرئيسية.</translation>
 <translation id="5233231016133573565">معرِّف العملية</translation>
 <translation id="52912272896845572">ملف المفتاح الخاص غير صالح.</translation>
-<translation id="5301954838959518834">موافق وأعي ذلك</translation>
 <translation id="5362741141255528695">حدد ملف المفتاح الخاص.</translation>
 <translation id="536638840841140142">لا شيء</translation>
 <translation id="5431318178759467895">اللون</translation>

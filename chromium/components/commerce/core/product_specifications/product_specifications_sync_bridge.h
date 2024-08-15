@@ -5,10 +5,15 @@
 #ifndef COMPONENTS_COMMERCE_CORE_PRODUCT_SPECIFICATIONS_PRODUCT_SPECIFICATIONS_SYNC_BRIDGE_H_
 #define COMPONENTS_COMMERCE_CORE_PRODUCT_SPECIFICATIONS_PRODUCT_SPECIFICATIONS_SYNC_BRIDGE_H_
 
+#include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
+#include "components/commerce/core/product_specifications/product_specifications_set.h"
 #include "components/sync/model/entity_change.h"
 #include "components/sync/model/model_type_store.h"
 #include "components/sync/model/model_type_sync_bridge.h"
+#include "components/sync/protocol/compare_specifics.pb.h"
 #include "components/sync/protocol/entity_data.h"
+#include "url/gurl.h"
 
 namespace syncer {
 class MetadataChangeList;
@@ -16,6 +21,10 @@ class ModelError;
 }  // namespace syncer
 
 namespace commerce {
+
+class MockProductSpecificationsSyncBridge;
+class ProductSpecificationsService;
+class ProductSpecificationsSyncBridgeTest;
 
 // Integration point between sync and ProductSpecificationService.
 class ProductSpecificationsSyncBridge : public syncer::ModelTypeSyncBridge {
@@ -38,6 +47,55 @@ class ProductSpecificationsSyncBridge : public syncer::ModelTypeSyncBridge {
   std::string GetClientTag(const syncer::EntityData& entity_data) override;
   void GetData(StorageKeyList storage_keys, DataCallback callback) override;
   void GetAllDataForDebugging(DataCallback callback) override;
+
+ private:
+  friend class commerce::MockProductSpecificationsSyncBridge;
+  friend class commerce::ProductSpecificationsService;
+  friend class commerce::ProductSpecificationsSyncBridgeTest;
+  using CompareSpecificsEntries =
+      std::map<std::string, sync_pb::CompareSpecifics>;
+
+  const CompareSpecificsEntries& entries() { return entries_; }
+
+  virtual sync_pb::CompareSpecifics AddProductSpecifications(
+      const std::string& name,
+      const std::vector<GURL>& urls);
+
+  // Update the specifics for the provided ProductSpecificationsSet based on its
+  // UUID. If no specifics for a UUID are found, this method is a noop and
+  // nullopt is returned.
+  sync_pb::CompareSpecifics UpdateProductSpecificationsSet(
+      const ProductSpecificationsSet& set);
+
+  void DeleteProductSpecificationsSet(const std::string& uuid);
+
+  void OnStoreCreated(const std::optional<syncer::ModelError>& error,
+                      std::unique_ptr<syncer::ModelTypeStore> store);
+  void OnReadAllData(
+      const std::optional<syncer::ModelError>& error,
+      std::unique_ptr<syncer::ModelTypeStore::RecordList> record_list);
+  void OnReadAllMetadata(
+      std::unique_ptr<syncer::ModelTypeStore::RecordList> record_list,
+      const std::optional<syncer::ModelError>& error,
+      std::unique_ptr<syncer::MetadataBatch> metadata_batch);
+  void Commit(std::unique_ptr<syncer::ModelTypeStore::WriteBatch> batch);
+  void OnCommit(const std::optional<syncer::ModelError>& error);
+
+  void AddObserver(commerce::ProductSpecificationsSet::Observer* observer);
+  void RemoveObserver(commerce::ProductSpecificationsSet::Observer* observer);
+
+  void OnSpecificsAdded(const sync_pb::CompareSpecifics& compare_specifics);
+  void OnSpecificsUpdated(const sync_pb::CompareSpecifics& before,
+                          const sync_pb::CompareSpecifics& compare_specifics);
+  void OnSpecificsRemoved(const ProductSpecificationsSet& removed_set);
+
+  CompareSpecificsEntries entries_;
+
+  std::unique_ptr<syncer::ModelTypeStore> store_;
+
+  base::ObserverList<commerce::ProductSpecificationsSet::Observer> observers_;
+
+  base::WeakPtrFactory<ProductSpecificationsSyncBridge> weak_ptr_factory_{this};
 };
 
 }  // namespace commerce

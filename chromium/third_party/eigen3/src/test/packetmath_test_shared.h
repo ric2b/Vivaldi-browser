@@ -22,9 +22,14 @@ namespace Eigen {
 
 namespace test {
 
-template <typename T>
+template <typename T, std::enable_if_t<NumTraits<T>::IsSigned, bool> = true>
 T negate(const T& x) {
   return -x;
+}
+
+template <typename T, std::enable_if_t<!NumTraits<T>::IsSigned, bool> = true>
+T negate(const T& x) {
+  return T(0) - x;
 }
 
 template <typename T>

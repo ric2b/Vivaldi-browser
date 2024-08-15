@@ -35,6 +35,10 @@ namespace syncer {
 
 @property(nonatomic, weak) id<VivaldiSyncCoordinatorDelegate> delegate;
 
+// Determine if we need to setup a cancel button on the navigation's left bar
+// button.
+@property(nonatomic) BOOL showCancelButton;
+
 @end
 
 #endif  // IOS_UI_SETTINGS_SYNC_VIVALDI_SYNC_COORDINATOR_H_

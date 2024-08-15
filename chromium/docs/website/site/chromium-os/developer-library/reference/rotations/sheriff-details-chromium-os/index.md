@@ -1,12 +1,12 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: sheriff-details-chromium-os
-title: 'Sheriff FAQ: Chromium OS'
+title: 'Sheriff FAQ: ChromiumOS'
 ---
 
-Chrome OS sheriffing is to keep developers happy by keeping the tree green.
+ChromeOS sheriffing is to keep developers happy by keeping the tree green.
 
 ### Responsibilities
 
@@ -19,5 +19,5 @@ These threefold purposes apply to sheriffs:
     *   Post-submit builders
     *   *NEW* Release builders
 
-For more information on how to be a Chrome OS Sheriff, see [Chrome OS Sheriffing
+For more information on how to be a ChromeOS Sheriff, see [ChromeOS Sheriffing
 Guide](https://goto.google.com/cros-sheriff-ref).

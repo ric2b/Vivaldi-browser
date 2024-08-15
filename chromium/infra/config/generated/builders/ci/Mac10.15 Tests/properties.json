@@ -7,7 +7,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Mac Builder",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-mac-archive",
@@ -25,6 +25,7 @@
               },
               "legacy_gclient_config": {
                 "apply_configs": [
+                  "chromium_with_telemetry_dependencies",
                   "use_clang_coverage"
                 ],
                 "config": "chromium"
@@ -35,7 +36,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Mac10.15 Tests",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-mac-archive",
@@ -56,7 +57,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Mac Builder",
-                "project": "chromium-m124"
+                "project": "chromium-m126"
               }
             }
           }
@@ -66,7 +67,7 @@
         {
           "bucket": "ci",
           "builder": "Mac10.15 Tests",
-          "project": "chromium-m124"
+          "project": "chromium-m126"
         }
       ],
       "mirroring_builder_group_and_names": [

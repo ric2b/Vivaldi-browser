@@ -184,19 +184,6 @@ EIGEN_STRONG_INLINE float cast(const AnnoyingScalar& x) {
   return *x.v;
 }
 
-template <>
-struct random_impl<AnnoyingScalar> {
-  using Impl = random_impl<float>;
-  static EIGEN_DEVICE_FUNC inline AnnoyingScalar run(const AnnoyingScalar& x, const AnnoyingScalar& y) {
-    float result = Impl::run(*x.v, *y.v);
-    return AnnoyingScalar(result);
-  }
-  static EIGEN_DEVICE_FUNC inline AnnoyingScalar run() {
-    float result = Impl::run();
-    return AnnoyingScalar(result);
-  }
-};
-
 }  // namespace internal
 }  // namespace Eigen
 

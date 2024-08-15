@@ -64,17 +64,17 @@ ERRORPRONE_WARNINGS_TO_DISABLE = [
     'ToStringReturnsNull',
     # If possible, this should be automatically fixed if turned on:
     'MalformedInlineTag',
-    # TODO(crbug.com/834807): Follow steps in bug
+    # TODO(crbug.com/41384359): Follow steps in bug
     'DoubleBraceInitialization',
-    # TODO(crbug.com/834790): Follow steps in bug.
+    # TODO(crbug.com/41384349): Follow steps in bug.
     'CatchAndPrintStackTrace',
-    # TODO(crbug.com/801210): Follow steps in bug.
+    # TODO(crbug.com/41364336): Follow steps in bug.
     'SynchronizeOnNonFinalField',
-    # TODO(crbug.com/802073): Follow steps in bug.
+    # TODO(crbug.com/41364806): Follow steps in bug.
     'TypeParameterUnusedInFormals',
-    # TODO(crbug.com/803484): Follow steps in bug.
+    # TODO(crbug.com/41365724): Follow steps in bug.
     'CatchFail',
-    # TODO(crbug.com/803485): Follow steps in bug.
+    # TODO(crbug.com/41365725): Follow steps in bug.
     'JUnitAmbiguousTestClass',
     # Android platform default is always UTF-8.
     # https://developer.android.com/reference/java/nio/charset/Charset.html#defaultCharset()
@@ -766,6 +766,8 @@ def main(argv):
       # Do not warn about finalize() methods. Android still intends to support
       # them.
       '-Xlint:-removal',
+      # https://crbug.com/1441023
+      '-J-XX:+PerfDisableSharedMem',
   ]
 
   if options.enable_errorprone:

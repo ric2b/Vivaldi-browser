@@ -27,12 +27,10 @@
 
 #include "src/tint/lang/spirv/reader/parser/helper_test.h"
 
-#include "gtest/gtest-spi.h"
-
 namespace tint::spirv::reader {
 
 TEST_F(SpirvParserTest, Struct_Empty) {
-    EXPECT_FATAL_FAILURE(  //
+    EXPECT_DEATH_IF_SUPPORTED(  //
         {
             auto assembly = Assemble(R"(
                OpCapability Shader
@@ -90,8 +88,8 @@ tint_symbol_2 = struct @align(4) {
   tint_symbol_1:i32 @offset(4)
 }
 
-%1 = func(%2:tint_symbol_2):void -> %b1 {
-  %b1 = block {
+%1 = func(%2:tint_symbol_2):void {
+  $B1: {
     ret
   }
 }
@@ -128,8 +126,8 @@ tint_symbol_2 = struct @align(4) {
   tint_symbol_1:i32 @offset(4)
 }
 
-%1 = func(%2:tint_symbol_2, %3:tint_symbol_2):tint_symbol_2 -> %b1 {
-  %b1 = block {
+%1 = func(%2:tint_symbol_2, %3:tint_symbol_2):tint_symbol_2 {
+  $B1: {
     ret %2
   }
 }
@@ -178,8 +176,8 @@ tint_symbol_9 = struct @align(4) {
   tint_symbol_8:tint_symbol_2 @offset(24)
 }
 
-%1 = func(%2:tint_symbol_9):void -> %b1 {
-  %b1 = block {
+%1 = func(%2:tint_symbol_9):void {
+  $B1: {
     ret
   }
 }
@@ -221,8 +219,8 @@ tint_symbol_4 = struct @align(4) {
   tint_symbol_3:i32 @offset(64)
 }
 
-%1 = func(%2:tint_symbol_4):void -> %b1 {
-  %b1 = block {
+%1 = func(%2:tint_symbol_4):void {
+  $B1: {
     ret
   }
 }

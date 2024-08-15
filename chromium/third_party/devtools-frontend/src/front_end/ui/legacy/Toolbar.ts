@@ -33,6 +33,7 @@ import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
+import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 import * as Adorners from '../components/adorners/adorners.js';
 import * as IconButton from '../components/icon_button/icon_button.js';
@@ -47,8 +48,7 @@ import {type Suggestion} from './SuggestBox.js';
 import {Events as TextPromptEvents, TextPrompt} from './TextPrompt.js';
 import toolbarStyles from './toolbar.css.legacy.js';
 import {Tooltip} from './Tooltip.js';
-import {CheckboxLabel, LongClickController} from './UIUtils.js';
-import * as Utils from './utils/utils.js';
+import {CheckboxLabel, createShadowRootWithCoreStyles, LongClickController} from './UIUtils.js';
 
 const UIStrings = {
   /**
@@ -62,7 +62,11 @@ const UIStrings = {
   /**
    *@description Tooltip shown when the user hovers over the clear icon to empty the text input.
    */
-  clearInput: 'Clear input',
+  clearInput: 'Clear',
+  /**
+   *@description Placeholder for filter bars that shows before the user types in a filter keyword.
+   */
+  filter: 'Filter',
 };
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/Toolbar.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -81,8 +85,7 @@ export class Toolbar {
     this.element.className = className;
     this.element.classList.add('toolbar');
     this.enabled = true;
-    this.shadowRoot =
-        Utils.createShadowRootWithCoreStyles(this.element, {cssFile: toolbarStyles, delegatesFocus: undefined});
+    this.shadowRoot = createShadowRootWithCoreStyles(this.element, {cssFile: toolbarStyles, delegatesFocus: undefined});
     this.contentElement = this.shadowRoot.createChild('div', 'toolbar-shadow');
   }
 
@@ -704,21 +707,32 @@ export class ToolbarInput extends ToolbarItem<ToolbarInput.EventTypes> {
       this.element.style.flexShrink = String(shrinkFactor);
     }
 
-    const clearButton = this.element.createChild('div', 'toolbar-input-clear-button');
-    clearButton.title = UIStrings.clearInput;
-    const clearIcon = new IconButton.Icon.Icon();
-    clearIcon.data = {color: 'var(--icon-default)', width: '16px', height: '16px', iconName: 'cross-circle-filled'};
-    clearIcon.classList.add('search-cancel-button');
-    clearButton.appendChild(clearIcon);
+    const clearButtonText = i18nString(UIStrings.clearInput);
+    const clearButton = new Buttons.Button.Button();
+    clearButton.className = 'toolbar-input-clear-button';
+    clearButton.variant = Buttons.Button.Variant.ICON;
+    clearButton.size = Buttons.Button.Size.SMALL;
+    clearButton.iconName = 'cross-circle-filled';
+    clearButton.title = clearButtonText;
+    clearButton.ariaLabel = clearButtonText;
+    clearButton.tabIndex = -1;
+
     clearButton.addEventListener('click', () => {
       this.setValue('', true);
       this.prompt.focus();
     });
 
+    this.element.appendChild(clearButton);
     this.updateEmptyStyles();
   }
 
   override applyEnabledState(enabled: boolean): void {
+    if (enabled) {
+      this.element.classList.remove('disabled');
+    } else {
+      this.element.classList.add('disabled');
+    }
+
     this.prompt.setEnabled(enabled);
   }
 
@@ -737,6 +751,15 @@ export class ToolbarInput extends ToolbarItem<ToolbarInput.EventTypes> {
   valueWithoutSuggestion(): string {
     return this.prompt.text();
   }
+
+  clearAutocomplete(): void {
+    this.prompt.clearAutocomplete();
+  }
+
+  focus(): void {
+    this.prompt.focus();
+  }
+
   private onKeydownCallback(event: KeyboardEvent): void {
     if (event.key === 'Enter' && this.prompt.text()) {
       this.dispatchEventToListeners(ToolbarInput.Event.EnterPressed, this.prompt.text());
@@ -755,6 +778,21 @@ export class ToolbarInput extends ToolbarItem<ToolbarInput.EventTypes> {
 
   private updateEmptyStyles(): void {
     this.element.classList.toggle('toolbar-input-empty', !this.prompt.text());
+  }
+}
+
+export class ToolbarFilter extends ToolbarInput {
+  constructor(
+      filterBy?: Common.UIString.LocalizedString, growFactor?: number, shrinkFactor?: number, tooltip?: string,
+      completions?: ((arg0: string, arg1: string, arg2?: boolean|undefined) => Promise<Suggestion[]>),
+      dynamicCompletions?: boolean, jslogContext?: string) {
+    const filterPlaceholder = filterBy ? filterBy : i18nString(UIStrings.filter);
+    super(
+        filterPlaceholder, filterPlaceholder, growFactor, shrinkFactor, tooltip, completions, dynamicCompletions,
+        jslogContext);
+
+    const filterIcon = IconButton.Icon.create('filter');
+    this.element.prepend(filterIcon);
   }
 }
 

@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sv">
+<translation id="2947471979790858922">Din aktivitet på dessa privata flikar kommer att tas bort från den här enheten</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+         =1 {Du kan hitta dina stängda flikar i Senaste flikarna under Vivaldis huvudmeny. Din privata flik kommer inte att vara tillgänglig.}
+         other {Du kan hitta dina stängda flikar i Senaste flikarna under Vivaldis huvudmeny. Dina # privata flikar kommer inte att vara tillgängliga.}}</translation>
+<translation id="4871187110787939393">Stäng alla privata flikar?</translation>
 </translationbundle>

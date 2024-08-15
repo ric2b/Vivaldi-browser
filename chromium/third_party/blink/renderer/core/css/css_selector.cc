@@ -139,10 +139,6 @@ inline unsigned CSSSelector::SpecificityForOneSelector() const {
       return kIdSpecificity;
     case kPseudoClass:
       switch (GetPseudoType()) {
-        case kPseudoActiveViewTransitionType:
-          CHECK(!IdentList().empty());
-          // TODO(csswg-drafts:10071): Figure out the specificity.
-          return 2 * kClassLikeSpecificity;
         case kPseudoWhere:
           return 0;
         case kPseudoHost:
@@ -287,6 +283,10 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
       return kPseudoIdBackdrop;
     case kPseudoScrollbar:
       return kPseudoIdScrollbar;
+    case kPseudoScrollMarker:
+      return kPseudoIdScrollMarker;
+    case kPseudoScrollMarkers:
+      return kPseudoIdScrollMarkers;
     case kPseudoScrollbarButton:
       return kPseudoIdScrollbarButton;
     case kPseudoScrollbarCorner:
@@ -299,6 +299,8 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
       return kPseudoIdScrollbarTrackPiece;
     case kPseudoResizer:
       return kPseudoIdResizer;
+    case kPseudoSearchText:
+      return kPseudoIdSearchText;
     case kPseudoTargetText:
       return kPseudoIdTargetText;
     case kPseudoHighlight:
@@ -330,6 +332,7 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoClosed:
     case kPseudoCornerPresent:
     case kPseudoCue:
+    case kPseudoCurrent:
     case kPseudoDecrement:
     case kPseudoDefault:
     case kPseudoDefined:
@@ -404,8 +407,10 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoRightPage:
     case kPseudoRoot:
     case kPseudoScope:
-    case kPseudoSelectAuthorButton:
-    case kPseudoSelectAuthorDatalist:
+    case kPseudoSelectFallbackButton:
+    case kPseudoSelectFallbackButtonIcon:
+    case kPseudoSelectFallbackButtonText:
+    case kPseudoSelectFallbackDatalist:
     case kPseudoSelectorFragmentAnchor:
     case kPseudoSingleButton:
     case kPseudoSlotted:
@@ -467,9 +472,6 @@ const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"-internal-multi-select-focus", CSSSelector::kPseudoMultiSelectFocus},
     {"-internal-popover-in-top-layer", CSSSelector::kPseudoPopoverInTopLayer},
     {"-internal-relative-anchor", CSSSelector::kPseudoRelativeAnchor},
-    {"-internal-select-author-button", CSSSelector::kPseudoSelectAuthorButton},
-    {"-internal-select-author-datalist",
-     CSSSelector::kPseudoSelectAuthorDatalist},
     {"-internal-selector-fragment-anchor",
      CSSSelector::kPseudoSelectorFragmentAnchor},
     {"-internal-shadow-host-has-appearance",
@@ -503,6 +505,7 @@ const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"closed", CSSSelector::kPseudoClosed},
     {"corner-present", CSSSelector::kPseudoCornerPresent},
     {"cue", CSSSelector::kPseudoWebKitCustomElement},
+    {"current", CSSSelector::kPseudoCurrent},
     {"decrement", CSSSelector::kPseudoDecrement},
     {"default", CSSSelector::kPseudoDefault},
     {"defined", CSSSelector::kPseudoDefined},
@@ -557,6 +560,15 @@ const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"right", CSSSelector::kPseudoRightPage},
     {"root", CSSSelector::kPseudoRoot},
     {"scope", CSSSelector::kPseudoScope},
+    {"scroll-marker", CSSSelector::kPseudoScrollMarker},
+    {"scroll-markers", CSSSelector::kPseudoScrollMarkers},
+    {"search-text", CSSSelector::kPseudoSearchText},
+    {"select-fallback-button", CSSSelector::kPseudoSelectFallbackButton},
+    {"select-fallback-button-icon",
+     CSSSelector::kPseudoSelectFallbackButtonIcon},
+    {"select-fallback-button-text",
+     CSSSelector::kPseudoSelectFallbackButtonText},
+    {"select-fallback-datalist", CSSSelector::kPseudoSelectFallbackDatalist},
     {"selection", CSSSelector::kPseudoSelection},
     {"single-button", CSSSelector::kPseudoSingleButton},
     {"spelling-error", CSSSelector::kPseudoSpellingError},
@@ -655,19 +667,34 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(
   }
 
   if (match->type == CSSSelector::kPseudoPermissionGranted &&
-      !RuntimeEnabledFeatures::PermissionElementEnabled()) {
+      !RuntimeEnabledFeatures::PermissionElementEnabled(
+          document ? document->GetExecutionContext() : nullptr)) {
     return CSSSelector::kPseudoUnknown;
   }
 
-  if ((match->type == CSSSelector::kPseudoUserInvalid ||
-       match->type == CSSSelector::kPseudoUserValid) &&
-      !RuntimeEnabledFeatures::UserValidUserInvalidEnabled()) {
+  if ((match->type == CSSSelector::kPseudoScrollMarker ||
+       match->type == CSSSelector::kPseudoScrollMarkers) &&
+      !RuntimeEnabledFeatures::CSSPseudoScrollMarkersEnabled()) {
     return CSSSelector::kPseudoUnknown;
   }
 
   if ((match->type == CSSSelector::kPseudoOpen ||
        match->type == CSSSelector::kPseudoClosed) &&
       !RuntimeEnabledFeatures::CSSPseudoOpenClosedEnabled()) {
+    return CSSSelector::kPseudoUnknown;
+  }
+
+  if ((match->type == CSSSelector::kPseudoSelectFallbackButton ||
+       match->type == CSSSelector::kPseudoSelectFallbackButtonIcon ||
+       match->type == CSSSelector::kPseudoSelectFallbackButtonText ||
+       match->type == CSSSelector::kPseudoSelectFallbackDatalist) &&
+      !RuntimeEnabledFeatures::StylableSelectEnabled()) {
+    return CSSSelector::kPseudoUnknown;
+  }
+
+  if ((match->type == CSSSelector::kPseudoSearchText ||
+       match->type == CSSSelector::kPseudoCurrent) &&
+      !RuntimeEnabledFeatures::SearchTextHighlightPseudoEnabled()) {
     return CSSSelector::kPseudoUnknown;
   }
 
@@ -758,9 +785,16 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoScrollbarThumb:
     case kPseudoScrollbarTrack:
     case kPseudoScrollbarTrackPiece:
+    case kPseudoScrollMarker:
+    case kPseudoScrollMarkers:
+    case kPseudoSelectFallbackButton:
+    case kPseudoSelectFallbackButtonIcon:
+    case kPseudoSelectFallbackButtonText:
+    case kPseudoSelectFallbackDatalist:
     case kPseudoSelection:
     case kPseudoWebKitCustomElement:
     case kPseudoSlotted:
+    case kPseudoSearchText:
     case kPseudoTargetText:
     case kPseudoHighlight:
     case kPseudoSpellingError:
@@ -805,6 +839,7 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoChecked:
     case kPseudoClosed:
     case kPseudoCornerPresent:
+    case kPseudoCurrent:
     case kPseudoDecrement:
     case kPseudoDefault:
     case kPseudoDefined:
@@ -867,8 +902,6 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoRequired:
     case kPseudoRoot:
     case kPseudoScope:
-    case kPseudoSelectAuthorButton:
-    case kPseudoSelectAuthorDatalist:
     case kPseudoSelectorFragmentAnchor:
     case kPseudoSingleButton:
     case kPseudoStart:
@@ -1426,7 +1459,11 @@ bool CSSSelector::IsTreeAbidingPseudoElement() const {
           GetPseudoType() == kPseudoMarker ||
           GetPseudoType() == kPseudoPlaceholder ||
           GetPseudoType() == kPseudoFileSelectorButton ||
-          GetPseudoType() == kPseudoBackdrop);
+          GetPseudoType() == kPseudoBackdrop ||
+          GetPseudoType() == kPseudoSelectFallbackButton ||
+          GetPseudoType() == kPseudoSelectFallbackButtonIcon ||
+          GetPseudoType() == kPseudoSelectFallbackButtonText ||
+          GetPseudoType() == kPseudoSelectFallbackDatalist);
 }
 
 bool CSSSelector::IsAllowedAfterPart() const {
@@ -1446,7 +1483,12 @@ bool CSSSelector::IsAllowedAfterPart() const {
     case kPseudoFileSelectorButton:
     case kPseudoFirstLine:
     case kPseudoFirstLetter:
+    case kPseudoSelectFallbackButton:
+    case kPseudoSelectFallbackButtonIcon:
+    case kPseudoSelectFallbackButtonText:
+    case kPseudoSelectFallbackDatalist:
     case kPseudoSelection:
+    case kPseudoSearchText:
     case kPseudoTargetText:
     case kPseudoHighlight:
     case kPseudoSpellingError:
@@ -1456,6 +1498,20 @@ bool CSSSelector::IsAllowedAfterPart() const {
     default:
       return false;
   }
+}
+
+bool CSSSelector::IsOrContainsHostPseudoClass() const {
+  if (IsHostPseudoClass()) {
+    return true;
+  }
+  // Accept selector lists like :is(:host, .foo).
+  for (const CSSSelector* sub_selector = SelectorListOrParent(); sub_selector;
+       sub_selector = CSSSelectorList::Next(*sub_selector)) {
+    if (sub_selector->IsOrContainsHostPseudoClass()) {
+      return true;
+    }
+  }
+  return false;
 }
 
 template <typename Functor>

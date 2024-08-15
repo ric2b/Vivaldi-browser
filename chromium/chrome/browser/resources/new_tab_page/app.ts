@@ -5,8 +5,9 @@
 import './iframe.js';
 import './logo.js';
 import './strings.m.js';
-import 'chrome://resources/cr_components/omnibox/realbox.js';
+import 'chrome://resources/cr_components/searchbox/realbox.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_icons.css.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 
 import {ColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
@@ -89,6 +90,10 @@ const OGB_IFRAME_ORIGIN = 'chrome-untrusted://new-tab-page';
 export const CUSTOMIZE_CHROME_BUTTON_ELEMENT_ID =
     'NewTabPageUI::kCustomizeChromeButtonElementId';
 
+// 900px ~= 561px (max value for --ntp-search-box-width) * 1.5 + some margin.
+const realboxCanShowSecondarySideMediaQueryList =
+    window.matchMedia('(min-width: 900px)');
+
 function recordClick(element: NtpElement) {
   chrome.metricsPrivate.recordEnumerationValue(
       'NewTabPage.Click', element, NtpElement.MAX_VALUE + 1);
@@ -170,12 +175,6 @@ export class AppElement extends AppElementBase {
         reflectToAttribute: true,
       },
 
-      showCustomizeDialog_: {
-        type: Boolean,
-        computed:
-            'computeShowCustomizeDialog_(customizeChromeEnabled_, showCustomize_)',
-      },
-
       selectedCustomizeDialogPage_: {
         type: String,
         value: () =>
@@ -217,11 +216,6 @@ export class AppElement extends AppElementBase {
         computed: 'computeColorSourceIsBaseline(theme_)',
       },
 
-      customizeChromeEnabled_: {
-        type: Boolean,
-        value: () => loadTimeData.getBoolean('customizeChromeEnabled'),
-      },
-
       logoColor_: {
         type: String,
         computed: 'computeLogoColor_(theme_)',
@@ -232,14 +226,42 @@ export class AppElement extends AppElementBase {
         type: Boolean,
       },
 
-      realboxLensSearchEnabled_: {
+      /**
+       * Whether the secondary side can be shown based on the feature state and
+       * the width available to the dropdown for the ntp searchbox.
+       */
+      realboxCanShowSecondarySide: {
         type: Boolean,
-        value: () => loadTimeData.getBoolean('realboxLensSearch'),
+        value: () => realboxCanShowSecondarySideMediaQueryList.matches,
+        reflectToAttribute: true,
+      },
+
+      /**
+       * Whether the searchbox secondary side was at any point available to
+       * be shown.
+       */
+      realboxHadSecondarySide: {
+        type: Boolean,
+        reflectToAttribute: true,
+        notify: true,
+      },
+
+      realboxIsTall_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('realboxIsTall'),
+        reflectToAttribute: true,
       },
 
       realboxShown_: {
         type: Boolean,
         computed: 'computeRealboxShown_(theme_, showLensUploadDialog_)',
+      },
+
+      /* Searchbox width behavior. */
+      realboxWidthBehavior_: {
+        type: String,
+        value: () => loadTimeData.getString('realboxWidthBehavior'),
+        reflectToAttribute: true,
       },
 
       logoEnabled_: {
@@ -363,7 +385,6 @@ export class AppElement extends AppElementBase {
   private showCustomize_: boolean;
   private showCustomizeChromeText_: boolean;
   private showWallpaperSearch_: boolean;
-  private showCustomizeDialog_: boolean;
   private selectedCustomizeDialogPage_: string|null;
   private showVoiceSearchOverlay_: boolean;
   private showBackgroundImage_: boolean;
@@ -371,10 +392,10 @@ export class AppElement extends AppElementBase {
   private backgroundImageAttribution2_: string;
   private backgroundImageAttributionUrl_: string;
   private backgroundColor_: SkColor;
-  private customizeChromeEnabled_: boolean;
   private logoColor_: string;
   private singleColoredLogo_: boolean;
-  private realboxLensSearchEnabled_: boolean;
+  realboxCanShowSecondarySide: boolean;
+  realboxHadSecondarySide: boolean;
   private realboxShown_: boolean;
   private showLensUploadDialog_: boolean = false;
   private logoEnabled_: boolean;
@@ -444,6 +465,8 @@ export class AppElement extends AppElementBase {
 
   override connectedCallback() {
     super.connectedCallback();
+    realboxCanShowSecondarySideMediaQueryList.addEventListener(
+        'change', this.onRealboxCanShowSecondarySideChanged_.bind(this));
     this.setThemeListenerId_ =
         this.callbackRouter_.setTheme.addListener((theme: Theme) => {
           if (!this.theme_) {
@@ -527,6 +550,8 @@ export class AppElement extends AppElementBase {
 
   override disconnectedCallback() {
     super.disconnectedCallback();
+    realboxCanShowSecondarySideMediaQueryList.removeEventListener(
+        'change', this.onRealboxCanShowSecondarySideChanged_.bind(this));
     this.callbackRouter_.removeListener(this.setThemeListenerId_!);
     this.callbackRouter_.removeListener(
         this.setCustomizeChromeSidePanelVisibilityListener_!);
@@ -559,10 +584,6 @@ export class AppElement extends AppElementBase {
         applyLightTheme: isNtpDarkTheme,
       });
     }
-  }
-
-  private computeShowCustomizeDialog_(): boolean {
-    return !this.customizeChromeEnabled_ && this.showCustomize_;
   }
 
   private computeShowCustomizeChromeText_(): boolean {
@@ -598,6 +619,10 @@ export class AppElement extends AppElementBase {
         (!loadTimeData.getBoolean('modulesEnabled') || this.modulesLoaded_);
   }
 
+  private onRealboxCanShowSecondarySideChanged_(e: MediaQueryListEvent) {
+    this.realboxCanShowSecondarySide = e.matches;
+  }
+
   private async onLazyRendered_() {
     // Integration tests use this attribute to determine when lazy load has
     // completed.
@@ -621,17 +646,11 @@ export class AppElement extends AppElementBase {
   }
 
   private onCustomizeClick_() {
-    // Let customize dialog or side panel decide what page or section to show.
+    // Let side panel decide what page or section to show.
     this.selectedCustomizeDialogPage_ = null;
-    if (this.customizeChromeEnabled_) {
-      this.setCustomizeChromeSidePanelVisible_(!this.showCustomize_);
-      if (!this.showCustomize_) {
-        this.pageHandler_.incrementCustomizeChromeButtonOpenCount();
-        recordCustomizeChromeOpen(
-            NtpCustomizeChromeEntryPoint.CUSTOMIZE_BUTTON);
-      }
-    } else {
-      this.showCustomize_ = true;
+    this.setCustomizeChromeSidePanelVisible_(!this.showCustomize_);
+    if (!this.showCustomize_) {
+      this.pageHandler_.incrementCustomizeChromeButtonOpenCount();
       recordCustomizeChromeOpen(NtpCustomizeChromeEntryPoint.CUSTOMIZE_BUTTON);
     }
   }
@@ -654,12 +673,6 @@ export class AppElement extends AppElementBase {
       recordCustomizeChromeOpen(
           NtpCustomizeChromeEntryPoint.WALLPAPER_SEARCH_BUTTON);
     }
-  }
-
-  private onCustomizeDialogClose_() {
-    this.showCustomize_ = false;
-    // Let customize dialog decide what page to show on next open.
-    this.selectedCustomizeDialogPage_ = null;
   }
 
   private onVoiceSearchOverlayClose_() {
@@ -869,9 +882,6 @@ export class AppElement extends AppElementBase {
   }
 
   private setCustomizeChromeSidePanelVisible_(visible: boolean) {
-    if (!this.customizeChromeEnabled_) {
-      return;
-    }
     let section: CustomizeChromeSection = CustomizeChromeSection.kUnspecified;
     switch (this.selectedCustomizeDialogPage_) {
       case CustomizeDialogPage.BACKGROUNDS:

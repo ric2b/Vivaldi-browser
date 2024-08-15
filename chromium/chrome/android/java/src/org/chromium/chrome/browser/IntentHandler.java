@@ -40,7 +40,7 @@ import org.chromium.chrome.browser.externalnav.IntentWithRequestMetadataHandler;
 import org.chromium.chrome.browser.externalnav.IntentWithRequestMetadataHandler.RequestMetadata;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.gsa.GSAState;
-import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteControllerProvider;
+import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.renderer_host.ChromeNavigationUIData;
@@ -243,6 +243,9 @@ public class IntentHandler {
     public static final String EXTRA_URL_DRAG_SOURCE =
             "org.chromium.chrome.browser.url_drag_source";
 
+    /** The id of a dragged tab that attempts to launch the intent. */
+    public static final String EXTRA_DRAGGED_TAB_ID = "org.chromium.chrome.browser.dragdrop.tab_id";
+
     /** A boolean to indicate whether the intent should launch the history page in Chrome. */
     public static final String EXTRA_OPEN_HISTORY = "org.chromium.chrome.browser.open_history";
 
@@ -323,9 +326,8 @@ public class IntentHandler {
     }
 
     /**
-     * Represents apps that launch Incognito CCT.
-     * DO NOT reorder items in this interface, because it's mirrored to UMA (as
-     * {@link IncognitoCCTCallerId}). Values should be enumerated from 0.
+     * Represents apps that launch Incognito CCT. DO NOT reorder items in this interface, because
+     * it's mirrored to UMA (as {@link IncognitoCCTCallerId}). Values should be enumerated from 0.
      * When removing items, comment them out and keep existing numeric values stable.
      */
     @IntDef({
@@ -333,7 +335,8 @@ public class IntentHandler {
         IncognitoCCTCallerId.GOOGLE_APPS,
         IncognitoCCTCallerId.OTHER_CHROME_FEATURES,
         IncognitoCCTCallerId.READER_MODE,
-        IncognitoCCTCallerId.READ_LATER
+        IncognitoCCTCallerId.READ_LATER,
+        IncognitoCCTCallerId.EPHEMERAL_TAB,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface IncognitoCCTCallerId {
@@ -348,13 +351,20 @@ public class IntentHandler {
         int READER_MODE = 3;
         int READ_LATER = 4;
 
+        // An ephemeral custom tab without incognito branding.
+        int EPHEMERAL_TAB = 5;
+
         // Update {@link IncognitoCCTCallerId} in enums.xml when adding new items.
-        int NUM_ENTRIES = 5;
+        int NUM_ENTRIES = 6;
     }
 
     /** Intent extra to open an incognito tab. */
     public static final String EXTRA_OPEN_NEW_INCOGNITO_TAB =
             "com.google.android.apps.chrome.EXTRA_OPEN_NEW_INCOGNITO_TAB";
+
+    /** Intent extra to open an ephemeral custom tab without incognito branding. */
+    public static final String EXTRA_OPEN_NEW_EPHEMERAL_TAB =
+            "com.google.android.apps.chrome.EXTRA_OPEN_NEW_EPHEMERAL_TAB";
 
     /** Scheme used by web pages to start up Chrome without an explicit Intent. */
     public static final String GOOGLECHROME_SCHEME = "googlechrome";
@@ -616,9 +626,10 @@ public class IntentHandler {
 
     /**
      * Extracts the URL from voice search result intent.
+     *
      * @return URL if it was found, null otherwise.
      */
-    // TODO(https://crbug.com/783819): Investigate whether this function can return a GURL instead,
+    // TODO(crbug.com/40549331): Investigate whether this function can return a GURL instead,
     // or split into formatted/unformatted getUrl.
     static String getUrlFromVoiceSearchResult(Intent intent) {
         if (!RecognizerResultsIntent.ACTION_VOICE_SEARCH_RESULTS.equals(intent.getAction())) {
@@ -649,10 +660,7 @@ public class IntentHandler {
         String query = results.get(0);
 
         Profile profile = ProfileManager.getLastUsedRegularProfile();
-        AutocompleteMatch match;
-        try (var controller = AutocompleteControllerProvider.createCloseableController(profile)) {
-            match = controller.get().classify(query);
-        }
+        AutocompleteMatch match = AutocompleteCoordinator.classify(profile, query);
 
         if (!match.isSearchSuggestion()) return match.getUrl().getSpec();
 
@@ -1485,7 +1493,8 @@ public class IntentHandler {
         return IntentUtils.safeGetBoolean(extras, EXTRA_INCOGNITO_MODE, false)
                 || IntentUtils.safeGetBoolean(extras, EXTRA_OPEN_NEW_INCOGNITO_TAB, false)
                 || IntentUtils.safeGetBoolean(
-                        extras, EXTRA_INVOKED_FROM_LAUNCH_NEW_INCOGNITO_TAB, false);
+                        extras, EXTRA_INVOKED_FROM_LAUNCH_NEW_INCOGNITO_TAB, false)
+                || IntentUtils.safeGetBoolean(extras, EXTRA_OPEN_NEW_EPHEMERAL_TAB, false);
     }
 
     @NativeMethods

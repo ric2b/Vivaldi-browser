@@ -26,6 +26,7 @@
 #include "libavutil/dict.h"
 #include "libavutil/internal.h"
 #include "libavutil/mathematics.h"
+#include "libavutil/mem.h"
 #include "libavutil/time_internal.h"
 
 #include "avformat.h"
@@ -1674,9 +1675,10 @@ failed:
     return ret;
 }
 
-const AVInputFormat ff_asf_o_demuxer = {
-    .name           = "asf_o",
-    .long_name      = NULL_IF_CONFIG_SMALL("ASF (Advanced / Active Streaming Format)"),
+const FFInputFormat ff_asf_o_demuxer = {
+    .p.name         = "asf_o",
+    .p.long_name    = NULL_IF_CONFIG_SMALL("ASF (Advanced / Active Streaming Format)"),
+    .p.flags        = AVFMT_NOBINSEARCH | AVFMT_NOGENSEARCH,
     .priv_data_size = sizeof(ASFContext),
     .read_probe     = asf_probe,
     .read_header    = asf_read_header,
@@ -1684,5 +1686,4 @@ const AVInputFormat ff_asf_o_demuxer = {
     .read_close     = asf_read_close,
     .read_timestamp = asf_read_timestamp,
     .read_seek      = asf_read_seek,
-    .flags          = AVFMT_NOBINSEARCH | AVFMT_NOGENSEARCH,
 };

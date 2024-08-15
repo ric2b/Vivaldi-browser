@@ -9,8 +9,10 @@
 
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
+#include "base/feature_list.h"
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/autofill/core/browser/country_type.h"
 #include "components/autofill/core/browser/data_model/autofill_i18n_formatting_expressions.h"
 #include "components/autofill/core/browser/data_model/autofill_i18n_hierarchies.h"
 #include "components/autofill/core/browser/data_model/autofill_i18n_parsing_expressions.h"
@@ -104,6 +106,7 @@ std::unique_ptr<AddressComponent> BuildTreeNode(
     case ADDRESS_HOME_LINE3:
     case ADDRESS_HOME_APT:
     case ADDRESS_HOME_APT_TYPE:
+    case ADDRESS_HOME_HOUSE_NUMBER_AND_APT:
     case ADDRESS_HOME_OTHER_SUBUNIT:
     case ADDRESS_HOME_ADDRESS_WITH_NAME:
     case ADDRESS_HOME_STREET_LOCATION_AND_LOCALITY:
@@ -373,6 +376,10 @@ bool IsCustomHierarchyAvailableForCountry(AddressCountryCode country_code) {
     return false;
   }
 
+  if (country_code == AddressCountryCode("AU") &&
+      !base::FeatureList::IsEnabled(features::kAutofillUseAUAddressModel)) {
+    return false;
+  }
   if (country_code == AddressCountryCode("BR") &&
       !base::FeatureList::IsEnabled(features::kAutofillUseBRAddressModel)) {
     return false;
@@ -390,6 +397,11 @@ bool IsCustomHierarchyAvailableForCountry(AddressCountryCode country_code) {
 
   if (country_code == AddressCountryCode("MX") &&
       !base::FeatureList::IsEnabled(features::kAutofillUseMXAddressModel)) {
+    return false;
+  }
+
+  if (country_code == AddressCountryCode("PL") &&
+      !base::FeatureList::IsEnabled(features::kAutofillUsePLAddressModel)) {
     return false;
   }
 

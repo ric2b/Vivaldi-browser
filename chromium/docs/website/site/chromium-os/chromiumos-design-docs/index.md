@@ -48,7 +48,7 @@ design docs in the coming months.**
 ### Firmware
 
 *   [CBI: CrOS Board
-            Info](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/design_docs/cros_board_info.md)
+            Info](/chromium-os/developer-library/reference/device/cros-board-info/)
 *   [Firmware Boot and
             Recovery](/chromium-os/chromiumos-design-docs/firmware-boot-and-recovery)
 *   [Disk Format](/chromium-os/chromiumos-design-docs/disk-format)

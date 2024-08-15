@@ -64,6 +64,7 @@ flat::ResourceType ResourceTypeFromRequest(
     case network::mojom::RequestDestination::kWorker:
     case network::mojom::RequestDestination::kSharedWorker:
     case network::mojom::RequestDestination::kServiceWorker:
+    case network::mojom::RequestDestination::kSharedStorageWorklet:
     case network::mojom::RequestDestination::kJson:
       return flat::ResourceType_SCRIPT;
     case network::mojom::RequestDestination::kImage:

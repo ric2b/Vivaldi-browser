@@ -81,8 +81,10 @@ static constexpr uint64_t kMaxDebugMessagesToPrint = 5;
 // static
 ResultOrError<Ref<Device>> Device::Create(AdapterBase* adapter,
                                           const UnpackedPtr<DeviceDescriptor>& descriptor,
-                                          const TogglesState& deviceToggles) {
-    Ref<Device> device = AcquireRef(new Device(adapter, descriptor, deviceToggles));
+                                          const TogglesState& deviceToggles,
+                                          Ref<DeviceBase::DeviceLostEvent>&& lostEvent) {
+    Ref<Device> device =
+        AcquireRef(new Device(adapter, descriptor, deviceToggles, std::move(lostEvent)));
     DAWN_TRY(device->Initialize(descriptor));
     return device;
 }
@@ -200,8 +202,9 @@ MaybeError Device::Initialize(const UnpackedPtr<DeviceDescriptor>& descriptor) {
 
 Device::Device(AdapterBase* adapter,
                const UnpackedPtr<DeviceDescriptor>& descriptor,
-               const TogglesState& deviceToggles)
-    : Base(adapter, descriptor, deviceToggles) {}
+               const TogglesState& deviceToggles,
+               Ref<DeviceBase::DeviceLostEvent>&& lostEvent)
+    : Base(adapter, descriptor, deviceToggles, std::move(lostEvent)) {}
 
 Device::~Device() = default;
 
@@ -300,7 +303,7 @@ MaybeError Device::ClearBufferToZero(CommandRecordingContext* commandContext,
     // the allocation of the staging buffer causes various end2end tests that monitor heap usage
     // to fail if it's done during device creation. Perhaps ClearUnorderedAccessView*() can be
     // used to avoid that.
-    if (!mZeroBuffer->IsDataInitialized()) {
+    if (!mZeroBuffer->IsInitialized()) {
         DynamicUploader* uploader = GetDynamicUploader();
         UploadHandle uploadHandle;
         DAWN_TRY_ASSIGN(uploadHandle,
@@ -313,7 +316,7 @@ MaybeError Device::ClearBufferToZero(CommandRecordingContext* commandContext,
                                       uploadHandle.startOffset, mZeroBuffer.Get(), 0,
                                       kZeroBufferSize);
 
-        mZeroBuffer->SetIsDataInitialized();
+        mZeroBuffer->SetInitialized(true);
     }
 
     Buffer* dstBuffer = ToBackend(destination);
@@ -397,11 +400,10 @@ ResultOrError<Ref<ShaderModuleBase>> Device::CreateShaderModuleImpl(
     OwnedCompilationMessages* compilationMessages) {
     return ShaderModule::Create(this, descriptor, parseResult, compilationMessages);
 }
-ResultOrError<Ref<SwapChainBase>> Device::CreateSwapChainImpl(
-    Surface* surface,
-    SwapChainBase* previousSwapChain,
-    const SwapChainDescriptor* descriptor) {
-    return SwapChain::Create(this, surface, previousSwapChain, descriptor);
+ResultOrError<Ref<SwapChainBase>> Device::CreateSwapChainImpl(Surface* surface,
+                                                              SwapChainBase* previousSwapChain,
+                                                              const SurfaceConfiguration* config) {
+    return SwapChain::Create(this, surface, previousSwapChain, config);
 }
 ResultOrError<Ref<TextureBase>> Device::CreateTextureImpl(
     const UnpackedPtr<TextureDescriptor>& descriptor) {
@@ -409,18 +411,14 @@ ResultOrError<Ref<TextureBase>> Device::CreateTextureImpl(
 }
 ResultOrError<Ref<TextureViewBase>> Device::CreateTextureViewImpl(
     TextureBase* texture,
-    const TextureViewDescriptor* descriptor) {
+    const UnpackedPtr<TextureViewDescriptor>& descriptor) {
     return TextureView::Create(texture, descriptor);
 }
-void Device::InitializeComputePipelineAsyncImpl(Ref<ComputePipelineBase> computePipeline,
-                                                WGPUCreateComputePipelineAsyncCallback callback,
-                                                void* userdata) {
-    ComputePipeline::InitializeAsync(std::move(computePipeline), callback, userdata);
+void Device::InitializeComputePipelineAsyncImpl(Ref<CreateComputePipelineAsyncEvent> event) {
+    event->InitializeAsync();
 }
-void Device::InitializeRenderPipelineAsyncImpl(Ref<RenderPipelineBase> renderPipeline,
-                                               WGPUCreateRenderPipelineAsyncCallback callback,
-                                               void* userdata) {
-    RenderPipeline::InitializeAsync(std::move(renderPipeline), callback, userdata);
+void Device::InitializeRenderPipelineAsyncImpl(Ref<CreateRenderPipelineAsyncEvent> event) {
+    event->InitializeAsync();
 }
 
 ResultOrError<Ref<SharedBufferMemoryBase>> Device::ImportSharedBufferMemoryImpl(
@@ -496,10 +494,9 @@ MaybeError Device::CopyFromStagingToBufferImpl(BufferBase* source,
 
     Buffer* dstBuffer = ToBackend(destination);
 
-    bool cleared;
+    [[maybe_unused]] bool cleared;
     DAWN_TRY_ASSIGN(cleared, dstBuffer->EnsureDataInitializedAsDestination(
                                  commandRecordingContext, destinationOffset, size));
-    DAWN_UNUSED(cleared);
 
     CopyFromStagingToBufferHelper(commandRecordingContext, source, sourceOffset, destination,
                                   destinationOffset, size);

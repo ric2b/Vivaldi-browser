@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <ostream>
+#include <string_view>
 
 #include "base/check_op.h"
 #include "base/i18n/rtl.h"
@@ -18,7 +19,6 @@
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/uuid.h"
@@ -80,6 +80,9 @@ std::u16string NetworkForFill(const std::string& network) {
     return l10n_util::GetStringUTF16(IDS_AUTOFILL_CC_TROY);
   if (network == kUnionPay)
     return l10n_util::GetStringUTF16(IDS_AUTOFILL_CC_UNION_PAY);
+  if (network == kVerveCard) {
+    return l10n_util::GetStringUTF16(IDS_AUTOFILL_CC_VERVE);
+  }
   if (network == kVisaCard)
     return l10n_util::GetStringUTF16(IDS_AUTOFILL_CC_VISA);
 
@@ -148,6 +151,10 @@ Suggestion::Icon ConvertCardNetworkIntoIcon(std::string_view network) {
   if (network == kUnionPay) {
     return Suggestion::Icon::kCardUnionPay;
   }
+  if (network == kVerveCard &&
+      base::FeatureList::IsEnabled(features::kAutofillEnableVerveCardSupport)) {
+    return Suggestion::Icon::kCardVerve;
+  }
   if (network == kVisaCard) {
     return Suggestion::Icon::kCardVisa;
   }
@@ -205,7 +212,7 @@ CreditCard::CreditCard(const std::string& guid, const std::string& origin)
       card_issuer_(Issuer::kIssuerUnknown),
       instrument_id_(0) {}
 
-// TODO(crbug.com/1121806): Calling the CreditCard's default constructor
+// TODO(crbug.com/40146355): Calling the CreditCard's default constructor
 // initializes the `guid_`. This shouldn't happen for server cards, since they
 // are not identified by guids. However, some of the server card logic relies
 // by them for historical reasons.
@@ -217,7 +224,7 @@ CreditCard::CreditCard(RecordType type, const std::string& server_id)
   server_id_ = server_id;
 }
 
-// TODO(crbug.com/1121806): See `server_id` constructor.
+// TODO(crbug.com/40146355): See `server_id` constructor.
 CreditCard::CreditCard(RecordType type, int64_t instrument_id) : CreditCard() {
   DCHECK(type == RecordType::kMaskedServerCard ||
          type == RecordType::kFullServerCard);
@@ -283,6 +290,8 @@ int CreditCard::IconResourceId(Suggestion::Icon icon) {
     case Suggestion::Icon::kCardUnionPay:
       return get_icon(IDR_AUTOFILL_METADATA_CC_UNIONPAY,
                       IDR_AUTOFILL_CC_UNIONPAY);
+    case Suggestion::Icon::kCardVerve:
+      return get_icon(IDR_AUTOFILL_METADATA_CC_VERVE, IDR_AUTOFILL_CC_VERVE);
     case Suggestion::Icon::kCardVisa:
       return get_icon(IDR_AUTOFILL_METADATA_CC_VISA, IDR_AUTOFILL_CC_VISA);
     case Suggestion::Icon::kCardGeneric:
@@ -314,6 +323,7 @@ int CreditCard::IconResourceId(Suggestion::Icon icon) {
     case Suggestion::Icon::kSettingsAndroid:
     case Suggestion::Icon::kUndo:
     case Suggestion::Icon::kPlusAddress:
+    case Suggestion::Icon::kIban:
       NOTREACHED_NORETURN();
   }
   NOTREACHED_NORETURN();
@@ -755,7 +765,7 @@ void CreditCard::SetInfoForMonthInputType(const std::u16string& value) {
   if (!MatchesRegex<kDateRegex>(value))
     return;
 
-  std::vector<base::StringPiece16> year_month = base::SplitStringPiece(
+  std::vector<std::u16string_view> year_month = base::SplitStringPiece(
       value, u"-", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   DCHECK_EQ(2u, year_month.size());
   int num = 0;
@@ -1251,15 +1261,6 @@ bool CreditCard::HasRichCardArtImageFromMetadata() const {
   return card_art_url().is_valid() &&
          card_art_url().spec() != kCapitalOneLargeCardArtUrl &&
          card_art_url().spec() != kCapitalOneCardArtUrl;
-}
-
-bool CreditCard::IsCardEligibleForBenefits() const {
-  return (issuer_id() == kAmexCardIssuerId &&
-          base::FeatureList::IsEnabled(
-              features::kAutofillEnableCardBenefitsForAmericanExpress)) ||
-         (issuer_id() == kCapitalOneCardIssuerId &&
-          base::FeatureList::IsEnabled(
-              features::kAutofillEnableCardBenefitsForCapitalOne));
 }
 
 void CreditCard::GetSupportedTypes(FieldTypeSet* supported_types) const {

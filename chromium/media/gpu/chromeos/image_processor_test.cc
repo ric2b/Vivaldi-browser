@@ -339,8 +339,9 @@ scoped_refptr<VideoFrame> CreateRandomMM21Frame(const gfx::Size& size,
     return nullptr;
   }
 
-  uint8_t* y_plane = mapped_ret->GetWritableVisibleData(VideoFrame::kYPlane);
-  uint8_t* uv_plane = mapped_ret->GetWritableVisibleData(VideoFrame::kUVPlane);
+  uint8_t* y_plane = mapped_ret->GetWritableVisibleData(VideoFrame::Plane::kY);
+  uint8_t* uv_plane =
+      mapped_ret->GetWritableVisibleData(VideoFrame::Plane::kUV);
   for (int row = 0; row < size.height(); row++) {
     for (int col = 0; col < size.width(); col++) {
       y_plane[col] = base::RandInt(/*min=*/0, /*max=*/255);
@@ -348,9 +349,9 @@ scoped_refptr<VideoFrame> CreateRandomMM21Frame(const gfx::Size& size,
         uv_plane[col] = base::RandInt(/*min=*/0, /*max=*/255);
       }
     }
-    y_plane += mapped_ret->stride(VideoFrame::kYPlane);
+    y_plane += mapped_ret->stride(VideoFrame::Plane::kY);
     if (row % 2 == 0) {
-      uv_plane += mapped_ret->stride(VideoFrame::kUVPlane);
+      uv_plane += mapped_ret->stride(VideoFrame::Plane::kUV);
     }
   }
 
@@ -401,13 +402,13 @@ bool CompareNV12VideoFrames(scoped_refptr<VideoFrame> test_frame,
   }
 
   const uint8_t* test_y_plane =
-      mapped_test_frame->visible_data(VideoFrame::kYPlane);
+      mapped_test_frame->visible_data(VideoFrame::Plane::kY);
   const uint8_t* test_uv_plane =
-      mapped_test_frame->visible_data(VideoFrame::kUVPlane);
+      mapped_test_frame->visible_data(VideoFrame::Plane::kUV);
   const uint8_t* golden_y_plane =
-      mapped_golden_frame->visible_data(VideoFrame::kYPlane);
+      mapped_golden_frame->visible_data(VideoFrame::Plane::kY);
   const uint8_t* golden_uv_plane =
-      mapped_golden_frame->visible_data(VideoFrame::kUVPlane);
+      mapped_golden_frame->visible_data(VideoFrame::Plane::kUV);
   for (int y = 0; y < test_frame->coded_size().height(); y++) {
     for (int x = 0; x < test_frame->coded_size().width(); x++) {
       if (test_y_plane[x] != golden_y_plane[x]) {
@@ -420,11 +421,11 @@ bool CompareNV12VideoFrames(scoped_refptr<VideoFrame> test_frame,
         }
       }
     }
-    test_y_plane += mapped_test_frame->stride(VideoFrame::kYPlane);
-    golden_y_plane += mapped_golden_frame->stride(VideoFrame::kYPlane);
+    test_y_plane += mapped_test_frame->stride(VideoFrame::Plane::kY);
+    golden_y_plane += mapped_golden_frame->stride(VideoFrame::Plane::kY);
     if (y % 2 == 0) {
-      test_uv_plane += mapped_test_frame->stride(VideoFrame::kUVPlane);
-      golden_uv_plane += mapped_golden_frame->stride(VideoFrame::kUVPlane);
+      test_uv_plane += mapped_test_frame->stride(VideoFrame::Plane::kUV);
+      golden_uv_plane += mapped_golden_frame->stride(VideoFrame::Plane::kUV);
     }
   }
 
@@ -442,9 +443,9 @@ class ImageProcessorParamTest
 
   std::unique_ptr<test::ImageProcessorClient> CreateImageProcessorClient(
       const test::Image& input_image,
-      const std::vector<VideoFrame::StorageType>& input_storage_types,
+      VideoFrame::StorageType input_storage_type,
       test::Image* const output_image,
-      const std::vector<VideoFrame::StorageType>& output_storage_types) {
+      VideoFrame::StorageType output_storage_type) {
     bool is_single_planar_input = true;
     bool is_single_planar_output = true;
 #if defined(ARCH_CPU_ARM_FAMILY)
@@ -467,10 +468,10 @@ class ImageProcessorParamTest
     LOG_ASSERT(input_layout && output_layout);
     ImageProcessor::PortConfig input_config(
         input_fourcc, input_image.Size(), input_layout->planes(),
-        input_image.VisibleRect(), input_storage_types);
+        input_image.VisibleRect(), input_storage_type);
     ImageProcessor::PortConfig output_config(
         output_fourcc, output_image->Size(), output_layout->planes(),
-        output_image->VisibleRect(), output_storage_types);
+        output_image->VisibleRect(), output_storage_type);
 
     // TODO(crbug.com/917951): Select more appropriate number of buffers.
     constexpr size_t kNumBuffers = 1;
@@ -540,9 +541,13 @@ TEST_P(ImageProcessorParamTest, ConvertOneTime_MemToMem) {
   test::Image output_image(BuildSourceFilePath(std::get<1>(GetParam())));
   ASSERT_TRUE(input_image.Load());
   ASSERT_TRUE(output_image.LoadMetadata());
-  auto ip_client = CreateImageProcessorClient(
-      input_image, {VideoFrame::STORAGE_OWNED_MEMORY}, &output_image,
-      {VideoFrame::STORAGE_OWNED_MEMORY});
+
+  const bool is_scaling = (input_image.PixelFormat() == PIXEL_FORMAT_NV12 &&
+                           output_image.PixelFormat() == PIXEL_FORMAT_NV12);
+  const auto storage = is_scaling ? VideoFrame::STORAGE_GPU_MEMORY_BUFFER
+                                  : VideoFrame::STORAGE_OWNED_MEMORY;
+  auto ip_client =
+      CreateImageProcessorClient(input_image, storage, &output_image, storage);
   if (!ip_client && g_backend_type.has_value()) {
     GTEST_SKIP() << "Forced backend " << ToString(*g_backend_type)
                  << " does not support this test";
@@ -569,9 +574,12 @@ TEST_P(ImageProcessorParamTest, ConvertOneTime_DmabufToMem) {
   ASSERT_TRUE(output_image.LoadMetadata());
   if (!IsFormatTestedForDmabufAndGbm(input_image.PixelFormat()))
     GTEST_SKIP() << "Skipping Dmabuf format " << input_image.PixelFormat();
-  auto ip_client = CreateImageProcessorClient(
-      input_image, {VideoFrame::STORAGE_DMABUFS}, &output_image,
-      {VideoFrame::STORAGE_OWNED_MEMORY});
+  const bool is_scaling = (input_image.PixelFormat() == PIXEL_FORMAT_NV12 &&
+                           output_image.PixelFormat() == PIXEL_FORMAT_NV12);
+  const auto storage = is_scaling ? VideoFrame::STORAGE_GPU_MEMORY_BUFFER
+                                  : VideoFrame::STORAGE_OWNED_MEMORY;
+  auto ip_client =
+      CreateImageProcessorClient(input_image, storage, &output_image, storage);
   if (!ip_client && g_backend_type.has_value()) {
     GTEST_SKIP() << "Forced backend " << ToString(*g_backend_type)
                  << " does not support this test";
@@ -599,8 +607,8 @@ TEST_P(ImageProcessorParamTest, ConvertOneTime_DmabufToDmabuf) {
     GTEST_SKIP() << "Skipping Dmabuf format " << output_image.PixelFormat();
 
   auto ip_client =
-      CreateImageProcessorClient(input_image, {VideoFrame::STORAGE_DMABUFS},
-                                 &output_image, {VideoFrame::STORAGE_DMABUFS});
+      CreateImageProcessorClient(input_image, VideoFrame::STORAGE_DMABUFS,
+                                 &output_image, VideoFrame::STORAGE_DMABUFS);
   if (!ip_client && g_backend_type.has_value()) {
     GTEST_SKIP() << "Forced backend " << ToString(*g_backend_type)
                  << " does not support this test";
@@ -633,8 +641,8 @@ TEST_P(ImageProcessorParamTest, ConvertOneTime_GmbToGmb) {
   }
 
   auto ip_client = CreateImageProcessorClient(
-      input_image, {VideoFrame::STORAGE_GPU_MEMORY_BUFFER}, &output_image,
-      {VideoFrame::STORAGE_GPU_MEMORY_BUFFER});
+      input_image, VideoFrame::STORAGE_GPU_MEMORY_BUFFER, &output_image,
+      VideoFrame::STORAGE_GPU_MEMORY_BUFFER);
   if (!ip_client && g_backend_type.has_value()) {
     GTEST_SKIP() << "Forced backend " << ToString(*g_backend_type)
                  << " does not support this test";
@@ -826,15 +834,15 @@ TEST(ImageProcessorBackendTest, VulkanDetileScaleTest) {
   scoped_refptr<VideoFrame> mapped_mm21_frame =
       frame_mapper->Map(mm21_frame, PROT_READ | PROT_WRITE);
   ASSERT_TRUE(mapped_mm21_frame);
-  uint8_t* input_y_plane =
-      (uint8_t*)mapped_mm21_frame->GetWritableVisibleData(VideoFrame::kYPlane);
-  uint8_t* input_uv_plane =
-      (uint8_t*)mapped_mm21_frame->GetWritableVisibleData(VideoFrame::kUVPlane);
+  uint8_t* input_y_plane = (uint8_t*)mapped_mm21_frame->GetWritableVisibleData(
+      VideoFrame::Plane::kY);
+  uint8_t* input_uv_plane = (uint8_t*)mapped_mm21_frame->GetWritableVisibleData(
+      VideoFrame::Plane::kUV);
   libyuv::NV12Copy(
       input_image.Data(), coded_size.width(),
       input_image.Data() + coded_size.GetArea(), coded_size.width(),
-      input_y_plane, mapped_mm21_frame->stride(VideoFrame::kYPlane),
-      input_uv_plane, mapped_mm21_frame->stride(VideoFrame::kUVPlane),
+      input_y_plane, mapped_mm21_frame->stride(VideoFrame::Plane::kY),
+      input_uv_plane, mapped_mm21_frame->stride(VideoFrame::Plane::kUV),
       coded_size.width(), coded_size.height());
 
   gfx::Size output_size(1000, 1000);
@@ -886,14 +894,15 @@ TEST(ImageProcessorBackendTest, VulkanDetileScaleTest) {
       gpu::SharedImageUsage::SHARED_IMAGE_USAGE_DISPLAY_READ, "TestLabel",
       std::move(in_gmb));
   shared_image_factory.CreateSharedImage(
-      output_mailbox, viz::SinglePlaneFormat::kRGBA_8888, coded_size,
+      output_mailbox, viz::SinglePlaneFormat::kBGRA_8888, coded_size,
       gfx::ColorSpace::CreateSRGB(), kTopLeft_GrSurfaceOrigin,
       kUnpremul_SkAlphaType,
       gpu::SharedImageUsage::SHARED_IMAGE_USAGE_DISPLAY_WRITE |
           gpu::SharedImageUsage::SHARED_IMAGE_USAGE_SCANOUT,
       "TestLabel", std::move(out_gmb));
 
-  auto vulkan_image_processor = VulkanImageProcessor::Create();
+  auto vulkan_image_processor =
+      VulkanImageProcessor::Create(/*is_protected=*/false, kMM21);
   ASSERT_TRUE(vulkan_image_processor);
 
   auto input_vulkan_representation = shared_image_manager.ProduceVulkan(
@@ -996,9 +1005,9 @@ TEST(ImageProcessorBackendTest, VulkanDetileScaleTest) {
   scoped_refptr<VideoFrame> mapped_output_frame =
       output_frame_mapper->Map(vulkan_output_frame, PROT_READ | PROT_WRITE);
   const uint8_t* argb_plane =
-      mapped_output_frame->visible_data(VideoFrame::kARGBPlane);
+      mapped_output_frame->visible_data(VideoFrame::Plane::kARGB);
   libyuv::ARGBToI420(
-      argb_plane, mapped_output_frame->stride(VideoFrame::kARGBPlane),
+      argb_plane, mapped_output_frame->stride(VideoFrame::Plane::kARGB),
       vulkan_output_y, output_size.width(), vulkan_output_u,
       (output_size.width() + 1) / 2, vulkan_output_v,
       (output_size.width() + 1) / 2, output_size.width(), output_size.height());
@@ -1013,7 +1022,7 @@ TEST(ImageProcessorBackendTest, VulkanDetileScaleTest) {
       (output_size.width() + 1) / 2, vulkan_output_y, output_size.width(),
       vulkan_output_u, (output_size.width() + 1) / 2, vulkan_output_v,
       (output_size.width() + 1) / 2, output_size.width(), output_size.height());
-  constexpr double kPsnrThreshold = 45.0;
+  constexpr double kPsnrThreshold = 35.0;
   ASSERT_TRUE(psnr >= kPsnrThreshold);
 
   munmap(i420_scaled_y, i420_scaled_y_size);
@@ -1057,9 +1066,9 @@ TEST(ImageProcessorBackendTest, VulkanMT2TDetileScaleTest) {
   scoped_refptr<VideoFrame> mapped_mt2t_frame =
       frame_mapper->Map(mt2t_frame, PROT_READ | PROT_WRITE);
   ASSERT_TRUE(mapped_mt2t_frame);
-  memcpy(mapped_mt2t_frame->GetWritableVisibleData(VideoFrame::kYPlane),
+  memcpy(mapped_mt2t_frame->GetWritableVisibleData(VideoFrame::Plane::kY),
          input_image.Data(), mt2t_frame->coded_size().GetArea());
-  memcpy(mapped_mt2t_frame->GetWritableVisibleData(VideoFrame::kUVPlane),
+  memcpy(mapped_mt2t_frame->GetWritableVisibleData(VideoFrame::Plane::kUV),
          input_image.Data() + mt2t_frame->coded_size().GetArea(),
          mt2t_frame->coded_size().GetArea() / 2);
 
@@ -1114,7 +1123,8 @@ TEST(ImageProcessorBackendTest, VulkanMT2TDetileScaleTest) {
           gpu::SharedImageUsage::SHARED_IMAGE_USAGE_SCANOUT,
       "TestLabel", std::move(out_gmb));
 
-  auto vulkan_image_processor = VulkanImageProcessor::Create(kMT2T);
+  auto vulkan_image_processor =
+      VulkanImageProcessor::Create(/*is_protected=*/false, kMT2T);
   ASSERT_TRUE(vulkan_image_processor);
 
   auto input_vulkan_representation = shared_image_manager.ProduceVulkan(
@@ -1201,12 +1211,12 @@ TEST(ImageProcessorBackendTest, VulkanMT2TDetileScaleTest) {
 
   double psnr = test::ComputeAR30PSNR(
       reinterpret_cast<const uint32_t*>(
-          mapped_output_frame->visible_data(VideoFrame::kARGBPlane)),
-      mapped_output_frame->stride(VideoFrame::kARGBPlane) / 4, libyuv_output,
+          mapped_output_frame->visible_data(VideoFrame::Plane::kARGB)),
+      mapped_output_frame->stride(VideoFrame::Plane::kARGB) / 4, libyuv_output,
       output_size.width(), output_size.width(), output_size.height());
 
   // TODO(b/328227651): We have to keep this PSNR threshold pretty low because
-  // LibYUV produces innacurate results in the 10-bit YUV->ARGB conversion. We
+  // LibYUV produces inaccurate results in the 10-bit YUV->ARGB conversion. We
   // should try to fix this discrepancy though.
   constexpr double kPsnrThreshold = 25.0;
   ASSERT_TRUE(psnr >= kPsnrThreshold);

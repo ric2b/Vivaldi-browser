@@ -95,7 +95,7 @@ ui::WindowShowState RenderWidgetHostDelegate::GetWindowShowState() {
   return ui::WindowShowState::SHOW_STATE_DEFAULT;
 }
 
-DevicePostureProviderImpl*
+blink::mojom::DevicePostureProvider*
 RenderWidgetHostDelegate::GetDevicePostureProvider() {
   return nullptr;
 }
@@ -149,6 +149,11 @@ bool RenderWidgetHostDelegate::IsWidgetForPrimaryMainFrame(
   return false;
 }
 
+gfx::mojom::DelegatedInkPointRenderer*
+RenderWidgetHostDelegate::GetDelegatedInkRenderer(ui::Compositor* compositor) {
+  return nullptr;
+}
+
 ukm::SourceId RenderWidgetHostDelegate::GetCurrentPageUkmSourceId() {
   return ukm::kInvalidSourceId;
 }
@@ -167,6 +172,11 @@ int RenderWidgetHostDelegate::GetVirtualKeyboardResizeHeight() {
 
 bool RenderWidgetHostDelegate::ShouldDoLearning() {
   return true;
+}
+
+std::optional<double> RenderWidgetHostDelegate::AdjustedChildZoom(
+    const RenderWidgetHostViewChildFrame* render_widget) {
+  return std::nullopt;
 }
 
 }  // namespace content

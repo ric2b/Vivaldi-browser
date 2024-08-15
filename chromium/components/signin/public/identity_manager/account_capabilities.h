@@ -69,6 +69,9 @@ class AccountCapabilities {
   // The user account is able to use IP Protection.
   signin::Tribool can_use_chrome_ip_protection() const;
 
+  // The user account is able to use DevTools AI features.
+  signin::Tribool can_use_devtools_generative_ai_features() const;
+
   // The user account is able to use edu features.
   signin::Tribool can_use_edu_features() const;
 
@@ -106,7 +109,6 @@ class AccountCapabilities {
   bool UpdateWith(const AccountCapabilities& other);
 
   bool operator==(const AccountCapabilities& other) const;
-  bool operator!=(const AccountCapabilities& other) const;
 
  private:
   friend std::optional<AccountCapabilities> AccountCapabilitiesFromValue(

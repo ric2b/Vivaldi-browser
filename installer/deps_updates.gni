@@ -16,6 +16,9 @@ if (is_win) {
 
 if (is_linux && !is_component_build) {
   update_target("//chrome/installer/linux:linux") {
-    deps -= [":beta"]
+    deps -= [
+      ":beta",
+      ":canary",
+    ]
   }
 }

@@ -8,7 +8,11 @@ declare_args() {
 if (vivaldi_enable_reclient) {
   assert(!is_official_build)
   declare_overrides() {
-    rbe_cfg_dir=rebase_path("//vivaldi/build/reclient_cfgs", root_build_dir)
+    if (getenv("CHROME_HEADLESS") == "1") {
+      rbe_cfg_dir=rebase_path("//vivaldi/build/reclient_cfgs", root_build_dir)
+    } else {
+      rbe_cfg_dir=rebase_path("//vivaldi/build/reclient_main_cfgs", root_build_dir)
+    }
     rbe_exec_root = rebase_path("//vivaldi")
 
     use_remoteexec = true
@@ -16,7 +20,9 @@ if (vivaldi_enable_reclient) {
   declare_overrides() {
     if (is_win) {
       rbe_cc_cfg_file = "${rbe_cfg_dir}/rewrapper_windows.cfg"
-    } else {
+    } else if (is_mac) {
+      rbe_cc_cfg_file = "${rbe_cfg_dir}/rewrapper_mac.cfg"
+    } else{
       rbe_cc_cfg_file = "${rbe_cfg_dir}/rewrapper_linux.cfg"
     }
   }

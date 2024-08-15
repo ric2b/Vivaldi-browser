@@ -21,7 +21,7 @@ void VivaldiEventHooks::InitInstance(VivaldiEventHooks& instance) {
 
 // static
 bool VivaldiEventHooks::HandleMouseEvent(
-    content::RenderWidgetHostViewBase* root_view,
+    content::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseEvent& event) {
   if (!instance_)
     return false;
@@ -30,7 +30,7 @@ bool VivaldiEventHooks::HandleMouseEvent(
 
 // static
 bool VivaldiEventHooks::HandleWheelEvent(
-    content::RenderWidgetHostViewBase* root_view,
+    content::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseWheelEvent& event,
     const ui::LatencyInfo& latency) {
   if (!instance_)
@@ -40,7 +40,7 @@ bool VivaldiEventHooks::HandleWheelEvent(
 
 // static
 bool VivaldiEventHooks::HandleWheelEventAfterChild(
-    content::RenderWidgetHostViewBase* root_view,
+    content::RenderWidgetHostViewInput* root_view,
     const blink::WebMouseWheelEvent& event) {
   if (!instance_)
     return false;

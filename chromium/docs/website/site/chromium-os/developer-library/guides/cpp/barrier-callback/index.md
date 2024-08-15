@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: barrier-callback
 title: How to wait for a callback be invoked N times
 ---
@@ -14,14 +14,14 @@ We want to run a callback function multiple times, the callback will get
 consumed when put into `std::move()` function.
 
 For example, we have several `root_window` stored in `all_window` array, and we
-are using an async function `GrabWindowSnapshotAsyncPNG()` on each
+are using an async function `GrabWindowSnapshotAsPNG()` on each
 `root_window`. So we will have to call a callback function when each
-`GrabWindowSnapshotAsyncPNG()` is finished:
+`GrabWindowSnapshotAsPNG()` is finished:
 
 ```
 for (aura::Window* root_window : all_windows) {
   gfx::Rect rect = root_window->bounds();
-  ui::GrabWindowSnapshotAsyncPNG(
+  ui::GrabWindowSnapshotAsPNG(
       root_window, rect,
       base::BindOnce(some_function, callback));
 }
@@ -53,16 +53,16 @@ So in our case, we need to update the code:
                           weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
     ```
 
-    Here we want to handle the final results from `GrabWindowSnapshotAsyncPNG()`
+    Here we want to handle the final results from `GrabWindowSnapshotAsPNG()`
     all at once using the `OnAllScreenshotsTaken()` function.
 
-2.  Gather each result from `GrabWindowSnapshotAsyncPNG()`, move it into the
+2.  Gather each result from `GrabWindowSnapshotAsPNG()`, move it into the
     callback storage:
 
     ```
     for (aura::Window* root_window : all_windows) {
       gfx::Rect rect = root_window->bounds();
-      ui::GrabWindowSnapshotAsyncPNG(
+      ui::GrabWindowSnapshotAsPNG(
           root_window, rect,
           base::BindOnce(OnOneScreenshotTaken, barrier_callback));
     }

@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
@@ -19,8 +20,8 @@
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_contents/web_app_data_retriever.h"
-#include "chrome/browser/web_applications/web_contents/web_app_url_loader.h"
 #include "chrome/browser/web_applications/web_contents/web_contents_manager.h"
+#include "components/webapps/browser/web_contents/web_app_url_loader.h"
 #include "content/public/browser/web_contents.h"
 
 namespace web_app {
@@ -73,7 +74,7 @@ class WebAppInstallInfoFetcher {
   }
 
  private:
-  void FailWithError(base::StringPiece error_message) {
+  void FailWithError(std::string_view error_message) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     CHECK(callback_);
     std::move(callback_).Run(base::unexpected(std::string(error_message)));
@@ -172,7 +173,7 @@ class WebAppInstallInfoFetcher {
 
   std::unique_ptr<content::WebContents> web_contents_;
 
-  std::unique_ptr<WebAppUrlLoader> url_loader_;
+  std::unique_ptr<webapps::WebAppUrlLoader> url_loader_;
 
   base::WeakPtrFactory<WebAppInstallInfoFetcher> weak_factory_{this};
 };

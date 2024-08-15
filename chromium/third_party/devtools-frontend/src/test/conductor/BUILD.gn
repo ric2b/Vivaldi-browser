@@ -14,14 +14,19 @@ group("conductor") {
 
 node_ts_library("implementation") {
   sources = [
+    "commandline.ts",
     "custom-query-handlers.ts",
     "events.ts",
     "frontend_tab.ts",
     "hooks.ts",
+    "karma-resultsdb-reporter.ts",
     "mocha_hooks.ts",
+    "paths.ts",
     "pool.ts",
     "puppeteer-state.ts",
+    "resultsdb.ts",
     "target_tab.ts",
+    "test_config.ts",
     "test_runner_config.ts",
     "test_server.ts",
   ]

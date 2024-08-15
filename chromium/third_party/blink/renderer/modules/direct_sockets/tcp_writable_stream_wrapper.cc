@@ -104,7 +104,7 @@ void TCPWritableStreamWrapper::OnAbortSignal() {
   }
 }
 
-ScriptPromiseTyped<IDLUndefined> TCPWritableStreamWrapper::Write(
+ScriptPromise<IDLUndefined> TCPWritableStreamWrapper::Write(
     ScriptValue chunk,
     ExceptionState& exception_state) {
   // There can only be one call to write() in progress at a time.
@@ -116,18 +116,18 @@ ScriptPromiseTyped<IDLUndefined> TCPWritableStreamWrapper::Write(
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNetworkError,
         "The underlying data pipe was disconnected.");
-    return ScriptPromiseTyped<IDLUndefined>();
+    return ScriptPromise<IDLUndefined>();
   }
 
   buffer_source_ = V8BufferSource::Create(GetScriptState()->GetIsolate(),
                                           chunk.V8Value(), exception_state);
   if (exception_state.HadException()) {
-    return ScriptPromiseTyped<IDLUndefined>();
+    return ScriptPromise<IDLUndefined>();
   }
   DCHECK(buffer_source_);
 
   write_promise_resolver_ =
-      MakeGarbageCollected<ScriptPromiseResolverTyped<IDLUndefined>>(
+      MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
           GetScriptState(), exception_state.GetContext());
   auto promise = write_promise_resolver_->Promise();
 
@@ -169,7 +169,7 @@ size_t TCPWritableStreamWrapper::WriteDataSynchronously(
   // This use of saturated cast means that we will fallback to asynchronous
   // sending if |data| is larger than 4GB. In practice we'd never be able to
   // send 4GB synchronously anyway.
-  uint32_t num_bytes = base::saturated_cast<uint32_t>(data.size());
+  size_t num_bytes = data.size();
   MojoResult result =
       data_pipe_->WriteData(data.data(), &num_bytes, MOJO_WRITE_DATA_FLAG_NONE);
 

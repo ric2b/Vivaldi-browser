@@ -34,10 +34,10 @@ class CreateBundleTargetGenerator : public TargetGenerator {
   bool FillPartialInfoPlist();
   bool FillXcodeTestApplicationName();
 
-  bool FillCodeSigningScript();
-  bool FillCodeSigningSources();
-  bool FillCodeSigningOutputs();
-  bool FillCodeSigningArgs();
+  bool FillPostProcessingScript();
+  bool FillPostProcessingSources();
+  bool FillPostProcessingOutputs();
+  bool FillPostProcessingArgs();
   bool FillBundleDepsFilter();
   bool FillXcassetCompilerFlags();
   bool FillTransparent();

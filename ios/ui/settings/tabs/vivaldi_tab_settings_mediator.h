@@ -16,6 +16,7 @@ class PrefService;
     : NSObject <VivaldiTabsSettingsConsumer>
 
 - (instancetype)initWithOriginalPrefService:(PrefService*)originalPrefService
+                           localPrefService:(PrefService*)localPrefService
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;

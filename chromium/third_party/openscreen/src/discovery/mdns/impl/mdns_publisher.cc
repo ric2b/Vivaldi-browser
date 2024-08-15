@@ -43,8 +43,8 @@ inline MdnsRecord CreateGoodbyeRecord(const MdnsRecord& record) {
 
 }  // namespace
 
-MdnsPublisher::MdnsPublisher(MdnsSender* sender,
-                             MdnsProbeManager* ownership_manager,
+MdnsPublisher::MdnsPublisher(MdnsSender& sender,
+                             MdnsProbeManager& ownership_manager,
                              TaskRunner& task_runner,
                              ClockNowFunctionPtr now_function,
                              const Config& config)
@@ -53,8 +53,6 @@ MdnsPublisher::MdnsPublisher(MdnsSender* sender,
       task_runner_(task_runner),
       now_function_(now_function),
       max_announcement_attempts_(config.new_record_announcement_count) {
-  OSP_CHECK(ownership_manager_);
-  OSP_CHECK(sender_);
   OSP_CHECK_GE(max_announcement_attempts_, 0);
 }
 
@@ -240,12 +238,12 @@ bool MdnsPublisher::IsRecordNameClaimed(const MdnsRecord& record) const {
       record.dns_type() == DnsType::kPTR
           ? absl::get<PtrRecordRdata>(record.rdata()).ptr_domain()
           : record.name();
-  return ownership_manager_->IsDomainClaimed(name);
+  return ownership_manager_.IsDomainClaimed(name);
 }
 
 MdnsPublisher::RecordAnnouncer::RecordAnnouncer(
     MdnsRecord record,
-    MdnsPublisher* publisher,
+    MdnsPublisher& publisher,
     TaskRunner& task_runner,
     ClockNowFunctionPtr now_function,
     int target_announcement_attempts)
@@ -255,7 +253,6 @@ MdnsPublisher::RecordAnnouncer::RecordAnnouncer(
       record_(std::move(record)),
       alarm_(now_function_, task_runner_),
       target_announcement_attempts_(target_announcement_attempts) {
-  OSP_CHECK(publisher_);
   OSP_CHECK(record_.ttl() != Clock::duration::zero());
 
   QueueAnnouncement();
@@ -271,7 +268,7 @@ MdnsPublisher::RecordAnnouncer::~RecordAnnouncer() {
 void MdnsPublisher::RecordAnnouncer::QueueGoodbye() {
   OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
 
-  publisher_->QueueRecord(CreateGoodbyeRecord(record_));
+  publisher_.QueueRecord(CreateGoodbyeRecord(record_));
 }
 
 void MdnsPublisher::RecordAnnouncer::QueueAnnouncement() {
@@ -281,7 +278,7 @@ void MdnsPublisher::RecordAnnouncer::QueueAnnouncement() {
     return;
   }
 
-  publisher_->QueueRecord(record_);
+  publisher_.QueueRecord(record_);
 
   const Clock::duration new_delay = GetNextAnnounceDelay();
   attempts_++;
@@ -350,13 +347,13 @@ void MdnsPublisher::ProcessRecordQueue() {
           << "known answer in suppressions...";
       it++;
     } else {
-      sender_->SendMulticast(message);
+      sender_.SendMulticast(message);
       message = MdnsMessage(CreateMessageId(), MessageType::Response);
     }
   }
 
   if (!message.answers().empty()) {
-    sender_->SendMulticast(message);
+    sender_.SendMulticast(message);
   }
 
   batch_records_alarm_ = std::nullopt;

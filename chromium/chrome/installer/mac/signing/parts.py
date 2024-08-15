@@ -130,12 +130,12 @@ def get_parts(config):
                 'app_mode_loader',
                 options=full_hardened_runtime_options,
                 verify_options=verify_options),
-        'vivaldi-relayproxy':
-            CodeSignedProduct(
-                '{.framework_dir}/Helpers/relayproxy-darwin'.format(config),
-                'relayproxy-darwin',
-                options=full_hardened_runtime_options,
-                verify_options=verify_options),
+        #'vivaldi-relayproxy':
+        #    CodeSignedProduct(
+        #        '{.framework_dir}/Helpers/relayproxy-darwin'.format(config),
+        #        'relayproxy-darwin',
+        #        options=full_hardened_runtime_options,
+        #        verify_options=verify_options),
         'mac-sparkle-autoupdate':
             CodeSignedProduct(
                 "{.app_dir}/Contents/Frameworks/Sparkle.framework/Autoupdate".format(config),
@@ -280,6 +280,9 @@ def sign_chrome(paths, config, sign_framework=False):
 
     # Display the code signature.
     signing.validate_app(paths, config, parts['app'])
+
+    # Validate the app's architecture geometry, if configured.
+    signing.validate_app_geometry(paths, config, parts['app'])
 
 
 def _sanity_check_version_keys(paths, parts):

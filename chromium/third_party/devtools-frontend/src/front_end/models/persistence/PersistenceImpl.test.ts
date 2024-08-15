@@ -2,27 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-import * as Workspace from '../workspace/workspace.js';
-import * as Persistence from '../persistence/persistence.js';
-import * as Bindings from '../bindings/bindings.js';
-import * as Breakpoints from '../breakpoints/breakpoints.js';
+import type * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
-import {MockProtocolBackend} from '../../testing/MockScopeChain.js';
-import type * as Platform from '../../core/platform/platform.js';
-
+import {createTarget} from '../../testing/EnvironmentHelpers.js';
 import {
   describeWithMockConnection,
 } from '../../testing/MockConnection.js';
-import {createTarget} from '../../testing/EnvironmentHelpers.js';
-
-import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
+import {MockProtocolBackend} from '../../testing/MockScopeChain.js';
 import {createFileSystemFileForPersistenceTests} from '../../testing/PersistenceHelpers.js';
 import {
   createContentProviderUISourceCode,
   createFileSystemUISourceCode,
 } from '../../testing/UISourceCodeHelpers.js';
+import * as Bindings from '../bindings/bindings.js';
+import * as Breakpoints from '../breakpoints/breakpoints.js';
+import * as Persistence from '../persistence/persistence.js';
+import * as Workspace from '../workspace/workspace.js';
 
 describeWithMockConnection('PersistenceImpl', () => {
   const FILE_SYSTEM_BREAK_ID = 'BREAK_ID' as Protocol.Debugger.BreakpointId;
@@ -92,7 +88,7 @@ describeWithMockConnection('PersistenceImpl', () => {
     const script = await backend.addScript(target, SCRIPT_DESCRIPTION, null);
     const uiSourceCode =
         Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance().uiSourceCodeForScript(script);
-    assertNotNullOrUndefined(uiSourceCode);
+    assert.exists(uiSourceCode);
 
     // Set the breakpoint response for our upcoming request to set the breakpoint on the network file.
     await backend.responderToBreakpointByUrlRequest(script.sourceURL, breakpointLine)({
@@ -161,7 +157,7 @@ describeWithMockConnection('PersistenceImpl', () => {
        // over to the file system uiSourceCode.
        const persistence = Persistence.Persistence.PersistenceImpl.instance();
        const binding = persistence.binding(fileSystemUiSourceCode);
-       assertNotNullOrUndefined(binding);
+       assert.exists(binding);
 
        // Set the breakpoint response for our upcoming request on the file system.
        const moveResponse = backend.responderToBreakpointByUrlRequest(fileSystemUiSourceCode.url(), breakpointLine)({

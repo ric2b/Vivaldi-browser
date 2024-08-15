@@ -9,7 +9,6 @@
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
-#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "ui/base/pointer/touch_ui_controller.h"
 #include "ui/base/ui_base_features.h"
@@ -79,10 +78,7 @@ gfx::Insets ChromeLayoutProvider::GetInsetsMetric(int metric) const {
     case INSETS_TOAST:
       return gfx::Insets::VH(0, kHarmonyLayoutUnit);
     case INSETS_OMNIBOX_PILL_BUTTON:
-      if ((base::FeatureList::IsEnabled(omnibox::kCr2023ActionChips) ||
-           features::GetChromeRefresh2023Level() ==
-               features::ChromeRefresh2023Level::kLevel2) &&
-          !touch_ui) {
+      if (!touch_ui) {
         return gfx::Insets::VH(4, 8);
       } else {
         return touch_ui
@@ -100,9 +96,6 @@ gfx::Insets ChromeLayoutProvider::GetInsetsMetric(int metric) const {
       // label button because it behaves like a menu control.
       return gfx::Insets::VH(insets.height(), horizontal_padding);
     }
-    case INSETS_INFOBAR_VIEW:
-      return features::IsChromeRefresh2023() ? gfx::Insets::VH(4, 0)
-                                             : gfx::Insets::VH(0, 0);
     default:
       return LayoutProvider::GetInsetsMetric(metric);
   }
@@ -167,7 +160,7 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
     case DISTANCE_BETWEEN_PRIMARY_AND_SECONDARY_LABELS_HORIZONTAL:
       return 24;
     case DISTANCE_OMNIBOX_CELL_VERTICAL_PADDING:
-      return OmniboxFieldTrial::IsCr23LayoutEnabled() ? 12 : 8;
+      return 12;
     case DISTANCE_OMNIBOX_TWO_LINE_CELL_VERTICAL_PADDING:
       return 4;
     case DISTANCE_SIDE_PANEL_HEADER_VECTOR_ICON_SIZE:
@@ -180,6 +173,10 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
       return features::IsChromeRefresh2023() ? 20 : 0;
     case DISTANCE_INFOBAR_HORIZONTAL_ICON_LABEL_PADDING:
       return features::IsChromeRefresh2023() ? 16 : 12;
+    case DISTANCE_INFOBAR_HEIGHT:
+      // Spec says height of button should be 36dp, vertical padding on both
+      // top and bottom should be 8dp.
+      return 36 + 2 * 8;
     case DISTANCE_PERMISSION_PROMPT_HORIZONTAL_ICON_LABEL_PADDING:
       return features::IsChromeRefresh2023()
                  ? 8

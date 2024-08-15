@@ -4,9 +4,17 @@
 
 #include "chrome/browser/ash/login/screens/osauth/password_selection_screen.h"
 
+#include <string>
+#include <utility>
+
 #include "ash/constants/ash_features.h"
+#include "base/check.h"
+#include "base/check_is_test.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
+#include "base/values.h"
+#include "chrome/browser/ash/login/oobe_screen.h"
 #include "chrome/browser/ash/login/quick_unlock/quick_unlock_factory.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
 #include "chrome/browser/ash/login/screens/osauth/base_osauth_setup_screen.h"
@@ -16,12 +24,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/ash/login/password_selection_screen_handler.h"
-#include "chromeos/ash/components/login/auth/auth_factor_editor.h"
+#include "chromeos/ash/components/cryptohome/auth_factor.h"
 #include "chromeos/ash/components/login/auth/public/user_context.h"
-#include "chromeos/ash/services/auth_factor_config/auth_factor_config.h"
 #include "chromeos/ash/services/auth_factor_config/auth_factor_config_utils.h"
-#include "chromeos/ash/services/auth_factor_config/in_process_instances.h"
-#include "chromeos/ash/services/auth_factor_config/password_factor_editor.h"
 
 namespace ash {
 
@@ -42,6 +47,7 @@ bool IsUserEnterpriseManaged() {
 
 // static
 std::string PasswordSelectionScreen::GetResultString(Result result) {
+  // LINT.IfChange(UsageMetrics)
   switch (result) {
     case Result::NOT_APPLICABLE:
       return BaseScreen::kNotApplicable;
@@ -58,6 +64,7 @@ std::string PasswordSelectionScreen::GetResultString(Result result) {
     case Result::GAIA_PASSWORD_ENTERPRISE:
       return "GaiaPasswordEnterprise";
   }
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/oobe/histograms.xml)
 }
 
 PasswordSelectionScreen::PasswordSelectionScreen(
@@ -71,6 +78,7 @@ PasswordSelectionScreen::PasswordSelectionScreen(
 PasswordSelectionScreen::~PasswordSelectionScreen() = default;
 
 void PasswordSelectionScreen::ShowImpl() {
+  is_shown_ = true;
   if (!view_) {
     return;
   }
@@ -80,6 +88,11 @@ void PasswordSelectionScreen::ShowImpl() {
                      weak_ptr_factory_.GetWeakPtr()),
       base::BindOnce(&PasswordSelectionScreen::ProcessOptions,
                      weak_ptr_factory_.GetWeakPtr()));
+}
+
+void PasswordSelectionScreen::HideImpl() {
+  BaseOSAuthSetupScreen::HideImpl();
+  is_shown_ = false;
 }
 
 void PasswordSelectionScreen::OnUserAction(const base::Value::List& args) {
@@ -103,6 +116,13 @@ void PasswordSelectionScreen::OnUserAction(const base::Value::List& args) {
 }
 
 bool PasswordSelectionScreen::MaybeSkip(WizardContext& wizard_context) {
+  if (wizard_context.skip_post_login_screens_for_tests && is_shown_) {
+    CHECK_IS_TEST();
+    // WizardController::SkipPostLoginScreensForTesting() can be triggered
+    // after screen is shown.
+    exit_callback_.Run(Result::GAIA_PASSWORD_FALLBACK);
+    return true;
+  }
   return false;
 }
 

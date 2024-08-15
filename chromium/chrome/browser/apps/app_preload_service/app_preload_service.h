@@ -14,7 +14,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
-#include "chrome/browser/apps/app_preload_service/app_preload_server_connector.h"
+#include "chrome/browser/apps/app_preload_service/preload_app_definition.h"
 #include "components/keyed_service/core/keyed_service.h"
 
 class Profile;
@@ -83,7 +83,9 @@ class AppPreloadService : public KeyedService {
   // Processes the list of apps retrieved by the server connector.
   void OnGetAppsForFirstLoginCompleted(
       base::TimeTicks start_time,
-      std::optional<std::vector<PreloadAppDefinition>> apps);
+      std::optional<std::vector<PreloadAppDefinition>> apps,
+      LauncherOrdering launcher_ordering,
+      ShelfPinOrdering shelf_pin_ordering);
   void OnAppInstallationsCompleted(base::TimeTicks start_time,
                                    const std::vector<bool>& results);
   // Called when the installation flow started by
@@ -96,7 +98,6 @@ class AppPreloadService : public KeyedService {
   const base::Value::Dict& GetStateManager() const;
 
   raw_ptr<Profile> profile_;
-  std::unique_ptr<AppPreloadServerConnector> server_connector_;
   std::unique_ptr<DeviceInfoManager> device_info_manager_;
 
   // For testing

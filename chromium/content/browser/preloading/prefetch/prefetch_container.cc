@@ -333,15 +333,11 @@ void RecordBlockUntilHeadDurationHistogram(
   }
 }
 
-ukm::SourceId GetUkmSourceId(
-    base::WeakPtr<PrefetchDocumentManager>& prefetch_document_manager) {
-  if (!prefetch_document_manager) {
-    return ukm::kInvalidSourceId;
-  }
+ukm::SourceId GetUkmSourceId(RenderFrameHostImpl& rfhi) {
   // Prerendering page should not trigger prefetches.
-  CHECK(!prefetch_document_manager->render_frame_host().IsInLifecycleState(
-      RenderFrameHost::LifecycleState::kPrerendering));
-  return prefetch_document_manager->render_frame_host().GetPageUkmSourceId();
+  CHECK(
+      !rfhi.IsInLifecycleState(RenderFrameHost::LifecycleState::kPrerendering));
+  return rfhi.GetPageUkmSourceId();
 }
 
 void RecordPrefetchProxyPrefetchMainframeNetError(int net_error) {
@@ -421,30 +417,84 @@ PrefetchContainer::PrefetchContainer(
     std::optional<net::HttpNoVarySearchData> no_vary_search_hint,
     base::WeakPtr<PrefetchDocumentManager> prefetch_document_manager,
     base::WeakPtr<PreloadingAttempt> attempt)
-    : referring_render_frame_host_id_(
-          referring_render_frame_host.GetGlobalId()),
-      referring_origin_(referring_render_frame_host.GetLastCommittedOrigin()),
-      referring_url_hash_(base::FastHash(
-          referring_render_frame_host.GetLastCommittedURL().spec())),
-      key_(referring_document_token, url),
+    : PrefetchContainer(
+          referring_render_frame_host.GetGlobalId(),
+          referring_render_frame_host.GetLastCommittedOrigin(),
+          base::FastHash(
+              referring_render_frame_host.GetLastCommittedURL().spec()),
+          PrefetchContainer::Key(referring_document_token, url),
+          prefetch_type,
+          referrer,
+          std::move(no_vary_search_hint),
+          prefetch_document_manager,
+          referring_render_frame_host.GetBrowserContext()->GetWeakPtr(),
+          GetUkmSourceId(referring_render_frame_host),
+          std::move(attempt),
+          referring_render_frame_host.GetDevToolsNavigationToken(),
+          WebContentsImpl::FromRenderFrameHostImpl(&referring_render_frame_host)
+              ->GetOrCreateWebPreferences()
+              .javascript_enabled) {
+  CHECK(prefetch_type_.IsRendererInitiated());
+}
+
+PrefetchContainer::PrefetchContainer(
+    WebContents& referring_web_contents,
+    const GURL& url,
+    const PrefetchType& prefetch_type,
+    const blink::mojom::Referrer& referrer,
+    const std::optional<url::Origin>& referring_origin,
+    std::optional<net::HttpNoVarySearchData> no_vary_search_hint,
+    base::WeakPtr<PreloadingAttempt> attempt)
+    : PrefetchContainer(
+          GlobalRenderFrameHostId(),
+          referring_origin.value_or(url::Origin()),
+          /*referring_url_hash=*/std::nullopt,
+          PrefetchContainer::Key(
+              std::optional<blink::DocumentToken>(std::nullopt),
+              url),
+          prefetch_type,
+          referrer,
+          std::move(no_vary_search_hint),
+          /*prefetch_document_manager=*/nullptr,
+          referring_web_contents.GetBrowserContext()->GetWeakPtr(),
+          ukm::kInvalidSourceId,
+          std::move(attempt),
+          /*initiator_devtools_navigation_token=*/std::nullopt,
+          referring_web_contents.GetOrCreateWebPreferences()
+              .javascript_enabled) {
+  CHECK(!prefetch_type_.IsRendererInitiated());
+  CHECK(PrefetchBrowserInitiatedTriggersEnabled());
+}
+
+PrefetchContainer::PrefetchContainer(
+    const GlobalRenderFrameHostId& referring_render_frame_host_id,
+    const url::Origin& referring_origin,
+    const std::optional<size_t>& referring_url_hash,
+    const PrefetchContainer::Key& key,
+    const PrefetchType& prefetch_type,
+    const blink::mojom::Referrer& referrer,
+    std::optional<net::HttpNoVarySearchData> no_vary_search_hint,
+    base::WeakPtr<PrefetchDocumentManager> prefetch_document_manager,
+    base::WeakPtr<BrowserContext> browser_context,
+    ukm::SourceId ukm_source_id,
+    base::WeakPtr<PreloadingAttempt> attempt,
+    std::optional<base::UnguessableToken> initiator_devtools_navigation_token,
+    bool is_javascript_enabed)
+    : referring_render_frame_host_id_(referring_render_frame_host_id),
+      referring_origin_(referring_origin),
+      referring_url_hash_(referring_url_hash),
+      key_(key),
       prefetch_type_(prefetch_type),
       referrer_(referrer),
       no_vary_search_hint_(std::move(no_vary_search_hint)),
-      prefetch_document_manager_(prefetch_document_manager),
-      browser_context_(
-          referring_render_frame_host.GetBrowserContext()->GetWeakPtr()),
-      ukm_source_id_(GetUkmSourceId(prefetch_document_manager_)),
+      prefetch_document_manager_(std::move(prefetch_document_manager)),
+      browser_context_(std::move(browser_context)),
+      ukm_source_id_(ukm_source_id),
       request_id_(base::UnguessableToken::Create().ToString()),
       attempt_(std::move(attempt)),
       initiator_devtools_navigation_token_(
-          referring_render_frame_host.GetDevToolsNavigationToken()) {
-  CHECK(prefetch_type_.IsRendererInitiated());
-
-  auto* web_contents =
-      WebContentsImpl::FromRenderFrameHostImpl(&referring_render_frame_host);
-  is_javascript_enabled_ =
-      web_contents->GetOrCreateWebPreferences().javascript_enabled;
-
+          std::move(initiator_devtools_navigation_token)),
+      is_javascript_enabled_(is_javascript_enabed) {
   redirect_chain_.push_back(
       std::make_unique<SinglePrefetch>(GetURL(), referring_origin_));
 }
@@ -471,7 +521,7 @@ PrefetchContainer::~PrefetchContainer() {
     builder.SetISPFilteringStatus(static_cast<int>(probe_result_.value()));
   }
 
-  // TODO(https://crbug.com/1299059): Get the navigation start time and set the
+  // TODO(crbug.com/40215782): Get the navigation start time and set the
   // NavigationStartToFetchStartMs field of the PrefetchProxy.PrefetchedResource
   // UKM event.
 
@@ -480,22 +530,23 @@ PrefetchContainer::~PrefetchContainer() {
   if (prefetch_document_manager_) {
     prefetch_document_manager_->PrefetchWillBeDestroyed(this);
   }
+
+  if (base::FeatureList::IsEnabled(features::kPrefetchUnblockOnCancel)) {
+    // Make this object appear to be dead from the perspective of other code.
+    // In particular, the on_received_head_callback_ checks a WeakPtr to this
+    // object.
+    weak_method_factory_.InvalidateWeakPtrs();
+
+    // If anything was blocked on head, it no longer is.
+    if (on_received_head_callback_) {
+      std::move(on_received_head_callback_).Run();
+    }
+  }
 }
 
 PrefetchContainer::Key::Key(
-    absl::variant<blink::DocumentToken, net::NetworkIsolationKey>
-        referring_document_token_or_nik,
+    std::optional<blink::DocumentToken> referring_document_token,
     GURL prefetch_url)
-    : referring_document_token_or_nik_(
-          std::move(referring_document_token_or_nik)),
-      prefetch_url_(std::move(prefetch_url)) {
-  CHECK_EQ(absl::holds_alternative<net::NetworkIsolationKey>(
-               referring_document_token_or_nik_),
-           PrefetchNIKScopeEnabled());
-}
-
-PrefetchContainer::Key::Key(blink::DocumentToken referring_document_token,
-                            GURL prefetch_url)
     : referring_document_token_or_nik_(std::move(referring_document_token)),
       prefetch_url_(std::move(prefetch_url)) {
   CHECK(!PrefetchNIKScopeEnabled());
@@ -538,17 +589,22 @@ PrefetchContainer::Reader PrefetchContainer::CreateReader() {
 void PrefetchContainer::SetPrefetchStatusWithoutUpdatingTriggeringOutcome(
     PrefetchStatus prefetch_status) {
   prefetch_status_ = prefetch_status;
-  FrameTreeNode* ftn = FrameTreeNode::From(
-      RenderFrameHostImpl::FromID(referring_render_frame_host_id_));
 
-  std::optional<PreloadingTriggeringOutcome> preloading_trigger_outcome =
-      TriggeringOutcomeFromStatus(prefetch_status);
+  // Currently DevTools only supports when the prefetch is initiated by
+  // renderer.
+  if (IsRendererInitiated()) {
+    FrameTreeNode* ftn = FrameTreeNode::From(
+        RenderFrameHostImpl::FromID(referring_render_frame_host_id_));
 
-  if (initiator_devtools_navigation_token_.has_value() &&
-      preloading_trigger_outcome.has_value()) {
-    devtools_instrumentation::DidUpdatePrefetchStatus(
-        ftn, initiator_devtools_navigation_token_.value(), GetURL(),
-        preloading_trigger_outcome.value(), prefetch_status, RequestId());
+    std::optional<PreloadingTriggeringOutcome> preloading_trigger_outcome =
+        TriggeringOutcomeFromStatus(prefetch_status);
+
+    if (initiator_devtools_navigation_token_.has_value() &&
+        preloading_trigger_outcome.has_value()) {
+      devtools_instrumentation::DidUpdatePrefetchStatus(
+          ftn, initiator_devtools_navigation_token_.value(), GetURL(),
+          preloading_trigger_outcome.value(), prefetch_status, RequestId());
+    }
   }
 }
 
@@ -669,8 +725,13 @@ void PrefetchContainer::OnEligibilityCheckComplete(
       attempt_->SetEligibility(eligibility);
     }
 
-    if (prefetch_document_manager_) {
-      prefetch_document_manager_->OnEligibilityCheckComplete(is_eligible);
+    // Recording an eligiblity for PrefetchReferringPageMetrics.
+    // TODO(crbug.com/40946257): Current code doesn't support
+    // PrefetchReferringPageMetrics when the prefetch is initiated by browser.
+    if (IsRendererInitiated()) {
+      if (prefetch_document_manager_) {
+        prefetch_document_manager_->OnEligibilityCheckComplete(is_eligible);
+      }
     }
   } else {
     // This case is for any URLs from redirects.
@@ -958,9 +1019,13 @@ void PrefetchContainer::SetNoVarySearchData(RenderFrameHost* rfh) {
 }
 
 void PrefetchContainer::OnReceivedHead() {
-  if (prefetch_document_manager_ &&
+  // TODO(crbug.com/40946257): Current code doesn't support NVS for
+  // browser-initated triggers.
+  if (IsRendererInitiated() && prefetch_document_manager_ &&
       prefetch_document_manager_->NoVarySearchSupportEnabled()) {
-    SetNoVarySearchData(&prefetch_document_manager_->render_frame_host());
+    auto* rfhi_can_be_null =
+        RenderFrameHostImpl::FromID(referring_render_frame_host_id_);
+    SetNoVarySearchData(rfhi_can_be_null);
   }
 
   if (on_received_head_callback_) {
@@ -1007,7 +1072,7 @@ void PrefetchContainer::OnPrefetchComplete(
     return;
   }
 
-  // TODO(https://crbug.com/1399956): Call
+  // TODO(crbug.com/40250089): Call
   // SpeculationHostDevToolsObserver::OnPrefetchBodyDataReceived with body of
   // the response.
   const auto& devtools_observer = GetDevToolsObserver();
@@ -1037,8 +1102,12 @@ void PrefetchContainer::OnPrefetchComplete(
   }
 
   if (GetPrefetchStatus() == PrefetchStatus::kPrefetchSuccessful) {
-    if (prefetch_document_manager_) {
-      prefetch_document_manager_->OnPrefetchSuccessful(this);
+    // TODO(crbug.com/40946257): Current code doesn't support
+    // PrefetchReferringPageMetrics when the prefetch is initiated by browser.
+    if (IsRendererInitiated()) {
+      if (prefetch_document_manager_) {
+        prefetch_document_manager_->OnPrefetchSuccessful(this);
+      }
     }
   }
 }
@@ -1203,7 +1272,7 @@ void PrefetchContainer::OnCookiesChanged() {
   CancelStreamingURLLoaderIfNotServing();
 }
 
-// TODO(crbug.com/1462206): We might be waiting on PrefetchContainer's head
+// TODO(crbug.com/40274818): We might be waiting on PrefetchContainer's head
 // from multiple navigations.
 // E.g. We might wait from one navigation but not use the prefetch, and
 // then we can use the prefetch in a separate navigation without waiting
@@ -1241,7 +1310,9 @@ void PrefetchContainer::OnReturnPrefetchToServe(bool served) {
 
 bool PrefetchContainer::HasSameReferringURLForMetrics(
     const PrefetchContainer& other) const {
-  return referring_url_hash_ == other.referring_url_hash_;
+  return referring_url_hash_.has_value() &&
+         other.referring_url_hash_.has_value() &&
+         referring_url_hash_ == other.referring_url_hash_;
 }
 
 GURL PrefetchContainer::GetCurrentURL() const {
@@ -1361,7 +1432,7 @@ void PrefetchContainer::MakeResourceRequest(
       // priority), but the fact that we're doing this at all for more
       // conservative candidates suggests a strong engagement signal.
       //
-      // TODO(crbug.com/1467928): Ideally, we would actually use a combination
+      // TODO(crbug.com/40276985): Ideally, we would actually use a combination
       // of the actual engagement seen (rather than the minimum required to
       // trigger the candidate) and the declared eagerness, and update them as
       // the prefetch becomes increasingly likely.
@@ -1418,7 +1489,7 @@ void PrefetchContainer::AddClientHintsHeaders(
     return;
   }
 
-  // TODO(crbug.com/1524069): Consider supporting UA override mode here
+  // TODO(crbug.com/41497015): Consider supporting UA override mode here
   const bool is_ua_override_on = false;
   net::HttpRequestHeaders client_hints_headers;
   AddClientHintsHeadersToPrefetchNavigation(
@@ -1459,9 +1530,10 @@ std::ostream& operator<<(std::ostream& ostream,
 std::ostream& operator<<(std::ostream& ostream,
                          const PrefetchContainer::Key& prefetch_key) {
   ostream << "(";
-  if (const auto* token = absl::get_if<blink::DocumentToken>(
+  if (const auto* token = absl::get_if<std::optional<blink::DocumentToken>>(
           &prefetch_key.referring_document_token_or_nik_)) {
-    ostream << *token;
+    token->has_value() ? ostream << token->value()
+                       : ostream << "(empty document token)";
   } else {
     ostream << absl::get<net::NetworkIsolationKey>(
                    prefetch_key.referring_document_token_or_nik_)

@@ -34,8 +34,8 @@ class EmbeddedA11yExtensionLoader : public ProfileObserver,
   // Simple struct to hold information about each extension installed on all
   // profiles.
   struct ExtensionInfo {
-    ExtensionInfo(const std::string& extension_id,
-                  const std::string& extension_path,
+    ExtensionInfo(const std::string extension_id,
+                  const std::string extension_path,
                   const base::FilePath::CharType* extension_manifest_file,
                   bool should_localize);
     ExtensionInfo(const ExtensionInfo& other);
@@ -45,10 +45,10 @@ class EmbeddedA11yExtensionLoader : public ProfileObserver,
     ~ExtensionInfo();
 
     // The id of the extension.
-    const raw_ref<const std::string> extension_id;
+    const std::string extension_id;
 
     // The path to the extension manifest file.
-    const raw_ref<const std::string> extension_path;
+    const std::string extension_path;
 
     // The name of the extension manifest file.
     const base::FilePath::CharType* extension_manifest_file;
@@ -68,12 +68,9 @@ class EmbeddedA11yExtensionLoader : public ProfileObserver,
   // Should be called when the browser starts up.
   void Init();
 
-  // TODO(crbug.com/324143642): Observe the reading mode enabled/disabled state
-  // in this class instead of informing EmbeddedA11yManagerLacros to
-  // enable/disable reading mode.
-  virtual void InstallA11yHelperExtensionForReadingMode();
-  virtual void RemoveA11yHelperExtensionForReadingMode();
-
+  // Install an extension.
+  // `manifest_name` must live for the duration of the program. (e.g. be
+  // statically allocated)
   void InstallExtensionWithId(const std::string& extension_id,
                               const std::string& extension_path,
                               const base::FilePath::CharType* manifest_name,
@@ -83,6 +80,9 @@ class EmbeddedA11yExtensionLoader : public ProfileObserver,
   // We can't use extensions::ExtensionHostTestHelper as those require a
   // background page, and these extensions do not have background pages.
   void AddExtensionChangedCallbackForTest(base::RepeatingClosure callback);
+
+  // Check whether an extension is installed or not.
+  bool IsExtensionInstalled(const std::string& extension_id);
 
  private:
   // ProfileObserver:

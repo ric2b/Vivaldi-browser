@@ -9,7 +9,6 @@
 #include "components/sync/protocol/entity_data.h"
 
 namespace plus_addresses {
-
 // Utils to convert a `EntityData` containing `PlusAddressSpecifics` to a
 // `PlusProfile` and back.
 // Since the PLUS_ADDRESS model type is read-only on the client, it is not

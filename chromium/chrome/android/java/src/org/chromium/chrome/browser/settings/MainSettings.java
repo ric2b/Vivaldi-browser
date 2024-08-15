@@ -18,7 +18,6 @@ import androidx.preference.Preference;
 
 import org.chromium.base.BuildInfo;
 import org.chromium.base.ContextUtils;
-import org.chromium.base.Log;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.options.AutofillOptionsFragment;
@@ -51,6 +50,7 @@ import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarStatePredictor;
 import org.chromium.chrome.browser.tracing.settings.DeveloperSettings;
 import org.chromium.chrome.browser.ui.signin.SyncPromoController;
+import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerBottomSheetStrings;
 import org.chromium.components.autofill.AutofillFeatures;
 import org.chromium.components.browser_ui.settings.ChromeBasePreference;
 import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
@@ -79,6 +79,7 @@ import android.content.SharedPreferences;
 import android.text.TextUtils;
 
 import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.bookmarks.BookmarkFeatures;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.searchwidget.SearchWidgetProvider;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
@@ -113,6 +114,7 @@ public class MainSettings extends ChromeBaseSettingsFragment
     public static final String PREF_GOOGLE_SERVICES = "google_services";
     public static final String PREF_SEARCH_ENGINE = "search_engine";
     public static final String PREF_PASSWORDS = "passwords";
+    public static final String PREF_TABS = "tabs";
     public static final String PREF_HOMEPAGE = "homepage";
     public static final String PREF_HOME_MODULES_CONFIG = "home_modules_config";
     public static final String PREF_TOOLBAR_SHORTCUT = "toolbar_shortcut";
@@ -238,6 +240,8 @@ public class MainSettings extends ChromeBaseSettingsFragment
                 IdentityServicesProvider.get().getIdentityManager(getProfile());
 
         SyncPromoPreference syncPromoPreference = findPreference(PREF_SYNC_PROMO);
+        AccountPickerBottomSheetStrings bottomSheetStrings =
+                new AccountPickerBottomSheetStrings.Builder(R.string.sign_in_to_chrome).build();
         syncPromoPreference.initialize(
                 profileDataCache,
                 accountManagerFacade,
@@ -245,6 +249,7 @@ public class MainSettings extends ChromeBaseSettingsFragment
                 identityManager,
                 new SyncPromoController(
                         getProfile(),
+                        bottomSheetStrings,
                         SigninAccessPoint.SETTINGS,
                         SyncConsentActivityLauncherImpl.get(),
                         SigninAndHistoryOptInActivityLauncherImpl.get()));
@@ -257,6 +262,10 @@ public class MainSettings extends ChromeBaseSettingsFragment
         if (ChromeApplicationImpl.isVivaldi()) {
             removePreferenceIfPresent(VivaldiPreferences.SCREEN_LOCK);
             removePreferenceIfPresent(PREF_SYNC_PROMO);
+            if (!BookmarkFeatures.isNewStartPageEnabled()) {
+                removePreferenceIfPresent(VivaldiPreferences.SHOW_CUSTOMIZE_SPEEDDIAL_PREF);
+                removePreferenceIfPresent(VivaldiPreferences.SHOW_SPEEDDIAL_PREF);
+            }
             if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
                 removePreferenceIfPresent(VivaldiPreferences.APP_MENU_BAR_SETTING);
             }
@@ -266,7 +275,6 @@ public class MainSettings extends ChromeBaseSettingsFragment
                 removePreferenceIfPresent(PREF_DOUBLE_TAP_BACK_TO_EXIT); // Ref. POLE-30
                 // Remove if OEM runs phone UI (Mercedes co driver display).
                 removePreferenceIfPresent(VivaldiPreferences.APP_MENU_BAR_SETTING);
-                removePreferenceIfPresent(VivaldiPreferences.RATE_VIVALDI);
                 removePreferenceIfPresent(VivaldiPreferences.ADD_VIVALDI_SEARCH_WIDGET);
                 if (VivaldiUtils.driverDistractionHandlingEnabled()) {
                     // Incompatible with driver distraction handling, remove.
@@ -281,12 +289,16 @@ public class MainSettings extends ChromeBaseSettingsFragment
                 removePreferenceIfPresent(PREF_VIVALDI_GAME);
                 removePreferenceIfPresent(VivaldiPreferences.SET_AS_DEFAULT_BROWSER);
             }
+            // Rate Vivaldi should be available for GAS builds.
+            if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD && !BuildConfig.IS_OEM_GAS_BUILD) {
+                removePreferenceIfPresent(VivaldiPreferences.RATE_VIVALDI);
+            }
         }
 
         updateAutofillPreferences();
         updatePlusAddressesPreference();
 
-        // TODO(crbug.com/1373451): Remove the passwords managed subtitle for local and UPM
+        // TODO(crbug.com/40242060): Remove the passwords managed subtitle for local and UPM
         // unenrolled users who can see it directly in the context of the setting.
         setManagedPreferenceDelegateForPreference(PREF_PASSWORDS);
         setManagedPreferenceDelegateForPreference(PREF_SEARCH_ENGINE);
@@ -329,7 +341,7 @@ public class MainSettings extends ChromeBaseSettingsFragment
         }
 
         if (!ChromeApplicationImpl.isVivaldi())
-        new AdaptiveToolbarStatePredictor(null)
+        new AdaptiveToolbarStatePredictor(getProfile(), null)
                 .recomputeUiState(
                         uiState -> {
                             // We don't show the toolbar shortcut settings page if disabled from
@@ -393,14 +405,17 @@ public class MainSettings extends ChromeBaseSettingsFragment
             }
 
             // Handle the PWA Disabled Toggle
-            ChromeSwitchPreference pwaDisabledPref =
-                    findPreference(PREF_PWA_DISABLED);
+            ChromeSwitchPreference pwaDisabledPref = findPreference(PREF_PWA_DISABLED);
             if (pwaDisabledPref != null) {
-                pwaDisabledPref.setOnPreferenceChangeListener((preference, newValue) -> {
-                    VivaldiPreferencesBridge vivaldiPrefs = new VivaldiPreferencesBridge();
-                    vivaldiPrefs.setPWADisabled((boolean) newValue);
-                    return true;
-                });
+                if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
+                    getPreferenceScreen().removePreference(pwaDisabledPref);
+                } else {
+                    pwaDisabledPref.setOnPreferenceChangeListener((preference, newValue) -> {
+                        VivaldiPreferencesBridge vivaldiPrefs = new VivaldiPreferencesBridge();
+                        vivaldiPrefs.setPWADisabled((boolean) newValue);
+                        return true;
+                    });
+                }
             }
 
             ChromeSwitchPreference alwaysShowDesktopSitePref =
@@ -423,6 +438,28 @@ public class MainSettings extends ChromeBaseSettingsFragment
                                 BuildConfig.IS_OEM_MERCEDES_BUILD);
 
                 stayInBrowserPref.setChecked(stayInBrowser);
+            }
+
+            ChromeSwitchPreference showSpeedDialPref =
+                    findPreference(VivaldiPreferences.SHOW_SPEEDDIAL_PREF);
+            if (showSpeedDialPref != null) {
+                boolean showSpeedDial =
+                        VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                                VivaldiPreferences.SHOW_SPEEDDIAL_PREF,
+                                true);
+
+                showSpeedDialPref.setChecked(showSpeedDial);
+            }
+
+            ChromeSwitchPreference showCustomizePref =
+                    findPreference(VivaldiPreferences.SHOW_CUSTOMIZE_SPEEDDIAL_PREF);
+            if (showCustomizePref != null) {
+                boolean showCustomize =
+                        VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                                VivaldiPreferences.SHOW_CUSTOMIZE_SPEEDDIAL_PREF,
+                                true);
+
+                showCustomizePref.setChecked(showCustomize);
             }
         }
     }
@@ -462,8 +499,14 @@ public class MainSettings extends ChromeBaseSettingsFragment
         updateAutofillPreferences();
         updatePlusAddressesPreference();
 
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.TAB_GROUP_SYNC_ANDROID)) {
+            addPreferenceIfAbsent(PREF_TABS);
+        } else {
+            removePreferenceIfPresent(PREF_TABS);
+        }
+
         Preference homepagePref = addPreferenceIfAbsent(PREF_HOMEPAGE);
-        setOnOffSummary(homepagePref, HomepageManager.isHomepageEnabled());
+        setOnOffSummary(homepagePref, HomepageManager.getInstance().isHomepageEnabled());
 
         if (HomeModulesConfigManager.getInstance().hasModuleShownInSettings()) {
             addPreferenceIfAbsent(PREF_HOME_MODULES_CONFIG);
@@ -543,7 +586,7 @@ public class MainSettings extends ChromeBaseSettingsFragment
         else
             getPreferenceScreen()
                     .findPreference(homeButton)
-                    .setEnabled(HomepageManager.isHomepageEnabled());
+                    .setEnabled(HomepageManager.getInstance().isHomepageEnabled());
 
         // Handling adding Vivaldi search widget to home screen
         pref = findPreference(VivaldiPreferences.ADD_VIVALDI_SEARCH_WIDGET);
@@ -614,21 +657,20 @@ public class MainSettings extends ChromeBaseSettingsFragment
                                 .getIdentityManager(getProfile())
                                 .getPrimaryAccountInfo(ConsentLevel.SIGNIN));
 
-        SyncService syncService = SyncServiceFactory.getForProfile(getProfile());
-
-        boolean showManageSync =
-                primaryAccountName != null
-                        && (!ChromeFeatureList.isEnabled(
-                                        ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
-                                || syncService.hasSyncConsent());
-        mManageSync.setVisible(showManageSync);
-        if (!showManageSync) return;
-
+        // TODO(crbug.com/40067770): Remove usage of ConsentLevel.SYNC after kSync users are
+        // migrated to kSignin in phase 3. See ConsentLevel::kSync documentation for details.
         boolean isSyncConsentAvailable =
                 IdentityServicesProvider.get()
                                 .getIdentityManager(getProfile())
                                 .getPrimaryAccountInfo(ConsentLevel.SYNC)
                         != null;
+        boolean showManageSync =
+                primaryAccountName != null
+                        && (!ChromeFeatureList.isEnabled(
+                                        ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+                                || isSyncConsentAvailable);
+        mManageSync.setVisible(showManageSync);
+        if (!showManageSync) return;
 
         mManageSync.setIcon(SyncSettingsUtils.getSyncStatusIcon(getActivity(), getProfile()));
         mManageSync.setSummary(SyncSettingsUtils.getSyncStatusSummary(getActivity(), getProfile()));
@@ -643,6 +685,10 @@ public class MainSettings extends ChromeBaseSettingsFragment
                         SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
                         settingsLauncher.launchSettingsActivity(context, ManageSyncSettings.class);
                     } else {
+                        // TODO(crbug.com/40067770): Remove after rolling out
+                        // REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS.
+                        assert !ChromeFeatureList.isEnabled(
+                                ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS);
                         SyncConsentActivityLauncherImpl.get()
                                 .launchActivityForPromoDefaultFlow(
                                         context,
@@ -716,7 +762,7 @@ public class MainSettings extends ChromeBaseSettingsFragment
     }
 
     private void updatePlusAddressesPreference() {
-        // TODO(crbug.com/1467623): Replace with a static string once name is finalized.
+        // TODO(crbug.com/40276862): Replace with a static string once name is finalized.
         String title =
                 ChromeFeatureList.getFieldTrialParamByFeature(
                         ChromeFeatureList.PLUS_ADDRESSES_ENABLED, "settings-label");

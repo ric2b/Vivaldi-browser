@@ -176,7 +176,6 @@ unsigned int AHardwareBufferFormat(viz::SharedImageFormat format) {
 constexpr uint32_t kSupportedUsage =
     SHARED_IMAGE_USAGE_GLES2_READ | SHARED_IMAGE_USAGE_GLES2_WRITE |
     SHARED_IMAGE_USAGE_GLES2_FOR_RASTER_ONLY |
-    SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
     SHARED_IMAGE_USAGE_DISPLAY_WRITE | SHARED_IMAGE_USAGE_DISPLAY_READ |
     SHARED_IMAGE_USAGE_RASTER_READ | SHARED_IMAGE_USAGE_RASTER_WRITE |
     SHARED_IMAGE_USAGE_RASTER_OVER_GLES2_ONLY |
@@ -867,9 +866,10 @@ AHardwareBufferImageBackingFactory::CreateSharedImage(
     SkAlphaType alpha_type,
     uint32_t usage,
     std::string debug_label,
+    bool is_thread_safe,
     base::span<const uint8_t> pixel_data) {
   return MakeBacking(mailbox, format, size, color_space, surface_origin,
-                     alpha_type, usage, std::move(debug_label), false,
+                     alpha_type, usage, std::move(debug_label), is_thread_safe,
                      pixel_data);
 }
 

@@ -20,7 +20,8 @@
     "android-cronet-x64-dbg": "ci/android-cronet-x64-dbg/gn-args.json",
     "android-cronet-x86-dbg": "ci/android-cronet-x86-dbg/gn-args.json",
     "android-oreo-x86-rel": "ci/android-oreo-x86-rel/gn-args.json",
-    "android-pie-arm64-rel": "ci/android-pie-arm64-rel/gn-args.json"
+    "android-pie-arm64-rel": "ci/android-pie-arm64-rel/gn-args.json",
+    "android-webview-13-x64-hostside-rel": "ci/android-webview-13-x64-hostside-rel/gn-args.json"
   },
   "chromium.chromiumos": {
     "chromeos-amd64-generic-dbg": "ci/chromeos-amd64-generic-dbg/gn-args.json",
@@ -53,6 +54,11 @@
     "fuchsia-x64-cast-receiver-dbg": "ci/fuchsia-x64-cast-receiver-dbg/gn-args.json",
     "fuchsia-x64-cast-receiver-rel": "ci/fuchsia-x64-cast-receiver-rel/gn-args.json"
   },
+  "chromium.fuzz": {
+    "Centipede Upload Linux ASan": "ci/Centipede Upload Linux ASan/gn-args.json",
+    "Libfuzzer Upload Linux ASan": "ci/Libfuzzer Upload Linux ASan/gn-args.json",
+    "Libfuzzer Upload Windows ASan": "ci/Libfuzzer Upload Windows ASan/gn-args.json"
+  },
   "chromium.gpu": {
     "Android Release (Nexus 5X)": "ci/Android Release (Nexus 5X)/gn-args.json",
     "GPU Linux Builder": "ci/GPU Linux Builder/gn-args.json",
@@ -82,6 +88,7 @@
     "Win Builder": "ci/Win Builder/gn-args.json",
     "Win Builder (dbg)": "ci/Win Builder (dbg)/gn-args.json",
     "Win x64 Builder": "ci/Win x64 Builder/gn-args.json",
+    "win-arm64-dbg": "ci/win-arm64-dbg/gn-args.json",
     "win-arm64-rel": "ci/win-arm64-rel/gn-args.json"
   },
   "tryserver.blink": {
@@ -121,6 +128,7 @@
     "android-webview-oreo-arm64-dbg": "try/android-webview-oreo-arm64-dbg/gn-args.json",
     "android-webview-pie-arm64-dbg": "try/android-webview-pie-arm64-dbg/gn-args.json",
     "android-x64-cast": "try/android-x64-cast/gn-args.json",
+    "android-x64-rel": "try/android-x64-rel/gn-args.json",
     "android-x86-rel": "try/android-x86-rel/gn-args.json",
     "android_compile_dbg": "try/android_compile_dbg/gn-args.json",
     "android_compile_x64_dbg": "try/android_compile_x64_dbg/gn-args.json",
@@ -185,12 +193,15 @@
     "mac12-arm64-rel": "try/mac12-arm64-rel/gn-args.json",
     "mac12-tests": "try/mac12-tests/gn-args.json",
     "mac13-arm64-rel": "try/mac13-arm64-rel/gn-args.json",
+    "mac14-arm64-rel": "try/mac14-arm64-rel/gn-args.json",
+    "mac14-tests": "try/mac14-tests/gn-args.json",
     "mac_chromium_10.15_rel_ng": "try/mac_chromium_10.15_rel_ng/gn-args.json",
     "mac_chromium_11.0_rel_ng": "try/mac_chromium_11.0_rel_ng/gn-args.json",
     "mac_chromium_compile_dbg_ng": "try/mac_chromium_compile_dbg_ng/gn-args.json",
     "mac_optional_gpu_tests_rel": "try/mac_optional_gpu_tests_rel/gn-args.json"
   },
   "tryserver.chromium.win": {
+    "win-arm64-compile-dbg": "try/win-arm64-compile-dbg/gn-args.json",
     "win-arm64-rel": "try/win-arm64-rel/gn-args.json",
     "win-libfuzzer-asan-rel": "try/win-libfuzzer-asan-rel/gn-args.json",
     "win-rel": "try/win-rel/gn-args.json",

@@ -107,6 +107,10 @@ class DownloadItemWarningData : public base::SupportsUserData::Data {
                        WarningAction action,
                        int64_t action_latency_msec,
                        bool is_terminal_action);
+
+    // Serializes the surface, action, and action_latency_msec into a string
+    // in a colon-separated format such as "DOWNLOADS_PAGE:DISCARD:10000".
+    std::string ToString() const;
   };
 
   // Enum representing the trigger of the scan request.
@@ -182,6 +186,14 @@ class DownloadItemWarningData : public base::SupportsUserData::Data {
   static void SetIsFullyExtractedArchive(download::DownloadItem* download,
                                          bool extracted);
 
+  // Time and surface of the first SHOWN event. Time will be null if SHOWN has
+  // not yet been logged. Surface will return nullopt if SHOWN has not yet been
+  // logged.
+  static base::Time WarningFirstShownTime(
+      const download::DownloadItem* download);
+  static std::optional<WarningSurface> WarningFirstShownSurface(
+      const download::DownloadItem* download);
+
  private:
   DownloadItemWarningData();
 
@@ -196,6 +208,7 @@ class DownloadItemWarningData : public base::SupportsUserData::Data {
   static const char kKey[];
 
   base::Time warning_first_shown_time_;
+  std::optional<WarningSurface> warning_first_shown_surface_ = std::nullopt;
   std::vector<WarningActionEvent> action_events_;
   bool is_encrypted_archive_ = false;
   bool has_incorrect_password_ = false;

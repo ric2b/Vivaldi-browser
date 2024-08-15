@@ -3,20 +3,6 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <algorithm>  // For std::generate, std::min.
-#include <array>      // For std::array.
-#include <cmath>      // For std::lrintf.
-#include <cstddef>    // For size_t.
-#include <cstdint>    // For uint32_t.
-#include <functional> // For std::multiplies.
-#include <memory>     // For std::unique_ptr.
-#include <numeric>    // For std::accumulate.
-#include <random>     // For std::random_device, std::mt19937, std::uniform_real_distribution.
-#include <vector>     // For std::vector.
-
-#include <fp16/fp16.h>
-#include <gtest/gtest.h>
-
 #include <xnnpack.h>
 #include <xnnpack/aligned-allocator.h>
 #include <xnnpack/common.h>
@@ -24,14 +10,25 @@
 #include <xnnpack/operator.h>
 #include <xnnpack/subgraph.h>
 
+#include <algorithm>   // For std::generate, std::min.
+#include <array>       // For std::array.
+#include <cmath>       // For std::lrintf.
+#include <cstddef>     // For size_t.
+#include <cstdint>     // For uint32_t.
+#include <functional>  // For std::multiplies.
+#include <memory>      // For std::unique_ptr.
+#include <numeric>     // For std::accumulate.
+#include <random>      // For std::uniform_real_distribution.
+#include <vector>      // For std::vector.
+
+#include "replicable_random_device.h"
+#include <gtest/gtest.h>
+#include <fp16/fp16.h>
 
 namespace xnnpack {
 template <class T> class MeanTestBase : public ::testing::Test {
-protected:
-  MeanTestBase()
-  {
-    random_device = std::make_unique<std::random_device>();
-    rng = std::mt19937((*random_device)());
+ protected:
+  MeanTestBase() {
     f32dist = std::uniform_real_distribution<float>(-1.0f, 1.0f);
 
     auto num_input_dim_dist = std::uniform_int_distribution<size_t>(2, XNN_MAX_TENSOR_DIMS);
@@ -63,8 +60,7 @@ protected:
     subgraph_output = std::vector<T>(num_output_elements);
   }
 
-  std::unique_ptr<std::random_device> random_device;
-  std::mt19937 rng;
+  xnnpack::ReplicableRandomDevice rng;
   std::uniform_real_distribution<float> f32dist;
 
   std::vector<size_t> reduction_axes;
@@ -172,11 +168,11 @@ TEST_F(MeanTestF16, matches_operator_api)
   xnn_operator_t op = nullptr;
 
   std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-  std::fill(operator_output.begin(), operator_output.end(), fp16_ieee_from_fp32_value(nanf("")));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), fp16_ieee_from_fp32_value(nanf("")));
+  std::fill(operator_output.begin(), operator_output.end(), UINT16_C(0x7E00) /* NaN */);
+  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT16_C(0x7E00) /* NaN */);
 
   // Call operator API.
-  const xnn_status status = xnn_create_mean_nd_f16(/*flags=*/0, &op);
+  const xnn_status status = xnn_create_mean_nd_f16(/*flags=*/XNN_FLAG_KEEP_DIMS, &op);
   if (status == xnn_status_unsupported_hardware) {
     GTEST_SKIP();
   }
@@ -222,7 +218,7 @@ TEST_F(MeanTestF16, matches_operator_api)
       subgraph,
       reduction_axes.size(), reduction_axes.data(),
       input_id, output_id,
-      /*flags=*/0));
+      /*flags=*/XNN_FLAG_KEEP_DIMS));
 
   xnn_runtime_t runtime = nullptr;
   ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
@@ -253,7 +249,7 @@ TEST_F(MeanTestF32, matches_operator_api)
   std::fill(subgraph_output.begin(), subgraph_output.end(), nanf(""));
 
   // Call operator API.
-  const xnn_status status = xnn_create_mean_nd_f32(/*flags=*/0, &op);
+  const xnn_status status = xnn_create_mean_nd_f32(/*flags=*/XNN_FLAG_KEEP_DIMS, &op);
   if (status == xnn_status_unsupported_hardware) {
     GTEST_SKIP();
   }
@@ -299,7 +295,7 @@ TEST_F(MeanTestF32, matches_operator_api)
       subgraph,
       reduction_axes.size(), reduction_axes.data(),
       input_id, output_id,
-      /*flags=*/0));
+      /*flags=*/XNN_FLAG_KEEP_DIMS));
 
   xnn_runtime_t runtime = nullptr;
   ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));

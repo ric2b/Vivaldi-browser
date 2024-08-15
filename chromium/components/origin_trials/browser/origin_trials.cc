@@ -5,6 +5,7 @@
 #include "components/origin_trials/browser/origin_trials.h"
 
 #include <algorithm>
+#include <string_view>
 
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
@@ -143,7 +144,7 @@ void OriginTrials::PersistTokensInternal(
   }
 
   // Parse the provided tokens
-  for (const base::StringPiece token : header_tokens) {
+  for (const std::string_view token : header_tokens) {
     blink::TrialTokenResult validation_result =
         trial_token_validator_->ValidateTokenAndTrial(
             token, origin, script_origins, current_time);
@@ -157,13 +158,13 @@ void OriginTrials::PersistTokensInternal(
             parsed_token->feature_name())) {
       continue;
     }
-    // TODO(crbug.com/1227440): Should be part of general validation logic.
+    // TODO(crbug.com/40189223): Should be part of general validation logic.
     if (!trial_token_validator_->TrialEnablesFeaturesForOS(
             parsed_token->feature_name())) {
       continue;
     }
     if (parsed_token->is_third_party()) {
-      // TODO(crbug.com/1418340): Support for all third-party tokens.
+      // TODO(crbug.com/40257643): Support for all third-party tokens.
       // Only accept deprecation trials as third-party for now.
       bool deprecation_trial = false;
       for (const blink::mojom::OriginTrialFeature feature :
@@ -207,7 +208,7 @@ base::flat_set<std::string> OriginTrials::GetPersistedTrialsForOriginWithMatch(
   for (const auto& [token_origin, saved_tokens] : potential_tokens) {
     for (const PersistedTrialToken& token : saved_tokens) {
       if (trial_feature_match &&
-          // TODO(crbug.com/1227440): FeaturesEnabledByTrial should be part of
+          // TODO(crbug.com/40189223): FeaturesEnabledByTrial should be part of
           // general validation logic.
           !base::Contains(
               trial_token_validator_->FeaturesEnabledByTrial(token.trial_name),

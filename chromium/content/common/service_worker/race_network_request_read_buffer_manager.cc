@@ -3,7 +3,10 @@
 // found in the LICENSE file.
 
 #include "content/common/service_worker/race_network_request_read_buffer_manager.h"
+
+#include "base/check_op.h"
 #include "base/debug/crash_logging.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "content/common/features.h"
@@ -41,26 +44,32 @@ void RaceNetworkRequestReadBufferManager::CancelWatching() {
 std::pair<MojoResult, base::span<const char>>
 RaceNetworkRequestReadBufferManager::ReadData() {
   CHECK_EQ(BytesRemaining(), 0u);
-  uint32_t num_bytes = 0;
+  size_t num_bytes = 0;
   MojoResult result;
-  if (base::GetFieldTrialParamByFeatureAsBool(
-          features::kServiceWorkerAutoPreload, "query_data_size", false)) {
+  bool is_query_data_size_mode = base::GetFieldTrialParamByFeatureAsBool(
+      features::kServiceWorkerAutoPreload, "query_data_size", false);
+  if (is_query_data_size_mode) {
     result = consumer_handle_->ReadData(nullptr, &num_bytes,
                                         MOJO_READ_DATA_FLAG_QUERY);
     CHECK_EQ(result, MOJO_RESULT_OK);
+    // Sometimes queried |num_bytes| is zero. So explicitly set >=1 byte size
+    // here to avoid receiving |MOJO_RESULT_INVALID_ARGUMENT| from
+    // DataPipe::ReadData(), which happens if the |num_bytes| is zero.
+    if (num_bytes == 0) {
+      num_bytes = network::features::GetDataPipeDefaultAllocationSize();
+      CHECK_GT(num_bytes, 0u);
+    }
   } else {
     num_bytes = base::GetFieldTrialParamByFeatureAsInt(
         features::kServiceWorkerAutoPreload, "read_buffer_size",
         network::features::GetDataPipeDefaultAllocationSize(
             network::features::DataPipeAllocationSize::kLargerSizeIfPossible));
   }
-
-  SCOPED_CRASH_KEY_BOOL("SWRace", "consumer_handle_valid",
-                        consumer_handle_->is_valid());
   scoped_refptr<net::IOBuffer> buffer =
       base::MakeRefCounted<net::IOBufferWithSize>(num_bytes);
   result = consumer_handle_->ReadData(buffer->data(), &num_bytes,
                                       MOJO_READ_DATA_FLAG_NONE);
+
   if (result == MOJO_RESULT_OK) {
     buffer_ = base::MakeRefCounted<net::DrainableIOBuffer>(std::move(buffer),
                                                            num_bytes);

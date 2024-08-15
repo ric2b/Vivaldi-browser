@@ -34,13 +34,25 @@ void PushNotificationClient::OnSceneActiveForegroundBrowserReady() {
   if (feedback_presentation_delayed_) {
     id<ApplicationCommands> handler =
         static_cast<id<ApplicationCommands>>(browser->GetCommandDispatcher());
-    // TODO(b/328827101): Add payload from notification to send alongside the
-    // feedback.
-    [handler showReportAnIssueFromViewController:browser->GetSceneState()
-                                                     .window.rootViewController
-                                          sender:UserFeedbackSender::
-                                                     ContentNotification];
-    feedback_presentation_delayed_ = false;
+    switch (feedback_presentation_delayed_client_) {
+      case PushNotificationClientId::kContent:
+      case PushNotificationClientId::kSports:
+        [handler
+            showReportAnIssueFromViewController:browser->GetSceneState()
+                                                    .window.rootViewController
+                                         sender:UserFeedbackSender::
+                                                    ContentNotification
+                            specificProductData:feedback_data_];
+        feedback_presentation_delayed_ = false;
+        break;
+      case PushNotificationClientId::kTips:
+      case PushNotificationClientId::kCommerce:
+        // Features do not support feedback.
+        NOTREACHED();
+        break;
+      default:
+        break;
+    }
   }
   if (urls_delayed_for_loading_.size()) {
     for (const GURL& url : urls_delayed_for_loading_) {
@@ -50,9 +62,10 @@ void PushNotificationClient::OnSceneActiveForegroundBrowserReady() {
   }
 }
 
-// TODO(crbug.com/1524081): Make functionality that relies on this multi-profile
-// and multi-window safe. That might mean removing this method and finding a
-// different way to determine which window should be used to present UI.
+// TODO(crbug.com/41497027): Make functionality that relies on this
+// multi-profile and multi-window safe. That might mean removing this method and
+// finding a different way to determine which window should be used to present
+// UI.
 Browser* PushNotificationClient::GetSceneLevelForegroundActiveBrowser() {
   BrowserList* browser_list =
       BrowserListFactory::GetForBrowserState(GetLastUsedBrowserState());
@@ -83,10 +96,14 @@ void PushNotificationClient::loadUrlInNewTab(const GURL& url,
   UrlLoadingBrowserAgent::FromBrowser(browser)->Load(params);
 }
 
-void PushNotificationClient::loadFeedback() {
+void PushNotificationClient::loadFeedbackWithPayloadAndClientId(
+    NSDictionary<NSString*, NSString*>* data,
+    PushNotificationClientId client) {
   Browser* browser = GetSceneLevelForegroundActiveBrowser();
-  if (!browser) {
+  if (!browser && data) {
+    feedback_presentation_delayed_client_ = client;
     feedback_presentation_delayed_ = true;
+    feedback_data_ = data;
     return;
   }
 }
@@ -97,5 +114,5 @@ ChromeBrowserState* PushNotificationClient::GetLastUsedBrowserState() {
   }
   return GetApplicationContext()
       ->GetChromeBrowserStateManager()
-      ->GetLastUsedBrowserState();
+      ->GetLastUsedBrowserStateDeprecatedDoNotUse();
 }

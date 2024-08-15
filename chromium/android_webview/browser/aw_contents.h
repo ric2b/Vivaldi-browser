@@ -194,6 +194,8 @@ class AwContents : public FindHelper::Listener,
   std::vector<jni_zero::ScopedJavaLocalRef<jobject>>
   GetDocumentStartupJavascripts(JNIEnv* env);
 
+  void FlushBackForwardCache(JNIEnv* env);
+
   bool GetViewTreeForceDarkState() { return view_tree_force_dark_state_; }
 
   // PermissionRequestHandlerClient implementation.
@@ -287,9 +289,6 @@ class AwContents : public FindHelper::Listener,
   base::android::ScopedJavaLocalRef<jstring> GetScheme(JNIEnv* env);
   void OnInputEvent(JNIEnv* env);
 
-  // Sets the java client
-  void SetAndroidAutofillClient(const base::android::JavaRef<jobject>& client);
-
   void SetJsOnlineProperty(JNIEnv* env, jboolean network_up);
   void TrimMemory(JNIEnv* env, jint level, jboolean visible);
 
@@ -304,6 +303,9 @@ class AwContents : public FindHelper::Listener,
   void PrimaryPageChanged(content::Page& page) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
+  void ReadyToCommitNavigation(
+      content::NavigationHandle* navigation_handle) override;
+  void RenderViewReady() override;
 
   // AwSafeBrowsingUIManager::UIManagerClient implementation
   bool CanShowInterstitial() override;

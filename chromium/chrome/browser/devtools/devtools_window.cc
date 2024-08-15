@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <set>
+#include <string_view>
 #include <utility>
 
 #include "aida_client.h"
@@ -13,6 +14,7 @@
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -193,7 +195,9 @@ class DevToolsToolboxDelegate
 
   content::WebContents* OpenURLFromTab(
       content::WebContents* source,
-      const content::OpenURLParams& params) override;
+      const content::OpenURLParams& params,
+      base::OnceCallback<void(content::NavigationHandle&)>
+          navigation_handle_callback) override;
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
       content::WebContents* source,
       const content::NativeWebKeyboardEvent& event) override;
@@ -218,12 +222,20 @@ DevToolsToolboxDelegate::~DevToolsToolboxDelegate() {
 
 content::WebContents* DevToolsToolboxDelegate::OpenURLFromTab(
     content::WebContents* source,
-    const content::OpenURLParams& params) {
+    const content::OpenURLParams& params,
+    base::OnceCallback<void(content::NavigationHandle&)>
+        navigation_handle_callback) {
   DCHECK(source == web_contents());
-  if (!params.url.SchemeIs(content::kChromeDevToolsScheme))
+  if (!params.url.SchemeIs(content::kChromeDevToolsScheme)) {
     return nullptr;
-  source->GetController().LoadURLWithParams(
-      content::NavigationController::LoadURLParams(params));
+  }
+  base::WeakPtr<content::NavigationHandle> navigation_handle =
+      source->GetController().LoadURLWithParams(
+          content::NavigationController::LoadURLParams(params));
+
+  if (navigation_handle_callback && navigation_handle) {
+    std::move(navigation_handle_callback).Run(*navigation_handle);
+  }
   return source;
 }
 
@@ -307,7 +319,7 @@ class DevToolsEventForwarder {
   static bool KeyWhitelistingAllowed(int key_code, int modifiers);
   static int CombineKeyCodeAndModifiers(int key_code, int modifiers);
 
-  DevToolsWindow* devtools_window_;
+  raw_ptr<DevToolsWindow> devtools_window_;
   std::set<int> whitelisted_keys_;
 };
 
@@ -420,7 +432,7 @@ class DevToolsWindow::Throttle : public content::NavigationThrottle {
   }
 
  private:
-  DevToolsWindow* devtools_window_;
+  raw_ptr<DevToolsWindow> devtools_window_;
 };
 
 // Helper class that holds the owned main WebContents for the docked
@@ -575,8 +587,8 @@ content::WebContents* DevToolsWindow::GetInTabWebContents(
   if (out_strategy)
     out_strategy->CopyFrom(window->contents_resizing_strategy_);
 
-  return window->is_docked_ ? window->main_web_contents_ :
-      window->toolbox_web_contents_;
+  return window->is_docked_ ? window->main_web_contents_.get()
+                            : window->toolbox_web_contents_.get();
 }
 
 // static
@@ -1388,6 +1400,32 @@ DevToolsWindow* DevToolsWindow::Create(
                             inspected_web_contents, can_dock, opened_by);
 }
 
+std::string GetConsoleInsightsModelId() {
+  if (base::FeatureList::IsEnabled(
+          ::features::kDevToolsConsoleInsightsDogfood)) {
+    return features::kDevToolsConsoleInsightsDogfoodModelId.Get();
+  }
+  return features::kDevToolsConsoleInsightsModelId.Get();
+}
+
+std::string GetConsoleInsightsTemperature() {
+  if (base::FeatureList::IsEnabled(
+          ::features::kDevToolsConsoleInsightsDogfood)) {
+    return base::NumberToString(
+        features::kDevToolsConsoleInsightsDogfoodTemperature.Get());
+  }
+  return base::NumberToString(
+      features::kDevToolsConsoleInsightsTemperature.Get());
+}
+
+bool GetConsoleInsightsOptIn() {
+  if (base::FeatureList::IsEnabled(
+          ::features::kDevToolsConsoleInsightsDogfood)) {
+    return features::kDevToolsConsoleInsightsDogfoodOptIn.Get();
+  }
+  return features::kDevToolsConsoleInsightsOptIn.Get();
+}
+
 // static
 GURL DevToolsWindow::GetDevToolsURL(Profile* profile,
                                     FrontendType frontend_type,
@@ -1397,6 +1435,7 @@ GURL DevToolsWindow::GetDevToolsURL(Profile* profile,
                                     bool has_other_clients,
                                     bool browser_connection) {
   std::string url;
+  AidaClient::BlockedReason blocked_reason;
 
   std::string remote_base =
       "?remoteBase=" + DevToolsUI::GetRemoteBaseURL().spec();
@@ -1422,12 +1461,28 @@ GURL DevToolsWindow::GetDevToolsURL(Profile* profile,
       if (base::FeatureList::IsEnabled(::features::kDevToolsVeLogging)) {
         url += "&veLogging=true";
       }
-      if (AidaClient::CanUseAida(profile)) {
-        url += "&enableAida=true&aidaModelId=" +
-               features::kDevToolsConsoleInsightsModelId.Get() +
-               "&aidaTemperature=" +
-               base::NumberToString(
-                   features::kDevToolsConsoleInsightsTemperature.Get());
+      blocked_reason = AidaClient::CanUseAida(profile);
+      if (!blocked_reason.blocked_by_feature_flag) {
+        url += "&enableAida=true&aidaModelId=" + GetConsoleInsightsModelId() +
+               "&aidaTemperature=" + GetConsoleInsightsTemperature();
+        if (GetConsoleInsightsOptIn()) {
+          url += "&ci_disabledByDefault=true";
+        }
+      }
+      if (blocked_reason.blocked_by_age) {
+        url += "&ci_blockedByAge=true";
+      }
+      if (blocked_reason.blocked_by_enterprise_policy) {
+        url += "&ci_blockedByEnterprisePolicy=true";
+      }
+      if (blocked_reason.disallow_logging) {
+        url += "&ci_disallowLogging=true";
+      }
+      if (blocked_reason.blocked_by_geo) {
+        url += "&ci_blockedByGeo=true";
+      }
+      if (blocked_reason.blocked_by_rollout) {
+        url += "&ci_blockedByRollout=true";
       }
       break;
     case kFrontendWorker:
@@ -1452,6 +1507,11 @@ GURL DevToolsWindow::GetDevToolsURL(Profile* profile,
     url += "&hasOtherClients=true";
   if (browser_connection)
     url += "&browserConnection=true";
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kUnsafelyDisableDevToolsSelfXssWarnings)) {
+    url += "&disableSelfXssWarnings=true";
+  }
 
 #if BUILDFLAG(CHROME_FOR_TESTING)
   url += "&isChromeForTesting=true";
@@ -1497,11 +1557,15 @@ DevToolsWindow* DevToolsWindow::AsDevToolsWindow(Browser* browser) {
 
 WebContents* DevToolsWindow::OpenURLFromTab(
     WebContents* source,
-    const content::OpenURLParams& params) {
+    const content::OpenURLParams& params,
+    base::OnceCallback<void(content::NavigationHandle&)>
+        navigation_handle_callback) {
   DCHECK(source == main_web_contents_);
   if (!params.url.SchemeIs(content::kChromeDevToolsScheme)) {
+    // TODO(https://crbug.com/40275094): Plumb the `navigation_handle_callback`.
     return OpenURLFromInspectedTab(params);
   }
+  // TODO(https://crbug.com/40275094): Plumb the `navigation_handle_callback`.
   main_web_contents_->GetController().Reload(content::ReloadType::NORMAL,
                                              false);
   return main_web_contents_;
@@ -1514,7 +1578,8 @@ WebContents* DevToolsWindow::OpenURLFromInspectedTab(
     return nullptr;
   content::OpenURLParams modified = params;
   modified.referrer = content::Referrer();
-  return inspected_web_contents->OpenURL(modified);
+  return inspected_web_contents->OpenURL(modified,
+                                         /*navigation_handle_callback=*/{});
 }
 
 void DevToolsWindow::ActivateContents(WebContents* contents) {
@@ -1783,12 +1848,16 @@ void DevToolsWindow::SetIsDocked(bool dock_requested) {
     // okay to just null the raw pointer here.
     browser_ = nullptr;
 
-    // TODO(crbug.com/1221967): WebContents should be removed with a reason
+    // TODO(crbug.com/40773744): WebContents should be removed with a reason
     // other than kInsertedIntoOtherTabStrip, it's not getting reinserted into
     // another tab strip.
-    owned_main_web_contents_ = std::make_unique<OwnedMainWebContents>(
-        tab_strip_model->DetachWebContentsAtForInsertion(
-            tab_strip_model->GetIndexOfWebContents(main_web_contents_)));
+    std::unique_ptr<tabs::TabModel> tab_model =
+        tab_strip_model->DetachTabAtForInsertion(
+            tab_strip_model->GetIndexOfWebContents(main_web_contents_));
+    std::unique_ptr<WebContents> web_contents =
+        tabs::TabModel::DestroyAndTakeWebContents(std::move(tab_model));
+    owned_main_web_contents_ =
+        std::make_unique<OwnedMainWebContents>(std::move(web_contents));
   } else if (!dock_requested && was_docked) {
     UpdateBrowserWindow();
   }
@@ -1845,9 +1914,11 @@ void DevToolsWindow::OpenInNewTab(const GURL& url) {
   // checking the return value which can be null in particular when opening
   // links in a new tab. Otherwise we would get a second tab here (VB-11330).
   if (vivaldi::IsVivaldiRunning() && inspected_web_contents) {
-    inspected_web_contents->OpenURL(params);
+    inspected_web_contents->OpenURL(params, /*navigation_handle_callback=*/{});
   } else
-  if (!inspected_web_contents || !inspected_web_contents->OpenURL(params)) {
+  if (!inspected_web_contents ||
+      !inspected_web_contents->OpenURL(params,
+                                       /*navigation_handle_callback=*/{})) {
     chrome::ScopedTabbedBrowserDisplayer displayer(profile_);
     chrome::AddSelectedTabWithURL(displayer.browser(), fixed_url,
                                   ui::PAGE_TRANSITION_LINK);
@@ -1934,7 +2005,7 @@ void DevToolsWindow::ShowCertificateViewer(const std::string& cert_chain) {
     decoded.push_back(std::move(temp));
   }
 
-  std::vector<base::StringPiece> cert_string_piece;
+  std::vector<std::string_view> cert_string_piece;
   for (const auto& str : decoded)
     cert_string_piece.push_back(str);
   scoped_refptr<net::X509Certificate> cert =
@@ -1944,7 +2015,7 @@ void DevToolsWindow::ShowCertificateViewer(const std::string& cert_chain) {
   WebContents* inspected_contents =
       vivaldi::IsVivaldiRunning()
           ? GetInspectedWebContents()
-          : (is_docked_ ? GetInspectedWebContents() : main_web_contents_);
+          : (is_docked_ ? GetInspectedWebContents() : main_web_contents_.get());
   Browser* browser = nullptr;
   int tab = 0;
   if (!FindInspectedBrowserAndTabIndex(inspected_contents, &browser, &tab))
@@ -2215,10 +2286,14 @@ void DevToolsWindow::MaybeShowSharedProcessInfobar() {
 
   if (primary_main_frame_count > 1) {
     auto* info_bar_manager = GetInfoBarManager();
+    // NOTE(andre@vivaldi.com) : UIBindingsDelegate::GetInfoBarManager can
+    // return null. VB-105711.
+    if (info_bar_manager) {
     sharing_infobar_ = info_bar_manager->AddInfoBar(
         CreateConfirmInfoBar(std::make_unique<ProcessSharingInfobarDelegate>(
             inspected_web_contents)));
     info_bar_manager->AddObserver(this);
+    }
   }
 }
 

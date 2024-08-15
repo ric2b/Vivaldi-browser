@@ -12,8 +12,8 @@
 
 #include "base/files/file_path.h"
 #include "base/observer_list_types.h"
-#include "components/ad_blocker/adblock_metadata.h"
 #include "components/ad_blocker/adblock_rule_source_handler.h"
+#include "components/ad_blocker/adblock_types.h"
 #include "url/origin.h"
 
 namespace base {
@@ -41,7 +41,8 @@ class RuleManager {
     ~Observer() override;
     // The properties of a rule source have been updated. Either because a
     // fetch started or completed.
-    virtual void OnRulesSourceUpdated(const RuleSource& rule_source) {}
+    virtual void OnRuleSourceUpdated(RuleGroup group,
+                                     const ActiveRuleSource& rule_source) {}
 
     virtual void OnRuleSourceDeleted(uint32_t source_id, RuleGroup group) {}
 
@@ -53,13 +54,15 @@ class RuleManager {
 
   virtual ~RuleManager();
 
-  virtual bool AddRulesSource(const KnownRuleSource& known_source) = 0;
-  virtual void DeleteRuleSource(const KnownRuleSource& known_source) = 0;
+  virtual bool AddRulesSource(RuleGroup group,
+                              const RuleSourceCore& source_core) = 0;
+  virtual void DeleteRuleSource(RuleGroup group,
+                                const RuleSourceCore& source_core) = 0;
 
   // Returns the rule source matching the given ID, if it is an existing ID.
-  virtual std::optional<RuleSource> GetRuleSource(RuleGroup group,
-                                                   uint32_t source_id) = 0;
-  virtual std::map<uint32_t, RuleSource> GetRuleSources(
+  virtual std::optional<ActiveRuleSource> GetRuleSource(RuleGroup group,
+                                                        uint32_t source_id) = 0;
+  virtual std::map<uint32_t, ActiveRuleSource> GetRuleSources(
       RuleGroup group) const = 0;
 
   // Triggers an immediate fetching of a rule source instead of waiting for its

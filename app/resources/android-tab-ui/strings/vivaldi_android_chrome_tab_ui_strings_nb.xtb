@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="no">
+<translation id="2947471979790858922">Din aktivitet i disse privatfanene blir fjernet fra denne enheten</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Du kan finne dine lukkede faner under Nylige faner i Vivadi-menyen. Din privatfane vil ikke være tilgjengelig.}
+        other {Du kan finne dine lukkede faner under Nylige faner i Vivadi-menyen. Dine privatfaner vil ikke være tilgjengelige.}}</translation>
+<translation id="4871187110787939393">Lukke alle privatfaner?</translation>
 </translationbundle>

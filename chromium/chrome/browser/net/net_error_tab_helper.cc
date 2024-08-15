@@ -168,7 +168,7 @@ void NetErrorTabHelper::OpenVivaldia() {
   content::OpenURLParams params(GURL("vivaldi://game/"), content::Referrer(),
                                 WindowOpenDisposition::NEW_FOREGROUND_TAB,
                                 ui::PAGE_TRANSITION_LINK, false);
-  web_contents()->OpenURL(params);
+  web_contents()->OpenURL(params, /*navigation_handle_callback=*/{});
 }
 
 #if BUILDFLAG(IS_CHROMEOS)

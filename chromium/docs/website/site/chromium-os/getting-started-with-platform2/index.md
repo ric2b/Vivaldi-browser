@@ -9,6 +9,6 @@ title: Getting started with Platform2
 #### Deprecation warning
 
 [This page has been
-migrated](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/platform2_primer.md)!
+migrated](https://www.chromium.org/chromium-os/developer-library/guides/development/platform2-primer/)!
 
 Please update the link that brought you here.

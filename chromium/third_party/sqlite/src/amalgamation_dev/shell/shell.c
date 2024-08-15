@@ -580,6 +580,9 @@ zSkipValidUtf8(const char *z, int nAccept, long ccm);
 #ifndef HAVE_CONSOLE_IO_H
 # include "console_io.h"
 #endif
+#if defined(_MSC_VER)
+# pragma warning(disable : 4204)
+#endif
 
 #ifndef SQLITE_CIO_NO_TRANSLATE
 # if (defined(_WIN32) || defined(WIN32)) && !SQLITE_OS_WINRT
@@ -677,6 +680,10 @@ static short streamOfConsole(FILE *pf, /* out */ PerStreamTags *ppst){
   return ppst->reachesConsole;
 # endif
 }
+
+# ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
+#  define ENABLE_VIRTUAL_TERMINAL_PROCESSING  (0x4)
+# endif
 
 # if CIO_WIN_WC_XLATE
 /* Define console modes for use with the Windows Console API. */
@@ -1227,6 +1234,10 @@ SQLITE_INTERNAL_LINKAGE char* fGetsUtf8(char *cBuf, int ncMax, FILE *pfIn){
 # endif
 }
 #endif /* !defined(SQLITE_CIO_NO_TRANSLATE) */
+
+#if defined(_MSC_VER)
+# pragma warning(default : 4204)
+#endif
 
 #undef SHELL_INVALID_FILE_PTR
 
@@ -14742,6 +14753,15 @@ static void dbdataValue(
   }
 }
 
+/* This macro is a copy of the MX_CELL() macro in the SQLite core. Given
+** a page-size, it returns the maximum number of cells that may be present
+** on the page.  */
+#define DBDATA_MX_CELL(pgsz) ((pgsz-8)/6)
+
+/* Maximum number of fields that may appear in a single record. This is
+** the "hard-limit", according to comments in sqliteLimit.h. */
+#define DBDATA_MX_FIELD 32676
+
 /*
 ** Move an sqlite_dbdata or sqlite_dbptr cursor to the next entry.
 */
@@ -14770,6 +14790,9 @@ static int dbdataNext(sqlite3_vtab_cursor *pCursor){
       assert( iOff+3+2<=pCsr->nPage );
       pCsr->iCell = pTab->bPtr ? -2 : 0;
       pCsr->nCell = get_uint16(&pCsr->aPage[iOff+3]);
+      if( pCsr->nCell>DBDATA_MX_CELL(pCsr->nPage) ){
+        pCsr->nCell = DBDATA_MX_CELL(pCsr->nPage);
+      }
     }
 
     if( pTab->bPtr ){
@@ -14814,19 +14837,19 @@ static int dbdataNext(sqlite3_vtab_cursor *pCursor){
         if( pCsr->iCell>=pCsr->nCell ){
           bNextPage = 1;
         }else{
+          int iCellPtr = iOff + 8 + nPointer + pCsr->iCell*2;
   
-          iOff += 8 + nPointer + pCsr->iCell*2;
-          if( iOff>pCsr->nPage ){
+          if( iCellPtr>pCsr->nPage ){
             bNextPage = 1;
           }else{
-            iOff = get_uint16(&pCsr->aPage[iOff]);
+            iOff = get_uint16(&pCsr->aPage[iCellPtr]);
           }
     
           /* For an interior node cell, skip past the child-page number */
           iOff += nPointer;
     
           /* Load the "byte of payload including overflow" field */
-          if( bNextPage || iOff>pCsr->nPage ){
+          if( bNextPage || iOff>pCsr->nPage || iOff<=iCellPtr ){
             bNextPage = 1;
           }else{
             iOff += dbdataGetVarintU32(&pCsr->aPage[iOff], &nPayload);
@@ -14909,7 +14932,9 @@ static int dbdataNext(sqlite3_vtab_cursor *pCursor){
         pCsr->iField++;
         if( pCsr->iField>0 ){
           sqlite3_int64 iType;
-          if( pCsr->pHdrPtr>&pCsr->pRec[pCsr->nRec] ){
+          if( pCsr->pHdrPtr>=&pCsr->pRec[pCsr->nRec] 
+           || pCsr->iField>=DBDATA_MX_FIELD
+          ){
             bNextPage = 1;
           }else{
             int szField = 0;
@@ -16397,7 +16422,7 @@ static int recoverWriteSchema1(sqlite3_recover *p){
         if( bTable && !bVirtual ){
           if( SQLITE_ROW==sqlite3_step(pTblname) ){
             const char *zTbl = (const char*)sqlite3_column_text(pTblname, 0);
-            recoverAddTable(p, zTbl, iRoot);
+            if( zTbl ) recoverAddTable(p, zTbl, iRoot);
           }
           recoverReset(p, pTblname);
         }
@@ -20619,6 +20644,7 @@ static void exec_prepared_stmt_columnar(
   rc = sqlite3_step(pStmt);
   if( rc!=SQLITE_ROW ) return;
   nColumn = sqlite3_column_count(pStmt);
+  if( nColumn==0 ) goto columnar_end;
   nAlloc = nColumn*4;
   if( nAlloc<=0 ) nAlloc = 1;
   azData = sqlite3_malloc64( nAlloc*sizeof(char*) );
@@ -20704,7 +20730,6 @@ static void exec_prepared_stmt_columnar(
     if( n>p->actualWidth[j] ) p->actualWidth[j] = n;
   }
   if( seenInterrupt ) goto columnar_end;
-  if( nColumn==0 ) goto columnar_end;
   switch( p->cMode ){
     case MODE_Column: {
       colSep = "  ";
@@ -25553,16 +25578,15 @@ static int do_meta_command(char *zLine, ShellState *p){
 #ifndef SQLITE_SHELL_FIDDLE
   if( c=='i' && cli_strncmp(azArg[0], "import", n)==0 ){
     char *zTable = 0;           /* Insert data into this table */
-    char *zSchema = 0;          /* within this schema (may default to "main") */
+    char *zSchema = 0;          /* Schema of zTable */
     char *zFile = 0;            /* Name of file to extra content from */
     sqlite3_stmt *pStmt = NULL; /* A statement */
     int nCol;                   /* Number of columns in the table */
-    int nByte;                  /* Number of bytes in an SQL string */
+    i64 nByte;                  /* Number of bytes in an SQL string */
     int i, j;                   /* Loop counters */
     int needCommit;             /* True to COMMIT or ROLLBACK at end */
     int nSep;                   /* Number of bytes in p->colSeparator[] */
-    char *zSql;                 /* An SQL statement */
-    char *zFullTabName;         /* Table name with schema if applicable */
+    char *zSql = 0;             /* An SQL statement */
     ImportCtx sCtx;             /* Reader context */
     char *(SQLITE_CDECL *xRead)(ImportCtx*); /* Func to read one value */
     int eVerbose = 0;           /* Larger for more console output */
@@ -25696,24 +25720,14 @@ static int do_meta_command(char *zLine, ShellState *p){
     while( (nSkip--)>0 ){
       while( xRead(&sCtx) && sCtx.cTerm==sCtx.cColSep ){}
     }
-    if( zSchema!=0 ){
-      zFullTabName = sqlite3_mprintf("\"%w\".\"%w\"", zSchema, zTable);
-    }else{
-      zFullTabName = sqlite3_mprintf("\"%w\"", zTable);
-    }
-    zSql = sqlite3_mprintf("SELECT * FROM %s", zFullTabName);
-    if( zSql==0 || zFullTabName==0 ){
-      import_cleanup(&sCtx);
-      shell_out_of_memory();
-    }
-    nByte = strlen30(zSql);
-    rc = sqlite3_prepare_v2(p->db, zSql, -1, &pStmt, 0);
     import_append_char(&sCtx, 0);    /* To ensure sCtx.z is allocated */
-    if( rc && sqlite3_strglob("no such table: *", sqlite3_errmsg(p->db))==0 ){
+    if( sqlite3_table_column_metadata(p->db, zSchema, zTable,0,0,0,0,0,0) ){
+      /* Table does not exist.  Create it. */
       sqlite3 *dbCols = 0;
       char *zRenames = 0;
       char *zColDefs;
-      zCreate = sqlite3_mprintf("CREATE TABLE %s", zFullTabName);
+      zCreate = sqlite3_mprintf("CREATE TABLE \"%w\".\"%w\"", 
+                    zSchema ? zSchema : "main", zTable);
       while( xRead(&sCtx) ){
         zAutoColumn(sCtx.z, &dbCols, 0);
         if( sCtx.cTerm!=sCtx.cColSep ) break;
@@ -25728,34 +25742,50 @@ static int do_meta_command(char *zLine, ShellState *p){
       assert(dbCols==0);
       if( zColDefs==0 ){
         eputf("%s: empty file\n", sCtx.zFile);
-      import_fail:
-        sqlite3_free(zCreate);
-        sqlite3_free(zSql);
-        sqlite3_free(zFullTabName);
         import_cleanup(&sCtx);
         rc = 1;
         goto meta_command_exit;
       }
       zCreate = sqlite3_mprintf("%z%z\n", zCreate, zColDefs);
+      if( zCreate==0 ){
+        import_cleanup(&sCtx);
+        shell_out_of_memory();
+      }
       if( eVerbose>=1 ){
         oputf("%s\n", zCreate);
       }
       rc = sqlite3_exec(p->db, zCreate, 0, 0, 0);
-      if( rc ){
-        eputf("%s failed:\n%s\n", zCreate, sqlite3_errmsg(p->db));
-        goto import_fail;
-      }
       sqlite3_free(zCreate);
       zCreate = 0;
-      rc = sqlite3_prepare_v2(p->db, zSql, -1, &pStmt, 0);
+      if( rc ){
+        eputf("%s failed:\n%s\n", zCreate, sqlite3_errmsg(p->db));
+        import_cleanup(&sCtx);
+        rc = 1;
+        goto meta_command_exit;
+      }
     }
+    zSql = sqlite3_mprintf("SELECT count(*) FROM pragma_table_info(%Q,%Q);",
+                           zTable, zSchema);
+    if( zSql==0 ){
+      import_cleanup(&sCtx);
+      shell_out_of_memory();
+    }
+    nByte = strlen(zSql);    
+    rc =  sqlite3_prepare_v2(p->db, zSql, -1, &pStmt, 0);
+    sqlite3_free(zSql);
+    zSql = 0;
     if( rc ){
       if (pStmt) sqlite3_finalize(pStmt);
       eputf("Error: %s\n", sqlite3_errmsg(p->db));
-      goto import_fail;
+      import_cleanup(&sCtx);
+      rc = 1;
+      goto meta_command_exit;
     }
-    sqlite3_free(zSql);
-    nCol = sqlite3_column_count(pStmt);
+    if( sqlite3_step(pStmt)==SQLITE_ROW ){
+      nCol = sqlite3_column_int(pStmt, 0);
+    }else{
+      nCol = 0;
+    }
     sqlite3_finalize(pStmt);
     pStmt = 0;
     if( nCol==0 ) return 0; /* no columns, no error */
@@ -25764,7 +25794,12 @@ static int do_meta_command(char *zLine, ShellState *p){
       import_cleanup(&sCtx);
       shell_out_of_memory();
     }
-    sqlite3_snprintf(nByte+20, zSql, "INSERT INTO %s VALUES(?", zFullTabName);
+    if( zSchema ){
+      sqlite3_snprintf(nByte+20, zSql, "INSERT INTO \"%w\".\"%w\" VALUES(?", 
+                       zSchema, zTable);
+    }else{
+      sqlite3_snprintf(nByte+20, zSql, "INSERT INTO \"%w\" VALUES(?", zTable);
+    }
     j = strlen30(zSql);
     for(i=1; i<nCol; i++){
       zSql[j++] = ',';
@@ -25776,13 +25811,15 @@ static int do_meta_command(char *zLine, ShellState *p){
       oputf("Insert using: %s\n", zSql);
     }
     rc = sqlite3_prepare_v2(p->db, zSql, -1, &pStmt, 0);
+    sqlite3_free(zSql);
+    zSql = 0;
     if( rc ){
       eputf("Error: %s\n", sqlite3_errmsg(p->db));
       if (pStmt) sqlite3_finalize(pStmt);
-      goto import_fail;
+      import_cleanup(&sCtx);
+      rc = 1;
+      goto meta_command_exit;
     }
-    sqlite3_free(zSql);
-    sqlite3_free(zFullTabName);
     needCommit = sqlite3_get_autocommit(p->db);
     if( needCommit ) sqlite3_exec(p->db, "BEGIN", 0, 0, 0);
     do{

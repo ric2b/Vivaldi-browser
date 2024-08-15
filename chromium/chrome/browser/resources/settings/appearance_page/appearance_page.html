@@ -70,8 +70,7 @@
           </div>
 </if>
         </div>
-        <div id="colorSchemeModeRow" class="cr-row"
-            hidden$="[[!showColorSchemeMode_]]">
+        <div id="colorSchemeModeRow" class="cr-row">
           <div id="colorSchemeModeLabel" class="flex cr-padded-text"
               aria-hidden="true">
             $i18n{colorSchemeMode}
@@ -141,6 +140,12 @@
             hidden="[[!pageVisibility.bookmarksBar]]"
             pref="{{prefs.bookmark_bar.show_on_all_tabs}}"
             label="$i18n{showBookmarksBar}">
+        </settings-toggle-button>
+
+        <settings-toggle-button class="hr" id="showSavedTabGroups"
+            hidden="[[!showSavedTabGroupsInBookmarksBar_]]"
+            pref="{{prefs.bookmark_bar.show_tab_groups}}"
+            label="$i18n{showTabGroupsInBookmarksBar}">
         </settings-toggle-button>
 
         <template is="dom-if" if="[[!showHoverCardImagesOption_]]">
@@ -231,14 +236,6 @@
             </template>
           </select>
         </div>
-        <template is="dom-if" if="[[showReaderModeOption_]]">
-          <settings-toggle-button
-              class="hr"
-              pref="{{prefs.dom_distiller.offer_reader_mode}}"
-              label="$i18n{readerMode}"
-              sub-label="$i18n{readerModeDescription}">
-          </settings-toggle-button>
-        </template>
 <if expr="is_macosx">
         <settings-toggle-button class="hr"
             pref="{{prefs.webkit.webprefs.tabs_to_links}}"

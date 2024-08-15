@@ -28,6 +28,7 @@
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 
 #include "base/memory/scoped_refptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/trace_event/typed_macros.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/metrics/public/cpp/mojo_ukm_recorder.h"
@@ -128,16 +129,25 @@ scoped_refptr<SecurityOrigin> CreateSecurityOrigin(
   DCHECK(!is_service_worker_global_scope ||
          !KURL(creation_params->script_url).ProtocolIsData());
 
-  // TODO(https://crbug.com/1058305) Inherit |agent_cluster_id_| for dedicated
-  // workers. DO NOT inherit for shared workers and service workers.
-  //
-  // Create a new SecurityOrigin via CreateFromUrlOrigin() so that worker's
-  // origin can avoid inheriting unnecessary capabilities from the starter
-  // origin, while the worker's origin inherits url:Origin's internal nonce.
   scoped_refptr<SecurityOrigin> security_origin;
   if (KURL(creation_params->script_url).ProtocolIsData()) {
-    security_origin = SecurityOrigin::CreateUniqueOpaque();
+    // Workers with data: URL should use a new, unique opaque origin per spec:
+    // https://html.spec.whatwg.org/multipage/workers.html#script-settings-for-workers:concept-settings-object-origin-2
+    // We derive the new opaque origin from the starter origin because of a bug
+    // where the browser thinks the worker's origin is the starter origin (see
+    // https://crbug.com/1058759). With `DeriveNewOpaqueOrigin()`, the precursor
+    // origin of the new opaque origin will be the starter origin. This way, if
+    // the browser needs to verify that the browser and renderer origin matches,
+    // it can just compare the browser-side origin with the precursor of the
+    // renderer-side origin.
+    security_origin = creation_params->starter_origin->DeriveNewOpaqueOrigin();
   } else {
+    // TODO(https://crbug.com/1058305) Inherit |agent_cluster_id_| for dedicated
+    // workers. DO NOT inherit for shared workers and service workers.
+    //
+    // Create a new SecurityOrigin via CreateFromUrlOrigin() so that worker's
+    // origin can avoid inheriting unnecessary capabilities from the starter
+    // origin, while the worker's origin inherits url:Origin's internal nonce.
     security_origin = SecurityOrigin::CreateFromUrlOrigin(
         creation_params->starter_origin->ToUrlOrigin());
   }
@@ -456,6 +466,7 @@ void WorkerGlobalScope::WorkerScriptFetchFinished(
     Script& worker_script,
     std::optional<v8_inspector::V8StackTraceId> stack_id) {
   DCHECK(IsContextThread());
+  TRACE_EVENT("blink.worker", "WorkerGlobalScope::WorkerScriptFetchFinished");
 
   DCHECK_NE(ScriptEvalState::kEvaluated, script_eval_state_);
   DCHECK(!worker_script_);
@@ -492,6 +503,7 @@ void WorkerGlobalScope::RunWorkerScript() {
 
   DCHECK(worker_script_);
   DCHECK_EQ(script_eval_state_, ScriptEvalState::kReadyToEvaluate);
+  TRACE_EVENT("blink.worker", "WorkerGlobalScope::RunWorkerScript");
 
   WorkerThreadDebugger* debugger =
       WorkerThreadDebugger::From(GetThread()->GetIsolate());
@@ -553,6 +565,8 @@ void WorkerGlobalScope::RunWorkerScript() {
     debugger->ExternalAsyncTaskFinished(*stack_id_);
 
   script_eval_state_ = ScriptEvalState::kEvaluated;
+  TRACE_EVENT_NESTABLE_ASYNC_END0("blink.worker", "WorkerGlobalScope setup",
+                                  TRACE_ID_LOCAL(this));
 }
 
 void WorkerGlobalScope::ReceiveMessage(BlinkTransferableMessage message) {
@@ -632,6 +646,9 @@ WorkerGlobalScope::WorkerGlobalScope(
           std::move(creation_params->top_level_frame_security_origin)) {
   // Workers should always maintain the default world of an isolate.
   CHECK(creation_params->is_default_world_of_isolate);
+  TRACE_EVENT("blink.worker", "WorkerGlobalScope::WorkerGlobalScope");
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("blink.worker", "WorkerGlobalScope setup",
+                                    TRACE_ID_LOCAL(this));
 
   InstanceCounters::IncrementCounter(
       InstanceCounters::kWorkerGlobalScopeCounter);

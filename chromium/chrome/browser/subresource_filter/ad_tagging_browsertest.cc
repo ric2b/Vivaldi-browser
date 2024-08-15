@@ -502,7 +502,7 @@ IN_PROC_BROWSER_TEST_F(AdTaggingBrowserTest, VerifySameOriginWithoutNavigate) {
   // The test assumes pages gets deleted after navigation, triggering histogram
   // recording. Disable back/forward cache to ensure that pages don't get
   // preserved in the cache.
-  // TODO(https://crbug.com/1229122): Investigate if this needs further fix.
+  // TODO(crbug.com/40189815): Investigate if this needs further fix.
   content::DisableBackForwardCacheForTesting(
       browser()->tab_strip_model()->GetActiveWebContents(),
       content::BackForwardCache::TEST_REQUIRES_NO_CACHING);
@@ -986,6 +986,19 @@ IN_PROC_BROWSER_TEST_F(AdTaggingBrowserTest,
 
   EXPECT_EQ(waiter->current_complete_vanilla_resources(), 2);
   EXPECT_EQ(waiter->current_complete_ad_resources(), 3);
+}
+
+// Regression test for crbug.com/336753737.
+IN_PROC_BROWSER_TEST_F(
+    AdTaggingBrowserTest,
+    SameDocumentHistoryNavigationAbortedByParentHistoryNavigation) {
+  GURL url = embedded_test_server()->GetURL(
+      "a.com", "/ad_tagging/abort_regression.html");
+
+  content::TestNavigationObserver navigation_observer(web_contents());
+
+  // We should not crash in this line.
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
 }
 
 class AdClickMetricsBrowserTest : public AdTaggingBrowserTest {

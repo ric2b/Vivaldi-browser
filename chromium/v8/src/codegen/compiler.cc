@@ -80,7 +80,8 @@ constexpr bool IsOSR(BytecodeOffset osr_offset) { return !osr_offset.IsNone(); }
 void SetTieringState(IsolateForSandbox isolate, Tagged<JSFunction> function,
                      BytecodeOffset osr_offset, TieringState value) {
   if (IsOSR(osr_offset)) {
-    function->set_osr_tiering_state(value);
+    DCHECK(value == TieringState::kInProgress || value == TieringState::kNone);
+    function->set_osr_tiering_in_progress(IsInProgress(value));
   } else {
     function->set_tiering_state(isolate, value);
   }
@@ -1055,6 +1056,7 @@ class OptimizedCodeCache : public AllStatic {
       return;
     }
 
+    function->shared()->set_function_context_independent_compiled(true);
     feedback_vector->SetOptimizedCode(isolate, code);
   }
 };
@@ -1361,7 +1363,7 @@ MaybeHandle<Code> GetOrCompileOptimized(
   if (OptimizedCodeCache::Get(isolate, function, osr_offset, code_kind)
           .ToHandle(&cached_code)) {
     if (IsOSR(osr_offset)) {
-      if (!IsInProgress(function->osr_tiering_state())) {
+      if (!function->osr_tiering_in_progress()) {
         function->feedback_vector()->reset_osr_urgency();
       }
     } else {
@@ -1372,7 +1374,7 @@ MaybeHandle<Code> GetOrCompileOptimized(
 
   if (IsOSR(osr_offset)) {
     // One OSR job per function at a time.
-    if (IsInProgress(function->osr_tiering_state())) {
+    if (function->osr_tiering_in_progress()) {
       return {};
     }
 
@@ -1720,10 +1722,8 @@ BackgroundCompileTask::BackgroundCompileTask(
 
 BackgroundCompileTask::~BackgroundCompileTask() = default;
 
-namespace {
-
 void SetScriptFieldsFromDetails(Isolate* isolate, Tagged<Script> script,
-                                ScriptDetails script_details,
+                                const ScriptDetails& script_details,
                                 DisallowGarbageCollection* no_gc) {
   Handle<Object> script_name;
   if (script_details.name_obj.ToHandle(&script_name)) {
@@ -1748,6 +1748,8 @@ void SetScriptFieldsFromDetails(Isolate* isolate, Tagged<Script> script,
     }
   }
 }
+
+namespace {
 
 #ifdef ENABLE_SLOW_DCHECKS
 
@@ -2459,10 +2461,10 @@ void BackgroundDeserializeTask::MergeWithExistingScript() {
 
 MaybeHandle<SharedFunctionInfo> BackgroundDeserializeTask::Finish(
     Isolate* isolate, Handle<String> source,
-    ScriptOriginOptions origin_options) {
+    const ScriptDetails& script_details) {
   return CodeSerializer::FinishOffThreadDeserialize(
       isolate, std::move(off_thread_data_), &cached_data_, source,
-      origin_options, &background_merge_task_);
+      script_details, &background_merge_task_);
 }
 
 // ----------------------------------------------------------------------------
@@ -3218,7 +3220,6 @@ struct ScriptCompileTimerScope {
         all_scripts_histogram_scope_(isolate->counters()->compile_script()),
         no_cache_reason_(no_cache_reason),
         hit_isolate_cache_(false),
-        producing_code_cache_(false),
         consuming_code_cache_(false),
         consuming_code_cache_failed_(false) {}
 
@@ -3241,8 +3242,6 @@ struct ScriptCompileTimerScope {
 
   void set_hit_isolate_cache() { hit_isolate_cache_ = true; }
 
-  void set_producing_code_cache() { producing_code_cache_ = true; }
-
   void set_consuming_code_cache() { consuming_code_cache_ = true; }
 
   void set_consuming_code_cache_failed() {
@@ -3257,19 +3256,10 @@ struct ScriptCompileTimerScope {
   NestedTimedHistogramScope all_scripts_histogram_scope_;
   ScriptCompiler::NoCacheReason no_cache_reason_;
   bool hit_isolate_cache_;
-  bool producing_code_cache_;
   bool consuming_code_cache_;
   bool consuming_code_cache_failed_;
 
   CacheBehaviour GetCacheBehaviour() {
-    if (producing_code_cache_) {
-      if (hit_isolate_cache_) {
-        return CacheBehaviour::kHitIsolateCacheWhenProduceCodeCache;
-      } else {
-        return CacheBehaviour::kProduceCodeCache;
-      }
-    }
-
     if (consuming_code_cache_) {
       if (hit_isolate_cache_) {
         return CacheBehaviour::kHitIsolateCacheWhenConsumeCodeCache;
@@ -3280,7 +3270,15 @@ struct ScriptCompileTimerScope {
     }
 
     if (hit_isolate_cache_) {
-      if (no_cache_reason_ == ScriptCompiler::kNoCacheBecauseStreamingSource) {
+      // A roundabout way of knowing the embedder is going to produce a code
+      // cache (which is done by a separate API call later) is to check whether
+      // no_cache_reason_ is
+      // ScriptCompiler::kNoCacheBecauseDeferredProduceCodeCache.
+      if (no_cache_reason_ ==
+          ScriptCompiler::kNoCacheBecauseDeferredProduceCodeCache) {
+        return CacheBehaviour::kHitIsolateCacheWhenProduceCodeCache;
+      } else if (no_cache_reason_ ==
+                 ScriptCompiler::kNoCacheBecauseStreamingSource) {
         return CacheBehaviour::kHitIsolateCacheWhenStreamingSource;
       }
       return CacheBehaviour::kHitIsolateCacheWhenNoCache;
@@ -3315,14 +3313,9 @@ struct ScriptCompileTimerScope {
         return CacheBehaviour::kNoCacheBecauseInDocumentWrite;
       case ScriptCompiler::kNoCacheBecauseResourceWithNoCacheHandler:
         return CacheBehaviour::kNoCacheBecauseResourceWithNoCacheHandler;
-      case ScriptCompiler::kNoCacheBecauseDeferredProduceCodeCache: {
-        if (hit_isolate_cache_) {
-          return CacheBehaviour::kHitIsolateCacheWhenProduceCodeCache;
-        } else {
-          return CacheBehaviour::kProduceCodeCache;
-        }
+      case ScriptCompiler::kNoCacheBecauseDeferredProduceCodeCache:
+        return CacheBehaviour::kProduceCodeCache;
       }
-    }
     UNREACHABLE();
   }
 
@@ -3639,8 +3632,8 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
                    "V8.CompileDeserialize");
       if (deserialize_task) {
         // If there's a cache consume task, finish it.
-        maybe_result = deserialize_task->Finish(isolate, source,
-                                                script_details.origin_options);
+        maybe_result =
+            deserialize_task->Finish(isolate, source, script_details);
         // It is possible at this point that there is a Script object for this
         // script in the compilation cache (held in the variable maybe_script),
         // which does not match maybe_result->script(). This could happen any of
@@ -3661,8 +3654,7 @@ MaybeHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
         // would be non-trivial.
       } else {
         maybe_result = CodeSerializer::Deserialize(
-            isolate, cached_data, source, script_details.origin_options,
-            maybe_script);
+            isolate, cached_data, source, script_details, maybe_script);
       }
 
       bool consuming_code_cache_succeeded = false;
@@ -3838,7 +3830,7 @@ MaybeHandle<JSFunction> Compiler::GetWrappedFunction(
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
                  "V8.CompileDeserialize");
     maybe_result = CodeSerializer::Deserialize(isolate, cached_data, source,
-                                               script_details.origin_options);
+                                               script_details);
     bool consuming_code_cache_succeeded = false;
     if (maybe_result.ToHandle(&result)) {
       is_compiled_scope = result->is_compiled_scope(isolate);

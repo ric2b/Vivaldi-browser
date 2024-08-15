@@ -141,11 +141,9 @@ std::unique_ptr<SessionCommand> CreateSetWindowVivExtDataCommand(
 bool RestoreSetVivExtDataCommand(const SessionCommand& command,
                               SessionID* tab_id,
                                  std::string* viv_ext_data) {
-  std::unique_ptr<base::Pickle> pickle(command.PayloadAsPickle());
-  if (!pickle.get())
-    return false;
+  base::Pickle pickle = command.PayloadAsPickle();
+  base::PickleIterator iterator(pickle);
 
-  base::PickleIterator iterator(*pickle);
   return ReadSessionIdFromPickle(&iterator, tab_id) &&
          iterator.ReadString(viv_ext_data);
 }
@@ -154,11 +152,9 @@ bool RestoreVivPageActionOverrideCommand(const SessionCommand& command,
                                          SessionID* tab_id,
                                          std::string* script_path,
                                          bool* is_enabled_override) {
-  std::unique_ptr<base::Pickle> pickle(command.PayloadAsPickle());
-  if (!pickle.get())
-    return false;
+  base::Pickle pickle = command.PayloadAsPickle();
+  base::PickleIterator iterator(pickle);
 
-  base::PickleIterator iterator(*pickle);
   return ReadSessionIdFromPickle(&iterator, tab_id) &&
          iterator.ReadString(script_path) &&
          iterator.ReadBool(is_enabled_override);
@@ -167,11 +163,9 @@ bool RestoreVivPageActionOverrideCommand(const SessionCommand& command,
 bool RestoreRemoveVivPageActionOverrideCommand(const SessionCommand& command,
                                             SessionID* tab_id,
                                             std::string* script_path) {
-  std::unique_ptr<base::Pickle> pickle(command.PayloadAsPickle());
-  if (!pickle.get())
-    return false;
+  base::Pickle pickle = command.PayloadAsPickle();
+  base::PickleIterator iterator(pickle);
 
-  base::PickleIterator iterator(*pickle);
   return ReadSessionIdFromPickle(&iterator, tab_id) &&
          iterator.ReadString(script_path);
 }
@@ -179,11 +173,9 @@ bool RestoreRemoveVivPageActionOverrideCommand(const SessionCommand& command,
 bool RestoreSetWindowVivExtDataCommand(const SessionCommand& command,
                                     SessionID* window_id,
                                     std::string* viv_ext_data) {
-  std::unique_ptr<base::Pickle> pickle(command.PayloadAsPickle());
-  if (!pickle.get())
-    return false;
+  base::Pickle pickle = command.PayloadAsPickle();
+  base::PickleIterator iterator(pickle);
 
-  base::PickleIterator iterator(*pickle);
   return ReadSessionIdFromPickle(&iterator, window_id) &&
          iterator.ReadString(viv_ext_data);
 }

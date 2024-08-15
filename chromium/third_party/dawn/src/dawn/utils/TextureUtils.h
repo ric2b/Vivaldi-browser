@@ -266,6 +266,18 @@ static constexpr std::array<wgpu::TextureFormat, 2> kDepthAndStencilFormats = {
     wgpu::TextureFormat::Depth32FloatStencil8,
 };
 
+class SubsamplingFactor {
+  public:
+    constexpr SubsamplingFactor(uint32_t horizontal, uint32_t vertical)
+        : horizontalFactor(horizontal), verticalFactor(vertical) {}
+
+    SubsamplingFactor(const SubsamplingFactor&) = delete;
+    SubsamplingFactor& operator=(const SubsamplingFactor&) = delete;
+
+    const uint32_t horizontalFactor = 1;
+    const uint32_t verticalFactor = 1;
+};
+
 bool TextureFormatSupportsStorageTexture(wgpu::TextureFormat format,
                                          const wgpu::Device& device,
                                          bool isCompatibilityMode);
@@ -274,7 +286,8 @@ bool TextureFormatSupportsReadWriteStorageTexture(wgpu::TextureFormat format);
 bool IsBCTextureFormat(wgpu::TextureFormat textureFormat);
 bool IsETC2TextureFormat(wgpu::TextureFormat textureFormat);
 bool IsASTCTextureFormat(wgpu::TextureFormat textureFormat);
-bool IsNorm16TextureFormat(wgpu::TextureFormat textureFormat);
+bool IsUnorm16TextureFormat(wgpu::TextureFormat textureFormat);
+bool IsSnorm16TextureFormat(wgpu::TextureFormat textureFormat);
 bool IsCompressedTextureFormat(wgpu::TextureFormat textureFormat);
 
 bool IsDepthOnlyFormat(wgpu::TextureFormat textureFormat);
@@ -288,6 +301,12 @@ bool TextureFormatSupportsMultisampling(const wgpu::Device& device,
                                         wgpu::TextureFormat textureFormat);
 bool TextureFormatSupportsResolveTarget(const wgpu::Device& device,
                                         wgpu::TextureFormat textureFormat);
+
+uint32_t GetMultiPlaneTextureBitDepth(wgpu::TextureFormat textureFormat);
+uint32_t GetMultiPlaneTextureNumPlanes(wgpu::TextureFormat textureFormat);
+uint32_t GetMultiPlaneTextureBytesPerElement(wgpu::TextureFormat textureFormat, size_t plane);
+SubsamplingFactor GetMultiPlaneTextureSubsamplingFactor(wgpu::TextureFormat textureFormat,
+                                                        size_t plane);
 
 uint32_t GetTexelBlockSizeInBytes(wgpu::TextureFormat textureFormat);
 uint32_t GetTextureFormatBlockWidth(wgpu::TextureFormat textureFormat);

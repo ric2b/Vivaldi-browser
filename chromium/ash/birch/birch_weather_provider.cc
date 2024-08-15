@@ -76,6 +76,12 @@ void BirchWeatherProvider::RequestBirchDataFetch() {
     birch_model_->SetWeatherItems({});
     return;
   }
+  // Only allow one fetch at a time.
+  if (is_fetching_) {
+    return;
+  }
+  is_fetching_ = true;
+
   if (!birch_model_->birch_client()) {
     // BirchClient may be null in tests.
     FetchWeather();
@@ -88,15 +94,20 @@ void BirchWeatherProvider::RequestBirchDataFetch() {
 }
 
 void BirchWeatherProvider::FetchWeather() {
+  const bool prefer_prod_endpoint = base::GetFieldTrialParamByFeatureAsBool(
+      features::kBirchWeather, "prod_weather_endpoint", false);
   Shell::Get()
       ->ambient_controller()
       ->ambient_backend_controller()
-      ->FetchWeather(base::BindOnce(&BirchWeatherProvider::OnWeatherInfoFetched,
+      ->FetchWeather("chromeos-system-ui",
+                     /*prefer_alpha_endpoint=*/!prefer_prod_endpoint,
+                     base::BindOnce(&BirchWeatherProvider::OnWeatherInfoFetched,
                                     weak_factory_.GetWeakPtr()));
 }
 
 void BirchWeatherProvider::OnWeatherInfoFetched(
     const std::optional<WeatherInfo>& weather_info) {
+  is_fetching_ = false;
   if (!weather_info || !weather_info->temp_f.has_value() ||
       !weather_info->condition_icon_url ||
       !weather_info->condition_description ||

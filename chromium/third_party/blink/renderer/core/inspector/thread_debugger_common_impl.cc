@@ -535,33 +535,42 @@ ThreadDebuggerCommonImpl::deepSerialize(
         std::move(error_message));
   }
 
+  if (!v8_value->IsObject()) {
+    return nullptr;
+  }
+  v8::Local<v8::Object> object = v8_value.As<v8::Object>();
+
   // Serialize according to https://w3c.github.io/webdriver-bidi.
-  if (Node* node = V8Node::ToWrappable(isolate_, v8_value)) {
+  if (Node* node = V8Node::ToWrappable(isolate_, object)) {
     return std::make_unique<v8_inspector::DeepSerializationResult>(
         DeepSerializeNode(node, isolate_, max_node_depth, include_shadow_tree));
   }
 
   // Serialize as a regular array
   if (HTMLCollection* html_collection =
-          V8HTMLCollection::ToWrappable(isolate_, v8_value)) {
+          V8HTMLCollection::ToWrappable(isolate_, object)) {
     return std::make_unique<v8_inspector::DeepSerializationResult>(
         DeepSerializeHtmlCollection(html_collection, isolate_, max_depth,
                                     max_node_depth, include_shadow_tree));
   }
 
   // Serialize as a regular array
-  if (NodeList* node_list = V8NodeList::ToWrappable(isolate_, v8_value)) {
+  if (NodeList* node_list = V8NodeList::ToWrappable(isolate_, object)) {
     return std::make_unique<v8_inspector::DeepSerializationResult>(
         DeepSerializeNodeList(node_list, isolate_, max_depth, max_node_depth,
                               include_shadow_tree));
   }
 
-  if (DOMWindow* window = V8Window::ToWrappable(isolate_, v8_value)) {
+  if (DOMWindow* window = V8Window::ToWrappable(isolate_, object)) {
     return std::make_unique<v8_inspector::DeepSerializationResult>(
         DeepSerializeWindow(window, isolate_));
   }
 
-  if (V8DOMWrapper::IsWrapper(isolate_, v8_value)) {
+  // TODO(caseq): consider object->IsApiWrapper() + checking for all kinds
+  // of (Typed)?Array(Buffers)?. IsApiWrapper() returns true for these, but
+  // we want them to fall through to default serialization and not be treated
+  // as "platform objects".
+  if (V8DOMWrapper::IsWrapper(isolate_, object)) {
     return std::make_unique<v8_inspector::DeepSerializationResult>(
         std::make_unique<v8_inspector::DeepSerializedValue>(
             ToV8InspectorStringBuffer("platformobject")));
@@ -659,15 +668,7 @@ double ThreadDebuggerCommonImpl::currentTimeMS() {
 
 bool ThreadDebuggerCommonImpl::isInspectableHeapObject(
     v8::Local<v8::Object> object) {
-  if (object->InternalFieldCount() < kV8DefaultWrapperInternalFieldCount)
-    return true;
-  v8::Local<v8::Value> wrapper =
-      object->GetInternalField(kV8DOMWrapperObjectIndex).As<v8::Value>();
-  // Skip wrapper boilerplates which are like regular wrappers but don't have
-  // native object.
-  if (!wrapper.IsEmpty() && wrapper->IsUndefined())
-    return false;
-  return true;
+  return !object->IsApiWrapper() || V8DOMWrapper::IsWrapper(isolate_, object);
 }
 
 static void ReturnDataCallback(
@@ -759,11 +760,13 @@ void ThreadDebuggerCommonImpl::installAdditionalCommandLineAPI(
       "function getAccessibleRole(node) { [Command Line API] }",
       v8::SideEffectType::kHasNoSideEffect);
 
+  v8::Isolate* isolate = context->GetIsolate();
   ScriptEvaluationResult result =
       ClassicScript::CreateUnspecifiedScript(
           "(function(e) { console.log(e.type, e); })",
           ScriptSourceLocationType::kInternal)
-          ->RunScriptOnScriptStateAndReturnValue(ScriptState::From(context));
+          ->RunScriptOnScriptStateAndReturnValue(
+              ScriptState::From(isolate, context));
   if (result.GetResultType() != ScriptEvaluationResult::ResultType::kSuccess) {
     // On pages where scripting is disabled or CSP sandbox directive is used,
     // this can be blocked and thus early exited here.
@@ -1036,7 +1039,7 @@ void ThreadDebuggerCommonImpl::cancelTimer(void* data) {
 
 int64_t ThreadDebuggerCommonImpl::generateUniqueId() {
   int64_t result;
-  base::RandBytes(&result, sizeof result);
+  base::RandBytes(base::byte_span_from_ref(result));
   return result;
 }
 

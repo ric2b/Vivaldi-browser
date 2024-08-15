@@ -1,9 +1,9 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: policy-prefs
-title: Prefences and policies
+title: Preferences and policies
 ---
 
 [TOC]

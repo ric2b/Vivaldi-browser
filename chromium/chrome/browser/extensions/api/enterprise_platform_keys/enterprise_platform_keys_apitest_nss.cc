@@ -374,16 +374,22 @@ IN_PROC_BROWSER_TEST_P(EnterprisePlatformKeysIsRestrictedTest,
                                {.ignore_manifest_warnings = true}));
 
   const Extension* extension = GetSingleLoadedExtension();
+  int warning_index = 0;
   ASSERT_TRUE(extension);
-  ASSERT_EQ(2u, extension->install_warnings().size());
-  // TODO(https://crbug.com/1269161): Remove the check for the deprecated
-  // manifest version when the test extension is updated to MV3.
-  EXPECT_EQ(extensions::manifest_errors::kManifestV2IsDeprecatedWarning,
-            extension->install_warnings()[0].message);
+  if (GetParam() == ContextType::kServiceWorker) {
+    ASSERT_EQ(1u, extension->install_warnings().size());
+  } else {
+    // TODO(crbug.com/40804030): Remove the check for the deprecated
+    // manifest version when the test extension is updated to MV3.
+    ASSERT_EQ(2u, extension->install_warnings().size());
+    EXPECT_EQ(extensions::manifest_errors::kManifestV2IsDeprecatedWarning,
+              extension->install_warnings()[0].message);
+    warning_index = 1;
+  }
   EXPECT_EQ(
       "'enterprise.platformKeys' is not allowed for specified install "
       "location.",
-      extension->install_warnings()[1].message);
+      extension->install_warnings()[warning_index].message);
 }
 
 INSTANTIATE_TEST_SUITE_P(PersistentBackground,
@@ -473,7 +479,7 @@ INSTANTIATE_TEST_SUITE_P(PersistentBackground,
                          EnterprisePlatformKeysLoginScreenTest,
                          ::testing::Values(ContextType::kPersistentBackground));
 
-// TODO(crbug.com/1303197): Service workers don't work in the login screen
+// TODO(crbug.com/40217298): Service workers don't work in the login screen
 // context. Investigate and fix.
 // INSTANTIATE_TEST_SUITE_P(
 //    ServiceWorker,

@@ -975,6 +975,14 @@ PendingScript* ScriptLoader::PrepareScript(
         // Fetch an external module script graph given url, settings object, and
         // options.</spec>
         Modulator* modulator = Modulator::From(script_state);
+        if (integrity_attr.IsNull()) {
+          // <spec step="31.11.B">If el does not have an integrity attribute,
+          // then set options's integrity metadata to the result of resolving a
+          // module integrity metadata with url and settings object </spec>
+          options.SetIntegrityMetadata(modulator->GetIntegrityMetadata(url));
+          options.SetIntegrityAttributeValue(
+              modulator->GetIntegrityMetadataString(url));
+        }
         FetchModuleScriptTree(url, fetch_client_settings_object_fetcher,
                               modulator, options);
       } break;
@@ -1161,6 +1169,9 @@ PendingScript* ScriptLoader::PrepareScript(
       }
     }
   }
+
+  prepared_pending_script_->SetParserInserted(parser_inserted_);
+  prepared_pending_script_->SetIsInDocumentWrite(is_in_document_write);
 
   ScriptSchedulingType script_scheduling_type = GetScriptSchedulingTypePerSpec(
       element_document, parser_blocking_inline_option);

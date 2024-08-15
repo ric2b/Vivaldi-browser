@@ -89,8 +89,8 @@ PointerEvent::PointerEvent(const AtomicString& type,
         PointerEventUtil::TransformToAzimuthInValidRange(azimuth_angle_),
         PointerEventUtil::TransformToAltitudeInValidRange(altitude_angle_));
   }
-  if (initializer->hasDeviceId()) {
-    device_id_ = initializer->deviceId();
+  if (initializer->hasDeviceProperties()) {
+    device_properties_ = initializer->deviceProperties();
   }
 }
 
@@ -188,6 +188,7 @@ base::TimeTicks PointerEvent::OldestPlatformTimeStamp() const {
 void PointerEvent::Trace(Visitor* visitor) const {
   visitor->Trace(coalesced_events_);
   visitor->Trace(predicted_events_);
+  visitor->Trace(device_properties_);
   MouseEvent::Trace(visitor);
 }
 

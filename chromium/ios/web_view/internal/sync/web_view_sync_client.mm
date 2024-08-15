@@ -19,7 +19,7 @@
 #import "components/password_manager/core/browser/sharing/password_sender_service.h"
 #import "components/plus_addresses/webdata/plus_address_webdata_service.h"
 #import "components/sync/base/sync_util.h"
-#import "components/sync/service/data_type_controller.h"
+#import "components/sync/service/model_type_controller.h"
 #import "components/sync/service/sync_api_component_factory.h"
 #import "components/version_info/version_info.h"
 #import "components/version_info/version_string.h"
@@ -101,8 +101,12 @@ WebViewSyncClient::WebViewSyncClient(
           /*account_bookmark_sync_service=*/nullptr,
           /*power_bookmark_service=*/nullptr,
           /*supervised_user_settings_service=*/nullptr,
-          /*plus_address_webdata_service=*/nullptr);
-  // TODO(crbug.com/1434661): introduce ios webview version of
+          /*plus_address_webdata_service=*/nullptr,
+          /*TODO(crbug.com/330201909) implement on iOS
+             product_specifications_service= */
+          nullptr,
+          /*data_sharing_service=*/nullptr);
+  // TODO(crbug.com/40264840): introduce ios webview version of
   // TrustedVaultServiceFactory.
   trusted_vault_client_ = std::make_unique<WebViewTrustedVaultClient>();
 }
@@ -167,11 +171,11 @@ WebViewSyncClient::GetSendTabToSelfSyncService() {
   return nullptr;
 }
 
-syncer::DataTypeController::TypeVector
-WebViewSyncClient::CreateDataTypeControllers(
+syncer::ModelTypeController::TypeVector
+WebViewSyncClient::CreateModelTypeControllers(
     syncer::SyncService* sync_service) {
-  return component_factory_->CreateCommonDataTypeControllers(GetDisabledTypes(),
-                                                             sync_service);
+  return component_factory_->CreateCommonModelTypeControllers(
+      GetDisabledTypes(), sync_service);
 }
 
 syncer::SyncInvalidationsService*
@@ -217,4 +221,9 @@ void WebViewSyncClient::SetPasswordSyncAllowedChangeCb(
   // IsPasswordSyncAllowed() doesn't change on //ios/web_view/.
 }
 
+void WebViewSyncClient::RegisterTrustedVaultAutoUpgradeSyntheticFieldTrial(
+    const syncer::TrustedVaultAutoUpgradeSyntheticFieldTrialGroup& group) {
+  // This code might be reached but synthetic field trials are not supported on
+  // iOS webview.
+}
 }  // namespace ios_web_view

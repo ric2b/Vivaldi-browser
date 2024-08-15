@@ -59,3 +59,96 @@ To build the Nearby Connection library:
 ```shell
 swift build
 ```
+
+# Supported Mediums
+
+<table>
+  <thead>
+    <tr>
+      <th align="left" colspan="2">Legend</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><ul><li>[x] </li></ul></td>
+      <td>Supported.</td>
+    </tr>
+    <tr>
+      <td><ul><li>[ ] </li></ul></td>
+      <td>Support is possible, but not implemented.</td>
+    </tr>
+    <tr>
+      <td></td>
+      <td>Support is not possible or does not make sense.</td>
+    </tr>
+  </tbody>
+</table>
+
+
+## Android
+| Mediums           | Advertising            | Scanning               | Data                   |
+| :---------------- | :--------------------: | :--------------------: | :--------------------: |
+| Bluetooth Classic | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> |
+| BLE (Fast)        | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> |                        |
+| BLE (GATT)        | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> |
+| BLE (Extended)    | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> |                        |
+| BLE (L2CAP)       |                        |                        | <ul><li>[x] </li></ul> |
+| Wi-Fi LAN         | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> |
+| Wi-Fi Hotspot     |                        |                        | <ul><li>[x] </li></ul> |
+| Wi-Fi Direct      |                        |                        | <ul><li>[x] </li></ul> |
+| Wi-Fi Aware       | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> |
+| WebRTC            |                        |                        | <ul><li>[x] </li></ul> |
+| NFC               | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> |
+| USB               | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> |
+| AWDL              |                        |                        |                        |
+
+## ChromeOS
+| Mediums           | Advertising            | Scanning               | Data                   |
+| :---------------- | :--------------------: | :--------------------: | :--------------------: |
+| Bluetooth Classic | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> |
+| BLE (Fast)        | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> |                        |
+| BLE (GATT)        | <ul><li>[ ] </li></ul> | <ul><li>[ ] </li></ul> | <ul><li>[ ] </li></ul> |
+| BLE (Extended)    | <ul><li>[ ] </li></ul> | <ul><li>[ ] </li></ul> |                        |
+| BLE (L2CAP)       |                        |                        |                        |
+| Wi-Fi LAN         | <ul><li>[ ] </li></ul> | <ul><li>[ ] </li></ul> | <ul><li>[x] </li></ul> |
+| Wi-Fi Hotspot     |                        |                        | <ul><li>[ ] </li></ul> |
+| Wi-Fi Direct      |                        |                        | <ul><li>[ ] </li></ul> |
+| Wi-Fi Aware       |                        |                        |                        |
+| WebRTC            |                        |                        | <ul><li>[x] </li></ul> |
+| NFC               |                        |                        |                        |
+| USB               | <ul><li>[ ] </li></ul> | <ul><li>[ ] </li></ul> | <ul><li>[ ] </li></ul> |
+| AWDL              |                        |                        |                        |
+
+## Windows
+| Mediums           | Advertising            | Scanning               | Data                   |
+| :---------------- | :--------------------: | :--------------------: | :--------------------: |
+| Bluetooth Classic |                        | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> |
+| BLE (Fast)        | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> |                        |
+| BLE (GATT)        | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> | <ul><li>[ ] </li></ul> |
+| BLE (Extended)    | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> |                        |
+| BLE (L2CAP)       |                        |                        |                        |
+| Wi-Fi LAN         | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> |
+| Wi-Fi Hotspot     |                        |                        | <ul><li>[x] </li></ul> |
+| Wi-Fi Direct      |                        |                        | <ul><li>[ ] </li></ul> |
+| Wi-Fi Aware       |                        |                        |                        |
+| WebRTC            |                        |                        | <ul><li>[ ] </li></ul> |
+| NFC               |                        |                        |                        |
+| USB               | <ul><li>[ ] </li></ul> | <ul><li>[ ] </li></ul> | <ul><li>[ ] </li></ul> |
+| AWDL              |                        |                        |                        |
+
+## iOS/macOS
+| Mediums           | Advertising            | Scanning               | Data                   |
+| :---------------- | :--------------------: | :--------------------: | :--------------------: |
+| Bluetooth Classic |                        | <ul><li>[ ] </li></ul> | <ul><li>[ ] </li></ul> |
+| BLE (Fast)        | <ul><li>[ ] </li></ul> | <ul><li>[ ] </li></ul> |                        |
+| BLE (GATT)        | <ul><li>[ ] </li></ul> | <ul><li>[ ] </li></ul> | <ul><li>[ ] </li></ul> |
+| BLE (Extended)    |                        | <ul><li>[ ] </li></ul> |                        |
+| BLE (L2CAP)       |                        |                        | <ul><li>[ ] </li></ul> |
+| Wi-Fi LAN         | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> | <ul><li>[x] </li></ul> |
+| Wi-Fi Hotspot     |                        |                        | <ul><li>[ ] </li></ul> |
+| Wi-Fi Direct      |                        |                        |                        |
+| Wi-Fi Aware       |                        |                        |                        |
+| WebRTC            |                        |                        | <ul><li>[ ] </li></ul> |
+| NFC               |                        | <ul><li>[ ] </li></ul> |                        |
+| USB               |                        |                        |                        |
+| AWDL              | <ul><li>[ ] </li></ul> | <ul><li>[ ] </li></ul> | <ul><li>[ ] </li></ul> |

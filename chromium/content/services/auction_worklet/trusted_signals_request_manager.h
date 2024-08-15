@@ -36,7 +36,7 @@ class TrustedSignals;
 // Manages trusted signals requests and responses. Currently only batches
 // requests.
 //
-// TODO(https://crbug.com/1276639): Cache responses as well.
+// TODO(crbug.com/40207533): Cache responses as well.
 class CONTENT_EXPORT TrustedSignalsRequestManager {
  public:
   // Delay between construction of a Request and automatically starting a
@@ -88,7 +88,7 @@ class CONTENT_EXPORT TrustedSignalsRequestManager {
   // "&`trusted_bidding_signals_slot_size_param`" is appended to the end of the
   // query string. It's expected to already be escaped if necessary.
   //
-  // TODO(https://crbug.com/1279643): Investigate improving the
+  // TODO(crbug.com/40810962): Investigate improving the
   // `automatically_send_requests` logic.
   TrustedSignalsRequestManager(
       Type type,
@@ -194,6 +194,11 @@ class CONTENT_EXPORT TrustedSignalsRequestManager {
     bool operator()(const RequestImpl* r1, const RequestImpl* r2) const;
   };
 
+  // Manages building and loading trusted signals URLs.
+  class TrustedSignalsUrlBuilder;
+  class TrustedBiddingSignalsUrlBuilder;
+  class TrustedScoringSignalsUrlBuilder;
+
   // Manages a single TrustedSignals object, which is associated with one or
   // more Requests. Tracks all associated live Requests, and manages invoking
   // their callbacks. Only created when a TrustedSignals request is started.
@@ -225,12 +230,7 @@ class CONTENT_EXPORT TrustedSignalsRequestManager {
   // request with it, cancelling the request if it's no longer needed.
   void OnRequestDestroyed(RequestImpl* request);
 
-  bool RequestsURLSizeIsTooBig(std::set<raw_ptr<RequestImpl, SetExperimental>,
-                                        CompareRequestImpl> requests,
-                               size_t limit);
-
-  void IssueRequests(std::set<raw_ptr<RequestImpl, SetExperimental>,
-                              CompareRequestImpl> requests);
+  void IssueRequests(TrustedSignalsUrlBuilder& url_builder);
 
   const Type type_;
   const raw_ptr<network::mojom::URLLoaderFactory> url_loader_factory_;

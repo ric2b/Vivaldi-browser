@@ -28,7 +28,7 @@ void test_gpu_contraction(int m_size, int k_size, int n_size) {
   Tensor<float, 2, DataLayout> t_right(k_size, n_size);
   Tensor<float, 2, DataLayout> t_result(m_size, n_size);
   Tensor<float, 2, DataLayout> t_result_gpu(m_size, n_size);
-  Eigen::array<DimPair, 1> dims(DimPair(1, 0));
+  Eigen::array<DimPair, 1> dims{DimPair(1, 0)};
 
   t_left.setRandom();
   t_right.setRandom();
@@ -51,9 +51,9 @@ void test_gpu_contraction(int m_size, int k_size, int n_size) {
   Eigen::GpuStreamDevice stream;
   Eigen::GpuDevice gpu_device(&stream);
 
-  Eigen::TensorMap<Eigen::Tensor<float, 2, DataLayout> > gpu_t_left(d_t_left, Eigen::array<int, 2>(m_size, k_size));
-  Eigen::TensorMap<Eigen::Tensor<float, 2, DataLayout> > gpu_t_right(d_t_right, Eigen::array<int, 2>(k_size, n_size));
-  Eigen::TensorMap<Eigen::Tensor<float, 2, DataLayout> > gpu_t_result(d_t_result, Eigen::array<int, 2>(m_size, n_size));
+  Eigen::TensorMap<Eigen::Tensor<float, 2, DataLayout> > gpu_t_left(d_t_left, Eigen::array<int, 2>{m_size, k_size});
+  Eigen::TensorMap<Eigen::Tensor<float, 2, DataLayout> > gpu_t_right(d_t_right, Eigen::array<int, 2>{k_size, n_size});
+  Eigen::TensorMap<Eigen::Tensor<float, 2, DataLayout> > gpu_t_result(d_t_result, Eigen::array<int, 2>{m_size, n_size});
 
   gpu_t_result.device(gpu_device) = gpu_t_left.contract(gpu_t_right, dims);
   t_result = t_left.contract(t_right, dims);
@@ -85,7 +85,7 @@ void test_scalar(int m_size, int k_size, int n_size) {
   Tensor<float, 2, DataLayout> t_right(k_size, n_size);
   Tensor<float, 0, DataLayout> t_result;
   Tensor<float, 0, DataLayout> t_result_gpu;
-  Eigen::array<DimPair, 2> dims(DimPair(0, 0), DimPair(1, 1));
+  Eigen::array<DimPair, 2> dims{DimPair(0, 0), DimPair(1, 1)};
 
   t_left.setRandom();
   t_right.setRandom();

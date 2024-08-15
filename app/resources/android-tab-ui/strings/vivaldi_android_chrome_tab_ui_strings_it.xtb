@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="it">
+<translation id="2947471979790858922">La tua attività in queste schede private sarà rimossa da questo dispositivo</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Puoi trovare le schede chiuse in Schede recenti nel menu principale di Vivaldi. La tua scheda privata non sarà disponibile.}
+        other {Puoi trovare le schede chiuse in Schede recenti nel menu principale di Vivaldi. Le tue # schede private non saranno disponibili.}}</translation>
+<translation id="4871187110787939393">Chiudere tutte le schede private?</translation>
 </translationbundle>

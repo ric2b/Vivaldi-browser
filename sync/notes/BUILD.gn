@@ -35,6 +35,7 @@ static_library("sync_notes") {
     "//components/bookmarks/browser",
     "//components/keyed_service/core:core",
     "//components/sync",
+    "//components/version_info",
     "//ui/base",
     "//vivaldi/sync/file_sync",
   ]

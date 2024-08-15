@@ -643,7 +643,7 @@ class SystemTrayClientShowChannelInfoGiveFeedbackTest
   ash::LoginManagerMixin login_mixin_{&mixin_host_};
 };
 
-// TODO(crbug.com/1352326): Flaky on release bots.
+// TODO(crbug.com/40857702): Flaky on release bots.
 #if defined(NDEBUG)
 #define MAYBE_RecordFeedbackSourceChannelIndicator \
   DISABLED_RecordFeedbackSourceChannelIndicator
@@ -659,13 +659,13 @@ IN_PROC_BROWSER_TEST_F(SystemTrayClientShowChannelInfoGiveFeedbackTest,
   LoginUser(account_id_);
 
   histograms.ExpectBucketCount("Feedback.RequestSource",
-                               chrome::kFeedbackSourceChannelIndicator,
+                               feedback::kFeedbackSourceChannelIndicator,
                                /*expected_count=*/0);
   ash::Shell::Get()
       ->system_tray_model()
       ->client()
       ->ShowChannelInfoGiveFeedback();
   histograms.ExpectBucketCount("Feedback.RequestSource",
-                               chrome::kFeedbackSourceChannelIndicator,
+                               feedback::kFeedbackSourceChannelIndicator,
                                /*expected_count=*/1);
 }

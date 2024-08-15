@@ -30,16 +30,17 @@ BlockedUrlsReporter::BlockedUrlsReporter(base::Time reporting_start,
 BlockedUrlsReporter::~BlockedUrlsReporter() = default;
 
 void BlockedUrlsReporter::OnTrackerInfosUpdated(
-    const RuleSource& source,
+    RuleGroup group,
+    const ActiveRuleSource& source,
     base::Value::Dict new_tracker_infos) {
-  auto& tracker_infos = tracker_infos_[static_cast<size_t>(source.group)];
+  auto& tracker_infos = tracker_infos_[static_cast<size_t>(group)];
   std::erase_if(tracker_infos, [&source](auto& tracker) {
-    tracker.second.erase(source.id);
+    tracker.second.erase(source.core.id());
     return tracker.second.empty();
   });
 
   for (const auto tracker : new_tracker_infos) {
-    tracker_infos[tracker.first][source.id] = std::move(tracker.second);
+    tracker_infos[tracker.first][source.core.id()] = std::move(tracker.second);
   }
 }
 
@@ -67,8 +68,8 @@ void BlockedUrlsReporter::OnUrlBlocked(RuleGroup group,
 
   bool is_off_the_record = web_contents->GetBrowserContext()->IsOffTheRecord();
 
-    // Create it if it doesn't exist yet.
-    BlockedUrlsReporterTabHelper::CreateForWebContents(web_contents);
+  // Create it if it doesn't exist yet.
+  BlockedUrlsReporterTabHelper::CreateForWebContents(web_contents);
   BlockedUrlsReporterTabHelper* tab_helper =
       BlockedUrlsReporterTabHelper::FromWebContents(web_contents);
 

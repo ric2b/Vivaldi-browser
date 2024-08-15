@@ -15,7 +15,7 @@
 #include "common/utilities.h"
 #include "libANGLE/Context.h"
 #include "libANGLE/renderer/vulkan/ContextVk.h"
-#include "libANGLE/renderer/vulkan/RendererVk.h"
+#include "libANGLE/renderer/vulkan/vk_renderer.h"
 
 namespace rx
 {
@@ -584,16 +584,19 @@ angle::Result BufferVk::handleDeviceLocalBufferMap(ContextVk *contextVk,
                                                    VkDeviceSize size,
                                                    uint8_t **mapPtr)
 {
+    vk::Renderer *renderer = contextVk->getRenderer();
     ANGLE_TRY(
         allocStagingBuffer(contextVk, vk::MemoryCoherency::CachedPreferCoherent, size, mapPtr));
-    ANGLE_TRY(mStagingBuffer.invalidate(contextVk->getRenderer()));
+    ANGLE_TRY(mStagingBuffer.flush(renderer));
 
     // Copy data from device local buffer to host visible staging buffer.
     VkBufferCopy copyRegion = {mBuffer.getOffset() + offset, mStagingBuffer.getOffset(), size};
     ANGLE_TRY(CopyBuffers(contextVk, &mBuffer, &mStagingBuffer, 1, &copyRegion));
     ANGLE_TRY(mStagingBuffer.waitForIdle(contextVk, "GPU stall due to mapping device local buffer",
                                          RenderPassClosureReason::DeviceLocalBufferMap));
-    // Because the buffer is coherent, no need to call invalidate here.
+    // Since coherent is prefer, we may end up getting non-coherent. Always call invalidate here (it
+    // will check memory flag before it actually calls into driver).
+    ANGLE_TRY(mStagingBuffer.invalidate(renderer));
 
     return angle::Result::Continue;
 }
@@ -1272,10 +1275,13 @@ bool BufferVk::shouldRedefineStorage(vk::Renderer *renderer,
     }
     else
     {
-        size_t alignment   = renderer->getDefaultBufferAlignment();
-        size_t sizeInBytes = roundUpPow2(size, kBufferSizeGranularity);
-        size_t alignedSize = roundUp(sizeInBytes, alignment);
-        if (alignedSize != mBuffer.getSize())
+        size_t paddedBufferSize =
+            (renderer->getFeatures().padBuffersToMaxVertexAttribStride.enabled)
+                ? (size + static_cast<size_t>(renderer->getMaxVertexAttribStride()))
+                : size;
+        size_t sizeInBytes = roundUpPow2(paddedBufferSize, kBufferSizeGranularity);
+        size_t alignedSize = roundUp(sizeInBytes, renderer->getDefaultBufferAlignment());
+        if (alignedSize > mBuffer.getSize())
         {
             return true;
         }

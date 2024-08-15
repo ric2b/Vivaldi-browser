@@ -41,10 +41,14 @@
 
 namespace {
 
+using password_manager::PasswordForm;
 using password_manager::UsesSplitStoresAndUPMForLocal;
 
 // Duration of message before timeout; 20 seconds.
 const int kMessageDismissDurationMs = 20000;
+
+constexpr base::TimeDelta kUpdateGMSCoreMessageDisplayDelay =
+    base::Milliseconds(500);
 
 // Log the outcome of the save/update password workflow.
 // It differentiates whether the the flow was accepted/cancelled immediately
@@ -344,7 +348,7 @@ int SaveUpdatePasswordMessageDelegate::GetPrimaryButtonTextId(
 unsigned int SaveUpdatePasswordMessageDelegate::GetDisplayUsernames(
     std::vector<std::u16string>* usernames) {
   unsigned int selected_username_index = 0;
-  // TODO(crbug.com/1054410): Fix the update logic to use all best matches,
+  // TODO(crbug.com/40675711): Fix the update logic to use all best matches,
   // rather than current_forms which is best_matches without PSL-matched
   // credentials.
   const std::vector<std::unique_ptr<password_manager::PasswordForm>>&
@@ -367,6 +371,12 @@ void SaveUpdatePasswordMessageDelegate::HandleSaveButtonClicked() {
 void SaveUpdatePasswordMessageDelegate::SavePassword() {
   if (!device_lock_bridge_->ShouldShowDeviceLockUi()) {
     passwords_state_.form_manager()->Save();
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(
+            &SaveUpdatePasswordMessageDelegate::MaybeNudgeToUpdateGmsCore,
+            weak_ptr_factory_.GetWeakPtr()),
+        kUpdateGMSCoreMessageDisplayDelay);
     return;
   }
   device_lock_bridge_->LaunchDeviceLockUiIfNeededBeforeRunningCallback(
@@ -381,6 +391,12 @@ void SaveUpdatePasswordMessageDelegate::SavePasswordAfterDeviceLockUi(
   CHECK(device_lock_bridge_->RequiresDeviceLock());
   if (is_device_lock_requirement_met) {
     passwords_state_.form_manager()->Save();
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(
+            &SaveUpdatePasswordMessageDelegate::MaybeNudgeToUpdateGmsCore,
+            weak_ptr_factory_.GetWeakPtr()),
+        kUpdateGMSCoreMessageDisplayDelay);
     TryToShowPasswordMigrationWarning(create_migration_warning_callback_,
                                       web_contents_);
   }
@@ -451,7 +467,7 @@ void SaveUpdatePasswordMessageDelegate::HandleMessageDismissed(
 }
 
 bool SaveUpdatePasswordMessageDelegate::HasMultipleCredentialsStored() {
-  // TODO(crbug.com/1054410): Fix the update logic to use all best matches,
+  // TODO(crbug.com/40675711): Fix the update logic to use all best matches,
   // rather than current_forms which is best_matches without PSL-matched
   // credentials.
   const std::vector<std::unique_ptr<password_manager::PasswordForm>>&
@@ -499,31 +515,24 @@ bool SaveUpdatePasswordMessageDelegate::IsUsingAccountStorage(
     return false;
   }
 
+  // Pre-UPM the profile storage was used in fact as the account store (when
+  // sync is on). So this is the cut-off for the users who are not using UPM
+  // (this evaluates to using account store when the user is syncing and using
+  // profile store when they are not syncing).
   Profile* profile =
       Profile::FromBrowserContext(web_contents_->GetBrowserContext());
   if (!UsesSplitStoresAndUPMForLocal(profile->GetPrefs())) {
     return account_email_.has_value();
   }
 
-  // Saving new credential to the account store.
-  auto different_username = [&username](const auto& form) {
-    return (form->username_value != username);
-  };
-  // TODO(crbug.com/1054410): Fix the update logic to use all best matches,
-  // rather than current_forms which is best_matches without PSL-matched
-  // credentials.
-  if (base::ranges::all_of(passwords_state_.GetCurrentForms(),
-                           different_username)) {
-    return true;
-  }
-
-  // If it's an update in the account store return true, else (meaning
-  // that the updated username is only in the profile store) return false.
-  auto same_username_in_account_store = [&username](const auto& form) {
-    return (form->username_value == username) && form->IsUsingAccountStore();
-  };
-  return base::ranges::any_of(passwords_state_.GetCurrentForms(),
-                              same_username_in_account_store);
+  // Copy the pending password form here and assign the new username.
+  password_manager::PasswordForm updated_credentials =
+      passwords_state_.form_manager()->GetPendingCredentials();
+  updated_credentials.username_value = username;
+  return (passwords_state_.form_manager()->GetPasswordStoreForSaving(
+              updated_credentials) &
+          PasswordForm::Store::kAccountStore) ==
+         PasswordForm::Store::kAccountStore;
 }
 
 void SaveUpdatePasswordMessageDelegate::ClearState() {
@@ -632,4 +641,15 @@ SaveUpdatePasswordMessageDelegate::
       break;
   }
   return ui_dismissal_reason;
+}
+
+void SaveUpdatePasswordMessageDelegate::MaybeNudgeToUpdateGmsCore() {
+  if (passwords_state_.client()
+          ->GetPasswordFeatureManager()
+          ->ShouldUpdateGmsCore()) {
+    passwords_state_.client()->ShowPasswordManagerErrorMessage(
+        password_manager::ErrorMessageFlowType::kSaveFlow,
+        password_manager::PasswordStoreBackendErrorType::
+            kGMSCoreOutdatedSavingPossible);
+  }
 }

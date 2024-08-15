@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ru">
+<translation id="2947471979790858922">Ваша активность в приватных вкладках будет удалена с устройства</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Все закрытые вкладки, кроме приватной, вы можете найти в Недавно закрытых в меню Vivaldi.}
+        other {Все закрытые вкладки, кроме # приватных, вы можете найти в Недавно закрытых в меню Vivaldi.}}</translation>
+<translation id="4871187110787939393">Закрыть все приватные вкладки?</translation>
 </translationbundle>

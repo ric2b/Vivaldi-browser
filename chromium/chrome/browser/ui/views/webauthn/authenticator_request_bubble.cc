@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/ui/webauthn/authenticator_request_bubble.h"
+
 #include <memory>
 
+#include "base/strings/utf_string_conversions.h"
 #include "cc/paint/skottie_wrapper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -14,10 +17,11 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
-#include "chrome/browser/ui/webauthn/authenticator_request_bubble.h"
+#include "chrome/browser/ui/views/webauthn/authenticator_common_views.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/lottie/animation.h"
@@ -29,10 +33,6 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/view_class_properties.h"
-
-#if BUILDFLAG(IS_MAC)
-#include "chrome/browser/ui/views/webauthn/mac_authentication_view.h"
-#endif  // BUILDFLAG(IS_MAC)
 
 namespace {
 
@@ -49,49 +49,6 @@ struct BubbleContents {
       &AuthenticatorRequestDialogModel::StartOver;
 };
 
-constexpr BubbleContents kGPMTouchID = {
-    .title = u"Touch ID to proceed (UNTRANSLATED)",
-    .body = nullptr,
-    .show_footer = false,
-    .on_ok = &AuthenticatorRequestDialogModel::OnGPMCreatePasskey,
-};
-
-constexpr BubbleContents kGPMCreatePasskeyContents = {
-    .illustration_light_id = IDR_WEBAUTHN_GPM_FINGERPRINT_LIGHT,
-    .title = u"Create passkey for example.com? (UNTRANSLATED)",
-    .body = nullptr,
-    .show_footer = true,
-    .show_icon = true,
-    .on_ok = &AuthenticatorRequestDialogModel::OnGPMCreatePasskey,
-};
-
-constexpr BubbleContents kTrustThisComputerContents = {
-    .illustration_light_id = IDR_WEBAUTHN_GPM_LAPTOP_LIGHT,
-    .title =
-        u"Trust this device to use your passkeys from Google Password Manager? "
-        u"(UNTRANSLATED)",
-    .body =
-        u"This device will be enrolled to use your passkeys saved in Google "
-        u"Password Manager. If this is a temporary device, select more "
-        u"options. (UNTRANSLATED)",
-    .show_footer = false,
-    .on_ok = &AuthenticatorRequestDialogModel::OnTrustThisComputer,
-};
-
-constexpr BubbleContents kGPMOnboardingContents = {
-    .illustration_light_id = IDR_WEBAUTHN_GPM_FINGERPRINT_LIGHT,
-    .title =
-        u"Start using passkeys with your Google Password Manager "
-        u"(UNTRANSLATED)",
-    .body =
-        u"We'll create a passkey for you to sign in to example.com "
-        u"(UNTRANSLATED)",
-    .show_footer = true,
-    .show_icon = true,
-    .on_ok = &AuthenticatorRequestDialogModel::OnGPMOnboardingAccepted,
-};
-
-// TODO(rgod): Add username row and correct footer when mocks are ready.
 constexpr BubbleContents kGPMPasskeySavedContents = {
     .buttons = ui::DIALOG_BUTTON_NONE,
     .title = u"Passkey saved (UT)",
@@ -107,11 +64,13 @@ class AuthenticatorRequestBubbleDelegate
   AuthenticatorRequestBubbleDelegate(views::View* anchor_view,
                                      AuthenticatorRequestDialogModel* model)
       : BubbleDialogDelegateView(anchor_view,
-                                 views::BubbleBorder::Arrow::TOP_RIGHT),
+                                 views::BubbleBorder::Arrow::TOP_RIGHT,
+                                 views::BubbleBorder::DIALOG_SHADOW,
+                                 true),
         model_(model),
-        step_(model_->current_step()),
+        step_(model_->step()),
         bubble_contents_(GetContents(step_)) {
-    model_->AddObserver(this);
+    model_->observers.AddObserver(this);
 
     SetShowCloseButton(true);
     SetButtonLabel(ui::DIALOG_BUTTON_OK, u"Continue (UT)");
@@ -135,7 +94,7 @@ class AuthenticatorRequestBubbleDelegate
 
   ~AuthenticatorRequestBubbleDelegate() override {
     if (model_) {
-      model_->RemoveObserver(this);
+      model_->observers.RemoveObserver(this);
     }
   }
 
@@ -143,14 +102,6 @@ class AuthenticatorRequestBubbleDelegate
   static const BubbleContents* GetContents(
       AuthenticatorRequestDialogModel::Step step) {
     switch (step) {
-      case AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey:
-        return &kGPMCreatePasskeyContents;
-      case AuthenticatorRequestDialogModel::Step::kTrustThisComputer:
-        return &kTrustThisComputerContents;
-      case AuthenticatorRequestDialogModel::Step::kGPMTouchID:
-        return &kGPMTouchID;
-      case AuthenticatorRequestDialogModel::Step::kGPMOnboarding:
-        return &kGPMOnboardingContents;
       case AuthenticatorRequestDialogModel::Step::kGPMPasskeySaved:
         return &kGPMPasskeySavedContents;
       default:
@@ -197,17 +148,14 @@ class AuthenticatorRequestBubbleDelegate
       return;
     }
 
-    if (model_->current_step() == step_) {
+    if (model_->step() == step_) {
       return;
     }
 
-    step_ = model_->current_step();
+    step_ = model_->step();
     bubble_contents_ = GetContents(step_);
     ConfigureView();
-    SizeToContents();
   }
-
-  void OnSheetModelChanged() override {}
 
  private:
   void UpdateHeader() {
@@ -222,7 +170,8 @@ class AuthenticatorRequestBubbleDelegate
           ui::ResourceBundle::GetSharedInstance().GetLottieData(
               bubble_contents_->illustration_light_id);
       scoped_refptr<cc::SkottieWrapper> skottie =
-          cc::SkottieWrapper::CreateSerializable(std::move(*lottie_bytes));
+          cc::SkottieWrapper::UnsafeCreateSerializable(
+              std::move(*lottie_bytes));
       auto animation = std::make_unique<views::AnimatedImageView>();
       animation->SetPreferredSize(gfx::Size(320, 106));
       animation->SetAnimatedImage(std::make_unique<lottie::Animation>(skottie));
@@ -242,8 +191,7 @@ class AuthenticatorRequestBubbleDelegate
     if (bubble_contents_->show_footer) {
       auto label = std::make_unique<views::Label>(
           u"Your passkeys are saved to Google Password Manager for "
-          u"example@gmail.com and will also be available on your Android "
-          u"devices (UNTRANSLATED)",
+          u"example@gmail.com (UNTRANSLATED)",
           ChromeTextContext::CONTEXT_DIALOG_BODY_TEXT_SMALL,
           views::style::STYLE_SECONDARY);
       label->SetMultiLine(true);
@@ -275,16 +223,11 @@ class AuthenticatorRequestBubbleDelegate
               .SetTextContext(views::style::CONTEXT_DIALOG_BODY_TEXT)
               .Build());
     }
-
-#if BUILDFLAG(IS_MAC)
-    if (step_ == AuthenticatorRequestDialogModel::Step::kGPMTouchID) {
-      if (__builtin_available(macos 12, *)) {
-        primary_view_->AddChildView(
-            std::make_unique<MacAuthenticationView>(base::DoNothing()));
-      }
+    if (step_ == AuthenticatorRequestDialogModel::Step::kGPMPasskeySaved) {
+      AddChildView(CreatePasskeyIconWithLabelRow(
+          vector_icons::kPasskeyIcon,
+          base::UTF8ToUTF16(model_->user_entity.name.value_or(""))));
     }
-#endif  // BUILDFLAG(IS_MAC)
-
     AddChildView(std::move(primary_view));
   }
 
@@ -293,7 +236,6 @@ class AuthenticatorRequestBubbleDelegate
     UpdateHeader();
     UpdateFootnote();
   }
-
   raw_ptr<AuthenticatorRequestDialogModel> model_;
   AuthenticatorRequestDialogModel::Step step_;
   raw_ptr<const BubbleContents> bubble_contents_;

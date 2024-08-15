@@ -17,17 +17,6 @@ namespace bookmarks {
 class BookmarkModel;
 }
 
-// Note: (prio@vivaldi.com) - Chromium is refactoring the bookmarks model on
-// CR124 for iOS. This requires iOS to use LegacyBookmarkModel instead of
-// BookmarkModel. This might be temporary or not, we don't know yet, depends on
-// Chromium to finish their refactoring.
-#if !BUILDFLAG(IS_IOS)
-using VivaldiBookmarkModelType = bookmarks::BookmarkModel;
-#else
-class LegacyBookmarkModel;
-using VivaldiBookmarkModelType = LegacyBookmarkModel;
-#endif
-
 // A collection of helper classes and utilities to extend Chromium BookmarkModel
 // and BookmarkNode functionality.
 
@@ -40,8 +29,8 @@ using bookmarks::BookmarkNode;
 // will be null when the callback is called while the model was deleted when
 // waiting.
 using RunAfterModelLoadCallback =
-    base::OnceCallback<void(VivaldiBookmarkModelType* model)>;
-void RunAfterModelLoad(VivaldiBookmarkModelType* model,
+    base::OnceCallback<void(bookmarks::BookmarkModel* model)>;
+void RunAfterModelLoad(bookmarks::BookmarkModel* model,
                        RunAfterModelLoadCallback callback);
 
 constexpr auto kNonClonableKeys = base::MakeFixedFlatSet<std::string_view>(
@@ -95,6 +84,21 @@ bool DoesNickExists(const BookmarkModel* model,
                     const std::string& nickname,
                     const BookmarkNode* updated_node);
 
+// Creates a unique nickname for given nickname and updated_node.
+// Follows the same logic as DoesNickExist, but simply creates a new
+// unique nickname in case the specified one is already taken.
+// It does so by attempting to change nickname's trailing characters
+// to a format of "Nickname.NUMBER".
+// In case the nickname already contains .NUMBER, we search for first
+// number causing the nick to be unique.
+// Returns true for a found conflicting nick, false otherwise.
+// Sets updated_nickname to contain a unique nickname usable for the
+// updated_node (be it the original one or created one).
+bool SuggestUniqueNick(const BookmarkModel* model,
+                       const std::string& nickname,
+                       const BookmarkNode* updated_node,
+                       std::string* unique_nickname);
+
 bool SetBookmarkThumbnail(BookmarkModel* model,
                           int64_t bookmark_id,
                           const std::string& url);
@@ -118,27 +122,6 @@ void SetNodeThumbnail(BookmarkModel* model,
 void SetNodeThemeColor(BookmarkModel* model,
                        const BookmarkNode* node,
                        SkColor theme_color);
-
-#if BUILDFLAG(IS_IOS)
-// iOS-specific functions
-bool DoesNickExists(LegacyBookmarkModel* model,
-                    const std::string& nickname,
-                    const BookmarkNode* updated_node);
-void SetNodeNickname(LegacyBookmarkModel* model,
-                     const BookmarkNode* node,
-                     const std::string& nickname);
-void SetNodeDescription(LegacyBookmarkModel* model,
-                        const BookmarkNode* node,
-                        const std::string& description);
-void SetNodeSpeeddial(LegacyBookmarkModel* model,
-                      const BookmarkNode* node,
-                      bool speeddial);
-void SetNodeThumbnail(LegacyBookmarkModel* model,
-                      const BookmarkNode* node,
-                      const std::string& path);
-void RemovePartnerId(LegacyBookmarkModel* model,
-                     const BookmarkNode* node);
-#endif
 
 typedef base::RepeatingCallback<bool(const std::string&)> BookmarkWriteFunc;
 bool WriteBookmarkData(const base::Value::Dict& value,

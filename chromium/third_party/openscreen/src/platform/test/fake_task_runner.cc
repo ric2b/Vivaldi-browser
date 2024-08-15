@@ -10,13 +10,12 @@
 
 namespace openscreen {
 
-FakeTaskRunner::FakeTaskRunner(FakeClock* clock) : clock_(clock) {
-  OSP_CHECK(clock_);
-  clock_->SubscribeToTimeChanges(this);
+FakeTaskRunner::FakeTaskRunner(FakeClock& clock) : clock_(clock) {
+  clock_.SubscribeToTimeChanges(this);
 }
 
 FakeTaskRunner::~FakeTaskRunner() {
-  clock_->UnsubscribeFromTimeChanges(this);
+  clock_.UnsubscribeFromTimeChanges(this);
 }
 
 void FakeTaskRunner::RunTasksUntilIdle() {

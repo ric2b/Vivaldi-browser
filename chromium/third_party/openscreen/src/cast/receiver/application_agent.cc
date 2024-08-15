@@ -29,11 +29,11 @@ std::string GetFirstAppId(ApplicationAgent::Application* app) {
 
 ApplicationAgent::ApplicationAgent(
     TaskRunner& task_runner,
-    DeviceAuthNamespaceHandler::CredentialsProvider* credentials_provider)
+    DeviceAuthNamespaceHandler::CredentialsProvider& credentials_provider)
     : task_runner_(task_runner),
       auth_handler_(credentials_provider),
-      connection_handler_(&router_, this),
-      message_port_(&router_) {
+      connection_handler_(router_, *this),
+      message_port_(router_) {
   router_.AddHandlerForLocalId(kPlatformReceiverId, this);
 }
 
@@ -98,7 +98,8 @@ void ApplicationAgent::OnConnected(ReceiverSocketFactory* factory,
   router_.TakeSocket(this, std::move(socket));
 }
 
-void ApplicationAgent::OnError(ReceiverSocketFactory* factory, Error error) {
+void ApplicationAgent::OnError(ReceiverSocketFactory* factory,
+                               const Error& error) {
   OSP_LOG_ERROR << "Cast agent received socket factory error: " << error;
 }
 
@@ -179,7 +180,7 @@ void ApplicationAgent::OnClose(CastSocket* socket) {
   }
 }
 
-void ApplicationAgent::OnError(CastSocket* socket, Error error) {
+void ApplicationAgent::OnError(CastSocket* socket, const Error& error) {
   if (message_port_.GetSocketId() == ToCastSocketId(socket)) {
     OSP_LOG_ERROR << "Cast agent received socket error: " << error;
     GoIdle();

@@ -38,7 +38,8 @@ public class HomeButton extends ListMenuButton implements ThemeColorProvider.Tin
     }
 
     @Override
-    public void onTintChanged(ColorStateList tint, int brandedColorScheme) {
+    public void onTintChanged(
+            ColorStateList tint, ColorStateList activityFocusTint, int brandedColorScheme) {
         ImageViewCompat.setImageTintList(this, tint); // Ref. VAB-7901
     }
 

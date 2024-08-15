@@ -10,7 +10,6 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <wchar.h>
 
 #include <functional>
 #include <iosfwd>
@@ -70,16 +69,6 @@ class WideString : public StringTemplate<wchar_t> {
   [[nodiscard]] static WideString FromUTF8(ByteStringView str);
   [[nodiscard]] static WideString FromUTF16LE(pdfium::span<const uint8_t> data);
   [[nodiscard]] static WideString FromUTF16BE(pdfium::span<const uint8_t> data);
-
-  // Explicit conversion to C-style wide string.  The result is never nullptr,
-  // and is always NUL terminated.
-  // Note: Any subsequent modification of |this| will invalidate the result.
-  const wchar_t* c_str() const { return m_pData ? m_pData->m_String : L""; }
-
-
-  size_t GetStringLength() const {
-    return m_pData ? wcslen(m_pData->m_String) : 0;
-  }
 
   WideString& operator=(const wchar_t* str);
   WideString& operator=(WideStringView str);

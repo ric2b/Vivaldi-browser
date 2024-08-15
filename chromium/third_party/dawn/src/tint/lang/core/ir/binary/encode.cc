@@ -162,10 +162,10 @@ struct Encoder {
                 return pb::PipelineStage::Fragment;
             case Function::PipelineStage::kVertex:
                 return pb::PipelineStage::Vertex;
-            default:
-                TINT_ICE() << "unhandled PipelineStage: " << stage;
-                return pb::PipelineStage::Compute;
+            case Function::PipelineStage::kUndefined:
+                break;
         }
+        TINT_ICE() << "unhandled PipelineStage: " << stage;
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -655,10 +655,13 @@ struct Encoder {
                 return pb::AddressSpace::uniform;
             case core::AddressSpace::kWorkgroup:
                 return pb::AddressSpace::workgroup;
-            default:
-                TINT_ICE() << "invalid AddressSpace: " << in;
-                return pb::AddressSpace::function;
+
+            case core::AddressSpace::kUndefined:
+            case core::AddressSpace::kIn:
+            case core::AddressSpace::kOut:
+                break;
         }
+        TINT_ICE() << "invalid AddressSpace: " << in;
     }
 
     pb::AccessControl AccessControl(core::Access in) {
@@ -669,10 +672,10 @@ struct Encoder {
                 return pb::AccessControl::write;
             case core::Access::kReadWrite:
                 return pb::AccessControl::read_write;
-            default:
-                TINT_ICE() << "invalid Access: " << in;
-                return pb::AccessControl::read;
+            case core::Access::kUndefined:
+                break;
         }
+        TINT_ICE() << "invalid Access: " << in;
     }
 
     pb::UnaryOp UnaryOp(core::UnaryOp in) {
@@ -689,7 +692,6 @@ struct Encoder {
                 return pb::UnaryOp::not_;
         }
         TINT_ICE() << "invalid UnaryOp: " << in;
-        return pb::UnaryOp::complement;
     }
 
     pb::BinaryOp BinaryOp(core::BinaryOp in) {
@@ -733,7 +735,6 @@ struct Encoder {
         }
 
         TINT_ICE() << "invalid BinaryOp: " << in;
-        return pb::BinaryOp::add_;
     }
 
     pb::TextureDimension TextureDimension(core::type::TextureDimension in) {
@@ -750,12 +751,11 @@ struct Encoder {
                 return pb::TextureDimension::cube;
             case core::type::TextureDimension::kCubeArray:
                 return pb::TextureDimension::cube_array;
-            default:
+            case core::type::TextureDimension::kNone:
                 break;
         }
 
         TINT_ICE() << "invalid TextureDimension: " << in;
-        return pb::TextureDimension::_1d;
     }
 
     pb::TexelFormat TexelFormat(core::TexelFormat in) {
@@ -768,6 +768,8 @@ struct Encoder {
                 return pb::TexelFormat::r32_sint;
             case core::TexelFormat::kR32Uint:
                 return pb::TexelFormat::r32_uint;
+            case core::TexelFormat::kR8Unorm:
+                return pb::TexelFormat::r8_unorm;
             case core::TexelFormat::kRg32Float:
                 return pb::TexelFormat::rg32_float;
             case core::TexelFormat::kRg32Sint:
@@ -794,12 +796,11 @@ struct Encoder {
                 return pb::TexelFormat::rgba8_uint;
             case core::TexelFormat::kRgba8Unorm:
                 return pb::TexelFormat::rgba8_unorm;
-            default:
+            case core::TexelFormat::kUndefined:
                 break;
         }
 
         TINT_ICE() << "invalid TexelFormat: " << in;
-        return pb::TexelFormat::bgra8_unorm;
     }
 
     pb::SamplerKind SamplerKind(core::type::SamplerKind in) {
@@ -811,7 +812,6 @@ struct Encoder {
         }
 
         TINT_ICE() << "invalid SamplerKind: " << in;
-        return pb::SamplerKind::sampler;
     }
 
     pb::InterpolationType InterpolationType(core::InterpolationType in) {
@@ -822,11 +822,10 @@ struct Encoder {
                 return pb::InterpolationType::linear;
             case core::InterpolationType::kPerspective:
                 return pb::InterpolationType::perspective;
-            default:
+            case core::InterpolationType::kUndefined:
                 break;
         }
         TINT_ICE() << "invalid InterpolationType: " << in;
-        return pb::InterpolationType::flat;
     }
 
     pb::InterpolationSampling InterpolationSampling(core::InterpolationSampling in) {
@@ -837,11 +836,10 @@ struct Encoder {
                 return pb::InterpolationSampling::centroid;
             case core::InterpolationSampling::kSample:
                 return pb::InterpolationSampling::sample;
-            default:
+            case core::InterpolationSampling::kUndefined:
                 break;
         }
         TINT_ICE() << "invalid InterpolationSampling: " << in;
-        return pb::InterpolationSampling::center;
     }
 
     pb::BuiltinValue BuiltinValue(core::BuiltinValue in) {
@@ -876,11 +874,10 @@ struct Encoder {
                 return pb::BuiltinValue::vertex_index;
             case core::BuiltinValue::kWorkgroupId:
                 return pb::BuiltinValue::workgroup_id;
-            default:
+            case core::BuiltinValue::kUndefined:
                 break;
         }
         TINT_ICE() << "invalid BuiltinValue: " << in;
-        return pb::BuiltinValue::point_size;
     }
 
     pb::BuiltinFn BuiltinFn(core::BuiltinFn in) {
@@ -1005,6 +1002,14 @@ struct Encoder {
                 return pb::BuiltinFn::pack4x8_snorm;
             case core::BuiltinFn::kPack4X8Unorm:
                 return pb::BuiltinFn::pack4x8_unorm;
+            case core::BuiltinFn::kPack4XI8:
+                return pb::BuiltinFn::pack4xi8;
+            case core::BuiltinFn::kPack4XU8:
+                return pb::BuiltinFn::pack4xu8;
+            case core::BuiltinFn::kPack4XI8Clamp:
+                return pb::BuiltinFn::pack4xi8_clamp;
+            case core::BuiltinFn::kPack4XU8Clamp:
+                return pb::BuiltinFn::pack4xu8_clamp;
             case core::BuiltinFn::kPow:
                 return pb::BuiltinFn::pow;
             case core::BuiltinFn::kQuantizeToF16:
@@ -1055,6 +1060,10 @@ struct Encoder {
                 return pb::BuiltinFn::unpack4x8_snorm;
             case core::BuiltinFn::kUnpack4X8Unorm:
                 return pb::BuiltinFn::unpack4x8_unorm;
+            case core::BuiltinFn::kUnpack4XI8:
+                return pb::BuiltinFn::unpack4xi8;
+            case core::BuiltinFn::kUnpack4XU8:
+                return pb::BuiltinFn::unpack4xu8;
             case core::BuiltinFn::kWorkgroupBarrier:
                 return pb::BuiltinFn::workgroup_barrier;
             case core::BuiltinFn::kTextureBarrier:
@@ -1115,11 +1124,10 @@ struct Encoder {
                 return pb::BuiltinFn::subgroup_ballot;
             case core::BuiltinFn::kSubgroupBroadcast:
                 return pb::BuiltinFn::subgroup_broadcast;
-            default:
+            case core::BuiltinFn::kNone:
                 break;
         }
         TINT_ICE() << "invalid BuiltinFn: " << in;
-        return pb::BuiltinFn::abs;
     }
 };
 

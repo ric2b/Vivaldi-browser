@@ -47,6 +47,7 @@
 #import "ios/chrome/browser/ui/authentication/re_signin_infobar_delegate.h"
 #import "ios/chrome/browser/ui/bookmarks/home/bookmarks_coordinator.h"
 #import "ios/chrome/browser/ui/browser_container/browser_container_view_controller.h"
+#import "ios/chrome/browser/ui/browser_view/browser_view_visibility_consumer.h"
 #import "ios/chrome/browser/ui/browser_view/key_commands_provider.h"
 #import "ios/chrome/browser/ui/browser_view/safe_area_provider.h"
 #import "ios/chrome/browser/ui/bubble/bubble_presenter.h"
@@ -125,6 +126,7 @@
 #import "ios/chrome/browser/ui/whats_new/vivaldi_whats_new_util.h"
 #import "ios/panel/panel_interaction_controller.h"
 #import "ios/ui/common/vivaldi_url_constants.h"
+#import "ios/ui/helpers/vivaldi_default_rating_manager.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
@@ -164,6 +166,9 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     return GURL();
   }
 }
+
+const double kDelayForRatingPrompt = 10.0;
+
 // End Vivaldi
 
 }  // namespace
@@ -471,6 +476,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     self.toolbarCoordinator.steadyViewConsumer = self;
     self.browserCoordinatorCommandsHandler =
         dependencies.browserCoordinatorCommandsHandler;
+    self.defaultRatingManager = [[VivaldiDefaultRatingManager alloc] init];
     // End Vivaldi
 
     self.tabStripCoordinator = dependencies.tabStripCoordinator;
@@ -567,6 +573,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     return;
   _viewVisible = viewVisible;
   self.visible = viewVisible;
+  [self.browserViewVisibilityConsumer browserViewDidChangeVisibility];
   [self updateBroadcastState];
 }
 
@@ -746,10 +753,10 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
 - (void)updateWebStateVisibility:(BOOL)isVisible {
   if (isVisible) {
-    // TODO(crbug.com/971364): The webState is not necessarily added to the view
-    // hierarchy, even though the bookkeeping says that the WebState is visible.
-    // Do not DCHECK([webState->GetView() window]) here since this is a known
-    // issue.
+    // TODO(crbug.com/40630853): The webState is not necessarily added to the
+    // view hierarchy, even though the bookkeeping says that the WebState is
+    // visible. Do not DCHECK([webState->GetView() window]) here since this is a
+    // known issue.
     self.currentWebState->WasShown();
   } else {
     self.currentWebState->WasHidden();
@@ -863,7 +870,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   [self setNeedsStatusBarAppearanceUpdate];
 }
 
-// TODO(crbug.com/1329111): Federate ClearPresentedState.
+// TODO(crbug.com/40842434): Federate ClearPresentedState.
 - (void)clearPresentedStateWithCompletion:(ProceduralBlock)completion
                            dismissOmnibox:(BOOL)dismissOmnibox {
   [_bookmarksCoordinator dismissBookmarkModalControllerAnimated:NO];
@@ -1114,6 +1121,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   [self.contentArea addGestureRecognizer:self.contentAreaGestureRecognizer];
 
   if (IsVivaldiRunning()) {
+#if !defined(__IPHONE_16_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_16_0
     // Copy to note context menu item
     NSString* text =
       l10n_util::GetNSString(IDS_VIVALDI_COPY_TO_NOTE);
@@ -1123,6 +1131,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     // Add to context menu.
     UIMenuController.sharedMenuController.menuItems =
         [NSArray arrayWithObjects:copyToNoteItem, nil];
+#endif
 
     // Set up the sticky top toolbar view.
     VivaldiStickyToolbarView* vivaldiStickyToolbarView =
@@ -1221,9 +1230,26 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   if (ShouldShowVivaldiWhatsNewPage()) {
     [self openWhatsNewTab];
   }
+  [_defaultRatingManager recordActiveDay];
+  [self showReviewPrompt];
   // End Vivaldi
 
 }
+
+// Vivaldi
+- (void)showReviewPrompt {
+  BOOL shouldShowReviewPrompt = [_defaultRatingManager shouldShowReviewPrompt];
+  if (shouldShowReviewPrompt) {
+    __weak BrowserViewController* weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                      (kDelayForRatingPrompt * NSEC_PER_SEC)),
+        dispatch_get_main_queue(), ^{
+          [weakSelf.browserCoordinatorCommandsHandler showDefaultReviewPrompt];
+        }
+    );
+  }
+}
+// End Vivaldi
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
@@ -1340,10 +1366,10 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
   self.fullscreenController->BrowserTraitCollectionChangedBegin();
 
-  // TODO(crbug.com/527092): - traitCollectionDidChange: is not always forwarded
-  // because in some cases the presented view controller isn't a child of the
-  // BVC in the view controller hierarchy (some intervening object isn't a
-  // view controller).
+  // TODO(crbug.com/41198852): - traitCollectionDidChange: is not always
+  // forwarded because in some cases the presented view controller isn't a child
+  // of the BVC in the view controller hierarchy (some intervening object isn't
+  // a view controller).
   [self.presentedViewController
       traitCollectionDidChange:previousTraitCollection];
 
@@ -1377,8 +1403,8 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   }
 
   // Update the toolbar visibility.
-  // TODO(crbug.com/1329087): Remove this and let `PrimaryToolbarViewController`
-  // or `ToolbarCoordinator` call the update ?
+  // TODO(crbug.com/40842406): Remove this and let
+  // `PrimaryToolbarViewController` or `ToolbarCoordinator` call the update ?
   [self.toolbarCoordinator updateToolbar];
 
   // Update the tab strip visibility.
@@ -1452,7 +1478,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     [self.browserCoordinatorCommandsHandler dismissPanel];
   } // End Vivaldi
 
-  // TODO(crbug.com/522721): Support size changes for all popups and modal
+  // TODO(crbug.com/40432185): Support size changes for all popups and modal
   // dialogs.
   [self.helpHandler hideAllHelpBubbles];
   if (!IsNewOverflowMenuEnabled()) {
@@ -1509,12 +1535,12 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 - (void)dismissViewControllerAnimated:(BOOL)flag
                            completion:(void (^)())completion {
   if (!self.presentedViewController) {
-    // TODO(crbug.com/801165): On iOS10, UIDocumentMenuViewController and
+    // TODO(crbug.com/41364311): On iOS10, UIDocumentMenuViewController and
     // WKFileUploadPanel somehow combine to call dismiss twice instead of once.
     // The second call would dismiss the BVC itself, so look for that case and
     // return early.
     //
-    // TODO(crbug.com/811671): A similar bug exists on all iOS versions with
+    // TODO(crbug.com/41370278): A similar bug exists on all iOS versions with
     // WKFileUploadPanel and UIDocumentPickerViewController.
     //
     // To make M65 as safe as possible, return early whenever this method is
@@ -1530,7 +1556,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   // this case and return early.  It is not enough to check
   // `self.dismissingModal` because some dismissals do not go through
   // -[BrowserViewController dismissViewControllerAnimated:completion:`.
-  // TODO(crbug.com/782338): Fix callers and remove this early return.
+  // TODO(crbug.com/40548564): Fix callers and remove this early return.
   if (self.dismissingModal || self.presentedViewController.isBeingDismissed) {
     return;
   }
@@ -1552,7 +1578,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
                      animated:(BOOL)flag
                    completion:(void (^)())completion {
   ProceduralBlock finalCompletionHandler = [completion copy];
-  // TODO(crbug.com/580098) This is an interim fix for the flicker between the
+  // TODO(crbug.com/41235932) This is an interim fix for the flicker between the
   // launch screen and the FRE Animation. The fix is, if the FRE is about to be
   // presented, to show a temporary view of the launch screen and then remove it
   // when the controller for the FRE has been presented. This fix should be
@@ -1581,10 +1607,10 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
       // by the `completion` block below.
       UIView* launchScreenView = launchScreenController.view;
       launchScreenView.userInteractionEnabled = NO;
-      // TODO(crbug.com/1011155): Displaying the launch screen is a hack to hide
-      // the build up of the UI from the user. To implement the hack, this view
-      // controller uses information that it should not know or care about: this
-      // BVC is contained and its parent bounds to the full screen.
+      // TODO(crbug.com/40101769): Displaying the launch screen is a hack to
+      // hide the build up of the UI from the user. To implement the hack, this
+      // view controller uses information that it should not know or care about:
+      // this BVC is contained and its parent bounds to the full screen.
       launchScreenView.frame = self.parentViewController.view.bounds;
       [self.parentViewController.view addSubview:launchScreenView];
       [launchScreenView setNeedsLayout];
@@ -1609,7 +1635,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
                         animated:flag
                       completion:finalCompletionHandler];
   };
-  // TODO(crbug.com/965688): The Default Browser Promo is
+  // TODO(crbug.com/40628488): The Default Browser Promo is
   // currently the only presented controller that allows interaction with the
   // rest of the App while they are being presented. Dismiss it in case the user
   // or system has triggered another presentation.
@@ -1729,8 +1755,8 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   CGFloat height = self.toolbarCoordinator.expandedPrimaryToolbarHeight;
   // If the primary toolbar is not the topmost header, it does not overlap with
   // the unsafe area.
-  // TODO(crbug.com/806437): Update implementation such that this calculates the
-  // topmost header's height.
+  // TODO(crbug.com/41367346): Update implementation such that this calculates
+  // the topmost header's height.
   UIView* primaryToolbar =
       self.toolbarCoordinator.primaryToolbarViewController.view;
   UIView* topmostHeader = [self.headerViews firstObject].view;
@@ -1837,11 +1863,8 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
       self.toolbarCoordinator.secondaryToolbarViewController.view;
   self.secondaryToolbarHeightConstraint = [toolbarView.heightAnchor
       constraintEqualToConstant:[self secondaryToolbarHeightWithInset]];
-  if (IsBottomOmniboxSteadyStateEnabled()) {
-    // The bottom toolbar can be constraint to the keyboard in some cases.
-    self.secondaryToolbarHeightConstraint.priority =
-        UILayoutPriorityRequired - 1;
-  }
+  // The bottom toolbar can be constraint to the keyboard in some cases.
+  self.secondaryToolbarHeightConstraint.priority = UILayoutPriorityRequired - 1;
   self.secondaryToolbarHeightConstraint.active = YES;
   AddSameConstraintsToSides(
       self.view, toolbarView,
@@ -1927,7 +1950,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
                                  .secondaryToolbarViewController.view
                 aboveSubview:primaryToolbarView];
 
-    // TODO(crbug.com/1450600): Migrate kContentAreaGuide to LayoutGuideCenter.
+    // TODO(crbug.com/40270239): Migrate kContentAreaGuide to LayoutGuideCenter.
     // Add guide kContentAreaGuide to the browser view.
     [self.view
         addLayoutGuide:[[NamedGuide alloc] initWithName:kContentAreaGuide]];
@@ -1936,7 +1959,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     NamedGuide* contentAreaGuide = [NamedGuide guideWithName:kContentAreaGuide
                                                         view:self.view];
 
-    // TODO(crbug.com/1136765): Sometimes, `contentAreaGuide` and
+    // TODO(crbug.com/40724393): Sometimes, `contentAreaGuide` and
     // `primaryToolbarView` aren't in the same view hierarchy; this seems to be
     // impossible,  but it does still happen. This will cause an exception in
     // when activiating these constraints. To gather more information about this
@@ -1991,7 +2014,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   [self loadViewIfNeeded];
 
   if (!self.inNewTabAnimation) {
-    // TODO(crbug.com/1329087): -updateToolbar will move out of the BVC; make
+    // TODO(crbug.com/40842406): -updateToolbar will move out of the BVC; make
     // sure this comment remains accurate. Hide findbar.  `updateToolbar` will
     // restore the findbar later.
     [self.findInPageCommandsHandler hideFindUI];
@@ -2018,13 +2041,13 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
       UIViewController* viewController = NTPCoordinator.viewController;
       viewController.view.frame = [self ntpFrameForCurrentWebState];
       [viewController.view layoutIfNeeded];
-      // TODO(crbug.com/873729): For a newly created WebState, the session will
-      // not be restored until LoadIfNecessary call. Remove when fixed.
+      // TODO(crbug.com/41407753): For a newly created WebState, the session
+      // will not be restored until LoadIfNecessary call. Remove when fixed.
       self.currentWebState->GetNavigationManager()->LoadIfNecessary();
       self.browserContainerViewController.contentView = nil;
       self.browserContainerViewController.contentViewController =
           viewController;
-      [NTPCoordinator constrainDiscoverHeaderMenuButtonNamedGuide];
+      [NTPCoordinator constrainFeedHeaderManagementButtonNamedGuide];
     } else {
       self.browserContainerViewController.contentView = view;
     }
@@ -2034,7 +2057,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     }
   }
 
-  // TODO(crbug.com/1329087): Remove this and let `ToolbarCoordinator` call the
+  // TODO(crbug.com/40842406): Remove this and let `ToolbarCoordinator` call the
   // update, somehow. Toolbar needs to know when NTP isActive state changes.
   [self.toolbarCoordinator updateToolbar];
 
@@ -2096,21 +2119,10 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     UIEdgeInsets viewportInsets = UIEdgeInsetsZero;
     if ([self isBottomOmniboxEnabled]) {
       viewportInsets.top = self.rootSafeAreaInsets.top;
-      if (!IsSplitToolbarMode(self)) {
-        // (Important) VIB-133 Workaround for (ntp + landscape + bottom omnibox)
-        // combo.
-        // For this state bottom insets would need to be 0, and the padding is
-        // adjusted on the VivaldiSpeedDialContainerView.
-        // Check -containerBottomPadding method of VivaldiSpeedDialContainerView
-        // for rest of the patch.
-        viewportInsets.bottom = 0;
-      } else {
-        viewportInsets.bottom = [self secondaryToolbarHeightWithInset];
-      }
     } else {
       viewportInsets.top = [self expandedTopToolbarHeight];
-      viewportInsets.bottom = [self secondaryToolbarHeightWithInset];
     }
+    viewportInsets.bottom = [self secondaryToolbarHeightWithInset];
 
     return UIEdgeInsetsInsetRect(self.contentArea.bounds, viewportInsets);
   } // End Vivaldi
@@ -2142,7 +2154,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     // Make sure the toolbarView's constraints are also updated.  Leaving the
     // -setFrame call to minimize changes in this CL -- otherwise the way
     // toolbar_view manages it's alpha changes would also need to be updated.
-    // TODO(crbug.com/778822): This can be cleaned up when the new fullscreen
+    // TODO(crbug.com/40546808): This can be cleaned up when the new fullscreen
     // is enabled.
 
     if (IsVivaldiRunning()) {
@@ -2380,7 +2392,6 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     return 0.0;
   }
   // Height is non-zero only when bottom omnibox is enabled.
-  CHECK(IsBottomOmniboxSteadyStateEnabled());
   return self.rootSafeAreaInsets.bottom + height;
 }
 
@@ -2596,12 +2607,9 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
         [self.typingShield setHidden:YES];
       }];
 
-  ProceduralBlock completion = nil;
-  if (IsIOSLargeFakeboxEnabled()) {
+  ProceduralBlock completion = ^{
     // Show the NTP's fake toolbar after the defocus animation completes.
-    completion = ^{
-      [self.ntpCoordinator locationBarDidResignFirstResponder];
-    };
+    [self.ntpCoordinator locationBarDidResignFirstResponder];
   };
 
   [self.toolbarCoordinator transitionToLocationBarFocusedState:NO
@@ -2893,9 +2901,12 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
           forControlEvents:UIControlEventTouchUpInside];
 
       DCHECK(self.applicationCommandsHandler);
+      __weak __typeof(self) weakSelf = self;
       [self.blockingView.tabSwitcherButton
-                 addTarget:self.applicationCommandsHandler
-                    action:@selector(displayRegularTabSwitcherInGridLayout)
+                 addAction:[UIAction actionWithHandler:^(UIAction* action) {
+                   [weakSelf.applicationCommandsHandler
+                       displayTabGridInMode:TabGridOpeningMode::kRegular];
+                 }]
           forControlEvents:UIControlEventTouchUpInside];
     }
 
@@ -2951,7 +2962,8 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   return [hitView isDescendantOfView:self.contentArea];
 }
 
-// TODO(crbug.com/1329105): Factor this delegate into a mediator or other helper
+// TODO(crbug.com/40842427): Factor this delegate into a mediator or other
+// helper
 #pragma mark - SideSwipeMediatorDelegate
 
 - (void)sideSwipeViewDismissAnimationDidEnd:(UIView*)sideSwipeView {
@@ -2962,7 +2974,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   DCHECK(!IsRegularXRegularSizeClass(self));
   } // End Vivaldi
 
-  // TODO(crbug.com/1329087): Signal to the toolbar coordinator to perform this
+  // TODO(crbug.com/40842406): Signal to the toolbar coordinator to perform this
   // update. Longer-term, make SideSwipeMediatorDelegate observable instead of
   // delegating.
   [self.toolbarCoordinator updateToolbar];
@@ -2980,7 +2992,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   [self displayTabView];
 }
 
-// TODO(crbug.com/1329105): Federate side swipe logic.
+// TODO(crbug.com/40842427): Federate side swipe logic.
 - (BOOL)preventSideSwipe {
 
   if (IsVivaldiRunning() && ShouldPresentFirstRunExperience()) {
@@ -3006,7 +3018,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
 - (void)updateAccessoryViewsForSideSwipeWithVisibility:(BOOL)visible {
   if (visible) {
-    // TODO(crbug.com/1329087): Signal to the toolbar coordinator to perform
+    // TODO(crbug.com/40842406): Signal to the toolbar coordinator to perform
     // this update. Longer-term, make SideSwipeMediatorDelegate observable
     // instead of delegating.
     [self.toolbarCoordinator updateToolbar];
@@ -3045,11 +3057,6 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 #pragma mark - ToolbarHeightDelegate
 
 - (void)toolbarsHeightChanged {
-  CHECK(IsBottomOmniboxSteadyStateEnabled());
-
-  // TODO(crbug.com/1455093): Check if other components are impacted here.
-  // Fullscreen, TextZoom, FindInPage.
-
   // Toolbar state must be updated before `updateForFullscreenProgress` as the
   // later uses the insets from fullscreen model.
   [self updateToolbarState];
@@ -3062,7 +3069,6 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 }
 
 - (void)secondaryToolbarMovedAboveKeyboard {
-  CHECK(IsBottomOmniboxSteadyStateEnabled());
   // Lower the height constraint priority, allowing UIKeyboardLayoutGuide to
   // move the toolbar above the keyboard.
   self.secondaryToolbarHeightConstraint.priority = UILayoutPriorityDefaultHigh;
@@ -3075,7 +3081,6 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 }
 
 - (void)secondaryToolbarRemovedFromKeyboard {
-  CHECK(IsBottomOmniboxSteadyStateEnabled());
   // Return to required priority, otherwise UIKeyboardLayoutGuide would set the
   // toolbar minimum height to the bottom safe area.
   self.secondaryToolbarHeightConstraint.priority = UILayoutPriorityRequired - 1;
@@ -3106,7 +3111,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   self.tabStripView = tabStripView;
   CGRect tabStripFrame = [self.tabStripView frame];
   tabStripFrame.origin = CGPointZero;
-  // TODO(crbug.com/256655): Move the origin.y below to -setUpViewLayout.
+  // TODO(crbug.com/41023322): Move the origin.y below to -setUpViewLayout.
   // because the CGPointZero above will break reset the offset, but it's not
   // clear what removing that will do.
   tabStripFrame.origin.y = self.headerOffset;
@@ -3170,6 +3175,14 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
   viewportInsets.top = [self expandedTopToolbarHeight];
   return UIEdgeInsetsInsetRect(self.contentArea.bounds, viewportInsets);
+}
+
+#pragma mark - ContextualSheetPresenter
+
+- (void)insertContextualSheet:(UIView*)contextualSheet {
+  [self.view
+      insertSubview:contextualSheet
+       aboveSubview:self.toolbarCoordinator.primaryToolbarViewController.view];
 }
 
 #pragma mark - VIVALDI
@@ -3427,6 +3440,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
             !IsSplitToolbarMode(self);
   }
 }
+// End Vivaldi
 
 - (void)openWhatsNewTab {
   GURL url;

@@ -16,6 +16,18 @@
 
 namespace ash {
 
+// These values are used in metrics and should not be reordered or deleted.
+enum class BirchItemType {
+  kTest = 0,          // Internal type used for testing.
+  kCalendar = 1,      // Calendar event.
+  kAttachment = 2,    // File attachment from calendar event.
+  kFile = 3,          // File suggestion e.g. Google Drive file.
+  kTab = 4,           // Recent tab from other device.
+  kWeather = 5,       // Weather conditions.
+  kReleaseNotes = 6,  // Release notes from recent OS update.
+  kMaxValue = kReleaseNotes,
+};
+
 // The base item which is stored by the birch model.
 class ASH_EXPORT BirchItem {
  public:
@@ -27,7 +39,7 @@ class ASH_EXPORT BirchItem {
   virtual ~BirchItem();
   bool operator==(const BirchItem& rhs) const;
 
-  virtual const char* GetItemType() const = 0;
+  virtual BirchItemType GetType() const = 0;
 
   // Print the item to a string for debugging. The format is not stable.
   virtual std::string ToString() const = 0;
@@ -46,6 +58,10 @@ class ASH_EXPORT BirchItem {
   using LoadIconCallback = base::OnceCallback<void(const ui::ImageModel&)>;
   virtual void LoadIcon(LoadIconCallback callback) const = 0;
 
+  // Records metrics when the user takes an action on the item (e.g. clicks or
+  // taps on it).
+  void RecordActionMetrics();
+
   const std::u16string& title() const { return title_; }
   const std::u16string& subtitle() const { return subtitle_; }
 
@@ -55,6 +71,8 @@ class ASH_EXPORT BirchItem {
   const std::optional<std::u16string> secondary_action() const {
     return secondary_action_;
   }
+
+  static void set_action_count_for_test(int value) { action_count_ = value; }
 
  protected:
   void set_secondary_action(const std::u16string& action_name) {
@@ -73,6 +91,9 @@ class ASH_EXPORT BirchItem {
   std::optional<std::u16string> secondary_action_;
 
   float ranking_;  // Lower is better.
+
+  // Clicks or taps on birch chips, across this login session. Used for metrics.
+  static int action_count_;
 };
 
 // A birch item which contains calendar event information.
@@ -82,16 +103,16 @@ class ASH_EXPORT BirchCalendarItem : public BirchItem {
                     const base::Time& start_time,
                     const base::Time& end_time,
                     const GURL& calendar_url,
-                    const GURL& conference_url);
+                    const GURL& conference_url,
+                    const std::string& event_id,
+                    const bool all_day_event);
   BirchCalendarItem(BirchCalendarItem&&);
   BirchCalendarItem(const BirchCalendarItem&);
   BirchCalendarItem& operator=(const BirchCalendarItem&);
   ~BirchCalendarItem() override;
 
-  static constexpr char kItemType[] = "CalendarItem";
-
   // BirchItem:
-  const char* GetItemType() const override;
+  BirchItemType GetType() const override;
   std::string ToString() const override;
   void PerformAction() override;
   void PerformSecondaryAction() override;
@@ -101,9 +122,20 @@ class ASH_EXPORT BirchCalendarItem : public BirchItem {
   const base::Time& end_time() const { return end_time_; }
   const GURL& calendar_url() const { return calendar_url_; }
   const GURL& conference_url() const { return conference_url_; }
+  const std::string& event_id() const { return event_id_; }
 
  private:
-  static std::u16string GetSubtitle(base::Time start_time, base::Time end_time);
+  static std::u16string GetSubtitle(base::Time start_time,
+                                    base::Time end_time,
+                                    bool all_day_event);
+
+  // Returns a string like "10:00 AM - 10:30 AM".
+  static std::u16string GetStartEndString(base::Time start_time,
+                                          base::Time end_time);
+
+  // Returns true if the "Join" button should be shown (i.e. the event has a
+  // conference URL and the event is ongoing or happening soon).
+  bool ShouldShowJoinButton() const;
 
   base::Time start_time_;
   base::Time end_time_;
@@ -111,6 +143,7 @@ class ASH_EXPORT BirchCalendarItem : public BirchItem {
   GURL calendar_url_;
   // Video conferencing URL (e.g. Google Meet).
   GURL conference_url_;
+  std::string event_id_;
 };
 
 // An attachment (e.g. a file attached to a calendar event). Represented as a
@@ -122,17 +155,16 @@ class ASH_EXPORT BirchAttachmentItem : public BirchItem {
                                const GURL& file_url,
                                const GURL& icon_url,
                                const base::Time& start_time,
-                               const base::Time& end_time);
+                               const base::Time& end_time,
+                               const std::string& file_id);
   BirchAttachmentItem(BirchAttachmentItem&&);
   BirchAttachmentItem& operator=(BirchAttachmentItem&&);
   BirchAttachmentItem(const BirchAttachmentItem&);
   BirchAttachmentItem& operator=(const BirchAttachmentItem&);
   ~BirchAttachmentItem() override;
 
-  static constexpr char kItemType[] = "AttachmentItem";
-
   // BirchItem:
-  const char* GetItemType() const override;
+  BirchItemType GetType() const override;
   std::string ToString() const override;
   void PerformAction() override;
   void PerformSecondaryAction() override;
@@ -142,14 +174,16 @@ class ASH_EXPORT BirchAttachmentItem : public BirchItem {
   const GURL& icon_url() const { return icon_url_; }
   const base::Time& start_time() const { return start_time_; }
   const base::Time& end_time() const { return end_time_; }
+  const std::string& file_id() const { return file_id_; }
 
  private:
-  static std::u16string GetSubtitle();
+  static std::u16string GetSubtitle(base::Time start_time, base::Time end_time);
 
   GURL file_url_;          // Link to the file.
   GURL icon_url_;          // Link to the file's icon's art asset.
   base::Time start_time_;  // Start time of the event (used for ranking).
   base::Time end_time_;    // End time of the event (used for ranking).
+  std::string file_id_;    // ID of the file.
 };
 
 // A birch item which contains file path and time information.
@@ -157,27 +191,33 @@ class ASH_EXPORT BirchFileItem : public BirchItem {
  public:
   BirchFileItem(const base::FilePath& file_path,
                 const std::u16string& justification,
-                base::Time timestamp);
+                base::Time timestamp,
+                const std::string& file_id,
+                const std::string& icon_url);
   BirchFileItem(BirchFileItem&&);
   BirchFileItem(const BirchFileItem&);
   BirchFileItem& operator=(const BirchFileItem&);
   bool operator==(const BirchFileItem& rhs) const;
   ~BirchFileItem() override;
 
-  static constexpr char kItemType[] = "FileItem";
-
   // BirchItem:
-  const char* GetItemType() const override;
+  BirchItemType GetType() const override;
   std::string ToString() const override;
   void PerformAction() override;
   void PerformSecondaryAction() override;
   void LoadIcon(LoadIconCallback callback) const override;
 
   const base::Time& timestamp() const { return timestamp_; }
+  const std::string& file_id() const { return file_id_; }
+  const std::string& icon_url() const { return icon_url_; }
 
  private:
   static std::u16string GetTitle(const base::FilePath& file_path);
 
+  // A unique file id which is used to identify file type items, specifically
+  // BirchFileItem and BirchAttachmentItem.
+  std::string file_id_;
+  std::string icon_url_;
   base::FilePath file_path_;
   base::Time timestamp_;
 };
@@ -199,10 +239,8 @@ class ASH_EXPORT BirchTabItem : public BirchItem {
   bool operator==(const BirchTabItem& rhs) const;
   ~BirchTabItem() override;
 
-  static constexpr char kItemType[] = "TabItem";
-
   // BirchItem:
-  const char* GetItemType() const override;
+  BirchItemType GetType() const override;
   std::string ToString() const override;
   void PerformAction() override;
   void PerformSecondaryAction() override;
@@ -214,7 +252,8 @@ class ASH_EXPORT BirchTabItem : public BirchItem {
   DeviceFormFactor form_factor() const { return form_factor_; }
 
  private:
-  static std::u16string GetSubtitle(const std::string& session_name);
+  static std::u16string GetSubtitle(const std::string& session_name,
+                                    base::Time timestamp);
 
   GURL url_;
   base::Time timestamp_;
@@ -234,10 +273,8 @@ class ASH_EXPORT BirchWeatherItem : public BirchItem {
   bool operator==(const BirchWeatherItem& rhs) const;
   ~BirchWeatherItem() override;
 
-  static constexpr char kItemType[] = "WeatherItem";
-
   // BirchItem:
-  const char* GetItemType() const override;
+  BirchItemType GetType() const override;
   std::string ToString() const override;
   void PerformAction() override;
   void PerformSecondaryAction() override;
@@ -257,14 +294,12 @@ struct ASH_EXPORT BirchReleaseNotesItem : public BirchItem {
                         base::Time first_seen);
   BirchReleaseNotesItem(BirchReleaseNotesItem&&) = default;
   BirchReleaseNotesItem(const BirchReleaseNotesItem&) = default;
-  BirchReleaseNotesItem& operator=(const BirchReleaseNotesItem&) = delete;
+  BirchReleaseNotesItem& operator=(const BirchReleaseNotesItem&) = default;
   bool operator==(const BirchReleaseNotesItem& rhs) const = default;
   ~BirchReleaseNotesItem() override;
 
-  static constexpr char kItemType[] = "ReleaseNotesItem";
-
   // BirchItem:
-  const char* GetItemType() const override;
+  BirchItemType GetType() const override;
   std::string ToString() const override;
   void PerformAction() override;
   void PerformSecondaryAction() override;

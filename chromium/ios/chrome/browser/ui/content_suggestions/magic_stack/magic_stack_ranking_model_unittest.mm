@@ -12,7 +12,6 @@
 #import "components/commerce/core/mock_shopping_service.h"
 #import "components/feature_engagement/test/mock_tracker.h"
 #import "components/segmentation_platform/public/constants.h"
-#import "components/segmentation_platform/public/features.h"
 #import "components/segmentation_platform/public/segmentation_platform_service.h"
 #import "components/signin/public/base/signin_pref_names.h"
 #import "components/sync_preferences/testing_pref_service_syncable.h"
@@ -20,7 +19,6 @@
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/first_run/model/first_run.h"
 #import "ios/chrome/browser/ntp/model/set_up_list_prefs.h"
-#import "ios/chrome/browser/parcel_tracking/features.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_model_factory.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_test_utils.h"
 #import "ios/chrome/browser/segmentation_platform/model/segmentation_platform_service_factory.h"
@@ -39,6 +37,7 @@
 #import "ios/chrome/browser/ui/content_suggestions/cells/shortcuts_mediator.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_consumer.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_metrics_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_metrics_recorder.h"
 #import "ios/chrome/browser/ui/content_suggestions/magic_stack/magic_stack_ranking_model_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/parcel_tracking/parcel_tracking_item.h"
@@ -53,6 +52,7 @@
 #import "ios/chrome/browser/url_loading/model/fake_url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_notifier_browser_agent.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
+#import "ios/chrome/test/ios_chrome_scoped_testing_variations_service.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
@@ -184,16 +184,8 @@ std::unique_ptr<KeyedService> BuildFeatureEngagementMockTracker(
 class MagicStackRankingModelTest : public PlatformTest {
  public:
   void SetUp() override {
-    // Need to initialize features before constructing
-    // SegmentationPlatformServiceFactory.
     scoped_feature_list_.InitWithFeaturesAndParameters(
-        {{segmentation_platform::features::kSegmentationPlatformFeature, {}},
-         {segmentation_platform::features::kSegmentationPlatformIosModuleRanker,
-          {{segmentation_platform::kDefaultModelEnabledParam, "true"}}},
-         {kMagicStack, {{kMagicStackMostVisitedModuleParam, "true"}}},
-         {kIOSParcelTracking, {}},
-         {kTabResumption, {}}},
-        {});
+        {{kMagicStack, {{kMagicStackMostVisitedModuleParam, "true"}}}}, {});
 
     TestChromeBrowserState::Builder test_cbs_builder;
     test_cbs_builder.AddTestingFactory(
@@ -218,6 +210,9 @@ class MagicStackRankingModelTest : public PlatformTest {
     local_state_.Get()->ClearPref(set_up_list_prefs::kDisabled);
     ClearDefaultBrowserPromoData();
     WriteFirstRunSentinel();
+
+    // Necessary set up for parcel tracking.
+    scoped_variations_service_.Get()->OverrideStoredPermanentCountry("us");
 
     AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
         chrome_browser_state_.get(),
@@ -319,6 +314,7 @@ class MagicStackRankingModelTest : public PlatformTest {
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
   std::unique_ptr<Browser> browser_;
   FakeUrlLoadingBrowserAgent* url_loader_;
+  IOSChromeScopedTestingVariationsService scoped_variations_service_;
   std::unique_ptr<commerce::MockShoppingService> shopping_service_;
   FakeSetUpListMediator* _setUpListMediator;
   FakeParcelTrackingMediator* _parcelTrackingMediator;
@@ -353,6 +349,8 @@ TEST_F(MagicStackRankingModelTest, TestMagicStackOrderSegmentationServiceCall) {
         return _magicStackRankingModel.hasReceivedMagicStackResponse;
       }));
   EXPECT_OCMOCK_VERIFY(consumer_);
+  histogram_tester_->ExpectTotalCount(
+      kMagicStackNTPSegmentationRankingFetchTimeHistogram, 1);
 }
 
 // Tests that the -setMagicStackOrder: consumer call is executed with the
@@ -364,14 +362,10 @@ TEST_F(MagicStackRankingModelTest,
        TestMagicStackOrderSegmentationServiceCallWithNewFeaturesHidden) {
   scoped_feature_list_.Reset();
   scoped_feature_list_.InitWithFeaturesAndParameters(
-      {{segmentation_platform::features::kSegmentationPlatformFeature, {}},
-       {segmentation_platform::features::kSegmentationPlatformIosModuleRanker,
-        {{segmentation_platform::kDefaultModelEnabledParam, "true"}}},
-       {kMagicStack,
+      {{kMagicStack,
         {{kMagicStackMostVisitedModuleParam, "true"},
          {kHideIrrelevantModulesParam, "true"}}},
-       {kSafetyCheckMagicStack, {}},
-       {kTabResumption, {}}},
+       {kSafetyCheckMagicStack, {}}},
       {});
 
   EXPECT_SET_MAGIC_STACK_ORDER(
@@ -399,6 +393,7 @@ TEST_F(MagicStackRankingModelTest, TestSetUpListConsumerCall) {
   OCMExpect([consumer_ showSetUpListModuleWithConfigs:[OCMArg any]]);
   OCMExpect([consumer_ setShortcutTilesConfig:[OCMArg any]]);
   OCMExpect([consumer_ showTabResumptionWithItem:[OCMArg any]]);
+  OCMExpect([consumer_ showParcelTrackingItem:[OCMArg any]]);
 
   [_magicStackRankingModel fetchLatestMagicStackRanking];
 
@@ -466,14 +461,7 @@ TEST_F(MagicStackRankingModelTest, TestModuleClickIndexMetric) {
 TEST_F(MagicStackRankingModelTest, TestModelDidGetLatestRankingOrder) {
   scoped_feature_list_.Reset();
   scoped_feature_list_.InitWithFeaturesAndParameters(
-      {{segmentation_platform::features::kSegmentationPlatformFeature, {}},
-       {segmentation_platform::features::kSegmentationPlatformIosModuleRanker,
-        {{segmentation_platform::kDefaultModelEnabledParam, "true"}}},
-       {kMagicStack, {}},
-       {kIOSParcelTracking, {}},
-       {kTabResumption, {}},
-       {kIOSMagicStackCollectionView, {}}},
-      {});
+      {{kIOSMagicStackCollectionView, {}}}, {});
   FakeMagicStackRankingModelDelegate* delegate_ =
       [[FakeMagicStackRankingModelDelegate alloc] init];
   _magicStackRankingModel.delegate = delegate_;
@@ -498,14 +486,7 @@ TEST_F(MagicStackRankingModelTest, TestModelDidGetLatestRankingOrder) {
 TEST_F(MagicStackRankingModelTest, TestFeatureInsertCalls) {
   scoped_feature_list_.Reset();
   scoped_feature_list_.InitWithFeaturesAndParameters(
-      {{segmentation_platform::features::kSegmentationPlatformFeature, {}},
-       {segmentation_platform::features::kSegmentationPlatformIosModuleRanker,
-        {{segmentation_platform::kDefaultModelEnabledParam, "true"}}},
-       {kMagicStack, {}},
-       {kIOSParcelTracking, {}},
-       {kTabResumption, {}},
-       {kIOSMagicStackCollectionView, {}}},
-      {});
+      {{kIOSMagicStackCollectionView, {}}}, {});
 
   FakeMagicStackRankingModelDelegate* delegate_ =
       [[FakeMagicStackRankingModelDelegate alloc] init];

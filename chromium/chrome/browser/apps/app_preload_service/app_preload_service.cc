@@ -19,6 +19,7 @@
 #include "base/strings/strcat.h"
 #include "base/time/time.h"
 #include "chrome/browser/apps/almanac_api_client/device_info_manager.h"
+#include "chrome/browser/apps/app_preload_service/app_preload_almanac_endpoint.h"
 #include "chrome/browser/apps/app_preload_service/app_preload_service_factory.h"
 #include "chrome/browser/apps/app_preload_service/preload_app_definition.h"
 #include "chrome/browser/apps/app_service/app_install/app_install_service.h"
@@ -83,7 +84,6 @@ BASE_FEATURE(kAppPreloadServiceEnableArcApps,
 
 AppPreloadService::AppPreloadService(Profile* profile)
     : profile_(profile),
-      server_connector_(std::make_unique<AppPreloadServerConnector>()),
       device_info_manager_(std::make_unique<DeviceInfoManager>(profile)) {
   if (g_disable_preloads_on_startup_for_testing_) {
     return;
@@ -154,20 +154,23 @@ void AppPreloadService::StartAppInstallationForFirstLogin(
     CHECK_IS_TEST();
     return;
   }
-  server_connector_->GetAppsForFirstLogin(
-      device_info, url_loader_factory,
+  app_preload_almanac_endpoint::GetAppsForFirstLogin(
+      device_info, *url_loader_factory,
       base::BindOnce(&AppPreloadService::OnGetAppsForFirstLoginCompleted,
                      weak_ptr_factory_.GetWeakPtr(), start_time));
 }
 
 void AppPreloadService::OnGetAppsForFirstLoginCompleted(
     base::TimeTicks start_time,
-    std::optional<std::vector<PreloadAppDefinition>> apps) {
+    std::optional<std::vector<PreloadAppDefinition>> apps,
+    LauncherOrdering launcher_ordering,
+    ShelfPinOrdering shelf_pin_ordering) {
   if (!apps.has_value()) {
     OnFirstLoginFlowComplete(start_time, /*success=*/false);
     return;
   }
 
+  // TODO(crbug.com/327058999): Implement launcher ordering and shelf pinning.
   std::vector<const PreloadAppDefinition*> apps_to_install;
   for (const PreloadAppDefinition& app : apps.value()) {
     if (ShouldInstallApp(app)) {
@@ -213,11 +216,11 @@ void AppPreloadService::OnFirstLoginFlowComplete(base::TimeTicks start_time,
 
 bool AppPreloadService::ShouldInstallApp(const PreloadAppDefinition& app) {
   // We preload android apps (when feature enabled) and web apps.
-  if (app.GetPlatform() == AppType::kArc) {
+  if (app.GetPlatform() == PackageType::kArc) {
     if (!base::FeatureList::IsEnabled(apps::kAppPreloadServiceEnableArcApps)) {
       return false;
     }
-  } else if (app.GetPlatform() != AppType::kWeb) {
+  } else if (app.GetPlatform() != PackageType::kWeb) {
     return false;
   }
 
@@ -233,25 +236,22 @@ bool AppPreloadService::ShouldInstallApp(const PreloadAppDefinition& app) {
   // If the app is already installed with the relevant install reason, we do not
   // need to reinstall it. This avoids extra work in the case where we are
   // retrying the flow after an install error for a different app.
-
-  // TODO(crbug.com/329144520) Implement already installed check for android.
-  if (app.GetPlatform() == AppType::kArc) {
-    return true;
-  }
-
   InstallReason expected_reason =
       app.IsDefaultApp() ? InstallReason::kDefault : InstallReason::kOem;
   AppServiceProxy* proxy = AppServiceProxyFactory::GetForProfile(profile_);
   bool installed = false;
 
-  proxy->AppRegistryCache().ForOneApp(
-      app.GetWebAppId(), [&installed, expected_reason](const AppUpdate& app) {
+  proxy->AppRegistryCache().ForEachApp(
+      [&installed, expected_reason, app](const apps::AppUpdate& update) {
         // It's possible that if APS requests the same app to be installed for
         // multiple reasons, this check could incorrectly return false, as App
         // Service only reports the highest priority install reason. This is
         // acceptable since the check is just an optimization.
-        installed = apps_util::IsInstalled(app.Readiness()) &&
-                    app.InstallReason() == expected_reason;
+        if (update.InstallerPackageId() == app.GetPackageId() &&
+            apps_util::IsInstalled(update.Readiness()) &&
+            update.InstallReason() == expected_reason) {
+          installed = true;
+        }
       });
 
   return !installed;

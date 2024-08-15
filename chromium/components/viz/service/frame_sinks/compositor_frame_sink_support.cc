@@ -94,6 +94,25 @@ gfx::Rect IntersectInSpace(const gfx::Rect& rect,
   return intersected.value_or(gfx::Rect{});
 }
 
+void RemoveSurfaceReferenceAndDispatchCopyOutputRequestCallback(
+    base::WeakPtr<FrameSinkManagerImpl> frame_sink_manager,
+    const SurfaceId& holds_ref_surface_id,
+    const blink::SameDocNavigationScreenshotDestinationToken& destination_token,
+    std::unique_ptr<CopyOutputResult> result) {
+  if (!frame_sink_manager) {
+    return;
+  }
+  if (auto* surface_holds_ref =
+          frame_sink_manager->surface_manager()->GetSurfaceForId(
+              holds_ref_surface_id)) {
+    surface_holds_ref->ResetPendingCopySurfaceId();
+  }
+  // Send the IPC to the browser process even if `result` is empty. The empty
+  // result will be handled on the browser side.
+  frame_sink_manager->OnScreenshotCaptured(destination_token,
+                                           std::move(result));
+}
+
 }  // namespace
 
 CompositorFrameSinkSupport::CompositorFrameSinkSupport(
@@ -107,7 +126,9 @@ CompositorFrameSinkSupport::CompositorFrameSinkSupport(
       frame_sink_id_(frame_sink_id),
       surface_resource_holder_(this),
       is_root_(is_root),
-      allow_copy_output_requests_(is_root) {
+      allow_copy_output_requests_(is_root),
+      use_blit_request_for_view_transition_(base::FeatureList::IsEnabled(
+          features::kBlitRequestsForViewTransition)) {
   // This may result in SetBeginFrameSource() being called.
   frame_sink_manager_->RegisterCompositorFrameSinkSupport(frame_sink_id_, this);
 }
@@ -290,8 +311,8 @@ void CompositorFrameSinkSupport::OnSurfaceActivated(Surface* surface) {
   // The directives above generate TransferableResources which are required to
   // replace shared elements with the corresponding cached snapshots. This step
   // must be done after processing directives above.
-  if (surface_animation_manager_)
-    surface_animation_manager_->ReplaceSharedElementResources(surface);
+  SurfaceAnimationManager::ReplaceSharedElementResources(
+      surface, view_transition_token_to_animation_manager_);
 
   if (surface->surface_id() == last_activated_surface_id_)
     return;
@@ -403,9 +424,11 @@ void CompositorFrameSinkSupport::OnSurfacePresented(
 
 void CompositorFrameSinkSupport::RefResources(
     const std::vector<TransferableResource>& resources) {
-  if (reserved_resource_delegate_) {
-    reserved_resource_delegate_->RefResources(resources);
-  }
+  ForAllReservedResourceDelegates(
+      [&resources](ReservedResourceDelegate& delegate) {
+        delegate.RefResources(resources);
+      });
+
   surface_resource_holder_.RefResources(resources);
 }
 
@@ -414,9 +437,11 @@ void CompositorFrameSinkSupport::UnrefResources(
   // `ReservedResourceDelegate` allocates ResourceIds in a different range
   // than the client so it can process returned resources before
   // |surface_resource_holder_|.
-  if (reserved_resource_delegate_) {
-    reserved_resource_delegate_->UnrefResources(resources);
-  }
+  ForAllReservedResourceDelegates(
+      [&resources](ReservedResourceDelegate& delegate) {
+        delegate.UnrefResources(resources);
+      });
+
   surface_resource_holder_.UnrefResources(std::move(resources));
 }
 
@@ -448,9 +473,11 @@ void CompositorFrameSinkSupport::ReturnResources(
 
 void CompositorFrameSinkSupport::ReceiveFromChild(
     const std::vector<TransferableResource>& resources) {
-  if (reserved_resource_delegate_) {
-    reserved_resource_delegate_->ReceiveFromChild(resources);
-  }
+  ForAllReservedResourceDelegates(
+      [&resources](ReservedResourceDelegate& delegate) {
+        delegate.ReceiveFromChild(resources);
+      });
+
   surface_resource_holder_.ReceiveFromChild(resources);
 }
 
@@ -584,26 +611,6 @@ void CompositorFrameSinkSupport::UpdateThreadIdsPostVerification(
   if (passed_verification) {
     thread_ids_ = std::move(thread_ids);
   }
-}
-
-void CompositorFrameSinkSupport::SetSurfaceAnimationManager(
-    std::unique_ptr<SurfaceAnimationManager> surface_animation_manager) {
-  // We only support one of SurfaceAnimationManager or a custom
-  // `ReservedResourceDelegate` for the lifetime of a CFSS. If we are setting
-  // `surface_animation_manager_`, then either there is no current one and it
-  // and `reserved_resource_delegate_` should be nullptr, or we are setting a
-  // new one and the previous values should be equal.
-  CHECK_EQ(surface_animation_manager_.get(), reserved_resource_delegate_);
-  reserved_resource_delegate_ = surface_animation_manager.get();
-  surface_animation_manager_ = std::move(surface_animation_manager);
-}
-
-std::unique_ptr<SurfaceAnimationManager>
-CompositorFrameSinkSupport::TakeSurfaceAnimationManager() {
-  // See comment in `SetSurfaceAnimationManager` about this CHECK.
-  CHECK_EQ(surface_animation_manager_.get(), reserved_resource_delegate_);
-  reserved_resource_delegate_ = nullptr;
-  return std::move(surface_animation_manager_);
 }
 
 base::TimeDelta CompositorFrameSinkSupport::GetPreferredFrameInterval(
@@ -802,7 +809,7 @@ SubmitResult CompositorFrameSinkSupport::MaybeSubmitCompositorFrame(
     return SubmitResult::COPY_OUTPUT_REQUESTS_NOT_ALLOWED;
   }
 
-  // TODO(crbug.com/846739): It should be possible to use
+  // TODO(crbug.com/40578019): It should be possible to use
   // |frame.metadata.frame_token| instead of maintaining a |last_frame_index_|.
   uint64_t frame_index = ++last_frame_index_;
 
@@ -888,8 +895,40 @@ SubmitResult CompositorFrameSinkSupport::MaybeSubmitCompositorFrame(
       return SubmitResult::ACCEPTED;
     }
 
+    const bool has_copy_request_against_prev_surface =
+        frame.metadata.screenshot_destination.has_value() && prev_surface;
+
     current_surface = surface_manager_->CreateSurface(
-        weak_factory_.GetWeakPtr(), surface_info);
+        weak_factory_.GetWeakPtr(), surface_info,
+        has_copy_request_against_prev_surface ? last_created_surface_id_
+                                              : SurfaceId());
+
+    // The previous surface needs to be valid to generate a screenshot.
+    //
+    // NOTE: In order for the previous surface to be copied, it needs to be
+    // reachable and kept alive. This is achieved by adding a reference from the
+    // current surface to the previous surface. Normally this reference is
+    // removed when the copy is finished in Viz. However we could run into an
+    // edge case where the frame sink is destroyed before the copy is finished.
+    // If that happens, we will rely on the GC of the current surface to remove
+    // the reference.
+    if (has_copy_request_against_prev_surface) {
+      auto copy_request = std::make_unique<CopyOutputRequest>(
+          CopyOutputRequest::ResultFormat::RGBA,
+          CopyOutputRequest::ResultDestination::kSystemMemory,
+          base::BindOnce(
+              &RemoveSurfaceReferenceAndDispatchCopyOutputRequestCallback,
+              frame_sink_manager_->GetWeakPtr(), surface_info.id(),
+              frame.metadata.screenshot_destination.value()));
+      copy_request->set_result_task_runner(
+          base::SequencedTaskRunner::GetCurrentDefault());
+
+      RequestCopyOfOutput(
+          PendingCopyOutputRequest(last_created_surface_id_.local_surface_id(),
+                                   SubtreeCaptureId{}, std::move(copy_request),
+                                   /*capture_exact_id=*/true));
+    }
+
     if (!current_surface) {
       TRACE_EVENT_INSTANT0("viz", "Surface belongs to another client",
                            TRACE_EVENT_SCOPE_THREAD);
@@ -1528,87 +1567,91 @@ bool CompositorFrameSinkSupport::ShouldThrottleBeginFrameAsRequested(
 void CompositorFrameSinkSupport::ProcessCompositorFrameTransitionDirective(
     const CompositorFrameTransitionDirective& directive,
     Surface* surface) {
+  const auto& transition_token = directive.transition_token();
+
   switch (directive.type()) {
     case CompositorFrameTransitionDirective::Type::kSave:
-      // Initialize this before creating the SurfaceAnimationManager since the
-      // save operation may execute synchronously.
-      in_flight_save_sequence_id_ = directive.sequence_id();
-      SetSurfaceAnimationManager(SurfaceAnimationManager::CreateWithSave(
-          directive, surface, frame_sink_manager_->shared_bitmap_manager(),
-          base::BindOnce(&CompositorFrameSinkSupport::
-                             OnCompositorFrameTransitionDirectiveProcessed,
-                         base::Unretained(this))));
-      break;
-    case CompositorFrameTransitionDirective::Type::kAnimateRenderer:
-      // The save operation must have been executed before we see an animate
-      // directive.
-      if (in_flight_save_sequence_id_ != 0) {
-        LOG(ERROR)
-            << "Ignoring animate directive, save operation pending completion";
-        break;
+      // The save directive is used to start a new transition sequence. Ensure
+      // we don't have any existing state for this transition.
+      if (UNLIKELY(frame_sink_manager_->ClearSurfaceAnimationManager(
+              transition_token))) {
+        view_transition_token_to_animation_manager_.erase(transition_token);
+        return;
+      }
+      if (UNLIKELY(view_transition_token_to_animation_manager_.erase(
+              transition_token))) {
+        return;
       }
 
-      if (directive.navigation_id()) {
-        if (surface_animation_manager_) {
-          LOG(ERROR) << "Deleting existing SurfaceAnimationManager for "
-                        "transition with navigation_id : "
-                     << directive.navigation_id();
+      view_transition_token_to_animation_manager_[transition_token] =
+          SurfaceAnimationManager::CreateWithSave(
+              directive, surface, frame_sink_manager_->shared_bitmap_manager(),
+              use_blit_request_for_view_transition_
+                  ? frame_sink_manager_->GetSharedImageInterface()
+                  : nullptr,
+              frame_sink_manager_->reserved_resource_id_tracker(),
+              base::BindOnce(&CompositorFrameSinkSupport::
+                                 OnSaveTransitionDirectiveProcessed,
+                             base::Unretained(this)));
+      break;
+    case CompositorFrameTransitionDirective::Type::kAnimateRenderer: {
+      if (directive.maybe_cross_frame_sink()) {
+        // We shouldn't have an existing SurfaceAnimationManager for this
+        // token.
+        if (view_transition_token_to_animation_manager_.erase(
+                transition_token)) {
+          return;
         }
-
-        SetSurfaceAnimationManager(
-            frame_sink_manager_->TakeSurfaceAnimationManager(
-                directive.navigation_id()));
+        view_transition_token_to_animation_manager_[transition_token] =
+            frame_sink_manager_->TakeSurfaceAnimationManager(transition_token);
       }
 
-      if (surface_animation_manager_)
-        surface_animation_manager_->Animate();
-      else
-        LOG(ERROR) << "Animate directive with no saved data.";
+      auto it =
+          view_transition_token_to_animation_manager_.find(transition_token);
+      if (it == view_transition_token_to_animation_manager_.end()) {
+        return;
+      }
 
-      break;
+      // The save operation must have been completed before the renderer sends
+      // an animate directive.
+      auto& surface_animation_manager = it->second;
+      if (!surface_animation_manager->Animate()) {
+        view_transition_token_to_animation_manager_.erase(it);
+        return;
+      }
+    } break;
     case CompositorFrameTransitionDirective::Type::kRelease:
-      SetSurfaceAnimationManager(nullptr);
-
-      // This `surface_animation_manager_` could correspond to an in-flight
-      // save, reset the tracking here.
-      in_flight_save_sequence_id_ = 0;
-
-      // If we had a `navigation_id`, also make sure to clean up the
-      // `frame_sink_manager_` in case the animation was never started (which
-      // would be the case if the destination renderer didn't opt-in to the
-      // animation behavior). Note that this operation is harmless if there
-      // is no surface animation manager to clear.
-      if (directive.navigation_id()) {
-        frame_sink_manager_->ClearSurfaceAnimationManager(
-            directive.navigation_id());
-      }
+      frame_sink_manager_->ClearSurfaceAnimationManager(
+          directive.transition_token());
+      view_transition_token_to_animation_manager_.erase(
+          directive.transition_token());
       break;
   }
 }
 
-void CompositorFrameSinkSupport::OnCompositorFrameTransitionDirectiveProcessed(
+void CompositorFrameSinkSupport::OnSaveTransitionDirectiveProcessed(
     const CompositorFrameTransitionDirective& directive) {
   DCHECK_EQ(directive.type(), CompositorFrameTransitionDirective::Type::kSave)
       << "Only save directives need to be ack'd back to the client";
+
+  auto it = view_transition_token_to_animation_manager_.find(
+      directive.transition_token());
+  if (it == view_transition_token_to_animation_manager_.end()) {
+    return;
+  }
+
+  CHECK(it->second);
 
   if (client_) {
     client_->OnCompositorFrameTransitionDirectiveProcessed(
         directive.sequence_id());
   }
 
-  // There could be an ID mismatch if there are consecutive save operations
-  // before the first one is ack'd. This should never happen but handled safely
-  // here since the directives are untrusted input from the renderer.
-  if (in_flight_save_sequence_id_ == directive.sequence_id() &&
-      directive.navigation_id()) {
-    // Note that this can fail if there is already a cached
-    // SurfaceAnimationManager for this |navigation_id|. Should never happen
-    // but handled safely because its untrusted input from the renderer.
+  if (directive.maybe_cross_frame_sink()) {
     frame_sink_manager_->CacheSurfaceAnimationManager(
-        directive.navigation_id(), TakeSurfaceAnimationManager());
+        directive.transition_token(), std::move(it->second));
+    view_transition_token_to_animation_manager_.erase(it);
   }
-
-  in_flight_save_sequence_id_ = 0;
 }
 
 bool CompositorFrameSinkSupport::IsEvicted(
@@ -1655,7 +1698,7 @@ void CompositorFrameSinkSupport::ClearAllPendingCopyOutputRequests() {
                         "CopyOutputRequest specificc for it.";
       }
     } else {
-      // TODO(https://crbug.com/1467314): We should probably transfer all
+      // TODO(crbug.com/40276723): We should probably transfer all
       // the requests to their corresponding `Surface`s or `RenderPass`es.
     }
   }
@@ -1664,17 +1707,9 @@ void CompositorFrameSinkSupport::ClearAllPendingCopyOutputRequests() {
   copy_output_requests_.clear();
 }
 
-SurfaceAnimationManager*
-CompositorFrameSinkSupport::GetSurfaceAnimationManagerForTesting() {
-  return surface_animation_manager_.get();
-}
-
-void CompositorFrameSinkSupport::SetReservedResourceDelegate(
+void CompositorFrameSinkSupport::SetExternalReservedResourceDelegate(
     ReservedResourceDelegate* delegate) {
-  // We only support a custom `ReservedResourceDelegate` on root CFSS. So make
-  // sure `surface_animation_manager_` is not set.
-  CHECK(!surface_animation_manager_);
-  reserved_resource_delegate_ = delegate;
+  external_reserved_resource_delegate_ = delegate;
 }
 
 void CompositorFrameSinkSupport::DestroySelf() {
@@ -1690,6 +1725,17 @@ void CompositorFrameSinkSupport::ScheduleSelfDestruction() {
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&CompositorFrameSinkSupport::DestroySelf,
                                 weak_factory_.GetWeakPtr()));
+}
+
+void CompositorFrameSinkSupport::ForAllReservedResourceDelegates(
+    base::FunctionRef<void(ReservedResourceDelegate&)> func) {
+  if (external_reserved_resource_delegate_) {
+    func(*external_reserved_resource_delegate_);
+  }
+
+  for (auto& it : view_transition_token_to_animation_manager_) {
+    func(*it.second);
+  }
 }
 
 CompositorFrameSinkSupport::PendingFrameDetails::PendingFrameDetails(

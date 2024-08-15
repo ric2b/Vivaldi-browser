@@ -32,9 +32,6 @@
 #import "ios/ui/notes/vivaldi_notes_pref.h"
 #import "ui/base/l10n/l10n_util.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using vivaldi::NoteNode;
 using l10n_util::GetNSString;
@@ -217,7 +214,13 @@ class NoteModelBridge;
         return [b.lastModified compare:a.lastModified];
       }];
       break;
-    default:
+    case NotesSortingModeByKind:
+      [nodeItems sortUsingComparator:
+          ^NSComparisonResult(NoteHomeNodeItem* a, NoteHomeNodeItem* b) {
+        return [self compare:a.isFolder
+                      second:b.isFolder
+                foldersFirst:YES];
+      }];
       break;
   }
 
@@ -239,6 +242,15 @@ class NoteModelBridge;
 - (NSComparisonResult)compare:(NSString*)first
              second:(NSString*)second {
   return [VivaldiGlobalHelpers compare:first second:second];
+}
+
+/// Returns sorted result from two provided BOOL keys, and sorting order.
+- (NSComparisonResult)compare:(BOOL)first
+                       second:(BOOL)second
+                 foldersFirst:(BOOL)foldersFirst {
+  return [VivaldiGlobalHelpers compare:first
+                                second:second
+                          foldersFirst:foldersFirst];
 }
 
 // Generate the table view data when the current root node is the outermost

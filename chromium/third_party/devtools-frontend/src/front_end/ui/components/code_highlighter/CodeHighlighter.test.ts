@@ -4,8 +4,6 @@
 
 import * as CodeHighlighter from './code_highlighter.js';
 
-const {assert} = chai;
-
 function parseTokens(code: string): [string, string][] {
   const token = /\[(\S+) ([^\]]+)\]/g, tokens: [string, string][] = [];
   for (let pos = 0;;) {
@@ -63,6 +61,10 @@ it('can highlight JavaScript compatible with CodeMirror 5', testHighlight(`
 it('can highlight JavaScript with `import { default as name }` syntax', testHighlight(`
 [keyword import] {[keyword default] [keyword as] [definition name]} [keyword from] [string 'module'];
 `, 'text/javascript')),
+
+it('can highlight JavaScript with `new.target` syntax', testHighlight(`
+[keyword new].[property target]
+`, 'text/javascript'));
 
   it('can highlight TypeScript', testHighlight(`
 [keyword type] [type X] = {

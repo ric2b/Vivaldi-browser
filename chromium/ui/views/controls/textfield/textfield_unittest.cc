@@ -1040,7 +1040,7 @@ TEST_F(TextfieldTest, KeyTestControlModifier) {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 #define MAYBE_KeysWithModifiersTest KeysWithModifiersTest
 #else
-// TODO(crbug.com/645104): Implement keyboard layout changing for other
+// TODO(crbug.com/41274325): Implement keyboard layout changing for other
 //                         platforms.
 #define MAYBE_KeysWithModifiersTest DISABLED_KeysWithModifiersTest
 #endif
@@ -3404,7 +3404,7 @@ TEST_F(TextfieldTest, KeepInitiallySelectedWord) {
   EXPECT_EQ(gfx::Range(7, 0), textfield_->GetSelectedRange());
 }
 
-// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// TODO(crbug.com/40118868): Revisit the macro expression once build flag switch
 // of lacros-chrome is complete.
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 TEST_F(TextfieldTest, SelectionClipboard) {
@@ -3795,7 +3795,7 @@ TEST_F(TextfieldTest, TwoFingerScrollUpdate) {
   EXPECT_LT(GetTextfieldTestApi().GetDisplayOffsetX(), 0);
 }
 
-// TODO(crbug.com/1465767): Rewrite these long press tests when EventGenerator
+// TODO(crbug.com/40276114): Rewrite these long press tests when EventGenerator
 // can generate long press gestures.
 TEST_F(TextfieldTest, LongPressSelection) {
   base::test::ScopedFeatureList feature_list;
@@ -4115,7 +4115,7 @@ TEST_F(TextfieldTest, SetAccessibleNameNotifiesAccessibilityEvent) {
   EXPECT_EQ(1, counter.GetCount(ax::mojom::Event::kTextChanged));
   EXPECT_EQ(test_tooltip_text, textfield_->GetAccessibleName());
   ui::AXNodeData data;
-  textfield_->GetAccessibleNodeData(&data);
+  textfield_->GetViewAccessibility().GetAccessibleNodeData(&data);
   const std::string& name =
       data.GetStringAttribute(ax::mojom::StringAttribute::kName);
   EXPECT_EQ(test_tooltip_text, base::ASCIIToUTF16(name));
@@ -4132,6 +4132,7 @@ TEST_F(TextfieldTest, AccessibleNameFromLabel) {
 
   const std::u16string label_text = u"Some label";
   View label;
+  label.SetAccessibleRole(ax::mojom::Role::kStaticText);
   label.SetAccessibleName(label_text);
   textfield_->SetAccessibleName(&label);
 
@@ -4141,7 +4142,7 @@ TEST_F(TextfieldTest, AccessibleNameFromLabel) {
   label.GetViewAccessibility().GetAccessibleNodeData(&label_data);
 
   ui::AXNodeData textfield_data;
-  textfield_->GetAccessibleNodeData(&textfield_data);
+  textfield_->GetViewAccessibility().GetAccessibleNodeData(&textfield_data);
   EXPECT_EQ(
       textfield_data.GetString16Attribute(ax::mojom::StringAttribute::kName),
       label_text);
@@ -4545,7 +4546,7 @@ TEST_F(TextfieldTest, AccessiblePasswordTest) {
   textfield_->SetText(u"password");
 
   ui::AXNodeData node_data_regular;
-  textfield_->GetAccessibleNodeData(&node_data_regular);
+  textfield_->GetViewAccessibility().GetAccessibleNodeData(&node_data_regular);
   EXPECT_EQ(ax::mojom::Role::kTextField, node_data_regular.role);
   EXPECT_EQ(u"password", node_data_regular.GetString16Attribute(
                              ax::mojom::StringAttribute::kValue));
@@ -4553,7 +4554,8 @@ TEST_F(TextfieldTest, AccessiblePasswordTest) {
 
   textfield_->SetTextInputType(ui::TEXT_INPUT_TYPE_PASSWORD);
   ui::AXNodeData node_data_protected;
-  textfield_->GetAccessibleNodeData(&node_data_protected);
+  textfield_->GetViewAccessibility().GetAccessibleNodeData(
+      &node_data_protected);
   EXPECT_EQ(ax::mojom::Role::kTextField, node_data_protected.role);
   EXPECT_EQ(u"••••••••", node_data_protected.GetString16Attribute(
                              ax::mojom::StringAttribute::kValue));
@@ -4564,14 +4566,14 @@ TEST_F(TextfieldTest, AccessibleRole) {
   InitTextfield();
 
   ui::AXNodeData data;
-  textfield_->GetAccessibleNodeData(&data);
+  textfield_->GetViewAccessibility().GetAccessibleNodeData(&data);
   EXPECT_EQ(data.role, ax::mojom::Role::kTextField);
   EXPECT_EQ(textfield_->GetAccessibleRole(), ax::mojom::Role::kTextField);
 
   textfield_->SetAccessibleRole(ax::mojom::Role::kSearchBox);
 
   data = ui::AXNodeData();
-  textfield_->GetAccessibleNodeData(&data);
+  textfield_->GetViewAccessibility().GetAccessibleNodeData(&data);
   EXPECT_EQ(data.role, ax::mojom::Role::kSearchBox);
   EXPECT_EQ(textfield_->GetAccessibleRole(), ax::mojom::Role::kSearchBox);
 }

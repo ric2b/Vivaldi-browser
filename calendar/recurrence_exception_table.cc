@@ -213,4 +213,18 @@ bool RecurrrenceExceptionTable::GetAllEventExceptionIds(EventID event_id,
   return true;
 }
 
+EventID RecurrrenceExceptionTable::GetParentExceptionEventId(
+    EventID exception_event_id) {
+  sql::Statement statement(
+      GetDB().GetUniqueStatement(" SELECT parent_event_id  \
+     FROM recurring_exceptions  \
+        where exception_event_id = ?"));
+  statement.BindInt64(0, exception_event_id);
+
+  if (!statement.Step())
+    return 0;
+
+  return statement.ColumnInt64(0);
+}
+
 }  // namespace calendar

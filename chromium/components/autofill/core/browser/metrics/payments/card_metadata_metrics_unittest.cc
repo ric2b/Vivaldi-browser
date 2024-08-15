@@ -9,6 +9,7 @@
 #include "components/autofill/core/browser/data_model/credit_card_benefit_test_api.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics_test_base.h"
 #include "components/autofill/core/browser/payments/constants.h"
+#include "components/autofill/core/browser/payments_data_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -84,7 +85,6 @@ class CardMetadataFormEventMetricsTest
     }
 
     personal_data().AddServerCreditCard(card_);
-    personal_data().Refresh();
   }
 
   void TearDown() override { TearDownHelper(); }
@@ -127,7 +127,7 @@ TEST_P(CardMetadataFormEventMetricsTest, LogShownMetrics) {
   // Simulate activating the autofill popup for the credit card field.
   autofill_manager().OnAskForValuesToFillTest(form(), form().fields.back());
   DidShowAutofillSuggestions(form(), /*field_index=*/form().fields.size() - 1,
-                             PopupItemId::kCreditCardEntry);
+                             SuggestionType::kCreditCardEntry);
 
   // Verify that:
   // 1. if the card suggestion shown had metadata,
@@ -173,7 +173,7 @@ TEST_P(CardMetadataFormEventMetricsTest, LogShownMetrics) {
   // Show the popup again.
   autofill_manager().OnAskForValuesToFillTest(form(), form().fields.back());
   DidShowAutofillSuggestions(form(), /*field_index=*/form().fields.size() - 1,
-                             PopupItemId::kCreditCardEntry);
+                             SuggestionType::kCreditCardEntry);
 
   EXPECT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
               BucketsInclude(
@@ -218,10 +218,10 @@ TEST_P(CardMetadataFormEventMetricsTest, LogSelectedMetrics) {
   // Simulate selecting the card.
   autofill_manager().OnAskForValuesToFillTest(form(), form().fields.back());
   DidShowAutofillSuggestions(form(), /*field_index=*/form().fields.size() - 1,
-                             PopupItemId::kCreditCardEntry);
+                             SuggestionType::kCreditCardEntry);
   autofill_manager().AuthenticateThenFillCreditCardForm(
       form(), form().fields.back(),
-      *personal_data().GetCreditCardByGUID(kCardGuid),
+      *personal_data().payments_data_manager().GetCreditCardByGUID(kCardGuid),
       {.trigger_source = AutofillTriggerSource::kPopup});
 
   // Verify that:
@@ -270,7 +270,7 @@ TEST_P(CardMetadataFormEventMetricsTest, LogSelectedMetrics) {
   // Select the suggestion again.
   autofill_manager().AuthenticateThenFillCreditCardForm(
       form(), form().fields.back(),
-      *personal_data().GetCreditCardByGUID(kCardGuid),
+      *personal_data().payments_data_manager().GetCreditCardByGUID(kCardGuid),
       {.trigger_source = AutofillTriggerSource::kPopup});
 
   EXPECT_THAT(
@@ -323,10 +323,10 @@ TEST_P(CardMetadataFormEventMetricsTest, LogFilledMetrics) {
   // Simulate filling the card.
   autofill_manager().OnAskForValuesToFillTest(form(), form().fields.back());
   DidShowAutofillSuggestions(form(), /*field_index=*/form().fields.size() - 1,
-                             PopupItemId::kCreditCardEntry);
+                             SuggestionType::kCreditCardEntry);
   autofill_manager().AuthenticateThenFillCreditCardForm(
       form(), form().fields.back(),
-      *personal_data().GetCreditCardByGUID(kCardGuid),
+      *personal_data().payments_data_manager().GetCreditCardByGUID(kCardGuid),
       {.trigger_source = AutofillTriggerSource::kPopup});
   test_api(autofill_manager())
       .OnCreditCardFetched(CreditCardFetchResult::kSuccess, &card());
@@ -411,7 +411,7 @@ TEST_P(CardMetadataFormEventMetricsTest, LogSubmitMetrics) {
   autofill_manager().OnAskForValuesToFillTest(form(), form().fields.back());
   autofill_manager().AuthenticateThenFillCreditCardForm(
       form(), form().fields.back(),
-      *personal_data().GetCreditCardByGUID(kCardGuid),
+      *personal_data().payments_data_manager().GetCreditCardByGUID(kCardGuid),
       {.trigger_source = AutofillTriggerSource::kPopup});
   test_api(autofill_manager())
       .OnCreditCardFetched(CreditCardFetchResult::kSuccess, &card());
@@ -509,7 +509,6 @@ class CardMetadataLatencyMetricsTest
           GURL("https://www.example.com/cardart.png"));
     }
     personal_data().AddServerCreditCard(masked_server_card);
-    personal_data().Refresh();
   }
 
   void TearDown() override { TearDownHelper(); }
@@ -535,11 +534,12 @@ TEST_P(CardMetadataLatencyMetricsTest, LogMetrics) {
   // Simulate activating the autofill popup for the credit card field.
   autofill_manager().OnAskForValuesToFillTest(form(), form().fields.back());
   DidShowAutofillSuggestions(form(), /*field_index=*/form().fields.size() - 1,
-                             PopupItemId::kCreditCardEntry);
+                             SuggestionType::kCreditCardEntry);
   task_environment_.FastForwardBy(base::Seconds(2));
   autofill_manager().AuthenticateThenFillCreditCardForm(
       form(), form().fields.front(),
-      *personal_data().GetCreditCardByGUID(kTestMaskedCardId),
+      *personal_data().payments_data_manager().GetCreditCardByGUID(
+          kTestMaskedCardId),
       {.trigger_source = AutofillTriggerSource::kPopup});
 
   std::string latency_histogram_prefix =
@@ -603,14 +603,15 @@ class CardBenefitFormEventMetricsTest
     CreditCardBenefit benefit = test::GetActiveCreditCardFlatRateBenefit();
     test_api(benefit).SetLinkedCardInstrumentId(
         CreditCardBenefitBase::LinkedCardInstrumentId(card_.instrument_id()));
-    personal_data().AddCreditCardBenefitForTest(benefit);
+    personal_data().payments_data_manager().AddCreditCardBenefitForTest(
+        benefit);
   }
 
   // Adding a local card to the client.
   void AddLocalCard() {
     CreditCard local_card = test::GetCreditCard();
     local_card_guid_ = local_card.guid();
-    personal_data().AddCreditCard(local_card);
+    personal_data().payments_data_manager().AddCreditCard(local_card);
   }
 
   // Simulating selecting and filling the given `card`.
@@ -618,7 +619,7 @@ class CardBenefitFormEventMetricsTest
     autofill_manager().OnAskForValuesToFillTest(
         form(), form().fields[credit_card_number_field_index()]);
     DidShowAutofillSuggestions(form(), credit_card_number_field_index(),
-                               PopupItemId::kCreditCardEntry);
+                               SuggestionType::kCreditCardEntry);
     autofill_manager().AuthenticateThenFillCreditCardForm(
         form(), form().fields[credit_card_number_field_index()], *card,
         {.trigger_source = AutofillTriggerSource::kPopup});
@@ -701,7 +702,7 @@ TEST_P(CardBenefitFormEventMetricsTest, LogShownMetrics_SuggestionHasBenefits) {
   autofill_manager().OnAskForValuesToFillTest(
       form(), form().fields[credit_card_number_field_index()]);
   DidShowAutofillSuggestions(form(), credit_card_number_field_index(),
-                             PopupItemId::kCreditCardEntry);
+                             SuggestionType::kCreditCardEntry);
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
               BucketsInclude(Bucket(FORM_EVENT_SUGGESTIONS_SHOWN, 1)));
@@ -721,7 +722,7 @@ TEST_P(CardBenefitFormEventMetricsTest, LogShownMetrics_SuggestionHasBenefits) {
 
   // Show the popup again.
   DidShowAutofillSuggestions(form(), credit_card_number_field_index(),
-                             PopupItemId::kCreditCardEntry);
+                             SuggestionType::kCreditCardEntry);
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
               BucketsInclude(Bucket(FORM_EVENT_SUGGESTIONS_SHOWN, 2)));
@@ -748,7 +749,7 @@ TEST_P(CardBenefitFormEventMetricsTest,
   autofill_manager().OnAskForValuesToFillTest(
       form(), form().fields[credit_card_number_field_index()]);
   DidShowAutofillSuggestions(form(), credit_card_number_field_index(),
-                             PopupItemId::kCreditCardEntry);
+                             SuggestionType::kCreditCardEntry);
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
               BucketsInclude(Bucket(FORM_EVENT_SUGGESTIONS_SHOWN, 1)));
@@ -768,7 +769,7 @@ TEST_P(CardBenefitFormEventMetricsTest,
 
   // Show the popup again.
   DidShowAutofillSuggestions(form(), credit_card_number_field_index(),
-                             PopupItemId::kCreditCardEntry);
+                             SuggestionType::kCreditCardEntry);
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
               BucketsInclude(Bucket(FORM_EVENT_SUGGESTIONS_SHOWN, 2)));
@@ -799,10 +800,11 @@ TEST_P(CardBenefitFormEventMetricsTest,
   autofill_manager().OnAskForValuesToFillTest(
       form(), form().fields[credit_card_number_field_index()]);
   DidShowAutofillSuggestions(form(), credit_card_number_field_index(),
-                             PopupItemId::kCreditCardEntry);
+                             SuggestionType::kCreditCardEntry);
   autofill_manager().AuthenticateThenFillCreditCardForm(
       form(), form().fields[credit_card_number_field_index()],
-      *personal_data().GetCreditCardByInstrumentId(GetCardInstrumentId()),
+      *personal_data().payments_data_manager().GetCreditCardByInstrumentId(
+          GetCardInstrumentId()),
       {.trigger_source = AutofillTriggerSource::kPopup});
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
@@ -830,7 +832,8 @@ TEST_P(CardBenefitFormEventMetricsTest,
   // Select the suggestion again.
   autofill_manager().AuthenticateThenFillCreditCardForm(
       form(), form().fields[credit_card_number_field_index()],
-      *personal_data().GetCreditCardByInstrumentId(GetCardInstrumentId()),
+      *personal_data().payments_data_manager().GetCreditCardByInstrumentId(
+          GetCardInstrumentId()),
       {.trigger_source = AutofillTriggerSource::kPopup});
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
@@ -864,10 +867,11 @@ TEST_P(CardBenefitFormEventMetricsTest,
   autofill_manager().OnAskForValuesToFillTest(
       form(), form().fields[credit_card_number_field_index()]);
   DidShowAutofillSuggestions(form(), credit_card_number_field_index(),
-                             PopupItemId::kCreditCardEntry);
+                             SuggestionType::kCreditCardEntry);
   autofill_manager().AuthenticateThenFillCreditCardForm(
       form(), form().fields[credit_card_number_field_index()],
-      *personal_data().GetCreditCardByInstrumentId(GetCardInstrumentId()),
+      *personal_data().payments_data_manager().GetCreditCardByInstrumentId(
+          GetCardInstrumentId()),
       {.trigger_source = AutofillTriggerSource::kPopup});
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
@@ -895,7 +899,8 @@ TEST_P(CardBenefitFormEventMetricsTest,
   // Select the suggestion again.
   autofill_manager().AuthenticateThenFillCreditCardForm(
       form(), form().fields[credit_card_number_field_index()],
-      *personal_data().GetCreditCardByInstrumentId(GetCardInstrumentId()),
+      *personal_data().payments_data_manager().GetCreditCardByInstrumentId(
+          GetCardInstrumentId()),
       {.trigger_source = AutofillTriggerSource::kPopup});
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
@@ -931,10 +936,11 @@ TEST_P(CardBenefitFormEventMetricsTest,
   autofill_manager().OnAskForValuesToFillTest(
       form(), form().fields[credit_card_number_field_index()]);
   DidShowAutofillSuggestions(form(), credit_card_number_field_index(),
-                             PopupItemId::kCreditCardEntry);
+                             SuggestionType::kCreditCardEntry);
   autofill_manager().AuthenticateThenFillCreditCardForm(
       form(), form().fields[credit_card_number_field_index()],
-      *personal_data().GetCreditCardByInstrumentId(card2.instrument_id()),
+      *personal_data().payments_data_manager().GetCreditCardByInstrumentId(
+          card2.instrument_id()),
       {.trigger_source = AutofillTriggerSource::kPopup});
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
@@ -949,7 +955,8 @@ TEST_P(CardBenefitFormEventMetricsTest,
   // Select the card again.
   autofill_manager().AuthenticateThenFillCreditCardForm(
       form(), form().fields[credit_card_number_field_index()],
-      *personal_data().GetCreditCardByInstrumentId(card2.instrument_id()),
+      *personal_data().payments_data_manager().GetCreditCardByInstrumentId(
+          card2.instrument_id()),
       {.trigger_source = AutofillTriggerSource::kPopup});
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
@@ -977,7 +984,8 @@ TEST_P(CardBenefitFormEventMetricsTest,
 
   // Simulate filling the card.
   SelectAndFillCard(
-      personal_data().GetCreditCardByInstrumentId(GetCardInstrumentId()));
+      personal_data().payments_data_manager().GetCreditCardByInstrumentId(
+          GetCardInstrumentId()));
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
               BucketsInclude(
@@ -1003,7 +1011,8 @@ TEST_P(CardBenefitFormEventMetricsTest,
 
   // Fill the card suggestion again.
   SelectAndFillCard(
-      personal_data().GetCreditCardByInstrumentId(GetCardInstrumentId()));
+      personal_data().payments_data_manager().GetCreditCardByInstrumentId(
+          GetCardInstrumentId()));
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
               BucketsInclude(
@@ -1034,7 +1043,8 @@ TEST_P(CardBenefitFormEventMetricsTest,
 
   // Simulate filling the card.
   SelectAndFillCard(
-      personal_data().GetCreditCardByInstrumentId(GetCardInstrumentId()));
+      personal_data().payments_data_manager().GetCreditCardByInstrumentId(
+          GetCardInstrumentId()));
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
               BucketsInclude(
@@ -1060,7 +1070,8 @@ TEST_P(CardBenefitFormEventMetricsTest,
 
   // Fill the card suggestion again.
   SelectAndFillCard(
-      personal_data().GetCreditCardByInstrumentId(GetCardInstrumentId()));
+      personal_data().payments_data_manager().GetCreditCardByInstrumentId(
+          GetCardInstrumentId()));
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
               BucketsInclude(
@@ -1092,7 +1103,8 @@ TEST_P(CardBenefitFormEventMetricsTest,
 
   // Simulate filling the card with no benefit.
   SelectAndFillCard(
-      personal_data().GetCreditCardByInstrumentId(card2.instrument_id()));
+      personal_data().payments_data_manager().GetCreditCardByInstrumentId(
+          card2.instrument_id()));
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
               BucketsInclude(
@@ -1105,7 +1117,8 @@ TEST_P(CardBenefitFormEventMetricsTest,
 
   // Fill the card suggestion again.
   SelectAndFillCard(
-      personal_data().GetCreditCardByInstrumentId(card2.instrument_id()));
+      personal_data().payments_data_manager().GetCreditCardByInstrumentId(
+          card2.instrument_id()));
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
               BucketsInclude(
@@ -1129,7 +1142,8 @@ TEST_P(CardBenefitFormEventMetricsTest,
 
   // Simulate filling with a masked server card.
   SelectAndFillCard(
-      personal_data().GetCreditCardByInstrumentId(GetCardInstrumentId()));
+      personal_data().payments_data_manager().GetCreditCardByInstrumentId(
+          GetCardInstrumentId()));
 
   ASSERT_THAT(
       histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
@@ -1146,7 +1160,8 @@ TEST_P(CardBenefitFormEventMetricsTest,
               1)));
 
   // Simulate filling with a local card.
-  SelectAndFillCard(personal_data().GetCreditCardByGUID(local_card_guid()));
+  SelectAndFillCard(personal_data().payments_data_manager().GetCreditCardByGUID(
+      local_card_guid()));
 
   ASSERT_THAT(
       histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
@@ -1177,7 +1192,8 @@ TEST_P(CardBenefitFormEventMetricsTest,
 
   // Simulate submitting the card.
   SelectAndFillCard(
-      personal_data().GetCreditCardByInstrumentId(GetCardInstrumentId()));
+      personal_data().payments_data_manager().GetCreditCardByInstrumentId(
+          GetCardInstrumentId()));
   SubmitForm(form());
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
@@ -1208,7 +1224,8 @@ TEST_P(CardBenefitFormEventMetricsTest,
 
   // Simulate submitting the card.
   SelectAndFillCard(
-      personal_data().GetCreditCardByInstrumentId(GetCardInstrumentId()));
+      personal_data().payments_data_manager().GetCreditCardByInstrumentId(
+          GetCardInstrumentId()));
   SubmitForm(form());
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
@@ -1245,7 +1262,8 @@ TEST_P(CardBenefitFormEventMetricsTest,
 
   // Simulate submitting the card.
   SelectAndFillCard(
-      personal_data().GetCreditCardByInstrumentId(card2.instrument_id()));
+      personal_data().payments_data_manager().GetCreditCardByInstrumentId(
+          card2.instrument_id()));
   SubmitForm(form());
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
@@ -1269,10 +1287,12 @@ TEST_P(CardBenefitFormEventMetricsTest,
 
   // Filling with a masked server card.
   SelectAndFillCard(
-      personal_data().GetCreditCardByInstrumentId(GetCardInstrumentId()));
+      personal_data().payments_data_manager().GetCreditCardByInstrumentId(
+          GetCardInstrumentId()));
 
   // Filling with a local card.
-  SelectAndFillCard(personal_data().GetCreditCardByGUID(local_card_guid()));
+  SelectAndFillCard(personal_data().payments_data_manager().GetCreditCardByGUID(
+      local_card_guid()));
   SubmitForm(form());
 
   ASSERT_THAT(histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),

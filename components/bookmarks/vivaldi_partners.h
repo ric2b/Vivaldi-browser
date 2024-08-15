@@ -15,7 +15,7 @@ class SequencedTaskRunner;
 
 namespace vivaldi_partners {
 
-extern const char kBookmarkResourceDir[];
+const std::string GetBookmarkResourceDir();
 
 struct PartnerDetails {
   PartnerDetails();

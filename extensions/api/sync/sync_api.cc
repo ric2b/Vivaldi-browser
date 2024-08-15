@@ -305,16 +305,19 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
   std::vector<vivaldi::sync::DataType> data_types;
   for (const syncer::UserSelectableType data_type :
        syncer::UserSelectableTypeSet::All()) {
-    // We do not use chrome themes. The saved tab groups feature is currently
-    // not used either. SharedTabGroups and Payments rely on server-side
-    // implementation which we don't have for privacy reasons.
-    // Compare is part of the Google shopping features and we do not expose
-    // those on desktop.
+    // Don't expose these types to the UI, each for its own reason:
+    // - We do not use chrome themes.
+    // - The saved tab groups feature is currently not used either.
+    // - SharedTabGroups and Payments rely on server-side implementation which
+    //   we don't have for privacy reasons.
+    // - Compare is part of the Google shopping features and we do not expose.
+    // - Cookies is in the works. We don't know yet if it will be relevant.
     if (data_type == syncer::UserSelectableType::kThemes ||
         data_type == syncer::UserSelectableType::kSavedTabGroups ||
         data_type == syncer::UserSelectableType::kSharedTabGroupData ||
         data_type == syncer::UserSelectableType::kPayments ||
-        data_type == syncer::UserSelectableType::kCompare) {
+        data_type == syncer::UserSelectableType::kCompare ||
+        data_type == syncer::UserSelectableType::kCookies) {
       continue;
     }
 

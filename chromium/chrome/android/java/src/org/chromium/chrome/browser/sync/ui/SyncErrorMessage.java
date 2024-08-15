@@ -23,7 +23,6 @@ import org.chromium.base.UnownedUserDataHost;
 import org.chromium.base.UnownedUserDataKey;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
@@ -252,7 +251,7 @@ public class SyncErrorMessage implements SyncService.SyncStateChangedListener, U
     private void recordHistogram(@ErrorUiAction int action) {
         assert mType != MessageType.NOT_SHOWN;
         @SyncError int error = SyncError.NO_ERROR;
-        // TODO(crbug.com/1503649): Remove MessageType enum.
+        // TODO(crbug.com/40944114): Remove MessageType enum.
         switch (mType) {
             case MessageType.AUTH_ERROR:
                 error = SyncError.AUTH_ERROR;
@@ -290,7 +289,7 @@ public class SyncErrorMessage implements SyncService.SyncStateChangedListener, U
         RecordHistogram.recordEnumeratedHistogram(name, action, ErrorUiAction.NUM_ENTRIES);
     }
 
-    // TODO(crbug.com/1503649): Use mType instead error.
+    // TODO(crbug.com/40944114): Use mType instead error.
     private String getPrimaryButtonText(Context context, @SyncError int error) {
         // Check if this is for a sync error.
         if (mSyncService.hasSyncConsent()) {
@@ -329,7 +328,7 @@ public class SyncErrorMessage implements SyncService.SyncStateChangedListener, U
         }
     }
 
-    // TODO(crbug.com/1503649): Use mType instead error.
+    // TODO(crbug.com/40944114): Use mType instead error.
     private String getTitle(Context context, @SyncError int error) {
         // Check if this is for a sync error.
         if (mSyncService.hasSyncConsent()) {
@@ -358,7 +357,7 @@ public class SyncErrorMessage implements SyncService.SyncStateChangedListener, U
         }
     }
 
-    // TODO(crbug.com/1503649): Use mType instead error.
+    // TODO(crbug.com/40944114): Use mType instead error.
     private String getMessage(Context context, @SyncError int error) {
         // Check if this is for a sync error.
         if (mSyncService.hasSyncConsent()) {
@@ -467,17 +466,11 @@ public class SyncErrorMessage implements SyncService.SyncStateChangedListener, U
     }
 
     private static @SyncError int getError(Profile profile) {
-        // Check if there is an identity error.
-        final boolean hasSyncConsent =
-                IdentityServicesProvider.get()
+        return IdentityServicesProvider.get()
                         .getIdentityManager(profile)
-                        .hasPrimaryAccount(ConsentLevel.SYNC);
-        if (!hasSyncConsent
-                && ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.SYNC_SHOW_IDENTITY_ERRORS_FOR_SIGNED_IN_USERS)) {
-            return SyncSettingsUtils.getIdentityError(profile);
-        }
-        return SyncSettingsUtils.getSyncError(profile);
+                        .hasPrimaryAccount(ConsentLevel.SYNC)
+                ? SyncSettingsUtils.getSyncError(profile)
+                : SyncSettingsUtils.getIdentityError(profile);
     }
 
     @VisibleForTesting

@@ -6,4 +6,7 @@ include_rules = [
   '+discovery/dnssd/public',
   # Also necessary to implement discovery APIs.
   '+discovery/common',
+  # Allowed to use quiche module.
+  '+quiche/common',
+  '+quiche/quic',
 ]

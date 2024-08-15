@@ -211,6 +211,13 @@ export class PdfViewerElement extends PdfViewerBaseElement {
         value: false,
       },
 
+      // <if expr="enable_pdf_ink2">
+      pdfInk2Enabled_: {
+        type: Boolean,
+        value: false,
+      },
+      // </if>
+
       // <if expr="enable_screen_ai_service">
       pdfOcrEnabled_: {
         type: Boolean,
@@ -277,11 +284,17 @@ export class PdfViewerElement extends PdfViewerBaseElement {
   private navigator_: PdfNavigator|null = null;
   private pageNo_: number;
   private pdfAnnotationsEnabled_: boolean;
+  // <if expr="enable_pdf_ink2">
+  private pdfInk2Enabled_: boolean = false;
+  // </if>
   // <if expr="enable_screen_ai_service">
   private pdfOcrEnabled_: boolean;
   // </if>
   private pluginController_: PluginController|null = null;
   private printingEnabled_: boolean;
+  // <if expr="enable_pdf_ink2">
+  private restoreAnnotationMode_: boolean = false;
+  // </if>
   private showPasswordDialog_: boolean;
   private showPropertiesDialog_: boolean;
   private sidenavCollapsed_: boolean;
@@ -300,6 +313,7 @@ export class PdfViewerElement extends PdfViewerBaseElement {
 
   // <if expr="enable_ink">
   private inkController_: InkController|null = null;
+  private showBeforeUnloadDialog_: boolean = false;
   // </if>
 
   constructor() {
@@ -332,11 +346,7 @@ export class PdfViewerElement extends PdfViewerBaseElement {
     this.tracker.add(
         this.inkController_.getEventTarget(),
         InkControllerEventType.HAS_UNSAVED_CHANGES, () => {
-          // TODO(crbug.com/1445746): Write an equivalent API call for
-          // chrome.pdfViewerPrivate.
-          if (!this.pdfOopifEnabled) {
-            chrome.mimeHandlerPrivate.setShowBeforeUnloadDialog(true);
-          }
+          this.setShowBeforeUnloadDialog(true);
         });
     // </if>
 
@@ -480,10 +490,26 @@ export class PdfViewerElement extends PdfViewerBaseElement {
     return this.sidenavCollapsed_ ? Promise.resolve() :
                                     this.waitForSidenavTransition_();
   }
+  // </if>
 
+  // <if expr="enable_ink or enable_pdf_ink2">
   /** Handles the annotation mode being toggled on or off. */
   private async onAnnotationModeToggled_(e: CustomEvent<boolean>) {
     const annotationMode = e.detail;
+    // <if expr="enable_pdf_ink2">
+    if (this.pdfInk2Enabled_) {
+      if (!this.restoreAnnotationMode_) {
+        record(
+            annotationMode ? UserAction.ENTER_ANNOTATION_MODE :
+                             UserAction.EXIT_ANNOTATION_MODE);
+      }
+      this.pluginController_!.setAnnotationMode(annotationMode);
+      this.annotationMode_ = annotationMode;
+      return;
+    }
+    // </if> expr="enable_pdf_ink2"
+
+    // <if expr="enable_ink">
     if (annotationMode) {
       // Enter annotation mode.
       assert(this.pluginController_!.isActive);
@@ -535,6 +561,7 @@ export class PdfViewerElement extends PdfViewerBaseElement {
       this.currentController = this.pluginController_!;
       await this.pluginController_!.load(result.fileName, result.dataToSave);
     }
+    // </if> expr="enable_ink"
   }
 
   /** Exits annotation mode if active. */
@@ -544,10 +571,12 @@ export class PdfViewerElement extends PdfViewerBaseElement {
     }
     this.$.toolbar.toggleAnnotation();
     this.annotationMode_ = false;
+    // <if expr="enable_ink">
     await this.restoreSidenav_();
+    // </if> expr="enable_ink"
     await this.loaded;
   }
-  // </if>
+  // </if> expr="enable_ink or enable_pdf_ink2"
 
   private onDisplayAnnotationsChanged_(e: CustomEvent<boolean>) {
     assert(this.currentController);
@@ -555,6 +584,15 @@ export class PdfViewerElement extends PdfViewerBaseElement {
   }
 
   private async enterPresentationMode_(): Promise<void> {
+    // <if expr="enable_pdf_ink2">
+    // Exit annotation mode if it was enabled.
+    if (this.pdfInk2Enabled_ && this.annotationMode_) {
+      this.restoreAnnotationMode_ = true;
+      this.$.toolbar.toggleAnnotation();
+      assert(!this.annotationMode_);
+    }
+    // </if>
+
     const scroller = this.$.scroller;
 
     this.viewport.saveZoomState();
@@ -588,6 +626,16 @@ export class PdfViewerElement extends PdfViewerBaseElement {
 
     // Set zoom back to original zoom before presentation mode.
     this.viewport.restoreZoomState();
+
+    // <if expr="enable_pdf_ink2">
+    // Enter annotation mode again if it was enabled before entering
+    // Presentation mode.
+    if (this.restoreAnnotationMode_) {
+      this.$.toolbar.toggleAnnotation();
+      assert(this.annotationMode_);
+      this.restoreAnnotationMode_ = false;
+    }
+    // </if>
   }
 
   private async onPresentClick_() {
@@ -715,6 +763,9 @@ export class PdfViewerElement extends PdfViewerBaseElement {
 
     this.pdfAnnotationsEnabled_ =
         loadTimeData.getBoolean('pdfAnnotationsEnabled');
+    // <if expr="enable_pdf_ink2">
+    this.pdfInk2Enabled_ = loadTimeData.getBoolean('pdfInk2Enabled');
+    // </if>
     // <if expr="enable_screen_ai_service">
     this.pdfOcrEnabled_ = loadTimeData.getBoolean('pdfOcrEnabled');
     // </if>
@@ -810,10 +861,6 @@ export class PdfViewerElement extends PdfViewerBaseElement {
       case 'setIsEditing':
         // Editing mode can only be entered once, and cannot be exited.
         this.hasEdits_ = true;
-        return;
-      case 'setIsSelecting':
-        const selectingData = data as unknown as {isSelecting: boolean};
-        this.viewportScroller!.setEnableScrolling(selectingData.isSelecting);
         return;
       case 'setSmoothScrolling':
         this.viewport.setSmoothScrolling(
@@ -970,13 +1017,11 @@ export class PdfViewerElement extends PdfViewerBaseElement {
           }
           entry!.createWriter((writer: FileWriter) => {
             writer.write(blob);
+            // <if expr="enable_ink">
             // Unblock closing the window now that the user has saved
             // successfully.
-            // TODO(crbug.com/1445746): Write an equivalent API call for
-            // chrome.pdfViewerPrivate.
-            if (!this.pdfOopifEnabled) {
-              chrome.mimeHandlerPrivate.setShowBeforeUnloadDialog(false);
-            }
+            this.setShowBeforeUnloadDialog(false);
+            // </if>
           });
         });
   }
@@ -1105,13 +1150,11 @@ export class PdfViewerElement extends PdfViewerBaseElement {
           }
           entry!.createWriter((writer: FileWriter) => {
             writer.write(blob);
+            // <if expr="enable_ink">
             // Unblock closing the window now that the user has saved
             // successfully.
-            // TODO(crbug.com/1445746): Write an equivalent API call for
-            // chrome.pdfViewerPrivate.
-            if (!this.pdfOopifEnabled) {
-              chrome.mimeHandlerPrivate.setShowBeforeUnloadDialog(false);
-            }
+            this.setShowBeforeUnloadDialog(false);
+            // </if>
           });
         });
 
@@ -1165,6 +1208,32 @@ export class PdfViewerElement extends PdfViewerBaseElement {
   }
 
   // <if expr="enable_ink">
+  /**
+   * Handles the `BeforeUnloadEvent` event.
+   * @param event The `BeforeUnloadEvent` object representing the event.
+   */
+  override onBeforeUnload(event: BeforeUnloadEvent) {
+    super.onBeforeUnload(event);
+    // When user tries to leave PDF with unsaved changes, show the 'Leave site'
+    // dialog.
+    if (this.pdfOopifEnabled && this.showBeforeUnloadDialog_) {
+      event.preventDefault();
+    }
+  }
+
+  /**
+   * Sets whether to show the beforeunload dialog when navigating away from pdf.
+   * @param showDialog A boolean indicating whether to show the beforeunload
+   * dialog.
+   */
+  private setShowBeforeUnloadDialog(showDialog: boolean) {
+    if (this.pdfOopifEnabled) {
+      this.showBeforeUnloadDialog_ = showDialog;
+    } else {
+      chrome.mimeHandlerPrivate.setShowBeforeUnloadDialog(showDialog);
+    }
+  }
+
   getCurrentControllerForTesting(): ContentController|null {
     return this.currentController;
   }

@@ -7,6 +7,7 @@
 #import "base/ios/ios_util.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/elements/instruction_view.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/settings/password/passwords_in_other_apps/constants.h"
 #import "ios/chrome/browser/ui/settings/password/passwords_in_other_apps/passwords_in_other_apps_view_controller_delegate.h"
@@ -110,15 +111,19 @@ CGFloat const kContentOptimalWidth = 327;
       _bannerName = @"vivaldi_passwords_autofill_banner";
     } else {
     UIUserInterfaceIdiom idiom = [[UIDevice currentDevice] userInterfaceIdiom];
-     if (idiom == UIUserInterfaceIdiomPad) {
-       _subtitleText = l10n_util::GetNSString(
-           IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_SUBTITLE_IPAD);
-     } else {
-       _subtitleText = l10n_util::GetNSString(
-           IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_SUBTITLE_IPHONE);
-     }
+    if (idiom == UIUserInterfaceIdiomPad) {
+      _subtitleText = l10n_util::GetNSString(
+          IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_SUBTITLE_IPAD);
+    } else {
+      _subtitleText = l10n_util::GetNSString(
+          IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_SUBTITLE_IPHONE);
+    }
 
-    _bannerName = @"settings_passwords_in_other_apps_banner";
+#if BUILDFLAG(IOS_USE_BRANDED_SYMBOLS)
+    _bannerName = kGoogleSettingsPasswordsInOtherAppsBannerImage;
+#else
+    _bannerName = kChromiumSettingsPasswordsInOtherAppsBannerImage;
+#endif
     } // End Vivaldi
 
     self.bannerStyle = UIUserInterfaceStyleUnspecified;

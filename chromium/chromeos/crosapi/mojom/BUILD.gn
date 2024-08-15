@@ -17,7 +17,9 @@ mojom("mojom") {
     "automation.mojom",
     "bitmap.mojom",
     "browser_app_instance_registry.mojom",
+    "browser_service.mojom",
     "browser_version.mojom",
+    "cec_private.mojom",
     "cert_database.mojom",
     "cert_provisioning.mojom",
     "chaps_service.mojom",
@@ -57,6 +59,7 @@ mojom("mojom") {
     "file_system_provider.mojom",
     "firewall_hole.mojom",
     "force_installed_tracker.mojom",
+    "full_restore.mojom",
     "fullscreen_controller.mojom",
     "geolocation.mojom",
     "guest_os_sk_forwarder.mojom",
@@ -64,6 +67,7 @@ mojom("mojom") {
     "identity_manager.mojom",
     "idle_service.mojom",
     "image_writer.mojom",
+    "input_methods.mojom",
     "kerberos_in_browser.mojom",
     "keystore_error.mojom",
     "keystore_service.mojom",
@@ -106,7 +110,6 @@ mojom("mojom") {
     "sharesheet.mojom",
     "smart_reader.mojom",
     "speech_recognition.mojom",
-    "structured_metrics_service.mojom",
     "suggestion_service.mojom",
     "sync.mojom",
     "synced_session_client.mojom",
@@ -139,6 +142,7 @@ mojom("mojom") {
   cpp_only = true
 
   public_deps = [
+    ":structured_metrics_service",
     ":video_capture",
     "//chromeos/components/drivefs/mojom",
     "//chromeos/components/in_session_auth/mojom",
@@ -149,7 +153,6 @@ mojom("mojom") {
     "//chromeos/services/network_health/public/mojom:types",
     "//components/digital_goods/mojom:mojom",
     "//components/global_media_controls/public/mojom:device_service",
-    "//components/metrics/structured/mojom",
     "//components/tab_groups/public/mojom:mojo_bindings",
     "//media/mojo/mojom:speech_recognition",
     "//mojo/public/mojom/base",
@@ -357,6 +360,18 @@ mojom("video_capture") {
     "//ui/gfx/geometry/mojom",
     "//ui/gfx/mojom",
   ]
+}
+
+# This needs a separate target, because this is also used
+# by the ChromeOS Camera App in Ash and blink bindings
+# are needed.
+mojom("structured_metrics_service") {
+  sources = [ "structured_metrics_service.mojom" ]
+  public_deps = [
+    "//components/metrics/structured/mojom",
+    "//mojo/public/mojom/base",
+  ]
+  webui_module_path = "/"
 }
 
 source_set("unit_tests") {

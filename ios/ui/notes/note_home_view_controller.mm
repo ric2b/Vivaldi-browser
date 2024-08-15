@@ -37,6 +37,7 @@
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
 #import "ios/chrome/browser/ui/menu/menu_histograms.h"
+#import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
 #import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
 #import "ios/chrome/browser/ui/sharing/sharing_params.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
@@ -125,6 +126,7 @@ const int kRowsHiddenByNavigationBar = 3;
                                           TableViewURLDropDelegate,
                                           UIGestureRecognizerDelegate,
                                           VivaldiSearchBarViewDelegate,
+                                          SettingsNavigationControllerDelegate,
                                           UITableViewDataSource,
                                           UITableViewDelegate> {
   // Bridge to register for note changes.
@@ -133,6 +135,10 @@ const int kRowsHiddenByNavigationBar = 3;
   // The root node, whose child nodes are shown in the note table view.
   const vivaldi::NoteNode* _rootNode;
 }
+// Navigation View controller for the settings.
+@property(nonatomic, strong)
+    SettingsNavigationController* settingsNavigationController;
+
 // Sort button
 @property(nonatomic, weak) UIButton* sortButton;
 
@@ -225,6 +231,7 @@ const int kRowsHiddenByNavigationBar = 3;
 @property(nonatomic, strong) UIAction* titleSortAction;
 @property(nonatomic, strong) UIAction* dateCreatedSortAction;
 @property(nonatomic, strong) UIAction* dateEditedSortAction;
+@property(nonatomic, strong) UIAction* kindSortAction;
 
 // The current sort order Action
 @property(nonatomic, strong) UIAction* ascendingSortAction;
@@ -238,6 +245,7 @@ const int kRowsHiddenByNavigationBar = 3;
 @synthesize titleSortAction = _titleSortAction;
 @synthesize dateCreatedSortAction = _dateCreatedSortAction;
 @synthesize dateEditedSortAction = _dateEditedSortAction;
+@synthesize kindSortAction = _kindSortAction;
 @synthesize ascendingSortAction = _ascendingSortAction;
 @synthesize descendingSortAction = _descendingSortAction;
 #pragma mark - Initializer
@@ -1480,7 +1488,7 @@ const int kRowsHiddenByNavigationBar = 3;
 
 - (void)setNotesContextBarButtonsDefaultState {
   // Set Context Menu button for sorting and new folder
-  UIImage* dotsIcon = [UIImage imageNamed:@"context_menu_icon"];
+  UIImage* dotsIcon = [UIImage imageNamed:vPanelMoreAction];
   UIBarButtonItem* contextMenu =
   [[UIBarButtonItem alloc]
    initWithImage:dotsIcon
@@ -1539,6 +1547,17 @@ const int kRowsHiddenByNavigationBar = 3;
 
 /// Returns the context menu actions for notes sort button action
 - (UIMenu*)contextMenuForNotesSortButton {
+  // Sync action button
+  NSString* syncTitleString =
+      GetNSString(IDS_IOS_BOOKMARK_CONTEXT_BAR_SYNCHRONIZATION);
+  UIAction* syncAction =
+  [UIAction actionWithTitle:syncTitleString
+                      image:nil
+                 identifier:nil
+                    handler:^(__kindof UIAction*_Nonnull action) {
+    [self showVivaldiSync];
+  }];
+
   //New Folder action Button
   NSString* titleString = GetNSString(IDS_IOS_NOTE_CONTEXT_BAR_NEW_FOLDER);
   UIAction* newFolderAction =
@@ -1598,6 +1617,18 @@ const int kRowsHiddenByNavigationBar = 3;
   }];
   self.dateEditedSortAction = dateEditedSortAction;
 
+  // Sort by kind action button
+  titleString = GetNSString(IDS_IOS_SORT_BY_KIND);
+  UIAction* kindSortAction =
+      [UIAction actionWithTitle:titleString
+                          image:nil
+                     identifier:nil
+                        handler:^(__kindof UIAction*_Nonnull
+                                 action) {
+    [self sortNotesWithMode:NotesSortingModeByKind];
+  }];
+  self.kindSortAction = kindSortAction;
+
   // Ascending sort action button
   titleString = GetNSString(IDS_IOS_NOTE_ASCENDING_SORT_ORDER);
   UIAction* ascendingSortAction =
@@ -1642,7 +1673,7 @@ const int kRowsHiddenByNavigationBar = 3;
 
   _notesSortActions = [[NSMutableArray alloc] initWithArray:@[
     manualSortAction, titleSortAction,
-    dateCreatedSortAction, dateEditedSortAction]
+    dateCreatedSortAction, dateEditedSortAction, kindSortAction]
   ];
 
   // Refresh actions buttons states
@@ -1667,12 +1698,12 @@ const int kRowsHiddenByNavigationBar = 3;
 
   UIMenu* subMenu =
     [UIMenu menuWithTitle:titleString
-                    image:[UIImage imageNamed:@"sort_order_icon"]
+                    image:[UIImage imageNamed:vPanelSortOrderAction]
                identifier:nil
                   options:options
                  children:@[sortOrderMenu, sortMenu]];
   UIMenu* menu = [UIMenu menuWithTitle:@""
-                              children:@[subMenu, newFolderAction]];
+                              children:@[subMenu, newFolderAction, syncAction]];
   return menu;
 }
 
@@ -1734,6 +1765,9 @@ const int kRowsHiddenByNavigationBar = 3;
       break;
     case NotesSortingModeDateEdited:
       [self updateSortActionButtonState:self.dateEditedSortAction];
+      break;
+    case NotesSortingModeByKind:
+      [self updateSortActionButtonState:self.kindSortAction];
       break;
   }
 }
@@ -2474,6 +2508,26 @@ const int kRowsHiddenByNavigationBar = 3;
                         index, self.notes, self.browserState)];
 }
 
+#pragma mark - SettingsNavigationControllerDelegate
+
+- (void)closeSettings {
+  __weak UIViewController* weakPresentingViewController =
+      [self.settingsNavigationController presentingViewController];
+  [self.settingsNavigationController cleanUpSettings];
+  UIViewController* strongPresentingViewController =
+      weakPresentingViewController;
+  if (strongPresentingViewController) {
+    [strongPresentingViewController
+        dismissViewControllerAnimated:YES completion:nil];
+  }
+  self.settingsNavigationController = nil;
+}
+
+- (void)settingsWasDismissed {
+  [self.settingsNavigationController cleanUpSettings];
+  self.settingsNavigationController = nil;
+}
+
 - (UIBarButtonItem*)customizedDoneButton {
   UIBarButtonItem* doneButton = [[UIBarButtonItem alloc]
       initWithTitle:GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)
@@ -2573,6 +2627,23 @@ const int kRowsHiddenByNavigationBar = 3;
 /// enough space to show iPad side panel.
 - (BOOL)showingSidePanel {
   return VivaldiGlobalHelpers.canShowSidePanel;
+}
+
+- (void)showVivaldiSync {
+  self.settingsNavigationController =
+      [SettingsNavigationController
+          vivaldiSyncViewControllerForBrowser:self.browser
+              showCreateAccountFlow:NO
+                  delegate:self];
+  UISheetPresentationController *sheetPc =
+      self.settingsNavigationController.sheetPresentationController;
+  sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
+                      UISheetPresentationControllerDetent.largeDetent];
+  sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
+  sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
+  [self presentViewController:self.settingsNavigationController
+                     animated:YES
+                   completion:nil];
 }
 
 @end

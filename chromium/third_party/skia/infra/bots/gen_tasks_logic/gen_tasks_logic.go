@@ -164,7 +164,7 @@ var (
 	CAS_SPEC_LOTTIE_CI = &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
-			"skia/.vpython",
+			"skia/.vpython3",
 			"skia/infra/bots/run_recipe.py",
 			"skia/infra/lottiecap",
 			"skia/tools/lottie-web-perf",
@@ -453,6 +453,7 @@ func GenTasks(cfg *Config) {
 			"skia/.bazelrc",
 			"skia/.bazelversion",
 			"skia/BUILD.bazel",
+			"skia/LICENSE", // Referred to by default_applicable_licenses
 			"skia/WORKSPACE.bazel",
 			"skia/bazel",
 			"skia/defines.bzl",
@@ -468,7 +469,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_CANVASKIT, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
-			"skia/.vpython",
+			"skia/.vpython3",
 			"skia/infra/bots/run_recipe.py",
 			"skia/infra/canvaskit",
 			"skia/modules/canvaskit",
@@ -482,7 +483,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_LOTTIE_WEB, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
-			"skia/.vpython",
+			"skia/.vpython3",
 			"skia/infra/bots/run_recipe.py",
 			"skia/tools/lottie-web-perf",
 		},
@@ -491,7 +492,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_PATHKIT, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
-			"skia/.vpython",
+			"skia/.vpython3",
 			"skia/infra/bots/run_recipe.py",
 			"skia/infra/pathkit",
 			"skia/modules/pathkit",
@@ -501,7 +502,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_PERF, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
-			"skia/.vpython",
+			"skia/.vpython3",
 			"skia/infra/bots/assets",
 			"skia/infra/bots/run_recipe.py",
 			"skia/platform_tools/ios/bin",
@@ -513,7 +514,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_PUPPETEER, &specs.CasSpec{
 		Root: "../skia", // Needed for other repos.
 		Paths: []string{
-			".vpython",
+			".vpython3",
 			"tools/perf-canvaskit-puppeteer",
 		},
 		Excludes: []string{rbe.ExcludeGitDir},
@@ -521,6 +522,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_RECIPES, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
+			"skia/.vpython3",
 			"skia/infra/config/recipes.cfg",
 			"skia/infra/bots/bundle_recipes.sh",
 			"skia/infra/bots/README.recipes.md",
@@ -533,7 +535,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_RUN_RECIPE, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
-			"skia/.vpython",
+			"skia/.vpython3",
 			"skia/infra/bots/run_recipe.py",
 		},
 		Excludes: []string{rbe.ExcludeGitDir},
@@ -541,7 +543,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_SKOTTIE_WASM, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
-			"skia/.vpython",
+			"skia/.vpython3",
 			"skia/infra/bots/run_recipe.py",
 			"skia/tools/skottie-wasm-perf",
 		},
@@ -550,7 +552,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_SKPBENCH, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
-			"skia/.vpython",
+			"skia/.vpython3",
 			"skia/infra/bots/assets",
 			"skia/infra/bots/run_recipe.py",
 			"skia/tools/skpbench",
@@ -565,8 +567,10 @@ func GenTasks(cfg *Config) {
 			"skia/.bazelrc",
 			"skia/.bazelversion",
 			"skia/BUILD.bazel",
+			"skia/LICENSE",
 			"skia/WORKSPACE.bazel",
 			"skia/bazel",
+			"skia/defines.bzl",
 			"skia/go_repositories.bzl",
 			"skia/include/config", // There's a WORKSPACE.bazel in here
 			"skia/requirements.txt",
@@ -581,7 +585,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_TEST, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
-			"skia/.vpython",
+			"skia/.vpython3",
 			"skia/infra/bots/assets",
 			"skia/infra/bots/run_recipe.py",
 			"skia/platform_tools/ios/bin",
@@ -593,7 +597,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_WASM_GM, &specs.CasSpec{
 		Root: "../skia", // Needed for other repos.
 		Paths: []string{
-			".vpython",
+			".vpython3",
 			"resources",
 			"tools/run-wasm-gm-tests",
 		},
@@ -603,12 +607,11 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_RECREATE_SKPS, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
-			"skia/.vpython",
+			"skia/.vpython3",
 			"skia/DEPS",
 			"skia/bin/fetch-sk",
 			"skia/infra/bots/assets/skp",
 			"skia/infra/bots/utils.py",
-			"skia/infra/config/recipes.cfg",
 			"skia/tools/skp",
 		},
 		Excludes: []string{rbe.ExcludeGitDir},
@@ -664,7 +667,7 @@ func (b *taskBuilder) kitchenTaskNoBundle(recipe string, outputDir string) {
 	b.cipd(CIPD_PKG_LUCI_AUTH)
 	b.cipd(cipd.MustGetPackage("infra/tools/luci/kitchen/${platform}"))
 	b.env("RECIPES_USE_PY3", "true")
-	b.envPrefixes("VPYTHON_DEFAULT_SPEC", "skia/.vpython")
+	b.envPrefixes("VPYTHON_DEFAULT_SPEC", "skia/.vpython3")
 	b.usesPython()
 	b.recipeProp("swarm_out_dir", outputDir)
 	if outputDir != OUTPUT_NONE {
@@ -859,9 +862,6 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			"Debian10":   DEFAULT_OS_LINUX_GCE,
 			"Debian11":   DEBIAN_11_OS,
 			"Mac":        DEFAULT_OS_MAC,
-			"Mac10.12":   "Mac-10.12",
-			"Mac10.13":   "Mac-10.13.6",
-			"Mac10.14":   "Mac-10.14",
 			"Mac10.15.1": "Mac-10.15.1",
 			"Mac10.15.7": "Mac-10.15.7", // Same as 'Mac', but explicit.
 			"Mac11":      "Mac-11.4",
@@ -882,8 +882,8 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			d["os"] = DEFAULT_OS_LINUX_GCE
 		}
 		if os == "Win10" && b.parts["model"] == "Golo" {
-			// ChOps-owned machines have Windows 10 21h1.
-			d["os"] = "Windows-10-19043"
+			// ChOps-owned machines have Windows 10 22H2.
+			d["os"] = "Windows-10-19045"
 		}
 		if b.parts["model"] == "iPhone11" {
 			d["os"] = "iOS-13.6"
@@ -995,10 +995,10 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 					"IntelIris540":  "8086:1926-31.0.101.2115",
 					"IntelIris6100": "8086:162b-20.19.15.4963",
 					"IntelIris655":  "8086:3ea5-26.20.100.7463",
-					"IntelIrisXe":   "8086:9a49-31.0.101.4889",
+					"IntelIrisXe":   "8086:9a49-31.0.101.5186",
 					"RadeonHD7770":  "1002:683d-26.20.13031.18002",
 					"RadeonR9M470X": "1002:6646-26.20.13031.18002",
-					"QuadroP400":    "10de:1cb3-30.0.15.1179",
+					"QuadroP400":    "10de:1cb3-31.0.15.5222",
 					"RadeonVega6":   "1002:1636-31.0.14057.5006",
 					"RTX3060":       "10de:2489-31.0.15.3699",
 				}[b.parts["cpu_or_gpu_value"]]
@@ -1009,14 +1009,13 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			} else if b.isLinux() {
 				gpu, ok := map[string]string{
 					// Intel drivers come from CIPD, so no need to specify the version here.
-					"IntelBayTrail": "8086:0f31",
-					"IntelHD2000":   "8086:0102",
-					"IntelHD405":    "8086:22b1",
-					"IntelIris640":  "8086:5926",
-					"QuadroP400":    "10de:1cb3-510.60.02",
-					"RTX3060":       "10de:2489-470.182.03",
-					"IntelIrisXe":   "8086:9a49",
-					"RadeonVega6":   "1002:1636",
+					"IntelHD2000":  "8086:0102",
+					"IntelHD405":   "8086:22b1",
+					"IntelIris640": "8086:5926",
+					"QuadroP400":   "10de:1cb3-510.60.02",
+					"RTX3060":      "10de:2489-470.182.03",
+					"IntelIrisXe":  "8086:9a49",
+					"RadeonVega6":  "1002:1636",
 				}[b.parts["cpu_or_gpu_value"]]
 				if !ok {
 					log.Fatalf("Entry %q not found in Ubuntu GPU mapping.", b.parts["cpu_or_gpu_value"])
@@ -1815,6 +1814,8 @@ func (b *jobBuilder) dm() {
 		} else if b.arch("x86") && b.debug() {
 			// skia:6737
 			b.timeout(6 * time.Hour)
+		} else if b.matchOs("Mac11") {
+			b.timeout(30 * time.Minute)
 		}
 		b.maybeAddIosDevImage()
 	})
@@ -2023,7 +2024,11 @@ func (b *jobBuilder) perf() {
 		} else if b.parts["arch"] == "x86" && b.parts["configuration"] == "Debug" {
 			// skia:6737
 			b.timeout(6 * time.Hour)
-		} else if b.extraConfig("LottieWeb", "SkottieWASM") {
+		} else if b.matchOs("Mac11") {
+			b.timeout(30 * time.Minute)
+		}
+
+		if b.extraConfig("LottieWeb", "SkottieWASM") {
 			b.asset("node", "lottie-samples")
 		} else if b.matchExtraConfig("SkottieTracing") {
 			b.needsLottiesWithAssets()
@@ -2085,7 +2090,7 @@ func (b *jobBuilder) presubmit() {
 		b.cipd(&specs.CipdPackage{
 			Name:    "infra/recipe_bundles/chromium.googlesource.com/chromium/tools/build",
 			Path:    "recipe_bundle",
-			Version: "git_revision:1a28cb094add070f4beefd052725223930d8c27a",
+			Version: "git_revision:bb122cd16700ab80bfcbd494b605dd11d4f5902d",
 		})
 	})
 }
@@ -2180,26 +2185,28 @@ type labelAndSavedOutputDir struct {
 // label or "target pattern" https://bazel.build/docs/build#specifying-build-targets
 // The reason we need this mapping is because Buildbucket build names cannot have / or : in them.
 var shorthandToLabel = map[string]labelAndSavedOutputDir{
-	"base":                           {"//src/base:base", ""},
-	"modules_canvaskit":              {"//modules/canvaskit:canvaskit", ""},
-	"modules_canvaskit_js_tests":     {"//modules/canvaskit:canvaskit_js_tests", ""},
-	"skia_public":                    {"//:skia_public", ""},
-	"skottie_tool_gpu":               {"//modules/skottie:skottie_tool_gpu", ""},
-	"all_tests":                      {"//tests:linux_rbe_tests", ""},
-	"experimental_bazel_test_client": {"//experimental/bazel_test/client:client_lib", ""},
-	"cpu_gms":                        {"//gm:cpu_gm_tests", ""},
-	"hello_bazel_world_test":         {"//gm:hello_bazel_world_test", ""},
-	"cpu_8888_benchmark_test":        {"//bench:cpu_8888_test", ""},
+	"all_tests":                  {"//tests:linux_rbe_tests", ""},
+	"core":                       {"//:core", ""},
+	"cpu_8888_benchmark_test":    {"//bench:cpu_8888_test", ""},
+	"cpu_gms":                    {"//gm:cpu_gm_tests", ""},
+	"full_library":               {"//tools:full_build", ""},
+	"ganesh_gl":                  {"//:ganesh_gl", ""},
+	"hello_bazel_world_test":     {"//gm:hello_bazel_world_test", ""},
+	"modules_canvaskit":          {"//modules/canvaskit:canvaskit", ""},
+	"modules_canvaskit_js_tests": {"//modules/canvaskit:canvaskit_js_tests", ""},
+	"skottie_tool_gpu":           {"//modules/skottie:skottie_tool_gpu", ""},
 
 	// Note: these paths are relative to the WORKSPACE in //example/external_client
-	"decode_everything": {"//:decode_everything", ""},
-	"path_combiner":     {"//:path_combiner", ""},
-	"png_decoder":       {"//:png_decoder", ""},
-	"shape_text":        {"//:shape_text", ""},
-	"use_ganesh_gl":     {"//:use_ganesh_gl", ""},
-	"use_ganesh_vulkan": {"//:use_ganesh_vulkan", ""},
-	"use_skresources":   {"//:use_skresources", ""},
-	"write_text_to_png": {"//:write_text_to_png", ""},
+	"decode_everything":  {"//:decode_everything", ""},
+	"path_combiner":      {"//:path_combiner", ""},
+	"png_decoder":        {"//:png_decoder", ""},
+	"shape_text":         {"//:shape_text", ""},
+	"svg_with_harfbuzz":  {"//:svg_with_harfbuzz", ""},
+	"svg_with_primitive": {"//:svg_with_primitive", ""},
+	"use_ganesh_gl":      {"//:use_ganesh_gl", ""},
+	"use_ganesh_vulkan":  {"//:use_ganesh_vulkan", ""},
+	"use_skresources":    {"//:use_skresources", ""},
+	"write_text_to_png":  {"//:write_text_to_png", ""},
 
 	// Currently there is no way to tell Bazel "only test go_test targets", so we must group them
 	// under a test_suite.
@@ -2403,11 +2410,11 @@ func (b *jobBuilder) bazelTest() {
 			// the bazel-bin directory, which we receive a subset of as a CAS input.
 			command := strings.ReplaceAll(labelAndSavedOutputDir.label, "//", "")
 			command = strings.ReplaceAll(command, ":", "/")
-			command = filepath.Join(OUTPUT_BAZEL, command)
+			command = path.Join(OUTPUT_BAZEL, command)
 
 			// The test's working directory will be its runfiles directory, which simulates the behavior of
 			// the "bazel run" command.
-			commandWorkDir := filepath.Join(command+".runfiles", "skia")
+			commandWorkDir := path.Join(command+".runfiles", "skia")
 
 			cmd = append(cmd,
 				"--command="+command,

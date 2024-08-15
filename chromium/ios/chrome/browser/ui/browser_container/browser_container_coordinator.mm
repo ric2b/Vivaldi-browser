@@ -37,6 +37,13 @@
 #import "ios/chrome/browser/ui/screen_time/screen_time_coordinator.h"
 #endif
 
+#if defined(VIVALDI_BUILD)
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/copy_to_note/copy_to_note_mediator.h"
+
+using vivaldi::IsVivaldiRunning;
+#endif // End Vivaldi
+
 @interface BrowserContainerCoordinator () <EditMenuAlertDelegate>
 // Whether the coordinator is started.
 @property(nonatomic, assign, getter=isStarted) BOOL started;
@@ -60,6 +67,12 @@
 @property(nonatomic, strong) ChromeCoordinator* screenTimeCoordinator;
 // Coordinator used to present alerts to the user.
 @property(nonatomic, strong) AlertCoordinator* alertCoordinator;
+
+#if defined(VIVALDI_BUILD)
+// The mediator used for the Copy To Note feature.
+@property(nonatomic, strong) CopyToNoteMediator* vivaldiCopyToNoteMediator;
+#endif // End Vivaldi
+
 @end
 
 @implementation BrowserContainerCoordinator
@@ -142,6 +155,19 @@
 
   [self setUpScreenTimeIfEnabled];
 
+  if (IsVivaldiRunning()) {
+    self.vivaldiCopyToNoteMediator =
+        [[CopyToNoteMediator alloc] initWithBrowser:browser];
+    self.vivaldiCopyToNoteMediator.alertDelegate = self;
+    self.vivaldiCopyToNoteMediator.activityServiceHandler = HandlerForProtocol(
+        browser->GetCommandDispatcher(), ActivityServiceCommands);
+
+    self.browserEditMenuHandler.vivaldiCopyToNoteDelegate =
+        self.vivaldiCopyToNoteMediator;
+    self.viewController.vivaldiCopyToNoteDelegate =
+        self.vivaldiCopyToNoteMediator;
+  } // End Vivaldi
+
   [super start];
 }
 
@@ -159,6 +185,11 @@
   self.linkToTextMediator = nil;
   self.partialTranslateMediator = nil;
   self.searchWithMediator = nil;
+
+  if (IsVivaldiRunning()) {
+    self.vivaldiCopyToNoteMediator = nil;
+  } // End Vivaldi
+
   [super stop];
 }
 

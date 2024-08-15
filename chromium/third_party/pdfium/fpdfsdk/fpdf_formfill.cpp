@@ -519,11 +519,13 @@ FORM_GetFocusedText(FPDF_FORMHANDLE hHandle,
                     void* buffer,
                     unsigned long buflen) {
   CPDFSDK_PageView* pPageView = FormHandleToPageView(hHandle, page);
-  if (!pPageView)
+  if (!pPageView) {
     return 0;
-
-  return Utf16EncodeMaybeCopyAndReturnLength(pPageView->GetFocusedFormText(),
-                                             buffer, buflen);
+  }
+  // SAFETY: required from caller.
+  return Utf16EncodeMaybeCopyAndReturnLength(
+      pPageView->GetFocusedFormText(),
+      UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, buflen)));
 }
 
 FPDF_EXPORT unsigned long FPDF_CALLCONV
@@ -532,11 +534,13 @@ FORM_GetSelectedText(FPDF_FORMHANDLE hHandle,
                      void* buffer,
                      unsigned long buflen) {
   CPDFSDK_PageView* pPageView = FormHandleToPageView(hHandle, page);
-  if (!pPageView)
+  if (!pPageView) {
     return 0;
-
-  return Utf16EncodeMaybeCopyAndReturnLength(pPageView->GetSelectedText(),
-                                             buffer, buflen);
+  }
+  // SAFETY: required from caller.
+  return Utf16EncodeMaybeCopyAndReturnLength(
+      pPageView->GetSelectedText(),
+      UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, buflen)));
 }
 
 FPDF_EXPORT void FPDF_CALLCONV
@@ -544,20 +548,24 @@ FORM_ReplaceAndKeepSelection(FPDF_FORMHANDLE hHandle,
                              FPDF_PAGE page,
                              FPDF_WIDESTRING wsText) {
   CPDFSDK_PageView* pPageView = FormHandleToPageView(hHandle, page);
-  if (!pPageView)
+  if (!pPageView) {
     return;
-
-  pPageView->ReplaceAndKeepSelection(WideStringFromFPDFWideString(wsText));
+  }
+  // SAFETY: required from caller.
+  pPageView->ReplaceAndKeepSelection(
+      UNSAFE_BUFFERS(WideStringFromFPDFWideString(wsText)));
 }
 
 FPDF_EXPORT void FPDF_CALLCONV FORM_ReplaceSelection(FPDF_FORMHANDLE hHandle,
                                                      FPDF_PAGE page,
                                                      FPDF_WIDESTRING wsText) {
   CPDFSDK_PageView* pPageView = FormHandleToPageView(hHandle, page);
-  if (!pPageView)
+  if (!pPageView) {
     return;
-
-  pPageView->ReplaceSelection(WideStringFromFPDFWideString(wsText));
+  }
+  // SAFETY: required from caller.
+  pPageView->ReplaceSelection(
+      UNSAFE_BUFFERS(WideStringFromFPDFWideString(wsText)));
 }
 
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FORM_SelectAllText(FPDF_FORMHANDLE hHandle,

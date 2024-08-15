@@ -31,7 +31,7 @@ import sys
 
 from git_common import current_branch, upstream, tags, get_branches_info
 from git_common import get_git_version, MIN_UPSTREAM_TRACK_GIT_VERSION, hash_one
-from git_common import run
+from git_common import get_config, run
 
 import setup_color
 
@@ -153,18 +153,17 @@ class BranchMapper(object):
             if not branch_info:
                 continue
 
-            parent = branch_info.upstream
             if self.__check_cycle(branch):
                 continue
+            parent = branch_info.upstream
             if not self.__branches_info[parent]:
-                branch_upstream = upstream(branch)
-                # If git can't find the upstream, mark the upstream as gone.
-                if branch_upstream:
-                    parent = branch_upstream
-                else:
-                    self.__gone_branches.add(parent)
-                # A parent that isn't in the branches info is a root.
-                roots.add(parent)
+                # If the parent is not a known branch, it may be an upstream
+                # branch like origin/main or it may be gone. Determine which it
+                # is, but don't re-query the same parent multiple times.
+                if parent not in roots:
+                    if not upstream(branch):
+                        self.__gone_branches.add(parent)
+                    roots.add(parent)
 
             self.__parent_map[parent].append(branch)
 
@@ -221,11 +220,7 @@ class BranchMapper(object):
         if '/' in branch:
             return False
 
-        is_dormant = run('config',
-                         '--get',
-                         'branch.{}.dormant'.format(branch),
-                         accepted_retcodes=[0, 1])
-        return is_dormant == 'true'
+        return get_config(f'branch.{branch}.dormant') == 'true'
 
     def __append_branch(self, branch, output, depth=0):
         """Recurses through the tree structure and appends an OutputLine to the

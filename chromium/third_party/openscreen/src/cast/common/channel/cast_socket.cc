@@ -71,7 +71,7 @@ std::array<uint8_t, 2> CastSocket::GetSanitizedIpAddress() {
   return result;
 }
 
-void CastSocket::OnError(TlsConnection* connection, Error error) {
+void CastSocket::OnError(TlsConnection* connection, const Error& error) {
   state_ = State::kError;
   client_->OnError(this, error);
 }

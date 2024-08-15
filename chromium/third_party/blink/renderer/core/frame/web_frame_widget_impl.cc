@@ -66,6 +66,7 @@
 #include "third_party/blink/renderer/core/accessibility/histogram_macros.h"
 #include "third_party/blink/renderer/core/content_capture/content_capture_manager.h"
 #include "third_party/blink/renderer/core/core_initializer.h"
+#include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/dom/layout_tree_builder_traversal.h"
@@ -1298,6 +1299,12 @@ void WebFrameWidgetImpl::StartDragging(LocalFrame* source_frame,
                                        const SkBitmap& drag_image,
                                        const gfx::Vector2d& cursor_offset,
                                        const gfx::Rect& drag_obj_rect) {
+  if (doing_drag_and_drop_) {
+    // TODO: crbug.com/330274075 - Root cause nested drag-start events, remove
+    // once issue has been resolved.
+    base::debug::DumpWithoutCrashing();
+  }
+
   doing_drag_and_drop_ = true;
   if (drag_and_drop_disabled_) {
     DragSourceSystemDragEnded();
@@ -1439,6 +1446,11 @@ bool WebFrameWidgetImpl::IsScrollGestureActive() const {
   return is_scroll_gesture_active_;
 }
 
+void WebFrameWidgetImpl::RequestViewportScreenshot(
+    const base::UnguessableToken& token) {
+  LayerTreeHost()->RequestViewportScreenshot(token);
+}
+
 void WebFrameWidgetImpl::RequestNewLocalSurfaceId() {
   LayerTreeHost()->RequestNewLocalSurfaceId();
 }
@@ -1484,6 +1496,9 @@ void WebFrameWidgetImpl::Trace(Visitor* visitor) const {
   visitor->Trace(frame_widget_host_);
   visitor->Trace(receiver_);
   visitor->Trace(input_target_receiver_);
+#if BUILDFLAG(IS_ANDROID)
+  visitor->Trace(ime_render_widget_host_);
+#endif
   visitor->Trace(mouse_capture_element_);
   visitor->Trace(device_emulator_);
   visitor->Trace(animation_frame_timing_monitor_);
@@ -1608,18 +1623,22 @@ void WebFrameWidgetImpl::OnTaskCompletedForFrame(
 }
 
 void WebFrameWidgetImpl::DidBeginMainFrame() {
-  LocalFrame* root_frame = LocalRootImpl()->GetFrame();
-  DCHECK(root_frame);
+  LocalFrame* local_root_frame = LocalRootImpl()->GetFrame();
+  CHECK(local_root_frame);
 
-  if (LocalFrameView* frame_view = root_frame->View())
+  if (LocalFrameView* frame_view = local_root_frame->View()) {
     frame_view->RunPostLifecycleSteps();
-
-  if (animation_frame_timing_monitor_) {
-    animation_frame_timing_monitor_->DidBeginMainFrame();
   }
 
-  if (Page* page = root_frame->GetPage())
+  if (animation_frame_timing_monitor_) {
+    CHECK(local_root_frame->DomWindow());
+    animation_frame_timing_monitor_->DidBeginMainFrame(
+        *local_root_frame->DomWindow());
+  }
+
+  if (Page* page = local_root_frame->GetPage()) {
     page->Animator().PostAnimate();
+  }
 }
 
 void WebFrameWidgetImpl::UpdateLifecycle(WebLifecycleUpdate requested_update,
@@ -1977,7 +1996,6 @@ void WebFrameWidgetImpl::SetEventListenerProperties(
     if (!has_touch_handlers_ || *has_touch_handlers_ != has_touch_handlers) {
       has_touch_handlers_ = has_touch_handlers;
 
-      widget_base_->WidgetScheduler()->SetHasTouchHandler(has_touch_handlers);
       // Set touch event consumers based on whether there are touch event
       // handlers or the page has hit testable scrollbars.
       auto touch_event_consumers = mojom::blink::TouchEventConsumers::New(
@@ -2536,6 +2554,10 @@ void WebFrameWidgetImpl::EndCommitCompositorFrame(
       ->GetUkmAggregator()
       ->RecordImplCompositorSample(commit_compositor_frame_start_time_.value(),
                                    commit_start_time, commit_finish_time);
+  WindowPerformance* performance = DOMWindowPerformance::performance(
+      *LocalRootImpl()->GetFrame()->DomWindow());
+  performance->SetCommitFinishTimeStampForPendingEvents(commit_finish_time);
+
   commit_compositor_frame_start_time_ =
       next_commit_compositor_frame_start_time_;
   next_commit_compositor_frame_start_time_.reset();
@@ -3979,6 +4001,19 @@ void WebFrameWidgetImpl::NotifyAutoscrollForSelectionInMainFrame(
   }
 }
 
+#if BUILDFLAG(IS_ANDROID)
+void WebFrameWidgetImpl::PassImeRenderWidgetHost(
+    mojo::PendingRemote<mojom::blink::ImeRenderWidgetHost> pending_remote) {
+  // TODO(crbug.com/330385378): Could the renderer send this endpoint to the
+  // browser?
+  ime_render_widget_host_ =
+      HeapMojoRemote<mojom::blink::ImeRenderWidgetHost>(nullptr);
+  ime_render_widget_host_.Bind(
+      std::move(pending_remote),
+      local_root_->GetTaskRunner(TaskType::kInternalDefault));
+}
+#endif
+
 gfx::Range WebFrameWidgetImpl::CompositionRange() {
   WebLocalFrame* focused_frame = FocusedWebLocalFrameInWidget();
   if (!focused_frame || ShouldDispatchImeEventsToPlugin())
@@ -4063,12 +4098,62 @@ void WebFrameWidgetImpl::UpdateLineBounds() {
     return;
   }
   input_visible_line_bounds_.swap(line_bounds);
+  if (RuntimeEnabledFeatures::CursorAnchorInfoMojoPipeEnabled()) {
+    UpdateCursorAnchorInfo();
+    return;
+  }
   if (mojom::blink::WidgetInputHandlerHost* host =
           widget_base_->widget_input_handler_manager()
               ->GetWidgetInputHandlerHost()) {
     host->ImeCompositionRangeChanged(gfx::Range::InvalidRange(), std::nullopt,
                                      input_visible_line_bounds_);
   }
+}
+
+void WebFrameWidgetImpl::UpdateCursorAnchorInfo() {
+#if BUILDFLAG(IS_ANDROID)
+  Element* focused_element = FocusedElement();
+  if (!focused_element) {
+    return;
+  }
+  TextControlElement* text_control = ToTextControlOrNull(focused_element);
+  if (!text_control || text_control->IsDisabledOrReadOnly() ||
+      !text_control->GetLayoutObject()) {
+    return;
+  }
+
+  Vector<gfx::Rect> character_bounds;
+  GetCompositionCharacterBoundsInWindow(&character_bounds);
+
+  gfx::RectF editor_bounds =
+      gfx::RectF(LocalRootImpl()->GetFrameView()->FrameToScreen(
+          focused_element->VisibleBoundsInLocalRoot()));
+  float device_scale_factor = widget_base_->GetScreenInfo().device_scale_factor;
+  gfx::RectF handwriting_bounds(editor_bounds);
+  // See kStylusWritableAdjustmentSizeDip in
+  // third_party/blink/renderer/core/input/pointer_event_manager.cc
+  handwriting_bounds.Outset(30 / device_scale_factor);
+  mojom::blink::EditorBoundsInfoPtr editor_bounds_info =
+      mojom::blink::EditorBoundsInfo::New(editor_bounds, handwriting_bounds);
+
+  mojom::blink::TextAppearanceInfoPtr text_appearance_info =
+      mojom::blink::TextAppearanceInfo::New(
+          text_control->GetLayoutObject()
+              ->StyleRef()
+              .VisitedDependentColor(GetCSSPropertyColor())
+              .Rgb());
+
+  mojom::blink::InputCursorAnchorInfoPtr cursor_anchor_info =
+      mojom::blink::InputCursorAnchorInfo::New(
+          character_bounds, std::move(editor_bounds_info),
+          std::move(text_appearance_info), input_visible_line_bounds_);
+  // Since the IME pushes this endpoint to the renderer, it may not be bound
+  // yet.
+  if (ime_render_widget_host_) {
+    ime_render_widget_host_->UpdateCursorAnchorInfo(
+        std::move(cursor_anchor_info));
+  }
+#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 void WebFrameWidgetImpl::AddImeTextSpansToExistingText(
@@ -4440,6 +4525,11 @@ void WebFrameWidgetImpl::ForEachRemoteFrameControlledByWidget(
     base::FunctionRef<void(RemoteFrame*)> callback) {
   ForEachRemoteFrameChildrenControlledByWidget(local_root_->GetFrame(),
                                                callback);
+}
+
+void WebFrameWidgetImpl::CalculateSelectionBounds(gfx::Rect& anchor_root_frame,
+                                                  gfx::Rect& focus_root_frame) {
+  CalculateSelectionBounds(anchor_root_frame, focus_root_frame, nullptr);
 }
 
 void WebFrameWidgetImpl::CalculateSelectionBounds(

@@ -30,7 +30,7 @@ constexpr size_t kMessageNamePrefixLength =
 
 constexpr char kJSScriptArgRequestPart1[] = "window.webkit.messageHandlers['";
 constexpr char kJSScriptArgRequestPart2[] =
-    R"JsSource('].postMessage({}).then((scriptlet_arguments) =>  {
+    R"JsSource('].postMessage({}).then((scriptlet_arguments) => {
   const source=)JsSource";
 constexpr char kJSScriptArgRequestPart3[] = R"JsSource(;
   if(scriptlet_arguments.length != 0) {
@@ -45,12 +45,12 @@ std::string SourceToTemplatedHexString(base::StringPiece source) {
 
   const int kPlaceHolderLength = 5;
 
-  for (const auto* c = source.begin(); c != source.end(); ++c) {
+  for (auto c = source.begin(); c != source.end(); ++c) {
     if (*c == '{' && source.end() - c >= kPlaceHolderLength) {
       if (*(c + 1) == '{' && base::IsAsciiDigit(*(c + 2)) && *(c + 3) == '}' &&
           *(c + 4) == '}') {
         int index = -1;
-        base::StringToInt(base::StringPiece(c + 2, 1), &index);
+        base::StringToInt(base::StringPiece(c + 2, c + 3), &index);
         result.append("${scriptlet_arguments[");
         result.append(base::NumberToString(index - 1));
         result.append("]}");
@@ -59,7 +59,7 @@ std::string SourceToTemplatedHexString(base::StringPiece source) {
     }
 
     result.append("\\x");
-    result.append(base::HexEncode(c, 1));
+    result.append(base::HexEncode(base::StringPiece(c, c + 1)));
   }
 
   result.push_back('`');
@@ -98,8 +98,8 @@ class ContentInjectionHandlerImpl
   void HandlePlaceholderRequest(WKScriptMessage* message,
                                 ScriptMessageReplyHandler reply_handler);
 
-  web::BrowserState* browser_state_;
-  web::BrowserState* incognito_browser_state_ = nullptr;
+  base::WeakPtr<web::WKWebViewConfigurationProvider> config_provider_;
+  base::WeakPtr<web::WKWebViewConfigurationProvider> incognito_config_provider_;
   std::array<std::optional<base::Value::Dict>, kRuleGroupCount>
       injection_rules_;
 
@@ -120,12 +120,13 @@ class ContentInjectionHandlerImpl
 ContentInjectionHandlerImpl::ContentInjectionHandlerImpl(
     web::BrowserState* browser_state,
     Resources* resources)
-    : browser_state_(browser_state), resources_(resources) {
-  web::WKWebViewConfigurationProvider& config_provider =
-      web::WKWebViewConfigurationProvider::FromBrowserState(browser_state_);
-  DidCreateNewConfiguration(&config_provider,
-                            config_provider.GetWebViewConfiguration());
-  config_provider.AddObserver(this);
+    : config_provider_(
+          web::WKWebViewConfigurationProvider::FromBrowserState(browser_state)
+              .AsWeakPtr()),
+      resources_(resources) {
+  DidCreateNewConfiguration(config_provider_.get(),
+                            config_provider_->GetWebViewConfiguration());
+  config_provider_->AddObserver(this);
 
   if (resources_->loaded())
     InjectUserScripts();
@@ -135,19 +136,30 @@ ContentInjectionHandlerImpl::ContentInjectionHandlerImpl(
 
 void ContentInjectionHandlerImpl::SetIncognitoBrowserState(
     web::BrowserState* browser_state) {
-  incognito_browser_state_ = browser_state;
-  if (incognito_browser_state_) {
-    web::WKWebViewConfigurationProvider& config_provider =
-        web::WKWebViewConfigurationProvider::FromBrowserState(
-            incognito_browser_state_);
-    DidCreateNewConfiguration(&config_provider,
-                              config_provider.GetWebViewConfiguration());
+  if (incognito_config_provider_) {
+    incognito_config_provider_->RemoveObserver(this);
+    incognito_config_provider_.reset();
   }
+
+  if (!browser_state) {
+    return;
+  }
+  incognito_config_provider_ =
+      web::WKWebViewConfigurationProvider::FromBrowserState(browser_state)
+          .AsWeakPtr();
+  DidCreateNewConfiguration(
+      incognito_config_provider_.get(),
+      incognito_config_provider_->GetWebViewConfiguration());
+  incognito_config_provider_->AddObserver(this);
 }
 
 ContentInjectionHandlerImpl::~ContentInjectionHandlerImpl() {
-  web::WKWebViewConfigurationProvider::FromBrowserState(browser_state_)
-      .RemoveObserver(this);
+  if (config_provider_) {
+    config_provider_->RemoveObserver(this);
+  }
+  if (incognito_config_provider_) {
+    incognito_config_provider_->RemoveObserver(this);
+  }
 }
 
 void ContentInjectionHandlerImpl::OnResourcesLoaded() {
@@ -158,15 +170,11 @@ void ContentInjectionHandlerImpl::OnResourcesLoaded() {
 void ContentInjectionHandlerImpl::DidCreateNewConfiguration(
     web::WKWebViewConfigurationProvider* config_provider,
     WKWebViewConfiguration* new_config) {
-  if (config_provider ==
-      &web::WKWebViewConfigurationProvider::FromBrowserState(browser_state_)) {
+  if (config_provider == config_provider_.get()) {
     user_content_controller_ = new_config.userContentController;
     if (resources_->loaded())
       InjectUserScriptsForController(user_content_controller_);
-  } else if (incognito_browser_state_ &&
-             config_provider ==
-                 &web::WKWebViewConfigurationProvider::FromBrowserState(
-                     incognito_browser_state_)) {
+  } else if (config_provider == incognito_config_provider_.get()) {
     incognito_user_content_controller_ = new_config.userContentController;
     if (resources_->loaded())
       InjectUserScriptsForController(incognito_user_content_controller_);
@@ -188,20 +196,20 @@ void ContentInjectionHandlerImpl::InjectUserScripts() {
 
 void ContentInjectionHandlerImpl::InjectUserScriptsForController(
     __weak WKUserContentController* user_content_controller) {
-  std::map<std::string, base::StringPiece> injections =
+  std::map<std::string, Resources::InjectableResource> injections =
       resources_->GetInjections();
 
   WKContentWorld* content_world =
       [WKContentWorld worldWithName:@"vivaldi_adblock_user_scripts"];
 
-  for (const auto& [name, source] : injections) {
+  for (const auto& [name, injectable_resource] : injections) {
     std::string message_name(kMessageNamePrefix);
     message_name.append(name);
 
     std::string patched_source(kJSScriptArgRequestPart1);
     patched_source.append(message_name);
     patched_source.append(kJSScriptArgRequestPart2);
-    patched_source.append(SourceToTemplatedHexString(source));
+    patched_source.append(SourceToTemplatedHexString(injectable_resource.code));
     patched_source.append(kJSScriptArgRequestPart3);
 
     script_message_handlers_.emplace_back(
@@ -215,7 +223,9 @@ void ContentInjectionHandlerImpl::InjectUserScriptsForController(
           initWithSource:[NSString stringWithUTF8String:patched_source.c_str()]
            injectionTime:WKUserScriptInjectionTimeAtDocumentStart
         forMainFrameOnly:false
-          inContentWorld:content_world];
+          inContentWorld:injectable_resource.use_main_world
+                             ? WKContentWorld.pageWorld
+                             : content_world];
     [user_content_controller addUserScript:user_script];
   }
 }
@@ -235,12 +245,13 @@ void ContentInjectionHandlerImpl::HandlePlaceholderRequest(
   std::string scriptlet_name = message_name.substr(kMessageNamePrefixLength);
 
   // We don't support other scriptlets yet.
-  if (scriptlet_name != kAbpSnippetsScriptletName) {
+  if (scriptlet_name != kAbpSnippetsMainScriptletName &&
+      scriptlet_name != kAbpSnippetsIsolatedScriptletName) {
     reply_handler(&result, nil);
     return;
   }
 
-  std::string abp_argument = "[";
+  std::string abp_argument;
   const auto domain_pieces = base::SplitStringPiece(
       host, ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   for (auto group : {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
@@ -284,14 +295,15 @@ void ContentInjectionHandlerImpl::HandlePlaceholderRequest(
     for (const base::Value::List* selected_arguments_list :
          selected_arguments_lists) {
       DCHECK_EQ(1UL, selected_arguments_list->size());
+      // The ABP snippet arguments were purposefully left with a trailing
+      // comma at the parsing stage. We can just concatenate them here.
       abp_argument.append(selected_arguments_list->front().GetString());
-      abp_argument.push_back(',');
     }
   }
 
-  abp_argument.pop_back();
   if (!abp_argument.empty()) {
-    abp_argument.push_back(']');
+    // Remove extra comma
+    abp_argument.pop_back();
     result_list.Append(abp_argument);
   }
   reply_handler(&result, nil);

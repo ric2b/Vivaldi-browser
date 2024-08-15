@@ -13,7 +13,7 @@ title: Portage New & Upgrade Package Process
 **This page has been migrated!**
 
 [Please refer to the updated, in-repo copy
-instead](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/portage/package_upgrade_process.md).
+instead](/chromium-os/developer-library/guides/portage/package-upgrade-process/).
 Feel free to contribute or file bugs if it is in any way lacking.
 
 ### Purpose

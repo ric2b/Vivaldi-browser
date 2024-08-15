@@ -8,11 +8,15 @@
 
 #include "ash/constants/ash_features.h"
 #include "base/feature_list.h"
+#include "chrome/browser/ash/input_method/editor_helpers.h"
+#include "chrome/browser/browser_process.h"
 #include "chromeos/ash/services/orca/public/mojom/orca_service.mojom.h"
 #include "content/public/browser/service_process_host.h"
 
 namespace ash::input_method {
 namespace {
+
+constexpr char kDefaultLanguageCode[] = "en";
 
 orca::mojom::EditorConfigPtr GenerateConfig() {
   std::vector<orca::mojom::PresetTextQueryType> allowed;
@@ -35,7 +39,10 @@ orca::mojom::EditorConfigPtr GenerateConfig() {
     allowed.push_back(orca::mojom::PresetTextQueryType::kShorten);
   }
   return orca::mojom::EditorConfig::New(
-      /*allowed_types=*/std::move(allowed));
+      /*allowed_types=*/std::move(allowed),
+      /*language_code=*/ShouldUseL10nStrings()
+          ? GetSystemLocale()
+          : std::string{kDefaultLanguageCode});
 }
 
 }  // namespace

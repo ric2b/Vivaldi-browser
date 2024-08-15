@@ -15,12 +15,9 @@
 #import "ios/ui/settings/sync/vivaldi_sync_settings_constants.h"
 #import "ios/ui/table_view/cells/vivaldi_input_error_item.h"
 #import "ios/ui/table_view/cells/vivaldi_table_view_illustrated_item.h"
+#import "ios/ui/table_view/cells/vivaldi_table_view_text_spinner_button_item.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierHeader = kSectionIdentifierEnumZero,
@@ -56,6 +53,8 @@ BOOL subscribeToNewsletter;
 @property(nonatomic, strong) VivaldiTableViewTextEditItem* passwordItem;
 @property(nonatomic, strong) VivaldiTableViewTextEditItem* confirmPasswordItem;
 @property(nonatomic, strong) VivaldiTableViewTextEditItem* deviceNameItem;
+@property(nonatomic, strong)
+    VivaldiTableViewTextSpinnerButtonItem* createButton;
 @property(nonatomic, strong) TableViewSwitchItem* termsOfUseSwitch;
 @property(nonatomic, strong) TableViewSwitchItem* subscribeToNewsletterSwitch;
 
@@ -247,25 +246,33 @@ BOOL subscribeToNewsletter;
   [model addItem:externalLinks
       toSectionWithIdentifier:SectionIdentifierExternalLinks];
 
-  TableViewTextButtonItem* createButton =
-      [[TableViewTextButtonItem alloc] initWithType:ItemTypeCreateButton];
-  createButton.buttonText =
+  self.createButton =
+      [[VivaldiTableViewTextSpinnerButtonItem alloc]
+          initWithType:ItemTypeCreateButton];
+  self.createButton.buttonText =
       l10n_util::GetNSString(IDS_VIVALDI_CREATE_ACCOUNT_CREATE);
-  createButton.textAlignment = NSTextAlignmentNatural;
-  createButton.buttonBackgroundColor = [UIColor colorNamed:kBlueColor];
-  createButton.buttonTextColor = [UIColor colorNamed:kSolidButtonTextColor];
-  createButton.cellBackgroundColor = createButton.buttonBackgroundColor;
-  createButton.disableButtonIntrinsicWidth = YES;
+  self.createButton.textAlignment = NSTextAlignmentNatural;
+  self.createButton.buttonBackgroundColor = [UIColor colorNamed:kBlueColor];
+  self.createButton.buttonTextColor =
+      [UIColor colorNamed:kSolidButtonTextColor];
+  self.createButton.cellBackgroundColor =
+      self.createButton.buttonBackgroundColor;
+  self.createButton.disableButtonIntrinsicWidth = YES;
 
-  [self.tableViewModel addItem:createButton
+  [self.tableViewModel addItem:self.createButton
       toSectionWithIdentifier:SectionIdentifierCreateButton];
 }
 
 #pragma mark - UITableViewDelegate
 
 - (CGFloat)tableView:(UITableView*)tableView
-    heightForFooterInSection:(NSInteger)section {
-  return kFooterSectionHeight;
+heightForFooterInSection:(NSInteger)section {
+  return 0;
+}
+
+- (CGFloat)tableView:(UITableView*)tableView
+heightForHeaderInSection:(NSInteger)section {
+  return kCommonHeaderSectionHeight;
 }
 
 #pragma mark - UITableViewDataSource
@@ -280,12 +287,15 @@ BOOL subscribeToNewsletter;
 
   switch (itemType) {
     case ItemTypeCreateButton: {
-      TableViewTextButtonCell* tableViewTextButtonCell =
-          base::apple::ObjCCastStrict<TableViewTextButtonCell>(cell);
+      VivaldiTableViewTextSpinnerButtonCell* tableViewTextButtonCell =
+          base::apple::ObjCCastStrict<VivaldiTableViewTextSpinnerButtonCell>
+                                                                        (cell);
       [tableViewTextButtonCell.button
                  addTarget:self
                     action:@selector(createButtonPressed:)
           forControlEvents:UIControlEventTouchUpInside];
+      [tableViewTextButtonCell
+          setActivityIndicatorEnabled:self.createButton.activityInProgress];
       break;
     }
     case ItemTypePassword: {
@@ -417,6 +427,9 @@ BOOL subscribeToNewsletter;
                           itemType:ItemTypeError];
     return;
   }
+
+  self.createButton.activityInProgress = YES;
+  [self reloadSection:SectionIdentifierCreateButton];
 
   [self.delegate createAccountButtonPressed:self.passwordItem.textFieldValue
                                  deviceName:self.deviceNameItem.textFieldValue

@@ -9,76 +9,105 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
+#include "base/check.h"
 #include "components/facilitated_payments/android/java/jni_headers/FacilitatedPaymentsApiClientBridge_jni.h"
-#include "components/facilitated_payments/core/browser/facilitated_payments_api_client_delegate.h"
+#include "components/signin/public/identity_manager/account_info.h"
+#include "content/public/browser/render_frame_host.h"
 
 namespace payments::facilitated {
 
-// Declared in the cross-platform header `facilitated_payments_api_client.h`.
-// static
+// Declared in the cross-platform header
+// `facilitated_payments_api_client_factory.h`.
 std::unique_ptr<FacilitatedPaymentsApiClient>
-FacilitatedPaymentsApiClient::Create(
-    base::WeakPtr<FacilitatedPaymentsApiClientDelegate> delegate) {
+CreateFacilitatedPaymentsApiClient(
+    content::RenderFrameHost* render_frame_host) {
   return std::make_unique<FacilitatedPaymentsApiClientAndroid>(
-      std::move(delegate));
+      render_frame_host);
 }
 
 FacilitatedPaymentsApiClientAndroid::FacilitatedPaymentsApiClientAndroid(
-    base::WeakPtr<FacilitatedPaymentsApiClientDelegate> delegate)
-    : delegate_(std::move(delegate)),
-      java_bridge_(Java_FacilitatedPaymentsApiClientBridge_Constructor(
+    content::RenderFrameHost* render_frame_host)
+    : java_bridge_(Java_FacilitatedPaymentsApiClientBridge_Constructor(
           base::android::AttachCurrentThread(),
-          reinterpret_cast<intptr_t>(this))) {}
+          reinterpret_cast<intptr_t>(this),
+          render_frame_host->GetJavaRenderFrameHost())) {}
 
 FacilitatedPaymentsApiClientAndroid::~FacilitatedPaymentsApiClientAndroid() {
   Java_FacilitatedPaymentsApiClientBridge_resetNativePointer(
       base::android::AttachCurrentThread(), java_bridge_);
 }
 
-void FacilitatedPaymentsApiClientAndroid::IsAvailable() {
+void FacilitatedPaymentsApiClientAndroid::IsAvailable(
+    base::OnceCallback<void(bool)> callback) {
+  DCHECK(!IsAnyCallbackPending());
+
+  is_available_callback_ = std::move(callback);
   Java_FacilitatedPaymentsApiClientBridge_isAvailable(
       base::android::AttachCurrentThread(), java_bridge_);
 }
 
-void FacilitatedPaymentsApiClientAndroid::GetClientToken() {
+void FacilitatedPaymentsApiClientAndroid::GetClientToken(
+    base::OnceCallback<void(std::vector<uint8_t>)> callback) {
+  DCHECK(!IsAnyCallbackPending());
+
+  get_client_token_callback_ = std::move(callback);
   Java_FacilitatedPaymentsApiClientBridge_getClientToken(
       base::android::AttachCurrentThread(), java_bridge_);
 }
 
 void FacilitatedPaymentsApiClientAndroid::InvokePurchaseAction(
-    base::span<const uint8_t> action_token) {
+    CoreAccountInfo primary_account,
+    base::span<const uint8_t> action_token,
+    base::OnceCallback<void(PurchaseActionResult)> callback) {
+  DCHECK(!IsAnyCallbackPending());
+
+  purchase_action_callback_ = std::move(callback);
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_FacilitatedPaymentsApiClientBridge_invokePurchaseAction(
-      env, java_bridge_, base::android::ToJavaByteArray(env, action_token));
+      env, java_bridge_, ConvertToJavaCoreAccountInfo(env, primary_account),
+      base::android::ToJavaByteArray(env, action_token));
 }
 
 void FacilitatedPaymentsApiClientAndroid::OnIsAvailable(
     JNIEnv* env,
     jboolean is_api_available) {
-  if (delegate_) {
-    delegate_->OnIsAvailable(is_api_available);
+  if (is_available_callback_) {
+    std::move(is_available_callback_).Run(is_api_available);
   }
 }
 
 void FacilitatedPaymentsApiClientAndroid::OnGetClientToken(
     JNIEnv* env,
     const base::android::JavaRef<jbyteArray>& jclient_token_byte_array) {
-  if (delegate_) {
+  if (get_client_token_callback_) {
     std::vector<uint8_t> client_token;
     if (jclient_token_byte_array) {
       base::android::JavaByteArrayToByteVector(env, jclient_token_byte_array,
                                                &client_token);
     }
-    delegate_->OnGetClientToken(std::move(client_token));
+    std::move(get_client_token_callback_).Run(std::move(client_token));
   }
 }
 
-void FacilitatedPaymentsApiClientAndroid::OnPurchaseActionResult(
+void FacilitatedPaymentsApiClientAndroid::OnPurchaseActionResultEnum(
     JNIEnv* env,
-    jboolean is_purchase_action_successful) {
-  if (delegate_) {
-    delegate_->OnPurchaseActionResult(is_purchase_action_successful);
+    jint purchase_action_result) {
+  if (!purchase_action_callback_ ||
+      purchase_action_result <
+          static_cast<int>(PurchaseActionResult::kCouldNotInvoke) ||
+      purchase_action_result >
+          static_cast<int>(PurchaseActionResult::kResultCanceled)) {
+    return;
   }
+
+  std::move(purchase_action_callback_)
+      .Run(static_cast<PurchaseActionResult>(purchase_action_result));
+}
+
+bool FacilitatedPaymentsApiClientAndroid::IsAnyCallbackPending() const {
+  return !is_available_callback_.is_null() ||
+         !get_client_token_callback_.is_null() ||
+         !purchase_action_callback_.is_null();
 }
 
 }  // namespace payments::facilitated

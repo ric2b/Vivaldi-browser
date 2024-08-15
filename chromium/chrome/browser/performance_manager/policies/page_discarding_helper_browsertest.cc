@@ -72,7 +72,8 @@ class PageDiscardingHelperBrowserTest : public InProcessBrowserTest {
         embedded_test_server()->GetURL("/favicon/title2_with_favicon.html"),
         content::Referrer(), WindowOpenDisposition::NEW_BACKGROUND_TAB,
         ui::PAGE_TRANSITION_TYPED, false);
-    content::WebContents* contents = browser()->OpenURL(page);
+    content::WebContents* contents =
+        browser()->OpenURL(page, /*navigation_handle_callback=*/{});
     content::TestNavigationObserver observer(contents);
     observer.set_expected_initial_url(page.url);
 
@@ -122,6 +123,9 @@ class PageDiscardingHelperBrowserTest : public InProcessBrowserTest {
       case DiscardReason::EXTERNAL:
         discard_string = "External";
         break;
+      case DiscardReason::SUGGESTED:
+        discard_string = "Suggested";
+        break;
     }
     SCOPED_TRACE(::testing::Message()
                  << discard_string << " discard from " << location.ToString());
@@ -137,8 +141,8 @@ class PageDiscardingHelperBrowserTest : public InProcessBrowserTest {
           ASSERT_TRUE(page_node);
           auto* helper = PageDiscardingHelper::GetFromGraph(graph);
           ASSERT_TRUE(helper);
-          helper->ImmediatelyDiscardSpecificPage(
-              page_node.get(), discard_reason,
+          helper->ImmediatelyDiscardMultiplePages(
+              {page_node.get()}, discard_reason,
               base::BindLambdaForTesting([&](bool success) {
                 EXPECT_EQ(success, expected_result);
                 run_loop.Quit();
@@ -155,7 +159,7 @@ class PageDiscardingHelperBrowserTest : public InProcessBrowserTest {
 IN_PROC_BROWSER_TEST_F(PageDiscardingHelperBrowserTest, DiscardSpecificPage) {
   // Test urgent and proactive discards in a loop to avoid the overhead of
   // starting a new browser every time.
-  // TODO(crbug.com/1426484): Add tests for all the other heuristics in
+  // TODO(crbug.com/40899366): Add tests for all the other heuristics in
   // PageDiscardingHelper::CanDiscard().
   for (auto discard_reason :
        {DiscardReason::URGENT, DiscardReason::PROACTIVE}) {
@@ -165,8 +169,8 @@ IN_PROC_BROWSER_TEST_F(PageDiscardingHelperBrowserTest, DiscardSpecificPage) {
       ExpectImmediateDiscard(index1, discard_reason, true);
 
       // Foreground page should be blocked.
-      // TODO(crbug.com/1426484): Also test when the browser window is occluded.
-      // They should still be blocked.
+      // TODO(crbug.com/40899366): Also test when the browser window is
+      // occluded. They should still be blocked.
       const int index2 = OpenNewBackgroundPage();
       browser()->tab_strip_model()->ActivateTabAt(index2);
       ExpectImmediateDiscard(index2, discard_reason, false);

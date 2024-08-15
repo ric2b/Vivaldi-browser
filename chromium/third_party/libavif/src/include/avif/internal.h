@@ -157,6 +157,79 @@ void avifImageCopyNoAlloc(avifImage * dstImage, const avifImage * srcImage);
 void avifImageCopySamples(avifImage * dstImage, const avifImage * srcImage, avifPlanesFlags planes);
 
 // ---------------------------------------------------------------------------
+
+#if defined(AVIF_ENABLE_EXPERIMENTAL_SAMPLE_TRANSFORM)
+// Mapping used in the coding of Sample Transform metadata.
+typedef enum avifSampleTransformBitDepth
+{
+    AVIF_SAMPLE_TRANSFORM_BIT_DEPTH_8 = 0,  // Signed 8-bit.
+    AVIF_SAMPLE_TRANSFORM_BIT_DEPTH_16 = 1, // Signed 16-bit.
+    AVIF_SAMPLE_TRANSFORM_BIT_DEPTH_32 = 2, // Signed 32-bit.
+    AVIF_SAMPLE_TRANSFORM_BIT_DEPTH_64 = 3  // Signed 64-bit.
+} avifSampleTransformBitDepth;
+
+// Meaning of an operand or operator in Sample Transform metadata.
+typedef enum avifSampleTransformTokenType
+{
+    // Operands.
+    AVIF_SAMPLE_TRANSFORM_CONSTANT = 0,
+    AVIF_SAMPLE_TRANSFORM_INPUT_IMAGE_ITEM_INDEX = 1,
+
+    // Operators. L is the left operand. R is the right operand if there are two operands.
+    AVIF_SAMPLE_TRANSFORM_NEGATE = 2,     // S = -L
+    AVIF_SAMPLE_TRANSFORM_ABSOLUTE = 3,   // S = |L|
+    AVIF_SAMPLE_TRANSFORM_SUM = 4,        // S = L + R
+    AVIF_SAMPLE_TRANSFORM_DIFFERENCE = 5, // S = L - R
+    AVIF_SAMPLE_TRANSFORM_PRODUCT = 6,    // S = L * R
+    AVIF_SAMPLE_TRANSFORM_DIVIDE = 7,     // S = R==0 ? L : floor(L / R)
+    AVIF_SAMPLE_TRANSFORM_AND = 8,        // S = L & R
+    AVIF_SAMPLE_TRANSFORM_OR = 9,         // S = L | R
+    AVIF_SAMPLE_TRANSFORM_XOR = 10,       // S = L ^ R
+    AVIF_SAMPLE_TRANSFORM_NOT = 11,       // S = ~L
+    AVIF_SAMPLE_TRANSFORM_MSB = 12,       // S = L<=0 ? 0 : floor(log2(L))
+    AVIF_SAMPLE_TRANSFORM_POW = 13,       // S = L==0 ? 0 : pow(L, R)
+    AVIF_SAMPLE_TRANSFORM_MIN = 14,       // S = L<=R ? L : R
+    AVIF_SAMPLE_TRANSFORM_MAX = 15,       // S = L<=R ? R : L
+    AVIF_SAMPLE_TRANSFORM_RESERVED
+} avifSampleTransformTokenType;
+
+typedef struct avifSampleTransformToken
+{
+    uint8_t type;                // avifSampleTransformTokenType
+    int32_t constant;            // If type is AVIF_SAMPLE_TRANSFORM_CONSTANT.
+                                 // Only 32-bit (bit_depth=2) constants are supported.
+    uint8_t inputImageItemIndex; // If type is AVIF_SAMPLE_TRANSFORM_INPUT_IMAGE_ITEM_INDEX. 1-based.
+} avifSampleTransformToken;
+
+AVIF_ARRAY_DECLARE(avifSampleTransformExpression, avifSampleTransformToken, tokens);
+avifBool avifSampleTransformExpressionIsValid(const avifSampleTransformExpression * tokens, uint32_t numInputImageItems);
+avifBool avifSampleTransformExpressionIsEquivalentTo(const avifSampleTransformExpression * a, const avifSampleTransformExpression * b);
+
+avifResult avifSampleTransformRecipeToExpression(avifSampleTransformRecipe recipe, avifSampleTransformExpression * expression);
+avifResult avifSampleTransformExpressionToRecipe(const avifSampleTransformExpression * expression, avifSampleTransformRecipe * recipe);
+
+// Applies the expression to the samples of the inputImageItems in the selected planes and stores
+// the results in dstImage. dstImage can be part of the inputImageItems.
+// dstImage and inputImageItems must be allocated and have the same planes and dimensions.
+avifResult avifImageApplyExpression(avifImage * dstImage,
+                                    avifSampleTransformBitDepth bitDepth,
+                                    const avifSampleTransformExpression * expression,
+                                    uint8_t numInputImageItems,
+                                    const avifImage * inputImageItems[],
+                                    avifPlanesFlags planes);
+
+// Same as avifImageApplyExpression(). Convenience function.
+avifResult avifImageApplyOperations(avifImage * dstImage,
+                                    avifSampleTransformBitDepth bitDepth,
+                                    uint32_t numTokens,
+                                    const avifSampleTransformToken tokens[],
+                                    uint8_t numInputImageItems,
+                                    const avifImage * inputImageItems[],
+                                    avifPlanesFlags planes);
+
+#endif // AVIF_ENABLE_EXPERIMENTAL_SAMPLE_TRANSFORM
+
+// ---------------------------------------------------------------------------
 // Alpha
 
 typedef struct avifAlphaParams
@@ -321,15 +394,34 @@ typedef enum avifItemCategory
 #if defined(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
     AVIF_ITEM_GAIN_MAP,
 #endif
+#if defined(AVIF_ENABLE_EXPERIMENTAL_SAMPLE_TRANSFORM)
+    AVIF_ITEM_SAMPLE_TRANSFORM, // Sample Transform derived image item 'sato'.
+    // Extra input image items for AVIF_ITEM_SAMPLE_TRANSFORM. "Extra" because AVIF_ITEM_COLOR could be one too.
+    AVIF_ITEM_SAMPLE_TRANSFORM_INPUT_0_COLOR,
+    AVIF_ITEM_SAMPLE_TRANSFORM_INPUT_1_COLOR,
+    AVIF_ITEM_SAMPLE_TRANSFORM_INPUT_0_ALPHA,
+    AVIF_ITEM_SAMPLE_TRANSFORM_INPUT_1_ALPHA,
+#endif
     AVIF_ITEM_CATEGORY_COUNT
 } avifItemCategory;
 
 avifBool avifIsAlpha(avifItemCategory itemCategory);
 
+#if defined(AVIF_ENABLE_EXPERIMENTAL_SAMPLE_TRANSFORM)
+#define AVIF_SAMPLE_TRANSFORM_MAX_NUM_EXTRA_INPUT_IMAGE_ITEMS \
+    (AVIF_ITEM_SAMPLE_TRANSFORM_INPUT_0_ALPHA - AVIF_ITEM_SAMPLE_TRANSFORM_INPUT_0_COLOR)
+#define AVIF_SAMPLE_TRANSFORM_MAX_NUM_INPUT_IMAGE_ITEMS \
+    (1 /* for AVIF_ITEM_COLOR */ + AVIF_SAMPLE_TRANSFORM_MAX_NUM_EXTRA_INPUT_IMAGE_ITEMS)
+
+#define AVIF_SAMPLE_TRANSFORM_MIN_CATEGORY AVIF_ITEM_SAMPLE_TRANSFORM_INPUT_0_COLOR
+#define AVIF_SAMPLE_TRANSFORM_MAX_CATEGORY \
+    (AVIF_ITEM_SAMPLE_TRANSFORM_INPUT_0_ALPHA + AVIF_SAMPLE_TRANSFORM_MAX_NUM_EXTRA_INPUT_IMAGE_ITEMS - 1)
+#endif
+
 // ---------------------------------------------------------------------------
 
-#if defined(AVIF_ENABLE_EXPERIMENTAL_AVIR)
-// AVIF color_type field meaning in CondensedImageBox
+#if defined(AVIF_ENABLE_EXPERIMENTAL_MINI)
+// AVIF color_type field meaning in MinimizedImageBox
 typedef enum avifMiniColorType
 {
     AVIF_MINI_COLOR_TYPE_SRGB = 0,
@@ -337,7 +429,7 @@ typedef enum avifMiniColorType
     AVIF_MINI_COLOR_TYPE_NCLX_8BIT = 2,
     AVIF_MINI_COLOR_TYPE_ICC = 3
 } avifMiniColorType;
-#endif // AVIF_ENABLE_EXPERIMENTAL_AVIR
+#endif // AVIF_ENABLE_EXPERIMENTAL_MINI
 
 // ---------------------------------------------------------------------------
 // Grid AVIF images
@@ -555,6 +647,11 @@ typedef size_t avifBoxMarker;
 
 typedef struct avifBoxHeader
 {
+    // If set to AVIF_TRUE, it means that the box goes on until the end of the
+    // stream. So, |size| must be set to the number of bytes left in the input
+    // stream. If set to AVIF_FALSE, |size| indicates the size of the box in
+    // bytes, excluding the box header.
+    avifBool isSizeZeroBox;
     // Size of the box in bytes, excluding the box header.
     size_t size;
 
@@ -592,11 +689,12 @@ AVIF_NODISCARD avifBool avifROStreamReadU16(avifROStream * stream, uint16_t * v)
 AVIF_NODISCARD avifBool avifROStreamReadU16Endianness(avifROStream * stream, uint16_t * v, avifBool littleEndian);
 AVIF_NODISCARD avifBool avifROStreamReadU32(avifROStream * stream, uint32_t * v);
 AVIF_NODISCARD avifBool avifROStreamReadU32Endianness(avifROStream * stream, uint32_t * v, avifBool littleEndian);
-AVIF_NODISCARD avifBool avifROStreamReadUX8(avifROStream * stream, uint64_t * v, uint64_t factor); // Reads a factor*8 sized uint, saves in v
+// Reads a factor*8 sized uint, saves in v. If factor is 0, reads nothing and saves 0 in v.
+AVIF_NODISCARD avifBool avifROStreamReadUX8(avifROStream * stream, uint64_t * v, uint64_t factor);
 AVIF_NODISCARD avifBool avifROStreamReadU64(avifROStream * stream, uint64_t * v);
 AVIF_NODISCARD avifBool avifROStreamReadString(avifROStream * stream, char * output, size_t outputSize);
 AVIF_NODISCARD avifBool avifROStreamReadBoxHeader(avifROStream * stream, avifBoxHeader * header); // This fails if the size reported by the header cannot fit in the stream
-AVIF_NODISCARD avifBool avifROStreamReadBoxHeaderPartial(avifROStream * stream, avifBoxHeader * header); // This doesn't require that the full box can fit in the stream
+AVIF_NODISCARD avifBool avifROStreamReadBoxHeaderPartial(avifROStream * stream, avifBoxHeader * header, avifBool topLevel); // This doesn't require that the full box can fit in the stream
 AVIF_NODISCARD avifBool avifROStreamReadVersionAndFlags(avifROStream * stream, uint8_t * version, uint32_t * flags); // version and flags ptrs are both optional
 AVIF_NODISCARD avifBool avifROStreamReadAndEnforceVersion(avifROStream * stream, uint8_t enforcedVersion); // currently discards flags
 // The following functions can write non-aligned bits.

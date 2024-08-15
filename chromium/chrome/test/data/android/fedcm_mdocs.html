@@ -4,29 +4,49 @@
   <title>FedCM MDocs Test Page</title>
 </head>
 <script>
-  async function request() {
-    const mdoc = await navigator.credentials.get({
-      identity: {
+  async function request(fields) {
+    const mdoc = await navigator.identity.get({
+      digital: {
         providers: [{
-          holder: {
-            selector: {
-              format: ["mdoc"],
-              doctype: "org.iso.18013.5.1.mDL",
-              fields: [
-                "org.iso.18013.5.1.family_name"
-              ]
-            },
-            params: {
-              nonce: "1234",
-              readerPublicKey: 'test_reader_public_key',
-              moreParametersAsNeededHere: true
-            },
-          },
-        }],
-      },
+          protocol: "urn:openid.net:oid4vp",
+          request: JSON.stringify({
+            presentation_definition: {
+              id: "mDL-request-demo",
+              input_descriptors: [{
+                id: "org.iso.18013.5.1.mDL",
+                constraints: {
+                  fields: fields
+                }
+              }]
+            }
+          })
+        }]
+      }
     });
-   const token = mdoc.token;
+   const token = mdoc.data;
    document.getElementById("log").textContent += `${token}`;
+  }
+
+  async function requestAgeOnly() {
+    const fields = [{
+      path: [
+        "$['org.iso.18013.5.1']['age_over_21']"
+      ]
+    }];
+    request(fields);
+  }
+
+  async function requestAgeAndName() {
+    const fields = [{
+      path: [
+        "$['org.iso.18013.5.1']['age_over_21']"
+      ]
+    }, {
+      path: [
+        "$['org.iso.18013.5.1']['given_name']"
+      ]
+    }];
+    request(fields);
   }
 </script>
 

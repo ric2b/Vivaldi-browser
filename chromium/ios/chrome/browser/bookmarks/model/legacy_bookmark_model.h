@@ -10,15 +10,12 @@
 #include <string>
 #include <vector>
 
+#include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "components/bookmarks/common/bookmark_metrics.h"
 #include "components/keyed_service/core/keyed_service.h"
-
-// Vivaldi
-#include "components/bookmarks/browser/bookmark_node.h"
-// End Vivaldi
 
 class GURL;
 
@@ -37,10 +34,6 @@ namespace ios {
 class AccountBookmarkModelFactory;
 class LocalOrSyncableBookmarkModelFactory;
 }  // namespace ios
-
-// Vivaldi
-using bookmarks::BookmarkNode;
-// End Vivaldi
 
 // iOS-specific interface that mimcs bookmarks::BookmarkModel that allows
 // a gradual migration of code under ios/ to use one BookmarkModel instance
@@ -71,7 +64,8 @@ class LegacyBookmarkModel : public KeyedService {
   // libraries.
   bool loaded() const;
   void Remove(const bookmarks::BookmarkNode* node,
-              bookmarks::metrics::BookmarkEditSource source);
+              bookmarks::metrics::BookmarkEditSource source,
+              const base::Location& location);
   void Move(const bookmarks::BookmarkNode* node,
             const bookmarks::BookmarkNode* new_parent,
             size_t index);
@@ -86,50 +80,6 @@ class LegacyBookmarkModel : public KeyedService {
               bookmarks::metrics::BookmarkEditSource source);
   void SetDateAdded(const bookmarks::BookmarkNode* node, base::Time date_added);
   bool HasNoUserCreatedBookmarksOrFolders() const;
-
-#if defined(VIVALDI_BUILD)
-  // Note (prio@vivaldi.com) - Forked from main BookmarkModel since
-  // LegacyBookmarkModel do not offer the same method arguments we need.
-
-  // Adds a new folder node at the specified position with the given
-  // `creation_time`, `uuid` and `meta_info`. If no UUID is provided (i.e.
-  // nullopt), then a random one will be generated. If a UUID is provided, it
-  // must be valid.
-  const BookmarkNode* AddFolder(
-      const BookmarkNode* parent,
-      size_t index,
-      const std::u16string& title,
-      const BookmarkNode::MetaInfoMap* meta_info = nullptr,
-      std::optional<base::Time> creation_time = std::nullopt,
-      std::optional<base::Uuid> uuid = std::nullopt);
-
-  // Adds a new bookmark for the given `url` at the specified position with the
-  // given `meta_info`. Used for bookmarks being added through some direct user
-  // action (e.g. the bookmark star).
-  const BookmarkNode* AddNewURL(
-      const BookmarkNode* parent,
-      size_t index,
-      const std::u16string& title,
-      const GURL& url,
-      const BookmarkNode::MetaInfoMap* meta_info = nullptr);
-
-  // Adds a url at the specified position with the given `creation_time`,
-  // `meta_info`, `uuid`, and `last_used_time`. If no UUID is provided
-  // (i.e. nullopt), then a random one will be generated. If a UUID is
-  // provided, it must be valid. Used for bookmarks not being added from
-  // direct user actions (e.g. created via sync, locally modified bookmark
-  // or pre-existing bookmark). `added_by_user` is true when a new bookmark was
-  // added by the user and false when a node is added by sync or duplicated.
-  const BookmarkNode* AddURL(
-      const BookmarkNode* parent,
-      size_t index,
-      const std::u16string& title,
-      const GURL& url,
-      const BookmarkNode::MetaInfoMap* meta_info = nullptr,
-      std::optional<base::Time> creation_time = std::nullopt,
-      std::optional<base::Uuid> uuid = std::nullopt,
-      bool added_by_user = false);
-#else
   const bookmarks::BookmarkNode* AddFolder(
       const bookmarks::BookmarkNode* parent,
       size_t index,
@@ -143,27 +93,10 @@ class LegacyBookmarkModel : public KeyedService {
                                         size_t index,
                                         const std::u16string& title,
                                         const GURL& url);
-#endif // End Vivaldi
-
   void RemoveMany(const std::set<const bookmarks::BookmarkNode*>& nodes,
-                  bookmarks::metrics::BookmarkEditSource source);
+                  bookmarks::metrics::BookmarkEditSource source,
+                  const base::Location& location);
   void CommitPendingWriteForTest();
-
-  // Vivaldi
-  bool DoesNickExists(const std::string& nickname,
-                      const BookmarkNode* updated_node);
-  void SetNodeNickname(const BookmarkNode* node,
-                       const std::string& nickname);
-  void SetNodeDescription(const BookmarkNode* node,
-                          const std::string& description);
-  void SetNodeSpeeddial(const BookmarkNode* node,
-                        bool speeddial);
-  void SetNodeThumbnail(const BookmarkNode* node,
-                        const std::string& path);
-  void SetNodeMetaInfoMap(const BookmarkNode* node,
-                          const BookmarkNode::MetaInfoMap& meta_info_map);
-  void RemovePartnerId(const BookmarkNode* node);
-  // End Vivaldi
 
   // LegacyBookmarkModel has three top-level permanent nodes (as opposed to
   // bookmarks::BookmarkModel that can have up to six).
@@ -173,7 +106,9 @@ class LegacyBookmarkModel : public KeyedService {
   virtual const bookmarks::BookmarkNode* managed_node() const = 0;
 
   // Vivaldi
-  virtual const bookmarks::BookmarkNode* trash_node() const = 0;
+  bookmarks::BookmarkModel* getUnderlyingModel() {
+    return underlying_model();
+  }
   // End Vivaldi
 
   virtual bool IsBookmarked(const GURL& url) const = 0;

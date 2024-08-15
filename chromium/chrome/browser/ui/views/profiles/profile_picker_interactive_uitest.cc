@@ -522,9 +522,14 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerInteractiveUiTest,
   );
 }
 
-// TODO(b/330201475): Enable the test. It was flaky on Win ASAN bots.
+// TODO(crbug.com/330201475): Flaky on win-asan.
+#if BUILDFLAG(IS_WIN) && defined(ADDRESS_SANITIZER)
+#define MAYBE_ContinueWithoutAccount DISABLED_ContinueWithoutAccount
+#else
+#define MAYBE_ContinueWithoutAccount ContinueWithoutAccount
+#endif
 IN_PROC_BROWSER_TEST_P(ProfilePickerParametrizedInteractiveUiTest,
-                       DISABLED_ContinueWithoutAccount) {
+                       MAYBE_ContinueWithoutAccount) {
   ShowAndFocusPicker(ProfilePicker::EntryPoint::kProfileMenuManageProfiles,
                      GURL("chrome://profile-picker"));
 

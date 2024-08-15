@@ -29,14 +29,17 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync/atomic"
 
 	"dawn.googlesource.com/dawn/tools/src/fileutils"
@@ -45,6 +48,10 @@ import (
 	"dawn.googlesource.com/dawn/tools/src/term"
 	"dawn.googlesource.com/dawn/tools/src/transform"
 	"dawn.googlesource.com/dawn/tools/src/utils"
+)
+
+const (
+	wgslDictionaryRelPath = "src/tint/cmd/fuzz/wgsl/dictionary.txt"
 )
 
 func main() {
@@ -75,6 +82,7 @@ func run() error {
 	build := ""
 	flag.BoolVar(&t.verbose, "verbose", false, "print additional output")
 	flag.BoolVar(&check, "check", false, "check that all the end-to-end test do not fail")
+	flag.StringVar(&t.filter, "filter", "", "filter the fuzzers run to those with this substring")
 	flag.StringVar(&t.corpus, "corpus", defaultCorpusDir(), "the corpus directory")
 	flag.StringVar(&build, "build", defaultBuildDir(), "the build directory")
 	flag.StringVar(&t.out, "out", "<tmp>", "the directory to hold generated test files")
@@ -127,23 +135,27 @@ func run() error {
 
 type tool struct {
 	verbose      bool
+	filter       string // filter fuzzers to those with this substring
 	corpus       string // directory of test files
 	out          string // where to emit new test files
 	wgslFuzzer   string // path to tint_wgsl_fuzzer
 	numProcesses int    // number of concurrent processes to spawn
 }
 
-// check() runs the fuzzers against all the files under to the corpus directory,
+// check() runs the fuzzers against all the .wgsl files under to the corpus directory,
 // ensuring that the fuzzers do not error for the given file.
 func (t tool) check() error {
-	files, err := glob.Glob(filepath.Join(t.corpus, "**"))
+	wgslFiles, err := glob.Glob(filepath.Join(t.corpus, "**.wgsl"))
 	if err != nil {
 		return err
 	}
 
-	log.Printf("checking %v files...\n", len(files))
+	// Remove '*.expected.wgsl'
+	wgslFiles = transform.Filter(wgslFiles, func(s string) bool { return !strings.Contains(s, ".expected.") })
 
-	remaining := transform.SliceToChan(files)
+	log.Printf("checking %v files...\n", len(wgslFiles))
+
+	remaining := transform.SliceToChan(wgslFiles)
 
 	var pb *progressbar.ProgressBar
 	if term.CanUseAnsiEscapeSequences() {
@@ -157,7 +169,7 @@ func (t tool) check() error {
 			atomic.AddUint32(&numDone, 1)
 			if pb != nil {
 				pb.Update(progressbar.Status{
-					Total: len(files),
+					Total: len(wgslFiles),
 					Segments: []progressbar.Segment{
 						{Count: int(atomic.LoadUint32(&numDone))},
 					},
@@ -189,19 +201,42 @@ func (t tool) run() error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	dictPath, err := filepath.Abs(filepath.Join(fileutils.DawnRoot(), wgslDictionaryRelPath))
+	if err != nil || !fileutils.IsFile(dictPath) {
+		return fmt.Errorf("failed to obtain the dictionary.txt path: %w", err)
+	}
+
+	args := []string{t.out, t.corpus,
+		"-dict=" + dictPath,
+	}
+	if t.verbose {
+		args = append(args, "--verbose")
+	}
+	if t.filter != "" {
+		args = append(args, "--filter="+t.filter)
+	}
+
 	fmt.Println("running", t.numProcesses, "fuzzer instances")
 	errs := make(chan error, t.numProcesses)
 	for i := 0; i < t.numProcesses; i++ {
 		go func() {
-			if out, err := exec.CommandContext(ctx, t.wgslFuzzer, t.out, t.corpus).CombinedOutput(); err != nil {
+			cmd := exec.CommandContext(ctx, t.wgslFuzzer, args...)
+			out := bytes.Buffer{}
+			cmd.Stdout = &out
+			cmd.Stderr = &out
+			if t.verbose {
+				cmd.Stdout = io.MultiWriter(&out, os.Stdout)
+				cmd.Stderr = io.MultiWriter(&out, os.Stderr)
+			}
+			if err := cmd.Run(); err != nil {
 				if ctxErr := ctx.Err(); ctxErr != nil {
 					errs <- ctxErr
 				} else {
 					_, fuzzer := filepath.Split(t.wgslFuzzer)
-					errs <- fmt.Errorf("%v failed with %v\n\n%v", fuzzer, err, string(out))
+					errs <- fmt.Errorf("%v failed with %v\n\n%v", fuzzer, err, out.String())
 				}
 			} else {
-				errs <- fmt.Errorf("fuzzer unexpectedly terminated without error:\n%v", string(out))
+				errs <- fmt.Errorf("fuzzer unexpectedly terminated without error:\n%v", out.String())
 			}
 		}()
 	}

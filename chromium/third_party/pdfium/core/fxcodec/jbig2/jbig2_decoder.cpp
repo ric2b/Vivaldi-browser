@@ -4,9 +4,12 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#include "core/fxcodec/jbig2/jbig2_decoder.h"
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
 
-#include <string.h>
+#include "core/fxcodec/jbig2/jbig2_decoder.h"
 
 #include "core/fxcodec/jbig2/JBig2_Context.h"
 #include "core/fxcodec/jbig2/JBig2_DocumentContext.h"

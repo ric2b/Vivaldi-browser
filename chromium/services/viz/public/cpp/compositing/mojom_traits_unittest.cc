@@ -597,15 +597,16 @@ TEST_F(StructTraitsTest, CompositorFrameTransitionDirective) {
                    .AddDefaultRenderPass()
                    .Build();
 
-  NavigationId navigation_id = base::UnguessableToken::Create();
+  blink::ViewTransitionToken transition_token;
   CompositorFrameTransitionDirective::SharedElement element;
   element.render_pass_id = frame.render_pass_list.front()->id;
   element.view_transition_element_resource_id =
-      ViewTransitionElementResourceId(navigation_id, 1);
+      ViewTransitionElementResourceId(transition_token, 1);
   uint32_t sequence_id = 1u;
   frame.metadata.transition_directives.push_back(
-      CompositorFrameTransitionDirective::CreateSave(navigation_id, sequence_id,
-                                                     {element}));
+      CompositorFrameTransitionDirective::CreateSave(
+          transition_token, /*maybe_cross_frame_sink=*/true, sequence_id,
+          {element}));
 
   // This ensures de-serialization succeeds if all passes are present.
   CompositorFrame output;
@@ -613,7 +614,8 @@ TEST_F(StructTraitsTest, CompositorFrameTransitionDirective) {
       frame, output));
   EXPECT_EQ(output.metadata.transition_directives.size(), 1u);
   const auto& directive = output.metadata.transition_directives[0];
-  EXPECT_EQ(directive.navigation_id(), navigation_id);
+  EXPECT_EQ(directive.transition_token(), transition_token);
+  EXPECT_TRUE(directive.maybe_cross_frame_sink());
   EXPECT_EQ(directive.sequence_id(), sequence_id);
   EXPECT_EQ(directive.type(), CompositorFrameTransitionDirective::Type::kSave);
   EXPECT_EQ(directive.shared_elements().size(), 1u);
@@ -622,8 +624,9 @@ TEST_F(StructTraitsTest, CompositorFrameTransitionDirective) {
   element.render_pass_id = CompositorRenderPassId(
       frame.render_pass_list.back()->id.GetUnsafeValue() + 1);
   frame.metadata.transition_directives.push_back(
-      CompositorFrameTransitionDirective::CreateSave(navigation_id, sequence_id,
-                                                     {element}));
+      CompositorFrameTransitionDirective::CreateSave(
+          transition_token, /*maybe_cross_frame_sink=*/true, sequence_id,
+          {element}));
 
   // This ensures de-serialization fails if a pass is missing.
   ASSERT_FALSE(mojo::test::SerializeAndDeserialize<mojom::CompositorFrame>(
@@ -1013,7 +1016,6 @@ TEST_F(StructTraitsTest, QuadListBasic) {
 
   const gfx::Rect rect5(123, 567, 91011, 13141);
   const ResourceId resource_id5(1337);
-  const float vertex_opacity[4] = {1.f, 2.f, 3.f, 4.f};
   const bool premultiplied_alpha = true;
 
   const gfx::PointF uv_top_left(12.1f, 34.2f);
@@ -1031,7 +1033,6 @@ TEST_F(StructTraitsTest, QuadListBasic) {
       sqs, rect5, rect5, needs_blending, resource_id5, resource_size_in_pixels5,
       premultiplied_alpha, uv_top_left, uv_bottom_right, background_color,
       y_flipped, nearest_neighbor, secure_output_only, protected_video_type);
-  texture_draw_quad->set_vertex_opacity(vertex_opacity);
   // Create a stream video TextureDrawQuad.
   const gfx::Rect rect6(321, 765, 11109, 151413);
   const bool needs_blending6 = false;
@@ -1131,10 +1132,6 @@ TEST_F(StructTraitsTest, QuadListBasic) {
   EXPECT_EQ(uv_top_left, out_texture_draw_quad->uv_top_left);
   EXPECT_EQ(uv_bottom_right, out_texture_draw_quad->uv_bottom_right);
   EXPECT_EQ(background_color, out_texture_draw_quad->background_color);
-  EXPECT_EQ(vertex_opacity[0], out_texture_draw_quad->vertex_opacity[0]);
-  EXPECT_EQ(vertex_opacity[1], out_texture_draw_quad->vertex_opacity[1]);
-  EXPECT_EQ(vertex_opacity[2], out_texture_draw_quad->vertex_opacity[2]);
-  EXPECT_EQ(vertex_opacity[3], out_texture_draw_quad->vertex_opacity[3]);
   EXPECT_EQ(y_flipped, out_texture_draw_quad->y_flipped);
   EXPECT_EQ(nearest_neighbor, out_texture_draw_quad->nearest_neighbor);
   EXPECT_EQ(secure_output_only, out_texture_draw_quad->secure_output_only);
@@ -1212,7 +1209,9 @@ TEST_F(StructTraitsTest, TransferableResource) {
   input.id = id;
   input.format = format;
   input.size = size;
-  input.mailbox_holder = mailbox_holder;
+  input.set_mailbox(mailbox_holder.mailbox);
+  input.set_sync_token(mailbox_holder.sync_token);
+  input.set_texture_target(mailbox_holder.texture_target);
   input.synchronization_type = sync_type;
   input.is_software = is_software;
   input.is_overlay_candidate = is_overlay_candidate;
@@ -1224,10 +1223,9 @@ TEST_F(StructTraitsTest, TransferableResource) {
   EXPECT_EQ(id, output.id);
   EXPECT_EQ(format, output.format);
   EXPECT_EQ(size, output.size);
-  EXPECT_EQ(mailbox_holder.mailbox, output.mailbox_holder.mailbox);
-  EXPECT_EQ(mailbox_holder.sync_token, output.mailbox_holder.sync_token);
-  EXPECT_EQ(mailbox_holder.texture_target,
-            output.mailbox_holder.texture_target);
+  EXPECT_EQ(mailbox_holder.mailbox, output.mailbox());
+  EXPECT_EQ(mailbox_holder.sync_token, output.sync_token());
+  EXPECT_EQ(mailbox_holder.texture_target, output.texture_target());
   EXPECT_EQ(sync_type, output.synchronization_type);
   EXPECT_EQ(is_software, output.is_software);
   EXPECT_EQ(is_overlay_candidate, output.is_overlay_candidate);

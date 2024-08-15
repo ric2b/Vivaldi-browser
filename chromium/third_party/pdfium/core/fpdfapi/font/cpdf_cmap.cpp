@@ -4,6 +4,11 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "core/fpdfapi/font/cpdf_cmap.h"
 
 #include <utility>
@@ -14,6 +19,7 @@
 #include "core/fpdfapi/font/cpdf_fontglobals.h"
 #include "core/fpdfapi/parser/cpdf_simple_parser.h"
 #include "core/fxcrt/check.h"
+#include "core/fxcrt/fx_memcpy_wrappers.h"
 
 namespace {
 
@@ -477,7 +483,7 @@ int CPDF_CMap::AppendChar(char* str, uint32_t charcode) const {
           iSize = 1;
         str[iSize - 1] = static_cast<char>(charcode);
         if (iSize > 1)
-          memset(str, 0, iSize - 1);
+          FXSYS_memset(str, 0, iSize - 1);
         return iSize;
       }
       if (charcode < 0x10000) {

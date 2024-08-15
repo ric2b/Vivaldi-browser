@@ -103,7 +103,6 @@ uint32_t BuiltinOrder(core::BuiltinValue builtin) {
             break;
     }
     TINT_UNREACHABLE();
-    return 0;
 }
 
 // Returns true if `attr` is a shader IO attribute.
@@ -224,7 +223,6 @@ struct CanonicalizeEntryPointIO::State {
             return ctx.src->Sem().Get(attr)->Value();
         }
         TINT_ICE() << "could not obtain builtin value from attribute";
-        return core::BuiltinValue::kUndefined;
     }
 
     /// @param attrs the input attribute list
@@ -496,7 +494,6 @@ struct CanonicalizeEntryPointIO::State {
         for (auto* member : str->Members()) {
             if (TINT_UNLIKELY(member->Type()->Is<core::type::Struct>())) {
                 TINT_ICE() << "nested IO struct";
-                continue;
             }
 
             if (auto* wave_intrinsic_call = CallWaveIntrinsic(member->Declaration()->attributes)) {
@@ -530,7 +527,6 @@ struct CanonicalizeEntryPointIO::State {
             for (auto* member : str->Members()) {
                 if (TINT_UNLIKELY(member->Type()->Is<core::type::Struct>())) {
                     TINT_ICE() << "nested IO struct";
-                    continue;
                 }
 
                 auto name = member->Name().Name();
@@ -979,8 +975,7 @@ Transform::ApplyResult CanonicalizeEntryPointIO::Apply(const Program& src,
 
     auto* cfg = inputs.Get<Config>();
     if (cfg == nullptr) {
-        b.Diagnostics().AddError(diag::System::Transform, Source{})
-            << "missing transform data for " << TypeInfo().name;
+        b.Diagnostics().AddError(Source{}) << "missing transform data for " << TypeInfo().name;
         return resolver::Resolve(b);
     }
 
@@ -1010,6 +1005,8 @@ Transform::ApplyResult CanonicalizeEntryPointIO::Apply(const Program& src,
     ctx.Clone();
     return resolver::Resolve(b);
 }
+
+CanonicalizeEntryPointIO::Config::Config() = default;
 
 CanonicalizeEntryPointIO::Config::Config(ShaderStyle style,
                                          uint32_t sample_mask,

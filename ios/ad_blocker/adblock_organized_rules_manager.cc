@@ -106,13 +106,28 @@ void OrganizedRulesManager::SetIncognitoBrowserState(
   content_rule_list_provider_->SetIncognitoBrowserState(browser_state);
 }
 
-void OrganizedRulesManager::OnRulesSourceUpdated(
-    const RuleSource& rule_source) {
-  if (rule_source.group != group_ || rule_source.is_fetching)
+void OrganizedRulesManager::OnRuleSourceUpdated(
+    RuleGroup group,
+    const ActiveRuleSource& rule_source) {
+  if (group != group_ || rule_source.is_fetching)
     return;
 
-  ReadCompiledRules(rule_source);
-  rule_sources_.insert_or_assign(rule_source.id, rule_source);
+  // If the last fetch failed, either we won't have anything to read, or
+  // the rules won't have changed, so skip reading. `kFileUnsupported` results
+  // from a successful fetch with no valid rules.
+  if (rule_source.last_fetch_result == FetchResult::kSuccess ||
+      rule_source.last_fetch_result == FetchResult::kFileUnsupported) {
+    const auto& old_source = rule_sources_.find(rule_source.core.id());
+
+    if (old_source == rule_sources_.end() ||
+        rule_source.rules_list_checksum !=
+            old_source->second.rules_list_checksum)
+      ReadCompiledRules(rule_source);
+    // Make sure to drop the |old_source| iterator here sisnce we're about to
+    // change the map.
+  }
+
+  rule_sources_.insert_or_assign(rule_source.core.id(), rule_source);
 }
 
 void OrganizedRulesManager::OnRuleSourceDeleted(uint32_t source_id,
@@ -142,23 +157,30 @@ void OrganizedRulesManager::OnExceptionListChanged(
     UpdateExceptions();
 }
 
-void OrganizedRulesManager::ReadCompiledRules(const RuleSource& rule_source) {
-  const auto existing_rules = compiled_rules_.find(rule_source.id);
-  if (existing_rules != compiled_rules_.end() &&
-      existing_rules->second->checksum() == rule_source.rules_list_checksum) {
-    // checksum hasn't changed. Don't re-index.
+void OrganizedRulesManager::ReadCompiledRules(
+    const ActiveRuleSource& rule_source) {
+  if (rule_source.last_fetch_result == FetchResult::kFileUnsupported) {
+    // We know there is no valid rules here. No point in trying.
+    // Keep any rules buffer around for the index currently in use, they'll be
+    // cleared once the new index is ready.
+    if (compiled_rules_.count(rule_source.core.id()) != 0) {
+      compiled_rules_.erase(rule_source.core.id());
+      ReorganizeRules();
+    }
     return;
   }
 
+  CHECK(!rule_source.rules_list_checksum.empty());
+
   file_task_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,
-      base::BindOnce(
-          &GetJsonFromFile,
-          rules_list_folder_.AppendASCII(base::NumberToString(rule_source.id)),
-          rule_source.rules_list_checksum,
-          GetIntermediateRepresentationVersionNumber()),
+      base::BindOnce(&GetJsonFromFile,
+                     rules_list_folder_.AppendASCII(
+                         base::NumberToString(rule_source.core.id())),
+                     rule_source.rules_list_checksum,
+                     GetIntermediateRepresentationVersionNumber()),
       base::BindOnce(&OrganizedRulesManager::OnRulesRead,
-                     weak_factory_.GetWeakPtr(), rule_source.id,
+                     weak_factory_.GetWeakPtr(), rule_source.core.id(),
                      rule_source.rules_list_checksum));
 }
 
@@ -166,8 +188,15 @@ void OrganizedRulesManager::OnRulesRead(
     uint32_t source_id,
     const std::string& checksum,
     std::unique_ptr<base::Value> compiled_rules) {
-  if (!rule_sources_.count(source_id)) {
-    // The rule source was removed while we were fetching its compiled rules.
+  const auto& rule_source = rule_sources_.find(source_id);
+
+  if (rule_source == rule_sources_.end()) {
+    // The rule source was removed while we were fetching its buffer.
+    return;
+  }
+
+  if (rule_source->second.rules_list_checksum != checksum) {
+    // The rule source was modified while we were fetching its buffer.
     return;
   }
 
@@ -236,7 +265,9 @@ void OrganizedRulesManager::OnOrganizedRulesLoaded(
   UpdateExceptions();
 
   for (const auto& [rule_source_id, rule_source] : rule_sources_) {
-    ReadCompiledRules(rule_source);
+    if (!rule_source.rules_list_checksum.empty()) {
+      ReadCompiledRules(rule_source);
+    }
   }
 
   if (rule_sources_.empty()) {
@@ -295,21 +326,21 @@ bool OrganizedRulesManager::CheckOrganizedRules(
       metadata->FindDict(rules_json::kListChecksums);
   DCHECK(list_checksums);
 
-  if (list_checksums->size() != rule_sources_.size()) {
-    return false;
-  } else {
-    for (auto [string_id, list_checksum] : *list_checksums) {
-      DCHECK(list_checksum.is_string());
-      uint32_t id = 0;
-      bool result = base::StringToUint(string_id, &id);
-      DCHECK(result);
-      auto rule_source = rule_sources_.find(id);
-      if (rule_source == rule_sources_.end() ||
-          rule_source->second.rules_list_checksum !=
-              list_checksum.GetString()) {
+  size_t valid_count = 0;
+  for (const auto& [rule_source_id, rule_source] : rule_sources_) {
+    if (!rule_source.rules_list_checksum.empty()) {
+      std::string string_id = base::NumberToString(rule_source.core.id());
+      ++valid_count;
+      auto* compiled_checksum = list_checksums->Find(string_id);
+      if (!compiled_checksum ||
+          compiled_checksum->GetString() != rule_source.rules_list_checksum) {
         return false;
       }
     }
+  }
+
+  if (list_checksums->size() != valid_count) {
+    return false;
   }
 
   std::string* exceptions_checksum =

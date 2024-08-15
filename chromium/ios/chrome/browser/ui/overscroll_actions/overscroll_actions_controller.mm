@@ -23,7 +23,7 @@
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_gesture_recognizer.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_view.h"
 #import "ios/chrome/browser/ui/side_swipe/side_swipe_mediator.h"
-#import "ios/chrome/browser/ui/voice/voice_search_notification_names.h"
+#import "ios/chrome/browser/voice/ui_bundled/voice_search_notification_names.h"
 #import "ios/chrome/common/material_timing.h"
 #import "ios/public/provider/chrome/browser/fullscreen/fullscreen_api.h"
 #import "ios/web/common/features.h"
@@ -429,6 +429,15 @@ UIEdgeInsets TopContentInset(UIScrollView* scrollView, CGFloat topInset) {
   _lastScrollBeginTime = base::TimeTicks::Now();
 }
 
+- (void)forceAnimatedScrollRefresh {
+  _forceStateUpdate = YES;
+  [self scrollViewWillBeginDragging];
+  [self.scrollView
+      scrollRectToVisible:CGRectMake(0, -kHeaderMaxExpansionThreshold - 1, 1,
+                                     kHeaderMaxExpansionThreshold + 1)
+                 animated:YES];
+}
+
 - (BOOL)isOverscrollActionsAllowed {
 
   // Note:(prio@vivaldi.com) Disable pull to refresh for PDFs as its almost
@@ -559,6 +568,14 @@ UIEdgeInsets TopContentInset(UIScrollView* scrollView, CGFloat topInset) {
   DCHECK_EQ(static_cast<id>(webViewScrollViewProxy), [self scrollView]);
   [self scrollViewWillEndDraggingWithVelocity:velocity
                           targetContentOffset:targetContentOffset];
+}
+
+- (void)webViewScrollViewDidEndScrollingAnimation:
+    (CRWWebViewScrollViewProxy*)webViewScrollViewProxy {
+  CHECK_EQ(static_cast<id>(webViewScrollViewProxy), [self scrollView]);
+  [self scrollViewDidEndDraggingWillDecelerate:YES
+                                 contentOffset:webViewScrollViewProxy
+                                                   .contentOffset];
 }
 
 #pragma mark - Pan gesture recognizer handling

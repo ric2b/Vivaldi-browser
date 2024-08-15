@@ -123,8 +123,12 @@ std::ostream& operator<<(std::ostream& os, const PreconnectRequest& request);
 std::ostream& operator<<(std::ostream& os,
                          const PreconnectPrediction& prediction);
 std::ostream& operator<<(std::ostream& os, const LcppData& data);
+std::ostream& operator<<(std::ostream& os, const LcppKeyStat& key_stat);
+std::ostream& operator<<(std::ostream& os, const LcppStat& stat);
 std::ostream& operator<<(std::ostream& os,
                          const LcpElementLocatorBucket& bucket);
+std::ostream& operator<<(std::ostream& os,
+                         const LcppStringFrequencyStatData& data);
 
 bool operator==(const RedirectData& lhs, const RedirectData& rhs);
 bool operator==(const RedirectStat& lhs, const RedirectStat& rhs);

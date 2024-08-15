@@ -62,11 +62,11 @@ class TracedReferenceBase : public api_internal::IndirectHandleBase {
   V8_INLINE void Reset();
 
   /**
-   * Construct a Local<Value> from this handle.
+   * Construct a Local<Data> from this handle.
    */
-  V8_INLINE Local<Value> Get(Isolate* isolate) const {
-    if (IsEmpty()) return Local<Value>();
-    return Local<Value>::New(isolate, this->value<Value>());
+  V8_INLINE Local<Data> Get(Isolate* isolate) const {
+    if (IsEmpty()) return Local<Data>();
+    return Local<Data>::New(isolate, this->value<Data>());
   }
 
   /**
@@ -135,7 +135,7 @@ class BasicTracedReference : public TracedReferenceBase {
         const_cast<BasicTracedReference<T>&>(*this));
   }
 
-  V8_DEPRECATE_SOON("Use Get to convert to Local instead")
+  V8_DEPRECATED("Use Get to convert to Local instead")
   V8_INLINE T* operator->() const {
 #ifdef V8_ENABLE_CHECKS
     CheckValue();
@@ -143,7 +143,7 @@ class BasicTracedReference : public TracedReferenceBase {
     return this->template value<T>();
   }
 
-  V8_DEPRECATE_SOON("Use Get to convert to Local instead")
+  V8_DEPRECATED("Use Get to convert to Local instead")
   V8_INLINE T* operator*() const { return this->operator->(); }
 
  private:

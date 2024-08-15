@@ -66,7 +66,7 @@ class AuthenticatorQRViewCentered : public views::View {
     // absence of a quiet zone may interfere with decoding of QR codes even for
     // small codes (for examples see #comment8, #comment9 and #comment6 in the
     // bug).
-    auto qr_code = qr_code_generator::GenerateBitmap(
+    auto qr_code = qr_code_generator::GenerateImage(
         base::as_byte_span(qr_string), qr_code_generator::ModuleStyle::kCircles,
         qr_code_generator::LocatorStyle::kRounded,
         qr_code_generator::CenterImage::kPasskey,
@@ -76,8 +76,7 @@ class AuthenticatorQRViewCentered : public views::View {
     // than QR code limits.
     CHECK(qr_code.has_value(), base::NotFatalUntil::M124);
 
-    qr_code_image_->SetImage(ui::ImageModel::FromImageSkia(
-        gfx::ImageSkia::CreateFrom1xBitmap(qr_code.value())));
+    qr_code_image_->SetImage(ui::ImageModel::FromImageSkia(qr_code.value()));
     qr_code_image_->SetVisible(true);
   }
 
@@ -113,9 +112,9 @@ END_METADATA
 AuthenticatorQRSheetView::AuthenticatorQRSheetView(
     std::unique_ptr<AuthenticatorQRSheetModel> sheet_model)
     : AuthenticatorRequestSheetView(std::move(sheet_model)),
-      qr_string_(static_cast<AuthenticatorQRSheetModel*>(model())
-                     ->dialog_model()
-                     ->cable_qr_string()) {}
+      qr_string_(*static_cast<AuthenticatorQRSheetModel*>(model())
+                      ->dialog_model()
+                      ->cable_qr_string) {}
 
 AuthenticatorQRSheetView::~AuthenticatorQRSheetView() = default;
 

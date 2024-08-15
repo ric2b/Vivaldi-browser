@@ -1130,7 +1130,7 @@ static int FUNC(sps)(CodedBitstreamContext *ctx, RWContext *rw,
 
     flag(sps_subpic_info_present_flag);
     if (current->sps_subpic_info_present_flag) {
-        ue(sps_num_subpics_minus1, 1, VVC_MAX_SLICES - 1);
+        ue(sps_num_subpics_minus1, 0, VVC_MAX_SLICES - 1);
         if (current->sps_num_subpics_minus1 > 0) {
             flag(sps_independent_subpics_flag);
             flag(sps_subpic_same_size_flag);
@@ -1213,29 +1213,29 @@ static int FUNC(sps)(CodedBitstreamContext *ctx, RWContext *rw,
                     infer(sps_loop_filter_across_subpic_enabled_flag[i], 0);
                 }
             }
-            ue(sps_subpic_id_len_minus1, 0, 15);
-            if ((1 << (current->sps_subpic_id_len_minus1 + 1)) <
-                current->sps_num_subpics_minus1 + 1) {
-                av_log(ctx->log_ctx, AV_LOG_ERROR,
-                       "sps_subpic_id_len_minus1(%d) is too small\n",
-                       current->sps_subpic_id_len_minus1);
-                return AVERROR_INVALIDDATA;
-            }
-            flag(sps_subpic_id_mapping_explicitly_signalled_flag);
-            if (current->sps_subpic_id_mapping_explicitly_signalled_flag) {
-                flag(sps_subpic_id_mapping_present_flag);
-                if (current->sps_subpic_id_mapping_present_flag) {
-                    for (i = 0; i <= current->sps_num_subpics_minus1; i++) {
-                        ubs(current->sps_subpic_id_len_minus1 + 1,
-                            sps_subpic_id[i], 1, i);
-                    }
-                }
-            }
         } else {
             infer(sps_subpic_ctu_top_left_x[0], 0);
             infer(sps_subpic_ctu_top_left_y[0], 0);
             infer(sps_subpic_width_minus1[0], tmp_width_val - 1);
             infer(sps_subpic_height_minus1[0], tmp_height_val - 1);
+        }
+        ue(sps_subpic_id_len_minus1, 0, 15);
+        if ((1 << (current->sps_subpic_id_len_minus1 + 1)) <
+            current->sps_num_subpics_minus1 + 1) {
+            av_log(ctx->log_ctx, AV_LOG_ERROR,
+                   "sps_subpic_id_len_minus1(%d) is too small\n",
+                   current->sps_subpic_id_len_minus1);
+            return AVERROR_INVALIDDATA;
+        }
+        flag(sps_subpic_id_mapping_explicitly_signalled_flag);
+        if (current->sps_subpic_id_mapping_explicitly_signalled_flag) {
+            flag(sps_subpic_id_mapping_present_flag);
+            if (current->sps_subpic_id_mapping_present_flag) {
+                for (i = 0; i <= current->sps_num_subpics_minus1; i++) {
+                    ubs(current->sps_subpic_id_len_minus1 + 1,
+                        sps_subpic_id[i], 1, i);
+                }
+            }
         }
     } else {
         infer(sps_num_subpics_minus1, 0);
@@ -2072,6 +2072,8 @@ static int FUNC(pps) (CodedBitstreamContext *ctx, RWContext *rw,
 
                 tile_x = tile_idx % current->num_tile_columns;
                 tile_y = tile_idx / current->num_tile_columns;
+                if (tile_y >= current->num_tile_rows)
+                    return AVERROR_INVALIDDATA;
 
                 ctu_x = 0, ctu_y = 0;
                 for (j = 0; j < tile_x; j++) {
@@ -2118,9 +2120,12 @@ static int FUNC(pps) (CodedBitstreamContext *ctx, RWContext *rw,
         } else {
             if (current->pps_no_pic_partition_flag)
                 infer(pps_num_slices_in_pic_minus1, 0);
-            else if (current->pps_single_slice_per_subpic_flag)
+            else if (current->pps_single_slice_per_subpic_flag) {
+                for (i = 0; i <= sps->sps_num_subpics_minus1; i++)
+                    current->num_slices_in_subpic[i] = 1;
                 infer(pps_num_slices_in_pic_minus1,
                       sps->sps_num_subpics_minus1);
+            }
             // else?
         }
         if (!current->pps_rect_slice_flag ||
@@ -3219,19 +3224,27 @@ static int FUNC(slice_header) (CodedBitstreamContext *ctx, RWContext *rw,
             flag(sh_cabac_init_flag);
         else
             infer(sh_cabac_init_flag, 0);
-        if (ph->ph_temporal_mvp_enabled_flag && !pps->pps_rpl_info_in_ph_flag) {
-            if (current->sh_slice_type == VVC_SLICE_TYPE_B)
-                flag(sh_collocated_from_l0_flag);
-            else
-                infer(sh_collocated_from_l0_flag, 1);
-            if ((current->sh_collocated_from_l0_flag &&
-                 current->num_ref_idx_active[0] > 1) ||
-                (!current->sh_collocated_from_l0_flag &&
-                 current->num_ref_idx_active[1] > 1)) {
-                unsigned int idx = current->sh_collocated_from_l0_flag ? 0 : 1;
-                ue(sh_collocated_ref_idx, 0, current->num_ref_idx_active[idx] - 1);
+        if (ph->ph_temporal_mvp_enabled_flag) {
+            if (!pps->pps_rpl_info_in_ph_flag) {
+                if (current->sh_slice_type == VVC_SLICE_TYPE_B)
+                    flag(sh_collocated_from_l0_flag);
+                else
+                    infer(sh_collocated_from_l0_flag, 1);
+                if ((current->sh_collocated_from_l0_flag &&
+                    current->num_ref_idx_active[0] > 1) ||
+                    (!current->sh_collocated_from_l0_flag &&
+                    current->num_ref_idx_active[1] > 1)) {
+                    unsigned int idx = current->sh_collocated_from_l0_flag ? 0 : 1;
+                    ue(sh_collocated_ref_idx, 0, current->num_ref_idx_active[idx] - 1);
+                } else {
+                    infer(sh_collocated_ref_idx, 0);
+                }
             } else {
-                infer(sh_collocated_ref_idx, 0);
+                if (current->sh_slice_type == VVC_SLICE_TYPE_B)
+                    infer(sh_collocated_from_l0_flag, ph->ph_collocated_from_l0_flag);
+                else
+                    infer(sh_collocated_from_l0_flag, 1);
+                infer(sh_collocated_ref_idx, ph->ph_collocated_ref_idx);
             }
         }
         if (!pps->pps_wp_info_in_ph_flag &&
@@ -3427,10 +3440,10 @@ static int FUNC(slice_header) (CodedBitstreamContext *ctx, RWContext *rw,
     return 0;
 }
 
-static int FUNC(sei_decoded_picture_hash) (CodedBitstreamContext *ctx,
-                                           RWContext *rw,
-                                           H266RawSEIDecodedPictureHash *
-                                           current)
+SEI_FUNC(sei_decoded_picture_hash, (CodedBitstreamContext *ctx,
+                                    RWContext *rw,
+                                    H266RawSEIDecodedPictureHash *current,
+                                    SEIMessageState *unused))
 {
     int err, c_idx, i;
 

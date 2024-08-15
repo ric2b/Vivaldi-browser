@@ -9,16 +9,17 @@
 #include <vector>
 
 #include "ash/public/cpp/app_list/app_list_types.h"
+#include "ash/public/cpp/image_util.h"
 #include "ash/public/cpp/style/dark_light_mode_controller.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/no_destructor.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/app_list/search/common/icon_constants.h"
+#include "chrome/browser/ash/app_list/search/files/file_title.h"
 #include "chrome/browser/ash/app_list/search/search_features.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
@@ -34,6 +35,7 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/image/image_skia_operations.h"
 
 namespace app_list {
 
@@ -70,6 +72,22 @@ constexpr double kPenaltyCoeff = 0.0029;
 
 constexpr int64_t kMillisPerDay = 1000 * 60 * 60 * 24;
 
+gfx::Size GetIconSizeForDisplayType(ash::SearchResultDisplayType display_type) {
+  switch (display_type) {
+    case ash::SearchResultDisplayType::kList:
+      return gfx::Size(kThumbnailDimension, kThumbnailDimension);
+    case ash::SearchResultDisplayType::kImage:
+      return gfx::Size(kImageSearchWidth, kImageSearchHeight);
+    case ash::SearchResultDisplayType::kContinue:
+    case ash::SearchResultDisplayType::kNone:
+    case ash::SearchResultDisplayType::kAnswerCard:
+    case ash::SearchResultDisplayType::kRecentApps:
+    case ash::SearchResultDisplayType::kLast:
+      NOTREACHED();
+      return gfx::Size();
+  }
+}
+
 // Generates ash::FileMetadata for the result at `file_path`.
 // Performs blocking File IO, so should not be run on UI thread.
 ash::FileMetadata GetFileMetadata(base::FilePath file_path,
@@ -87,20 +105,6 @@ ash::FileMetadata GetFileMetadata(base::FilePath file_path,
   metadata.displayable_folder_path = displayable_path.DirName();
 
   return metadata;
-}
-
-std::string StripHostedFileExtensions(const std::string& filename) {
-  static const base::NoDestructor<std::vector<std::string>> hosted_extensions(
-      {".GDOC", ".GSHEET", ".GSLIDES", ".GDRAW", ".GTABLE", ".GLINK", ".GFORM",
-       ".GMAPS", ".GSITE"});
-
-  for (const auto& extension : *hosted_extensions) {
-    if (EndsWith(filename, extension, base::CompareCase::INSENSITIVE_ASCII)) {
-      return filename.substr(0, filename.size() - extension.size());
-    }
-  }
-
-  return filename;
 }
 
 void LogRelevance(ChromeSearchResult::ResultType result_type,
@@ -144,8 +148,12 @@ FileResult::FileResult(const std::string& id,
                        float relevance,
                        const std::u16string& query,
                        Type type,
-                       Profile* profile)
-    : filepath_(filepath), type_(type), profile_(profile) {
+                       Profile* profile,
+                       ash::ThumbnailLoader* thumbnail_loader)
+    : filepath_(filepath),
+      type_(type),
+      profile_(profile),
+      thumbnail_loader_(thumbnail_loader) {
   DCHECK(profile);
   set_id(id);
   SetCategory(Category::kFiles);
@@ -179,8 +187,7 @@ FileResult::FileResult(const std::string& id,
       NOTREACHED();
   }
 
-  SetTitle(base::UTF8ToUTF16(
-      StripHostedFileExtensions(filepath.BaseName().value())));
+  SetTitle(GetFileTitle(filepath));
 
   if (details)
     SetDetails(details.value());
@@ -195,7 +202,20 @@ FileResult::FileResult(const std::string& id,
         base::BindRepeating(&GetFileMetadata, filepath_, displayable_path));
   }
 
-  UpdateIcon();
+  if (display_type == DisplayType::kContinue) {
+    UpdateChipIcon();
+  } else {
+    thumbnail_image_ = std::make_unique<ash::HoldingSpaceImage>(
+        GetIconSizeForDisplayType(display_type), filepath_,
+        base::BindRepeating(&FileResult::RequestThumbnail,
+                            weak_factory_.GetWeakPtr()),
+        base::BindRepeating(&FileResult::GetPlaceholderImage,
+                            base::Unretained(this)));
+    thumbnail_image_update_sub_ =
+        thumbnail_image_->AddImageSkiaChangedCallback(base::BindRepeating(
+            &FileResult::UpdateThumbnailIcon, base::Unretained(this)));
+    UpdateThumbnailIcon();
+  }
 
   if (auto* dark_light_mode_controller = ash::DarkLightModeController::Get())
     dark_light_mode_controller->AddObserver(this);
@@ -235,8 +255,7 @@ double FileResult::CalculateRelevance(
     const std::optional<TokenizedString>& query,
     const base::FilePath& filepath,
     const std::optional<base::Time>& last_accessed) {
-  const std::u16string raw_title =
-      base::UTF8ToUTF16(StripHostedFileExtensions(filepath.BaseName().value()));
+  const std::u16string raw_title = GetFileTitle(filepath);
   const TokenizedString title(raw_title, TokenizedString::Mode::kWords);
 
   const bool use_default_relevance =
@@ -271,85 +290,71 @@ double FileResult::CalculateRelevance(
   return relevance * penalty;
 }
 
-void FileResult::RequestThumbnail(ash::ThumbnailLoader* thumbnail_loader) {
-  // Thumbnails are only available for list results or image results.
-  gfx::Size size;
-  if (display_type() == DisplayType::kList) {
-    size = gfx::Size(kThumbnailDimension, kThumbnailDimension);
-  } else if (display_type() == DisplayType::kImage) {
-    size = gfx::Size(kImageSearchWidth, kImageSearchHeight);
-  } else {
-    NOTREACHED();
+void FileResult::RequestThumbnail(
+    const base::FilePath& file_path,
+    const gfx::Size& size,
+    ash::HoldingSpaceImage::BitmapCallback callback) {
+  if (!thumbnail_loader_) {
+    std::move(callback).Run(nullptr, base::File::FILE_ERROR_FAILED);
+    return;
   }
-
-  // Request a thumbnail for all file types. For unsupported types, this will
-  // just call OnThumbnailLoaded with an error.
-  thumbnail_loader->Load({filepath_, size},
-                         base::BindOnce(&FileResult::OnThumbnailLoaded,
-                                        weak_factory_.GetWeakPtr()));
+  thumbnail_loader_->Load({file_path, size}, std::move(callback));
 }
 
 void FileResult::OnColorModeChanged(bool dark_mode_enabled) {
-  UpdateIcon();
+  if (display_type() == DisplayType::kContinue) {
+    UpdateChipIcon();
+  }
 }
 
-void FileResult::OnThumbnailLoaded(const SkBitmap* bitmap,
-                                   base::File::Error error) {
-  if (!bitmap) {
-    DCHECK_NE(error, base::File::Error::FILE_OK);
-    base::UmaHistogramExactLinear(
-        "Apps.AppList.FileResult.ThumbnailLoadedError", -error,
-        -base::File::FILE_ERROR_MAX);
-    return;
-  }
-
-  DCHECK_EQ(error, base::File::Error::FILE_OK);
-
-  const bool is_list_display_type = display_type() == DisplayType::kList;
-
-  const int dimension =
-      is_list_display_type ? kThumbnailDimension : kImageSearchWidth;
-  const auto shape = is_list_display_type
+void FileResult::UpdateThumbnailIcon() {
+  const int dimension = GetIconSizeForDisplayType(display_type()).width();
+  const auto shape = display_type() == DisplayType::kList
                          ? ash::SearchResultIconShape::kCircle
                          : ash::SearchResultIconShape::kRoundedRectangle;
-  const auto image = ui::ImageModel::FromImageSkia(
-      gfx::ImageSkia::CreateFromBitmap(*bitmap, 1.0f));
-
-  SetIcon(IconInfo(image, dimension, shape));
+  SetIcon(
+      IconInfo(ui::ImageModel::FromImageSkia(thumbnail_image_->GetImageSkia()),
+               dimension, shape, thumbnail_image_->UsingPlaceholder()));
 }
 
-void FileResult::UpdateIcon() {
+gfx::ImageSkia FileResult::GetPlaceholderImage(
+    const base::FilePath& file_path,
+    const gfx::Size& size,
+    const std::optional<bool>& dark_background,
+    const std::optional<bool>& is_folder) {
   // Do not set the default chromeos icon to the image search result.
   if (display_type() == DisplayType::kImage) {
-    return;
+    return ash::image_util::CreateEmptyImage(size);
   }
 
+  gfx::ImageSkia icon_image;
+  switch (type_) {
+    case Type::kFile:
+      icon_image = chromeos::GetIconForPath(
+          file_path, dark_background.value_or(true), kSystemIconDimension);
+      break;
+    case Type::kDirectory:
+      icon_image = chromeos::GetIconFromType(chromeos::IconType::kFolder,
+                                             dark_background.value_or(true),
+                                             kSystemIconDimension);
+      break;
+    case Type::kSharedDirectory:
+      icon_image = chromeos::GetIconFromType(chromeos::IconType::kFolderShared,
+                                             dark_background.value_or(true),
+                                             kSystemIconDimension);
+      break;
+  }
+  return gfx::ImageSkiaOperations::CreateSuperimposedImage(
+      ash::image_util::CreateEmptyImage(size), icon_image);
+}
+
+void FileResult::UpdateChipIcon() {
   // DarkLightModeController might be nullptr in tests.
   auto* dark_light_mode_controller = ash::DarkLightModeController::Get();
   const bool dark_background = dark_light_mode_controller &&
                                dark_light_mode_controller->IsDarkModeEnabled();
 
-  if (display_type() == DisplayType::kContinue) {
-    SetChipIcon(chromeos::GetChipIconForPath(filepath_, dark_background));
-  } else {
-    switch (type_) {
-      case Type::kFile:
-        SetIcon(IconInfo(
-            ui::ImageModel::FromVectorIcon(chromeos::GetIconForPath(filepath_)),
-            kSystemIconDimension));
-        break;
-      case Type::kDirectory:
-        SetIcon(IconInfo(
-            ui::ImageModel::FromVectorIcon(chromeos::GetIconFromType("folder")),
-            kSystemIconDimension));
-        break;
-      case Type::kSharedDirectory:
-        SetIcon(IconInfo(
-            ui::ImageModel::FromVectorIcon(chromeos::GetIconFromType("shared")),
-            kSystemIconDimension));
-        break;
-    }
-  }
+  SetChipIcon(chromeos::GetChipIconForPath(filepath_, dark_background));
 }
 
 ::std::ostream& operator<<(::std::ostream& os, const FileResult& result) {

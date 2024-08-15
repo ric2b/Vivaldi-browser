@@ -380,6 +380,24 @@ export interface PasswordManagerProxy {
 
   /** Dismiss the menu notifications for the Safety Hub password module. */
   dismissSafetyHubPasswordMenuNotification(): void;
+
+  /** Starts the flow for changing Password Manager PIN. */
+  changePasswordManagerPin(): Promise<boolean>;
+
+  /** Checks whether changing the Password Manager PIN is possible. */
+  isPasswordManagerPinAvailable(): Promise<boolean>;
+
+  /**
+   * Starts the flow for disconnecting the Cloud Authenticator
+   * (Passkeys Enclave).
+   */
+  disconnectCloudAuthenticator(): Promise<boolean>;
+
+  /**
+   * Checks whether the Chrome client is connected to the Cloud Authenticator
+   * (Passkeys Enclave).
+   */
+  isConnectedToCloudAuthenticator(): Promise<boolean>;
 }
 
 /**
@@ -607,6 +625,22 @@ export class PasswordManagerImpl implements PasswordManagerProxy {
 
   dismissSafetyHubPasswordMenuNotification() {
     chrome.send('dismissSafetyHubPasswordMenuNotification');
+  }
+
+  changePasswordManagerPin() {
+    return chrome.passwordsPrivate.changePasswordManagerPin();
+  }
+
+  isPasswordManagerPinAvailable() {
+    return chrome.passwordsPrivate.isPasswordManagerPinAvailable();
+  }
+
+  disconnectCloudAuthenticator() {
+    return chrome.passwordsPrivate.disconnectCloudAuthenticator();
+  }
+
+  isConnectedToCloudAuthenticator() {
+    return chrome.passwordsPrivate.isConnectedToCloudAuthenticator();
   }
 
   static getInstance(): PasswordManagerProxy {

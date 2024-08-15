@@ -37,7 +37,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "dawn/common/FutureUtils.h"
 #include "dawn/common/MutexProtected.h"
-#include "dawn/common/NonCopyable.h"
+#include "dawn/common/NonMovable.h"
 #include "dawn/common/Ref.h"
 #include "dawn/native/Error.h"
 #include "dawn/native/Forward.h"
@@ -72,8 +72,8 @@ class EventManager final : NonMovable {
 
     class TrackedEvent;
     // Track a TrackedEvent and give it a FutureID.
-    [[nodiscard]] FutureID TrackEvent(Ref<TrackedEvent>&&);
-    void SetFutureReady(FutureID futureID);
+    FutureID TrackEvent(Ref<TrackedEvent>&&);
+    void SetFutureReady(TrackedEvent* event);
 
     // Returns true if future ProcessEvents is needed.
     bool ProcessPollEvents();
@@ -152,6 +152,7 @@ class EventManager::TrackedEvent : public RefCounted {
     virtual void Complete(EventCompletionType) = 0;
 
     wgpu::CallbackMode mCallbackMode;
+    FutureID mFutureID = kNullFutureID;
 
 #if DAWN_ENABLE_ASSERTS
     std::atomic<bool> mCurrentlyBeingWaited = false;

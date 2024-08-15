@@ -3093,6 +3093,21 @@ const kFractIntervalCases = {
     { input: -1.1, expected: [reinterpretU16AsF16(0x3b32), reinterpretU16AsF16(0x3b34)] }, // ~0.9
     { input: 658.5, expected: 0.5 },
   ] as ScalarToIntervalCase[],
+  abstract: [
+    { input: 0.1, expected: reinterpretU64AsF64(0x3fb999999999999an) },
+    { input: 0.9, expected: reinterpretU64AsF64(0x3feccccccccccccdn) },
+    { input: 1.1, expected: reinterpretU64AsF64(0x3fb99999999999a0n) },
+    { input: -0.1, expected: reinterpretU64AsF64(0x3feccccccccccccdn) },
+    { input: -0.9, expected: reinterpretU64AsF64(0x3fb9999999999998n) },
+    { input: -1.1, expected: reinterpretU64AsF64(0x3fecccccccccccccn) },
+
+    // https://github.com/gpuweb/cts/issues/2766
+    { input: 0x80000000, expected: 0 },
+
+    // https://github.com/gpuweb/gpuweb/issues/4523
+    { input: 3937509.87755102, expected: [0, 0.75] },
+  ] as ScalarToIntervalCase[],
+
 } as const;
 
 g.test('fractInterval')
@@ -3137,7 +3152,7 @@ const kInverseSqrtIntervalCases = {
     // 1/sqrt(0x3D23D70B)=4.9999998230487200185270893769213 rounded to f32 0x409FFFFF or 0x40A00000,
     // 1/sqrt(0x3D23D70A)=5.0000000558793553117506910583908 rounded to f32 0x40A00000 or 0x40A00001.
     { input: 0.04, expected: [reinterpretU32AsF32(0x409FFFFF), reinterpretU32AsF32(0x40A00001)] },  // ~5.0
-    // Maximium f32 0x7F7FFFFF = 3.4028234663852886e+38,
+    // Maximum f32 0x7F7FFFFF = 3.4028234663852886e+38,
     // 1/sqrt(0x7F7FFFFF)=5.4210110239862427800382690921791e-20 rounded to f32 0x1F800000 or 0x1F800001
     { input: kValue.f32.positive.max, expected: [reinterpretU32AsF32(0x1f800000), reinterpretU32AsF32(0x1f800001)] },  // ~5.421...e-20
   ] as ScalarToIntervalCase[],
@@ -3146,7 +3161,7 @@ const kInverseSqrtIntervalCases = {
     // 1/sqrt(0x291F)=4.9994660279328446295684795818427 rounded to f16 0x44FF or 0x4500,
     // 1/sqrt(0x291E)=5.001373857053206453045376503367 rounded to f16 0x4500 or 0x4501.
     { input: 0.04, expected: [reinterpretU16AsF16(0x44FF), reinterpretU16AsF16(0x4501)] },  // ~5.0
-    // Maximium f16 0x7BFF = 65504,
+    // Maximum f16 0x7BFF = 65504,
     // 1/sqrt(0x7BFF)=0.00390720402370454101997160826062 rounded to f16 0x1C00 or 0x1C01
     { input: kValue.f16.positive.max, expected: [reinterpretU16AsF16(0x1c00), reinterpretU16AsF16(0x1c01)] },  // ~3.9072...e-3
   ] as ScalarToIntervalCase[],
@@ -4045,23 +4060,12 @@ const kAdditionInterval64BitsNormalCases = {
     // -0.1+0.1 expect f16 interval [0xAE67+0x2E66, 0xAE66+0x2E67]
     { input: [-0.1, 0.1], expected: [reinterpretU16AsF16(0xae67)+reinterpretU16AsF16(0x2e66), reinterpretU16AsF16(0xae66)+reinterpretU16AsF16(0x2e67)] },  // ~0.0
   ] as ScalarPairToIntervalCase[],
-  abstract: [
-    // 0.1 isn't exactly representable in f64, but will be quantized to an
-    // exact value when storing to a 'number' (0x3FB999999999999A).
-    // This is why below the expectations are not intervals.
-    // f64 0x3FB999999999999A+0x3FB999999999999A = 0x3FC999999999999A
-    { input: [0.1, 0.1], expected: reinterpretU64AsF64(0x3FC999999999999An) },  // ~0.2
-    // f64 0xBFB999999999999A+0xBFB999999999999A = 0xBFC999999999999A
-    { input: [-0.1, -0.1], expected: reinterpretU64AsF64(0xBFC999999999999An) },  // ~-0.2
-    { input: [0.1, -0.1], expected: 0 },
-    { input: [-0.1, 0.1], expected: 0 },
-  ] as ScalarPairToIntervalCase[],
 } as const;
 
 g.test('additionInterval')
   .params(u =>
     u
-      .combine('trait', ['f32', 'f16', 'abstract'] as const)
+      .combine('trait', ['f32', 'f16'] as const)
       .beginSubcases()
       .expandWithParams<ScalarPairToIntervalCase>(p => {
         const trait = FP[p.trait];
@@ -4465,19 +4469,60 @@ const kLdexpIntervalCases = {
     { input: [-100, 14], expected: kUnboundedEndpoints },
     { input: [2 ** 10, 10], expected: kUnboundedEndpoints },
   ] as ScalarPairToIntervalCase[],
+  abstract: [
+    // Edge Cases
+    // 1.9999999999999997779553950749686919152736663818359375 * 2 ** 1023 = f64.positive.max
+    {
+      input: [1.9999999999999997779553950749686919152736663818359375, 1023],
+      expected: kValue.f64.positive.max,
+    },
+    // f64.positive.min = 1 * 2 ** -1022
+    { input: [1, -1022], expected: kValue.f64.positive.min },
+    // f64.positive.subnormal.max = 1.9999999999999997779553950749686919152736663818359375 * 2 ** -1022
+    {
+      input: [0.9999999999999997779553950749686919152736663818359375, -1022],
+      expected: [0, kValue.f64.positive.subnormal.max],
+    },
+    // f64.positive.subnormal.min = 0.0000000000000002220446049250313080847263336181640625 * 2 ** -1022
+    {
+      input: [0.0000000000000002220446049250313080847263336181640625, -1022],
+      expected: [0, kValue.f64.positive.subnormal.min],
+    },
+    {
+      input: [-0.0000000000000002220446049250313080847263336181640625, -1022],
+      expected: [kValue.f64.negative.subnormal.max, 0],
+    },
+    {
+      input: [-0.9999999999999997779553950749686919152736663818359375, -1022],
+      expected: [kValue.f64.negative.subnormal.min, 0],
+    },
+    { input: [-1, -1022], expected: kValue.f64.negative.max },
+    {
+      input: [-1.9999999999999997779553950749686919152736663818359375, 1023],
+      expected: kValue.f64.negative.min,
+    },
+    // e2 + bias <= 0, expect correctly rounded intervals.
+    { input: [2 ** 120, -130], expected: 2 ** -10 },
+    // Out of Bounds
+    { input: [1, 1024], expected: kUnboundedEndpoints },
+    { input: [-1, 1024], expected: kUnboundedEndpoints },
+    { input: [100, 1024], expected: kUnboundedEndpoints },
+    { input: [-100, 1024], expected: kUnboundedEndpoints },
+    { input: [2 ** 100, 1000], expected: kUnboundedEndpoints },
+  ] as ScalarPairToIntervalCase[],
 } as const;
 
 g.test('ldexpInterval')
   .params(u =>
     u
-      .combine('trait', ['f32', 'f16'] as const)
+      .combine('trait', ['f32', 'f16', 'abstract'] as const)
       .beginSubcases()
       .expandWithParams<ScalarPairToIntervalCase>(p => {
         const trait = FP[p.trait];
         const constants = trait.constants();
         // prettier-ignore
         return [
-          // always exactly represeantable cases
+          // always exactly representable cases
           { input: [0, 0], expected: 0 },
           { input: [0, 1], expected: 0 },
           { input: [0, -1], expected: 0 },
@@ -4665,22 +4710,12 @@ const kMultiplicationInterval64BitsNormalCases = {
     { input: [0.1, -0.1], expected: [reinterpretU16AsF16(0xa120), reinterpretU16AsF16(0xa11e)] },  // ~-0.01
     { input: [-0.1, 0.1], expected: [reinterpretU16AsF16(0xa120), reinterpretU16AsF16(0xa11e)] },  // ~-0.01
   ] as ScalarPairToIntervalCase[],
-  abstract: [
-    // 0.1 isn't exactly representable in f64, but will be quantized to an
-    // exact value when storing to a 'number' (0x3FB999999999999A).
-    // This is why below the expectations are not intervals.
-    // f64 0.1 * 0.1 = 0x3f847ae147ae147c,
-    { input: [0.1, 0.1], expected: reinterpretU64AsF64(0x3f847ae147ae147cn) },  // ~0.01
-    { input: [-0.1, -0.1], expected: reinterpretU64AsF64(0x3f847ae147ae147cn) },  // ~0.01
-    { input: [0.1, -0.1], expected: reinterpretU64AsF64(0xbf847ae147ae147cn) },  // ~-0.01
-    { input: [-0.1, 0.1], expected: reinterpretU64AsF64(0xbf847ae147ae147cn) },  // ~-0.01
-  ] as ScalarPairToIntervalCase[],
 } as const;
 
 g.test('multiplicationInterval')
   .params(u =>
     u
-      .combine('trait', ['f32', 'f16', 'abstract'] as const)
+      .combine('trait', ['f32', 'f16'] as const)
       .beginSubcases()
       .expandWithParams<ScalarPairToIntervalCase>(p => {
         const trait = FP[p.trait];
@@ -4885,7 +4920,7 @@ g.test('remainderInterval')
 g.test('stepInterval')
   .params(u =>
     u
-      .combine('trait', ['f32', 'f16'] as const)
+      .combine('trait', ['f32', 'f16', 'abstract'] as const)
       .beginSubcases()
       .expandWithParams<ScalarPairToIntervalCase>(p => {
         const constants = FP[p.trait].constants();
@@ -4903,12 +4938,17 @@ g.test('stepInterval')
           { input: [1, -1], expected: 0 },
 
           // 64-bit normals
-          { input: [0.1, 0.1], expected: [0, 1] },
+          // number is f64 internally, so the value representing the literal
+          // 0.1/-0.1 will always be exactly representable in AbstractFloat,
+          // since AF is also f64 internally.
+          // It is impossible with normals to cause the rounding ambiguity that
+          // causes the 0 or 1 result.
+          { input: [0.1, 0.1], expected: p.trait === 'abstract' ? 1 : [0, 1] },
           { input: [0, 0.1], expected: 1 },
           { input: [0.1, 0], expected: 0 },
           { input: [0.1, 1], expected: 1 },
           { input: [1, 0.1], expected: 0 },
-          { input: [-0.1, -0.1], expected: [0, 1] },
+          { input: [-0.1, -0.1], expected: p.trait === 'abstract' ? 1 : [0, 1] },
           { input: [0, -0.1], expected: 0 },
           { input: [-0.1, 0], expected: 1 },
           { input: [-0.1, -1], expected: 0 },
@@ -4989,23 +5029,12 @@ const kSubtractionInterval64BitsNormalCases = {
     // Expect f16 interval [0xAE67-0x2E67, 0xAE66-0x2E66]
     { input: [-0.1, 0.1], expected: [reinterpretU16AsF16(0xae67)-reinterpretU16AsF16(0x2e67), reinterpretU16AsF16(0xae66)-reinterpretU16AsF16(0x2e66)] },
   ] as ScalarPairToIntervalCase[],
-  abstract: [
-    // 0.1 isn't exactly representable in f64, but will be quantized to an
-    // exact value when storing to a 'number' (0x3FB999999999999A).
-    // This is why below the expectations are not intervals.
-    { input: [0.1, 0.1], expected: 0 },
-    { input: [-0.1, -0.1], expected: 0 },
-    // f64 0x3FB999999999999A - 0xBFB999999999999A = 0x3FC999999999999A
-    { input: [0.1, -0.1], expected: reinterpretU64AsF64(0x3fc999999999999an) },  // ~0.2
-    // f64 0xBFB999999999999A - 0x3FB999999999999A = 0xBFC999999999999A
-    { input: [-0.1, 0.1], expected: reinterpretU64AsF64(0xbfc999999999999an) },  // ~-0.2,
-  ] as ScalarPairToIntervalCase[],
 } as const;
 
 g.test('subtractionInterval')
   .params(u =>
     u
-      .combine('trait', ['f32', 'f16', 'abstract'] as const)
+      .combine('trait', ['f32', 'f16'] as const)
       .beginSubcases()
       .expandWithParams<ScalarPairToIntervalCase>(p => {
         const trait = FP[p.trait];
@@ -6635,7 +6664,7 @@ interface MatrixPairToMatrixCase {
 g.test('additionMatrixMatrixInterval')
   .params(u =>
     u
-      .combine('trait', ['f32', 'f16', 'abstract'] as const)
+      .combine('trait', ['f32', 'f16'] as const)
       .beginSubcases()
       .expandWithParams<MatrixPairToMatrixCase>(p => {
         const trait = FP[p.trait];
@@ -6853,7 +6882,7 @@ g.test('additionMatrixMatrixInterval')
 g.test('subtractionMatrixMatrixInterval')
   .params(u =>
     u
-      .combine('trait', ['f32', 'f16', 'abstract'] as const)
+      .combine('trait', ['f32', 'f16'] as const)
       .beginSubcases()
       .expandWithParams<MatrixPairToMatrixCase>(p => {
         const trait = FP[p.trait];
@@ -6861,7 +6890,7 @@ g.test('subtractionMatrixMatrixInterval')
         return [
           // Only testing that different shapes of matrices are handled correctly
           // here, to reduce test duplication.
-          // subtractionMatrixMatrixInterval uses AdditionIntervalOp for calculating intervals,
+          // subtractionMatrixMatrixInterval uses SubtractionIntervalOp for calculating intervals,
           // so the testing for subtractionInterval covers the actual interval
           // calculations.
           {
@@ -7646,26 +7675,12 @@ const kMultiplicationMatrixScalarIntervalCases = {
       ],
     },
   ] as MatrixScalarToMatrixCase[],
-  abstract: [
-    // From https://github.com/gpuweb/cts/issues/3044
-    {
-      matrix: [
-        [kValue.f64.negative.min, 0],
-        [0, 0],
-      ],
-      scalar: kValue.f64.negative.subnormal.min,
-      expected: [
-        [[0, reinterpretU64AsF64(0x400ffffffffffffdn)], 0], // [[0, 3.9999995...], 0],
-        [0, 0],
-      ],
-    },
-  ] as MatrixScalarToMatrixCase[],
 } as const;
 
 g.test('multiplicationMatrixScalarInterval')
   .params(u =>
     u
-      .combine('trait', ['f32', 'f16', 'abstract'] as const)
+      .combine('trait', ['f32', 'f16'] as const)
       .beginSubcases()
       .expandWithParams<MatrixScalarToMatrixCase>(p => {
         const trait = FP[p.trait];

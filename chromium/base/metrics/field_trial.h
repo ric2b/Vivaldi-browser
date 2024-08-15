@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 // The FieldTrial class handles the lower level configuration of running A/B
 // tests.
 //
@@ -183,9 +188,11 @@ class BASE_EXPORT FieldTrial : public RefCounted<FieldTrial> {
     static constexpr size_t kExpectedInstanceSize = 16;
 
     // Return a pointer to the data area immediately following the entry.
-    char* GetPickledDataPtr() { return reinterpret_cast<char*>(this + 1); }
-    const char* GetPickledDataPtr() const {
-      return reinterpret_cast<const char*>(this + 1);
+    uint8_t* GetPickledDataPtr() {
+      return reinterpret_cast<uint8_t*>(this + 1);
+    }
+    const uint8_t* GetPickledDataPtr() const {
+      return reinterpret_cast<const uint8_t*>(this + 1);
     }
 
     // Whether or not this field trial is activated. This is really just a
@@ -319,8 +326,8 @@ class BASE_EXPORT FieldTrial : public RefCounted<FieldTrial> {
 
   // Whether this field trial is low anonymity or not (see
   // |FieldTrialListIncludingLowAnonymity|).
-  // TODO(crbug.com/1431156): remove this once all call sites have been properly
-  // migrated to use an appropriate observer.
+  // TODO(crbug.com/40263398): remove this once all call sites have been
+  // properly migrated to use an appropriate observer.
   bool is_low_anonymity() const { return is_low_anonymity_; }
 
  private:

@@ -3,6 +3,9 @@
 // found in the LICENSE file.
 
 #include "components/commerce/core/shopping_service.h"
+
+#include <string>
+
 #include "base/functional/bind.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -83,6 +86,9 @@ const uint64_t kDiscountId1 = 111;
 const uint64_t kDiscountId2 = 222;
 const uint64_t kDiscountOfferId = 123456;
 
+const std::vector<std::vector<std::string>> kProductCategories = {
+    {"Dress", "Red Dress"}};
+
 }  // namespace
 
 class ShoppingServiceTest : public ShoppingServiceTestBase,
@@ -131,7 +137,7 @@ TEST_P(ShoppingServiceTest, TestProductInfoResponse) {
 
   OptimizationMetadata meta = opt_guide_->BuildPriceTrackingResponse(
       kTitle, kImageUrl, kOfferId, kClusterId, kCountryCode, kPrice,
-      kCurrencyCode, kGpcTitle);
+      kCurrencyCode, kGpcTitle, kProductCategories);
   opt_guide_->AddPriceUpdateToPriceTrackingResponse(&meta, kCurrencyCode,
                                                     kNewPrice, kPrice);
 
@@ -159,6 +165,19 @@ TEST_P(ShoppingServiceTest, TestProductInfoResponse) {
             ASSERT_TRUE(info->previous_amount_micros.has_value());
             ASSERT_EQ(kPrice, info->previous_amount_micros.value());
 
+            ASSERT_EQ(static_cast<int>(kProductCategories.size()),
+                      info->category_data.product_categories().size());
+
+            for (size_t i = 0; i < kProductCategories.size(); i++) {
+              auto labels =
+                  info->category_data.product_categories()[i].category_labels();
+              ASSERT_EQ(static_cast<int>(kProductCategories[i].size()),
+                        labels.size());
+              for (int j = 0; j < labels.size(); j++) {
+                ASSERT_EQ(kProductCategories[i][j],
+                          labels[j].category_default_label());
+              }
+            }
             run_loop->Quit();
           },
           &run_loop));
@@ -357,6 +376,147 @@ TEST_P(ShoppingServiceTest, TestProductInfoCacheURLCount) {
   ASSERT_EQ(0, GetProductInfoCacheOpenURLCount(GURL(url2)));
 }
 
+// Ensure we keep track of live web wrappers.
+TEST_P(ShoppingServiceTest, TestWebWrapperSet) {
+  test_features_.InitWithFeatures({kShoppingList}, {});
+
+  std::string url1 = "http://example.com/foo";
+  std::u16string title1 = u"example1";
+  MockWebWrapper web1(GURL(url1), false, nullptr, title1);
+
+  UrlInfo url_info1;
+  url_info1.url = GURL(url1);
+  url_info1.title = title1;
+
+  std::string url2 = "http://example.com/bar";
+  std::u16string title2 = u"example2";
+  MockWebWrapper web2(GURL(url2), false, nullptr, title2);
+
+  UrlInfo url_info2;
+  url_info2.url = GURL(url2);
+  url_info2.title = title2;
+
+  std::string url3 = "http://example.com/baz";
+  std::u16string title3 = u"example3";
+  MockWebWrapper web3(GURL(url3), false, nullptr, title3);
+
+  UrlInfo url_info3;
+  url_info3.url = GURL(url3);
+  url_info3.title = title3;
+
+  ASSERT_TRUE(shopping_service_->GetUrlInfosForActiveWebWrappers().empty());
+
+  WebWrapperCreated(&web1);
+  WebWrapperCreated(&web2);
+  WebWrapperCreated(&web3);
+
+  std::vector<UrlInfo> open_urls =
+      shopping_service_->GetUrlInfosForActiveWebWrappers();
+
+  ASSERT_EQ(3u, open_urls.size());
+  ASSERT_TRUE(base::Contains(open_urls, url_info1));
+  ASSERT_TRUE(base::Contains(open_urls, url_info2));
+  ASSERT_TRUE(base::Contains(open_urls, url_info3));
+
+  // Close one of the tabs
+  WebWrapperDestroyed(&web1);
+
+  open_urls = shopping_service_->GetUrlInfosForActiveWebWrappers();
+  ASSERT_EQ(2u, open_urls.size());
+  ASSERT_FALSE(base::Contains(open_urls, url_info1));
+  ASSERT_TRUE(base::Contains(open_urls, url_info2));
+  ASSERT_TRUE(base::Contains(open_urls, url_info3));
+
+  WebWrapperDestroyed(&web2);
+  WebWrapperDestroyed(&web3);
+
+  ASSERT_TRUE(shopping_service_->GetUrlInfosForActiveWebWrappers().empty());
+}
+
+// Make sure recent URLs doesn't contain duplicates.
+TEST_P(ShoppingServiceTest, TestRecentUrls_NoDuplicates) {
+  std::string url1 = "http://example.com/foo";
+  MockWebWrapper web1(GURL(url1), false);
+  std::string url2 = "http://example.com/bar";
+  MockWebWrapper web2(GURL(url2), false);
+
+  ASSERT_EQ(
+      0u, shopping_service_->GetUrlInfosForRecentlyViewedWebWrappers().size());
+
+  OnWebWrapperSwitched(&web1);
+
+  std::vector<UrlInfo> urls =
+      shopping_service_->GetUrlInfosForRecentlyViewedWebWrappers();
+  ASSERT_EQ(1u, urls.size());
+  ASSERT_EQ(urls[0].url, GURL(url1));
+
+  OnWebWrapperSwitched(&web2);
+
+  urls = shopping_service_->GetUrlInfosForRecentlyViewedWebWrappers();
+  ASSERT_EQ(2u, urls.size());
+  ASSERT_EQ(urls[0].url, GURL(url2));
+  ASSERT_EQ(urls[1].url, GURL(url1));
+
+  // Adding the first URL again should move that url to the head of the list.
+  // There should still only be one instance.
+  OnWebWrapperSwitched(&web1);
+
+  urls = shopping_service_->GetUrlInfosForRecentlyViewedWebWrappers();
+  ASSERT_EQ(2u, urls.size());
+  ASSERT_EQ(urls[0].url, GURL(url1));
+  ASSERT_EQ(urls[1].url, GURL(url2));
+}
+
+// Make sure recent URLs doesn't go over the max size.
+TEST_P(ShoppingServiceTest, TestRecentUrls_MaxCount) {
+  for (int i = 0; i < 20; i++) {
+    MockWebWrapper wrapper = MockWebWrapper(
+        GURL("http://example.com/" + base::NumberToString(i)), false);
+    OnWebWrapperSwitched(&wrapper);
+  }
+
+  std::string url1 = "http://example.com/foo";
+  MockWebWrapper web1(GURL(url1), false);
+  std::string url2 = "http://example.com/bar";
+  MockWebWrapper web2(GURL(url2), false);
+
+  ASSERT_EQ(
+      10u, shopping_service_->GetUrlInfosForRecentlyViewedWebWrappers().size());
+}
+
+TEST_P(ShoppingServiceTest, TestRecentUrls_CacheEntriesRetained) {
+  const size_t max_recents = 10;
+  std::vector<std::unique_ptr<MockWebWrapper>> web_wrappers;
+  for (size_t i = 0; i < max_recents; i++) {
+    web_wrappers.push_back(std::make_unique<MockWebWrapper>(
+        GURL("http://example.com/" + base::NumberToString(i)), false));
+    OnWebWrapperSwitched(web_wrappers[i].get());
+  }
+
+  for (const auto& web_wrapper : web_wrappers) {
+    ASSERT_TRUE(GetCache().IsUrlReferenced(web_wrapper->GetLastCommittedURL()));
+  }
+
+  // Add more URLs to push the originals out.
+  for (size_t i = max_recents; i < max_recents * 2; i++) {
+    web_wrappers.push_back(std::make_unique<MockWebWrapper>(
+        GURL("http://example.com/" + base::NumberToString(i)), false));
+    OnWebWrapperSwitched(web_wrappers[i].get());
+  }
+
+  // The first set of web wrapper URLs should no longer be in the cache, but
+  // the second set should.
+  for (size_t i = 0; i < web_wrappers.size(); i++) {
+    if (i < max_recents) {
+      ASSERT_FALSE(
+          GetCache().IsUrlReferenced(web_wrappers[i]->GetLastCommittedURL()));
+    } else {
+      ASSERT_TRUE(
+          GetCache().IsUrlReferenced(web_wrappers[i]->GetLastCommittedURL()));
+    }
+  }
+}
+
 // Test that product info is inserted into the cache without a client
 // necessarily querying for it.
 TEST_P(ShoppingServiceTest, TestProductInfoCacheFullLifecycle) {
@@ -549,6 +709,114 @@ TEST_P(ShoppingServiceTest,
   // Close the "tab" and make sure the cache is empty.
   WebWrapperDestroyed(&web);
   ASSERT_EQ(0, GetProductInfoCacheOpenURLCount(GURL(kProductUrl)));
+}
+
+// The on-demand api should not be triggered in the case where we have an
+// explicit negative signal from the page.
+TEST_P(ShoppingServiceTest, TestProductInfoWithFallback_NoOnDemandCalls) {
+  MockWebWrapper web(GURL(kProductUrl), false);
+
+  // Assume the page has already loaded for the navigation. This is usually the
+  // case for single-page webapps.
+  web.SetIsFirstLoadForNavigationFinished(true);
+
+  opt_guide_->SetResponse(GURL(kProductUrl), OptimizationType::PRICE_TRACKING,
+                          OptimizationGuideDecision::kFalse,
+                          OptimizationMetadata());
+
+  // The on-demand api should only ever be called once in this test.
+  EXPECT_CALL(*GetMockOptGuideDecider(), CanApplyOptimizationOnDemand).Times(0);
+
+  DidNavigatePrimaryMainFrame(&web);
+  // If the page was already loaded, assume the js has time to run now.
+  SimulateProductInfoLocalExtractionTaskFinished();
+
+  // By this point there should be something in the cache.
+  ASSERT_EQ(1, GetProductInfoCacheOpenURLCount(GURL(kProductUrl)));
+
+  // We should be able to access the cached data.
+  CommerceInfoCache::CacheEntry* entry =
+      GetCache().GetEntryForUrl(GURL(kProductUrl));
+  ASSERT_FALSE(entry == nullptr);
+  ASSERT_FALSE(entry->run_product_info_on_demand);
+
+  // Querying for the info multiple times should not trigger the on-demand api.
+  base::RunLoop run_loop;
+  shopping_service_->GetProductInfoForUrl(
+      GURL(kProductUrl), base::BindOnce(
+                             [](base::RunLoop* run_loop, const GURL& url,
+                                const std::optional<const ProductInfo>& info) {
+                               ASSERT_EQ(kProductUrl, url.spec());
+                               ASSERT_FALSE(info.has_value());
+                               run_loop->Quit();
+                             },
+                             &run_loop));
+  run_loop.Run();
+
+  // Close the "tab" and make sure the cache is empty.
+  WebWrapperDestroyed(&web);
+  ASSERT_EQ(0, GetProductInfoCacheOpenURLCount(GURL(kProductUrl)));
+}
+
+// If there's a reference to the url in the cache and opt guide doesn't know
+// about the url, we should be allowed to call the on-demand api.
+TEST_P(ShoppingServiceTest,
+       TestProductInfoWithFallback_CallsOnDemandOnce_RefInCache) {
+  // The on-demand api should not be called if there isn't a page open and
+  // there isn't a reference in the cache.
+  EXPECT_CALL(*GetMockOptGuideDecider(), CanApplyOptimizationOnDemand).Times(0);
+
+  opt_guide_->SetResponse(GURL(kProductUrl), OptimizationType::PRICE_TRACKING,
+                          OptimizationGuideDecision::kUnknown,
+                          OptimizationMetadata());
+
+  base::RunLoop run_loop;
+  shopping_service_->GetProductInfoForUrl(
+      GURL(kProductUrl), base::BindOnce(
+                             [](base::RunLoop* run_loop, const GURL& url,
+                                const std::optional<const ProductInfo>& info) {
+                               ASSERT_EQ(kProductUrl, url.spec());
+                               ASSERT_FALSE(info.has_value());
+                               run_loop->Quit();
+                             },
+                             &run_loop));
+  run_loop.Run();
+
+  // We shouldn't have a cache entry.
+  ASSERT_TRUE(GetCache().GetEntryForUrl(GURL(kProductUrl)) == nullptr);
+
+  // Add a ref to the url - this could be a page loading or another feature.
+  GetCache().AddRef(GURL(kProductUrl));
+
+  CommerceInfoCache::CacheEntry* entry =
+      GetCache().GetEntryForUrl(GURL(kProductUrl));
+  ASSERT_FALSE(entry == nullptr);
+  ASSERT_TRUE(entry->run_product_info_on_demand);
+
+  // We should now be allowed to call the on-demand api when product info is
+  // requested.
+  EXPECT_CALL(*GetMockOptGuideDecider(), CanApplyOptimizationOnDemand).Times(1);
+
+  OptimizationMetadata meta = opt_guide_->BuildPriceTrackingResponse(
+      kTitle, "", kOfferId, kClusterId, kCountryCode);
+  opt_guide_->AddOnDemandShoppingResponse(
+      GURL(kProductUrl), OptimizationGuideDecision::kTrue, meta);
+
+  // By this point there should be something in the cache.
+  ASSERT_EQ(1, GetProductInfoCacheOpenURLCount(GURL(kProductUrl)));
+
+  // Querying for the info multiple times should not trigger the on-demand api.
+  base::RunLoop run_loop2;
+  shopping_service_->GetProductInfoForUrl(
+      GURL(kProductUrl), base::BindOnce(
+                             [](base::RunLoop* run_loop, const GURL& url,
+                                const std::optional<const ProductInfo>& info) {
+                               ASSERT_EQ(kProductUrl, url.spec());
+                               ASSERT_TRUE(info.has_value());
+                               run_loop->Quit();
+                             },
+                             &run_loop2));
+  run_loop2.Run();
 }
 
 // Test that merchant info is processed correctly.
@@ -1576,84 +1844,6 @@ TEST_P(ShoppingServiceTest, TestDiscountInfoResponse_InfoWithoutDiscountCode) {
             run_loop->Quit();
           },
           &run_loop));
-  run_loop.Run();
-}
-
-TEST_P(ShoppingServiceTest, TestProductSpecificationsSetResponse) {
-  OptimizationMetadata meta = opt_guide_->BuildPriceTrackingResponse(
-      kTitle, kImageUrl, kOfferId, kClusterId, kCountryCode, kPrice,
-      kCurrencyCode, kGpcTitle);
-
-  opt_guide_->SetResponse(GURL(kProductUrl), OptimizationType::PRICE_TRACKING,
-                          OptimizationGuideDecision::kTrue, meta);
-
-  base::RunLoop run_loop;
-  shopping_service_->GetProductSpecificationsSetForUrls(
-      std::vector<GURL>{GURL(kProductUrl), GURL(kMerchantUrl)},
-      base::BindOnce(
-          [](base::RunLoop* run_loop,
-             commerce::ProductSpecificationSet spec_set) {
-            std::string ids;
-            net::GetValueForKeyInQuery(spec_set.product_spec_url, "ids", &ids);
-            ASSERT_EQ("456,0", ids);
-            run_loop->Quit();
-          },
-          &run_loop));
-  run_loop.Run();
-}
-
-TEST_P(ShoppingServiceTest,
-       TestProductSpecificationsSetResponse_MultipleProducts) {
-  OptimizationMetadata meta = opt_guide_->BuildPriceTrackingResponse(
-      kTitle, kImageUrl, kOfferId, kClusterId, kCountryCode, kPrice,
-      kCurrencyCode, kGpcTitle);
-
-  opt_guide_->SetResponse(GURL(kProductUrl), OptimizationType::PRICE_TRACKING,
-                          OptimizationGuideDecision::kTrue, meta);
-
-  base::RunLoop run_loop;
-  shopping_service_->GetProductSpecificationsSetForUrls(
-      std::vector<GURL>{
-          GURL(kProductUrl),
-          GURL(kProductUrl),
-      },
-      base::BindOnce(
-          [](base::RunLoop* run_loop,
-             commerce::ProductSpecificationSet spec_set) {
-            std::string ids;
-            net::GetValueForKeyInQuery(spec_set.product_spec_url, "ids", &ids);
-            ASSERT_EQ("456,456", ids);
-            run_loop->Quit();
-          },
-          &run_loop));
-
-  run_loop.Run();
-}
-
-TEST_P(ShoppingServiceTest, TestProductSpecificationsSetResponse_NoProducts) {
-  OptimizationMetadata meta = opt_guide_->BuildPriceTrackingResponse(
-      kTitle, kImageUrl, kOfferId, kClusterId, kCountryCode, kPrice,
-      kCurrencyCode, kGpcTitle);
-
-  opt_guide_->SetResponse(GURL(kProductUrl), OptimizationType::PRICE_TRACKING,
-                          OptimizationGuideDecision::kFalse, meta);
-
-  base::RunLoop run_loop;
-  shopping_service_->GetProductSpecificationsSetForUrls(
-      std::vector<GURL>{
-          GURL(kProductUrl),
-          GURL(kProductUrl),
-      },
-      base::BindOnce(
-          [](base::RunLoop* run_loop,
-             commerce::ProductSpecificationSet spec_set) {
-            std::string ids;
-            net::GetValueForKeyInQuery(spec_set.product_spec_url, "ids", &ids);
-            ASSERT_EQ("0,0", ids);
-            run_loop->Quit();
-          },
-          &run_loop));
-
   run_loop.Run();
 }
 

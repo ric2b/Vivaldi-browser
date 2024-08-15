@@ -13,48 +13,27 @@
 #include "gn/substitution_writer.h"
 #include "gn/target.h"
 
-namespace {
-
-// Return directory of |path| without the trailing directory separator.
-std::string_view FindDirNoTrailingSeparator(std::string_view path) {
-  std::string_view::size_type pos = path.find_last_of("/\\");
-  if (pos == std::string_view::npos)
-    return std::string_view();
-  return std::string_view(path.data(), pos);
-}
-
-bool IsSourceFileFromAssetsCatalog(std::string_view source,
-                                   SourceFile* asset_catalog) {
-  // Check whether |source| matches one of the following pattern:
-  //    .*\.xcassets/Contents.json
-  //    .*\.xcassets/[^/]*\.appiconset/[^/]*
-  //    .*\.xcassets/[^/]*\.colorset/[^/]*
-  //    .*\.xcassets/[^/]*\.dataset/[^/]*
-  //    .*\.xcassets/[^/]*\.imageset/[^/]*
-  //    .*\.xcassets/[^/]*\.launchimage/[^/]*
-  //    .*\.xcassets/[^/]*\.symbolset/[^/]*
-  bool is_file_from_asset_catalog = false;
-  std::string_view dir = FindDirNoTrailingSeparator(source);
-  if (source.ends_with("/Contents.json") && dir.ends_with(".xcassets")) {
-    is_file_from_asset_catalog = true;
-  } else if (dir.ends_with(".appiconset") || dir.ends_with(".colorset") ||
-             dir.ends_with(".dataset") || dir.ends_with(".imageset") ||
-             dir.ends_with(".launchimage") || dir.ends_with(".symbolset")) {
-    dir = FindDirNoTrailingSeparator(dir);
-    is_file_from_asset_catalog = dir.ends_with(".xcassets");
-  }
-  if (is_file_from_asset_catalog && asset_catalog) {
-    std::string asset_catalog_path(dir);
-    *asset_catalog = SourceFile(std::move(asset_catalog_path));
-  }
-  return is_file_from_asset_catalog;
-}
-
-}  // namespace
-
 BundleData::BundleData() = default;
 
 BundleData::~BundleData() = default;
+
+SourceFile BundleData::GetAssetsCatalogDirectory(const SourceFile& source) {
+  SourceFile assets_catalog_dir;
+  std::string_view path = source.value();
+  while (!path.empty()) {
+    if (path.ends_with(".xcassets")) {
+      assets_catalog_dir = SourceFile(path);
+    }
+
+    const auto sep = path.find_last_of("/\\");
+    if (sep == std::string_view::npos) {
+      break;
+    }
+
+    path = path.substr(0, sep);
+  }
+  return assets_catalog_dir;
+}
 
 void BundleData::AddBundleData(const Target* target, bool is_create_bundle) {
   DCHECK_EQ(target->output_type(), Target::BUNDLE_DATA);
@@ -89,9 +68,9 @@ void BundleData::OnTargetResolved(Target* owning_target) {
   for (const Target* target : bundle_deps_) {
     SourceFiles file_rule_sources;
     for (const SourceFile& source_file : target->sources()) {
-      SourceFile assets_catalog;
-      if (IsSourceFileFromAssetsCatalog(source_file.value(), &assets_catalog)) {
-        assets_catalog_sources.push_back(assets_catalog);
+      SourceFile assets_catalog_dir = GetAssetsCatalogDirectory(source_file);
+      if (!assets_catalog_dir.is_null()) {
+        assets_catalog_sources.push_back(assets_catalog_dir);
         assets_catalog_deps.push_back(target);
       } else {
         file_rule_sources.push_back(source_file);
@@ -123,9 +102,9 @@ void BundleData::GetSourceFiles(SourceFiles* sources) const {
   }
   sources->insert(sources->end(), assets_catalog_sources_.begin(),
                   assets_catalog_sources_.end());
-  if (!code_signing_script_.is_null()) {
-    sources->insert(sources->end(), code_signing_sources_.begin(),
-                    code_signing_sources_.end());
+  if (!post_processing_script_.is_null()) {
+    sources->insert(sources->end(), post_processing_sources_.begin(),
+                    post_processing_sources_.end());
   }
 }
 
@@ -161,13 +140,13 @@ bool BundleData::GetOutputsAsSourceFiles(const Settings* settings,
   if (!partial_info_plist_.is_null())
     outputs_as_source->push_back(partial_info_plist_);
 
-  if (!code_signing_script_.is_null()) {
-    std::vector<SourceFile> code_signing_output_files;
-    SubstitutionWriter::GetListAsSourceFiles(code_signing_outputs_,
-                                             &code_signing_output_files);
+  if (!post_processing_script_.is_null()) {
+    std::vector<SourceFile> post_processing_output_files;
+    SubstitutionWriter::GetListAsSourceFiles(post_processing_outputs_,
+                                             &post_processing_output_files);
     outputs_as_source->insert(outputs_as_source->end(),
-                              code_signing_output_files.begin(),
-                              code_signing_output_files.end());
+                              post_processing_output_files.begin(),
+                              post_processing_output_files.end());
   }
 
   if (!root_dir_.is_null())

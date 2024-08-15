@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "core/fxge/cfx_face.h"
 
 #include <algorithm>
@@ -12,10 +17,12 @@
 
 #include "core/fxcrt/check.h"
 #include "core/fxcrt/check_op.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/notreached.h"
 #include "core/fxcrt/numerics/clamped_math.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
 #include "core/fxcrt/numerics/safe_math.h"
+#include "core/fxcrt/span.h"
 #include "core/fxge/cfx_font.h"
 #include "core/fxge/cfx_fontmgr.h"
 #include "core/fxge/cfx_gemodule.h"
@@ -378,7 +385,8 @@ int16_t CFX_Face::GetHeight() const {
 #endif
 
 pdfium::span<uint8_t> CFX_Face::GetData() const {
-  return {GetRec()->stream->base, GetRec()->stream->size};
+  return UNSAFE_BUFFERS(
+      pdfium::make_span(GetRec()->stream->base, GetRec()->stream->size));
 }
 
 size_t CFX_Face::GetSfntTable(uint32_t table, pdfium::span<uint8_t> buffer) {
@@ -521,10 +529,13 @@ std::unique_ptr<CFX_GlyphBitmap> CFX_Face::RenderGlyph(const CFX_Font* pFont,
   int dib_width = bitmap.width;
   auto pGlyphBitmap =
       std::make_unique<CFX_GlyphBitmap>(glyph->bitmap_left, glyph->bitmap_top);
-  pGlyphBitmap->GetBitmap()->Create(dib_width, bitmap.rows,
-                                    anti_alias == FT_RENDER_MODE_MONO
-                                        ? FXDIB_Format::k1bppMask
-                                        : FXDIB_Format::k8bppMask);
+  const FXDIB_Format format = anti_alias == FT_RENDER_MODE_MONO
+                                  ? FXDIB_Format::k1bppMask
+                                  : FXDIB_Format::k8bppMask;
+  if (!pGlyphBitmap->GetBitmap()->Create(dib_width, bitmap.rows, format)) {
+    return nullptr;
+  }
+
   int dest_pitch = pGlyphBitmap->GetBitmap()->GetPitch();
   uint8_t* pDestBuf = pGlyphBitmap->GetBitmap()->GetWritableBuffer().data();
   const uint8_t* pSrcBuf = bitmap.buffer;

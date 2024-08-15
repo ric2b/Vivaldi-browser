@@ -464,8 +464,14 @@ class UserMediaProcessorUnderTest : public UserMediaProcessor {
   blink::AudioCaptureSettings AudioSettings() const {
     return AudioCaptureSettingsForTesting();
   }
+  const Vector<blink::AudioCaptureSettings>& EligibleAudioSettings() const {
+    return EligibleAudioCaptureSettingsForTesting();
+  }
   blink::VideoCaptureSettings VideoSettings() const {
     return VideoCaptureSettingsForTesting();
+  }
+  const Vector<blink::VideoCaptureSettings> EligibleVideoSettings() const {
+    return EligibleVideoCaptureSettingsForTesting();
   }
 
   blink::mojom::blink::MediaStreamRequestResult error_reason() const {
@@ -826,16 +832,16 @@ TEST_F(UserMediaClientTest, GenerateTwoMediaStreamsWithSameSource) {
 
   auto desc1_video_components = desc1->VideoComponents();
   auto desc2_video_components = desc2->VideoComponents();
-  EXPECT_EQ(desc1_video_components[0]->Source()->Id(),
-            desc2_video_components[0]->Source()->Id());
+  EXPECT_EQ(desc1_video_components[0]->Source()->GetName(),
+            desc2_video_components[0]->Source()->GetName());
 
   EXPECT_EQ(desc1_video_components[0]->Source()->GetPlatformSource(),
             desc2_video_components[0]->Source()->GetPlatformSource());
 
   auto desc1_audio_components = desc1->AudioComponents();
   auto desc2_audio_components = desc2->AudioComponents();
-  EXPECT_EQ(desc1_audio_components[0]->Source()->Id(),
-            desc2_audio_components[0]->Source()->Id());
+  EXPECT_EQ(desc1_audio_components[0]->Source()->GetName(),
+            desc2_audio_components[0]->Source()->GetName());
 
   EXPECT_EQ(MediaStreamAudioSource::From(desc1_audio_components[0]->Source()),
             MediaStreamAudioSource::From(desc2_audio_components[0]->Source()));
@@ -853,16 +859,16 @@ TEST_F(UserMediaClientTest, GenerateTwoMediaStreamsWithDifferentSources) {
 
   auto desc1_video_components = desc1->VideoComponents();
   auto desc2_video_components = desc2->VideoComponents();
-  EXPECT_NE(desc1_video_components[0]->Source()->Id(),
-            desc2_video_components[0]->Source()->Id());
+  EXPECT_NE(desc1_video_components[0]->Source()->GetName(),
+            desc2_video_components[0]->Source()->GetName());
 
   EXPECT_NE(desc1_video_components[0]->Source()->GetPlatformSource(),
             desc2_video_components[0]->Source()->GetPlatformSource());
 
   auto desc1_audio_components = desc1->AudioComponents();
   auto desc2_audio_components = desc2->AudioComponents();
-  EXPECT_NE(desc1_audio_components[0]->Source()->Id(),
-            desc2_audio_components[0]->Source()->Id());
+  EXPECT_NE(desc1_audio_components[0]->Source()->GetName(),
+            desc2_audio_components[0]->Source()->GetName());
 
   EXPECT_NE(MediaStreamAudioSource::From(desc1_audio_components[0]->Source()),
             MediaStreamAudioSource::From(desc2_audio_components[0]->Source()));
@@ -1220,6 +1226,13 @@ TEST_F(UserMediaClientTest, NonDefaultAudioConstraintsPropagate) {
   user_media_client_impl_->RequestUserMediaForTest(request);
   blink::AudioCaptureSettings audio_capture_settings =
       user_media_processor_->AudioSettings();
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_FUCHSIA)
+  if (base::FeatureList::IsEnabled(
+          features::kGetUserMediaDeferredDeviceSettingsSelection)) {
+    audio_capture_settings = user_media_processor_->EligibleAudioSettings()[0];
+  }
+#endif
+
   blink::VideoCaptureSettings video_capture_settings =
       user_media_processor_->VideoSettings();
   user_media_client_impl_->CancelUserMediaRequest(request);
@@ -1273,6 +1286,12 @@ TEST_F(UserMediaClientTest, CreateWithMandatoryValidDeviceIds) {
 }
 
 TEST_F(UserMediaClientTest, CreateWithBasicIdealValidDeviceId) {
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_FUCHSIA)
+  // Ideal device ids are overridden by user preference under this flag.
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitAndDisableFeature(
+      features::kGetUserMediaDeferredDeviceSettingsSelection);
+#endif
   MediaConstraints audio_constraints =
       CreateDeviceConstraints(g_empty_string, fake_ids_->audio_input_1);
   MediaConstraints video_constraints =
@@ -1283,6 +1302,13 @@ TEST_F(UserMediaClientTest, CreateWithBasicIdealValidDeviceId) {
 }
 
 TEST_F(UserMediaClientTest, CreateWithAdvancedExactValidDeviceId) {
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_FUCHSIA)
+  // Advanced exact device id constraints are overridden by user preference
+  // under this flag.
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitAndDisableFeature(
+      features::kGetUserMediaDeferredDeviceSettingsSelection);
+#endif
   MediaConstraints audio_constraints = CreateDeviceConstraints(
       g_empty_string, g_empty_string, fake_ids_->audio_input_1);
   MediaConstraints video_constraints = CreateDeviceConstraints(
@@ -1329,10 +1355,6 @@ TEST_F(UserMediaClientTest, CreateWithFacingModeEnvironment) {
 }
 
 TEST_F(UserMediaClientTest, ApplyConstraintsVideoDeviceSingleTrack) {
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kStartMediaStreamCaptureIndicatorInBrowser)) {
-    EXPECT_CALL(mock_dispatcher_host_, OnStreamStarted(_));
-  }
   MediaStreamTrack* track = RequestLocalVideoTrack();
   MediaStreamComponent* component = track->Component();
   MediaStreamVideoTrack* platform_track =
@@ -1365,10 +1387,6 @@ TEST_F(UserMediaClientTest, ApplyConstraintsVideoDeviceSingleTrack) {
 }
 
 TEST_F(UserMediaClientTest, ApplyConstraintsVideoDeviceTwoTracks) {
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kStartMediaStreamCaptureIndicatorInBrowser)) {
-    EXPECT_CALL(mock_dispatcher_host_, OnStreamStarted(_));
-  }
   MediaStreamTrack* track = RequestLocalVideoTrack();
   MediaStreamComponent* component = track->Component();
   MockMediaStreamVideoCapturerSource* source =
@@ -1383,10 +1401,6 @@ TEST_F(UserMediaClientTest, ApplyConstraintsVideoDeviceTwoTracks) {
   // Create a new track and verify that it uses the same source and that the
   // source's format did not change. The new track uses the same format as the
   // source by default.
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kStartMediaStreamCaptureIndicatorInBrowser)) {
-    EXPECT_CALL(mock_dispatcher_host_, OnStreamStarted(_));
-  }
   MediaStreamTrack* track2 = RequestLocalVideoTrack();
   MediaStreamComponent* component2 = track2->Component();
   CheckVideoSourceAndTrack(source, 1024, 768, 20.0, component2, 1024, 768,
@@ -1421,10 +1435,6 @@ TEST_F(UserMediaClientTest, ApplyConstraintsVideoDeviceTwoTracks) {
 }
 
 TEST_F(UserMediaClientTest, ApplyConstraintsVideoDeviceFailsToStopForRestart) {
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kStartMediaStreamCaptureIndicatorInBrowser)) {
-    EXPECT_CALL(mock_dispatcher_host_, OnStreamStarted(_));
-  }
   MediaStreamTrack* track = RequestLocalVideoTrack();
   MediaStreamComponent* component = track->Component();
   MockMediaStreamVideoCapturerSource* source =
@@ -1445,10 +1455,6 @@ TEST_F(UserMediaClientTest, ApplyConstraintsVideoDeviceFailsToStopForRestart) {
 
 TEST_F(UserMediaClientTest,
        ApplyConstraintsVideoDeviceFailsToRestartAfterStop) {
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kStartMediaStreamCaptureIndicatorInBrowser)) {
-    EXPECT_CALL(mock_dispatcher_host_, OnStreamStarted(_));
-  }
   MediaStreamTrack* track = RequestLocalVideoTrack();
   MediaStreamComponent* component = track->Component();
   MockMediaStreamVideoCapturerSource* source =
@@ -1470,10 +1476,6 @@ TEST_F(UserMediaClientTest,
 }
 
 TEST_F(UserMediaClientTest, ApplyConstraintsVideoDeviceStopped) {
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kStartMediaStreamCaptureIndicatorInBrowser)) {
-    EXPECT_CALL(mock_dispatcher_host_, OnStreamStarted(_));
-  }
   MediaStreamTrack* track = RequestLocalVideoTrack();
   MediaStreamComponent* component = track->Component();
   MockMediaStreamVideoCapturerSource* source =
@@ -1515,10 +1517,6 @@ TEST_F(UserMediaClientTest, ApplyConstraintsVideoDeviceStopped) {
 // set according to the renderToAssociatedSink constrainable property.
 TEST_F(UserMediaClientTest,
        RenderToAssociatedSinkTrueAssociatedOutputDeviceId) {
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kStartMediaStreamCaptureIndicatorInBrowser)) {
-    EXPECT_CALL(mock_dispatcher_host_, OnStreamStarted(_));
-  }
   MediaStreamComponent* component =
       RequestLocalAudioTrackWithAssociatedSink(true);
   MediaStreamAudioSource* source =
@@ -1528,10 +1526,6 @@ TEST_F(UserMediaClientTest,
 
 TEST_F(UserMediaClientTest,
        RenderToAssociatedSinkFalseAssociatedOutputDeviceId) {
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kStartMediaStreamCaptureIndicatorInBrowser)) {
-    EXPECT_CALL(mock_dispatcher_host_, OnStreamStarted(_));
-  }
   MediaStreamComponent* component =
       RequestLocalAudioTrackWithAssociatedSink(false);
   MediaStreamAudioSource* source =
@@ -1541,10 +1535,6 @@ TEST_F(UserMediaClientTest,
 
 TEST_F(UserMediaClientTest, IsCapturing) {
   EXPECT_FALSE(user_media_client_impl_->IsCapturing());
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kStartMediaStreamCaptureIndicatorInBrowser)) {
-    EXPECT_CALL(mock_dispatcher_host_, OnStreamStarted(_));
-  }
   MediaStreamDescriptor* descriptor = RequestLocalMediaStream();
   EXPECT_TRUE(user_media_client_impl_->IsCapturing());
 

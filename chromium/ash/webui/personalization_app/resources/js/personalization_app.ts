@@ -119,7 +119,8 @@ export {GooglePhotosZeroStateElement} from './wallpaper/google_photos_zero_state
 export {DEFAULT_COLOR_SCHEME} from './theme/utils.js';
 export {LocalImagesElement} from './wallpaper/local_images_element.js';
 export * from 'chrome://resources/ash/common/sea_pen/sea_pen_actions.js';
-export {getRecentSeaPenImages, selectRecentSeaPenImage, searchSeaPenThumbnails} from 'chrome://resources/ash/common/sea_pen/sea_pen_controller.js';
+export {getRecentSeaPenImages, selectRecentSeaPenImage, searchSeaPenThumbnails, selectSeaPenWallpaper} from 'chrome://resources/ash/common/sea_pen/sea_pen_controller.js';
+export {SeaPenFeedbackElement} from 'chrome://resources/ash/common/sea_pen/sea_pen_feedback_element.js';
 export {SeaPenImageLoadingElement} from 'chrome://resources/ash/common/sea_pen/sea_pen_image_loading_element.js';
 export {SeaPenImagesElement} from 'chrome://resources/ash/common/sea_pen/sea_pen_images_element.js';
 export {SeaPenInputQueryElement} from 'chrome://resources/ash/common/sea_pen/sea_pen_input_query_element.js';
@@ -131,21 +132,22 @@ export {getSeaPenStore, setSeaPenStore, SeaPenStoreInterface} from 'chrome://res
 export {SeaPenTemplateQueryElement} from 'chrome://resources/ash/common/sea_pen/sea_pen_template_query_element.js';
 export {SeaPenTemplatesElement} from 'chrome://resources/ash/common/sea_pen/sea_pen_templates_element.js';
 export {setSeaPenProviderForTesting} from 'chrome://resources/ash/common/sea_pen/sea_pen_interface_provider.js';
-export {SeaPenTermsOfServiceDialogElement} from 'chrome://resources/ash/common/sea_pen/sea_pen_terms_of_service_dialog_element.js';
+export {SeaPenIntroductionDialogElement} from 'chrome://resources/ash/common/sea_pen/sea_pen_introduction_dialog_element.js';
+export {SeaPenToastElement} from 'chrome://resources/ash/common/sea_pen/sea_pen_toast_element.js';
 export {SeaPenZeroStateSvgElement} from 'chrome://resources/ash/common/sea_pen/sea_pen_zero_state_svg_element.js';
 export {isDefaultImage, isGooglePhotosPhoto, isWallpaperImage} from './wallpaper/utils.js';
 export * from './wallpaper/wallpaper_actions.js';
 export {WallpaperCollectionsElement} from './wallpaper/wallpaper_collections_element.js';
 export {selectGooglePhotosAlbum, cancelPreviewWallpaper, confirmPreviewWallpaper, fetchCollections, fetchGooglePhotosAlbum, fetchGooglePhotosAlbums, fetchGooglePhotosPhotos, fetchGooglePhotosSharedAlbums, fetchLocalData, getDefaultImageThumbnail, getLocalImages, initializeBackdropData, fetchGooglePhotosEnabled, selectWallpaper, setCurrentWallpaperLayout, setDailyRefreshCollectionId, updateDailyRefreshWallpaper} from './wallpaper/wallpaper_controller.js';
 export {WallpaperErrorElement} from './wallpaper/wallpaper_error_element.js';
-export {WallpaperFullscreenElement} from './wallpaper/wallpaper_fullscreen_element.js';
+export {WallpaperFullscreenElement, setShouldWaitForFullscreenOpacityTransitionsForTesting} from './wallpaper/wallpaper_fullscreen_element.js';
 export {getImageTiles, WallpaperImagesElement} from './wallpaper/wallpaper_images_element.js';
 export {setWallpaperProviderForTesting} from './wallpaper/wallpaper_interface_provider.js';
 export {WallpaperObserver} from './wallpaper/wallpaper_observer.js';
 export {WallpaperPreviewElement} from './wallpaper/wallpaper_preview_element.js';
 export {WallpaperSelectedElement} from './wallpaper/wallpaper_selected_element.js';
 export {WallpaperSubpageElement} from './wallpaper/wallpaper_subpage_element.js';
-export {DailyRefreshType} from './wallpaper/wallpaper_state.js';
+export {DailyRefreshType, FullscreenPreviewState} from './wallpaper/wallpaper_state.js';
 export {TimeOfDayAcceptEvent, TimeOfDayWallpaperDialogElement} from './wallpaper/time_of_day_wallpaper_dialog_element.js';
 export {setTransitionsEnabled, maybeDoPageTransition} from 'chrome://resources/ash/common/sea_pen/transition.js';
 

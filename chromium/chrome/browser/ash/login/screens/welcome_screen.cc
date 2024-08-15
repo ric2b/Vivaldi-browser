@@ -173,6 +173,7 @@ std::string GetApplicationLocale() {
 
 // static
 std::string WelcomeScreen::GetResultString(Result result) {
+  // LINT.IfChange(UsageMetrics)
   switch (result) {
     case Result::kNext:
       return "Next";
@@ -185,6 +186,7 @@ std::string WelcomeScreen::GetResultString(Result result) {
     case Result::kQuickStart:
       return "QuickStart";
   }
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/oobe/histograms.xml)
 }
 
 WelcomeScreen::WelcomeScreen(base::WeakPtr<WelcomeView> view,
@@ -388,8 +390,8 @@ void WelcomeScreen::ShowImpl() {
   WizardController::default_controller()
       ->quick_start_controller()
       ->DetermineEntryPointVisibility(
-          base::BindOnce(&WelcomeScreen::SetQuickStartButtonVisibility,
-                         weak_ptr_factory_.GetWeakPtr()));
+          base::BindRepeating(&WelcomeScreen::SetQuickStartButtonVisibility,
+                              weak_ptr_factory_.GetWeakPtr()));
 
   if (LoginScreenClientImpl::HasInstance()) {
     LoginScreenClientImpl::Get()->AddSystemTrayObserver(this);
@@ -556,8 +558,8 @@ bool WelcomeScreen::HandleAccelerator(LoginAcceleratorAction action) {
     WizardController::default_controller()
         ->quick_start_controller()
         ->DetermineEntryPointVisibility(
-            base::BindOnce(&WelcomeScreen::SetQuickStartButtonVisibility,
-                           weak_ptr_factory_.GetWeakPtr()));
+            base::BindRepeating(&WelcomeScreen::SetQuickStartButtonVisibility,
+                                weak_ptr_factory_.GetWeakPtr()));
     return true;
   }
 
@@ -578,8 +580,14 @@ void WelcomeScreen::InputMethodChanged(
 }
 
 void WelcomeScreen::SetQuickStartButtonVisibility(bool visible) {
-  if (visible && view_) {
+  if (!view_) {
+    return;
+  }
+
+  if (visible) {
     view_->SetQuickStartEnabled();
+    base::UmaHistogramBoolean(
+        "QuickStart.WelcomeScreen.QuickStartButtonVisible", visible);
   }
 }
 

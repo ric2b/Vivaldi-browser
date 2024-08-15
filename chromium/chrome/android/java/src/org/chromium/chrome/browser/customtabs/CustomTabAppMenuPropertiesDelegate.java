@@ -30,7 +30,7 @@ import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntent
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider.CustomTabsUiType;
 import org.chromium.chrome.browser.browserservices.ui.controller.Verifier;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.history.HistoryManager;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.readaloud.ReadAloudController;
 import org.chromium.chrome.browser.readaloud.ReadAloudFeatures;
@@ -73,6 +73,10 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
     private final Map<Integer, Integer> mItemIdToIndexMap = new HashMap<Integer, Integer>();
 
     private boolean mHasClientPackage;
+    // Vivaldi
+    private static final int TAPS_FOR_OPEN_IN_VIVALDI = 10;
+    private int mTapsCountdown;
+    private CustomTabActivity mCustomTabActivity;
 
     /** Creates an {@link CustomTabAppMenuPropertiesDelegate} instance. */
     public CustomTabAppMenuPropertiesDelegate(
@@ -125,6 +129,11 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
         mIsStartIconMenu = isStartIconMenu;
         mIsPageInsightsHubEnabled = isPageInsightsHubEnabled;
         mHasClientPackage = hasClientPackage;
+        // Vivaldi
+        if (BuildConfig.IS_OEM_MERCEDES_BUILD) {
+            if (context instanceof CustomTabActivity)
+                mCustomTabActivity = (CustomTabActivity) context;
+        }
     }
 
     @Override
@@ -173,7 +182,7 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
             boolean requestDesktopSiteVisible = true;
             boolean tryAddingReadAloud = ReadAloudFeatures.isEnabledForOverflowMenuInCCT();
             boolean historyItemVisible = true;
-            if (!ChromeFeatureList.sAppSpecificHistory.isEnabled() || !mHasClientPackage) {
+            if (!HistoryManager.isAppSpecificHistoryEnabled() || !mHasClientPackage) {
                 historyItemVisible = false;
             }
 
@@ -232,14 +241,23 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
                 tryAddingReadAloud = false;
             }
 
-            boolean isChromeScheme =
+            // Vivaldi
+            if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
+                tryAddingReadAloud = false;
+            }
+            if (BuildConfig.IS_OEM_MERCEDES_BUILD) {
+                openInChromeItemVisible = false;
+            }
+
+            boolean isNativePage =
                     url.getScheme().equals(UrlConstants.CHROME_SCHEME)
                             || url.getScheme().equals(VivaldiUrlConstants.VIVALDI_SCHEME)
                             || url.getScheme().equals(VivaldiUrlConstants.VIVALDI_NATIVE_SCHEME)
-                            || url.getScheme().equals(UrlConstants.CHROME_NATIVE_SCHEME);
+                            || url.getScheme().equals(UrlConstants.CHROME_NATIVE_SCHEME)
+                            || currentTab.isNativePage();
             boolean isFileScheme = url.getScheme().equals(UrlConstants.FILE_SCHEME);
             boolean isContentScheme = url.getScheme().equals(UrlConstants.CONTENT_SCHEME);
-            if (isChromeScheme || isFileScheme || isContentScheme || url.isEmpty()) {
+            if (isNativePage || isFileScheme || isContentScheme || url.isEmpty()) {
                 addToHomeScreenVisible = false;
             }
 
@@ -266,8 +284,6 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
             }
 
             prepareTranslateMenuItem(menu, currentTab);
-            // Vivaldi
-            if (!BuildConfig.IS_OEM_AUTOMOTIVE_BUILD)
             if (tryAddingReadAloud) {
                 // Set visibility of Read Aloud menu item. The entrypoint will be
                 // visible iff the tab can be synthesized.
@@ -310,7 +326,7 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
                 addToHomeScreenVisible = false;
 
             updateRequestDesktopSiteMenuItem(
-                    menu, currentTab, requestDesktopSiteVisible, isChromeScheme);
+                    menu, currentTab, requestDesktopSiteVisible, isNativePage);
             prepareAddToHomescreenMenuItem(menu, currentTab, addToHomeScreenVisible);
         }
     }
@@ -351,6 +367,20 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
     @Override
     public void onFooterViewInflated(AppMenuHandler appMenuHandler, View view) {
         super.onFooterViewInflated(appMenuHandler, view);
+        // Vivaldi
+        if (BuildConfig.IS_OEM_MERCEDES_BUILD) {
+            assert mCustomTabActivity != null;
+            mTapsCountdown = TAPS_FOR_OPEN_IN_VIVALDI;
+            view.setOnClickListener((v) -> {
+                if (mTapsCountdown > 0) {
+                    mTapsCountdown--;
+                    if (mTapsCountdown == 0) {
+                        mCustomTabActivity.onMenuOrKeyboardAction(R.id.open_in_browser_id, false);
+                    }
+                }
+            });
+            view.setClickable(true);
+        }
 
         TextView footerTextView = view.findViewById(R.id.running_in_chrome_footer_text);
         if (footerTextView != null) {

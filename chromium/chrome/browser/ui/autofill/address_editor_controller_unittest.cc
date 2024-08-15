@@ -26,7 +26,7 @@ using ::testing::NiceMock;
 using ::testing::Return;
 using ::testing::ReturnRef;
 
-// TODO(crbug.com/1470459): write more unit tests for AddressEditorController.
+// TODO(crbug.com/40277889): write more unit tests for AddressEditorController.
 class AddressEditorControllerTest : public testing::Test {
  public:
   AddressEditorControllerTest() = default;
@@ -37,7 +37,8 @@ class AddressEditorControllerTest : public testing::Test {
     pref_service_.registry()->RegisterBooleanPref(
         prefs::kAutofillCreditCardEnabled, true);
     pdm_.SetPrefService(&pref_service_);
-    pdm_.set_default_country_code("US");
+    pdm_.test_address_data_manager().SetDefaultCountryCode(
+        AddressCountryCode("US"));
   }
 
  protected:
@@ -130,7 +131,7 @@ TEST_F(AddressEditorControllerTest, GetCountryComboboxModel) {
       1l);
 }
 
-// TODO(crbug.com/1432505): remove this test once unsupported countries
+// TODO(crbug.com/40263955): remove this test once unsupported countries
 // filtering is removed.
 TEST_F(AddressEditorControllerTest, NonZeroCountriesFiltered) {
   auto non_validatable_controller = std::make_unique<AddressEditorController>(

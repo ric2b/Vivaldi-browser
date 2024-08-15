@@ -31,14 +31,12 @@
 #include <mutex>
 #include <string>
 
+#include "absl/strings/str_format.h"
 #include "dawn/common/LinkedList.h"
+#include "dawn/common/MutexProtected.h"
 #include "dawn/common/Ref.h"
 #include "dawn/common/RefCounted.h"
 #include "dawn/native/Forward.h"
-
-namespace absl {
-class FormatSink;
-}
 
 namespace dawn::native {
 
@@ -47,7 +45,7 @@ namespace detail {
 template <typename T>
 struct APIRefCountedTraits {
     static constexpr T* kNullValue = nullptr;
-    static void Reference(T* value) { value->APIReference(); }
+    static void AddRef(T* value) { value->APIAddRef(); }
     static void Release(T* value) { value->APIRelease(); }
 };
 
@@ -98,12 +96,21 @@ class ApiObjectList {
     // Destroys and removes all the objects tracked in the list.
     void Destroy();
 
+    template <typename F>
+    void ForEach(F fn) const {
+        mObjects.Use([&fn](const auto lockedObjects) {
+            for (const auto* node = lockedObjects->head(); node != lockedObjects->end();
+                 node = node->next()) {
+                fn(node->value());
+            }
+        });
+    }
+
   private:
     // Boolean used to mark the list so that on subsequent calls to Untrack, we don't need to
-    // reaquire the lock, and Track on new objects immediately destroys them.
-    bool mMarkedDestroyed = false;
-    std::mutex mMutex;
-    LinkedList<ApiObjectBase> mObjects;
+    // reacquire the lock, and Track on new objects immediately destroys them.
+    std::atomic<bool> mMarkedDestroyed{false};
+    MutexProtected<LinkedList<ApiObjectBase>> mObjects;
 };
 
 class ApiObjectBase : public ObjectBase, public LinkNode<ApiObjectBase> {
@@ -172,6 +179,9 @@ class RefCountedWithExternalCountBase;
 
 template <class T>
 T* ReturnToAPI(Ref<T>&& object) {
+    if (object == nullptr) {
+        return nullptr;
+    }
     if constexpr (T::HasExternalRefCount) {
         // For an object which has external ref count, just need to increase the external ref count,
         // and keep the total ref count unchanged.

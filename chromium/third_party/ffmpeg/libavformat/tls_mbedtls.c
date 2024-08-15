@@ -31,6 +31,7 @@
 #include "internal.h"
 #include "url.h"
 #include "tls.h"
+#include "libavutil/mem.h"
 #include "libavutil/parseutils.h"
 
 typedef struct TLSContext {
@@ -309,6 +310,8 @@ static int tls_read(URLContext *h, uint8_t *buf, int size)
     TLSContext *tls_ctx = h->priv_data;
     int ret;
 
+    tls_ctx->tls_shared.tcp->flags &= ~AVIO_FLAG_NONBLOCK;
+    tls_ctx->tls_shared.tcp->flags |= h->flags & AVIO_FLAG_NONBLOCK;
     if ((ret = mbedtls_ssl_read(&tls_ctx->ssl_context, buf, size)) > 0) {
         // return read length
         return ret;
@@ -322,6 +325,8 @@ static int tls_write(URLContext *h, const uint8_t *buf, int size)
     TLSContext *tls_ctx = h->priv_data;
     int ret;
 
+    tls_ctx->tls_shared.tcp->flags &= ~AVIO_FLAG_NONBLOCK;
+    tls_ctx->tls_shared.tcp->flags |= h->flags & AVIO_FLAG_NONBLOCK;
     if ((ret = mbedtls_ssl_write(&tls_ctx->ssl_context, buf, size)) > 0) {
         // return written length
         return ret;

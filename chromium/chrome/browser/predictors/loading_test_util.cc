@@ -301,23 +301,41 @@ std::ostream& operator<<(std::ostream& os,
 
 std::ostream& operator<<(std::ostream& os, const LcppData& data) {
   os << "[" << data.host() << "," << data.last_visit_time() << "]" << std::endl;
+  os << "lcpp_stat:" << std::endl;
+  os << data.lcpp_stat();
+  os << "lcpp_key_stat:" << std::endl;
+  os << data.lcpp_key_stat();
+  return os;
+}
 
+std::ostream& operator<<(std::ostream& os, const LcppKeyStat& key_stat) {
+  os << "\t" << "lcpp_stat_map:" << std::endl;
+  for (const auto& [path, path_key_stat] : key_stat.lcpp_stat_map()) {
+    os << "\t\t" << path << std::endl;
+    os << path_key_stat << std::endl;
+  }
+  os << "\t" << "key_frequency_stat:" << std::endl;
+  os << key_stat.key_frequency_stat();
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const LcppStat& stat) {
   // Output lcp_element_locator_stat.
   os << "\t\t" << "lcp_element_locator_stat:" << std::endl;
-  os << data.lcpp_stat().lcp_element_locator_stat();
+  os << stat.lcp_element_locator_stat();
 
   // Output lcp_script_url_stat.
   os << "\t\t"
      << "lcp_script_url_stat:" << std::endl;
-  os << data.lcpp_stat().lcp_script_url_stat();
+  os << stat.lcp_script_url_stat();
 
   // Output fetched_font_url_stat.
   os << "\t\t" << "fetched_font_url_stat:" << std::endl;
-  os << data.lcpp_stat().fetched_font_url_stat();
+  os << stat.fetched_font_url_stat();
 
   // Output fetched_subresource_url_stat.
   os << "\t\t" << "fetched_subresource_url_stat:" << std::endl;
-  os << data.lcpp_stat().fetched_subresource_url_stat();
+  os << stat.fetched_subresource_url_stat();
 
   return os;
 }

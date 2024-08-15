@@ -1,8 +1,7 @@
 #!/usr/bin/python3 -i
 #
-# Copyright 2023 The Khronos Group Inc.
-# Copyright 2023 Valve Corporation
-# Copyright 2023 LunarG, Inc.
+# Copyright (c) 2023-2024 Valve Corporation
+# Copyright (c) 2023-2024 LunarG, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -33,7 +32,7 @@ class Extension:
     # Quotes allow us to forward declare the dataclass
     commands: list['Command'] = field(default_factory=list, init=False)
     enums:    list['Enum']    = field(default_factory=list, init=False)
-    bitmask:  list['Bitmask'] = field(default_factory=list, init=False)
+    bitmasks: list['Bitmask'] = field(default_factory=list, init=False)
     # Use the Enum name to see what fields are extended
     enumFields: dict[str, list['EnumField']] = field(default_factory=dict, init=False)
     # Use the Bitmaks name to see what flags are extended
@@ -65,6 +64,9 @@ class Handle:
 
     dispatchable: bool
 
+    def __lt__(self, other):
+        return self.name < other.name
+
 @dataclass
 class Param:
     """<command/param>"""
@@ -91,6 +93,9 @@ class Param:
     #   - VkFormat format
     #   - VkStructureType sType
     cDeclaration: str
+
+    def __lt__(self, other):
+        return self.name < other.name
 
 class Queues(IntFlag):
     TRANSFER       = auto() # VK_QUEUE_TRANSFER_BIT
@@ -153,6 +158,9 @@ class Command:
     #   (const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance);
     cFunctionPointer: str
 
+    def __lt__(self, other):
+        return self.name < other.name
+
 @dataclass
 class Member:
     """<member>"""
@@ -179,6 +187,9 @@ class Member:
     #   - VkStructureType sType
     cDeclaration: str
 
+    def __lt__(self, other):
+        return self.name < other.name
+
 @dataclass
 class Struct:
     """<type category="struct"> or <type category="union">"""
@@ -200,6 +211,9 @@ class Struct:
     extends: list[str] # Struct names that this struct extends
     extendedBy: list[str] # Struct names that can be extended by this struct
 
+    def __lt__(self, other):
+        return self.name < other.name
+
 @dataclass
 class EnumField:
     """<enum> of type enum"""
@@ -209,6 +223,9 @@ class EnumField:
 
     # some fields are enabled from 2 extensions (ex) VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS_KHR)
     extensions: list[Extension] # None if part of 1.0 core
+
+    def __lt__(self, other):
+        return self.name < other.name
 
 @dataclass
 class Enum:
@@ -225,6 +242,9 @@ class Enum:
     # Unique list of all extension that are involved in 'fields' (superset of 'extensions')
     fieldExtensions: list[Extension]
 
+    def __lt__(self, other):
+        return self.name < other.name
+
 @dataclass
 class Flag:
     """<enum> of type bitmask"""
@@ -236,7 +256,10 @@ class Flag:
     zero: bool     # if true, the value is zero (ex) VK_PIPELINE_STAGE_NONE)
 
     # some fields are enabled from 2 extensions (ex) VK_TOOL_PURPOSE_DEBUG_REPORTING_BIT_EXT)
-    extensions: list[str] # None if part of 1.0 core
+    extensions: list[Extension] # None if part of 1.0 core
+
+    def __lt__(self, other):
+        return self.name < other.name
 
 @dataclass
 class Bitmask:
@@ -246,11 +269,16 @@ class Bitmask:
     protect: (str | None) # ex) VK_ENABLE_BETA_EXTENSIONS
 
     bitWidth: int # 32 or 64
+    returnedOnly: bool
+
     flags: list[Flag]
 
     extensions: list[Extension] # None if part of 1.0 core
     # Unique list of all extension that are involved in 'flag' (superset of 'extensions')
     flagExtensions: list[Extension]
+
+    def __lt__(self, other):
+        return self.name < other.name
 
 @dataclass
 class FormatComponent:

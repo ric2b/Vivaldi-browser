@@ -10,6 +10,7 @@
 #include "base/component_export.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
+#include "build/build_config.h"
 
 namespace switches {
 
@@ -19,6 +20,15 @@ extern const char kExtraSearchQueryParams[];
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 extern const char kSearchEngineChoiceCountry[];
 
+// `kDefaultListCountryOverride` and `kEeaRegionCountryOverrideString` are
+// special values for `kSearchEngineChoiceCountry`.
+// `kDefaultListCountryOverride` will override the list of search engines to
+// display the default set.
+// `kEeaListCountryOverride` will override the list
+// of search engines to display list of all EEA engines.
+inline const char kDefaultListCountryOverride[] = "DEFAULT_EEA";
+inline const char kEeaListCountryOverride[] = "EEA_ALL";
+
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 extern const char kDisableSearchEngineChoiceScreen[];
 
@@ -27,6 +37,11 @@ extern const char kForceSearchEngineChoiceScreen[];
 
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 BASE_DECLARE_FEATURE(kSearchEngineChoiceTrigger);
+
+#if BUILDFLAG(IS_ANDROID)
+COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
+BASE_DECLARE_FEATURE(kPersistentSearchEngineChoiceImport);
+#endif
 
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 extern const base::FeatureParam<bool>
@@ -57,6 +72,26 @@ extern const base::FeatureParam<std::string>
 // default search engine is not Google.
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 extern const base::FeatureParam<bool> kSearchEngineChoiceTriggerSkipFor3p;
+
+#if BUILDFLAG(IS_IOS)
+// Maximum number of time the search engine choice screen can be skipped
+// because the application is started via an external intent. Once this
+// count is reached, the search engine choice screen is presented on all
+// restart until the user has made a decision.
+COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
+extern const base::FeatureParam<int> kSearchEngineChoiceMaximumSkipCount;
+#endif
+
+#if BUILDFLAG(IS_ANDROID)
+// Enables the search engine choice feature for existing users.
+// TODO(b/316859558): Not used for shipping purposes, remove this feature.
+COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
+BASE_DECLARE_FEATURE(kSearchEngineChoice);
+
+// Rewrites DefaultSearchEnginePromoDialog into MVC pattern.
+COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
+BASE_DECLARE_FEATURE(kSearchEnginePromoDialogRewrite);
+#endif
 }  // namespace switches
 
 #endif  // COMPONENTS_SEARCH_ENGINES_SEARCH_ENGINES_SWITCHES_H_

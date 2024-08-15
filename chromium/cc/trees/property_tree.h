@@ -395,6 +395,7 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
   void UpdateEffectChanged(EffectNode* node, EffectNode* parent_node);
 
   void UpdateHasFilters(EffectNode* node, EffectNode* parent_node);
+  void UpdateHasFastRoundedCorner(EffectNode* node, EffectNode* parent_node);
 
   typedef std::unordered_multimap<int, std::unique_ptr<viz::CopyOutputRequest>>
       CopyRequestMap;
@@ -537,7 +538,7 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
   // Note: Using this method may causes the associated transform node for this
   // scroll node to update its transforms.
   //
-  // TODO(crbug.com/585458): Updating single transform node only works for
+  // TODO(crbug.com/41238797): Updating single transform node only works for
   // simple cases but we really should update the whole transform tree otherwise
   // we are ignoring any parent transform node that needs updating and thus our
   // snap amount can be incorrect.

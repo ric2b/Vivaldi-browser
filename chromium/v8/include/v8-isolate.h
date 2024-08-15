@@ -279,6 +279,7 @@ class V8_EXPORT Isolate {
     /**
      * Termination is postponed when there is no active SafeForTerminationScope.
      */
+    V8_DEPRECATED("All code should be safe for termination")
     bool only_terminate_in_safe_scope = false;
 
     /**
@@ -395,7 +396,7 @@ class V8_EXPORT Isolate {
    */
   class V8_EXPORT V8_NODISCARD SafeForTerminationScope {
    public:
-    V8_DEPRECATE_SOON("All code should be safe for termination")
+    V8_DEPRECATED("All code should be safe for termination")
     explicit SafeForTerminationScope(v8::Isolate* v8_isolate) {}
     ~SafeForTerminationScope() {}
 
@@ -1376,7 +1377,7 @@ class V8_EXPORT Isolate {
    * that function. There is no guarantee that the actual work will be done
    * within the time limit.
    */
-  V8_DEPRECATE_SOON(
+  V8_DEPRECATED(
       "Use MemoryPressureNotification() to influence the GC schedule.")
   bool IdleNotificationDeadline(double deadline_in_seconds);
 
@@ -1656,7 +1657,7 @@ class V8_EXPORT Isolate {
    * heap.  GC is not invoked prior to iterating, therefore there is no
    * guarantee that visited objects are still alive.
    */
-  V8_DEPRECATE_SOON("Will be removed without replacement. crbug.com/v8/14172")
+  V8_DEPRECATED("Will be removed without replacement. crbug.com/v8/14172")
   void VisitExternalResources(ExternalResourceVisitor* visitor);
 
   /**

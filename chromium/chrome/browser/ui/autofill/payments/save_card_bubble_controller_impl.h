@@ -15,7 +15,6 @@
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/payments/legal_message_line.h"
-#include "components/security_state/core/security_state.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
@@ -29,7 +28,7 @@ enum class BubbleType;
 
 // Implementation of per-tab class to control the local/server save credit card
 // bubble, the local/server save CVC bubble, and Omnibox icon.
-// TODO(crbug.com/1487232): Refactor SaveCardBubbleControllerImpl to split the
+// TODO(crbug.com/40934022): Refactor SaveCardBubbleControllerImpl to split the
 // states into different classes.
 class SaveCardBubbleControllerImpl
     : public AutofillBubbleControllerBase,
@@ -54,6 +53,8 @@ class SaveCardBubbleControllerImpl
   // `CardSaveType::kCardSaveWithCvc`, the offer-to-save card bubble is shown,
   // and the users are informed that the CVC will also be stored. If the type is
   // `CardSaveType::kCvcSaveOnly`, the offer-to-save CVC bubble is shown.
+  // TODO(b/40937065) refactor: pass Iban by value since all they then
+  // immediately move it into a member.
   void OfferLocalSave(
       const CreditCard& card,
       AutofillClient::SaveCreditCardOptions options,
@@ -127,6 +128,8 @@ class SaveCardBubbleControllerImpl
   PaymentBubbleType GetPaymentBubbleType() const override;
   int GetSaveSuccessAnimationStringId() const override;
 
+  static void IgnoreWindowActivationForTesting();
+
  protected:
   explicit SaveCardBubbleControllerImpl(content::WebContents* web_contents);
 
@@ -137,9 +140,6 @@ class SaveCardBubbleControllerImpl
   void OnVisibilityChanged(content::Visibility visibility) override;
   PageActionIconType GetPageActionIconType() override;
   void DoShowBubble() override;
-
-  // Gets the security level of the page.
-  virtual security_state::SecurityLevel GetSecurityLevel() const;
 
  private:
   friend class content::WebContentsUserData<SaveCardBubbleControllerImpl>;
@@ -222,9 +222,6 @@ class SaveCardBubbleControllerImpl
 
   // If no legal message should be shown then this variable is an empty vector.
   LegalMessageLines legal_message_lines_;
-
-  // The security level for the current context.
-  security_state::SecurityLevel security_level_;
 
   // UI parameters needed to display the save card confirmation view.
   std::optional<SaveCardAndVirtualCardEnrollConfirmationUiParams>

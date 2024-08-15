@@ -6,7 +6,7 @@
 load("//lib/branches.star", "branches")
 load("//lib/builder_config.star", "builder_config")
 load("//lib/builder_url.star", "linkify_builder")
-load("//lib/builders.star", "builders", "os", "reclient", "siso")
+load("//lib/builders.star", "builders", "os", "reclient")
 load("//lib/consoles.star", "consoles")
 load("//lib/gn_args.star", "gn_args")
 load("//lib/try.star", "try_")
@@ -21,15 +21,11 @@ try_.defaults.set(
     compilator_cores = 8,
     execution_timeout = try_.DEFAULT_EXECUTION_TIMEOUT,
     orchestrator_cores = 2,
-    orchestrator_reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
+    orchestrator_siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
     reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
-    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
     service_account = try_.DEFAULT_SERVICE_ACCOUNT,
-    siso_configs = ["builder"],
-    siso_enable_cloud_profiler = True,
-    siso_enable_cloud_trace = True,
     siso_enabled = True,
-    siso_project = siso.project.DEFAULT_UNTRUSTED,
+    siso_remote_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
 )
 
 consoles.list_view(
@@ -92,29 +88,6 @@ try_.builder(
 )
 
 try_.builder(
-    name = "fuchsia-compile-x64-dbg",
-    mirrors = [
-        "ci/fuchsia-x64-dbg",
-    ],
-    builder_config_settings = builder_config.try_settings(
-        include_all_triggered_testers = True,
-        is_compile_only = True,
-    ),
-    gn_args = gn_args.config(
-        configs = [
-            "ci/fuchsia-x64-dbg",
-        ],
-    ),
-    tryjob = try_.job(
-        location_filters = [
-            "base/fuchsia/.+",
-            "fuchsia/.+",
-            "media/fuchsia/.+",
-        ],
-    ),
-)
-
-try_.builder(
     name = "fuchsia-x64-cast-receiver-dbg-compile",
     description_html = "A compile only replica of " + linkify_builder("ci", "fuchsia-x64-cast-receiver-dbg", "chromium"),
     mirrors = [
@@ -130,13 +103,12 @@ try_.builder(
         ],
     ),
     contact_team_email = "chrome-fuchsia-engprod@google.com",
-    # TODO(b/1509109): Enable the tryjob once it's green.
-    # tryjob = try_.job(
-    #     location_filters = [
-    #         ".*fuchsia.+",
-    #         cq.location_filter(exclude = True, path_regexp = ".*\\.md"),
-    #     ],
-    # ),
+    tryjob = try_.job(
+        location_filters = [
+            ".*fuchsia.+",
+            cq.location_filter(exclude = True, path_regexp = ".*\\.md"),
+        ],
+    ),
 )
 
 try_.builder(
@@ -209,6 +181,13 @@ try_.orchestrator_builder(
     mirrors = [
         "ci/fuchsia-x64-cast-receiver-rel",
     ],
+    builder_config_settings = builder_config.try_settings(
+        # This is a temporary solution to avoid allowing culprit changes to slip through since
+        # retry runs without the patch always fail with connection errors.
+        # See https://crbug.com/40278477.
+        # TODO(b/40278477): Re-enable the exoneration when the issue above is fixed.
+        retry_without_patch = False,
+    ),
     gn_args = gn_args.config(
         configs = [
             "ci/fuchsia-x64-cast-receiver-rel",

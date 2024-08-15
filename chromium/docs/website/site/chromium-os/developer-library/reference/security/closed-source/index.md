@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: closed-source
 title: Security guidelines for closed-source components
 ---
@@ -21,7 +21,7 @@ For these reasons binary third-party components should be avoided as far as
 possible.
 
 If there are strong business reasons to include the component, then it **must**
-be [strictly isolated](/sandboxing.md). It should:
+be [strictly isolated](/chromium-os/developer-library/guides/development/sandboxing/). It should:
 
 *   run with minimal privileges, and
 *   be walled off from untrusted input.

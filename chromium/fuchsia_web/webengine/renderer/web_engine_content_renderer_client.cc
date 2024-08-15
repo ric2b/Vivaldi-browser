@@ -50,8 +50,8 @@ namespace {
 // Returns true if the specified video format can be decoded on hardware.
 bool IsSupportedHardwareVideoCodec(const media::VideoType& type) {
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
-  // TODO(crbug.com/1013412): Replace these hardcoded checks with a query to the
-  // fuchsia.mediacodec FIDL service.
+  // TODO(crbug.com/42050020): Replace these hardcoded checks with a query to
+  // the fuchsia.mediacodec FIDL service.
   if (type.codec == media::VideoCodec::kH264 && type.level <= 41)
     return true;
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
@@ -96,7 +96,7 @@ class PlayreadyKeySystemInfo : public ::media::KeySystemInfo {
       const std::string& requested_robustness,
       const bool* /*hw_secure_requirement*/) const override {
     // Only empty robustness string is currently supported.
-    // TODO(crbug.com/1205716): Add support for robustness strings.
+    // TODO(crbug.com/40180587): Add support for robustness strings.
     if (requested_robustness.empty()) {
       return media::EmeConfig{.hw_secure_codecs =
                                   media::EmeConfigRuleState::kRequired};
@@ -200,8 +200,9 @@ WebEngineContentRendererClient::CreateURLLoaderThrottleProvider(
   return std::make_unique<WebEngineURLLoaderThrottleProvider>(this);
 }
 
-std::unique_ptr<media::KeySystemSupportObserver>
+std::unique_ptr<media::KeySystemSupportRegistration>
 WebEngineContentRendererClient::GetSupportedKeySystems(
+    content::RenderFrame* render_frame,
     media::GetSupportedKeySystemsCB cb) {
   media::KeySystemInfos key_systems;
   media::SupportedCodecs supported_video_codecs = 0;
@@ -243,7 +244,7 @@ WebEngineContentRendererClient::GetSupportedKeySystems(
     // Fuchsia always decrypts audio into clear buffers and return them back to
     // Chromium. Hardware secured decoders are only available for supported
     // video codecs.
-    // TODO(crbug.com/1013412): Replace these hardcoded values with a query to
+    // TODO(crbug.com/42050020): Replace these hardcoded values with a query to
     // the fuchsia.mediacodec FIDL service.
     key_systems.push_back(std::make_unique<cdm::WidevineKeySystemInfo>(
         supported_codecs,             // codecs
@@ -288,7 +289,7 @@ bool WebEngineContentRendererClient::IsSupportedVideoType(
   return IsSupportedHardwareVideoCodec(type);
 }
 
-// TODO(crbug.com/1067435): Look into the ChromiumContentRendererClient version
+// TODO(crbug.com/40682958): Look into the ChromiumContentRendererClient version
 // of this method and how it may apply here.
 bool WebEngineContentRendererClient::DeferMediaLoad(
     content::RenderFrame* render_frame,

@@ -1,16 +1,12 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library
-  - Chromium OS > Developer Library
+  - ChromiumOS
 page_name: getting-started
 title: Getting Started
 ---
 
-> 🚧 The library is currently under construction. See
-> [the CrOS Developer Library Proposal](/chromium-os/developer-library/proposal)
-> for more information.
-
-Welcome to ChromiumOS development! This guide will help you boostrap your
+Welcome to ChromiumOS development! This guide will help you bootstrap your
 workflow by making sure you have the right hardware, development environment,
 and source checkout. The guide will also step you through building, testing,
 uploading and committing code.

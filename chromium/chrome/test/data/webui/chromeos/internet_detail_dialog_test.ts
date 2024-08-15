@@ -20,7 +20,7 @@ import {NetworkSiminfoElement} from 'chrome://resources/ash/common/network/netwo
 import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {ApnAuthenticationType, ApnIpType, ApnProperties, ApnSource, ApnState, ApnType, InhibitReason, MAX_NUM_CUSTOM_APNS, SIMInfo} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
+import {ApnAuthenticationType, ApnIpType, ApnProperties, ApnSource, ApnState, ApnType, GlobalPolicy, InhibitReason, MAX_NUM_CUSTOM_APNS, SIMInfo} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
 import {ConnectionStateType, DeviceStateType, NetworkType, OncSource, PortalState} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {IronCollapseElement} from 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -248,13 +248,13 @@ suite('internet-detail-dialog', () => {
       });
     });
 
-    test('WiFi in a proxy-auth portalState', function() {
+    test('WiFi in a portal suspected portalState', function() {
       mojoApi.setNetworkTypeEnabledState(NetworkType.kWiFi, true);
       const wifiNetwork = getManagedProperties(NetworkType.kWiFi, 'wifi_user');
       wifiNetwork.source = OncSource.kUser;
       wifiNetwork.connectable = true;
       wifiNetwork.connectionState = ConnectionStateType.kPortal;
-      wifiNetwork.portalState = PortalState.kProxyAuthRequired;
+      wifiNetwork.portalState = PortalState.kPortalSuspected;
 
       mojoApi.setManagedPropertiesForTest(wifiNetwork);
       init();
@@ -486,6 +486,57 @@ suite('internet-detail-dialog', () => {
     });
   });
 
+  [true, false].forEach(isApnRevampAndPoliciesEnabled => {
+    test(
+        `Managed APN UI states when isApnRevampAndPoliciesEnabled is ${
+            isApnRevampAndPoliciesEnabled}`,
+        async () => {
+          loadTimeData.overrideValues({
+            apnRevamp: true,
+            isApnRevampAndPoliciesEnabled: isApnRevampAndPoliciesEnabled,
+          });
+          await setupCellularNetwork(
+              /* isPrimary= */ true, /* isInhibited= */ false);
+
+          await init();
+          assertTrue(!!internetDetailDialog.shadowRoot!.querySelector(
+              'cr-expand-button'));
+
+          // Check for APN policies managed icon.
+          const getApnManagedIcon = () =>
+              internetDetailDialog.shadowRoot!.querySelector('#apnManagedIcon');
+          assertFalse(!!getApnManagedIcon());
+          const createCustomApnButton = () =>
+              getElement<CrButtonElement>('#createCustomApnButton');
+          const discoverMoreApnsButton = () =>
+              getElement<CrButtonElement>('#discoverMoreApnsButton');
+          assertTrue(!!createCustomApnButton());
+          assertFalse(createCustomApnButton().disabled);
+          assertTrue(!!discoverMoreApnsButton());
+          assertFalse(discoverMoreApnsButton().disabled);
+
+          let globalPolicy = {
+            allowApnModification: true,
+          } as GlobalPolicy;
+          mojoApi.setGlobalPolicy(globalPolicy);
+          await flushAsync();
+          assertFalse(!!getApnManagedIcon());
+          assertFalse(createCustomApnButton().disabled);
+          assertFalse(discoverMoreApnsButton().disabled);
+
+          globalPolicy = {
+            allowApnModification: false,
+          } as GlobalPolicy;
+          mojoApi.setGlobalPolicy(globalPolicy);
+          await flushAsync();
+          assertEquals(isApnRevampAndPoliciesEnabled, !!getApnManagedIcon());
+          assertEquals(
+              isApnRevampAndPoliciesEnabled, createCustomApnButton().disabled);
+          assertEquals(
+              isApnRevampAndPoliciesEnabled, discoverMoreApnsButton().disabled);
+        });
+  });
+
   test(
       'Disable and show tooltip for New APN button when custom APNs limit is' +
           ' reached',
@@ -567,27 +618,6 @@ suite('internet-detail-dialog', () => {
                 .shadowRoot!.querySelector('apn-selection-dialog');
         assertTrue(!!apnSelectionDialog);
       });
-
-  [false, true].forEach(isJellyEnabled => {
-    test('Dynamic theme CSS is added when isJellyEnabled is set', async () => {
-      loadTimeData.overrideValues({
-        isJellyEnabled: isJellyEnabled,
-      });
-      await setupCellularNetwork(
-          /*isPrimary=*/ true, /*isInhibited=*/ false);
-      await init();
-
-      const linkEl =
-          document.querySelector('link[href*=\'chrome://theme/colors.css\']');
-      if (isJellyEnabled) {
-        assertTrue(!!linkEl);
-        assertTrue(document.body.classList.contains('jelly-enabled'));
-      } else {
-        assertEquals(null, linkEl);
-        assertFalse(document.body.classList.contains('jelly-enabled'));
-      }
-    });
-  });
 
   test('Show toast on show-error-toast event', async function() {
     loadTimeData.overrideValues({

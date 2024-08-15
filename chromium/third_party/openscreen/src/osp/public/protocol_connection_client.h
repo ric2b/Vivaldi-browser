@@ -12,6 +12,7 @@
 #include "osp/public/endpoint_request_ids.h"
 #include "osp/public/message_demuxer.h"
 #include "osp/public/protocol_connection.h"
+#include "osp/public/service_listener.h"
 #include "platform/base/error.h"
 #include "platform/base/ip_address.h"
 #include "platform/base/macros.h"
@@ -24,7 +25,7 @@ namespace openscreen::osp {
 // NOTE: This API closely resembles that for the ProtocolConnectionServer; the
 // client currently lacks Suspend(). Consider factoring out a common
 // ProtocolConnectionEndpoint when the two APIs are finalized.
-class ProtocolConnectionClient {
+class ProtocolConnectionClient : public ServiceListener::Observer {
  public:
   enum class State { kStopped = 0, kStarting, kRunning, kStopping };
 
@@ -88,7 +89,7 @@ class ProtocolConnectionClient {
   virtual std::unique_ptr<ProtocolConnection> CreateProtocolConnection(
       uint64_t endpoint_id) = 0;
 
-  MessageDemuxer* message_demuxer() const { return demuxer_; }
+  MessageDemuxer* message_demuxer() const { return &demuxer_; }
 
   EndpointRequestIds* endpoint_request_ids() { return &endpoint_request_ids_; }
 
@@ -99,17 +100,16 @@ class ProtocolConnectionClient {
   const Error& last_error() const { return last_error_; }
 
  protected:
-  explicit ProtocolConnectionClient(
-      MessageDemuxer* demuxer,
-      ProtocolConnectionServiceObserver* observer);
+  ProtocolConnectionClient(MessageDemuxer& demuxer,
+                           ProtocolConnectionServiceObserver& observer);
 
   virtual void CancelConnectRequest(uint64_t request_id) = 0;
 
   State state_ = State::kStopped;
   Error last_error_;
-  MessageDemuxer* const demuxer_;
+  MessageDemuxer& demuxer_;
   EndpointRequestIds endpoint_request_ids_;
-  ProtocolConnectionServiceObserver* const observer_;
+  ProtocolConnectionServiceObserver& observer_;
 
   OSP_DISALLOW_COPY_AND_ASSIGN(ProtocolConnectionClient);
 };

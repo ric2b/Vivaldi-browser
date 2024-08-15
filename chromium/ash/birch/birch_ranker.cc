@@ -141,21 +141,24 @@ void BirchRanker::RankRecentTabItems(std::vector<BirchTabItem>* items) {
               return b.timestamp() < a.timestamp();
             });
 
-  // TODO(b/305094126): Distinguish between tabs from mobile and tabs from
-  // desktop.
   for (BirchTabItem& item : *items) {
-    // Very recent items have high priority.
-    if (now_ - base::Minutes(5) < item.timestamp()) {
+    const bool is_mobile =
+        item.form_factor() == BirchTabItem::DeviceFormFactor::kPhone ||
+        item.form_factor() == BirchTabItem::DeviceFormFactor::kTablet;
+    // Very recent mobile items have high priority.
+    if (is_mobile && now_ - base::Minutes(5) < item.timestamp()) {
       item.set_ranking(14.f);
       continue;
     }
-    // Items from the last hour have medium priority.
-    if (now_ - base::Hours(1) < item.timestamp()) {
+    const bool is_desktop =
+        item.form_factor() == BirchTabItem::DeviceFormFactor::kDesktop;
+    // Desktop items from the last hour have medium priority.
+    if (is_desktop && now_ - base::Hours(1) < item.timestamp()) {
       item.set_ranking(17.f);
       continue;
     }
-    // Items from the last day have low priority.
-    if (now_ - base::Days(1) < item.timestamp()) {
+    // Desktop items from the last day have low priority.
+    if (is_desktop && now_ - base::Days(1) < item.timestamp()) {
       item.set_ranking(30.f);
       continue;
     }
@@ -163,10 +166,11 @@ void BirchRanker::RankRecentTabItems(std::vector<BirchTabItem>* items) {
 }
 
 void BirchRanker::RankWeatherItems(std::vector<BirchWeatherItem>* items) {
-  // In the morning, weather has high priority.
-  const bool is_morning = IsMorning();
-  if (is_morning && !items->empty()) {
-    (*items)[0].set_ranking(5.f);
+  // TODO(jamescook): Limit weather to `IsMorning()`. For now show it at a much
+  // lower priority during non-morning hours as this helps with debugging and
+  // dogfooding.
+  if (!items->empty()) {
+    (*items)[0].set_ranking(IsMorning() ? 5.f : 36.f);
   }
 
   // TODO(b/305094126): Figure out how to query the next day's weather and show

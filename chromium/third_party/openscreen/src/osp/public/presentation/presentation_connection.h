@@ -165,7 +165,7 @@ class Connection {
                    uint64_t endpoint_id,
                    std::unique_ptr<ProtocolConnection> stream);
 
-  void OnClosedByError(Error cause);
+  void OnClosedByError(const Error& cause);
   void OnClosedByRemote();
   void OnTerminated();
 

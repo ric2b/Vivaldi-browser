@@ -99,7 +99,7 @@ NotesBridge::NotesBridge(JNIEnv* env,
   // initialized, we need to make sure that our initial state is
   // up to date.
   if (notes_model_->IsDoingExtensiveChanges())
-    ExtensiveNoteChangesBeginning(notes_model_);
+    ExtensiveNoteChangesBeginning();
 }
 
 NotesBridge::~NotesBridge() {
@@ -373,13 +373,13 @@ void NotesBridge::SetNoteTitle(JNIEnv* env,
 void NotesBridge::SetNoteContent(JNIEnv* env,
                                  const JavaParamRef<jobject>& obj,
                                  jlong id,
-                                 const JavaParamRef<jstring>& j_title) {
+                                 const JavaParamRef<jstring>& j_content) {
   DCHECK(IsLoaded());
   const NoteNode* note = GetNodeByID(id);
-  const std::u16string title =
-      base::android::ConvertJavaStringToUTF16(env, j_title);
+  const std::u16string content =
+      base::android::ConvertJavaStringToUTF16(env, j_content);
 
-  notes_model_->SetContent(note, title);
+  notes_model_->SetContent(note, content);
 }
 
 void NotesBridge::SetNoteUrl(JNIEnv* env,
@@ -509,14 +509,14 @@ void NotesBridge::DeleteNote(JNIEnv* env,
     NOTREACHED();
     return;
   }
-  notes_model_->Remove(node);
+  notes_model_->Remove(node, FROM_HERE);
 }
 
 void NotesBridge::RemoveAllUserNotes(JNIEnv* env,
                                      const JavaParamRef<jobject>& obj) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(IsLoaded());
-  notes_model_->RemoveAllUserNotes();
+  notes_model_->RemoveAllUserNotes(FROM_HERE);
 }
 
 void NotesBridge::MoveNote(JNIEnv* env,
@@ -608,14 +608,16 @@ ScopedJavaLocalRef<jobject> NotesBridge::CreateJavaNote(const NoteNode* node) {
   // if (node->is_url())
   url = node->GetURL().spec();
 
-  int64_t java_timestamp = node->GetCreationTime().InMillisecondsSinceUnixEpoch();
-  int64_t java_modified_time = node->GetLastModificationTime().InMillisecondsSinceUnixEpoch();
+  int64_t java_timestamp =
+      node->GetCreationTime().InMillisecondsSinceUnixEpoch();
+  int64_t java_modified_time =
+      node->GetLastModificationTime().InMillisecondsSinceUnixEpoch();
 
   return Java_NotesBridge_createNoteItem(
       env, node->id(), ConvertUTF16ToJavaString(env, GetTitle(node)),
-      ConvertUTF16ToJavaString(env, GetContent(node)), java_timestamp, java_modified_time,
-      ConvertUTF8ToJavaString(env, url), node->is_folder(), parent_id,
-      IsEditable(node), IsManaged(node));
+      ConvertUTF16ToJavaString(env, GetContent(node)), java_timestamp,
+      java_modified_time, ConvertUTF8ToJavaString(env, url), node->is_folder(),
+      parent_id, IsEditable(node), IsManaged(node));
 }
 
 void NotesBridge::ExtractNoteNodeInformation(
@@ -711,12 +713,11 @@ void NotesBridge::NotesModelChanged() {
   Java_NotesBridge_noteModelChanged(env, obj);
 }
 
-void NotesBridge::NotesModelLoaded(vivaldi::NotesModel* model,
-                                   bool ids_reassigned) {
+void NotesBridge::NotesModelLoaded(bool ids_reassigned) {
   NotifyIfDoneLoading();
 }
 
-void NotesBridge::NotesModelBeingDeleted(vivaldi::NotesModel* model) {
+void NotesBridge::NotesModelBeingDeleted() {
   if (!IsLoaded())
     return;
 
@@ -727,8 +728,7 @@ void NotesBridge::NotesModelBeingDeleted(vivaldi::NotesModel* model) {
   Java_NotesBridge_noteModelDeleted(env, obj);
 }
 
-void NotesBridge::NoteNodeMoved(vivaldi::NotesModel* model,
-                                const NoteNode* old_parent,
+void NotesBridge::NoteNodeMoved(const NoteNode* old_parent,
                                 size_t old_index,
                                 const NoteNode* new_parent,
                                 size_t new_index) {
@@ -744,9 +744,7 @@ void NotesBridge::NoteNodeMoved(vivaldi::NotesModel* model,
                                  new_index);
 }
 
-void NotesBridge::NoteNodeAdded(vivaldi::NotesModel* model,
-                                const NoteNode* parent,
-                                size_t index) {
+void NotesBridge::NoteNodeAdded(const NoteNode* parent, size_t index) {
   if (!IsLoaded())
     return;
 
@@ -757,11 +755,11 @@ void NotesBridge::NoteNodeAdded(vivaldi::NotesModel* model,
   Java_NotesBridge_noteNodeAdded(env, obj, CreateJavaNote(parent), index);
 }
 
-void NotesBridge::NoteNodeRemoved(vivaldi::NotesModel* model,
-                                  const NoteNode* parent,
+void NotesBridge::NoteNodeRemoved(const NoteNode* parent,
                                   size_t old_index,
                                   const NoteNode* node,
-                                  const std::set<GURL>& removed_urls) {
+                                  const std::set<GURL>& removed_urls,
+                                  const base::Location& location) {
   if (!IsLoaded())
     return;
 
@@ -773,8 +771,8 @@ void NotesBridge::NoteNodeRemoved(vivaldi::NotesModel* model,
                                    CreateJavaNote(node));
 }
 
-void NotesBridge::NoteAllUserNodesRemoved(vivaldi::NotesModel* model,
-                                          const std::set<GURL>& removed_urls) {
+void NotesBridge::NoteAllUserNodesRemoved(const std::set<GURL>& removed_urls,
+                                          const base::Location& location) {
   if (!IsLoaded())
     return;
 
@@ -785,8 +783,7 @@ void NotesBridge::NoteAllUserNodesRemoved(vivaldi::NotesModel* model,
   Java_NotesBridge_noteAllUserNodesRemoved(env, obj);
 }
 
-void NotesBridge::NoteNodeChanged(vivaldi::NotesModel* model,
-                                  const NoteNode* node) {
+void NotesBridge::NoteNodeChanged(const NoteNode* node) {
   if (!IsLoaded())
     return;
 
@@ -797,8 +794,7 @@ void NotesBridge::NoteNodeChanged(vivaldi::NotesModel* model,
   Java_NotesBridge_noteNodeChanged(env, obj, CreateJavaNote(node));
 }
 
-void NotesBridge::NoteNodeChildrenReordered(vivaldi::NotesModel* model,
-                                            const NoteNode* node) {
+void NotesBridge::NoteNodeChildrenReordered(const NoteNode* node) {
   if (!IsLoaded())
     return;
 
@@ -809,7 +805,7 @@ void NotesBridge::NoteNodeChildrenReordered(vivaldi::NotesModel* model,
   Java_NotesBridge_noteNodeChildrenReordered(env, obj, CreateJavaNote(node));
 }
 
-void NotesBridge::ExtensiveNoteChangesBeginning(vivaldi::NotesModel* model) {
+void NotesBridge::ExtensiveNoteChangesBeginning() {
   if (!IsLoaded())
     return;
 
@@ -820,7 +816,7 @@ void NotesBridge::ExtensiveNoteChangesBeginning(vivaldi::NotesModel* model) {
   Java_NotesBridge_extensiveNoteChangesBeginning(env, obj);
 }
 
-void NotesBridge::ExtensiveNoteChangesEnded(vivaldi::NotesModel* model) {
+void NotesBridge::ExtensiveNoteChangesEnded() {
   if (!IsLoaded())
     return;
 
@@ -832,32 +828,29 @@ void NotesBridge::ExtensiveNoteChangesEnded(vivaldi::NotesModel* model) {
 }
 
 // Invoked when a node has been added.
-void NotesBridge::NotesNodeAdded(vivaldi::NotesModel* model,
-                                 const vivaldi::NoteNode* parent,
+void NotesBridge::NotesNodeAdded(const vivaldi::NoteNode* parent,
                                  size_t index) {
-  NoteNodeAdded(model, parent, index);
+  NoteNodeAdded(parent, index);
 }
 
-void NotesBridge::NotesNodeMoved(vivaldi::NotesModel* model,
-                                 const vivaldi::NoteNode* old_parent,
+void NotesBridge::NotesNodeMoved(const vivaldi::NoteNode* old_parent,
                                  size_t old_index,
                                  const vivaldi::NoteNode* new_parent,
                                  size_t new_index) {
-  NoteNodeMoved(model, old_parent, old_index, new_parent, new_index);
+  NoteNodeMoved(old_parent, old_index, new_parent, new_index);
 }
 
 // Invoked when the title or url of a node changes.
-void NotesBridge::NotesNodeChanged(vivaldi::NotesModel* model,
-                                   const vivaldi::NoteNode* node) {
-  NoteNodeChanged(model, node);
+void NotesBridge::NotesNodeChanged(const vivaldi::NoteNode* node) {
+  NoteNodeChanged(node);
 }
 
-void NotesBridge::NotesNodeRemoved(vivaldi::NotesModel* model,
-                                   const vivaldi::NoteNode* parent,
+void NotesBridge::NotesNodeRemoved(const vivaldi::NoteNode* parent,
                                    size_t old_index,
-                                   const vivaldi::NoteNode* node) {
+                                   const vivaldi::NoteNode* node,
+                                   const base::Location& location) {
   std::set<GURL> urls = {};
-  NoteNodeRemoved(model, parent, old_index, node, urls);
+  NoteNodeRemoved(parent, old_index, node, urls, location);
 }
 
 void NotesBridge::ReorderChildren(JNIEnv* env,

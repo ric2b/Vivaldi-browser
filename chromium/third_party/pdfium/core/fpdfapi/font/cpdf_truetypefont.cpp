@@ -4,6 +4,11 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "core/fpdfapi/font/cpdf_truetypefont.h"
 
 #include <algorithm>
@@ -240,7 +245,7 @@ void CPDF_TrueTypeFont::SetGlyphIndicesFromFirstChar() {
   if (start_char < 0 || start_char > 255)
     return;
 
-  auto* it = std::begin(m_GlyphIndex);
+  auto it = std::begin(m_GlyphIndex);
   std::fill(it, it + start_char, 0);
   uint16_t glyph = 3;
   for (int charcode = start_char; charcode < 256; charcode++, glyph++)

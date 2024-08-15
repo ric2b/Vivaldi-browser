@@ -6,6 +6,7 @@
 #define ASH_SYSTEM_FOCUS_MODE_FOCUS_MODE_TASK_VIEW_H_
 
 #include "ash/ash_export.h"
+#include "ash/system/focus_mode/focus_mode_tasks_provider.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/layout/box_layout_view.h"
 
@@ -14,10 +15,6 @@ class ImageButton;
 }  // namespace views
 
 namespace ash {
-
-namespace api {
-struct Task;
-}  // namespace api
 
 class FocusModeChipCarousel;
 
@@ -40,7 +37,7 @@ class ASH_EXPORT FocusModeTaskView : public views::BoxLayoutView {
 
   // Updates `task_title_` and saves the task information to the focus mode
   // controller.
-  void OnTaskSelected(const api::Task* task);
+  void OnTaskSelected(const FocusModeTask& task_entry);
 
   // Clears the stored task data, and fetches an updated task list to display in
   // the carousel.
@@ -66,6 +63,9 @@ class ASH_EXPORT FocusModeTaskView : public views::BoxLayoutView {
 
   // Called when `add_task_button_` is pressed to focus on `textfield_`.
   void OnAddTaskButtonPressed();
+
+  // Called when tasks have been fetched from the tasks provider.
+  void OnTasksFetched(const std::vector<FocusModeTask>& tasks);
 
   // If `show_selected_state` is true, it means that there is a task selected
   // by the user for a focus session, then we will show `radio_button_` and

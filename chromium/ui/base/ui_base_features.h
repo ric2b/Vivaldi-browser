@@ -44,8 +44,6 @@ COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kApplyNativeOccludedRegionToWindowTracker);
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kCalculateNativeWinOcclusion);
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-BASE_DECLARE_FEATURE(kInputPaneOnScreenKeyboard);
 COMPONENT_EXPORT(UI_BASE_FEATURES) BASE_DECLARE_FEATURE(kPointerEventsForTouch);
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kScreenPowerListenerForNativeWinOcclusion);
@@ -57,6 +55,8 @@ COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsUsingWMPointerForTouch();
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_LACROS)
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kApplyNativeOcclusionToCompositor);
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+BASE_DECLARE_FEATURE(kAlwaysTrackNativeWindowOcclusionForTest);
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 extern const base::FeatureParam<std::string>
     kApplyNativeOcclusionToCompositorType;
@@ -86,6 +86,8 @@ COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsForcedColorsEnabled();
 
 // Used to enable the eye-dropper in the refresh color-picker.
 COMPONENT_EXPORT(UI_BASE_FEATURES) BASE_DECLARE_FEATURE(kEyeDropper);
+// TODO(https://crbug.com/329678163): This flag should be removed.
+COMPONENT_EXPORT(UI_BASE_FEATURES) extern const char kEyeDropperNotSupported[];
 COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsEyeDropperEnabled();
 
 COMPONENT_EXPORT(UI_BASE_FEATURES)
@@ -106,8 +108,6 @@ BASE_DECLARE_FEATURE(kNotificationGesturesUpdate);
 COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsNotificationGesturesUpdateEnabled();
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-COMPONENT_EXPORT(UI_BASE_FEATURES) BASE_DECLARE_FEATURE(kHandwritingGesture);
-
 COMPONENT_EXPORT(UI_BASE_FEATURES) BASE_DECLARE_FEATURE(kDeprecateAltClick);
 
 COMPONENT_EXPORT(UI_BASE_FEATURES)
@@ -133,6 +133,11 @@ BASE_DECLARE_FEATURE(kSupportF11AndF12KeyShortcuts);
 
 COMPONENT_EXPORT(UI_BASE_FEATURES) bool AreF11AndF12ShortcutsEnabled();
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_OZONE)
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+BASE_DECLARE_FEATURE(kOzoneBubblesUsePlatformWidgets);
+#endif  // BUILDFLAG(IS_OZONE)
 
 // Indicates whether DrmOverlayManager should used the synchronous API to
 // perform pageflip tests.
@@ -219,83 +224,22 @@ COMPONENT_EXPORT(UI_BASE_FEATURES) BASE_DECLARE_FEATURE(kLacrosColorManagement);
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 bool IsLacrosColorManagementEnabled();
 
-// If enabled, Customize Chrome will be an option in the Unified Side Panel
-// when on the New Tab Page.
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-BASE_DECLARE_FEATURE(kCustomizeChromeSidePanel);
-
-// If both kCustomizeChromeSidePanelNoChromeRefresh2023 and
-// kCustomizeChromeSidePanel are enabled, Customize Chrome will be an option in
-// the Unified Side Panel when on the New Tab Page but Chrome Refresh 2023 will
-// be disabled. This state is useful in the Customize Chrome holdback
-// experiment.
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-BASE_DECLARE_FEATURE(kCustomizeChromeSidePanelNoChromeRefresh2023);
-
-// Returns true if Customize Chrome is configured such that it supports Chrome
-// Refresh 2023.
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-bool CustomizeChromeSupportsChromeRefresh2023();
-
 // Exposed for testing and flags integration. For actual checks please use
 // IsChromeRefresh2023().
 COMPONENT_EXPORT(UI_BASE_FEATURES) BASE_DECLARE_FEATURE(kChromeRefresh2023);
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kChromeRefreshSecondary2023);
 
-enum class ChromeRefresh2023NTBVariation {
-  kGM2Full = 0,
-  kGM3OldIconNoBackground = 1,
-  kGM3OldIconWithBackground = 2,
-  kGM3NewIconNoBackground = 3,
-  kGM3NewIconWithBackground = 4,
-  kNoChoice = 5,
-};
-COMPONENT_EXPORT(UI_BASE_FEATURES) BASE_DECLARE_FEATURE(kChromeRefresh2023NTB);
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-extern const char kChromeRefresh2023NTBVariationKey[];
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-ChromeRefresh2023NTBVariation GetChromeRefresh2023NTB();
-
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-BASE_DECLARE_FEATURE(kChromeRefresh2023TopChromeFont);
-
 COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsChromeRefresh2023();
 
 // Exposed for testing and flags integration. For actual checks please use
 // IsChromeWebuiRefresh2023().
 COMPONENT_EXPORT(UI_BASE_FEATURES) BASE_DECLARE_FEATURE(kChromeRefresh2023);
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-BASE_DECLARE_FEATURE(kChromeWebuiRefresh2023);
 
 COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsChromeWebuiRefresh2023();
 
-// If you are not Omnibox developer, you don't need to query CR2023 level.
-// Otherwise, please ensure that Omnibox features are guarded by an OR; enabling
-// either CR2023 Level2 or the feature-specific features should enable them
-// respectively.
-enum class ChromeRefresh2023Level {
-  // ChromeRefresh2023 is disabled.
-  kDisabled = 0,
-  // Enables ChromeRefresh2023 without Omnibox changes.
-  // Omnibox features can still be independently enabled by feature-specific
-  // Features.
-  kLevel1 = 1,
-  // Enables ChromeRefresh2023 with full Omnibox changes.
-  // Omnibox feature-specific features can be enabled on top of Level2 to gain
-  // additional control using their FeatureParams.
-  kLevel2 = 2,
-};
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-ChromeRefresh2023Level GetChromeRefresh2023Level();
-
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kBubbleMetricsApi);
-
-#if BUILDFLAG(IS_MAC)
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-BASE_DECLARE_FEATURE(kMacClipboardWriteImageWithPng);
-#endif  // BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(IS_APPLE)
 // Font Smoothing, a CoreText technique, simulates optical sizes to enhance text
@@ -313,6 +257,9 @@ BASE_DECLARE_FEATURE(kCr2023MacFontSmoothing);
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kUseGammaContrastRegistrySettings);
 #endif  // BUILDFLAG(IS_WIN)
+
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+BASE_DECLARE_FEATURE(kBubbleFrameViewTitleIsHeading);
 
 }  // namespace features
 

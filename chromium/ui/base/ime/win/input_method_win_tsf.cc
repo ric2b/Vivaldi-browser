@@ -40,10 +40,30 @@ InputMethodWinTSF::InputMethodWinTSF(
       tsf_event_observer_(new TSFEventObserver()),
       tsf_event_router_(new TSFEventRouter(tsf_event_observer_.get())) {}
 
-InputMethodWinTSF::~InputMethodWinTSF() {}
+InputMethodWinTSF::~InputMethodWinTSF() {
+  // A pointer to |this| might have been passed to ui::TSFBridge::GetInstance()
+  // in InputMethodWinTSF::OnFocus(). This TSFBridge can sometime be called
+  // asynchronously with the following stack:
+  //   chrome.dll               ui::TSFTextStore::DispatchKeyEvent
+  //   chrome.dll               ui::TSFTextStore::RequestLock
+  //   textinputframework.dll   SafeRequestLock
+  //   textinputframework.dll   CInputContext::RequestLock
+  //
+  // This will cause the TSFBridge to try to access this pointer, which could
+  // cause a UAF if this object is already destroyed. To avoid this, we need to
+  // explicitly remove the dispatcher before destroying this object. The code in
+  // ui::TSFTextStore::DispatchKeyEvent does properly check the pointer before
+  // trying to use it. Note that everything happens on the same thread here.
+  //
+  // See crbug.com/41488962
+  if (is_focused_ && ui::TSFBridge::GetInstance()) {
+    ui::TSFBridge::GetInstance()->RemoveImeKeyEventDispatcher();
+  }
+}
 
 void InputMethodWinTSF::OnFocus() {
   InputMethodBase::OnFocus();
+  is_focused_ = true;
   if (!ui::TSFBridge::GetInstance()) {
     // TSFBridge can be null for tests.
     return;
@@ -56,6 +76,7 @@ void InputMethodWinTSF::OnFocus() {
 
 void InputMethodWinTSF::OnBlur() {
   InputMethodBase::OnBlur();
+  is_focused_ = false;
   if (!ui::TSFBridge::GetInstance()) {
     // TSFBridge can be null for tests.
     return;

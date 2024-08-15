@@ -15,6 +15,62 @@ It's an open list, so
 if you're interested in updates, discussion, or feisty rants related to Chromium
 security.
 
+## Q1 2024
+
+
+
+# Chrome Security **2024 Q1** Update
+
+Hello,
+
+It’s 2024! Here’s a summary of what Chrome Security has been working on in the first three months of the year. 
+
+We rolled out real-time phishing protection to all Safe Browsing-enabled Chrome users on Desktop and iOS platforms ([blog post](https://security.googleblog.com/2024/03/blog-post.html)) and observed a close to 25% increase in phishing warnings shown to those users. This protection will be landing for all Safe Browsing-enabled Chrome users on Android soon.
+
+The number of users who opt in to Enhanced Protection in Chrome continues to grow, with a 19% increase since the start of 2024.
+
+We publicly described the challenges of how cookie theft malware can compromise users’ accounts, and one way we’re addressing it, in a [blog post on Device Bound Session Credentials](https://blog.chromium.org/2024/04/fighting-cookie-theft-using-device.html).
+
+After several months of experimentation for compatibility and performance impacts, we’re launching a [hybrid postquantum TLS key exchange](https://blog.chromium.org/2023/08/protecting-chrome-traffic-with-hybrid.html) to desktop platforms in Chrome 124. This protects users’ traffic from so-called “store now decrypt later” attacks, in which a future quantum computer could decrypt encrypted traffic recorded today.
+
+We continue to build out tooling and engineering support for the Chrome Root Program. This quarter, we began experimenting with expanded support for revocation of leaf certificates. We also built policy support for enterprises to customize root stores, and implemented new capabilities for distrusting CAs with minimal compatibility impact.
+
+In the policy realm, our experiments with certificate linting tools revealed a large number of misissued certificates, leading to various active incident reports from CAs. Responding to these incidents should become less burdensome as more certificate issuance becomes automated and misissued certificates can be replaced more quickly and with less manual intervention. To that end, we published our latest Chrome Root Program [policy](https://www.chromium.org/for-testers/providing-network-details/) update; among other changes, Chrome now requires new CA applicants to support automated certificate issuance.
+
+We re-evaluated our efforts to make crossOriginIsolation more deployable. To that end, we propose a new policy, [DocumentIsolationPolicy](https://github.com/explainers-by-googlers/document-isolation-policy), that enables process isolation for a document and allows it to become crossOriginIsolated, without restrictions on popups it can communicate with and frames it can embed. On the XSS mitigation side, we’ve been following up on spec issues raised by Mozilla as [TrustedTypes](https://www.w3.org/TR/trusted-types/) are implemented in Firefox. We also produced a first draft of the [Sanitizer](https://github.com/WICG/sanitizer-api) specification.
+
+The Chrome Security Architecture team moved closer to launching some long term efforts, including [isolated sandboxed iframes](https://crbug.com/510122) (with a 1% stable trial and more enforcements) and [RenderDocument](https://crbug.com/936696). We also strengthened the CanCommitURL checks when a navigation occurs, and refactored the PolicyContainerHost keepalive logic to support more types of navigation state, unblocking work on [SiteInstanceGroup](https://crbug.com/1447896). We also cleaned up legacy RenderProcessHost privilege buckets and continued work to simplify checks in ChildProcessSecurityPolicy. Finally, we kicked off an experimental project to build a model of a [memory-safe browser kernel](https://docs.google.com/document/d/1f9OOpmKPV1A7J7i78xBePVmaM2N6IcVI8025qUDLY_A/edit?usp=sharing) in Rust, to help inform future refactoring work in Chrome.
+
+On Windows, the platform security team has continued development of the app-bound encryption mechanism, which makes it more difficult for malware running on the same system as Chrome to extract cookies and other secrets. It also forces malware to use techniques which are easier to detect when stealing secrets from the browser. This feature will continue to roll out over the next few milestones, with increased protection being gradually applied to other kinds of data held by Chrome.
+
+Also on Windows, we've made improvements to the sandbox by having the browser process provide already-created handles to needed log files and removing a sandbox exemption allowing sandboxed processes to access those files. We’ve worked closely with engineers from the Edge team to reduce access to the GDI subsystem, helping us to smooth the complexity of the sandbox.
+
+On macOS, we've continued to work towards proper ad hoc code signing for installed progressive web apps. We've encountered significant complexity getting this improvement to play well with various host security software but believe we have a path forward.
+
+We continue to add security improvements to Chrome’s IPC system (Mojo) - lately including feature annotations on interfaces and restrictions on opaque string types. Engineers from the Edge team, collaborating with members of the Chrome platform security team, added non-writable memory on some platforms to make it more difficult for some attackers to use javascript to talk directly to Mojo in their exploit chains.
+
+Across all platforms, we've continued our effort ([tracking bug](https://bugs.chromium.org/p/angleproject/issues/detail?id=8472)) to retarget the [ANGLE](https://github.com/google/angle) OpenGL ES implementation to use the [Dawn](https://github.com/google/dawn) WebGPU implementation as a backend. This effort will allow moving ANGLE into a more tightly-sandboxed process and considerably reduce GPU attack surface. It is ongoing and relatively early, and we don't have an estimated completion milestone yet.
+
+Our vulnerability research in Q1 continued focusing on codec code, with at least three security bugs (one high-severity) bug found and fixed. Along the way we added or meaningfully improved fuzz coverage for sixteen security-relevant targets.
+
+The [MiraclePtr](https://security.googleblog.com/2022/09/use-after-freedom-miracleptr.html) rewrite has been applied to the dawn repository and so that code is now protected from use-after-free exploits. We have also increased coverage by rewriting collections of pointers (e.g. std::vector&lt;T\*> => std::vector&lt;raw\_ptr&lt;T>>, and more). While we continue our experiment to enable MiraclePtr for the renderer process, we have started experimenting with ADVANCED\_MEMORY\_SAFETY\_CHECK and the Extreme Lightweight UAF Detector both of which aim to detect memory safety issues from the wild.
+
+We've begun work in earnest on Spanification – finding sharp edges that need filing down or gaps that need filling for the project to succeed at Chromium scale. We introduced a number of new APIs within `base::span`, primarily for working with byte spans and strings. We added `HeapArray` to replace use of `unique_ptr&lt;T[]>`, `cstring_view` to replace use of `const char*`, span-based endian conversion functions, and `SpanReader`/`SpanWriter` for working with a dynamic series of bytes in a span. Finally, we implemented a novel Clang mechanism for incrementally rolling out a warning (`-Wunsafe-buffer-usage`) across the codebase without it being viral across textual #includes that will allow us to ratchet Spanification progress forward. We tested this support out in `//base` and `//pdfium`.
+
+On the V8 side, the major achievement this quarter was to [launch VRP integration for the V8 sandbox](https://g.co/chrome/vrp/#v8-sandbox-bypass-rewards). Even though there are still a number of open issues that need to be fixed, this will hopefully help prioritize the important ones and provide a better idea of the types of bugs encountered on this new attack surface. We also released a [technical blog post](https://v8.dev/blog/sandbox) about the motivation for the sandbox, its high-level design, and the goals we’re trying to accomplish with it.
+
+There’s been a big win this quarter for third party dependency health thanks to a new process which will update our Chrome Rust dependencies each week. This is the result of a lot of love and investment in the Rust ecosystem within Chrome, and will smooth the path for replacing some of our C/C++ dependencies with Rust, and improving our memory safety.
+
+The fuzzing team has been making progress on a few fronts. We’ve been working on a ClusterFuzz rearchitecture project for a while, with the goal of allowing VRP reporters eventually to upload test cases directly to ClusterFuzz. The last few steps are being worked through, and we expect to start testing this out with a few security shepherds in Q2. Building on the InProcessFuzzer work of last quarter, we have [extended the framework](https://source.chromium.org/chromium/chromium/src/+/main:chrome/test/fuzzing/renderer_fuzzing/in_process_renderer_fuzzing.h?q=InProcessFuzzer&ss=chromium%2Fchromium%2Fsrc) to allow running test cases within the renderer process. We have used this to build an [experimental fuzzer](https://source.chromium.org/chromium/chromium/src/+/main:chrome/test/fuzzing/renderer_fuzzing/renderer_in_process_mojolpm_fuzzer.cc) for the renderer-browser mojo boundary, and are now automatically fuzzing all interfaces vended by BrowserInterfaceBroker in a browsertest environment, on ClusterFuzz. Work remains to identify important Mojo interfaces to fuzz, and simplifying the introduction of other similar fuzzers.
+
+Android fuzzing is truly back online with several phones fuzzing a HWASAN build of Chrome from Android’s test lab on Android’s fuzzing infra, with integration issues being addressed as we find them. We are working to enable HWASAN fuzzing on our own devices in Chrome test labs, as well as EOL devices graciously provided by the Android team.
+
+Until next time,
+
+Adrian
+
+On behalf of Chrome Security
+
 ## Q4 2023
 
 Hello,

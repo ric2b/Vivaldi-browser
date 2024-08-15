@@ -28,15 +28,11 @@
 #ifndef SRC_TINT_UTILS_BYTES_READER_H_
 #define SRC_TINT_UTILS_BYTES_READER_H_
 
-#include <algorithm>
-#include <cstdint>
 #include <string>
 
 #include "src/tint/utils/bytes/endianness.h"
 #include "src/tint/utils/bytes/swap.h"
-#include "src/tint/utils/containers/slice.h"
 #include "src/tint/utils/result/result.h"
-
 namespace tint::bytes {
 
 /// A binary stream reader interface
@@ -53,6 +49,9 @@ class Reader {
     /// @returns the number of bytes read from the stream. If Read() returns less than @p count,
     /// then the end of the stream has been reached.
     virtual size_t Read(std::byte* out, size_t count) = 0;
+
+    /// @returns true if the Reader has no more bytes to read.
+    virtual bool IsEOF() const = 0;
 
     /// Reads an integer from the stream, performing byte swapping if the stream's endianness
     /// differs from the native endianness.
@@ -109,43 +108,6 @@ class Reader {
         }
         return out;
     }
-};
-
-/// BufferReader is an implementation of the Reader interface backed by a buffer.
-class BufferReader final : public Reader {
-  public:
-    // Destructor
-    ~BufferReader() override;
-
-    /// Constructor
-    /// @param data the data to read from
-    /// @param size the number of bytes in the buffer
-    BufferReader(const std::byte* data, size_t size) : data_(data), bytes_remaining_(size) {
-        TINT_ASSERT(data);
-    }
-
-    /// Constructor
-    /// @param string the string to read from
-    explicit BufferReader(std::string_view string)
-        : data_(reinterpret_cast<const std::byte*>(string.data())),
-          bytes_remaining_(string.length()) {}
-
-    /// Constructor
-    /// @param slice the byte slice to read from
-    explicit BufferReader(Slice<const std::byte> slice)
-        : data_(slice.data), bytes_remaining_(slice.len) {
-        TINT_ASSERT(slice.data);
-    }
-
-    /// @copydoc Reader::Read
-    size_t Read(std::byte* out, size_t count) override;
-
-  private:
-    /// The data to read from
-    const std::byte* data_ = nullptr;
-
-    /// The number of bytes remaining
-    size_t bytes_remaining_ = 0;
 };
 
 }  // namespace tint::bytes

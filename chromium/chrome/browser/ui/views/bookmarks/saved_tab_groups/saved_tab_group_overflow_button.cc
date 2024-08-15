@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_ink_drop_util.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/saved_tab_groups/features.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -26,20 +27,25 @@
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/view_class_properties.h"
 
+namespace {
+static constexpr int kDefaultIconSize = 16;
+static constexpr int kUIUpdateIconSize = 20;
+}  // namespace
+
 namespace tab_groups {
 
 SavedTabGroupOverflowButton::SavedTabGroupOverflowButton(
     PressedCallback callback)
     : views::MenuButton(std::move(callback)) {
-  bool v2_enabled = base::FeatureList::IsEnabled(features::kTabGroupsSaveV2);
   SetAccessibilityProperties(
-      ax::mojom::Role::kMenu,
-      l10n_util::GetStringUTF16(v2_enabled
+      ax::mojom::Role::kButton,
+      l10n_util::GetStringUTF16(IsTabGroupsSaveUIUpdateEnabled()
                                     ? IDS_ACCNAME_TAB_GROUPS_EVERYTHING
                                     : IDS_ACCNAME_SAVED_TAB_GROUPS_CHEVRON));
   SetTooltipText(l10n_util::GetStringUTF16(
-      v2_enabled ? IDS_TAB_GROUPS_EVERYTHING_BUTTON_TOOLTIP
-                 : IDS_SAVED_TAB_GROUPS_OVERFLOW_BUTTON_TOOLTIP));
+      IsTabGroupsSaveUIUpdateEnabled()
+          ? IDS_TAB_GROUPS_EVERYTHING_BUTTON_TOOLTIP
+          : IDS_SAVED_TAB_GROUPS_OVERFLOW_BUTTON_TOOLTIP));
   SetFlipCanvasOnPaintForRTLUI(true);
   ConfigureInkDropForToolbar(this);
   SetImageLabelSpacing(ChromeLayoutProvider::Get()->GetDistanceMetric(
@@ -49,14 +55,6 @@ SavedTabGroupOverflowButton::SavedTabGroupOverflowButton(
 }
 
 SavedTabGroupOverflowButton::~SavedTabGroupOverflowButton() = default;
-
-void SavedTabGroupOverflowButton::GetAccessibleNodeData(
-    ui::AXNodeData* node_data) {
-  views::MenuButton::GetAccessibleNodeData(node_data);
-  node_data->role = ax::mojom::Role::kMenu;
-  node_data->SetNameChecked(
-      l10n_util::GetStringUTF8(IDS_ACCNAME_SAVED_TAB_GROUPS_CHEVRON));
-}
 
 std::unique_ptr<views::LabelButtonBorder>
 SavedTabGroupOverflowButton::CreateDefaultBorder() const {
@@ -70,17 +68,18 @@ void SavedTabGroupOverflowButton::OnThemeChanged() {
   views::MenuButton::OnThemeChanged();
 
   ui::ColorProvider* color_provider = GetColorProvider();
-  const SkColor overflow_color =
-      color_provider->GetColor(kColorBookmarkButtonIcon);
-  const gfx::VectorIcon& icon = features::IsChromeRefresh2023()
-                                    ? kBookmarkbarOverflowRefreshIcon
-                                    : kOverflowChevronIcon;
-  SetImageModel(views::Button::STATE_NORMAL,
-                ui::ImageModel::FromVectorIcon(
-                    base::FeatureList::IsEnabled(features::kTabGroupsSaveV2)
-                        ? kSavedTabGroupBarEverythingIcon
-                        : icon,
-                    overflow_color));
+  bool is_ui_update = IsTabGroupsSaveUIUpdateEnabled();
+  const gfx::VectorIcon& icon = is_ui_update ? kSavedTabGroupBarEverythingIcon
+                                             : kBookmarkbarOverflowRefreshIcon;
+  const int icon_size = is_ui_update ? kUIUpdateIconSize : kDefaultIconSize;
+  SetImageModel(
+      views::Button::STATE_NORMAL,
+      ui::ImageModel::FromVectorIcon(
+          icon, color_provider->GetColor(kColorBookmarkButtonIcon), icon_size));
+  SetImageModel(
+      views::Button::STATE_DISABLED,
+      ui::ImageModel::FromVectorIcon(
+          icon, color_provider->GetColor(ui::kColorIconDisabled), icon_size));
   return;
 }
 

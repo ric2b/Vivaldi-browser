@@ -22,7 +22,7 @@
 #include "chrome/grit/search_engine_choice_resources_map.h"
 #include "chrome/grit/signin_resources.h"
 #include "components/search_engines/search_engine_choice/search_engine_choice_service.h"
-#include "components/search_engines/search_engine_choice_utils.h"
+#include "components/search_engines/search_engine_choice/search_engine_choice_utils.h"
 #include "components/search_engines/template_url.h"
 #include "components/signin/public/base/signin_switches.h"
 #include "components/strings/grit/components_branded_strings.h"
@@ -35,7 +35,7 @@ std::string GetChoiceListJSON(Profile& profile) {
   base::Value::List choice_value_list;
   SearchEngineChoiceDialogService* search_engine_choice_dialog_service =
       SearchEngineChoiceDialogServiceFactory::GetForProfile(&profile);
-  const std::vector<std::unique_ptr<TemplateURL>> choices =
+  const TemplateURL::TemplateURLVector choices =
       search_engine_choice_dialog_service->GetSearchEngines();
 
   for (const auto& choice : choices) {
@@ -92,6 +92,8 @@ SearchEngineChoiceUI::SearchEngineChoiceUI(content::WebUI* web_ui)
   source->AddLocalizedString(
       "infoDialogThirdParagraph",
       IDS_SEARCH_ENGINE_CHOICE_INFO_DIALOG_BODY_THIRD_PARAGRAPH);
+  source->AddLocalizedString("choiceListA11yLabel",
+                             IDS_SEARCH_ENGINE_CHOICE_LIST_A11Y_LABEL);
   source->AddLocalizedString("infoDialogButtonText", IDS_CLOSE);
   source->AddLocalizedString("productLogoAltText",
                              IDS_SHORT_PRODUCT_LOGO_ALT_TEXT);
@@ -111,8 +113,6 @@ SearchEngineChoiceUI::SearchEngineChoiceUI(content::WebUI* web_ui)
   source->AddResourcePath("signin_vars.css.js", IDR_SIGNIN_SIGNIN_VARS_CSS_JS);
 
   source->AddString("choiceList", GetChoiceListJSON(profile_.get()));
-
-  webui::SetupChromeRefresh2023(source);
 
   webui::SetupWebUIDataSource(
       source,

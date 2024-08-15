@@ -114,14 +114,14 @@ using manual_fill::ManualFillDataType;
 
   self.view = self.formInputAccessoryView;
 
-  if (IsBottomOmniboxSteadyStateEnabled()) {
+  if (IsBottomOmniboxAvailable()) {
     [self updateOmniboxTypingShieldVisibility];
   }
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
-  if (IsBottomOmniboxSteadyStateEnabled()) {
+  if (IsBottomOmniboxAvailable()) {
     [self updateOmniboxTypingShieldVisibility];
   }
 }
@@ -223,6 +223,27 @@ using manual_fill::ManualFillDataType;
   [self updateOmniboxTypingShieldVisibility];
 }
 
+- (void)keyboardHeightChanged:(CGFloat)newHeight oldHeight:(CGFloat)oldHeight {
+  if (newHeight < oldHeight) {
+    // Add a quick animation to move the keyboard accessory view, which will
+    // prevent it from moving if this is a quick flicker of the keyboard.
+    [self verticalOffset:newHeight - oldHeight];
+    [UIView animateWithDuration:0.1
+                          delay:0.1
+                        options:UIViewAnimationOptionCurveEaseInOut
+                     animations:^{
+                       [self verticalOffset:0];
+                     }
+                     completion:nil];
+  } else if (newHeight > oldHeight) {
+    // If the height is increasing, whether or not this was a flicker, we can
+    // cancel the animations and offset to immediately return to the default
+    // state.
+    [self.formInputAccessoryView.layer removeAllAnimations];
+    [self verticalOffset:0];
+  }
+}
+
 #pragma mark - Getter
 
 - (BOOL)isFormAccessoryVisible {
@@ -279,7 +300,7 @@ using manual_fill::ManualFillDataType;
   if (base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
     [self.formInputAccessoryViewControllerDelegate
         formInputAccessoryViewController:self
-            didTapFormInputAccessoryView:self.view];
+            didTapFormInputAccessoryView:self.formInputAccessoryView];
   } else {
     // This method can't be reached when `kEnableStartupImprovements` is
     // enabled.
@@ -339,8 +360,6 @@ using manual_fill::ManualFillDataType;
           customTrailingView:self.manualFillAccessoryViewController.view];
   } else {
     formInputAccessoryView.accessibilityViewIsModal = YES;
-    self.formSuggestionView.trailingView =
-        self.manualFillAccessoryViewController.view;
     if (IsKeyboardAccessoryUpgradeEnabled()) {
       [formInputAccessoryView
                 setUpWithLeadingView:self.leadingView
@@ -360,6 +379,8 @@ using manual_fill::ManualFillDataType;
                                          kKeyboardDownSymbol,
                                          kSymbolActionPointSize)];
     } else {
+      self.formSuggestionView.trailingView =
+          self.manualFillAccessoryViewController.view;
       [formInputAccessoryView setUpWithLeadingView:self.leadingView
                                 navigationDelegate:self.navigationDelegate];
     }
@@ -453,7 +474,6 @@ using manual_fill::ManualFillDataType;
 }
 
 - (void)updateOmniboxTypingShieldVisibility {
-  CHECK(IsBottomOmniboxSteadyStateEnabled());
   if (!self.formInputAccessoryView) {
     return;
   }
@@ -488,6 +508,13 @@ using manual_fill::ManualFillDataType;
       // These cases are currently not available on iOS.
       NOTREACHED_NORETURN();
   }
+}
+
+// Moves the main view down by a certain offset (negative offsets move the view
+// up).
+- (void)verticalOffset:(CGFloat)offset {
+  self.formInputAccessoryView.transform =
+      CGAffineTransformMakeTranslation(0, offset);
 }
 
 #pragma mark - ManualFillAccessoryViewControllerDelegate

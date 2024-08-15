@@ -156,10 +156,10 @@ class IndexedDBBrowserTest : public ContentBrowserTest {
   storage::mojom::IndexedDBControl& GetControl(Shell* browser = nullptr) {
     if (!browser)
       browser = shell();
-    StoragePartition* partition = browser->web_contents()
-                                      ->GetBrowserContext()
-                                      ->GetDefaultStoragePartition();
-    return partition->GetIndexedDBControl();
+    return browser->web_contents()
+        ->GetBrowserContext()
+        ->GetDefaultStoragePartition()
+        ->GetIndexedDBControl();
   }
 
   mojo::Remote<storage::mojom::IndexedDBControlTest> GetControlTest(
@@ -175,11 +175,11 @@ class IndexedDBBrowserTest : public ContentBrowserTest {
     if (!browser) {
       browser = shell();
     }
-    StoragePartition* partition = browser->web_contents()
-                                      ->GetBrowserContext()
-                                      ->GetDefaultStoragePartition();
-    auto& control = partition->GetIndexedDBControl();
-    control.BindTestInterface(std::move(receiver));
+    browser->web_contents()
+        ->GetBrowserContext()
+        ->GetDefaultStoragePartition()
+        ->GetIndexedDBControl()
+        .BindTestInterface(std::move(receiver));
   }
 
   void SetQuota(int per_host_quota_kilobytes) {
@@ -816,6 +816,36 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, DeleteBucketDataDeletesBlobs) {
   EXPECT_GT(size, 4 << 20 /* 4 MB */);
   DeleteBucketData(kTestStorageKey);
   EXPECT_EQ(0, RequestUsage());
+}
+
+// Regression test for crbug.com/330868483
+// In this test,
+//   1. the page reads a blob
+//   2. the backing store is force-closed
+//   3. the reference to the blob is GC'd
+//      . this disconnects the IndexedDBDataItemReader *after* the backing store
+//        is already reset
+//   4. the page reads the same blob, reusing the IndexedDBDataItemReader
+//   5. the blob reference is dropped and GC'd again
+//   6. don't crash
+IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestWithGCExposed, ForceCloseWithBlob) {
+  const GURL kTestUrl = GetTestUrl("indexeddb", "write_and_read_blob.html");
+  SimpleTest(kTestUrl);
+  DeleteBucketData(
+      blink::StorageKey::CreateFirstParty(url::Origin::Create(kTestUrl)));
+  std::ignore = EvalJs(shell(), "gc()");
+
+  // Run the test again, but don't reset the object stores first to make sure
+  // the same blob is read again.
+  std::ignore = EvalJs(shell(), "testThenGc()");
+  while (true) {
+    std::string result = shell()->web_contents()->GetLastCommittedURL().ref();
+    if (!result.empty()) {
+      EXPECT_EQ(result, "pass");
+      break;
+    }
+    base::RunLoop().RunUntilIdle();
+  }
 }
 
 IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, DeleteBucketDataIncognito) {

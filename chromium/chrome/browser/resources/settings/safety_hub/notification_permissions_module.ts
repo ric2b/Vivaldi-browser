@@ -13,7 +13,7 @@ import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
-import 'chrome://resources/polymer/v3_0/paper-tooltip/paper-tooltip.js';
+import 'chrome://resources/cr_elements/cr_tooltip/cr_tooltip.js';
 import '../settings_shared.css.js';
 import '../i18n_setup.js';
 import '../icons.html.js';
@@ -252,6 +252,7 @@ export class SettingsSafetyHubNotificationPermissionsModuleElement extends
         this.browserProxy_.blockNotificationPermissionForOrigins.bind(
             this.browserProxy_, this.lastOrigins_));
 
+    this.browserProxy_.recordSafetyHubInteraction();
     this.metricsBrowserProxy_
         .recordSafetyHubNotificationPermissionsModuleInteractionsHistogram(
             SafetyCheckNotificationsModuleInteractions.BLOCK);
@@ -278,6 +279,7 @@ export class SettingsSafetyHubNotificationPermissionsModuleElement extends
         this.browserProxy_.ignoreNotificationPermissionForOrigins.bind(
             this.browserProxy_, this.lastOrigins_));
 
+    this.browserProxy_.recordSafetyHubInteraction();
     this.metricsBrowserProxy_
         .recordSafetyHubNotificationPermissionsModuleInteractionsHistogram(
             SafetyCheckNotificationsModuleInteractions.IGNORE);
@@ -298,6 +300,7 @@ export class SettingsSafetyHubNotificationPermissionsModuleElement extends
         this.browserProxy_.resetNotificationPermissionForOrigins.bind(
             this.browserProxy_, this.lastOrigins_));
 
+    this.browserProxy_.recordSafetyHubInteraction();
     this.metricsBrowserProxy_
         .recordSafetyHubNotificationPermissionsModuleInteractionsHistogram(
             SafetyCheckNotificationsModuleInteractions.RESET);
@@ -315,6 +318,7 @@ export class SettingsSafetyHubNotificationPermissionsModuleElement extends
         this.browserProxy_.blockNotificationPermissionForOrigins.bind(
             this.browserProxy_, this.lastOrigins_));
 
+    this.browserProxy_.recordSafetyHubInteraction();
     this.metricsBrowserProxy_
         .recordSafetyHubNotificationPermissionsModuleInteractionsHistogram(
             SafetyCheckNotificationsModuleInteractions.BLOCK_ALL);
@@ -457,9 +461,9 @@ export class SettingsSafetyHubNotificationPermissionsModuleElement extends
 
   private showUndoTooltip_(e: Event) {
     e.stopPropagation();
-    const tooltip = this.shadowRoot!.querySelector('paper-tooltip');
+    const tooltip = this.shadowRoot!.querySelector('cr-tooltip');
     assert(tooltip);
-    this.showTooltipAtTarget(tooltip, e.target!);
+    this.showTooltipAtTarget(tooltip, e.target! as Element);
   }
 }
 

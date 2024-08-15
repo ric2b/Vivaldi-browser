@@ -8,9 +8,9 @@
 #import <UIKit/UIKit.h>
 
 #import "base/ios/block_types.h"
-
 #import "base/memory/raw_ptr.h"
 #import "base/memory/weak_ptr.h"
+#import "ios/chrome/browser/contextual_panel/coordinator/contextual_sheet_presenter.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/browser_view/tab_consumer.h"
@@ -32,6 +32,7 @@
 @protocol ApplicationCommands;
 @class BookmarksCoordinator;
 @class BrowserContainerViewController;
+@protocol BrowserViewVisibilityConsumer;
 @class BubblePresenter;
 @protocol DefaultPromoNonModalPresentationDelegate;
 @protocol FindInPageCommands;
@@ -59,6 +60,7 @@ class UrlLoadingBrowserAgent;
 
 // Vivaldi
 @class PanelInteractionController;
+@class VivaldiDefaultRatingManager;
 @protocol BrowserCoordinatorCommands;
 // End Vivaldi
 
@@ -97,7 +99,9 @@ typedef struct {
 // The top-level view controller for the browser UI. Manages other controllers
 // which implement the interface.
 @interface BrowserViewController
-    : UIViewController <FindBarPresentationDelegate,
+    : UIViewController <BrowserCommands,
+                        ContextualSheetPresenter,
+                        FindBarPresentationDelegate,
                         IncognitoReauthConsumer,
                         LensPresentationDelegate,
                         LogoAnimationControllerOwnerOwner,
@@ -105,13 +109,12 @@ typedef struct {
                         OmniboxFocusDelegate,
                         OmniboxPopupPresenterDelegate,
                         ToolbarHeightDelegate,
-                        WebStateContainerViewProvider,
-                        BrowserCommands>
+                        WebStateContainerViewProvider>
 
 // Initializes a new BVC.
 // `browserContainerViewController` is the container object this BVC will exist
 // inside.
-// TODO(crbug.com/992582): Remove references to model objects from this class.
+// TODO(crbug.com/41475381): Remove references to model objects from this class.
 - (instancetype)
     initWithBrowserContainerViewController:
         (BrowserContainerViewController*)browserContainerViewController
@@ -125,6 +128,10 @@ typedef struct {
                          bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
 
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
+
+// Consumer that gets notified of the visibility of the browser view.
+@property(nonatomic, weak) id<BrowserViewVisibilityConsumer>
+    browserViewVisibilityConsumer;
 
 // Handler for reauth commands.
 @property(nonatomic, weak) id<IncognitoReauthCommands> reauthHandler;
@@ -166,6 +173,9 @@ typedef struct {
 // Vivaldi
 // Browser state of this BVC.
 @property(nonatomic,assign) ChromeBrowserState* browserState;
+
+// Vivaldi Default Rating Manager
+@property(nonatomic, strong) VivaldiDefaultRatingManager* defaultRatingManager;
 
 - (web::WebState*)getCurrentWebState;
 - (void)openWhatsNewTab;

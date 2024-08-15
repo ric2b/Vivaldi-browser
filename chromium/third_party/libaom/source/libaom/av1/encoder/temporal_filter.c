@@ -463,12 +463,12 @@ static void tf_build_predictor(const YV12_BUFFER_CONFIG *ref_frame,
 // Returns:
 //   Nothing will be returned. But the content to which `accum` and `pred`
 //   point will be modified.
-void tf_apply_temporal_filter_self(const YV12_BUFFER_CONFIG *ref_frame,
-                                   const MACROBLOCKD *mbd,
-                                   const BLOCK_SIZE block_size,
-                                   const int mb_row, const int mb_col,
-                                   const int num_planes, uint32_t *accum,
-                                   uint16_t *count) {
+static void tf_apply_temporal_filter_self(const YV12_BUFFER_CONFIG *ref_frame,
+                                          const MACROBLOCKD *mbd,
+                                          const BLOCK_SIZE block_size,
+                                          const int mb_row, const int mb_col,
+                                          const int num_planes, uint32_t *accum,
+                                          uint16_t *count) {
   // Block information.
   const int mb_height = block_size_high[block_size];
   const int mb_width = block_size_wide[block_size];
@@ -564,9 +564,10 @@ static INLINE void compute_square_diff(const uint8_t *ref, const int ref_offset,
 // Returns:
 //   Nothing will be returned. But the content to which `luma_sse_sum` points
 //   will be modified.
-void compute_luma_sq_error_sum(uint32_t *square_diff, uint32_t *luma_sse_sum,
-                               int block_height, int block_width,
-                               int ss_x_shift, int ss_y_shift) {
+static void compute_luma_sq_error_sum(uint32_t *square_diff,
+                                      uint32_t *luma_sse_sum, int block_height,
+                                      int block_width, int ss_x_shift,
+                                      int ss_y_shift) {
   for (int i = 0; i < block_height; ++i) {
     for (int j = 0; j < block_width; ++j) {
       for (int ii = 0; ii < (1 << ss_y_shift); ++ii) {

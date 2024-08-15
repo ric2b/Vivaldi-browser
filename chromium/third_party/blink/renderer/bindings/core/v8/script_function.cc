@@ -15,9 +15,6 @@ namespace {
 void InstallCallableHolderTemplate(v8::Isolate*,
                                    const DOMWrapperWorld&,
                                    v8::Local<v8::Template> interface_template) {
-  v8::Local<v8::ObjectTemplate> instance_template =
-      interface_template.As<v8::FunctionTemplate>()->InstanceTemplate();
-  instance_template->SetInternalFieldCount(kV8DefaultWrapperInternalFieldCount);
 }
 
 const WrapperTypeInfo callable_holder_info = {
@@ -54,9 +51,10 @@ class CORE_EXPORT CallableHolder final : public ScriptWrappable {
     RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(args.GetIsolate(),
                                                  "Blink_CallCallback");
     v8::Local<v8::Object> data = v8::Local<v8::Object>::Cast(args.Data());
-    auto* holder = static_cast<CallableHolder*>(ToScriptWrappable(data));
-    ScriptState* script_state =
-        ScriptState::From(args.GetIsolate()->GetCurrentContext());
+    v8::Isolate* isolate = args.GetIsolate();
+    auto* holder =
+        static_cast<CallableHolder*>(ToScriptWrappable(isolate, data));
+    ScriptState* script_state = ScriptState::ForCurrentRealm(isolate);
     holder->callable_->CallRaw(script_state, args);
   }
 

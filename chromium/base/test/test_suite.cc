@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/test/test_suite.h"
 
 #include <signal.h>
@@ -36,6 +41,7 @@
 #include "base/process/memory.h"
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/gtest_xml_unittest_result_printer.h"
@@ -91,9 +97,9 @@
 #include "base/debug/handle_hooks_win.h"
 #endif  // BUILDFLAG(IS_WIN)
 
-#if BUILDFLAG(USE_PARTITION_ALLOC)
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC)
 #include "base/allocator/partition_alloc_support.h"
-#endif  // BUILDFLAG(USE_PARTITION_ALLOC)
+#endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC)
 
 #if GTEST_HAS_DEATH_TEST
 #include "base/gtest_prod_util.h"
@@ -123,7 +129,7 @@ class DisableMaybeTests : public testing::EmptyTestEventListener {
 class ResetCommandLineBetweenTests : public testing::EmptyTestEventListener {
  public:
   ResetCommandLineBetweenTests() : old_command_line_(CommandLine::NO_PROGRAM) {
-    // TODO(crbug.com/1123627): Remove this after A/B test is done.
+    // TODO(crbug.com/40053215): Remove this after A/B test is done.
     // Workaround a test-specific race conditon with StatisticsRecorder lock
     // initialization checking CommandLine by ensuring it's created here (when
     // we start the test process), rather than in some arbitrary test. This
@@ -169,11 +175,13 @@ class FeatureListScopedToEachTest : public testing::EmptyTestEventListener {
     // TestFeatureForBrowserTest1 and TestFeatureForBrowserTest2 used in
     // ContentBrowserTestScopedFeatureListTest to ensure ScopedFeatureList keeps
     // features from command line.
+    // TestBlinkFeatureDefault is used in RuntimeEnabledFeaturesTest to test a
+    // behavior with OverrideState::OVERIDE_USE_DEFAULT.
     std::string enabled =
         command_line->GetSwitchValueASCII(switches::kEnableFeatures);
     std::string disabled =
         command_line->GetSwitchValueASCII(switches::kDisableFeatures);
-    enabled += ",TestFeatureForBrowserTest1";
+    enabled += ",TestFeatureForBrowserTest1,*TestBlinkFeatureDefault";
     disabled += ",TestFeatureForBrowserTest2";
     scoped_feature_list_.InitFromCommandLine(enabled, disabled);
 
@@ -192,9 +200,9 @@ class FeatureListScopedToEachTest : public testing::EmptyTestEventListener {
 
     *CommandLine::ForCurrentProcess() = new_command_line;
 
-    // TODO(https://crbug.com/1413674): Enable PartitionAlloc in unittests with
+    // TODO(crbug.com/40255771): Enable PartitionAlloc in unittests with
     // ASAN.
-#if BUILDFLAG(USE_PARTITION_ALLOC) && !defined(ADDRESS_SANITIZER)
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC) && !defined(ADDRESS_SANITIZER)
     allocator::PartitionAllocSupport::Get()->ReconfigureAfterFeatureListInit(
         "",
         /*configure_dangling_pointer_detector=*/true);
@@ -336,6 +344,31 @@ void AbortHandler(int signal) {
   __debugbreak();
 }
 #endif
+
+#if GTEST_HAS_DEATH_TEST
+// Returns a friendly message to tell developers how to see the stack traces for
+// unexpected crashes in death test child processes. Since death tests generate
+// stack traces as a consequence of their expected crashes and stack traces are
+// expensive to compute, stack traces in death test child processes are
+// suppressed unless `--with-stack-traces` is on the command line.
+std::string GetStackTraceMessage() {
+  // When Google Test launches a "threadsafe" death test's child proc, it uses
+  // `--gtest_filter` to convey the test to be run. It appendeds it to the end
+  // of the command line, so Chromium's `CommandLine` will preserve only the
+  // value of interest.
+  auto filter_switch =
+      CommandLine::ForCurrentProcess()->GetSwitchValueNative("gtest_filter");
+  return StrCat({"Stack trace suppressed; retry with `--",
+                 switches::kWithDeathTestStackTraces, " --gtest_filter=",
+#if BUILDFLAG(IS_WIN)
+                 WideToUTF8(filter_switch)
+#else
+                 filter_switch
+#endif
+                     ,
+                 "`."});
+}
+#endif  // GTEST_HAS_DEATH_TEST
 
 }  // namespace
 
@@ -504,6 +537,21 @@ void TestSuite::Initialize() {
 
   InitializeFromCommandLine(&argc_, argv_);
 
+#if GTEST_HAS_DEATH_TEST
+  if (::testing::internal::InDeathTestChild() &&
+      !CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kWithDeathTestStackTraces)) {
+    // For death tests using the "threadsafe" style (which includes all such
+    // tests on Windows and Fuchsia, and is the default for all Chromium tests
+    // on all platforms except Android; see `PreInitialize`),
+    //
+    // For more information, see
+    // https://github.com/google/googletest/blob/main/docs/advanced.md#death-test-styles.
+    debug::StackTrace::SuppressStackTracesWithMessageForTesting(
+        GetStackTraceMessage());
+  }
+#endif
+
   // Logging must be initialized before any thread has a chance to call logging
   // functions.
   InitializeLogging();
@@ -515,11 +563,11 @@ void TestSuite::Initialize() {
   base::debug::AsanService::GetInstance()->Initialize();
 #endif
 
-  // TODO(https://crbug.com/1400058): Enable BackupRefPtr in unittests on
+  // TODO(crbug.com/40250141): Enable BackupRefPtr in unittests on
   // Android too. Same for ASAN.
-  // TODO(https://crbug.com/1413674): Enable PartitionAlloc in unittests with
+  // TODO(crbug.com/40255771): Enable PartitionAlloc in unittests with
   // ASAN.
-#if BUILDFLAG(USE_PARTITION_ALLOC) && !defined(ADDRESS_SANITIZER)
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC) && !defined(ADDRESS_SANITIZER)
   allocator::PartitionAllocSupport::Get()->ReconfigureForTests();
 #endif  // BUILDFLAG(IS_WIN)
 
@@ -535,7 +583,7 @@ void TestSuite::Initialize() {
 #if BUILDFLAG(DCHECK_IS_CONFIGURABLE)
   // Default the configurable DCHECK level to FATAL when running death tests'
   // child process, so that they behave as expected.
-  // TODO(crbug.com/1057995): Remove this in favor of the codepath in
+  // TODO(crbug.com/40120934): Remove this in favor of the codepath in
   // FeatureList::SetInstance() when/if OnTestStart() TestEventListeners
   // are fixed to be invoked in the child process as expected.
   if (command_line->HasSwitch("gtest_internal_run_death_test"))
@@ -612,10 +660,6 @@ void TestSuite::Initialize() {
 }
 
 void TestSuite::InitializeFromCommandLine(int* argc, char** argv) {
-#if GTEST_HAS_DEATH_TEST
-  internal::SetInDeathTestChildFn(&::testing::internal::InDeathTestChild);
-#endif
-
   // CommandLine::Init() is called earlier from PreInitialize().
   CommandLine::ForCurrentProcess()->AppendSwitch("--disable-vivaldi");
   testing::InitGoogleTest(argc, argv);
@@ -632,6 +676,11 @@ int TestSuite::RunAllTests() {
 
 void TestSuite::Shutdown() {
   DCHECK(is_initialized_);
+#if GTEST_HAS_DEATH_TEST
+  if (::testing::internal::InDeathTestChild()) {
+    debug::StackTrace::SuppressStackTracesWithMessageForTesting({});
+  }
+#endif
   debug::StopProfiling();
 }
 
@@ -647,12 +696,11 @@ void TestSuite::PreInitialize() {
   // fork() but before exec() is unsafe. Using the threadsafe style by default
   // alleviates these concerns.
   //
-  // However, the threasafe style does not work reliably on Android, so that
-  // will keep the default of "fast". See https://crbug.com/815537,
-  // https://github.com/google/googletest/issues/1496, and
-  // https://github.com/google/googletest/issues/2093.
-  // TODO(danakj): Determine if all death tests should be skipped on Android
-  // (many already are, such as for DCHECK-death tests).
+  // However, the threadsafe style does not work reliably on Android, so for
+  // that we will keep the default of "fast". For more information, see:
+  // https://crbug.com/41372437#comment12.
+  // TODO(https://crbug.com/41372437): Use "threadsafe" on Android once it is
+  // supported.
 #if !BUILDFLAG(IS_ANDROID)
   GTEST_FLAG_SET(death_test_style, "threadsafe");
 #endif

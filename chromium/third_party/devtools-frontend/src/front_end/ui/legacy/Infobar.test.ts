@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 import {
-  assertElement,
   dispatchClickEvent,
   renderElementIntoDOM,
 } from '../../testing/DOMHelpers.js';
@@ -11,10 +10,9 @@ import {
   deinitializeGlobalVars,
   initializeGlobalVars,
 } from '../../testing/EnvironmentHelpers.js';
+import * as Buttons from '../components/buttons/buttons.js';
 
 import * as UI from './legacy.js';
-
-const {assert} = chai;
 
 describe('Infobar', () => {
   before(async () => {
@@ -29,11 +27,11 @@ describe('Infobar', () => {
     renderElementIntoDOM(component.element);
 
     const infobar = component.element.shadowRoot!.querySelector('.infobar');
-    assertElement(infobar, HTMLDivElement);
-    const learnMoreButton = infobar.querySelector('button.text-button');
-    assertElement(learnMoreButton, HTMLButtonElement);
+    assert.instanceOf(infobar, HTMLDivElement);
+    const learnMoreButton = infobar.querySelector('devtools-button');
+    assert.instanceOf(learnMoreButton, Buttons.Button.Button);
     const detailsRow = infobar.querySelector('.infobar-details-rows');
-    assertElement(detailsRow, HTMLDivElement);
+    assert.instanceOf(detailsRow, HTMLDivElement);
 
     assert.isTrue(detailsRow.classList.contains('hidden'), 'Details row should initially be hidden');
     assert.strictEqual(detailsRow.textContent, messageText);

@@ -178,26 +178,29 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
 }
 
 - (void)saveNTPStateForWebState:(web::WebState*)webState {
-  NewTabPageTabHelper::FromWebState(webState)->SetNTPState(
-      [[NewTabPageState alloc]
-          initWithScrollPosition:self.scrollPositionToSave
-                    selectedFeed:[self.feedControlDelegate selectedFeed]]);
+  NewTabPageState* NTPState = [[NewTabPageState alloc]
+      initWithScrollPosition:self.scrollPositionToSave
+                selectedFeed:[self.feedControlDelegate selectedFeed]
+       followingFeedSortType:[self.feedControlDelegate followingFeedSortType]];
+  self.feedMetricsRecorder.NTPState = NTPState;
+  NewTabPageTabHelper::FromWebState(webState)->SetNTPState(NTPState);
 }
 
 - (void)restoreNTPStateForWebState:(web::WebState*)webState {
-  NewTabPageState* ntpState =
+  NewTabPageState* NTPState =
       NewTabPageTabHelper::FromWebState(webState)->GetNTPState();
+  self.feedMetricsRecorder.NTPState = NTPState;
   if ([self.feedControlDelegate isFollowingFeedAvailable]) {
-    [self.NTPContentDelegate updateForSelectedFeed:ntpState.selectedFeed];
+    [self.NTPContentDelegate updateForSelectedFeed:NTPState.selectedFeed];
   }
 
-  if (ntpState.shouldScrollToTopOfFeed) {
+  if (NTPState.shouldScrollToTopOfFeed) {
     [self.consumer restoreScrollPositionToTopOfFeed];
     // Prevent next NTP from being scrolled to the top of feed.
-    ntpState.shouldScrollToTopOfFeed = NO;
-    NewTabPageTabHelper::FromWebState(webState)->SetNTPState(ntpState);
+    NTPState.shouldScrollToTopOfFeed = NO;
+    NewTabPageTabHelper::FromWebState(webState)->SetNTPState(NTPState);
   } else {
-    [self.consumer restoreScrollPosition:ntpState.scrollPosition];
+    [self.consumer restoreScrollPosition:NTPState.scrollPosition];
   }
 }
 
@@ -219,7 +222,7 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
 }
 
 - (void)handleNavigateToFollowedURL:(const GURL&)url {
-  // TODO(crbug.com/1331102): Add metrics.
+  // TODO(crbug.com/40227407): Add metrics.
   [self openMenuItemWebPage:url];
 }
 
@@ -290,7 +293,7 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
 // Opens web page for a menu item in the NTP.
 - (void)openMenuItemWebPage:(GURL)URL {
   _URLLoader->Load(UrlLoadParams::InCurrentTab(URL));
-  // TODO(crbug.com/1085419): Add metrics.
+  // TODO(crbug.com/40693626): Add metrics.
 }
 
 // Returns an updated value for feedHeaderVisible.

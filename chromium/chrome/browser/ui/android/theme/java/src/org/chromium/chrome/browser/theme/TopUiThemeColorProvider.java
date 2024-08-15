@@ -51,7 +51,7 @@ public class TopUiThemeColorProvider extends ThemeColorProvider {
      * @param activityThemeColorSupplier Supplier of activity theme color.
      * @param isTablet Whether the current activity is being run on a tablet.
      * @param allowThemingInNightMode Whether the tab theme should be used when the device is in
-     *                                night mode.
+     *     night mode.
      * @param allowBrightThemeColors Whether the tab allows bright theme colors.
      */
     public TopUiThemeColorProvider(
@@ -96,7 +96,7 @@ public class TopUiThemeColorProvider extends ThemeColorProvider {
                 calculateBrandedColorScheme(tab.isIncognito(), mIsDefaultColorUsed);
         final ColorStateList iconTint =
                 ThemeUtils.getThemedToolbarIconTint(mContext, brandedColorScheme);
-        updateTint(iconTint, brandedColorScheme);
+        updateTint(iconTint, iconTint, brandedColorScheme);
     }
 
     private int calculateBrandedColorScheme(boolean isIncognito, boolean isDefaultColor) {

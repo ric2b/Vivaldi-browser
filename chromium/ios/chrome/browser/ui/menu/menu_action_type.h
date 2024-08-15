@@ -7,7 +7,7 @@
 
 // Enum representing the existing set of menu actions as types. Current values
 // should not be renumbered. Please keep in sync with "IOSMenuAction" in
-// src/tools/metrics/histograms/enums.xml.
+// src/tools/metrics/histograms/metadata/mobile/enums.xml.
 // LINT.IfChange
 enum class MenuActionType {
   OpenInNewTab = 0,
@@ -59,7 +59,12 @@ enum class MenuActionType {
   RenameTabGroup = 46,
   NewTabInGroup = 47,
   UngroupTabGroup = 48,
-  ClaseTabGroup = 49,
+  CloseTabGroup = 49,
+  DeleteTabGroup = 50,
+  MoveTabToExistingGroup = 51,
+  RemoveTabFromGroup = 52,
+  OpenLinkInNewGroup = 53,
+  ShowDetails = 54,
 
   // Vivaldi
   OpenInNewBackgroundTab,

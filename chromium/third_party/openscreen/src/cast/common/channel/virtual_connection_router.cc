@@ -183,7 +183,7 @@ Error VirtualConnectionRouter::BroadcastFromLocalPeer(
   return error;
 }
 
-void VirtualConnectionRouter::OnError(CastSocket* socket, Error error) {
+void VirtualConnectionRouter::OnError(CastSocket* socket, const Error& error) {
   const int id = socket->socket_id();
   auto it = sockets_.find(id);
   if (it != sockets_.end()) {

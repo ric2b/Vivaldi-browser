@@ -36,7 +36,7 @@ const syncer::ModelTypeSet kSupportedTypes = {
     syncer::PASSWORDS, syncer::BOOKMARKS, syncer::READING_LIST};
 
 std::string GetDomainFromUrl(const GURL& url) {
-  // TODO(crbug.com/1451508): Return UTF16 strings to avoid converting back for
+  // TODO(crbug.com/40065374): Return UTF16 strings to avoid converting back for
   // display in the UI.
   return base::UTF16ToUTF8(
       url_formatter::FormatUrlForDisplayOmitSchemePathAndTrivialSubdomains(
@@ -140,7 +140,7 @@ class LocalDataQueryHelper::LocalDataQueryRequest
     // the callback uses any of the other data members, this can lead to
     // unexpected behaviour (see crbug.com/1482218).
     barrier_callback_ = base::BarrierClosure(
-        types_.Size(),
+        types_.size(),
         base::BindOnce(&LocalDataQueryHelper::OnRequestComplete,
                        base::Unretained(helper_), base::Unretained(this),
                        std::move(callback)));
@@ -152,7 +152,7 @@ class LocalDataQueryHelper::LocalDataQueryRequest
   void Run() {
     // If no supported type is requested, return early. The BarrierClosure would
     // have already called the result callback.
-    if (types_.Empty()) {
+    if (types_.empty()) {
       return;
     }
 
@@ -220,7 +220,7 @@ class LocalDataQueryHelper::LocalDataQueryRequest
 
   const std::map<syncer::ModelType, syncer::LocalDataDescription>& result()
       const {
-    CHECK(result_.size() == types_.Size()) << "Request is still on-going.";
+    CHECK(result_.size() == types_.size()) << "Request is still on-going.";
     return result_;
   }
 
@@ -403,7 +403,8 @@ class LocalDataMigrationHelper::LocalDataMigrationRequest
         ++moved_passwords_counter;
       }
       // Remove `profile_password` from the local store.
-      helper_->profile_password_store_->RemoveLogin(*profile_password);
+      helper_->profile_password_store_->RemoveLogin(FROM_HERE,
+                                                    *profile_password);
     }
 
     // Log number of passwords moved to account.

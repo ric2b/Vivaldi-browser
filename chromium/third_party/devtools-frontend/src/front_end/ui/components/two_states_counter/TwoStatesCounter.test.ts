@@ -2,12 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertElement, assertShadowRoot, renderElementIntoDOM} from '../../../testing/DOMHelpers.js';
+import {renderElementIntoDOM} from '../../../testing/DOMHelpers.js';
 import * as Coordinator from '../render_coordinator/render_coordinator.js';
 
 import * as TwoStatesCounter from './two_states_counter.js';
 
-const {assert} = chai;
 const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
 const ACTIVE_SELECTOR = '.active';
@@ -24,9 +23,9 @@ async function renderCounter(data: TwoStatesCounter.TwoStatesCounter.TwoStatesCo
 
 function assertContentAndTitleForPart(
     counter: TwoStatesCounter.TwoStatesCounter.TwoStatesCounter, selector: string, content: string, title?: string) {
-  assertShadowRoot(counter.shadowRoot);
+  assert.isNotNull(counter.shadowRoot);
   const activeCount = counter.shadowRoot.querySelector(selector);
-  assertElement(activeCount, HTMLSpanElement);
+  assert.instanceOf(activeCount, HTMLSpanElement);
   assert.strictEqual(activeCount.textContent?.trim(), `${content}`);
   assert.strictEqual(activeCount.title, title ? `${title}` : '');
 }
@@ -36,7 +35,7 @@ describe('TwoStatesCounter', () => {
     const data = {active: 3, inactive: 0, activeTitle: 'Num active'} as
         TwoStatesCounter.TwoStatesCounter.TwoStatesCounterData;
     const counter = await renderCounter(data);
-    assertShadowRoot(counter.shadowRoot);
+    assert.isNotNull(counter.shadowRoot);
 
     assertContentAndTitleForPart(counter, ACTIVE_SELECTOR, `${data.active}`, data.activeTitle);
     assert.isNull(counter.shadowRoot.querySelector(INACTIVE_SELECTOR));
@@ -46,7 +45,7 @@ describe('TwoStatesCounter', () => {
     const data = {active: 0, inactive: 10, inactiveTitle: 'Num inactive'} as
         TwoStatesCounter.TwoStatesCounter.TwoStatesCounterData;
     const counter = await renderCounter(data);
-    assertShadowRoot(counter.shadowRoot);
+    assert.isNotNull(counter.shadowRoot);
 
     assertContentAndTitleForPart(counter, INACTIVE_SELECTOR, `${data.inactive}`, data.inactiveTitle);
     assert.isNull(counter.shadowRoot.querySelector(ACTIVE_SELECTOR));
@@ -56,7 +55,7 @@ describe('TwoStatesCounter', () => {
     const data = {active: 2, inactive: 3, activeTitle: 'Num active', inactiveTitle: 'Num inactive'} as
         TwoStatesCounter.TwoStatesCounter.TwoStatesCounterData;
     const counter = await renderCounter(data);
-    assertShadowRoot(counter.shadowRoot);
+    assert.isNotNull(counter.shadowRoot);
 
     assertContentAndTitleForPart(counter, ACTIVE_SELECTOR, `${data.active}`, data.activeTitle);
     assertContentAndTitleForPart(counter, INACTIVE_SELECTOR, `${data.inactive}`, data.inactiveTitle);
@@ -66,7 +65,7 @@ describe('TwoStatesCounter', () => {
     const data = {active: 0, inactive: 0, inactiveTitle: 'Num inactive'} as
         TwoStatesCounter.TwoStatesCounter.TwoStatesCounterData;
     const counter = await renderCounter(data);
-    assertShadowRoot(counter.shadowRoot);
+    assert.isNotNull(counter.shadowRoot);
 
     assert.isNull(counter.shadowRoot.querySelector(INACTIVE_SELECTOR));
     assert.isNull(counter.shadowRoot.querySelector(ACTIVE_SELECTOR));

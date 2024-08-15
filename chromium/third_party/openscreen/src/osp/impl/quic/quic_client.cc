@@ -15,13 +15,15 @@
 namespace openscreen::osp {
 
 QuicClient::QuicClient(
-    MessageDemuxer* demuxer,
-    std::unique_ptr<QuicConnectionFactory> connection_factory,
-    ProtocolConnectionServiceObserver* observer,
+    const EndpointConfig& config,
+    MessageDemuxer& demuxer,
+    std::unique_ptr<QuicConnectionFactoryClient> connection_factory,
+    ProtocolConnectionServiceObserver& observer,
     ClockNowFunctionPtr now_function,
     TaskRunner& task_runner)
     : ProtocolConnectionClient(demuxer, observer),
       connection_factory_(std::move(connection_factory)),
+      connection_endpoints_(config.connection_endpoints),
       cleanup_alarm_(now_function, task_runner) {}
 
 QuicClient::~QuicClient() {
@@ -33,7 +35,7 @@ bool QuicClient::Start() {
     return false;
   state_ = State::kRunning;
   Cleanup();  // Start periodic clean-ups.
-  observer_->OnRunning();
+  observer_.OnRunning();
   return true;
 }
 
@@ -43,7 +45,7 @@ bool QuicClient::Stop() {
   CloseAllConnections();
   state_ = State::kStopped;
   Cleanup();  // Final clean-up.
-  observer_->OnStopped();
+  observer_.OnStopped();
   return true;
 }
 
@@ -76,7 +78,7 @@ QuicClient::ConnectRequest QuicClient::Connect(
   auto endpoint_entry = endpoint_map_.find(endpoint);
   if (endpoint_entry != endpoint_map_.end()) {
     auto immediate_result = CreateProtocolConnection(endpoint_entry->second);
-    OSP_DCHECK(immediate_result);
+    OSP_CHECK(immediate_result);
     request->OnConnectionOpened(0, std::move(immediate_result));
     return ConnectRequest(this, 0);
   }
@@ -92,7 +94,7 @@ std::unique_ptr<ProtocolConnection> QuicClient::CreateProtocolConnection(
   if (connection_entry == connections_.end())
     return nullptr;
   return QuicProtocolConnection::FromExisting(
-      this, connection_entry->second.connection.get(),
+      *this, connection_entry->second.connection.get(),
       connection_entry->second.delegate.get(), endpoint_id);
 }
 
@@ -109,7 +111,7 @@ void QuicClient::OnConnectionDestroyed(QuicProtocolConnection* connection) {
 
 uint64_t QuicClient::OnCryptoHandshakeComplete(
     ServiceConnectionDelegate* delegate,
-    uint64_t connection_id) {
+    std::string connection_id) {
   const IPEndpoint& endpoint = delegate->endpoint();
   auto pending_entry = pending_connections_.find(endpoint);
   if (pending_entry == pending_connections_.end())
@@ -124,7 +126,7 @@ uint64_t QuicClient::OnCryptoHandshakeComplete(
   for (auto& request : pending_entry->second.callbacks) {
     request_map_.erase(request.first);
     std::unique_ptr<QuicProtocolConnection> pc =
-        QuicProtocolConnection::FromExisting(this, connection, delegate,
+        QuicProtocolConnection::FromExisting(*this, connection, delegate,
                                              endpoint_id);
     request_map_.erase(request.first);
     request.second->OnConnectionOpened(request.first, std::move(pc));
@@ -142,7 +144,7 @@ void QuicClient::OnIncomingStream(
 }
 
 void QuicClient::OnConnectionClosed(uint64_t endpoint_id,
-                                    uint64_t connection_id) {
+                                    std::string connection_id) {
   // TODO(btolsch): Is this how handshake failure is communicated to the
   // delegate?
   auto connection_entry = connections_.find(endpoint_id);
@@ -157,10 +159,10 @@ void QuicClient::OnConnectionClosed(uint64_t endpoint_id,
 }
 
 void QuicClient::OnDataReceived(uint64_t endpoint_id,
-                                uint64_t connection_id,
-                                const uint8_t* data,
-                                size_t data_size) {
-  demuxer_->OnStreamData(endpoint_id, connection_id, data, data_size);
+                                uint64_t protocol_connection_id,
+                                const ByteView& bytes) {
+  demuxer_.OnStreamData(endpoint_id, protocol_connection_id, bytes.data(),
+                        bytes.size());
 }
 
 QuicClient::PendingConnectionData::PendingConnectionData(
@@ -171,6 +173,34 @@ QuicClient::PendingConnectionData::PendingConnectionData(
 QuicClient::PendingConnectionData::~PendingConnectionData() = default;
 QuicClient::PendingConnectionData& QuicClient::PendingConnectionData::operator=(
     PendingConnectionData&&) noexcept = default;
+
+void QuicClient::OnStarted() {}
+void QuicClient::OnStopped() {}
+void QuicClient::OnSuspended() {}
+void QuicClient::OnSearching() {}
+
+void QuicClient::OnReceiverAdded(const ServiceInfo& info) {
+  fingerprints_.emplace(
+      info.v4_endpoint.port ? info.v4_endpoint : info.v6_endpoint,
+      info.fingerprint);
+}
+
+void QuicClient::OnReceiverChanged(const ServiceInfo& info) {
+  fingerprints_[info.v4_endpoint.port ? info.v4_endpoint : info.v6_endpoint] =
+      info.fingerprint;
+}
+
+void QuicClient::OnReceiverRemoved(const ServiceInfo& info) {
+  fingerprints_.erase(info.v4_endpoint.port ? info.v4_endpoint
+                                            : info.v6_endpoint);
+}
+
+void QuicClient::OnAllReceiversRemoved() {
+  fingerprints_.clear();
+}
+
+void QuicClient::OnError(const Error&) {}
+void QuicClient::OnMetrics(ServiceListener::Metrics) {}
 
 QuicClient::ConnectRequest QuicClient::CreatePendingConnection(
     const IPEndpoint& endpoint,
@@ -189,20 +219,26 @@ QuicClient::ConnectRequest QuicClient::CreatePendingConnection(
 uint64_t QuicClient::StartConnectionRequest(
     const IPEndpoint& endpoint,
     ConnectionRequestCallback* request) {
-  auto delegate = std::make_unique<ServiceConnectionDelegate>(this, endpoint);
-  std::unique_ptr<QuicConnection> connection =
-      connection_factory_->Connect(endpoint, delegate.get());
+  auto fingerprint_entry = fingerprints_.find(endpoint);
+  if (fingerprint_entry == fingerprints_.end()) {
+    request->OnConnectionFailed(0);
+    OSP_LOG_ERROR
+        << "QuicClient connect failed: can't find usable fingerprint.";
+    return 0;
+  }
+
+  auto delegate = std::make_unique<ServiceConnectionDelegate>(*this, endpoint);
+  ErrorOr<std::unique_ptr<QuicConnection>> connection =
+      connection_factory_->Connect(connection_endpoints_[0], endpoint,
+                                   fingerprint_entry->second, delegate.get());
   if (!connection) {
-    // TODO(btolsch): Need interface/handling for Connect() failures. Or, should
-    // request->OnConnectionFailed() be called?
-    OSP_DCHECK(false)
-        << __func__
-        << ": Factory connect failed, but requestor will never know.";
+    request->OnConnectionFailed(0);
+    OSP_LOG_ERROR << "Factory connect failed: " << connection.error();
     return 0;
   }
   auto pending_result = pending_connections_.emplace(
       endpoint, PendingConnectionData(ServiceConnectionData(
-                    std::move(connection), std::move(delegate))));
+                    std::move(connection.value()), std::move(delegate))));
   uint64_t request_id = next_request_id_++;
   pending_result.first->second.callbacks.emplace_back(request_id, request);
   return request_id;

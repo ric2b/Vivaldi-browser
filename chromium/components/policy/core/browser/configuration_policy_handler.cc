@@ -401,7 +401,8 @@ bool PolicyWithDependencyHandler::CheckPolicySettings(const PolicyMap& policies,
   const base::Value* required_value =
       policies.GetValueUnsafe(required_policy_name_);
   const base::Value* value = policies.GetValueUnsafe(handler_->policy_name());
-  if (value) {
+  if (!value) {
+      return true;
   }
   switch (dependency_requirement_) {
     case DependencyRequirement::kPolicyUnsetOrSetWithvalue:
@@ -880,6 +881,57 @@ bool CloudOnlyPolicyHandler::CheckPolicySettings(const PolicyMap& policies,
              ? SchemaValidatingPolicyHandler::CheckPolicySettings(policies,
                                                                   errors)
              : false;
+}
+
+// CloudUserOnlyPolicyHandler implementation
+// ---------------------------------------
+
+CloudUserOnlyPolicyHandler::CloudUserOnlyPolicyHandler(
+    std::unique_ptr<NamedPolicyHandler> policy_handler)
+    : NamedPolicyHandler(policy_handler->policy_name()),
+      policy_handler_(std::move(policy_handler)) {}
+
+CloudUserOnlyPolicyHandler::~CloudUserOnlyPolicyHandler() = default;
+
+// static
+bool CloudUserOnlyPolicyHandler::CheckUserOnlyPolicySettings(
+    const char* policy_name,
+    const PolicyMap& policies,
+    PolicyErrorMap* errors) {
+  const PolicyMap::Entry* policy = policies.Get(policy_name);
+  if (!policy) {
+    return true;
+  }
+
+  if (policy->scope != policy::POLICY_SCOPE_USER ||
+      !IsCloudOnlyPolicy(*policy)) {
+    if (errors) {
+      errors->AddError(policy_name, IDS_POLICY_CLOUD_USER_ONLY_ERROR);
+    }
+    return false;
+  }
+
+  return true;
+}
+
+bool CloudUserOnlyPolicyHandler::CheckPolicySettings(const PolicyMap& policies,
+                                                     PolicyErrorMap* errors) {
+  return CheckUserOnlyPolicySettings(policy_name(), policies, errors) &&
+         policy_handler_->CheckPolicySettings(policies, errors);
+}
+
+void CloudUserOnlyPolicyHandler::ApplyPolicySettingsWithParameters(
+    const policy::PolicyMap& policies,
+    const policy::PolicyHandlerParameters& parameters,
+    PrefValueMap* prefs) {
+  policy_handler_->ApplyPolicySettingsWithParameters(policies, parameters,
+                                                     prefs);
+}
+
+void CloudUserOnlyPolicyHandler::ApplyPolicySettings(
+    const policy::PolicyMap& /* policies */,
+    PrefValueMap* /* prefs */) {
+  NOTREACHED();
 }
 
 URLPolicyHandler::URLPolicyHandler(const char* policy_name,

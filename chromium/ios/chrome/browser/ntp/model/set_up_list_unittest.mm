@@ -7,6 +7,7 @@
 #import "base/memory/raw_ptr.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/gtest_util.h"
+#import "base/test/metrics/histogram_tester.h"
 #import "base/test/scoped_feature_list.h"
 #import "components/password_manager/core/browser/password_manager_util.h"
 #import "components/prefs/scoped_user_pref_update.h"
@@ -60,13 +61,14 @@ class SetUpListTest : public PlatformTest {
         std::make_unique<FakeAuthenticationServiceDelegate>());
     auth_service_ =
         AuthenticationServiceFactory::GetForBrowserState(GetBrowserState());
+    content_notification_feature_enabled_ = false;
   }
 
   ~SetUpListTest() override { [set_up_list_ disconnect]; }
 
   // Get the test BrowserState.
   ChromeBrowserState* GetBrowserState() {
-    return test_manager_->GetLastUsedBrowserState();
+    return test_manager_->GetLastUsedBrowserStateForTesting();
   }
 
   // Get the LocalState prefs.
@@ -79,10 +81,11 @@ class SetUpListTest : public PlatformTest {
     [set_up_list_ disconnect];
     set_up_list_ =
         [SetUpList buildFromPrefs:prefs_
-                       localState:GetLocalState()
-                      syncService:SyncServiceFactory::GetForBrowserState(
-                                      GetBrowserState())
-            authenticationService:auth_service_];
+                            localState:GetLocalState()
+                           syncService:SyncServiceFactory::GetForBrowserState(
+                                           GetBrowserState())
+                 authenticationService:auth_service_
+            contentNotificationEnabled:content_notification_feature_enabled_];
   }
 
   // Fakes a sign-in with a fake identity.
@@ -174,9 +177,10 @@ class SetUpListTest : public PlatformTest {
   web::WebTaskEnvironment task_environment_;
   base::test::ScopedFeatureList feature_list_;
   raw_ptr<PrefService> prefs_;
-  std::unique_ptr<ios::ChromeBrowserStateManager> test_manager_;
+  std::unique_ptr<TestChromeBrowserStateManager> test_manager_;
   raw_ptr<AuthenticationService> auth_service_;
   SetUpList* set_up_list_;
+  bool content_notification_feature_enabled_;
 };
 
 // Tests the SignInSync item is hidden if sync is disabled by policy.
@@ -288,10 +292,7 @@ TEST_F(SetUpListTest, BuildListWithNotifications_Tips) {
 // Tests that the SetUpList uses the correct criteria when including the
 // Notifications item and content notifications is enabled.
 TEST_F(SetUpListTest, BuildListWithNotifications_Content) {
-  feature_list_.InitAndEnableFeatureWithParameters(
-      kContentPushNotifications,
-      {{kContentPushNotificationsExperimentType, "2"}});
-  SignInFakeIdentity();
+  content_notification_feature_enabled_ = YES;
 
   SetContentNotificationsEnabled(false);
   BuildSetUpList();
@@ -336,9 +337,12 @@ TEST_F(SetUpListTest, ObservesPrefs) {
 // Tests that `allItemsComplete` correctly returns whether all items are
 // complete.
 TEST_F(SetUpListTest, AllItemsComplete) {
+  base::HistogramTester histogram_tester;
   feature_list_.InitAndEnableFeature(kIOSTipsNotifications);
   BuildSetUpList();
   EXPECT_FALSE([set_up_list_ allItemsComplete]);
+  histogram_tester.ExpectBucketCount("IOS.SetUpList.AllItemsCompleted", true,
+                                     0);
 
   set_up_list_prefs::MarkItemComplete(GetLocalState(),
                                       SetUpListItemType::kSignInSync);
@@ -350,6 +354,32 @@ TEST_F(SetUpListTest, AllItemsComplete) {
                                       SetUpListItemType::kNotifications);
 
   EXPECT_TRUE([set_up_list_ allItemsComplete]);
+  histogram_tester.ExpectBucketCount("IOS.SetUpList.AllItemsCompleted", true,
+                                     1);
+}
+
+TEST_F(SetUpListTest, RecordsAllItemsCompleteOnce) {
+  base::HistogramTester histogram_tester;
+  feature_list_.InitAndEnableFeature(kIOSTipsNotifications);
+  BuildSetUpList();
+  histogram_tester.ExpectBucketCount("IOS.SetUpList.AllItemsCompleted", true,
+                                     0);
+
+  set_up_list_prefs::MarkItemComplete(GetLocalState(),
+                                      SetUpListItemType::kSignInSync);
+  set_up_list_prefs::MarkItemComplete(GetLocalState(),
+                                      SetUpListItemType::kDefaultBrowser);
+  set_up_list_prefs::MarkItemComplete(GetLocalState(),
+                                      SetUpListItemType::kAutofill);
+  set_up_list_prefs::MarkItemComplete(GetLocalState(),
+                                      SetUpListItemType::kNotifications);
+  histogram_tester.ExpectBucketCount("IOS.SetUpList.AllItemsCompleted", true,
+                                     1);
+
+  // Ensure that this metric is not double-counted, when rebuilding the list.
+  BuildSetUpList();
+  histogram_tester.ExpectBucketCount("IOS.SetUpList.AllItemsCompleted", true,
+                                     1);
 }
 
 // Tests that the Set Up List can be disabled.

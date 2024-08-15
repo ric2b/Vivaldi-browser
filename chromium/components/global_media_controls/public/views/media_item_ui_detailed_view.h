@@ -5,8 +5,6 @@
 #ifndef COMPONENTS_GLOBAL_MEDIA_CONTROLS_PUBLIC_VIEWS_MEDIA_ITEM_UI_DETAILED_VIEW_H_
 #define COMPONENTS_GLOBAL_MEDIA_CONTROLS_PUBLIC_VIEWS_MEDIA_ITEM_UI_DETAILED_VIEW_H_
 
-#include <optional>
-
 #include "base/component_export.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -128,7 +126,10 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemUIDetailedView
   MediaItemUIDeviceSelector* GetDeviceSelectorForTesting();
   views::View* GetDeviceSelectorSeparatorForTesting();
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+  views::Button* GetChapterListButtonForTesting();
   views::View* GetChapterListViewForTesting();
+  views::Label* GetCurrentTimestampViewForTesting();
+  views::Label* GetTotalDurationViewForTesting();
   base::flat_map<int, ChapterItemView*> GetChaptersForTesting();
 #endif
 
@@ -156,11 +157,27 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemUIDetailedView
   // position.
   void SeekTo(double seek_progress);
 
+  // Callback for when the media progress view wants to update the progress
+  // position to the given time.
+  void SeekToTimestamp(const base::TimeDelta time) const;
+
   // Callback for when the start casting button is toggled by user.
   void StartCastingButtonPressed();
 
   // Update the display states of UI elements for casting devices.
   void UpdateCastingState();
+
+  // Updates the chapter list view's chapter items with the new `metadata`.
+  void UpdateChapterListViewWithMetadata(
+      const media_session::MediaMetadata& metadata);
+
+  // Creates a control row containing a timestamp view. Returns the container
+  // for additional buttons that can be added later to the end of the same row.
+  views::View* CreateControlsRow();
+
+  // Callback for when the progress view updates the progress in UI given the
+  // new media position.
+  void OnProgressViewUpdateProgress(base::TimeDelta current_timestamp);
 
   // Raw pointer to the container holding this view. The |container_| should
   // never be nullptr.
@@ -203,12 +220,31 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemUIDetailedView
   raw_ptr<views::BoxLayoutView> device_selector_view_separator_ = nullptr;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+
+  // Callback for when the chapter list button is clicked by user.
+  void ToggleChapterListView();
+
+  // The chapter list button, which will be built only for chrome os ash.
+  // Clicking on which will show the chapter list view.
+  raw_ptr<MediaActionButton> chapter_list_button_ = nullptr;
+
   // The chapter list view, which will be built only for chrome os ash.
   raw_ptr<views::View> chapter_list_view_ = nullptr;
+
+  // The current duration timestamp. It updates its text when
+  // `OnProgressViewUpdateProgress` so the timestamp can be refreshed every
+  // second.
+  raw_ptr<views::Label> current_timestamp_view_ = nullptr;
+
+  // The total duration timestamp. It updates its text when
+  // `UpdateWithMediaPosition`.
+  raw_ptr<views::Label> total_duration_view_ = nullptr;
 
   // The current `ChapterItemView` for the chapter at the index of the chapter
   // list.
   base::flat_map<int, ChapterItemView*> chapters_;
+
+  base::WeakPtrFactory<MediaItemUIDetailedView> weak_factory_{this};
 #endif
 };
 

@@ -7,7 +7,7 @@
 
 // Used for histograms, do not reorder. When adding to this enum, please also
 // modify the corresponding references in
-// tools/metrics/histograms/page/enums.xml and
+// tools/metrics/histograms/metadata/page/enums.xml and
 // tools/metrics/histograms/metadata/page/histograms.xml and add a static assert
 // below.
 enum class PageActionIconType {
@@ -23,11 +23,11 @@ enum class PageActionIconType {
   kPaymentsOfferNotification = 9,
   kPriceTracking = 10,
   kPwaInstall = 11,
-  kQRCodeGenerator = 12,
+  // DEPRECATED: kQRCodeGenerator = 12,
   // DEPRECATED: kReaderMode = 13,
   kAutofillAddress = 14,
   kSaveCard = 15,
-  kSendTabToSelf = 16,
+  // DEPRECATED: kSendTabToSelf = 16,
   kSharingHub = 17,
   kSideSearch = 18,
   kSmsRemoteFetcher = 19,
@@ -39,7 +39,9 @@ enum class PageActionIconType {
   kMandatoryReauth = 25,
   kPriceInsights = 26,
   kReadAnything = 27,
-  kMaxValue = kReadAnything,
+  kProductSpecifications = 28,
+  kLensOverlay = 29,
+  kMaxValue = kLensOverlay,
 };
 
 static_assert(static_cast<int>(PageActionIconType::kBookmarkStar) == 0);
@@ -55,10 +57,8 @@ static_assert(
     static_cast<int>(PageActionIconType::kPaymentsOfferNotification) == 9);
 static_assert(static_cast<int>(PageActionIconType::kPriceTracking) == 10);
 static_assert(static_cast<int>(PageActionIconType::kPwaInstall) == 11);
-static_assert(static_cast<int>(PageActionIconType::kQRCodeGenerator) == 12);
 static_assert(static_cast<int>(PageActionIconType::kAutofillAddress) == 14);
 static_assert(static_cast<int>(PageActionIconType::kSaveCard) == 15);
-static_assert(static_cast<int>(PageActionIconType::kSendTabToSelf) == 16);
 static_assert(static_cast<int>(PageActionIconType::kSharingHub) == 17);
 static_assert(static_cast<int>(PageActionIconType::kSideSearch) == 18);
 static_assert(static_cast<int>(PageActionIconType::kSmsRemoteFetcher) == 19);
@@ -71,4 +71,7 @@ static_assert(static_cast<int>(PageActionIconType::kSaveIban) == 24);
 static_assert(static_cast<int>(PageActionIconType::kMandatoryReauth) == 25);
 static_assert(static_cast<int>(PageActionIconType::kPriceInsights) == 26);
 static_assert(static_cast<int>(PageActionIconType::kReadAnything) == 27);
+static_assert(static_cast<int>(PageActionIconType::kProductSpecifications) ==
+              28);
+static_assert(static_cast<int>(PageActionIconType::kLensOverlay) == 29);
 #endif  // CHROME_BROWSER_UI_PAGE_ACTION_PAGE_ACTION_ICON_TYPE_H_

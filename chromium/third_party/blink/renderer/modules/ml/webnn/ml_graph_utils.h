@@ -70,10 +70,17 @@ struct ArrayBufferViewInfo {
 //
 // TODO(crbug.com/1273291): Revisit the error handling once the WebNN spec issue
 // is resolved: https://github.com/webmachinelearning/webnn/issues/351
+//
+// TODO(crbug.com/332782852): Accepts a `ScriptPromiseResolver` rather than
+// `ExceptionState`. So the caller, i.e. `MLGraph::Compute()`, won't need to
+// pass both ways of throwing an exception.
 MODULES_EXPORT std::unique_ptr<Vector<std::pair<String, ArrayBufferViewInfo>>>
 TransferNamedArrayBufferViews(v8::Isolate* isolate,
                               const MLNamedArrayBufferViews& source_views,
                               ExceptionState& exception_state);
+
+MODULES_EXPORT DOMArrayBufferView* CreateArrayBufferView(
+    ArrayBufferViewInfo view_info);
 
 MODULES_EXPORT MLNamedArrayBufferViews* CreateNamedArrayBufferViews(
     std::unique_ptr<Vector<std::pair<String, ArrayBufferViewInfo>>> views_info);

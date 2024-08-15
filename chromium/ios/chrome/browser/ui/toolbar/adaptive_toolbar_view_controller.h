@@ -12,6 +12,10 @@
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_type.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_consumer.h"
 
+// Vivaldi
+#import "ios/chrome/browser/ui/toolbar/vivaldi_adaptive_toolbar_viewcontroller_delegate.h"
+// End Vivaldi
+
 @protocol AdaptiveToolbarMenusProvider;
 @class AdaptiveToolbarViewController;
 @protocol AdaptiveToolbarViewControllerDelegate;
@@ -82,6 +86,9 @@
 - (void)refreshToolbarButtonsGuide;
 // Sets whether omnibox is focused.
 - (void)setIsOmniboxFocused:(BOOL)focused;
+// Delegate for vivaldi related events in `AdaptiveToolbarViewController`.
+@property(nonatomic, weak) id<VivaldiAdaptiveToolbarViewControllerDelegate>
+    vivaldiDelegate;
 // End Vivaldi
 
 @end

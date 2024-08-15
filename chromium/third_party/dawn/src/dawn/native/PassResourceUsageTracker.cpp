@@ -111,7 +111,7 @@ void SyncScopeUsageTracker::AddBindGroup(BindGroupBase* group) {
 
         MatchVariant(
             bindingInfo.bindingLayout,
-            [&](const BufferBindingLayout& layout) {
+            [&](const BufferBindingInfo& layout) {
                 BufferBase* buffer = group->GetBindingAsBufferBinding(bindingIndex).buffer;
                 switch (layout.type) {
                     case wgpu::BufferBindingType::Uniform:
@@ -130,7 +130,7 @@ void SyncScopeUsageTracker::AddBindGroup(BindGroupBase* group) {
                         DAWN_UNREACHABLE();
                 }
             },
-            [&](const TextureBindingLayout& layout) {
+            [&](const TextureBindingInfo& layout) {
                 TextureViewBase* view = group->GetBindingAsTextureView(bindingIndex);
                 switch (layout.sampleType) {
                     case kInternalResolveAttachmentSampleType:
@@ -143,7 +143,7 @@ void SyncScopeUsageTracker::AddBindGroup(BindGroupBase* group) {
                         break;
                 }
             },
-            [&](const StorageTextureBindingLayout& layout) {
+            [&](const StorageTextureBindingInfo& layout) {
                 TextureViewBase* view = group->GetBindingAsTextureView(bindingIndex);
                 switch (layout.access) {
                     case wgpu::StorageTextureAccess::WriteOnly:
@@ -160,7 +160,8 @@ void SyncScopeUsageTracker::AddBindGroup(BindGroupBase* group) {
                         DAWN_UNREACHABLE();
                 }
             },
-            [&](const SamplerBindingLayout&) {});
+            [&](const SamplerBindingInfo&) {},  //
+            [&](const StaticSamplerBindingInfo&) {});
     }
 
     for (const Ref<ExternalTextureBase>& externalTexture : group->GetBoundExternalTextures()) {
@@ -214,18 +215,18 @@ void ComputePassResourceUsageTracker::AddResourcesReferencedByBindGroup(BindGrou
 
         MatchVariant(
             bindingInfo.bindingLayout,
-            [&](const BufferBindingLayout&) {
+            [&](const BufferBindingInfo&) {
                 mUsage.referencedBuffers.insert(group->GetBindingAsBufferBinding(index).buffer);
             },
-            [&](const TextureBindingLayout&) {
+            [&](const TextureBindingInfo&) {
                 mUsage.referencedTextures.insert(
                     group->GetBindingAsTextureView(index)->GetTexture());
             },
-            [&](const StorageTextureBindingLayout&) {
+            [&](const StorageTextureBindingInfo&) {
                 mUsage.referencedTextures.insert(
                     group->GetBindingAsTextureView(index)->GetTexture());
             },
-            [](const SamplerBindingLayout&) {});
+            [](const SamplerBindingInfo&) {}, [](const StaticSamplerBindingInfo&) {});
     }
 
     for (const Ref<ExternalTextureBase>& externalTexture : group->GetBoundExternalTextures()) {

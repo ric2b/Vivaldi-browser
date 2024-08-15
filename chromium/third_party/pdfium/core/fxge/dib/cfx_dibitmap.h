@@ -7,8 +7,12 @@
 #ifndef CORE_FXGE_DIB_CFX_DIBITMAP_H_
 #define CORE_FXGE_DIB_CFX_DIBITMAP_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <optional>
 
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_memory_wrappers.h"
 #include "core/fxcrt/maybe_owned.h"
 #include "core/fxcrt/retain_ptr.h"
@@ -25,12 +29,12 @@ class CFX_DIBitmap final : public CFX_DIBBase {
 
   CONSTRUCT_VIA_MAKE_RETAIN;
 
-  bool Create(int width, int height, FXDIB_Format format);
-  bool Create(int width,
-              int height,
-              FXDIB_Format format,
-              uint8_t* pBuffer,
-              uint32_t pitch);
+  [[nodiscard]] bool Create(int width, int height, FXDIB_Format format);
+  [[nodiscard]] bool Create(int width,
+                            int height,
+                            FXDIB_Format format,
+                            uint8_t* pBuffer,
+                            uint32_t pitch);
 
   bool Copy(RetainPtr<const CFX_DIBBase> source);
 
@@ -44,12 +48,15 @@ class CFX_DIBitmap final : public CFX_DIBBase {
   pdfium::span<const uint8_t> GetBuffer() const;
   pdfium::span<uint8_t> GetWritableBuffer() {
     pdfium::span<const uint8_t> src = GetBuffer();
-    return {const_cast<uint8_t*>(src.data()), src.size()};
+    // SAFETY: const_cast<>() doesn't change size.
+    return UNSAFE_BUFFERS(
+        pdfium::make_span(const_cast<uint8_t*>(src.data()), src.size()));
   }
 
   pdfium::span<uint8_t> GetWritableScanline(int line) {
     pdfium::span<const uint8_t> src = GetScanline(line);
-    return {const_cast<uint8_t*>(src.data()), src.size()};
+    return UNSAFE_BUFFERS(
+        pdfium::make_span(const_cast<uint8_t*>(src.data()), src.size()));
   }
 
   void TakeOver(RetainPtr<CFX_DIBitmap>&& pSrcBitmap);

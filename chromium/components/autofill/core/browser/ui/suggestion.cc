@@ -8,9 +8,8 @@
 #include <utility>
 
 #include "base/strings/utf_string_conversions.h"
-#include "base/types/cxx23_to_underlying.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
-#include "components/autofill/core/browser/ui/popup_item_ids.h"
+#include "components/autofill/core/browser/ui/suggestion_type.h"
 
 namespace autofill {
 
@@ -34,18 +33,16 @@ Suggestion::Suggestion() = default;
 Suggestion::Suggestion(std::u16string main_text)
     : main_text(std::move(main_text), Text::IsPrimary(true)) {}
 
-Suggestion::Suggestion(PopupItemId popup_item_id)
-    : popup_item_id(popup_item_id) {}
+Suggestion::Suggestion(SuggestionType type) : type(type) {}
 
-Suggestion::Suggestion(std::u16string main_text, PopupItemId popup_item_id)
-    : popup_item_id(popup_item_id),
-      main_text(std::move(main_text), Text::IsPrimary(true)) {}
+Suggestion::Suggestion(std::u16string main_text, SuggestionType type)
+    : type(type), main_text(std::move(main_text), Text::IsPrimary(true)) {}
 
 Suggestion::Suggestion(std::string_view main_text,
                        std::string_view label,
                        Icon icon,
-                       PopupItemId popup_item_id)
-    : popup_item_id(popup_item_id),
+                       SuggestionType type)
+    : type(type),
       main_text(base::UTF8ToUTF16(main_text), Text::IsPrimary(true)),
       icon(icon) {
   if (!label.empty())
@@ -55,8 +52,8 @@ Suggestion::Suggestion(std::string_view main_text,
 Suggestion::Suggestion(std::string_view main_text,
                        std::vector<std::vector<Text>> labels,
                        Icon icon,
-                       PopupItemId popup_item_id)
-    : popup_item_id(popup_item_id),
+                       SuggestionType type)
+    : type(type),
       main_text(base::UTF8ToUTF16(main_text), Text::IsPrimary(true)),
       labels(std::move(labels)),
       icon(icon) {}
@@ -65,8 +62,8 @@ Suggestion::Suggestion(std::string_view main_text,
                        std::string_view minor_text,
                        std::string_view label,
                        Icon icon,
-                       PopupItemId popup_item_id)
-    : popup_item_id(popup_item_id),
+                       SuggestionType type)
+    : type(type),
       main_text(base::UTF8ToUTF16(main_text), Text::IsPrimary(true)),
       minor_text(base::UTF8ToUTF16(minor_text)),
       icon(icon) {
@@ -152,8 +149,12 @@ std::string_view ConvertIconToPrintableString(Suggestion::Icon icon) {
       return "kCardTroy";
     case Suggestion::Icon::kCardUnionPay:
       return "kCardUnionPay";
+    case Suggestion::Icon::kCardVerve:
+      return "kCardVerve";
     case Suggestion::Icon::kCardVisa:
       return "kCardVisa";
+    case Suggestion::Icon::kIban:
+      return "kIban";
     case Suggestion::Icon::kPlusAddress:
       return "kPlusAddress";
     case Suggestion::Icon::kNoIcon:
@@ -164,8 +165,7 @@ std::string_view ConvertIconToPrintableString(Suggestion::Icon icon) {
 
 void PrintTo(const Suggestion& suggestion, std::ostream* os) {
   *os << std::endl
-      << "Suggestion (popup_item_id:"
-      << base::to_underlying(suggestion.popup_item_id) << ", main_text:\""
+      << "Suggestion (type:" << suggestion.type << ", main_text:\""
       << suggestion.main_text.value << "\""
       << (suggestion.main_text.is_primary ? "(Primary)" : "(Not Primary)")
       << ", minor_text:\"" << suggestion.minor_text.value << "\""

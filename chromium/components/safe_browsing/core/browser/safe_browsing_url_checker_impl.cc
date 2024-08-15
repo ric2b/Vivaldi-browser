@@ -15,13 +15,13 @@
 #include "components/safe_browsing/core/browser/db/database_manager.h"
 #include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/core/browser/hash_realtime_mechanism.h"
-#include "components/safe_browsing/core/browser/hashprefix_realtime/hash_realtime_utils.h"
 #include "components/safe_browsing/core/browser/realtime/policy_engine.h"
 #include "components/safe_browsing/core/browser/realtime/url_lookup_service_base.h"
 #include "components/safe_browsing/core/browser/safe_browsing_lookup_mechanism.h"
 #include "components/safe_browsing/core/browser/url_checker_delegate.h"
-#include "components/safe_browsing/core/browser/utils/scheme_logger.h"
 #include "components/safe_browsing/core/common/features.h"
+#include "components/safe_browsing/core/common/hashprefix_realtime/hash_realtime_utils.h"
+#include "components/safe_browsing/core/common/scheme_logger.h"
 #include "components/safe_browsing/core/common/web_ui_constants.h"
 #include "components/security_interstitials/core/unsafe_resource.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -38,6 +38,21 @@ using hash_realtime_utils::HashRealTimeSelection;
 namespace {
 void RecordCheckUrlTimeout(bool timed_out) {
   UMA_HISTOGRAM_BOOLEAN("SafeBrowsing.CheckUrl.Timeout", timed_out);
+}
+
+std::string GetPerformedCheckSuffix(
+    SafeBrowsingUrlCheckerImpl::PerformedCheck performed_check) {
+  switch (performed_check) {
+    case SafeBrowsingUrlCheckerImpl::PerformedCheck::kHashDatabaseCheck:
+      return "HashDatabase";
+    case SafeBrowsingUrlCheckerImpl::PerformedCheck::kUrlRealTimeCheck:
+      return "UrlRealTime";
+    case SafeBrowsingUrlCheckerImpl::PerformedCheck::kHashRealTimeCheck:
+      return "HashRealTime";
+    case SafeBrowsingUrlCheckerImpl::PerformedCheck::kUnknown:
+    case SafeBrowsingUrlCheckerImpl::PerformedCheck::kCheckSkipped:
+      NOTREACHED_NORETURN();
+  }
 }
 
 void MaybeRecordFirstRequestMetrics(SBThreatType threat_type,
@@ -80,14 +95,11 @@ void MaybeRecordFirstRequestMetrics(SBThreatType threat_type,
       break;
   }
 
-  // TODO(drubery): Make SBThreatType an `enum class` so we can use
-  // the template instantiations relying on kMaxValue here.
-  base::UmaHistogramEnumeration(
-      "SafeBrowsing.CheckUrl.FirstRequestThreatType", threat_type,
-      static_cast<SBThreatType>(SB_THREAT_TYPE_MAX + 1));
+  base::UmaHistogramEnumeration("SafeBrowsing.CheckUrl.FirstRequestThreatType",
+                                threat_type);
   base::UmaHistogramEnumeration(
       "SafeBrowsing.CheckUrl.FirstRequestThreatType." + threat_source_name,
-      threat_type, static_cast<SBThreatType>(SB_THREAT_TYPE_MAX + 1));
+      threat_type);
 }
 
 }  // namespace
@@ -437,7 +449,7 @@ void SafeBrowsingUrlCheckerImpl::ProcessUrlsAndMaybeDeleteSelf() {
       continue;
     }
 
-    // TODO(crbug.com/1486144): Remove this check when
+    // TODO(crbug.com/40933579): Remove this check when
     // kSafeBrowsingSkipSubresources is launched.
     if (!database_manager_->CanCheckRequestDestination(request_destination_)) {
       UMA_HISTOGRAM_ENUMERATION("SB2.RequestDestination.Skipped",
@@ -550,7 +562,7 @@ SafeBrowsingUrlCheckerImpl::KickOffLookupMechanism(const GURL& url) {
   DCHECK(performed_check != PerformedCheck::kUnknown);
   lookup_mechanism_runner_ =
       std::make_unique<SafeBrowsingLookupMechanismRunner>(
-          std::move(lookup_mechanism),
+          std::move(lookup_mechanism), GetPerformedCheckSuffix(performed_check),
           base::BindOnce(
               &SafeBrowsingUrlCheckerImpl::OnUrlResultAndMaybeDeleteSelf,
               weak_factory_.GetWeakPtr(), performed_check));

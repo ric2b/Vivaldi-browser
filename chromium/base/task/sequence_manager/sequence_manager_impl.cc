@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/task/sequence_manager/sequence_manager_impl.h"
 
 #include <array>
@@ -755,8 +760,8 @@ void SequenceManagerImpl::MaybeAddLeewayToTask(Task& task) const {
   }
 }
 
-// TODO(crbug/1267874): Rename once ExplicitHighResolutionTimerWin experiment is
-// shipped.
+// TODO(crbug.com/40204558): Rename once ExplicitHighResolutionTimerWin
+// experiment is shipped.
 bool SequenceManagerImpl::HasPendingHighResolutionTasks() {
   // Only consider high-res tasks in the |wake_up_queue| (ignore the
   // |non_waking_wake_up_queue|).
@@ -1057,7 +1062,7 @@ void SequenceManagerImpl::ReclaimMemory() {
   LazyNow lazy_now(main_thread_clock());
   for (auto it = main_thread_only().active_queues.begin();
        it != main_thread_only().active_queues.end();) {
-    auto* const queue = (*it++).get();
+    auto* const queue = *it++;
     ReclaimMemoryFromQueue(queue, &lazy_now);
   }
 }
@@ -1097,11 +1102,12 @@ SequenceManagerImpl::GetMetricRecordingSettings() const {
   return metric_recording_settings_;
 }
 
-void SequenceManagerImpl::SetTaskExecutionAllowed(bool allowed) {
-  controller_->SetTaskExecutionAllowed(allowed);
+void SequenceManagerImpl::SetTaskExecutionAllowedInNativeNestedLoop(
+    bool allowed) {
+  controller_->SetTaskExecutionAllowedInNativeNestedLoop(allowed);
 }
 
-bool SequenceManagerImpl::IsTaskExecutionAllowed() const {
+bool SequenceManagerImpl::IsTaskExecutionAllowedInNativeNestedLoop() const {
   return controller_->IsTaskExecutionAllowed();
 }
 
@@ -1124,8 +1130,10 @@ bool SequenceManagerImpl::IsIdleForTesting() {
 }
 
 void SequenceManagerImpl::EnableMessagePumpTimeKeeperMetrics(
-    const char* thread_name) {
-  controller_->EnableMessagePumpTimeKeeperMetrics(thread_name);
+    const char* thread_name,
+    bool wall_time_based_metrics_enabled_for_testing) {
+  controller_->EnableMessagePumpTimeKeeperMetrics(
+      thread_name, wall_time_based_metrics_enabled_for_testing);
 }
 
 size_t SequenceManagerImpl::GetPendingTaskCountForTesting() const {

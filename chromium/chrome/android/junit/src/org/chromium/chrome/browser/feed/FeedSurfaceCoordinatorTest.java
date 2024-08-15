@@ -19,6 +19,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.app.Activity;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.view.MotionEvent;
 
@@ -44,6 +45,7 @@ import org.robolectric.shadows.ShadowLog;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Callback;
+import org.chromium.base.LocaleUtils;
 import org.chromium.base.jank_tracker.PlaceholderJankTracker;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
@@ -102,24 +104,23 @@ import org.chromium.ui.base.WindowAndroid;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /** Tests for {@link FeedSurfaceCoordinator}. */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 @DisableFeatures({
-    ChromeFeatureList.WEB_FEED,
     ChromeFeatureList.WEB_FEED_SORT,
     ChromeFeatureList.WEB_FEED_ONBOARDING,
     ChromeFeatureList.FEED_USER_INTERACTION_RELIABILITY_REPORT,
-    // TODO(crbug.com/1353777): Disabling the feature explicitly, because native is not
+    // TODO(crbug.com/40858677): Disabling the feature explicitly, because native is not
     // available to provide a default value. This should be enabled if the feature is enabled by
     // default or removed if the flag is removed.
     ChromeFeatureList.SYNC_ANDROID_LIMIT_NTP_PROMO_IMPRESSIONS,
+    ChromeFeatureList.FEED_CONTAINMENT
 })
-@EnableFeatures({
-    ChromeFeatureList.KID_FRIENDLY_CONTENT_FEED,
-})
+@EnableFeatures({ChromeFeatureList.KID_FRIENDLY_CONTENT_FEED})
 public class FeedSurfaceCoordinatorTest {
     private static final @SurfaceType int SURFACE_TYPE = SurfaceType.NEW_TAB_PAGE;
     private static final long SURFACE_CREATION_TIME_NS = 1234L;
@@ -226,6 +227,10 @@ public class FeedSurfaceCoordinatorTest {
 
     @Before
     public void setUp() {
+        Configuration config = new Configuration();
+        config.setLocale(new Locale("en", "US"));
+        LocaleUtils.setDefaultLocalesFromConfiguration(config);
+
         mActivity = Robolectric.buildActivity(Activity.class).get();
         mActivity.setTheme(R.style.Theme_BrowserUI_DayNight);
         mocker.mock(FeedSurfaceRendererBridgeJni.TEST_HOOKS, mFeedSurfaceRendererBridgeJniMock);
@@ -563,7 +568,6 @@ public class FeedSurfaceCoordinatorTest {
                 false,
                 new TestSurfaceDelegate(),
                 mProfileMock,
-                false,
                 mBottomSheetController,
                 mShareDelegateSupplier,
                 mScrollableContainerDelegate,

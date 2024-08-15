@@ -10,8 +10,6 @@ import type * as Platform from '../platform/platform.js';
 
 import * as SDK from './sdk.js';
 
-const {assert} = chai;
-
 const content = JSON.stringify({
   'version': 3,
   'file': '/script.js',
@@ -42,10 +40,6 @@ describeWithMockConnection('SourceMapManager', () => {
 
     const debuggerModel = workerTarget.model(SDK.DebuggerModel.DebuggerModel);
     assert.isNotNull(debuggerModel);
-    if (debuggerModel === null) {
-      return;
-    }
-
     const sourceMapManager = debuggerModel.sourceMapManager();
 
     const script = new SDK.Script.Script(
@@ -76,10 +70,6 @@ describeWithMockConnection('SourceMapManager', () => {
 
     const debuggerModel = mainTarget.model(SDK.DebuggerModel.DebuggerModel);
     assert.isNotNull(debuggerModel);
-    if (debuggerModel === null) {
-      return;
-    }
-
     const sourceMapManager = debuggerModel.sourceMapManager();
 
     const script = new SDK.Script.Script(

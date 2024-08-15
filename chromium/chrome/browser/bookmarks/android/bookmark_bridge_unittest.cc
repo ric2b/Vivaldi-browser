@@ -321,21 +321,16 @@ TEST_F(
 TEST_F(BookmarkBridgeTest, TestIsBookmarked) {
   JNIEnv* const env = AttachCurrentThread();
   GURL url = GURL("http://foo.com");
-  auto java_url = url::GURLAndroid::FromNativeGURL(env, url);
-  ASSERT_FALSE(bookmark_bridge()->IsBookmarked(
-      env, JavaParamRef<jobject>(env, java_url.obj())));
+  ASSERT_FALSE(bookmark_bridge()->IsBookmarked(env, url));
 
   AddURL(bookmark_model()->other_node(), 0, u"foo", url);
-  ASSERT_TRUE(bookmark_bridge()->IsBookmarked(
-      env, JavaParamRef<jobject>(env, java_url.obj())));
+  ASSERT_TRUE(bookmark_bridge()->IsBookmarked(env, url));
 
-  bookmark_model()->RemoveAllUserBookmarks();
-  ASSERT_FALSE(bookmark_bridge()->IsBookmarked(
-      env, JavaParamRef<jobject>(env, java_url.obj())));
+  bookmark_model()->RemoveAllUserBookmarks(FROM_HERE);
+  ASSERT_FALSE(bookmark_bridge()->IsBookmarked(env, url));
 
   local_or_syncable_reading_list_manager()->Add(url, "bar");
-  ASSERT_TRUE(bookmark_bridge()->IsBookmarked(
-      env, JavaParamRef<jobject>(env, java_url.obj())));
+  ASSERT_TRUE(bookmark_bridge()->IsBookmarked(env, url));
 }
 
 TEST_F(BookmarkBridgeTest, TestGetTopLevelFolderIds) {
@@ -379,7 +374,7 @@ TEST_F(BookmarkBridgeTest, AccountFoldersNullWhileNotEnabled) {
   EXPECT_TRUE(bookmark_bridge()->GetAccountReadingListFolder(env).is_null());
 }
 
-// TODO(crbug.com/1509189): Also enable bookmark account folders here.
+// TODO(crbug.com/41481802): Also enable bookmark account folders here.
 TEST_F(BookmarkBridgeTest, TestGetTopLevelFolderIdsAccountActive) {
   CreateBookmarkBridge(/*enable_account_bookmarks=*/true);
 

@@ -31,8 +31,10 @@ import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Restriction;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.night_mode.ChromeNightModeTestUtils;
 import org.chromium.chrome.browser.ui.signin.R;
@@ -84,6 +86,17 @@ public class AccountPickerBottomSheetRenderTest {
 
         @Override
         public void onAccountPickerDestroy() {}
+
+        @Override
+        public boolean canHandleAddAccount() {
+            return false;
+        }
+
+        @Override
+        public void addAccount() {
+            throw new UnsupportedOperationException(
+                    "CustomAccountPickerDelegate.addAccount() should never be called.");
+        }
 
         @Override
         public void signIn(CoreAccountInfo accountInfo, AccountPickerBottomSheetMediator mediator) {
@@ -159,6 +172,7 @@ public class AccountPickerBottomSheetRenderTest {
     @Test
     @MediumTest
     @Feature("RenderTest")
+    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     @ParameterAnnotations.UseMethodParameter(NightModeTestUtils.NightModeParams.class)
     public void testCollapsedSheetWithAccountViewForWebSigninEntryPoint(boolean nightModeEnabled)
             throws IOException {
@@ -173,6 +187,24 @@ public class AccountPickerBottomSheetRenderTest {
     @Test
     @MediumTest
     @Feature("RenderTest")
+    @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    @ParameterAnnotations.UseMethodParameter(NightModeTestUtils.NightModeParams.class)
+    public void
+            testCollapsedSheetWithAccountViewForWebSigninEntryPoint_replaceSyncWithSigninPromosEnabled(
+                    boolean nightModeEnabled) throws IOException {
+        mAccountManagerTestRule.addAccount(TEST_EMAIL1, FULL_NAME1, GIVEN_NAME1, null);
+        buildAndShowCollapsedBottomSheet();
+        ViewUtils.waitForVisibleView(allOf(withText(TEST_EMAIL1), isDisplayed()));
+        ViewUtils.waitForVisibleView(allOf(withText(FULL_NAME1), isDisplayed()));
+        mRenderTestRule.render(
+                mCoordinator.getBottomSheetViewForTesting(),
+                "collapsed_sheet_with_account_replace_sync_with_signin_promos_enabled");
+    }
+
+    @Test
+    @MediumTest
+    @Feature("RenderTest")
+    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     @ParameterAnnotations.UseMethodParameter(NightModeTestUtils.NightModeParams.class)
     public void testCollapsedSheetWithAccountViewForSendTabToSelfEntryPoint(
             boolean nightModeEnabled) throws IOException {
@@ -189,6 +221,25 @@ public class AccountPickerBottomSheetRenderTest {
     @Test
     @MediumTest
     @Feature("RenderTest")
+    @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    @ParameterAnnotations.UseMethodParameter(NightModeTestUtils.NightModeParams.class)
+    public void
+            testCollapsedSheetWithAccountViewForSendTabToSelfEntryPoint_replaceSyncWithSigninPromosEnabled(
+                    boolean nightModeEnabled) throws IOException {
+        mSigninAccessPoint = SigninAccessPoint.SEND_TAB_TO_SELF_PROMO;
+        mAccountManagerTestRule.addAccount(TEST_EMAIL1, FULL_NAME1, GIVEN_NAME1, null);
+        buildAndShowCollapsedBottomSheet();
+        ViewUtils.waitForVisibleView(allOf(withText(TEST_EMAIL1), isDisplayed()));
+        ViewUtils.waitForVisibleView(allOf(withText(FULL_NAME1), isDisplayed()));
+        mRenderTestRule.render(
+                mCoordinator.getBottomSheetViewForTesting(),
+                "collapsed_sheet_with_account_for_send_tab_to_self_replace_sync_with_signin_promos_enabled");
+    }
+
+    @Test
+    @MediumTest
+    @Feature("RenderTest")
+    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     @ParameterAnnotations.UseMethodParameter(NightModeTestUtils.NightModeParams.class)
     public void testCollapsedSheetWithAccountViewForBookmarksEntryPoint(boolean nightModeEnabled)
             throws IOException {
@@ -200,6 +251,24 @@ public class AccountPickerBottomSheetRenderTest {
         mRenderTestRule.render(
                 mCoordinator.getBottomSheetViewForTesting(),
                 "collapsed_sheet_with_account_for_bookmarks");
+    }
+
+    @Test
+    @MediumTest
+    @Feature("RenderTest")
+    @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    @ParameterAnnotations.UseMethodParameter(NightModeTestUtils.NightModeParams.class)
+    public void
+            testCollapsedSheetWithAccountViewForBookmarksEntryPoint_replaceSyncWithSigninPromosEnabled(
+                    boolean nightModeEnabled) throws IOException {
+        mSigninAccessPoint = SigninAccessPoint.BOOKMARK_MANAGER;
+        mAccountManagerTestRule.addAccount(TEST_EMAIL1, FULL_NAME1, GIVEN_NAME1, null);
+        buildAndShowCollapsedBottomSheet();
+        ViewUtils.waitForVisibleView(allOf(withText(TEST_EMAIL1), isDisplayed()));
+        ViewUtils.waitForVisibleView(allOf(withText(FULL_NAME1), isDisplayed()));
+        mRenderTestRule.render(
+                mCoordinator.getBottomSheetViewForTesting(),
+                "collapsed_sheet_with_account_for_bookmarks_replace_sync_with_signin_promos_enabled");
     }
 
     @Test
@@ -348,7 +417,7 @@ public class AccountPickerBottomSheetRenderTest {
         // Currently the ProgressBar animation cannot be disabled on android-marshmallow-arm64-rel
         // bot with DisableAnimationsTestRule, we hide the ProgressBar manually here to enable
         // checks of other elements on the screen.
-        // TODO(https://crbug.com/1115067): Delete this line and use DisableAnimationsTestRule
+        // TODO(crbug.com/40144184): Delete this line and use DisableAnimationsTestRule
         //  once DisableAnimationsTestRule is fixed.
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {

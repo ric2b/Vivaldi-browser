@@ -28,7 +28,7 @@ bool operator<(int a,
   return b && a < b->socket->socket_id();
 }
 
-SenderSocketFactory::SenderSocketFactory(Client* client,
+SenderSocketFactory::SenderSocketFactory(Client& client,
                                          TaskRunner& task_runner)
     : SenderSocketFactory(client,
                           task_runner,
@@ -36,7 +36,7 @@ SenderSocketFactory::SenderSocketFactory(Client* client,
                           CastCRLTrustStore::Create()) {}
 
 SenderSocketFactory::SenderSocketFactory(
-    Client* client,
+    Client& client,
     TaskRunner& task_runner,
     std::unique_ptr<TrustStore> cast_trust_store,
     std::unique_ptr<TrustStore> crl_trust_store)
@@ -44,7 +44,6 @@ SenderSocketFactory::SenderSocketFactory(
       task_runner_(task_runner),
       cast_trust_store_(std::move(cast_trust_store)),
       crl_trust_store_(std::move(crl_trust_store)) {
-  OSP_CHECK(client);
   OSP_CHECK(cast_trust_store_);
   OSP_CHECK(crl_trust_store_);
 }
@@ -97,7 +96,7 @@ void SenderSocketFactory::OnConnected(
   ErrorOr<std::unique_ptr<ParsedCertificate>> peer_cert =
       ParsedCertificate::ParseFromDER(der_x509_peer_cert);
   if (!peer_cert) {
-    client_->OnError(this, endpoint, peer_cert.error());
+    client_.OnError(this, endpoint, peer_cert.error());
     return;
   }
 
@@ -114,7 +113,7 @@ void SenderSocketFactory::OnConnected(
   Error error = pending.socket->Send(auth_challenge);
   if (!error.ok()) {
     pending_auth_.pop_back();
-    client_->OnError(this, endpoint, error);
+    client_.OnError(this, endpoint, error);
   }
 }
 
@@ -125,14 +124,15 @@ void SenderSocketFactory::OnConnectionFailed(TlsConnectionFactory* factory,
     return;
   }
   pending_connections_.erase(it);
-  client_->OnError(this, remote_address, Error::Code::kConnectionFailed);
+  client_.OnError(this, remote_address, Error::Code::kConnectionFailed);
 }
 
-void SenderSocketFactory::OnError(TlsConnectionFactory* factory, Error error) {
+void SenderSocketFactory::OnError(TlsConnectionFactory* factory,
+                                  const Error& error) {
   std::vector<PendingConnection> connections;
   pending_connections_.swap(connections);
   for (const PendingConnection& pending : connections) {
-    client_->OnError(this, pending.endpoint, error);
+    client_.OnError(this, pending.endpoint, error);
   }
 }
 
@@ -144,7 +144,7 @@ SenderSocketFactory::FindPendingConnection(const IPEndpoint& endpoint) {
                       });
 }
 
-void SenderSocketFactory::OnError(CastSocket* socket, Error error) {
+void SenderSocketFactory::OnError(CastSocket* socket, const Error& error) {
   auto it = std::find_if(pending_auth_.begin(), pending_auth_.end(),
                          [id = socket->socket_id()](
                              const std::unique_ptr<PendingAuth>& pending_auth) {
@@ -156,7 +156,7 @@ void SenderSocketFactory::OnError(CastSocket* socket, Error error) {
   }
   IPEndpoint endpoint = (*it)->endpoint;
   pending_auth_.erase(it);
-  client_->OnError(this, endpoint, error);
+  client_.OnError(this, endpoint, error);
 }
 
 void SenderSocketFactory::OnMessage(CastSocket* socket, CastMessage message) {
@@ -173,8 +173,8 @@ void SenderSocketFactory::OnMessage(CastSocket* socket, CastMessage message) {
   std::unique_ptr<PendingAuth> pending = std::move(*it);
   pending_auth_.erase(it);
   if (!IsAuthMessage(message)) {
-    client_->OnError(this, pending->endpoint,
-                     Error::Code::kCastV2AuthenticationError);
+    client_.OnError(this, pending->endpoint,
+                    Error::Code::kCastV2AuthenticationError);
     return;
   }
 
@@ -184,22 +184,22 @@ void SenderSocketFactory::OnMessage(CastSocket* socket, CastMessage message) {
   if (policy_or_error.is_error()) {
     OSP_DLOG_WARN << "Authentication failed for " << pending->endpoint
                   << " with error: " << policy_or_error.error();
-    client_->OnError(this, pending->endpoint, policy_or_error.error());
+    client_.OnError(this, pending->endpoint, policy_or_error.error());
     return;
   }
 
   if (policy_or_error.value() == CastDeviceCertPolicy::kAudioOnly &&
       pending->media_policy == DeviceMediaPolicy::kIncludesVideo) {
-    client_->OnError(this, pending->endpoint,
-                     Error::Code::kCastV2ChannelPolicyMismatch);
+    client_.OnError(this, pending->endpoint,
+                    Error::Code::kCastV2ChannelPolicyMismatch);
     return;
   }
   pending->socket->set_audio_only(policy_or_error.value() ==
                                   CastDeviceCertPolicy::kAudioOnly);
 
   pending->socket->SetClient(pending->client);
-  client_->OnConnected(this, pending->endpoint,
-                       std::unique_ptr<CastSocket>(pending->socket.release()));
+  client_.OnConnected(this, pending->endpoint,
+                      std::unique_ptr<CastSocket>(pending->socket.release()));
 }
 
 }  // namespace openscreen::cast

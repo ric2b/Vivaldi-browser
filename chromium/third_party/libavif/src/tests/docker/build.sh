@@ -26,7 +26,7 @@ export PATH="$HOME/.cargo/bin:$PATH"
 
 # aom
 cd
-git clone -b v3.8.2 --depth 1 https://aomedia.googlesource.com/aom
+git clone -b v3.9.0 --depth 1 https://aomedia.googlesource.com/aom
 cd aom
 mkdir build.avif
 cd build.avif
@@ -35,7 +35,7 @@ ninja install
 
 # dav1d
 cd
-git clone -b 1.4.0 --depth 1 https://code.videolan.org/videolan/dav1d.git
+git clone -b 1.4.1 --depth 1 https://code.videolan.org/videolan/dav1d.git
 cd dav1d
 mkdir build
 cd build
@@ -53,13 +53,13 @@ ninja install
 
 # rav1e
 cd
-git clone -b v0.7.0 --depth 1 https://github.com/xiph/rav1e.git
+git clone -b v0.7.1 --depth 1 https://github.com/xiph/rav1e.git
 cd rav1e
 cargo cinstall --prefix=/usr --release
 
 # SVT-AV1
 cd
-git clone -b v1.7.0 --depth 1 https://gitlab.com/AOMediaCodec/SVT-AV1.git
+git clone -b v2.0.0 --depth 1 https://gitlab.com/AOMediaCodec/SVT-AV1.git
 cd SVT-AV1
 cd Build
 cmake -G Ninja -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release ..

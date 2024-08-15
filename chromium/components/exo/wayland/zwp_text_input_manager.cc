@@ -10,11 +10,12 @@
 #include <wayland-server-protocol-core.h>
 #include <xkbcommon/xkbcommon.h>
 
+#include <string_view>
+
 #include "ash/constants/ash_features.h"
 #include "base/files/file_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/utf_offset_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/exo/display.h"
@@ -194,7 +195,7 @@ class WaylandTextInputDelegate : public TextInput::Delegate {
     wl_client_flush(client());
   }
 
-  void Commit(base::StringPiece16 text) override {
+  void Commit(std::u16string_view text) override {
     zwp_text_input_v1_send_commit_string(
         text_input_,
         serial_tracker_->GetNextSerial(SerialTracker::EventType::OTHER_EVENT),
@@ -202,7 +203,7 @@ class WaylandTextInputDelegate : public TextInput::Delegate {
     wl_client_flush(client());
   }
 
-  void SetCursor(base::StringPiece16 surrounding_text,
+  void SetCursor(std::u16string_view surrounding_text,
                  const gfx::Range& selection) override {
     std::vector<size_t> offsets{selection.start(), selection.end()};
     base::UTF16ToUTF8AndAdjustOffsets(surrounding_text, &offsets);
@@ -211,14 +212,14 @@ class WaylandTextInputDelegate : public TextInput::Delegate {
                                            static_cast<uint32_t>(offsets[0]));
   }
 
-  void DeleteSurroundingText(base::StringPiece16 surrounding_text,
+  void DeleteSurroundingText(std::u16string_view surrounding_text,
                              const gfx::Range& range) override {
     std::vector<size_t> offsets{range.GetMin(), range.GetMax()};
     base::UTF16ToUTF8AndAdjustOffsets(surrounding_text, &offsets);
     // Currently, the arguments are conflicting with spec.
     // However, the only client, Lacros, also interprets wrongly in the same
     // way so just fixing here could cause visible regression.
-    // TODO(crbug.com/1227590): Fix the behavior with versioning.
+    // TODO(crbug.com/40189286): Fix the behavior with versioning.
     zwp_text_input_v1_send_delete_surrounding_text(
         text_input_, static_cast<uint32_t>(offsets[0]),
         static_cast<uint32_t>(offsets[1] - offsets[0]));
@@ -274,7 +275,7 @@ class WaylandTextInputDelegate : public TextInput::Delegate {
   }
 
   void SetCompositionFromExistingText(
-      base::StringPiece16 surrounding_text,
+      std::u16string_view surrounding_text,
       const gfx::Range& cursor,
       const gfx::Range& range,
       const std::vector<ui::ImeTextSpan>& ui_ime_text_spans) override {
@@ -296,7 +297,7 @@ class WaylandTextInputDelegate : public TextInput::Delegate {
     wl_client_flush(client());
   }
 
-  void ClearGrammarFragments(base::StringPiece16 surrounding_text,
+  void ClearGrammarFragments(std::u16string_view surrounding_text,
                              const gfx::Range& range) override {
     if (!extended_text_input_)
       return;
@@ -312,7 +313,7 @@ class WaylandTextInputDelegate : public TextInput::Delegate {
     }
   }
 
-  void AddGrammarFragment(base::StringPiece16 surrounding_text,
+  void AddGrammarFragment(std::u16string_view surrounding_text,
                           const ui::GrammarFragment& fragment) override {
     if (!extended_text_input_)
       return;
@@ -329,7 +330,7 @@ class WaylandTextInputDelegate : public TextInput::Delegate {
     }
   }
 
-  void SetAutocorrectRange(base::StringPiece16 surrounding_text,
+  void SetAutocorrectRange(std::u16string_view surrounding_text,
                            const gfx::Range& range) override {
     if (!extended_text_input_) {
       return;
@@ -348,7 +349,7 @@ class WaylandTextInputDelegate : public TextInput::Delegate {
           extended_text_input_, offsets[0], offsets[1]);
     } else {
       // Fallback to the old implementation for transition.
-      // TODO(crbug.com/1402906): Remove once new way is widely distributed.
+      // TODO(crbug.com/40251329): Remove once new way is widely distributed.
       zcr_extended_text_input_v1_send_set_autocorrect_range(
           extended_text_input_, range.GetMin(), range.GetMax());
     }
@@ -377,7 +378,7 @@ class WaylandTextInputDelegate : public TextInput::Delegate {
     }
   }
 
-  void SendPreeditStyle(base::StringPiece16 text,
+  void SendPreeditStyle(std::u16string_view text,
                         const std::vector<ui::ImeTextSpan>& spans) {
     if (spans.empty())
       return;
@@ -503,7 +504,7 @@ class WaylandExtendedTextInput {
 
 void SetSurroundingTextImpl(TextInput* text_input,
                             WaylandTextInputDelegate* delegate,
-                            base::StringPiece text,
+                            std::string_view text,
                             uint32_t cursor,
                             uint32_t anchor) {
   uint32_t offset_utf16 =
@@ -511,7 +512,7 @@ void SetSurroundingTextImpl(TextInput* text_input,
   auto grammar_fragment = delegate->TakeGrammarFragment();
   auto autocorrect_info = delegate->TakeAutocorrectInfo();
 
-  // TODO(crbug.com/1227590): Selection range should keep cursor/anchor
+  // TODO(crbug.com/40189286): Selection range should keep cursor/anchor
   // relationship.
   auto minmax = std::minmax(cursor, anchor);
   std::vector<size_t> offsets{minmax.first, minmax.second};
@@ -538,7 +539,7 @@ void SetSurroundingTextImpl(TextInput* text_input,
   // Original implementation did not convert the range. Guard this by the
   // feature flag to be reverted to old behavior just in case for transition
   // period.
-  // TODO(crbug.com/1402906): Remove the guard once transition is done.
+  // TODO(crbug.com/40251329): Remove the guard once transition is done.
   if (autocorrect_info.has_value() &&
       base::FeatureList::IsEnabled(ash::features::kExoSurroundingTextOffset)) {
     size_t index = grammar_fragment.has_value() ? 4u : 2u;
@@ -809,7 +810,7 @@ void extended_text_input_deprecated_set_input_type(wl_client* client,
                                                    uint32_t input_mode,
                                                    uint32_t input_flags,
                                                    uint32_t learning_mode) {
-  // TODO(crbug.com/1420448) This deprecated method signature is preserved to
+  // TODO(crbug.com/40258785) This deprecated method signature is preserved to
   // maintain backwards compatibility with older client versions. Once both Exo
   // and Lacros have stabilized on the new API, delete this implementation or
   // otherwise make it impossible to call.

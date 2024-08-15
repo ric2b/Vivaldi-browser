@@ -135,4 +135,9 @@ void WebContentsImpl::SetResumePending(bool resume) {
   is_resume_pending_ = resume;
 }
 
+void WebContentsImpl::SetJavaScriptDialogManager(
+    JavaScriptDialogManager* dialog_manager) {
+  dialog_manager_ = dialog_manager;
+}
+
 }  // namespace content

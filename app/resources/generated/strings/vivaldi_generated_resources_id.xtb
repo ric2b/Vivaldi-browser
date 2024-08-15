@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">Tidak Setelah</translation>
 <translation id="2749881179542288782">Periksa Gramatika Dengan Ejaaan</translation>
 <translation id="2785873697295365461">Semua deskriptor berkas</translation>
-<translation id="2809586584051668049">dan <ph name="NUMBER_ADDITIONAL_DISABLED" /> lainnya</translation>
 <translation id="2825758591930162672">Kunci Publik Subjek</translation>
 <translation id="2850541429955027218">Tambah tema</translation>
 <translation id="2861941300086904918">Pengelola keamanan Klien Asli</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">Buka sebagai jendela</translation>
 <translation id="3280237271814976245">Simp&amp;an sebagai...</translation>
 <translation id="3285322247471302225">&amp;Tab Baru</translation>
-<translation id="3288047731229977326">Ekstensi yang berjalan dalam mode pengembang dapat membahayakan komputer anda. Jika anda bukan pengembang, anda sebaiknya tidak mengaktifkan semua ekstensi yang berjalan dalam mode pengembang agar tetap aman.</translation>
 <translation id="329838636886466101">Perbaiki</translation>
 <translation id="33022249435934718">Penangan GDI</translation>
 <translation id="3303818374450886607">Salinan</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">Membuat ekstensi:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Nonaktifkan semua ekstensi mode pengembang</translation>
 <translation id="4100839878934973028">Program lain di komputer anda menambahkan aplikasi yang dapat mengubah cara kerja Vivaldi.</translation>
 <translation id="4104163789986725820">E&amp;kspor...</translation>
 <translation id="4109898769411476438">Tutup Peramban Sebelum Mengimpor</translation>
@@ -261,7 +258,6 @@
 <translation id="5269977353971873915">Gagal Mencetak</translation>
 <translation id="5284445933715251131">Lanjutkan Mengunduh</translation>
 <translation id="52912272896845572">Berkas kunci pribadi tidak sah.</translation>
-<translation id="5301954838959518834">Baik, paham</translation>
 <translation id="5302932258331363306">Tampilkan Substitusi</translation>
 <translation id="5317780077021120954">Simpan</translation>
 <translation id="5334142896108694079">Singgahan Skrip</translation>

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "core/fxge/skia/fx_skia_device.h"
 
 #include <math.h>
@@ -1329,12 +1334,10 @@ bool CFX_SkiaDeviceDriver::DrawShading(const CPDF_ShadingPattern* pPattern,
         cubics[i].fY = point.y;
       }
       for (size_t i = start_color; i < std::size(colors); ++i) {
-        float r;
-        float g;
-        float b;
-        std::tie(r, g, b) = stream.ReadColor();
-        colors[i] = SkColorSetARGB(0xFF, (U8CPU)(r * 255), (U8CPU)(g * 255),
-                                   (U8CPU)(b * 255));
+        FX_RGB<float> rgb = stream.ReadColor();
+        colors[i] =
+            SkColorSetARGB(0xFF, (U8CPU)(rgb.red * 255),
+                           (U8CPU)(rgb.green * 255), (U8CPU)(rgb.blue * 255));
       }
       m_pCanvas->drawPatch(cubics, colors, /*texCoords=*/nullptr,
                            SkBlendMode::kDst, paint);

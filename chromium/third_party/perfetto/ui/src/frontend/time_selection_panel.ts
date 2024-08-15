@@ -15,7 +15,7 @@
 import m from 'mithril';
 
 import {duration, Span, time, Time, TimeSpan} from '../base/time';
-import {timestampFormat, TimestampFormat} from '../common/timestamp_format';
+import {timestampFormat, TimestampFormat} from '../core/timestamp_format';
 
 import {
   BACKGROUND_COLOR,
@@ -32,6 +32,7 @@ import {
 import {PanelSize} from './panel';
 import {Panel} from './panel_container';
 import {renderDuration} from './widgets/duration';
+import {getLegacySelection} from '../common/state';
 
 export interface BBox {
   x: number;
@@ -172,7 +173,7 @@ export class TimeSelectionPanel implements Panel {
     }
 
     const localArea = globals.timeline.selectedArea;
-    const selection = globals.state.currentSelection;
+    const selection = getLegacySelection(globals.state);
     if (localArea !== undefined) {
       const start = Time.min(localArea.start, localArea.end);
       const end = Time.max(localArea.start, localArea.end);

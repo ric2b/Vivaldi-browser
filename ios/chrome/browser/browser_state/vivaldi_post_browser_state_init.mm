@@ -27,7 +27,7 @@ class UpdaterClientImpl : public UpdaterClient {
   static std::unique_ptr<UpdaterClientImpl> Create(
       ChromeBrowserState* browser_state);
 
-  LegacyBookmarkModel* GetBookmarkModel() override;
+  bookmarks::BookmarkModel* GetBookmarkModel() override;
   FaviconServiceGetter GetFaviconServiceGetter() override;
   PrefService* GetPrefService() override;
   const std::string& GetApplicationLocale() override;
@@ -51,9 +51,9 @@ UpdaterClientImpl::UpdaterClientImpl(ChromeBrowserState* browser_state)
     : browser_state_(browser_state) {}
 UpdaterClientImpl::~UpdaterClientImpl() = default;
 
-LegacyBookmarkModel* UpdaterClientImpl::GetBookmarkModel() {
+bookmarks::BookmarkModel* UpdaterClientImpl::GetBookmarkModel() {
   return ios::LocalOrSyncableBookmarkModelFactory::
-              GetForBrowserState(browser_state_);
+              GetForBrowserState(browser_state_)->getUnderlyingModel();
 }
 
 PrefService* UpdaterClientImpl::GetPrefService() {
@@ -79,8 +79,9 @@ void PostBrowserStateInit(ChromeBrowserState* browser_state) {
   vivaldi::SearchEnginesUpdater::Update(
       browser_state->GetSharedURLLoaderFactory());
   vivaldi_partners::RemovedPartnersTracker::Create(
-      browser_state->GetPrefs(), ios::LocalOrSyncableBookmarkModelFactory::
-                                      GetForBrowserState(browser_state));
+      browser_state->GetPrefs(),
+          ios::LocalOrSyncableBookmarkModelFactory::
+                GetForBrowserState(browser_state)->getUnderlyingModel());
 
   vivaldi_default_bookmarks::UpdatePartners(
       vivaldi_default_bookmarks::UpdaterClientImpl::Create(browser_state));

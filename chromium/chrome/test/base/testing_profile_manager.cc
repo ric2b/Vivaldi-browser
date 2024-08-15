@@ -5,6 +5,7 @@
 #include "chrome/test/base/testing_profile_manager.h"
 
 #include <stddef.h>
+
 #include <utility>
 
 #include "base/feature_list.h"
@@ -21,12 +22,11 @@
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_destroyer.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/fake_profile_manager.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "components/supervised_user/core/common/buildflags.h"
+#include "components/supervised_user/core/common/supervised_user_constants.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -40,10 +40,6 @@
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/browser/lacros/account_manager/account_profile_mapper.h"
-#endif
-
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "components/supervised_user/core/common/supervised_user_constants.h"
 #endif
 
 const char kGuestProfileName[] = "Guest";
@@ -79,8 +75,10 @@ TestingProfileManager::~TestingProfileManager() {
   browser_process_->SetProfileManager(nullptr);
 }
 
-bool TestingProfileManager::SetUp(const base::FilePath& profiles_path) {
-  SetUpInternal(profiles_path);
+bool TestingProfileManager::SetUp(
+    const base::FilePath& profiles_path,
+    std::unique_ptr<ProfileManager> profile_manager) {
+  SetUpInternal(profiles_path, std::move(profile_manager));
   return called_set_up_;
 }
 
@@ -97,33 +95,14 @@ TestingProfile* TestingProfileManager::CreateTestingProfile(
     scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory) {
   DCHECK(called_set_up_);
 
-  // Create a path for the profile based on the name.
-  base::FilePath profile_path(profiles_path_);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (ash::IsUserBrowserContextBaseName(base::FilePath(profile_name))) {
-    const std::string fake_email =
-        profile_name.find('@') == std::string::npos
-            ? base::ToLowerASCII(profile_name) + "@test"
-            : profile_name;
-    profile_path =
-        profile_path.Append(ash::ProfileHelper::Get()->GetUserProfileDir(
-            user_manager::FakeUserManager::GetFakeUsernameHash(
-                AccountId::FromUserEmail(fake_email))));
-  } else {
-    profile_path = profile_path.AppendASCII(profile_name);
-  }
-#else
-  profile_path = profile_path.AppendASCII(profile_name);
-#endif
+  base::FilePath profile_path = GetProfilePath(profile_name);
 
   // Create the profile and register it.
   TestingProfile::Builder builder;
   builder.SetPath(profile_path);
   builder.SetPrefService(std::move(prefs));
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   if (is_supervised_profile)
     builder.SetIsSupervisedProfile();
-#endif
   builder.SetProfileName(profile_name);
   builder.SetIsNewProfile(is_new_profile.value_or(false));
   if (policy_service)
@@ -147,11 +126,9 @@ TestingProfile* TestingProfileManager::CreateTestingProfile(
           .GetProfileAttributesWithPath(profile_path);
   DCHECK(entry);
   entry->SetAvatarIconIndex(avatar_id);
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   entry->SetSupervisedUserId(is_supervised_profile
                                  ? ::supervised_user::kChildAccountSUID
                                  : std::string());
-#endif
   entry->SetLocalProfileName(user_name, entry->IsUsingDefaultName());
 
   testing_profiles_.insert(std::make_pair(profile_name, profile_ptr));
@@ -300,6 +277,29 @@ void TestingProfileManager::UpdateLastUser(Profile* last_active) {
 #endif
 }
 
+base::FilePath TestingProfileManager::GetProfilePath(
+    const std::string& profile_name) {
+  // Create a path for the profile based on the name.
+  base::FilePath profile_path(profiles_path_);
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (ash::IsUserBrowserContextBaseName(base::FilePath(profile_name))) {
+    const std::string fake_email =
+        profile_name.find('@') == std::string::npos
+            ? base::ToLowerASCII(profile_name) + "@test"
+            : profile_name;
+    profile_path =
+        profile_path.Append(ash::ProfileHelper::Get()->GetUserProfileDir(
+            user_manager::FakeUserManager::GetFakeUsernameHash(
+                AccountId::FromUserEmail(fake_email))));
+  } else {
+    profile_path = profile_path.AppendASCII(profile_name);
+  }
+#else
+  profile_path = profile_path.AppendASCII(profile_name);
+#endif
+  return profile_path;
+}
+
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 void TestingProfileManager::SetAccountProfileMapper(
     std::unique_ptr<AccountProfileMapper> mapper) {
@@ -329,7 +329,9 @@ void TestingProfileManager::OnProfileWillBeDestroyed(Profile* profile) {
   profile_observations_.RemoveObservation(profile);
 }
 
-void TestingProfileManager::SetUpInternal(const base::FilePath& profiles_path) {
+void TestingProfileManager::SetUpInternal(
+    const base::FilePath& profiles_path,
+    std::unique_ptr<ProfileManager> profile_manager) {
   ASSERT_FALSE(browser_process_->profile_manager())
       << "ProfileManager already exists";
 
@@ -347,7 +349,8 @@ void TestingProfileManager::SetUpInternal(const base::FilePath& profiles_path) {
       chrome::DIR_USER_DATA, profiles_path_);
 
   auto profile_manager_unique =
-      std::make_unique<FakeProfileManager>(profiles_path_);
+      profile_manager ? std::move(profile_manager)
+                      : std::make_unique<FakeProfileManager>(profiles_path_);
   profile_manager_ = profile_manager_unique.get();
   browser_process_->SetProfileManager(std::move(profile_manager_unique));
 

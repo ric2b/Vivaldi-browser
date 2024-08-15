@@ -12,6 +12,7 @@
 
 namespace ash {
 
+class MahiUiController;
 class RefreshBannerView;
 
 // The widget that contains the Mahi panel.
@@ -19,7 +20,7 @@ class RefreshBannerView;
 // closing capability is added.
 class ASH_EXPORT MahiPanelWidget : public views::Widget, views::ViewObserver {
  public:
-  explicit MahiPanelWidget(InitParams params);
+  MahiPanelWidget(InitParams params, MahiUiController* ui_controller);
 
   MahiPanelWidget(const MahiPanelWidget&) = delete;
   MahiPanelWidget& operator=(const MahiPanelWidget&) = delete;
@@ -27,16 +28,19 @@ class ASH_EXPORT MahiPanelWidget : public views::Widget, views::ViewObserver {
   ~MahiPanelWidget() override;
 
   // Creates the Mahi panel widget within the display with `display_id`.
-  static views::UniqueWidgetPtr CreatePanelWidget(int64_t display_id);
+  static views::UniqueWidgetPtr CreatePanelWidget(
+      int64_t display_id,
+      MahiUiController* ui_controller);
 
-  // Shows/hides the refresh UI in the panel.
-  void SetRefreshViewVisible(bool visible);
+  static const char* GetName();
 
  private:
   // views::ViewObserver:
   void OnViewVisibilityChanged(views::View* observed_view,
                                views::View* starting_view) override;
   void OnViewIsDeleting(views::View* observed_view) override;
+
+  bool is_refresh_view_visible_ = false;
 
   // Owned by views hierarchy.
   raw_ptr<RefreshBannerView> refresh_view_ = nullptr;

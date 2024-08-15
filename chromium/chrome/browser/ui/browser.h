@@ -27,6 +27,7 @@
 #include "chrome/browser/ui/bookmarks/bookmark_bar.h"
 #include "chrome/browser/ui/bookmarks/bookmark_tab_helper_observer.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/chrome_web_modal_dialog_manager_delegate.h"
 #include "chrome/browser/ui/signin/signin_view_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
@@ -42,6 +43,7 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "extensions/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
+#include "third_party/blink/public/mojom/page/draggable_region.mojom-forward.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/base/window_open_disposition.h"
@@ -60,6 +62,7 @@ class BrowserSyncedWindowDelegate;
 class BrowserLocationBarModelDelegate;
 class BrowserLiveTabContext;
 class BrowserWindow;
+class BrowserWindowFeatures;
 class ExclusiveAccessManager;
 class FindBarController;
 class LocationBarModel;
@@ -71,6 +74,10 @@ class StatusBubble;
 class TabStripModel;
 class TabStripModelDelegate;
 class TabMenuModelDelegate;
+
+namespace tab_groups {
+class DeletionDialogController;
+}
 
 namespace blink {
 enum class ProtocolHandlerSecurityLevel;
@@ -115,6 +122,10 @@ enum class BrowserClosingStatus {
   kDeniedUnloadHandlersNeedTime
 };
 
+// An instance of this class represents a single browser window on Desktop. All
+// features that are scoped to a browser window should have lifetime semantics
+// scoped to an instance of this class, usually via direct or indirect ownership
+// of a std::unique_ptr. See BrowserWindowFeatures and TabFeatures.
 class Browser : public TabStripModelObserver,
                 public WebContentsCollection::Observer,
                 public content::WebContentsDelegate,
@@ -125,11 +136,15 @@ class Browser : public TabStripModelObserver,
                 public content::PageNavigator,
                 public ThemeServiceObserver,
                 public translate::ContentTranslateDriver::TranslationObserver,
-                public ui::SelectFileDialog::Listener {
+                public ui::SelectFileDialog::Listener,
+                public BrowserWindowInterface {
  public:
   // SessionService::WindowType mirrors these values.  If you add to this
   // enum, look at SessionService::WindowType to see if it needs to be
   // updated.
+  // TODO(https://crbug.com/331031753): Several of these existing Window Types
+  // likely should not have been using Browser as a base to begin with and
+  // should be migrated. Please refrain from adding new types.
   enum Type {
     // Normal tabbed non-app browser (previously TYPE_TABBED).
     TYPE_NORMAL,
@@ -173,10 +188,10 @@ class Browser : public TabStripModelObserver,
     FEATURE_TOOLBAR = 1 << 2,
     FEATURE_LOCATIONBAR = 1 << 3,
     FEATURE_BOOKMARKBAR = 1 << 4,
-    // TODO(crbug.com/992834): Add FEATURE_PAGECONTROLS to describe the presence
-    // of per-page controls such as Content Settings Icons, which should be
-    // decoupled from FEATURE_LOCATIONBAR as they have independent presence in
-    // Web App browsers.
+    // TODO(crbug.com/40639933): Add FEATURE_PAGECONTROLS to describe the
+    // presence of per-page controls such as Content Settings Icons, which
+    // should be decoupled from FEATURE_LOCATIONBAR as they have independent
+    // presence in Web App browsers.
   };
 
   // The context for a download blocked notification from
@@ -256,6 +271,11 @@ class Browser : public TabStripModelObserver,
                                           const gfx::Rect& window_bounds,
                                           Profile* profile,
                                           bool user_gesture);
+
+    static CreateParams CreateForPictureInPicture(const std::string& app_name,
+                                                  bool trusted_source,
+                                                  Profile* profile,
+                                                  bool user_gesture);
 
     static CreateParams CreateForDevTools(Profile* profile);
 
@@ -467,6 +487,16 @@ class Browser : public TabStripModelObserver,
 #endif
 
   // Never nullptr.
+  //
+  // When the last tab is removed, the browser attempts to close, see
+  // TabStripEmpty().
+  // TODO(https://crbug.com/331031753): Several existing Browser::Types never
+  // show a tab strip, yet are forced to work with the tab strip API to deal
+  // with the previous condition. This creates confusing control flow both for
+  // the tab strip and this class. One or both of the following should happen:
+  //  (1) tab_strip_model_ should become an optional member.
+  //  (2) Variations of Browser::Type that never show a tab strip should not use
+  //      this class.
   TabStripModel* tab_strip_model() const { return tab_strip_model_.get(); }
 
   // Never nullptr.
@@ -482,6 +512,12 @@ class Browser : public TabStripModelObserver,
   chrome::BrowserCommandController* command_controller() {
     return command_controller_.get();
   }
+
+  tab_groups::DeletionDialogController* tab_group_deletion_dialog_controller()
+      const {
+    return tab_group_deletion_dialog_controller_.get();
+  }
+
   SessionID session_id() const { return session_id_; }
   bool omit_from_session_restore() const { return omit_from_session_restore_; }
   bool should_trigger_session_restore() const {
@@ -506,6 +542,9 @@ class Browser : public TabStripModelObserver,
   }
   SigninViewController* signin_view_controller() {
     return &signin_view_controller_;
+  }
+  BrowserWindowFeatures* browser_window_features() const {
+    return features_.get();
   }
 
   base::WeakPtr<Browser> AsWeakPtr();
@@ -629,7 +668,7 @@ class Browser : public TabStripModelObserver,
   //
   // Note that there are other cases that may delay closing, such as downloads,
   // but that is done before any of these steps.
-  // TODO(https://crbug.com/1434387): See about unifying IsBrowserClosing() and
+  // TODO(crbug.com/40064092): See about unifying IsBrowserClosing() and
   // is_delete_scheduled().
   bool IsAttemptingToCloseBrowser() const;
   bool IsBrowserClosing() const;
@@ -689,10 +728,6 @@ class Browser : public TabStripModelObserver,
   // Saving can be disabled e.g. for the DevTools window.
   bool CanSaveContents(content::WebContents* web_contents) const;
 
-  std::unique_ptr<content::WebContents> SwapWebContents(
-      content::WebContents* old_contents,
-      std::unique_ptr<content::WebContents> new_contents);
-
   // Returns whether favicon should be shown.
   bool ShouldDisplayFavicon(content::WebContents* web_contents) const;
 
@@ -714,7 +749,10 @@ class Browser : public TabStripModelObserver,
   // Interface implementations ////////////////////////////////////////////////
 
   // Overridden from content::PageNavigator:
-  content::WebContents* OpenURL(const content::OpenURLParams& params) override;
+  content::WebContents* OpenURL(
+      const content::OpenURLParams& params,
+      base::OnceCallback<void(content::NavigationHandle&)>
+          navigation_handle_callback) override;
 
   // Overridden from TabStripModelObserver:
   void OnTabStripModelChanged(
@@ -786,6 +824,9 @@ class Browser : public TabStripModelObserver,
   void InitiatePreview(content::WebContents& web_contents,
                        const GURL& url) override;
   bool ShouldUseInstancedSystemMediaControls() const override;
+  void DraggableRegionsChanged(
+      const std::vector<blink::mojom::DraggableRegionPtr>& regions,
+      content::WebContents* contents) override;
 
   bool is_type_normal() const { return type_ == TYPE_NORMAL; }
   bool is_type_popup() const { return type_ == TYPE_POPUP; }
@@ -817,11 +858,6 @@ class Browser : public TabStripModelObserver,
   bool ShouldRunUnloadListenerBeforeClosing(content::WebContents* web_contents);
   bool RunUnloadListenerBeforeClosing(content::WebContents* web_contents);
 
-  // Set if the browser is currently participating in a tab dragging process.
-  // This information is used to decide if fast resize will be used during
-  // dragging.
-  void SetIsInTabDragging(bool is_in_tab_dragging);
-
   // Sets the browser's user title. Setting it to an empty string clears it.
   void SetWindowUserTitle(const std::string& user_title);
 
@@ -835,6 +871,11 @@ class Browser : public TabStripModelObserver,
   // Sets or clears the flags to force showing bookmark bar.
   void SetForceShowBookmarkBarFlag(ForceShowBookmarkBarFlag flag);
   void ClearForceShowBookmarkBarFlag(ForceShowBookmarkBarFlag flag);
+
+  // BrowserWindowInterface overrides:
+  views::WebView* GetWebView() override;
+  void OpenURL(const GURL& gurl, WindowOpenDisposition disposition) override;
+  const SessionID& GetSessionID() override;
 
   // Vivaldi
   bool is_vivaldi() const { return is_vivaldi_; }
@@ -875,9 +916,6 @@ class Browser : public TabStripModelObserver,
   FRIEND_TEST_ALL_PREFIXES(ExclusiveAccessTest,
                            TabEntersPresentationModeFromWindowed);
   FRIEND_TEST_ALL_PREFIXES(BrowserCloseTest, LastGuest);
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  FRIEND_TEST_ALL_PREFIXES(BrowserTest, URLElisionExtensionSetsPref);
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
   // Used to describe why a tab is being detached. This is used by
   // TabDetachedAtImpl.
@@ -922,7 +960,9 @@ class Browser : public TabStripModelObserver,
   // Overridden from content::WebContentsDelegate:
   content::WebContents* OpenURLFromTab(
       content::WebContents* source,
-      const content::OpenURLParams& params) override;
+      const content::OpenURLParams& params,
+      base::OnceCallback<void(content::NavigationHandle&)>
+          navigation_handle_callback) override;
   void NavigationStateChanged(content::WebContents* source,
                               content::InvalidateTypes changed_flags) override;
   void VisibleSecurityStateChanged(content::WebContents* source) override;
@@ -940,8 +980,7 @@ class Browser : public TabStripModelObserver,
                          const gfx::Rect& bounds) override;
   void UpdateTargetURL(content::WebContents* source, const GURL& url) override;
   void ContentsMouseEvent(content::WebContents* source,
-                          bool motion,
-                          bool exited) override;
+                          const ui::Event& event) override;
   void ContentsZoomChange(bool zoom_in) override;
   bool TakeFocus(content::WebContents* source, bool reverse) override;
   void BeforeUnloadFired(content::WebContents* source,
@@ -1003,8 +1042,7 @@ class Browser : public TabStripModelObserver,
   void RestoreFromWebAPI() override;
   ui::WindowShowState GetWindowShowState() const override;
   bool CanEnterFullscreenModeForTab(
-      content::RenderFrameHost* requesting_frame,
-      const blink::mojom::FullscreenOptions& options) override;
+      content::RenderFrameHost* requesting_frame) override;
   void EnterFullscreenModeForTab(
       content::RenderFrameHost* requesting_frame,
       const blink::mojom::FullscreenOptions& options) override;
@@ -1074,6 +1112,8 @@ class Browser : public TabStripModelObserver,
                              bool blocked) override;
   web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHost()
       override;
+  // Added by Vivaldi.
+  bool IsWebContentsVisible(content::WebContents* web_contents) override;
 
   // Overridden from BookmarkTabHelperObserver:
   void URLStarredChanged(content::WebContents* web_contents,
@@ -1166,6 +1206,11 @@ class Browser : public TabStripModelObserver,
   // and the browser closed, false if the browser should stay open and the
   // downloads running.
   void InProgressDownloadResponse(bool cancel_downloads);
+
+  // Called when the user has decided whether to proceed or not with the browser
+  // closure, in case the cookie migration notice was shown. |proceed_closing|
+  // is true if the browser can  be closed.
+  void CookieMigrationNoticeResponse(bool proceed_closing);
 
   // Called when all warnings have completed when attempting to close the
   // browser directly (e.g. via hotkey, close button, terminate signal, etc.)
@@ -1261,8 +1306,6 @@ class Browser : public TabStripModelObserver,
       const GURL& target_url,
       const content::StoragePartitionConfig& partition_config,
       content::SessionStorageNamespace* session_storage_namespace);
-
-  void SetURLElisionExtensionIDForTesting(const char* extension_id);
 
   // Data members /////////////////////////////////////////////////////////////
 
@@ -1392,6 +1435,10 @@ class Browser : public TabStripModelObserver,
 
   std::unique_ptr<chrome::BrowserCommandController> command_controller_;
 
+  // Dialog controller that handles the showing of the deletion dialog.
+  std::unique_ptr<tab_groups::DeletionDialogController>
+      tab_group_deletion_dialog_controller_;
+
   // True if the browser window has been shown at least once.
   bool window_has_shown_;
 
@@ -1437,13 +1484,7 @@ class Browser : public TabStripModelObserver,
 
   int force_show_bookmark_bar_flags_ = ForceShowBookmarkBarFlag::kNone;
 
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  // ID of an extension that historically was used to prevent URL elision in the
-  // omnibox, and now is being deprecated by migration to a pref. Only set by
-  // tests.
-  // TODO(crbug/324934130): remove after ~M125 or so.
-  static const char* url_elision_extension_id_;
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+  std::unique_ptr<BrowserWindowFeatures> features_;
 
   // Vivaldi
   // True if this is Vivaldi browser object.

@@ -171,7 +171,8 @@ void AddDitherBlock(const KeyContext& keyContext,
                     SkColorType ct) {
     static const SkBitmap gLUT = skgpu::MakeDitherLUT();
 
-    sk_sp<TextureProxy> proxy = RecorderPriv::CreateCachedProxy(keyContext.recorder(), gLUT);
+    sk_sp<TextureProxy> proxy = RecorderPriv::CreateCachedProxy(keyContext.recorder(), gLUT,
+                                                                "DitherLUT");
     if (keyContext.recorder() && !proxy) {
         SKGPU_LOG_W("Couldn't create dither shader's LUT");
         builder->addBlock(BuiltInCodeSnippetID::kPriorOutput);
@@ -332,6 +333,26 @@ void PaintParams::toKey(const KeyContext& keyContext,
             kFixedFunctionBlendModeIDOffset + static_cast<int>(*finalBlendMode));
 
     builder->addBlock(fixedFuncBlendModeID);
+}
+
+// TODO(b/330864257): Can be deleted once keys are determined by the Device draw.
+void PaintParams::notifyImagesInUse(Recorder* recorder,
+                                    DrawContext* drawContext) const {
+    if (fShader) {
+        NotifyImagesInUse(recorder, drawContext, fShader.get());
+    }
+    if (fPrimitiveBlender) {
+        NotifyImagesInUse(recorder, drawContext, fPrimitiveBlender.get());
+    }
+    if (fColorFilter) {
+        NotifyImagesInUse(recorder, drawContext, fColorFilter.get());
+    }
+    if (fFinalBlender) {
+        NotifyImagesInUse(recorder, drawContext, fFinalBlender.get());
+    }
+    if (fClipShader) {
+        NotifyImagesInUse(recorder, drawContext, fClipShader.get());
+    }
 }
 
 } // namespace skgpu::graphite

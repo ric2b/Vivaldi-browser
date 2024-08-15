@@ -58,18 +58,12 @@ usage: %s <options> addr[:port] media_file
       -n, --no-looping
            Disable looping the passed in video after it finishes playing.
 
-)"
-#if defined(CAST_ALLOW_DEVELOPER_CERTIFICATE)
-                               R"(
       -d, --developer-certificate=path-to-cert
            Specifies the path to a self-signed developer certificate that will
            be permitted for use as a root CA certificate for receivers that
            this sender instance will connect to. If omitted, only connections to
            receivers using an official Google-signed cast certificate chain will
            be permitted.
-)"
-#endif
-                               R"(
       -a, --android-hack:
            Use the wrong RTP payload types, for compatibility with older Android
            TV receivers. See https://crbug.com/631828.
@@ -117,9 +111,7 @@ int StandaloneSenderMain(int argc, char* argv[]) {
   const struct option kArgumentOptions[] = {
     {"max-bitrate", required_argument, nullptr, 'm'},
     {"no-looping", no_argument, nullptr, 'n'},
-#if defined(CAST_ALLOW_DEVELOPER_CERTIFICATE)
     {"developer-certificate", required_argument, nullptr, 'd'},
-#endif
     {"android-hack", no_argument, nullptr, 'a'},
     {"remoting", no_argument, nullptr, 'r'},
     {"tracing", no_argument, nullptr, 't'},
@@ -153,11 +145,9 @@ int StandaloneSenderMain(int argc, char* argv[]) {
       case 'n':
         should_loop_video = false;
         break;
-#if defined(CAST_ALLOW_DEVELOPER_CERTIFICATE)
       case 'd':
         developer_certificate_path = optarg;
         break;
-#endif
       case 'a':
         use_android_rtp_hack = true;
         break;
@@ -203,14 +193,12 @@ int StandaloneSenderMain(int argc, char* argv[]) {
   const char* const path = argv[optind];
 
   std::unique_ptr<TrustStore> cast_trust_store;
-#if defined(CAST_ALLOW_DEVELOPER_CERTIFICATE)
   if (!developer_certificate_path.empty()) {
     cast_trust_store =
         TrustStore::CreateInstanceFromPemFile(developer_certificate_path);
     OSP_LOG_INFO << "using cast trust store generated from: "
                  << developer_certificate_path;
   }
-#endif
   if (!cast_trust_store) {
     cast_trust_store = CastTrustStore::Create();
   }

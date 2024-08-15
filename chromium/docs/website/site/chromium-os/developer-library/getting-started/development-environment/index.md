@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/getting-started
-  - Chromium OS > Developer Library > Getting Started
+  - ChromiumOS > Getting Started
 page_name: development-environment
 title: Development Environment
 ---
@@ -84,9 +84,11 @@ conflicts with other binaries of the same name in another location.
 
 ## Up next
 
-You're now ready to [download the
-code](/chromium-os/developer-library/getting-started/checkout-chromium) necessary to
-build and deploy ChromiumOS.
+Now that your workstation is ready for development, you'll
+[setup your development Chromebook](../setup-chromebook) such that you will be
+able to deploy your custom builds to the device. If you don't have a development
+Chromebook, skip ahead to [Checkout Chromium](../checkout-chromium) to continue
+with the workstation-only development flow.
 
 <div style="text-align: center; margin: 3rem 0 1rem 0;">
   <div style="margin: 0 1rem; display: inline-block;">
@@ -94,7 +96,7 @@ build and deploy ChromiumOS.
     <a href="/chromium-os/developer-library/getting-started/hardware-requirements">Hardware Requirements</a>
   </div>
   <div style="margin: 0 1rem; display: inline-block;">
-    <a href="/chromium-os/developer-library/getting-started/checkout-chromium">Checkout Chromium</a>
+    <a href="/chromium-os/developer-library/getting-started/setup-chromebook">Setup your development Chromebook</a>
     <span style="margin-left: 0.5rem;">></span>
   </div>
 </div>

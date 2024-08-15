@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/base64.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
@@ -22,13 +23,13 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/signin/public/base/gaia_id_hash.h"
 #include "components/signin/public/base/signin_pref_names.h"
-#include "components/signin/public/base/signin_switches.h"
 #include "components/sync/base/features.h"
 #include "components/sync/base/passphrase_enums.h"
 #include "components/sync/base/pref_names.h"
 #include "components/sync/base/user_selectable_type.h"
 #include "components/sync/service/sync_feature_status_for_migrations_recorder.h"
 
+#include "app/vivaldi_apptools.h"
 #include "sync/vivaldi_prefs_names.h"
 
 namespace syncer {
@@ -69,6 +70,28 @@ constexpr int kNotMigrated = 0;
 constexpr int kMigratedPart1ButNot2 = 1;
 constexpr int kMigratedPart2AndFullyDone = 2;
 
+// Encodes a protobuf instance of type
+// sync_pb::TrustedVaultAutoUpgradeExperimentGroup in a way that can be safely
+// stored in prefs, i.e. using base64 encoding.
+std::string EncodeTrustedVaultAutoUpgradeExperimentGroupToString(
+    const sync_pb::TrustedVaultAutoUpgradeExperimentGroup& group) {
+  return base::Base64Encode(group.SerializeAsString());
+}
+
+// Does the opposite of EncodeTrustedVaultAutoUpgradeExperimentGroupToString(),
+// i.e. transforms from a string representation to a protobuf instance.
+sync_pb::TrustedVaultAutoUpgradeExperimentGroup
+DecodeTrustedVaultAutoUpgradeExperimentGroupFromString(
+    const std::string& encoded_group) {
+  sync_pb::TrustedVaultAutoUpgradeExperimentGroup proto;
+  std::string serialized_proto;
+  if (!base::Base64Decode(encoded_group, &serialized_proto)) {
+    return proto;
+  }
+  proto.ParseFromString(serialized_proto);
+  return proto;
+}
+
 }  // namespace
 
 SyncPrefObserver::~SyncPrefObserver() = default;
@@ -107,8 +130,9 @@ SyncPrefs::SyncPrefs(PrefService* pref_service)
       base::BindRepeating(&SyncPrefs::OnSelectedTypesPrefChanged,
                           base::Unretained(this)));
 #if BUILDFLAG(IS_IOS)
-  // On iOS, in some situations, there is a dedicated opt-in for bookmarks and
-  // reading list.
+  // On iOS, in some situations, there was a dedicated opt-in for bookmarks and
+  // reading list. It's not used anymore with kReplaceSyncPromosWithSigninPromos
+  // enabled, except for a migration.
   pref_change_registrar_.Add(
       prefs::internal::kBookmarksAndReadingListAccountStorageOptIn,
       base::BindRepeating(&SyncPrefs::OnSelectedTypesPrefChanged,
@@ -178,6 +202,10 @@ void SyncPrefs::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(
       prefs::internal::kSyncCachedPassphraseType,
       sync_pb::NigoriSpecifics_PassphraseType_UNKNOWN);
+  // The user's TrustedVaultAutoUpgradeExperimentGroup, determined the first
+  // time the engine is successfully initialized.
+  registry->RegisterStringPref(
+      prefs::internal::kSyncCachedTrustedVaultAutoUpgradeExperimentGroup, "");
   // The encryption bootstrap token represents a user-entered passphrase.
   registry->RegisterStringPref(prefs::internal::kSyncEncryptionBootstrapToken,
                                std::string());
@@ -220,6 +248,10 @@ bool SyncPrefs::IsInitialSyncFeatureSetupComplete() const {
   return pref_service_->GetBoolean(
       prefs::internal::kSyncInitialSyncFeatureSetupComplete);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+}
+
+bool SyncPrefs::IsExplicitBrowserSignin() const {
+  return pref_service_->GetBoolean(::prefs::kExplicitBrowserSignin);
 }
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
@@ -275,19 +307,13 @@ UserSelectableTypeSet SyncPrefs::GetSelectedTypesForAccount(
         type_enabled = true;
 #else
         // kPasswords and kAutofill are only on by default if there was an
-        // explicit sign in recorded and
-        // `IsExplicitBrowserSigninUIOnDesktopEnabled()` is true.
+        // explicit sign in recorded.
         // Otherwise:
         // - kPasswords requires a dedicated opt-in.
         // - kAutofill cannot be enabled.
         // Note: If this changes, also update the migration logic in
         // MigrateGlobalDataTypePrefsToAccount().
-        switches::ExplicitBrowserSigninPhase phase =
-            type == UserSelectableType::kPasswords
-                ? switches::ExplicitBrowserSigninPhase::kExperimental
-                : switches::ExplicitBrowserSigninPhase::kFull;
         type_enabled =
-            switches::IsExplicitBrowserSigninUIOnDesktopEnabled(phase) &&
             pref_service_->GetBoolean(::prefs::kExplicitBrowserSignin);
 #endif
       } else if (type == UserSelectableType::kBookmarks ||
@@ -303,19 +329,6 @@ UserSelectableTypeSet SyncPrefs::GetSelectedTypesForAccount(
         // All other types are always enabled by default.
         type_enabled = true;
       }
-
-#if BUILDFLAG(IS_IOS)
-      // In transport-only mode, bookmarks and reading list require an
-      // additional opt-in.
-      // TODO(crbug.com/1440628): Cleanup the temporary behaviour of an
-      // additional opt in for Bookmarks and Reading Lists.
-      if ((type == UserSelectableType::kBookmarks ||
-           type == UserSelectableType::kReadingList) &&
-          !base::FeatureList::IsEnabled(kReplaceSyncPromosWithSignInPromos)) {
-        type_enabled &= pref_service_->GetBoolean(
-            prefs::internal::kBookmarksAndReadingListAccountStorageOptIn);
-      }
-#endif
     }
     if (type_enabled) {
       selected_types.Put(type);
@@ -365,6 +378,26 @@ bool SyncPrefs::IsTypeManagedByCustodian(UserSelectableType type) const {
   const char* pref_name = GetPrefNameForType(type);
   CHECK(pref_name);
   return pref_service_->IsPreferenceManagedByCustodian(pref_name);
+}
+
+bool SyncPrefs::IsTypeDisabledByUserForAccount(
+    const UserSelectableType type,
+    const signin::GaiaIdHash& gaia_id_hash) {
+  const char* pref_name = GetPrefNameForType(type);
+  DCHECK(pref_name);
+
+  const base::Value::Dict* account_settings =
+      pref_service_->GetDict(prefs::internal::kSelectedTypesPerAccount)
+          .FindDict(gaia_id_hash.ToBase64());
+  std::optional<bool> pref_value;
+  if (account_settings) {
+    pref_value = account_settings->FindBool(pref_name);
+  }
+
+  if (pref_value.has_value()) {
+    return !*pref_value;
+  }
+  return false;
 }
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
@@ -426,32 +459,17 @@ void SyncPrefs::SetSelectedTypeForAccount(
 
 void SyncPrefs::KeepAccountSettingsPrefsOnlyForUsers(
     const std::vector<signin::GaiaIdHash>& available_gaia_ids) {
+  // Vivaldi: Since we don't use chromiium's gaia id system, this would always
+  // wipe all bootstrap token, preventing users from using the encryption key
+  // backup feature.
+  if (vivaldi::IsVivaldiRunning())
+    return;
   KeepAccountSettingsPrefsOnlyForUsers(
       available_gaia_ids, prefs::internal::kSelectedTypesPerAccount);
   KeepAccountSettingsPrefsOnlyForUsers(
       available_gaia_ids,
       prefs::internal::kSyncEncryptionBootstrapTokenPerAccount);
 }
-
-#if BUILDFLAG(IS_IOS)
-void SyncPrefs::SetBookmarksAndReadingListAccountStorageOptIn(bool value) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  pref_service_->SetBoolean(
-      prefs::internal::kBookmarksAndReadingListAccountStorageOptIn, value);
-}
-
-bool SyncPrefs::IsOptedInForBookmarksAndReadingListAccountStorageForTesting() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return pref_service_->GetBoolean(
-      prefs::internal::kBookmarksAndReadingListAccountStorageOptIn);
-}
-
-void SyncPrefs::ClearBookmarksAndReadingListAccountStorageOptIn() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  pref_service_->ClearPref(
-      prefs::internal::kBookmarksAndReadingListAccountStorageOptIn);
-}
-#endif  // BUILDFLAG(IS_IOS)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 bool SyncPrefs::IsSyncFeatureDisabledViaDashboard() const {
@@ -566,33 +584,45 @@ bool SyncPrefs::IsSyncClientDisabledByPolicy() const {
 }
 
 std::optional<PassphraseType> SyncPrefs::GetCachedPassphraseType() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return ProtoPassphraseInt32ToEnum(
       pref_service_->GetInteger(prefs::internal::kSyncCachedPassphraseType));
 }
 
 void SyncPrefs::SetCachedPassphraseType(PassphraseType passphrase_type) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   pref_service_->SetInteger(prefs::internal::kSyncCachedPassphraseType,
                             EnumPassphraseTypeToProto(passphrase_type));
 }
 
 void SyncPrefs::ClearCachedPassphraseType() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   pref_service_->ClearPref(prefs::internal::kSyncCachedPassphraseType);
 }
 
-std::string SyncPrefs::GetEncryptionBootstrapToken() const {
+std::optional<sync_pb::TrustedVaultAutoUpgradeExperimentGroup>
+SyncPrefs::GetCachedTrustedVaultAutoUpgradeExperimentGroup() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  // This is only called when kSyncRememberCustomPassphraseAfterSignout is
-  // disabled.
-  return pref_service_->GetString(
-      prefs::internal::kSyncEncryptionBootstrapToken);
+  const std::string& encoded_group = pref_service_->GetString(
+      prefs::internal::kSyncCachedTrustedVaultAutoUpgradeExperimentGroup);
+  if (encoded_group.empty()) {
+    return std::nullopt;
+  }
+  return DecodeTrustedVaultAutoUpgradeExperimentGroupFromString(encoded_group);
 }
 
-void SyncPrefs::SetEncryptionBootstrapToken(const std::string& token) {
+void SyncPrefs::SetCachedTrustedVaultAutoUpgradeExperimentGroup(
+    const sync_pb::TrustedVaultAutoUpgradeExperimentGroup& group) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  // This is only called when kSyncRememberCustomPassphraseAfterSignout is
-  // disabled.
-  pref_service_->SetString(prefs::internal::kSyncEncryptionBootstrapToken,
-                           token);
+  pref_service_->SetString(
+      prefs::internal::kSyncCachedTrustedVaultAutoUpgradeExperimentGroup,
+      EncodeTrustedVaultAutoUpgradeExperimentGroupToString(group));
+}
+
+void SyncPrefs::ClearCachedTrustedVaultAutoUpgradeExperimentGroup() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  pref_service_->ClearPref(
+      prefs::internal::kSyncCachedTrustedVaultAutoUpgradeExperimentGroup);
 }
 
 void SyncPrefs::ClearAllEncryptionBootstrapTokens() {
@@ -611,8 +641,6 @@ void SyncPrefs::ClearAllEncryptionBootstrapTokens() {
 
 std::string SyncPrefs::GetEncryptionBootstrapTokenForAccount(
     const signin::GaiaIdHash& gaia_id_hash) const {
-  // This is only called when kSyncRememberCustomPassphraseAfterSignout is
-  // enabled.
   CHECK(gaia_id_hash.IsValid());
   const std::string* account_passphrase =
       pref_service_
@@ -624,8 +652,6 @@ std::string SyncPrefs::GetEncryptionBootstrapTokenForAccount(
 void SyncPrefs::SetEncryptionBootstrapTokenForAccount(
     const std::string& token,
     const signin::GaiaIdHash& gaia_id_hash) {
-  // This is only called when kSyncRememberCustomPassphraseAfterSignout is
-  // enabled.
   CHECK(gaia_id_hash.IsValid());
   {
     ScopedDictPrefUpdate update_account_passphrase_dict(
@@ -684,6 +710,10 @@ const char* SyncPrefs::GetPrefNameForType(UserSelectableType type) {
       return prefs::internal::kSyncPayments;
     case UserSelectableType::kCompare:
       return prefs::internal::kSyncCompare;
+    case UserSelectableType::kCookies:
+      return prefs::internal::kSyncCookies;
+
+    // Vivaldi
     case UserSelectableType::kNotes:
       return prefs::kSyncNotes;
   }
@@ -737,11 +767,6 @@ bool SyncPrefs::IsTypeSupportedInTransportMode(UserSelectableType type) {
       return base::FeatureList::IsEnabled(
           kEnablePasswordsAccountStorageForNonSyncingUsers);
     case UserSelectableType::kAutofill:
-      // Note that this logic may lead to kPayments being treated as supported
-      // (or even selected) while kAutofill isn't. This goes against the general
-      // practice that kPayments depends on kAutofill (when it comes to user
-      // choice).
-      // TODO(crbug.com/1435431): Update comment once the decoupling is removed.
       return base::FeatureList::IsEnabled(
           kSyncEnableContactInfoDataTypeInTransportMode);
     case UserSelectableType::kPayments:
@@ -763,8 +788,10 @@ bool SyncPrefs::IsTypeSupportedInTransportMode(UserSelectableType type) {
     case UserSelectableType::kExtensions:
     case UserSelectableType::kThemes:
     case UserSelectableType::kSavedTabGroups:
+    case UserSelectableType::kCookies:
       // These types are not supported in transport mode yet.
       return false;
+
     // Vivaldi
     case UserSelectableType::kNotes:
       return true;
@@ -993,15 +1020,6 @@ bool SyncPrefs::MaybeMigratePrefsForSyncToSigninPart2(
         update_selected_types_dict->EnsureDict(gaia_id_hash.ToBase64());
     account_settings->Set(GetPrefNameForType(UserSelectableType::kAutofill),
                           false);
-    if (!base::FeatureList::IsEnabled(
-            syncer::kSyncDecoupleAddressPaymentSettings)) {
-      // When the auto fill data type is updated, the payments should be updated
-      // too. Payments should not be enabled when auto fill data type disabled.
-      // TODO(crbug.com/1435431): This can be removed once kPayments is
-      // decoupled from kAutofill.
-      account_settings->Set(GetPrefNameForType(UserSelectableType::kPayments),
-                            false);
-    }
     return true;
   }
   return false;
@@ -1009,12 +1027,6 @@ bool SyncPrefs::MaybeMigratePrefsForSyncToSigninPart2(
 
 void SyncPrefs::MaybeMigrateCustomPassphrasePref(
     const signin::GaiaIdHash& gaia_id_hash) {
-  if (!base::FeatureList::IsEnabled(
-          kSyncRememberCustomPassphraseAfterSignout)) {
-    pref_service_->ClearPref(
-        kSyncEncryptionBootstrapTokenPerAccountMigrationDone);
-    return;
-  }
 
   if (pref_service_->GetBoolean(
           kSyncEncryptionBootstrapTokenPerAccountMigrationDone)) {
@@ -1042,8 +1054,6 @@ void SyncPrefs::MaybeMigrateCustomPassphrasePref(
     base::Value::Dict& all_accounts = update_account_passphrase_dict.Get();
     all_accounts.Set(gaia_id_hash.ToBase64(), token);
   }
-  CHECK(GetEncryptionBootstrapTokenForAccount(gaia_id_hash) ==
-        GetEncryptionBootstrapToken());
   return;
 }
 

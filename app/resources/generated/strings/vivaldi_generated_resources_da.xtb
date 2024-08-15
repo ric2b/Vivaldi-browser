@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">Ikke efter</translation>
 <translation id="2749881179542288782">Kontrollér grammatik med stavning</translation>
 <translation id="2785873697295365461">Filbeskrivelser</translation>
-<translation id="2809586584051668049">og <ph name="NUMBER_ADDITIONAL_DISABLED" /> mere</translation>
 <translation id="2825758591930162672">Emnets offentlige nøgle</translation>
 <translation id="2850541429955027218">Tilføj tema</translation>
 <translation id="2861941300086904918">Sikkerhedsadministrator for Native Client</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">Åbn som vindue</translation>
 <translation id="3280237271814976245">Gem &amp;som...</translation>
 <translation id="3285322247471302225">Ny &amp;fane</translation>
-<translation id="3288047731229977326">Udvidelser, der kører i udviklertilstand, kan skade din computer. Hvis du ikke er udvikler, skal du deaktivere udvidelserne, der kører i udviklertilstand, af hensyn til sikkerheden.</translation>
 <translation id="329838636886466101">Reparer</translation>
 <translation id="33022249435934718">GDI-håndtag</translation>
 <translation id="3303818374450886607">Kopier</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">Oprettede udvidelsen:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Deaktiver udvidelser, der kører i udviklertilstand</translation>
 <translation id="4100839878934973028">Et andet program på din computer tilføjede en app, der kan ændre den måde, hvorpå Vivaldi fungerer.</translation>
 <translation id="4104163789986725820">E&amp;ksporter...</translation>
 <translation id="4109898769411476438">Luk browser inden import</translation>
@@ -261,7 +258,6 @@
 <translation id="5269977353971873915">Udskrift mislykkedes</translation>
 <translation id="5284445933715251131">Fortsæt download</translation>
 <translation id="52912272896845572">Den private nøglefil er ugyldig.</translation>
-<translation id="5301954838959518834">OK, det er forstået</translation>
 <translation id="5302932258331363306">Vis erstatninger</translation>
 <translation id="5317780077021120954">Gem</translation>
 <translation id="5334142896108694079">Scriptcache</translation>

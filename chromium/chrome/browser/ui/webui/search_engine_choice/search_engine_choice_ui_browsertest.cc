@@ -52,8 +52,28 @@ class MockSearchEngineChoiceDialogService
             *search_engines::SearchEngineChoiceServiceFactory::GetForProfile(
                 profile),
             *TemplateURLServiceFactory::GetForProfile(profile)) {
-    ON_CALL(*this, GetSearchEngines).WillByDefault([]() {
-      std::vector<std::unique_ptr<TemplateURL>> choices;
+    ON_CALL(*this, GetSearchEngines).WillByDefault([&]() {
+      TemplateURL::TemplateURLVector choices;
+      for (auto& choice : GetSearchEnginesInternal()) {
+        choices.push_back(choice.get());
+      }
+      return choices;
+    });
+  }
+  ~MockSearchEngineChoiceDialogService() override = default;
+
+  static std::unique_ptr<KeyedService> Create(
+      content::BrowserContext* context) {
+    return std::make_unique<
+        testing::NiceMock<MockSearchEngineChoiceDialogService>>(
+        Profile::FromBrowserContext(context));
+  }
+
+  MOCK_METHOD(TemplateURL::TemplateURLVector, GetSearchEngines, (), (override));
+
+ private:
+  const TemplateURL::OwnedTemplateURLVector& GetSearchEnginesInternal() {
+    if (choices_.empty()) {
       auto choice = TemplateURLData();
 
       // Current design is built around having 8 items, but the max is defined
@@ -75,24 +95,14 @@ class MockSearchEngineChoiceDialogService
           // Uses the default generic favicon.
           choice.SetKeyword(TemplateURLPrepopulateData::incredibar.keyword);
         }
-        choices.push_back(std::make_unique<TemplateURL>(choice));
+        choices_.push_back(std::make_unique<TemplateURL>(choice));
       }
-      return choices;
-    });
-  }
-  ~MockSearchEngineChoiceDialogService() override = default;
+    }
 
-  static std::unique_ptr<KeyedService> Create(
-      content::BrowserContext* context) {
-    return std::make_unique<
-        testing::NiceMock<MockSearchEngineChoiceDialogService>>(
-        Profile::FromBrowserContext(context));
+    return choices_;
   }
 
-  MOCK_METHOD(std::vector<std::unique_ptr<TemplateURL>>,
-              GetSearchEngines,
-              (),
-              (override));
+  TemplateURL::OwnedTemplateURLVector choices_;
 };
 
 struct TestParam {
@@ -101,6 +111,7 @@ struct TestParam {
   bool use_right_to_left_language = false;
   bool select_first_search_engine = false;
   bool first_snippet_text_larger = false;
+  bool display_info_dialog = false;
   gfx::Size dialog_dimensions = gfx::Size(988, 900);
 };
 
@@ -126,6 +137,10 @@ const TestParam kTestParams[] = {
     {.test_suffix = "FirstEngineSelectedWithLargerSnippet",
      .select_first_search_engine = true,
      .first_snippet_text_larger = true},
+    {.test_suffix = "InfoDialog", .display_info_dialog = true},
+    {.test_suffix = "InfoDialogDarkTheme",
+     .use_dark_theme = true,
+     .display_info_dialog = true},
 #endif
     // We enable the test on platforms other than Windows with the smallest
     // height due to a small maximum window height set by the operating system.
@@ -165,7 +180,23 @@ const char kMakeFirstSnippetLargerJsString[] =
     "const marketingSnippet = "
     "app.shadowRoot.querySelectorAll('.marketing-snippet');"
     "marketingSnippet[0].textContent = "
-    "marketingSnippet[0].textContent.repeat(2);"
+    "marketingSnippet[0].textContent.repeat(3);"
+    "return true;"
+    "})();";
+
+const char kDisplayInfoDialogJsString[] =
+    "(() => {"
+    "const app = document.querySelector('search-engine-choice-app');"
+    "app.shadowRoot.querySelector('#infoLink').click();"
+    "return true;"
+    "})();";
+
+// We remove the hover property to prevent the test from being flaky.
+const char kRemoveHoverPropertyJsString[] =
+    "(() => {"
+    "const app = document.querySelector('search-engine-choice-app');"
+    "const radioButtons = app.shadowRoot.querySelectorAll('cr-radio-button');"
+    "radioButtons.forEach(button => button.classList.remove('hoverable'));"
     "return true;"
     "})();";
 }  // namespace
@@ -238,6 +269,8 @@ class SearchEngineChoiceUIPixelTest
     content::WebContents* web_contents = observer.web_contents();
     CHECK(web_contents);
 
+    EXPECT_EQ(true,
+              content::EvalJs(web_contents, kRemoveHoverPropertyJsString));
     if (GetParam().select_first_search_engine) {
       EXPECT_EQ(true, content::EvalJs(web_contents,
                                       kSelectFirstSearchEngineJsString));
@@ -247,6 +280,12 @@ class SearchEngineChoiceUIPixelTest
       EXPECT_EQ(true,
                 content::EvalJs(web_contents, kMakeFirstSnippetLargerJsString));
     }
+
+    if (GetParam().display_info_dialog) {
+      EXPECT_EQ(true,
+                content::EvalJs(web_contents, kDisplayInfoDialogJsString));
+    }
+
     observer.Wait();
   }
 
@@ -258,7 +297,13 @@ class SearchEngineChoiceUIPixelTest
   base::CallbackListSubscription create_services_subscription_;
 };
 
-IN_PROC_BROWSER_TEST_P(SearchEngineChoiceUIPixelTest, InvokeUi_default) {
+// TODO(crbug.com/335549659): Re-enable test.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_InvokeUi_default DISABLED_InvokeUi_default
+#else
+#define MAYBE_InvokeUi_default InvokeUi_default
+#endif
+IN_PROC_BROWSER_TEST_P(SearchEngineChoiceUIPixelTest, MAYBE_InvokeUi_default) {
   ShowAndVerifyUi();
 }
 

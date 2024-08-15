@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/script_streamer.h"
 
+#include <atomic>
 #include <memory>
 #include <utility>
 
@@ -12,6 +13,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/sequence_checker.h"
 #include "base/state_transitions.h"
 #include "base/synchronization/lock.h"
@@ -60,7 +62,6 @@
 #include "third_party/blink/renderer/platform/wtf/shared_buffer.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_encoding_registry.h"
-#include "third_party/libc++/src/include/__atomic/atomic.h"
 
 namespace blink {
 namespace {
@@ -134,7 +135,7 @@ class SourceStream : public v8::ScriptCompiler::ExternalSourceStream {
     // Start a new two-phase read, blocking until data is available.
     while (true) {
       const void* buffer;
-      uint32_t num_bytes;
+      size_t num_bytes;
       MojoResult result = data_pipe_->BeginReadData(&buffer, &num_bytes,
                                                     MOJO_READ_DATA_FLAG_NONE);
 
@@ -154,7 +155,8 @@ class SourceStream : public v8::ScriptCompiler::ExternalSourceStream {
           // either share ownership of the chunks, or only give chunks back to
           // the client once the streaming completes.
           Vector<char> copy_for_decoder;
-          copy_for_decoder.Append(static_cast<const char*>(buffer), num_bytes);
+          copy_for_decoder.Append(static_cast<const char*>(buffer),
+                                  base::checked_cast<wtf_size_t>(num_bytes));
           if (absl::holds_alternative<ScriptDecoder*>(script_decoder_)) {
             absl::get<ScriptDecoder*>(script_decoder_)
                 ->DidReceiveData(std::move(copy_for_decoder));
@@ -574,16 +576,6 @@ void ResourceScriptStreamer::RunScriptStreamingTask(
       "v8.parseOnBackground2");
 }
 
-bool ResourceScriptStreamer::HasEnoughDataForStreaming(
-    size_t resource_buffer_size) {
-  if (base::FeatureList::IsEnabled(features::kSmallScriptStreaming)) {
-    return resource_buffer_size >= kMaximumLengthOfBOM;
-  } else {
-    // Only stream larger scripts.
-    return resource_buffer_size >= kSmallScriptThreshold;
-  }
-}
-
 // Try to start a task streaming the script from the datapipe, with the task
 // taking ownership of the datapipe and weak ownership of the client. Returns
 // true if streaming succeeded and false otherwise.
@@ -591,7 +583,7 @@ bool ResourceScriptStreamer::HasEnoughDataForStreaming(
 // Streaming may fail to start because:
 //
 //   * The encoding is invalid (not UTF-8 or one-byte data)
-//   * The script is too small (see HasEnoughDataForStreaming)
+//   * The script is too small to check for a byte-order marker
 //   * There is a code cache for this script already
 //   * V8 failed to create a script streamer
 //
@@ -617,7 +609,7 @@ bool ResourceScriptStreamer::TryStartStreamingTask() {
   // wait until the next data chunk comes before deciding whether to start the
   // streaming.
   if (!script_resource_->ResourceBuffer() ||
-      !HasEnoughDataForStreaming(script_resource_->ResourceBuffer()->size())) {
+      script_resource_->ResourceBuffer()->size() < kMaximumLengthOfBOM) {
     CHECK(!IsLoaded());
     return false;
   }
@@ -641,13 +633,15 @@ bool ResourceScriptStreamer::TryStartStreamingTask() {
     // The encoding may change when we see the BOM. Check for BOM now
     // and update the encoding from the decoder when necessary. Suppress
     // streaming if the encoding is unsupported.
-    //
-    // Also note that have at least s_smallScriptThreshold worth of
-    // data, which is more than enough for detecting a BOM.
     if (!ConvertEncoding(decoder->Encoding().GetName(), &encoding_)) {
       SuppressStreaming(NotStreamingReason::kEncodingNotSupported);
       return false;
     }
+  }
+
+  if (script_resource_->CacheHandler()) {
+    // Exclude scripts for which we're not going to generate metadata.
+    V8CodeCache::RecordCacheGetStatistics(script_resource_->CacheHandler());
   }
 
   // Here we can't call Check on the cache handler because it requires the
@@ -818,8 +812,7 @@ void ResourceScriptStreamer::OnDataPipeReadable(
       // must be because we suppressed streaming earlier, or never got enough
       // data to start streaming.
       CHECK(IsStreamingSuppressed() || !script_resource_->ResourceBuffer() ||
-            !HasEnoughDataForStreaming(
-                script_resource_->ResourceBuffer()->size()));
+            script_resource_->ResourceBuffer()->size() < kMaximumLengthOfBOM);
       watcher_.reset();
       // Pass kScriptTooSmall for the !IsStreamingSuppressed() case, it won't
       // override an existing streaming reason.
@@ -842,7 +835,7 @@ void ResourceScriptStreamer::OnDataPipeReadable(
   CHECK(data_pipe_);
 
   const void* data;
-  uint32_t data_size;
+  size_t data_size;
   MojoReadDataFlags flags_to_pass = MOJO_READ_DATA_FLAG_NONE;
   MojoResult begin_read_result =
       data_pipe_->BeginReadData(&data, &data_size, flags_to_pass);
@@ -1130,6 +1123,8 @@ BuildCompileHintsForStreaming(
   scoped_refptr<CachedMetadata> metadata =
       big_buffer ? CachedMetadata::CreateFromSerializedData(*big_buffer)
                  : nullptr;
+
+  V8CodeCache::RecordCacheGetStatistics(metadata.get(), encoding);
   std::unique_ptr<v8_compile_hints::CompileHintsForStreaming> result =
       std::move(builder).Build(
           (metadata && V8CodeCache::HasHotCompileHints(*metadata, encoding))
@@ -1358,6 +1353,8 @@ bool BackgroundResourceScriptStreamer::BackgroundProcessor::
   }
   if (HasCodeCache(cached_metadata, encoding_.GetName())) {
     SuppressStreaming(NotStreamingReason::kHasCodeCacheBackground);
+    V8CodeCache::RecordCacheGetStatistics(
+        V8CodeCache::GetMetadataType::kCodeCache);
     return false;
   }
   compile_hints_ = BuildCompileHintsForStreaming(
@@ -1374,7 +1371,7 @@ bool BackgroundResourceScriptStreamer::BackgroundProcessor::
   watcher_->Watch(body_.get(), MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE,
                   MOJO_TRIGGER_CONDITION_SIGNALS_SATISFIED,
                   WTF::BindRepeating(&BackgroundProcessor::OnDataPipeReadable,
-                                     WTF::Unretained(this)));
+                                     scoped_refptr(this)));
   MojoResult ready_result;
   mojo::HandleSignalsState ready_state;
   MojoResult rv = watcher_->Arm(&ready_result, &ready_state);
@@ -1477,8 +1474,8 @@ bool BackgroundResourceScriptStreamer::BackgroundProcessor::
   }
   CHECK(state.readable());
   const void* data;
-  uint32_t data_size = 0;
-  constexpr uint32_t kMaximumLengthOfBOM = 4;
+  size_t data_size = 0;
+  constexpr size_t kMaximumLengthOfBOM = 4;
   MojoResult begin_read_result =
       body_->BeginReadData(&data, &data_size, MOJO_READ_DATA_FLAG_NONE);
   CHECK_EQ(begin_read_result, MOJO_RESULT_OK);
@@ -1605,6 +1602,7 @@ void BackgroundResourceScriptStreamer::BackgroundProcessor::
 void BackgroundResourceScriptStreamer::BackgroundProcessor::Cancel() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(background_sequence_checker_);
   SetState(BackgroundProcessorState::kCancelled);
+  watcher_.reset();
   client_ = nullptr;
   if (!background_task_runner_) {
     return;

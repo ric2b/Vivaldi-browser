@@ -5,14 +5,16 @@
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/wallpaper/sea_pen_image.h"
 #include "ash/wallpaper/sea_pen_wallpaper_manager.h"
+#include "ash/wallpaper/wallpaper_utils/sea_pen_metadata_utils.h"
 #include "ash/webui/common/mojom/sea_pen.mojom.h"
 #include "ash/webui/personalization_app/test/personalization_app_mojom_banned_mocha_test_base.h"
 #include "base/functional/callback_helpers.h"
+#include "base/test/gtest_tags.h"
 #include "base/test/test_future.h"
 #include "chrome/browser/ash/system_web_apps/apps/personalization_app/personalization_app_mocha_test_base.h"
 #include "chrome/browser/ash/system_web_apps/apps/personalization_app/personalization_app_utils.h"
-#include "chrome/browser/ash/wallpaper_handlers/sea_pen_utils.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/webui/feedback/feedback_dialog.h"
 #include "components/manta/features.h"
 #include "content/public/test/browser_test.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -44,7 +46,6 @@ IN_PROC_BROWSER_TEST_F(SeaPenControllerTest, All) {
 }
 
 // Tests the SeaPen UI.
-// TODO(b/329149811) Add screenplay id
 class PersonalizationAppSeaPenBrowserTest
     : public PersonalizationAppMochaTestBase {
  public:
@@ -65,6 +66,8 @@ class PersonalizationAppSeaPenBrowserTest
   ~PersonalizationAppSeaPenBrowserTest() override = default;
 
   void SetUpOnMainThread() override {
+    base::AddFeatureIdTagToTestResult(
+        "screenplay-1bacd0f6-45cb-4dbd-a5df-cde7dedae42d");
     PersonalizationAppMochaTestBase::SetUpOnMainThread();
 
     //  Creates a fake SeaPen image and saves it to disk.
@@ -82,13 +85,12 @@ class PersonalizationAppSeaPenBrowserTest
             mojom::SeaPenTemplateId::kFlower, options,
             mojom::SeaPenUserVisibleQuery::New("test template query",
                                                "test template title")));
-    ASSERT_TRUE(wallpaper_handlers::IsValidTemplateQuery(
-        search_query->get_template_query()));
-    base::test::TestFuture<const gfx::ImageSkia&> save_image_future;
-    sea_pen_wallpaper_manager->DecodeAndSaveSeaPenImage(
-        account_id, sea_pen_image, std::move(search_query),
-        save_image_future.GetCallback());
-    ASSERT_FALSE(save_image_future.Get().isNull());
+    ASSERT_TRUE(ash::IsValidTemplateQuery(search_query->get_template_query()));
+    base::test::TestFuture<bool> save_image_future;
+    sea_pen_wallpaper_manager->SaveSeaPenImage(account_id, sea_pen_image,
+                                               std::move(search_query),
+                                               save_image_future.GetCallback());
+    ASSERT_TRUE(save_image_future.Get());
   }
 
  private:
@@ -99,6 +101,18 @@ IN_PROC_BROWSER_TEST_F(PersonalizationAppSeaPenBrowserTest, SeaPen) {
   RunTestWithoutTestLoader(
       "chromeos/personalization_app/personalization_app_test.js",
       "runMochaSuite('sea pen')");
+}
+
+IN_PROC_BROWSER_TEST_F(PersonalizationAppSeaPenBrowserTest, Feedback) {
+  FeedbackDialog* feedback_dialog = FeedbackDialog::GetInstanceForTest();
+  // Test that no feedback dialog object has been created.
+  ASSERT_EQ(nullptr, feedback_dialog);
+  RunTestWithoutTestLoader(
+      "chromeos/personalization_app/personalization_app_test.js",
+      "runMochaSuite('sea pen feedback')");
+  feedback_dialog = FeedbackDialog::GetInstanceForTest();
+  // Test that a feedback dialog object has been created.
+  ASSERT_NE(nullptr, feedback_dialog);
 }
 
 }  // namespace ash::personalization_app

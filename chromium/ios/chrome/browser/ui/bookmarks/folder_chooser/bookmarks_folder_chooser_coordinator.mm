@@ -145,6 +145,7 @@ using vivaldi::IsVivaldiRunning;
 
   // Vivaldi
   currentBrowserState = browserState;
+  [VivaldiBookmarkPrefs setPrefService:browserState->GetPrefs()];
   // End Vivaldi
 
   LegacyBookmarkModel* localOrSyncableModel =
@@ -338,16 +339,14 @@ using vivaldi::IsVivaldiRunning;
 
 /// Sets the setting for show only speed dial folders.
 - (void)setShowOnlySpeedDialFolder:(bool)show {
-  [VivaldiBookmarkPrefs setFolderViewMode:show
-                           inPrefServices:currentBrowserState->GetPrefs()];
+  [VivaldiBookmarkPrefs setFolderViewMode:show];
 }
 /// Returns the setting from prefs to show only speed dial folders or all folders
 - (BOOL)showOnlySpeedDialFolders {
   if (!currentBrowserState)
     return NO;
 
-  return [VivaldiBookmarkPrefs
-            getFolderViewModeFromPrefService:currentBrowserState->GetPrefs()];
+  return [VivaldiBookmarkPrefs getFolderViewMode];
 }
 
 - (void)navigateToBookmarkFolderEditorWithParent:

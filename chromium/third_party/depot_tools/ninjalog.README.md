@@ -14,7 +14,7 @@ $ autoninja -C out/Release chrome
 autoninja uploads ninja's build log for Google employees but we don't collect
 logs from external contributors.
 
-We use `goma_auth info` to decide whether an autoninja user is a Googler or not.
+We use `cipd auth-info` to decide whether an autoninja user is a Googler or not.
 
 Before uploading logs, autoninja shows a message 10 times to warn users that we
 will collect build logs.

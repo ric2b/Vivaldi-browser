@@ -17,7 +17,7 @@ DEPS = [
   'git',
   'recipe_engine/buildbucket',
   'recipe_engine/context',
-  'recipe_engine/cq',
+  'recipe_engine/cv',
   'recipe_engine/json',
   'recipe_engine/path',
   'recipe_engine/properties',

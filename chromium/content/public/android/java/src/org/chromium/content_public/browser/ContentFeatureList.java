@@ -8,7 +8,7 @@ package org.chromium.content_public.browser;
 public class ContentFeatureList {
     private ContentFeatureList() {}
 
-    // TODO(crbug.com/1447098): Use generated constants in ContentFeatures and other generated
+    // TODO(crbug.com/40268884): Use generated constants in ContentFeatures and other generated
     // Features files, then remove the constants below.
 
     // Alphabetical:
@@ -23,8 +23,12 @@ public class ContentFeatureList {
             "AccessibilityPageZoomEnhancements";
 
     public static final String ACCESSIBILITY_UNIFIED_SNAPSHOTS = "AccessibilityUnifiedSnapshots";
+    public static final String ACCESSIBILITY_MANAGE_BROADCAST_RECEIVER_ON_BACKGROUND =
+            "AccessibilityManageBroadcastReceiverOnBackground";
 
     public static final String ANDROID_OPEN_PDF_INLINE = "AndroidOpenPdfInline";
+
+    public static final String HIDE_PASTE_POPUP_ON_GSB = "HidePastePopupOnGSB";
 
     public static final String MOUSE_AND_TRACKPAD_DROPDOWN_MENU = "MouseAndTrackpadDropdownMenu";
 

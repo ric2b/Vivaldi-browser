@@ -19,11 +19,13 @@ struct DawnTextureSpec {
             : fFormat(info.fFormat)
             , fViewFormat(info.fViewFormat)
             , fUsage(info.fUsage)
-            , fAspect(info.fAspect) {}
+            , fAspect(info.fAspect)
+            , fSlice(info.fSlice) {}
 
     bool operator==(const DawnTextureSpec& that) const {
         return fUsage == that.fUsage && fFormat == that.fFormat &&
-               fViewFormat == that.fViewFormat && fAspect == that.fAspect;
+               fViewFormat == that.fViewFormat && fAspect == that.fAspect &&
+               fSlice == that.fSlice;
     }
 
     bool isCompatible(const DawnTextureSpec& that) const {
@@ -37,13 +39,7 @@ struct DawnTextureSpec {
         return fViewFormat != wgpu::TextureFormat::Undefined ? fViewFormat : fFormat;
     }
 
-    SkString toString() const {
-        return SkStringPrintf("format=0x%08X, viewFroamt=0x%08X,usage=0x%08X,aspect=0x%08X",
-                              static_cast<unsigned int>(fFormat),
-                              static_cast<unsigned int>(fViewFormat),
-                              static_cast<unsigned int>(fUsage),
-                              static_cast<unsigned int>(fAspect));
-    }
+    SkString toString() const;
 
     wgpu::TextureFormat fFormat = wgpu::TextureFormat::Undefined;
     // `fViewFormat` is always single plane format or plane view format for a multiplanar
@@ -51,11 +47,14 @@ struct DawnTextureSpec {
     wgpu::TextureFormat fViewFormat = wgpu::TextureFormat::Undefined;
     wgpu::TextureUsage fUsage = wgpu::TextureUsage::None;
     wgpu::TextureAspect fAspect = wgpu::TextureAspect::All;
+    uint32_t fSlice = 0;
 };
 
 DawnTextureInfo DawnTextureSpecToTextureInfo(const DawnTextureSpec& dawnSpec,
                                              uint32_t sampleCount,
                                              Mipmapped mipmapped);
+
+DawnTextureInfo DawnTextureInfoFromWGPUTexture(WGPUTexture texture);
 
 } // namespace skgpu::graphite
 

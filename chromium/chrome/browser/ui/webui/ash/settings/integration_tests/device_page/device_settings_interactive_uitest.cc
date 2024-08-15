@@ -104,11 +104,13 @@ class DeviceSettingsInteractiveUiTest : public InteractiveAshTest {
     DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kOsSettingsWebContentsId);
     webcontents_id_ = kOsSettingsWebContentsId;
 
-    feature_list_.InitWithFeatures({features::kInputDeviceSettingsSplit,
-                                    features::kAltClickAndSixPackCustomization,
-                                    features::kPeripheralCustomization,
-                                    ::features::kSupportF11AndF12KeyShortcuts},
-                                   {});
+    feature_list_.InitWithFeatures(
+        {features::kInputDeviceSettingsSplit,
+         features::kAltClickAndSixPackCustomization,
+         features::kPeripheralCustomization,
+         features::kEnableKeyboardBacklightControlInSettings,
+         ::features::kSupportF11AndF12KeyShortcuts},
+        {});
   }
 
   DeviceSettingsInteractiveUiTest(const DeviceSettingsInteractiveUiTest&) =
@@ -210,7 +212,7 @@ class DeviceSettingsInteractiveUiTest : public InteractiveAshTest {
   auto SendKeyPressEvent(ui::KeyboardCode key, int modifier = ui::EF_NONE) {
     return Do([key, modifier]() {
       ui::test::EventGenerator(Shell::GetPrimaryRootWindow())
-          .PressKey(key, modifier, kDeviceId1);
+          .PressKeyAndModifierKeys(key, modifier, kDeviceId1);
     });
   }
 
@@ -240,7 +242,7 @@ class DeviceSettingsInteractiveUiTest : public InteractiveAshTest {
   auto SendKeyPressAndReleaseEvent(ui::KeyboardCode key, int modifier) {
     return Do([key, modifier]() {
       ui::test::EventGenerator(Shell::GetPrimaryRootWindow())
-          .PressAndReleaseKey(key, modifier, kDeviceId1);
+          .PressAndReleaseKeyAndModifierKeys(key, modifier, kDeviceId1);
     });
   }
 
@@ -643,8 +645,8 @@ IN_PROC_BROWSER_TEST_F(DeviceSettingsInteractiveUiTest,
       WaitForElementExists(webcontents_id_, kKeyCombinationSaveQuery),
       Log("Typing Key Combination"), Do([&]() {
         ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow());
-        generator.PressAndReleaseKey(ui::VKEY_C, ui::EF_COMMAND_DOWN,
-                                     kDeviceId1);
+        generator.PressAndReleaseKeyAndModifierKeys(
+            ui::VKEY_C, ui::EF_COMMAND_DOWN, kDeviceId1);
       }),
       Log("Clicking Save Button"),
       ClickElement(webcontents_id_, kKeyCombinationSaveQuery),
@@ -792,25 +794,15 @@ IN_PROC_BROWSER_TEST_F(DeviceSettingsInteractiveUiTest,
 
 IN_PROC_BROWSER_TEST_F(DeviceSettingsInteractiveUiTest, KeyboardFkeys) {
   const DeepQuery kF11DropdownQuery{
-      "os-settings-ui",
-      "os-settings-main",
-      "main-page-container",
-      "settings-device-page",
-      "#remap-keys",
-      "div.subsection > div:nth-child(5) > fkey-row:nth-child(7)",
-      "#keyDropdown",
-      "#dropdownMenu",
+      "os-settings-ui",       "os-settings-main", "main-page-container",
+      "settings-device-page", "#remap-keys",      "#f11",
+      "#keyDropdown",         "#dropdownMenu",
   };
 
   const DeepQuery kF12DropdownQuery{
-      "os-settings-ui",
-      "os-settings-main",
-      "main-page-container",
-      "settings-device-page",
-      "#remap-keys",
-      "div.subsection > div:nth-child(5) > fkey-row:nth-child(8)",
-      "#keyDropdown",
-      "#dropdownMenu",
+      "os-settings-ui",       "os-settings-main", "main-page-container",
+      "settings-device-page", "#remap-keys",      "#f12",
+      "#keyDropdown",         "#dropdownMenu",
   };
 
   DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kDevToolsId);

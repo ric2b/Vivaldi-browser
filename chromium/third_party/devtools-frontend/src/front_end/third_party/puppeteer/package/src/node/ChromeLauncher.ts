@@ -166,6 +166,9 @@ export class ChromeLauncher extends ProductLauncher {
       removeMatchingFlags(options.args, '--disable-features');
     }
 
+    const turnOnExperimentalFeaturesForTesting =
+      process.env['PUPPETEER_TEST_EXPERIMENTAL_CHROME_FEATURES'] === 'true';
+
     // Merge default disabled features with user-provided ones, if any.
     const disabledFeatures = [
       'Translate',
@@ -173,10 +176,19 @@ export class ChromeLauncher extends ProductLauncher {
       'AcceptCHFrame',
       'MediaRouter',
       'OptimizationHints',
-      // https://crbug.com/1492053
-      'ProcessPerSiteUpToMainFrameThreshold',
+
+      ...(turnOnExperimentalFeaturesForTesting
+        ? []
+        : [
+            // https://crbug.com/1492053
+            'ProcessPerSiteUpToMainFrameThreshold',
+            // https://github.com/puppeteer/puppeteer/issues/10715
+            'IsolateSandboxedIframes',
+          ]),
       ...userDisabledFeatures,
-    ];
+    ].filter(feature => {
+      return feature !== '';
+    });
 
     const userEnabledFeatures = getFeatures('--enable-features', options.args);
     if (options.args && userEnabledFeatures.length > 0) {
@@ -185,9 +197,12 @@ export class ChromeLauncher extends ProductLauncher {
 
     // Merge default enabled features with user-provided ones, if any.
     const enabledFeatures = [
-      'NetworkServiceInProcess2',
+      'PdfOopif',
+      // Add features to enable by default here.
       ...userEnabledFeatures,
-    ];
+    ].filter(feature => {
+      return feature !== '';
+    });
 
     const chromeArguments = [
       '--allow-pre-commit-input',
@@ -201,7 +216,6 @@ export class ChromeLauncher extends ProductLauncher {
       '--disable-default-apps',
       '--disable-dev-shm-usage',
       '--disable-extensions',
-      '--disable-field-trial-config', // https://source.chromium.org/chromium/chromium/src/+/main:testing/variations/README.md
       '--disable-hang-monitor',
       '--disable-infobars',
       '--disable-ipc-flooding-protection',
@@ -220,7 +234,9 @@ export class ChromeLauncher extends ProductLauncher {
       '--use-mock-keychain',
       `--disable-features=${disabledFeatures.join(',')}`,
       `--enable-features=${enabledFeatures.join(',')}`,
-    ];
+    ].filter(arg => {
+      return arg !== '';
+    });
     const {
       devtools = false,
       headless = !devtools,

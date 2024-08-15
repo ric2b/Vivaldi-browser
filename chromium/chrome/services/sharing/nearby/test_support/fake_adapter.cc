@@ -93,6 +93,8 @@ void FakeAdapter::GetInfo(GetInfoCallback callback) {
   mojom::AdapterInfoPtr adapter_info = mojom::AdapterInfo::New();
   adapter_info->address = address_;
   adapter_info->name = name_;
+  adapter_info->extended_advertisement_support =
+      extended_advertisement_support_;
   adapter_info->present = present_;
   adapter_info->powered = powered_;
   adapter_info->discoverable = discoverable_;
@@ -228,6 +230,7 @@ void FakeAdapter::CreateLocalGattService(
     mojo::PendingRemote<mojom::GattServiceObserver> observer,
     CreateLocalGattServiceCallback callback) {
   mojo::PendingRemote<mojom::GattService> pending_gatt_service;
+  fake_gatt_service_->SetObserver(std::move(observer));
   mojo::MakeSelfOwnedReceiver(
       std::move(fake_gatt_service_),
       pending_gatt_service.InitWithNewPipeAndPassReceiver());
@@ -236,6 +239,17 @@ void FakeAdapter::CreateLocalGattService(
   if (create_local_gatt_service_callback_) {
     std::move(create_local_gatt_service_callback_).Run();
   }
+}
+
+void FakeAdapter::SetShouldAdvertisementRegistrationSucceed(
+    bool should_advertisement_registration_succeed) {
+  should_advertisement_registration_succeed_ =
+      should_advertisement_registration_succeed;
+}
+
+void FakeAdapter::IsLeScatternetDualRoleSupported(
+    IsLeScatternetDualRoleSupportedCallback callback) {
+  std::move(callback).Run(is_dual_role_supported_);
 }
 
 void FakeAdapter::SetShouldDiscoverySucceed(bool should_discovery_succeed) {
@@ -255,6 +269,11 @@ void FakeAdapter::SetCreateLocalGattServiceCallback(
 void FakeAdapter::SetCreateLocalGattServiceResult(
     std::unique_ptr<FakeGattService> fake_gatt_service) {
   fake_gatt_service_ = std::move(fake_gatt_service);
+}
+
+void FakeAdapter::SetExtendedAdvertisementSupport(
+    bool extended_advertisement_support) {
+  extended_advertisement_support_ = extended_advertisement_support;
 }
 
 const std::vector<uint8_t>* FakeAdapter::GetRegisteredAdvertisementServiceData(

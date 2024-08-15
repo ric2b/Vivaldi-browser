@@ -20,7 +20,7 @@ To learn how to set up Linux on ChromeOS on supported Chromebooks, [click
 here](https://chromeos.dev/en/linux/setup).
 
 For in-depth technical documentation, [click
-here](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/containers_and_vms.md).
+here](/chromium-os/developer-library/guides/containers/containers-and-vms/).
 
 <table>
 <thead>

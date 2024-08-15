@@ -25,6 +25,7 @@
 #include "gn/args.h"
 #include "gn/build_settings.h"
 #include "gn/builder.h"
+#include "gn/bundle_data.h"
 #include "gn/commands.h"
 #include "gn/deps_iterator.h"
 #include "gn/filesystem_utils.h"
@@ -447,6 +448,63 @@ PBXAttributes ProjectAttributesFromBuildSettings(
   return attributes;
 }
 
+// Helper class used to collect the source files that will be added to
+// and PBXProject.
+class WorkspaceSources {
+ public:
+  WorkspaceSources(const BuildSettings* build_settings);
+  ~WorkspaceSources();
+
+  // Records `source` as part of the project. The source may be dropped if
+  // it should not be listed in the project (e.g. a generated file). Also
+  // for files in an assets catalog, only the catalog itself will be added.
+  void AddSourceFile(const SourceFile& source);
+
+  // Insert all the recorded source into `project`.
+  void AddToProject(PBXProject& project) const;
+
+ private:
+  const SourceDir build_dir_;
+  const std::string root_dir_;
+  SourceFileSet source_files_;
+};
+
+WorkspaceSources::WorkspaceSources(const BuildSettings* build_settings)
+    : build_dir_(build_settings->build_dir()),
+      root_dir_(build_settings->root_path_utf8()) {}
+
+WorkspaceSources::~WorkspaceSources() = default;
+
+void WorkspaceSources::AddSourceFile(const SourceFile& source) {
+  if (IsStringInOutputDir(build_dir_, source.value())) {
+    return;
+  }
+
+  if (IsPathAbsolute(source.value())) {
+    return;
+  }
+
+  SourceFile assets_catalog_dir = BundleData::GetAssetsCatalogDirectory(source);
+  if (!assets_catalog_dir.is_null()) {
+    source_files_.insert(assets_catalog_dir);
+  } else {
+    source_files_.insert(source);
+  }
+}
+
+void WorkspaceSources::AddToProject(PBXProject& project) const {
+  // Sort the files to ensure a deterministic generation of the project file.
+  std::vector<SourceFile> sources(source_files_.begin(), source_files_.end());
+  std::sort(sources.begin(), sources.end());
+
+  const SourceDir source_dir("//");
+  for (const SourceFile& source : sources) {
+    const std::string source_path =
+        RebasePath(source.value(), source_dir, root_dir_);
+    project.AddSourceFileToIndexingTarget(source_path, source_path);
+  }
+}
+
 }  // namespace
 
 // Class representing the workspace embedded in an xcodeproj file used to
@@ -634,34 +692,30 @@ bool XcodeProject::ShouldIncludeFileInProject(const SourceFile& source) const {
 }
 
 bool XcodeProject::AddSourcesFromBuilder(const Builder& builder, Err* err) {
-  SourceFileSet sources;
+  WorkspaceSources sources(build_settings_);
 
   // Add sources from all targets.
   for (const Target* target : builder.GetAllResolvedTargets()) {
     for (const SourceFile& source : target->sources()) {
-      if (ShouldIncludeFileInProject(source))
-        sources.insert(source);
+      sources.AddSourceFile(source);
     }
 
     for (const SourceFile& source : target->config_values().inputs()) {
-      if (ShouldIncludeFileInProject(source))
-        sources.insert(source);
+      sources.AddSourceFile(source);
     }
 
     for (const SourceFile& source : target->public_headers()) {
-      if (ShouldIncludeFileInProject(source))
-        sources.insert(source);
+      sources.AddSourceFile(source);
     }
 
     const SourceFile& bridge_header = target->swift_values().bridge_header();
-    if (!bridge_header.is_null() && ShouldIncludeFileInProject(bridge_header)) {
-      sources.insert(bridge_header);
+    if (!bridge_header.is_null()) {
+      sources.AddSourceFile(bridge_header);
     }
 
     if (target->output_type() == Target::ACTION ||
         target->output_type() == Target::ACTION_FOREACH) {
-      if (ShouldIncludeFileInProject(target->action_values().script()))
-        sources.insert(target->action_values().script());
+      sources.AddSourceFile(target->action_values().script());
     }
   }
 
@@ -671,13 +725,11 @@ bool XcodeProject::AddSourcesFromBuilder(const Builder& builder, Err* err) {
       continue;
 
     const SourceFile build = builder.loader()->BuildFileForLabel(item->label());
-    if (ShouldIncludeFileInProject(build))
-      sources.insert(build);
+    sources.AddSourceFile(build);
 
     for (const SourceFile& source :
          item->settings()->import_manager().GetImportedFiles()) {
-      if (ShouldIncludeFileInProject(source))
-        sources.insert(source);
+      sources.AddSourceFile(source);
     }
   }
 
@@ -687,8 +739,7 @@ bool XcodeProject::AddSourcesFromBuilder(const Builder& builder, Err* err) {
       continue;
 
     const SourceFile source = FilePathToSourceFile(build_settings_, path);
-    if (ShouldIncludeFileInProject(source))
-      sources.insert(source);
+    sources.AddSourceFile(source);
   }
 
   // Add any files from --xcode-additional-files-patterns, using the root
@@ -707,25 +758,13 @@ bool XcodeProject::AddSourcesFromBuilder(const Builder& builder, Err* err) {
 
         for (base::FilePath path = it.Next(); !path.empty(); path = it.Next()) {
           const SourceFile source = FilePathToSourceFile(build_settings_, path);
-          if (ShouldIncludeFileInProject(source))
-            sources.insert(source);
+          sources.AddSourceFile(source);
         }
       }
     }
   }
 
-  // Sort files to ensure deterministic generation of the project file (and
-  // nicely sorted file list in Xcode).
-  std::vector<SourceFile> sorted_sources(sources.begin(), sources.end());
-  std::sort(sorted_sources.begin(), sorted_sources.end());
-
-  const SourceDir source_dir("//");
-  for (const SourceFile& source : sorted_sources) {
-    const std::string source_file = RebasePath(
-        source.value(), source_dir, build_settings_->root_path_utf8());
-    project_.AddSourceFileToIndexingTarget(source_file, source_file);
-  }
-
+  sources.AddToProject(project_);
   return true;
 }
 

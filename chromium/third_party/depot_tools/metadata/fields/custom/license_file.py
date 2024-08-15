@@ -6,7 +6,7 @@
 import os
 import re
 import sys
-from typing import Union
+from typing import Optional
 
 _THIS_DIR = os.path.abspath(os.path.dirname(__file__))
 # The repo's root directory.
@@ -26,12 +26,12 @@ _PATTERN_PATH_BACKWARD = re.compile(r"\.\.\/")
 _NOT_SHIPPED = "NOT_SHIPPED"
 
 
-class LicenseFileField(field_types.MetadataField):
+class LicenseFileField(field_types.SingleLineTextField):
     """Custom field for the paths to the package's license file(s)."""
     def __init__(self):
-        super().__init__(name="License File", one_liner=True)
+        super().__init__(name="License File")
 
-    def validate(self, value: str) -> Union[vr.ValidationResult, None]:
+    def validate(self, value: str) -> Optional[vr.ValidationResult]:
         """Checks the given value consists of non-empty paths with no
         backward directory navigation (i.e. no "../").
 
@@ -72,7 +72,7 @@ class LicenseFileField(field_types.MetadataField):
         value: str,
         source_file_dir: str,
         repo_root_dir: str,
-    ) -> Union[vr.ValidationResult, None]:
+    ) -> Optional[vr.ValidationResult]:
         """Checks the given value consists of file paths which exist on
         disk.
 

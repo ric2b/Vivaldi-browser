@@ -21,7 +21,7 @@ namespace openscreen::cast {
 // SDLVideoPlayer cannot be built.
 class DummyPlayer final : public Receiver::Consumer {
  public:
-  explicit DummyPlayer(Receiver* receiver);
+  explicit DummyPlayer(Receiver& receiver);
 
   ~DummyPlayer() final;
 
@@ -29,7 +29,7 @@ class DummyPlayer final : public Receiver::Consumer {
   // Receiver::Consumer implementation.
   void OnFramesReady(int next_frame_buffer_size) final;
 
-  Receiver* const receiver_;
+  Receiver& receiver_;
   std::vector<uint8_t> buffer_;
 };
 

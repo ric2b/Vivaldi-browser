@@ -1,14 +1,10 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/getting-started
-  - Chromium OS > Developer Library > Getting Started
+  - ChromiumOS > Getting Started
 page_name: hardware-requirements
 title: Hardware Requirements
 ---
-
-> 🚧 The library is currently under construction. See
-> [the CrOS Developer Library Proposal](/chromium-os/developer-library/proposal)
-> for more information.
 
 Developing an operating system requires a hardware-rich environment. The
 ChromiumOS development infrastructure supports a range of configurations from
@@ -33,7 +29,7 @@ build workstation over Ethernet. Deploying builds from the workstation to the
 DUT often involves transferring files that can be several hundred megabytes to
 gigabytes in size. This configuration requires the following:
 * An Ethernet cable.
-* A USB-to-Ethernet adapater if the DUT does not have an Ethernet port.
+* A USB-to-Ethernet adapter if the DUT does not have an Ethernet port.
 
 ### Workstation
 
@@ -42,8 +38,8 @@ distributed compilation system, building and testing the platform is resource
 intensive and benefits from a powerful machine. The following workstation specs
 are recommended:
 * Multi-core x86-64 CPU
-* 128 GB RAM
-* 1 TB SSD NVMe (Solid State Drive Non-Volatile Memory Express)
+* 32 GB RAM
+* 200 GB free disk space (NVMe SSD recommended)
 
 > Googlers: Please visit <a
 > href="https://go.corp.google.com/cros-hardware-acquisition"

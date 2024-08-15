@@ -13,8 +13,8 @@
 #include "libANGLE/formatutils.h"
 #include "libANGLE/renderer/load_functions_table.h"
 #include "libANGLE/renderer/vulkan/ContextVk.h"
-#include "libANGLE/renderer/vulkan/RendererVk.h"
 #include "libANGLE/renderer/vulkan/vk_caps_utils.h"
+#include "libANGLE/renderer/vulkan/vk_renderer.h"
 
 namespace rx
 {
@@ -311,7 +311,7 @@ angle::FormatID ExternalFormatTable::getOrAllocExternalFormatID(uint64_t externa
                                                                 VkFormat colorAttachmentFormat,
                                                                 VkFormatFeatureFlags formatFeatures)
 {
-    std::unique_lock<std::mutex> lock(mExternalYuvFormatMutex);
+    std::unique_lock<angle::SimpleMutex> lock(mExternalYuvFormatMutex);
     for (size_t index = 0; index < mExternalYuvFormats.size(); index++)
     {
         if (mExternalYuvFormats[index].externalFormat == externalFormat)

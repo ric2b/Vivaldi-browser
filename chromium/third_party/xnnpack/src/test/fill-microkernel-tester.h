@@ -5,52 +5,54 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
+#include <xnnpack/microfnptr.h>
 
-#include <array>
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <iomanip>
 #include <ios>
+#include <limits>
 #include <random>
 #include <vector>
 
-#include <xnnpack.h>
-#include <xnnpack/microfnptr.h>
-
+#include "replicable_random_device.h"
+#include <gtest/gtest.h>
 
 class FillMicrokernelTester {
  public:
-  inline FillMicrokernelTester& rows(size_t rows) {
+  FillMicrokernelTester& rows(size_t rows) {
     assert(rows != 0);
     this->rows_ = rows;
     return *this;
   }
 
-  inline size_t rows() const {
+  size_t rows() const {
     return this->rows_;
   }
 
-  inline FillMicrokernelTester& channels(size_t channels) {
+  FillMicrokernelTester& channels(size_t channels) {
     assert(channels != 0);
     this->channels_ = channels;
     return *this;
   }
 
-  inline size_t channels() const {
+  size_t channels() const {
     return this->channels_;
   }
 
-  inline FillMicrokernelTester& output_stride(size_t output_stride) {
+  FillMicrokernelTester& output_stride(size_t output_stride) {
     assert(output_stride != 0);
     this->output_stride_ = output_stride;
     return *this;
   }
 
-  inline size_t output_stride() const {
+  size_t output_stride() const {
     if (this->output_stride_ == 0) {
       return channels();
     } else {
@@ -58,21 +60,23 @@ class FillMicrokernelTester {
     }
   }
 
-  inline FillMicrokernelTester& iterations(size_t iterations) {
+  FillMicrokernelTester& iterations(size_t iterations) {
     this->iterations_ = iterations;
     return *this;
   }
 
-  inline size_t iterations() const {
+  size_t iterations() const {
     return this->iterations_;
   }
 
   void Test(xnn_fill_ukernel_fn fill) const {
     ASSERT_GE(output_stride(), channels());
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
-    auto u8rng = std::bind(std::uniform_int_distribution<uint32_t>(0, std::numeric_limits<uint8_t>::max()), rng);
+    xnnpack::ReplicableRandomDevice rng;
+    auto u8rng = [&rng]() {
+      return std::uniform_int_distribution<uint32_t>(
+          0, std::numeric_limits<uint8_t>::max())(rng);
+    };
 
     std::vector<uint8_t> output((rows() - 1) * output_stride() + channels());
     std::vector<uint8_t> output_copy(output.size());

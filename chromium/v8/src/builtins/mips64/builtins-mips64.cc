@@ -548,8 +548,16 @@ void Generate_JSEntryVariant(MacroAssembler* masm, StackFrame::Type type,
   // JS frames on top.
   __ Sd(zero_reg, MemOperand(s5));
 
+  __ li(s1, ExternalReference::fast_c_call_caller_fp_address(masm->isolate()));
+  __ Ld(s2, MemOperand(s1, 0));
+  __ Sd(zero_reg, MemOperand(s1, 0));
+  __ li(s1, ExternalReference::fast_c_call_caller_pc_address(masm->isolate()));
+  __ Ld(s3, MemOperand(s1, 0));
+  __ Sd(zero_reg, MemOperand(s1, 0));
+  __ Push(s2, s3);
+
   // Set up frame pointer for the frame to be pushed.
-  __ daddiu(fp, sp, -EntryFrameConstants::kNextExitFrameFPOffset);
+  __ daddiu(fp, sp, -EntryFrameConstants::kNextFastCallFramePCOffset);
 
   // Registers:
   //  either
@@ -562,13 +570,13 @@ void Generate_JSEntryVariant(MacroAssembler* masm, StackFrame::Type type,
   //   a1: microtask_queue
   //
   // Stack:
-  // caller fp          |
+  // fast api call pc   |
+  // fast api call fp   |
+  // C entry FP         |
   // function slot      | entry frame
   // context slot       |
   // bad fp (0xFF...F)  |
   // callee saved registers + ra
-  // [ O32: 4 args slots]
-  // args
 
   // If this is the outermost JS call, set js_entry_sp value.
   Label non_outermost_js;
@@ -630,10 +638,14 @@ void Generate_JSEntryVariant(MacroAssembler* masm, StackFrame::Type type,
   // Stack:
   // handler frame
   // entry frame
+  // fast api call pc
+  // fast api call fp
+  // C entry FP
+  // function slot
+  // context slot
+  // bad fp (0xFF...F)
   // callee saved registers + ra
-  // [ O32: 4 args slots]
-  // args
-  //
+
   // Invoke the function by calling through JS entry trampoline builtin and
   // pop the faked function when we return.
   __ CallBuiltin(entry_trampoline);
@@ -652,6 +664,12 @@ void Generate_JSEntryVariant(MacroAssembler* masm, StackFrame::Type type,
   __ bind(&non_outermost_js_2);
 
   // Restore the top frame descriptors from the stack.
+  __ Pop(a4, a5);
+  __ li(a6, ExternalReference::fast_c_call_caller_fp_address(masm->isolate()));
+  __ Sd(a4, MemOperand(a6, 0));
+  __ li(a6, ExternalReference::fast_c_call_caller_pc_address(masm->isolate()));
+  __ Sd(a5, MemOperand(a6, 0));
+
   __ pop(a5);
   __ li(a4, ExternalReference::Create(IsolateAddressId::kCEntryFPAddress,
                                       masm->isolate()));
@@ -2970,6 +2988,27 @@ void Builtins::Generate_WasmOnStackReplace(MacroAssembler* masm) {
 
 void Builtins::Generate_JSToWasmWrapperAsm(MacroAssembler* masm) { __ Trap(); }
 
+void Builtins::Generate_WasmToOnHeapWasmToJsTrampoline(MacroAssembler* masm) {
+  // Load the code pointer from the WasmApiFunctionRef and tail-call there.
+  Register api_function_ref = wasm::kGpParamRegisters[0];
+  // Use t0 which is not in kGpParamRegisters.
+  Register call_target = t0;
+  UseScratchRegisterScope temps{masm};
+  temps.Exclude(call_target);
+#ifdef V8_ENABLE_SANDBOX
+  __ LoadCodeEntrypointViaCodePointer(
+      call_target,
+      FieldMemOperand(api_function_ref, WasmApiFunctionRef::kCodeOffset),
+      kWasmEntrypointTag);
+#else
+  Register code = call_target;
+  __ Ld(code,
+        FieldMemOperand(api_function_ref, WasmApiFunctionRef::kCodeOffset));
+  __ Ld(call_target, FieldMemOperand(code, Code::kInstructionStartOffset));
+#endif
+  __ Jump(call_target);
+}
+
 #endif  // V8_ENABLE_WEBASSEMBLY
 
 void Builtins::Generate_CEntry(MacroAssembler* masm, int result_size,
@@ -3075,7 +3114,7 @@ void Builtins::Generate_CEntry(MacroAssembler* masm, int result_size,
     __ mov(a0, zero_reg);
     __ mov(a1, zero_reg);
     __ li(a2, ExternalReference::isolate_address(masm->isolate()));
-    __ CallCFunction(find_handler, 3);
+    __ CallCFunction(find_handler, 3, SetIsolateDataSlots::kNo);
   }
 
   // Retrieve the handler context, SP and FP.

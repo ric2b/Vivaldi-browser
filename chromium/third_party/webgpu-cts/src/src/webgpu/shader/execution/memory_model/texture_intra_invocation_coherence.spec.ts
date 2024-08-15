@@ -39,7 +39,7 @@ fn indexToCoord(idx : u32) -> vec2u {
     case '3d': {
       return `
 fn indexToCoord(idx : u32) -> vec3u {
-  return vec3u(idx % (wgx * num_wgs_x), idx / (wgx * num_wgs_x), 1);
+  return vec3u(idx % (wgx * num_wgs_x), idx / (wgx * num_wgs_x), 0);
 }`;
     }
     default: {

@@ -90,7 +90,7 @@ class SenderSession final {
     //   trying to get capabilities.
     // * kRemotingNotSupported: the receiver does not support remoting, or
     //   uses a version that is too new for us.
-    virtual void OnError(const SenderSession* session, Error error) = 0;
+    virtual void OnError(const SenderSession* session, const Error& error) = 0;
 
    protected:
     virtual ~Client();
@@ -104,7 +104,7 @@ class SenderSession final {
     IPAddress remote_address;
 
     // The client for notifying of successful negotiations and errors. Required.
-    Client* const client;
+    Client& client;
 
     // The cast environment used to access operating system resources, such
     // as the UDP socket for RTP/RTCP messaging. Required.

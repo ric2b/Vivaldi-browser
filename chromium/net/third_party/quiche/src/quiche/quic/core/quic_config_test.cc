@@ -120,7 +120,7 @@ TEST_P(QuicConfigTest, ProcessClientHello) {
     return;
   }
   const uint32_t kTestMaxAckDelayMs =
-      static_cast<uint32_t>(kDefaultDelayedAckTimeMs + 1);
+      static_cast<uint32_t>(GetDefaultDelayedAckTimeMs() + 1);
   QuicConfig client_config;
   QuicTagVector cgst;
   cgst.push_back(kQBIC);
@@ -187,7 +187,7 @@ TEST_P(QuicConfigTest, ProcessServerHello) {
       0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57,
       0x58, 0x59, 0x5a, 0x5b, 0x5c, 0x5d, 0x5e, 0x5f};
   const uint32_t kTestMaxAckDelayMs =
-      static_cast<uint32_t>(kDefaultDelayedAckTimeMs + 1);
+      static_cast<uint32_t>(GetDefaultDelayedAckTimeMs() + 1);
   QuicConfig server_config;
   QuicTagVector cgst;
   cgst.push_back(kQBIC);
@@ -535,6 +535,37 @@ TEST_P(QuicConfigTest, FillTransportParams) {
                 &params.preferred_address->stateless_reset_token.front()),
             new_stateless_reset_token);
   EXPECT_EQ(kFakeGoogleHandshakeMessage, params.google_handshake_message);
+}
+
+TEST_P(QuicConfigTest, DNATPreferredAddress) {
+  QuicIpAddress host_v4;
+  host_v4.FromString("127.0.3.1");
+  QuicSocketAddress server_address_v4 = QuicSocketAddress(host_v4, 1234);
+  QuicSocketAddress expected_server_address_v4 =
+      QuicSocketAddress(host_v4, 1235);
+
+  QuicIpAddress host_v6;
+  host_v6.FromString("2001:db8:0::1");
+  QuicSocketAddress server_address_v6 = QuicSocketAddress(host_v6, 1234);
+  QuicSocketAddress expected_server_address_v6 =
+      QuicSocketAddress(host_v6, 1235);
+
+  config_.SetIPv4AlternateServerAddressForDNat(server_address_v4,
+                                               expected_server_address_v4);
+  config_.SetIPv6AlternateServerAddressForDNat(server_address_v6,
+                                               expected_server_address_v6);
+
+  EXPECT_EQ(server_address_v4,
+            config_.GetPreferredAddressToSend(quiche::IpAddressFamily::IP_V4));
+  EXPECT_EQ(server_address_v6,
+            config_.GetPreferredAddressToSend(quiche::IpAddressFamily::IP_V6));
+
+  EXPECT_EQ(expected_server_address_v4,
+            config_.GetMappedAlternativeServerAddress(
+                quiche::IpAddressFamily::IP_V4));
+  EXPECT_EQ(expected_server_address_v6,
+            config_.GetMappedAlternativeServerAddress(
+                quiche::IpAddressFamily::IP_V6));
 }
 
 TEST_P(QuicConfigTest, FillTransportParamsNoV4PreferredAddress) {

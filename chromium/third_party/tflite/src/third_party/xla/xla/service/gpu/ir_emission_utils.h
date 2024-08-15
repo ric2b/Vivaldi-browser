@@ -54,9 +54,6 @@ inline constexpr int64_t kMinDimensionToTransposeTiled2 = 8;
 inline constexpr int64_t kMinTotalDimensionsToTransposeTiled = 64 * 128;
 
 // Matrix multiplication before the rewrite.
-//
-// These functions should never return "true" on instructions after
-// GemmRewriter pass has finished.
 bool IsMatrixMultiplication(const HloInstruction& dot);
 bool IsMatrixVectorMultiplication(const HloInstruction& dot);
 
@@ -104,6 +101,9 @@ bool IsSliceWithUnitStrides(const HloInstruction* instr);
 // slice.
 bool IsContiguousSlice(const HloInstruction& instr);
 
+// Returns true if `sliced` is a contiguous slice of `orig`.
+bool IsContiguousSlice(const Shape& orig, const Shape& sliced);
+
 // Emits code to shuffle data between threads of a warp. This has the same
 // semantics as the PTX "shfl.sync.down" instruction but works for values that
 // aren't 32 bits in size. The last operand of the emitted "shfl" is
@@ -137,7 +137,7 @@ absl::StatusOr<BufferAllocation::Slice> GetAllocationSlice(
 absl::StatusOr<bool> CanEmitFusedDynamicUpdateSliceInPlaceForGpu(
     const HloFusionInstruction* fusion,
     const BufferAssignment* buffer_assignment,
-    const std::vector<const HloInstruction*>& roots);
+    absl::Span<HloInstructionAdaptor const> roots);
 
 // Returns the dynamic-update-slice instructions defining the results of a
 // fusion node. A dynamic slice update is said to be "defining" of a result if
@@ -145,20 +145,16 @@ absl::StatusOr<bool> CanEmitFusedDynamicUpdateSliceInPlaceForGpu(
 // output of a bitcast of a dynamic slice update---since such bitcast may be
 // handled as a no-op.
 std::vector<const HloInstruction*> GetOutputDefiningDynamicUpdateSlices(
-    const std::vector<const HloInstruction*>& roots);
+    absl::Span<HloInstructionAdaptor const> roots);
 
 Shape GetShape(mlir::Value value);
 
-// `is_boundary` returns `true` for edges that are on the boundary of the
-// fusion, i.e., they go from an instruction inside the fusion to one outside,
-// or vice versa.
-// Note: when this is called with a fusion instruction, it will traverse into
-// the fusion (unless the boundary function stops it).
-const HloInstruction& FindNonTrivialHero(const HloInstruction& instr,
-                                         const HloFusionAdaptor& fusion);
+// Returns the first hero instruction reachable from `instr` as root. Hero
+// instruction can be in a different computation if the parent HloFusionAdaptor
+// is a producer-consumer fusion.
+HloInstructionAdaptor FindNonTrivialHero(const HloInstructionAdaptor& instr);
 
-// Like above, but assumes the instruction is inside an HloFusionInstruction.
-// Returns the instruction itself if it is an HloFusionInstruction.
+// Same as above, but fusion is the parent computation of the hlo instruction.
 const HloInstruction& FindNonTrivialHero(const HloInstruction& instr);
 
 /// Description of how to emit a given transposition.

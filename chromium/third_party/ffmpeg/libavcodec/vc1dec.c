@@ -33,10 +33,10 @@
 #include "codec_internal.h"
 #include "decode.h"
 #include "get_bits.h"
-#include "h263dec.h"
 #include "hwaccel_internal.h"
 #include "hwconfig.h"
 #include "mpeg_er.h"
+#include "mpegutils.h"
 #include "mpegvideo.h"
 #include "mpegvideodec.h"
 #include "msmpeg4_vc1_data.h"
@@ -48,6 +48,7 @@
 #include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/mem.h"
 #include "libavutil/thread.h"
 
 

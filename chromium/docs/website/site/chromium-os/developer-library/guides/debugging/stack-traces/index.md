@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: stack-traces
 title: How to get a stack trace at runtime
 ---
@@ -18,7 +18,7 @@ document describes how to do so.
 |---------------|-------------------------------------------------------|
 |  (shell)      | outside the chroot and SDK shell on your workstation  |
 |  (sdk)        | inside the `chrome-sdk` SDK shell on your workstation |
-|  (device)     | in your [VM](./cros_vm.md) or ChromeOS device        |
+|  (device)     | in your [VM] or ChromeOS device                       |
 |  (cros)       | inside the `cros_sdk` ChromeOS chroot                |
 
 ## Chromium
@@ -64,7 +64,7 @@ different, and re-running `cros chrome-sdk` will overwrite these.
 
 Then append `exclude_unwind_tables=false`.
 
-[add them via]: simple_chrome_workflow.md#cros-chrome_sdk-options
+[add them via]: /chromium-os/developer-library/guides/development/simple-chrome-workflow/#cros-chrome_sdk-options
 [compiler.gni]: https://source.chromium.org/chromium/chromium/src/+/main:build/config/compiler/compiler.gni
 
 #### Deploying Chrome
@@ -322,4 +322,5 @@ Under the hood, `tast symbolize` runs minidump_stackwalk twice.
 [ChromiumOS Crash Reporting]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/crash-reporter/docs/design.md
 [Crashpad]: https://chromium.googlesource.com/crashpad/crashpad
 [Breakpad]: https://chromium.googlesource.com/breakpad/breakpad
-[prebuilt binaries]: ./simple_chrome_workflow.md#Googlers_Prebuilt-minidump_stackwalk-and-other-Breakpad-tools
+[prebuilt binaries]: /chromium-os/developer-library/guides/development/simple-chrome-workflow/#Googlers_Prebuilt-minidump_stackwalk-and-other-Breakpad-tools
+[VM]: /chromium-os/developer-library/guides/containers/cros-vm/

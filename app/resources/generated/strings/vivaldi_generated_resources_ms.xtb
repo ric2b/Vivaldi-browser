@@ -21,7 +21,6 @@
 <translation id="2470702053775288986">Pelanjutan yang tidak disokong dilumpuhkan</translation>
 <translation id="2662876636500006917">Kedai Web Vivaldi</translation>
 <translation id="2678063897982469759">Dayakan semula</translation>
-<translation id="2809586584051668049">dan <ph name="NUMBER_ADDITIONAL_DISABLED" /> lagi</translation>
 <translation id="2850541429955027218">Tambahkan tema</translation>
 <translation id="2861941300086904918">Pengurus keselamatan Klien Asli</translation>
 <translation id="2932883381142163287">Laporkan penyalahgunaan</translation>
@@ -30,7 +29,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3222066309010235055">Prapaparan: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Pilih direktori akar bagi sambungan untuk pek. Untuk mengemas kini sambungan, pilih kunci persendirian untuk gunakan semula juga.</translation>
-<translation id="3288047731229977326">Sambungan yang dijalankan dalam mod pembangun boleh membahayakan komputer anda. Jika anda bukan pembangun, anda harus melumpuhkan sambungan yang dijalankan dalam mod pembangun ini supaya kekal selamat.</translation>
 <translation id="3378572629723696641">Sambungan ini mungkin telah tercemar.</translation>
 <translation id="3678156199662914018">Sambungan: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">Baiki apl</translation>
@@ -41,7 +39,6 @@
 <translation id="4087089424473531098">Mencipta sambungan:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Lumpuhkan sambungan mod pembangun</translation>
 <translation id="4100839878934973028">Program lain pada komputer anda menambah apl yang boleh mengubah cara Vivaldi berfungsi.</translation>
 <translation id="4176463684765177261">Dilumpuhkan</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K langsung)</translation>
@@ -54,7 +51,6 @@
 <translation id="5143374789336132547">Sambungan "<ph name="EXTENSION_NAME" />" telah menukar halaman yang ditunjukkan apabila anda mengklik butang Laman Utama.</translation>
 <translation id="5233231016133573565">ID Proses</translation>
 <translation id="52912272896845572">Fail penting persendirian adalah tidak sah.</translation>
-<translation id="5301954838959518834">OK, faham</translation>
 <translation id="5362741141255528695">Pilih fail kunci persendirian.</translation>
 <translation id="5485102783864353244">Tambah apl</translation>
 <translation id="5521078259930077036">Adakah ini halaman utama yang anda jangkakan?</translation>

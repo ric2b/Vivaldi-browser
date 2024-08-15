@@ -28,6 +28,7 @@
 
 #include "libavutil/internal.h"
 #include "libavutil/common.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/pixfmt.h"
@@ -354,8 +355,8 @@ static av_cold int libxeve_init(AVCodecContext *avctx)
     }
 
     {
-        AVDictionaryEntry *en = NULL;
-        while (en = av_dict_get(xectx->xeve_params, "", en, AV_DICT_IGNORE_SUFFIX)) {
+        const AVDictionaryEntry *en = NULL;
+        while (en = av_dict_iterate(xectx->xeve_params, en)) {
             if ((ret = xeve_param_parse(&cdsc->param, en->key, en->value)) < 0) {
                 av_log(avctx, AV_LOG_WARNING,
                        "Error parsing option '%s = %s'.\n",

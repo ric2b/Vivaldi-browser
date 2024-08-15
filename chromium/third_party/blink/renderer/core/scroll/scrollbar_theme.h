@@ -88,7 +88,6 @@ class CORE_EXPORT ScrollbarTheme {
       const gfx::Rect& rect) const {
     return rect;
   }
-  virtual void UpdateScrollbarOverlayColorTheme(const Scrollbar&) {}
 
   // If true, scrollbars that become invisible (i.e. overlay scrollbars that
   // fade out) should be marked as disabled. This option exists since Mac and
@@ -120,6 +119,7 @@ class CORE_EXPORT ScrollbarTheme {
                                  const DisplayItemClient&,
                                  const gfx::Rect& corner_rect,
                                  mojom::blink::ColorScheme color_scheme,
+                                 bool in_forced_colors,
                                  const ui::ColorProvider* color_provider);
   virtual void PaintTickmarks(GraphicsContext&,
                               const Scrollbar&,

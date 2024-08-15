@@ -127,7 +127,7 @@ class GclientApi(recipe_api.RecipeApi):
   def get_config_defaults(self):
     return {
       'USE_MIRROR': self.use_mirror,
-      'CACHE_DIR': self.m.path['cache'].join('git'),
+      'CACHE_DIR': self.m.path.cache_dir / 'git',
     }
 
   @staticmethod
@@ -271,9 +271,9 @@ class GclientApi(recipe_api.RecipeApi):
         name = 'recurse (git config %s)' % var
         self(name, ['recurse', 'git', 'config', var, val], **kwargs)
     finally:
-      cwd = self.m.context.cwd or self.m.path['start_dir']
+      cwd = self.m.context.cwd or self.m.path.start_dir
       if 'checkout' not in self.m.path:
-        self.m.path['checkout'] = cwd.join(
+        self.m.path.checkout_dir = cwd.joinpath(
           *cfg.solutions[0].name.split(self.m.path.sep))
 
     return sync_step
@@ -281,14 +281,14 @@ class GclientApi(recipe_api.RecipeApi):
   def runhooks(self, args=None, name='runhooks', **kwargs):
     args = args or []
     assert isinstance(args, (list, tuple))
-    with self.m.context(cwd=(self.m.context.cwd or self.m.path['checkout'])):
+    with self.m.context(cwd=(self.m.context.cwd or self.m.path.checkout_dir)):
       return self(name, ['runhooks'] + list(args), infra_step=False, **kwargs)
 
   def break_locks(self):
     """Remove all index.lock files. If a previous run of git crashed, bot was
     reset, etc... we might end up with leftover index.lock files.
     """
-    cmd = ['python3', '-u', self.resource('cleanup.py'), self.m.path['start_dir']]
+    cmd = ['python3', '-u', self.resource('cleanup.py'), self.m.path.start_dir]
     return self.m.step('cleanup index.lock', cmd)
 
   def get_gerrit_patch_root(self, gclient_config=None):

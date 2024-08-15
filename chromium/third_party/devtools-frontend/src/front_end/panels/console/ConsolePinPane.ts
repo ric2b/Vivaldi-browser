@@ -199,7 +199,7 @@ export class ConsolePin {
   <div class='console-pin'>
   ${this.deletePinIcon}
   <div class='console-pin-name' $='name' jslog="${VisualLogging.textField().track({
-      keydown: true,
+      change: true,
     })}"></div>
   <div class='console-pin-preview' $='preview'></div>
   </div>`;
@@ -266,7 +266,7 @@ export class ConsolePin {
       ]),
       CodeMirror.EditorView.domEventHandlers({blur: (_e, view) => this.onBlur(view)}),
       TextEditor.Config.baseConfiguration(doc),
-      TextEditor.Config.closeBrackets,
+      TextEditor.Config.closeBrackets.instance(),
       TextEditor.Config.autocompletion.instance(),
     ];
     if (Root.Runtime.Runtime.queryParam('noJavaScriptCompletion') !== 'true') {

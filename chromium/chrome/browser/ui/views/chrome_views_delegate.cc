@@ -27,8 +27,9 @@
 #include "ui/views/widget/widget.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/constants/app_types.h"
 #include "chrome/browser/ui/ash/touch_selection_menu_runner_chromeos.h"
+#include "chromeos/ui/base/app_types.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "chromeos/ui/frame/frame_utils.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -61,7 +62,6 @@ PrefService* GetPrefsForWindow(const views::Widget* window) {
 }
 
 }  // namespace
-
 
 // ChromeViewsDelegate --------------------------------------------------------
 
@@ -99,13 +99,13 @@ void ChromeViewsDelegate::SaveWindowPlacement(const views::Widget* window,
   window_preferences.Set("bottom", bounds.bottom());
   window_preferences.Set("maximized", show_state == ui::SHOW_STATE_MAXIMIZED);
 
-  gfx::Rect work_area(display::Screen::GetScreen()
-                          ->GetDisplayNearestView(window->GetNativeView())
-                          .work_area());
-  window_preferences.Set("work_area_left", work_area.x());
-  window_preferences.Set("work_area_top", work_area.y());
-  window_preferences.Set("work_area_right", work_area.right());
-  window_preferences.Set("work_area_bottom", work_area.bottom());
+  // TODO: Remove this block as these preferences have been long unused. Cleanup
+  // removal code by 2025.
+
+  window_preferences.Remove("work_area_left");
+  window_preferences.Remove("work_area_top");
+  window_preferences.Remove("work_area_right");
+  window_preferences.Remove("work_area_bottom");
 }
 
 bool ChromeViewsDelegate::GetSavedWindowPlacement(
@@ -186,7 +186,7 @@ void ChromeViewsDelegate::OnBeforeWidgetInit(
   if (params->delegate && params->delegate->AsDialogDelegate() &&
       !params->parent) {
     params->init_properties_container.SetProperty(
-        aura::client::kAppType, static_cast<int>(ash::AppType::SYSTEM_APP));
+        chromeos::kAppTypeKey, chromeos::AppType::SYSTEM_APP);
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 

@@ -3,22 +3,22 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <xnnpack.h>
+#include <xnnpack/node-type.h>
+#include <xnnpack/operator.h>
+#include <xnnpack/requantization.h>
+#include <xnnpack/subgraph.h>
+
 #include <algorithm>
 #include <array>
-#include <cstddef>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <vector>
 
-#include <fp16/fp16.h>
-#include <gtest/gtest.h>
-
-#include <xnnpack.h>
-#include <xnnpack/node-type.h>
-#include <xnnpack/operator.h>
-#include <xnnpack/subgraph.h>
-
 #include "subgraph-binary-tester.h"
+#include <gtest/gtest.h>
+#include <fp16/fp16.h>
 
 using Multiply2TestQS8 = BinaryTest<int8_t>;
 using Multiply2TestQU8 = BinaryTest<uint8_t>;
@@ -397,8 +397,8 @@ TEST_F(Multiply2TestF16, matches_operator_api)
 {
   std::generate(input1.begin(), input1.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
   std::generate(input2.begin(), input2.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-  std::fill(operator_output.begin(), operator_output.end(), fp16_ieee_from_fp32_value(nanf("")));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), fp16_ieee_from_fp32_value(nanf("")));
+  std::fill(operator_output.begin(), operator_output.end(), UINT16_C(0x7E00) /* NaN */);
+  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT16_C(0x7E00) /* NaN */);
 
   ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));
 

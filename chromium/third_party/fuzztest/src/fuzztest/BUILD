@@ -57,6 +57,7 @@ cc_library(
 
 cc_library(
     name = "fuzztest_macros",
+    srcs = ["fuzztest_macros.cc"],
     hdrs = [
         "fuzztest_macros.h",
     ],
@@ -64,6 +65,22 @@ cc_library(
         ":io",
         ":registration",
         ":registry",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/strings:string_view",
+    ],
+)
+
+cc_test(
+    name = "fuzztest_macros_test",
+    srcs = ["fuzztest_macros_test.cc"],
+    deps = [
+        ":fuzztest_macros",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -92,6 +109,8 @@ cc_library(
         ":registry",
         ":runtime",
         "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/flags:reflection",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
@@ -121,15 +140,13 @@ cc_library(
     deps = [
         ":domain_core",
         ":fuzztest",
+        ":fuzztest_macros",
         ":io",
         ":llvm_fuzzer_main",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/random:bit_gen_ref",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:string_view",
-        "@com_googlesource_code_re2//:re2",
     ],
     alwayslink = True,
 )
@@ -181,6 +198,7 @@ cc_library(
     deps = [
         ":any",
         ":configuration",
+        ":corpus_database",
         ":coverage",
         ":domain_core",
         ":fixture_driver",
@@ -189,6 +207,8 @@ cc_library(
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/random",
+        "@com_google_absl//absl/random:distributions",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/strings:string_view",
@@ -200,6 +220,7 @@ cc_library(
         "@com_google_fuzztest//centipede:defs",
         "@com_google_fuzztest//centipede:early_exit",
         "@com_google_fuzztest//centipede:environment",
+        "@com_google_fuzztest//centipede:mutation_input",
         "@com_google_fuzztest//centipede:runner_result",
         "@com_google_fuzztest//centipede:shared_memory_blob_sequence",
         "@com_google_fuzztest//centipede:workdir",
@@ -229,10 +250,35 @@ cc_library(
     srcs = ["internal/configuration.cc"],
     hdrs = ["internal/configuration.h"],
     deps = [
-        ":io",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/time",
+    ],
+)
+
+cc_test(
+    name = "configuration_test",
+    srcs = ["internal/configuration_test.cc"],
+    deps = [
+        ":configuration",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/time",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "corpus_database",
+    srcs = ["internal/corpus_database.cc"],
+    hdrs = ["internal/corpus_database.h"],
+    deps = [
+        ":configuration",
+        ":io",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:string_view",
     ],
 )
 
@@ -389,10 +435,13 @@ cc_library(
     hdrs = ["internal/googletest_adaptor.h"],
     deps = [
         ":configuration",
+        ":corpus_database",
+        ":flag_name",
         ":io",
         ":registry",
         ":runtime",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/strings:string_view",
         "@com_google_googletest//:gtest",
     ],
@@ -510,6 +559,7 @@ cc_library(
     hdrs = ["internal/runtime.h"],
     deps = [
         ":configuration",
+        ":corpus_database",
         ":coverage",
         ":domain_core",
         ":fixture_driver",
@@ -524,6 +574,7 @@ cc_library(
         ":type_support",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/functional:function_ref",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/random:bit_gen_ref",
         "@com_google_absl//absl/random:distributions",
@@ -673,6 +724,7 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
+        "@com_google_protobuf//:protobuf",
     ],
 )
 
@@ -690,5 +742,6 @@ cc_test(
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
+        "@com_google_protobuf//:protobuf",
     ],
 )

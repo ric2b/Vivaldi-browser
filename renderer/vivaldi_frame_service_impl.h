@@ -53,7 +53,7 @@ class VivaldiFrameServiceImpl : public vivaldi::mojom::VivaldiFrameService,
       bool full_page,
       const ::gfx::Size& target_size,
       RequestThumbnailForFrameCallback callback) override;
-  void SetSupportsAppRegion(bool supports_app_region) override;
+  void SetSupportsDraggableRegions(bool supports_draggable_regions) override;
 
  private:
   blink::Document* GetDocument();

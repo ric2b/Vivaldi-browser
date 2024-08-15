@@ -145,16 +145,11 @@ const CGFloat kIPHVerticalOffset = -5;
     CommandDispatcher* dispatcher = browser->GetCommandDispatcher();
     [dispatcher startDispatchingToTarget:self
                              forProtocol:@protocol(SecurityAlertCommands)];
-    __weak id<SecurityAlertCommands> securityAlertHandler =
-        HandlerForProtocol(dispatcher, SecurityAlertCommands);
+
     _brandingCoordinator =
         [[BrandingCoordinator alloc] initWithBaseViewController:viewController
                                                         browser:browser];
     _reauthenticationModule = [[ReauthenticationModule alloc] init];
-    _injectionHandler = [[ManualFillInjectionHandler alloc]
-          initWithWebStateList:browser->GetWebStateList()
-          securityAlertHandler:securityAlertHandler
-        reauthenticationModule:_reauthenticationModule];
     if (!base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
       _formInputAccessoryTapRecognizer = [[UITapGestureRecognizer alloc]
           initWithTarget:self
@@ -201,7 +196,10 @@ const CGFloat kIPHVerticalOffset = -5;
         profilePasswordStore:profilePasswordStore
         accountPasswordStore:accountPasswordStore
         securityAlertHandler:securityAlertHandler
-      reauthenticationModule:self.reauthenticationModule];
+      reauthenticationModule:self.reauthenticationModule
+           engagementTracker:feature_engagement::TrackerFactory::
+                                 GetForBrowserState(
+                                     self.browser->GetBrowserState())];
   self.formInputAccessoryViewController.formSuggestionClient =
       self.formInputAccessoryMediator;
   if (!base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
@@ -217,6 +215,12 @@ const CGFloat kIPHVerticalOffset = -5;
       self.browser->GetBrowserState()
           ->GetOriginalChromeBrowserState()
           ->GetPrefs();
+
+  _injectionHandler = [[ManualFillInjectionHandler alloc]
+        initWithWebStateList:self.browser->GetWebStateList()
+        securityAlertHandler:securityAlertHandler
+      reauthenticationModule:_reauthenticationModule
+        formSuggestionClient:self.formInputAccessoryMediator];
 }
 
 - (void)stop {
@@ -239,6 +243,7 @@ const CGFloat kIPHVerticalOffset = -5;
 - (void)reset {
   [self stopChildren];
   [self resetInputViews];
+  [GetFirstResponder() reloadInputViews];
 }
 
 #pragma mark - Presenting Children
@@ -274,7 +279,7 @@ const CGFloat kIPHVerticalOffset = -5;
                                  URL:URL
                     injectionHandler:self.injectionHandler
             invokedOnObfuscatedField:invokedOnObfuscatedField
-                              formID:lastSeenParams.unique_form_id
+                              formID:lastSeenParams.form_renderer_id
                              frameID:lastSeenParams.frame_id];
 
   passwordCoordinator.delegate = self;
@@ -337,7 +342,7 @@ const CGFloat kIPHVerticalOffset = -5;
   expandedManualFillCoordinator.injectionHandler = self.injectionHandler;
   expandedManualFillCoordinator.invokedOnObfuscatedField =
       invokedOnObfuscatedField;
-  expandedManualFillCoordinator.formID = lastSeenParams.unique_form_id;
+  expandedManualFillCoordinator.formID = lastSeenParams.form_renderer_id;
   expandedManualFillCoordinator.frameID = lastSeenParams.frame_id;
   expandedManualFillCoordinator.delegate = self;
   [expandedManualFillCoordinator start];
@@ -758,18 +763,17 @@ const CGFloat kIPHVerticalOffset = -5;
 // Resets `formInputAccessoryViewController` and `formInputViewController` to
 // their initial state.
 - (void)resetInputViews {
-  [self.formInputAccessoryMediator enableSuggestions];
+  self.formInputAccessoryMediator.suggestionsEnabled = YES;
   [self.formInputAccessoryViewController reset];
 
   self.formInputViewController = nil;
-  [GetFirstResponder() reloadInputViews];
 }
 
 // Updates the keyboard accessory to the state it should be in when a manual
 // fill view is displayed.
 - (void)updateKeyboardAccessoryForManualFilling {
   [self.formInputAccessoryViewController lockManualFallbackView];
-  [self.formInputAccessoryMediator disableSuggestions];
+  self.formInputAccessoryMediator.suggestionsEnabled = NO;
 }
 
 @end

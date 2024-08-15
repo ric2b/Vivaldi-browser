@@ -4,12 +4,12 @@
 
 import {CrLitElement} from '//resources/lit/v3_0/lit.rollup.js';
 
-import {CrPaperRippleMixin} from '../cr_paper_ripple_mixin.js';
+import {CrRippleMixin} from '../cr_ripple/cr_ripple_mixin.js';
 
 import {getCss} from './cr_chip.css.js';
 import {getHtml} from './cr_chip.html.js';
 
-const CrChipElementBase = CrPaperRippleMixin(CrLitElement);
+const CrChipElementBase = CrRippleMixin(CrLitElement);
 
 export interface CrChipElement {
   $: {
@@ -44,14 +44,10 @@ export class CrChipElement extends CrChipElementBase {
 
   constructor() {
     super();
-    this.addEventListener('pointerdown', this.onPointerDown_.bind(this));
+    this.ensureRippleOnPointerdown();
   }
 
-  private onPointerDown_() {
-    this.ensureRipple();
-  }
-
-  // Overridden from CrPaperRippleMixin
+  // Overridden from CrRippleMixin
   override createRipple() {
     this.rippleContainer = this.shadowRoot!.querySelector('button');
     return super.createRipple();

@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: development-basics
 title: ChromiumOS Development Basics
 ---
@@ -234,7 +234,7 @@ ChromiumOS is an open-source project. Whenever possible (i.e. when not
 discussing private, partner-related information), use the public issue tracker
 and mailing lists rather than the internal versions.
 
-[contact]: contact.md
+[contact]: /chromium-os/developer-library/guides/who-do-i-notify/contact/
 [documentation guidelines]: https://chromium.googlesource.com/chromium/src/+/HEAD/docs/documentation_guidelines.md
 [documentation best practices]: https://chromium.googlesource.com/chromium/src/+/HEAD/docs/documentation_best_practices.md
 [ChromiumOS design docs]: https://www.chromium.org/chromium-os/chromiumos-design-docs
@@ -244,9 +244,9 @@ and mailing lists rather than the internal versions.
 [Google C++ style guide]: https://google.github.io/styleguide/cppguide.html
 [Chromium C++ style guide]: https://chromium.googlesource.com/chromium/src/+/HEAD/styleguide/c++/c++.md
 [Modern C++ use in Chromium]: https://chromium.googlesource.com/chromium/src/+/HEAD/styleguide/c++/c++-features.md
-[platform2 repository]: platform2_primer.md
+[platform2 repository]: /chromium-os/developer-library/guides/development/platform2-primer/
 [Linux kernel coding style]: https://github.com/torvalds/linux/blob/HEAD/Documentation/process/coding-style.rst
-[Kernel Development]: kernel_development.md
+[Kernel Development]: /chromium-os/developer-library/guides/kernel/kernel-development/
 [EC Development page]: https://chromium.googlesource.com/chromiumos/platform/ec/+/HEAD/README.md
 [src/platform2/init]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/init/
 [init STYLE file]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/init/STYLE
@@ -254,19 +254,19 @@ and mailing lists rather than the internal versions.
 [chromiumos-overlay repository]: https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay
 [Ebuild Writing]: https://devmanual.gentoo.org/ebuild-writing/index.html
 [Ebuild File Format]: https://devmanual.gentoo.org/ebuild-writing/file-format/index.html
-[ChromiumOS shell style guidelines]: styleguide/shell.md
+[ChromiumOS shell style guidelines]: /chromium-os/developer-library/reference/style-guides/shell/
 [Google Python style guide]: https://google.github.io/styleguide/pyguide.html
-[ChromiumOS Python style guidelines]: styleguide/python.md
+[ChromiumOS Python style guidelines]: /chromium-os/developer-library/reference/style-guides/python/
 [autotest coding style]: https://chromium.googlesource.com/chromiumos/third_party/autotest/+/HEAD/docs/coding-style.md
 [ChromiumOS testing site]: https://www.chromium.org/chromium-os/testing
 [Google Test]: https://github.com/google/googletest
 [Why Google C++ Testing Framework?]: https://github.com/google/googletest/blob/HEAD/googletest/docs/primer.md
 [Google Test FAQ]: https://github.com/google/googletest/blob/HEAD/googletest/docs/faq.md
 [unit testing document]: https://www.chromium.org/chromium-os/testing/adding-unit-tests-to-the-build
-[Best practices for writing ChromeOS unit tests]: testing/unit_tests.md
+[Best practices for writing ChromeOS unit tests]: /chromium-os/developer-library/guides/testing/unit-tests/
 [Autotest]: https://chromium.googlesource.com/chromiumos/third_party/autotest/+/HEAD/docs/user-doc.md
 [Chromium code review policy]: https://chromium.googlesource.com/chromium/src/+/HEAD/docs/code_reviews.md
-[Developer Guide's code review instructions]: developer_guide.md#Upload-your-changes-and-get-a-code-review
+[Developer Guide's code review instructions]: /chromium-os/developer-library/guides/development/developer-guide/#Upload-your-changes-and-get-a-code-review
 [Gerrit notification settings]: https://chromium-review.googlesource.com/settings/#Notifications
 [chromium issue tracker]: https://crbug.com/
 [Chromium bug reporting guidelines]: https://www.chromium.org/for-testers/bug-reporting-guidelines

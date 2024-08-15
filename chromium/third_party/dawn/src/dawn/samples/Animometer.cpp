@@ -197,7 +197,6 @@ int main(int argc, const char* argv[]) {
     dawn::utils::Timer* timer = dawn::utils::CreateTimer();
     timer->Start();
     while (!ShouldQuit()) {
-        ProcessEvents();
         frameCount++;
         frame();
         if (frameCount % 60 == 0) {

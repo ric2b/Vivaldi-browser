@@ -133,12 +133,12 @@ using GlobalMap = Hashmap<Symbol, Global*, 16>;
 
 /// @returns a new error diagnostic with the given source.
 diag::Diagnostic& AddError(diag::List& diagnostics, const Source& source) {
-    return diagnostics.AddError(diag::System::Resolver, source);
+    return diagnostics.AddError(source);
 }
 
 /// @returns a new note diagnostic with the given source.
 diag::Diagnostic& AddNote(diag::List& diagnostics, const Source& source) {
-    return diagnostics.AddNote(diag::System::Resolver, source);
+    return diagnostics.AddNote(source);
 }
 
 /// DependencyScanner is used to traverse a module to build the list of
@@ -760,7 +760,6 @@ struct DependencyAnalysis {
         }
         TINT_ICE() << "failed to find dependency info for edge: '" << NameOf(from->node) << "' -> '"
                    << NameOf(to->node) << "'";
-        return {};
     }
 
     /// CyclicDependencyFound() emits an error diagnostic for a cyclic dependency.
@@ -907,7 +906,6 @@ std::string ResolvedIdentifier::String() const {
     }
 
     TINT_UNREACHABLE() << "unhandled ResolvedIdentifier";
-    return "<unknown>";
 }
 
 }  // namespace tint::resolver

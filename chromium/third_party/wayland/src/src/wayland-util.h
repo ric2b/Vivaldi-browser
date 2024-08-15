@@ -590,6 +590,7 @@ wl_array_copy(struct wl_array *array, struct wl_array *source);
  */
 #define wl_array_for_each(pos, array)					\
 	for (pos = (array)->data;					\
+	     (array)->size != 0 &&					\
 	     (const char *) pos < ((const char *) (array)->data + (array)->size); \
 	     (pos)++)
 

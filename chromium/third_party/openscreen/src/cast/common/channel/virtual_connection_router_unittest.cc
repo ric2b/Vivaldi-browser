@@ -394,8 +394,8 @@ TEST_F(VirtualConnectionRouterTest, HandlesConnectionMessagesAsSpecialCase) {
       : public ConnectionNamespaceHandler,
         public ConnectionNamespaceHandler::VirtualConnectionPolicy {
    public:
-    explicit MockConnectionNamespaceHandler(VirtualConnectionRouter* vc_router)
-        : ConnectionNamespaceHandler(vc_router, this) {}
+    explicit MockConnectionNamespaceHandler(VirtualConnectionRouter& vc_router)
+        : ConnectionNamespaceHandler(vc_router, *this) {}
     ~MockConnectionNamespaceHandler() final = default;
     MOCK_METHOD(void,
                 OnMessage,
@@ -408,7 +408,7 @@ TEST_F(VirtualConnectionRouterTest, HandlesConnectionMessagesAsSpecialCase) {
       return true;
     }
   };
-  MockConnectionNamespaceHandler connection_handler(&local_router_);
+  MockConnectionNamespaceHandler connection_handler(local_router_);
 
   MockCastMessageHandler alice;
   local_router_.AddHandlerForLocalId("alice", &alice);

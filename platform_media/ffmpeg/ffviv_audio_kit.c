@@ -12,6 +12,7 @@
 #include "third_party/ffmpeg/libavcodec/put_bits.h"
 #include "third_party/ffmpeg/libavutil/error.h"
 #include "third_party/ffmpeg/libavutil/log.h"
+#include "third_party/ffmpeg/libavutil/mem.h"
 
 static int ffviv_ensure_size(int size, uint8_t** data, int* data_size) {
   int ret = 0;

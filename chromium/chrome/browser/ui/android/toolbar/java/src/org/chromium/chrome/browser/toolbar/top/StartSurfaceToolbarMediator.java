@@ -41,7 +41,6 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.logo.LogoCoordinator;
 import org.chromium.chrome.browser.logo.LogoView;
-import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tabmodel.IncognitoTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -55,6 +54,7 @@ import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator.ToolbarAlph
 import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.animation.CancelAwareAnimatorListener;
+import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.accessibility.AccessibilityState;
 import org.chromium.ui.interpolators.Interpolators;
@@ -77,7 +77,6 @@ class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserv
     private final Callback<LoadUrlParams> mLogoClickedCallback;
     private final boolean mShouldFetchDoodle;
     private final ButtonDataProvider mIdentityDiscController;
-    private final boolean mShouldCreateLogoInToolbar;
     private final Context mContext;
 
     private TabModelSelector mTabModelSelector;
@@ -109,7 +108,6 @@ class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserv
             BooleanSupplier isIncognitoModeEnabledSupplier,
             Callback<LoadUrlParams> logoClickedCallback,
             boolean shouldFetchDoodle,
-            boolean shouldCreateLogoInToolbar,
             Callback<Boolean> finishedTransitionCallback,
             ToolbarAlphaInOverviewObserver toolbarAlphaInOverviewObserver) {
         mPropertyModel = model;
@@ -123,7 +121,6 @@ class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserv
         mShouldFetchDoodle = shouldFetchDoodle;
         mIdentityDiscController = identityDiscController;
         mIdentityDiscController.addObserver(this);
-        mShouldCreateLogoInToolbar = shouldCreateLogoInToolbar;
         mFinishedTransitionCallback = finishedTransitionCallback;
         mToolbarAlphaInOverviewObserver = toolbarAlphaInOverviewObserver;
         mContext = context;
@@ -321,10 +318,11 @@ class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserv
 
     /**
      * Called when the logo view is inflated.
+     *
      * @param logoView The logo view.
      */
     void onLogoViewReady(LogoView logoView) {
-        if (!mShouldCreateLogoInToolbar) return;
+        if (mIsSurfacePolished) return;
 
         mLogoCoordinator =
                 new LogoCoordinator(
@@ -333,7 +331,6 @@ class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserv
                         logoView,
                         mShouldFetchDoodle,
                         /* onLogoAvailableCallback= */ null,
-                        isOnHomepage(),
                         null);
 
         // The logo view may be ready after native is initialized, so we need to call
@@ -413,8 +410,7 @@ class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserv
     private void updateLogoVisibility() {
         if (mLogoCoordinator == null) return;
 
-        mLogoCoordinator.updateVisibilityAndMaybeCleanUp(
-                isOnHomepage(), isOnATab() || isOnGridTabSwitcher(), /* animationEnabled= */ false);
+        mLogoCoordinator.updateVisibility(/* animationEnabled= */ false);
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)

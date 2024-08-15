@@ -68,4 +68,4 @@ Posts before that date for the above lists are available at
 If you're interested in **implementation details** of the Chromium projects, see
 the **technical discussion** groups for
 [Chromium](/developers/technical-discussion-groups) and [Chromium
-OS](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/contact.md).
+OS](/chromium-os/developer-library/guides/who-do-i-notify/contact/).

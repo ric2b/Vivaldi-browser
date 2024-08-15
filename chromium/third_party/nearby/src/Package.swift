@@ -1,5 +1,20 @@
-// swift-tools-version:5.5
+// swift-tools-version:5.7
 // The swift-tools-version declares the minimum version of Swift required to build this package.
+
+// Copyright 2022 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import PackageDescription
 
 let package = Package(
@@ -13,23 +28,22 @@ let package = Package(
   products: [
     // Products define the executables and libraries a package produces, and make them visible to other packages.
     .library(
-      name: "NearbyCoreAdapter",
-      targets: ["NearbyCoreAdapter"]
+      name: "NearbyConnections",
+      targets: ["NearbyConnections"]
     ),
     .library(
-      name: "NearbyConnections",
+      name: "NearbyConnectionsDynamic",
+      type: .dynamic,
       targets: ["NearbyConnections"]
     ),
   ],
   dependencies: [
     // Dependencies declare other packages that this package depends on.
     .package(
-      name: "abseil",
       url: "https://github.com/bourdakos1/abseil-cpp-SwiftPM.git",
-      branch: "cxx17"
+      branch: "cxx17-test"
     ),
     .package(
-      name: "BoringSSL-GRPC",
       url: "https://github.com/firebase/boringssl-SwiftPM.git",
       "0.7.1"..<"0.8.0"
     ),
@@ -172,8 +186,10 @@ let package = Package(
       name: "ukey2",
       dependencies: [
         "protobuf",
-        .product(name: "abseil", package: "abseil"),
-        .product(name: "openssl_grpc", package: "BoringSSL-GRPC"),
+        .product(name: "AbseilCXX17", package: "abseil-cpp-SwiftPM"),
+        .product(
+          name: "openssl_grpc", package: "boringssl-SwiftPM",
+          moduleAliases: ["NearbySSL": "openssl_grpc"]),
       ],
       path: "third_party/ukey2",
       exclude: [
@@ -362,7 +378,7 @@ let package = Package(
         "smhasher",
         "ukey2",
         "protobuf",
-        .product(name: "abseil", package: "abseil"),
+        .product(name: "AbseilCXX17", package: "abseil-cpp-SwiftPM"),
       ],
       path: ".",
       exclude: [
@@ -391,6 +407,7 @@ let package = Package(
         "connections/implementation/analytics/BUILD",
         "connections/implementation/flags/BUILD",
         "connections/implementation/mediums/ble_v2/BUILD",
+        "connections/implementation/mediums/multiplex/BUILD",
         "connections/implementation/mediums/BUILD",
         "connections/implementation/BUILD",
         "connections/implementation/fuzzers",
@@ -445,6 +462,8 @@ let package = Package(
         "connections/implementation/mediums/ble_v2/ble_utils_test.cc",
         "connections/implementation/mediums/ble_v2/discovered_peripheral_tracker_test.cc",
         "connections/implementation/mediums/ble_v2/instant_on_lost_advertisement_test.cc",
+        "connections/implementation/mediums/multiplex/multiplex_frames_test.cc",
+        "connections/implementation/mediums/multiplex/multiplex_output_stream_test.cc",
         "connections/implementation/mediums/webrtc_peer_id_test.cc",
         "connections/implementation/mediums/wifi_lan_test.cc",
         "connections/implementation/mediums/bluetooth_classic_test.cc",
@@ -478,7 +497,6 @@ let package = Package(
         "internal/crypto_cros/ec_signature_creator_unittest.cc",
         "internal/crypto_cros/encryptor_unittest.cc",
         "internal/crypto_cros/hmac_unittest.cc",
-        "internal/crypto_cros/random_unittest.cc",
         "internal/crypto_cros/rsa_private_key_unittest.cc",
         "internal/crypto_cros/secure_hash_unittest.cc",
         "internal/crypto_cros/sha2_unittest.cc",

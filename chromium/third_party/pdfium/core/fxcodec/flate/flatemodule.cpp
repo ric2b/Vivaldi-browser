@@ -4,10 +4,14 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "core/fxcodec/flate/flatemodule.h"
 
-#include <stdint.h>
-#include <string.h>
+#include <stddef.h>
 
 #include <algorithm>
 #include <limits>
@@ -20,7 +24,7 @@
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fixed_size_data_vector.h"
 #include "core/fxcrt/fx_extension.h"
-#include "core/fxcrt/fx_memory_wrappers.h"
+#include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/notreached.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
@@ -97,7 +101,7 @@ uint32_t FlateOutput(z_stream* context,
 
   uint32_t written = post_pos - pre_pos;
   if (written < dest_size)
-    memset(dest_buf + written, '\0', dest_size - written);
+    FXSYS_memset(dest_buf + written, '\0', dest_size - written);
 
   return ret;
 }
@@ -318,7 +322,7 @@ void PNG_PredictLine(pdfium::span<uint8_t> dest_span,
   const uint32_t BytesPerPixel = (bpc * nColors + 7) / 8;
   uint8_t tag = pSrcData[0];
   if (tag == 0) {
-    memmove(pDestData, pSrcData + 1, row_size);
+    FXSYS_memmove(pDestData, pSrcData + 1, row_size);
     return;
   }
   for (uint32_t byte = 0; byte < row_size; ++byte) {
@@ -411,7 +415,7 @@ bool PNG_Predictor(int Colors,
       if ((row + 1) * (move_size + 1) > *data_size) {
         move_size = last_row_size - 1;
       }
-      memcpy(pDestData, pSrcData + 1, move_size);
+      FXSYS_memcpy(pDestData, pSrcData + 1, move_size);
       pSrcData += move_size + 1;
       pPrevDestData = pDestData;
       pDestData += move_size;
@@ -610,7 +614,7 @@ void FlateUncompress(pdfium::span<const uint8_t> src_buf,
       tmp_buf_size = last_buf_size;
     }
     uint32_t cp_size = std::min(tmp_buf_size, remaining);
-    memcpy(result_buf.get() + result_pos, tmp_buf.get(), cp_size);
+    FXSYS_memcpy(result_buf.get() + result_pos, tmp_buf.get(), cp_size);
     result_pos += cp_size;
     remaining -= cp_size;
   }
@@ -771,7 +775,7 @@ void FlatePredictorScanlineDecoder::GetNextLineWithPredictedPitch() {
       FlateOutput(m_pFlate.get(), m_PredictRaw.data(), m_PredictPitch + 1);
       PNG_PredictLine(m_Scanline, m_PredictRaw, m_LastLine, m_BitsPerComponent,
                       m_Colors, m_Columns);
-      memcpy(m_LastLine.data(), m_Scanline.data(), m_PredictPitch);
+      FXSYS_memcpy(m_LastLine.data(), m_Scanline.data(), m_PredictPitch);
       break;
     case PredictorType::kFlate:
       FlateOutput(m_pFlate.get(), m_Scanline.data(), m_Pitch);
@@ -787,8 +791,8 @@ void FlatePredictorScanlineDecoder::GetNextLineWithoutPredictedPitch() {
   size_t bytes_to_go = m_Pitch;
   size_t read_leftover = m_LeftOver > bytes_to_go ? bytes_to_go : m_LeftOver;
   if (read_leftover) {
-    memcpy(m_Scanline.data(), &m_PredictBuffer[m_PredictPitch - m_LeftOver],
-           read_leftover);
+    FXSYS_memcpy(m_Scanline.data(),
+                 &m_PredictBuffer[m_PredictPitch - m_LeftOver], read_leftover);
     m_LeftOver -= read_leftover;
     bytes_to_go -= read_leftover;
   }
@@ -798,7 +802,7 @@ void FlatePredictorScanlineDecoder::GetNextLineWithoutPredictedPitch() {
         FlateOutput(m_pFlate.get(), m_PredictRaw.data(), m_PredictPitch + 1);
         PNG_PredictLine(m_PredictBuffer, m_PredictRaw, m_LastLine,
                         m_BitsPerComponent, m_Colors, m_Columns);
-        memcpy(m_LastLine.data(), m_PredictBuffer.data(), m_PredictPitch);
+        FXSYS_memcpy(m_LastLine.data(), m_PredictBuffer.data(), m_PredictPitch);
         break;
       case PredictorType::kFlate:
         FlateOutput(m_pFlate.get(), m_PredictBuffer.data(), m_PredictPitch);

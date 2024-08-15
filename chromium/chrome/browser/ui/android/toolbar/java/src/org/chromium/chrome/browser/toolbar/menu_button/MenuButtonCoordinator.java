@@ -36,6 +36,9 @@ import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
 import android.widget.ImageButton;
 
+// Vivaldi
+import android.view.ViewGroup;
+
 /**
  * Root component for the app menu button on the toolbar. Owns the MenuButton view and handles
  * changes to its visual state, e.g. showing/hiding the app update badge.
@@ -286,5 +289,15 @@ public class MenuButtonCoordinator {
     public ImageButton getMenuImageButton()
     {
         return mMenuButton.getImageButton();
+    }
+
+    /** Vivaldi **/
+    public static ViewGroup.LayoutParams updateLayoutParamsMenuButtonWrapper(View menuWrapper) {
+        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) menuWrapper.getLayoutParams();
+        params.width = (int) menuWrapper.getResources().getDimension(
+                org.chromium.chrome.browser.toolbar.R.dimen.toolbar_button_width);
+        params.rightMargin = (int) menuWrapper.getResources().getDimension(
+                org.chromium.chrome.browser.toolbar.R.dimen.toolbar_buttons_offset_padding);
+        return params;
     }
 }

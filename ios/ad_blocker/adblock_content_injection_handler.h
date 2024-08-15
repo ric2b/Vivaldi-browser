@@ -7,8 +7,8 @@
 
 #include "base/functional/callback.h"
 #include "base/values.h"
-#include "components/ad_blocker/adblock_metadata.h"
 #include "components/ad_blocker/adblock_resources.h"
+#include "components/ad_blocker/adblock_types.h"
 
 namespace web {
 class BrowserState;

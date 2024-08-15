@@ -2,15 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
 import * as Helpers from '../../../testing/DOMHelpers.js';  // eslint-disable-line rulesdir/es_modules_import
-import * as Coordinator from '../render_coordinator/render_coordinator.js';
-import * as Dialogs from './dialogs.js';
-
 import {
   describeWithLocale,
 } from '../../../testing/EnvironmentHelpers.js';
+import * as Coordinator from '../render_coordinator/render_coordinator.js';
+
+import * as Dialogs from './dialogs.js';
 
 const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
@@ -25,12 +23,12 @@ describeWithLocale('ShortcutDialog', () => {
   }
 
   function getDialogFromShortcutDialog(shortcutDialog: Dialogs.ShortcutDialog.ShortcutDialog) {
-    Helpers.assertShadowRoot(shortcutDialog.shadowRoot);
+    assert.isNotNull(shortcutDialog.shadowRoot);
     const dialog = shortcutDialog.shadowRoot.querySelector('devtools-dialog');
     if (!dialog) {
       assert.fail('devtools-dialog not found');
     }
-    Helpers.assertElement(dialog, HTMLElement);
+    assert.instanceOf(dialog, HTMLElement);
     return dialog;
   }
 

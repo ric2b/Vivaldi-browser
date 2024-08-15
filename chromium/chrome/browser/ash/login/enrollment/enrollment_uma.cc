@@ -30,6 +30,10 @@ const char* const kMetricEnrollmentRollbackAttestation =
     "Enterprise.EnrollmentRollbackAttestation";
 const char* const kMetricEnrollmentRollbackManualFallback =
     "Enterprise.EnrollmentRollbackManualFallback";
+const char* const kMetricEnrollmentTokenBased =
+    "Enterprise.EnrollmentTokenBased";
+const char* const kMetricEnrollmentTokenBasedManualFallback =
+    "Enterprise.EnrollmentTokenBasedManualFallback";
 
 }  // namespace
 
@@ -76,8 +80,14 @@ void EnrollmentUMA(policy::MetricEnrollment sample,
     case policy::EnrollmentConfig::MODE_ATTESTATION_ROLLBACK_MANUAL_FALLBACK:
       base::UmaHistogramSparse(kMetricEnrollmentRollbackManualFallback, sample);
       break;
-    case policy::EnrollmentConfig::DEPRECATED_MODE_ENROLLED_ROLLBACK:
-    case policy::EnrollmentConfig::DEPRECATED_MODE_OFFLINE_DEMO:
+    case policy::EnrollmentConfig::MODE_ENROLLMENT_TOKEN_INITIAL_SERVER_FORCED:
+      base::UmaHistogramSparse(kMetricEnrollmentTokenBased, sample);
+      break;
+    case policy::EnrollmentConfig::
+        MODE_ENROLLMENT_TOKEN_INITIAL_MANUAL_FALLBACK:
+      base::UmaHistogramSparse(kMetricEnrollmentTokenBasedManualFallback,
+                               sample);
+      break;
     case policy::EnrollmentConfig::MODE_NONE:
       NOTREACHED();
       break;

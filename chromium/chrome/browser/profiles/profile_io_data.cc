@@ -52,6 +52,9 @@ bool ProfileIOData::IsHandledProtocol(const std::string& scheme) {
     url::kBlobScheme,
     url::kFileSystemScheme,
     chrome::kChromeSearchScheme,
+#if !BUILDFLAG(IS_ANDROID)
+    chrome::kIsolatedAppScheme,
+#endif  // !BUILDFLAG(IS_ANDROID)
   };
   for (const char* supported_protocol : kProtocolList) {
     if (scheme == supported_protocol)

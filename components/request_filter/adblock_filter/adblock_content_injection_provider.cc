@@ -11,6 +11,7 @@
 #include "components/request_filter/adblock_filter/utils.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/common/isolated_world_ids.h"
 
 namespace adblock_filter {
 namespace {
@@ -162,7 +163,7 @@ void ContentInjectionProvider::BuildStaticContent() {
       std::move(world_info));
 
   if (javascript_world_id_) {
-    std::map<std::string, base::StringPiece> injections =
+    std::map<std::string, Resources::InjectableResource> injections =
         resources_->GetInjections();
 
     for (const auto& injection : injections) {
@@ -172,9 +173,11 @@ void ContentInjectionProvider::BuildStaticContent() {
       DCHECK(emplace_result.second);
       content_injection::StaticInjectionItem& item =
           emplace_result.first->second;
-      item.content = injection.second;
+      item.content = injection.second.code;
       item.metadata.type = content_injection::mojom::ItemType::kJS;
-      item.metadata.javascript_world_id = javascript_world_id_.value();
+      item.metadata.javascript_world_id =
+          injection.second.use_main_world ? content::ISOLATED_WORLD_ID_GLOBAL
+                                          : javascript_world_id_.value();
       item.metadata.run_time =
           content_injection::mojom::ItemRunTime::kDocumentStart;
     }

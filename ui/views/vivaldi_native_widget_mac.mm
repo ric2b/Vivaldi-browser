@@ -95,7 +95,6 @@ class VivaldiNativeWidgetMac : public views::NativeWidgetMac {
   void OnWindowDestroying(gfx::NativeWindow window) override;
   bool IsMaximized() const override;
   void Maximize() override;
-  gfx::Rect GetRestoredBounds() const override;
   void Restore() override;
 
   // Indirect owner
@@ -346,14 +345,6 @@ void VivaldiNativeWidgetMac::Maximize() {
   if (IsMinimized()) {
     [ns_window deminiaturize:nil];
   }
-}
-
-gfx::Rect VivaldiNativeWidgetMac::GetRestoredBounds() const {
-  NSWindow* ns_window = GetNativeWindow().GetNativeNSWindow();
-  if (NSWindowIsMaximized(ns_window))
-    return gfx::ScreenRectFromNSRect(bounds_before_maximize_);
-
-  return NativeWidgetMac::GetRestoredBounds();
 }
 
 void VivaldiNativeWidgetMac::Restore() {

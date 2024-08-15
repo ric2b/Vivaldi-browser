@@ -1111,37 +1111,6 @@ int AXNode::GetTextContentLengthUTF16() const {
   return GetComputedNodeData().GetOrComputeTextContentLengthUTF16();
 }
 
-gfx::RectF AXNode::GetTextContentRangeBoundsUTF8(int start_offset,
-                                                 int end_offset) const {
-  DCHECK(!tree_->GetTreeUpdateInProgressState());
-  DCHECK_LE(start_offset, end_offset)
-      << "Invalid `start_offset` and `end_offset`.\n"
-      << start_offset << ' ' << end_offset << "\nin\n"
-      << *this;
-  // Since we DCHECK that `start_offset` <= `end_offset`, there is no need to
-  // check whether `start_offset` is also in range.
-  if (end_offset > GetTextContentLengthUTF8())
-    return gfx::RectF();
-
-  // TODO(nektar): Update this to use
-  // "base/strings/utf_offset_string_conversions.h" which provides caching of
-  // offsets.
-  std::u16string out_trancated_string_utf16;
-  if (!base::UTF8ToUTF16(GetTextContentUTF8().data(),
-                         base::checked_cast<size_t>(start_offset),
-                         &out_trancated_string_utf16)) {
-    return gfx::RectF();
-  }
-  start_offset = base::checked_cast<int>(out_trancated_string_utf16.length());
-  if (!base::UTF8ToUTF16(GetTextContentUTF8().data(),
-                         base::checked_cast<size_t>(end_offset),
-                         &out_trancated_string_utf16)) {
-    return gfx::RectF();
-  }
-  end_offset = base::checked_cast<int>(out_trancated_string_utf16.length());
-  return GetTextContentRangeBoundsUTF16(start_offset, end_offset);
-}
-
 gfx::RectF AXNode::GetTextContentRangeBoundsUTF16(int start_offset,
                                                   int end_offset) const {
   DCHECK(!tree_->GetTreeUpdateInProgressState());
@@ -1149,16 +1118,19 @@ gfx::RectF AXNode::GetTextContentRangeBoundsUTF16(int start_offset,
       << "Invalid `start_offset` and `end_offset`.\n"
       << start_offset << ' ' << end_offset << "\nin\n"
       << *this;
+
+  int text_content_length = GetTextContentLengthUTF16();
   // Since we DCHECK that `start_offset` <= `end_offset`, there is no need to
   // check whether `start_offset` is also in range.
-  if (end_offset > GetTextContentLengthUTF16())
+  if (end_offset > text_content_length) {
     return gfx::RectF();
+  }
 
   const std::vector<int32_t>& character_offsets =
       GetIntListAttribute(ax::mojom::IntListAttribute::kCharacterOffsets);
   int character_offsets_length =
       base::checked_cast<int>(character_offsets.size());
-  // Charactger offsets are always based on the UTF-16 representation of the
+  // Character offsets are always based on the UTF-16 representation of the
   // text.
   if (character_offsets_length < GetTextContentLengthUTF16()) {
     // Blink might not return pixel offsets for all characters. Clamp the
@@ -2312,10 +2284,11 @@ AXNode* AXNode::GetCollapsedMenuListSelectAncestor() const {
 }
 
 bool AXNode::IsEmbeddedGroup() const {
-  if (GetRole() != ax::mojom::Role::kGroup || !GetParent())
+  if (GetRole() != ax::mojom::Role::kGroup || !GetUnignoredParent()) {
     return false;
+  }
 
-  return ui::IsSetLike(GetParent()->GetRole());
+  return ui::IsSetLike(GetUnignoredParent()->GetRole());
 }
 
 AXNode* AXNode::GetLowestPlatformAncestor() const {

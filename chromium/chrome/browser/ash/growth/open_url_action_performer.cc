@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "chromeos/ash/components/growth/growth_metrics.h"
 #include "url/gurl.h"
 
 namespace {
@@ -74,12 +75,13 @@ std::unique_ptr<OpenUrlParam> ParseOpenUrlActionPerformerParams(
 OpenUrlActionPerformer::OpenUrlActionPerformer() = default;
 OpenUrlActionPerformer::~OpenUrlActionPerformer() = default;
 
-void OpenUrlActionPerformer::Run(const base::Value::Dict* params,
+void OpenUrlActionPerformer::Run(int campaign_id,
+                                 const base::Value::Dict* params,
                                  growth::ActionPerformer::Callback callback) {
   auto open_url_param = ParseOpenUrlActionPerformerParams(params);
   if (!open_url_param) {
-    // TODO(b/306023057): Record an UMA metric that parsing the params
-    // has failed.
+    growth::RecordCampaignsManagerError(
+        growth::CampaignsManagerError::kOpenUrlParamsParsingFail);
     std::move(callback).Run(growth::ActionResult::kFailure,
                             growth::ActionResultReason::kParsingActionFailed);
     return;

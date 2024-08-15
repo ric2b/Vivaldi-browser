@@ -9,8 +9,8 @@
 import '../settings_shared.css.js';
 import '../controls/settings_dropdown_menu.js';
 
-import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
-import {CrSettingsPrefs} from 'chrome://resources/cr_components/settings_prefs/prefs_types.js';
+import {PrefsMixin} from '/shared/settings/prefs/prefs_mixin.js';
+import {CrSettingsPrefs} from '/shared/settings/prefs/prefs_types.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -48,6 +48,7 @@ export class TimezoneSelectorElement extends TimezoneSelectorElementBase {
       shouldDisableTimeZoneGeoSelector: {
         type: Boolean,
         notify: true,
+        value: false,
       },
 
       /**
@@ -190,13 +191,15 @@ export class TimezoneSelectorElement extends TimezoneSelectorElementBase {
   }
 
   /**
-   * Computes visibility of user timezone preference.
+   * Computes whether user timezone selector should be disabled. Returns `true`
+   * if auto detect is on or it's waiting for 'access-code-validation-complete'
+   * for child account.
    */
-  private isUserTimeZoneSelectorHidden_(
-      prefUserTimezone: chrome.settingsPrivate.PrefObject|null,
-      prefResolveOnOffValue: boolean): boolean {
-    return (prefUserTimezone && prefUserTimezone.controlledBy != null) ||
-        prefResolveOnOffValue;
+  private shouldDisableUserTimezoneSelector_(): boolean {
+    return this.getPref<boolean>(
+                   'generated.resolve_timezone_by_geolocation_on_off')
+               .value ||
+        this.shouldDisableTimeZoneGeoSelector;
   }
 }
 

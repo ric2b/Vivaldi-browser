@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: cpp-mojo
 title: Using Mojo in C++
 ---
@@ -91,7 +91,7 @@ manually converting between two types.
 
 Mojo provides a range of type mappings, including `StructTraits<>`,
 `ArrayTraits<>`, `EnumTraits<>`, and
-[more](https://g3doc.corp.google.com/third_party/chromiumos_libchrome/mojo/public/cpp/bindings/README.md#type-mapping).
+[more](https://chromium.googlesource.com/chromium/src/+/master/mojo/public/cpp/bindings/README.md#type-mapping).
 For example, a C++ enum:
 
 ```cpp
@@ -204,4 +204,4 @@ can be type-mapped to a `.mojom` enum using an `EnumTrait<>`.
     expected. Example: crrev.com/c/2809147.
 
 TIP: Read more about Mojo type mapping in the
-[Mojo documentation](https://g3doc.corp.google.com/third_party/chromiumos_libchrome/mojo/public/cpp/bindings/README.md#type-mapping).
+[Mojo documentation](https://chromium.googlesource.com/chromium/src/+/master/mojo/public/cpp/bindings/README.md#type-mapping).

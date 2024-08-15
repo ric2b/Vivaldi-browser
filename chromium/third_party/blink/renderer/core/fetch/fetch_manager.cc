@@ -226,18 +226,6 @@ void HistogramNetErrorForTrustTokensOperation(
       net_error);
 }
 
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-enum class FetchManagerLoaderCheckPoint {
-  kConstructor = 0,
-  kFailed = 1,
-  kMaxValue = kFailed,
-};
-
-void SendHistogram(FetchManagerLoaderCheckPoint cp) {
-  base::UmaHistogramEnumeration("Net.Fetch.CheckPoint.FetchManagerLoader", cp);
-}
-
 ResourceLoadPriority ComputeFetchLaterLoadPriority(
     const FetchParameters& params) {
   // FetchLater's ResourceType is ResourceType::kRaw, which should default to
@@ -340,7 +328,7 @@ class FetchManager::Loader final
  public:
   Loader(ExecutionContext*,
          FetchManager*,
-         ScriptPromiseResolverTyped<Response>*,
+         ScriptPromiseResolver<Response>*,
          FetchRequestData*,
          ScriptState*,
          AbortSignal*);
@@ -487,7 +475,7 @@ class FetchManager::Loader final
       std::optional<base::UnguessableToken> issue_id = std::nullopt) override;
 
   Member<FetchManager> fetch_manager_;
-  Member<ScriptPromiseResolverTyped<Response>> resolver_;
+  Member<ScriptPromiseResolver<Response>> resolver_;
   Member<ThreadableLoader> threadable_loader_;
   Member<PlaceHolderBytesConsumer> place_holder_body_;
   bool failed_;
@@ -503,7 +491,7 @@ class FetchManager::Loader final
 
 FetchManager::Loader::Loader(ExecutionContext* execution_context,
                              FetchManager* fetch_manager,
-                             ScriptPromiseResolverTyped<Response>* resolver,
+                             ScriptPromiseResolver<Response>* resolver,
                              FetchRequestData* fetch_request_data,
                              ScriptState* script_state,
                              AbortSignal* signal)
@@ -528,7 +516,6 @@ FetchManager::Loader::Loader(ExecutionContext* execution_context,
   v8::Local<v8::Value> exception =
       V8ThrowException::CreateTypeError(isolate, "Failed to fetch");
   exception_.Reset(isolate, exception);
-  SendHistogram(FetchManagerLoaderCheckPoint::kConstructor);
 }
 
 FetchManager::Loader::~Loader() {
@@ -782,6 +769,7 @@ void FetchLoaderBase::Start(ExceptionState& exception_state) {
 
   // "- should fetching |request| be blocked as content security returns
   //    blocked"
+  CHECK(execution_context_);
   if (!execution_context_->GetContentSecurityPolicyForWorld(world_.Get())
            ->AllowConnectToSource(fetch_request_data_->Url(),
                                   fetch_request_data_->Url(),
@@ -1196,7 +1184,6 @@ void FetchManager::Loader::Failed(
                      IdentifiersFactory::IdFromToken(*issue_id)));
       }
       resolver_->Reject(value);
-      SendHistogram(FetchManagerLoaderCheckPoint::kFailed);
       LogIfKeepalive("Failed");
     }
   }
@@ -1472,20 +1459,19 @@ class FetchLaterManager::DeferredLoader final
 FetchManager::FetchManager(ExecutionContext* execution_context)
     : ExecutionContextLifecycleObserver(execution_context) {}
 
-ScriptPromiseTyped<Response> FetchManager::Fetch(
-    ScriptState* script_state,
-    FetchRequestData* request,
-    AbortSignal* signal,
-    ExceptionState& exception_state) {
+ScriptPromise<Response> FetchManager::Fetch(ScriptState* script_state,
+                                            FetchRequestData* request,
+                                            AbortSignal* signal,
+                                            ExceptionState& exception_state) {
   DCHECK(signal);
   if (signal->aborted()) {
     exception_state.RethrowV8Exception(signal->reason(script_state).V8Value());
-    return ScriptPromiseTyped<Response>();
+    return ScriptPromise<Response>();
   }
 
   request->SetDestination(network::mojom::RequestDestination::kEmpty);
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolverTyped<Response>>(
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<Response>>(
       script_state, exception_state.GetContext());
   auto promise = resolver->Promise();
 

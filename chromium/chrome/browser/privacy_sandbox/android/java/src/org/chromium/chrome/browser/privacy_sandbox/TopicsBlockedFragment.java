@@ -13,7 +13,6 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
 
 import org.chromium.base.metrics.RecordUserAction;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 
@@ -30,8 +29,7 @@ public class TopicsBlockedFragment extends PrivacySandboxSettingsBaseFragment
     @Override
     public void onCreatePreferences(@Nullable Bundle bundle, @Nullable String s) {
         super.onCreatePreferences(bundle, s);
-        if (ChromeFeatureList.isEnabled(
-                ChromeFeatureList.PRIVACY_SANDBOX_PROACTIVE_TOPICS_BLOCKING)) {
+        if (TopicsUtils.shouldShowProactiveTopicsBlocking()) {
             getActivity().setTitle(R.string.settings_topics_page_blocked_topics_heading_new);
         } else {
             getActivity().setTitle(R.string.settings_topics_page_blocked_topics_sub_page_title);
@@ -58,42 +56,40 @@ public class TopicsBlockedFragment extends PrivacySandboxSettingsBaseFragment
 
     @Override
     public boolean onPreferenceClick(@NonNull Preference preference) {
-        if (preference instanceof TopicPreference) {
-            Topic topic = ((TopicPreference) preference).getTopic();
-            PrivacySandboxBridge.setTopicAllowed(topic, true);
-            mBlockedTopicsCategory.removePreference(preference);
-            updateBlockedTopicsDescription();
+        if (!(preference instanceof TopicPreference)) return false;
 
-            if (ChromeFeatureList.isEnabled(
-                    ChromeFeatureList.PRIVACY_SANDBOX_PROACTIVE_TOPICS_BLOCKING)) {
-                var currentTopics = new HashSet<Topic>(PrivacySandboxBridge.getCurrentTopTopics());
-                if (!currentTopics.contains(topic)) {
-                    showSnackbar(
-                            R.string.settings_unblock_topic_toast_body,
-                            null,
-                            Snackbar.TYPE_ACTION,
-                            Snackbar.UMA_PRIVACY_SANDBOX_ADD_INTEREST,
-                            R.string.settings_unblock_topic_toast_button_text,
-                            /* multiLine= */ true);
-                }
-            } else {
+        Topic topic = ((TopicPreference) preference).getTopic();
+        getPrivacySandboxBridge().setTopicAllowed(topic, true);
+        mBlockedTopicsCategory.removePreference(preference);
+        updateBlockedTopicsDescription();
+
+        if (TopicsUtils.shouldShowProactiveTopicsBlocking()) {
+            var currentTopics = new HashSet<Topic>(getPrivacySandboxBridge().getCurrentTopTopics());
+            if (!currentTopics.contains(topic)) {
                 showSnackbar(
-                        R.string.settings_topics_page_add_topic_snackbar,
+                        R.string.settings_unblock_topic_toast_body,
                         null,
                         Snackbar.TYPE_ACTION,
                         Snackbar.UMA_PRIVACY_SANDBOX_ADD_INTEREST,
-                        /* actionStringResId= */ 0,
+                        R.string.settings_unblock_topic_toast_button_text,
                         /* multiLine= */ true);
             }
-            RecordUserAction.record("Settings.PrivacySandbox.Topics.TopicAdded");
-            return true;
+        } else {
+            showSnackbar(
+                    R.string.settings_topics_page_add_topic_snackbar,
+                    null,
+                    Snackbar.TYPE_ACTION,
+                    Snackbar.UMA_PRIVACY_SANDBOX_ADD_INTEREST,
+                    /* actionStringResId= */ 0,
+                    /* multiLine= */ true);
         }
-        return false;
+        RecordUserAction.record("Settings.PrivacySandbox.Topics.TopicAdded");
+        return true;
     }
 
     private void populateBlockedTopics() {
         mBlockedTopicsCategory.removeAll();
-        List<Topic> blockedTopics = PrivacySandboxBridge.getBlockedTopics();
+        List<Topic> blockedTopics = getPrivacySandboxBridge().getBlockedTopics();
         for (Topic topic : blockedTopics) {
             TopicPreference preference = new TopicPreference(getContext(), topic);
             preference.setImage(
@@ -109,12 +105,12 @@ public class TopicsBlockedFragment extends PrivacySandboxSettingsBaseFragment
     }
 
     private void updateBlockedTopicsDescription() {
-        if (ChromeFeatureList.isEnabled(
-                ChromeFeatureList.PRIVACY_SANDBOX_PROACTIVE_TOPICS_BLOCKING)) {
+        if (TopicsUtils.shouldShowProactiveTopicsBlocking()) {
             mBlockedTopicsCategory.setSummary(null);
-            if (mBlockedTopicsCategory.getPreferenceCount() == 0)
+            if (mBlockedTopicsCategory.getPreferenceCount() == 0) {
                 mBlockedTopicsCategory.setSummary(
                         R.string.settings_topics_page_blocked_topics_description_empty_text_v2);
+            }
             return;
         }
         mBlockedTopicsCategory.setSummary(

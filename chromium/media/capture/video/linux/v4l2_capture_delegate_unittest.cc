@@ -46,7 +46,7 @@ constexpr int kFrameToReceive = 3;
 #endif  // BUILDFLAG(IS_LINUX)
 
 // Base id and class identifiers for Controls to be modified and later tested
-// agains default values.
+// against default values.
 static struct {
   uint32_t control_base;
   uint32_t class_id;
@@ -164,8 +164,8 @@ static void SetControlsToMaxValues(int device_fd) {
       readback.id = range.id & ~V4L2_CTRL_FLAG_NEXT_CTRL;
       if (HANDLE_EINTR(ioctl(device_fd, VIDIOC_G_CTRL, &readback)) < 0)
         DPLOG(ERROR) << range.name << ", failed to be read.";
-      EXPECT_EQ(range.maximum, readback.value) << " control " << range.name
-                                               << " didnt set correctly";
+      EXPECT_EQ(range.maximum, readback.value)
+          << " control " << range.name << " didn't set correctly";
     }
   }
 }
@@ -269,8 +269,13 @@ class MockV4l2GpuClient : public VideoCaptureDevice::Client {
 
   void OnCaptureConfigurationChanged() override {}
 
-  MOCK_METHOD4(ReserveOutputBuffer,
-               ReserveResult(const gfx::Size&, VideoPixelFormat, int, Buffer*));
+  MOCK_METHOD6(ReserveOutputBuffer,
+               ReserveResult(const gfx::Size&,
+                             VideoPixelFormat,
+                             int,
+                             Buffer*,
+                             int*,
+                             int*));
 
   void OnIncomingCapturedBuffer(
       Buffer buffer,
@@ -441,7 +446,8 @@ TEST_P(V4l2CaptureDelegateGPUMemoryBufferTest, CameraCaptureOneCopy) {
   EXPECT_CALL(*client_ptr, ReserveOutputBuffer)
       .WillRepeatedly(Invoke(
           [](const gfx::Size& size, VideoPixelFormat format, int feedback_id,
-             VideoCaptureDevice::Client::Buffer* capture_buffer) {
+             VideoCaptureDevice::Client::Buffer* capture_buffer,
+             int* require_new_buffer_id, int* retire_old_buffer_id) {
             EXPECT_EQ(format, PIXEL_FORMAT_NV12);
             capture_buffer->handle_provider =
                 std::make_unique<MockCaptureHandleProvider>(

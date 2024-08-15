@@ -24,6 +24,7 @@
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
+#include "chrome/browser/web_applications/test/os_integration_test_override_impl.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -81,8 +82,8 @@ class WebAppOpaqueBrowserFrameViewTest : public InProcessBrowserTest {
 
   bool InstallAndLaunchWebApp(
       std::optional<SkColor> theme_color = std::nullopt) {
-    auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
-    web_app_info->start_url = GetAppURL();
+    auto web_app_info =
+        web_app::WebAppInstallInfo::CreateWithStartUrlForTesting(GetAppURL());
     web_app_info->scope = GetAppURL().GetWithoutFilename();
     web_app_info->theme_color = theme_color;
 
@@ -139,6 +140,7 @@ class WebAppOpaqueBrowserFrameViewTest : public InProcessBrowserTest {
               theme_mode == ThemeMode::kDefault);
   }
 
+  web_app::OsIntegrationTestOverrideBlockingRegistration faked_os_integration_;
   raw_ptr<BrowserView, AcrossTasksDanglingUntriaged> browser_view_ = nullptr;
   raw_ptr<OpaqueBrowserFrameView, AcrossTasksDanglingUntriaged>
       opaque_browser_frame_view_ = nullptr;
@@ -282,8 +284,8 @@ class WebAppOpaqueBrowserFrameViewWindowControlsOverlayTest
                          .LoadWindowControlsOverlayTestPageWithDataAndGetURL(
                              embedded_test_server(), &temp_dir_);
 
-    auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
-    web_app_info->start_url = start_url;
+    auto web_app_info =
+        web_app::WebAppInstallInfo::CreateWithStartUrlForTesting(start_url);
     web_app_info->scope = start_url.GetWithoutFilename();
     web_app_info->display_mode = blink::mojom::DisplayMode::kStandalone;
     web_app_info->user_display_mode =
@@ -338,6 +340,7 @@ class WebAppOpaqueBrowserFrameViewWindowControlsOverlayTest
   WebAppFrameToolbarTestHelper web_app_frame_toolbar_helper_;
 
  private:
+  web_app::OsIntegrationTestOverrideBlockingRegistration faked_os_integration_;
   base::ScopedTempDir temp_dir_;
 };
 

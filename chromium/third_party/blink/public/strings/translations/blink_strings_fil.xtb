@@ -12,12 +12,12 @@
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1591562245178063882">Buwang ito</translation>
 <translation id="1637811476055996098">Pumili ng Mga File</translation>
+<translation id="1680090928918677457">Gamitin ang camera</translation>
 <translation id="1681022320378710418">kasalukuyang oras</translation>
 <translation id="1727839386348365796">Eyedropper</translation>
 <translation id="1729654308190250600">Mangyaring maglagay ng isang non-empty na email address.</translation>
 <translation id="1758486001363313524">Iba pa...</translation>
 <translation id="1787192514241997742">kabuuang oras: <ph name="REMAINING_TIME" /></translation>
-<translation id="1800494066469288780">Payagan ang camera</translation>
 <translation id="1822429046913737220">AM/PM</translation>
 <translation id="1832974991323546415">i-play sa malayuang device</translation>
 <translation id="1921819250265091946">dd</translation>
@@ -54,7 +54,6 @@
 <translation id="3220661731597678625">kasalukuyang hakbang</translation>
 <translation id="3321030238473337787">Bilis ng pag-playback</translation>
 <translation id="3329013043687509092">Saturation</translation>
-<translation id="3377518164566272702">Payagan ang mikropono at camera</translation>
 <translation id="3450233048674729344">Dapat mas mababa kaysa sa o katumbas ng <ph name="MAXIMUM" /> ang halaga.</translation>
 <translation id="3732799496749320381">mm</translation>
 <translation id="3754210790023674521">Lumabas sa picture-in-picture</translation>
@@ -62,6 +61,7 @@
 <translation id="3822383571486410024">Pakihabaan ang text na ito hanggang <ph name="MIN_CHARACTERS" /> (na) character o higit pa (kasalukuyan kang gumagamit ng <ph name="CURRENT_LENGTH" /> (na) character).</translation>
 <translation id="383465348367842624">Hindi dapat naglalaman ng simbolong '<ph name="INVALIDCHARACTER" />' ang bahagi bago ang '<ph name="ATSIGN" />.'</translation>
 <translation id="3846214748874656680">Lumabas sa fullscreen</translation>
+<translation id="3914173277599553213">Kinakailangan</translation>
 <translation id="4031179711345676612">Pinapayagan ang mikropono</translation>
 <translation id="4103419683916926126">Milliseconds</translation>
 <translation id="4201051445878709314">Ipakita ang nakaraang buwan</translation>
@@ -77,6 +77,7 @@
 <translation id="4912200001568447310">kasalukuyang item</translation>
 <translation id="4915360478455618802">Ipakita ang picker ng oras</translation>
 <translation id="4924138096460353083">hindi matukoy</translation>
+<translation id="49269513399674318">Gamitin ang mikropono</translation>
 <translation id="4950364064308314478">Ipakita ang picker ng lokal na petsa at oras</translation>
 <translation id="4971739861736909480"><ph name="ACCNAME" /> ang napili</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> ang napili</translation>
@@ -144,6 +145,7 @@
 <translation id="7080893216867146095">Pinapayagan ang pag-share ng lokasyon</translation>
 <translation id="709897737746224366">Pakitugma ang hiniling na format.</translation>
 <translation id="7102274145889307184">kasalukuyang lokasyon</translation>
+<translation id="7134810312945846184">Gamitin ang mikropono at camera</translation>
 <translation id="7263440858009898357">Mangyaring pumili ng item sa listahan.</translation>
 <translation id="7320576522385648310">nagba-buffer</translation>
 <translation id="7341556277900466204">Color well</translation>
@@ -188,7 +190,6 @@
 <translation id="9132465097189459683">Iba pa...</translation>
 <translation id="9155987714137265666"><ph name="WEEK" />, na magsisimula sa <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Picture in Picture</translation>
-<translation id="918430632320614861">Payagan ang mikropono</translation>
 <translation id="945780513535800434">Hindi Nilagyan ng Check ang Lahat</translation>
 <translation id="954003015749068518">pumasok sa picture-in-picture</translation>
 </translationbundle>

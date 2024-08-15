@@ -5,15 +5,18 @@
 #include "chrome/browser/enterprise/watermark/watermark_view.h"
 
 #include <math.h>
+
 #include <algorithm>
 #include <string>
 
+#include "base/no_destructor.h"
 #include "cc/paint/paint_canvas.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/render_text.h"
+#include "ui/views/accessibility/view_accessibility.h"
 
 namespace enterprise_watermark {
 
@@ -27,8 +30,8 @@ constexpr double kRotationAngle = 45;
 constexpr SkColor kFillColor = SkColorSetARGB(0x12, 0x00, 0x00, 0x00);
 constexpr SkColor kOutlineColor = SkColorSetARGB(0x27, 0xff, 0xff, 0xff);
 
-const gfx::Font& WatermarkFont() {
-  static gfx::Font font(
+gfx::Font WatermarkFont() {
+  return gfx::Font(
 #if BUILDFLAG(IS_WIN)
       "Segoe UI",
 #elif BUILDFLAG(IS_MAC)
@@ -41,7 +44,6 @@ const gfx::Font& WatermarkFont() {
       "sans-serif",
 #endif
       kTextSize);
-  return font;
 }
 
 gfx::Font::Weight WatermarkFontWeight() {
@@ -53,8 +55,8 @@ gfx::Font::Weight WatermarkFontWeight() {
 }
 
 const gfx::FontList& WatermarkFontList() {
-  static gfx::FontList font_list(WatermarkFont());
-  return font_list;
+  static base::NoDestructor<gfx::FontList> font_list(WatermarkFont());
+  return *font_list;
 }
 
 std::unique_ptr<gfx::RenderText> CreateRenderText(const gfx::Rect& display_rect,
@@ -106,24 +108,27 @@ WatermarkView::~WatermarkView() = default;
 void WatermarkView::SetString(const std::string& text) {
   DCHECK(base::IsStringUTF8(text));
 
-  text_fill_.reset();
-  text_outline_.reset();
+  if (text.empty()) {
+    text_fill_.reset();
+    text_outline_.reset();
+    block_height_ = 0;
+  } else {
+    std::u16string utf16_text = base::UTF8ToUTF16(text);
 
-  std::u16string utf16_text = base::UTF8ToUTF16(text);
+    // The coordinates here do not matter as the display rect will change for
+    // each drawn block.
+    gfx::Rect display_rect(0, 0, kWatermarkBlockWidth, 0);
+    text_fill_ = CreateFillRenderText(display_rect, utf16_text);
+    text_outline_ = CreateOutlineRenderText(display_rect, utf16_text);
 
-  // The coordinates here do not matter as the display rect will change for
-  // each drawn block.
-  gfx::Rect display_rect(0, 0, kWatermarkBlockWidth, 0);
-  text_fill_ = CreateFillRenderText(display_rect, utf16_text);
-  text_outline_ = CreateOutlineRenderText(display_rect, utf16_text);
-
-  // `block_height_` is going to be the max required height for a single line
-  // times the number of line.
-  int w = kWatermarkBlockWidth;
-  gfx::Canvas::SizeStringInt(utf16_text, WatermarkFontList(), &w,
-                             &block_height_, kTextSize,
-                             gfx::Canvas::NO_ELLIPSIS);
-  block_height_ *= text_fill_->GetNumLines();
+    // `block_height_` is going to be the max required height for a single line
+    // times the number of line.
+    int w = kWatermarkBlockWidth;
+    gfx::Canvas::SizeStringInt(utf16_text, WatermarkFontList(), &w,
+                               &block_height_, kTextSize,
+                               gfx::Canvas::NO_ELLIPSIS);
+    block_height_ *= text_fill_->GetNumLines();
+  }
 
   // Invalidate the state of the view.
   SchedulePaint();
@@ -281,6 +286,10 @@ int WatermarkView::max_y(double angle, const gfx::Rect& bounds) const {
   //                           │╱
   //
   return sin(angle) * bounds.width() + cos(angle) * bounds.height();
+}
+
+void WatermarkView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->AddState(ax::mojom::State::kInvisible);
 }
 
 BEGIN_METADATA(WatermarkView)

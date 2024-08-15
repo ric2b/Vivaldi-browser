@@ -49,15 +49,28 @@ if("${AOM_TARGET_CPU}" STREQUAL "arm64")
   # SVE and SVE2 require that the Neon-SVE bridge header is also available.
   if(ENABLE_SVE OR ENABLE_SVE2)
     set(OLD_CMAKE_REQURED_FLAGS ${CMAKE_REQUIRED_FLAGS})
+    set(OLD_CMAKE_TRY_COMPILE_TARGET_TYPE ${CMAKE_TRY_COMPILE_TARGET_TYPE})
     set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} ${AOM_SVE_FLAG}")
+    set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
     aom_check_source_compiles("arm_neon_sve_bridge_available" "
 #ifndef __ARM_NEON_SVE_BRIDGE
 #error 1
 #endif
 #include <arm_sve.h>
 #include <arm_neon_sve_bridge.h>" HAVE_SVE_HEADERS)
+    # Check whether the compiler can compile SVE functions that require
+    # backup/restore of SVE registers according to AAPCS. Clang for Windows used
+    # to fail this, see https://github.com/llvm/llvm-project/issues/80009.
+    aom_check_source_compiles("arm_sve_preserve" "
+#include <arm_sve.h>
+void other(void)\;
+svfloat32_t func(svfloat32_t a) {
+  other()\;
+  return a\;
+}" CAN_COMPILE_SVE)
     set(CMAKE_REQUIRED_FLAGS ${OLD_CMAKE_REQURED_FLAGS})
-    if(HAVE_SVE_HEADERS EQUAL 0)
+    set(CMAKE_TRY_COMPILE_TARGET_TYPE ${OLD_CMAKE_TRY_COMPILE_TARGET_TYPE})
+    if(HAVE_SVE_HEADERS EQUAL 0 OR CAN_COMPILE_SVE EQUAL 0)
       set(ENABLE_SVE 0)
       set(ENABLE_SVE2 0)
     endif()

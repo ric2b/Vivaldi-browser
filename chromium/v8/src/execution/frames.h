@@ -169,8 +169,9 @@ class StackFrame {
     Address fp = kNullAddress;
     Address* pc_address = nullptr;
     Address callee_fp = kNullAddress;
-    Address* callee_pc_address = nullptr;
+    Address callee_pc = kNullAddress;
     Address* constant_pool_address = nullptr;
+    bool is_profiler_entry_frame = false;
   };
 
   // Convert a stack frame type to a marker that can be stored on the stack.
@@ -281,9 +282,12 @@ class StackFrame {
   Address sp() const { return state_.sp; }
   Address fp() const { return state_.fp; }
   Address callee_fp() const { return state_.callee_fp; }
-  inline Address callee_pc() const;
+  Address callee_pc() const { return state_.callee_pc; }
   Address caller_sp() const { return GetCallerStackPointer(); }
   inline Address pc() const;
+  bool is_profiler_entry_frame() const {
+    return state_.is_profiler_entry_frame;
+  }
 
   // Skip authentication of the PC, when using CFI. Used in the profiler, where
   // in certain corner-cases we do not use an address on the stack, which would
@@ -357,7 +361,6 @@ class StackFrame {
 
  protected:
   inline explicit StackFrame(StackFrameIteratorBase* iterator);
-  virtual ~StackFrame() = default;
 
   // Compute the stack pointer for the calling frame.
   virtual Address GetCallerStackPointer() const = 0;
@@ -1472,9 +1475,12 @@ class StackFrameIteratorBase {
   explicit StackFrameIteratorBase(Isolate* isolate);
 
   Isolate* const isolate_;
+  union {
+    char uninitialized_;
 #define DECLARE_SINGLETON(ignore, type) type type##_;
   STACK_FRAME_TYPE_LIST(DECLARE_SINGLETON)
 #undef DECLARE_SINGLETON
+  };
   StackFrame* frame_;
   StackHandler* handler_;
 
@@ -1483,10 +1489,10 @@ class StackFrameIteratorBase {
     return handler_;
   }
 
-  // Get the type-specific frame singleton in a given state.
-  StackFrame* SingletonFor(StackFrame::Type type, StackFrame::State* state);
-  // A helper function, can return a nullptr pointer.
-  StackFrame* SingletonFor(StackFrame::Type type);
+  // Update the current frame to the given state.
+  void SetNewFrame(StackFrame::Type type, StackFrame::State* state);
+  // A helper function, can set the frame to nullptr.
+  void SetNewFrame(StackFrame::Type type);
 
  private:
   friend class StackFrame;
@@ -1626,11 +1632,14 @@ class StackFrameIteratorForProfiler : public StackFrameIteratorBase {
 #endif
     return low_bound_ <= addr && addr <= high_bound_;
   }
-  bool IsValidFrame(StackFrame* frame) const;
-  bool IsValidCaller(StackFrame* frame);
+  bool IsValidState(const StackFrame::State& frame) const;
+  bool HasValidExitIfEntryFrame(const StackFrame* frame) const;
   bool IsValidExitFrame(Address fp) const;
   bool IsValidTop(ThreadLocalTop* top) const;
   static bool IsValidFrameType(StackFrame::Type type);
+
+  StackFrame::Type GetCallerIfValid(StackFrame* frame,
+                                    StackFrame::State* state);
 
   // Returns true if the pc points to a bytecode handler and the frame pointer
   // doesn't seem to be a bytecode handler's frame, which implies that the

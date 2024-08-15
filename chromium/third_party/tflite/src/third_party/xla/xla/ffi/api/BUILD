@@ -1,6 +1,6 @@
-load("//xla:xla.bzl", "xla_cc_test")
-load("@local_tsl//tsl:tsl.default.bzl", "filegroup")
 load("@local_tsl//tsl/platform:rules_cc.bzl", "cc_library")
+load("//xla:xla.bzl", "xla_cc_test")
+load("//xla/tsl:tsl.default.bzl", "filegroup")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
@@ -71,6 +71,7 @@ xla_cc_test(
         ":ffi",
         "//xla:xla_data_proto_cc",
         "//xla/ffi:call_frame",
+        "//xla/ffi:execution_context",
         "//xla/ffi:ffi_api",
         "//xla/stream_executor:device_memory",
         "@com_google_absl//absl/log:check",

@@ -9,6 +9,7 @@
 
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "components/manta/base_provider_test_helper.h"
@@ -35,7 +36,9 @@ class FakeSnapperProvider : public SnapperProvider, public FakeBaseProvider {
   FakeSnapperProvider(
       scoped_refptr<network::SharedURLLoaderFactory> test_url_loader_factory,
       signin::IdentityManager* identity_manager)
-      : BaseProvider(test_url_loader_factory, identity_manager),
+      : BaseProvider(test_url_loader_factory,
+                     identity_manager,
+                     /*is_demo_mode=*/false),
         SnapperProvider(test_url_loader_factory, identity_manager),
         FakeBaseProvider(test_url_loader_factory, identity_manager) {}
 };
@@ -59,6 +62,7 @@ class SnapperProviderTest : public BaseProviderTest {
 
 // Test POST data is correctly passed from SnapperProvider to EndpointFetcher.
 TEST_F(SnapperProviderTest, SimpleRequestPayload) {
+  base::HistogramTester histogram_tester;
   manta::proto::Response response;
   manta::proto::OutputData& output_data = *response.add_output_data();
   manta::proto::Image& image = *output_data.mutable_image();
@@ -72,8 +76,9 @@ TEST_F(SnapperProviderTest, SimpleRequestPayload) {
       CreateSnapperProvider();
   auto quit_closure = task_environment_.QuitClosure();
 
+  manta::proto::Request request;
   snapper_provider->Call(
-      manta::proto::Request(),
+      request, TRAFFIC_ANNOTATION_FOR_TESTS,
       base::BindLambdaForTesting(
           [&quit_closure](std::unique_ptr<manta::proto::Response> response,
                           MantaStatus manta_status) {
@@ -88,16 +93,22 @@ TEST_F(SnapperProviderTest, SimpleRequestPayload) {
             quit_closure.Run();
           }));
   task_environment_.RunUntilQuit();
+
+  // Metric is logged when respose is successfully parsed.
+  histogram_tester.ExpectTotalCount("Ash.MantaService.SnapperProvider.TimeCost",
+                                    1);
 }
 
 TEST_F(SnapperProviderTest, EmptyResponseAfterIdentityManagerShutdown) {
+  base::HistogramTester histogram_tester;
   std::unique_ptr<FakeSnapperProvider> snapper_provider =
       CreateSnapperProvider();
 
   identity_test_env_.reset();
 
+  manta::proto::Request request;
   snapper_provider->Call(
-      manta::proto::Request(),
+      request, TRAFFIC_ANNOTATION_FOR_TESTS,
       base::BindLambdaForTesting(
           [quit_closure = task_environment_.QuitClosure()](
               std::unique_ptr<manta::proto::Response> response,
@@ -108,6 +119,10 @@ TEST_F(SnapperProviderTest, EmptyResponseAfterIdentityManagerShutdown) {
             quit_closure.Run();
           }));
   task_environment_.RunUntilQuit();
+
+  // No metric logged.
+  histogram_tester.ExpectTotalCount("Ash.MantaService.SnapperProvider.TimeCost",
+                                    0);
 }
 
 }  // namespace manta

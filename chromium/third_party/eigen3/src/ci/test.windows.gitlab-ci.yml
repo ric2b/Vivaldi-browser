@@ -90,10 +90,11 @@ test:windows:x86-64:msvc-14.29:avx512dq:unsupported:
     - x86-64
     - cuda
 
-# MSVC 14.16 + CUDA 9.2
-test:windows:x86-64:cuda-9.2:msvc-14.16:
-  extends: .test:windows:cuda
-  needs: [ build:windows:x86-64:cuda-9.2:msvc-14.16 ]
+# The CUDA 9.2 compiler crashes with an internal error.
+# # MSVC 14.16 + CUDA 9.2
+# test:windows:x86-64:cuda-9.2:msvc-14.16:
+#   extends: .test:windows:cuda
+#   needs: [ build:windows:x86-64:cuda-9.2:msvc-14.16 ]
   
 # MSVC 14.29 + CUDA 10.2
 test:windows:x86-64:cuda-10.2:msvc-14.29:

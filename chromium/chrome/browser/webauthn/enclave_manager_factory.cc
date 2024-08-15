@@ -4,17 +4,28 @@
 
 #include "chrome/browser/webauthn/enclave_manager_factory.h"
 
-#include "chrome/browser/net/system_network_context_manager.h"
+#include "base/memory/weak_ptr.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/webauthn/enclave_manager.h"
-#include "components/signin/public/identity_manager/identity_manager.h"
+#include "chrome/browser/webauthn/enclave_manager_interface.h"
 #include "content/public/browser/storage_partition.h"
 
-// static
-EnclaveManager* EnclaveManagerFactory::GetForProfile(Profile* profile) {
-  return static_cast<EnclaveManager*>(
+network::SharedURLLoaderFactory* g_url_loader_factory_test_override;
+
+EnclaveManagerInterface* EnclaveManagerFactory::GetForProfile(
+    Profile* profile) {
+  return static_cast<EnclaveManagerInterface*>(
       GetInstance()->GetServiceForBrowserContext(profile, /*create=*/true));
+}
+
+EnclaveManager* EnclaveManagerFactory::GetAsEnclaveManagerForProfile(
+    Profile* profile) {
+  EnclaveManagerInterface* interface = GetForProfile(profile);
+  if (!interface) {
+    return nullptr;
+  }
+  return interface->GetEnclaveManager();
 }
 
 // static
@@ -33,6 +44,12 @@ EnclaveManagerFactory::EnclaveManagerFactory()
   DependsOn(IdentityManagerFactory::GetInstance());
 }
 
+// static
+void EnclaveManagerFactory::SetUrlLoaderFactoryForTesting(
+    network::SharedURLLoaderFactory* factory) {
+  g_url_loader_factory_test_override = factory;
+}
+
 EnclaveManagerFactory::~EnclaveManagerFactory() = default;
 
 std::unique_ptr<KeyedService>
@@ -42,7 +59,17 @@ EnclaveManagerFactory::BuildServiceInstanceForBrowserContext(
   return std::make_unique<EnclaveManager>(
       /*base_dir=*/profile->GetPath(),
       IdentityManagerFactory::GetForProfile(profile),
-      SystemNetworkContextManager::GetInstance()->GetContext(),
-      profile->GetDefaultStoragePartition()
-          ->GetURLLoaderFactoryForBrowserProcess());
+      base::BindRepeating(
+          [](base::WeakPtr<Profile> profile)
+              -> network::mojom::NetworkContext* {
+            if (!profile) {
+              return nullptr;
+            }
+            return profile->GetDefaultStoragePartition()->GetNetworkContext();
+          },
+          profile->GetWeakPtr()),
+      g_url_loader_factory_test_override
+          ? g_url_loader_factory_test_override
+          : profile->GetDefaultStoragePartition()
+                ->GetURLLoaderFactoryForBrowserProcess());
 }

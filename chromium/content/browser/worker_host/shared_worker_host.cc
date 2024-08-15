@@ -29,6 +29,7 @@
 #include "content/browser/webtransport/web_transport_connector_impl.h"
 #include "content/browser/worker_host/shared_worker_content_settings_proxy_impl.h"
 #include "content/browser/worker_host/shared_worker_service_impl.h"
+#include "content/browser/worker_host/worker_script_fetcher.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -156,6 +157,7 @@ SharedWorkerHost::SharedWorkerHost(
   worker_receiver_ = worker_.BindNewPipeAndPassReceiver();
 
   service_->NotifyWorkerCreated(token_, GetProcessHost()->GetID(),
+                                instance_.storage_key().origin(),
                                 devtools_handle_->dev_tools_token());
 }
 
@@ -199,24 +201,18 @@ RenderProcessHost* SharedWorkerHost::GetProcessHost() {
 
 void SharedWorkerHost::Start(
     mojo::PendingRemote<blink::mojom::SharedWorkerFactory> factory,
-    blink::mojom::WorkerMainScriptLoadParamsPtr main_script_load_params,
-    std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
-        subresource_loader_factories,
-    blink::mojom::ControllerServiceWorkerInfoPtr controller,
-    base::WeakPtr<ServiceWorkerObjectHost>
-        controller_service_worker_object_host,
     blink::mojom::FetchClientSettingsObjectPtr
         outside_fetch_client_settings_object,
-    const GURL& final_response_url,
-    ContentBrowserClient* client) {
+    ContentBrowserClient* client,
+    WorkerScriptFetcherResult result) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!started_);
-  DCHECK(main_script_load_params);
-  DCHECK(subresource_loader_factories);
-  DCHECK(!subresource_loader_factories->pending_default_factory());
+  DCHECK(result.main_script_load_params);
+  DCHECK(result.subresource_loader_factories);
+  DCHECK(!result.subresource_loader_factories->pending_default_factory());
 
   started_ = true;
-  final_response_url_ = final_response_url;
+  final_response_url_ = result.final_response_url;
 
   // `network::mojom::ClientSecurityState` contains a worker-relevant subset of
   // the policy container. https://crbug.com/1177199 tracks using
@@ -226,8 +222,8 @@ void SharedWorkerHost::Start(
   worker_client_security_state_ = network::mojom::ClientSecurityState::New();
   scoped_refptr<PolicyContainerHost> policy_container_host;
 
-  if (final_response_url.SchemeIsLocal()) {
-    // TODO(https://crbug.com/1146362): Inherit from the file creator instead
+  if (result.final_response_url.SchemeIsLocal()) {
+    // TODO(crbug.com/40053797): Inherit from the file creator instead
     // once creator policies are persisted through the filesystem store.
     if (creator_policy_container_host_) {
       worker_client_security_state_ =
@@ -254,8 +250,8 @@ void SharedWorkerHost::Start(
     // This does not parse the referrer policy, which will be
     // updated in `SharedWorkerGlobalScope::Initialize()`.
     PolicyContainerPolicies policies(
-        final_response_url, main_script_load_params->response_head.get(),
-        nullptr);
+        result.final_response_url,
+        result.main_script_load_params->response_head.get(), nullptr);
 
     // A worker context can only be secure if its creator also is.
     if (!creator_policy_container_host_->policies().is_web_secure_context) {
@@ -268,9 +264,9 @@ void SharedWorkerHost::Start(
     policy_container_host =
         base::MakeRefCounted<PolicyContainerHost>(std::move(policies));
 
-    if (main_script_load_params->response_head->parsed_headers) {
+    if (result.main_script_load_params->response_head->parsed_headers) {
       worker_client_security_state_->cross_origin_embedder_policy =
-          main_script_load_params->response_head->parsed_headers
+          result.main_script_load_params->response_head->parsed_headers
               ->cross_origin_embedder_policy;
     }
 
@@ -291,7 +287,7 @@ void SharedWorkerHost::Start(
         GetProcessHost()->GetStoragePartition());
     // Create a COEP reporter with worker's policy.
     coep_reporter_ = std::make_unique<CrossOriginEmbedderPolicyReporter>(
-        storage_partition->GetWeakPtr(), final_response_url,
+        storage_partition->GetWeakPtr(), result.final_response_url,
         worker_client_security_state_->cross_origin_embedder_policy
             .reporting_endpoint,
         worker_client_security_state_->cross_origin_embedder_policy
@@ -334,9 +330,9 @@ void SharedWorkerHost::Start(
   // Set the default factory to the bundle for subresource loading to pass to
   // the renderer.
   bool bypass_redirect_checks = false;
-  subresource_loader_factories->pending_default_factory() =
+  result.subresource_loader_factories->pending_default_factory() =
       CreateNetworkFactoryForSubresources(&bypass_redirect_checks);
-  subresource_loader_factories->set_bypass_redirect_checks(
+  result.subresource_loader_factories->set_bypass_redirect_checks(
       bypass_redirect_checks);
 
   // Prepare the controller service worker info to pass to the renderer.
@@ -345,10 +341,10 @@ void SharedWorkerHost::Start(
   mojo::PendingAssociatedRemote<blink::mojom::ServiceWorkerObject>
       service_worker_remote_object;
   blink::mojom::ServiceWorkerState service_worker_sent_state;
-  if (controller && controller->object_info) {
-    controller->object_info->receiver =
+  if (result.controller && result.controller->object_info) {
+    result.controller->object_info->receiver =
         service_worker_remote_object.InitWithNewEndpointAndPassReceiver();
-    service_worker_sent_state = controller->object_info->state;
+    service_worker_sent_state = result.controller->object_info->state;
   }
 
   // Send the CreateSharedWorker message.
@@ -363,20 +359,25 @@ void SharedWorkerHost::Start(
       devtools_handle_->pause_on_start(), devtools_handle_->dev_tools_token(),
       std::move(renderer_preferences), std::move(preference_watcher_receiver),
       std::move(content_settings), service_worker_handle_->TakeContainerInfo(),
-      std::move(main_script_load_params),
-      std::move(subresource_loader_factories), std::move(controller),
+      std::move(result.main_script_load_params),
+      std::move(result.subresource_loader_factories),
+      std::move(result.controller),
       policy_container_host->CreatePolicyContainerForBlink(),
       receiver_.BindNewPipeAndPassRemote(), std::move(worker_receiver_),
       std::move(browser_interface_broker), ukm_source_id_,
       instance_.DoesRequireCrossSiteRequestForCookies());
+  if (service_worker_handle_->service_worker_client()) {
+    service_worker_handle_->service_worker_client()->SetContainerReady();
+  }
 
   // |service_worker_remote_object| is an associated interface ptr, so calls
   // can't be made on it until its request endpoint is sent. Now that the
   // request endpoint was sent, it can be used, so add it to
   // ServiceWorkerObjectHost.
   if (service_worker_remote_object.is_valid()) {
-    controller_service_worker_object_host->AddRemoteObjectPtrAndUpdateState(
-        std::move(service_worker_remote_object), service_worker_sent_state);
+    result.controller_service_worker_object_host
+        ->AddRemoteObjectPtrAndUpdateState(
+            std::move(service_worker_remote_object), service_worker_sent_state);
   }
 
   // Monitor the lifetime of the worker.
@@ -408,6 +409,7 @@ SharedWorkerHost::CreateNetworkFactoryForSubresources(
       url_loader_factory::ContentClientParams(
           GetProcessHost()->GetBrowserContext(),
           /*frame=*/nullptr, GetProcessHost()->GetID(), origin,
+          GetStorageKey().ToPartialNetIsolationInfo(),
           ukm::SourceIdObj::FromInt64(ukm_source_id_), bypass_redirect_checks),
       devtools_instrumentation::WillCreateURLLoaderFactoryParams::
           ForSharedWorker(this));
@@ -677,7 +679,7 @@ bool SharedWorkerHost::CheckCrossOriginEmbedderPolicy(
   // cross-origin embedder policy inheritance violation with response, "worker
   // initialization", owner's policy's report only reporting endpoint,
   // "reporting", and owner.
-  // TODO(https://crbug.com/1060832): Add reporters.
+  // TODO(crbug.com/40122193): Add reporters.
 
   // [spec]: 5. If ownerPolicy's value is "unsafe-none" or policy's value is
   // "require-corp" or "credentialless", then return true.

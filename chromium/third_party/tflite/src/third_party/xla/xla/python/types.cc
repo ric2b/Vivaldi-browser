@@ -35,8 +35,6 @@ limitations under the License.
 #include "third_party/nanobind/include/nanobind/stl/shared_ptr.h"  // IWYU pragma: keep
 #include "third_party/nanobind/include/nanobind/stl/string.h"  // IWYU pragma: keep
 #include "third_party/nanobind/include/nanobind/stl/string_view.h"  // IWYU pragma: keep
-#include "pybind11/numpy.h"  // from @pybind11
-#include "pybind11/pytypes.h"  // from @pybind11
 #include "xla/layout.h"
 #include "xla/literal.h"
 #include "xla/pjrt/exceptions.h"
@@ -47,16 +45,15 @@ limitations under the License.
 #include "xla/shape.h"
 #include "xla/shape_util.h"
 #include "xla/status_macros.h"
+#include "xla/tsl/python/lib/core/numpy.h"
 #include "xla/util.h"
 #include "xla/xla_data.pb.h"
 #include "tsl/platform/logging.h"
 #include "tsl/platform/statusor.h"
-#include "tsl/python/lib/core/numpy.h"
 
 namespace xla {
 
 namespace nb = nanobind;
-namespace py = pybind11;
 
 namespace {
 
@@ -154,10 +151,6 @@ absl::StatusOr<PrimitiveType> DtypeToPrimitiveType(const nb_dtype& np_type) {
                          np_type.char_(), np_type.kind(), np_type.itemsize());
 }
 
-absl::StatusOr<PrimitiveType> DtypeToPrimitiveType(const py::dtype& np_type) {
-  return DtypeToPrimitiveType(nb::borrow<nb_dtype>(np_type.ptr()));
-}
-
 absl::StatusOr<nb_dtype> PrimitiveTypeToNbDtype(PrimitiveType type) {
   const CustomDtypes& custom_dtypes = GetCustomDtypes();
   auto to_nb_dtype = [](int typenum) -> nb_dtype {
@@ -215,11 +208,6 @@ absl::StatusOr<nb_dtype> PrimitiveTypeToNbDtype(PrimitiveType type) {
   }
 }
 
-absl::StatusOr<py::dtype> PrimitiveTypeToDtype(PrimitiveType type) {
-  TF_ASSIGN_OR_RETURN(nb_dtype np_type, PrimitiveTypeToNbDtype(type));
-  return py::reinterpret_steal<py::dtype>(np_type.release().ptr());
-}
-
 absl::StatusOr<nb_dtype> IfrtDtypeToNbDtype(ifrt::DType dtype) {
   const CustomDtypes& custom_dtypes = GetCustomDtypes();
   auto to_nb_dtype = [](int typenum) -> nb_dtype {
@@ -230,7 +218,7 @@ absl::StatusOr<nb_dtype> IfrtDtypeToNbDtype(ifrt::DType dtype) {
     case ifrt::DType::kPred:
       return to_nb_dtype(NPY_BOOL);
     case ifrt::DType::kS4:
-      return to_nb_dtype(NPY_INT8);
+      return custom_dtypes.int4;
     case ifrt::DType::kS8:
       return to_nb_dtype(NPY_INT8);
     case ifrt::DType::kS16:
@@ -240,7 +228,7 @@ absl::StatusOr<nb_dtype> IfrtDtypeToNbDtype(ifrt::DType dtype) {
     case ifrt::DType::kS64:
       return to_nb_dtype(NPY_INT64);
     case ifrt::DType::kU4:
-      return to_nb_dtype(NPY_UINT8);
+      return custom_dtypes.uint4;
     case ifrt::DType::kU8:
       return to_nb_dtype(NPY_UINT8);
     case ifrt::DType::kU16:
@@ -285,46 +273,52 @@ absl::StatusOr<nb_dtype> IfrtDtypeToNbDtype(ifrt::DType dtype) {
   }
 }
 
-absl::StatusOr<pybind11::dtype> IfrtDtypeToDtype(ifrt::DType dtype) {
-  TF_ASSIGN_OR_RETURN(nb_dtype np_type, IfrtDtypeToNbDtype(dtype));
-  return py::reinterpret_steal<py::dtype>(np_type.release().ptr());
-}
-
-absl::StatusOr<ifrt::DType> DtypeToIfRtDType(py::dtype dtype) {
+absl::StatusOr<ifrt::DType> DtypeToIfRtDType(nb_dtype dtype) {
   TF_ASSIGN_OR_RETURN(auto primitive_type, DtypeToPrimitiveType(dtype));
   return ifrt::ToDType(primitive_type);
+}
+
+absl::StatusOr<nb_dtype> IfrtDtypeToDtypeWithTokenCanonicalization(
+    ifrt::DType dtype) {
+  if (dtype.kind() == ifrt::DType::kToken) {
+    // Treat token as bool.
+    return nb::steal<nb_dtype>(
+        reinterpret_cast<PyObject*>(PyArray_DescrFromType(NPY_BOOL)));
+  }
+
+  return IfrtDtypeToNbDtype(dtype);
 }
 
 const NumpyScalarTypes& GetNumpyScalarTypes() {
   static const NumpyScalarTypes* singleton = []() {
     NumpyScalarTypes* dtypes = new NumpyScalarTypes();
-    py::module numpy = py::module::import("numpy");
-    py::module ml_dtypes = py::module::import("ml_dtypes");
-    dtypes->np_bool = py::object(numpy.attr("bool_"));
-    dtypes->np_int4 = py::object(ml_dtypes.attr("int4"));
-    dtypes->np_int8 = py::object(numpy.attr("int8"));
-    dtypes->np_int16 = py::object(numpy.attr("int16"));
-    dtypes->np_int32 = py::object(numpy.attr("int32"));
-    dtypes->np_int64 = py::object(numpy.attr("int64"));
-    dtypes->np_uint4 = py::object(ml_dtypes.attr("uint4"));
-    dtypes->np_uint8 = py::object(numpy.attr("uint8"));
-    dtypes->np_uint16 = py::object(numpy.attr("uint16"));
-    dtypes->np_uint32 = py::object(numpy.attr("uint32"));
-    dtypes->np_uint64 = py::object(numpy.attr("uint64"));
-    dtypes->np_bfloat16 = py::object(ml_dtypes.attr("bfloat16"));
-    dtypes->np_float8_e4m3fn = py::object(ml_dtypes.attr("float8_e4m3fn"));
+    nb::module_ numpy = nb::module_::import_("numpy");
+    nb::module_ ml_dtypes = nb::module_::import_("ml_dtypes");
+    dtypes->np_bool = nb::object(numpy.attr("bool_"));
+    dtypes->np_int4 = nb::object(ml_dtypes.attr("int4"));
+    dtypes->np_int8 = nb::object(numpy.attr("int8"));
+    dtypes->np_int16 = nb::object(numpy.attr("int16"));
+    dtypes->np_int32 = nb::object(numpy.attr("int32"));
+    dtypes->np_int64 = nb::object(numpy.attr("int64"));
+    dtypes->np_uint4 = nb::object(ml_dtypes.attr("uint4"));
+    dtypes->np_uint8 = nb::object(numpy.attr("uint8"));
+    dtypes->np_uint16 = nb::object(numpy.attr("uint16"));
+    dtypes->np_uint32 = nb::object(numpy.attr("uint32"));
+    dtypes->np_uint64 = nb::object(numpy.attr("uint64"));
+    dtypes->np_bfloat16 = nb::object(ml_dtypes.attr("bfloat16"));
+    dtypes->np_float8_e4m3fn = nb::object(ml_dtypes.attr("float8_e4m3fn"));
     dtypes->np_float8_e4m3b11fnuz =
-        py::object(ml_dtypes.attr("float8_e4m3b11fnuz"));
-    dtypes->np_float8_e5m2 = py::object(ml_dtypes.attr("float8_e5m2"));
-    dtypes->np_float8_e4m3fnuz = py::object(ml_dtypes.attr("float8_e4m3fnuz"));
-    dtypes->np_float8_e5m2fnuz = py::object(ml_dtypes.attr("float8_e5m2fnuz"));
-    dtypes->np_float16 = py::object(numpy.attr("float16"));
-    dtypes->np_float32 = py::object(numpy.attr("float32"));
-    dtypes->np_float64 = py::object(numpy.attr("float64"));
-    dtypes->np_complex64 = py::object(numpy.attr("complex64"));
-    dtypes->np_complex128 = py::object(numpy.attr("complex128"));
-    dtypes->np_longlong = py::object(numpy.attr("longlong"));
-    dtypes->np_intc = py::object(numpy.attr("intc"));
+        nb::object(ml_dtypes.attr("float8_e4m3b11fnuz"));
+    dtypes->np_float8_e5m2 = nb::object(ml_dtypes.attr("float8_e5m2"));
+    dtypes->np_float8_e4m3fnuz = nb::object(ml_dtypes.attr("float8_e4m3fnuz"));
+    dtypes->np_float8_e5m2fnuz = nb::object(ml_dtypes.attr("float8_e5m2fnuz"));
+    dtypes->np_float16 = nb::object(numpy.attr("float16"));
+    dtypes->np_float32 = nb::object(numpy.attr("float32"));
+    dtypes->np_float64 = nb::object(numpy.attr("float64"));
+    dtypes->np_complex64 = nb::object(numpy.attr("complex64"));
+    dtypes->np_complex128 = nb::object(numpy.attr("complex128"));
+    dtypes->np_longlong = nb::object(numpy.attr("longlong"));
+    dtypes->np_intc = nb::object(numpy.attr("intc"));
     return dtypes;
   }();
   return *singleton;
@@ -368,7 +362,7 @@ const char* PEP3118FormatDescriptorForPrimitiveType(PrimitiveType type) {
   }
 }
 
-absl::StatusOr<py::str> TypeDescriptorForPrimitiveType(PrimitiveType type) {
+absl::StatusOr<nb::str> TypeDescriptorForPrimitiveType(PrimitiveType type) {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #define ENDIAN_PREFIX "<"
 #else
@@ -376,35 +370,35 @@ absl::StatusOr<py::str> TypeDescriptorForPrimitiveType(PrimitiveType type) {
 #endif
   switch (type) {
     case PRED:
-      return py::str("|b1");
+      return nb::str("|b1");
     case S8:
-      return py::str("|i1");
+      return nb::str("|i1");
     case S16:
-      return py::str(ENDIAN_PREFIX "i2");
+      return nb::str(ENDIAN_PREFIX "i2");
     case S32:
-      return py::str(ENDIAN_PREFIX "i4");
+      return nb::str(ENDIAN_PREFIX "i4");
     case S64:
-      return py::str(ENDIAN_PREFIX "i8");
+      return nb::str(ENDIAN_PREFIX "i8");
     case U8:
-      return py::str("|u1");
+      return nb::str("|u1");
     case U16:
-      return py::str(ENDIAN_PREFIX "u2");
+      return nb::str(ENDIAN_PREFIX "u2");
     case U32:
-      return py::str(ENDIAN_PREFIX "u4");
+      return nb::str(ENDIAN_PREFIX "u4");
     case U64:
-      return py::str(ENDIAN_PREFIX "u8");
+      return nb::str(ENDIAN_PREFIX "u8");
     case BF16:
-      return py::str(ENDIAN_PREFIX "V2");
+      return nb::str(ENDIAN_PREFIX "V2");
     case F16:
-      return py::str(ENDIAN_PREFIX "f2");
+      return nb::str(ENDIAN_PREFIX "f2");
     case F32:
-      return py::str(ENDIAN_PREFIX "f4");
+      return nb::str(ENDIAN_PREFIX "f4");
     case F64:
-      return py::str(ENDIAN_PREFIX "f8");
+      return nb::str(ENDIAN_PREFIX "f8");
     case C64:
-      return py::str(ENDIAN_PREFIX "c8");
+      return nb::str(ENDIAN_PREFIX "c8");
     case C128:
-      return py::str(ENDIAN_PREFIX "c16");
+      return nb::str(ENDIAN_PREFIX "c16");
     default:
       return Unimplemented("Unimplemented primitive type %s",
                            PrimitiveType_Name(type));
@@ -497,24 +491,6 @@ nb::tuple MutableSpanToNbTuple(absl::Span<nb::object> xs) {
     PyTuple_SET_ITEM(out.ptr(), i, xs[i].release().ptr());
   }
   return out;
-}
-
-template <typename IntType>
-static py::tuple IntSpanToTupleHelper(absl::Span<IntType const> xs) {
-  py::tuple out(xs.size());
-  for (int i = 0; i < xs.size(); ++i) {
-    out[i] = py::int_(xs[i]);
-  }
-  return out;
-}
-
-template <>
-pybind11::tuple SpanToTuple(absl::Span<int const> xs) {
-  return IntSpanToTupleHelper(xs);
-}
-template <>
-pybind11::tuple SpanToTuple(absl::Span<int64_t const> xs) {
-  return IntSpanToTupleHelper(xs);
 }
 
 std::optional<CastToArrayResult> CastToArray(nb::handle h) {

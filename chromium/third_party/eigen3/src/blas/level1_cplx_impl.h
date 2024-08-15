@@ -11,7 +11,7 @@
 
 struct scalar_norm1_op {
   typedef RealScalar result_type;
-  inline RealScalar operator()(const Scalar &a) const { return numext::norm1(a); }
+  inline RealScalar operator()(const Scalar &a) const { return Eigen::numext::norm1(a); }
 };
 namespace Eigen {
 namespace internal {
@@ -40,7 +40,7 @@ extern "C" int EIGEN_CAT(i, EIGEN_BLAS_FUNC_NAME(amax))(int *n, RealScalar *px, 
   if (*n <= 0) return 0;
   Scalar *x = reinterpret_cast<Scalar *>(px);
 
-  DenseIndex ret;
+  Eigen::DenseIndex ret;
   if (*incx == 1)
     make_vector(x, *n).unaryExpr<scalar_norm1_op>().maxCoeff(&ret);
   else
@@ -52,7 +52,7 @@ extern "C" int EIGEN_CAT(i, EIGEN_BLAS_FUNC_NAME(amin))(int *n, RealScalar *px, 
   if (*n <= 0) return 0;
   Scalar *x = reinterpret_cast<Scalar *>(px);
 
-  DenseIndex ret;
+  Eigen::DenseIndex ret;
   if (*incx == 1)
     make_vector(x, *n).unaryExpr<scalar_norm1_op>().minCoeff(&ret);
   else
@@ -132,16 +132,16 @@ EIGEN_BLAS_FUNC(EIGEN_CAT(REAL_SCALAR_SUFFIX, rot))
   StridedVectorType vx(make_vector(x, *n, std::abs(*incx)));
   StridedVectorType vy(make_vector(y, *n, std::abs(*incy)));
 
-  Reverse<StridedVectorType> rvx(vx);
-  Reverse<StridedVectorType> rvy(vy);
+  Eigen::Reverse<StridedVectorType> rvx(vx);
+  Eigen::Reverse<StridedVectorType> rvy(vy);
 
   // TODO implement mixed real-scalar rotations
   if (*incx < 0 && *incy > 0)
-    internal::apply_rotation_in_the_plane(rvx, vy, JacobiRotation<Scalar>(c, s));
+    Eigen::internal::apply_rotation_in_the_plane(rvx, vy, Eigen::JacobiRotation<Scalar>(c, s));
   else if (*incx > 0 && *incy < 0)
-    internal::apply_rotation_in_the_plane(vx, rvy, JacobiRotation<Scalar>(c, s));
+    Eigen::internal::apply_rotation_in_the_plane(vx, rvy, Eigen::JacobiRotation<Scalar>(c, s));
   else
-    internal::apply_rotation_in_the_plane(vx, vy, JacobiRotation<Scalar>(c, s));
+    Eigen::internal::apply_rotation_in_the_plane(vx, vy, Eigen::JacobiRotation<Scalar>(c, s));
 }
 
 EIGEN_BLAS_FUNC(EIGEN_CAT(REAL_SCALAR_SUFFIX, scal))(int *n, RealScalar *palpha, RealScalar *px, int *incx) {

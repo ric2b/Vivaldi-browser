@@ -4,7 +4,7 @@
 
 #include "partition_alloc/partition_alloc_base/strings/cstring_builder.h"
 
-#include "build/build_config.h"
+#include "partition_alloc/build_config.h"
 #include "partition_alloc/partition_alloc_base/debug/debugging_buildflags.h"
 #include "partition_alloc/partition_alloc_base/strings/safe_sprintf.h"
 
@@ -16,7 +16,7 @@
 #include <cstring>
 #include <limits>
 
-#if BUILDFLAG(PA_DCHECK_IS_ON)
+#if PA_BUILDFLAG(PA_DCHECK_IS_ON)
 #include "partition_alloc/partition_alloc_base/check.h"
 #define PA_RAW_DCHECK PA_RAW_CHECK
 #else

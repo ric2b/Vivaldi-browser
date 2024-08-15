@@ -63,15 +63,22 @@ class ProcTableAsClass {
         //*   - setDeviceLostCallback
         //*   - setUncapturedErrorCallback
         //*   - setLoggingCallback
-        {%- set LegacyCallbackFunctions = ['set device lost callback', 'set uncaptured error callback', 'set logging callback'] %}
+        {%- set LegacyCallbackFunctions = ['set uncaptured error callback', 'set logging callback'] %}
+
+        //* Manually implemented mock functions due to incompatibility.
+        {% set ManuallyMockedFunctions = ['set device lost callback'] %}
 
         {%- for type in by_category["object"] %}
 
-            virtual void {{as_MethodSuffix(type.name, Name("reference"))}}({{as_cType(type.name)}} self) = 0;
+            virtual void {{as_MethodSuffix(type.name, Name("add ref"))}}({{as_cType(type.name)}} self) = 0;
             virtual void {{as_MethodSuffix(type.name, Name("release"))}}({{as_cType(type.name)}} self) = 0;
-            {% for method in type.methods %}
+            // TODO(dawn::2234): Deprecated. Remove once no longer used.
+            void {{as_MethodSuffix(type.name, Name("reference"))}}({{as_cType(type.name)}} self) {
+                {{as_MethodSuffix(type.name, Name("add ref"))}}(self);
+            }
+            {% for method in type.methods if method.name.get() not in ManuallyMockedFunctions %}
                 {% set Suffix = as_CppMethodSuffix(type.name, method.name) %}
-                {% if not has_callback_arguments(method) and not has_callback_info(method) %}
+                {% if not has_callback_arguments(method) and not has_callback_info(method) and not has_callbackInfoStruct(method) %}
                     virtual {{as_cType(method.return_type.name)}} {{Suffix}}(
                         {{-as_cType(type.name)}} {{as_varName(type.name)}}
                         {%- for arg in method.arguments -%}
@@ -87,6 +94,26 @@ class ProcTableAsClass {
                         {%- endfor -%}
                     );
                 {% endif %}
+            {% endfor %}
+
+            {% for method in type.methods if has_callbackInfoStruct(method) %}
+                {% set Suffix = as_CppMethodSuffix(type.name, method.name) %}
+                //* The virtual function to call after saving the callback and userdata in the proc.
+                //* This function can be mocked.
+                virtual void On{{Suffix}}(
+                    {{-as_cType(type.name)}} {{as_varName(type.name)}}
+                    {%- for arg in method.arguments -%}
+                        , {{as_annotated_cType(arg)}}
+                    {%- endfor -%}
+                ) = 0;
+                {% set CallbackInfoType = (method.arguments|last).type %}
+                {% set CallbackType = (CallbackInfoType.members|first).type %}
+                void Call{{Suffix}}Callback(
+                    {{-as_cType(type.name)}} {{as_varName(type.name)}}
+                    {%- for arg in CallbackType.arguments -%}
+                        , {{as_annotated_cType(arg)}}
+                    {%- endfor -%}
+                );
             {% endfor %}
 
             {%- for method in type.methods if has_callback_info(method) or method.name.get() in LegacyCallbackFunctions %}
@@ -122,6 +149,17 @@ class ProcTableAsClass {
             {% endfor %}
         {% endfor %}
 
+        // Manually implement device lost related callback helpers for testing.
+        void DeviceSetDeviceLostCallback(WGPUDevice device,
+                                         WGPUDeviceLostCallback callback,
+                                         void* userdata);
+        virtual void OnDeviceSetDeviceLostCallback(WGPUDevice device,
+                                                   WGPUDeviceLostCallback callback,
+                                                   void* userdata) = 0;
+        void CallDeviceSetDeviceLostCallbackCallback(WGPUDevice device,
+                                                     WGPUDeviceLostReason reason,
+                                                     char const* message);
+
         struct Object {
             ProcTableAsClass* procs = nullptr;
             {% for type in by_category["object"] %}
@@ -137,7 +175,18 @@ class ProcTableAsClass {
                         {% endif %}
                     {% endfor %}
                 {% endfor %}
+                {% for method in type.methods if has_callbackInfoStruct(method) %}
+                    {% set CallbackInfoType = (method.arguments|last).type %}
+                    {% set CallbackType = (CallbackInfoType.members|first).type %}
+                    void* m{{as_CppMethodSuffix(type.name, method.name)}}Userdata1 = 0;
+                    void* m{{as_CppMethodSuffix(type.name, method.name)}}Userdata2 = 0;
+                    {{as_cType(CallbackType.name)}} m{{as_CppMethodSuffix(type.name, method.name)}}Callback = nullptr;
+                {% endfor %}
             {% endfor %}
+            // Manually implement device lost related callback helpers for testing.
+            WGPUDeviceLostCallback mDeviceLostOldCallback = nullptr;
+            WGPUDeviceLostCallbackNew mDeviceLostCallback = nullptr;
+            void* mDeviceLostUserdata = 0;
         };
 
     private:
@@ -156,9 +205,9 @@ class MockProcTable : public ProcTableAsClass {
 
         {%- for type in by_category["object"] %}
 
-            MOCK_METHOD(void, {{as_MethodSuffix(type.name, Name("reference"))}}, ({{as_cType(type.name)}} self), (override));
+            MOCK_METHOD(void, {{as_MethodSuffix(type.name, Name("add ref"))}}, ({{as_cType(type.name)}} self), (override));
             MOCK_METHOD(void, {{as_MethodSuffix(type.name, Name("release"))}}, ({{as_cType(type.name)}} self), (override));
-            {% for method in type.methods if not has_callback_arguments(method) and not has_callback_info(method) %}
+            {% for method in type.methods if not has_callback_arguments(method) and not has_callback_info(method) and not has_callbackInfoStruct(method) %}
                 MOCK_METHOD({{as_cType(method.return_type.name)}},{{" "}}
                     {{-as_MethodSuffix(type.name, method.name)}}, (
                         {{-as_cType(type.name)}} {{as_varName(type.name)}}
@@ -177,7 +226,22 @@ class MockProcTable : public ProcTableAsClass {
                         {%- endfor -%}
                     ), (override));
             {% endfor %}
+            {% for method in type.methods if has_callbackInfoStruct(method) %}
+                MOCK_METHOD(void,{{" "-}}
+                    On{{as_CppMethodSuffix(type.name, method.name)}}, (
+                        {{-as_cType(type.name)}} {{as_varName(type.name)}}
+                        {%- for arg in method.arguments -%}
+                            , {{as_annotated_cType(arg)}}
+                        {%- endfor -%}
+                    ), (override));
+            {% endfor %}
         {% endfor %}
+
+        // Manually implement device lost related callback helpers for testing.
+        MOCK_METHOD(void,
+                    OnDeviceSetDeviceLostCallback,
+                    (WGPUDevice device, WGPUDeviceLostCallback callback, void* userdata),
+                    (override));
 };
 
 #endif  // MOCK_{{API}}_H

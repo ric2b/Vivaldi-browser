@@ -20,7 +20,7 @@ namespace openscreen::cast {
 class CastSocketMessagePort : public MessagePort, public CastMessageHandler {
  public:
   // The router is expected to outlive this message port.
-  explicit CastSocketMessagePort(VirtualConnectionRouter* router);
+  explicit CastSocketMessagePort(VirtualConnectionRouter& router);
   ~CastSocketMessagePort() override;
 
   const std::string& source_id() const { return source_id_; }
@@ -44,7 +44,7 @@ class CastSocketMessagePort : public MessagePort, public CastMessageHandler {
                  ::cast::channel::CastMessage message) override;
 
  private:
-  VirtualConnectionRouter* const router_;
+  VirtualConnectionRouter& router_;
   std::string source_id_;
   MessagePort::Client* client_ = nullptr;
   WeakPtr<CastSocket> socket_;

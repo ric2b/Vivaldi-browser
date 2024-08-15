@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #ifndef BASE_METRICS_PERSISTENT_MEMORY_ALLOCATOR_H_
 #define BASE_METRICS_PERSISTENT_MEMORY_ALLOCATOR_H_
 
@@ -760,7 +765,7 @@ class BASE_EXPORT PersistentMemoryAllocator {
   // Histogram recording errors.
   raw_ptr<HistogramBase> errors_histogram_ = nullptr;
 
-  // TODO(crbug.com/1432981) For debugging purposes. Remove these once done.
+  // TODO(crbug.com/40064026) For debugging purposes. Remove these once done.
   friend class DelayedPersistentAllocation;
   friend class metrics::FileMetricsProvider;
 

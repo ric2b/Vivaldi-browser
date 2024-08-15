@@ -277,18 +277,6 @@ class TrustedSignalsRequestManagerTest : public testing::Test {
   TrustedSignalsRequestManager scoring_request_manager_;
 };
 
-class TrustedSignalsRequestManagerSplitURLTest
-    : public TrustedSignalsRequestManagerTest {
- public:
-  TrustedSignalsRequestManagerSplitURLTest() {
-    feature_list_.InitAndEnableFeature(
-        blink::features::kFledgeSplitTrustedSignalsFetchingURL);
-  }
-
- protected:
-  base::test::ScopedFeatureList feature_list_;
-};
-
 TEST_F(TrustedSignalsRequestManagerTest, BiddingSignalsError) {
   url_loader_factory_.AddResponse(
       "https://url.test/?hostname=publisher&keys=key1&interestGroupNames=name1"
@@ -462,7 +450,8 @@ TEST_F(TrustedSignalsRequestManagerTest, BiddingSignalsOneRequestNullKeys) {
           /*trusted_bidding_signals_keys=*/std::nullopt);
   ASSERT_TRUE(signals);
   EXPECT_FALSE(error_msg_.has_value());
-  const auto* priority_vector = signals->GetPriorityVector("name1");
+  const auto priority_vector =
+      signals->GetPerGroupData("name1")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 1}}),
             *priority_vector);
@@ -480,7 +469,8 @@ TEST_F(TrustedSignalsRequestManagerTest, BiddingSignalsOneRequest) {
   EXPECT_FALSE(error_msg_.has_value());
   EXPECT_EQ(R"({"key2":[2],"key1":1})",
             ExtractBiddingSignals(signals.get(), kKeys));
-  const auto* priority_vector = signals->GetPriorityVector("name1");
+  const auto priority_vector =
+      signals->GetPerGroupData("name1")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 1}}),
             *priority_vector);
@@ -544,7 +534,7 @@ TEST_F(TrustedSignalsRequestManagerTest, BiddingSignalsSequentialRequests) {
   EXPECT_FALSE(error_msg_.has_value());
   EXPECT_EQ(R"({"key1":1,"key3":3})",
             ExtractBiddingSignals(signals1.get(), kKeys1));
-  const auto* priority_vector = signals1->GetPriorityVector("name1");
+  auto priority_vector = signals1->GetPerGroupData("name1")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 1}}),
             *priority_vector);
@@ -563,7 +553,7 @@ TEST_F(TrustedSignalsRequestManagerTest, BiddingSignalsSequentialRequests) {
   EXPECT_FALSE(error_msg_.has_value());
   EXPECT_EQ(R"({"key2":[2],"key3":[3]})",
             ExtractBiddingSignals(signals2.get(), kKeys2));
-  priority_vector = signals2->GetPriorityVector("name2");
+  priority_vector = signals2->GetPerGroupData("name2")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 2}}),
             *priority_vector);
@@ -700,7 +690,7 @@ TEST_F(TrustedSignalsRequestManagerTest,
   ASSERT_TRUE(signals1);
   EXPECT_EQ(R"({"key1":1,"key3":3})",
             ExtractBiddingSignals(signals1.get(), kKeys1));
-  const auto* priority_vector = signals1->GetPriorityVector("name1");
+  auto priority_vector = signals1->GetPerGroupData("name1")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 1}}),
             *priority_vector);
@@ -710,7 +700,7 @@ TEST_F(TrustedSignalsRequestManagerTest,
   ASSERT_TRUE(signals2);
   EXPECT_EQ(R"({"key2":[2],"key3":[3]})",
             ExtractBiddingSignals(signals2.get(), kKeys2));
-  priority_vector = signals2->GetPriorityVector("name2");
+  priority_vector = signals2->GetPerGroupData("name2")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 2}}),
             *priority_vector);
@@ -853,7 +843,7 @@ TEST_F(TrustedSignalsRequestManagerTest, BiddingSignalsBatchedRequests) {
   ASSERT_TRUE(signals1);
   EXPECT_EQ(R"({"key1":1,"key3":"3"})",
             ExtractBiddingSignals(signals1.get(), kKeys1));
-  const auto* priority_vector = signals1->GetPriorityVector("name1");
+  auto priority_vector = signals1->GetPerGroupData("name1")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 1}}),
             *priority_vector);
@@ -863,7 +853,7 @@ TEST_F(TrustedSignalsRequestManagerTest, BiddingSignalsBatchedRequests) {
   ASSERT_TRUE(signals2);
   EXPECT_EQ(R"({"key2":[2],"key3":"3"})",
             ExtractBiddingSignals(signals2.get(), kKeys2));
-  priority_vector = signals2->GetPriorityVector("name2");
+  priority_vector = signals2->GetPerGroupData("name2")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 2}}),
             *priority_vector);
@@ -1012,7 +1002,8 @@ TEST_F(TrustedSignalsRequestManagerTest, CancelOneRequest) {
   EXPECT_FALSE(error_msg2);
   ASSERT_TRUE(signals2);
   EXPECT_EQ(R"({"key2":[2]})", ExtractBiddingSignals(signals2.get(), kKeys2));
-  const auto* priority_vector = signals2->GetPriorityVector("name2");
+  const auto priority_vector =
+      signals2->GetPerGroupData("name2")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 2}}),
             *priority_vector);
@@ -1087,7 +1078,8 @@ TEST_F(TrustedSignalsRequestManagerTest, CancelOneLiveRequest) {
   EXPECT_FALSE(error_msg2);
   ASSERT_TRUE(signals2);
   EXPECT_EQ(R"({"key2":[2]})", ExtractBiddingSignals(signals2.get(), kKeys2));
-  const auto* priority_vector = signals2->GetPriorityVector("name2");
+  const auto priority_vector =
+      signals2->GetPerGroupData("name2")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 2}}),
             *priority_vector);
@@ -1341,7 +1333,8 @@ TEST_F(TrustedSignalsRequestManagerTest, BiddingExperimentGroupIds) {
   EXPECT_FALSE(error_msg);
   ASSERT_TRUE(signals);
   EXPECT_EQ(R"({"key1":1})", ExtractBiddingSignals(signals.get(), kKeys));
-  const auto* priority_vector = signals->GetPriorityVector("name1");
+  const auto priority_vector =
+      signals->GetPerGroupData("name1")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 1}}),
             *priority_vector);
@@ -1398,7 +1391,7 @@ TEST_F(TrustedSignalsRequestManagerTest, ScoringExperimentGroupIds) {
 // TODO(crbug.com/326082728): Remove this test because it will be duplicated
 // with `BiddingSignalsOneRequest` after the split feature is enabled by
 // default.
-TEST_F(TrustedSignalsRequestManagerSplitURLTest,
+TEST_F(TrustedSignalsRequestManagerTest,
        BiddingSignalsOneRequestWithZeroLimit) {
   const std::vector<std::string> kKeys{"key2", "key1"};
   const std::string kUrl =
@@ -1413,7 +1406,8 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
   EXPECT_FALSE(error_msg_.has_value());
   EXPECT_EQ(R"({"key2":[2],"key1":1})",
             ExtractBiddingSignals(signals.get(), kKeys));
-  const auto* priority_vector = signals->GetPriorityVector("name1");
+  const auto priority_vector =
+      signals->GetPerGroupData("name1")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 1}}),
             *priority_vector);
@@ -1430,7 +1424,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
 // Test a single scoring request with 0 (unlimited) length limit.
 // TODO(xtlsheep): Remove this test because it will be duplicated with
 // `ScoringSignalsOneRequest` after the split feature is enabled by default.
-TEST_F(TrustedSignalsRequestManagerSplitURLTest,
+TEST_F(TrustedSignalsRequestManagerTest,
        ScoringSignalsOneRequestWithZeroLimit) {
   const GURL kRenderUrl = GURL("https://foo.test/");
   const std::vector<std::string> kAdComponentRenderUrls{
@@ -1462,7 +1456,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
 
 // Test a single bidding request with a tiny length limit that is smaller than
 // the URL generated by itself.
-TEST_F(TrustedSignalsRequestManagerSplitURLTest,
+TEST_F(TrustedSignalsRequestManagerTest,
        BiddingSignalsOneRequestWithTinyLimit) {
   const std::vector<std::string> kKeys{"key2", "key1"};
   const std::string kUrl =
@@ -1477,7 +1471,8 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
   EXPECT_FALSE(error_msg_.has_value());
   EXPECT_EQ(R"({"key2":[2],"key1":1})",
             ExtractBiddingSignals(signals.get(), kKeys));
-  const auto* priority_vector = signals->GetPriorityVector("name1");
+  const auto priority_vector =
+      signals->GetPerGroupData("name1")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 1}}),
             *priority_vector);
@@ -1493,7 +1488,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
 
 // Test a single scoring request with a tiny length limit that is smaller than
 // the URL generated by itself.
-TEST_F(TrustedSignalsRequestManagerSplitURLTest,
+TEST_F(TrustedSignalsRequestManagerTest,
        ScoringSignalsOneRequestWithTinyLimit) {
   const GURL kRenderUrl = GURL("https://foo.test/");
   const std::vector<std::string> kAdComponentRenderUrls{
@@ -1525,7 +1520,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
 
 // Test a single bidding request with normal length limit that is larger than
 // the URL generated by itself.
-TEST_F(TrustedSignalsRequestManagerSplitURLTest,
+TEST_F(TrustedSignalsRequestManagerTest,
        BiddingSignalsOneRequestWithNormalLimit) {
   const std::vector<std::string> kKeys{"key2", "key1"};
   const std::string kUrl =
@@ -1541,7 +1536,8 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
   EXPECT_FALSE(error_msg_.has_value());
   EXPECT_EQ(R"({"key2":[2],"key1":1})",
             ExtractBiddingSignals(signals.get(), kKeys));
-  const auto* priority_vector = signals->GetPriorityVector("name1");
+  const auto priority_vector =
+      signals->GetPerGroupData("name1")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 1}}),
             *priority_vector);
@@ -1557,7 +1553,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
 
 // Test a single scoring request with normal length limit that is larger than
 // the URL generated by itself.
-TEST_F(TrustedSignalsRequestManagerSplitURLTest,
+TEST_F(TrustedSignalsRequestManagerTest,
        ScoringSignalsOneRequestWithNormalLimit) {
   const GURL kRenderUrl = GURL("https://foo.test/");
   const std::vector<std::string> kAdComponentRenderUrls{
@@ -1592,8 +1588,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
 // Request A has a limit of 0.
 // Request B has a limit of 1000.
 // The combined URL length of requests A and B is 131.
-TEST_F(TrustedSignalsRequestManagerSplitURLTest,
-       BiddingSignalsJointBatchedRequests) {
+TEST_F(TrustedSignalsRequestManagerTest, BiddingSignalsJointBatchedRequests) {
   // Use partially overlapping keys, to cover both the shared and distinct key
   // cases.
   const std::vector<std::string> kKeys1{"key1", "key3"};
@@ -1631,7 +1626,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
   ASSERT_TRUE(signals1);
   EXPECT_EQ(R"({"key1":1,"key3":"3"})",
             ExtractBiddingSignals(signals1.get(), kKeys1));
-  const auto* priority_vector = signals1->GetPriorityVector("name1");
+  auto priority_vector = signals1->GetPerGroupData("name1")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 1}}),
             *priority_vector);
@@ -1641,7 +1636,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
   ASSERT_TRUE(signals2);
   EXPECT_EQ(R"({"key2":[2],"key3":"3"})",
             ExtractBiddingSignals(signals2.get(), kKeys2));
-  priority_vector = signals2->GetPriorityVector("name2");
+  priority_vector = signals2->GetPerGroupData("name2")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 2}}),
             *priority_vector);
@@ -1659,8 +1654,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
 // Request A has a limit of 0.
 // Request B has a limit of 1000.
 // The combined URL length of requests A and B is 208.
-TEST_F(TrustedSignalsRequestManagerSplitURLTest,
-       ScoringSignalsJointBatchedRequests) {
+TEST_F(TrustedSignalsRequestManagerTest, ScoringSignalsJointBatchedRequests) {
   // Use partially overlapping keys, to cover both the shared and distinct
   // cases.
   const GURL kRenderUrl1 = GURL("https://foo.test/");
@@ -1736,8 +1730,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
 // Request A has a limit of 130.
 // Request B has a limit of 130.
 // The combined URL length of requests A and B is 131.
-TEST_F(TrustedSignalsRequestManagerSplitURLTest,
-       BiddingSignalsSplitBatchedRequests) {
+TEST_F(TrustedSignalsRequestManagerTest, BiddingSignalsSplitBatchedRequests) {
   const std::vector<std::string> kKeys1{"key1", "key3"};
   const std::string kUrl1 =
       "https://url.test/?hostname=publisher"
@@ -1784,7 +1777,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
   ASSERT_TRUE(signals1);
   EXPECT_EQ(R"({"key1":1,"key3":3})",
             ExtractBiddingSignals(signals1.get(), kKeys1));
-  const auto* priority_vector = signals1->GetPriorityVector("name1");
+  auto priority_vector = signals1->GetPerGroupData("name1")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 1}}),
             *priority_vector);
@@ -1794,7 +1787,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
   ASSERT_TRUE(signals2);
   EXPECT_EQ(R"({"key2":[2],"key3":[3]})",
             ExtractBiddingSignals(signals2.get(), kKeys2));
-  priority_vector = signals2->GetPriorityVector("name2");
+  priority_vector = signals2->GetPerGroupData("name2")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 2}}),
             *priority_vector);
@@ -1813,8 +1806,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
 // Request A has a limit of 200.
 // Request B has a limit of 200.
 // The combined URL length of requests A and B is 208.
-TEST_F(TrustedSignalsRequestManagerSplitURLTest,
-       ScoringSignalsSplitBatchedRequests) {
+TEST_F(TrustedSignalsRequestManagerTest, ScoringSignalsSplitBatchedRequests) {
   // Use partially overlapping keys, to cover both the shared and distinct
   // cases.
   const GURL kRenderUrl1 = GURL("https://foo.test/");
@@ -1900,7 +1892,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
 // Request C has a limit of 130.
 // The combined URL length of requests A and B is 131.
 // The combined URL length of requests A, B and C is 137.
-TEST_F(TrustedSignalsRequestManagerSplitURLTest,
+TEST_F(TrustedSignalsRequestManagerTest,
        BiddingSignalsPartlyJointBatchedRequests1) {
   const std::vector<std::string> kKeys1{"key1", "key3"};
   const std::vector<std::string> kKeys2{"key2", "key3"};
@@ -1953,7 +1945,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
   ASSERT_TRUE(signals1);
   EXPECT_EQ(R"({"key1":1,"key3":"3"})",
             ExtractBiddingSignals(signals1.get(), kKeys1));
-  const auto* priority_vector = signals1->GetPriorityVector("name1");
+  auto priority_vector = signals1->GetPerGroupData("name1")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 1}}),
             *priority_vector);
@@ -1963,7 +1955,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
   ASSERT_TRUE(signals2);
   EXPECT_EQ(R"({"key2":[2],"key3":"3"})",
             ExtractBiddingSignals(signals2.get(), kKeys2));
-  priority_vector = signals2->GetPriorityVector("name2");
+  priority_vector = signals2->GetPerGroupData("name2")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 2}}),
             *priority_vector);
@@ -1973,7 +1965,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
   ASSERT_TRUE(signals3);
   EXPECT_EQ(R"({"key1":[2],"key2":[3]})",
             ExtractBiddingSignals(signals3.get(), kKeys3));
-  priority_vector = signals3->GetPriorityVector("name3");
+  priority_vector = signals3->GetPerGroupData("name3")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 3}}),
             *priority_vector);
@@ -1995,7 +1987,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
 // Request C has a limit of 200.
 // The combined URL length of requests A and B is 208.
 // The combined URL length of requests A, B and C is 234.
-TEST_F(TrustedSignalsRequestManagerSplitURLTest,
+TEST_F(TrustedSignalsRequestManagerTest,
        ScoringSignalsPartlyJointBatchedRequests1) {
   const GURL kRenderUrl1 = GURL("https://bar.test/");
   const std::vector<std::string> kAdComponentRenderUrls1{
@@ -2105,7 +2097,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
 // Request C has a limit of 131.
 // The combined URL length of requests A and B is 143.
 // The combined URL length of requests B and C is 131.
-TEST_F(TrustedSignalsRequestManagerSplitURLTest,
+TEST_F(TrustedSignalsRequestManagerTest,
        BiddingSignalsPartlyJointBatchedRequests2) {
   const std::vector<std::string> kKeys1{"key1", "key3"};
   const std::vector<std::string> kKeys2{"key2", "key3"};
@@ -2160,8 +2152,8 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
   ASSERT_TRUE(signals1);
   EXPECT_EQ(R"({"key1":[2],"key3":[3]})",
             ExtractBiddingSignals(signals1.get(), kKeys1));
-  const auto* priority_vector =
-      signals1->GetPriorityVector("extremelyLongName");
+  auto priority_vector =
+      signals1->GetPerGroupData("extremelyLongName")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 3}}),
             *priority_vector);
@@ -2171,7 +2163,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
   ASSERT_TRUE(signals2);
   EXPECT_EQ(R"({"key2":[2],"key3":"3"})",
             ExtractBiddingSignals(signals2.get(), kKeys2));
-  priority_vector = signals2->GetPriorityVector("name1");
+  priority_vector = signals2->GetPerGroupData("name1")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 1}}),
             *priority_vector);
@@ -2181,7 +2173,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
   ASSERT_TRUE(signals3);
   EXPECT_EQ(R"({"key1":1,"key2":[2]})",
             ExtractBiddingSignals(signals3.get(), kKeys3));
-  priority_vector = signals3->GetPriorityVector("name2");
+  priority_vector = signals3->GetPerGroupData("name2")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 2}}),
             *priority_vector);
@@ -2203,7 +2195,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
 // Request C has a limit of 208.
 // The combined URL length of requests A and B is 221.
 // The combined URL length of requests B and C is 208.
-TEST_F(TrustedSignalsRequestManagerSplitURLTest,
+TEST_F(TrustedSignalsRequestManagerTest,
        ScoringSignalsPartlyJointBatchedRequests2) {
   const GURL kRenderUrl1 = GURL("https://barExtremelyLong.test/");
   const std::vector<std::string> kAdComponentRenderUrls1{
@@ -2310,8 +2302,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
 // bidder keys will result two separate fetch request.
 // Request A has a limit of 104.
 // Request B has a limit of 104.
-TEST_F(TrustedSignalsRequestManagerSplitURLTest,
-       BiddingSignalsIdenticalRequests) {
+TEST_F(TrustedSignalsRequestManagerTest, BiddingSignalsIdenticalRequests) {
   const std::string kUrl =
       "https://url.test/?hostname=publisher"
       "&interestGroupNames=name"
@@ -2343,7 +2334,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
   run_loop1.Run();
   EXPECT_FALSE(error_msg1);
   ASSERT_TRUE(signals1);
-  const auto* priority_vector = signals1->GetPriorityVector("name");
+  auto priority_vector = signals1->GetPerGroupData("name")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 1}}),
             *priority_vector);
@@ -2351,7 +2342,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
   run_loop2.Run();
   EXPECT_FALSE(error_msg2);
   ASSERT_TRUE(signals2);
-  priority_vector = signals2->GetPriorityVector("name");
+  priority_vector = signals2->GetPerGroupData("name")->priority_vector;
   ASSERT_TRUE(priority_vector);
   EXPECT_EQ((TrustedSignals::Result::PriorityVector{{"foo", 1}}),
             *priority_vector);
@@ -2369,8 +2360,7 @@ TEST_F(TrustedSignalsRequestManagerSplitURLTest,
 // ad component urls will result two separate fetch request.
 // Request A has a limit of 73.
 // Request B has a limit of 73.
-TEST_F(TrustedSignalsRequestManagerSplitURLTest,
-       ScoringSignalsIdenticalRequests) {
+TEST_F(TrustedSignalsRequestManagerTest, ScoringSignalsIdenticalRequests) {
   // Use partially overlapping keys, to cover both the shared and distinct
   // cases.
   const GURL kRenderUrl = GURL("https://foo.test/");

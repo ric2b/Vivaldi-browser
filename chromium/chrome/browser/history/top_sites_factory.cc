@@ -39,6 +39,9 @@
 #include "url/gurl.h"
 
 #include "app/vivaldi_apptools.h"
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#include "browser/vivaldi_runtime_feature.h"
+#endif
 
 namespace {
 
@@ -121,6 +124,15 @@ scoped_refptr<history::TopSites> TopSitesFactory::BuildTopSites(
       profile->GetPrefs(), history_service, template_url_service,
       prepopulated_page_list, base::BindRepeating(CanAddURLToHistory)));
   top_sites->Init(context->GetPath().Append(history::kTopSitesFilename));
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  if (vivaldi::IsVivaldiRunning()) {
+    // This is temporary code that will only live as long as we use the
+    // feature to evaluate behavior.
+    if (vivaldi_runtime_feature::IsEnabled(profile, "top_sites")) {
+      top_sites->SetAggressiveUpdate();
+    }
+  }
+#endif
   return top_sites;
 }
 
@@ -129,7 +141,7 @@ TopSitesFactory::TopSitesFactory()
           "TopSites",
           ProfileSelections::Builder()
               .WithRegular(ProfileSelection::kOriginalOnly)
-              // TODO(crbug.com/1418376): Check if this service is needed in
+              // TODO(crbug.com/40257657): Check if this service is needed in
               // Guest mode.
               .WithGuest(ProfileSelection::kOriginalOnly)
               .Build()) {

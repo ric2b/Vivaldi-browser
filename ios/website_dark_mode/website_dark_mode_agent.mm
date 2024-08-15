@@ -23,7 +23,6 @@
 #import "ios/website_dark_mode/website_dark_mode_java_script_feature.h"
 #import "prefs/vivaldi_pref_names.h"
 
-
 @interface WebsiteDarkModeAgent () <CRWWebStateObserver,
                              CRWWebFramesManagerObserver> {
   // The WebState this instance is observing. Will be null after
@@ -72,7 +71,7 @@
     _forceDarkWebPagesEnabled =
         [[PrefBackedBoolean alloc]
             initWithPrefService:prefService
-                       prefName:vivaldiprefs::kVivaldiWebsiteAppearanceForceDarkTheme];
+                prefName:vivaldiprefs::kVivaldiWebsiteAppearanceForceDarkTheme];
     [self forceReloadWebpageIfNeeded];
 
   }
@@ -91,8 +90,19 @@
   if (!_forceDarkWebPagesEnabled)
     return NO;
 
-  return [_forceDarkWebPagesEnabled value] &&
-      [self websiteAppearanceStyle] != VivaldiWebsiteAppearanceStyleLight;
+  BOOL enabledToggle = [_forceDarkWebPagesEnabled value];
+  if (enabledToggle &&
+      [self websiteAppearanceStyle] == VivaldiWebsiteAppearanceStyleDark) {
+    return YES;
+  }
+
+  if (enabledToggle &&
+      [self websiteAppearanceStyle] == VivaldiWebsiteAppearanceStyleAuto &&
+      self.isBrowserOrSystemThemeDark) {
+    return YES;
+  }
+
+  return NO;
 }
 
 - (VivaldiWebsiteAppearanceStyle)websiteAppearanceStyle {
@@ -107,6 +117,12 @@
     default:
       return VivaldiWebsiteAppearanceStyleAuto;
   }
+}
+
+- (BOOL)isBrowserOrSystemThemeDark {
+  return [VivaldiAppearanceSettingsPrefsHelper isBrowserThemeDark] ||
+      UITraitCollection.currentTraitCollection.userInterfaceStyle ==
+          UIUserInterfaceStyleDark;
 }
 
 - (void)forceReloadWebpageIfNeeded {

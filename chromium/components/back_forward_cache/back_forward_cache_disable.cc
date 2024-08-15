@@ -35,6 +35,8 @@ std::string ReasonIdToString(DisabledReasonId reason_id) {
       return "ExtensionSentMessageToCachedFrame";
     case DisabledReasonId::kOomInterventionTabHelper:
       return "OomInterventionTabHelper";
+    case DisabledReasonId::kRequestedByWebViewClient:
+      return "RequestedByWebViewClient";
   }
 }
 
@@ -46,9 +48,9 @@ std::string ReasonIdToReportString(DisabledReasonId reason_id) {
     case DisabledReasonId::kExtensionSentMessageToCachedFrame:
       return "extension-messaging";
     case DisabledReasonId::kModalDialog:
-      return "modal-dialog";
+      return "modals";
     case DisabledReasonId::kPermissionRequestManager:
-      return "permission-request-manager";
+      return "pending-permission-request";
     default:
       return "masked";
   }

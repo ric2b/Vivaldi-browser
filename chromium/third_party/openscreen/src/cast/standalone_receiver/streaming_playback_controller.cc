@@ -91,7 +91,7 @@ void StreamingPlaybackController::OnReceiversDestroying(
 }
 
 void StreamingPlaybackController::OnError(const ReceiverSession* session,
-                                          Error error) {
+                                          const Error& error) {
   client_->OnPlaybackError(this, error);
 }
 
@@ -115,11 +115,11 @@ void StreamingPlaybackController::Initialize(
   }
 #else
   if (receivers.audio_receiver) {
-    audio_player_ = std::make_unique<DummyPlayer>(receivers.audio_receiver);
+    audio_player_ = std::make_unique<DummyPlayer>(*receivers.audio_receiver);
   }
 
   if (receivers.video_receiver) {
-    video_player_ = std::make_unique<DummyPlayer>(receivers.video_receiver);
+    video_player_ = std::make_unique<DummyPlayer>(*receivers.video_receiver);
   }
 #endif  // defined(CAST_STANDALONE_RECEIVER_HAVE_EXTERNAL_LIBS)
 }

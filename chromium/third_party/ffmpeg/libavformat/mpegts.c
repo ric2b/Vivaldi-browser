@@ -22,17 +22,15 @@
 #include "config_components.h"
 
 #include "libavutil/buffer.h"
-#include "libavutil/common.h"
 #include "libavutil/crc.h"
 #include "libavutil/internal.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/log.h"
 #include "libavutil/dict.h"
-#include "libavutil/mathematics.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/avassert.h"
 #include "libavutil/dovi_meta.h"
-#include "libavcodec/avcodec.h"
 #include "libavcodec/bytestream.h"
 #include "libavcodec/defs.h"
 #include "libavcodec/get_bits.h"
@@ -276,7 +274,7 @@ typedef struct PESContext {
     int merged_st;
 } PESContext;
 
-extern const AVInputFormat ff_mpegts_demuxer;
+extern const FFInputFormat ff_mpegts_demuxer;
 
 static struct Program * get_program(MpegTSContext *ts, unsigned int programid)
 {
@@ -1307,8 +1305,11 @@ skip:
                     p += sl_header_bytes;
                     buf_size -= sl_header_bytes;
                 }
-                if (pes->st->codecpar->codec_id == AV_CODEC_ID_SMPTE_KLV && buf_size >= 5) {
-                    /* skip metadata access unit header */
+                if (pes->stream_type == STREAM_TYPE_METADATA &&
+                    pes->stream_id == STREAM_ID_METADATA_STREAM &&
+                    pes->st->codecpar->codec_id == AV_CODEC_ID_SMPTE_KLV &&
+                    buf_size >= 5) {
+                    /* skip metadata access unit header - see MISB ST 1402 */
                     pes->pes_header_size += 5;
                     p += 5;
                     buf_size -= 5;
@@ -2558,7 +2559,7 @@ static void pat_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
 
     if (skip_identical(h, tssf))
         return;
-    ts->stream->ts_id = ts->id = h->id;
+    ts->id = h->id;
 
     for (;;) {
         sid = get16(&p, p_end);
@@ -2602,7 +2603,8 @@ static void pat_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
                     FFSWAP(struct Program, ts->prg[nb_prg], ts->prg[prg_idx]);
                 if (prg_idx >= nb_prg)
                     nb_prg++;
-            }
+            } else
+                nb_prg = 0;
         }
     }
     ts->nb_prg = nb_prg;
@@ -3121,7 +3123,7 @@ static int mpegts_read_header(AVFormatContext *s)
     ts->stream     = s;
     ts->auto_guess = 0;
 
-    if (s->iformat == &ff_mpegts_demuxer) {
+    if (s->iformat == &ff_mpegts_demuxer.p) {
         /* normal demux */
 
         /* first do a scan to get all the services */
@@ -3429,27 +3431,27 @@ void avpriv_mpegts_parse_close(MpegTSContext *ts)
     av_free(ts);
 }
 
-const AVInputFormat ff_mpegts_demuxer = {
-    .name           = "mpegts",
-    .long_name      = NULL_IF_CONFIG_SMALL("MPEG-TS (MPEG-2 Transport Stream)"),
+const FFInputFormat ff_mpegts_demuxer = {
+    .p.name         = "mpegts",
+    .p.long_name    = NULL_IF_CONFIG_SMALL("MPEG-TS (MPEG-2 Transport Stream)"),
+    .p.flags        = AVFMT_SHOW_IDS | AVFMT_TS_DISCONT,
+    .p.priv_class   = &mpegts_class,
     .priv_data_size = sizeof(MpegTSContext),
     .read_probe     = mpegts_probe,
     .read_header    = mpegts_read_header,
     .read_packet    = mpegts_read_packet,
     .read_close     = mpegts_read_close,
     .read_timestamp = mpegts_get_dts,
-    .flags          = AVFMT_SHOW_IDS | AVFMT_TS_DISCONT,
-    .priv_class     = &mpegts_class,
 };
 
-const AVInputFormat ff_mpegtsraw_demuxer = {
-    .name           = "mpegtsraw",
-    .long_name      = NULL_IF_CONFIG_SMALL("raw MPEG-TS (MPEG-2 Transport Stream)"),
+const FFInputFormat ff_mpegtsraw_demuxer = {
+    .p.name         = "mpegtsraw",
+    .p.long_name    = NULL_IF_CONFIG_SMALL("raw MPEG-TS (MPEG-2 Transport Stream)"),
+    .p.flags        = AVFMT_SHOW_IDS | AVFMT_TS_DISCONT,
+    .p.priv_class   = &mpegtsraw_class,
     .priv_data_size = sizeof(MpegTSContext),
     .read_header    = mpegts_read_header,
     .read_packet    = mpegts_raw_read_packet,
     .read_close     = mpegts_read_close,
     .read_timestamp = mpegts_get_dts,
-    .flags          = AVFMT_SHOW_IDS | AVFMT_TS_DISCONT,
-    .priv_class     = &mpegtsraw_class,
 };

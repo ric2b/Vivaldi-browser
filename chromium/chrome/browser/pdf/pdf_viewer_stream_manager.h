@@ -22,6 +22,8 @@
 namespace content {
 struct GlobalRenderFrameHostId;
 class NavigationHandle;
+class RenderFrameHost;
+class SiteInstance;
 class WebContents;
 }  // namespace content
 
@@ -133,6 +135,15 @@ class PdfViewerStreamManager
   // differentiate between the hosts.
   bool IsPdfExtensionHost(content::RenderFrameHost* render_frame_host);
 
+  // Returns true if `frame_tree_node_id` is the frame tree node ID for the PDF
+  // extension frame under `embedder_host`, false otherwise.
+  bool IsPdfExtensionFrameTreeNodeId(content::RenderFrameHost* embedder_host,
+                                     int frame_tree_node_id);
+
+  // Returns true if `embedder_host` has a PDF extension frame and it has
+  // already finished its navigation, false otherwise.
+  bool DidPdfExtensionFinishNavigation(content::RenderFrameHost* embedder_host);
+
   // Returns true if `render_frame_host` is a content host for a PDF. During a
   // PDF load, the initial RFH for the content frame attempts to navigate to the
   // stream URL. Another RFH will then be chosen to host the content frame. This
@@ -140,6 +151,15 @@ class PdfViewerStreamManager
   // on, callers can also check the last committed URL to differentiate between
   // the hosts.
   bool IsPdfContentHost(content::RenderFrameHost* render_frame_host);
+
+  // Returns true if `frame_tree_node_id` is the frame tree node ID for the PDF
+  // content frame under `embedder_host`, false otherwise.
+  bool IsPdfContentFrameTreeNodeId(content::RenderFrameHost* embedder_host,
+                                   int frame_tree_node_id);
+
+  // Returns true if `embedder_host` has a PDF content frame and it has already
+  // finished its navigation, false otherwise.
+  bool DidPdfContentNavigate(content::RenderFrameHost* embedder_host);
 
   // Returns whether the PDF plugin should handle save events.
   bool PluginCanSave(content::RenderFrameHost* embedder_host);
@@ -199,7 +219,9 @@ class PdfViewerStreamManager
 
     extensions::StreamContainer* stream() { return stream_.get(); }
 
-    bool did_extension_navigate() const { return did_extension_navigate_; }
+    bool did_extension_finish_navigation() const {
+      return did_extension_finish_navigation_;
+    }
 
     const mojo::AssociatedRemote<
         extensions::mojom::MimeHandlerViewContainerManager>&
@@ -216,7 +238,9 @@ class PdfViewerStreamManager
 
     int32_t instance_id() const { return instance_id_; }
 
-    void SetExtensionNavigated();
+    void SetDidExtensionFinishNavigation();
+
+    bool DidPdfExtensionStartNavigation() const;
 
     bool DidPdfContentNavigate() const;
 
@@ -251,10 +275,9 @@ class PdfViewerStreamManager
     // PDF viewer.
     const std::unique_ptr<extensions::StreamContainer> stream_;
 
-    // True if the extension host has navigated to the PDF extension URL. Used
-    // to avoid navigating multiple about:blank child hosts to the PDF extension
+    // True if the extension host has finished navigating to the PDF extension
     // URL.
-    bool did_extension_navigate_ = false;
+    bool did_extension_finish_navigation_ = false;
 
     // The container manager used to provide postMessage support.
     mojo::AssociatedRemote<extensions::mojom::MimeHandlerViewContainerManager>
@@ -286,6 +309,21 @@ class PdfViewerStreamManager
   // Returns the stream info for a PDF content navigation.
   StreamInfo* GetClaimedStreamInfoFromPdfContentNavigation(
       content::NavigationHandle* navigation_handle);
+
+  // Navigates the FrameTreeNode with ID `extension_host_frame_tree_node_id` to
+  // the PDF extension URL. Marks the PDF extension as navigated in
+  // `stream_info`, which must be non-null. `source_site_instance` should be the
+  // `content::SiteInstance` of the PDF embedder frame that will be initiating
+  // the navigation.
+  //
+  // Subclasses may override this for use in callbacks. If so, `global_id`,
+  // which is the ID for the intermediate about:blank host for the PDF extension
+  // frame, can be used to get the other parameters safely.
+  virtual void NavigateToPdfExtensionUrl(
+      int extension_host_frame_tree_node_id,
+      StreamInfo* stream_info,
+      content::SiteInstance* source_site_instance,
+      content::GlobalRenderFrameHostId global_id);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(PdfViewerStreamManagerTest,
@@ -338,7 +376,7 @@ class PdfViewerStreamManager
       content::NavigationHandle* navigation_handle);
 
   // Sets up beforeunload API support for full-page PDF viewers.
-  // TODO(crbug.com/1445746): Currently a no-op. Support the beforeunload API.
+  // TODO(crbug.com/40268279): Currently a no-op. Support the beforeunload API.
   void SetUpBeforeUnloadControl(
       mojo::PendingRemote<extensions::mime_handler::BeforeUnloadControl>
           before_unload_control_remote);

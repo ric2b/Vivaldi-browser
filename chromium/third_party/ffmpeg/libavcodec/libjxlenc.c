@@ -31,6 +31,7 @@
 #include "libavutil/error.h"
 #include "libavutil/frame.h"
 #include "libavutil/libm.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/pixfmt.h"
@@ -52,6 +53,7 @@ typedef struct LibJxlEncodeContext {
     int effort;
     float distance;
     int modular;
+    int xyb;
     uint8_t *buffer;
     size_t buffer_size;
 } LibJxlEncodeContext;
@@ -303,7 +305,7 @@ static int libjxl_encode_frame(AVCodecContext *avctx, AVPacket *pkt, const AVFra
         av_log(avctx, AV_LOG_WARNING, "Unknown color range, assuming full (pc)\n");
 
     /* bitexact lossless requires there to be no XYB transform */
-    info.uses_original_profile = ctx->distance == 0.0;
+    info.uses_original_profile = ctx->distance == 0.0 || !ctx->xyb;
     info.orientation = frame->linesize[0] >= 0 ? JXL_ORIENT_IDENTITY : JXL_ORIENT_FLIP_VERTICAL;
 
     if (JxlEncoderSetBasicInfo(ctx->encoder, &info) != JXL_ENC_SUCCESS) {
@@ -474,6 +476,8 @@ static const AVOption libjxl_encode_options[] = {
     { "distance",      "Maximum Butteraugli distance (quality setting, "
                         "lower = better, zero = lossless, default 1.0)",   OFFSET(distance),   AV_OPT_TYPE_FLOAT,  { .dbl = -1.0 }, -1.0,  15.0, VE },
     { "modular",       "Force modular mode",                               OFFSET(modular),    AV_OPT_TYPE_INT,    { .i64 =    0 },    0,     1, VE },
+    { "xyb",           "Use XYB-encoding for lossy images",                OFFSET(xyb),
+        AV_OPT_TYPE_INT,   { .i64 =    1 },    0,     1, VE },
     { NULL },
 };
 

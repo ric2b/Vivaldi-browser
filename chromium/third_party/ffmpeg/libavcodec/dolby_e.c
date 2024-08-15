@@ -1200,7 +1200,7 @@ static av_cold void init_tables(void)
         gain_tab[i] = exp2f((i - 960) / 64.0f);
 
     // short 1
-    avpriv_kbd_window_init(window, 3.0f, 128);
+    ff_kbd_window_init(window, 3.0f, 128);
     for (i = 0; i < 128; i++)
         window[128 + i] = window[127 - i];
 
@@ -1227,7 +1227,7 @@ static av_cold void init_tables(void)
         window[1088 + i] = 1.0f;
 
     // long
-    avpriv_kbd_window_init(window + 1408, 3.0f, 256);
+    ff_kbd_window_init(window + 1408, 3.0f, 256);
     for (i = 0; i < 640; i++)
         window[1664 + i] = 1.0f;
     for (i = 0; i < 256; i++)
@@ -1271,13 +1271,6 @@ static av_cold int dolby_e_init(AVCodecContext *avctx)
 
     if (!(s->fdsp = avpriv_float_dsp_alloc(0)))
         return AVERROR(ENOMEM);
-
-#if FF_API_OLD_CHANNEL_LAYOUT
-FF_DISABLE_DEPRECATION_WARNINGS
-    if (avctx->request_channel_layout & AV_CH_LAYOUT_NATIVE)
-        s->dectx.metadata.output_channel_order = CHANNEL_ORDER_CODED;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
 
     s->dectx.metadata.multi_prog_warned = s->dectx.metadata.output_channel_order == CHANNEL_ORDER_CODED;
     s->dectx.avctx = s->avctx = avctx;

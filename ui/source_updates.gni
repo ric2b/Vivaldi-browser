@@ -12,6 +12,15 @@ update_target("//content/common:common") {
     "//vivaldi/ui/content/vivaldi_event_hooks.cc",
     "//vivaldi/ui/content/vivaldi_event_hooks.h",
   ]
+  deps += [
+    "//components/services/storage/public/mojom",
+    "//components/services/storage/privileged/mojom",
+    "//components/services/quarantine/public/mojom",
+    "//content/services/auction_worklet/public/mojom",
+    "//media/mojo/mojom:remoting",
+    "//services/cert_verifier/public/mojom",
+    "//vivaldi/renderer/mojo:frame_service",
+  ]
 }
 
 update_target("//chrome/browser/ui:ui") {
@@ -46,6 +55,8 @@ update_target("//chrome/browser/ui:ui") {
       "//vivaldi/ui/vivaldi_document_loader.h",
       "//vivaldi/ui/vivaldi_location_bar.cc",
       "//vivaldi/ui/vivaldi_location_bar.h",
+      "//vivaldi/ui/vivaldi_message_box_dialog.cc",
+      "//vivaldi/ui/vivaldi_message_box_dialog.h",
       "//vivaldi/ui/vivaldi_tab_model.cc",
       "//vivaldi/ui/vivaldi_tab_strip_model.cc",
       "//vivaldi/ui/views/vivaldi_window_widget_delegate.cc",
@@ -121,7 +132,7 @@ if (!is_android) {
     deps += [
       "//base",
       "//content/public/common:interfaces",
-        "//third_party/blink/public:blink_headers",
+      "//third_party/blink/public:blink_headers",
       "//vivaldi/app:resources",
       "//vivaldi/ui/vector_icons:vector_icons",
     ]

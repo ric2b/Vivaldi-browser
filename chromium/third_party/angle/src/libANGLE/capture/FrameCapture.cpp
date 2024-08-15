@@ -51,6 +51,7 @@
 #include "libANGLE/entry_points_utils.h"
 #include "libANGLE/queryconversions.h"
 #include "libANGLE/queryutils.h"
+#include "libANGLE/renderer/driver_utils.h"
 #include "libANGLE/validationEGL.h"
 #include "third_party/ceval/ceval.h"
 
@@ -1553,13 +1554,13 @@ void CaptureUpdateCurrentProgram(const CallCapture &call,
     callsOut->emplace_back("UpdateCurrentProgram", std::move(paramBuffer));
 }
 
-bool ProgramNeedsReset(const gl::ContextID contextID,
+bool ProgramNeedsReset(const gl::Context *context,
                        ResourceTracker *resourceTracker,
                        gl::ShaderProgramID programID)
 {
     // Check whether the program is listed in programs to regen or restore
     TrackedResource &trackedShaderPrograms =
-        resourceTracker->getTrackedResource(contextID, ResourceIDType::ShaderProgram);
+        resourceTracker->getTrackedResource(context->id(), ResourceIDType::ShaderProgram);
 
     ResourceSet &shaderProgramsToRegen = trackedShaderPrograms.getResourcesToRegen();
     if (shaderProgramsToRegen.count(programID.value) != 0)
@@ -1569,6 +1570,13 @@ bool ProgramNeedsReset(const gl::ContextID contextID,
 
     ResourceSet &shaderProgramsToRestore = trackedShaderPrograms.getResourcesToRestore();
     if (shaderProgramsToRestore.count(programID.value) != 0)
+    {
+        return true;
+    }
+
+    // Deferred linked programs will also update their own uniforms
+    FrameCaptureShared *frameCaptureShared = context->getShareGroup()->getFrameCaptureShared();
+    if (frameCaptureShared->isDeferredLinkProgram(programID))
     {
         return true;
     }
@@ -1592,7 +1600,7 @@ void MaybeResetDefaultUniforms(std::stringstream &out,
         gl::ShaderProgramID programID               = uniformIter.first;
         const DefaultUniformLocationsSet &locations = uniformIter.second;
 
-        if (ProgramNeedsReset(context->id(), resourceTracker, programID))
+        if (ProgramNeedsReset(context, resourceTracker, programID))
         {
             // Skip programs marked for reset as they will update their own uniforms
             return;
@@ -2464,6 +2472,18 @@ bool IsTextureUpdate(CallCapture &call)
         case EntryPoint::GLCopyImageSubData:
         case EntryPoint::GLCopyImageSubDataEXT:
         case EntryPoint::GLCopyImageSubDataOES:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool IsImageUpdate(CallCapture &call)
+{
+    switch (call.entryPoint)
+    {
+        case EntryPoint::GLDispatchCompute:
+        case EntryPoint::GLDispatchComputeIndirect:
             return true;
         default:
             return false;
@@ -4636,23 +4656,33 @@ void CaptureShareGroupMidExecutionSetup(
 
     // Capture Program binary state.
     gl::ShaderProgramID tempShaderStartID = {resourceTracker->getMaxShaderPrograms()};
+    std::map<gl::ShaderProgramID, std::vector<gl::ShaderProgramID>> deferredAttachCalls;
     for (const auto &programIter : programs)
     {
         gl::ShaderProgramID id = {programIter.first};
         gl::Program *program   = programIter.second;
 
-        // Unlinked programs don't have an executable. Thus they don't need to be captured.
+        // Unlinked programs don't have an executable so track in case linking is deferred
         // Programs are shared by contexts in the share group and only need to be captured once.
         if (!program->isLinked())
         {
-            continue;
+            frameCaptureShared->setDeferredLinkProgram(id);
+
+            // Deferred attachment of shaders is not yet supported
+            ASSERT(program->getAttachedShadersCount());
+
+            // AttachShader calls will be generated at shader-handling time
+            for (gl::ShaderType shaderType : gl::AllShaderTypes())
+            {
+                gl::Shader *shader = program->getAttachedShader(shaderType);
+                if (shader != nullptr)
+                {
+                    deferredAttachCalls[shader->getHandle()].push_back(id);
+                }
+            }
         }
 
         size_t programSetupStart = setupCalls->size();
-
-        // Get last linked shader source.
-        const ProgramSources &linkedSources =
-            context->getShareGroup()->getFrameCaptureShared()->getProgramSources(id);
 
         // Create two lists for program regen calls
         ResourceCalls &shaderProgramRegenCalls = trackedShaderPrograms.getResourceRegenCalls();
@@ -4664,21 +4694,29 @@ void CaptureShareGroupMidExecutionSetup(
             CaptureCustomShaderProgram("CreateProgram", createProgram, *calls);
         }
 
-        // Create two lists for program restore calls
-        ResourceCalls &shaderProgramRestoreCalls = trackedShaderPrograms.getResourceRestoreCalls();
-        CallVector programRestoreCalls({setupCalls, &shaderProgramRestoreCalls[id.value]});
-
-        for (std::vector<CallCapture> *calls : programRestoreCalls)
+        if (program->isLinked())
         {
-            GenerateLinkedProgram(context, replayState, resourceTracker, calls, program, id,
-                                  tempShaderStartID, linkedSources);
-        }
+            // Get last linked shader source.
+            const ProgramSources &linkedSources =
+                context->getShareGroup()->getFrameCaptureShared()->getProgramSources(id);
 
-        // Update the program in replayState
-        if (!replayState.getProgram() || replayState.getProgram()->id() != program->id())
-        {
-            // Note: We don't do this in GenerateLinkedProgram because it can't modify state
-            (void)replayState.setProgram(context, program);
+            // Create two lists for program restore calls
+            ResourceCalls &shaderProgramRestoreCalls =
+                trackedShaderPrograms.getResourceRestoreCalls();
+            CallVector programRestoreCalls({setupCalls, &shaderProgramRestoreCalls[id.value]});
+
+            for (std::vector<CallCapture> *calls : programRestoreCalls)
+            {
+                GenerateLinkedProgram(context, replayState, resourceTracker, calls, program, id,
+                                      tempShaderStartID, linkedSources);
+            }
+
+            // Update the program in replayState
+            if (!replayState.getProgram() || replayState.getProgram()->id() != program->id())
+            {
+                // Note: We don't do this in GenerateLinkedProgram because it can't modify state
+                (void)replayState.setProgram(context, program);
+            }
         }
 
         resourceTracker->getTrackedResource(context->id(), ResourceIDType::ShaderProgram)
@@ -4686,12 +4724,17 @@ void CaptureShareGroupMidExecutionSetup(
             .insert(id.value);
         resourceTracker->setShaderProgramType(id, ShaderProgramType::ProgramType);
 
-        size_t programSetupEnd = setupCalls->size();
+        // Mark linked programs/shaders as inactive, leaving deferred-linked programs/shaders marked
+        // as active
+        if (!frameCaptureShared->isDeferredLinkProgram(id))
+        {
+            size_t programSetupEnd = setupCalls->size();
 
-        // Mark the range of calls used to setup this program
-        frameCaptureShared->markResourceSetupCallsInactive(
-            setupCalls, ResourceIDType::ShaderProgram, id.value,
-            gl::Range<size_t>(programSetupStart, programSetupEnd));
+            // Mark the range of calls used to setup this program
+            frameCaptureShared->markResourceSetupCallsInactive(
+                setupCalls, ResourceIDType::ShaderProgram, id.value,
+                gl::Range<size_t>(programSetupStart, programSetupEnd));
+        }
     }
 
     // Handle shaders.
@@ -4718,6 +4761,15 @@ void CaptureShareGroupMidExecutionSetup(
             CallCapture createShader =
                 CaptureCreateShader(replayState, true, shader->getType(), id.value);
             CaptureCustomShaderProgram("CreateShader", createShader, *calls);
+
+            // If unlinked programs have been created which reference this shader emit corresponding
+            // attach calls
+            for (const auto deferredAttachedProgramID : deferredAttachCalls[id])
+            {
+                CallCapture attachShader =
+                    CaptureAttachShader(replayState, true, deferredAttachedProgramID, id);
+                calls->emplace_back(std::move(attachShader));
+            }
         }
 
         std::string shaderSource  = shader->getSourceString();
@@ -4727,8 +4779,8 @@ void CaptureShareGroupMidExecutionSetup(
         ResourceCalls &shaderProgramRestoreCalls = trackedShaderPrograms.getResourceRestoreCalls();
         CallVector shaderRestoreCalls({setupCalls, &shaderProgramRestoreCalls[id.value]});
 
-        // This does not handle some more tricky situations like attaching shaders to a non-linked
-        // program. Or attaching uncompiled shaders. Or attaching and then deleting a shader.
+        // This does not handle some more tricky situations like attaching and then deleting a
+        // shader.
         // TODO(jmadill): Handle trickier program uses. http://anglebug.com/3662
         if (shader->isCompiled(context))
         {
@@ -4758,10 +4810,14 @@ void CaptureShareGroupMidExecutionSetup(
             }
         }
 
-        // Mark the range of calls used to setup this shader
-        frameCaptureShared->markResourceSetupCallsInactive(
-            setupCalls, ResourceIDType::ShaderProgram, id.value,
-            gl::Range<size_t>(shaderSetupStart, setupCalls->size()));
+        // Deferred-linked programs/shaders must be left marked as active
+        if (deferredAttachCalls[id].empty())
+        {
+            // Mark the range of calls used to setup this shader
+            frameCaptureShared->markResourceSetupCallsInactive(
+                setupCalls, ResourceIDType::ShaderProgram, id.value,
+                gl::Range<size_t>(shaderSetupStart, setupCalls->size()));
+        }
 
         resourceTracker->getTrackedResource(context->id(), ResourceIDType::ShaderProgram)
             .getStartingResources()
@@ -6524,7 +6580,7 @@ CoherentBufferTracker::~CoherentBufferTracker()
 
 PageFaultHandlerRangeType CoherentBufferTracker::handleWrite(uintptr_t address)
 {
-    std::lock_guard<std::mutex> lock(mMutex);
+    std::lock_guard<angle::SimpleMutex> lock(mMutex);
     auto pagesInBuffers = getBufferPagesForAddress(address);
 
     if (pagesInBuffers.empty())
@@ -6621,7 +6677,7 @@ bool CoherentBufferTracker::haveBuffer(gl::BufferID id)
 
 void CoherentBufferTracker::onEndFrame()
 {
-    std::lock_guard<std::mutex> lock(mMutex);
+    std::lock_guard<angle::SimpleMutex> lock(mMutex);
 
     if (!mEnabled)
     {
@@ -6663,7 +6719,7 @@ void CoherentBufferTracker::disable()
 
 uintptr_t CoherentBufferTracker::addBuffer(gl::BufferID id, uintptr_t start, size_t size)
 {
-    std::lock_guard<std::mutex> lock(mMutex);
+    std::lock_guard<angle::SimpleMutex> lock(mMutex);
 
     if (haveBuffer(id))
     {
@@ -6752,7 +6808,7 @@ PageSharingType CoherentBufferTracker::doesBufferSharePage(gl::BufferID id)
 
 void CoherentBufferTracker::removeBuffer(gl::BufferID id)
 {
-    std::lock_guard<std::mutex> lock(mMutex);
+    std::lock_guard<angle::SimpleMutex> lock(mMutex);
 
     if (!haveBuffer(id))
     {
@@ -6804,11 +6860,17 @@ void FrameCaptureShared::determineMemoryProtectionSupport(gl::Context *context)
     angle::GetSystemInfo(&info);
     bool isDeviceDenyListed = false;
 
-    if (denyList.find(info.machineManufacturer) != denyList.end())
+    if (rx::GetAndroidSDKVersion() < 34)
     {
-        const std::vector<std::string> &models = denyList[info.machineManufacturer];
-        isDeviceDenyListed =
-            std::find(models.begin(), models.end(), info.machineModelName) != models.end();
+        // Before Android 14, there was a bug in Mali based Pixel preventing mprotect
+        // on Vulkan surfaces. (https://b.corp.google.com/issues/269535398)
+        // Check the denylist in this case.
+        if (denyList.find(info.machineManufacturer) != denyList.end())
+        {
+            const std::vector<std::string> &models = denyList[info.machineManufacturer];
+            isDeviceDenyListed =
+                std::find(models.begin(), models.end(), info.machineModelName) != models.end();
+        }
     }
 
     if (isDeviceDenyListed)
@@ -6946,6 +7008,26 @@ void FrameCaptureShared::trackTextureUpdate(const gl::Context *context, const Ca
     // Mark it as modified
     mResourceTracker.getTrackedResource(context->id(), ResourceIDType::Texture)
         .setModifiedResource(id);
+}
+
+// Identify and mark writeable shader image textures as modified
+void FrameCaptureShared::trackImageUpdate(const gl::Context *context, const CallCapture &call)
+{
+    const gl::ProgramExecutable *executable = context->getState().getProgramExecutable();
+    for (const gl::ImageBinding &imageBinding : executable->getImageBindings())
+    {
+        for (GLuint binding : imageBinding.boundImageUnits)
+        {
+            const gl::ImageUnit &imageUnit = context->getState().getImageUnit(binding);
+            if (imageUnit.access != GL_READ_ONLY)
+            {
+                // Get image binding texture id and mark it as modified
+                GLuint id = imageUnit.texture.id().value;
+                mResourceTracker.getTrackedResource(context->id(), ResourceIDType::Texture)
+                    .setModifiedResource(id);
+            }
+        }
+    }
 }
 
 void FrameCaptureShared::trackDefaultUniformUpdate(const gl::Context *context,
@@ -7285,7 +7367,7 @@ void FrameCaptureShared::maybeCaptureCoherentBuffers(const gl::Context *context)
         return;
     }
 
-    std::lock_guard<std::mutex> lock(mCoherentBufferTracker.mMutex);
+    std::lock_guard<angle::SimpleMutex> lock(mCoherentBufferTracker.mMutex);
 
     for (const auto &pair : mCoherentBufferTracker.mBuffers)
     {
@@ -8087,6 +8169,12 @@ void FrameCaptureShared::maybeCapturePreCallUpdates(
     {
         // If this call modified texture contents, track it for possible reset
         trackTextureUpdate(context, call);
+    }
+
+    if (IsImageUpdate(call))
+    {
+        // If this call modified shader image contents, track it for possible reset
+        trackImageUpdate(context, call);
     }
 
     if (isCaptureActive() && GetDefaultUniformType(call) != DefaultUniformType::None)

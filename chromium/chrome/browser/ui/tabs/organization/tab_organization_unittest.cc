@@ -189,8 +189,8 @@ TEST_F(TabOrganizationTest, TabDataTabStripModelConstructor) {
   EXPECT_EQ(tab_strip_model(), tab_data.original_tab_strip_model());
   EXPECT_EQ(web_contents->GetLastCommittedURL(), tab_data.original_url());
 
-  // TODO(1476012) Add a check for TabID once TabStripModel::Tab has the new
-  // handle.
+  // TODO(crbug.com/40070608) Add a check for TabID once TabStripModel::Tab has
+  // the new handle.
 }
 
 // Check that TabData isn't updated when the tabstrip updates.
@@ -245,7 +245,7 @@ TEST_F(TabOrganizationTest, TabDataOnDestroyWebContentsReplaceUpdatesContents) {
   std::unique_ptr<content::WebContents> new_contents = CreateWebContents();
   content::WebContents* new_contents_ptr = new_contents.get();
   EXPECT_EQ(tab_data->web_contents(), old_contents);
-  tab_strip_model()->ReplaceWebContentsAt(
+  tab_strip_model()->DiscardWebContentsAt(
       tab_strip_model()->GetIndexOfWebContents(old_contents),
       std::move(new_contents));
   EXPECT_EQ(tab_data->web_contents(), new_contents_ptr);
@@ -331,7 +331,7 @@ TEST_F(TabOrganizationTest, TabDataObserverTest) {
   // replace the contents which should result in an update call.
   std::unique_ptr<content::WebContents> new_contents = CreateWebContents();
   content::WebContents* new_contents_ptr = new_contents.get();
-  tab_strip_model()->ReplaceWebContentsAt(
+  tab_strip_model()->DiscardWebContentsAt(
       tab_strip_model()->GetIndexOfWebContents(old_contents),
       std::move(new_contents));
   EXPECT_EQ(observer.update_call_count, 1);
@@ -459,7 +459,8 @@ TEST_F(TabOrganizationTest, TabOrganizationReject) {
 }
 
 TEST_F(TabOrganizationTest, TabOrganizationCHECKOnChangingUserChoiceTwice) {
-  TabOrganization organization({}, {u"default_name"}, /*current_name*/ 0u,
+  TabOrganization organization({}, {u"default_name"}, /*first_new_tab_index=*/0,
+                               /*current_name=*/0u,
                                TabOrganization::UserChoice::kAccepted);
 
   EXPECT_DEATH(organization.Reject(), "");

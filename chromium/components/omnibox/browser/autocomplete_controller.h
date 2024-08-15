@@ -40,6 +40,9 @@
 #include "components/omnibox/browser/autocomplete_scoring_model_service.h"
 #endif  // BUILDFLAG(BUILD_WITH_TFLITE_LIB)
 
+// Vivaldi
+#include "components/omnibox/bookmark_nickname_provider.h"
+
 class ClipboardProvider;
 class DocumentProvider;
 class HistoryFuzzyProvider;
@@ -437,8 +440,8 @@ class AutocompleteController : public AutocompleteProviderListener,
 #endif  // BUILDFLAG(BUILD_WITH_TFLITE_LIB)
 
   // Constructs a destination URL from supplied search terms args.
-  // TODO(1418077): look for a way to dissolve this function into direct
-  // application where it's needed.
+  // TODO(crbug.com/40257536): look for a way to dissolve this function into
+  // direct application where it's needed.
   GURL ComputeURLFromSearchTermsArgs(
       const TemplateURL* template_url,
       const TemplateURLRef::SearchTermsArgs& args) const;
@@ -576,6 +579,9 @@ class AutocompleteController : public AutocompleteProviderListener,
 
   // The preferred steady state (unfocused) omnibox position.
   metrics::OmniboxEventProto::OmniboxPosition steady_state_omnibox_position_;
+
+  // Vivaldi
+  raw_ptr<BookmarkNicknameProvider> bookmark_nickname_provider_;
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_CONTROLLER_H_

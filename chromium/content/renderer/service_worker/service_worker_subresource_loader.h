@@ -220,13 +220,16 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoader
   // A caller should handle the case.
   bool StartRaceNetworkRequest();
 
-  std::optional<ServiceWorkerRouterEvaluator::Result>
-  MaybeEvaluateRouterConditions() const;
+  std::optional<ServiceWorkerRouterEvaluator::Result> EvaluateRouterConditions()
+      const;
 
   bool MaybeStartAutoPreload();
 
   void DidCacheStorageMatch(base::TimeTicks event_dispatch_time,
                             blink::mojom::MatchResultPtr result);
+
+  void MaybeDeleteThis();
+  bool IsResponseAlreadyCommittedByRaceNetworkRequest();
 
   network::mojom::URLResponseHeadPtr response_head_;
   std::optional<net::RedirectInfo> redirect_info_;

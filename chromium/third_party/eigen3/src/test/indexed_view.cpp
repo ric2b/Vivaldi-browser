@@ -447,7 +447,7 @@ void check_indexed_view() {
 
   // Check compilation of varying integer types as index types:
   Index i = n / 2;
-  short i_short(i);
+  short i_short = static_cast<short>(i);
   std::size_t i_sizet(i);
   VERIFY_IS_EQUAL(a(i), a.coeff(i_short));
   VERIFY_IS_EQUAL(a(i), a.coeff(i_sizet));
@@ -498,12 +498,353 @@ void check_indexed_view() {
     // A(1, seq(0,2,1)).cwiseAbs().colwise().replicate(2).eval();
     STATIC_CHECK(((internal::evaluator<decltype(A(1, seq(0, 2, 1)))>::Flags & RowMajorBit) == RowMajorBit));
   }
+
+  // Direct access.
+  {
+    int rows = 3;
+    int row_start = internal::random<int>(0, rows - 1);
+    int row_inc = internal::random<int>(1, rows - row_start);
+    int row_size = internal::random<int>(1, (rows - row_start) / row_inc);
+    auto row_seq = seqN(row_start, row_size, row_inc);
+
+    int cols = 3;
+    int col_start = internal::random<int>(0, cols - 1);
+    int col_inc = internal::random<int>(1, cols - col_start);
+    int col_size = internal::random<int>(1, (cols - col_start) / col_inc);
+    auto col_seq = seqN(col_start, col_size, col_inc);
+
+    MatrixXd m1 = MatrixXd::Random(rows, cols);
+    MatrixXd m2 = MatrixXd::Random(cols, rows);
+    VERIFY_IS_APPROX(m1(row_seq, indexing::all) * m2, m1(row_seq, indexing::all).eval() * m2);
+    VERIFY_IS_APPROX(m1 * m2(indexing::all, col_seq), m1 * m2(indexing::all, col_seq).eval());
+    VERIFY_IS_APPROX(m1(row_seq, col_seq) * m2(col_seq, row_seq),
+                     m1(row_seq, col_seq).eval() * m2(col_seq, row_seq).eval());
+
+    VectorXd v1 = VectorXd::Random(cols);
+    VERIFY_IS_APPROX(m1(row_seq, col_seq) * v1(col_seq), m1(row_seq, col_seq).eval() * v1(col_seq).eval());
+    VERIFY_IS_APPROX(v1(col_seq).transpose() * m2(col_seq, row_seq),
+                     v1(col_seq).transpose().eval() * m2(col_seq, row_seq).eval());
+  }
+}
+
+void check_tutorial_examples() {
+  constexpr int kRows = 11;
+  constexpr int kCols = 21;
+  Matrix<double, kRows, kCols> A = Matrix<double, kRows, kCols>::Random();
+  Vector<double, kRows> v = Vector<double, kRows>::Random();
+
+  {
+    auto slice = A(seqN(fix<0>, fix<5>, fix<2>), seqN(fix<2>, fix<7>, fix<1>));
+    EIGEN_UNUSED_VARIABLE(slice);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), 5);
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), 7);
+  }
+  {
+    auto slice = A(seqN(fix<0>, fix<5>, fix<2>), indexing::all);
+    EIGEN_UNUSED_VARIABLE(slice);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), 5);
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), kCols);
+  }
+
+  // Examples from slicing tutorial.
+  // Bottom-left corner.
+  {
+    Index i = 3;
+    Index n = 5;
+    auto slice = A(seq(i, indexing::last), seqN(0, n));
+    auto block = A.bottomLeftCorner(A.rows() - i, n);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), Dynamic);
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), Dynamic);
+    VERIFY_IS_EQUAL(slice, block);
+  }
+  {
+    auto i = fix<3>;
+    auto n = fix<5>;
+    auto slice = A(seq(i, indexing::last), seqN(fix<0>, n));
+    auto block = A.bottomLeftCorner(fix<kRows> - i, n);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), A.RowsAtCompileTime - i);
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), n);
+    VERIFY_IS_EQUAL(slice, block);
+  }
+
+  // Block starting at i,j of size m,n.
+  {
+    Index i = 4;
+    Index j = 2;
+    Index m = 3;
+    Index n = 5;
+    auto slice = A(seqN(i, m), seqN(j, n));
+    auto block = A.block(i, j, m, n);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+  {
+    auto i = fix<4>;
+    auto j = fix<2>;
+    auto m = fix<3>;
+    auto n = fix<5>;
+    auto slice = A(seqN(i, m), seqN(j, n));
+    auto block = A.block(i, j, m, n);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+
+  // Block starting at i0,j0 and ending at i1,j1.
+  {
+    Index i0 = 4;
+    Index i1 = 7;
+    Index j0 = 3;
+    Index j1 = 5;
+    auto slice = A(seq(i0, i1), seq(j0, j1));
+    auto block = A.block(i0, j0, i1 - i0 + 1, j1 - j0 + 1);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+  {
+    auto i0 = fix<4>;
+    auto i1 = fix<7>;
+    auto j0 = fix<3>;
+    auto j1 = fix<5>;
+    auto slice = A(seq(i0, i1), seq(j0, j1));
+    auto block = A.block(i0, j0, i1 - i0 + fix<1>, j1 - j0 + fix<1>);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+
+  // Even columns of A.
+  {
+    auto slice = A(all, seq(0, last, 2));
+    auto block =
+        Eigen::Map<Eigen::Matrix<double, kRows, Dynamic>, 0, OuterStride<2 * kRows>>(A.data(), kRows, (kCols + 1) / 2);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+  {
+    auto slice = A(all, seq(fix<0>, last, fix<2>));
+    auto block = Eigen::Map<Eigen::Matrix<double, kRows, (kCols + 1) / 2>, 0, OuterStride<2 * kRows>>(A.data());
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+
+  // First n odd rows of A.
+  {
+    Index n = 3;
+    auto slice = A(seqN(1, n, 2), all);
+    auto block = Eigen::Map<Eigen::Matrix<double, Dynamic, kCols>, 0, Stride<kRows, 2>>(A.data() + 1, n, kCols);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+  {
+    auto n = fix<3>;
+    auto slice = A(seqN(fix<1>, n, fix<2>), all);
+    auto block = Eigen::Map<Eigen::Matrix<double, 3, kCols>, 0, Stride<kRows, 2>>(A.data() + 1);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+
+  // The second-last column.
+  {
+    auto slice = A(all, last - 1);
+    auto block = A.col(A.cols() - 2);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+  {
+    auto slice = A(all, last - fix<1>);
+    auto block = A.col(fix<kCols> - fix<2>);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+
+  // The middle row.
+  {
+    auto slice = A(last / 2, all);
+    auto block = A.row((A.rows() - 1) / 2);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+  {
+    auto slice = A(last / fix<2>, all);
+    auto block = A.row(fix<(kRows - 1) / 2>);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+
+  // Last elements of v starting at i.
+  {
+    Index i = 7;
+    auto slice = v(seq(i, last));
+    auto block = v.tail(v.size() - i);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+  {
+    auto i = fix<7>;
+    auto slice = v(seq(i, last));
+    auto block = v.tail(fix<kRows> - i);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+
+  // Last n elements of v.
+  {
+    Index n = 6;
+    auto slice = v(seq(last + 1 - n, last));
+    auto block = v.tail(n);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+  {
+    auto n = fix<6>;
+    auto slice = v(seq(last + fix<1> - n, last));
+    auto block = v.tail(n);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+
+  // Last n elements of v.
+  {
+    Index n = 6;
+    auto slice = v(lastN(n));
+    auto block = v.tail(n);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+  {
+    auto n = fix<6>;
+    auto slice = v(lastN(n));
+    auto block = v.tail(n);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+
+  // Bottom-right corner of A of size m times n.
+  {
+    Index m = 3;
+    Index n = 6;
+    auto slice = A(lastN(m), lastN(n));
+    auto block = A.bottomRightCorner(m, n);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+  {
+    auto m = fix<3>;
+    auto n = fix<6>;
+    auto slice = A(lastN(m), lastN(n));
+    auto block = A.bottomRightCorner(m, n);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+
+  // Last n columns with a stride of 3.
+  {
+    Index n = 4;
+    constexpr Index stride = 3;
+    auto slice = A(all, lastN(n, stride));
+    auto block = Eigen::Map<Eigen::Matrix<double, kRows, Dynamic>, 0, OuterStride<stride * kRows>>(
+        A.data() + (kCols - 1 - (n - 1) * stride) * kRows, A.rows(), n);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+  {
+    constexpr auto n = fix<4>;
+    constexpr auto stride = fix<3>;
+    auto slice = A(all, lastN(n, stride));
+    auto block = Eigen::Map<Eigen::Matrix<double, kRows, n>, 0, OuterStride<stride * kRows>>(
+        A.data() + (kCols - 1 - (n - 1) * stride) * kRows, A.rows(), n);
+    VERIFY_IS_EQUAL(int(slice.RowsAtCompileTime), int(block.RowsAtCompileTime));
+    VERIFY_IS_EQUAL(int(slice.ColsAtCompileTime), int(block.ColsAtCompileTime));
+    VERIFY_IS_EQUAL(slice, block);
+  }
+
+  // Compile time size and increment.
+  {
+    auto slice1 = v(seq(last - fix<7>, last - fix<2>));
+    auto slice2 = v(seqN(last - 7, fix<6>));
+    VERIFY_IS_EQUAL(slice1, slice2);
+    VERIFY_IS_EQUAL(int(slice1.SizeAtCompileTime), 6);
+    VERIFY_IS_EQUAL(int(slice2.SizeAtCompileTime), 6);
+    auto slice3 = A(all, seq(fix<0>, last, fix<2>));
+    TEST_SET_BUT_UNUSED_VARIABLE(slice3)
+    VERIFY_IS_EQUAL(int(slice3.RowsAtCompileTime), kRows);
+    VERIFY_IS_EQUAL(int(slice3.ColsAtCompileTime), (kCols + 1) / 2);
+  }
+
+  // Reverse order.
+  {
+    auto slice = A(all, seq(20, 10, fix<-2>));
+    auto block = Eigen::Map<Eigen::Matrix<double, kRows, Dynamic>, 0, OuterStride<-2 * kRows>>(
+        A.data() + 20 * kRows, A.rows(), (20 - 10 + 2) / 2);
+    VERIFY_IS_EQUAL(slice, block);
+  }
+  {
+    Index n = 10;
+    auto slice1 = A(seqN(last, n, fix<-1>), all);
+    auto slice2 = A(lastN(n).reverse(), all);
+    VERIFY_IS_EQUAL(slice1, slice2);
+  }
+
+  // Array of indices.
+  {
+    std::vector<int> ind{4, 2, 5, 5, 3};
+    auto slice1 = A(all, ind);
+    for (size_t i = 0; i < ind.size(); ++i) {
+      VERIFY_IS_EQUAL(slice1.col(i), A.col(ind[i]));
+    }
+
+    auto slice2 = A(all, {4, 2, 5, 5, 3});
+    VERIFY_IS_EQUAL(slice1, slice2);
+
+    Eigen::ArrayXi indarray(5);
+    indarray << 4, 2, 5, 5, 3;
+    auto slice3 = A(all, indarray);
+    VERIFY_IS_EQUAL(slice1, slice3);
+  }
+
+  // Custom index list.
+  {
+    struct pad {
+      Index size() const { return out_size; }
+      Index operator[](Index i) const { return std::max<Index>(0, i - (out_size - in_size)); }
+      Index in_size, out_size;
+    };
+
+    auto slice = A(pad{3, 5}, pad{3, 5});
+    Eigen::MatrixXd B = slice;
+    VERIFY_IS_EQUAL(B.block(2, 2, 3, 3), A.block(0, 0, 3, 3));
+  }
 }
 
 EIGEN_DECLARE_TEST(indexed_view) {
-  //   for(int i = 0; i < g_repeat; i++) {
-  CALL_SUBTEST_1(check_indexed_view());
-  //   }
+  for (int i = 0; i < g_repeat; i++) {
+    CALL_SUBTEST_1(check_indexed_view());
+  }
+  CALL_SUBTEST_1(check_tutorial_examples());
 
   // static checks of some internals:
   STATIC_CHECK((internal::is_valid_index_type<int>::value));

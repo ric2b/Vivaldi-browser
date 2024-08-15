@@ -419,7 +419,7 @@ bool FileSystemBackend::HasInplaceCopyImplementation(
     case storage::kFileSystemTypeArcDocumentsProvider:
     case storage::kFileSystemTypeLocal:
     case storage::kFileSystemTypeArcContent:
-    // TODO(crbug.com/939235): Implement in-place copy in SmbFs.
+    // TODO(crbug.com/41445433): Implement in-place copy in SmbFs.
     case storage::kFileSystemTypeSmbFs:
     case storage::kFileSystemTypeFuseBox:
       return false;
@@ -523,39 +523,6 @@ bool FileSystemBackend::GetVirtualPath(const base::FilePath& filesystem_path,
                                        base::FilePath* virtual_path) const {
   return mount_points_->GetVirtualPath(filesystem_path, virtual_path) ||
          system_mount_points_->GetVirtualPath(filesystem_path, virtual_path);
-}
-
-void FileSystemBackend::GetRedirectURLForContents(
-    const storage::FileSystemURL& url,
-    storage::URLCallback callback) const {
-  DCHECK(url.is_valid());
-
-  if (!IsAccessAllowed(BackendFunction::kGetRedirectURLForContents,
-                       storage::OperationType::kNone, url)) {
-    std::move(callback).Run(GURL());
-    return;
-  }
-
-  switch (url.type()) {
-    case storage::kFileSystemTypeProvided:
-      file_system_provider_delegate_->GetRedirectURLForContents(
-          url, std::move(callback));
-      return;
-    case storage::kFileSystemTypeDeviceMediaAsFileStorage:
-      mtp_delegate_->GetRedirectURLForContents(url, std::move(callback));
-      return;
-    case storage::kFileSystemTypeLocal:
-    case storage::kFileSystemTypeArcContent:
-    case storage::kFileSystemTypeArcDocumentsProvider:
-    case storage::kFileSystemTypeDriveFs:
-    case storage::kFileSystemTypeSmbFs:
-    case storage::kFileSystemTypeFuseBox:
-      std::move(callback).Run(GURL());
-      return;
-    default:
-      NOTREACHED();
-  }
-  std::move(callback).Run(GURL());
 }
 
 storage::FileSystemURL FileSystemBackend::CreateInternalURL(

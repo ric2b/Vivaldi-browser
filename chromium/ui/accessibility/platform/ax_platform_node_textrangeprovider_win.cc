@@ -529,7 +529,7 @@ HRESULT AXPlatformNodeTextRangeProviderWin::FindText(
   size_t find_length;
   if (base::i18n::StringSearch(search_string, text_range, &find_start,
                                &find_length, !ignore_case, !backwards)) {
-    // TODO(https://crbug.com/1023599): There is a known issue here related to
+    // TODO(crbug.com/40658243): There is a known issue here related to
     // text searches of a |string| starting and ending with a "\n", e.g.
     // "\nsometext" or "sometext\n" if the newline is computed from a line
     // breaking object. FindText() is rarely called, and when it is, it's not to
@@ -1010,7 +1010,7 @@ HRESULT AXPlatformNodeTextRangeProviderWin::Select() {
   DCHECK(!selection_end->IsNullPosition());
   DCHECK_EQ(selection_start->tree_id(), selection_end->tree_id());
 
-  // TODO(crbug.com/1124051): Blink does not support selection on the list
+  // TODO(crbug.com/40717049): Blink does not support selection on the list
   // markers. So if |selection_start| or |selection_end| are in list markers, we
   // don't perform selection and return success. Remove this check once this bug
   // is fixed.

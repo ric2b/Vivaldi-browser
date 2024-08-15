@@ -22,9 +22,9 @@
 #include "base/feature_list.h"
 #include "base/files/scoped_file.h"
 #include "base/functional/bind.h"
-#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/process/set_process_title.h"
 #include "base/strings/string_number_conversions.h"
@@ -41,12 +41,14 @@
 #include "sandbox/linux/services/namespace_sandbox.h"
 #include "sandbox/linux/services/proc_util.h"
 #include "sandbox/linux/services/resource_limits.h"
+#include "sandbox/linux/services/syscall_wrappers.h"
 #include "sandbox/linux/services/thread_helpers.h"
 #include "sandbox/linux/services/yama.h"
 #include "sandbox/linux/suid/client/setuid_sandbox_client.h"
 #include "sandbox/linux/syscall_broker/broker_client.h"
 #include "sandbox/linux/syscall_broker/broker_command.h"
 #include "sandbox/linux/syscall_broker/broker_process.h"
+#include "sandbox/linux/system_headers/landlock.h"
 #include "sandbox/linux/system_headers/linux_stat.h"
 #include "sandbox/policy/features.h"
 #include "sandbox/policy/linux/bpf_broker_policy_linux.h"
@@ -56,6 +58,7 @@
 #include "sandbox/policy/sandbox_type.h"
 #include "sandbox/policy/switches.h"
 #include "sandbox/sandbox_buildflags.h"
+#include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 
 #if BUILDFLAG(USING_SANITIZER)
 #include <sanitizer/common_interface_defs.h>
@@ -69,6 +72,16 @@ namespace sandbox {
 namespace policy {
 
 namespace {
+
+// The state of Landlock support on the system.
+// Used to report through UMA.
+enum LandlockState {
+  kEnabled = 0,
+  kDisabled = 1,
+  kNotSupported = 2,
+  kUnknown = 3,
+  kMaxValue = kUnknown,
+};
 
 void LogSandboxStarted(const std::string& sandbox_name) {
   const std::string process_type =
@@ -362,14 +375,11 @@ bool SandboxLinux::InitializeSandbox(sandbox::mojom::Sandbox sandbox_type,
 
   // We need to make absolutely sure that our sandbox is "sealed" before
   // returning.
-  // Unretained() since the current object is a Singleton.
-  base::ScopedClosureRunner sandbox_sealer(
-      base::BindOnce(&SandboxLinux::SealSandbox, base::Unretained(this)));
+  absl::Cleanup sandbox_sealer = [this] { SealSandbox(); };
   // Make sure that this function enables sandboxes as promised by GetStatus().
-  // Unretained() since the current object is a Singleton.
-  base::ScopedClosureRunner sandbox_promise_keeper(
-      base::BindOnce(&SandboxLinux::CheckForBrokenPromises,
-                     base::Unretained(this), sandbox_type));
+  absl::Cleanup sandbox_promise_keeper = [this, sandbox_type] {
+    CheckForBrokenPromises(sandbox_type);
+  };
 
   const bool has_threads = !IsSingleThreaded();
 
@@ -452,7 +462,7 @@ bool SandboxLinux::InitializeSandbox(sandbox::mojom::Sandbox sandbox_type,
     // libraries).
     // On ChromeOS none of these third party libraries are installed, so there
     // is no need to discourage getaddrinfo().
-    // TODO(crbug.com/1312224): in the future this should depend on the
+    // TODO(crbug.com/40220505): in the future this should depend on the
     // libraries listed in /etc/nsswitch.conf, and should be a
     // SandboxLinux::Options option.
     DiscourageGetaddrinfo();
@@ -668,6 +678,36 @@ bool SandboxLinux::EngageNamespaceSandboxInternal(bool from_zygote) {
   }
   CHECK(Credentials::SetCapabilities(proc_fd_, caps));
   return true;
+}
+
+void SandboxLinux::ReportLandlockStatus() {
+  LandlockState landlock_state = LandlockState::kUnknown;
+  const int landlock_version =
+      landlock_create_ruleset(nullptr, 0, LANDLOCK_CREATE_RULESET_VERSION);
+  if (landlock_version <= 0) {
+    const int err = errno;
+    switch (err) {
+      case ENOSYS: {
+        DVLOG(1) << "Landlock not supported by the kernel.";
+        landlock_state = LandlockState::kNotSupported;
+        break;
+      }
+      case EOPNOTSUPP: {
+        DVLOG(1) << "Landlock supported by the kernel but disabled.";
+        landlock_state = LandlockState::kDisabled;
+        break;
+      }
+      default: {
+        DVLOG(1) << "Could not determine Landlock state.";
+        landlock_state = LandlockState::kUnknown;
+      }
+    }
+  } else {
+    DVLOG(1) << "Landlock enabled; Version " << landlock_version;
+    landlock_state = LandlockState::kEnabled;
+  }
+
+  UMA_HISTOGRAM_ENUMERATION("Security.Sandbox.LandlockState", landlock_state);
 }
 
 }  // namespace policy

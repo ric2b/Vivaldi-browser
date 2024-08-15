@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "ios-simulator-full-configs",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-mac-archive",
@@ -40,7 +40,7 @@
         {
           "bucket": "ci",
           "builder": "ios-simulator-full-configs",
-          "project": "chromium-m124"
+          "project": "chromium-m126"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -57,6 +57,16 @@
     "metrics_project": "chromium-reclient-metrics",
     "scandeps_server": true
   },
+  "$build/siso": {
+    "configs": [
+      "builder"
+    ],
+    "enable_cloud_profiler": true,
+    "enable_cloud_trace": true,
+    "experiments": [],
+    "project": "rbe-chromium-trusted",
+    "remote_jobs": 250
+  },
   "$recipe_engine/resultdb/test_presentation": {
     "column_keys": [],
     "grouping_keys": [
@@ -69,5 +79,5 @@
   "sheriff_rotations": [
     "chrome_browser_release"
   ],
-  "xcode_build_version": "15c500b"
+  "xcode_build_version": "15e204a"
 }

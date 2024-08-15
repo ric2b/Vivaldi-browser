@@ -74,6 +74,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/elements_upload_data_stream.h"
+#include "net/base/isolation_info.h"
 #include "net/base/load_flags.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/request_priority.h"
@@ -90,11 +91,19 @@
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "url/origin.h"
 
+#if BUILDFLAG(IS_ANDROID)
+#include "net/http/http_content_disposition.h"
+#endif  // BUILDFLAG(IS_ANDROID)
+
 #include "app/vivaldi_apptools.h"
 #include "net/base/filename_util.h"
 
 namespace content {
 namespace {
+#if BUILDFLAG(IS_ANDROID)
+// PDF MIME type.
+constexpr char kPdfMimeType[] = "application/pdf";
+#endif  // BUILDFLAG(IS_ANDROID)
 
 void DeleteDownloadedFileOnUIThread(const base::FilePath& file_path) {
   if (!file_path.empty()) {
@@ -234,8 +243,8 @@ CreatePendingSharedURLLoaderFactory(StoragePartitionImpl* storage_partition,
         rfh->GetSiteInstance()->GetBrowserContext(), rfh,
         rfh->GetProcess()->GetID(),
         ContentBrowserClient::URLLoaderFactoryType::kDownload, url::Origin(),
-        std::nullopt /* navigation_id */, ukm::kInvalidSourceIdObj,
-        factory_builder, nullptr /* header_client */,
+        net::IsolationInfo(), std::nullopt /* navigation_id */,
+        ukm::kInvalidSourceIdObj, factory_builder, nullptr /* header_client */,
         nullptr /* bypass_redirect_checks */, nullptr /* disable_secure_dns */,
         nullptr /* factory_override */,
         nullptr /* navigation_response_task_runner */);
@@ -550,6 +559,9 @@ void DownloadManagerImpl::Shutdown() {
     if (download != nullptr &&
         download->GetState() == download::DownloadItem::IN_PROGRESS) {
       download->Cancel(false);
+      if (delegate_) {
+        delegate_->OnDownloadCanceledAtShutdown(download);
+      }
     }
   }
 
@@ -596,7 +608,7 @@ bool DownloadManagerImpl::InterceptDownload(
       // Ensure the method is called from an active document.
       // If inactive documents start download, it can be a security risk.
       // Call ReceiveBadMessage to terminate such a renderer.
-      // TODO(https://crbug.com/1259521): confirm if fenced frames or portals
+      // TODO(crbug.com/40201479): confirm if fenced frames or portals
       // are allowed to start downloads.
       if (!RenderFrameHost::FromID(info.render_process_id, info.render_frame_id)
                ->IsActive()) {
@@ -683,9 +695,9 @@ void DownloadManagerImpl::StartDownloadItem(
   if (vivaldi::IsVivaldiRunning()) {
     WebContents* web_contents = WebContentsImpl::FromRenderFrameHostID(
       info->render_process_id, info->render_frame_id);
-    if (web_contents) {
+    if (web_contents && web_contents->GetDelegate()) {
       content::DownloadInformation* downloadinfo =
-        web_contents->GetDelegate()->GetDownloadInformation();
+          web_contents->GetDelegate()->GetDownloadInformation();
       info->open_when_finished = downloadinfo->open_when_done;
       info->save_info->prompt_for_save_location = downloadinfo->ask_for_target;
     }
@@ -695,7 +707,7 @@ void DownloadManagerImpl::StartDownloadItem(
     download::DownloadItemImpl* download = downloads_by_guid_[info->guid];
     if (!download || download->GetState() == download::DownloadItem::CANCELLED)
       download = nullptr;
-    std::move(callback).Run(std::move(info), download,
+    std::move(callback).Run(std::move(info), download, base::FilePath(),
                             should_persist_new_download_);
     OnDownloadStarted(download, std::move(on_started));
   } else {
@@ -705,23 +717,68 @@ void DownloadManagerImpl::StartDownloadItem(
                       "request is ignored.";
       return;
     }
-    GetNextId(base::BindOnce(&DownloadManagerImpl::CreateNewDownloadItemToStart,
+    GetNextId(base::BindOnce(&DownloadManagerImpl::OnNewDownloadIdRetrieved,
                              weak_factory_.GetWeakPtr(), std::move(info),
                              std::move(on_started), std::move(callback)));
   }
+}
+
+void DownloadManagerImpl::OnNewDownloadIdRetrieved(
+    std::unique_ptr<download::DownloadCreateInfo> info,
+    download::DownloadUrlParameters::OnStartedCallback on_started,
+    download::InProgressDownloadManager::StartDownloadItemCallback callback,
+    uint32_t id) {
+#if BUILDFLAG(IS_ANDROID)
+  if (info->transient && !info->is_must_download &&
+      delegate_->ShouldOpenPdfInline() &&
+      base::EqualsCaseInsensitiveASCII(info->mime_type, kPdfMimeType)) {
+    for (const auto& iter : downloads_by_guid_) {
+      download::DownloadItem* item = iter.second;
+      if (item->GetFileExternallyRemoved() ||
+          item->GetState() != download::DownloadItem::COMPLETE) {
+        continue;
+      }
+
+      if (item->GetMimeType() != kPdfMimeType ||
+          item->GetUrlChain() != info->url_chain) {
+        continue;
+      }
+
+      if (!item->IsTransient() || item->IsMustDownload()) {
+        continue;
+      }
+
+      disk_access_task_runner_->PostTaskAndReplyWithResult(
+          FROM_HERE,
+          base::BindOnce(&base::PathExists, item->GetTargetFilePath()),
+          base::BindOnce(&DownloadManagerImpl::CreateNewDownloadItemToStart,
+                         weak_factory_.GetWeakPtr(), std::move(info),
+                         std::move(on_started), std::move(callback), id,
+                         item->GetTargetFilePath()));
+      return;
+    }
+  }
+#endif  // BUILDFLAG(IS_ANDROID)
+  CreateNewDownloadItemToStart(std::move(info), std::move(on_started),
+                               std::move(callback), id, base::FilePath(),
+                               false);
 }
 
 void DownloadManagerImpl::CreateNewDownloadItemToStart(
     std::unique_ptr<download::DownloadCreateInfo> info,
     download::DownloadUrlParameters::OnStartedCallback on_started,
     download::InProgressDownloadManager::StartDownloadItemCallback callback,
-    uint32_t id) {
+    uint32_t id,
+    const base::FilePath& duplicate_download_file_path,
+    bool duplicate_file_exists) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   download::DownloadItemImpl* download = CreateActiveItem(id, *info);
   content::devtools_instrumentation::WillBeginDownload(info.get(), download);
-  std::move(callback).Run(std::move(info), download,
-                          should_persist_new_download_);
+  std::move(callback).Run(
+      std::move(info), download,
+      duplicate_file_exists ? duplicate_download_file_path : base::FilePath(),
+      should_persist_new_download_);
   if (download) {
     // For new downloads, we notify here, rather than earlier, so that
     // the download_file is bound to download and all the usual
@@ -1045,7 +1102,7 @@ void DownloadManagerImpl::DownloadUrl(
     WebContents* web_contents = WebContentsImpl::FromRenderFrameHostID(
         params->render_process_host_id(),
         params->render_frame_host_routing_id());
-    if (web_contents) {
+    if (web_contents && web_contents->GetDelegate()) {
       content::DownloadInformation* downloadinfo =
         web_contents->GetDelegate()->GetDownloadInformation();
       downloadinfo->content_initiated = params->content_initiated();
@@ -1382,6 +1439,16 @@ void DownloadManagerImpl::InterceptNavigationOnChecksComplete(
       RecordDownloadOpenerType(render_frame_host, opener);
     }
   }
+
+  bool is_transient = false;
+#if BUILDFLAG(IS_ANDROID)
+  if (!download::IsContentDispositionAttachmentInHead(*response_head)) {
+    is_transient = delegate_->ShouldOpenPdfInline() &&
+                   base::EqualsCaseInsensitiveASCII(response_head->mime_type,
+                                                    kPdfMimeType);
+  }
+#endif  // BUILDFLAG(IS_ANDROID)
+
   StoragePartitionImpl* storage_partition =
       GetStoragePartitionForConfig(browser_context_, storage_partition_config);
   in_progress_manager_->InterceptDownloadFromNavigation(
@@ -1391,8 +1458,8 @@ void DownloadManagerImpl::InterceptNavigationOnChecksComplete(
       tab_url, tab_referrer_url, std::move(url_chain), std::move(cert_status),
       std::move(response_head), std::move(response_body),
       std::move(url_loader_client_endpoints),
-      CreatePendingSharedURLLoaderFactory(storage_partition,
-                                          render_frame_host));
+      CreatePendingSharedURLLoaderFactory(storage_partition, render_frame_host),
+      is_transient);
 }
 
 void DownloadManagerImpl::BeginResourceDownloadOnChecksComplete(

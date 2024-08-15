@@ -99,6 +99,8 @@ class ExternalProcessImporterClient
   void OnSpeedDialImportStart(uint32_t total_count) override;
   void OnSpeedDialImportGroup(
       const std::vector<ImportedSpeedDialEntry>& group) override;
+  void OnExtensionsImportStart(uint32_t total_count) override;
+  void OnExtensionsImportGroup(const std::vector<std::string>& group) override;
 
  protected:
   ~ExternalProcessImporterClient() override;
@@ -170,6 +172,8 @@ class ExternalProcessImporterClient
 
   std::vector<ImportedSpeedDialEntry> speeddial_;
 
+  std::vector<std::string> extensions_;
+
    // Usually some variation on IDS_NOTES_GROUP_...; the name of the folder
   // under which imported notes will be placed.
   std::u16string notes_first_folder_name_;
@@ -179,6 +183,9 @@ class ExternalProcessImporterClient
 
   // Total number of speed dial to import.
   size_t total_speeddial_count_;
+
+  // Total number of extensions to import.
+  size_t total_extensions_count_;
 };
 
 #endif  // CHROME_BROWSER_IMPORTER_EXTERNAL_PROCESS_IMPORTER_CLIENT_H_

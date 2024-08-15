@@ -10,7 +10,9 @@
 
 - (void)showNotesManager:(Browser*)browser
           parentController:(BrowserViewController*)bvc;
-- (void)onCopyToNote:(UIMenuController*) sender;
+#if !defined(__IPHONE_16_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_16_0
+- (void)onCopyToNote:(UIMenuController*)sender;
+#endif
 - (void)dismissNoteController;
 - (void)shutdownNoteController;
 - (void)dismissNoteSnackbar;

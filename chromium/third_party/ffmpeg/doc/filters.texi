@@ -4291,14 +4291,18 @@ It accepts the following parameters:
 @item map
 Map channels from input to output. The argument is a '|'-separated list of
 mappings, each in the @code{@var{in_channel}-@var{out_channel}} or
-@var{in_channel} form. @var{in_channel} can be either the name of the input
-channel (e.g. FL for front left) or its index in the input channel layout.
-@var{out_channel} is the name of the output channel or its index in the output
-channel layout. If @var{out_channel} is not given then it is implicitly an
-index, starting with zero and increasing by one for each mapping.
+@code{@var{in_channel}} form. @var{in_channel} can be either the name of the
+input channel (e.g. FL for front left) or its index in the input channel
+layout. @var{out_channel} is the name of the output channel or its index in the
+output channel layout. If @var{out_channel} is not given then it is implicitly
+an index, starting with zero and increasing by one for each mapping. Mixing
+different types of mappings is not allowed and will result in a parse error.
 
 @item channel_layout
-The channel layout of the output stream.
+The channel layout of the output stream. If not specified, then filter will
+guess it based on the @var{out_channel} names or the number of mappings.
+Guessed layouts will not necessarily contain channels in the order of the
+mappings.
 @end table
 
 If no mapping is present, the filter will implicitly map input channels to
@@ -10497,7 +10501,7 @@ and from 1 to 49 odd number of signed integers in @var{row} mode.
 @item 2rdiv
 @item 3rdiv
 Set multiplier for calculated value for each plane.
-If unset or 0, it will be sum of all matrix elements.
+If unset or 0, it will be 1/sum of all matrix elements.
 
 @item 0bias
 @item 1bias
@@ -12069,11 +12073,21 @@ need to build and install the OpenVINO for C library (see
 @code{--enable-libopenvino} (--extra-cflags=-I... --extra-ldflags=-L... might
 be needed if the header files and libraries are not installed into system path)
 
+@item torch
+Libtorch backend. To enable this backend you need to build and install Libtroch
+for C++ library. Please download cxx11 ABI version (see
+@url{https://pytorch.org/get-started/locally})
+and configure FFmpeg with @code{--enable-libtorch
+--extra-cflags=-I/libtorch_root/libtorch/include
+--extra-cflags=-I/libtorch_root/libtorch/include/torch/csrc/api/include
+--extra-ldflags=-L/libtorch_root/libtorch/lib/}
+
 @end table
 
 @item model
 Set path to model file specifying network architecture and its parameters.
-Note that different backends use different file formats. TensorFlow, OpenVINO backend can load files for only its format.
+Note that different backends use different file formats. TensorFlow, OpenVINO
+and Libtorch backend can load files for only its format.
 
 @item input
 Set the input name of the dnn network.

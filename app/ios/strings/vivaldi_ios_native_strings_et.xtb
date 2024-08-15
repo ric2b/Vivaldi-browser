@@ -41,7 +41,6 @@
 <translation id="1689333818294560261">Hüüdnimi</translation>
 <translation id="1711184756728070210"><ph name="BEGIN_LINK" />Kasutustingimused ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />Privaatsuspõhimõtted ➔<ph name="END_LINK2" /></translation>
 <translation id="1717473843091433383">Tumeda kujunduse pealesundimine kõigile saitidele</translation>
-<translation id="1721552494230946796">Uus kiirvalimislehe kaust</translation>
 <translation id="173924678149983125">Sisesta URL, millelt blokeerimisreeglid importida</translation>
 <translation id="1751280147639351837">Jälitajate ja reklaamide blokeerimine</translation>
 <translation id="1752547299766512813">Salvesta paroolid</translation>
@@ -59,7 +58,6 @@
 <translation id="2034405583989639424">Muuda kiirvalimist</translation>
 <translation id="2048247880942380698">Araabia (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">Võta tagasi</translation>
-<translation id="2117093051794889870">Sisu järgi</translation>
 <translation id="2129408066358825297">Vanus</translation>
 <translation id="2148384276939959392">Valikuline sünkimine</translation>
 <translation id="2195713384412091023">Kui jätkad, eemaldatakse serverist kõik sinu süngitavad andmed, lähtestatakse sinu krüptimisparool ja logitakse sind välja.</translation>
@@ -144,7 +142,6 @@ blokeeritud</translation>
 <translation id="3858860766373142691">Nimi</translation>
 <translation id="3866249974567520381">Kirjeldus</translation>
 <translation id="3872195896030547485">Sisesta kehtiv meiliaadress.</translation>
-<translation id="3894427358181296146">Kausta lisamine</translation>
 <translation id="3897092660631435901">Menüü</translation>
 <translation id="3921585859122905677">Aadressiriba asukoht</translation>
 <translation id="3953599441418463312">Jaapani (<ph name="ORIGIN" />)</translation>
@@ -210,7 +207,6 @@ blokeeritud</translation>
 <translation id="4833044618885331665">Sünkimise kasutamiseks tuleb Vivaldit uuendada.</translation>
 <translation id="484462545196658690">Automaatne</translation>
 <translation id="4852383705713307704">reklaam blokeeritud</translation>
-<translation id="4871370605780490696">Järjehoidja lisamine</translation>
 <translation id="4903325570808402486">Süngitakse Vivaldi seaded (mitte küll veel kõik)</translation>
 <translation id="4929196061847506605">Võimas. Kohandatav. Privaatne.</translation>
 <translation id="4936710149174207991">pole süngitud</translation>
@@ -265,7 +261,6 @@ blokeeritud</translation>
 <translation id="6193995664633100765">India (<ph name="ORIGIN" />)</translation>
 <translation id="6224086034182508647">Veebisaitide välimuse valikud</translation>
 <translation id="6365929278691047681">Saksa (<ph name="ORIGIN" />)</translation>
-<translation id="6404511346730675251">Järjehoidja muutmine</translation>
 <translation id="6406506848690869874">Sünkimine</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> valitud</translation>
 <translation id="6468130661190228905">Kahjuks tundub, et pead natuke ootama, enne kui Vivaldi kogukonnaga liituda saad. Liitumiseks pead olema vähemalt 16-aastane.</translation>
@@ -276,7 +271,6 @@ blokeeritud</translation>
 <translation id="659351303388691480">Kustuta sirvimisandmed...</translation>
 <translation id="6602272356389933803">Välimus ja kujundus</translation>
 <translation id="6614744450826097546">Reklaami üksikasjad</translation>
-<translation id="6627583120233659107">Kausta redigeerimine</translation>
 <translation id="6631760746795162665">Colombia (<ph name="ORIGIN" />)</translation>
 <translation id="6639866709520319699">Blokeeritakse jälitajad ja reklaamid. Mõned saidid ei pruugi seetõttu töötada.</translation>
 <translation id="6642196070615520677">Süngitavate kaugandmete kustutamine</translation>
@@ -310,7 +304,6 @@ blokeeritud</translation>
 <translation id="7210372243397300116">Otsi kausta</translation>
 <translation id="7215420652436283416">Aadressi järgi</translation>
 <translation id="7229439505896086266">Loo märge</translation>
-<translation id="7299721129597238157">Kustuta järjehoidja</translation>
 <translation id="7311118006561484338">Tiitli järgi</translation>
 <translation id="7325310788570036874">Vivaldi abil saab veebi sirvida nutikamalt, sujuvamalt ja kiiremini.</translation>
 <translation id="734110743815267231">Heebrea (<ph name="ORIGIN" />)</translation>

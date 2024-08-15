@@ -14,6 +14,7 @@ import androidx.annotation.VisibleForTesting;
 import com.google.protobuf.InvalidProtocolBufferException;
 
 import org.jni_zero.CalledByNative;
+import org.jni_zero.JniType;
 import org.jni_zero.NativeMethods;
 
 import org.chromium.base.Callback;
@@ -55,6 +56,10 @@ class BookmarkBridge {
     private @Nullable BookmarkId mOtherFolderId;
     private @Nullable BookmarkId mDesktopFolderId;
     private @Nullable BookmarkId mLocalOrSyncableReadingListFolderId;
+
+    /** Vivaldi **/
+    private @Nullable BookmarkId mTrashFolderId;
+
 
     /** Returns whether account bookmark folders are currently active. */
     public boolean areAccountBookmarkFoldersActive() {
@@ -207,21 +212,6 @@ class BookmarkBridge {
         assert mIsNativeBookmarkModelLoaded;
         if (id == null) return null;
 
-        if (BookmarkId.SHOPPING_FOLDER.equals(id)) {
-            return new BookmarkItem(
-                    id,
-                    /* title= */ null,
-                    /* url= */ null,
-                    /* isFolder= */ true,
-                    /* parentId= */ getRootFolderId(),
-                    /* isEditable= */ false,
-                    /* isManaged= */ false,
-                    /* dateAdded= */ 0L,
-                    /* read= */ false,
-                    /* dateLastOpened= */ 0L,
-                    /* isAccountBookmark= */ false);
-        }
-
         return BookmarkBridgeJni.get()
                 .getBookmarkById(mNativeBookmarkBridge, id.getId(), id.getType());
     }
@@ -293,6 +283,9 @@ class BookmarkBridge {
 
     /** Returns the default bookmark location. */
     public BookmarkId getDefaultBookmarkFolder() {
+        if (BuildConfig.IS_VIVALDI) { // Vivaldi. Intercept default Bookmark Folder
+            return getDesktopFolderId();
+        }
         ThreadUtils.assertOnUiThread();
         if (mNativeBookmarkBridge == 0) return null;
         assert mIsNativeBookmarkModelLoaded;
@@ -406,6 +399,17 @@ class BookmarkBridge {
         return mDesktopFolderId;
     }
 
+    /** Vivaldi **/
+    public BookmarkId getTrashFolderId() {
+        ThreadUtils.assertOnUiThread();
+        if (mNativeBookmarkBridge == 0) return null;
+        assert mIsNativeBookmarkModelLoaded;
+        if (mTrashFolderId == null) {
+            mTrashFolderId = BookmarkBridgeJni.get().getTrashFolderId(mNativeBookmarkBridge);
+        }
+        return mTrashFolderId;
+    } // End Vivaldi
+
     /** Returns the id representing the special account "mobile" folder from bookmark model. */
     public BookmarkId getAccountMobileFolderId() {
         ThreadUtils.assertOnUiThread();
@@ -468,9 +472,7 @@ class BookmarkBridge {
         ThreadUtils.assertOnUiThread();
         if (mNativeBookmarkBridge == 0) return new ArrayList<>();
         assert mIsNativeBookmarkModelLoaded;
-        if (BookmarkId.SHOPPING_FOLDER.equals(id)) {
-            return searchBookmarks("", null, PowerBookmarkType.SHOPPING, -1);
-        }
+
         List<BookmarkId> result = new ArrayList<>();
         if (BuildConfig.IS_VIVALDI) {
             BookmarkBridgeJni.get()
@@ -1032,8 +1034,8 @@ class BookmarkBridge {
     private static BookmarkItem createBookmarkItem(
             long id,
             int type,
-            String title,
-            GURL url,
+            @JniType("std::u16string") String title,
+            @JniType("GURL") GURL url,
             boolean isFolder,
             long parentId,
             int parentIdType,
@@ -1095,17 +1097,18 @@ class BookmarkBridge {
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     @NativeMethods
     public interface Natives {
-        BookmarkModel nativeGetForProfile(Profile profile);
+        BookmarkModel nativeGetForProfile(@JniType("Profile*") Profile profile);
 
         boolean areAccountBookmarkFoldersActive(long nativeBookmarkBridge);
 
         void getImageUrlForBookmark(
                 long nativeBookmarkBridge,
-                GURL url,
+                @JniType("GURL") GURL url,
                 boolean isAccountBookmark,
                 Callback<GURL> callback);
 
-        BookmarkId getMostRecentlyAddedUserBookmarkIdForUrl(long nativeBookmarkBridge, GURL url);
+        BookmarkId getMostRecentlyAddedUserBookmarkIdForUrl(
+                long nativeBookmarkBridge, @JniType("GURL") GURL url);
 
         BookmarkItem getBookmarkById(long nativeBookmarkBridge, long id, int type);
 
@@ -1122,7 +1125,7 @@ class BookmarkBridge {
 
         BookmarkId getDefaultBookmarkFolder(long nativeBookmarkBridge);
 
-        // TODO(crbug.com/1515332): Remove this method.
+        // TODO(crbug.com/41487884): Remove this method.
         void getAllFoldersWithDepths(
                 long nativeBookmarkBridge, List<BookmarkId> folderList, List<Integer> depthList);
 
@@ -1142,6 +1145,7 @@ class BookmarkBridge {
 
         BookmarkId getPartnerFolderId(long nativeBookmarkBridge);
 
+        @JniType("std::string")
         String getBookmarkGuidByIdForTesting( // IN-TEST
                 long nativeBookmarkBridge, long id, int type);
 
@@ -1154,9 +1158,14 @@ class BookmarkBridge {
 
         int getTotalBookmarkCount(long nativeBookmarkBridge, long id, int type);
 
-        void setBookmarkTitle(long nativeBookmarkBridge, long id, int type, String title);
+        void setBookmarkTitle(
+                long nativeBookmarkBridge,
+                long id,
+                int type,
+                @JniType("std::u16string") String title);
 
-        void setBookmarkUrl(long nativeBookmarkBridge, long id, int type, GURL url);
+        void setBookmarkUrl(
+                long nativeBookmarkBridge, long id, int type, @JniType("GURL") GURL url);
 
         byte[] getPowerBookmarkMeta(long nativeBookmarkBridge, long id, int type);
 
@@ -1166,13 +1175,17 @@ class BookmarkBridge {
 
         boolean doesBookmarkExist(long nativeBookmarkBridge, long id, int type);
 
-        // TODO(crbug.com/1515332): Remove this method.
+        // TODO(crbug.com/41487884): Remove this method.
         void getBookmarksForFolder(
                 long nativeBookmarkBridge, BookmarkId folderId, List<BookmarkItem> bookmarksList);
 
         boolean isFolderVisible(long nativeBookmarkBridge, long id, int type);
 
-        BookmarkId addFolder(long nativeBookmarkBridge, BookmarkId parent, int index, String title);
+        BookmarkId addFolder(
+                long nativeBookmarkBridge,
+                BookmarkId parent,
+                int index,
+                @JniType("std::u16string") String title);
 
         void deleteBookmark(long nativeBookmarkBridge, BookmarkId bookmarkId);
 
@@ -1185,10 +1198,17 @@ class BookmarkBridge {
                 int index);
 
         BookmarkId addBookmark(
-                long nativeBookmarkBridge, BookmarkId parentId, int index, String title, GURL url);
+                long nativeBookmarkBridge,
+                BookmarkId parentId,
+                int index,
+                @JniType("std::u16string") String title,
+                @JniType("GURL") GURL url);
 
         BookmarkId addToReadingList(
-                long nativeBookmarkBridge, BookmarkId parentId, String title, GURL url);
+                long nativeBookmarkBridge,
+                BookmarkId parentId,
+                @JniType("std::string") String title,
+                @JniType("GURL") GURL url);
 
         void setReadStatus(long nativeBookmarkBridge, BookmarkId id, boolean read);
 
@@ -1209,7 +1229,7 @@ class BookmarkBridge {
         void searchBookmarks(
                 long nativeBookmarkBridge,
                 List<BookmarkId> bookmarkMatches,
-                String query,
+                @JniType("std::u16string") String query,
                 String[] tags,
                 int powerBookmarkType,
                 int maxNumber);
@@ -1225,10 +1245,11 @@ class BookmarkBridge {
 
         void reorderChildren(long nativeBookmarkBridge, BookmarkId parent, long[] orderedNodes);
 
-        boolean isBookmarked(long nativeBookmarkBridge, GURL url);
+        boolean isBookmarked(long nativeBookmarkBridge, @JniType("GURL") GURL url);
 
         /** Vivaldi */
-        BookmarkId getTrashFolderId(long nativeBookmarkBridge, BookmarkBridge caller);
+        BookmarkId getTrashFolderId(long nativeBookmarkBridge);
+
         void setBookmarkDescription(long nativeBookmarkBridge, BookmarkBridge caller,
                 long id, int type, String description);
         void setBookmarkNickName(
@@ -1268,14 +1289,6 @@ class BookmarkBridge {
         for (BookmarkModelObserver observer : mObservers) {
             observer.bookmarkSpeedDialNodeChanged(node);
         }
-    }
-
-    /** Vivaldi
-     * @return BookmarkId The BookmarkId for Trash folder node.
-     */
-    public BookmarkId getTrashFolderId() {
-        assert mIsNativeBookmarkModelLoaded;
-        return BookmarkBridgeJni.get().getTrashFolderId(mNativeBookmarkBridge, BookmarkBridge.this);
     }
 
     /** Vivaldi

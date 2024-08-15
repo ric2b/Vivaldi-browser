@@ -153,10 +153,10 @@ const checkContents: (type: 'depth' | 'stencil', ...args: Parameters<CheckConten
       ],
       depthStencilAttachment: {
         view: texture.createView(viewDescriptor),
-        depthStoreOp: formatInfo.depth ? 'store' : undefined,
         depthLoadOp: formatInfo.depth ? 'load' : undefined,
-        stencilStoreOp: formatInfo.stencil ? 'store' : undefined,
+        depthStoreOp: formatInfo.depth ? 'store' : undefined,
         stencilLoadOp: formatInfo.stencil ? 'load' : undefined,
+        stencilStoreOp: formatInfo.stencil ? 'store' : undefined,
       },
     });
 

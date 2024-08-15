@@ -13,17 +13,17 @@
 
 using ShowFeedbackPageTest = BrowserWithTestWindowTest;
 
-// TODO(crbug.com/1128855): Fix the test for Lacros build.
+// TODO(crbug.com/40719879): Fix the test for Lacros build.
 // TODO(crbug.com/1167223): Fix the test for WebUIFeedback.
 TEST_F(ShowFeedbackPageTest, DISABLED_UserFeedbackDisallowed) {
   base::HistogramTester histogram_tester;
   std::string unused;
-  chrome::ShowFeedbackPage(browser(), chrome::kFeedbackSourceBrowserCommand,
+  chrome::ShowFeedbackPage(browser(), feedback::kFeedbackSourceBrowserCommand,
                            unused, unused, unused, unused, base::Value::Dict());
   histogram_tester.ExpectTotalCount("Feedback.RequestSource", 1);
   browser()->profile()->GetPrefs()->SetBoolean(prefs::kUserFeedbackAllowed,
                                                false);
-  chrome::ShowFeedbackPage(browser(), chrome::kFeedbackSourceBrowserCommand,
+  chrome::ShowFeedbackPage(browser(), feedback::kFeedbackSourceBrowserCommand,
                            unused, unused, unused, unused, base::Value::Dict());
   histogram_tester.ExpectTotalCount("Feedback.RequestSource", 1);
 }

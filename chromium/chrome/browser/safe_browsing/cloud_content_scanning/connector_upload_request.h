@@ -9,6 +9,7 @@
 #include "base/functional/callback.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/scoped_refptr.h"
+#include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/connector_data_pipe_getter.h"
 #include "components/file_access/scoped_file_access.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -86,6 +87,11 @@ class ConnectorUploadRequest {
   // will call `callback_` on the UI thread.
   virtual void Start() = 0;
 
+  // Return the upload protocol and scanning type of the request. E.g.,
+  // "Multipart - Pending", "Multipart - Complete", "Resumable - Pending",
+  // "Resumable - Metadata only scan", "Resumable - Full content scan".
+  virtual std::string GetUploadInfo() = 0;
+
  protected:
   static ConnectorUploadRequestFactory* factory_;
 
@@ -136,6 +142,7 @@ class ConnectorUploadRequestFactory {
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       const GURL& base_url,
       const std::string& metadata,
+      BinaryUploadService::Result get_data_result,
       const base::FilePath& path,
       uint64_t file_size,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
@@ -144,6 +151,7 @@ class ConnectorUploadRequestFactory {
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       const GURL& base_url,
       const std::string& metadata,
+      BinaryUploadService::Result get_data_result,
       base::ReadOnlySharedMemoryRegion page_region,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
       ConnectorUploadRequest::Callback callback) = 0;

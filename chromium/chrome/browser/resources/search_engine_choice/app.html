@@ -111,7 +111,7 @@
     --cr-radio-button-label-spacing: 16px;
     --cr-radio-button-size: 20px;
     align-items: start;
-    background-color: var(--google-grey-100);
+    background-color: var(--cr-fallback-color-surface2);
     border-bottom: 1px solid var(--background-color);
     border-radius: 2px;
     padding: 8px var(--radio-button-horizontal-padding);
@@ -126,6 +126,16 @@
     border-bottom: unset;
     border-bottom-left-radius: 16px;
     border-bottom-right-radius: 16px;
+  }
+  cr-radio-button[checked] {
+    background-color: var(--cr-fallback-color-tonal-container);
+  }
+
+  /* Using a class instead of relying only on the pseudo-class allows
+  disabling this style in screenshot tests, where the inability to
+  control the pointer location causes some flakiness. */
+  .hoverable:hover:not([checked]) {
+    background-color: var(--cr-hover-on-subtle-background-color);
   }
 
   .product-logo {
@@ -213,9 +223,19 @@
     line-height: var(--search-engine-name-line-height);
   }
 
+  .info-dialog-illustration {
+    content: url(images/info_dialog_illustration.svg);
+    margin-bottom: 24px;
+    width: 100%;
+  }
+
   @media (prefers-color-scheme: dark) {
     :host {
       --background-color: var(--md-background-color);
+    }
+
+    .info-dialog-illustration {
+      content: url(images/info_dialog_illustration_dark.svg);
     }
 
     .tangible-sync-style-left-banner {
@@ -232,7 +252,6 @@
 
     cr-radio-button {
       --cr-radio-button-unchecked-color: var(--google-grey-100);
-      background-color: var(--google-grey-800);
     }
   }
 
@@ -264,10 +283,11 @@
     </a>
   </p>
   <cr-radio-group id="choiceList"
-      selected="{{selectedChoice_}}" role="list">
+      selected="{{selectedChoice_}}" aria-label="$i18n{choiceListA11yLabel}"
+      role="list">
     <template is="dom-repeat" items="[[choiceList_]]">
         <cr-radio-button aria-label$="[[item.name]]" role="listitem"
-            class="label-first"
+            class="label-first hoverable"
             name="[[item.prepopulateId]]">
           <div class="choice">
             <div class="choice-icon"
@@ -298,7 +318,8 @@
 
 <cr-dialog id="infoDialog">
   <div slot="title">
-    $i18n{infoDialogTitle}
+    <img class="info-dialog-illustration" alt="">
+    <div>$i18n{infoDialogTitle}</div>
   </div>
   <div slot="body">
     <p>$i18n{infoDialogFirstParagraph}</p>

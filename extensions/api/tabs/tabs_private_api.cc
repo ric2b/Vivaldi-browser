@@ -19,11 +19,16 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/performance_manager/public/user_tuning/user_performance_tuning_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_preferences_util.h"
+#include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
+#include "chrome/browser/resource_coordinator/utils.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/performance_controls/memory_saver_utils.h"
+#include "chrome/browser/ui/performance_controls/tab_resource_usage_tab_helper.h"
 #include "chrome/browser/ui/recently_audible_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
@@ -74,6 +79,7 @@
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
 #include "browser/vivaldi_browser_finder.h"
+#include "browser/startup_vivaldi_browser.h"
 #include "components/capture/capture_page.h"
 #include "extensions/schema/tabs_private.h"
 #include "extensions/schema/window_private.h"
@@ -495,9 +501,14 @@ VivaldiPrivateTabObserver::VivaldiPrivateTabObserver(
     translate_client->translate_driver()->AddTranslationObserver(this);
     translate_client->translate_driver()->AddLanguageDetectionObserver(this);
   }
+
+  TabResourceUsageCollector::Get()->AddObserver(this);
+
 }
 
-VivaldiPrivateTabObserver::~VivaldiPrivateTabObserver() {}
+VivaldiPrivateTabObserver::~VivaldiPrivateTabObserver() {
+    TabResourceUsageCollector::Get()->RemoveObserver(this);
+}
 
 void VivaldiPrivateTabObserver::WebContentsDestroyed() {
   VivaldiTranslateClient* translate_client =
@@ -513,6 +524,49 @@ void VivaldiPrivateTabObserver::OnPrefsChanged(const std::string& path) {
     UpdateAllowTabCycleIntoUI();
     CommitSettings();
   }
+}
+
+void VivaldiPrivateTabObserver::OnTabResourceMetricsRefreshed() {
+  int id = sessions::SessionTabHelper::IdForTab(web_contents()).id();
+  uint64_t memory_usage;
+
+  auto* tab_lifecycle_unit_external =
+      resource_coordinator::TabLifecycleUnitExternal::FromWebContents(
+          web_contents());
+
+  bool not_yet_loaded =
+      web_contents()->GetUserData(::vivaldi::kVivaldiStartupTabUserDataKey);
+
+  bool was_discarded = web_contents()->WasDiscarded() ||
+                      tab_lifecycle_unit_external->IsDiscarded() ||
+                      not_yet_loaded;
+
+  // TODO: (andre@vivaldi.com) GetDiscardedMemorySavingsInBytes does not return
+  // anything useful.
+  if (was_discarded) {
+    const auto* const pre_discard_resource_usage =
+        performance_manager::user_tuning::UserPerformanceTuningManager::
+            PreDiscardResourceUsage::FromWebContents(web_contents());
+    memory_usage =
+        pre_discard_resource_usage == nullptr
+            ? 0
+            : pre_discard_resource_usage->memory_footprint_estimate_kb() * 1024;
+
+  } else {
+    auto* const resource_tab_helper =
+        TabResourceUsageTabHelper::FromWebContents(web_contents());
+    memory_usage = (resource_tab_helper->GetMemoryUsageInBytes());
+  }
+
+  tabs_private::TabPerformanceData info;
+  info.tab_id = id;
+  info.memory_usage = memory_usage;
+  info.discarded = was_discarded;
+
+  ::vivaldi::BroadcastEvent(
+      tabs_private::OnTabResourceMetricsRefreshed::kEventName,
+      tabs_private::OnTabResourceMetricsRefreshed::Create(info),
+      web_contents()->GetBrowserContext());
 }
 
 void VivaldiPrivateTabObserver::BroadcastTabInfo(
@@ -1462,6 +1516,82 @@ void TabsPrivateDetermineTextLanguageFunction::DetermineTextLanguageDone(
   namespace Results = tabs_private::DetermineTextLanguage::Results;
 
   Respond(ArgumentList(Results::Create(langCode)));
+}
+
+ExtensionFunction::ResponseAction
+TabsPrivateLoadViaLifeCycleUnitFunction::Run() {
+  using tabs_private::LoadViaLifeCycleUnit::Params;
+  std::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  content::WebContents* tab_contents =
+      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
+          params->tab_id, browser_context(), nullptr);
+
+  for (resource_coordinator::LifecycleUnit* lifecycle_unit :
+       g_browser_process->GetTabManager()->GetSortedLifecycleUnits()) {
+    resource_coordinator::TabLifecycleUnitExternal*
+        tab_lifecycle_unit_external =
+            lifecycle_unit->AsTabLifecycleUnitExternal();
+    if (tab_lifecycle_unit_external->GetWebContents() == tab_contents) {
+      lifecycle_unit->Load();
+      break;
+    }
+  }
+
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+TabsPrivateGetTabPerformanceDataFunction::Run() {
+  using tabs_private::GetTabPerformanceData::Params;
+  namespace Results = tabs_private::GetTabPerformanceData::Results;
+
+  std::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  const int tabcount = params->tab_ids.size();
+  std::vector<tabs_private::TabPerformanceData> data(tabcount);
+
+  for (int i = 0; i < tabcount; i++) {
+
+    content::WebContents* tab_contents =
+        ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
+            params->tab_ids[i], browser_context(), nullptr);
+
+    if (tab_contents) {
+
+      tabs_private::TabPerformanceData* pdata = &data[i];
+      pdata->tab_id = params->tab_ids[i];
+
+      auto* tab_lifecycle_unit_external =
+          resource_coordinator::TabLifecycleUnitExternal::FromWebContents(
+              tab_contents);
+
+      bool notYetLoaded = tab_contents->GetUserData(
+                  ::vivaldi::kVivaldiStartupTabUserDataKey);
+
+      pdata->discarded = tab_contents->WasDiscarded() ||
+                         tab_lifecycle_unit_external->IsDiscarded() ||
+                         notYetLoaded;
+
+      if (pdata->discarded) {
+        const auto* const pre_discard_resource_usage =
+            performance_manager::user_tuning::UserPerformanceTuningManager::
+                PreDiscardResourceUsage::FromWebContents(tab_contents);
+        pdata->memory_usage = pre_discard_resource_usage == nullptr
+                   ? 0
+                   : pre_discard_resource_usage->memory_footprint_estimate_kb() *
+                         1024;
+      } else {
+        auto* const resource_tab_helper =
+            TabResourceUsageTabHelper::FromWebContents(tab_contents);
+        pdata->memory_usage = (resource_tab_helper->GetMemoryUsageInBytes());
+      }
+    }
+
+  }
+  return RespondNow(ArgumentList(Results::Create(data)));
 }
 
 }  // namespace extensions

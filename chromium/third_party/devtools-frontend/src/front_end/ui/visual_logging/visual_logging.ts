@@ -12,8 +12,7 @@ export type Loggable = LoggableModule.Loggable;
 export {startLogging, stopLogging, addDocument} from './LoggingDriver.js';
 export {logImpressions, logChange} from './LoggingEvents.js';
 export const logClick = (l: Loggable, e: Event): void => LoggingEvents.logClick(LoggingDriver.clickLogThrottler)(l, e);
-export const logResize = (l: Loggable, s: DOMRect): void =>
-    LoggingEvents.logResize(LoggingDriver.resizeLogThrottler)(l, s);
+export const logResize = (l: Loggable, s: DOMRect): void => LoggingEvents.logResize(l, s);
 export const logKeyDown = async(l: Loggable|null, e: Event, context?: string): Promise<void> =>
     LoggingEvents.logKeyDown(LoggingDriver.keyboardLogThrottler)(l, e, context);
 export {registerParentProvider, setMappedParent} from './LoggingState.js';
@@ -49,6 +48,7 @@ export const counter = LoggingConfig.makeConfigStringBuilder.bind(null, 'Counter
  */
 export const controlPoint = LoggingConfig.makeConfigStringBuilder.bind(null, 'ControlPoint');
 export const cssColorMix = LoggingConfig.makeConfigStringBuilder.bind(null, 'CssColorMix');
+export const cssRuleHeader = LoggingConfig.makeConfigStringBuilder.bind(null, 'CSSRuleHeader');
 export const deviceModeRuler = LoggingConfig.makeConfigStringBuilder.bind(null, 'DeviceModeRuler');
 export const domBreakpoint = LoggingConfig.makeConfigStringBuilder.bind(null, 'DOMBreakpoint');
 export const drawer = LoggingConfig.makeConfigStringBuilder.bind(null, 'Drawer');
@@ -56,6 +56,7 @@ export const dropDown = LoggingConfig.makeConfigStringBuilder.bind(null, 'DropDo
 export const elementsBreadcrumbs = LoggingConfig.makeConfigStringBuilder.bind(null, 'ElementsBreadcrumbs');
 export const expand = LoggingConfig.makeConfigStringBuilder.bind(null, 'Expand');
 export const filterDropdown = LoggingConfig.makeConfigStringBuilder.bind(null, 'FilterDropdown');
+export const gutter = LoggingConfig.makeConfigStringBuilder.bind(null, 'Gutter');
 export const dialog = LoggingConfig.makeConfigStringBuilder.bind(null, 'Dialog');
 export const item = LoggingConfig.makeConfigStringBuilder.bind(null, 'Item');
 export const key = LoggingConfig.makeConfigStringBuilder.bind(null, 'Key');
@@ -91,7 +92,6 @@ export const showStyleEditor = LoggingConfig.makeConfigStringBuilder.bind(null, 
 export const slider = LoggingConfig.makeConfigStringBuilder.bind(null, 'Slider');
 export const section = LoggingConfig.makeConfigStringBuilder.bind(null, 'Section');
 export const sectionHeader = LoggingConfig.makeConfigStringBuilder.bind(null, 'SectionHeader');
-export const stylesSelector = LoggingConfig.makeConfigStringBuilder.bind(null, 'StylesSelector');
 export const tableRow = LoggingConfig.makeConfigStringBuilder.bind(null, 'TableRow');
 export const tableCell = LoggingConfig.makeConfigStringBuilder.bind(null, 'TableCell');
 export const tableHeader = LoggingConfig.makeConfigStringBuilder.bind(null, 'TableHeader');

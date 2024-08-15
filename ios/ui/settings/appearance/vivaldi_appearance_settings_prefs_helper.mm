@@ -4,11 +4,19 @@
 
 #import "ios/ui/settings/appearance/vivaldi_appearance_settings_prefs.h"
 
+namespace {
+NSString* darkThemeKey = @"dark";
+}
+
 @implementation VivaldiAppearanceSettingsPrefsHelper
 
 #pragma mark - Getters
 + (NSString*)getBrowserTheme {
   return [VivaldiAppearanceSettingPrefs getBrowserTheme];
+}
+
++ (BOOL)isBrowserThemeDark {
+  return [[self getBrowserTheme] isEqualToString:darkThemeKey];
 }
 
 + (int)getWebsiteAppearanceStyle {

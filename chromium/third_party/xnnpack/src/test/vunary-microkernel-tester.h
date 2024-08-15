@@ -21,6 +21,7 @@
 #include <random>
 #include <vector>
 
+#include "replicable_random_device.h"
 #include <gtest/gtest.h>
 #include <fp16/fp16.h>
 
@@ -130,14 +131,24 @@ class VUnaryMicrokernelTester {
   static float TolExact16(float y_ref) { return std::abs(y_ref) * 5.0e-4f; }
   static std::function<float(float)> TolMixed(float abs_tol, float rel_tol) {
     return [=](float y_ref) -> float {
-      return std::max(abs_tol, std::abs(y_ref) * rel_tol);
+      return std::max(abs_tol, std::abs(y_ref * (1.0f + rel_tol) - y_ref));
     };
   }
   static std::function<float(float)> TolRelative(float rel_tol) {
-    return [=](float y_ref) -> float { return std::abs(y_ref) * rel_tol; };
+    return [=](float y_ref) -> float {
+      // Note that `y_ref * rel_tol`, i.e. the expected absolute difference,
+      // may round differently than `y_ref * (1 + rel_tol) - y_ref`, i.e. the
+      // effective absolute difference computed in `float`s. We therefore use
+      // the latter form since it is the true difference between two `float`s
+      // within the given relative tolerance.
+      return std::abs(y_ref * (1.0f + rel_tol) - y_ref);
+    };
   }
 
   void Test(xnn_f32_vrelu_ukernel_fn vrelu) const;
+
+  void Test(xnn_bf16_vabs_ukernel_fn vabs,
+            xnn_init_bf16_abs_params_fn init_params = nullptr) const;
 
   void Test(xnn_f16_vabs_ukernel_fn vabs,
             xnn_init_f16_abs_params_fn init_params = nullptr) const;
@@ -196,6 +207,9 @@ class VUnaryMicrokernelTester {
   void Test(xnn_f32_vsqrt_ukernel_fn vsqrt,
             xnn_init_f32_sqrt_params_fn init_params = nullptr) const;
 
+  void Test(xnn_f16_vrsqrt_ukernel_fn vrsqrt,
+            xnn_init_f16_rsqrt_params_fn init_params = nullptr) const;
+
   void Test(xnn_f32_vrsqrt_ukernel_fn vrsqrt,
             xnn_init_f32_rsqrt_params_fn init_params = nullptr) const;
 
@@ -203,7 +217,7 @@ class VUnaryMicrokernelTester {
             xnn_init_f16_tanh_params_fn init_params = nullptr) const;
 
   void Test(xnn_f32_vtanh_ukernel_fn vtanh,
-            xnn_init_f32_tanh_params_fn init_params) const;
+            xnn_init_f32_tanh_params_fn init_params = nullptr) const;
 
   void Test(xnn_f16_vclamp_ukernel_fn vclamp,
             xnn_init_f16_minmax_params_fn init_params) const;
@@ -239,8 +253,7 @@ class VUnaryMicrokernelTester {
                                 const UKernelParamsType*),
                 InitParamsFunc init_params, ReferenceFunc ref,
                 ToleranceFunc tol, float range_min, float range_max) const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(range_min, range_max);
 
     std::vector<float> x(batch_size() + XNN_EXTRA_BYTES / sizeof(float));
@@ -270,9 +283,86 @@ class VUnaryMicrokernelTester {
 
       // Verify results.
       for (size_t i = 0; i < batch_size(); i++) {
-        EXPECT_NEAR(y[i], y_ref[i], tol(y_ref[i]))
+        ASSERT_NEAR(y[i], y_ref[i], tol(y_ref[i]))
             << "at " << i << " / " << batch_size() << ", x[" << i
             << "] = " << x[i];
+      }
+    }
+  }
+
+  union bf16float {
+    uint16_t bf[2];
+    float f;
+  };
+  static float cvt_bf16_f32(uint16_t r) {
+    bf16float q{};
+    q.f = 0;
+    q.bf[1] = r;
+    return q.f;
+  }
+
+  static uint16_t cvt_f32_bf16(float f) {
+    bf16float q{};
+    q.f = f;
+    return q.bf[1];
+  }
+
+  // Generic test function for `bf16` `vunary` kernels.
+  //
+  // The function is templated on the type of the kernel parameters and takes
+  // the following arguments:
+  //
+  //  * `init_params`: A function that populates a given parameters data
+  //    structure or returns `nullptr` if there is no default initialization.
+  //  * `ref`: A function that computes the reference result for an input `x` of
+  //    type `float`, converted from the actual `bf16` input.
+  //  * `tol`: A function that computes the absolute tolerance for a reference
+  //    result `y_ref` of type `float`. Note that the computed result `y` will
+  //    be converted back to `float` for the comparison.
+  //  * `range_min`, `range_max`: Limits for the range of input values.
+  template <typename UKernelParamsType, typename InitParamsFunc,
+            typename ReferenceFunc, typename ToleranceFunc>
+  void TestBF16(void (*ukernel)(size_t, const void*, void*,
+                                const UKernelParamsType*),
+                InitParamsFunc init_params, ReferenceFunc ref,
+                ToleranceFunc tol, float range_min, float range_max) const {
+    xnnpack::ReplicableRandomDevice rng;
+    auto distribution =
+        std::uniform_real_distribution<float>(range_min, range_max);
+    auto bf16rng = [&]() {
+      return cvt_f32_bf16(distribution(rng));
+    };
+
+    std::vector<uint16_t> x(batch_size() + XNN_EXTRA_BYTES / sizeof(uint16_t));
+    std::vector<uint16_t> y(
+        batch_size() + (inplace() ? XNN_EXTRA_BYTES / sizeof(uint16_t) : 0));
+    std::vector<float> y_ref(batch_size());
+    for (size_t iteration = 0; iteration < iterations(); iteration++) {
+      if (inplace()) {
+        std::generate(y.begin(), y.end(), std::ref(bf16rng));
+      } else {
+        std::generate(x.begin(), x.end(), std::ref(bf16rng));
+        std::fill(y.begin(), y.end(), UINT16_C(0xFFFF) /* NaN */);
+      }
+      const uint16_t* x_data = inplace() ? y.data() : x.data();
+
+      // Compute reference results.
+      for (size_t i = 0; i < batch_size(); i++) {
+        y_ref[i] = ref(cvt_bf16_f32(x_data[i]));
+      }
+
+      // Initialize the params.
+      UKernelParamsType params;
+      const UKernelParamsType* params_ptr = init_params(&params);
+
+      // Call optimized micro-kernel.
+      ukernel(batch_size() * sizeof(uint16_t), x_data, y.data(), params_ptr);
+
+      // Verify results.
+      for (size_t i = 0; i < batch_size(); i++) {
+        ASSERT_NEAR(cvt_bf16_f32(y[i]), y_ref[i], tol(y_ref[i]))
+            << "at " << i << " / " << batch_size() << ", x[" << i
+            << "] = " << cvt_bf16_f32(x[i]);
       }
     }
   }
@@ -296,8 +386,7 @@ class VUnaryMicrokernelTester {
                                 const UKernelParamsType*),
                 InitParamsFunc init_params, ReferenceFunc ref,
                 ToleranceFunc tol, float range_min, float range_max) const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     auto distribution =
         std::uniform_real_distribution<float>(range_min, range_max);
     auto f16rng = [&]() {
@@ -331,7 +420,7 @@ class VUnaryMicrokernelTester {
 
       // Verify results.
       for (size_t i = 0; i < batch_size(); i++) {
-        EXPECT_NEAR(fp16_ieee_to_fp32_value(y[i]), y_ref[i], tol(y_ref[i]))
+        ASSERT_NEAR(fp16_ieee_to_fp32_value(y[i]), y_ref[i], tol(y_ref[i]))
             << "at " << i << " / " << batch_size() << ", x[" << i
             << "] = " << fp16_ieee_to_fp32_value(x[i]);
       }

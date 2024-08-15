@@ -70,7 +70,8 @@ const char kNotificationAutorizationStatusChangedToDenied[] =
 
 @implementation PushNotificationUtil
 
-+ (void)registerDeviceWithAPNS {
++ (void)registerDeviceWithAPNSWithContentNotificationsAvailable:
+    (BOOL)contentNotificationAvailability {
   [PushNotificationUtil
       getPermissionSettings:^(UNNotificationSettings* settings) {
         // Logs the users iOS settings' push notification permission status over
@@ -78,7 +79,7 @@ const char kNotificationAutorizationStatusChangedToDenied[] =
         [PushNotificationUtil
             logPermissionSettingsMetrics:settings.authorizationStatus];
         if (settings.authorizationStatus == UNAuthorizationStatusAuthorized ||
-            IsContentPushNotificationsEnabled()) {
+            contentNotificationAvailability) {
           [[UIApplication sharedApplication] registerForRemoteNotifications];
         }
       }];
@@ -147,6 +148,29 @@ const char kNotificationAutorizationStatusChangedToDenied[] =
       };
 
   [center getNotificationSettingsWithCompletionHandler:permissionHandler];
+}
+
+// This function returns the value stored in the prefService that represents the
+// user's iOS settings permission status for push notifications.
++ (UNAuthorizationStatus)getSavedPermissionSettings {
+  ApplicationContext* context = GetApplicationContext();
+  PrefService* prefService = context->GetLocalState();
+  int previousStatus =
+      prefService->GetInteger(prefs::kPushNotificationAuthorizationStatus);
+  switch (previousStatus) {
+    case (int)SettingsAuthorizationStatus::NOTDETERMINED:
+      return UNAuthorizationStatusNotDetermined;
+    case (int)SettingsAuthorizationStatus::DENIED:
+      return UNAuthorizationStatusDenied;
+    case (int)SettingsAuthorizationStatus::AUTHORIZED:
+      return UNAuthorizationStatusAuthorized;
+    case (int)SettingsAuthorizationStatus::PROVISIONAL:
+      return UNAuthorizationStatusProvisional;
+    case (int)SettingsAuthorizationStatus::EPHEMERAL:
+      return UNAuthorizationStatusEphemeral;
+    default:
+      return UNAuthorizationStatusNotDetermined;
+  }
 }
 
 // This function updates the value stored in the prefService that represents the
@@ -232,7 +256,8 @@ const char kNotificationAutorizationStatusChangedToDenied[] =
                            granted:(BOOL)granted
                              error:(NSError*)error {
   if (granted) {
-    [PushNotificationUtil registerDeviceWithAPNS];
+    [PushNotificationUtil
+        registerDeviceWithAPNSWithContentNotificationsAvailable:NO];
     base::UmaHistogramEnumeration(kEnabledPermissionsHistogram,
                                   PermissionPromptAction::ACCEPTED);
   } else if (!error) {
@@ -255,7 +280,8 @@ const char kNotificationAutorizationStatusChangedToDenied[] =
                                       granted:(BOOL)granted
                                         error:(NSError*)error {
   if (granted) {
-    [PushNotificationUtil registerDeviceWithAPNS];
+    [PushNotificationUtil
+        registerDeviceWithAPNSWithContentNotificationsAvailable:NO];
     base::UmaHistogramEnumeration(kProvisionalEnabledPermissionsHistogram,
                                   ProvisionalPermissionAction::ENABLED);
   } else if (!granted || error) {

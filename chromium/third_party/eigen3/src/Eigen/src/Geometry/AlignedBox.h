@@ -173,7 +173,7 @@ class AlignedBox {
   }
 
   /** \returns the volume of the bounding box */
-  EIGEN_DEVICE_FUNC inline Scalar volume() const { return sizes().prod(); }
+  EIGEN_DEVICE_FUNC inline Scalar volume() const { return isEmpty() ? Scalar(0) : sizes().prod(); }
 
   /** \returns an expression for the bounding box diagonal vector
    * if the length of the diagonal is needed: diagonal().norm()

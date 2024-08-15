@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "I57c4719b625b9076abdc96013cda4ad427e646e4",
+  "upstream_commit_id": "I79c24561057282ac13192f59bcd990052630bd71",
 
   # The path of the sysroots.json file.
   # This is used by vendor builds like Electron.
@@ -93,38 +93,6 @@ hooks = [
     ],
   },
   {
-    'name': 'sysroot_arm',
-    'pattern': '.',
-    'condition': 'checkout_linux and checkout_arm',
-    'action': ['python3', "-u", 'chromium/build/linux/sysroot_scripts/install-sysroot.py',
-               '--sysroots-json-path=' + Var('sysroots_json_path'),
-               '--arch=arm'],
-  },
-  {
-    'name': 'sysroot_arm64',
-    'pattern': '.',
-    'condition': 'checkout_linux and checkout_arm64',
-    'action': ['python3', "-u", 'chromium/build/linux/sysroot_scripts/install-sysroot.py',
-               '--sysroots-json-path=' + Var('sysroots_json_path'),
-               '--arch=arm64'],
-  },
-  {
-    'name': 'sysroot_x86',
-    'pattern': '.',
-    'condition': 'checkout_linux and (checkout_x86 or checkout_x64)',
-    'action': ['python3', "-u", 'chromium/build/linux/sysroot_scripts/install-sysroot.py',
-               '--sysroots-json-path=' + Var('sysroots_json_path'),
-               '--arch=x86'],
-  },
-  {
-    'name': 'sysroot_x64',
-    'pattern': '.',
-    'condition': 'checkout_linux and checkout_x64',
-    'action': ['python3', "-u", 'chromium/build/linux/sysroot_scripts/install-sysroot.py',
-               '--sysroots-json-path=' + Var('sysroots_json_path'),
-               '--arch=x64'],
-  },
-  {
     # Case-insensitivity for the Win SDK. Must run before win_toolchain below.
     'name': 'ciopfs_linux',
     'pattern': '.',
@@ -156,6 +124,17 @@ hooks = [
     'name': 'rust-toolchain',
     'pattern': '.',
     'action': ['python3', "-u", 'chromium/tools/rust/update_rust.py'],
+  },
+  {
+    # Update the prebuilt clang toolchain.
+    # Note: On Win, this should run after win_toolchain, as it may use it.
+    'name': 'clang',
+    'pattern': '.',
+    'condition': 'checkout_reclient and (checkout_win or checkout_mac)',
+    'action': ['python3', "-u", 'chromium/tools/clang/scripts/update.py',
+                  "--host-os", "linux",
+                  "--output-dir",
+                  "chromium/third_party/llvm-build/Release+Asserts_linux"],
   },
   {
     # Should run after the clang hook. Used on mac, as well as for orderfile
@@ -326,18 +305,6 @@ hooks = [
                 '-s', 'chromium/build/toolchain/win/rc/linux64/rc.sha1',
     ]
   },
- {
-    'name': 'test_fonts',
-    'pattern': '.',
-    'action': [ 'python3', "-u",
-      'chromium/third_party/depot_tools/download_from_google_storage.py',
-                '--no_resume',
-                '--extract',
-                '--no_auth',
-                '--bucket', 'chromium-fonts',
-                '-s', 'chromium/third_party/test_fonts/test_fonts.tar.gz.sha1',
-    ],
-  },
   # Download test resources for opus, i.e. audio files.
   {
     'name': 'opus_test_files',
@@ -392,17 +359,6 @@ hooks = [
     'condition': 'checkout_android',
     'action': ['python3', "-u",
                'chromium/build/android/download_doclava.py',
-    ],
-  },
-  {
-    'name': 'subresource-filter-ruleset',
-    'pattern': '.',
-    'action': [ 'python3', "-u",
-                'chromium/third_party/depot_tools/download_from_google_storage.py',
-                '--no_resume',
-                '--no_auth',
-                '--bucket', 'chromium-ads-detection',
-                '-s', 'chromium/third_party/subresource-filter-ruleset/data/UnindexedRules.sha1',
     ],
   },
   # Download PGO profiles.
@@ -505,6 +461,8 @@ hooks = [
                 'download',
                 '--depot-tools',
                 'chromium/third_party/depot_tools',
+                "--force",
+                '--quiet',
     ],
   },
   #{ # Vivaldi don't do libc++ roll and reverts; disabling

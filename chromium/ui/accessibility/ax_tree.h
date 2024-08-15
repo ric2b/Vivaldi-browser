@@ -266,12 +266,11 @@ class AX_EXPORT AXTree {
   static bool is_focused_node_always_unignored_;
 
 #if DCHECK_IS_ON()
-  bool has_plugin_ = false;
   void CheckTreeConsistency(const AXTreeUpdate& update);
 #endif
 
   // Accumulate errors as there can be more than one before Chrome is crashed
-  // via AccessibilityFatalError();
+  // via UnrecoverableAccessibilityError();
   // In an AX_FAIL_FAST_BUILD or if |is_fatal|, will assert/crash immediately.
   void RecordError(const AXTreeUpdateState& update_state,
                    std::string new_error,

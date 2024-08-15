@@ -12,11 +12,11 @@
 #include "platform/api/tls_connection.h"
 #include "util/weak_ptr.h"
 
-namespace cast {
-namespace channel {
+namespace cast::channel {
+
 class CastMessage;
-}  // namespace channel
-}  // namespace cast
+
+}  // namespace cast::channel
 
 namespace openscreen::cast {
 
@@ -29,7 +29,7 @@ class CastSocket : public TlsConnection::Client {
    public:
 
     // Called when a terminal error on |socket| has occurred.
-    virtual void OnError(CastSocket* socket, Error error) = 0;
+    virtual void OnError(CastSocket* socket, const Error& error) = 0;
 
     virtual void OnMessage(CastSocket* socket,
                            ::cast::channel::CastMessage message) = 0;
@@ -62,7 +62,7 @@ class CastSocket : public TlsConnection::Client {
   bool audio_only() const { return audio_only_; }
 
   // TlsConnection::Client overrides.
-  void OnError(TlsConnection* connection, Error error) override;
+  void OnError(TlsConnection* connection, const Error& error) override;
   void OnRead(TlsConnection* connection, std::vector<uint8_t> block) override;
 
   WeakPtr<CastSocket> GetWeakPtr() const { return weak_factory_.GetWeakPtr(); }

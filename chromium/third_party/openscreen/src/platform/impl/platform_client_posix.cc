@@ -46,7 +46,7 @@ TlsDataRouterPosix* PlatformClientPosix::tls_data_router() {
 UdpSocketReaderPosix* PlatformClientPosix::udp_socket_reader() {
   std::call_once(udp_socket_reader_initialization_, [this]() {
     udp_socket_reader_ =
-        std::make_unique<UdpSocketReaderPosix>(socket_handle_waiter());
+        std::make_unique<UdpSocketReaderPosix>(*socket_handle_waiter());
   });
   return udp_socket_reader_.get();
 }

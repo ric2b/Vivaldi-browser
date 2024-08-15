@@ -40,6 +40,7 @@ enum class UploadState {
 // values should never be reused. Keep in sync w/ TrustedVaultUserActionTrigger
 // in tools/metrics/histograms/metadata/sync/enums.xml.
 // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.sync
+// LINT.IfChange(TrustedVaultUserActionTrigger)
 enum class TrustedVaultUserActionTriggerForUMA {
   // Settings pages, used on all platforms except ChromeOS.
   kSettings = 0,
@@ -48,7 +49,7 @@ enum class TrustedVaultUserActionTriggerForUMA {
   // Used on Android and ChromeOS, represents OS-level notification.
   kNotification = 2,
   // Used on iOS only. Represents Infobar on the New Tab Page.
-  // TODO(crbug.com/1083973): record this bucket bucket on Android once
+  // TODO(crbug.com/40131571): record this bucket bucket on Android once
   // corresponding UI added.
   kNewTabPageInfobar = 3,
   // Used on Android only. This dialog is shown when GMSCore returned
@@ -56,6 +57,7 @@ enum class TrustedVaultUserActionTriggerForUMA {
   kPasswordManagerErrorMessage = 4,
   kMaxValue = kPasswordManagerErrorMessage
 };
+// LINT.ThenChange(/tools/metrics/histograms/metadata/sync/enums.xml:TrustedVaultUserActionTrigger)
 
 // Returns whether |type| is being uploaded to Google. This is useful for
 // features that depend on user consent for uploading data (e.g. history) to

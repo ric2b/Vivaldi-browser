@@ -61,12 +61,9 @@ class FullscreenControllerTestWindow : public TestBrowserWindow,
                        ExclusiveAccessBubbleType type,
                        int64_t display_id) override;
   void ExitFullscreen() override;
-  void UpdateExclusiveAccessExitBubbleContent(
-      const GURL& url,
-      ExclusiveAccessBubbleType bubble_type,
-      ExclusiveAccessBubbleHideCallback bubble_first_hide_callback,
-      bool notify_download,
-      bool force_update) override;
+  void UpdateExclusiveAccessBubble(
+      const ExclusiveAccessBubbleParams& params,
+      ExclusiveAccessBubbleHideCallback first_hide_callback) override;
   bool IsExclusiveAccessBubbleDisplayed() const override;
   void OnExclusiveAccessUserInput() override;
   bool CanUserExitFullscreen() const override;
@@ -183,12 +180,9 @@ content::WebContents* FullscreenControllerTestWindow::GetActiveWebContents() {
   return browser_->tab_strip_model()->GetActiveWebContents();
 }
 
-void FullscreenControllerTestWindow::UpdateExclusiveAccessExitBubbleContent(
-    const GURL& url,
-    ExclusiveAccessBubbleType bubble_type,
-    ExclusiveAccessBubbleHideCallback bubble_first_hide_callback,
-    bool notify_download,
-    bool force_update) {}
+void FullscreenControllerTestWindow::UpdateExclusiveAccessBubble(
+    const ExclusiveAccessBubbleParams& params,
+    ExclusiveAccessBubbleHideCallback first_hide_callback) {}
 
 bool FullscreenControllerTestWindow::IsExclusiveAccessBubbleDisplayed() const {
   return false;
@@ -525,7 +519,7 @@ TEST_F(FullscreenControllerStateUnitTest, ExitTabFullscreenViaReplacingTab) {
       content::WebContents::Create(
           content::WebContents::CreateParams(profile()));
   std::unique_ptr<content::WebContents> old_web_contents =
-      browser()->tab_strip_model()->ReplaceWebContentsAt(
+      browser()->tab_strip_model()->DiscardWebContentsAt(
           0, std::move(new_web_contents));
   ChangeWindowFullscreenState();
   EXPECT_FALSE(browser()->window()->IsFullscreen());

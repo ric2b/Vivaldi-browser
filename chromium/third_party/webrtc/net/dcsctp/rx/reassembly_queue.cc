@@ -27,6 +27,7 @@
 #include "net/dcsctp/packet/data.h"
 #include "net/dcsctp/packet/parameter/outgoing_ssn_reset_request_parameter.h"
 #include "net/dcsctp/packet/parameter/reconfiguration_response_parameter.h"
+#include "net/dcsctp/public/dcsctp_handover_state.h"
 #include "net/dcsctp/public/dcsctp_message.h"
 #include "net/dcsctp/public/types.h"
 #include "net/dcsctp/rx/interleaved_reassembly_streams.h"
@@ -51,13 +52,11 @@ std::unique_ptr<ReassemblyStreams> CreateStreams(
 }  // namespace
 
 ReassemblyQueue::ReassemblyQueue(absl::string_view log_prefix,
-                                 TSN peer_initial_tsn,
                                  size_t max_size_bytes,
                                  bool use_message_interleaving)
     : log_prefix_(log_prefix),
       max_size_bytes_(max_size_bytes),
       watermark_bytes_(max_size_bytes * kHighWatermarkLimit),
-      last_completed_reset_req_seq_nbr_(ReconfigRequestSN(0)),
       streams_(CreateStreams(
           log_prefix_,
           [this](rtc::ArrayView<const UnwrappedTSN> tsns,
@@ -222,17 +221,10 @@ HandoverReadinessStatus ReassemblyQueue::GetHandoverReadiness() const {
 }
 
 void ReassemblyQueue::AddHandoverState(DcSctpSocketHandoverState& state) {
-  state.rx.last_completed_deferred_reset_req_sn =
-      last_completed_reset_req_seq_nbr_.value();
   streams_->AddHandoverState(state);
 }
 
 void ReassemblyQueue::RestoreFromState(const DcSctpSocketHandoverState& state) {
-  // Validate that the component is in pristine state.
-  RTC_DCHECK(last_completed_reset_req_seq_nbr_ == ReconfigRequestSN(0));
-
-  last_completed_reset_req_seq_nbr_ =
-      ReconfigRequestSN(state.rx.last_completed_deferred_reset_req_sn);
   streams_->RestoreFromState(state);
 }
 }  // namespace dcsctp

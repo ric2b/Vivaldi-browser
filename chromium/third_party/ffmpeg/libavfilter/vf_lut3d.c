@@ -24,10 +24,11 @@
  * 3D Lookup table filter
  */
 
+#include <float.h>
+
 #include "config_components.h"
 
-#include "float.h"
-
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/file_open.h"
 #include "libavutil/intfloat.h"

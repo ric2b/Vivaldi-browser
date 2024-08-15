@@ -100,7 +100,7 @@ PresenceDeviceProvider::PresenceDeviceProvider(
     ServiceController* service_controller,
     const ConnectionAuthenticator* connection_authenticator)
     : service_controller_(*service_controller),
-      device_{service_controller_.GetLocalDeviceMetadata()},
+      device_(service_controller_.GetDeviceIdentityMetaData()),
       connection_authenticator_(*connection_authenticator) {
   CHECK(connection_authenticator);
 }
@@ -123,10 +123,9 @@ AuthenticationStatus PresenceDeviceProvider::AuthenticateAsInitiator(
   // unknown result to callers in NC.
   service_controller_.GetLocalCredentials(
       /*credential_selector=*/{.manager_app_id = manager_app_id_,
-                               .account_name =
-                                   device_.GetMetadata().account_name(),
+                               .account_name = "dummy_account_name",
                                .identity_type = ::nearby::internal::
-                                   IdentityType::IDENTITY_TYPE_PRIVATE},
+                                   IdentityType::IDENTITY_TYPE_PRIVATE_GROUP},
       /*callback=*/{.credentials_fetched_cb = [this, &response, &remote_device,
                                                &authentication_transport,
                                                &shared_secret](
@@ -225,10 +224,9 @@ bool PresenceDeviceProvider::ReadAndVerifyRemoteDeviceData(
   Future<bool> read_and_verify_result;
   service_controller_.GetLocalPublicCredentials(
       /*credential_selector=*/{.manager_app_id = manager_app_id_,
-                               .account_name =
-                                   device_.GetMetadata().account_name(),
+                               .account_name = "dummy_account_name",
                                .identity_type = ::nearby::internal::
-                                   IdentityType::IDENTITY_TYPE_PRIVATE},
+                                   IdentityType::IDENTITY_TYPE_PRIVATE_GROUP},
       /*callback=*/{.credentials_fetched_cb = [this, &read_and_verify_result,
                                                &authentication_transport,
                                                &shared_secret](

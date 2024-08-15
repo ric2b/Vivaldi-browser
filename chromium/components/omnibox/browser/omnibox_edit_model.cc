@@ -27,6 +27,7 @@
 #include "components/bookmarks/browser/core_bookmark_model.h"
 #include "components/dom_distiller/core/url_constants.h"
 #include "components/dom_distiller/core/url_utils.h"
+#include "components/history_embeddings/history_embeddings_features.h"
 #include "components/navigation_metrics/navigation_metrics.h"
 #include "components/omnibox/browser/actions/omnibox_action.h"
 #include "components/omnibox/browser/actions/omnibox_pedal.h"
@@ -210,8 +211,7 @@ size_t CountNumberOfIPv4Parts(const std::u16string& text,
     return 0;
   }
 
-  url::Parsed parsed;
-  url::ParseStandardURL(text.data(), text.length(), &parsed);
+  url::Parsed parsed = url::ParseStandardURL(text);
   if (!parsed.host.is_valid()) {
     return 0;
   }
@@ -839,19 +839,6 @@ void OmniboxEditModel::OpenSelection(OmniboxPopupSelection selection,
              OmniboxPopupSelection::FOCUSED_BUTTON_REMOVE_SUGGESTION) {
     TryDeletingPopupLine(selection.line);
   } else {
-    // Mark instant keyword as used if we're in keyword mode for a
-    // starter pack keyword with its original '@' prefix intact.
-    if (kIsDesktop && !keyword_.empty()) {
-      PrefService* prefs = GetPrefService();
-      TemplateURL* turl = controller_->client()
-                              ->GetTemplateURLService()
-                              ->GetTemplateURLForKeyword(keyword_);
-      if (prefs && turl && turl->starter_pack_id() != 0 &&
-          turl->keyword().starts_with(u'@')) {
-        prefs->SetBoolean(omnibox::kOmniboxInstantKeywordUsed, true);
-      }
-    }
-
     // Open the match.
     GURL alternate_nav_url = AutocompleteResult::ComputeAlternateNavUrl(
         input_, match,
@@ -1174,7 +1161,7 @@ bool OmniboxEditModel::OnEscapeKeyPressed() {
   // This in turn allows the user to use escape to quickly select all the text
   // for ease of replacement, and matches other browsers.
   bool user_input_was_in_progress = user_input_in_progress_;
-  // TODO(crbug.com/1340378): If the popup was open, `user_input_in_progress_`
+  // TODO(crbug.com/40230336): If the popup was open, `user_input_in_progress_`
   //  *should* also be true; checking `user_text_` in the DCHECK below, and
   //  checking `popup_was_open` in the if predicate below *should* be
   //  unnecessary. However, that's not always the case (see
@@ -1249,6 +1236,37 @@ bool OmniboxEditModel::OnSpacePressed() {
       }
     }
   }
+  return false;
+}
+
+bool OmniboxEditModel::MaybeAccelerateKeywordSelection(
+    const std::u16string& input_text,
+    char16_t ch) {
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  // Only check for acceleration when the current input text is "@" exactly.
+  if (input_text.size() != 1 ||
+      !input_text.starts_with('@') ||
+      !history_embeddings::kAtKeywordAcceleration.Get()) {
+    return false;
+  }
+  TemplateURLService* turl_service =
+      controller_->client()->GetTemplateURLService();
+  const AutocompleteResult& result = autocomplete_controller()->result();
+  for (size_t i = 0; i < result.size(); i++) {
+    const AutocompleteMatch& match = result.match_at(i);
+    // TODO(b/332783748): If this gets used in practice, a more general
+    //  matching mechanism would be needed to handle keywords with a
+    //  prefix in common. This is simple for the prototype where all
+    //  first characters are unique.
+    if (match.HasInstantKeyword(turl_service) && match.keyword.size() > 1 &&
+        match.keyword[1] == ch) {
+      SetPopupSelection(OmniboxPopupSelection(i), true, true);
+      // TODO(b/332783748): Use a different entry method.
+      AcceptKeyword(metrics::OmniboxEventProto::TAB);
+      return true;
+    }
+  }
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   return false;
 }
 
@@ -2399,13 +2417,16 @@ void OmniboxEditModel::OpenMatch(OmniboxPopupSelection selection,
       dropdown_ignored ? fake_single_entry_result
                        : autocomplete_controller()->result(),
       destination_url, is_incognito);
+// Check disabled on iOS as the platform shows a default suggestion on focus
+// (crbug.com/40061502).
+#if !BUILDFLAG(IS_IOS)
   DCHECK(dropdown_ignored ||
          (log.elapsed_time_since_user_first_modified_omnibox >=
           log.elapsed_time_since_last_change_to_default_match))
       << "We should've got the notification that the user modified the "
       << "omnibox text at same time or before the most recent time the "
       << "default match changed.";
-
+#endif
   log.ukm_source_id = controller_->client()->GetUKMSourceId();
 
   if ((disposition == WindowOpenDisposition::CURRENT_TAB) &&

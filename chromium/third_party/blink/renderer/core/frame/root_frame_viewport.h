@@ -62,6 +62,7 @@ class CORE_EXPORT RootFrameViewport final
                        ScrollCallback on_finish) override;
   PhysicalRect ScrollIntoView(
       const PhysicalRect&,
+      const PhysicalBoxStrut& scroll_margin,
       const mojom::blink::ScrollIntoViewParamsPtr&) override;
   gfx::Rect VisibleContentRect(
       IncludeScrollbarsInRect = kExcludeScrollbars) const override;
@@ -167,6 +168,8 @@ class CORE_EXPORT RootFrameViewport final
 
   std::optional<cc::ElementId> GetTargetedSnapAreaId() override;
   void SetTargetedSnapAreaId(const std::optional<cc::ElementId>&) override;
+
+  void DropCompositorScrollDeltaNextCommit() override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(RootFrameViewportTest, DistributeScrollOrder);

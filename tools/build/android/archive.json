@@ -10,11 +10,13 @@
   },
   "Vivaldi.apk.map": {
     "file_globs": [ "apks/Vivaldi.*.apk.map" ],
-    "archive_type": "ARCHIVE_TYPE_ZIP"
+    "archive_type": "ARCHIVE_TYPE_ZIP",
+    "versioned": true
   },
   "native_debug_symbols": {
     "files": [ "lib.unstripped/libchrome.so" ],
-    "archive_type": "ARCHIVE_TYPE_ZIP"
+    "archive_type": "ARCHIVE_TYPE_ZIP",
+    "versioned": true
   },
   "dump_syms": {},
   "minidump_stackwalk": {}

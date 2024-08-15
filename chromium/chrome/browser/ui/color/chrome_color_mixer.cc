@@ -13,7 +13,6 @@
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/color/chrome_color_provider_utils.h"
 #include "chrome_color_id.h"
-#include "components/omnibox/common/omnibox_features.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/color/color_id.h"
@@ -86,12 +85,8 @@ ui::ColorTransform GetToolbarTopSeparatorColorTransform(
 // Apply updates to the Omnibox background color tokens per GM3 spec.
 void ApplyGM3OmniboxBackgroundColor(ui::ColorMixer& mixer,
                                     const ui::ColorProviderKey& key) {
-  const bool gm3_background_color_enabled =
-      omnibox::IsOmniboxCr23CustomizeGuardedFeatureEnabled(
-          omnibox::kOmniboxSteadyStateBackgroundColor);
-
   // Apply omnibox background color updates only to non-themed clients.
-  if (gm3_background_color_enabled && !key.custom_theme) {
+  if (!key.custom_theme) {
     mixer[kColorLocationBarBackground] = {ui::kColorSysOmniboxContainer};
     mixer[kColorLocationBarBackgroundHovered] =
         ui::GetResultingPaintColor(ui::kColorSysStateHoverBrightBlendProtection,
@@ -116,6 +111,9 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
       kColorAvatarButtonHighlightSyncError};
   mixer[kColorAppMenuHighlightSeverityMedium] = AdjustHighlightColorForContrast(
       ui::kColorAlertMediumSeverityIcon, kColorToolbar);
+  mixer[kColorAppMenuHighlightPrimary] = {ui::kColorButtonBackgroundProminent};
+  mixer[kColorAppMenuExpandedForegroundPrimary] = {
+      ui::kColorButtonForegroundProminent};
   mixer[kColorAvatarButtonHighlightNormal] =
       AdjustHighlightColorForContrast(ui::kColorAccent, kColorToolbar);
   mixer[kColorAvatarButtonHighlightSyncError] = AdjustHighlightColorForContrast(
@@ -123,6 +121,8 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorAvatarButtonHighlightSyncPaused] = {
       kColorAvatarButtonHighlightNormal};
   mixer[kColorAvatarButtonHighlightSigninPaused] = {
+      kColorAvatarButtonHighlightNormal};
+  mixer[kColorAvatarButtonHighlightExplicitText] = {
       kColorAvatarButtonHighlightNormal};
   mixer[kColorAvatarStrokeLight] = {SK_ColorWHITE};
   mixer[kColorBookmarkBarBackground] = {kColorToolbar};
@@ -156,10 +156,6 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
       kColorProfileMenuSyncInfoBackground};
   mixer[kColorDesktopMediaTabListBorder] = {ui::kColorMidground};
   mixer[kColorDesktopMediaTabListPreviewBackground] = {ui::kColorMidground};
-  mixer[kColorDownloadBubbleInfoBackground] = {
-      ui::kColorSubtleEmphasisBackground};
-  mixer[kColorDownloadBubbleInfoIcon] = {ui::kColorIcon};
-  mixer[kColorDownloadBubbleShowAllDownloadsIcon] = {ui::kColorIconSecondary};
   mixer[kColorDownloadItemForeground] = {kColorDownloadShelfForeground};
   mixer[kColorDownloadItemForegroundDangerous] = ui::PickGoogleColor(
       ui::kColorAlertHighSeverity, kColorDownloadShelfBackground,
@@ -363,7 +359,7 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorPipWindowSkipAdButtonBorder] = {kColorPipWindowForeground};
   mixer[kColorProfileMenuBackground] = {ui::kColorDialogBackground};
   mixer[kColorProfileMenuSyncInfoBackground] = {ui::kColorSyncInfoBackground};
-  // TODO(https://crbug.com/1315194): stop forcing the light theme once the
+  // TODO(crbug.com/40833357): stop forcing the light theme once the
   // reauth dialog supports the dark mode.
   mixer[kColorProfilesReauthDialogBorder] = {SK_ColorWHITE};
   mixer[kColorQrCodeBackground] = {SK_ColorWHITE};

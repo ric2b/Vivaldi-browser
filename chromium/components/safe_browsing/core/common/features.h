@@ -37,6 +37,10 @@ BASE_DECLARE_FEATURE(kClientSideDetectionKeyboardPointerLockRequest);
 // occurs on the page.
 BASE_DECLARE_FEATURE(kClientSideDetectionNotificationPrompt);
 
+// Send a sample CSPP ping when a URL matches the CSD allowlist and all other
+// preclassification check conditions pass.
+BASE_DECLARE_FEATURE(kClientSideDetectionSamplePing);
+
 // Creates and sends CSBRRs when notification permissions are accepted for an
 // abusive site whose interstitial has been bypassed.
 BASE_DECLARE_FEATURE(kCreateNotificationsAcceptedClientSafeBrowsingReports);
@@ -47,27 +51,62 @@ BASE_DECLARE_FEATURE(kCreateWarningShownClientSafeBrowsingReports);
 // Controls whether we prompt the user on unencrypted deep scans.
 BASE_DECLARE_FEATURE(kDeepScanningPromptRemoval);
 
+// Controls whether we use new broader criteria for deep scans.
+BASE_DECLARE_FEATURE(kDeepScanningCriteria);
+
 // Controls whether the delayed warning experiment is enabled.
 BASE_DECLARE_FEATURE(kDelayedWarnings);
 // True if mouse clicks should undelay the warnings immediately when delayed
 // warnings feature is enabled.
 extern const base::FeatureParam<bool> kDelayedWarningsEnableMouseClicks;
 
+// Sends the WebProtect content scanning request to the corresponding regional
+// DLP endpoint based on ChromeDataRegionSetting policy.
+BASE_DECLARE_FEATURE(kDlpRegionalizedEndpoints);
+
+// Sends download report without explicit user decision. This can be either the
+// download is automatically discarded 1 hour after the warning is shown, or
+// the profile is closed while the warning is still showing.
+BASE_DECLARE_FEATURE(kDownloadReportWithoutUserDecision);
+
 // The kill switch for download tailored warnings. The main control is on the
 // server-side.
 BASE_DECLARE_FEATURE(kDownloadTailoredWarnings);
+
+// Enables HaTS surveys for users encountering desktop download warnings on the
+// download bubble or the downloads page.
+BASE_DECLARE_FEATURE(kDownloadWarningSurvey);
+
+// Gives the type of the download warning HaTS survey that the user is eligible
+// for. This should be set in the fieldtrial config along with the trigger ID
+// for the corresponding survey (as en_site_id). The int value corresponds to
+// the value of DownloadWarningHatsType enum (see
+// //c/b/download/download_warning_desktop_hats_util.h).
+extern const base::FeatureParam<int> kDownloadWarningSurveyType;
+
+// The time interval after which to consider a download warning ignored, and
+// potentially show the survey for ignoring a download bubble warning.
+extern const base::FeatureParam<int> kDownloadWarningSurveyIgnoreDelaySeconds;
 
 // Controls whether Standard Safe Browsing users are permitted to provide
 // passwords for local decryption on encrypted archives.
 BASE_DECLARE_FEATURE(kEncryptedArchivesMetadata);
 
-// Controls whether the Enhanced Safe Browsing (ESB) download row promotion
-// should show.
-BASE_DECLARE_FEATURE(kEsbDownloadRowPromo);
+// Controls whether Safe Browsing Extended Reporting (SBER) is deprecated.
+// When this feature flag is enabled:
+// - the Extended Reporting toggle will not be displayed on
+//   chrome://settings/security
+// - features will not depend on the SBER preference value,
+//   safebrowsing.scout_reporting_enabled
+BASE_DECLARE_FEATURE(kExtendedReportingRemovePrefDependency);
 
 // Allows the Extension Telemetry Service to accept and use configurations
 // sent by the server.
 BASE_DECLARE_FEATURE(kExtensionTelemetryConfiguration);
+
+// Enables collection of telemetry signal whenever an extension invokes the
+// declarativeNetRequest actions.
+BASE_DECLARE_FEATURE(kExtensionTelemetryDeclarativeNetRequestActionSignal);
 
 // Allows the Extension Telemetry Service to include file data of extensions
 // specified in the --load-extension commandline switch in telemetry reports.
@@ -145,9 +184,6 @@ BASE_DECLARE_FEATURE(kNestedArchives);
 // enterprise interstitials.
 BASE_DECLARE_FEATURE(kRealTimeUrlFilteringCustomMessage);
 
-// Controls whether we are using red interstitial facelift updates.
-BASE_DECLARE_FEATURE(kRedInterstitialFacelift);
-
 // Enables modifying key parameters on the navigation event collection used to
 // populate referrer chains.
 BASE_DECLARE_FEATURE(kReferrerChainParameters);
@@ -189,6 +225,9 @@ BASE_DECLARE_FEATURE(kSafeBrowsingRemoveCookiesInAuthRequests);
 // handshakes.
 BASE_DECLARE_FEATURE(kSafeBrowsingSkipSubresources2);
 
+// Automatically revoke abusive notifications in Safety Hub.
+BASE_DECLARE_FEATURE(kSafetyHubAbusiveNotificationRevocation);
+
 // Controls whether the new 7z evaluation is performed on downloads.
 BASE_DECLARE_FEATURE(kSevenZipEvaluationEnabled);
 
@@ -226,9 +265,6 @@ BASE_DECLARE_FEATURE(kTailoredSecurityObserverRetries);
 
 // Controls whether the integration of tailored security settings is enabled.
 BASE_DECLARE_FEATURE(kTailoredSecurityIntegration);
-
-// Enable new updated strings and icons for the Tailored Security dialogs.
-BASE_DECLARE_FEATURE(kTailoredSecurityUpdatedMessages);
 
 // Specifies which non-resource HTML Elements to collect based on their tag and
 // attributes. It's a single param containing a comma-separated list of pairs.
@@ -273,6 +309,11 @@ extern const base::FeatureParam<std::string> kRedWarningSurveyReportTypeFilter;
 extern const base::FeatureParam<std::string> kRedWarningSurveyDidProceedFilter;
 
 BASE_DECLARE_FEATURE(kClientSideDetectionImagesCache);
+
+BASE_DECLARE_FEATURE(kClientSideDetectionDebuggingMetadataCache);
+
+// Enables Enhanced Safe Browsing promos for iOS.
+BASE_DECLARE_FEATURE(kEnhancedSafeBrowsingPromo);
 
 }  // namespace safe_browsing
 #endif  // COMPONENTS_SAFE_BROWSING_CORE_COMMON_FEATURES_H_

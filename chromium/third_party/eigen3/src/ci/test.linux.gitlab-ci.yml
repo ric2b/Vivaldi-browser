@@ -55,6 +55,22 @@ test:linux:x86-64:gcc-10:default:unsupported:
   variables:
     EIGEN_CI_TEST_LABEL: Unsupported
 
+.test:linux:x86-64:gcc-10:avx:
+  extends: .test:linux:x86-64
+  needs: [ build:linux:cross:x86-64:gcc-10:avx ]
+  variables:
+    EIGEN_CI_INSTALL: g++-10
+
+test:linux:x86-64:gcc-10:avx:official:
+  extends: .test:linux:x86-64:gcc-10:avx
+  variables:
+    EIGEN_CI_TEST_LABEL: Official
+
+test:linux:x86-64:gcc-10:avx:unsupported:
+  extends: .test:linux:x86-64:gcc-10:avx
+  variables:
+    EIGEN_CI_TEST_LABEL: Unsupported
+
 .test:linux:x86-64:gcc-10:avx2:
   extends: .test:linux:x86-64
   needs: [ build:linux:cross:x86-64:gcc-10:avx2 ]
@@ -124,6 +140,22 @@ test:linux:x86-64:clang-12:default:official:
 
 test:linux:x86-64:clang-12:default:unsupported:
   extends: .test:linux:x86-64:clang-12:default
+  variables:
+    EIGEN_CI_TEST_LABEL: Unsupported
+
+.test:linux:x86-64:clang-12:avx:
+  extends: .test:linux:x86-64
+  needs: [ build:linux:cross:x86-64:clang-12:avx ]
+  variables:
+    EIGEN_CI_INSTALL: clang-12
+
+test:linux:x86-64:clang-12:avx:official:
+  extends: .test:linux:x86-64:clang-12:avx
+  variables:
+    EIGEN_CI_TEST_LABEL: Official
+
+test:linux:x86-64:clang-12:avx:unsupported:
+  extends: .test:linux:x86-64:clang-12:avx
   variables:
     EIGEN_CI_TEST_LABEL: Unsupported
 

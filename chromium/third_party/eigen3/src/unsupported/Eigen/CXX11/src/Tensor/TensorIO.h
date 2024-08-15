@@ -18,33 +18,24 @@ namespace Eigen {
 struct TensorIOFormat;
 
 namespace internal {
-template <typename Tensor, std::size_t rank>
+template <typename Tensor, std::size_t rank, typename Format, typename EnableIf = void>
 struct TensorPrinter;
 }
 
-struct TensorIOFormat {
-  TensorIOFormat(const std::vector<std::string>& _separator, const std::vector<std::string>& _prefix,
-                 const std::vector<std::string>& _suffix, int _precision = StreamPrecision, int _flags = 0,
-                 const std::string& _tenPrefix = "", const std::string& _tenSuffix = "", const char _fill = ' ')
-      : tenPrefix(_tenPrefix),
-        tenSuffix(_tenSuffix),
-        prefix(_prefix),
-        suffix(_suffix),
-        separator(_separator),
-        fill(_fill),
-        precision(_precision),
-        flags(_flags) {
-    init_spacer();
-  }
-
-  TensorIOFormat(int _precision = StreamPrecision, int _flags = 0, const std::string& _tenPrefix = "",
-                 const std::string& _tenSuffix = "", const char _fill = ' ')
-      : tenPrefix(_tenPrefix), tenSuffix(_tenSuffix), fill(_fill), precision(_precision), flags(_flags) {
-    // default values of prefix, suffix and separator
-    prefix = {"", "["};
-    suffix = {"", "]"};
-    separator = {", ", "\n"};
-
+template <typename Derived_>
+struct TensorIOFormatBase {
+  using Derived = Derived_;
+  TensorIOFormatBase(const std::vector<std::string>& separator, const std::vector<std::string>& prefix,
+                     const std::vector<std::string>& suffix, int precision = StreamPrecision, int flags = 0,
+                     const std::string& tenPrefix = "", const std::string& tenSuffix = "", const char fill = ' ')
+      : tenPrefix(tenPrefix),
+        tenSuffix(tenSuffix),
+        prefix(prefix),
+        suffix(suffix),
+        separator(separator),
+        fill(fill),
+        precision(precision),
+        flags(flags) {
     init_spacer();
   }
 
@@ -67,33 +58,6 @@ struct TensorIOFormat {
     }
   }
 
-  static inline const TensorIOFormat Numpy() {
-    std::vector<std::string> prefix = {"", "["};
-    std::vector<std::string> suffix = {"", "]"};
-    std::vector<std::string> separator = {" ", "\n"};
-    return TensorIOFormat(separator, prefix, suffix, StreamPrecision, 0, "[", "]");
-  }
-
-  static inline const TensorIOFormat Plain() {
-    std::vector<std::string> separator = {" ", "\n", "\n", ""};
-    std::vector<std::string> prefix = {""};
-    std::vector<std::string> suffix = {""};
-    return TensorIOFormat(separator, prefix, suffix, StreamPrecision, 0, "", "", ' ');
-  }
-
-  static inline const TensorIOFormat Native() {
-    std::vector<std::string> separator = {", ", ",\n", "\n"};
-    std::vector<std::string> prefix = {"", "{"};
-    std::vector<std::string> suffix = {"", "}"};
-    return TensorIOFormat(separator, prefix, suffix, StreamPrecision, 0, "{", "}", ' ');
-  }
-
-  static inline const TensorIOFormat Legacy() {
-    TensorIOFormat LegacyFormat(StreamPrecision, 0, "", "", ' ');
-    LegacyFormat.legacy_bit = true;
-    return LegacyFormat;
-  }
-
   std::string tenPrefix;
   std::string tenSuffix;
   std::vector<std::string> prefix;
@@ -103,24 +67,67 @@ struct TensorIOFormat {
   int precision;
   int flags;
   std::vector<std::string> spacer{};
-  bool legacy_bit = false;
 };
 
-template <typename T, int Layout, int rank>
+struct TensorIOFormatNumpy : public TensorIOFormatBase<TensorIOFormatNumpy> {
+  using Base = TensorIOFormatBase<TensorIOFormatNumpy>;
+  TensorIOFormatNumpy()
+      : Base(/*separator=*/{" ", "\n"}, /*prefix=*/{"", "["}, /*suffix=*/{"", "]"}, /*precision=*/StreamPrecision,
+             /*flags=*/0, /*tenPrefix=*/"[", /*tenSuffix=*/"]") {}
+};
+
+struct TensorIOFormatNative : public TensorIOFormatBase<TensorIOFormatNative> {
+  using Base = TensorIOFormatBase<TensorIOFormatNative>;
+  TensorIOFormatNative()
+      : Base(/*separator=*/{", ", ",\n", "\n"}, /*prefix=*/{"", "{"}, /*suffix=*/{"", "}"},
+             /*precision=*/StreamPrecision, /*flags=*/0, /*tenPrefix=*/"{", /*tenSuffix=*/"}") {}
+};
+
+struct TensorIOFormatPlain : public TensorIOFormatBase<TensorIOFormatPlain> {
+  using Base = TensorIOFormatBase<TensorIOFormatPlain>;
+  TensorIOFormatPlain()
+      : Base(/*separator=*/{" ", "\n", "\n", ""}, /*prefix=*/{""}, /*suffix=*/{""}, /*precision=*/StreamPrecision,
+             /*flags=*/0, /*tenPrefix=*/"", /*tenSuffix=*/"") {}
+};
+
+struct TensorIOFormatLegacy : public TensorIOFormatBase<TensorIOFormatLegacy> {
+  using Base = TensorIOFormatBase<TensorIOFormatLegacy>;
+  TensorIOFormatLegacy()
+      : Base(/*separator=*/{", ", "\n"}, /*prefix=*/{"", "["}, /*suffix=*/{"", "]"}, /*precision=*/StreamPrecision,
+             /*flags=*/0, /*tenPrefix=*/"", /*tenSuffix=*/"") {}
+};
+
+struct TensorIOFormat : public TensorIOFormatBase<TensorIOFormat> {
+  using Base = TensorIOFormatBase<TensorIOFormat>;
+  TensorIOFormat(const std::vector<std::string>& separator, const std::vector<std::string>& prefix,
+                 const std::vector<std::string>& suffix, int precision = StreamPrecision, int flags = 0,
+                 const std::string& tenPrefix = "", const std::string& tenSuffix = "", const char fill = ' ')
+      : Base(separator, prefix, suffix, precision, flags, tenPrefix, tenSuffix, fill) {}
+
+  static inline const TensorIOFormatNumpy Numpy() { return TensorIOFormatNumpy{}; }
+
+  static inline const TensorIOFormatPlain Plain() { return TensorIOFormatPlain{}; }
+
+  static inline const TensorIOFormatNative Native() { return TensorIOFormatNative{}; }
+
+  static inline const TensorIOFormatLegacy Legacy() { return TensorIOFormatLegacy{}; }
+};
+
+template <typename T, int Layout, int rank, typename Format>
 class TensorWithFormat;
 // specialize for Layout=ColMajor, Layout=RowMajor and rank=0.
-template <typename T, int rank>
-class TensorWithFormat<T, RowMajor, rank> {
+template <typename T, int rank, typename Format>
+class TensorWithFormat<T, RowMajor, rank, Format> {
  public:
-  TensorWithFormat(const T& tensor, const TensorIOFormat& format) : t_tensor(tensor), t_format(format) {}
+  TensorWithFormat(const T& tensor, const Format& format) : t_tensor(tensor), t_format(format) {}
 
-  friend std::ostream& operator<<(std::ostream& os, const TensorWithFormat<T, RowMajor, rank>& wf) {
+  friend std::ostream& operator<<(std::ostream& os, const TensorWithFormat<T, RowMajor, rank, Format>& wf) {
     // Evaluate the expression if needed
     typedef TensorEvaluator<const TensorForcedEvalOp<const T>, DefaultDevice> Evaluator;
     TensorForcedEvalOp<const T> eval = wf.t_tensor.eval();
     Evaluator tensor(eval, DefaultDevice());
     tensor.evalSubExprsIfNeeded(NULL);
-    internal::TensorPrinter<Evaluator, rank>::run(os, tensor, wf.t_format);
+    internal::TensorPrinter<Evaluator, rank, Format>::run(os, tensor, wf.t_format);
     // Cleanup.
     tensor.cleanup();
     return os;
@@ -128,15 +135,15 @@ class TensorWithFormat<T, RowMajor, rank> {
 
  protected:
   T t_tensor;
-  TensorIOFormat t_format;
+  Format t_format;
 };
 
-template <typename T, int rank>
-class TensorWithFormat<T, ColMajor, rank> {
+template <typename T, int rank, typename Format>
+class TensorWithFormat<T, ColMajor, rank, Format> {
  public:
-  TensorWithFormat(const T& tensor, const TensorIOFormat& format) : t_tensor(tensor), t_format(format) {}
+  TensorWithFormat(const T& tensor, const Format& format) : t_tensor(tensor), t_format(format) {}
 
-  friend std::ostream& operator<<(std::ostream& os, const TensorWithFormat<T, ColMajor, rank>& wf) {
+  friend std::ostream& operator<<(std::ostream& os, const TensorWithFormat<T, ColMajor, rank, Format>& wf) {
     // Switch to RowMajor storage and print afterwards
     typedef typename T::Index IndexType;
     std::array<IndexType, rank> shuffle;
@@ -150,7 +157,7 @@ class TensorWithFormat<T, ColMajor, rank> {
     TensorForcedEvalOp<const decltype(tensor_row_major)> eval = tensor_row_major.eval();
     Evaluator tensor(eval, DefaultDevice());
     tensor.evalSubExprsIfNeeded(NULL);
-    internal::TensorPrinter<Evaluator, rank>::run(os, tensor, wf.t_format);
+    internal::TensorPrinter<Evaluator, rank, Format>::run(os, tensor, wf.t_format);
     // Cleanup.
     tensor.cleanup();
     return os;
@@ -158,21 +165,21 @@ class TensorWithFormat<T, ColMajor, rank> {
 
  protected:
   T t_tensor;
-  TensorIOFormat t_format;
+  Format t_format;
 };
 
-template <typename T>
-class TensorWithFormat<T, ColMajor, 0> {
+template <typename T, typename Format>
+class TensorWithFormat<T, ColMajor, 0, Format> {
  public:
-  TensorWithFormat(const T& tensor, const TensorIOFormat& format) : t_tensor(tensor), t_format(format) {}
+  TensorWithFormat(const T& tensor, const Format& format) : t_tensor(tensor), t_format(format) {}
 
-  friend std::ostream& operator<<(std::ostream& os, const TensorWithFormat<T, ColMajor, 0>& wf) {
+  friend std::ostream& operator<<(std::ostream& os, const TensorWithFormat<T, ColMajor, 0, Format>& wf) {
     // Evaluate the expression if needed
     typedef TensorEvaluator<const TensorForcedEvalOp<const T>, DefaultDevice> Evaluator;
     TensorForcedEvalOp<const T> eval = wf.t_tensor.eval();
     Evaluator tensor(eval, DefaultDevice());
     tensor.evalSubExprsIfNeeded(NULL);
-    internal::TensorPrinter<Evaluator, 0>::run(os, tensor, wf.t_format);
+    internal::TensorPrinter<Evaluator, 0, Format>::run(os, tensor, wf.t_format);
     // Cleanup.
     tensor.cleanup();
     return os;
@@ -180,29 +187,39 @@ class TensorWithFormat<T, ColMajor, 0> {
 
  protected:
   T t_tensor;
-  TensorIOFormat t_format;
+  Format t_format;
 };
 
 namespace internal {
-template <typename Tensor, std::size_t rank>
-struct TensorPrinter {
-  static void run(std::ostream& s, const Tensor& _t, const TensorIOFormat& fmt) {
-    typedef std::remove_const_t<typename Tensor::Scalar> Scalar;
-    typedef typename Tensor::Index IndexType;
-    static const int layout = Tensor::Layout;
-    // backwards compatibility case: print tensor after reshaping to matrix of size dim(0) x
-    // (dim(1)*dim(2)*...*dim(rank-1)).
-    if (fmt.legacy_bit) {
-      const IndexType total_size = internal::array_prod(_t.dimensions());
-      if (total_size > 0) {
-        const IndexType first_dim = Eigen::internal::array_get<0>(_t.dimensions());
-        Map<const Array<Scalar, Dynamic, Dynamic, layout>> matrix(_t.data(), first_dim, total_size / first_dim);
-        s << matrix;
-        return;
-      }
-    }
 
-    eigen_assert(layout == RowMajor);
+// Default scalar printer.
+template <typename Scalar, typename Format, typename EnableIf = void>
+struct ScalarPrinter {
+  static void run(std::ostream& stream, const Scalar& scalar, const Format&) { stream << scalar; }
+};
+
+template <typename Scalar>
+struct ScalarPrinter<Scalar, TensorIOFormatNumpy, std::enable_if_t<NumTraits<Scalar>::IsComplex>> {
+  static void run(std::ostream& stream, const Scalar& scalar, const TensorIOFormatNumpy&) {
+    stream << numext::real(scalar) << "+" << numext::imag(scalar) << "j";
+  }
+};
+
+template <typename Scalar>
+struct ScalarPrinter<Scalar, TensorIOFormatNative, std::enable_if_t<NumTraits<Scalar>::IsComplex>> {
+  static void run(std::ostream& stream, const Scalar& scalar, const TensorIOFormatNative&) {
+    stream << "{" << numext::real(scalar) << ", " << numext::imag(scalar) << "}";
+  }
+};
+
+template <typename Tensor, std::size_t rank, typename Format, typename EnableIf>
+struct TensorPrinter {
+  using Scalar = std::remove_const_t<typename Tensor::Scalar>;
+
+  static void run(std::ostream& s, const Tensor& tensor, const Format& fmt) {
+    typedef typename Tensor::Index IndexType;
+
+    eigen_assert(Tensor::Layout == RowMajor);
     typedef std::conditional_t<is_same<Scalar, char>::value || is_same<Scalar, unsigned char>::value ||
                                    is_same<Scalar, numext::int8_t>::value || is_same<Scalar, numext::uint8_t>::value,
                                int,
@@ -213,7 +230,7 @@ struct TensorPrinter {
                                                   std::complex<int>, const Scalar&>>
         PrintType;
 
-    const IndexType total_size = array_prod(_t.dimensions());
+    const IndexType total_size = array_prod(tensor.dimensions());
 
     std::streamsize explicit_precision;
     if (fmt.precision == StreamPrecision) {
@@ -232,20 +249,16 @@ struct TensorPrinter {
     if (explicit_precision) old_precision = s.precision(explicit_precision);
 
     IndexType width = 0;
-
     bool align_cols = !(fmt.flags & DontAlignCols);
     if (align_cols) {
       // compute the largest width
       for (IndexType i = 0; i < total_size; i++) {
         std::stringstream sstr;
         sstr.copyfmt(s);
-        sstr << static_cast<PrintType>(_t.data()[i]);
+        ScalarPrinter<Scalar, Format>::run(sstr, static_cast<PrintType>(tensor.data()[i]), fmt);
         width = std::max<IndexType>(width, IndexType(sstr.str().length()));
       }
     }
-    std::streamsize old_width = s.width();
-    char old_fill_character = s.fill();
-
     s << fmt.tenPrefix;
     for (IndexType i = 0; i < total_size; i++) {
       std::array<bool, rank> is_at_end{};
@@ -253,7 +266,7 @@ struct TensorPrinter {
 
       // is the ith element the end of an coeff (always true), of a row, of a matrix, ...?
       for (std::size_t k = 0; k < rank; k++) {
-        if ((i + 1) % (std::accumulate(_t.dimensions().rbegin(), _t.dimensions().rbegin() + k, 1,
+        if ((i + 1) % (std::accumulate(tensor.dimensions().rbegin(), tensor.dimensions().rbegin() + k, 1,
                                        std::multiplies<IndexType>())) ==
             0) {
           is_at_end[k] = true;
@@ -262,7 +275,7 @@ struct TensorPrinter {
 
       // is the ith element the begin of an coeff (always true), of a row, of a matrix, ...?
       for (std::size_t k = 0; k < rank; k++) {
-        if (i % (std::accumulate(_t.dimensions().rbegin(), _t.dimensions().rbegin() + k, 1,
+        if (i % (std::accumulate(tensor.dimensions().rbegin(), tensor.dimensions().rbegin() + k, 1,
                                  std::multiplies<IndexType>())) ==
             0) {
           is_at_begin[k] = true;
@@ -318,12 +331,20 @@ struct TensorPrinter {
       }
 
       s << prefix.str();
-      if (width) {
-        s.fill(fmt.fill);
-        s.width(width);
-        s << std::right;
+      // So we don't mess around with formatting, output scalar to a string stream, and adjust the width/fill manually.
+      std::stringstream sstr;
+      sstr.copyfmt(s);
+      ScalarPrinter<Scalar, Format>::run(sstr, static_cast<PrintType>(tensor.data()[i]), fmt);
+      std::string scalar_str = sstr.str();
+      IndexType scalar_width = scalar_str.length();
+      if (width && scalar_width < width) {
+        std::string filler;
+        for (IndexType j = scalar_width; j < width; ++j) {
+          filler.push_back(fmt.fill);
+        }
+        s << filler;
       }
-      s << _t.data()[i];
+      s << scalar_str;
       s << suffix.str();
       if (i < total_size - 1) {
         s << separator.str();
@@ -331,17 +352,32 @@ struct TensorPrinter {
     }
     s << fmt.tenSuffix;
     if (explicit_precision) s.precision(old_precision);
-    if (width) {
-      s.fill(old_fill_character);
-      s.width(old_width);
+  }
+};
+
+template <typename Tensor, std::size_t rank>
+struct TensorPrinter<Tensor, rank, TensorIOFormatLegacy, std::enable_if_t<rank != 0>> {
+  using Format = TensorIOFormatLegacy;
+  using Scalar = std::remove_const_t<typename Tensor::Scalar>;
+
+  static void run(std::ostream& s, const Tensor& tensor, const Format&) {
+    typedef typename Tensor::Index IndexType;
+    // backwards compatibility case: print tensor after reshaping to matrix of size dim(0) x
+    // (dim(1)*dim(2)*...*dim(rank-1)).
+    const IndexType total_size = internal::array_prod(tensor.dimensions());
+    if (total_size > 0) {
+      const IndexType first_dim = Eigen::internal::array_get<0>(tensor.dimensions());
+      Map<const Array<Scalar, Dynamic, Dynamic, Tensor::Layout>> matrix(tensor.data(), first_dim, total_size / first_dim);
+      s << matrix;
+      return;
     }
   }
 };
 
-template <typename Tensor>
-struct TensorPrinter<Tensor, 0> {
-  static void run(std::ostream& s, const Tensor& _t, const TensorIOFormat& fmt) {
-    typedef typename Tensor::Scalar Scalar;
+template <typename Tensor, typename Format>
+struct TensorPrinter<Tensor, 0, Format> {
+  static void run(std::ostream& s, const Tensor& tensor, const Format& fmt) {
+    using Scalar = std::remove_const_t<typename Tensor::Scalar>;
 
     std::streamsize explicit_precision;
     if (fmt.precision == StreamPrecision) {
@@ -358,8 +394,9 @@ struct TensorPrinter<Tensor, 0> {
 
     std::streamsize old_precision = 0;
     if (explicit_precision) old_precision = s.precision(explicit_precision);
-
-    s << fmt.tenPrefix << _t.coeff(0) << fmt.tenSuffix;
+    s << fmt.tenPrefix;
+    ScalarPrinter<Scalar, Format>::run(s, tensor.coeff(0), fmt);
+    s << fmt.tenSuffix;
     if (explicit_precision) s.precision(old_precision);
   }
 };

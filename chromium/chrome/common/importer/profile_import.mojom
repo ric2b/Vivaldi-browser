@@ -95,6 +95,8 @@ interface ProfileImportObserver {
   OnNotesImportGroup(array<ImportedNotesEntry> notes_group);
   OnSpeedDialImportStart(uint32 total_count);
   OnSpeedDialImportGroup(array<ImportedSpeedDialEntry> group);
+  OnExtensionsImportStart(uint32 total_count);
+  OnExtensionsImportGroup(array<string> group);
 };
 
 // This interface is used to control the import process.

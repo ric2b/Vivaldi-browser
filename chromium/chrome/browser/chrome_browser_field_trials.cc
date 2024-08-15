@@ -31,8 +31,6 @@
 #include "chrome/browser/android/flags/chrome_cached_flags.h"
 #include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "chrome/common/chrome_features.h"
-#else
-#include "chrome/browser/search_engine_choice/search_engine_choice_client_side_trial.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -47,7 +45,7 @@
 #endif
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
-#include "chrome/browser/ui/startup/default_browser_prompt_manager.h"
+#include "chrome/browser/ui/startup/default_browser_prompt/default_browser_prompt_trial.h"
 #endif
 
 ChromeBrowserFieldTrials::ChromeBrowserFieldTrials(PrefService* local_state)
@@ -58,7 +56,7 @@ ChromeBrowserFieldTrials::ChromeBrowserFieldTrials(PrefService* local_state)
 ChromeBrowserFieldTrials::~ChromeBrowserFieldTrials() = default;
 
 void ChromeBrowserFieldTrials::OnVariationsSetupComplete() {
-#if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
   // Persistent histograms must be enabled ASAP, but depends on Features.
   // For non-Fuchsia platforms, it is enabled earlier on, and is not controlled
   // by variations.
@@ -78,7 +76,7 @@ void ChromeBrowserFieldTrials::OnVariationsSetupComplete() {
       NOTREACHED();
     }
   }
-#endif  // BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 }
 
 void ChromeBrowserFieldTrials::SetUpClientSideFieldTrials(
@@ -100,10 +98,6 @@ void ChromeBrowserFieldTrials::SetUpClientSideFieldTrials(
   if (!has_seed) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     ash::multidevice_setup::CreateFirstRunFieldTrial(feature_list);
-#endif
-#if !BUILDFLAG(IS_ANDROID)
-    SearchEngineChoiceClientSideTrial::SetUpIfNeeded(
-        entropy_providers.default_entropy(), feature_list, local_state_);
 #endif
   }
 }
@@ -149,11 +143,9 @@ void ChromeBrowserFieldTrials::RegisterSyntheticTrials() {
     ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
         kBackgroundThreadPoolTrial, group_name);
   }
-#else
-  SearchEngineChoiceClientSideTrial::RegisterSyntheticTrials();
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
-  DefaultBrowserPromptManager::EnsureStickToDefaultBrowserPromptCohort();
+  DefaultBrowserPromptTrial::EnsureStickToDefaultBrowserPromptCohort();
 #endif
 }

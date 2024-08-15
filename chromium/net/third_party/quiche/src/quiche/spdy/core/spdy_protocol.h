@@ -22,6 +22,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/types/variant.h"
 #include "quiche/common/platform/api/quiche_export.h"
+#include "quiche/common/platform/api/quiche_flags.h"
 #include "quiche/common/platform/api/quiche_logging.h"
 #include "quiche/spdy/core/http2_header_block.h"
 #include "quiche/spdy/core/spdy_alt_svc_wire_format.h"
@@ -338,13 +339,13 @@ QUICHE_EXPORT extern const char* const kHttp2Npn;
 //   - 2 bytes for the name length (assuming new name).
 //   - 3 bytes for the value length.
 // TODO(b/322146543): Remove the `New` suffix with deprecation of
-// --gfe2_reloadable_flag_http2_add_hpack_overhead_bytes.
+// --gfe2_reloadable_flag_http2_add_hpack_overhead_bytes2.
 inline constexpr size_t kPerHeaderHpackOverheadNew = 6;
 // An estimate size of the HPACK overhead for each header field. 1 bytes for
 // indexed literal, 1 bytes for key literal and length encoding, and 2 bytes for
 // value literal and length encoding.
 // TODO(b/322146543): Remove with deprecation of
-// --gfe2_reloadable_flag_http2_add_hpack_overhead_bytes.
+// --gfe2_reloadable_flag_http2_add_hpack_overhead_bytes2.
 inline constexpr size_t kPerHeaderHpackOverheadOld = 4;
 
 // Names of pseudo-headers defined for HTTP/2 requests.
@@ -466,7 +467,8 @@ class QUICHE_EXPORT SpdyFrameIR {
   SpdyStreamId stream_id() const { return stream_id_; }
   virtual bool fin() const;
   // Returns an estimate of the size of the serialized frame, without applying
-  // compression. May not be exact.
+  // compression. May not be exact, but implementations should return the same
+  // value for a const frame.
   virtual size_t size() const = 0;
 
   // Returns the number of bytes of flow control window that would be consumed
@@ -755,6 +757,8 @@ class QUICHE_EXPORT SpdyHeadersIR : public SpdyFrameWithHeaderBlockIR {
   bool exclusive_ = false;
   bool padded_ = false;
   int padding_payload_len_ = 0;
+  const bool add_hpack_overhead_bytes_ =
+      GetQuicheReloadableFlag(http2_add_hpack_overhead_bytes2);
 };
 
 class QUICHE_EXPORT SpdyWindowUpdateIR : public SpdyFrameIR {
@@ -989,84 +993,41 @@ class QUICHE_EXPORT SpdyUnknownIR : public SpdyFrameIR {
 
 class QUICHE_EXPORT SpdySerializedFrame {
  public:
-  SpdySerializedFrame()
-      : frame_(const_cast<char*>("")), size_(0), owns_buffer_(false) {}
+  SpdySerializedFrame() : size_(0) {}
 
-  // Create a valid SpdySerializedFrame using a pre-created buffer.
-  // If |owns_buffer| is true, this class takes ownership of the buffer and will
-  // delete it on cleanup.  The buffer must have been created using new char[].
-  // If |owns_buffer| is false, the caller retains ownership of the buffer and
-  // is responsible for making sure the buffer outlives this frame.  In other
-  // words, this class does NOT create a copy of the buffer.
-  SpdySerializedFrame(char* data, size_t size, bool owns_buffer)
-      : frame_(data), size_(size), owns_buffer_(owns_buffer) {}
+  // Creates a valid SpdySerializedFrame using a pre-created buffer.
+  SpdySerializedFrame(std::unique_ptr<char[]> data, size_t size)
+      : frame_(std::move(data)), size_(size) {}
 
   SpdySerializedFrame(SpdySerializedFrame&& other)
-      : frame_(other.frame_),
-        size_(other.size_),
-        owns_buffer_(other.owns_buffer_) {
-    // |other| is no longer responsible for the buffer.
-    other.owns_buffer_ = false;
-  }
+      : frame_(std::move(other.frame_)), size_(other.size_) {}
+
   SpdySerializedFrame(const SpdySerializedFrame&) = delete;
   SpdySerializedFrame& operator=(const SpdySerializedFrame&) = delete;
 
   SpdySerializedFrame& operator=(SpdySerializedFrame&& other) {
-    // Free buffer if necessary.
-    if (owns_buffer_) {
-      delete[] frame_;
-    }
     // Take over |other|.
-    frame_ = other.frame_;
+    frame_ = std::move(other.frame_);
     size_ = other.size_;
-    owns_buffer_ = other.owns_buffer_;
-    // |other| is no longer responsible for the buffer.
-    other.owns_buffer_ = false;
     return *this;
   }
 
-  ~SpdySerializedFrame() {
-    if (owns_buffer_) {
-      delete[] frame_;
-    }
-  }
+  ~SpdySerializedFrame() = default;
 
   // Provides access to the frame bytes, which is a buffer containing the frame
   // packed as expected for sending over the wire.
-  char* data() const { return frame_; }
+  char* data() const { return frame_.get(); }
 
   // Returns the actual size of the underlying buffer.
   size_t size() const { return size_; }
 
   operator absl::string_view() const {
-    return absl::string_view{frame_, size_};
+    return absl::string_view{frame_.get(), size_};
   }
-
-  operator std::string() const { return std::string{frame_, size_}; }
-
-  // Returns a buffer containing the contents of the frame, of which the caller
-  // takes ownership, and clears this SpdySerializedFrame.
-  char* ReleaseBuffer() {
-    char* buffer;
-    if (owns_buffer_) {
-      // If the buffer is owned, relinquish ownership to the caller.
-      buffer = frame_;
-      owns_buffer_ = false;
-    } else {
-      // Otherwise, we need to make a copy to give to the caller.
-      buffer = new char[size_];
-      memcpy(buffer, frame_, size_);
-    }
-    *this = SpdySerializedFrame();
-    return buffer;
-  }
-
- protected:
-  char* frame_;
 
  private:
+  std::unique_ptr<char[]> frame_;
   size_t size_;
-  bool owns_buffer_;
 };
 
 // This interface is for classes that want to process SpdyFrameIRs without

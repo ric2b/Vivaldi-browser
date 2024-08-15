@@ -111,15 +111,13 @@ class Internals final : public ScriptWrappable {
   bool isLoading(const String& url);
   bool isLoadingFromMemoryCache(const String& url);
 
-  ScriptPromiseTyped<IDLLong> getInitialResourcePriority(
-      ScriptState*,
-      const String& url,
-      Document*,
-      bool new_load_only = false);
-  ScriptPromiseTyped<IDLLong> getInitialResourcePriorityOfNewLoad(
-      ScriptState*,
-      const String& url,
-      Document*);
+  ScriptPromise<IDLLong> getInitialResourcePriority(ScriptState*,
+                                                    const String& url,
+                                                    Document*,
+                                                    bool new_load_only = false);
+  ScriptPromise<IDLLong> getInitialResourcePriorityOfNewLoad(ScriptState*,
+                                                             const String& url,
+                                                             Document*);
   String getResourceHeader(const String& url, const String& header, Document*);
 
   bool doesWindowHaveUrlFragment(DOMWindow*);
@@ -390,9 +388,6 @@ class Internals final : public ScriptWrappable {
   int numberOfPages(float page_width_in_pixels,
                     float page_height_in_pixels,
                     ExceptionState&);
-  String pageProperty(String,
-                      unsigned,
-                      ExceptionState& = ASSERT_NO_EXCEPTION) const;
   float pageScaleFactor(ExceptionState&);
   void setPageScaleFactor(float scale_factor, ExceptionState&);
   void setPageScaleFactorLimits(float min_scale_factor,
@@ -437,7 +432,7 @@ class Internals final : public ScriptWrappable {
 
   DOMRectList* draggableRegions(Document*, ExceptionState&);
   DOMRectList* nonDraggableRegions(Document*, ExceptionState&);
-  void SetSupportsAppRegion(bool supports_app_region);
+  void SetSupportsDraggableRegions(bool supports_draggable_regions);
 
   DOMArrayBuffer* serializeObject(v8::Isolate* isolate,
                                   const ScriptValue&,
@@ -479,28 +474,28 @@ class Internals final : public ScriptWrappable {
 
   void setShouldRevealPassword(Element*, bool, ExceptionState&);
 
-  ScriptPromiseTyped<IDLAny> createResolvedPromise(ScriptState*, ScriptValue);
-  ScriptPromise createRejectedPromise(ScriptState*, ScriptValue);
-  ScriptPromise addOneToPromise(ScriptState*, ScriptPromise);
-  ScriptPromiseTyped<IDLAny> promiseCheck(ScriptState*,
-                                          int32_t,
-                                          bool,
-                                          const ScriptValue&,
-                                          const String&,
-                                          const Vector<String>&,
-                                          ExceptionState&);
-  ScriptPromiseTyped<IDLAny> promiseCheckWithoutExceptionState(
+  ScriptPromise<IDLAny> createResolvedPromise(ScriptState*, ScriptValue);
+  ScriptPromise<IDLAny> createRejectedPromise(ScriptState*, ScriptValue);
+  ScriptPromise<IDLAny> addOneToPromise(ScriptState*, ScriptPromiseUntyped);
+  ScriptPromise<IDLAny> promiseCheck(ScriptState*,
+                                     int32_t,
+                                     bool,
+                                     const ScriptValue&,
+                                     const String&,
+                                     const Vector<String>&,
+                                     ExceptionState&);
+  ScriptPromise<IDLAny> promiseCheckWithoutExceptionState(
       ScriptState*,
       const ScriptValue&,
       const String&,
       const Vector<String>&);
-  ScriptPromiseTyped<IDLAny> promiseCheckRange(ScriptState*, int32_t);
-  ScriptPromiseTyped<IDLAny> promiseCheckOverload(ScriptState*, Location*);
-  ScriptPromiseTyped<IDLAny> promiseCheckOverload(ScriptState*, Document*);
-  ScriptPromiseTyped<IDLAny> promiseCheckOverload(ScriptState*,
-                                                  Location*,
-                                                  int32_t,
-                                                  int32_t);
+  ScriptPromise<IDLAny> promiseCheckRange(ScriptState*, int32_t);
+  ScriptPromise<IDLAny> promiseCheckOverload(ScriptState*, Location*);
+  ScriptPromise<IDLAny> promiseCheckOverload(ScriptState*, Document*);
+  ScriptPromise<IDLAny> promiseCheckOverload(ScriptState*,
+                                             Location*,
+                                             int32_t,
+                                             int32_t);
 
   void Trace(Visitor*) const override;
 
@@ -531,6 +526,7 @@ class Internals final : public ScriptWrappable {
   // Return true if the given use counter exists for the given document.
   // |feature| must be one of the values from the WebFeature enum.
   bool isUseCounted(Document*, uint32_t feature);
+  bool isWebDXFeatureUseCounted(Document*, uint32_t feature);
   bool isCSSPropertyUseCounted(Document*, const String&);
   bool isAnimatedCSSPropertyUseCounted(Document*, const String&);
   void clearUseCounter(Document*, uint32_t feature);
@@ -542,9 +538,9 @@ class Internals final : public ScriptWrappable {
   // Observes changes on Document's UseCounter. Returns a promise that is
   // resolved when |feature| is counted. When |feature| was already counted,
   // it's immediately resolved.
-  ScriptPromiseTyped<IDLUndefined> observeUseCounter(ScriptState*,
-                                                     Document*,
-                                                     uint32_t feature);
+  ScriptPromise<IDLUndefined> observeUseCounter(ScriptState*,
+                                                Document*,
+                                                uint32_t feature);
 
   // Used by the iterable<>.
   unsigned length() const { return 5; }
@@ -631,6 +627,8 @@ class Internals final : public ScriptWrappable {
 
   void setAllowPerChunkTransferring(ReadableStream* stream);
   void setBackForwardCacheRestorationBufferSize(unsigned int maxSize);
+  void setEventTimingBufferSize(unsigned int maxSize);
+  void stopResponsivenessMetricsUkmSampling();
 
   InternalsUkmRecorder* initializeUKMRecorder();
 
@@ -638,14 +636,15 @@ class Internals final : public ScriptWrappable {
   // the LCPScriptObserver Probe.
   Vector<String> getCreatorScripts(HTMLImageElement* img);
 
-  ScriptPromiseTyped<IDLString> LCPPrediction(ScriptState*, Document* document);
+  ScriptPromise<IDLString> LCPPrediction(ScriptState*, Document* document);
 
-  ScriptPromise exemptUrlFromNetworkRevocation(ScriptState*, const String& url);
+  ScriptPromise<IDLUndefined> exemptUrlFromNetworkRevocation(ScriptState*,
+                                                             const String& url);
 
  private:
   Document* ContextDocument() const;
   Vector<String> IconURLs(Document*, int icon_types_mask) const;
-  DOMRectList* AnnotatedRegions(Document*, bool draggable, ExceptionState&);
+  DOMRectList* DraggableRegions(Document*, bool draggable, ExceptionState&);
   void HitTestRect(HitTestLocation&,
                    HitTestResult&,
                    int x,
@@ -658,9 +657,8 @@ class Internals final : public ScriptWrappable {
                            const String& marker_type,
                            unsigned index,
                            ExceptionState&);
-  void ResolveResourcePriority(ScriptPromiseResolverTyped<IDLLong>*,
+  void ResolveResourcePriority(ScriptPromiseResolver<IDLLong>*,
                                int resource_load_priority);
-  void ExemptUrlFromNetworkRevocationComplete(ScriptPromiseResolver* resolver);
 
   Member<InternalRuntimeFlags> runtime_flags_;
   Member<Document> document_;

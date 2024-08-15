@@ -38,7 +38,8 @@ def validate_content(content: str, source_file_dir: str,
         repo_root_dir: the repository's root directory; this is needed
                        to construct file paths to license files.
 
-    Returns: the validation results for the given content.
+    Returns: the validation results for the given content, sorted based
+             severity then message.
     """
     results = []
     dependencies = metadata.parse.parse_content(content)
@@ -50,7 +51,7 @@ def validate_content(content: str, source_file_dir: str,
         dependency_results = dependency.validate(
             source_file_dir=source_file_dir, repo_root_dir=repo_root_dir)
         results.extend(dependency_results)
-    return results
+    return sorted(results)
 
 
 def _construct_file_read_error(filepath: str, cause: str) -> vr.ValidationError:

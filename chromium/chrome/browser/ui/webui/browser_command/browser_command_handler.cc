@@ -106,7 +106,6 @@ void BrowserCommandHandler::CanExecuteCommand(
       break;
     case Command::kOpenNTPAndStartCustomizeChromeTutorial:
       can_execute = TutorialServiceExists() &&
-                    BrowserSupportsCustomizeChromeSidePanel() &&
                     DefaultSearchProviderIsGoogle();
       break;
     case Command::kStartPasswordManagerTutorial:
@@ -261,10 +260,6 @@ void BrowserCommandHandler::OpenAISettings() {
                               chrome::kExperimentalAISettingsSubPage);
 }
 
-bool BrowserCommandHandler::BrowserSupportsCustomizeChromeSidePanel() {
-  return base::FeatureList::IsEnabled(features::kCustomizeChromeSidePanel);
-}
-
 bool BrowserCommandHandler::DefaultSearchProviderIsGoogle() {
   return search::DefaultSearchProviderIsGoogle(profile_);
 }
@@ -274,15 +269,13 @@ bool BrowserCommandHandler::BrowserSupportsSavedTabGroups() {
 
   // Duplicated from chrome/browser/ui/views/bookmarks/bookmark_bar_view.cc
   // Which cannot be included here
-  return base::FeatureList::IsEnabled(features::kTabGroupsSave) &&
-         browser->profile()->IsRegularProfile();
+  return browser->profile()->IsRegularProfile();
 }
 
 void BrowserCommandHandler::OpenNTPAndStartCustomizeChromeTutorial() {
   auto* tutorial_id = kSidePanelCustomizeChromeTutorialId;
 
-  if (BrowserSupportsCustomizeChromeSidePanel() &&
-      DefaultSearchProviderIsGoogle()) {
+  if (DefaultSearchProviderIsGoogle()) {
     StartTutorialInPage::Params params;
     params.tutorial_id = tutorial_id;
     params.callback = base::BindOnce(&BrowserCommandHandler::OnTutorialStarted,

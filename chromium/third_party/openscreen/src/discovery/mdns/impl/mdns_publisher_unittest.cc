@@ -35,7 +35,7 @@ bool ContainsRecord(const std::vector<MdnsRecord::ConstRef>& records,
 
 class MockMdnsSender : public MdnsSender {
  public:
-  explicit MockMdnsSender(UdpSocket* socket) : MdnsSender(socket) {}
+  explicit MockMdnsSender(UdpSocket& socket) : MdnsSender(socket) {}
 
   MOCK_METHOD1(SendMulticast, Error(const MdnsMessage& message));
   MOCK_METHOD2(SendMessage,
@@ -70,10 +70,10 @@ class MdnsPublisherTest : public testing::Test {
  public:
   MdnsPublisherTest()
       : clock_(Clock::now()),
-        task_runner_(&clock_),
-        sender_(&socket_),
-        publisher_(&sender_,
-                   &probe_manager_,
+        task_runner_(clock_),
+        sender_(socket_),
+        publisher_(sender_,
+                   probe_manager_,
                    task_runner_,
                    FakeClock::now,
                    config_) {}

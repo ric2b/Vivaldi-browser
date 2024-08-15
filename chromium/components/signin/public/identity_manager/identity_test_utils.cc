@@ -5,11 +5,11 @@
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 
 #include <optional>
+#include <string_view>
 #include <vector>
 
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
-#include "base/strings/string_piece.h"
 #include "base/uuid.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -72,7 +72,9 @@ void UpdateRefreshTokenForAccount(
     AccountTrackerService* account_tracker_service,
     IdentityManager* identity_manager,
     const CoreAccountId& account_id,
-    const std::string& new_token) {
+    const std::string& new_token,
+    signin_metrics::SourceForRefreshTokenOperation source =
+        signin_metrics::SourceForRefreshTokenOperation::kUnknown) {
   DCHECK_EQ(account_tracker_service->GetAccountInfo(account_id).account_id,
             account_id)
       << "To set the refresh token for an unknown account, use "
@@ -89,7 +91,8 @@ void UpdateRefreshTokenForAccount(
   token_updated_observer.SetOnRefreshTokenUpdatedCallback(
       run_loop.QuitClosure());
 
-  // TODO(crbug.com/1226041): simplify this when all Lacros Profiles use Mirror.
+  // TODO(crbug.com/40776160): simplify this when all Lacros Profiles use
+  // Mirror.
 #if BUILDFLAG(IS_CHROMEOS)
   if (ShouldUseAccountManagerFacade(identity_manager)) {
     const AccountInfo& account_info =
@@ -103,7 +106,7 @@ void UpdateRefreshTokenForAccount(
   } else
 #endif  // BUILDFLAG(IS_CHROMEOS)
   {
-    token_service->UpdateCredentials(account_id, new_token);
+    token_service->UpdateCredentials(account_id, new_token, source);
   }
 
   run_loop.Run();
@@ -127,14 +130,14 @@ void CompareErrorStatusAndCallClosure(
 
 // --- AccountAvailabilityOptions ----------------------------------------------
 
-AccountAvailabilityOptions::AccountAvailabilityOptions(base::StringPiece email)
+AccountAvailabilityOptions::AccountAvailabilityOptions(std::string_view email)
     : email(email) {
   CHECK(!email.empty());
 }
 
 AccountAvailabilityOptions::AccountAvailabilityOptions(
-    base::StringPiece email,
-    base::StringPiece gaia_id,
+    std::string_view email,
+    std::string_view gaia_id,
     std::optional<ConsentLevel> consent_level,
     std::optional<std::string> refresh_token,
     raw_ptr<network::TestURLLoaderFactory> url_loader_factory_for_cookies,
@@ -178,7 +181,7 @@ AccountAvailabilityOptionsBuilder& AccountAvailabilityOptionsBuilder::AsPrimary(
 }
 
 AccountAvailabilityOptionsBuilder&
-AccountAvailabilityOptionsBuilder::WithGaiaId(base::StringPiece gaia_id) {
+AccountAvailabilityOptionsBuilder::WithGaiaId(std::string_view gaia_id) {
   CHECK(!gaia_id.empty());
   gaia_id_ = gaia_id;
   return *this;
@@ -194,7 +197,7 @@ AccountAvailabilityOptionsBuilder::WithCookie(bool with_cookie) {
 
 AccountAvailabilityOptionsBuilder&
 AccountAvailabilityOptionsBuilder::WithRefreshToken(
-    base::StringPiece refresh_token) {
+    std::string_view refresh_token) {
   refresh_token_ = refresh_token;
   return *this;
 }
@@ -213,7 +216,7 @@ AccountAvailabilityOptionsBuilder::WithAccessPoint(
 }
 
 AccountAvailabilityOptions AccountAvailabilityOptionsBuilder::Build(
-    base::StringPiece email) {
+    std::string_view email) {
   return AccountAvailabilityOptions(
       email, gaia_id_, primary_account_consent_level_, refresh_token_,
       with_cookie_ ? url_loader_factory_for_cookies_ : nullptr, access_point_);
@@ -282,12 +285,13 @@ void SetRefreshTokenForPrimaryAccount(IdentityManager* identity_manager,
 }
 
 void SetInvalidRefreshTokenForPrimaryAccount(
-    IdentityManager* identity_manager) {
+    IdentityManager* identity_manager,
+    signin_metrics::SourceForRefreshTokenOperation source) {
   DCHECK(identity_manager->HasPrimaryAccount(ConsentLevel::kSignin));
   CoreAccountId account_id =
       identity_manager->GetPrimaryAccountId(ConsentLevel::kSignin);
 
-  SetInvalidRefreshTokenForAccount(identity_manager, account_id);
+  SetInvalidRefreshTokenForAccount(identity_manager, account_id, source);
 }
 
 void RemoveRefreshTokenForPrimaryAccount(IdentityManager* identity_manager) {
@@ -462,12 +466,14 @@ void SetRefreshTokenForAccount(IdentityManager* identity_manager,
           : token_value);
 }
 
-void SetInvalidRefreshTokenForAccount(IdentityManager* identity_manager,
-                                      const CoreAccountId& account_id) {
+void SetInvalidRefreshTokenForAccount(
+    IdentityManager* identity_manager,
+    const CoreAccountId& account_id,
+    signin_metrics::SourceForRefreshTokenOperation source) {
   UpdateRefreshTokenForAccount(identity_manager->GetTokenService(),
                                identity_manager->GetAccountTrackerService(),
                                identity_manager, account_id,
-                               GaiaConstants::kInvalidRefreshToken);
+                               GaiaConstants::kInvalidRefreshToken, source);
 }
 
 void RemoveRefreshTokenForAccount(IdentityManager* identity_manager,
@@ -480,7 +486,8 @@ void RemoveRefreshTokenForAccount(IdentityManager* identity_manager,
   token_updated_observer.SetOnRefreshTokenRemovedCallback(
       run_loop.QuitClosure());
 
-  // TODO(crbug.com/1226041): simplify this when all Lacros Profiles use Mirror.
+  // TODO(crbug.com/40776160): simplify this when all Lacros Profiles use
+  // Mirror.
 #if BUILDFLAG(IS_CHROMEOS)
   if (ShouldUseAccountManagerFacade(identity_manager)) {
     const AccountInfo& account_info =
@@ -546,7 +553,7 @@ void SetCookieAccounts(
   // Clears cached LIST_ACCOUNTS requests, so that the new request can trigger
   // the observers instead of being assumed as having an identical result as the
   // previous one.
-  // TODO(crbug.com/1457501): Investigate replacing this by
+  // TODO(crbug.com/40273636): Investigate replacing this by
   // `cookie_manager->ForceOnCookieChangeProcessing()`.
   cookie_manager->CancelAll();
   cookie_manager->ListAccounts(nullptr, nullptr);
@@ -555,7 +562,7 @@ void SetCookieAccounts(
 }
 
 AccountInfo WithGeneratedUserInfo(const AccountInfo& base_account_info,
-                                  base::StringPiece given_name) {
+                                  std::string_view given_name) {
   CHECK(!given_name.empty())
       << "A given name is needed to generate the Gaia info.";
 
@@ -645,11 +652,6 @@ void WaitForErrorStateOfRefreshTokenUpdatedForAccount(
 void DisableAccessTokenFetchRetries(IdentityManager* identity_manager) {
   identity_manager->GetTokenService()
       ->set_max_authorization_token_fetch_retries_for_testing(0);
-}
-
-void EnableAccountCapabilitiesFetches(IdentityManager* identity_manager) {
-  identity_manager->GetAccountFetcherService()
-      ->EnableAccountCapabilitiesFetcherForTest(true);
 }
 
 #if BUILDFLAG(IS_ANDROID)

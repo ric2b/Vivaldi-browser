@@ -25,6 +25,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_HTML_FORMS_HTML_OPTIONS_COLLECTION_H_
 
 #include "third_party/blink/renderer/core/html/forms/html_data_list_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_opt_group_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_option_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/html_collection.h"
@@ -93,8 +94,13 @@ inline bool HTMLOptionsCollection::ElementMatches(
   if (RuntimeEnabledFeatures::StylableSelectEnabled()) {
     if (auto* datalist =
             To<HTMLSelectElement>(RootNode()).FirstChildDatalist()) {
-      if (element.IsDescendantOf(datalist)) {
-        return true;
+      for (auto* ancestor = element.parentNode(); ancestor;
+           ancestor = ancestor->parentNode()) {
+        if (ancestor == datalist) {
+          return true;
+        } else if (IsA<HTMLSelectElement>(ancestor)) {
+          break;
+        }
       }
     }
   }

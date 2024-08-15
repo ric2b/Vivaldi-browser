@@ -32,6 +32,9 @@
 #include "components/omnibox/browser/suggestion_answer.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/omnibox/common/omnibox_features.h"
+#include "components/search_engines/template_url.h"
+#include "components/search_engines/template_url_data.h"
+#include "components/search_engines/template_url_starter_pack_data.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/prerender_test_util.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -79,17 +82,35 @@ IN_PROC_BROWSER_TEST_P(BrowserTestWithParam, MatchVectorIcons) {
        type != AutocompleteMatchType::NUM_TYPES; type++) {
     AutocompleteMatch match;
     match.type = static_cast<AutocompleteMatchType::Type>(type);
-    const bool is_bookmark = BrowserTestWithParam::GetParam().first;
-    const gfx::VectorIcon& vector_icon = match.GetVectorIcon(is_bookmark);
-    const std::string& svg_name =
-        RealboxHandler::AutocompleteMatchVectorIconToResourceName(vector_icon);
-    if (vector_icon.is_empty()) {
-      // An empty resource name is effectively a blank icon.
-      EXPECT_TRUE(svg_name.empty());
-    } else if (is_bookmark) {
-      EXPECT_EQ("//resources/images/icon_bookmark.svg", svg_name);
+    if (match.type == AutocompleteMatchType::STARTER_PACK) {
+      // All STARTER_PACK suggestions should have non-empty vector icons.
+      for (int starter_pack_id = TemplateURLStarterPackData::kBookmarks;
+           starter_pack_id != TemplateURLStarterPackData::kMaxStarterPackID;
+           starter_pack_id++) {
+        TemplateURLData turl_data;
+        turl_data.starter_pack_id = starter_pack_id;
+        TemplateURL turl(turl_data);
+        const gfx::VectorIcon& vector_icon =
+            match.GetVectorIcon(/*is_bookmark=*/false, &turl);
+        const std::string& svg_name =
+            RealboxHandler::AutocompleteMatchVectorIconToResourceName(
+                vector_icon);
+        EXPECT_FALSE(svg_name.empty());
+      }
     } else {
-      EXPECT_FALSE(svg_name.empty());
+      const bool is_bookmark = BrowserTestWithParam::GetParam().first;
+      const gfx::VectorIcon& vector_icon = match.GetVectorIcon(is_bookmark);
+      const std::string& svg_name =
+          RealboxHandler::AutocompleteMatchVectorIconToResourceName(
+              vector_icon);
+      if (vector_icon.is_empty()) {
+        // An empty resource name is effectively a blank icon.
+        EXPECT_TRUE(svg_name.empty());
+      } else if (is_bookmark) {
+        EXPECT_EQ("//resources/images/icon_bookmark.svg", svg_name);
+      } else {
+        EXPECT_FALSE(svg_name.empty());
+      }
     }
   }
 }
@@ -127,7 +148,7 @@ IN_PROC_BROWSER_TEST_P(BrowserTestWithParam, PedalVectorIcons) {
     const scoped_refptr<OmniboxPedal> pedal = it.second;
     const gfx::VectorIcon& vector_icon = pedal->GetVectorIcon();
     const std::string& svg_name =
-        RealboxHandler::PedalVectorIconToResourceName(vector_icon);
+        RealboxHandler::ActionVectorIconToResourceName(vector_icon);
     EXPECT_FALSE(svg_name.empty());
   }
 }
@@ -143,7 +164,7 @@ IN_PROC_BROWSER_TEST_P(BrowserTestWithParam, ActionVectorIcons) {
   for (auto const& action : actions) {
     const gfx::VectorIcon& vector_icon = action->GetVectorIcon();
     const std::string& svg_name =
-        RealboxHandler::PedalVectorIconToResourceName(vector_icon);
+        RealboxHandler::ActionVectorIconToResourceName(vector_icon);
     EXPECT_FALSE(svg_name.empty());
   }
 }
@@ -163,7 +184,7 @@ class RealboxSearchPreloadBrowserTest : public SearchPrefetchBaseBrowserTest {
         /*disabled_features=*/{kSearchPrefetchBlockBeforeHeaders});
   }
 
-  // TODO(crbug.com/1491942): This fails with the field trial testing config.
+  // TODO(crbug.com/40285326): This fails with the field trial testing config.
   void SetUpCommandLine(base::CommandLine* command_line) override {
     SearchPrefetchBaseBrowserTest::SetUpCommandLine(command_line);
     command_line->AppendSwitch("disable-field-trial-config");
@@ -175,29 +196,32 @@ class RealboxSearchPreloadBrowserTest : public SearchPrefetchBaseBrowserTest {
 };
 
 // A sink instance that allows Realbox to make IPC without failing DCHECK.
-class RealboxSearchBrowserTestPage : public omnibox::mojom::Page {
+class RealboxSearchBrowserTestPage : public searchbox::mojom::Page {
  public:
-  // omnibox::mojom::Page
+  // searchbox::mojom::Page
   void AutocompleteResultChanged(
-      omnibox::mojom::AutocompleteResultPtr result) override {}
+      searchbox::mojom::AutocompleteResultPtr result) override {}
   void UpdateSelection(
-      omnibox::mojom::OmniboxPopupSelectionPtr old_selection,
-      omnibox::mojom::OmniboxPopupSelectionPtr selection) override {}
-  mojo::PendingRemote<omnibox::mojom::Page> GetRemotePage() {
+      searchbox::mojom::OmniboxPopupSelectionPtr old_selection,
+      searchbox::mojom::OmniboxPopupSelectionPtr selection) override {}
+  void SetInputText(const std::string& input_text) override {}
+  void SetThumbnail(const std::string& thumbnail_url) override {}
+  mojo::PendingRemote<searchbox::mojom::Page> GetRemotePage() {
     return receiver_.BindNewPipeAndPassRemote();
   }
 
  private:
-  mojo::Receiver<omnibox::mojom::Page> receiver_{this};
+  mojo::Receiver<searchbox::mojom::Page> receiver_{this};
 };
 
 // Tests the realbox input can trigger prerender and prefetch.
 IN_PROC_BROWSER_TEST_F(RealboxSearchPreloadBrowserTest, SearchPreloadSuccess) {
-  mojo::Remote<omnibox::mojom::PageHandler> remote_page_handler;
+  mojo::Remote<searchbox::mojom::PageHandler> remote_page_handler;
   RealboxSearchBrowserTestPage page;
   RealboxHandler realbox_handler = RealboxHandler(
       remote_page_handler.BindNewPipeAndPassReceiver(), browser()->profile(),
       GetWebContents(), /*metrics_reporter=*/nullptr,
+      /*lens_searchbox_client=*/nullptr,
       /*omnibox_controller=*/nullptr);
   realbox_handler.SetPage(page.GetRemotePage());
   content::test::PrerenderHostRegistryObserver registry_observer(

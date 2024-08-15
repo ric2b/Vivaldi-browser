@@ -169,7 +169,6 @@
 <translation id="7353601530677266744">命令行</translation>
 <translation id="7364115444476960850">您尝试访问的页面被Vivaldi的<ph name="BLOCKER_NAME" />阻止</translation>
 <translation id="7419106976560586862">配置文件路径</translation>
-<translation id="7445762425076701745">无法完全验证您所连接到的服务器的身份。您在连接服务器时使用的服务器名称仅在您的网络中有效，而外部证书授权中心无法验证该名称的所有权。由于一些证书授权中心仍然会为这些名称颁发证书，因此无法确保您连接到想要访问的网站而不是攻击网站。</translation>
 <translation id="7455133967321480974">使用全局默认设置（阻止）</translation>
 <translation id="7518003948725431193">找不到与以下网址对应的网页：<ph name="URL" /></translation>
 <translation id="7549584377607005141">此网页需要使用您之前输入的数据才能正常显示。您可以重新发送这些数据，不过，这么做会重复执行此网页之前执行过的所有操作。</translation>

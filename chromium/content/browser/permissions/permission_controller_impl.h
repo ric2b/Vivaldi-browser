@@ -85,11 +85,13 @@ class CONTENT_EXPORT PermissionControllerImpl : public PermissionController {
       RenderProcessHost* render_process_host,
       RenderFrameHost* render_frame_host,
       const GURL& requesting_origin,
+      bool should_include_device_status,
       const base::RepeatingCallback<void(PermissionStatus)>& callback);
   SubscriptionId SubscribeToPermissionStatusChange(
       PermissionType permission,
       RenderProcessHost* render_process_host,
       const url::Origin& requesting_origin,
+      bool should_include_device_status,
       const base::RepeatingCallback<void(PermissionStatus)>& callback) override;
 
   void UnsubscribeFromPermissionStatusChange(
@@ -118,6 +120,11 @@ class CONTENT_EXPORT PermissionControllerImpl : public PermissionController {
                                                const GURL& requesting_origin,
                                                const GURL& embedding_origin);
 
+  PermissionStatus GetPermissionStatusForCurrentDocumentInternal(
+      PermissionType permission,
+      RenderFrameHost* render_frame_host,
+      bool should_include_device_status = false);
+
   // PermissionController implementation.
   PermissionStatus GetPermissionStatusForWorker(
       PermissionType permission,
@@ -137,8 +144,8 @@ class CONTENT_EXPORT PermissionControllerImpl : public PermissionController {
       const url::Origin& requesting_origin,
       const url::Origin& embedding_origin) override;
   // WARNING: Permission requests order is not guaranteed.
-  // TODO(crbug.com/1363094): Migrate to `std::set`.
-  // TODO(crbug.com/1462930): `RequestPermissions` and
+  // TODO(crbug.com/40864728): Migrate to `std::set`.
+  // TODO(crbug.com/40275129): `RequestPermissions` and
   // `RequestPermissionsFromCurrentDocument` do exactly the same things. Merge
   // them together.
   void RequestPermissions(
@@ -150,7 +157,7 @@ class CONTENT_EXPORT PermissionControllerImpl : public PermissionController {
       PermissionRequestDescription request_description,
       base::OnceCallback<void(PermissionStatus)> callback) override;
   // WARNING: Permission requests order is not guaranteed.
-  // TODO(crbug.com/1363094): Migrate to `std::set`.
+  // TODO(crbug.com/40864728): Migrate to `std::set`.
   void RequestPermissionsFromCurrentDocument(
       RenderFrameHost* render_frame_host,
       PermissionRequestDescription request_description,
@@ -163,6 +170,13 @@ class CONTENT_EXPORT PermissionControllerImpl : public PermissionController {
       blink::PermissionType permission,
       RenderFrameHost* render_frame_host,
       const url::Origin& requesting_origin);
+
+  // The method does the same as `GetPermissionStatusForCurrentDocument` but it
+  // also takes into account the device's status (OS permission status).
+  // Currently, this function is only used for Page Embedded Permission Control.
+  PermissionStatus GetCombinedPermissionAndDeviceStatus(
+      PermissionType permission,
+      RenderFrameHost* render_frame_host);
 
   struct Subscription;
   using SubscriptionsMap =

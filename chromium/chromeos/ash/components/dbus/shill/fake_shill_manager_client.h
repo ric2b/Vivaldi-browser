@@ -87,12 +87,22 @@ class COMPONENT_EXPORT(SHILL_CLIENT) FakeShillManagerClient
                       ErrorCallback error_callback) override;
 
   void CreateP2PGroup(
-      const base::Value::Dict& properties,
+      const CreateP2PGroupParameter& create_group_argument,
       base::OnceCallback<void(base::Value::Dict result)> callback,
       ErrorCallback error_callback) override;
 
   void ConnectToP2PGroup(
-      const base::Value::Dict& properties,
+      const ConnectP2PGroupParameter& connect_group_argument,
+      base::OnceCallback<void(base::Value::Dict result)> callback,
+      ErrorCallback error_callback) override;
+
+  void DestroyP2PGroup(
+      const int shill_id,
+      base::OnceCallback<void(base::Value::Dict result)> callback,
+      ErrorCallback error_callback) override;
+
+  void DisconnectFromP2PGroup(
+      const int shill_id,
       base::OnceCallback<void(base::Value::Dict result)> callback,
       ErrorCallback error_callback) override;
 
@@ -138,11 +148,25 @@ class COMPONENT_EXPORT(SHILL_CLIENT) FakeShillManagerClient
   void SetSimulateCheckTetheringReadinessResult(
       FakeShillSimulatedResult tethering_readiness_result,
       const std::string& readiness_status) override;
+  void SetSimulateCreateP2PGroupResult(
+      FakeShillSimulatedResult operation_result,
+      const std::string& result_code) override;
+  void SetSimulateDestroyP2PGroupResult(
+      FakeShillSimulatedResult operation_result,
+      const std::string& result_code) override;
+  void SetSimulateConnectToP2PGroupResult(
+      FakeShillSimulatedResult operation_result,
+      const std::string& result_code) override;
+  void SetSimulateDisconnectFromP2PGroupResult(
+      FakeShillSimulatedResult operation_result,
+      const std::string& result_code) override;
   base::Value::List GetEnabledServiceList() const override;
   void ClearProfiles() override;
   void SetShouldReturnNullProperties(bool value) override;
   void SetWifiServicesVisibleByDefault(
       bool wifi_services_visible_by_default) override;
+  int GetRecentlyDestroyedP2PGroupId() override;
+  int GetRecentlyDisconnectedP2PGroupId() override;
 
   // Constants used for testing.
   static const char kFakeEthernetNetworkGuid[];
@@ -221,6 +245,20 @@ class COMPONENT_EXPORT(SHILL_CLIENT) FakeShillManagerClient
   FakeShillSimulatedResult simulate_check_tethering_readiness_result_ =
       FakeShillSimulatedResult::kSuccess;
   std::string simulate_tethering_readiness_status_;
+  FakeShillSimulatedResult simulate_create_p2p_group_result_ =
+      FakeShillSimulatedResult::kSuccess;
+  std::string simulate_create_p2p_group_result_code_;
+  FakeShillSimulatedResult simulate_destroy_p2p_group_result_ =
+      FakeShillSimulatedResult::kSuccess;
+  std::string simulate_destroy_p2p_group_result_code_;
+  int recent_destroyed_group_id = -1;
+  FakeShillSimulatedResult simulate_connect_p2p_group_result_ =
+      FakeShillSimulatedResult::kSuccess;
+  std::string simulate_connect_p2p_group_result_code_;
+  int recent_disconnected_group_id = -1;
+  FakeShillSimulatedResult simulate_disconnect_p2p_group_result_ =
+      FakeShillSimulatedResult::kSuccess;
+  std::string simulate_disconnect_p2p_group_result_code_;
 
   bool return_null_properties_ = false;
   bool wifi_services_visible_by_default_ = true;

@@ -505,4 +505,29 @@ TEST_P(PrePaintTreeWalkTest, InlineOutlineWithContinuationPaintInvalidation) {
   UpdateAllLifecyclePhasesForTest();
 }
 
+TEST_P(PrePaintTreeWalkTest, ScrollTranslationNodeForNonZeroScrollPosition) {
+  SetBodyInnerHTML(R"HTML(
+    <div id="div" style="overflow:hidden;max-width:5ch;direction:rtl">
+      loremipsumdolorsitamet
+    </div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+
+  auto* scroller = GetDocument().getElementById(AtomicString("div"));
+  auto* object = To<LayoutBoxModelObject>(scroller->GetLayoutObject());
+  auto* scrollable_area = object->GetScrollableArea();
+
+  ASSERT_EQ(ScrollOffset(), scrollable_area->GetScrollOffset());
+  ASSERT_NE(gfx::PointF(), scrollable_area->ScrollPosition());
+  EXPECT_TRUE(object->FirstFragment().PaintProperties()->ScrollTranslation());
+
+  // When the scroll is scrolled all the way to the end of content it should
+  // still get a scroll node.
+  scroller->scrollBy(-10000, 0);
+  UpdateAllLifecyclePhasesForTest();
+  ASSERT_NE(ScrollOffset(), scrollable_area->GetScrollOffset());
+  ASSERT_EQ(gfx::PointF(), scrollable_area->ScrollPosition());
+  EXPECT_TRUE(object->FirstFragment().PaintProperties()->ScrollTranslation());
+}
+
 }  // namespace blink

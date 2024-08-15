@@ -10,6 +10,7 @@
 #include "discovery/dnssd/public/dns_sd_instance.h"
 #include "discovery/dnssd/public/dns_sd_txt_record.h"
 #include "discovery/public/dns_sd_service_factory.h"
+#include "osp/impl/osp_constants.h"
 #include "osp/public/service_info.h"
 #include "platform/base/macros.h"
 #include "util/osp_logging.h"
@@ -20,15 +21,13 @@ using State = ServicePublisher::State;
 
 namespace {
 
-constexpr char kFriendlyNameTxtKey[] = "fn";
-constexpr char kDnsSdDomainId[] = "local";
-
 discovery::DnsSdInstance ServiceConfigToDnsSdInstance(
     const ServicePublisher::Config& config) {
   discovery::DnsSdTxtRecord txt;
   const bool did_set_everything =
-      txt.SetValue(kFriendlyNameTxtKey, config.friendly_name).ok();
-  OSP_DCHECK(did_set_everything);
+      txt.SetValue(kFriendlyNameTxtKey, config.friendly_name).ok() &&
+      txt.SetValue(kFingerprint, config.fingerprint).ok();
+  OSP_CHECK(did_set_everything);
 
   // NOTE: Not totally clear how we should be using config.hostname, which in
   // principle is already part of config.service_instance_name.
@@ -69,21 +68,21 @@ void DnsSdPublisherClient::StopPublisher() {
 }
 
 void DnsSdPublisherClient::SuspendPublisher() {
-  OSP_DCHECK(dns_sd_publisher_);
+  OSP_CHECK(dns_sd_publisher_);
   dns_sd_publisher_->DeregisterAll();
   SetState(State::kSuspended);
 }
 
 void DnsSdPublisherClient::ResumePublisher(
     const ServicePublisher::Config& config) {
-  OSP_DCHECK(dns_sd_publisher_);
+  OSP_CHECK(dns_sd_publisher_);
   dns_sd_publisher_->Register(config);
   SetState(State::kRunning);
 }
 
 void DnsSdPublisherClient::StartPublisherInternal(
     const ServicePublisher::Config& config) {
-  OSP_DCHECK(!dns_sd_publisher_);
+  OSP_CHECK(!dns_sd_publisher_);
   if (!dns_sd_service_) {
     dns_sd_service_ = CreateDnsSdServiceInternal(config);
   }
@@ -110,7 +109,7 @@ DnsSdPublisherClient::CreateDnsSdServiceInternal(
   // discovery::DnsSdService, e.g. through a ref-counting handle, so that the
   // OSP publisher and the OSP listener don't have to coordinate through an
   // additional object.
-  return CreateDnsSdService(task_runner_, publisher_, dns_sd_config);
+  return CreateDnsSdService(task_runner_, *publisher_, dns_sd_config);
 }
 
 }  // namespace openscreen::osp

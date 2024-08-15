@@ -30,7 +30,6 @@ limitations under the License.
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
-#include "xla/stream_executor/device_options.h"
 #include "xla/stream_executor/gpu/gpu_types.h"
 #include "xla/stream_executor/platform.h"
 
@@ -244,7 +243,6 @@ class GpuDriver {
   // userspace processes is given here:
   // http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html#group__CUDA__CTX_1g65dc0012348bc84810e2103a40d8e2cf
   static absl::Status CreateContext(int device_ordinal, GpuDeviceHandle device,
-                                    const DeviceOptions& device_options,
                                     GpuContext** context);
 
   // Destroys the provided context via cuCtxDestroy.
@@ -252,10 +250,6 @@ class GpuDriver {
   // bad things will happen.
   // http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html#group__CUDA__CTX_1g27a365aebb0eb548166309f58a1e8b8e
   static void DestroyContext(GpuContext* context);
-
-  // Returns the context handle (CUcontext for CUDA and hipCtx_t for ROCm) of a
-  // GpuContext.
-  static GpuContextHandle GetContextHandle(GpuContext* context);
 
   // Queries the runtime for the specified attribute of the specified function.
   // cuFuncGetAttribute (the underlying CUDA driver API routine) only operates

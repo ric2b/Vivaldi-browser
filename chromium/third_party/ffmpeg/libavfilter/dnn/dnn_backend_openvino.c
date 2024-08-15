@@ -27,6 +27,7 @@
 #include "libavformat/avio.h"
 #include "libavutil/avassert.h"
 #include "libavutil/cpu.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/avstring.h"
 #include "libavutil/detection_bbox.h"
@@ -1198,7 +1199,7 @@ static int contain_valid_detection_bbox(AVFrame *frame)
         if (bbox->x < 0 || bbox->w < 0 || bbox->x + bbox->w >= frame->width) {
             return 0;
         }
-        if (bbox->y < 0 || bbox->h < 0 || bbox->y + bbox->h >= frame->width) {
+        if (bbox->y < 0 || bbox->h < 0 || bbox->y + bbox->h >= frame->height) {
             return 0;
         }
 

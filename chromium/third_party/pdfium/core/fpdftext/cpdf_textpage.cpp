@@ -4,6 +4,11 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "core/fpdftext/cpdf_textpage.h"
 
 #include <math.h>
@@ -623,14 +628,11 @@ void CPDF_TextPage::ProcessObject() {
   m_TextlineDir = FindTextlineFlowOrientation();
   for (auto it = m_pPage->begin(); it != m_pPage->end(); ++it) {
     CPDF_PageObject* pObj = it->get();
-    if (!pObj)
-      continue;
-
-    CFX_Matrix matrix;
-    if (pObj->IsText())
-      ProcessTextObject(pObj->AsText(), matrix, m_pPage, it);
-    else if (pObj->IsForm())
-      ProcessFormObject(pObj->AsForm(), matrix);
+    if (pObj->IsText()) {
+      ProcessTextObject(pObj->AsText(), CFX_Matrix(), m_pPage, it);
+    } else if (pObj->IsForm()) {
+      ProcessFormObject(pObj->AsForm(), CFX_Matrix());
+    }
   }
   for (const auto& obj : mTextObjects)
     ProcessTextObject(obj);
@@ -645,13 +647,11 @@ void CPDF_TextPage::ProcessFormObject(CPDF_FormObject* pFormObj,
   const CPDF_PageObjectHolder* pHolder = pFormObj->form();
   for (auto it = pHolder->begin(); it != pHolder->end(); ++it) {
     CPDF_PageObject* pPageObj = it->get();
-    if (!pPageObj)
-      continue;
-
-    if (pPageObj->IsText())
+    if (pPageObj->IsText()) {
       ProcessTextObject(pPageObj->AsText(), curFormMatrix, pHolder, it);
-    else if (pPageObj->IsForm())
+    } else if (pPageObj->IsForm()) {
       ProcessFormObject(pPageObj->AsForm(), curFormMatrix);
+    }
   }
 }
 

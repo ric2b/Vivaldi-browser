@@ -34,23 +34,43 @@ bool test_is_equal_or_nans(const T& actual, const U& expected) {
 #define VERIFY_IS_EQUAL_OR_NANS(a, b) VERIFY(test_is_equal_or_nans(a, b))
 
 template <typename T>
+void check_negate() {
+  Index size = 1000;
+  for (Index i = 0; i < size; i++) {
+    T val = i == 0 ? T(0) : internal::random<T>(T(0), NumTraits<T>::highest());
+    T neg_val = numext::negate(val);
+    VERIFY_IS_EQUAL(T(val + neg_val), T(0));
+    VERIFY_IS_EQUAL(numext::negate(neg_val), val);
+  }
+}
+
+template <typename T>
 void check_abs() {
   typedef typename NumTraits<T>::Real Real;
   Real zero(0);
 
-  if (NumTraits<T>::IsSigned) VERIFY_IS_EQUAL(numext::abs(-T(1)), T(1));
+  if (NumTraits<T>::IsSigned) VERIFY_IS_EQUAL(numext::abs(numext::negate(T(1))), T(1));
   VERIFY_IS_EQUAL(numext::abs(T(0)), T(0));
   VERIFY_IS_EQUAL(numext::abs(T(1)), T(1));
 
   for (int k = 0; k < 100; ++k) {
     T x = internal::random<T>();
-    if (!internal::is_same<T, bool>::value) x = x / Real(2);
+    x = x / Real(2);
     if (NumTraits<T>::IsSigned) {
-      VERIFY_IS_EQUAL(numext::abs(x), numext::abs(-x));
-      VERIFY(numext::abs(-x) >= zero);
+      VERIFY_IS_EQUAL(numext::abs(x), numext::abs(numext::negate(x)));
+      VERIFY(numext::abs(numext::negate(x)) >= zero);
     }
     VERIFY(numext::abs(x) >= zero);
     VERIFY_IS_APPROX(numext::abs2(x), numext::abs2(numext::abs(x)));
+  }
+}
+
+template <>
+void check_abs<bool>() {
+  for (bool x : {true, false}) {
+    VERIFY_IS_EQUAL(numext::abs(x), x);
+    VERIFY(numext::abs(x) >= false);
+    VERIFY_IS_EQUAL(numext::abs2(x), numext::abs2(numext::abs(x)));
   }
 }
 
@@ -236,16 +256,17 @@ struct check_signbit_impl {
       negative_values = {static_cast<T>(-1), static_cast<T>(NumTraits<T>::lowest())};
       non_negative_values = {static_cast<T>(0), static_cast<T>(1), static_cast<T>(NumTraits<T>::highest())};
     } else {
-      // has sign bit
-      const T neg_zero = static_cast<T>(-0.0);
-      const T neg_one = static_cast<T>(-1.0);
-      const T neg_inf = -std::numeric_limits<T>::infinity();
-      const T neg_nan = -std::numeric_limits<T>::quiet_NaN();
       // does not have sign bit
       const T pos_zero = static_cast<T>(0.0);
       const T pos_one = static_cast<T>(1.0);
       const T pos_inf = std::numeric_limits<T>::infinity();
       const T pos_nan = std::numeric_limits<T>::quiet_NaN();
+      // has sign bit
+      const T neg_zero = numext::negate(pos_zero);
+      const T neg_one = numext::negate(pos_one);
+      const T neg_inf = numext::negate(pos_inf);
+      const T neg_nan = numext::negate(pos_nan);
+
       negative_values = {neg_zero, neg_one, neg_inf, neg_nan};
       non_negative_values = {pos_zero, pos_one, pos_inf, pos_nan};
     }
@@ -271,8 +292,45 @@ void check_signbit() {
   check_signbit_impl<T>::run();
 }
 
+template <typename T>
+void check_shift() {
+  using SignedT = typename numext::get_integer_by_size<sizeof(T)>::signed_type;
+  using UnsignedT = typename numext::get_integer_by_size<sizeof(T)>::unsigned_type;
+  constexpr int kNumBits = CHAR_BIT * sizeof(T);
+  for (int i = 0; i < 1000; ++i) {
+    const T a = internal::random<T>();
+    for (int s = 1; s < kNumBits; s++) {
+      T a_bsll = numext::logical_shift_left(a, s);
+      T a_bsll_ref = a << s;
+      VERIFY_IS_EQUAL(a_bsll, a_bsll_ref);
+      T a_bsrl = numext::logical_shift_right(a, s);
+      T a_bsrl_ref = numext::bit_cast<T, UnsignedT>(numext::bit_cast<UnsignedT, T>(a) >> s);
+      VERIFY_IS_EQUAL(a_bsrl, a_bsrl_ref);
+      T a_bsra = numext::arithmetic_shift_right(a, s);
+      T a_bsra_ref = numext::bit_cast<T, SignedT>(numext::bit_cast<SignedT, T>(a) >> s);
+      VERIFY_IS_EQUAL(a_bsra, a_bsra_ref);
+    }
+  }
+}
+
 EIGEN_DECLARE_TEST(numext) {
   for (int k = 0; k < g_repeat; ++k) {
+    CALL_SUBTEST(check_negate<signed char>());
+    CALL_SUBTEST(check_negate<unsigned char>());
+    CALL_SUBTEST(check_negate<short>());
+    CALL_SUBTEST(check_negate<unsigned short>());
+    CALL_SUBTEST(check_negate<int>());
+    CALL_SUBTEST(check_negate<unsigned int>());
+    CALL_SUBTEST(check_negate<long>());
+    CALL_SUBTEST(check_negate<unsigned long>());
+    CALL_SUBTEST(check_negate<half>());
+    CALL_SUBTEST(check_negate<bfloat16>());
+    CALL_SUBTEST(check_negate<float>());
+    CALL_SUBTEST(check_negate<double>());
+    CALL_SUBTEST(check_negate<long double>());
+    CALL_SUBTEST(check_negate<std::complex<float> >());
+    CALL_SUBTEST(check_negate<std::complex<double> >());
+
     CALL_SUBTEST(check_abs<bool>());
     CALL_SUBTEST(check_abs<signed char>());
     CALL_SUBTEST(check_abs<unsigned char>());
@@ -317,5 +375,15 @@ EIGEN_DECLARE_TEST(numext) {
     CALL_SUBTEST(check_signbit<int16_t>());
     CALL_SUBTEST(check_signbit<int32_t>());
     CALL_SUBTEST(check_signbit<int64_t>());
+
+    CALL_SUBTEST(check_shift<int8_t>());
+    CALL_SUBTEST(check_shift<int16_t>());
+    CALL_SUBTEST(check_shift<int32_t>());
+    CALL_SUBTEST(check_shift<int64_t>());
+
+    CALL_SUBTEST(check_shift<uint8_t>());
+    CALL_SUBTEST(check_shift<uint16_t>());
+    CALL_SUBTEST(check_shift<uint32_t>());
+    CALL_SUBTEST(check_shift<uint64_t>());
   }
 }

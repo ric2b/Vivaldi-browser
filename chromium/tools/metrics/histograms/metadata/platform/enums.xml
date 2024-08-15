@@ -308,8 +308,9 @@ chromium-metrics-reviews@google.com.
     greatest set can be found in
     https://chromium.googlesource.com/chromiumos/platform/ec/+/refs/heads/main/include/flash_log.h
     (enum flash_event_type and enum nvmem_failure_type). Note that NVMEM errors
-    are logged as subevents of flash log event 5, we register them offset by
-    200.
+    and AP RO verification events are logged as subevents. AP RO verification
+    subevents are registered with an offset of 160. Nvmem subevents are
+    registered with an offset of 200.
   </summary>
   <int value="0" label="Start"/>
   <int value="1" label="Corrupted Log"/>
@@ -319,9 +320,20 @@ chromium-metrics-reviews@google.com.
   <int value="6" label="TPM Wipe"/>
   <int value="7" label="TRNG Stall"/>
   <int value="8" label="Dcrypto Failure"/>
-  <int value="9" label="AP RO Verification Failure"/>
+  <int value="9" label="AP RO Verification Event"/>
   <int value="10" label="FIPS Failure"/>
   <int value="11" label="Invalid Board Properties"/>
+  <int value="163" label="AP RO Triggered"/>
+  <int value="164" label="AP RO Space Not Programmed"/>
+  <int value="165" label="AP RO Space Invalid"/>
+  <int value="166" label="AP RO Check Failed"/>
+  <int value="167" label="AP RO Check Succeeded"/>
+  <int value="168" label="AP RO Check Unsupported"/>
+  <int value="169" label="AP RO Fail Cleared"/>
+  <int value="170" label="AP RO Saved GBBD"/>
+  <int value="171" label="AP RO Fail - to Save GBBD"/>
+  <int value="172" label="AP RO Fail - Corrupted V1 Data"/>
+  <int value="173" label="AP RO Fail - Corrupted GBBD"/>
   <int value="200" label="Nvmem Malloc"/>
   <int value="201" label="Nvmem Page Header Size Mismatch"/>
   <int value="202" label="Nvmem Read Underrun"/>
@@ -418,32 +430,6 @@ metrics consent we also won't be able to send UMA metrics. -->
   <int value="34" label="Crostini.OomEvent"/>
 </enum>
 
-<enum name="CrosHibernateAbortReason">
-  <int value="0" label="Unknown"/>
-  <int value="1" label="Not enough free memory"/>
-  <int value="2" label="Not enough free disk space"/>
-  <int value="3" label="Update Engine is active"/>
-  <int value="4" label="Hiberimage is not set up"/>
-  <int value="5" label="Prior user logout"/>
-  <int value="6" label="PinWeaver has credentials"/>
-</enum>
-
-<enum name="CrosHibernateCycleEvent">
-  <int value="0" label="SuspendAttempt"/>
-  <int value="1" label="SuspendSuccess"/>
-  <int value="2" label="SuspendFailure"/>
-  <int value="3" label="ResumeAttempt"/>
-  <int value="4" label="ResumeSuccess"/>
-  <int value="5" label="ResumeFailure"/>
-  <int value="6" label="ResumePending"/>
-  <int value="7" label="ResumeSkippedUserMismatch"/>
-</enum>
-
-<enum name="CrosHibernateFileSystemStatus">
-  <int value="0" label="Clean"/>
-  <int value="1" label="Has errors"/>
-</enum>
-
 <enum name="CrosTPMDictionaryAttackResetStatusEnum">
   <int value="0" label="Reset not necessary"/>
   <int value="1" label="Reset attempt succeeded"/>
@@ -535,13 +521,6 @@ metrics consent we also won't be able to send UMA metrics. -->
   <int value="285212672" label="NonZeroGbbFlags"/>
 </enum>
 
-<enum name="Exynos5250LotIdEnum">
-  <int value="0" label="Fused device"/>
-  <int value="1" label="Generic unfused device"/>
-  <int value="2" label="Unfused; lot ID NZVPU"/>
-  <int value="3" label="Unfused; lot ID NZVR7"/>
-</enum>
-
 <enum name="FeatureManagementScopeLevel">
   <int value="0" label="Regular">Device is a regular Chromebook.</int>
   <int value="1" label="Soft Braned">
@@ -550,6 +529,14 @@ metrics consent we also won't be able to send UMA metrics. -->
   <int value="2" label="Hard Braned">
     Device is a Hard Branded Chromebook Plus.
   </int>
+</enum>
+
+<enum name="FlexBootMethod">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="Coreboot"/>
+  <int value="2" label="32-bit UEFI"/>
+  <int value="3" label="64-bit UEFI"/>
+  <int value="4" label="BIOS"/>
 </enum>
 
 <enum name="FlexCpuIsaLevel">
@@ -673,6 +660,10 @@ metrics consent we also won't be able to send UMA metrics. -->
   <int value="7" label="AVX"/>
   <int value="8" label="AVX2"/>
   <int value="9" label="FMA3"/>
+  <int value="10" label="AVX_VNNI"/>
+  <int value="11" label="AVX512F"/>
+  <int value="12" label="AVX512BW"/>
+  <int value="13" label="AVX512_VNNI"/>
 </enum>
 
 <enum name="InternalStorageCapabilities">
@@ -2430,6 +2421,7 @@ Full version information for the fingerprint enum values:
   <int value="79646227" label="CROS Ti50 0.24.60"/>
   <int value="91611772" label="CROS Cr50 0.4.21"/>
   <int value="91664959" label="CROS Cr50 0.0.16"/>
+  <int value="100632617" label="CROS Ti50 0.23.81"/>
   <int value="113099773" label="CROS Cr50 0.0.23 Eve Flags 0x7f00(prod)"/>
   <int value="125416236" label="CROS Cr50 0.3.7"/>
   <int value="129455924" label="CROS Cr50 0.5.215"/>
@@ -2480,6 +2472,7 @@ Full version information for the fingerprint enum values:
   <int value="666817951" label="CROS Cr50 0.6.211"/>
   <int value="679016111" label="CROS Cr50 0.5.60"/>
   <int value="691364586" label="CROS Cr50 0.0.22 Eve Flags 0xff00(unknown)"/>
+  <int value="698425188" label="CROS Ti50 0.24.90"/>
   <int value="704960859" label="CROS Ti50 0.24.3"/>
   <int value="705140733" label="CROS Cr50 0.6.111"/>
   <int value="707846933" label="CROS Cr50 0.1.1 Flags 0x10(pre-pvt)"/>
@@ -2521,6 +2514,7 @@ Full version information for the fingerprint enum values:
   <int value="1039624416" label="CROS Cr50 0.3.10"/>
   <int value="1048372479" label="CROS Cr50 0.6.4"/>
   <int value="1051360156" label="CROS Cr50 0.6.230"/>
+  <int value="1052367128" label="CROS Ti50 0.24.81"/>
   <int value="1053975981" label="CROS Cr50 0.5.141"/>
   <int value="1065916186" label="CROS Cr50 0.0.19"/>
   <int value="1069046756" label="CROS Cr50 0.5.51"/>
@@ -2611,6 +2605,7 @@ Full version information for the fingerprint enum values:
   <int value="1902169266" label="CROS Cr50 0.4.16"/>
   <int value="1903933708" label="CROS Cr50 0.4.3 Flags 0x10(pre-pvt)"/>
   <int value="1911169399" label="CROS Ti50 0.23.70"/>
+  <int value="1912806644" label="CROS Ti50 0.23.74"/>
   <int value="1934507294" label="CROS Ti50 0.0.13"/>
   <int value="1935803215" label="CROS Cr50 0.3.25"/>
   <int value="1941011596" label="IFX 9655 rev 35 fw 4.34 build 03f2"/>

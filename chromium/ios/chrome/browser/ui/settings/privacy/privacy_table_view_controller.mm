@@ -290,8 +290,13 @@ const char kSyncSettingsURL[] = "settings://open_sync";
   // Lockdown Mode item.
   [model addItem:[self lockdownModeDetailItem]
       toSectionWithIdentifier:SectionIdentifierLockdownMode];
+
+  // Note:(prio@vivaldi.com) Skip Google Service Footer
+  if (!IsVivaldiRunning()) {
   [model setFooter:[self showPrivacyFooterItem]
       forSectionWithIdentifier:SectionIdentifierLockdownMode];
+  } // End Vivaldi
+
 }
 
 #pragma mark - Model Objects
@@ -399,6 +404,12 @@ const char kSyncSettingsURL[] = "settings://open_sync";
 }
 
 - (void)updatePrivacyFooterItem {
+
+  // Note:(prio@vivaldi.com) Skip Google Service Footer
+  if (IsVivaldiRunning()) {
+    return;
+  } // End Vivaldi
+
   // The user might sign out from account settings, and thus the footer should
   // change.
   DCHECK([self.tableViewModel

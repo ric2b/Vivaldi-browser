@@ -25,9 +25,7 @@ const bidiServerLogger = (prefix: string, ...args: unknown[]): void => {
  */
 export async function connectBidiOverCdp(
   cdp: CdpConnection,
-  // TODO: replace with `BidiMapper.MapperOptions`, once it's exported in
-  //  https://github.com/puppeteer/puppeteer/pull/11415.
-  options: {acceptInsecureCerts: boolean}
+  options: BidiMapper.MapperOptions
 ): Promise<BidiConnection> {
   const transportBiDi = new NoOpTransport();
   const cdpConnectionAdapter = new CdpConnectionAdapter(cdp);
@@ -49,7 +47,12 @@ export async function connectBidiOverCdp(
     // Forwards a BiDi event sent by BidiServer to Puppeteer.
     pptrTransport.onmessage(JSON.stringify(message));
   });
-  const pptrBiDiConnection = new BidiConnection(cdp.url(), pptrTransport);
+  const pptrBiDiConnection = new BidiConnection(
+    cdp.url(),
+    pptrTransport,
+    cdp.delay,
+    cdp.timeout
+  );
   const bidiServer = await BidiMapper.BidiServer.createAndStart(
     transportBiDi,
     cdpConnectionAdapter,

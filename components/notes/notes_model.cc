@@ -84,7 +84,7 @@ NotesModel::NotesModel(sync_notes::NoteSyncService* sync_service,
 
 NotesModel::~NotesModel() {
   for (auto& observer : observers_)
-    observer.NotesModelBeingDeleted(this);
+    observer.NotesModelBeingDeleted();
 
   if (store_.get()) {
     // The store maintains a reference back to us. We need to tell it we're gone
@@ -150,7 +150,7 @@ void NotesModel::OnSyncedFilesStoreLoaded(
 
   // Notify our direct observers.
   for (auto& observer : observers_)
-    observer.NotesModelLoaded(this, details->ids_reassigned());
+    observer.NotesModelLoaded(details->ids_reassigned());
 
   if (details->has_deprecated_attachments()) {
     BeginExtensiveChanges();
@@ -205,7 +205,7 @@ void NotesModel::RemoveObserver(NotesModelObserver* observer) {
 void NotesModel::BeginExtensiveChanges() {
   if (++extensive_changes_ == 1) {
     for (auto& observer : observers_)
-      observer.ExtensiveNotesChangesBeginning(this);
+      observer.ExtensiveNotesChangesBeginning();
   }
 }
 
@@ -214,7 +214,7 @@ void NotesModel::EndExtensiveChanges() {
   DCHECK_GE(extensive_changes_, 0);
   if (extensive_changes_ == 0) {
     for (auto& observer : observers_)
-      observer.ExtensiveNotesChangesEnded(this);
+      observer.ExtensiveNotesChangesEnded();
   }
 }
 
@@ -230,7 +230,7 @@ NoteNode* NotesModel::AddNode(NoteNode* parent,
     store_->ScheduleSave();
 
   for (auto& observer : observers_)
-    observer.NotesNodeAdded(this, parent, index);
+    observer.NotesNodeAdded(parent, index);
 
   return node_ptr;
 }
@@ -445,7 +445,7 @@ void NotesModel::SetTitle(const NoteNode* node,
   }
 
   for (auto& observer : observers_)
-    observer.OnWillChangeNotesNode(this, node);
+    observer.OnWillChangeNotesNode(node);
 
   AsMutable(node)->SetTitle(title);
 
@@ -456,24 +456,25 @@ void NotesModel::SetTitle(const NoteNode* node,
     store_->ScheduleSave();
 
   for (auto& observer : observers_)
-    observer.NotesNodeChanged(this, node);
+    observer.NotesNodeChanged(node);
 }
 
-void NotesModel::SetLastModificationTime(const NoteNode* node, const base::Time time) {
+void NotesModel::SetLastModificationTime(const NoteNode* node,
+                                         const base::Time time) {
   DCHECK(node);
 
   if (node->GetLastModificationTime() == time || is_permanent_node(node))
     return;
 
   for (auto& observer : observers_)
-    observer.OnWillChangeNotesNode(this, node);
+    observer.OnWillChangeNotesNode(node);
 
   AsMutable(node)->SetLastModificationTime(time);
   if (store_.get())
-      store_->ScheduleSave();
+    store_->ScheduleSave();
 
   for (auto& observer : observers_)
-    observer.NotesNodeChanged(this, node);
+    observer.NotesNodeChanged(node);
 }
 
 void NotesModel::SetContent(const NoteNode* node,
@@ -487,7 +488,7 @@ void NotesModel::SetContent(const NoteNode* node,
   DCHECK(!node->is_attachment());
 
   for (auto& observer : observers_)
-    observer.OnWillChangeNotesNode(this, node);
+    observer.OnWillChangeNotesNode(node);
 
   AsMutable(node)->SetContent(content);
 
@@ -498,7 +499,7 @@ void NotesModel::SetContent(const NoteNode* node,
     store_->ScheduleSave();
 
   for (auto& observer : observers_)
-    observer.NotesNodeChanged(this, node);
+    observer.NotesNodeChanged(node);
 }
 
 void NotesModel::SetURL(const NoteNode* node,
@@ -514,7 +515,7 @@ void NotesModel::SetURL(const NoteNode* node,
   NoteNode* mutable_node = AsMutable(node);
 
   for (auto& observer : observers_)
-    observer.OnWillChangeNotesNode(this, node);
+    observer.OnWillChangeNotesNode(node);
 
   {
     base::AutoLock url_lock(url_lock_);
@@ -530,7 +531,7 @@ void NotesModel::SetURL(const NoteNode* node,
     store_->ScheduleSave();
 
   for (auto& observer : observers_)
-    observer.NotesNodeChanged(this, node);
+    observer.NotesNodeChanged(node);
 }
 
 void NotesModel::SetDateAdded(const NoteNode* node, base::Time date_added) {
@@ -571,7 +572,7 @@ void NotesModel::GetNodesByURL(const GURL& url,
   }
 }
 
-void NotesModel::Remove(const NoteNode* node) {
+void NotesModel::Remove(const NoteNode* node, const base::Location& location) {
   DCHECK(loaded_);
   DCHECK(node);
   DCHECK(!is_root_node(node));
@@ -582,7 +583,7 @@ void NotesModel::Remove(const NoteNode* node) {
   DCHECK_NE(static_cast<size_t>(-1), index);
 
   for (auto& observer : observers_)
-    observer.OnWillRemoveNotes(this, parent, index, node);
+    observer.OnWillRemoveNotes(parent, index, node, location);
 
   std::unique_ptr<NoteNode> owned_node;
   {
@@ -597,13 +598,13 @@ void NotesModel::Remove(const NoteNode* node) {
     store_->ScheduleSave();
 
   for (auto& observer : observers_)
-    observer.NotesNodeRemoved(this, parent, index, node);
+    observer.NotesNodeRemoved(parent, index, node, location);
 }
 
-void NotesModel::RemoveAllUserNotes() {
+void NotesModel::RemoveAllUserNotes(const base::Location& location) {
   DCHECK(loaded_);
   for (auto& observer : observers_)
-    observer.OnWillRemoveAllNotes(this);
+    observer.OnWillRemoveAllNotes(location);
 
   BeginExtensiveChanges();
   // Skip deleting permanent nodes. Permanent notes nodes are the root and
@@ -624,7 +625,7 @@ void NotesModel::RemoveAllUserNotes() {
     store_->ScheduleSave();
 
   for (auto& observer : observers_)
-    observer.NotesAllNodesRemoved(this);
+    observer.NotesAllNodesRemoved(location);
 }
 
 bool NotesModel::IsNotesNoLock(const GURL& url) {
@@ -676,12 +677,12 @@ void NotesModel::RemoveAttachmentsRecursive(NoteNode* node) {
 
 void NotesModel::BeginGroupedChanges() {
   for (auto& observer : observers_)
-    observer.GroupedNotesChangesBeginning(this);
+    observer.GroupedNotesChangesBeginning();
 }
 
 void NotesModel::EndGroupedChanges() {
   for (auto& observer : observers_)
-    observer.GroupedNotesChangesEnded(this);
+    observer.GroupedNotesChangesEnded();
 }
 
 const NoteNode* NotesModel::GetNoteNodeByID(int64_t id) const {
@@ -725,7 +726,7 @@ void NotesModel::Move(const NoteNode* node,
     store_->ScheduleSave();
 
   for (auto& observer : observers_)
-    observer.NotesNodeMoved(this, old_parent, old_index, new_parent, index);
+    observer.NotesNodeMoved(old_parent, old_index, new_parent, index);
 }
 
 void NotesModel::SortChildren(const NoteNode* parent) {
@@ -735,7 +736,7 @@ void NotesModel::SortChildren(const NoteNode* parent) {
   }
 
   for (auto& observer : observers_)
-    observer.OnWillReorderNotesNode(this, parent);
+    observer.OnWillReorderNotesNode(parent);
 
   UErrorCode error = U_ZERO_ERROR;
   std::unique_ptr<icu::Collator> collator(icu::Collator::createInstance(error));
@@ -747,7 +748,7 @@ void NotesModel::SortChildren(const NoteNode* parent) {
     store_->ScheduleSave();
 
   for (auto& observer : observers_)
-    observer.NotesNodeChildrenReordered(this, parent);
+    observer.NotesNodeChildrenReordered(parent);
 }
 
 void NotesModel::ReorderChildren(
@@ -759,7 +760,7 @@ void NotesModel::ReorderChildren(
     DCHECK_EQ(parent, ordered_nodes[i]->parent());
 
   for (auto& observer : observers_)
-    observer.OnWillReorderNotesNode(this, parent);
+    observer.OnWillReorderNotesNode(parent);
 
   if (ordered_nodes.size() > 1) {
     std::map<const NoteNode*, size_t> order;
@@ -781,7 +782,7 @@ void NotesModel::ReorderChildren(
   }
 
   for (auto& observer : observers_)
-    observer.NotesNodeChildrenReordered(this, parent);
+    observer.NotesNodeChildrenReordered(parent);
 }
 
 void NotesModel::GetNotesMatching(const std::u16string& text,

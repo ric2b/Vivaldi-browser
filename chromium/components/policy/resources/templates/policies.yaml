@@ -1239,17 +1239,32 @@ policies:
   1238: CustomProfileLabel
   1239: ProfileLabel
   1240: PrivacySandboxFingerprintingProtectionEnabled
-  1241: ''
+  1241: MultiScreenCaptureAllowedForUrls
   1242: ''
   1243: ''
   1244: BoundSessionCredentialsEnabled
-  1245: ''
-  1246: ''
-  1247: ''
-  1248: ''
-  1249: ''
-  1250: ''
+  1245: UiAutomationProviderEnabled
+  1246: ApplicationBoundEncryptionEnabled
+  1247: DeviceAuthenticationFlowAutoReloadInterval
+  1248: ShowAiIntroScreenEnabled
+  1249: ShowTunaScreenEnabled
+  1250: EnterpriseBadgingTemporarySetting
   1251: GenAILocalFoundationalModelSettings
+  1252: DeviceExtensionsSystemLogEnabled
+  1253: ChromeDataRegionSetting
+  1254: ContextualGoogleIntegrationsEnabled
+  1255: ContextualGoogleIntegrationsConfiguration
+  1256: PdfViewerOutOfProcessIframeEnabled
+  1257: LockScreenAutoStartOnlineReauth
+  1258: ''
+  1259: ''
+  1260: ''
+  1261: MemorySaverModeSavings
+  1262: ''
+  1263: ''
+  1264: ''
+  1265: ''
+  1266: LensOverlaySettings
 atomic_groups:
   1: Homepage
   2: RemoteAccess

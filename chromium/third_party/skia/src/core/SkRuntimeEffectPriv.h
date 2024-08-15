@@ -14,6 +14,7 @@
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/private/SkSLSampleUsage.h"
 #include "include/private/base/SkAssert.h"
+#include "include/private/base/SkDebug.h"
 #include "include/private/base/SkSpan_impl.h"
 #include "include/private/base/SkTArray.h"
 #include "src/core/SkEffectPriv.h"
@@ -132,6 +133,10 @@ public:
                                  skia_private::TArray<SkRuntimeEffect::ChildPtr>* children);
     static void WriteChildEffects(SkWriteBuffer& buffer,
                                   SkSpan<const SkRuntimeEffect::ChildPtr> children);
+
+    static bool UsesColorTransform(const SkRuntimeEffect* effect) {
+        return effect->usesColorTransform();
+    }
 };
 
 // These internal APIs for creating runtime effects vary from the public API in two ways:

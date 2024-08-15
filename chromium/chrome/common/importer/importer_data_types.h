@@ -34,7 +34,8 @@ enum ImportItem {
   SPEED_DIAL         = 1 << 9, // Speed Dials
   EMAIL              = 1 << 10,
   CONTACTS           = 1 << 11,
-  ALL                = (1 << 12) - 1  // All the bits should be 1, hence the -1.
+  EXTENSIONS         = 1 << 12,
+  ALL                = (1 << 13) - 1  // All the bits should be 1, hence the -1.
 };
 
 // Contains information needed for importing bookmarks/search engine urls, etc.

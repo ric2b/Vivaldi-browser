@@ -81,9 +81,9 @@ class CastAppDiscoveryServiceImplTest : public ::testing::Test {
   MockSocketErrorHandler mock_error_handler_;
   VirtualConnectionRouter router_;
   FakeClock clock_{Clock::now()};
-  FakeTaskRunner task_runner_{&clock_};
-  CastPlatformClient platform_client_{&router_, &FakeClock::now, task_runner_};
-  CastAppDiscoveryServiceImpl app_discovery_service_{&platform_client_,
+  FakeTaskRunner task_runner_{clock_};
+  CastPlatformClient platform_client_{router_, &FakeClock::now, task_runner_};
+  CastAppDiscoveryServiceImpl app_discovery_service_{platform_client_,
                                                      &FakeClock::now};
 
   CastMediaSource source_a_1_{"cast:AAA?clientId=1", {"AAA"}};

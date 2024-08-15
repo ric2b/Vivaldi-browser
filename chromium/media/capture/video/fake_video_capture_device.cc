@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/containers/heap_array.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
@@ -244,7 +245,7 @@ class OwnBufferFrameDeliverer : public FrameDeliverer {
   void PaintAndDeliverNextFrame(base::TimeDelta timestamp_to_paint) override;
 
  private:
-  std::unique_ptr<uint8_t[]> buffer_;
+  base::HeapArray<uint8_t> buffer_;
 };
 
 // Delivers frames using buffers provided by the client via
@@ -788,7 +789,7 @@ void OwnBufferFrameDeliverer::Initialize(
     std::unique_ptr<VideoCaptureDevice::Client> client,
     const FakeDeviceState* device_state) {
   FrameDeliverer::Initialize(pixel_format, std::move(client), device_state);
-  buffer_ = std::make_unique<uint8_t[]>(VideoFrame::AllocationSize(
+  buffer_ = base::HeapArray<uint8_t>::Uninit(VideoFrame::AllocationSize(
       pixel_format, device_state->format.frame_size));
 }
 
@@ -799,11 +800,11 @@ void OwnBufferFrameDeliverer::PaintAndDeliverNextFrame(
   const auto& frame_format = device_state()->format;
   const size_t frame_size = VideoFrame::AllocationSize(
       frame_format.pixel_format, frame_format.frame_size);
-  memset(buffer_.get(), 0, frame_size);
-  frame_painter()->PaintFrame(timestamp_to_paint, buffer_.get());
+  memset(buffer_.data(), 0, frame_size);
+  frame_painter()->PaintFrame(timestamp_to_paint, buffer_.data());
   base::TimeTicks now = base::TimeTicks::Now();
   client()->OnIncomingCapturedData(
-      buffer_.get(), frame_size, device_state()->format,
+      buffer_.data(), frame_size, device_state()->format,
       GetDefaultColorSpace(device_state()->format.pixel_format),
       0 /* rotation */, false /* flip_y */, now,
       CalculateTimeSinceFirstInvocation(now), std::nullopt);
@@ -824,7 +825,8 @@ void ClientBufferFrameDeliverer::PaintAndDeliverNextFrame(
   VideoCaptureDevice::Client::Buffer capture_buffer;
   const auto reserve_result = client()->ReserveOutputBuffer(
       device_state()->format.frame_size, device_state()->format.pixel_format,
-      arbitrary_frame_feedback_id, &capture_buffer);
+      arbitrary_frame_feedback_id, &capture_buffer,
+      /*require_new_buffer_id=*/nullptr, /*retire_old_buffer_id=*/nullptr);
   if (reserve_result != VideoCaptureDevice::Client::ReserveResult::kSucceeded) {
     client()->OnFrameDropped(
         ConvertReservationFailureToFrameDropReason(reserve_result));

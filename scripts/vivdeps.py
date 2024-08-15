@@ -21,7 +21,7 @@ os.environ["DEPOT_TOOLS_METRICS"] = "0"
 
 import gclient
 import detect_host_arch
-from gclient_scm import CipdRoot
+from gclient_scm import CipdRoot, GcsRoot
 from gclient_utils import SplitUrlRevision, ExecutionQueue, freeze
 from third_party.repo.progress import Progress
 
@@ -59,7 +59,7 @@ def IsAndroidEnabled():
   return os.access(os.path.join(SRC,".enable_android"), os.F_OK)
 
 def IsReclientEnabled(host_os):
-  if host_os not in ["win", "linux"]:
+  if host_os not in ["win", "mac", "linux"]:
     return False
   if "FETCH_RECLIENT" in os.environ:
     return True
@@ -138,6 +138,7 @@ def get_chromium_variables():
 
   global_vars["checkout_src_internal"]=False
   global_vars["checkout_nacl"]=False
+  global_vars["git_dependencies"]="DEPS"
 
   return global_vars
 
@@ -152,6 +153,7 @@ class VivaldiBaseDeps(gclient.GitDependency):
     self._preloaded_deps_content = preloaded_content
     self._preloaded_subdeps = preloaded_subdeps
     self._sub_deps={}
+    self._gcs_root=None
 
     class VivDepsOptions(object):
       process_all_deps = False
@@ -177,6 +179,7 @@ class VivaldiBaseDeps(gclient.GitDependency):
         condition=None,
         print_outbuf=True,
         protocol=(BASE_URL or "ssh:").split(":")[0],
+        git_dependencies_state="DEPS",
         )
 
   @property
@@ -206,6 +209,11 @@ class VivaldiBaseDeps(gclient.GitDependency):
           self.root_dir,
           'https://chrome-infra-packages.appspot.com')
     return self._cipd_root
+
+  def GetGcsRoot(self):
+    if not self._gcs_root:
+        self._gcs_root = GcsRoot(self.root_dir)
+    return self._gcs_root
 
   def Load(self, recurse=False):
     self.ParseDepsFile()
@@ -261,8 +269,14 @@ class VivaldiBaseDeps(gclient.GitDependency):
           x.really_should_process = False
         if x.name.split(":")[0] in exclude_cipd:
           x.really_should_process = False
+      elif x.GetScmName() == "gcs":
+        if cipd_list and x.name.split(":")[0] not in cipd_list:
+          x.really_should_process = False
+        if x.name.split(":")[0] in exclude_cipd:
+          x.really_should_process = False
       else:
         x.really_should_process = False
+      x._should_process = x.really_should_process
       anything_to_update = anything_to_update or x.really_should_process
 
     if not anything_to_update:
@@ -284,6 +298,9 @@ class VivaldiBaseDeps(gclient.GitDependency):
                      skip_sync_revisions=None)
     if self._cipd_root:
       self._cipd_root.run("update")
+    if self._gcs_root:
+      self._gcs_root.clobber_deps_with_updated_objects(self.name)
+
 
     for subname, sub_deps in self._sub_deps.items():
       if subname in exclude_modules:

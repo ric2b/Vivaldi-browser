@@ -41,13 +41,29 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Not In Fullscreen"/>
 </enum>
 
+<!-- TODO(crbug.com/339262105): Clean up the old password promo methods after
+the generic promo launch. -->
+
 <enum name="DesktopIOSPasswordPromoAction">
   <int value="0" label="Dismissed"/>
   <int value="1" label="ExplicitlyClosed"/>
   <int value="2" label="GetStartedClicked"/>
 </enum>
 
+<!-- TODO(crbug.com/339262105): Clean up the old password promo methods after
+the generic promo launch. -->
+
 <enum name="DesktopIOSPasswordPromoImpression">
+  <int value="0" label="FirstImpression"/>
+  <int value="1" label="SecondImpression"/>
+</enum>
+
+<enum name="DesktopIOSPromoAction">
+  <int value="0" label="Dismissed"/>
+  <int value="1" label="ExplicitlyClosed"/>
+</enum>
+
+<enum name="DesktopIOSPromoImpression">
   <int value="0" label="FirstImpression"/>
   <int value="1" label="SecondImpression"/>
 </enum>
@@ -60,13 +76,13 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <enum name="DocumentDownloadState">
-  <int value="0" label="Complete"/>
-  <int value="1" label="Failed"/>
-  <int value="2" label="Failed Not Resumable"/>
-  <int value="3" label="Not Started"/>
-  <int value="4" label="In Progress"/>
-  <int value="5"
+  <int value="0" label="Not Started"/>
+  <int value="1" label="In Progress"/>
+  <int value="2"
       label="Cancelled (includes termination of tab and application)"/>
+  <int value="3" label="Complete"/>
+  <int value="4" label="Failed"/>
+  <int value="5" label="Failed Not Resumable"/>
 </enum>
 
 <enum name="ExperienceKitCalendarTypes">
@@ -1118,10 +1134,16 @@ chromium-metrics-reviews@google.com.
   <int value="9" label="Calendar Event"/>
   <int value="10" label="Chrome Actions"/>
   <int value="11" label="Mini Maps"/>
+  <int value="12" label="Lens Search"/>
+  <int value="13" label="Bottom Omnibox"/>
+  <int value="14" label="Enhanced Safe Browsing"/>
+  <int value="15" label="Password Manager Widget"/>
+  <int value="16" label="Pinned Tabs"/>
+  <int value="17" label="Inactive Tabs"/>
 </enum>
 
 <enum name="WindowActivityOrigin">
-  <int value="0" label="WindowActivityUnknwonOrigin"/>
+  <int value="0" label="WindowActivityUnknownOrigin"/>
   <int value="1" label="WindowActivityExternalOrigin"/>
   <int value="2" label="WindowActivityRestoredOrigin"/>
   <int value="3" label="WindowActivityContextMenuOrigin"/>

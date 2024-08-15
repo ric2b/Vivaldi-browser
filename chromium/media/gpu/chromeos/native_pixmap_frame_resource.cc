@@ -23,22 +23,10 @@ namespace media {
 
 namespace {
 gfx::GenericSharedMemoryId GetNextSharedMemoryId() {
-  static base::NoDestructor<base::Lock> id_lock;
-  static int next_shared_memory_id = 0;
-  base::AutoLock lock(*id_lock);
-  CHECK_LT(next_shared_memory_id, std::numeric_limits<int>::max());
-  return gfx::GpuMemoryBufferId(next_shared_memory_id++);
-}
-
-// Provides a const-correct accessor to |pixmap_|->ExportHandle(). This is
-// needed because NativePixmap::ExportHandle() is declared as non-const.
-// However, in the case of NativePixmapDmaBuf, the implementation, at the time
-// or writing, is const. This is a convenience method for performing the
-// const_cast on |pixmap_| in order to call ExportHandle().
-// TODO(nhebert): add a NativePixmapDmaBuf::ExportHandle() const method and
-// remove ExportHandle()` from this file.
-gfx::NativePixmapHandle ExportHandle(const gfx::NativePixmapDmaBuf* pixmap) {
-  return const_cast<gfx::NativePixmapDmaBuf*>(pixmap)->ExportHandle();
+  // This uses the same ID generator that is used for creating ID's for GPU
+  // memory buffers. Doing so avoids overlapping ID's. No cast is necessary
+  // since gfx::GpuMemoryBufferId is an alias of gfx::GenericSharedMemoryId.
+  return GetNextGpuMemoryBufferId();
 }
 
 }  // namespace
@@ -289,26 +277,15 @@ int NativePixmapFrameResource::GetDmabufFd(size_t i) const {
   return pixmap_->GetDmaBufFd(i);
 }
 
-scoped_refptr<gfx::NativePixmapDmaBuf>
-NativePixmapFrameResource::CreateNativePixmapDmaBuf() const {
-  // Duplicate FD's into a new NativePixmapHandle
-  gfx::NativePixmapHandle native_pixmap_handle = ExportHandle(pixmap_.get());
-
-  // If ExportHandle() runs out of FD's, |native_pixmap_handle| will have no
-  // planes.
-  if (native_pixmap_handle.planes.empty()) {
-    return nullptr;
-  }
-
-  return base::MakeRefCounted<gfx::NativePixmapDmaBuf>(
-      pixmap_->GetBufferSize(), pixmap_->GetBufferFormat(),
-      std::move(native_pixmap_handle));
+scoped_refptr<const gfx::NativePixmapDmaBuf>
+NativePixmapFrameResource::GetNativePixmapDmaBuf() const {
+  return pixmap_;
 }
 
 gfx::GpuMemoryBufferHandle
 NativePixmapFrameResource::CreateGpuMemoryBufferHandle() const {
   // Duplicate FD's into a new NativePixmapHandle
-  gfx::NativePixmapHandle native_pixmap_handle = ExportHandle(pixmap_.get());
+  gfx::NativePixmapHandle native_pixmap_handle = pixmap_->ExportHandle();
   if (native_pixmap_handle.planes.empty()) {
     return gfx::GpuMemoryBufferHandle();  // Invalid
   }
@@ -492,11 +469,6 @@ scoped_refptr<VideoFrame> NativePixmapFrameResource::CreateVideoFrame() const {
       base::WrapRefCounted<const NativePixmapFrameResource>(this)));
 
   return video_frame;
-}
-
-const scoped_refptr<const gfx::NativePixmapDmaBuf>&
-NativePixmapFrameResource::GetNativePixmapDmaBuf() const {
-  return pixmap_;
 }
 
 }  // namespace media

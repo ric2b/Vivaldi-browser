@@ -288,7 +288,6 @@ class TabStrip : public views::View,
   void OnMouseEventInTab(views::View* source,
                          const ui::MouseEvent& event) override;
   void UpdateHoverCard(Tab* tab, HoverCardUpdateType update_type) override;
-  bool ShowDomainInHoverCards() const override;
   bool HoverCardIsShowingForTab(Tab* tab) override;
   int GetBackgroundOffset() const override;
   int GetStrokeThickness() const override;
@@ -316,7 +315,8 @@ class TabStrip : public views::View,
   // views::View:
   views::SizeBounds GetAvailableSize(const View* child) const override;
   gfx::Size GetMinimumSize() const override;
-  gfx::Size CalculatePreferredSize() const override;
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override;
   void Layout(PassKey) override;
   void ChildPreferredSizeChanged(views::View* child) override;
 

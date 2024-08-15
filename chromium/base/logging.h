@@ -16,10 +16,9 @@
 #include "base/base_export.h"
 #include "base/compiler_specific.h"
 #include "base/dcheck_is_on.h"
+#include "base/files/file_path.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
-#include "base/scoped_clear_last_error.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/utf_ostream_operators.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -179,13 +178,6 @@
 
 namespace logging {
 
-// TODO(avi): do we want to do a unification of character types here?
-#if BUILDFLAG(IS_WIN)
-typedef wchar_t PathChar;
-#elif BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
-typedef char PathChar;
-#endif
-
 // A bitmask of potential logging destinations.
 using LoggingDestination = uint32_t;
 // Specifies where logs will be written. Multiple destinations can be specified
@@ -241,7 +233,7 @@ struct BASE_EXPORT LoggingSettings {
 
   // The four settings below have an effect only when LOG_TO_FILE is
   // set in |logging_dest|.
-  const PathChar* log_file_path = nullptr;
+  base::FilePath::StringType log_file_path;
   LogLockingState lock_log = LOCK_LOG_FILE;
   OldFileDeletionState delete_old = APPEND_TO_OLD_LOG_FILE;
 #if BUILDFLAG(IS_CHROMEOS)
@@ -349,8 +341,8 @@ BASE_EXPORT void SetShowErrorDialogs(bool enable_dialogs);
 using LogAssertHandlerFunction =
     base::RepeatingCallback<void(const char* file,
                                  int line,
-                                 const base::StringPiece message,
-                                 const base::StringPiece stack_trace)>;
+                                 std::string_view message,
+                                 std::string_view stack_trace)>;
 
 class BASE_EXPORT ScopedLogAssertHandler {
  public:
@@ -640,13 +632,8 @@ class BASE_EXPORT LogMessage {
   const char* const file_;
   const int line_;
 
-  // This is useful since the LogMessage class uses a lot of Win32 calls
-  // that will lose the value of GLE and the code that called the log function
-  // will have lost the thread error value when the log call returns.
-  base::ScopedClearLastError last_error_;
-
 #if BUILDFLAG(IS_CHROMEOS)
-  void InitWithSyslogPrefix(base::StringPiece filename,
+  void InitWithSyslogPrefix(std::string_view filename,
                             int line,
                             uint64_t tick_count,
                             const char* log_severity_name_c_str,

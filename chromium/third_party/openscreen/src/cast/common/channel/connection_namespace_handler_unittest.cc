@@ -144,8 +144,7 @@ class ConnectionNamespaceHandlerTest : public ::testing::Test {
 
   NiceMock<MockVirtualConnectionPolicy> vc_policy_;
   VirtualConnectionRouter router_;
-  ConnectionNamespaceHandler connection_namespace_handler_{&router_,
-                                                           &vc_policy_};
+  ConnectionNamespaceHandler connection_namespace_handler_{router_, vc_policy_};
 
   const std::string sender_id_{"sender-5678"};
   const std::string receiver_id_{"receiver-3245"};

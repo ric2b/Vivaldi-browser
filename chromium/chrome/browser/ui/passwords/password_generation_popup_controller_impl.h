@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_PASSWORDS_PASSWORD_GENERATION_POPUP_CONTROLLER_IMPL_H_
 
 #include <stddef.h>
+
 #include <memory>
 #include <string>
 #include <vector>
@@ -17,6 +18,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/ui/autofill/popup_controller_common.h"
 #include "chrome/browser/ui/passwords/password_generation_popup_controller.h"
+#include "components/autofill/core/browser/ui/popup_open_enums.h"
 #include "components/autofill/core/common/signatures.h"
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/password_manager/core/browser/password_form.h"
@@ -56,7 +58,7 @@ class PrefService;
 //
 // NOTE: This is used on Android only to display the editing popup.
 //
-// TODO(crbug.com/944502): Clean up the popup code on Android to make its use
+// TODO(crbug.com/40619484): Clean up the popup code on Android to make its use
 // clear and remove unused code.
 class PasswordGenerationPopupControllerImpl
     : public PasswordGenerationPopupController,
@@ -155,11 +157,12 @@ class PasswordGenerationPopupControllerImpl
   };
 
   // AutofillPopupViewDelegate implementation:
-  void Hide(autofill::PopupHidingReason) override;
+  void Hide(autofill::SuggestionHidingReason) override;
   void ViewDestroyed() override;
   gfx::NativeView container_view() const override;
   content::WebContents* GetWebContents() const override;
   const gfx::RectF& element_bounds() const override;
+  autofill::PopupAnchorType anchor_type() const override;
   base::i18n::TextDirection GetElementTextDirection() const override;
 
   // PasswordGenerationPopupController implementation:

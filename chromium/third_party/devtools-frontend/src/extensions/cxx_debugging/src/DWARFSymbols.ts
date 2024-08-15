@@ -32,7 +32,6 @@ type ScopeInfo = {
   icon?: string,
 };
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
 type LazyFSNode = FS.FSNode&{contents: {cacheLength: Function, length: number}};
 
 function mapEnumerator(apiEnumerator: SymbolsBackend.Enumerator): Formatters.Enumerator {
@@ -392,7 +391,10 @@ export class DWARFLanguageExtensionPlugin implements Chrome.DevTools.LanguageExt
         apiMissingSymbolFiles = apiMissingSymbolFiles.concat(this.resourceLoader.possiblyMissingSymbols);
       }
 
-      return {frames: apiFunctionInfos, missingSymbolFiles: apiMissingSymbolFiles};
+      return {
+        frames: apiFunctionInfos,
+        missingSymbolFiles: apiMissingSymbolFiles.map(x => new URL(x, moduleInfo.symbolsUrl).href)
+      };
     } finally {
       flush();
     }

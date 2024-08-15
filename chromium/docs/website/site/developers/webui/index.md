@@ -23,6 +23,9 @@ If you need additional information on how to set up the BUILD.gn file to build
 your WebUI, there is detailed information and additional examples for BUILD
 files specifically at [WebUI Build Configurations](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/webui_build_configuration.md).
 
+If you need additional information on how to share TS/HTML/CSS code between
+multiple (2+) WebUI surfaces, see [Sharing Code in WebUI](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/webui_code_sharing.md).
+
 ### Debug vs User-Facing UIs
 Before adding a new WebUI, the first question to consider is whether you are
 creating a user-facing or a debug UI. Some differences:

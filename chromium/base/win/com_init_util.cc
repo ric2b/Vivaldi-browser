@@ -4,8 +4,9 @@
 
 #include "base/win/com_init_util.h"
 
-#include <stdint.h>
 #include <windows.h>
+
+#include <stdint.h>
 #include <winternl.h>
 
 #include "base/logging.h"
@@ -74,7 +75,7 @@ void AssertComInitialized(const char* message) {
     return;
   }
 
-  NOTREACHED() << (message ? message : kComNotInitialized);
+  NOTREACHED_IN_MIGRATION() << (message ? message : kComNotInitialized);
 }
 
 void AssertComApartmentType(ComApartmentType apartment_type) {

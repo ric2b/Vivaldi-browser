@@ -28,8 +28,8 @@
 #ifndef SRC_TINT_UTILS_DIAGNOSTIC_DIAGNOSTIC_H_
 #define SRC_TINT_UTILS_DIAGNOSTIC_DIAGNOSTIC_H_
 
+#include <cstdint>
 #include <memory>
-#include <ostream>
 #include <string>
 #include <utility>
 
@@ -41,35 +41,12 @@
 namespace tint::diag {
 
 /// Severity is an enumerator of diagnostic severities.
-enum class Severity { Note, Warning, Error, InternalCompilerError, Fatal };
+enum class Severity : uint8_t { Note, Warning, Error };
 
 /// @return true iff `a` is more than, or of equal severity to `b`
 inline bool operator>=(Severity a, Severity b) {
     return static_cast<int>(a) >= static_cast<int>(b);
 }
-
-/// System is an enumerator of Tint systems that can be the originator of a diagnostic message.
-enum class System {
-    AST,
-    Builtin,
-    Clone,
-    Constant,
-    Inspector,
-    Intrinsics,
-    IR,
-    Program,
-    ProgramBuilder,
-    Reader,
-    Resolver,
-    Semantic,
-    Symbol,
-    Test,
-    Transform,
-    Type,
-    Utils,
-    Writer,
-    Unknown,
-};
 
 /// Diagnostic holds all the information for a single compiler diagnostic
 /// message.
@@ -99,8 +76,6 @@ class Diagnostic {
     Source source;
     /// message is the text associated with the diagnostic.
     StyledText message;
-    /// system is the Tint system that raised the diagnostic.
-    System system;
     /// A shared pointer to a Source::File. Only used if the diagnostic Source
     /// points to a file that was created specifically for this diagnostic
     /// (usually an ICE).
@@ -178,60 +153,42 @@ class List {
     }
 
     /// Adds the note message with the given Source to the end of this list.
-    /// @param system the system raising the note message
     /// @param source the source of the note diagnostic
     /// @returns a reference to the new diagnostic.
     /// @note The returned reference must not be used after the list is mutated again.
-    diag::Diagnostic& AddNote(System system, const Source& source) {
+    diag::Diagnostic& AddNote(const Source& source) {
         diag::Diagnostic note{};
         note.severity = diag::Severity::Note;
-        note.system = system;
         note.source = source;
         return Add(std::move(note));
     }
 
     /// Adds the warning message with the given Source to the end of this list.
-    /// @param system the system raising the warning message
     /// @param source the source of the warning diagnostic
     /// @returns a reference to the new diagnostic.
     /// @note The returned reference must not be used after the list is mutated again.
-    diag::Diagnostic& AddWarning(System system, const Source& source) {
+    diag::Diagnostic& AddWarning(const Source& source) {
         diag::Diagnostic warning{};
         warning.severity = diag::Severity::Warning;
-        warning.system = system;
         warning.source = source;
         return Add(std::move(warning));
     }
 
     /// Adds the error message with the given Source to the end of this list.
-    /// @param system the system raising the error message
     /// @param source the source of the error diagnostic
     /// @returns a reference to the new diagnostic.
     /// @note The returned reference must not be used after the list is mutated again.
-    diag::Diagnostic& AddError(System system, const Source& source) {
+    diag::Diagnostic& AddError(const Source& source) {
         diag::Diagnostic error{};
         error.severity = diag::Severity::Error;
-        error.system = system;
         error.source = source;
         return Add(std::move(error));
     }
 
-    /// Adds an internal compiler error message to the end of this list.
-    /// @param system the system raising the error message
-    /// @param source the source of the internal compiler error
-    /// @param file the Source::File owned by this diagnostic
-    /// @returns a reference to the new diagnostic.
-    /// @note The returned reference must not be used after the list is mutated again.
-    diag::Diagnostic& AddIce(System system,
-                             const Source& source,
-                             std::shared_ptr<Source::File> file) {
-        diag::Diagnostic ice{};
-        ice.severity = diag::Severity::InternalCompilerError;
-        ice.system = system;
-        ice.source = source;
-        ice.owned_file = std::move(file);
-        return Add(std::move(ice));
-    }
+    /// Ensures that the diagnostic list can fit an additional @p count diagnostics without
+    /// resizing. This is useful for ensuring that a reference returned by the AddX() methods is not
+    /// invalidated after another Add().
+    void ReserveAdditional(size_t count) { entries_.Reserve(entries_.Length() + count); }
 
     /// @returns true iff the diagnostic list contains errors diagnostics (or of
     /// higher severity).

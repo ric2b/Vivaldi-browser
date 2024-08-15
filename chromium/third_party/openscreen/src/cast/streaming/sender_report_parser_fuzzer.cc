@@ -26,7 +26,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 #pragma clang diagnostic ignored "-Wexit-time-destructors"
   static RtcpSession session(kSenderSsrcInSeedCorpus, kReceiverSsrcInSeedCorpus,
                              openscreen::Clock::now());
-  static SenderReportParser parser(&session);
+  static SenderReportParser parser(session);
 #pragma clang diagnostic pop
 
   parser.Parse(openscreen::ByteView(data, size));

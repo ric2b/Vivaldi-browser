@@ -108,6 +108,33 @@ void sparse_vector(int rows, int cols) {
   VERIFY_IS_APPROX(refV3 = v1.transpose(), v1.toDense());
   VERIFY_IS_APPROX(DenseVector(v1), v1.toDense());
 
+  // test move
+  {
+    SparseVectorType tmp(std::move(v1));
+    VERIFY_IS_APPROX(tmp, refV1);
+    v1 = tmp;
+  }
+
+  {
+    SparseVectorType tmp;
+    tmp = std::move(v1);
+    VERIFY_IS_APPROX(tmp, refV1);
+    v1 = tmp;
+  }
+
+  {
+    SparseVectorType tmp(std::move(mv1));
+    VERIFY_IS_APPROX(tmp, refV1);
+    mv1 = tmp;
+  }
+
+  {
+    SparseVectorType tmp;
+    tmp = std::move(mv1);
+    VERIFY_IS_APPROX(tmp, refV1);
+    mv1 = tmp;
+  }
+
   // test conservative resize
   {
     std::vector<StorageIndex> inc;

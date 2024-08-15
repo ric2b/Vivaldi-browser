@@ -7,6 +7,7 @@
 
 #include "src/gpu/ganesh/SurfaceDrawContext.h"
 
+#include "include/core/SkArc.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkDrawable.h"
 #include "include/core/SkTypes.h"
@@ -593,6 +594,18 @@ void SurfaceDrawContext::drawTexture(const GrClip* clip,
     // If we are using dmsaa then go through FillRRectOp (via fillRectToRect).
     if ((this->alwaysAntialias() || this->caps()->reducedShaderMode()) &&
         edgeAA != GrQuadAAFlags::kNone) {
+        auto [mustFilter, mustMM] = FilterAndMipmapHaveNoEffect(
+                GrQuad::MakeFromRect(dstRect, viewMatrix), GrQuad(srcRect));
+        if (!mustFilter) {
+            // Chromeos-jacuzzi devices (ARM Mali-G72 MP3) have issues with blitting with linear
+            // filtering. Likely some optimization or quantization causes fragments to be produced
+            // with small offset/error. This will result in a slight blending of pixels when
+            // sampling. Normally in most application this would be completely unnoticeable but when
+            // trying to use the gpu as a per pixel blit we will end up with slightly blurry
+            // results.
+            // See https://crbug.com/326980863
+            filter = GrSamplerState::Filter::kNearest;
+        }
 
         GrPaint paint;
         paint.setColor4f(color);
@@ -1407,10 +1420,7 @@ void SurfaceDrawContext::drawArc(const GrClip* clip,
                                  GrPaint&& paint,
                                  GrAA aa,
                                  const SkMatrix& viewMatrix,
-                                 const SkRect& oval,
-                                 SkScalar startAngle,
-                                 SkScalar sweepAngle,
-                                 bool useCenter,
+                                 const SkArc& arc,
                                  const GrStyle& style) {
     ASSERT_SINGLE_OWNER
     RETURN_IF_ABANDONED
@@ -1426,10 +1436,10 @@ void SurfaceDrawContext::drawArc(const GrClip* clip,
         GrOp::Owner op = GrOvalOpFactory::MakeArcOp(fContext,
                                                     std::move(paint),
                                                     viewMatrix,
-                                                    oval,
-                                                    startAngle,
-                                                    sweepAngle,
-                                                    useCenter,
+                                                    arc.fOval,
+                                                    arc.fStartAngle,
+                                                    arc.fSweepAngle,
+                                                    arc.isWedge(),
                                                     style,
                                                     shaderCaps);
         if (op) {
@@ -1439,9 +1449,11 @@ void SurfaceDrawContext::drawArc(const GrClip* clip,
         assert_alive(paint);
     }
 #endif
-    this->drawShapeUsingPathRenderer(clip, std::move(paint), aa, viewMatrix,
-                                     GrStyledShape::MakeArc(oval, startAngle, sweepAngle, useCenter,
-                                                            style, DoSimplify::kNo));
+    this->drawShapeUsingPathRenderer(clip,
+                                     std::move(paint),
+                                     aa,
+                                     viewMatrix,
+                                     GrStyledShape::MakeArc(arc, style, DoSimplify::kNo));
 }
 
 void SurfaceDrawContext::drawImageLattice(const GrClip* clip,

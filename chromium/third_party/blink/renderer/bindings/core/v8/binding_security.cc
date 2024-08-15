@@ -201,10 +201,10 @@ DOMWindow* FindWindow(v8::Isolate* isolate,
                       const WrapperTypeInfo* type,
                       v8::Local<v8::Object> holder) {
   if (V8Window::GetWrapperTypeInfo()->Equals(type))
-    return V8Window::ToWrappableUnsafe(holder);
+    return V8Window::ToWrappableUnsafe(isolate, holder);
 
   if (V8Location::GetWrapperTypeInfo()->Equals(type))
-    return V8Location::ToWrappableUnsafe(holder)->DomWindow();
+    return V8Location::ToWrappableUnsafe(isolate, holder)->DomWindow();
 
   // This function can handle only those types listed above.
   NOTREACHED();
@@ -294,9 +294,10 @@ bool BindingSecurity::ShouldAllowAccessToV8Context(
   if (LIKELY(accessing_context == target_context))
     return true;
 
+  v8::Isolate* isolate = accessing_context->GetIsolate();
   return ShouldAllowAccessToV8ContextInternal(
-      ScriptState::From(accessing_context), ScriptState::From(target_context),
-      exception_state);
+      ScriptState::From(isolate, accessing_context),
+      ScriptState::From(isolate, target_context), exception_state);
 }
 
 void BindingSecurity::FailedAccessCheckFor(v8::Isolate* isolate,

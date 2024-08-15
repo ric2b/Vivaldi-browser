@@ -17,10 +17,8 @@
 
 namespace openscreen::cast {
 
-CompoundRtcpBuilder::CompoundRtcpBuilder(RtcpSession* session)
-    : session_(session) {
-  OSP_CHECK(session_);
-}
+CompoundRtcpBuilder::CompoundRtcpBuilder(RtcpSession& session)
+    : session_(session) {}
 
 CompoundRtcpBuilder::~CompoundRtcpBuilder() = default;
 
@@ -124,7 +122,7 @@ void CompoundRtcpBuilder::AppendReceiverReportPacket(ByteBuffer& buffer) {
     header.with.report_count = 0;
   }
   header.AppendFields(buffer);
-  AppendField<uint32_t>(session_->receiver_ssrc(), buffer);
+  AppendField<uint32_t>(session_.receiver_ssrc(), buffer);
   if (receiver_report_for_next_packet_) {
     receiver_report_for_next_packet_->AppendFields(buffer);
     receiver_report_for_next_packet_ = std::nullopt;
@@ -140,12 +138,12 @@ void CompoundRtcpBuilder::AppendReceiverReferenceTimeReportPacket(
                         kRtcpExtendedReportBlockHeaderSize +
                         kRtcpReceiverReferenceTimeReportBlockSize;
   header.AppendFields(buffer);
-  AppendField<uint32_t>(session_->receiver_ssrc(), buffer);
+  AppendField<uint32_t>(session_.receiver_ssrc(), buffer);
   AppendField<uint8_t>(kRtcpReceiverReferenceTimeReportBlockType, buffer);
   AppendField<uint8_t>(0 /* reserved/unused byte */, buffer);
   AppendField<uint16_t>(
       kRtcpReceiverReferenceTimeReportBlockSize / sizeof(uint32_t), buffer);
-  AppendField<uint64_t>(session_->ntp_converter().ToNtpTimestamp(send_time),
+  AppendField<uint64_t>(session_.ntp_converter().ToNtpTimestamp(send_time),
                         buffer);
 }
 
@@ -155,8 +153,8 @@ void CompoundRtcpBuilder::AppendPictureLossIndicatorPacket(ByteBuffer& buffer) {
   header.with.subtype = RtcpSubtype::kPictureLossIndicator;
   header.payload_size = kRtcpPictureLossIndicatorHeaderSize;
   header.AppendFields(buffer);
-  AppendField<uint32_t>(session_->receiver_ssrc(), buffer);
-  AppendField<uint32_t>(session_->sender_ssrc(), buffer);
+  AppendField<uint32_t>(session_.receiver_ssrc(), buffer);
+  AppendField<uint32_t>(session_.sender_ssrc(), buffer);
 }
 
 void CompoundRtcpBuilder::AppendCastFeedbackPacket(ByteBuffer& buffer) {
@@ -166,8 +164,8 @@ void CompoundRtcpBuilder::AppendCastFeedbackPacket(ByteBuffer& buffer) {
   uint8_t* const feedback_fields_begin = buffer.data();
 
   // Append the mandatory fields.
-  AppendField<uint32_t>(session_->receiver_ssrc(), buffer);
-  AppendField<uint32_t>(session_->sender_ssrc(), buffer);
+  AppendField<uint32_t>(session_.receiver_ssrc(), buffer);
+  AppendField<uint32_t>(session_.sender_ssrc(), buffer);
   AppendField<uint32_t>(kRtcpCastIdentifierWord, buffer);
   AppendField<uint8_t>(checkpoint_frame_id_.lower_8_bits(), buffer);
   // The |loss_count_field| will be set after the Loss Fields are generated

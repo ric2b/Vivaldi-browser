@@ -8,7 +8,7 @@
 
 #include "base/values.h"
 #include "components/ad_blocker/adblock_content_injection_rule.h"
-#include "components/ad_blocker/adblock_metadata.h"
+#include "components/ad_blocker/adblock_types.h"
 #include "components/ad_blocker/adblock_request_filter_rule.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 

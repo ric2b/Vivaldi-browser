@@ -463,7 +463,7 @@ PlatformNotificationServiceImpl::CreateNotificationFromData(
   optional_fields.settings_button_handler =
       message_center::SettingsButtonHandler::INLINE;
 
-  // TODO(https://crbug.com/1468301): We can do a better job than basing this
+  // TODO(crbug.com/40277066): We can do a better job than basing this
   // purely on `web_app_hint_url`, for example for non-persistent notifications
   // triggered from workers (where `web_app_hint_url` is always blank) but also
   // for persistent notifications triggered from web pages (where the page url
@@ -511,17 +511,17 @@ PlatformNotificationServiceImpl::CreateNotificationFromData(
 
   if (!notification_resources.image.drawsNothing()) {
     notification.set_type(message_center::NOTIFICATION_TYPE_IMAGE);
-    notification.set_image(
+    notification.SetImage(
         gfx::Image::CreateFrom1xBitmap(notification_resources.image));
   }
 
   if (web_app_icon_and_title && !web_app_icon_and_title->icon.isNull())
-    notification.set_small_image(gfx::Image(web_app_icon_and_title->icon));
+    notification.SetSmallImage(gfx::Image(web_app_icon_and_title->icon));
 
   // TODO(peter): Handle different screen densities instead of always using the
   // 1x bitmap - crbug.com/585815.
   if (!notification_resources.badge.isNull()) {
-    notification.set_small_image(
+    notification.SetSmallImage(
         gfx::Image::CreateFrom1xBitmap(notification_resources.badge));
   }
 

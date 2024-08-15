@@ -12,8 +12,8 @@ namespace openscreen::discovery {
 
 class MockReportingClient : public ReportingClient {
  public:
-  MOCK_METHOD1(OnFatalError, void(Error error));
-  MOCK_METHOD1(OnRecoverableError, void(Error error));
+  MOCK_METHOD1(OnFatalError, void(const Error& error));
+  MOCK_METHOD1(OnRecoverableError, void(const Error& error));
 };
 
 }  // namespace openscreen::discovery

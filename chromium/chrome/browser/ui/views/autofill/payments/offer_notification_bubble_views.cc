@@ -45,7 +45,9 @@ OfferNotificationBubbleViews::OfferNotificationBubbleViews(
     views::View* anchor_view,
     content::WebContents* web_contents,
     OfferNotificationBubbleController* controller)
-    : LocationBarBubbleDelegateView(anchor_view, web_contents),
+    : LocationBarBubbleDelegateView(anchor_view,
+                                    web_contents,
+                                    /*autosize=*/true),
       controller_(controller) {
   DCHECK(controller);
   SetShowCloseButton(true);
@@ -354,10 +356,13 @@ void OfferNotificationBubbleViews::OnPromoCodeButtonClicked() {
 
 void OfferNotificationBubbleViews::OnPromoCodeSeeDetailsClicked() {
   DCHECK(controller_->GetOffer()->GetOfferDetailsUrl().is_valid());
-  web_contents()->OpenURL(content::OpenURLParams(
-      GURL(controller_->GetOffer()->GetOfferDetailsUrl()), content::Referrer(),
-      WindowOpenDisposition::NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_LINK,
-      /*is_renderer_initiated=*/false));
+  web_contents()->OpenURL(
+      content::OpenURLParams(
+          GURL(controller_->GetOffer()->GetOfferDetailsUrl()),
+          content::Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
+          ui::PAGE_TRANSITION_LINK,
+          /*is_renderer_initiated=*/false),
+      /*navigation_handle_callback=*/{});
 }
 
 void OfferNotificationBubbleViews::UpdateButtonTooltipsAndAccessibleNames() {
@@ -411,7 +416,6 @@ void OfferNotificationBubbleViews::OpenTermsAndConditionsPage(
                   .SetAllowCharacterBreak(true)
                   .Build())
           .Build());
-  SizeToContents();
 }
 
 std::unique_ptr<views::View>
@@ -457,7 +461,6 @@ void OfferNotificationBubbleViews::OpenFreeListingCouponOfferMainPage(
   GetBubbleFrameView()->SetFootnoteView(nullptr);
   free_listing_coupon_page_container_->SwitchToPage(
       CreateFreeListingCouponOfferMainPageContent(offer, seller_domain));
-  SizeToContents();
 }
 
 void OfferNotificationBubbleViews::

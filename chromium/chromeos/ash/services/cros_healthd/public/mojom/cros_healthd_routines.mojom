@@ -7,16 +7,15 @@
 
 // NOTE: This mojom should be kept in sync with the copy in ChromiumOS repo in
 // src/platform2/diagnostics/mojom/public/cros_healthd_routines.mojom.
-
 module ash.cros_healthd.mojom;
 
+import "chromeos/ash/services/cros_healthd/public/mojom/cros_healthd_exception.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "mojo/public/mojom/base/uuid.mojom";
-import "chromeos/ash/services/cros_healthd/public/mojom/cros_healthd_exception.mojom";
 
 // Routines interface exposed by the cros_healthd daemon.
 //
-// NextMinVersion: 3, NextIndex: 2
+// NextMinVersion: 1, NextIndex: 2
 [Stable]
 interface CrosHealthdRoutinesService {
   // Requests that a routine using the RoutineControl API is created on the
@@ -55,9 +54,9 @@ interface CrosHealthdRoutinesService {
   //
   // * |routine_observer| - an optional observer to receive status updates about
   //                        changing routine states.
-  [MinVersion=1] CreateRoutine@0(RoutineArgument routine_argument,
-      pending_receiver<RoutineControl> routine_receiver,
-      pending_remote<RoutineObserver>? routine_observer);
+  CreateRoutine@0(RoutineArgument routine_argument,
+                  pending_receiver<RoutineControl> routine_receiver,
+                  pending_remote<RoutineObserver>? routine_observer);
 
   // Checks whether a given `RoutineArgument` is supported.
   //
@@ -68,52 +67,55 @@ interface CrosHealthdRoutinesService {
   //
   // The response:
   // * |status| - See the documentation of `SupportStatus`.
-  [MinVersion=2] IsRoutineArgumentSupported@1(
-      RoutineArgument routine_argument) => (SupportStatus status);
+  IsRoutineArgumentSupported@1(RoutineArgument routine_argument)
+      => (SupportStatus status);
 };
 
 // Argument types for the possible routines the routine control API can create.
 //
-// NextMinVersion: 5, NextIndex: 18
+// NextMinVersion: 1, NextIndex: 19
 [Stable, Extensible]
 union RoutineArgument {
   // Default field is required by extensible unions for backward compatibility.
   // Any unrecognized Mojo field will deserialize to this field. Don't use this.
-  [Default] bool unrecognizedArgument@0;
+  [Default]
+  bool unrecognizedArgument@0;
   // Arguments to create a memory routine.
-  [MinVersion=1] MemoryRoutineArgument memory@1;
+  MemoryRoutineArgument memory@1;
   // Arguments to create a volume button routine.
-  [MinVersion=2] VolumeButtonRoutineArgument volume_button@2;
+  VolumeButtonRoutineArgument volume_button@2;
   // Arguments to create a fan routine.
-  [MinVersion=3] FanRoutineArgument fan@3;
+  FanRoutineArgument fan@3;
   // Arguments to create an audio driver malfunction test routine.
-  [MinVersion=4] AudioDriverRoutineArgument audio_driver@4;
+  AudioDriverRoutineArgument audio_driver@4;
   // Arguments to create a CPU stress routine.
-  [MinVersion=4] CpuStressRoutineArgument cpu_stress@5;
+  CpuStressRoutineArgument cpu_stress@5;
   // Arguments to create a UFS lifetime routine.
-  [MinVersion=4] UfsLifetimeRoutineArgument ufs_lifetime@6;
+  UfsLifetimeRoutineArgument ufs_lifetime@6;
   // Arguments to create a disk read routine.
-  [MinVersion=4] DiskReadRoutineArgument disk_read@7;
+  DiskReadRoutineArgument disk_read@7;
   // Arguments to create a CPU cache routine.
-  [MinVersion=4] CpuCacheRoutineArgument cpu_cache@8;
+  CpuCacheRoutineArgument cpu_cache@8;
   // Arguments to create a prime search routine.
-  [MinVersion=4] PrimeSearchRoutineArgument prime_search@9;
+  PrimeSearchRoutineArgument prime_search@9;
   // Arguments to create a LED lit up routine.
-  [MinVersion=4] LedLitUpRoutineArgument led_lit_up@10;
+  LedLitUpRoutineArgument led_lit_up@10;
   // Arguments to create a floating point routine.
-  [MinVersion=4] FloatingPointRoutineArgument floating_point@11;
+  FloatingPointRoutineArgument floating_point@11;
   // Arguments to create a Bluetooth power routine.
-  [MinVersion=4] BluetoothPowerRoutineArgument bluetooth_power@12;
+  BluetoothPowerRoutineArgument bluetooth_power@12;
   // Arguments to create a Bluetooth discovery routine.
-  [MinVersion=4] BluetoothDiscoveryRoutineArgument bluetooth_discovery@13;
+  BluetoothDiscoveryRoutineArgument bluetooth_discovery@13;
   // Arguments to create a Bluetooth scanning routine.
-  [MinVersion=4] BluetoothScanningRoutineArgument bluetooth_scanning@14;
+  BluetoothScanningRoutineArgument bluetooth_scanning@14;
   // Arguments to create a Bluetooth pairing routine.
-  [MinVersion=4] BluetoothPairingRoutineArgument bluetooth_pairing@15;
+  BluetoothPairingRoutineArgument bluetooth_pairing@15;
   // Arguments to create a camera availability routine.
-  [MinVersion=4] CameraAvailabilityRoutineArgument camera_availability@16;
+  CameraAvailabilityRoutineArgument camera_availability@16;
   // Arguments to create a urandom routine.
-  [MinVersion=4] UrandomRoutineArgument urandom@17;
+  UrandomRoutineArgument urandom@17;
+  // Arguments to create a network bandwidth routine.
+  NetworkBandwidthRoutineArgument network_bandwidth@18;
 };
 
 // This routine checks whether there is any memory problem by
@@ -212,7 +214,7 @@ struct VolumeButtonRoutineArgument {
   enum ButtonType {
     // The default value is for backward compatibility, should not be used.
     [Default] kUnmappedEnumField = 0,
-    kVolumeUp = 1,    // Test for the volume up button.
+    kVolumeUp = 1,  // Test for the volume up button.
     kVolumeDown = 2,  // Test for the volume down button.
   };
   // The type of volume button to test.
@@ -222,45 +224,31 @@ struct VolumeButtonRoutineArgument {
   mojo_base.mojom.TimeDelta timeout@1;
 };
 
-// Replier interface for the LED lit up routine.
-//
-// NextMinVersion: 1, NextIndex: 1
-[Stable]
-interface LedLitUpRoutineReplier {
-  // Returns whether the actual LED color matches the expected color.
-  //
-  // The response:
-  // * |matched| - true if the actual LED color matches the expected color.
-  //               Otherwise, false.
-  GetColorMatched@0() => (bool matched);
-};
-
 // The routine lights up the target LED in the specified color and requests the
 // caller to verify the change.
 //
-// The routine proceeds with the following steps:
-// 1. Set the specified LED with the specified color. If the LED name or color
-//    is not supported by EC, the routine reports error at this step.
-// 2. Invoke the |GetColorMatched| method of |replier|. The method should
-//    return |true| if the actual color matches the specified color and
-//    |false|, otherwise. Notice that there is no timeout so it will wait
-//    indefinitely.
-// 3. After receiving the response from |replier|, the color of the LED will
-//    be reset (back the auto control). If the replier disconnects before
-//    the response is received, the LED will also be reset.
-// 4. The status of the routine is then updated. The routine passes when the
-//    response is |true|. If the response is |false|, the routine fails.
+// This routine is supported if and only if the device has a ChromeOS EC.
 //
-// NextMinVersion: 1, NextIndex: 3
+// When an LED name or LED color is not supported by the EC, it will cause a
+// routine exception (by closing the connection of `RoutineControl`) at runtime.
+// TODO(b/319047040): add per-LED-name and per-LED-color supported check.
+//
+// The routine proceeds with the following steps:
+// 1. Set the specified LED with the specified color and enter the waiting state
+//    with the `CheckLedLitUpStateInquiry` interaction request.
+// 2. After receiving `CheckLedLitUpStateReply` with the observed LED state, the
+//    color of the LED will be reset (back to auto control). Notice that there
+//    is no timeout so the routine will be in the waiting state indefinitely.
+// 3. The routine passes if the LED is lit up in the correct color. Otherwise,
+//    the routine fails.
+//
+// NextMinVersion: 1, NextIndex: 2
 [Stable]
 struct LedLitUpRoutineArgument {
   // The LED to be lit up.
   LedName name@0;
   // The color to be lit up.
   LedColor color@1;
-  // A replier to answer whether the actual LED color matches the expected
-  // color.
-  pending_remote<LedLitUpRoutineReplier> replier@2;
 };
 
 // This routine checks whether there is any CPU problem by repeatedly
@@ -342,25 +330,41 @@ struct UrandomRoutineArgument {
   mojo_base.mojom.TimeDelta? exec_duration@0;
 };
 
+// This routine checks the network bandwidth and reports the speed info.
+//
+// NextMinVersion: 1, NextIndex: 0
+[Stable]
+struct NetworkBandwidthRoutineArgument {};
+
 // Interface exposed to clients for controlling a routine.
 //
 // Error Handling:
 // Please check the Error Handling section of CrosHealthdRoutinesService.
 //
-// NextMinVersion: 2, NextIndex: 2
+// NextMinVersion: 3, NextIndex: 3
 [Stable]
 interface RoutineControl {
   // Gets the current state of the routine. Note that if the routine fails to
   // initialize, the RoutineControl will disconnect before the callback is
   // called.
-  [MinVersion=1] GetState@0() => (RoutineState state);
+  [MinVersion=1]
+  GetState@0() => (RoutineState state);
 
   // Starts the routine. Each routine can only be started once. Calling this
   // method multiple times results in no-ops.
   //
   // See the error handling section above to know how to handle possible
   // exceptions that occur before and after the routine has been started.
-  [MinVersion=1] Start@1();
+  [MinVersion=1]
+  Start@1();
+
+  // Reply to the routine inquiry requested in the waiting state. The routine
+  // will raise an exception (by closing the connection of this
+  // `RoutineControl`) if the routine is not in the waiting state or the reply
+  // does not match the inquiry in the waiting state (see
+  // `RoutineStateWaiting`).
+  [MinVersion=2]
+  ReplyInquiry@2(RoutineInquiryReply reply);
 };
 
 // Implemented by clients who desire routine update notifications.
@@ -372,7 +376,8 @@ interface RoutineObserver {
   // as a routine is initialized (right after calling `CreateRoutine`).
   // Note that if the routine fails to initialize, the RoutineControl may
   // disconnect before the first invocation of this observer method.
-  [MinVersion=1] OnRoutineStateChange@0(RoutineState state);
+  [MinVersion=1]
+  OnRoutineStateChange@0(RoutineState state);
 };
 
 // Used to pass information regarding routine state.
@@ -393,7 +398,8 @@ struct RoutineState {
 union RoutineStateUnion {
   // Default field is required by extensible unions for backward compatibility.
   // Any unrecognized Mojo field will deserialize to this field. Don't use this.
-  [Default] bool unrecognizedArgument @0;
+  [Default]
+  bool unrecognizedArgument@0;
   // Routine has been initialized but not yet started.
   RoutineStateInitialized initialized@1;
   // Routine is running.
@@ -412,13 +418,52 @@ struct RoutineStateInitialized {};
 
 // Routine is currently running.
 //
-// NextMinVersion: 1, NextIndex: 0
+// NextMinVersion: 2, NextIndex: 1
 [Stable]
-struct RoutineStateRunning {};
+struct RoutineStateRunning {
+  [MinVersion=1]
+  RoutineRunningInfo? info@0;
+};
+
+// Routine running info. Note that not every routine provides info during the
+// running state.
+//
+// NextMinVersion: 1, NextIndex: 2
+[Stable]
+union RoutineRunningInfo {
+  // Default field is required by extensible unions for backward compatibility.
+  // Any unrecognized Mojo field will deserialize to this field. Don't use this.
+  [Default]
+  bool unrecognizedArgument@0;
+  // Running info of network bandwidth routine.
+  NetworkBandwidthRoutineRunningInfo network_bandwidth@1;
+};
+
+// Running info regarding network bandwidth routine.
+//
+// NextMinVersion: 1, NextIndex: 2
+[Stable]
+struct NetworkBandwidthRoutineRunningInfo {
+  // The type of test that routine is running.
+  //
+  // NextMinVersion: 1, NextIndex: 3
+  [Stable, Extensible]
+  enum Type {
+    [Default] kUnmappedEnumField = 0,
+    // Routine is running download test.
+    kDownload = 1,
+    // Routine is running upload test.
+    kUpload = 2,
+  };
+  Type type@0;
+
+  // The current network speed in kbit/s.
+  double speed_kbps@1;
+};
 
 // Routine is currently waiting.
 //
-// NextMinVersion: 1, NextIndex: 2
+// NextMinVersion: 2, NextIndex: 3
 [Stable]
 struct RoutineStateWaiting {
   // The reason why the routine waits.
@@ -429,13 +474,93 @@ struct RoutineStateWaiting {
     [Default] kUnmappedEnumField = 0,
     // Waiting for the job to be scheduled for running.
     kWaitingToBeScheduled = 1,
-    // Waiting for user input.
-    kWaitingUserInput = 2,
+    // Waiting for an interaction. Check `interaction` to learn about which
+    // interaction is requested.
+    kWaitingInteraction = 2,
   };
   // Reason why the routine waits.
   Reason reason@0;
   // Additional information, may be used to pass instruction or explanation.
   string message@1;
+  // The requested interaction. This field is set if and only if `reason` is
+  // kWaitingInteraction. When set, clients must respond to the interaction for
+  // the routine to proceed.
+  [MinVersion=1]
+  RoutineInteraction? interaction@2;
+};
+
+// An interaction that is requested by a routine in the waiting state. See the
+// comments on the subtypes to learn how to respond to each interaction request.
+//
+// Note: this union type contains only one field (apart from the unrecognized
+// one) because all interactions currently need to be replied. Another type
+// `RoutineTask` should be added when there are interactions that do not need to
+// be replied.
+//
+// NextMinVersion: 1, NextIndex: 2
+[Stable, Extensible]
+union RoutineInteraction {
+  // Default field is required by extensible unions for backward compatibility.
+  // Any unrecognized Mojo field will deserialize to this field. Don't use this.
+  [Default]
+  bool unrecognizedInteraction@0;
+  // An interaction that needs to be replied using `ReplyInquiry`.
+  RoutineInquiry inquiry@1;
+};
+
+// An interaction that has to be replied. Each inquiry type has a corresponding
+// reply type in `RoutineInquiryReply`. Clients should call the `ReplyInquiry`
+// method of `RoutineControl` with the corresponding reply type.
+//
+// NextMinVersion: 1, NextIndex: 2
+[Stable, Extensible]
+union RoutineInquiry {
+  // Default field is required by extensible unions for backward compatibility.
+  // Any unrecognized Mojo field will deserialize to this field. Don't use this.
+  [Default]
+  bool unrecognizedInquiry@0;
+  // Details of the inquiry to check the LED lit up state.
+  CheckLedLitUpStateInquiry check_led_lit_up_state@1;
+};
+
+// Details to reply to a routine inquiry.
+//
+// NextMinVersion: 1, NextIndex: 2
+[Stable, Extensible]
+union RoutineInquiryReply {
+  // Default field is required by extensible unions for backward compatibility.
+  // Any unrecognized Mojo field will deserialize to this field. Don't use this.
+  [Default]
+  bool unrecognizedReply@0;
+  // Details to resume a routine requesting to check the LED lit up state.
+  CheckLedLitUpStateReply check_led_lit_up_state@1;
+};
+
+// Details regarding the inquiry to check the LED lit up state. Clients should
+// inspect the target LED and report its state using `CheckLedLitUpStateReply`.
+//
+// NextMinVersion: 1, NextIndex: 0
+[Stable]
+struct CheckLedLitUpStateInquiry {};
+
+// Details to reply to a routine requesting to check the LED lit up state.
+//
+// NextMinVersion: 1, NextIndex: 1
+[Stable]
+struct CheckLedLitUpStateReply {
+  // State of the target LED.
+  //
+  // NextMinVersion: 1, NextIndex: 3
+  [Stable, Extensible]
+  enum State {
+    // The default value is for backward compatibility, should not be used.
+    [Default] kUnmappedEnumField = 0,
+    // The LED is lit up with the correct color.
+    kCorrectColor = 1,
+    // The LED is not lit up with the correct color.
+    kNotLitUp = 2,
+  };
+  State state@0;
 };
 
 // Information about a finished routine.
@@ -451,12 +576,13 @@ struct RoutineStateFinished {
 
 // Details about a finished routine.
 //
-// NextMinVersion: 1, NextIndex: 10
+// NextMinVersion: 2, NextIndex: 11
 [Stable, Extensible]
 union RoutineDetail {
   // Default field is required by extensible unions for backward compatibility.
   // Any unrecognized Mojo field will deserialize to this field. Don't use this.
-  [Default] bool unrecognizedArgument@0;
+  [Default]
+  bool unrecognizedArgument@0;
   // Details of a completed memory routine.
   MemoryRoutineDetail memory@1;
   // Details of a completed fan routine.
@@ -475,6 +601,9 @@ union RoutineDetail {
   BluetoothPairingRoutineDetail bluetooth_pairing@8;
   // Details of a completed camera availability routine.
   CameraAvailabilityRoutineDetail camera_availability@9;
+  // Details of a completed network bandwidth routine.
+  [MinVersion=1]
+  NetworkBandwidthRoutineDetail network_bandwidth@10;
 };
 
 // Details regarding memory routine.
@@ -626,7 +755,7 @@ struct BluetoothDiscoveryRoutineDetail {
 
 // Details regarding the scanned peripheral.
 //
-// NextMinVersion: 1, NextIndex: 3
+// NextMinVersion: 2, NextIndex: 4
 [Stable]
 struct BluetoothScannedPeripheralInfo {
   // All collected RSSI during the routine.
@@ -637,6 +766,10 @@ struct BluetoothScannedPeripheralInfo {
   // The unique id of peripheral, which is reported when the average RSSI is
   // higher than -60.
   string? peripheral_id@2;
+  // The list of available services of peripheral, which is reported when the
+  // average RSSI is higher than -60.
+  [MinVersion=1]
+  array<mojo_base.mojom.Uuid>? uuids@3;
 };
 
 // Details regarding Bluetooth scanning routine.
@@ -821,4 +954,15 @@ struct FanRoutineDetail {
   array<uint8> failed_fan_ids@1;
   // Whether the number of fan probed is matched.
   HardwarePresenceStatus fan_count_status@2;
+};
+
+// Details regarding network bandwidth routine.
+//
+// NextMinVersion: 1, NextIndex: 2
+[Stable]
+struct NetworkBandwidthRoutineDetail {
+  // Average download speed in kbit/s.
+  double download_speed_kbps@0;
+  // Average upload speed in kbit/s.
+  double upload_speed_kbps@1;
 };

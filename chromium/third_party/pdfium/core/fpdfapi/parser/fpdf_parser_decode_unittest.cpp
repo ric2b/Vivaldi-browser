@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "core/fpdfapi/parser/fpdf_parser_decode.h"
 
 #include <stddef.h>
@@ -285,8 +290,9 @@ TEST(ParserDecodeTest, A85Decode) {
     std::unique_ptr<uint8_t, FxFreeDeleter> result;
     uint32_t result_size = 0;
     EXPECT_EQ(test_case.processed_size,
-              A85Decode({test_case.input, test_case.input_size}, &result,
-                        &result_size))
+              A85Decode(UNSAFE_BUFFERS(pdfium::make_span(test_case.input,
+                                                         test_case.input_size)),
+                        &result, &result_size))
         << "for case " << test_case.input;
     ASSERT_EQ(test_case.expected_size, result_size);
     const uint8_t* result_ptr = result.get();
@@ -320,8 +326,9 @@ TEST(ParserDecodeTest, HexDecode) {
     std::unique_ptr<uint8_t, FxFreeDeleter> result;
     uint32_t result_size = 0;
     EXPECT_EQ(test_case.processed_size,
-              HexDecode({test_case.input, test_case.input_size}, &result,
-                        &result_size))
+              HexDecode(UNSAFE_BUFFERS(pdfium::make_span(test_case.input,
+                                                         test_case.input_size)),
+                        &result, &result_size))
         << "for case " << test_case.input;
     ASSERT_EQ(test_case.expected_size, result_size);
     const uint8_t* result_ptr = result.get();

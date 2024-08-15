@@ -4,6 +4,7 @@
 
 #include "components/enterprise/data_controls/rule.h"
 
+#include <string_view>
 #include <vector>
 
 #include "base/containers/fixed_flat_map.h"
@@ -43,8 +44,8 @@ std::string GetStringOrEmpty(const base::Value::Dict& dict, const char* key) {
 // their dictionary. If other attributes are present alongside them, it creates
 // ambiguity as to how the rule is evaluated, and as such this is considered an
 // error in the set policy.
-std::vector<base::StringPiece> OneOfConditions(const base::Value::Dict& value) {
-  std::vector<base::StringPiece> oneof_conditions;
+std::vector<std::string_view> OneOfConditions(const base::Value::Dict& value) {
+  std::vector<std::string_view> oneof_conditions;
   for (const char* oneof_value :
        {// "and", "or" and "not" need to be the only value at their level as it
         // is otherwise ambiguous which of them has precedence or how they are
@@ -65,8 +66,8 @@ std::vector<base::StringPiece> OneOfConditions(const base::Value::Dict& value) {
 
 // Returns any condition present in `value` that wouldn't match
 // `OneOfConditions`.
-std::vector<base::StringPiece> AnyOfConditions(const base::Value::Dict& value) {
-  std::vector<base::StringPiece> anyof_conditions;
+std::vector<std::string_view> AnyOfConditions(const base::Value::Dict& value) {
+  std::vector<std::string_view> anyof_conditions;
   for (const char* anyof_condition :
        {kKeySources, kKeyDestinations, AttributesCondition::kKeyUrls,
         AttributesCondition::kKeyIncognito,
@@ -145,7 +146,7 @@ Rule::Level Rule::GetLevel(Restriction restriction,
     return Level::kNotSet;
   }
 
-  if (condition_->IsTriggered(context)) {
+  if (condition_->CanBeEvaluated(context) && condition_->IsTriggered(context)) {
     return restrictions_.at(restriction);
   }
 
@@ -291,7 +292,7 @@ base::flat_map<Rule::Restriction, Rule::Level> Rule::GetRestrictions(
 // static
 Rule::Restriction Rule::StringToRestriction(const std::string& restriction) {
   static constexpr auto kMap =
-      base::MakeFixedFlatMap<base::StringPiece, Restriction>({
+      base::MakeFixedFlatMap<std::string_view, Restriction>({
           {kRestrictionClipboard, Restriction::kClipboard},
           {kRestrictionScreenshot, Restriction::kScreenshot},
           {kRestrictionPrinting, Restriction::kPrinting},
@@ -313,13 +314,12 @@ Rule::Restriction Rule::StringToRestriction(const std::string& restriction) {
 
 // static
 Rule::Level Rule::StringToLevel(const std::string& level) {
-  static constexpr auto kMap =
-      base::MakeFixedFlatMap<base::StringPiece, Level>({
-          {kLevelAllow, Level::kAllow},
-          {kLevelBlock, Level::kBlock},
-          {kLevelWarn, Level::kWarn},
-          {kLevelReport, Level::kReport},
-      });
+  static constexpr auto kMap = base::MakeFixedFlatMap<std::string_view, Level>({
+      {kLevelAllow, Level::kAllow},
+      {kLevelBlock, Level::kBlock},
+      {kLevelWarn, Level::kWarn},
+      {kLevelReport, Level::kReport},
+  });
 
   static_assert(
       static_cast<int>(Level::kMaxValue) == kMap.size(),
@@ -375,16 +375,40 @@ const char* Rule::LevelToString(Level level) {
 
 // static
 bool Rule::ValidateRuleValue(const char* policy_name,
-                             const base::Value::Dict& value,
+                             const base::Value::Dict& root_value,
                              policy::PolicyErrorPath error_path,
                              policy::PolicyErrorMap* errors) {
-  std::vector<base::StringPiece> oneof_conditions = OneOfConditions(value);
-  std::vector<base::StringPiece> anyof_conditions = AnyOfConditions(value);
+  auto restrictions = GetRestrictions(root_value);
 
+  if (!AddUnsupportedRestrictionErrors(policy_name, restrictions, error_path,
+                                       errors) ||
+      restrictions.empty()) {
+    return false;
+  }
+
+  return ValidateRuleSubValues(policy_name, root_value, restrictions,
+                               error_path, errors);
+}
+
+// static
+bool Rule::ValidateRuleSubValues(
+    const char* policy_name,
+    const base::Value::Dict& value,
+    const base::flat_map<Rule::Restriction, Rule::Level>& restrictions,
+    policy::PolicyErrorPath error_path,
+    policy::PolicyErrorMap* errors) {
+  std::vector<std::string_view> oneof_conditions = OneOfConditions(value);
+  std::vector<std::string_view> anyof_conditions = AnyOfConditions(value);
   if (oneof_conditions.size() > 1 ||
       (oneof_conditions.size() == 1 && anyof_conditions.size() != 0)) {
     AddMutuallyExclusiveErrors(oneof_conditions, anyof_conditions, policy_name,
                                std::move(error_path), errors);
+    return false;
+  }
+
+  if (!AddUnsupportedAttributeErrors(oneof_conditions, anyof_conditions,
+                                     restrictions, policy_name, error_path,
+                                     errors)) {
     return false;
   }
 
@@ -395,17 +419,18 @@ bool Rule::ValidateRuleValue(const char* policy_name,
   bool valid = true;
   for (const char* sub_key : {kKeySources, kKeyDestinations, kKeyNot}) {
     if (value.contains(sub_key)) {
-      valid &= ValidateRuleValue(policy_name, *value.FindDict(sub_key),
-                                 CreateErrorPath(error_path, sub_key), errors);
+      valid &= ValidateRuleSubValues(
+          policy_name, *value.FindDict(sub_key), restrictions,
+          CreateErrorPath(error_path, sub_key), errors);
     }
   }
   for (const char* sub_key : {kKeyAnd, kKeyOr}) {
     if (value.contains(sub_key)) {
       int index = 0;
       for (const base::Value& sub_condition : *value.FindList(sub_key)) {
-        valid &= ValidateRuleValue(policy_name, sub_condition.GetDict(),
-                                   CreateErrorPath(error_path, sub_key, index),
-                                   errors);
+        valid &= ValidateRuleSubValues(
+            policy_name, sub_condition.GetDict(), restrictions,
+            CreateErrorPath(error_path, sub_key, index), errors);
         ++index;
       }
     }
@@ -416,12 +441,12 @@ bool Rule::ValidateRuleValue(const char* policy_name,
 
 // static
 void Rule::AddMutuallyExclusiveErrors(
-    const std::vector<base::StringPiece>& oneof_conditions,
-    const std::vector<base::StringPiece>& anyof_conditions,
+    const std::vector<std::string_view>& oneof_conditions,
+    const std::vector<std::string_view>& anyof_conditions,
     const char* policy_name,
     policy::PolicyErrorPath error_path,
     policy::PolicyErrorMap* errors) {
-  if (oneof_conditions.size() == 0) {
+  if (!errors || oneof_conditions.size() == 0) {
     return;
   }
 
@@ -437,6 +462,107 @@ void Rule::AddMutuallyExclusiveErrors(
                      base::JoinString(anyof_conditions, ", "),
                      base::JoinString(oneof_conditions, ", "), error_path);
   }
+}
+
+// static
+bool Rule::AddUnsupportedAttributeErrors(
+    const std::vector<std::string_view>& oneof_conditions,
+    const std::vector<std::string_view>& anyof_conditions,
+    base::flat_map<Rule::Restriction, Rule::Level> restrictions,
+    const char* policy_name,
+    policy::PolicyErrorPath error_path,
+    policy::PolicyErrorMap* errors) {
+  static const base::flat_map<Rule::Restriction, std::set<std::string_view>>
+      kSupportedAttributes = {
+          {Restriction::kClipboard,
+           {AttributesCondition::kKeyOsClipboard, AttributesCondition::kKeyUrls,
+            AttributesCondition::kKeyIncognito,
+            AttributesCondition::kKeyOtherProfile,
+#if BUILDFLAG(IS_CHROMEOS)
+            AttributesCondition::kKeyComponents,
+#endif  // BUILDFLAG(IS_CHROMEOS)
+            kKeyAnd, kKeyOr, kKeyNot, kKeySources, kKeyDestinations}},
+          {Restriction::kScreenshot,
+           {AttributesCondition::kKeyUrls, AttributesCondition::kKeyIncognito,
+#if BUILDFLAG(IS_CHROMEOS)
+            AttributesCondition::kKeyComponents,
+#endif  // BUILDFLAG(IS_CHROMEOS)
+            kKeyAnd, kKeyOr, kKeyNot, kKeySources}},
+      };
+
+  bool valid = true;
+  for (const auto& restriction : restrictions) {
+    if (!kSupportedAttributes.contains(restriction.first)) {
+      // This shouldn't be reached as `AddUnsupportedRestrictionErrors` should
+      // catch these unsupported restrictions.
+      NOTREACHED();
+      continue;
+    }
+
+    for (const auto& attribute : anyof_conditions) {
+      if (!kSupportedAttributes.at(restriction.first).contains(attribute)) {
+        if (errors) {
+          errors->AddError(policy_name,
+                           IDS_POLICY_DATA_CONTROLS_UNSUPPORTED_CONDITION,
+                           std::string(attribute),
+                           RestrictionToString(restriction.first), error_path);
+        }
+        valid = false;
+      }
+    }
+    for (const auto& attribute : oneof_conditions) {
+      if (!kSupportedAttributes.at(restriction.first).contains(attribute)) {
+        if (errors) {
+          errors->AddError(policy_name,
+                           IDS_POLICY_DATA_CONTROLS_UNSUPPORTED_CONDITION,
+                           std::string(attribute),
+                           RestrictionToString(restriction.first), error_path);
+        }
+        valid = false;
+      }
+    }
+  }
+
+  return valid;
+}
+
+// static
+bool Rule::AddUnsupportedRestrictionErrors(
+    const char* policy_name,
+    const base::flat_map<Rule::Restriction, Rule::Level>& restrictions,
+    policy::PolicyErrorPath error_path,
+    policy::PolicyErrorMap* errors) {
+  static const base::flat_map<Rule::Restriction, std::set<Rule::Level>>
+      kSupportedRestrictions = {
+          {Restriction::kClipboard,
+           {Level::kNotSet, Level::kReport, Level::kWarn, Level::kBlock}},
+          {Restriction::kScreenshot, {Level::kNotSet, Level::kBlock}},
+      };
+
+  bool valid = true;
+  for (const auto& restriction : restrictions) {
+    if (!kSupportedRestrictions.contains(restriction.first)) {
+      if (errors) {
+        errors->AddError(policy_name,
+                         IDS_POLICY_DATA_CONTROLS_UNSUPPORTED_RESTRICTION,
+                         RestrictionToString(restriction.first), error_path);
+      }
+      valid = false;
+      continue;
+    }
+    if (!kSupportedRestrictions.at(restriction.first)
+             .contains(restriction.second)) {
+      if (errors) {
+        errors->AddError(policy_name,
+                         IDS_POLICY_DATA_CONTROLS_UNSUPPORTED_LEVEL,
+                         RestrictionToString(restriction.first),
+                         LevelToString(restriction.second), error_path);
+      }
+      valid = false;
+    }
+  }
+
+  return valid;
 }
 
 }  // namespace data_controls

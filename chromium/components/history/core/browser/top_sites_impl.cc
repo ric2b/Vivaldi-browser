@@ -45,6 +45,8 @@
 #include "components/search_engines/template_url_service.h"
 #include "url/gurl.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace history {
 namespace {
 
@@ -439,6 +441,16 @@ void TopSitesImpl::ScheduleUpdateTimer() {
   if (timer_.IsRunning())
     return;
 
+  if (vivaldi::IsVivaldiRunning() && vivaldi_aggressive_update_) {
+    // if we have not yet populated a full top site list we assume history is
+    // resonable short and update (almost) immediately.
+    if (top_sites_.size() < kTopSitesNumber) {
+      timer_.Start(FROM_HERE, base::Seconds(10), this,
+                 &TopSitesImpl::StartQueryForMostVisited);
+      return;
+    }
+  }
+
   timer_.Start(FROM_HERE, kDelayForUpdates, this,
                &TopSitesImpl::StartQueryForMostVisited);
 }
@@ -451,6 +463,16 @@ void TopSitesImpl::OnGotMostVisitedURLs(MostVisitedURLList sites) {
   SetTopSites(std::move(sites), CALL_LOCATION_FROM_ON_GOT_MOST_VISITED_URLS);
 
   MoveStateToLoaded();
+
+  if (vivaldi::IsVivaldiRunning() && vivaldi_aggressive_update_) {
+    // if we have not yet populated a full top site list we assume history is
+    // resonable short and update (almost) immediately.
+    if (top_sites_.size() < kTopSitesNumber) {
+      timer_.Start(FROM_HERE, base::Seconds(1), this,
+                 &TopSitesImpl::StartQueryForMostVisited);
+      return;
+    }
+  }
 
   // Start a timer that refreshes top sites from history.
   timer_.Start(FROM_HERE, kFirstDelayAtStartup, this,
@@ -566,8 +588,8 @@ void TopSitesImpl::SetTopSitesFromHistory(
   SetTopSites(std::move(merged_list), CALL_LOCATION_FROM_OTHER_PLACES);
 }
 
-void TopSitesImpl::OnURLsDeleted(HistoryService* history_service,
-                                 const DeletionInfo& deletion_info) {
+void TopSitesImpl::OnHistoryDeletions(HistoryService* history_service,
+                                      const DeletionInfo& deletion_info) {
   if (!loaded_)
     return;
 
@@ -577,5 +599,15 @@ void TopSitesImpl::OnURLsDeleted(HistoryService* history_service,
   }
   StartQueryForMostVisited();
 }
+
+// Added by Vivaldi
+void TopSitesImpl::UpdateNow() {
+  StartQueryForMostVisited();
+}
+
+void TopSitesImpl::SetAggressiveUpdate() {
+  vivaldi_aggressive_update_ = true;
+}
+
 
 }  // namespace history

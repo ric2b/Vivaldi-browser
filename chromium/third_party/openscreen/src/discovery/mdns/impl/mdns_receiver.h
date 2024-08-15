@@ -29,7 +29,7 @@ class MdnsReceiver {
   // MdnsReceiver does not own |socket| and |delegate|
   // and expects that the lifetime of these objects exceeds the lifetime of
   // MdnsReceiver.
-  explicit MdnsReceiver(Config config);
+  explicit MdnsReceiver(const Config& config);
   MdnsReceiver(const MdnsReceiver& other) = delete;
   MdnsReceiver(MdnsReceiver&& other) noexcept = delete;
   MdnsReceiver& operator=(const MdnsReceiver& other) = delete;

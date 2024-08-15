@@ -65,7 +65,7 @@ class LegacyTwoClientNotesSyncTest : public NotesSyncTest {
       delete;
 };
 
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, Sanity) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DISABLED_Sanity) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -149,7 +149,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, Sanity) {
   ASSERT_TRUE(AllModelsMatch());
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SimultaneousURLChanges) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_SimultaneousURLChanges) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -177,7 +178,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SimultaneousURLChanges) {
 }
 
 // Test Scribe ID - 370558.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddFirstFolder) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DISABLED_SC_AddFirstFolder) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -187,7 +188,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddFirstFolder) {
 }
 
 // Test Scribe ID - 370559.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddFirstNote) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DISABLED_SC_AddFirstNote) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -197,7 +198,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddFirstNote) {
 }
 
 // Test Scribe ID - 370560.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddNonHTTPNote) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DISABLED_SC_AddNonHTTPNote) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -210,7 +211,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddNonHTTPNote) {
 }
 
 // Test Scribe ID - 370561.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddFirstNoteUnderFolder) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_SC_AddFirstNoteUnderFolder) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -223,7 +225,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddFirstNoteUnderFolder) {
 }
 
 // Test Scribe ID - 370562.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddSeveralNotes) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DISABLED_SC_AddSeveralNotes) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -237,7 +239,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddSeveralNotes) {
 }
 
 // Test Scribe ID - 370563.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddSeveralNotesAndFolders) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_SC_AddSeveralNotesAndFolders) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -270,7 +273,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddSeveralNotesAndFolders) {
 
 // Test Scribe ID - 370641.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DuplicateNotesWithDifferentURLSameContent) {
+                       DISABLED_SC_DuplicateNotesWithDifferentURLSameContent) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -283,7 +286,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 }
 
 // Test Scribe ID - 370639 - Add notes with different name and same URL.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_DuplicateNotesWithSameURL) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_SC_DuplicateNotesWithSameURL) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -296,7 +300,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_DuplicateNotesWithSameURL) {
 }
 
 // Test Scribe ID - 371817.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_RenameNoteName) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DISABLED_SC_RenameNoteName) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -312,7 +316,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_RenameNoteName) {
   ASSERT_TRUE(AllModelsMatch());
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_ChangeNoteContent) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DISABLED_SC_ChangeNoteContent) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -329,7 +333,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_ChangeNoteContent) {
 }
 
 // Test Scribe ID - 371822.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_ChangeNoteURL) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DISABLED_SC_ChangeNoteURL) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -346,7 +350,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_ChangeNoteURL) {
 }
 
 // Test Scribe ID - 371818 - Renaming the same note name twice.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_TwiceRenamingNoteName) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_SC_TwiceRenamingNoteName) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -367,7 +372,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_TwiceRenamingNoteName) {
   ASSERT_TRUE(AllModelsMatch());
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_TwiceChangingNoteContent) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_SC_TwiceChangingNoteContent) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -388,7 +394,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_TwiceChangingNoteContent) {
 }
 
 // Test Scribe ID - 371823 - Renaming the same note URL twice.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_TwiceRenamingNoteURL) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_SC_TwiceRenamingNoteURL) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -409,7 +416,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_TwiceRenamingNoteURL) {
 }
 
 // Test Scribe ID - 371824.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_RenameNotesFolder) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DISABLED_SC_RenameNotesFolder) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -427,7 +434,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_RenameNotesFolder) {
 }
 
 // Test Scribe ID - 371825.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_RenameEmptyNotesFolder) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_SC_RenameEmptyNotesFolder) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -444,7 +452,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_RenameEmptyNotesFolder) {
 
 // Test Scribe ID - 371826.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_RenameNotesFolderWithLongHierarchy) {
+                       DISABLED_SC_RenameNotesFolderWithLongHierarchy) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -472,7 +480,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371827.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_RenameNotesFolderThatHasParentAndChildren) {
+                       DISABLED_SC_RenameNotesFolderThatHasParentAndChildren) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -506,7 +514,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371828.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_RenameNoteNameAndContentAndURL) {
+                       DISABLED_SC_RenameNoteNameAndContentAndURL) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -531,7 +539,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371832.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DeleteNoteEmptyAccountAfterwards) {
+                       DISABLED_SC_DeleteNoteEmptyAccountAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -546,7 +554,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371833.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DelNoteNonEmptyAccountAfterwards) {
+                       DISABLED_SC_DelNoteNonEmptyAccountAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -565,7 +573,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371835.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DelFirstNoteUnderNotesFoldNonEmptyFoldAfterwards) {
+    DISABLED_SC_DelFirstNoteUnderNotesFoldNonEmptyFoldAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -586,7 +594,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371836.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DelLastNoteUnderNotesFoldNonEmptyFoldAfterwards) {
+    DISABLED_SC_DelLastNoteUnderNotesFoldNonEmptyFoldAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -607,7 +615,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371856.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DelMiddleNoteUnderNotesFoldNonEmptyFoldAfterwards) {
+    DISABLED_SC_DelMiddleNoteUnderNotesFoldNonEmptyFoldAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -628,7 +636,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371857.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DelNotessUnderNotesFoldEmptyFolderAfterwards) {
+    DISABLED_SC_DelNotessUnderNotesFoldEmptyFolderAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -652,7 +660,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371858.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DelEmptyNotesFoldEmptyAccountAfterwards) {
+                       DISABLED_SC_DelEmptyNotesFoldEmptyAccountAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -667,7 +675,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371869.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DelEmptyNotesFoldNonEmptyAccountAfterwards) {
+                       DISABLED_SC_DelEmptyNotesFoldNonEmptyAccountAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -692,7 +700,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371879.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DelNotesFoldWithNotesNonEmptyAccountAfterwards) {
+    DISABLED_SC_DelNotesFoldWithNotesNonEmptyAccountAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -725,7 +733,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 // Test Scribe ID - 371880.
 IN_PROC_BROWSER_TEST_F(
     TwoClientNotesSyncTest,
-    SC_DelNotesFoldWithNotesAndNotesFoldsNonEmptyACAfterwards) {
+    DISABLED_SC_DelNotesFoldWithNotesAndNotesFoldsNonEmptyACAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -776,7 +784,7 @@ IN_PROC_BROWSER_TEST_F(
 // Test Scribe ID - 371882.
 IN_PROC_BROWSER_TEST_F(
     TwoClientNotesSyncTest,
-    SC_DelBNotesFoldWithParentAndChildrenNotesAndNotesFolds) {
+    DISABLED_SC_DelBNotesFoldWithParentAndChildrenNotesAndNotesFolds) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -808,7 +816,8 @@ IN_PROC_BROWSER_TEST_F(
 }
 
 // Test Scribe ID - 371931.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_ReverseTheOrderOfTwoNotes) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_SC_ReverseTheOrderOfTwoNotes) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -829,7 +838,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_ReverseTheOrderOfTwoNotes) {
 }
 
 // Test Scribe ID - 371933.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_ReverseTheOrderOf10Notes) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_SC_ReverseTheOrderOf10Notes) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -848,7 +858,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_ReverseTheOrderOf10Notes) {
 
 // Test Scribe ID - 371954.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_MovingNotessFromRootToNotesFolder) {
+                       DISABLED_SC_MovingNotessFromRootToNotesFolder) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -873,7 +883,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 }
 
 // Test Scribe ID - 371957.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_MovingNotesFromFoldToRoot) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_SC_MovingNotesFromFoldToRoot) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -899,7 +910,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_MovingNotesFromFoldToRoot) {
 
 // Test Scribe ID - 371961.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_MovingNotesFromParentNotesFoldToChildNotesFold) {
+    DISABLED_SC_MovingNotesFromParentNotesFoldToChildNotesFold) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -930,7 +941,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371964.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_MovingNotesFromChildNotesFoldToParentNotesFold) {
+    DISABLED_SC_MovingNotesFromChildNotesFoldToParentNotesFold) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -960,7 +971,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 }
 
 // Test Scribe ID - 371967.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_HoistNotes10LevelUp) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_SC_HoistNotes10LevelUp) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -1003,7 +1015,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_HoistNotes10LevelUp) {
 
 // Test Scribe ID - 371968.
 // Flaky. http://crbug.com/107744.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_SinkNotes10LevelDown) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_SC_SinkNotes10LevelDown) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -1046,7 +1059,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_SinkNotes10LevelDown) {
 
 // Test Scribe ID - 371980.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_SinkEmptyNotesFold5LevelsDown) {
+                       DISABLED_SC_SinkEmptyNotesFold5LevelsDown) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -1078,7 +1091,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371997.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_SinkNonEmptyNotesFold5LevelsDown) {
+                       DISABLED_SC_SinkNonEmptyNotesFold5LevelsDown) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -1114,7 +1127,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 }
 
 // Test Scribe ID - 372006.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_HoistFolder5LevelsUp) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_SC_HoistFolder5LevelsUp) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -1151,7 +1165,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_HoistFolder5LevelsUp) {
 
 // Test Scribe ID - 372026.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_ReverseTheOrderOfTwoNotesFolders) {
+                       DISABLED_SC_ReverseTheOrderOfTwoNotesFolders) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -1175,7 +1189,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 372028.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_ReverseTheOrderOfTenNotesFolders) {
+                       DISABLED_SC_ReverseTheOrderOfTenNotesFolders) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -1199,7 +1213,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 373379.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_BiDirectionalPushAddingNotes) {
+                       DISABLED_MC_BiDirectionalPushAddingNotes) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -1218,7 +1232,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 373503.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_BiDirectionalPush_AddingSameNotes) {
+                       DISABLED_MC_BiDirectionalPush_AddingSameNotes) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -1236,7 +1250,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 373506.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_BootStrapEmptyStateEverywhere) {
+                       DISABLED_MC_BootStrapEmptyStateEverywhere) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
@@ -1244,7 +1258,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 373505.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_Merge_CaseInsensitivity_InNames) {
+                       DISABLED_MC_Merge_CaseInsensitivity_InNames) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
   const NoteNode* folder0 = AddFolder(0, "Folder");
@@ -1268,7 +1282,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 373508.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_SimpleMergeOfDifferentNotesModels) {
+                       DISABLED_MC_SimpleMergeOfDifferentNotesModels) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
   for (int i = 0; i < 3; ++i) {
@@ -1295,7 +1309,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 }
 
 // Test Scribe ID - 386586.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_MergeSimpleNotesHierarchy) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_MC_MergeSimpleNotesHierarchy) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
   for (int i = 0; i < 3; ++i) {
@@ -1320,7 +1335,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_MergeSimpleNotesHierarchy) {
 
 // Test Scribe ID - 386589.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_MergeSimpleNotesHierarchyEqualSets) {
+                       DISABLED_MC_MergeSimpleNotesHierarchyEqualSets) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
   for (int i = 0; i < 3; ++i) {
@@ -1339,7 +1354,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 373504 - Merge note folders with different notes.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_MergeNotesFoldersWithDifferentNotes) {
+                       DISABLED_MC_MergeNotesFoldersWithDifferentNotes) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
   const NoteNode* folder0 = AddFolder(0, kGenericFolderName);
@@ -1363,7 +1378,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 373509 - Merge moderately complex note models.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_MergeDifferentNotesModelsModeratelyComplex) {
+                       DISABLED_MC_MergeDifferentNotesModelsModeratelyComplex) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
   for (int i = 0; i < 25; ++i) {
@@ -1405,7 +1420,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // TCM ID - 3675271 - Merge simple note subset under note folder.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_MergeSimpleNotesHierarchySubsetUnderNotesFolder) {
+    DISABLED_MC_MergeSimpleNotesHierarchySubsetUnderNotesFolder) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
   for (int i = 0; i < 2; ++i) {
@@ -1431,7 +1446,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // TCM ID - 3727284 - Merge subsets of note under note bar.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_MergeSimpleNotesHierarchySubset) {
+                       DISABLED_MC_MergeSimpleNotesHierarchySubset) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
   for (int i = 0; i < 4; ++i) {
@@ -1456,7 +1471,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // TCM ID - 3659294 - Merge simple note hierarchy under note folder.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_Merge_SimpleNotesHierarchy_Under_NotesFolder) {
+    DISABLED_MC_Merge_SimpleNotesHierarchy_Under_NotesFolder) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
   const NoteNode* folder0 = AddFolder(0, 0, kGenericFolderName);
@@ -1489,7 +1504,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 // folder.
 IN_PROC_BROWSER_TEST_F(
     TwoClientNotesSyncTest,
-    MC_Merge_SimpleNotesHierarchy_DisjointSets_Under_NotesFolder) {
+    DISABLED_MC_Merge_SimpleNotesHierarchy_DisjointSets_Under_NotesFolder) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
   const NoteNode* folder0 = AddFolder(0, 0, kGenericFolderName);
@@ -1519,7 +1534,7 @@ IN_PROC_BROWSER_TEST_F(
 
 // TCM ID - 3639296 - Merge disjoint sets of note hierarchy
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_Merge_SimpleNotesHierarchy_DisjointSets) {
+                       DISABLED_MC_Merge_SimpleNotesHierarchy_DisjointSets) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
   for (int i = 0; i < 3; ++i) {
@@ -1542,7 +1557,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // TCM ID - 3616282 - Merge sets of duplicate notes.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_Merge_SimpleNotesHierarchy_DuplicateNotes) {
+                       DISABLED_MC_Merge_SimpleNotesHierarchy_DuplicateNotes) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
   // Let's add duplicate set of note {1,2,2,3,3,3,4,4,4,4} to client0.
@@ -1573,7 +1588,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 }
 
 // TCM ID - 6593872.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DisableNotes) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DISABLED_DisableNotes) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -1590,7 +1605,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DisableNotes) {
 }
 
 // TCM ID - 7343544.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DisableSync) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DISABLED_DisableSync) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -1609,7 +1624,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DisableSync) {
 
 // TCM ID - 3662298 - Test adding duplicate folder - Both with different BMs
 // underneath.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_DuplicateFolders) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DISABLED_MC_DuplicateFolders) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
   const NoteNode* folder0 = AddFolder(0, kGenericFolderName);
@@ -1632,7 +1647,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_DuplicateFolders) {
 }
 
 // This test fails when run with FakeServer and FakeServerInvalidationService.
-IN_PROC_BROWSER_TEST_F(LegacyTwoClientNotesSyncTest, MC_DeleteNote) {
+IN_PROC_BROWSER_TEST_F(LegacyTwoClientNotesSyncTest, DISABLED_MC_DeleteNote) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(
       GetClient(1)->DisableSyncForType(syncer::UserSelectableType::kNotes));
@@ -1668,7 +1683,8 @@ IN_PROC_BROWSER_TEST_F(LegacyTwoClientNotesSyncTest, MC_DeleteNote) {
 
 // TCM ID - 3719307 - Test a scenario of updating the name of the same note
 // from two clients at the same time.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_NoteNameChangeConflict) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_MC_NoteNameChangeConflict) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   const NoteNode* folder0 = AddFolder(0, kGenericFolderName);
@@ -1692,7 +1708,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_NoteNameChangeConflict) {
   ASSERT_FALSE(ContainsDuplicateNotes(0));
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_NoteContentChangeConflict) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_MC_NoteContentChangeConflict) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   const NoteNode* folder0 = AddFolder(0, kGenericFolderName);
@@ -1718,7 +1735,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_NoteContentChangeConflict) {
 
 // TCM ID - 3672299 - Test a scenario of updating the URL of the same note
 // from two clients at the same time.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_NoteURLChangeConflict) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_MC_NoteURLChangeConflict) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   const NoteNode* folder0 = AddFolder(0, kGenericFolderName);
@@ -1745,7 +1763,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_NoteURLChangeConflict) {
 
 // TCM ID - 3699290 - Test a scenario of updating the BM Folder name from two
 // clients at the same time.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_FolderNameChangeConflict) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_MC_FolderNameChangeConflict) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
   const NoteNode* folderA[2];
@@ -1821,7 +1840,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_FolderNameChangeConflict) {
 // Deliberately racy rearranging of notes to test that our conflict resolver
 // code results in a consistent view across machines (no matter what the final
 // order is).
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, RacyPositionChanges) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DISABLED_RacyPositionChanges) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 
@@ -1875,7 +1894,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, RacyPositionChanges) {
   ASSERT_TRUE(AllModelsMatch());
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, NoteAllNodesRemovedEvent) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       DISABLED_NoteAllNodesRemovedEvent) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatch());
 

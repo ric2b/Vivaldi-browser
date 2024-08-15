@@ -31,10 +31,10 @@
 #include <string>
 #include <vector>
 
+#include "dawn/common/StackAllocated.h"
 #include "dawn/common/vulkan_platform.h"
 #include "dawn/native/Commands.h"
 #include "dawn/native/dawn_platform.h"
-#include "partition_alloc/pointers/raw_ptr.h"
 
 namespace dawn::native {
 struct ProgrammableStage;
@@ -44,6 +44,7 @@ union OverrideScalar;
 namespace dawn::native::vulkan {
 
 class Device;
+struct VulkanFunctions;
 
 // A Helper type used to build a pNext chain of extension structs.
 // Usage is:
@@ -67,7 +68,12 @@ class Device;
 //     featuresChain.Add(&featuresExtensions.subgroupSizeControl,
 //                       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT);
 //
-struct PNextChainBuilder {
+// Note:
+//   The build option `use_asan_unowned_ptr` checks the pointer to the current
+//   tail it is not dangling. So every structs in the chain must be declared
+//   before `PNextChainBuilder`.
+//
+struct PNextChainBuilder : public StackAllocated {
     // Constructor takes the address of a Vulkan structure instance, and
     // walks its pNext chain to record the current location of its tail.
     //
@@ -162,6 +168,25 @@ void SetDebugName(Device* device,
 
 std::string GetNextDeviceDebugPrefix();
 std::string GetDeviceDebugPrefixFromDebugName(const char* debugName);
+
+// Get the properties for the given format.
+// https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkDrmFormatModifierPropertiesEXT.html
+std::vector<VkDrmFormatModifierPropertiesEXT> GetFormatModifierProps(
+    const VulkanFunctions& fn,
+    VkPhysicalDevice vkPhysicalDevice,
+    VkFormat format);
+
+// Get the properties for the (format, modifier) pair.
+// https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkDrmFormatModifierPropertiesEXT.html
+ResultOrError<VkDrmFormatModifierPropertiesEXT> GetFormatModifierProps(
+    const VulkanFunctions& fn,
+    VkPhysicalDevice vkPhysicalDevice,
+    VkFormat format,
+    uint64_t modifier);
+
+ResultOrError<VkSamplerYcbcrConversion> CreateSamplerYCbCrConversionCreateInfo(
+    YCbCrVkDescriptor yCbCrDescriptor,
+    Device* device);
 
 }  // namespace dawn::native::vulkan
 

@@ -71,6 +71,10 @@ class PixelTest : public testing::Test {
                     std::vector<SkColor>* ref_pixels,
                     const PixelComparator& comparator);
 
+  bool RunPixelTest(viz::AggregatedRenderPassList* pass_list,
+                    SkBitmap ref_bitmap,
+                    const PixelComparator& comparator);
+
   bool RunPixelTestWithReadbackTarget(viz::AggregatedRenderPassList* pass_list,
                                       viz::AggregatedRenderPass* target,
                                       const base::FilePath& ref_file,
@@ -121,8 +125,6 @@ class PixelTest : public testing::Test {
   std::unique_ptr<FakeOutputSurfaceClient> output_surface_client_;
   std::unique_ptr<viz::OutputSurface> output_surface_;
   std::unique_ptr<viz::TestSharedBitmapManager> shared_bitmap_manager_;
-  std::unique_ptr<gpu::SharedImageManager> shared_image_manager_;
-  std::unique_ptr<gpu::SyncPointManager> sync_point_manager_;
   std::unique_ptr<viz::DisplayResourceProvider> resource_provider_;
   scoped_refptr<viz::RasterContextProvider> child_context_provider_;
   std::unique_ptr<viz::ClientResourceProvider> child_resource_provider_;
@@ -141,6 +143,8 @@ class PixelTest : public testing::Test {
   }
 
  private:
+  void FinishSetup();
+
   // Render |pass_list| and readback the |copy_rect| portion of |target| to
   // |result_bitmap_|.
   void RenderReadbackTargetAndAreaToResultBitmap(

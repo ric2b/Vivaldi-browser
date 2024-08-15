@@ -66,19 +66,38 @@ PropertyHandleSet KeyframeEffectModelBase::Properties() const {
   return result;
 }
 
-PropertyHandleSet KeyframeEffectModelBase::DynamicProperties() const {
-  if (!RuntimeEnabledFeatures::StaticAnimationOptimizationEnabled()) {
-    return Properties();
+const PropertyHandleSet& KeyframeEffectModelBase::EnsureDynamicProperties() const {
+  if (dynamic_properties_) {
+    return *dynamic_properties_;
   }
 
-  PropertyHandleSet result;
+  dynamic_properties_ = std::make_unique<PropertyHandleSet>();
   EnsureKeyframeGroups();
-  for (const auto& entry : *keyframe_groups_) {
-    if (!entry.value->IsStatic()) {
-      result.insert(entry.key);
+  if (!RuntimeEnabledFeatures::StaticAnimationOptimizationEnabled()) {
+    // Unless the static optimization is enabled, all properties are considered
+    // dynamic.
+    for (const auto& entry : *keyframe_groups_) {
+      dynamic_properties_->insert(entry.key);
+    }
+  } else {
+    for (const auto& entry : *keyframe_groups_) {
+      if (!entry.value->IsStatic()) {
+        dynamic_properties_->insert(entry.key);
+      }
     }
   }
-  return result;
+
+  return *dynamic_properties_;
+}
+
+bool KeyframeEffectModelBase::HasStaticProperty() const {
+  EnsureKeyframeGroups();
+  for (const auto& entry : *keyframe_groups_) {
+    if (entry.value->IsStatic()) {
+      return true;
+    }
+  }
+  return false;
 }
 
 template <class K>
@@ -447,15 +466,13 @@ void KeyframeEffectModelBase::EnsureKeyframeGroups() const {
 }
 
 bool KeyframeEffectModelBase::RequiresPropertyNode() const {
-  for (const auto& keyframe : keyframes_) {
-    for (const auto& property : keyframe->Properties()) {
-      if (!property.IsCSSProperty() ||
-          (property.GetCSSProperty().PropertyID() != CSSPropertyID::kVariable &&
-           property.GetCSSProperty().PropertyID() !=
-               CSSPropertyID::kBackgroundColor &&
-           property.GetCSSProperty().PropertyID() != CSSPropertyID::kClipPath))
-        return true;
-    }
+  for (const auto& property : EnsureDynamicProperties()) {
+    if (!property.IsCSSProperty() ||
+        (property.GetCSSProperty().PropertyID() != CSSPropertyID::kVariable &&
+         property.GetCSSProperty().PropertyID() !=
+             CSSPropertyID::kBackgroundColor &&
+         property.GetCSSProperty().PropertyID() != CSSPropertyID::kClipPath))
+      return true;
   }
   return false;
 }
@@ -466,6 +483,26 @@ void KeyframeEffectModelBase::EnsureInterpolationEffectPopulated() const {
 
   for (const auto& entry : *keyframe_groups_) {
     const PropertySpecificKeyframeVector& keyframes = entry.value->Keyframes();
+    if (RuntimeEnabledFeatures::StaticAnimationOptimizationEnabled()) {
+      // Skip cross-fade interpolations in the static property optimization to
+      // avoid introducing a side-effect in serialization of the computed value.
+      // cross-fade(A 50%, A 50%) is visually equivalent to rendering A, but at
+      // present, we expect the computed style to reflect an explicit
+      // cross-fade.
+      PropertyHandle handle = entry.key;
+      if (entry.value->IsStatic() && handle.IsCSSProperty() &&
+          handle.GetCSSProperty().PropertyID() !=
+              CSSPropertyID::kListStyleImage) {
+        // All keyframes have the same property value.
+        // Create an interpolation from starting keyframe to starting keyframe.
+        // The resulting interpolation record will be marked as static and can
+        // short-circuit the local fraction calculation.
+        CHECK(keyframes.size());
+        interpolation_effect_->AddStaticValuedInterpolation(entry.key,
+                                                            *keyframes[0]);
+        continue;
+      }
+    }
     for (wtf_size_t i = 0; i < keyframes.size() - 1; i++) {
       wtf_size_t start_index = i;
       wtf_size_t end_index = i + 1;
@@ -538,6 +575,7 @@ bool KeyframeEffectModelBase::ResolveTimelineOffsets(
 
 void KeyframeEffectModelBase::ClearCachedData() {
   keyframe_groups_ = nullptr;
+  dynamic_properties_.reset();
   interpolation_effect_->Clear();
   last_fraction_ = std::numeric_limits<double>::quiet_NaN();
   needs_compositor_keyframes_snapshot_ = true;

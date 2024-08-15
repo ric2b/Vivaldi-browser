@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_CHECK_H_
-#define BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_CHECK_H_
+#ifndef PARTITION_ALLOC_PARTITION_ALLOC_BASE_CHECK_H_
+#define PARTITION_ALLOC_PARTITION_ALLOC_BASE_CHECK_H_
 
 #include <iosfwd>
 
@@ -145,7 +145,7 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC_BASE) NotImplemented
 #error "Debug builds are not expected to be optimized as official builds."
 #endif  // defined(OFFICIAL_BUILD) && !defined(NDEBUG)
 
-#if defined(OFFICIAL_BUILD) && !BUILDFLAG(PA_DCHECK_IS_ON)
+#if defined(OFFICIAL_BUILD) && !PA_BUILDFLAG(PA_DCHECK_IS_ON)
 
 // Discard log strings to reduce code bloat.
 //
@@ -185,7 +185,7 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC_BASE) NotImplemented
 
 #endif
 
-#if BUILDFLAG(PA_DCHECK_IS_ON)
+#if PA_BUILDFLAG(PA_DCHECK_IS_ON)
 
 #define PA_BASE_DCHECK(condition)                                \
   PA_LAZY_CHECK_STREAM(                                          \
@@ -220,4 +220,4 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC_BASE) NotImplemented
 
 }  // namespace partition_alloc::internal::logging
 
-#endif  // BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_CHECK_H_
+#endif  // PARTITION_ALLOC_PARTITION_ALLOC_BASE_CHECK_H_

@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-PT">
+<translation id="2947471979790858922">A sua atividade nestes separadores privados será removida deste equipamento</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Pode encontrar os separadores que fechar nos Separadores recentes, no menu principal do Vivaldi. O seu separador privado não estará disponível.}
+        other {Pode encontrar os separadores que fechar nos Separadores recentes, no menu principal do Vivaldi. Os seus # separadores privados não estarão disponíveis.}}</translation>
+<translation id="4871187110787939393">Fechar todos os separadores privados?</translation>
 </translationbundle>

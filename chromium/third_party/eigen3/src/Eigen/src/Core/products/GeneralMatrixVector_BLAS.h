@@ -95,6 +95,7 @@ EIGEN_BLAS_GEMV_SPECIALIZE(scomplex)
                                                                                                                     \
     static void run(Index rows, Index cols, const EIGTYPE* lhs, Index lhsStride, const EIGTYPE* rhs, Index rhsIncr, \
                     EIGTYPE* res, Index resIncr, EIGTYPE alpha) {                                                   \
+      if (rows == 0 || cols == 0) return;                                                                           \
       BlasIndex m = convert_index<BlasIndex>(rows), n = convert_index<BlasIndex>(cols),                             \
                 lda = convert_index<BlasIndex>(lhsStride), incx = convert_index<BlasIndex>(rhsIncr),                \
                 incy = convert_index<BlasIndex>(resIncr);                                                           \
@@ -111,8 +112,9 @@ EIGEN_BLAS_GEMV_SPECIALIZE(scomplex)
         x_tmp = map_x.conjugate();                                                                                  \
         x_ptr = x_tmp.data();                                                                                       \
         incx = 1;                                                                                                   \
-      } else                                                                                                        \
+      } else {                                                                                                      \
         x_ptr = rhs;                                                                                                \
+      }                                                                                                             \
       BLASFUNC(&trans, &m, &n, (const BLASTYPE*)&numext::real_ref(alpha), (const BLASTYPE*)lhs, &lda,               \
                (const BLASTYPE*)x_ptr, &incx, (const BLASTYPE*)&numext::real_ref(beta), (BLASTYPE*)res, &incy);     \
     }                                                                                                               \

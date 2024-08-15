@@ -18,12 +18,12 @@
 #include "libANGLE/renderer/vulkan/ContextVk.h"
 #include "libANGLE/renderer/vulkan/DeviceVk.h"
 #include "libANGLE/renderer/vulkan/ImageVk.h"
-#include "libANGLE/renderer/vulkan/RendererVk.h"
 #include "libANGLE/renderer/vulkan/ShareGroupVk.h"
 #include "libANGLE/renderer/vulkan/SurfaceVk.h"
 #include "libANGLE/renderer/vulkan/SyncVk.h"
 #include "libANGLE/renderer/vulkan/TextureVk.h"
 #include "libANGLE/renderer/vulkan/VkImageImageSiblingVk.h"
+#include "libANGLE/renderer/vulkan/vk_renderer.h"
 
 namespace rx
 {
@@ -144,7 +144,7 @@ void InstallDebugAnnotator(egl::Display *display, vk::Renderer *renderer)
 
     if (!installedAnnotator)
     {
-        std::unique_lock<std::mutex> lock(gl::GetDebugMutex());
+        std::unique_lock<angle::SimpleMutex> lock(gl::GetDebugMutex());
         display->setGlobalDebugAnnotator();
     }
 }

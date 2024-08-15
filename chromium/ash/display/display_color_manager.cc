@@ -285,7 +285,7 @@ bool DisplayColorManager::SetDisplayColorTemperatureAdjustment(
   return configurator_->SetColorMatrix(display_id, matrix_buffer_);
 }
 
-void DisplayColorManager::OnDisplayModeChanged(
+void DisplayColorManager::OnDisplayConfigurationChanged(
     const display::DisplayConfigurator::DisplayStateList& display_states) {
   size_t displays_with_ctm_support_count = 0;
   for (const display::DisplaySnapshot* state : display_states) {
@@ -313,9 +313,11 @@ void DisplayColorManager::OnDisplayModeChanged(
     displays_ctm_support_ = DisplayCtmSupport::kMixed;
 }
 
-void DisplayColorManager::OnDisplayRemoved(
-    const display::Display& old_display) {
-  displays_color_matrix_map_.erase(old_display.id());
+void DisplayColorManager::OnDisplaysRemoved(
+    const display::Displays& removed_displays) {
+  for (const auto& display : removed_displays) {
+    displays_color_matrix_map_.erase(display.id());
+  }
 }
 
 void DisplayColorManager::ApplyDisplayColorCalibration(

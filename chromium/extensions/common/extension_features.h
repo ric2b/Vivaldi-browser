@@ -6,6 +6,7 @@
 #define EXTENSIONS_COMMON_EXTENSION_FEATURES_H_
 
 #include "base/feature_list.h"
+#include "base/metrics/field_trial_params.h"
 
 namespace extensions_features {
 
@@ -44,8 +45,9 @@ BASE_DECLARE_FEATURE(kApiEnterpriseKioskInput);
 // Controls the availability of the ReadingList API.
 BASE_DECLARE_FEATURE(kApiReadingList);
 
-// Controls the availability of the userScripts API.
-BASE_DECLARE_FEATURE(kApiUserScripts);
+// Controls the availability of specifying different world IDs in the
+// userScripts API.
+BASE_DECLARE_FEATURE(kApiUserScriptsMultipleWorlds);
 
 // Controls the availability of the odfsConfigPrivate API.
 BASE_DECLARE_FEATURE(kApiOdfsConfigPrivate);
@@ -61,7 +63,7 @@ BASE_DECLARE_FEATURE(kRestrictFileURLNavigation);
 
 // Whether extension contexts can use SharedArrayBuffers unconditionally (i.e.
 // without requiring cross origin isolation).
-// TODO(crbug.com/1184892): Flip this in M95.
+// TODO(crbug.com/40752831): Flip this in M95.
 BASE_DECLARE_FEATURE(kAllowSharedArrayBuffersUnconditionally);
 
 // Enables the UI in the install prompt which lets a user choose to withhold
@@ -86,6 +88,15 @@ BASE_DECLARE_FEATURE(kEnableWebHidInWebView);
 
 // Determine if dynamic extension URLs are handled and redirected.
 BASE_DECLARE_FEATURE(kExtensionDynamicURLRedirection);
+
+// Controls displaying a warning that affected MV2 extensions may no longer be
+// supported.
+BASE_DECLARE_FEATURE(kExtensionManifestV2DeprecationWarning);
+
+// Allows server-side configuration of a temporary exception list.
+BASE_DECLARE_FEATURE(kExtensionManifestV2ExceptionList);
+extern const base::FeatureParam<std::string>
+    kExtensionManifestV2ExceptionListParam;
 
 // Side panel API availability.
 BASE_DECLARE_FEATURE(kExtensionSidePanelIntegration);
@@ -156,19 +167,6 @@ BASE_DECLARE_FEATURE(kStructuredCloningForMV3Messaging);
 // https://chromium.googlesource.com/chromium/src/+/master/docs/telemetry_extension/README.md.
 BASE_DECLARE_FEATURE(kTelemetryExtensionPendingApprovalApi);
 
-// If enabled, calling WebRequestEventRouter::Get will return an instance of the
-// per-BrowserContext WebRequestEventRouter instead of the global singleton
-// ExtensionWebRequestEventRouter.
-BASE_DECLARE_FEATURE(kUsePerBrowserContextWebRequestEventRouter);
-
-// Controls the <webview> tag behaviour changes proposed as part of the guest
-// view MPArch migration. See
-// https://docs.google.com/document/d/1RVbtvklXUg9QCNvMT0r-1qDwJNeQFGoTCOD1Ur9mDa4/edit?usp=sharing
-// for details.
-// TODO(crbug.com/1261928): This has been enabled by default for long enough
-// that we can remove this flag.
-BASE_DECLARE_FEATURE(kWebviewTagMPArchBehavior);
-
 ///////////////////////////////////////////////////////////////////////////////
 // STOP!
 // Please don't just add your new feature down here.
@@ -179,11 +177,6 @@ BASE_DECLARE_FEATURE(kWebviewTagMPArchBehavior);
 // from installing in base::TEMP_DIR to .../<profile_dir>/UnpackedExtensions and
 // persist until removed by the user.
 BASE_DECLARE_FEATURE(kExtensionsZipFileInstalledInProfileDir);
-
-// If enabled, extensions with service workers use an optimized event
-// dispatching flow that does not start the worker for every event. It only
-// starts a worker if it is not already running.
-BASE_DECLARE_FEATURE(kExtensionsServiceWorkerOptimizedEventDispatch);
 
 // If enabled, the button for visiting the chrome webstore in both the
 // extensions menu in the app menu and the chrome://extensions sidebar will send
@@ -199,6 +192,9 @@ BASE_DECLARE_FEATURE(kDeclarativeNetRequestSafeRuleLimits);
 // Enables declarative net request rules to specify response headers as a
 // matching condition.
 BASE_DECLARE_FEATURE(kDeclarativeNetRequestResponseHeaderMatching);
+
+// If enabled, use the new CWS itemSnippets API to fetch extension info.
+BASE_DECLARE_FEATURE(kUseItemSnippetsAPI);
 
 }  // namespace extensions_features
 

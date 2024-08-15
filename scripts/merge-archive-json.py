@@ -70,8 +70,8 @@ for fname in options.files:
             output_target[x][i] = j
         else:
           output_target[x][i] = j
-    elif not y:
-      output_target[x] = {
+    elif not y or (len(y) == 1 and "versioned" in y):
+      output_target[x] = y | {
         "files":[x],
         "archive_type": "ARCHIVE_TYPE_FILES",
         }

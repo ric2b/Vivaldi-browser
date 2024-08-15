@@ -44,6 +44,8 @@ public class NavigationHandle {
     private boolean mIsPageActivation;
     private boolean mIsReload;
     private UserDataHost mUserDataHost;
+    private boolean mIsPdf;
+    private String mMimeType;
 
     public static NavigationHandle createForTesting(
             @NonNull GURL url,
@@ -85,7 +87,9 @@ public class NavigationHandle {
                 /* isExternalProtocol= */ false,
                 /* navigationId= */ 0,
                 /* isPageActivation= */ false,
-                isReload);
+                isReload,
+                /* isPdf= */ false,
+                "");
         return handle;
     }
 
@@ -111,7 +115,9 @@ public class NavigationHandle {
             boolean isExternalProtocol,
             long navigationId,
             boolean isPageActivation,
-            boolean isReload) {
+            boolean isReload,
+            boolean isPdf,
+            String mimeType) {
         mNativeNavigationHandleProxy = nativeNavigationHandleProxy;
         mUrl = url;
         mReferrerUrl = referrerUrl;
@@ -128,10 +134,13 @@ public class NavigationHandle {
         mNavigationId = navigationId;
         mIsPageActivation = isPageActivation;
         mIsReload = isReload;
+        mIsPdf = isPdf;
+        mMimeType = mimeType;
     }
 
     /**
      * The navigation received a redirect. Called once per redirect.
+     *
      * @param url The new URL.
      */
     @CalledByNative
@@ -155,7 +164,9 @@ public class NavigationHandle {
             @PageTransition int transition,
             @NetError int errorCode,
             int httpStatuscode,
-            boolean isExternalProtocol) {
+            boolean isExternalProtocol,
+            boolean isPdf,
+            String mimeType) {
         mUrl = url;
         mIsErrorPage = isErrorPage;
         mHasCommitted = hasCommitted;
@@ -166,6 +177,8 @@ public class NavigationHandle {
         mErrorCode = errorCode;
         mHttpStatusCode = httpStatuscode;
         mIsExternalProtocol = isExternalProtocol;
+        mIsPdf = isPdf;
+        mMimeType = mimeType;
     }
 
     /** Release the C++ pointer. */
@@ -360,5 +373,15 @@ public class NavigationHandle {
     /** Sets the user data host. This should not be considered part of the content API. */
     public void setUserDataHost(UserDataHost userDataHost) {
         mUserDataHost = userDataHost;
+    }
+
+    /** Whether the navigation is for PDF content. */
+    public boolean isPdf() {
+        return mIsPdf;
+    }
+
+    /** MIME type of the page. */
+    public String getMimeType() {
+        return mMimeType;
     }
 }

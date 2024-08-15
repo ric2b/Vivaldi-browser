@@ -35,7 +35,12 @@ enum class FeaturePromoClosedReason {
   kOverrideForTesting = 9,           // Promo aborted for tests.
   kOverrideForPrecedence = 10,       // Promo aborted for higher priority Promo.
 
-  kMaxValue = kOverrideForPrecedence,
+  // Additional ways a promo can be aborted.
+  kAbortedByFeature = 11,          // EndPromo() explicitly called.
+  kAbortedByAnchorHidden = 12,     // Anchor element disappeared.
+  kAbortedByBubbleDestroyed = 13,  // HelpBubble object destroyed.
+
+  kMaxValue = kAbortedByBubbleDestroyed,
 };
 
 std::ostream& operator<<(std::ostream& oss,
@@ -58,7 +63,8 @@ struct FeaturePromoData {
   base::Time last_snooze_time;
   int snooze_count = 0;
   int show_count = 0;
-  std::set<std::string> shown_for_apps;
+  int promo_index = 0;
+  std::set<std::string> shown_for_keys;
 };
 
 // Data about the current session, which can persist across browser restarts.

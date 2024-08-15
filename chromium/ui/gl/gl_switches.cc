@@ -168,6 +168,17 @@ const char* const kGLSwitchesCopiedFromGpuProcessHost[] = {
 const size_t kGLSwitchesCopiedFromGpuProcessHostNumSwitches =
     std::size(kGLSwitchesCopiedFromGpuProcessHost);
 
+#if BUILDFLAG(IS_ANDROID)
+// On some Android emulators with software GL, ANGLE
+// is exposing the native fence sync extension but it doesn't
+// actually work. This switch is used to disable the Android native fence sync
+// during test to avoid crashes.
+//
+// TODO(https://crbug.com/337886037): Remove this flag once the upstream ANGLE
+// is fixed.
+const char kDisableAndroidNativeFenceSyncForTesting[] =
+    "disable-android-native-fence-sync-for-testing";
+#endif
 }  // namespace switches
 
 namespace features {
@@ -190,11 +201,6 @@ BASE_FEATURE(kDCompTripleBufferRootSwapChain,
 BASE_FEATURE(kDCompTripleBufferVideoSwapChain,
              "DCompTripleBufferVideoSwapChain",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enables incremental update of dcomp visual tree.
-BASE_FEATURE(kDCompVisualTreeOptimization,
-             "DCompVisualTreeOptimization",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Allow overlay swapchain to present on all GPUs even if they only support
 // software overlays. GPU deny lists limit it to NVIDIA only at the moment.
@@ -280,11 +286,6 @@ BASE_FEATURE(kTrackCurrentShaders,
 // Enable sharing Vulkan device queue with ANGLE's Vulkan backend.
 BASE_FEATURE(kVulkanFromANGLE,
              "VulkanFromANGLE",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enable ANGLE's debug layer.
-BASE_FEATURE(kANGLEDebugLayer,
-             "ANGLEDebugLayer",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsDefaultANGLEVulkan() {

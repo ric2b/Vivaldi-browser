@@ -67,6 +67,11 @@ inline constexpr char kBrowsingDataMigrationHasBeenPossible[] =
 inline constexpr char kClearBrowsingDataHistoryNoticeShownTimes[] =
     "browser.clear_data.history_notice_shown_times";
 
+// A dictionary mapping content notification enrollment eligibilities. This is
+// stored in BrowserState prefs.
+inline constexpr char kContentNotificationsEnrollmentEligibility[] =
+    "ios.content_notification.enrollment_eligibility";
+
 // String indicating the Contextual Search enabled state.
 // "false" - opt-out (disabled)
 // "" (empty string) - undecided
@@ -200,6 +205,11 @@ inline constexpr char
     kIosCredentialProviderPromoHasRegisteredWithPromoManager[] =
         "ios.credential_provider_promo.has_registered_with_promo_manager";
 
+// The last action that the user took when a Default Browser promo was
+// presented.
+inline constexpr char kIosDefaultBrowserPromoLastAction[] =
+    "ios.default_browser_promo.last_action";
+
 // The time when the DiscoverFeed was last refreshed while the feed was visible
 // to the user.
 inline constexpr char kIosDiscoverFeedLastRefreshTime[] =
@@ -302,6 +312,11 @@ inline constexpr char kIosSafetyCheckManagerUpdateCheckResult[] =
 // recent Safety Check run (using the new Safety Check Manager).
 inline constexpr char kIosSafetyCheckManagerSafeBrowsingCheckResult[] =
     "ios.safety_check_manager.safe_browsing_check_result";
+
+// Dictionary preference containing the counts of passwords flagged as
+// compromised, dismissed, reused, and weak by the most recent Safety Check run.
+inline constexpr char kIosSafetyCheckManagerInsecurePasswordCounts[] =
+    "ios.safety_check_manager.insecure_password_counts";
 
 // String preference containing the default account to use for saving files to
 // Google Drive.
@@ -577,6 +592,17 @@ inline constexpr char kInsecureFormWarningsEnabled[] =
 // This value is true if the default user agent was changed. To be used
 // only when raccoon is enabled.
 inline constexpr char kUserAgentWasChanged[] = "UserAgentWasChanged";
+
+// A time object storing the last time size metrics of the documents directory
+// were logged.
+inline constexpr char kLastApplicationStorageMetricsLogTime[] =
+    "LastApplicationStorageMetricsLogTime";
+
+// Count the number of times the Search Engine Choice Screen was skipped
+// because the application was started via an external Intent.
+inline constexpr char kChoiceScreenSkippedCount[] =
+    "ios.search_engine_choice_screen.skip_count";
+
 }  // namespace prefs
 
 #endif  // IOS_CHROME_BROWSER_PREFS_PREF_NAMES_H_

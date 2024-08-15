@@ -22,9 +22,6 @@ namespace internal {
 // directly. Instead use `IsJourneysEnabled()` for the system language filter.
 BASE_DECLARE_FEATURE(kJourneys);
 
-// Enables labelling of Journeys in UI.
-BASE_DECLARE_FEATURE(kJourneysLabels);
-
 // Enables images for Journeys in UI.
 BASE_DECLARE_FEATURE(kJourneysImages);
 
@@ -65,9 +62,6 @@ BASE_DECLARE_FEATURE(kHistoryClustersKeywordFiltering);
 
 // Enables experimentation for how to dedupe visits in clusters.
 BASE_DECLARE_FEATURE(kHistoryClustersVisitDeduping);
-
-// Enables visits from other synced devices to be included in clusters.
-BASE_DECLARE_FEATURE(kJourneysIncludeSyncedVisits);
 
 // Persist keyword caches via pref service.
 BASE_DECLARE_FEATURE(kJourneysPersistCachesToPrefs);

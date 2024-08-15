@@ -653,11 +653,15 @@ bool Converter::Convert(interop::GPUTextureFormat& out, wgpu::TextureFormat in) 
         CASE(Stencil8, kStencil8);
 #undef CASE
 
-        case wgpu::TextureFormat::R10X6BG10X6Biplanar420Unorm:
         case wgpu::TextureFormat::R16Snorm:
         case wgpu::TextureFormat::R16Unorm:
         case wgpu::TextureFormat::R8BG8Biplanar420Unorm:
+        case wgpu::TextureFormat::R8BG8Biplanar422Unorm:
+        case wgpu::TextureFormat::R8BG8Biplanar444Unorm:
         case wgpu::TextureFormat::R8BG8A8Triplanar420Unorm:
+        case wgpu::TextureFormat::R10X6BG10X6Biplanar420Unorm:
+        case wgpu::TextureFormat::R10X6BG10X6Biplanar422Unorm:
+        case wgpu::TextureFormat::R10X6BG10X6Biplanar444Unorm:
         case wgpu::TextureFormat::RG16Snorm:
         case wgpu::TextureFormat::RG16Unorm:
         case wgpu::TextureFormat::RGBA16Snorm:
@@ -1493,20 +1497,38 @@ bool Converter::Convert(interop::GPUFeatureName& out, wgpu::FeatureName in) {
 #undef CASE
 
         case wgpu::FeatureName::AdapterPropertiesD3D:
+        case wgpu::FeatureName::AdapterPropertiesMemoryHeaps:
+        case wgpu::FeatureName::AdapterPropertiesVk:
         case wgpu::FeatureName::ANGLETextureSharing:
+        case wgpu::FeatureName::BufferMapExtendedUsages:
+        case wgpu::FeatureName::ChromiumExperimentalTimestampQueryInsidePasses:
         case wgpu::FeatureName::D3D11MultithreadProtected:
         case wgpu::FeatureName::DawnInternalUsages:
         case wgpu::FeatureName::DawnMultiPlanarFormats:
         case wgpu::FeatureName::DawnNative:
+        case wgpu::FeatureName::DrmFormatCapabilities:
         case wgpu::FeatureName::DualSourceBlending:
+        case wgpu::FeatureName::FormatCapabilities:
+        case wgpu::FeatureName::FramebufferFetch:
+        case wgpu::FeatureName::HostMappedPointer:
         case wgpu::FeatureName::ImplicitDeviceSynchronization:
         case wgpu::FeatureName::MSAARenderToSingleSampled:
         case wgpu::FeatureName::MultiPlanarFormatExtendedUsages:
         case wgpu::FeatureName::MultiPlanarFormatP010:
+        case wgpu::FeatureName::MultiPlanarFormatP210:
+        case wgpu::FeatureName::MultiPlanarFormatP410:
+        case wgpu::FeatureName::MultiPlanarFormatNv16:
+        case wgpu::FeatureName::MultiPlanarFormatNv24:
         case wgpu::FeatureName::MultiPlanarFormatNv12a:
+        case wgpu::FeatureName::MultiPlanarRenderTargets:
         case wgpu::FeatureName::Norm16TextureFormats:
+        case wgpu::FeatureName::Unorm16TextureFormats:
+        case wgpu::FeatureName::Snorm16TextureFormats:
         case wgpu::FeatureName::PixelLocalStorageCoherent:
         case wgpu::FeatureName::PixelLocalStorageNonCoherent:
+        case wgpu::FeatureName::R8UnormStorage:
+        case wgpu::FeatureName::ShaderModuleCompilationOptions:
+        case wgpu::FeatureName::SharedBufferMemoryD3D12Resource:
         case wgpu::FeatureName::SharedFenceDXGISharedHandle:
         case wgpu::FeatureName::SharedFenceMTLSharedEvent:
         case wgpu::FeatureName::SharedFenceVkSemaphoreOpaqueFD:
@@ -1521,17 +1543,12 @@ bool Converter::Convert(interop::GPUFeatureName& out, wgpu::FeatureName in) {
         case wgpu::FeatureName::SharedTextureMemoryOpaqueFD:
         case wgpu::FeatureName::SharedTextureMemoryVkDedicatedAllocation:
         case wgpu::FeatureName::SharedTextureMemoryZirconHandle:
+        case wgpu::FeatureName::StaticSamplers:
         case wgpu::FeatureName::SurfaceCapabilities:
-        case wgpu::FeatureName::ChromiumExperimentalTimestampQueryInsidePasses:
         case wgpu::FeatureName::TransientAttachments:
-        case wgpu::FeatureName::HostMappedPointer:
-        case wgpu::FeatureName::MultiPlanarRenderTargets:
-        case wgpu::FeatureName::FramebufferFetch:
-        case wgpu::FeatureName::BufferMapExtendedUsages:
-        case wgpu::FeatureName::AdapterPropertiesMemoryHeaps:
-        case wgpu::FeatureName::SharedBufferMemoryD3D12Resource:
-        case wgpu::FeatureName::R8UnormStorage:
         case wgpu::FeatureName::Undefined:
+        case wgpu::FeatureName::YCbCrVulkanSamplers:
+        case wgpu::FeatureName::DawnLoadResolveTexture:
             return false;
     }
     return false;

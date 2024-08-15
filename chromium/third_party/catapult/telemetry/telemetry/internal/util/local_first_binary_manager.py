@@ -18,6 +18,7 @@ from __future__ import absolute_import
 import datetime
 import logging
 import os
+from typing import Optional
 
 from telemetry.core import exceptions
 from telemetry.internal.util import binary_manager
@@ -28,7 +29,7 @@ class LocalFirstBinaryManager():
 
   Prioritizes locally built versions of dependencies.
   """
-  _instance = None
+  _instance: Optional['LocalFirstBinaryManager'] = None
 
   def __init__(self, build_dir, browser_binary, os_name, arch,
                ignored_dependencies, os_version):
@@ -181,6 +182,7 @@ class LocalFirstBinaryManager():
       raise exceptions.InitializationError(
           'Attempted to get LocalFirstBinaryManager without prior '
           'initialization.')
+    assert cls._instance is not None  # Necessary for type checker.
     return cls._instance
 
 

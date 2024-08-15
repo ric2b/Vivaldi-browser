@@ -21,10 +21,9 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.merchant_viewer.MerchantTrustSignalsCoordinator;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
-import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.omnibox.SearchEngineUtils;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
@@ -45,8 +44,6 @@ import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.content_settings.CookieBlocking3pcdStatus;
 import org.chromium.components.content_settings.CookieControlsBridge;
 import org.chromium.components.content_settings.CookieControlsObserver;
-import org.chromium.components.feature_engagement.FeatureConstants;
-import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.page_info.PageInfoController;
 import org.chromium.components.permissions.PermissionDialogController;
 import org.chromium.components.search_engines.TemplateUrlService;
@@ -534,7 +531,8 @@ public class StatusMediator
         }
 
         // If the icon is missing, fallback to the info icon.
-        StatusIconResource statusIcon = icon == 0 ? null : new StatusIconResource(icon, tint);
+        StatusIconResource statusIcon = icon == 0 ? null : new StatusIconResource(icon,
+                BuildConfig.IS_VIVALDI ? mNavigationIconTintRes : tint); // Vivaldi Ref. VAB-8862
         if (statusIcon != null) {
             statusIcon.setTransitionType(transitionType);
         }
@@ -622,7 +620,7 @@ public class StatusMediator
             // autocomplete text still pointing at the previous url's autocomplete text.
             urlTextWithAutocomplete = "";
         } else if (TextUtils.indexOf(currentAutocompleteText, urlBarText) > -1) {
-            // TODO(crbug.com/1015147): This is to workaround the UrlBar text pointing to the
+            // TODO(crbug.com/40103581): This is to workaround the UrlBar text pointing to the
             // "current" url and the the autocomplete text pointing to the "previous" url.
             urlTextWithAutocomplete = currentAutocompleteText;
         } else {
@@ -634,7 +632,10 @@ public class StatusMediator
     }
 
     public void onIncognitoStateChanged() {
-        boolean showIncognitoStatus = !mIsTablet || OmniboxFeatures.showIncognitoStatusForTablet();
+        boolean showIncognitoStatus =
+                !mIsTablet
+                        || ChromeFeatureList.sTabletToolbarIncognitoStatus.isEnabled()
+                        || ChromeFeatureList.sDynamicTopChrome.isEnabled();
         boolean incognitoBadgeVisible =
                 mLocationBarDataProvider.isIncognito() && showIncognitoStatus;
         // Vivaldi - No incognito badge.
@@ -706,6 +707,10 @@ public class StatusMediator
     }
 
     private void animateCookieControlsIcon(Runnable onAnimationFinished) {
+        // Check if the web content is valid before attempting to animate.
+        if (mLocationBarDataProvider.getTab().getWebContents() == null) {
+            return;
+        }
         resetCustomIconsStatus();
 
         boolean isIncognito = mLocationBarDataProvider.isIncognito();
@@ -880,14 +885,7 @@ public class StatusMediator
                 return;
             }
 
-            Tracker tracker = TrackerFactory.getTrackerForProfile(profile);
-            if (!tracker.wouldTriggerHelpUI(FeatureConstants.COOKIE_CONTROLS_3PCD_FEATURE)) return;
-
-            animateCookieControlsIcon(
-                    () ->
-                            mPageInfoIPHController.showCookieControlsReminderIPH(
-                                    getIPHTimeout(),
-                                    R.string.cookie_controls_reminder_iph_message));
+            animateCookieControlsIcon(() -> {});
         }
     }
 

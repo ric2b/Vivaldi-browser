@@ -10,7 +10,7 @@
 #include "base/functional/callback.h"
 #include "base/observer_list.h"
 #include "components/ad_blocker/adblock_known_sources_handler.h"
-#include "components/ad_blocker/adblock_metadata.h"
+#include "components/ad_blocker/adblock_types.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
@@ -36,18 +36,18 @@ class KnownRuleSourcesHandlerImpl : public KnownRuleSourcesHandler {
   const std::set<std::string>& GetDeletedPresets(
       RuleGroup group) const override;
 
-  std::optional<uint32_t> AddSourceFromUrl(RuleGroup group,
-                                            const GURL& url) override;
-  std::optional<uint32_t> AddSourceFromFile(
-      RuleGroup group,
-      const base::FilePath& file) override;
+  bool AddSource(RuleGroup group, RuleSourceCore source_core) override;
   std::optional<KnownRuleSource> GetSource(RuleGroup group,
-                                            uint32_t source_id) override;
+                                           uint32_t source_id) override;
   bool RemoveSource(RuleGroup group, uint32_t source_id) override;
 
   bool EnableSource(RuleGroup group, uint32_t source_id) override;
   void DisableSource(RuleGroup group, uint32_t source_id) override;
   bool IsSourceEnabled(RuleGroup group, uint32_t source_id) override;
+
+  bool SetSourceSettings(RuleGroup group,
+                         uint32_t source_id,
+                         RuleSourceSettings settings) override;
 
   void ResetPresetSources(RuleGroup group) override;
 
@@ -55,8 +55,7 @@ class KnownRuleSourcesHandlerImpl : public KnownRuleSourcesHandler {
   void RemoveObserver(Observer* observer) override;
 
  private:
-  std::optional<uint32_t> AddSource(const KnownRuleSource& known_source,
-                                     bool enable);
+  bool AddSource(RuleGroup group, KnownRuleSource known_source, bool enable);
 
   KnownRuleSources& GetSourceMap(RuleGroup group);
   const KnownRuleSources& GetSourceMap(RuleGroup group) const;

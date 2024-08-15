@@ -2,9 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include <iterator>
 #include <optional>
 
+#include "core/fxcrt/stl_util.h"
 #include "public/fpdf_structtree.h"
 #include "testing/embedder_test.h"
 #include "testing/fx_string_testhelpers.h"
@@ -53,8 +59,7 @@ TEST_F(FPDFStructTreeEmbedderTest, GetAltText) {
     EXPECT_EQ(-1, FPDF_StructElement_GetMarkedContentID(gchild_element));
     ASSERT_EQ(24U, FPDF_StructElement_GetAltText(gchild_element, nullptr, 0));
 
-    unsigned short buffer[12];
-    memset(buffer, 0, sizeof(buffer));
+    unsigned short buffer[12] = {};
     // Deliberately pass in a small buffer size to make sure |buffer| remains
     // untouched.
     ASSERT_EQ(24U, FPDF_StructElement_GetAltText(gchild_element, buffer, 1));
@@ -451,18 +456,18 @@ TEST_F(FPDFStructTreeEmbedderTest, GetType) {
     ASSERT_TRUE(element);
 
     // test nullptr inputs
-    unsigned short buffer[12];
+    unsigned short buffer[12] = {};
     ASSERT_EQ(0U, FPDF_StructElement_GetType(nullptr, buffer, sizeof(buffer)));
     ASSERT_EQ(0U, FPDF_StructElement_GetType(nullptr, nullptr, 0));
     ASSERT_EQ(18U, FPDF_StructElement_GetType(element, nullptr, 0));
 
-    memset(buffer, 0, sizeof(buffer));
     // Deliberately pass in a small buffer size to make sure |buffer| remains
     // untouched.
+    fxcrt::Fill(buffer, 0xbdfcu);
     ASSERT_EQ(18U, FPDF_StructElement_GetType(element, buffer, 1));
-    for (size_t i = 0; i < std::size(buffer); ++i)
-      EXPECT_EQ(0U, buffer[i]);
-
+    for (const auto b : buffer) {
+      EXPECT_EQ(0xbdfcu, b);
+    }
     ASSERT_EQ(18U, FPDF_StructElement_GetType(element, buffer, sizeof(buffer)));
     EXPECT_EQ(L"Document", GetPlatformWString(buffer));
   }
@@ -503,14 +508,15 @@ TEST_F(FPDFStructTreeEmbedderTest, GetObjType) {
 
     ASSERT_EQ(1, FPDF_StructElement_CountChildren(child));
     FPDF_STRUCTELEMENT gchild = FPDF_StructElement_GetChildAtIndex(child, 0);
-    memset(buffer, 0, sizeof(buffer));
+
+    fxcrt::Fill(buffer, 0xbdfcu);
     // Missing /Type in `gchild`
     ASSERT_EQ(0U,
               FPDF_StructElement_GetObjType(gchild, buffer, sizeof(buffer)));
     // Buffer is untouched.
-    for (size_t i = 0; i < std::size(buffer); ++i)
-      EXPECT_EQ(0U, buffer[i]);
-
+    for (const auto b : buffer) {
+      EXPECT_EQ(0xbdfcu, b);
+    }
     ASSERT_EQ(1, FPDF_StructElement_CountChildren(gchild));
     FPDF_STRUCTELEMENT ggchild = FPDF_StructElement_GetChildAtIndex(gchild, 0);
     ASSERT_EQ(28U,
@@ -569,21 +575,21 @@ TEST_F(FPDFStructTreeEmbedderTest, GetTitle) {
     ASSERT_TRUE(element);
 
     // test nullptr inputs
-    unsigned short buffer[13];
+    unsigned short buffer[13] = {};
     ASSERT_EQ(0U, FPDF_StructElement_GetTitle(nullptr, buffer, sizeof(buffer)));
     ASSERT_EQ(0U, FPDF_StructElement_GetTitle(nullptr, nullptr, 0));
     ASSERT_EQ(20U, FPDF_StructElement_GetTitle(element, nullptr, 0));
 
-    memset(buffer, 0, sizeof(buffer));
     // Deliberately pass in a small buffer size to make sure |buffer| remains
     // untouched.
+    fxcrt::Fill(buffer, 0xbdfcu);
     ASSERT_EQ(20U, FPDF_StructElement_GetTitle(element, buffer, 1));
-    for (size_t i = 0; i < std::size(buffer); ++i)
-      EXPECT_EQ(0U, buffer[i]);
+    for (const auto b : buffer) {
+      EXPECT_EQ(0xbdfcu, b);
+    }
 
     ASSERT_EQ(20U,
               FPDF_StructElement_GetTitle(element, buffer, sizeof(buffer)));
-
     EXPECT_EQ(L"TitleText", GetPlatformWString(buffer));
 
     ASSERT_EQ(1, FPDF_StructElement_CountChildren(element));
@@ -661,25 +667,35 @@ TEST_F(FPDFStructTreeEmbedderTest, GetAttributes) {
                                                   sizeof(buffer), &out_len));
       EXPECT_EQ(2U, out_len);
       EXPECT_STREQ("O", buffer);
-      EXPECT_EQ(FPDF_OBJECT_NAME,
-                FPDF_StructElement_Attr_GetType(attr, buffer));
+
+      // Make sure bad inputs do not work.
+      EXPECT_FALSE(FPDF_StructElement_Attr_GetValue(nullptr, ""));
+      EXPECT_FALSE(FPDF_StructElement_Attr_GetValue(attr, "DOES_NOT_EXIST"));
+      EXPECT_FALSE(FPDF_StructElement_Attr_GetValue(attr, "DOES_NOT_EXIST"));
+
+      FPDF_STRUCTELEMENT_ATTR_VALUE attr_value =
+          FPDF_StructElement_Attr_GetValue(attr, buffer);
+      ASSERT_TRUE(attr_value);
+
+      EXPECT_EQ(FPDF_OBJECT_NAME, FPDF_StructElement_Attr_GetType(attr_value));
 
       unsigned short str_val[12] = {};
       ASSERT_TRUE(FPDF_StructElement_Attr_GetStringValue(
-          attr, buffer, str_val, sizeof(str_val), &out_len));
+          attr_value, str_val, sizeof(str_val), &out_len));
       EXPECT_EQ(12U, out_len);
       EXPECT_EQ(L"Table", GetPlatformWString(str_val));
 
-      memset(buffer, 0, sizeof(buffer));
+      fxcrt::Fill(buffer, 0u);
       ASSERT_TRUE(FPDF_StructElement_Attr_GetName(attr, 0, buffer,
                                                   sizeof(buffer), &out_len));
       EXPECT_EQ(8U, out_len);
       EXPECT_STREQ("ColSpan", buffer);
+      attr_value = FPDF_StructElement_Attr_GetValue(attr, buffer);
+      ASSERT_TRUE(attr_value);
       EXPECT_EQ(FPDF_OBJECT_NUMBER,
-                FPDF_StructElement_Attr_GetType(attr, buffer));
+                FPDF_StructElement_Attr_GetType(attr_value));
       float num_val;
-      ASSERT_TRUE(
-          FPDF_StructElement_Attr_GetNumberValue(attr, buffer, &num_val));
+      ASSERT_TRUE(FPDF_StructElement_Attr_GetNumberValue(attr_value, &num_val));
       EXPECT_FLOAT_EQ(2.0f, num_val);
     }
 
@@ -710,18 +726,21 @@ TEST_F(FPDFStructTreeEmbedderTest, GetAttributes) {
           EXPECT_EQ(8U, out_len);
           EXPECT_STREQ("ColProp", buffer);
 
+          FPDF_STRUCTELEMENT_ATTR_VALUE attr_value =
+              FPDF_StructElement_Attr_GetValue(attr, buffer);
+          ASSERT_TRUE(attr_value);
           EXPECT_EQ(FPDF_OBJECT_STRING,
-                    FPDF_StructElement_Attr_GetType(attr, buffer));
+                    FPDF_StructElement_Attr_GetType(attr_value));
 
           unsigned short str_val[12] = {};
           ASSERT_TRUE(FPDF_StructElement_Attr_GetStringValue(
-              attr, buffer, str_val, sizeof(str_val), &out_len));
+              attr_value, str_val, sizeof(str_val), &out_len));
           EXPECT_EQ(8U, out_len);
           EXPECT_EQ(L"Sum", GetPlatformWString(str_val));
 
           char blob_val[3] = {};
           ASSERT_TRUE(FPDF_StructElement_Attr_GetBlobValue(
-              attr, buffer, blob_val, sizeof(blob_val), &out_len));
+              attr_value, blob_val, sizeof(blob_val), &out_len));
           EXPECT_EQ(3U, out_len);
           EXPECT_EQ('S', blob_val[0]);
           EXPECT_EQ('u', blob_val[1]);
@@ -737,11 +756,14 @@ TEST_F(FPDFStructTreeEmbedderTest, GetAttributes) {
           EXPECT_EQ(7U, out_len);
           EXPECT_STREQ("CurUSD", buffer);
 
+          FPDF_STRUCTELEMENT_ATTR_VALUE attr_value =
+              FPDF_StructElement_Attr_GetValue(attr, buffer);
+          ASSERT_TRUE(attr_value);
           EXPECT_EQ(FPDF_OBJECT_BOOLEAN,
-                    FPDF_StructElement_Attr_GetType(attr, buffer));
+                    FPDF_StructElement_Attr_GetType(attr_value));
           FPDF_BOOL val;
           ASSERT_TRUE(
-              FPDF_StructElement_Attr_GetBooleanValue(attr, buffer, &val));
+              FPDF_StructElement_Attr_GetBooleanValue(attr_value, &val));
           EXPECT_TRUE(val);
         }
 
@@ -754,11 +776,13 @@ TEST_F(FPDFStructTreeEmbedderTest, GetAttributes) {
           EXPECT_EQ(8U, out_len);
           EXPECT_STREQ("RowSpan", buffer);
 
-          EXPECT_EQ(FPDF_OBJECT_REFERENCE,
-                    FPDF_StructElement_Attr_GetType(attr, buffer));
+          FPDF_STRUCTELEMENT_ATTR_VALUE attr_value =
+              FPDF_StructElement_Attr_GetValue(attr, buffer);
+          ASSERT_TRUE(attr_value);
+          EXPECT_EQ(FPDF_OBJECT_NUMBER,
+                    FPDF_StructElement_Attr_GetType(attr_value));
           float val;
-          ASSERT_TRUE(
-              FPDF_StructElement_Attr_GetNumberValue(attr, buffer, &val));
+          ASSERT_TRUE(FPDF_StructElement_Attr_GetNumberValue(attr_value, &val));
           EXPECT_FLOAT_EQ(3, val);
         }
       }

@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: power-consumption
 title: Power consumption & Finch experimentation
 ---
@@ -101,7 +101,7 @@ References
 ### Evaluating experiments with UMA
 
 You should keep a close watch on your experiment's metrics, especially with how
-it affects Chrome OS Guardrail metrics, including power consumption. This is
+it affects ChromeOS Guardrail metrics, including power consumption. This is
 done using UMA's
 "[Finch](https://uma.googleplex.com/p/chrome/variations?sid=6799af3f695a4b2aaa6e755c5c4f7711)"
 tab. **These metrics should be evaluated before every stage of the experiment

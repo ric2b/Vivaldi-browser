@@ -1,0 +1,21 @@
+# Copyright 2024 Vivaldi Technologies. All rights reserved.
+
+source_set("copy_to_note") {
+  sources = [
+    "copy_to_note_delegate.h",
+    "copy_to_note_mediator.h",
+    "copy_to_note_mediator.mm",
+  ]
+  deps = [
+    "//base",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser/shared/model/browser",
+    "//ios/chrome/browser/shared/model/browser_state",
+    "//ios/chrome/browser/shared/model/web_state_list",
+    "//ios/chrome/browser/shared/public/commands",
+    "//ios/chrome/browser/ui/browser_container:edit_menu_alert_delegate",
+    "//ios/web/public",
+    "//ui/strings",
+    "//vivaldi/components/notes",
+  ]
+}

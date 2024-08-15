@@ -103,14 +103,18 @@ proto_library("proto") {
     "proto/parcel.proto",
     "proto/price_insights.proto",
     "proto/price_tracking.proto",
+    "proto/product_category.proto",
     "proto/shopping_page_types.proto",
   ]
 }
 
 if (is_android) {
   proto_java_library("proto_java") {
-    proto_path = "."
-    sources = [ "proto/price_tracking.proto" ]
+    proto_path = "//"
+    sources = [
+      "proto/price_tracking.proto",
+      "proto/product_category.proto",
+    ]
   }
 
   proto_library("merchant_signal_db_proto") {
@@ -471,5 +475,19 @@ source_set("utils") {
     ":commerce_types",
     ":feature_list",
     "//net:net",
+  ]
+}
+
+source_set("utils_unit_tests") {
+  testonly = true
+
+  sources = [ "commerce_utils_unittest.cc" ]
+
+  deps = [
+    ":utils",
+    "//base",
+    "//base/test:test_support",
+    "//components/commerce/core:shopping_service_test_support",
+    "//url",
   ]
 }

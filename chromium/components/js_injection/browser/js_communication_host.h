@@ -23,7 +23,6 @@ namespace js_injection {
 
 class OriginMatcher;
 struct JsObject;
-class JsToBrowserMessaging;
 class WebMessageHostFactory;
 
 struct DocumentStartJavaScript {
@@ -104,8 +103,14 @@ class JsCommunicationHost : public content::WebContentsObserver {
   // content::WebContentsObserver implementations
   void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
   void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
+  void RenderFrameHostStateChanged(
+      content::RenderFrameHost* render_frame_host,
+      content::RenderFrameHost::LifecycleState old_state,
+      content::RenderFrameHost::LifecycleState new_state) override;
+  void PrimaryPageChanged(content::Page& page) override;
 
  private:
+  class JsToBrowserMessagingList;
   void NotifyFrameForWebMessageListener(
       content::RenderFrameHost* render_frame_host);
   void NotifyFrameForAllDocumentStartJavaScripts(
@@ -121,8 +126,9 @@ class JsCommunicationHost : public content::WebContentsObserver {
   std::vector<DocumentStartJavaScript> scripts_;
   std::vector<std::unique_ptr<JsObject>> js_objects_;
   std::map<content::GlobalRenderFrameHostId,
-           std::vector<std::unique_ptr<JsToBrowserMessaging>>>
+           std::unique_ptr<JsToBrowserMessagingList>>
       js_to_browser_messagings_;
+  bool has_navigation_listener_ = false;
 };
 
 }  // namespace js_injection

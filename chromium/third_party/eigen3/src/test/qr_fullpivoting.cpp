@@ -105,6 +105,7 @@ void qr_invertible() {
   VERIFY_IS_APPROX(det, qr.determinant());
   VERIFY_IS_APPROX(absdet, qr.absDeterminant());
   VERIFY_IS_APPROX(log(absdet), qr.logAbsDeterminant());
+  VERIFY_IS_APPROX(numext::sign(det), qr.signDeterminant());
 }
 
 template <typename MatrixType>
@@ -125,6 +126,7 @@ void qr_verify_assert() {
   VERIFY_RAISES_ASSERT(qr.determinant())
   VERIFY_RAISES_ASSERT(qr.absDeterminant())
   VERIFY_RAISES_ASSERT(qr.logAbsDeterminant())
+  VERIFY_RAISES_ASSERT(qr.signDeterminant())
 }
 
 EIGEN_DECLARE_TEST(qr_fullpivoting) {

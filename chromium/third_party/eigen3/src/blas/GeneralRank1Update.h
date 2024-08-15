@@ -10,6 +10,7 @@
 #ifndef EIGEN_GENERAL_RANK1UPDATE_H
 #define EIGEN_GENERAL_RANK1UPDATE_H
 
+namespace Eigen {
 namespace internal {
 
 /* Optimized matrix += alpha * uv' */
@@ -35,6 +36,7 @@ struct general_rank1_update<Scalar, Index, RowMajor, ConjLhs, ConjRhs> {
   }
 };
 
-}  // end namespace internal
+}  // namespace internal
+}  // namespace Eigen
 
 #endif  // EIGEN_GENERAL_RANK1UPDATE_H

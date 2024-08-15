@@ -33,6 +33,8 @@
 #include <optional>
 #include <utility>
 
+#include "base/compiler_specific.h"
+#include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/weak_ptr.h"
@@ -320,6 +322,12 @@ void ResourceLoader::Trace(Visitor* visitor) const {
 
 void ResourceLoader::Start() {
   const ResourceRequestHead& request = resource_->GetResourceRequest();
+
+  if (request.GetKeepalive()) {
+    FetchUtils::LogFetchKeepAliveRequestMetric(
+        request.GetRequestContext(),
+        FetchUtils::FetchKeepAliveRequestState::kStarted);
+  }
 
   if (!resource_->Url().ProtocolIsData()) {
     network_resource_request_ = CreateNetworkRequest(request, request_body_);
@@ -774,6 +782,15 @@ void ResourceLoader::DidReceiveResponse(
     mojo::ScopedDataPipeConsumerHandle body,
     std::optional<mojo_base::BigBuffer> cached_metadata) {
   DCHECK(!response.IsNull());
+
+  if (resource_->GetResourceRequest().GetKeepalive()) {
+    // Logs when a keepalive request succeeds. It does not matter whether the
+    // response is a multipart resource or not.
+    FetchUtils::LogFetchKeepAliveRequestMetric(
+        resource_->GetResourceRequest().GetRequestContext(),
+        FetchUtils::FetchKeepAliveRequestState::kSucceeded);
+  }
+
   DidReceiveResponseInternal(response.ToResourceResponse(),
                              std::move(cached_metadata));
   if (!IsLoading() || !body) {
@@ -970,6 +987,8 @@ void ResourceLoader::DidReceiveResponseInternal(
     return;
   }
 
+  fetcher_->MarkEarlyHintConsumedIfNeeded(resource_->InspectorId(), resource_,
+                                          response);
   // FrameType never changes during the lifetime of a request.
   if (auto* observer = fetcher_->GetResourceLoadObserver()) {
     ResourceRequest request_for_obserber(initial_request);
@@ -1029,7 +1048,11 @@ void ResourceLoader::DidReceiveData(const char* data, size_t length) {
     observer->DidReceiveData(resource_->InspectorId(),
                              base::make_span(data, length));
   }
-  resource_->AppendData(data, length);
+  resource_->AppendData(
+      // SAFETY: `data` must point to `length` elements.
+      // TODO(crbug.com/40284755): Make this method take a span to capture it in
+      // the type system.
+      UNSAFE_BUFFERS(base::span(data, length)));
 
   // This value should not be exposed for opaque responses.
   if (resource_->response_.WasFetchedViaServiceWorker() &&
@@ -1144,6 +1167,12 @@ void ResourceLoader::CountFeature(blink::mojom::WebFeature feature) {
 }
 
 void ResourceLoader::HandleError(const ResourceError& error) {
+  if (resource_->GetResourceRequest().GetKeepalive()) {
+    FetchUtils::LogFetchKeepAliveRequestMetric(
+        resource_->GetResourceRequest().GetRequestContext(),
+        FetchUtils::FetchKeepAliveRequestState::kFailed);
+  }
+
   if (error.CorsErrorStatus() &&
       error.CorsErrorStatus()
           ->has_authorization_covered_by_wildcard_on_preflight) {

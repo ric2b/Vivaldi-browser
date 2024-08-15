@@ -11,10 +11,12 @@
 #include <vector>
 
 #include "base/functional/bind.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_file_util.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
+#include "components/saved_tab_groups/features.h"
 #include "components/saved_tab_groups/saved_tab_group.h"
 #include "components/saved_tab_groups/saved_tab_group_model.h"
 #include "components/saved_tab_groups/saved_tab_group_model_observer.h"
@@ -59,6 +61,9 @@ bool AreGroupSpecificsEqual(const sync_pb::SavedTabGroupSpecifics& sp1,
     return false;
   if (sp1.group().position() != sp2.group().position())
     return false;
+  if (sp1.group().pinned_position() != sp2.group().pinned_position()) {
+    return false;
+  }
   if (sp1.creation_time_windows_epoch_micros() !=
       sp2.creation_time_windows_epoch_micros()) {
     return false;
@@ -255,6 +260,38 @@ TEST_F(SavedTabGroupSyncBridgeTest, MergeFullSyncDataWithExistingData) {
   EXPECT_TRUE(AreTabSpecificsEqual(
       *updated_tab_1.ToSpecifics(),
       *group_from_model->GetTab(tab_1_guid)->ToSpecifics()));
+}
+
+// Verify that on sign-out, all data is locally deleted.
+TEST_F(SavedTabGroupSyncBridgeTest, DisableSyncDeletesAllLocalData) {
+  std::map<std::string, std::string> params = {
+      {"close_all_tab_groups_on_sign_out", "true"},
+  };
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeatureWithParameters(kTabGroupSyncUno, params);
+
+  EXPECT_TRUE(saved_tab_group_model_.saved_tab_groups().empty());
+
+  SavedTabGroup group(u"Test Title", tab_groups::TabGroupColorId::kBlue, {}, 0);
+  SavedTabGroupTab tab_1(GURL("https://website.com"), u"Website Title",
+                         group.saved_guid(), /*position=*/std::nullopt);
+  group.AddTabLocally(tab_1);
+  bridge_->MergeFullSyncData(
+      bridge_->CreateMetadataChangeList(),
+      CreateEntityChangeListFromGroup(
+          group, syncer::EntityChange::ChangeType::ACTION_ADD));
+  EXPECT_TRUE(saved_tab_group_model_.Contains(group.saved_guid()));
+  EXPECT_EQ(saved_tab_group_model_.saved_tab_groups().size(), 1u);
+
+  const SavedTabGroup* group_from_model =
+      saved_tab_group_model_.Get(group.saved_guid());
+  EXPECT_EQ(group_from_model->saved_tabs().size(), 1u);
+
+  // Disable sync. Expect all groups to be deleted locally from the model, but
+  // not from sync.
+  EXPECT_CALL(processor_, Delete(_, _, _)).Times(0);
+  bridge_->ApplyDisableSyncChanges(bridge_->CreateMetadataChangeList());
+  EXPECT_EQ(saved_tab_group_model_.saved_tab_groups().size(), 0u);
 }
 
 // Verify orphaned tabs (tabs missing their group) are added into the correct
@@ -557,6 +594,62 @@ TEST_F(SavedTabGroupSyncBridgeTest, DeleteSyncData) {
   EXPECT_FALSE(saved_tab_group_model_.Contains(group.saved_guid()));
 }
 
+// Verify that the deleted elements are processed last. We process deleted
+// elements last for consistency since the ordering of messages is not
+// guaranteed.
+TEST_F(SavedTabGroupSyncBridgeTest, DeleteSyncDataProcessedLast) {
+  syncer::EntityChangeList empty_change_list;
+  bridge_->MergeFullSyncData(bridge_->CreateMetadataChangeList(),
+                             std::move(empty_change_list));
+
+  SavedTabGroup group(u"Test Title", tab_groups::TabGroupColorId::kBlue, {},
+                      /*position=*/0);
+  SavedTabGroupTab tab_1(GURL("https://website.com"), u"Website Title",
+                         group.saved_guid(), /*position=*/std::nullopt);
+  SavedTabGroupTab tab_2(GURL("https://google.com"), u"Google",
+                         group.saved_guid(), /*position=*/std::nullopt);
+  SavedTabGroupTab tab_3(GURL("https://youtube.com"), u"Youtube",
+                         group.saved_guid(), /*position=*/2);
+  group.AddTabLocally(tab_1).AddTabLocally(tab_2);
+  EXPECT_EQ(group.saved_tabs().size(), 2u);
+
+  bridge_->ApplyIncrementalSyncChanges(
+      bridge_->CreateMetadataChangeList(),
+      CreateEntityChangeListFromGroup(
+          group, syncer::EntityChange::ChangeType::ACTION_ADD));
+
+  ASSERT_TRUE(saved_tab_group_model_.Contains(group.saved_guid()));
+  const SavedTabGroup* group_from_model =
+      saved_tab_group_model_.Get(group.saved_guid());
+
+  // Ensure the deleted tabs are removed from the group correctly.
+  base::Uuid removed_tab_1 = group.saved_tabs()[0].saved_tab_guid();
+  base::Uuid removed_tab_2 = group.saved_tabs()[1].saved_tab_guid();
+
+  // Remove both tabs in the group first, then add the new tab.
+  syncer::EntityChangeList change_list;
+  change_list.push_back(
+      CreateEntityChange(group.saved_tabs()[0].ToSpecifics(),
+                         syncer::EntityChange::ChangeType::ACTION_DELETE));
+  change_list.push_back(
+      CreateEntityChange(group.saved_tabs()[1].ToSpecifics(),
+                         syncer::EntityChange::ChangeType::ACTION_DELETE));
+  change_list.push_back(CreateEntityChange(
+      tab_3.ToSpecifics(), syncer::EntityChange::ChangeType::ACTION_ADD));
+  bridge_->ApplyIncrementalSyncChanges(bridge_->CreateMetadataChangeList(),
+                                       std::move(change_list));
+
+  // The group should still exist with only `tab_3`.
+  ASSERT_TRUE(saved_tab_group_model_.Contains(group.saved_guid()));
+  EXPECT_EQ(group_from_model->saved_tabs().size(), 1u);
+  EXPECT_TRUE(AreTabSpecificsEqual(
+      *tab_3.ToSpecifics(), *group_from_model->saved_tabs()[0].ToSpecifics()));
+
+  EXPECT_FALSE(group_from_model->ContainsTab(removed_tab_1));
+  EXPECT_FALSE(group_from_model->ContainsTab(removed_tab_2));
+  EXPECT_TRUE(group_from_model->ContainsTab(tab_3.saved_tab_guid()));
+}
+
 // Verify that locally added groups call add all group data to the processor.
 TEST_F(SavedTabGroupSyncBridgeTest, AddGroupLocally) {
   EXPECT_TRUE(saved_tab_group_model_.saved_tab_groups().empty());
@@ -598,9 +691,11 @@ TEST_F(SavedTabGroupSyncBridgeTest, RemoveGroupLocally) {
   base::Uuid tab_2_guid = tab_2.saved_tab_guid();
   saved_tab_group_model_.Add(std::move(group));
 
-  EXPECT_CALL(processor_, Delete(group_guid.AsLowercaseString(), _));
-  EXPECT_CALL(processor_, Delete(tab_1_guid.AsLowercaseString(), _)).Times(0);
-  EXPECT_CALL(processor_, Delete(tab_2_guid.AsLowercaseString(), _)).Times(0);
+  EXPECT_CALL(processor_, Delete(group_guid.AsLowercaseString(), _, _));
+  EXPECT_CALL(processor_, Delete(tab_1_guid.AsLowercaseString(), _, _))
+      .Times(0);
+  EXPECT_CALL(processor_, Delete(tab_2_guid.AsLowercaseString(), _, _))
+      .Times(0);
 
   saved_tab_group_model_.Remove(group_guid);
 
@@ -726,7 +821,7 @@ TEST_F(SavedTabGroupSyncBridgeTest, RemoveTabLocally) {
   base::Uuid tab_2_guid = tab_2.saved_tab_guid();
   saved_tab_group_model_.Add(std::move(group));
 
-  EXPECT_CALL(processor_, Delete(tab_1_guid.AsLowercaseString(), _));
+  EXPECT_CALL(processor_, Delete(tab_1_guid.AsLowercaseString(), _, _));
   EXPECT_CALL(processor_, Put(tab_2_guid.AsLowercaseString(), _, _)).Times(0);
   EXPECT_CALL(processor_, Put(group_guid.AsLowercaseString(), _, _)).Times(0);
 

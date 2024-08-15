@@ -27,7 +27,7 @@ namespace openscreen::discovery {
 
 class MockMdnsSender : public MdnsSender {
  public:
-  explicit MockMdnsSender(UdpSocket* socket) : MdnsSender(socket) {}
+  explicit MockMdnsSender(UdpSocket& socket) : MdnsSender(socket) {}
   MOCK_METHOD1(SendMulticast, Error(const MdnsMessage& message));
   MOCK_METHOD2(SendMessage,
                Error(const MdnsMessage& message, const IPEndpoint& endpoint));
@@ -43,8 +43,8 @@ class MdnsProbeTests : public testing::Test {
  public:
   MdnsProbeTests()
       : clock_(Clock::now()),
-        task_runner_(&clock_),
-        sender_(&socket_),
+        task_runner_(clock_),
+        sender_(socket_),
         receiver_(config_) {
     EXPECT_EQ(task_runner_.delayed_task_count(), 0);
     probe_ = CreateProbe();
@@ -53,9 +53,9 @@ class MdnsProbeTests : public testing::Test {
 
  protected:
   std::unique_ptr<MdnsProbeImpl> CreateProbe() {
-    return std::make_unique<MdnsProbeImpl>(&sender_, &receiver_, &random_,
+    return std::make_unique<MdnsProbeImpl>(sender_, receiver_, random_,
                                            task_runner_, FakeClock::now,
-                                           &observer_, name_, address_v4_);
+                                           observer_, name_, address_v4_);
   }
 
   MdnsMessage CreateMessage(const DomainName& domain) {

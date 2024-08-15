@@ -53,7 +53,7 @@ IpczResult IPCZ_API Serialize(IpczDriverHandle handle,
     return IPCZ_RESULT_ABORTED;
   }
 
-  // TODO(https://crbug.com/1451717): Propagate the volatile qualifier on
+  // TODO(crbug.com/40270656): Propagate the volatile qualifier on
   // `data`.
   const IpczResult result = transport->SerializeObject(
       *object, const_cast<void*>(data), num_bytes, handles, num_handles);
@@ -79,7 +79,7 @@ IpczResult IPCZ_API Deserialize(const volatile void* data,
     return IPCZ_RESULT_INVALID_ARGUMENT;
   }
 
-  // TODO(https://crbug.com/1451717): Propagate the volatile qualifier on
+  // TODO(crbug.com/40270656): Propagate the volatile qualifier on
   // `data`.
   scoped_refptr<ObjectBase> object;
   const IpczResult result = transport->DeserializeObject(
@@ -299,7 +299,10 @@ IpczResult IPCZ_API GenerateRandomBytes(size_t num_bytes,
   if (!buffer || !num_bytes) {
     return IPCZ_RESULT_INVALID_ARGUMENT;
   }
-  base::RandBytes(buffer, num_bytes);
+  base::RandBytes(
+      // SAFETY: This requires the caller to provide a valid pointer/size pair.
+      // The function API is a C API so can't use a span.
+      UNSAFE_BUFFERS(base::span(static_cast<uint8_t*>(buffer), num_bytes)));
   return IPCZ_RESULT_OK;
 }
 

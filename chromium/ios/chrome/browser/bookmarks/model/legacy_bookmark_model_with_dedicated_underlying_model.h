@@ -46,11 +46,6 @@ class LegacyBookmarkModelWithDedicatedUnderlyingModel
   const bookmarks::BookmarkNode* other_node() const override;
   const bookmarks::BookmarkNode* mobile_node() const override;
   const bookmarks::BookmarkNode* managed_node() const override;
-
-  // Vivaldi
-  const bookmarks::BookmarkNode* trash_node() const override;
-  // End Vivaldi
-
   bool IsBookmarked(const GURL& url) const override;
   bool is_permanent_node(const bookmarks::BookmarkNode* node) const override;
   void AddObserver(bookmarks::BookmarkModelObserver* observer) override;

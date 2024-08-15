@@ -4,13 +4,15 @@
 
 #include "ui/display/win/screen_win.h"
 
-#include <shellscalingapi.h>
 #include <windows.h>
+
+#include <shellscalingapi.h>
 
 #include <algorithm>
 #include <optional>
 
 #include "base/containers/contains.h"
+#include "base/containers/flat_set.h"
 #include "base/debug/alias.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -351,10 +353,15 @@ std::vector<ScreenWinDisplay> DisplayInfosToScreenWinDisplays(
   std::map<int64_t, bool> hdr_enabled;
   if (dxgi_info) {
     for (const auto& dxgi_output_desc : dxgi_info->output_descs) {
-      auto id = internal::DisplayInfo::DeviceIdFromDeviceName(
-          dxgi_output_desc->device_name.c_str());
-      dxgi_output_descs[id] = dxgi_output_desc.get();
-      hdr_enabled[id] = dxgi_output_desc->hdr_enabled;
+      auto display_info_iter = base::ranges::find_if(
+          display_infos, [&](const internal::DisplayInfo& display_info) {
+            return display_info.device_name() == dxgi_output_desc->device_name;
+          });
+      if (display_info_iter != display_infos.end()) {
+        auto id = display_info_iter->id();
+        dxgi_output_descs[id] = dxgi_output_desc.get();
+        hdr_enabled[id] = dxgi_output_desc->hdr_enabled;
+      }
     }
   }
 
@@ -416,23 +423,14 @@ gfx::Vector2dF GetDefaultMonitorPhysicalPixelsPerInch() {
 // Retrieves PPI for |monitor| based on touch pointer device handles.  Returns
 // nullopt if a pointer device for |monitor| can't be found.
 std::optional<gfx::Vector2dF> GetMonitorPixelsPerInch(HMONITOR monitor) {
-  static const auto get_pointer_devices =
-      reinterpret_cast<decltype(&::GetPointerDevices)>(
-          base::win::GetUser32FunctionPointer("GetPointerDevices"));
-  uint32_t pointer_device_count = 0;
-  if (!get_pointer_devices ||
-      !get_pointer_devices(&pointer_device_count, nullptr) ||
-      (pointer_device_count == 0))
-    return std::nullopt;
-
-  std::vector<POINTER_DEVICE_INFO> pointer_devices(pointer_device_count);
-  if (!get_pointer_devices(&pointer_device_count, pointer_devices.data()))
-    return std::nullopt;
-
-  for (const auto& device : pointer_devices) {
-    if (device.pointerDeviceType == POINTER_DEVICE_TYPE_TOUCH &&
-        device.monitor == monitor)
-      return GetPixelsPerInchForPointerDevice(device.device);
+  if (const std::optional<std::vector<POINTER_DEVICE_INFO>> pointer_devices =
+          base::win::GetPointerDevices()) {
+    for (const auto& device : *pointer_devices) {
+      if (device.pointerDeviceType == POINTER_DEVICE_TYPE_TOUCH &&
+          device.monitor == monitor) {
+        return GetPixelsPerInchForPointerDevice(device.device);
+      }
+    }
   }
   return std::nullopt;
 }
@@ -463,6 +461,12 @@ std::vector<internal::DisplayInfo> GetDisplayInfosFromSystem() {
   std::vector<internal::DisplayInfo> display_infos;
   EnumDisplayMonitors(nullptr, nullptr, EnumMonitorForDisplayInfoCallback,
                       reinterpret_cast<LPARAM>(&display_infos));
+  // Check that there are no duplicate display Ids generated.
+  base::flat_set<int64_t> display_ids;
+  for (const auto& display : display_infos) {
+    CHECK(!display_ids.contains(display.id()));
+    display_ids.insert(display.id());
+  }
   return display_infos;
 }
 
@@ -679,9 +683,8 @@ ScreenWinDisplay ScreenWin::GetScreenWinDisplayWithDisplayId(int64_t id) {
 }
 
 // static
-int64_t ScreenWin::DeviceIdFromDeviceName(const wchar_t* device_name) {
-  return display::win::internal::DisplayInfo::DeviceIdFromDeviceName(
-      device_name);
+int64_t ScreenWin::DisplayIdFromMonitorInfo(const MONITORINFOEX& monitor) {
+  return internal::DisplayInfo::DisplayIdFromMonitorInfo(monitor);
 }
 
 // static
@@ -989,7 +992,7 @@ ScreenWinDisplay ScreenWin::GetPrimaryScreenWinDisplay() const {
 ScreenWinDisplay ScreenWin::GetScreenWinDisplay(
     const MONITORINFOEX& monitor_info) const {
   const int64_t id =
-      internal::DisplayInfo::DeviceIdFromDeviceName(monitor_info.szDevice);
+      internal::DisplayInfo::DisplayIdFromMonitorInfo(monitor_info);
   const auto it = base::ranges::find(
       screen_win_displays_, id,
       [](const auto& display) { return display.display().id(); });

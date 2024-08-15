@@ -1,72 +1,55 @@
 ---
 breadcrumbs: []
 page_name: chromium-os
-title: ChromiumOS
+title: Developer Library
 ---
+
+The ChromiumOS Developer Library is the authoritative collection of resources
+and materials that enable engineers to efficiently develop the platform.
 
 <div class="two-column-container">
 <div class="column">
 
-ChromiumOS is an open-source project that aims to build an operating system
-that provides a fast, simple, and more secure computing experience for people
-who spend most of their time on the web. Here you can review the project's
-[design docs](/chromium-os/chromiumos-design-docs),
-obtain the source code, and contribute. To learn more about the project goals,
-read the [announcement blog
-post](http://googleblog.blogspot.com/2009/11/releasing-chromium-os-open-source.html).
+## [Getting Started](/chromium-os/developer-library/getting-started)
 
+Whether you are new to ChromiumOS development or unpacking a new workstation,
+the Getting Started guide provides step-by-step instructions to go from an
+empty directory to building and uploading changes for review. For a more
+in-depth view of ChromiumsOS Development, please check out the
+[ChromiumOS Developer Guide](/chromium-os/developer-library/guides/development/developer-guide).
 
-### For contributors
+## [Reference](/chromium-os/developer-library/reference)
 
-*   [Official ChromeOS
-            Devices](/chromium-os/developer-information-for-chrome-os-devices)
+The Reference section contain information about the systems developers rely on
+including tools, infrastructure, APIs, technologies and terms. Reading through
+these resources will give you a deeper understanding of which systems exist,
+how and why they were created, and how these pieces fit together in the
+development process.
 
-### For developers
+## [Glossary](/chromium-os/developer-library/glossary)
 
-*   [ChromiumOS Build](/chromium-os/build)
+This page provides a glossary of commonly-used terms and acronyms within the
+ChromiumOS development ecosystem.
 
 </div>
 <div class="column">
 
-### ![](/chromium-os/comp2_200x146.jpg)
+## [Guides](/chromium-os/developer-library/guides)
 
-### Source code
+Guides help you get specific tasks done. They answer the question of 'How do
+I?' Look here for common recipes, tips-and-tricks, and advice to help you get
+your tasks done.
 
-*   [Testing](/chromium-os/testing)
+## [Training](/chromium-os/developer-library/training)
 
-### Developer docs
+Develop your skills by accessing learning-based content such as code labs,
+presentations, and training session videos.
 
-*   [ChromiumOS Developer
-            Guide](/chromium-os/developer-library/guides/development/developer-guide)
-*   [CrOS Developer Library](/chromium-os/developer-library)
-*   [High-Level Developer
-            FAQ](/chromium-os/how-tos-and-troubleshooting/developer-faq)
-*   [Firmware (Coreboot / U-Boot) Overview and Porting
-            Guide](/chromium-os/firmware-porting-guide)
-*   [Embedded Firmware Solutions
-            book](https://link.springer.com/book/10.1007/978-1-4842-0070-4)
-    *   [Chromebook Firmware Internals
-                chapter](https://link.springer.com/chapter/10.1007/978-1-4842-0070-4_5)
-*   [Embedded Controller (EC)
-            Development](https://chromium.googlesource.com/chromiumos/platform/ec/+/HEAD/README.md)
-*   [All How Tos and
-            Troubleshooting](/chromium-os/how-tos-and-troubleshooting)
-*   [Design docs](/chromium-os/chromiumos-design-docs)
+## [Contributing](/chromium-os/developer-library/contributing)
 
-### Hardware Reference docs and schematics
-
-Software for the microcontroller on these USB Type-C example designs is in the
-[EC source code](https://chromium.googlesource.com/chromiumos/platform/ec/+/HEAD/README.md)
-
-*   [USB Type-C debug dongle and sniffer for USB-PD
-            communications](/chromium-os/twinkie)
-*   [USB Type-C to DisplayPort Adapter](/chromium-os/dingdong)
-*   [USB Type-C to HDMI Adapter](/chromium-os/hoho)
-*   [45W USB Type-C Charging Adapter Control
-            Board](/chromium-os/minimuffin)
-*   [Cable and Adapter Tips and
-            Tricks](/chromium-os/cable-and-adapter-tips-and-tricks)
-*   [USB Type-C functional testing board](/chromium-os/plankton)
+Looking to add or update content in the library? Read through this short guide
+to understand how to check out the library source and upload your change for
+review.
 
 </div>
 </div>

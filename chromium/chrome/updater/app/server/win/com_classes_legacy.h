@@ -6,6 +6,7 @@
 #define CHROME_UPDATER_APP_SERVER_WIN_COM_CLASSES_LEGACY_H_
 
 #include <windows.h>
+
 #include <wrl/implements.h>
 
 #include <optional>
@@ -149,8 +150,8 @@ class IDispatchImpl
     if (HRESULT hr = ::LoadTypeLib(typelib_path.value().c_str(), &type_lib);
         FAILED(hr)) {
       LOG(ERROR) << __func__ << " ::LoadTypeLib failed, " << typelib_path
-                 << ", " << std::hex << hr << ", IID: "
-                 << base::win::WStringFromGUID(__uuidof(TDualInterface));
+                 << ", " << std::hex << hr
+                 << ", IID: " << StringFromGuid(__uuidof(TDualInterface));
       return hr;
     }
 
@@ -158,8 +159,8 @@ class IDispatchImpl
             type_lib->GetTypeInfoOfGuid(__uuidof(TDualInterface), &type_info_);
         FAILED(hr)) {
       LOG(ERROR) << __func__ << " ::GetTypeInfoOfGuid failed" << ", "
-                 << std::hex << hr << ", IID: "
-                 << base::win::WStringFromGUID(__uuidof(TDualInterface));
+                 << std::hex << hr
+                 << ", IID: " << StringFromGuid(__uuidof(TDualInterface));
       return hr;
     }
 
@@ -302,6 +303,8 @@ class LegacyAppCommandWebImpl : public IDispatchImpl<IAppCommandWeb> {
                          VARIANT substitution7,
                          VARIANT substitution8,
                          VARIANT substitution9) override;
+
+  const base::Process& process() const { return process_; }
 
  private:
   friend class LegacyAppCommandWebImplTest;

@@ -29,6 +29,7 @@
 #include "chrome/browser/apps/platform_apps/shortcut_manager.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/enterprise/util/managed_browser_utils.h"
 #include "chrome/browser/extensions/api/identity/web_auth_flow.h"
 #include "chrome/browser/policy/cloud/user_policy_signin_service_internal.h"
@@ -56,6 +57,8 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/content_settings/core/browser/cookie_settings.h"
+#include "components/content_settings/core/common/content_settings.h"
 #include "components/prefs/pref_service.h"
 #include "components/search/ntp_features.h"
 #include "components/signin/core/browser/account_reconcilor.h"
@@ -81,7 +84,6 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_launcher.h"
@@ -396,7 +398,10 @@ class DiceBrowserTest : public InProcessBrowserTest,
         reconcilor_blocked_count_(0),
         reconcilor_unblocked_count_(0),
         reconcilor_started_count_(0) {
-    feature_list_.InitAndDisableFeature(switches::kUnoDesktop);
+    // TODO(b/320650075): Adapt tests for
+    // `switches::kExplicitBrowserSigninUIOnDesktop` is enabled.
+    feature_list_.InitAndDisableFeature(
+        switches::kExplicitBrowserSigninUIOnDesktop);
     https_server_.RegisterDefaultHandler(base::BindRepeating(
         &FakeGaia::HandleSigninURL, main_email_,
         base::BindRepeating(&DiceBrowserTest::OnSigninRequest,
@@ -748,9 +753,8 @@ IN_PROC_BROWSER_TEST_F(DiceBrowserTest, Signin) {
                   .empty());
 
   // Make sure we are recording this value for the Control group of the
-  // `switches::kUnoDesktop` experiment.
-  ASSERT_FALSE(switches::IsExplicitBrowserSigninUIOnDesktopEnabled(
-      switches::ExplicitBrowserSigninPhase::kExperimental));
+  // `switches::kExplicitBrowserSigninUIOnDesktop` experiment.
+  ASSERT_FALSE(switches::IsExplicitBrowserSigninUIOnDesktopEnabled());
   histogram_tester.ExpectUniqueSample(
       "Signin.Intercept.Heuristic.ShouldShowChromeSigninBubbleWithReason",
       ShouldShowChromeSigninBubbleWithReason::kShouldShow, 1);
@@ -1056,8 +1060,7 @@ IN_PROC_BROWSER_TEST_F(DiceBrowserTest, MAYBE_EnableSyncBeforeToken) {
   EXPECT_EQ(0, reconcilor_started_count_);
 
   ui_test_utils::UrlLoadObserver enable_sync_url_observer(
-      https_server_.GetURL(kEnableSyncURL),
-      content::NotificationService::AllSources());
+      https_server_.GetURL(kEnableSyncURL));
 
   // Signin using the Chrome Sync endpoint.
   browser()->signin_view_controller()->ShowSignin(
@@ -1076,8 +1079,7 @@ IN_PROC_BROWSER_TEST_F(DiceBrowserTest, MAYBE_EnableSyncBeforeToken) {
   SendRefreshTokenResponse();
 
   ui_test_utils::UrlLoadObserver ntp_url_observer(
-      GURL(chrome::kChromeUINewTabURL),
-      content::NotificationService::AllSources());
+      (GURL(chrome::kChromeUINewTabURL)));
 
   EXPECT_EQ(1, reconcilor_blocked_count_);
   WaitForReconcilorUnblockedCount(1);
@@ -1277,10 +1279,8 @@ class DiceExplicitSigninBrowserTest : public InProcessBrowserTest {
   DiceExplicitSigninBrowserTest() {
     std::vector<base::test::FeatureRef> enabled_features = {
         syncer::kSyncEnableContactInfoDataTypeInTransportMode,
-        syncer::kSyncDecoupleAddressPaymentSettings,
     };
-    std::vector<base::test::FeatureRef> disabled_features = {
-        switches::kUnoDesktop};
+    std::vector<base::test::FeatureRef> disabled_features = {};
 
     if (content::IsPreTest()) {
       disabled_features.push_back(switches::kExplicitBrowserSigninUIOnDesktop);
@@ -1301,7 +1301,8 @@ class DiceExplicitSigninBrowserTest : public InProcessBrowserTest {
     return {.autofill_sync_toggle_available =
                 autofill::PersonalDataManagerFactory::GetForProfile(
                     browser()->profile())
-                    ->IsAutofillSyncToggleAvailable(),
+                    ->address_data_manager()
+                    .IsAutofillSyncToggleAvailable(),
             .user_selectable_type_set = settings->GetSelectedTypes()};
   }
 
@@ -1336,6 +1337,7 @@ IN_PROC_BROWSER_TEST_F(DiceExplicitSigninBrowserTest, PRE_Migration) {
 // account storage enabled silently. Account storage is enabled after the user
 // signs out and signs in again through an explicit flow.
 IN_PROC_BROWSER_TEST_F(DiceExplicitSigninBrowserTest, Migration) {
+  Profile* profile = browser()->profile();
   // The user is still signed in implicitly.
   ASSERT_EQ(signin::GetPrimaryAccountConsentLevel(GetIdentityManager()),
             signin::ConsentLevel::kSignin);
@@ -1344,11 +1346,9 @@ IN_PROC_BROWSER_TEST_F(DiceExplicitSigninBrowserTest, Migration) {
           ->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin)
           .email,
       kMainGmailEmail));
-  ASSERT_FALSE(browser()->profile()->GetPrefs()->GetBoolean(
-      prefs::kExplicitBrowserSignin));
+  ASSERT_FALSE(profile->GetPrefs()->GetBoolean(prefs::kExplicitBrowserSignin));
   // Account storage was not enabled yet.
   AccountStorageStatus account_storage_status = GetAccountStorageStatus();
-  EXPECT_FALSE(account_storage_status.autofill_sync_toggle_available);
   EXPECT_FALSE(account_storage_status.user_selectable_type_set.HasAny(
       {syncer::UserSelectableType::kAutofill,
        syncer::UserSelectableType::kPasswords}));
@@ -1360,10 +1360,117 @@ IN_PROC_BROWSER_TEST_F(DiceExplicitSigninBrowserTest, Migration) {
 
   // Account storage is now enabled.
   account_storage_status = GetAccountStorageStatus();
-  EXPECT_TRUE(account_storage_status.autofill_sync_toggle_available);
   EXPECT_TRUE(account_storage_status.user_selectable_type_set.HasAll(
       {syncer::UserSelectableType::kAutofill,
        syncer::UserSelectableType::kPasswords}));
+
+  // Cookie migration is required.
+  EXPECT_FALSE(profile->GetPrefs()->GetBoolean(
+      prefs::kCookieClearOnExitMigrationNoticeComplete));
+  content_settings::CookieSettings* settings =
+      CookieSettingsFactory::GetForProfile(profile).get();
+  settings->SetDefaultCookieSetting(CONTENT_SETTING_ALLOW);
+  EXPECT_TRUE(profile->GetPrefs()->GetBoolean(
+      prefs::kCookieClearOnExitMigrationNoticeComplete));
+}
+
+class DiceBrowserTextWithExplicitSignin : public DiceBrowserTest {
+ public:
+  // Sets the user choice for Chrome Signin on `main_email_`.
+  void SetChromeSigninChoice(ChromeSigninUserChoice choice) {
+    SigninPrefs(*browser()->profile()->GetPrefs())
+        .SetChromeSigninInterceptionUserChoice(
+            signin::GetTestGaiaIdForEmail(main_email_), choice);
+  }
+
+  // Signs in `main_email_`.
+  void SimulateWebSigninMainAccount() {
+    NavigateToURL(kSigninURL);
+    SendRefreshTokenResponse();
+    WaitForReconcilorUnblockedCount(1);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_{
+      switches::kExplicitBrowserSigninUIOnDesktop};
+};
+
+IN_PROC_BROWSER_TEST_F(DiceBrowserTextWithExplicitSignin,
+                       SigninWithChoiceRemembered_NoChoiceDefault) {
+  // Sign in with no prior user action -- same as
+  // `ChromeSigninUserChoice::kNoChoice`.
+  SimulateWebSigninMainAccount();
+
+  EXPECT_FALSE(
+      GetIdentityManager()->HasPrimaryAccount(signin::ConsentLevel::kSignin));
+  ASSERT_EQ(GetIdentityManager()->GetAccountsWithRefreshTokens().size(), 1u);
+  EXPECT_TRUE(gaia::AreEmailsSame(
+      GetIdentityManager()->GetAccountsWithRefreshTokens()[0].email,
+      main_email_));
+}
+
+IN_PROC_BROWSER_TEST_F(DiceBrowserTextWithExplicitSignin,
+                       SigninWithChoiceRemembered_NoChoice) {
+  // Simulates no previous choice yet.
+  SetChromeSigninChoice(ChromeSigninUserChoice::kNoChoice);
+
+  SimulateWebSigninMainAccount();
+
+  EXPECT_FALSE(
+      GetIdentityManager()->HasPrimaryAccount(signin::ConsentLevel::kSignin));
+  ASSERT_EQ(GetIdentityManager()->GetAccountsWithRefreshTokens().size(), 1u);
+  EXPECT_TRUE(gaia::AreEmailsSame(
+      GetIdentityManager()->GetAccountsWithRefreshTokens()[0].email,
+      main_email_));
+}
+
+IN_PROC_BROWSER_TEST_F(DiceBrowserTextWithExplicitSignin,
+                       SigninWithChoiceRemembered_DoNotSignin) {
+  // Simulates a previous choice done with do not sign in.
+  SetChromeSigninChoice(ChromeSigninUserChoice::kDoNotSignin);
+
+  SimulateWebSigninMainAccount();
+
+  EXPECT_FALSE(
+      GetIdentityManager()->HasPrimaryAccount(signin::ConsentLevel::kSignin));
+  ASSERT_EQ(GetIdentityManager()->GetAccountsWithRefreshTokens().size(), 1u);
+  EXPECT_TRUE(gaia::AreEmailsSame(
+      GetIdentityManager()->GetAccountsWithRefreshTokens()[0].email,
+      main_email_));
+}
+
+IN_PROC_BROWSER_TEST_F(DiceBrowserTextWithExplicitSignin,
+                       SigninWithChoiceRemembered_AlwaysAsk) {
+  // Simulates a previous choice done with always ask, expecting the Chrome
+  // Signin bubble to show.
+  SetChromeSigninChoice(ChromeSigninUserChoice::kAlwaysAsk);
+
+  SimulateWebSigninMainAccount();
+
+  EXPECT_FALSE(
+      GetIdentityManager()->HasPrimaryAccount(signin::ConsentLevel::kSignin));
+}
+
+IN_PROC_BROWSER_TEST_F(DiceBrowserTextWithExplicitSignin,
+                       SigninWithChoiceRemembered_Signin) {
+  base::HistogramTester histogram_tester;
+
+  PrefService* prefs = browser()->profile()->GetPrefs();
+  ASSERT_FALSE(prefs->GetBoolean(prefs::kExplicitBrowserSignin));
+
+  // Simulates a previous choice done with Always sign in.
+  SetChromeSigninChoice(ChromeSigninUserChoice::kSignin);
+
+  SimulateWebSigninMainAccount();
+
+  EXPECT_TRUE(
+      GetIdentityManager()->HasPrimaryAccount(signin::ConsentLevel::kSignin));
+  histogram_tester.ExpectUniqueSample(
+      "Signin.SignIn.Completed",
+      signin_metrics::AccessPoint::ACCESS_POINT_SIGNIN_CHOICE_REMEMBERED, 1);
+  // Should still count as an explicit sign in since the choice was explicit
+  // set.
+  EXPECT_TRUE(prefs->GetBoolean(prefs::kExplicitBrowserSignin));
 }
 
 // This test is not specifically related to DICE, but it extends

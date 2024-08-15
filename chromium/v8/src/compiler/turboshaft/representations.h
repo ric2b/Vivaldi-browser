@@ -7,11 +7,11 @@
 
 #include <cstdint>
 
+#include "include/v8-internal.h"
 #include "src/base/functional.h"
 #include "src/base/logging.h"
 #include "src/codegen/machine-type.h"
 #include "src/compiler/turboshaft/utils.h"
-#include "v8-internal.h"
 
 namespace v8::internal::compiler::turboshaft {
 
@@ -295,6 +295,7 @@ class RegisterRepresentation : public MaybeRegisterRepresentation {
       case MachineRepresentation::kSimd256:
         return Simd256();
       case MachineRepresentation::kMapWord:
+      case MachineRepresentation::kProtectedPointer:
       case MachineRepresentation::kIndirectPointer:
       case MachineRepresentation::kSandboxedPointer:
       case MachineRepresentation::kNone:
@@ -323,6 +324,7 @@ class RegisterRepresentation : public MaybeRegisterRepresentation {
         return RegisterRepresentation::Float32();
       case MachineRepresentation::kFloat64:
         return RegisterRepresentation::Float64();
+      case MachineRepresentation::kProtectedPointer:
       case MachineRepresentation::kIndirectPointer:
       case MachineRepresentation::kSandboxedPointer:
         return RegisterRepresentation::WordPtr();
@@ -338,7 +340,7 @@ class RegisterRepresentation : public MaybeRegisterRepresentation {
   }
 
   constexpr bool AllowImplicitRepresentationChangeTo(
-      RegisterRepresentation dst_rep) const;
+      RegisterRepresentation dst_rep, bool graph_created_from_turbofan) const;
 
   constexpr RegisterRepresentation MapTaggedToWord() const {
     if (this->value() == RegisterRepresentation::Tagged()) {
@@ -363,23 +365,25 @@ V8_INLINE size_t hash_value(MaybeRegisterRepresentation rep) {
 }
 
 constexpr bool RegisterRepresentation::AllowImplicitRepresentationChangeTo(
-    RegisterRepresentation dst_rep) const {
+    RegisterRepresentation dst_rep, bool graph_created_from_turbofan) const {
   if (*this == dst_rep) {
     return true;
   }
   switch (dst_rep.value()) {
     case RegisterRepresentation::Word32():
-      // TODO(mliedtke): Remove this once JS graph building and JS reducers
-      // always produce explicit truncations.
-      // We allow implicit 64- to 32-bit truncation.
-      if (*this == RegisterRepresentation::Word64()) {
-        return true;
-      }
       // We allow implicit tagged -> untagged conversions.
       // Even without pointer compression, we use `Word32And` for Smi-checks on
       // tagged values.
       if (*this == any_of(RegisterRepresentation::Tagged(),
                           RegisterRepresentation::Compressed())) {
+        return true;
+      }
+      if (graph_created_from_turbofan &&
+          *this == RegisterRepresentation::Word64()) {
+        // TODO(12783): Remove this once Turboshaft graphs are not constructed
+        // via Turbofan any more. Unfortunately Turbofan has many implicit
+        // truncations which are hard to fix. Still, for wasm it is required
+        // that truncations in Turboshaft are explicit.
         return true;
       }
       break;
@@ -527,6 +531,7 @@ class MemoryRepresentation {
     kAnyTagged,
     kTaggedPointer,
     kTaggedSigned,
+    kProtectedPointer,
     kIndirectPointer,
     kSandboxedPointer,
     kSimd128,
@@ -590,6 +595,9 @@ class MemoryRepresentation {
   static constexpr MemoryRepresentation TaggedSigned() {
     return MemoryRepresentation(Enum::kTaggedSigned);
   }
+  static constexpr MemoryRepresentation ProtectedPointer() {
+    return MemoryRepresentation(Enum::kProtectedPointer);
+  }
   static constexpr MemoryRepresentation IndirectPointer() {
     return MemoryRepresentation(Enum::kIndirectPointer);
   }
@@ -619,6 +627,7 @@ class MemoryRepresentation {
       case AnyTagged():
       case TaggedPointer():
       case TaggedSigned():
+      case ProtectedPointer():
       case IndirectPointer():
       case SandboxedPointer():
       case Simd128():
@@ -644,6 +653,7 @@ class MemoryRepresentation {
       case AnyTagged():
       case TaggedPointer():
       case TaggedSigned():
+      case ProtectedPointer():
       case IndirectPointer():
       case SandboxedPointer():
       case Simd128():
@@ -669,6 +679,7 @@ class MemoryRepresentation {
       case Float32():
       case Float64():
       case IndirectPointer():
+      case ProtectedPointer():
       case SandboxedPointer():
       case Simd128():
       case Simd256():
@@ -693,6 +704,7 @@ class MemoryRepresentation {
       case Float32():
       case Float64():
       case IndirectPointer():
+      case ProtectedPointer():
       case SandboxedPointer():
       case Simd128():
       case Simd256():
@@ -719,9 +731,10 @@ class MemoryRepresentation {
       case AnyTagged():
       case TaggedPointer():
       case TaggedSigned():
-        return RegisterRepresentation::Tagged();
       case IndirectPointer():
         return RegisterRepresentation::Tagged();
+      case ProtectedPointer():
+        return RegisterRepresentation::WordPtr();
       case SandboxedPointer():
         return RegisterRepresentation::Word64();
       case Simd128():
@@ -794,6 +807,8 @@ class MemoryRepresentation {
         return MachineType::TaggedPointer();
       case TaggedSigned():
         return MachineType::TaggedSigned();
+      case ProtectedPointer():
+        return MachineType::ProtectedPointer();
       case IndirectPointer():
         return MachineType::IndirectPointer();
       case SandboxedPointer():
@@ -823,6 +838,8 @@ class MemoryRepresentation {
         // Turboshaft does not support map packing.
         DCHECK(!V8_MAP_PACKING_BOOL);
         return TaggedPointer();
+      case MachineRepresentation::kProtectedPointer:
+        return ProtectedPointer();
       case MachineRepresentation::kIndirectPointer:
         return IndirectPointer();
       case MachineRepresentation::kTagged:
@@ -877,6 +894,7 @@ class MemoryRepresentation {
       case MachineRepresentation::kBit:
       case MachineRepresentation::kCompressedPointer:
       case MachineRepresentation::kCompressed:
+      case MachineRepresentation::kProtectedPointer:
       case MachineRepresentation::kIndirectPointer:
         UNREACHABLE();
     }
@@ -907,6 +925,7 @@ class MemoryRepresentation {
       case AnyTagged():
       case TaggedPointer():
       case TaggedSigned():
+      case ProtectedPointer():
         return kTaggedSizeLog2;
       case Simd128():
         return 4;

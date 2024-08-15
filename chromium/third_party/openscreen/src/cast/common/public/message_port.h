@@ -25,7 +25,7 @@ class MessagePort {
                            const std::string& message) = 0;
 
     // Called whenever an error occurs on the message port.
-    virtual void OnError(Error error) = 0;
+    virtual void OnError(const Error& error) = 0;
 
     // Clients should expose a unique identifier used as the "source" of
     // all messages sent on this message port.

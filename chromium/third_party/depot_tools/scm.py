@@ -230,15 +230,6 @@ class GIT(object):
         GIT.SetConfig(cwd, key, value)
 
     @staticmethod
-    def IsWorkTreeDirty(cwd):
-        return GIT.Capture(['status', '-s'], cwd=cwd) != ''
-
-    @staticmethod
-    def GetEmail(cwd):
-        """Retrieves the user email address if known."""
-        return GIT.GetConfig(cwd, 'user.email', '')
-
-    @staticmethod
     def ShortBranchName(branch):
         """Converts a name like 'refs/heads/foo' to just 'foo'."""
         return branch.replace('refs/heads/', '')
@@ -262,6 +253,10 @@ class GIT(object):
                 ref = GIT.Capture(['symbolic-ref', ref], cwd=cwd)
                 if not ref.endswith('master'):
                     return ref
+            except subprocess2.CalledProcessError:
+                pass
+
+            try:
                 # Check if there are changes in the default branch for this
                 # particular repository.
                 GIT.Capture(['remote', 'set-head', '-a', remote], cwd=cwd)
@@ -429,17 +424,6 @@ class GIT(object):
         return ''.join(diff)
 
     @staticmethod
-    def GetDifferentFiles(cwd, branch=None, branch_head='HEAD'):
-        """Returns the list of modified files between two branches."""
-        if not branch:
-            branch = GIT.GetUpstreamBranch(cwd)
-        command = [
-            '-c', 'core.quotePath=false', 'diff', '--name-only',
-            branch + "..." + branch_head
-        ]
-        return GIT.Capture(command, cwd=cwd).splitlines(False)
-
-    @staticmethod
     def GetAllFiles(cwd):
         """Returns the list of all files under revision control."""
         command = ['-c', 'core.quotePath=false', 'ls-files', '--', '.']
@@ -463,21 +447,11 @@ class GIT(object):
         return commit_hashes
 
     @staticmethod
-    def GetPatchName(cwd):
-        """Constructs a name for this patch."""
-        short_sha = GIT.Capture(['rev-parse', '--short=4', 'HEAD'], cwd=cwd)
-        return "%s#%s" % (GIT.GetBranch(cwd), short_sha)
-
-    @staticmethod
     def GetCheckoutRoot(cwd):
         """Returns the top level directory of a git checkout as an absolute path.
         """
         root = GIT.Capture(['rev-parse', '--show-cdup'], cwd=cwd)
         return os.path.abspath(os.path.join(cwd, root))
-
-    @staticmethod
-    def GetGitDir(cwd):
-        return os.path.abspath(GIT.Capture(['rev-parse', '--git-dir'], cwd=cwd))
 
     @staticmethod
     def IsInsideWorkTree(cwd):

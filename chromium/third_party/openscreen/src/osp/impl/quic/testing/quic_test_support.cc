@@ -6,9 +6,11 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "osp/impl/quic/quic_client.h"
 #include "osp/impl/quic/quic_server.h"
+#include "osp/public/endpoint_config.h"
 #include "osp/public/network_service_manager.h"
 #include "platform/test/fake_task_runner.h"
 
@@ -25,22 +27,22 @@ FakeQuicBridge::FakeQuicBridge(FakeTaskRunner& task_runner,
   receiver_demuxer = std::make_unique<MessageDemuxer>(
       now_function, MessageDemuxer::kDefaultBufferLimit);
 
-  auto fake_client_factory =
-      std::make_unique<FakeClientQuicConnectionFactory>(fake_bridge.get());
+  auto fake_client_factory = std::make_unique<FakeClientQuicConnectionFactory>(
+      task_runner, fake_bridge.get());
   client_socket_ = std::make_unique<FakeUdpSocket>(fake_client_factory.get());
-
+  EndpointConfig client_config = {.connection_endpoints = {IPEndpoint()}};
   quic_client = std::make_unique<QuicClient>(
-      controller_demuxer.get(), std::move(fake_client_factory),
-      &mock_client_observer, now_function, task_runner);
+      client_config, *controller_demuxer, std::move(fake_client_factory),
+      mock_client_observer, now_function, task_runner);
+  quic_client->fingerprints().emplace(kReceiverEndpoint, kFingerprint);
 
-  auto fake_server_factory =
-      std::make_unique<FakeServerQuicConnectionFactory>(fake_bridge.get());
+  auto fake_server_factory = std::make_unique<FakeServerQuicConnectionFactory>(
+      task_runner, fake_bridge.get());
   server_socket_ = std::make_unique<FakeUdpSocket>(fake_server_factory.get());
-  ServerConfig config;
-  config.connection_endpoints.push_back(kReceiverEndpoint);
+  EndpointConfig server_config = {.connection_endpoints = {kReceiverEndpoint}};
   quic_server = std::make_unique<QuicServer>(
-      config, receiver_demuxer.get(), std::move(fake_server_factory),
-      &mock_server_observer, now_function, task_runner);
+      server_config, *receiver_demuxer, std::move(fake_server_factory),
+      mock_server_observer, now_function, task_runner);
 
   quic_client->Start();
   quic_server->Start();

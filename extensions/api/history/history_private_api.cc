@@ -2,6 +2,8 @@
 
 #include "extensions/api/history/history_private_api.h"
 
+#include <__config>
+#include <algorithm>
 #include <memory>
 #include <set>
 #include <string>
@@ -18,14 +20,20 @@
 #include "base/values.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/history/top_sites_factory.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
+#include "components/history/core/browser/top_sites.h"
 #include "components/history/core/browser/url_database.h"
+#include "components/prefs/pref_service.h"
+#include "components/search_engines/template_url_service.h"
 #include "components/sync/protocol/history_delete_directive_specifics.pb.h"
 #include "db/vivaldi_history_types.h"
 #include "extensions/schema/history_private.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using vivaldi::GetTime;
 
@@ -449,8 +457,6 @@ ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   history::TypedUrlResults results;
-  history::KeywordID prefix_keyword_id;
-  base::StringToInt64(params->prefix_keyword_id, &prefix_keyword_id);
 
   history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
   if (!hs) {
@@ -459,7 +465,7 @@ ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
   }
 
   hs->GetVivaldiTypedHistory(
-      params->query, prefix_keyword_id, params->max_results,
+      params->query, params->max_results,
       base::BindOnce(
           &HistoryPrivateGetTypedHistoryFunction::TypedHistorySearchComplete,
           this),
@@ -469,16 +475,70 @@ ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
   return RespondLater();
 }
 
+bool HistoryPrivateGetTypedHistoryFunction::HasTermInResponse(
+    std::vector<vivaldi::history_private::TypedHistoryItem>& response,
+    std::string term) {
+  return std::find_if(response.begin(), response.end(),
+                      [term](const auto& response_item) -> bool {
+                        return response_item.terms == term;
+                      }) != response.end();
+}
+
 void HistoryPrivateGetTypedHistoryFunction::TypedHistorySearchComplete(
     const history::TypedUrlResults& results) {
   std::vector<vivaldi::history_private::TypedHistoryItem> response;
+  auto* service =
+      TemplateURLServiceFactory::GetForProfile(GetFunctionCallerProfile(*this));
+  const TemplateURL* default_search_provider =
+      service ? service->GetDefaultSearchProvider() : nullptr;
+  PrefService* prefs =
+        Profile::FromBrowserContext(browser_context())->GetPrefs();
+  bool show_search_queries =
+      prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxShowSearchHistory);
+
   for (const auto& result : results) {
+    bool is_duplicate = HasTermInResponse(response, result.terms);
+    // Filter duplicate search queries items from different search providers.
+    if (result.terms.length() > 0) {
+      if (!show_search_queries) {
+        continue;
+      }
+      bool is_result_url_from_default_provider =
+          default_search_provider->IsSearchURL(result.url,
+                                               service->search_terms_data());
+      for (const auto& item : results) {
+        if (result.url == item.url || item.terms.length() <= 0 ||
+            result.terms != item.terms || is_duplicate) {
+          continue;
+        }
+        bool is_item_url_from_default_provider =
+            default_search_provider->IsSearchURL(item.url,
+                                                 service->search_terms_data());
+        // If result and item are not from the default search provider then pick
+        // the one with biggest visit_count.
+        // If both visit_count are equal then take the first one in the list,
+        // all the others will be consider as duplicates.
+        // Else if item is using default search provider then pick item.
+        if (!is_result_url_from_default_provider &&
+            !is_item_url_from_default_provider) {
+          is_duplicate = result.visit_count != item.visit_count
+                             ? result.visit_count < item.visit_count
+                             : HasTermInResponse(response, result.terms);
+        } else if (is_item_url_from_default_provider &&
+                   !is_result_url_from_default_provider) {
+          is_duplicate = true;
+        }
+      }
+      if (is_duplicate) {
+        continue;
+      }
+    }
+
     vivaldi::history_private::TypedHistoryItem item;
     item.url.assign(result.url.spec());
     item.title.assign(result.title);
-    item.keyword_id = base::NumberToString(result.keyword_id);
     item.terms.assign(result.terms);
-    item.typed_count = result.typed_count;
+    item.visit_count = result.visit_count;
     response.push_back(std::move(item));
   }
 
@@ -513,11 +573,6 @@ void HistoryPrivateGetDetailedHistoryFunction::SearchComplete(
       BookmarkModelFactory::GetForBrowserContext(profile);
   for (const auto& result : results) {
     vivaldi::history_private::DetailedHistoryItem item;
-    bool has_chain_start =
-        ui::PAGE_TRANSITION_CHAIN_START &
-        ui::PageTransitionGetQualifier(result.transition_type);
-    bool has_chain_end = ui::PAGE_TRANSITION_CHAIN_END &
-                         ui::PageTransitionGetQualifier(result.transition_type);
 
     item.id.assign(result.id);
     item.url.assign(result.url.spec());
@@ -527,16 +582,24 @@ void HistoryPrivateGetDetailedHistoryFunction::SearchComplete(
     item.visit_count = result.visit_count;
     item.typed_count = result.typed_count;
     item.is_bookmarked = bookmark_model->IsBookmarked(result.url);
-    item.transition_type =
-        HistoryPrivateAPI::UiTransitionToPrivateHistoryTransition(
-            result.transition_type);
-    item.is_redirect = ui::PageTransitionIsRedirect(result.transition_type) &&
-                       !(has_chain_start || has_chain_end);
+    item.score = result.score;
 
     response.push_back(std::move(item));
   }
   return Respond(ArgumentList(
       vivaldi::history_private::GetDetailedHistory::Results::Create(response)));
+}
+
+ExtensionFunction::ResponseAction HistoryPrivateUpdateTopSitesFunction::Run() {
+  scoped_refptr<history::TopSites> ts = TopSitesFactory::GetForProfile(
+      Profile::FromBrowserContext(browser_context()));
+  if (!ts) {
+    return RespondNow(Error("Database missing"));
+  }
+
+  ts->UpdateNow();
+
+  return RespondNow(NoArguments());
 }
 
 }  // namespace extensions

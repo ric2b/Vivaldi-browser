@@ -1,26 +1,432 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sk">
+<translation id="1016495303386450659">Položka upravená</translation>
+<translation id="1041637248958093184">Vyhľadávania, navštívené stránky, súbory cookie a dočasné súbory sa pri používaní súkromných kariet v systéme Vivaldi neukladajú.</translation>
+<translation id="1066692930984703744">Povoliť blokovanie sledovačov a reklám pre rýchlejšie a bezpečnejšie prehliadanie</translation>
 <translation id="1116694919640316211">O prehliadači</translation>
+<translation id="1123707809902612118">Blokovať sledovače a reklamy</translation>
+<translation id="1151972924205500581">Zadajte heslo</translation>
+<translation id="1166425484559430538">Vaše synchronizačné údaje sú šifrované. Poskytnite svoje šifrovacie heslo, aby ste mohli dešifrovať údaje.</translation>
+<translation id="1181037720776840403">Odstrániť</translation>
+<translation id="1182668946911971500">Lišta poznámok</translation>
+<translation id="1198271701881992799">Poďme na to</translation>
+<translation id="1201402288615127009">Ďalej</translation>
+<translation id="1208495925646914304">Názov</translation>
+<translation id="1254117744268754948">Vybrať priečinok</translation>
+<translation id="1265555169187992603">Vyberte si používateľské meno s 3 až 30 písmenami (a–z alebo A–Z) a číslicami (0–9).</translation>
+<translation id="1267954839079880017">Talianske (<ph name="ORIGIN" />)</translation>
+<translation id="1272729688996227528">Synchronizácia je aktívna</translation>
+<translation id="1275213816424141989">Možno neskôr</translation>
+<translation id="1315107593850379616">Záložný email</translation>
+<translation id="1325473901257014816">Pomocou prehliadača Vivaldi môžete mať všetky karty v jednom prehliadači a synchronizovať ich vo všetkých zariadeniach.</translation>
+<translation id="132683371494960526">Dvojitým ťuknutím na položku zmeníte nadradený priečinok.</translation>
+<translation id="1341156196125040601">Vyberte, kde chcete mať adresný riadok.</translation>
+<translation id="1354002567845495520">Synchronizovať poznámky (prílohy nie sú synchronizovateľné)</translation>
+<translation id="1365181765792690850">Povolenie týchto nastavení môže poškodiť niektoré webové stránky alebo obrázky. Vyžaduje sa reštart prehliadača.</translation>
+<translation id="1379470994139227452">Nastaviť Vivaldi ako predvolený</translation>
+<translation id="1381484244248892686">Uložené heslá môžete používať v akomkoľvek zariadení. Sú uložené vo Vivaldi správcovi hesiel pre <ph name="EMAIL" /></translation>
+<translation id="1383876407941801731">Vyhľadávať</translation>
+<translation id="1397515084080510783">Žiadne synchronizované karty</translation>
+<translation id="1410197035576869800">Ikona aplikácie</translation>
+<translation id="1430638949087011281">Žiadne blokovanie</translation>
+<translation id="1446108955355168157">Ak chcete zašifrovať a chrániť svoje synchronizované údaje (heslá, záložky, poznámky a ďalšie), vytvorte si šifrovacie heslo. Toto heslo nám nikdy nebude zaslané.</translation>
 <translation id="145015347812617860"><ph name="COUNT" />položiek</translation>
-<translation id="1711184756728070210"><ph name="BEGIN_LINK" />➔<ph name="END_LINK" /> ……<ph name="END_LINK" /><ph name="BEGIN_LINK2" />Zásady ochrany osobných údajov➔<ph name="END_LINK2" /></translation>
+<translation id="1468415711258933398">Štandardná karta</translation>
+<translation id="1521731267649138856">vašu záložnú e-mailovú adresu.</translation>
+<translation id="1573784689611551537">Spravovať zdroje blokovania reklám</translation>
+<translation id="1577761519530347814">Synchronizovať uložené heslá webových stránok</translation>
+<translation id="1644574205037202324">História</translation>
+<translation id="1659112017960130179">Kórejské (<ph name="ORIGIN" />)</translation>
+<translation id="1689333818294560261">Prezývka</translation>
+<translation id="1711184756728070210"><ph name="BEGIN_LINK" />Podmienky použitia ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />Zásady ochrany súkromia➔<ph name="END_LINK2" /></translation>
+<translation id="1717473843091433383">Vynútiť tmavý motív vzhľadu na všetkých webových stránkach</translation>
+<translation id="173924678149983125">Zadajte URL adresu pre importovanie pravidiel blokovania</translation>
+<translation id="1751280147639351837">Blokovač reklám a sledovačov</translation>
+<translation id="1752547299766512813">Uložiť heslá</translation>
+<translation id="1754797958074421486">Podmienky používania</translation>
+<translation id="1771413903824396513">Podľa prezývky</translation>
+<translation id="1804522390855853698">Čínske (<ph name="ORIGIN" />)</translation>
+<translation id="1807246157184219062">Svetlý</translation>
+<translation id="1809939268435598390">Vymazať priečinok</translation>
+<translation id="1813686536470127172">Iný priečinok</translation>
+<translation id="1828800626900562968">Ťuknutím na ikonu + nižšie vytvoríte novú kartu.</translation>
+<translation id="1861262398884155592">Tento priečinok je prázdny</translation>
+<translation id="1887193815546011584">Nový rýchly prístup</translation>
+<translation id="1929299157575856072">PREDVOLENÁ ÚROVEŇ BLOKOVANIA</translation>
+<translation id="2030706494969937066">Nepodarilo sa načítať vaše prihlasovacie údaje. Prosíme, prihláste sa znova.</translation>
+<translation id="2034405583989639424">Upraviť rýchly prístup</translation>
+<translation id="2048247880942380698">Arabské (<ph name="ORIGIN" />)</translation>
+<translation id="2079545284768500474">Vrátiť späť</translation>
+<translation id="2129408066358825297">Vek</translation>
+<translation id="2148384276939959392">Synchronizovať vybrané</translation>
+<translation id="2195713384412091023">Tým sa odstránia všetky synchronizačné údaje uložené na našom serveri, obnoví sa vaše šifrovacie heslo a odhlásite sa.</translation>
+<translation id="2243210264130642074">Poznámka uložená</translation>
 <translation id="2272338747456392228">Účet bol uzamknutý</translation>
+<translation id="2273327106802955778">Viac ponuky</translation>
 <translation id="2324160330092901720">Overovací kód bol odoslaný na adresu <ph name="EMAIL_ID" /></translation>
-<translation id="2386793615875593361">1 vybrané</translation>
+<translation id="2336309953058658733">Vyprázdniť kôš</translation>
+<translation id="2359808026110333948">Pokračovať</translation>
+<translation id="2386793615875593361">1 vybraná</translation>
+<translation id="2387049655823108978">Synchronizovať otvorené karty z iných zariadení</translation>
+<translation id="2388224692799337242">Po spustení prehľadávania sa história zobrazí tu</translation>
+<translation id="2391028308389203648">Turečtina (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">Aktivovať</translation>
+<translation id="2414886740292270097">Tmavý</translation>
+<translation id="2434910957904013691">Synchronizovať všetko</translation>
+<translation id="2448144008809286557">Zabudli ste<ph name="BEGIN_LINK" />Uživatelské meno<ph name="END_LINK" />alebo<ph name="BEGIN_LINK" />Heslo<ph name="END_LINK" />?</translation>
+<translation id="2478478121390627077">Aktuálne zvolená farba</translation>
+<translation id="2536780277491102902">VÝNIMKY</translation>
+<translation id="2558801801411970131">Blokovanie sledovačov</translation>
+<translation id="2562040727226360285">Odstránenie otravností môže poškodiť stránky (<ph name="ORIGIN" />)</translation>
+<translation id="2563886993995570961">Maximálny počet stĺpcov</translation>
+<translation id="257674075312929031">Skupina</translation>
+<translation id="2577446409661931381">Nová poznámka</translation>
+<translation id="261264557609353020">Úvodná stránka</translation>
+<translation id="2619628557366098325">Portugalské (<ph name="ORIGIN" />)</translation>
+<translation id="2620436844016719705">Systém</translation>
+<translation id="2666092431469916601">Navrchu</translation>
 <translation id="2677862276555105603">Reklama
-zablokovaná</translation>
+blokovaná</translation>
+<translation id="2678542925523700624">Estónske (<ph name="ORIGIN" />)</translation>
+<translation id="2709516037105925701">Automatické vypĺňanie</translation>
+<translation id="271033894570825754">Nový</translation>
+<translation id="2745324713975967671">Šifrovacie heslo</translation>
+<translation id="276436995507680929">Synchronizovať zoznam čítania</translation>
+<translation id="2765217105034171413">Malý</translation>
+<translation id="2767124759205735526">Synchronizovať históriu a zadané URL adriesy</translation>
+<translation id="2825232297853754349">Musíte súhlasiť so zmluvnými podmienkami.</translation>
+<translation id="2842985007712546952">Nadradený priečinok</translation>
+<translation id="2843343418360315034">Maďarské (<ph name="ORIGIN" />)</translation>
+<translation id="2850144663494818309">Spúšťanie synchronizácie...</translation>
+<translation id="2874111661876416905">Vyhľadávať pomocou Vivaldi</translation>
+<translation id="2884735088411646852">Triedenie</translation>
+<translation id="2898963176829412617">Nový priečinok…</translation>
+<translation id="2924890236896835588">Názov skupiny</translation>
+<translation id="2961573414320947355">Chcete otvoriť všetky odkazy v aplikácii Vivaldi? Nezabudnite nás nastaviť ako predvolený prehliadač.</translation>
+<translation id="3006429105107822794">Toto heslo si nemusíte pamätať. Bude uložené vo Vivaldi správcovi hesiel.</translation>
+<translation id="3018244467214569202">Grécke (<ph name="ORIGIN" />)</translation>
+<translation id="3029426144711327484">Zobraziť rýchle prístupy</translation>
+<translation id="3039671569659952257">Vymazať priečinok</translation>
+<translation id="3073196329485613487">Prihláste sa k svojmu účtu</translation>
+<translation id="307859903981308731">Pokračováním súhlasíte s Vivaldi</translation>
+<translation id="3086746722712840547">poznámka</translation>
+<translation id="3087734570205094154">Naspodku</translation>
+<translation id="3091563570137981919">Blokovanie sledovačov a reklám</translation>
+<translation id="3134385238404760368">Žiadne nedávne karty</translation>
+<translation id="3157931365184549694">Obnoviť</translation>
+<translation id="3159285901314605198">Obrázok pozadia</translation>
+<translation id="3177673846235066154">Server odmietol vaše prihlasovacie údaje.</translation>
+<translation id="3229182533910980085">Klepnutím na ikonu „+“ pridáte svoju prvú záložku</translation>
+<translation id="3236835587712044564">Ste spokojný s Vivaldi? Nastavte ho ako predvolený.</translation>
+<translation id="3270894089048358271">Nastaviť Vivaldi ako predvolený</translation>
+<translation id="3270930591809084274">Synchronizované karty</translation>
+<translation id="3335772982573114336">Nová poznámka</translation>
+<translation id="33451081266695216">Server obmedzil pripojenie.</translation>
+<translation id="3346386541263128307">E-mailové adresy musia byť rovnaké.</translation>
+<translation id="3365991203476235715">Anglické (<ph name="ORIGIN" />)</translation>
+<translation id="3368960138304620657">Litovské (<ph name="ORIGIN" />)</translation>
+<translation id="3377025655491224618">Súkromná karta</translation>
+<translation id="3435896845095436175">Povoliť</translation>
+<translation id="3438160227308459316">Rumunské (<ph name="ORIGIN" />)</translation>
+<translation id="3451162533623145500">Vytvoriť účet</translation>
+<translation id="3509379002674019679">Vytvorte, uložte a spravuje vaše heslá pre jednoduché prihlásenie do webových stránok a aplikácií.</translation>
+<translation id="3513566764071045027">Odhlásiť sa</translation>
+<translation id="3527085408025491307">Priečinok</translation>
+<translation id="3530991200302302959">Bulharské (<ph name="ORIGIN" />)</translation>
+<translation id="3536029647154100190">Pridať skupinu</translation>
+<translation id="3601414719864711130">Podľa dátumu</translation>
+<translation id="3602290021589620013">Náhľad</translation>
+<translation id="3607176258839749451">Registrácia zlyhala kvôli chybe. Prosíme, skúste to znova neskôr.</translation>
+<translation id="3646647753063635401">Synchronizovať všetky údaje a automaticky povoliť synchronizáciu nových typov údajov</translation>
+<translation id="3682791711395736890">Zobraziť počítačovú verziu stránky</translation>
+<translation id="3692650606013198282">Otvoriť v súkromí</translation>
+<translation id="3699026013955941879">Platnoť kódu vypršala. Prosíme, požiadajte o nový aktivačný kód.</translation>
+<translation id="3700829948786686853">Vitajte v prehliadači Vivaldi</translation>
+<translation id="3766350025418769949">Heslá, uložené vo Vivaldi správcovi hesiel, môžete používať aj v iných aplikáciách vo vašom iPade.</translation>
+<translation id="3817539520771282781">Podľa druhu</translation>
+<translation id="3842727926262967527">Vyberte, kde chcete mať lištu kariet a adresný riadok.</translation>
+<translation id="3845564230651302310">Uplatňovanie nového nastavenia blokovania...</translation>
+<translation id="3858860766373142691">Názov</translation>
+<translation id="3866249974567520381">Popis</translation>
+<translation id="3872195896030547485">Prosíme, zadajte platnú e-mailovú adresu.</translation>
+<translation id="3897092660631435901">Ponuka</translation>
+<translation id="3920366244737784074">Pridať <ph name="ITEM_TYPE" /></translation>
+<translation id="3921585859122905677">Umiestnenie adresného riadku</translation>
+<translation id="3953599441418463312">Japonské (<ph name="ORIGIN" />)</translation>
+<translation id="395506590020066151">Sledovač blokovaný</translation>
+<translation id="3958433364221339259">Vyhľadávať pomocou <ph name="SEARCH_ENGINE" /></translation>
+<translation id="3997823869212225788">Zadajte šesťmiestný kód</translation>
+<translation id="4002066346123236978">Názov</translation>
 <translation id="4032606071208172574">(Predvolené)</translation>
-<translation id="5160018607418677056"><ph name="BEGIN_LINK" />Opätovné odoslanie kódu<ph name="END_LINK" /></translation>
+<translation id="4048057312173843244">Tu sa zobrazia synchronizované karty z iných zariadení. Prihláste sa, ak chcete používať túto službu.</translation>
+<translation id="4073968054795398875">Server synchronizácie zaznamenal problémy. Opätovné spustenie začne o chvíľu...</translation>
+<translation id="4084682180776658562">Záložka</translation>
+<translation id="4096707694175478403">Panel</translation>
+<translation id="414098425907666915">Súkromné vyhľadávanie</translation>
+<translation id="4141861385728508836">Nordické (<ph name="ORIGIN" />)</translation>
+<translation id="4145489350420416595">🛑 Neočakávaná chyba.</translation>
+<translation id="4151468644762710975">Obnoviť predvolené vyhľadávače</translation>
+<translation id="4152011295694446843">Tu nájdete svoje záložky</translation>
+<translation id="4152623049003960417">Detaily sledovača</translation>
+<translation id="4176463684765177261">Vypnutý</translation>
+<translation id="4209092469652827314">Veľké</translation>
+<translation id="4219175188138757774">České a Slovenské (<ph name="ORIGIN" />)</translation>
+<translation id="4222285809803895512">Dátum vytvorenia</translation>
+<translation id="4276839458685471670">Podľa dátumu vytvorenia</translation>
+<translation id="4277085371281330061">Sledovače
+blokované</translation>
+<translation id="4299298331965375737">Nastaviť Vivaldi ako predvolený prehliadač?</translation>
+<translation id="4304224509867189079">Prihlásiť sa</translation>
+<translation id="4316955624679873896">Záložka uložená v</translation>
+<translation id="432696242656678770">Ruské (<ph name="ORIGIN" />)</translation>
+<translation id="4350751486125178847">Španielske (<ph name="ORIGIN" />)</translation>
+<translation id="4376661454588260127">Vietnamské (<ph name="ORIGIN" />)</translation>
+<translation id="4394049700291259645">Vypnúť</translation>
+<translation id="4413780690230851155">Vymazať históriu prehliadania</translation>
+<translation id="4452878871193896747">Indonézske (<ph name="ORIGIN" />)</translation>
+<translation id="445620040230332178">Štýl kariet</translation>
+<translation id="4461652107878667683">Navigácia vpred</translation>
+<translation id="4474581062946673155">Aktuálne nemáte synchronizované žiadne karty z iných zariadení.</translation>
+<translation id="4488900295693536220">Platí, keď je adresný riadok v dolnej časti, uľahčuje dosiahnutie populárnych návrhov.</translation>
+<translation id="4493850495402472953">a</translation>
+<translation id="4497115807425788318">Umiestnenie</translation>
+<translation id="4507213865286211606">Veľkosť náhľadu</translation>
+<translation id="4515084385531683114">Heslá sú uložené do správcu hesiel v tomto zariadení.</translation>
+<translation id="4525945044609022380">Tento e-mail je už prepojený s iným účtom.</translation>
+<translation id="4526803704855831732">Súkromné karty</translation>
+<translation id="4553717494760925411">Navigácia späť</translation>
+<translation id="4563480492836333884">E-mail nie je akceptovaný. Použite prosím inú doménu.</translation>
+<translation id="457386861538956877">Ďalšie...</translation>
+<translation id="460370326897402035">Heslo je neplatné.</translation>
+<translation id="4619615317237390068">Karty z iných zariadení</translation>
+<translation id="462860218383788109">Dátum úpravy</translation>
+<translation id="4640946580087069269">Kopírovať do poznámky</translation>
+<translation id="4654578955713250802">Blokovať reklamy a sledovače</translation>
+<translation id="4655510151391078468">Tento kód nie je zhodný s tým, ktorý sme vám poslali.
+Počet zostávajúcich pokusov: <ph name="ATTEMPTS" />.</translation>
+<translation id="46613249405673440">Vybrať ako tapetu</translation>
+<translation id="466494460776294423">Zadajte overovací kód</translation>
+<translation id="4714431804859029826">Obnoviť predvolené</translation>
+<translation id="4727698999970341158">Islandské (<ph name="ORIGIN" />)</translation>
+<translation id="473775607612524610">Aktualizovať</translation>
+<translation id="4739712911308055817">Nenačítané</translation>
+<translation id="4759399863961855552">Poradie triedenia</translation>
+<translation id="4780953868408193639">Sledovač
+blokovaný</translation>
+<translation id="4807415245238822255">Heslá musia byť rovnaké.</translation>
+<translation id="4818836520802586445">Farba zdôraznenia</translation>
+<translation id="4821701638681626529">Vivaldi nezaznamenáva históriu prehliadania pri používaní súkromných kariet</translation>
+<translation id="4833044618885331665">Ak chcete používať synchronizáciu, musíte aktualizovať prehliadač Vivaldi.</translation>
+<translation id="484462545196658690">Automaticky</translation>
+<translation id="4852383705713307704">Reklama blokovaná</translation>
+<translation id="4903325570808402486">Synchronizovať nastavenia aplikácie Vivaldi (nie všetky nastavenia sú synchronizovateľné)</translation>
+<translation id="4929196061847506605">Výkonný. Osobný. Súkromný.</translation>
+<translation id="4936710149174207991">Nesynchronizované</translation>
+<translation id="4943266325467647391">Zabudovaný blokovač reklám a sledovačov, v prehliadači Vivaldi, vás chráni pred škodlivým softvérom a reklamami.</translation>
+<translation id="495421405224926623">Prečítal som si a súhlasím s Podmienkami používania a Zásadami ochrany osobných údajov.</translation>
+<translation id="497942794017668482">Blokovanie sledovačov a reklám</translation>
+<translation id="5037761343305489956">Skopírované do poznámky</translation>
+<translation id="504986598654589766">Prehliadanie v súkromnom liste znamená, že všetky údaje vyhľadávania, navštívené stránky, súbory cookie a dočastné súbory nebudú uložené v prehliadači Vivaldi. Vaše pripojenie nie je šifrované alebo inak upravené.</translation>
+<translation id="505774819758747674">Náhľad lišty nástrojov so zvolenou farbou zdôraznenia</translation>
+<translation id="5094183365876568934">Niektoré webové stránky prispôsobujú svoju farebnú schému podľa preferencií používateľa. Vyberte si farebnú schému, ktorú chcete, aby tieto stránky používali.</translation>
+<translation id="5094376253685335202">Povoliť synchronizáciu</translation>
+<translation id="5116316489033177455">Synchronizovať záložky a rýchly prístup</translation>
+<translation id="5122095890854520072">Lotyšské (<ph name="ORIGIN" />)</translation>
+<translation id="5153806174841856652">Prihlásenie zlyhalo</translation>
+<translation id="5160018607418677056"><ph name="BEGIN_LINK" />Opätovne odoslať kód<ph name="END_LINK" /></translation>
+<translation id="5191012692655103305">Načítanie kariet a histórie...</translation>
+<translation id="5238642303473095117">Vymazať údaje</translation>
+<translation id="5245732982828228444">Tu nájdete svoje poznámky</translation>
+<translation id="5249199221558969362">Prosíme, zadajte váš reálny vek.</translation>
+<translation id="5271549068863921519">Uložiť heslo</translation>
+<translation id="5290452628447338707">Žiadne poznámky</translation>
+<translation id="5317780077021120954">Uložiť</translation>
+<translation id="5349678548463426691">Podľa popisu</translation>
+<translation id="5350737901534958404">Povoliť reklamy od našich partnerov (podporiť Vivaldi)</translation>
+<translation id="5351912500249789547">Vivaldi.net odmietlo vaše prihlasovanie údaje: Kód chyby <ph name="ERROR_CODE" /></translation>
+<translation id="5378841821586202982">Priečinok koša</translation>
+<translation id="5398772614898833570">Reklamy blokované</translation>
+<translation id="5421638721143596928">Chyba pri dešifrovaní prihlasovacích údajov. Prihláste sa prosím znova.</translation>
+<translation id="5422086212043657100">Použiť ako priečinok rýchleho prístupu</translation>
+<translation id="5439835075346716808">Registrácia bola pre túto IP adresu dočasne zablokovaná. Prosíme, skúste to znova neskôr.</translation>
+<translation id="5486261815000869482">Potvrdiť heslo</translation>
+<translation id="5494016731375030300">Nedávno zatvorené karty</translation>
+<translation id="5564687523685713029">Zobrazovať len skupiny</translation>
+<translation id="5600792731098584229">Veľkosť položiek rýchleho prístupu</translation>
+<translation id="5639137028584114536">Vaša spoločnosť vyžaduje súkromné prehliadanie. Karty nie sú v súkromnom režime uložené.
+        <ph name="BEGIN_LINK" />Viac informácií<ph name="END_LINK" /></translation>
+<translation id="5684277895745049190">Zoznam</translation>
+<translation id="5710478562694930157">Vzostupne</translation>
+<translation id="574392208103952083">Stredné</translation>
+<translation id="5787420647064736989">Názov zariadenia</translation>
+<translation id="5822336771053074270">Pridať poznámku</translation>
+<translation id="5823830882692559950">Vivaldi.net odmietlo vaše prihlasovanie údaje: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" /> 2)</translation>
+<translation id="5857090052475505287">Nový priečinok</translation>
+<translation id="5859825823508296659">Upraviť doménu</translation>
+<translation id="5867841422488265304">Vyhľadať alebo zadať webovú adresu</translation>
+<translation id="5869217094746242845">Viac informácií o ochrane osobných údajov a bezpečnosti</translation>
 <translation id="5871497086027727873">1 položka presunutá</translation>
-<translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" />presunutých položiek</translation>
+<translation id="5898502570200301364">Heslá, uložené vo Vivaldi správcovi hesiel, môžete používať aj v iných aplikáciách v vašom iPhone.</translation>
+<translation id="5900160494089383343">Toto používateľské meno nie je k dispozícii.</translation>
+<translation id="6005497458542935062">Presunúť z priečinka</translation>
+<translation id="6042308850641462728">Viac</translation>
+<translation id="6077943432358741146">Rýchly prístup</translation>
+<translation id="6079696972035130497">Neobmedzený</translation>
+<translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" />položiek presunutých</translation>
+<translation id="6147094071357011481">Nedávno zatvorené karty sú nedostupné</translation>
+<translation id="6193995664633100765">Indické (<ph name="ORIGIN" />)</translation>
+<translation id="6224086034182508647">Možnosti vzhľadu webovej stránky</translation>
+<translation id="6365929278691047681">Nemecké (<ph name="ORIGIN" />)</translation>
+<translation id="6406506848690869874">Synchronizácia</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" />vybraných</translation>
+<translation id="6468130661190228905">Ospravedlňujeme sa, ale na pripojenie do komunity budete musieť ešte chvílu počkať. Požadujeme, aby naši členovia mali minimálne 16 rokov.</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />Importovať<ph name="END_LINK" /></translation>
-<translation id="6757792528048321576">Blokovač reklám a sledovacích zariadení</translation>
+<translation id="6517411226162529295">Zálohovať šifrovací kľúč</translation>
+<translation id="6527303717912515753">Zdieľať</translation>
+<translation id="6535988230515403205">Poľské (<ph name="ORIGIN" />)</translation>
+<translation id="659351303388691480">Vyčistiť údaje prehliadania…</translation>
+<translation id="6602272356389933803">Vzhľad a motív</translation>
+<translation id="6614744450826097546">Detail reklamy</translation>
+<translation id="6631760746795162665">Kolumbijské (<ph name="ORIGIN" />)</translation>
+<translation id="6639866709520319699">Sledovače a reklamy sú blokované. Niektoré stránky sa môžu poškodiť.</translation>
+<translation id="6642196070615520677">Vymazať vzdialené údaje synchronizácie</translation>
+<translation id="6645228090427373820">Sledovače sú blokované, ale nie reklamy. Niektoré stránky sa môžu poškodiť.</translation>
+<translation id="6656103420185847513">Upraviť prečinok</translation>
+<translation id="6657585470893396449">Heslo</translation>
+<translation id="6690955457036363013">Spravovať stupeň blokovania pre stránku</translation>
+<translation id="6703516503311038964">Chcem odoberať informačný leták spoločnosti Vivaldi</translation>
+<translation id="6724024423419410528">Farby</translation>
+<translation id="6745857330065678428">Prevziať farbu zdôraznenia zo stránky</translation>
+<translation id="6757792528048321576">Blokovač reklám a sledovačov</translation>
+<translation id="6798469570047202628">Zadané nesprávne heslo</translation>
+<translation id="681368974849482173">Položka vytvorená</translation>
+<translation id="6830986331692390764">Prebieha vymazávanie údajov synchronizácie. Počkajte, prosím.</translation>
+<translation id="6875510405870945573">Vyberte si preferovanú úroveň blokovania.</translation>
+<translation id="6885837502028760851">Zobraziť len priečinky rýchleho pristupu</translation>
+<translation id="6887143077297974801">Spustenie synchronizácie zlyhalo.</translation>
+<translation id="691132463664340655">Motív vzhľadu prehliadača</translation>
+<translation id="6937750621455385628">Na prihlásenie musíte použiť účet Vivaldi.</translation>
+<translation id="6945221475159498467">Vybrať</translation>
+<translation id="6946395294519639514">Pomocou panelov môžete mať v bočnom paneli prehliadača ľahko dostupné nástroje.</translation>
+<translation id="6951435330868954105">Spravovať predvolené nastavenia</translation>
+<translation id="6951948201878750661">klepnutím vyberiete túto farbu</translation>
+<translation id="6967884871145366229">Spravovať nastavenia súkromia</translation>
+<translation id="6973630695168034713">Priečinky</translation>
+<translation id="7006864796794806241">Obnoviť heslo</translation>
+<translation id="7029809446516969842">Heslá</translation>
+<translation id="7041964446309059643">Manuálne</translation>
+<translation id="7110758301321962823">Obnoviť používateľské meno</translation>
+<translation id="7158507293261405349">Pridať novú skupinu</translation>
+<translation id="7192066917392691622">Zostupne</translation>
+<translation id="7194677467200983873">🕓 Posledná synchronizácia:</translation>
+<translation id="7203411967620588391">Upraviť <ph name="ITEM_TYPE" /></translation>
+<translation id="7210372243397300116">Vyhľadávať priečinok</translation>
+<translation id="7215420652436283416">Podľa adresy</translation>
+<translation id="7229439505896086266">Vytvoriť poznámku</translation>
+<translation id="7311118006561484338">Podľa názvu</translation>
+<translation id="7325310788570036874">Prehliadajte web šikovnejšie, plynulejšie a rýchlejšie s Vivaldi.</translation>
+<translation id="734110743815267231">Hebrejské (<ph name="ORIGIN" />)</translation>
+<translation id="7347289093190902150">Otvoriť v súkromí?</translation>
+<translation id="7362952245780030555">Vyberte si medzi plnohodnotnými kartami alebo zjednodušeným prepínačom kariet.</translation>
+<translation id="7379938540614588640">Dánske (<ph name="ORIGIN" />)</translation>
+<translation id="7388525939184421699">Pridať nový zdroj</translation>
+<translation id="7400418766976504921">URL adresa</translation>
+<translation id="7417521636956146248">Nastavenia vyhľadávačov budú resetované do predvolených nastavení, čo spôsobí aj stratu vami pridaných vyhľadávačov.</translation>
+<translation id="7454640759045234067">Sledovače blokované</translation>
+<translation id="7461899062138731833">ZDROJE</translation>
+<translation id="7490291412537629707">Otvoriť v novej karte na pozadí</translation>
 <translation id="750493650310597496">0 vybraných</translation>
+<translation id="7525067979554623046">Vytvoriť</translation>
+<translation id="753732157349120914">Prepínač kariet</translation>
+<translation id="7573518470897278603">Zobraziť mobilnú verziu stránky</translation>
+<translation id="7574321014880720413">Pridať novú doménu</translation>
+<translation id="7587132259180664054">E-mail bol úspešne odoslaný</translation>
+<translation id="7587287726969638956">Vzhľad webovej stránky</translation>
+<translation id="7602336701644200880">Odoslanie e-mailu zlyhalo. Prosíme, skúste to znova.</translation>
+<translation id="7606108789437688910">Otvoriť adresy poznámok v súkromnom režime</translation>
+<translation id="7622661618259256505">Prosíme, zvoľte heslo o dĺžke minimalne 12 znakov.</translation>
+<translation id="7658239707568436148">Zrušiť</translation>
+<translation id="767363698559661695">Nastavte si štýl kariet</translation>
+<translation id="7702907602086592255">Doména</translation>
+<translation id="7703885416803110670">Skupiny rýchleho prístupu sú skvelým spôsobom organizácie záložiek.</translation>
+<translation id="7730831244010940855">Prepnúť predvolené nastavenia na Vivaldi pre iPad?</translation>
+<translation id="7732622593814325274">Spravovať zdroje blokovania sledovačov</translation>
+<translation id="7765158879357617694">Presunúť</translation>
+<translation id="7771452384635174008">Rozloženie</translation>
+<translation id="7801204999757211519">Už máte účet? <ph name="BEGIN_LINK" />Prihlásiť sa ➔<ph name="END_LINK" /></translation>
+<translation id="7850070199083838600">Vytvoriť novú skupinu?</translation>
+<translation id="7914995060146784406">Upraviť poznámku</translation>
+<translation id="7925340978147141704">Zobraziť heslo</translation>
+<translation id="8008214489230610096">Potvrdiť záložný e-mail</translation>
+<translation id="8046542428651654244">Aktualizovať miniatúru</translation>
+<translation id="804786196054284061">Zmluvné podmienky prehliadača Vivaldi</translation>
+<translation id="8053851743673939284">Francúzke (<ph name="ORIGIN" />)</translation>
+<translation id="8058018971942772071">Použiť ako skupinu</translation>
+<translation id="8066170816074394954">🚧 Chyba serveru.</translation>
+<translation id="8076492880354921740">Karty</translation>
+<translation id="8112996065264879835">Tento kód nie je zhodný s tým, ktorý sme vám poslali.
+Prekročili ste maximálny limit nesprávnych pokusov. Požiadajte o nový kód pomocou možnosti Znova odoslať nižšie.</translation>
+<translation id="8134672010161840864">Priblížením orežete a umiestnite obrázok</translation>
+<translation id="8142291334394582384">Obrátené poradie návrhov vyhľadávania</translation>
+<translation id="8147118677117542370">Prosíme, uveďte váš vek.</translation>
+<translation id="8165573437634525334">Údaje zabezpečené šifrovacím heslom</translation>
+<translation id="8182979418912184986">Nová súkromná karta</translation>
+<translation id="8237090677709100373">Kód vlastnej farby</translation>
+<translation id="8257908958623224237">Nezhoda údajov medzi zariadeniami.</translation>
+<translation id="8261506727792406068">Vymazať</translation>
+<translation id="8273666073173891138">Poznámka uložena do <ph name="FOLDER_TITLE" /></translation>
+<translation id="8275038454117074363">Importovať</translation>
+<translation id="8284356787013856231">Oprávnenie na otvorenie súboru zamietnuté</translation>
+<translation id="8289933454364510719">Navrchu alebo naspodku</translation>
+<translation id="8304044605002588416">Tlačidlo prispôsobenia úvodnej stránky</translation>
+<translation id="8326104954595890674">Nová súkromná karta</translation>
+<translation id="8329813750766387010">Aktualizované: <ph name="DATE" /></translation>
+<translation id="8347535536909603600">Odstrániť upozornenia na súbory cookies (<ph name="TYPE" />)</translation>
+<translation id="8359194106448244241">Ak chcete zobraziť karty z iných zariadení, musíte povoliť synchronizáciu.</translation>
+<translation id="8366175803122817174">Otvoriť všetky adresy poznámok</translation>
+<translation id="8384409685584033392">Informácie o stránke</translation>
+<translation id="839736845446313156">Zaregistrovať sa</translation>
+<translation id="8414685983518053656">Poznámky</translation>
+<translation id="8423076545503792640">Požiadavka zlyhala kvôli chybe. Prosíme, skúste to znova neskôr.</translation>
+<translation id="8428213095426709021">Nastavenia</translation>
 <translation id="8458397775385147834">1 položka vymazaná</translation>
+<translation id="8500459200727969761">Obnoviť vstavané zoznamy</translation>
+<translation id="8503813439785031346">Užívateľské meno</translation>
+<translation id="8515808232153642813">Dešifrovať</translation>
 <translation id="8517852590337319813">Aktivovať svoj účet</translation>
-<translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" />odstránených položiek</translation>
+<translation id="8546963963006468833">Pomocou prehliadača Vivaldi môžete bezproblémovo otvárať odkazy, vyhľadávať z miniaplikácií a automaticky vypĺňať heslá v iných aplikáciách.</translation>
+<translation id="8562452229998620586">Uložené heslá sa zobrazia tu.</translation>
+<translation id="8591818185775466306">Vymazať <ph name="ITEM_TYPE" /></translation>
+<translation id="8605953154325672921">Zadajte užívateľské meno</translation>
+<translation id="8675578805254882416">Načítanie</translation>
+<translation id="8677007239430848917">Klepnutím na ikonu „+“ pridáte svoju prvú poznámku</translation>
+<translation id="8684294196284714094">Ste pripravený nastaviť Vivaldi ako váš predvolený prehliadač ?</translation>
+<translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> položiek vymazaných</translation>
+<translation id="8763006697839582351">Otvoriť vo Vivaldi v súkromí</translation>
+<translation id="8765173886020357878">Návrhy vyhledávania</translation>
+<translation id="8804164990146287819">Zásady ochrany súkromia</translation>
+<translation id="8818152010000655963">Tapeta</translation>
+<translation id="8819841443522803117">Je čas zmeniť predvolený prehliadač? Vyberte si Vivaldi.</translation>
+<translation id="8820817407110198400">Záložky</translation>
+<translation id="8855707633300847215">Zobrazovať lištu kariet</translation>
+<translation id="8892354889971902600">Nedávno zatvorené karty sa zobrazia tu.</translation>
+<translation id="89390081013973080">Všetko je pripravené! Čas rozhodnúť, aké údaje budú synchronizované naprieč zariadeniami.</translation>
+<translation id="8965371804397726192">Synchronizovať všetky údaje</translation>
+<translation id="9028089729841356743">🔌 Chyba siete.</translation>
+<translation id="9043882097999887291">Reklamy
+blokované</translation>
+<translation id="9065203028668620118">Upraviť</translation>
+<translation id="9079251484401922158">Fínske (<ph name="ORIGIN" />)</translation>
 <translation id="9083392325882095631">1 položka</translation>
-<translation id="984650419570014454">Aktivačný kód musí mať 6 číslic</translation>
+<translation id="9091665118798175641">Synchronizovať vyplnené údaje formulárov</translation>
+<translation id="9097127519290088802">Vyžaduje sa šifrovacie heslo</translation>
+<translation id="9195659219948942754">Aj naďalej používajte synchronizované údaje vo svojom konte Vivaldi</translation>
+<translation id="9212737146310746733">Farské (<ph name="ORIGIN" />)</translation>
+<translation id="9218693288527810093">Blokovať sledovače</translation>
+<translation id="924053859552461110">Prispôsobiť úvodnú stránku</translation>
+<translation id="937440209447114831">Neblokujeme žiadne reklamy ani sledovače.</translation>
+<translation id="958688202859970851">Nedávno navštívené karty sa zobrazia tu</translation>
+<translation id="984650419570014454">Aktivačný kód musí mať 6 číslic.</translation>
+<translation id="992440609313570947">Ste nový vo Vivaldi? <ph name="BEGIN_LINK" />Vytvorte si účet➔<ph name="END_LINK" /></translation>
 </translationbundle>

@@ -3,9 +3,11 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/autofill/add_new_address_bubble_controller.h"
+
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autofill/ui/ui_util.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
+#include "components/autofill/core/browser/address_data_manager.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/strings/grit/components_strings.h"
@@ -20,7 +22,7 @@ AddressCountryCode GetCountryCodeForNewAddress(
   PersonalDataManager* pdm =
       ContentAutofillClient::FromWebContents(web_contents)
           ->GetPersonalDataManager();
-  return AddressCountryCode(pdm->GetDefaultCountryCodeForNewAddress());
+  return pdm->address_data_manager().GetDefaultCountryCodeForNewAddress();
 }
 
 bool IsEligibleForAccountStorage(content::WebContents* web_contents,
@@ -30,10 +32,11 @@ bool IsEligibleForAccountStorage(content::WebContents* web_contents,
           ->GetPersonalDataManager();
 
   // Note: addresses from unsupported countries can't be saved in account.
-  // TODO(crbug.com/1432505): remove temporary unsupported countries
+  // TODO(crbug.com/40263955): remove temporary unsupported countries
   // filtering.
-  return pdm->IsEligibleForAddressAccountStorage() &&
-         pdm->IsCountryEligibleForAccountStorage(country_code);
+  return pdm->address_data_manager().IsEligibleForAddressAccountStorage() &&
+         pdm->address_data_manager().IsCountryEligibleForAccountStorage(
+             country_code);
 }
 
 }  // namespace
@@ -84,6 +87,7 @@ void AddNewAddressBubbleController::OnAddButtonClicked() {
                             ? AutofillProfile::Source::kAccount
                             : AutofillProfile::Source::kLocalOrSyncable,
                         country_code_),
+        l10n_util::GetStringUTF16(IDS_AUTOFILL_ADD_NEW_ADDRESS_EDITOR_TITLE),
         GetFooterMessage(),
         /*is_editing_existing_address=*/false);
   }

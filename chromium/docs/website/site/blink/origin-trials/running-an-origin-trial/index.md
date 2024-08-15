@@ -263,14 +263,16 @@ end date:
                 typically runs for 12-16 weeks, such delays can
                 significantly impact the availability of the experimental
                 feature and the ability to collect sufficient data.
-2.  Feature changes or new areas experimentation
+2.  Feature changes, new areas experimentation, or reviving dormant features
     *   As the origin trial progress, you may determine that a feature
-                is not ready to be shipped, but do want to continuing
-                experimenting. For example, feedback indicates that changes are
-                needed to the feature (especially in API surface), but the
-                changes would benefit from further feedback. In other cases, the
-                hypothesis for the experiment may be proved or disproved, but
-                you uncover new hypotheses for experimentation.
+                is not ready to be shipped, but do want to continue experimenting.
+        *   Examples include:
+            *   Feedback indicates that changes are needed to the feature (especially
+                in API surface), but the changes would benefit from further feedback.
+            *   You uncover new hypotheses for experimentation, after proving or
+                disproving the previous ones.
+            *   Returning to a dormant feature launch to start experimenting again
+                after the previous trial has long ended.
 
 Consult with the OT team to figure out if you're in a situation where it makes
 sense to continue experimenting. For unexpected delays (1), this generally means
@@ -285,29 +287,32 @@ for more details.
 
 ### How to setup an extension or continued experiment?
 
-The process is as follows:
-
-*   If desired, email
-            [origin-trials-support@google.com](mailto:origin-trials-support@google.com)
-            to consult on the appropriate approach.
-*   Send an Intent to Extend Origin Trial, via the [ChromeStatus entry
-            for your feature](https://chromestatus.com).
-*   Wait for 1 LGTM from at least one API owner (similar to the original
-            Intent to Experiment)
-*   If continuing to experiment via a new trial:
+The process depends on the scenario for your feature, as described in the previous section.
+If desired, email [origin-trials-support@google.com](mailto:origin-trials-support@google.com)
+to consult on the appropriate approach.
+*   Scenario 1: Extending the end date of the existing trial.
+    *   Send an Intent to Extend Origin Trial, via the [ChromeStatus entry
+                for your feature](https://chromestatus.com).
+    *   Wait for 1 LGTM from at least one API owner (similar to the original
+                Intent to Experiment)
+    *   Select the "Finalize Trial Extension" button that is now available in the Origin
+                Trial section.
+*   Scenario 2: Continuing to experiment via a new trial.
     *   This will officially be a new and separate trial, meaning a
                 separate entry in the list of trials, etc.
-    *   Request a new trial with the appropriate naming to distinguish the old
-                and new trial at ChromeStatus by clicking the "Request Trial
-                Creation" button in the Origin Trial section.
     *   Update the integration with the framework - the code must use a
                 different trial name in Chromium ([see integration
                 below](/blink/origin-trials/running-an-origin-trial#integrate-feature)).
-*   If extending the end date of the existing trial:
-    *   Notify the OT team of the change at ChromeStatus by clicking the "Request
-                Trial Extension" button in the Origin Trial section.
-*   Upon approval, the OT team will setup the extension or new trial as
-            appropriate.
+    *   Add a new Origin Trials stage in the ChromeStatus feature entry and edit the fields
+                as appropriate.
+    *   Request a new trial with the appropriate naming to distinguish the old
+                and new trial at ChromeStatus by clicking the "Request Trial
+                Creation" button in the Origin Trial section.
+    *   Click on the API Owners chip and then on Draft Intent to Experiment Email.
+    *   After the intent is approved, request a trial for your feature at
+                ChromeStatus by clicking the "Request Trial Creation" button in the
+                Origin Trial section.
+    *   Upon approval, the OT team will setup the new trial.
 
 ## How to integrate your feature with the framework?
 

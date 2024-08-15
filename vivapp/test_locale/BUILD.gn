@@ -1,0 +1,42 @@
+import("//vivaldi/gn/command_action.gni")
+
+executable("test_locale_app") {
+  sources = [
+    "test_locale.cc",
+  ]
+
+  deps = [
+    "//base",
+    "//extensions/common",
+  ]
+}
+
+system_command("test_locale") {
+  path_prefix = "."
+  if (host_toolchain != default_toolchain) {
+    if (is_win) {
+      path_prefix = "win_clang_$host_cpu"
+    } else  {
+      path_prefix = "clang_$host_cpu"
+    }
+  }
+
+  if (is_win) {
+    command = "$path_prefix\\test_locale_app"
+  } else {
+    command = "$path_prefix/test_locale_app"
+  }
+  args=[]
+  command_output_from_stdout = "$target_gen_dir/locale_tested.stamp"
+
+  inputs = []
+  outputs = [ command_output_from_stdout ]
+
+  deps = [
+    ":test_locale_app($host_toolchain)",
+    "//vivaldi/vivapp:bundle($default_toolchain)",
+  ]
+  data_deps = [
+    ":test_locale_app($host_toolchain)",
+  ]
+}

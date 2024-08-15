@@ -4,6 +4,8 @@
 
 #include "chrome/browser/signin/dice_response_handler.h"
 
+#include <string_view>
+
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
@@ -21,15 +23,18 @@
 #include "chrome/browser/signin/account_reconcilor_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/signin/signin_features.h"
+#include "chrome/browser/signin/signin_metrics_service_factory.h"
 #include "components/signin/core/browser/about_signin_internals.h"
 #include "components/signin/core/browser/signin_header_helper.h"
+#include "components/signin/core/browser/signin_metrics_service.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/signin/public/base/signin_client.h"
 #include "components/signin/public/base/signin_metrics.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/accounts_mutator.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/signin/public/identity_manager/identity_utils.h"
 #include "google_apis/gaia/gaia_auth_fetcher.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/google_service_auth_error.h"
@@ -88,8 +93,8 @@ enum DiceTokenFetchResult {
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
 std::unique_ptr<RegistrationTokenHelper> BuildRegistrationTokenHelper(
     unexportable_keys::UnexportableKeyService& unexportable_key_service,
-    base::StringPiece client_id,
-    base::StringPiece auth_code,
+    std::string_view client_id,
+    std::string_view auth_code,
     const GURL& registration_url,
     base::OnceCallback<void(std::optional<RegistrationTokenHelper::Result>)>
         callback) {
@@ -140,6 +145,7 @@ class DiceResponseHandlerFactory : public ProfileKeyedServiceFactory {
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
     DependsOn(UnexportableKeyServiceFactory::GetInstance());
 #endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+    DependsOn(SigninMetricsServiceFactory::GetInstance());
   }
 
   ~DiceResponseHandlerFactory() override {}
@@ -160,6 +166,7 @@ class DiceResponseHandlerFactory : public ProfileKeyedServiceFactory {
         IdentityManagerFactory::GetForProfile(profile),
         AccountReconcilorFactory::GetForProfile(profile),
         AboutSigninInternalsFactory::GetForProfile(profile),
+        SigninMetricsServiceFactory::GetForProfile(profile),
         std::move(registration_token_helper_factory));
   }
 };
@@ -320,11 +327,13 @@ DiceResponseHandler::DiceResponseHandler(
     signin::IdentityManager* identity_manager,
     AccountReconcilor* account_reconcilor,
     AboutSigninInternals* about_signin_internals,
+    SigninMetricsService* signin_metrics_service,
     RegistrationTokenHelperFactory registration_token_helper_factory)
     : signin_client_(signin_client),
       identity_manager_(identity_manager),
       account_reconcilor_(account_reconcilor),
       about_signin_internals_(about_signin_internals),
+      signin_metrics_service_(signin_metrics_service),
       registration_token_helper_factory_(
           std::move(registration_token_helper_factory)) {
   DCHECK(signin_client_);
@@ -399,8 +408,9 @@ void DiceResponseHandler::ProcessDiceSigninHeader(
         "Missing authorization code due to OAuth outage in Dice.");
     if (!timer_) {
       timer_ = std::make_unique<base::OneShotTimer>();
-      if (task_runner_)
+      if (task_runner_) {
         timer_->SetTaskRunner(task_runner_);
+      }
     }
     // If there is already another lock, the timer will be reset and
     // we'll wait another full timeout.
@@ -425,6 +435,17 @@ void DiceResponseHandler::ProcessDiceSigninHeader(
       RecordDiceFetchTokenResult(kFetchAbort);
       return;  // There is already a request in flight with the same parameters.
     }
+  }
+
+  if (base::FeatureList::IsEnabled(
+          ::switches::kPreconnectAccountCapabilitiesPostSignin)) {
+    // The user is signing in, which means that account fetching will shortly be
+    // triggered.
+    //
+    // Notify identity manager. This will trigger pre-connecting the network
+    // socket to the AccountCapabilities endpoint, in parallel with the LST and
+    // access token requests (instead of waiting for these to complete).
+    identity_manager_->PrepareForAddingNewAccount();
   }
 
   token_fetchers_.push_back(std::make_unique<DiceTokenFetcher>(
@@ -464,8 +485,8 @@ void DiceResponseHandler::ProcessDiceSignoutHeader(
   // - If there is a policy restriction on removing the primary account.
   bool invalidate_only_primary_account =
       identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSync) ||
-      switches::IsExplicitBrowserSigninUIOnDesktopEnabled(
-          switches::ExplicitBrowserSigninPhase::kFull) ||
+      !signin::IsImplicitBrowserSigninOrExplicitDisabled(
+          identity_manager_, signin_client_->GetPrefs()) ||
       !signin_client_->IsClearPrimaryAccountAllowed(
           /*has_sync_account=*/false);
 
@@ -536,13 +557,33 @@ void DiceResponseHandler::OnTokenExchangeSuccess(
       identity_manager_->PickAccountIdForAccount(gaia_id, email);
   bool is_new_account =
       !identity_manager_->HasAccountWithRefreshToken(account_id);
+
+  if (!is_new_account) {
+    signin_metrics_service_->SetReauthAccessPointIfInSigninPending(
+        account_id, token_fetcher->delegate()->GetAccessPoint());
+  }
+
   // If this is a reauth, do not update the access point.
-  identity_manager_->GetAccountsMutator()->AddOrUpdateAccount(
-      gaia_id, email, refresh_token, is_under_advanced_protection,
+  signin_metrics::AccessPoint access_point =
       is_new_account ? token_fetcher->delegate()->GetAccessPoint()
-                     : signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN,
-      signin_metrics::SourceForRefreshTokenOperation::
-          kDiceResponseHandler_Signin
+                     : signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN;
+  // Specifically set the token operation source in case the error was updated
+  // through a sign in from a password sign in promo, as this will indicate
+  // whether to move the password to account storage or not.
+  // TODO(crbug.com/339157240): Change the way this is implemented to not use
+  // SourceForRefreshTokenOperation as an indicator of the reauthentication
+  // source.
+  signin_metrics::SourceForRefreshTokenOperation token_operation_source =
+      token_fetcher->delegate()->GetAccessPoint() ==
+              signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE
+          ? signin_metrics::SourceForRefreshTokenOperation::
+                kDiceResponseHandler_PasswordPromoSignin
+          : signin_metrics::SourceForRefreshTokenOperation::
+                kDiceResponseHandler_Signin;
+
+  identity_manager_->GetAccountsMutator()->AddOrUpdateAccount(
+      gaia_id, email, refresh_token, is_under_advanced_protection, access_point,
+      token_operation_source
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
       ,
       wrapped_binding_key

@@ -9,6 +9,8 @@ import org.jni_zero.JNINamespace;
 
 import org.chromium.url.GURL;
 
+import java.util.Objects;
+
 /**
  * Data model for bank accounts used for facilitated payments.
  *
@@ -59,18 +61,38 @@ public class BankAccount extends PaymentInstrument {
     }
 
     /** Returns the bank name for the bank account. */
+    @CalledByNative
     public String getBankName() {
         return mBankName;
     }
 
     /** Returns the account number suffix that can be used to identify the bank account. */
+    @CalledByNative
     public String getAccountNumberSuffix() {
         return mAccountNumberSuffix;
     }
 
     /** Returns the account type for the bank account. */
+    @CalledByNative
     public @AccountType int getAccountType() {
         return mAccountType;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (obj == null) {
+            return false;
+        }
+
+        if (!(obj instanceof BankAccount)) {
+            return false;
+        }
+
+        BankAccount other = (BankAccount) obj;
+        return super.equals(obj)
+                && Objects.equals(mBankName, other.getBankName())
+                && Objects.equals(mAccountNumberSuffix, other.getAccountNumberSuffix())
+                && mAccountType == other.getAccountType();
     }
 
     /** Builder for {@link BankAccount}. */

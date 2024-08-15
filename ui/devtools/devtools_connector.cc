@@ -393,9 +393,12 @@ bool DevtoolsConnectorItem::PreHandleGestureEvent(
 
 content::WebContents* DevtoolsConnectorItem::OpenURLFromTab(
     content::WebContents* source,
-    const content::OpenURLParams& params) {
+    const content::OpenURLParams& params,
+    base::OnceCallback<void(content::NavigationHandle&)>
+        navigation_handle_callback) {
   if (devtools_delegate_) {
-    return devtools_delegate_->OpenURLFromTab(source, params);
+    return devtools_delegate_->OpenURLFromTab(
+        source, params, std::move(navigation_handle_callback));
   }
   NOTREACHED();
   return nullptr;

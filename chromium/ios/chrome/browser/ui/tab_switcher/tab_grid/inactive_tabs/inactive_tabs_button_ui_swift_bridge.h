@@ -18,4 +18,8 @@
 #import "ios/chrome/common/ui/colors/swift_bridge.h"
 #import "ui/base/l10n/l10n_util_mac_bridge.h"
 
+// Vivaldi
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_page_control_constants.h"
+// End Vivaldi
+
 #endif  // IOS_CHROME_BROWSER_UI_TAB_SWITCHER_TAB_GRID_INACTIVE_TABS_INACTIVE_TABS_BUTTON_UI_SWIFT_BRIDGE_H_

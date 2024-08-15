@@ -20,13 +20,13 @@ class PasskeyAffiliationSourceAdapter
     : public affiliations::AffiliationSource,
       public webauthn::PasskeyModel::Observer {
  public:
-  PasskeyAffiliationSourceAdapter(webauthn::PasskeyModel* passkey_model,
-                                  AffiliationSource::Observer* observer);
+  explicit PasskeyAffiliationSourceAdapter(
+      webauthn::PasskeyModel* passkey_model);
   ~PasskeyAffiliationSourceAdapter() override;
 
   // AffiliationSource:
   void GetFacets(AffiliationSource::ResultCallback response_callback) override;
-  void StartObserving() override;
+  void StartObserving(AffiliationSource::Observer* observer) override;
 
  private:
   // webauthn::PasskeyModel::Observer:
@@ -34,8 +34,8 @@ class PasskeyAffiliationSourceAdapter
       const std::vector<webauthn::PasskeyModelChange>& changes) override;
   void OnPasskeyModelShuttingDown() override;
 
-  const raw_ptr<webauthn::PasskeyModel> passkey_model_;
-  const raw_ref<AffiliationSource::Observer> observer_;
+  raw_ptr<webauthn::PasskeyModel> passkey_model_ = nullptr;
+  raw_ptr<AffiliationSource::Observer> observer_ = nullptr;
 
   // Observer to `passkey_model_`.
   base::ScopedObservation<webauthn::PasskeyModel,

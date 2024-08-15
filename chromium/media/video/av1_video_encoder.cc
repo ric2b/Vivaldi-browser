@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "base/containers/heap_array.h"
 #include "base/logging.h"
 #include "base/numerics/checked_math.h"
 #include "base/strings/stringprintf.h"
@@ -77,14 +78,14 @@ aom_img_fmt GetAomImgFormat(VideoPixelFormat format) {
 void SetupStandardYuvPlanes(const VideoFrame& frame, aom_image_t* aom_image) {
   DCHECK_EQ(VideoFrame::NumPlanes(frame.format()), 3u);
   aom_image->planes[AOM_PLANE_Y] =
-      const_cast<uint8_t*>(frame.visible_data(VideoFrame::kYPlane));
+      const_cast<uint8_t*>(frame.visible_data(VideoFrame::Plane::kY));
   aom_image->planes[AOM_PLANE_U] =
-      const_cast<uint8_t*>(frame.visible_data(VideoFrame::kUPlane));
+      const_cast<uint8_t*>(frame.visible_data(VideoFrame::Plane::kU));
   aom_image->planes[AOM_PLANE_V] =
-      const_cast<uint8_t*>(frame.visible_data(VideoFrame::kVPlane));
-  aom_image->stride[AOM_PLANE_Y] = frame.stride(VideoFrame::kYPlane);
-  aom_image->stride[AOM_PLANE_U] = frame.stride(VideoFrame::kUPlane);
-  aom_image->stride[AOM_PLANE_V] = frame.stride(VideoFrame::kVPlane);
+      const_cast<uint8_t*>(frame.visible_data(VideoFrame::Plane::kV));
+  aom_image->stride[AOM_PLANE_Y] = frame.stride(VideoFrame::Plane::kY);
+  aom_image->stride[AOM_PLANE_U] = frame.stride(VideoFrame::Plane::kU);
+  aom_image->stride[AOM_PLANE_V] = frame.stride(VideoFrame::Plane::kV);
 }
 
 EncoderStatus SetUpAomConfig(VideoCodecProfile profile,
@@ -400,10 +401,12 @@ void Av1VideoEncoder::Initialize(VideoCodecProfile profile,
   output_cb_ = BindCallbackToCurrentLoopIfNeeded(std::move(output_cb));
   codec_ = std::move(codec);
 
-  VideoEncoderInfo info;
-  info.implementation_name = "Av1VideoEncoder";
-  info.is_hardware_accelerated = false;
-  BindCallbackToCurrentLoopIfNeeded(std::move(info_cb)).Run(info);
+  if (info_cb) {
+    VideoEncoderInfo info;
+    info.implementation_name = "Av1VideoEncoder";
+    info.is_hardware_accelerated = false;
+    BindCallbackToCurrentLoopIfNeeded(std::move(info_cb)).Run(info);
+  }
 
   std::move(done_cb).Run(EncoderStatus::Codes::kOk);
 }
@@ -476,7 +479,7 @@ void Av1VideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
   aom_image_t* image = aom_img_wrap(
       &image_, GetAomImgFormat(frame->format()), options_.frame_size.width(),
       options_.frame_size.height(), 1,
-      const_cast<uint8_t*>(frame->visible_data(VideoFrame::kYPlane)));
+      const_cast<uint8_t*>(frame->visible_data(VideoFrame::Plane::kY)));
   DCHECK_EQ(image, &image_);
 
   // Resizing should have been taken care of above.
@@ -487,12 +490,12 @@ void Av1VideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
              frame->format() == PIXEL_FORMAT_I420);
       if (frame->format() == PIXEL_FORMAT_NV12) {
         image_.planes[AOM_PLANE_Y] =
-            const_cast<uint8_t*>(frame->visible_data(VideoFrame::kYPlane));
+            const_cast<uint8_t*>(frame->visible_data(VideoFrame::Plane::kY));
         image_.planes[AOM_PLANE_U] =
-            const_cast<uint8_t*>(frame->visible_data(VideoFrame::kUVPlane));
+            const_cast<uint8_t*>(frame->visible_data(VideoFrame::Plane::kUV));
         image_.planes[AOM_PLANE_V] = nullptr;
-        image_.stride[AOM_PLANE_Y] = frame->stride(VideoFrame::kYPlane);
-        image_.stride[AOM_PLANE_U] = frame->stride(VideoFrame::kUVPlane);
+        image_.stride[AOM_PLANE_Y] = frame->stride(VideoFrame::Plane::kY);
+        image_.stride[AOM_PLANE_U] = frame->stride(VideoFrame::Plane::kUV);
         image_.stride[AOM_PLANE_V] = 0;
       } else {
         SetupStandardYuvPlanes(*frame, &image_);
@@ -653,8 +656,8 @@ VideoEncoderOutput Av1VideoEncoder::GetEncoderOutput(
       // encoded packet, or the frame is dropped.
       CHECK_EQ(output.size, 0u);
       output.size = pkt->data.frame.sz;
-      output.data = std::make_unique<uint8_t[]>(output.size);
-      memcpy(output.data.get(), pkt->data.frame.buf, output.size);
+      output.data = base::HeapArray<uint8_t>::Uninit(output.size);
+      memcpy(output.data.data(), pkt->data.frame.buf, output.size);
       output.key_frame = (pkt->data.frame.flags & AOM_FRAME_IS_KEY) != 0;
       output.temporal_id = output.key_frame ? 0 : temporal_id;
       output.color_space = color_space;

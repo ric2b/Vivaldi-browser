@@ -11,6 +11,10 @@
 @protocol PartialTranslateDelegate;
 @protocol SearchWithDelegate;
 
+#if defined(VIVALDI_BUILD)
+@protocol CopyToNoteDelegate;
+#endif // End Vivaldi
+
 // A handler for the Browser edit menu.
 // This class is in charge of customising the menu and executing the commands.
 @interface BrowserEditMenuHandler : NSObject
@@ -28,6 +32,10 @@
 // Will be called by `BrowserContainerViewController buildMenuWithBuilder:`
 // to customize its edit menu.
 - (void)buildMenuWithBuilder:(id<UIMenuBuilder>)builder;
+
+#if defined(VIVALDI_BUILD)
+@property(nonatomic, weak) id<CopyToNoteDelegate> vivaldiCopyToNoteDelegate;
+#endif // End Vivaldi
 
 @end
 

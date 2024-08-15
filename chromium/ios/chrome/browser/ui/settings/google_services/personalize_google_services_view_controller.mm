@@ -38,7 +38,7 @@ enum ItemType {
 - (void)viewDidLoad {
   [super viewDidLoad];
   self.title = l10n_util::GetNSString(
-      IDS_IOS_MANAGE_SYNC_PERSONALIZE_GOOGLE_SERVICES_TITLE);
+      IDS_IOS_MANAGE_SYNC_PERSONALIZE_GOOGLE_SERVICES_TITLE_EEA);
   self.view.accessibilityIdentifier = kPersonalizeGoogleServicesViewIdentifier;
 
   [self loadModel];
@@ -117,6 +117,7 @@ enum ItemType {
       [self.handler openLinkedGoogleServicesDialog];
       break;
   }
+  [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
 
 @end

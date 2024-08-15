@@ -29,6 +29,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <utility>
 
 #include "dawn/common/Constants.h"
 #include "dawn/common/GPUInfo.h"
@@ -55,6 +56,7 @@ MaybeError PhysicalDeviceBase::Initialize() {
     EnableFeature(Feature::DawnNative);
     EnableFeature(Feature::DawnInternalUsages);
     EnableFeature(Feature::ImplicitDeviceSynchronization);
+    EnableFeature(Feature::FormatCapabilities);
     InitializeSupportedFeaturesImpl();
 
     DAWN_TRY_CONTEXT(
@@ -71,8 +73,9 @@ MaybeError PhysicalDeviceBase::Initialize() {
 ResultOrError<Ref<DeviceBase>> PhysicalDeviceBase::CreateDevice(
     AdapterBase* adapter,
     const UnpackedPtr<DeviceDescriptor>& descriptor,
-    const TogglesState& deviceToggles) {
-    return CreateDeviceImpl(adapter, descriptor, deviceToggles);
+    const TogglesState& deviceToggles,
+    Ref<DeviceBase::DeviceLostEvent>&& lostEvent) {
+    return CreateDeviceImpl(adapter, descriptor, deviceToggles, std::move(lostEvent));
 }
 
 void PhysicalDeviceBase::InitializeVendorArchitectureImpl() {
@@ -176,7 +179,7 @@ FeatureValidationResult PhysicalDeviceBase::ValidateFeatureSupportedWithToggles(
             absl::StrFormat("Requested feature %s is not supported.", feature));
     }
 
-    const FeatureInfo* featureInfo = GetInstance()->GetFeatureInfo(feature);
+    const FeatureInfo* featureInfo = GetFeatureInfo(feature);
     // Experimental features are guarded by the AllowUnsafeAPIs toggle.
     if (featureInfo->featureState == FeatureInfo::FeatureState::Experimental) {
         // AllowUnsafeAPIs toggle is by default disabled if not explicitly enabled.
@@ -199,12 +202,16 @@ void PhysicalDeviceBase::SetSupportedFeaturesForTesting(
 }
 
 void PhysicalDeviceBase::ResetInternalDeviceForTesting() {
-    mInstance->ConsumedError(ResetInternalDeviceForTestingImpl());
+    [[maybe_unused]] bool hadError = mInstance->ConsumedError(ResetInternalDeviceForTestingImpl());
 }
 
 MaybeError PhysicalDeviceBase::ResetInternalDeviceForTestingImpl() {
     return DAWN_INTERNAL_ERROR(
         "ResetInternalDeviceForTesting should only be used with the D3D12 backend.");
 }
+
+void PhysicalDeviceBase::PopulateBackendFormatCapabilities(
+    wgpu::TextureFormat format,
+    UnpackedPtr<FormatCapabilities>& capabilities) const {}
 
 }  // namespace dawn::native

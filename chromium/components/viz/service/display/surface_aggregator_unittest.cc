@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <map>
 #include <set>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -17,6 +18,7 @@
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
@@ -50,6 +52,7 @@
 #include "components/viz/test/draw_quad_matchers.h"
 #include "components/viz/test/fake_compositor_frame_sink_client.h"
 #include "components/viz/test/fake_surface_observer.h"
+#include "components/viz/test/stub_surface_client.h"
 #include "components/viz/test/test_surface_id_allocator.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -123,7 +126,8 @@ class SurfaceAggregatorTest : public testing::Test, public DisplayTimeSource {
  public:
   explicit SurfaceAggregatorTest(
       bool use_damage_rect,
-      SurfaceAggregator::ExtraPassForReadbackOption extra_pass_option)
+      SurfaceAggregator::ExtraPassForReadbackOption extra_pass_option,
+      bool prevent_merging_surfaces_to_root_pass)
       : root_sink_(std::make_unique<CompositorFrameSinkSupport>(
             &fake_client_,
             &manager_,
@@ -133,14 +137,16 @@ class SurfaceAggregatorTest : public testing::Test, public DisplayTimeSource {
                     &resource_provider_,
                     use_damage_rect,
                     true,
-                    extra_pass_option) {
+                    extra_pass_option,
+                    prevent_merging_surfaces_to_root_pass) {
     manager_.surface_manager()->AddObserver(&observer_);
   }
 
   SurfaceAggregatorTest()
       : SurfaceAggregatorTest(
-            false,
-            SurfaceAggregator::ExtraPassForReadbackOption::kNone) {}
+            /*use_damage_rect=*/false,
+            SurfaceAggregator::ExtraPassForReadbackOption::kNone,
+            /*prevent_merging_surfaces_to_root_pass=*/false) {}
 
   void TearDown() override {
     observer_.Reset();
@@ -434,7 +440,7 @@ class SurfaceAggregatorTest : public testing::Test, public DisplayTimeSource {
 
     SurfaceDrawQuad* surface_quad =
         pass->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
-    // TODO(crbug.com/1308932): Pass an SkColor4f into this function.
+    // TODO(crbug.com/40219248): Pass an SkColor4f into this function.
     surface_quad->SetAll(pass->shared_quad_state_list.back(),
                          primary_surface_rect, primary_surface_rect,
                          /*needs_blending=*/true, surface_range,
@@ -525,8 +531,11 @@ class SurfaceAggregatorValidSurfaceTest : public SurfaceAggregatorTest {
  public:
   SurfaceAggregatorValidSurfaceTest(
       bool use_damage_rect,
-      SurfaceAggregator::ExtraPassForReadbackOption extra_pass_option)
-      : SurfaceAggregatorTest(use_damage_rect, extra_pass_option),
+      SurfaceAggregator::ExtraPassForReadbackOption extra_pass_option,
+      bool prevent_merging_surfaces_to_root_pass)
+      : SurfaceAggregatorTest(use_damage_rect,
+                              extra_pass_option,
+                              prevent_merging_surfaces_to_root_pass),
         child_sink_(std::make_unique<CompositorFrameSinkSupport>(
             nullptr,
             &manager_,
@@ -539,7 +548,8 @@ class SurfaceAggregatorValidSurfaceTest : public SurfaceAggregatorTest {
   explicit SurfaceAggregatorValidSurfaceTest(bool use_damage_rect)
       : SurfaceAggregatorValidSurfaceTest(
             use_damage_rect,
-            SurfaceAggregator::ExtraPassForReadbackOption::kNone) {}
+            SurfaceAggregator::ExtraPassForReadbackOption::kNone,
+            /*prevent_merging_surfaces_to_root_pass=*/false) {}
 
   SurfaceAggregatorValidSurfaceTest()
       : SurfaceAggregatorValidSurfaceTest(false) {}
@@ -706,8 +716,8 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, SimpleFrame) {
 
 // Tests that SharedElement quads are skipped during aggregation.
 TEST_F(SurfaceAggregatorValidSurfaceTest, SharedElementQuad) {
-  auto transition_id = base::UnguessableToken::Create();
-  ViewTransitionElementResourceId vt_resource_id(transition_id, 1);
+  ViewTransitionElementResourceId vt_resource_id(blink::ViewTransitionToken(),
+                                                 1);
 
   CompositorFrame frame =
       CompositorFrameBuilder()
@@ -4302,27 +4312,27 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, SurfaceDamageSameFrameSinkId) {
   auto aggregated_frame = AggregateFrame(root_surface_id_);
 
   // |id1| is before the fallback id so it shouldn't damage the display.
-  EXPECT_FALSE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_FALSE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId1, id1)));
 
   // |id2| is the fallback id so it should damage the display.
-  EXPECT_TRUE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_TRUE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId1, id2)));
 
   // |id3| is between fallback and primary so it should damage the display.
-  EXPECT_TRUE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_TRUE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId1, id3)));
 
   // |id4| is the primary id so it should damage the display.
-  EXPECT_TRUE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_TRUE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId1, id4)));
 
   // |id5| is newer than the primary surface so it shouldn't damage display.
-  EXPECT_FALSE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_FALSE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId1, id5)));
 
   // This FrameSinkId is not embedded at all so it shouldn't damage the display.
-  EXPECT_FALSE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_FALSE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId3, id3)));
 }
 
@@ -4373,24 +4383,24 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, SurfaceDamageDifferentFrameSinkId) {
   auto aggregated_frame = AggregateFrame(root_surface_id_);
 
   // |id1| is before the fallback id so it shouldn't damage the display.
-  EXPECT_FALSE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_FALSE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId1, id1)));
 
   // |id2| is the fallback id so it should damage the display.
-  EXPECT_TRUE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_TRUE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId1, id2)));
 
   // |id3| is before the primary and fallback has a different FrameSinkId so it
   // should damage the display.
-  EXPECT_TRUE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_TRUE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId2, id3)));
 
   // |id4| is the primary id so it should damage the display.
-  EXPECT_TRUE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_TRUE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId2, id4)));
 
   // This FrameSinkId is not embedded at all so it shouldn't damage the display.
-  EXPECT_FALSE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_FALSE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId3, id4)));
 }
 
@@ -4423,19 +4433,19 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, SurfaceDamagePrimarySurfaceOnly) {
   auto aggregated_frame = AggregateFrame(root_surface_id_);
 
   // |id1| is inside the range so it should damage the display.
-  EXPECT_TRUE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_TRUE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId1, id1)));
 
   // |id2| is the primary id so it should damage the display.
-  EXPECT_TRUE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_TRUE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId1, id2)));
 
   // |id3| is after the primary id so it shouldn't damage the display.
-  EXPECT_FALSE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_FALSE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId1, id3)));
 
   // This FrameSinkId is not embedded at all so it shouldn't damage the display.
-  EXPECT_FALSE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_FALSE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId3, id4)));
 }
 
@@ -4483,19 +4493,19 @@ TEST_F(SurfaceAggregatorValidSurfaceTest,
   auto aggregated_frame = AggregateFrame(root_surface_id_);
 
   // |id1| is before the fallback id so it shouldn't damage the display.
-  EXPECT_FALSE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_FALSE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId1, id1)));
 
   // |id2| is the embedded id so it should damage the display.
-  EXPECT_TRUE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_TRUE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId1, id2)));
 
   // |id3| is newer than primary id so it shouldn't damage the display.
-  EXPECT_FALSE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_FALSE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId1, id3)));
 
   // This FrameSinkId is not embedded at all so it shouldn't damage the display.
-  EXPECT_FALSE(aggregator_.NotifySurfaceDamageAndCheckForDisplayDamage(
+  EXPECT_FALSE(aggregator_.CheckForDisplayDamage(
       SurfaceId(kArbitraryFrameSinkId3, id4)));
 }
 
@@ -6821,7 +6831,8 @@ class SurfaceAggregatorWithResourcesTest : public SurfaceAggregatorTest {
   SurfaceAggregatorWithResourcesTest()
       : SurfaceAggregatorTest(
             false,
-            SurfaceAggregator::ExtraPassForReadbackOption::kNone) {
+            SurfaceAggregator::ExtraPassForReadbackOption::kNone,
+            false) {
     // BuildCompositorFrameWithResources() sets secure_output_only=true on
     // TextureDrawQuads so this will ensure they aren't dropped from the
     // AggregatedFrame.
@@ -6853,7 +6864,7 @@ CompositorFrame BuildCompositorFrameWithResources(
   }
 
   for (ResourceId resource_id : resource_ids) {
-    auto resource = TransferableResource::MakeSoftware(
+    auto resource = TransferableResource::MakeSoftwareSharedBitmap(
         SharedBitmap::GenerateId(), gpu::SyncToken(), gfx::Size(1, 1),
         SinglePlaneFormat::kRGBA_8888);
     resource.id = resource_id;
@@ -7181,6 +7192,9 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, ColorSpaceTestWin) {
   passes[1].damage_rect = partial_damage_rect;
   passes[0].damage_rect = child_pass_damage_rect;
 
+  const bool has_color_conversion_pass =
+      !base::FeatureList::IsEnabled(features::kColorConversionInRenderer);
+
   // The root pass of HDR content with a transparent background will get an
   // extra RenderPass converting to SCRGB-linear, if any content drawn to the
   // root pass requires blending.
@@ -7194,17 +7208,22 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, ColorSpaceTestWin) {
 
     auto aggregated_frame = AggregateFrame(surface_id);
 
-    EXPECT_EQ(3u, aggregated_frame.render_pass_list.size());
+    EXPECT_EQ(has_color_conversion_pass ? 3u : 2u,
+              aggregated_frame.render_pass_list.size());
     EXPECT_EQ(gfx::ContentColorUsage::kHDR,
               aggregated_frame.render_pass_list[0]->content_color_usage);
     EXPECT_EQ(gfx::ContentColorUsage::kHDR,
               aggregated_frame.render_pass_list[1]->content_color_usage);
-    EXPECT_EQ(gfx::ContentColorUsage::kHDR,
-              aggregated_frame.render_pass_list[2]->content_color_usage);
+    if (has_color_conversion_pass) {
+      EXPECT_EQ(gfx::ContentColorUsage::kHDR,
+                aggregated_frame.render_pass_list[2]->content_color_usage);
+    }
 
     // All passes will have full damage for the first frame.
-    EXPECT_EQ(full_damage_rect,
-              aggregated_frame.render_pass_list[2]->damage_rect);
+    if (has_color_conversion_pass) {
+      EXPECT_EQ(full_damage_rect,
+                aggregated_frame.render_pass_list[2]->damage_rect);
+    }
     EXPECT_EQ(full_damage_rect,
               aggregated_frame.render_pass_list[1]->damage_rect);
     EXPECT_EQ(full_damage_rect,
@@ -7224,20 +7243,25 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, ColorSpaceTestWin) {
 
     auto aggregated_frame = AggregateFrame(surface_id);
 
-    EXPECT_EQ(3u, aggregated_frame.render_pass_list.size());
+    EXPECT_EQ(has_color_conversion_pass ? 3u : 2u,
+              aggregated_frame.render_pass_list.size());
     EXPECT_EQ(gfx::ContentColorUsage::kHDR,
               aggregated_frame.render_pass_list[0]->content_color_usage);
     EXPECT_EQ(gfx::ContentColorUsage::kHDR,
               aggregated_frame.render_pass_list[1]->content_color_usage);
-    EXPECT_EQ(gfx::ContentColorUsage::kHDR,
-              aggregated_frame.render_pass_list[2]->content_color_usage);
+    if (has_color_conversion_pass) {
+      EXPECT_EQ(gfx::ContentColorUsage::kHDR,
+                aggregated_frame.render_pass_list[2]->content_color_usage);
+    }
 
-    // The root pass (drawn to the backbuffer) and the intermediate pass (drawn
-    // to extended-sRGB) will now have partial damage. Note that the root pass
-    // will end up getting full damage due to the OutputSurface::Reshape call
-    // that will be made by DirectRenderer.
-    EXPECT_EQ(partial_damage_rect,
-              aggregated_frame.render_pass_list[2]->damage_rect);
+    if (has_color_conversion_pass) {
+      // The root pass (drawn to the backbuffer) and the intermediate pass
+      // (drawn to extended-sRGB) will now have partial damage. Note that the
+      // root pass will end up getting full damage due to the
+      // OutputSurface::Reshape call that will be made by DirectRenderer.
+      EXPECT_EQ(partial_damage_rect,
+                aggregated_frame.render_pass_list[2]->damage_rect);
+    }
     EXPECT_EQ(partial_damage_rect,
               aggregated_frame.render_pass_list[1]->damage_rect);
   }
@@ -7264,9 +7288,15 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, ColorSpaceTestWin) {
     EXPECT_EQ(gfx::ContentColorUsage::kHDR,
               aggregated_frame.render_pass_list[1]->content_color_usage);
 
-    // The root pass has full damage because the intermediate pass was removed.
-    EXPECT_EQ(full_damage_rect,
-              aggregated_frame.render_pass_list[1]->damage_rect);
+    if (has_color_conversion_pass) {
+      // The root pass has full damage because the intermediate pass was
+      // removed.
+      EXPECT_EQ(full_damage_rect,
+                aggregated_frame.render_pass_list[1]->damage_rect);
+    } else {
+      EXPECT_EQ(partial_damage_rect,
+                aggregated_frame.render_pass_list[1]->damage_rect);
+    }
   }
 
   // This simulates the situation where we don't have HDR capabilities. Opaque
@@ -7321,20 +7351,29 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, ColorSpaceTestWin) {
 
     auto aggregated_frame = AggregateFrame(surface_id);
 
-    EXPECT_EQ(3u, aggregated_frame.render_pass_list.size());
+    EXPECT_EQ(has_color_conversion_pass ? 3u : 2u,
+              aggregated_frame.render_pass_list.size());
     EXPECT_EQ(gfx::ContentColorUsage::kHDR,
               aggregated_frame.render_pass_list[0]->content_color_usage);
     EXPECT_EQ(gfx::ContentColorUsage::kHDR,
               aggregated_frame.render_pass_list[1]->content_color_usage);
-    EXPECT_EQ(gfx::ContentColorUsage::kHDR,
-              aggregated_frame.render_pass_list[2]->content_color_usage);
+    if (has_color_conversion_pass) {
+      EXPECT_EQ(gfx::ContentColorUsage::kHDR,
+                aggregated_frame.render_pass_list[2]->content_color_usage);
+    }
 
-    // The root (drawn to backbuffer) and intermediate (drawn to extended-sRGB)
-    // passes have full damage because they were added this frame.
-    EXPECT_EQ(full_damage_rect,
-              aggregated_frame.render_pass_list[2]->damage_rect);
-    EXPECT_EQ(full_damage_rect,
-              aggregated_frame.render_pass_list[1]->damage_rect);
+    if (has_color_conversion_pass) {
+      // The root (drawn to backbuffer) and intermediate (drawn to
+      // extended-sRGB) passes have full damage because they were added this
+      // frame.
+      EXPECT_EQ(full_damage_rect,
+                aggregated_frame.render_pass_list[2]->damage_rect);
+      EXPECT_EQ(full_damage_rect,
+                aggregated_frame.render_pass_list[1]->damage_rect);
+    } else {
+      EXPECT_EQ(partial_damage_rect,
+                aggregated_frame.render_pass_list[1]->damage_rect);
+    }
   }
 }
 
@@ -11063,14 +11102,110 @@ INSTANTIATE_TEST_SUITE_P(,
                          SurfaceAggregatorValidSurfaceWithMergingPassesTest,
                          testing::Bool());
 
+#if BUILDFLAG(IS_WIN)
+// The flag |prevent_merging_surfaces_to_root_pass| prevents surfaces referenced
+// by the root pass of the root surface (e.g. the web contents surface(s)) from
+// merging during surface aggregation. This enables
+// |kDelegatedCompositingLimitToUi| because in delegated compositing mode, those
+// surfaces become RPDQ overlays.
+class SurfaceAggregatorPreventMergeTest
+    : public SurfaceAggregatorValidSurfaceTest {
+ protected:
+  SurfaceAggregatorPreventMergeTest()
+      : SurfaceAggregatorValidSurfaceTest(
+            /*use_damage_rect=*/false,
+            SurfaceAggregator::ExtraPassForReadbackOption::kNone,
+            /*prevent_merging_surfaces_to_root_pass=*/true) {}
+};
+
+// Check that surfaces in the root pass are not allowed to merge.
+TEST_F(SurfaceAggregatorPreventMergeTest, PreventMerge) {
+  const gfx::Rect child_rect(5, 5);
+
+  TestVizClient child(this, &manager_, kArbitraryFrameSinkId1, child_rect);
+  child.SubmitCompositorFrame(SkColors::kGreen);
+
+  // Submit a SurfaceDrawQuad that allows merging, but will be prevented.
+  {
+    std::vector<Quad> root_quads = {
+        Quad::SurfaceQuad(SurfaceRange(std::nullopt, child.surface_id()),
+                          SkColors::kWhite, child_rect, false, true)};
+    std::vector<Pass> root_passes = {
+        Pass(root_quads, CompositorRenderPassId{1}, kSurfaceSize)};
+
+    CompositorFrame frame = MakeEmptyCompositorFrame();
+    AddPasses(&frame.render_pass_list, root_passes,
+              &frame.metadata.referenced_surfaces);
+
+    root_sink_->SubmitCompositorFrame(root_surface_id_.local_surface_id(),
+                                      std::move(frame));
+  }
+
+  auto aggregated_frame = AggregateFrame(root_surface_id_);
+
+  // We expect |child| to be prevented from merging.
+  EXPECT_EQ(2u, aggregated_frame.render_pass_list.size());
+}
+
+TEST_F(SurfaceAggregatorPreventMergeTest, NonRootSurfacesCanMerge) {
+  const gfx::Rect child_rect(5, 5);
+
+  // Submit a leaf surface that does not contain other surfaces. This should be
+  // merged into |child_surface_id| because |child_surface_id| is not the root.
+  TestVizClient inner_child(this, &manager_, kArbitraryFrameSinkId1,
+                            child_rect);
+  inner_child.SubmitCompositorFrame(SkColors::kBlue);
+
+  // Submit an intermediate surface that embeds the leaf and will be embedded by
+  // the root.
+  TestSurfaceIdAllocator child_surface_id(child_sink_->frame_sink_id());
+  {
+    std::vector<Quad> child_quads = {
+        Quad::SurfaceQuad(SurfaceRange(std::nullopt, inner_child.surface_id()),
+                          SkColors::kGreen, child_rect, false, true)};
+    std::vector<Pass> child_passes = {
+        Pass(child_quads, CompositorRenderPassId{1}, kSurfaceSize)};
+
+    CompositorFrame child_frame = MakeEmptyCompositorFrame();
+    AddPasses(&child_frame.render_pass_list, child_passes,
+              &child_frame.metadata.referenced_surfaces);
+
+    child_sink_->SubmitCompositorFrame(child_surface_id.local_surface_id(),
+                                       std::move(child_frame));
+  }
+
+  // Submit a SurfaceDrawQuad that allows merging, but will be prevented.
+  {
+    std::vector<Quad> root_quads = {
+        Quad::SurfaceQuad(SurfaceRange(std::nullopt, child_surface_id),
+                          SkColors::kWhite, child_rect, false, true)};
+    std::vector<Pass> root_passes = {
+        Pass(root_quads, CompositorRenderPassId{1}, kSurfaceSize)};
+
+    CompositorFrame frame = MakeEmptyCompositorFrame();
+    AddPasses(&frame.render_pass_list, root_passes,
+              &frame.metadata.referenced_surfaces);
+
+    root_sink_->SubmitCompositorFrame(root_surface_id_.local_surface_id(),
+                                      std::move(frame));
+  }
+
+  auto aggregated_frame = AggregateFrame(root_surface_id_);
+
+  // We expect |inner_child| to merge into |child_surface_id|, but not for
+  // |child_surface_id| to merge into |root_surface_id_|.
+  EXPECT_EQ(2u, aggregated_frame.render_pass_list.size());
+}
+#endif
+
 class SurfaceAggregatorVulkanSecondaryCB
     : public SurfaceAggregatorValidSurfaceTest {
  public:
   SurfaceAggregatorVulkanSecondaryCB()
       : SurfaceAggregatorValidSurfaceTest(
             false,
-            SurfaceAggregator::ExtraPassForReadbackOption::
-                kAddPassForReadback) {}
+            SurfaceAggregator::ExtraPassForReadbackOption::kAddPassForReadback,
+            false) {}
 };
 
 TEST_F(SurfaceAggregatorVulkanSecondaryCB, AppendPassForFrameWithFilter) {
@@ -11116,5 +11251,240 @@ TEST_F(SurfaceAggregatorVulkanSecondaryCB,
   auto aggregated_frame = AggregateFrame(surface_id);
   EXPECT_EQ(2u, aggregated_frame.render_pass_list.size());
 }
+
+namespace {
+
+// Blocks until `OnScreenshotCaptured()` is called.
+class OnScreenshotCapturedWaiter : public mojom::FrameSinkManagerClient {
+ public:
+  OnScreenshotCapturedWaiter() = default;
+  ~OnScreenshotCapturedWaiter() override = default;
+  OnScreenshotCapturedWaiter(const OnScreenshotCapturedWaiter&) = delete;
+  OnScreenshotCapturedWaiter& operator=(const OnScreenshotCapturedWaiter&) =
+      delete;
+
+  // mojom::FrameSinkManagerClient:
+  void OnFirstSurfaceActivation(const SurfaceInfo&) override {}
+  void OnFrameTokenChanged(const FrameSinkId&,
+                           uint32_t,
+                           base::TimeTicks) override {}
+  void OnAggregatedHitTestRegionListUpdated(
+      const FrameSinkId& frame_sink_id,
+      const std::vector<AggregatedHitTestRegion>& hit_test_data) override {}
+#if BUILDFLAG(IS_ANDROID)
+  void VerifyThreadIdsDoNotBelongToHost(
+      const std::vector<int32_t>& thread_ids,
+      VerifyThreadIdsDoNotBelongToHostCallback callback) override {}
+#endif
+  void OnScreenshotCaptured(
+      const blink::SameDocNavigationScreenshotDestinationToken&
+          destination_token,
+      std::unique_ptr<CopyOutputResult> copy_output_result) override {
+    observed_token_ = destination_token;
+    run_loop_.Quit();
+  }
+
+  void Wait() { run_loop_.Run(); }
+
+  const blink::SameDocNavigationScreenshotDestinationToken& observed_token() {
+    return observed_token_;
+  }
+
+ private:
+  blink::SameDocNavigationScreenshotDestinationToken observed_token_;
+  base::RunLoop run_loop_;
+};
+
+class SurfaceAggregatorCopyRequestAgainstPreviousSurfaceTest
+    : public SurfaceAggregatorValidSurfaceTest,
+      public ::testing::WithParamInterface<bool> {
+ public:
+  SurfaceAggregatorCopyRequestAgainstPreviousSurfaceTest() = default;
+  ~SurfaceAggregatorCopyRequestAgainstPreviousSurfaceTest() override = default;
+
+  bool DestroyFrameSinkBeforeResult() { return GetParam(); }
+};
+
+std::string DescribeParam(const ::testing::TestParamInfo<bool>& info) {
+  if (info.param) {
+    return "CompositorFrameSinkSupportDestroyedBeforeResult";
+  } else {
+    return "CopyResultSent";
+  }
+}
+
+}  // namespace
+
+TEST_P(SurfaceAggregatorCopyRequestAgainstPreviousSurfaceTest,
+       CopyAgainstPreviousSurface) {
+  OnScreenshotCapturedWaiter waiter;
+  manager_.SetLocalClient(&waiter);
+
+  TestSurfaceIdAllocator child_allocator(child_sink_->frame_sink_id());
+  SurfaceId prev_sid = child_allocator.Get();
+  child_allocator.Increment();
+  SurfaceId current_sid = child_allocator.Get();
+
+  TestSurfaceIdAllocator root_allocator(root_sink_->frame_sink_id());
+  SurfaceId root_sid = root_allocator.Get();
+
+  // Submit one frame against the previous child surface.
+  {
+    SCOPED_TRACE("previous surface");
+    CompositorFrame new_frame = MakeEmptyCompositorFrame();
+    std::vector<Quad> quads = {
+        Quad::SolidColorQuad(SkColors::kGreen, gfx::Rect(5, 5))};
+    std::vector<Pass> passes = {
+        Pass(quads, CompositorRenderPassId{1}, gfx::Size(100, 100))};
+    AddPasses(&new_frame.render_pass_list, passes,
+              &new_frame.metadata.referenced_surfaces);
+    child_sink_->SubmitCompositorFrame(prev_sid.local_surface_id(),
+                                       std::move(new_frame));
+  }
+
+  // Submit a frame against the root surface.
+  {
+    SCOPED_TRACE("root surface -> previous surface");
+    CompositorFrame new_frame = MakeEmptyCompositorFrame();
+    // The previous surface is reachable from the root surface.
+    new_frame.metadata.referenced_surfaces = {SurfaceRange(prev_sid)};
+    std::vector<Quad> quads = {
+        Quad::SolidColorQuad(SkColors::kBlue, gfx::Rect(5, 5))};
+    std::vector<Pass> passes = {
+        Pass(quads, CompositorRenderPassId{2}, gfx::Size(100, 100))};
+    AddPasses(&new_frame.render_pass_list, passes,
+              &new_frame.metadata.referenced_surfaces);
+    root_sink_->SubmitCompositorFrame(root_sid.local_surface_id(),
+                                      std::move(new_frame));
+  }
+
+  // Activate the previous surface, and removes previous surface's temporary
+  // reference.
+  std::ignore = AggregateFrame(root_sid);
+
+  // A new frame against the root surface and aggregate. This removes the
+  // reference from root to the previous surface, but make the new surface
+  // reachable.
+  {
+    SCOPED_TRACE("root surface -> current surface");
+    CompositorFrame new_frame = MakeEmptyCompositorFrame();
+    new_frame.metadata.referenced_surfaces = {SurfaceRange(current_sid)};
+    std::vector<Quad> quads = {
+        Quad::SolidColorQuad(SkColors::kBlue, gfx::Rect(5, 5))};
+    std::vector<Pass> passes = {
+        Pass(quads, CompositorRenderPassId{3}, gfx::Size(100, 100))};
+    AddPasses(&new_frame.render_pass_list, passes,
+              &new_frame.metadata.referenced_surfaces);
+    root_sink_->SubmitCompositorFrame(root_sid.local_surface_id(),
+                                      std::move(new_frame));
+  }
+
+  // Another frame against the current child surface, with the CopyOutputRequest
+  // destination.
+  const auto expected_token = base::UnguessableToken::Create();
+  {
+    SCOPED_TRACE("current surface with a COR");
+    CompositorFrame new_frame = MakeEmptyCompositorFrame();
+    new_frame.metadata.screenshot_destination =
+        blink::SameDocNavigationScreenshotDestinationToken(expected_token);
+    std::vector<Quad> quads = {
+        Quad::SolidColorQuad(SkColors::kRed, gfx::Rect(5, 5))};
+    std::vector<Pass> passes = {
+        Pass(quads, CompositorRenderPassId{4}, gfx::Size(100, 100))};
+    AddPasses(&new_frame.render_pass_list, passes,
+              &new_frame.metadata.referenced_surfaces);
+    child_sink_->SubmitCompositorFrame(current_sid.local_surface_id(),
+                                       std::move(new_frame));
+  }
+
+  // Check that the current child surface has `pending_copy_surface_id_` set.
+  ASSERT_EQ(manager_.surface_manager()
+                ->GetSurfaceForId(current_sid)
+                ->pending_copy_surface_id_for_testing(),
+            prev_sid);
+
+  // Check the references.
+  ASSERT_THAT(
+      manager_.surface_manager()->GetSurfacesReferencedByParent(current_sid),
+      ::testing::UnorderedElementsAre(prev_sid));
+  ASSERT_THAT(
+      manager_.surface_manager()->GetSurfacesThatReferenceChildForTesting(
+          prev_sid),
+      ::testing::UnorderedElementsAre(current_sid));
+
+  // Check that the CopyOutputRequest is taken during aggregation.
+  auto result = AggregateFrame(root_sid);
+  ASSERT_TRUE(result.has_copy_requests);
+  ASSERT_EQ(result.render_pass_list.size(), 2U);
+  ASSERT_EQ(result.render_pass_list[0]->copy_requests.size(), 1U);
+
+  if (DestroyFrameSinkBeforeResult()) {
+    child_sink_.reset();
+
+    // The destruction of the frame sink doesn't remove the reference.
+    ASSERT_EQ(manager_.surface_manager()
+                  ->GetSurfaceForId(current_sid)
+                  ->pending_copy_surface_id_for_testing(),
+              prev_sid);
+    ASSERT_THAT(
+        manager_.surface_manager()->GetSurfacesReferencedByParent(current_sid),
+        ::testing::UnorderedElementsAre(prev_sid));
+    ASSERT_THAT(
+        manager_.surface_manager()->GetSurfacesThatReferenceChildForTesting(
+            prev_sid),
+        ::testing::UnorderedElementsAre(current_sid));
+
+    // The destruction of `current_sid` removes the reference.
+    {
+      SCOPED_TRACE("deref current surface from root");
+      CompositorFrame new_frame = MakeEmptyCompositorFrame();
+      std::vector<Quad> quads = {
+          Quad::SolidColorQuad(SkColors::kBlue, gfx::Rect(5, 5))};
+      std::vector<Pass> passes = {
+          Pass(quads, CompositorRenderPassId{3}, gfx::Size(100, 100))};
+      AddPasses(&new_frame.render_pass_list, passes,
+                &new_frame.metadata.referenced_surfaces);
+      root_sink_->SubmitCompositorFrame(root_sid.local_surface_id(),
+                                        std::move(new_frame));
+    }
+    manager_.surface_manager()->GarbageCollectSurfaces();
+
+    ASSERT_FALSE(manager_.surface_manager()->GetSurfaceForId(current_sid));
+    ASSERT_FALSE(manager_.surface_manager()->GetSurfaceForId(prev_sid));
+    ASSERT_TRUE(manager_.surface_manager()
+                    ->GetSurfacesReferencedByParent(current_sid)
+                    .empty());
+    ASSERT_TRUE(manager_.surface_manager()
+                    ->GetSurfacesThatReferenceChildForTesting(prev_sid)
+                    .empty());
+  } else {
+    auto empty_result = std::make_unique<CopyOutputResult>(
+        CopyOutputResult::Format::RGBA,
+        CopyOutputResult::Destination::kSystemMemory, gfx::Rect(),
+        /*needs_lock_for_bitmap=*/false);
+    result.render_pass_list[0]->copy_requests[0]->SendResult(
+        std::move(empty_result));
+    {
+      SCOPED_TRACE("Waiting for OnScreenshotCaptured()");
+      waiter.Wait();
+    }
+    ASSERT_EQ(waiter.observed_token().value(), expected_token);
+    ASSERT_FALSE(manager_.surface_manager()
+                     ->GetSurfaceForId(current_sid)
+                     ->pending_copy_surface_id_for_testing()
+                     .is_valid());
+    ASSERT_TRUE(manager_.surface_manager()
+                    ->GetSurfacesReferencedByParent(current_sid)
+                    .empty());
+    ASSERT_TRUE(manager_.surface_manager()
+                    ->GetSurfacesThatReferenceChildForTesting(prev_sid)
+                    .empty());
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         SurfaceAggregatorCopyRequestAgainstPreviousSurfaceTest,
+                         ::testing::Bool(),
+                         &DescribeParam);
 
 }  // namespace viz

@@ -49,6 +49,8 @@ class SidePanelCoordinator : public SidePanelUI,
                                  updated_options) override;
   void OnSidePanelServiceShutdown() override;
 
+  void DisableAnimationsForTesting() override {}
+
  private:
   Profile * GetProfile();
 

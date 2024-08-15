@@ -32,7 +32,7 @@
 
 namespace tint::ast::transform {
 
-void ZeroInitWorkgroupMemoryFuzzer(const tint::Program& program) {
+void ZeroInitWorkgroupMemoryFuzzer(const Program& program) {
     if (program.AST().HasOverrides()) {
         return;
     }
@@ -41,6 +41,7 @@ void ZeroInitWorkgroupMemoryFuzzer(const tint::Program& program) {
     if (auto result = ZeroInitWorkgroupMemory{}.Apply(program, DataMap{}, outputs)) {
         if (!result->IsValid()) {
             TINT_ICE() << "ZeroInitWorkgroupMemory returned invalid program:\n"
+                       << Program::printer(*result) << "\n"
                        << result->Diagnostics();
         }
     }

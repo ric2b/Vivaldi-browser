@@ -173,12 +173,12 @@ const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
 
   vivaldi_bookmark_kit::CustomMetaInfo vivaldi_meta;
   if (details.nickname) {
-    if (!details.nickname->empty() && vivaldi_bookmark_kit::DoesNickExists(
-                                          model, *details.nickname, nullptr)) {
-      *error = vivaldi::kNicknameExists;
-      return nullptr;
+    if (!details.nickname->empty()) {
+      std::string nickname;
+      vivaldi_bookmark_kit::SuggestUniqueNick(model, *details.nickname,
+                                              nullptr, &nickname);
+      vivaldi_meta.SetNickname(nickname);
     }
-    vivaldi_meta.SetNickname(*details.nickname);
   }
   if (details.description) {
     vivaldi_meta.SetDescription(*details.description);
@@ -327,7 +327,8 @@ void BookmarkEventRouter::BookmarkNodeRemoved(
     const BookmarkNode* parent,
     size_t index,
     const BookmarkNode* node,
-    const std::set<GURL>& removed_urls) {
+    const std::set<GURL>& removed_urls,
+    const base::Location& location) {
   api::bookmarks::OnRemoved::RemoveInfo remove_info;
   remove_info.parent_id = base::NumberToString(parent->id());
   remove_info.index = static_cast<int>(index);
@@ -341,8 +342,9 @@ void BookmarkEventRouter::BookmarkNodeRemoved(
 }
 
 void BookmarkEventRouter::BookmarkAllUserNodesRemoved(
-    const std::set<GURL>& removed_urls) {
-  // TODO(crbug.com/1468324): This used to be used only on Android, but that's
+    const std::set<GURL>& removed_urls,
+    const base::Location& location) {
+  // TODO(crbug.com/40277078): This used to be used only on Android, but that's
   // no longer the case. We need to implement a new event to handle this.
 }
 
@@ -623,7 +625,7 @@ ExtensionFunction::ResponseValue BookmarksRemoveFunctionBase::RunOnReady() {
     // If it's already in trash or a separator, just delete it.
     if (bookmarks::IsDescendantOf(node, trash_node) ||
         vivaldi_bookmark_kit::IsSeparator(node)) {
-      model->Remove(node, {});
+      model->Remove(node, {}, FROM_HERE);
     } else {
       model->Move(node, trash_node, 0);
     }
@@ -716,6 +718,10 @@ ExtensionFunction::ResponseValue BookmarksMoveFunction::RunOnReady() {
 
   if (!parent->is_folder()) {
     return Error(bookmark_api_constants::kInvalidParentError);
+  }
+
+  if (parent->HasAncestor(node)) {
+    return Error(bookmark_api_constants::kInvalidMoveDestinationError);
   }
 
   size_t index;

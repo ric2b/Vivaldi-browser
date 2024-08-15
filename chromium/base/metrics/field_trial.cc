@@ -11,6 +11,7 @@
 #include "base/auto_reset.h"
 #include "base/base_switches.h"
 #include "base/command_line.h"
+#include "base/containers/span.h"
 #include "base/debug/crash_logging.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
@@ -224,7 +225,8 @@ bool FieldTrial::FieldTrialEntry::GetParams(
 }
 
 PickleIterator FieldTrial::FieldTrialEntry::GetPickleIterator() const {
-  Pickle pickle(GetPickledDataPtr(), checked_cast<size_t>(pickle_size));
+  Pickle pickle = Pickle::WithUnownedBuffer(
+      span(GetPickledDataPtr(), checked_cast<size_t>(pickle_size)));
   return PickleIterator(pickle);
 }
 
@@ -696,7 +698,7 @@ void FieldTrialList::CreateTrialsInChildProcess(const CommandLine& cmd_line) {
   global_->create_trials_in_child_process_called_ = true;
 
 #if BUILDFLAG(USE_BLINK)
-  // TODO(crbug.com/867558): Change to a CHECK.
+  // TODO(crbug.com/41403903): Change to a CHECK.
   if (cmd_line.HasSwitch(switches::kFieldTrialHandle)) {
     std::string switch_value =
         cmd_line.GetSwitchValueASCII(switches::kFieldTrialHandle);
@@ -712,7 +714,7 @@ void FieldTrialList::CreateTrialsInChildProcess(const CommandLine& cmd_line) {
 void FieldTrialList::ApplyFeatureOverridesInChildProcess(
     FeatureList* feature_list) {
   CHECK(global_->create_trials_in_child_process_called_);
-  // TODO(crbug.com/867558): Change to a CHECK.
+  // TODO(crbug.com/41403903): Change to a CHECK.
   if (global_->field_trial_allocator_) {
     feature_list->InitFromSharedMemory(global_->field_trial_allocator_.get());
   }
@@ -1094,7 +1096,7 @@ bool FieldTrialList::CreateTrialsFromSharedMemoryMapping(
     if (!entry->GetState(trial_name, group_name, is_overridden)) {
       return false;
     }
-    // TODO(crbug.com/1431156): Don't set is_low_anonymity=false, but instead
+    // TODO(crbug.com/40263398): Don't set is_low_anonymity=false, but instead
     // propagate the is_low_anonymity state to the child process.
     FieldTrial* trial = CreateFieldTrial(
         trial_name, group_name, /*is_low_anonymity=*/false, is_overridden);
@@ -1171,7 +1173,7 @@ void FieldTrialList::AddToAllocatorWhileLocked(
   FieldTrial::FieldTrialRef ref = allocator->Allocate(
       total_size, FieldTrial::FieldTrialEntry::kPersistentTypeId);
   if (ref == FieldTrialAllocator::kReferenceNull) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 

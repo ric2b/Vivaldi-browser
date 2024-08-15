@@ -10,13 +10,13 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/types/pass_key.h"
-#include "base/unguessable_token.h"
-#include "components/viz/common/navigation_id.h"
 #include "third_party/blink/public/common/frame/view_transition_state.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_property.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_sync_iterator_view_transition_type_set.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_view_transition_callback.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
@@ -26,13 +26,8 @@
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/graphics/paint/clip_paint_property_node.h"
 #include "third_party/blink/renderer/platform/graphics/paint/effect_paint_property_node.h"
-#include "third_party/blink/renderer/platform/graphics/view_transition_element_id.h"
 #include "third_party/blink/renderer/platform/heap/forward.h"
 #include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
-
-namespace viz {
-using TransitionId = base::UnguessableToken;
-}
 
 namespace blink {
 
@@ -73,8 +68,9 @@ class CORE_EXPORT ViewTransition : public GarbageCollected<ViewTransition>,
       base::OnceCallback<void(const ViewTransitionState&)>;
   static ViewTransition* CreateForSnapshotForNavigation(
       Document*,
-      const viz::NavigationId& navigation_id,
+      const ViewTransitionToken& transition_token,
       ViewTransitionStateCallback,
+      const Vector<String>& types,
       Delegate*);
 
   // Creates a ViewTransition using cached state from the previous Document
@@ -95,8 +91,9 @@ class CORE_EXPORT ViewTransition : public GarbageCollected<ViewTransition>,
   // Navigation-initiated for-snapshot constructor.
   ViewTransition(PassKey,
                  Document*,
-                 const viz::NavigationId& navigation_id,
+                 const ViewTransitionToken& transition_token,
                  ViewTransitionStateCallback,
+                 const Vector<String>& types,
                  Delegate*);
   // Navigation-initiated from-snapshot constructor.
   ViewTransition(PassKey, Document*, ViewTransitionState, Delegate*);
@@ -142,14 +139,10 @@ class CORE_EXPORT ViewTransition : public GarbageCollected<ViewTransition>,
   // instead of the root element's LayoutView.
   bool IsTransitionElementExcludingRoot(const Element& node) const;
 
-  // Updates an effect node. This effect populates the view transition element
-  // id and the shared element resource id. The return value is a result of
-  // updating the effect node.
-  PaintPropertyChangeType UpdateEffect(
-      const LayoutObject& object,
-      const EffectPaintPropertyNodeOrAlias& current_effect,
-      const ClipPaintPropertyNodeOrAlias* current_clip,
-      const TransformPaintPropertyNodeOrAlias* current_transform);
+  // Returns the resource id if `object` is producing a snapshot for this
+  // transition.
+  viz::ViewTransitionElementResourceId GetSnapshotId(
+      const LayoutObject& object) const;
 
   // Updates a clip node. The clip tracks the subset of the |object|'s ink
   // overflow rectangle which should be painted.The return value is a result of
@@ -158,9 +151,6 @@ class CORE_EXPORT ViewTransition : public GarbageCollected<ViewTransition>,
       const LayoutObject& object,
       const ClipPaintPropertyNodeOrAlias* current_clip,
       const TransformPaintPropertyNodeOrAlias* current_transform);
-
-  // Returns the effect. One needs to first call UpdateEffect().
-  const EffectPaintPropertyNode* GetEffect(const LayoutObject& object) const;
 
   // Returns the clip. One needs to first call UpdateCaptureClip().
   const ClipPaintPropertyNode* GetCaptureClip(const LayoutObject& object) const;
@@ -234,10 +224,6 @@ class CORE_EXPORT ViewTransition : public GarbageCollected<ViewTransition>,
   // snapshot.
   void ActivateFromSnapshot();
 
-  // Returns true if lifecycle updates should be throttled for the Document
-  // associated with this transition.
-  bool ShouldThrottleRendering() const;
-
   // Ensure the LayoutViewTransitionRoot, representing the snapshot containing
   // block concept, has up to date style.
   void UpdateSnapshotContainingBlockStyle();
@@ -255,6 +241,10 @@ class CORE_EXPORT ViewTransition : public GarbageCollected<ViewTransition>,
   // resolved and start phase of the animation can be initiated. Note: this is
   // called only if a callback is provided.
   void NotifyDOMCallbackFinished(bool success);
+
+  ViewTransitionTypeSet* Types();
+
+  void InitTypes(const Vector<String>&);
 
  private:
   friend class ViewTransitionTest;
@@ -333,10 +323,9 @@ class CORE_EXPORT ViewTransition : public GarbageCollected<ViewTransition>,
   void OnRenderingPausedTimeout();
   void ResumeRendering();
 
-  // Returns the navigation id to use when creating a capture request. This id
-  // is the same for captures on both old and new documents of a cross-document
-  // transition. It is an empty id if the transition is not cross document.
-  viz::NavigationId CrossDocumentNavigationId() const;
+  bool IsCrossDocument() const {
+    return IsForNavigationSnapshot() || IsForNavigationOnNewDocument();
+  }
 
   State state_ = State::kInitial;
   const CreationType creation_type_;
@@ -345,13 +334,9 @@ class CORE_EXPORT ViewTransition : public GarbageCollected<ViewTransition>,
   Delegate* const delegate_ = nullptr;
 
   // Each transition is assigned a unique ID. For cross-document navigations
-  // this is also the `navigation_id` provided to the browser/GPU process to
+  // this is also the `transition_token` provided to the browser/GPU process to
   // track the lifetime of generated resources.
-  const viz::TransitionId transition_id_;
-
-  // The document tag identifies the document to which this transition
-  // belongs. It's unique among other local documents.
-  uint32_t document_tag_ = 0u;
+  const ViewTransitionToken transition_token_;
 
   Member<ViewTransitionStyleTracker> style_tracker_ = nullptr;
 
@@ -380,12 +365,12 @@ class CORE_EXPORT ViewTransition : public GarbageCollected<ViewTransition>,
   // is cleared if the document is torn down.
   Member<DOMViewTransition> script_delegate_;
 
+  Member<ViewTransitionTypeSet> types_;
+
   bool in_main_lifecycle_update_ = false;
   bool dom_callback_succeeded_ = false;
   bool first_animating_frame_ = true;
   bool context_destroyed_ = false;
-
-  std::optional<Vector<String>> types_;
 };
 
 }  // namespace blink

@@ -143,6 +143,15 @@ declare_args() {
     "tablet",
     "automotive",
   ]
+
+  # Use Starboard graphics backend. Compile it in statically.
+  enable_starboard_graphics = false
+
+  # Build Starboard graphics backend as shared library.
+  starboard_graphics_is_shared = false
+
+  # Use Starboard media backend.
+  enable_starboard_media = false
 }
 
 declare_args() {

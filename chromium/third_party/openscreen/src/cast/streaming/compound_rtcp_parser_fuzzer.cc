@@ -33,7 +33,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   static RtcpSession session(kSenderSsrcInSeedCorpus, kReceiverSsrcInSeedCorpus,
                              openscreen::Clock::time_point{});
   static ClientThatIgnoresEverything client_that_ignores_everything;
-  static CompoundRtcpParser parser(&session, &client_that_ignores_everything);
+  static CompoundRtcpParser parser(session, client_that_ignores_everything);
 #pragma clang diagnostic pop
 
   const auto max_feedback_frame_id = FrameId::first() + 100;

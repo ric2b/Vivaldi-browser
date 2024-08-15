@@ -9,6 +9,7 @@ Siso/Reclient builds.
 # TODO(b/278976196): `siso ninja` command should handle the reclient and
 # authentication accordingly.
 
+import multiprocessing
 import os
 import re
 import sys
@@ -50,19 +51,32 @@ def main(argv):
             "Please run `siso` command directly.",
             file=sys.stderr)
         return 1
+    has_remote_jobs = False
+    for arg in argv:
+        if arg.startswith("--remote_jobs") or arg.startswith("-remote_jobs"):
+            has_remote_jobs = True
+
+    # Limit -remote_jobs to avoid overloading Reproxy on developer machine.
+    remote_jobs = None
+    if not has_remote_jobs and sys.platform == 'win32':
+        num_cores = multiprocessing.cpu_count()
+        remote_jobs = min(num_cores * 80, 1000)
 
     os.environ.setdefault("AUTONINJA_BUILD_ID", str(uuid.uuid4()))
     with reclient_helper.build_context(argv, 'autosiso') as ret_code:
         if ret_code:
             return ret_code
-        argv = [
+        cmd = [
             argv[0],
             'ninja',
             # Do not authenticate when using Reproxy.
             '-project=',
             '-reapi_instance=',
-        ] + argv[1:]
-        return siso.main(argv)
+        ]
+        if remote_jobs:
+            cmd.append("-remote_jobs=%d" % remote_jobs)
+        cmd += argv[1:]
+        return siso.main(cmd)
 
 
 if __name__ == '__main__':

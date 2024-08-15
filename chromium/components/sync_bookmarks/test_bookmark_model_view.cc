@@ -82,4 +82,7 @@ const bookmarks::BookmarkNode* TestBookmarkModelView::GetNodeByUuid(
   return wrapped_view_->GetNodeByUuid(uuid);
 }
 
+const bookmarks::BookmarkNode* TestBookmarkModelView::trash_node() const {
+  return wrapped_view_->trash_node();
+}
 }  // namespace sync_bookmarks

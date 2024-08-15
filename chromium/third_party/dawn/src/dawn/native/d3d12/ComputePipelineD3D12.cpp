@@ -30,7 +30,8 @@
 #include <memory>
 #include <utility>
 
-#include "dawn/native/CreatePipelineAsyncTask.h"
+#include "dawn/native/CreatePipelineAsyncEvent.h"
+#include "dawn/native/Instance.h"
 #include "dawn/native/d3d/BlobD3D.h"
 #include "dawn/native/d3d/D3DError.h"
 #include "dawn/native/d3d12/DeviceD3D12.h"
@@ -71,12 +72,13 @@ MaybeError ComputePipeline::InitializeImpl() {
     // Tint does matrix multiplication expecting row major matrices
     compileFlags |= D3DCOMPILE_PACK_MATRIX_ROW_MAJOR;
 
-    if (!device->IsToggleEnabled(Toggle::D3DDisableIEEEStrictness)) {
-        compileFlags |= D3DCOMPILE_IEEE_STRICTNESS;
-    }
-
     const ProgrammableStage& computeStage = GetStage(SingleShaderStage::Compute);
     ShaderModule* module = ToBackend(computeStage.module.Get());
+
+    if (module->GetStrictMath().value_or(
+            !device->IsToggleEnabled(Toggle::D3DDisableIEEEStrictness))) {
+        compileFlags |= D3DCOMPILE_IEEE_STRICTNESS;
+    }
 
     D3D12_COMPUTE_PIPELINE_STATE_DESC d3dDesc = {};
     d3dDesc.pRootSignature = ToBackend(GetLayout())->GetRootSignature();
@@ -124,9 +126,11 @@ MaybeError ComputePipeline::InitializeImpl() {
         // Cache misses, need to get pipeline cached blob and store.
         cacheTimer.RecordMicroseconds("D3D12.CreateComputePipelineState.CacheMiss");
         ComPtr<ID3DBlob> d3dBlob;
-        DAWN_TRY(CheckHRESULT(GetPipelineState()->GetCachedBlob(&d3dBlob),
-                              "D3D12 compute pipeline state get cached blob"));
-        device->StoreCachedBlob(GetCacheKey(), CreateBlob(std::move(d3dBlob)));
+        if (!device->GetInstance()->ConsumedError(
+                CheckHRESULT(GetPipelineState()->GetCachedBlob(&d3dBlob),
+                             "D3D12 compute pipeline state get cached blob"))) {
+            device->StoreCachedBlob(GetCacheKey(), CreateBlob(std::move(d3dBlob)));
+        }
     } else {
         cacheTimer.RecordMicroseconds("D3D12.CreateComputePipelineState.CacheHit");
     }
@@ -149,15 +153,6 @@ ID3D12PipelineState* ComputePipeline::GetPipelineState() const {
 
 void ComputePipeline::SetLabelImpl() {
     SetDebugName(ToBackend(GetDevice()), GetPipelineState(), "Dawn_ComputePipeline", GetLabel());
-}
-
-void ComputePipeline::InitializeAsync(Ref<ComputePipelineBase> computePipeline,
-                                      WGPUCreateComputePipelineAsyncCallback callback,
-                                      void* userdata) {
-    std::unique_ptr<CreateComputePipelineAsyncTask> asyncTask =
-        std::make_unique<CreateComputePipelineAsyncTask>(std::move(computePipeline), callback,
-                                                         userdata);
-    CreateComputePipelineAsyncTask::RunAsync(std::move(asyncTask));
 }
 
 bool ComputePipeline::UsesNumWorkgroups() const {

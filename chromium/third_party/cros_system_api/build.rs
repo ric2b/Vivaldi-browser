@@ -46,6 +46,11 @@ const BINDINGS_TO_GENERATE: &[(&str, &str, BindingsType)] = &[
         BindingsType::Client(OPTS),
     ),
     (
+        "org_chromium_permission_broker",
+        "permission_broker/dbus_bindings/org.chromium.PermissionBroker.xml",
+        BindingsType::Client(OPTS),
+    ),
+    (
         "org_chromium_power_manager",
         "power_manager/dbus_bindings/org.chromium.PowerManager.xml",
         BindingsType::Client(OPTS),

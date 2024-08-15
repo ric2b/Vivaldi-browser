@@ -20,7 +20,7 @@ namespace openscreen::cast {
 // Builds RTCP packets containing one Sender Report.
 class SenderReportBuilder {
  public:
-  explicit SenderReportBuilder(RtcpSession* session);
+  explicit SenderReportBuilder(RtcpSession& session);
   ~SenderReportBuilder();
 
   // Serializes the given |sender_report| as a RTCP packet and writes it to
@@ -41,7 +41,7 @@ class SenderReportBuilder {
       kRtcpCommonHeaderSize + kRtcpSenderReportSize + kRtcpReportBlockSize;
 
  private:
-  RtcpSession* const session_;
+  RtcpSession& session_;
 };
 
 }  // namespace openscreen::cast

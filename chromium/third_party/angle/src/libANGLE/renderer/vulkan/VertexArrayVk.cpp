@@ -15,9 +15,9 @@
 #include "libANGLE/renderer/vulkan/BufferVk.h"
 #include "libANGLE/renderer/vulkan/ContextVk.h"
 #include "libANGLE/renderer/vulkan/FramebufferVk.h"
-#include "libANGLE/renderer/vulkan/RendererVk.h"
-#include "libANGLE/renderer/vulkan/ResourceVk.h"
 #include "libANGLE/renderer/vulkan/vk_format_utils.h"
+#include "libANGLE/renderer/vulkan/vk_renderer.h"
+#include "libANGLE/renderer/vulkan/vk_resource.h"
 
 namespace rx
 {
@@ -59,6 +59,10 @@ bool ShouldCombineAttributes(vk::Renderer *renderer,
                              const gl::VertexAttribute &attrib,
                              const gl::VertexBinding &binding)
 {
+    if (!renderer->getFeatures().enableMergeClientAttribBuffer.enabled)
+    {
+        return false;
+    }
     const vk::Format &vertexFormat = renderer->getFormat(attrib.format->id);
     return !vertexFormat.getVertexLoadRequiresConversion(false) && binding.getDivisor() == 0 &&
            ClientBindingAligned(attrib, binding.getStride(),

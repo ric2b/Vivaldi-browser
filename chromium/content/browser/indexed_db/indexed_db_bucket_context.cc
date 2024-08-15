@@ -6,6 +6,7 @@
 
 #include <inttypes.h>
 #include <stddef.h>
+
 #include <atomic>
 #include <compare>
 #include <list>
@@ -60,7 +61,6 @@
 #include "components/services/storage/privileged/mojom/indexed_db_internals_types.mojom.h"
 #include "components/services/storage/public/mojom/blob_storage_context.mojom-shared.h"
 #include "components/services/storage/public/mojom/blob_storage_context.mojom.h"
-#include "content/browser/indexed_db/features.h"
 #include "content/browser/indexed_db/file_path_util.h"
 #include "content/browser/indexed_db/file_stream_reader_to_data_pipe.h"
 #include "content/browser/indexed_db/indexed_db_active_blob_registry.h"
@@ -84,6 +84,7 @@
 #include "content/browser/indexed_db/indexed_db_transaction.h"
 #include "content/browser/indexed_db/list_set.h"
 #include "content/browser/indexed_db/mock_browsertest_indexed_db_class_factory.h"
+#include "content/public/common/content_features.h"
 #include "env_chromium.h"
 #include "mojo/public/cpp/base/big_buffer.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
@@ -296,8 +297,6 @@ CreateLevelDBState(const leveldb_env::Options& base_options,
     leveldb_env::Options in_memory_options = base_options;
     in_memory_options.env = in_memory_env.get();
     in_memory_options.paranoid_checks = false;
-    in_memory_options.create_if_missing = true;
-    in_memory_options.write_buffer_size = 4 * 1024 * 1024;
     std::unique_ptr<leveldb::DB> db;
     leveldb::Status status =
         leveldb_env::OpenDB(in_memory_options, std::string(), &db);
@@ -424,15 +423,12 @@ class IndexedDBDataItemReader : public storage::mojom::BlobDataItemReader {
                           base::Time expected_modification_time,
                           base::OnceCallback<void(const base::FilePath&)>
                               on_last_receiver_disconnected,
-                          scoped_refptr<base::TaskRunner> file_task_runner,
                           scoped_refptr<base::TaskRunner> io_task_runner)
       : file_path_(file_path),
         expected_modification_time_(std::move(expected_modification_time)),
         on_last_receiver_disconnected_(
             std::move(on_last_receiver_disconnected)),
-        file_task_runner_(std::move(file_task_runner)),
         io_task_runner_(std::move(io_task_runner)) {
-    DCHECK(file_task_runner_);
     DCHECK(io_task_runner_);
 
     // The `BlobStorageContext` will disconnect when the blob is no longer
@@ -460,26 +456,17 @@ class IndexedDBDataItemReader : public storage::mojom::BlobDataItemReader {
             ReadCallback callback) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-    auto adapter = std::make_unique<FileStreamReaderToDataPipe>(
-        storage::FileStreamReader::CreateForLocalFile(
-            file_task_runner_, file_path_, offset, expected_modification_time_),
-        std::move(pipe));
-    auto* raw_adapter = adapter.get();
-
     ReadCallback result_callback = base::BindPostTask(
         base::SequencedTaskRunner::GetCurrentDefault(), std::move(callback));
-    // Let the adapter be owned by the result callback. The adapter must be
-    // destroyed on `io_task_runner_`, hence the order of wrapping callbacks.
-    ReadCallback callback_owning_adapter = base::BindOnce(
-        base::IgnoreArgs<std::unique_ptr<FileStreamReaderToDataPipe>>(
-            std::move(result_callback)),
-        std::move(adapter));
-
-    // See note above `io_task_runner_`.
     io_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&FileStreamReaderToDataPipe::Start,
-                                  base::Unretained(raw_adapter),
-                                  std::move(callback_owning_adapter), length));
+        FROM_HERE,
+        base::BindOnce(
+            &MakeFileStreamAdapterAndRead,
+            storage::FileStreamReader::CreateForLocalFile(
+                base::ThreadPool::CreateTaskRunner(
+                    {base::MayBlock(), base::TaskPriority::USER_BLOCKING}),
+                file_path_, offset, expected_modification_time_),
+            std::move(pipe), std::move(result_callback), length));
   }
 
   void ReadSideData(ReadSideDataCallback callback) override {
@@ -508,16 +495,9 @@ class IndexedDBDataItemReader : public storage::mojom::BlobDataItemReader {
   base::OnceCallback<void(const base::FilePath&)>
       on_last_receiver_disconnected_;
 
-  // There are a lot of task runners in this class:
-  // * IndexedDBDataItemReader runs on the same sequence as
-  // `IndexedDBBucketContext`.
-  // * LocalFileStreamReader wants its own |file_task_runner_| to run
-  //   various asynchronous file operations on.
-  // * net::FileStream (used by LocalFileStreamReader) needs to be run
-  //   on an IO thread for asynchronous file operations (on Windows), which
-  //   is done by passing in an |io_task_runner| to do this.
-  scoped_refptr<base::TaskRunner> file_task_runner_;
-  scoped_refptr<base::TaskRunner> io_task_runner_;
+  // net::FileStream (used by LocalFileStreamReader) needs to be run
+  // on an IO thread for asynchronous file operations on Windows.
+  const scoped_refptr<base::TaskRunner> io_task_runner_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 };
@@ -557,8 +537,6 @@ IndexedDBBucketContext::IndexedDBBucketContext(
       data_path_(data_path),
       leveldb_options_(GetLevelDBOptions()),
       quota_manager_proxy_(std::move(quota_manager_proxy)),
-      file_task_runner_(base::ThreadPool::CreateTaskRunner(
-          {base::MayBlock(), base::TaskPriority::USER_VISIBLE})),
       io_task_runner_(std::move(io_task_runner)),
       blob_storage_context_(std::move(blob_storage_context)),
       file_system_access_context_(std::move(file_system_access_context)),
@@ -822,19 +800,16 @@ void IndexedDBBucketContext::RunTasks() {
 void IndexedDBBucketContext::AddReceiver(
     mojo::PendingRemote<storage::mojom::IndexedDBClientStateChecker>
         client_state_checker_remote,
-    base::UnguessableToken client_token,
     mojo::PendingReceiver<blink::mojom::IDBFactory> pending_receiver) {
   // When `on_ready_for_destruction` is non-null, `this` hasn't requested its
   // own destruction. When it is null, this is to be torn down and has to bounce
   // the AddReceiver request back to the delegate.
   if (delegate().on_ready_for_destruction) {
-    receivers_.Add(
-        this, std::move(pending_receiver),
-        ReceiverContext(std::move(client_state_checker_remote), client_token));
+    receivers_.Add(this, std::move(pending_receiver),
+                   ReceiverContext(std::move(client_state_checker_remote)));
   } else {
     CHECK(base::FeatureList::IsEnabled(features::kIndexedDBShardBackingStores));
     delegate().on_receiver_bounced.Run(std::move(client_state_checker_remote),
-                                       client_token,
                                        std::move(pending_receiver));
   }
 }
@@ -901,7 +876,7 @@ void IndexedDBBucketContext::Open(
   connection->was_cold_open = was_cold_open;
   connection->data_loss_info = data_loss_info;
   ReceiverContext& client = receivers_.current_context();
-  connection->client_token = client.client_token;
+  connection->client_id = receivers_.current_receiver();
   // Null in unit tests.
   if (client.client_state_checker_remote) {
     mojo::PendingRemote<storage::mojom::IndexedDBClientStateChecker>
@@ -1014,9 +989,8 @@ void IndexedDBBucketContext::DeleteDatabase(
   }
 }
 
-void IndexedDBBucketContext::FillInMetadata(
-    storage::mojom::IdbBucketMetadataPtr info,
-    base::OnceCallback<void(storage::mojom::IdbBucketMetadataPtr)> result) {
+storage::mojom::IdbBucketMetadataPtr IndexedDBBucketContext::FillInMetadata(
+    storage::mojom::IdbBucketMetadataPtr info) {
   // TODO(jsbell): Sort by name?
   std::vector<storage::mojom::IdbDatabaseMetadataPtr> database_list;
 
@@ -1098,7 +1072,7 @@ void IndexedDBBucketContext::FillInMetadata(
     database_list.push_back(std::move(db_info));
   }
   info->databases = std::move(database_list);
-  std::move(result).Run(std::move(info));
+  return info;
 }
 
 IndexedDBBucketContext* IndexedDBBucketContext::GetReferenceForTesting() {
@@ -1370,15 +1344,15 @@ void IndexedDBBucketContext::BindFileReader(
     mojo::PendingReceiver<storage::mojom::BlobDataItemReader> receiver) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(receiver.is_valid());
-  DCHECK(file_task_runner_);
 
   auto itr = file_reader_map_.find(path);
   if (itr == file_reader_map_.end()) {
+    // Unretained is safe because `this` owns the reader.
     auto reader = std::make_unique<IndexedDBDataItemReader>(
         path, expected_modification_time,
         base::BindOnce(&IndexedDBBucketContext::RemoveBoundReaders,
-                       weak_factory_.GetWeakPtr()),
-        file_task_runner_, io_task_runner_);
+                       base::Unretained(this)),
+        io_task_runner_);
     itr = file_reader_map_
               .insert({path, std::make_tuple(std::move(reader),
                                              base::ScopedClosureRunner(
@@ -1726,6 +1700,7 @@ IndexedDBBucketContext::InitBackingStoreIfNeeded(bool create_if_missing) {
 }
 
 void IndexedDBBucketContext::ResetBackingStore() {
+  file_reader_map_.clear();
   weak_factory_.InvalidateWeakPtrs();
 
   if (backing_store_) {
@@ -1765,10 +1740,8 @@ void IndexedDBBucketContext::OnReceiverDisconnected() {
 
 IndexedDBBucketContext::ReceiverContext::ReceiverContext(
     mojo::PendingRemote<storage::mojom::IndexedDBClientStateChecker>
-        client_state_checker,
-    base::UnguessableToken client_token)
-    : client_state_checker_remote(std::move(client_state_checker)),
-      client_token(client_token) {}
+        client_state_checker)
+    : client_state_checker_remote(std::move(client_state_checker)) {}
 
 IndexedDBBucketContext::ReceiverContext::ReceiverContext(
     IndexedDBBucketContext::ReceiverContext&&) noexcept = default;

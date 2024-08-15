@@ -227,13 +227,13 @@ gfx::NativeViewAccessible ViewAXPlatformNodeDelegate::GetNativeObject() const {
   return ax_platform_node_->GetNativeViewAccessible();
 }
 
-void ViewAXPlatformNodeDelegate::NotifyAccessibilityEvent(
-    ax::mojom::Event event_type) {
+void ViewAXPlatformNodeDelegate::FireNativeEvent(ax::mojom::Event event_type) {
   DCHECK(ax_platform_node_);
   Widget* const widget = view()->GetWidget();
   if (!widget || widget->IsClosed()) {
     return;
   }
+
   if (event_type == ax::mojom::Event::kAlert) {
     // Do not queue alert events for later. They must be dealt with
     // before the window potentially closes, and they can be fired
@@ -241,8 +241,11 @@ void ViewAXPlatformNodeDelegate::NotifyAccessibilityEvent(
     ax_platform_node_->NotifyAccessibilityEvent(event_type);
     return;
   }
-  if (accessibility_events_callback_)
+
+  if (accessibility_events_callback_) {
     accessibility_events_callback_.Run(this, event_type);
+  }
+
   if (g_is_queueing_events) {
     g_event_queue.Get().emplace_back(event_type, GetUniqueId());
     return;
@@ -305,8 +308,8 @@ const ui::AXNodeData& ViewAXPlatformNodeDelegate::GetData() const {
     // `AtomicViewAXTreeManager::GetRoot` calls this function
     // (`ViewAXplatformNodeDelegate::GetData`), which leads to an infinite loop.
     //
-    // TODO(1468416): This code is temporary until the ViewsAX project is
-    // completed.
+    // TODO(crbug.com/40924888): This code is temporary until the ViewsAX
+    // project is completed.
     atomic_view_ax_tree_manager_->ClearComputedRootData();
   }
 
@@ -348,8 +351,9 @@ size_t ViewAXPlatformNodeDelegate::GetChildCount() const {
   // because our class has an expanded definition of what a leaf node is, which
   // includes all nodes with zero unignored children. Calling our own override
   // would create a circular definition of what a "leaf node" is.
-  if (ViewAccessibility::IsLeaf())
+  if (ViewAccessibility::IsLeaf()) {
     return 0;
+  }
 
   // If present, virtual view children override any real children.
   if (!virtual_children().empty()) {
@@ -403,8 +407,9 @@ gfx::NativeViewAccessible ViewAXPlatformNodeDelegate::ChildAtIndex(
     size_t index) const {
   DCHECK_LT(index, GetChildCount())
       << "|index| should be less than the unignored child count.";
-  if (IsLeaf())
+  if (IsLeaf()) {
     return nullptr;
+  }
 
   if (!virtual_children().empty()) {
     // A virtual views subtree hides all the real view children.
@@ -711,8 +716,9 @@ gfx::NativeViewAccessible ViewAXPlatformNodeDelegate::HitTestSync(
   if (!view() || !view()->GetWidget())
     return nullptr;
 
-  if (IsLeaf())
+  if (IsLeaf()) {
     return GetNativeViewAccessible();
+  }
 
   gfx::Point point = ScreenToDIPPoint(
       gfx::Point(screen_physical_pixel_x, screen_physical_pixel_y));

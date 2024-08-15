@@ -93,57 +93,6 @@ void LogOmniboxZeroSuggestRequest(const RemoteRequestEvent request_event,
 // Relevance value to use if it was not set explicitly by the server.
 const int kDefaultZeroSuggestRelevance = 100;
 
-// Return whether a suggest request can be made with sending the current URL.
-// This function only applies to kRemoteSendURL variant.
-bool AllowRemoteSendURL(const AutocompleteProviderClient* client,
-                        const AutocompleteInput& input) {
-  const TemplateURLService* template_url_service =
-      client->GetTemplateURLService();
-  if (!template_url_service) {
-    return false;
-  }
-  const TemplateURL* default_provider =
-      template_url_service->GetDefaultSearchProvider();
-  if (!default_provider) {
-    return false;
-  }
-
-  // Explicitly test the conditions for sending a suggest request without
-  // sending the current URL are also met in case these two tests diverge.
-  return BaseSearchProvider::CanSendSuggestRequestWithoutPageURL(
-             default_provider, template_url_service->search_terms_data(),
-             client) &&
-         BaseSearchProvider::CanSendSuggestRequestWithPageURL(
-             input.current_url(), default_provider,
-             template_url_service->search_terms_data(), client);
-}
-
-// Return whether a suggest request can be made without sending the current URL.
-// This function only applies to kRemoteNoURL variant.
-bool AllowRemoteNoURL(const AutocompleteProviderClient* client) {
-  const TemplateURLService* template_url_service =
-      client->GetTemplateURLService();
-  if (!template_url_service) {
-    return false;
-  }
-  const TemplateURL* default_provider =
-      template_url_service->GetDefaultSearchProvider();
-  if (!default_provider) {
-    return false;
-  }
-
-  // Zero-suggest on the NTP is allowed only if the user is signed-in. This
-  // check is done not for privacy reasons but to prevent signed-out users from
-  // querying the server which does not have any suggestions for them.
-  bool check_authentication_state = !base::FeatureList::IsEnabled(
-      omnibox::kZeroSuggestOnNTPForSignedOutUsers);
-
-  return (!check_authentication_state || client->IsAuthenticated()) &&
-         BaseSearchProvider::CanSendSuggestRequestWithoutPageURL(
-             default_provider, template_url_service->search_terms_data(),
-             client);
-}
-
 // Called in StoreRemoteResponse() and ReadStoredResponse() to determine if the
 // zero suggest cache is being used to store ZPS responses received from the
 // remote Suggest service for the given |result_type|.
@@ -151,7 +100,7 @@ bool ShouldCacheResultTypeInContext(const ResultType result_type,
                                     const OEP::PageClassification page_class) {
   switch (result_type) {
     case ResultType::kRemoteNoURL:
-      return true;
+      return !omnibox::IsLensSearchbox(page_class);
     case ResultType::kRemoteSendURL:
       return omnibox::IsSearchResultsPage(page_class)
                  ? base::FeatureList::IsEnabled(
@@ -280,6 +229,15 @@ ZeroSuggestProvider::ResultType ZeroSuggestProvider::ResultTypeToRun(
     }
   }
 
+  // Lens searchboxes.
+  // TODO(b/335234545): Revisit sending the page URL.
+  if (omnibox::IsLensSearchbox(page_class)) {
+    if (focus_type_input_type ==
+        std::make_pair(OFT::INTERACTION_FOCUS, OIT::EMPTY)) {
+      return ResultType::kRemoteNoURL;
+    }
+  }
+
   // The following cases require sending the current page URL in the request.
   // Ensure the URL is valid with an HTTP(S) scheme and is not the NTP page URL.
   if (omnibox::IsNTPPage(page_class) ||
@@ -338,15 +296,27 @@ bool ZeroSuggestProvider::AllowZeroPrefixSuggestions(
     const AutocompleteInput& input) {
   auto eligibility = Eligibility::kEligible;
 
+  const TemplateURLService* template_url_service =
+      client->GetTemplateURLService();
+
   switch (ResultTypeToRun(input)) {
     case ResultType::kRemoteNoURL: {
-      if (!AllowRemoteNoURL(client)) {
+      if (!template_url_service ||
+          !template_url_service->GetDefaultSearchProvider() ||
+          !CanSendSuggestRequestWithoutPageURL(
+              template_url_service->GetDefaultSearchProvider(),
+              template_url_service->search_terms_data(), client)) {
         eligibility = Eligibility::kRequestNoURLIneligible;
       }
       break;
     }
     case ResultType::kRemoteSendURL: {
-      if (!AllowRemoteSendURL(client, input)) {
+      if (!client->GetTemplateURLService() ||
+          !template_url_service->GetDefaultSearchProvider() ||
+          !CanSendSuggestRequestWithPageURL(
+              input.current_url(),
+              template_url_service->GetDefaultSearchProvider(),
+              template_url_service->search_terms_data(), client)) {
         eligibility = Eligibility::kRequestSendURLIneligible;
       }
       break;
@@ -378,10 +348,15 @@ void ZeroSuggestProvider::StartPrefetch(const AutocompleteInput& input) {
 
   TemplateURLRef::SearchTermsArgs search_terms_args;
   search_terms_args.page_classification = input.current_page_classification();
+  search_terms_args.request_source = input.request_source();
   search_terms_args.focus_type = input.focus_type();
   search_terms_args.current_page_url = result_type == ResultType::kRemoteSendURL
                                            ? input.current_url().spec()
                                            : std::string();
+  // Make sure the Lens interaction response is sent in the request, if
+  // available.
+  search_terms_args.lens_overlay_interaction_response =
+      input.lens_overlay_interaction_response();
 
   // AllowZeroPrefixSuggestions() ensures these are not nullptr.
   const TemplateURLService* template_url_service =
@@ -465,11 +440,16 @@ void ZeroSuggestProvider::Start(const AutocompleteInput& input,
 
   TemplateURLRef::SearchTermsArgs search_terms_args;
   search_terms_args.page_classification = input.current_page_classification();
+  search_terms_args.request_source = input.request_source();
   search_terms_args.focus_type = input.focus_type();
   search_terms_args.current_page_url =
       result_type_running_ == ResultType::kRemoteSendURL
           ? input.current_url().spec()
           : std::string();
+  // Make sure the Lens interaction response is sent in the request, if
+  // available.
+  search_terms_args.lens_overlay_interaction_response =
+      input.lens_overlay_interaction_response();
 
   // Create a loader for the request and take ownership of it.
   loader_ =

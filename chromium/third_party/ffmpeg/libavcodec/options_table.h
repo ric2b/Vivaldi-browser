@@ -42,6 +42,8 @@
 #define D AV_OPT_FLAG_DECODING_PARAM
 #define CC AV_OPT_FLAG_CHILD_CONSTS
 
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
 #define AV_CODEC_DEFAULT_BITRATE 200*1000
 
 static const AVOption avcodec_options[] = {
@@ -94,9 +96,6 @@ static const AVOption avcodec_options[] = {
 {"time_base", NULL, OFFSET(time_base), AV_OPT_TYPE_RATIONAL, {.dbl = 0}, 0, INT_MAX},
 {"g", "set the group of picture (GOP) size", OFFSET(gop_size), AV_OPT_TYPE_INT, {.i64 = 12 }, INT_MIN, INT_MAX, V|E},
 {"ar", "set audio sampling rate (in Hz)", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64 = DEFAULT }, 0, INT_MAX, A|D|E},
-#if FF_API_OLD_CHANNEL_LAYOUT
-{"ac", "set number of audio channels", OFFSET(channels), AV_OPT_TYPE_INT, {.i64 = DEFAULT }, 0, INT_MAX, A|D|E},
-#endif
 {"cutoff", "set cutoff bandwidth", OFFSET(cutoff), AV_OPT_TYPE_INT, {.i64 = DEFAULT }, INT_MIN, INT_MAX, A|E},
 {"frame_size", NULL, OFFSET(frame_size), AV_OPT_TYPE_INT, {.i64 = DEFAULT }, 0, INT_MAX, A|E},
 {"frame_number", NULL, OFFSET(frame_num), AV_OPT_TYPE_INT64, {.i64 = DEFAULT }, INT_MIN, INT_MAX},
@@ -179,9 +178,6 @@ static const AVOption avcodec_options[] = {
 {"xvidmmx", "deprecated, for compatibility only", 0, AV_OPT_TYPE_CONST, {.i64 = FF_IDCT_XVID }, INT_MIN, INT_MAX, V|E|D, .unit = "idct"},
 {"faani", "floating point AAN IDCT", 0, AV_OPT_TYPE_CONST, {.i64 = FF_IDCT_FAAN }, INT_MIN, INT_MAX, V|D|E, .unit = "idct"},
 {"simpleauto", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = FF_IDCT_SIMPLEAUTO }, INT_MIN, INT_MAX, V|E|D, .unit = "idct"},
-#if FF_API_SLICE_OFFSET
-{"slice_count", NULL, OFFSET(slice_count), AV_OPT_TYPE_INT, {.i64 = DEFAULT }, INT_MIN, INT_MAX},
-#endif
 {"ec", "set error concealment strategy", OFFSET(error_concealment), AV_OPT_TYPE_FLAGS, {.i64 = 3 }, INT_MIN, INT_MAX, V|D, .unit = "ec"},
 {"guess_mvs", "iterative motion vector (MV) search (slow)", 0, AV_OPT_TYPE_CONST, {.i64 = FF_EC_GUESS_MVS }, INT_MIN, INT_MAX, V|D, .unit = "ec"},
 {"deblock", "use strong deblock filter for damaged MBs", 0, AV_OPT_TYPE_CONST, {.i64 = FF_EC_DEBLOCK }, INT_MIN, INT_MAX, V|D, .unit = "ec"},
@@ -272,10 +268,6 @@ static const AVOption avcodec_options[] = {
 {"compression_level", NULL, OFFSET(compression_level), AV_OPT_TYPE_INT, {.i64 = FF_COMPRESSION_DEFAULT }, INT_MIN, INT_MAX, V|A|E},
 {"bits_per_raw_sample", NULL, OFFSET(bits_per_raw_sample), AV_OPT_TYPE_INT, {.i64 = DEFAULT }, 0, INT_MAX},
 {"ch_layout", NULL, OFFSET(ch_layout), AV_OPT_TYPE_CHLAYOUT, {.str = NULL }, 0, 0, A|E|D, .unit = "ch_layout"},
-#if FF_API_OLD_CHANNEL_LAYOUT
-{"channel_layout", NULL, OFFSET(channel_layout), AV_OPT_TYPE_CHANNEL_LAYOUT, {.i64 = DEFAULT }, 0, UINT64_MAX, A|E|D, .unit = "channel_layout"},
-{"request_channel_layout", NULL, OFFSET(request_channel_layout), AV_OPT_TYPE_CHANNEL_LAYOUT, {.i64 = DEFAULT }, 0, UINT64_MAX, A|D, .unit = "request_channel_layout"},
-#endif
 {"rc_max_vbv_use", NULL, OFFSET(rc_max_available_vbv_use), AV_OPT_TYPE_FLOAT, {.dbl = 0 }, 0.0, FLT_MAX, V|E},
 {"rc_min_vbv_use", NULL, OFFSET(rc_min_vbv_overflow_use),  AV_OPT_TYPE_FLOAT, {.dbl = 3 },     0.0, FLT_MAX, V|E},
 #if FF_API_TICKS_PER_FRAME
@@ -339,8 +331,11 @@ static const AVOption avcodec_options[] = {
 {"chroma-derived-nc", "Chroma-derived NCL", 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_SPC_CHROMA_DERIVED_NCL }, INT_MIN, INT_MAX, V|E|D, .unit = "colorspace_type"},
 {"chroma-derived-c",  "Chroma-derived CL",  0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_SPC_CHROMA_DERIVED_CL },  INT_MIN, INT_MAX, V|E|D, .unit = "colorspace_type"},
 {"ictcp",             "ICtCp",              0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_SPC_ICTCP },              INT_MIN, INT_MAX, V|E|D, .unit = "colorspace_type"},
+{"ipt-c2",            "IPT-C2",             0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_SPC_IPT_C2 },             INT_MIN, INT_MAX, V|E|D, .unit = "colorspace_type"},
 {"unspecified",       "Unspecified",        0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_SPC_UNSPECIFIED },        INT_MIN, INT_MAX, V|E|D, .unit = "colorspace_type"},
 {"ycocg",             "YCGCO",              0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_SPC_YCGCO },              INT_MIN, INT_MAX, V|E|D, .unit = "colorspace_type"},
+{"ycgco-re",          "YCgCo-R, even add.", 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_SPC_YCGCO_RE },           INT_MIN, INT_MAX, V|E|D, .unit = "colorspace_type"},
+{"ycgco-ro",          "YCgCo-R, odd add.",  0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_SPC_YCGCO_RO },           INT_MIN, INT_MAX, V|E|D, .unit = "colorspace_type"},
 {"bt2020_ncl",        "BT.2020 NCL",        0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_SPC_BT2020_NCL },         INT_MIN, INT_MAX, V|E|D, .unit = "colorspace_type"},
 {"bt2020_cl",         "BT.2020 CL",         0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_SPC_BT2020_CL },          INT_MIN, INT_MAX, V|E|D, .unit = "colorspace_type"},
 {"color_range", "color range", OFFSET(color_range), AV_OPT_TYPE_INT, {.i64 = AVCOL_RANGE_UNSPECIFIED }, 0, INT_MAX, V|E|D, .unit = "color_range_type"},
@@ -405,6 +400,16 @@ static const AVOption avcodec_options[] = {
 {"unsafe_output", "allow potentially unsafe hwaccel frame output that might require special care to process successfully", 0, AV_OPT_TYPE_CONST, {.i64 = AV_HWACCEL_FLAG_UNSAFE_OUTPUT }, INT_MIN, INT_MAX, V | D, .unit = "hwaccel_flags"},
 {"extra_hw_frames", "Number of extra hardware frames to allocate for the user", OFFSET(extra_hw_frames), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, INT_MAX, V|D },
 {"discard_damaged_percentage", "Percentage of damaged samples to discard a frame", OFFSET(discard_damaged_percentage), AV_OPT_TYPE_INT, {.i64 = 95 }, 0, 100, V|D },
+{"side_data_prefer_packet", "Comma-separated list of side data types for which user-supplied (container) data is preferred over coded bytestream",
+    OFFSET(side_data_prefer_packet), AV_OPT_TYPE_INT | AR, .min = -1, .max = INT_MAX, .flags = V|A|S|D, .unit = "side_data_pkt" },
+    {"replaygain",                  .default_val.i64 = AV_PKT_DATA_REPLAYGAIN,                  .type = AV_OPT_TYPE_CONST, .flags = A|D, .unit = "side_data_pkt" },
+    {"displaymatrix",               .default_val.i64 = AV_PKT_DATA_DISPLAYMATRIX,               .type = AV_OPT_TYPE_CONST, .flags = A|D, .unit = "side_data_pkt" },
+    {"spherical",                   .default_val.i64 = AV_PKT_DATA_SPHERICAL,                   .type = AV_OPT_TYPE_CONST, .flags = A|D, .unit = "side_data_pkt" },
+    {"stereo3d",                    .default_val.i64 = AV_PKT_DATA_STEREO3D,                    .type = AV_OPT_TYPE_CONST, .flags = A|D, .unit = "side_data_pkt" },
+    {"audio_service_type",          .default_val.i64 = AV_PKT_DATA_AUDIO_SERVICE_TYPE,          .type = AV_OPT_TYPE_CONST, .flags = A|D, .unit = "side_data_pkt" },
+    {"mastering_display_metadata",  .default_val.i64 = AV_PKT_DATA_MASTERING_DISPLAY_METADATA,  .type = AV_OPT_TYPE_CONST, .flags = A|D, .unit = "side_data_pkt" },
+    {"content_light_level",         .default_val.i64 = AV_PKT_DATA_CONTENT_LIGHT_LEVEL,         .type = AV_OPT_TYPE_CONST, .flags = A|D, .unit = "side_data_pkt" },
+    {"icc_profile",                 .default_val.i64 = AV_PKT_DATA_ICC_PROFILE,                 .type = AV_OPT_TYPE_CONST, .flags = A|D, .unit = "side_data_pkt" },
 {NULL},
 };
 

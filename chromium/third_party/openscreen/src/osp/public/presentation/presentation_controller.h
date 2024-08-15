@@ -38,15 +38,15 @@ class ReceiverObserver {
   // This means the availability is unknown and there is no further response to
   // wait for.
   virtual void OnRequestFailed(const std::string& presentation_url,
-                               const std::string& service_id) = 0;
+                               const std::string& instance_id) = 0;
 
   // Called when receivers compatible with |presentation_url| are known to be
   // available.
   virtual void OnReceiverAvailable(const std::string& presentation_url,
-                                   const std::string& service_id) = 0;
-  // Only called for |service_id| values previously advertised as available.
+                                   const std::string& instance_id) = 0;
+  // Only called for |instance_id| values previously advertised as available.
   virtual void OnReceiverUnavailable(const std::string& presentation_url,
-                                     const std::string& service_id) = 0;
+                                     const std::string& instance_id) = 0;
 };
 
 class Controller final : public ServiceListener::Observer,
@@ -79,7 +79,7 @@ class Controller final : public ServiceListener::Observer,
    public:
     ConnectRequest();
     ConnectRequest(Controller* controller,
-                   const std::string& service_id,
+                   const std::string& instance_id,
                    bool is_reconnect,
                    std::optional<uint64_t> request_id);
     ConnectRequest(const ConnectRequest&) = delete;
@@ -94,7 +94,7 @@ class Controller final : public ServiceListener::Observer,
     friend void swap(ConnectRequest& a, ConnectRequest& b);
 
    private:
-    std::string service_id_;
+    std::string instance_id_;
     bool is_reconnect_ = false;
     std::optional<uint64_t> request_id_;
     Controller* controller_ = nullptr;
@@ -110,24 +110,24 @@ class Controller final : public ServiceListener::Observer,
   ReceiverWatch RegisterReceiverWatch(const std::vector<std::string>& urls,
                                       ReceiverObserver* observer);
 
-  // Requests that a new presentation be created on |service_id| using
+  // Requests that a new presentation be created on |instance_id| using
   // |presentation_url|, with the result passed to |delegate|.
   // |conn_delegate| is passed to the resulting connection.  The returned
   // ConnectRequest object may be destroyed before any |delegate| methods are
   // called to cancel the request.
   ConnectRequest StartPresentation(const std::string& url,
-                                   const std::string& service_id,
+                                   const std::string& instance_id,
                                    RequestDelegate* delegate,
                                    Connection::Delegate* conn_delegate);
 
   // Requests reconnection to the presentation with the given id and URL running
-  // on |service_id|, with the result passed to |delegate|.  |conn_delegate| is
+  // on |instance_id|, with the result passed to |delegate|.  |conn_delegate| is
   // passed to the resulting connection.  The returned ConnectRequest object may
   // be destroyed before any |delegate| methods are called to cancel the
   // request.
   ConnectRequest ReconnectPresentation(const std::vector<std::string>& urls,
                                        const std::string& presentation_id,
-                                       const std::string& service_id,
+                                       const std::string& instance_id,
                                        RequestDelegate* delegate,
                                        Connection::Delegate* conn_delegate);
 
@@ -155,30 +155,25 @@ class Controller final : public ServiceListener::Observer,
       const std::string& presentation_id) const;
 
   ProtocolConnection* GetConnectionRequestGroupStream(
-      const std::string& service_id);
-
-  // TODO(btolsch): still used?
-  void SetConnectionRequestGroupStreamForTest(
-      const std::string& service_id,
-      std::unique_ptr<ProtocolConnection> stream);
+      const std::string& instance_id);
 
  private:
   class TerminationListener;
   class MessageGroupStreams;
 
   struct ControlledPresentation {
-    std::string service_id;
+    std::string instance_id;
     std::string url;
     std::vector<Connection*> connections;
   };
 
   static std::string MakePresentationId(const std::string& url,
-                                        const std::string& service_id);
+                                        const std::string& instance_id);
 
   void AddConnection(Connection* connection);
   void OpenConnection(uint64_t connection_id,
                       uint64_t endpoint_id,
-                      const std::string& service_id,
+                      const std::string& instance_id,
                       RequestDelegate* request_delegate,
                       std::unique_ptr<Connection>&& connection,
                       std::unique_ptr<ProtocolConnection>&& stream);
@@ -192,7 +187,7 @@ class Controller final : public ServiceListener::Observer,
 
   // Cancels a presentation connect request for the given |request_id| if one is
   // pending.
-  void CancelConnectRequest(const std::string& service_id,
+  void CancelConnectRequest(const std::string& instance_id,
                             bool is_reconnect,
                             uint64_t request_id);
 
@@ -205,7 +200,7 @@ class Controller final : public ServiceListener::Observer,
   void OnReceiverChanged(const ServiceInfo& info) override;
   void OnReceiverRemoved(const ServiceInfo& info) override;
   void OnAllReceiversRemoved() override;
-  void OnError(Error) override;
+  void OnError(const Error& error) override;
   void OnMetrics(ServiceListener::Metrics) override;
 
   std::map<std::string, uint64_t> next_connection_id_;

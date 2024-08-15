@@ -19,6 +19,12 @@ struct VirtualCardEnrollUiModel;
 // Shows the card unmask authentication flow.
 - (void)showCardUnmaskAuthentication;
 
+// Continue the card unmask authentication flow with OTP auth.
+- (void)continueCardUnmaskWithOtpAuth;
+
+// Continue the card unmask flow with the CVC authentication input dialog.
+- (void)continueCardUnmaskWithCvcAuth;
+
 // Shows the password suggestion view controller.
 - (void)showPasswordBottomSheet:(const autofill::FormActivityParams&)params;
 
@@ -28,14 +34,21 @@ struct VirtualCardEnrollUiModel;
 // Shows the plus address bottom sheet view controller.
 - (void)showPlusAddressesBottomSheet;
 
-// Shows a command to show the VCN enrollment Bottom Sheet.
+// Sends a command to show the VCN enrollment Bottom Sheet.
 - (void)showVirtualCardEnrollmentBottomSheet:
     (const autofill::VirtualCardEnrollUiModel&)model;
+
+// Sends a command to show the bottom sheet to edit an address.
+- (void)showEditAddressBottomSheet;
 
 // Commands to manage the Autofill error dialog.
 - (void)showAutofillErrorDialog:
     (autofill::AutofillErrorDialogContext)errorContext;
 - (void)dismissAutofillErrorDialog;
+
+// Commands to manage the Autofill progress dialog.
+- (void)showAutofillProgressDialog;
+- (void)dismissAutofillProgressDialog;
 
 @end
 

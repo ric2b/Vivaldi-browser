@@ -32,6 +32,20 @@ class BundleData {
   BundleData();
   ~BundleData();
 
+  // Return the assets catalog directory path from `source` as a SourceFile,
+  // if present, or a null instance (in case assets catalog are nested, this
+  // returns the outer most path).
+  //
+  // Example:
+  //  "//my/bundle/foo.xcassets/my/file"
+  //    -> "//my/bundle/foo.xcassets"
+  //  "//my/bundle/foo.xcassets/nested/bar.xcassets/my/file"
+  //    -> "//my/bundle/foo.xcassets"
+  //  "//my/bundle/my/file"
+  //    -> ""
+  //
+  static SourceFile GetAssetsCatalogDirectory(const SourceFile& source);
+
   // Adds a bundle_data target to the recursive collection of all bundle_data
   // that the target depends on.
   void AddBundleData(const Target* target, bool is_create_bundle);
@@ -128,26 +142,30 @@ class BundleData {
   }
   const SourceFile& partial_info_plist() const { return partial_info_plist_; }
 
-  void set_code_signing_script(const SourceFile& script_file) {
-    code_signing_script_ = script_file;
+  void set_post_processing_script(const SourceFile& script_file) {
+    post_processing_script_ = script_file;
   }
-  const SourceFile& code_signing_script() const { return code_signing_script_; }
-
-  std::vector<SourceFile>& code_signing_sources() {
-    return code_signing_sources_;
-  }
-  const std::vector<SourceFile>& code_signing_sources() const {
-    return code_signing_sources_;
+  const SourceFile& post_processing_script() const {
+    return post_processing_script_;
   }
 
-  SubstitutionList& code_signing_outputs() { return code_signing_outputs_; }
-  const SubstitutionList& code_signing_outputs() const {
-    return code_signing_outputs_;
+  std::vector<SourceFile>& post_processing_sources() {
+    return post_processing_sources_;
+  }
+  const std::vector<SourceFile>& post_processing_sources() const {
+    return post_processing_sources_;
   }
 
-  SubstitutionList& code_signing_args() { return code_signing_args_; }
-  const SubstitutionList& code_signing_args() const {
-    return code_signing_args_;
+  SubstitutionList& post_processing_outputs() {
+    return post_processing_outputs_;
+  }
+  const SubstitutionList& post_processing_outputs() const {
+    return post_processing_outputs_;
+  }
+
+  SubstitutionList& post_processing_args() { return post_processing_args_; }
+  const SubstitutionList& post_processing_args() const {
+    return post_processing_args_;
   }
 
   std::vector<LabelPattern>& bundle_deps_filter() {
@@ -219,11 +237,11 @@ class BundleData {
   SourceFile partial_info_plist_;
 
   // Holds the values (script name, sources, outputs, script arguments) for the
-  // code signing step if defined.
-  SourceFile code_signing_script_;
-  std::vector<SourceFile> code_signing_sources_;
-  SubstitutionList code_signing_outputs_;
-  SubstitutionList code_signing_args_;
+  // post-processing step if defined.
+  SourceFile post_processing_script_;
+  std::vector<SourceFile> post_processing_sources_;
+  SubstitutionList post_processing_outputs_;
+  SubstitutionList post_processing_args_;
   SubstitutionList xcasset_compiler_flags_;
 
   BundleData(const BundleData&) = delete;

@@ -18,6 +18,7 @@
 
 namespace views {
 class Textfield;
+class ImageButton;
 }
 
 namespace ash {
@@ -65,13 +66,26 @@ class ASH_EXPORT PickerSearchFieldView : public views::View,
   // Set the placeholder text to show when the textfield is empty.
   void SetPlaceholderText(std::u16string_view new_placeholder_text);
 
+  // Sets the active descendant of the underlying textfield to `view` for screen
+  // readers. `view` may be null, in which case the active descendant is
+  // cleared.
+  void SetTextfieldActiveDescendant(views::View* view);
+
+  // Gets or sets the current search query text.
+  std::u16string_view GetQueryText() const;
+  void SetQueryText(std::u16string text);
+
   const views::Textfield& textfield_for_testing() const { return *textfield_; }
+  views::ImageButton& clear_button_for_testing() { return *clear_button_; }
 
  private:
+  void ClearButtonPressed();
+
   SearchCallback search_callback_;
   raw_ptr<PickerKeyEventHandler> key_event_handler_ = nullptr;
   raw_ptr<PickerPerformanceMetrics> performance_metrics_ = nullptr;
   raw_ptr<views::Textfield> textfield_ = nullptr;
+  raw_ptr<views::ImageButton> clear_button_ = nullptr;
 };
 
 BEGIN_VIEW_BUILDER(ASH_EXPORT, PickerSearchFieldView, views::View)

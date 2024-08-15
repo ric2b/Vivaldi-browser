@@ -22,8 +22,8 @@
 #include "platform/base/span.h"
 #include "platform/test/fake_task_runner.h"
 #include "platform/test/paths.h"
-#include "testing/util/read_file.h"
 #include "util/json/json_serialization.h"
+#include "util/read_file.h"
 
 namespace openscreen::cast {
 namespace {
@@ -93,7 +93,7 @@ class FakeApplication : public ApplicationAgent::Application,
                const std::string& message_namespace,
                const std::string& message),
               (override));
-  MOCK_METHOD(void, OnError, (Error error), (override));
+  MOCK_METHOD(void, OnError, (const Error& error), (override));
   const std::string& source_id() override { return GetStringifiedSessionId(); }
 
   const std::vector<std::string>& GetAppIds() const override {
@@ -242,11 +242,11 @@ class ApplicationAgentTest : public ::testing::Test {
   }
 
   FakeClock clock_{Clock::time_point() + std::chrono::hours(1)};
-  FakeTaskRunner task_runner_{&clock_};
+  FakeTaskRunner task_runner_{clock_};
   FakeCastSocketPair socket_pair_;
   StrictMock<FakeApplication> idle_app_{"E8C28D3C", "Backdrop"};
   TestCredentialsProvider creds_;
-  ApplicationAgent agent_{task_runner_, &creds_};
+  ApplicationAgent agent_{task_runner_, creds_};
 };
 
 TEST_F(ApplicationAgentTest, JustConnectsWithoutDoingAnything) {}

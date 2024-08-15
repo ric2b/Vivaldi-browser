@@ -9,7 +9,6 @@
 #include <utility>
 #include <vector>
 
-#include "ash/constants/app_types.h"
 #include "ash/constants/ash_features.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
@@ -42,7 +41,6 @@
 #include "chrome/browser/ash/crostini/crostini_test_helper.h"
 #include "chrome/browser/ash/guest_os/guest_os_registry_service.h"
 #include "chrome/browser/ash/guest_os/guest_os_registry_service_factory.h"
-#include "chrome/browser/metrics/structured/event_logging_features.h"
 #include "chrome/browser/metrics/usertype_by_devicetype_metrics_provider.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -54,6 +52,8 @@
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/dbus/power_manager/idle.pb.h"
 #include "chromeos/dbus/power_manager/suspend.pb.h"
+#include "chromeos/ui/base/app_types.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "components/app_constants/constants.h"
 #include "components/metrics/structured/recorder.h"
 #include "components/metrics/structured/structured_events.h"
@@ -2081,7 +2081,7 @@ TEST_P(AppPlatformMetricsServiceTest, LaunchApps) {
       1, IsLacrosEnabled() ? AppTypeNameV2::kStandaloneBrowserWebAppWindow
                            : AppTypeNameV2::kWebWindow);
 
-  // TODO(crbug.com/1253250): Register non-mojom apps and use
+  // TODO(crbug.com/40199106): Register non-mojom apps and use
   // AppServiceProxy::LaunchAppWithParams to test launching.
   proxy->BrowserAppLauncher()->LaunchAppWithParamsForTesting(AppLaunchParams(
       kWebAppId2, LaunchContainer::kLaunchContainerTab,
@@ -2729,8 +2729,7 @@ TEST_P(AppPlatformInputMetricsTest, LacrosWindowAndWebAppAndChromeApp) {
     return;
   }
 
-  window()->SetProperty(aura::client::kAppType,
-                        static_cast<int>(ash::AppType::LACROS));
+  window()->SetProperty(chromeos::kAppTypeKey, chromeos::AppType::LACROS);
 
   const base::UnguessableToken instance_id0 = base::UnguessableToken::Create();
   const base::UnguessableToken instance_id1 = base::UnguessableToken::Create();
@@ -2948,9 +2947,7 @@ class AppDiscoveryMetricsTest : public AppPlatformMetricsServiceTest {
     metrics::structured::Recorder::GetInstance()->SetUiTaskRunner(
         task_environment_.GetMainThreadTaskRunner());
 
-    std::vector<base::test::FeatureRef> enabled{
-        metrics::structured::kAppDiscoveryLogging,
-        metrics::structured::kEventSequenceLogging};
+    std::vector<base::test::FeatureRef> enabled;
     std::vector<base::test::FeatureRef> disabled;
     if (IsLacrosEnabled()) {
       base::Extend(enabled, ash::standalone_browser::GetFeatureRefs());

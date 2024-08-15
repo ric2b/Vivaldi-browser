@@ -340,10 +340,14 @@ void AppListControllerImpl::RegisterProfilePrefs(PrefRegistrySimple* registry) {
 
   // The prefs for launcher search controls.
   registry->RegisterDictionaryPref(prefs::kLauncherSearchCategoryControlStatus);
+
+  registry->RegisterTimePref(prefs::kLauncherSearchLastFileScanLogTime,
+                             base::Time());
 }
 
 void AppListControllerImpl::SetClient(AppListClient* client) {
   client_ = client;
+  apps_collections_controller_->SetClient(client);
 }
 
 AppListClient* AppListControllerImpl::GetClient() {
@@ -564,6 +568,9 @@ void AppListControllerImpl::UpdateAppListWithNewTemporarySortOrder(
       new_order, is_tablet_mode && animate,
       is_tablet_mode ? std::move(update_position_closure)
                      : base::NullCallback());
+
+  // Notify the AppsCollectionsController that there was a reorder.
+  apps_collections_controller_->SetAppsReordered();
 }
 
 ShelfAction AppListControllerImpl::ToggleAppList(
@@ -677,7 +684,7 @@ bool AppListControllerImpl::GoHome(int64_t display_id) {
     // animation can interfere with WindowTransformToHomeScreenAnimation
     // visuals.
     //
-    // TODO(https://crbug.com/1019531): This can be removed once transitions
+    // TODO(crbug.com/40656009): This can be removed once transitions
     // between in-app state and home do not cause work area updates.
     std::vector<std::unique_ptr<wm::ScopedAnimationDisabler>>
         animation_disablers;
@@ -1235,6 +1242,8 @@ void AppListControllerImpl::OpenSearchResult(const std::string& result_id,
       case AppListLaunchedFrom::kLaunchedFromShelf:
       case AppListLaunchedFrom::kLaunchedFromContinueTask:
       case AppListLaunchedFrom::kLaunchedFromQuickAppAccess:
+      case AppListLaunchedFrom::kLaunchedFromAppsCollections:
+      case AppListLaunchedFrom::kLaunchedFromDiscoveryChip:
         break;
       case AppListLaunchedFrom::DEPRECATED_kLaunchedFromSuggestionChip:
         NOTREACHED();
@@ -1267,6 +1276,8 @@ void AppListControllerImpl::OpenSearchResult(const std::string& result_id,
     case AppListLaunchedFrom::kLaunchedFromShelf:
     case AppListLaunchedFrom::DEPRECATED_kLaunchedFromSuggestionChip:
     case AppListLaunchedFrom::kLaunchedFromQuickAppAccess:
+    case AppListLaunchedFrom::kLaunchedFromAppsCollections:
+    case AppListLaunchedFrom::kLaunchedFromDiscoveryChip:
       NOTREACHED();
       break;
   }
@@ -1315,7 +1326,8 @@ void AppListControllerImpl::ViewClosing() {
 
 void AppListControllerImpl::ActivateItem(const std::string& id,
                                          int event_flags,
-                                         AppListLaunchedFrom launched_from) {
+                                         AppListLaunchedFrom launched_from,
+                                         bool is_app_above_the_fold) {
   RecordAppLaunched(launched_from);
 
   const bool is_tablet_mode = IsInTabletMode();
@@ -1329,7 +1341,12 @@ void AppListControllerImpl::ActivateItem(const std::string& id,
                                     is_tablet_mode, last_show_timestamp_);
       break;
     case AppListLaunchedFrom::kLaunchedFromQuickAppAccess:
-      // Metrics for quick app launch already recorded at RecordApplaunched().
+    // Metrics for quick app launch already recorded at RecordApplaunched().
+    case AppListLaunchedFrom::kLaunchedFromAppsCollections:
+    // Metrics for apps collections launch recorded by the
+    // AppListViewDelegate.
+    case AppListLaunchedFrom::kLaunchedFromDiscoveryChip:
+      // Metrics for discovery chip already recorded at RecordApplaunched().
       break;
     case AppListLaunchedFrom::kLaunchedFromContinueTask:
     case AppListLaunchedFrom::kLaunchedFromSearchBox:
@@ -1340,7 +1357,8 @@ void AppListControllerImpl::ActivateItem(const std::string& id,
   }
 
   if (client_)
-    client_->ActivateItem(profile_id_, id, event_flags, launched_from);
+    client_->ActivateItem(profile_id_, id, event_flags, launched_from,
+                          is_app_above_the_fold);
 
   ResetHomeLauncherIfShown();
 }
@@ -1492,6 +1510,16 @@ void AppListControllerImpl::SetCategoryEnabled(
   ScopedDictPrefUpdate pref_update(prefs,
                                    prefs::kLauncherSearchCategoryControlStatus);
   pref_update->Set(GetAppListControlCategoryName(category), enabled);
+}
+
+void AppListControllerImpl::RecordAppsDefaultVisibility(
+    const std::vector<std::string>& apps_above_the_fold,
+    const std::vector<std::string>& apps_below_the_fold,
+    bool is_apps_collections_page) {
+  if (client_) {
+    client_->RecordAppsDefaultVisibility(
+        apps_above_the_fold, apps_below_the_fold, is_apps_collections_page);
+  }
 }
 
 void AppListControllerImpl::GetAppLaunchedMetricParams(
@@ -1766,7 +1794,7 @@ void AppListControllerImpl::ResetHomeLauncherIfShown() {
   fullscreen_presenter_->GetView()->CloseOpenedPage();
 
   // Refresh the suggestion chips with empty query.
-  // TODO(crbug.com/1269115): Switch to client_->StartZeroStateSearch()?
+  // TODO(crbug.com/40204937): Switch to client_->StartZeroStateSearch()?
   StartSearch(std::u16string());
 }
 

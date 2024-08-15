@@ -87,6 +87,11 @@ inline constexpr char kSafeBrowsingSawInterstitialScoutReporting[] =
 inline constexpr char kSafeBrowsingScoutReportingEnabled[] =
     "safebrowsing.scout_reporting_enabled";
 
+// Boolean indicating whether Safe Browsing Scout reporting was enabled at the
+// time that extended reporting was deprecated.
+inline constexpr char kSafeBrowsingScoutReportingEnabledWhenDeprecated[] =
+    "safebrowsing.scout_reporting_enabled_when_deprecated";
+
 // Dictionary containing safe browsing triggers and the list of times they have
 // fired recently. The keys are TriggerTypes (4-byte ints) and the values are
 // lists of doubles.
@@ -179,7 +184,7 @@ inline constexpr char kTailoredSecuritySyncFlowLastRunTime[] =
 
 // Integer that maps to TailoredSecurityUserInteractionState. Indicates the
 // last known state of the tailored security sync flow.
-// TODO(crbug.com/1469133): remove this preference value.
+// TODO(crbug.com/40925236): remove this preference value.
 inline constexpr char kTailoredSecuritySyncFlowLastUserInteractionState[] =
     "safebrowsing.aesb_sync_flow_last_user_interaction_state";
 
@@ -245,6 +250,12 @@ inline constexpr char kSafeBrowsingEsbOptInWithFriendlierSettings[] =
 // automatic deep scans until they've actually seen the IPH.
 inline constexpr char kSafeBrowsingAutomaticDeepScanningIPHSeen[] =
     "safebrowsing.automatic_deep_scanning_iph_seen";
+
+// A preference indicating that the user has already done an automatic
+// deep scan. This addresses an edge case where deep scan notices remain
+// in the bubble after the user performs an automatic deep scan.
+inline constexpr char kSafeBrowsingAutomaticDeepScanPerformed[] =
+    "safe_browsing.automatic_deep_scan_performed";
 
 }  // namespace prefs
 

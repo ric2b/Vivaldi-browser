@@ -78,12 +78,12 @@ class SenderPacketRouter : public BandwidthEstimator,
 
   // Constructs an instance with default burst parameters appropriate for the
   // given |max_burst_bitrate|.
-  explicit SenderPacketRouter(Environment* environment,
+  explicit SenderPacketRouter(Environment& environment,
                               int max_burst_bitrate = kDefaultMaxBurstBitrate);
 
   // Constructs an instance with specific burst parameters. The maximum bitrate
   // will be computed based on these (and Environment::GetMaxPacketSize()).
-  SenderPacketRouter(Environment* environment,
+  SenderPacketRouter(Environment& environment,
                      int max_packets_per_burst,
                      std::chrono::milliseconds burst_interval);
 
@@ -176,7 +176,7 @@ class SenderPacketRouter : public BandwidthEstimator,
                                     int max_packets_per_burst,
                                     std::chrono::milliseconds burst_interval);
 
-  Environment* const environment_;
+  Environment& environment_;
   const int packet_buffer_size_;
   const std::unique_ptr<uint8_t[]> packet_buffer_;
   const int max_packets_per_burst_;

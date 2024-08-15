@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import type * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
@@ -15,7 +16,7 @@ const UIStrings = {
   /**
    *@description Placeholder for a search field in a toolbar
    */
-  enterTextToSearchTheUrlAndError: 'Enter text to search the URL and Error columns',
+  filterByText: 'Filter by URL and error',
   /**
    * @description Tooltip for a checkbox in the toolbar of the developer resources view. The
    * inspected target is the webpage that DevTools is debugging/inspecting/attached to.
@@ -43,6 +44,18 @@ const UIStrings = {
 };
 const str_ = i18n.i18n.registerUIStrings('panels/developer_resources/DeveloperResourcesView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
+export class DeveloperResourcesRevealer implements Common.Revealer.Revealer<SDK.PageResourceLoader.ResourceKey> {
+  async reveal(resourceInitiatorKey: SDK.PageResourceLoader.ResourceKey): Promise<void> {
+    const loader = SDK.PageResourceLoader.PageResourceLoader.instance();
+    const resource = loader.getResourcesLoaded().get(resourceInitiatorKey.key);
+    if (resource) {
+      await UI.ViewManager.ViewManager.instance().showView('developer-resources');
+      const developerResourcesView =
+          await UI.ViewManager.ViewManager.instance().view('developer-resources').widget() as DeveloperResourcesView;
+      return developerResourcesView.select(resource);
+    }
+  }
+}
 
 export class DeveloperResourcesView extends UI.ThrottledWidget.ThrottledWidget {
   private textFilterRegExp: RegExp|null;
@@ -63,9 +76,7 @@ export class DeveloperResourcesView extends UI.ThrottledWidget.ThrottledWidget {
     const toolbar = new UI.Toolbar.Toolbar('developer-resource-view-toolbar', toolbarContainer);
 
     this.textFilterRegExp = null;
-    const accessiblePlaceholder = '';  // Indicates that ToobarInput should use the placeholder as ARIA label.
-    this.filterInput =
-        new UI.Toolbar.ToolbarInput(i18nString(UIStrings.enterTextToSearchTheUrlAndError), accessiblePlaceholder, 1);
+    this.filterInput = new UI.Toolbar.ToolbarFilter(i18nString(UIStrings.filterByText), 1);
     this.filterInput.addEventListener(UI.Toolbar.ToolbarInput.Event.TextChanged, this.onFilterChanged, this);
     toolbar.appendToolbarItem(this.filterInput);
 
@@ -87,9 +98,23 @@ export class DeveloperResourcesView extends UI.ThrottledWidget.ThrottledWidget {
   }
 
   override async doUpdate(): Promise<void> {
+    const selectedItem = this.listView.selectedItem();
     this.listView.reset();
     this.listView.update(this.loader.getScopedResourcesLoaded().values());
+    if (selectedItem) {
+      this.listView.select(selectedItem);
+    }
     this.updateStats();
+  }
+
+  async select(resource: SDK.PageResourceLoader.PageResource): Promise<void> {
+    await this.lastUpdatePromise;
+    this.listView.select(resource);
+  }
+
+  async selectedItem(): Promise<SDK.PageResourceLoader.PageResource|null> {
+    await this.lastUpdatePromise;
+    return this.listView.selectedItem();
   }
 
   private updateStats(): void {

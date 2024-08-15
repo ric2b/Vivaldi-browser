@@ -11,11 +11,12 @@
 #include "base/location.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
-#include "base/strings/string_piece.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
+#include "components/attribution_reporting/constants.h"
 #include "components/attribution_reporting/destination_set.h"
 #include "components/attribution_reporting/event_trigger_data.h"
 #include "components/attribution_reporting/os_registration.h"
@@ -25,7 +26,6 @@
 #include "components/attribution_reporting/suitable_origin.h"
 #include "components/attribution_reporting/test_utils.h"
 #include "components/attribution_reporting/trigger_registration.h"
-#include "content/browser/attribution_reporting/attribution_constants.h"
 #include "content/browser/attribution_reporting/attribution_data_host_manager_impl.h"
 #include "content/browser/attribution_reporting/attribution_manager.h"
 #include "content/browser/attribution_reporting/attribution_manager_impl.h"
@@ -89,6 +89,10 @@ using ::testing::ElementsAre;
 using ::testing::Field;
 using ::testing::Property;
 using ::testing::StrictMock;
+
+using attribution_reporting::kAttributionReportingRegisterSourceHeader;
+
+constexpr char kRegistrationMethod[] = "Conversions.RegistrationMethod2";
 
 }  // namespace
 
@@ -234,6 +238,28 @@ IN_PROC_BROWSER_TEST_P(AttributionSrcBrowserTest,
 
     run_loop.Run();
   }
+}
+
+IN_PROC_BROWSER_TEST_P(AttributionSrcBrowserTest, ForegroundRegistration) {
+  base::HistogramTester histograms;
+  GURL page_url =
+      https_server()->GetURL("b.test", "/page_with_impression_creator.html");
+
+  EXPECT_TRUE(NavigateToURL(web_contents(), page_url));
+  GURL register_url =
+      https_server()->GetURL("c.test", "/register_source_headers.html");
+  base::RunLoop run_loop;
+  EXPECT_CALL(mock_attribution_manager(), HandleSource).WillOnce([&run_loop]() {
+    run_loop.Quit();
+  });
+  EXPECT_TRUE(
+      ExecJs(web_contents(),
+             JsReplace("createAttributionEligibleImgSrc($1);", register_url)));
+
+  run_loop.Run();
+
+  // kForegroundBlink = 6
+  histograms.ExpectBucketCount(kRegistrationMethod, 6, /*expected_count=*/1);
 }
 
 IN_PROC_BROWSER_TEST_P(AttributionSrcBrowserTest,
@@ -825,6 +851,7 @@ IN_PROC_BROWSER_TEST_P(AttributionSrcBrowserTest,
 // Regression test for https://crbug.com/1520612.
 IN_PROC_BROWSER_TEST_P(AttributionSrcBrowserTest,
                        ForegroundNavigationRedirectCancelled_SourceRegistered) {
+  base::HistogramTester histograms;
   TestNavigationThrottleInserter throttle_inserter(
       web_contents(),
       base::BindLambdaForTesting(
@@ -887,6 +914,9 @@ IN_PROC_BROWSER_TEST_P(AttributionSrcBrowserTest,
   register_response->Done();
 
   run_loop.Run();
+
+  // kNavForegrounnd = 0
+  histograms.ExpectBucketCount(kRegistrationMethod, 0, /*expected_count=*/1);
 }
 
 IN_PROC_BROWSER_TEST_P(AttributionSrcBrowserTest,
@@ -894,6 +924,7 @@ IN_PROC_BROWSER_TEST_P(AttributionSrcBrowserTest,
   const char* kTestCases[] = {"createAttributionSrcImg($1)",
                               "createAttributionSrcScript($1)"};
   for (const char* js_template : kTestCases) {
+    base::HistogramTester histograms;
     SCOPED_TRACE(js_template);
     // Create a separate server as we cannot register a
     // `ControllableHttpResponse` after the server starts.
@@ -951,6 +982,9 @@ IN_PROC_BROWSER_TEST_P(AttributionSrcBrowserTest,
     }
 
     run_loop.Run();
+    // kBackgroundBlink = 8, kForegroundOrBackgroundBrowser = 10
+    histograms.ExpectBucketCount(kRegistrationMethod, GetParam() ? 10 : 8,
+                                 /*expected_count=*/2);
   }
 }
 
@@ -1174,6 +1208,9 @@ IN_PROC_BROWSER_TEST_P(AttributionSrcFencedFrameBrowserTest,
       fenced_frame_helper_->CreateFencedFrame(
           root_rfh, GURL(url::kAboutBlankURL), net::OK,
           blink::FencedFrame::DeprecatedFencedFrameMode::kOpaqueAds));
+  FrameTreeNode* fenced_frame_node =
+      static_cast<RenderFrameHostImpl*>(&(*fenced_frame_host))
+          ->frame_tree_node();
   bool rfh_should_change =
       fenced_frame_host->ShouldChangeRenderFrameHostOnSameSiteNavigation();
   TestFrameNavigationObserver observer(fenced_frame_host.get());
@@ -1187,7 +1224,7 @@ IN_PROC_BROWSER_TEST_P(AttributionSrcFencedFrameBrowserTest,
   if (rfh_should_change) {
     EXPECT_TRUE(fenced_frame_host.WaitUntilRenderFrameDeleted());
   } else {
-    ASSERT_NE(fenced_frame_host.get(), nullptr);
+    ASSERT_NE(fenced_frame_node->current_frame_host(), nullptr);
   }
 
   RenderFrameHostWrapper fenced_frame_host2(

@@ -22,13 +22,14 @@ import {assertExists} from '../base/logging';
 import {undoCommonChatAppReplacements} from '../base/string_utils';
 import {duration, Span, Time, time, TimeSpan} from '../base/time';
 import {Actions} from '../common/actions';
+import {getLegacySelection} from '../common/state';
 import {runQuery} from '../common/queries';
 import {
   DurationPrecision,
   setDurationPrecision,
   setTimestampFormat,
   TimestampFormat,
-} from '../common/timestamp_format';
+} from '../core/timestamp_format';
 import {raf} from '../core/raf_scheduler';
 import {Command} from '../public';
 import {EngineProxy} from '../trace_processor/engine';
@@ -237,7 +238,7 @@ export class App implements m.ClassComponent {
   }
 
   private getFirstUtidOfSelectionOrVisibleWindow(): number {
-    const selection = globals.state.currentSelection;
+    const selection = getLegacySelection(globals.state);
     if (selection && selection.kind === 'AREA') {
       const selectedArea = globals.state.areas[selection.areaId];
       const firstThreadStateTrack = selectedArea.tracks.find((trackId) => {
@@ -321,7 +322,7 @@ export class App implements m.ClassComponent {
 
         if (engine !== undefined && trackUtid != 0) {
           await runQuery(
-            `SELECT IMPORT('sched.thread_executing_span');`,
+            `INCLUDE PERFETTO MODULE sched.thread_executing_span;`,
             engine,
           );
           await addDebugSliceTrack(
@@ -364,7 +365,7 @@ export class App implements m.ClassComponent {
 
         if (engine !== undefined && trackUtid != 0) {
           await runQuery(
-            `SELECT IMPORT('sched.thread_executing_span');`,
+            `INCLUDE PERFETTO MODULE sched.thread_executing_span_with_slice;`,
             engine,
           );
           await addDebugSliceTrack(
@@ -398,7 +399,7 @@ export class App implements m.ClassComponent {
 
         if (engine !== undefined && trackUtid != 0) {
           addQueryResultsTab({
-            query: `SELECT IMPORT('sched.thread_executing_span');
+            query: `INCLUDE PERFETTO MODULE sched.thread_executing_span_with_slice;
                    SELECT *
                       FROM
                         _thread_executing_span_critical_path_graph(
@@ -413,7 +414,7 @@ export class App implements m.ClassComponent {
     },
     {
       id: 'perfetto.ShowSliceTable',
-      name: 'Show slice table',
+      name: 'Open new slice table tab',
       callback: () => {
         addSqlTableTab({
           table: SqlTables.slice,
@@ -451,13 +452,13 @@ export class App implements m.ClassComponent {
     },
     {
       id: 'perfetto.OpenCommandPalette',
-      name: 'Open Command Palette',
+      name: 'Open command palette',
       callback: () => this.enterCommandMode(),
       defaultHotkey: '!Mod+Shift+P',
     },
     {
       id: 'perfetto.RunQuery',
-      name: 'Run Query',
+      name: 'Run query',
       callback: () => this.enterQueryMode(),
       defaultHotkey: '!Mod+O',
     },
@@ -544,7 +545,7 @@ export class App implements m.ClassComponent {
     },
     {
       id: 'perfetto.FocusSelection',
-      name: 'Focus selection',
+      name: 'Focus current selection',
       callback: () => findCurrentSelection(),
       defaultHotkey: 'F',
     },
@@ -553,7 +554,7 @@ export class App implements m.ClassComponent {
       name: 'Deselect',
       callback: () => {
         globals.timeline.deselectArea();
-        globals.makeSelection(Actions.deselect({}));
+        globals.clearSelection();
         globals.dispatch(Actions.removeNote({id: '0'}));
       },
       defaultHotkey: 'Escape',
@@ -562,7 +563,7 @@ export class App implements m.ClassComponent {
       id: 'perfetto.MarkArea',
       name: 'Mark area',
       callback: () => {
-        const selection = globals.state.currentSelection;
+        const selection = getLegacySelection(globals.state);
         if (selection && selection.kind === 'AREA') {
           globals.dispatch(Actions.toggleMarkCurrentArea({persistent: false}));
         } else if (selection) {
@@ -575,7 +576,7 @@ export class App implements m.ClassComponent {
       id: 'perfetto.MarkAreaPersistent',
       name: 'Mark area (persistent)',
       callback: () => {
-        const selection = globals.state.currentSelection;
+        const selection = getLegacySelection(globals.state);
         if (selection && selection.kind === 'AREA') {
           globals.dispatch(Actions.toggleMarkCurrentArea({persistent: true}));
         } else if (selection) {
@@ -588,25 +589,25 @@ export class App implements m.ClassComponent {
       id: 'perfetto.NextFlow',
       name: 'Next flow',
       callback: () => focusOtherFlow('Forward'),
-      defaultHotkey: ']',
+      defaultHotkey: 'Mod+]',
     },
     {
       id: 'perfetto.PrevFlow',
       name: 'Prev flow',
       callback: () => focusOtherFlow('Backward'),
-      defaultHotkey: '[',
+      defaultHotkey: 'Mod+[',
     },
     {
       id: 'perfetto.MoveNextFlow',
       name: 'Move next flow',
       callback: () => moveByFocusedFlow('Forward'),
-      defaultHotkey: 'Mod+]',
+      defaultHotkey: ']',
     },
     {
       id: 'perfetto.MovePrevFlow',
       name: 'Move prev flow',
       callback: () => moveByFocusedFlow('Backward'),
-      defaultHotkey: 'Mod+[',
+      defaultHotkey: '[',
     },
     {
       id: 'perfetto.SelectAll',
@@ -614,7 +615,7 @@ export class App implements m.ClassComponent {
       callback: () => {
         let tracksToSelect: string[] = [];
 
-        const selection = globals.state.currentSelection;
+        const selection = getLegacySelection(globals.state);
         if (selection !== null && selection.kind === 'AREA') {
           const area = globals.state.areas[selection.areaId];
           const coversEntireTimeRange =
@@ -803,6 +804,9 @@ export class App implements m.ClassComponent {
         this.addRecentCommand(key);
         cmdMgr.runCommand(key);
       },
+      onGoBack: () => {
+        this.enterSearchMode(false);
+      },
     });
   }
 
@@ -821,6 +825,7 @@ export class App implements m.ClassComponent {
       placeholder: ph,
       inputRef: App.OMNIBOX_INPUT_REF,
       extraClasses: 'query-mode',
+
       onInput: (value) => {
         this.queryText = value;
         raf.scheduleFullRedraw();
@@ -840,6 +845,9 @@ export class App implements m.ClassComponent {
         }
         this.enterSearchMode(false);
         raf.scheduleFullRedraw();
+      },
+      onGoBack: () => {
+        this.enterSearchMode(false);
       },
     });
   }

@@ -9,14 +9,18 @@
 #define skgpu_ResourceKey_DEFINED
 
 #include "include/core/SkData.h"
-#include "include/core/SkString.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypes.h"
 #include "include/private/base/SkAlign.h"
 #include "include/private/base/SkAlignedStorage.h"
-#include "include/private/base/SkOnce.h"
+#include "include/private/base/SkDebug.h"
 #include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkTo.h"
 
+#include <cstdint>
+#include <cstring>
 #include <new>
+#include <utility>
 
 class TestResource;
 
@@ -130,12 +134,12 @@ protected:
         if (!this->isValid()) {
             SkDebugf("Invalid Key\n");
         } else {
-            SkDebugf("hash: %d ", this->hash());
-            SkDebugf("domain: %d ", this->domain());
+            SkDebugf("hash: %u ", this->hash());
+            SkDebugf("domain: %u ", this->domain());
             SkDebugf("size: %zuB ", this->internalSize());
             size_t dataCount = this->internalSize() / sizeof(uint32_t) - kMetaDataCnt;
             for (size_t i = 0; i < dataCount; ++i) {
-                SkDebugf("%d ", fKey[SkTo<int>(kMetaDataCnt+i)]);
+                SkDebugf("%u ", fKey[SkTo<int>(kMetaDataCnt+i)]);
             }
             SkDebugf("\n");
         }

@@ -23,7 +23,7 @@ size_t GetHandleLimit() {
 }
 
 size_t GetSystemCommitCharge() {
-  // TODO(https://crbug.com/926581): Fuchsia does not support this.
+  // TODO(crbug.com/42050627): Fuchsia does not support this.
   return 0;
 }
 
@@ -35,20 +35,21 @@ std::unique_ptr<ProcessMetrics> ProcessMetrics::CreateProcessMetrics(
   return base::WrapUnique(new ProcessMetrics(process));
 }
 
-std::optional<TimeDelta> ProcessMetrics::GetCumulativeCPUUsage() {
+base::expected<TimeDelta, ProcessCPUUsageError>
+ProcessMetrics::GetCumulativeCPUUsage() {
   zx_info_task_runtime_t stats;
 
   zx_status_t status = zx::unowned_process(process_)->get_info(
       ZX_INFO_TASK_RUNTIME, &stats, sizeof(stats), nullptr, nullptr);
   if (status != ZX_OK) {
-    return std::nullopt;
+    return base::unexpected(ProcessCPUUsageError::kSystemError);
   }
 
-  return std::optional(TimeDelta::FromZxDuration(stats.cpu_time));
+  return base::ok(TimeDelta::FromZxDuration(stats.cpu_time));
 }
 
 bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo) {
-  // TODO(https://crbug.com/926581).
+  // TODO(crbug.com/42050627).
   return false;
 }
 

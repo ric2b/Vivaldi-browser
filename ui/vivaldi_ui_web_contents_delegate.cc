@@ -106,9 +106,8 @@ bool VivaldiUIWebContentsDelegate::HandleKeyboardEvent(
 
 void VivaldiUIWebContentsDelegate::ContentsMouseEvent(
     content::WebContents* source,
-    bool motion,
-    bool exited) {
-  window_->HandleMouseChange(motion);
+    const ui::Event& event) {
+  window_->HandleMouseChange(event.type() == ui::ET_MOUSE_MOVED);
 }
 
 bool VivaldiUIWebContentsDelegate::PreHandleGestureEvent(
@@ -219,7 +218,7 @@ void VivaldiUIWebContentsDelegate::RenderFrameCreated(
   content::RenderFrameHostImpl* host =
       static_cast<content::RenderFrameHostImpl*>(render_frame_host);
 
-  host->GetVivaldiFrameService()->SetSupportsAppRegion(true);
+  host->GetVivaldiFrameService()->SetSupportsDraggableRegions(true);
 
   // An incognito profile is not initialized with the UI zoom value. Set it up
   // here by reading prefs from the regular profile. At this point we do not
@@ -322,11 +321,13 @@ void VivaldiUIWebContentsDelegate::PrimaryMainDocumentElementAvailable() {
 
 content::WebContents* VivaldiUIWebContentsDelegate::OpenURLFromTab(
     content::WebContents* source,
-    const content::OpenURLParams& params) {
+    const content::OpenURLParams& params,
+    base::OnceCallback<void(content::NavigationHandle&)>
+        navigation_handle_callback) {
   // NEW_BACKGROUND_TAB is used for dragging files into our window, handle that
   // and ignore everything else.
   if (params.disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB) {
-    return window_->browser()->OpenURL(params);
+    return window_->browser()->OpenURL(params, std::move(navigation_handle_callback));
   }
   // Form submissions in our UI ends up as CURRENT_TAB, so ignore those
   // and others.
@@ -415,4 +416,10 @@ void VivaldiUIWebContentsDelegate::AddNewContents(
   if (browser_created && (target_browser != params.browser)) {
     target_browser->window()->Close();
   }
+}
+
+void VivaldiUIWebContentsDelegate::DraggableRegionsChanged(
+    const std::vector<blink::mojom::DraggableRegionPtr>& regions,
+    content::WebContents* contents) {
+    window_->DraggableRegionsChanged(regions, contents);
 }

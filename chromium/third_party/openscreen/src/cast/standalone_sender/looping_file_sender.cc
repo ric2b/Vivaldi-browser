@@ -16,7 +16,7 @@
 
 namespace openscreen::cast {
 
-LoopingFileSender::LoopingFileSender(Environment* environment,
+LoopingFileSender::LoopingFileSender(Environment& environment,
                                      ConnectionSettings settings,
                                      const SenderSession* session,
                                      SenderSession::ConfiguredSenders senders,
@@ -30,10 +30,10 @@ LoopingFileSender::LoopingFileSender(Environment* environment,
                      std::move(senders.audio_sender)),
       video_encoder_(CreateVideoEncoder(
           StreamingVideoEncoder::Parameters{.codec = settings.codec},
-          env_->task_runner(),
+          env_.task_runner(),
           std::move(senders.video_sender))),
-      next_task_(env_->now_function(), env_->task_runner()),
-      console_update_task_(env_->now_function(), env_->task_runner()) {
+      next_task_(env_.now_function(), env_.task_runner()),
+      console_update_task_(env_.now_function(), env_.task_runner()) {
   // Opus and Vp8 are the default values for the config, and if these are set
   // to a different value that means we offered a codec that we do not
   // support, which is a developer error.
@@ -105,11 +105,11 @@ void LoopingFileSender::SendFileAgain() {
 
   OSP_CHECK_EQ(num_capturers_running_, 0);
   num_capturers_running_ = 2;
-  capture_begin_time_ = latest_frame_time_ = env_->now() + seconds(1);
+  capture_begin_time_ = latest_frame_time_ = env_.now() + seconds(1);
   audio_capturer_.emplace(
-      env_, settings_.path_to_file.c_str(), audio_encoder_.num_channels(),
+      &env_, settings_.path_to_file.c_str(), audio_encoder_.num_channels(),
       audio_encoder_.sample_rate(), capture_begin_time_, this);
-  video_capturer_.emplace(env_, settings_.path_to_file.c_str(),
+  video_capturer_.emplace(&env_, settings_.path_to_file.c_str(),
                           capture_begin_time_, this);
 
   next_task_.ScheduleFromNow([this] { ControlForNetworkCongestion(); },
@@ -197,7 +197,7 @@ void LoopingFileSender::OnEndOfFile(SimulatedCapturer* capturer) {
 }
 
 void LoopingFileSender::OnError(SimulatedCapturer* capturer,
-                                std::string message) {
+                                const std::string& message) {
   OSP_LOG_ERROR << "The " << ToTrackName(capturer)
                 << " has failed: " << message;
   --num_capturers_running_;

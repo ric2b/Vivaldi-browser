@@ -310,6 +310,23 @@ IN_PROC_BROWSER_TEST_F(EmbeddedA11yManagerLacrosTest,
 }
 
 IN_PROC_BROWSER_TEST_F(EmbeddedA11yManagerLacrosTest,
+                       AddsAndRemovesHelperForReadingMode) {
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  const auto& profiles = profile_manager->GetLoadedProfiles();
+  ASSERT_GT(profiles.size(), 0u);
+  Profile* profile = profiles[0];
+
+  auto* embedded_a11y_manager = EmbeddedA11yManagerLacros::GetInstance();
+  embedded_a11y_manager->SetReadingModeEnabled(true);
+  WaitForExtensionLoaded(profile,
+                         extension_misc::kEmbeddedA11yHelperExtensionId);
+
+  embedded_a11y_manager->SetReadingModeEnabled(false);
+  WaitForExtensionUnloaded(profile,
+                           extension_misc::kEmbeddedA11yHelperExtensionId);
+}
+
+IN_PROC_BROWSER_TEST_F(EmbeddedA11yManagerLacrosTest,
                        SwitchAccessAndSelectToSpeak) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   const auto& profiles = profile_manager->GetLoadedProfiles();
@@ -435,14 +452,14 @@ IN_PROC_BROWSER_TEST_F(EmbeddedA11yManagerLacrosTest,
   Profile* profile = ProfileManager::GetPrimaryUserProfile();
   ASSERT_TRUE(profile);
 
-  extensions::service_worker_test_utils::TestRegistrationObserver
+  extensions::service_worker_test_utils::TestServiceWorkerContextObserver
       service_worker_observer(profile);
 
   SetEnabledAndWaitForExtensionLoaded(
       profile, AssistiveTechnologyType::kSwitchAccess,
       extension_misc::kEmbeddedA11yHelperExtensionId);
 
-  service_worker_observer.WaitForWorkerStart();
+  service_worker_observer.WaitForWorkerStarted();
 
   RenderViewContextMenu* menu = LoadTestPageAndSelectTextAndRightClick();
 
@@ -466,14 +483,14 @@ IN_PROC_BROWSER_TEST_F(EmbeddedA11yManagerLacrosTest,
   Profile* profile = ProfileManager::GetPrimaryUserProfile();
   ASSERT_TRUE(profile);
 
-  extensions::service_worker_test_utils::TestRegistrationObserver
+  extensions::service_worker_test_utils::TestServiceWorkerContextObserver
       service_worker_observer(profile);
 
   SetEnabledAndWaitForExtensionLoaded(
       profile, AssistiveTechnologyType::kSelectToSpeak,
       extension_misc::kEmbeddedA11yHelperExtensionId);
 
-  service_worker_observer.WaitForWorkerStart();
+  service_worker_observer.WaitForWorkerStarted();
 
   RenderViewContextMenu* menu = LoadTestPageAndSelectTextAndRightClick();
 

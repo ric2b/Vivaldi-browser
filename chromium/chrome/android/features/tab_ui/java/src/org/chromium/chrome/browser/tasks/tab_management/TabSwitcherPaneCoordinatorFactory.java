@@ -16,11 +16,11 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
-import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.profiles.ProfileProvider;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab_ui.TabContentManager;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
@@ -178,7 +178,8 @@ public class TabSwitcherPaneCoordinatorFactory {
     @VisibleForTesting
     static ScrimCoordinator createScrimCoordinatorForTablet(Activity activity) {
         ViewGroup coordinator = activity.findViewById(R.id.coordinator);
-        // TODO(crbug/1464216): Because the show/hide animation already uses the RootUiCoordinator's
+        // TODO(crbug.com/40067282): Because the show/hide animation already uses the
+        // RootUiCoordinator's
         // ScrimCoordinator, a separate instance is needed. However, the way this is implemented the
         // status bar color is not updated. This should be fixed.
         SystemUiScrimDelegate delegate =

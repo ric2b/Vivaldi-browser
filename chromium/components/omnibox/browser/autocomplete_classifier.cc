@@ -89,7 +89,12 @@ int AutocompleteClassifier::DefaultOmniboxProviders(bool is_low_memory_device) {
          AutocompleteProvider::TYPE_SHORTCUTS |
 #endif
          AutocompleteProvider::TYPE_HISTORY_FUZZY |
-         AutocompleteProvider::TYPE_CALCULATOR;
+         AutocompleteProvider::TYPE_CALCULATOR
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+         | AutocompleteProvider::TYPE_HISTORY_EMBEDDINGS
+#endif
+         | AutocompleteProvider::TYPE_BOOKMARK_NICKNAME
+      ;
 }
 
 void AutocompleteClassifier::Classify(

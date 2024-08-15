@@ -28,7 +28,6 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
 import org.chromium.base.PackageManagerUtils;
-import org.chromium.base.StrictModeContext;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.browserservices.SessionDataHolder;
 import org.chromium.chrome.browser.browserservices.ui.splashscreen.trustedwebactivity.TwaSplashController;
@@ -216,23 +215,23 @@ public class LaunchIntentDispatcher {
         Intent searchIntent = new Intent(Intent.ACTION_WEB_SEARCH);
         searchIntent.putExtra(SearchManager.QUERY, query);
 
-        try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
-            if (PackageManagerUtils.canResolveActivity(
-                    searchIntent, PackageManager.GET_RESOLVED_FILTER) &&
-                  !BuildConfig.IS_VIVALDI) {
-                mActivity.startActivity(searchIntent);
-            } else {
-                // Phone doesn't have a WEB_SEARCH action handler, open Search Activity with
-                // the given query.
-                Intent searchActivityIntent = new Intent(Intent.ACTION_MAIN);
-                searchActivityIntent.setClass(
-                        ContextUtils.getApplicationContext(), SearchActivity.class);
-                searchActivityIntent.putExtra(SearchManager.QUERY, query);
-                // Vivaldi sets the correct intent if web search from outside of app.
-                searchActivityIntent = BuildConfig.IS_VIVALDI ?
-                        vivaldiSetupWebSearchActionIntent(query) : searchActivityIntent;
-                mActivity.startActivity(searchActivityIntent);
-            }
+        if (PackageManagerUtils.canResolveActivity(
+                searchIntent, PackageManager.GET_RESOLVED_FILTER) &&
+              !BuildConfig.IS_VIVALDI) {
+            mActivity.startActivity(searchIntent);
+        } else {
+            // Phone doesn't have a WEB_SEARCH action handler, open Search Activity with
+            // the given query.
+            Intent searchActivityIntent = new Intent(Intent.ACTION_MAIN);
+            searchActivityIntent.setClass(
+                    ContextUtils.getApplicationContext(), SearchActivity.class);
+            searchActivityIntent.putExtra(SearchManager.QUERY, query);
+
+            // Vivaldi sets the correct intent if web search from outside of app.
+            searchActivityIntent = BuildConfig.IS_VIVALDI ?
+                    vivaldiSetupWebSearchActionIntent(query) : searchActivityIntent;
+
+            mActivity.startActivity(searchActivityIntent);
         }
         return true;
     }
@@ -371,17 +370,18 @@ public class LaunchIntentDispatcher {
         IntentUtils.safeRemoveExtra(mIntent, IntentHandler.EXTRA_LAUNCHED_FROM_PACKAGE);
 
         Intent intent = new Intent(mIntent);
-        String packageName = mActivity.getCallingPackage();
-        boolean identityShared = false;
+        String packageName = mActivity.getCallingPackage(); // from startActivityForResult
+        String packageNameIdentitySharing = getCallingPackageIdentitySharing();
+        if (packageName == null) packageName = packageNameIdentitySharing;
         if (packageName != null) {
             intent.putExtra(IntentHandler.EXTRA_CALLING_ACTIVITY_PACKAGE, packageName);
-        } else {
-            packageName = getCallingPackageIdentitySharing();
-            if (packageName != null) {
-                identityShared = true;
-                intent.putExtra(IntentHandler.EXTRA_CALLING_ACTIVITY_PACKAGE, packageName);
-                intent.putExtra(IntentHandler.EXTRA_LAUNCHED_FROM_PACKAGE, packageName);
-            }
+        }
+
+        // Pass the package name obtained via identity sharing API separately from the one
+        // obtained via startActivityForResult.
+        boolean identityShared = packageNameIdentitySharing != null;
+        if (identityShared) {
+            intent.putExtra(IntentHandler.EXTRA_LAUNCHED_FROM_PACKAGE, packageNameIdentitySharing);
         }
         // Create and fire a launch intent.
         Intent launchIntent = createCustomTabActivityIntent(mActivity, intent);
@@ -392,15 +392,13 @@ public class LaunchIntentDispatcher {
 
         // Allow disk writes during startActivity() to avoid strict mode violations on some
         // Samsung devices, see https://crbug.com/796548.
-        try (StrictModeContext ignored = StrictModeContext.allowDiskWrites()) {
-            if (TwaSplashController.handleIntent(mActivity, launchIntent)) {
-                return true;
-            }
-
-            mActivity.startActivity(launchIntent, null);
-            RecordHistogram.recordBooleanHistogram("CustomTabs.IdentityShared", identityShared);
+        if (TwaSplashController.handleIntent(mActivity, launchIntent)) {
             return true;
         }
+
+        mActivity.startActivity(launchIntent, null);
+        RecordHistogram.recordBooleanHistogram("CustomTabs.IdentityShared", identityShared);
+        return true;
     }
 
     /**

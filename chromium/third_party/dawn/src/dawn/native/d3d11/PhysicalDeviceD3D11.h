@@ -40,7 +40,7 @@ class Backend;
 class PhysicalDevice : public d3d::PhysicalDevice {
   public:
     PhysicalDevice(Backend* backend,
-                   ComPtr<IDXGIAdapter3> hardwareAdapter,
+                   ComPtr<IDXGIAdapter4> hardwareAdapter,
                    ComPtr<ID3D11Device> d3d11Device);
     ~PhysicalDevice() override;
 
@@ -61,9 +61,11 @@ class PhysicalDevice : public d3d::PhysicalDevice {
     void SetupBackendAdapterToggles(TogglesState* adapterToggles) const override;
     void SetupBackendDeviceToggles(TogglesState* deviceToggles) const override;
 
-    ResultOrError<Ref<DeviceBase>> CreateDeviceImpl(AdapterBase* adapter,
-                                                    const UnpackedPtr<DeviceDescriptor>& descriptor,
-                                                    const TogglesState& deviceToggles) override;
+    ResultOrError<Ref<DeviceBase>> CreateDeviceImpl(
+        AdapterBase* adapter,
+        const UnpackedPtr<DeviceDescriptor>& descriptor,
+        const TogglesState& deviceToggles,
+        Ref<DeviceBase::DeviceLostEvent>&& lostEvent) override;
 
     MaybeError ResetInternalDeviceForTestingImpl() override;
 

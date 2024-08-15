@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/containers/heap_array.h"
 
 #include <stdint.h>
@@ -55,6 +60,13 @@ TEST(HeapArray, WithSizeZero) {
 TEST(HeapArray, WithSizeNonZero) {
   auto vec = HeapArray<uint32_t>::WithSize(2u);
   EXPECT_EQ(vec.size(), 2u);
+  EXPECT_NE(vec.data(), nullptr);
+}
+
+TEST(HeapArray, FromOwningPointer) {
+  auto vec = UNSAFE_BUFFERS(
+      HeapArray<uint32_t>::FromOwningPointer(new uint32_t[3], 3u));
+  EXPECT_EQ(vec.size(), 3u);
   EXPECT_NE(vec.data(), nullptr);
 }
 

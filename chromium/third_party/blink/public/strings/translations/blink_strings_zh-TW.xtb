@@ -12,12 +12,12 @@
 <translation id="1588438908519853928">一般</translation>
 <translation id="1591562245178063882">本月</translation>
 <translation id="1637811476055996098">選擇檔案</translation>
+<translation id="1680090928918677457">使用攝影機</translation>
 <translation id="1681022320378710418">目前時間</translation>
 <translation id="1727839386348365796">滴管</translation>
 <translation id="1729654308190250600">請輸入電子郵件地址。</translation>
 <translation id="1758486001363313524">其他...</translation>
 <translation id="1787192514241997742">總時間：<ph name="REMAINING_TIME" /></translation>
-<translation id="1800494066469288780">授予相機權限</translation>
 <translation id="1822429046913737220">AM/PM</translation>
 <translation id="1832974991323546415">在遠端裝置上播放</translation>
 <translation id="1921819250265091946">日</translation>
@@ -54,7 +54,6 @@
 <translation id="3220661731597678625">目前步驟</translation>
 <translation id="3321030238473337787">播放速度</translation>
 <translation id="3329013043687509092">飽和度</translation>
-<translation id="3377518164566272702">授予麥克風和攝影機權限</translation>
 <translation id="3450233048674729344">值必須小於或等於 <ph name="MAXIMUM" />。</translation>
 <translation id="3732799496749320381">月</translation>
 <translation id="3754210790023674521">離開子母畫面</translation>
@@ -62,6 +61,7 @@
 <translation id="3822383571486410024">請將這段文字加長到 <ph name="MIN_CHARACTERS" /> 個字元以上 (目前使用字元數：<ph name="CURRENT_LENGTH" />)。</translation>
 <translation id="383465348367842624">「<ph name="ATSIGN" />」後面的部分不應包含「<ph name="INVALIDCHARACTER" />」符號。</translation>
 <translation id="3846214748874656680">結束全螢幕</translation>
+<translation id="3914173277599553213">必要</translation>
 <translation id="4031179711345676612">可使用麥克風</translation>
 <translation id="4103419683916926126">毫秒</translation>
 <translation id="4201051445878709314">顯示上一個月</translation>
@@ -77,6 +77,7 @@
 <translation id="4912200001568447310">目前項目</translation>
 <translation id="4915360478455618802">顯示時間挑選器</translation>
 <translation id="4924138096460353083">不確定</translation>
+<translation id="49269513399674318">使用麥克風</translation>
 <translation id="4950364064308314478">顯示當地日期和時間挑選器</translation>
 <translation id="4971739861736909480">已選取「<ph name="ACCNAME" />」</translation>
 <translation id="4975562563186953947">已選取 <ph name="SELECTED_COUNT" /> 個項目</translation>
@@ -144,6 +145,7 @@
 <translation id="7080893216867146095">已允許分享位置資訊</translation>
 <translation id="709897737746224366">請符合要求的格式。</translation>
 <translation id="7102274145889307184">目前位置</translation>
+<translation id="7134810312945846184">使用麥克風和攝影機</translation>
 <translation id="7263440858009898357">請選取一個清單中的項目。</translation>
 <translation id="7320576522385648310">緩衝處理中</translation>
 <translation id="7341556277900466204">色環</translation>
@@ -188,7 +190,6 @@
 <translation id="9132465097189459683">其他...</translation>
 <translation id="9155987714137265666"><ph name="WEEK" />，從 <ph name="WEEK_START_DATE" />開始</translation>
 <translation id="916607977885256133">子母畫面</translation>
-<translation id="918430632320614861">授予麥克風權限</translation>
 <translation id="945780513535800434">已勾選部分選項</translation>
 <translation id="954003015749068518">進入子母畫面</translation>
 </translationbundle>

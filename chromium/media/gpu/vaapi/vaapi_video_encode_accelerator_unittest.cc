@@ -168,7 +168,7 @@ class MockVaapiWrapper : public VaapiWrapper {
   MOCK_METHOD2(CreateVABuffer,
                std::unique_ptr<ScopedVABuffer>(VABufferType, size_t));
   MOCK_METHOD2(CreateVASurfaceForPixmap,
-               scoped_refptr<VASurface>(scoped_refptr<gfx::NativePixmap>,
+               scoped_refptr<VASurface>(scoped_refptr<const gfx::NativePixmap>,
                                         bool));
   MOCK_METHOD2(GetEncodedChunkSize, uint64_t(VABufferID, VASurfaceID));
   MOCK_METHOD5(
@@ -446,7 +446,6 @@ class VaapiVideoEncodeAcceleratorTest
               // Same implementation in VP9VaapiVideoEncoderDelegate.
               BitstreamBufferMetadata metadata(
                   payload_size, job.IsKeyframeRequested(), job.timestamp());
-              metadata.end_of_picture = job.end_of_picture();
               CodecPicture* picture = job.picture().get();
               metadata.vp9 =
                   reinterpret_cast<VP9Picture*>(picture)->metadata_for_encoding;
@@ -628,7 +627,6 @@ class VaapiVideoEncodeAcceleratorTest
                 // Same implementation in VP9VaapiVideoEncoderDelegate.
                 BitstreamBufferMetadata metadata(
                     payload_size, job.IsKeyframeRequested(), job.timestamp());
-                metadata.end_of_picture = job.end_of_picture();
                 CodecPicture* picture = job.picture().get();
                 metadata.vp9 = reinterpret_cast<VP9Picture*>(picture)
                                    ->metadata_for_encoding;
@@ -654,10 +652,12 @@ class VaapiVideoEncodeAcceleratorTest
     std::unique_ptr<gfx::GpuMemoryBuffer> gmb =
         std::make_unique<FakeGpuMemoryBuffer>(
             kDefaultEncodeSize, gfx::BufferFormat::YUV_420_BIPLANAR);
-    gpu::MailboxHolder mailbox_holders[media::VideoFrame::kMaxPlanes];
+    scoped_refptr<gpu::ClientSharedImage>
+        shared_images[media::VideoFrame::kMaxPlanes];
     auto frame = VideoFrame::WrapExternalGpuMemoryBuffer(
         gfx::Rect(kDefaultEncodeSize), kDefaultEncodeSize, std::move(gmb),
-        mailbox_holders, base::DoNothing(), base::TimeDelta());
+        shared_images, gpu::SyncToken(), 0, base::DoNothing(),
+        base::TimeDelta());
     ASSERT_TRUE(frame);
     encoder_->Encode(std::move(frame), /*force_keyframe=*/false);
     run_loop.Run();

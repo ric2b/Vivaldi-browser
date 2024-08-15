@@ -88,7 +88,8 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   // dependencies are satisfied, and it is not reachable from the root surface.
   // A temporary reference will be added to the new Surface.
   Surface* CreateSurface(base::WeakPtr<SurfaceClient> surface_client,
-                         const SurfaceInfo& surface_info);
+                         const SurfaceInfo& surface_info,
+                         const SurfaceId& pending_copy_surface_id);
 
   // Marks |surface_id| for destruction. The surface will get destroyed when
   // it's not reachable from the root or any other surface that is not marked
@@ -244,6 +245,7 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
     DROPPED = 1,   // The surface won't be embedded so it was dropped.
     SKIPPED = 2,   // A newer surface was embedded and the surface was skipped.
     EXPIRED = 4,   // The surface was never embedded and expired.
+    COPIED = 5,    // The surface was copied.
     COUNT
   };
 
@@ -364,8 +366,6 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   // Maximum length of uncommitted queue, zero means all frames are committed
   // automatically.
   const size_t max_uncommitted_frames_;
-
-  base::WeakPtrFactory<SurfaceManager> weak_factory_{this};
 };
 
 }  // namespace viz

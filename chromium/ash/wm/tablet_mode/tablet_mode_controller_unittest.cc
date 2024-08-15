@@ -15,7 +15,6 @@
 #include "ash/accelerometer/accelerometer_types.h"
 #include "ash/accessibility/test_accessibility_controller_client.h"
 #include "ash/app_list/app_list_controller_impl.h"
-#include "ash/constants/app_types.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/public/cpp/shell_window_ids.h"
@@ -1634,7 +1633,7 @@ TEST_F(TabletModeControllerTest, TabletModeTransitionHistogramsNotLogged) {
   histogram_tester.ExpectTotalCount(kExitHistogram, 0);
 }
 
-// TODO(crbug.com/1382272): Flaky on Linux Chromium OS ASan LSan Tests.
+// TODO(crbug.com/40877227): Flaky on Linux Chromium OS ASan LSan Tests.
 TEST_F(TabletModeControllerTest,
        DISABLED_TabletModeTransitionHistogramsLogged) {
   ui::ScopedAnimationDurationScaleMode test_duration_mode(

@@ -84,7 +84,7 @@ EIGEN_BLAS_RANKUPDATE_SPECIALIZE(float)
                                         const EIGTYPE* /*rhs*/, Index /*rhsStride*/, EIGTYPE* res, Index resStride, \
                                         EIGTYPE alpha, level3_blocking<EIGTYPE, EIGTYPE>& /*blocking*/) {           \
       /* typedef Matrix<EIGTYPE, Dynamic, Dynamic, RhsStorageOrder> MatrixRhs;*/                                    \
-                                                                                                                    \
+      if (size == 0 || depth == 0) return;                                                                          \
       BlasIndex lda = convert_index<BlasIndex>(lhsStride), ldc = convert_index<BlasIndex>(resStride),               \
                 n = convert_index<BlasIndex>(size), k = convert_index<BlasIndex>(depth);                            \
       char uplo = ((IsLower) ? 'L' : 'U'), trans = ((AStorageOrder == RowMajor) ? 'T' : 'N');                       \
@@ -107,7 +107,7 @@ EIGEN_BLAS_RANKUPDATE_SPECIALIZE(float)
                                         const EIGTYPE* /*rhs*/, Index /*rhsStride*/, EIGTYPE* res, Index resStride, \
                                         EIGTYPE alpha, level3_blocking<EIGTYPE, EIGTYPE>& /*blocking*/) {           \
       typedef Matrix<EIGTYPE, Dynamic, Dynamic, AStorageOrder> MatrixType;                                          \
-                                                                                                                    \
+      if (size == 0 || depth == 0) return;                                                                          \
       BlasIndex lda = convert_index<BlasIndex>(lhsStride), ldc = convert_index<BlasIndex>(resStride),               \
                 n = convert_index<BlasIndex>(size), k = convert_index<BlasIndex>(depth);                            \
       char uplo = ((IsLower) ? 'L' : 'U'), trans = ((AStorageOrder == RowMajor) ? 'C' : 'N');                       \

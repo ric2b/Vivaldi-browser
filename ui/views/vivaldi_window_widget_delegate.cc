@@ -295,10 +295,7 @@ void VivaldiWindowWidgetDelegate::SaveWindowPlacement(
     const gfx::Rect& bounds,
     ui::WindowShowState show_state) {
   if (window_->browser() &&
-      chrome::ShouldSaveWindowPlacement(window_->browser()) &&
-      // VB-92099 fix: [MAC] restores Vivaldi window for start
-      // page at the previously set size.
-      !window_->is_hidden()) {
+      chrome::ShouldSaveWindowPlacement(window_->browser())) {
     WidgetDelegate::SaveWindowPlacement(bounds, show_state);
     chrome::SaveWindowPlacement(window_->browser(), bounds, show_state);
   }

@@ -43,10 +43,11 @@ namespace plus_addresses {
 
 namespace {
 
+using ::testing::SizeIs;
+
 constexpr char kServerBaseUrl[] = "https://enterprise.foo/";
 constexpr char kTestScope[] = "scope";
 constexpr char kEmailAddress[] = "foo@plus.plus";
-constexpr char kPlusAddress[] = "plus@plus.plus";
 
 constexpr base::TimeDelta kLatency = base::Milliseconds(2400);
 
@@ -74,14 +75,6 @@ std::string ResponseByteSizeHistogramFor(PlusAddressNetworkRequestType type) {
       /*offsets=*/nullptr);
 }
 
-std::string MakeCreationResponse(const std::string& facet,
-                                 const std::string& plus_address,
-                                 bool is_confirmed) {
-  return test::MakeCreationResponse(PlusProfile{.facet = facet,
-                                                .plus_address = plus_address,
-                                                .is_confirmed = is_confirmed});
-}
-
 }  // namespace
 
 // Tests that use fake out the URL loading and issues requests to the enterprise
@@ -93,7 +86,7 @@ class PlusAddressHttpClientRequests : public ::testing::Test {
             base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
                 &test_url_loader_factory_)) {
     features_.InitAndEnableFeatureWithParameters(
-        features::kFeature,
+        features::kPlusAddressesEnabled,
         {{features::kEnterprisePlusAddressServerUrl.name, kServerBaseUrl},
          {features::kEnterprisePlusAddressOAuthScope.name, kTestScope}});
     identity_test_env_.MakePrimaryAccountAvailable(
@@ -159,7 +152,7 @@ class PlusAddressHttpClientRequests : public ::testing::Test {
 TEST_F(PlusAddressHttpClientRequests, ReservePlusAddress_IssuesCorrectRequest) {
   const url::Origin origin = url::Origin::Create(GURL("https://foobar.com"));
   std::string facet = origin.Serialize();
-  client().ReservePlusAddress(origin, base::DoNothing());
+  client().ReservePlusAddress(origin, /*refresh=*/false, base::DoNothing());
   identity_env().WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
       kToken, base::Time::Max());
 
@@ -184,6 +177,41 @@ TEST_F(PlusAddressHttpClientRequests, ReservePlusAddress_IssuesCorrectRequest) {
   std::string* facet_entry = body->GetDict().FindString("facet");
   ASSERT_NE(facet_entry, nullptr);
   EXPECT_EQ(*facet_entry, facet);
+}
+
+// Tests that the reserve request contains the expected data when the refresh
+// flag is set.
+TEST_F(PlusAddressHttpClientRequests,
+       ReservePlusAddress_IssuesCorrectRequestWithRefreshFlag) {
+  const url::Origin origin = url::Origin::Create(GURL("https://foobar.com"));
+  std::string facet = origin.Serialize();
+  client().ReservePlusAddress(origin, /*refresh=*/true, base::DoNothing());
+  identity_env().WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
+      kToken, base::Time::Max());
+
+  // Validate that the V1 Create request uses the right url and requests method.
+  EXPECT_EQ(last_request().url, kFullReserveEndpoint);
+  EXPECT_EQ(last_request().method, net::HttpRequestHeaders::kPutMethod);
+  // Validate the Authorization header includes "myToken".
+  std::string authorization_value;
+  last_request().headers.GetHeader("Authorization", &authorization_value);
+  EXPECT_EQ(authorization_value, "Bearer " + kToken);
+
+  // Validate the request payload.
+  ASSERT_NE(last_request().request_body, nullptr);
+  ASSERT_THAT(*last_request().request_body->elements(), SizeIs(1));
+  std::optional<base::Value> body =
+      base::JSONReader::Read(last_request()
+                                 .request_body->elements()
+                                 ->at(0)
+                                 .As<network::DataElementBytes>()
+                                 .AsStringPiece());
+  ASSERT_TRUE(body.has_value() && body->is_dict());
+  std::string* facet_entry = body->GetDict().FindString("facet");
+  ASSERT_NE(facet_entry, nullptr);
+  EXPECT_EQ(*facet_entry, facet);
+  EXPECT_TRUE(
+      body->GetDict().FindBool("refresh_email_address").value_or(false));
 }
 
 // Ensures the request sent by Chrome matches what we intended.
@@ -227,8 +255,6 @@ class PlusAddressCreationRequests
   PlusAddressCreationRequests() = default;
 
  protected:
-  const url::Origin kOrigin = url::Origin::Create(GURL("https://foobar.com"));
-
   std::string Endpoint() {
     if (GetParam() == PlusAddressNetworkRequestType::kReserve) {
       return kFullReserveEndpoint;
@@ -238,11 +264,16 @@ class PlusAddressCreationRequests
     }
     NOTREACHED_NORETURN();
   }
-  void MakeCreationRequest(PlusAddressRequestCallback callback) {
+  void MakeCreationRequest(const PlusProfile& profile,
+                           PlusAddressRequestCallback callback) {
+    url::Origin origin = url::Origin::Create(
+        GURL("https://" + absl::get<std::string>(profile.facet)));
     if (GetParam() == PlusAddressNetworkRequestType::kReserve) {
-      client().ReservePlusAddress(kOrigin, std::move(callback));
+      client().ReservePlusAddress(origin, /*refresh=*/false,
+                                  std::move(callback));
     } else if (GetParam() == PlusAddressNetworkRequestType::kCreate) {
-      client().ConfirmPlusAddress(kOrigin, kPlusAddress, std::move(callback));
+      client().ConfirmPlusAddress(origin, profile.plus_address,
+                                  std::move(callback));
     } else {
       NOTREACHED();
     }
@@ -259,32 +290,32 @@ class PlusAddressCreationRequests
 // Verifies ability to support making multiple requests at once.
 // Note: Create() is not idempotent, but that is ignored for this test.
 TEST_P(PlusAddressCreationRequests, HandlesConcurrentRequests) {
+  const PlusProfile profile = test::CreatePlusProfile();
   base::test::TestFuture<const PlusProfileOrError&> first_request;
   base::test::TestFuture<const PlusProfileOrError&> second_request;
 
   // Send two requests in quick succession.
-  MakeCreationRequest(first_request.GetCallback());
-  MakeCreationRequest(second_request.GetCallback());
+  MakeCreationRequest(profile, first_request.GetCallback());
+  MakeCreationRequest(profile, second_request.GetCallback());
   identity_env().WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
       kToken, base::Time::Max());
 
   // The first callback should be run once the server responds to its request.
   url_loader_factory().SimulateResponseForPendingRequest(
-      Endpoint(),
-      MakeCreationResponse(kOrigin.Serialize(), kPlusAddress, true));
+      Endpoint(), test::MakeCreationResponse(profile));
   EXPECT_TRUE(first_request.IsReady());
 
   // Same for the second callback.
   url_loader_factory().SimulateResponseForPendingRequest(
-      Endpoint(),
-      MakeCreationResponse(kOrigin.Serialize(), kPlusAddress, true));
+      Endpoint(), test::MakeCreationResponse(profile));
   EXPECT_TRUE(second_request.IsReady());
 }
 
 TEST_P(PlusAddressCreationRequests, RequestsOauthToken) {
+  const PlusProfile profile = test::CreatePlusProfile();
   // Make a request when the PlusAddressHttpClient has an expired OAuth token.
   base::test::TestFuture<const PlusProfileOrError&> future;
-  MakeCreationRequest(future.GetCallback());
+  MakeCreationRequest(profile, future.GetCallback());
   ASSERT_FALSE(future.IsReady());
   ASSERT_TRUE(identity_env().IsAccessTokenRequestPending());
 
@@ -300,28 +331,27 @@ TEST_P(PlusAddressCreationRequests, RequestsOauthToken) {
   ASSERT_EQ(url_loader_factory().NumPending(), 1);
   ASSERT_FALSE(future.IsReady());
   url_loader_factory().SimulateResponseForPendingRequest(
-      Endpoint(),
-      MakeCreationResponse(kOrigin.Serialize(), kPlusAddress, true));
+      Endpoint(), test::MakeCreationResponse(profile));
   EXPECT_TRUE(future.IsReady());
-  EXPECT_EQ(future.Get()->plus_address, kPlusAddress);
+  EXPECT_EQ(future.Get()->plus_address, profile.plus_address);
 }
 
 TEST_P(PlusAddressCreationRequests, RunCallbackOnSuccess) {
+  const PlusProfile profile = test::CreatePlusProfile();
   base::HistogramTester histogram_tester;
   base::test::TestFuture<const PlusProfileOrError&> future;
-  MakeCreationRequest(future.GetCallback());
+  MakeCreationRequest(profile, future.GetCallback());
   identity_env().WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
       kToken, base::Time::Max());
 
   // Fulfill the request and the appropriate callback should be run.
   FastForwardBy(kLatency);
-  const std::string json =
-      MakeCreationResponse(kOrigin.Serialize(), kPlusAddress, true);
+  const std::string json = test::MakeCreationResponse(profile);
   url_loader_factory().SimulateResponseForPendingRequest(Endpoint(), json);
 
   ASSERT_TRUE(future.IsReady());
   EXPECT_TRUE(future.Get().has_value());
-  EXPECT_EQ(future.Get()->plus_address, kPlusAddress);
+  EXPECT_EQ(future.Get()->plus_address, profile.plus_address);
 
   // Verify expected metrics.
   histogram_tester.ExpectUniqueTimeSample(LatencyHistogram(), kLatency, 1);
@@ -336,7 +366,7 @@ TEST_P(PlusAddressCreationRequests, RunCallbackOnSuccess) {
 TEST_P(PlusAddressCreationRequests, RunCallbackOnNetworkError) {
   base::HistogramTester histogram_tester;
   base::test::TestFuture<const PlusProfileOrError&> future;
-  MakeCreationRequest(future.GetCallback());
+  MakeCreationRequest(test::CreatePlusProfile(), future.GetCallback());
   identity_env().WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
       kToken, base::Time::Max());
 
@@ -361,7 +391,7 @@ TEST_P(PlusAddressCreationRequests, RunCallbackOnNetworkError) {
 TEST_P(PlusAddressCreationRequests, RunCallbackOnClientError) {
   base::HistogramTester histogram_tester;
   base::test::TestFuture<const PlusProfileOrError&> future;
-  MakeCreationRequest(future.GetCallback());
+  MakeCreationRequest(test::CreatePlusProfile(), future.GetCallback());
   identity_env().WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
       kToken, base::Time::Max());
 
@@ -386,7 +416,7 @@ TEST_P(PlusAddressCreationRequests, RunCallbackOnClientError) {
 TEST_P(PlusAddressCreationRequests, RunCallbackOnOauthError) {
   base::HistogramTester histogram_tester;
   base::test::TestFuture<const PlusProfileOrError&> future;
-  MakeCreationRequest(future.GetCallback());
+  MakeCreationRequest(test::CreatePlusProfile(), future.GetCallback());
   identity_env().WaitForAccessTokenRequestIfNecessaryAndRespondWithError(
       GoogleServiceAuthError(GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS));
 
@@ -459,7 +489,8 @@ TEST_F(PlusAddressHttpClientRequests, GetAllPlusAddresses_RequestsOauthToken) {
 
 // For tests that cover successful but unexpected server responses, see the
 // PlusAddressParsing.FromV1List tests.
-TEST_F(PlusAddressHttpClientRequests, GetAllPlusAddressesV1_RunsCallbackOnSuccess) {
+TEST_F(PlusAddressHttpClientRequests,
+       GetAllPlusAddressesV1_RunsCallbackOnSuccess) {
   base::HistogramTester histogram_tester;
   base::test::TestFuture<const PlusAddressMapOrError&> future;
   // Initiate a request...
@@ -467,22 +498,15 @@ TEST_F(PlusAddressHttpClientRequests, GetAllPlusAddressesV1_RunsCallbackOnSucces
   identity_env().WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
       kToken, base::Time::Max());
 
-  std::string plus_address_1 = "plus1@plus.plus";
-  std::string plus_address_2 = "plus2@plus.plus";
-  std::string facet_1 = "asdf.example";
-  std::string facet_2 = "fdsa.example";
+  const PlusProfile profile1 = test::CreatePlusProfile();
+  const PlusProfile profile2 = test::CreatePlusProfile2();
 
   PlusAddressMap expected(
-      {{facet_1, plus_address_1}, {facet_2, plus_address_2}});
+      {{absl::get<std::string>(profile1.facet), profile1.plus_address},
+       {absl::get<std::string>(profile2.facet), profile2.plus_address}});
   // Fulfill the request and the callback should be run.
   FastForwardBy(kLatency);
-  const std::string json =
-      test::MakeListResponse({PlusProfile{.facet = facet_1,
-                                          .plus_address = plus_address_1,
-                                          .is_confirmed = true},
-                              PlusProfile{.facet = facet_2,
-                                          .plus_address = plus_address_2,
-                                          .is_confirmed = true}});
+  const std::string json = test::MakeListResponse({profile1, profile2});
   url_loader_factory().SimulateResponseForPendingRequest(kFullProfileEndpoint,
                                                          json);
   ASSERT_TRUE(future.IsReady());
@@ -554,7 +578,7 @@ TEST_F(PlusAddressHttpClientRequests, ResetWhileWaitingForNetwork) {
   std::string facet = origin.Serialize();
   base::test::TestFuture<const PlusProfileOrError&> future;
 
-  client().ReservePlusAddress(origin, future.GetCallback());
+  client().ReservePlusAddress(origin, /*refresh=*/false, future.GetCallback());
   identity_env().WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
       kToken, base::Time::Max());
 
@@ -573,7 +597,7 @@ TEST_F(PlusAddressHttpClientRequests, ResetWhileWaitingForOAuth) {
   std::string facet = origin.Serialize();
   base::test::TestFuture<const PlusProfileOrError&> future;
 
-  client().ReservePlusAddress(origin, future.GetCallback());
+  client().ReservePlusAddress(origin, /*refresh=*/false, future.GetCallback());
   EXPECT_EQ(url_loader_factory().NumPending(), 0);
   client().Reset();
   ASSERT_TRUE(future.IsReady());
@@ -587,7 +611,7 @@ TEST(PlusAddressHttpClient, ChecksUrlParamIsValidGurl) {
   std::string server_url = "https://foo.com/";
   base::test::ScopedFeatureList feature;
   feature.InitAndEnableFeatureWithParameters(
-      features::kFeature,
+      features::kPlusAddressesEnabled,
       {{features::kEnterprisePlusAddressServerUrl.name, server_url}});
   PlusAddressHttpClientImpl client(
       identity_test_env.identity_manager(),
@@ -601,7 +625,7 @@ TEST(PlusAddressHttpClient, RejectsNonUrlStrings) {
   signin::IdentityTestEnvironment identity_test_env;
   base::test::ScopedFeatureList feature;
   feature.InitAndEnableFeatureWithParameters(
-      features::kFeature,
+      features::kPlusAddressesEnabled,
       {{features::kEnterprisePlusAddressServerUrl.name, "kirubeldotcom"}});
   PlusAddressHttpClientImpl client(
       identity_test_env.identity_manager(),
@@ -614,7 +638,7 @@ class PlusAddressAuthToken : public ::testing::Test {
   PlusAddressAuthToken() {
     // Init the feature param to add `kTestScope_` to GetUnconsentedOAuth2Scopes
     features_.InitAndEnableFeatureWithParameters(
-        features::kFeature,
+        features::kPlusAddressesEnabled,
         {{features::kEnterprisePlusAddressOAuthScope.name, kTestScope}});
     InitClient();
   }
@@ -763,7 +787,7 @@ class PlusAddressHttpClientNullServerUrl : public PlusAddressHttpClientRequests 
   PlusAddressHttpClientNullServerUrl() {
     // Disable feature plus_addresses, which should also set `server_url_` to
     // `nullopt`.
-    scoped_feature_list_.InitAndDisableFeature(features::kFeature);
+    scoped_feature_list_.InitAndDisableFeature(features::kPlusAddressesEnabled);
     InitClient();
   }
 
@@ -777,8 +801,9 @@ TEST_F(PlusAddressHttpClientNullServerUrl, ReservePlusAddress_SendsNoRequest) {
 
   EXPECT_FALSE(test_api(client()).GetServerUrlForTesting().has_value());
   // ReservePlusAddress should return without making any request when no valid
-  // `server_url` is provided.
-  client().ReservePlusAddress(origin, callback.GetCallback());
+  // `server_ur_` is provided.
+  client().ReservePlusAddress(origin, /*refresh=*/false,
+                              callback.GetCallback());
   EXPECT_EQ(url_loader_factory().NumPending(), 0);
   EXPECT_FALSE(callback.IsReady());
 }

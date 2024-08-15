@@ -13,9 +13,9 @@
 #include "base/files/file_path.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
-#include "components/ad_blocker/adblock_metadata.h"
 #include "components/ad_blocker/adblock_rule_manager.h"
 #include "components/ad_blocker/adblock_rule_source_handler.h"
+#include "components/ad_blocker/adblock_types.h"
 #include "url/origin.h"
 
 namespace base {
@@ -29,7 +29,7 @@ class RuleManagerImpl : public RuleManager {
       scoped_refptr<base::SequencedTaskRunner> file_task_runner,
       const base::FilePath& profile_path,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      std::array<RuleSources, kRuleGroupCount> rule_sources,
+      std::array<ActiveRuleSources, kRuleGroupCount> rule_sources,
       ActiveExceptionsLists active_exceptions_lists,
       Exceptions exceptions,
       base::RepeatingClosure schedule_save,
@@ -41,11 +41,14 @@ class RuleManagerImpl : public RuleManager {
   RuleManagerImpl& operator=(const RuleManagerImpl&) = delete;
 
   // Implementing RuleManager
-  bool AddRulesSource(const KnownRuleSource& known_source) override;
-  void DeleteRuleSource(const KnownRuleSource& known_source) override;
-  std::optional<RuleSource> GetRuleSource(RuleGroup group,
-                                           uint32_t source_id) override;
-  std::map<uint32_t, RuleSource> GetRuleSources(RuleGroup group) const override;
+  bool AddRulesSource(RuleGroup group,
+                      const RuleSourceCore& source_core) override;
+  void DeleteRuleSource(RuleGroup group,
+                        const RuleSourceCore& source_core) override;
+  std::optional<ActiveRuleSource> GetRuleSource(RuleGroup group,
+                                                uint32_t source_id) override;
+  std::map<uint32_t, ActiveRuleSource> GetRuleSources(
+      RuleGroup group) const override;
   bool FetchRuleSourceNow(RuleGroup group, uint32_t source_id) override;
   void SetActiveExceptionList(RuleGroup group, ExceptionsList list) override;
   ExceptionsList GetActiveExceptionList(RuleGroup group) const override;
@@ -66,7 +69,7 @@ class RuleManagerImpl : public RuleManager {
                                        uint32_t source_id) override;
 
  private:
-  void OnSourceUpdated(RuleSourceHandler* rule_source_handler);
+  void OnSourceUpdated(RuleGroup group, RuleSourceHandler* rule_source_handler);
 
   std::map<int64_t, std::unique_ptr<RuleSourceHandler>>& GetSourceMap(
       RuleGroup group);

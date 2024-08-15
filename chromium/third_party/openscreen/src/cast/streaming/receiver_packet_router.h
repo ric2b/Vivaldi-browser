@@ -26,7 +26,7 @@ class Receiver;
 // filtered-out.
 class ReceiverPacketRouter final : public Environment::PacketConsumer {
  public:
-  explicit ReceiverPacketRouter(Environment* environment);
+  explicit ReceiverPacketRouter(Environment& environment);
   ~ReceiverPacketRouter() final;
 
  protected:
@@ -49,7 +49,7 @@ class ReceiverPacketRouter final : public Environment::PacketConsumer {
                         Clock::time_point arrival_time,
                         std::vector<uint8_t> packet) final;
 
-  Environment* const environment_;
+  Environment& environment_;
 
   FlatMap<Ssrc, Receiver*> receivers_;
 };

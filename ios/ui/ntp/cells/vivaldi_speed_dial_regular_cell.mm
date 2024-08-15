@@ -254,29 +254,37 @@ const CGFloat thumbnailCropYOffset = 14.f;
       break;
   }
 
-  // Thumbnail: Initially we will check check whether the speed dial has a
-  // thumbnail in bundle. If not available we will see if application support
-  // directory has any stored for the item. If both case fails we will go
-  // fallback and show the item title instead.
-  NSString* bundlePath =
-    [_resourcePath stringByAppendingPathComponent:item.thumbnail];
-  UIImage *thumbnailBundle = [[UIImage alloc] initWithContentsOfFile:bundlePath];
-
-  if (thumbnailBundle) {
-    [self.thumbView setImage: thumbnailBundle];
-  } else {
-    UIImage* thumbnailLocal =
-      [[[VivaldiThumbnailService alloc] init] thumbnailForSDItem:item];
-    if (thumbnailLocal) {
-      UIImage* thumbnailImage =
-          [self cropTopAndResizeImage:thumbnailLocal
-                               toSize:self.bounds.size];
-      [self.thumbView setImage: thumbnailImage];
-    } else {
-      self.thumbView.backgroundColor =
+  if (item.isFrequentlyVisited) {
+    self.thumbView.backgroundColor =
         [UIColor colorNamed: vSearchbarBackgroundColor];
-      self.fallbackTitleLabel.hidden = NO;
-      self.fallbackTitleLabel.text = item.host;
+    self.fallbackTitleLabel.hidden = NO;
+    self.fallbackTitleLabel.text = item.host;
+  } else {
+    // Thumbnail: Initially we will check check whether the speed dial has a
+    // thumbnail in bundle. If not available we will see if application support
+    // directory has any stored for the item. If both case fails we will go
+    // fallback and show the item title instead.
+    NSString* bundlePath =
+        [_resourcePath stringByAppendingPathComponent:item.thumbnail];
+    UIImage *thumbnailBundle =
+        [[UIImage alloc] initWithContentsOfFile:bundlePath];
+
+    if (thumbnailBundle) {
+      [self.thumbView setImage: thumbnailBundle];
+    } else {
+      UIImage* thumbnailLocal =
+          [[[VivaldiThumbnailService alloc] init] thumbnailForSDItem:item];
+      if (thumbnailLocal) {
+        UIImage* thumbnailImage =
+            [self cropTopAndResizeImage:thumbnailLocal
+                                 toSize:self.bounds.size];
+        [self.thumbView setImage: thumbnailImage];
+      } else {
+        self.thumbView.backgroundColor =
+            [UIColor colorNamed: vSearchbarBackgroundColor];
+        self.fallbackTitleLabel.hidden = NO;
+        self.fallbackTitleLabel.text = item.host;
+      }
     }
   }
 }

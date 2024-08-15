@@ -65,6 +65,7 @@ class RegexRulesMatcher final : public RulesetMatcherBase {
   ~RegexRulesMatcher() override;
   std::vector<RequestAction> GetModifyHeadersActions(
       const RequestParams& params,
+      RulesetMatchingStage stage,
       std::optional<uint64_t> min_priority) const override;
   bool IsExtraHeadersMatcher() const override;
   size_t GetRulesCount() const override;
@@ -131,7 +132,8 @@ class RegexRulesMatcher final : public RulesetMatcherBase {
 
   // RulesetMatcherBase override:
   std::optional<RequestAction> GetAllowAllRequestsAction(
-      const RequestParams& params) const override;
+      const RequestParams& params,
+      RulesetMatchingStage stage) const override;
   std::optional<RequestAction> GetActionIgnoringAncestors(
       const RequestParams& params,
       RulesetMatchingStage stage) const override;

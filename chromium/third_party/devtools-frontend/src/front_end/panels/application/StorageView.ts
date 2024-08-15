@@ -7,6 +7,7 @@ import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
+import type * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as UI from '../../ui/legacy/legacy.js';
@@ -164,7 +165,7 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
   private quotaOverrideControlRow: HTMLElement;
   private quotaOverrideEditor: HTMLInputElement;
   private quotaOverrideErrorMessage: HTMLElement;
-  private clearButton: HTMLButtonElement;
+  private clearButton: Buttons.Button.Button;
 
   constructor() {
     super(true, 1000);
@@ -230,7 +231,7 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
     this.quotaOverrideEditor =
         this.quotaOverrideControlRow.createChild('input', 'quota-override-notification-editor') as HTMLInputElement;
     this.quotaOverrideEditor.setAttribute(
-        'jslog', `${VisualLogging.textField('quota-override').track({keydown: true})}`);
+        'jslog', `${VisualLogging.textField('quota-override').track({change: true})}`);
     this.quotaOverrideControlRow.appendChild(UI.UIUtils.createLabel(i18nString(UIStrings.mb)));
     this.quotaOverrideControlRow.classList.add('hidden');
     this.quotaOverrideEditor.addEventListener('keyup', event => {

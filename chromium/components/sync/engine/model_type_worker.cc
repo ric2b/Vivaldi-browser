@@ -63,8 +63,15 @@ const char kPasswordNotesStateHistogramName[] =
 constexpr char kEntityEncryptionResultHistogramName[] =
     "Sync.EntityEncryptionSucceeded";
 
+// Sync ignores updates encrypted with keys that have been missing for too long
+// from this client and will proceed normally as if those updates didn't exist.
+// The notion of "too long" is measured in number of GetUpdates and is
+// determined by this constant. The counter is in-memory only.
+constexpr int kMinGuResponsesToIgnoreKey = 3;
+
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
+// LINT.IfChange(CrossUserSharingDecryptionResult)
 enum class CrossUserSharingDecryptionResult {
   kSuccess = 0,
   kInvitationMissingFields = 1,
@@ -73,6 +80,7 @@ enum class CrossUserSharingDecryptionResult {
 
   kMaxValue = kFailedToParseDecryptedInvitation,
 };
+// LINT.ThenChange(/tools/metrics/histograms/metadata/sync/enums.xml:CrossUserSharingDecryptionResult)
 
 void LogPasswordNotesState(PasswordNotesStateForUMA state) {
   base::UmaHistogramEnumeration(kPasswordNotesStateHistogramName, state);
@@ -160,7 +168,7 @@ void AdaptWebAuthnClientTagHash(syncer::EntityData* data) {
 }
 
 // Returns empty string if |entity| is not encrypted.
-// TODO(crbug.com/1109221): Consider moving this to a util file and converting
+// TODO(crbug.com/40141634): Consider moving this to a util file and converting
 // UpdateResponseData::encryption_key_name into a method that calls it. Consider
 // returning a struct containing also the encrypted blob, which would make the
 // code of PopulateUpdateResponseData() simpler.
@@ -246,7 +254,7 @@ bool DecryptPasswordSpecifics(const Cryptographer& cryptographer,
     return false;
   }
   LogPasswordNotesState(PasswordNotesStateForUMA::kSetOnlyInBackup);
-  // TODO(crbug.com/1326554): Properly handle the case when both blobs are
+  // TODO(crbug.com/40225853): Properly handle the case when both blobs are
   // decryptable but with different keys. Ideally the password should be
   // re-uploaded potentially by setting needs_reupload boolean in
   // UpdateResponseData or EntityData.
@@ -308,8 +316,7 @@ ModelTypeWorker::ModelTypeWorker(ModelType type,
       cancelation_signal_(cancelation_signal),
       model_type_state_(initial_state),
       encryption_enabled_(encryption_enabled),
-      passphrase_type_(passphrase_type),
-      min_get_updates_to_ignore_key_(kMinGuResponsesToIgnoreKey.Get()) {
+      passphrase_type_(passphrase_type) {
   DCHECK(cryptographer_);
   DCHECK(!AlwaysEncryptedUserTypes().Has(type_) || encryption_enabled_);
 
@@ -326,7 +333,7 @@ ModelTypeWorker::ModelTypeWorker(ModelType type,
                     "invalidations overflow.";
         model_type_state_.clear_invalidations();
       }
-      // TODO(crbug/1365292): Persisted invaldiations are loaded in
+      // TODO(crbug.com/40239360): Persisted invaldiations are loaded in
       // ModelTypeWorker::ctor(), but sync cycle is not scheduled. New sync
       // cycle has to be triggered right after we loaded persisted
       // invalidations.
@@ -578,7 +585,7 @@ void ModelTypeWorker::ProcessGetUpdatesResponse(
           break;
         }
         // Copy the sync entity for later decryption.
-        // TODO(crbug.com/1270734): Any write to |entries_pending_decryption_|
+        // TODO(crbug.com/40805099): Any write to |entries_pending_decryption_|
         // should do like DeduplicatePendingUpdatesBasedOnServerId() and honor
         // entity version. Additionally, it should look up the same server id
         // in |pending_updates_| and compare versions. In fact, the 2 containers
@@ -841,7 +848,7 @@ void ModelTypeWorker::NudgeForCommit() {
 }
 
 void ModelTypeWorker::NudgeIfReadyToCommit() {
-  // TODO(crbug.com/1188034): |kNoNudgedLocalChanges| is used to keep the
+  // TODO(crbug.com/40173160): |kNoNudgedLocalChanges| is used to keep the
   // existing behaviour. But perhaps there is no need to nudge for commit if all
   // known changes are already in flight.
   if (has_local_changes_state_ != kNoNudgedLocalChanges && CanCommitItems()) {
@@ -1152,15 +1159,10 @@ void ModelTypeWorker::DeduplicatePendingUpdatesBasedOnOriginatorClientItemId() {
 
 bool ModelTypeWorker::ShouldIgnoreUpdatesEncryptedWith(
     const std::string& key_name) {
-  if (!unknown_encryption_keys_by_name_.contains(key_name)) {
-    return false;
-  }
-  if (unknown_encryption_keys_by_name_.at(key_name)
-          .get_updates_while_should_have_been_known <
-      min_get_updates_to_ignore_key_) {
-    return false;
-  }
-  return base::FeatureList::IsEnabled(kIgnoreSyncEncryptionKeysLongMissing);
+  return unknown_encryption_keys_by_name_.contains(key_name) &&
+         unknown_encryption_keys_by_name_.at(key_name)
+                 .get_updates_while_should_have_been_known >=
+             kMinGuResponsesToIgnoreKey;
 }
 
 void ModelTypeWorker::MaybeDropPendingUpdatesEncryptedWith(
@@ -1240,7 +1242,7 @@ void ModelTypeWorker::ExtractGcDirective() {
   //
   // In this case the GC directive from the first request has to be kept until
   // the end of the sync cycle.
-  // TODO(crbug.com/1356900): consider a better approach instead of this
+  // TODO(crbug.com/40860698): consider a better approach instead of this
   // workaround.
 
   if (model_type_state_.progress_marker().has_gc_directive()) {

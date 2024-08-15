@@ -17,9 +17,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "build/build_config.h"
 #include "partition_alloc/address_pool_manager.h"
 #include "partition_alloc/allocation_guard.h"
+#include "partition_alloc/build_config.h"
 #include "partition_alloc/internal_allocator.h"
 #include "partition_alloc/page_allocator.h"
 #include "partition_alloc/page_allocator_constants.h"
@@ -39,19 +39,20 @@
 #include "partition_alloc/partition_alloc_check.h"
 #include "partition_alloc/partition_alloc_config.h"
 #include "partition_alloc/partition_alloc_constants.h"
+#include "partition_alloc/partition_freelist_entry.h"
 #include "partition_alloc/partition_page.h"
 #include "partition_alloc/reservation_offset_table.h"
+#include "partition_alloc/stack/stack.h"
 #include "partition_alloc/starscan/pcscan_scheduling.h"
 #include "partition_alloc/starscan/raceful_worklist.h"
 #include "partition_alloc/starscan/scan_loop.h"
 #include "partition_alloc/starscan/snapshot.h"
-#include "partition_alloc/starscan/stack/stack.h"
 #include "partition_alloc/starscan/stats_collector.h"
 #include "partition_alloc/starscan/stats_reporter.h"
 #include "partition_alloc/tagging.h"
 #include "partition_alloc/thread_cache.h"
 
-#if !BUILDFLAG(HAS_64_BIT_POINTERS)
+#if !PA_BUILDFLAG(HAS_64_BIT_POINTERS)
 #include "partition_alloc/address_pool_manager_bitmap.h"
 #endif
 
@@ -620,7 +621,7 @@ PA_SCAN_INLINE AllocationStateMap* PCScanTask::TryFindScannerBitmapForPointer(
   PA_SCAN_DCHECK(IsManagedByPartitionAllocRegularPool(maybe_ptr));
   // First, check if |maybe_ptr| points to a valid super page or a quarantined
   // card.
-#if BUILDFLAG(HAS_64_BIT_POINTERS)
+#if PA_BUILDFLAG(HAS_64_BIT_POINTERS)
 #if PA_CONFIG(STARSCAN_USE_CARD_TABLE)
   // Check if |maybe_ptr| points to a quarantined card.
   if (PA_LIKELY(
@@ -641,11 +642,11 @@ PA_SCAN_INLINE AllocationStateMap* PCScanTask::TryFindScannerBitmapForPointer(
     return nullptr;
   }
 #endif  // PA_CONFIG(STARSCAN_USE_CARD_TABLE)
-#else   // BUILDFLAG(HAS_64_BIT_POINTERS)
+#else   // PA_BUILDFLAG(HAS_64_BIT_POINTERS)
   if (PA_LIKELY(!IsManagedByPartitionAllocRegularPool(maybe_ptr))) {
     return nullptr;
   }
-#endif  // BUILDFLAG(HAS_64_BIT_POINTERS)
+#endif  // PA_BUILDFLAG(HAS_64_BIT_POINTERS)
 
   // We are certain here that |maybe_ptr| points to an allocated super-page.
   return StateBitmapFromAddr(maybe_ptr);
@@ -784,14 +785,14 @@ class PCScanScanLoop final : public ScanLoop<PCScanScanLoop> {
   size_t quarantine_size() const { return quarantine_size_; }
 
  private:
-#if BUILDFLAG(HAS_64_BIT_POINTERS)
+#if PA_BUILDFLAG(HAS_64_BIT_POINTERS)
   PA_ALWAYS_INLINE static uintptr_t RegularPoolBase() {
     return PartitionAddressSpace::RegularPoolBase();
   }
   PA_ALWAYS_INLINE static uintptr_t RegularPoolMask() {
     return PartitionAddressSpace::RegularPoolBaseMask();
   }
-#endif  // BUILDFLAG(HAS_64_BIT_POINTERS)
+#endif  // PA_BUILDFLAG(HAS_64_BIT_POINTERS)
 
   PA_SCAN_INLINE void CheckPointer(uintptr_t maybe_ptr_maybe_tagged) {
     // |maybe_ptr| may have an MTE tag, so remove it first.
@@ -845,7 +846,7 @@ void PCScanTask::ScanStack() {
   }
   // Check if the stack top was registered. It may happen that it's not if the
   // current allocation happens from pthread trampolines.
-  void* stack_top = pcscan.GetCurrentThreadStackTop();
+  void* stack_top = StackTopRegistry::Get().GetCurrentThreadStackTop();
   if (PA_UNLIKELY(!stack_top)) {
     return;
   }
@@ -1018,7 +1019,9 @@ void UnmarkInCardTable(uintptr_t slot_start, SlotSpanMetadata* slot_span) {
   const auto bitmap_iterator = [&](uintptr_t slot_start) {
     SlotSpanMetadata* current_slot_span =
         SlotSpanMetadata::FromSlotStart(slot_start);
-    auto* entry = PartitionFreelistEntry::EmplaceAndInitNull(slot_start);
+    const internal::PartitionFreelistDispatcher* freelist_dispatcher =
+        root->get_freelist_dispatcher();
+    auto* entry = freelist_dispatcher->EmplaceAndInitNull(slot_start);
 
     if (current_slot_span != previous_slot_span) {
       // We started scanning a new slot span. Flush the accumulated freelist to
@@ -1034,7 +1037,7 @@ void UnmarkInCardTable(uintptr_t slot_start, SlotSpanMetadata* slot_span) {
     }
 
     if (freelist_tail) {
-      freelist_tail->SetNext(entry);
+      freelist_dispatcher->SetNext(freelist_tail, entry);
     }
     freelist_tail = entry;
     ++freelist_entries;
@@ -1293,7 +1296,7 @@ PCScanInternal::~PCScanInternal() = default;
 
 void PCScanInternal::Initialize(PCScan::InitConfig config) {
   PA_DCHECK(!is_initialized_);
-#if BUILDFLAG(HAS_64_BIT_POINTERS)
+#if PA_BUILDFLAG(HAS_64_BIT_POINTERS)
   // Make sure that pools are initialized.
   PartitionAddressSpace::Init();
 #endif
@@ -1546,27 +1549,6 @@ void PCScanInternal::DisableStackScanning() {
 }
 bool PCScanInternal::IsStackScanningEnabled() const {
   return stack_scanning_enabled_;
-}
-
-void PCScanInternal::NotifyThreadCreated(void* stack_top) {
-  const auto tid = base::PlatformThread::CurrentId();
-  std::lock_guard<std::mutex> lock(stack_tops_mutex_);
-  const auto res = stack_tops_.insert({tid, stack_top});
-  PA_DCHECK(res.second);
-}
-
-void PCScanInternal::NotifyThreadDestroyed() {
-  const auto tid = base::PlatformThread::CurrentId();
-  std::lock_guard<std::mutex> lock(stack_tops_mutex_);
-  PA_DCHECK(1 == stack_tops_.count(tid));
-  stack_tops_.erase(tid);
-}
-
-void* PCScanInternal::GetCurrentThreadStackTop() const {
-  const auto tid = base::PlatformThread::CurrentId();
-  std::lock_guard<std::mutex> lock(stack_tops_mutex_);
-  auto it = stack_tops_.find(tid);
-  return it != stack_tops_.end() ? it->second : nullptr;
 }
 
 bool PCScanInternal::WriteProtectionEnabled() const {

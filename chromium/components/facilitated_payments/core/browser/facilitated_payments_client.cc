@@ -4,9 +4,15 @@
 
 #include "components/facilitated_payments/core/browser/facilitated_payments_client.h"
 
+#include "base/functional/callback.h"
+
 namespace payments::facilitated {
 
-bool FacilitatedPaymentsClient::ShowPixPaymentPrompt() {
+FacilitatedPaymentsClient::~FacilitatedPaymentsClient() = default;
+
+bool FacilitatedPaymentsClient::ShowPixPaymentPrompt(
+    base::span<autofill::BankAccount> bank_account_suggestions,
+    base::OnceCallback<void(bool, int64_t)> on_user_decision_callback) {
   return false;
 }
 

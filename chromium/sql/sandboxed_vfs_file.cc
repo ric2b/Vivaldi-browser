@@ -5,18 +5,19 @@
 #include "sql/sandboxed_vfs_file.h"
 
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <type_traits>
 #include <utility>
 
+#include "base/check.h"
 #include "base/check_op.h"
+#include "base/dcheck_is_on.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
-#include "base/logging.h"
 #include "base/notreached.h"
-#include "base/threading/platform_thread.h"
 #include "build/build_config.h"
-#include "sql/initialization.h"
 #include "sql/sandboxed_vfs.h"
 #include "third_party/sqlite/sqlite3.h"
 
@@ -252,9 +253,9 @@ int SandboxedVfsFile::Truncate(sqlite3_int64 size) {
   // On macOS < 10.15, the default sandbox blocks ftruncate(), so we have to use
   // a sync mojo IPC to ask the browser process to call ftruncate() for us.
   //
-  // TODO(crbug.com/1084565): Figure out if we can allow ftruncate() in renderer
-  // and utility processes. It would be useful for low-level storage APIs, like
-  // the upcoming filesystem API.
+  // TODO(crbug.com/40693199): Figure out if we can allow ftruncate() in
+  // renderer and utility processes. It would be useful for low-level storage
+  // APIs, like the upcoming filesystem API.
   if (vfs_->delegate()->SetFileLength(file_path_, file_,
                                       static_cast<size_t>(size))) {
     return SQLITE_OK;
@@ -320,7 +321,7 @@ bool IsExclusiveLockMode(int sqlite_lock_mode) {
 }  // namespace
 
 int SandboxedVfsFile::Lock(int mode) {
-  DCHECK_GT(mode, sqlite_lock_mode_)
+  DCHECK_GE(mode, sqlite_lock_mode_)
       << "SQLite asked the VFS to lock the file up to mode " << mode
       << " but the file is already locked at mode " << sqlite_lock_mode_;
 

@@ -27,6 +27,7 @@
 #include "api/video/video_rotation.h"
 #include "api/video/video_timing.h"
 #include "modules/rtp_rtcp/include/rtp_rtcp_defines.h"
+#include "system_wrappers/include/ntp_time.h"
 
 // This file contains class definitions for reading/writing each RTP header
 // extension. Each class must be defined such that it is compatible with being
@@ -58,6 +59,11 @@ class AbsoluteSendTime {
     return static_cast<uint32_t>(time6x18);
   }
 
+  static uint32_t To24Bits(NtpTime ntp_time) {
+    uint64_t ntp_time32x32 = static_cast<uint64_t>(ntp_time);
+    return (ntp_time32x32 >> 14) & 0x00FF'FFFF;
+  }
+
   static constexpr Timestamp ToTimestamp(uint32_t time_24bits) {
     RTC_DCHECK_LT(time_24bits, (1 << 24));
     return Timestamp::Micros((time_24bits* int64_t{1'000'000}) >> 18);
@@ -84,21 +90,18 @@ class AbsoluteCaptureTimeExtension {
 
 class AudioLevelExtension {
  public:
+  using value_type = AudioLevel;
   static constexpr RTPExtensionType kId = kRtpExtensionAudioLevel;
   static constexpr uint8_t kValueSizeBytes = 1;
   static constexpr absl::string_view Uri() {
     return RtpExtension::kAudioLevelUri;
   }
 
-  static bool Parse(rtc::ArrayView<const uint8_t> data,
-                    bool* voice_activity,
-                    uint8_t* audio_level);
-  static size_t ValueSize(bool voice_activity, uint8_t audio_level) {
+  static bool Parse(rtc::ArrayView<const uint8_t> data, AudioLevel* extension);
+  static size_t ValueSize(const AudioLevel& extension) {
     return kValueSizeBytes;
   }
-  static bool Write(rtc::ArrayView<uint8_t> data,
-                    bool voice_activity,
-                    uint8_t audio_level);
+  static bool Write(rtc::ArrayView<uint8_t> data, const AudioLevel& extension);
 };
 
 class CsrcAudioLevel {

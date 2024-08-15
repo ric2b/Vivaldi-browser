@@ -100,6 +100,8 @@
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
 #endif
 
+// LINT.IfChange
+
 namespace {
 
 // Key under which extension policies are grouped in JSON policy exports.
@@ -412,19 +414,35 @@ void PolicyUIHandler::HandleUploadReport(const base::Value::List& args) {
       enterprise_reporting::CloudProfileReportingServiceFactory::GetForProfile(
           Profile::FromWebUI(web_ui()))
           ->report_scheduler();
-  CHECK(profile_report_scheduler);
 
-  if (report_scheduler) {
+  if (report_scheduler && profile_report_scheduler) {
     const auto on_report_uploaded = base::BarrierClosure(
         2, base::BindOnce(&PolicyUIHandler::OnReportUploaded,
                           weak_factory_.GetWeakPtr(), callback_id));
     report_scheduler->UploadFullReport(on_report_uploaded);
     profile_report_scheduler->UploadFullReport(on_report_uploaded);
-  } else {
+    return;
+  }
+
+  if (report_scheduler) {
+    report_scheduler->UploadFullReport(
+        base::BindOnce(&PolicyUIHandler::OnReportUploaded,
+                       weak_factory_.GetWeakPtr(), callback_id));
+    return;
+  }
+
+  if (profile_report_scheduler) {
     profile_report_scheduler->UploadFullReport(
         base::BindOnce(&PolicyUIHandler::OnReportUploaded,
                        weak_factory_.GetWeakPtr(), callback_id));
+    return;
   }
+
+  // TODO(335639255): Consider disable the button when neither report
+  // scheduler are ready. On at least show an error message to ask people
+  // to try again.
+  OnReportUploaded(callback_id);
+
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 
@@ -491,3 +509,5 @@ std::string PolicyUIHandler::GetPoliciesAsJson() {
       policy::GetChromeMetadataParams(
           /*application_name=*/l10n_util::GetStringUTF8(IDS_PRODUCT_NAME)));
 }
+
+// LINT.ThenChange(//ios/chrome/browser/webui/ui_bundled/policy/policy_ui_handler.mm)

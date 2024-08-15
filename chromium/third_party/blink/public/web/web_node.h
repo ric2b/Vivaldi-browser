@@ -31,12 +31,14 @@
 #ifndef THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_NODE_H_
 #define THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_NODE_H_
 
+#include "base/functional/callback_helpers.h"
 #include "base/functional/function_ref.h"
 #include "cc/paint/element_id.h"
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_private_ptr.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/web/web_dom_event.h"
 #include "v8/include/v8-forward.h"
 
 namespace blink {
@@ -55,6 +57,10 @@ class WebPluginContainer;
 // reason, subclasses must not add any additional data members.
 class BLINK_EXPORT WebNode {
  public:
+  enum class EventType {
+    kSelectionchange,
+  };
+
   static WebNode FromDomNodeId(int dom_node_id);
 
   virtual ~WebNode();
@@ -106,9 +112,11 @@ class BLINK_EXPORT WebNode {
 
   WebVector<WebElement> QuerySelectorAll(const WebString& selector) const;
 
-  // Returns the contents of the first descendant element, if any, that contains
-  // only text, a part of which is the given substring, if the given validity
-  // checker returns true for it. The substring search is case-sensitive.
+
+  // Returns the contents of the first descendant that is either (1) an element
+  // containing only text or (2) a readonly text input, whose text contains the
+  // given substring, if the validity checker returns true for it. The substring
+  // search is ASCII case insensitive.
   WebString FindTextInElementWith(
       const WebString& substring,
       base::FunctionRef<bool(const WebString&)> validity_checker) const;
@@ -122,6 +130,12 @@ class BLINK_EXPORT WebNode {
   v8::Local<v8::Value> ToV8Value(v8::Isolate*);
 
   int GetDomNodeId() const;
+
+  // Adds a listener to this node.
+  // Returns a RAII object that removes the listener.
+  base::ScopedClosureRunner AddEventListener(
+      EventType event_type,
+      base::RepeatingCallback<void(WebDOMEvent)> handler);
 
   // Helper to downcast to `T`. Will fail with a CHECK() if converting to `T` is
   // not legal. The returned `T` will always be non-null if `this` is non-null.

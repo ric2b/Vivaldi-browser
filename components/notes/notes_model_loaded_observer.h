@@ -6,24 +6,29 @@
 #ifndef COMPONENTS_NOTES_NOTES_MODEL_LOADED_OBSERVER_H_
 #define COMPONENTS_NOTES_NOTES_MODEL_LOADED_OBSERVER_H_
 
-#include "base/compiler_specific.h"
+#include "base/memory/raw_ptr.h"
+#include "base/scoped_observation.h"
 #include "components/notes/notes_model_observer.h"
 
 class Profile;
 
 namespace vivaldi {
+class NotesModel;
 
 class NotesModelLoadedObserver : public NotesModelObserver {
  public:
-  explicit NotesModelLoadedObserver(Profile* profile);
+  NotesModelLoadedObserver(Profile* profile, NotesModel* model);
   NotesModelLoadedObserver(const NotesModelLoadedObserver&) = delete;
+  ~NotesModelLoadedObserver() override;
+
   NotesModelLoadedObserver& operator=(const NotesModelLoadedObserver&) = delete;
 
  private:
-  void NotesModelLoaded(NotesModel* model, bool ids_reassigned) override;
-  void NotesModelBeingDeleted(NotesModel* model) override;
+  void NotesModelLoaded(bool ids_reassigned) override;
+  void NotesModelBeingDeleted() override;
 
   const raw_ptr<Profile> profile_;
+  base::ScopedObservation<NotesModel, NotesModelObserver> observation_{this};
 };
 
 }  // namespace vivaldi

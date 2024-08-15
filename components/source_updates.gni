@@ -258,8 +258,6 @@ if (is_mac) {
     sources += [
       "//vivaldi/components/remote_cocoa/app_shim/vivaldi_window_size_helper.h",
       "//vivaldi/components/remote_cocoa/app_shim/vivaldi_window_size_helper.mm",
-      "//vivaldi/components/remote_cocoa/app_shim/vivaldi_native_widget_mac_frameless_nswindow.h",
-      "//vivaldi/components/remote_cocoa/app_shim/vivaldi_native_widget_mac_frameless_nswindow.mm",
     ]
   }
 }

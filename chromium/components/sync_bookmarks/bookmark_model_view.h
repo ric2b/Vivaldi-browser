@@ -67,7 +67,8 @@ class BookmarkModelView {
   void RemoveObserver(bookmarks::BookmarkModelObserver* observer);
   void BeginExtensiveChanges();
   void EndExtensiveChanges();
-  void Remove(const bookmarks::BookmarkNode* node);
+  void Remove(const bookmarks::BookmarkNode* node,
+              const base::Location& location);
   void Move(const bookmarks::BookmarkNode* node,
             const bookmarks::BookmarkNode* new_parent,
             size_t index);
@@ -101,7 +102,7 @@ class BookmarkModelView {
       const bookmarks::BookmarkNode::MetaInfoMap& meta_info_map);
 
   // Vivaldi
-  virtual const bookmarks::BookmarkNode* trash_node() const;
+  virtual const bookmarks::BookmarkNode* trash_node() const = 0;
 
  protected:
   bookmarks::BookmarkModel* underlying_model() { return bookmark_model_.get(); }

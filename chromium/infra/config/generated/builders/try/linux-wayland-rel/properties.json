@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux Builder (Wayland)",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-linux-archive",
@@ -37,7 +37,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux Tests (Wayland)",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-linux-archive",
@@ -61,7 +61,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Linux Builder (Wayland)",
-                "project": "chromium-m124"
+                "project": "chromium-m126"
               }
             }
           }
@@ -71,16 +71,17 @@
         {
           "bucket": "ci",
           "builder": "Linux Builder (Wayland)",
-          "project": "chromium-m124"
+          "project": "chromium-m126"
         }
       ],
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
           "builder": "Linux Tests (Wayland)",
-          "project": "chromium-m124"
+          "project": "chromium-m126"
         }
-      ]
+      ],
+      "targets_spec_directory": "src/infra/config/generated/builders/try/linux-wayland-rel/targets"
     }
   },
   "$build/code_coverage": {
@@ -89,10 +90,6 @@
       "overall"
     ],
     "use_clang_coverage": true
-  },
-  "$build/flakiness": {
-    "check_for_flakiness": true,
-    "check_for_flakiness_with_resultdb": true
   },
   "$build/reclient": {
     "instance": "rbe-chromium-untrusted",

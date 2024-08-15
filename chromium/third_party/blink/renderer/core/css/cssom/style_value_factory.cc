@@ -310,9 +310,9 @@ CSSStyleValueVector StyleValueFactory::FromString(
 
   HeapVector<CSSPropertyValue, 64> parsed_properties;
   if (property_id != CSSPropertyID::kVariable &&
-      CSSPropertyParser::ParseValue(property_id, false, {range, css_text},
-                                    parser_context, parsed_properties,
-                                    StyleRule::RuleType::kStyle)) {
+      CSSPropertyParser::ParseValue(
+          property_id, /*allow_important_annotation=*/false, {range, css_text},
+          parser_context, parsed_properties, StyleRule::RuleType::kStyle)) {
     if (parsed_properties.size() == 1) {
       const auto result = StyleValueFactory::CssValueToStyleValueVector(
           CSSPropertyName(parsed_properties[0].Id()),
@@ -333,7 +333,8 @@ CSSStyleValueVector StyleValueFactory::FromString(
   }
 
   if ((property_id == CSSPropertyID::kVariable && !tokens.empty()) ||
-      CSSVariableParser::ContainsValidVariableReferences(range)) {
+      CSSVariableParser::ContainsValidVariableReferences(
+          range, parser_context->GetExecutionContext())) {
     const auto variable_data = CSSVariableData::Create(
         {range, StringView(css_text)}, false /* is_animation_tainted */,
         false /* needs variable resolution */);

@@ -98,7 +98,7 @@ class SigninWebDialogDelegate : public ui::WebDialogDelegate {
   ~SigninWebDialogDelegate() override = default;
 
   void OnLoadingStateChanged(content::WebContents* source) override {
-    network_portal_detector::GetInstance()->RequestCaptivePortalDetection();
+    NetworkHandler::Get()->network_state_handler()->RequestPortalDetection();
   }
 };
 
@@ -125,10 +125,8 @@ void NetworkPortalSigninController::ShowSignin(SigninSource source) {
   }
   auto portal_state = default_network->GetPortalState();
   if (portal_state != NetworkState::PortalState::kPortal &&
-      portal_state != NetworkState::PortalState::kPortalSuspected &&
-      portal_state != NetworkState::PortalState::kProxyAuthRequired) {
-    // If no portal or proxy signin is required, do not attempt to show the
-    // signin page.
+      portal_state != NetworkState::PortalState::kPortalSuspected) {
+    // If no portal signin is required, do not attempt to show the signin page.
     NET_LOG(EVENT) << "Show signin mode from: " << source << ": Network '"
                    << NetworkId(default_network)
                    << "' is in a non portal state: " << portal_state;
@@ -175,8 +173,6 @@ void NetworkPortalSigninController::ShowSignin(SigninSource source) {
       break;
     }
     case SigninMode::kIncognitoDisabledByPolicy:
-      ABSL_FALLTHROUGH_INTENDED;
-    case SigninMode::kIncognitoDisabledByParentalControls: {
       if (chromeos::features::IsCaptivePortalPopupWindowEnabled()) {
         // Since the signin window enables extensions and disables navigation,
         // no special handling is required when Incognito browsing is disabled
@@ -185,6 +181,11 @@ void NetworkPortalSigninController::ShowSignin(SigninSource source) {
       } else {
         ShowTab(ProfileManager::GetActiveUserProfile(), url);
       }
+      break;
+    case SigninMode::kIncognitoDisabledByParentalControls: {
+      // Supervised users require SupervisedUserNavigationThrottle which is
+      // only available to non OTR profiles.
+      ShowTab(ProfileManager::GetActiveUserProfile(), url);
       break;
     }
   }
@@ -204,15 +205,15 @@ NetworkPortalSigninController::GetSigninMode(
     return SigninMode::kSigninDialog;
   }
 
+  if (user_manager::UserManager::Get()->IsLoggedInAsChildUser()) {
+    NET_LOG(DEBUG) << "GetSigninMode: Child User";
+    return SigninMode::kIncognitoDisabledByParentalControls;
+  }
+
   Profile* profile = ProfileManager::GetActiveUserProfile();
   if (!profile) {
     NET_LOG(DEBUG) << "GetSigninMode: No profile";
     return SigninMode::kSigninDialog;
-  }
-
-  // When showing a proxy auth window, use a normal tab with proxies enabled.
-  if (portal_state == NetworkState::PortalState::kProxyAuthRequired) {
-    return SigninMode::kNormalTab;
   }
 
   // This pref defaults to true, but if a policy is active the policy value
@@ -233,11 +234,6 @@ NetworkPortalSigninController::GetSigninMode(
       &availability);
   if (availability == policy::IncognitoModeAvailability::kDisabled) {
     return SigninMode::kIncognitoDisabledByPolicy;
-  }
-
-  if (IncognitoModePrefs::GetAvailability(profile->GetPrefs()) ==
-      policy::IncognitoModeAvailability::kDisabled) {
-    return SigninMode::kIncognitoDisabledByParentalControls;
   }
 
   return SigninMode::kSigninDefault;

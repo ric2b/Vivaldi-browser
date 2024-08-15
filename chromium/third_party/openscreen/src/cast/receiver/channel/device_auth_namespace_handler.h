@@ -41,7 +41,7 @@ class DeviceAuthNamespaceHandler final : public CastMessageHandler {
   };
 
   // |creds_provider| must outlive |this|.
-  explicit DeviceAuthNamespaceHandler(CredentialsProvider* creds_provider);
+  explicit DeviceAuthNamespaceHandler(CredentialsProvider& creds_provider);
   ~DeviceAuthNamespaceHandler();
 
   // CastMessageHandler overrides.
@@ -50,7 +50,7 @@ class DeviceAuthNamespaceHandler final : public CastMessageHandler {
                  ::cast::channel::CastMessage message) override;
 
  private:
-  CredentialsProvider* const creds_provider_;
+  CredentialsProvider& creds_provider_;
 };
 
 }  // namespace openscreen::cast

@@ -24,6 +24,12 @@ class BookmarkNode;
 
 // Vivaldi
 @property(nonatomic, assign) BOOL shouldShowTrashIcon;
+- (BOOL)isFolder;
+- (NSString*)title;
+- (NSString*)nickname;
+- (NSString*)urlString;
+- (NSString*)description;
+- (NSDate*)createdAt;
 // End Vivaldi
 
 - (instancetype)initWithType:(NSInteger)type

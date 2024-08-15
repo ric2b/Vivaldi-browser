@@ -390,6 +390,9 @@ public class SigninFirstRunFragmentTest {
         doCallback(/* index= */ 2, (SignInCallback callback) -> callback.onSignInAborted())
                 .when(mSigninManagerMock)
                 .signin(eq(coreAccountInfo), anyInt(), any());
+        doCallback(/* index= */ 1, (Callback<Boolean> callback) -> callback.onResult(false))
+                .when(mSigninManagerMock)
+                .isAccountManaged(eq(coreAccountInfo), any());
         launchActivityWithFragment();
         checkFragmentWithSelectedAccount(TEST_EMAIL1, FULL_NAME1, GIVEN_NAME1);
 
@@ -401,7 +404,7 @@ public class SigninFirstRunFragmentTest {
 
         verify(mFirstRunPageDelegateMock).acceptTermsOfService(true);
         verify(mFirstRunPageDelegateMock, never()).advanceToNextPage();
-        // TODO(crbug/1248090): For now we enable the buttons again to not block the users from
+        // TODO(crbug.com/40790332): For now we enable the buttons again to not block the users from
         // continuing to the next page. Should show a dialog with the signin error.
         checkFragmentWithSelectedAccount(TEST_EMAIL1, FULL_NAME1, GIVEN_NAME1);
     }
@@ -1028,26 +1031,29 @@ public class SigninFirstRunFragmentTest {
     @EnableFeatures(SigninFeatures.SEED_ACCOUNTS_REVAMP)
     @Restriction({DeviceRestriction.RESTRICTION_TYPE_NON_AUTO})
     public void testFragmentSigninWhenAddedAccountIsNotYetAvailable() {
-        // This will freeze AccountManagerFacade with the currently available list of accounts.
-        // The added account from add account flow later on will not be available.
-        mSigninTestRule.blockGetCoreAccountInfosUpdate(/* populateCache= */ true);
-        mSigninTestRule.setResultForNextAddAccountFlow(Activity.RESULT_OK, TEST_EMAIL1);
-        launchActivityWithFragment();
-        onView(withText(R.string.signin_add_account_to_device)).perform(click());
-        checkFragmentWithSelectedAccount(TEST_EMAIL1, /* fullName= */ null, /* givenName= */ null);
-
         final String continueAsText =
                 mActivityTestRule
                         .getActivity()
                         .getString(R.string.sync_promo_continue_as, TEST_EMAIL1);
-        clickContinueButton(continueAsText);
 
-        // The click on continue button should be a no-op.
-        verify(mFirstRunPageDelegateMock, never()).advanceToNextPage();
-        checkFragmentWithSelectedAccount(TEST_EMAIL1, /* fullName= */ null, /* givenName= */ null);
+        // This will freeze AccountManagerFacade with the currently available list of accounts.
+        // The added account from add account flow later on will not be available.
+        try (var ignored =
+                mSigninTestRule.blockGetCoreAccountInfosUpdate(/* populateCache= */ true)) {
+            mSigninTestRule.setResultForNextAddAccountFlow(Activity.RESULT_OK, TEST_EMAIL1);
+            launchActivityWithFragment();
+            onView(withText(R.string.signin_add_account_to_device)).perform(click());
+            checkFragmentWithSelectedAccount(
+                    TEST_EMAIL1, /* fullName= */ null, /* givenName= */ null);
 
+            clickContinueButton(continueAsText);
+
+            // The click on continue button should be a no-op.
+            verify(mFirstRunPageDelegateMock, never()).advanceToNextPage();
+            checkFragmentWithSelectedAccount(
+                    TEST_EMAIL1, /* fullName= */ null, /* givenName= */ null);
+        }
         // Allow account list update and the continue button starts sign-in.
-        mSigninTestRule.unblockGetCoreAccountInfos();
         clickContinueButton(continueAsText);
         verify(mFirstRunPageDelegateMock, timeout(CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL))
                 .advanceToNextPage();
@@ -1066,7 +1072,7 @@ public class SigninFirstRunFragmentTest {
                 HistogramWatcher.newSingleRecordWatcher(
                         "MobileFre.SlowestLoadPoint", LoadPoint.POLICY_LOAD);
 
-        // TODO(https://crbug.com/1346258): Use OneshotSupplierImpl instead.
+        // TODO(crbug.com/40232416): Use OneshotSupplierImpl instead.
         when(mPolicyLoadListenerMock.get()).thenReturn(false);
         verify(mPolicyLoadListenerMock, atLeastOnce()).onAvailable(mCallbackCaptor.capture());
         TestThreadUtils.runOnUiThreadBlocking(
@@ -1118,7 +1124,7 @@ public class SigninFirstRunFragmentTest {
                 HistogramWatcher.newSingleRecordWatcher(
                         "MobileFre.SlowestLoadPoint", LoadPoint.CHILD_STATUS_LOAD);
 
-        // TODO(https://crbug.com/1346258): Use OneshotSupplierImpl instead.
+        // TODO(crbug.com/40232416): Use OneshotSupplierImpl instead.
         when(mChildAccountStatusListenerMock.get()).thenReturn(false);
         verify(mChildAccountStatusListenerMock, atLeastOnce())
                 .onAvailable(mCallbackCaptor.capture());

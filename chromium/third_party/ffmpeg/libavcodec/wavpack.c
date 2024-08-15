@@ -20,8 +20,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/buffer.h"
 #include "libavutil/channel_layout.h"
+#include "libavutil/mem.h"
 
 #define BITSTREAM_READER_LE
 #include "avcodec.h"
@@ -973,9 +973,11 @@ static inline int wv_unpack_mono(WavpackFrameContext *s, GetBitContext *gb,
 
 static av_cold int wv_alloc_frame_context(WavpackContext *c)
 {
-    c->fdec = av_realloc_f(c->fdec, c->fdec_num + 1, sizeof(*c->fdec));
-    if (!c->fdec)
+    WavpackFrameContext **fdec = av_realloc_array(c->fdec, c->fdec_num + 1, sizeof(*c->fdec));
+
+    if (!fdec)
         return -1;
+    c->fdec = fdec;
 
     c->fdec[c->fdec_num] = av_mallocz(sizeof(**c->fdec));
     if (!c->fdec[c->fdec_num])
@@ -1047,8 +1049,6 @@ static av_cold int wavpack_decode_init(AVCodecContext *avctx)
     if (!s->curr_frame.f || !s->prev_frame.f)
         return AVERROR(ENOMEM);
 
-    ff_init_dsd_data();
-
     return 0;
 }
 
@@ -1095,11 +1095,6 @@ static int wavpack_decode_block(AVCodecContext *avctx, int block_no,
     }
 
     s = wc->fdec[block_no];
-    if (!s) {
-        av_log(avctx, AV_LOG_ERROR, "Context for block %d is not present\n",
-               block_no);
-        return AVERROR_INVALIDDATA;
-    }
 
     memset(s->decorr, 0, MAX_TERMS * sizeof(Decorr));
     memset(s->ch, 0, sizeof(s->ch));
@@ -1527,6 +1522,7 @@ static int wavpack_decode_block(AVCodecContext *avctx, int block_no,
                 return ret;
             }
             ff_thread_release_ext_buffer(&wc->curr_frame);
+            ff_init_dsd_data();
         }
         av_channel_layout_copy(&avctx->ch_layout, &new_ch_layout);
         avctx->sample_rate         = new_samplerate;

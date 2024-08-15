@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-import * as TraceModel from '../trace.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
+import * as TraceModel from '../trace.js';
 
 async function parseAndFinalizeData(testContext: Mocha.Suite|Mocha.Context|null, traceFile: string) {
   const traceEvents = await TraceLoader.rawEvents(testContext, traceFile);
+  TraceModel.Handlers.ModelHandlers.Meta.reset();
+  TraceModel.Handlers.ModelHandlers.NetworkRequests.reset();
+  TraceModel.Handlers.ModelHandlers.PageLoadMetrics.reset();
   TraceModel.Handlers.ModelHandlers.Meta.initialize();
   TraceModel.Handlers.ModelHandlers.NetworkRequests.initialize();
   for (const event of traceEvents) {

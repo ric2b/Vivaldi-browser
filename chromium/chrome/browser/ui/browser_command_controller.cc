@@ -13,7 +13,9 @@
 #include "base/debug/debugging_buildflags.h"
 #include "base/debug/profiler.h"
 #include "base/functional/bind.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
+#include "base/time/time.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -36,10 +38,12 @@
 #include "chrome/browser/ui/bookmarks/bookmark_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/ui/lens/lens_overlay_controller.h"
 #include "chrome/browser/ui/managed_ui.h"
 #include "chrome/browser/ui/page_info/page_info_dialog.h"
 #include "chrome/browser/ui/passwords/ui_utils.h"
@@ -50,6 +54,8 @@
 #include "chrome/browser/ui/side_panel/side_panel_enums.h"
 #include "chrome/browser/ui/side_panel/side_panel_ui.h"
 #include "chrome/browser/ui/singleton_tabs.h"
+#include "chrome/browser/ui/startup/default_browser_prompt/default_browser_prompt_manager.h"
+#include "chrome/browser/ui/startup/default_browser_prompt/default_browser_prompt_prefs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
 #include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_utils.h"
@@ -555,7 +561,7 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       break;
 #endif
 
-// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// TODO(crbug.com/40118868): Revisit the macro expression once build flag switch
 // of lacros-chrome is complete.
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
     case IDC_MINIMIZE_WINDOW:
@@ -675,22 +681,16 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       ManagePasswordsForPage(browser_);
       break;
     case IDC_SEND_TAB_TO_SELF:
-      SendTabToSelfFromPageAction(browser_);
+      SendTabToSelf(browser_);
       break;
     case IDC_QRCODE_GENERATOR:
-      GenerateQRCodeFromPageAction(browser_);
+      GenerateQRCode(browser_);
       break;
     case IDC_SHARING_HUB:
-      SharingHubFromPageAction(browser_);
+      SharingHub(browser_);
       break;
     case IDC_SHARING_HUB_SCREENSHOT:
-      ScreenshotCaptureFromPageAction(browser_);
-      break;
-    case IDC_FOLLOW:
-      FollowSite(browser_->tab_strip_model()->GetActiveWebContents());
-      break;
-    case IDC_UNFOLLOW:
-      UnfollowSite(browser_->tab_strip_model()->GetActiveWebContents());
+      ScreenshotCapture(browser_);
       break;
 
     // Clipboard commands
@@ -769,8 +769,17 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       break;
     case IDC_CREATE_SHORTCUT:
       base::RecordAction(base::UserMetricsAction("CreateShortcut"));
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+      if (base::FeatureList::IsEnabled(features::kShortcutsNotApps)) {
+        chrome::CreateDesktopShortcutForActiveWebContents(browser_);
+      } else {
+        web_app::CreateWebAppFromCurrentWebContents(
+            browser_, web_app::WebAppInstallFlow::kCreateShortcut);
+      }
+#else
       web_app::CreateWebAppFromCurrentWebContents(
           browser_, web_app::WebAppInstallFlow::kCreateShortcut);
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
       break;
     case IDC_INSTALL_PWA:
       base::RecordAction(base::UserMetricsAction("InstallWebAppFromMenu"));
@@ -806,7 +815,7 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
 #endif
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
     case IDC_FEEDBACK:
-      OpenFeedbackDialog(browser_, kFeedbackSourceBrowserCommand);
+      OpenFeedbackDialog(browser_, feedback::kFeedbackSourceBrowserCommand);
       break;
     case IDC_SHOW_SEARCH_COMPANION:
       SidePanelUI::GetSidePanelUIForBrowser(browser_)->Show(
@@ -961,9 +970,6 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_SHOW_BETA_FORUM:
       ShowBetaForum(browser_);
       break;
-    case IDC_DISTILL_PAGE:
-      ToggleDistilledView(browser_);
-      break;
     case IDC_ROUTE_MEDIA:
       RouteMediaInvokedFromAppMenu(browser_);
       break;
@@ -975,6 +981,9 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       break;
     case IDC_WINDOW_GROUP_TAB:
       GroupTab(browser_);
+      break;
+    case IDC_CREATE_NEW_TAB_GROUP:
+      CreateNewTabGroup(browser_);
       break;
     case IDC_WINDOW_CLOSE_TABS_TO_RIGHT:
       CloseTabsToRight(browser_);
@@ -1039,6 +1048,10 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       break;
 #endif
 
+    case IDC_CONTENT_CONTEXT_LENS_OVERLAY:
+      ExecLensOverlay(browser_);
+      break;
+
 #if BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
     case IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH:
       ExecLensRegionSearch(browser_);
@@ -1100,6 +1113,31 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
           ProfilePicker::EntryPoint::kAppMenuProfileSubMenuManageProfiles));
       break;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
+    case IDC_SET_BROWSER_AS_DEFAULT:
+      base::MakeRefCounted<shell_integration::DefaultBrowserWorker>()
+          ->StartSetAsDefault(base::DoNothing());
+
+      // Log metrics before clearing prefs and closing prompts.
+      if (g_browser_process->local_state()->HasPrefPath(
+              prefs::kDefaultBrowserFirstShownTime)) {
+        base::UmaHistogramCounts100(
+            "DefaultBrowser.AppMenu.TimesShownBeforeAccept",
+            g_browser_process->local_state()->GetInteger(
+                prefs::kDefaultBrowserDeclinedCount) +
+                1);
+        base::UmaHistogramCustomTimes(
+            "DefaultBrowser.AppMenu.TimeToSetDefault",
+            base::Time::Now() - g_browser_process->local_state()->GetTime(
+                                    prefs::kDefaultBrowserFirstShownTime),
+            base::Milliseconds(1), base::Days(7), 50);
+      }
+      chrome::startup::default_prompt::UpdatePrefsForDismissedPrompt(
+          browser_->profile());
+      DefaultBrowserPromptManager::GetInstance()->CloseAllPrompts(
+          DefaultBrowserPromptManager::CloseReason::kAccept);
+      break;
+#endif
     default:
       if (!vivaldi::ExecuteVivaldiCommands(browser_, id)) {
       LOG(WARNING) << "Received Unimplemented Command: " << id;
@@ -1214,6 +1252,7 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(IDC_EXIT, true);
   command_updater_.UpdateCommandEnabled(IDC_NAME_WINDOW, true);
   command_updater_.UpdateCommandEnabled(IDC_ORGANIZE_TABS, true);
+  command_updater_.UpdateCommandEnabled(IDC_CREATE_NEW_TAB_GROUP, true);
 #if BUILDFLAG(IS_CHROMEOS)
   command_updater_.UpdateCommandEnabled(IDC_TOGGLE_MULTITASK_MENU, true);
 #endif
@@ -1233,7 +1272,7 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(IDC_VISIT_DESKTOP_OF_LRU_USER_4, true);
   command_updater_.UpdateCommandEnabled(IDC_VISIT_DESKTOP_OF_LRU_USER_5, true);
 #endif
-// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// TODO(crbug.com/40118868): Revisit the macro expression once build flag switch
 // of lacros-chrome is complete.
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   command_updater_.UpdateCommandEnabled(IDC_MINIMIZE_WINDOW, true);
@@ -1300,6 +1339,7 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(IDC_SHOW_BETA_FORUM, true);
   command_updater_.UpdateCommandEnabled(
       IDC_BOOKMARKS_MENU, (!guest_session && !profile()->IsSystemProfile()));
+  command_updater_.UpdateCommandEnabled(IDC_SAVED_TAB_GROUPS_MENU, true);
   command_updater_.UpdateCommandEnabled(
       IDC_RECENT_TABS_MENU, (!guest_session && !profile()->IsSystemProfile() &&
                              !profile()->IsIncognitoProfile()));
@@ -1374,6 +1414,7 @@ void BrowserCommandController::InitCommandState() {
 
   // These are always enabled; the menu determines their menu item visibility.
   command_updater_.UpdateCommandEnabled(IDC_UPGRADE_DIALOG, true);
+  command_updater_.UpdateCommandEnabled(IDC_SET_BROWSER_AS_DEFAULT, true);
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   command_updater_.UpdateCommandEnabled(IDC_LACROS_DATA_MIGRATION, true);
 #endif
@@ -1381,10 +1422,6 @@ void BrowserCommandController::InitCommandState() {
   // Safety Hub commands.
   command_updater_.UpdateCommandEnabled(
       IDC_OPEN_SAFETY_HUB, base::FeatureList::IsEnabled(features::kSafetyHub));
-
-  // Distill current page.
-  command_updater_.UpdateCommandEnabled(IDC_DISTILL_PAGE,
-                                        dom_distiller::IsDomDistillerEnabled());
 
   command_updater_.UpdateCommandEnabled(IDC_WINDOW_MUTE_SITE, normal_window);
   command_updater_.UpdateCommandEnabled(IDC_WINDOW_PIN_TAB, normal_window);
@@ -1406,6 +1443,10 @@ void BrowserCommandController::InitCommandState() {
     command_updater_.UpdateCommandEnabled(IDC_DEBUG_PRINT_VIEW_TREE_DETAILS,
                                           true);
   }
+
+  command_updater_.UpdateCommandEnabled(
+      IDC_CONTENT_CONTEXT_LENS_OVERLAY,
+      LensOverlayController::IsEnabled(browser_->profile()));
 
 #if BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
   if (base::FeatureList::IsEnabled(
@@ -1501,7 +1542,7 @@ void BrowserCommandController::UpdateCommandsForIncognitoAvailability() {
 }
 
 void BrowserCommandController::UpdateCommandsForExtensionsMenu() {
-  // TODO(crbug.com/401026): Talk with isandrk@chromium.org about whether this
+  // TODO(crbug.com/41124423): Talk with isandrk@chromium.org about whether this
   // is necessary for the experiment or not.
   if (is_locked_fullscreen_) {
     return;
@@ -1737,8 +1778,6 @@ void BrowserCommandController::UpdateCommandsForFullscreenMode() {
                                         show_main_ui);
   command_updater_.UpdateCommandEnabled(IDC_SHOW_APP_MENU, show_main_ui);
   command_updater_.UpdateCommandEnabled(IDC_SHOW_MANAGEMENT_PAGE, true);
-  command_updater_.UpdateCommandEnabled(IDC_FOLLOW, show_main_ui);
-  command_updater_.UpdateCommandEnabled(IDC_UNFOLLOW, show_main_ui);
 
   if (base::debug::IsProfilingSupported())
     command_updater_.UpdateCommandEnabled(IDC_PROFILING_ENABLED, show_main_ui);
@@ -1807,7 +1846,7 @@ void BrowserCommandController::UpdateCommandsForLockedFullscreenMode() {
     // Update the state of allowlisted commands:
     // IDC_CUT/IDC_COPY/IDC_PASTE,
     UpdateCommandsForContentRestrictionState();
-    // TODO(crbug.com/904637): Re-enable Find and Zoom in locked fullscreen.
+    // TODO(crbug.com/41426009): Re-enable Find and Zoom in locked fullscreen.
     // All other commands will be disabled (there is an early return in their
     // corresponding UpdateCommandsFor* functions).
 #if DCHECK_IS_ON()

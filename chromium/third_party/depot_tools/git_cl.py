@@ -46,6 +46,7 @@ import gerrit_util
 import git_common
 import git_footers
 import git_new_branch
+import google_java_format
 import metrics
 import metrics_utils
 import owners_client
@@ -1320,7 +1321,8 @@ class Changelist(object):
 
         self.branchref = branchref
         if self.branchref:
-            assert branchref.startswith(('refs/heads/', 'refs/branch-heads/'))
+            assert (branchref.startswith(('refs/heads/', 'refs/branch-heads/'))
+                    or branchref == 'refs/meta/config')
             self.branch = scm.GIT.ShortBranchName(self.branchref)
         else:
             self.branch = None
@@ -4580,21 +4582,72 @@ def CMDdescription(parser, args):
     return 0
 
 
+def FindFilesForLint(options, args):
+    """Returns the base folder and a list of files to lint."""
+    files = []
+    cwd = os.getcwd()
+    if len(args) > 0:
+        # If file paths are given in positional args, run the lint tools
+        # against them without using git commands. This allows git_cl.py
+        # runnable against any files even out of git checkouts.
+        for fn in args:
+            if os.path.isfile(fn):
+                files.append(fn)
+            else:
+                print('%s is not a file' % fn)
+                return None, None
+    else:
+        # If file names are omitted, use the git APIs to find the files to lint.
+        include_regex = re.compile(settings.GetLintRegex())
+        ignore_regex = re.compile(settings.GetLintIgnoreRegex())
+        cl = Changelist()
+        cwd = settings.GetRoot()
+        affectedFiles = cl.GetAffectedFiles(cl.GetCommonAncestorWithUpstream())
+        if not affectedFiles:
+            print('Cannot lint an empty CL')
+            return None, None
+
+        for fn in affectedFiles:
+            if not include_regex.match(fn):
+                print('Skipping file %s' % fn)
+            elif ignore_regex.match(fn):
+                print('Ignoring file %s' % fn)
+            else:
+                files.append(fn)
+
+    return cwd, files
+
+
+@subcommand.usage('[files ...]')
 @metrics.collector.collect_metrics('git cl lint')
 def CMDlint(parser, args):
-    """Runs cpplint on the current changelist."""
+    """Runs cpplint on the current changelist or given files.
+
+    positional arguments:
+      files           Files to lint. If omitted, it will run cpplint against
+                      all the affected files in the current git checkout.
+    """
     parser.add_option(
         '--filter',
         action='append',
         metavar='-x,+y',
         help='Comma-separated list of cpplint\'s category-filters')
     options, args = parser.parse_args(args)
+    root_path, files = FindFilesForLint(options, args)
+    if files is None:
+        return 1
 
     # Access to a protected member _XX of a client class
     # pylint: disable=protected-access
     try:
         import cpplint
         import cpplint_chromium
+
+        # Process cpplint arguments, if any.
+        filters = presubmit_canned_checks.GetCppLintFilters(options.filter)
+        command = ['--filter=' + ','.join(filters)]
+        command.extend(files)
+        files_to_lint = cpplint.ParseArguments(command)
     except ImportError:
         print(
             'Your depot_tools is missing cpplint.py and/or cpplint_chromium.py.'
@@ -4604,39 +4657,17 @@ def CMDlint(parser, args):
     # Change the current working directory before calling lint so that it
     # shows the correct base.
     previous_cwd = os.getcwd()
-    os.chdir(settings.GetRoot())
     try:
-        cl = Changelist()
-        files = cl.GetAffectedFiles(cl.GetCommonAncestorWithUpstream())
-        if not files:
-            print('Cannot lint an empty CL')
-            return 1
-
-        # Process cpplint arguments, if any.
-        filters = presubmit_canned_checks.GetCppLintFilters(options.filter)
-        command = ['--filter=' + ','.join(filters)]
-        command.extend(args)
-        command.extend(files)
-        filenames = cpplint.ParseArguments(command)
-
-        include_regex = re.compile(settings.GetLintRegex())
-        ignore_regex = re.compile(settings.GetLintIgnoreRegex())
+        os.chdir(root_path)
         extra_check_functions = [
             cpplint_chromium.CheckPointerDeclarationWhitespace
         ]
-        for filename in filenames:
-            if not include_regex.match(filename):
-                print('Skipping file %s' % filename)
-                continue
-
-            if ignore_regex.match(filename):
-                print('Ignoring file %s' % filename)
-                continue
-
-            cpplint.ProcessFile(filename, cpplint._cpplint_state.verbose_level,
+        for file in files_to_lint:
+            cpplint.ProcessFile(file, cpplint._cpplint_state.verbose_level,
                                 extra_check_functions)
     finally:
         os.chdir(previous_cwd)
+
     print('Total errors found: %d\n' % cpplint._cpplint_state.error_count)
     if cpplint._cpplint_state.error_count != 0:
         return 1
@@ -5821,11 +5852,10 @@ def CMDupstream(parser, args):
         # One arg means set upstream branch.
         branch = cl.GetBranch()
         RunGit(['branch', '--set-upstream-to', args[0], branch])
-        cl = Changelist()
-        print('Upstream branch set to %s' % (cl.GetUpstreamBranch(), ))
-
         # Clear configured merge-base, if there is one.
         git_common.remove_merge_base(branch)
+        cl = Changelist()
+        print('Upstream branch set to %s' % (cl.GetUpstreamBranch(), ))
     else:
         print(cl.GetUpstreamBranch())
     return 0
@@ -6096,7 +6126,11 @@ def _RunClangFormatDiff(opts, clang_diff_files, top_dir, upstream_commit):
         env = os.environ.copy()
         env['PATH'] = (str(os.path.dirname(clang_format_tool)) + os.pathsep +
                        env['PATH'])
+        # If `clang-format-diff.py` is run without `-i` and the diff is
+        # non-empty, it returns an error code of 1. This will cause `RunCommand`
+        # to die with an error if `error_ok` is not set.
         stdout = RunCommand(cmd,
+                            error_ok=True,
                             stdin=diff_output,
                             cwd=top_dir,
                             env=env,
@@ -6109,34 +6143,16 @@ def _RunClangFormatDiff(opts, clang_diff_files, top_dir, upstream_commit):
     return return_value
 
 
-def _FindGoogleJavaFormat():
-    # Allow non-chromium projects to use a custom location.
-    primary_solution_path = gclient_paths.GetPrimarySolutionPath()
-    if primary_solution_path:
-        override = os.environ.get('GOOGLE_JAVA_FORMAT_PATH')
-        if override:
-            # Make relative to solution root if not an absolute path.
-            return os.path.join(primary_solution_path, override)
-
-        path = os.path.join(primary_solution_path, 'third_party',
-                            'google-java-format', 'google-java-format')
-        # Check that the .jar exists, since it is conditionally downloaded via
-        # DEPS conditions.
-        if os.path.exists(path) and os.path.exists(path + '.jar'):
-            return path
-    return None
-
-
 def _RunGoogleJavaFormat(opts, paths, top_dir, upstream_commit):
     """Runs google-java-format and sets a return value if necessary."""
-    google_java_format = _FindGoogleJavaFormat()
-    if google_java_format is None:
+    tool = google_java_format.FindGoogleJavaFormat()
+    if tool is None:
         # Fail silently. It could be we are on an old chromium revision, or that
         # it is a non-chromium project. https://crbug.com/1491627
         print('google-java-format not found, skipping java formatting.')
         return 0
 
-    base_cmd = [google_java_format, '--aosp']
+    base_cmd = [tool, '--aosp']
     if not opts.diff:
         if opts.dry_run:
             base_cmd += ['--dry-run']
@@ -6351,7 +6367,7 @@ def _RunMojomFormat(opts, paths, top_dir, upstream_commit):
         DieWithError('Could not find mojom formater at '
                      f'"{mojom_format_path}"')
 
-    cmd = [mojom_format_path]
+    cmd = ['vpython3', mojom_format_path]
     if opts.dry_run:
         cmd.append('--dry-run')
     cmd.extend(paths)

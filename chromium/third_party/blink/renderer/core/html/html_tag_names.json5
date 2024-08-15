@@ -355,6 +355,7 @@
     {
       name: "object",
       constructorNeedsCreateElementFlags: true,
+      noTypeHelpers: true,
     },
     {
       name: "ol",
@@ -382,6 +383,8 @@
       name: "permission",
       interfaceName: "HTMLPermissionElement",
       runtimeEnabled: "PermissionElement",
+      runtimeFlagHasOriginTrial: true,
+      noTypeHelpers: true,
     },
     {
       name: "picture",
@@ -447,8 +450,9 @@
     },
     {
       name: "selectedoption",
-      interfaceName: "HTMLElement",
-      runtimeEnabled: "HTMLSelectListElement",
+      interfaceName: "HTMLSelectedOptionElement",
+      interfaceHeaderDir: "third_party/blink/renderer/core/html/forms",
+      runtimeEnabled: "StylableSelect",
     },
     {
       name: "selectlist",

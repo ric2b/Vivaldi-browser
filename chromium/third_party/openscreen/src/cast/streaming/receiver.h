@@ -112,8 +112,8 @@ class Receiver : public ReceiverBase {
   // agreed-upon by both sides from the OFFER/ANSWER exchange (i.e., the part of
   // the overall end-to-end connection process that occurs before Cast Streaming
   // is started).
-  Receiver(Environment* environment,
-           ReceiverPacketRouter* packet_router,
+  Receiver(Environment& environment,
+           ReceiverPacketRouter& packet_router,
            SessionConfig config);
   ~Receiver() override;
 
@@ -218,7 +218,7 @@ class Receiver : public ReceiverBase {
   void ScheduleFrameReadyCheck(Clock::time_point when = Alarm::kImmediately);
 
   const ClockNowFunctionPtr now_;
-  ReceiverPacketRouter* const packet_router_;
+  ReceiverPacketRouter& packet_router_;
   const SessionConfig config_;
   RtcpSession rtcp_session_;
   SenderReportParser rtcp_parser_;

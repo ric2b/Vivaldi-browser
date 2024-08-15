@@ -57,7 +57,7 @@ class CookiesFetcherRestoreUtilBrowserTest : public AndroidBrowserTest {
         jni_zero::JavaParamRef<jstring>(
             env,
             base::android::ConvertUTF8ToJavaString(env, partition_key).obj()),
-        /*source_scheme=*/2, /*source_port=*/-1);
+        /*source_scheme=*/2, /*source_port=*/-1, /*source_type=*/0);
   }
 
   bool HasCookie(std::string partition_key) {
@@ -77,7 +77,10 @@ class CookiesFetcherRestoreUtilBrowserTest : public AndroidBrowserTest {
     EXPECT_EQ(cookies_for_profile.size(), 1u);
     EXPECT_EQ(cookies_for_profile[0].Name(), "test");
     EXPECT_EQ(cookies_for_profile[0].PartitionKey(),
-              *net::CookiePartitionKey::FromStorage(partition_key));
+              *net::CookiePartitionKey::FromStorage(
+                  partition_key, /*has_cross_site_ancestor=*/true));
+    EXPECT_NE(cookies_for_profile[0].IsPartitioned(),
+              partition_key.empty());
     return true;
   }
 

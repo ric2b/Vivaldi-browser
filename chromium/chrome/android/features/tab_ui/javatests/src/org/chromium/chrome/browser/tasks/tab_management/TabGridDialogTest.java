@@ -29,7 +29,9 @@ import static androidx.test.espresso.matcher.ViewMatchers.withParent;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.core.IsEqual.equalTo;
@@ -37,10 +39,12 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.when;
 
-import static org.chromium.chrome.browser.flags.ChromeFeatureList.DEFER_TAB_SWITCHER_LAYOUT_CREATION;
+import static org.chromium.chrome.browser.flags.ChromeFeatureList.ANDROID_HUB;
+import static org.chromium.chrome.browser.flags.ChromeFeatureList.ANDROID_TAB_GROUP_STABLE_IDS;
 import static org.chromium.chrome.browser.flags.ChromeFeatureList.TAB_GROUP_PARITY_ANDROID;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.addBlankTabs;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.clickFirstCardFromTabSwitcher;
@@ -48,6 +52,7 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.c
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.clickNthTabInDialog;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.closeFirstTabInDialog;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.closeNthTabInDialog;
+import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.createTabGroup;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.createTabs;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.enterTabSwitcher;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.finishActivity;
@@ -88,6 +93,7 @@ import androidx.test.runner.lifecycle.ActivityLifecycleMonitor;
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry;
 import androidx.test.runner.lifecycle.Stage;
 
+import org.hamcrest.Matcher;
 import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
@@ -100,6 +106,7 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import org.chromium.base.Callback;
 import org.chromium.base.test.params.ParameterAnnotations;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.Batch;
@@ -111,20 +118,27 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
+import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.RequiresRestart;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
-import org.chromium.chrome.browser.app.bookmarks.BookmarkAddEditFolderActivity;
 import org.chromium.chrome.browser.app.bookmarks.BookmarkEditActivity;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.homepage.HomepagePolicyManager;
+import org.chromium.chrome.browser.hub.HubContainerView;
 import org.chromium.chrome.browser.hub.HubFieldTrial;
 import org.chromium.chrome.browser.layouts.LayoutTestUtils;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.night_mode.ChromeNightModeTestUtils;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tabmodel.TabModel;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.pseudotab.TabAttributeCache;
+import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -135,10 +149,14 @@ import org.chromium.chrome.test.util.BookmarkTestUtil;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.MenuUtils;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.components.user_prefs.UserPrefs;
+import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
-import org.chromium.content_public.common.ContentFeatures;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.base.DeviceFormFactor;
+import org.chromium.ui.modaldialog.DialogDismissalCause;
+import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.test.util.DeviceRestriction;
 import org.chromium.ui.test.util.NightModeTestUtils;
 import org.chromium.ui.test.util.UiDisableIf;
@@ -147,6 +165,7 @@ import org.chromium.ui.util.ColorUtils;
 import org.chromium.url.GURL;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 /** End-to-end tests for TabGridDialog component. */
@@ -154,7 +173,8 @@ import java.util.concurrent.ExecutionException;
 @ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @Restriction({Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE})
-@EnableFeatures({DEFER_TAB_SWITCHER_LAYOUT_CREATION, TAB_GROUP_PARITY_ANDROID})
+@EnableFeatures({ANDROID_HUB})
+@DisableFeatures({TAB_GROUP_PARITY_ANDROID})
 @Batch(Batch.PER_CLASS)
 public class TabGridDialogTest {
     private static final String CUSTOMIZED_TITLE1 = "wfh tips";
@@ -169,6 +189,7 @@ public class TabGridDialogTest {
 
     private boolean mHasReceivedSourceRect;
     private TabListEditorTestingRobot mSelectionEditorRobot = new TabListEditorTestingRobot();
+    private ModalDialogManager mModalDialogManager;
 
     @ClassRule
     public static ChromeTabbedActivityTestRule sActivityTestRule =
@@ -179,7 +200,7 @@ public class TabGridDialogTest {
             ChromeRenderTestRule.Builder.withPublicCorpus()
                     .setBugComponent(
                             ChromeRenderTestRule.Component.UI_BROWSER_MOBILE_TAB_SWITCHER_GRID)
-                    .setRevision(4)
+                    .setRevision(9)
                     .build();
 
     // Must force tab re-creation to ensure tab group names make sense.
@@ -218,6 +239,21 @@ public class TabGridDialogTest {
         ChromeTabbedActivity.interceptMoveTaskToBackForTesting();
         CriteriaHelper.pollUiThread(
                 sActivityTestRule.getActivity().getTabModelSelector()::isTabStateInitialized);
+        mModalDialogManager =
+                TestThreadUtils.runOnUiThreadBlockingNoException(
+                        sActivityTestRule.getActivity()::getModalDialogManager);
+
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    Profile profile =
+                            sActivityTestRule
+                                    .getActivity()
+                                    .getProfileProviderSupplier()
+                                    .get()
+                                    .getOriginalProfile();
+                    PrefService prefService = UserPrefs.get(profile);
+                    ActionConfirmationManager.clearStopShowingPrefsForTesting(prefService);
+                });
     }
 
     @After
@@ -247,6 +283,8 @@ public class TabGridDialogTest {
             }
             waitForDialogHidingAnimation(cta);
         }
+
+        dismissAllModalDialogs();
 
         if (cta.getLayoutManager().isLayoutVisible(LayoutType.TAB_SWITCHER)
                 && !cta.getLayoutManager().isLayoutStartingToHide(LayoutType.TAB_SWITCHER)) {
@@ -356,6 +394,76 @@ public class TabGridDialogTest {
 
     @Test
     @MediumTest
+    public void testAddTabHidesDialog() {
+        final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
+        createTabs(cta, false, 2);
+        enterTabSwitcher(cta);
+        verifyTabSwitcherCardCount(cta, 2);
+
+        // Create a tab group.
+        mergeAllNormalTabsToAGroup(cta);
+        verifyTabSwitcherCardCount(cta, 1);
+        // Open dialog from tab switcher and verify dialog is showing correct content.
+        openDialogFromTabSwitcherAndVerify(cta, 2, null);
+
+        // Add a tab to hide the group. Any foreground launch type will also hide the tab switcher
+        // so use a background one to make testing easier.
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    Tab parentTab = cta.getTabModelSelector().getModel(false).getTabAt(0);
+                    cta.getCurrentTabCreator()
+                            .createNewTab(
+                                    new LoadUrlParams("about:blank"),
+                                    "About title",
+                                    TabLaunchType.FROM_LONGPRESS_BACKGROUND_IN_GROUP,
+                                    parentTab,
+                                    TabModel.INVALID_TAB_INDEX);
+                });
+        waitForDialogHidingAnimationInTabSwitcher(cta);
+
+        verifyTabSwitcherCardCount(cta, 1);
+    }
+
+    @Test
+    @MediumTest
+    public void testAddTabSkipsHideDialogForSync() {
+        final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
+        createTabs(cta, false, 2);
+        enterTabSwitcher(cta);
+        verifyTabSwitcherCardCount(cta, 2);
+
+        // Create a tab group.
+        mergeAllNormalTabsToAGroup(cta);
+        verifyTabSwitcherCardCount(cta, 1);
+        // Open dialog from tab switcher and verify dialog is showing correct content.
+        openDialogFromTabSwitcherAndVerify(cta, 2, null);
+
+        // Add a tab to hide the group.
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    TabModelSelector selector = cta.getTabModelSelector();
+                    Tab destinationTab = selector.getModel(false).getTabAt(0);
+                    Tab tab =
+                            cta.getCurrentTabCreator()
+                                    .createNewTab(
+                                            new LoadUrlParams("about:blank"),
+                                            "About title",
+                                            TabLaunchType.FROM_SYNC_BACKGROUND,
+                                            null,
+                                            TabModel.INVALID_TAB_INDEX);
+                    ((TabGroupModelFilter)
+                                    selector.getTabModelFilterProvider().getTabModelFilter(false))
+                            .mergeListOfTabsToGroup(
+                                    List.of(tab), destinationTab, /* notify= */ false);
+                });
+        CriteriaHelper.pollUiThread(() -> isDialogFullyVisible(cta));
+        verifyShowingDialog(cta, 3, null);
+    }
+
+    @Test
+    @MediumTest
+    @EnableFeatures(TAB_GROUP_PARITY_ANDROID)
+    @RequiresRestart("Group creation modal dialog is sometimes persistent after dismissing")
     public void testTabGroupDialogUi() {
         final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         createTabs(cta, false, 2);
@@ -364,6 +472,7 @@ public class TabGridDialogTest {
 
         // Create a tab group.
         mergeAllNormalTabsToAGroup(cta);
+        verifyGroupCreationDialogOpenedAndDismiss();
         verifyTabSwitcherCardCount(cta, 1);
 
         // Open dialog and verify dialog is showing correct content.
@@ -454,6 +563,50 @@ public class TabGridDialogTest {
 
     @Test
     @MediumTest
+    @EnableFeatures(ANDROID_TAB_GROUP_STABLE_IDS)
+    public void testTabGroupDialogRemainsOpenOnSyncUpdate() {
+        final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
+        createTabs(cta, false, 3);
+        enterTabSwitcher(cta);
+        verifyTabSwitcherCardCount(cta, 3);
+        // Create a tab group.
+        mergeAllNormalTabsToAGroup(cta);
+        verifyTabSwitcherCardCount(cta, 1);
+
+        leaveTabSwitcher(cta);
+
+        TabModel model = cta.getTabModelSelector().getModel(false);
+        addBlankTabs(cta, false, 3);
+        enterTabSwitcher(cta);
+        createTabGroup(
+                cta, false, List.of(model.getTabAt(3), model.getTabAt(4), model.getTabAt(5)));
+
+        // Open dialog and verify dialog is showing correct content.
+        openDialogFromTabSwitcherAndVerify(cta, 3, null);
+
+        Callback<Integer> closeTabAt =
+                (index) -> {
+                    model.closeTab(model.getTabAt(index));
+                };
+        // Close two tabs in the current group
+        TestThreadUtils.runOnUiThreadBlocking(closeTabAt.bind(0));
+        verifyShowingDialog(cta, 2, null);
+        TestThreadUtils.runOnUiThreadBlocking(closeTabAt.bind(0));
+        verifyShowingDialog(cta, 1, null);
+
+        // Close two tabs in the GTS background group, dialog should still show.
+        TestThreadUtils.runOnUiThreadBlocking(closeTabAt.bind(1));
+        verifyShowingDialog(cta, 1, null);
+        TestThreadUtils.runOnUiThreadBlocking(closeTabAt.bind(1));
+        verifyShowingDialog(cta, 1, null);
+        TestThreadUtils.runOnUiThreadBlocking(closeTabAt.bind(1));
+        verifyShowingDialog(cta, 1, null);
+    }
+
+    @Test
+    @MediumTest
+    @EnableFeatures(TAB_GROUP_PARITY_ANDROID)
+    @RequiresRestart("Group creation modal dialog is sometimes persistent when dismissing")
     public void testColorPickerOnIconClick() throws ExecutionException {
         final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
 
@@ -471,7 +624,15 @@ public class TabGridDialogTest {
 
         // Create a tab group.
         mergeAllNormalTabsToAGroup(cta);
+        verifyGroupCreationDialogOpenedAndDismiss();
         verifyTabSwitcherCardCount(cta, 1);
+
+        // Expect the color icon to be clicked.
+        var histograms =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecordTimes(
+                                "Android.TabGroupParity.TabGroupColorChangeActionType", 0, 3)
+                        .build();
 
         // Open dialog and click the color icon to show the color picker.
         openDialogFromTabSwitcherAndVerify(cta, 2, null);
@@ -502,10 +663,13 @@ public class TabGridDialogTest {
         // Clicking ScrimView should close the color picker pop up.
         onView(withId(R.id.tab_group_color_icon)).perform(click());
         clickScrimToExitDialog(cta);
+        histograms.assertExpected();
     }
 
     @Test
     @MediumTest
+    @EnableFeatures(TAB_GROUP_PARITY_ANDROID)
+    @RequiresRestart("Group creation modal dialog is sometimes persistent when dismissing")
     public void testColorPickerOnToolbarMenuItemClick() throws ExecutionException {
         final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
 
@@ -523,7 +687,13 @@ public class TabGridDialogTest {
 
         // Create a tab group.
         mergeAllNormalTabsToAGroup(cta);
+        verifyGroupCreationDialogOpenedAndDismiss();
         verifyTabSwitcherCardCount(cta, 1);
+
+        // Expect the edit color menu item to be clicked.
+        HistogramWatcher watcher =
+                HistogramWatcher.newSingleRecordWatcher(
+                        "Android.TabGroupParity.TabGroupColorChangeActionType", 1);
 
         // Open dialog and click the toolbar menu item to show the color picker.
         openDialogFromTabSwitcherAndVerify(cta, 2, null);
@@ -543,6 +713,7 @@ public class TabGridDialogTest {
                                 withId(R.id.color_picker_container)))
                 .check(doesNotExist());
         clickScrimToExitDialog(cta);
+        watcher.assertExpected();
     }
 
     @Test
@@ -588,6 +759,8 @@ public class TabGridDialogTest {
 
     @Test
     @MediumTest
+    @EnableFeatures(TAB_GROUP_PARITY_ANDROID)
+    @RequiresRestart("Group creation modal dialog is sometimes persistent when dismissing")
     public void testDialogToolbarSelectionEditor() throws ExecutionException {
         final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         createTabs(cta, false, 2);
@@ -596,6 +769,7 @@ public class TabGridDialogTest {
 
         // Create a tab group.
         mergeAllNormalTabsToAGroup(cta);
+        verifyGroupCreationDialogOpenedAndDismiss();
         verifyTabSwitcherCardCount(cta, 1);
 
         // Open dialog and open selection editor and confirm the share action isn't visible.
@@ -656,6 +830,7 @@ public class TabGridDialogTest {
 
     @Test
     @MediumTest
+    @DisableIf.Device(type = {UiDisableIf.TABLET}) // https://crbug.com/338998202
     public void testDialogSelectionEditor_PostLongPressClickNoSelectionEditor()
             throws ExecutionException {
         TabUiFeatureUtilities.setTabListEditorLongPressEntryEnabledForTesting(true);
@@ -781,7 +956,7 @@ public class TabGridDialogTest {
                                 isDisplayed()))
                 .perform(click());
 
-        BookmarkAddEditFolderActivity activity = BookmarkTestUtil.waitForAddEditFolderActivity();
+        BookmarkEditActivity activity = BookmarkTestUtil.waitForEditActivity();
         activity.finish();
 
         mSelectionEditorRobot.resultRobot.verifyTabListEditorIsVisible();
@@ -983,6 +1158,43 @@ public class TabGridDialogTest {
 
     @Test
     @MediumTest
+    public void testDialogSelectionEditor_UngroupAll() {
+        final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
+        createTabs(cta, false, 4);
+        enterTabSwitcher(cta);
+        verifyTabSwitcherCardCount(cta, 4);
+
+        // Create a tab group.
+        mergeAllNormalTabsToAGroup(cta);
+        verifyTabSwitcherCardCount(cta, 1);
+
+        // Open the selection editor.
+        openDialogFromTabSwitcherAndVerify(cta, 4, null);
+        openSelectionEditorAndVerify(cta, 4);
+
+        // Ungroup all four tabs.
+        mSelectionEditorRobot
+                .actionRobot
+                .clickItemAtAdapterPosition(0)
+                .clickItemAtAdapterPosition(1)
+                .clickItemAtAdapterPosition(2)
+                .clickItemAtAdapterPosition(3)
+                .clickToolbarMenuButton()
+                .clickToolbarMenuItem("Ungroup tabs");
+
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    Criteria.checkThat(mModalDialogManager.isShowing(), Matchers.is(true));
+                });
+        onViewWaiting(withText("Delete group"), /* checkRootDialog= */ true).perform(click());
+
+        mSelectionEditorRobot.resultRobot.verifyTabListEditorIsHidden();
+        waitForDialogHidingAnimationInTabSwitcher(cta);
+        verifyTabSwitcherCardCount(cta, 4);
+    }
+
+    @Test
+    @MediumTest
     // Swipe action Fails with espresso 3.2. b/329707221
     @DisableIf.Build(sdk_is_greater_than = android.os.Build.VERSION_CODES.S)
     public void testSwipeToDismiss_Dialog() {
@@ -1016,8 +1228,6 @@ public class TabGridDialogTest {
 
     @Test
     @MediumTest
-    // TODO(crbug.com/1380489): Re-enable once test is no longer flaky locally.
-    @DisableFeatures({ContentFeatures.SURFACE_SYNC_FULLSCREEN_KILLSWITCH})
     @Restriction(DeviceRestriction.RESTRICTION_TYPE_NON_AUTO)
     public void testSelectionEditorPosition() {
         final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
@@ -1120,6 +1330,8 @@ public class TabGridDialogTest {
 
     @Test
     @MediumTest
+    @EnableFeatures(TAB_GROUP_PARITY_ANDROID)
+    @RequiresRestart("Group creation modal dialog is sometimes persistent when dismissing")
     public void testTabGroupNaming_KeyboardVisibility() throws ExecutionException {
         final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         createTabs(cta, false, 2);
@@ -1128,6 +1340,7 @@ public class TabGridDialogTest {
 
         // Create a tab group.
         mergeAllNormalTabsToAGroup(cta);
+        verifyGroupCreationDialogOpenedAndDismiss();
         verifyTabSwitcherCardCount(cta, 1);
         openDialogFromTabSwitcherAndVerify(
                 cta,
@@ -1294,6 +1507,8 @@ public class TabGridDialogTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
+    @EnableFeatures({TAB_GROUP_PARITY_ANDROID})
+    @RequiresRestart("Group creation modal dialog is sometimes persistent when dismissing")
     @ParameterAnnotations.UseMethodParameter(NightModeTestUtils.NightModeParams.class)
     public void testRenderDialog_3Tabs_Portrait(boolean nightModeEnabled) throws Exception {
         final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
@@ -1305,6 +1520,7 @@ public class TabGridDialogTest {
 
         // Create a tab group.
         mergeAllNormalTabsToAGroup(cta);
+        verifyGroupCreationDialogOpenedAndDismiss();
         verifyTabSwitcherCardCount(cta, 1);
         openDialogFromTabSwitcherAndVerify(cta, 3, null);
 
@@ -1317,6 +1533,8 @@ public class TabGridDialogTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
+    @EnableFeatures({TAB_GROUP_PARITY_ANDROID})
+    @RequiresRestart("Group creation modal dialog is sometimes persistent when dismissing")
     @ParameterAnnotations.UseMethodParameter(NightModeTestUtils.NightModeParams.class)
     public void testRenderDialog_3Tabs_Landscape_NewAspectRatio(boolean nightModeEnabled)
             throws Exception {
@@ -1330,6 +1548,7 @@ public class TabGridDialogTest {
         // Rotate to landscape mode and create a tab group.
         ActivityTestUtils.rotateActivityToOrientation(cta, Configuration.ORIENTATION_LANDSCAPE);
         mergeAllNormalTabsToAGroup(cta);
+        verifyGroupCreationDialogOpenedAndDismiss();
         verifyTabSwitcherCardCount(cta, 1);
         openDialogFromTabSwitcherAndVerify(cta, 3, null);
 
@@ -1342,6 +1561,8 @@ public class TabGridDialogTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
+    @EnableFeatures({TAB_GROUP_PARITY_ANDROID})
+    @RequiresRestart("Group creation modal dialog is sometimes persistent when dismissing")
     @ParameterAnnotations.UseMethodParameter(NightModeTestUtils.NightModeParams.class)
     public void testRenderDialog_5Tabs_InitialScroll(boolean nightModeEnabled) throws Exception {
         final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
@@ -1353,6 +1574,7 @@ public class TabGridDialogTest {
 
         // Create a tab group.
         mergeAllNormalTabsToAGroup(cta);
+        verifyGroupCreationDialogOpenedAndDismiss();
         verifyTabSwitcherCardCount(cta, 1);
         openDialogFromTabSwitcherAndVerify(cta, 5, null);
 
@@ -1371,6 +1593,9 @@ public class TabGridDialogTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
+    @EnableFeatures(TAB_GROUP_PARITY_ANDROID)
+    @DisableFeatures({ChromeFeatureList.LOGO_POLISH})
+    @RequiresRestart("Group creation modal dialog is sometimes persistent when dismissing")
     @ParameterAnnotations.UseMethodParameter(NightModeTestUtils.NightModeParams.class)
     public void testRenderDialog_TabGroupColorChange(boolean nightModeEnabled) throws Exception {
         final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
@@ -1397,6 +1622,7 @@ public class TabGridDialogTest {
 
         // Create a tab group.
         mergeAllNormalTabsToAGroup(cta);
+        verifyGroupCreationDialogOpenedAndDismiss();
         verifyTabSwitcherCardCount(cta, 1);
 
         // Open dialog and click the color icon to show the color picker.
@@ -1419,10 +1645,9 @@ public class TabGridDialogTest {
         clickScrimToExitDialog(cta);
         waitForDialogHidingAnimationInTabSwitcher(cta);
         View dialogView = cta.findViewById(R.id.dialog_parent_view);
-        View tabSwitcherView = cta.findViewById(R.id.tab_list_recycler_view);
-        waitForThumbnailsToFetch((RecyclerView) tabSwitcherView);
+        waitForThumbnailsToFetch(getRecyclerView(cta));
         // Take the GTS first snapshot, which should have the second color (blue) shown.
-        mRenderTestRule.render(tabSwitcherView, "GTS_tab_group_color_initial");
+        mRenderTestRule.render(getRecyclerView(cta), "GTS_tab_group_color_initial");
 
         openDialogFromTabSwitcherAndVerify(cta, 2, null);
         waitForThumbnailsToFetch(
@@ -1452,28 +1677,9 @@ public class TabGridDialogTest {
 
         clickScrimToExitDialog(cta);
         waitForDialogHidingAnimationInTabSwitcher(cta);
-        waitForThumbnailsToFetch((RecyclerView) tabSwitcherView);
+        waitForThumbnailsToFetch(getRecyclerView(cta));
         // Take the GTS second snapshot, which should have the third color (red) shown.
-        mRenderTestRule.render(tabSwitcherView, "GTS_tab_group_color_changed");
-    }
-
-    @Test
-    @MediumTest
-    @EnableFeatures({ChromeFeatureList.INSTANT_START})
-    @DisabledTest(message = "crbug.com/1522195")
-    public void testSetup_WithInstantStart() {
-        final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
-        prepareTabsWithThumbnail(sActivityTestRule, 2, 0, "about:blank");
-        enterTabSwitcher(cta);
-        verifyTabSwitcherCardCount(cta, 2);
-        mergeAllNormalTabsToAGroup(cta);
-        verifyTabSwitcherCardCount(cta, 1);
-        openDialogFromTabSwitcherAndVerify(cta, 2, null);
-
-        // Verify TabModelObserver is correctly setup by checking if tab grid dialog changes with
-        // tab closure.
-        closeFirstTabInDialog();
-        verifyShowingDialog(cta, 1, null);
+        mRenderTestRule.render(getRecyclerView(cta), "GTS_tab_group_color_changed");
     }
 
     @Test
@@ -1508,7 +1714,7 @@ public class TabGridDialogTest {
 
     @Test
     @MediumTest
-    @DisabledTest(message = "TODO(crbug.com/1128345): Fix flakiness.")
+    @DisabledTest(message = "TODO(crbug.com/40148943): Fix flakiness.")
     public void testAccessibilityString() throws ExecutionException {
         final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         createTabs(cta, false, 3);
@@ -2020,15 +2226,39 @@ public class TabGridDialogTest {
                 .verifyAdapterHasItemCount(count);
     }
 
+    private void verifyGroupCreationDialogOpenedAndDismiss() {
+        // Verify that the modal dialog is now showing.
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    Criteria.checkThat(mModalDialogManager.isShowing(), Matchers.is(true));
+                });
+        // Verify the visual data dialog exists.
+        onViewWaiting(withId(R.id.visual_data_dialog_layout), /* checkRootDialog= */ true)
+                .check(matches(isDisplayed()));
+        // Dismiss the tab group creation dialog.
+        dismissAllModalDialogs();
+        // Verify that the modal dialog is now hidden.
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    Criteria.checkThat(mModalDialogManager.isShowing(), Matchers.is(false));
+                });
+    }
+
+    private void dismissAllModalDialogs() {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    mModalDialogManager.dismissAllDialogs(DialogDismissalCause.UNKNOWN);
+                });
+    }
+
     private void checkPosition(ChromeTabbedActivity cta, boolean isDialog, boolean isPortrait) {
         // If isDialog is true, we are checking the position of TabGridDialog; otherwise we are
         // checking the position of TabListEditor.
         int contentViewId = isDialog ? R.id.dialog_container_view : R.id.selectable_list;
-        int smallMargin =
-                (int) cta.getResources().getDimension(R.dimen.tab_grid_dialog_side_margin);
-        int largeMargin = (int) cta.getResources().getDimension(R.dimen.tab_grid_dialog_top_margin);
-        int topMargin = isPortrait ? largeMargin : smallMargin;
-        int sideMargin = isPortrait ? smallMargin : largeMargin;
+        int minMargin =
+                cta.getResources().getDimensionPixelSize(R.dimen.tab_grid_dialog_min_margin);
+        int maxMargin =
+                cta.getResources().getDimensionPixelSize(R.dimen.tab_grid_dialog_max_margin);
         View parentView = cta.getCompositorViewHolderForTesting();
         Rect parentRect = new Rect();
         parentView.getGlobalVisibleRect(parentRect);
@@ -2039,14 +2269,27 @@ public class TabGridDialogTest {
                         (v, e) -> {
                             int[] location = new int[2];
                             v.getLocationOnScreen(location);
-                            int relLoc0 = location[0] - parentLoc[0];
-                            int relLoc1 = location[1] - parentLoc[1];
+                            int side = location[0] - parentLoc[0];
+                            int top = location[1] - parentLoc[1];
                             // Check the position.
-                            assertEquals(sideMargin, relLoc0);
-                            assertEquals(topMargin, relLoc1);
+                            if (isPortrait) {
+                                assertEquals(side, minMargin);
+                                assertThat(
+                                        top,
+                                        allOf(
+                                                greaterThanOrEqualTo(minMargin),
+                                                lessThanOrEqualTo(maxMargin)));
+                            } else {
+                                assertThat(
+                                        side,
+                                        allOf(
+                                                greaterThanOrEqualTo(minMargin),
+                                                lessThanOrEqualTo(maxMargin)));
+                                assertEquals(top, minMargin);
+                            }
                             // Check the size.
-                            assertEquals(parentView.getHeight() - 2 * topMargin, v.getHeight());
-                            assertEquals(parentView.getWidth() - 2 * sideMargin, v.getWidth());
+                            assertEquals(parentView.getHeight() - 2 * top, v.getHeight());
+                            assertEquals(parentView.getWidth() - 2 * side, v.getWidth());
                         });
     }
 
@@ -2165,21 +2408,18 @@ public class TabGridDialogTest {
 
     private void verifyGlobalUndoBarAndClick() {
         // Verify that the dialog undo bar is showing and the default undo bar is hidden.
-        int expectedAncestor = 0;
+        Matcher<View> expectedAncestor = null;
         if (HubFieldTrial.isHubEnabled()) {
-            expectedAncestor =
-                    TabUiTestHelper.getTabSwitcherAncestorId(sActivityTestRule.getActivity());
+            expectedAncestor = instanceOf(HubContainerView.class);
         } else {
             expectedAncestor =
-                    isTablet(sActivityTestRule.getActivity())
-                            ? R.id.tab_switcher_view_holder
-                            : R.id.bottom_container;
+                    withId(
+                            isTablet(sActivityTestRule.getActivity())
+                                    ? R.id.tab_switcher_view_holder
+                                    : R.id.bottom_container);
         }
         onViewWaiting(
-                allOf(
-                        withId(R.id.snackbar),
-                        isDescendantOfA(withId(expectedAncestor)),
-                        isDisplayed()));
+                allOf(withId(R.id.snackbar), isDescendantOfA(expectedAncestor), isDisplayed()));
         onView(
                         allOf(
                                 withId(R.id.snackbar_button),
@@ -2188,7 +2428,7 @@ public class TabGridDialogTest {
         onView(
                         allOf(
                                 withId(R.id.snackbar_button),
-                                isDescendantOfA(withId(expectedAncestor)),
+                                isDescendantOfA(expectedAncestor),
                                 isDisplayed()))
                 .perform(click());
     }

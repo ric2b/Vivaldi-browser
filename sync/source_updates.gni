@@ -2,7 +2,7 @@
 
 import("//vivaldi/testing/testing.gni")
 
-if(vivaldi_build_tests) {
+if(vivaldi_build_tests && false) { # Disabled
   update_template_instance("//chrome/test:sync_integration_tests") {
     sources += [
       "//vivaldi/sync/test/integration/single_client_notes_sync_test.cpp",

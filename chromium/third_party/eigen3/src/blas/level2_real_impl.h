@@ -14,11 +14,14 @@ EIGEN_BLAS_FUNC(symv)
 (const char *uplo, const int *n, const RealScalar *palpha, const RealScalar *pa, const int *lda, const RealScalar *px,
  const int *incx, const RealScalar *pbeta, RealScalar *py, const int *incy) {
   typedef void (*functype)(int, const Scalar *, int, const Scalar *, Scalar *, Scalar);
+  using Eigen::ColMajor;
+  using Eigen::Lower;
+  using Eigen::Upper;
   static const functype func[2] = {
       // array index: UP
-      (internal::selfadjoint_matrix_vector_product<Scalar, int, ColMajor, Upper, false, false>::run),
+      (Eigen::internal::selfadjoint_matrix_vector_product<Scalar, int, ColMajor, Upper, false, false>::run),
       // array index: LO
-      (internal::selfadjoint_matrix_vector_product<Scalar, int, ColMajor, Lower, false, false>::run),
+      (Eigen::internal::selfadjoint_matrix_vector_product<Scalar, int, ColMajor, Lower, false, false>::run),
   };
 
   const Scalar *a = reinterpret_cast<const Scalar *>(pa);
@@ -67,11 +70,14 @@ EIGEN_BLAS_FUNC(syr)
 (const char *uplo, const int *n, const RealScalar *palpha, const RealScalar *px, const int *incx, RealScalar *pc,
  const int *ldc) {
   typedef void (*functype)(int, Scalar *, int, const Scalar *, const Scalar *, const Scalar &);
+  using Eigen::ColMajor;
+  using Eigen::Lower;
+  using Eigen::Upper;
   static const functype func[2] = {
       // array index: UP
-      (selfadjoint_rank1_update<Scalar, int, ColMajor, Upper, false, Conj>::run),
+      (Eigen::selfadjoint_rank1_update<Scalar, int, ColMajor, Upper, false, Conj>::run),
       // array index: LO
-      (selfadjoint_rank1_update<Scalar, int, ColMajor, Lower, false, Conj>::run),
+      (Eigen::selfadjoint_rank1_update<Scalar, int, ColMajor, Lower, false, Conj>::run),
   };
 
   const Scalar *x = reinterpret_cast<const Scalar *>(px);
@@ -109,9 +115,9 @@ EIGEN_BLAS_FUNC(syr2)
   typedef void (*functype)(int, Scalar *, int, const Scalar *, const Scalar *, Scalar);
   static const functype func[2] = {
       // array index: UP
-      (internal::rank2_update_selector<Scalar, int, Upper>::run),
+      (Eigen::internal::rank2_update_selector<Scalar, int, Eigen::Upper>::run),
       // array index: LO
-      (internal::rank2_update_selector<Scalar, int, Lower>::run),
+      (Eigen::internal::rank2_update_selector<Scalar, int, Eigen::Lower>::run),
   };
 
   const Scalar *x = reinterpret_cast<const Scalar *>(px);
@@ -190,9 +196,9 @@ EIGEN_BLAS_FUNC(spr)(char *uplo, int *n, Scalar *palpha, Scalar *px, int *incx, 
   typedef void (*functype)(int, Scalar *, const Scalar *, Scalar);
   static const functype func[2] = {
       // array index: UP
-      (internal::selfadjoint_packed_rank1_update<Scalar, int, ColMajor, Upper, false, false>::run),
+      (Eigen::internal::selfadjoint_packed_rank1_update<Scalar, int, Eigen::ColMajor, Eigen::Upper, false, false>::run),
       // array index: LO
-      (internal::selfadjoint_packed_rank1_update<Scalar, int, ColMajor, Lower, false, false>::run),
+      (Eigen::internal::selfadjoint_packed_rank1_update<Scalar, int, Eigen::ColMajor, Eigen::Lower, false, false>::run),
   };
 
   Scalar *x = reinterpret_cast<Scalar *>(px);
@@ -232,9 +238,9 @@ EIGEN_BLAS_FUNC(spr2)
   typedef void (*functype)(int, Scalar *, const Scalar *, const Scalar *, Scalar);
   static const functype func[2] = {
       // array index: UP
-      (internal::packed_rank2_update_selector<Scalar, int, Upper>::run),
+      (Eigen::internal::packed_rank2_update_selector<Scalar, int, Eigen::Upper>::run),
       // array index: LO
-      (internal::packed_rank2_update_selector<Scalar, int, Lower>::run),
+      (Eigen::internal::packed_rank2_update_selector<Scalar, int, Eigen::Lower>::run),
   };
 
   Scalar *x = reinterpret_cast<Scalar *>(px);
@@ -299,7 +305,8 @@ EIGEN_BLAS_FUNC(ger)
   Scalar *x_cpy = get_compact_vector(x, *m, *incx);
   Scalar *y_cpy = get_compact_vector(y, *n, *incy);
 
-  internal::general_rank1_update<Scalar, int, ColMajor, false, false>::run(*m, *n, a, *lda, x_cpy, y_cpy, alpha);
+  Eigen::internal::general_rank1_update<Scalar, int, Eigen::ColMajor, false, false>::run(*m, *n, a, *lda, x_cpy, y_cpy,
+                                                                                         alpha);
 
   if (x_cpy != x) delete[] x_cpy;
   if (y_cpy != y) delete[] y_cpy;

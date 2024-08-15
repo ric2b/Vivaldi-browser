@@ -46,7 +46,7 @@ SharedTextureMemory::SharedTextureMemory(d3d::Device* device,
 MaybeError SharedTextureMemory::BeginAccessImpl(
     TextureBase* texture,
     const UnpackedPtr<BeginAccessDescriptor>& descriptor) {
-    DAWN_TRY(descriptor.ValidateSubset<>());
+    DAWN_TRY(descriptor.ValidateSubset<SharedTextureMemoryD3DSwapchainBeginState>());
     for (size_t i = 0; i < descriptor->fenceCount; ++i) {
         SharedFenceBase* fence = descriptor->fences[i];
 
@@ -79,7 +79,7 @@ ResultOrError<FenceAndSignalValue> SharedTextureMemory::EndAccessImpl(
 
     return FenceAndSignalValue{
         std::move(sharedFence),
-        static_cast<uint64_t>(texture->GetSharedTextureMemoryContents()->GetLastUsageSerial())};
+        static_cast<uint64_t>(texture->GetSharedResourceMemoryContents()->GetLastUsageSerial())};
 }
 
 }  // namespace dawn::native::d3d

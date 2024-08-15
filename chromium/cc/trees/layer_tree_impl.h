@@ -18,7 +18,6 @@
 #include "base/memory/raw_ptr_exclusion.h"
 #include "base/time/time.h"
 #include "cc/base/synced_property.h"
-#include "cc/input/browser_controls_offset_manager.h"
 #include "cc/input/event_listener_properties.h"
 #include "cc/input/layer_selection_bound.h"
 #include "cc/input/overscroll_behavior.h"
@@ -421,6 +420,9 @@ class CC_EXPORT LayerTreeImpl {
     return new_local_surface_id_request_;
   }
 
+  void SetScreenshotDestinationToken(base::UnguessableToken destination_token);
+  base::UnguessableToken TakeScreenshotDestinationToken();
+
   void SetDeviceViewportRect(const gfx::Rect& device_viewport_rect);
 
   // TODO(fsamuel): The reason this is not a trivial accessor is because it
@@ -513,6 +515,10 @@ class CC_EXPORT LayerTreeImpl {
   bool needs_surface_ranges_sync() const { return needs_surface_ranges_sync_; }
   void set_needs_surface_ranges_sync(bool needs_surface_ranges_sync) {
     needs_surface_ranges_sync_ = needs_surface_ranges_sync;
+  }
+
+  bool always_push_properties_on_picture_layers() const {
+    return always_push_properties_on_picture_layers_;
   }
 
   void ForceRedrawNextActivation() { next_activation_forces_redraw_ = true; }
@@ -624,10 +630,11 @@ class CC_EXPORT LayerTreeImpl {
   LayerImpl* FindLayerThatIsHitByPointInWheelEventHandlerRegion(
       const gfx::PointF& screen_space_point);
 
-  // Returns all layers up to the first scroller, scrollbar layer or a layer
-  // opaque to hit test, inclusive. The returned vector is sorted in order of
-  // top most come first. The back of the vector will be the scrollable layer
-  // or the first layer opaque to hit test, if one was hit.
+  // Returns all layers up to the first scroller or scrollbar layer (when
+  // enable_hit_test_opaqueness is false) or a layer opaque to hit test (when
+  // enable_hit_test_opaqueness is true), inclusive. The returned vector is
+  // sorted in order of top most come first. The back of the vector will be the
+  // scrollable layer or the first layer opaque to hit test, if one was hit.
   std::vector<const LayerImpl*> FindLayersUpToFirstScrollableOrOpaqueToHitTest(
       const gfx::PointF& screen_space_point);
   bool PointHitsNonFastScrollableRegion(const gfx::PointF& scree_space_point,
@@ -855,10 +862,37 @@ class CC_EXPORT LayerTreeImpl {
   gfx::DisplayColorSpaces display_color_spaces_;
 
   viz::LocalSurfaceId local_surface_id_from_parent_;
-  bool new_local_surface_id_request_ = false;
+
+  bool new_local_surface_id_request_ : 1 = false;
+
+  bool needs_update_draw_properties_ : 1 = true;
+
+  // True if a scrollbar geometry value has changed. For example, if the scroll
+  // offset changes, scrollbar thumb positions need to be updated.
+  bool scrollbar_geometries_need_update_ : 1 = false;
+
+  // In impl-side painting mode, this is true when the tree may contain
+  // structural differences relative to the active tree.
+  bool needs_full_tree_sync_ : 1 = true;
+
+  bool needs_surface_ranges_sync_ : 1 = false;
+
+  bool next_activation_forces_redraw_ : 1 = false;
+
+  bool handle_visibility_changed_ : 1 = false;
+
+  bool have_scroll_event_handlers_ : 1 = false;
+
   // Contains the physical rect of the device viewport, to be used in
   // determining what needs to be drawn.
-  bool device_viewport_rect_changed_ = false;
+  bool device_viewport_rect_changed_ : 1 = false;
+
+  // Whether we have a request to force-send RenderFrameMetadata with the next
+  // frame.
+  bool force_send_metadata_request_ : 1 = false;
+
+  bool always_push_properties_on_picture_layers_ : 1 = false;
+
   gfx::Rect device_viewport_rect_;
 
   scoped_refptr<SyncedElasticOverscroll> elastic_overscroll_;
@@ -910,28 +944,11 @@ class CC_EXPORT LayerTreeImpl {
   // would not be fully covered by opaque content.
   Region unoccluded_screen_space_region_;
 
-  bool needs_update_draw_properties_;
-
-  // True if a scrollbar geometry value has changed. For example, if the scroll
-  // offset changes, scrollbar thumb positions need to be updated.
-  bool scrollbar_geometries_need_update_;
-
-  // In impl-side painting mode, this is true when the tree may contain
-  // structural differences relative to the active tree.
-  bool needs_full_tree_sync_;
-
-  bool needs_surface_ranges_sync_;
-
-  bool next_activation_forces_redraw_;
-
-  bool handle_visibility_changed_;
-
   std::vector<std::unique_ptr<SwapPromise>> swap_promise_list_;
   std::vector<std::unique_ptr<SwapPromise>> pinned_swap_promise_list_;
 
   UIResourceRequestQueue ui_resource_request_queue_;
 
-  bool have_scroll_event_handlers_;
   EventListenerProperties event_listener_properties_
       [static_cast<size_t>(EventListenerClass::kLast) + 1];
 
@@ -945,10 +962,6 @@ class CC_EXPORT LayerTreeImpl {
   scoped_refptr<SyncedBrowserControls> bottom_controls_shown_ratio_;
 
   std::unique_ptr<PendingPageScaleAnimation> pending_page_scale_animation_;
-
-  // Whether we have a request to force-send RenderFrameMetadata with the next
-  // frame.
-  bool force_send_metadata_request_ = false;
 
   // Tracks the lifecycle which is used for enforcing dependencies between
   // lifecycle states. See: |LayerTreeLifecycle|.
@@ -975,6 +988,9 @@ class CC_EXPORT LayerTreeImpl {
   // The cumulative time spent performing visual updates for the current
   // Surface.
   base::TimeDelta visual_update_duration_;
+
+  // See `CommitState::screenshot_destination_token`.
+  base::UnguessableToken screenshot_destination_;
 };
 
 }  // namespace cc

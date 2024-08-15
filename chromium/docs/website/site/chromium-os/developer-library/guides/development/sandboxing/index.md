@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: sandboxing
 title: Sandboxing ChromeOS system services
 ---
@@ -92,13 +92,10 @@ three techniques mentioned in the Forbidden intersection section.
 
 ## Just tell me what I need to do
 
-*   Create a new user for your service ([example](https://crrev.com/c/225257)).
-    Use [this README](https://chromium.googlesource.com/chromiumos/overlays/eclass-overlay/+/HEAD/profiles/base/accounts/README.md)
-    as a guide on choosing and testing the new UID and GID.
-*   Optionally, create a new group to control access to a resource and add the
-    new user to that group ([example](https://crrev.com/c/242551)).
+*   Create a new user (and optionally a new group) for your service.
+    See [CrOS user & group management][account management].
 *   Use Minijail to run your service as the user (and group) created in the
-    previous steps. See [User IDs] and [Minijail configuration].
+    previous steps. See [Minijail configuration].
 *   If your service fails, you might need to grant it capabilities. See
     [Capabilities].
 *   Use as many namespaces as possible. See [Namespaces].
@@ -180,41 +177,11 @@ bind-mount = /var/lib/metrics,,1
 The first sandboxing mechanism is user IDs (UIDs). We try to run each service as
 its own UID, different from the root user, which allows us to restrict what
 files and directories the service can access, and also removes a big chunk of
-system functionality that's only available to root. For example, see [the
-`permission_broker` service's `/etc/init/permission_broker.conf`
-file](https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/permission_broker/permission_broker.conf):
+system functionality that's only available to root.
 
-```bash
-start on starting system-services
-stop on stopping system-services
-respawn
+See [CrOS user & group management][account management] for details of adding a new user.
 
-# Run as 'devbroker' user.
-exec minijail0 -u devbroker -c 'cap_chown,cap_fowner+eip' -- \
-    /usr/bin/permission_broker
-```
-
-Minijail's `-u` argument forces the target program (in this case
-`permission_broker`) to be executed as the devbroker user, instead of root. This
-is equivalent of doing `sudo -u devbroker`.
-
-The user (`devbroker` in this case) needs to first be added to the build system
-database ([example](https://crrev.com/c/361830) for a different user).
-
-Next, the user needs to be *installed* on the system
-([example](https://crrev.com/c/383076), again for a different user).
-
-See the [ChromeOS user accounts README] for more details.
-
-There's a test in the CQ that keeps track of the users present on the system
-that request additional access (e.g. listing more than one user in a group). If
-your user does that, the test baseline has to be updated at the same time the
-accounts are added with another CL ([example](https://crrev.com/c/894192)). If
-you're unsure whether you need this, the CQ will reject your CL when the test
-fails, so if the tests pass, you should be good to go!
-
-You can use Cq-Depend to land the CLs together (see [How do I specify the
-dependencies of a change?]).
+To set the user, add `u = <username>` to your service's minijail configuration.
 
 ### chronos-access membership requires SELinux
 
@@ -743,8 +710,8 @@ lost on reboot.
 
 `/run/daemon-store-cache/<daemon_name>/<user_hash>` works similarly as above,
 however contents inside this directory are automatically cleaned up when device
-disk space is low, for **logged-out users**. This is the ideal directory to
-store cache contents.
+disk space is low, for both logged-in and logged-out users. This is the ideal
+directory to store cache contents.
 
 **Be sure not to write to the folder before the cryptohome is mounted**.
 Consider listening to Session Manager's `SessionStateChanged` signal or similar
@@ -896,18 +863,17 @@ reason such as when the code is only for unit test support.
 [Landlock]: #landlock-unprivileged-filesystem-access-control
 [Seccomp filters]: #seccomp-filters
 [enable CFI]: #enforcing-control-flow-integrity
-[ebuild]: portage/ebuild_faq.md
+[ebuild]: /chromium-os/developer-library/guides/portage/ebuild-faq/
 [cros-sanitizers.eclass]: https://source.chromium.org/chromiumos/chromiumos/codesearch/+/main:src/third_party/chromiumos-overlay/eclass/cros-sanitizers.eclass
 [platform.eclass]: https://source.chromium.org/chromiumos/chromiumos/codesearch/+/main:src/third_party/chromiumos-overlay/eclass/platform.eclass
 [UNIX _abstract_ sockets]: https://man7.org/linux/man-pages/man7/unix.7.html
 [security.SandboxedServices]: https://chromium.googlesource.com/chromiumos/platform/tast-tests/+/HEAD/src/go.chromium.org/tast-tests/cros/local/bundles/cros/security/sandboxed_services.go
 
 [SELinux]: https://www.chromium.org/chromium-os/developer-library/reference/security/selinux
-[libchrome]: packages/libchrome.md
+[libchrome]: /chromium-os/developer-library/guides/infrastructure/libchrome/
 [libbrillo]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/libbrillo
 [shell command-injection bugs]: https://en.wikipedia.org/wiki/Code_injection#Shell_injection
 [ChromeOS user accounts README]: https://www.chromium.org/chromium-os/developer-library/reference/build/account-management
-[How do I specify the dependencies of a change?]: contributing.md#CQ-DEPEND
 [Linux capabilities]: https://man7.org/linux/man-pages/man7/capabilities.7.html
 [capability.h]: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/uapi/linux/capability.h
 [`cap_from_text(3)`]: https://man7.org/linux/man-pages/man3/cap_from_text.3.html
@@ -921,8 +887,8 @@ reason such as when the code is only for unit test support.
 [generate_seccomp_policy.py script]: https://android.googlesource.com/platform/external/minijail/+/HEAD/tools/generate_seccomp_policy.py
 [using Linux audit logs to generate policy]: https://android.googlesource.com/platform/external/minijail/+/HEAD/tools/README.md#using-linux-audit-logs-to-generate-policy
 [shared subtrees]: https://www.kernel.org/doc/Documentation/filesystems/sharedsubtree.txt
-[syscalls table]: ./constants/syscalls.md
-[syscall calling conventions]: ./constants/syscalls.md#calling-conventions
+[syscalls table]: /chromium-os/developer-library/reference/linux-constants/syscalls/
+[syscall calling conventions]: /chromium-os/developer-library/reference/linux-constants/syscalls/#calling-conventions
 [gen_constants-inl.h]: https://android.googlesource.com/platform/external/minijail/+/HEAD/gen_constants-inl.h
 [confused deputy attack]: https://en.wikipedia.org/wiki/Confused_deputy_problem
 [Linux Security Module]: https://en.wikipedia.org/wiki/Linux_Security_Modules
@@ -933,3 +899,4 @@ reason such as when the code is only for unit test support.
 [Control Flow Integrity]: https://clang.llvm.org/docs/ControlFlowIntegrity.html
 [cfi-ignore.txt]: https://clang.llvm.org/docs/SanitizerSpecialCaseList.html#format
 [`no_new_privs`]: https://docs.kernel.org/userspace-api/no_new_privs.html
+[account management]: /chromium-os/developer-library/reference/build/account-management/

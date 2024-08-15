@@ -5,74 +5,75 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
-
-#include <algorithm>
-#include <cassert>
-#include <cmath>
-#include <cstddef>
-#include <cstdlib>
-#include <random>
-#include <vector>
-
 #include <xnnpack.h>
 #include <xnnpack/aligned-allocator.h>
 #include <xnnpack/microfnptr.h>
 
+#include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <functional>
+#include <limits>
+#include <random>
+#include <vector>
+
+#include "replicable_random_device.h"
+#include <gtest/gtest.h>
 
 class WindowMicrokernelTester {
  public:
-  inline WindowMicrokernelTester& rows(size_t rows) {
+  WindowMicrokernelTester& rows(size_t rows) {
     assert(rows != 0);
     this->rows_ = rows;
     return *this;
   }
 
-  inline size_t rows() const {
+  size_t rows() const {
     return this->rows_;
   }
 
-  inline WindowMicrokernelTester& channels(size_t channels) {
+  WindowMicrokernelTester& channels(size_t channels) {
     assert(channels != 0);
     this->channels_ = channels;
     return *this;
   }
 
-  inline size_t channels() const {
+  size_t channels() const {
     return this->channels_;
   }
 
-  inline WindowMicrokernelTester& shift(uint32_t shift) {
+  WindowMicrokernelTester& shift(uint32_t shift) {
     assert(shift < 32);
     this->shift_ = shift;
     return *this;
   }
 
-  inline uint32_t shift() const {
+  uint32_t shift() const {
     return this->shift_;
   }
 
-  inline WindowMicrokernelTester& inplace(bool inplace) {
+  WindowMicrokernelTester& inplace(bool inplace) {
     this->inplace_ = inplace;
     return *this;
   }
 
-  inline bool inplace() const {
+  bool inplace() const {
     return this->inplace_;
   }
 
-  inline WindowMicrokernelTester& iterations(size_t iterations) {
+  WindowMicrokernelTester& iterations(size_t iterations) {
     this->iterations_ = iterations;
     return *this;
   }
 
-  inline size_t iterations() const {
+  size_t iterations() const {
     return this->iterations_;
   }
 
   void Test(xnn_s16_window_ukernel_fn window) const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     auto i16rng = std::bind(std::uniform_int_distribution<int16_t>(), std::ref(rng));
 
     std::vector<int16_t> input(channels() * rows() + XNN_EXTRA_BYTES / sizeof(int16_t));

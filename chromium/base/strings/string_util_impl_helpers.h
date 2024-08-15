@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #ifndef BASE_STRINGS_STRING_UTIL_IMPL_HELPERS_H_
 #define BASE_STRINGS_STRING_UTIL_IMPL_HELPERS_H_
 
@@ -458,7 +463,7 @@ inline typename string_type::value_type* WriteIntoT(string_type* str,
   DCHECK_GE(length_with_null, 1u);
   str->reserve(length_with_null);
   str->resize(length_with_null - 1);
-  return &((*str)[0]);
+  return str->data();
 }
 
 // Generic version for all JoinString overloads. |list_type| must be a sequence

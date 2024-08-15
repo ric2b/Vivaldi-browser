@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: lsb-release
 title: /etc/lsb-release File Format
 ---
@@ -141,4 +141,4 @@ lsbval() {
 ```
 
 [LSB]: http://refspecs.linuxbase.org/lsb.shtml
-[rewrite-shell]: ./development_basics.md#shell
+[rewrite-shell]: /chromium-os/developer-library/guides/development/development-basics/#shell

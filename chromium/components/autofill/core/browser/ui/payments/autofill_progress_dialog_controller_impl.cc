@@ -56,7 +56,6 @@ void AutofillProgressDialogControllerImpl::DismissDialog(
 
   autofill_progress_dialog_view_->Dismiss(show_confirmation_before_closing,
                                           /*is_canceled_by_user=*/false);
-  autofill_progress_dialog_view_ = nullptr;
 }
 
 void AutofillProgressDialogControllerImpl::OnDismissed(
@@ -161,5 +160,12 @@ base::WeakPtr<AutofillProgressDialogController>
 AutofillProgressDialogControllerImpl::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
+
+#if BUILDFLAG(IS_IOS)
+base::WeakPtr<AutofillProgressDialogControllerImpl>
+AutofillProgressDialogControllerImpl::GetImplWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
+#endif
 
 }  // namespace autofill

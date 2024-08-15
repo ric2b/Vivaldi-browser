@@ -88,12 +88,26 @@ TARGET_DEVICES = {
             'Speedometer3': 20,
         },
     },
-    'android-pixel6-perf-pgo': {
+    'android-pixel6-perf': {
+        'jetstream2': {
+            'JetStream2': 5,
+        },
         'speedometer2': {
             'Speedometer2': 20,
         },
-        'speedometer2-predictable': {
+        'speedometer3': {
+            'Speedometer3': 20,
+        },
+    },
+    'android-pixel6-perf-pgo': {
+        'jetstream2': {
+            'JetStream2': 5,
+        },
+        'speedometer2': {
             'Speedometer2': 20,
+        },
+        'speedometer3': {
+            'Speedometer3': 20,
         },
     },
     'linux-perf': {
@@ -109,10 +123,15 @@ TARGET_DEVICES = {
             'long_running:tools:gmail-background': 10,
             'browse:media:youtubetv:2019': 10
         },
-        'speedometer2': {
-            'Speedometer2': 20,
+        # set speedometer to 20 shards to help warm up speedometer2
+        # benchmark runs on linux-perf b/325578543
+        'speedometer': {
+            'http://browserbench.org/Speedometer/': 20,
         },
         'speedometer2-nominorms': {
+            'Speedometer2': 20,
+        },
+        'speedometer2': {
             'Speedometer2': 20,
         },
         'speedometer2-predictable': {
@@ -122,6 +141,9 @@ TARGET_DEVICES = {
             'Speedometer3': 20,
         },
         'speedometer3-nominorms': {
+            'Speedometer3': 20,
+        },
+        'speedometer3-predictable': {
             'Speedometer3': 20,
         },
     },
@@ -156,12 +178,6 @@ TARGET_DEVICES = {
     'win-11-perf': {
         'jetstream2': {
             'JetStream2': 5,
-        },
-        'system_health.common_desktop': {
-            # cputimeToFirstContentfulPaint
-            'browse:media:tumblr:2018': 10,
-            'browse:social:tumblr_infinite_scroll:2018': 10,
-            'load:search:google:2018': 10,
         },
         'speedometer2': {
             'Speedometer2': 20,

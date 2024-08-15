@@ -12,6 +12,7 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
@@ -79,19 +80,28 @@ class MahiWebContentsManagerBrowserTest : public InProcessBrowserTest {
     }
 #endif
 
-    fake_mahi_web_contents_manager_.Initialize();
+    fake_mahi_web_contents_manager_ =
+        std::make_unique<FakeMahiWebContentsManager>();
+    fake_mahi_web_contents_manager_->Initialize();
     scoped_mahi_web_contents_manager_ =
         std::make_unique<ScopedMahiWebContentsManagerForTesting>(
-            &fake_mahi_web_contents_manager_);
+            fake_mahi_web_contents_manager_.get());
 
 // Replace the production Mahi browser delegate with a mock for testing
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-    fake_mahi_web_contents_manager_.BindMahiBrowserDelegateForTesting(
+    fake_mahi_web_contents_manager_->BindMahiBrowserDelegateForTesting(
         receiver_.BindNewPipeAndPassRemote());
 #else   // BUILDFLAG(IS_CHROMEOS_ASH)
-    fake_mahi_web_contents_manager_.SetMahiBrowserDelegateForTesting(
+    fake_mahi_web_contents_manager_->SetMahiBrowserDelegateForTesting(
         &browser_delegate_);
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+  }
+
+  // InProcessBrowserTest:
+  void TearDownOnMainThread() override {
+    scoped_mahi_web_contents_manager_.reset();
+    fake_mahi_web_contents_manager_.reset();
+    InProcessBrowserTest::TearDownOnMainThread();
   }
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -120,6 +130,30 @@ class MahiWebContentsManagerBrowserTest : public InProcessBrowserTest {
     EXPECT_TRUE(AddTabAtIndex(0, GURL(kUrl), ui::PAGE_TRANSITION_TYPED));
   }
 
+  void ExpectOnContextMenuClicked(bool success, ButtonType button_type) {
+    base::RunLoop run_loop;
+    EXPECT_CALL(browser_delegate_, OnContextMenuClicked)
+        .WillOnce([&run_loop, success](
+                      crosapi::mojom::MahiContextMenuRequestPtr request,
+                      base::OnceCallback<void(bool)> callback) {
+          std::move(callback).Run(/*success=*/success);
+          run_loop.Quit();
+        });
+    {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+      base::RunLoop run_loop_for_remote;
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+      fake_mahi_web_contents_manager_->OnContextMenuClicked(
+          kDisplayID, button_type,
+          /*question=*/kQuestion);
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+      run_loop_for_remote.RunUntilIdle();
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+    }
+
+    run_loop.Run();
+  }
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   base::test::ScopedFeatureList scoped_feature_list_;
 #endif
@@ -128,7 +162,7 @@ class MahiWebContentsManagerBrowserTest : public InProcessBrowserTest {
   mojo::Receiver<crosapi::mojom::MahiBrowserDelegate> receiver_{
       &browser_delegate_};
 
-  FakeMahiWebContentsManager fake_mahi_web_contents_manager_;
+  std::unique_ptr<FakeMahiWebContentsManager> fake_mahi_web_contents_manager_;
   std::unique_ptr<ScopedMahiWebContentsManagerForTesting>
       scoped_mahi_web_contents_manager_;
 };
@@ -145,10 +179,10 @@ IN_PROC_BROWSER_TEST_F(MahiWebContentsManagerBrowserTest,
 
   // Initially, the focused state and the requested state should be different.
   EXPECT_NE(
-      fake_mahi_web_contents_manager_.focused_web_content_state().page_id,
-      fake_mahi_web_contents_manager_.requested_web_content_state().page_id);
+      fake_mahi_web_contents_manager_->focused_web_content_state().page_id,
+      fake_mahi_web_contents_manager_->requested_web_content_state().page_id);
   base::UnguessableToken focused_page_id =
-      fake_mahi_web_contents_manager_.focused_web_content_state().page_id;
+      fake_mahi_web_contents_manager_->focused_web_content_state().page_id;
 
   base::RunLoop run_loop;
   // Expects that `MahiBrowserDelegate` should receive the context menu click
@@ -164,22 +198,22 @@ IN_PROC_BROWSER_TEST_F(MahiWebContentsManagerBrowserTest,
         run_loop.Quit();
       });
 
-  fake_mahi_web_contents_manager_.OnContextMenuClicked(kDisplayID, kButtonType,
-                                                       kQuestion);
+  fake_mahi_web_contents_manager_->OnContextMenuClicked(kDisplayID, kButtonType,
+                                                        kQuestion);
   run_loop.Run();
 
   // After the context menu request, the requested state should be updated to
   // the focused state and the focused state stays the same.
   EXPECT_EQ(
       focused_page_id,
-      fake_mahi_web_contents_manager_.requested_web_content_state().page_id);
+      fake_mahi_web_contents_manager_->requested_web_content_state().page_id);
   EXPECT_EQ(
       focused_page_id,
-      fake_mahi_web_contents_manager_.focused_web_content_state().page_id);
+      fake_mahi_web_contents_manager_->focused_web_content_state().page_id);
   EXPECT_EQ(GURL(),
-            fake_mahi_web_contents_manager_.focused_web_content_state().url);
+            fake_mahi_web_contents_manager_->focused_web_content_state().url);
   EXPECT_EQ(u"",
-            fake_mahi_web_contents_manager_.focused_web_content_state().title);
+            fake_mahi_web_contents_manager_->focused_web_content_state().title);
 }
 
 IN_PROC_BROWSER_TEST_F(MahiWebContentsManagerBrowserTest,
@@ -191,13 +225,14 @@ IN_PROC_BROWSER_TEST_F(MahiWebContentsManagerBrowserTest,
     return;
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+  base::HistogramTester histogram;
 
   // Initially, the focused state and the requested state should be different.
   EXPECT_NE(
-      fake_mahi_web_contents_manager_.focused_web_content_state().page_id,
-      fake_mahi_web_contents_manager_.requested_web_content_state().page_id);
+      fake_mahi_web_contents_manager_->focused_web_content_state().page_id,
+      fake_mahi_web_contents_manager_->requested_web_content_state().page_id);
   // Initially, the focused state's favicon is empty.
-  EXPECT_TRUE(fake_mahi_web_contents_manager_.focused_web_content_state()
+  EXPECT_TRUE(fake_mahi_web_contents_manager_->focused_web_content_state()
                   .favicon.isNull());
 
   base::RunLoop run_loop;
@@ -213,16 +248,20 @@ IN_PROC_BROWSER_TEST_F(MahiWebContentsManagerBrowserTest,
       })
       // When a new page gets focus, the `MahiBrowserDelegate` should be
       // notified without the distillability check.
-      .WillOnce([](crosapi::mojom::MahiPageInfoPtr page_info,
-                   base::OnceCallback<void(bool)> callback) {
+      .WillOnce([&histogram](crosapi::mojom::MahiPageInfoPtr page_info,
+                             base::OnceCallback<void(bool)> callback) {
         EXPECT_EQ(GURL(kUrl), page_info->url);
         EXPECT_FALSE(page_info->IsDistillable.has_value());
         std::move(callback).Run(/*success=*/true);
+        // Before distillability check finishes, triggering metric is not
+        // logged.
+        histogram.ExpectTotalCount(kMahiContentExtractionTriggeringLatency, 0);
       })
       // When the focused page finishes loading, the `MahiBrowserDelegate`
       // should be notified with the distillability check.
-      .WillOnce([&run_loop](crosapi::mojom::MahiPageInfoPtr page_info,
-                            base::OnceCallback<void(bool)> callback) {
+      .WillOnce([&run_loop, &histogram](
+                    crosapi::mojom::MahiPageInfoPtr page_info,
+                    base::OnceCallback<void(bool)> callback) {
         EXPECT_EQ(GURL(kUrl), page_info->url);
         EXPECT_TRUE(page_info->IsDistillable.has_value());
         EXPECT_FALSE(page_info->IsDistillable.value());
@@ -231,6 +270,9 @@ IN_PROC_BROWSER_TEST_F(MahiWebContentsManagerBrowserTest,
 
         std::move(callback).Run(/*success=*/true);
         run_loop.Quit();
+
+        // When distillability check finishes, triggering metric is logged.
+        histogram.ExpectTotalCount(kMahiContentExtractionTriggeringLatency, 1);
       });
 
   CreateWebContent();
@@ -248,10 +290,10 @@ IN_PROC_BROWSER_TEST_F(MahiWebContentsManagerBrowserTest, GetPageContents) {
 
   // Initially, the focused state and the requested state should be different.
   EXPECT_NE(
-      fake_mahi_web_contents_manager_.focused_web_content_state().page_id,
-      fake_mahi_web_contents_manager_.requested_web_content_state().page_id);
+      fake_mahi_web_contents_manager_->focused_web_content_state().page_id,
+      fake_mahi_web_contents_manager_->requested_web_content_state().page_id);
   base::UnguessableToken focused_page_id =
-      fake_mahi_web_contents_manager_.focused_web_content_state().page_id;
+      fake_mahi_web_contents_manager_->focused_web_content_state().page_id;
 
   // First create a web page so there is a place to extract the contents from.
   base::RunLoop run_loop;
@@ -275,7 +317,7 @@ IN_PROC_BROWSER_TEST_F(MahiWebContentsManagerBrowserTest, GetPageContents) {
         focused_page_id = page_info->page_id;
         // When distillability check is returned, simulates the content request
         // from the mahi manager.
-        fake_mahi_web_contents_manager_.RequestContentFromPage(
+        fake_mahi_web_contents_manager_->RequestContentFromPage(
             focused_page_id,
             base::BindLambdaForTesting(
                 [&](crosapi::mojom::MahiPageContentPtr page_content) {
@@ -289,14 +331,119 @@ IN_PROC_BROWSER_TEST_F(MahiWebContentsManagerBrowserTest, GetPageContents) {
   // focused state and the focused state stays the same.
   EXPECT_EQ(
       focused_page_id,
-      fake_mahi_web_contents_manager_.requested_web_content_state().page_id);
+      fake_mahi_web_contents_manager_->requested_web_content_state().page_id);
   EXPECT_EQ(
       focused_page_id,
-      fake_mahi_web_contents_manager_.focused_web_content_state().page_id);
+      fake_mahi_web_contents_manager_->focused_web_content_state().page_id);
   EXPECT_EQ(GURL(kUrl),
-            fake_mahi_web_contents_manager_.focused_web_content_state().url);
+            fake_mahi_web_contents_manager_->focused_web_content_state().url);
   EXPECT_EQ(u"data:text/html,<p>kittens!</p>",
-            fake_mahi_web_contents_manager_.focused_web_content_state().title);
+            fake_mahi_web_contents_manager_->focused_web_content_state().title);
+}
+
+IN_PROC_BROWSER_TEST_F(MahiWebContentsManagerBrowserTest, ContextMenuMetrics) {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // If `MahiBrowserDelegate` interface is not available on ash-chrome, this
+  // test suite will no-op.
+  if (!IsServiceAvailable()) {
+    return;
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+  base::HistogramTester histogram;
+
+  histogram.ExpectBucketCount(kMahiContextMenuActivated, ButtonType::kSettings,
+                              0);
+  histogram.ExpectBucketCount(kMahiContextMenuActivated, ButtonType::kOutline,
+                              0);
+  histogram.ExpectBucketCount(kMahiContextMenuActivated, ButtonType::kSummary,
+                              0);
+  histogram.ExpectBucketCount(kMahiContextMenuActivated, ButtonType::kQA, 0);
+  histogram.ExpectBucketCount(kMahiContextMenuActivatedFailed,
+                              ButtonType::kSettings, 0);
+  histogram.ExpectBucketCount(kMahiContextMenuActivatedFailed,
+                              ButtonType::kOutline, 0);
+  histogram.ExpectBucketCount(kMahiContextMenuActivatedFailed,
+                              ButtonType::kSummary, 0);
+  histogram.ExpectBucketCount(kMahiContextMenuActivatedFailed, ButtonType::kQA,
+                              0);
+
+  // QA section.
+  // With a successful click.
+  ExpectOnContextMenuClicked(true, ButtonType::kQA);
+  histogram.ExpectBucketCount(kMahiContextMenuActivated, ButtonType::kQA, 1);
+  histogram.ExpectBucketCount(kMahiContextMenuActivatedFailed, ButtonType::kQA,
+                              0);
+  histogram.ExpectTotalCount(kMahiContextMenuActivated, 1);
+  histogram.ExpectTotalCount(kMahiContextMenuActivatedFailed, 0);
+  testing::Mock::VerifyAndClearExpectations(this);
+  // Clicking failed.
+  ExpectOnContextMenuClicked(false, ButtonType::kQA);
+  histogram.ExpectBucketCount(kMahiContextMenuActivated, ButtonType::kQA, 2);
+  histogram.ExpectBucketCount(kMahiContextMenuActivatedFailed, ButtonType::kQA,
+                              1);
+  histogram.ExpectTotalCount(kMahiContextMenuActivated, 2);
+  histogram.ExpectTotalCount(kMahiContextMenuActivatedFailed, 1);
+  testing::Mock::VerifyAndClearExpectations(this);
+
+  // Outline.
+  // With a successful click.
+  ExpectOnContextMenuClicked(true, ButtonType::kOutline);
+  histogram.ExpectBucketCount(kMahiContextMenuActivated, ButtonType::kOutline,
+                              1);
+  histogram.ExpectBucketCount(kMahiContextMenuActivatedFailed,
+                              ButtonType::kOutline, 0);
+  histogram.ExpectTotalCount(kMahiContextMenuActivated, 3);
+  histogram.ExpectTotalCount(kMahiContextMenuActivatedFailed, 1);
+  testing::Mock::VerifyAndClearExpectations(this);
+  // Clicking failed.
+  ExpectOnContextMenuClicked(false, ButtonType::kOutline);
+  histogram.ExpectBucketCount(kMahiContextMenuActivated, ButtonType::kOutline,
+                              2);
+  histogram.ExpectBucketCount(kMahiContextMenuActivatedFailed,
+                              ButtonType::kOutline, 1);
+  histogram.ExpectTotalCount(kMahiContextMenuActivated, 4);
+  histogram.ExpectTotalCount(kMahiContextMenuActivatedFailed, 2);
+  testing::Mock::VerifyAndClearExpectations(this);
+
+  // Summary button.
+  // With a successful click.
+  ExpectOnContextMenuClicked(true, ButtonType::kSummary);
+  histogram.ExpectBucketCount(kMahiContextMenuActivated, ButtonType::kSummary,
+                              1);
+  histogram.ExpectBucketCount(kMahiContextMenuActivatedFailed,
+                              ButtonType::kSummary, 0);
+  histogram.ExpectTotalCount(kMahiContextMenuActivated, 5);
+  histogram.ExpectTotalCount(kMahiContextMenuActivatedFailed, 2);
+  testing::Mock::VerifyAndClearExpectations(this);
+  // Clicking failed.
+  ExpectOnContextMenuClicked(false, ButtonType::kSummary);
+  histogram.ExpectBucketCount(kMahiContextMenuActivated, ButtonType::kSummary,
+                              2);
+  histogram.ExpectBucketCount(kMahiContextMenuActivatedFailed,
+                              ButtonType::kSummary, 1);
+  histogram.ExpectTotalCount(kMahiContextMenuActivated, 6);
+  histogram.ExpectTotalCount(kMahiContextMenuActivatedFailed, 3);
+  testing::Mock::VerifyAndClearExpectations(this);
+
+  // Settings button.
+  // With a successful click.
+  ExpectOnContextMenuClicked(true, ButtonType::kSettings);
+  histogram.ExpectBucketCount(kMahiContextMenuActivated, ButtonType::kSettings,
+                              1);
+  histogram.ExpectBucketCount(kMahiContextMenuActivatedFailed,
+                              ButtonType::kSettings, 0);
+  histogram.ExpectTotalCount(kMahiContextMenuActivated, 7);
+  histogram.ExpectTotalCount(kMahiContextMenuActivatedFailed, 3);
+  testing::Mock::VerifyAndClearExpectations(this);
+  // Clicking failed.
+  ExpectOnContextMenuClicked(false, ButtonType::kSettings);
+  histogram.ExpectBucketCount(kMahiContextMenuActivated, ButtonType::kSettings,
+                              2);
+  histogram.ExpectBucketCount(kMahiContextMenuActivatedFailed,
+                              ButtonType::kSettings, 1);
+  histogram.ExpectTotalCount(kMahiContextMenuActivated, 8);
+  histogram.ExpectTotalCount(kMahiContextMenuActivatedFailed, 4);
+  testing::Mock::VerifyAndClearExpectations(this);
 }
 
 }  // namespace mahi

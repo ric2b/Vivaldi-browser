@@ -113,6 +113,19 @@ Status ChromeImpl::GetWebViewIdForFirstTab(std::string* web_view_id,
   return Status(kUnknownError, "unable to discover open window in chrome");
 }
 
+Status ChromeImpl::GetWebViewCount(size_t* web_view_count, bool w3c_compliant) {
+  WebViewsInfo views_info;
+  Status status = target_utils::GetWebViewsInfo(*devtools_websocket_client_,
+                                                nullptr, views_info);
+  if (status.IsError()) {
+    return status;
+  }
+
+  *web_view_count = views_info.GetSize();
+
+  return Status(kOk);
+}
+
 Status ChromeImpl::GetWebViewIds(std::list<std::string>* web_view_ids,
                                  bool w3c_compliant) {
   WebViewsInfo views_info;
@@ -587,8 +600,6 @@ Status ChromeImpl::CloseTarget(const std::string& id) {
     WebViewsInfo views_info;
     status = target_utils::GetWebViewsInfo(*devtools_websocket_client_,
                                            &timeout, views_info);
-    if (status.code() == kChromeNotReachable)
-      return Status(kOk);
     if (status.code() == kDisconnected)  // The closed target has gone
       return Status(kOk);
     if (status.IsError())

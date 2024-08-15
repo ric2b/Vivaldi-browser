@@ -16,11 +16,6 @@ This tooling change will provide a feature-rich and well-supported issue tracker
 Chromium's ecosystem. Chromium has joined other open source projects (Git, Gerrit) on this
 tooling. Existing transparency levels to bugs will be maintained.
 
-### I have a concern or feedback, how do I reach out?
-
-You can reach out at any time to <http://g.co/dev/chromium-issue-tracker-feedback>
-with questions or concerns.
-
 ### What about historic bug links?
 
 Existing Monorail issue links will redirect to the migrated issues in the new issue tracker.

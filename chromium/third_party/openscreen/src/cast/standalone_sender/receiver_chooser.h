@@ -36,8 +36,8 @@ class ReceiverChooser final : public discovery::ReportingClient {
 
  private:
   // discovery::ReportingClient implementation.
-  void OnFatalError(Error error) final;
-  void OnRecoverableError(Error error) final;
+  void OnFatalError(const Error& error) final;
+  void OnRecoverableError(const Error& error) final;
 
   // Called from the DnsWatcher with |all| ReceiverInfos any time there is a
   // change in the set of discovered devices.

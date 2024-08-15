@@ -18,6 +18,8 @@ source_set("vivaldi_ntp") {
     "vivaldi_speed_dial_container_view_flow_layout.mm",
     "vivaldi_speed_dial_base_controller.h",
     "vivaldi_speed_dial_base_controller.mm",
+    "vivaldi_speed_dial_base_controller_flow_layout.h",
+    "vivaldi_speed_dial_base_controller_flow_layout.mm",
     "vivaldi_speed_dial_view_controller.h",
     "vivaldi_speed_dial_view_controller.mm",
     "vivaldi_speed_dial_view_controller_delegate.h",
@@ -37,16 +39,18 @@ source_set("vivaldi_ntp") {
   ]
 
   deps = [
-    "//ui/base",
-    "//base",
     "//base:i18n",
+    "//base",
     "//ios/chrome/app/strings",
-    "//ios/chrome/common/ui/util",
     "//ios/chrome/browser/bookmarks/model",
     "//ios/chrome/browser/ui/first_run:utils",
+    "//ios/chrome/common/ui/util",
+    "//ui/base",
+    "//vivaldi/ios/most_visited_sites",
+    "//vivaldi/ios/ui/custom_views:custom_views_swift",
     "//vivaldi/ios/ui/ntp/cells",
-    "//vivaldi/ios/ui/ntp/top_toolbar",
     "//vivaldi/ios/ui/ntp/top_toolbar:top_toolbar_swift",
+    "//vivaldi/ios/ui/ntp/top_toolbar",
     "//vivaldi/ios/ui/thumbnail:service",
     "resources"
   ]

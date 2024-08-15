@@ -46,8 +46,8 @@ TEST_F(ProgramToIRMaterializeTest, EmitExpression_MaterializedCall) {
     auto m = Build();
     ASSERT_EQ(m, Success);
 
-    EXPECT_EQ(Disassemble(m.Get()), R"(%test_function = func():f32 -> %b1 {
-  %b1 = block {
+    EXPECT_EQ(Disassemble(m.Get()).Plain(), R"(%test_function = func():f32 {
+  $B1: {
     ret 2.0f
   }
 }

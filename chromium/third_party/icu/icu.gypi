@@ -395,6 +395,8 @@
       'source/common/uinvchar.cpp',
       'source/common/uiter.cpp',
       'source/common/ulist.cpp',
+      'source/common/ulocale.cpp',
+      'source/common/ulocbuilder.cpp',
       'source/common/uloc.cpp',
       'source/common/uloc_keytype.cpp',
       'source/common/uloc_tag.cpp',

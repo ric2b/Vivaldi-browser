@@ -41,6 +41,9 @@ class PermissionPromptAndroid : public PermissionPrompt {
   TabSwitchingBehavior GetTabSwitchingBehavior() override;
   std::optional<gfx::Rect> GetViewBoundsInScreen() const override;
   bool ShouldFinalizeRequestAfterDecided() const override;
+  std::vector<permissions::ElementAnchoredBubbleVariant> GetPromptVariants()
+      const override;
+  bool IsAskPrompt() const override;
 
   void Closing();
   void Accept();

@@ -2,33 +2,45 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <queue>
 #include <string>
+
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/views/permissions/embedded_permission_prompt_ask_view.h"
 #include "chrome/browser/ui/views/permissions/embedded_permission_prompt_base_view.h"
+#include "chrome/browser/ui/views/permissions/embedded_permission_prompt_content_scrim_view.h"
 #include "chrome/browser/ui/views/permissions/embedded_permission_prompt_previously_denied_view.h"
 #include "chrome/browser/ui/views/permissions/embedded_permission_prompt_previously_granted_view.h"
 #include "chrome/browser/ui/views/permissions/permission_prompt_bubble_base_view.h"
+#include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/interaction/interactive_browser_test.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_request_manager.h"
-#include "content/public/common/content_features.h"
+#include "components/permissions/permission_uma_util.h"
+#include "components/ukm/test_ukm_recorder.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/dns/mock_host_resolver.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "third_party/blink/public/common/features_generated.h"
 #include "ui/base/interaction/element_identifier.h"
+#include "ui/events/base_event_utils.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/widget/any_widget_observer.h"
 #include "url/origin.h"
 
 namespace {
 DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kWebContentsElementId);
 DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kPEPCVisibleEvent);
+DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kDoneVisibleEvent);
+
+using UkmEntry = ukm::builders::Permissions_EmbeddedPromptAction;
 }  // namespace
 
 class EmbeddedPermissionPromptInteractiveTest : public InteractiveBrowserTest {
@@ -37,9 +49,9 @@ class EmbeddedPermissionPromptInteractiveTest : public InteractiveBrowserTest {
     https_server_ = std::make_unique<net::EmbeddedTestServer>(
         net::EmbeddedTestServer::TYPE_HTTPS);
     feature_list_.InitWithFeatures(
-        {features::kPermissionElement,
-         permissions::features::kOneTimePermission,
-         blink::features::kDisablePepcSecurityForTesting},
+        {permissions::features::kOneTimePermission,
+         blink::features::kPermissionElement,
+         blink::features::kBypassPepcSecurityForTesting},
         {});
   }
 
@@ -61,6 +73,7 @@ class EmbeddedPermissionPromptInteractiveTest : public InteractiveBrowserTest {
     host_resolver()->AddRule("*", "127.0.0.1");
     content::SetupCrossSiteRedirector(https_server());
     https_server()->StartAcceptingConnections();
+    ukm_recorder_ = std::make_unique<ukm::TestAutoSetUkmRecorder>();
   }
 
   void TearDownOnMainThread() override {
@@ -128,6 +141,53 @@ class EmbeddedPermissionPromptInteractiveTest : public InteractiveBrowserTest {
                                             expected_value);
         },
         true));
+  }
+
+  auto CheckHistogram(const base::HistogramTester& tester,
+                      const std::string& view_name,
+                      permissions::RequestTypeForUma request_type,
+                      int count) {
+    return Steps(Do([=, &tester]() {
+      tester.ExpectBucketCount(
+          view_name, static_cast<base::HistogramBase::Sample>(request_type),
+          count);
+    }));
+  }
+
+  auto CheckNoUkmEntriesSinceLastCheck() {
+    return Steps(Check([this]() {
+      size_t entry_count =
+          ukm_recorder_->GetEntriesByName(UkmEntry::kEntryName).size();
+      ukm_recorder_ = std::make_unique<ukm::TestAutoSetUkmRecorder>();
+      return entry_count == 0U;
+    }));
+  }
+
+  auto CheckEntrySinceLastCheck(
+      permissions::RequestTypeForUma permission,
+      permissions::RequestTypeForUma screen_permission,
+      permissions::ElementAnchoredBubbleAction action,
+      permissions::ElementAnchoredBubbleVariant variant,
+      int screen_counter) {
+    return Steps(Do([=] {
+      auto entries = ukm_recorder_->GetEntriesByName(UkmEntry::kEntryName);
+      CHECK_EQ(entries.size(), 1U);
+
+      ukm_recorder_->ExpectEntryMetric(entries[0],
+                                       UkmEntry::kPermissionTypeName,
+                                       static_cast<int64_t>(permission));
+      ukm_recorder_->ExpectEntryMetric(entries[0],
+                                       UkmEntry::kScreenPermissionTypeName,
+                                       static_cast<int64_t>(screen_permission));
+      ukm_recorder_->ExpectEntryMetric(entries[0], UkmEntry::kActionName,
+                                       static_cast<int64_t>(action));
+      ukm_recorder_->ExpectEntryMetric(entries[0], UkmEntry::kVariantName,
+                                       static_cast<int64_t>(variant));
+      ukm_recorder_->ExpectEntryMetric(entries[0],
+                                       UkmEntry::kPreviousScreensName,
+                                       static_cast<int64_t>(screen_counter));
+      ukm_recorder_ = std::make_unique<ukm::TestAutoSetUkmRecorder>();
+    }));
   }
 
   bool DoContentSettingsHaveValue(
@@ -221,10 +281,12 @@ class EmbeddedPermissionPromptInteractiveTest : public InteractiveBrowserTest {
         CheckContentSettingsValue(content_settings_types, CONTENT_SETTING_ASK));
   }
 
-  void TestPartialPermissionsLabel(ContentSetting camera_setting,
-                                   ContentSetting mic_setting,
-                                   const std::u16string expected_label1) {
-    RunTestSequence(
+  void TestPromptElementText(
+      ContentSetting camera_setting,
+      ContentSetting mic_setting,
+      std::map<ui::ElementIdentifier, const std::u16string>& expected_labels,
+      bool check_buttons) {
+    auto steps = Steps(
         // Set the initial settings values.
         Do([&, this]() {
           SetContentSetting(ContentSettingsType::MEDIASTREAM_CAMERA,
@@ -236,19 +298,64 @@ class EmbeddedPermissionPromptInteractiveTest : public InteractiveBrowserTest {
         // text.
         ClickOnPEPCElement("camera-microphone"),
         InAnyContext(
-            WaitForShow(EmbeddedPermissionPromptBaseView::kMainViewId)),
-        InAnyContext(
-            CheckViewProperty(EmbeddedPermissionPromptBaseView::kLabelViewId1,
-                              &views::Label::GetText, expected_label1)),
+            WaitForShow(EmbeddedPermissionPromptBaseView::kMainViewId)));
 
-        // Dismiss the prompt.
-        FlushEvents(), Do([this]() {
-          auto* manager =
-              permissions::PermissionRequestManager::FromWebContents(
-                  browser()->tab_strip_model()->GetActiveWebContents());
-          manager->Dismiss();
-          manager->FinalizeCurrentRequests();
-        }));
+    for (const auto& expectation : expected_labels) {
+      if (check_buttons) {
+        AddStep(steps, Steps(InAnyContext(CheckViewProperty(
+                           expectation.first, &views::MdTextButton::GetText,
+                           expectation.second))));
+      } else {
+        AddStep(steps, Steps(InAnyContext(CheckViewProperty(
+                           expectation.first, &views::Label::GetText,
+                           expectation.second))));
+      }
+    }
+
+    AddStep(steps,
+            Steps(
+                // Dismiss the prompt.
+                FlushEvents(), Do([this]() {
+                  auto* manager =
+                      permissions::PermissionRequestManager::FromWebContents(
+                          browser()->tab_strip_model()->GetActiveWebContents());
+                  manager->Dismiss();
+                  manager->FinalizeCurrentRequests();
+                })));
+
+    RunTestSequence(std::move(steps));
+  }
+
+  void TestPartialPermissionsLabel(ContentSetting camera_setting,
+                                   ContentSetting mic_setting,
+                                   const std::u16string expected_label1) {
+    std::map<ui::ElementIdentifier, const std::u16string> expected_labels = {
+        {EmbeddedPermissionPromptBaseView::kLabelViewId1, expected_label1}};
+    TestPromptElementText(camera_setting, mic_setting, expected_labels,
+                          /*check_buttons=*/false);
+  }
+
+  auto DoPromptAndCheckHistograms(const std::string& element_id,
+                                  ui::ElementIdentifier prompt_button,
+                                  const base::HistogramTester& tester,
+                                  permissions::RequestTypeForUma type,
+                                  int accepted_count,
+                                  int accepted_once_count) {
+    return Steps(
+        ClickOnPEPCElement(element_id),
+        InAnyContext(
+            WaitForShow(EmbeddedPermissionPromptBaseView::kMainViewId)),
+        PushPEPCPromptButton(prompt_button),
+        CheckHistogram(
+            tester, permissions::PermissionUmaUtil::kPermissionsPromptAccepted,
+            type, accepted_count),
+        CheckHistogram(
+            tester,
+            permissions::PermissionUmaUtil::kPermissionsPromptAcceptedOnce,
+            type, accepted_once_count),
+        CheckHistogram(tester,
+                       permissions::PermissionUmaUtil::kPermissionsPromptDenied,
+                       type, 0));
   }
 
  protected:
@@ -256,6 +363,10 @@ class EmbeddedPermissionPromptInteractiveTest : public InteractiveBrowserTest {
 
  private:
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
+
+  // |ukm_recorder_| needs to be reset after every check so that further check
+  // functions will only check the new data.
+  std::unique_ptr<ukm::TestAutoSetUkmRecorder> ukm_recorder_;
 };
 
 // Failing on Windows, though manual testing of the same flow does not reproduce
@@ -267,6 +378,9 @@ class EmbeddedPermissionPromptInteractiveTest : public InteractiveBrowserTest {
 #define MAYBE_TestPartialPermissionsLabels DISABLED_TestPartialPermissionsLabels
 #define MAYBE_TestPermissionElementDialogPositioning \
   DISABLED_TestPermissionElementDialogPositioning
+#define MAYBE_TestPepcHistograms DISABLED_TestPepcHistograms
+#define MAYBE_TestPepcUkm DISABLED_TestPepcUkm
+#define MAYBE_TestButtonsLabel DISABLED_TestButtonsLabel
 #else
 #define MAYBE_BasicFlowMicrophone BasicFlowMicrophone
 #define MAYBE_BasicFlowCamera BasicFlowCamera
@@ -274,6 +388,9 @@ class EmbeddedPermissionPromptInteractiveTest : public InteractiveBrowserTest {
 #define MAYBE_TestPartialPermissionsLabels TestPartialPermissionsLabels
 #define MAYBE_TestPermissionElementDialogPositioning \
   TestPermissionElementDialogPositioning
+#define MAYBE_TestPepcHistograms TestPepcHistograms
+#define MAYBE_TestPepcUkm TestPepcUkm
+#define MAYBE_TestButtonsLabel TestButtonsLabel
 #endif
 IN_PROC_BROWSER_TEST_F(EmbeddedPermissionPromptInteractiveTest,
                        MAYBE_BasicFlowMicrophone) {
@@ -283,19 +400,18 @@ IN_PROC_BROWSER_TEST_F(EmbeddedPermissionPromptInteractiveTest,
           {u"Use your microphones",
            u"You have allowed microphone on a.test:" +
                base::UTF8ToUTF16(GetOrigin().port()),
-           u"You previously didn't allow microphone on a.test:" +
-               base::UTF8ToUTF16(GetOrigin().port())}));
+           u"You previously chose don’t allow for this site"}));
 }
 
 IN_PROC_BROWSER_TEST_F(EmbeddedPermissionPromptInteractiveTest,
                        MAYBE_BasicFlowCamera) {
-  TestAskBlockAllowFlow("camera", {ContentSettingsType::MEDIASTREAM_CAMERA},
-                        std::queue<std::u16string>(
-                            {u"Use your cameras",
-                             u"You have allowed camera on a.test:" +
-                                 base::UTF8ToUTF16(GetOrigin().port()),
-                             u"You previously didn't allow camera on a.test:" +
-                                 base::UTF8ToUTF16(GetOrigin().port())}));
+  TestAskBlockAllowFlow(
+      "camera", {ContentSettingsType::MEDIASTREAM_CAMERA},
+      std::queue<std::u16string>(
+          {u"Use your cameras",
+           u"You have allowed camera on a.test:" +
+               base::UTF8ToUTF16(GetOrigin().port()),
+           u"You previously chose don’t allow for this site"}));
 }
 
 IN_PROC_BROWSER_TEST_F(EmbeddedPermissionPromptInteractiveTest,
@@ -308,8 +424,7 @@ IN_PROC_BROWSER_TEST_F(EmbeddedPermissionPromptInteractiveTest,
           {u"Use your cameras",
            u"You have allowed camera and microphone on a.test:" +
                base::UTF8ToUTF16(GetOrigin().port()),
-           u"You previously didn't allow camera and microphone on a.test:" +
-               base::UTF8ToUTF16(GetOrigin().port())}),
+           u"You previously chose don’t allow for this site"}),
       std::queue<std::u16string>({u"Use your microphones"}));
 }
 
@@ -325,20 +440,271 @@ IN_PROC_BROWSER_TEST_F(EmbeddedPermissionPromptInteractiveTest,
 
   TestPartialPermissionsLabel(
       CONTENT_SETTING_BLOCK, CONTENT_SETTING_ASK,
-      u"You previously didn't allow camera and microphone on a.test:" +
-          base::UTF8ToUTF16(GetOrigin().port()));
+      u"You previously chose don’t allow for this site");
   TestPartialPermissionsLabel(
       CONTENT_SETTING_ASK, CONTENT_SETTING_BLOCK,
-      u"You previously didn't allow camera and microphone on a.test:" +
-          base::UTF8ToUTF16(GetOrigin().port()));
+      u"You previously chose don’t allow for this site");
 
-  TestPartialPermissionsLabel(CONTENT_SETTING_BLOCK, CONTENT_SETTING_ALLOW,
-                              u"You previously didn't allow camera on a.test:" +
-                                  base::UTF8ToUTF16(GetOrigin().port()));
+  TestPartialPermissionsLabel(
+      CONTENT_SETTING_BLOCK, CONTENT_SETTING_ALLOW,
+      u"You previously chose don’t allow for this site");
   TestPartialPermissionsLabel(
       CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK,
-      u"You previously didn't allow microphone on a.test:" +
-          base::UTF8ToUTF16(GetOrigin().port()));
+      u"You previously chose don’t allow for this site");
+}
+
+IN_PROC_BROWSER_TEST_F(EmbeddedPermissionPromptInteractiveTest,
+                       MAYBE_TestButtonsLabel) {
+  RunTestSequence(InstrumentTab(kWebContentsElementId),
+                  NavigateWebContents(kWebContentsElementId, GetURL()));
+
+  std::map<ui::ElementIdentifier, const std::u16string> expected_ask_labels = {
+      {EmbeddedPermissionPromptAskView::kAllowId, u"Allow on every visit"},
+      {EmbeddedPermissionPromptAskView::kAllowThisTimeId, u"Allow this time"}};
+
+  TestPromptElementText(CONTENT_SETTING_ASK, CONTENT_SETTING_ASK,
+                        expected_ask_labels, /*check_buttons=*/true);
+}
+
+IN_PROC_BROWSER_TEST_F(EmbeddedPermissionPromptInteractiveTest,
+                       MAYBE_TestPepcHistograms) {
+  base::HistogramTester tester;
+  RunTestSequence(
+      InstrumentTab(kWebContentsElementId),
+      NavigateWebContents(kWebContentsElementId, GetURL()),
+
+      // Initially the "ask" view is displayed.
+      DoPromptAndCheckHistograms(
+          "camera", EmbeddedPermissionPromptAskView::kAllowId, tester,
+          permissions::RequestTypeForUma::PERMISSION_MEDIASTREAM_CAMERA,
+          /*accepted_count=*/1, /*accepted_once_count=*/0),
+
+      // Now the "allow" view is displayed. Neither clicking "continue allowing"
+      // or "stop allowing" records any additional histograms.
+      DoPromptAndCheckHistograms(
+          "camera",
+          EmbeddedPermissionPromptPreviouslyGrantedView::kContinueAllowingId,
+          tester, permissions::RequestTypeForUma::PERMISSION_MEDIASTREAM_CAMERA,
+          /*accepted_count=*/1, /*accepted_once_count=*/0),
+
+      DoPromptAndCheckHistograms(
+          "camera",
+          EmbeddedPermissionPromptPreviouslyGrantedView::kStopAllowingId,
+          tester, permissions::RequestTypeForUma::PERMISSION_MEDIASTREAM_CAMERA,
+          /*accepted_count=*/1, /*accepted_once_count=*/0),
+
+      // Other permissions are not affected, check that the microphone
+      // permission has no histograms.
+      CheckHistogram(tester,
+                     permissions::PermissionUmaUtil::kPermissionsPromptAccepted,
+                     permissions::RequestTypeForUma::PERMISSION_MEDIASTREAM_MIC,
+                     /*count=*/0),
+      CheckHistogram(
+          tester,
+          permissions::PermissionUmaUtil::kPermissionsPromptAcceptedOnce,
+          permissions::RequestTypeForUma::PERMISSION_MEDIASTREAM_MIC,
+          /*count=*/0),
+
+      // Trigger and check a microphone "ask" prompt with allow-once.
+      DoPromptAndCheckHistograms(
+          "microphone", EmbeddedPermissionPromptAskView::kAllowThisTimeId,
+          tester, permissions::RequestTypeForUma::PERMISSION_MEDIASTREAM_MIC,
+          /*accepted_count=*/0,
+          /*accepted_once_count=*/1),
+
+      // Showing a combined prompt at this point will result in a "previously
+      // blocked" screen which won't record new histograms.
+      DoPromptAndCheckHistograms(
+          "camera-microphone",
+          EmbeddedPermissionPromptPreviouslyDeniedView::kAllowThisTimeId,
+          tester,
+          permissions::RequestTypeForUma::MULTIPLE_AUDIO_AND_VIDEO_CAPTURE,
+          /*accepted_count=*/0,
+          /*accepted_once_count=*/0),
+      CheckHistogram(
+          tester,
+          permissions::PermissionUmaUtil::kPermissionsPromptAcceptedOnce,
+          permissions::RequestTypeForUma::PERMISSION_MEDIASTREAM_CAMERA,
+          /*count=*/0),
+      CheckHistogram(
+          tester,
+          permissions::PermissionUmaUtil::kPermissionsPromptAcceptedOnce,
+          permissions::RequestTypeForUma::PERMISSION_MEDIASTREAM_MIC,
+          /*count=*/1),
+
+      // Reset permissions and show the combined prompt, now in "ask" mode.
+      // First check the allow action, then the allow-once action.
+      Do([&, this]() {
+        SetContentSetting(ContentSettingsType::MEDIASTREAM_CAMERA,
+                          CONTENT_SETTING_DEFAULT);
+        SetContentSetting(ContentSettingsType::MEDIASTREAM_MIC,
+                          CONTENT_SETTING_DEFAULT);
+      }),
+
+      DoPromptAndCheckHistograms(
+          "camera-microphone", EmbeddedPermissionPromptAskView::kAllowId,
+          tester,
+          permissions::RequestTypeForUma::MULTIPLE_AUDIO_AND_VIDEO_CAPTURE,
+          /*accepted_count=*/1,
+          /*accepted_once_count=*/0),
+
+      Do([&, this]() {
+        SetContentSetting(ContentSettingsType::MEDIASTREAM_CAMERA,
+                          CONTENT_SETTING_DEFAULT);
+        SetContentSetting(ContentSettingsType::MEDIASTREAM_MIC,
+                          CONTENT_SETTING_DEFAULT);
+      }),
+
+      DoPromptAndCheckHistograms(
+          "camera-microphone",
+          EmbeddedPermissionPromptAskView::kAllowThisTimeId, tester,
+          permissions::RequestTypeForUma::MULTIPLE_AUDIO_AND_VIDEO_CAPTURE,
+          /*accepted_count=*/1,
+          /*accepted_once_count=*/1),
+
+      // Check that all other histograms are unmodified.
+      CheckHistogram(
+          tester, permissions::PermissionUmaUtil::kPermissionsPromptAccepted,
+          permissions::RequestTypeForUma::PERMISSION_MEDIASTREAM_CAMERA,
+          /*count=*/1),
+      CheckHistogram(
+          tester,
+          permissions::PermissionUmaUtil::kPermissionsPromptAcceptedOnce,
+          permissions::RequestTypeForUma::PERMISSION_MEDIASTREAM_CAMERA,
+          /*count=*/0),
+      CheckHistogram(tester,
+                     permissions::PermissionUmaUtil::kPermissionsPromptAccepted,
+                     permissions::RequestTypeForUma::PERMISSION_MEDIASTREAM_MIC,
+                     /*count=*/0),
+      CheckHistogram(
+          tester,
+          permissions::PermissionUmaUtil::kPermissionsPromptAcceptedOnce,
+          permissions::RequestTypeForUma::PERMISSION_MEDIASTREAM_MIC,
+          /*count=*/1));
+}
+
+IN_PROC_BROWSER_TEST_F(EmbeddedPermissionPromptInteractiveTest,
+                       FocusableViaTabKey) {
+  StateChange pepc_visible;
+  pepc_visible.where = DeepQuery{"#geolocation"};
+  pepc_visible.type = StateChange::Type::kExists;
+  pepc_visible.event = kPEPCVisibleEvent;
+
+  StateChange done_visible;
+  done_visible.where = DeepQuery{"#done"};
+  done_visible.type = StateChange::Type::kExists;
+  done_visible.event = kDoneVisibleEvent;
+
+  RunTestSequence(
+      InstrumentTab(kWebContentsElementId),
+      NavigateWebContents(kWebContentsElementId, GetURL()),
+      // Setup an event listener for focus changes. When all expected element
+      // ids are matched. A 'done' element is appended to the body.
+      ExecuteJs(kWebContentsElementId,
+                R"JS(
+        () => {
+          var expected_focused_ids = [
+            "geolocation",
+            "microphone",
+            "camera",
+            "camera-microphone"
+          ];
+
+          document.addEventListener('focus', (event) => {
+            if (event.target.id === expected_focused_ids[0]) {
+              expected_focused_ids.shift();
+              if (expected_focused_ids.length == 0) {
+                const newElement = document.createElement('div');
+                newElement.id = 'done';
+                document.body.appendChild(newElement);
+              }
+            }
+          }, true);
+        })JS"),
+      WaitForStateChange(kWebContentsElementId, pepc_visible), Do([this]() {
+        // The exact number of "tab" presses needed to pass through all elements
+        // differs by platform. Here we do it 10 times to be sure.
+        for (int i = 0; i < 10; i++) {
+          ASSERT_TRUE(ui_test_utils::SendKeyPressSync(
+              browser(), ui::VKEY_TAB, false, false, false, false));
+        }
+      }),
+      // Make sure all elements have been focused as expected.
+      WaitForStateChange(kWebContentsElementId, done_visible));
+}
+
+IN_PROC_BROWSER_TEST_F(EmbeddedPermissionPromptInteractiveTest,
+                       MAYBE_TestPepcUkm) {
+  views::NamedWidgetShownWaiter waiter(
+      views::test::AnyWidgetTestPasskey{},
+      "EmbeddedPermissionPromptContentScrimWidget");
+  RunTestSequence(
+      InstrumentTab(kWebContentsElementId),
+      NavigateWebContents(kWebContentsElementId, GetURL()),
+      ClickOnPEPCElement("camera-microphone"),
+      InAnyContext(WaitForShow(EmbeddedPermissionPromptBaseView::kMainViewId)),
+      CheckNoUkmEntriesSinceLastCheck(),
+      PushPEPCPromptButton(EmbeddedPermissionPromptAskView::kAllowId),
+      CheckEntrySinceLastCheck(
+          permissions::RequestTypeForUma::MULTIPLE_AUDIO_AND_VIDEO_CAPTURE,
+          permissions::RequestTypeForUma::MULTIPLE_AUDIO_AND_VIDEO_CAPTURE,
+          permissions::ElementAnchoredBubbleAction::kGranted,
+          permissions::ElementAnchoredBubbleVariant::ASK, 0),
+
+      // Now mic+camera are granted.
+      ClickOnPEPCElement("camera"),
+      InAnyContext(WaitForShow(EmbeddedPermissionPromptBaseView::kMainViewId)),
+      PushPEPCPromptButton(
+          EmbeddedPermissionPromptPreviouslyGrantedView::kStopAllowingId),
+      CheckEntrySinceLastCheck(
+          permissions::RequestTypeForUma::PERMISSION_MEDIASTREAM_CAMERA,
+          permissions::RequestTypeForUma::PERMISSION_MEDIASTREAM_CAMERA,
+          permissions::ElementAnchoredBubbleAction::kDenied,
+          permissions::ElementAnchoredBubbleVariant::PREVIOUSLY_GRANTED, 0),
+
+      ClickOnPEPCElement("microphone"),
+      InAnyContext(WaitForShow(EmbeddedPermissionPromptBaseView::kMainViewId)),
+      PushPEPCPromptButton(
+          EmbeddedPermissionPromptPreviouslyGrantedView::kContinueAllowingId),
+      CheckEntrySinceLastCheck(
+          permissions::RequestTypeForUma::PERMISSION_MEDIASTREAM_MIC,
+          permissions::RequestTypeForUma::PERMISSION_MEDIASTREAM_MIC,
+          permissions::ElementAnchoredBubbleAction::kOk,
+          permissions::ElementAnchoredBubbleVariant::PREVIOUSLY_GRANTED, 0),
+
+      // Mic is granted, camera is blocked. Triggering the double permission
+      // prompt will show the screen that is only for camera, while the prompt
+      // is for both.
+      ClickOnPEPCElement("camera-microphone"),
+      InAnyContext(WaitForShow(EmbeddedPermissionPromptBaseView::kMainViewId)),
+      PushPEPCPromptButton(
+          EmbeddedPermissionPromptPreviouslyDeniedView::kAllowThisTimeId),
+      CheckEntrySinceLastCheck(
+          permissions::RequestTypeForUma::MULTIPLE_AUDIO_AND_VIDEO_CAPTURE,
+          permissions::RequestTypeForUma::PERMISSION_MEDIASTREAM_CAMERA,
+          permissions::ElementAnchoredBubbleAction::kGrantedOnce,
+          permissions::ElementAnchoredBubbleVariant::PREVIOUSLY_DENIED, 0),
+
+      // Both permissions are granted. Dismiss the prompt via clicking on the
+      // scrim.
+      ClickOnPEPCElement("camera-microphone"),
+      InAnyContext(WaitForShow(EmbeddedPermissionPromptBaseView::kMainViewId)),
+      FlushEvents(), Do([&]() {
+        auto* scrim_view =
+            static_cast<EmbeddedPermissionPromptContentScrimView*>(
+                waiter.WaitIfNeededAndGet()->GetContentsView());
+        scrim_view->OnMousePressed(
+            ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
+                           ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
+        scrim_view->OnMouseReleased(
+            ui::MouseEvent(ui::ET_MOUSE_RELEASED, gfx::Point(), gfx::Point(),
+                           ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
+      }),
+      CheckEntrySinceLastCheck(
+          permissions::RequestTypeForUma::MULTIPLE_AUDIO_AND_VIDEO_CAPTURE,
+          permissions::RequestTypeForUma::MULTIPLE_AUDIO_AND_VIDEO_CAPTURE,
+          permissions::ElementAnchoredBubbleAction::kDismissedScrim,
+          permissions::ElementAnchoredBubbleVariant::PREVIOUSLY_GRANTED, 0));
 }
 
 class EmbeddedPermissionPromptPositioningInteractiveTest
@@ -348,10 +714,10 @@ class EmbeddedPermissionPromptPositioningInteractiveTest
     feature_list_.Reset();
     feature_list_.InitWithFeaturesAndParameters(
         {
-            {features::kPermissionElement,
-             {{"PermissionElementDialogPositioning", "true"}}},
+            {blink::features::kPermissionElement, {}},
+            {permissions::features::kPermissionElementDialogPositioning, {}},
             {permissions::features::kOneTimePermission, {}},
-            {blink::features::kDisablePepcSecurityForTesting, {}},
+            {blink::features::kBypassPepcSecurityForTesting, {}},
         },
         {});
   }

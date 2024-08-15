@@ -7,8 +7,6 @@ import {describeWithEnvironment} from '../../testing/EnvironmentHelpers.js';
 
 import * as Elements from './elements.js';
 
-const {assert} = chai;
-
 describeWithEnvironment('CSSRuleValidator', () => {
   const tests = [
     {
@@ -436,7 +434,7 @@ describeWithEnvironment('CSSRuleValidator', () => {
           test.validator().getApplicableProperties()[0], test.computedStyles, test.parentsComputedStyles, test.nodeName,
           test.fontFaces);
       if (test.hintExpected) {
-        assert.isDefined(actualResult);
+        assert.exists(actualResult);
       } else {
         assert.isUndefined(actualResult);
       }

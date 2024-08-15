@@ -63,7 +63,7 @@
 #include "chrome/browser/ui/webui/ash/diagnostics_dialog.h"
 #include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
-#include "chromeos/ash/components/system/statistics_provider.h"
+#include "chromeos/ash/components/memory/swap_configuration.h"
 #include "components/account_id/account_id.h"
 #include "components/exo/wm_helper.h"
 #include "components/prefs/pref_service.h"
@@ -96,17 +96,7 @@ constexpr const char kArcPrepareHostGeneratedDirJobName[] =
 // Maximum amount of time we'll wait for ARC to finish booting up. Once this
 // timeout expires, keep ARC running in case the user wants to file feedback,
 // but present the UI to try again.
-base::TimeDelta GetArcSignInTimeout() {
-  constexpr base::TimeDelta kArcSignInTimeout = base::Minutes(5);
-  constexpr base::TimeDelta kArcVmSignInTimeoutForVM = base::Minutes(20);
-
-  if (ash::system::StatisticsProvider::GetInstance()->IsRunningOnVm() &&
-      arc::IsArcVmEnabled()) {
-    return kArcVmSignInTimeoutForVM;
-  } else {
-    return kArcSignInTimeout;
-  }
-}
+constexpr base::TimeDelta kArcSignInTimeout = base::Minutes(5);
 
 // Updates UMA with user cancel only if error is not currently shown.
 void MaybeUpdateOptInCancelUMA(const ArcSupportHost* support_host) {
@@ -1024,6 +1014,7 @@ void ArcSessionManager::RequestEnable() {
     return;
   }
   enable_requested_ = true;
+  ash::ConfigureSwap(true);
   SetArcEnabledStateMetric(true);
 
   VLOG(1) << "ARC opt-in. Starting ARC session.";
@@ -1329,7 +1320,6 @@ void ArcSessionManager::OnActivationNecessityChecked(bool result) {
 void ArcSessionManager::RequestDisable(bool remove_arc_data) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(profile_);
-
   if (!enable_requested_) {
     VLOG(1) << "ARC is already disabled. "
             << "Killing an instance for login screen (if any).";
@@ -1354,6 +1344,8 @@ void ArcSessionManager::RequestDisable(bool remove_arc_data) {
   if (remove_arc_data) {
     RequestArcDataRemoval();
   }
+
+  ash::ConfigureSwap(false);
 }
 
 void ArcSessionManager::RequestDisable() {
@@ -1794,7 +1786,7 @@ void ArcSessionManager::MaybeStartTimer() {
   sign_in_start_time_ = base::TimeTicks::Now();
   ReportProvisioningStartTime(sign_in_start_time_, profile_);
   arc_sign_in_timer_.Start(
-      FROM_HERE, GetArcSignInTimeout(),
+      FROM_HERE, kArcSignInTimeout,
       base::BindOnce(&ArcSessionManager::OnArcSignInTimeout,
                      weak_ptr_factory_.GetWeakPtr()));
 }
@@ -1869,7 +1861,7 @@ void ArcSessionManager::OnErrorPageShown(bool network_tests_shown) {
 
 void ArcSessionManager::OnSendFeedbackClicked() {
   DCHECK(support_host_);
-  chrome::OpenFeedbackDialog(nullptr, chrome::kFeedbackSourceArcApp);
+  chrome::OpenFeedbackDialog(nullptr, feedback::kFeedbackSourceArcApp);
 
   // If network-related error occurred, collect UMA stats on user action.
   if (support_host_->GetShouldShowRunNetworkTests()) {

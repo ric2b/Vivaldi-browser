@@ -3,19 +3,26 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
+#include <xnnpack.h>
+#include <xnnpack/node-type.h>
+#include <xnnpack/operator.h>
+#include <xnnpack/subgraph.h>
+
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <random>
 #include <tuple>
 #include <vector>
 
-#include <fp16/fp16.h>
+#include "replicable_random_device.h"
+#include "subgraph-unary-tester.h"
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-
-#include "subgraph-unary-tester.h"
+#include <fp16/fp16.h>
 
 template <typename T> class StaticSliceTest : public UnaryTest<T, T, /*min_dim=*/1> {
 public:
@@ -361,8 +368,8 @@ TEST_F(StaticSliceTestQU8, matches_operator_api)
 TEST_F(StaticSliceTestF16, matches_operator_api)
 {
   std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-  std::fill(operator_output.begin(), operator_output.end(), fp16_ieee_from_fp32_value(nanf("")));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), fp16_ieee_from_fp32_value(nanf("")));
+  std::fill(operator_output.begin(), operator_output.end(), UINT16_C(0x7E00) /* NaN */);
+  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT16_C(0x7E00) /* NaN */);
 
   ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));
 

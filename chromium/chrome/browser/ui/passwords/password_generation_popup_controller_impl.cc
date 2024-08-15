@@ -24,6 +24,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/autofill/core/browser/ui/popup_open_enums.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
 #include "components/autofill/core/common/password_generation_util.h"
 #include "components/password_manager/core/browser/features/password_features.h"
@@ -51,7 +52,7 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #endif  // !BUILDFLAG(IS_ANDROID)
 
-using autofill::PopupHidingReason;
+using autofill::SuggestionHidingReason;
 #if !BUILDFLAG(IS_ANDROID)
 using password_manager::features::kPasswordGenerationExperimentVariationParam;
 using password_manager::features::PasswordGenerationVariation;
@@ -378,7 +379,7 @@ void PasswordGenerationPopupControllerImpl::OnZoomChanged(
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
-void PasswordGenerationPopupControllerImpl::Hide(PopupHidingReason) {
+void PasswordGenerationPopupControllerImpl::Hide(SuggestionHidingReason) {
 #if !BUILDFLAG(IS_ANDROID)
   if (ShouldShowNudgePassword()) {
     pref_service_->SetInteger(
@@ -456,6 +457,11 @@ content::WebContents* PasswordGenerationPopupControllerImpl::GetWebContents()
 const gfx::RectF& PasswordGenerationPopupControllerImpl::element_bounds()
     const {
   return controller_common_.element_bounds;
+}
+
+autofill::PopupAnchorType PasswordGenerationPopupControllerImpl::anchor_type()
+    const {
+  return controller_common_.anchor_type;
 }
 
 base::i18n::TextDirection

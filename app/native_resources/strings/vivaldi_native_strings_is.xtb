@@ -29,6 +29,7 @@
 <translation id="1985669426322966465">Hugbúnaðaruppfærsla</translation>
 <translation id="2079036669923635404">Smelltu hér til þess að uppfæra Vivaldi í útgáfu <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Það kom upp villa við niðurhal á uppfærsluskrám. Vinsamlegast athugaðu nettenginguna og prófaðu aftur síðar.</translation>
+<translation id="2226825946708954262">⚠ Halda áfram þrátt fyrir gagnatap</translation>
 <translation id="2339641773402824483">Leita að uppfærslum...</translation>
 <translation id="2441056087170876076">Skrímsli 2</translation>
 <translation id="2444387452209867610">Bæta við minnisblaði</translation>
@@ -84,6 +85,9 @@
 <translation id="3943857333388298514">Líma</translation>
 <translation id="4005270918754737597">Sleppa þessari útgáfu</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi tókst ekki að opna örugga lyklahólfið þitt. Án lyklahólfsins muntu glata vistuðum innskráningum, öruggum kökum og nokkrir eiginleikar, s.s. samstilling, póstur og dagatal munu hætta að virka.
+
+    Vinamlegast skráðu þig út, opnaðu eða gerðu við lyklahólfið þitt og prófaðu svo aftur. Ertu viss um að þú viljir halda áfram og missa þar með gögn?</translation>
 <translation id="4074744496918018786">Opna mynd í einkaglugga</translation>
 <translation id="410351446219883937">Sjálfvirk spilun</translation>
 <translation id="4281844954008187215">Notkunarskilmálar</translation>
@@ -105,6 +109,7 @@
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> af <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Flutt inn úr hraðvali</translation>
 <translation id="5092656712000637858">Gera síðu að vefspjaldi</translation>
+<translation id="5106275083540628394">Túlkun dulkóða mistókst: Hætta er á gagnatapi</translation>
 <translation id="5177818338935286353">Skrímsli 7</translation>
 <translation id="5213743983876949565">Dýr 1</translation>
 <translation id="5238244642230426581">Flutt inn úr bókamerkjum</translation>
@@ -126,6 +131,7 @@
 <translation id="6229528619562190452">Smelltu hér til þess að uppfæra Vivaldi.</translation>
 <translation id="6234173136417926046">Nota bakgrunnsmynd á bakgrunni upphafssíðu</translation>
 <translation id="6339818817272922368">Staðbundinn reikningur</translation>
+<translation id="6398710281890660037">Tryggja prófílinn minn</translation>
 <translation id="6438786710866753178">Landslag 4</translation>
 <translation id="6477028720702061455">Veldu möppu sem inniheldur Óperu notendamöppu til að flytja inn</translation>
 <translation id="6510706699590490869">&amp;Uppfæra Vivaldi</translation>
@@ -137,7 +143,9 @@
 <translation id="6726279523566323394">Veldu Brave notendamöppu til að flytja inn</translation>
 <translation id="6892812721183419409">Opna hlekk sem <ph name="USER" /></translation>
 <translation id="6896758677409633944">Afrita</translation>
+<translation id="6960139763942959188">Þessi prófíll er í augnablikinu vistaður í óöruggu og ódulkóðuðu formati. Vivaldi er að uppfæra prófílinn þinn í öruggara og dulkóðað format. Þú ættir að hætta núna og taka afrit af prófílnum þínum áður en þú heldur áfram.</translation>
 <translation id="7086554968911045110">Landslag 7</translation>
+<translation id="7099506190679014195">Uppfærsla á öruggu lyklaboxi</translation>
 <translation id="7111492742514999492">Landslag 9</translation>
 <translation id="7208252576848052204">Því miður eru Arc stillingarnar þínar ekki aðgengilegar þegar sá vafri er í gangi. Til þess að flytja inn stillingarnar þínar í Vivaldi þarftu að vista vinnuna þína og loka öllum Arc gluggum. Ýttu svo á halda áfram.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -170,6 +178,7 @@
 <translation id="8669345741879513971">Skrímsli 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Atburðaskrá fyrir bakvinnsluþráð (portal-document)</translation>
+<translation id="875142999698251063">Hætta núna</translation>
 <translation id="8768970203213061953">Landslag 14</translation>
 <translation id="8773635261052182196">Þú munt ekki lengur sjá tilkynningar. Þú getur virkjað þær aftur í vivaldi stillingum.</translation>
 <translation id="8774017153185436870">Síður gætu hugsanlega leyft sjálfvirka spilun myndbanda</translation>
@@ -181,6 +190,7 @@
 <translation id="9048058608784130603">Uppfærsla á bið <ph name="VERSION" /></translation>
 <translation id="9048224371732578627">Leyfi fyrir sjálfvirka spilun á myndbandi</translation>
 <translation id="9065203028668620118">Breyta</translation>
+<translation id="9090254883741610153">Leyfðu mér að halda áfram</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Opna mynd sem <ph name="USER" /></translation>
 <translation id="9157539936604258187">Opna hlekk</translation>

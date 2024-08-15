@@ -21,6 +21,7 @@ void cod() {
   Index rank = internal::random<Index>(1, (std::min)(rows, cols) - 1);
 
   typedef typename MatrixType::Scalar Scalar;
+  typedef typename MatrixType::RealScalar RealScalar;
   typedef Matrix<Scalar, MatrixType::RowsAtCompileTime, MatrixType::RowsAtCompileTime> MatrixQType;
   MatrixType matrix;
   createRandomPIMatrixOfRank(rank, rows, cols, matrix);
@@ -56,6 +57,23 @@ void cod() {
 
   MatrixType pinv = cod.pseudoInverse();
   VERIFY_IS_APPROX(cod_solution, pinv * rhs);
+
+  // now construct a (square) matrix with prescribed determinant
+  Index size = internal::random<Index>(2, 20);
+  matrix.setZero(size, size);
+  for (int i = 0; i < size; i++) {
+    matrix(i, i) = internal::random<Scalar>();
+  }
+  Scalar det = matrix.diagonal().prod();
+  RealScalar absdet = numext::abs(det);
+  CompleteOrthogonalDecomposition<MatrixType> cod2(matrix);
+  cod2.compute(matrix);
+  q = cod2.householderQ();
+  matrix = q * matrix * q.adjoint();
+  VERIFY_IS_APPROX(det, cod2.determinant());
+  VERIFY_IS_APPROX(absdet, cod2.absDeterminant());
+  VERIFY_IS_APPROX(numext::log(absdet), cod2.logAbsDeterminant());
+  VERIFY_IS_APPROX(numext::sign(det), cod2.signDeterminant());
 }
 
 template <typename MatrixType, int Cols2>
@@ -265,6 +283,7 @@ void qr_invertible() {
   VERIFY_IS_APPROX(det, qr.determinant());
   VERIFY_IS_APPROX(absdet, qr.absDeterminant());
   VERIFY_IS_APPROX(log(absdet), qr.logAbsDeterminant());
+  VERIFY_IS_APPROX(numext::sign(det), qr.signDeterminant());
 }
 
 template <typename MatrixType>
@@ -285,6 +304,7 @@ void qr_verify_assert() {
   VERIFY_RAISES_ASSERT(qr.determinant())
   VERIFY_RAISES_ASSERT(qr.absDeterminant())
   VERIFY_RAISES_ASSERT(qr.logAbsDeterminant())
+  VERIFY_RAISES_ASSERT(qr.signDeterminant())
 }
 
 template <typename MatrixType>
@@ -305,6 +325,7 @@ void cod_verify_assert() {
   VERIFY_RAISES_ASSERT(cod.determinant())
   VERIFY_RAISES_ASSERT(cod.absDeterminant())
   VERIFY_RAISES_ASSERT(cod.logAbsDeterminant())
+  VERIFY_RAISES_ASSERT(cod.signDeterminant())
 }
 
 EIGEN_DECLARE_TEST(qr_colpivoting) {

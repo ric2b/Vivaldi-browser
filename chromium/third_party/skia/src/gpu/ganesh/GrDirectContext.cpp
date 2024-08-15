@@ -25,6 +25,7 @@
 #include "src/core/SkMipmap.h"
 #include "src/core/SkTaskGroup.h"
 #include "src/core/SkTraceEvent.h"
+#include "src/gpu/DataUtils.h"
 #include "src/gpu/GpuTypesPriv.h"
 #include "src/gpu/RefCntedCallback.h"
 #include "src/gpu/Swizzle.h"
@@ -34,7 +35,6 @@
 #include "src/gpu/ganesh/GrClientMappedBufferManager.h"
 #include "src/gpu/ganesh/GrColorInfo.h"
 #include "src/gpu/ganesh/GrContextThreadSafeProxyPriv.h"
-#include "src/gpu/ganesh/GrDataUtils.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrDrawOpAtlas.h"
 #include "src/gpu/ganesh/GrDrawingManager.h"
@@ -44,6 +44,7 @@
 #include "src/gpu/ganesh/GrRenderTargetProxy.h"
 #include "src/gpu/ganesh/GrResourceCache.h"
 #include "src/gpu/ganesh/GrResourceProvider.h"
+#include "src/gpu/ganesh/GrSemaphore.h"  // IWYU pragma: keep
 #include "src/gpu/ganesh/GrShaderCaps.h"
 #include "src/gpu/ganesh/GrSurfaceProxy.h"
 #include "src/gpu/ganesh/GrSurfaceProxyView.h"
@@ -64,8 +65,6 @@
 #include <forward_list>
 #include <memory>
 #include <utility>
-
-class GrSemaphore;
 
 #ifdef SK_DIRECT3D
 #include "src/gpu/ganesh/d3d/GrD3DGpu.h"
@@ -957,7 +956,7 @@ GrBackendTexture GrDirectContext::createCompressedBackendTexture(
     size_t size = SkCompressedDataSize(
             compression, {width, height}, nullptr, mipmapped == skgpu::Mipmapped::kYes);
     auto storage = std::make_unique<char[]>(size);
-    GrFillInCompressedData(compression, {width, height}, mipmapped, storage.get(), color);
+    skgpu::FillInCompressedData(compression, {width, height}, mipmapped, storage.get(), color);
     return create_and_update_compressed_backend_texture(this,
                                                         {width, height},
                                                         backendFormat,
@@ -1047,11 +1046,11 @@ bool GrDirectContext::updateCompressedBackendTexture(const GrBackendTexture& bac
                                        nullptr,
                                        backendTexture.hasMipmaps());
     SkAutoMalloc storage(size);
-    GrFillInCompressedData(compression,
-                           backendTexture.dimensions(),
-                           backendTexture.mipmapped(),
-                           static_cast<char*>(storage.get()),
-                           color);
+    skgpu::FillInCompressedData(compression,
+                                backendTexture.dimensions(),
+                                backendTexture.mipmapped(),
+                                static_cast<char*>(storage.get()),
+                                color);
     return fGpu->updateCompressedBackendTexture(backendTexture,
                                                 std::move(finishedCallback),
                                                 storage.get(),

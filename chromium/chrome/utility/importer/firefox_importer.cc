@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <set>
+#include <string_view>
 
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
@@ -27,9 +28,9 @@
 #include "sql/statement.h"
 #include "url/gurl.h"
 
-#if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_FUCHSIA)
+#if !BUILDFLAG(IS_MAC)
 #include "chrome/utility/importer/nss_decryptor.h"
-#endif  // !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_FUCHSIA)
+#endif  // !BUILDFLAG(IS_MAC)
 
 #include "app/vivaldi_apptools.h"
 
@@ -153,13 +154,13 @@ void FirefoxImporter::StartImport(const importer::SourceProfile& source_profile,
     ImportBookmarks();
     bridge_->NotifyItemEnded(importer::FAVORITES);
   }
-#if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_FUCHSIA)
+#if !BUILDFLAG(IS_MAC)
   if ((items & importer::PASSWORDS) && !cancelled()) {
     bridge_->NotifyItemStarted(importer::PASSWORDS);
     ImportPasswords();
     bridge_->NotifyItemEnded(importer::PASSWORDS);
   }
-#endif  // !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_FUCHSIA)
+#endif  // !BUILDFLAG(IS_MAC)
   if ((items & importer::AUTOFILL_FORM_DATA) && !cancelled()) {
     bridge_->NotifyItemStarted(importer::AUTOFILL_FORM_DATA);
     ImportAutofillFormData();
@@ -254,7 +255,7 @@ void FirefoxImporter::ImportBookmarks() {
   std::vector<importer::SearchEngineInfo> search_engines;
   FaviconMap favicon_map;
 
-  // TODO(https://crbug.com/18107): We do not support POST based keywords yet.
+  // TODO(crbug.com/40304654): We do not support POST based keywords yet.
   // We won't include them in the list.
   std::set<int> post_keyword_ids;
   const char query[] =
@@ -381,7 +382,7 @@ void FirefoxImporter::ImportBookmarks() {
   }
 }
 
-#if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_FUCHSIA)
+#if !BUILDFLAG(IS_MAC)
 void FirefoxImporter::ImportPasswords() {
   // Initializes NSS3.
   NSSDecryptor decryptor;
@@ -407,7 +408,7 @@ void FirefoxImporter::ImportPasswords() {
     }
   }
 }
-#endif  // !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_FUCHSIA)
+#endif  // !BUILDFLAG(IS_MAC)
 
 void FirefoxImporter::ImportHomepage() {
   GURL home_page = GetHomepage(source_path_);
@@ -651,7 +652,7 @@ void FirefoxImporter::LoadFavicons(
 }
 
 base::FilePath FirefoxImporter::GetCopiedSourcePath(
-    base::StringPiece base_file_name) {
+    std::string_view base_file_name) {
   const base::FilePath file = source_path_.AppendASCII(base_file_name);
   if (!base::PathExists(file))
     return {};

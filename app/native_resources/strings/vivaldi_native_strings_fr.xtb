@@ -83,11 +83,11 @@
 <translation id="3914946330804881301">Importés d’Opera</translation>
 <translation id="3921292902397893431">Monstre 8</translation>
 <translation id="3943857333388298514">Coller</translation>
-<translation id="3974783668264968389">Vivaldi ne peut pas déverrouiller votre stockage sécurisé de clés. Sans ce stockage, vous allez perdre les mots de passe enregistrés, les cookies sécurisés et quelques fonctions comme la synchronisation, le courrier et l’agenda cesseront de fonctionner.
-
-    Veuillez fermer le navigateur, déverrouiller ou réparer votre stockage de clés et réessayer. Si vous souhaitez vraiment continuer, cochez la case et cliquez sur le bouton « Continuer avec perte de données ».</translation>
 <translation id="4005270918754737597">Ignorer cette version</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi n’a pas pu déverrouiller votre magasin de clés sécurisées. Sans la base de données de clés, vous perdrez vos paramètres de connexion sauvegardés, vos cookies sécurisés et certaines fonctions comme la synchronisation, le courrier et l’agenda cesseront de fonctionner.
+
+    Veuillez arrêter maintenant, déverrouiller ou réparer votre trousseau de clés, puis réessayez. Voulez-vous vraiment continuer, mais perdre des données ?</translation>
 <translation id="4074744496918018786">Ouvrir l’image dans une fenêtre de navigation privée</translation>
 <translation id="410351446219883937">Jouer automatiquement</translation>
 <translation id="4281844954008187215">Conditions d’utilisation</translation>
@@ -178,6 +178,7 @@
 <translation id="8669345741879513971">Monstre 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Inspecter le portal-document</translation>
+<translation id="875142999698251063">Quitter maintenant</translation>
 <translation id="8768970203213061953">Paysage 14</translation>
 <translation id="8773635261052182196">Vous ne verrez plus ces notifications. Vous pourrez toujours les rétablir dans les réglages de Vivaldi.</translation>
 <translation id="8774017153185436870">Les sites peuvent lire automatiquement les vidéos</translation>

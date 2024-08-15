@@ -92,6 +92,7 @@
 #include "extensions/common/mojom/app_window.mojom.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "sessions/index_service_factory.h"
+#include "third_party/blink/public/mojom/page/draggable_region.mojom.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/devtools/devtools_connector.h"
@@ -219,12 +220,9 @@ class VivaldiBrowserWindow::InterfaceHelper final
 
   bool CanUserExitFullscreen() const override { return true; }
 
-  void UpdateExclusiveAccessExitBubbleContent(
-      const GURL& url,
-      ExclusiveAccessBubbleType bubble_type,
-      ExclusiveAccessBubbleHideCallback bubble_first_hide_callback,
-      bool notify_download,
-      bool force_update) override {}
+  void UpdateExclusiveAccessBubble(
+      const ExclusiveAccessBubbleParams& params,
+      ExclusiveAccessBubbleHideCallback first_hide_callback) override {}
 
   bool IsExclusiveAccessBubbleDisplayed() const override { return false; }
 
@@ -2283,8 +2281,9 @@ bool VivaldiBrowserWindow::MaybeShowNewBadgeFor(const base::Feature& feature) {
   return false;
 }
 
-void VivaldiBrowserWindow::UpdateDraggableRegions(
-    const std::vector<extensions::mojom::DraggableRegionPtr>& regions) {
+void VivaldiBrowserWindow::DraggableRegionsChanged(
+    const std::vector<blink::mojom::DraggableRegionPtr>& regions,
+    content::WebContents* contents) {
   if (with_native_frame_) {
     // The system handles the drag.
     return;
@@ -2381,6 +2380,11 @@ ui::WindowShowState VivaldiBrowserWindow::GetWindowShowState() const {
   }
 }
 
+views::WebView* VivaldiBrowserWindow::GetContentsWebView() {
+  // TODO: return correct value
+  return nullptr;
+}
+
 void VivaldiBrowserWindow::BeforeUnloadFired(content::WebContents* source) {
   // web_contents_delegate_ calls back when unload has fired and we can self
   // destruct. Note we cannot destruct here since cleanup is done.
@@ -2434,7 +2438,7 @@ VivaldiToolbarButtonProvider::GetAsAccessiblePaneView() {
 }
 
 views::View* VivaldiToolbarButtonProvider::GetAnchorView(
-    PageActionIconType type) {
+    std::optional<PageActionIconType> type) {
   // Return the webview.
   return window_->GetWebView();
 }

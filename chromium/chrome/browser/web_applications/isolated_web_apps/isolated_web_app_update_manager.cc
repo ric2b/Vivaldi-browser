@@ -12,6 +12,7 @@
 #include "base/cancelable_callback.h"
 #include "base/check.h"
 #include "base/containers/circular_deque.h"
+#include "base/containers/map_util.h"
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
@@ -306,6 +307,26 @@ void IsolatedWebAppUpdateManager::OnWebAppUninstalled(
   MaybeResetScheduledUpdateDiscoveryCheck();
 }
 
+bool IsolatedWebAppUpdateManager::MaybeDiscoverUpdatesForApp(
+    const webapps::AppId& app_id) {
+  const WebApp* web_app = provider_->registrar_unsafe().GetAppById(app_id);
+  if (!web_app || !web_app->isolation_data().has_value()) {
+    return false;
+  }
+
+  base::flat_map<web_package::SignedWebBundleId, GURL>
+      id_to_update_manifest_map =
+          GetForceInstalledBundleIdToUpdateManifestUrlMap();
+
+  bool queued_update_discovery_task =
+      MaybeQueueUpdateDiscoveryTask(*web_app, id_to_update_manifest_map);
+  if (queued_update_discovery_task) {
+    task_queue_.MaybeStartNextTask();
+  }
+
+  return queued_update_discovery_task;
+}
+
 size_t IsolatedWebAppUpdateManager::DiscoverUpdatesNow() {
   // If an update discovery check is already scheduled, reset it, so that the
   // next update discovery happens based on `update_discovery_frequency_` time
@@ -340,7 +361,7 @@ IsolatedWebAppUpdateManager::GetForceInstalledBundleIdToUpdateManifestUrlMap() {
   base::flat_map<web_package::SignedWebBundleId, GURL>
       id_to_update_manifest_map;
 
-// TODO(crbug.com/1458725): Enable automatic updates on other platforms.
+// TODO(crbug.com/40274058): Enable automatic updates on other platforms.
 #if BUILDFLAG(IS_CHROMEOS)
   const base::Value::List& iwa_force_install_list =
       profile_->GetPrefs()->GetList(prefs::kIsolatedWebAppInstallForceList);
@@ -371,34 +392,11 @@ size_t IsolatedWebAppUpdateManager::QueueUpdateDiscoveryTasks() {
       id_to_update_manifest_map =
           GetForceInstalledBundleIdToUpdateManifestUrlMap();
 
-  // TODO(crbug.com/1459160): In the future, we also need to automatically
-  // update IWAs not installed via policy.
   size_t num_new_tasks = 0;
-  for (const auto& [web_bundle_id, update_manifest_url] :
-       id_to_update_manifest_map) {
-    auto url_info =
-        IsolatedWebAppUrlInfo::CreateFromSignedWebBundleId(web_bundle_id);
-    const WebApp* web_app =
-        provider_->registrar_unsafe().GetAppById(url_info.app_id());
-    if (!web_app) {
-      continue;
+  for (const WebApp& web_app : provider_->registrar_unsafe().GetApps()) {
+    if (MaybeQueueUpdateDiscoveryTask(web_app, id_to_update_manifest_map)) {
+      ++num_new_tasks;
     }
-    const std::optional<WebApp::IsolationData>& isolation_data =
-        web_app->isolation_data();
-    if (!isolation_data) {
-      continue;
-    }
-    if (isolation_data->location.dev_mode()) {
-      // Never automatically update IWAs installed in dev mode. Updates for dev
-      // mode apps will be triggerable manually from the upcoming dev mode
-      // browser UI.
-      continue;
-    }
-
-    task_queue_.Push(std::make_unique<IsolatedWebAppUpdateDiscoveryTask>(
-        update_manifest_url, url_info, provider_->scheduler(),
-        provider_->registrar_unsafe(), profile_->GetURLLoaderFactory()));
-    ++num_new_tasks;
   }
 
   task_queue_.MaybeStartNextTask();
@@ -406,6 +404,45 @@ size_t IsolatedWebAppUpdateManager::QueueUpdateDiscoveryTasks() {
   MaybeScheduleUpdateDiscoveryCheck();
 
   return num_new_tasks;
+}
+
+bool IsolatedWebAppUpdateManager::MaybeQueueUpdateDiscoveryTask(
+    const WebApp& web_app,
+    const base::flat_map<web_package::SignedWebBundleId, GURL>&
+        id_to_update_manifest_map) {
+  // TODO(crbug.com/40274186): In the future, we also need to automatically
+  // update IWAs not installed via policy.
+  if (!web_app.IsIwaPolicyInstalledApp()) {
+    return false;
+  }
+
+  const std::optional<WebApp::IsolationData>& isolation_data =
+      web_app.isolation_data();
+  if (!isolation_data) {
+    return false;
+  }
+  if (isolation_data->location.dev_mode()) {
+    // Never automatically update IWAs installed in dev mode. Updates for dev
+    // mode apps can be triggered manually from the browser's dev mode UI.
+    return false;
+  }
+
+  ASSIGN_OR_RETURN(auto url_info,
+                   IsolatedWebAppUrlInfo::Create(web_app.manifest_id()),
+                   [](auto error) { return false; });
+
+  const GURL* update_manifest_url =
+      base::FindOrNull(id_to_update_manifest_map, url_info.web_bundle_id());
+  if (!update_manifest_url) {
+    // The app is no longer part of the policy (and thus should soon be
+    // uninstalled), so no need to check for updates.
+    return false;
+  }
+  task_queue_.Push(std::make_unique<IsolatedWebAppUpdateDiscoveryTask>(
+      *update_manifest_url, url_info, provider_->scheduler(),
+      provider_->registrar_unsafe(), profile_->GetURLLoaderFactory()));
+
+  return true;
 }
 
 void IsolatedWebAppUpdateManager::MaybeScheduleUpdateDiscoveryCheck() {

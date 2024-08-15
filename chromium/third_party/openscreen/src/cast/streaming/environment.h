@@ -60,7 +60,7 @@ class Environment : public UdpSocket::Client {
     virtual void OnSocketReady() = 0;
 
     // Event that occurs when the environment has experienced a fatal error.
-    virtual void OnSocketInvalid(Error error) = 0;
+    virtual void OnSocketInvalid(const Error& error) = 0;
 
    protected:
     virtual ~SocketSubscriber();
@@ -131,8 +131,8 @@ class Environment : public UdpSocket::Client {
  private:
   // UdpSocket::Client implementation.
   void OnBound(UdpSocket* socket) final;
-  void OnError(UdpSocket* socket, Error error) final;
-  void OnSendError(UdpSocket* socket, Error error) final;
+  void OnError(UdpSocket* socket, const Error& error) final;
+  void OnSendError(UdpSocket* socket, const Error& error) final;
   void OnRead(UdpSocket* socket, ErrorOr<UdpPacket> packet_or_error) final;
 
   ClockNowFunctionPtr now_function_;

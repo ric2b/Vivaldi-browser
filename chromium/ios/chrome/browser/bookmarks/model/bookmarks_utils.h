@@ -9,6 +9,8 @@
 #include <set>
 #include <vector>
 
+#include "base/location.h"
+
 enum class BookmarkModelType;
 class ChromeBrowserState;
 class LegacyBookmarkModel;
@@ -45,7 +47,8 @@ extern const int64_t kLastUsedBookmarkFolderNone;
 // bookmark model to be loaded.
 // Return true if the bookmarks were successfully removed and false otherwise.
 // TODO(crbug.com/326185948): Inline this trivial helper function.
-[[nodiscard]] bool RemoveAllUserBookmarksIOS(ChromeBrowserState* browser_state);
+[[nodiscard]] bool RemoveAllUserBookmarksIOS(ChromeBrowserState* browser_state,
+                                             const base::Location& location);
 
 // Returns the permanent nodes whose url children are considered uncategorized
 // and whose folder children should be shown in the bookmark menu.
@@ -75,7 +78,7 @@ void SetLastUsedBookmarkFolder(PrefService* prefs,
 // priority:
 //- Last used folder
 //- Account mobile folder
-//- Profile mobile folder
+//- Local mobile folder
 const bookmarks::BookmarkNode* GetDefaultBookmarkFolder(
     PrefService* prefs,
     bool is_account_bookmark_model_available,

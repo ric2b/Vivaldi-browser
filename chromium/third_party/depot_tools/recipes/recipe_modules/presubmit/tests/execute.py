@@ -24,7 +24,7 @@ DEPS = [
 
 def RunSteps(api):
   api.gclient.set_config('infra')
-  with api.context(cwd=api.path['cache'].join('builder')):
+  with api.context(cwd=api.path.cache_dir / 'builder'):
     bot_update_step = api.presubmit.prepare()
     skip_owners = api.properties.get('skip_owners', False)
     run_all = api.properties.get('run_all', False)
@@ -83,7 +83,6 @@ def GenTests(api):
       ) + api.post_process(post_process.StatusFailure) + api.post_process(
           post_process.ResultReason,
           (u'#### There are 0 error(s), 0 warning(s), and 0 notifications(s).'
-           ' Here are the errors:'
            '\n\nTimeout occurred during presubmit step.')) +
       api.post_process(post_process.DropExpectation))
 
@@ -122,7 +121,7 @@ def GenTests(api):
       api.post_process(
           post_process.ResultReason,
           textwrap.dedent(u'''
-          #### There are 2 error(s), 1 warning(s), and 1 notifications(s). Here are the errors:
+          #### There are 2 error(s), 1 warning(s), and 1 notifications(s).
 
           **ERROR**
           ```
@@ -160,7 +159,7 @@ def GenTests(api):
          api.post_process(
              post_process.ResultReason,
              textwrap.dedent('''
-          #### There are 1 error(s), 0 warning(s), and 0 notifications(s). Here are the errors:
+          #### There are 1 error(s), 0 warning(s), and 0 notifications(s).
 
           **ERROR**
           ```
@@ -200,7 +199,7 @@ def GenTests(api):
          api.post_process(
              post_process.ResultReason,
              textwrap.dedent(u'''
-        #### There are 1 error(s), 0 warning(s), and 0 notifications(s). Here are the errors:
+        #### There are 1 error(s), 0 warning(s), and 0 notifications(s).
 
         **ERROR**
         ```

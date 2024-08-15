@@ -20,6 +20,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace performance_manager {
 namespace policies {
@@ -69,7 +70,7 @@ class PageDiscardingHelperTest
         false, base::TimeTicks::Now(), page->GetNavigationID() + 1, url,
         mime_type, /* notification_permission_status=*/
         blink::mojom::PermissionStatus::ASK);
-    frame->OnNavigationCommitted(url, false);
+    frame->OnNavigationCommitted(url, url::Origin::Create(url), false);
   }
 
   // Convenience wrappers for PageNodeHelper::CanDiscard().
@@ -95,7 +96,7 @@ class PageDiscardingHelperTest
 };
 
 TEST_F(PageDiscardingHelperTest, TestCanDiscardMultipleCurrentMainFrames) {
-  // TODO(crbug.com/1441986): It shouldn't be possible to have two main frames
+  // TODO(crbug.com/40910297): It shouldn't be possible to have two main frames
   // both marked "current", but due to a state tracking bug this sometimes
   // occurs. Until the bug is fixed, make sure CanDiscard works around it. (See
   // comment at
@@ -187,7 +188,7 @@ TEST_F(PageDiscardingHelperTest, TestCanDiscardNeverAudiblePage) {
   new_page_node->OnMainFrameNavigationCommitted(
       false, base::TimeTicks::Now(), 42, kUrl, "text/html",
       /* notification_permission_status=*/blink::mojom::PermissionStatus::ASK);
-  new_frame_node->OnNavigationCommitted(kUrl, false);
+  new_frame_node->OnNavigationCommitted(kUrl, url::Origin::Create(kUrl), false);
 
   EXPECT_FALSE(new_page_node->IsAudible());
 

@@ -29,9 +29,10 @@ namespace {
 
 class ContentBrowserClientMock : public ChromeContentBrowserClient {
  public:
-  MOCK_METHOD(bool,
-              IsGetAllScreensMediaAllowed,
-              (content::BrowserContext * context, const url::Origin& origin),
+  MOCK_METHOD(void,
+              CheckGetAllScreensMediaAllowed,
+              (content::RenderFrameHost * render_frame_host,
+               base::OnceCallback<void(bool)> callback),
               (override));
 };
 
@@ -108,8 +109,11 @@ IN_PROC_BROWSER_TEST_F(GetAllScreensMediaOffscreenApiTest,
   base::AddTagToTestResult("feature_id",
                            "screenplay-f3601ae4-bff7-495a-a51f-3c0997a46445");
   EXPECT_CALL(content_browser_client(),
-              IsGetAllScreensMediaAllowed(testing::_, testing::_))
-      .WillOnce(testing::Return(true));
+              CheckGetAllScreensMediaAllowed(testing::_, testing::_))
+      .WillOnce(testing::Invoke([](content::RenderFrameHost* render_frame_host,
+                                   base::OnceCallback<void(bool)> callback) {
+        std::move(callback).Run(true);
+      }));
 
   static constexpr char kManifest[] =
       R"({
@@ -220,7 +224,7 @@ IN_PROC_BROWSER_TEST_F(GetAllScreensMediaOffscreenApiTest,
         profile(), extension->id(), "chrome.runtime.sendMessage('stop');");
   }
 
-  // TODO(crbug.com/1443432): Add check if document gets shut down after the
+  // TODO(crbug.com/40267351): Add check if document gets shut down after the
   // screen capture with `getAllScreensMedia` is stopped.
 }
 

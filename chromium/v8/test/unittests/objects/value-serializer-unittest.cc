@@ -59,18 +59,18 @@ class ValueSerializerTest : public TestWithIsolate {
     Local<FunctionTemplate> function_template = v8::FunctionTemplate::New(
         isolate(), [](const FunctionCallbackInfo<Value>& info) {
           CHECK(i::ValidateCallbackInfo(info));
-          info.Holder()->SetInternalField(0, info[0]);
-          info.Holder()->SetInternalField(1, info[1]);
+          info.HolderSoonToBeDeprecated()->SetInternalField(0, info[0]);
+          info.HolderSoonToBeDeprecated()->SetInternalField(1, info[1]);
         });
     function_template->InstanceTemplate()->SetInternalFieldCount(2);
-    function_template->InstanceTemplate()->SetAccessor(
+    function_template->InstanceTemplate()->SetNativeDataProperty(
         StringFromUtf8("value"),
         [](Local<Name> property, const PropertyCallbackInfo<Value>& info) {
           CHECK(i::ValidateCallbackInfo(info));
           info.GetReturnValue().Set(
               info.Holder()->GetInternalField(0).As<v8::Value>());
         });
-    function_template->InstanceTemplate()->SetAccessor(
+    function_template->InstanceTemplate()->SetNativeDataProperty(
         StringFromUtf8("value2"),
         [](Local<Name> property, const PropertyCallbackInfo<Value>& info) {
           CHECK(i::ValidateCallbackInfo(info));

@@ -17,7 +17,7 @@ class MdnsSender {
  public:
   // MdnsSender does not own |socket| and expects that its lifetime exceeds the
   // lifetime of MdnsSender.
-  explicit MdnsSender(UdpSocket* socket);
+  explicit MdnsSender(UdpSocket& socket);
   MdnsSender(const MdnsSender& other) = delete;
   MdnsSender(MdnsSender&& other) noexcept = delete;
   virtual ~MdnsSender();
@@ -29,10 +29,10 @@ class MdnsSender {
   virtual Error SendMessage(const MdnsMessage& message,
                             const IPEndpoint& endpoint);
 
-  void OnSendError(UdpSocket* socket, Error error);
+  void OnSendError(UdpSocket* socket, const Error& error);
 
  private:
-  UdpSocket* const socket_;
+  UdpSocket& socket_;
 };
 
 }  // namespace openscreen::discovery

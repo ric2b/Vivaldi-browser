@@ -22,7 +22,7 @@
 #include "ui/gfx/native_widget_types.h"
 
 static_assert(BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
-              BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA));
+              BUILDFLAG(IS_CHROMEOS));
 
 class GURL;
 class Profile;
@@ -132,7 +132,7 @@ void ShowWebAppFileLaunchDialog(const std::vector<base::FilePath>& file_paths,
 void SetAutoAcceptWebAppDialogForTesting(bool auto_accept,
                                          bool auto_open_in_window);
 
-// Sets an override title for the installation.
+// Sets an override title for the Create Shortcut confirmation view.
 void SetOverrideTitleForTesting(const char* title_to_use);
 
 // Describes the state of in-product-help being shown to the user.
@@ -180,6 +180,10 @@ void ShowWebAppDetailedInstallDialog(
 // Sets whether |ShowSimpleInstallDialogForWebApps| should accept immediately
 // without any user interaction.
 void SetAutoAcceptPWAInstallConfirmationForTesting(bool auto_accept);
+
+// Sets whether |ShowDiyInstallDialogForWebApps| should accept immediately
+// without any user interaction.
+void SetAutoAcceptDiyAppsInstallDialogForTesting(bool auto_accept);
 
 // Sets whether the bubble should close when it is not in an active window
 // during testing.

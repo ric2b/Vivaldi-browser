@@ -6,6 +6,7 @@
 /// Bridging header between Swift and Obj-C. These types/includes need to be
 /// pure Obj-C and have no C++ in them.
 
+#import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_features.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/ntp/top_toolbar/vivaldi_ntp_top_toolbar_view_consumer.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"

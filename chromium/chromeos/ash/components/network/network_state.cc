@@ -10,6 +10,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -60,7 +61,7 @@ bool IsValidConnectionState(const std::string& connection_state) {
          connection_state == shill::kStatePortalSuspected ||
          connection_state == shill::kStateOnline ||
          connection_state == shill::kStateFailure ||
-         connection_state == shill::kStateDisconnect;
+         connection_state == shill::kStateDisconnecting;
 }
 
 }  // namespace
@@ -526,6 +527,12 @@ NetworkState::PortalState NetworkState::GetPortalState() const {
                                                        : shill_portal_state_;
 }
 
+void NetworkState::SetChromePortalState(PortalState portal_state) {
+  CHECK(!features::IsRemoveDetectPortalFromChromeEnabled());
+
+  chrome_portal_state_ = portal_state;
+}
+
 bool NetworkState::IsSecure() const {
   return !security_class_.empty() &&
          security_class_ != shill::kSecurityClassNone;
@@ -762,7 +769,6 @@ std::ostream& operator<<(std::ostream& out,
     PRINT(Online)
     PRINT(PortalSuspected)
     PRINT(Portal)
-    PRINT(ProxyAuthRequired)
     PRINT(NoInternet)
 #undef PRINT
   }

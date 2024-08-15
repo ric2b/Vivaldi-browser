@@ -21,6 +21,8 @@
 
 using vivaldi::IsVivaldiRunning;
 using vivaldi_bookmark_kit::GetSpeeddial;
+using vivaldi_bookmark_kit::GetNickname;
+using vivaldi_bookmark_kit::GetDescription;
 // End Vivaldi
 
 @implementation BookmarksHomeNodeItem
@@ -95,6 +97,35 @@ using vivaldi_bookmark_kit::GetSpeeddial;
     urlCell.metadataImage.tintColor = CloudSlashTintColor();
     [urlCell configureUILayout];
   }
+}
+
+#pragma mark - Vivaldi
+
+- (BOOL)isFolder {
+  return _bookmarkNode->is_folder();
+}
+
+- (NSString*)title {
+  return bookmark_utils_ios::TitleForBookmarkNode(_bookmarkNode);
+}
+
+- (NSString*)nickname {
+  const std::string nick = GetNickname(_bookmarkNode);
+  return [NSString stringWithUTF8String:nick.c_str()];
+}
+
+- (NSString*)urlString {
+  return base::SysUTF8ToNSString(_bookmarkNode->url().spec());
+}
+
+- (NSString*)description {
+  const std::string desciptionStr = GetDescription(_bookmarkNode);
+  return [NSString stringWithUTF8String:desciptionStr.c_str()];
+}
+
+- (NSDate*)createdAt {
+  base::Time dateAdded = _bookmarkNode->date_added();
+  return dateAdded.ToNSDate();
 }
 
 @end

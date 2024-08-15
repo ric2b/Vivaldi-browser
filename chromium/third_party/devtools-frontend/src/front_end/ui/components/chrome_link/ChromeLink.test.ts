@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import type * as Platform from '../../../core/platform/platform.js';
-import {assertElement, assertShadowRoot, renderElementIntoDOM} from '../../../testing/DOMHelpers.js';
+import {renderElementIntoDOM} from '../../../testing/DOMHelpers.js';
 import {createTarget} from '../../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../../testing/MockConnection.js';
 import * as LitHtml from '../../lit-html/lit-html.js';
@@ -12,8 +12,6 @@ import * as Coordinator from '../render_coordinator/render_coordinator.js';
 import * as ChromeLink from './chrome_link.js';
 
 const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
-
-const {assert} = chai;
 
 describeWithMockConnection('ChromeLink', () => {
   it('renders a link when given a \'chrome://\' URL', async () => {
@@ -35,12 +33,12 @@ describeWithMockConnection('ChromeLink', () => {
     await coordinator.done();
 
     const chromeLink = container.querySelector('devtools-chrome-link');
-    assertElement(chromeLink, ChromeLink.ChromeLink.ChromeLink);
-    assertShadowRoot(chromeLink.shadowRoot);
+    assert.instanceOf(chromeLink, ChromeLink.ChromeLink.ChromeLink);
+    assert.isNotNull(chromeLink.shadowRoot);
     assert.strictEqual(chromeLink.innerHTML.trim(), 'link text');
 
     const link = chromeLink.shadowRoot.querySelector('a');
-    assertElement(link, HTMLAnchorElement);
+    assert.instanceOf(link, HTMLAnchorElement);
     assert.isTrue(spy.notCalled);
     link.click();
 

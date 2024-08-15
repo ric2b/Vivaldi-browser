@@ -132,8 +132,8 @@ class ExtensionWebUIEmbeddedOptionsTest : public ExtensionWebUITest {
   // inner WebContents. The direct access is centralized in this helper function
   // for easier migration.
   //
-  // TODO(crbug/1261928): Update this implementation for MPArch, and consider
-  // relocate it to `content/public/test/browser_test_utils.h`.
+  // TODO(crbug.com/40202416): Update this implementation for MPArch, and
+  // consider relocate it to `content/public/test/browser_test_utils.h`.
   void WaitForGuestViewLoadStop(guest_view::GuestViewBase* guest_view) {
     auto* guest_contents = guest_view->web_contents();
     ASSERT_TRUE(content::WaitForLoadStop(guest_contents));
@@ -146,12 +146,12 @@ class ExtensionWebUIEmbeddedOptionsTest : public ExtensionWebUITest {
 
 #if !BUILDFLAG(IS_WIN)  // flaky http://crbug.com/530722
 
-IN_PROC_BROWSER_TEST_F(ExtensionWebUITest, SanityCheckAvailableAPIs) {
-  ASSERT_TRUE(RunTestOnExtensionsPage("sanity_check_available_apis.js"));
+IN_PROC_BROWSER_TEST_F(ExtensionWebUITest, ConfidenceCheckAvailableAPIs) {
+  ASSERT_TRUE(RunTestOnExtensionsPage("confidence_check_available_apis.js"));
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionWebUITest, SanityCheckUnavailableAPIs) {
-  ASSERT_TRUE(RunTestOnAboutPage("sanity_check_available_apis.js"));
+IN_PROC_BROWSER_TEST_F(ExtensionWebUITest, ConfidenceCheckUnavailableAPIs) {
+  ASSERT_TRUE(RunTestOnAboutPage("confidence_check_available_apis.js"));
 }
 
 // Tests chrome.test.sendMessage, which exercises WebUI making a
@@ -281,7 +281,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebUIEmbeddedOptionsTest,
       R"(new Promise(r => {
            chrome.tabs.create({}, (tab) => {
              let message;
-             // Sanity check that it looks and smells like a tab.
+             // Confidence check that it looks and smells like a tab.
              if (tab && tab.index) {
                message = 'success';
              } else {

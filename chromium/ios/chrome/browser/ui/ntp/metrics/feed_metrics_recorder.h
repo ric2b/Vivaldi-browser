@@ -16,6 +16,7 @@
 @protocol FeedControlDelegate;
 @protocol NewTabPageFollowDelegate;
 @protocol NewTabPageMetricsDelegate;
+@class NewTabPageState;
 class PrefService;
 
 namespace base {
@@ -25,8 +26,8 @@ class Time;
 // Records different metrics for the NTP feeds.
 @interface FeedMetricsRecorder : NSObject <FeedRefreshStateTracker>
 
-// Delegate to get the currently selected feed.
-@property(nonatomic, weak) id<FeedControlDelegate> feedControlDelegate;
+// The last active new tab page state.
+@property(nonatomic, weak) NewTabPageState* NTPState;
 
 // Delegate for getting information relating to Following.
 @property(nonatomic, weak) id<NewTabPageFollowDelegate> followDelegate;
@@ -198,7 +199,7 @@ class Time;
 - (void)recordNativePulldownMenuVisibilityChanged:(BOOL)shown;
 
 // Records the broken view hierarchy before repairing it.
-// TODO(crbug.com/1262536): Remove this when issue is fixed.
+// TODO(crbug.com/40799579): Remove this when issue is fixed.
 - (void)recordBrokenNTPHierarchy:
     (BrokenNTPHierarchyRelationship)brokenRelationship;
 
@@ -279,13 +280,6 @@ class Time;
 - (void)recordFollowRecommendationIPHShown;
 
 #pragma mark - Sign-in Promo
-
-// Record metrics for when a user tapped on "Continue" of the Sign-in promo
-// UI.
-- (void)recordSignInPromoUIContinueTapped;
-
-// Record metrics for when a user tapped on "Cancel" of the Sign-in promo UI.
-- (void)recordSignInPromoUICancelTapped;
 
 // Record metrics for when a user triggered a sign-in only flow from Discover
 // feed. `hasUserId` is YES when the user has one or more device-level

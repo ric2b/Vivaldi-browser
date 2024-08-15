@@ -89,6 +89,12 @@ void MockShoppingService::SetResponseForGetPriceInsightsInfoForUrl(
           });
 }
 
+void MockShoppingService::SetResponseForGetUrlInfosForActiveWebWrappers(
+    std::vector<commerce::UrlInfo> url_infos) {
+  ON_CALL(*this, GetUrlInfosForActiveWebWrappers)
+      .WillByDefault(testing::Return(url_infos));
+}
+
 void MockShoppingService::SetResponsesForGetUpdatedProductInfoForBookmarks(
     std::map<int64_t, ProductInfo> bookmark_updates) {
   ON_CALL(*this, GetUpdatedProductInfoForBookmarks)
@@ -279,6 +285,12 @@ void MockShoppingService::SetResponseForGetProductSpecificationsForUrls(
                                           std::optional<ProductSpecifications>(
                                               std::move(specs))));
           });
+}
+
+void MockShoppingService::SetResponseForGetEntryPointInfoForSelection(
+    std::optional<EntryPointInfo> entry_point_info) {
+  ON_CALL(*this, GetEntryPointInfoForSelection)
+      .WillByDefault(testing::Return(entry_point_info));
 }
 
 }  // namespace commerce

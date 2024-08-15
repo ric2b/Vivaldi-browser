@@ -6,14 +6,13 @@ import * as Platform from '../../core/platform/platform.js';
 
 import {type Size} from './Geometry.js';
 import glassPaneStyles from './glassPane.css.legacy.js';
-import {deepElementFromEvent} from './UIUtils.js';
-import * as Utils from './utils/utils.js';
-import {Widget, type WidgetElement} from './Widget.js';
+import {deepElementFromEvent, measuredScrollbarWidth} from './UIUtils.js';
+import {Widget} from './Widget.js';
 
 export class GlassPane {
   private readonly widgetInternal: Widget;
-  element: WidgetElement;
-  contentElement: HTMLDivElement;
+  element: typeof Widget.prototype.element;
+  contentElement: typeof Widget.prototype.contentElement;
   private readonly arrowElement: HTMLSpanElement;
   private readonly onMouseDownBound: (event: Event) => void;
   private onClickOutsideCallback: ((arg0: Event) => void)|null;
@@ -166,7 +165,7 @@ export class GlassPane {
 
     const showArrow = this.marginBehavior === MarginBehavior.Arrow;
     const gutterSize = showArrow ? 8 : (this.marginBehavior === MarginBehavior.NoMargin ? 0 : 3);
-    const scrollbarSize = Utils.measuredScrollbarWidth(this.element.ownerDocument);
+    const scrollbarSize = measuredScrollbarWidth(this.element.ownerDocument);
     const arrowSize = 10;
 
     const container = (containers.get((this.element.ownerDocument as Document))) as HTMLElement;

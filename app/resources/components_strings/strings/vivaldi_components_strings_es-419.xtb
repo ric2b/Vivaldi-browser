@@ -161,7 +161,6 @@
 <translation id="7221855153210829124">Mostrar notificaciones</translation>
 <translation id="7353601530677266744">Línea de comandos</translation>
 <translation id="7419106976560586862">Ruta al perfil</translation>
-<translation id="7445762425076701745">La identidad del servidor al que estás conectado no se puede validar completamente. Estás conectado a un servidor utilizando un nombre que sólo es válido dentro de tu red y cuya propiedad no puede validar ninguna entidad externa de certificación. Debido a que  aún así hay algunas entidades que emiten certificados para estos nombres, no hay forma de asegurar que estás conectado al sitio web que pretendías, o en su lugar al de un atacante.</translation>
 <translation id="7455133967321480974">Usar configuración global predeterminada (Bloquear)</translation>
 <translation id="7518003948725431193">No se encontró una página web para la siguiente dirección web: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Esta página web necesita los datos ingresados anteriormente para mostrarse correctamente. Puedes volver a enviar los datos, pero ten en cuenta que se repetirán las acciones que la página haya realizado anteriormente.</translation>

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/files/important_file_writer.h"
 
 #include <stddef.h>
@@ -305,7 +310,7 @@ bool ImportantFileWriter::HasPendingWrite() const {
 void ImportantFileWriter::WriteNow(std::string data) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!IsValueInRangeForNumericType<int32_t>(data.length())) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return;
   }
 
@@ -331,7 +336,7 @@ void ImportantFileWriter::WriteNowWithBackgroundDataProducer(
     // Posting the task to background message loop is not expected
     // to fail, but if it does, avoid losing data and just hit the disk
     // on the current thread.
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
 
     std::move(split_task.second).Run();
   }

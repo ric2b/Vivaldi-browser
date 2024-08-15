@@ -28,7 +28,7 @@ class NotesLoadObserver : public NotesModelObserver {
 
  private:
   // NotesBaseModelObserver:
-  void NotesModelLoaded(NotesModel* model, bool ids_reassigned) override;
+  void NotesModelLoaded(bool ids_reassigned) override;
 
   base::OnceClosure quit_task_;
 };
@@ -38,8 +38,7 @@ NotesLoadObserver::NotesLoadObserver(base::OnceClosure quit_task)
 
 NotesLoadObserver::~NotesLoadObserver() {}
 
-void NotesLoadObserver::NotesModelLoaded(NotesModel* model,
-                                         bool ids_reassigned) {
+void NotesLoadObserver::NotesModelLoaded(bool ids_reassigned) {
   std::move(quit_task_).Run();
 }
 

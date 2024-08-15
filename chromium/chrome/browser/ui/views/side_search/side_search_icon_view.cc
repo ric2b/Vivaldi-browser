@@ -21,7 +21,6 @@
 #include "components/feature_engagement/public/event_constants.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/public/tracker.h"
-#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -29,7 +28,6 @@
 #include "ui/views/view_class_properties.h"
 
 SideSearchIconView::SideSearchIconView(
-    CommandUpdater* command_updater,
     IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
     PageActionIconView::Delegate* page_action_icon_delegate,
     Browser* browser)
@@ -96,9 +94,9 @@ void SideSearchIconView::UpdateImpl() {
 
   auto* browser_view = BrowserView::GetBrowserViewForBrowser(browser_);
 
-  // TODO(crbug.com/1339789): BrowserView should never be null here, investigate
-  // why GetBrowserViewForBrowser() is returning null in certain circumstances
-  // and remove this check.
+  // TODO(crbug.com/40849924): BrowserView should never be null here,
+  // investigate why GetBrowserViewForBrowser() is returning null in certain
+  // circumstances and remove this check.
   if (!browser_view)
     return;
 
@@ -109,18 +107,11 @@ void SideSearchIconView::UpdateImpl() {
   SetVisible(should_show);
 
   if (should_show && !was_visible) {
-    // Now IPH and action label share the same frontend triggering condition.
-    // Make sure we show IPH first if possible.
-    browser_view->MaybeShowFeaturePromo(
-        feature_engagement::kIPHSideSearchFeature);
     MaybeShowPageActionLabel();
   }
 
   if (!should_show) {
     HidePageActionLabel();
-    browser_view->CloseFeaturePromo(
-        feature_engagement::kIPHSideSearchFeature,
-        user_education::EndFeaturePromoReason::kAbortPromo);
   }
 }
 
@@ -134,9 +125,9 @@ void SideSearchIconView::OnExecuting(PageActionIconView::ExecuteSource source) {
 
   SidePanelUI* side_panel_ui = SidePanelUI::GetSidePanelUIForBrowser(browser_);
 
-  // TODO(crbug.com/1339789): BrowserView should never be null here, investigate
-  // why GetBrowserViewForBrowser() is returning null in certain circumstances
-  // and remove this check.
+  // TODO(crbug.com/40849924): BrowserView should never be null here,
+  // investigate why GetBrowserViewForBrowser() is returning null in certain
+  // circumstances and remove this check.
   if (!side_panel_ui) {
     return;
   }
@@ -156,9 +147,7 @@ views::BubbleDialogDelegate* SideSearchIconView::GetBubble() const {
 
 const gfx::VectorIcon& SideSearchIconView::GetVectorIcon() const {
   // Default to the kSearchIcon if the DSE icon image is not available.
-  return OmniboxFieldTrial::IsChromeRefreshIconsEnabled()
-             ? vector_icons::kSearchChromeRefreshIcon
-             : vector_icons::kSearchIcon;
+  return vector_icons::kSearchChromeRefreshIcon;
 }
 
 ui::ImageModel SideSearchIconView::GetSizedIconImage(int size) const {
@@ -172,9 +161,10 @@ void SideSearchIconView::AnimationProgressed(const gfx::Animation* animation) {
   // kLabelPersistDuration before resuming the animation and allowing the label
   // to animate out. This is currently set to show for 12s including the in/out
   // animation.
-  // TODO(crbug.com/1314206): This approach of inspecting the animation progress
-  // to extend the animation duration is quite hacky. This should be removed and
-  // the IconLabelBubbleView API expanded to support a finer level of control.
+  // TODO(crbug.com/40832707): This approach of inspecting the animation
+  // progress to extend the animation duration is quite hacky. This should be
+  // removed and the IconLabelBubbleView API expanded to support a finer level
+  // of control.
   constexpr double kAnimationValueWhenLabelFullyShown = 0.5;
   constexpr base::TimeDelta kLabelPersistDuration = base::Milliseconds(10800);
   if (should_extend_label_shown_duration_ &&

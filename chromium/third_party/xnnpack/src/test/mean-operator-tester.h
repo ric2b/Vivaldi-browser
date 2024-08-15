@@ -5,80 +5,82 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
+#include <xnnpack.h>
+#include <xnnpack/aligned-allocator.h>
+#include <xnnpack/common.h>
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cmath>
 #include <cstddef>
-#include <cstdlib>
 #include <cstdint>
+#include <cstdlib>
+#include <functional>
 #include <initializer_list>
 #include <memory>
 #include <numeric>
 #include <random>
 #include <vector>
 
+#include "pthreadpool.h"
+#include "replicable_random_device.h"
+#include <gtest/gtest.h>
 #include <fp16/fp16.h>
-
-#include <xnnpack.h>
-#include <xnnpack/aligned-allocator.h>
-#include <xnnpack/common.h>
-
 
 class MeanOperatorTester {
  public:
-  inline MeanOperatorTester& input_shape(std::initializer_list<size_t> input_shape) {
+  MeanOperatorTester& input_shape(std::initializer_list<size_t> input_shape) {
     assert(input_shape.size() <= XNN_MAX_TENSOR_DIMS);
     this->input_shape_ = std::vector<size_t>(input_shape);
     return *this;
   }
 
-  inline MeanOperatorTester& input_shape(const std::vector<size_t>& input_shape) {
+  MeanOperatorTester& input_shape(const std::vector<size_t>& input_shape) {
     assert(input_shape.size() <= XNN_MAX_TENSOR_DIMS);
     this->input_shape_ = std::vector<size_t>(input_shape);
     return *this;
   }
 
-  inline const std::vector<size_t>& input_shape() const {
+  const std::vector<size_t>& input_shape() const {
     return this->input_shape_;
   }
 
-  inline size_t num_input_dims() const {
+  size_t num_input_dims() const {
     return this->input_shape_.size();
   }
 
-  inline size_t num_input_elements() const {
+  size_t num_input_elements() const {
     return std::accumulate(
       this->input_shape_.begin(), this->input_shape_.end(), size_t(1), std::multiplies<size_t>());
   }
 
-  inline MeanOperatorTester& reduction_axes(std::initializer_list<size_t> reduction_axes) {
+  MeanOperatorTester& reduction_axes(std::initializer_list<size_t> reduction_axes) {
     assert(reduction_axes.size() <= XNN_MAX_TENSOR_DIMS);
     this->reduction_axes_ = std::vector<size_t>(reduction_axes);
     return *this;
   }
 
-  inline MeanOperatorTester& reduction_axes(const std::vector<size_t> reduction_axes) {
+  MeanOperatorTester& reduction_axes(const std::vector<size_t> reduction_axes) {
     assert(reduction_axes.size() <= XNN_MAX_TENSOR_DIMS);
     this->reduction_axes_ = reduction_axes;
     return *this;
   }
 
-  inline const std::vector<size_t>& reduction_axes() const {
+  const std::vector<size_t>& reduction_axes() const {
     return this->reduction_axes_;
   }
 
-  inline size_t num_reduction_axes() const {
+  size_t num_reduction_axes() const {
     return this->reduction_axes_.size();
   }
 
-  inline MeanOperatorTester& multithreaded(size_t multithreaded) {
+  MeanOperatorTester& multithreaded(size_t multithreaded) {
     this->multithreaded_ = multithreaded;
     return *this;
   }
 
-  inline size_t multithreaded() const {
+  size_t multithreaded() const {
     return this->multithreaded_;
   }
 
@@ -87,18 +89,17 @@ class MeanOperatorTester {
     return multithreaded() ? 5 : 1;
   }
 
-  inline MeanOperatorTester& iterations(size_t iterations) {
+  MeanOperatorTester& iterations(size_t iterations) {
     this->iterations_ = iterations;
     return *this;
   }
 
-  inline size_t iterations() const {
+  size_t iterations() const {
     return this->iterations_;
   }
 
   void TestF16() const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(0.01f, 1.0f);
 
     // Compute generalized shapes.
@@ -224,8 +225,7 @@ class MeanOperatorTester {
   }
 
   void TestF32() const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(0.01f, 1.0f);
 
     // Compute generalized shapes.

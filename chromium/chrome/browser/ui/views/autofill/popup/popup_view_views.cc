@@ -5,11 +5,14 @@
 #include "chrome/browser/ui/views/autofill/popup/popup_view_views.h"
 
 #include <algorithm>
+#include <memory>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
+#include "base/auto_reset.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
@@ -20,13 +23,17 @@
 #include "build/build_config.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/autofill/autofill_popup_controller.h"
+#include "chrome/browser/ui/autofill/autofill_suggestion_controller_utils.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/passwords/ui_utils.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_base_view.h"
+#include "chrome/browser/ui/views/autofill/popup/popup_no_suggestions_view.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_row_factory_utils.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_row_view.h"
+#include "chrome/browser/ui/views/autofill/popup/popup_search_bar_view.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_separator_view.h"
+#include "chrome/browser/ui/views/autofill/popup/popup_title_view.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_view_utils.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_warning_view.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
@@ -35,15 +42,16 @@
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/ui/autofill_resource_utils.h"
-#include "components/autofill/core/browser/ui/popup_hiding_reasons.h"
-#include "components/autofill/core/browser/ui/popup_item_ids.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
+#include "components/autofill/core/browser/ui/suggestion_hiding_reason.h"
+#include "components/autofill/core/browser/ui/suggestion_type.h"
 #include "components/autofill/core/common/aliases.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/user_education/common/feature_promo_controller.h"
+#include "content/public/common/input/native_web_keyboard_event.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -51,6 +59,8 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/color/color_id.h"
+#include "ui/events/blink/web_input_event.h"
+#include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/events/types/event_type.h"
 #include "ui/gfx/geometry/insets.h"
@@ -82,7 +92,7 @@ constexpr int kAutofillPopupWidthMultiple = 12;
 // (see crbug.com/1434330).
 constexpr int kAutofillPopupMinWidth = kAutofillPopupWidthMultiple * 13;
 static_assert(kAutofillPopupMinWidth > 128);
-// TODO(crbug.com/831603): move handling the max width to the base class.
+// TODO(crbug.com/41382463): move handling the max width to the base class.
 constexpr int kAutofillPopupMaxWidth = kAutofillPopupWidthMultiple * 38;
 
 // Preferred position relative to the control sides of the sub-popup.
@@ -96,26 +106,11 @@ int GetContentsVerticalPadding() {
       DISTANCE_CONTENT_LIST_VERTICAL_SINGLE);
 }
 
-// Returns true if the item at `line_number` is a footer item.
-bool IsFooterItem(const std::vector<Suggestion>& suggestions,
-                  size_t line_number) {
-  if (line_number >= suggestions.size()) {
-    return false;
-  }
-
-  // Separators are a special case: They belong into the footer iff the next
-  // item exists and is a footer item.
-  PopupItemId popup_item_id = suggestions[line_number].popup_item_id;
-  return popup_item_id == PopupItemId::kSeparator
-             ? IsFooterItem(suggestions, line_number + 1)
-             : IsFooterPopupItemId(popup_item_id);
-}
-
-bool CanShowRootPopup(base::WeakPtr<AutofillPopupController> controller) {
+bool CanShowRootPopup(AutofillSuggestionController& controller) {
 #if BUILDFLAG(IS_MAC)
   // It's possible for the container_view to not be in a window. In that case,
   // cancel the popup since we can't fully set it up.
-  if (!platform_util::GetTopLevel(controller->container_view())) {
+  if (!platform_util::GetTopLevel(controller.container_view())) {
     return false;
   }
 #else
@@ -123,7 +118,7 @@ bool CanShowRootPopup(base::WeakPtr<AutofillPopupController> controller) {
   // fully set it up. On Mac Cocoa browser, |observing_widget| is null
   // because the parent is not a views::Widget.
   if (!views::Widget::GetTopLevelWidgetForNativeView(
-          controller->container_view())) {
+          controller.container_view())) {
     return false;
   }
 #endif
@@ -143,20 +138,27 @@ PopupViewViews::PopupViewViews(
     views::Widget* parent_widget)
     : PopupBaseView(controller,
                     parent_widget,
+                    views::Widget::InitParams::Activatable::kDefault,
                     base::i18n::IsRTL() ? kDefaultSubPopupSidesRTL
                                         : kDefaultSubPopupSides,
                     /*show_arrow_pointer=*/false),
       controller_(controller),
-      parent_(parent) {
+      parent_(parent),
+      search_bar_config_({}) {
   InitViews();
 }
 
 PopupViewViews::PopupViewViews(
-    base::WeakPtr<AutofillPopupController> controller)
+    base::WeakPtr<AutofillPopupController> controller,
+    PopupViewSearchBarConfig search_bar_config)
     : PopupBaseView(controller,
                     views::Widget::GetTopLevelWidgetForNativeView(
-                        controller->container_view())),
-      controller_(controller) {
+                        controller->container_view()),
+                    search_bar_config.enabled
+                        ? views::Widget::InitParams::Activatable::kYes
+                        : views::Widget::InitParams::Activatable::kDefault),
+      controller_(controller),
+      search_bar_config_(std::move(search_bar_config)) {
   InitViews();
 }
 
@@ -185,12 +187,22 @@ void PopupViewViews::OnMouseExited(const ui::MouseEvent& event) {
 
 bool PopupViewViews::Show(
     AutoselectFirstSuggestion autoselect_first_suggestion) {
+  base::AutoReset show_in_progress_reset(&show_in_progress_, !!search_bar_);
+
   NotifyAccessibilityEvent(ax::mojom::Event::kExpandedChanged, true);
   if (!DoShow()) {
     return false;
   }
 
   has_keyboard_focus_ = !parent_;
+
+  if (search_bar_) {
+    // Make sure the search bar is focused before possible first suggestion
+    // selection, because `SetSelectedCell()` eventually leads to calling
+    // `SetPopupFocusOverride()` and focusing the input while having a view
+    // overriding focus makes `ViewAXPlatformNodeDelegate` unhappy.
+    search_bar_->Focus();
+  }
 
   if (autoselect_first_suggestion) {
     SetSelectedCell(CellIndex{0u, PopupRowView::CellType::kContent},
@@ -200,19 +212,37 @@ bool PopupViewViews::Show(
   // Check for the special "warning bubble" mode: single warning suggestion
   // which content should be just announced to the user. Triggering
   // Event::kAlert on such a row makes screen readers read its content out.
-  // TODO(crbug.com/1480487): Consider supporting "warning mode" explicitly.
+  // TODO(crbug.com/40281426): Consider supporting "warning mode" explicitly.
   if (rows_.size() == 1 &&
       absl::holds_alternative<PopupWarningView*>(rows_[0])) {
     absl::get<PopupWarningView*>(rows_[0])->NotifyAccessibilityEvent(
         ax::mojom::Event::kAlert, true);
   }
-  // Compose popups are announced separately.
+
+  // Compose has separate on show announcements.
+  // TODO(b/340359989): Replace with AutofillComposeDelegate::OnShow
   if (controller_->GetMainFillingProduct() == FillingProduct::kCompose) {
-    AxAnnounce(
-        l10n_util::GetStringUTF16(IDS_COMPOSE_SUGGESTION_AX_MESSAGE_ON_SHOW));
+    switch (controller_->GetSuggestionAt(0).type) {
+      case SuggestionType::kComposeResumeNudge:
+      case SuggestionType::kComposeSavedStateNotification:
+        AxAnnounce(l10n_util::GetStringUTF16(
+            IDS_COMPOSE_SUGGESTION_AX_MESSAGE_ON_SHOW_RESUME));
+        break;
+      case SuggestionType::kComposeProactiveNudge:
+        AxAnnounce(l10n_util::GetStringUTF16(
+            IDS_COMPOSE_SUGGESTION_AX_MESSAGE_ON_SHOW_PROACTIVE));
+        break;
+      case SuggestionType::kComposeDisable:
+      case SuggestionType::kComposeGoToSettings:
+      case SuggestionType::kComposeNeverShowOnThisSiteAgain:
+        break;
+      default:
+        // All Compose SuggestionTypes should already be handled.
+        NOTREACHED_NORETURN();
+    }
   }
 
-  return true;
+  return !CanActivate() || (GetWidget() && GetWidget()->IsActive());
 }
 
 void PopupViewViews::Hide() {
@@ -285,25 +315,6 @@ bool PopupViewViews::HandleKeyPressEvent(
       (event.GetModifiers() & blink::WebInputEvent::kKeyModifiers &
        ~blink::WebInputEvent::kShiftKey);
 
-  // Selects the content cell of the row with currently open sup-popup if any,
-  // which closes the sub-popup and looks like going one menu level back.
-  auto select_sub_popup_content_cell = [&]() {
-    if (!row_with_open_sub_popup_) {
-      return false;
-    }
-
-    size_t row_index = *row_with_open_sub_popup_;
-    // Closing the sub-popup by setting `std::nullopt` is required as
-    // `suppress_popup=true` is not enough: the sub-popup closing will be
-    // prevented by the "same value" check.
-    SetRowWithOpenSubPopup(std::nullopt);
-    SetSelectedCell(CellIndex{row_index, PopupRowView::CellType::kContent},
-                    PopupCellSelectionSource::kKeyboard,
-                    AutoselectFirstSuggestion(false),
-                    /*suppress_popup=*/true);
-    return true;
-  };
-
   switch (event.windows_key_code) {
     case ui::VKEY_UP:
       SelectPreviousRow();
@@ -319,14 +330,14 @@ bool PopupViewViews::HandleKeyPressEvent(
       if (base::i18n::IsRTL()) {
         return SelectNextHorizontalCell();
       } else {
-        if (select_sub_popup_content_cell()) {
+        if (SelectParentPopupContentCell()) {
           return true;
         }
         return SelectPreviousHorizontalCell();
       }
     case ui::VKEY_RIGHT:
       if (base::i18n::IsRTL()) {
-        if (select_sub_popup_content_cell()) {
+        if (SelectParentPopupContentCell()) {
           return true;
         }
         return SelectPreviousHorizontalCell();
@@ -346,13 +357,13 @@ bool PopupViewViews::HandleKeyPressEvent(
     case ui::VKEY_DELETE:
       return kHasShiftModifier && RemoveSelectedCell();
     case ui::VKEY_ESCAPE:
-      if (select_sub_popup_content_cell()) {
+      if (SelectParentPopupContentCell()) {
         return true;
       }
       // If this is the root popup view and there was no sub-popup open (find
       // the check for it above) just close itself.
       if (!parent_) {
-        controller_->Hide(PopupHidingReason::kUserAborted);
+        controller_->Hide(SuggestionHidingReason::kUserAborted);
         return true;
       }
       return false;
@@ -378,30 +389,101 @@ bool PopupViewViews::HandleKeyPressEventForCompose(
       (event.GetModifiers() & blink::WebInputEvent::kShiftKey);
   switch (event.windows_key_code) {
     case ui::VKEY_ESCAPE:
-      controller_->Hide(PopupHidingReason::kUserAborted);
+      controller_->Hide(SuggestionHidingReason::kUserAborted);
       return true;
-    case ui::VKEY_TAB:
+    case ui::VKEY_UP:
       if (GetSelectedCell()) {
-        if (kHasShiftModifier) {
-          // Shift+TAB should remove the selection, but keep the popup open.
-          SetSelectedCell(std::nullopt, PopupCellSelectionSource::kKeyboard);
+        SelectPreviousRow();
+        return true;
+      }
+      return false;
+    case ui::VKEY_DOWN:
+      if (GetSelectedCell()) {
+        SelectNextRow();
+        return true;
+      }
+      return false;
+    case ui::VKEY_LEFT:
+      // `base::i18n::IsRTL` is used here instead of the controller's method
+      // because the controller's `IsRTL` depends on the language of the focused
+      // field and not the overall UI language. However, the layout of the popup
+      // is determined by the overall UI language.
+      if (base::i18n::IsRTL()) {
+        return SelectNextHorizontalCell();
+      } else {
+        if (SelectParentPopupContentCell()) {
           return true;
         }
+        return SelectPreviousHorizontalCell();
+      }
+    case ui::VKEY_RIGHT:
+      if (base::i18n::IsRTL()) {
+        if (SelectParentPopupContentCell()) {
+          return true;
+        }
+        return SelectPreviousHorizontalCell();
+      } else {
+        return SelectNextHorizontalCell();
+      }
+    case ui::VKEY_TAB: {
+      const bool is_root_popup = !parent_;
+      // TAB should only be handled by the root popup. The subpopup only deals
+      // with selection (ENTER) and arrow navigation.
+      if (!is_root_popup) {
+        return false;
+      }
+      std::optional<CellIndex> selected_cell = GetSelectedCell();
+      // The `!row_with_open_sub_popup_` check is to make sure that we only
+      // select the content cell if there is no subpopup open. This is because
+      // if one presses TAB from the subpopup, we also want to close the root
+      // popup (and navigate to the next HTML element).
+      const bool tab_pressed_popup_unselected =
+          !selected_cell && !kHasShiftModifier && !row_with_open_sub_popup_;
+      if (tab_pressed_popup_unselected) {
+        // If there is no selected cell in the compose popup, TAB should select
+        // the single compose nudge entry.
+        SetSelectedCell(CellIndex(0, PopupRowView::CellType::kContent),
+                        PopupCellSelectionSource::kKeyboard);
+        return true;
+      }
+
+      const bool tab_pressed_popup_selected =
+          selected_cell && !kHasShiftModifier;
+      if (tab_pressed_popup_selected) {
         // TAB should close the popup and focus the next HTML element if the
         // Compose entry is selected.
-        controller_->Hide(PopupHidingReason::kUserAborted);
+        controller_->Hide(SuggestionHidingReason::kUserAborted);
         return false;
       }
 
-      // If the Compose suggestion is not selected, Shift+TAB should not be
-      // handled, but TAB should select the suggestion.
-      if (kHasShiftModifier) {
+      const bool shift_tab_pressed_popup_unselected_no_subpopup =
+          !selected_cell && kHasShiftModifier && !row_with_open_sub_popup_;
+      if (shift_tab_pressed_popup_unselected_no_subpopup) {
+        // If the Compose suggestion is not selected, Shift+TAB should not be
+        // handled.
         return false;
       }
-      // Compose nudges have a single entry - select it.
-      SetSelectedCell(CellIndex(0, PopupRowView::CellType::kContent),
-                      PopupCellSelectionSource::kKeyboard);
-      return true;
+
+      const bool shift_tab_pressed_has_subpopup =
+          kHasShiftModifier && row_with_open_sub_popup_;
+      if (shift_tab_pressed_has_subpopup) {
+        // In this case, focus on the root/parent popup content area. This
+        // closes the sub-popup.
+        SetSelectedCell(CellIndex(0, PopupRowView::CellType::kContent),
+                        PopupCellSelectionSource::kKeyboard);
+        return true;
+      }
+
+      const bool shift_tab_pressed_root_popup_selected =
+          selected_cell && kHasShiftModifier && is_root_popup;
+      if (shift_tab_pressed_root_popup_selected) {
+        // Shift+TAB should remove the selection when the root popup is
+        // selected, but keep the popup open.
+        SetSelectedCell(std::nullopt, PopupCellSelectionSource::kKeyboard);
+        return true;
+      }
+      return false;
+    }
     default:
       return false;
   }
@@ -410,8 +492,6 @@ bool PopupViewViews::HandleKeyPressEventForCompose(
 void PopupViewViews::SelectPreviousRow() {
   DCHECK(!rows_.empty());
   std::optional<CellIndex> old_index = GetSelectedCell();
-  const PopupRowView::CellType kNewCellType =
-      old_index ? old_index->second : PopupRowView::CellType::kContent;
 
   // Temporarily use an int to avoid underflows.
   int new_row = old_index ? static_cast<int>(old_index->first) - 1 : -1;
@@ -422,6 +502,15 @@ void PopupViewViews::SelectPreviousRow() {
   if (new_row < 0) {
     new_row = static_cast<int>(rows_.size()) - 1;
   }
+
+  // `kControl` is used to show a sub-popup with child suggestions. It can only
+  // be selected on a new row if the corresponding suggestion has children.
+  const PopupRowView::CellType kNewCellType =
+      (old_index && old_index->second == PopupRowView::CellType::kControl &&
+       GetPopupRowViewAt(new_row).GetExpandChildSuggestionsView())
+          ? PopupRowView::CellType::kControl
+          : PopupRowView::CellType::kContent;
+
   SetSelectedCell(CellIndex{new_row, kNewCellType},
                   PopupCellSelectionSource::kKeyboard);
 }
@@ -429,8 +518,6 @@ void PopupViewViews::SelectPreviousRow() {
 void PopupViewViews::SelectNextRow() {
   DCHECK(!rows_.empty());
   std::optional<CellIndex> old_index = GetSelectedCell();
-  const PopupRowView::CellType kNewCellType =
-      old_index ? old_index->second : PopupRowView::CellType::kContent;
 
   size_t new_row = old_index ? old_index->first + 1u : 0u;
   while (new_row < rows_.size() && !HasPopupRowViewAt(new_row)) {
@@ -440,6 +527,15 @@ void PopupViewViews::SelectNextRow() {
   if (new_row >= rows_.size()) {
     new_row = 0u;
   }
+
+  // `kControl` is used to show a sub-popup with child suggestions. It can only
+  // be selected on a new row if the corresponding suggestion has children.
+  const PopupRowView::CellType kNewCellType =
+      (old_index && old_index->second == PopupRowView::CellType::kControl &&
+       GetPopupRowViewAt(new_row).GetExpandChildSuggestionsView())
+          ? PopupRowView::CellType::kControl
+          : PopupRowView::CellType::kContent;
+
   SetSelectedCell(CellIndex{new_row, kNewCellType},
                   PopupCellSelectionSource::kKeyboard);
 }
@@ -461,13 +557,13 @@ bool PopupViewViews::SelectNextHorizontalCell() {
 
 bool PopupViewViews::SelectPreviousHorizontalCell() {
   std::optional<CellIndex> selected_cell = GetSelectedCell();
-  if (selected_cell && HasPopupRowViewAt(selected_cell->first)) {
-    if (selected_cell->second == PopupRowView::CellType::kControl) {
-      SetSelectedCell(
-          CellIndex{selected_cell->first, PopupRowView::CellType::kContent},
-          PopupCellSelectionSource::kKeyboard);
-      return true;
-    }
+  if (selected_cell &&
+      selected_cell->second == PopupRowView::CellType::kControl &&
+      HasPopupRowViewAt(selected_cell->first)) {
+    SetSelectedCell(
+        CellIndex{selected_cell->first, PopupRowView::CellType::kContent},
+        PopupCellSelectionSource::kKeyboard);
+    return true;
   }
   return false;
 }
@@ -482,10 +578,9 @@ bool PopupViewViews::AcceptSelectedContentOrCreditCardCell() {
     return false;
   }
 
-  const PopupItemId popup_item_id =
-      controller_->GetSuggestionAt(index->first).popup_item_id;
-  if (!base::Contains(kItemsTriggeringFieldFilling, popup_item_id) &&
-      popup_item_id != PopupItemId::kScanCreditCard) {
+  const SuggestionType type = controller_->GetSuggestionAt(index->first).type;
+  if (!base::Contains(kItemsTriggeringFieldFilling, type) &&
+      type != SuggestionType::kScanCreditCard) {
     return false;
   }
 
@@ -516,7 +611,7 @@ void PopupViewViews::OnSuggestionsChanged() {
   open_sub_popup_timer_.Stop();
   SetRowWithOpenSubPopup(std::nullopt);
 
-  CreateChildViews();
+  CreateSuggestionViews();
   DoUpdateBoundsAndRedrawPopup();
 }
 
@@ -542,10 +637,11 @@ void PopupViewViews::AxAnnounce(const std::u16string& text) {
 }
 
 base::WeakPtr<AutofillPopupView> PopupViewViews::CreateSubPopupView(
-    base::WeakPtr<AutofillPopupController> controller) {
-  if (GetWidget()) {
-    return (new PopupViewViews(controller, weak_ptr_factory_.GetWeakPtr(),
-                               GetWidget()))
+    base::WeakPtr<AutofillSuggestionController> controller) {
+  if (GetWidget() && controller) {
+    return (new PopupViewViews(
+                static_cast<AutofillPopupController&>(*controller).GetWeakPtr(),
+                weak_ptr_factory_.GetWeakPtr(), GetWidget()))
         ->GetWeakPtr();
   }
   return nullptr;
@@ -586,6 +682,19 @@ PopupViewViews::GetPopupScreenLocation() const {
           static_cast<views::BubbleBorder*>(border)->arrow())};
 }
 
+bool PopupViewViews::HasFocus() const {
+  if (!GetWidget()) {
+    return false;
+  }
+
+  // The `CanActivate() && show_in_progress_` expression is needed to cover
+  // the case when this method is called during the `GetWidget()->Show()`
+  // execution and the popup is not yet active. It optimistically responds
+  // `true` and requires an additional `GetWidget()->IsActive()` check after
+  // the `GetWidget()->Show()` call to ensure the popup is shown successfully.
+  return (CanActivate() && show_in_progress_) || GetWidget()->IsActive();
+}
+
 void PopupViewViews::OnWidgetVisibilityChanged(views::Widget* widget,
                                                bool visible) {
   if (!visible || !controller_) {
@@ -608,6 +717,46 @@ void PopupViewViews::OnWidgetVisibilityChanged(views::Widget* widget,
       feature_engagement::kIPHAutofillVirtualCardSuggestionFeature);
   browser->window()->MaybeShowFeaturePromo(
       feature_engagement::kIPHAutofillExternalAccountProfileSuggestionFeature);
+  browser->window()->MaybeShowFeaturePromo(
+      feature_engagement::kIPHAutofillCreditCardBenefitFeature);
+}
+
+void PopupViewViews::SearchBarOnInputChanged(const std::u16string& query) {
+  if (controller_) {
+    controller_->SetFilter(
+        query.empty()
+            ? std::nullopt
+            : std::optional(AutofillPopupController::SuggestionFilter(query)));
+  }
+}
+
+void PopupViewViews::SearchBarOnFocusLost() {
+  if (controller_) {
+    controller_->Hide(SuggestionHidingReason::kSearchBarFocusLost);
+  }
+}
+
+bool PopupViewViews::SearchBarHandleKeyPressed(const ui::KeyEvent& event) {
+  if (!controller_) {
+    return false;
+  }
+
+// TODO(b/339187209): On MaOS, conversion of a character key event to
+// `NativeWebKeyboardEvent` hits `NOTREACHED` in `ui::DomKeyFromNSEvent`. This
+// doesn't affect our use case as we handle only non-character events
+// (Arrows/Esc/etc) for navigation. But it needs to be investigated and ideally
+// removed.
+#if BUILDFLAG(IS_MAC)
+  if (event.is_char()) {
+    return false;
+  }
+#endif  // BUILDFLAG(IS_MAC)
+
+  // Handling events in the controller (the delegate's handler is prioritized by
+  // the search bar) enables keyboard navigation when the search bar input
+  // field is focused.
+  return controller_->HandleKeyPressEvent(
+      content::NativeWebKeyboardEvent(event));
 }
 
 void PopupViewViews::SetSelectedCell(
@@ -642,12 +791,17 @@ void PopupViewViews::SetSelectedCell(
     new_selected_row.SetSelectedCell(cell_index->second);
     new_selected_row.ScrollViewToVisible();
 
+    if (!controller_) {
+      // The previous SetSelectedCell() call may have hidden the popup.
+      return;
+    }
     const Suggestion& suggestion =
         controller_->GetSuggestionAt(cell_index->first);
+
     bool can_open_sub_popup =
         !suppress_popup &&
         (cell_index->second == PopupRowView::CellType::kControl ||
-         !suggestion.is_acceptable);
+         CanOpenSubPopupSuggestion(suggestion));
 
     CHECK(!can_open_sub_popup ||
           !controller_->GetSuggestionAt(cell_index->first).children.empty());
@@ -674,16 +828,26 @@ bool PopupViewViews::HasPopupRowViewAt(size_t index) const {
 
 void PopupViewViews::InitViews() {
   SetNotifyEnterExitOnChild(true);
+  SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical));
 
-  views::BoxLayout* layout =
-      SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kVertical));
-  layout->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kStart);
+  if (search_bar_config_.enabled) {
+    search_bar_ = AddChildView(std::make_unique<PopupSearchBarView>(
+        search_bar_config_.placeholder, *this));
+    search_bar_->SetProperty(views::kMarginsKey,
+                             gfx::Insets::VH(GetContentsVerticalPadding(), 0));
+    AddChildView(std::make_unique<PopupSeparatorView>(/*vertical_padding=*/0));
+  }
 
-  CreateChildViews();
+  suggestions_container_ =
+      AddChildView(views::Builder<views::BoxLayoutView>()
+                       .SetOrientation(views::BoxLayout::Orientation::kVertical)
+                       .Build());
+
+  CreateSuggestionViews();
 }
 
-void PopupViewViews::CreateChildViews() {
+void PopupViewViews::CreateSuggestionViews() {
   // Null all pointers prior to deleting the children views to avoid temporarily
   // dangling pointers that might be picked up by dangle detection builds. Also,
   // `footer_container_` is instantiated conditionally, which can make its value
@@ -692,7 +856,7 @@ void PopupViewViews::CreateChildViews() {
   body_container_ = nullptr;
   footer_container_ = nullptr;
   rows_.clear();
-  RemoveAllChildViews();
+  suggestions_container_->RemoveAllChildViews();
 
   const int kInterItemsPadding = GetContentsVerticalPadding();
   const std::vector<Suggestion> kSuggestions = controller_->GetSuggestions();
@@ -700,15 +864,19 @@ void PopupViewViews::CreateChildViews() {
   SetBackground(
       views::CreateThemedSolidBackground(ui::kColorDropdownBackground));
 
-  // `content_view` wraps the full content of the popup and provides vertical
-  // padding.
-  raw_ptr<views::BoxLayoutView> content_view =
-      AddChildView(views::Builder<views::BoxLayoutView>()
-                       .SetOrientation(views::BoxLayout::Orientation::kVertical)
-                       .Build());
-
   rows_.reserve(kSuggestions.size());
   size_t current_line_number = 0u;
+
+  // No suggestions (or only footer ones, which are not filterable) with
+  // a non-empty filter query means that there are no results matching
+  // the query. Show a corresponding message.
+  if ((kSuggestions.empty() || IsFooterItem(kSuggestions, 0u)) && search_bar_ &&
+      controller_->HasFilteredOutSuggestions()) {
+    suggestions_container_->AddChildView(
+        std::make_unique<PopupNoSuggestionsView>(
+            search_bar_config_.no_results_message));
+  }
+
   // Add the body rows, if there are any.
   if (!kSuggestions.empty() && !IsFooterItem(kSuggestions, 0u)) {
     // Create a container to wrap the "regular" (non-footer) rows.
@@ -721,14 +889,20 @@ void PopupViewViews::CreateChildViews() {
     for (; current_line_number < kSuggestions.size() &&
            !IsFooterItem(kSuggestions, current_line_number);
          ++current_line_number) {
-      switch (kSuggestions[current_line_number].popup_item_id) {
-        case PopupItemId::kSeparator:
+      switch (kSuggestions[current_line_number].type) {
+        case SuggestionType::kSeparator:
           rows_.push_back(body_container->AddChildView(
               std::make_unique<PopupSeparatorView>(kInterItemsPadding)));
           break;
 
-        case PopupItemId::kMixedFormMessage:
-        case PopupItemId::kInsecureContextPaymentDisabledMessage:
+        case SuggestionType::kTitle:
+          rows_.push_back(
+              body_container->AddChildView(std::make_unique<PopupTitleView>(
+                  kSuggestions[current_line_number].main_text.value)));
+          break;
+
+        case SuggestionType::kMixedFormMessage:
+        case SuggestionType::kInsecureContextPaymentDisabledMessage:
           rows_.push_back(
               body_container->AddChildView(std::make_unique<PopupWarningView>(
                   kSuggestions[current_line_number])));
@@ -737,34 +911,44 @@ void PopupViewViews::CreateChildViews() {
         // The default section contains all selectable rows and includes
         // autocomplete, address, credit cards and passwords.
         default:
+          std::optional<AutofillPopupController::SuggestionFilterMatch>
+              filter_match =
+                  controller_->GetSuggestionFilterMatches().empty()
+                      ? std::nullopt
+                      : std::optional(controller_->GetSuggestionFilterMatches()
+                                          [current_line_number]);
           PopupRowView* row_view =
               body_container->AddChildView(CreatePopupRowView(
                   controller(), /*a11y_selection_delegate=*/*this,
-                  /*selection_delegate=*/*this, current_line_number));
+                  /*selection_delegate=*/*this, current_line_number,
+                  std::move(filter_match)));
           rows_.push_back(row_view);
 
-          const std::string& feature_for_iph =
+          const base::Feature* const feature_for_iph =
               kSuggestions[current_line_number].feature_for_iph;
 
           // Set appropriate element ids for IPH targets, it is important to
           // set them earlier to make sure the elements are discoverable later
           // during popup's visibility change and the promo bubble showing.
           if (feature_for_iph ==
-              feature_engagement::kIPHAutofillVirtualCardSuggestionFeature
-                  .name) {
+              &feature_engagement::kIPHAutofillVirtualCardSuggestionFeature) {
             row_view->SetProperty(views::kElementIdentifierKey,
                                   kAutofillCreditCardSuggestionEntryElementId);
           } else if (feature_for_iph ==
-                     feature_engagement::
-                         kIPHAutofillVirtualCardCVCSuggestionFeature.name) {
+                     &feature_engagement::
+                         kIPHAutofillVirtualCardCVCSuggestionFeature) {
             row_view->SetProperty(views::kElementIdentifierKey,
                                   kAutofillStandaloneCvcSuggestionElementId);
           } else if (feature_for_iph ==
-                     feature_engagement::
-                         kIPHAutofillExternalAccountProfileSuggestionFeature
-                             .name) {
+                     &feature_engagement::
+                         kIPHAutofillExternalAccountProfileSuggestionFeature) {
             row_view->SetProperty(views::kElementIdentifierKey,
                                   kAutofillSuggestionElementId);
+          } else if (feature_for_iph ==
+                     &feature_engagement::
+                         kIPHAutofillCreditCardBenefitFeature) {
+            row_view->SetProperty(views::kElementIdentifierKey,
+                                  kAutofillCreditCardBenefitElementId);
           }
       }
     }
@@ -778,8 +962,18 @@ void PopupViewViews::CreateChildViews() {
             .ClipHeightTo(0, body_container->GetPreferredSize().height())
             .Build();
     body_container_ = scroll_view->SetContents(std::move(body_container));
-    scroll_view_ = content_view->AddChildView(std::move(scroll_view));
-    content_view->SetFlexForView(scroll_view_.get(), 1);
+    scroll_view_ = suggestions_container_->AddChildView(std::move(scroll_view));
+    // If `kUiCompositorScrollWithLayers` is enabled, then a ScrollView performs
+    // scrolling by using layers. These layers are not affected by the clip path
+    // of the widget and their corners remain unrounded, thus going beyond
+    // the popup's rounded corners. To avoid these, set a corner radius for
+    // the ScrollView's ViewPort if layer scrolling is enabled.
+    if (scroll_view_ && base::FeatureList::IsEnabled(
+                            ::features::kUiCompositorScrollWithLayers)) {
+      scroll_view_->SetViewportRoundedCornerRadius(
+          gfx::RoundedCornersF(GetCornerRadius()));
+    }
+    suggestions_container_->SetFlexForView(scroll_view_.get(), 1);
   }
 
   if (current_line_number >= kSuggestions.size()) {
@@ -799,24 +993,23 @@ void PopupViewViews::CreateChildViews() {
   } else {
     // Add a separator between the main list of suggestions and the footer with
     // no vertical padding as these elements have their own top/bottom paddings.
-    if (kSuggestions[current_line_number].popup_item_id ==
-        PopupItemId::kSeparator) {
-      rows_.push_back(content_view->AddChildView(
+    if (kSuggestions[current_line_number].type == SuggestionType::kSeparator) {
+      rows_.push_back(suggestions_container_->AddChildView(
           std::make_unique<PopupSeparatorView>(/*vertical_padding=*/0)));
       ++current_line_number;
     }
 
-    footer_container_ = content_view->AddChildView(std::move(footer_container));
+    footer_container_ =
+        suggestions_container_->AddChildView(std::move(footer_container));
     footer_container_->SetInsideBorderInsets(
         gfx::Insets::VH(kInterItemsPadding, 0));
-    content_view->SetFlexForView(footer_container_, 0);
+    suggestions_container_->SetFlexForView(footer_container_, 0);
   }
 
   for (; current_line_number < kSuggestions.size(); ++current_line_number) {
     DCHECK(IsFooterItem(kSuggestions, current_line_number));
     // The footer can contain either footer views or separator lines.
-    if (kSuggestions[current_line_number].popup_item_id ==
-        PopupItemId::kSeparator) {
+    if (kSuggestions[current_line_number].type == SuggestionType::kSeparator) {
       rows_.push_back(footer_container_->AddChildView(
           std::make_unique<PopupSeparatorView>(kInterItemsPadding)));
     } else {
@@ -854,11 +1047,11 @@ int PopupViewViews::AdjustWidth(int width) const {
 }
 
 bool PopupViewViews::DoUpdateBoundsAndRedrawPopup() {
-  gfx::Size preferred_size = CalculatePreferredSize();
+  gfx::Size preferred_size = CalculatePreferredSize({});
   gfx::Rect popup_bounds;
 
   const gfx::Rect content_area_bounds = GetContentAreaBounds();
-  // TODO(crbug.com/1262371) Once popups can render outside the main window on
+  // TODO(crbug.com/40799454) Once popups can render outside the main window on
   // Linux, use the screen bounds.
   const gfx::Rect top_window_bounds = GetTopWindowBounds();
   const gfx::Rect& max_bounds_for_popup =
@@ -869,12 +1062,18 @@ bool PopupViewViews::DoUpdateBoundsAndRedrawPopup() {
   gfx::Rect element_bounds =
       gfx::ToEnclosingRect(controller_->element_bounds());
 
-  // If the element exceeds the content area, ensure that the popup is still
-  // visually attached to the input element.
-  element_bounds.Intersect(content_area_bounds);
-  if (element_bounds.IsEmpty()) {
-    controller_->Hide(PopupHidingReason::kElementOutsideOfContentArea);
-    return false;
+  // An element that is contained by the `content_area_bounds` (even if empty,
+  // which means either the height or the width is 0) is never outside the
+  // content area. An empty element case can happen with caret bounds, which
+  // sometimes has 0 width.
+  if (!content_area_bounds.Contains(element_bounds)) {
+    // If the element exceeds the content area, ensure that the popup is still
+    // visually attached to the input element.
+    element_bounds.Intersect(content_area_bounds);
+    if (element_bounds.IsEmpty()) {
+      controller_->Hide(SuggestionHidingReason::kElementOutsideOfContentArea);
+      return false;
+    }
   }
 
   // Consider the element is |kElementBorderPadding| pixels larger at the top
@@ -885,12 +1084,12 @@ bool PopupViewViews::DoUpdateBoundsAndRedrawPopup() {
 
   if ((!body_container_ || body_container_->children().empty()) &&
       (!footer_container_ || footer_container_->children().empty())) {
-    controller_->Hide(PopupHidingReason::kNoSuggestions);
+    controller_->Hide(SuggestionHidingReason::kNoSuggestions);
     return false;
   }
 
   if (!CanShowDropdownInBounds(max_bounds_for_popup)) {
-    controller_->Hide(PopupHidingReason::kInsufficientSpace);
+    controller_->Hide(SuggestionHidingReason::kInsufficientSpace);
     return false;
   }
 
@@ -916,7 +1115,7 @@ bool PopupViewViews::DoUpdateBoundsAndRedrawPopup() {
 
   if (BoundsOverlapWithAnyOpenPrompt(popup_bounds,
                                      controller_->GetWebContents())) {
-    controller_->Hide(PopupHidingReason::kOverlappingWithAnotherPrompt);
+    controller_->Hide(SuggestionHidingReason::kOverlappingWithAnotherPrompt);
     return false;
   }
   // On Windows, due to platform-specific implementation details, the previous
@@ -924,7 +1123,7 @@ bool PopupViewViews::DoUpdateBoundsAndRedrawPopup() {
   // critical bubble is the permission bubble, we check for that specifically.
   if (BoundsOverlapWithOpenPermissionsPrompt(popup_bounds,
                                              controller_->GetWebContents())) {
-    controller_->Hide(PopupHidingReason::kOverlappingWithAnotherPrompt);
+    controller_->Hide(SuggestionHidingReason::kOverlappingWithAnotherPrompt);
     return false;
   }
 
@@ -934,7 +1133,7 @@ bool PopupViewViews::DoUpdateBoundsAndRedrawPopup() {
   // For more details on how this can happen, see crbug.com/1358647.
   if (BoundsOverlapWithPictureInPictureWindow(popup_bounds)) {
     controller_->Hide(
-        PopupHidingReason::kOverlappingWithPictureInPictureWindow);
+        SuggestionHidingReason::kOverlappingWithPictureInPictureWindow);
     return false;
   }
 
@@ -943,17 +1142,6 @@ bool PopupViewViews::DoUpdateBoundsAndRedrawPopup() {
   popup_bounds.Inset(-GetWidget()->GetRootView()->GetInsets());
   GetWidget()->SetBounds(popup_bounds);
   UpdateClipPath();
-
-  // If `kUiCompositorScrollWithLayers` is enabled, then a ScrollView performs
-  // scrolling by using layers. These layers are not affected by the clip path
-  // of the widget and their corners remain unrounded, thus going beyond
-  // the popup's rounded corners. To avoid these, set a corner radius for
-  // the ScrollView's ViewPort if layer scrolling is enabled.
-  if (scroll_view_ &&
-      base::FeatureList::IsEnabled(::features::kUiCompositorScrollWithLayers)) {
-    scroll_view_->SetViewportRoundedCornerRadius(
-        gfx::RoundedCornersF(GetCornerRadius()));
-  }
 
   SchedulePaint();
   return true;
@@ -1003,6 +1191,9 @@ bool PopupViewViews::CanShowDropdownInBounds(const gfx::Rect& bounds) const {
   if (body_container_ && !body_container_->children().empty()) {
     min_height += body_container_->children()[0]->GetPreferredSize().height();
   }
+  if (search_bar_) {
+    min_height += search_bar_->GetPreferredSize().height();
+  }
   if (footer_container_ && !footer_container_->children().empty() &&
       !IsFooterScrollable()) {
     // The footer is not scrollable, its full height should be considered.
@@ -1051,6 +1242,28 @@ void PopupViewViews::SetRowWithOpenSubPopup(
   }
 }
 
+bool PopupViewViews::CanOpenSubPopupSuggestion(const Suggestion& suggestion) {
+  // Checking both `is_acceptable` and `apply_deactivated_style` because the
+  // latter is used for disabling virtual cards which cannot open a sub popup.
+  return !suggestion.is_acceptable && !suggestion.apply_deactivated_style;
+}
+
+bool PopupViewViews::SelectParentPopupContentCell() {
+  if (!row_with_open_sub_popup_) {
+    return false;
+  }
+  size_t row_index = *row_with_open_sub_popup_;
+  // Closing the sub-popup by setting `std::nullopt` is required as
+  // `suppress_popup=true` is not enough: the sub-popup closing will be
+  // prevented by the "same value" check.
+  SetRowWithOpenSubPopup(std::nullopt);
+  SetSelectedCell(CellIndex{row_index, PopupRowView::CellType::kContent},
+                  PopupCellSelectionSource::kKeyboard,
+                  AutoselectFirstSuggestion(false),
+                  /*suppress_popup=*/true);
+  return true;
+}
+
 base::WeakPtr<AutofillPopupView> PopupViewViews::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
@@ -1060,12 +1273,15 @@ END_METADATA
 
 // static
 base::WeakPtr<AutofillPopupView> AutofillPopupView::Create(
-    base::WeakPtr<AutofillPopupController> controller) {
-  if (!CanShowRootPopup(controller)) {
+    base::WeakPtr<AutofillSuggestionController> controller) {
+  if (!controller || !CanShowRootPopup(*controller)) {
     return nullptr;
   }
 
-  return (new PopupViewViews(controller))->GetWeakPtr();
+  // On Desktop, all controllers are `AutofillPopupController`s.
+  return (new PopupViewViews(
+              static_cast<AutofillPopupController&>(*controller).GetWeakPtr()))
+      ->GetWeakPtr();
 }
 
 }  // namespace autofill

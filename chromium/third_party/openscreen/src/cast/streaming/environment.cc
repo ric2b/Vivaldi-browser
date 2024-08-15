@@ -112,7 +112,7 @@ void Environment::OnBound(UdpSocket* socket) {
   }
 }
 
-void Environment::OnError(UdpSocket* socket, Error error) {
+void Environment::OnError(UdpSocket* socket, const Error& error) {
   OSP_CHECK_EQ(socket, socket_.get());
   // Usually OnError() is only called for non-recoverable Errors. However,
   // OnSendError() and OnRead() delegate to this method, to handle their hard
@@ -131,7 +131,7 @@ void Environment::OnError(UdpSocket* socket, Error error) {
   }
 }
 
-void Environment::OnSendError(UdpSocket* socket, Error error) {
+void Environment::OnSendError(UdpSocket* socket, const Error& error) {
   OnError(socket, error);
 }
 

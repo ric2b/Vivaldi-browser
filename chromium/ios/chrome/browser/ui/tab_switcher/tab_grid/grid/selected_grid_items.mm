@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/selected_grid_items.h"
 
 #import "base/notreached.h"
+#import "ios/chrome/browser/shared/model/web_state_list/tab_group.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/ui/util/url_with_title.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_item_identifier.h"
@@ -17,6 +18,7 @@
 @implementation SelectedGridItems {
   WebStateList* _webStateList;
   std::set<web::WebStateID> _sharableItemsIDs;
+  NSMutableSet<GridItemIdentifier*>* _itemsIdentifiers;
 }
 
 - (instancetype)initWithWebStateList:(WebStateList*)webStateList {
@@ -27,6 +29,10 @@
     _itemsIdentifiers = [NSMutableSet set];
   }
   return self;
+}
+
+- (NSSet<GridItemIdentifier*>*)itemsIdentifiers {
+  return _itemsIdentifiers;
 }
 
 - (void)addItem:(GridItemIdentifier*)item {
@@ -46,7 +52,7 @@
     case GridItemType::Group: {
       [_itemsIdentifiers addObject:item];
       const TabGroup* group = item.tabGroupItem.tabGroup;
-      WebStateList::Range range = _webStateList->GetGroupRange(group);
+      const TabGroupRange range = group->range();
       for (int i : range) {
         web::WebStateID webStateID =
             _webStateList->GetWebStateAt(i)->GetUniqueIdentifier();
@@ -72,7 +78,7 @@
     }
     case GridItemType::Group: {
       const TabGroup* group = item.tabGroupItem.tabGroup;
-      WebStateList::Range range = _webStateList->GetGroupRange(group);
+      const TabGroupRange range = group->range();
       for (int i : range) {
         web::WebStateID webStateID =
             _webStateList->GetWebStateAt(i)->GetUniqueIdentifier();
@@ -98,12 +104,33 @@
   return [_itemsIdentifiers containsObject:item];
 }
 
-- (NSUInteger)sharableItemsCount {
+- (NSUInteger)sharableTabsCount {
   return _sharableItemsIDs.size();
 }
 
-- (const std::set<web::WebStateID>&)sharableItems {
+- (const std::set<web::WebStateID>&)sharableTabs {
   return _sharableItemsIDs;
+}
+
+- (std::set<web::WebStateID>)allTabs {
+  std::set<web::WebStateID> tabs;
+  for (GridItemIdentifier* item in _itemsIdentifiers) {
+    switch (item.type) {
+      case GridItemType::Tab:
+        tabs.insert(item.tabSwitcherItem.identifier);
+        break;
+      case GridItemType::Group: {
+        CHECK(item.tabGroupItem.tabGroup);
+        for (int i : item.tabGroupItem.tabGroup->range()) {
+          tabs.insert(_webStateList->GetWebStateAt(i)->GetUniqueIdentifier());
+        }
+        break;
+      }
+      case GridItemType::SuggestedActions:
+        NOTREACHED_NORETURN();
+    }
+  }
+  return tabs;
 }
 
 - (NSArray<URLWithTitle*>*)selectedTabsURLs {

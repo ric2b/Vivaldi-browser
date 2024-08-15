@@ -40,7 +40,7 @@ enum FrameType {
 };
 
 TEST(OgHttp2AdapterTest, ClientHandlesMetadata) {
-  DataSavingVisitor visitor;
+  TestVisitor visitor;
   OgHttp2Adapter::Options options;
   options.perspective = Perspective::kClient;
   auto adapter = OgHttp2Adapter::Create(visitor, options);
@@ -54,8 +54,8 @@ TEST(OgHttp2AdapterTest, ClientHandlesMetadata) {
                  {":path", "/this/is/request/one"}});
 
   const char* kSentinel1 = "arbitrary pointer 1";
-  const int32_t stream_id1 =
-      adapter->SubmitRequest(headers1, nullptr, const_cast<char*>(kSentinel1));
+  const int32_t stream_id1 = adapter->SubmitRequest(
+      headers1, nullptr, true, const_cast<char*>(kSentinel1));
   ASSERT_GT(stream_id1, 0);
   QUICHE_LOG(INFO) << "Created stream: " << stream_id1;
 
@@ -127,7 +127,7 @@ TEST(OgHttp2AdapterTest, ClientHandlesMetadata) {
 }
 
 TEST(OgHttp2AdapterTest, ClientHandlesMetadataWithEmptyPayload) {
-  DataSavingVisitor visitor;
+  TestVisitor visitor;
   OgHttp2Adapter::Options options;
   options.perspective = Perspective::kClient;
   auto adapter = OgHttp2Adapter::Create(visitor, options);
@@ -140,7 +140,8 @@ TEST(OgHttp2AdapterTest, ClientHandlesMetadataWithEmptyPayload) {
                  {":authority", "example.com"},
                  {":path", "/this/is/request/one"}});
 
-  const int32_t stream_id = adapter->SubmitRequest(headers1, nullptr, nullptr);
+  const int32_t stream_id =
+      adapter->SubmitRequest(headers1, nullptr, true, nullptr);
   ASSERT_GT(stream_id, 0);
 
   EXPECT_CALL(visitor, OnBeforeFrameSent(SETTINGS, 0, _, 0x0));
@@ -194,7 +195,7 @@ TEST(OgHttp2AdapterTest, ClientHandlesMetadataWithEmptyPayload) {
 }
 
 TEST(OgHttp2AdapterTest, ClientHandlesMetadataWithPayloadError) {
-  DataSavingVisitor visitor;
+  TestVisitor visitor;
   OgHttp2Adapter::Options options;
   options.perspective = Perspective::kClient;
   auto adapter = OgHttp2Adapter::Create(visitor, options);
@@ -207,7 +208,8 @@ TEST(OgHttp2AdapterTest, ClientHandlesMetadataWithPayloadError) {
                  {":authority", "example.com"},
                  {":path", "/this/is/request/one"}});
 
-  const int32_t stream_id = adapter->SubmitRequest(headers, nullptr, nullptr);
+  const int32_t stream_id =
+      adapter->SubmitRequest(headers, nullptr, true, nullptr);
   ASSERT_GT(stream_id, 0);
 
   EXPECT_CALL(visitor, OnBeforeFrameSent(SETTINGS, 0, _, 0x0));
@@ -271,7 +273,7 @@ TEST(OgHttp2AdapterTest, ClientHandlesMetadataWithPayloadError) {
 }
 
 TEST(OgHttp2AdapterTest, ClientHandlesMetadataWithCompletionError) {
-  DataSavingVisitor visitor;
+  TestVisitor visitor;
   OgHttp2Adapter::Options options;
   options.perspective = Perspective::kClient;
   auto adapter = OgHttp2Adapter::Create(visitor, options);
@@ -284,7 +286,8 @@ TEST(OgHttp2AdapterTest, ClientHandlesMetadataWithCompletionError) {
                  {":authority", "example.com"},
                  {":path", "/this/is/request/one"}});
 
-  const int32_t stream_id = adapter->SubmitRequest(headers, nullptr, nullptr);
+  const int32_t stream_id =
+      adapter->SubmitRequest(headers, nullptr, true, nullptr);
   ASSERT_GT(stream_id, 0);
 
   EXPECT_CALL(visitor, OnBeforeFrameSent(SETTINGS, 0, _, 0x0));
@@ -349,7 +352,7 @@ TEST(OgHttp2AdapterTest, ClientHandlesMetadataWithCompletionError) {
 }
 
 TEST(OgHttp2AdapterTest, ClientSendsMetadataAfterFlowControlBlock) {
-  DataSavingVisitor visitor;
+  TestVisitor visitor;
   OgHttp2Adapter::Options options;
   options.perspective = Perspective::kClient;
   auto adapter = OgHttp2Adapter::Create(visitor, options);
@@ -368,7 +371,7 @@ TEST(OgHttp2AdapterTest, ClientSendsMetadataAfterFlowControlBlock) {
   body1->EndData();
 
   const int32_t stream_id1 =
-      adapter->SubmitRequest(headers1, std::move(body1), nullptr);
+      adapter->SubmitRequest(headers1, std::move(body1), false, nullptr);
   ASSERT_GT(stream_id1, 0);
 
   EXPECT_CALL(visitor, OnBeforeFrameSent(SETTINGS, 0, _, 0x0));
@@ -395,7 +398,7 @@ TEST(OgHttp2AdapterTest, ClientSendsMetadataAfterFlowControlBlock) {
 }
 
 TEST(OgHttp2AdapterTest, ClientSendsMetadataWithContinuation) {
-  DataSavingVisitor visitor;
+  TestVisitor visitor;
   OgHttp2Adapter::Options options;
   options.perspective = Perspective::kServer;
   auto adapter = OgHttp2Adapter::Create(visitor, options);
@@ -458,7 +461,7 @@ TEST(OgHttp2AdapterTest, ClientSendsMetadataWithContinuation) {
 }
 
 TEST(OgHttp2AdapterTest, SubmitMetadata) {
-  DataSavingVisitor visitor;
+  TestVisitor visitor;
   OgHttp2Adapter::Options options;
   options.perspective = Perspective::kServer;
   auto adapter = OgHttp2Adapter::Create(visitor, options);
@@ -482,7 +485,7 @@ TEST(OgHttp2AdapterTest, SubmitMetadata) {
 }
 
 TEST(OgHttp2AdapterTest, SubmitMetadataMultipleFrames) {
-  DataSavingVisitor visitor;
+  TestVisitor visitor;
   OgHttp2Adapter::Options options;
   options.perspective = Perspective::kServer;
   auto adapter = OgHttp2Adapter::Create(visitor, options);
@@ -518,7 +521,7 @@ TEST(OgHttp2AdapterTest, SubmitMetadataMultipleFrames) {
 }
 
 TEST(OgHttp2AdapterTest, SubmitConnectionMetadata) {
-  DataSavingVisitor visitor;
+  TestVisitor visitor;
   OgHttp2Adapter::Options options;
   options.perspective = Perspective::kServer;
   auto adapter = OgHttp2Adapter::Create(visitor, options);
@@ -542,7 +545,7 @@ TEST(OgHttp2AdapterTest, SubmitConnectionMetadata) {
 }
 
 TEST(OgHttp2AdapterTest, ServerQueuesMetadataThenTrailers) {
-  DataSavingVisitor visitor;
+  TestVisitor visitor;
   OgHttp2Adapter::Options options;
   options.perspective = Perspective::kServer;
   auto adapter = OgHttp2Adapter::Create(visitor, options);
@@ -582,7 +585,7 @@ TEST(OgHttp2AdapterTest, ServerQueuesMetadataThenTrailers) {
   body1->EndData();
   int submit_result = adapter->SubmitResponse(
       1, ToHeaders({{":status", "200"}, {"x-comment", "Sure, sounds good."}}),
-      std::move(body1));
+      std::move(body1), false);
   EXPECT_EQ(submit_result, 0);
   EXPECT_TRUE(adapter->want_write());
 

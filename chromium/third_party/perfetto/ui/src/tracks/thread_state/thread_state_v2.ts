@@ -13,8 +13,8 @@
 // limitations under the License.
 
 import {Actions} from '../../common/actions';
-import {colorForState} from '../../common/colorizer';
-import {Selection} from '../../common/state';
+import {colorForState} from '../../core/colorizer';
+import {LegacySelection} from '../../common/state';
 import {translateState} from '../../common/thread_state';
 import {
   BASE_ROW,
@@ -55,12 +55,7 @@ export class ThreadStateTrack extends BaseSliceTrack<ThreadStateTrackTypes> {
   }
 
   getSqlSource(): string {
-    // Do not display states:
-    //   'x' (dead), 'S' (sleeping), 'I' (idle kernel thread).
-    // Note: Thread state tracks V1 basically ignores incomplete slices, faking
-    // their duration as 1 instead. Let's just do this here as well for now to
-    // achieve feature parity with tracks V1 and tackle the issue of overlapping
-    // incomplete slices later.
+    // Do not display states: 'S' (sleeping), 'I' (idle kernel thread).
     return `
       select
         id,
@@ -73,7 +68,7 @@ export class ThreadStateTrack extends BaseSliceTrack<ThreadStateTrackTypes> {
       from thread_state
       where
         utid = ${this.utid} and
-        state not in ('x', 'S', 'I')
+        state not in ('S', 'I')
     `;
   }
 
@@ -102,7 +97,7 @@ export class ThreadStateTrack extends BaseSliceTrack<ThreadStateTrackTypes> {
     );
   }
 
-  protected isSelectionHandled(selection: Selection): boolean {
+  protected isSelectionHandled(selection: LegacySelection): boolean {
     return selection.kind === 'THREAD_STATE';
   }
 }

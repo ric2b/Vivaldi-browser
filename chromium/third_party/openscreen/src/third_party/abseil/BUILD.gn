@@ -12,9 +12,7 @@ if (build_with_chromium) {
   config("abseil_config") {
     include_dirs = [ "//third_party/abseil/src" ]
 
-    # TODO(issuetracker.google.com/202964797): Support all build flags on Mac
-    # once it migrates to a newer clang.
-    if (!is_mac && is_clang) {
+    if (is_clang) {
       cflags = [
         # TODO(crbug.com/1343975) Evaluate and possibly enable.
         "-Wno-deprecated-builtins",
@@ -27,13 +25,8 @@ if (build_with_chromium) {
       "-Wno-sign-compare",
       "-Wno-extra-semi",
       "-Wno-range-loop-analysis",
+      "-Wno-array-parameter",
     ]
-
-    # TODO(issuetracker.google.com/202964797): Support all build flags on Mac
-    # once it migrates to a newer clang.
-    if (!is_mac) {
-      cflags += [ "-Wno-array-parameter" ]
-    }
 
     if (target_cpu == "arm" || target_cpu == "arm64") {
       cflags += [ "-Wno-implicit-int-float-conversion" ]
@@ -149,13 +142,18 @@ if (build_with_chromium) {
       "src/absl/base/internal/unscaledcycleclock.h",
       "src/absl/container/internal/raw_hash_set.cc",
       "src/absl/container/internal/raw_hash_set.h",
+      "src/absl/crc/internal/cpu_detect.cc",
+      "src/absl/crc/internal/cpu_detect.h",
       "src/absl/crc/internal/crc.cc",
+      "src/absl/crc/internal/crc.h",
       "src/absl/crc/internal/crc.h",
       "src/absl/crc/internal/crc_cord_state.cc",
       "src/absl/crc/internal/crc_cord_state.h",
       "src/absl/crc/internal/crc_internal.h",
       "src/absl/crc/internal/crc_memcpy.h",
       "src/absl/crc/internal/crc_memcpy_fallback.cc",
+      "src/absl/crc/internal/crc_memcpy_x86_arm_combined.cc",
+      "src/absl/crc/internal/crc_non_temporal_memcpy.cc",
       "src/absl/crc/internal/crc_x86_arm_combined.cc",
       "src/absl/debugging/internal/address_is_readable.cc",
       "src/absl/debugging/internal/address_is_readable.h",
@@ -182,6 +180,8 @@ if (build_with_chromium) {
       "src/absl/log/internal/check_op.h",
       "src/absl/log/internal/conditions.cc",
       "src/absl/log/internal/conditions.h",
+      "src/absl/log/internal/fnmatch.cc",
+      "src/absl/log/internal/fnmatch.h",
       "src/absl/log/internal/globals.cc",
       "src/absl/log/internal/globals.h",
       "src/absl/log/internal/log_format.cc",
@@ -195,6 +195,8 @@ if (build_with_chromium) {
       "src/absl/log/internal/nullguard.h",
       "src/absl/log/internal/proto.cc",
       "src/absl/log/internal/proto.h",
+      "src/absl/log/internal/vlog_config.cc",
+      "src/absl/log/internal/vlog_config.h",
       "src/absl/profiling/internal/exponential_biased.cc",
       "src/absl/profiling/internal/exponential_biased.h",
       "src/absl/status/internal/status_internal.cc",
@@ -298,6 +300,8 @@ if (build_with_chromium) {
       "src/absl/flags/usage_config.cc",
       "src/absl/flags/usage_config.h",
       "src/absl/log/absl_log.h",
+      "src/absl/log/flags.cc",
+      "src/absl/log/flags.h",
       "src/absl/log/globals.cc",
       "src/absl/log/globals.h",
       "src/absl/log/initialize.cc",

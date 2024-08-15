@@ -122,6 +122,7 @@ if (build_with_tflite_lib) {
 component("features") {
   sources = [
     "insertion_ordered_set.h",
+    "model_execution/feature_keys.h",
     "optimization_guide_constants.cc",
     "optimization_guide_constants.h",
     "optimization_guide_enums.h",
@@ -232,15 +233,19 @@ static_library("core") {
       "model_execution/model_execution_util.h",
       "model_execution/on_device_model_access_controller.cc",
       "model_execution/on_device_model_access_controller.h",
+      "model_execution/on_device_model_adaptation_controller.cc",
+      "model_execution/on_device_model_adaptation_controller.h",
+      "model_execution/on_device_model_adaptation_loader.cc",
+      "model_execution/on_device_model_adaptation_loader.h",
       "model_execution/on_device_model_component.cc",
       "model_execution/on_device_model_component.h",
-      "model_execution/on_device_model_execution_config_interpreter.cc",
-      "model_execution/on_device_model_execution_config_interpreter.h",
       "model_execution/on_device_model_execution_proto_descriptors.h",
       "model_execution/on_device_model_execution_proto_value_utils.cc",
       "model_execution/on_device_model_execution_proto_value_utils.h",
       "model_execution/on_device_model_feature_adapter.cc",
       "model_execution/on_device_model_feature_adapter.h",
+      "model_execution/on_device_model_metadata.cc",
+      "model_execution/on_device_model_metadata.h",
       "model_execution/on_device_model_service_controller.cc",
       "model_execution/on_device_model_service_controller.h",
       "model_execution/optimization_guide_model_execution_error.cc",
@@ -249,6 +254,10 @@ static_library("core") {
       "model_execution/redactor.h",
       "model_execution/repetition_checker.cc",
       "model_execution/repetition_checker.h",
+      "model_execution/safety_config.cc",
+      "model_execution/safety_config.h",
+      "model_execution/safety_model_info.cc",
+      "model_execution/safety_model_info.h",
       "model_execution/session_impl.cc",
       "model_execution/session_impl.h",
       "model_execution/settings_enabled_observer.cc",
@@ -458,10 +467,15 @@ source_set("unit_tests") {
       "model_execution/model_execution_features_unittest.cc",
       "model_execution/model_execution_fetcher_unittest.cc",
       "model_execution/model_execution_manager_unittest.cc",
+      "model_execution/on_device_model_adaptation_controller_unittest.cc",
+      "model_execution/on_device_model_adaptation_loader_unittest.cc",
       "model_execution/on_device_model_component_unittest.cc",
-      "model_execution/on_device_model_execution_config_interpreter_unittest.cc",
       "model_execution/on_device_model_execution_proto_value_utils_unittest.cc",
+      "model_execution/on_device_model_feature_adapter_unittest.cc",
+      "model_execution/on_device_model_metadata_unittest.cc",
       "model_execution/on_device_model_service_controller_unittest.cc",
+      "model_execution/on_device_model_test_utils.cc",
+      "model_execution/on_device_model_test_utils.h",
       "model_execution/optimization_guide_model_execution_error_unittest.cc",
       "model_execution/redactor_unittest.cc",
       "model_execution/repetition_checker_unittest.cc",
@@ -507,6 +521,7 @@ source_set("unit_tests") {
     "//net:test_support",
     "//services/network:network_service",
     "//services/network:test_support",
+    "//services/on_device_model/public/cpp/test_support",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/zlib/google:zip",
@@ -588,6 +603,7 @@ action("on_device_model_execution_proto_generator") {
   inputs = [
     "$root_gen_dir/components/optimization_guide/proto/compose.descriptor",
     "$root_gen_dir/components/optimization_guide/proto/string_value.descriptor",
+    "$root_gen_dir/components/optimization_guide/proto/tab_organization.descriptor",
   ]
   outputs = [ output_proto_descriptors_cc_file ]
 
@@ -596,6 +612,7 @@ action("on_device_model_execution_proto_generator") {
         rebase_path(output_proto_descriptors_cc_file, root_build_dir),
     "--include=\"components/optimization_guide/proto/features/compose.pb.h\"",
     "--include=\"components/optimization_guide/proto/string_value.pb.h\"",
+    "--include=\"components/optimization_guide/proto/features/tab_organization.pb.h\"",
   ]
   foreach(file, inputs) {
     args += [
@@ -607,6 +624,7 @@ action("on_device_model_execution_proto_generator") {
   deps = [
     "//components/optimization_guide/proto:compose_proto_descriptor",
     "//components/optimization_guide/proto:string_value_proto_descriptor",
+    "//components/optimization_guide/proto:tab_organization_proto_descriptor",
     "//third_party/protobuf:py_proto_runtime",
   ]
 }

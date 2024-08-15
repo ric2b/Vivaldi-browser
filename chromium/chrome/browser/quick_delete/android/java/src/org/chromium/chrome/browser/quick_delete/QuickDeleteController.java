@@ -14,6 +14,7 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.browsing_data.TimePeriod;
 import org.chromium.chrome.browser.browsing_data.TimePeriodUtils;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
@@ -23,7 +24,9 @@ import org.chromium.chrome.browser.layouts.LayoutStateProvider.LayoutStateObserv
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.components.feature_engagement.Tracker;
@@ -43,6 +46,7 @@ public class QuickDeleteController {
     private final @NonNull SnackbarManager mSnackbarManager;
     private final @NonNull LayoutManager mLayoutManager;
     private final @NonNull Profile mProfile;
+    private final @NonNull TabModel mTabModel;
     private final QuickDeleteBridge mQuickDeleteBridge;
     private final QuickDeleteMediator mQuickDeleteMediator;
     private final PropertyModel mPropertyModel;
@@ -71,8 +75,13 @@ public class QuickDeleteController {
         mSnackbarManager = snackbarManager;
         mLayoutManager = layoutManager;
 
+        mTabModel = tabModelSelector.getModel(/* incognito= */ false);
         mDeleteTabsFilter =
-                new QuickDeleteTabsFilter(tabModelSelector.getModel(/* incognito= */ false));
+                new QuickDeleteTabsFilter(
+                        (TabGroupModelFilter)
+                                tabModelSelector
+                                        .getTabModelFilterProvider()
+                                        .getTabModelFilter(/* incognito= */ false));
         mProfile = tabModelSelector.getCurrentModel().getProfile();
         mQuickDeleteBridge = new QuickDeleteBridge(mProfile);
 
@@ -82,6 +91,9 @@ public class QuickDeleteController {
         mPropertyModel =
                 new PropertyModel.Builder(QuickDeleteProperties.ALL_KEYS)
                         .with(QuickDeleteProperties.CONTEXT, mContext)
+                        .with(
+                                QuickDeleteProperties.HAS_MULTI_WINDOWS,
+                                delegate.isInMultiWindowMode())
                         .build();
         mPropertyModelChangeProcessor =
                 PropertyModelChangeProcessor.create(
@@ -127,8 +139,12 @@ public class QuickDeleteController {
                 QuickDeleteMetricsDelegate.recordHistogram(
                         QuickDeleteMetricsDelegate.QuickDeleteAction.DELETE_CLICKED);
                 @TimePeriod int timePeriod = mPropertyModel.get(QuickDeleteProperties.TIME_PERIOD);
+                boolean isTabClosureDisabled =
+                        mPropertyModel.get(QuickDeleteProperties.HAS_MULTI_WINDOWS);
+
                 mDelegate.performQuickDelete(
-                        () -> onBrowsingDataDeletionFinished(timePeriod), timePeriod);
+                        () -> onBrowsingDataDeletionFinished(timePeriod, isTabClosureDisabled),
+                        timePeriod);
                 break;
             case DialogDismissalCause.NEGATIVE_BUTTON_CLICKED:
                 QuickDeleteMetricsDelegate.recordHistogram(
@@ -142,30 +158,45 @@ public class QuickDeleteController {
         destroy();
     }
 
-    private void onBrowsingDataDeletionFinished(@TimePeriod int timePeriod) {
+    private void onBrowsingDataDeletionFinished(
+            @TimePeriod int timePeriod, boolean isTabClosureDisabled) {
+        RecordHistogram.recordBooleanHistogram(
+                "Privacy.QuickDelete.TabsEnabled", !isTabClosureDisabled);
+
         // Ensure that no in-product help is triggered during tab closure and the post-deletion
         // experience.
         Tracker tracker = TrackerFactory.getTrackerForProfile(mProfile);
         Tracker.DisplayLockHandle trackerLock = tracker.acquireDisplayLock();
 
-        navigateToTabSwitcher(() -> maybeShowQuickDeleteAnimation(timePeriod, trackerLock));
+        if (isTabClosureDisabled) {
+            showPostDeleteFeedback(timePeriod, trackerLock);
+        } else {
+            navigateToTabSwitcher(() -> maybeShowQuickDeleteAnimation(timePeriod, trackerLock));
+        }
     }
 
     private void maybeShowQuickDeleteAnimation(
             @TimePeriod int timePeriod, @Nullable Tracker.DisplayLockHandle trackerLock) {
         mDeleteTabsFilter.prepareListOfTabsToBeClosed(timePeriod);
-        if (isQuickDeleteFollowupEnabled()) {
+        boolean isTabModelEmpty = mTabModel.getCount() == 0;
+
+        if (isQuickDeleteFollowupEnabled() && !isTabModelEmpty) {
             List<Tab> tabs = mDeleteTabsFilter.getListOfTabsFilteredToBeClosed();
             mDelegate.showQuickDeleteAnimation(
-                    () -> showPostDeleteFeedback(timePeriod, trackerLock), tabs);
+                    () -> closeTabsAndShowPostDeleteFeedback(timePeriod, trackerLock), tabs);
         } else {
-            showPostDeleteFeedback(timePeriod, trackerLock);
+            closeTabsAndShowPostDeleteFeedback(timePeriod, trackerLock);
         }
+    }
+
+    private void closeTabsAndShowPostDeleteFeedback(
+            @TimePeriod int timePeriod, @Nullable Tracker.DisplayLockHandle trackerLock) {
+        mDeleteTabsFilter.closeTabsFilteredForQuickDelete();
+        showPostDeleteFeedback(timePeriod, trackerLock);
     }
 
     private void showPostDeleteFeedback(
             @TimePeriod int timePeriod, @Nullable Tracker.DisplayLockHandle trackerLock) {
-        mDeleteTabsFilter.closeTabsFilteredForQuickDelete();
         triggerHapticFeedback();
         showSnackbar(timePeriod);
 

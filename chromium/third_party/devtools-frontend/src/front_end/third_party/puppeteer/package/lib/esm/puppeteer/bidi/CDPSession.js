@@ -7,7 +7,7 @@ import { Deferred } from '../util/Deferred.js';
 export class BidiCdpSession extends CDPSession {
     static sessions = new Map();
     #detached = false;
-    #connection = undefined;
+    #connection;
     #sessionId = Deferred.create();
     frame;
     constructor(frame, sessionId) {
@@ -25,11 +25,11 @@ export class BidiCdpSession extends CDPSession {
         else {
             (async () => {
                 try {
-                    const session = await connection.send('cdp.getSession', {
+                    const { result } = await connection.send('cdp.getSession', {
                         context: frame._id,
                     });
-                    this.#sessionId.resolve(session.result.session);
-                    BidiCdpSession.sessions.set(session.result.session, this);
+                    this.#sessionId.resolve(result.session);
+                    BidiCdpSession.sessions.set(result.session, this);
                 }
                 catch (error) {
                     this.#sessionId.reject(error);
@@ -42,7 +42,7 @@ export class BidiCdpSession extends CDPSession {
     connection() {
         return undefined;
     }
-    async send(method, params) {
+    async send(method, params, options) {
         if (this.#connection === undefined) {
             throw new UnsupportedOperation('CDP support is required for this feature. The current browser does not support CDP.');
         }
@@ -54,11 +54,13 @@ export class BidiCdpSession extends CDPSession {
             method: method,
             params: params,
             session,
-        });
+        }, options?.timeout);
         return result.result;
     }
     async detach() {
-        if (this.#connection === undefined || this.#detached) {
+        if (this.#connection === undefined ||
+            this.#connection.closed ||
+            this.#detached) {
             return;
         }
         try {
@@ -67,10 +69,16 @@ export class BidiCdpSession extends CDPSession {
             });
         }
         finally {
-            BidiCdpSession.sessions.delete(this.id());
-            this.#detached = true;
+            this.onClose();
         }
     }
+    /**
+     * @internal
+     */
+    onClose = () => {
+        BidiCdpSession.sessions.delete(this.id());
+        this.#detached = true;
+    };
     id() {
         const value = this.#sessionId.value();
         return typeof value === 'string' ? value : '';

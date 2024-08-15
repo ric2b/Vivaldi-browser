@@ -83,11 +83,11 @@
 <translation id="3914946330804881301">Importeret fra Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
 <translation id="3943857333388298514">Sæt ind</translation>
-<translation id="3974783668264968389">Vivaldi kunne ikke låse dit sikre nøglearkiv op. Uden nøglearkivet mister du dine gemte logins, sikre cookies, og nogle funktioner, såsom Synkronisering, Mail og Kalender stopper med at fungere.
-
-    Afslut nu, lås op eller reparér dit nøglearkiv, og prøv derefter igen. Hvis du virkelig vil fortsætte, skal du klikke på afkrydsningsfeltet og trykke på knappen "Fortsæt med datatab.</translation>
 <translation id="4005270918754737597">Spring denne version over</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi kunne ikke låse dit sikre nøglelager op. Uden nøglelageret mister du dine gemte logins, sikre cookies, og nogle funktioner som Synkronisering, Mail og Kalender stopper med at fungere.
+
+    Afslut venligst nu, lås op eller reparér dit nøglelager, og prøv derefter igen. Vil du virkelig fortsætte, men miste data?</translation>
 <translation id="4074744496918018786">Åbn billede i nyt vindue</translation>
 <translation id="410351446219883937">Automatisk afspilning</translation>
 <translation id="4281844954008187215">Servicevilkår</translation>
@@ -178,6 +178,7 @@
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Inspicer portal-dokument</translation>
+<translation id="875142999698251063">Afslut nu</translation>
 <translation id="8768970203213061953">Landskab 14</translation>
 <translation id="8773635261052182196">Du vil ikke se disse notifikationer længere. Du kan aktivere dem igen fra Vivaldi's indstillinger.</translation>
 <translation id="8774017153185436870">Sider kan måske automatisk afspille video</translation>

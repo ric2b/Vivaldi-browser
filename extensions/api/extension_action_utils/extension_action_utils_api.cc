@@ -86,13 +86,13 @@ std::string GetShortcutTextForExtensionAction(
 
   const Command* requested_command = nullptr;
   switch (action->action_type()) {
-  case ActionInfo::Type::TYPE_ACTION:
+  case ActionInfo::Type::kAction:
     requested_command = CommandsInfo::GetActionCommand(extension);
     break;
-  case ActionInfo::Type::TYPE_BROWSER:
+  case ActionInfo::Type::kBrowser:
     requested_command = CommandsInfo::GetBrowserActionCommand(extension);
     break;
-  case ActionInfo::Type::TYPE_PAGE:
+  case ActionInfo::Type::kPage:
     requested_command = CommandsInfo::GetPageActionCommand(extension);
     break;
   }
@@ -395,7 +395,8 @@ void ExtensionActionUtil::FillInfoForTabId(
   info->badge_text_color =
       color_utils::SkColorToRgbaString(action->GetBadgeTextColor(tab_id));
 
-  info->action_type = action->action_type() == ActionInfo::TYPE_BROWSER
+  info->action_type =
+      action->action_type() == ActionInfo::Type::kBrowser
                           ? vivaldi::extension_action_utils::ActionType::kBrowser
                           : vivaldi::extension_action_utils::ActionType::kPage;
 
@@ -545,7 +546,7 @@ void ExtensionActionUtil::OnExtensionLoaded(
     icon_resource.reset(new extensions::ExtensionResource(
         extensions::IconsInfo::GetIconResource(
             extension, extension_misc::EXTENSION_ICON_MEDIUM,
-            ExtensionIconSet::MATCH_BIGGER)));
+            ExtensionIconSet::Match::kBigger)));
   }
 
   if (icon_resource.get() && !icon_resource.get()->extension_root().empty()) {

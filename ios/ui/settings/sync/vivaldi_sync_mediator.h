@@ -39,7 +39,8 @@ namespace vivaldi {
 
 - (void)login:(std::string)username
         password:(std::string)password
-        save_password:(BOOL)save_password;
+        deviceName:(NSString*)deviceName
+      save_password:(BOOL)save_password;
 
 - (BOOL)setEncryptionPassword:(std::string)password;
 - (void)importEncryptionPassword:(NSURL*)file

@@ -19,6 +19,8 @@ dictionary MLComputeResult {
   MLNamedArrayBufferViews outputs;
 };
 
+typedef record<DOMString, MLBuffer> MLNamedBuffers;
+
 [
   RuntimeEnabled=MachineLearningCommon,
   SecureContext,
@@ -36,4 +38,44 @@ dictionary MLComputeResult {
     CallWith=ScriptState,
     RaisesException
   ] MLBuffer createBuffer(MLBufferDescriptor descriptor);
+
+  // TODO(crbug.com/328105506): enable partial MLBuffer reads/writes.
+  // TODO(crbug.com/40278771): consider moving arguments into a dictonary 
+  // per W3C recommendations:
+  // https://w3ctag.github.io/design-principles/#prefer-dictionaries
+  [
+    RuntimeEnabled=MachineLearningNeuralNetwork,
+    CallWith=ScriptState,
+    RaisesException
+  ] void writeBuffer(
+        MLBuffer dstBuffer,
+        [AllowShared] ArrayBufferView srcData,
+        optional MLSize64 srcElementOffset = 0,
+        optional MLSize64 srcElementSize);
+
+  [
+    RuntimeEnabled=MachineLearningNeuralNetwork,
+    CallWith=ScriptState,
+    RaisesException
+  ] void writeBuffer(
+        MLBuffer dstBuffer,
+        ArrayBuffer srcData,
+        optional MLSize64 srcByteOffset = 0,
+        optional MLSize64 srcByteSize);
+
+  // TODO(crbug.com/328102504): enable transferable view to avoid copy.
+  [
+    RuntimeEnabled=MachineLearningNeuralNetwork,
+    CallWith=ScriptState,
+    RaisesException
+  ] Promise<ArrayBuffer> readBuffer(
+        MLBuffer srcBuffer);
+
+  // TODO(crbug.com/1273291): enable partial buffer dispatches.
+  [
+    RuntimeEnabled=MachineLearningNeuralNetwork,
+    CallWith=ScriptState,
+    RaisesException
+  ] void dispatch(
+      MLGraph graph, MLNamedBuffers inputs, MLNamedBuffers outputs);
 };

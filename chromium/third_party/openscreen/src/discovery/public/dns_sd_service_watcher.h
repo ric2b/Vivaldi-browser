@@ -58,9 +58,7 @@ class DnsSdServiceWatcher : public DnsSdQuerier::Callback {
       : conversion_(conversion),
         service_name_(std::move(service_name)),
         callback_(std::move(callback)),
-        querier_(service ? service->GetQuerier() : nullptr) {
-    OSP_CHECK(querier_);
-  }
+        querier_(*service->GetQuerier()) {}
 
   ~DnsSdServiceWatcher() = default;
 
@@ -69,7 +67,7 @@ class DnsSdServiceWatcher : public DnsSdQuerier::Callback {
     OSP_CHECK(!is_running_);
     is_running_ = true;
 
-    querier_->StartQuery(service_name_, this);
+    querier_.StartQuery(service_name_, this);
   }
 
   // Stops service discovery.
@@ -77,7 +75,7 @@ class DnsSdServiceWatcher : public DnsSdQuerier::Callback {
     OSP_CHECK(is_running_);
     is_running_ = false;
 
-    querier_->StopQuery(service_name_, this);
+    querier_.StopQuery(service_name_, this);
   }
 
   // Returns whether or not discovery is currently ongoing.
@@ -93,7 +91,7 @@ class DnsSdServiceWatcher : public DnsSdQuerier::Callback {
       return Error::Code::kOperationInvalid;
     }
 
-    querier_->ReinitializeQueries(service_name_);
+    querier_.ReinitializeQueries(service_name_);
     records_.clear();
     return Error::None();
   }
@@ -108,7 +106,7 @@ class DnsSdServiceWatcher : public DnsSdQuerier::Callback {
       return Error::Code::kOperationInvalid;
     }
 
-    querier_->ReinitializeQueries(service_name_);
+    querier_.ReinitializeQueries(service_name_);
     return Error::None();
   }
 
@@ -133,7 +131,7 @@ class DnsSdServiceWatcher : public DnsSdQuerier::Callback {
   // DnsSdQuerier::Callback overrides.
   void OnEndpointCreated(const DnsSdInstanceEndpoint& new_endpoint) override {
     // NOTE: existence is not checked because records may be overwritten after
-    // querier_->ReinitializeQueries() is called.
+    // querier_.ReinitializeQueries() is called.
     ErrorOr<T> record = conversion_(new_endpoint);
     if (record.is_error()) {
       OSP_LOG_INFO << "Conversion of received record failed with error: "
@@ -211,7 +209,7 @@ class DnsSdServiceWatcher : public DnsSdQuerier::Callback {
 
   std::string service_name_;
   ServicesUpdatedCallback callback_;
-  DnsSdQuerier* const querier_;
+  DnsSdQuerier& querier_;
 };
 
 }  // namespace openscreen::discovery

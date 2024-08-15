@@ -678,6 +678,8 @@
               'unicode/uidna.h',
               'unicode/uiter.h',
               'unicode/uldnames.h',
+              'unicode/ulocale.h',
+              'unicode/ulocbuilder.h',
               'unicode/uloc.h',
               'unicode/umachine.h',
               'unicode/umisc.h',

@@ -51,7 +51,7 @@ namespace {
 
 MaybeError ValidateBufferBinding(const DeviceBase* device,
                                  const BindGroupEntry& entry,
-                                 const BufferBindingLayout& layout) {
+                                 const BufferBindingInfo& layout) {
     DAWN_INVALID_IF(entry.buffer == nullptr, "Binding entry buffer not set.");
 
     DAWN_INVALID_IF(entry.sampler != nullptr || entry.textureView != nullptr,
@@ -149,7 +149,7 @@ MaybeError ValidateTextureBindGroupEntry(DeviceBase* device, const BindGroupEntr
 
 MaybeError ValidateSampledTextureBinding(DeviceBase* device,
                                          const BindGroupEntry& entry,
-                                         const TextureBindingLayout& layout,
+                                         const TextureBindingInfo& layout,
                                          UsageValidationMode mode) {
     DAWN_TRY(ValidateTextureBindGroupEntry(device, entry));
 
@@ -198,7 +198,7 @@ MaybeError ValidateSampledTextureBinding(DeviceBase* device,
 
 MaybeError ValidateStorageTextureBinding(DeviceBase* device,
                                          const BindGroupEntry& entry,
-                                         const StorageTextureBindingLayout& layout,
+                                         const StorageTextureBindingInfo& layout,
                                          UsageValidationMode mode) {
     DAWN_TRY(ValidateTextureBindGroupEntry(device, entry));
 
@@ -225,8 +225,11 @@ MaybeError ValidateStorageTextureBinding(DeviceBase* device,
 
 MaybeError ValidateSamplerBinding(const DeviceBase* device,
                                   const BindGroupEntry& entry,
-                                  const SamplerBindingLayout& layout) {
+                                  const SamplerBindingInfo& layout) {
     DAWN_INVALID_IF(entry.sampler == nullptr, "Binding entry sampler not set.");
+
+    DAWN_INVALID_IF(entry.sampler->IsYCbCr(),
+                    "YCbCr sampler is incompatible with SamplerBindingLayout");
 
     DAWN_INVALID_IF(entry.textureView != nullptr || entry.buffer != nullptr,
                     "Expected only sampler to be set for binding entry.");
@@ -288,7 +291,7 @@ void ForEachUnverifiedBufferBindingIndexImpl(const BindGroupLayoutInternalBase* 
     uint32_t packedIndex = 0;
     for (BindingIndex bindingIndex{0}; bindingIndex < bgl->GetBufferCount(); ++bindingIndex) {
         const auto* bufferLayout =
-            std::get_if<BufferBindingLayout>(&bgl->GetBindingInfo(bindingIndex).bindingLayout);
+            std::get_if<BufferBindingInfo>(&bgl->GetBindingInfo(bindingIndex).bindingLayout);
         if (bufferLayout == nullptr || bufferLayout->minBindingSize == 0) {
             f(bindingIndex, packedIndex++);
         }
@@ -305,11 +308,17 @@ MaybeError ValidateBindGroupDescriptor(DeviceBase* device,
     DAWN_TRY(device->ValidateObject(descriptor->layout));
 
     BindGroupLayoutInternalBase* layout = descriptor->layout->GetInternalBindGroupLayout();
+
+    // NOTE: Static sampler layout bindings should not have bind group entries,
+    // as the sampler is specified in the layout itself.
+    const auto expectedBindingsCount =
+        layout->GetUnexpandedBindingCount() - layout->GetStaticSamplerCount();
+
     DAWN_INVALID_IF(
-        descriptor->entryCount != layout->GetUnexpandedBindingCount(),
-        "Number of entries (%u) did not match the number of entries (%u) specified in %s."
+        descriptor->entryCount != expectedBindingsCount,
+        "Number of entries (%u) did not match the expected number of entries (%u) for %s."
         "\nExpected layout: %s",
-        descriptor->entryCount, static_cast<uint32_t>(layout->GetBindingCount()), layout,
+        descriptor->entryCount, static_cast<uint32_t>(expectedBindingsCount), layout,
         layout->EntriesToString());
 
     const BindGroupLayoutInternalBase::BindingMap& bindingMap = layout->GetBindingMap();
@@ -361,7 +370,7 @@ MaybeError ValidateBindGroupDescriptor(DeviceBase* device,
         // Perform binding-type specific validation.
         DAWN_TRY(MatchVariant(
             bindingInfo.bindingLayout,
-            [&](const BufferBindingLayout& layout) -> MaybeError {
+            [&](const BufferBindingInfo& layout) -> MaybeError {
                 // TODO(dawn:1485): Validate buffer binding with usage validation mode.
                 DAWN_TRY_CONTEXT(ValidateBufferBinding(device, entry, layout),
                                  "validating entries[%u] as a Buffer."
@@ -369,26 +378,32 @@ MaybeError ValidateBindGroupDescriptor(DeviceBase* device,
                                  i, layout);
                 return {};
             },
-            [&](const TextureBindingLayout& layout) -> MaybeError {
+            [&](const TextureBindingInfo& layout) -> MaybeError {
                 DAWN_TRY_CONTEXT(ValidateSampledTextureBinding(device, entry, layout, mode),
                                  "validating entries[%u] as a Sampled Texture."
                                  "\nExpected entry layout: %s",
                                  i, layout);
                 return {};
             },
-            [&](const StorageTextureBindingLayout& layout) -> MaybeError {
+            [&](const StorageTextureBindingInfo& layout) -> MaybeError {
                 DAWN_TRY_CONTEXT(ValidateStorageTextureBinding(device, entry, layout, mode),
                                  "validating entries[%u] as a Storage Texture."
                                  "\nExpected entry layout: %s",
                                  i, layout);
                 return {};
             },
-            [&](const SamplerBindingLayout& layout) -> MaybeError {
+            [&](const SamplerBindingInfo& layout) -> MaybeError {
                 DAWN_TRY_CONTEXT(ValidateSamplerBinding(device, entry, layout),
                                  "validating entries[%u] as a Sampler."
                                  "\nExpected entry layout: %s",
                                  i, layout);
                 return {};
+            },
+            [&](const StaticSamplerBindingInfo& layout) -> MaybeError {
+                return DAWN_VALIDATION_ERROR(
+                    "entries[%u] is provided when the layout contains a static sampler for that "
+                    "binding.",
+                    i);
             }));
     }
 
@@ -397,7 +412,7 @@ MaybeError ValidateBindGroupDescriptor(DeviceBase* device,
     //  - Each binding must be set at most once
     //
     // We don't validate the equality because it wouldn't be possible to cover it with a test.
-    DAWN_ASSERT(bindingsSet.count() == layout->GetUnexpandedBindingCount());
+    DAWN_ASSERT(bindingsSet.count() == expectedBindingsCount);
 
     return {};
 }
@@ -557,7 +572,7 @@ BufferBinding BindGroupBase::GetBindingAsBufferBinding(BindingIndex bindingIndex
     DAWN_ASSERT(!IsError());
     const BindGroupLayoutInternalBase* layout = GetLayout();
     DAWN_ASSERT(bindingIndex < layout->GetBindingCount());
-    DAWN_ASSERT(std::holds_alternative<BufferBindingLayout>(
+    DAWN_ASSERT(std::holds_alternative<BufferBindingInfo>(
         layout->GetBindingInfo(bindingIndex).bindingLayout));
     BufferBase* buffer = static_cast<BufferBase*>(mBindingData.bindings[bindingIndex].Get());
     return {buffer, mBindingData.bufferData[bindingIndex].offset,
@@ -568,7 +583,7 @@ SamplerBase* BindGroupBase::GetBindingAsSampler(BindingIndex bindingIndex) const
     DAWN_ASSERT(!IsError());
     const BindGroupLayoutInternalBase* layout = GetLayout();
     DAWN_ASSERT(bindingIndex < layout->GetBindingCount());
-    DAWN_ASSERT(std::holds_alternative<SamplerBindingLayout>(
+    DAWN_ASSERT(std::holds_alternative<SamplerBindingInfo>(
         layout->GetBindingInfo(bindingIndex).bindingLayout));
     return static_cast<SamplerBase*>(mBindingData.bindings[bindingIndex].Get());
 }
@@ -577,9 +592,9 @@ TextureViewBase* BindGroupBase::GetBindingAsTextureView(BindingIndex bindingInde
     DAWN_ASSERT(!IsError());
     const BindGroupLayoutInternalBase* layout = GetLayout();
     DAWN_ASSERT(bindingIndex < layout->GetBindingCount());
-    DAWN_ASSERT(std::holds_alternative<TextureBindingLayout>(
+    DAWN_ASSERT(std::holds_alternative<TextureBindingInfo>(
                     layout->GetBindingInfo(bindingIndex).bindingLayout) ||
-                std::holds_alternative<StorageTextureBindingLayout>(
+                std::holds_alternative<StorageTextureBindingInfo>(
                     layout->GetBindingInfo(bindingIndex).bindingLayout));
     return static_cast<TextureViewBase*>(mBindingData.bindings[bindingIndex].Get());
 }

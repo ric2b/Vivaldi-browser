@@ -14,8 +14,11 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/commerce/shopping_service_factory.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
+#include "chrome/browser/signin/chrome_signin_client_factory.h"
+#include "chrome/browser/signin/chrome_signin_client_test_util.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/commerce/mock_commerce_ui_tab_helper.h"
 #include "chrome/browser/ui/signin/bubble_signin_promo_delegate.h"
@@ -32,6 +35,7 @@
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/test/mock_tracker.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
+#include "components/sync/test/test_sync_service.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "ui/base/interaction/element_identifier.h"
@@ -101,6 +105,16 @@ class BookmarkBubbleViewTestBase : public BrowserWithTestWindowTest {
         {commerce::ShoppingServiceFactory::GetInstance(),
          base::BindRepeating([](content::BrowserContext* context) {
            return commerce::MockShoppingService::Build();
+         })},
+        // Used by IdentityTestEnvironmentProfileAdaptor.
+        {ChromeSigninClientFactory::GetInstance(),
+         base::BindRepeating(&BuildChromeSigninClientWithURLLoader,
+                             test_url_loader_factory())},
+        // Used by ImageService.
+        {SyncServiceFactory::GetInstance(),
+         base::BindRepeating([](content::BrowserContext*) {
+           return static_cast<std::unique_ptr<KeyedService>>(
+               std::make_unique<syncer::TestSyncService>());
          })}};
     IdentityTestEnvironmentProfileAdaptor::
         AppendIdentityTestEnvironmentFactories(&factories);
@@ -145,9 +159,7 @@ class BookmarkBubbleViewTestBase : public BrowserWithTestWindowTest {
 class BookmarkBubbleViewTest : public BookmarkBubbleViewTestBase {
  public:
   BookmarkBubbleViewTest() {
-#if !BUILDFLAG(IS_FUCHSIA)
     test_features_.InitAndEnableFeature(commerce::kShoppingList);
-#endif  // !BUILDFLAG(IS_FUCHSIA)
   }
 };
 
@@ -173,7 +185,6 @@ TEST_F(BookmarkBubbleViewTest, SyncPromoNotSignedIn) {
 #endif
 }
 
-#if !BUILDFLAG(IS_FUCHSIA)
 // Verifies that the price tracking view is displayed for trackable product.
 TEST_F(BookmarkBubbleViewTest, PriceTrackingViewIsVisible) {
   ukm::TestAutoSetUkmRecorder ukm_recorder;
@@ -252,9 +263,7 @@ TEST_F(BookmarkBubbleViewTest, PriceTrackingViewWithToggleOn) {
   EXPECT_TRUE(price_tracking_view);
   EXPECT_TRUE(price_tracking_view->IsToggleOn());
 }
-#endif  // !BUILDFLAG(IS_FUCHSIA)
 
-#if !BUILDFLAG(IS_FUCHSIA)
 class PriceTrackingViewFeatureFlagTest
     : public BookmarkBubbleViewTestBase,
       public testing::WithParamInterface<bool> {
@@ -309,8 +318,6 @@ TEST_P(PriceTrackingViewFeatureFlagTest, PriceTrackingViewCreation) {
     EXPECT_FALSE(price_tracking_view);
   }
 }
-
-#endif  // !BUILDFLAG(IS_FUCHSIA)
 
 class BookmarkBubbleViewShoppingCollectionTest
     : public BookmarkBubbleViewTestBase {

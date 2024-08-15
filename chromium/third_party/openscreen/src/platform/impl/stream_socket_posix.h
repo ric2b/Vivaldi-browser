@@ -59,7 +59,7 @@ class StreamSocketPosix : public StreamSocket {
   bool EnsureInitializedAndOpen();
   Error Initialize();
 
-  Error CloseOnError(Error error);
+  Error CloseOnError(const Error& error);
   Error ReportSocketClosedError();
 
   constexpr static int kUnsetHandleFd = -1;

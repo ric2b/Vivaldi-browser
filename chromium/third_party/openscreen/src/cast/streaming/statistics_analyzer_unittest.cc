@@ -107,7 +107,7 @@ class FakeClockOffsetEstimator : public ClockOffsetEstimator {
 class StatisticsAnalyzerTest : public ::testing::Test {
  public:
   StatisticsAnalyzerTest()
-      : fake_clock_(Clock::now()), fake_task_runner_(&fake_clock_) {}
+      : fake_clock_(Clock::now()), fake_task_runner_(fake_clock_) {}
 
   void SetUp() {
     // In general, use an estimator that doesn't have an offset.

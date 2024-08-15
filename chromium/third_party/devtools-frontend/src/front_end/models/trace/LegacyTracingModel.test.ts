@@ -2,15 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
-import * as TraceEngine from '../trace/trace.js';
 import {describeWithEnvironment} from '../../testing/EnvironmentHelpers.js';
 import {
-  StubbedThread,
   makeFakeEventPayload,
+  StubbedThread,
 } from '../../testing/TraceHelpers.js';
 import {TraceLoader} from '../../testing/TraceLoader.js';
+import * as TraceEngine from '../trace/trace.js';
 
 describeWithEnvironment('TracingModel', function() {
   it('can create events from an EventPayload[] and finds the correct number of processes', async function() {
@@ -246,12 +244,5 @@ describeWithEnvironment('TracingModel', function() {
           // The number 1 here is the timestamp divided by 1000.
           'Unexpected id2 field at 1, one and only one of \'local\' and \'global\' should be present.'));
     });
-  });
-
-  it('finds the browser main thread from the tracing model', async function() {
-    const {tracingModel} = await TraceLoader.allModels(this, 'web-dev.json.gz');
-    const mainThread = TraceEngine.Legacy.TracingModel.browserMainThread(tracingModel);
-    assert.strictEqual(mainThread?.id(), 775);
-    assert.strictEqual(mainThread?.name(), 'CrBrowserMain');
   });
 });

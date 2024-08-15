@@ -5,6 +5,7 @@
 import type * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import type * as Platform from '../../core/platform/platform.js';
+import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
 import {type LighthouseController, type Preset, Presets, RuntimeSettings} from './LighthouseController.js';
@@ -25,10 +26,6 @@ const UIStrings = {
    * @description Title in the Lighthouse Start View for list of categories to run during audit
    */
   categories: 'Categories',
-  /**
-   * @description Title in the Lighthouse Start View for list of available start plugins
-   */
-  plugins: 'Plugins',
   /**
    * @description Label for a button to start analyzing a page navigation with Lighthouse
    */
@@ -58,7 +55,7 @@ export class StartView extends UI.Widget.Widget {
   private controller: LighthouseController;
   private panel: LighthousePanel;
   private readonly settingsToolbarInternal: UI.Toolbar.Toolbar;
-  private startButton!: HTMLButtonElement;
+  private startButton!: Buttons.Button.Button;
   private helpText?: Element;
   private warningText?: Element;
   private checkboxes: Array<{preset: Preset, checkbox: UI.Toolbar.ToolbarCheckbox}> = [];
@@ -147,14 +144,12 @@ export class StartView extends UI.Widget.Widget {
 
     // Populate the categories
     const categoryFormElements = fragment.$('categories-form-elements') as HTMLElement;
-    const pluginFormElements = fragment.$('plugins-form-elements') as HTMLElement;
 
     this.checkboxes = [];
     for (const preset of Presets) {
-      const formElements = preset.plugin ? pluginFormElements : categoryFormElements;
       preset.setting.setTitle(preset.title());
       const checkbox = new UI.Toolbar.ToolbarSettingCheckbox(preset.setting, preset.description());
-      const row = formElements.createChild('div', 'vbox lighthouse-launcher-row');
+      const row = categoryFormElements.createChild('div', 'vbox lighthouse-launcher-row');
       row.appendChild(checkbox.element);
       checkbox.element.setAttribute('data-lh-category', preset.configID);
       this.checkboxes.push({preset, checkbox});
@@ -165,8 +160,6 @@ export class StartView extends UI.Widget.Widget {
     }
     UI.ARIAUtils.markAsGroup(categoryFormElements);
     UI.ARIAUtils.setLabel(categoryFormElements, i18nString(UIStrings.categories));
-    UI.ARIAUtils.markAsGroup(pluginFormElements);
-    UI.ARIAUtils.setLabel(pluginFormElements, i18nString(UIStrings.plugins));
   }
 
   private render(): void {
@@ -196,12 +189,6 @@ export class StartView extends UI.Widget.Widget {
       <div class="lighthouse-form-section">
         <div class="lighthouse-form-section-label">${i18nString(UIStrings.categories)}</div>
         <div class="lighthouse-form-elements" $="categories-form-elements"></div>
-      </div>
-      <div class="lighthouse-form-section">
-        <div class="lighthouse-form-section-label">
-          <div class="lighthouse-icon-label">${i18nString(UIStrings.plugins)}</div>
-        </div>
-        <div class="lighthouse-form-elements" $="plugins-form-elements"></div>
       </div>
     </div>
   </div>
@@ -247,8 +234,8 @@ export class StartView extends UI.Widget.Widget {
     const startButtonContainer = this.contentElement.querySelector('.lighthouse-start-button-container');
     if (startButtonContainer) {
       startButtonContainer.textContent = '';
-      this.startButton =
-          UI.UIUtils.createTextButton(buttonLabel, callback, {primary: true, jslogContext: 'lighthouse.start'});
+      this.startButton = UI.UIUtils.createTextButton(
+          buttonLabel, callback, {variant: Buttons.Button.Variant.PRIMARY, jslogContext: 'lighthouse.start'});
       startButtonContainer.append(this.startButton);
     }
   }

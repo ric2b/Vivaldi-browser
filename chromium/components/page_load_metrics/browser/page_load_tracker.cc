@@ -11,12 +11,14 @@
 #include <utility>
 
 #include "base/check_op.h"
+#include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/default_tick_clock.h"
 #include "base/trace_event/trace_event.h"
+#include "components/page_load_metrics/browser/features.h"
 #include "components/page_load_metrics/browser/page_load_metrics_embedder_interface.h"
 #include "components/page_load_metrics/browser/page_load_metrics_forward_observer.h"
 #include "components/page_load_metrics/browser/page_load_metrics_memory_tracker.h"
@@ -33,6 +35,7 @@
 #include "page_load_metrics_observer_delegate.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
+#include "third_party/blink/public/mojom/input/input_event.mojom-shared.h"
 
 namespace page_load_metrics {
 
@@ -151,11 +154,11 @@ PageEndReason EndReasonForPageTransition(ui::PageTransition transition) {
 }
 
 bool IsNavigationUserInitiated(content::NavigationHandle* handle) {
-  // TODO(crbug.com/617904): Browser initiated navigations should have
+  // TODO(crbug.com/41257523): Browser initiated navigations should have
   // HasUserGesture() set to true. In the meantime, we consider all
   // browser-initiated navigations to be user initiated.
   //
-  // TODO(crbug.com/637345): Some browser-initiated navigations incorrectly
+  // TODO(crbug.com/40480474): Some browser-initiated navigations incorrectly
   // report that they are renderer-initiated. We will currently report that
   // these navigations are not user initiated, when in fact they are user
   // initiated.
@@ -752,6 +755,20 @@ void PageLoadTracker::Redirect(content::NavigationHandle* navigation_handle) {
 }
 
 void PageLoadTracker::OnInputEvent(const blink::WebInputEvent& event) {
+  static const bool do_not_send_continuous_events =
+      !base::FeatureList::IsEnabled(
+          features::kSendContinuousInputEventsToObservers);
+  using Type = blink::mojom::EventType;
+  const bool is_continuous_event =
+      (event.GetType() == Type::kTouchMove ||
+       event.GetType() == Type::kGestureScrollUpdate ||
+       event.GetType() == Type::kGesturePinchUpdate);
+  if (do_not_send_continuous_events && is_continuous_event) {
+    return;
+  }
+
+  // TODO(b/328601354): Confirm continuous input events are not required for
+  // page load tracker observers and rename the API to reflect the same.
   for (const auto& observer : observers_) {
     observer->OnUserInput(event, metrics_update_dispatcher_.timing());
   }
@@ -1028,7 +1045,7 @@ void PageLoadTracker::OnTimingChanged() {
 
   // Record UMA if the LCP candidate changes.
 
-  // TODO(crbug.com/1431906): This is to track irregularities in the LCP timing
+  // TODO(crbug.com/40902605): This is to track irregularities in the LCP timing
   // values in the UKM recording. We would remove this code once we have
   // identified all of the conditions where these irregularities happen.
   bool largest_contentful_image_changed =
@@ -1137,7 +1154,7 @@ void PageLoadTracker::OnSoftNavigationChanged(
     return;
   }
 
-  // TODO(crbug.com/1451911): For soft navigation detections, the count and
+  // TODO(crbug.com/40065440): For soft navigation detections, the count and
   // start time should be monotonically increasing and navigation id different
   // each time. But we do see check failures on
   // soft_navigation_metrics.count >= soft_navigation_metrics_->count when this
@@ -1310,7 +1327,7 @@ std::optional<base::TimeDelta> PageLoadTracker::GetTimeToPageEnd() const {
     return DurationSinceNavigationStartForTime(page_end_time_);
   }
   DCHECK(page_end_time_.is_null());
-  return std::optional<base::TimeDelta>();
+  return std::nullopt;
 }
 
 const base::TimeTicks& PageLoadTracker::GetPageEndTime() const {
@@ -1482,6 +1499,12 @@ void PageLoadTracker::OnV8MemoryChanged(
 void PageLoadTracker::OnSharedStorageWorkletHostCreated() {
   for (const auto& observer : observers_) {
     observer->OnSharedStorageWorkletHostCreated();
+  }
+}
+
+void PageLoadTracker::OnSharedStorageSelectURLCalled() {
+  for (const auto& observer : observers_) {
+    observer->OnSharedStorageSelectURLCalled();
   }
 }
 

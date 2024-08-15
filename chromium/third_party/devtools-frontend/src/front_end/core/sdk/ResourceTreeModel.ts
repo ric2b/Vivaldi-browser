@@ -32,25 +32,23 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+import type * as ProtocolProxyApi from '../../generated/protocol-proxy-api.js';
+import * as Protocol from '../../generated/protocol.js';
 import * as Common from '../common/common.js';
 import * as i18n from '../i18n/i18n.js';
 import * as Platform from '../platform/platform.js';
-import type * as ProtocolProxyApi from '../../generated/protocol-proxy-api.js';
-import * as Protocol from '../../generated/protocol.js';
 
-import {DOMModel, type DeferredDOMNode, type DOMNode} from './DOMModel.js';
-
+import {type DeferredDOMNode, DOMModel, type DOMNode} from './DOMModel.js';
+import {FrameManager} from './FrameManager.js';
 import {Events as NetworkManagerEvents, NetworkManager, type RequestUpdateDroppedEventData} from './NetworkManager.js';
 import {type NetworkRequest} from './NetworkRequest.js';
 import {Resource} from './Resource.js';
 import {ExecutionContext, RuntimeModel} from './RuntimeModel.js';
-
-import {Capability, Type, type Target} from './Target.js';
 import {SDKModel} from './SDKModel.js';
-import {TargetManager} from './TargetManager.js';
 import {SecurityOriginManager} from './SecurityOriginManager.js';
 import {StorageKeyManager} from './StorageKeyManager.js';
-import {FrameManager} from './FrameManager.js';
+import {Capability, type Target, Type} from './Target.js';
+import {TargetManager} from './TargetManager.js';
 
 export class ResourceTreeModel extends SDKModel<EventTypes> {
   readonly agent: ProtocolProxyApi.PageApi;
@@ -419,6 +417,10 @@ export class ResourceTreeModel extends SDKModel<EventTypes> {
   }
 
   reloadPage(ignoreCache?: boolean, scriptToEvaluateOnLoad?: string): void {
+    const loaderId = this.mainFrame?.loaderId;
+    if (!loaderId) {
+      return;
+    }
     // Only dispatch PageReloadRequested upon first reload request to simplify client logic.
     if (!this.#pendingReloadOptions) {
       this.dispatchEventToListeners(Events.PageReloadRequested, this);
@@ -433,7 +435,7 @@ export class ResourceTreeModel extends SDKModel<EventTypes> {
       networkManager.clearRequests();
     }
     this.dispatchEventToListeners(Events.WillReloadPage);
-    void this.agent.invoke_reload({ignoreCache, scriptToEvaluateOnLoad});
+    void this.agent.invoke_reload({ignoreCache, scriptToEvaluateOnLoad, loaderId});
   }
 
   navigate(url: Platform.DevToolsPath.UrlString): Promise<Protocol.Page.NavigateResponse> {
@@ -464,7 +466,7 @@ export class ResourceTreeModel extends SDKModel<EventTypes> {
     data: string|null,
     errors: Array<Protocol.Page.AppManifestError>,
   }> {
-    const response = await this.agent.invoke_getAppManifest();
+    const response = await this.agent.invoke_getAppManifest({});
     if (response.getError()) {
       return {url: response.url as Platform.DevToolsPath.UrlString, data: null, errors: []};
     }
@@ -661,7 +663,7 @@ export class ResourceTreeFrame {
   #sameTargetParentFrameInternal: ResourceTreeFrame|null;
   readonly #idInternal: Protocol.Page.FrameId;
   crossTargetParentFrameId: string|null;
-  #loaderIdInternal: string;
+  #loaderIdInternal: Protocol.Network.LoaderId;
   #nameInternal: string|null|undefined;
   #urlInternal: Platform.DevToolsPath.UrlString;
   #domainAndRegistryInternal: string;
@@ -694,7 +696,7 @@ export class ResourceTreeFrame {
     this.#idInternal = frameId;
     this.crossTargetParentFrameId = null;
 
-    this.#loaderIdInternal = payload?.loaderId || '';
+    this.#loaderIdInternal = payload?.loaderId ?? '' as Protocol.Network.LoaderId;
     this.#nameInternal = payload && payload.name;
     this.#urlInternal =
         payload && payload.url as Platform.DevToolsPath.UrlString || Platform.DevToolsPath.EmptyUrlString;
@@ -814,7 +816,7 @@ export class ResourceTreeFrame {
     return this.#unreachableUrlInternal;
   }
 
-  get loaderId(): string {
+  get loaderId(): Protocol.Network.LoaderId {
     return this.#loaderIdInternal;
   }
 

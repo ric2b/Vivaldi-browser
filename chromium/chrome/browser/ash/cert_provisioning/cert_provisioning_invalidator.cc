@@ -146,8 +146,6 @@ void CertProvisioningInvalidationHandler::OnIncomingInvalidation(
       << "Incoming invalidation does not contain invalidation"
          " for certificate topic";
 
-  invalidation.Acknowledge();
-
   on_invalidation_event_callback_.Run(InvalidationEvent::kInvalidationReceived);
 }
 
@@ -168,7 +166,7 @@ bool CertProvisioningInvalidationHandler::IsRegistered() const {
 
 bool CertProvisioningInvalidationHandler::AreInvalidationsEnabled() const {
   return IsRegistered() && invalidation_service_->GetInvalidatorState() ==
-                               invalidation::INVALIDATIONS_ENABLED;
+                               invalidation::InvalidatorState::kEnabled;
 }
 
 }  // namespace internal

@@ -20,6 +20,7 @@ from telemetry.internal.platform import gpu_info as tgi
 EXPECTATIONS_DRIVER_TAGS = frozenset([
     'mesa_lt_19.1',
     'mesa_ge_21.0',
+    'mesa_ge_23.2',
     'nvidia_ge_31.0.15.4601',
     'nvidia_lt_31.0.15.4601',
 ])
@@ -294,6 +295,7 @@ def GetMockArgs(webgl_version: str = '1.0.0') -> mock.MagicMock:
   args.expected_vendor_id = 0
   args.expected_device_id = 0
   args.browser_options = []
+  args.use_worker = 'none'
   return args
 
 

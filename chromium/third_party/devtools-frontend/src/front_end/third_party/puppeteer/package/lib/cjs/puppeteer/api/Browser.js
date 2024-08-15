@@ -42,7 +42,7 @@ exports.WEB_PERMISSION_TO_PROTOCOL_PERMISSION = new Map([
  * - connected to via {@link Puppeteer.connect} or
  * - launched by {@link PuppeteerNode.launch}.
  *
- * {@link Browser} {@link EventEmitter | emits} various events which are
+ * {@link Browser} {@link EventEmitter.emit | emits} various events which are
  * documented in the {@link BrowserEvent} enum.
  *
  * @example Using a {@link Browser} to create a {@link Page}:
@@ -130,11 +130,17 @@ class Browser extends EventEmitter_js_1.EventEmitter {
     }
     /** @internal */
     [disposable_js_1.disposeSymbol]() {
-        return void this.close().catch(util_js_1.debugError);
+        if (this.process()) {
+            return void this.close().catch(util_js_1.debugError);
+        }
+        return void this.disconnect().catch(util_js_1.debugError);
     }
     /** @internal */
     [disposable_js_1.asyncDisposeSymbol]() {
-        return this.close();
+        if (this.process()) {
+            return this.close();
+        }
+        return this.disconnect();
     }
 }
 exports.Browser = Browser;

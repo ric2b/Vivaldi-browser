@@ -5,6 +5,7 @@
 #include "content/browser/webid/digital_credentials/digital_identity_request_impl.h"
 
 #include "base/functional/callback.h"
+#include "base/json/json_writer.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/values.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
@@ -17,6 +18,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "third_party/blink/public/mojom/webid/federated_auth_request.mojom.h"
+#include "third_party/re2/src/re2/re2.h"
 
 using base::Value;
 using blink::mojom::RequestDigitalIdentityStatus;
@@ -24,6 +26,25 @@ using RequestStatusForMetrics =
     content::DigitalIdentityProvider::RequestStatusForMetrics;
 
 namespace content {
+namespace {
+
+constexpr char kMdlDocumentType[] = "org.iso.18013.5.1.mDL";
+constexpr char kOpenid4vpAgeOverPathRegex[] =
+    R"(\$\['org\.iso\.18013\.5\.1'\]\['age_over_\d\d'\])";
+
+// Returns entry if `dict` has a list with a single dict element for key
+// `list_key`.
+const base::Value::Dict* FindSingleElementListEntry(
+    const base::Value::Dict& dict,
+    const std::string& list_key) {
+  const base::Value::List* list = dict.FindList(list_key);
+  if (!list || list->size() != 1u) {
+    return nullptr;
+  }
+  return list->front().GetIfDict();
+}
+
+}  // anonymous namespace
 
 // static
 void DigitalIdentityRequestImpl::Create(
@@ -33,6 +54,54 @@ void DigitalIdentityRequestImpl::Create(
   // interface error occurs, the RenderFrameHost is deleted, or the
   // RenderFrameHost navigates to a new document.
   new DigitalIdentityRequestImpl(host, std::move(receiver));
+}
+
+// static
+bool DigitalIdentityRequestImpl::IsOnlyRequestingAge(
+    const base::Value& request) {
+  if (!request.is_dict()) {
+    return false;
+  }
+
+  const base::Value::Dict& request_dict = request.GetDict();
+  const base::Value::Dict* presentation_dict =
+      request_dict.FindDict("presentation_definition");
+  if (!presentation_dict) {
+    return false;
+  }
+
+  const base::Value::Dict* input_descriptor_dict =
+      FindSingleElementListEntry(*presentation_dict, "input_descriptors");
+  if (!input_descriptor_dict) {
+    return false;
+  }
+
+  const std::string* input_descriptor_id =
+      input_descriptor_dict->FindString("id");
+  if (!input_descriptor_id || *input_descriptor_id != kMdlDocumentType) {
+    return false;
+  }
+
+  const base::Value::Dict* constraints_dict =
+      input_descriptor_dict->FindDict("constraints");
+  if (!constraints_dict) {
+    return false;
+  }
+
+  const base::Value::Dict* field_dict =
+      FindSingleElementListEntry(*constraints_dict, "fields");
+  if (!field_dict) {
+    return false;
+  }
+
+  const base::Value::List* field_paths = field_dict->FindList("path");
+  if (!field_paths || field_paths->size() != 1u ||
+      !field_paths->front().is_string()) {
+    return false;
+  }
+
+  return re2::RE2::FullMatch(field_paths->front().GetString(),
+                             re2::RE2(kOpenid4vpAgeOverPathRegex));
 }
 
 DigitalIdentityRequestImpl::DigitalIdentityRequestImpl(
@@ -58,6 +127,7 @@ void DigitalIdentityRequestImpl::CompleteRequestWithStatus(
     RequestStatusForMetrics status_for_metrics) {
   // Invalidate pending requests in case that the request gets aborted.
   weak_ptr_factory_.InvalidateWeakPtrs();
+  provider_.reset();
 
   base::UmaHistogramEnumeration("Blink.DigitalIdentityRequest.Status",
                                 status_for_metrics);
@@ -65,60 +135,23 @@ void DigitalIdentityRequestImpl::CompleteRequestWithStatus(
   std::move(callback_).Run(status, response);
 }
 
-base::Value::Dict BuildRequest(
-    blink::mojom::DigitalCredentialProviderPtr provider) {
+std::string BuildRequest(blink::mojom::DigitalCredentialProviderPtr provider) {
   auto result = Value::Dict();
 
-  if (provider->params) {
-    auto params = Value::Dict();
-    for (const auto& pair : *provider->params) {
-      params.Set(pair.first, pair.second);
-    }
-    result.Set("params", std::move(params));
+  if (!provider->protocol) {
+    return "";
   }
+  result.Set("protocol", *provider->protocol);
 
-  if (provider->selector) {
-    auto formats = Value::List();
-    for (auto& format : provider->selector->format) {
-      formats.Append(format);
-    }
-
-    auto fields = Value::List();
-
-    if (provider->selector->doctype) {
-      auto doctype = Value::Dict();
-      doctype.Set("name", "doctype");
-      doctype.Set("equals", provider->selector->doctype.value());
-      fields.Append(std::move(doctype));
-    }
-
-    for (auto& value : provider->selector->fields) {
-      auto field = Value::Dict();
-      field.Set("name", value->name);
-      if (value->equals) {
-        field.Set("equals", value->equals.value());
-      }
-      fields.Append(std::move(field));
-    }
-
-    result.Set("selector", Value::Dict().Set("fields", std::move(fields)));
-    result.Set("responseFormat", std::move(formats));
+  if (!provider->request) {
+    return "";
   }
+  result.Set("request", *provider->request);
 
-  if (provider->protocol) {
-    result.Set("protocol", *provider->protocol);
-  }
-
-  if (provider->request) {
-    result.Set("request", *provider->request);
-  }
-
-  if (provider->publicKey) {
-    result.Set("publicKey", *provider->publicKey);
-  }
-
-  return Value::Dict().Set("providers",
-                           Value::List().Append(std::move(result)));
+  base::Value::Dict out =
+      Value::Dict().Set("providers", Value::List().Append(std::move(result)));
+  return WriteJsonWithOptions(out, base::JSONWriter::OPTIONS_PRETTY_PRINT)
+      .value_or("");
 }
 
 void DigitalIdentityRequestImpl::Request(
@@ -145,6 +178,31 @@ void DigitalIdentityRequestImpl::Request(
 
   callback_ = std::move(callback);
 
+  std::optional<std::string> request_json_string =
+      digital_credential_provider->request;
+  std::string request_to_send =
+      BuildRequest(std::move(digital_credential_provider));
+
+  if (!request_json_string || request_to_send.empty()) {
+    CompleteRequest("", RequestStatusForMetrics::kErrorOther);
+    return;
+  }
+
+  data_decoder::DataDecoder::ParseJsonIsolated(
+      *request_json_string,
+      base::BindOnce(&DigitalIdentityRequestImpl::OnRequestJsonParsed,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     std::move(request_to_send)));
+}
+
+void DigitalIdentityRequestImpl::Abort() {
+  CompleteRequestWithStatus(RequestDigitalIdentityStatus::kErrorCanceled, "",
+                            RequestStatusForMetrics::kErrorAborted);
+}
+
+void DigitalIdentityRequestImpl::OnRequestJsonParsed(
+    std::string request_to_send,
+    data_decoder::DataDecoder::ValueOrError parsed_result) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kUseFakeUIForDigitalIdentity)) {
     // Post delayed task to enable testing abort.
@@ -157,27 +215,40 @@ void DigitalIdentityRequestImpl::Request(
     return;
   }
 
-  // provider_ is not destroyed after a successful wallet request so we need to
-  // have the nullcheck to avoid duplicated creation.
-  if (!provider_) {
-    provider_ = CreateProvider();
-  }
+  provider_ = CreateProvider();
   if (!provider_) {
     CompleteRequest("", RequestStatusForMetrics::kErrorOther);
     return;
   }
 
-  auto request = BuildRequest(std::move(digital_credential_provider));
-
+  bool is_only_requesting_age =
+      parsed_result.has_value() && IsOnlyRequestingAge(*parsed_result);
   provider_->Request(
-      WebContents::FromRenderFrameHost(&render_frame_host()), origin(), request,
-      base::BindOnce(&DigitalIdentityRequestImpl::CompleteRequest,
-                     weak_ptr_factory_.GetWeakPtr()));
+      WebContents::FromRenderFrameHost(&render_frame_host()), origin(),
+      request_to_send,
+      base::BindOnce(&DigitalIdentityRequestImpl::ShowInterstitialIfNeeded,
+                     weak_ptr_factory_.GetWeakPtr(), is_only_requesting_age));
 }
 
-void DigitalIdentityRequestImpl::Abort() {
-  CompleteRequestWithStatus(RequestDigitalIdentityStatus::kErrorCanceled, "",
-                            RequestStatusForMetrics::kErrorAborted);
+void DigitalIdentityRequestImpl::ShowInterstitialIfNeeded(
+    bool is_only_requesting_age,
+    const std::string& response,
+    RequestStatusForMetrics status_for_metrics) {
+  if (status_for_metrics != RequestStatusForMetrics::kSuccess) {
+    CompleteRequest("", status_for_metrics);
+    return;
+  }
+
+  if (!render_frame_host().IsActive()) {
+    CompleteRequest("", RequestStatusForMetrics::kErrorOther);
+    return;
+  }
+
+  GetContentClient()->browser()->ShowDigitalIdentityInterstitialIfNeeded(
+      *WebContents::FromRenderFrameHost(&render_frame_host()), origin(),
+      is_only_requesting_age,
+      base::BindOnce(&DigitalIdentityRequestImpl::CompleteRequest,
+                     weak_ptr_factory_.GetWeakPtr(), response));
 }
 
 std::unique_ptr<DigitalIdentityProvider>

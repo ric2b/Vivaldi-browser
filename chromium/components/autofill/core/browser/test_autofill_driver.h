@@ -75,7 +75,6 @@ class TestAutofillDriverTemplate : public T {
   void RendererShouldAcceptDataListSuggestion(
       const FieldGlobalId& field,
       const std::u16string& value) override {}
-  void RendererShouldClearFilledSection() override {}
   void RendererShouldClearPreviewedForm() override {}
   void RendererShouldTriggerSuggestions(
       const FieldGlobalId& field_id,
@@ -83,7 +82,6 @@ class TestAutofillDriverTemplate : public T {
   void RendererShouldSetSuggestionAvailability(
       const FieldGlobalId& field,
       mojom::AutofillSuggestionAvailability suggestion_availability) override {}
-  void PopupHidden() override {}
   net::IsolationInfo IsolationInfo() override { return isolation_info_; }
   void TriggerFormExtractionInDriverFrame() override {}
   void TriggerFormExtractionInAllFrames(

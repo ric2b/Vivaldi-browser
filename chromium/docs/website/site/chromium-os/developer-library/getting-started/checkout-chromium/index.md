@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/getting-started
-  - Chromium OS > Developer Library > Getting Started
+  - ChromiumOS > Getting Started
 page_name: checkout-chromium
 title: Checkout Chromium
 ---
@@ -136,7 +136,7 @@ Chromium binary.
 <div style="text-align: center; margin: 3rem 0 1rem 0;">
   <div style="margin: 0 1rem; display: inline-block;">
     <span style="margin-right: 0.5rem;"><</span>
-    <a href="/chromium-os/developer-library/getting-started/development-environment">Development Environment</a>
+    <a href="/chromium-os/developer-library/getting-started/setup-chromebook">Setup Chromebook</a>
   </div>
   <div style="margin: 0 1rem; display: inline-block;">
     <a href="/chromium-os/developer-library/getting-started/build-chromium">Build Chromium</a>

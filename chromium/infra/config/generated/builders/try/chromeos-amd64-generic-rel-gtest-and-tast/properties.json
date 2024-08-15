@@ -1,8 +1,7 @@
 {
   "$build/chromium_orchestrator": {
     "compilator": "chromeos-amd64-generic-rel-gtest-and-tast-compilator",
-    "compilator_watcher_git_revision": "27c191f304c8d7329a393d8a69020fc14032c3c3",
-    "propagate_properties_to_compilator": true
+    "compilator_watcher_git_revision": "27c191f304c8d7329a393d8a69020fc14032c3c3"
   },
   "$build/chromium_tests_builder_config": {
     "builder_config": {
@@ -15,7 +14,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "chromeos-amd64-generic-rel",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-chromiumos-archive",
@@ -40,6 +39,7 @@
               "legacy_gclient_config": {
                 "apply_configs": [
                   "chromeos",
+                  "chromium_with_telemetry_dependencies",
                   "checkout_lacros_sdk"
                 ],
                 "config": "chromium"
@@ -50,7 +50,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "chromeos-amd64-generic-rel-gtest",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-chromiumos-archive",
@@ -82,7 +82,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "chromeos-amd64-generic-rel",
-                "project": "chromium-m124"
+                "project": "chromium-m126"
               }
             }
           },
@@ -90,7 +90,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "chromeos-amd64-generic-rel-tast",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-chromiumos-archive",
@@ -122,7 +122,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "chromeos-amd64-generic-rel",
-                "project": "chromium-m124"
+                "project": "chromium-m126"
               }
             }
           }
@@ -132,19 +132,19 @@
         {
           "bucket": "ci",
           "builder": "chromeos-amd64-generic-rel",
-          "project": "chromium-m124"
+          "project": "chromium-m126"
         }
       ],
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
           "builder": "chromeos-amd64-generic-rel-gtest",
-          "project": "chromium-m124"
+          "project": "chromium-m126"
         },
         {
           "bucket": "ci",
           "builder": "chromeos-amd64-generic-rel-tast",
-          "project": "chromium-m124"
+          "project": "chromium-m126"
         }
       ]
     }
@@ -155,7 +155,6 @@
   },
   "$build/reclient": {
     "instance": "rbe-chromium-untrusted",
-    "jobs": 500,
     "metrics_project": "chromium-reclient-metrics",
     "scandeps_server": true
   },
@@ -166,7 +165,8 @@
     "enable_cloud_profiler": true,
     "enable_cloud_trace": true,
     "experiments": [],
-    "project": "rbe-chromium-untrusted"
+    "project": "rbe-chromium-untrusted",
+    "remote_jobs": -1
   },
   "$recipe_engine/resultdb/test_presentation": {
     "column_keys": [],

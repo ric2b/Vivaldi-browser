@@ -5,20 +5,20 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
+#include <xnnpack/math.h>
+#include <xnnpack/microfnptr.h>
 
 #include <algorithm>
 #include <cassert>
-#include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
+#include <functional>
 #include <random>
 #include <vector>
 
-#include <xnnpack.h>
-#include <xnnpack/aligned-allocator.h>
-#include <xnnpack/math.h>
-#include <xnnpack/params.h>
+#include "replicable_random_device.h"
+#include <gtest/gtest.h>
 
 // twiddle table for bfly4 for fft size 192 (complex numbers)
 // Even numbers are numpy.floor(0.5 + 32767 * numpy.cos(-2*pi*numpy.linspace(0, 255, num=256) / 256)).astype(numpy.int16).tolist()
@@ -84,9 +84,9 @@ static void xnn_cs16_bfly4_reference(
 {
   assert(batch != 0);
   assert(samples != 0);
-  assert(data != NULL);
+  assert(data != nullptr);
   assert(stride != 0);
-  assert(twiddle != NULL);
+  assert(twiddle != nullptr);
 
   int16_t* data0 = data;
   int16_t* data1 = data + samples * 2;
@@ -177,47 +177,46 @@ static void xnn_cs16_bfly4_reference(
 
 class BFly4MicrokernelTester {
  public:
-  inline BFly4MicrokernelTester& batch(size_t batch) {
+  BFly4MicrokernelTester& batch(size_t batch) {
     assert(batch != 0);
     this->batch_ = batch;
     return *this;
   }
 
-  inline size_t batch() const {
+  size_t batch() const {
     return this->batch_;
   }
 
-  inline BFly4MicrokernelTester& samples(size_t samples) {
+  BFly4MicrokernelTester& samples(size_t samples) {
     assert(samples != 0);
     this->samples_ = samples;
     return *this;
   }
 
-  inline size_t samples() const {
+  size_t samples() const {
     return this->samples_;
   }
 
-  inline BFly4MicrokernelTester& stride(uint32_t stride) {
+  BFly4MicrokernelTester& stride(uint32_t stride) {
     this->stride_ = stride;
     return *this;
   }
 
-  inline uint32_t stride() const {
+  uint32_t stride() const {
     return this->stride_;
   }
 
-  inline BFly4MicrokernelTester& iterations(size_t iterations) {
+  BFly4MicrokernelTester& iterations(size_t iterations) {
     this->iterations_ = iterations;
     return *this;
   }
 
-  inline size_t iterations() const {
+  size_t iterations() const {
     return this->iterations_;
   }
 
   void Test(xnn_cs16_bfly4_ukernel_fn bfly4) const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     auto i16rng = std::bind(std::uniform_int_distribution<int16_t>(), std::ref(rng));
     const size_t fft_size = samples() * stride() * 4;  // 4 for bfly4.
 

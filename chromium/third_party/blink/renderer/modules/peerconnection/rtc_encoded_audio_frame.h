@@ -9,6 +9,7 @@
 
 #include <optional>
 
+#include "base/types/expected.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
@@ -25,6 +26,7 @@ namespace blink {
 class DOMArrayBuffer;
 class RTCEncodedAudioFrameDelegate;
 class RTCEncodedAudioFrameMetadata;
+class RTCEncodedAudioFrameOptions;
 
 class MODULES_EXPORT RTCEncodedAudioFrame final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
@@ -34,7 +36,7 @@ class MODULES_EXPORT RTCEncodedAudioFrame final : public ScriptWrappable {
                                       ExceptionState& exception_state);
   static RTCEncodedAudioFrame* Create(
       RTCEncodedAudioFrame* original_frame,
-      RTCEncodedAudioFrameMetadata* new_metadata,
+      const RTCEncodedAudioFrameOptions* options_dict,
       ExceptionState& exception_state);
   explicit RTCEncodedAudioFrame(
       std::unique_ptr<webrtc::TransformableAudioFrameInterface> webrtc_frame);
@@ -47,12 +49,11 @@ class MODULES_EXPORT RTCEncodedAudioFrame final : public ScriptWrappable {
   std::optional<uint16_t> sequenceNumber() const;
   DOMArrayBuffer* data() const;
   RTCEncodedAudioFrameMetadata* getMetadata() const;
-  bool SetMetadata(const RTCEncodedAudioFrameMetadata* metadata,
-                   String& error_message);
+  base::expected<void, String> SetMetadata(
+      const RTCEncodedAudioFrameMetadata* metadata);
   void setMetadata(RTCEncodedAudioFrameMetadata* metadata,
                    ExceptionState& exception_state);
   void setData(DOMArrayBuffer*);
-  void setTimestamp(uint32_t timestamp, ExceptionState& exception_state);
   String toString() const;
 
   scoped_refptr<RTCEncodedAudioFrameDelegate> Delegate() const;

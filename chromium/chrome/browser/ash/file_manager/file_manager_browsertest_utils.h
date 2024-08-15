@@ -62,7 +62,7 @@ struct TestCase {
 
   TestCase& EnableSinglePartitionFormat();
 
-  TestCase& NewDirectoryTree();
+  TestCase& EnableMaterializedViews();
 
   // Show the startup browser. Some tests invoke the file picker dialog during
   // the test. Requesting a file picker from a background page is forbidden by
@@ -115,6 +115,8 @@ struct TestCase {
   TestCase& SetTestAccountType(TestAccountType test_account_type);
 
   TestCase& EnableCrosComponents();
+
+  TestCase& EnableSkyVault();
 
   std::string GetFullName() const;
 

@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: libchrome
 title: libchrome
 ---
@@ -314,11 +314,11 @@ the following.
 1.  Create a local branch in the libchrome repository.
     *   `cd src/platform/libchrome`
     *   `repo start ${branch_name}`
-1.  Locally modify the files, and create a local comit.
+1.  Locally modify the files, and create a local commit.
     *   `git commit -am "libchrome: {change description}"`
 1.  Find the git commit hash
     *   `git log -n 1`
-1.  Run `cros_workon-${BAORD} start libchrome` to use local HEAD.
+1.  Run `cros_workon-${BOARD} start libchrome` to use local HEAD.
 1.  Build and deploy libchrome
     *   `emerge-${BOARD} libchrome {plus dependent workon packages, e.g. shill}`
     *   `cros deploy ${IP} libchrome {other packages}`
@@ -328,7 +328,7 @@ the following.
 [libbase] on Google Git
 
 [libbase]: https://chromium.googlesource.com/chromium/src/base/
-[platform2]: ../platform2_primer.md
+[platform2]: /chromium-os/developer-library/guides/development/platform2-primer/
 [pkg-config]: https://www.freedesktop.org/wiki/Software/pkg-config/
 [linker script]: https://sourceware.org/binutils/docs/ld/Implicit-Linker-Scripts.html
 [chromium/src/base]: https://chromium.googlesource.com/chromium/src/base/

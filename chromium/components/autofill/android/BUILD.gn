@@ -143,6 +143,7 @@ android_resources("autofill_payments_java_resources") {
     "payments/java/res/drawable-xxxhdpi/visa_metadata_card.png",
     "payments/java/res/drawable/discover_card.xml",
     "payments/java/res/drawable/elo_card.xml",
+    "payments/java/res/drawable/iban_icon.xml",
     "payments/java/res/drawable/ic_credit_card_black.xml",
     "payments/java/res/drawable/ic_credit_card_primary.xml",
     "payments/java/res/drawable/ic_offer_tag.xml",
@@ -176,8 +177,8 @@ java_cpp_enum("autofill_core_browser_java_enums") {
     "../core/browser/metrics/payments/virtual_card_enrollment_metrics.h",
     "../core/browser/payments/card_unmask_challenge_option.h",
     "../core/browser/ui/payments/payments_bubble_closed_reasons.h",
-    "../core/browser/ui/popup_item_ids.h",
     "../core/browser/ui/suggestion.h",
+    "../core/browser/ui/suggestion_type.h",
   ]
 }
 
@@ -293,6 +294,7 @@ generate_jni("payments_jni_headers") {
     "java/src/org/chromium/components/autofill/payments/AutofillSaveCardUiInfo.java",
     "java/src/org/chromium/components/autofill/payments/BankAccount.java",
     "java/src/org/chromium/components/autofill/payments/LegalMessageLine.java",
+    "java/src/org/chromium/components/autofill/payments/PaymentInstrument.java",
   ]
 }
 

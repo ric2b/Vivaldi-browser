@@ -47,6 +47,7 @@
 #include "content/public/browser/web_contents.h"
 #include "net/base/schemeful_site.h"
 #include "services/device/public/cpp/device_features.h"
+#include "services/device/public/cpp/geolocation/buildflags.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/pointer/touch_ui_controller.h"
 #include "ui/base/ui_base_features.h"
@@ -63,7 +64,7 @@
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
 #endif
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
 #include "services/device/public/cpp/geolocation/geolocation_system_permission_manager.h"
 #include "services/device/public/cpp/geolocation/location_system_permission_status.h"
 #endif
@@ -383,71 +384,8 @@ void GetIconFromType(ContentSettingsType type,
                      bool blocked,
                      raw_ptr<const gfx::VectorIcon>* icon,
                      raw_ptr<const gfx::VectorIcon>* badge) {
-  if (features::IsChromeRefresh2023()) {
-    *badge = &gfx::kNoneIcon;
-    GetIconChromeRefresh(type, blocked, icon);
-    return;
-  }
-
-  *badge = (blocked ? &vector_icons::kBlockedBadgeIcon : &gfx::kNoneIcon);
-  switch (type) {
-    case ContentSettingsType::COOKIES:
-      *icon = &vector_icons::kDatabaseIcon;
-      return;
-    case ContentSettingsType::IMAGES:
-      *icon = &vector_icons::kPhotoIcon;
-      return;
-    case ContentSettingsType::JAVASCRIPT:
-      *icon = &vector_icons::kCodeIcon;
-      return;
-    case ContentSettingsType::MIXEDSCRIPT:
-      *icon = &kMixedContentIcon;
-      return;
-    case ContentSettingsType::SOUND: {
-      bool touch_ui = ui::TouchUiController::Get()->touch_ui();
-      *icon = (touch_ui ? &kTabAudioRoundedIcon : &kTabAudioIcon);
-      return;
-    }
-    case ContentSettingsType::ADS:
-      *icon = &vector_icons::kAdsIcon;
-      return;
-    case ContentSettingsType::GEOLOCATION:
-      *icon = &vector_icons::kLocationOnIcon;
-      return;
-    case ContentSettingsType::PROTOCOL_HANDLERS:
-      *icon = &vector_icons::kProtocolHandlerIcon;
-      return;
-    case ContentSettingsType::MIDI_SYSEX:
-      *icon = &vector_icons::kMidiIcon;
-      return;
-    case ContentSettingsType::AUTOMATIC_DOWNLOADS:
-      *icon = &vector_icons::kFileDownloadIcon;
-      return;
-    case ContentSettingsType::CLIPBOARD_READ_WRITE:
-      *icon = &vector_icons::kContentPasteIcon;
-      return;
-    case ContentSettingsType::MEDIASTREAM_MIC:
-      *icon = &vector_icons::kMicIcon;
-      return;
-    case ContentSettingsType::MEDIASTREAM_CAMERA:
-      *icon = &vector_icons::kVideocamIcon;
-      return;
-    case ContentSettingsType::NOTIFICATIONS:
-      *icon = &vector_icons::kNotificationsOffIcon;
-      return;
-    case ContentSettingsType::SENSORS:
-      *icon = &vector_icons::kSensorsIcon;
-      return;
-    case ContentSettingsType::STORAGE_ACCESS:
-      *icon = &vector_icons::kStorageAccessIcon;
-      return;
-    case ContentSettingsType::POPUPS:
-      *icon = &kWebIcon;
-      return;
-    default:
-      NOTREACHED();
-      return;
-  }
+  *badge = &gfx::kNoneIcon;
+  GetIconChromeRefresh(type, blocked, icon);
 }
 
 }  // namespace
@@ -626,13 +564,8 @@ void ContentSettingImageModel::SetIcon(ContentSettingsType type, bool blocked) {
 }
 
 void ContentSettingImageModel::SetFramebustBlockedIcon() {
-  if (features::IsChromeRefresh2023()) {
-    icon_ = &kOpenInNewOffChromeRefreshIcon;
-    icon_badge_ = &gfx::kNoneIcon;
-  } else {
-    icon_ = &kBlockedRedirectIcon;
-    icon_badge_ = &vector_icons::kBlockedBadgeIcon;
-  }
+  icon_ = &kOpenInNewOffChromeRefreshIcon;
+  icon_badge_ = &gfx::kNoneIcon;
 }
 
 // Generic blocked content settings --------------------------------------------
@@ -676,7 +609,7 @@ bool ContentSettingBlockedImageModel::UpdateAndGetVisibility(
     return false;
   }
 
-  // TODO(crbug.com/1054460): Handle first-party blocking with new ui.
+  // TODO(crbug.com/40675739): Handle first-party blocking with new ui.
   if (type == ContentSettingsType::COOKIES &&
       CookieSettingsFactory::GetForProfile(profile)
           ->ShouldBlockThirdPartyCookies()) {
@@ -721,9 +654,11 @@ bool ContentSettingGeolocationImageModel::UpdateAndGetVisibility(
     return false;
   }
 
+  // Reset the explanatory string in all cases.
+  set_explanatory_string_id(0);
+
   if (is_allowed) {
     if (!IsGeolocationAllowedOnASystemLevel()) {
-      set_explanatory_string_id(0);
       SetIcon(ContentSettingsType::GEOLOCATION, /*blocked=*/true);
       base::RecordAction(base::UserMetricsAction(
           "ContentSettings.Geolocation.BlockedIconShown"));
@@ -796,7 +731,7 @@ bool ContentSettingGeolocationImageModel::UpdateAndGetVisibility(
 }
 
 bool ContentSettingGeolocationImageModel::IsGeolocationAllowedOnASystemLevel() {
-#if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_CHROMEOS)
+#if !BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
   return true;
 #else
   device::GeolocationSystemPermissionManager*
@@ -811,7 +746,7 @@ bool ContentSettingGeolocationImageModel::IsGeolocationAllowedOnASystemLevel() {
 }
 
 bool ContentSettingGeolocationImageModel::IsGeolocationPermissionDetermined() {
-#if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_CHROMEOS)
+#if !BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
   return true;
 #else
 
@@ -967,7 +902,7 @@ bool ContentSettingMediaImageModel::UpdateAndGetVisibility(
 
   // If neither the microphone nor the camera stream was accessed then no icon
   // is displayed in the omnibox.
-  if (state_.Empty()) {
+  if (state_.empty()) {
     return false;
   }
 
@@ -1320,7 +1255,7 @@ bool ContentSettingNotificationsImageModel::UpdateAndGetVisibility(
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
 
   // We shouldn't show the icon unless we're a PWA.
-  // TODO(crbug.com/1221189): Allow PermissionRequestManager to identify the
+  // TODO(crbug.com/40186737): Allow PermissionRequestManager to identify the
   // correct UI style of a permission prompt.
   const bool quiet_icon_allowed = web_app::AppBrowserController::IsWebApp(
       chrome::FindBrowserWithTab(web_contents));

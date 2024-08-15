@@ -149,17 +149,6 @@ void CSSToStyleMap::MapFillOrigin(StyleResolverState&,
   layer->SetOrigin(identifier_value->ConvertTo<EFillBox>());
 }
 
-namespace {
-
-CSSPropertyID MaskImageProperty() {
-  if (!RuntimeEnabledFeatures::CSSMaskingInteropEnabled()) {
-    return CSSPropertyID::kWebkitMaskImage;
-  }
-  return CSSPropertyID::kMaskImage;
-}
-
-}  // namespace
-
 void CSSToStyleMap::MapFillImage(StyleResolverState& state,
                                  FillLayer* layer,
                                  const CSSValue& value) {
@@ -170,7 +159,7 @@ void CSSToStyleMap::MapFillImage(StyleResolverState& state,
 
   CSSPropertyID property = layer->GetType() == EFillLayerType::kBackground
                                ? CSSPropertyID::kBackgroundImage
-                               : MaskImageProperty();
+                               : CSSPropertyID::kMaskImage;
   layer->SetImage(
       state.GetStyleImage(property, state.ResolveLightDarkPair(value)));
 }
@@ -671,23 +660,21 @@ void CSSToStyleMap::MapNinePieceImage(StyleResolverState& state,
     // about percentages, since we don't even support those on real borders yet.
     if (image.BorderSlices().Top().IsLength() &&
         image.BorderSlices().Top().length().IsFixed()) {
-      builder.SetBorderTopWidth(
-          LayoutUnit(image.BorderSlices().Top().length().Pixels()));
+      builder.SetBorderTopWidth(image.BorderSlices().Top().length().Pixels());
     }
     if (image.BorderSlices().Right().IsLength() &&
         image.BorderSlices().Right().length().IsFixed()) {
       builder.SetBorderRightWidth(
-          LayoutUnit(image.BorderSlices().Right().length().Pixels()));
+          image.BorderSlices().Right().length().Pixels());
     }
     if (image.BorderSlices().Bottom().IsLength() &&
         image.BorderSlices().Bottom().length().IsFixed()) {
       builder.SetBorderBottomWidth(
-          LayoutUnit(image.BorderSlices().Bottom().length().Pixels()));
+          image.BorderSlices().Bottom().length().Pixels());
     }
     if (image.BorderSlices().Left().IsLength() &&
         image.BorderSlices().Left().length().IsFixed()) {
-      builder.SetBorderLeftWidth(
-          LayoutUnit(image.BorderSlices().Left().length().Pixels()));
+      builder.SetBorderLeftWidth(image.BorderSlices().Left().length().Pixels());
     }
   }
 }

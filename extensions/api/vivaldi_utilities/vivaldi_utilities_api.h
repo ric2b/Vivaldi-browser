@@ -16,6 +16,7 @@
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/shell_integration.h"
 #include "components/download/public/common/download_item.h"
+#include "components/history/core/browser/top_sites_observer.h"
 #include "content/public/browser/download_manager.h"
 #include "extensions/browser/api/file_system/file_system_api.h"
 #include "extensions/browser/app_window/app_window.h"
@@ -41,7 +42,8 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
                             public base::PowerStateObserver,
                             public base::PowerSuspendObserver,
                             public content::DownloadManager::Observer,
-                            public download::DownloadItem::Observer {
+                            public download::DownloadItem::Observer,
+                            public history::TopSitesObserver {
  public:
   using MutexAvailableCallback = base::OnceCallback<void(int)>;
 
@@ -114,6 +116,12 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
 
   // Set RGB color of the configured Razer Chroma devices.
   bool SetRazerChromaColors(RazerChromaColors& colors);
+
+  //history::TopSitesObserver
+  void TopSitesLoaded(history::TopSites* top_sites) override;
+  void TopSitesChanged(
+      history::TopSites* top_sites,
+      history::TopSitesObserver::ChangeReason change_reason) override;
 
   class DialogPosition {
    public:

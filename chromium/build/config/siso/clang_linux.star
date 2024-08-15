@@ -124,6 +124,9 @@ def __step_config(ctx, step_config):
         ],
     })
     step_config["input_deps"].update(clang_all.input_deps)
+
+    # Disable remote compiles on Clang ToT builds.
+    remote = not config.get(ctx, "clang-tot")
     step_config["rules"].extend([
         {
             "name": "clang/cxx",
@@ -133,7 +136,7 @@ def __step_config(ctx, step_config):
                 "third_party/llvm-build/Release+Asserts/bin/clang++",
             ],
             "exclude_input_patterns": ["*.stamp"],
-            "remote": True,
+            "remote": remote,
             "canonicalize_dir": True,
             "timeout": "2m",
         },
@@ -145,7 +148,18 @@ def __step_config(ctx, step_config):
                 "third_party/llvm-build/Release+Asserts/bin/clang",
             ],
             "exclude_input_patterns": ["*.stamp"],
-            "remote": True,
+            "remote": remote,
+            "canonicalize_dir": True,
+            "timeout": "2m",
+        },
+        {
+            "name": "clang/asm",
+            "action": "(.*_)?asm",
+            "command_prefix": "../../third_party/llvm-build/Release+Asserts/bin/clang",
+            "inputs": [
+                "third_party/llvm-build/Release+Asserts/bin/clang",
+            ],
+            "remote": remote and config.get(ctx, "cog"),
             "canonicalize_dir": True,
             "timeout": "2m",
         },
@@ -158,7 +172,7 @@ def __step_config(ctx, step_config):
             ],
             "exclude_input_patterns": ["*.stamp"],
             "handler": "clang_compile_coverage",
-            "remote": True,
+            "remote": remote,
             "canonicalize_dir": True,
             "timeout": "2m",
         },
@@ -171,7 +185,7 @@ def __step_config(ctx, step_config):
             ],
             "exclude_input_patterns": ["*.stamp"],
             "handler": "clang_compile_coverage",
-            "remote": True,
+            "remote": remote,
             "canonicalize_dir": True,
             "timeout": "2m",
         },
@@ -196,6 +210,7 @@ def __step_config(ctx, step_config):
                     "*.stamp",
                 ],
                 "remote": config.get(ctx, "remote-library-link"),
+                "canonicalize_dir": True,
                 "platform_ref": "large",
                 "accumulate": True,
             },
@@ -219,6 +234,7 @@ def __step_config(ctx, step_config):
                     "*.stamp",
                 ],
                 "remote": config.get(ctx, "remote-library-link"),
+                "canonicalize_dir": True,
                 "platform_ref": "large",
             },
             {
@@ -241,7 +257,9 @@ def __step_config(ctx, step_config):
                     "*.stamp",
                 ],
                 "remote": config.get(ctx, "remote-exec-link"),
+                "canonicalize_dir": True,
                 "platform_ref": "large",
+                "timeout": "10m",
             },
         ])
     return step_config

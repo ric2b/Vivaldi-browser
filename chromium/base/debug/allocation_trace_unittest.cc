@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/debug/allocation_trace.h"
 
 #include <algorithm>
@@ -81,7 +86,7 @@ class AllocationTraceRecorderTest : public Test {
       MTEMode mte_mode = MTEMode::kUndefined) {
     return AllocationNotificationData(address, size, nullptr,
                                       AllocationSubsystem::kPartitionAllocator)
-#if BUILDFLAG(HAS_MEMORY_TAGGING)
+#if PA_BUILDFLAG(HAS_MEMORY_TAGGING)
         .SetMteReportingMode(mte_mode)
 #endif
         ;
@@ -91,7 +96,7 @@ class AllocationTraceRecorderTest : public Test {
                                       MTEMode mte_mode = MTEMode::kUndefined) {
     return FreeNotificationData(address,
                                 AllocationSubsystem::kPartitionAllocator)
-#if BUILDFLAG(HAS_MEMORY_TAGGING)
+#if PA_BUILDFLAG(HAS_MEMORY_TAGGING)
         .SetMteReportingMode(mte_mode)
 #endif
         ;

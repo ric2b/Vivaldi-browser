@@ -128,6 +128,27 @@ const StyledTextTheme StyledTextTheme::kDefaultDark{
         /* bold */ std::nullopt,
         /* underlined */ std::nullopt,
     },
+    /* kind_comment */
+    StyledTextTheme::Attributes{
+        /* foreground */ Color{106, 153, 85},
+        /* background */ std::nullopt,
+        /* bold */ std::nullopt,
+        /* underlined */ std::nullopt,
+    },
+    /* kind_label */
+    StyledTextTheme::Attributes{
+        /* foreground */ Color{180, 140, 140},
+        /* background */ std::nullopt,
+        /* bold */ std::nullopt,
+        /* underlined */ std::nullopt,
+    },
+    /* kind_instruction */
+    StyledTextTheme::Attributes{
+        /* foreground */ Color{220, 220, 170},
+        /* background */ std::nullopt,
+        /* bold */ std::nullopt,
+        /* underlined */ std::nullopt,
+    },
     /* kind_squiggle */
     StyledTextTheme::Attributes{
         /* foreground */ Color{0, 200, 255},
@@ -235,6 +256,27 @@ const StyledTextTheme StyledTextTheme::kDefaultLight{
         /* bold */ std::nullopt,
         /* underlined */ std::nullopt,
     },
+    /* kind_comment */
+    StyledTextTheme::Attributes{
+        /* foreground */ Color{0, 128, 0},
+        /* background */ std::nullopt,
+        /* bold */ std::nullopt,
+        /* underlined */ std::nullopt,
+    },
+    /* kind_label */
+    StyledTextTheme::Attributes{
+        /* foreground */ Color{180, 140, 140},
+        /* background */ std::nullopt,
+        /* bold */ std::nullopt,
+        /* underlined */ std::nullopt,
+    },
+    /* kind_instruction */
+    StyledTextTheme::Attributes{
+        /* foreground */ Color{121, 94, 38},
+        /* background */ std::nullopt,
+        /* bold */ std::nullopt,
+        /* underlined */ std::nullopt,
+    },
     /* kind_squiggle */
     StyledTextTheme::Attributes{
         /* foreground */ Color{0, 200, 255},
@@ -294,6 +336,12 @@ StyledTextTheme::Attributes StyledTextTheme::Get(TextStyle text_style) const {
                 apply(kind_literal);
             } else if (text_style.IsAttribute()) {
                 apply(kind_attribute);
+            } else if (text_style.IsComment()) {
+                apply(kind_comment);
+            } else if (text_style.IsLabel()) {
+                apply(kind_label);
+            } else if (text_style.IsInstruction()) {
+                apply(kind_instruction);
             }
         }
         if (text_style.IsSquiggle()) {

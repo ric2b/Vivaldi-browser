@@ -4,8 +4,8 @@
 
 #include "partition_alloc/partition_alloc_base/log_message.h"
 
-// TODO(1151236): After finishing copying //base files to PA library, remove
-// defined(BASE_CHECK_H_) from here.
+// TODO(crbug.com/40158212): After finishing copying //base files to PA library,
+// remove defined(BASE_CHECK_H_) from here.
 #if defined(                                                                                 \
     BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_CHECK_H_) || \
     defined(BASE_CHECK_H_) ||                                                                \
@@ -14,7 +14,7 @@
 #error "log_message.h should not include check.h"
 #endif
 
-#include "build/build_config.h"
+#include "partition_alloc/build_config.h"
 #include "partition_alloc/partition_alloc_base/component_export.h"
 #include "partition_alloc/partition_alloc_base/debug/alias.h"
 #include "partition_alloc/partition_alloc_base/debug/stack_trace.h"
@@ -25,10 +25,9 @@
 #include "partition_alloc/partition_alloc_base/strings/stringprintf.h"
 
 #if BUILDFLAG(IS_WIN)
-
-#include <io.h>
 #include <windows.h>
 
+#include <io.h>
 #endif
 
 #if BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
@@ -64,13 +63,13 @@ LogMessageHandlerFunction g_log_message_handler = nullptr;
 
 }  // namespace
 
-#if BUILDFLAG(PA_DCHECK_IS_CONFIGURABLE)
+#if PA_BUILDFLAG(PA_DCHECK_IS_CONFIGURABLE)
 // In DCHECK-enabled Chrome builds, allow the meaning of LOGGING_DCHECK to be
 // determined at run-time. We default it to ERROR, to avoid it triggering
 // crashes before the run-time has explicitly chosen the behaviour.
 PA_COMPONENT_EXPORT(PARTITION_ALLOC_BASE)
 logging::LogSeverity LOGGING_DCHECK = LOGGING_ERROR;
-#endif  // BUILDFLAG(PA_DCHECK_IS_CONFIGURABLE)
+#endif  // PA_BUILDFLAG(PA_DCHECK_IS_CONFIGURABLE)
 
 // This is never instantiated, it's just used for EAT_STREAM_PARAMETERS to have
 // an object of the correct type on the LHS of the unused part of the ternary
@@ -111,11 +110,11 @@ LogMessage::~LogMessage() {
   // Always use RawLog() if g_log_message_handler doesn't filter messages.
   RawLog(severity_, str_newline);
 
-  // TODO(1293552): Enable a stack trace on a fatal on fuchsia.
+  // TODO(crbug.com/40213558): Enable a stack trace on a fatal on fuchsia.
 #if !defined(OFFICIAL_BUILD) && (BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_WIN)) && \
     !defined(__UCLIBC__) && !BUILDFLAG(IS_AIX)
-  // TODO(1293552): Show a stack trace on a fatal, unless a debugger is
-  // attached.
+  // TODO(crbug.com/40213558): Show a stack trace on a fatal, unless a debugger
+  // is attached.
   if (severity_ == LOGGING_FATAL) {
     constexpr size_t kMaxTracesOfLoggingFatal = 32u;
     const void* traces[kMaxTracesOfLoggingFatal];
@@ -138,7 +137,7 @@ void LogMessage::Init(const char* file, int line) {
   {
     // TODO(darin): It might be nice if the columns were fixed width.
     stream_ << '[';
-    // TODO(1151236): show process id, thread id, timestamp and so on
+    // TODO(crbug.com/40158212): show process id, thread id, timestamp and so on
     // if needed.
     if (severity_ >= 0) {
       stream_ << log_severity_name(severity_);

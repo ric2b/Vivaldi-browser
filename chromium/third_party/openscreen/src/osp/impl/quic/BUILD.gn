@@ -4,25 +4,68 @@
 
 import("../../../gni/openscreen.gni")  #
 
-if (!is_win && !is_mac) {
+if (!is_win) {
   visibility = [ "./*" ]
+
+  config("quic_internal_config") {
+    cflags = []
+    if (is_clang) {
+      cflags += [
+        "-Wno-implicit-int-float-conversion",
+        "-Wno-shadow-field",
+        "-Wno-shadow-uncaptured-local",
+      ]
+    }
+  }
 
   openscreen_source_set("quic") {
     visibility += [ "../*" ]
-    public = [ "quic_connection.h" ]
-    sources = [
-      "quic_client.cc",
+    public = [
       "quic_client.h",
-      "quic_connection_factory.h",
-      "quic_server.cc",
+      "quic_connection.h",
+      "quic_connection_factory_client.h",
+      "quic_connection_factory_server.h",
       "quic_server.h",
+      "quic_stream.h",
+    ]
+    sources = [
+      "open_screen_client_session.cc",
+      "open_screen_client_session.h",
+      "open_screen_server_session.cc",
+      "open_screen_server_session.h",
+      "open_screen_session_base.cc",
+      "open_screen_session_base.h",
+      "quic_alarm_factory_impl.cc",
+      "quic_alarm_factory_impl.h",
+      "quic_client.cc",
+      "quic_connection_factory_base.cc",
+      "quic_connection_factory_base.h",
+      "quic_connection_factory_client.cc",
+      "quic_connection_factory_server.cc",
+      "quic_connection_impl.cc",
+      "quic_connection_impl.h",
+      "quic_constants.h",
+      "quic_dispatcher_impl.cc",
+      "quic_dispatcher_impl.h",
+      "quic_packet_writer_impl.cc",
+      "quic_packet_writer_impl.h",
+      "quic_server.cc",
       "quic_service_common.cc",
       "quic_service_common.h",
+      "quic_stream_impl.cc",
+      "quic_stream_impl.h",
+      "quic_utils.cc",
+      "quic_utils.h",
+      "quic_version_manager.cc",
+      "quic_version_manager.h",
     ]
+
+    configs = [ ":quic_internal_config" ]
 
     deps = [
       "../../../platform",
       "../../../third_party/abseil",
+      "../../../third_party/quiche",
       "../../../util",
       "../../public",
     ]
@@ -55,6 +98,7 @@ if (!is_win && !is_mac) {
     deps = [
       "../../../third_party/abseil",
       "../../../third_party/googletest:gmock",
+      "../../../third_party/quiche",
       "../../../util",
       "../../msgs",
     ]

@@ -264,7 +264,8 @@ ExtensionFunction::ResponseAction WebViewPrivateSendRequestFunction::Run() {
   }
   url_params.extra_headers = params->extra_headers;
 
-  guest_->NavigateGuest(params->url, true, transition, url_params);
+  guest_->NavigateGuest(params->url, /* navigation_handle = */ {}, true,
+                        transition, url_params);
   return RespondNow(NoArguments());
 }
 

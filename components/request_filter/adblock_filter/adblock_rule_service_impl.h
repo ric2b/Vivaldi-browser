@@ -14,7 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "components/ad_blocker/adblock_known_sources_handler_impl.h"
-#include "components/ad_blocker/adblock_metadata.h"
+#include "components/ad_blocker/adblock_types.h"
 #include "components/ad_blocker/adblock_resources.h"
 #include "components/ad_blocker/adblock_rule_manager_impl.h"
 #include "components/ad_blocker/adblock_rule_service_storage.h"

@@ -783,7 +783,7 @@ TEST_F(ServiceWorkerRegistryTest, StoreFindUpdateDeleteRegistration) {
   blink::mojom::ServiceWorkerRegistrationOptions options;
   options.scope = kScope;
   scoped_refptr<ServiceWorkerRegistration> live_registration =
-      base::MakeRefCounted<ServiceWorkerRegistration>(
+      ServiceWorkerRegistration::Create(
           options, kKey, kRegistrationId, context()->AsWeakPtr(),
           blink::mojom::AncestorFrameType::kNormalFrame);
   scoped_refptr<ServiceWorkerVersion> live_version =
@@ -940,7 +940,7 @@ TEST_F(ServiceWorkerRegistryTest, StoreFindUpdateDeleteRegistration) {
 
   // Trying to update a unstored registration to active should fail.
   scoped_refptr<ServiceWorkerRegistration> unstored_registration =
-      new ServiceWorkerRegistration(
+      ServiceWorkerRegistration::Create(
           options, kKey, kRegistrationId + 1, context()->AsWeakPtr(),
           blink::mojom::AncestorFrameType::kNormalFrame);
   EXPECT_EQ(blink::ServiceWorkerStatusCode::kErrorNotFound,
@@ -2920,7 +2920,7 @@ TEST_F(ServiceWorkerRegistryOriginTrialsTest, FromMainScript) {
   blink::mojom::ServiceWorkerRegistrationOptions options;
   options.scope = kScope;
   scoped_refptr<ServiceWorkerRegistration> registration =
-      new ServiceWorkerRegistration(
+      ServiceWorkerRegistration::Create(
           options, kKey, kRegistrationId, context()->AsWeakPtr(),
           blink::mojom::AncestorFrameType::kNormalFrame);
   scoped_refptr<ServiceWorkerVersion> version = new ServiceWorkerVersion(
@@ -3235,13 +3235,13 @@ TEST_F(ServiceWorkerRegistryResourceTest, DeleteRegistration_ActiveVersion) {
   registry()->UpdateToActiveState(registration_->id(), registration_->key(),
                                   base::DoNothing());
   ServiceWorkerRemoteContainerEndpoint remote_endpoint;
-  base::WeakPtr<ServiceWorkerContainerHost> container_host =
-      CreateContainerHostForWindow(
+  base::WeakPtr<ServiceWorkerClient> service_worker_client =
+      CreateServiceWorkerClientForWindow(
           GlobalRenderFrameHostId(/*mock process_id=*/33,
                                   /*mock frame_routing_id=*/1),
           /*is_parent_frame_secure=*/true, context()->AsWeakPtr(),
           &remote_endpoint);
-  registration_->active_version()->AddControllee(container_host.get());
+  registration_->active_version()->AddControllee(service_worker_client.get());
 
   // Deleting the registration should move the resources to the purgeable list
   // but keep them available.
@@ -3256,7 +3256,7 @@ TEST_F(ServiceWorkerRegistryResourceTest, DeleteRegistration_ActiveVersion) {
   base::RunLoop loop;
   storage_control()->SetPurgingCompleteCallbackForTest(loop.QuitClosure());
   registration_->active_version()->RemoveControllee(
-      container_host->client_uuid());
+      service_worker_client->client_uuid());
   registration_->active_version()->Doom();
   loop.Run();
   EXPECT_TRUE(GetPurgeableResourceIds().empty());
@@ -3272,13 +3272,13 @@ TEST_F(ServiceWorkerRegistryResourceTest, UpdateRegistration) {
   registry()->UpdateToActiveState(registration_->id(), registration_->key(),
                                   base::DoNothing());
   ServiceWorkerRemoteContainerEndpoint remote_endpoint;
-  base::WeakPtr<ServiceWorkerContainerHost> container_host =
-      CreateContainerHostForWindow(
+  base::WeakPtr<ServiceWorkerClient> service_worker_client =
+      CreateServiceWorkerClientForWindow(
           GlobalRenderFrameHostId(/*mock process_id=*/33,
                                   /*mock frame_routing_id=*/1),
           /*is_parent_frame_secure=*/true, context()->AsWeakPtr(),
           &remote_endpoint);
-  registration_->active_version()->AddControllee(container_host.get());
+  registration_->active_version()->AddControllee(service_worker_client.get());
 
   // Make an updated registration.
   scoped_refptr<ServiceWorkerVersion> live_version =
@@ -3309,7 +3309,7 @@ TEST_F(ServiceWorkerRegistryResourceTest, UpdateRegistration) {
   storage_control()->SetPurgingCompleteCallbackForTest(loop.QuitClosure());
   scoped_refptr<ServiceWorkerVersion> old_version(
       registration_->active_version());
-  old_version->RemoveControllee(container_host->client_uuid());
+  old_version->RemoveControllee(service_worker_client->client_uuid());
   registration_->ActivateWaitingVersionWhenReady();
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, old_version->status());
 
@@ -3365,13 +3365,13 @@ TEST_F(ServiceWorkerRegistryResourceTest, CleanupOnRestart) {
   registry()->UpdateToActiveState(registration_->id(), registration_->key(),
                                   base::DoNothing());
   ServiceWorkerRemoteContainerEndpoint remote_endpoint;
-  base::WeakPtr<ServiceWorkerContainerHost> container_host =
-      CreateContainerHostForWindow(
+  base::WeakPtr<ServiceWorkerClient> service_worker_client =
+      CreateServiceWorkerClientForWindow(
           GlobalRenderFrameHostId(/*mock process_id=*/33,
                                   /*mock frame_routing_id=*/1),
           /*is_parent_frame_secure=*/true, context()->AsWeakPtr(),
           &remote_endpoint);
-  registration_->active_version()->AddControllee(container_host.get());
+  registration_->active_version()->AddControllee(service_worker_client.get());
 
   // Deleting the registration should move the resources to the purgeable list
   // but keep them available.

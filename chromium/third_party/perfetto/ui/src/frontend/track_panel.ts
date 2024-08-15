@@ -32,10 +32,14 @@ import {Panel} from './panel_container';
 import {verticalScrollToTrack} from './scroll_helper';
 import {drawVerticalLineAtTime} from './vertical_line_helper';
 import {classNames} from '../base/classnames';
-import {Button} from '../widgets/button';
+import {Button, ButtonBar} from '../widgets/button';
 import {Popup} from '../widgets/popup';
 import {canvasClip} from '../common/canvas_utils';
 import {TimeScale} from './time_scale';
+import {getLegacySelection} from '../common/state';
+import {CloseTrackButton} from './close_track_button';
+import {exists} from '../base/utils';
+import {Intent} from '../widgets/common';
 
 function getTitleSize(title: string): string | undefined {
   const length = title.length;
@@ -62,7 +66,7 @@ function isPinned(id: string) {
 }
 
 function isSelected(id: string) {
-  const selection = globals.state.currentSelection;
+  const selection = getLegacySelection(globals.state);
   if (selection === null || selection.kind !== 'AREA') return false;
   const selectedArea = globals.state.areas[selection.areaId];
   return selectedArea.tracks.includes(id);
@@ -96,7 +100,7 @@ export class CrashButton implements m.ClassComponent<CrashButtonAttrs> {
       {
         trigger: m(Button, {
           icon: Icons.Crashed,
-          minimal: true,
+          compact: true,
         }),
       },
       this.renderErrorMessage(attrs.error),
@@ -109,6 +113,7 @@ export class CrashButton implements m.ClassComponent<CrashButtonAttrs> {
       'This track has crashed',
       m(Button, {
         label: 'Re-raise exception',
+        intent: Intent.Primary,
         className: Popup.DISMISS_POPUP_GROUP_CLASS,
         onclick: () => {
           throw error;
@@ -143,6 +148,9 @@ class TrackShell implements m.ClassComponent<TrackShellAttrs> {
       }
     }
 
+    const currentSelection = getLegacySelection(globals.state);
+    const pinned = isPinned(attrs.trackKey);
+
     return m(
       `.track-shell[draggable=true]`,
       {
@@ -158,52 +166,55 @@ class TrackShell implements m.ClassComponent<TrackShellAttrs> {
         ondrop: (e: DragEvent) => this.ondrop(e, attrs.trackKey),
       },
       m(
-        'h1',
-        {
-          title: attrs.title,
-          style: {
-            'font-size': getTitleSize(attrs.title),
+        '.track-menubar',
+        m(
+          'h1',
+          {
+            title: attrs.title,
+            style: {
+              'font-size': getTitleSize(attrs.title),
+            },
           },
-        },
-        attrs.title,
-        renderChips(attrs.tags),
-      ),
-      m(
-        '.track-buttons',
-        attrs.buttons,
-        m(TrackButton, {
-          action: () => {
-            globals.dispatch(
-              Actions.toggleTrackPinned({trackKey: attrs.trackKey}),
-            );
-          },
-          i: Icons.Pin,
-          filledIcon: isPinned(attrs.trackKey),
-          tooltip: isPinned(attrs.trackKey) ? 'Unpin' : 'Pin to top',
-          showButton: isPinned(attrs.trackKey),
-          fullHeight: true,
-        }),
-        globals.state.currentSelection !== null &&
-          globals.state.currentSelection.kind === 'AREA'
-          ? m(TrackButton, {
-              action: (e: MouseEvent) => {
-                globals.dispatch(
-                  Actions.toggleTrackSelection({
-                    id: attrs.trackKey,
-                    isTrackGroup: false,
-                  }),
-                );
-                e.stopPropagation();
-              },
-              i: isSelected(attrs.trackKey)
-                ? Icons.Checkbox
-                : Icons.BlankCheckbox,
-              tooltip: isSelected(attrs.trackKey)
-                ? 'Remove track'
-                : 'Add track to selection',
-              showButton: true,
-            })
-          : '',
+          attrs.title,
+          renderChips(attrs.tags),
+        ),
+        m(
+          ButtonBar,
+          {className: 'track-buttons'},
+          attrs.buttons,
+          m(Button, {
+            className: classNames(!pinned && 'pf-visible-on-hover'),
+            onclick: () => {
+              globals.dispatch(
+                Actions.toggleTrackPinned({trackKey: attrs.trackKey}),
+              );
+            },
+            icon: Icons.Pin,
+            iconFilled: pinned,
+            title: pinned ? 'Unpin' : 'Pin to top',
+            compact: true,
+          }),
+          currentSelection !== null && currentSelection.kind === 'AREA'
+            ? m(Button, {
+                onclick: (e: MouseEvent) => {
+                  globals.dispatch(
+                    Actions.toggleTrackSelection({
+                      id: attrs.trackKey,
+                      isTrackGroup: false,
+                    }),
+                  );
+                  e.stopPropagation();
+                },
+                compact: true,
+                icon: isSelected(attrs.trackKey)
+                  ? Icons.Checkbox
+                  : Icons.BlankCheckbox,
+                title: isSelected(attrs.trackKey)
+                  ? 'Remove track'
+                  : 'Add track to selection',
+              })
+            : '',
+        ),
       ),
     );
   }
@@ -261,6 +272,7 @@ class TrackShell implements m.ClassComponent<TrackShellAttrs> {
 export interface TrackContentAttrs {
   track: Track;
   hasError?: boolean;
+  height?: number;
 }
 export class TrackContent implements m.ClassComponent<TrackContentAttrs> {
   private mouseDownX?: number;
@@ -272,6 +284,9 @@ export class TrackContent implements m.ClassComponent<TrackContentAttrs> {
     return m(
       '.track-content',
       {
+        style: exists(attrs.height) && {
+          height: `${attrs.height}px`,
+        },
         className: classNames(attrs.hasError && 'pf-track-content-error'),
         onmousemove: (e: MouseEvent) => {
           attrs.track.onMouseMove?.(currentTargetOffset(e));
@@ -328,6 +343,7 @@ interface TrackComponentAttrs {
   tags?: TrackTags;
   track?: Track;
   error?: Error | undefined;
+  closeable: boolean;
 
   // Issues a scrollTo() on this DOM element at creation time. Default: false.
   revealOnCreate?: boolean;
@@ -357,6 +373,7 @@ class TrackComponent implements m.ClassComponent<TrackComponentAttrs> {
         m(TrackShell, {
           buttons: [
             attrs.error && m(CrashButton, {error: attrs.error}),
+            attrs.closeable && m(CloseTrackButton, {trackKey: attrs.trackKey}),
             attrs.buttons,
           ],
           title: attrs.title,
@@ -367,6 +384,7 @@ class TrackComponent implements m.ClassComponent<TrackComponentAttrs> {
           m(TrackContent, {
             track: attrs.track,
             hasError: Boolean(attrs.error),
+            height: attrs.heightPx,
           }),
       ],
     );
@@ -390,40 +408,13 @@ class TrackComponent implements m.ClassComponent<TrackComponentAttrs> {
   }
 }
 
-export interface TrackButtonAttrs {
-  action: (e: MouseEvent) => void;
-  i: string;
-  tooltip: string;
-  showButton: boolean;
-  fullHeight?: boolean;
-  filledIcon?: boolean;
-}
-export class TrackButton implements m.ClassComponent<TrackButtonAttrs> {
-  view({attrs}: m.CVnode<TrackButtonAttrs>) {
-    return m(
-      'i.track-button',
-      {
-        class: [
-          attrs.showButton ? 'show' : '',
-          attrs.fullHeight ? 'full-height' : '',
-          attrs.filledIcon ? 'material-icons-filled' : 'material-icons',
-        ]
-          .filter(Boolean)
-          .join(' '),
-        onclick: attrs.action,
-        title: attrs.tooltip,
-      },
-      attrs.i,
-    );
-  }
-}
-
 interface TrackPanelAttrs {
   trackKey: string;
   title: string;
   tags?: TrackTags;
   trackFSM?: TrackCacheEntry;
   revealOnCreate?: boolean;
+  closeable: boolean;
 }
 
 export class TrackPanel implements Panel {
@@ -450,6 +441,7 @@ export class TrackPanel implements Panel {
           trackKey: attrs.trackKey,
           error: attrs.trackFSM.getError(),
           track: attrs.trackFSM.track,
+          closeable: attrs.closeable,
         });
       }
       return m(TrackComponent, {
@@ -461,19 +453,21 @@ export class TrackPanel implements Panel {
         track: attrs.trackFSM.track,
         error: attrs.trackFSM.getError(),
         revealOnCreate: attrs.revealOnCreate,
+        closeable: attrs.closeable,
       });
     } else {
       return m(TrackComponent, {
         trackKey: attrs.trackKey,
         title: attrs.title,
         revealOnCreate: attrs.revealOnCreate,
+        closeable: attrs.closeable,
       });
     }
   }
 
   highlightIfTrackSelected(ctx: CanvasRenderingContext2D, size: PanelSize) {
     const {visibleTimeScale} = globals.timeline;
-    const selection = globals.state.currentSelection;
+    const selection = getLegacySelection(globals.state);
     if (!selection || selection.kind !== 'AREA') {
       return;
     }
@@ -574,9 +568,10 @@ export function renderWakeupVertical(
   visibleTimeScale: TimeScale,
   size: PanelSize,
 ) {
-  if (globals.state.currentSelection !== null) {
+  const currentSelection = getLegacySelection(globals.state);
+  if (currentSelection !== null) {
     if (
-      globals.state.currentSelection.kind === 'SLICE' &&
+      currentSelection.kind === 'SLICE' &&
       globals.sliceDetails.wakeupTs !== undefined
     ) {
       drawVerticalLineAtTime(

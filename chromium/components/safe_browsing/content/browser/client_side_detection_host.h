@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/containers/flat_map.h"
@@ -25,8 +26,10 @@
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "mojo/public/cpp/base/proto_wrapper.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "net/http/http_status_code.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "url/gurl.h"
 
@@ -129,6 +132,12 @@ class ClientSideDetectionHost
   FRIEND_TEST_ALL_PREFIXES(ClientSideDetectionHostPrerenderBrowserTest,
                            ClassifyPrerenderedPageAfterActivation);
   FRIEND_TEST_ALL_PREFIXES(
+      ClientSideDetectionHostPrerenderBrowserTest,
+      ClassifyPrerenderedPageAfterActivationAndCheckDebuggingMetadataCache);
+  FRIEND_TEST_ALL_PREFIXES(
+      ClientSideDetectionHostPrerenderBrowserTest,
+      CheckDebuggingMetadataCacheAfterClearingCacheAfterNavigation);
+  FRIEND_TEST_ALL_PREFIXES(
       ClientSideDetectionHostPrerenderExclusiveAccessBrowserTest,
       KeyboardLockTriggersPreclassificationCheck);
   FRIEND_TEST_ALL_PREFIXES(
@@ -151,16 +160,15 @@ class ClientSideDetectionHost
   void OnPhishingPreClassificationDone(ClientSideDetectionType request_type,
                                        bool should_classify);
 
-  // |verdict| is an encoded ClientPhishingRequest protocol message, |result|
-  // is the outcome of the renderer classification. |request_type| is passed in
+  // `verdict` is a wrapped ClientPhishingRequest protocol message, `result`
+  // is the outcome of the renderer classification. `request_type` is passed in
   // to specify the process that requests the classification, which is passed
-  // along from |OnPhishingPreClassificationDone|.
+  // along from OnPhishingPreClassificationDone().
   void PhishingDetectionDone(ClientSideDetectionType request_type,
                              mojom::PhishingDetectorResult result,
-                             const std::string& verdict);
+                             std::optional<mojo_base::ProtoWrapper> verdict);
 
-  // |verdict| is an object parsed from the serialized string passed into
-  // |PhishingDetectionDone|.
+  // `verdict` is the ClientPhishingRequest passed into PhishingDetectionDone().
   void MaybeSendClientPhishingRequest(
       std::unique_ptr<ClientPhishingRequest> verdict);
 
@@ -170,17 +178,20 @@ class ClientSideDetectionHost
   void PhishingImageEmbeddingDone(
       std::unique_ptr<ClientPhishingRequest> verdict,
       mojom::PhishingImageEmbeddingResult result,
-      const std::string& image_feature_embedding_string);
+      std::optional<mojo_base::ProtoWrapper> image_feature_embedding);
 
   // Callback that is called when the server ping back is
   // done. Display an interstitial if |is_phishing| is true.
   // Otherwise, we do nothing. Called in UI thread. |is_from_cache| indicates
   // whether the warning is being shown due to a cached verdict or from an
-  // actual server ping.
-  void MaybeShowPhishingWarning(bool is_from_cache,
-                                ClientSideDetectionType request_type,
-                                GURL phishing_url,
-                                bool is_phishing);
+  // actual server ping. |response_code| is cached so it can be included as
+  // debugging metadata in PhishGuard pings.
+  void MaybeShowPhishingWarning(
+      bool is_from_cache,
+      ClientSideDetectionType request_type,
+      GURL phishing_url,
+      bool is_phishing,
+      std::optional<net::HttpStatusCode> response_code);
 
   // Used for testing.  This function does not take ownership of the service
   // class.
@@ -220,6 +231,9 @@ class ClientSideDetectionHost
   // Called when token_fetcher_ has fetched the token.
   void OnGotAccessToken(std::unique_ptr<ClientPhishingRequest> verdict,
                         const std::string& access_token);
+
+  // Check if sample ping can be sent to Safe Browsing.
+  bool CanSendSamplePing();
 
   // This pointer may be nullptr if client-side phishing detection is
   // disabled.

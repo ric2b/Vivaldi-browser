@@ -4,6 +4,8 @@
 
 #include "chrome/browser/tpcd/http_error_observer/http_error_tab_helper.h"
 
+#include <string_view>
+
 #include "base/feature_list.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -101,7 +103,7 @@ class HTTPErrProcBrowserTest : public InProcessBrowserTest {
 
   // Navigates to a page with an iframe, then navigates the iframe to the given
   // GURL. Can also set TPC blocking cookie.
-  void NavigateToURLAndIFrame(base::StringPiece host, const GURL iframe_url) {
+  void NavigateToURLAndIFrame(std::string_view host, const GURL iframe_url) {
     ASSERT_TRUE(ui_test_utils::NavigateToURL(
         browser(), https_server()->GetURL(host, "/iframe.html")));
     ASSERT_TRUE(NavigateIframeToURL(
@@ -182,7 +184,7 @@ IN_PROC_BROWSER_TEST_F(HTTPErrProcBrowserTest, TPCBlockedImageErr) {
 }
 
 // Check that the ThirdPartyCookieBreakageIndicator UKM works with fetches
-// TODO(https://crbug.com/1497270): Fix flakiness and re-enable.
+// TODO(crbug.com/40938887): Fix flakiness and re-enable.
 IN_PROC_BROWSER_TEST_F(HTTPErrProcBrowserTest, DISABLED_TPCBlockedFetchErr) {
   ukm::TestAutoSetUkmRecorder ukm_recorder;
 
@@ -260,7 +262,7 @@ IN_PROC_BROWSER_TEST_F(HTTPErrProcBrowserTest, TPCBlocked4xxErr) {
 }
 
 // Check that multiple entries are entered correctly.
-// TODO(https://crbug.com/1498862): Fix flakiness and re-enable.
+// TODO(crbug.com/40287588): Fix flakiness and re-enable.
 IN_PROC_BROWSER_TEST_F(HTTPErrProcBrowserTest, DISABLED_MultiErrs) {
   ukm::TestAutoSetUkmRecorder ukm_recorder;
 

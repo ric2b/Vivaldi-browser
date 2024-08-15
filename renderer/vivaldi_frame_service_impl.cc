@@ -310,8 +310,9 @@ void VivaldiFrameServiceImpl::ResumeParser() {
   loader->ResumeParser();
 }
 
-void VivaldiFrameServiceImpl::SetSupportsAppRegion(bool supports_app_region) {
-  render_frame_->GetWebView()->SetSupportsAppRegion(supports_app_region);
+void VivaldiFrameServiceImpl::SetSupportsDraggableRegions(
+    bool supports_draggable_regions) {
+  render_frame_->GetWebView()->SetSupportsDraggableRegions(supports_draggable_regions);
 }
 
 namespace {

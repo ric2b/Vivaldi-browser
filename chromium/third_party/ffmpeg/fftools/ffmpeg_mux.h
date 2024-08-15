@@ -75,6 +75,11 @@ typedef struct MuxStream {
     int             copy_initial_nonkeyframes;
     int             copy_prior_start;
     int             streamcopy_started;
+#if FFMPEG_OPT_VSYNC_DROP
+    int             ts_drop;
+#endif
+
+    char           *apad;
 } MuxStream;
 
 typedef struct Muxer {

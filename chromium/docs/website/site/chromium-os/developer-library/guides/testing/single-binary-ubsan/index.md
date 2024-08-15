@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: single-binary-ubsan
 title: Running a single binary with UBSAN
 ---
@@ -110,7 +110,7 @@ For anomaly_detector, this might print out:
 
 The names and paths on the right side are the libraries we want.
 
-### Transfer binary and libaries
+### Transfer binary and libraries
 
 If you haven't yet, make sure your test device has a writable drive:
 

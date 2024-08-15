@@ -47,6 +47,8 @@ static PrefService *_prefService = nil;
       return NotesSortingModeDateCreated;
     case 3:
       return NotesSortingModeDateEdited;
+    case 4:
+      return NotesSortingModeByKind;
     default:
       return NotesSortingModeDateEdited;
   }

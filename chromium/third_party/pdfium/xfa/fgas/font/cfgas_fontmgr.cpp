@@ -4,6 +4,11 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "xfa/fgas/font/cfgas_fontmgr.h"
 
 #include <stdint.h>
@@ -11,17 +16,20 @@
 #include <algorithm>
 #include <iterator>
 #include <memory>
+#include <type_traits>
 #include <utility>
 
 #include "build/build_config.h"
 #include "core/fxcrt/byteorder.h"
 #include "core/fxcrt/cfx_read_only_vector_stream.h"
 #include "core/fxcrt/check.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fixed_size_data_vector.h"
 #include "core/fxcrt/fx_codepage.h"
 #include "core/fxcrt/fx_extension.h"
+#include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_memory_wrappers.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
@@ -181,13 +189,14 @@ int32_t CALLBACK GdiFontEnumProc(ENUMLOGFONTEX* lpelfe,
   const LOGFONTW& lf = ((LPENUMLOGFONTEXW)lpelfe)->elfLogFont;
   if (lf.lfFaceName[0] == L'@')
     return 1;
-  FX_FONTDESCRIPTOR font;
-  memset(&font, 0, sizeof(FX_FONTDESCRIPTOR));
+  FX_FONTDESCRIPTOR font = {};  // Aggregate initialization.
+  static_assert(std::is_aggregate_v<decltype(font)>);
   font.uCharSet = FX_GetCharsetFromInt(lf.lfCharSet);
   font.dwFontStyles = GetGdiFontStyles(lf);
   FXSYS_wcsncpy(font.wsFontFace, (const wchar_t*)lf.lfFaceName, 31);
   font.wsFontFace[31] = 0;
-  memcpy(&font.FontSignature, &lpntme->ntmFontSig, sizeof(lpntme->ntmFontSig));
+  FXSYS_memcpy(&font.FontSignature, &lpntme->ntmFontSig,
+               sizeof(lpntme->ntmFontSig));
   reinterpret_cast<std::deque<FX_FONTDESCRIPTOR>*>(lParam)->push_back(font);
   return 1;
 }
@@ -201,8 +210,8 @@ std::deque<FX_FONTDESCRIPTOR> EnumGdiFonts(const wchar_t* pwsFaceName,
     return fonts;
   }
 
-  LOGFONTW lfFind;
-  memset(&lfFind, 0, sizeof(lfFind));
+  LOGFONTW lfFind = {};  // Aggregate initialization.
+  static_assert(std::is_aggregate_v<decltype(lfFind)>);
   lfFind.lfCharSet = DEFAULT_CHARSET;
   if (pwsFaceName) {
     FXSYS_wcsncpy(lfFind.lfFaceName, pwsFaceName, 31);
@@ -263,8 +272,8 @@ const FX_FONTDESCRIPTOR* CFGAS_FontMgr::FindFont(const wchar_t* pszFontFamily,
                                                  FX_CodePage wCodePage,
                                                  uint32_t dwUSB,
                                                  wchar_t wUnicode) {
-  FX_FONTMATCHPARAMS params;
-  memset(&params, 0, sizeof(params));
+  FX_FONTMATCHPARAMS params = {};  // Aggregate initialization.
+  static_assert(std::is_aggregate_v<decltype(params)>);
   params.dwUSB = dwUSB;
   params.wUnicode = wUnicode;
   params.wCodePage = wCodePage;
@@ -395,9 +404,12 @@ unsigned long ftStreamRead(FXFT_StreamRec* stream,
 
   IFX_SeekableReadStream* pFile =
       static_cast<IFX_SeekableReadStream*>(stream->descriptor.pointer);
-  if (!pFile->ReadBlockAtOffset({buffer, count}, offset))
-    return 0;
 
+  // SAFETY: required from caller.
+  if (!pFile->ReadBlockAtOffset(
+          UNSAFE_BUFFERS(pdfium::make_span(buffer, count), offset))) {
+    return 0;
+  }
   return count;
 }
 
@@ -509,7 +521,7 @@ RetainPtr<CFX_Face> LoadFace(
   // https://bugs.chromium.org/p/pdfium/issues/detail?id=690
   FXFT_StreamRec* ftStream =
       static_cast<FXFT_StreamRec*>(ft_scalloc(sizeof(FXFT_StreamRec), 1));
-  memset(ftStream, 0, sizeof(FXFT_StreamRec));
+  FXSYS_memset(ftStream, 0, sizeof(FXFT_StreamRec));
   ftStream->base = nullptr;
   ftStream->descriptor.pointer = static_cast<void*>(pFontStream.Get());
   ftStream->pos = 0;
@@ -517,8 +529,8 @@ RetainPtr<CFX_Face> LoadFace(
   ftStream->read = ftStreamRead;
   ftStream->close = ftStreamClose;
 
-  FT_Open_Args ftArgs;
-  memset(&ftArgs, 0, sizeof(FT_Open_Args));
+  FT_Open_Args ftArgs = {};  // Aggregate initialization.
+  static_assert(std::is_aggregate_v<decltype(ftArgs)>);
   ftArgs.flags |= FT_OPEN_STREAM;
   ftArgs.stream = ftStream;
 

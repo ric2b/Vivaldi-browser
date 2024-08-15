@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <array>
 #include <map>
 #include <memory>
 #include <set>
@@ -375,7 +376,7 @@ namespace {
 
 constexpr uint8_t kMaxExecuteRecursion = 2;
 
-constexpr uint8_t kInvBase64[128] = {
+constexpr std::array<const uint8_t, 128> kInvBase64 = {{
     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 62,  255,
@@ -385,7 +386,7 @@ constexpr uint8_t kInvBase64[128] = {
     25,  255, 255, 255, 255, 255, 255, 26,  27,  28,  29,  30,  31,  32,  33,
     34,  35,  36,  37,  38,  39,  40,  41,  42,  43,  44,  45,  46,  47,  48,
     49,  50,  51,  255, 255, 255, 255, 255,
-};
+}};
 
 inline uint8_t GetInvBase64(uint8_t x) {
   return (x & 128) == 0 ? kInvBase64[x] : 255;

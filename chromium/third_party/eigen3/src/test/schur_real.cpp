@@ -97,6 +97,13 @@ void schur(int size = MatrixType::ColsAtCompileTime) {
   }
 }
 
+void test_bug2633() {
+  Eigen::MatrixXd A(4, 4);
+  A << 0, 0, 0, -2, 1, 0, 0, -0, 0, 1, 0, 2, 0, 0, 2, -0;
+  RealSchur<Eigen::MatrixXd> schur(A);
+  VERIFY(schur.info() == Eigen::Success);
+}
+
 EIGEN_DECLARE_TEST(schur_real) {
   CALL_SUBTEST_1((schur<Matrix4f>()));
   CALL_SUBTEST_2((schur<MatrixXd>(internal::random<int>(1, EIGEN_TEST_MAX_SIZE / 4))));
@@ -105,4 +112,6 @@ EIGEN_DECLARE_TEST(schur_real) {
 
   // Test problem size constructors
   CALL_SUBTEST_5(RealSchur<MatrixXf>(10));
+
+  CALL_SUBTEST_6((test_bug2633()));
 }

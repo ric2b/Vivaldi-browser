@@ -108,6 +108,9 @@
 #include "ui/base/ime/ash/extension_ime_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/events/ash/keyboard_capability.h"
+#include "ui/events/devices/device_data_manager.h"
+#include "ui/events/devices/input_device_event_observer.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/widget/widget.h"
@@ -578,6 +581,8 @@ AccessibilityManager::AccessibilityManager() {
 
   CrasAudioHandler::Get()->AddAudioObserver(this);
 
+  ui::DeviceDataManager::GetInstance()->AddObserver(this);
+
   dlc_installer_ = std::make_unique<AccessibilityDlcInstaller>();
 }
 
@@ -586,6 +591,7 @@ AccessibilityManager::~AccessibilityManager() {
   AccessibilityStatusEventDetails details(
       AccessibilityNotificationType::kManagerShutdown, false);
   NotifyAccessibilityStatusChanged(details);
+  ui::DeviceDataManager::GetInstance()->RemoveObserver(this);
   CrasAudioHandler::Get()->RemoveAudioObserver(this);
   user_manager::UserManager::Get()->RemoveSessionStateObserver(this);
   input_method::InputMethodManager::Get()->RemoveObserver(this);
@@ -1503,7 +1509,7 @@ void AccessibilityManager::InputMethodChanged(
     input_method::InputMethodManager* manager,
     Profile* /* profile */,
     bool show_message) {
-  Shell::Get()->sticky_keys_controller()->SetModifiersEnabled(
+  Shell::Get()->sticky_keys_controller()->SetMod3AndAltGrModifiersEnabled(
       manager->IsISOLevel5ShiftUsedByCurrentInputMethod(),
       manager->IsAltGrUsedByCurrentInputMethod());
   const input_method::InputMethodDescriptor descriptor =
@@ -1802,6 +1808,20 @@ void AccessibilityManager::UpdateChromeOSAccessibilityHistograms() {
         prefs->GetBoolean(prefs::kAccessibilityAutoclickEnabled);
     base::UmaHistogramBoolean("Accessibility.CrosAutoclick", autoclick_enabled);
 
+    if (::features::IsAccessibilityReducedAnimationsEnabled()) {
+      bool reduced_animations_enabled =
+          prefs->GetBoolean(prefs::kAccessibilityReducedAnimationsEnabled);
+      base::UmaHistogramBoolean("Accessibility.CrosReducedAnimations",
+                                reduced_animations_enabled);
+    }
+
+    if (::features::IsAccessibilityCaretBlinkIntervalSettingEnabled()) {
+      int caret_blink_interval_ms =
+          prefs->GetInteger(prefs::kAccessibilityCaretBlinkInterval);
+      base::UmaHistogramSparse("Accessibility.CrosCaretBlinkInterval",
+                               caret_blink_interval_ms);
+    }
+
     base::UmaHistogramBoolean(
         "Accessibility.CrosCursorColor",
         prefs->GetBoolean(prefs::kAccessibilityCursorColorEnabled));
@@ -1832,6 +1852,13 @@ void AccessibilityManager::UpdateChromeOSAccessibilityHistograms() {
                             IsSelectToSpeakEnabled());
   base::UmaHistogramBoolean("Accessibility.CrosSwitchAccess",
                             IsSwitchAccessEnabled());
+  base::UmaHistogramBoolean("Accessibility.CrosMonoAudio.Enabled",
+                            IsMonoAudioEnabled());
+  base::UmaHistogramBoolean("Accessibility.OOBEStartupSoundEnabled",
+                            GetStartupSoundEnabled());
+  base::UmaHistogramBoolean(
+      "Accessibility.CrosSpokenFeedback.BrailleDisplayConnected",
+      IsBrailleDisplayConnected());
 }
 
 void AccessibilityManager::PlayVolumeAdjustSound() {
@@ -1843,6 +1870,19 @@ void AccessibilityManager::PlayVolumeAdjustSound() {
 
 void AccessibilityManager::OnAppTerminating() {
   app_terminating_ = true;
+}
+
+void AccessibilityManager::MaybeLogBrailleDisplayConnectedTime() {
+  if (braille_display_connect_time_ == base::Time()) {
+    return;
+  }
+  base::TimeDelta duration = base::Time::Now() - braille_display_connect_time_;
+  base::UmaHistogramCustomCounts(
+      "Accessibility.CrosSpokenFeedback.BrailleDisplayConnected."
+      "ConnectionDuration",
+      /*sample=*/duration.InSeconds(), /*min=*/1,
+      /*exclusive_max=*/base::Days(1) / base::Seconds(1), /*buckets=*/100);
+  braille_display_connect_time_ = base::Time();
 }
 
 void AccessibilityManager::OnShimlessRmaLaunched() {
@@ -1887,7 +1927,20 @@ void AccessibilityManager::OnFocusChangedInPage(
 
 void AccessibilityManager::OnBrailleDisplayStateChanged(
     const DisplayState& display_state) {
+  if (braille_display_connected_ != display_state.available) {
+    base::UmaHistogramBoolean(
+        "Accessibility.CrosSpokenFeedback.BrailleDisplayConnected."
+        "ConnectionChanged",
+        display_state.available);
+  }
   braille_display_connected_ = display_state.available;
+  if (braille_display_connected_ &&
+      braille_display_connect_time_ == base::Time()) {
+    braille_display_connect_time_ = base::Time::Now();
+  }
+  if (!braille_display_connected_) {
+    MaybeLogBrailleDisplayConnectedTime();
+  }
   AccessibilityController::Get()->BrailleDisplayStateChanged(
       braille_display_connected_);
   UpdateBrailleImeState();
@@ -1923,6 +1976,7 @@ void AccessibilityManager::OnExtensionUnloaded(
 }
 
 void AccessibilityManager::OnShutdown(extensions::ExtensionRegistry* registry) {
+  MaybeLogBrailleDisplayConnectedTime();
   extension_registry_observations_.RemoveObservation(registry);
 }
 
@@ -2591,7 +2645,7 @@ void AccessibilityManager::OnSodaInstallUpdated(int progress) {
   const std::string dictation_locale =
       profile_->GetPrefs()->GetString(prefs::kAccessibilityDictationLocale);
   // Update the Dictation button tray.
-  // TODO(https://crbug.com/1266491): Ensure we use combined progress instead
+  // TODO(crbug.com/40802157): Ensure we use combined progress instead
   // of just the language pack progress.
   AccessibilityController::Get()
       ->UpdateDictationButtonOnSpeechRecognitionDownloadChanged(progress);
@@ -2752,8 +2806,8 @@ void AccessibilityManager::InstallFaceGazeAssets(
       AccessibilityDlcInstaller::DlcType::kFaceGazeAssets,
       base::BindOnce(&AccessibilityManager::OnFaceGazeAssetsInstalled,
                      weak_ptr_factory_.GetWeakPtr()),
-      base::BindRepeating([](double progress) {}),
-      base::BindOnce([](const std::string& error) {}));
+      /*on_progress=*/base::DoNothing(),
+      /*on_error=*/base::DoNothing());
 }
 
 void AccessibilityManager::OnFaceGazeAssetsInstalled(
@@ -2840,7 +2894,7 @@ void AccessibilityManager::OnPumpkinDataCreated(
   std::move(install_pumpkin_callback_).Run(std::move(data));
 }
 
-void AccessibilityManager::OnPumpkinError(const std::string& error) {
+void AccessibilityManager::OnPumpkinError(std::string_view error) {
   if (install_pumpkin_callback_.is_null()) {
     return;
   }
@@ -2975,6 +3029,18 @@ void AccessibilityManager::SendSyntheticMouseEvent(
   if (!is_mouse_events_enabled) {
     cursor_client->DisableMouseEvents();
   }
+}
+
+void AccessibilityManager::OnInputDeviceConfigurationChanged(
+    uint8_t input_device_type) {
+  if (input_device_type & ui::InputDeviceEventObserver::kKeyboard) {
+    Shell::Get()->sticky_keys_controller()->SetFnModifierEnabled(
+        Shell::Get()->keyboard_capability()->HasFunctionKeyOnAnyKeyboard());
+  }
+}
+void AccessibilityManager::OnDeviceListsComplete() {
+  Shell::Get()->sticky_keys_controller()->SetFnModifierEnabled(
+      Shell::Get()->keyboard_capability()->HasFunctionKeyOnAnyKeyboard());
 }
 
 }  // namespace ash

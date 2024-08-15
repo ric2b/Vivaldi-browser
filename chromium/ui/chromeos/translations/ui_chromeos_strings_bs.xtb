@@ -331,7 +331,7 @@
 <translation id="3619115746895587757">Kapućino</translation>
 <translation id="3619593063686672873">Nema nedavnih videozapisa</translation>
 <translation id="3634507049637220048">Mreža <ph name="NETWORK_INDEX" /> od <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, upravlja vaš administrator, detalji</translation>
-<translation id="36451918667380448">Kartica operatera mobilne mreže je zaključana. Kontaktirajte operatera za podršku.</translation>
+<translation id="36451918667380448">Mobilni operater je zaključan. Kontaktirajte operatera za podršku.</translation>
 <translation id="3645233063072417428">Broj premještenih stavki: <ph name="NUMBER_OF_ITEMS" />.</translation>
 <translation id="3658269352872031728">Broj odabranih fajlova: <ph name="SELECTED_FILE_COUNT" /></translation>
 <translation id="3685122418104378273">Sinhroniziranje Google Diska je onemogućeno prema zadanim postavkama kada se koristi prijenos podataka na mobilnoj mreži.</translation>
@@ -358,7 +358,6 @@
 <translation id="3830674330436234648">Reproduciranje nije dostupno</translation>
 <translation id="383652340667548381">Srpska</translation>
 <translation id="385051799172605136">Nazad</translation>
-<translation id="3851491607336266896">Povezano, ograničena povezivost</translation>
 <translation id="3855472144336161447">Njemačka Neo 2</translation>
 <translation id="3858860766373142691">Naziv</translation>
 <translation id="3866249974567520381">Opis</translation>
@@ -626,7 +625,7 @@
 <translation id="57838592816432529">Isključi zvuk</translation>
 <translation id="5788127256798019331">Play fajlovi</translation>
 <translation id="5790193330357274855">Kazaška</translation>
-<translation id="5804245609861364054">kannada jezik (transliteracija)</translation>
+<translation id="5804245609861364054">kanada (transliteracija)</translation>
 <translation id="5814126672212206791">Vrsta veze</translation>
 <translation id="5817397429773072584">Tradicionalna kineska</translation>
 <translation id="5818003990515275822">Korejska</translation>
@@ -794,7 +793,7 @@
 <translation id="7103992300314999525">makedonski</translation>
 <translation id="7106346894903675391">Kupite dodatni prostor za pohranu...</translation>
 <translation id="7126604456862387217">"&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;" – &lt;em&gt;pretraži Disk&lt;/em&gt;</translation>
-<translation id="7135561821015524160">kannada fonetski</translation>
+<translation id="7135561821015524160">kanada fonetski</translation>
 <translation id="714034171374937760">Chromebase</translation>
 <translation id="7162080671816799010">Nedostaje "Podudaranje alternativnog naziva subjekta" ili "Podudaranje sufiksa domene" da se potvrdi identitet servera za autentifikaciju</translation>
 <translation id="7165320105431587207">Konfiguriranje mjreže nije uspjelo</translation>

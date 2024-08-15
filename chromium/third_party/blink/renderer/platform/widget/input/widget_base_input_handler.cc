@@ -27,7 +27,6 @@
 #include "third_party/blink/public/common/input/web_pointer_event.h"
 #include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
-#include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
 #include "third_party/blink/renderer/platform/widget/input/ime_event_guard.h"
 #include "third_party/blink/renderer/platform/widget/widget_base.h"
@@ -145,13 +144,11 @@ WebCoalescedInputEvent GetCoalescedWebPointerEventForTouch(
                                 std::move(predicted_pointer_events), latency);
 }
 
-mojom::InputEventResultState GetAckResult(WebInputEventResult processed) {
-  if (processed == WebInputEventResult::kNotHandled) {
-    return base::FeatureList::IsEnabled(features::kFixGestureScrollQueuingBug)
-               ? mojom::InputEventResultState::kNotConsumedBlocking
-               : mojom::InputEventResultState::kNotConsumed;
-  }
-  return mojom::InputEventResultState::kConsumed;
+mojom::blink::InputEventResultState GetAckResult(
+    WebInputEventResult processed) {
+  return processed == WebInputEventResult::kNotHandled
+             ? mojom::blink::InputEventResultState::kNotConsumed
+             : mojom::blink::InputEventResultState::kConsumed;
 }
 
 bool IsGestureScroll(WebInputEvent::Type type) {

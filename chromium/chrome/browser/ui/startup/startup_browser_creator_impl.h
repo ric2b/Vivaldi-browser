@@ -31,7 +31,6 @@ class FilePath;
 
 namespace internals {
 GURL GetTriggeredResetSettingsURL();
-GURL GetWelcomePageURL();
 }  // namespace internals
 
 // Assists launching the application and appending the initial tabs for a
@@ -175,7 +174,6 @@ class StartupBrowserCreatorImpl {
       bool is_post_crash_launch,
       bool has_incompatible_applications,
       bool promotional_tabs_enabled,
-      bool welcome_enabled,
       bool whats_new_enabled,
       bool privacy_sandbox_confirmation_required);
 

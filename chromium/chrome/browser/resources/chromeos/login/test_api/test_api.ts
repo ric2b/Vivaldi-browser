@@ -133,11 +133,6 @@ class HidDetectionScreenTester extends ScreenElementApi {
     this.nextButton = new PolymerElementApi(this, '#hid-continue-button');
   }
 
-  // Must be called to enable the next button
-  emulateDevicesConnected(): void {
-    chrome.send('OobeTestApi.emulateDevicesForTesting');
-  }
-
   touchscreenDetected(): boolean {
     // Touchscreen entire row is only visible when touchscreen is detected.
     const touchscreenRow =
@@ -346,6 +341,24 @@ class FingerprintScreenTester extends ScreenElementApi {
   }
   override shouldSkip(): boolean {
     return !loadTimeData.getBoolean('testapi_isFingerprintSupported');
+  }
+}
+
+class AiIntroScreenTester extends ScreenElementApi {
+  constructor() {
+    super('ai-intro');
+  }
+  override shouldSkip(): boolean {
+    return loadTimeData.getBoolean('testapi_shouldSkipAiIntro');
+  }
+}
+
+class TunaScreenTester extends ScreenElementApi {
+  constructor() {
+    super('tuna');
+  }
+  override shouldSkip(): boolean {
+    return loadTimeData.getBoolean('testapi_shouldSkipTuna');
   }
 }
 
@@ -1081,6 +1094,7 @@ class LocalPasswordSetupScreenTester extends ScreenElementApi {
         this.confirmInput.isVisible();
   }
 
+  // TODO (b/329361749): remove this code after crrev.com/c/5381081 landed.
   enterPassword(password: string): void {
     this.firstInput.typeInto(password);
     afterNextRender(assert(this.element()), () => {
@@ -1090,6 +1104,18 @@ class LocalPasswordSetupScreenTester extends ScreenElementApi {
         this.nextButton.click();
       });
     });
+  }
+
+  enterPasswordToFirstInput(password: string): void {
+    this.firstInput.typeInto(password);
+  }
+
+  enterPasswordToConfirmInput(password: string): void {
+    this.confirmInput.typeInto(password);
+  }
+
+  isNextButtonEnabled(): boolean {
+    return this.nextButton !== undefined && this.nextButton.isEnabled();
   }
 }
 
@@ -1120,13 +1146,27 @@ class PasswordFactorSuccessScreenTester extends ScreenElementApi {
 }
 
 class GaiaInfoScreenTester extends ScreenElementApi {
+  private manualCredentialsButton: PolymerElementApi;
+
   constructor() {
     super('gaia-info');
     this.nextButton = new PolymerElementApi(this, '#nextButton');
+    this.manualCredentialsButton = new PolymerElementApi(this, '#manualButton');
   }
 
   override shouldSkip(): boolean {
     return loadTimeData.getBoolean('testapi_shouldSkipGaiaInfoScreen');
+  }
+
+  isOobeQuickStartEnabled(): boolean {
+    return loadTimeData.getBoolean('testapi_isOobeQuickStartEnabled');
+  }
+
+  /**
+   * Select option to manually enter Google credentials.
+   */
+  selectManualCredentials(): void {
+    this.manualCredentialsButton.click();
   }
 }
 
@@ -1399,6 +1439,8 @@ export class OobeApiProvider {
       SyncScreen: new SyncScreenTester(),
       PasswordSelectionScreen: new PasswordSelectionScreenTester(),
       FingerprintScreen: new FingerprintScreenTester(),
+      AiIntroScreen: new AiIntroScreenTester(),
+      TunaScreen: new TunaScreenTester(),
       AssistantScreen: new AssistantScreenTester(),
       MarketingOptInScreen: new MarketingOptInScreenTester(),
       ConfirmSamlPasswordScreen: new ConfirmSamlPasswordScreenTester(),

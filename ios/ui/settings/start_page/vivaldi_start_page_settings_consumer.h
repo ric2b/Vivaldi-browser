@@ -5,13 +5,23 @@
 
 #import <Foundation/Foundation.h>
 
+#import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_column.h"
 #import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_style.h"
 
-// A protocol implemented by consumers to handle start page settings state.
+// A protocol implemented by consumers to handle start page settings
+// state change.
 @protocol VivaldiStartPageSettingsConsumer
 
-// Updates the state with the layout settings item with pref value.
-- (void)setPreferenceForStartPageLayout:(VivaldiStartPageLayoutStyle)layoutStyle;
+// Updates the state with the show frequently visited pages preference value.
+- (void)setPreferenceShowFrequentlyVisitedPages:(BOOL)showFrequentlyVisited;
+// Updates the state with the show speed dials preference value.
+- (void)setPreferenceShowSpeedDials:(BOOL)showSpeedDials;
+// Updates the state with the show start page customize preference value.
+- (void)setPreferenceShowCustomizeStartPageButton:(BOOL)showCustomizeButton;
+// Updates the state with the speed dial layout style preference value
+- (void)setPreferenceSpeedDialLayout:(VivaldiStartPageLayoutStyle)layout;
+// Updates the state with the speed dial maximum number columns preference value
+- (void)setPreferenceSpeedDialColumn:(VivaldiStartPageLayoutColumn)column;
 
 @end
 

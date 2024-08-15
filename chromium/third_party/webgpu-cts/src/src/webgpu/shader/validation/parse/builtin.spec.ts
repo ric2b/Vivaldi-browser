@@ -59,6 +59,10 @@ const kTests = {
     src: `@builtin(2)`,
     pass: false,
   },
+  duplicate: {
+    src: `@builtin(position) @builtin(position)`,
+    pass: false,
+  },
 };
 
 g.test('parse')

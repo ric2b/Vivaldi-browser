@@ -146,8 +146,8 @@ class MockSender : public CompoundRtcpParser::Client {
             IPAddress::Parse("2001:db8:0d93:69c2:fd1a:49a6:a7c0:e8a6").value(),
             2344},
         rtcp_session_(kSenderSsrc, kReceiverSsrc, FakeClock::now()),
-        sender_report_builder_(&rtcp_session_),
-        rtcp_parser_(&rtcp_session_, this),
+        sender_report_builder_(rtcp_session_),
+        rtcp_parser_(rtcp_session_, *this),
         crypto_(kAesKey, kCastIvMask),
         rtp_packetizer_(kRtpPayloadType, kSenderSsrc, kMaxRtpPacketSize) {}
 
@@ -265,11 +265,11 @@ class ReceiverTest : public testing::Test {
  public:
   ReceiverTest()
       : clock_(Clock::now()),
-        task_runner_(&clock_),
+        task_runner_(clock_),
         env_(&FakeClock::now, task_runner_),
-        packet_router_(&env_),
-        receiver_(&env_,
-                  &packet_router_,
+        packet_router_(env_),
+        receiver_(env_,
+                  packet_router_,
                   {/* .sender_ssrc = */ kSenderSsrc,
                    /* .receiver_ssrc = */ kReceiverSsrc,
                    /* .rtp_timebase = */ kRtpTimebase,

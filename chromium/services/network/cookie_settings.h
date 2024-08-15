@@ -12,6 +12,7 @@
 
 #include "base/component_export.h"
 #include "base/containers/flat_map.h"
+#include "base/memory/raw_ptr.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -38,6 +39,10 @@ class Origin;
 }  // namespace url
 
 namespace network {
+
+namespace tpcd::metadata {
+class Manager;
+}
 
 // Handles cookie access and deletion logic for the network service.
 class COMPONENT_EXPORT(NETWORK_SERVICE) CookieSettings
@@ -95,6 +100,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CookieSettings
 
   void set_tracking_protection_enabled_for_3pcd(bool enable) {
     tracking_protection_enabled_for_3pcd_ = enable;
+  }
+
+  void set_tpcd_metadata_manager(tpcd::metadata::Manager* manager) {
+    tpcd_metadata_manager_ = manager;
   }
 
   bool are_truncated_cookies_blocked() const {
@@ -174,7 +183,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CookieSettings
       const std::string& scheme) const override;
   bool ShouldBlockThirdPartyCookies() const override;
   bool MitigationsEnabledFor3pcd() const override;
-  bool IsStorageAccessApiEnabled() const override;
 
   bool IsThirdPartyPhaseoutEnabled() const;
 
@@ -215,6 +223,15 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CookieSettings
       const net::SiteForCookies& site_for_cookies,
       const url::Origin* top_frame_origin);
 
+  // Adds exclusion reasons, warnings, etc. as appropriate to `out_status` for
+  // the given cookie in the given context.
+  void AugmentInclusionStatus(
+      const net::CanonicalCookie& cookie,
+      bool is_third_party_request,
+      const CookieSettings::CookieSettingWithMetadata& setting_with_metadata,
+      const net::FirstPartySetMetadata& first_party_set_metadata,
+      net::CookieInclusionStatus& out_status) const;
+
   // Returns true if at least one content settings is session only.
   bool HasSessionOnlyOrigins() const;
 
@@ -239,6 +256,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CookieSettings
   // Holds an EntryIndex if kHostIndexedMetadataGrants is enabled.
   // Holds an EntryMap otherwise.
   absl::variant<EntryMap, EntryIndex> content_settings_;
+
+  raw_ptr<tpcd::metadata::Manager> tpcd_metadata_manager_;
 };
 
 }  // namespace network

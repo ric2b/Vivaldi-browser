@@ -15,11 +15,12 @@
 import {duration, Time, time} from '../base/time';
 import {Actions} from '../common/actions';
 import {cropText, drawIncompleteSlice} from '../common/canvas_utils';
-import {getColorForSlice} from '../common/colorizer';
+import {getColorForSlice} from '../core/colorizer';
 import {HighPrecisionTime} from '../common/high_precision_time';
 import {TrackData} from '../common/track_data';
 import {TimelineFetcher} from '../common/track_helper';
 import {SliceRect, Track} from '../public';
+import {getLegacySelection} from '../common/state';
 
 import {CROP_INCOMPLETE_SLICE_FLAG} from './base_slice_track';
 import {checkerboardExcept} from './checkerboard';
@@ -153,7 +154,7 @@ export abstract class SliceTrackLEGACY implements Track {
         height: SLICE_HEIGHT,
       };
 
-      const currentSelection = globals.state.currentSelection;
+      const currentSelection = getLegacySelection(globals.state);
       const isSelected =
         currentSelection &&
         currentSelection.kind === 'CHROME_SLICE' &&
@@ -361,12 +362,18 @@ export abstract class SliceTrackLEGACY implements Track {
     if (data === undefined) return false;
     const sliceId = data.sliceIds[sliceIndex];
     if (sliceId !== undefined && sliceId !== -1) {
-      globals.makeSelection(
-        Actions.selectChromeSlice({
+      globals.setLegacySelection(
+        {
+          kind: 'CHROME_SLICE',
           id: sliceId,
           trackKey: this.trackKey,
           table: this.namespace,
-        }),
+        },
+        {
+          clearSearch: true,
+          pendingScrollId: undefined,
+          switchToCurrentSelectionTab: true,
+        },
       );
       return true;
     }

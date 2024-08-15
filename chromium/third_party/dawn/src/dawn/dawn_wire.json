@@ -108,13 +108,15 @@
             { "name": "event manager handle", "type": "ObjectHandle" },
             { "name": "future", "type": "future" },
             { "name": "adapter object handle", "type": "ObjectHandle", "handle_type": "adapter"},
-            { "name": "options", "type": "request adapter options", "annotation": "const*", "optional": true }
+            { "name": "options", "type": "request adapter options", "annotation": "const*", "optional": true },
+            { "name": "userdata count", "type": "uint8_t", "_comment": "TODO(crbug.com/dawn/2509): Remove this once Chromium overrides the correct functions in the proc table."}
         ],
         "adapter request device": [
             { "name": "adapter id", "type": "ObjectId", "id_type": "adapter" },
             { "name": "event manager handle", "type": "ObjectHandle" },
             { "name": "future", "type": "future" },
             { "name": "device object handle", "type": "ObjectHandle", "handle_type": "device"},
+            { "name": "device lost future", "type": "future" },
             { "name": "descriptor", "type": "device descriptor", "annotation": "const*" }
         ]
     },
@@ -149,7 +151,8 @@
             { "name": "message", "type": "char", "annotation": "const*", "length": "strlen" }
         ],
         "device lost callback" : [
-            { "name": "device", "type": "ObjectHandle", "handle_type": "device" },
+            { "name": "event manager", "type": "ObjectHandle" },
+            { "name": "future", "type": "future" },
             { "name": "reason", "type": "device lost reason" },
             { "name": "message", "type": "char", "annotation": "const*", "length": "strlen" }
         ],
@@ -202,6 +205,7 @@
         ],
         "client_side_commands": [
             "AdapterCreateDevice",
+            "AdapterGetFormatCapabilities",
             "AdapterGetProperties",
             "AdapterGetLimits",
             "AdapterHasFeature",
@@ -232,6 +236,7 @@
             "InstanceHasWGSLLanguageFeature",
             "InstanceRequestAdapter",
             "InstanceRequestAdapterF",
+            "InstanceRequestAdapter2",
             "ShaderModuleGetCompilationInfo",
             "ShaderModuleGetCompilationInfoF",
             "QuerySetGetType",
@@ -240,6 +245,7 @@
             "QueueOnSubmittedWorkDoneF",
             "QueueWriteBuffer",
             "QueueWriteTexture",
+            "SurfaceGetCapabilities",
             "SurfaceGetPreferredFormat",
             "TextureGetWidth",
             "TextureGetHeight",
@@ -260,6 +266,8 @@
             "DeviceInjectError",
             "InstanceProcessEvents",
             "InstanceWaitAny",
+            "SurfaceConfigure",
+            "SurfaceGetCurrentTexture",
             "SwapChainGetCurrentTexture"
         ],
         "client_special_objects": [
@@ -271,6 +279,7 @@
             "Queue",
             "ShaderModule",
             "Surface",
+            "SurfaceCapabilities",
             "SwapChain",
             "Texture"
         ],

@@ -180,6 +180,9 @@ class LayerTreeHostImplClient {
 
   virtual void ClearHistory() = 0;
 
+  virtual void SetHasActiveThreadedScroll(bool is_scrolling) = 0;
+  virtual void SetWaitingForScrollEvent(bool waiting_for_scroll_event) = 0;
+
   virtual size_t CommitDurationSampleCountForTesting() const = 0;
 
  protected:
@@ -328,7 +331,6 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   }
 
   virtual void WillSendBeginMainFrame() {}
-  virtual void DidSendBeginMainFrame(const viz::BeginFrameArgs& args);
   virtual void BeginMainFrameAborted(
       CommitEarlyOutReason reason,
       std::vector<std::unique_ptr<SwapPromise>> swap_promises,
@@ -1323,6 +1325,9 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
 
   bool downsample_metrics_ = true;
   base::MetricsSubSampler metrics_subsampler_;
+
+  // See `CommitState::screenshot_destination_token`.
+  base::UnguessableToken screenshot_destination_;
 
   // Must be the last member to ensure this is destroyed first in the
   // destruction order and invalidates all weak pointers.

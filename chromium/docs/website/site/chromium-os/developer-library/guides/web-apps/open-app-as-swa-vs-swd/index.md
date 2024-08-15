@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: open-app-as-swa-vs-swd
 title: How to open other SWA/SWD from your SWA
 ---

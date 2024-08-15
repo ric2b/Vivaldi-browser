@@ -88,7 +88,7 @@ class MockTaskRunner final : public TaskRunner {
 // Class extending NetworkWaiter to allow for looking at protected data.
 class TestingUdpSocketReader final : public UdpSocketReaderPosix {
  public:
-  explicit TestingUdpSocketReader(SocketHandleWaiter* waiter)
+  explicit TestingUdpSocketReader(SocketHandleWaiter& waiter)
       : UdpSocketReaderPosix(waiter) {}
 
   void OnDestroy(UdpSocket* socket) override {
@@ -119,7 +119,7 @@ TEST(UdpSocketReaderTest, UnwatchReadableSucceeds) {
   std::unique_ptr<MockUdpSocketPosix> socket =
       std::make_unique<MockUdpSocketPosix>(task_runner, &client, 17,
                                            UdpSocket::Version::kV4);
-  TestingUdpSocketReader network_waiter(mock_waiter.get());
+  TestingUdpSocketReader network_waiter(*mock_waiter);
 
   EXPECT_FALSE(network_waiter.IsMappedRead(socket.get()));
   network_waiter.OnDestroy(socket.get());

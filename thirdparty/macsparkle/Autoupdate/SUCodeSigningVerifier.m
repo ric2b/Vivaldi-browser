@@ -61,7 +61,7 @@
     
     // Note that kSecCSCheckNestedCode may not work with pre-Mavericks code signing.
     // See https://github.com/sparkle-project/Sparkle/issues/376#issuecomment-48824267 and https://developer.apple.com/library/mac/technotes/tn2206
-    // Aditionally, there are several reasons to stay away from deep verification and to prefer EdDSA signing the download archive instead.
+    // Additionally, there are several reasons to stay away from deep verification and to prefer EdDSA signing the download archive instead.
     // See https://github.com/sparkle-project/Sparkle/pull/523#commitcomment-17549302 and https://github.com/sparkle-project/Sparkle/issues/543
     SecCSFlags flags = (SecCSFlags) (kSecCSDefaultFlags | kSecCSCheckAllArchitectures);
     result = SecStaticCodeCheckValidityWithErrors(staticCode, flags, requirement, &cfError);
@@ -256,6 +256,30 @@ static id valueOrNSNull(id value) {
         return NO;
     }
     return (result == 0);
+}
+
++ (NSString * _Nullable)teamIdentifierAtURL:(NSURL *)url
+{
+    SecStaticCodeRef staticCode = NULL;
+    OSStatus staticCodeResult = SecStaticCodeCreateWithPath((__bridge CFURLRef)url, kSecCSDefaultFlags, &staticCode);
+    if (staticCodeResult != noErr) {
+        SULog(SULogLevelError, @"Failed to get static code for retrieving team identifier: %d", staticCodeResult);
+        return nil;
+    }
+    
+    CFDictionaryRef cfSigningInformation = NULL;
+    OSStatus copySigningInfoCode = SecCodeCopySigningInformation(staticCode, kSecCSSigningInformation,
+        &cfSigningInformation);
+    
+    NSDictionary *signingInformation = CFBridgingRelease(cfSigningInformation);
+    
+    if (copySigningInfoCode != noErr) {
+        SULog(SULogLevelError, @"Failed to get signing information for retrieving team identifier: %d", copySigningInfoCode);
+        return nil;
+    }
+    
+    // Note this will return nil for ad-hoc or unsigned binaries
+    return signingInformation[(NSString *)kSecCodeInfoTeamIdentifier];
 }
 
 @end

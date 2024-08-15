@@ -10,6 +10,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <string>
+
 #include "core/fxcrt/retain_ptr.h"
 #include "core/fxcrt/span.h"
 
@@ -33,18 +35,43 @@ class StringDataTemplate {
   void CopyContentsAt(size_t offset, pdfium::span<const CharType> str);
 
   pdfium::span<CharType> span() {
-    return pdfium::make_span(m_String, m_nDataLength);
+    // SAFETY: m_nDataLength is within m_String.
+    return UNSAFE_BUFFERS(pdfium::make_span(m_String, m_nDataLength));
   }
   pdfium::span<const CharType> span() const {
-    return pdfium::make_span(m_String, m_nDataLength);
+    // SAFETY: m_nDataLength is within m_String.
+    return UNSAFE_BUFFERS(pdfium::make_span(m_String, m_nDataLength));
+  }
+
+  // Only a const-form is provided to preclude modifying the terminator.
+  pdfium::span<const CharType> span_with_terminator() const {
+    // SAFETY: m_nDataLength is within m_String and there is always a
+    // terminator character following it.
+    return UNSAFE_BUFFERS(pdfium::make_span(m_String, m_nDataLength + 1));
+  }
+
+  pdfium::span<CharType> alloc_span() {
+    // SAFETY: m_nAllocLength is within m_String.
+    return UNSAFE_BUFFERS(pdfium::make_span(m_String, m_nAllocLength));
+  }
+  pdfium::span<const CharType> alloc_span() const {
+    // SAFETY: m_nAllocLength is within m_String.
+    return UNSAFE_BUFFERS(pdfium::make_span(m_String, m_nAllocLength));
   }
 
   // Includes the terminating NUL not included in lengths.
   pdfium::span<CharType> capacity_span() {
-    return pdfium::make_span(m_String, m_nAllocLength + 1);
+    // SAFETY: m_nAllocLength + 1 is within m_String.
+    return UNSAFE_BUFFERS(pdfium::make_span(m_String, m_nAllocLength + 1));
   }
   pdfium::span<const CharType> capacity_span() const {
-    return pdfium::make_span(m_String, m_nAllocLength + 1);
+    // SAFETY: m_nAllocLength + 1 is within m_String.
+    return UNSAFE_BUFFERS(pdfium::make_span(m_String, m_nAllocLength + 1));
+  }
+
+  // Return length as determined by the location of the first embedded NUL.
+  size_t GetStringLength() const {
+    return std::char_traits<CharType>::length(m_String);
   }
 
   // Unlike std::string::front(), this is always safe and returns a

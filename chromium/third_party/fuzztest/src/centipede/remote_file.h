@@ -22,6 +22,7 @@
 #ifndef THIRD_PARTY_CENTIPEDE_REMOTE_FILE_H_
 #define THIRD_PARTY_CENTIPEDE_REMOTE_FILE_H_
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>  // NOLINT
 #include <memory>
@@ -49,11 +50,24 @@ absl::Nullable<RemoteFile *> RemoteFileOpen(std::string_view file_path,
 // Closes the file previously opened by RemoteFileOpen.
 void RemoteFileClose(absl::Nonnull<RemoteFile *> f);
 
+// Adjusts the buffered I/O capacity for a file opened for writing. By default,
+// the internal buffer of size `BUFSIZ` is used. May only be used after opening
+// a file, but before performing any other operations on it. Violating this
+// requirement in general can cause undefined behavior.
+void RemoteFileSetWriteBufferSize(absl::Nonnull<RemoteFile *> f, size_t size);
+
 // Appends bytes from 'ba' to 'f'.
 void RemoteFileAppend(absl::Nonnull<RemoteFile *> f, const ByteArray &ba);
 
 // Appends characters from 'contents' to 'f'.
-void RemoteFileAppend(RemoteFile *f, const std::string &contents);
+void RemoteFileAppend(absl::Nonnull<RemoteFile *> f,
+                      const std::string &contents);
+
+// Flushes the file's internal buffer. Some dynamic results of a running
+// pipeline are consumed by itself (e.g. shard cross-pollination) and can be
+// consumed by external processes (e.g. monitoring): for such files, call this
+// API after every write to ensure that they are in a valid state.
+void RemoteFileFlush(absl::Nonnull<RemoteFile *> f);
 
 // Reads all current contents of 'f' into 'ba'.
 void RemoteFileRead(absl::Nonnull<RemoteFile *> f, ByteArray &ba);

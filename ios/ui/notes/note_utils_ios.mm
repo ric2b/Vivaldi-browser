@@ -170,7 +170,7 @@ void DeleteNotes(const std::set<const NoteNode*>& notes,
     DeleteNotes(notes, model, node->children()[i - 1].get());
   }
   if (notes.find(node) != notes.end())
-    model->Remove(node);
+    model->Remove(node, FROM_HERE);
 }
 
 // Creates a toast which will undo the changes made to the note model if

@@ -14,7 +14,6 @@
 #import "components/segmentation_platform/public/constants.h"
 #import "components/segmentation_platform/public/features.h"
 #import "components/strings/grit/components_strings.h"
-#import "components/sync/base/features.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
@@ -107,24 +106,13 @@ void TapSecondaryActionButton() {
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config;
   config.features_enabled.push_back(kEnableFeedAblation);
+  config.additional_args.push_back("--test-ios-module-ranker=mvt");
   if ([self isRunningTest:@selector
             (DISABLED_testMagicStackSetUpListCompleteAllItems)] ||
       [self isRunningTest:@selector(testMagicStackEditButton)] ||
       [self isRunningTest:@selector
             (testMagicStackCompactedSetUpListCompleteAllItems)]) {
     config.features_enabled.push_back(kIOSMagicStackCollectionView);
-    std::string enable_magic_stack_segmentation_arg =
-        "--enable-features=" +
-        std::string(segmentation_platform::features::
-                        kSegmentationPlatformIosModuleRanker.name) +
-        ":" + segmentation_platform::kDefaultModelEnabledParam + "/true" + "," +
-        kMagicStack.name;
-    if ([self isRunningTest:@selector
-              (testMagicStackCompactedSetUpListCompleteAllItems)]) {
-      enable_magic_stack_segmentation_arg +=
-          ":" + std::string(kSetUpListCompactedTimeThresholdDays) + "/" + "0";
-    }
-    config.additional_args.push_back(enable_magic_stack_segmentation_arg);
     config.features_disabled.push_back(kContentPushNotifications);
     config.features_disabled.push_back(kIOSTipsNotifications);
   }
@@ -217,8 +205,15 @@ void TapSecondaryActionButton() {
                  @"Test did not switch to incognito");
 }
 
+// Tests the "Remove" action of the Most Visited context menu, and the "Undo"
 // action.
-- (void)testMostVisitedRemoveUndo {
+// TODO(crbug.com/337064665): Test is flaky on simluator. Re-enable when fixed.
+#if TARGET_IPHONE_SIMULATOR
+#define MAYBE_testMostVisitedRemoveUndo FLAKY_testMostVisitedRemoveUndo
+#else
+#define MAYBE_testMostVisitedRemoveUndo testMostVisitedRemoveUndo
+#endif
+- (void)MAYBE_testMostVisitedRemoveUndo {
   [self setupMostVisitedTileLongPress];
   const GURL pageURL = self.testServer->GetURL(kPageURL);
   NSString* pageTitle = base::SysUTF8ToNSString(kPageTitle);
@@ -287,7 +282,7 @@ void TapSecondaryActionButton() {
 
 // Tests that the "All Set" module is shown after completing all Set Up List
 // Hero Cell modules in the Magic Stack.
-// TODO(crbug.com/1520954): Test is flaky, re-enable when fixed.
+// TODO(crbug.com/41493926): Test is flaky, re-enable when fixed.
 - (void)DISABLED_testMagicStackSetUpListCompleteAllItems {
   [self prepareToTestSetUpListInMagicStack];
 
@@ -341,15 +336,10 @@ void TapSecondaryActionButton() {
   // Tap the signin item.
   TapView(set_up_list::kSignInItemID);
   [ChromeEarlGreyUI waitForAppToIdle];
-  if ([ChromeEarlGrey isReplaceSyncWithSigninEnabled]) {
-    // The fake signin UI appears. Dismiss it.
-    [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                            kFakeAuthCancelButtonIdentifier)]
-        performAction:grey_tap()];
-  } else {
-    // The full-screen signin promo appears. Dismiss it.
-    TapPromoStyleSecondaryActionButton();
-  }
+  // The fake signin UI appears. Dismiss it.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kFakeAuthCancelButtonIdentifier)]
+      performAction:grey_tap()];
 
   // Verify the All Set item is shown.
   condition = ^{
@@ -415,15 +405,10 @@ void TapSecondaryActionButton() {
   // Tap the signin item.
   TapView(set_up_list::kSignInItemID);
   [ChromeEarlGreyUI waitForAppToIdle];
-  if ([ChromeEarlGrey isReplaceSyncWithSigninEnabled]) {
-    // The fake signin UI appears. Dismiss it.
-    [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                            kFakeAuthCancelButtonIdentifier)]
-        performAction:grey_tap()];
-  } else {
-    // The full-screen signin promo appears. Dismiss it.
-    TapPromoStyleSecondaryActionButton();
-  }
+  // The fake signin UI appears. Dismiss it.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kFakeAuthCancelButtonIdentifier)]
+      performAction:grey_tap()];
 
   // Verify the All Set item is shown.
   condition = ^{

@@ -36,8 +36,9 @@ class ContentBlockingEventRouter
   void OnGroupStateChanged(adblock_filter::RuleGroup group) override;
 
   // adblock_filter::RuleManager::Observer implementation.
-  void OnRulesSourceUpdated(
-      const adblock_filter::RuleSource& rule_source) override;
+  void OnRuleSourceUpdated(
+      adblock_filter::RuleGroup group,
+      const adblock_filter::ActiveRuleSource& rule_source) override;
   void OnExceptionListStateChanged(adblock_filter::RuleGroup group) override;
   void OnExceptionListChanged(
       adblock_filter::RuleGroup group,
@@ -45,6 +46,7 @@ class ContentBlockingEventRouter
 
   // adblock_filter::KnownRuleSourcesHandler::Observer implementation.
   void OnKnownSourceAdded(
+      adblock_filter::RuleGroup group,
       const adblock_filter::KnownRuleSource& rule_source) override;
   void OnKnownSourceRemoved(adblock_filter::RuleGroup group,
                             uint32_t source_id) override;
@@ -160,6 +162,19 @@ class ContentBlockingAddKnownSourceFromFileFunction : public AdBlockFunction {
 
  private:
   ~ContentBlockingAddKnownSourceFromFileFunction() override = default;
+  // AdBlockFunction:
+  ResponseValue RunWithService(
+      adblock_filter::RuleService* rules_service) override;
+};
+
+class ContentBlockingSetKnownSourceSettingsFunction : public AdBlockFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("contentBlocking.setKnownSourceSettings",
+                             CONTENT_BLOCKING_SET_KNOWN_SOURCE_SETTINGS)
+  ContentBlockingSetKnownSourceSettingsFunction() = default;
+
+ private:
+  ~ContentBlockingSetKnownSourceSettingsFunction() override = default;
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;

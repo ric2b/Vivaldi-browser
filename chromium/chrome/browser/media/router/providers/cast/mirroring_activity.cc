@@ -179,7 +179,7 @@ bool ShouldForceLetterboxing(std::string_view model_name) {
           "disable-cast-letterboxing")) {
     return false;
   }
-  return model_name.find("Nest Hub") != base::StringPiece::npos;
+  return model_name.find("Nest Hub") != std::string_view::npos;
 }
 
 std::optional<int> GetExceededPlayoutDelayPacketPercent(
@@ -735,7 +735,7 @@ void MirroringActivity::HandleParseJsonResult(
   }
 
   if (!result.has_value() || !result.value().is_dict()) {
-    // TODO(crbug.com/905002): Record UMA metric for parse result.
+    // TODO(crbug.com/41426190): Record UMA metric for parse result.
     logger_->LogError(
         media_router::mojom::LogCategory::kMirroring, kLoggerComponent,
         base::StrCat({"Failed to parse Cast client message:", result.error()}),

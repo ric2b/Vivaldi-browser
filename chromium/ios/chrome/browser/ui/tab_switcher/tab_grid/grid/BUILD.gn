@@ -10,6 +10,7 @@ source_set("grid") {
     "grid_coordinator_audience.h",
   ]
   deps = [
+    ":grid_mediator",
     ":grid_ui",
     "//base",
     "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
@@ -21,6 +22,7 @@ source_set("grid") {
     "//ios/chrome/browser/ui/tab_switcher/tab_grid/grid/tab_groups:tab_group_creation",
     "//ios/chrome/browser/ui/tab_switcher/tab_grid/grid/tab_groups:tab_groups_commands",
     "//ios/chrome/browser/ui/tab_switcher/tab_grid/grid/tab_groups:tab_groups_ui",
+    "//ios/chrome/browser/ui/tab_switcher/tab_grid/transitions",
     "//ios/web/public",
   ]
 }
@@ -49,6 +51,7 @@ source_set("grid_mediator") {
     "//ios/chrome/browser/commerce/model",
     "//ios/chrome/browser/default_browser/model:utils",
     "//ios/chrome/browser/drag_and_drop/model",
+    "//ios/chrome/browser/iph_for_new_chrome_user/model",
     "//ios/chrome/browser/main/model",
     "//ios/chrome/browser/policy/model:policy_util",
     "//ios/chrome/browser/reading_list/model",
@@ -58,17 +61,21 @@ source_set("grid_mediator") {
     "//ios/chrome/browser/shared/model/url",
     "//ios/chrome/browser/shared/model/url:constants",
     "//ios/chrome/browser/shared/model/web_state_list",
+    "//ios/chrome/browser/shared/model/web_state_list:utils",
     "//ios/chrome/browser/shared/public/commands",
     "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/shared/public/features:system_flags",
     "//ios/chrome/browser/shared/ui/util:url_with_title",
     "//ios/chrome/browser/snapshots/model",
-    "//ios/chrome/browser/tabs/model:features",
+    "//ios/chrome/browser/snapshots/model:model_common",
+    "//ios/chrome/browser/snapshots/model:model_swift",
     "//ios/chrome/browser/tabs_search/model",
     "//ios/chrome/browser/tabs_search/model:model_factory",
     "//ios/chrome/browser/ui/menu",
     "//ios/chrome/browser/ui/tab_switcher",
-    "//ios/chrome/browser/ui/tab_switcher:tab_utils",
+    "//ios/chrome/browser/ui/tab_switcher:items",
+    "//ios/chrome/browser/ui/tab_switcher:utils",
+    "//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_idle_status_handler",
     "//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_metrics",
     "//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_page_mutator",
     "//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_paging",
@@ -98,7 +105,7 @@ source_set("grid_item_identifier") {
 
   deps = [
     "//base",
-    "//ios/chrome/browser/ui/tab_switcher",
+    "//ios/chrome/browser/ui/tab_switcher:items",
     "//ios/web/public",
   ]
 }
@@ -117,7 +124,8 @@ source_set("selected_grid_items") {
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/ui/util:url_with_title",
     "//ios/chrome/browser/ui/tab_switcher",
-    "//ios/chrome/browser/ui/tab_switcher:tab_utils",
+    "//ios/chrome/browser/ui/tab_switcher:items",
+    "//ios/chrome/browser/ui/tab_switcher:utils",
     "//ios/chrome/browser/ui/tab_switcher/tab_grid/tab_context_menu:tab_item",
     "//ios/web/public",
   ]
@@ -132,8 +140,9 @@ source_set("grid_utils") {
     ":grid_item_identifier",
     "//base",
     "//ios/chrome/browser/shared/model/web_state_list",
-    "//ios/chrome/browser/tabs/model:features",
+    "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/ui/tab_switcher",
+    "//ios/chrome/browser/ui/tab_switcher:items",
   ]
 }
 
@@ -178,8 +187,6 @@ source_set("grid_ui") {
     ":grid_ui_constants",
     ":grid_view_controller_mutator",
     ":group_tab_info",
-    "resources:tab_grid_incognito_tabs_empty",
-    "resources:tab_grid_regular_tabs_empty",
     "//base",
     "//components/supervised_user/core/common:common",
     "//ios/chrome/app/strings",
@@ -188,14 +195,15 @@ source_set("grid_ui") {
     "//ios/chrome/browser/shared/ui/elements",
     "//ios/chrome/browser/shared/ui/symbols",
     "//ios/chrome/browser/shared/ui/util",
-    "//ios/chrome/browser/tabs/model:features",
     "//ios/chrome/browser/tabs/model/inactive_tabs:features",
     "//ios/chrome/browser/ui/commerce:price_card",
     "//ios/chrome/browser/ui/menu",
     "//ios/chrome/browser/ui/tab_switcher",
-    "//ios/chrome/browser/ui/tab_switcher:tab_utils",
+    "//ios/chrome/browser/ui/tab_switcher:items",
+    "//ios/chrome/browser/ui/tab_switcher:utils",
     "//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_paging",
     "//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_ui_constants",
+    "//ios/chrome/browser/ui/tab_switcher/tab_grid/grid/resources",
     "//ios/chrome/browser/ui/tab_switcher/tab_grid/grid/tab_groups:snapshots_view",
     "//ios/chrome/browser/ui/tab_switcher/tab_grid/suggested_actions",
     "//ios/chrome/browser/ui/tab_switcher/tab_grid/tab_context_menu",
@@ -225,6 +233,12 @@ source_set("grid_consumer") {
 
 source_set("grid_mediator_delegate") {
   sources = [ "grid_mediator_delegate.h" ]
+
+  deps = [ "//base" ]
+}
+
+source_set("grid_view_delegate") {
+  sources = [ "grid_view_delegate.h" ]
 
   deps = [ "//base" ]
 }
@@ -273,14 +287,16 @@ source_set("unit_tests") {
     "//base/test:test_support",
     "//components/commerce/core:feature_list",
     "//components/tab_groups",
+    "//ios/chrome/app/strings",
     "//ios/chrome/browser/commerce/model",
     "//ios/chrome/browser/shared/model/browser/test:test_support",
     "//ios/chrome/browser/shared/model/browser_state:test_support",
+    "//ios/chrome/browser/shared/model/url:constants",
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/model/web_state_list/test:test_support",
     "//ios/chrome/browser/shared/public/features",
-    "//ios/chrome/browser/tabs/model:features",
     "//ios/chrome/browser/ui/tab_switcher",
+    "//ios/chrome/browser/ui/tab_switcher:items",
     "//ios/chrome/browser/ui/tab_switcher/tab_grid/grid/incognito",
     "//ios/chrome/browser/ui/tab_switcher/tab_grid/grid/regular",
     "//ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars",

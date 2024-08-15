@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="da">
+<translation id="2947471979790858922">Din aktivitet i disse private faner vil blive fjernet fra denne enhed</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 { Du kan finde dine lukkede faner i Seneste faner under Vivaldi-hovedmenuen. Din private fane er ikke tilgængelig.}
+        other {Du kan finde dine lukkede faner i Seneste faner under Vivaldi-hovedmenuen. Dine # private faner er ikke tilgængelige.}}</translation>
+<translation id="4871187110787939393">Luk alle private faner?</translation>
 </translationbundle>

@@ -6,7 +6,6 @@
 #define COMPONENTS_COMMERCE_CORE_COMMERCE_INFO_CACHE_H_
 
 #include <memory>
-#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -22,6 +21,7 @@ class Time;
 
 namespace commerce {
 
+struct PriceInsightsInfo;
 struct ProductInfo;
 
 class CommerceInfoCache {
@@ -42,8 +42,16 @@ class CommerceInfoCache {
 
     std::unique_ptr<base::CancelableOnceClosure> run_local_extraction_task;
 
-    // The product info associated with the URL.
+    // The product info associated with the URL or nullptr if not available.
     std::unique_ptr<ProductInfo> product_info;
+
+    // A flag indicating whether we should check for product info on-demand.
+    // This will be used to prevent repeated attempts.
+    bool run_product_info_on_demand{true};
+
+    // The price insights info associated with the URL or nullptr if not
+    // available.
+    std::unique_ptr<PriceInsightsInfo> price_insights_info;
   };
 
   CommerceInfoCache();

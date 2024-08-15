@@ -16,6 +16,7 @@
 #include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
+#include "base/rand_util.h"
 #include "base/synchronization/lock.h"
 #include "base/task/single_thread_task_runner.h"
 #include "gpu/config/gpu_feature_info.h"
@@ -26,6 +27,7 @@
 #include "gpu/ipc/client/shared_image_interface_proxy.h"
 #include "gpu/ipc/common/gpu_channel.mojom.h"
 #include "ipc/ipc_listener.h"
+#include "mojo/public/cpp/base/shared_memory_version.h"
 #include "mojo/public/cpp/bindings/shared_associated_remote.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 
@@ -90,17 +92,25 @@ class GPU_EXPORT GpuChannelHost
 
   // Enqueue a deferred message for the ordering barrier and return an
   // identifier that can be used to ensure or verify the deferred message later.
+  // `release_count` is the sync point release count that is expected to be
+  // reached after execution of this request. 0 means this request doesn't
+  // release.
   uint32_t OrderingBarrier(int32_t route_id,
                            int32_t put_offset,
-                           std::vector<SyncToken> sync_token_fences);
+                           std::vector<SyncToken> sync_token_fences,
+                           uint64_t release_count);
 
   // Enqueues an IPC message that is deferred until the next implicit or
   // explicit flush. The IPC is also possibly gated on one or more SyncTokens
   // being released, but is handled in-order relative to other such IPCs and/or
-  // OrderingBarriers. Returns a deferred message id just like OrderingBarrier.
-  uint32_t EnqueueDeferredMessage(
-      mojom::DeferredRequestParamsPtr params,
-      std::vector<SyncToken> sync_token_fences = {});
+  // OrderingBarriers.
+  // `release_count` is the sync point release count that is expected to be
+  // reached after execution of this request. 0 means this request doesn't
+  // release.
+  // Returns a deferred message id just like OrderingBarrier.
+  uint32_t EnqueueDeferredMessage(mojom::DeferredRequestParamsPtr params,
+                                  std::vector<SyncToken> sync_token_fences,
+                                  uint64_t release_count);
 
   // Ensure that the all deferred messages prior upto |deferred_message_id| have
   // been flushed. Pass UINT32_MAX to force all pending deferred messages to be
@@ -135,6 +145,14 @@ class GPU_EXPORT GpuChannelHost
                                     gfx::Size* size,
                                     gfx::BufferUsage* buffer_usage);
 
+#if BUILDFLAG(IS_WIN)
+  void CopyToGpuMemoryBufferAsync(
+      const Mailbox& mailbox,
+      std::vector<SyncToken> sync_token_dependencies,
+      uint64_t release_count,
+      base::OnceCallback<void(bool)> callback);
+#endif
+
   // Crashes the GPU process. This functionality is added here because
   // of instability when creating a new tab just to navigate to
   // chrome://gpucrash . This only works when running tests and is
@@ -164,6 +182,10 @@ class GPU_EXPORT GpuChannelHost
   virtual ~GpuChannelHost();
 
  private:
+  // Establishes shared memory communication with the GPU process. This memory
+  // is used to keep track of flushed items and avoid unnecessary IPCs.
+  void EstablishSharedMemoryForFlushVerification();
+
   // Tracks whether we still have a working connection to the GPU process. This
   // is updated eaglerly from the IO thread if the connection is broken, but it
   // may be queried from any thread via GpuChannel::IsLost(). This is why it's a
@@ -194,8 +216,9 @@ class GPU_EXPORT GpuChannelHost
 
     // The GpuChannelLost Monitor for LayerTreeFrameSink.
     base::Lock channel_obs_lock_;
-    base::ObserverList<GpuChannelLostObserver>::Unchecked GUARDED_BY(
-        channel_obs_lock_) observer_list_;
+    // Note that ObserverList is sequence checked so we can't use that here.
+    std::vector<GpuChannelLostObserver*> GUARDED_BY(channel_obs_lock_)
+        observer_list_;
   };
 
   // A filter used internally to route incoming messages from the IO thread
@@ -239,6 +262,10 @@ class GPU_EXPORT GpuChannelHost
     // Sync token dependencies of the message. These are sync tokens for which
     // waits are in the commands that are part of this command buffer flush.
     std::vector<SyncToken> sync_token_fences;
+
+    // The sync point release count that is expected to be reached after
+    // execution of this request.
+    uint64_t release_count;
   };
 
   void EnqueuePendingOrderingBarrier();
@@ -269,8 +296,14 @@ class GPU_EXPORT GpuChannelHost
   mojo::SharedAssociatedRemote<mojom::GpuChannel> gpu_channel_;
   SharedImageInterfaceProxy shared_image_interface_;
 
+  // Used to synchronize flushed request ids with the GPU process.
+  std::optional<mojo::SharedMemoryVersionClient> shared_memory_version_client_;
+
   // A client-side helper to send image decode requests to the GPU process.
   ImageDecodeAcceleratorProxy image_decode_accelerator_proxy_;
+
+  // Used to reduce frequency of metrics logging.
+  base::MetricsSubSampler metrics_sub_sampler_;
 
   // Image IDs are allocated in sequence.
   base::AtomicSequenceNumber next_image_id_;
@@ -290,8 +323,6 @@ class GPU_EXPORT GpuChannelHost
   uint32_t enqueued_deferred_message_id_ GUARDED_BY(context_lock_) = 0;
   // Highest deferred message id sent to the channel.
   uint32_t flushed_deferred_message_id_ GUARDED_BY(context_lock_) = 0;
-  // Highest deferred message id known to have been received by the service.
-  uint32_t verified_deferred_message_id_ GUARDED_BY(context_lock_) = 0;
 };
 
 }  // namespace gpu

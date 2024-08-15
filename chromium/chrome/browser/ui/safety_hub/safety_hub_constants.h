@@ -29,10 +29,17 @@ extern const char kSafetyHubMenuNotificationResultKey[];
 // Key used for the dict of the Extensions result.
 extern const char kSafetyHubTriggeringExtensionIdsKey[];
 
-// Key used for the dict storing revoked permission.
+// Key of the expiration time in the |UnusedSitePermissions| object. Indicates
+// the time after which the associated origin and permissions are no longer
+// shown in the UI.
+extern const char kExpirationKey[];
+// Key of the lifetime in the |UnusedSitePermissions| object.
+extern const char kLifetimeKey[];
+// Key of the revoked chooser permissions in the |UnusedSitePermissions| object.
 extern const char kSafetyHubChooserPermissionsData[];
 
-// State that a top card in the Safety Hub page can be in.
+// State that a top card in the Safety Hub page can be in. This enum should
+// remain sorted from the "worst" state (warning) to the "best" state (safe).
 // Should be kept in sync with the corresponding enum in
 // chrome/browser/resources/settings/safety_hub/safety_hub_browser_proxy.ts
 enum class SafetyHubCardState {
@@ -45,9 +52,6 @@ enum class SafetyHubCardState {
 
 // Smallest time duration between two subsequent password checks.
 extern const base::TimeDelta kMinTimeBetweenPasswordChecks;
-// When the password check didn't run at its scheduled time (e.g. client was
-// offline) it will be scheduled to run within this time frame.
-extern const base::TimeDelta kPasswordCheckOverdueTimeWindow;
 
 // An enum of the different Safety Hub modules that are available. This should
 // be updated whenever a notification for a new module is added to or removed
@@ -87,6 +91,16 @@ enum class SafetyHubSurfaces {
   kSafetyHubPage = 1,
   kMaxValue = kSafetyHubPage,
 };
+
+// This string is used for the key of the base::Value dictionary we assign to
+// the REVOKED_ABUSIVE_NOTIFICATION_PERMISSION value.
+extern const char kRevokedStatusDictKeyStr[];
+// When users take action to grant a permission despite warnings against doing
+// so, we should ignore the origin in future auto revocations. To do this, we
+// will assign the REVOKED_ABUSIVE_NOTIFICATION_PERMISSION permission
+// base::Value to the "ignore" string. Otherwise, the value should be "revoke".
+extern const char kIgnoreStr[];
+extern const char kRevokeStr[];
 
 }  // namespace safety_hub
 

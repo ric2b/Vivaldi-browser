@@ -30,11 +30,27 @@ extern const char kMagicStackTopModuleImpressionHistogram[];
 // Logs a Home action and attributes it to the NTP or Start surface.
 void RecordHomeAction(IOSHomeActionType type, bool isStartSurface);
 
+// Logs a Magic Stack card click split by NTP and Start surface.
+void RecordMagicStackClick(ContentSuggestionsModuleType type,
+                           bool isStartSurface);
+
+// Logs some TabResumption specific metrics on click split by NTP and Start
+// surface.
+void RecordMagicStackTabResumptionClick(bool isLocal,
+                                        bool isStartSurface,
+                                        NSUInteger index);
+
 // Logs a Magic Stack freshness event.
 void RecordModuleFreshnessSignal(ContentSuggestionsModuleType module_type);
 
 // Logs a metric for when a module of `type` is shown as the first module in the
 // Magic Stack.
 void LogTopModuleImpressionForType(ContentSuggestionsModuleType module_type);
+
+// Logs some TabResumption specific metrics on impression split by NTP and Start
+// surface.
+void LogTabResumptionImpression(bool isLocal,
+                                bool isStartSurface,
+                                NSUInteger index);
 
 #endif  // IOS_CHROME_BROWSER_UI_NTP_METRICS_HOME_METRICS_H_

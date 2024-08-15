@@ -11,6 +11,7 @@
 
 #include "ash/app_list/app_collections_constants.h"
 #include "ash/app_list/model/app_list_model_observer.h"
+#include "ash/app_list/views/app_list_item_view_grid_delegate.h"
 #include "ash/ash_export.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "base/memory/raw_ptr.h"
@@ -32,7 +33,8 @@ class ASH_EXPORT AppsCollectionSectionView : public AppListModelObserver,
 
  public:
   AppsCollectionSectionView(AppCollection collection,
-                            AppListViewDelegate* view_delegate);
+                            AppListViewDelegate* view_delegate,
+                            AppListItemViewGridDelegate* grid_delegate);
   AppsCollectionSectionView(const AppsCollectionSectionView&) = delete;
   AppsCollectionSectionView& operator=(const AppsCollectionSectionView&) =
       delete;
@@ -49,9 +51,6 @@ class ASH_EXPORT AppsCollectionSectionView : public AppListModelObserver,
   // Returns the number of AppListItemView children.
   size_t GetItemViewCount() const;
 
-  // views::View:
-  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
-
   // AppListModelObserver:
   void OnAppListModelStatusChanged() override;
   void OnAppListItemAdded(AppListItem* item) override;
@@ -59,16 +58,24 @@ class ASH_EXPORT AppsCollectionSectionView : public AppListModelObserver,
 
   AppCollection collection() { return collection_; }
 
- private:
-  friend class AppsCollectionSectionViewTest;
+  // Return the view model.
+  views::ViewModelT<AppListItemView>* item_views() { return &item_views_; }
+  const views::ViewModelT<AppListItemView>* item_views() const {
+    return &item_views_;
+  }
 
-  // Calculates how much padding is assigned to the AppListItemView.
-  int CalculateTilePadding() const;
+ private:
+  friend class AppListBubbleAppsCollectionsPageTest;
+  friend class AppsCollectionSectionViewTest;
 
   // Returns the index of the AppListItemView within `item_views_` that
   // corresponds to the `item_id`. If the `item_id` does not appear on
   // `item_views_`, the return value will be null.
   std::optional<size_t> GetViewIndexForItem(const std::string& item_id);
+
+  // Create an AppListItemView from the `item` provided and add it to the
+  // collection view at the end.
+  void CreateAndAddAppItemView(AppListItem* item);
 
   const AppCollection collection_ = AppCollection::kUnknown;
   const raw_ptr<AppListViewDelegate> view_delegate_;
@@ -78,8 +85,7 @@ class ASH_EXPORT AppsCollectionSectionView : public AppListModelObserver,
   raw_ptr<AppListModel> model_ = nullptr;
 
   // The grid delegate for each AppListItemView.
-  class GridDelegateImpl;
-  std::unique_ptr<GridDelegateImpl> grid_delegate_;
+  raw_ptr<AppListItemViewGridDelegate> grid_delegate_;
 
   // The recent app items. Stored here because this view has child views for
   // spacing that are not AppListItemViews.

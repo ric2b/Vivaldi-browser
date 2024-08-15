@@ -1,6 +1,6 @@
 --------------------------------------------------------------------------------
 
-breadcrumbs: - - /chromium-os/developer-library/guides - Chromium OS > Developer
+breadcrumbs: - - /chromium-os/developer-library/guides - ChromiumOS > Developer
 Library > Guides page_name: coreboot-upstream
 
 ## title: Working with coreboot upstream and Chromium

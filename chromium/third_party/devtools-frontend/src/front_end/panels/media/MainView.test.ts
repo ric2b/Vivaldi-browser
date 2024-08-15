@@ -4,7 +4,6 @@
 
 import type * as Common from '../../core/common/common.js';
 import type * as Platform from '../../core/platform/platform.js';
-import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
 import {createTarget} from '../../testing/EnvironmentHelpers.js';
@@ -12,8 +11,6 @@ import {describeWithMockConnection} from '../../testing/MockConnection.js';
 import * as Coordinator from '../../ui/components/render_coordinator/render_coordinator.js';
 
 import * as Media from './media.js';
-
-const {assert} = chai;
 
 const PLAYER_ID = 'PLAYER_ID' as Protocol.Media.PlayerId;
 
@@ -34,7 +31,7 @@ describeWithMockConnection('MediaMainView', () => {
     mainView.markAsRoot();
     mainView.show(document.body);
     const model = target.model(Media.MediaModel.MediaModel);
-    assertNotNullOrUndefined(model);
+    assert.exists(model);
     model.dispatchEventToListeners(Media.MediaModel.Events.PlayersCreated, [PLAYER_ID]);
     const field = [{name: 'kResolution', value: '{}', data: {}, stack: [], cause: []}];
     const data = {playerId: PLAYER_ID, properties: field, events: field, messages: field, errors: field};

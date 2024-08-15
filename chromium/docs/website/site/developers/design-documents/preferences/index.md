@@ -15,8 +15,6 @@ context of extensions and policies.
 
 **Authors:** battre, pamg
 
-**Last modification:** March 16, 2013 (updated code search links)
-
 [TOC]
 
 ## Introduction
@@ -120,8 +118,8 @@ preferences are written to disk (during shutdown), use
 `PrefService::CommitPendingWrite()`.
 
 The **PrefChangeRegistrar** allows to subscribe to preference change events. A
-class that implements the `NotificationObserver` interface
-(`notification_observer.h`) can have a member variable
+class that wants to be notified of preferences changing can have a member
+variable
 
 ```none
 PrefChangeRegistrar registrar_;
@@ -131,10 +129,13 @@ In its constructor, the class would initialize the registrar as follows
 
 ```none
 registrar_.Init(pref_service);
-registrar_.Add(prefs::kPreference, this);
+registrar_.Add(prefs::kPreference, base::BindRepeating(/* … */));
 ```
 
-Any changes to `prefs::kPreference` would call the `Observe()` method of `this`.
+passing either a `base::RepeatingClosure` or a `base::RepeatingCallback` taking
+a `const std::string&` (if the changed preference path is required). Then, any
+changes to `prefs::kPreference` will call the provided callback.
+
 The **PrefMember** classes (`BooleanPrefMember`, `IntegerPrefMember`, …, see
 `pref_member.h`) are helper classes that stay in sync with preference values
 beyond the scope of the UI thread. This allows simple reading of preference

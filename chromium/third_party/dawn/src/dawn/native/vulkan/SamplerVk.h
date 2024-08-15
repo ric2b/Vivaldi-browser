@@ -41,7 +41,7 @@ class Sampler final : public SamplerBase {
   public:
     static ResultOrError<Ref<Sampler>> Create(Device* device, const SamplerDescriptor* descriptor);
 
-    VkSampler GetHandle() const;
+    const VkSampler& GetHandle() const;
 
   private:
     ~Sampler() override;
@@ -53,6 +53,8 @@ class Sampler final : public SamplerBase {
     void SetLabelImpl() override;
 
     VkSampler mHandle = VK_NULL_HANDLE;
+    VkSamplerYcbcrConversion mSamplerYCbCrConversion = VK_NULL_HANDLE;
+    YCbCrVkDescriptor mYCbCrVkDescriptor;
 };
 
 }  // namespace dawn::native::vulkan

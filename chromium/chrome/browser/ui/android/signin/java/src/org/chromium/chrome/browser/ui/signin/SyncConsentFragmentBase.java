@@ -40,7 +40,6 @@ import org.chromium.chrome.browser.signin.services.SigninMetricsUtils.State;
 import org.chromium.chrome.browser.signin.services.UnifiedConsentServiceBridge;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.browser.ui.device_lock.DeviceLockCoordinator;
-import org.chromium.chrome.browser.ui.signin.MinorModeHelper.ScreenMode;
 import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerCoordinator;
 import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerDialogCoordinator;
 import org.chromium.components.browser_ui.device_lock.DeviceLockActivityLauncher;
@@ -248,11 +247,14 @@ public abstract class SyncConsentFragmentBase extends Fragment
         };
     }
 
-    // TODO(crbug.com/1302635): |callback| is only used to set |mIsSigninInProgress| to false. Once
+    // TODO(crbug.com/40217047): |callback| is only used to set |mIsSigninInProgress| to false. Once
     // this method replaces onSyncAccepted(), the field can be set directly.
-    // TODO(crbug.com/1462264): Refactor method to take CoreAccountInfo instead of String email.
+    // TODO(crbug.com/40274844): Refactor method to take CoreAccountInfo instead of String email.
     protected void signinAndEnableSync(
             String accountEmail, boolean settingsClicked, SigninManager.SignInCallback callback) {
+        // Getting the profile depends on the Activity, which may be gone by the time the callback
+        // runs.
+        final Profile profile = getProfile();
         AccountManagerFacadeProvider.getInstance()
                 .getCoreAccountInfos()
                 .then(
@@ -265,7 +267,6 @@ public abstract class SyncConsentFragmentBase extends Fragment
                                 callback.onSignInAborted();
                                 return;
                             }
-                            Profile profile = getProfile();
                             SigninManager signinManager =
                                     IdentityServicesProvider.get().getSigninManager(profile);
                             signinManager.signinAndEnableSync(
@@ -289,7 +290,7 @@ public abstract class SyncConsentFragmentBase extends Fragment
         mSigninAccessPoint = arguments.getInt(ARGUMENT_ACCESS_POINT, SigninAccessPoint.MAX);
         assert mSigninAccessPoint != SigninAccessPoint.MAX : "Cannot find SigninAccessPoint!";
 
-        // TODO(crbug.com/1306971): remove usage of Profile.isChild() and the need for a bundle
+        // TODO(crbug.com/40828116): remove usage of Profile.isChild() and the need for a bundle
         // argument in the FRE, but moving to a new API for determining device supervision status.
         mSelectedAccountEmail = arguments.getString(ARGUMENT_ACCOUNT_NAME, null);
         if (arguments.containsKey(ARGUMENT_CHILD_ACCOUNT_STATUS)) {
@@ -369,6 +370,7 @@ public abstract class SyncConsentFragmentBase extends Fragment
                 .getCoreAccountInfos()
                 .then(
                         (coreAccountInfos) -> {
+                            if (getActivity() == null) return;
                             CoreAccountInfo selectedCoreAccountInfo =
                                     AccountUtils.findCoreAccountInfoByEmail(
                                             coreAccountInfos, mSelectedAccountEmail);
@@ -413,7 +415,7 @@ public abstract class SyncConsentFragmentBase extends Fragment
                             mSigninView
                                     .getScrollView()
                                     .smoothScrollBy(0, mSigninView.getScrollView().getHeight());
-                            // TODO(https://crbug.com/821127): Revise this user action.
+                            // TODO(crbug.com/41376043): Revise this user action.
                             RecordUserAction.record("Signin_MoreButton_Shown");
                         });
         mSigninView.getScrollView().setScrolledToBottomObserver(this::showButtonBar);
@@ -649,7 +651,9 @@ public abstract class SyncConsentFragmentBase extends Fragment
                                 // immediately or after a short timeout during which the button
                                 // configuration is retrieved.
                                 MinorModeHelper.resolveMinorMode(
-                                        identityManager, account, mSigninView::recreateButtons);
+                                        identityManager,
+                                        account,
+                                        mSigninView::recreateSyncConsentButtons);
                             } else {
                                 MinorModeHelper.trackLatency(identityManager, account);
                             }
@@ -669,6 +673,7 @@ public abstract class SyncConsentFragmentBase extends Fragment
     }
 
     private void onRefuseButtonClicked(View button) {
+        mSigninView.refuseButtonClicked();
         refuseSignIn();
     }
 
@@ -711,6 +716,9 @@ public abstract class SyncConsentFragmentBase extends Fragment
     }
 
     private void seedAccountsAndSignin(boolean settingsClicked, View confirmationView) {
+        // Getting the profile depends on the Activity, which may be gone by the time the callback
+        // runs.
+        final Profile profile = getProfile();
         AccountInfoServiceProvider.get()
                 .getAccountInfoByEmail(mSelectedAccountEmail)
                 .then(
@@ -726,7 +734,7 @@ public abstract class SyncConsentFragmentBase extends Fragment
                                 return;
                             }
                             mConsentTextTracker.recordConsent(
-                                    getProfile(),
+                                    profile,
                                     accountInfo.getId(),
                                     ConsentAuditorFeature.CHROME_SYNC,
                                     (TextView) confirmationView,
@@ -882,7 +890,7 @@ public abstract class SyncConsentFragmentBase extends Fragment
         } else {
             if (SigninFeatureMap.isEnabled(
                     SigninFeatures.MINOR_MODE_RESTRICTIONS_FOR_HISTORY_SYNC_OPT_IN)) {
-                mSigninView.recreateButtons(ScreenMode.UNRESTRICTED);
+                mSigninView.recreateAddAccountButtons();
             }
         }
 

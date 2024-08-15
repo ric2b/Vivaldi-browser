@@ -12,12 +12,12 @@
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1591562245178063882">Bu ay</translation>
 <translation id="1637811476055996098">Dosyaları Seç</translation>
+<translation id="1680090928918677457">Kamerayı kullan</translation>
 <translation id="1681022320378710418">şu anki saat</translation>
 <translation id="1727839386348365796">Damlalık</translation>
 <translation id="1729654308190250600">Lütfen e-posta adresini boş bırakmayın.</translation>
 <translation id="1758486001363313524">Diğer...</translation>
 <translation id="1787192514241997742">toplam süre: <ph name="REMAINING_TIME" /></translation>
-<translation id="1800494066469288780">Kameraya izin ver</translation>
 <translation id="1822429046913737220">AM/PM</translation>
 <translation id="1832974991323546415">uzaktan cihazda oynat</translation>
 <translation id="1921819250265091946">gg</translation>
@@ -54,7 +54,6 @@
 <translation id="3220661731597678625">geçerli adım</translation>
 <translation id="3321030238473337787">Oynatma hızı</translation>
 <translation id="3329013043687509092">Doygunluk</translation>
-<translation id="3377518164566272702">Mikrofon ve kameraya izin ver</translation>
 <translation id="3450233048674729344">Değer <ph name="MAXIMUM" /> veya daha küçük olmalıdır.</translation>
 <translation id="3732799496749320381">aa</translation>
 <translation id="3754210790023674521">Pencere içinde pencere modundan çık</translation>
@@ -62,6 +61,7 @@
 <translation id="3822383571486410024">Lütfen bu metni <ph name="MIN_CHARACTERS" /> karakter veya daha fazla olacak şekilde uzatın (şu anda <ph name="CURRENT_LENGTH" /> karakter kullanıyorsunuz).</translation>
 <translation id="383465348367842624">Başında "<ph name="ATSIGN" />" bulunan kısımda "<ph name="INVALIDCHARACTER" />" simgesi bulunmamalıdır.</translation>
 <translation id="3846214748874656680">Tam ekran modundan çık</translation>
+<translation id="3914173277599553213">Gerekli</translation>
 <translation id="4031179711345676612">Mikrofona izin verildi</translation>
 <translation id="4103419683916926126">Milisaniye</translation>
 <translation id="4201051445878709314">Önceki ayı göster</translation>
@@ -77,6 +77,7 @@
 <translation id="4912200001568447310">geçerli öğe</translation>
 <translation id="4915360478455618802">Saat seçiciyi gösterir</translation>
 <translation id="4924138096460353083">belirsiz</translation>
+<translation id="49269513399674318">Mikrofonu kullan</translation>
 <translation id="4950364064308314478">Yerel tarih ve saat seçiciyi gösterir</translation>
 <translation id="4971739861736909480"><ph name="ACCNAME" /> seçildi</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> öğe seçildi</translation>
@@ -144,6 +145,7 @@
 <translation id="7080893216867146095">Konum paylaşımına izin veriliyor</translation>
 <translation id="709897737746224366">Lütfen istenen biçimi eşleştirin.</translation>
 <translation id="7102274145889307184">geçerli konum</translation>
+<translation id="7134810312945846184">Mikrofon ve kamerayı kullan</translation>
 <translation id="7263440858009898357">Lütfen listeden bir öğe seçin.</translation>
 <translation id="7320576522385648310">arabelleğe alınıyor</translation>
 <translation id="7341556277900466204">Renk bölmesi</translation>
@@ -188,7 +190,6 @@
 <translation id="9132465097189459683">Diğer...</translation>
 <translation id="9155987714137265666"><ph name="WEEK_START_DATE" /> tarihinde başlayan <ph name="WEEK" /></translation>
 <translation id="916607977885256133">Pencere İçinde Pencere</translation>
-<translation id="918430632320614861">Mikrofona izin ver</translation>
 <translation id="945780513535800434">Kısmen İşaretlendi</translation>
 <translation id="954003015749068518">pencere içinde pencere moduna gir</translation>
 </translationbundle>

@@ -111,9 +111,20 @@ class MergedBookmarkModel : public bookmarks::CoreBookmarkModel {
     return matches;
   }
 
-  void RemoveAllUserBookmarks() override {
-    model1_->RemoveAllUserBookmarks();
-    model2_->RemoveAllUserBookmarks();
+  void RemoveAllUserBookmarks(const base::Location& location) override {
+    model1_->RemoveAllUserBookmarks(location);
+    model2_->RemoveAllUserBookmarks(location);
+  }
+
+  // Vivaldi
+  [[nodiscard]] std::vector<bookmarks::TitledUrlMatch> GetNicknameMatching(
+      const std::u16string& query,
+      size_t max_count_hint) const override {
+    std::vector<bookmarks::TitledUrlMatch> matches =
+        model1_->GetNicknameMatching(query, max_count_hint);
+    base::Extend(matches,
+        model2_->GetNicknameMatching(query, max_count_hint));
+    return matches;
   }
 
  private:

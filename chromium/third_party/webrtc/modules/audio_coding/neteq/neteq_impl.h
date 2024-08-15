@@ -133,7 +133,7 @@ class NetEqImpl : public webrtc::NetEq {
 
   int GetAudio(
       AudioFrame* audio_frame,
-      bool* muted,
+      bool* muted = nullptr,
       int* current_sample_rate_hz = nullptr,
       absl::optional<Operation> action_override = absl::nullopt) override;
 
@@ -216,7 +216,6 @@ class NetEqImpl : public webrtc::NetEq {
   // Delivers 10 ms of audio data. The data is written to `audio_frame`.
   // Returns 0 on success, otherwise an error code.
   int GetAudioInternal(AudioFrame* audio_frame,
-                       bool* muted,
                        absl::optional<Operation> action_override)
       RTC_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
@@ -357,7 +356,6 @@ class NetEqImpl : public webrtc::NetEq {
   const std::unique_ptr<PreemptiveExpandFactory> preemptive_expand_factory_
       RTC_GUARDED_BY(mutex_);
   const std::unique_ptr<StatisticsCalculator> stats_ RTC_GUARDED_BY(mutex_);
-  const bool enable_fec_delay_adaptation_ RTC_GUARDED_BY(mutex_);
 
   std::unique_ptr<BackgroundNoise> background_noise_ RTC_GUARDED_BY(mutex_);
   std::unique_ptr<NetEqController> controller_ RTC_GUARDED_BY(mutex_);

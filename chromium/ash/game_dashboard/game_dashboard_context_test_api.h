@@ -108,9 +108,10 @@ class GameDashboardContextTestApi {
   IconButton* GetToolbarGameControlsButton();
   IconButton* GetToolbarRecordGameButton();
   IconButton* GetToolbarScreenshotButton();
+  bool IsToolbarExpanded();
 
   // Returns the quadrant that the toolbar is currently placed in.
-  GameDashboardContext::ToolbarSnapLocation GetToolbarSnapLocation() const;
+  GameDashboardToolbarSnapLocation GetToolbarSnapLocation() const;
 
   // Opens the toolbar.
   // Before opening the toolbar, verifies the main menu is open and the toolbar
@@ -142,6 +143,10 @@ class GameDashboardContextTestApi {
   // Before toggling the switch, verifies the settings view view is visible.
   // After toggling the switch, verifies the switch state has changed.
   void ToggleWelcomeDialogSettingsSwitch();
+
+  // Verifies the accessibility tree matches the available Game Dashboard
+  // related traversable widgets.
+  void VerifyAccessibilityTree();
 
  private:
   // Returns a view from the `GameDashboardMainMenuView` for the given

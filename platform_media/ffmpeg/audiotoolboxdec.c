@@ -43,6 +43,7 @@
 
 #include "platform_media/ffmpeg/ffviv_audio_kit.h"
 #include "third_party/ffmpeg/libavcodec/decode.h"
+#include "third_party/ffmpeg/libavutil/mem.h"
 
 #if __MAC_OS_X_VERSION_MIN_REQUIRED < 101100
 #define kAudioFormatEnhancedAC3 'ec-3'

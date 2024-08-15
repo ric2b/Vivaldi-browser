@@ -4,6 +4,11 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "xfa/fwl/cfwl_monthcalendar.h"
 
 #include <algorithm>
@@ -36,19 +41,19 @@ constexpr float kMonthCalHeaderBtnHMargin = 5.0f;
 WideString GetAbbreviatedDayOfWeek(int day) {
   switch (day) {
     case 0:
-      return L"Sun";
+      return WideString::FromASCII("Sun");
     case 1:
-      return L"Mon";
+      return WideString::FromASCII("Mon");
     case 2:
-      return L"Tue";
+      return WideString::FromASCII("Tue");
     case 3:
-      return L"Wed";
+      return WideString::FromASCII("Wed");
     case 4:
-      return L"Thu";
+      return WideString::FromASCII("Thu");
     case 5:
-      return L"Fri";
+      return WideString::FromASCII("Fri");
     case 6:
-      return L"Sat";
+      return WideString::FromASCII("Sat");
     default:
       NOTREACHED_NORETURN();
   }
@@ -57,29 +62,29 @@ WideString GetAbbreviatedDayOfWeek(int day) {
 WideString GetMonth(int month) {
   switch (month) {
     case 0:
-      return L"January";
+      return WideString::FromASCII("January");
     case 1:
-      return L"February";
+      return WideString::FromASCII("February");
     case 2:
-      return L"March";
+      return WideString::FromASCII("March");
     case 3:
-      return L"April";
+      return WideString::FromASCII("April");
     case 4:
-      return L"May";
+      return WideString::FromASCII("May");
     case 5:
-      return L"June";
+      return WideString::FromASCII("June");
     case 6:
-      return L"July";
+      return WideString::FromASCII("July");
     case 7:
-      return L"August";
+      return WideString::FromASCII("August");
     case 8:
-      return L"September";
+      return WideString::FromASCII("September");
     case 9:
-      return L"October";
+      return WideString::FromASCII("October");
     case 10:
-      return L"November";
+      return WideString::FromASCII("November");
     case 11:
-      return L"December";
+      return WideString::FromASCII("December");
     default:
       NOTREACHED_NORETURN();
   }

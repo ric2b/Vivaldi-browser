@@ -66,35 +66,35 @@ void I4xxxRect(VideoFrame* dest_frame,
       << VideoPixelFormatToString(dest_frame->format());
 
   // Write known full size planes first.
-  libyuv::SetPlane(dest_frame->GetWritableVisibleData(VideoFrame::kYPlane) +
-                       y * dest_frame->stride(VideoFrame::kYPlane) + x,
-                   dest_frame->stride(VideoFrame::kYPlane), width, height,
+  libyuv::SetPlane(dest_frame->GetWritableVisibleData(VideoFrame::Plane::kY) +
+                       y * dest_frame->stride(VideoFrame::Plane::kY) + x,
+                   dest_frame->stride(VideoFrame::Plane::kY), width, height,
                    value_y);
   if (num_planes == 4) {
-    libyuv::SetPlane(dest_frame->GetWritableVisibleData(VideoFrame::kAPlane) +
-                         y * dest_frame->stride(VideoFrame::kAPlane) + x,
-                     dest_frame->stride(VideoFrame::kAPlane), width, height,
+    libyuv::SetPlane(dest_frame->GetWritableVisibleData(VideoFrame::Plane::kA) +
+                         y * dest_frame->stride(VideoFrame::Plane::kA) + x,
+                     dest_frame->stride(VideoFrame::Plane::kA), width, height,
                      value_a);
   }
 
   // Adjust rect start and offset.
   auto start_xy = VideoFrame::PlaneSize(dest_frame->format(),
-                                        VideoFrame::kUPlane, gfx::Size(x, y));
+                                        VideoFrame::Plane::kU, gfx::Size(x, y));
   auto uv_size = VideoFrame::PlaneSize(
-      dest_frame->format(), VideoFrame::kUPlane, gfx::Size(width, height));
+      dest_frame->format(), VideoFrame::Plane::kU, gfx::Size(width, height));
 
   // Write variable sized planes.
   libyuv::SetPlane(
-      dest_frame->GetWritableVisibleData(VideoFrame::kUPlane) +
-          start_xy.height() * dest_frame->stride(VideoFrame::kUPlane) +
+      dest_frame->GetWritableVisibleData(VideoFrame::Plane::kU) +
+          start_xy.height() * dest_frame->stride(VideoFrame::Plane::kU) +
           start_xy.width(),
-      dest_frame->stride(VideoFrame::kUPlane), uv_size.width(),
+      dest_frame->stride(VideoFrame::Plane::kU), uv_size.width(),
       uv_size.height(), value_u);
   libyuv::SetPlane(
-      dest_frame->GetWritableVisibleData(VideoFrame::kVPlane) +
-          start_xy.height() * dest_frame->stride(VideoFrame::kVPlane) +
+      dest_frame->GetWritableVisibleData(VideoFrame::Plane::kV) +
+          start_xy.height() * dest_frame->stride(VideoFrame::Plane::kV) +
           start_xy.width(),
-      dest_frame->stride(VideoFrame::kVPlane), uv_size.width(),
+      dest_frame->stride(VideoFrame::Plane::kV), uv_size.width(),
       uv_size.height(), value_v);
 }
 
@@ -153,25 +153,25 @@ void FillFourColorsFrameYUV(VideoFrame& dest_frame,
 
   if (temp_frame) {
     ASSERT_EQ(libyuv::I420ToNV12(
-                  temp_frame->visible_data(VideoFrame::kYPlane),
-                  temp_frame->stride(VideoFrame::kYPlane),
-                  temp_frame->visible_data(VideoFrame::kUPlane),
-                  temp_frame->stride(VideoFrame::kUPlane),
-                  temp_frame->visible_data(VideoFrame::kVPlane),
-                  temp_frame->stride(VideoFrame::kVPlane),
-                  dest_frame.GetWritableVisibleData(VideoFrame::kYPlane),
-                  dest_frame.stride(VideoFrame::kYPlane),
-                  dest_frame.GetWritableVisibleData(VideoFrame::kUVPlane),
-                  dest_frame.stride(VideoFrame::kUVPlane),
+                  temp_frame->visible_data(VideoFrame::Plane::kY),
+                  temp_frame->stride(VideoFrame::Plane::kY),
+                  temp_frame->visible_data(VideoFrame::Plane::kU),
+                  temp_frame->stride(VideoFrame::Plane::kU),
+                  temp_frame->visible_data(VideoFrame::Plane::kV),
+                  temp_frame->stride(VideoFrame::Plane::kV),
+                  dest_frame.GetWritableVisibleData(VideoFrame::Plane::kY),
+                  dest_frame.stride(VideoFrame::Plane::kY),
+                  dest_frame.GetWritableVisibleData(VideoFrame::Plane::kUV),
+                  dest_frame.stride(VideoFrame::Plane::kUV),
                   dest_frame.visible_rect().width(),
                   dest_frame.visible_rect().height()),
               0);
     if (dest_frame.format() == PIXEL_FORMAT_NV12A) {
       libyuv::CopyPlane(
-          temp_frame->visible_data(VideoFrame::kAPlane),
-          temp_frame->stride(VideoFrame::kAPlane),
-          dest_frame.GetWritableVisibleData(VideoFrame::kAPlaneTriPlanar),
-          dest_frame.stride(VideoFrame::kAPlaneTriPlanar),
+          temp_frame->visible_data(VideoFrame::Plane::kA),
+          temp_frame->stride(VideoFrame::Plane::kA),
+          dest_frame.GetWritableVisibleData(VideoFrame::Plane::kATriPlanar),
+          dest_frame.stride(VideoFrame::Plane::kATriPlanar),
           dest_frame.visible_rect().width(),
           dest_frame.visible_rect().height());
     }
@@ -195,31 +195,31 @@ void FillFourColorsFrameARGB(VideoFrame& dest_frame,
 
   // Yellow top left.
   ASSERT_EQ(libyuv::ARGBRect(
-                dest_frame.GetWritableVisibleData(VideoFrame::kARGBPlane),
-                dest_frame.stride(VideoFrame::kARGBPlane), 0, 0,
+                dest_frame.GetWritableVisibleData(VideoFrame::Plane::kARGB),
+                dest_frame.stride(VideoFrame::Plane::kARGB), 0, 0,
                 visible_size.width() / 2, visible_size.height() / 2, yellow),
             0);
 
   // Red top right.
   ASSERT_EQ(
       libyuv::ARGBRect(
-          dest_frame.GetWritableVisibleData(VideoFrame::kARGBPlane),
-          dest_frame.stride(VideoFrame::kARGBPlane), visible_size.width() / 2,
+          dest_frame.GetWritableVisibleData(VideoFrame::Plane::kARGB),
+          dest_frame.stride(VideoFrame::Plane::kARGB), visible_size.width() / 2,
           0, visible_size.width() / 2, visible_size.height() / 2, red),
       0);
 
   // Blue bottom left.
   ASSERT_EQ(libyuv::ARGBRect(
-                dest_frame.GetWritableVisibleData(VideoFrame::kARGBPlane),
-                dest_frame.stride(VideoFrame::kARGBPlane), 0,
+                dest_frame.GetWritableVisibleData(VideoFrame::Plane::kARGB),
+                dest_frame.stride(VideoFrame::Plane::kARGB), 0,
                 visible_size.height() / 2, visible_size.width() / 2,
                 visible_size.height() / 2, blue),
             0);
 
   // Green bottom right.
   ASSERT_EQ(libyuv::ARGBRect(
-                dest_frame.GetWritableVisibleData(VideoFrame::kARGBPlane),
-                dest_frame.stride(VideoFrame::kARGBPlane),
+                dest_frame.GetWritableVisibleData(VideoFrame::Plane::kARGB),
+                dest_frame.stride(VideoFrame::Plane::kARGB),
                 visible_size.width() / 2, visible_size.height() / 2,
                 visible_size.width() / 2, visible_size.height() / 2, green),
             0);
@@ -227,10 +227,10 @@ void FillFourColorsFrameARGB(VideoFrame& dest_frame,
   if (dest_frame.format() == PIXEL_FORMAT_XBGR ||
       dest_frame.format() == PIXEL_FORMAT_ABGR) {
     ASSERT_EQ(libyuv::ARGBToABGR(
-                  dest_frame.visible_data(VideoFrame::kARGBPlane),
-                  dest_frame.stride(VideoFrame::kARGBPlane),
-                  dest_frame.GetWritableVisibleData(VideoFrame::kARGBPlane),
-                  dest_frame.stride(VideoFrame::kARGBPlane),
+                  dest_frame.visible_data(VideoFrame::Plane::kARGB),
+                  dest_frame.stride(VideoFrame::Plane::kARGB),
+                  dest_frame.GetWritableVisibleData(VideoFrame::Plane::kARGB),
+                  dest_frame.stride(VideoFrame::Plane::kARGB),
                   visible_size.width(), visible_size.height()),
               0);
   }
@@ -693,9 +693,7 @@ scoped_refptr<DecoderBuffer> CreateFakeVideoBufferForTest(
   pickle.WriteInt(config.coded_size().height());
   pickle.WriteInt64(timestamp.InMilliseconds());
 
-  scoped_refptr<DecoderBuffer> buffer =
-      DecoderBuffer::CopyFrom(static_cast<const uint8_t*>(pickle.data()),
-                              static_cast<int>(pickle.size()));
+  scoped_refptr<DecoderBuffer> buffer = DecoderBuffer::CopyFrom(pickle);
   buffer->set_timestamp(timestamp);
   buffer->set_duration(duration);
   buffer->set_is_key_frame(true);
@@ -706,7 +704,7 @@ scoped_refptr<DecoderBuffer> CreateFakeVideoBufferForTest(
 scoped_refptr<DecoderBuffer> CreateMismatchedBufferForTest() {
   std::vector<uint8_t> data = {42, 22, 26, 13, 7, 16, 8, 2};
   scoped_refptr<media::DecoderBuffer> mismatched_encrypted_buffer =
-      media::DecoderBuffer::CopyFrom(data.data(), data.size());
+      media::DecoderBuffer::CopyFrom(data);
   mismatched_encrypted_buffer->set_timestamp(base::Seconds(42));
   mismatched_encrypted_buffer->set_duration(base::Seconds(64));
   mismatched_encrypted_buffer->set_decrypt_config(
@@ -740,14 +738,13 @@ scoped_refptr<DecoderBuffer> CreateClearBuffer() {
 bool VerifyFakeVideoBufferForTest(const DecoderBuffer& buffer,
                                   const VideoDecoderConfig& config) {
   // Check if the input |buffer| matches the |config|.
-  base::PickleIterator pickle(
-      base::Pickle(reinterpret_cast<const char*>(buffer.data()),
-                   static_cast<int>(buffer.data_size())));
+  base::Pickle pickle = base::Pickle::WithUnownedBuffer(buffer);
+  base::PickleIterator iterator(pickle);
   std::string header;
   int width = 0;
   int height = 0;
-  bool success = pickle.ReadString(&header) && pickle.ReadInt(&width) &&
-                 pickle.ReadInt(&height);
+  bool success = iterator.ReadString(&header) && iterator.ReadInt(&width) &&
+                 iterator.ReadInt(&height);
   return (success && header == kFakeVideoBufferHeader &&
           width == config.coded_size().width() &&
           height == config.coded_size().height());

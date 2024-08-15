@@ -4,6 +4,8 @@
 
 #include "osp/public/network_service_manager.h"
 
+#include "util/osp_logging.h"
+
 namespace {
 
 openscreen::osp::NetworkServiceManager* g_network_service_manager_instance =
@@ -19,9 +21,7 @@ NetworkServiceManager* NetworkServiceManager::Create(
     std::unique_ptr<ServicePublisher> service_publisher,
     std::unique_ptr<ProtocolConnectionClient> connection_client,
     std::unique_ptr<ProtocolConnectionServer> connection_server) {
-  // TODO(mfoltz): Convert to assertion failure
-  if (g_network_service_manager_instance)
-    return nullptr;
+  OSP_CHECK(!g_network_service_manager_instance);
   g_network_service_manager_instance = new NetworkServiceManager(
       std::move(service_listener), std::move(service_publisher),
       std::move(connection_client), std::move(connection_server));
@@ -30,34 +30,34 @@ NetworkServiceManager* NetworkServiceManager::Create(
 
 // static
 NetworkServiceManager* NetworkServiceManager::Get() {
-  // TODO(mfoltz): Convert to assertion failure
-  if (!g_network_service_manager_instance)
-    return nullptr;
+  OSP_CHECK(g_network_service_manager_instance);
   return g_network_service_manager_instance;
 }
 
 // static
 void NetworkServiceManager::Dispose() {
-  // TODO(mfoltz): Convert to assertion failure
-  if (!g_network_service_manager_instance)
-    return;
+  OSP_CHECK(g_network_service_manager_instance);
   delete g_network_service_manager_instance;
   g_network_service_manager_instance = nullptr;
 }
 
 ServiceListener* NetworkServiceManager::GetServiceListener() {
+  OSP_CHECK(service_listener_);
   return service_listener_.get();
 }
 
 ServicePublisher* NetworkServiceManager::GetServicePublisher() {
+  OSP_CHECK(service_publisher_);
   return service_publisher_.get();
 }
 
 ProtocolConnectionClient* NetworkServiceManager::GetProtocolConnectionClient() {
+  OSP_CHECK(connection_client_);
   return connection_client_.get();
 }
 
 ProtocolConnectionServer* NetworkServiceManager::GetProtocolConnectionServer() {
+  OSP_CHECK(connection_server_);
   return connection_server_.get();
 }
 

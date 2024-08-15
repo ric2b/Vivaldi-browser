@@ -97,8 +97,11 @@
 #include "third_party/blink/renderer/core/frame/navigator.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
+#include "third_party/blink/renderer/core/html/html_body_element.h"
 #include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
+#include "third_party/blink/renderer/core/html/html_head_element.h"
+#include "third_party/blink/renderer/core/html/html_html_element.h"
 #include "third_party/blink/renderer/core/html/html_object_element.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html/parser/text_resource_decoder_builder.h"
@@ -162,7 +165,6 @@
 #include "third_party/blink/renderer/platform/network/network_utils.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/runtime_feature_state/runtime_feature_state_override_context.h"
-#include "third_party/blink/renderer/platform/scheduler/main_thread/frame_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/task_attribution_tracker.h"
@@ -342,6 +344,7 @@ struct SameSizeAsDocumentLoader
       modified_runtime_features;
   AtomicString cookie_deprecation_label;
   mojom::RendererContentSettingsPtr content_settings;
+  int64_t body_size_from_service_worker;
 };
 
 // Asserts size of DocumentLoader, so that whenever a new attribute is added to
@@ -1031,16 +1034,18 @@ void DocumentLoader::UpdateForSameDocumentNavigation(
   SoftNavigationHeuristics* heuristics = nullptr;
   if (frame_->IsMainFrame() &&
       base::FeatureList::IsEnabled(features::kSoftNavigationDetection)) {
-    CHECK(frame_->DomWindow());
-    heuristics = SoftNavigationHeuristics::From(*frame_->DomWindow());
-    if (is_browser_initiated && heuristics) {
-      // For browser-initiated navigations, we never started the soft
-      // navigation (as this is the first we hear of it in the renderer). We
-      // need to do that now.
-      soft_navigation_event_scope = heuristics->CreateEventScope(
-          SoftNavigationHeuristics::EventScope::Type::kNavigate,
-          /*is_new_interaction=*/true);
-      heuristics->SameDocumentNavigationStarted();
+    if (auto* script_state = ToScriptStateForMainWorld(frame_->DomWindow())) {
+      CHECK(frame_->DomWindow());
+      heuristics = SoftNavigationHeuristics::From(*frame_->DomWindow());
+      if (is_browser_initiated && heuristics) {
+        // For browser-initiated navigations, we never started the soft
+        // navigation (as this is the first we hear of it in the renderer). We
+        // need to do that now.
+        soft_navigation_event_scope = heuristics->CreateEventScope(
+            SoftNavigationHeuristics::EventScope::Type::kNavigate,
+            /*is_new_interaction=*/true, script_state);
+        heuristics->SameDocumentNavigationStarted();
+      }
     }
   }
 
@@ -1185,7 +1190,6 @@ void DocumentLoader::DecodedBodyDataReceived(
     base::span<const char> encoded_data) {
   // Decoding has already happened, we don't need the decoder anymore.
   parser_->SetDecoder(nullptr);
-
   DecodedBodyData body_data(data, DocumentEncodingData(encoding_data),
                             encoded_data);
   BodyDataReceivedImpl(body_data);
@@ -1208,6 +1212,9 @@ void DocumentLoader::BodyDataReceivedImpl(BodyData& data) {
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   base::span<const char> encoded_data = data.EncodedData();
   if (encoded_data.size()) {
+    if (response_.WasFetchedViaServiceWorker()) {
+      total_body_size_from_service_worker_ += encoded_data.size();
+    }
     GetFrameLoader().Progress().IncrementProgress(main_resource_identifier_,
                                                   encoded_data.size());
     probe::DidReceiveData(probe::ToCoreProbeSink(GetFrame()),
@@ -1251,6 +1258,14 @@ void DocumentLoader::BodyLoadingFinished(
     probe::DidFinishLoading(
         probe::ToCoreProbeSink(GetFrame()), main_resource_identifier_, this,
         completion_time, total_encoded_data_length, total_decoded_body_length);
+
+    if (response_.WasFetchedViaServiceWorker()) {
+      // See https://w3c.github.io/ServiceWorker/#dom-fetchevent-respondwith
+      // in "chunk steps": there is no difference between encoded/decoded body
+      // size, as encoding is handled inside the service worker.
+      total_encoded_body_length = total_body_size_from_service_worker_;
+      total_decoded_body_length = total_body_size_from_service_worker_;
+    }
 
     DOMWindowPerformance::performance(*frame_->DomWindow())
         ->OnBodyLoadFinished(total_encoded_body_length,
@@ -1920,6 +1935,23 @@ void DocumentLoader::StartLoadingResponse() {
   if (!frame_)
     return;
 
+  // TODO(crbug.com/332706093): See if this optimization can be enabled for
+  // non-main frames after fixing failing tests.
+  if (base::FeatureList::IsEnabled(features::kStreamlineRendererInit) &&
+      frame_->IsMainFrame() && loading_url_as_empty_document_ &&
+      commit_reason_ == CommitReason::kInitialization) {
+    // We know this is an empty document, so explicitly set empty content
+    // without going through the parser, which has a lot of overhead.
+    Document* document = frame_->GetDocument();
+    auto* html = MakeGarbageCollected<HTMLHtmlElement>(*document);
+    html->AppendChild(MakeGarbageCollected<HTMLHeadElement>(*document));
+    document->AppendChild(html);
+    html->AppendChild(MakeGarbageCollected<HTMLBodyElement>(*document));
+
+    FinishedLoading(base::TimeTicks::Now());
+    return;
+  }
+
   CHECK_GE(state_, kCommitted);
 
   CreateParserPostCommit();
@@ -2065,12 +2097,11 @@ void DocumentLoader::DidCommitNavigation() {
     return;
 
   // When committing a new document, the FrameScheduler might need to carry over
-  // the previous document's FrameScheduler's `unreported_task_time()`, as that
+  // the previous document's FrameScheduler's `UnreportedTaskTime()`, as that
   // value should be aggregated across all documents that ever committed in the
   // same frame.
   base::TimeDelta previous_document_unreported_task_time =
-      static_cast<scheduler::FrameSchedulerImpl*>(frame_->GetFrameScheduler())
-          ->unreported_task_time();
+      frame_->GetFrameScheduler()->UnreportedTaskTime();
   if (OldDocumentInfoForCommit* old_document_info =
           ScopedOldDocumentInfoForCommitCapturer::CurrentInfo()) {
     previous_document_unreported_task_time =
@@ -2170,6 +2201,11 @@ scoped_refptr<SecurityOrigin> DocumentLoader::CalculateOrigin(
     Document* owner_document) {
   scoped_refptr<SecurityOrigin> origin;
   StringBuilder debug_info_builder;
+  // Whether the origin is newly created within this call, instead of copied
+  // from an existing document's origin or from `origin_to_commit_`. If this is
+  // true, we won't try to compare the nonce of this origin (if it's opaque) to
+  // the browser-calculated origin later on.
+  bool origin_is_newly_created = false;
   if (origin_to_commit_) {
     // Origin to commit is specified by the browser process, it must be taken
     // and used directly. It is currently supplied only for failed navigations
@@ -2217,25 +2253,27 @@ scoped_refptr<SecurityOrigin> DocumentLoader::CalculateOrigin(
     debug_info_builder.Append(owner_document->Url().BaseAsString());
     debug_info_builder.Append(")");
   } else if (url_.IsAboutSrcdocURL()) {
-    // If there's no owner_document and this is a srcdoc load, then get the
-    // origin from the remote parent. A srcdoc navigation with no owner_document
-    // can only happen if the iframe is sandboxed and isolated sandboxed frames
-    // is enabled In that case, copy the origin from the remote parent
-    // here—though this origin will only be used to derive the actual opaque
-    // origin later.
+    // If there's no owner_document and this is a sandboxed srcdoc load, then
+    // get the origin from the remote parent. In general, a srcdoc navigation
+    // with no owner_document can only currently happen  if the iframe is
+    // sandboxed and isolated sandboxed frames is enabled, in which case, copy
+    // the origin from the remote parent here (though this origin will only be
+    // used to derive the actual opaque origin later),
     // TODO(https://crbug.com/328279696): this block can be removed once the
     // about:srcdoc navigation blocking finishes rolling out, as then the
     // initiator can never be cross-origin to the parent.
-    debug_info_builder.Append("about_srcdoc_with_remote_parent");
-    // Verify this is a sandboxed srcdoc frame.
-    CHECK((policy_container_->GetPolicies().sandbox_flags &
-           network::mojom::blink::WebSandboxFlags::kOrigin) !=
-          network::mojom::blink::WebSandboxFlags::kNone);
+    bool is_sandboxed = (policy_container_->GetPolicies().sandbox_flags &
+                         network::mojom::blink::WebSandboxFlags::kOrigin) !=
+                        network::mojom::blink::WebSandboxFlags::kNone;
+    CHECK(is_sandboxed);
+    debug_info_builder.Append("about_srcdoc_with_remote_parent[origin=");
     origin = frame_->Tree()
                  .Parent()
                  ->GetSecurityContext()
                  ->GetSecurityOrigin()
                  ->IsolatedCopy();
+    debug_info_builder.Append(origin->ToString());
+    debug_info_builder.Append("]");
   } else {
     debug_info_builder.Append("use_url_with_precursor");
     // Otherwise, create an origin that propagates precursor information
@@ -2244,13 +2282,17 @@ scoped_refptr<SecurityOrigin> DocumentLoader::CalculateOrigin(
     // initiator origin as the precursor.
     origin = SecurityOrigin::CreateWithReferenceOrigin(url_,
                                                        requestor_origin_.get());
+    origin_is_newly_created = true;
   }
 
   if ((policy_container_->GetPolicies().sandbox_flags &
        network::mojom::blink::WebSandboxFlags::kOrigin) !=
       network::mojom::blink::WebSandboxFlags::kNone) {
-    debug_info_builder.Append(", add_sandbox");
+    debug_info_builder.Append(", add_sandbox[new_origin_precursor=");
     auto sandbox_origin = origin->DeriveNewOpaqueOrigin();
+    debug_info_builder.Append(
+        sandbox_origin->GetOriginOrPrecursorOriginIfOpaque()->ToString());
+    debug_info_builder.Append("]");
 
     // If we're supposed to inherit our security origin from our
     // owner, but we're also sandboxed, the only things we inherit are
@@ -2288,6 +2330,7 @@ scoped_refptr<SecurityOrigin> DocumentLoader::CalculateOrigin(
       }
     }
     origin = sandbox_origin;
+    origin_is_newly_created = true;
   }
 
   if (commit_reason_ == CommitReason::kInitialization &&
@@ -2332,7 +2375,14 @@ scoped_refptr<SecurityOrigin> DocumentLoader::CalculateOrigin(
       debug_info_builder.Append(", is_potentially_trustworthy");
     }
   }
-
+  if (origin_is_newly_created) {
+    // This information will be used by the browser side to figure out if it can
+    // do browser vs renderer calculated origin equality check. Note that this
+    // information must be the last part of the debug info string.
+    // TODO(https://crbug.com/888079): Consider adding a separate boolean that
+    // tracks this instead of piggybacking `origin_calculation_debug_info_`.
+    debug_info_builder.Append(", is_newly_created");
+  }
   origin_calculation_debug_info_ = debug_info_builder.ToAtomicString();
   return origin;
 }
@@ -3137,6 +3187,10 @@ void DocumentLoader::CountUse(mojom::WebFeature feature) {
 
 void DocumentLoader::CountDeprecation(mojom::WebFeature feature) {
   return use_counter_.Count(feature, GetFrame());
+}
+
+void DocumentLoader::CountWebDXFeature(mojom::blink::WebDXFeature feature) {
+  return use_counter_.CountWebDXFeature(feature, GetFrame());
 }
 
 void DocumentLoader::RecordAcceptLanguageAndContentLanguageMetric() {

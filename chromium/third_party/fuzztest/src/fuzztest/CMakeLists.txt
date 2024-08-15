@@ -45,6 +45,8 @@ fuzztest_cc_library(
     fuzztest_macros
   HDRS
     "fuzztest_macros.h"
+  SRCS
+    "fuzztest_macros.cc"
   DEPS
     fuzztest::io
     fuzztest::registration
@@ -77,6 +79,7 @@ fuzztest_cc_library(
     fuzztest::registry
     fuzztest::runtime
     absl::flags
+    absl::flags_reflection
     absl::strings
     absl::str_format
     absl::time
@@ -181,6 +184,35 @@ fuzztest_cc_library(
   SRCS
     "internal/configuration.cc"
   DEPS
+    absl::check
+    absl::status
+    absl::statusor
+    absl::strings
+    absl::string_view
+    absl::time
+)
+
+fuzztest_cc_test(
+  NAME
+    configuration_test
+  SRCS
+    "internal/configuration_test.cc"
+  DEPS
+    fuzztest::configuration
+    absl::statusor
+    absl::time
+    GTest::gmock_main
+)
+
+fuzztest_cc_library(
+  NAME
+    corpus_database
+  HDRS
+    "internal/corpus_database.h"
+  SRCS
+    "internal/corpus_database.cc"
+  DEPS
+    fuzztest::configuration
     fuzztest::io
     absl::strings
     absl::string_view
@@ -330,11 +362,13 @@ fuzztest_cc_library(
     "internal/googletest_adaptor.cc"
   DEPS
     fuzztest::configuration
+    fuzztest::corpus_database
     fuzztest::io
     fuzztest::registry
     fuzztest::runtime
     absl::strings
     absl::string_view
+    absl::str_format
     GTest::gtest
 )
 
@@ -460,6 +494,7 @@ fuzztest_cc_library(
     "internal/runtime.cc"
   DEPS
     fuzztest::configuration
+    fuzztest::corpus_database
     fuzztest::coverage
     fuzztest::domain_core
     fuzztest::fixture_driver
@@ -473,6 +508,7 @@ fuzztest_cc_library(
     fuzztest::type_support
     absl::any_invocable
     absl::function_ref
+    absl::check
     absl::random_random
     absl::random_bit_gen_ref
     absl::random_distributions

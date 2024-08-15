@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">Не по-късно от</translation>
 <translation id="2749881179542288782">Проверявай граматиката с правописа</translation>
 <translation id="2785873697295365461">Файлови описатели</translation>
-<translation id="2809586584051668049">и още <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2825758591930162672">Публичен ключ на лицето</translation>
 <translation id="2850541429955027218">Добави темата</translation>
 <translation id="2861941300086904918">Диспечер на защитата в Native Client</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">Отваряй в прозорец</translation>
 <translation id="3280237271814976245">Запиши &amp;като…</translation>
 <translation id="3285322247471302225">Създай &amp;раздел</translation>
-<translation id="3288047731229977326">Разширения, изпълнявани в развоен режим могат да затормозят компютъра. Ако не сте разработчик, трябва да забраните разширенията, изпълнявани в развоен режим за по-голяма безопасност.</translation>
 <translation id="329838636886466101">Поправи</translation>
 <translation id="33022249435934718">Графични обработчици</translation>
 <translation id="3303818374450886607">Копия</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">Създадено разширение:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Забрани разширенията в развоен режим</translation>
 <translation id="4100839878934973028">Друга програма в компютъра добави приложение, вероятно променящо начина на работа на Vivaldi.</translation>
 <translation id="4104163789986725820">И&amp;знеси…</translation>
 <translation id="4109898769411476438">Затворете браузъра преди внасяне</translation>
@@ -261,7 +258,6 @@
 <translation id="5269977353971873915">Провалено отпечатване</translation>
 <translation id="5284445933715251131">Продължи изтеглянето</translation>
 <translation id="52912272896845572">Файлът с частен ключ е недействителен.</translation>
-<translation id="5301954838959518834">ДА, ясно</translation>
 <translation id="5302932258331363306">Показвай заместванията</translation>
 <translation id="5317780077021120954">Запиши</translation>
 <translation id="5334142896108694079">Кеш на скриптове</translation>

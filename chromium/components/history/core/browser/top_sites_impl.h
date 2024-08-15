@@ -83,6 +83,10 @@ class TopSitesImpl : public TopSites, public HistoryServiceObserver {
   // Register preferences used by TopSitesImpl.
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
+  // Added by Vivaldi
+  void UpdateNow() override;
+  void SetAggressiveUpdate() override;
+
  protected:
   ~TopSitesImpl() override;
 
@@ -183,8 +187,8 @@ class TopSitesImpl : public TopSites, public HistoryServiceObserver {
   void SetTopSitesFromHistory(scoped_refptr<SitesAndQueriesRequest> request);
 
   // history::HistoryServiceObserver:
-  void OnURLsDeleted(HistoryService* history_service,
-                     const DeletionInfo& deletion_info) override;
+  void OnHistoryDeletions(HistoryService* history_service,
+                          const DeletionInfo& deletion_info) override;
 
   // Vivaldi:: Rebuilds the database, removing on free/deleted pages.
   void Vacuum();
@@ -236,6 +240,8 @@ class TopSitesImpl : public TopSites, public HistoryServiceObserver {
 
   // Are we loaded?
   bool loaded_;
+
+  bool vivaldi_aggressive_update_ = false;
 
   base::ScopedObservation<HistoryService, HistoryServiceObserver>
       history_service_observation_{this};

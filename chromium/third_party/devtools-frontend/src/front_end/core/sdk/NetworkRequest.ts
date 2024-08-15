@@ -237,8 +237,8 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
   readonly #documentURLInternal: Platform.DevToolsPath.UrlString;
   readonly #frameIdInternal: Protocol.Page.FrameId|null;
   readonly #loaderIdInternal: Protocol.Network.LoaderId|null;
-  readonly #initiatorInternal: Protocol.Network.Initiator|null|undefined;
   readonly #hasUserGesture: boolean|undefined;
+  readonly #initiatorInternal: Protocol.Network.Initiator|null|undefined;
   #redirectSourceInternal: NetworkRequest|null;
   #preflightRequestInternal: NetworkRequest|null;
   #preflightInitiatorRequestInternal: NetworkRequest|null;
@@ -323,11 +323,13 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
   #fromMemoryCache?: boolean;
   #fromDiskCache?: boolean;
   #fromPrefetchCacheInternal?: boolean;
+  #fromEarlyHints?: boolean;
   #fetchedViaServiceWorkerInternal?: boolean;
   #serviceWorkerRouterInfoInternal?: Protocol.Network.ServiceWorkerRouterInfo;
   #timingInternal?: Protocol.Network.ResourceTiming;
   #requestHeadersTextInternal?: string;
   #responseHeadersInternal?: NameValue[];
+  #earlyHintsHeadersInternal?: NameValue[];
   #sortedResponseHeadersInternal?: NameValue[];
   #responseCookiesInternal?: Cookie[];
   #serverTimingsInternal?: ServerTiming[]|null;
@@ -747,6 +749,14 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
     this.#fromPrefetchCacheInternal = true;
   }
 
+  fromEarlyHints(): boolean {
+    return Boolean(this.#fromEarlyHints);
+  }
+
+  setFromEarlyHints(): void {
+    this.#fromEarlyHints = true;
+  }
+
   /**
    * Returns true if the request was intercepted by a service worker and it
    * provided its own response.
@@ -1017,6 +1027,14 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
     this.dispatchEventToListeners(Events.ResponseHeadersChanged);
   }
 
+  get earlyHintsHeaders(): NameValue[] {
+    return this.#earlyHintsHeadersInternal || [];
+  }
+
+  set earlyHintsHeaders(x: NameValue[]) {
+    this.#earlyHintsHeadersInternal = x;
+  }
+
   get originalResponseHeaders(): Protocol.Fetch.HeaderEntry[] {
     return this.#originalResponseHeaders;
   }
@@ -1134,6 +1152,10 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
 
   setWasIntercepted(wasIntercepted: boolean): void {
     this.#wasIntercepted = wasIntercepted;
+  }
+
+  setEarlyHintsHeaders(headers: NameValue[]): void {
+    this.earlyHintsHeaders = headers;
   }
 
   get responseCookies(): Cookie[] {
@@ -1990,6 +2012,7 @@ export interface IncludedCookieWithReason {
 
 export interface ExemptedSetCookieWithReason {
   cookie: Cookie;
+  cookieLine: string;
   exemptionReason: Protocol.Network.CookieExemptionReason;
 }
 
@@ -2026,8 +2049,13 @@ export interface ExtraResponseInfo {
   cookiePartitionKeyOpaque: boolean|undefined;
   exemptedResponseCookies: {
     cookie: Cookie,
+    cookieLine: string,
     exemptionReason: Protocol.Network.CookieExemptionReason,
   }[]|undefined;
+}
+
+export interface EarlyHintsInfo {
+  responseHeaders: NameValue[];
 }
 
 export interface WebBundleInfo {

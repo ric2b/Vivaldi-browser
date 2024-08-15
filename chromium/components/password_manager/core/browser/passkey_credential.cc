@@ -11,11 +11,11 @@
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#if !BUILDFLAG(IS_ANDROID)
 #include "base/containers/span.h"
 #include "components/sync/protocol/webauthn_credential_specifics.pb.h"
 #include "components/webauthn/core/browser/passkey_model_utils.h"
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_ANDROID)
 #include "components/webauthn/android/webauthn_cred_man_delegate.h"
@@ -23,7 +23,7 @@
 
 namespace password_manager {
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#if !BUILDFLAG(IS_ANDROID)
 
 namespace {
 
@@ -47,14 +47,18 @@ std::vector<PasskeyCredential> PasskeyCredential::FromCredentialSpecifics(
         CredentialId(ProtobufBytesToVector(passkey.credential_id())),
         UserId(ProtobufBytesToVector(passkey.user_id())),
         Username(passkey.has_user_name() ? passkey.user_name() : ""),
-        DisplayName(passkey.has_user_display_name()
-                        ? passkey.user_display_name()
-                        : ""));
+        DisplayName(
+            passkey.has_user_display_name() ? passkey.user_display_name() : ""),
+        passkey.creation_time() != 0
+            ? std::optional<base::Time>(
+                  base::Time::FromMillisecondsSinceUnixEpoch(
+                      passkey.creation_time()))
+            : std::nullopt);
   }
   return ret;
 }
 
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 namespace {
 
@@ -78,13 +82,15 @@ PasskeyCredential::PasskeyCredential(Source source,
                                      CredentialId credential_id,
                                      UserId user_id,
                                      Username username,
-                                     DisplayName display_name)
+                                     DisplayName display_name,
+                                     std::optional<base::Time> creation_time)
     : source_(source),
       rp_id_(std::move(rp_id)),
       credential_id_(std::move(credential_id)),
       user_id_(std::move(user_id)),
       username_(std::move(username)),
-      display_name_(std::move(display_name)) {}
+      display_name_(std::move(display_name)),
+      creation_time_(std::move(creation_time)) {}
 
 PasskeyCredential::~PasskeyCredential() = default;
 
@@ -114,9 +120,8 @@ std::u16string PasskeyCredential::GetAuthenticatorLabel() const {
       id = GetAuthenticationLabelForPasskeysFromAndroid();
       break;
     case Source::kGooglePasswordManager:
-      // TODO(https://crbug.com/1459620): Update this when a proper string is
-      // added.
-      return u"Passkey from Google Password Manager (UNTRANSLATED STRING)";
+      id = IDS_PASSWORD_MANAGER_PASSKEY_FROM_GOOGLE_PASSWORD_MANAGER;
+      break;
     case Source::kOther:
       id = IDS_PASSWORD_MANAGER_USE_GENERIC_DEVICE;
       break;

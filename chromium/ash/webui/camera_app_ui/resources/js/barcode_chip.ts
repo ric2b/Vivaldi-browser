@@ -7,7 +7,11 @@ import * as dom from './dom.js';
 import {reportError} from './error.js';
 import {Flag} from './flag.js';
 import {I18nString} from './i18n_string.js';
-import {BarcodeContentType, sendBarcodeDetectedEvent} from './metrics.js';
+import {
+  BarcodeContentType,
+  sendBarcodeDetectedEvent,
+  sendUnsupportedProtocolEvent,
+} from './metrics.js';
 import * as loadTimeData from './models/load_time_data.js';
 import {ChromeHelper} from './mojo/chrome_helper.js';
 import {
@@ -24,7 +28,7 @@ import {
   ErrorType,
 } from './type.js';
 
-enum SupportedWifiSecurityType {
+export enum SupportedWifiSecurityType {
   EAP = 'WPA2-EAP',
   NONE = 'nopass',
   WEP = 'WEP',
@@ -40,6 +44,11 @@ const CHIP_DURATION = 8000;
  * The detected string that is being shown currently.
  */
 let currentCode: string|null = null;
+
+/**
+ * The detected string from OCR that is being shown currently.
+ */
+let currentOcrText: string|null = null;
 
 /**
  * The barcode chip container that is being shown currently.
@@ -59,6 +68,7 @@ function deactivate() {
     currentChip.classList.add('invisible');
   }
   currentCode = null;
+  currentOcrText = null;
   currentChip = null;
   currentTimer = null;
 }
@@ -90,6 +100,7 @@ function isSafeUrl(s: string): boolean {
       reportError(
           ErrorType.UNSUPPORTED_PROTOCOL, ErrorLevel.WARNING,
           new Error(`Reject url with protocol: ${url.protocol}`));
+      sendUnsupportedProtocolEvent();
       return false;
     }
     return true;
@@ -319,8 +330,10 @@ function showUrl(url: string) {
 /**
  * Shows an actionable text chip.
  */
-function showText(text: string) {
+function showText(text: string): void {
   const container = dom.get('#barcode-chip-text-container', HTMLDivElement);
+  container.classList.remove('expanded');
+  container.setAttribute('aria-expanded', 'false');
   activate(container);
 
   const textEl = dom.get('#barcode-chip-text-content', HTMLSpanElement);
@@ -390,6 +403,7 @@ export function show(code: string): void {
   }
 
   currentCode = code;
+  currentOcrText = null;
   const wifiConfig = parseWifi(code);
   if (loadTimeData.getChromeFlag(Flag.AUTO_QR) && wifiConfig !== null) {
     showWifi(wifiConfig);
@@ -400,6 +414,32 @@ export function show(code: string): void {
     sendBarcodeDetectedEvent({contentType: BarcodeContentType.TEXT});
     showText(code);
   }
+}
+
+/**
+ * Shows an actionable chip for the string detected from OCR.
+ *
+ * TODO(b/311592341): Rename related string, class, and function names since
+ * they are used by both barcode and OCR.
+ */
+export function showOcrText(text: string): void {
+  if (text === currentOcrText) {
+    if (currentTimer !== null) {
+      // Extend the duration by resetting the timeout.
+      currentTimer.resetTimeout();
+    }
+    return;
+  }
+
+  if (currentTimer !== null) {
+    // Dismiss the previous chip.
+    currentTimer.fireNow();
+    assert(currentTimer === null, 'The timer should be cleared.');
+  }
+  currentCode = null;
+  currentOcrText = text;
+  // TODO(b/338535966): Send OCR events.
+  showText(text);
 }
 
 /**

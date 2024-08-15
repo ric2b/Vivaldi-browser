@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="nl">
+<translation id="2947471979790858922">Jouw activiteit in deze privétabbladen wordt van dit apparaat verwijderd</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Je kunt je gesloten tabbladen vinden in Recente tabbladen onder het hoofdmenu van Vivaldi. Jouw privétab is niet beschikbaar.}
+        other {Je kunt je gesloten tabbladen vinden in Recente tabbladen onder het hoofdmenu van Vivaldi. Jouw # privétabbladen zijn niet beschikbaar.}}</translation>
+<translation id="4871187110787939393">Alle privétabs sluiten?</translation>
 </translationbundle>

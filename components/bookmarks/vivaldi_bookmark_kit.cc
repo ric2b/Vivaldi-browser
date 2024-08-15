@@ -21,10 +21,6 @@
 #include "components/bookmarks/browser/titled_url_index.h"
 #include "ui/base/models/tree_node_iterator.h"
 
-#if BUILDFLAG(IS_IOS)
-#include "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
-#endif
-
 namespace bookmarks {
 
 namespace {
@@ -33,6 +29,31 @@ namespace {
 BookmarkNode* AsMutableNode(const BookmarkNode* node) {
   return const_cast<BookmarkNode*>(node);
 }
+
+// Helper function, extracts prefix and uniqueness number for a nickname.
+// For nicknames without a dot or that don't have a valid number after it,
+// this sets prefix to the original str and num to 0.
+// Otherwise it will put string before last . into prefix and num
+// will contain the numerical conversion of number after the dot.
+void ExtractNickPrefixAndNumber(const std::string& str,
+                                std::string* prefix,
+                                int* num) {
+  // Default prefix and number
+  *prefix = str;
+  *num = 0;
+
+  // Extract prefix and number from the string
+  size_t dotPos = str.find_last_of('.');
+  if (dotPos != std::string::npos) {
+    *prefix = str.substr(0, dotPos);
+    if (!base::StringToInt(str.substr(dotPos + 1), num)) {
+      // not a number. leave nickname whole, set the num to 0
+      *prefix = str;
+      *num = 0;
+    }
+  }
+}
+
 }  // namespace
 
 // Helper to access BookmarkModel private members
@@ -91,7 +112,7 @@ namespace {
 
 class BookmarkModelLoadWaiter : public bookmarks::BaseBookmarkModelObserver {
  public:
-  BookmarkModelLoadWaiter(VivaldiBookmarkModelType* bookmark_model,
+  BookmarkModelLoadWaiter(bookmarks::BookmarkModel* bookmark_model,
                           RunAfterModelLoadCallback callback)
       : callback_(std::move(callback)), bookmark_model_(bookmark_model) {
     bookmark_model_->AddObserver(this);
@@ -108,7 +129,7 @@ class BookmarkModelLoadWaiter : public bookmarks::BaseBookmarkModelObserver {
   void BookmarkModelLoaded(bool ids_reassigned) override {
     bookmark_model_->RemoveObserver(this);
     RunAfterModelLoadCallback callback = std::move(callback_);
-    const raw_ptr<VivaldiBookmarkModelType> model = std::move(bookmark_model_);
+    const raw_ptr<bookmarks::BookmarkModel> model = std::move(bookmark_model_);
     delete this;
     std::move(callback).Run(model);
   }
@@ -124,7 +145,7 @@ class BookmarkModelLoadWaiter : public bookmarks::BaseBookmarkModelObserver {
   }
 
   RunAfterModelLoadCallback callback_;
-  const raw_ptr<VivaldiBookmarkModelType> bookmark_model_;
+  const raw_ptr<bookmarks::BookmarkModel> bookmark_model_;
 };
 
 // Struct holding std::string constants with names that we use to get/set values
@@ -194,7 +215,7 @@ void SetMetaString(BookmarkNode::MetaInfoMap* map,
 
 }  // namespace
 
-void RunAfterModelLoad(VivaldiBookmarkModelType* model,
+void RunAfterModelLoad(bookmarks::BookmarkModel* model,
                        RunAfterModelLoadCallback callback) {
   if (!model || model->loaded()) {
     std::move(callback).Run(model);
@@ -341,6 +362,54 @@ bool DoesNickExists(const BookmarkModel* model,
   return false;
 }
 
+bool SuggestUniqueNick(const BookmarkModel* model,
+                       const std::string& nickname,
+                       const BookmarkNode* updated_node,
+                       std::string* unique_nickname) {
+  bool found =
+      false;  // If we encountered the same nick, we will solve uniqueness.
+  std::string nick_prefix;
+  int nick_num;
+  bookmarks::ExtractNickPrefixAndNumber(nickname, &nick_prefix, &nick_num);
+  int nick_max = nick_num;  // will be updated to new one in case of conflict
+
+  ui::TreeNodeIterator<const BookmarkNode> iterator(model->root_node());
+  while (iterator.has_next()) {
+    const BookmarkNode* node = iterator.Next();
+    auto current_nick = GetNickname(node);
+
+    // Skip if this is the updated node. This allows us to re-set the same
+    // nickname without conflicts.
+    if (node == updated_node) {
+      continue;
+    }
+
+    if (current_nick == nickname) {
+      found = true;
+    }
+
+    std::string prefix;
+    int num;
+    bookmarks::ExtractNickPrefixAndNumber(current_nick, &prefix, &num);
+
+    // Nickname has the same prefix, we have to remember the numbering.
+    if (prefix == nick_prefix) {
+      // We add 1 here to have unique number again in case of collision.
+      nick_max = std::max(nick_max, num + 1);
+    }
+  }
+
+  // The nickname was not found at all?
+  if (!found) {
+    *unique_nickname = nickname;  // does not exist. Return verbatim.
+    return false;
+  } else {
+    // Suggest a new unique one based on the maximum found before.
+    *unique_nickname = nick_prefix + "." + std::to_string(nick_max);
+    return true;
+  }
+}
+
 bool SetBookmarkThumbnail(BookmarkModel* model,
                           int64_t bookmark_id,
                           const std::string& url) {
@@ -403,43 +472,6 @@ void SetNodeThemeColor(BookmarkModel* model,
   model->SetNodeMetaInfo(node, GetMetaNames().theme_color,
                          base::NumberToString(theme_color));
 }
-
-#if BUILDFLAG(IS_IOS)
-// iOS specific functions
-bool DoesNickExists(LegacyBookmarkModel* model,
-                    const std::string& nickname,
-                    const BookmarkNode* updated_node) {
-  return model->DoesNickExists(nickname, updated_node);
-}
-
-void SetNodeNickname(LegacyBookmarkModel* model,
-                     const BookmarkNode* node,
-                     const std::string& nickname) {
-  model->SetNodeNickname(node, nickname);
-}
-
-void SetNodeDescription(LegacyBookmarkModel* model,
-                        const BookmarkNode* node,
-                        const std::string& description) {
-  model->SetNodeDescription(node, description);
-}
-
-void SetNodeSpeeddial(LegacyBookmarkModel* model,
-                      const BookmarkNode* node,
-                      bool speeddial) {
-  model->SetNodeSpeeddial(node, speeddial);
-}
-
-void SetNodeThumbnail(LegacyBookmarkModel* model,
-                      const BookmarkNode* node,
-                      const std::string& thumbnail) {
-  model->SetNodeThumbnail(node, thumbnail);
-}
-
-void RemovePartnerId(LegacyBookmarkModel* model, const BookmarkNode* node) {
-  model->RemovePartnerId(node);
-}
-#endif
 
 bool WriteBookmarkData(const base::Value::Dict& value,
                        BookmarkWriteFunc write_func,

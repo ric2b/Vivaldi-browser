@@ -11,8 +11,6 @@ static_library("service") {
     "backend_migrator.cc",
     "backend_migrator.h",
     "configure_context.h",
-    "data_type_controller.cc",
-    "data_type_controller.h",
     "data_type_encryption_handler.h",
     "data_type_manager.cc",
     "data_type_manager.h",
@@ -52,6 +50,8 @@ static_library("service") {
     "sync_policy_handler.h",
     "sync_prefs.cc",
     "sync_prefs.h",
+    "sync_prefs_policy_handler.cc",
+    "sync_prefs_policy_handler.h",
     "sync_service.cc",
     "sync_service.h",
     "sync_service_crypto.cc",
@@ -74,6 +74,8 @@ static_library("service") {
     "syncable_service_based_model_type_controller.h",
     "trusted_vault_histograms.cc",
     "trusted_vault_histograms.h",
+    "trusted_vault_synthetic_field_trial.cc",
+    "trusted_vault_synthetic_field_trial.h",
   ]
 
   public_deps = [
@@ -103,6 +105,7 @@ static_library("service") {
     "//components/sync/invalidations",
     "//components/version_info",
     "//components/version_info:generate_version_info",
+    "//crypto",
     "//services/network/public/cpp",
   ]
 

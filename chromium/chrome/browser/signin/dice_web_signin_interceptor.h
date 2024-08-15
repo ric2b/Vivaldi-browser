@@ -22,6 +22,7 @@
 #include "components/policy/core/browser/signin/profile_separation_policies.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/signin/public/base/signin_metrics.h"
+#include "components/signin/public/base/signin_prefs.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "google_apis/gaia/core_account_id.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -59,7 +60,7 @@ enum class ShouldShowChromeSigninBubbleWithReason {
 
   // The bubble should not be shown: multiple reasons listed below with order of
   // priority.
-  kShouldNotShowMaxShownCountReached = 1,
+  // Deprecated: kShouldNotShowMaxShownCountReached = 1,
   kShouldNotShowAlreadySignedIn = 2,
   // Deprecated: kShouldNotShowSecondaryAccount = 3,
   kShouldNotShowUnknownAccessPoint = 4,
@@ -67,24 +68,6 @@ enum class ShouldShowChromeSigninBubbleWithReason {
   kShouldNotShowUserChoice = 6,
 
   kMaxValue = kShouldNotShowUserChoice,
-};
-
-// Value of the user choice for the Chrome Signin bubble effect.
-// Theses values are persisted to disk through prefs, they should not be
-// renumbered or reused.
-// - `kNoChoice` is the default value, it is applied when the user made no
-// explicit choice yet (on the bubble or the settings).
-// - The user can made a choice through the Chrome Signin bubble by accepting or
-// declining the bubble leading to `kSignin` and `kDoNotSignin` respectively.
-// - Dismissing the bubble multiple times will be treated as `kDoNotSignin` as
-// long as the user is in `kNoChoice` mode.
-// - There is no way to go back to `kNoChoice` after a choice has been taken or
-// applied.
-enum class ChromeSigninUserChoice {
-  kNoChoice = 0,
-  kAlwaysAsk = 1,
-  kSignin = 2,
-  kDoNotSignin = 3,
 };
 
 // Called after web signed in, after a successful token exchange through Dice.
@@ -134,16 +117,6 @@ class DiceWebSigninInterceptor : public KeyedService,
                                        bool is_new_account,
                                        bool is_sync_signin);
 
-  // Gets the Chrome Signin user choice pref based on the profile/account.
-  static ChromeSigninUserChoice GetChromeSigninUserChoice(
-      const PrefService& pref_service,
-      const std::string& email);
-
-  // Sets the Chrome Signin user choice pref based on the profile/account.
-  static void SetChromeSigninUserChoice(PrefService& pref_service,
-                                        const std::string& email,
-                                        ChromeSigninUserChoice choice);
-
   // Called after the new profile was created during a signin interception.
   // The token has been moved to the new profile, but the account is not yet in
   // the cookies.
@@ -162,10 +135,13 @@ class DiceWebSigninInterceptor : public KeyedService,
   // in |entry|.
   // In some cases the outcome cannot be fully computed synchronously, when this
   // happens, the signin interception is highly likely (but not guaranteed).
+  // `gaia_id` is optional as some usages may not have the information yet. It
+  // is currently only mandatory for the checks of the Chrome Signin bubble.
   std::optional<SigninInterceptionHeuristicOutcome> GetHeuristicOutcome(
       bool is_new_account,
       bool is_sync_signin,
       const std::string& email,
+      const std::string& gaia_id = std::string(),
       bool update_state = false,
       const ProfileAttributesEntry** entry = nullptr) const;
 
@@ -197,6 +173,8 @@ class DiceWebSigninInterceptor : public KeyedService,
                            ShouldShowEnterpriseBubbleWithoutUPA);
   FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorTest,
                            ShouldShowMultiUserBubble);
+  FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorTest,
+                           ShouldShowMultiUserBubbleNoPrimaryAccount);
   FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorTest, PersistentHash);
   FRIEND_TEST_ALL_PREFIXES(DiceWebSigninInterceptorTest,
                            ShouldEnforceEnterpriseProfileSeparation);
@@ -250,12 +228,17 @@ class DiceWebSigninInterceptor : public KeyedService,
       const AccountInfo& intercepted_account_info) const;
   bool ShouldShowMultiUserBubble(
       const AccountInfo& intercepted_account_info) const;
-  bool ShouldShowChromeSigninBubble(const std::string& email);
+  bool ShouldShowChromeSigninBubble(const std::string& gaia_id);
 
   // Helper function to call `delegate_->ShowSigninInterceptionBubble()`.
   void ShowSigninInterceptionBubble(
       const WebSigninInterceptor::Delegate::BubbleParameters& bubble_parameters,
       base::OnceCallback<void(SigninInterceptionResult)> callback);
+
+  // Attempts showing the In-Product-Help for remembering the explicit browser
+  // sign-in preference.
+  void MaybeShowExplicitBrowserSigninPreferenceRememberedIPH(
+      const AccountInfo& account_info);
 
   // Ensure that we are observing changes in extended account info. Idempotent.
   void EnsureObservingExtendedAccountInfo();
@@ -294,7 +277,7 @@ class DiceWebSigninInterceptor : public KeyedService,
   // - returns the processed result.
   SigninInterceptionResult ProcessChromeSigninUserChoice(
       SigninInterceptionResult result,
-      const std::string& email);
+      const std::string& gaia_id);
 
   // A non `std::nullopt` `profile_presets` will be applied to the
   // `new_profile` when the function is called.
@@ -328,25 +311,17 @@ class DiceWebSigninInterceptor : public KeyedService,
   size_t IncrementEmailToCountDictionaryPref(const char* pref_name,
                                              const std::string& email);
 
-  // In the experiment phase, the number of attempts is the number of declines.
-  // Also only records on accept and resets the decline count when recorded.
-  // In the full phase, since the choice is remembered, the number of attempts
-  // is the number of dimisses - this value is not reset. Records the number of
-  // times the user previously dismissed the Chrome Signin bubble when
-  // accepting/declining it. Result is expected to be either
+  // Records the number of times the user previously dismissed the Chrome Signin
+  // bubble when accepting/declining it. Result is expected to be either
   // `SigninInterceptionResult::kAccepted` or
   // `SigninInterceptionResult::kDeclined`.
-  void RecordChromeSigninNumberOfAttemptsBeforeExplicitUserAction(
-      const std::string& email,
+  void RecordChromeSigninNumberOfDismissesForAccount(
+      const std::string& gaia_id,
       SigninInterceptionResult result);
 
   // Checks if the user previously declined 2 times creating a new profile for
   // this account.
   bool HasUserDeclinedProfileCreation(const std::string& email) const;
-
-  // Returns the number of times the Chrome Signin Bubble was shown per `email`.
-  // The value is stored in a profile pref.
-  size_t GetChromeSigninBubbleShownCount(const std::string& email) const;
 
   // Fetches the value of the cloud user level value of the
   // ManagedAccountsSigninRestriction policy for 'account_info' and runs

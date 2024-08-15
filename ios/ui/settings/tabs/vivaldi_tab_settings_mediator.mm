@@ -2,25 +2,40 @@
 
 #import "ios/ui/settings/tabs/vivaldi_tab_settings_mediator.h"
 
+#import "components/prefs/ios/pref_observer_bridge.h"
+#import "components/prefs/pref_change_registrar.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
+#import "ios/chrome/browser/tabs/model/inactive_tabs/features.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
+#import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
 #import "prefs/vivaldi_pref_names.h"
 
-@interface VivaldiTabSettingsMediator () <BooleanObserver> {
+@interface VivaldiTabSettingsMediator () <BooleanObserver,
+                                          PrefObserverDelegate> {
   PrefBackedBoolean* _bottomOmniboxEnabled;
   PrefBackedBoolean* _reverseSearchResultsEnabled;
   PrefBackedBoolean* _tabBarEnabled;
 }
 @end
 
-@implementation VivaldiTabSettingsMediator
+@implementation VivaldiTabSettingsMediator {
+  // Preference service from the application context.
+  raw_ptr<PrefService> _local_prefs;
+  // Pref observer to track changes to prefs.
+  std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
+  // Registrar for pref changes notifications.
+  PrefChangeRegistrar _prefChangeRegistrar;
+}
 
-- (instancetype)initWithOriginalPrefService:(PrefService*)originalPrefService {
+- (instancetype)initWithOriginalPrefService:(PrefService*)originalPrefService
+                           localPrefService:(PrefService*)localPrefService {
   self = [super init];
   if (self) {
+    _local_prefs = localPrefService;
+
     _bottomOmniboxEnabled =
         [[PrefBackedBoolean alloc] initWithPrefService:originalPrefService
                                               prefName:prefs::kBottomOmnibox];
@@ -37,6 +52,16 @@
             initWithPrefService:originalPrefService
                        prefName:vivaldiprefs::kVivaldiDesktopTabsEnabled];
     [_tabBarEnabled setObserver:self];
+
+    if (IsInactiveTabsAvailable()) {
+      _prefChangeRegistrar.Init(_local_prefs);
+      _prefObserverBridge.reset(new PrefObserverBridge(self));
+      _prefObserverBridge->ObserveChangesForPreference(
+          prefs::kInactiveTabsTimeThreshold, &_prefChangeRegistrar);
+      [self.consumer
+          setPreferenceForInactiveTabsTimeThreshold:[self defaultThreshold]];
+    }
+
   }
   return self;
 }
@@ -53,6 +78,13 @@
   [_tabBarEnabled stop];
   [_tabBarEnabled setObserver:nil];
   _tabBarEnabled = nil;
+
+  if (IsInactiveTabsAvailable()) {
+    _prefChangeRegistrar.RemoveAll();
+    _prefObserverBridge.reset();
+  }
+  _local_prefs = nil;
+  _consumer = nil;
 }
 
 #pragma mark - Private Helpers
@@ -77,6 +109,15 @@
   return [_tabBarEnabled value];
 }
 
+- (int)defaultThreshold {
+  // Use InactiveTabsTimeThreshold() instead of reading the pref value
+  // directly as this function also manage flag and default value.
+  int currentThreshold = IsInactiveTabsExplictlyDisabledByUser()
+                             ? kInactiveTabsDisabledByUser
+                             : InactiveTabsTimeThreshold().InDays();
+  return currentThreshold;
+}
+
 #pragma mark - Properties
 
 - (void)setConsumer:(id<VivaldiTabsSettingsConsumer>)consumer {
@@ -85,6 +126,13 @@
   [self.consumer setPreferenceForReverseSearchResultOrder:
       [self isReverseSearchResultOrder]];
   [self.consumer setPreferenceForShowTabBar:[self isTabBarEnabled]];
+
+  [self.consumer setPreferenceForShowInactiveTabs:
+      [VivaldiTabSettingPrefs isInactiveTabsAvailable]];
+  if (IsInactiveTabsAvailable()) {
+    [self.consumer
+        setPreferenceForInactiveTabsTimeThreshold:[self defaultThreshold]];
+  }
 }
 
 #pragma mark - VivaldiTabsSettingsConsumer
@@ -103,6 +151,10 @@
     [_tabBarEnabled setValue:showTabBar];
 }
 
+- (void)setPreferenceForInactiveTabsTimeThreshold:(int)threshold {
+  // No op.
+}
+
 #pragma mark - BooleanObserver
 
 - (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
@@ -113,6 +165,17 @@
         [observableBoolean value]];
   } else if (observableBoolean == _tabBarEnabled) {
     [self.consumer setPreferenceForShowTabBar:[observableBoolean value]];
+  }
+}
+
+#pragma mark - PrefObserverDelegate
+
+- (void)onPreferenceChanged:(const std::string&)preferenceName {
+  if (preferenceName == prefs::kInactiveTabsTimeThreshold) {
+    CHECK(IsInactiveTabsAvailable());
+    [_consumer
+        setPreferenceForInactiveTabsTimeThreshold:_local_prefs->GetInteger(
+                                            prefs::kInactiveTabsTimeThreshold)];
   }
 }
 

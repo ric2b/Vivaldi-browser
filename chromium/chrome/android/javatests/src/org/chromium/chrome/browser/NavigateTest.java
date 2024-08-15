@@ -70,6 +70,7 @@ import org.chromium.content_public.browser.test.util.UiUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.ServerCertificate;
 import org.chromium.net.test.util.TestWebServer;
+import org.chromium.ui.test.util.UiDisableIf;
 import org.chromium.ui.test.util.UiRestriction;
 import org.chromium.url.GURL;
 import org.chromium.url.Origin;
@@ -225,6 +226,7 @@ public class NavigateTest {
     @Test
     @MediumTest
     @Feature({"Navigation"})
+    @DisableIf.Device(type = {UiDisableIf.TABLET}) // https://crbug.com/339299609
     public void testOpenLink() throws Exception {
         String url1 = mTestServer.getURL("/chrome/test/data/android/google.html");
         String url2 = mTestServer.getURL("/chrome/test/data/android/about.html");
@@ -248,7 +250,7 @@ public class NavigateTest {
     @MediumTest
     @Feature({"Navigation"})
     @CommandLineFlags.Add({"enable-features=UserAgentClientHint"})
-    // TODO(https://crbug.com/928669) Remove switch when UA-CH-* launched.
+    // TODO(crbug.com/40612550) Remove switch when UA-CH-* launched.
     public void testRequestDesktopSiteClientHints() throws Exception {
         String url1 =
                 mTestServer.getURL(
@@ -286,9 +288,9 @@ public class NavigateTest {
     @MediumTest
     @Feature({"Navigation"})
     @CommandLineFlags.Add({"enable-features=UserAgentClientHint, CriticalClientHint"})
-    // TODO(https://crbug.com/928669) Remove switch when UA-CH-* launched.
+    // TODO(crbug.com/40612550) Remove switch when UA-CH-* launched.
     public void testRequestDesktopSiteCriticalClientHints() throws Exception {
-        // TODO(https://crbug.com/1138913): Move EchoCriticalHeader request handler here when
+        // TODO(crbug.com/40153192): Move EchoCriticalHeader request handler here when
         // implemented
         String url = mTestServer.getURL("/echocriticalheader");
         final Tab tab = mActivityTestRule.getActivity().getActivityTab();
@@ -315,6 +317,7 @@ public class NavigateTest {
     @Test
     @MediumTest
     @Feature({"Navigation"})
+    @DisableIf.Device(type = {UiDisableIf.TABLET}) // https://crbug.com/339299609
     public void testTabObserverOnPageLoadStarted() throws Exception {
         final String url1 = mTestServer.getURL("/chrome/test/data/android/google.html");
         final String url2 = mTestServer.getURL("/chrome/test/data/android/about.html");

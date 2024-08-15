@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library
-  - Chromium OS > Developer Library
+  - ChromiumOS
 page_name: contributing
 title: Contributing
 ---
@@ -74,7 +74,7 @@ of each Markdown file. Here is the metadata for our example new page:
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: code-coverage
 title: Code Coverage
 ---

@@ -78,10 +78,15 @@ class DevicePickerBottomSheetContent implements BottomSheetContent, OnItemClickL
         listView.setOnItemClickListener(this);
 
         // Vivaldi
-        if (!BuildConfig.IS_VIVALDI)
-        listView.addFooterView(
-                LayoutInflater.from(mContext)
-                        .inflate(R.layout.send_tab_to_self_device_picker_footer, null));
+        if (!BuildConfig.IS_VIVALDI) {
+        ViewGroup footerView =
+                (ViewGroup)
+                        LayoutInflater.from(mContext)
+                                .inflate(R.layout.send_tab_to_self_device_picker_footer, null);
+        ((ManageAccountDevicesLinkView) footerView.findViewById(R.id.manage_account_devices_link))
+                .setProfile(mProfile);
+        listView.addFooterView(footerView);
+        } // Vivaldi
     }
 
     @Override

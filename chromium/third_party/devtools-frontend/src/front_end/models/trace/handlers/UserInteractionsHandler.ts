@@ -5,7 +5,8 @@
 import * as Helpers from '../helpers/helpers.js';
 import * as Types from '../types/types.js';
 
-import {HandlerState} from './types.js';
+import {data as metaHandlerData} from './MetaHandler.js';
+import {HandlerState, type TraceEventHandlerName} from './types.js';
 
 // This handler serves two purposes. It generates a list of events that are
 // used to show user clicks in the timeline. It is also used to gather
@@ -16,11 +17,15 @@ import {HandlerState} from './types.js';
 // because they are effectively global, so we just track all that we find.
 const allEvents: Types.TraceEvents.TraceEventEventTiming[] = [];
 
+const beginCommitCompositorFrameEvents: Types.TraceEvents.TraceEventBeginCommitCompositorFrame[] = [];
+
 export const LONG_INTERACTION_THRESHOLD = Helpers.Timing.millisecondsToMicroseconds(Types.Timing.MilliSeconds(200));
 
 export interface UserInteractionsData {
   /** All the user events we found in the trace */
   allEvents: readonly Types.TraceEvents.TraceEventEventTiming[];
+  /** All the BeginCommitCompositorFrame events we found in the trace */
+  beginCommitCompositorFrameEvents: readonly Types.TraceEvents.TraceEventBeginCommitCompositorFrame[];
   /** All the interaction events we found in the trace that had an
    * interactionId and a duration > 0
    **/
@@ -56,6 +61,7 @@ let handlerState = HandlerState.UNINITIALIZED;
 
 export function reset(): void {
   allEvents.length = 0;
+  beginCommitCompositorFrameEvents.length = 0;
   interactionEvents.length = 0;
   eventTimingStartEventsForInteractions.length = 0;
   eventTimingEndEventsById.clear();
@@ -67,6 +73,11 @@ export function reset(): void {
 export function handleEvent(event: Types.TraceEvents.TraceEventData): void {
   if (handlerState !== HandlerState.INITIALIZED) {
     throw new Error('Handler is not initialized');
+  }
+
+  if (Types.TraceEvents.isTraceEventBeginCommitCompositorFrame(event)) {
+    beginCommitCompositorFrameEvents.push(event);
+    return;
   }
 
   if (!Types.TraceEvents.isTraceEventEventTiming(event)) {
@@ -192,7 +203,7 @@ export function removeNestedInteractions(interactions: readonly Types.TraceEvent
       // events will have an event handler bound to it which caused delay on
       // the main thread, and the others will not. This leads to a situation
       // where if we pick one of the events that had no event handler, its
-      // processing time (processingEnd - processingStart) will be 0, but if we
+      // processing duration (processingEnd - processingStart) will be 0, but if we
       // had picked the event that had the slow event handler, we would show
       // correctly the main thread delay due to the event handler.
       // So, if we find events with the same interactionId and the same
@@ -200,18 +211,18 @@ export function removeNestedInteractions(interactions: readonly Types.TraceEvent
       // processingStart) time in order to make sure we find the event with the
       // worst main thread delay, as that is the one the user should care
       // about.
-      const currentEventProcessingTime = earliestCurrentEvent.processingEnd - earliestCurrentEvent.processingStart;
-      const newEventProcessingTime = interaction.processingEnd - interaction.processingStart;
+      const currentProcessingDuration = earliestCurrentEvent.processingEnd - earliestCurrentEvent.processingStart;
+      const newProcessingDuration = interaction.processingEnd - interaction.processingStart;
 
-      // Use the new interaction if it has a longer processing time than the existing one.
-      if (newEventProcessingTime > currentEventProcessingTime) {
+      // Use the new interaction if it has a longer processing duration than the existing one.
+      if (newProcessingDuration > currentProcessingDuration) {
         earliestEventForEndTime.set(endTime, interaction);
       }
     }
 
-    // Maximize the processing time based on the "children" interactions.
-    // We pick the earliest start processing time, and the latest end
-    // processing time to avoid under-reporting.
+    // Maximize the processing duration based on the "children" interactions.
+    // We pick the earliest start processing duration, and the latest end
+    // processing duration to avoid under-reporting.
     if (interaction.processingStart < earliestCurrentEvent.processingStart) {
       earliestCurrentEvent.processingStart = interaction.processingStart;
       writeSyntheticTimespans(earliestCurrentEvent);
@@ -246,6 +257,8 @@ function writeSyntheticTimespans(event: Types.TraceEvents.SyntheticInteractionPa
 }
 
 export async function finalize(): Promise<void> {
+  const {navigationsByFrameId} = metaHandlerData();
+
   // For each interaction start event, find the async end event by the ID, and then create the Synthetic Interaction event.
   for (const interactionStartEvent of eventTimingStartEventsForInteractions) {
     const endEvent = eventTimingEndEventsById.get(interactionStartEvent.id);
@@ -283,6 +296,10 @@ export async function finalize(): Promise<void> {
          Helpers.Timing.millisecondsToMicroseconds(interactionStartEvent.args.data.timeStamp)) +
         interactionStartEvent.ts);
 
+    const frameId = interactionStartEvent.args.frame ?? interactionStartEvent.args.data.frame;
+    const navigation = Helpers.Trace.getNavigationForTraceEvent(interactionStartEvent, frameId, navigationsByFrameId);
+    const navigationId = navigation?.args.data?.navigationId;
+
     const interactionEvent: Types.TraceEvents.SyntheticInteractionPair = {
       // Use the start event to define the common fields.
       cat: interactionStartEvent.cat,
@@ -300,6 +317,8 @@ export async function finalize(): Promise<void> {
         data: {
           beginEvent: interactionStartEvent,
           endEvent: endEvent,
+          frame: frameId,
+          navigationId,
         },
       },
       ts: interactionStartEvent.ts,
@@ -326,12 +345,17 @@ export async function finalize(): Promise<void> {
 
 export function data(): UserInteractionsData {
   return {
-    allEvents: [...allEvents],
-    interactionEvents: [...interactionEvents],
-    interactionEventsWithNoNesting: [...interactionEventsWithNoNesting],
+    allEvents,
+    beginCommitCompositorFrameEvents,
+    interactionEvents,
+    interactionEventsWithNoNesting,
     longestInteractionEvent,
     interactionsOverThreshold: new Set(interactionEvents.filter(event => {
       return event.dur > LONG_INTERACTION_THRESHOLD;
     })),
   };
+}
+
+export function deps(): TraceEventHandlerName[] {
+  return ['Meta'];
 }

@@ -257,6 +257,9 @@ sequence:
 LoggerImpl impl(std::move(receiver));
 ```
 
+If `LoggerImpl` is in another process, see
+[Sending Interfaces Over Interfaces](#sending-interfaces-over-interfaces).
+
 The diagram below illustrates the following sequence of events, all set in
 motion by the above line of code:
 
@@ -718,7 +721,8 @@ LOG(INFO) << "Value is " << value->get_string_value();  // DCHECK!
 Mojom `feature` generates a `base::Feature` with the given `name` and
 `default_state` (`true` => `ENABLED_BY_DEFAULT`). The feature can be accessed
 and tested in C++ using the mapped name even if it is not used to mark any
-interfaces or methods.
+[interfaces](#runtimefeature-on-interfaces) or
+[methods](#runtimefeature-on-methods).
 
 ```mojom
 module experiment.mojom;
@@ -1869,6 +1873,13 @@ enum Department {
   kResearch,
 };
 ```
+
+*** note
+**NOTE**: The `[Default]` enumerator value is distinct from the automatically
+populated enum value used when a non-nullable enum field is not defined in an
+older client's versioned struct definition
+([the enumerator value corresponding to `0`](/mojo/public/tools/bindings/README.md#ensuring-backward-compatible-behavior)).
+***
 
 ### Using Mojo Bindings in Chrome
 

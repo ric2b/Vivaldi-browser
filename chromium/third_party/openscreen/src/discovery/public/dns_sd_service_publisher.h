@@ -39,9 +39,7 @@ class DnsSdServicePublisher : public DnsSdPublisher::Client {
                         ServiceInstanceConverter conversion)
       : conversion_(conversion),
         service_name_(std::move(service_name)),
-        publisher_(service ? service->GetPublisher() : nullptr) {
-    OSP_CHECK(publisher_);
-  }
+        publisher_(*service->GetPublisher()) {}
 
   ~DnsSdServicePublisher() = default;
 
@@ -51,7 +49,7 @@ class DnsSdServicePublisher : public DnsSdPublisher::Client {
     }
 
     DnsSdInstance instance = conversion_(service);
-    return publisher_->Register(instance, this);
+    return publisher_.Register(instance, this);
   }
 
   Error UpdateRegistration(const T& service) {
@@ -60,11 +58,11 @@ class DnsSdServicePublisher : public DnsSdPublisher::Client {
     }
 
     DnsSdInstance instance = conversion_(service);
-    return publisher_->UpdateRegistration(instance);
+    return publisher_.UpdateRegistration(instance);
   }
 
   ErrorOr<int> DeregisterAll() {
-    return publisher_->DeregisterAll(service_name_);
+    return publisher_.DeregisterAll(service_name_);
   }
 
  protected:
@@ -86,7 +84,7 @@ class DnsSdServicePublisher : public DnsSdPublisher::Client {
  private:
   ServiceInstanceConverter conversion_;
   std::string service_name_;
-  DnsSdPublisher* const publisher_;
+  DnsSdPublisher& publisher_;
 };
 
 }  // namespace openscreen::discovery

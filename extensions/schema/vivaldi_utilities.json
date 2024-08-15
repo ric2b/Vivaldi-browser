@@ -2225,6 +2225,12 @@
         "parameters": []
       },
       {
+        "name": "onTopSitesChanged",
+        "type": "function",
+        "description": "Fired when topsites list has changed.",
+        "parameters": []
+      },
+      {
         "name": "onBroadcastMessage",
         "type": "function",
         "description": "Test.",

@@ -22,6 +22,7 @@
  */
 
 #include "libavutil/avassert.h"
+#include "libavutil/mem.h"
 #include "libavutil/thread.h"
 #include "avcodec.h"
 #include "get_bits.h"
@@ -103,7 +104,7 @@ static inline void x8_select_ac_table(IntraX8Context *const w, int mode)
     table_index       = get_bits(w->gb, 3);
     // 2 modes use same tables
     w->j_ac_vlc_table[mode] = j_ac_vlc[w->quant < 13][mode >> 1][table_index];
-    av_assert2(j_ac_vlc[mode]);
+    av_assert2(w->j_ac_vlc_table[mode]);
 }
 
 static inline int x8_get_orient_vlc(IntraX8Context *w)

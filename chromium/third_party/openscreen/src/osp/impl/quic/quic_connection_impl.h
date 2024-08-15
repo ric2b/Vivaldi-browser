@@ -5,98 +5,80 @@
 #ifndef OSP_IMPL_QUIC_QUIC_CONNECTION_IMPL_H_
 #define OSP_IMPL_QUIC_QUIC_CONNECTION_IMPL_H_
 
-#include <list>
 #include <memory>
-#include <vector>
+#include <string>
+#include <utility>
 
+#include "osp/impl/quic/open_screen_session_base.h"
 #include "osp/impl/quic/quic_connection.h"
+#include "osp/impl/quic/quic_dispatcher_impl.h"
 #include "platform/api/udp_socket.h"
-#include "platform/base/ip_address.h"
-#include "third_party/chromium_quic/src/base/callback.h"
-#include "third_party/chromium_quic/src/base/location.h"
-#include "third_party/chromium_quic/src/base/task_runner.h"
-#include "third_party/chromium_quic/src/base/time/time.h"
-#include "third_party/chromium_quic/src/net/third_party/quic/quartc/quartc_packet_writer.h"
-#include "third_party/chromium_quic/src/net/third_party/quic/quartc/quartc_session.h"
-#include "third_party/chromium_quic/src/net/third_party/quic/quartc/quartc_stream.h"
+#include "platform/base/error.h"
+#include "quiche/quic/core/quic_clock.h"
+#include "quiche/quic/core/quic_connection.h"
 
 namespace openscreen::osp {
 
-class QuicConnectionFactoryImpl;
-
-class UdpTransport final : public ::quic::QuartcPacketTransport {
- public:
-  UdpTransport(UdpSocket* socket, const IPEndpoint& destination);
-  UdpTransport(UdpTransport&&) noexcept;
-  ~UdpTransport() override;
-
-  UdpTransport& operator=(UdpTransport&&) noexcept;
-
-  // ::quic::QuartcPacketTransport overrides.
-  int Write(const char* buffer,
-            size_t buffer_length,
-            const PacketInfo& info) override;
-
-  UdpSocket* socket() const { return socket_; }
-
- private:
-  UdpSocket* socket_;
-  IPEndpoint destination_;
-};
-
-class QuicStreamImpl final : public QuicStream,
-                             public ::quic::QuartcStream::Delegate {
- public:
-  QuicStreamImpl(QuicStream::Delegate* delegate, ::quic::QuartcStream* stream);
-  ~QuicStreamImpl() override;
-
-  // QuicStream overrides.
-  void Write(const uint8_t* data, size_t size) override;
-  void CloseWriteEnd() override;
-
-  // ::quic::QuartcStream::Delegate overrides.
-  void OnReceived(::quic::QuartcStream* stream,
-                  const char* data,
-                  size_t data_size) override;
-  void OnClose(::quic::QuartcStream* stream) override;
-  void OnBufferChanged(::quic::QuartcStream* stream) override;
-
- private:
-  ::quic::QuartcStream* const stream_;
-};
+class QuicConnectionFactoryBase;
 
 class QuicConnectionImpl final : public QuicConnection,
-                                 public ::quic::QuartcSession::Delegate {
+                                 public OpenScreenSessionBase::Visitor {
  public:
-  QuicConnectionImpl(QuicConnectionFactoryImpl* parent_factory,
-                     QuicConnection::Delegate* delegate,
-                     std::unique_ptr<UdpTransport> udp_transport,
-                     std::unique_ptr<::quic::QuartcSession> session);
-
+  QuicConnectionImpl(QuicConnectionFactoryBase& parent_factory,
+                     QuicConnection::Delegate& delegate,
+                     const quic::QuicClock& clock);
+  QuicConnectionImpl(const QuicConnectionImpl&) = delete;
+  QuicConnectionImpl& operator=(const QuicConnectionImpl&) = delete;
   ~QuicConnectionImpl() override;
 
-  // UdpSocket::Client overrides.
-  void OnRead(UdpSocket* socket, ErrorOr<UdpPacket> data) override;
-  void OnError(UdpSocket* socket, Error error) override;
-  void OnSendError(UdpSocket* socket, Error error) override;
-
   // QuicConnection overrides.
-  std::unique_ptr<QuicStream> MakeOutgoingStream(
-      QuicStream::Delegate* delegate) override;
+  void OnPacketReceived(const UdpPacket& packet) override;
+  QuicStream* MakeOutgoingStream(QuicStream::Delegate* delegate) override;
   void Close() override;
 
-  // ::quic::QuartcSession::Delegate overrides.
+  // quic::QuicSession::Visitor overrides
+  void OnConnectionClosed(quic::QuicConnectionId server_connection_id,
+                          quic::QuicErrorCode error_code,
+                          const std::string& error_details,
+                          quic::ConnectionCloseSource source) override;
+  void OnWriteBlocked(
+      quic::QuicBlockedWriterInterface* blocked_writer) override;
+  void OnRstStreamReceived(const quic::QuicRstStreamFrame& frame) override;
+  void OnStopSendingReceived(const quic::QuicStopSendingFrame& frame) override;
+  bool TryAddNewConnectionId(
+      const quic::QuicConnectionId& server_connection_id,
+      const quic::QuicConnectionId& new_connection_id) override;
+  void OnConnectionIdRetired(
+      const quic::QuicConnectionId& server_connection_id) override;
+  void OnServerPreferredAddressAvailable(
+      const quic::QuicSocketAddress& server_preferred_address) override;
+  void OnPathDegrading() override;
+
+  // OpenScreenSessionBase::Visitor overrides
   void OnCryptoHandshakeComplete() override;
-  void OnIncomingStream(::quic::QuartcStream* stream) override;
-  void OnConnectionClosed(::quic::QuicErrorCode error_code,
-                          const ::quic::QuicString& error_details,
-                          ::quic::ConnectionCloseSource source) override;
+  void OnIncomingStream(QuicStream* QuicStream) override;
+  Delegate& GetConnectionDelegate() override { return delegate_; }
+
+  void set_dispacher(QuicDispatcherImpl* dispatcher) {
+    dispatcher_ = dispatcher;
+  }
+
+  void set_session(OpenScreenSessionBase* session, bool owns_session) {
+    session_ = session;
+    owns_session_ = owns_session;
+  }
 
  private:
-  QuicConnectionFactoryImpl* const parent_factory_;
-  const std::unique_ptr<::quic::QuartcSession> session_;
-  const std::unique_ptr<UdpTransport> udp_transport_;
-  std::vector<QuicStream*> streams_;
+  QuicConnectionFactoryBase& parent_factory_;
+  const quic::QuicClock& clock_;  // Not owned.
+  // `dispatcher_` is only needed for QuicServer side.
+  QuicDispatcherImpl* dispatcher_;
+  OpenScreenSessionBase* session_;
+  // On QuicClient side, `owns_session_` is true and `session_` is owned by
+  // this class.
+  // On QuicServer side, `owns_session_` is false and `session_` is owned by
+  // QuicDispatcherImpl.
+  bool owns_session_;
 };
 
 }  // namespace openscreen::osp

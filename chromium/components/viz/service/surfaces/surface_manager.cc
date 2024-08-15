@@ -19,7 +19,6 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/default_tick_clock.h"
 #include "base/trace_event/trace_event.h"
-#include "components/viz/common/features.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/common/surfaces/surface_info.h"
 #include "components/viz/service/surfaces/surface.h"
@@ -81,7 +80,7 @@ SurfaceManager::~SurfaceManager() {
 
   // All SurfaceClients and their surfaces are supposed to be
   // destroyed before SurfaceManager.
-  // TODO(crbug.com/823043): The following two DCHECKs don't hold. Destroy
+  // TODO(crbug.com/41377228): The following two DCHECKs don't hold. Destroy
   // manually for now to avoid ~Surface calling back into a partially-destructed
   // `this`.
   // DCHECK(surface_map_.empty());
@@ -113,7 +112,8 @@ void SurfaceManager::SetTickClockForTesting(const base::TickClock* tick_clock) {
 
 Surface* SurfaceManager::CreateSurface(
     base::WeakPtr<SurfaceClient> surface_client,
-    const SurfaceInfo& surface_info) {
+    const SurfaceInfo& surface_info,
+    const SurfaceId& pending_copy_surface_id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(surface_info.is_valid());
   DCHECK(surface_client);
@@ -130,9 +130,9 @@ Surface* SurfaceManager::CreateSurface(
   if (!allocation_group)
     return nullptr;
 
-  std::unique_ptr<Surface> surface =
-      std::make_unique<Surface>(surface_info, this, allocation_group,
-                                surface_client, max_uncommitted_frames_);
+  std::unique_ptr<Surface> surface = std::make_unique<Surface>(
+      surface_info, this, allocation_group, surface_client,
+      pending_copy_surface_id, max_uncommitted_frames_);
   surface->SetDependencyDeadline(
       std::make_unique<SurfaceDependencyDeadline>(tick_clock_));
   surface_map_[surface_info.id()] = std::move(surface);
@@ -312,7 +312,9 @@ void SurfaceManager::AddSurfaceReferenceImpl(
   const SurfaceId& parent_id = reference.parent_id();
   const SurfaceId& child_id = reference.child_id();
 
-  if (parent_id.frame_sink_id() == child_id.frame_sink_id()) {
+  if (parent_id.frame_sink_id() == child_id.frame_sink_id() &&
+      !parent_id.IsNewerThan(child_id)) {
+    // Only newer surfaces from the same client can keep an older surface alive.
     DLOG(ERROR) << "Cannot add self reference from " << parent_id << " to "
                 << child_id;
     return;
@@ -482,8 +484,7 @@ void SurfaceManager::ExpireOldTemporaryReferences() {
 
   // Some surfaces may have become eligible to garbage collection, since we
   // just removed temporary references.
-  if (base::FeatureList::IsEnabled(features::kEagerSurfaceGarbageCollection))
-    GarbageCollectSurfaces();
+  GarbageCollectSurfaces();
 }
 
 Surface* SurfaceManager::GetSurfaceForId(const SurfaceId& surface_id) const {

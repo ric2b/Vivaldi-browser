@@ -50,9 +50,9 @@ import java.util.List;
  */
 public class ClearBrowsingDataFragmentBasic extends ClearBrowsingDataFragment {
     /**
-     * Functional interface to start a Chrome Custom Tab for the given intent, e.g. by using
-     * {@link org.chromium.chrome.browser.LaunchIntentDispatcher#createCustomTabActivityIntent}.
-     * TODO(crbug.com/1222076): Update when LaunchIntentDispatcher is (partially-)modularized.
+     * Functional interface to start a Chrome Custom Tab for the given intent, e.g. by using {@link
+     * org.chromium.chrome.browser.LaunchIntentDispatcher#createCustomTabActivityIntent}.
+     * TODO(crbug.com/40773797): Update when LaunchIntentDispatcher is (partially-)modularized.
      */
     public interface CustomTabIntentHelper {
         /**
@@ -255,7 +255,7 @@ public class ClearBrowsingDataFragmentBasic extends ClearBrowsingDataFragment {
     }
 
     @Override
-    protected List<Integer> getDialogOptions() {
+    protected List<Integer> getDialogOptions(Bundle fragmentArgs) {
         return Arrays.asList(
                 DialogOption.CLEAR_HISTORY,
                 DialogOption.CLEAR_COOKIES_AND_SITE_DATA,

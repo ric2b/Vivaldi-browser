@@ -12,11 +12,12 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "content/public/renderer/plugin_ax_tree_source.h"
+#include "content/public/renderer/plugin_ax_tree_action_target_adapter.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "pdf/accessibility_structs.h"
 #include "pdf/pdf_accessibility_data_handler.h"
 #include "services/screen_ai/buildflags/buildflags.h"
+#include "third_party/blink/public/web/web_ax_object.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_node_id_forward.h"
 #include "ui/accessibility/ax_tree.h"
@@ -26,11 +27,7 @@
 #include "ui/gfx/geometry/vector2d_f.h"
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-#include "base/containers/queue.h"
-#include "base/sequence_checker.h"
-#include "mojo/public/cpp/bindings/remote.h"
-#include "services/screen_ai/public/mojom/screen_ai_service.mojom.h"
-#include "ui/accessibility/ax_node_data.h"
+#include "components/pdf/renderer/pdf_ocr_helper.h"
 #endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 
 namespace blink {
@@ -59,117 +56,13 @@ struct AXTreeUpdate;
 
 namespace pdf {
 
-#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-enum class PdfOcrRequestStatus {
-  kRequested = 0,
-  kPerformed = 1,
-  kMaxValue = kPerformed,
-};
-#endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-
-class PdfAccessibilityTree : public content::PluginAXTreeSource,
+class PdfAccessibilityTree : public ui::AXTreeSource<const ui::AXNode*,
+                                                     ui::AXTreeData*,
+                                                     ui::AXNodeData>,
+                             public content::PluginAXTreeActionTargetAdapter,
                              public content::RenderFrameObserver,
                              public chrome_pdf::PdfAccessibilityDataHandler {
  public:
-#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-  // Used for storing OCR requests either before performing an OCR job, or after
-  // the results have been received. This is for scheduling the work in another
-  // task in batches in order to unblock the user from reading a partially
-  // OCRed PDF, and in order to avoid sending all the images to the OCR Service
-  // at once, in case the PDF is closed halfway through the OCR process.
-  struct PdfOcrRequest {
-    PdfOcrRequest(const ui::AXNodeID& image_node_id,
-                  const chrome_pdf::AccessibilityImageInfo& image,
-                  const ui::AXNodeID& root_node_id,
-                  const ui::AXNodeID& parent_node_id,
-                  const ui::AXNodeID& page_node_id,
-                  uint32_t page_index);
-    PdfOcrRequest(const PdfOcrRequest& other);
-
-    const ui::AXNodeID image_node_id;
-    const chrome_pdf::AccessibilityImageInfo image;
-    const ui::AXNodeID root_node_id;
-    const ui::AXNodeID parent_node_id;
-    const ui::AXNodeID page_node_id;
-    const uint32_t page_index;
-    // This boolean indicates which request corresponds to the last image on
-    // each page.
-    bool is_last_on_page = false;
-
-    // This field is set after the image is extracted from PDF.
-    gfx::SizeF image_pixel_size;
-  };
-
-  // Manages the connection to the OCR Service via Mojo, and ensures that
-  // requests are sent in order and that responses are batched.
-  class PdfOcrService final {
-   public:
-    using OnOcrDataReceivedCallback = base::RepeatingCallback<void(
-        std::vector<PdfOcrRequest> ocr_requests,
-        std::vector<ui::AXTreeUpdate> tree_updates)>;
-
-    PdfOcrService(chrome_pdf::PdfAccessibilityImageFetcher* image_fetcher,
-                  content::RenderFrame& render_frame,
-                  ui::AXNodeID root_node_id,
-                  uint32_t page_count,
-                  OnOcrDataReceivedCallback callback);
-
-    PdfOcrService(const PdfOcrService&) = delete;
-    PdfOcrService& operator=(const PdfOcrService&) = delete;
-
-    ~PdfOcrService();
-
-    // If the OCR Service is created before the PDF is loaded or reloaded, i.e.
-    // before `PdfAccessibilityTree::SetAccessibilityDocInfo` is called,
-    // previous requests are removed and page count and root node are re-set.
-    void ResetService(ui::AXNodeID root_node_id, uint32_t page_count);
-    void OcrPage(base::queue<PdfOcrRequest> page_requests);
-    bool AreAllPagesOcred() const;
-    bool AreAllPagesInBatchOcred() const;
-    void SetScreenAIAnnotatorForTesting(
-        mojo::PendingRemote<screen_ai::mojom::ScreenAIAnnotator>
-            screen_ai_annotator);
-    void ResetRemainingPageCountForTesting();
-    uint32_t pages_per_batch_for_testing() const { return pages_per_batch_; }
-
-   private:
-    static uint32_t ComputePagesPerBatch(uint32_t page_count);
-    void OcrNextImage();
-    void ReceiveOcrResultsForImage(PdfOcrRequest request,
-                                   const ui::AXTreeUpdate& tree_update);
-
-    // `image_fetcher_` owns `this`.
-    const raw_ptr<chrome_pdf::PdfAccessibilityImageFetcher> image_fetcher_;
-
-    uint32_t pages_per_batch_;
-    uint32_t remaining_page_count_;
-    ui::AXNodeID root_node_id_;
-
-    // True if there are pending OCR requests. Used to determine if `OcrPage`
-    // should call `OcrNextImage` or if the next call to
-    // `ReceiveOcrResultsForImage` should do it instead. This avoids the
-    // possibility of processing requests in the wrong order.
-    bool is_ocr_in_progress_ = false;
-
-    // A PDF is made up of a number of pages, and each page might have one or
-    // more inaccessible images that need to be OCRed. This queue could contain
-    // the OCR requests for all the images on several pages, so the requests
-    // from each page are concatenated together into a single queue.
-    // `PdfOcrRequest.is_last_on_page` indicates which request is the last on
-    // each page.
-    base::queue<PdfOcrRequest> all_requests_;
-    std::vector<PdfOcrRequest> batch_requests_;
-    std::vector<ui::AXTreeUpdate> batch_tree_updates_;
-    OnOcrDataReceivedCallback on_ocr_data_received_callback_;
-    mojo::Remote<screen_ai::mojom::ScreenAIAnnotator> screen_ai_annotator_;
-    SEQUENCE_CHECKER(sequence_checker_);
-    // Needs to be kept last so that it would be destructed first.
-    base::WeakPtrFactory<PdfOcrService> weak_ptr_factory_{this};
-  };
-#endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-
   PdfAccessibilityTree(
       content::RenderFrame* render_frame,
       chrome_pdf::PdfAccessibilityActionHandler* action_handler,
@@ -216,7 +109,7 @@ class PdfAccessibilityTree : public content::PluginAXTreeSource,
       uint32_t char_offset_in_node,
       chrome_pdf::PageCharacterIndex& page_char_index) const;
 
-  // content::PluginAXTreeSource:
+  // ui::AXTreeSource:
   bool GetTreeData(ui::AXTreeData* tree_data) const override;
   ui::AXNode* GetRoot() const override;
   ui::AXNode* GetFromId(int32_t id) const override;
@@ -231,9 +124,10 @@ class PdfAccessibilityTree : public content::PluginAXTreeSource,
   const ui::AXNode* GetNull() const override;
   void SerializeNode(const ui::AXNode* node,
                      ui::AXNodeData* out_data) const override;
+
+  // content::PluginAXTreeActionTargetAdapter:
   std::unique_ptr<ui::AXActionTarget> CreateActionTarget(
-      const ui::AXNode& target_node) override;
-  blink::WebPluginContainer* GetPluginContainer() override;
+      ui::AXNodeID id) override;
 
   // content::RenderFrameObserver:
   void AccessibilityModeChanged(const ui::AXMode& mode) override;
@@ -242,8 +136,8 @@ class PdfAccessibilityTree : public content::PluginAXTreeSource,
   void WasShown() override;
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-  void CreateOcrService();
-  PdfOcrService* ocr_service_for_testing() { return ocr_service_.get(); }
+  void CreateOcrHelper();
+  PdfOcrHelper* ocr_helper_for_testing() { return ocr_helper_.get(); }
 
   // After receiving a batch of tree updates containing the results of the OCR
   // Service, this method adds each piece of OCRed text in the correct page,
@@ -266,6 +160,8 @@ class PdfAccessibilityTree : public content::PluginAXTreeSource,
   // structure, and because they would be hidden by the child tree anyway.
   bool SetChildTree(const ui::AXNodeID& target_node_id,
                     const ui::AXTreeID& child_tree_id);
+
+  void ForcePluginAXObjectForTesting(const blink::WebAXObject& obj);
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
  protected:
@@ -319,10 +215,7 @@ class PdfAccessibilityTree : public content::PluginAXTreeSource,
   // replacement node data can be introduced.
   void ClearAccessibilityNodes();
 
-  content::RenderAccessibility* GetRenderAccessibility();
-
-  // WARNING: May cause `this` to be deleted.
-  content::RenderAccessibility* GetRenderAccessibilityIfEnabled();
+  std::optional<blink::WebAXObject> GetPluginContainerAXObject();
 
   std::unique_ptr<gfx::Transform> MakeTransformFromViewInfo() const;
 
@@ -340,6 +233,11 @@ class PdfAccessibilityTree : public content::PluginAXTreeSource,
   // Marks the plugin container dirty to ensure serialization of the PDF
   // contents.
   void MarkPluginContainerDirty();
+
+  // Let our dependent objects know about our lifetime; `set_this`, if true,
+  // sets `this` in our dependents; nullptr otherwise.
+  // Returns true on successful update.
+  bool UpdateDependentObjects(bool set_this);
 
   // Returns a weak pointer for an instance of this class.
   base::WeakPtr<PdfAccessibilityTree> GetWeakPtr() {
@@ -410,12 +308,16 @@ class PdfAccessibilityTree : public content::PluginAXTreeSource,
   // background, this value will be flipped to false in `WasHidden()`.
   bool currently_in_foreground_ = true;
 
+  // Forces a WebAXObject for the plugin container to be returned, even if the
+  // plugin container is nullptr. Enables lower level tests to function.
+  blink::WebAXObject force_plugin_ax_object_for_testing_;
+
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
   // The postamble page is added to the accessibility tree to inform the user
   // that the OCR process is ongoing. It is removed once the process is
   // complete.
   std::unique_ptr<ui::AXTreeUpdate> postamble_page_tree_update_;
-  std::unique_ptr<PdfOcrService> ocr_service_;
+  std::unique_ptr<PdfOcrHelper> ocr_helper_;
 
   // Flag indicating if any text was converted from images by OCR.
   bool was_text_converted_from_image_ = false;

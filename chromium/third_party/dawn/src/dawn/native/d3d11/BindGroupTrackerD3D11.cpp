@@ -175,7 +175,7 @@ MaybeError BindGroupTracker::Apply() {
 
                 DAWN_TRY(MatchVariant(
                     bindingInfo.bindingLayout,
-                    [&](const BufferBindingLayout& layout) -> MaybeError {
+                    [&](const BufferBindingInfo& layout) -> MaybeError {
                         BufferBinding binding = group->GetBindingAsBufferBinding(bindingIndex);
                         auto offset = binding.offset;
                         if (layout.hasDynamicOffset) {
@@ -206,7 +206,7 @@ MaybeError BindGroupTracker::Apply() {
                         }
                         return {};
                     },
-                    [&](const StorageTextureBindingLayout& layout) -> MaybeError {
+                    [&](const StorageTextureBindingInfo& layout) -> MaybeError {
                         switch (layout.access) {
                             case wgpu::StorageTextureAccess::WriteOnly:
                             case wgpu::StorageTextureAccess::ReadWrite: {
@@ -227,8 +227,14 @@ MaybeError BindGroupTracker::Apply() {
                         }
                         return {};
                     },
-                    [](const TextureBindingLayout&) -> MaybeError { return {}; },
-                    [](const SamplerBindingLayout&) -> MaybeError { return {}; }));
+                    [](const TextureBindingInfo&) -> MaybeError { return {}; },
+                    [](const SamplerBindingInfo&) -> MaybeError { return {}; },
+                    [](const StaticSamplerBindingInfo&) -> MaybeError {
+                        // Static samplers are implemented in the frontend on
+                        // D3D11.
+                        DAWN_UNREACHABLE();
+                        return {};
+                    }));
             }
         }
 
@@ -241,10 +247,12 @@ MaybeError BindGroupTracker::Apply() {
         for (auto& uav : mPixelLocalStorageUAVs) {
             views.push_back(uav.Get());
         }
-        DAWN_ASSERT(uavSlotCount >= views.size());
-        mCommandContext->GetD3D11DeviceContext4()->OMSetRenderTargetsAndUnorderedAccessViews(
-            D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL, nullptr, nullptr,
-            uavSlotCount - views.size(), views.size(), views.data(), nullptr);
+        if (!views.empty()) {
+            DAWN_ASSERT(uavSlotCount >= views.size());
+            mCommandContext->GetD3D11DeviceContext4()->OMSetRenderTargetsAndUnorderedAccessViews(
+                D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL, nullptr, nullptr,
+                uavSlotCount - views.size(), views.size(), views.data(), nullptr);
+        }
     } else {
         BindGroupMask inheritedGroups =
             mPipelineLayout->InheritedGroupsMask(mLastAppliedPipelineLayout);
@@ -287,7 +295,7 @@ MaybeError BindGroupTracker::ApplyBindGroup(BindGroupIndex index) {
 
         DAWN_TRY(MatchVariant(
             bindingInfo.bindingLayout,
-            [&](const BufferBindingLayout& layout) -> MaybeError {
+            [&](const BufferBindingInfo& layout) -> MaybeError {
                 BufferBinding binding = group->GetBindingAsBufferBinding(bindingIndex);
                 auto offset = binding.offset;
                 if (layout.hasDynamicOffset) {
@@ -366,7 +374,13 @@ MaybeError BindGroupTracker::ApplyBindGroup(BindGroupIndex index) {
                 }
                 return {};
             },
-            [&](const SamplerBindingLayout&) -> MaybeError {
+            [&](const StaticSamplerBindingInfo&) -> MaybeError {
+                // Static samplers are implemented in the frontend on
+                // D3D11.
+                DAWN_UNREACHABLE();
+                return {};
+            },
+            [&](const SamplerBindingInfo&) -> MaybeError {
                 Sampler* sampler = ToBackend(group->GetBindingAsSampler(bindingIndex));
                 ID3D11SamplerState* d3d11SamplerState = sampler->GetD3D11SamplerState();
                 if (bindingVisibility & wgpu::ShaderStage::Vertex) {
@@ -380,7 +394,7 @@ MaybeError BindGroupTracker::ApplyBindGroup(BindGroupIndex index) {
                 }
                 return {};
             },
-            [&](const TextureBindingLayout&) -> MaybeError {
+            [&](const TextureBindingInfo&) -> MaybeError {
                 TextureView* view = ToBackend(group->GetBindingAsTextureView(bindingIndex));
                 ComPtr<ID3D11ShaderResourceView> srv;
                 // For sampling from stencil, we have to use an internal mirror 'R8Uint' texture.
@@ -401,7 +415,7 @@ MaybeError BindGroupTracker::ApplyBindGroup(BindGroupIndex index) {
                 }
                 return {};
             },
-            [&](const StorageTextureBindingLayout& layout) -> MaybeError {
+            [&](const StorageTextureBindingInfo& layout) -> MaybeError {
                 TextureView* view = ToBackend(group->GetBindingAsTextureView(bindingIndex));
                 switch (layout.access) {
                     case wgpu::StorageTextureAccess::WriteOnly:
@@ -451,7 +465,7 @@ void BindGroupTracker::UnApplyBindGroup(BindGroupIndex index) {
 
         MatchVariant(
             bindingInfo.bindingLayout,
-            [&](const BufferBindingLayout& layout) {
+            [&](const BufferBindingInfo& layout) {
                 switch (layout.type) {
                     case wgpu::BufferBindingType::Uniform: {
                         ID3D11Buffer* nullBuffer = nullptr;
@@ -503,7 +517,12 @@ void BindGroupTracker::UnApplyBindGroup(BindGroupIndex index) {
                         DAWN_UNREACHABLE();
                 }
             },
-            [&](const SamplerBindingLayout&) {
+            [&](const StaticSamplerBindingInfo&) {
+                // Static samplers are implemented in the frontend on
+                // D3D11.
+                DAWN_UNREACHABLE();
+            },
+            [&](const SamplerBindingInfo&) {
                 ID3D11SamplerState* nullSampler = nullptr;
                 if (bindingVisibility & wgpu::ShaderStage::Vertex) {
                     deviceContext->VSSetSamplers(bindingSlot, 1, &nullSampler);
@@ -515,7 +534,7 @@ void BindGroupTracker::UnApplyBindGroup(BindGroupIndex index) {
                     deviceContext->CSSetSamplers(bindingSlot, 1, &nullSampler);
                 }
             },
-            [&](const TextureBindingLayout&) {
+            [&](const TextureBindingInfo&) {
                 ID3D11ShaderResourceView* nullSRV = nullptr;
                 if (bindingVisibility & wgpu::ShaderStage::Vertex) {
                     deviceContext->VSSetShaderResources(bindingSlot, 1, &nullSRV);
@@ -527,7 +546,7 @@ void BindGroupTracker::UnApplyBindGroup(BindGroupIndex index) {
                     deviceContext->CSSetShaderResources(bindingSlot, 1, &nullSRV);
                 }
             },
-            [&](const StorageTextureBindingLayout& layout) {
+            [&](const StorageTextureBindingInfo& layout) {
                 switch (layout.access) {
                     case wgpu::StorageTextureAccess::WriteOnly:
                     case wgpu::StorageTextureAccess::ReadWrite: {

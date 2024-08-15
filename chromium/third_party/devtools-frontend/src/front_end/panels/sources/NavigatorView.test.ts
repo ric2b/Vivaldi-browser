@@ -4,7 +4,6 @@
 
 import * as Common from '../../core/common/common.js';
 import type * as Platform from '../../core/platform/platform.js';
-import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
@@ -14,16 +13,14 @@ import * as Persistence from '../../models/persistence/persistence.js';
 import * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as Workspace from '../../models/workspace/workspace.js';
 import {createTarget} from '../../testing/EnvironmentHelpers.js';
-import * as UI from '../../ui/legacy/legacy.js';
-
-import * as Sources from './sources.js';
-
-const {assert} = chai;
-
 import {
   describeWithMockConnection,
   setMockConnectionResponseHandler,
 } from '../../testing/MockConnection.js';
+import {setMockResourceTree} from '../../testing/ResourceTreeHelpers.js';
+import * as UI from '../../ui/legacy/legacy.js';
+
+import * as Sources from './sources.js';
 
 describeWithMockConnection('NavigatorView', () => {
   let target: SDK.Target.Target;
@@ -33,6 +30,7 @@ describeWithMockConnection('NavigatorView', () => {
     Root.Runtime.experiments.register(Root.Runtime.ExperimentName.AUTHORED_DEPLOYED_GROUPING, '');
     Root.Runtime.experiments.register(Root.Runtime.ExperimentName.JUST_MY_CODE, '');
 
+    setMockResourceTree(false);
     setMockConnectionResponseHandler('Page.getResourceTree', async () => {
       return {
         frameTree: null,
@@ -88,7 +86,7 @@ describeWithMockConnection('NavigatorView', () => {
     await resourceTreeModel.once(SDK.ResourceTreeModel.Events.CachedResourcesLoaded);
     resourceTreeModel.frameAttached(mainFrameId, null);
     const childFrame = resourceTreeModel.frameAttached(childFrameId, mainFrameId);
-    assertNotNullOrUndefined(childFrame);
+    assert.exists(childFrame);
     const {project} = addResourceAndUISourceCode(url, childFrame, '', 'text/html', resourceTreeModel);
 
     const navigatorView = Sources.SourcesNavigator.NetworkNavigatorView.instance({forceNew: true});

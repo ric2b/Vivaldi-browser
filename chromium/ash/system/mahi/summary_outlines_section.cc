@@ -5,13 +5,16 @@
 #include "ash/system/mahi/summary_outlines_section.h"
 
 #include <memory>
-#include <string>
 
 #include "ash/style/typography.h"
 #include "ash/system/mahi/mahi_animation_utils.h"
 #include "ash/system/mahi/mahi_constants.h"
+#include "ash/system/mahi/mahi_ui_update.h"
 #include "ash/system/mahi/resources/grit/mahi_resources.h"
+#include "base/check.h"
 #include "base/check_is_test.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/time/time.h"
 #include "chromeos/components/mahi/public/cpp/mahi_manager.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
@@ -39,6 +42,8 @@ constexpr int64_t kSectionHeaderChildSpacing = 4;
 constexpr int64_t kSectionHeaderIconSize = 20;
 constexpr gfx::Insets kSectionPadding = gfx::Insets::TLBR(8, 8, 16, 8);
 constexpr int64_t kSectionChildSpacing = 8;
+constexpr int kTextLabelDefaultMaximumWidth =
+    mahi_constants::kScrollViewWidth - kSectionPadding.width();
 
 std::unique_ptr<views::View> CreateSectionHeader(const gfx::VectorIcon& icon,
                                                  int name_id) {
@@ -60,7 +65,10 @@ std::unique_ptr<views::View> CreateSectionHeader(const gfx::VectorIcon& icon,
 
 }  // namespace
 
-SummaryOutlinesSection::SummaryOutlinesSection() {
+SummaryOutlinesSection::SummaryOutlinesSection(MahiUiController* ui_controller)
+    : MahiUiController::Delegate(ui_controller), ui_controller_(ui_controller) {
+  CHECK(ui_controller_);
+
   SetOrientation(views::BoxLayout::Orientation::kVertical);
   SetCrossAxisAlignment(views::BoxLayout::CrossAxisAlignment::kStart);
   SetInsideBorderInsets(kSectionPadding);
@@ -77,23 +85,40 @@ SummaryOutlinesSection::SummaryOutlinesSection() {
               IDR_MAHI_LOADING_SUMMARY_ANIMATION))
           .Build());
 
-  AddChildView(views::Builder<views::Label>()
-                   .CopyAddressTo(&summary_label_)
-                   .SetVisible(false)
-                   .SetID(mahi_constants::ViewId::kSummaryLabel)
-                   .SetMultiLine(true)
-                   .SetEnabledColorId(cros_tokens::kCrosSysOnSurface)
-                   .SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT)
-                   .AfterBuild(base::BindOnce([](views::Label* self) {
-                     TypographyProvider::Get()->StyleLabel(
-                         TypographyToken::kCrosBody2, *self);
-                   }))
-                   .Build());
-
-  AddChildView(CreateSectionHeader(chromeos::kMahiOutlinesIcon,
-                                   IDS_MAHI_PANEL_OUTLINES_SECTION_NAME));
-
   AddChildView(
+      views::Builder<views::Label>()
+          .CopyAddressTo(&summary_label_)
+          .SetVisible(false)
+          .SetID(mahi_constants::ViewId::kSummaryLabel)
+          .SetSelectable(true)
+          .SetMultiLine(true)
+          // TODO(crbug.com/40233803): Multiline label right now doesn't
+          // work well with `FlexLayout`. The size constraint is not
+          // passed down from the views tree in the first round of layout,
+          // so we impose a maximum width constraint so that the first
+          // layout handle the width and height constraint correctly.
+          .SetMaximumWidth(kTextLabelDefaultMaximumWidth)
+          .SetEnabledColorId(cros_tokens::kCrosSysOnSurface)
+          .SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT)
+          .AfterBuild(base::BindOnce([](views::Label* self) {
+            TypographyProvider::Get()->StyleLabel(TypographyToken::kCrosBody2,
+                                                  *self);
+          }))
+          .Build());
+
+  // TODO(b/330643995): Show the outlines section once it is ready.
+  auto* outlines_section_container = AddChildView(
+      views::Builder<views::BoxLayoutView>()
+          .SetOrientation(views::BoxLayout::Orientation::kVertical)
+          .SetCrossAxisAlignment(views::BoxLayout::CrossAxisAlignment::kStart)
+          .SetID(mahi_constants::ViewId::kOutlinesSectionContainer)
+          .SetVisible(false)
+          .Build());
+
+  outlines_section_container->AddChildView(CreateSectionHeader(
+      chromeos::kMahiOutlinesIcon, IDS_MAHI_PANEL_OUTLINES_SECTION_NAME));
+
+  outlines_section_container->AddChildView(
       views::Builder<views::AnimatedImageView>()
           .CopyAddressTo(&outlines_loading_animated_image_)
           .SetID(mahi_constants::ViewId::kOutlinesLoadingAnimatedImage)
@@ -101,58 +126,62 @@ SummaryOutlinesSection::SummaryOutlinesSection() {
               IDR_MAHI_LOADING_OUTLINES_ANIMATION))
           .Build());
 
-  AddChildView(views::Builder<views::FlexLayoutView>()
-                   .SetID(mahi_constants::ViewId::kOutlinesContainer)
-                   .SetOrientation(views::LayoutOrientation::kVertical)
-                   .SetVisible(false)
-                   .Build());
-
-  LoadSummaryAndOutlines();
+  outlines_section_container->AddChildView(
+      views::Builder<views::FlexLayoutView>()
+          .CopyAddressTo(&outlines_container_)
+          .SetID(mahi_constants::ViewId::kOutlinesContainer)
+          .SetOrientation(views::LayoutOrientation::kVertical)
+          .SetVisible(false)
+          .Build());
 }
 
 SummaryOutlinesSection::~SummaryOutlinesSection() = default;
 
-void SummaryOutlinesSection::LoadSummaryAndOutlines() {
-  auto* manager = chromeos::MahiManager::Get();
-  if (!manager) {
-    CHECK_IS_TEST();
-    return;
+views::View* SummaryOutlinesSection::GetView() {
+  return this;
+}
+
+bool SummaryOutlinesSection::GetViewVisibility(VisibilityState state) const {
+  switch (state) {
+    case VisibilityState::kError:
+    case VisibilityState::kQuestionAndAnswer:
+      return false;
+    case VisibilityState::kSummaryAndOutlines:
+      return true;
   }
-
-  manager->GetSummary(base::BindOnce(&SummaryOutlinesSection::OnSummaryLoaded,
-                                     weak_ptr_factory_.GetWeakPtr()));
-
-  summary_loading_animated_image_->Play(
-      mahi_animation_utils::GetLottiePlaybackConfig(
-          *summary_loading_animated_image_->animated_image()->skottie(),
-          IDR_MAHI_LOADING_SUMMARY_ANIMATION));
-
-  manager->GetOutlines(base::BindOnce(&SummaryOutlinesSection::OnOutlinesLoaded,
-                                      weak_ptr_factory_.GetWeakPtr()));
-  outlines_loading_animated_image_->Play(
-      mahi_animation_utils::GetLottiePlaybackConfig(
-          *outlines_loading_animated_image_->animated_image()->skottie(),
-          IDR_MAHI_LOADING_OUTLINES_ANIMATION));
 }
 
-void SummaryOutlinesSection::OnSummaryLoaded(
-    std::u16string summary_text,
-    chromeos::MahiResponseStatus status) {
-  summary_label_->SetVisible(true);
-  summary_label_->SetText(summary_text);
-  summary_loading_animated_image_->Stop();
-  summary_loading_animated_image_->SetVisible(false);
+void SummaryOutlinesSection::OnUpdated(const MahiUiUpdate& update) {
+  switch (update.type()) {
+    case MahiUiUpdateType::kContentsRefreshInitiated:
+    case MahiUiUpdateType::kSummaryAndOutlinesReloaded:
+      LoadSummaryAndOutlines();
+      return;
+    case MahiUiUpdateType::kOutlinesLoaded:
+      HandleOutlinesLoaded(update.GetOutlines());
+      return;
+    case MahiUiUpdateType::kSummaryLoaded:
+      HandleSummaryLoaded(update.GetSummary());
+      return;
+    case MahiUiUpdateType::kAnswerLoaded:
+    case MahiUiUpdateType::kErrorReceived:
+    case MahiUiUpdateType::kQuestionAndAnswerViewNavigated:
+    case MahiUiUpdateType::kQuestionPosted:
+    case MahiUiUpdateType::kQuestionReAsked:
+    case MahiUiUpdateType::kRefreshAvailabilityUpdated:
+    case MahiUiUpdateType::kSummaryAndOutlinesSectionNavigated:
+      return;
+  }
 }
 
-void SummaryOutlinesSection::OnOutlinesLoaded(
-    std::vector<chromeos::MahiOutline> outlines,
-    chromeos::MahiResponseStatus status) {
-  auto* outlines_container =
-      GetViewByID(mahi_constants::ViewId::kOutlinesContainer);
+void SummaryOutlinesSection::HandleOutlinesLoaded(
+    const std::vector<chromeos::MahiOutline>& outlines) {
+  outlines_container_->RemoveAllChildViews();
   for (auto outline : outlines) {
-    outlines_container->AddChildView(
+    outlines_container_->AddChildView(
         views::Builder<views::Label>()
             .SetText(outline.outline_content)
+            .SetSelectable(true)
             .SetMultiLine(true)
             .SetEnabledColorId(cros_tokens::kCrosSysOnSurface)
             .SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT)
@@ -165,7 +194,53 @@ void SummaryOutlinesSection::OnOutlinesLoaded(
 
   outlines_loading_animated_image_->Stop();
   outlines_loading_animated_image_->SetVisible(false);
-  outlines_container->SetVisible(true);
+  // TODO(b/330643995): Show the outlines section once it is ready.
+  outlines_container_->SetVisible(false);
+
+  // TODO(b/333916944): Add metrics recording the outline loading animation time
+  // here.
+}
+
+void SummaryOutlinesSection::HandleSummaryLoaded(
+    const std::u16string& summary_text) {
+  summary_label_->SetVisible(true);
+  summary_label_->SetText(summary_text);
+  summary_loading_animated_image_->Stop();
+  summary_loading_animated_image_->SetVisible(false);
+
+  base::UmaHistogramTimes(mahi_constants::kSummaryLoadingTimeHistogramName,
+                          base::Time::Now() - summary_start_loading_time_);
+}
+
+void SummaryOutlinesSection::LoadSummaryAndOutlines() {
+  if (!chromeos::MahiManager::Get()) {
+    CHECK_IS_TEST();
+    return;
+  }
+
+  if (summary_label_->GetVisible()) {
+    summary_label_->SetVisible(false);
+    summary_loading_animated_image_->SetVisible(true);
+  }
+
+  if (outlines_container_->GetVisible()) {
+    outlines_container_->SetVisible(false);
+    outlines_loading_animated_image_->SetVisible(true);
+  }
+
+  // Plays loading animation before summary and outlines are loaded.
+  summary_loading_animated_image_->Play(
+      mahi_animation_utils::GetLottiePlaybackConfig(
+          *summary_loading_animated_image_->animated_image()->skottie(),
+          IDR_MAHI_LOADING_SUMMARY_ANIMATION));
+  outlines_loading_animated_image_->Play(
+      mahi_animation_utils::GetLottiePlaybackConfig(
+          *outlines_loading_animated_image_->animated_image()->skottie(),
+          IDR_MAHI_LOADING_OUTLINES_ANIMATION));
+
+  summary_start_loading_time_ = base::Time::Now();
+
+  ui_controller_->UpdateSummaryAndOutlines();
 }
 
 BEGIN_METADATA(SummaryOutlinesSection)

@@ -18,7 +18,6 @@ import cpplint
 import fnmatch  # Exposed through the API.
 import glob
 import inspect
-import itertools
 import json  # Exposed through the API.
 import logging
 import mimetypes
@@ -49,6 +48,7 @@ import gerrit_util
 import owners_client
 import owners_finder
 import presubmit_canned_checks
+import presubmit_diff
 import rdb_wrapper
 import scm
 import subprocess2 as subprocess  # Exposed through the API.
@@ -1199,6 +1199,9 @@ class Change(object):
         self._description_without_tags = ''
         self.SetDescriptionText(description)
 
+        # List of submodule paths in the repo.
+        self._submodules = None
+
         assert all((isinstance(f, (list, tuple)) and len(f) == 2)
                    for f in files), files
 
@@ -1359,11 +1362,11 @@ class Change(object):
         return list(filter(lambda x: x.Action() != 'D', affected))
 
     def AffectedSubmodules(self):
-        """Returns a list of AffectedFile instances for submodules in the change.
-
-        There is no SCM and no submodules, so return an empty list.
-        """
-        return []
+        """Returns a list of AffectedFile instances for submodules in the change."""
+        return [
+            af for af in self._affected_files
+            if af.LocalPath() in self._repo_submodules()
+        ]
 
     def AffectedTestableFiles(self, include_deletes=None, **kwargs):
         """Return a list of the existing text files in a change."""
@@ -1423,11 +1426,10 @@ class Change(object):
         return {f.LocalPath(): f.OldContents() for f in files}
 
     def _repo_submodules(self):
-        """Returns submodule paths for current change's repo.
-
-        There is no SCM, so return an empty list.
-        """
-        return []
+        """Returns submodule paths for current change's repo."""
+        if not self._submodules:
+            self._submodules = scm.GIT.ListSubmodules(self.RepositoryRoot())
+        return self._submodules
 
 
 class GitChange(Change):
@@ -1438,17 +1440,8 @@ class GitChange(Change):
         self._upstream = upstream
         super(GitChange, self).__init__(*args)
 
-        # List of submodule paths in the repo.
-        self._submodules = None
-
     def _diff_cache(self):
         return self._AFFECTED_FILES.DIFF_CACHE(self._upstream)
-
-    def _repo_submodules(self):
-        """Returns submodule paths for current change's repo."""
-        if not self._submodules:
-            self._submodules = scm.GIT.ListSubmodules(self.RepositoryRoot())
-        return self._submodules
 
     def UpstreamBranch(self):
         """Returns the upstream branch for the change."""
@@ -1480,13 +1473,6 @@ class GitChange(Change):
         if include_deletes:
             return affected
         return list(filter(lambda x: x.Action() != 'D', affected))
-
-    def AffectedSubmodules(self):
-        """Returns a list of AffectedFile instances for submodules in the change."""
-        return [
-            af for af in self._affected_files
-            if af.LocalPath() in self._repo_submodules()
-        ]
 
 
 class ProvidedDiffChange(Change):
@@ -2070,6 +2056,10 @@ def _parse_change(parser, options):
             parser.error(
                 '<diff_file> cannot be specified when --all-files is set.')
 
+    if options.diff_file and options.generate_diff:
+        parser.error(
+            '<diff_file> cannot be specified when <generate_diff> is set.')
+
     # TODO(b/323243527): Consider adding a SCM for provided diff.
     change_scm = scm.determine_scm(options.root)
     if change_scm != 'git' and not options.files and not options.diff_file:
@@ -2086,6 +2076,17 @@ def _parse_change(parser, options):
                     if fnmatch.fnmatch(name, mask):
                         change_files.append(('M', name))
                         break
+        elif options.generate_diff:
+            gerrit_url = urlparse.urlparse(options.gerrit_url).netloc
+            diffs = presubmit_diff.create_diffs(
+                host=gerrit_url.split('-review')[0],
+                repo=options.gerrit_project,
+                ref=options.upstream,
+                root=options.root,
+                files=options.files,
+            )
+            diff = '\n'.join(diffs.values())
+            change_files = _diffs_to_change_files(diffs)
         else:
             # Get the filtered set of files from a directory scan.
             change_files = _parse_files(options.files, options.recursive)
@@ -2169,7 +2170,14 @@ def _parse_unified_diff(diff):
 
 
 def _process_diff_file(diff_file):
-    """Validates a git diff file and processes it into a list of change files.
+    diff = gclient_utils.FileRead(diff_file)
+    if not diff:
+        raise PresubmitFailure('diff file is empty')
+    return diff, _diffs_to_change_files(_parse_unified_diff(diff))
+
+
+def _diffs_to_change_files(diffs):
+    """Validates a dict of diffs and processes it into a list of change files.
 
     Each change file is a tuple of (action, path) where action is one of:
         * A: newly added file
@@ -2177,20 +2185,16 @@ def _process_diff_file(diff_file):
         * D: deleted file
 
     Args:
-        diff_file: Path to file containing unified git diff.
+        diffs: Dict of (path, diff) tuples.
 
     Returns:
-        Contents of diff_file and a list of change file tuples from the diff.
+        A list of change file tuples from the diffs.
 
     Raises:
-        PresubmitFailure: If the provided diff is empty or otherwise invalid.
+        PresubmitFailure: If a diff is empty or otherwise invalid.
     """
-    diff = gclient_utils.FileRead(diff_file)
-    if not diff:
-        raise PresubmitFailure('diff file is empty')
-
     change_files = []
-    for file, file_diff in _parse_unified_diff(diff).items():
+    for file, file_diff in diffs.items():
         header_line = file_diff.splitlines()[1]
         if not header_line:
             raise PresubmitFailure('diff header is empty')
@@ -2201,7 +2205,7 @@ def _process_diff_file(diff_file):
         else:
             action = 'M'
         change_files.append((action, file))
-    return diff, change_files
+    return change_files
 
 
 @contextlib.contextmanager
@@ -2276,6 +2280,9 @@ def main(argv=None):
     desc.add_argument('--description_file',
                       help='File to read change description from.')
     parser.add_argument('--diff_file', help='File to read change diff from.')
+    parser.add_argument('--generate_diff',
+                        action='store_true',
+                        help='Create a diff using upstream server as base.')
     parser.add_argument('--issue', type=int, default=0)
     parser.add_argument('--patchset', type=int, default=0)
     parser.add_argument('--root',
@@ -2284,10 +2291,9 @@ def main(argv=None):
                         'If inherit-review-settings-ok is present in this '
                         'directory, parent directories up to the root file '
                         'system directories will also be searched.')
-    parser.add_argument(
-        '--upstream',
-        help='Git only: the base ref or upstream branch against '
-        'which the diff should be computed.')
+    parser.add_argument('--upstream',
+                        help='The base ref or upstream branch against '
+                        'which the diff should be computed.')
     parser.add_argument('--default_presubmit')
     parser.add_argument('--may_prompt', action='store_true', default=False)
     parser.add_argument(

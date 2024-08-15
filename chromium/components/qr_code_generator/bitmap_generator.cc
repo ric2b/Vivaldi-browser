@@ -97,6 +97,18 @@ void DrawPasskeyIcon(SkCanvas* canvas,
   PaintCenterImage(canvas, canvas_bounds, kSizePx, kSizePx, kBorderPx,
                    paint_background, icon.GetRepresentation(1.0f).GetBitmap());
 }
+
+void DrawProductIcon(SkCanvas* canvas,
+                     const SkRect& canvas_bounds,
+                     const SkPaint& paint_foreground,
+                     const SkPaint& paint_background) {
+  constexpr int kSizePx = 100;
+  constexpr int kBorderPx = 0;  // Unlike the dino, the icon is already padded.
+  auto icon = gfx::CreateVectorIcon(gfx::IconDescription(
+      vector_icons::kProductRefreshIcon, kSizePx, paint_foreground.getColor()));
+  PaintCenterImage(canvas, canvas_bounds, kSizePx, kSizePx, kBorderPx,
+                   paint_background, icon.GetRepresentation(1.0f).GetBitmap());
+}
 #endif
 
 void DrawDino(SkCanvas* canvas,
@@ -281,6 +293,9 @@ SkBitmap RenderBitmap(base::span<const uint8_t> data,
     case CenterImage::kPasskey:
       DrawPasskeyIcon(&canvas, bitmap_bounds, paint_black, paint_white);
       break;
+    case CenterImage::kProductLogo:
+      DrawProductIcon(&canvas, bitmap_bounds, paint_black, paint_white);
+      break;
 #endif
   }
 
@@ -290,6 +305,23 @@ SkBitmap RenderBitmap(base::span<const uint8_t> data,
 }  // namespace
 
 const int kQuietZoneSizePixels = kModuleSizePixels * 4;
+
+base::expected<gfx::ImageSkia, Error> GenerateImage(
+    base::span<const uint8_t> data,
+    ModuleStyle module_style,
+    LocatorStyle locator_style,
+    CenterImage center_image,
+    QuietZone quiet_zone) {
+  // TODO(crbug.com/338570710) CreateImage() should generate a higher resolution
+  // QR code for displays with scale-factor > 1. Not generating higher
+  // resolution QR codes is OK because:
+  // - QR codes are shown to the user rarely.
+  // - Many callers display the QR code at a downsampled size.
+  // - Upscaling QR codes has few upscaling artifacts.
+  return GenerateBitmap(data, module_style, locator_style, center_image,
+                        quiet_zone)
+      .transform(&gfx::ImageSkia::CreateFrom1xBitmap);
+}
 
 base::expected<SkBitmap, Error> GenerateBitmap(base::span<const uint8_t> data,
                                                ModuleStyle module_style,

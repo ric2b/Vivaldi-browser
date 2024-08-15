@@ -13,7 +13,6 @@
 #import "ios/chrome/browser/ui/scoped_iphone_portrait_only/iphone_portrait_only_manager.h"
 #import "ios/chrome/browser/ui/scoped_ui_blocker/ui_blocker_manager.h"
 
-@class AppState;
 class ChromeBrowserState;
 @class CommandDispatcher;
 @class SceneState;
@@ -99,6 +98,10 @@ enum class PostCrashAction {
 // YES if the application is getting terminated.
 @property(nonatomic, readonly) BOOL appIsTerminating;
 @property(nonatomic, assign, readwrite) BOOL overridePortraitOnly;
+
+// All agents that have been attached. Use -addAgent: and -removeAgent: to
+// add and remove agents.
+@property(nonatomic, readonly) NSArray<id<AppStateAgent>>* connectedAgents;
 
 // Logs duration of the session and records that chrome is no longer in cold
 // start.

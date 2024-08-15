@@ -147,11 +147,11 @@ constexpr char kOnlyUseOfflineManifest[] = "only_use_offline_manifest";
 constexpr char kOfflineManifest[] = "offline_manifest";
 
 // "name" manifest value to use for offline install. Cannot be updated.
-// TODO(crbug.com/1119699): Allow updating of name.
+// TODO(crbug.com/40145613): Allow updating of name.
 constexpr char kOfflineManifestName[] = "name";
 
 // "start_url" manifest value to use for offline install. Cannot be updated.
-// TODO(crbug.com/1119699): Allow updating of start_url.
+// TODO(crbug.com/40145613): Allow updating of start_url.
 constexpr char kOfflineManifestStartUrl[] = "start_url";
 
 // "scope" manifest value to use for offline install.
@@ -187,6 +187,13 @@ constexpr char kOemInstalled[] = "oem_installed";
 // with a built-in touchscreen with stylus support.
 constexpr char kDisableIfTouchScreenWithStylusNotSupported[] =
     "disable_if_touchscreen_with_stylus_not_supported";
+
+// Contains boolean that, if set to true, will set the app as the preferred app
+// for its supported links after installation. Note that this has no effect if
+// the app is already installed as the user may have already updated their
+// preference.
+constexpr char kIsPreferredAppForSupportedLinks[] =
+    "is_preferred_app_for_supported_links";
 
 void EnsureContains(base::Value::List& list, std::string_view value) {
   for (const base::Value& item : list) {
@@ -453,6 +460,16 @@ OptionsOrError ParseConfig(FileUtilsWrapper& file_utils,
                            kDisableIfTouchScreenWithStylusNotSupported});
     }
     options.disable_if_touchscreen_with_stylus_not_supported = value->GetBool();
+  }
+
+  // is_preferred_app_for_supported_links
+  value = app_config_dict.Find(kIsPreferredAppForSupportedLinks);
+  if (value) {
+    if (!value->is_bool()) {
+      return base::StrCat({file.AsUTF8Unsafe(), " had an invalid ",
+                           kIsPreferredAppForSupportedLinks});
+    }
+    options.is_preferred_app_for_supported_links = value->GetBool();
   }
 
   return options;

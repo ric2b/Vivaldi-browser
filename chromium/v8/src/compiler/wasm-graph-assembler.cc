@@ -146,15 +146,28 @@ Node* WasmGraphAssembler::LoadFromObject(MachineType type, Node* base,
 
 Node* WasmGraphAssembler::LoadProtectedPointerFromObject(Node* object,
                                                          Node* offset) {
+  return LoadFromObject(V8_ENABLE_SANDBOX_BOOL ? MachineType::ProtectedPointer()
+                                               : MachineType::AnyTagged(),
+                        object, offset);
+}
+
+Node* WasmGraphAssembler::LoadImmutableProtectedPointerFromObject(
+    Node* object, Node* offset) {
+  return LoadImmutableFromObject(V8_ENABLE_SANDBOX_BOOL
+                                     ? MachineType::ProtectedPointer()
+                                     : MachineType::AnyTagged(),
+                                 object, offset);
+}
+
+Node* WasmGraphAssembler::BuildDecompressProtectedPointer(Node* tagged) {
 #if V8_ENABLE_SANDBOX
   static_assert(COMPRESS_POINTERS_BOOL);
-  Node* tagged = LoadFromObject(MachineType::Int32(), object, offset);
   Node* trusted_cage_base = Load(MachineType::Pointer(), LoadRootRegister(),
                                  IsolateData::trusted_cage_base_offset());
   return BitcastWordToTagged(
       WordOr(trusted_cage_base, BuildChangeUint32ToUintPtr(tagged)));
 #else
-  return LoadFromObject(MachineType::AnyTagged(), object, offset);
+  UNREACHABLE();
 #endif  // V8_ENABLE_SANDBOX
 }
 
@@ -427,9 +440,15 @@ Node* WasmGraphAssembler::LoadContextFromJSFunction(Node* js_function) {
 
 Node* WasmGraphAssembler::LoadFunctionDataFromJSFunction(Node* js_function) {
   Node* shared = LoadSharedFunctionInfo(js_function);
-  return LoadFromObject(
-      MachineType::TaggedPointer(), shared,
-      wasm::ObjectAccess::ToTagged(SharedFunctionInfo::kFunctionDataOffset));
+#if V8_ENABLE_SANDBOX
+    static constexpr int kOffset =
+        SharedFunctionInfo::kTrustedFunctionDataOffset;
+#else
+    static constexpr int kOffset = SharedFunctionInfo::kFunctionDataOffset;
+#endif
+  return LoadTrustedPointerFromObject(shared,
+                                      wasm::ObjectAccess::ToTagged(kOffset),
+                                      kWasmFunctionDataIndirectPointerTag);
 }
 
 Node* WasmGraphAssembler::LoadExportedFunctionIndexAsSmi(

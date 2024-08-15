@@ -30,7 +30,8 @@ import {
 } from './index';
 import {JANK_COLOR} from './jank_colors';
 import {ScrollJankV3DetailsPanel} from './scroll_jank_v3_details_panel';
-import {getColorForSlice} from '../../common/colorizer';
+import {getColorForSlice} from '../../core/colorizer';
+import {getLegacySelection} from '../../common/state';
 
 const UNKNOWN_SLICE_NAME = 'Unknown';
 const JANK_SLICE_NAME = ' Jank';
@@ -75,8 +76,8 @@ export class ScrollJankV3Track extends CustomSqlTableSliceTrack<NamedSliceTrackT
     };
   }
 
-  onDestroy() {
-    super.onDestroy();
+  async onDestroy(): Promise<void> {
+    await super.onDestroy();
     ScrollJankPluginState.getInstance().unregisterTrack(ScrollJankV3Track.kind);
   }
 
@@ -100,7 +101,7 @@ export class ScrollJankV3Track extends CustomSqlTableSliceTrack<NamedSliceTrackT
 
   onUpdatedSlices(slices: EventLatencyTrackTypes['slice'][]) {
     for (const slice of slices) {
-      const currentSelection = globals.state.currentSelection;
+      const currentSelection = getLegacySelection(globals.state);
       const isSelected =
         currentSelection &&
         currentSelection.kind === 'GENERIC_SLICE' &&

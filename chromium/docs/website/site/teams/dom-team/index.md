@@ -12,7 +12,9 @@ soon.
 
 **Contact:**
 
-*   dom-dev@chromium.org
-*   masonfreed@chromium.org
-*   yuzhehan@chromium.org
+*   dom-dev@google.com
+*   masonf@chromium.org
 *   jarhar@chromium.org
+*   dbaron@chromium.org
+*   dizhangg@chromium.org
+*   dom@chromium.org

@@ -91,4 +91,8 @@ using l10n_util::GetNSString;
   return note_utils_ios::lastModificationTimeForNoteNode(_noteNode);
 }
 
+- (BOOL)isFolder {
+  return _noteNode->is_folder();
+}
+
 @end

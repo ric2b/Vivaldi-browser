@@ -58,6 +58,9 @@ enum class ContentNotificationPromoProvisionalEntrypoint {
 // Returns `YES` if the signin promo exists on the current NTP.
 @property(nonatomic, assign) BOOL isSignInPromoEnabled;
 
+// Returns `YES` if the user is using Google as default search engine.
+@property(nonatomic, assign) BOOL isDefaultSearchEngine;
+
 // Handler for displaying notification related alerts.
 @property(nonatomic, weak) id<NotificationsAlertPresenter> presenter;
 
@@ -66,6 +69,9 @@ enum class ContentNotificationPromoProvisionalEntrypoint {
 
 // Cleans the mediator.
 - (void)shutdown;
+
+// Used from the coordinator to respond to the OS prompt outcome.
+- (void)updateFeedTopSectionWhenClosed;
 
 @end
 

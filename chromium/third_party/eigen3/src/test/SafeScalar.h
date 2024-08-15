@@ -4,22 +4,20 @@ template <typename T>
 class SafeScalar {
  public:
   SafeScalar() : initialized_(false) {}
-  SafeScalar(const SafeScalar& other) { *this = other; }
-  SafeScalar& operator=(const SafeScalar& other) {
-    val_ = T(other);
-    initialized_ = true;
-    return *this;
-  }
 
-  SafeScalar(T val) : val_(val), initialized_(true) {}
-  SafeScalar& operator=(T val) {
-    val_ = val;
-    initialized_ = true;
-  }
+  SafeScalar(const T& val) : val_(val), initialized_(true) {}
+
+  template <typename Source>
+  explicit SafeScalar(const Source& val) : SafeScalar(T(val)) {}
 
   operator T() const {
     VERIFY(initialized_ && "Uninitialized access.");
     return val_;
+  }
+
+  template <typename Target>
+  explicit operator Target() const {
+    return Target(this->operator T());
   }
 
  private:
@@ -28,19 +26,8 @@ class SafeScalar {
 };
 
 namespace Eigen {
-namespace internal {
 template <typename T>
-struct random_impl<SafeScalar<T>> {
-  using SafeT = SafeScalar<T>;
-  using Impl = random_impl<T>;
-  static EIGEN_DEVICE_FUNC inline SafeT run(const SafeT& x, const SafeT& y) {
-    T result = Impl::run(x, y);
-    return SafeT(result);
-  }
-  static EIGEN_DEVICE_FUNC inline SafeT run() {
-    T result = Impl::run();
-    return SafeT(result);
-  }
+struct NumTraits<SafeScalar<T>> : GenericNumTraits<T> {
+  enum { RequireInitialization = 1 };
 };
-}  // namespace internal
 }  // namespace Eigen

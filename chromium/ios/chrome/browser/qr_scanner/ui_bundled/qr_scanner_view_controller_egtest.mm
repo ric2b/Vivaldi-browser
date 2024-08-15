@@ -149,7 +149,7 @@ void TapButton(id<GREYMatcher> button) {
 // Appends the given `editText` to the `text` already in the omnibox and presses
 // the keyboard return key.
 void EditOmniboxTextAndTapKeyboardReturn(std::string text, NSString* editText) {
-  // TODO(crbug.com/1454516): Use simulatePhysicalKeyboardEvent until
+  // TODO(crbug.com/40916974): Use simulatePhysicalKeyboardEvent until
   // replaceText can properly handle \n.
   [ChromeEarlGrey simulatePhysicalKeyboardEvent:editText flags:0];
   [ChromeEarlGrey simulatePhysicalKeyboardEvent:@"\n" flags:0];
@@ -157,7 +157,7 @@ void EditOmniboxTextAndTapKeyboardReturn(std::string text, NSString* editText) {
 
 // Presses the keyboard return key.
 void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
-  // TODO(crbug.com/1454516): Use simulatePhysicalKeyboardEvent until
+  // TODO(crbug.com/40916974): Use simulatePhysicalKeyboardEvent until
   // replaceText can properly handle \n.
   [ChromeEarlGrey simulatePhysicalKeyboardEvent:@"\n" flags:0];
 }
@@ -592,7 +592,7 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
 }
 
 // Tests that a new dialog replaces an old dialog if the camera state changes.
-// TODO(crbug.com/1019211): Re-enable test on iOS12.
+// TODO(crbug.com/40105250): Re-enable test on iOS12.
 #if TARGET_IPHONE_SIMULATOR
 #define MAYBE_testDialogIsReplacedIfCameraStateChanges \
   testDialogIsReplacedIfCameraStateChanges

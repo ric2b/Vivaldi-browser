@@ -318,9 +318,9 @@ void PrepareDragData(const DropData& drop_data,
 // support was for dragging items out of Outlook.exe for upload to a file
 // hosting service. The Outlook drag source does not add url data to the data
 // object.
-// TODO(https://crbug.com/958273): DragDrop: Extend virtual filename support
+// TODO(crbug.com/41456054): DragDrop: Extend virtual filename support
 // to DropData, for parity with real filename support.
-// TODO(https://crbug.com/964461): Drag and drop: Should support both virtual
+// TODO(crbug.com/41459545): Drag and drop: Should support both virtual
 // file and url data on drop.
 bool ShouldIncludeVirtualFiles(const DropData& drop_data) {
   return !drop_data.did_originate_from_renderer && drop_data.url.is_empty();
@@ -367,16 +367,17 @@ aura::Window* GetHostWindow(aura::Window* window) {
 void VivaldiGetDragTarget(
     WebContentsImpl* web_contents,
     const gfx::PointF& point,
-    RenderWidgetTargeter::RenderWidgetHostAtPointCallback callback) {
+    base::OnceCallback<void(base::WeakPtr<RenderWidgetHostViewBase>,
+                            std::optional<gfx::PointF>)> callback) {
   DCHECK(!web_contents->GetOuterWebContents());
   RenderWidgetHostViewBase* root_view =
       web_contents->GetRenderViewHost()->GetWidget()->GetView();
   if (vivaldi::IsVivaldiRunning() && vivaldi::IsTabDragInProgress()) {
     std::move(callback).Run(root_view->GetWeakPtr(), point);
   } else {
-    web_contents->GetInputEventRouter()
-        ->GetRenderWidgetHostAtPointAsynchronously(root_view, point,
-                                                   std::move(callback));
+    web_contents->GetRenderWidgetHostAtPointAsynchronously(
+        root_view, point,
+        std::move(callback));
   }
 }
 
@@ -791,19 +792,23 @@ void WebContentsViewAura::PrepareDropData(
   }
 #endif
 
-  base::Pickle pickle;
-  std::vector<DropData::FileSystemFileInfo> file_system_files;
-  if (data.GetPickledData(GetFileSystemFileFormatType(), &pickle) &&
-      DropData::FileSystemFileInfo::ReadFileSystemFilesFromPickle(
-          pickle, &file_system_files))
-    drop_data->file_system_files = file_system_files;
+  if (std::optional<base::Pickle> pickle =
+          data.GetPickledData(GetFileSystemFileFormatType());
+      pickle.has_value()) {
+    std::vector<DropData::FileSystemFileInfo> file_system_files;
+    if (DropData::FileSystemFileInfo::ReadFileSystemFilesFromPickle(
+            pickle.value(), &file_system_files)) {
+      drop_data->file_system_files = file_system_files;
+    }
+  }
 
-  if (data.GetPickledData(ui::ClipboardFormatType::WebCustomDataType(),
-                          &pickle)) {
+  if (std::optional<base::Pickle> pickle =
+          data.GetPickledData(ui::ClipboardFormatType::WebCustomDataType());
+      pickle.has_value()) {
     if (std::optional<std::unordered_map<std::u16string, std::u16string>>
-            maybe_custom_data = ui::ReadCustomDataIntoMap(pickle);
-        maybe_custom_data) {
-      drop_data->custom_data = std::move(*maybe_custom_data);
+            maybe_custom_data = ui::ReadCustomDataIntoMap(pickle.value());
+        maybe_custom_data.has_value()) {
+      drop_data->custom_data = std::move(maybe_custom_data.value());
     }
   }
 }
@@ -1185,7 +1190,7 @@ void WebContentsViewAura::StartDragging(
   if (!image.isNull())
     data->provider().SetDragImage(image, cursor_offset);
 
-  // TODO(crbug.com/1302094): The param `drag_obj_rect` is unused.
+  // TODO(crbug.com/40825138): The param `drag_obj_rect` is unused.
 
   std::unique_ptr<WebDragSourceAura> drag_source(
       new WebDragSourceAura(GetNativeView(), web_contents_));
@@ -1355,8 +1360,7 @@ void WebContentsViewAura::OnMouseEvent(ui::MouseEvent* event) {
   if (!web_contents_->GetDelegate())
     return;
 
-  ui::EventType type = event->type();
-  if (type == ui::ET_MOUSE_PRESSED) {
+  if (event->type() == ui::ET_MOUSE_PRESSED) {
     // Linux window managers like to handle raise-on-click themselves.  If we
     // raise-on-click manually, this may override user settings that prevent
     // focus-stealing.
@@ -1371,8 +1375,7 @@ void WebContentsViewAura::OnMouseEvent(ui::MouseEvent* event) {
 #endif
   }
 
-  web_contents_->GetDelegate()->ContentsMouseEvent(
-      web_contents_, type == ui::ET_MOUSE_MOVED, type == ui::ET_MOUSE_EXITED);
+  web_contents_->GetDelegate()->ContentsMouseEvent(web_contents_, *event);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1384,8 +1387,9 @@ void WebContentsViewAura::DragEnteredCallback(
     base::WeakPtr<RenderWidgetHostViewBase> target,
     std::optional<gfx::PointF> transformed_pt) {
   drag_in_progress_ = true;
-  if (!target)
+  if (!target) {
     return;
+  }
   RenderWidgetHostImpl* target_rwh =
       RenderWidgetHostImpl::From(target->GetRenderWidgetHost());
   if (!drag_security_info_.IsValidDragTarget(target_rwh)) {
@@ -1458,10 +1462,10 @@ void WebContentsViewAura::OnDragEntered(const ui::DropTargetEvent& event) {
 
   DropMetadata drop_metadata(event);
   VivaldiGetDragTarget(web_contents_,
-          event.location_f(),
-          base::BindOnce(&WebContentsViewAura::DragEnteredCallback,
-                         weak_ptr_factory_.GetWeakPtr(), drop_metadata,
-                         std::move(drop_data)));
+      event.location_f(),
+      base::BindOnce(&WebContentsViewAura::DragEnteredCallback,
+                     weak_ptr_factory_.GetWeakPtr(), drop_metadata,
+                     std::move(drop_data)));
 }
 
 void WebContentsViewAura::DragUpdatedCallback(
@@ -1476,8 +1480,9 @@ void WebContentsViewAura::DragUpdatedCallback(
   // this case we just ignore this operation.
   if (!drag_in_progress_)
     return;
-  if (!target)
+  if (!target) {
     return;
+  }
   RenderWidgetHostImpl* target_rwh =
       RenderWidgetHostImpl::From(target->GetRenderWidgetHost());
   if (!drag_security_info_.IsValidDragTarget(target_rwh)) {
@@ -1635,8 +1640,9 @@ void WebContentsViewAura::PerformDropCallback(
   drag_in_progress_ = false;
   base::ScopedClosureRunner end_drag_runner(std::move(end_drag_runner_));
 
-  if (!target)
+  if (!target) {
     return;
+  }
   RenderWidgetHostImpl* target_rwh =
       RenderWidgetHostImpl::From(target->GetRenderWidgetHost());
   if (!drag_security_info_.IsValidDragTarget(target_rwh)) {
@@ -1694,7 +1700,7 @@ void WebContentsViewAura::PerformDropCallback(
 void WebContentsViewAura::MaybeLetDelegateProcessDrop(
     OnPerformingDropContext drop_context) {
   // |delegate_| may be null in unit tests.
-  // TODO(crbug.com/1459352): Tests should use a delegate.
+  // TODO(crbug.com/40274271): Tests should use a delegate.
   if (delegate_) {
     auto* drop_data_ptr = drop_context.drop_data.get();
     delegate_->OnPerformingDrop(
@@ -1785,13 +1791,12 @@ void WebContentsViewAura::PerformDropOrExitDrag(
   output_drag_op = current_drag_data_ ? current_drag_data_->operation
                                       : ui::mojom::DragOperation::kNone;
 
-  web_contents_->GetInputEventRouter()
-      ->GetRenderWidgetHostAtPointAsynchronously(
-          web_contents_->GetRenderViewHost()->GetWidget()->GetView(),
-          drop_metadata.localized_location,
-          base::BindOnce(&WebContentsViewAura::PerformDropCallback,
-                         weak_ptr_factory_.GetWeakPtr(), drop_metadata,
-                         std::move(data)));
+  web_contents_->GetRenderWidgetHostAtPointAsynchronously(
+      web_contents_->GetRenderViewHost()->GetWidget()->GetView(),
+      drop_metadata.localized_location,
+      base::BindOnce(&WebContentsViewAura::PerformDropCallback,
+                     weak_ptr_factory_.GetWeakPtr(), drop_metadata,
+                     std::move(data)));
   exit_drag.ReplaceClosure(base::DoNothing());
 }
 

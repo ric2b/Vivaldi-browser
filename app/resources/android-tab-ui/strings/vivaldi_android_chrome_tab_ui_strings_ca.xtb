@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ca">
+<translation id="2947471979790858922">La teva activitat a aquestes pestanyes privades se suprimirà d'aquest dispositiu</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Pots trobar les pestanyes tancades a Pestanyes recents sota el menú principal de Vivaldi. Les pestanyes privades no estan disponibles.}
+        other {Pots trobar les pestanyes tancades a Pestanyes recents sota el menú principal de Vivaldi. Les teves # pestanyes privades no estan disponibles.}}</translation>
+<translation id="4871187110787939393">Tancar totes les pestanyes privades?</translation>
 </translationbundle>

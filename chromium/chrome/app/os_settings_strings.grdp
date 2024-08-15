@@ -295,15 +295,14 @@
   <message name="IDS_SETTINGS_ABOUT_PAGE_CONSUMER_AUTO_UPDATE_TOGGLE_KEEP_UPDATES_BUTTON" desc="Text of the auto update toggle feature dialog keep update button.">
     Keep updates
   </message>
-  <!-- TODO(b/324297162): Finalize and enable translation -->
-  <message name="IDS_SETTINGS_ABOUT_PAGE_EXTENDED_UPDATES_BUTTON" desc="Text of the extended updates button." translateable="false">
+  <message name="IDS_SETTINGS_ABOUT_PAGE_EXTENDED_UPDATES_BUTTON" desc="Text of the extended updates button.">
     Set up
   </message>
-  <message name="IDS_SETTINGS_ABOUT_PAGE_EXTENDED_UPDATES_MAIN_MESSAGE" desc="Text of the main extended updates message." translateable="false">
-    Opt into extended updates to keep your device up to date
+  <message name="IDS_SETTINGS_ABOUT_PAGE_EXTENDED_UPDATES_MAIN_MESSAGE" desc="Text of the main extended updates message.">
+    Extended security updates available
   </message>
-  <message name="IDS_SETTINGS_ABOUT_PAGE_EXTENDED_UPDATES_SECONDARY_MESSAGE" desc="Text of the supplemental explanation about extended updates." translateable="false">
-    Automatic security and software updates have been paused. You can extend updates for 2 more years, but some functionality will be limited. <ph name="LINK_BEGIN">&lt;a target="_blank" href="$1<ex>https://google.com/</ex>"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
+  <message name="IDS_SETTINGS_ABOUT_PAGE_EXTENDED_UPDATES_SECONDARY_MESSAGE" desc="Text of the supplemental explanation about extended updates.">
+    This device is no longer receiving automatic software updates. Turn on extended security updates for continued security, stability, and performance. Some functionality will be limited. <ph name="LINK_BEGIN">&lt;a target="_blank" href="$1<ex>https://google.com/</ex>"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
   </message>
 
  <!-- ChromeOS End Of Life Incentive -->
@@ -640,11 +639,11 @@
   <message name="IDS_SETTINGS_SUGGESTIONS_MANAGE_PERSONAL_INFO" desc="The label for opening Chrome's browser settings page for managing personal addresses">
     Manage personal information
   </message>
-  <message name="IDS_OS_SETTINGS_SUGGESTIONS_ORCA_TITLE" desc="The label for orca" translateable="false">
+  <message name="IDS_OS_SETTINGS_SUGGESTIONS_ORCA_TITLE" desc="The label for Help me write settings">
     Help me write
   </message>
-  <message name="IDS_OS_SETTINGS_SUGGESTIONS_ORCA_DESCRIPTION" desc="The description for orca" translateable="false">
-    Create a draft or refine existing work, powered by Google AI.
+  <message name="IDS_OS_SETTINGS_SUGGESTIONS_ORCA_DESCRIPTION" desc="The description for Help me write settings">
+    Right-click in a text box to create a draft or refine existing work, powered by Google AI. Currently has limited availability.
   </message>
   <message name="IDS_SETTINGS_SUGGESTIONS_EMOJI_SUGGESTION_TITLE" desc="The label for emoji suggestion (when an user types a word, some emojis might be suggested for the user to insert after) section.">
     Emoji suggestions
@@ -971,6 +970,9 @@
   <message name="IDS_OS_SETTINGS_PERSONALIZATION_MENU_ITEM_DESCRIPTION" desc="Description for the Personalization menu item in the left menu.">
     Dark theme, screen saver
   </message>
+  <message name="IDS_OS_SETTINGS_PERSONALIZATION_MENU_ITEM_DESCRIPTION_GUEST_MODE" desc="Description for the Personalization menu item in the left menu, for guest mode.">
+    Dark theme
+  </message>
   <message name="IDS_OS_SETTINGS_OPEN_PERSONALIZATION_HUB" desc="Title for the link to open personalization hub.">
     Set your wallpaper &amp; style
   </message>
@@ -979,6 +981,9 @@
   </message>
   <message name="IDS_OS_SETTINGS_REVAMP_OPEN_PERSONALIZATION_HUB_SUBTITLE" desc="Description for the link to open personalization hub.">
     Personalize wallpaper, screen saver, dark theme, and more
+  </message>
+  <message name="IDS_OS_SETTINGS_REVAMP_OPEN_PERSONALIZATION_HUB_SUBTITLE_GUEST_MODE" desc="Description for the link to open personalization hub in guest mode.">
+    Personalize wallpaper, dark theme, and more
   </message>
 
   <!-- Search and Assistant section. -->
@@ -1233,6 +1238,16 @@
   <message name="IDS_SETTINGS_ALWAYS_MOVE_OFFICE_TO_ONEDRIVE_PREFERENCE_LABEL" desc="Label for the preference that allows users to always copy/move files to OneDrive without asking for confirmation.">
     Ask before copying or moving Microsoft files to Microsoft OneDrive
   </message>
+  <!--TODO(b/247049860): Finalize strings for MirrorSync. -->
+  <message name="IDS_SETTINGS_GOOGLE_DRIVE_FILE_SYNC_SECTION_TITLE" desc="Label for section title which includs options to allow user tweak file sync configurations." translateable="false">
+    File Sync
+  </message>
+  <message name="IDS_SETTINGS_GOOGLE_DRIVE_MIRROR_SYNC_TOGGLE_LABEL" desc="Label for backup mode which allow user to toggle of Mirror Sync." translateable="false">
+    Backup your local files to Drive
+  </message>
+  <message name="IDS_SETTINGS_GOOGLE_DRIVE_MIRROR_SYNC_TOGGLE_DESCRIPTION" desc="Description for backup mode which allow user to toggle of Mirror Sync." translateable="false">
+    Backup all your files under My files to Google Drive.
+  </message>
 
   <!-- Accessibility -->
   <message name="IDS_SETTINGS_A11Y_TABLET_MODE_SHELF_BUTTONS_LABEL" desc="The name of a setting within accessibility settings that controls whether ChromeOS system shelf navigation buttons (for going back, home, or to overview) should be shown when the device is in tablet mode.">
@@ -1402,23 +1417,13 @@
   <message name="IDS_SETTINGS_ACCESSIBILITY_REDUCED_ANIMATIONS_DESCRIPTION" desc="Description for a checkbox which enables reduced animations.">
     Limit movement on the screen
   </message>
-  <!-- TODO(b:259374492): Mark these strings translatable before launch. -->
-  <message name="IDS_SETTINGS_CARET_BLINK_INTERVAL_LABEL" desc="The label for a drop-down menu that allows users to pick the blink rate of their text insertion caret." translateable="false">
-    Text caret blink rate
+  <message name="IDS_SETTINGS_CARET_BLINK_INTERVAL_LABEL" desc="The label for a slider that allows users to pick the blink rate of their text insertion cursor.">
+    Text cursor blink rate
   </message>
-  <message name="IDS_SETTINGS_CARET_BLINK_INTERVAL_DESCRIPTION" desc="The description for a drop-down menu that allows users to pick the blink rate of their text insertion caret." translateable="false">
-    Change the blink rate of the text caret in most text fields.
+  <message name="IDS_SETTINGS_CARET_BLINK_INTERVAL_OFF" desc="The label for the minimum value on a slider that turns off the caret blink rate (so the caret does not blink).">
+    Don't blink
   </message>
-  <message name="IDS_SETTINGS_CARET_BLINK_INTERVAL_OFF" desc="The name of a drop-down menu item that turns off the caret blink rate (so the caret is always steady on)." translateable="false">
-    Do not blink
-  </message>
-  <message name="IDS_SETTINGS_CARET_BLINK_INTERVAL_NORMAL" desc="The name of a drop-down menu item that makes the caret blink at the normal rate." translateable="false">
-    Normal
-  </message>
-  <message name="IDS_SETTINGS_CARET_BLINK_INTERVAL_SLOW" desc="The name of a drop-down menu item that makes the caret blink rate slower than normal." translateable="false">
-    Slow
-  </message>
-  <message name="IDS_SETTINGS_CARET_BLINK_INTERVAL_FAST" desc="The name of a drop-down menu item that makes the caret blink rate faster than normal." translateable="false">
+  <message name="IDS_SETTINGS_CARET_BLINK_INTERVAL_FAST" desc="The label for the maximum value on a slider that makes the caret blink rate faster than normal.">
     Fast
   </message>
   <message name="IDS_SETTINGS_STICKY_KEYS_LABEL" desc="Label for checkbox which enables sticky keys, with an explanation of the term 'sticky keys'.">
@@ -1636,7 +1641,10 @@
     Move screen when mouse touches edges of screen
   </message>
   <message name="IDS_SETTINGS_SCREEN_MAGNIFIER_FOCUS_FOLLOWING_LABEL" desc="Label for toggle which enables keyboard focus following in the fullscreen magnifier">
-      Zoomed in screen follows keyboard focus
+      Magnifier follows keyboard focus
+  </message>
+  <message name="IDS_SETTINGS_SCREEN_MAGNIFIER_SELECT_TO_SPEAK_FOCUS_FOLLOWING_LABEL" desc="Label for toggle which enables select to speak following in the docked or fullscreen magnifier">
+      Magnifier follows the word being read by select-to-speak
   </message>
   <message name="IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_LABEL" desc="Label for dropdown menu which contains zoom levels for the fullscreen magnifier">
     Zoom level
@@ -1741,15 +1749,15 @@ Use Ctrl + Alt + Brightness down to zoom out.
   <message name="IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_EXTRA_LARGE" desc="Description of an extra large mouse movement threshold for autoclick mouse movements">
     Extra large
   </message>
+  <message name="IDS_SETTINGS_OVERSCROLL_HISTORY_NAVIGATION_TITLE" desc="Title for the overscroll history navigation setting, which allows you to navigate back and forward by swiping left or right with a touch device.">
+    Use a swipe gesture to navigate between pages
+  </message>
   <!-- TODO(b/259372916): Finalize and translate these strings before Mouse Keys launches-->
   <message name="IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_LABEL" desc="Label for the mouse keys setting toggle." translateable="false">
     Mouse Keys
   </message>
   <message name="IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_DESCRIPTION" desc="Description of the mouse keys setting toggle." translateable="false">
     Use your Chromebook keyboard or a numeric keypad to control the cursor
-  </message>
-  <message name="IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_SHORTCUT_TO_PAUSE" desc="Description of the setting to disable mouse keys with a keyboard shortcut." translateable="false">
-    Press ctrl key 5 times to pause mouse keys
   </message>
   <message name="IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_DISABLE_IN_TEXT_FIELDS" desc="Description of the setting to disable mouse keys in text fields." translateable="false">
     Temporarily disable mouse keys when you are in a text field.  Press esc to resume.
@@ -4119,7 +4127,10 @@ Press an assigned switch or key to remove assignment.
     <message name="IDS_SETTINGS_INTERNET_CELLULAR_SUBTITLE_WITH_LEARN_MORE_LINK" desc="Subtitle of the cellular subpage which explains the behavior of a carrier locked Chromebook.">
     This device can only connect to a specific mobile network. <ph name="BEGIN_LINK_LEARN_MORE">&lt;a target="_blank" href="$1"&gt;</ph>Learn more<ph name="END_LINK_LEARN_MORE">&lt;/a&gt;</ph>
   </message>
-  <message name="IDS_SETTINGS_INTERNET_INSTANT_TETHERING_DETAILS" desc="Name of the settings page which displays details about an Instant Tethering network (i.e., using a phone's internet through the Instant Tethering feature).">
+  <message name="IDS_SETTINGS_INTERNET_INSTANT_TETHERING_DETAILS" desc="Name of the settings page which displays details about an Instant hotspot network (i.e., using a phone's internet through the Instant hotspot feature).">
+    Instant hotspot details
+  </message>
+  <message name="IDS_SETTINGS_INTERNET_INSTANT_TETHERING_DETAILS_LEGACY" desc="Name of the settings page which displays details about an Instant Tethering network (i.e., using a phone's internet through the Instant Tethering feature).">
     Instant Tethering details
   </message>
   <message name="IDS_SETTINGS_INTERNET_VPN_DETAILS" desc="Name of the settings page which displays details about a VPN connection.">
@@ -4251,8 +4262,14 @@ Press an assigned switch or key to remove assignment.
   <message name="IDS_SETTINGS_INTERNET_NO_NETWORKS" desc="Entry when there are no preferred networks or no networks of a particular type.">
     None
   </message>
-  <message name="IDS_SETTINGS_INTERNET" desc="Name of the settings page which displays internet preferences.">
+  <message name="IDS_SETTINGS_INTERNET_LEGACY" desc="Name of the settings page which displays internet preferences.">
     Network
+  </message>
+  <message name="IDS_SETTINGS_INTERNET_NO_TETHER_HOSTS" desc="Entry when there are no available tether hosts nearby.">
+    No available hotspots
+  </message>
+  <message name="IDS_SETTINGS_INTERNET" desc="Name of the settings page which displays internet preferences.">
+    Internet
   </message>
   <message name="IDS_SETTINGS_INTERNET_HOTSPOT" desc="Name of the settings page which displays hotspot preferences.">
     Hotspot
@@ -5618,6 +5635,12 @@ Press an assigned switch or key to remove assignment.
   <message name="IDS_SETTINGS_DISPLAY_BRIGHTNESS_LABEL" desc="In Device Settings > Displays, the label for setting the screen brightness of the selected display." translateable="false">
     Display brightness
   </message>
+  <message name="IDS_SETTINGS_DISPLAY_AUTO_BRIGHTNESS_TOGGLE_LABEL" desc="In Device Settings > Displays, the label for toggling automatic display brightness for the selected display." translateable="false">
+    Automatically adjust display brightness
+  </message>
+  <message name="IDS_SETTINGS_DISPLAY_AUTO_BRIGHTNESS_TOGGLE_SUBTITLE" desc="In Device Settings > Displays, the subtitle under the label for toggling automatic display brightness for the selected display." translateable="false">
+    Adjust brightness based on your environment
+  </message>
   <message name="IDS_SETTINGS_DISPLAY_MIRROR" desc="In Device Settings > Displays, the label for the control for mirroring.">
     Mirror <ph name="DISPLAY_NAME">$1<ex>HP Z27n</ex></ph>
   </message>
@@ -6000,6 +6023,13 @@ Press an assigned switch or key to remove assignment.
   <message name="IDS_SETTINGS_PER_DEVICE_KEYBOARD_KEY_DISABLED" desc="In keyboard remap keys subpage, the dropdown list item for a disabled key.">
     Disabled
   </message>
+   <!-- TODO(b:329880993): Translate following strings before launch. -->
+  <message name="IDS_SETTINGS_PER_DEVICE_KEYBOARD_KEY_RIGHT_ALT" translateable="false" desc="In keyboard remap keys subpage, the dropdown list item for a right alt key.">
+    right alt
+  </message>
+  <message name="IDS_SETTINGS_PER_DEVICE_KEYBOARD_KEY_FUNCTION" translateable="false" desc="In keyboard remap keys subpage, the dropdown list item for a function key.">
+    fn
+  </message>
   <message name="IDS_SETTINGS_PER_DEVICE_CONNECTED_A11Y_LABEL" desc="The message announced to screen readers when a device is connected.">
     <ph name="DEVICE_NAME">$1<ex>Internal Keyboard</ex></ph> has been connected
   </message>
@@ -6065,6 +6095,22 @@ Press an assigned switch or key to remove assignment.
   <message name="IDS_SETTINGS_KEYBOARD_SEND_FUNCTION_KEYS" desc="In Device Settings, the checkbox label for interpreting the top-row keys as function keys instead.">
     Treat top-row keys as function keys
   </message>
+  <!-- TODO(b/329861823) Finalize and translate these strings -->
+  <message name="IDS_SETTINGS_KEYBOARD_COLORS" translateable="false" desc="In Device Settings, the direct link from Keyboard Settings to Personalization Hub's RGB keyboard control">
+    Keyboard Colors
+  </message>
+  <!-- TODO(b/329861823) Finalize and translate these strings -->
+  <message name="IDS_SETTINGS_KEYBOARD_BRIGHTNESS_LABEL" translateable="false" desc="The label for setting the keyboard brightness.">
+    Keyboard brightness
+  </message>
+  <!-- TODO(b/329861823) Finalize and translate these strings -->
+  <message name="IDS_SETTINGS_KEYBOARD_AUTO_BRIGHNTESS_ENABLE_LABEL" translateable="false" desc="The label for setting the keyboard auto brightness enabled.">
+    Automatically adjust brightness
+  </message>
+  <!-- TODO(b/329861823) Finalize and translate these strings -->
+  <message name="IDS_SETTINGS_KEYBOARD_AUTO_BRIGHNTESS_ENABLE_SUB_LABEL" translateable="false" desc="The sub-label for setting the keyboard auto brightness enabled.">
+    Adjust keyboard backlight based on surrounding light levels
+  </message>
   <message name="IDS_SETTINGS_KEYBOARD_AUTO_REPEAT_ENABLE" desc="The checkbox label for enabling keyboard auto-repeat.">
     Press and hold to automatically repeat the key
   </message>
@@ -6107,6 +6153,9 @@ Press an assigned switch or key to remove assignment.
   <message name="IDS_SETTINGS_KEYBOARD_KEY_SEARCH" desc="In Device Settings, the label and dropdown list item for the Search key.">
     Search
   </message>
+  <message name="IDS_SETTINGS_SPLIT_MODIFIER_KEYBOARD_SEND_FUNCTION_KEYS_LAYOUT_DESCRIPTION" translateable="false" desc="In split modifier keyboard, the label describing how to use the top-row keys' original actions when they are set to behave like function keys.">
+    Press the Fn key to switch the behavior of top-row keys
+  </message>
   <message name="IDS_SETTINGS_KEYBOARD_SEND_FUNCTION_KEYS_LAYOUT2_DESCRIPTION" desc="In Device Settings, when device uses 2017 keyboard layout, the label describing how to use the top-row keys' original actions when they are set to behave like function keys.">
     Hold the Launcher key to switch the behavior of the top-row keys
   </message>
@@ -6130,6 +6179,9 @@ Press &amp; hold keyboard keys to see accent marks and special characters. This 
   </message>
   <message name="IDS_OS_SETTINGS_APPS_MENU_ITEM_DESCRIPTION" desc="Description for the Apps menu item in the left menu.">
     Notifications, Google Play
+  </message>
+  <message name="IDS_OS_SETTINGS_APPS_MENU_ITEM_DESCRIPTION_ARC_UNAVAILABLE" desc="Description for the Apps menu item in the left menu, when ARC is unavailable.">
+    Notifications
   </message>
   <message name="IDS_SETTINGS_APPS_LINK_TEXT" desc="The label for the button which links to the App Management page.">
     Manage your apps
@@ -6246,6 +6298,15 @@ Press &amp; hold keyboard keys to see accent marks and special characters. This 
   <message name="IDS_OS_SETTINGS_APP_LANGUAGE_DIALOG_UPDATE_BUTTON_TEXT" desc="The dialog confirm button to update app language with selected locale.">
     Update
   </message>
+  <message name="IDS_OS_SETTINGS_APP_PARENTAL_CONTROLS_LABEL" desc="The label for the settings row that takes the user to a page for setting up on-device parental controls for apps.">
+    Parental controls
+  </message>
+  <message name="IDS_OS_SETTINGS_APP_PARENTAL_CONTROLS_SUBLABEL" desc="The sublabel that describes the feature where users can set up on-device parental controls to block or enable apps.">
+    Manage access and block apps on this Chromebook.
+  </message>
+  <message name="IDS_OS_SETTINGS_APP_PARENTAL_CONTROLS_SET_UP_BUTTON" desc="Text for the button that allows users to set up a PIN for on-device parental controls.">
+    Set up
+  </message>
 
    <!-- Apps > Manage your apps > Borealis -->
   <message name="IDS_SETTINGS_APPS_BOREALIS_MAIN_PERMISSION_TEXT" desc="Description in Steam (name of app, manages other apps) settings page.">
@@ -6356,6 +6417,15 @@ Press &amp; hold keyboard keys to see accent marks and special characters. This 
   <message name="IDS_SETTINGS_STORAGE_ITEM_SYSTEM" desc="In Device Settings > Storage, label for the total system size, difference between the size of the filesystem and the size of all items listed on the storage page.">
     System
   </message>
+  <message name="IDS_SETTINGS_STORAGE_ITEM_ENCRYPTION_LABEL" desc="In Device Settings > Storage, label for the algorithm used for storage encryption.">
+    Encrypted using
+  </message>
+  <message name="IDS_SETTINGS_STORAGE_ITEM_ENCRYPTION_AES_128" desc="In Device Settings > Storage, string for the algorithm used for storage encryption.">
+    AES-128
+  </message>
+  <message name="IDS_SETTINGS_STORAGE_ITEM_ENCRYPTION_AES_256" desc="In Device Settings > Storage, string for the algorithm used for storage encryption.">
+    AES-256
+  </message>
 
   <!-- Privacy Page -->
   <if expr="reven">
@@ -6403,6 +6473,12 @@ Press &amp; hold keyboard keys to see accent marks and special characters. This 
   </message>
   <message name="IDS_OS_SETTINGS_REVAMP_ENABLE_SUGGESTED_CONTENT_DESCRIPTION" desc="The description of the checkbox to enable/disable Suggested Content in ChromeOS settings. Suggested Content includes app search recommendations and website recommendations which can show up in places such as the launcher search and suggestion chips.">
   See suggestions for new apps and web content in Launcher and search results. Sends statistics to improve suggestions only if you have chosen to send crash reports and diagnostics and usage data to ChromeOS.
+  </message>
+  <message name="IDS_OS_SETTINGS_ENABLE_MAHI" desc="The label of the checkbox to enable/disable Mahi in ChromeOS settings." translateable="false">
+    Mahi
+  </message>
+  <message name="IDS_OS_SETTINGS_ENABLE_MAHI_DESCRIPTION" desc="The description of the checkbox to enable/disable Mahi in ChromeOS settings." translateable="false">
+    Use Mahi in ChromeOS.
   </message>
   <message name="IDS_SETTINGS_ENABLE_CONTENT_PROTECTION_ATTESTATION" desc="description label for verified access about premium contents">
     Enable Verified Access
@@ -6539,13 +6615,19 @@ Press &amp; hold keyboard keys to see accent marks and special characters. This 
   <message name="IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_AREA_TITLE" desc="The title of the geolocation row under the Privacy controls (aka Privacy Hub) os-settings page.">
     Location access
   </message>
-  <message name="IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_AREA_DESCRIPTION" desc="The description of the geolocation row under the Privacy controls (aka Privacy Hub) os-settings page. Displays the system overivew for geolocation usage.">
-    Manage location access for apps, websites and system services. Location may use sources like Wi-Fi, mobile networks, and sensors to help estimate your device's location. <ph name="LINK_BEGIN">&lt;a&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
+  <message name="IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_AREA_ALLOWED_SUBTEXT" desc="The subtext of the geolocation row under the Privacy controls (aka Privacy Hub) os-settings page. Shown when the system geolocation state is allowed, explaining how the system is affected.">
+    Apps and websites with the location permission, as well as system services, can use your location
+  </message>
+  <message name="IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_AREA_ONLY_ALLOWED_FOR_SYSTEM_SUBTEXT" desc="The subtext of the geolocation row under the Privacy controls (aka Privacy Hub) os-settings page. Shown when the system geolocation state is only-allowed-for-system, explaining how the system is affected.">
+    Only system services can use your location
+  </message>
+  <message name="IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_AREA_DISALLOWED_SUBTEXT" desc="The subtext of the geolocation row under the Privacy controls (aka Privacy Hub) os-settings page. Shown when the system geolocation state is blocked, explaining how the system is affected.">
+    Location access is blocked
   </message>
   <message name="IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_ACCESS_LEVEL_ALLOWED" desc="In Geolocation setting subpage (under Privacy Controls), Dropdown list item to set system-wide geolocation access level. ">
     Allowed
   </message>
-    <message name="IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_ACCESS_LEVEL_ONLY_ALLOWED_FOR_SYSTEM" desc="In Geolocation setting subpage (under Privacy Controls), Dropdown list item to set system-wide geolocation access level. Blocks access to all clients but system-services (such as PWAs or Android apps).">
+  <message name="IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_ACCESS_LEVEL_ONLY_ALLOWED_FOR_SYSTEM" desc="In Geolocation setting subpage (under Privacy Controls), Dropdown list item to set system-wide geolocation access level. Blocks access to all clients but system-services (such as PWAs or Android apps).">
     Only allowed for system services
   </message>
   <message name="IDS_OS_SETTINGS_PRIVACY_HUB_GEOLOCATION_ACCESS_LEVEL_DISALLOWED" desc="In Geolocation setting subpage (under Privacy Controls), Dropdown list item to set system-wide geolocation access level. Blocks geolocation access to every geolocation client (including system services).">
@@ -6640,6 +6722,9 @@ Press &amp; hold keyboard keys to see accent marks and special characters. This 
   <message name="IDS_OS_SETTINGS_PRIVACY_HUB_SYSTEM_SERVICES_SECTION_TITLE" desc="The title of the System services section of the privacy hub sensor subpages.">
     System services
   </message>
+  <message name="IDS_OS_SETTINGS_PRIVACY_HUB_SYSTEM_SERVICES_GEOLOCATION_NOT_CONFIGURED" desc="The sub-label displayed in the rows of the System services section of the privacy hub geolocation subpage, when the respective feature is not configured to use geolocation service (e.g. time zone is selected from the static list, not set to be resolved automatically)">
+    Manually set, not using location
+  </message>
   <message name="IDS_OS_SETTINGS_PRIVACY_HUB_SYSTEM_SERVICES_ALLOWED_TEXT" desc="The sub-label displayed in the rows of the System services section of the privacy hub sensor subpages when sensor access is allowed.">
     Allowed
   </message>
@@ -6687,6 +6772,30 @@ Press &amp; hold keyboard keys to see accent marks and special characters. This 
   </message>
   <message name="IDS_OS_SETTINGS_PRIVACY_HUB_MICROPHONE_TOGGLE_NO_MICROPHONE_CONNECTED_TOOLTIP_TEXT" desc="Text displayed in the privacy hub subpage microphone toggle button tooltip when no microphone is connected to the device.">
     No microphone connected
+  </message>
+  <message name="IDS_OS_SETTINGS_PRIVACY_HUB_ALLOW_CAMERA_ACCESS_DIALOG_TITLE" desc="The title of the dialog that asks users to enable system wide camera access." translateable="false">
+    Turn on camera access?
+  </message>
+  <message name="IDS_OS_SETTINGS_PRIVACY_HUB_ALLOW_LOCATION_ACCESS_DIALOG_TITLE" desc="The title of the dialog that asks users to enable system wide location access." translateable="false">
+    Turn on location access?
+  </message>
+  <message name="IDS_OS_SETTINGS_PRIVACY_HUB_ALLOW_MICROPHONE_ACCESS_DIALOG_TITLE" desc="The title of the dialog that asks users to enable system wide microphone access." translateable="false">
+    Turn on microphone access?
+  </message>
+  <message name="IDS_OS_SETTINGS_PRIVACY_HUB_ALLOW_CAMERA_ACCESS_DIALOG_BODY_TEXT" desc="The text displayed on the body of the dialog that asks users to enable system wide camera access." translateable="false">
+    This allows camera access for apps, websites with the camera permission, and system services
+  </message>
+  <message name="IDS_OS_SETTINGS_PRIVACY_HUB_ALLOW_LOCATION_ACCESS_DIALOG_BODY_TEXT" desc="The text displayed on the body of the dialog that asks users to enable system wide location access." translateable="false">
+    This allows location access for apps, websites with the location permission, and system services
+  </message>
+  <message name="IDS_OS_SETTINGS_PRIVACY_HUB_ALLOW_MICROPHONE_ACCESS_DIALOG_BODY_TEXT" desc="The text displayed on the body of the dialog that asks users to enable system wide microphone access." translateable="false">
+    This allows microphone access for apps, websites with the microphone permission, and system services
+  </message>
+  <message name="IDS_OS_SETTINGS_PRIVACY_HUB_DIALOG_CONFIRM_BUTTON_LABEL" desc="Label of the confirm button for the allow sensor access dialog." translateable="false">
+    Allow
+  </message>
+  <message name="IDS_OS_SETTINGS_PRIVACY_HUB_DIALOG_CANCEL_BUTTON_LABEL" desc="Label of the cancel button for the allow sensor access dialog." translateable="false">
+    Cancel
   </message>
 
   <!-- On Startup (OS settings) -->

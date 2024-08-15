@@ -150,7 +150,7 @@ os = struct(
 def get_dimension(os, builder_name = None):
     """Returns the dimension to use for the input os and optional builder name"""
     if os.category == os_category.LINUX:
-        return "Ubuntu-18.04"
+        return "Ubuntu-22.04"
     elif os.category == os_category.MAC:
         if "cmake" in builder_name:
             # CMake build runs Tint e2e tests, which must run on 11+ where the metal
@@ -563,6 +563,7 @@ _os_arch_to_branch_builder = {
     "mac": "dawn-mac-x64-deps-rel",
     "mac-arm64": "dawn-mac-arm64-deps-rel",
     "win": "dawn-win10-x64-deps-rel",
+    "win-arm64": "dawn-win11-arm64-deps-rel",
     "android-arm": "dawn-android-arm-deps-rel",
     "android-arm64": "dawn-android-arm64-deps-rel",
 }
@@ -572,6 +573,7 @@ _os_arch_to_dawn_cq_builder = {
     "mac": "mac-dawn-rel",
     "mac-arm64": "mac-arm64-dawn-rel",
     "win": "win-dawn-rel",
+    "win-arm64": "win11-arm64-dawn-rel",
     "android-arm": "android-dawn-arm-rel",
     "android-arm64": "android-dawn-arm64-rel",
 }
@@ -582,6 +584,7 @@ _os_arch_to_min_milestone = {
     "mac": 112,
     "mac-arm64": 122,
     "win": 112,
+    "win-arm64": 126,
     "android-arm": None,
     "android-arm64": None,
 }
@@ -751,8 +754,8 @@ dawn_cmake_standalone_builder("cmake-linux-clang-dbg-x64-ubsan", clang = True, d
 dawn_cmake_standalone_builder("cmake-linux-clang-rel-x64", clang = True, debug = False, cpu = "x64", asan = False, ubsan = False)
 dawn_cmake_standalone_builder("cmake-linux-clang-rel-x64-asan", clang = True, debug = False, cpu = "x64", asan = True, ubsan = False)
 dawn_cmake_standalone_builder("cmake-linux-clang-rel-x64-ubsan", clang = True, debug = False, cpu = "x64", asan = False, ubsan = True)
-dawn_cmake_standalone_builder("cmake-mac-dbg", clang = True, debug = True, cpu = "x64", asan = False, ubsan = False, experimental = True)
-dawn_cmake_standalone_builder("cmake-mac-rel", clang = True, debug = False, cpu = "x64", asan = False, ubsan = False, experimental = True)
+dawn_cmake_standalone_builder("cmake-mac-dbg", clang = True, debug = True, cpu = "x64", asan = False, ubsan = False, experimental = False)
+dawn_cmake_standalone_builder("cmake-mac-rel", clang = True, debug = False, cpu = "x64", asan = False, ubsan = False, experimental = False)
 dawn_cmake_standalone_builder("cmake-win-msvc-dbg-x64", clang = False, debug = True, cpu = "x64", asan = False, ubsan = False)
 dawn_cmake_standalone_builder("cmake-win-msvc-rel-x64", clang = False, debug = False, cpu = "x64", asan = False, ubsan = False)
 
@@ -760,6 +763,7 @@ chromium_dawn_tryjob("linux")
 chromium_dawn_tryjob("mac")
 chromium_dawn_tryjob("mac", "arm64")
 chromium_dawn_tryjob("win")
+chromium_dawn_tryjob("win", "arm64")
 chromium_dawn_tryjob("android", "arm")
 chromium_dawn_tryjob("android", "arm64")
 
@@ -789,6 +793,12 @@ luci.cq_tryjob_verifier(
 luci.cq_tryjob_verifier(
     cq_group = "Dawn-CQ",
     builder = "chromium:try/dawn-try-mac-intel-exp",
+    includable_only = True,
+)
+
+luci.cq_tryjob_verifier(
+    cq_group = "Dawn-CQ",
+    builder = "chromium:try/dawn-try-mac-amd-exp",
     includable_only = True,
 )
 

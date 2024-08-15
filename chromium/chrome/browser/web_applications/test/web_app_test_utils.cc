@@ -53,10 +53,12 @@
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
+#include "chrome/browser/web_applications/web_app_proto_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "components/base32/base32.h"
 #include "components/prefs/pref_service.h"
@@ -85,7 +87,7 @@
 
 namespace {
 
-std::vector<std::string> features = {
+std::vector<std::string> test_features = {
     "default_on_feature", "default_self_feature", "default_disabled_feature"};
 
 }  // namespace
@@ -206,9 +208,9 @@ apps::ShareTarget CreateRandomShareTarget(uint32_t suffix) {
 blink::ParsedPermissionsPolicy CreateRandomPermissionsPolicy(
     RandomHelper& random) {
   const int num_permissions_policy_declarations =
-      random.next_uint(features.size());
+      random.next_uint(test_features.size());
 
-  std::vector<std::string> available_features = features;
+  std::vector<std::string> available_features = test_features;
 
   const auto suffix = random.next_uint();
   std::default_random_engine rng;
@@ -608,8 +610,16 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
     management_types.push_back(WebAppManagement::kKiosk);
   }
   if (random.next_bool()) {
-    app->AddSource(WebAppManagement::kCommandLine);
-    management_types.push_back(WebAppManagement::kCommandLine);
+    app->AddSource(WebAppManagement::kIwaShimlessRma);
+    management_types.push_back(WebAppManagement::kIwaShimlessRma);
+  }
+  if (random.next_bool()) {
+    app->AddSource(WebAppManagement::kIwaPolicy);
+    management_types.push_back(WebAppManagement::kIwaPolicy);
+  }
+  if (random.next_bool()) {
+    app->AddSource(WebAppManagement::kIwaUserInstalled);
+    management_types.push_back(WebAppManagement::kIwaUserInstalled);
   }
   if (random.next_bool()) {
     app->AddSource(WebAppManagement::kOem);
@@ -654,22 +664,37 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
   app->SetIsLocallyInstalled(random.next_bool());
   app->SetIsFromSyncAndPendingInstallation(random.next_bool());
 
-  const mojom::UserDisplayMode user_display_modes[3] = {
-      mojom::UserDisplayMode::kBrowser, mojom::UserDisplayMode::kStandalone,
-      mojom::UserDisplayMode::kTabbed};
+  const sync_pb::WebAppSpecifics::UserDisplayMode user_display_modes[3] = {
+      sync_pb::WebAppSpecifics_UserDisplayMode_BROWSER,
+      sync_pb::WebAppSpecifics_UserDisplayMode_STANDALONE,
+      sync_pb::WebAppSpecifics_UserDisplayMode_TABBED};
   // Explicitly set a UserDisplayMode for each platform (instead of calling
   // `SetUserDisplayMode` which sets the current platform's value only) so the
   // test expectations are consistent across platforms.
-  if (base::FeatureList::IsEnabled(kSeparateUserDisplayModeForCrOS)) {
+  {
+    // Copy proto, retaining existing fields (including unknown fields).
+    sync_pb::WebAppSpecifics sync_proto = app->sync_proto();
     if (random.next_bool()) {
-      app->SetUserDisplayModeDefault(user_display_modes[random.next_uint(3)]);
+      sync_proto.set_user_display_mode_default(
+          user_display_modes[random.next_uint(3)]);
     }
     // Must have at least one platform's UserDisplayMode set.
-    if (!app->user_display_mode_default().has_value() || random.next_bool()) {
-      app->SetUserDisplayModeCrOS(user_display_modes[random.next_uint(3)]);
+    if (!sync_proto.has_user_display_mode_default() || random.next_bool()) {
+      sync_proto.set_user_display_mode_cros(
+          user_display_modes[random.next_uint(3)]);
     }
-  } else {
-    app->SetUserDisplayModeDefault(user_display_modes[random.next_uint(3)]);
+
+    if (random.next_bool()) {
+      sync_proto.set_user_launch_ordinal(
+          syncer::StringOrdinal::CreateInitialOrdinal().ToInternalValue());
+    }
+
+    if (random.next_bool()) {
+      sync_proto.set_user_page_ordinal(
+          syncer::StringOrdinal::CreateInitialOrdinal().ToInternalValue());
+    }
+
+    app->SetSyncProto(std::move(sync_proto));
   }
 
   app->SetLastBadgingTime(random.next_time());
@@ -797,12 +822,19 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
 
   app->SetWindowControlsOverlayEnabled(false);
 
-  WebApp::SyncFallbackData sync_fallback_data;
-  sync_fallback_data.name = "Sync" + name;
-  sync_fallback_data.theme_color = synced_theme_color;
-  sync_fallback_data.scope = app->scope();
-  sync_fallback_data.icon_infos = app->manifest_icons();
-  app->SetSyncFallbackData(std::move(sync_fallback_data));
+  {
+    // Copy proto, retaining existing fields (including unknown fields).
+    sync_pb::WebAppSpecifics sync_proto = app->sync_proto();
+    sync_proto.set_name("Sync" + name);
+    if (synced_theme_color.has_value()) {
+      sync_proto.set_theme_color(synced_theme_color.value());
+    }
+    sync_proto.set_scope(app->scope().spec());
+    for (const apps::IconInfo& icon_info : app->manifest_icons()) {
+      *(sync_proto.add_icon_infos()) = AppIconInfoToSyncProto(icon_info);
+    }
+    app->SetSyncProto(std::move(sync_proto));
+  }
 
   if (random.next_bool()) {
     app->SetLaunchHandler(
@@ -832,16 +864,19 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
     chromeos_data->show_in_management = cros_random.next_bool();
     chromeos_data->is_disabled = cros_random.next_bool();
     chromeos_data->oem_installed = cros_random.next_bool();
-    // Comply with DCHECK that system apps cannot be OEM installed.
-    if (app->IsSystemApp())
+    // Comply with DCHECK that system apps and shimless RMA apps cannot be OEM
+    // installed.
+    if (app->IsSystemApp() || app->IsIwaShimlessRmaApp()) {
       chromeos_data->oem_installed = false;
+    }
     app->SetWebAppChromeOsData(std::move(chromeos_data));
   }
 
   WebApp::ExternalConfigMap management_to_external_config;
   for (WebAppManagement::Type type : management_types) {
-    if (type == WebAppManagement::kSync)
+    if (type == WebAppManagement::kSync || WebAppManagement::IsIwaType(type)) {
       continue;
+    }
     base::flat_set<GURL> install_urls;
     base::flat_set<std::string> additional_policy_ids;
     WebApp::ExternalManagementConfig config;
@@ -996,16 +1031,20 @@ void TestDeclineDialogCallback(
                                 false /*accept*/, std::move(web_app_info)));
 }
 
+// TODO(b/329703817): Make this smarter by waiting for a specific dialog, and
+// then triggering accept on the dialog.
 webapps::AppId InstallPwaForCurrentUrl(Browser* browser) {
   // Depending on the installability criteria, different dialogs can be used.
   SetAutoAcceptWebAppDialogForTesting(true, true);
   SetAutoAcceptPWAInstallConfirmationForTesting(true);
+  SetAutoAcceptDiyAppsInstallDialogForTesting(true);
   WebAppTestInstallWithOsHooksObserver observer(browser->profile());
   observer.BeginListening();
   CHECK(chrome::ExecuteCommand(browser, IDC_INSTALL_PWA));
   webapps::AppId app_id = observer.Wait();
   SetAutoAcceptPWAInstallConfirmationForTesting(false);
   SetAutoAcceptWebAppDialogForTesting(false, false);
+  SetAutoAcceptDiyAppsInstallDialogForTesting(false);
   return app_id;
 }
 

@@ -6,19 +6,22 @@
 
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
+#include "base/strings/escape.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_delegate_base.h"
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_dialog.h"
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_downloads_delegate.h"
-#include "chrome/browser/enterprise/connectors/connectors_prefs.h"
+#include "chrome/browser/enterprise/connectors/analysis/content_analysis_features.h"
 #include "chrome/browser/enterprise/connectors/connectors_service.h"
 #include "chrome/browser/enterprise/util/affiliation.h"
 #include "chrome/browser/policy/dm_token_utils.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
 #include "components/download/public/common/download_danger_type.h"
 #include "components/download/public/common/download_item.h"
 #include "components/enterprise/browser/controller/browser_dm_token_storage.h"
+#include "components/enterprise/connectors/connectors_prefs.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -71,6 +74,16 @@ ContentAnalysisAcknowledgement::FinalAction RuleActionToAckAction(
     case TriggeredRule::BLOCK:
       return ContentAnalysisAcknowledgement::BLOCK;
   }
+}
+
+bool ShouldAllowDeepScanOnLargeOrEncryptedFiles(
+    BinaryUploadService::Result result,
+    bool block_large_files,
+    bool block_password_protected_files) {
+  return (result == BinaryUploadService::Result::FILE_TOO_LARGE &&
+          !block_large_files) ||
+         (result == BinaryUploadService::Result::FILE_ENCRYPTED &&
+          !block_password_protected_files);
 }
 
 }  // namespace
@@ -165,8 +178,9 @@ std::u16string GetCustomRuleString(
         custom_rule_message) {
   std::u16string custom_message;
   for (const auto& custom_segment : custom_rule_message.message_segments()) {
-    base::StrAppend(&custom_message,
-                    {base::UTF8ToUTF16(custom_segment.text())});
+    base::StrAppend(
+        &custom_message,
+        {base::UnescapeForHTML(base::UTF8ToUTF16(custom_segment.text()))});
   }
   return custom_message;
 }
@@ -177,14 +191,16 @@ std::vector<std::pair<gfx::Range, GURL>> GetCustomRuleStyles(
     size_t offset) {
   std::vector<std::pair<gfx::Range, GURL>> linked_ranges;
   for (const auto& custom_segment : custom_rule_message.message_segments()) {
+    std::u16string unescaped_segment =
+        base::UnescapeForHTML(base::UTF8ToUTF16(custom_segment.text()));
     if (custom_segment.has_link()) {
       GURL url(custom_segment.link());
       if (url.is_valid()) {
         linked_ranges.emplace_back(
-            gfx::Range(offset, offset + custom_segment.text().length()), url);
+            gfx::Range(offset, offset + unescaped_segment.length()), url);
       }
     }
-    offset += custom_segment.text().length();
+    offset += unescaped_segment.length();
   }
   return linked_ranges;
 }
@@ -555,8 +571,26 @@ void ShowDownloadReviewDialog(const std::u16string& filename,
       /* file_count */ 1, state, download_item);
 }
 
-bool CloudResultIsFailure(BinaryUploadService::Result result) {
+bool IsResumableUpload(const BinaryUploadService::Request& request) {
+  // Currently resumable upload doesn't support paste or LBUS. If one day we do,
+  // we should update the logic here as well.
+  return !safe_browsing::IsConsumerScanRequest(request) &&
+         request.cloud_or_local_settings().is_cloud_analysis() &&
+         request.content_analysis_request().analysis_connector() !=
+             enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY &&
+         IsResumableUploadEnabled();
+}
+
+bool CloudMultipartResultIsFailure(BinaryUploadService::Result result) {
   return result != BinaryUploadService::Result::SUCCESS;
+}
+
+bool CloudResumableResultIsFailure(BinaryUploadService::Result result,
+                                   bool block_large_files,
+                                   bool block_password_protected_files) {
+  return result != BinaryUploadService::Result::SUCCESS &&
+         !ShouldAllowDeepScanOnLargeOrEncryptedFiles(
+             result, block_large_files, block_password_protected_files);
 }
 
 bool LocalResultIsFailure(BinaryUploadService::Result result) {

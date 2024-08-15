@@ -15,6 +15,7 @@
 #include "base/time/time.h"
 #include "base/tuple.h"
 #include "components/commerce/core/proto/parcel.pb.h"
+#include "components/commerce/core/proto/product_category.pb.h"
 #include "url/gurl.h"
 
 namespace commerce {
@@ -119,6 +120,7 @@ struct ProductInfo {
   int64_t amount_micros{0};
   std::optional<int64_t> previous_amount_micros;
   std::string country_code;
+  CategoryData category_data;
 
  private:
   friend class ShoppingService;
@@ -151,6 +153,7 @@ struct ProductSpecifications {
     GURL image_url;
     std::map<ProductDimensionId, std::vector<std::string>>
         product_dimension_values;
+    std::string summary;
   };
 
   // A map of each product dimension ID to its human readable name.
@@ -176,10 +179,34 @@ struct ParcelTrackingStatus {
   base::Time estimated_delivery_time;
 };
 
-// Information returned by ProductSpecifications API.
-struct ProductSpecificationSet {
- public:
-  GURL product_spec_url;
+// Details about a particular URL.
+struct UrlInfo {
+  UrlInfo();
+  UrlInfo(const UrlInfo&);
+  UrlInfo& operator=(const UrlInfo&);
+  bool operator==(const UrlInfo& other) const {
+    return url == other.url && title == other.title;
+  }
+  ~UrlInfo();
+
+  GURL url;
+  std::u16string title;
+};
+
+// Class representing the tap strip entry point.
+struct EntryPointInfo {
+  EntryPointInfo(const std::string& title,
+                 std::set<GURL> similar_candidate_products_urls);
+  ~EntryPointInfo();
+  EntryPointInfo(const EntryPointInfo&);
+  EntryPointInfo& operator=(const EntryPointInfo&);
+
+  // Title of the product group to be clustered.
+  std::string title;
+
+  // Set of URLs of candidate products that are similar and can
+  // be clustered into one product group.
+  std::set<GURL> similar_candidate_products_urls;
 };
 
 // Callbacks and typedefs for various accessors in the shopping service.

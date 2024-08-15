@@ -42,18 +42,13 @@
             "type": "string",
             "description": "The title of the page when it was last loaded."
           },
-          "keywordId": {
-            "type": "string",
-            "serialized_type": "int64",
-            "description": "The database identifier of the used keyword for a search or -1 if this wasn't a search."
-          },
           "terms": {
             "type": "string",
-            "description": "If keyWordID is not -1, the terms that the user searched for."
+            "description": "The terms that the user searched for."
           },
-          "typedCount": {
+          "visitCount": {
             "type": "integer",
-            "description": "The number of times the user has navigated to this page by typing in the address."
+            "description": "The number of times the user has navigated to this page."
           }
         }
       },
@@ -93,13 +88,9 @@
             "type": "boolean",
             "description": "States if the URL is bookmarked."
           },
-          "transitionType": {
-            "$ref": "TransitionType",
-            "description": "The transition type for this visit from its referrer."
-          },
-          "isRedirect": {
-            "type": "boolean",
-            "description": "The link is in a redirection chain. First and last redirection links are not considered as redirect."
+          "score": {
+            "type": "integer",
+            "description": "The relavancy score given to the URL."
           }
         }
       },
@@ -300,12 +291,6 @@
             "description": "A piece of text that the results should contain"
           },
           {
-            "name": "prefixKeywordId",
-            "type": "string",
-            "serialized_type": "int64",
-            "description": "A number identifying a possible keyword prefixing the query or -1 if none."
-          },
-          {
             "name": "maxResults",
             "type": "integer",
             "description": "The maximum number of items to return"
@@ -348,6 +333,12 @@
             }
           ]
         }
+      },
+      {
+        "name": "updateTopSites",
+        "type": "function",
+        "description": "Requests an update for top sites",
+        "parameters": []
       }
     ],
     "events": [

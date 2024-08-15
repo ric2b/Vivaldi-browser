@@ -722,6 +722,7 @@ EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC half ceil(const half& a) {
 }
 EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC half rint(const half& a) { return half(::rintf(float(a))); }
 EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC half round(const half& a) { return half(::roundf(float(a))); }
+EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC half trunc(const half& a) { return half(::truncf(float(a))); }
 EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC half fmod(const half& a, const half& b) {
   return half(::fmodf(float(a), float(b)));
 }

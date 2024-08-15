@@ -19,7 +19,9 @@
 #include "core/fpdfapi/parser/cpdf_stream.h"
 #include "core/fpdfapi/parser/cpdf_stream_acc.h"
 #include "core/fxcrt/check.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_codepage.h"
+#include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxge/cfx_defaultrenderdevice.h"
 #include "core/fxge/fx_font.h"
@@ -1082,6 +1084,16 @@ TEST_F(FPDFEditEmbedderTest, RemoveTextObject) {
     CompareBitmap(page_bitmap.get(), 200, 200, HelloWorldChecksum());
   }
 
+  // Check the initial state of the text page as well. `text_page` must be freed
+  // before calling FPDFPage_RemoveObject() below, so ASAN does not report
+  // dangling pointers.
+  {
+    ScopedFPDFTextPage text_page(FPDFText_LoadPage(page));
+    ASSERT_TRUE(text_page);
+    EXPECT_EQ(30, FPDFText_CountChars(text_page.get()));
+    EXPECT_EQ(0, FPDFText_GetFontWeight(text_page.get(), 0));
+  }
+
   // Get the "Hello, world!" text object and remove it.
   ASSERT_EQ(2, FPDFPage_CountObjects(page));
   {
@@ -1096,6 +1108,14 @@ TEST_F(FPDFEditEmbedderTest, RemoveTextObject) {
   {
     ScopedFPDFBitmap page_bitmap = RenderPage(page);
     CompareBitmap(page_bitmap.get(), 200, 200, FirstRemovedChecksum());
+  }
+
+  // Create a new text page, which has updated results.
+  {
+    ScopedFPDFTextPage text_page(FPDFText_LoadPage(page));
+    ASSERT_TRUE(text_page);
+    EXPECT_EQ(15, FPDFText_CountChars(text_page.get()));
+    EXPECT_EQ(0, FPDFText_GetFontWeight(text_page.get(), 0));
   }
 
   // Verify the rendering again after calling FPDFPage_GenerateContent().
@@ -4034,7 +4054,9 @@ TEST_F(FPDFEditEmbedderTest, AddMarkedText) {
   // - blob "BlobKey": "\x01\x02\x03\0BlobValue1\0\0\0BlobValue2\0"
   constexpr size_t kBlobLen = 28;
   char block_value[kBlobLen];
-  memcpy(block_value, "\x01\x02\x03\0BlobValue1\0\0\0BlobValue2\0", kBlobLen);
+  // TODO(tsepez): investigate safety.
+  UNSAFE_BUFFERS(FXSYS_memcpy(
+      block_value, "\x01\x02\x03\0BlobValue1\0\0\0BlobValue2\0", kBlobLen));
   EXPECT_EQ(0, FPDFPageObjMark_CountParams(mark));
   EXPECT_TRUE(
       FPDFPageObjMark_SetIntParam(document(), text_object, mark, "IntKey", 42));

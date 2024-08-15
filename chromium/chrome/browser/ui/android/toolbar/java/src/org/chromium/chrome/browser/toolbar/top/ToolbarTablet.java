@@ -55,7 +55,9 @@ import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.top.CaptureReadinessResult.TopToolbarBlockCaptureReason;
 import org.chromium.chrome.browser.toolbar.top.NavigationPopup.HistoryDelegate;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
+import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.components.browser_ui.styles.ChromeColors;
+import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.widget.Toast;
@@ -72,7 +74,6 @@ import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.ui.widget.ChromeImageButton;
 
 import org.chromium.url.GURL;
-import org.vivaldi.browser.toolbar.TrackerShieldButton;
 
 /** The Toolbar object for Tablet screens. */
 @SuppressLint("Instantiatable")
@@ -124,10 +125,6 @@ public class ToolbarTablet extends ToolbarLayout
 
     /** Vivaldi **/
     public static ChromeImageButton sPanelButton;
-    /**
-     * Vivaldi tracker shield button.
-     */
-    private TrackerShieldButton mShieldButton;
 
     /**
      * Vivaldi reload button.
@@ -186,9 +183,19 @@ public class ToolbarTablet extends ToolbarLayout
                     .getDrawable(R.drawable.vivaldi_bottom_nav_forward_56dp));
             mModelSelectorButton = findViewById((R.id.vivaldi_model_selector_button));
             mModelSelectorButton.setOnClickListener(this);
+            // Vivaldi Ref. VAB-8862 Start
+            LinearLayout linearlayout = (LinearLayout) findViewById(
+                    R.id.toolbar_tablet_layout);
+            int dimensionOffset = (int) getResources().getDimension(
+                    R.dimen.toolbar_buttons_offset_padding);
+            linearlayout.setPadding(dimensionOffset, 0, dimensionOffset,0);
+
+            View myView = findViewById(R.id.menu_button_wrapper);
+            if (BuildConfig.IS_VIVALDI && myView != null) {
+                myView.setLayoutParams(
+                        MenuButtonCoordinator.updateLayoutParamsMenuButtonWrapper(myView));
+            } // Vivaldi Ref. VAB-8862 END
         }
-        // Vivaldi
-        mShieldButton = findViewById(R.id.shield_button);
 
         // ImageView tinting doesn't work with LevelListDrawable, use Drawable tinting instead.
         // See https://crbug.com/891593 for details.
@@ -404,9 +411,6 @@ public class ToolbarTablet extends ToolbarLayout
 
         mSaveOfflineButton.setOnClickListener(this);
         mSaveOfflineButton.setOnLongClickListener(this);
-
-        // Vivaldi
-        mShieldButton.setToolbarDataProvider(getToolbarDataProvider());
     }
 
     @Override
@@ -593,24 +597,26 @@ public class ToolbarTablet extends ToolbarLayout
     }
 
     @Override
-    public void onTintChanged(ColorStateList tint, @BrandedColorScheme int brandedColorScheme) {
-        ImageViewCompat.setImageTintList(mHomeButton, tint);
-        ImageViewCompat.setImageTintList(mBackButton, tint);
-        ImageViewCompat.setImageTintList(mForwardButton, tint);
+    public void onTintChanged(
+            ColorStateList tint,
+            ColorStateList activityFocusTint,
+            @BrandedColorScheme int brandedColorScheme) {
+        ImageViewCompat.setImageTintList(mHomeButton, activityFocusTint);
+        ImageViewCompat.setImageTintList(mBackButton, activityFocusTint);
+        ImageViewCompat.setImageTintList(mForwardButton, activityFocusTint);
+        // The tint of the |mSaveOfflineButton| should not be affected by an activity focus change.
         ImageViewCompat.setImageTintList(mSaveOfflineButton, tint);
-        ImageViewCompat.setImageTintList(mReloadButton, tint);
+        ImageViewCompat.setImageTintList(mReloadButton, activityFocusTint);
+        ImageViewCompat.setImageTintList(mSwitcherButton, activityFocusTint);
 
         // Vivaldi
-        ImageViewCompat.setImageTintList(mShieldButton, tint);
         ImageViewCompat.setImageTintList(mModelSelectorButton, tint);
         ImageViewCompat.setImageTintList(sPanelButton, tint);
         ImageViewCompat.setImageTintList(mVivaldiReloadButton, tint);
         // End Vivaldi
 
-        mSwitcherButton.setBrandedColorScheme(brandedColorScheme);
-
         if (mOptionalButton != null && mOptionalButtonUsesTint) {
-            ImageViewCompat.setImageTintList(mOptionalButton, tint);
+            ImageViewCompat.setImageTintList(mOptionalButton, activityFocusTint);
         }
     }
 
@@ -653,7 +659,6 @@ public class ToolbarTablet extends ToolbarLayout
     @Override
     void updateButtonVisibility() {
         // Vivaldi
-        mShieldButton.updateVisibility(urlHasFocus());
         getProgressBar() // Ref. VAB-8803 Progressbar is shown during TabSwitcher transition
                 .setVisibility(mIsInTabSwitcherMode ? INVISIBLE : VISIBLE);
         if (getToolbarDataProvider().getTab() != null) mVivaldiReloadButton.setVisibility(
@@ -739,14 +744,18 @@ public class ToolbarTablet extends ToolbarLayout
             MenuButtonCoordinator menuButtonCoordinator,
             HistoryDelegate historyDelegate,
             BooleanSupplier partnerHomepageEnabledSupplier,
-            OfflineDownloader offlineDownloader) {
+            OfflineDownloader offlineDownloader,
+            UserEducationHelper userEducationHelper,
+            ObservableSupplier<Tracker> trackerSupplier) {
         super.initialize(
                 toolbarDataProvider,
                 tabController,
                 menuButtonCoordinator,
                 historyDelegate,
                 partnerHomepageEnabledSupplier,
-                offlineDownloader);
+                offlineDownloader,
+                userEducationHelper,
+                trackerSupplier);
         mHistoryDelegate = historyDelegate;
         mOfflineDownloader = offlineDownloader;
         menuButtonCoordinator.setVisibility(true);
@@ -760,8 +769,6 @@ public class ToolbarTablet extends ToolbarLayout
             mButtonVisibilityAnimators.cancel();
             mButtonVisibilityAnimators = null;
         }
-        // Vivaldi
-        mShieldButton.destroy();
     }
 
     @Override
@@ -1047,6 +1054,10 @@ public class ToolbarTablet extends ToolbarLayout
         mToolbarButtonsVisible = value;
     }
 
+    public ImageButton getBookmarkButtonForTesting() {
+        return mBookmarkButton;
+    }
+
     // Vivaldi
     @Override
     public void onUrlFocusChange(final boolean hasFocus) {
@@ -1055,18 +1066,12 @@ public class ToolbarTablet extends ToolbarLayout
             View v = mActivity.findViewById(R.id.panels_main);
             if (v != null) v.setVisibility(View.GONE);
         }
-        mShieldButton.updateVisibility(hasFocus);
     }
 
     @Override
     public boolean areNavigationButtonsVisible() {
         // always visible for tablets
         return true;
-    }
-
-    @Override
-    public void updateShieldButtonState(GURL gurl) {
-        mShieldButton.updateState(gurl);
     }
 
     // Vivaldi

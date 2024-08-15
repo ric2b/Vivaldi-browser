@@ -287,6 +287,7 @@ template <typename Scalar, bool Enable = !internal::is_same<
                                typename internal::unpacket_traits<typename internal::packet_traits<Scalar>::type>::half,
                                typename internal::packet_traits<Scalar>::type>::value>
 struct vectorization_logic_half {
+  using RealScalar = typename NumTraits<Scalar>::Real;
   typedef internal::packet_traits<Scalar> PacketTraits;
   typedef typename internal::unpacket_traits<typename internal::packet_traits<Scalar>::type>::half PacketType;
   static constexpr int PacketSize = internal::unpacket_traits<PacketType>::size;
@@ -355,10 +356,12 @@ struct vectorization_logic_half {
     VERIFY(test_assign(Vector1(), Vector1().template segment<MinVSize>(0).derived(),
                        EIGEN_UNALIGNED_VECTORIZE ? InnerVectorizedTraversal : LinearVectorizedTraversal,
                        CompleteUnrolling));
-    VERIFY(test_assign(Vector1(), Scalar(2.1) * Vector1() - Vector1(), InnerVectorizedTraversal, CompleteUnrolling));
+    VERIFY(test_assign(Vector1(), Scalar(RealScalar(2.1)) * Vector1() - Vector1(), InnerVectorizedTraversal,
+                       CompleteUnrolling));
     VERIFY(test_assign(
         Vector1(),
-        (Scalar(2.1) * Vector1().template segment<MinVSize>(0) - Vector1().template segment<MinVSize>(0)).derived(),
+        (Scalar(RealScalar(2.1)) * Vector1().template segment<MinVSize>(0) - Vector1().template segment<MinVSize>(0))
+            .derived(),
         EIGEN_UNALIGNED_VECTORIZE ? InnerVectorizedTraversal : LinearVectorizedTraversal, CompleteUnrolling));
     VERIFY(test_assign(Vector1(), Vector1().cwiseProduct(Vector1()), InnerVectorizedTraversal, CompleteUnrolling));
     VERIFY(test_assign(Vector1(), Vector1().template cast<Scalar>(), InnerVectorizedTraversal, CompleteUnrolling));

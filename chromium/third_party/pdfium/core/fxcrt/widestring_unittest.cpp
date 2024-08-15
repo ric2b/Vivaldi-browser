@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "build/build_config.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/fx_string.h"
 #include "core/fxcrt/span.h"
@@ -18,6 +19,14 @@
 namespace fxcrt {
 
 TEST(WideString, ElementAccess) {
+  const WideString empty;
+  pdfium::span<const wchar_t> empty_span = empty.span();
+  pdfium::span<const wchar_t> empty_span_with_terminator =
+      empty.span_with_terminator();
+  EXPECT_EQ(0u, empty_span.size());
+  ASSERT_EQ(1u, empty_span_with_terminator.size());
+  EXPECT_EQ(L'\0', empty_span_with_terminator[0]);
+
   const WideString abc(L"abc");
   EXPECT_EQ(L'a', abc[0]);
   EXPECT_EQ(L'b', abc[1]);
@@ -29,6 +38,11 @@ TEST(WideString, ElementAccess) {
   pdfium::span<const wchar_t> abc_span = abc.span();
   EXPECT_EQ(3u, abc_span.size());
   EXPECT_EQ(0, wmemcmp(abc_span.data(), L"abc", 3));
+
+  pdfium::span<const wchar_t> abc_span_with_terminator =
+      abc.span_with_terminator();
+  EXPECT_EQ(4u, abc_span_with_terminator.size());
+  EXPECT_EQ(0, wmemcmp(abc_span_with_terminator.data(), L"abc", 4));
 
   WideString mutable_abc = abc;
   EXPECT_EQ(abc.c_str(), mutable_abc.c_str());
@@ -1007,7 +1021,8 @@ TEST(WideString, GetBuffer) {
   WideString str2(L"cl");
   {
     pdfium::span<wchar_t> buffer = str2.GetBuffer(12);
-    wcscpy(buffer.data() + 2, L"ams");
+    // TODO(tsepez): make safe.
+    UNSAFE_BUFFERS(wcscpy(buffer.data() + 2, L"ams"));
   }
   str2.ReleaseBuffer(str2.GetStringLength());
   EXPECT_EQ(L"clams", str2);
@@ -1242,12 +1257,15 @@ TEST(WideString, FromUTF16BE) {
       {ByteString("\xD8\x3C\xDF\xA8", 4), L"🎨"},
   };
 
-  for (size_t i = 0; i < std::size(utf16be_decode_cases); ++i) {
-    EXPECT_EQ(
-        WideString::FromUTF16BE(utf16be_decode_cases[i].in.unsigned_span()),
-        utf16be_decode_cases[i].out)
-        << " for case number " << i;
-  }
+  // TODO(tsepez): make safe.
+  UNSAFE_BUFFERS({
+    for (size_t i = 0; i < std::size(utf16be_decode_cases); ++i) {
+      EXPECT_EQ(
+          WideString::FromUTF16BE(utf16be_decode_cases[i].in.unsigned_span()),
+          utf16be_decode_cases[i].out)
+          << " for case number " << i;
+    }
+  });
 }
 
 TEST(WideString, FromUTF16LE) {
@@ -1262,12 +1280,15 @@ TEST(WideString, FromUTF16LE) {
       {ByteString("\x3C\xD8\xA8\xDF", 4), L"🎨"},
   };
 
-  for (size_t i = 0; i < std::size(utf16le_decode_cases); ++i) {
-    EXPECT_EQ(
-        WideString::FromUTF16LE(utf16le_decode_cases[i].in.unsigned_span()),
-        utf16le_decode_cases[i].out)
-        << " for case number " << i;
-  }
+  // TODO(tsepez): make safe.
+  UNSAFE_BUFFERS({
+    for (size_t i = 0; i < std::size(utf16le_decode_cases); ++i) {
+      EXPECT_EQ(
+          WideString::FromUTF16LE(utf16le_decode_cases[i].in.unsigned_span()),
+          utf16le_decode_cases[i].out)
+          << " for case number " << i;
+    }
+  });
 }
 
 TEST(WideString, ToUTF16LE) {
@@ -1284,11 +1305,14 @@ TEST(WideString, ToUTF16LE) {
       {L"🎨", ByteString("\x3C\xD8\xA8\xDF\0\0", 6)},
   };
 
-  for (size_t i = 0; i < std::size(utf16le_encode_cases); ++i) {
-    EXPECT_EQ(utf16le_encode_cases[i].bs,
-              utf16le_encode_cases[i].ws.ToUTF16LE())
-        << " for case number " << i;
-  }
+  // TODO(tsepez): make safe.
+  UNSAFE_BUFFERS({
+    for (size_t i = 0; i < std::size(utf16le_encode_cases); ++i) {
+      EXPECT_EQ(utf16le_encode_cases[i].bs,
+                utf16le_encode_cases[i].ws.ToUTF16LE())
+          << " for case number " << i;
+    }
+  });
 }
 
 TEST(WideString, ToUCS2LE) {
@@ -1817,7 +1841,7 @@ TEST(WideStringView, TrimmedRight) {
   EXPECT_EQ(L"FRED", fred.TrimmedRight(L'E'));
   EXPECT_EQ(L"FRE", fred.TrimmedRight(L'D'));
   WideStringView fredd(L"FREDD");
-  EXPECT_EQ(L"FRE", fred.TrimmedRight(L'D'));
+  EXPECT_EQ(L"FRE", fredd.TrimmedRight(L'D'));
 }
 
 TEST(WideString, FormatWidth) {

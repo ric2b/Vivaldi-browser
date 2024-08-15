@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pl">
+<translation id="2947471979790858922">Twoja aktywność z kart prywatnych zostanie usunięta z tego urządzenia</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Możesz znaleźć zamknięte karty wybierając Ostatnie karty z menu głównego Vivaldi. Twoja karta prywatna nie będzie dostępna.}
+        other {Możesz znaleźć zamknięte karty wybierając Ostatnie karty z menu głównego Vivaldi. Twoje karty prywatne (#) nie będą dostępne.}}</translation>
+<translation id="4871187110787939393">Zamknąć wszystkie karty prywatne?</translation>
 </translationbundle>

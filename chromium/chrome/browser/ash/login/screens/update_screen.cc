@@ -97,10 +97,15 @@ void RecordUpdateStages(const base::TimeDelta check_time,
   RecordFinalizeTime(finalize_time);
 }
 
+void RecordUpdateCheckTimeout(bool timeout) {
+  base::UmaHistogramBoolean("OOBE.UpdateScreen.CheckTimeout", timeout);
+}
+
 }  // namespace
 
 // static
 std::string UpdateScreen::GetResultString(Result result) {
+  // LINT.IfChange(UsageMetrics)
   switch (result) {
     case Result::UPDATE_NOT_REQUIRED:
       return "UpdateNotRequired";
@@ -113,6 +118,7 @@ std::string UpdateScreen::GetResultString(Result result) {
     case Result::UPDATE_CHECK_TIMEOUT:
       return "UpdateCheckTimeout";
   }
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/oobe/histograms.xml)
 }
 
 UpdateScreen::UpdateScreen(base::WeakPtr<UpdateView> view,
@@ -317,7 +323,7 @@ void UpdateScreen::UpdateInfoChanged(
       context()->quick_start_setup_ongoing) {
     WizardController::default_controller()
         ->quick_start_controller()
-        ->PrepareForUpdate();
+        ->PrepareForUpdate(/*is_forced=*/true);
     did_prepare_quick_start_for_update_ = true;
     view_->SetUpdateState(UpdateView::UIState::kUpdateInProgress);
     // Set that critical update applied in OOBE.
@@ -386,7 +392,7 @@ void UpdateScreen::UpdateInfoChanged(
       if (context()->quick_start_setup_ongoing) {
         WizardController::default_controller()
             ->quick_start_controller()
-            ->PrepareForUpdate();
+            ->PrepareForUpdate(/*is_forced=*/true);
         did_prepare_quick_start_for_update_ = true;
       }
       break;
@@ -460,6 +466,8 @@ void UpdateScreen::FinishExitUpdate(Result result) {
         ->quick_start_controller()
         ->ResumeSessionAfterCancelledUpdate();
   }
+
+  RecordUpdateCheckTimeout(result == Result::UPDATE_CHECK_TIMEOUT);
 
   if (!start_update_stage_.is_null() && check_time_.is_zero()) {
     check_time_ = tick_clock_->NowTicks() - start_update_stage_;

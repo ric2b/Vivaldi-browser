@@ -4,20 +4,22 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
-#include <math.h>
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #include <xnnpack.h>
+#include <xnnpack/allocation-type.h>
+#include <xnnpack/common.h>
 #include <xnnpack/log.h>
 #include <xnnpack/node-type.h>
-#include <xnnpack/operator.h>
 #include <xnnpack/operator-type.h>
-#include <xnnpack/params.h>
+#include <xnnpack/operator.h>
 #include <xnnpack/requantization.h>
-#include <xnnpack/subgraph.h>
 #include <xnnpack/subgraph-validation.h>
+#include <xnnpack/subgraph.h>
 
+#include "pthreadpool.h"
 
 static enum xnn_status create_fully_connected_operator(
   const struct xnn_node* node,
@@ -346,29 +348,18 @@ enum xnn_status resize_fully_connected_output_tensor(
   }
   // Infer output channels.
   const uint32_t filter_output_channel_index = (opdata->flags & XNN_FLAG_TRANSPOSE_WEIGHTS) ? 1 : 0;
-  enum xnn_shape_inference_status status =
-    xnn_tensor_propagate_dimension(output, output->shape.num_dims - 1, filter->shape.dim[filter_output_channel_index]);
-  if (status == xnn_shape_inference_status_error) {
-    return xnn_status_invalid_parameter;
-  }
+  output->shape.dim[output->shape.num_dims - 1] = filter->shape.dim[filter_output_channel_index];
 
   if (reshape_2d) {
     const uint32_t filter_input_channel_index = (opdata->flags & XNN_FLAG_TRANSPOSE_WEIGHTS) ? 0 : 1;
     const size_t num_input_elements = xnn_shape_multiply_all_dims(&input->shape);
     // propogate the input shape to output.
-    status =
-      xnn_tensor_propagate_dimension(output, 0, num_input_elements / filter->shape.dim[filter_input_channel_index]);
-    if (status == xnn_shape_inference_status_error) {
-      return xnn_status_invalid_parameter;
-    }
+    output->shape.dim[0] = num_input_elements / filter->shape.dim[filter_input_channel_index];
   }
   else {
     // Propagate input shape to output.
     for (size_t cur_dim = 0; cur_dim < input->shape.num_dims - 1; cur_dim++) {
-      status = xnn_tensor_propagate_dimension(output, cur_dim, input->shape.dim[cur_dim]);
-      if (status == xnn_shape_inference_status_error) {
-        return xnn_status_invalid_parameter;
-      }
+      output->shape.dim[cur_dim] = input->shape.dim[cur_dim];
     }
   }
 
@@ -656,48 +647,6 @@ static enum xnn_status setup_fully_connected_operator(
   }
 }
 
-static enum xnn_shape_inference_status infer_shape_backward(
-  const struct xnn_node* node,
-  struct xnn_value* values)
-{
-  // Assert that filter tensor has static shape.
-  const uint32_t filter_id = node->inputs[1];
-  const struct xnn_value* filter = &values[filter_id];
-  assert(xnn_tensor_shape_is_static(filter));
-
-  enum xnn_shape_inference_status status = xnn_shape_inference_status_no_change;
-
-  // Infer input channels.
-  const uint32_t input_channel_index = (node->flags & XNN_FLAG_TRANSPOSE_WEIGHTS) ? 0 : 1;
-  const uint32_t input_id = node->inputs[0];
-  struct xnn_value* input = &values[input_id];
-  status = xnn_tensor_propagate_dimension(input, input->shape.num_dims - 1, filter->shape.dim[input_channel_index]);
-  if (status == xnn_shape_inference_status_error) {
-    return status;
-  }
-
-  if (node->flags & XNN_FLAG_TENSORFLOW_RESHAPE_2D) {
-    // No inference for input/output shape possible.
-    return status;
-  }
-
-  // Propagate output shape to input.
-  const struct xnn_value* output = &values[node->outputs[0]];
-  for (size_t cur_dim = 0; cur_dim < output->shape.num_dims - 1; cur_dim++) {
-    const enum xnn_shape_inference_status changed =
-      xnn_tensor_propagate_dimension(input, cur_dim, output->shape.dim[cur_dim]);
-    if (changed == xnn_shape_inference_status_error) {
-      return changed;
-    } else if (changed == xnn_shape_inference_status_changed) {
-      // Only overwrite status if inference on this dimension changed. We could have changed something above, and not
-      // changed anything here, then overwriting status to be no_change will be incorrect.
-      status = changed;
-    }
-  }
-
-  return status;
-}
-
 static inline enum xnn_compute_type validate_datatypes_with_bias(
   enum xnn_datatype input_datatype,
   enum xnn_datatype kernel_datatype,
@@ -729,7 +678,13 @@ static inline enum xnn_compute_type validate_datatypes_with_bias(
           output_datatype == xnn_datatype_fp32)
       {
         return xnn_compute_type_qd8_to_fp32;
+      } else if (input_datatype == xnn_datatype_qdint8 &&
+          bias_datatype == xnn_datatype_fp32 &&
+          output_datatype == xnn_datatype_fp16)
+      {
+        return xnn_compute_type_qd8_to_fp16;
       }
+      break;
     case xnn_datatype_qcint8:
       if (input_datatype == xnn_datatype_fp32 &&
           bias_datatype == xnn_datatype_fp32 &&
@@ -747,11 +702,12 @@ static inline enum xnn_compute_type validate_datatypes_with_bias(
       {
         return xnn_compute_type_qd8_to_fp16;
       } else if (input_datatype == xnn_datatype_qint8 &&
-          bias_datatype == xnn_datatype_qint32 &&
+          bias_datatype == xnn_datatype_qcint32 &&
           output_datatype == xnn_datatype_qint8)
       {
         return xnn_compute_type_qc8;
       }
+      break;
     case xnn_datatype_qint8:
       if (input_datatype == xnn_datatype_qint8 &&
           bias_datatype == xnn_datatype_qint32 &&
@@ -793,7 +749,10 @@ static inline enum xnn_compute_type validate_datatypes_without_bias(
         return xnn_compute_type_fp32;
       } else if (input_datatype == xnn_datatype_qdint8 && output_datatype == xnn_datatype_fp32) {
         return xnn_compute_type_qd8_to_fp32;
+      } else if (input_datatype == xnn_datatype_qdint8 && output_datatype == xnn_datatype_fp16) {
+        return xnn_compute_type_qd8_to_fp16;
       }
+      break;
     case xnn_datatype_qcint8:
       if (input_datatype == xnn_datatype_fp32 && output_datatype == xnn_datatype_fp32) {
         return xnn_compute_type_fp32;
@@ -804,6 +763,7 @@ static inline enum xnn_compute_type validate_datatypes_without_bias(
       } else if (input_datatype == xnn_datatype_qint8 && output_datatype == xnn_datatype_qint8) {
         return xnn_compute_type_qc8;
       }
+      break;
     case xnn_datatype_qint8:
       if (input_datatype == xnn_datatype_qint8 && output_datatype == xnn_datatype_qint8) {
         return xnn_compute_type_qs8;
@@ -890,14 +850,6 @@ enum xnn_status xnn_define_fully_connected(
     return xnn_status_invalid_parameter;
   }
 
-  // Check that filter shape is fully known.
-  if (!xnn_tensor_shape_is_static(kernel_value)) {
-    xnn_log_error(
-      "failed to define %s operator with filter ID #%" PRIu32 ": filter must have static dimensions.",
-      xnn_node_type_to_string(xnn_node_type_fully_connected), filter_id);
-    return xnn_status_invalid_parameter;
-  }
-
   // Non-static kernel is supported, but only for some data types
   switch (kernel_value->datatype) {
     case xnn_datatype_fp32:
@@ -917,10 +869,10 @@ enum xnn_status xnn_define_fully_connected(
     case xnn_datatype_fp32:
       break;
     case xnn_datatype_qcint4:
-      if (kernel_value->quantization.zero_point != 8) {
+      if (kernel_value->quantization.zero_point != 8 && kernel_value->quantization.zero_point != 0) {
         xnn_log_error(
           "failed to define %s operator with filter ID #%" PRIu32 ": unsupported quantization zero point %" PRId32
-          " for datatype %s, must be equals to 8",
+          " for datatype %s, must be equals to 8 (unsigned weights) or 0 (signed weights) ",
           xnn_node_type_to_string(xnn_node_type_fully_connected), filter_id, kernel_value->quantization.zero_point,
           xnn_datatype_to_string(kernel_value->datatype));
         return xnn_status_invalid_parameter;
@@ -976,14 +928,6 @@ enum xnn_status xnn_define_fully_connected(
       return xnn_status_invalid_parameter;
     }
 
-    // Check that bias shape is fully known.
-    if (!xnn_tensor_shape_is_static(bias_value)) {
-      xnn_log_error(
-        "failed to define %s operator with bias ID #%" PRIu32 ": bias must have static dimensions.",
-        xnn_node_type_to_string(xnn_node_type_fully_connected), bias_id);
-      return xnn_status_invalid_parameter;
-    }
-
     // Non-static bias is supported, but only for some data types
     switch (bias_value->datatype) {
       case xnn_datatype_fp32:
@@ -1008,6 +952,7 @@ enum xnn_status xnn_define_fully_connected(
       case xnn_datatype_fp16:
       case xnn_datatype_fp32:
       case xnn_datatype_qint32:
+      case xnn_datatype_qcint32:
         break;
       default:
         xnn_log_error(
@@ -1093,8 +1038,6 @@ enum xnn_status xnn_define_fully_connected(
   node->create = create_fully_connected_operator;
   node->reshape = reshape_fully_connected_operator;
   node->setup = setup_fully_connected_operator;
-
-  node->infer_shape_backward = infer_shape_backward;
 
   return xnn_status_success;
 }

@@ -49,10 +49,12 @@ class ChromeShellDelegate : public ash::ShellDelegate {
   std::unique_ptr<ash::SystemSoundsDelegate> CreateSystemSoundsDelegate()
       const override;
   std::unique_ptr<ash::api::TasksDelegate> CreateTasksDelegate() const override;
+  std::unique_ptr<ash::FocusModeDelegate> CreateFocusModeDelegate()
+      const override;
   std::unique_ptr<ash::UserEducationDelegate> CreateUserEducationDelegate()
       const override;
   scoped_refptr<network::SharedURLLoaderFactory>
-  GetGeolocationUrlLoaderFactory() const override;
+  GetBrowserProcessUrlLoaderFactory() const override;
   void OpenKeyboardShortcutHelpPage() const override;
   bool CanGoBack(gfx::NativeWindow window) const override;
   void SetTabScrubberChromeOSEnabled(bool enabled) override;

@@ -114,6 +114,16 @@ suite('PaymentsSectionCardRows', function() {
     updateCreditCardCallback(creditCard);
     assertEquals(
         'More actions for Jane Doe', menuButton!.getAttribute('title'));
+
+    // Case 5: a card with CVC
+    creditCard = createCreditCardEntry();
+    creditCard.cardNumber = '0000000000001234';
+    creditCard.network = 'Visa';
+    creditCard.cvc = '111';
+    updateCreditCardCallback(creditCard);
+    assertEquals(
+        'More actions for Visa ending in 1234, CVC saved',
+        menuButton!.getAttribute('title'));
   });
 
   test('verifyCreditCardRowButtonIsOutlinkWhenRemote', async function() {
@@ -168,8 +178,13 @@ suite('PaymentsSectionCardRows', function() {
     const creditCardList = section.$.paymentsList;
     assertTrue(!!creditCardList);
     assertEquals(1, getLocalAndServerCreditCardListItems().length);
-    assertFalse(getCardRowShadowRoot(section.$.paymentsList)
-                    .querySelector<HTMLElement>('#cardImage')!.hidden);
+    const cardImage = getCardRowShadowRoot(section.$.paymentsList)
+                          .querySelector<HTMLImageElement>('#cardImage');
+    assertTrue(!!cardImage);
+    assertTrue(isVisible(cardImage));
+    assertEquals(
+        'chrome://theme/IDR_AUTOFILL_CC_GENERIC 1x, chrome://theme/IDR_AUTOFILL_CC_GENERIC@2x 2x',
+        cardImage.srcset);
   });
 
   test('verifyLocalCreditCardMenu', async function() {
@@ -510,11 +525,7 @@ suite('PaymentsSectionCardRows', function() {
           loadTimeData.getString('virtualCardTurnedOn');
       if (benefitsAvailable && productTermsUrlAvailable) {
         benefitExpectedSublabel += ' | ' +
-            loadTimeData.getString(
-                'benefitsAvailableTagForCreditCardListEntry') +
-            ' (' +
-            loadTimeData.getString('benefitsTermsTagForCreditCardListEntry') +
-            ')';
+            loadTimeData.getString('benefitsTermsTagForCreditCardListEntry');
       }
 
       assertEquals(
@@ -579,11 +590,7 @@ suite('PaymentsSectionCardRows', function() {
           loadTimeData.getString('cvcTagForCreditCardListEntry');
       if (benefitsAvailable && productTermsUrlAvailable) {
         benefitExpectedSublabel += ' | ' +
-            loadTimeData.getString(
-                'benefitsAvailableTagForCreditCardListEntry') +
-            ' (' +
-            loadTimeData.getString('benefitsTermsTagForCreditCardListEntry') +
-            ')';
+            loadTimeData.getString('benefitsTermsTagForCreditCardListEntry');
       }
 
       assertEquals(
@@ -643,11 +650,7 @@ suite('PaymentsSectionCardRows', function() {
           serverCreditCard.expirationYear!.toString().substring(2);
       if (benefitsAvailable && productTermsUrlAvailable) {
         benefitExpectedSublabel += ' | ' +
-            loadTimeData.getString(
-                'benefitsAvailableTagForCreditCardListEntry') +
-            ' (' +
-            loadTimeData.getString('benefitsTermsTagForCreditCardListEntry') +
-            ')';
+            loadTimeData.getString('benefitsTermsTagForCreditCardListEntry');
       }
 
       assertEquals(
@@ -707,11 +710,7 @@ suite('PaymentsSectionCardRows', function() {
           loadTimeData.getString('cvcTagForCreditCardListEntry');
       if (benefitsAvailable && productTermsUrlAvailable) {
         benefitExpectedSublabel += ' | ' +
-            loadTimeData.getString(
-                'benefitsAvailableTagForCreditCardListEntry') +
-            ' (' +
-            loadTimeData.getString('benefitsTermsTagForCreditCardListEntry') +
-            ')';
+            loadTimeData.getString('benefitsTermsTagForCreditCardListEntry');
       }
       assertEquals(
           benefitExpectedSublabel,
@@ -768,8 +767,37 @@ suite('PaymentsSectionCardRows', function() {
         CardBenefitsUserAction.CARD_BENEFITS_TERMS_LINK_CLICKED, userAction);
   });
 
-  // Test to verify the cvc tag is visible when cvc is present on a server/local
-  // cards.
+  // Test to verify the benefit terms link has an aria label that includes
+  // the card network name and last four digits.
+  test('verifyCardBenefitsTermsAriaLabel', async () => {
+    loadTimeData.overrideValues({
+      autofillCardBenefitsAvailable: true,
+    });
+
+    const creditCard = createCreditCardEntry();
+    creditCard.cardNumber = '0000000000001234';
+    creditCard.network = 'Visa';
+    creditCard.metadata!.isLocal = false;
+    creditCard.productTermsUrl = 'https://google.com/';
+    await createPaymentsSection([creditCard], /*ibans=*/[], /*prefValues=*/ {});
+
+    const paymentsList = getLocalAndServerCreditCardListItems();
+    assertTrue(!!paymentsList);
+    const termsLink =
+        paymentsList[0]!.shadowRoot!.querySelector<HTMLAnchorElement>(
+            '#summaryTermsLink');
+    assertTrue(!!termsLink);
+
+    const description = loadTimeData.substituteString(
+        loadTimeData.getString('creditCardDescription'), creditCard.network,
+        creditCard.cardNumber.substring(creditCard.cardNumber.length - 4));
+    const expectedAriaLabel = loadTimeData.substituteString(
+        loadTimeData.getString('benefitsTermsAriaLabel'), description);
+    assertEquals(termsLink.ariaLabel, expectedAriaLabel);
+  });
+
+  // Test to verify the cvc tag is visible when cvc is present on a
+  // server/local cards.
   [true, false].forEach(cvcOnServerCard => {
     test(
         'verifyCvcTagPresentFor_' +

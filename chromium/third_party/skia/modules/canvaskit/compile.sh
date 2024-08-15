@@ -90,12 +90,6 @@ if [[ $@ == *no_pathops* ]] ; then
   ENABLE_PATHOPS="false"
 fi
 
-ENABLE_SKSL_TRACE="true"
-if [[ $@ == *no_sksl_trace* ]] ; then
-  echo "Omitting SkSl trace"
-  ENABLE_SKSL_TRACE="false"
-fi
-
 ENABLE_MATRIX="true"
 if [[ $@ == *no_matrix* ]]; then
   echo "Omitting matrix helper code"
@@ -118,13 +112,13 @@ if [[ $@ == *no_font* ]]; then
   ENABLE_FONT="false"
   ENABLE_EMBEDDED_FONT="false"
   GN_FONT+="skia_enable_fontmgr_custom_embedded=false skia_enable_fontmgr_custom_empty=false "
-elif [[ $@ == *no_embedded_font* ]]; then
-  echo "Omitting the built-in font(s)"
-  ENABLE_EMBEDDED_FONT="false"
-  GN_FONT+="skia_enable_fontmgr_custom_embedded=true skia_enable_fontmgr_custom_empty=true "
 else
+  if [[ $@ == *no_embedded_font* ]]; then
+    echo "Omitting the built-in font(s)"
+    ENABLE_EMBEDDED_FONT="false"
+  fi
   # Generate the font's binary file (which is covered by .gitignore)
-  GN_FONT+="skia_enable_fontmgr_custom_embedded=true skia_enable_fontmgr_custom_empty=false "
+  GN_FONT+="skia_enable_fontmgr_custom_embedded=true skia_enable_fontmgr_custom_empty=true "
 fi
 
 if [[ $@ == *no_woff2* ]]; then
@@ -150,6 +144,11 @@ GN_SHAPER="skia_use_icu=true skia_use_client_icu=false skia_use_libgrapheme=fals
 if [[ $@ == *primitive_shaper* ]] || [[ $@ == *no_font* ]]; then
   echo "Using the primitive shaper instead of the harfbuzz/icu one"
   GN_SHAPER="skia_use_icu=false skia_use_harfbuzz=false"
+fi
+
+if [[ $@ == *client_unicode* ]] ; then
+  echo "Using the client-provided skunicode data and harfbuz instead of the icu-provided data"
+  GN_SHAPER="skia_use_icu=false skia_use_client_icu=true skia_use_libgrapheme=false skia_use_icu4x=false skia_use_harfbuzz=true skia_use_system_harfbuzz=false"
 fi
 
 ENABLE_PARAGRAPH="true"
@@ -238,7 +237,6 @@ echo "Compiling"
   skia_enable_graphite=${ENABLE_GRAPHITE} \
   skia_build_for_debugger=${DEBUGGER_ENABLED} \
   skia_enable_skottie=${ENABLE_SKOTTIE} \
-  skia_enable_sksl_tracing=${ENABLE_SKSL_TRACE} \
   \
   ${GN_SHAPER} \
   ${GN_FONT} \

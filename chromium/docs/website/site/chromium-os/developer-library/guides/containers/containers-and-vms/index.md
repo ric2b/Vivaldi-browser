@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: containers-and-vms
 title: Running Custom Containers Under ChromeOS
 ---
@@ -14,7 +14,7 @@ documentation](https://support.google.com/chromebook/answer/9145439) and the
 [ChromeOS developer site](https://chromeos.dev/en/linux).
 
 If you're interested in hacking on [Crostini] itself, take a look at the
-[Crostini developer guide](crostini_developer_guide.md)
+[Crostini developer guide](/chromium-os/developer-library/guides/containers/crostini-developer-guide/)
 
 We won't get into technical details for specific projects as each one already
 has relevant documentation.
@@ -929,7 +929,7 @@ doing everything from scratch.
 
 It is certainly true that [VM]s add overhead when compared to running in only
 a container or directly in the system.
-However, in our tests, the overhead is negligble to the user experience, and
+However, in our tests, the overhead is negligible to the user experience, and
 well worth the strong gains in system security.
 
 For more details, see the [Security] section in this doc.

@@ -183,7 +183,8 @@ void DownloadBubbleSecurityViewInfo::PopulateForInterrupted(
       return;
     }
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_SCAN_FAILED: {
-      // TODO(b/327392327): Implement UX for this danger type.
+      warning_summary_ = l10n_util::GetStringUTF16(
+          IDS_DOWNLOAD_BUBBLE_SUBPAGE_SUMMARY_SCAN_FAILED);
       return;
     }
     case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
@@ -198,7 +199,6 @@ void DownloadBubbleSecurityViewInfo::PopulateForInterrupted(
     case download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_LOCAL_PASSWORD_SCANNING:
     case download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING:
     case download::DOWNLOAD_DANGER_TYPE_ASYNC_LOCAL_PASSWORD_SCANNING:
-    case download::DOWNLOAD_DANGER_TYPE_BLOCKED_UNSUPPORTED_FILETYPE:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_FAILED:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_OPENED_DANGEROUS:
@@ -414,7 +414,7 @@ void DownloadBubbleSecurityViewInfo::PopulateForInProgressOrComplete(
           // to the DownloadItem. Instead they are handled specially in
           // DownloadBubbleSecurityView::ProcessButtonClick. That makes it
           // okay that the we aren't really prompting for a deep scan.
-          // TODO(crbug/1482901): Remove this by creating a dedicated View
+          // TODO(crbug.com/40931768): Remove this by creating a dedicated View
           // for the local decryption prompt which directly handles the
           // button presses.
           DownloadCommands::Command::DEEP_SCAN);
@@ -486,7 +486,7 @@ void DownloadBubbleSecurityViewInfo::PopulateForInProgressOrComplete(
       // in DownloadBubbleSecurityView::ProcessButtonClick. That
       // means the semantics don't have to line up with the actual
       // behavior of the download command.
-      // TODO(crbug/1482901): Remove this by creating a dedicated
+      // TODO(crbug.com/40931768): Remove this by creating a dedicated
       // View for the local decryption prompt which directly
       // handles the button presses.
       PopulatePrimarySubpageButton(
@@ -503,7 +503,6 @@ void DownloadBubbleSecurityViewInfo::PopulateForInProgressOrComplete(
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED:
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_TOO_LARGE:
     case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK:
-    case download::DOWNLOAD_DANGER_TYPE_BLOCKED_UNSUPPORTED_FILETYPE:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_OPENED_DANGEROUS:
     case download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:

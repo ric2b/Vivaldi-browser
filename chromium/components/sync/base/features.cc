@@ -12,16 +12,6 @@ BASE_FEATURE(kDeferredSyncStartupCustomDelay,
              "DeferredSyncStartupCustomDelay",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kIgnoreSyncEncryptionKeysLongMissing,
-             "IgnoreSyncEncryptionKeysLongMissing",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-#if BUILDFLAG(IS_ANDROID)
-BASE_FEATURE(kPassExplicitSyncPassphraseToGmsCore,
-             "PassExplicitSyncPassphraseToGmsCore",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
-
 BASE_FEATURE(kSharingOfferKeyPairBootstrap,
              "SharingOfferKeyPairBootstrap",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -46,10 +36,6 @@ BASE_FEATURE(kSyncAutofillWalletCredentialData,
 
 BASE_FEATURE(kSyncPlusAddress,
              "SyncPlusAddress",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kSyncSegmentationDataType,
-             "SyncSegmentationDataType",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -114,6 +100,10 @@ BASE_FEATURE(kSyncEnableContactInfoDataTypeForDasherUsers,
              "SyncEnableContactInfoDataTypeForDasherUsers",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kSyncEnableContactInfoDataTypeForChildUsers,
+             "SyncEnableContactInfoDataTypeForChildUsers",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kEnablePreferencesAccountStorage,
              "EnablePreferencesAccountStorage",
 #if BUILDFLAG(IS_IOS) || BUILDFLAG(IS_ANDROID)
@@ -125,19 +115,19 @@ BASE_FEATURE(kEnablePreferencesAccountStorage,
 
 BASE_FEATURE(kSyncPollImmediatelyOnEveryStartup,
              "SyncPollImmediatelyOnEveryStartup2",
-#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
-    BUILDFLAG(IS_WIN)
-             base::FEATURE_ENABLED_BY_DEFAULT
-#else
              base::FEATURE_DISABLED_BY_DEFAULT
-#endif
 );
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#if !BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kSyncWebauthnCredentials,
              "SyncWebauthnCredentials",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#if BUILDFLAG(IS_IOS)
+             base::FEATURE_DISABLED_BY_DEFAULT
+#else
+             base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+);
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 BASE_FEATURE(kSyncIgnoreGetUpdatesRetryDelay,
              "SyncIgnoreGetUpdatesRetryDelay",
@@ -201,27 +191,8 @@ BASE_FEATURE(kSyncPasswordCleanUpAccidentalBatchDeletions,
              "SyncPasswordCleanUpAccidentalBatchDeletions",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kSyncEnableBatchUploadLocalData,
-             "SyncEnableBatchUploadLocalData",
-#if BUILDFLAG(IS_IOS)
-             base::FEATURE_ENABLED_BY_DEFAULT
-#else
-             base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-);
-
-#if BUILDFLAG(IS_ANDROID)
-BASE_FEATURE(kRestoreSyncedPlaceholderTabs,
-             "RestoreSyncedPlaceholderTabs",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_ANDROID)
-
 BASE_FEATURE(kSyncSessionOnVisibilityChanged,
              "SyncSessionOnVisibilityChanged",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kSyncDecoupleAddressPaymentSettings,
-             "SyncDecoupleAddressPaymentSettings",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSyncIncreaseNudgeDelayForSingleClient,
@@ -232,15 +203,9 @@ BASE_FEATURE(kSyncSchedulerUseWallClockTimer,
              "SyncSchedulerUseWallClockTimer",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-#if BUILDFLAG(IS_ANDROID)
-BASE_FEATURE(kSyncShowIdentityErrorsForSignedInUsers,
-             "SyncShowIdentityErrorsForSignedInUsers",
+BASE_FEATURE(kTrustedVaultAutoUpgradeSyntheticFieldTrial,
+             "TrustedVaultAutoUpgradeSyntheticFieldTrial",
              base::FEATURE_DISABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_ANDROID)
-
-BASE_FEATURE(kSyncRememberCustomPassphraseAfterSignout,
-             "SyncRememberCustomPassphraseAfterSignout",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kWebApkBackupAndRestoreBackend,

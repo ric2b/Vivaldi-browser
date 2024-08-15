@@ -30,7 +30,7 @@ ReceiverChooser::ReceiverChooser(const InterfaceInfo& interface,
                            .enable_publication = false,
                            .enable_querying = true};
   service_ =
-      discovery::CreateDnsSdService(task_runner, this, std::move(config));
+      discovery::CreateDnsSdService(task_runner, *this, std::move(config));
 
   watcher_ = std::make_unique<discovery::DnsSdServiceWatcher<ReceiverInfo>>(
       service_.get(), kCastV2ServiceId, DnsSdInstanceEndpointToReceiverInfo,
@@ -45,11 +45,11 @@ ReceiverChooser::ReceiverChooser(const InterfaceInfo& interface,
 
 ReceiverChooser::~ReceiverChooser() = default;
 
-void ReceiverChooser::OnFatalError(Error error) {
+void ReceiverChooser::OnFatalError(const Error& error) {
   OSP_LOG_FATAL << "Fatal error: " << error;
 }
 
-void ReceiverChooser::OnRecoverableError(Error error) {
+void ReceiverChooser::OnRecoverableError(const Error& error) {
   OSP_VLOG << "Recoverable error: " << error;
 }
 

@@ -99,8 +99,11 @@ public class SearchEngineUtils implements Destroyable, TemplateUrlServiceObserve
         if (sInstanceForTesting != null) return sInstanceForTesting;
 
         assert profile != null;
-        return sProfileKeyedUtils.getForProfile(
-                profile, () -> new SearchEngineUtils(profile, new FaviconHelper()));
+        return sProfileKeyedUtils.getForProfile(profile, SearchEngineUtils::buildForProfile);
+    }
+
+    private static SearchEngineUtils buildForProfile(Profile profile) {
+        return new SearchEngineUtils(profile, new FaviconHelper());
     }
 
     @Override
@@ -119,6 +122,11 @@ public class SearchEngineUtils implements Destroyable, TemplateUrlServiceObserve
             recordEvent(Events.FETCH_NON_GOOGLE_LOGO_REQUEST);
 
             var templateUrl = mTemplateUrlService.getDefaultSearchEngineTemplateUrl();
+            if (BuildConfig.IS_VIVALDI) // Vivaldi Ref. VAB-9090
+                templateUrl = mTemplateUrlService.vivaldiGetDefaultSearchEngine(
+                        mIsOffTheRecord ?
+                                TemplateUrlService.DefaultSearchType.DEFAULT_SEARCH_PRIVATE :
+                                TemplateUrlService.DefaultSearchType.DEFAULT_SEARCH_MAIN);
             if (templateUrl == null) {
                 recordEvent(Events.FETCH_FAILED_NULL_URL);
                 return;

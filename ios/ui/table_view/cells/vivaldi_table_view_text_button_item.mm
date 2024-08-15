@@ -35,6 +35,17 @@ const CGFloat kDisabledButtonAlpha = 0.5;
                     forState:UIControlStateDisabled];
   cell.button.backgroundColor =
       [UIColor colorNamed:kBackgroundColor];
+
+  [NSLayoutConstraint activateConstraints:@[
+    [cell.button.leadingAnchor
+        constraintEqualToAnchor:cell.contentView.leadingAnchor],
+    [cell.button.topAnchor
+        constraintEqualToAnchor:cell.contentView.topAnchor],
+    [cell.button.bottomAnchor
+        constraintEqualToAnchor:cell.contentView.bottomAnchor],
+    [cell.button.trailingAnchor
+        constraintEqualToAnchor:cell.contentView.trailingAnchor]
+  ]];
 }
 
 @end

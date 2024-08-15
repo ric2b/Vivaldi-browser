@@ -110,22 +110,22 @@ const AtomicString StyleEnvironmentVariables::GetVariableName(
     const FeatureContext* feature_context) {
   switch (variable) {
     case UADefinedTwoDimensionalVariable::kViewportSegmentTop:
-      DCHECK(RuntimeEnabledFeatures::ViewportSegmentsEnabled());
+      DCHECK(RuntimeEnabledFeatures::ViewportSegmentsEnabled(feature_context));
       return AtomicString("viewport-segment-top");
     case UADefinedTwoDimensionalVariable::kViewportSegmentRight:
-      DCHECK(RuntimeEnabledFeatures::ViewportSegmentsEnabled());
+      DCHECK(RuntimeEnabledFeatures::ViewportSegmentsEnabled(feature_context));
       return AtomicString("viewport-segment-right");
     case UADefinedTwoDimensionalVariable::kViewportSegmentBottom:
-      DCHECK(RuntimeEnabledFeatures::ViewportSegmentsEnabled());
+      DCHECK(RuntimeEnabledFeatures::ViewportSegmentsEnabled(feature_context));
       return AtomicString("viewport-segment-bottom");
     case UADefinedTwoDimensionalVariable::kViewportSegmentLeft:
-      DCHECK(RuntimeEnabledFeatures::ViewportSegmentsEnabled());
+      DCHECK(RuntimeEnabledFeatures::ViewportSegmentsEnabled(feature_context));
       return AtomicString("viewport-segment-left");
     case UADefinedTwoDimensionalVariable::kViewportSegmentWidth:
-      DCHECK(RuntimeEnabledFeatures::ViewportSegmentsEnabled());
+      DCHECK(RuntimeEnabledFeatures::ViewportSegmentsEnabled(feature_context));
       return AtomicString("viewport-segment-width");
     case UADefinedTwoDimensionalVariable::kViewportSegmentHeight:
-      DCHECK(RuntimeEnabledFeatures::ViewportSegmentsEnabled());
+      DCHECK(RuntimeEnabledFeatures::ViewportSegmentsEnabled(feature_context));
       return AtomicString("viewport-segment-height");
     default:
       break;
@@ -215,8 +215,9 @@ void StyleEnvironmentVariables::SetVariable(
     UADefinedTwoDimensionalVariable variable,
     unsigned first_dimension,
     unsigned second_dimension,
-    const String& value) {
-  SetVariable(GetVariableName(variable, GetFeatureContext()), first_dimension,
+    const String& value,
+    const FeatureContext* feature_context) {
+  SetVariable(GetVariableName(variable, feature_context), first_dimension,
               second_dimension, value);
 }
 
@@ -226,8 +227,9 @@ void StyleEnvironmentVariables::RemoveVariable(UADefinedVariable variable) {
 }
 
 void StyleEnvironmentVariables::RemoveVariable(
-    UADefinedTwoDimensionalVariable variable) {
-  const AtomicString name = GetVariableName(variable, GetFeatureContext());
+    UADefinedTwoDimensionalVariable variable,
+    const FeatureContext* feature_context) {
+  const AtomicString name = GetVariableName(variable, feature_context);
   RemoveVariable(name);
 }
 

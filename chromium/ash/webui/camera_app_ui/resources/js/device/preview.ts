@@ -9,14 +9,12 @@ import {
   assertInstanceof,
 } from '../assert.js';
 import {queuedAsyncCallback} from '../async_job_queue.js';
-import * as barcodeChip from '../barcode_chip.js';
 import * as dom from '../dom.js';
 import {reportError} from '../error.js';
 import * as expert from '../expert.js';
 import {FaceOverlay} from '../face.js';
 import {Flag} from '../flag.js';
 import {Point} from '../geometry.js';
-import {BarcodeScanner} from '../models/barcode.js';
 import * as loadTimeData from '../models/load_time_data.js';
 import {DeviceOperator, parseMetadata} from '../mojo/device_operator.js';
 import {
@@ -38,6 +36,10 @@ import {
   MojoEndpoint,
 } from '../mojo/util.js';
 import * as nav from '../nav.js';
+import {
+  createInstance as createPhotoModeAutoScanner,
+  PhotoModeAutoScanner,
+} from '../photo_mode_auto_scanner.js';
 import * as state from '../state.js';
 import {
   ErrorLevel,
@@ -53,9 +55,11 @@ import * as util from '../util.js';
 import {WaitableEvent} from '../waitable_event.js';
 
 import {
+  assertStrictPTZSettings,
   DigitalZoomPTZController,
   MediaStreamPTZController,
   PTZController,
+  StrictPTZSettings,
 } from './ptz_controller.js';
 import {
   StreamConstraints,
@@ -72,9 +76,9 @@ export class Preview {
   private video = dom.get('#preview-video', HTMLVideoElement);
 
   /**
-   * A barcode scanner to detect barcodes. Only used in Photo mode.
+   * The scanner that scan preview for various functionalities in Photo mode.
    */
-  private barcodeScanner: BarcodeScanner|null = null;
+  private photoModeAutoScanner: PhotoModeAutoScanner|null = null;
 
   /**
    * The observer endpoint for preview metadata.
@@ -126,10 +130,10 @@ export class Preview {
 
   private enableFaceOverlay = false;
 
-  private readonly autoQRFlag = loadTimeData.getChromeFlag(Flag.AUTO_QR);
-
   private readonly digitalZoomFlag =
       loadTimeData.getChromeFlag(Flag.DIGITAL_ZOOM);
+
+  private static ptzControllerForTest: PTZController|null = null;
 
   /**
    * Triggered when the screen orientation is updated.
@@ -158,12 +162,12 @@ export class Preview {
         expert.ExpertOption.SHOW_METADATA,
         queuedAsyncCallback('keepLatest', () => this.updateShowMetadata()));
 
-    // Reset the auto QR code scanner timer after taking a photo
-    state.addObserver(state.State.TAKING, (taking, _) => {
-      if (!state.get(Mode.PHOTO) || taking) {
-        return;
+    // Reset the scanner timer after taking a photo.
+    state.addObserver(state.State.TAKING, (taking) => {
+      if (state.get(Mode.PHOTO) && !taking) {
+        const scanner = assertExists(this.photoModeAutoScanner);
+        scanner.restart();
       }
-      this.barcodeScanner?.resetTimer();
     });
   }
 
@@ -227,8 +231,10 @@ export class Preview {
     const deviceOperator = DeviceOperator.getInstance();
     const {pan, tilt, zoom} = this.getVideoTrack().getCapabilities();
     const {deviceId} = getVideoTrackSettings(this.getVideoTrack());
+    // TODO(b/336480993): Enable digital zoom in portrait mode.
     const isDigitalZoomSupported = this.digitalZoomFlag &&
-        (await deviceOperator?.isDigitalZoomSupported(deviceId) ?? false);
+        (await deviceOperator?.isDigitalZoomSupported(deviceId) ?? false) &&
+        !state.get(Mode.PORTRAIT);
 
     if (isDigitalZoomSupported) {
       this.isSupportPTZInternal = true;
@@ -324,6 +330,13 @@ export class Preview {
     await this.ptzController.resetPTZ();
   }
 
+  getZoomRatio(): number {
+    if (this.ptzController instanceof DigitalZoomPTZController) {
+      return assertExists(this.ptzController.getSettings().zoom);
+    }
+    return 1;
+  }
+
   /**
    * Preview resolution.
    */
@@ -408,6 +421,7 @@ export class Preview {
       this.updateFacing();
       this.deviceId = getVideoTrackSettings(this.getVideoTrack()).deviceId;
       await this.updatePTZ();
+      Preview.ptzControllerForTest = this.ptzController;
       window.screen.orientation.addEventListener(
           'change', this.orientationListener);
 
@@ -441,13 +455,9 @@ export class Preview {
       this.onPreviewExpired = new WaitableEvent();
       state.set(state.State.STREAMING, true);
 
-      // Enable auto QR code scanner in Photo mode preview
-      if (state.get(Mode.PHOTO) && this.autoQRFlag) {
-        this.barcodeScanner = new BarcodeScanner(this.video, (value) => {
-          barcodeChip.show(value);
-        });
-
-        this.barcodeScanner?.resetTimer();
+      if (state.get(Mode.PHOTO)) {
+        this.photoModeAutoScanner = createPhotoModeAutoScanner(this.video);
+        this.photoModeAutoScanner.start();
       }
     } catch (e) {
       await this.close();
@@ -460,9 +470,8 @@ export class Preview {
    * Closes the preview.
    */
   async close(): Promise<void> {
-    this.barcodeScanner?.stop();
-    this.barcodeScanner = null;
-
+    this.photoModeAutoScanner?.stop();
+    this.photoModeAutoScanner = null;
     this.clearWatchdog();
     // Pause video element to avoid black frames during transition.
     this.video.pause();
@@ -720,7 +729,7 @@ export class Preview {
       // Disabling check because this code assumes that metadata.entries is
       // either undefined or defined, but at runtime Mojo will always set this
       // to null or defined.
-      // TODO(crbug.com/1442785): If this function only handles data
+      // TODO(crbug.com/40267104): If this function only handles data
       // from Mojo, the assertion above should be changed to null and the
       // null error suppression can be removed.
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -848,5 +857,14 @@ export class Preview {
     this.focusMarker = null;
     const aim = dom.get('#preview-focus-aim', HTMLElement);
     aim.hidden = true;
+  }
+
+  /**
+   * Returns current PTZ settings for testing.
+   */
+  static getPTZSettingsForTest(): StrictPTZSettings {
+    assert(Preview.ptzControllerForTest !== null, 'PTZ is not enabled');
+    const settings = Preview.ptzControllerForTest.getSettings();
+    return assertStrictPTZSettings(settings);
   }
 }

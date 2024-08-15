@@ -79,9 +79,9 @@ BindGroup::BindGroup(Device* device,
         write.descriptorCount = 1;
         write.descriptorType = VulkanDescriptorType(bindingInfo);
 
-        bool isValidDescriptorSet = MatchVariant(
+        bool shouldWriteDescriptor = MatchVariant(
             bindingInfo.bindingLayout,
-            [&](const BufferBindingLayout&) -> bool {
+            [&](const BufferBindingInfo&) -> bool {
                 BufferBinding binding = GetBindingAsBufferBinding(bindingIndex);
 
                 VkBuffer handle = ToBackend(binding.buffer)->GetHandle();
@@ -98,13 +98,19 @@ BindGroup::BindGroup(Device* device,
                 write.pBufferInfo = &writeBufferInfo[numWrites];
                 return true;
             },
-            [&](const SamplerBindingLayout&) -> bool {
+            [&](const SamplerBindingInfo&) -> bool {
                 Sampler* sampler = ToBackend(GetBindingAsSampler(bindingIndex));
                 writeImageInfo[numWrites].sampler = sampler->GetHandle();
                 write.pImageInfo = &writeImageInfo[numWrites];
                 return true;
             },
-            [&](const TextureBindingLayout&) -> bool {
+            [&](const StaticSamplerBindingInfo& layout) -> bool {
+                // Static samplers are bound into the Vulkan layout as immutable
+                // samplers at BindGroupLayout creation time. There is no work
+                // to be done at BindGroup creation time.
+                return false;
+            },
+            [&](const TextureBindingInfo&) -> bool {
                 TextureView* view = ToBackend(GetBindingAsTextureView(bindingIndex));
 
                 VkImageView handle = view->GetHandle();
@@ -123,7 +129,7 @@ BindGroup::BindGroup(Device* device,
                 write.pImageInfo = &writeImageInfo[numWrites];
                 return true;
             },
-            [&](const StorageTextureBindingLayout&) -> bool {
+            [&](const StorageTextureBindingInfo&) -> bool {
                 TextureView* view = ToBackend(GetBindingAsTextureView(bindingIndex));
 
                 VkImageView handle = VK_NULL_HANDLE;
@@ -147,7 +153,7 @@ BindGroup::BindGroup(Device* device,
                 return true;
             });
 
-        if (isValidDescriptorSet) {
+        if (shouldWriteDescriptor) {
             numWrites++;
         }
     }

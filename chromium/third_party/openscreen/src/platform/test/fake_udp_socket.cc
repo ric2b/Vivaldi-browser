@@ -60,7 +60,7 @@ void FakeUdpSocket::ProcessConfigurationMethod(std::queue<Error>* errors) {
   errors->pop();
 
   if (!error.ok() && client_) {
-    client_->OnError(this, std::move(error));
+    client_->OnError(this, error);
   }
 }
 
@@ -72,7 +72,7 @@ void FakeUdpSocket::SendMessage(const void* data,
   send_errors_.pop();
 
   if (!error.ok() && client_) {
-    client_->OnSendError(this, std::move(error));
+    client_->OnSendError(this, error);
   }
 }
 

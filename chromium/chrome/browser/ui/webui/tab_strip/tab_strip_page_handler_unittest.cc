@@ -15,7 +15,7 @@
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_embedder.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_layout.h"
-#include "chrome/browser/ui/webui/webui_util.h"
+#include "chrome/browser/ui/webui/webui_util_desktop.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/tab_groups/tab_group_color.h"
@@ -560,7 +560,7 @@ TEST_F(TabStripPageHandlerTest, TabReplaced) {
       browser()->tab_strip_model()->GetWebContentsAt(0));
 
   web_ui()->ClearTrackedCalls();
-  browser()->tab_strip_model()->ReplaceWebContentsAt(
+  browser()->tab_strip_model()->DiscardWebContentsAt(
       0, content::WebContentsTester::CreateTestWebContents(profile(), nullptr));
   int expected_new_id = extensions::ExtensionTabUtil::GetTabId(
       browser()->tab_strip_model()->GetWebContentsAt(0));
@@ -702,7 +702,7 @@ TEST_F(TabStripPageHandlerTest, PreventsInvalidGroupDrags) {
 }
 
 TEST_F(TabStripPageHandlerTest, OnThemeChanged) {
-  webui::GetNativeTheme(web_ui()->GetWebContents())
+  webui::GetNativeThemeDeprecated(web_ui()->GetWebContents())
       ->NotifyOnNativeThemeUpdated();
   EXPECT_CALL(page_, ThemeChanged());
 }

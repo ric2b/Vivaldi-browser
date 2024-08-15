@@ -10,6 +10,8 @@
 #include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
 
+class Browser;
+
 // This is a singleton class that preloads Top Chrome WebUIs resources.
 // If preloaded, it hosts a WebContents that can later be used to show a WebUI.
 // The currently implementation preloads Tab Search. If a different WebUI
@@ -18,7 +20,7 @@
 class WebUIContentsPreloadManager {
  public:
   enum class PreloadMode {
-    // Preloads on calling `WarmupForBrowserContext()` and after every WebUI
+    // Preloads on calling `WarmupForBrowser()` and after every WebUI
     // creation.
     // TODO(326505383): preloading on browser startup causes test failures
     // primarily because they expect a certain number of WebContents are
@@ -59,7 +61,7 @@ class WebUIContentsPreloadManager {
 
   // Warms up the preload manager. Depending on PreloadMode this may or may not
   // make a preloaded contents.
-  void WarmupForBrowserContext(content::BrowserContext* browser_context);
+  void WarmupForBrowser(Browser* browser);
 
   // Make a WebContents that shows `webui_url` under `browser_context`.
   // Reuses the preloaded contents if it is under the same `browser_context`.
@@ -72,7 +74,8 @@ class WebUIContentsPreloadManager {
     return preloaded_web_contents_.get();
   }
 
-  GURL GetPreloadedURLForTesting() const;
+  // Returns nullopt if there is no contents preloaded.
+  std::optional<GURL> GetPreloadedURLForTesting() const;
 
   // Disable navigations for tests that don't have //content properly
   // initialized.
@@ -81,9 +84,17 @@ class WebUIContentsPreloadManager {
   void PreloadForBrowserContextForTesting(
       content::BrowserContext* browser_context);
 
+  GURL GetNextWebUIURLToPreloadForTesting(
+      content::BrowserContext* browser_context) const;
+
+  void SetNextWebUIUrlToPreloadForTesting(GURL webui_url);
+
+  static std::vector<GURL> GetAllPreloadableWebUIURLsForTesting();
+
  private:
   class WebUIControllerEmbedderStub;
-  static const char* const kPreloadedWebUIURL;
+
+  GURL GetNextWebUIURLToPreload(content::BrowserContext* browser_context) const;
 
   // Preload a WebContents for `browser_context`.
   // There is at most one preloaded contents at any time.
@@ -92,9 +103,14 @@ class WebUIContentsPreloadManager {
   // If under heavy memory pressure, no preloaded contents will be created.
   void PreloadForBrowserContext(content::BrowserContext* browser_context);
 
+  // Sets the current preloaded WebContents and performs necessary bookkepping.
+  // The bookkeeping includes monitoring for the shutdown of the browser context
+  // and handling the "ready-to-show" event emitted by the WebContents.
+  void SetPreloadedContents(std::unique_ptr<content::WebContents> web_contents);
+
   std::unique_ptr<content::WebContents> CreateNewContents(
       content::BrowserContext* browser_context,
-      GURL url = GURL(kPreloadedWebUIURL));
+      GURL url);
 
   void LoadURLForContents(content::WebContents* web_contents, GURL url);
 
@@ -114,6 +130,8 @@ class WebUIContentsPreloadManager {
   // Disable navigations for views unittests because they don't initialize
   // //content properly.
   bool is_navigation_disabled_for_test_ = false;
+
+  std::optional<GURL> next_webui_url_to_preload_for_testing_;
 
   std::unique_ptr<content::WebContents> preloaded_web_contents_;
   // A stub WebUI page embdeder that captures the ready-to-show signal.

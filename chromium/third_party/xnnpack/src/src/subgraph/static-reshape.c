@@ -4,17 +4,21 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
 #include <xnnpack.h>
+#include <xnnpack/common.h>
 #include <xnnpack/log.h>
+#include <xnnpack/node-type.h>
+#include <xnnpack/operator-type.h>
 #include <xnnpack/operator.h>
-#include <xnnpack/params.h>
-#include <xnnpack/subgraph.h>
 #include <xnnpack/subgraph-validation.h>
+#include <xnnpack/subgraph.h>
 
+#include "pthreadpool.h"
 
 static enum xnn_status create_copy_operator(
   const struct xnn_node* node,
@@ -80,11 +84,7 @@ static enum xnn_status resize_copy_output_tensor(
       output_axis_dynamic = dim_idx;
       hint_cur_dim = 1;
     }
-    enum xnn_shape_inference_status status =
-      xnn_tensor_propagate_dimension(output, dim_idx, hint_cur_dim);
-    if (status == xnn_shape_inference_status_error) {
-      return xnn_status_invalid_parameter;
-    }
+    output->shape.dim[dim_idx] = hint_cur_dim;
   }
 
   const size_t input_num_elements = xnn_shape_multiply_all_dims(&input->shape);
@@ -97,11 +97,7 @@ static enum xnn_status resize_copy_output_tensor(
       return xnn_status_invalid_parameter;
     }
     // Infer dynamic dimension
-    enum xnn_shape_inference_status status =
-      xnn_tensor_propagate_dimension(output, output_axis_dynamic, inferred_dim);
-    if (status == xnn_shape_inference_status_error) {
-      return xnn_status_invalid_parameter;
-    }
+    output->shape.dim[output_axis_dynamic] = inferred_dim;
   } else {
     const size_t output_num_elements = xnn_shape_multiply_all_dims(&output->shape);
 

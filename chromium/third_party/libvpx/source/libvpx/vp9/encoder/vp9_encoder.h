@@ -339,6 +339,10 @@ typedef struct TileDataEnc {
 
   // Used for adaptive_rd_thresh with row multithreading
   int *row_base_thresh_freq_fact;
+  // The value of sb_rows when row_base_thresh_freq_fact is allocated.
+  // The row_base_thresh_freq_fact array has sb_rows * BLOCK_SIZES * MAX_MODES
+  // elements.
+  int sb_rows;
   MV firstpass_top_mv;
 } TileDataEnc;
 
@@ -1221,8 +1225,8 @@ int vp9_receive_raw_frame(VP9_COMP *cpi, vpx_enc_frame_flags_t frame_flags,
                           int64_t end_time);
 
 int vp9_get_compressed_data(VP9_COMP *cpi, unsigned int *frame_flags,
-                            size_t *size, uint8_t *dest, int64_t *time_stamp,
-                            int64_t *time_end, int flush,
+                            size_t *size, uint8_t *dest, size_t dest_size,
+                            int64_t *time_stamp, int64_t *time_end, int flush,
                             ENCODE_FRAME_RESULT *encode_frame_result);
 
 int vp9_get_preview_raw_frame(VP9_COMP *cpi, YV12_BUFFER_CONFIG *dest,
@@ -1345,7 +1349,13 @@ static INLINE int get_token_alloc(int mb_rows, int mb_cols) {
   // mb_rows, cols are in units of 16 pixels. We assume 3 planes all at full
   // resolution. We assume up to 1 token per pixel, and then allow
   // a head room of 4.
-  return mb_rows * mb_cols * (16 * 16 * 3 + 4);
+
+  // Use aligned mb_rows and mb_cols to better align with actual token sizes.
+  const int aligned_mb_rows =
+      ALIGN_POWER_OF_TWO(mb_rows, MI_BLOCK_SIZE_LOG2 - 1);
+  const int aligned_mb_cols =
+      ALIGN_POWER_OF_TWO(mb_cols, MI_BLOCK_SIZE_LOG2 - 1);
+  return aligned_mb_rows * aligned_mb_cols * (16 * 16 * 3 + 4);
 }
 
 // Get the allocated token size for a tile. It does the same calculation as in

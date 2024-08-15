@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: disk-format
 title: Disk format
 ---
@@ -68,7 +68,7 @@ Legacy boot for x86 Linux has three steps:
 
 Legacy BIOSes will continue to boot ChromiumOS from the MBR. The ChromiumOS
 build process places GPT-aware boot sector code from syslinux in the MBR. That
-code can specify one GPT partition to boot, indentified by a matching
+code can specify one GPT partition to boot, identified by a matching
 UniquePartitionGUID field in the Partition Entry Array.  We use partition 12 for
 this purpose. The second-stage syslinux bootloader is installed on that
 partition, along with its corresponding config file (/syslinux/syslinux.cfg). We
@@ -467,7 +467,7 @@ futility sign \
   --outfile /tmp/kernel.new
 ```
 
-For the recovery kernel on a removeable device, `<private_key>` above is
+For the recovery kernel on a removable device, `<private_key>` above is
 `recovery_kernel_data_key.vbprivk` and for the main kernel on the hard drive,
 the `<private_key>` is `kernel_data_key.vbprivk`. The full path to the key file
 is required, of course.

@@ -38,12 +38,18 @@
 }
 
 #pragma mark - SETTERS
+- (void)configureActionFactory:(BrowserActionFactory*)actionFactory {
+  [self.speedDialView configureActionFactory:actionFactory];
+}
+
 - (void)configureWith:(NSArray*)speedDials
                parent:(VivaldiSpeedDialItem*)parent
         faviconLoader:(FaviconLoader*)faviconLoader
           layoutStyle:(VivaldiStartPageLayoutStyle)style
          layoutColumn:(VivaldiStartPageLayoutColumn)column
          showAddGroup:(BOOL)showAddGroup
+    frequentlyVisited:(BOOL)frequentlyVisited
+    topSitesAvailable:(BOOL)topSitesAvailable
     verticalSizeClass:(UIUserInterfaceSizeClass)verticalSizeClass {
   [self.speedDialView configureWith:speedDials
                              parent:parent
@@ -51,6 +57,8 @@
                         layoutStyle:style
                        layoutColumn:column
                        showAddGroup:showAddGroup
+                  frequentlyVisited:frequentlyVisited
+                  topSitesAvailable:topSitesAvailable
                   verticalSizeClass:verticalSizeClass];
 }
 
@@ -113,6 +121,31 @@
 - (void)didSelectAddNewGroupForParent:(VivaldiSpeedDialItem*)parent {
   if (self.delegate)
     [self.delegate didSelectAddNewGroupForParent:parent];
+}
+
+- (void)didSelectItemToOpenInNewTab:(VivaldiSpeedDialItem*)item
+                             parent:(VivaldiSpeedDialItem*)parent {
+  if (self.delegate)
+    [self.delegate didSelectItemToOpenInNewTab:item parent:parent];
+}
+
+- (void)didSelectItemToOpenInBackgroundTab:(VivaldiSpeedDialItem*)item
+                                    parent:(VivaldiSpeedDialItem*)parent {
+  if (self.delegate)
+    [self.delegate didSelectItemToOpenInBackgroundTab:item parent:parent];
+}
+
+- (void)didSelectItemToOpenInPrivateTab:(VivaldiSpeedDialItem*)item
+                                 parent:(VivaldiSpeedDialItem*)parent {
+  if (self.delegate)
+    [self.delegate didSelectItemToOpenInPrivateTab:item parent:parent];
+}
+
+- (void)didSelectItemToShare:(VivaldiSpeedDialItem*)item
+                      parent:(VivaldiSpeedDialItem*)parent
+                    fromView:(UIView*)view {
+  if (self.delegate)
+    [self.delegate didSelectItemToShare:item parent:parent fromView:view];
 }
 
 @end

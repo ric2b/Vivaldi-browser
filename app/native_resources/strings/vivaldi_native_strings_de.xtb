@@ -83,11 +83,11 @@
 <translation id="3914946330804881301">Importiert von Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
 <translation id="3943857333388298514">Einfügen</translation>
-<translation id="3974783668264968389">Vivaldi kann Ihren sicheren Schlüsselspeicher nicht entsperren. Ohne diesen Speicher verlieren Sie Ihre gespeicherten Passwörter, die sicheren Cookies und einige Funktionen wie Synchronisation, Mail und Kalender funktionieren nicht mehr.
-
-    Bitte schließen Sie den Browser, entsperren oder reparieren Sie Ihren Schlüsselspeicher und versuchen Sie es erneut. Wenn Sie wirklich fortfahren möchten, markieren Sie das Kästchen und klicken Sie auf die Schaltfläche "Mit Datenverlust fortfahren".</translation>
 <translation id="4005270918754737597">Diese Version überspringen</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi konnte Ihren sicheren Schlüsselspeicher nicht freischalten. Ohne den Schlüsselspeicher verlieren Sie Ihre gespeicherten Logins, sichere Cookies, und einige Funktionen wie Sync, Mail und Kalender funktionieren nicht mehr.
+
+    Bitte beenden Sie jetzt, entsperren oder reparieren Sie Ihren Schlüsselspeicher und versuchen Sie es dann erneut. Möchten Sie wirklich fortfahren, aber Daten verlieren?</translation>
 <translation id="4074744496918018786">Bild in privatem Fenster öffnen</translation>
 <translation id="410351446219883937">Automatisch abspielen</translation>
 <translation id="4281844954008187215">Nutzungsbedingungen</translation>
@@ -178,6 +178,7 @@
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Portaldokument inspizieren</translation>
+<translation id="875142999698251063">Jetzt beenden</translation>
 <translation id="8768970203213061953">Landschaft 14</translation>
 <translation id="8773635261052182196">Sie werden diese Benachrichtigungen nicht mehr sehen. Sie können sie aber wieder in den Vivaldi-Einstellungen aktivieren.</translation>
 <translation id="8774017153185436870">Seiten können Videos automatisch abspielen</translation>

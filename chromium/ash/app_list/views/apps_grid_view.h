@@ -23,6 +23,7 @@
 #include "ash/app_list/model/app_list_model_observer.h"
 #include "ash/app_list/views/app_drag_icon_proxy.h"
 #include "ash/app_list/views/app_list_item_view.h"
+#include "ash/app_list/views/app_list_item_view_grid_delegate.h"
 #include "ash/ash_export.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
@@ -66,7 +67,7 @@ class PagedAppsGridViewTest;
 // - The main grid of apps in the launcher
 // - The grid of apps in a folder
 class ASH_EXPORT AppsGridView : public views::View,
-                                public AppListItemView::GridDelegate,
+                                public AppListItemViewGridDelegate,
                                 public AppListItemListObserver,
                                 public AppListItemObserver,
                                 public AppListModelObserver {
@@ -149,6 +150,7 @@ class ASH_EXPORT AppsGridView : public views::View,
   void EndDrag(bool cancel) override;
   void OnAppListItemViewActivated(AppListItemView* pressed_item_view,
                                   const ui::Event& event) override;
+  bool IsAboveTheFold(AppListItemView* item_view) override;
 
   bool IsDragging() const;
   bool IsDraggedView(const AppListItemView* view) const;
@@ -173,7 +175,8 @@ class ASH_EXPORT AppsGridView : public views::View,
   const AppListItem* drag_item() const { return drag_item_; }
 
   // Overridden from views::View:
-  gfx::Size CalculatePreferredSize() const override;
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   bool OnKeyReleased(const ui::KeyEvent& event) override;
   void ViewHierarchyChanged(
@@ -600,7 +603,8 @@ class ASH_EXPORT AppsGridView : public views::View,
   // True if the AppList is in cardified state. "Cardified" means showing a
   // rounded rectangle background "card" behind each page during a drag. The
   // grid icons are reduced in size in this state.
-  // TODO(crbug.com/1211608): Move cardified state members to PagedAppsGridView.
+  // TODO(crbug.com/40182999): Move cardified state members to
+  // PagedAppsGridView.
   bool cardified_state_ = false;
 
   // Tile spacing between the tile views.

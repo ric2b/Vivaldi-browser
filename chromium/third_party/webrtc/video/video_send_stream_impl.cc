@@ -221,10 +221,9 @@ absl::optional<float> GetConfiguredPacingFactor(
   if (alr_settings)
     return alr_settings->pacing_factor;
 
-  RateControlSettings rate_control_settings =
-      RateControlSettings::ParseFromKeyValueConfig(&field_trials);
-  return rate_control_settings.GetPacingFactor().value_or(
-      default_pacing_config.pacing_factor);
+  return RateControlSettings(field_trials)
+      .GetPacingFactor()
+      .value_or(default_pacing_config.pacing_factor);
 }
 
 int GetEncoderPriorityBitrate(std::string codec_name,
@@ -355,7 +354,7 @@ std::unique_ptr<VideoStreamEncoderInterface> CreateVideoStreamEncoder(
   TaskQueueBase* encoder_queue_ptr = encoder_queue.get();
   return std::make_unique<VideoStreamEncoder>(
       env, num_cpu_cores, stats_proxy, encoder_settings,
-      std::make_unique<OveruseFrameDetector>(stats_proxy),
+      std::make_unique<OveruseFrameDetector>(env, stats_proxy),
       FrameCadenceAdapterInterface::Create(
           &env.clock(), encoder_queue_ptr, metronome,
           /*worker_queue=*/TaskQueueBase::Current(), env.field_trials()),
@@ -485,9 +484,8 @@ VideoSendStreamImpl::VideoSendStreamImpl(
       enable_alr_bw_probing = true;
       queue_time_limit_ms = alr_settings->max_paced_queue_time;
     } else {
-      RateControlSettings rate_control_settings =
-          RateControlSettings::ParseFromKeyValueConfig(&env_.field_trials());
-      enable_alr_bw_probing = rate_control_settings.UseAlrProbing();
+      enable_alr_bw_probing =
+          RateControlSettings(env_.field_trials()).UseAlrProbing();
       queue_time_limit_ms = pacing_config_.max_pacing_delay.Get().ms();
     }
 
@@ -683,7 +681,8 @@ void VideoSendStreamImpl::Stop() {
   if (!rtp_video_sender_->IsActive())
     return;
 
-  TRACE_EVENT_INSTANT0("webrtc", "VideoSendStream::Stop");
+  TRACE_EVENT_INSTANT0("webrtc", "VideoSendStream::Stop",
+                       TRACE_EVENT_SCOPE_GLOBAL);
   rtp_video_sender_->SetSending(false);
   if (IsRunning()) {
     StopVideoSendStream();
@@ -801,7 +800,7 @@ void VideoSendStreamImpl::OnEncoderConfigurationChanged(
         PayloadStringToCodecType(config_.rtp.payload_name);
 
     const absl::optional<DataRate> experimental_min_bitrate =
-        GetExperimentalMinVideoBitrate(codec_type);
+        GetExperimentalMinVideoBitrate(env_.field_trials(), codec_type);
     encoder_min_bitrate_bps_ =
         experimental_min_bitrate
             ? experimental_min_bitrate->bps()

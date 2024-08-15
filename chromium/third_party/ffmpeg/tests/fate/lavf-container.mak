@@ -30,7 +30,7 @@ FATE_LAVF_CONTAINER_SCALE := dv dv_pal dv_ntsc flm gxf gxf_pal gxf_ntsc \
 FATE_LAVF_CONTAINER-$(!CONFIG_SCALE_FILTER) := $(filter-out $(FATE_LAVF_CONTAINER_SCALE),$(FATE_LAVF_CONTAINER-yes))
 
 FATE_LAVF_CONTAINER = $(FATE_LAVF_CONTAINER-yes:%=fate-lavf-%)
-FATE_LAVF_CONTAINER := $(if $(call ENCDEC2, RAWVIDEO PGMYUV, PCM_S16LE, CRC IMAGE2, PCM_S16LE_DEMUXER PIPE_PROTOCOL), $(FATE_LAVF_CONTAINER))
+FATE_LAVF_CONTAINER := $(if $(call ENCDEC2, RAWVIDEO PGMYUV, PCM_S16LE, CRC IMAGE2, PCM_S16LE_DEMUXER PIPE_PROTOCOL FFMPEG), $(FATE_LAVF_CONTAINER))
 
 $(FATE_LAVF_CONTAINER): CMD = lavf_container
 $(FATE_LAVF_CONTAINER): REF = $(SRC_PATH)/tests/ref/lavf/$(@:fate-lavf-%=%)
@@ -78,8 +78,9 @@ FATE_LAVF_CONTAINER_FATE-$(call ALLYES, MATROSKA_DEMUXER   OGG_MUXER)          +
 FATE_LAVF_CONTAINER_FATE-$(call ALLYES, MATROSKA_DEMUXER   OGV_MUXER)          += vp8.ogg
 FATE_LAVF_CONTAINER_FATE-$(call ALLYES, MOV_DEMUXER        LATM_MUXER)         += latm
 FATE_LAVF_CONTAINER_FATE-$(call ALLYES, MP3_DEMUXER        MP3_MUXER)          += mp3
-FATE_LAVF_CONTAINER_FATE-$(call ALLYES, MOV_DEMUXER        MOV_MUXER)          += qtrle_mace6.mov
-FATE_LAVF_CONTAINER_FATE-$(call ALLYES, AVI_DEMUXER        AVI_MUXER)          += cram.avi
+FATE_LAVF_CONTAINER_FATE-$(call ALLYES, MOV_DEMUXER MOV_MUXER ARESAMPLE_FILTER) += qtrle_mace6.mov
+FATE_LAVF_CONTAINER_FATE-$(call ALLYES, AVI_DEMUXER AVI_MUXER ARESAMPLE_FILTER) += cram.avi
+FATE_LAVF_CONTAINER_FATE-$(call ALLYES, AVI_DEMUXER        FLV_MUXER)           += hevc.flv
 
 FATE_LAVF_CONTAINER_FATE = $(FATE_LAVF_CONTAINER_FATE-yes:%=fate-lavf-fate-%)
 
@@ -96,6 +97,7 @@ fate-lavf-fate-latm: CMD = lavf_container_fate "aac/al04_44.mp4" "" "-acodec cop
 fate-lavf-fate-mp3: CMD = lavf_container_fate "mp3-conformance/he_32khz.bit" "" "-acodec copy"
 fate-lavf-fate-qtrle_mace6.mov: CMD = lavf_container_fate "qtrle/Animation-16Greys.mov" "-idct auto"
 fate-lavf-fate-cram.avi: CMD = lavf_container_fate "cram/toon.avi" "-idct auto"
+fate-lavf-fate-hevc.flv: CMD = lavf_container_fate "mkv/hdr10tags-both.mkv" "" "-c:v copy"
 
 FATE_SAMPLES_FFMPEG += $(FATE_LAVF_CONTAINER_FATE)
 fate-lavf-fate fate-lavf: $(FATE_LAVF_CONTAINER_FATE)

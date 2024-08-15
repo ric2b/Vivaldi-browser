@@ -20,11 +20,13 @@ namespace textlayout {
 class ParagraphBuilderImpl : public ParagraphBuilder {
 public:
     ParagraphBuilderImpl(const ParagraphStyle& style,
-        sk_sp<FontCollection> fontCollection,
-        std::unique_ptr<SkUnicode> unicode);
+                         sk_sp<FontCollection> fontCollection,
+                         sk_sp<SkUnicode> unicode);
 
+#if !defined(SK_DISABLE_LEGACY_PARAGRAPH_UNICODE)
     // Just until we fix all the code; calls icu::make inside
     ParagraphBuilderImpl(const ParagraphStyle& style, sk_sp<FontCollection> fontCollection);
+#endif
 
     ~ParagraphBuilderImpl() override;
 
@@ -64,6 +66,7 @@ public:
     SkSpan<char> getText() override;
     const ParagraphStyle& getParagraphStyle() const override;
 
+#if !defined(SK_DISABLE_LEGACY_CLIENT_UNICODE) && defined(SK_UNICODE_CLIENT_IMPLEMENTATION)
     void setWordsUtf8(std::vector<SkUnicode::Position> wordsUtf8) override;
     void setWordsUtf16(std::vector<SkUnicode::Position> wordsUtf16) override;
 
@@ -73,19 +76,30 @@ public:
     void setLineBreaksUtf8(std::vector<SkUnicode::LineBreakBefore> lineBreaksUtf8) override;
     void setLineBreaksUtf16(std::vector<SkUnicode::LineBreakBefore> lineBreaksUtf16) override;
 
-    void SetUnicode(std::unique_ptr<SkUnicode> unicode) override {
+    std::tuple<std::vector<SkUnicode::Position>,
+               std::vector<SkUnicode::Position>,
+               std::vector<SkUnicode::LineBreakBefore>>
+        getClientICUData() const override {
+            return { fWordsUtf16, fGraphemeBreaksUtf8, fLineBreaksUtf8 };
+    }
+
+    void SetUnicode(sk_sp<SkUnicode> unicode) override {
         fUnicode = std::move(unicode);
     }
+#endif
     // Support for Flutter optimization
     void Reset() override;
 
     static std::unique_ptr<ParagraphBuilder> make(const ParagraphStyle& style,
                                                   sk_sp<FontCollection> fontCollection,
-                                                  std::unique_ptr<SkUnicode> unicode);
+                                                  sk_sp<SkUnicode> unicode);
 
+
+#if !defined(SK_DISABLE_LEGACY_PARAGRAPH_UNICODE)
     // Just until we fix all the code; calls icu::make inside
     static std::unique_ptr<ParagraphBuilder> make(const ParagraphStyle& style,
                                                   sk_sp<FontCollection> fontCollection);
+#endif
 
     static bool RequiresClientICU();
 protected:
@@ -102,7 +116,7 @@ protected:
     sk_sp<FontCollection> fFontCollection;
     ParagraphStyle fParagraphStyle;
 
-    std::shared_ptr<SkUnicode> fUnicode;
+    sk_sp<SkUnicode> fUnicode;
 private:
     SkOnce fillUTF16MappingOnce;
     void ensureUTF16Mapping();

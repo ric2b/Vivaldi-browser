@@ -21,7 +21,6 @@
 <translation id="2470702053775288986">असमर्थित एक्‍सटेंशन अक्षम</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">फिर से-सक्षम करें</translation>
-<translation id="2809586584051668049">तथा <ph name="NUMBER_ADDITIONAL_DISABLED" /> और</translation>
 <translation id="2850541429955027218">थीम जोड़ें</translation>
 <translation id="2861941300086904918">नेटिव क्लाइंट सुरक्षा प्रबंधक</translation>
 <translation id="2932883381142163287">दुर्व्यवहार की रिपोर्ट करें</translation>
@@ -30,7 +29,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3222066309010235055">प्रीरेंडर: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">पैक के एक्सटेंशनकी मूल निर्देशिका को चुनें. किसी एक्स्टेंशन को अपडेट करने के लिए, पुन: उपयोग के लिए निजी कुंजी फ़ाइल का भी चुनें.</translation>
-<translation id="3288047731229977326">डेवलपर मोड में चलने वाले एक्सटेंशन आपके कंप्यूटर को नुकसान पहुंचा सकते हैं. यदि आप कोई डेवलपर नहीं हैं, तो सुरक्षित रहने के लिए आपको डेवलपर मोड मे चलने वाले इन एक्सटेंशन को अक्षम करना चाहिए.</translation>
 <translation id="3378572629723696641">यह एक्‍सटेंशन दूषित हो सकता है.</translation>
 <translation id="3678156199662914018">एक्‍सटेंशन: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">ऐप को ठीक करें</translation>
@@ -41,7 +39,6 @@
 <translation id="4087089424473531098">एक्सटेंशमन बनाया गया:
 
 <ph name="EXTENSION_FILE" />￼</translation>
-<translation id="4096508467498758490">डेवलपर मोड एक्सटेंशन अक्षम करें</translation>
 <translation id="4100839878934973028">आपके कंप्यूटर पर किसी अन्य प्रोग्राम ने ऐप्स  जोड़ा है, जो Vivaldi के काम करने के तरीके को बदल सकता है.</translation>
 <translation id="4176463684765177261">अक्षम</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K लाइव)</translation>
@@ -54,7 +51,6 @@
 <translation id="5143374789336132547">एक्सटेंशन "<ph name="EXTENSION_NAME" />" ने यह बदल दिया है कि जब आप होम बटन क्लिक करते हैं तब कौन सा पेज दिखाया जाए.</translation>
 <translation id="5233231016133573565">प्रक्रिया आईडी</translation>
 <translation id="52912272896845572">निजी कुंजी फ़ाइल अमान्य है.</translation>
-<translation id="5301954838959518834">ठीक है, समझ गया/गई</translation>
 <translation id="5362741141255528695">निजी कुंजी फ़ाइल को चुनें.</translation>
 <translation id="5485102783864353244">ऐप जोड़ें</translation>
 <translation id="5521078259930077036">क्या यह वही मुख्यपृष्ठ है जिसकी आप अपेक्षा कर रहे थे?</translation>

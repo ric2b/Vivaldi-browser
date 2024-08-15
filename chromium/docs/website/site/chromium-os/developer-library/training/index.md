@@ -1,18 +1,17 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library
-  - Chromium OS > Developer Library
+  - ChromiumOS
 page_name: training
 title: Training
 ---
 
-> 🚧 The library is currently under construction. See
-> [the CrOS Developer Library Proposal](/chromium-os/developer-library/proposal)
-> for more information.
-
 ## Codelabs
 
+* [Autotest client tests](/chromium-os/developer-library/training/codelabs/autotest-client-tests)
 * [Debugging crashes](/chromium-os/developer-library/training/codelabs/debugging-crashes)
+* [Creating and deploying ChromiumOS dynamic test suites](/chromium-os/developer-library/training/codelabs/dynamic-suite-codelab)
+* [Server Side test for ChromiumOS autotest codelab](/chromium-os/developer-library/training/codelabs/server-side-test)
 
 ## Tech Talks
 
@@ -99,7 +98,10 @@ title: Training
     <tr>
       <td>WebUI Walkthrough</td>
       <td>
-        TODO(jhawkins): Find the link to the video.
+        <a href="https://drive.google.com/file/d/1bKDsNKP-HdcVCpo3YsgeEdrkrOFp1ABV/view"
+            target="_blank">
+          Video
+        </a>
       </td>
       <td>
         <a href="https://docs.google.com/presentation/d/1HxbpU0js2rqmH2Mb90PIF_Z7g3MYb04ACXngQZfLGfU/edit?usp=sharing"

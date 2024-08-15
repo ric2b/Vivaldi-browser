@@ -44,6 +44,7 @@ if (skia_enable_skottie) {
       sources = [
         "utils/SkottieUtils.cpp",
         "utils/TextEditor.cpp",
+        "utils/TextPreshape.cpp",
       ]
       deps = [
         ":skottie",
@@ -75,6 +76,7 @@ if (skia_enable_skottie) {
           "../..:skia",
           "../..:test",
           "../skshaper",
+          "../skunicode",
         ]
       }
 
@@ -116,6 +118,7 @@ if (skia_enable_skottie) {
           "../..:gpu_tool_utils",
           "../..:skia",
           "../../experimental/ffmpeg:video_encoder",
+          "../skshaper",
         ]
 
         public_deps = [
@@ -138,6 +141,7 @@ if (skia_enable_skottie) {
           "../..:gpu_tool_utils",
           "../..:skia",
           "../../experimental/ffmpeg:video_encoder",
+          "../skshaper",
         ]
 
         public_deps = [
@@ -159,6 +163,7 @@ if (skia_enable_skottie) {
           "../..:gpu_tool_utils",
           "../..:skia",
           "../../experimental/ffmpeg:video_encoder",
+          "../skshaper",
         ]
 
         public_deps = [
@@ -167,6 +172,23 @@ if (skia_enable_skottie) {
         ]
       }
 
+      skia_source_set("preshape_tool") {
+        check_includes = false
+        testonly = true
+
+        configs = [ "../..:skia_private" ]
+        sources = [ "utils/PreshapeTool.cpp" ]
+
+        deps = [
+          "../..:flags",
+          "../..:skia",
+        ]
+
+        public_deps = [
+          ":skottie",
+          ":utils",
+        ]
+      }
       skia_source_set("gm") {
         check_includes = false
         testonly = true
@@ -186,6 +208,7 @@ if (skia_enable_skottie) {
           "../..:gpu_tool_utils",
           "../..:skia",
           "../..:tool_utils",
+          "../skshaper",
         ]
       }
     }

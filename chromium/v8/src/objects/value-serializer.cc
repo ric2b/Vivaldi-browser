@@ -691,8 +691,7 @@ Maybe<bool> ValueSerializer::WriteJSObject(Handle<JSObject> object) {
                   details.location() == PropertyLocation::kField)) {
       DCHECK_EQ(PropertyKind::kData, details.kind());
       FieldIndex field_index = FieldIndex::ForDetails(*map, details);
-      value = JSObject::FastPropertyAt(isolate_, object,
-                                       details.representation(), field_index);
+      value = handle(object->RawFastPropertyAt(field_index), isolate_);
     } else {
       // This logic should essentially match WriteJSObjectPropertiesSlow.
       // If the property is no longer found, do not serialize it.
@@ -1131,11 +1130,8 @@ Maybe<bool> ValueSerializer::WriteWasmModule(Handle<WasmModuleObject> object) {
     return ThrowDataCloneError(MessageTemplate::kDataCloneError, object);
   }
 
-  // TODO(titzer): introduce a Utils::ToLocal for WasmModuleObject.
   Maybe<uint32_t> transfer_id = delegate_->GetWasmModuleTransferId(
-      reinterpret_cast<v8::Isolate*>(isolate_),
-      v8::Local<v8::WasmModuleObject>::Cast(
-          Utils::ToLocal(Handle<JSObject>::cast(object))));
+      reinterpret_cast<v8::Isolate*>(isolate_), Utils::ToLocal(object));
   RETURN_VALUE_IF_EXCEPTION(isolate_, Nothing<bool>());
   uint32_t id = 0;
   if (transfer_id.To(&id)) {
@@ -1264,7 +1260,7 @@ Maybe<bool> ValueSerializer::ThrowDataCloneError(
 }
 
 Maybe<bool> ValueSerializer::ThrowDataCloneError(MessageTemplate index,
-                                                 Handle<Object> arg0) {
+                                                 DirectHandle<Object> arg0) {
   Handle<String> message =
       MessageFormatter::Format(isolate_, index, base::VectorOf({arg0}));
   if (delegate_) {

@@ -45,7 +45,7 @@ TEST_F(ProgramToIRVarTest, Emit_GlobalVar_NoInit) {
     auto m = Build();
     ASSERT_EQ(m, Success);
 
-    EXPECT_EQ(Disassemble(m.Get()), R"(%b1 = block {  # root
+    EXPECT_EQ(Disassemble(m.Get()).Plain(), R"($B1: {  # root
   %a:ptr<private, u32, read_write> = var
 }
 
@@ -59,7 +59,7 @@ TEST_F(ProgramToIRVarTest, Emit_GlobalVar_Init) {
     auto m = Build();
     ASSERT_EQ(m, Success);
 
-    EXPECT_EQ(Disassemble(m.Get()), R"(%b1 = block {  # root
+    EXPECT_EQ(Disassemble(m.Get()).Plain(), R"($B1: {  # root
   %a:ptr<private, u32, read_write> = var, 2u
 }
 
@@ -72,7 +72,7 @@ TEST_F(ProgramToIRVarTest, Emit_GlobalVar_GroupBinding) {
     auto m = Build();
     ASSERT_EQ(m, Success);
 
-    EXPECT_EQ(Disassemble(m.Get()), R"(%b1 = block {  # root
+    EXPECT_EQ(Disassemble(m.Get()).Plain(), R"($B1: {  # root
   %a:ptr<storage, u32, read> = var @binding_point(2, 3)
 }
 
@@ -86,9 +86,9 @@ TEST_F(ProgramToIRVarTest, Emit_Var_NoInit) {
     auto m = Build();
     ASSERT_EQ(m, Success);
 
-    EXPECT_EQ(Disassemble(m.Get()),
-              R"(%test_function = @compute @workgroup_size(1, 1, 1) func():void -> %b1 {
-  %b1 = block {
+    EXPECT_EQ(Disassemble(m.Get()).Plain(),
+              R"(%test_function = @compute @workgroup_size(1, 1, 1) func():void {
+  $B1: {
     %a:ptr<function, u32, read_write> = var
     ret
   }
@@ -104,9 +104,9 @@ TEST_F(ProgramToIRVarTest, Emit_Var_Init_Constant) {
     auto m = Build();
     ASSERT_EQ(m, Success);
 
-    EXPECT_EQ(Disassemble(m.Get()),
-              R"(%test_function = @compute @workgroup_size(1, 1, 1) func():void -> %b1 {
-  %b1 = block {
+    EXPECT_EQ(Disassemble(m.Get()).Plain(),
+              R"(%test_function = @compute @workgroup_size(1, 1, 1) func():void {
+  $B1: {
     %a:ptr<function, u32, read_write> = var, 2u
     ret
   }
@@ -122,9 +122,9 @@ TEST_F(ProgramToIRVarTest, Emit_Var_Init_NonConstant) {
     auto m = Build();
     ASSERT_EQ(m, Success);
 
-    EXPECT_EQ(Disassemble(m.Get()),
-              R"(%test_function = @compute @workgroup_size(1, 1, 1) func():void -> %b1 {
-  %b1 = block {
+    EXPECT_EQ(Disassemble(m.Get()).Plain(),
+              R"(%test_function = @compute @workgroup_size(1, 1, 1) func():void {
+  $B1: {
     %a:ptr<function, u32, read_write> = var
     %3:u32 = load %a
     %4:u32 = add %3, 2u
@@ -142,9 +142,9 @@ TEST_F(ProgramToIRVarTest, Emit_Var_Assign_42i) {
     auto m = Build();
     ASSERT_EQ(m, Success);
 
-    EXPECT_EQ(Disassemble(m.Get()),
-              R"(%test_function = @compute @workgroup_size(1, 1, 1) func():void -> %b1 {
-  %b1 = block {
+    EXPECT_EQ(Disassemble(m.Get()).Plain(),
+              R"(%test_function = @compute @workgroup_size(1, 1, 1) func():void {
+  $B1: {
     %a:ptr<function, i32, read_write> = var
     store %a, 42i
     ret
@@ -179,14 +179,14 @@ TEST_F(ProgramToIRVarTest, Emit_Var_Assign_ArrayOfArray_EvalOrder) {
     auto m = Build();
     ASSERT_EQ(m, Success);
 
-    EXPECT_EQ(Disassemble(m.Get()),
-              R"(%f = func(%p:i32):i32 -> %b1 {
-  %b1 = block {
+    EXPECT_EQ(Disassemble(m.Get()).Plain(),
+              R"(%f = func(%p:i32):i32 {
+  $B1: {
     ret %p
   }
 }
-%test_function = @compute @workgroup_size(1, 1, 1) func():void -> %b2 {
-  %b2 = block {
+%test_function = @compute @workgroup_size(1, 1, 1) func():void {
+  $B2: {
     %a:ptr<function, array<array<array<i32, 5>, 5>, 5>, read_write> = var
     %5:i32 = call %f, 1i
     %6:i32 = call %f, 2i
@@ -225,14 +225,14 @@ TEST_F(ProgramToIRVarTest, Emit_Var_Assign_ArrayOfVec_EvalOrder) {
     auto m = Build();
     ASSERT_EQ(m, Success);
 
-    EXPECT_EQ(Disassemble(m.Get()),
-              R"(%f = func(%p:i32):i32 -> %b1 {
-  %b1 = block {
+    EXPECT_EQ(Disassemble(m.Get()).Plain(),
+              R"(%f = func(%p:i32):i32 {
+  $B1: {
     ret %p
   }
 }
-%test_function = @compute @workgroup_size(1, 1, 1) func():void -> %b2 {
-  %b2 = block {
+%test_function = @compute @workgroup_size(1, 1, 1) func():void {
+  $B2: {
     %a:ptr<function, array<vec4<f32>, 5>, read_write> = var
     %5:i32 = call %f, 1i
     %6:ptr<function, vec4<f32>, read_write> = access %a, %5
@@ -273,14 +273,14 @@ TEST_F(ProgramToIRVarTest, Emit_Var_Assign_ArrayOfMatrix_EvalOrder) {
     auto m = Build();
     ASSERT_EQ(m, Success);
 
-    EXPECT_EQ(Disassemble(m.Get()),
-              R"(%f = func(%p:i32):i32 -> %b1 {
-  %b1 = block {
+    EXPECT_EQ(Disassemble(m.Get()).Plain(),
+              R"(%f = func(%p:i32):i32 {
+  $B1: {
     ret %p
   }
 }
-%test_function = @compute @workgroup_size(1, 1, 1) func():void -> %b2 {
-  %b2 = block {
+%test_function = @compute @workgroup_size(1, 1, 1) func():void {
+  $B2: {
     %a:ptr<function, array<mat3x4<f32>, 5>, read_write> = var
     %5:i32 = call %f, 1i
     %6:i32 = call %f, 2i
@@ -305,9 +305,9 @@ TEST_F(ProgramToIRVarTest, Emit_Var_CompoundAssign_42i) {
     auto m = Build();
     ASSERT_EQ(m, Success);
 
-    EXPECT_EQ(Disassemble(m.Get()),
-              R"(%test_function = @compute @workgroup_size(1, 1, 1) func():void -> %b1 {
-  %b1 = block {
+    EXPECT_EQ(Disassemble(m.Get()).Plain(),
+              R"(%test_function = @compute @workgroup_size(1, 1, 1) func():void {
+  $B1: {
     %a:ptr<function, i32, read_write> = var
     %3:i32 = load %a
     %4:i32 = add %3, 42i
@@ -344,14 +344,14 @@ TEST_F(ProgramToIRVarTest, Emit_Var_CompoundAssign_ArrayOfArray_EvalOrder) {
     auto m = Build();
     ASSERT_EQ(m, Success);
 
-    EXPECT_EQ(Disassemble(m.Get()),
-              R"(%f = func(%p:i32):i32 -> %b1 {
-  %b1 = block {
+    EXPECT_EQ(Disassemble(m.Get()).Plain(),
+              R"(%f = func(%p:i32):i32 {
+  $B1: {
     ret %p
   }
 }
-%test_function = @compute @workgroup_size(1, 1, 1) func():void -> %b2 {
-  %b2 = block {
+%test_function = @compute @workgroup_size(1, 1, 1) func():void {
+  $B2: {
     %a:ptr<function, array<array<array<i32, 5>, 5>, 5>, read_write> = var
     %5:i32 = call %f, 1i
     %6:i32 = call %f, 2i
@@ -396,14 +396,14 @@ TEST_F(ProgramToIRVarTest, Emit_Var_CompoundAssign_ArrayOfMatrix_EvalOrder) {
     auto m = Build();
     ASSERT_EQ(m, Success);
 
-    EXPECT_EQ(Disassemble(m.Get()),
-              R"(%f = func(%p:i32):i32 -> %b1 {
-  %b1 = block {
+    EXPECT_EQ(Disassemble(m.Get()).Plain(),
+              R"(%f = func(%p:i32):i32 {
+  $B1: {
     ret %p
   }
 }
-%test_function = @compute @workgroup_size(1, 1, 1) func():void -> %b2 {
-  %b2 = block {
+%test_function = @compute @workgroup_size(1, 1, 1) func():void {
+  $B2: {
     %a:ptr<function, array<mat3x4<f32>, 5>, read_write> = var
     %5:i32 = call %f, 1i
     %6:i32 = call %f, 2i

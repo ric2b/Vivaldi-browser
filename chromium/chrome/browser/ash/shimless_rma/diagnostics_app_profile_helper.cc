@@ -11,13 +11,16 @@
 #include <vector>
 
 #include "ash/constants/ash_features.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "ash/webui/shimless_rma/backend/shimless_rma_delegate.h"
-#include "base/containers/fixed_flat_set.h"
+#include "base/containers/fixed_flat_map.h"
 #include "base/files/file_path.h"
+#include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "chrome/browser/ash/shimless_rma/chrome_shimless_rma_delegate.h"
 #include "chrome/browser/ash/shimless_rma/diagnostics_app_profile_helper_constants.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/crx_installer.h"
@@ -32,7 +35,9 @@
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chromeos/extensions/chromeos_system_extension_info.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
 #include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/service_worker_context.h"
@@ -46,6 +51,8 @@
 #include "extensions/common/verifier_formats.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "url/origin.h"
 
 namespace context {
 class BrowserContext;
@@ -61,12 +68,21 @@ constexpr base::TimeDelta kExtensionReadyPollingInterval =
 constexpr base::TimeDelta kExtensionReadyPollingTimeout = base::Seconds(3);
 
 // The set of allowlisted permission policy for diagnostics IWA.
-constexpr auto kAllowlistedPermissionPolicy =
-    base::MakeFixedFlatSet<blink::mojom::PermissionsPolicyFeature>(
-        {blink::mojom::PermissionsPolicyFeature::kCamera,
-         blink::mojom::PermissionsPolicyFeature::kFullscreen,
-         blink::mojom::PermissionsPolicyFeature::kMicrophone,
-         blink::mojom::PermissionsPolicyFeature::kHid});
+constexpr auto kAllowlistedPermissionPolicyStringMap =
+    base::MakeFixedFlatMap<blink::mojom::PermissionsPolicyFeature, int>(
+        {{blink::mojom::PermissionsPolicyFeature::kCamera,
+          IDS_ASH_SHIMLESS_RMA_APP_ACCESS_PERMISSION_CAMERA},
+         {blink::mojom::PermissionsPolicyFeature::kMicrophone,
+          IDS_ASH_SHIMLESS_RMA_APP_ACCESS_PERMISSION_MICROPHONE},
+         {blink::mojom::PermissionsPolicyFeature::kFullscreen,
+          IDS_ASH_SHIMLESS_RMA_APP_ACCESS_PERMISSION_FULLSCREEN},
+         {blink::mojom::PermissionsPolicyFeature::kHid,
+          IDS_ASH_SHIMLESS_RMA_APP_ACCESS_PERMISSION_HID_DEVICES}});
+
+std::optional<url::Origin>& GetInstalledDiagnosticsAppOriginInternal() {
+  static base::NoDestructor<std::optional<url::Origin>> g_origin;
+  return *g_origin;
+}
 
 extensions::ExtensionService* GetExtensionService(
     content::BrowserContext* context) {
@@ -118,6 +134,7 @@ struct PrepareDiagnosticsAppProfileState {
   std::optional<web_package::SignedWebBundleId> iwa_id;
   std::optional<std::string> name;
   std::optional<std::string> permission_message;
+  std::optional<GURL> iwa_start_url;
 };
 
 PrepareDiagnosticsAppProfileState::PrepareDiagnosticsAppProfileState() =
@@ -135,6 +152,10 @@ void ReportSuccess(std::unique_ptr<PrepareDiagnosticsAppProfileState> state) {
   CHECK(state->context);
   CHECK(state->extension_id);
   CHECK(state->iwa_id);
+  CHECK(state->iwa_start_url);
+
+  GetInstalledDiagnosticsAppOriginInternal() =
+      url::Origin::Create(state->iwa_start_url.value());
 
   std::move(state->callback)
       .Run(base::ok(
@@ -167,14 +188,35 @@ void OnIsolatedWebAppInstalled(
   // custom checker. For now, we just install the IWA. Because we won't return
   // the profile and won't launch the IWA it should be fine.
   if (!web_app->permissions_policy().empty()) {
+    if (!ash::features::
+            IsShimlessRMA3pDiagnosticsAllowPermissionPolicyEnabled()) {
+      ReportError(std::move(state), k3pDiagErrorIWACannotHasPermissionPolicy);
+      return;
+    }
+
+    std::u16string permission_message;
     for (const auto& permission_policy : web_app->permissions_policy()) {
-      if (!kAllowlistedPermissionPolicy.contains(permission_policy.feature)) {
+      if (!kAllowlistedPermissionPolicyStringMap.contains(
+              permission_policy.feature)) {
         ReportError(std::move(state), k3pDiagErrorIWACannotHasPermissionPolicy);
         return;
       }
+      base::StrAppend(
+          &permission_message,
+          {u"- ",
+           l10n_util::GetStringUTF16(kAllowlistedPermissionPolicyStringMap.at(
+               permission_policy.feature)),
+           u"\n"});
     }
+    state->permission_message = state->permission_message.value_or("");
+    base::StrAppend(&*state->permission_message,
+                    {base::UTF16ToUTF8(l10n_util::GetStringUTF16(
+                         IDS_ASH_SHIMLESS_RMA_APP_ACCESS_PERMISSION)),
+                     "\n", base::UTF16ToUTF8(permission_message)});
   }
+
   state->name = web_app->untranslated_name();
+  state->iwa_start_url = web_app->start_url();
 
   ReportSuccess(std::move(state));
 }
@@ -410,12 +452,18 @@ const web_app::WebApp* DiagnosticsAppProfileHelperDelegate::GetWebAppById(
   return registrar.GetAppById(app_id);
 }
 
+const std::optional<url::Origin>&
+DiagnosticsAppProfileHelperDelegate::GetInstalledDiagnosticsAppOrigin() {
+  return GetInstalledDiagnosticsAppOriginInternal();
+}
+
 void PrepareDiagnosticsAppProfile(
     DiagnosticsAppProfileHelperDelegate* delegate,
     const base::FilePath& crx_path,
     const base::FilePath& swbn_path,
     ShimlessRmaDelegate::PrepareDiagnosticsAppBrowserContextCallback callback) {
   CHECK(::ash::features::IsShimlessRMA3pDiagnosticsEnabled());
+  GetInstalledDiagnosticsAppOriginInternal() = std::nullopt;
   auto state = std::make_unique<PrepareDiagnosticsAppProfileState>();
   state->delegate = delegate;
   state->crx_path = crx_path;

@@ -1926,6 +1926,28 @@
         }
       },
       {
+        "name": "getParentExceptionId",
+        "type": "function",
+        "description": "Returns the parent event id of a exception event id.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "exception_event_id",
+            "description": "The id of the event exception to return the parent event id for."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "parent_event_id",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      {
         "name": "deleteEventTemplate",
         "type": "function",
         "description": "Deletes an event template.",
@@ -1933,7 +1955,7 @@
           {
             "type": "string",
             "name": "id",
-	    "description": "The id of the event template to delete."
+            "description": "The id of the event template to delete."
           }
         ],
         "returns_async": {

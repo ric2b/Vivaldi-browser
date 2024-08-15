@@ -12,6 +12,8 @@
 #include "components/plus_addresses/mock_plus_address_http_client.h"
 #include "components/plus_addresses/plus_address_http_client.h"
 #include "components/plus_addresses/plus_address_service.h"
+#include "components/plus_addresses/plus_address_test_utils.h"
+#include "components/plus_addresses/plus_address_types.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -28,15 +30,15 @@ using ::testing::UnorderedElementsAreArray;
 
 class PlusAddressAffiliationSourceAdapterTest : public testing::Test {
  protected:
-  PlusAddressAffiliationSourceAdapterTest()
-      : service_(
-            /*identity_manager=*/nullptr,
-            /*pref_service=*/nullptr,
-            std::make_unique<testing::NiceMock<MockPlusAddressHttpClient>>(),
-            /*webdata_service=*/nullptr),
-        adapter_(std::make_unique<PlusAddressAffiliationSourceAdapter>(
-            &service_,
-            &mock_source_observer_)) {}
+  PlusAddressAffiliationSourceAdapterTest() {
+    service_ = std::make_unique<PlusAddressService>(
+        /*identity_manager=*/nullptr,
+        /*pref_service=*/nullptr,
+        std::make_unique<testing::NiceMock<MockPlusAddressHttpClient>>(),
+        /*webdata_service=*/nullptr);
+    adapter_ =
+        std::make_unique<PlusAddressAffiliationSourceAdapter>(service_.get());
+  }
 
   testing::AssertionResult ExpectAdapterToReturnFacets(
       const std::vector<FacetURI>& expected_facets) {
@@ -51,22 +53,18 @@ class PlusAddressAffiliationSourceAdapterTest : public testing::Test {
                       : (AssertionFailure() << "Error fetching facets.");
   }
 
-  PlusAddressService& service() { return service_; }
-
-  affiliations::MockAffiliationSourceObserver& mock_source_observer() {
-    return mock_source_observer_;
+  affiliations::MockAffiliationSourceObserver* mock_source_observer() {
+    return &mock_source_observer_;
   }
-
-  PlusAddressAffiliationSourceAdapter* adapter() { return adapter_.get(); }
 
   void RunUntilIdle() { task_environment_.RunUntilIdle(); }
 
- private:
+ protected:
   base::test::SingleThreadTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
-  PlusAddressService service_;
   testing::StrictMock<MockAffiliationSourceObserver> mock_source_observer_;
   std::unique_ptr<PlusAddressAffiliationSourceAdapter> adapter_;
+  std::unique_ptr<PlusAddressService> service_;
 };
 
 // Verifies that no facets are returned when no plus addresses are registered.
@@ -76,14 +74,74 @@ TEST_F(PlusAddressAffiliationSourceAdapterTest, TestGetFacetsEmpty) {
 
 // Verifies that facets for plus addresses are available via GetFacets.
 TEST_F(PlusAddressAffiliationSourceAdapterTest, TestGetFacets) {
-  service().SavePlusAddress(url::Origin::Create(GURL("https://foo.com")),
-                            "plus+foo@plus.plus");
-  service().SavePlusAddress(url::Origin::Create(GURL("https://bar.com")),
-                            "plus+bar@plus.plus");
+  const PlusProfile profile1 =
+      test::CreatePlusProfile(/*use_full_domain=*/true);
+  const PlusProfile profile2 =
+      test::CreatePlusProfile2(/*use_full_domain=*/true);
+
+  service_->OnWebDataChangedBySync(
+      {PlusAddressDataChange(PlusAddressDataChange::Type::kAdd, profile1),
+       PlusAddressDataChange(PlusAddressDataChange::Type::kAdd, profile2)});
 
   EXPECT_TRUE(ExpectAdapterToReturnFacets(
       {FacetURI::FromCanonicalSpec("https://foo.com"),
        FacetURI::FromCanonicalSpec("https://bar.com")}));
+}
+
+// Verifies that updates (e.g. add or remove) of valid facets are communicated
+// to the affiliation source observer.
+TEST_F(PlusAddressAffiliationSourceAdapterTest, OnPlusAddressesChanged) {
+  PlusProfile profile1 = test::CreatePlusProfile(/*use_full_domain=*/true);
+  PlusProfile profile2 = test::CreatePlusProfile2(/*use_full_domain=*/true);
+  service_->OnWebDataChangedBySync(
+      {PlusAddressDataChange(PlusAddressDataChange::Type::kAdd, profile1)});
+
+  EXPECT_TRUE(ExpectAdapterToReturnFacets(
+      {FacetURI::FromCanonicalSpec("https://foo.com")}));
+  adapter_->StartObserving(mock_source_observer());
+
+  // Assert that `add` operations are reported before `remove` operation for
+  // similar facets.
+  {
+    testing::InSequence in_sequence;
+    EXPECT_CALL(*mock_source_observer(),
+                OnFacetsAdded(ElementsAre(
+                    FacetURI::FromCanonicalSpec("https://foo.com"),
+                    FacetURI::FromCanonicalSpec("https://bar.com"))));
+    EXPECT_CALL(*mock_source_observer(),
+                OnFacetsRemoved(ElementsAre(
+                    FacetURI::FromCanonicalSpec("https://foo.com"))));
+  }
+
+  // Simulate update of `profile1`.
+  PlusProfile updated_profile1 = profile1;
+  updated_profile1.plus_address = "new-" + updated_profile1.plus_address;
+
+  service_->OnWebDataChangedBySync(
+      {PlusAddressDataChange(PlusAddressDataChange::Type::kRemove, profile1),
+       PlusAddressDataChange(PlusAddressDataChange::Type::kAdd,
+                             updated_profile1),
+       PlusAddressDataChange(PlusAddressDataChange::Type::kAdd, profile2)});
+}
+
+// Verifies that the adapter keeps functioning if the service is destroyed.
+TEST_F(PlusAddressAffiliationSourceAdapterTest,
+       TestPlusAddressServiceDestroyed) {
+  const PlusProfile profile1 =
+      test::CreatePlusProfile(/*use_full_domain=*/true);
+  const PlusProfile profile2 =
+      test::CreatePlusProfile2(/*use_full_domain=*/true);
+
+  service_->OnWebDataChangedBySync(
+      {PlusAddressDataChange(PlusAddressDataChange::Type::kAdd, profile1),
+       PlusAddressDataChange(PlusAddressDataChange::Type::kAdd, profile2)});
+
+  EXPECT_TRUE(ExpectAdapterToReturnFacets(
+      {FacetURI::FromCanonicalSpec("https://foo.com"),
+       FacetURI::FromCanonicalSpec("https://bar.com")}));
+
+  service_.reset();
+  EXPECT_TRUE(ExpectAdapterToReturnFacets({}));
 }
 
 }  // namespace plus_addresses

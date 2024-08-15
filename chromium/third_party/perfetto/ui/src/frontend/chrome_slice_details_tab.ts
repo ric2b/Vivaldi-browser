@@ -28,7 +28,7 @@ import {MenuItem, PopupMenu2} from '../widgets/menu';
 import {Section} from '../widgets/section';
 import {Tree, TreeNode} from '../widgets/tree';
 
-import {BottomTab, bottomTabRegistry, NewBottomTabArgs} from './bottom_tab';
+import {BottomTab, NewBottomTabArgs} from './bottom_tab';
 import {FlowPoint, globals} from './globals';
 import {hasArgs, renderArguments} from './slice_args';
 import {renderDetails} from './slice_details';
@@ -399,7 +399,6 @@ export class ChromeSliceDetailsTab extends BottomTab<ChromeSliceDetailsTabConfig
     const contextMenuItems = getSliceContextMenuItems(sliceInfo);
     if (contextMenuItems.length > 0) {
       const trigger = m(Button, {
-        minimal: true,
         compact: true,
         label: 'Contextual Options',
         rightIcon: Icons.ContextMenu,
@@ -416,5 +415,3 @@ export class ChromeSliceDetailsTab extends BottomTab<ChromeSliceDetailsTabConfig
     }
   }
 }
-
-bottomTabRegistry.register(ChromeSliceDetailsTab);

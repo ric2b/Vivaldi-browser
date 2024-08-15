@@ -4,10 +4,6 @@
 
 import {sendWithPromise} from 'chrome://resources/js/cr.js';
 
-// <if expr="structured_metrics_enabled">
-import type {StructuredMetricEvent, StructuredMetricsSummary} from './structured/structured_utils.js';
-// </if>
-
 /**
  * @fileoverview A helper object used by the chrome://metrics-internals page to
  * interact with the browser.
@@ -38,7 +34,7 @@ export interface LogEvent {
  * lifetime. The |type| field is only set for UMA logs (i.e., ongoing,
  * independent, or stability). The |compressed_data| field (i.e., its proto
  * data) is only set when exporting.
- * TODO(crbug/1363747): Change name of |type| to something else, since it is
+ * TODO(crbug.com/40238818): Change name of |type| to something else, since it is
  * confusing and can be mistaken for |logType| in LogData (UMA or UKM).
  */
 export interface Log {
@@ -80,18 +76,6 @@ export interface MetricsInternalsBrowserProxy {
    * service or is owned by the page.
    */
   isUsingMetricsServiceObserver(): Promise<boolean>;
-
-  // <if expr="structured_metrics_enabled">
-  /**
-   * Fetches recorded events from Structured Metrics Service.
-   */
-  fetchStructuredMetricsEvents(): Promise<StructuredMetricEvent[]>;
-
-  /**
-   * Fetches a summary of the Structured Metrics Service.
-   */
-  fetchStructuredMetricsSummary(): Promise<StructuredMetricsSummary>;
-  // </if>
 }
 
 export class MetricsInternalsBrowserProxyImpl implements
@@ -111,16 +95,6 @@ export class MetricsInternalsBrowserProxyImpl implements
   isUsingMetricsServiceObserver(): Promise<boolean> {
     return sendWithPromise('isUsingMetricsServiceObserver');
   }
-
-  // <if expr="structured_metrics_enabled">
-  fetchStructuredMetricsEvents(): Promise<StructuredMetricEvent[]> {
-    return sendWithPromise('fetchStructuredMetricsEvents');
-  }
-
-  fetchStructuredMetricsSummary(): Promise<StructuredMetricsSummary> {
-    return sendWithPromise('fetchStructuredMetricsSummary');
-  }
-  // </if>
 
   static getInstance(): MetricsInternalsBrowserProxy {
     return instance || (instance = new MetricsInternalsBrowserProxyImpl());

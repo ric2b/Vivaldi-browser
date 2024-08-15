@@ -102,7 +102,7 @@ class LockTest(unittest.TestCase):
         # One result was consumed by side_effect, we expect only one in the
         # queue.
         self.assertEqual(1, results.qsize())
-        sleep_mock.assert_called_once_with(1)
+        sleep_mock.assert_called_with(0.1)
 
 
 if __name__ == '__main__':

@@ -24,6 +24,11 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
     isOptedInAccountStorage: boolean,
     isAccountStorageDefault: boolean,
     passwords: chrome.passwordsPrivate.PasswordUiEntry[],
+    isPasswordManagerPinAvailable: boolean,
+    isCloudAuthenticatorConnected: boolean,
+    changePasswordManagerPinSuccesful: boolean|null,
+    disconnectCloudAuthenticatorSuccessful: boolean|null,
+    isConnectedToCloudAuthenticator: boolean|null,
   };
 
   listeners: {
@@ -51,16 +56,15 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
   constructor() {
     super([
       'addPassword',
-      'changeCredential',
       'cancelExportPasswords',
+      'changeCredential',
+      'changePasswordManagerPin',
       'continueImport',
+      'disconnectCloudAuthenticator',
       'dismissSafetyHubPasswordMenuNotification',
       'exportPasswords',
       'extendAuthValidity',
       'fetchFamilyMembers',
-      'importPasswords',
-      'isAccountStoreDefault',
-      'isOptedInForAccountStorage',
       'getBlockedSitesList',
       'getCredentialGroups',
       'getCredentialsWithReusedPassword',
@@ -68,6 +72,11 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
       'getPasswordCheckStatus',
       'getSavedPasswordList',
       'getUrlCollection',
+      'importPasswords',
+      'isAccountStoreDefault',
+      'isConnectedToCloudAuthenticator',
+      'isOptedInForAccountStorage',
+      'isPasswordManagerPinAvailable',
       'movePasswordsToAccount',
       'muteInsecureCredential',
       'optInForAccountStorage',
@@ -75,13 +84,13 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
       'recordPasswordViewInteraction',
       'removeBlockedSite',
       'removeCredential',
-      'resetImporter',
       'requestCredentialsDetails',
       'requestExportProgressStatus',
       'requestPlaintextPassword',
+      'resetImporter',
+      'sharePassword',
       'showAddShortcutDialog',
       'showExportedFileInShell',
-      'sharePassword',
       'startBulkPasswordCheck',
       'switchBiometricAuthBeforeFillingState',
       'undoRemoveSavedPasswordOrException',
@@ -99,6 +108,11 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
       isOptedInAccountStorage: false,
       isAccountStorageDefault: false,
       passwords: [],
+      isPasswordManagerPinAvailable: false,
+      isCloudAuthenticatorConnected: false,
+      changePasswordManagerPinSuccesful: null,
+      disconnectCloudAuthenticatorSuccessful: null,
+      isConnectedToCloudAuthenticator: null,
     };
 
     // Holds listeners so they can be called when needed.
@@ -375,5 +389,37 @@ export class TestPasswordManagerProxy extends TestBrowserProxy implements
 
   dismissSafetyHubPasswordMenuNotification() {
     this.methodCalled('dismissSafetyHubPasswordMenuNotification');
+  }
+
+  changePasswordManagerPin() {
+    this.methodCalled('changePasswordManagerPin');
+    if (this.data.changePasswordManagerPinSuccesful !== null) {
+      return Promise.resolve(this.data.changePasswordManagerPinSuccesful);
+    }
+    return Promise.reject(new Error());
+  }
+
+  isPasswordManagerPinAvailable(): Promise<boolean> {
+    this.methodCalled('isPasswordManagerPinAvailable');
+    return Promise.resolve(this.data.isPasswordManagerPinAvailable);
+  }
+
+  disconnectCloudAuthenticator(): Promise<boolean> {
+    this.methodCalled('disconnectCloudAuthenticator');
+    if (this.data.isConnectedToCloudAuthenticator !== null &&
+        this.data.disconnectCloudAuthenticatorSuccessful !== null) {
+      this.data.isConnectedToCloudAuthenticator = false;
+      return Promise.resolve(this.data.disconnectCloudAuthenticatorSuccessful);
+    }
+    return Promise.reject(new Error());
+  }
+
+  isConnectedToCloudAuthenticator(): Promise<boolean> {
+    this.methodCalled('isConnectedToCloudAuthenticator');
+    if (this.data.isConnectedToCloudAuthenticator !== null) {
+      return Promise.resolve(this.data.isConnectedToCloudAuthenticator);
+    }
+
+    return Promise.reject(new Error());
   }
 }

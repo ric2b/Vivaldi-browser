@@ -176,6 +176,8 @@ TEST(CSSSelectorParserTest, ValidSimpleAfterPseudoElementInCompound) {
   test::TaskEnvironment task_environment;
   const char* test_cases[] = {"::-webkit-volume-slider:hover",
                               "::selection:window-inactive",
+                              "::search-text:current",
+                              "::search-text:not(:current)",
                               "::-webkit-scrollbar:disabled",
                               "::-webkit-volume-slider:not(:hover)",
                               "::-webkit-scrollbar:not(:horizontal)",
@@ -206,6 +208,9 @@ TEST(CSSSelectorParserTest, InvalidSimpleAfterPseudoElementInCompound) {
       ".class::content::before",
       "::shadow.class",
       "::selection:window-inactive::before",
+      "::search-text.class",
+      "::search-text::before",
+      "::search-text:hover",
       "::-webkit-volume-slider.class",
       "::before:not(.a)",
       "::shadow:not(::after)",
@@ -480,6 +485,45 @@ TEST(CSSSelectorParserTest, InternalPseudo) {
         /*is_within_scope=*/false,
         /*semicolon_aborts_nested_selector=*/false, nullptr, arena);
     EXPECT_GT(ua_vector.size(), 0u);
+  }
+}
+
+TEST(CSSSelectorParserTest, ScrollMarkerPseudos) {
+  test::TaskEnvironment task_environment;
+  struct TestCase {
+    const char* selector;
+    CSSSelector::PseudoType type;
+  };
+
+  TestCase test_cases[] = {
+      {"ul::scroll-markers", CSSSelector::kPseudoScrollMarkers},
+      {"li::scroll-marker", CSSSelector::kPseudoScrollMarker},
+  };
+
+  HeapVector<CSSSelector> arena;
+  for (const auto& test_case : test_cases) {
+    SCOPED_TRACE(test_case.selector);
+    CSSTokenizer tokenizer(StringView(test_case.selector));
+    const auto tokens = tokenizer.TokenizeToEOF();
+    CSSParserTokenRange range(tokens);
+    base::span<CSSSelector> vector = CSSSelectorParser::ParseSelector(
+        range,
+        MakeGarbageCollected<CSSParserContext>(
+            kHTMLStandardMode, SecureContextMode::kInsecureContext),
+        CSSNestingType::kNone, /*parent_rule_for_nesting=*/nullptr,
+        /*is_within_scope=*/false,
+        /*semicolon_aborts_nested_selector=*/false, nullptr, arena);
+    EXPECT_TRUE(!vector.empty());
+
+    CSSSelectorList* list = CSSSelectorList::AdoptSelectorVector(vector);
+    ASSERT_TRUE(list->HasOneSelector());
+
+    const CSSSelector* selector = list->First();
+    while (selector->NextSimpleSelector()) {
+      selector = selector->NextSimpleSelector();
+    }
+
+    EXPECT_EQ(selector->GetPseudoType(), test_case.type);
   }
 }
 

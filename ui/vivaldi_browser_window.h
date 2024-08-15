@@ -69,7 +69,8 @@ class VivaldiToolbarButtonProvider : public ToolbarButtonProvider {
   gfx::Rect GetFindBarBoundingBox(int contents_bottom) override;
   void FocusToolbar() override;
   views::AccessiblePaneView* GetAsAccessiblePaneView() override;
-  views::View* GetAnchorView(PageActionIconType type) override;  // the one
+  views::View* GetAnchorView(
+      std::optional<PageActionIconType> type) override;  // the one
   void ZoomChangedForActiveTab(bool can_show_bubble) override;
   AvatarToolbarButton* GetAvatarToolbarButton() override;
   ToolbarButton* GetBackButton() override;
@@ -275,8 +276,9 @@ class VivaldiBrowserWindow final : public BrowserWindow {
 
   void SetWindowURL(std::string s) { resource_relative_url_ = std::move(s); }
 
-  void UpdateDraggableRegions(
-      const std::vector<extensions::mojom::DraggableRegionPtr>& regions);
+  void DraggableRegionsChanged(
+      const std::vector<blink::mojom::DraggableRegionPtr>& regions,
+      content::WebContents* contents);
 
   const gfx::Rect& GetMaximizeButtonBounds() const {
     return maximize_button_bounds_;
@@ -477,6 +479,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void OnCanResizeFromWebAPIChanged() override;
   bool GetCanResize() override;
   ui::WindowShowState GetWindowShowState() const override;
+  views::WebView* GetContentsWebView() override;
 
   // BrowserWindow overrides end
 

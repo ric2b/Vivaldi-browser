@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
+#include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/display.h"
 #include "libavutil/iamf.h"
@@ -31,6 +32,7 @@
 #include "libavutil/ambient_viewing_environment.h"
 #include "libavutil/dovi_meta.h"
 #include "libavutil/mathematics.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/replaygain.h"
 #include "libavutil/spherical.h"
@@ -176,10 +178,6 @@ static void dump_paramchange(void *ctx, const AVPacketSideData *sd, int log_leve
     int size = sd->size;
     const uint8_t *data = sd->data;
     uint32_t flags, sample_rate, width, height;
-#if FF_API_OLD_CHANNEL_LAYOUT
-    uint32_t channels;
-    uint64_t layout;
-#endif
 
     if (!data || sd->size < 4)
         goto fail;
@@ -188,27 +186,6 @@ static void dump_paramchange(void *ctx, const AVPacketSideData *sd, int log_leve
     data += 4;
     size -= 4;
 
-#if FF_API_OLD_CHANNEL_LAYOUT
-FF_DISABLE_DEPRECATION_WARNINGS
-    if (flags & AV_SIDE_DATA_PARAM_CHANGE_CHANNEL_COUNT) {
-        if (size < 4)
-            goto fail;
-        channels = AV_RL32(data);
-        data += 4;
-        size -= 4;
-        av_log(ctx, log_level, "channel count %"PRIu32", ", channels);
-    }
-    if (flags & AV_SIDE_DATA_PARAM_CHANGE_CHANNEL_LAYOUT) {
-        if (size < 8)
-            goto fail;
-        layout = AV_RL64(data);
-        data += 8;
-        size -= 8;
-        av_log(ctx, log_level,
-               "channel layout: %s, ", av_get_channel_name(layout));
-    }
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif /* FF_API_OLD_CHANNEL_LAYOUT */
     if (flags & AV_SIDE_DATA_PARAM_CHANGE_SAMPLE_RATE) {
         if (size < 4)
             goto fail;
@@ -744,6 +721,35 @@ static void dump_stream_group(const AVFormatContext *ic, uint8_t *printed,
                     av_log(NULL, AV_LOG_INFO, " Binaural");
                 av_log(NULL, AV_LOG_INFO, "\n");
             }
+        }
+        break;
+    }
+    case AV_STREAM_GROUP_PARAMS_TILE_GRID: {
+        const AVStreamGroupTileGrid *tile_grid = stg->params.tile_grid;
+        AVCodecContext *avctx = avcodec_alloc_context3(NULL);
+        const char *ptr = NULL;
+        av_log(NULL, AV_LOG_INFO, " Tile Grid:");
+        if (avctx && stg->nb_streams && !avcodec_parameters_to_context(avctx, stg->streams[0]->codecpar)) {
+            avctx->width  = tile_grid->width;
+            avctx->height = tile_grid->height;
+            avctx->coded_width  = tile_grid->coded_width;
+            avctx->coded_height = tile_grid->coded_height;
+            if (ic->dump_separator)
+                av_opt_set(avctx, "dump_separator", ic->dump_separator, 0);
+            buf[0] = 0;
+            avcodec_string(buf, sizeof(buf), avctx, is_output);
+            ptr = av_stristr(buf, " ");
+        }
+        avcodec_free_context(&avctx);
+        if (ptr)
+            av_log(NULL, AV_LOG_INFO, "%s", ptr);
+        dump_disposition(stg->disposition, AV_LOG_INFO);
+        av_log(NULL, AV_LOG_INFO, "\n");
+        dump_metadata(NULL, stg->metadata, "    ", AV_LOG_INFO);
+        for (int i = 0; i < stg->nb_streams; i++) {
+            const AVStream *st = stg->streams[i];
+            dump_stream_format(ic, st->index, i, index, is_output, AV_LOG_VERBOSE);
+            printed[st->index] = 1;
         }
         break;
     }

@@ -31,6 +31,7 @@
 #include "libavutil/avassert.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
+#include "libavutil/mem.h"
 
 #include "avcodec.h"
 #include "blockdsp.h"
@@ -787,9 +788,6 @@ void ff_mpv_common_end(MpegEncContext *s)
 
     av_freep(&s->bitstream_buffer);
     s->allocated_bitstream_buffer_size = 0;
-
-    if (!s->avctx)
-        return;
 
     if (s->picture) {
         for (int i = 0; i < MAX_PICTURE_COUNT; i++)

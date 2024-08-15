@@ -9,6 +9,7 @@
 #include <ostream>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "base/check.h"
@@ -20,7 +21,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/sequence_checker.h"
 #include "base/strings/strcat.h"
-#include "base/strings/string_piece.h"
 #include "base/types/expected.h"
 #include "base/types/expected_macros.h"
 #include "base/values.h"
@@ -37,8 +37,8 @@
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
-#include "chrome/browser/web_applications/web_contents/web_app_url_loader.h"
 #include "chrome/browser/web_applications/web_contents/web_contents_manager.h"
+#include "components/webapps/browser/web_contents/web_app_url_loader.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
@@ -345,7 +345,7 @@ void IsolatedWebAppUpdatePrepareAndStoreCommand::OnFinalized(
 }
 
 void IsolatedWebAppUpdatePrepareAndStoreCommand::ReportFailure(
-    base::StringPiece message) {
+    std::string_view message) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   IsolatedWebAppUpdatePrepareAndStoreCommandError error{
       .message = std::string(message)};

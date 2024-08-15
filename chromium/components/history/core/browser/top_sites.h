@@ -97,6 +97,10 @@ class TopSites : public RefcountedKeyedService {
   // Remove Observer from the list.
   void RemoveObserver(TopSitesObserver* observer);
 
+  // Added by Vivaldi
+  virtual void UpdateNow() {}
+  virtual void SetAggressiveUpdate() {}
+
  protected:
   void NotifyTopSitesLoaded();
   void NotifyTopSitesChanged(const TopSitesObserver::ChangeReason reason);

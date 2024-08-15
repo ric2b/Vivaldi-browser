@@ -31,6 +31,7 @@
 #include "components/prefs/pref_service.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/chromeos/devicetype_utils.h"
+#include "url/gurl.h"
 #include "url/origin.h"
 
 namespace ash::quick_start {
@@ -88,8 +89,6 @@ TargetDeviceBootstrapController::GetAsWeakPtrForClient() {
 }
 
 void TargetDeviceBootstrapController::StartAdvertisingAndMaybeGetQRCode() {
-  CHECK(connection_broker_->GetFeatureSupportStatus() ==
-        TargetDeviceConnectionBroker::FeatureSupportStatus::kSupported);
   CHECK_EQ(status_.step, Step::NONE);
   session_context_.FillOrResetSession();
 
@@ -147,7 +146,8 @@ void TargetDeviceBootstrapController::OnPinVerificationRequested(
     const std::string& pin) {
   constexpr Step kPossibleSteps[] = {Step::ADVERTISING_WITHOUT_QR_CODE,
                                      Step::ADVERTISING_WITH_QR_CODE};
-  CHECK(base::Contains(kPossibleSteps, status_.step));
+  CHECK(base::Contains(kPossibleSteps, status_.step))
+      << "Unexpected status step: " << status_.step;
 
   UpdateStatus(/*step=*/Step::PIN_VERIFICATION, /*payload=*/PinString(pin));
 }
@@ -158,7 +158,8 @@ void TargetDeviceBootstrapController::OnConnectionAuthenticated(
   constexpr Step kPossibleSteps[] = {Step::ADVERTISING_WITH_QR_CODE,
                                      Step::ADVERTISING_WITHOUT_QR_CODE,
                                      Step::PIN_VERIFICATION};
-  CHECK(base::Contains(kPossibleSteps, status_.step));
+  CHECK(base::Contains(kPossibleSteps, status_.step))
+      << "Unexpected status step: " << status_.step;
   authenticated_connection_ = authenticated_connection;
 
   if (session_context_.is_resume_after_update()) {
@@ -210,6 +211,22 @@ void TargetDeviceBootstrapController::UpdateStatus(Step step, Payload payload) {
     return;
   }
 
+  // Record metrics if establishing phone connection has succeeded or failed.
+  constexpr Step kPossibleBootstrappingConnectionSteps[] = {
+      Step::ADVERTISING_WITH_QR_CODE, Step::ADVERTISING_WITHOUT_QR_CODE,
+      Step::PIN_VERIFICATION};
+  if (step == Step::CONNECTED) {
+    QuickStartMetrics::RecordEstablishConnection(
+        /*success=*/true,
+        /*is_automatic_resume=*/session_context_.is_resume_after_update());
+  } else if (step == Step::ERROR &&
+             base::Contains(kPossibleBootstrappingConnectionSteps,
+                            status_.step)) {
+    QuickStartMetrics::RecordEstablishConnection(
+        /*success=*/false,
+        /*is_automatic_resume=*/session_context_.is_resume_after_update());
+  }
+
   status_.step = step;
   status_.payload = payload;
   NotifyObservers();
@@ -227,7 +244,8 @@ void TargetDeviceBootstrapController::NotifyObservers() {
 void TargetDeviceBootstrapController::OnStartAdvertisingResult(bool success) {
   constexpr Step kPossibleSteps[] = {Step::ADVERTISING_WITH_QR_CODE,
                                      Step::ADVERTISING_WITHOUT_QR_CODE};
-  CHECK(base::Contains(kPossibleSteps, status_.step));
+  CHECK(base::Contains(kPossibleSteps, status_.step))
+      << "Unexpected status step: " << status_.step;
   if (success) {
     return;
   }
@@ -251,7 +269,7 @@ void TargetDeviceBootstrapController::OnStopAdvertising() {
 
 void TargetDeviceBootstrapController::OnNotifySourceOfUpdateResponse(
     bool ack_successful) {
-  CHECK(authenticated_connection_);
+  CHECK(authenticated_connection_) << "Missing authenticated_connection_";
 
   if (ack_successful) {
     QS_LOG(INFO) << "Update ack sucessfully received. Preparing to resume "
@@ -298,7 +316,7 @@ void TargetDeviceBootstrapController::AttemptWifiCredentialTransfer() {
 void TargetDeviceBootstrapController::OnWifiCredentialsReceived(
     std::optional<mojom::WifiCredentials> credentials) {
   CHECK_EQ(status_.step, Step::REQUESTING_WIFI_CREDENTIALS);
-
+  session_context_.SetDidTransferWifi(true);
   if (credentials.has_value()) {
     UpdateStatus(/*step=*/Step::WIFI_CREDENTIALS_RECEIVED,
                  /*payload=*/credentials.value());
@@ -314,7 +332,7 @@ void TargetDeviceBootstrapController::OnWifiCredentialsReceived(
 }
 
 void TargetDeviceBootstrapController::RequestGoogleAccountInfo() {
-  CHECK(authenticated_connection_);
+  CHECK(authenticated_connection_) << "Missing authenticated_connection_";
 
   UpdateStatus(/*step=*/Step::REQUESTING_GOOGLE_ACCOUNT_INFO,
                /*payload=*/absl::monostate());
@@ -331,13 +349,13 @@ void TargetDeviceBootstrapController::OnGoogleAccountInfoReceived(
 }
 
 void TargetDeviceBootstrapController::AttemptGoogleAccountTransfer() {
-  CHECK(authenticated_connection_);
+  CHECK(authenticated_connection_) << "Missing authenticated_connection_";
 
   UpdateStatus(/*step=*/Step::TRANSFERRING_GOOGLE_ACCOUNT_DETAILS,
                /*payload=*/absl::monostate());
 
   // Request the challenge bytes from Gaia to be sent to the phone.
-  CHECK(auth_broker_);
+  CHECK(auth_broker_) << "Missing auth_broker_";
   auth_broker_->FetchChallengeBytes(
       base::BindOnce(&TargetDeviceBootstrapController::OnChallengeBytesReceived,
                      weak_ptr_factory_.GetWeakPtr()));
@@ -349,7 +367,7 @@ void TargetDeviceBootstrapController::Cleanup() {
 }
 
 void TargetDeviceBootstrapController::OnSetupComplete() {
-  CHECK(authenticated_connection_);
+  CHECK(authenticated_connection_) << "Missing authenticated_connection_";
   UpdateStatus(/*step=*/Step::SETUP_COMPLETE, /*payload=*/absl::monostate());
   authenticated_connection_->NotifyPhoneSetupComplete();
 }
@@ -359,9 +377,12 @@ void TargetDeviceBootstrapController::OnChallengeBytesReceived(
   if (!challenge.has_value()) {
     quick_start::QS_LOG(ERROR) << "Error fetching challenge bytes from Gaia. "
                                << "Reason: " << challenge.error().ToString();
+    QuickStartMetrics::RecordGaiaTransferResult(
+        /*succeeded=*/false,
+        /*failure_reason=*/QuickStartMetrics::GaiaTransferResultFailureReason::
+            kFailedFetchingChallengeBytesFromGaia);
     UpdateStatus(/*step=*/Step::ERROR,
                  /*payload=*/ErrorCode::FETCHING_CHALLENGE_BYTES_FAILED);
-    QuickStartMetrics::RecordGaiaTransferAttempted(/*attempted=*/false);
     return;
     // TODO(b:286853512) - Implement retry mechanism.
   }
@@ -369,6 +390,9 @@ void TargetDeviceBootstrapController::OnChallengeBytesReceived(
   if (!authenticated_connection_) {
     quick_start::QS_LOG(ERROR)
         << "Received challenge bytes, but a phone connection no longer exists.";
+    QuickStartMetrics::RecordGaiaTransferResult(
+        /*succeeded=*/false, /*failure_reason=*/QuickStartMetrics::
+            GaiaTransferResultFailureReason::kConnectionLost);
     NOTIMPLEMENTED();
   }
 
@@ -376,7 +400,6 @@ void TargetDeviceBootstrapController::OnChallengeBytesReceived(
       << "Received challenge bytes from Gaia. Requesting FIDO assertion.";
   challenge_bytes_ = challenge.value();
 
-  QuickStartMetrics::RecordGaiaTransferAttempted(/*attempted=*/true);
   authenticated_connection_->RequestAccountTransferAssertion(
       challenge_bytes_,
       base::BindOnce(&TargetDeviceBootstrapController::OnFidoAssertionReceived,
@@ -386,6 +409,9 @@ void TargetDeviceBootstrapController::OnChallengeBytesReceived(
 void TargetDeviceBootstrapController::OnFidoAssertionReceived(
     std::optional<FidoAssertionInfo> assertion) {
   if (!assertion.has_value()) {
+    QuickStartMetrics::RecordGaiaTransferResult(
+        /*succeeded=*/false, /*failure_reason=*/QuickStartMetrics::
+            GaiaTransferResultFailureReason::kGaiaAssertionNotReceived);
     UpdateStatus(/*step=*/Step::ERROR,
                  /*payload=*/ErrorCode::GAIA_ASSERTION_NOT_RECEIVED);
     return;
@@ -415,6 +441,10 @@ void TargetDeviceBootstrapController::OnAttestationCertificateReceived(
     // TODO(b/287006890) - Implement retry logic.
     quick_start::QS_LOG(ERROR) << "Error fetching attestation certificate. "
                                << "Reason: " << attestation_certificate.error();
+    QuickStartMetrics::RecordGaiaTransferResult(
+        /*succeeded=*/false,
+        /*failure_reason=*/QuickStartMetrics::GaiaTransferResultFailureReason::
+            kFailedFetchingAttestationCertificate);
     UpdateStatus(
         /*step=*/Step::ERROR,
         /*payload=*/ErrorCode::FETCHING_ATTESTATION_CERTIFICATE_FAILED);
@@ -442,34 +472,45 @@ void TargetDeviceBootstrapController::OnAuthCodeReceived(
             UpdateStatus(/*step=*/Step::TRANSFERRED_GOOGLE_ACCOUNT_DETAILS,
                          /*payload=*/gaia_creds);
             is_error = false;
+            session_context_.SetDidSetUpGaia(true);
           },
-          [](SecondDeviceAuthBroker::
-                 AuthCodeAdditionalChallengesOnTargetResponse res) {
-            // TODO(b/310937296) - Implement fallback logic.
-            quick_start::QS_LOG(ERROR)
-                << "Failed to fetch refresh token! "
+          [&](SecondDeviceAuthBroker::
+                  AuthCodeAdditionalChallengesOnTargetResponse res) {
+            quick_start::QS_LOG(INFO)
+                << "Failed to fetch OAuth authorization code! "
                    "Additional challenges needed on target device.";
+            const GURL fallback_url = GURL(res.fallback_url);
+            GaiaCredentials gaia_creds;
+            // Note that we are, on purpose, not taking the URL authority here!
+            gaia_creds.fallback_url_path = fallback_url.PathForRequest();
+            UpdateStatus(/*step=*/Step::TRANSFERRED_GOOGLE_ACCOUNT_DETAILS,
+                         /*payload=*/gaia_creds);
+            is_error = false;
           },
           [](SecondDeviceAuthBroker::
                  AuthCodeAdditionalChallengesOnSourceResponse res) {
             quick_start::QS_LOG(ERROR)
-                << "Failed to fetch refresh token! "
+                << "Failed to fetch OAuth authorization code! "
                    "Additional challenges needed on source device.";
           },
           [](SecondDeviceAuthBroker::AuthCodeRejectionResponse res) {
             quick_start::QS_LOG(ERROR)
-                << "Failed to fetch refresh token! Rejected: " << res.reason;
+                << "Failed to fetch OAuth authorization code! Rejected: "
+                << res.reason;
           },
           [](SecondDeviceAuthBroker::AuthCodeParsingErrorResponse res) {
             quick_start::QS_LOG(ERROR)
-                << "Failed to fetch refresh token! Parsing error";
+                << "Failed to fetch OAuth authorization code! Parsing error";
           },
           [](SecondDeviceAuthBroker::AuthCodeUnknownErrorResponse res) {
             quick_start::QS_LOG(ERROR)
-                << "Failed to fetch refresh token! Unknown error";
+                << "Failed to fetch OAuth authorization code! Unknown error";
           }},
       response);
   if (is_error) {
+    QuickStartMetrics::RecordGaiaTransferResult(
+        /*succeeded=*/false, /*failure_reason=*/QuickStartMetrics::
+            GaiaTransferResultFailureReason::kFailedFetchingRefreshToken);
     UpdateStatus(/*step=*/Step::ERROR,
                  /*payload=*/ErrorCode::FETCHING_REFRESH_TOKEN_FAILED);
   }

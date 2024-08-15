@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "ash/api/tasks/tasks_types.h"
 #include "ash/capture_mode/capture_mode_test_util.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
@@ -22,6 +21,7 @@
 #include "ash/system/focus_mode/focus_mode_countdown_view.h"
 #include "ash/system/focus_mode/focus_mode_feature_pod_controller.h"
 #include "ash/system/focus_mode/focus_mode_histogram_names.h"
+#include "ash/system/focus_mode/focus_mode_task_test_utils.h"
 #include "ash/system/focus_mode/focus_mode_task_view.h"
 #include "ash/system/focus_mode/focus_mode_util.h"
 #include "ash/system/model/system_tray_model.h"
@@ -32,6 +32,7 @@
 #include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/test/ash_test_base.h"
 #include "base/i18n/time_formatting.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -42,6 +43,7 @@
 #include "ui/message_center/message_center.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/scroll_view.h"
 #include "ui/views/layout/box_layout_view.h"
 #include "ui/views/test/views_test_utils.h"
 #include "ui/views/view_utils.h"
@@ -76,6 +78,10 @@ class FocusModeDetailedViewTest : public AshTestBase {
     // pref will not be marked as using the default value.
     prefs()->SetBoolean(prefs::kFocusModeDoNotDisturb, true);
 
+    auto& tasks_client =
+        CreateFakeTasksClient(AccountId::FromUserEmail("user0@tray"));
+    CreateFakeTasks(tasks_client);
+
     CreateFakeFocusModeDetailedView();
   }
 
@@ -84,6 +90,11 @@ class FocusModeDetailedViewTest : public AshTestBase {
     widget_.reset();
 
     AshTestBase::TearDown();
+  }
+
+  virtual void CreateFakeTasks(api::FakeTasksClient& tasks_client) {
+    AddFakeTaskList(tasks_client, "default");
+    AddFakeTask(tasks_client, "default", "task1", "Task 1");
   }
 
   void CreateFakeFocusModeDetailedView() {
@@ -98,6 +109,13 @@ class FocusModeDetailedViewTest : public AshTestBase {
     DCHECK(!FocusModeController::Get()->in_focus_session());
     focus_mode_detailed_view_->SetInactiveSessionDuration(base::Minutes(
         focus_mode_util::GetTimerTextfieldInputInMinutes(timer_textfield)));
+  }
+
+  // Scroll to the bottom of the defailed view.
+  void ScrollToBottom() {
+    auto* scroll_view = focus_mode_detailed_view_->scroll_view_for_testing();
+    scroll_view->ScrollToPosition(scroll_view->vertical_scroll_bar(),
+                                  scroll_view->GetVisibleRect().bottom());
   }
 
   views::Label* GetToggleRowLabel() {
@@ -198,6 +216,9 @@ TEST_F(FocusModeDetailedViewTest, DndOffBeforeStart) {
 
   // 2. Before turning on a focus session, the system do not disturb is off. The
   // default value for the toggle button is set to disabled.
+  // Scroll to the bottom of the focus panel to make the `toggle_button` visible
+  // before clicking on it.
+  ScrollToBottom();
   LeftClickOn(toggle_button);
   EXPECT_FALSE(toggle_button->GetIsOn());
 
@@ -252,6 +273,9 @@ TEST_F(FocusModeDetailedViewTest, DndOnBeforeStart) {
   message_center->SetQuietMode(true);
   EXPECT_TRUE(message_center->IsQuietMode());
 
+  // Scroll to the bottom of the focus panel to make the `toggle_button` visible
+  // before clicking on it.
+  ScrollToBottom();
   LeftClickOn(toggle_button);
   EXPECT_FALSE(toggle_button->GetIsOn());
 
@@ -516,7 +540,8 @@ TEST_F(FocusModeDetailedViewTest, TimerSettingViewDecrements) {
 
 // Tests that the timer setting view is visible outside of a focus session and
 // the countdown view is visible in a focus session.
-TEST_F(FocusModeDetailedViewTest, TimerViewVisibility) {
+// TODO(b/338629645): disabled due to flakes.
+TEST_F(FocusModeDetailedViewTest, DISABLED_TimerViewVisibility) {
   auto* focus_mode_controller = FocusModeController::Get();
   auto* timer_setting_view = GetTimerSettingView();
   auto* countdown_view = GetTimerCountdownView();
@@ -745,78 +770,30 @@ TEST_F(FocusModeDetailedViewTest, StartSessionWithActiveTimerTextfield) {
           prefs::kFocusModeSessionDuration));
 }
 
-// Verify that when toggling a focus mode, the histogram will record the initial
-// session duration.
-TEST_F(FocusModeDetailedViewTest, CheckInitialDurationHistograms) {
-  base::HistogramTester histogram_tester;
+class FocusModeDetailedViewWithLotsOfTasksTest
+    : public FocusModeDetailedViewTest {
+ public:
+  void CreateFakeTasks(api::FakeTasksClient& tasks_client) override {
+    // Creates five lists, each containing two tasks.
+    for (int list_no = 0; list_no != 5; ++list_no) {
+      std::string list_id = base::StringPrintf("L%d", list_no);
+      AddFakeTaskList(tasks_client, list_id);
 
-  auto* controller = FocusModeController::Get();
-  EXPECT_FALSE(controller->in_focus_session());
+      for (int task_no = 0; task_no != 2; ++task_no) {
+        std::string task_id = base::StringPrintf("T%d.%d", list_no, task_no);
+        AddFakeTask(tasks_client, list_id, task_id, "Title");
+      }
+    }
+  }
+};
 
-  // 1. Start a focus session with the minimum session duration.
-  controller->SetInactiveSessionDuration(focus_mode_util::kMinimumDuration);
-  controller->ToggleFocusMode();
-  EXPECT_TRUE(controller->in_focus_session());
-  histogram_tester.ExpectTimeBucketCount(
-      focus_mode_histogram_names::kInitialDurationOnSessionStartsHistogramName,
-      focus_mode_util::kMinimumDuration, 1);
-
-  controller->ToggleFocusMode();
-  EXPECT_FALSE(controller->in_focus_session());
-
-  // 2. Start a new focus session with the maximum session duration.
-  controller->SetInactiveSessionDuration(focus_mode_util::kMaximumDuration);
-  controller->ToggleFocusMode();
-  EXPECT_TRUE(controller->in_focus_session());
-  histogram_tester.ExpectTimeBucketCount(
-      focus_mode_histogram_names::kInitialDurationOnSessionStartsHistogramName,
-      focus_mode_util::kMaximumDuration, 1);
-
-  histogram_tester.ExpectTotalCount(
-      focus_mode_histogram_names::kInitialDurationOnSessionStartsHistogramName,
-      2);
-}
-
-// Verify that we start a focus session, the histogram will record whether there
-// is a selected task.
-TEST_F(FocusModeDetailedViewTest, CheckHasSelectedTaskHistogram) {
-  base::HistogramTester histogram_tester;
-
-  auto* controller = FocusModeController::Get();
-  EXPECT_FALSE(controller->in_focus_session());
-  histogram_tester.ExpectTotalCount(
-      focus_mode_histogram_names::kHasSelectedTaskOnSessionStartHistogramName,
-      0);
-
-  // 1. Start a focus session without a selected task.
-  EXPECT_FALSE(controller->HasSelectedTask());
-  controller->ToggleFocusMode();
-  EXPECT_TRUE(controller->in_focus_session());
-  histogram_tester.ExpectBucketCount(
-      focus_mode_histogram_names::kHasSelectedTaskOnSessionStartHistogramName,
-      false, 1);
-  controller->ToggleFocusMode();
-  EXPECT_FALSE(controller->in_focus_session());
-
-  // 2. Start a focus session with a selected task.
-  int id = 0;
-  const std::string title = "Focus Task";
-  controller->SetSelectedTask(std::make_unique<api::Task>(
-                                  /*id=*/base::NumberToString(id), title,
-                                  /*due=*/std::nullopt, /*completed=*/false,
-                                  /*has_subtasks=*/false,
-                                  /*has_email_link=*/false,
-                                  /*has_notes=*/false,
-                                  /*updated=*/base::Time::Now(),
-                                  /*web_view_link=*/GURL())
-                                  .get());
-  EXPECT_TRUE(controller->HasSelectedTask());
-
-  controller->ToggleFocusMode();
-  EXPECT_TRUE(controller->in_focus_session());
-  histogram_tester.ExpectBucketCount(
-      focus_mode_histogram_names::kHasSelectedTaskOnSessionStartHistogramName,
-      true, 1);
+// Tests that the carousel only shows a limited number of tasks.
+TEST_F(FocusModeDetailedViewWithLotsOfTasksTest, LimitTasks) {
+  auto* task_view = GetTaskView();
+  auto* chip_carousel = task_view->chip_carousel_for_testing();
+  EXPECT_TRUE(chip_carousel->HasTasks());
+  EXPECT_EQ(chip_carousel->GetTaskCountForTesting(), 5);
+  EXPECT_TRUE(chip_carousel->GetVisible());
 }
 
 }  // namespace ash

@@ -13,27 +13,6 @@ directly to argparse.
 import argparse
 
 
-def _AddArgumentImpl(parser, *args, **kwargs):
-  if 'help' in kwargs:
-    help_str = kwargs['help']
-    help_str = help_str.replace('%default', '%(default)s')
-    kwargs['help'] = help_str
-
-  # optparse supported string values for the type argument, but argparse does
-  # not, so convert here.
-  if 'type' in kwargs:
-    type_value = kwargs['type']
-    if type_value == 'int':
-      type_value = int
-    elif type_value in ('string', 'str'):
-      type_value = str
-    elif type_value == 'float':
-      type_value = float
-    kwargs['type'] = type_value
-
-  parser.add_argument(*args, **kwargs)
-
-
 class ArgumentParser(argparse.ArgumentParser):
 
   def __init__(self, *args, **kwargs):
@@ -61,14 +40,6 @@ class ArgumentParser(argparse.ArgumentParser):
         self.error(f'no such option: {unknown}')
     return known_args, unknown_args
 
-  def add_option(self, *args, **kwargs):
-    _AddArgumentImpl(self, *args, **kwargs)
-
-  def add_option_group(self, *args, **kwargs):
-    # We no-op since argparse's add_argument_group already associates the group
-    # with the argument parser.
-    pass
-
   def get_default_values(self):
     defaults = {}
     for action in self._actions:
@@ -85,34 +56,8 @@ class ArgumentParser(argparse.ArgumentParser):
     return argparse.Namespace(**defaults)
 
   @property
-  def option_list(self):
-    return self._actions
-
-  @property
   def defaults(self):
     return self._defaults
-
-
-class _ArgumentGroup(argparse._ArgumentGroup):
-
-  def add_option(self, *args, **kwargs):
-    _AddArgumentImpl(self, *args, **kwargs)
-
-  @property
-  def option_list(self):
-    return self._actions
-
-
-def CreateOptionGroup(parser, title, description=None):
-  """Creates an ArgumentParser group using the same arguments as optparse.
-
-  See Python's optparse.OptionGroup documentation for argument descriptions.
-  """
-  # Copied from argparse's source code for add_argument_group, but using our own
-  # class.
-  group = _ArgumentGroup(parser, title, description)
-  parser._action_groups.append(group)
-  return group
 
 
 def CreateFromOptparseInputs(usage=None, description=None):

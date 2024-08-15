@@ -263,6 +263,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_NOTE_CONTEXT_BAR_EDIT" desc="The iOS context bar item for edit note. ">
         Edit
       </message>
+      <message name="IDS_IOS_NOTE_CONTEXT_BAR_SYNCHRONIZATION" desc="Text on the notes context bar to open sync settings">
+        Synchronization
+      </message>
       <message name="IDS_IOS_NOTE_CONTEXT_BAR_NEW_FOLDER" desc="The iOS context bar item for adding new note folder.">
         New Folder
       </message>
@@ -471,7 +474,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_NOTE_CONTEXT_BAR_EMPTY_TRASH" desc="The iOS context bar item for empty trash. ">
         Empty trash
       </message>
-
+      <message name="IDS_IOS_NOTE_VIEW_AS_HTML" desc="Title of the toggle button to render markdown as HTML. ">
+        View as HTML
+      </message>
       <!-- End Notes -->
       <!-- START PAGE AND SPEED DIAL -->
       <message name="IDS_IOS_TABS_SPEED_DIAL" desc="The title for the new tab on desktop tabs tab view and tab switcher">
@@ -566,6 +571,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_BOOKMARK_FOLDER_TITLE" desc="Label specifying the title of the bookmark folder. [CHAR_LIMIT=32]" meaning="Name of an inanimate object">
         Title
       </message>
+      <message name="IDS_IOS_BOOKMARK_EDITOR_SUGGESTIONS_TITLE" desc="Header text for title of top sites section in bookmark editor">
+        Suggestions
+      </message>
       <message name="IDS_IOS_BOOKMARK_LOCATION" desc="Label specifying the location of the bookmark. [CHAR_LIMIT=32]" meaning="Name of an inanimate object">
         Location
       </message>
@@ -616,6 +624,12 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_BOOKMARK_GROUP_NAME_TITLE" desc="Label specifying the title of the bookmark group name title for bookmark editor.">
         Group Name
+      </message>
+      <message name="IDS_IOS_BOOKMARK_SHOW_GROUPS_TITLE" desc="Title for the speed dial/group toggle on bookmarks editor group view">
+        Display Speed Dials
+      </message>
+      <message name="IDS_IOS_BOOKMARK_SHOW_GROUPS_DESCRIPTION" desc="Description for the speed dial/group toggle on bookmarks editor group view">
+        Enable Display Speed Dials to have this group visible on start page. You will still be able to access the group through bookmarks panels.
       </message>
       <!-- END BOOKMARK EDITOR -->
       <message name="IDS_IOS_OPEN_IN_PRIVATE_ACTION_TITLE" desc="Title of the action used to open an URL in a new Private tab. [iOS only]">
@@ -696,6 +710,12 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_VIVALDI_BACKUP_ENCRYPTION_KEY" desc="(Vivaldi) Title of encryption backup key">
         Backup encryption key
+      </message>
+      <message name="IDS_VIVALDI_RESET_ENCRYPTION_PASSWORD" desc="(Vivaldi) Label of the button giving the user the option to reset sync remote data if they've lost their password">
+        Forgot <ph name="BEGIN_LINK">BEGIN_LINK</ph>password<ph name="END_LINK">END_LINK</ph>?
+      </message>
+      <message name="IDS_VIVALDI_SYNC_FORGOT_ENCRYPTION_PASSWORD" desc="(Vivaldi) Text of the dialog showing up to ask the user to confirm the clearing of server-side data.">
+        Without your current encryption password we're unable to decrypt your data. Reseting this password requires deleting all existing Sync data on Vivaldi servers.
       </message>
       <message name="IDS_VIVALDI_SYNC_IMPORT_ENCRYPTION_KEY" desc="(Vivaldi) Title of button to import the backup encryption key">
         <ph name="BEGIN_LINK">BEGIN_LINK</ph>Import<ph name="END_LINK">END_LINK</ph>
@@ -1253,6 +1273,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_BOOKMARK_EMPTY_TITLE" desc="Title shown on the Bookmarks screen when there are no bookmarks.">
         You'll find your bookmarks here
       </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_BAR_SYNCHRONIZATION" desc="Text on the bookmarks context bar to open sync settings">
+        Synchronization
+      </message>
       <message name="IDS_VIVALDI_HISTORY_EMPTY_TITLE" desc="Message shown on the History screen when there are no history">
         History
       </message>
@@ -1314,27 +1337,31 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_VIVALDI_START_PAGE_WALLPAPER_CANCEL_TITLE" desc="Title for the start page wallpaper settings Cancel">
         Cancel
       </message>
-      <!-- END START PAGE SETTINGS -->
-      <!-- START PAGE QUICK SETTINGS -->
-      <message name="IDS_IOS_START_PAGE_QUICK_SETTINGS_SPEED_DIALS_TITLE" desc="Title for the speed dial toggle on start page quick settings">
+      <message name="IDS_IOS_START_PAGE_FREQUENTLY_VISITED_TITLE" desc="Title for the frequently visited pages item title on top toolbar and settings">
+        Top Sites
+      </message>
+      <message name="IDS_IOS_START_PAGE_FREQUENTLY_VISITED_EMPTY_DESCRIPTION" desc="Description for the frequently visited pages when there are no items to show">
+        As soon as you start browsing, your Top Sites will show here.
+      </message>
+      <message name="IDS_IOS_START_PAGE_SETTINGS_SPEED_DIALS_TITLE" desc="Title for the speed dial toggle on start page settings">
         Display Speed Dials
       </message>
-      <message name="IDS_IOS_START_PAGE_QUICK_SETTINGS_SPEED_DIAL_SIZE_TITLE" desc="Title for the speed dial size menu on start page quick settings">
+      <message name="IDS_IOS_START_PAGE_SETTINGS_SPEED_DIAL_SIZE_TITLE" desc="Title for the speed dial size menu on start page settings">
         Speed Dial Size
       </message>
-      <message name="IDS_IOS_START_PAGE_QUICK_SETTINGS_SPEED_DIAL_COLUMN_TITLE" desc="Title for the speed dial size maximum column on start page quick settings">
+      <message name="IDS_IOS_START_PAGE_SETTINGS_SPEED_DIAL_COLUMN_TITLE" desc="Title for the speed dial size maximum column on start page settings">
         Maximum Columns
       </message>
-      <message name="IDS_IOS_START_PAGE_QUICK_SETTINGS_BACKGROUND_IMAGE_TITLE" desc="Title for the background image settings on start page quick settings">
+      <message name="IDS_IOS_START_PAGE_SETTINGS_BACKGROUND_IMAGE_TITLE" desc="Title for the background image settings on start page settings">
         Background Image
       </message>
-      <message name="IDS_IOS_SHOW_START_PAGE_QUICK_SETTINGS_CUSTOMIZE_TITLE" desc="Title for the show start page customize button toggle on start page quick settings">
+      <message name="IDS_IOS_SHOW_START_PAGE_SETTINGS_CUSTOMIZE_TITLE" desc="Title for the show start page customize button toggle on start page settings">
         Customize Start Page button
       </message>
-      <message name="IDS_IOS_START_PAGE_SPEED_DIAL_QUICK_SETTINGS_COLUMN_UNLIMITED_TITLE" desc="Title for the speed dial size maximum column unlimited option on start page quick settings">
+      <message name="IDS_IOS_START_PAGE_SPEED_DIAL_SETTINGS_COLUMN_UNLIMITED_TITLE" desc="Title for the speed dial size maximum column unlimited option on start page settings">
         Unlimited
       </message>
-      <!-- END START PAGE QUICK SETTINGS -->
+      <!-- END START PAGE SETTINGS -->
       <!--TABS SETTINGS -->
       <message name="IDS_IOS_PREFS_VIVALDI_TABS" desc="Title for the tabs settings">
         Tabs
@@ -1362,6 +1389,12 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_TABS_TAB_STYLE_SHOW_TAB_BAR_TITLE" desc="Title for tabs show tab bar settings">
         Show Tab Bar
+      </message>
+      <message name="IDS_IOS_TABS_INACTIVE_TABS_HEADER_TITLE" desc="Title for inactive tabs settings header on tabs settings">
+        Inactive Tabs
+      </message>
+      <message name="IDS_IOS_TABS_INACTIVE_TABS_OPTION_TITLE" desc="Title for inactive tabs settings option on tabs settings">
+        Inactive After Days
       </message>
       <!-- END TABS SETTINGS -->
       <!-- TOOLBAR -->
@@ -1652,6 +1685,12 @@ locale.  The strings in this file are specific to iOS.
       <!-- END APPEARANCE SETTING -->
       <message name="IDS_IOS_CONTENT_CONTEXT_OPENLINK_NEWBACKGROUNDTAB" desc="The iOS menu item for opening a link in a background tab.">
         Open in New Background Tab
+      </message>
+      <message name="IDS_IOS_CONTENT_CONTEXT_OPEN_ALL_INBACKGROUND" desc="The iOS menu item for opening selected links in background tab.">
+        Open All in Background
+      </message>
+      <message name="IDS_IOS_CONTENT_CONTEXT_OPENIMAGENEWBACKGROUNDTAB" desc="The iOS menu item for opening selected image in background tab.">
+        Open Image in Background Tab
       </message>
     </messages>
   </release>

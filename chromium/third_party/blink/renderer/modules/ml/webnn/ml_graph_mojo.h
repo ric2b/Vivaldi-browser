@@ -14,7 +14,7 @@
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph_utils.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/heap/visitor.h"
-#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_associated_remote.h"
 
 namespace blink {
 
@@ -28,7 +28,7 @@ class MODULES_EXPORT MLGraphMojo final : public MLGraph {
   static void ValidateAndBuild(ScopedMLTrace scoped_trace,
                                MLContext* context,
                                const MLNamedOperands& named_outputs,
-                               ScriptPromiseResolverTyped<MLGraph>* resolver);
+                               ScriptPromiseResolver<MLGraph>* resolver);
 
   MLGraphMojo(ScriptState* script_state, MLContext* context);
   ~MLGraphMojo() override;
@@ -41,18 +41,24 @@ class MODULES_EXPORT MLGraphMojo final : public MLGraph {
   // learning API in the WebNN Service.
   void BuildImpl(ScopedMLTrace scoped_trace,
                  const MLNamedOperands& outputs,
-                 ScriptPromiseResolverTyped<MLGraph>* resolver) override;
+                 ScriptPromiseResolver<MLGraph>* resolver) override;
 
   void ComputeImpl(ScopedMLTrace scoped_trace,
                    const MLNamedArrayBufferViews& inputs,
                    const MLNamedArrayBufferViews& outputs,
-                   ScriptPromiseResolverTyped<MLComputeResult>* resolver,
+                   ScriptPromiseResolver<MLComputeResult>* resolver,
                    ExceptionState& exception_state) override;
+
+  void DispatchImpl(ScopedMLTrace scoped_trace,
+                    const MLNamedBuffers& inputs,
+                    const MLNamedBuffers& outputs,
+                    ExceptionState& exception_state) override;
+
   // The callback of computing `WebNNGraph` by calling hardware accelerated OS
   // machine learning APIs.
   void OnDidCompute(
       ScopedMLTrace scoped_trace,
-      ScriptPromiseResolverTyped<MLComputeResult>* resolver,
+      ScriptPromiseResolver<MLComputeResult>* resolver,
       std::unique_ptr<Vector<std::pair<String, ArrayBufferViewInfo>>>
           inputs_info,
       std::unique_ptr<Vector<std::pair<String, ArrayBufferViewInfo>>>
@@ -63,14 +69,14 @@ class MODULES_EXPORT MLGraphMojo final : public MLGraph {
   // The returned `CreateGraphResultPtr` contains a `pending_remote<WebNNGraph>`
   // if the graph was successfully created and an `Error` otherwise.
   void OnCreateWebNNGraph(ScopedMLTrace scoped_trace,
-                          ScriptPromiseResolverTyped<MLGraph>* resolver,
+                          ScriptPromiseResolver<MLGraph>* resolver,
                           webnn::mojom::blink::CreateGraphResultPtr result);
 
   Member<MLContext> ml_context_;
 
   // The `WebNNGraph` is compiled graph that can be executed by the hardware
   // accelerated OS machine learning API.
-  HeapMojoRemote<webnn::mojom::blink::WebNNGraph> remote_graph_;
+  HeapMojoAssociatedRemote<webnn::mojom::blink::WebNNGraph> remote_graph_;
 };
 
 }  // namespace blink

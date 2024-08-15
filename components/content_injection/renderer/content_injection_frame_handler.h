@@ -53,7 +53,7 @@ class FrameHandler : public content::RenderFrameObserver,
   bool InjectScript(const std::string& key,
                     const std::string& content,
                     const mojom::InjectionItemMetadata& metadata);
-  void InjectJS(const std::string& content, int world_id);
+  void InjectJS(const std::string& key, const std::string& content, int world_id);
   void InjectCSS(const std::string& key,
                  const std::string& content,
                  const mojom::StylesheetOrigin origin);

@@ -44,13 +44,13 @@
 #include "absl/strings/str_replace.h"
 #include "absl/time/time.h"
 #include "./centipede/blob_file.h"
+#include "./centipede/corpus_io.h"
 #include "./centipede/defs.h"
 #include "./centipede/feature.h"
 #include "./centipede/logging.h"
 #include "./centipede/remote_file.h"
 #include "./centipede/rusage_profiler.h"
 #include "./centipede/seed_corpus_config.pb.h"
-#include "./centipede/shard_reader.h"
 #include "./centipede/thread_pool.h"
 #include "./centipede/util.h"
 #include "./centipede/workdir.h"
@@ -71,7 +71,7 @@ namespace {
 
 std::string ShardPathsForLogging(  //
     const std::string& corpus_fname, const std::string& features_fname) {
-  if (VLOG_IS_ON(3)) {
+  if (ABSL_VLOG_IS_ON(3)) {
     return absl::StrCat(  //
         ":\nCorpus:  ", corpus_fname, "\nFeatures:", features_fname);
   }
@@ -108,9 +108,9 @@ SeedCorpusConfig ResolveSeedCorpusConfig(  //
       << "Couldn't parse config: " << VV(config_str);
   CHECK_EQ(config.sources_size() > 0, config.has_destination())
       << "Non-empty config must have both source(s) and destination: "
-      << VV(config_spec) << VV(config.DebugString());
+      << VV(config_spec) << VV(config);
 
-  LOG(INFO) << "Parsed config:\n" << config.DebugString();
+  LOG(INFO) << "Parsed config:\n" << config;
 
   // Resolve relative `source.dir_glob`s in the config to absolute ones.
   for (auto& src : *config.mutable_sources()) {
@@ -136,7 +136,7 @@ SeedCorpusConfig ResolveSeedCorpusConfig(  //
         WorkDir::kDigitsInShardIndex);
   }
 
-  LOG(INFO) << "Resolved config:\n" << config.DebugString();
+  LOG(INFO) << "Resolved config:\n" << config;
 
   return config;
 }
@@ -147,13 +147,12 @@ void SampleSeedCorpusElementsFromSource(    //
     std::string_view coverage_binary_name,  //
     std::string_view coverage_binary_hash,  //
     InputAndFeaturesVec& elements) {
-  RPROF_THIS_FUNCTION_WITH_TIMELAPSE(                                 //
-      /*enable=*/VLOG_IS_ON(1),                                       //
-      /*timelapse_interval=*/absl::Seconds(VLOG_IS_ON(2) ? 10 : 60),  //
-      /*also_log_timelapses=*/VLOG_IS_ON(10));
+  RPROF_THIS_FUNCTION_WITH_TIMELAPSE(                                      //
+      /*enable=*/ABSL_VLOG_IS_ON(1),                                       //
+      /*timelapse_interval=*/absl::Seconds(ABSL_VLOG_IS_ON(2) ? 10 : 60),  //
+      /*also_log_timelapses=*/ABSL_VLOG_IS_ON(10));
 
-  LOG(INFO) << "Reading/sampling seed corpus elements from source:\n"
-            << source.DebugString();
+  LOG(INFO) << "Reading/sampling seed corpus elements from source:\n" << source;
 
   // Find `source.dir_glob()`-matching dirs and pick at most
   // `source.num_recent_dirs()` most recent ones.
@@ -226,7 +225,7 @@ void SampleSeedCorpusElementsFromSource(    //
 
         ReadShard(corpus_fname, features_fname,
                   [shard, &shard_elts, &shard_elts_with_features](  //
-                      const ByteArray& input, FeatureVec& features) {
+                      ByteArray input, FeatureVec features) {
                     // `ReadShard()` indicates "features not computed/found" as
                     // `{}` and "features computed/found, but empty" as
                     // `{feature_domains::kNoFeature}`. We're interested in how
@@ -283,7 +282,7 @@ void SampleSeedCorpusElementsFromSource(    //
   switch (source.sample_size_case()) {
     case SeedCorpusSource::kSampledFraction:
       CHECK(source.sampled_fraction() > 0.0 && source.sampled_fraction() <= 1.0)
-          << VV(source.DebugString());
+          << VV(source);
       sample_size = std::llrint(src_elts.size() * source.sampled_fraction());
       break;
     case SeedCorpusSource::kSampledCount:
@@ -332,14 +331,14 @@ void WriteSeedCorpusElementsToDestination(  //
   CHECK(!coverage_binary_hash.empty());
   CHECK(!destination.dir_path().empty());
 
-  RPROF_THIS_FUNCTION_WITH_TIMELAPSE(                                 //
-      /*enable=*/VLOG_IS_ON(1),                                       //
-      /*timelapse_interval=*/absl::Seconds(VLOG_IS_ON(2) ? 10 : 60),  //
-      /*also_log_timelapses=*/VLOG_IS_ON(10));
+  RPROF_THIS_FUNCTION_WITH_TIMELAPSE(                                      //
+      /*enable=*/ABSL_VLOG_IS_ON(1),                                       //
+      /*timelapse_interval=*/absl::Seconds(ABSL_VLOG_IS_ON(2) ? 10 : 60),  //
+      /*also_log_timelapses=*/ABSL_VLOG_IS_ON(10));
 
   LOG(INFO) << "Writing " << elements.size()
             << " seed corpus elements to destination:\n"
-            << destination.DebugString();
+            << destination;
 
   CHECK_GT(destination.num_shards(), 0)
       << "Requested number of shards can't be 0";
@@ -503,7 +502,7 @@ void GenerateSeedCorpusFromConfig(          //
   };
   const std::filesystem::path debug_info_dir = workdir.DebugInfoDirPath();
   RemoteMkdir(debug_info_dir.string());
-  RemoteFileSetContents(debug_info_dir / "seeding.cfg", config.DebugString());
+  RemoteFileSetContents(debug_info_dir / "seeding.cfg", absl::StrCat(config));
 
   InputAndFeaturesVec elements;
 

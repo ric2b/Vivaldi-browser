@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
-- - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+- - /chromium-os/developer-library/reference
+  - ChromiumOS > Reference
 page_name: bazel-remote-caching
 title: Bazel Remote Caching
 ---

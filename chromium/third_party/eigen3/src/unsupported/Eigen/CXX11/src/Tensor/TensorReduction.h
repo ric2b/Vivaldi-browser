@@ -977,11 +977,12 @@ struct TensorReductionEvaluatorBase<const TensorReductionOp<Op, Dims, ArgType, M
   // Dimensions of the output of the operation.
   Dimensions m_dimensions;
   // Precomputed strides for the output tensor.
-  array<Index, NumOutputDims> m_outputStrides;
-  array<internal::TensorIntDivisor<Index>, NumOutputDims> m_fastOutputStrides;
-  array<Index, NumPreservedStrides> m_preservedStrides;
+  // Avoid zero-sized arrays, since element access fails to compile on GPU.
+  array<Index, (std::max)(NumOutputDims, 1)> m_outputStrides;
+  array<internal::TensorIntDivisor<Index>, (std::max)(NumOutputDims, 1)> m_fastOutputStrides;
+  array<Index, (std::max)(NumPreservedStrides, 1)> m_preservedStrides;
   // Map from output to input dimension index.
-  array<Index, NumOutputDims> m_output_to_input_dim_map;
+  array<Index, (std::max)(NumOutputDims, 1)> m_output_to_input_dim_map;
   // How many values go into each reduction
   Index m_numValuesToReduce;
 

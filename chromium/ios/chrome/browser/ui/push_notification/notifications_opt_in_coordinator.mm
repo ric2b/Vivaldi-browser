@@ -8,7 +8,7 @@
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "components/signin/public/base/signin_metrics.h"
-#import "components/sync/base/features.h"
+#import "ios/chrome/browser/content_notification/model/content_notification_util.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_client_id.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
@@ -56,6 +56,8 @@
   _viewController.delegate = mediator;
   _viewController.notificationsDelegate = mediator;
   _viewController.presentationController.delegate = self;
+  _viewController.isContentNotificationEnabled =
+      IsContentNotificationEnabled(self.browser->GetBrowserState());
   [mediator configureConsumer];
   self.mediator = mediator;
   [self.baseViewController presentViewController:_viewController
@@ -83,18 +85,13 @@
           [weakSelf.mediator disableUserSelectionForItem:kContent];
         }
       };
+  // If there are 0 identities, kInstantSignin requires less taps.
+  ChromeBrowserState* browserState = self.browser->GetBrowserState();
   AuthenticationOperation operation =
-      AuthenticationOperation::kSigninAndSyncWithTwoScreens;
-  if (base::FeatureList::IsEnabled(
-          syncer::kReplaceSyncPromosWithSignInPromos)) {
-    // If there are 0 identities, kInstantSignin requires less taps.
-    ChromeBrowserState* browserState = self.browser->GetBrowserState();
-    operation =
-        ChromeAccountManagerServiceFactory::GetForBrowserState(browserState)
-                ->HasIdentities()
-            ? AuthenticationOperation::kSigninOnly
-            : AuthenticationOperation::kInstantSignin;
-  }
+      ChromeAccountManagerServiceFactory::GetForBrowserState(browserState)
+              ->HasIdentities()
+          ? AuthenticationOperation::kSigninOnly
+          : AuthenticationOperation::kInstantSignin;
   ShowSigninCommand* command = [[ShowSigninCommand alloc]
       initWithOperation:operation
                identity:nil

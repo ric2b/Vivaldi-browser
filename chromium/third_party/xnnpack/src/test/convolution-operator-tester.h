@@ -8,7 +8,11 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
+#include <xnnpack.h>
+#include <xnnpack/aligned-allocator.h>
+#include <xnnpack/cache.h>
+#include <xnnpack/common.h>
+#include <xnnpack/microparams.h>
 
 #include <algorithm>
 #include <cassert>
@@ -23,13 +27,10 @@
 #include <vector>
 
 #include "convolution-test-helpers.h"
+#include "pthreadpool.h"
+#include "replicable_random_device.h"
+#include <gtest/gtest.h>
 #include <fp16/fp16.h>
-
-#include <xnnpack.h>
-#include <xnnpack/aligned-allocator.h>
-#include <xnnpack/cache.h>
-#include <xnnpack/allocator.h>
-
 
 class ConvolutionOperatorTester {
  public:
@@ -38,7 +39,7 @@ class ConvolutionOperatorTester {
     FP32,
   };
 
-  inline ConvolutionOperatorTester& padding_tf_same(bool padding_same) {
+  ConvolutionOperatorTester& padding_tf_same(bool padding_same) {
     if (padding_same) {
       assert(padding_top() == 0);
       assert(padding_left() == 0);
@@ -49,11 +50,11 @@ class ConvolutionOperatorTester {
     return *this;
   }
 
-  inline bool padding_tf_same() const {
+  bool padding_tf_same() const {
     return this->padding_tf_same_;
   }
 
-  inline ConvolutionOperatorTester& padding(uint32_t padding) {
+  ConvolutionOperatorTester& padding(uint32_t padding) {
     assert(!padding_tf_same());
     this->padding_top_ = padding;
     this->padding_right_ = padding;
@@ -62,7 +63,7 @@ class ConvolutionOperatorTester {
     return *this;
   }
 
-  inline ConvolutionOperatorTester& padding(uint32_t padding_height, uint32_t padding_width) {
+  ConvolutionOperatorTester& padding(uint32_t padding_height, uint32_t padding_width) {
     assert(!padding_tf_same());
     this->padding_top_ = padding_height;
     this->padding_right_ = padding_width;
@@ -71,27 +72,27 @@ class ConvolutionOperatorTester {
     return *this;
   }
 
-  inline ConvolutionOperatorTester& padding_height(uint32_t padding_height) {
+  ConvolutionOperatorTester& padding_height(uint32_t padding_height) {
     assert(!padding_tf_same());
     this->padding_top_ = padding_height;
     this->padding_bottom_ = padding_height;
     return *this;
   }
 
-  inline ConvolutionOperatorTester& padding_width(uint32_t padding_width) {
+  ConvolutionOperatorTester& padding_width(uint32_t padding_width) {
     assert(!padding_tf_same());
     this->padding_right_ = padding_width;
     this->padding_left_ = padding_width;
     return *this;
   }
 
-  inline ConvolutionOperatorTester& padding_top(uint32_t padding_top) {
+  ConvolutionOperatorTester& padding_top(uint32_t padding_top) {
     assert(!padding_tf_same());
     this->padding_top_ = padding_top;
     return *this;
   }
 
-  inline uint32_t padding_top() const {
+  uint32_t padding_top() const {
     if (padding_tf_same()) {
       const uint32_t total_padding_height =
         (output_height() - 1) * subsampling_height() + dilated_kernel_height() - input_height();
@@ -101,13 +102,13 @@ class ConvolutionOperatorTester {
     }
   }
 
-  inline ConvolutionOperatorTester& padding_left(uint32_t padding_left) {
+  ConvolutionOperatorTester& padding_left(uint32_t padding_left) {
     assert(!padding_tf_same());
     this->padding_left_ = padding_left;
     return *this;
   }
 
-  inline uint32_t padding_left() const {
+  uint32_t padding_left() const {
     if (padding_tf_same()) {
       const uint32_t total_padding_width =
         (output_width() - 1) * subsampling_width() + dilated_kernel_width() - input_width();
@@ -117,13 +118,13 @@ class ConvolutionOperatorTester {
     }
   }
 
-  inline ConvolutionOperatorTester& padding_bottom(uint32_t padding_bottom) {
+  ConvolutionOperatorTester& padding_bottom(uint32_t padding_bottom) {
     assert(!padding_tf_same());
     this->padding_bottom_ = padding_bottom;
     return *this;
   }
 
-  inline uint32_t padding_bottom() const {
+  uint32_t padding_bottom() const {
     if (padding_tf_same()) {
       const uint32_t total_padding_height =
         (output_height() - 1) * subsampling_height() + dilated_kernel_height() - input_height();
@@ -133,13 +134,13 @@ class ConvolutionOperatorTester {
     }
   }
 
-  inline ConvolutionOperatorTester& padding_right(uint32_t padding_right) {
+  ConvolutionOperatorTester& padding_right(uint32_t padding_right) {
     assert(!padding_tf_same());
     this->padding_right_ = padding_right;
     return *this;
   }
 
-  inline uint32_t padding_right() const {
+  uint32_t padding_right() const {
     if (padding_tf_same()) {
       const uint32_t total_padding_width =
         (output_width() - 1) * subsampling_width() + dilated_kernel_width() - input_width();
@@ -149,7 +150,7 @@ class ConvolutionOperatorTester {
     }
   }
 
-  inline ConvolutionOperatorTester& input_size(uint32_t input_height, uint32_t input_width) {
+  ConvolutionOperatorTester& input_size(uint32_t input_height, uint32_t input_width) {
     assert(input_height >= 1);
     assert(input_width >= 1);
     this->input_height_ = input_height;
@@ -157,74 +158,74 @@ class ConvolutionOperatorTester {
     return *this;
   }
 
-  inline ConvolutionOperatorTester& input_height(uint32_t input_height) {
+  ConvolutionOperatorTester& input_height(uint32_t input_height) {
     assert(input_height >= 1);
     this->input_height_ = input_height;
     return *this;
   }
 
-  inline uint32_t input_height() const {
+  uint32_t input_height() const {
     return this->input_height_;
   }
 
-  inline ConvolutionOperatorTester& input_width(uint32_t input_width) {
+  ConvolutionOperatorTester& input_width(uint32_t input_width) {
     assert(input_width >= 1);
     this->input_width_ = input_width;
     return *this;
   }
 
-  inline uint32_t input_width() const {
+  uint32_t input_width() const {
     return this->input_width_;
   }
 
-  inline ConvolutionOperatorTester& groups(uint32_t groups) {
+  ConvolutionOperatorTester& groups(uint32_t groups) {
     assert(groups >= 1);
     this->groups_ = groups;
     return *this;
   }
 
-  inline uint32_t groups() const {
+  uint32_t groups() const {
     return this->groups_;
   }
 
-  inline ConvolutionOperatorTester& group_input_channels(size_t group_input_channels) {
+  ConvolutionOperatorTester& group_input_channels(size_t group_input_channels) {
     assert(group_input_channels >= 1);
     this->group_input_channels_ = group_input_channels;
     return *this;
   }
 
-  inline size_t group_input_channels() const {
+  size_t group_input_channels() const {
     return this->group_input_channels_;
   }
 
-  inline ConvolutionOperatorTester& group_output_channels(size_t group_output_channels) {
+  ConvolutionOperatorTester& group_output_channels(size_t group_output_channels) {
     assert(group_output_channels >= 1);
     this->group_output_channels_ = group_output_channels;
     return *this;
   }
 
-  inline size_t group_output_channels() const {
+  size_t group_output_channels() const {
     return this->group_output_channels_;
   }
 
-  inline ConvolutionOperatorTester& batch_size(size_t batch_size) {
+  ConvolutionOperatorTester& batch_size(size_t batch_size) {
     assert(batch_size >= 1);
     this->batch_size_ = batch_size;
     return *this;
   }
 
-  inline size_t batch_size() const {
+  size_t batch_size() const {
     return this->batch_size_;
   }
 
-  inline ConvolutionOperatorTester& kernel_size(uint32_t kernel_size) {
+  ConvolutionOperatorTester& kernel_size(uint32_t kernel_size) {
     assert(kernel_size >= 1);
     this->kernel_height_ = kernel_size;
     this->kernel_width_ = kernel_size;
     return *this;
   }
 
-  inline ConvolutionOperatorTester& kernel_size(uint32_t kernel_height, uint32_t kernel_width) {
+  ConvolutionOperatorTester& kernel_size(uint32_t kernel_height, uint32_t kernel_width) {
     assert(kernel_height >= 1);
     assert(kernel_width >= 1);
     this->kernel_height_ = kernel_height;
@@ -232,43 +233,43 @@ class ConvolutionOperatorTester {
     return *this;
   }
 
-  inline ConvolutionOperatorTester& transient_indirection_buffer(bool use_transient_buffer) {
+  ConvolutionOperatorTester& transient_indirection_buffer(bool use_transient_buffer) {
     this->transient_indirection_buffer_ = use_transient_buffer;
     return *this;
   }
 
-  inline bool transient_indirection_buffer() const {
+  bool transient_indirection_buffer() const {
     return this->transient_indirection_buffer_;
   }
 
-  inline ConvolutionOperatorTester& kernel_height(uint32_t kernel_height) {
+  ConvolutionOperatorTester& kernel_height(uint32_t kernel_height) {
     assert(kernel_height >= 1);
     this->kernel_height_ = kernel_height;
     return *this;
   }
 
-  inline uint32_t kernel_height() const {
+  uint32_t kernel_height() const {
     return this->kernel_height_;
   }
 
-  inline ConvolutionOperatorTester& kernel_width(uint32_t kernel_width) {
+  ConvolutionOperatorTester& kernel_width(uint32_t kernel_width) {
     assert(kernel_width >= 1);
     this->kernel_width_ = kernel_width;
     return *this;
   }
 
-  inline uint32_t kernel_width() const {
+  uint32_t kernel_width() const {
     return this->kernel_width_;
   }
 
-  inline ConvolutionOperatorTester& dilation(uint32_t dilation) {
+  ConvolutionOperatorTester& dilation(uint32_t dilation) {
     assert(dilation >= 1);
     this->dilation_height_ = dilation;
     this->dilation_width_ = dilation;
     return *this;
   }
 
-  inline ConvolutionOperatorTester& dilation(uint32_t dilation_height, uint32_t dilation_width) {
+  ConvolutionOperatorTester& dilation(uint32_t dilation_height, uint32_t dilation_width) {
     assert(dilation_height >= 1);
     assert(dilation_width >= 1);
     this->dilation_height_ = dilation_height;
@@ -276,34 +277,34 @@ class ConvolutionOperatorTester {
     return *this;
   }
 
-  inline ConvolutionOperatorTester& dilation_height(uint32_t dilation_height) {
+  ConvolutionOperatorTester& dilation_height(uint32_t dilation_height) {
     assert(dilation_height >= 1);
     this->dilation_height_ = dilation_height;
     return *this;
   }
 
-  inline uint32_t dilation_height() const {
+  uint32_t dilation_height() const {
     return this->dilation_height_;
   }
 
-  inline ConvolutionOperatorTester& dilation_width(uint32_t dilation_width) {
+  ConvolutionOperatorTester& dilation_width(uint32_t dilation_width) {
     assert(dilation_width >= 1);
     this->dilation_width_ = dilation_width;
     return *this;
   }
 
-  inline uint32_t dilation_width() const {
+  uint32_t dilation_width() const {
     return this->dilation_width_;
   }
 
-  inline ConvolutionOperatorTester& subsampling(uint32_t subsampling) {
+  ConvolutionOperatorTester& subsampling(uint32_t subsampling) {
     assert(subsampling >= 1);
     this->subsampling_height_ = subsampling;
     this->subsampling_width_ = subsampling;
     return *this;
   }
 
-  inline ConvolutionOperatorTester& subsampling(uint32_t subsampling_height, uint32_t subsampling_width) {
+  ConvolutionOperatorTester& subsampling(uint32_t subsampling_height, uint32_t subsampling_width) {
     assert(subsampling_height >= 1);
     assert(subsampling_width >= 1);
     this->subsampling_height_ = subsampling_height;
@@ -311,33 +312,33 @@ class ConvolutionOperatorTester {
     return *this;
   }
 
-  inline ConvolutionOperatorTester& subsampling_height(uint32_t subsampling_height) {
+  ConvolutionOperatorTester& subsampling_height(uint32_t subsampling_height) {
     assert(subsampling_height >= 1);
     this->subsampling_height_ = subsampling_height;
     return *this;
   }
 
-  inline uint32_t subsampling_height() const {
+  uint32_t subsampling_height() const {
     return this->subsampling_height_;
   }
 
-  inline ConvolutionOperatorTester& subsampling_width(uint32_t subsampling_width) {
+  ConvolutionOperatorTester& subsampling_width(uint32_t subsampling_width) {
     assert(subsampling_width >= 1);
     this->subsampling_width_ = subsampling_width;
     return *this;
   }
 
-  inline uint32_t subsampling_width() const {
+  uint32_t subsampling_width() const {
     return this->subsampling_width_;
   }
 
-  inline ConvolutionOperatorTester& input_channel_stride(size_t input_channel_stride) {
+  ConvolutionOperatorTester& input_channel_stride(size_t input_channel_stride) {
     assert(input_channel_stride >= 1);
     this->input_channel_stride_ = input_channel_stride;
     return *this;
   }
 
-  inline size_t input_channel_stride() const {
+  size_t input_channel_stride() const {
     if (this->input_channel_stride_ == 0) {
       return group_input_channels() * groups();
     } else {
@@ -346,13 +347,13 @@ class ConvolutionOperatorTester {
     }
   }
 
-  inline ConvolutionOperatorTester& output_channel_stride(size_t output_channel_stride) {
+  ConvolutionOperatorTester& output_channel_stride(size_t output_channel_stride) {
     assert(output_channel_stride >= 1);
     this->output_channel_stride_ = output_channel_stride;
     return *this;
   }
 
-  inline size_t output_channel_stride() const {
+  size_t output_channel_stride() const {
     if (this->output_channel_stride_ == 0) {
       return group_output_channels() * groups();
     } else {
@@ -361,15 +362,15 @@ class ConvolutionOperatorTester {
     }
   }
 
-  inline uint32_t dilated_kernel_height() const {
+  uint32_t dilated_kernel_height() const {
     return (kernel_height() - 1) * dilation_height() + 1;
   }
 
-  inline uint32_t dilated_kernel_width() const {
+  uint32_t dilated_kernel_width() const {
     return (kernel_width() - 1) * dilation_width() + 1;
   }
 
-  inline size_t output_height() const {
+  size_t output_height() const {
     if (padding_tf_same()) {
       return (input_height() + subsampling_height() - 1) / subsampling_height();
     } else {
@@ -382,7 +383,7 @@ class ConvolutionOperatorTester {
     }
   }
 
-  inline size_t output_width() const {
+  size_t output_width() const {
     if (padding_tf_same()) {
       return (input_width() + subsampling_width() - 1) / subsampling_width();
     } else {
@@ -395,7 +396,7 @@ class ConvolutionOperatorTester {
     }
   }
 
-  inline ConvolutionOperatorTester& next_input_size(uint32_t next_input_height, uint32_t next_input_width) {
+  ConvolutionOperatorTester& next_input_size(uint32_t next_input_height, uint32_t next_input_width) {
     assert(next_input_height >= 1);
     assert(next_input_width >= 1);
     this->next_input_height_ = next_input_height;
@@ -403,13 +404,13 @@ class ConvolutionOperatorTester {
     return *this;
   }
 
-  inline ConvolutionOperatorTester& next_input_height(uint32_t next_input_height) {
+  ConvolutionOperatorTester& next_input_height(uint32_t next_input_height) {
     assert(next_input_height >= 1);
     this->next_input_height_ = next_input_height;
     return *this;
   }
 
-  inline uint32_t next_input_height() const {
+  uint32_t next_input_height() const {
     if (this->next_input_height_ == 0) {
       return input_height();
     } else {
@@ -417,13 +418,13 @@ class ConvolutionOperatorTester {
     }
   }
 
-  inline ConvolutionOperatorTester& next_input_width(uint32_t next_input_width) {
+  ConvolutionOperatorTester& next_input_width(uint32_t next_input_width) {
     assert(next_input_width >= 1);
     this->next_input_width_ = next_input_width;
     return *this;
   }
 
-  inline uint32_t next_input_width() const {
+  uint32_t next_input_width() const {
     if (this->next_input_width_ == 0) {
       return input_width();
     } else {
@@ -431,7 +432,7 @@ class ConvolutionOperatorTester {
     }
   }
 
-  inline size_t next_output_height() const {
+  size_t next_output_height() const {
     const size_t padded_input_height = padding_top() + next_input_height() + padding_bottom();
     if (padded_input_height <= dilated_kernel_height()) {
       return 1;
@@ -440,7 +441,7 @@ class ConvolutionOperatorTester {
     }
   }
 
-  inline size_t next_output_width() const {
+  size_t next_output_width() const {
     const size_t padded_input_width = padding_left() + next_input_width() + padding_right();
     if (padded_input_width <= dilated_kernel_width()) {
       return 1;
@@ -449,13 +450,13 @@ class ConvolutionOperatorTester {
     }
   }
 
-  inline ConvolutionOperatorTester& next_batch_size(size_t next_batch_size) {
+  ConvolutionOperatorTester& next_batch_size(size_t next_batch_size) {
     assert(next_batch_size >= 1);
     this->next_batch_size_ = next_batch_size;
     return *this;
   }
 
-  inline size_t next_batch_size() const {
+  size_t next_batch_size() const {
     if (this->next_batch_size_ == 0) {
       return batch_size();
     } else {
@@ -463,75 +464,75 @@ class ConvolutionOperatorTester {
     }
   }
 
-  inline ConvolutionOperatorTester& sparsity(float sparsity) {
+  ConvolutionOperatorTester& sparsity(float sparsity) {
     this->sparsity_ = sparsity;
     return *this;
   }
 
-  inline float sparsity() const {
+  float sparsity() const {
     return this->sparsity_;
   }
 
-  inline ConvolutionOperatorTester& qmin(uint8_t qmin) {
+  ConvolutionOperatorTester& qmin(uint8_t qmin) {
     this->qmin_ = qmin;
     return *this;
   }
 
-  inline uint8_t qmin() const {
+  uint8_t qmin() const {
     return this->qmin_;
   }
 
-  inline ConvolutionOperatorTester& qmax(uint8_t qmax) {
+  ConvolutionOperatorTester& qmax(uint8_t qmax) {
     this->qmax_ = qmax;
     return *this;
   }
 
-  inline uint8_t qmax() const {
+  uint8_t qmax() const {
     return this->qmax_;
   }
 
-  inline ConvolutionOperatorTester& force_nhwc_input(bool force_nhwc_input) {
+  ConvolutionOperatorTester& force_nhwc_input(bool force_nhwc_input) {
     this->force_nhwc_input_ = force_nhwc_input;
     return *this;
   }
 
-  inline bool force_nhwc_input() const {
+  bool force_nhwc_input() const {
     return this->force_nhwc_input_;
   }
 
-  inline ConvolutionOperatorTester& depthwise_layout(bool depthwise_layout) {
+  ConvolutionOperatorTester& depthwise_layout(bool depthwise_layout) {
     this->depthwise_layout_ = depthwise_layout;
     return *this;
   }
 
-  inline bool depthwise_layout() const {
+  bool depthwise_layout() const {
     return this->depthwise_layout_;
   }
 
-  inline ConvolutionOperatorTester& has_bias(bool has_bias) {
+  ConvolutionOperatorTester& has_bias(bool has_bias) {
     this->has_bias_ = has_bias;
     return *this;
   }
 
-  inline bool has_bias() const {
+  bool has_bias() const {
     return this->has_bias_;
   }
 
-  inline ConvolutionOperatorTester& weights_type(WeightsType weights_type) {
+  ConvolutionOperatorTester& weights_type(WeightsType weights_type) {
     this->weights_type_ = weights_type;
     return *this;
   }
 
-  inline WeightsType weights_type() const {
+  WeightsType weights_type() const {
     return this->weights_type_;
   }
 
-  inline ConvolutionOperatorTester& multithreaded(size_t multithreaded) {
+  ConvolutionOperatorTester& multithreaded(size_t multithreaded) {
     this->multithreaded_ = multithreaded;
     return *this;
   }
 
-  inline size_t multithreaded() const {
+  size_t multithreaded() const {
     return this->multithreaded_;
   }
 
@@ -540,40 +541,39 @@ class ConvolutionOperatorTester {
     return multithreaded() ? 5 : 1;
   }
 
-  inline ConvolutionOperatorTester& iterations(size_t iterations) {
+  ConvolutionOperatorTester& iterations(size_t iterations) {
     this->iterations_ = iterations;
     return *this;
   }
 
-  inline size_t iterations() const {
+  size_t iterations() const {
     return this->iterations_;
   }
 
 #if XNN_PLATFORM_JIT
-  inline ConvolutionOperatorTester& use_jit(bool use_jit) {
+  ConvolutionOperatorTester& use_jit(bool use_jit) {
     this->use_jit_ = use_jit;
     return *this;
   }
 
-  inline bool use_jit() const {
+  bool use_jit() const {
     return this->use_jit_;
   }
 #endif
 
-  inline ConvolutionOperatorTester& use_weights_cache(bool use_weights_cache) {
+  ConvolutionOperatorTester& use_weights_cache(bool use_weights_cache) {
     this->use_weights_cache_ = use_weights_cache;
     return *this;
   }
 
-  inline bool use_weights_cache() const {
+  bool use_weights_cache() const {
     return this->use_weights_cache_;
   }
 
   void TestNHWCxQC8() const {
     ASSERT_EQ(weights_type(), WeightsType::Default);
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_int_distribution<int32_t> i32dist(-10000, 10000);
     std::uniform_int_distribution<int32_t> i8dist(
       std::numeric_limits<int8_t>::min(), std::numeric_limits<int8_t>::max());
@@ -857,8 +857,7 @@ class ConvolutionOperatorTester {
   void TestNHWCxQD8F16QC8W() const {
     ASSERT_EQ(weights_type(), WeightsType::Default);
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(-1.f, 1.f);
     std::uniform_real_distribution<float> f32idist(0.1f, 1.0f);
     std::uniform_int_distribution<int32_t> w8dist(
@@ -1089,8 +1088,7 @@ class ConvolutionOperatorTester {
   void TestNHWCxQD8F32QC8W() const {
     ASSERT_EQ(weights_type(), WeightsType::Default);
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(-1.f, 1.f);
     std::uniform_real_distribution<float> f32idist(0.5f, 2.0f);
     std::uniform_int_distribution<int32_t> w8dist(
@@ -1310,8 +1308,7 @@ class ConvolutionOperatorTester {
   void TestNHWCxQS8() const {
     ASSERT_EQ(weights_type(), WeightsType::Default);
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_int_distribution<int32_t> i32dist(-10000, 10000);
     std::uniform_int_distribution<int32_t> i8dist(
       std::numeric_limits<int8_t>::min(), std::numeric_limits<int8_t>::max());
@@ -1578,8 +1575,7 @@ class ConvolutionOperatorTester {
   void TestNHWCxQU8() const {
     ASSERT_EQ(weights_type(), WeightsType::Default);
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_int_distribution<int32_t> i32dist(-10000, 10000);
     std::uniform_int_distribution<int32_t> u8dist(
       std::numeric_limits<uint8_t>::min(), std::numeric_limits<uint8_t>::max());
@@ -1866,8 +1862,7 @@ class ConvolutionOperatorTester {
   void TestNHWCxF32() const {
     ASSERT_EQ(weights_type(), WeightsType::Default);
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(0.1f, 1.0f);
 
     std::vector<float> input(XNN_EXTRA_BYTES / sizeof(float) +
@@ -2176,8 +2171,7 @@ class ConvolutionOperatorTester {
         GTEST_FAIL() << "unexpected weights type";
     }
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(0.1f, 1.0f);
 
     std::vector<uint16_t> input(XNN_EXTRA_BYTES / sizeof(uint16_t) +
@@ -2499,8 +2493,7 @@ class ConvolutionOperatorTester {
   void TestNCHWxF32() {
     ASSERT_EQ(weights_type(), WeightsType::Default);
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(0.1f, 1.0f);
     std::uniform_real_distribution<float> pdist;
 
@@ -2769,8 +2762,7 @@ class ConvolutionOperatorTester {
         GTEST_FAIL() << "unexpected weights type";
     }
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(0.1f, 1.0f);
     std::uniform_real_distribution<float> pdist;
 
@@ -3053,8 +3045,7 @@ class ConvolutionOperatorTester {
 
     ASSERT_FALSE(depthwise_layout());
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_int_distribution<int32_t> i32dist(-10000, 10000);
     std::uniform_int_distribution<int32_t> i8dist(
       std::numeric_limits<int8_t>::min(), std::numeric_limits<int8_t>::max());
@@ -3332,8 +3323,7 @@ class ConvolutionOperatorTester {
 
     ASSERT_FALSE(depthwise_layout());
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_int_distribution<int32_t> i32dist(-10000, 10000);
     std::uniform_int_distribution<int32_t> i8dist(
       std::numeric_limits<int8_t>::min(), std::numeric_limits<int8_t>::max());
@@ -3582,8 +3572,7 @@ class ConvolutionOperatorTester {
 
     ASSERT_FALSE(depthwise_layout());
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_int_distribution<int32_t> i32dist(-10000, 10000);
     std::uniform_int_distribution<int32_t> u8dist(
       std::numeric_limits<uint8_t>::min(), std::numeric_limits<uint8_t>::max());
@@ -3832,8 +3821,7 @@ class ConvolutionOperatorTester {
 
     ASSERT_FALSE(depthwise_layout());
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(0.1f, 1.0f);
 
     std::vector<uint16_t> input(XNN_EXTRA_BYTES / sizeof(uint16_t) + std::max(
@@ -4034,8 +4022,7 @@ class ConvolutionOperatorTester {
 
     ASSERT_FALSE(depthwise_layout());
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(0.1f, 1.0f);
 
     std::vector<float> input(XNN_EXTRA_BYTES / sizeof(float) + std::max(

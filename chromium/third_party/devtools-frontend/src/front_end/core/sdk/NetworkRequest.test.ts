@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
 import * as Protocol from '../../generated/protocol.js';
 import * as TextUtils from '../../models/text_utils/text_utils.js';
 import {expectCookie} from '../../testing/Cookies.js';
@@ -13,7 +11,7 @@ import {
   setMockConnectionResponseHandler,
 } from '../../testing/MockConnection.js';
 import * as Platform from '../platform/platform.js';
-import {assertNotNullOrUndefined} from '../platform/platform.js';
+
 import * as SDK from './sdk.js';
 
 describe('NetworkRequest', () => {
@@ -186,8 +184,11 @@ describe('NetworkRequest', () => {
       statusCode: undefined,
       cookiePartitionKey: undefined,
       cookiePartitionKeyOpaque: undefined,
-      exemptedResponseCookies:
-          [{cookie: cookie, exemptionReason: Protocol.Network.CookieExemptionReason.TPCDHeuristics}],
+      exemptedResponseCookies: [{
+        cookie: cookie,
+        cookieLine: cookie.getCookieLine() as string,
+        exemptionReason: Protocol.Network.CookieExemptionReason.TPCDHeuristics,
+      }],
     });
 
     assert.deepEqual(
@@ -247,7 +248,7 @@ describeWithMockConnection('NetworkRequest', () => {
   beforeEach(() => {
     target = createTarget();
     const networkManager = target.model(SDK.NetworkManager.NetworkManager);
-    assertNotNullOrUndefined(networkManager);
+    assert.exists(networkManager);
     networkManagerForRequestStub = sinon.stub(SDK.NetworkManager.NetworkManager, 'forRequest').returns(networkManager);
     cookie = new SDK.Cookie.Cookie('name', 'value');
     addBlockedCookieSpy = sinon.spy(SDK.CookieModel.CookieModel.prototype, 'addBlockedCookie');
@@ -261,7 +262,7 @@ describeWithMockConnection('NetworkRequest', () => {
     const removeBlockedCookieSpy = sinon.spy(SDK.CookieModel.CookieModel.prototype, 'removeBlockedCookie');
     setMockConnectionResponseHandler('Network.getCookies', () => ({cookies: []}));
     const cookieModel = target.model(SDK.CookieModel.CookieModel);
-    assertNotNullOrUndefined(cookieModel);
+    assert.exists(cookieModel);
     const url = 'url' as Platform.DevToolsPath.UrlString;
     const request = SDK.NetworkRequest.NetworkRequest.create(
         'requestId' as Protocol.Network.RequestId, url, 'documentURL' as Platform.DevToolsPath.UrlString, null, null,
@@ -294,7 +295,11 @@ describeWithMockConnection('NetworkRequest', () => {
       statusCode: undefined,
       cookiePartitionKey: undefined,
       cookiePartitionKeyOpaque: undefined,
-      exemptedResponseCookies: [{cookie, exemptionReason: Protocol.Network.CookieExemptionReason.TPCDHeuristics}],
+      exemptedResponseCookies: [{
+        cookie,
+        cookieLine: cookie.getCookieLine() as string,
+        exemptionReason: Protocol.Network.CookieExemptionReason.TPCDHeuristics,
+      }],
     });
     assert.isTrue(removeBlockedCookieSpy.calledOnceWith(cookie));
     assert.isEmpty(await cookieModel.getCookies([url]));

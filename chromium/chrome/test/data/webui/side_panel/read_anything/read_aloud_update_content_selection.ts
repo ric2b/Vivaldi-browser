@@ -1,13 +1,14 @@
 // Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-import 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything_toolbar.js';
+import 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 
 import {BrowserProxy} from '//resources/cr_components/color_change_listener/browser_proxy.js';
-import type {ReadAnythingElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/app.js';
-import {PauseActionSource} from 'chrome-untrusted://read-anything-side-panel.top-chrome/app.js';
-import {assertEquals, assertFalse, assertNull, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
+import type {ReadAnythingElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
+import {PauseActionSource} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
+import {assertEquals, assertFalse, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
 
+import {suppressInnocuousErrors} from './common.js';
 import {TestColorUpdaterBrowserProxy} from './test_color_updater_browser_proxy.js';
 
 suite('ReadAloud_UpdateContentSelection', () => {
@@ -79,26 +80,6 @@ suite('ReadAloud_UpdateContentSelection', () => {
     },
   };
 
-  /**
-   * Suppresses harmless ResizeObserver errors due to a browser bug.
-   * yaqs/2300708289911980032
-   */
-  function suppressInnocuousErrors() {
-    const onerror = window.onerror;
-    window.onerror = (message, url, lineNumber, column, error) => {
-      if ([
-            'ResizeObserver loop limit exceeded',
-            'ResizeObserver loop completed with undelivered notifications.',
-          ].includes(message.toString())) {
-        console.info('Suppressed ResizeObserver error: ', message);
-        return;
-      }
-      if (onerror) {
-        onerror.apply(window, [message, url, lineNumber, column, error]);
-      }
-    };
-  }
-
   setup(() => {
     suppressInnocuousErrors();
     testBrowserProxy = new TestColorUpdaterBrowserProxy();
@@ -111,6 +92,7 @@ suite('ReadAloud_UpdateContentSelection', () => {
 
     app = document.createElement('read-anything-app');
     document.body.appendChild(app);
+    document.onselectionchange = () => {};
     chrome.readingMode.setContentForTesting(axTree, []);
   });
 
@@ -127,10 +109,10 @@ suite('ReadAloud_UpdateContentSelection', () => {
     test('selection in reading mode panel correct', () => {
       // Calling shadowRoot.getSelection directly is not supported in TS tests,
       // so use a helper to get the selection from the app instead.
-      const selection = app.getSelection();
+      const selection = document.getSelection()!;
       assertTrue(selection != null);
-      assertEquals(selection.anchorNode.textContent, 'World');
-      assertEquals(selection.focusNode.textContent, 'Friend');
+      assertEquals(selection.anchorNode!.textContent, 'World');
+      assertEquals(selection.focusNode!.textContent, 'Friend');
       assertEquals(selection.anchorOffset, 1);
       assertEquals(selection.focusOffset, 2);
     });
@@ -151,23 +133,20 @@ suite('ReadAloud_UpdateContentSelection', () => {
       assertFalse(app.speechPlayingState.paused);
       assertTrue(app.speechPlayingState.speechStarted);
       // The expected HTML with the current highlights.
-      const expected =
-          '<div><p><span><span class="current-read-highlight">World</span>' +
-          '</span></p><p><span><span class="current-read-highlight">Friend' +
-          '</span></span><span><span class="current-read-highlight">!</span>' +
+      const expected = '<div><p><span class="parent-of-highlight">' +
+          '<span class="current-read-highlight">World</span>' +
+          '</span></p><p><span class="parent-of-highlight">' +
+          '<span class="current-read-highlight">Friend' +
+          '</span></span><span class="parent-of-highlight">' +
+          '<span class="current-read-highlight">!</span>' +
           '</span></p></div>';
       const innerHTML = app.$.container.innerHTML;
       assertEquals(innerHTML, expected);
     });
 
     test('selection in reading model panel cleared', () => {
-      // Calling shadowRoot.getSelection directly is not supported in TS tests,
-      // so use a helper to get the selection from the app instead.
-      const selection = app.getSelection();
-      assertNull(selection.anchorNode);
-      assertNull(selection.focusNode);
-      assertEquals(selection.anchorOffset, 0);
-      assertEquals(selection.focusOffset, 0);
+      const selection = document.getSelection()!;
+      assertEquals(selection.toString(), '');
     });
 
 
@@ -188,10 +167,12 @@ suite('ReadAloud_UpdateContentSelection', () => {
       assertTrue(app.speechPlayingState.paused);
       assertTrue(app.speechPlayingState.speechStarted);
       // The expected HTML with the current highlights.
-      const expected =
-          '<div><p><span><span class="current-read-highlight">World</span>' +
-          '</span></p><p><span><span class="current-read-highlight">Friend' +
-          '</span></span><span><span class="current-read-highlight">!</span>' +
+      const expected = '<div><p><span class="parent-of-highlight">' +
+          '<span class="current-read-highlight">World</span>' +
+          '</span></p><p><span class="parent-of-highlight">' +
+          '<span class="current-read-highlight">Friend' +
+          '</span></span><span class="parent-of-highlight">' +
+          '<span class="current-read-highlight">!</span>' +
           '</span></p></div>';
       const innerHTML = app.$.container.innerHTML;
       assertEquals(innerHTML, expected);
@@ -200,15 +181,15 @@ suite('ReadAloud_UpdateContentSelection', () => {
     test('selection in reading mode container correct', () => {
       // Calling shadowRoot.getSelection directly is not supported in TS tests,
       // so use a helper to get the selection from the app instead.
-      const selection = app.getSelection();
+      const selection = document.getSelection()!;
       assertTrue(selection != null);
 
       // TODO(b/327519645): Playing Read Aloud slightly adjusts what's
       // selected. This happened before disabling selection when Read Aloud
       // was playing, but adding tests for disabled selection makes this bug
       // more apparent.
-      assertEquals(selection.anchorNode.textContent, 'World');
-      assertEquals(selection.focusNode.textContent, 'Friend!');
+      assertEquals(selection.anchorNode!.textContent, 'World');
+      assertEquals(selection.focusNode!.textContent, 'Friend!');
       assertEquals(selection.anchorOffset, 0);
       assertEquals(selection.focusOffset, 0);
     });

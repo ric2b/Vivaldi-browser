@@ -11,8 +11,8 @@ class TabStripLayout: UICollectionViewFlowLayout {
   public var needsSizeUpdate: Bool = true
 
   /// Static decoration views that border the collection view.
-  public var leftStaticSeparator: TabStripDecorationView?
-  public var rightStaticSeparator: TabStripDecorationView?
+  public var leadingStaticSeparator: TabStripDecorationView?
+  public var trailingStaticSeparator: TabStripDecorationView?
 
   /// The tab strip new tab button.
   public var newTabButton: UIView?
@@ -29,6 +29,13 @@ class TabStripLayout: UICollectionViewFlowLayout {
   /// Index paths of animated items.
   private var indexPathsOfDeletingItems: [IndexPath] = []
   private var indexPathsOfInsertingItems: [IndexPath] = []
+
+  /// Whether items are currently being collapsed/expanded.
+  private var expandingItems = false
+  private var collapsingItems = false
+
+  /// The currently selected item.
+  public var selectedItem: TabSwitcherItem? = nil
 
   //// Leading constraint of the `newTabButton`.
   private var newTabButtonLeadingConstraint: NSLayoutConstraint?
@@ -97,11 +104,16 @@ class TabStripLayout: UICollectionViewFlowLayout {
 
   // Returns the selected item index path.
   private var selectedIndexPath: IndexPath? {
-    guard let collectionView = collectionView else { return nil }
-    return collectionView.indexPathsForSelectedItems?.first
+    return TabStripItemIdentifier(selectedItem).flatMap {
+      dataSource?.indexPath(for: $0)
+    }
   }
 
   // MARK: - UICollectionViewLayout
+
+  override var flipsHorizontallyInOppositeLayoutDirection: Bool {
+    return true
+  }
 
   override func prepare() {
     /// Only recalculate the `tabCellSize` when needed to avoid extra
@@ -120,10 +132,10 @@ class TabStripLayout: UICollectionViewFlowLayout {
     indexPathsOfInsertingItems = []
     for item in updateItems {
       switch item.updateAction {
-      case .insert:
+      case .insert where !expandingItems:
         indexPathsOfInsertingItems.append(item.indexPathAfterUpdate!)
         break
-      case .delete:
+      case .delete where !collapsingItems:
         indexPathsOfDeletingItems.append(item.indexPathBeforeUpdate!)
         break
       default:
@@ -142,17 +154,18 @@ class TabStripLayout: UICollectionViewFlowLayout {
     -> UICollectionViewLayoutAttributes?
   {
     guard
+      let collectionView = collectionView,
       let attributes: UICollectionViewLayoutAttributes = super
         .initialLayoutAttributesForAppearingItem(at: itemIndexPath),
       let itemIdentifier = dataSource?.itemIdentifier(for: itemIndexPath)
     else { return nil }
     switch itemIdentifier.item {
-    case .tab(let tabSwitcherItem):
-      return initialLayoutAttributesForAppearingTabSwitcherItem(
-        tabSwitcherItem, at: itemIndexPath, attributes: attributes)
-    case .group(let tabGroupItem):
-      return initialLayoutAttributesForAppearingTabGroupItem(
-        tabGroupItem, at: itemIndexPath, attributes: attributes)
+    case .tab(_):
+      return initialLayoutAttributesForAppearingTabCell(
+        at: itemIndexPath, attributes: attributes, collectionView: collectionView)
+    case .group(_):
+      return initialLayoutAttributesForAppearingGroupCell(
+        at: itemIndexPath, attributes: attributes, collectionView: collectionView)
     }
   }
 
@@ -160,18 +173,21 @@ class TabStripLayout: UICollectionViewFlowLayout {
     -> UICollectionViewLayoutAttributes?
   {
     guard
-      let itemIdentifier = dataSource?.itemIdentifier(for: itemIndexPath),
+      let collectionView = collectionView,
+      let cell = collectionView.cellForItem(at: itemIndexPath),
       let attributes: UICollectionViewLayoutAttributes =
         super.finalLayoutAttributesForDisappearingItem(at: itemIndexPath)
     else { return nil }
 
-    switch itemIdentifier.item {
-    case .tab(let tabSwitcherItem):
-      return finalLayoutAttributesForDisappearingTabSwitcherItem(
-        tabSwitcherItem, at: itemIndexPath, attributes: attributes)
-    case .group(let tabGroupItem):
-      return finalLayoutAttributesForDisappearingTabGroupItem(
-        tabGroupItem, at: itemIndexPath, attributes: attributes)
+    switch cell {
+    case let tabCell as TabStripTabCell:
+      return finalLayoutAttributesForDisappearingTabCell(
+        tabCell, at: itemIndexPath, attributes: attributes, collectionView: collectionView)
+    case let groupCell as TabStripGroupCell:
+      return finalLayoutAttributesForDisappearingGroupCell(
+        groupCell, at: itemIndexPath, attributes: attributes, collectionView: collectionView)
+    default:
+      return nil
     }
   }
 
@@ -183,35 +199,35 @@ class TabStripLayout: UICollectionViewFlowLayout {
       let layoutAttributes = super.layoutAttributesForItem(at: indexPath),
       let collectionView = collectionView
     else { return nil }
-
+    let cell = collectionView.cellForItem(at: indexPath)
     switch itemIdentifier.item {
-    case .tab(let tabSwitcherItem):
-      return layoutAttributesForTabSwitcherItem(
-        tabSwitcherItem, at: indexPath, layoutAttributes: layoutAttributes,
+    case .tab(_):
+      let tabCell = cell as? TabStripTabCell
+      return layoutAttributesForTabCell(
+        tabCell, at: indexPath, layoutAttributes: layoutAttributes,
         collectionView: collectionView)
-    case .group(let tabGroupItem):
-      return layoutAttributesForTabGroupItem(
-        tabGroupItem, at: indexPath, layoutAttributes: layoutAttributes,
+    case .group(_):
+      let groupCell = cell as? TabStripGroupCell
+      return layoutAttributesForGroupCell(
+        groupCell, at: indexPath, layoutAttributes: layoutAttributes,
         collectionView: collectionView)
     }
   }
 
-  private func layoutAttributesForTabSwitcherItem(
-    _ tabSwitcherItem: TabSwitcherItem, at indexPath: IndexPath,
+  private func layoutAttributesForTabCell(
+    _ cell: TabStripTabCell?, at indexPath: IndexPath,
     layoutAttributes: UICollectionViewLayoutAttributes, collectionView: UICollectionView
   )
     -> UICollectionViewLayoutAttributes?
   {
     /// Early return the updated `selectedAttributes` if the cell is selected.
-    if let selectedAttributes = self.layoutAttributesForSelectedCell(
-      layoutAttributes: layoutAttributes)
+    if let selectedAttributes = self.layoutAttributesForSelectedTabCell(
+      cell, at: indexPath, layoutAttributes: layoutAttributes, collectionView: collectionView)
     {
       return selectedAttributes
     }
 
-    guard
-      let cell = collectionView.cellForItem(at: indexPath) as? TabStripTabCell
-    else { return layoutAttributes }
+    guard let cell = cell else { return layoutAttributes }
 
     let contentOffset = collectionView.contentOffset
     var frame = layoutAttributes.frame
@@ -220,22 +236,25 @@ class TabStripLayout: UICollectionViewFlowLayout {
     let leftBounds: CGFloat = contentOffset.x + sectionInset.left
     let rightBounds: CGFloat = collectionViewWidth + contentOffset.x - sectionInset.right
     let isScrollable: Bool = collectionView.contentSize.width > collectionView.frame.width
-    let isRTL: Bool = collectionView.effectiveUserInterfaceLayoutDirection == .rightToLeft
 
     /// Hide the `trailingSeparator`if the next cell is selected.
     let isNextCellSelected = (indexPath.item + 1) == selectedIndexPath?.item
     cell.trailingSeparatorHidden = isNextCellSelected
 
     /// Hide the `leadingSeparator` if the previous cell is selected or the
-    /// collection view is not scrollable.
-    let isPreviousCellSelected = (indexPath.item - 1) == selectedIndexPath?.item
-    cell.leadingSeparatorHidden = isPreviousCellSelected || !isScrollable
+    /// collection view is not scrollable, or the previous cell is a group.
+    let indexPathOfPreviousItem = IndexPath(item: indexPath.item - 1, section: indexPath.section)
+    let isPreviousCellSelected = indexPathOfPreviousItem == selectedIndexPath
+    cell.leadingSeparatorHidden = isPreviousCellSelected || !isScrollable || cell.isFirstTabInGroup
 
     if UIAccessibility.isVoiceOverRunning {
       // Prevent frame resizing while VoiceOver is active.
       // This ensures swiping right/left goes to the next cell.
       return layoutAttributes
     }
+
+    var intersectsLeftEdge = false
+    var intersectsRightEdge = false
 
     /// Recalculate the cell width and origin when it intersects with the left
     /// collection view's bounds. The cell should collapse within the collection
@@ -253,6 +272,7 @@ class TabStripLayout: UICollectionViewFlowLayout {
       // If intersects with the left bounds.
       if frame.minX < leftBounds {
         cell.leadingSeparatorHidden = false
+        intersectsLeftEdge = true
 
         // Update the frame origin and width.
         frame.origin.x = max(leftBounds, frame.origin.x)
@@ -277,11 +297,7 @@ class TabStripLayout: UICollectionViewFlowLayout {
 
           // Set its width to 0 and update its separators.
           frame.size.width = 0
-          if !isRTL {
-            cell.trailingSeparatorHidden = true
-          } else {
-            cell.leadingSeparatorHidden = true
-          }
+          cell.trailingSeparatorHidden = true
           cell.leadingSeparatorGradientViewHidden = true
           cell.trailingSeparatorGradientViewHidden = true
         }
@@ -290,6 +306,7 @@ class TabStripLayout: UICollectionViewFlowLayout {
       // If intersects with the right bounds.
       else if frame.maxX > rightBounds {
         cell.trailingSeparatorHidden = false
+        intersectsRightEdge = true
 
         // Update the frame origin and width.
         frame.origin.x = min(rightBounds, frame.origin.x)
@@ -317,11 +334,7 @@ class TabStripLayout: UICollectionViewFlowLayout {
             min(rightBounds + collapseHorizontalInset - frame.origin.x, frame.size.width), 0)
 
           // Update its separators.
-          if !isRTL {
-            cell.leadingSeparatorHidden = true
-          } else {
-            cell.trailingSeparatorHidden = true
-          }
+          cell.leadingSeparatorHidden = true
           cell.leadingSeparatorGradientViewHidden = true
           cell.trailingSeparatorGradientViewHidden = true
         }
@@ -330,17 +343,81 @@ class TabStripLayout: UICollectionViewFlowLayout {
 
     // Update separators height once the computation is done.
     cell.setSeparatorsHeight(separatorHeight)
+    cell.intersectsLeftEdge = intersectsLeftEdge
+    cell.intersectsRightEdge = intersectsRightEdge
 
     layoutAttributes.frame = frame
     return layoutAttributes
   }
 
-  private func layoutAttributesForTabGroupItem(
-    _ tabGroupItem: TabGroupItem, at indexPath: IndexPath,
+  private func layoutAttributesForGroupCell(
+    _ groupCell: TabStripGroupCell?, at indexPath: IndexPath,
     layoutAttributes: UICollectionViewLayoutAttributes, collectionView: UICollectionView
   )
     -> UICollectionViewLayoutAttributes?
   {
+    if UIAccessibility.isVoiceOverRunning {
+      // Prevent frame resizing while VoiceOver is active.
+      // This ensures swiping right/left goes to the next cell.
+      return layoutAttributes
+    }
+
+    guard let groupCell = groupCell else { return layoutAttributes }
+
+    let contentOffset = collectionView.contentOffset
+    var frame = layoutAttributes.frame
+    let collectionViewWidth = collectionView.bounds.size.width
+
+    let leftBounds: CGFloat = contentOffset.x + sectionInset.left
+    let rightBounds: CGFloat = collectionViewWidth + contentOffset.x - sectionInset.right
+    let isScrollable: Bool = collectionView.contentSize.width > collectionView.frame.width
+
+    var intersectsLeftEdge = false
+    var intersectsRightEdge = false
+
+    /// Recalculate the cell width and origin when it intersects with the left
+    /// collection view's bounds. The cell should collapse within the collection
+    /// view's bounds until its width reaches 0.
+    if isScrollable && (frame.minX < leftBounds || frame.maxX > rightBounds) {
+      let minCellWidth = TabStripConstants.GroupItem.minCellWidth
+
+      // If intersects with the left bounds.
+      if frame.minX < leftBounds {
+        intersectsLeftEdge = true
+        // Update the frame origin and width.
+        frame.origin.x = max(leftBounds, frame.origin.x)
+        let offsetLeft: CGFloat = abs(frame.origin.x - layoutAttributes.frame.origin.x)
+        frame.size.width = min(frame.size.width - offsetLeft, frame.size.width)
+
+        /// Start animating the cell out of the collection view  if  the new
+        /// width `frame.size.width` is less than or equal to
+        /// `collapseThreshold`.
+        if frame.size.width <= minCellWidth {
+          // Move the cell to the left until it reaches its final position.
+          frame.origin.x = frame.origin.x - minCellWidth + frame.size.width
+          frame.size.width = minCellWidth
+        }
+      }
+
+      // If intersects with the right bounds.
+      else if frame.maxX > rightBounds {
+        intersectsRightEdge = true
+        // Update the frame origin and width.
+        frame.size.width = min(rightBounds - frame.origin.x, frame.size.width)
+
+        /// Start animating the cell out of the collection view  if the new
+        ///  width `frame.size.width` is less than or equal to
+        ///  `collapseThreshold`.
+        if frame.size.width <= minCellWidth {
+          frame.size.width = minCellWidth
+        }
+      }
+    }
+
+    groupCell.intersectsLeftEdge = intersectsLeftEdge
+    groupCell.intersectsRightEdge = intersectsRightEdge
+
+    layoutAttributes.frame = frame
     return layoutAttributes
   }
 
@@ -352,7 +429,12 @@ class TabStripLayout: UICollectionViewFlowLayout {
     else { return nil }
 
     var indexPathToConsider = superAttributes.map(\.indexPath)
-    if let selectedIndexPath = selectedIndexPath {
+    // If there is a selected tab, and its index path is one of the visible
+    // index paths of the collection view, add it to the list of index paths to
+    // consider.
+    if let selectedIndexPath = selectedIndexPath,
+      collectionView?.indexPathsForVisibleItems.contains(selectedIndexPath) == true
+    {
       if !indexPathToConsider.contains(selectedIndexPath) {
         indexPathToConsider.append(selectedIndexPath)
       }
@@ -375,47 +457,51 @@ class TabStripLayout: UICollectionViewFlowLayout {
     newTabButton?.superview?.layoutIfNeeded()
   }
 
-  /// Returns the initial layout attributes for an appearing `TabSwitcherItem`.
-  private func initialLayoutAttributesForAppearingTabSwitcherItem(
-    _ tabSwitcherItem: TabSwitcherItem, at itemIndexPath: IndexPath,
-    attributes: UICollectionViewLayoutAttributes
+  /// Returns the initial layout attributes for an appearing `tabCell`.
+  private func initialLayoutAttributesForAppearingTabCell(
+    at itemIndexPath: IndexPath,
+    attributes: UICollectionViewLayoutAttributes, collectionView: UICollectionView
   )
     -> UICollectionViewLayoutAttributes?
   {
+    let tabCell = collectionView.cellForItem(at: itemIndexPath) as? TabStripTabCell
     guard
-      let selectedAttributes: UICollectionViewLayoutAttributes = layoutAttributesForSelectedCell(
-        layoutAttributes: attributes)
+      let selectedAttributes: UICollectionViewLayoutAttributes =
+        self.layoutAttributesForSelectedTabCell(
+          tabCell, at: itemIndexPath, layoutAttributes: attributes, collectionView: collectionView)
     else { return nil }
 
-    // Animate the appearing item by starting it with zero opacity and
-    // translated down by its height.
-    selectedAttributes.alpha = 0
-    selectedAttributes.transform = CGAffineTransform(
-      translationX: 0,
-      y: attributes.frame.size.height)
+    if indexPathsOfInsertingItems.contains(itemIndexPath) {
+      // Animate the appearing item by starting it with zero opacity and
+      // translated down by its height.
+      selectedAttributes.alpha = 0
+      selectedAttributes.transform = CGAffineTransform(
+        translationX: 0,
+        y: attributes.frame.size.height)
+    }
     return selectedAttributes
   }
 
-  /// Returns the initial layout attributes for an appearing `TabGroupItem`.
-  private func initialLayoutAttributesForAppearingTabGroupItem(
-    _ tabGroupItem: TabGroupItem, at itemIndexPath: IndexPath,
-    attributes: UICollectionViewLayoutAttributes
+  /// Returns the initial layout attributes for an appearing `groupCell`.
+  private func initialLayoutAttributesForAppearingGroupCell(
+    at itemIndexPath: IndexPath, attributes: UICollectionViewLayoutAttributes,
+    collectionView: UICollectionView
   )
     -> UICollectionViewLayoutAttributes?
   {
     return attributes
   }
 
-  /// Updates and returns the given `layoutAttributes` if the cell is selected.
+  /// Updates and returns the given `attributes` if the cell is selected.
   /// Inserted items are considered as selected.
-  private func layoutAttributesForSelectedCell(layoutAttributes: UICollectionViewLayoutAttributes)
+  private func layoutAttributesForSelectedTabCell(
+    _ cell: TabStripTabCell?, at indexPath: IndexPath,
+    layoutAttributes: UICollectionViewLayoutAttributes, collectionView: UICollectionView
+  )
     -> UICollectionViewLayoutAttributes?
   {
-    guard let collectionView = collectionView
-    else { return nil }
     // The selected cell should remain on top of other cells within collection
     // view's bounds.
-    let indexPath = layoutAttributes.indexPath
     guard
       indexPath == selectedIndexPath || indexPathsOfInsertingItems.contains(indexPath)
     else {
@@ -424,10 +510,12 @@ class TabStripLayout: UICollectionViewFlowLayout {
 
     /// `cellAnimatediOS16` is always `false` above iOS 16.
     var cellAnimated = cellAnimatediOS16
-    let cell = collectionView.cellForItem(at: indexPath) as? TabStripTabCell
     if let animationKeys = cell?.layer.animationKeys() {
       cellAnimated = !animationKeys.isEmpty || cellAnimatediOS16
     }
+
+    var intersectsLeftEdge = false
+    var intersectsRightEdge = false
 
     // Update cell separators.
     cell?.leadingSeparatorHidden = true
@@ -456,8 +544,8 @@ class TabStripLayout: UICollectionViewFlowLayout {
       }
     }
 
-    var hideLeftStaticSeparator = true
-    var hideRightStaticSeparator = true
+    var hideLeadingStaticSeparator = true
+    var hideTrailingStaticSeparator = true
 
     // If the collection view is scrollable, add an horizontal inset to its
     // origin.
@@ -470,15 +558,18 @@ class TabStripLayout: UICollectionViewFlowLayout {
 
     // Check the left side.
     let minOringin = horizontalOffset + sectionInset.left + horizontalInset
-    // Show left static separators when all of the following conditions are
+    // Show leading static separators when all of the following conditions are
     // satisfied:
-    // - The selected cell is on the left edge.
-    // - A cell behind the selected cell is also reaching the left edge.
+    // - The selected cell is on the leading edge.
+    // - A cell behind the selected cell is also reaching the leading edge.
     // - The cell is not animated (inserted / deleted).
     if (minOringin - staticSeparatorHorizontalInset) >= origin.x {
-      hideLeftStaticSeparator = !isScrollable || cellAnimated
+      hideLeadingStaticSeparator = !isScrollable || cellAnimated
     }
-    origin.x = max(origin.x, minOringin)
+    if origin.x < minOringin {
+      origin.x = minOringin
+      intersectsLeftEdge = true
+    }
 
     // Check the right side.
     let maxOrigin =
@@ -490,31 +581,37 @@ class TabStripLayout: UICollectionViewFlowLayout {
     // - A cell behind the selected cell is also reaching the right edge.
     // - The cell is not animated (inserted / deleted).
     if (maxOrigin + staticSeparatorHorizontalInset) <= origin.x {
-      hideRightStaticSeparator = !isScrollable || cellAnimated
+      hideTrailingStaticSeparator = !isScrollable || cellAnimated
     }
-    origin.x = min(origin.x, maxOrigin)
+    if origin.x > maxOrigin {
+      origin.x = maxOrigin
+      intersectsRightEdge = true
+    }
 
-    leftStaticSeparator?.isHidden = hideLeftStaticSeparator
-    rightStaticSeparator?.isHidden = hideRightStaticSeparator
-    cell?.leftSelectedBorderBackgroundViewHidden = hideLeftStaticSeparator
-    cell?.rightSelectedBorderBackgroundViewHidden = hideRightStaticSeparator
+    cell?.intersectsLeftEdge = intersectsLeftEdge
+    cell?.intersectsRightEdge = intersectsRightEdge
+
+    leadingStaticSeparator?.isHidden = hideLeadingStaticSeparator
+    trailingStaticSeparator?.isHidden = hideTrailingStaticSeparator
+    cell?.leadingSelectedBorderBackgroundViewHidden = hideLeadingStaticSeparator
+    cell?.trailingSelectedBorderBackgroundViewHidden = hideTrailingStaticSeparator
 
     layoutAttributes.frame = CGRect(origin: origin, size: frame.size)
     layoutAttributes.zIndex = TabStripConstants.TabItem.selectedZIndex
     return layoutAttributes
   }
 
-  /// Returns the final layout attributes for an disappearing `TabSwitcherItem`.
-  private func finalLayoutAttributesForDisappearingTabSwitcherItem(
-    _ tabSwitcherItem: TabSwitcherItem, at itemIndexPath: IndexPath,
-    attributes: UICollectionViewLayoutAttributes
+  /// Returns the final layout attributes for andisappearing `tabCell`.
+  private func finalLayoutAttributesForDisappearingTabCell(
+    _ tabCell: TabStripTabCell?, at itemIndexPath: IndexPath,
+    attributes: UICollectionViewLayoutAttributes, collectionView: UICollectionView
   )
     -> UICollectionViewLayoutAttributes?
   {
     var attributes = attributes
     /// Update `attributes` if the disappearing cell is selected.
-    if let selectedAttributes = self.layoutAttributesForSelectedCell(
-      layoutAttributes: attributes)
+    if let selectedAttributes = self.layoutAttributesForSelectedTabCell(
+      tabCell, at: itemIndexPath, layoutAttributes: attributes, collectionView: collectionView)
     {
       attributes = selectedAttributes
     }
@@ -531,10 +628,10 @@ class TabStripLayout: UICollectionViewFlowLayout {
     return attributes
   }
 
-  /// Returns the final layout attributes for an disappearing `TabGroupItem`.
-  private func finalLayoutAttributesForDisappearingTabGroupItem(
-    _ tabGroupItem: TabGroupItem, at itemIndexPath: IndexPath,
-    attributes: UICollectionViewLayoutAttributes
+  /// Returns the final layout attributes for a disappearing `groupCell`.
+  private func finalLayoutAttributesForDisappearingGroupCell(
+    _ groupCell: TabStripGroupCell?, at itemIndexPath: IndexPath,
+    attributes: UICollectionViewLayoutAttributes, collectionView: UICollectionView
   )
     -> UICollectionViewLayoutAttributes?
   {
@@ -563,7 +660,7 @@ class TabStripLayout: UICollectionViewFlowLayout {
     let distance =
       offset + TabStripConstants.AnimatedSeparator.collapseHorizontalInset - tabCellSize.width
     if distance > 0 {
-      alpha = 1 / distance
+      alpha = max(0, 1 - distance / TabStripConstants.TabItem.maximumVisibleDistance)
     }
 
     return alpha
@@ -579,19 +676,20 @@ class TabStripLayout: UICollectionViewFlowLayout {
   // Calculates the dynamic size of a tab according to the number of tabs and
   // groups.
   public func calculateTabCellSize() {
-    guard let collectionView = self.collectionView, let snapshot = dataSource?.snapshot() else {
+    guard let collectionView = self.collectionView, let snapshot = dataSource?.snapshot(for: .tabs)
+    else {
       return
     }
 
     var groupCellWidthSum: CGFloat = 0
     var tabCellCount: CGFloat = 0
-    let cellCount: CGFloat = CGFloat(snapshot.itemIdentifiers.count)
+    let cellCount: CGFloat = CGFloat(snapshot.visibleItems.count)
 
     if cellCount == 0 {
       return
     }
 
-    for itemIdentifier in snapshot.itemIdentifiers {
+    for itemIdentifier in snapshot.visibleItems {
       switch itemIdentifier.item {
       case .tab(_):
         tabCellCount += 1
@@ -617,12 +715,33 @@ class TabStripLayout: UICollectionViewFlowLayout {
   }
 
   public func calculateCellSizeForTabGroupItem(_ tabGroupItem: TabGroupItem) -> CGSize {
-    var width = tabGroupItem.title.size(withAttributes: [
-      .font: UIFont.systemFont(ofSize: TabStripConstants.GroupItem.fontSize, weight: .medium)
-    ]).width
+    var width =
+      tabGroupItem.rawTitle?.size(withAttributes: [
+        .font: UIFont.systemFont(ofSize: TabStripConstants.GroupItem.fontSize, weight: .medium)
+      ]).width ?? 0
     width += 2 * TabStripConstants.GroupItem.titleContainerHorizontalMargin
     width += 2 * TabStripConstants.GroupItem.titleContainerHorizontalPadding
+    width = min(width, TabStripConstants.GroupItem.maxCellWidth)
     return CGSize(width: width, height: TabStripConstants.GroupItem.height)
   }
 
+  /// Prepares the layout for collection view updates resulting from expanding items.
+  public func prepareForItemsExpanding() {
+    self.expandingItems = true
+  }
+
+  /// Finalizes collection view updates resulting from expanding items.
+  public func finalizeItemsExpanding() {
+    self.expandingItems = false
+  }
+
+  /// Prepares the layout for collection view updates resulting from collapsing items.
+  public func prepareForItemsCollapsing() {
+    self.collapsingItems = true
+  }
+
+  /// Finalizes collection view updates resulting from collapsing items.
+  public func finalizeItemsCollapsing() {
+    self.collapsingItems = false
+  }
 }

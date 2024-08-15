@@ -9,6 +9,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/public/cpp/session/session_observer.h"
+#include "ash/system/focus_mode/focus_mode_delegate.h"
 #include "ash/system/focus_mode/focus_mode_histogram_names.h"
 #include "ash/system/focus_mode/focus_mode_session.h"
 #include "ash/system/focus_mode/focus_mode_tasks_provider.h"
@@ -18,7 +19,19 @@
 
 class PrefRegistrySimple;
 
+namespace views {
+class Widget;
+}  // namespace views
+
 namespace ash {
+
+namespace youtube_music {
+class YouTubeMusicController;
+}  //  namespace youtube_music
+
+class AshWebView;
+class FocusModeMetricsRecorder;
+class FocusModeSoundsController;
 
 // Controls starting and ending a Focus Mode session and its behavior. Also
 // keeps track of the system state to restore after a Focus Mode session ends.
@@ -48,7 +61,7 @@ class ASH_EXPORT FocusModeController : public SessionObserver {
         const FocusModeSession::Snapshot& session_snapshot) {}
   };
 
-  FocusModeController();
+  explicit FocusModeController(std::unique_ptr<FocusModeDelegate> delegate);
   FocusModeController(const FocusModeController&) = delete;
   FocusModeController& operator=(const FocusModeController&) = delete;
   ~FocusModeController() override;
@@ -80,11 +93,21 @@ class ASH_EXPORT FocusModeController : public SessionObserver {
   const std::optional<FocusModeSession>& current_session() const {
     return current_session_;
   }
-  const std::string& selected_task_id() const { return selected_task_id_; }
+  const std::string& selected_task_list_id() const {
+    return selected_task_.task_list_id;
+  }
+  const std::string& selected_task_id() const { return selected_task_.task_id; }
   const std::string& selected_task_title() const {
-    return selected_task_title_;
+    return selected_task_.title;
   }
   FocusModeTasksProvider& tasks_provider() { return tasks_provider_; }
+  FocusModeSoundsController* focus_mode_sounds_controller() const {
+    return focus_mode_sounds_controller_.get();
+  }
+  youtube_music::YouTubeMusicController* youtube_music_controller() const {
+    return youtube_music_controller_.get();
+  }
+  FocusModeDelegate* delegate() { return delegate_.get(); }
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
@@ -135,9 +158,8 @@ class ASH_EXPORT FocusModeController : public SessionObserver {
   // ending moment needs to account for the extra duration).
   base::Time GetActualEndTime() const;
 
-  // Stores the `selected_task_id_` and `selected_task_title_` of the provided
-  // task. If task is `nullptr`, clears the selected task data.
-  void SetSelectedTask(const api::Task* task);
+  // Stores the provided `task`.
+  void SetSelectedTask(const FocusModeTask& task);
 
   // Returns whether there is a currently selected task.
   bool HasSelectedTask() const;
@@ -182,6 +204,9 @@ class ASH_EXPORT FocusModeController : public SessionObserver {
   // displays.
   bool IsFocusTrayBubbleVisible() const;
 
+  void CreateMediaWidget();
+  void CloseMediaWidget();
+
   // Gives Focus Mode access to the Google Tasks API.
   FocusModeTasksProvider tasks_provider_;
 
@@ -202,10 +227,25 @@ class ASH_EXPORT FocusModeController : public SessionObserver {
   // This is used to track the current session, if any.
   std::optional<FocusModeSession> current_session_;
 
-  // This is the selected task data, which can be populated from an existing
-  // task or created by the user.
-  std::string selected_task_id_;
-  std::string selected_task_title_;
+  // This is the selected task, which can be populated from an existing task or
+  // created by the user.
+  FocusModeTask selected_task_;
+
+  std::unique_ptr<FocusModeMetricsRecorder> focus_mode_metrics_recorder_;
+
+  // This is used to display focus mode playlists. Playback controls will be
+  // added later.
+  std::unique_ptr<FocusModeSoundsController> focus_mode_sounds_controller_;
+
+  // Controller for YouTube Music API integration.
+  std::unique_ptr<youtube_music::YouTubeMusicController>
+      youtube_music_controller_;
+
+  // The media widget and its contents view.
+  std::unique_ptr<views::Widget> media_widget_;
+  raw_ptr<AshWebView> focus_mode_media_view_ = nullptr;
+
+  std::unique_ptr<FocusModeDelegate> delegate_;
 
   base::ObserverList<Observer> observers_;
 };

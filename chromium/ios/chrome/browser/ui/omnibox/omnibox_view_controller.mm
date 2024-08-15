@@ -69,7 +69,7 @@ using base::UserMetricsAction;
 
 // YES if we are already forwarding an OnDidChange() message to the edit view.
 // Needed to prevent infinite recursion.
-// TODO(crbug.com/1015413): There must be a better way.
+// TODO(crbug.com/40103694): There must be a better way.
 @property(nonatomic, assign) BOOL forwardingOnDidChange;
 
 // YES if this text field is currently processing a user-initiated event,
@@ -444,6 +444,19 @@ using base::UserMetricsAction;
   _textChangeDelegate->OnDeleteBackward();
 }
 
+- (void)textFieldDidAcceptAutocomplete:(OmniboxTextFieldIOS*)textField {
+  if (_textChangeDelegate) {
+    _textChangeDelegate->OnAcceptAutocomplete();
+  }
+}
+
+- (void)textFieldDidRemoveAdditionalText:(OmniboxTextFieldIOS*)textField {
+  base::RecordAction(UserMetricsAction("MobileOmniboxRichInlineRemoved"));
+  if (_textChangeDelegate) {
+    _textChangeDelegate->OnRemoveAdditionalText();
+  }
+}
+
 - (BOOL)canPasteItemProviders:(NSArray<NSItemProvider*>*)itemProviders {
   for (NSItemProvider* itemProvider in itemProviders) {
     if (((self.searchByImageEnabled || self.shouldUseLensInMenu) &&
@@ -552,6 +565,11 @@ using base::UserMetricsAction;
 
 - (void)updateText:(NSAttributedString*)text {
   [self.textField setText:text userTextLength:text.length];
+}
+
+- (void)updateAdditionalText:(NSAttributedString*)additionalText {
+  CHECK(IsRichAutocompletionEnabled());
+  self.textField.additionalText = additionalText;
 }
 
 #pragma mark - EditViewAnimatee
@@ -762,6 +780,10 @@ using base::UserMetricsAction;
 
   // Dismiss any inline autocomplete. The user expectation is to not have it.
   [self.textField clearAutocompleteText];
+
+  if (IsRichAutocompletionEnabled() && _textChangeDelegate) {
+    _textChangeDelegate->OnRemoveAdditionalText();
+  }
 }
 
 #pragma mark VIVALDI

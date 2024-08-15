@@ -8,7 +8,6 @@
 #include <string>
 #include <utility>
 
-#include "discovery/common/config.h"
 #include "discovery/mdns/impl/mdns_probe_manager.h"
 #include "discovery/mdns/impl/mdns_publisher.h"
 #include "discovery/mdns/impl/mdns_querier.h"
@@ -285,7 +284,7 @@ bool IsMultiPacketTruncatedQueryMessage(const MdnsMessage& message) {
 
 MdnsResponder::RecordHandler::~RecordHandler() = default;
 
-MdnsResponder::TruncatedQuery::TruncatedQuery(MdnsResponder* responder,
+MdnsResponder::TruncatedQuery::TruncatedQuery(MdnsResponder& responder,
                                               TaskRunner& task_runner,
                                               ClockNowFunctionPtr now_function,
                                               IPEndpoint src,
@@ -298,7 +297,6 @@ MdnsResponder::TruncatedQuery::TruncatedQuery(MdnsResponder* responder,
       questions_(message.questions()),
       known_answers_(message.answers()),
       alarm_(now_function, task_runner) {
-  OSP_CHECK(responder_);
   OSP_CHECK_GT(max_allowed_messages_, 0);
   OSP_CHECK_GT(max_allowed_records_, 0);
 
@@ -344,7 +342,7 @@ void MdnsResponder::TruncatedQuery::RescheduleSend() {
     send_delay = Clock::duration(0);
   } else {
     // Reschedule to send after a random delay, per RFC 6762.
-    send_delay = responder_->random_delay_->GetTruncatedQueryResponseDelay();
+    send_delay = responder_.random_delay_.GetTruncatedQueryResponseDelay();
   }
 
   alarm_.ScheduleFromNow([this]() { SendResponse(); }, send_delay);
@@ -359,16 +357,16 @@ void MdnsResponder::TruncatedQuery::SendResponse() {
     return;
   }
 
-  responder_->RespondToTruncatedQuery(this);
+  responder_.RespondToTruncatedQuery(this);
 }
 
-MdnsResponder::MdnsResponder(RecordHandler* record_handler,
-                             MdnsProbeManager* ownership_handler,
-                             MdnsSender* sender,
-                             MdnsReceiver* receiver,
+MdnsResponder::MdnsResponder(RecordHandler& record_handler,
+                             MdnsProbeManager& ownership_handler,
+                             MdnsSender& sender,
+                             MdnsReceiver& receiver,
                              TaskRunner& task_runner,
                              ClockNowFunctionPtr now_function,
-                             MdnsRandom* random_delay,
+                             MdnsRandom& random_delay,
                              const Config& config)
     : record_handler_(record_handler),
       ownership_handler_(ownership_handler),
@@ -378,22 +376,17 @@ MdnsResponder::MdnsResponder(RecordHandler* record_handler,
       now_function_(now_function),
       random_delay_(random_delay),
       config_(config) {
-  OSP_CHECK(record_handler_);
-  OSP_CHECK(ownership_handler_);
-  OSP_CHECK(sender_);
-  OSP_CHECK(receiver_);
-  OSP_CHECK(random_delay_);
   OSP_CHECK_GT(config_.maximum_truncated_messages_per_query, 0);
   OSP_CHECK_GT(config_.maximum_concurrent_truncated_queries_per_interface, 0);
 
   auto func = [this](const MdnsMessage& message, const IPEndpoint& src) {
     OnMessageReceived(message, src);
   };
-  receiver_->SetQueryCallback(std::move(func));
+  receiver_.SetQueryCallback(std::move(func));
 }
 
 MdnsResponder::~MdnsResponder() {
-  receiver_->SetQueryCallback(nullptr);
+  receiver_.SetQueryCallback(nullptr);
 }
 
 void MdnsResponder::OnMessageReceived(const MdnsMessage& message,
@@ -422,7 +415,7 @@ void MdnsResponder::OnMessageReceived(const MdnsMessage& message,
   // If the query is a probe query, it will be handled separately by the
   // MdnsProbeManager. Ignore it here.
   if (message.IsProbeQuery()) {
-    ownership_handler_->RespondToProbeQuery(message, src);
+    ownership_handler_.RespondToProbeQuery(message, src);
     return;
   }
 
@@ -453,7 +446,7 @@ void MdnsResponder::ProcessMultiPacketTruncatedMessage(
   if (pair.second) {
     // Create a new query and swap it with the old one to save an extra lookup.
     auto new_query = std::make_unique<TruncatedQuery>(
-        this, task_runner_, now_function_, src, message, config_);
+        *this, task_runner_, now_function_, src, message, config_);
     stored_query.swap(new_query);
     return;
   }
@@ -490,7 +483,7 @@ void MdnsResponder::ProcessMultiPacketTruncatedMessage(
   //
   // Create a new query and swap it with the old one to save an extra lookup.
   auto new_query = std::make_unique<TruncatedQuery>(
-      this, task_runner_, now_function_, src, message, config_);
+      *this, task_runner_, now_function_, src, message, config_);
   stored_query.swap(new_query);
 
   // Now that the pointers have been swapped, process the previously stored
@@ -533,10 +526,10 @@ void MdnsResponder::ProcessQueries(
     // - The query is a service enumeration query.
     const bool is_service_enumeration = IsServiceTypeEnumerationQuery(question);
     const bool is_exclusive_owner =
-        ownership_handler_->IsDomainClaimed(question.name());
+        ownership_handler_.IsDomainClaimed(question.name());
     if (!is_service_enumeration && !is_exclusive_owner &&
-        !record_handler_->HasRecords(question.name(), question.dns_type(),
-                                     question.dns_class())) {
+        !record_handler_.HasRecords(question.name(), question.dns_type(),
+                                    question.dns_class())) {
       OSP_DVLOG << "\tmDNS Query processed and no relevant records found!";
       continue;
     } else if (is_service_enumeration) {
@@ -548,12 +541,12 @@ void MdnsResponder::ProcessQueries(
     std::function<void(const MdnsMessage&)> send_response;
     if (question.response_type() == ResponseType::kMulticast) {
       send_response = [this](const MdnsMessage& message) {
-        sender_->SendMulticast(message);
+        sender_.SendMulticast(message);
       };
     } else {
       OSP_CHECK(question.response_type() == ResponseType::kUnicast);
       send_response = [this, src](const MdnsMessage& message) {
-        sender_->SendMessage(message, src);
+        sender_.SendMessage(message, src);
       };
     }
 
@@ -563,7 +556,7 @@ void MdnsResponder::ProcessQueries(
     if (is_exclusive_owner) {
       SendResponse(question, known_answers, send_response, is_exclusive_owner);
     } else {
-      const auto delay = random_delay_->GetSharedRecordResponseDelay();
+      const auto delay = random_delay_.GetSharedRecordResponseDelay();
       std::function<void()> response = [this, question, known_answers,
                                         send_response, is_exclusive_owner]() {
         SendResponse(question, known_answers, send_response,
@@ -586,7 +579,7 @@ void MdnsResponder::SendResponse(
   if (IsServiceTypeEnumerationQuery(question)) {
     // This is a special case defined in RFC 6763 section 9, so handle it
     // separately.
-    ApplyServiceTypeEnumerationResults(&message, record_handler_,
+    ApplyServiceTypeEnumerationResults(&message, &record_handler_,
                                        question.name(), question.dns_class());
   } else {
     // NOTE: The exclusive ownership of this record cannot change before this
@@ -594,8 +587,8 @@ void MdnsResponder::SendResponse(
     // has previously been published, and if this host is the exclusive owner
     // then this method will have been called without any delay on the task
     // runner.
-    ApplyQueryResults(&message, record_handler_, question.name(), known_answers,
-                      question.dns_type(), question.dns_class(),
+    ApplyQueryResults(&message, &record_handler_, question.name(),
+                      known_answers, question.dns_type(), question.dns_class(),
                       is_exclusive_owner);
   }
 

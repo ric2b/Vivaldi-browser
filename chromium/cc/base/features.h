@@ -120,10 +120,6 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kReclaimResourcesFlushInBackground);
 // Enabled 03/2024, kept to run a holdback experiment.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kReclaimResourcesDelayedFlushInBackground);
 
-// Try to play a longer list of ops before giving up in solid color analysis for
-// tiles.
-CC_BASE_EXPORT BASE_DECLARE_FEATURE(kMoreAggressiveSolidColorDetection);
-
 // Allow CC FrameRateEstimater to reduce the frame rate to half of the default
 // if the condition meets the requirement.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kReducedFrameRateEstimation);
@@ -141,9 +137,6 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kSmallerInterestArea);
 constexpr static int kDefaultInterestAreaSizeInPixels = 3000;
 constexpr static int kDefaultInterestAreaSizeInPixelsWhenEnabled = 500;
 CC_BASE_EXPORT extern const base::FeatureParam<int> kInterestAreaSizeInPixels;
-
-// Whether images marked "no-cache" are cached. When disabled, they are.
-CC_BASE_EXPORT BASE_DECLARE_FEATURE(kImageCacheNoCache);
 
 // When enabled, old prepaint tiles in the "eventually" region get reclaimed
 // after some time.
@@ -171,15 +164,41 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kAdjustFastMainThreadThreshold);
 // that haven't been imported into viz.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kClearCanvasResourcesInBackground);
 
-// Re-enables legacy cc/metrics V1 termination path, to validate if some shifts
-// in V3 metrics were from the interactions of these paths.
-CC_BASE_EXPORT BASE_DECLARE_FEATURE(kUseV1MetricsTermination);
-
 // Currently CC Metrics does a lot of calculations for UMA and Tracing. While
 // Traces themselves won't run when we are not tracing, some of the calculation
 // work is done regardless. When enabled this feature reduces extra calculation
 // to when tracing is enabled.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kMetricsTracingCalculationReduction);
+
+// Temporary features to enable the fix for b/328665503 independently from
+// adding the implementation.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kPaintWithGainmapShader);
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kPaintWithGlobalToneMapFilter);
+
+// When enabled we will restore older FrameSequenceTracker sequence order
+// enforcing that can miss backfilled frames.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kMetricsBackfillAdjustmentHoldback);
+
+// When enabled we will submit the 'CopySharedImage' in one call and not batch
+// it up into 4MiB increments.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kNonBatchedCopySharedImage);
+
+// Currently there is a race between OnBeginFrames from the GPU process and
+// input arriving from the Browser process. Due to this we can start to produce
+// a frame while scrolling without any input events. Late arriving events are
+// then enqueued for the next VSync.
+//
+// When this feature is enabled we will instead wait until
+// `kWaitForLateScrollEventsDeadlineRatio` of the frame interval for input.
+// During this time scroll events will be dispatched immediately. At the
+// deadline we will resume frame production and enqueuing input.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kWaitForLateScrollEvents);
+CC_BASE_EXPORT extern const base::FeatureParam<double>
+    kWaitForLateScrollEventsDeadlineRatio;
+
+// When enabled we stop always pushing PictureLayerImpl properties on
+// tree Activation. See crbug.com/40335690.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kDontAlwaysPushPictureLayerImpls);
 
 }  // namespace features
 

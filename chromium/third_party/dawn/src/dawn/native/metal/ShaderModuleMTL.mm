@@ -39,6 +39,7 @@
 #include "dawn/native/metal/UtilsMetal.h"
 #include "dawn/native/stream/BlobSource.h"
 #include "dawn/native/stream/ByteVectorSink.h"
+#include "dawn/native/utils/WGPUHelpers.h"
 #include "dawn/platform/DawnPlatform.h"
 #include "dawn/platform/metrics/HistogramMacros.h"
 #include "dawn/platform/tracing/TraceEvent.h"
@@ -178,7 +179,7 @@ ResultOrError<CacheResult<MslCompilation>> TranslateToMSL(
                     bindings.sampler.emplace(srcBindingPoint, tint::msl::writer::binding::Sampler{
                                                                   dstBindingPoint.binding});
                 },
-                [&](const SampledTextureBindingInfo& bindingInfo) {
+                [&](const TextureBindingInfo& bindingInfo) {
                     bindings.texture.emplace(srcBindingPoint, tint::msl::writer::binding::Texture{
                                                                   dstBindingPoint.binding});
                 },
@@ -392,7 +393,8 @@ MaybeError ShaderModule::CreateFunction(SingleShaderStage stage,
                                         uint32_t sampleMask,
                                         const RenderPipeline* renderPipeline,
                                         std::optional<uint32_t> maxSubgroupSizeForFullSubgroups) {
-    TRACE_EVENT0(GetDevice()->GetPlatform(), General, "ShaderModuleMTL::CreateFunction");
+    TRACE_EVENT1(GetDevice()->GetPlatform(), General, "metal::ShaderModule::CreateFunction",
+                 "label", utils::GetLabelForTrace(GetLabel().c_str()));
 
     DAWN_ASSERT(!IsError());
     DAWN_ASSERT(out);
@@ -425,7 +427,8 @@ MaybeError ShaderModule::CreateFunction(SingleShaderStage stage,
             (*compileOptions).preserveInvariance = true;
         }
     }
-    (*compileOptions).fastMathEnabled = true;
+
+    (*compileOptions).fastMathEnabled = !GetStrictMath().value_or(false);
 
     auto mtlDevice = ToBackend(GetDevice())->GetMTLDevice();
     NSError* error = nullptr;

@@ -30,16 +30,17 @@
 #include "components/sync/engine/shutdown_reason.h"
 #include "components/sync/engine/sync_engine.h"
 #include "components/sync/engine/sync_engine_host.h"
-#include "components/sync/service/data_type_controller.h"
 #include "components/sync/service/data_type_manager.h"
 #include "components/sync/service/data_type_manager_observer.h"
 #include "components/sync/service/data_type_status_table.h"
+#include "components/sync/service/model_type_controller.h"
 #include "components/sync/service/sync_client.h"
 #include "components/sync/service/sync_prefs.h"
 #include "components/sync/service/sync_service.h"
 #include "components/sync/service/sync_service_crypto.h"
 #include "components/sync/service/sync_stopped_reporter.h"
 #include "components/sync/service/sync_user_settings_impl.h"
+#include "components/sync/service/trusted_vault_synthetic_field_trial.h"
 #include "components/version_info/channel.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/google_service_auth_error.h"
@@ -63,6 +64,7 @@ namespace syncer {
 class BackendMigrator;
 class SyncAuthManager;
 class SyncFeatureStatusForMigrationsRecorder;
+class SyncPrefsPolicyHandler;
 
 // Look at the SyncService interface for information on how to use this class.
 // You should not need to know about SyncServiceImpl directly.
@@ -151,7 +153,7 @@ class SyncServiceImpl : public SyncService,
   SyncCycleSnapshot GetLastCycleSnapshotForDebugging() const override;
   base::Value::List GetTypeStatusMapForDebugging() const override;
   void GetEntityCountsForDebugging(
-      base::OnceCallback<void(const std::vector<TypeEntitiesCount>&)> callback)
+      base::RepeatingCallback<void(const TypeEntitiesCount&)> callback)
       const override;
   const GURL& GetSyncServiceUrlForDebugging() const override;
   std::string GetUnrecoverableErrorMessageForDebugging() const override;
@@ -246,7 +248,7 @@ class SyncServiceImpl : public SyncService,
   std::string GetAccessTokenForTest() const;
 
   // Overrides the callback used to create network connections.
-  // TODO(crbug.com/949504): Inject this in the ctor instead. As it is, it's
+  // TODO(crbug.com/41451146): Inject this in the ctor instead. As it is, it's
   // possible that the real callback was already used before the test had a
   // chance to call this.
   void OverrideNetworkForTest(const CreateHttpPostProviderFactory&
@@ -257,8 +259,6 @@ class SyncServiceImpl : public SyncService,
 
   void GetThrottledDataTypesForTest(
       base::OnceCallback<void(ModelTypeSet)> cb) const;
-
-  bool IsDataTypeControllerRunningForTest(ModelType type) const;
 
   // Some tests rely on injecting calls to the encryption observer.
   SyncEncryptionHandler::Observer* GetEncryptionObserverForTest();
@@ -278,11 +278,12 @@ class SyncServiceImpl : public SyncService,
 
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
+  // LINT.IfChange(SyncResetEngineReason)
   enum class ResetEngineReason {
     kShutdown = 0,
     kUnrecoverableError = 1,
     kDisabledAccount = 2,
-    kRequestedPrefChange = 3,
+    // kRequestedPrefChange = 3,
     kStopAndClear = 4,
     // kSetSyncAllowedByPlatform = 5,
     kCredentialsChanged = 6,
@@ -290,6 +291,11 @@ class SyncServiceImpl : public SyncService,
 
     kMaxValue = kResetLocalData
   };
+  // LINT.ThenChange(/tools/metrics/histograms/metadata/sync/enums.xml:SyncResetEngineReason)
+
+  // static
+  ShutdownReason ShutdownReasonForResetEngineReason(
+      ResetEngineReason reset_reason);
 
   // Records UMA histograms related to download status during browser startup.
   class DownloadStatusRecorder : public SyncServiceObserver {
@@ -350,15 +356,12 @@ class SyncServiceImpl : public SyncService,
 
   void UpdateDataTypesForInvalidations();
 
- protected:
-  // Shuts down and destroys the engine. |reason| dictates if sync metadata
-  // should be kept or not.
+  // Shuts down and destroys the engine. |reset_reason| specifies the reason for
+  // the shutdown, and dictates if sync metadata should be kept or not.
   // If the engine is still allowed to run (per IsEngineAllowedToRun()), it will
   // soon start up again (possibly in transport-only mode).
-  virtual void ResetEngine(ShutdownReason shutdown_reason,
-                   ResetEngineReason reset_reason);
+  std::unique_ptr<SyncEngine> ResetEngine(ResetEngineReason reset_reason);
 
- private:
   // Helper for OnUnrecoverableError.
   void OnUnrecoverableErrorImpl(const base::Location& from_here,
                                 const std::string& message,
@@ -366,7 +369,7 @@ class SyncServiceImpl : public SyncService,
 
   // Puts the engine's sync scheduler into NORMAL mode.
   // Called when configuration is complete.
-  virtual void StartSyncingWithServer();
+  void StartSyncingWithServer();
 
   // Notify all observers that a change has occurred.
   void NotifyObservers();
@@ -416,15 +419,24 @@ class SyncServiceImpl : public SyncService,
 
   void OnPasswordSyncAllowedChanged();
 
+  // Updates PrefService (SyncPrefs) to cache the last known value for trusted
+  // vault AutoUpgradeDebugInfo. It also notifies SyncClient.
+  void CacheTrustedVaultDebugInfoToPrefsFromEngine();
+
+  // Exercises SyncClient to register synthetic field trials for trusted vault
+  // passphrase type.
+  void RegisterTrustedVaultSyntheticFieldTrialsIfNecessary();
+
   // This profile's SyncClient, which abstracts away non-Sync dependencies and
   // the Sync API component factory.
   const std::unique_ptr<SyncClient> sync_client_;
 
- protected:
   // The class that handles getting, setting, and persisting sync preferences.
   SyncPrefs sync_prefs_;
 
- private:
+  // The class that updates SyncPrefs when a policy is applied.
+  std::unique_ptr<SyncPrefsPolicyHandler> sync_prefs_policy_handler_;
+
   // Encapsulates user signin - used to set/get the user's authenticated
   // email address and sign-out upon error.
   // May be null (if local Sync is enabled).
@@ -501,11 +513,6 @@ class SyncServiceImpl : public SyncService,
   base::ObserverList<ProtocolEventObserver>::Unchecked
       protocol_event_observers_;
 
-  // This allows us to gracefully handle an ABORTED return code from the
-  // DataTypeManager in the event that the server informed us to cease and
-  // desist syncing immediately.
-  bool expect_sync_configuration_aborted_ = false;
-
   std::unique_ptr<BackendMigrator> migrator_;
 
   // This is the last |SyncProtocolError| we received from the server that had
@@ -517,7 +524,7 @@ class SyncServiceImpl : public SyncService,
   DataTypeStatusTable::TypeErrorMap data_type_error_map_;
 
   // List of available data type controllers.
-  DataTypeController::TypeMap data_type_controllers_;
+  ModelTypeController::TypeMap model_type_controllers_;
 
   CreateHttpPostProviderFactory create_http_post_provider_factory_cb_;
 
@@ -527,6 +534,12 @@ class SyncServiceImpl : public SyncService,
   // histogram needs to recorded. Set to false iff histogram was already
   // recorded or trusted vault passphrase type wasn't used on startup.
   bool should_record_trusted_vault_error_shown_on_startup_ = true;
+
+  // Whether or not SyncClient was exercised to register synthetic field trials
+  // related to trusted vault passphrase, and if yes which precise group was
+  // registered.
+  std::optional<TrustedVaultAutoUpgradeSyntheticFieldTrialGroup>
+      registered_trusted_vault_auto_upgrade_synthetic_field_trial_group_;
 
   const bool sync_poll_immediately_on_every_startup_;
 
@@ -553,9 +566,6 @@ class SyncServiceImpl : public SyncService,
   // android.
   std::unique_ptr<SyncServiceAndroidBridge> sync_service_android_;
 #endif  // BUILDFLAG(IS_ANDROID)
-
-  // This weak factory invalidates its issued pointers when Sync is disabled.
-  base::WeakPtrFactory<SyncServiceImpl> sync_enabled_weak_factory_{this};
 
   base::WeakPtrFactory<SyncServiceImpl> weak_factory_{this};
 };

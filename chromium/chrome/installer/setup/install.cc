@@ -168,8 +168,8 @@ void CopyPreferenceFileForFirstRun(const InstallerState& installer_state,
   if (!base::CopyFile(prefs_source_path,
                       InitialPreferences::Path(installer_state.target_path(),
                                                /*for_read=*/false))) {
-    VLOG(1) << "Failed to copy initial preferences from:"
-            << prefs_source_path.value() << " gle: " << ::GetLastError();
+    VPLOG(1) << "Failed to copy initial preferences from \""
+             << prefs_source_path << "\"";
   }
 }
 
@@ -364,6 +364,11 @@ void CreateOrUpdateShortcuts(const base::FilePath& target,
                 &do_not_create_quick_launch_shortcut);
   prefs.GetBool(initial_preferences::kDoNotCreateTaskbarShortcut,
                 &do_not_create_taskbar_shortcut);
+
+  // Pinning to taskbar only makes sense for per-user shortcuts.
+  if (install_level != CURRENT_USER) {
+    do_not_create_taskbar_shortcut = true;
+  }
 
   // The default operation on update is to overwrite shortcuts with the
   // currently desired properties, but do so only for shortcuts that still

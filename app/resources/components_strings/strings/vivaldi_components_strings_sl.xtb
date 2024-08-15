@@ -169,7 +169,6 @@
 <translation id="7353601530677266744">Ukazna vrstica</translation>
 <translation id="7364115444476960850">Stran, do katere ste poskušali dostopati, je blokirala družba Vivaldi <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Pot profila</translation>
-<translation id="7445762425076701745">Identitete strežnika, s katerim ste povezani, ni mogoče v celoti preveriti. S strežnikom ste povezani z uporabo imena, ki je veljavno samo v vašem omrežju, zato zunanji overitelj certifikatov ne more preveriti njegovega lastništva. Ker nekateri overitelji certifikatov kljub temu izdajajo certifikate za takšna imena, ni mogoče zagotoviti, da ste povezani z želenim spletnim mestom in ne z napadalcem.</translation>
 <translation id="7455133967321480974">Uporabi globalno privzeto (Blokiraj)</translation>
 <translation id="7518003948725431193">Za ta spletni naslov in bilo mogoče najti nobene spletne strani:<ph name="URL" /></translation>
 <translation id="7549584377607005141">Za pravilen prikaz te strani so potrebni podatki, ki ste jih vnesli prej. Podatke lahko pošljete še enkrat, vendar se bodo s tem ponovila vsa prejšnja dejanja strani.</translation>

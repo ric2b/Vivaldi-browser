@@ -16,11 +16,6 @@
 // Current selected index of the ment item
 @property (nonatomic,assign) NSInteger selectedIndex;
 
-// Property to track whether the speed dial position is modifed by drag-dropping
-// item. When this is done, the UI needed to be refreshed when a new tab page
-// is opened.
-@property (nonatomic,assign) BOOL isSpeedDialPositionModified;
-
 + (id)manager;
 @end
 

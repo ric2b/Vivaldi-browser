@@ -49,7 +49,7 @@ struct ReceiverCapability {
 struct ReceiverError {
   explicit ReceiverError(int code, std::string_view description = "");
   explicit ReceiverError(Error::Code code, std::string_view description = "");
-  explicit ReceiverError(Error error);
+  explicit ReceiverError(const Error& error);
 
   ReceiverError(const ReceiverError&);
   ReceiverError(ReceiverError&&) noexcept;

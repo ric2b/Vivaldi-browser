@@ -35,7 +35,6 @@ import org.chromium.chrome.browser.ntp.search.SearchBoxCoordinator;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileManager;
-import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.CoordinatorLayoutForPointer;
 import org.chromium.components.browser_ui.widget.displaystyle.UiConfig;
@@ -61,7 +60,6 @@ public class TasksView extends CoordinatorLayoutForPointer {
     private View.OnClickListener mIncognitoCookieControlsIconClickListener;
     private UiConfig mUiConfig;
     private final boolean mIsSurfacePolishEnabled;
-    private final boolean mIsSurfacePolishOmniboxColorEnabled;
 
     /** Default constructor needed to inflate via XML. */
     public TasksView(Context context, AttributeSet attrs) {
@@ -69,9 +67,6 @@ public class TasksView extends CoordinatorLayoutForPointer {
         mContext = context;
 
         mIsSurfacePolishEnabled = ChromeFeatureList.sSurfacePolish.isEnabled();
-        mIsSurfacePolishOmniboxColorEnabled =
-                mIsSurfacePolishEnabled
-                        && StartSurfaceConfiguration.SURFACE_POLISH_OMNIBOX_COLOR.getValue();
     }
 
     public void initialize(
@@ -165,14 +160,10 @@ public class TasksView extends CoordinatorLayoutForPointer {
             searchBackground =
                     AppCompatResources.getDrawable(
                             mContext, R.drawable.fake_search_box_bg_incognito);
-        } else if (mIsSurfacePolishOmniboxColorEnabled) {
-            searchBackground =
-                    AppCompatResources.getDrawable(
-                            mContext, R.drawable.home_surface_search_box_background_colorful);
         } else if (mIsSurfacePolishEnabled) {
             searchBackground =
                     AppCompatResources.getDrawable(
-                            mContext, R.drawable.home_surface_search_box_background_neutral);
+                            mContext, R.drawable.home_surface_search_box_background);
         } else {
             searchBackground = AppCompatResources.getDrawable(mContext, R.drawable.ntp_search_box);
         }
@@ -188,7 +179,7 @@ public class TasksView extends CoordinatorLayoutForPointer {
                                 : ChromeColors.getSurfaceColor(
                                         mContext, R.dimen.toolbar_text_box_elevation);
                 shapeDrawable.mutate();
-                // TODO(https://crbug.com/1239289): Change back to #setTint once our min API level
+                // TODO(crbug.com/40193794): Change back to #setTint once our min API level
                 // is 23.
                 shapeDrawable.setColorFilter(searchBackgroundColor, PorterDuff.Mode.SRC_IN);
             }
@@ -221,14 +212,7 @@ public class TasksView extends CoordinatorLayoutForPointer {
 
         ViewStub incognitoDescriptionViewStub =
                 (ViewStub) findViewById(R.id.task_view_incognito_layout_stub);
-        boolean isIncognitoNtpRevampEnabled = ChromeFeatureList.sIncognitoNtpRevamp.isEnabled();
-        if (isIncognitoNtpRevampEnabled) {
-            incognitoDescriptionViewStub.setLayoutResource(
-                    R.layout.revamped_incognito_description_layout);
-        } else {
-            incognitoDescriptionViewStub.setLayoutResource(R.layout.incognito_description_layout);
-        }
-
+        incognitoDescriptionViewStub.setLayoutResource(R.layout.incognito_description_layout);
         mIncognitoDescriptionView =
                 (IncognitoDescriptionView) incognitoDescriptionViewStub.inflate();
 
@@ -236,15 +220,9 @@ public class TasksView extends CoordinatorLayoutForPointer {
         ViewStub cardStub = findViewById(R.id.cookie_card_stub);
         if (cardStub == null) return;
         if (shouldShowTrackingProtectionNtp()) {
-            cardStub.setLayoutResource(
-                    isIncognitoNtpRevampEnabled
-                            ? R.layout.revamped_incognito_tracking_protection_card
-                            : R.layout.incognito_tracking_protection_card);
+            cardStub.setLayoutResource(R.layout.incognito_tracking_protection_card);
         } else {
-            cardStub.setLayoutResource(
-                    isIncognitoNtpRevampEnabled
-                            ? R.layout.revamped_incognito_cookie_controls_card
-                            : R.layout.incognito_cookie_controls_card);
+            cardStub.setLayoutResource(R.layout.incognito_cookie_controls_card);
         }
         cardStub.inflate();
         mIncognitoDescriptionView.formatTrackingProtectionText(getContext(), this);
@@ -437,7 +415,7 @@ public class TasksView extends CoordinatorLayoutForPointer {
     }
 
     private void forceHeaderScrollable() {
-        // TODO(https://crbug.com/1251632): Find out why scrolling was broken after
+        // TODO(crbug.com/40198436): Find out why scrolling was broken after
         // crrev.com/c/3025127. Force the header view to be draggable as a workaround.
         CoordinatorLayout.LayoutParams params =
                 (CoordinatorLayout.LayoutParams) mHeaderView.getLayoutParams();

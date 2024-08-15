@@ -10,13 +10,12 @@
 #import "base/mac/mac_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/task/task_traits.h"
 #include "base/time/time.h"
 #import "content/browser/accessibility/browser_accessibility_cocoa.h"
 #import "content/browser/accessibility/browser_accessibility_mac.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
-#include "content/public/browser/browser_task_traits.h"
-#include "content/public/browser/browser_thread.h"
-#include "content/public/browser/web_contents.h"
 #include "ui/accelerated_widget_mac/accelerated_widget_mac.h"
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/platform/ax_platform_tree_manager_delegate.h"
@@ -250,7 +249,7 @@ void BrowserAccessibilityManagerMac::FireGeneratedEvent(
 
       // Use native VoiceOver support for live regions.
       BrowserAccessibilityCocoa* retained_node = native_node;
-      GetUIThreadTaskRunner({})->PostDelayedTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
           FROM_HERE,
           base::BindOnce(
               [](BrowserAccessibilityCocoa* wrapper) {
@@ -382,13 +381,11 @@ void BrowserAccessibilityManagerMac::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::DESCRIBED_BY_CHANGED:
     case ui::AXEventGenerator::Event::DESCRIPTION_CHANGED:
     case ui::AXEventGenerator::Event::DOCUMENT_TITLE_CHANGED:
-    case ui::AXEventGenerator::Event::DROPEFFECT_CHANGED:
     case ui::AXEventGenerator::Event::EDITABLE_TEXT_CHANGED:
     case ui::AXEventGenerator::Event::ENABLED_CHANGED:
     case ui::AXEventGenerator::Event::FOCUS_CHANGED:
     case ui::AXEventGenerator::Event::FLOW_FROM_CHANGED:
     case ui::AXEventGenerator::Event::FLOW_TO_CHANGED:
-    case ui::AXEventGenerator::Event::GRABBED_CHANGED:
     case ui::AXEventGenerator::Event::HASPOPUP_CHANGED:
     case ui::AXEventGenerator::Event::HIERARCHICAL_LEVEL_CHANGED:
     case ui::AXEventGenerator::Event::IGNORED_CHANGED:
@@ -431,6 +428,37 @@ void BrowserAccessibilityManagerMac::FireGeneratedEvent(
   FireNativeMacNotification(mac_notification, wrapper);
 }
 
+void BrowserAccessibilityManagerMac::FireAriaNotificationEvent(
+    BrowserAccessibility* node,
+    const std::string& announcement,
+    const std::string& notification_id,
+    ax::mojom::AriaNotificationInterrupt interrupt_property,
+    ax::mojom::AriaNotificationPriority priority_property) {
+  DCHECK(node);
+
+  auto* root_manager = GetManagerForRootFrame();
+  if (!root_manager) {
+    return;
+  }
+
+  auto* root_manager_mac = root_manager->ToBrowserAccessibilityManagerMac();
+
+  auto MapPropertiesToNSAccessibilityPriorityLevel =
+      [&]() -> NSAccessibilityPriorityLevel {
+    switch (priority_property) {
+      case ax::mojom::AriaNotificationPriority::kNone:
+        return NSAccessibilityPriorityMedium;
+      case ax::mojom::AriaNotificationPriority::kImportant:
+        return NSAccessibilityPriorityHigh;
+    }
+    NOTREACHED_NORETURN();
+  };
+
+  PostAnnouncementNotification(base::SysUTF8ToNSString(announcement),
+                               [root_manager_mac->GetParentView() window],
+                               MapPropertiesToNSAccessibilityPriorityLevel());
+}
+
 void BrowserAccessibilityManagerMac::FireNativeMacNotification(
     NSString* mac_notification,
     BrowserAccessibility* node) {
@@ -446,7 +474,7 @@ void BrowserAccessibilityManagerMac::FireNativeMacNotification(
 }
 
 bool BrowserAccessibilityManagerMac::OnAccessibilityEvents(
-    const AXEventNotificationDetails& details) {
+    const ui::AXUpdatesAndEvents& details) {
   text_edits_.clear();
   return BrowserAccessibilityManager::OnAccessibilityEvents(details);
 }

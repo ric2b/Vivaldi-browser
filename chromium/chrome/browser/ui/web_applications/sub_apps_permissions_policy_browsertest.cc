@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <string_view>
+
 #include "base/files/file_util.h"
 #include "base/test/gmock_expected_support.h"
 #include "base/test/test_future.h"
@@ -29,11 +31,11 @@ class SubAppsPermissionsPolicyBrowserTest
     : public IsolatedWebAppBrowserTestHarness {
   base::ScopedTempDir scoped_temp_dir_;
   base::FilePath bundle_path_;
-  web_package::WebBundleSigner::KeyPair key_pair_ =
-      web_package::WebBundleSigner::KeyPair::CreateRandom();
+  web_package::WebBundleSigner::Ed25519KeyPair key_pair_ =
+      web_package::WebBundleSigner::Ed25519KeyPair::CreateRandom();
 
   TestSignedWebBundle CreateBundle() const {
-    constexpr base::StringPiece manifest =
+    constexpr std::string_view manifest =
         R"({
           "name": "Sub apps test app",
           "id": "/",

@@ -28,7 +28,7 @@
   <interface name="wp_drm_lease_device_v1" version="1">
     <description summary="lease device">
       This protocol is used by Wayland compositors which act as Direct
-      Renderering Manager (DRM) masters to lease DRM resources to Wayland
+      Rendering Manager (DRM) masters to lease DRM resources to Wayland
       clients.
 
       The compositor will advertise one wp_drm_lease_device_v1 global for each

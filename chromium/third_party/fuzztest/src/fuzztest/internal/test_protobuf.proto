@@ -213,3 +213,93 @@ message WebSearchResult {
   // A list of size `count` containing valid URLs.
   repeated string urls = 3;
 }
+
+message MazePath {
+  enum Direction {
+    UNSPECIFIED = 0;
+    UP = 1;
+    DOWN = 2;
+    LEFT = 3;
+    RIGHT = 4;
+  }
+  repeated Direction direction = 1 [packed = true];
+}
+
+// Represents a sequence of numbered keys that open the doors along a maze path.
+message MazeKeys {
+  repeated int32 key = 1 [packed = true];
+}
+
+// Represents a directed graph of nodes, alongside a specially designated start
+// node.
+message NodeGraph {
+  // A node in the graph.
+  message Node {
+    // The name of the node. Must be non-empty and unique among all nodes.
+    optional string name = 1;
+
+    // The names of zero or more successors of the node. Each successor must
+    // refer to an existing node in the graph (including the current node).
+    repeated string successor = 2;
+  }
+
+  // All nodes in the graph.
+  repeated Node node = 1;
+
+  // The name of the start node in the graph.
+  optional string start = 2;
+}
+
+message DataColumnFilter {
+  message AndFilter {
+    repeated DataColumnFilter filters = 1;  // must have length > 1
+  }
+  message OrFilter {
+    repeated DataColumnFilter filters = 1;  // must have length > 1
+  }
+  message NotFilter {
+    optional DataColumnFilter filter = 1;
+  }
+  oneof filter {
+    AndFilter and_filter = 1;
+    OrFilter or_filter = 2;
+    NotFilter not_filter = 3;
+  }
+}
+
+message Person {
+  optional string name = 1;
+  optional uint32 zipcode = 2;
+  optional uint32 age = 3;
+  repeated Person emergency_contacts = 5;
+}
+
+message Vector {
+  repeated uint32 rows = 1 [packed = true];
+}
+message Matrix {
+  repeated Vector columns = 1;
+}
+
+// A partial TCP state machine, modeling connection establishment
+message TcpStateMachine {
+  enum State {
+    INVALID_STATE = 0;
+    CLOSED = 1;
+    LISTEN = 2;
+    SYN_RCVD = 3;
+    SYN_SENT = 4;
+    ESTABLISHED = 5;
+  }
+
+  enum Event {
+    INVALID_EVENT = 0;
+    USER_LISTEN = 1;
+    USER_CONNECT = 2;
+    RCV_SYN = 3;
+    RCV_SYN_ACK = 4;
+    RCV_ACK = 5;
+  }
+  repeated Event event = 1 [packed = true];
+  optional State start_state = 2;
+}

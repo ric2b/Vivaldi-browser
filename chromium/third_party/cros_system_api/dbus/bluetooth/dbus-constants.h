@@ -549,10 +549,16 @@ constexpr char kSolicitUUIDsProperty[] = "SolicitUUIDs";
 constexpr char kTypeProperty[] = "Type";
 constexpr char kIncludeTxPowerProperty[] = "IncludeTxPower";
 constexpr char kScanResponseDataProperty[] = "ScanResponseData";
+constexpr char kSecondaryChannelProperty[] = "SecondaryChannel";
 
 // Possible values for the "Type" property.
 constexpr char kTypeBroadcast[] = "broadcast";
 constexpr char kTypePeripheral[] = "peripheral";
+
+// Possible values for the "SecondaryChannel"
+constexpr char kPhy1M[] = "1M";
+constexpr char kPhy2M[] = "2M";
+constexpr char kPhyCodec[] = "Codec";
 }  // namespace bluetooth_advertisement
 
 // https://chromium.googlesource.com/chromiumos/third_party/bluez/+/refs/heads/chromeos-5.54/doc/advertisement-monitor-api.txt

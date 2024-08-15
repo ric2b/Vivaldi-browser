@@ -41,6 +41,7 @@
 #endif  // CONFIG_BITSTREAM_DEBUG
 
 #include "av1/common/alloccommon.h"
+#include "av1/common/debugmodes.h"
 #include "av1/common/filter.h"
 #include "av1/common/idct.h"
 #include "av1/common/reconinter.h"
@@ -155,8 +156,8 @@ int av1_set_active_map(AV1_COMP *cpi, unsigned char *new_map_16x16, int rows,
     const int mi_cols = mi_params->mi_cols;
     cpi->active_map.update = 0;
     cpi->rc.percent_blocks_inactive = 0;
-    assert(mi_rows % 2 == 0);
-    assert(mi_cols % 2 == 0);
+    assert(mi_rows % 2 == 0 && mi_rows > 0);
+    assert(mi_cols % 2 == 0 && mi_cols > 0);
     if (new_map_16x16) {
       int num_samples = 0;
       int num_blocks_inactive = 0;
@@ -178,6 +179,7 @@ int av1_set_active_map(AV1_COMP *cpi, unsigned char *new_map_16x16, int rows,
       }
       cpi->active_map.enabled = 1;
       cpi->active_map.update = 1;
+      assert(num_samples);
       cpi->rc.percent_blocks_inactive =
           (num_blocks_inactive * 100) / num_samples;
     }
@@ -2394,7 +2396,10 @@ static void loopfilter_frame(AV1_COMP *cpi, AV1_COMMON *cm) {
 
   const int use_loopfilter =
       is_loopfilter_used(cm) && !cpi->mt_info.pipeline_lpf_mt_with_enc;
-  const int use_cdef = is_cdef_used(cm);
+  const int use_cdef =
+      is_cdef_used(cm) && (!cpi->active_map.enabled ||
+                           cpi->rc.percent_blocks_inactive <=
+                               cpi->sf.rt_sf.thresh_active_maps_skip_lf_cdef);
   const int use_superres = av1_superres_scaled(cm);
   const int use_restoration = is_restoration_used(cm);
 
@@ -2653,12 +2658,8 @@ static int encode_without_recode(AV1_COMP *cpi) {
         av1_setup_frame(cpi);
     }
   }
-
-  if (q_cfg->aq_mode == CYCLIC_REFRESH_AQ) {
-    suppress_active_map(cpi);
-    av1_cyclic_refresh_setup(cpi);
-  }
   av1_apply_active_map(cpi);
+  if (q_cfg->aq_mode == CYCLIC_REFRESH_AQ) av1_cyclic_refresh_setup(cpi);
   if (cm->seg.enabled) {
     if (!cm->seg.update_data && cm->prev_frame) {
       segfeatures_copy(&cm->seg, &cm->prev_frame->seg);
@@ -3553,9 +3554,6 @@ static void calculate_frame_avg_haar_energy(AV1_COMP *cpi) {
       log1p((double)frame_avg_wavelet_energy / num_mbs);
 }
 #endif
-
-extern void av1_print_frame_contexts(const FRAME_CONTEXT *fc,
-                                     const char *filename);
 
 /*!\brief Run the final pass encoding for 1-pass/2-pass encoding mode, and pack
  * the bitstream

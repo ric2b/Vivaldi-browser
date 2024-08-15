@@ -124,8 +124,7 @@ uint32_t GetEntryProperty(io_registry_entry_t entry, CFStringRef name) {
 //
 // [device registryID] is the ID for one of the IOGraphicsAccelerator2 and we can see that
 // their parent always is an IOPCIDevice that has properties for the device and vendor IDs.
-MaybeError API_AVAILABLE(macos(10.13))
-    GetDeviceIORegistryPCIInfo(id<MTLDevice> device, PCIIDs* ids) {
+MaybeError GetDeviceIORegistryPCIInfo(id<MTLDevice> device, PCIIDs* ids) {
     // Get a matching dictionary for the IOGraphicsAccelerator2
     CFRef<CFMutableDictionaryRef> matchingDict =
         AcquireCFRef(IORegistryEntryIDMatching([device registryID]));
@@ -167,8 +166,6 @@ MaybeError API_AVAILABLE(macos(10.13))
 }
 
 MaybeError GetDevicePCIInfo(id<MTLDevice> device, PCIIDs* ids) {
-    // [device registryID] is introduced on macOS 10.13+, otherwise workaround to get vendor
-    // id by vendor name on old macOS
     auto result = GetDeviceIORegistryPCIInfo(device, ids);
     if (result.IsError()) {
         dawn::WarningLog() << "GetDeviceIORegistryPCIInfo failed: "
@@ -182,8 +179,7 @@ MaybeError GetDevicePCIInfo(id<MTLDevice> device, PCIIDs* ids) {
 
 #elif DAWN_PLATFORM_IS(IOS)
 
-MaybeError GetDevicePCIInfo(id<MTLDevice> device, PCIIDs* ids) {
-    DAWN_UNUSED(device);
+MaybeError GetDevicePCIInfo(id<MTLDevice>, PCIIDs* ids) {
     *ids = PCIIDs{0, 0};
     return {};
 }
@@ -304,11 +300,47 @@ class PhysicalDevice : public PhysicalDeviceBase {
 
     bool SupportsFeatureLevel(FeatureLevel) const override { return true; }
 
+    ResultOrError<PhysicalDeviceSurfaceCapabilities> GetSurfaceCapabilities(
+        const Surface*) const override {
+        PhysicalDeviceSurfaceCapabilities capabilities;
+
+        // Formats
+
+        capabilities.formats = {
+            wgpu::TextureFormat::BGRA8Unorm,
+            wgpu::TextureFormat::BGRA8UnormSrgb,
+            wgpu::TextureFormat::RGBA16Float,
+        };
+#if DAWN_PLATFORM_IS(MACOS)
+        capabilities.formats.push_back(wgpu::TextureFormat::RGB10A2Unorm);
+#endif  // DAWN_PLATFORM_IS(MACOS)
+
+        // Present Modes
+
+        capabilities.presentModes = {
+            wgpu::PresentMode::Fifo,
+            wgpu::PresentMode::Immediate,
+            wgpu::PresentMode::Mailbox,
+        };
+
+        // Alpha Modes
+
+        capabilities.alphaModes = {
+            wgpu::CompositeAlphaMode::Opaque,
+            wgpu::CompositeAlphaMode::Premultiplied,
+            wgpu::CompositeAlphaMode::Auto,
+        };
+
+        return capabilities;
+    }
+
   private:
-    ResultOrError<Ref<DeviceBase>> CreateDeviceImpl(AdapterBase* adapter,
-                                                    const UnpackedPtr<DeviceDescriptor>& descriptor,
-                                                    const TogglesState& deviceToggles) override {
-        return Device::Create(adapter, mDevice, descriptor, deviceToggles);
+    ResultOrError<Ref<DeviceBase>> CreateDeviceImpl(
+        AdapterBase* adapter,
+        const UnpackedPtr<DeviceDescriptor>& descriptor,
+        const TogglesState& deviceToggles,
+        Ref<DeviceBase::DeviceLostEvent>&& lostEvent) override {
+        return Device::Create(adapter, mDevice, descriptor, deviceToggles, std::move(lostEvent));
     }
 
     void SetupBackendAdapterToggles(TogglesState* adapterToggles) const override {}
@@ -317,8 +349,7 @@ class PhysicalDevice : public PhysicalDeviceBase {
         {
             bool haveStoreAndMSAAResolve = false;
 #if DAWN_PLATFORM_IS(MACOS)
-            haveStoreAndMSAAResolve =
-                [*mDevice supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily1_v2];
+            haveStoreAndMSAAResolve = [*mDevice supportsFamily:MTLGPUFamilyCommon2];
 #elif DAWN_PLATFORM_IS(IOS)
 #if !defined(__IPHONE_16_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_16_0
             haveStoreAndMSAAResolve = [*mDevice supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily3_v2];
@@ -461,14 +492,8 @@ class PhysicalDevice : public PhysicalDeviceBase {
             EnableFeature(Feature::Float32Filterable);
         }
 #elif DAWN_PLATFORM_IS(MACOS)
-        if (@available(macOS 10.15, *)) {
-            if ([*mDevice supportsFamily:MTLGPUFamilyMac2]) {
-                EnableFeature(Feature::Float32Filterable);
-            }
-        } else if (@available(macOS 10.14, *)) {
-            if ([*mDevice supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily2_v1]) {
-                EnableFeature(Feature::Float32Filterable);
-            }
+        if ([*mDevice supportsFamily:MTLGPUFamilyMac2]) {
+            EnableFeature(Feature::Float32Filterable);
         }
 #endif
 
@@ -478,15 +503,7 @@ class PhysicalDevice : public PhysicalDeviceBase {
             EnableFeature(Feature::TextureCompressionBC);
         }
 #elif DAWN_PLATFORM_IS(MACOS)
-        if (@available(macOS 10.15, *)) {
-            if ([*mDevice supportsFamily:MTLGPUFamilyMac1]) {
-                EnableFeature(Feature::TextureCompressionBC);
-            }
-        } else {
-            if ([*mDevice supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily1_v1]) {
-                EnableFeature(Feature::TextureCompressionBC);
-            }
-        }
+        EnableFeature(Feature::TextureCompressionBC);
 #endif
 
 #if DAWN_PLATFORM_IS(IOS) && \
@@ -588,8 +605,18 @@ class PhysicalDevice : public PhysicalDeviceBase {
             EnableFeature(Feature::MultiPlanarFormatExtendedUsages);
         }
 
+        if (@available(macOS 10.13, iOS 11.0, *)) {
+            EnableFeature(Feature::MultiPlanarFormatP210);
+            EnableFeature(Feature::MultiPlanarFormatP410);
+        }
+
         if (@available(macOS 10.15, iOS 13.0, *)) {
             EnableFeature(Feature::MultiPlanarFormatNv12a);
+        }
+
+        if (@available(macOS 11.0, iOS 14.0, *)) {
+            EnableFeature(Feature::MultiPlanarFormatNv16);
+            EnableFeature(Feature::MultiPlanarFormatNv24);
         }
 
         if (@available(macOS 11.0, iOS 10.0, *)) {
@@ -614,9 +641,10 @@ class PhysicalDevice : public PhysicalDeviceBase {
         EnableFeature(Feature::RG11B10UfloatRenderable);
         EnableFeature(Feature::BGRA8UnormStorage);
         EnableFeature(Feature::SurfaceCapabilities);
-        EnableFeature(Feature::MSAARenderToSingleSampled);
         EnableFeature(Feature::DualSourceBlending);
         EnableFeature(Feature::R8UnormStorage);
+        EnableFeature(Feature::ShaderModuleCompilationOptions);
+        EnableFeature(Feature::DawnLoadResolveTexture);
 
         // SIMD-scoped permute operations is supported by GPU family Metal3, Apple6, Apple7, Apple8,
         // and Mac2.
@@ -638,6 +666,8 @@ class PhysicalDevice : public PhysicalDeviceBase {
             EnableFeature(Feature::SharedFenceMTLSharedEvent);
         }
 
+        EnableFeature(Feature::Unorm16TextureFormats);
+        EnableFeature(Feature::Snorm16TextureFormats);
         EnableFeature(Feature::Norm16TextureFormats);
 
         EnableFeature(Feature::HostMappedPointer);
@@ -700,9 +730,6 @@ class PhysicalDevice : public PhysicalDeviceBase {
             if ([*mDevice supportsFamily:MTLGPUFamilyMac2]) {
                 return MTLGPUFamily::Mac2;
             }
-            if ([*mDevice supportsFamily:MTLGPUFamilyMac1]) {
-                return MTLGPUFamily::Mac1;
-            }
 #endif
             if ([*mDevice supportsFamily:MTLGPUFamilyApple7]) {
                 return MTLGPUFamily::Apple7;
@@ -725,18 +752,13 @@ class PhysicalDevice : public PhysicalDeviceBase {
             if ([*mDevice supportsFamily:MTLGPUFamilyApple1]) {
                 return MTLGPUFamily::Apple1;
             }
-        }
 
-#if DAWN_PLATFORM_IS(MACOS)
-        if (@available(macOS 10.14, *)) {
-            if ([*mDevice supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily2_v1]) {
-                return MTLGPUFamily::Mac2;
-            }
-        }
-        if ([*mDevice supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily1_v1]) {
+            // This family is no longer supported in the macOS 10.15 SDK but still exists so
+            // default to it.
             return MTLGPUFamily::Mac1;
         }
-#elif DAWN_PLATFORM_IS(IOS) && \
+
+#if DAWN_PLATFORM_IS(IOS) && \
     (!defined(__IPHONE_16_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_16_0)
         if (@available(iOS 10.11, *)) {
             if ([*mDevice supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily4_v1]) {

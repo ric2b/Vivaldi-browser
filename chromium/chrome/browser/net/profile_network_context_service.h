@@ -25,7 +25,7 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_member.h"
-#include "components/privacy_sandbox/privacy_sandbox_settings.h"
+#include "content/public/browser/storage_partition.h"
 #include "net/net_buildflags.h"
 #include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom-forward.h"
 #include "services/network/public/mojom/cert_verifier_service_updater.mojom.h"
@@ -58,8 +58,7 @@ class PrefRegistrySyncable;
 class ProfileNetworkContextService
     : public KeyedService,
       public content_settings::Observer,
-      public content_settings::CookieSettings::Observer,
-      public privacy_sandbox::PrivacySandboxSettings::Observer {
+      public content_settings::CookieSettings::Observer {
  public:
   explicit ProfileNetworkContextService(Profile* profile);
 
@@ -79,7 +78,9 @@ class ProfileNetworkContextService
       cert_verifier::mojom::CertVerifierCreationParams*
           cert_verifier_creation_params);
 
-#if BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(CHROME_CERTIFICATE_POLICIES_SUPPORTED)
+  // Update all of the profile_'s CertVerifierServices with certificates from
+  // enterprise policies.
   void UpdateAdditionalCertificates();
 #endif
 
@@ -96,6 +97,11 @@ class ProfileNetworkContextService
   // doesn't match the cached certificate.
   void FlushCachedClientCertIfNeeded(
       const net::HostPortPair& host,
+      const scoped_refptr<net::X509Certificate>& certificate);
+
+  // Flushes a cached client certificate preference if |certificate| matches
+  // the cached certificate.
+  void FlushMatchingCachedClientCert(
       const scoped_refptr<net::X509Certificate>& certificate);
 
   // Flushes all pending proxy configuration changes.
@@ -149,14 +155,11 @@ class ProfileNetworkContextService
   void ScheduleUpdateCTPolicy();
 
 #if BUILDFLAG(CHROME_CERTIFICATE_POLICIES_SUPPORTED)
-  // Get the current certificate policies from preferences.
-  cert_verifier::mojom::AdditionalCertificatesPtr GetCertificatePolicy();
-
-  // Update the certificate policy for all of the profile_'s
-  // CertVerifierServices.
-  void UpdateCertificatePolicy();
-
   void ScheduleUpdateCertificatePolicy();
+
+  // Get the current certificate policies from preferences.
+  cert_verifier::mojom::AdditionalCertificatesPtr GetCertificatePolicy(
+      const base::FilePath& storage_partition_path);
 #endif
 
   bool ShouldSplitAuthCacheByNetworkIsolationKey() const;
@@ -180,12 +183,6 @@ class ProfileNetworkContextService
   base::FilePath GetPartitionPath(
       const base::FilePath& relative_partition_path);
 
-  // Populates |network_context_params| with initial additional server and
-  // authority certificates for |relative_partition_path|.
-  void PopulateInitialAdditionalCerts(
-      const base::FilePath& relative_partition_path,
-      cert_verifier::mojom::CertVerifierCreationParams* creation_params);
-
   // content_settings::Observer:
   void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
                                const ContentSettingsPattern& secondary_pattern,
@@ -196,9 +193,6 @@ class ProfileNetworkContextService
       bool block_third_party_cookies) override;
   void OnMitigationsEnabledFor3pcdChanged(bool enable) override;
   void OnTrackingProtectionEnabledFor3pcdChanged(bool enable) override;
-
-  // PrivacySandboxSettings::Observer:
-  void OnFirstPartySetsEnabledChanged(bool enabled) override;
 
   const raw_ptr<Profile> profile_;
 
@@ -213,9 +207,6 @@ class ProfileNetworkContextService
   base::ScopedObservation<content_settings::CookieSettings,
                           content_settings::CookieSettings::Observer>
       cookie_settings_observation_{this};
-  base::ScopedObservation<privacy_sandbox::PrivacySandboxSettings,
-                          privacy_sandbox::PrivacySandboxSettings::Observer>
-      privacy_sandbox_settings_observer_{this};
 
   // Used to post schedule CT and Certificate policy updates
   base::OneShotTimer ct_policy_update_timer_;

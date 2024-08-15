@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/training
-  - Chromium OS > Developer Library > Training
+  - ChromiumOS > Training
 page_name: debugging-crashes
 title: Debugging Crashes
 ---
@@ -12,7 +12,7 @@ finally how to get more information to determine the root cause (using
 symbolized build logs, stack traces, and gdb). At the end of this codelab you
 will know the first steps to take anytime you need to debug a crash in Chrome!
 If you want more information about debugging chrome, see
-[Debugging](/chrome/chromeos/system_services_team/dev_instructions/g3doc/debugging.md#debugging-crashes-with-gdb).
+[Debugging](/chromium-os/developer-library/guides/debugging#debugging-crashes-with-gdb).
 
 [TOC]
 
@@ -20,9 +20,9 @@ If you want more information about debugging chrome, see
 
 First, let's make sure you are ready to start debugging crashes. Prior to doing
 this codelab, you should have completed the following sections:
-[Hardware](/chrome/chromeos/system_services_team/dev_instructions/g3doc/hardware.md),
+[Hardware](/chromium-os/developer-library/getting-started/hardware-requirements),
 [Chromebook Setup](/chrome/chromeos/system_services_team/dev_instructions/g3doc/setup_chromebook.md),
-[Checkout Chromium](/chrome/chromeos/system_services_team/dev_instructions/g3doc/setup_checkout.md),
+[Checkout Chromium](/chromium-os/developer-library/getting-started/checkout-chromium),
 and
 [Building, deploying and testing](/chrome/chromeos/system_services_team/dev_instructions/g3doc/developing.md).
 Once you have done all that, you're ready to start at step 1!
@@ -30,9 +30,9 @@ Once you have done all that, you're ready to start at step 1!
 ## 1. Creating a crash
 
 Crashes can happen for a variety of reasons, some of the most common are segv
-(segmentation faults), UAF (use after free) and CHECKs. Today we will debug a
+(segmentation faults), UAF (use after free) and CHECKKs. Today we will debug a
 crash caused by a CHECK but the same principles can be applied to debugging any
-crash. There are two primary types of CHECKs: 1) CHECK: will cause a crash both
+crash. There are two primary types of CHECKKs: 1) CHECK: will cause a crash both
 in both development and production environments. 2) DCHECK will cause a crash in
 development environments but in production it becomes a no-op instead. By
 default DCHECKS are enabled in your builds. To create a crash, we will insert a
@@ -141,18 +141,18 @@ information.
 Building with symbols takes longer but gives developers significantly more
 details for debugging issues. To build and deploy with symbols we'll use the
 instructions in
-[Debugging](/chrome/chromeos/system_services_team/dev_instructions/g3doc/debugging.md#debugging-crashes-with-gdb).
+[Debugging](/chromium-os/developer-library/guides/debugging/debugging#debugging-crashes-with-gdb).
 
 To build chromium with symbols follow the instructions on
-[Building chrome with symbols](/chrome/chromeos/system_services_team/dev_instructions/g3doc/debugging.md#building-chrome-with-symbols).
+[Building chrome with symbols](/chromium-os/developer-library/guides/debugging/debugging#building-chrome-with-symbols).
 Then to deploy with symbols, follow the instructions on
-[Deploying Chrome with symbols](/chrome/chromeos/system_services_team/dev_instructions/g3doc/debugging.md#deploying-chrome-with-symbols).
+[Deploying Chrome with symbols](/chromium-os/developer-library/guides/debugging/debugging#deploying-chrome-with-symbols).
 
 ## 5. Intercepting and debugging crashes with `gdb`
 
 Generally the most straightforward way to debug all crashes is to catch them as
 they happen, and inspect them, with `gdb`. This will provide a stack trace for
-all types of crashes whereas looking at logs only shows stack traces for CHECKs.
+all types of crashes whereas looking at logs only shows stack traces for CHECKKs.
 
 Note: If you are debugging a real crash, you'll want to skip straight to using a
 symbolized build and debugging with `gdb`. The purpose of this codelab is to
@@ -161,7 +161,7 @@ investigating a crash **ALWAYS** use a symbolized build.
 
 It’s okay if you have no background with `gdb`, as the following steps explain
 how to set it up and its basic usage. For more in-depth information see the
-[Debugging](/chrome/chromeos/system_services_team/dev_instructions/g3doc/debugging.md#debugging-a-crash-after-it-happens).
+[Debugging](/chromium-os/developer-library/guides/debugging/debugging#debugging-a-crash-after-it-happens).
 **Once you have deployed a symbolized Chrome executable to your Chromebook (see
 section
 [Building and deploying Chrome with symbols](#5-deploying-chrome-with-symbols)

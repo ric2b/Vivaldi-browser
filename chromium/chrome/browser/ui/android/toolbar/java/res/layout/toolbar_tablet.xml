@@ -64,7 +64,8 @@ found in the LICENSE file.
             app:menuMaxWidth="@dimen/home_button_list_menu_width"
             app:menuPositionedAtEnd="false"
             app:menuVerticalOverlapAnchor="false"
-            app:tint="@color/default_icon_color_tint_list" />
+            app:tint="@color/default_icon_color_tint_list"
+            android:paddingEnd="@dimen/toolbar_buttons_offset_padding" />
 
         <!-- Vivaldi: Margin changes-->
         <org.chromium.chrome.browser.omnibox.LocationBarTablet
@@ -86,8 +87,6 @@ found in the LICENSE file.
             style="@style/ToolbarButton"
             android:paddingStart="8dp"
             android:visibility="gone" />
-
-        <include layout="@layout/tracker_shield_button"/>
 
         <org.chromium.chrome.browser.toolbar.top.ToggleTabStackButton
             android:id="@+id/tab_switcher_button"

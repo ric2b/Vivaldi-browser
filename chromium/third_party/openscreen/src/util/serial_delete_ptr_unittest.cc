@@ -12,7 +12,7 @@ namespace openscreen {
 
 class SerialDeletePtrTest : public ::testing::Test {
  public:
-  SerialDeletePtrTest() : clock_(Clock::now()), task_runner_(&clock_) {}
+  SerialDeletePtrTest() : clock_(Clock::now()), task_runner_(clock_) {}
 
  protected:
   FakeClock clock_;

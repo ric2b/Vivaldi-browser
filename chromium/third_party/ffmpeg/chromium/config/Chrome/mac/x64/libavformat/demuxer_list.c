@@ -1,4 +1,4 @@
-static const AVInputFormat * const demuxer_list[] = {
+static const FFInputFormat * const demuxer_list[] = {
     &ff_aac_demuxer,
     &ff_flac_demuxer,
     &ff_matroska_demuxer,

@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">არა შემდეგ</translation>
 <translation id="2749881179542288782">შეამოწმეთ გრამატიკა მართლწერით</translation>
 <translation id="2785873697295365461">ფაილის დესკრიპტორები</translation>
-<translation id="2809586584051668049">და კიდევ <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2825758591930162672">სუბიექტის საჯარო გასაღები</translation>
 <translation id="2850541429955027218">თემის დამატება</translation>
 <translation id="2861941300086904918">საკუთარი კლიენტის უსაფრთხოების მმართველი</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">ფანჯრის სახით გახსნა</translation>
 <translation id="3280237271814976245">&amp;შენახვა როგორც...</translation>
 <translation id="3285322247471302225">&amp;ახალი ჩანართი</translation>
-<translation id="3288047731229977326">გაფართოებებს, რომლების პროგრამისტის რეჟიმშია გაშვებული, შეუძლია, თქვენს კომპიუტერს ავნოს. თუ პროგრამისტი არ ბრძანდებით, იმისთვის, რომ უსაფრთხოდ იყოთ, ეს გაფართოებები უნდა გამორთოთ, როცა პროგრამისტის რეჟიმში ბრძანდებით.</translation>
 <translation id="329838636886466101">აღდგენა</translation>
 <translation id="33022249435934718">GDI დამმუშავებლები</translation>
 <translation id="3303818374450886607">ასლები</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">შეიქმნა გაფართოება:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">პროგრამისტის რეჟიმის გაფართოებების გამორთვა</translation>
 <translation id="4100839878934973028">სხვა პროგრამამ თქვენი კომპიუტერიდან დაამატა აპი, რომელმაც, შეიძლება, შეცვალოს გზა, როგორ მუშაობს Vivaldi.</translation>
 <translation id="4104163789986725820">გატანა...</translation>
 <translation id="4109898769411476438">შემოტანამდე ბრაუზერის დახურვა</translation>
@@ -261,7 +258,6 @@
 <translation id="5269977353971873915">ბეჭდვს შეცდომა</translation>
 <translation id="5284445933715251131">გადმოწერა {} ({}%)</translation>
 <translation id="52912272896845572">პირადი გასაღების ფაილი არასწორია.</translation>
-<translation id="5301954838959518834">გავიგე</translation>
 <translation id="5302932258331363306">შენაცვლებების ჩვენება</translation>
 <translation id="5317780077021120954">შენახვა</translation>
 <translation id="5334142896108694079">სკრიპტის კეში</translation>

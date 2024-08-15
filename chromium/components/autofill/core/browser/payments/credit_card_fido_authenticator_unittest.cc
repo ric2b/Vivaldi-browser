@@ -33,6 +33,7 @@
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/metrics/form_events/form_events.h"
 #include "components/autofill/core/browser/metrics/payments/better_auth_metrics.h"
+#include "components/autofill/core/browser/payments/payments_service_url.h"
 #include "components/autofill/core/browser/payments/test_authentication_requester.h"
 #include "components/autofill/core/browser/payments/test_credit_card_fido_authenticator.h"
 #include "components/autofill/core/browser/payments/test_internal_authenticator.h"
@@ -41,6 +42,7 @@
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/browser/test_autofill_clock.h"
 #include "components/autofill/core/browser/test_autofill_driver.h"
+#include "components/autofill/core/browser/test_payments_data_manager.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
 #include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
@@ -66,8 +68,6 @@
 #include "ui/gfx/geometry/rect.h"
 #include "url/gurl.h"
 
-#include "components/autofill/core/browser/payments/payments_service_url.h"
-
 namespace autofill {
 namespace {
 
@@ -82,6 +82,8 @@ constexpr char kTestCredentialId[] = "VGhpcyBpcyBhIHRlc3QgQ3JlZGVudGlhbCBJRC4=";
 // Base64 encoding of "This is a test signature".
 constexpr char kTestSignature[] = "VGhpcyBpcyBhIHRlc3Qgc2lnbmF0dXJl";
 constexpr char kTestAuthToken[] = "dummy_card_authorization_token";
+constexpr std::string_view kEnrollmentOfferedHistogramName =
+    "Autofill.BetterAuth.EnrollmentPromptOffered";
 
 std::vector<uint8_t> Base64ToBytes(std::string base64) {
   return base::Base64Decode(base64).value_or(std::vector<uint8_t>());
@@ -121,7 +123,8 @@ class CreditCardFidoAuthenticatorTest : public testing::Test {
         CreditCard::RecordType::kMaskedServerCard);
 
     personal_data_manager().test_payments_data_manager().ClearCreditCards();
-    personal_data_manager().AddServerCreditCard(masked_server_card);
+    personal_data_manager().test_payments_data_manager().AddServerCreditCard(
+        masked_server_card);
 
     return masked_server_card;
   }
@@ -608,6 +611,40 @@ TEST_F(CreditCardFidoAuthenticatorTest, Register_NewCardAuthorization) {
   OptChange(AutofillClient::PaymentsRpcResult::kSuccess,
             /*user_is_opted_in=*/true);
   EXPECT_TRUE(fido_authenticator().IsUserOptedIn());
+}
+
+// Test that if FIDO enrollment is offered, the enrollment histogram logs to the
+// enrollment offered bucket.
+TEST_F(CreditCardFidoAuthenticatorTest,
+       Register_EnrollmentOfferedHistogramBucketLogs) {
+  base::HistogramTester histogram_tester;
+
+  SetUserOptInPreference(true);
+
+  fido_authenticator().Authorize(
+      requester().GetWeakPtr(), kTestAuthToken,
+      GetTestRequestOptions(kTestChallenge, kTestRelyingPartyId,
+                            kTestCredentialId));
+
+  histogram_tester.ExpectUniqueSample(kEnrollmentOfferedHistogramName,
+                                      /*sample=*/true,
+                                      /*expected_bucket_count=*/1);
+}
+
+// Test that if FIDO enrollment is not offered, the enrollment histogram logs
+// to the enrollment not offered bucket.
+TEST_F(CreditCardFidoAuthenticatorTest,
+       Register_EnrollmentNotOfferedHistogramBucketLogs) {
+  base::HistogramTester histogram_tester;
+
+  SetUserOptInPreference(true);
+
+  fido_authenticator().Authorize(requester().GetWeakPtr(), kTestAuthToken,
+                                 base::Value::Dict());
+
+  histogram_tester.ExpectUniqueSample(kEnrollmentOfferedHistogramName,
+                                      /*sample=*/false,
+                                      /*expected_bucket_count=*/1);
 }
 
 TEST_F(CreditCardFidoAuthenticatorTest, OptOut_Success) {

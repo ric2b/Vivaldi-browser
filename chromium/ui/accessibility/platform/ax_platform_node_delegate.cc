@@ -8,6 +8,7 @@
 #include "base/notreached.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_selection.h"
+#include "ui/accessibility/platform/ax_platform.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/accessibility/platform/ax_platform_tree_manager.h"
 #include "ui/accessibility/platform/child_iterator.h"
@@ -67,7 +68,7 @@ std::u16string AXPlatformNodeDelegate::GetTextContentUTF16() const {
   // compute the text of a non-leaf text field from the text contents of its
   // children, even though we currently know of no such text field in Views.
   //
-  // TODO(https://crbug.com/1030703): The check for `IsInvisibleOrIgnored()`
+  // TODO(crbug.com/40662009): The check for `IsInvisibleOrIgnored()`
   // should not be needed. `ChildAtIndex()` and `GetChildCount()` are already
   // supposed to skip over nodes that are invisible or ignored, but
   // `ViewAXPlatformNodeDelegate` does not currently implement this behavior.
@@ -86,6 +87,15 @@ std::u16string AXPlatformNodeDelegate::GetTextContentUTF16() const {
     text_content += child->GetDelegate()->GetTextContentUTF16();
   }
   return text_content;
+}
+
+int AXPlatformNodeDelegate::GetTextContentLengthUTF16() const {
+  // TODO(accessibility): Simplify once ViewsAX is complete.
+  if (node_) {
+    return node_->GetTextContentLengthUTF16();
+  }
+
+  return GetTextContentUTF16().length();
 }
 
 std::u16string AXPlatformNodeDelegate::GetValueForControl() const {
@@ -133,7 +143,7 @@ gfx::NativeViewAccessible AXPlatformNodeDelegate::GetNSWindow() {
 }
 
 gfx::NativeViewAccessible AXPlatformNodeDelegate::GetNativeViewAccessible() {
-  // TODO(crbug.com/703369) On Windows, where we have started to migrate to an
+  // TODO(crbug.com/41308426) On Windows, where we have started to migrate to an
   // AXPlatformNode implementation, the BrowserAccessibilityWin subclass has
   // overridden this method. On all other platforms, this method should not be
   // called yet. In the future, when all subclasses have moved over to be
@@ -562,9 +572,9 @@ bool AXPlatformNodeDelegate::IsValidRelationTarget(
     // relations reported via platform APIs.
     return false;
   }
-  DCHECK_GT(GetUniqueId(), kInvalidAXUniqueId);
+  DCHECK_GT(GetUniqueId(), AXUniqueId::kInvalidId);
   DCHECK(target);
-  DCHECK_GT(target->GetUniqueId(), kInvalidAXUniqueId);
+  DCHECK_GT(target->GetUniqueId(), AXUniqueId::kInvalidId);
   // We should ignore reflexive relations.
   return GetUniqueId() != target->GetUniqueId();
 }
@@ -576,7 +586,8 @@ std::u16string AXPlatformNodeDelegate::GetAuthorUniqueId() const {
 }
 
 const AXUniqueId& AXPlatformNodeDelegate::GetUniqueId() const {
-  static base::NoDestructor<AXUniqueId> empty_unique_id;
+  static const base::NoDestructor<AXUniqueId> empty_unique_id(
+      AXUniqueId::Create());
   return *empty_unique_id;
 }
 
@@ -897,7 +908,7 @@ std::vector<ax::mojom::Action> AXPlatformNodeDelegate::GetSupportedActions()
   std::vector<ax::mojom::Action> supported_actions;
 
   // The default action must be listed at index 0.
-  // TODO(crbug.com/1370076): Do this only if (HasDefaultActionVerb()), After
+  // TODO(crbug.com/40869533): Do this only if (HasDefaultActionVerb()), After
   // some time tracking the DCHECK at
   // BrowserAccessibilityManager::DoDefaultAction()
   supported_actions.push_back(ax::mojom::Action::kDoDefault);

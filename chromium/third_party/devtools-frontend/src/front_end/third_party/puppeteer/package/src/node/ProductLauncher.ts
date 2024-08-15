@@ -98,6 +98,12 @@ export abstract class ProductLauncher {
 
     const launchArgs = await this.computeLaunchArguments(options);
 
+    if (!existsSync(launchArgs.executablePath)) {
+      throw new Error(
+        `Browser was not found at the configured executablePath (${launchArgs.executablePath})`
+      );
+    }
+
     const usePipe = launchArgs.args.includes('--remote-debugging-pipe');
 
     const onProcessExit = async () => {
@@ -105,6 +111,18 @@ export abstract class ProductLauncher {
         isTemp: launchArgs.isTempUserDataDir,
       });
     };
+
+    if (
+      this.#product === 'firefox' &&
+      protocol !== 'webDriverBiDi' &&
+      this.puppeteer.configuration.logLevel === 'warn'
+    ) {
+      console.warn(
+        `Chrome DevTools Protocol (CDP) support for Firefox is deprecated in Puppeteer ` +
+          `and it will be eventually removed. ` +
+          `Use WebDriver BiDi instead (see https://pptr.dev/webdriver-bidi#get-started).`
+      );
+    }
 
     const browserProcess = launch({
       executablePath: launchArgs.executablePath,

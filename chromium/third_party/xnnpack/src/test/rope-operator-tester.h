@@ -5,23 +5,21 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
+#include <xnnpack.h>
 
-#include <cassert>
-#include <cstddef>
-#include <cstdlib>
 #include <algorithm>
+#include <cassert>
 #include <cmath>
-#include <limits>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
 #include <memory>
 #include <random>
 #include <vector>
 
+#include "replicable_random_device.h"
+#include <gtest/gtest.h>
 #include <fp16/fp16.h>
-
-#include <xnnpack.h>
-#include <xnnpack/cache.h>
-
 
 class RoPEOperatorTester {
  public:
@@ -30,60 +28,59 @@ class RoPEOperatorTester {
     FP32,
   };
 
-  inline RoPEOperatorTester& channels(size_t channels) {
+  RoPEOperatorTester& channels(size_t channels) {
     assert(channels >= 1);
     this->channels_ = channels;
     return *this;
   }
 
-  inline size_t channels() const {
+  size_t channels() const {
     return this->channels_;
   }
 
-  inline RoPEOperatorTester& heads(size_t heads) {
+  RoPEOperatorTester& heads(size_t heads) {
     assert(heads >= 1);
     this->heads_ = heads;
     return *this;
   }
 
-  inline size_t heads() const {
+  size_t heads() const {
     return this->heads_;
   }
 
-  inline RoPEOperatorTester& tokens(size_t tokens) {
+  RoPEOperatorTester& tokens(size_t tokens) {
     assert(tokens >= 1);
     this->tokens_ = tokens;
     return *this;
   }
 
-  inline size_t tokens() const {
+  size_t tokens() const {
     return this->tokens_;
   }
 
-  inline RoPEOperatorTester& batch_size(size_t batch_size) {
+  RoPEOperatorTester& batch_size(size_t batch_size) {
     assert(batch_size >= 1);
     this->batch_size_ = batch_size;
     return *this;
   }
 
-  inline size_t batch_size() const {
+  size_t batch_size() const {
     return this->batch_size_;
   }
 
-  inline RoPEOperatorTester& iterations(size_t iterations) {
+  RoPEOperatorTester& iterations(size_t iterations) {
     this->iterations_ = iterations;
     return *this;
   }
 
-  inline size_t iterations() const {
+  size_t iterations() const {
     return this->iterations_;
   }
 
   void TestF16() const {
     ASSERT_EQ(channels() % 2, 0);
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32rdist(1.0f, 10.0f);
     std::uniform_real_distribution<float> f32idist(0.01f, 0.1f);
 
@@ -185,8 +182,7 @@ class RoPEOperatorTester {
   void TestF32() const {
     ASSERT_EQ(channels() % 2, 0);
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32rdist(1.0f, 10.0f);
     std::uniform_real_distribution<float> f32idist(0.01f, 0.1f);
 

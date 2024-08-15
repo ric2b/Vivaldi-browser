@@ -23,6 +23,8 @@ extern const char kAccountInfo[];
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 extern const char kAutologinEnabled[];
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
+extern const char kCookieClearOnExitMigrationNoticeComplete[];
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
 extern const char kGaiaCookieHash[];
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 extern const char kGaiaCookieChangedTime[];
@@ -38,6 +40,8 @@ COMPONENT_EXPORT(SIGNIN_SWITCHES)
 extern const char kGoogleServicesLastSyncingGaiaId[];
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 extern const char kGoogleServicesLastSyncingUsername[];
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+extern const char kGoogleServicesLastSignedInUsername[];
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 extern const char kGoogleServicesSigninScopedDeviceId[];
 COMPONENT_EXPORT(SIGNIN_SWITCHES)

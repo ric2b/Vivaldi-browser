@@ -6,7 +6,19 @@
     "abseil": {
         "IncludePatterns": [
             "absl/**"
+        ]
+    },
+    "dl": {
+        "IncludePatterns": [
+            "dlfcn.h"
         ],
+        "Condition": "tint_build_hlsl_writer"
+    },
+    "dxc-include": {
+        "IncludePatterns": [
+            "dxc/**"
+        ],
+        "Condition": "tint_build_hlsl_writer"
     },
     "google-benchmark": {
         "IncludePatterns": [

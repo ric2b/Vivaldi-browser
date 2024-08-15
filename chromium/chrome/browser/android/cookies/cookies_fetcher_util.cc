@@ -55,7 +55,8 @@ void OnCookiesFetchFinished(const net::CookieList& cookies) {
         static_cast<int>(cookie.SameSite()), cookie.Priority(),
         base::android::ConvertUTF8ToJavaString(
             env, key_serialized_result->TopLevelSite()),
-        static_cast<int>(cookie.SourceScheme()), cookie.SourcePort());
+        static_cast<int>(cookie.SourceScheme()), cookie.SourcePort(),
+        static_cast<int>(cookie.SourceType()));
     env->SetObjectArrayElement(joa.obj(), index++, java_cookie.obj());
   }
 
@@ -94,9 +95,10 @@ void JNI_CookiesFetcher_RestoreCookies(
     jint priority,
     const JavaParamRef<jstring>& partition_key,
     jint source_scheme,
-    jint source_port) {
+    jint source_port,
+    jint source_type) {
   cookie_fetcher_restore_util::CookiesFetcherRestoreCookiesImpl(
       env, name, value, domain, path, creation, expiration, last_access,
       last_update, secure, httponly, same_site, priority, partition_key,
-      source_scheme, source_port);
+      source_scheme, source_port, source_type);
 }

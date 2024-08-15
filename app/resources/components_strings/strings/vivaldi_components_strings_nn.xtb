@@ -163,7 +163,6 @@
 <translation id="7353601530677266744">Kommandolinje</translation>
 <translation id="7364115444476960850">Sida du prøvde å gå til vart blokkert av Vivaldis <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profilsti</translation>
-<translation id="7445762425076701745">Identiteten til tenaren du er tilkopla kan ikkje heilt stadfestast sidan tenaren bruker eit namn som berre er gyldig på lokalnettverket ditt. Ein ekstern sertifiseringsinstans kan derfor ikkje validera han. Somme sertifiseringsinstansar gjev ut sertifikat for slike namn likevel. Dette betyr at det ikkje er mogleg å vera sikker på at du er tilkopla rett nettstad og ikkje ein åtakar.</translation>
 <translation id="7455133967321480974">Bruk systemstandarden (blokker)</translation>
 <translation id="7518003948725431193">Fann inga nettside på nettadressa: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Denne nettsida krev data som du skreiv inn tidlegare for å kunna visa ho skikkeleg. Du kan senda dataa på ny, men ved å gjera det vil du ogso repetera ei kvar handling denne sida utførte.</translation>

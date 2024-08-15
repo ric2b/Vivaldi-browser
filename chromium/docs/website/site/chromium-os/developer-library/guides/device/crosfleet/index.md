@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: crosfleet
 title: Crosfleet
 ---
@@ -89,6 +89,6 @@ tast run chromeos2-row7-rack4-host33 login.Chrome
 ```
 
 [Build the packages for your board]: https://www.chromium.org/chromium-os/developer-library/guides/development/developer-guide/#build-the-packages-for-your-board
-[Flashing ChromiumOS]: flash_chromiumos.md#flash-a-custom-built-of-chromium-os-image
+[Flashing ChromiumOS]: /chromium-os/developer-library/guides/device/flashing-chromiumos/#flash-a-custom-built-of-chromium-os-image
 [SSH private keys]: http://go/chromeos-lab-duts-ssh#setup-private-key-and-ssh-config
 [SSH to a lab DUT inside chroot environment]: http://go/chromeos-lab-duts-ssh#optional-ssh-to-a-lab-dut-inside-chroot-environment

@@ -190,7 +190,7 @@ TEST_F(BackForwardCacheMetricsTest, TimeRecordedAtStart) {
               testing::ElementsAre(UkmEntry{id3, {{time_away, 0b1000}}}));
 }
 
-// TODO(crbug.com/1255492): Flaky under TSan.
+// TODO(crbug.com/40200059): Flaky under TSan.
 #if BUILDFLAG(USING_SANITIZER)
 #define MAYBE_TimeRecordedWhenRendererIsKilled DISABLED_TimeRecordedWhenRendererIsKilled
 #else
@@ -272,7 +272,7 @@ TEST_F(BackForwardCacheMetricsTest, AllFeaturesCovered) {
         BackForwardCacheImpl::RequestedFeatures::kAll, ccns_context);
     auto allowed_features = BackForwardCacheImpl::GetAllowedFeatures(
         BackForwardCacheImpl::RequestedFeatures::kAll, ccns_context);
-    ASSERT_TRUE(Intersection(disallowed_features, allowed_features).Empty());
+    ASSERT_TRUE(Intersection(disallowed_features, allowed_features).empty());
     for (auto feature : Union(disallowed_features, allowed_features)) {
       combined_features.emplace(static_cast<uint64_t>(feature));
     }

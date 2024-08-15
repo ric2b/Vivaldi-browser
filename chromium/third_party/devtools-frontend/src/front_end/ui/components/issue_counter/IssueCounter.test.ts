@@ -2,12 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertNotNullOrUndefined} from '../../../core/platform/platform.js';
 import * as IssuesManager from '../../../models/issues_manager/issues_manager.js';
 import {
-  assertElement,
   assertElements,
-  assertShadowRoot,
   renderElementIntoDOM,
 } from '../../../testing/DOMHelpers.js';
 import {describeWithLocale} from '../../../testing/EnvironmentHelpers.js';
@@ -16,22 +13,20 @@ import * as IconButton from '../icon_button/icon_button.js';
 
 import * as IssueCounter from './issue_counter.js';
 
-const {assert} = chai;
-
 const renderIssueCounter = (data: IssueCounter.IssueCounter.IssueCounterData):
     {component: IssueCounter.IssueCounter.IssueCounter, shadowRoot: ShadowRoot} => {
       const component = new IssueCounter.IssueCounter.IssueCounter();
       component.data = data;
       renderElementIntoDOM(component);
-      assertShadowRoot(component.shadowRoot);
+      assert.isNotNull(component.shadowRoot);
       return {component, shadowRoot: component.shadowRoot};
     };
 
 export const extractIconGroups = (shadowRoot: ShadowRoot) => {
   const iconButton = shadowRoot.querySelector('icon-button');
-  assertElement(iconButton, IconButton.IconButton.IconButton);
+  assert.instanceOf(iconButton, IconButton.IconButton.IconButton);
   const iconButtonShadowRoot = iconButton.shadowRoot;
-  assertNotNullOrUndefined(iconButtonShadowRoot);
+  assert.exists(iconButtonShadowRoot);
   const icons = iconButtonShadowRoot.querySelectorAll('.status-icon');
   assertElements(icons, IconButton.Icon.Icon);
   const labels = iconButtonShadowRoot.querySelectorAll('.icon-button-title');
@@ -49,11 +44,11 @@ export const extractIconGroups = (shadowRoot: ShadowRoot) => {
 
 export const extractButton = (shadowRoot: ShadowRoot) => {
   const iconButton = shadowRoot.querySelector('icon-button');
-  assertElement(iconButton, IconButton.IconButton.IconButton);
+  assert.instanceOf(iconButton, IconButton.IconButton.IconButton);
   const iconButtonShadowRoot = iconButton.shadowRoot;
-  assertNotNullOrUndefined(iconButtonShadowRoot);
+  assert.exists(iconButtonShadowRoot);
   const button = iconButtonShadowRoot.querySelector('button');
-  assertElement(button, HTMLButtonElement);
+  assert.instanceOf(button, HTMLButtonElement);
   return button;
 };
 

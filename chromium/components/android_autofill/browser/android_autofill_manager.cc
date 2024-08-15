@@ -12,8 +12,8 @@
 #include "base/containers/contains.h"
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
+#include "components/android_autofill/browser/android_form_event_logger.h"
 #include "components/android_autofill/browser/autofill_provider.h"
-#include "components/android_autofill/browser/form_event_logger_weblayer_android.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
 #include "content/public/browser/render_frame_host.h"
@@ -62,7 +62,6 @@ void AndroidAutofillManager::OnFormSubmittedImpl(
 void AndroidAutofillManager::OnTextFieldDidChangeImpl(
     const FormData& form,
     const FormFieldData& field,
-    const gfx::RectF& bounding_box,
     const TimeTicks timestamp) {
   auto* provider = GetAutofillProvider();
   if (!provider) {
@@ -73,7 +72,7 @@ void AndroidAutofillManager::OnTextFieldDidChangeImpl(
   // cleared by blink. Check `provider` cache.
   bool cached_is_autofilled = provider->GetCachedIsAutofilled(field);
 
-  provider->OnTextFieldDidChange(this, form, field, bounding_box, timestamp);
+  provider->OnTextFieldDidChange(this, form, field, timestamp);
 
   if (auto* logger = GetEventFormLogger(form, field)) {
     if (cached_is_autofilled) {
@@ -86,24 +85,22 @@ void AndroidAutofillManager::OnTextFieldDidChangeImpl(
 
 void AndroidAutofillManager::OnTextFieldDidScrollImpl(
     const FormData& form,
-    const FormFieldData& field,
-    const gfx::RectF& bounding_box) {
+    const FormFieldData& field) {
   if (auto* provider = GetAutofillProvider())
-    provider->OnTextFieldDidScroll(this, form, field, bounding_box);
+    provider->OnTextFieldDidScroll(this, form, field);
 }
 
 void AndroidAutofillManager::OnAskForValuesToFillImpl(
     const FormData& form,
     const FormFieldData& field,
-    const gfx::RectF& bounding_box,
+    const gfx::Rect& caret_bounds,
     AutofillSuggestionTriggerSource trigger_source) {
   auto* provider = GetAutofillProvider();
   if (!provider) {
     return;
   }
 
-  provider->OnAskForValuesToFill(this, form, field, bounding_box,
-                                 trigger_source);
+  provider->OnAskForValuesToFill(this, form, field, trigger_source);
 
   if (auto* logger = GetEventFormLogger(form, field)) {
     logger->OnDidInteractWithAutofillableForm();
@@ -112,28 +109,26 @@ void AndroidAutofillManager::OnAskForValuesToFillImpl(
 
 void AndroidAutofillManager::OnFocusOnFormFieldImpl(
     const FormData& form,
-    const FormFieldData& field,
-    const gfx::RectF& bounding_box) {
+    const FormFieldData& field) {
   if (auto* provider = GetAutofillProvider())
-    provider->OnFocusOnFormField(this, form, field, bounding_box);
+    provider->OnFocusOnFormField(this, form, field);
 }
 
 void AndroidAutofillManager::OnSelectControlDidChangeImpl(
     const FormData& form,
-    const FormFieldData& field,
-    const gfx::RectF& bounding_box) {
+    const FormFieldData& field) {
   if (auto* provider = GetAutofillProvider())
-    provider->OnSelectControlDidChange(this, form, field, bounding_box);
+    provider->OnSelectControlDidChange(this, form, field);
 }
 
 bool AndroidAutofillManager::ShouldParseForms() {
   return true;
 }
 
-void AndroidAutofillManager::OnFocusNoLongerOnFormImpl(
+void AndroidAutofillManager::OnFocusOnNonFormFieldImpl(
     bool had_interacted_form) {
   if (auto* provider = GetAutofillProvider())
-    provider->OnFocusNoLongerOnForm(this, had_interacted_form);
+    provider->OnFocusOnNonFormField(this, had_interacted_form);
 }
 
 void AndroidAutofillManager::OnDidFillAutofillFormDataImpl(
@@ -221,7 +216,7 @@ void AndroidAutofillManager::FillOrPreviewForm(
   std::erase_if(form.fields, [&](const FormFieldData& field) {
     // The renderer doesn't fill such fields, and therefore they can be removed
     // from here to reduce IPC traffic and avoid accidental filling.
-    return !field.is_autofilled || field.value.empty();
+    return !field.is_autofilled() || field.value().empty();
   });
   driver().ApplyFormAction(mojom::FormActionType::kFill, action_persistence,
                            form, triggered_origin, {});
@@ -233,25 +228,23 @@ void AndroidAutofillManager::FillOrPreviewForm(
 }
 
 void AndroidAutofillManager::StartNewLoggingSession() {
-  address_logger_ = std::make_unique<FormEventLoggerWeblayerAndroid>("Address");
-  payments_logger_ =
-      std::make_unique<FormEventLoggerWeblayerAndroid>("CreditCard");
-  password_logger_ =
-      std::make_unique<FormEventLoggerWeblayerAndroid>("Password");
+  address_logger_ = std::make_unique<AndroidFormEventLogger>("Address");
+  payments_logger_ = std::make_unique<AndroidFormEventLogger>("CreditCard");
+  password_logger_ = std::make_unique<AndroidFormEventLogger>("Password");
 }
 
-FormEventLoggerWeblayerAndroid* AndroidAutofillManager::GetEventFormLogger(
+AndroidFormEventLogger* AndroidAutofillManager::GetEventFormLogger(
     const FormData& form,
     const FormFieldData& field) {
   return GetEventFormLogger(ComputeFieldTypeGroupForField(form, field));
 }
 
-FormEventLoggerWeblayerAndroid* AndroidAutofillManager::GetEventFormLogger(
+AndroidFormEventLogger* AndroidAutofillManager::GetEventFormLogger(
     FieldTypeGroup group) {
   return GetEventFormLogger(FieldTypeGroupToFormType(group));
 }
 
-FormEventLoggerWeblayerAndroid* AndroidAutofillManager::GetEventFormLogger(
+AndroidFormEventLogger* AndroidAutofillManager::GetEventFormLogger(
     FormType form_type) {
   switch (form_type) {
     case FormType::kAddressForm:

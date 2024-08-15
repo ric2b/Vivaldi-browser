@@ -4,6 +4,8 @@
 
 #include "components/plus_addresses/webdata/plus_address_table.h"
 
+#include <optional>
+
 #include "base/files/scoped_temp_dir.h"
 #include "components/plus_addresses/plus_address_test_utils.h"
 #include "components/plus_addresses/plus_address_types.h"
@@ -41,25 +43,65 @@ class PlusAddressTableTest : public testing::Test {
 };
 
 TEST_F(PlusAddressTableTest, GetPlusProfiles) {
-  const PlusProfile profile1 = test::GetPlusProfile();
-  const PlusProfile profile2 = test::GetPlusProfile2();
-  ASSERT_TRUE(table_.AddPlusProfile(profile1));
-  ASSERT_TRUE(table_.AddPlusProfile(profile2));
+  const PlusProfile profile1 =
+      test::CreatePlusProfile(/*use_full_domain=*/true);
+  const PlusProfile profile2 =
+      test::CreatePlusProfile2(/*use_full_domain=*/true);
+  ASSERT_TRUE(table_.AddOrUpdatePlusProfile(profile1));
+  ASSERT_TRUE(table_.AddOrUpdatePlusProfile(profile2));
   EXPECT_THAT(table_.GetPlusProfiles(),
               testing::UnorderedElementsAre(profile1, profile2));
 }
 
-TEST_F(PlusAddressTableTest, AddPlusProfile) {
-  const PlusProfile profile = test::GetPlusProfile();
-  EXPECT_TRUE(table_.AddPlusProfile(profile));
-  EXPECT_FALSE(table_.AddPlusProfile(profile));
-  EXPECT_TRUE(table_.AddPlusProfile(test::GetPlusProfile2()));
+TEST_F(PlusAddressTableTest, GetPlusProfileForId) {
+  const PlusProfile profile1 =
+      test::CreatePlusProfile(/*use_full_domain=*/true);
+  const PlusProfile profile2 =
+      test::CreatePlusProfile2(/*use_full_domain=*/true);
+  ASSERT_TRUE(table_.AddOrUpdatePlusProfile(profile1));
+  ASSERT_TRUE(table_.AddOrUpdatePlusProfile(profile2));
+  EXPECT_EQ(table_.GetPlusProfileForId(profile1.profile_id), profile1);
+  EXPECT_EQ(table_.GetPlusProfileForId(profile2.profile_id), profile2);
+  EXPECT_EQ(table_.GetPlusProfileForId("invalid_id"), std::nullopt);
+}
+
+TEST_F(PlusAddressTableTest, AddOrUpdatePlusProfile) {
+  PlusProfile profile1 = test::CreatePlusProfile(/*use_full_domain=*/true);
+  PlusProfile profile2 = test::CreatePlusProfile2(/*use_full_domain=*/true);
+  // Add `profile1`.
+  EXPECT_TRUE(table_.AddOrUpdatePlusProfile(profile1));
+  EXPECT_THAT(table_.GetPlusProfiles(),
+              testing::UnorderedElementsAre(profile1));
+  // Update `profile1`.
+  profile1.plus_address = "new-" + profile1.plus_address;
+  EXPECT_TRUE(table_.AddOrUpdatePlusProfile(profile1));
+  EXPECT_THAT(table_.GetPlusProfiles(),
+              testing::UnorderedElementsAre(profile1));
+  // Add `profile2`.
+  EXPECT_TRUE(table_.AddOrUpdatePlusProfile(profile2));
+  EXPECT_THAT(table_.GetPlusProfiles(),
+              testing::UnorderedElementsAre(profile1, profile2));
+}
+
+TEST_F(PlusAddressTableTest, RemovePlusProfile) {
+  const PlusProfile profile1 =
+      test::CreatePlusProfile(/*use_full_domain=*/true);
+  const PlusProfile profile2 =
+      test::CreatePlusProfile2(/*use_full_domain=*/true);
+  ASSERT_TRUE(table_.AddOrUpdatePlusProfile(profile1));
+  ASSERT_TRUE(table_.AddOrUpdatePlusProfile(profile2));
+  EXPECT_TRUE(table_.RemovePlusProfile(profile1.profile_id));
+  EXPECT_THAT(table_.GetPlusProfiles(),
+              testing::UnorderedElementsAre(profile2));
+  // Removing a non-existing `profile_id` shouldn't be considered a failure.
+  EXPECT_TRUE(table_.RemovePlusProfile(profile1.profile_id));
 }
 
 TEST_F(PlusAddressTableTest, ClearPlusProfiles) {
-  ASSERT_TRUE(table_.AddPlusProfile(test::GetPlusProfile()));
-  ASSERT_TRUE(table_.AddPlusProfile(test::GetPlusProfile2()));
-  ASSERT_EQ(table_.GetPlusProfiles().size(), 2u);
+  ASSERT_TRUE(table_.AddOrUpdatePlusProfile(
+      test::CreatePlusProfile(/*use_full_domain=*/true)));
+  ASSERT_TRUE(table_.AddOrUpdatePlusProfile(
+      test::CreatePlusProfile2(/*use_full_domain=*/true)));
   EXPECT_TRUE(table_.ClearPlusProfiles());
   EXPECT_THAT(table_.GetPlusProfiles(), testing::IsEmpty());
 }

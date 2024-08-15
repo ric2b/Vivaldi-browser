@@ -193,6 +193,9 @@ public class BookmarkModel extends BookmarkBridge {
      */
     public boolean hasBookmarkIdForTab(@Nullable Tab tab) {
         if (tab == null) return false;
+        // Vivaldi Ref. VAB-9205
+        if (BookmarkBridge.getForProfile(tab.getProfile()).isBookmarkModelLoaded())
+            if (isInsideTrashFolder(getUserBookmarkIdForTab(tab))) return false;
         return isBookmarked(tab.getOriginalUrl());
     }
 

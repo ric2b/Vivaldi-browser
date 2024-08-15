@@ -94,14 +94,23 @@ export class SamplesIntegrator {
   #nodeForGC = new Map<Types.TraceEvents.SyntheticProfileCall, CPUProfile.ProfileTreeModel.ProfileNode>();
 
   #engineConfig: Types.Configuration.Configuration;
+  #profileId: Types.TraceEvents.ProfileID;
+
+  /**
+   * Keeps track of the individual samples from the CPU Profile.
+   * Only used with Debug Mode experiment enabled.
+   */
+  jsSampleEvents: Types.TraceEvents.SyntheticJSSample[] = [];
 
   constructor(
-      profileModel: CPUProfile.CPUProfileDataModel.CPUProfileDataModel, pid: Types.TraceEvents.ProcessID,
-      tid: Types.TraceEvents.ThreadID, configuration?: Types.Configuration.Configuration) {
+      profileModel: CPUProfile.CPUProfileDataModel.CPUProfileDataModel, profileId: Types.TraceEvents.ProfileID,
+      pid: Types.TraceEvents.ProcessID, tid: Types.TraceEvents.ThreadID,
+      configuration?: Types.Configuration.Configuration) {
     this.#profileModel = profileModel;
     this.#threadId = tid;
     this.#processId = pid;
-    this.#engineConfig = configuration || Types.Configuration.DEFAULT;
+    this.#engineConfig = configuration || Types.Configuration.defaults();
+    this.#profileId = profileId;
   }
 
   buildProfileCalls(traceEvents: Types.TraceEvents.TraceEventData[]): Types.TraceEvents.SyntheticProfileCall[] {
@@ -224,6 +233,7 @@ export class SamplesIntegrator {
   callsFromProfileSamples(): Types.TraceEvents.SyntheticProfileCall[] {
     const samples = this.#profileModel.samples;
     const timestamps = this.#profileModel.timestamps;
+    const debugModeEnabled = this.#engineConfig.debugMode;
     if (!samples) {
       return [];
     }
@@ -235,8 +245,12 @@ export class SamplesIntegrator {
       if (!node) {
         continue;
       }
-      const call = makeProfileCall(node, timestamp, this.#processId, this.#threadId);
+      const call = makeProfileCall(node, this.#profileId, i, timestamp, this.#processId, this.#threadId);
       calls.push(call);
+
+      if (debugModeEnabled) {
+        this.jsSampleEvents.push(this.#makeJSSampleEvent(call, timestamp));
+      }
       if (node.id === this.#profileModel.gcNode?.id && prevNode) {
         // GC samples have no stack, so we just put GC node on top of the
         // last recorded sample. Cache the previous sample for future
@@ -249,7 +263,7 @@ export class SamplesIntegrator {
     return calls;
   }
 
-  #getStackTraceFromProfileCall(profileCall: Types.TraceEvents.SyntheticProfileCall):
+  #makeProfileCallsForStack(profileCall: Types.TraceEvents.SyntheticProfileCall):
       Types.TraceEvents.SyntheticProfileCall[] {
     let node = this.#profileModel.nodeById(profileCall.nodeId);
     const isGarbageCollection = node?.id === this.#profileModel.gcNode?.id;
@@ -270,8 +284,12 @@ export class SamplesIntegrator {
       // Place the garbage collection call frame on top of the stack.
       callFrames[i--] = profileCall;
     }
+
+    // Many of these ProfileCalls will be GC'd later when we estimate the frame
+    // durations
     while (node) {
-      callFrames[i--] = makeProfileCall(node, profileCall.ts, this.#processId, this.#threadId);
+      callFrames[i--] = makeProfileCall(
+          node, profileCall.profileId, profileCall.sampleIndex, profileCall.ts, this.#processId, this.#threadId);
       node = node.parent;
     }
     return callFrames;
@@ -282,7 +300,7 @@ export class SamplesIntegrator {
    */
   #extractStackTrace(event: Types.TraceEvents.TraceEventData): void {
     const stackTrace =
-        Types.TraceEvents.isProfileCall(event) ? this.#getStackTraceFromProfileCall(event) : this.#currentJSStack;
+        Types.TraceEvents.isProfileCall(event) ? this.#makeProfileCallsForStack(event) : this.#currentJSStack;
     SamplesIntegrator.filterStackFrames(stackTrace, this.#engineConfig);
 
     const endTime = event.ts + (event.dur || 0);
@@ -377,6 +395,23 @@ export class SamplesIntegrator {
     this.#currentJSStack.length = depth;
   }
 
+  #makeJSSampleEvent(call: Types.TraceEvents.SyntheticProfileCall, timestamp: Types.Timing.MicroSeconds):
+      Types.TraceEvents.SyntheticJSSample {
+    const JSSampleEvent: Types.TraceEvents.SyntheticJSSample = {
+      name: Types.TraceEvents.KnownEventName.JSSample,
+      cat: 'devtools.timeline',
+      args: {
+        data: {stackTrace: this.#makeProfileCallsForStack(call).map(e => e.callFrame)},
+      },
+      ph: Types.TraceEvents.Phase.INSTANT,
+      ts: timestamp,
+      dur: Types.Timing.MicroSeconds(0),
+      pid: this.#processId,
+      tid: this.#threadId,
+    };
+    return JSSampleEvent;
+  }
+
   static framesAreEqual(frame1: Protocol.Runtime.CallFrame, frame2: Protocol.Runtime.CallFrame): boolean {
     return frame1.scriptId === frame2.scriptId && frame1.functionName === frame2.functionName &&
         frame1.lineNumber === frame2.lineNumber;
@@ -402,7 +437,7 @@ export class SamplesIntegrator {
 
   static filterStackFrames(
       stack: Types.TraceEvents.SyntheticProfileCall[], engineConfig: Types.Configuration.Configuration): void {
-    const showAllEvents = engineConfig.experiments.timelineShowAllEvents;
+    const showAllEvents = engineConfig.showAllEvents;
     if (showAllEvents) {
       return;
     }
@@ -412,7 +447,7 @@ export class SamplesIntegrator {
       const frame = stack[i].callFrame;
       const nativeRuntimeFrame = SamplesIntegrator.isNativeRuntimeFrame(frame);
       if (nativeRuntimeFrame &&
-          !SamplesIntegrator.showNativeName(frame.functionName, engineConfig.experiments.timelineV8RuntimeCallStats)) {
+          !SamplesIntegrator.showNativeName(frame.functionName, engineConfig.includeRuntimeCallStats)) {
         continue;
       }
       const nativeFrameName = nativeRuntimeFrame ? SamplesIntegrator.nativeGroup(frame.functionName) : null;

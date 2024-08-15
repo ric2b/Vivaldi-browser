@@ -14,6 +14,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static androidx.test.espresso.matcher.ViewMatchers.withParent;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.is;
@@ -65,7 +66,7 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerChrome;
-import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.HubFieldTrial;
 import org.chromium.chrome.browser.hub.HubLayout;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider.LayoutStateObserver;
@@ -74,6 +75,9 @@ import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
+import org.chromium.chrome.browser.tab_ui.TabContentManager;
+import org.chromium.chrome.browser.tab_ui.TabThumbnailView;
+import org.chromium.chrome.browser.tab_ui.TabUiThemeUtils;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
@@ -132,11 +136,12 @@ public class TabUiTestHelper {
 
     /**
      * Enter tab switcher from a tab page.
-     * @param cta  The current running activity.
+     *
+     * @param cta The current running activity.
      */
     public static void enterTabSwitcher(ChromeTabbedActivity cta) {
         assertFalse(cta.getLayoutManager().isLayoutVisible(LayoutType.TAB_SWITCHER));
-        // TODO(crbug.com/1145271): Replace this with clicking tab switcher button via espresso.
+        // TODO(crbug.com/40155797): Replace this with clicking tab switcher button via espresso.
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     cta.findViewById(R.id.tab_switcher_button).performClick();
@@ -254,7 +259,7 @@ public class TabUiTestHelper {
 
                             @Override
                             public String getDescription() {
-                                return "close tab with index " + String.valueOf(index);
+                                return "close tab with index " + index;
                             }
 
                             @Override
@@ -274,7 +279,19 @@ public class TabUiTestHelper {
     }
 
     /**
+     * Close a tab group. Depending on feature setting, the action button might be a simple x or a
+     * three dot into a menu.
+     */
+    public static void closeFirstTabGroupInTabSwitcher(Context context) {
+        closeFirstTabInTabSwitcher(context);
+        if (ChromeFeatureList.sTabGroupPaneAndroid.isEnabled()) {
+            onView(withText("Close")).perform(click());
+        }
+    }
+
+    /**
      * Close the Nth tab in grid tab switcher.
+     *
      * @param context The activity context.
      * @param index The index of the target tab to close.
      */
@@ -292,7 +309,7 @@ public class TabUiTestHelper {
 
                             @Override
                             public String getDescription() {
-                                return "close tab with index " + String.valueOf(index);
+                                return "close tab with index " + index;
                             }
 
                             @Override
@@ -309,7 +326,8 @@ public class TabUiTestHelper {
     /**
      * Check whether the tab list in {@link android.widget.PopupWindow} is completely showing. This
      * can be used for tab grid dialog and tab group popup UI.
-     * @param cta  The current running activity.
+     *
+     * @param cta The current running activity.
      * @return Whether the tab list in a popup component is completely showing.
      */
     static boolean isPopupTabListCompletelyShowing(ChromeTabbedActivity cta) {
@@ -784,7 +802,7 @@ public class TabUiTestHelper {
         final @ColorInt int actualColor =
                 ViewCompat.getBackgroundTintList(cardView).getDefaultColor();
         final @ColorInt int selectedColor =
-                TabUiThemeProvider.getCardViewBackgroundColor(
+                TabUiThemeUtils.getCardViewBackgroundColor(
                         holder.getContext(), /* isIncognito= */ false, /* isSelected= */ true);
         return actualColor == selectedColor;
     }
@@ -843,8 +861,7 @@ public class TabUiTestHelper {
                 RecyclerView.ViewHolder viewHolder =
                         recyclerView.findViewHolderForAdapterPosition(i);
                 if (viewHolder == null) return;
-                if (viewHolder.getItemViewType() != TabProperties.UiType.CLOSABLE
-                        && viewHolder.getItemViewType() != TabProperties.UiType.SELECTABLE
+                if (viewHolder.getItemViewType() != TabProperties.UiType.TAB
                         && viewHolder.getItemViewType() != TabProperties.UiType.STRIP) {
                     nonTabCardCount += 1;
                 }

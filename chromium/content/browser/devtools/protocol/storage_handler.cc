@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/barrier_closure.h"
 #include "base/functional/bind.h"
 #include "base/notreached.h"
 #include "base/scoped_observation.h"
@@ -39,6 +40,7 @@
 #include "content/browser/attribution_reporting/aggregatable_result.mojom.h"
 #include "content/browser/attribution_reporting/attribution_manager.h"
 #include "content/browser/attribution_reporting/attribution_observer.h"
+#include "content/browser/attribution_reporting/attribution_report.h"
 #include "content/browser/attribution_reporting/attribution_trigger.h"
 #include "content/browser/attribution_reporting/common_source_info.h"
 #include "content/browser/attribution_reporting/create_report_result.h"
@@ -282,7 +284,7 @@ class StorageHandler::IndexedDBObserver
     if (!owner_) {
       return;
     }
-    // TODO(crbug.com/1315371): Allow custom bucket names.
+    // TODO(crbug.com/40221733): Allow custom bucket names.
     auto found = storage_keys_.find(bucket_locator.storage_key);
     if (found == storage_keys_.end()) {
       return;
@@ -299,7 +301,7 @@ class StorageHandler::IndexedDBObserver
     if (!owner_) {
       return;
     }
-    // TODO(crbug.com/1315371): Allow custom bucket names.
+    // TODO(crbug.com/40221733): Allow custom bucket names.
     auto found = storage_keys_.find(bucket_locator.storage_key);
     if (found == storage_keys_.end()) {
       return;
@@ -441,9 +443,8 @@ class StorageHandler::QuotaManagerObserver
   mojo::Receiver<storage::mojom::QuotaManagerObserver> receiver_{this};
 };
 
-StorageHandler::StorageHandler(bool client_is_trusted)
-    : DevToolsDomainHandler(Storage::Metainfo::domainName),
-      client_is_trusted_(client_is_trusted) {}
+StorageHandler::StorageHandler(DevToolsAgentHostClient* client)
+    : DevToolsDomainHandler(Storage::Metainfo::domainName), client_(client) {}
 
 StorageHandler::~StorageHandler() {
   DCHECK(!cache_storage_observer_);
@@ -489,9 +490,6 @@ Response StorageHandler::Disable() {
 
 void StorageHandler::GetCookies(Maybe<std::string> browser_context_id,
                                 std::unique_ptr<GetCookiesCallback> callback) {
-  if (!client_is_trusted_) {
-    callback->sendFailure(Response::ServerError("Permission denied"));
-  }
   StoragePartition* storage_partition = nullptr;
   Response response = StorageHandler::FindStoragePartition(browser_context_id,
                                                            &storage_partition);
@@ -501,12 +499,28 @@ void StorageHandler::GetCookies(Maybe<std::string> browser_context_id,
   }
 
   storage_partition->GetCookieManagerForBrowserProcess()->GetAllCookies(
-      base::BindOnce(
-          [](std::unique_ptr<GetCookiesCallback> callback,
-             const std::vector<net::CanonicalCookie>& cookies) {
-            callback->sendSuccess(NetworkHandler::BuildCookieArray(cookies));
-          },
-          std::move(callback)));
+      base::BindOnce(&StorageHandler::GotAllCookies,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void StorageHandler::GotAllCookies(
+    std::unique_ptr<GetCookiesCallback> callback,
+    const std::vector<net::CanonicalCookie>& cookies) {
+  bool is_webui = frame_host_ && frame_host_->web_ui();
+  std::vector<net::CanonicalCookie> filtered_cookies;
+  for (const auto& cookie : cookies) {
+    if (client_->MayAttachToURL(
+            GURL(base::StrCat({url::kHttpsScheme, url::kStandardSchemeSeparator,
+                               cookie.DomainWithoutDot()})),
+            is_webui) &&
+        client_->MayAttachToURL(
+            GURL(base::StrCat({url::kHttpScheme, url::kStandardSchemeSeparator,
+                               cookie.DomainWithoutDot()})),
+            is_webui)) {
+      filtered_cookies.emplace_back(std::move(cookie));
+    }
+  }
+  callback->sendSuccess(NetworkHandler::BuildCookieArray(filtered_cookies));
 }
 
 void StorageHandler::SetCookies(
@@ -1695,6 +1709,40 @@ void StorageHandler::SetAttributionReportingLocalTestingMode(
           std::move(callback)));
 }
 
+void StorageHandler::SendPendingAttributionReports(
+    std::unique_ptr<SendPendingAttributionReportsCallback> callback) {
+  auto* manager = GetAttributionManager();
+  if (!manager) {
+    callback->sendFailure(Response::InternalError());
+    return;
+  }
+  manager->GetPendingReportsForInternalUse(
+      /*limit=*/-1,
+      base::BindOnce(
+          [](base::WeakPtr<StorageHandler> storage_handler,
+             std::unique_ptr<SendPendingAttributionReportsCallback> callback,
+             std::vector<AttributionReport> reports) {
+            if (!storage_handler) {
+              callback->sendFailure(Response::InternalError());
+              return;
+            }
+            auto* manager = storage_handler->GetAttributionManager();
+            if (!manager) {
+              callback->sendFailure(Response::InternalError());
+              return;
+            }
+            auto barrier = base::BarrierClosure(
+                reports.size(),
+                base::BindOnce(
+                    &SendPendingAttributionReportsCallback::sendSuccess,
+                    std::move(callback), reports.size()));
+            for (const auto& report : reports) {
+              manager->SendReportForWebUI(report.id(), barrier);
+            }
+          },
+          weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
 void StorageHandler::ResetAttributionReporting() {
   attribution_observation_.Reset();
 
@@ -1750,6 +1798,9 @@ ToSourceRegistrationResult(StoreSourceResult result) {
     case StoreSourceResult::kExceedsMaxChannelCapacity:
       return Storage::AttributionReportingSourceRegistrationResultEnum::
           ExceedsMaxChannelCapacity;
+    case StoreSourceResult::kExceedsMaxTriggerStateCardinality:
+      return Storage::AttributionReportingSourceRegistrationResultEnum::
+          ExceedsMaxTriggerStateCardinality;
   }
 }
 
@@ -2171,7 +2222,11 @@ Response StorageHandler::SetAttributionReportingTracking(bool enable) {
     if (!manager) {
       return Response::ServerError("Attribution Reporting is disabled.");
     }
-    attribution_observation_.Observe(manager);
+    // Prevent `DCHECK` crashes in `base::ScopedObservation::Observe()` when we
+    // are already observing.
+    if (!attribution_observation_.IsObserving()) {
+      attribution_observation_.Observe(manager);
+    }
   } else {
     attribution_observation_.Reset();
   }

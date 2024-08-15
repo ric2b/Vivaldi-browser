@@ -221,7 +221,7 @@ bool DisplayChangeObserver::GetSelectedModeForDisplayId(
   return display_manager_->GetSelectedModeForDisplayId(display_id, out_mode);
 }
 
-void DisplayChangeObserver::OnDisplayModeChanged(
+void DisplayChangeObserver::OnDisplayConfigurationChanged(
     const DisplayConfigurator::DisplayStateList& display_states) {
   UpdateInternalDisplay(display_states);
 
@@ -240,20 +240,17 @@ void DisplayChangeObserver::OnDisplayModeChanged(
 
   // For the purposes of user activity detection, ignore synthetic mouse events
   // that are triggered by screen resizes: http://crbug.com/360634
-  ui::UserActivityDetector* user_activity_detector =
-      ui::UserActivityDetector::Get();
-  if (user_activity_detector)
-    user_activity_detector->OnDisplayPowerChanging();
+  ui::UserActivityDetector::Get()->OnDisplayPowerChanging();
 }
 
-void DisplayChangeObserver::OnDisplayModeChangeFailed(
+void DisplayChangeObserver::OnDisplayConfigurationChangeFailed(
     const DisplayConfigurator::DisplayStateList& displays,
     MultipleDisplayState failed_new_state) {
   // If display configuration failed during startup, simply update the display
   // manager with detected displays. If no display is detected, it will
   // create a pseudo display.
   if (display_manager_->GetNumDisplays() == 0)
-    OnDisplayModeChanged(displays);
+    OnDisplayConfigurationChanged(displays);
 }
 
 void DisplayChangeObserver::OnInputDeviceConfigurationChanged(
@@ -267,7 +264,7 @@ void DisplayChangeObserver::OnInputDeviceConfigurationChanged(
     const auto& cached_displays =
         display_manager_->configurator()->cached_displays();
     if (!cached_displays.empty())
-      OnDisplayModeChanged(cached_displays);
+      OnDisplayConfigurationChanged(cached_displays);
   }
 }
 
@@ -341,7 +338,7 @@ ManagedDisplayInfo DisplayChangeObserver::CreateManagedDisplayInfo(
   if (dpi)
     new_info.set_device_dpi(dpi);
 
-  // TODO(crbug.com/1012846): Remove kEnableUseHDRTransferFunction usage when
+  // TODO(crbug.com/40652358): Remove kEnableUseHDRTransferFunction usage when
   // HDR is fully supported on ChromeOS.
   const bool allow_high_bit_depth =
       base::FeatureList::IsEnabled(features::kUseHDRTransferFunction);

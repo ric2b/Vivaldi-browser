@@ -97,10 +97,13 @@ void ServiceImpl::OnStaticContentChanged() {
 
       switch (injection_item.second.metadata.type) {
         case mojom::ItemType::kJS:
-          DCHECK_GE(injection_item.second.metadata.javascript_world_id,
-                    ISOLATED_WORLD_ID_VIVALDI_CONTENT_INJECTION);
-          DCHECK_LT(injection_item.second.metadata.javascript_world_id,
-                    ISOLATED_WORLD_ID_VIVALDI_CONTENT_INJECTION_END);
+          if (injection_item.second.metadata.javascript_world_id !=
+              content::ISOLATED_WORLD_ID_GLOBAL) {
+            CHECK_GE(injection_item.second.metadata.javascript_world_id,
+                     ISOLATED_WORLD_ID_VIVALDI_CONTENT_INJECTION);
+            CHECK_LT(injection_item.second.metadata.javascript_world_id,
+                     ISOLATED_WORLD_ID_VIVALDI_CONTENT_INJECTION_END);
+          }
           serialized_static_content.WriteInt(static_cast<int>(
               injection_item.second.metadata.javascript_world_id));
           break;

@@ -9,14 +9,25 @@ directories.
 Design doc: https://docs.google.com/document/d/1W3V81l94slAC_rPcTKWXgv3YxRxtlSIAxi3yj6NsbBw/edit?usp=sharing
 """
 
-from collections import defaultdict
 import logging
 import re
 import typing
-from typing import List, NamedTuple, Optional
+from collections import defaultdict
+from dataclasses import dataclass, field
+from pathlib import PurePath
+from typing import (
+    List,
+    Mapping,
+    MutableMapping,
+    NamedTuple,
+    Optional,
+    Tuple,
+    Union,
+)
 
 from blinkpy.common import path_finder
 from blinkpy.common.checkout.git import CommitRange
+from blinkpy.common.memoized import memoized
 from blinkpy.common.net.git_cl import CLRevisionID
 from blinkpy.common.system.executive import ScriptError
 from blinkpy.web_tests.models import typ_types
@@ -42,18 +53,21 @@ from blinkpy.w3c.common import (
 )
 from blinkpy.w3c.directory_owners_extractor import DirectoryOwnersExtractor
 from blinkpy.w3c.gerrit import GerritAPI, GerritCL, OutputOption
-from blinkpy.w3c.wpt_expectations_updater import WPTExpectationsUpdater
 from blinkpy.w3c.wpt_results_processor import TestType
 
 _log = logging.getLogger(__name__)
 
 GITHUB_COMMIT_PREFIX = WPT_GH_URL + 'commit/'
 CHECKS_URL_TEMPLATE = 'https://chromium-review.googlesource.com/c/chromium/src/+/{}/{}?checksPatchset=1&tab=checks'
-
 BUGANIZER_WPT_COMPONENT = '1456176'
+
+IssuesByDir = Mapping[str, BuganizerIssue]
 
 
 class ImportNotifier:
+    IMPORT_SUBJECT_PREFIX = 'Import wpt@'
+    COMMENT_PREAMBLE = 'Filed bugs for failures introduced by this CL: '
+
     def __init__(self,
                  host,
                  chromium_git,
@@ -66,61 +80,101 @@ class ImportNotifier:
         self._gerrit_api = gerrit_api
         self._buganizer_client = buganizer_client or BuganizerClient()
 
+        self.finder = path_finder.PathFinder(host.filesystem)
         self.default_port = host.port_factory.get()
+        self.default_port.set_option_default('additional_expectations', [
+            self.finder.path_from_web_tests('ChromeTestExpectations'),
+            self.finder.path_from_web_tests('MobileTestExpectations'),
+        ])
         self.default_port.set_option_default('test_types',
                                              typing.get_args(TestType))
-        self.finder = path_finder.PathFinder(host.filesystem)
         self.owners_extractor = DirectoryOwnersExtractor(host)
-        self.new_failures_by_directory = defaultdict(list)
+        self.new_failures_by_directory = defaultdict(DirectoryFailures)
 
-    def main(self,
-             import_range: CommitRange,
-             wpt_revision_start,
-             wpt_revision_end,
-             dry_run: bool = False) -> bool:
+    def main(self, dry_run: bool = False) -> Tuple[IssuesByDir, GerritCL]:
         """Files bug reports for new failures.
 
         Arguments:
-            import_range: The commits before (exclusive) and after (inclusive)
-                the imported CL.
-            wpt_revision_start: The start of the imported WPT revision range
-                (exclusive), i.e. the last imported revision.
-            wpt_revision_end: The end of the imported WPT revision range
-                (inclusive), i.e. the current imported revision.
             dry_run: If True, no bugs will be actually filed to crbug.com.
 
         Returns:
-            True iff the notifications were successful.
+            A map from a WPT directory to a new bug filed.
+
+        Raises:
+            GerritError: A network failure when calling Gerrit.
+            ImportNotifierError: An invariant violation, which could suggest
+                checkout or Gerrit corruption.
 
         Note: "test names" are paths of the tests relative to web_tests.
         """
-        cl = self._cl_for_wpt_revision(wpt_revision_end)
-        if not cl:
-            _log.warning('Unable to find last imported CL; '
-                         'skipping bug filing.')
-            return False
+        wpt_end_rev, import_rev = self.latest_wpt_import()
+        cl = self._cl_for_wpt_revision(wpt_end_rev)
+        repo = self.host.project_config.gerrit_project
+        _log.info(f'Identifying failures for {repo}@{import_rev} ({cl.url})')
+        if self._bugs_already_filed(cl):
+            _log.info(f'Bugs have already been filed.')
+            return {}, cl
+        wpt_start_rev, _ = self.latest_wpt_import(f'{import_rev}~1')
 
-        self.examine_baseline_changes(import_range, cl.current_revision_id)
-        self.examine_new_test_expectations(import_range)
-        bugs = self.create_bugs_from_new_failures(wpt_revision_start,
-                                                  wpt_revision_end,
-                                                  cl.latest_revision_id)
-        self.file_bugs(bugs, dry_run)
-        return True
+        self.examine_baseline_changes(import_rev, cl.current_revision_id)
+        self.examine_new_test_expectations(import_rev)
+        wpt_range = CommitRange(wpt_start_rev, wpt_end_rev)
+        bugs = self.create_bugs_from_new_failures(wpt_range,
+                                                  cl.current_revision_id)
+        filed_bugs = self.file_bugs(bugs, dry_run)
+        if filed_bugs:
+            cl.post_comment(
+                self.COMMENT_PREAMBLE +
+                ', '.join(sorted(bug.link for bug in filed_bugs.values())))
+        return filed_bugs, cl
 
-    def examine_baseline_changes(self, import_range: CommitRange,
+    @memoized
+    def latest_wpt_import(
+            self,
+            commits: Union[None, str, CommitRange] = None) -> Tuple[str, str]:
+        """Get commit hashes for the last WPT import.
+
+        Arguments:
+            commits: The range to search. See `Git.most_recent_log_matching()`
+                docstring for usage.
+
+        Returns:
+            A pair of SHA-1 hex digests (40 hex digits each):
+              * A valid commit in the WPT repo denoting how far WPT was rolled
+                (inclusive).
+              * The corresponding `chromium/src` commit where those changes
+                were rolled.
+        """
+        raw_log = self.git.most_recent_log_matching(
+            f'^{self.IMPORT_SUBJECT_PREFIX}',
+            commits=commits,
+            format_pattern='%s:%H').strip()
+        if raw_log.startswith(self.IMPORT_SUBJECT_PREFIX):
+            revisions = raw_log[len(self.IMPORT_SUBJECT_PREFIX):]
+            wpt_rev, _, chromium_rev = revisions.partition(':')
+            assert len(wpt_rev) == 40, wpt_rev
+            assert len(chromium_rev) == 40, chromium_rev
+            return wpt_rev, chromium_rev
+        raise ImportNotifierError(
+            f'unable to find latest WPT revision within {commits!r}')
+
+    def _bugs_already_filed(self, cl: GerritCL) -> bool:
+        return any(self.COMMENT_PREAMBLE in message['message']
+                   for message in cl.messages)
+
+    def examine_baseline_changes(self, import_rev: str,
                                  cl_revision: CLRevisionID):
         """Examines all changed baselines to find new failures.
 
         Arguments:
-            import_range: The commits before (exclusive) and after (inclusive)
-                the imported CL.
+            import_rev: A chromium/src revision pointing to the import commit.
             cl_revision: Issue and patchset numbers of the imported CL.
         """
         assert cl_revision.patchset, cl_revision
         sep = re.escape(self.host.filesystem.sep)
         platform_pattern = f'(platform|flag-specific){sep}([^{sep}]+){sep}'
         baseline_pattern = re.compile(f'web_tests{sep}({platform_pattern})?')
+        import_range = CommitRange(f'{import_rev}~1', import_rev)
         for changed_file in self.git.changed_files(import_range):
             parts = baseline_pattern.split(changed_file, maxsplit=1)[1:]
             if not parts:
@@ -135,9 +189,9 @@ class ImportNotifier:
                                                import_range.start)
             lines_after = self._read_baseline(changed_file, import_range.end)
             if self.more_failures_in_baseline(lines_before, lines_after):
-                self.new_failures_by_directory[directory].append(
-                    TestFailure.from_file(test, changed_file,
-                                          f'{cl_revision}/'))
+                failures = self.new_failures_by_directory[directory]
+                failures.baseline_failures.append(
+                    BaselineFailure(test, f'{cl_revision}/{changed_file}'))
 
     def more_failures_in_baseline(
         self,
@@ -178,18 +232,14 @@ class ImportNotifier:
         except ScriptError:
             return []
 
-    def examine_new_test_expectations(self, import_range: CommitRange):
+    def examine_new_test_expectations(self, import_rev: str):
         """Examines new test expectations to find new failures.
 
         Arguments:
-            import_range: The commits before (exclusive) and after (inclusive)
-                the imported CL.
+            import_rev: A chromium/src revision pointing to the import commit.
         """
-        exp_files = {
-            *self.default_port.all_expectations_dict(),
-            self.finder.path_from_web_tests('ChromeTestExpectations'),
-            self.finder.path_from_web_tests('MobileTestExpectations'),
-        }
+        import_range = CommitRange(f'{import_rev}~1', import_rev)
+        exp_files = set(self.default_port.all_expectations_dict())
         for changed_file in self.git.changed_files(import_range):
             abs_changed_file = self.finder.path_from_chromium_base(
                 changed_file)
@@ -204,9 +254,8 @@ class ImportNotifier:
             for line in change.lines_added:
                 directory = self.find_directory_for_bug(line.test)
                 if directory:
-                    failure = TestFailure.from_expectation_line(
-                        line.test, line.to_string())
-                    self.new_failures_by_directory[directory].append(failure)
+                    failures = self.new_failures_by_directory[directory]
+                    failures.exp_by_file[changed_file].append(line)
 
     def _read_exp_lines(self, path: str,
                         ref: str) -> List[typ_types.Expectation]:
@@ -218,29 +267,28 @@ class ImportNotifier:
 
     def create_bugs_from_new_failures(
         self,
-        wpt_revision_start: str,
-        wpt_revision_end: str,
+        wpt_range: CommitRange,
         cl_revision: CLRevisionID,
-    ) -> List[BuganizerIssue]:
+    ) -> Mapping[str, BuganizerIssue]:
         """Files bug reports for new failures.
 
         Arguments:
-            wpt_revision_start: The start of the imported WPT revision range
-                (exclusive), i.e. the last imported revision.
-            wpt_revision_end: The end of the imported WPT revision range
-                (inclusive), i.e. the current imported revision.
-            cl_revision: Issue number of the imported CL.
+            wpt_range: The imported WPT revision range. The start is exclusive
+                (i.e., the last imported revision) and the end is inclusive
+                (i.e., the current imported reivision).
+            cl_revision: Issue number and patchset of the imported CL.
 
         Returns:
-            A list of issues that should be filed.
+            A map from a WPT directory to its corresponding issue to file.
         """
+        assert cl_revision.patchset, cl_revision
+        cl_revision_no_ps = CLRevisionID(cl_revision.issue)
         checks_url = CHECKS_URL_TEMPLATE.format(cl_revision.issue, '1')
-        imported_commits = self.local_wpt.commits_in_range(
-            wpt_revision_start, wpt_revision_end)
-        bugs = []
+        imported_commits = self.local_wpt.commits_in_range(*wpt_range)
+        bugs = {}
         for directory, failures in self.new_failures_by_directory.items():
             summary = '[WPT] New failures introduced in {} by import {}'.format(
-                directory, cl_revision)
+                directory, cl_revision_no_ps)
 
             full_directory = self.host.filesystem.join(
                 self.finder.web_tests_dir(), directory)
@@ -261,9 +309,8 @@ class ImportNotifier:
 
             prologue = ('WPT import {} introduced new failures in {}:\n\n'
                         'List of new failures:\n'.format(
-                            cl_revision, directory))
-            failure_list = ''.join(f'{failure.message}\n'
-                                   for failure in failures)
+                            cl_revision_no_ps, directory))
+            failure_list = failures.format_for_description(cl_revision)
             checks = '\nSee {} for details.\n'.format(checks_url)
 
             expectations_statement = (
@@ -272,7 +319,7 @@ class ImportNotifier:
                 'investigate the new failures and triage as appropriate.\n')
             range_statement = '\nUpstream changes imported:\n'
             range_statement += WPT_GH_RANGE_URL_TEMPLATE.format(
-                wpt_revision_start, wpt_revision_end) + '\n'
+                *wpt_range) + '\n'
             commit_list = self.format_commit_list(imported_commits,
                                                   full_directory)
             links_list = '\n[0]: https://chromium.googlesource.com/chromium/src/+/HEAD/docs/testing/web_test_expectations.md\n'
@@ -284,6 +331,9 @@ class ImportNotifier:
                 'If you do not want to receive these reports, please add '
                 '"wpt { notify: NO }"  to the relevant DIR_METADATA file.')
 
+            # TODO(https://crbug.com/40631540): Format the description with
+            # `textwrap.dedent(f'...')` so it's easier to tell what the final
+            # formatted message looks like.
             description = (prologue + failure_list + checks +
                            expectations_statement + range_statement +
                            commit_list + links_list + epilogue)
@@ -296,7 +346,7 @@ class ImportNotifier:
                 cc=cc)
             _log.info("WPT-NOTIFY enabled in %s; adding the bug to the pending list." % full_directory)
             _log.info(f'{bug}')
-            bugs.append(bug)
+            bugs[directory] = bug
         return bugs
 
     def format_commit_list(self, imported_commits, directory):
@@ -349,57 +399,82 @@ class ImportNotifier:
             owned_directory, self.finder.web_tests_dir())
         return short_directory
 
-    def file_bugs(self, bugs: List[BuganizerIssue], dry_run: bool = False):
+    def file_bugs(self,
+                  bugs: Mapping[str, BuganizerIssue],
+                  dry_run: bool = False) -> List[BuganizerIssue]:
         """Files a list of bugs to Buganizer.
 
-        Args:
+        Arguments:
             bugs: A list of bugs to file.
             dry_run: A boolean, whether we are in dry run mode.
+
+        Returns:
+            A map from a WPT directory to a bug actually filed successfully
+            (i.e., this map may be smaller than the input map).
         """
-        # TODO(robertma): Better error handling in this method.
         if dry_run:
             _log.info(
                 '[dry_run] Would have filed the %d bugs in the pending list.',
                 len(bugs))
-            return
+            return []
 
         _log.info('Filing %d bugs in the pending list to Buganizer', len(bugs))
-        for index, bug in enumerate(bugs, start=1):
+        filed_bugs = {}
+        for index, (directory, bug) in enumerate(bugs.items(), start=1):
             try:
                 bug = self._buganizer_client.NewIssue(bug)
                 _log.info(f'[{index}] Filed bug: {bug.link}')
+                filed_bugs[directory] = bug
             except BuganizerError as error:
                 _log.exception('Failed to file bug', exc_info=error)
+        return filed_bugs
 
-    def _cl_for_wpt_revision(self, wpt_revision: str) -> Optional[GerritCL]:
+    def _cl_for_wpt_revision(self, wpt_revision: str) -> GerritCL:
         query = ' '.join([
             f'owner:{AUTOROLLER_EMAIL}',
-            f'prefixsubject:"Import wpt@{wpt_revision}"',
+            f'prefixsubject:"{self.IMPORT_SUBJECT_PREFIX}{wpt_revision}"',
             'status:merged',
         ])
         output = GerritAPI.DEFAULT_OUTPUT | OutputOption.MESSAGES
         cls = self._gerrit_api.query_cls(query, limit=1, output_options=output)
-        return cls[0] if cls else None
+        if not cls:
+            raise ImportNotifierError(f'query {query!r} returned no CLs')
+        return cls[0]
 
 
-class TestFailure(NamedTuple):
-    """A simple abstraction of a new test failure for the notifier."""
-    message: str
+class ImportNotifierError(Exception):
+    """Represents an unsuccessful notification attempt."""
+
+
+class BaselineFailure(NamedTuple):
     test: str
+    url: str
 
-    @classmethod
-    def from_file(cls, test: str, baseline_path: str,
-                  gerrit_url_with_ps: str) -> 'TestFailure':
+    def __str__(self) -> str:
         message = ''
-        platform = re.search(r'/platform/([^/]+)/', baseline_path)
+        platform = re.search(r'/platform/([^/]+)/', self.url)
         if platform:
             message += '[ {} ] '.format(platform.group(1).capitalize())
-        message += f'{test} new failing tests: '
-        message += gerrit_url_with_ps + baseline_path
-        return cls(message, test)
+        message += f'{self.test} new failing tests: {self.url}'
+        return message
 
-    @classmethod
-    def from_expectation_line(cls, test: str, line: str) -> 'TestFailure':
-        if line.startswith(WPTExpectationsUpdater.UMBRELLA_BUG):
-            line = line[len(WPTExpectationsUpdater.UMBRELLA_BUG):].lstrip()
-        return cls(line, test)
+
+@dataclass
+class DirectoryFailures:
+    """A thin container for new failures under a WPT directory.
+
+    This corresponds 1-1 to a filed bug.
+    """
+    exp_by_file: MutableMapping[str, List[typ_types.Expectation]] = field(
+        default_factory=lambda: defaultdict(list))
+    baseline_failures: List[BaselineFailure] = field(default_factory=list)
+
+    def format_for_description(self, cl_revision: CLRevisionID) -> str:
+        assert cl_revision.patchset, cl_revision
+        lines = [str(failure) for failure in self.baseline_failures]
+        for path in sorted(self.exp_by_file):
+            for exp in self.exp_by_file[path]:
+                path_for_url = PurePath(path).as_posix()
+                url = f'{cl_revision}/{path_for_url}#{exp.lineno}'
+                lines.append(f'{exp.to_string()}: {url}')
+        return '\n'.join(lines) + '\n'

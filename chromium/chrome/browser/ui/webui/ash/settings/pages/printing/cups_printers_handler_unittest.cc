@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/webui/ash/settings/pages/printing/cups_printers_handler.h"
 
 #include <memory>
+#include <string>
 
 #include "ash/public/cpp/test/test_new_window_delegate.h"
 #include "base/containers/flat_set.h"
@@ -15,6 +16,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/memory/raw_ptr.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/values_test_util.h"
@@ -48,6 +50,20 @@ constexpr char kSavedPrintersCountHistogramName[] =
 
 constexpr char kHandlerFunctionName[] = "handlerFunctionName";
 
+void AddPrinterToPrintScanManager(const std::string& printer_id,
+                                  const std::string& ppd) {
+  printscanmgr::CupsAddManuallyConfiguredPrinterRequest request;
+  request.set_name(printer_id);
+  request.set_ppd_contents(ppd);
+  base::RunLoop run_loop;
+  PrintscanmgrClient::Get()->CupsAddManuallyConfiguredPrinter(
+      std::move(request),
+      base::IgnoreArgs<std::optional<
+          printscanmgr::CupsAddManuallyConfiguredPrinterResponse>>(
+          run_loop.QuitClosure()));
+  run_loop.Run();
+}
+
 }  // namespace
 
 using ::chromeos::Printer;
@@ -78,7 +94,7 @@ class FakePpdProvider : public chromeos::PpdProvider {
                            ResolvePpdReferenceCallback cb) override {}
   void ResolvePpd(const Printer::PpdReference& reference,
                   ResolvePpdCallback cb) override {}
-  void ResolvePpdLicense(base::StringPiece effective_make_and_model,
+  void ResolvePpdLicense(std::string_view effective_make_and_model,
                          ResolvePpdLicenseCallback cb) override {}
   void ReverseLookup(const std::string& effective_make_and_model,
                      ReverseLookupCallback cb) override {}
@@ -196,6 +212,7 @@ class MockNewWindowDelegate : public testing::NiceMock<TestNewWindowDelegate> {
 
 class CupsPrintersHandlerTest : public testing::Test {
  public:
+  constexpr static const std::string kPpdPrinterName = "printer_name";
   CupsPrintersHandlerTest()
       : task_environment_(content::BrowserTaskEnvironment::REAL_IO_THREAD),
         profile_(std::make_unique<TestingProfile>()),
@@ -238,10 +255,11 @@ class CupsPrintersHandlerTest : public testing::Test {
   }
 
   void CallRetrieveCupsPpd(const std::string& printer_id,
-                           const std::string& license_url = "") {
+                           const std::string& license_url = "",
+                           const std::string& printer_name = kPpdPrinterName) {
     base::Value::List args;
     args.Append(printer_id);
-    args.Append(kPpdPrinterName);
+    args.Append(printer_name);
     args.Append(license_url);
 
     web_ui_.HandleReceivedMessage("retrieveCupsPrinterPpd", args);
@@ -256,12 +274,14 @@ class CupsPrintersHandlerTest : public testing::Test {
 
   // Get the contents of the file that was downloaded.  Return true on success,
   // false on error.
-  bool GetDownloadedPpdContents(std::string& contents) const {
+  bool GetDownloadedPpdContents(
+      std::string& contents,
+      const std::string& printer_name = kPpdPrinterName) const {
     const base::FilePath downloads_path =
         DownloadPrefs::FromDownloadManager(profile_->GetDownloadManager())
             ->DownloadPath();
     const base::FilePath filepath =
-        downloads_path.Append(kPpdPrinterName).AddExtension("ppd");
+        downloads_path.Append(printer_name).AddExtension("ppd");
     return base::ReadFileToString(filepath, &contents);
   }
 
@@ -282,13 +302,8 @@ class CupsPrintersHandlerTest : public testing::Test {
   base::ScopedTempDir download_dir_;
   base::HistogramTester histogram_tester_;
 
-  const std::string kPpdPrinterName = "printer_name";
   const std::string kDefaultPpdData = "PPD data used for testing";
-  const std::vector<uint8_t> kPpdData{kDefaultPpdData.begin(),
-                                      kDefaultPpdData.end()};
   const std::string kPpdDataStrWithHeader = R"(*PPD-Adobe: "4.3")";
-  const std::vector<uint8_t> kPpdDataWithHeader{kPpdDataStrWithHeader.begin(),
-                                                kPpdDataStrWithHeader.end()};
   const std::string kPpdErrorString =
       base::StringPrintf("Unable to retrieve PPD for %s.",
                          kPpdPrinterName.c_str());
@@ -334,8 +349,7 @@ TEST_F(CupsPrintersHandlerTest, VerifyOnlyPpdFilesAllowed) {
 TEST_F(CupsPrintersHandlerTest, ViewPPD) {
   // Test the nominal case where everything works and the PPD gets downloaded.
 
-  static_cast<FakePrintscanmgrClient*>(PrintscanmgrClient::Get())
-      ->SetPpdDataForTesting(kPpdData);
+  AddPrinterToPrintScanManager("id", kDefaultPpdData);
 
   Printer printer("id");
   printers_manager_.SavePrinter(printer);
@@ -363,8 +377,7 @@ TEST_F(CupsPrintersHandlerTest, ViewPPDWithLicense) {
   // Test the nominal case where everything works and the PPD (with a license)
   // gets returned.
 
-  static_cast<FakePrintscanmgrClient*>(PrintscanmgrClient::Get())
-      ->SetPpdDataForTesting(kPpdDataWithHeader);
+  AddPrinterToPrintScanManager("id", kPpdDataStrWithHeader);
 
   Printer printer("id");
   printers_manager_.SavePrinter(printer);
@@ -390,13 +403,41 @@ TEST_F(CupsPrintersHandlerTest, ViewPPDWithLicense) {
   EXPECT_THAT(contents, testing::HasSubstr(kPpdDataStrWithHeader));
 }
 
+TEST_F(CupsPrintersHandlerTest, ViewPPDUnsanitizedFilename) {
+  // Test the nominal case where the printer has a name that needs sanitized.
+  const std::string printer_name("bad/name");
+  const std::string sanitized_name("bad_name");
+
+  AddPrinterToPrintScanManager("id", kDefaultPpdData);
+
+  Printer printer("id");
+  printers_manager_.SavePrinter(printer);
+
+  print_backend_->AddValidPrinter(
+      printer.id(),
+      std::make_unique<printing::PrinterSemanticCapsAndDefaults>(), nullptr);
+
+  EXPECT_CALL(*new_window_delegate_primary_,
+              OpenUrl(testing::Property(&GURL::ExtractFileName,
+                                        testing::StartsWith(sanitized_name)),
+                      ash::NewWindowDelegate::OpenUrlFrom::kUserInteraction,
+                      ash::NewWindowDelegate::Disposition::kSwitchToTab))
+      .WillOnce(testing::InvokeWithoutArgs(&run_loop_, &base::RunLoop::Quit));
+
+  CallRetrieveCupsPpd(printer.id(), /*license_url=*/"", printer_name);
+
+  // Check for the downloaded PPD file.
+  std::string contents;
+  EXPECT_TRUE(GetDownloadedPpdContents(contents, sanitized_name));
+  EXPECT_EQ(contents, kDefaultPpdData);
+}
+
 TEST_F(CupsPrintersHandlerTest, ViewPPDWithLicenseBadPpd) {
   // Try to view a PPD that contains a license, but the PPD doesn't start with
   // the expected PPD string, so the license can't be inserted, and the PPD
   // can't be downloaded.
 
-  static_cast<FakePrintscanmgrClient*>(PrintscanmgrClient::Get())
-      ->SetPpdDataForTesting(kPpdData);
+  AddPrinterToPrintScanManager("id", kDefaultPpdData);
 
   Printer printer("id");
   printers_manager_.SavePrinter(printer);
@@ -443,8 +484,7 @@ TEST_F(CupsPrintersHandlerTest, ViewPPDPrinterNotFound) {
 TEST_F(CupsPrintersHandlerTest, ViewPPDPrinterNotSetup) {
   // Test the case where the printer is known but not setup.
 
-  static_cast<FakePrintscanmgrClient*>(PrintscanmgrClient::Get())
-      ->SetPpdDataForTesting(kPpdData);
+  AddPrinterToPrintScanManager("id", kDefaultPpdData);
 
   Printer printer("id");
   printers_manager_.SavePrinter(printer);
@@ -471,8 +511,7 @@ TEST_F(CupsPrintersHandlerTest, ViewPPDPrinterNotSetup) {
 TEST_F(CupsPrintersHandlerTest, ViewPPDEmptyPPD) {
   // Test the case where an empty PPD is returned from printscanmgr.
 
-  static_cast<FakePrintscanmgrClient*>(PrintscanmgrClient::Get())
-      ->SetPpdDataForTesting({});
+  AddPrinterToPrintScanManager("id", "");
 
   Printer printer("id");
   printers_manager_.SavePrinter(printer);

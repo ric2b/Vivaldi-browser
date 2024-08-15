@@ -438,6 +438,30 @@ xnnpack_benchmark(
 )
 
 xnnpack_benchmark(
+    name = "f16_rmax_bench",
+    srcs = [
+        "f16-rmax.cc",
+    ],
+    deps = MICROKERNEL_BENCHMARK_DEPS,
+)
+
+xnnpack_benchmark(
+    name = "f16_rminmax_bench",
+    srcs = [
+        "f16-rminmax.cc",
+    ],
+    deps = MICROKERNEL_BENCHMARK_DEPS,
+)
+
+xnnpack_benchmark(
+    name = "f16_rmin_bench",
+    srcs = [
+        "f16-rmin.cc",
+    ],
+    deps = MICROKERNEL_BENCHMARK_DEPS,
+)
+
+xnnpack_benchmark(
     name = "f16_spmm_bench",
     srcs = [
         "f16-spmm.cc",
@@ -803,6 +827,26 @@ xnnpack_benchmark(
 )
 
 xnnpack_benchmark(
+    name = "f16_f32acc_rdsum_bench",
+    srcs = [
+        "f16-f32acc-rdsum.cc",
+    ],
+    deps = MICROKERNEL_BENCHMARK_DEPS + [
+        ":rsum_benchmark",
+    ],
+)
+
+xnnpack_benchmark(
+    name = "f32_rdsum_bench",
+    srcs = [
+        "f32-rdsum.cc",
+    ],
+    deps = MICROKERNEL_BENCHMARK_DEPS + [
+        ":rsum_benchmark",
+    ],
+)
+
+xnnpack_benchmark(
     name = "f32_spmm_bench",
     srcs = [
         "f32-spmm.cc",
@@ -1046,6 +1090,15 @@ xnnpack_benchmark(
 )
 
 xnnpack_benchmark(
+    name = "f16_vrsqrt_bench",
+    srcs = [
+        "f16-vrsqrt.cc",
+        "f16-vunary-benchmark.h",
+    ],
+    deps = MICROKERNEL_BENCHMARK_DEPS,
+)
+
+xnnpack_benchmark(
     name = "f32_vsqrt_bench",
     srcs = [
         "f32-vsqrt.cc",
@@ -1230,6 +1283,14 @@ xnnpack_benchmark(
 )
 
 xnnpack_cc_library(
+    name = "rsum_benchmark",
+    hdrs = [
+        "rsum-benchmark.h",
+    ],
+    deps = MICROKERNEL_BENCHMARK_DEPS,
+)
+
+xnnpack_cc_library(
     name = "gemm_benchmark",
     hdrs = [
         "gemm.h",
@@ -1387,6 +1448,14 @@ xnnpack_benchmark(
 xnnpack_benchmark(
     name = "prelu_bench",
     srcs = ["prelu.cc"],
+    copts = xnnpack_optional_tflite_copts(),
+    tags = ["nowin32"],
+    deps = OPERATOR_BENCHMARK_DEPS + xnnpack_optional_tflite_deps(),
+)
+
+xnnpack_benchmark(
+    name = "reciprocal_square_root_bench",
+    srcs = ["reciprocal-square-root.cc"],
     copts = xnnpack_optional_tflite_copts(),
     tags = ["nowin32"],
     deps = OPERATOR_BENCHMARK_DEPS + xnnpack_optional_tflite_deps(),

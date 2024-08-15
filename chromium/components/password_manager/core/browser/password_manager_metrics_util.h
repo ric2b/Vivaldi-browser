@@ -12,6 +12,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
 #include "components/autofill/core/common/password_generation_util.h"
@@ -19,10 +20,6 @@
 #include "components/password_manager/core/browser/features/password_manager_features_util.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
-
-namespace password_manager {
-struct PasswordForm;
-}
 
 namespace password_manager::metrics_util {
 
@@ -879,10 +876,6 @@ void LogUserInteractionsInSharedPasswordsNotificationBubble(
 void LogProcessIncomingPasswordSharingInvitationResult(
     ProcessIncomingPasswordSharingInvitationResult result);
 
-// Logs GroupedPasswordFetchResult.
-void LogGroupedPasswordsResults(
-    const std::vector<password_manager::PasswordForm>& logins);
-
 #if BUILDFLAG(IS_ANDROID)
 // Records the scheduling state of the local passwords migration to the
 // Android backend.
@@ -901,6 +894,23 @@ base::OnceCallback<R(Args...)> TimeCallback(
       [](const char* histogram, const base::ElapsedTimer& timer,
          base::OnceCallback<R(Args...)> callback, Args... args) {
         base::UmaHistogramTimes(histogram, timer.Elapsed());
+        return std::move(callback).Run(std::forward<Args>(args)...);
+      },
+      histogram, base::ElapsedTimer(), std::move(callback));
+}
+
+// Wraps |callback| into another callback that measures the elapsed time between
+// construction and actual execution of the callback. Records the result to
+// |histogram|, which is expected to be a char literal.
+// For time intervals between 1ms and 3 minutes (50 buckets).
+template <typename R, typename... Args>
+base::OnceCallback<R(Args...)> TimeCallbackMediumTimes(
+    base::OnceCallback<R(Args...)> callback,
+    const char* histogram) {
+  return base::BindOnce(
+      [](const char* histogram, const base::ElapsedTimer& timer,
+         base::OnceCallback<R(Args...)> callback, Args... args) {
+        base::UmaHistogramMediumTimes(histogram, timer.Elapsed());
         return std::move(callback).Run(std::forward<Args>(args)...);
       },
       histogram, base::ElapsedTimer(), std::move(callback));

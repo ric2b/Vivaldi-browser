@@ -281,7 +281,7 @@
 <translation id="3264582393905923483">Context</translation>
 <translation id="3272909651715601089"><ph name="PATH" /> no s'ha pogut obrir</translation>
 <translation id="3280431534455935878">S'està preparant</translation>
-<translation id="3280719573299097127">Tens connexió a una xarxa d'ús mesurat. La sincronització de fitxers s'ha posat en pausa.</translation>
+<translation id="3280719573299097127">Tens connexió de xarxa d'ús mesurat. La sincronització de fitxers s'ha posat en pausa.</translation>
 <translation id="3280987981688031357">Disc de vinil</translation>
 <translation id="3290356915286466215">No segura</translation>
 <translation id="3291218047831493686">Connecta amb aquesta xarxa per canviar la configuració del bloqueig de la SIM</translation>
@@ -358,7 +358,6 @@
 <translation id="3830674330436234648">No hi ha cap reproducció disponible</translation>
 <translation id="383652340667548381">Serbi</translation>
 <translation id="385051799172605136">Enrere</translation>
-<translation id="3851491607336266896">Connectat, connectivitat limitada</translation>
 <translation id="3855472144336161447">Neo 2 alemany</translation>
 <translation id="3858860766373142691">Nom</translation>
 <translation id="3866249974567520381">Descripció</translation>

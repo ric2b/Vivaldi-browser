@@ -2,9 +2,12 @@
 
 #import "ios/ui/notes/note_add_edit_view_controller.h"
 
+#import <WebKit/WebKit.h>
+
 #import <memory>
 #import <set>
 
+#import "base/apple/bundle_locations.h"
 #import "base/apple/foundation_util.h"
 #import "base/apple/scoped_cftyperef.h"
 #import "base/auto_reset.h"
@@ -12,9 +15,10 @@
 #import "base/ios/block_types.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/url_formatter/url_fixer.h"
+#import "ios/chrome/browser/features/vivaldi_features.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
-#import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/ui/symbols/chrome_icon.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_header_footer_item.h"
@@ -36,13 +40,10 @@
 #import "ios/ui/notes/note_folder_chooser_view_controller.h"
 #import "ios/ui/notes/note_mediator.h"
 #import "ios/ui/notes/note_model_bridge_observer.h"
-#import "ios/ui/notes/note_ui_constants.h"
-#import "ios/ui/notes/note_utils_ios.h"
-#import "ios/ui/notes/note_mediator.h"
-#import "ios/ui/notes/note_model_bridge_observer.h"
 #import "ios/ui/notes/note_parent_folder_view.h"
 #import "ios/ui/notes/note_ui_constants.h"
 #import "ios/ui/notes/note_utils_ios.h"
+#import "ios/web/common/web_view_creation_util.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/gfx/image/image.h"
@@ -68,7 +69,8 @@ CGFloat bodyContainerCornerRadius = 6;
 
 @interface NoteAddEditViewController () <NoteFolderChooserViewControllerDelegate,
                                         NoteModelBridgeObserver,
-                                        UITextViewDelegate> {
+                                        UITextViewDelegate,
+                                        WKNavigationDelegate> {
   // Flag to ignore note model changes notifications.
   BOOL _ignoresNotesModelChanges;
 
@@ -105,6 +107,12 @@ CGFloat bodyContainerCornerRadius = 6;
 
 // The note text content view
 @property(nonatomic, weak) VivaldiTextView* noteTextView;
+
+// For markdown to HTML toggle
+@property(nonatomic, strong) UIView* bodyContainerView;
+@property(nonatomic, strong) UISwitch* toggleMarkdownButton;
+@property(nonatomic, strong) UIStackView* switchWithLabel;
+@property(nonatomic, strong) WKWebView* webView;
 
 // The action sheet coordinator, if one is currently being shown.
 @property(nonatomic, strong) ActionSheetCoordinator* actionSheetCoordinator;
@@ -170,6 +178,10 @@ CGFloat bodyContainerCornerRadius = 6;
 @synthesize noteTextView = _noteTextView;
 @synthesize allowsCancel = _allowsCancel;
 @synthesize noteTextViewBottomConstraint = _noteTextViewBottomConstraint;
+@synthesize bodyContainerView = _bodyContainerView;
+@synthesize toggleMarkdownButton = _toggleMarkdownButton;
+@synthesize switchWithLabel = _switchWithLabel;
+@synthesize webView = _webView;
 
 #pragma mark - Lifecycle
 
@@ -316,33 +328,161 @@ CGFloat bodyContainerCornerRadius = 6;
 
 -(void)setupContentView {
   // Set up views
-  UIView* bodyContainerView = [UIView new];
-  bodyContainerView.backgroundColor =
+  self.bodyContainerView = [[UIView alloc] init];
+  self.bodyContainerView.backgroundColor =
     [UIColor colorNamed: kGroupedSecondaryBackgroundColor];
-  bodyContainerView.layer.cornerRadius = bodyContainerCornerRadius;
-  bodyContainerView.clipsToBounds = YES;
+  self.bodyContainerView.layer.cornerRadius = bodyContainerCornerRadius;
+  self.bodyContainerView.clipsToBounds = YES;
 
-  [self.view addSubview:bodyContainerView];
-  [bodyContainerView
+  [self.view addSubview:self.bodyContainerView];
+  [self.bodyContainerView
     fillSuperviewToSafeAreaInsetWithPadding:bodyContainerViewPadding];
+
+
+  // Markdown toggle
+  if (IsViewMarkdownAsHTMLEnabled()) {
+    self.toggleMarkdownButton = [[UISwitch alloc] init];
+    self.toggleMarkdownButton.on = NO;
+    [self.toggleMarkdownButton addTarget:self
+                      action:@selector(onToggleMarkdownView:)
+            forControlEvents:UIControlEventValueChanged];
+
+    self.switchWithLabel = [[UIStackView alloc] init];
+    self.switchWithLabel.axis = UILayoutConstraintAxisHorizontal;
+    self.switchWithLabel.spacing = UIStackViewSpacingUseSystem;
+    self.switchWithLabel.alignment = UIStackViewAlignmentCenter;
+
+    UILabel* viewAsHTMLLabel = [[UILabel alloc] init];
+    viewAsHTMLLabel.text = l10n_util::GetNSString(IDS_IOS_NOTE_VIEW_AS_HTML);
+    [self.switchWithLabel addArrangedSubview:viewAsHTMLLabel];
+    [self.switchWithLabel addArrangedSubview:self.toggleMarkdownButton];
+
+    [self.bodyContainerView addSubview:self.switchWithLabel];
+
+    [self.switchWithLabel anchorTop:self.bodyContainerView.topAnchor
+                    leading:nil
+                    bottom:nil
+                  trailing:self.bodyContainerView.trailingAnchor
+                    padding:noteTextViewPadding];
+  }
 
   // Note text view
   VivaldiTextView* noteTextView = [[VivaldiTextView alloc] init];
   _noteTextView = noteTextView;
 
-  [bodyContainerView addSubview:self.noteTextView];
+  [self.bodyContainerView addSubview:self.noteTextView];
   // Add anchoring of note textView
-  [noteTextView anchorTop:bodyContainerView.topAnchor
-                  leading:bodyContainerView.leadingAnchor
+  [noteTextView anchorTop:IsViewMarkdownAsHTMLEnabled() ?
+                            self.switchWithLabel.bottomAnchor :
+                            self.bodyContainerView.topAnchor
+                  leading:self.bodyContainerView.leadingAnchor
                    bottom:nil
-                 trailing:bodyContainerView.trailingAnchor
+                 trailing:self.bodyContainerView.trailingAnchor
                   padding:noteTextViewPadding];
 
   self.noteTextViewBottomConstraint =
     [noteTextView.bottomAnchor
-     constraintEqualToAnchor:bodyContainerView.bottomAnchor
+     constraintEqualToAnchor:self.bodyContainerView.bottomAnchor
      constant:-noteTextViewBottomPadding];
   [self.noteTextViewBottomConstraint setActive:YES];
+}
+
+- (void)createMarkdownWebView {
+  if (!IsViewMarkdownAsHTMLEnabled()) {
+    return;
+  }
+  self.webView = web::BuildWKWebView(self.bodyContainerView.bounds,
+                                      self.browserState);
+  self.webView.navigationDelegate = self;
+
+  [self.bodyContainerView addSubview:self.webView];
+
+  [self.webView anchorTop:self.switchWithLabel.bottomAnchor
+                            leading:self.bodyContainerView.leadingAnchor
+                              bottom:self.bodyContainerView.bottomAnchor
+                            trailing:self.bodyContainerView.trailingAnchor];
+
+  NSURL* url =
+      [base::apple::FrameworkBundle() URLForResource:vMarkdownHTMLFilename
+                                       withExtension:@"html"];
+  [self.webView loadFileURL:url allowingReadAccessToURL:url];
+
+  // Inject markdown JS library
+  NSString* markdown_bundle_path =
+    [base::apple::FrameworkBundle() pathForResource:vMarkdownLibraryBundleName
+                                              ofType:@"js"];
+
+  NSError* error = nil;
+  NSString* markdown_bundle =
+      [NSString stringWithContentsOfFile:markdown_bundle_path
+                                encoding:NSUTF8StringEncoding
+                                   error:&error];
+  if (error) {
+    // TODO(tomas@vivaldi): What should happen in case of error?
+    // For now, fall back to the markdown view
+    [self fallbackToMarkdownViewDueToError];
+    return;
+  }
+
+  WKUserScript* markdown_script = [[WKUserScript alloc]
+        initWithSource:markdown_bundle
+          injectionTime:WKUserScriptInjectionTimeAtDocumentEnd
+      forMainFrameOnly:NO];
+  [self.webView.configuration.userContentController
+      addUserScript:markdown_script];
+}
+
+- (void)fallbackToMarkdownViewDueToError {
+  self.toggleMarkdownButton.on = NO;
+  [self deleteMarkdownWebView];
+  [self setupContentView];
+  [self updateUIFromNote];
+}
+
+- (void)deleteMarkdownWebView {
+  [self.webView removeFromSuperview];
+  self.webView = nil;
+}
+
+- (void)onToggleMarkdownView:(id)sender {
+  if (self.webView == nil) {
+    [self commitNoteChanges];
+    [self createMarkdownWebView];
+  } else {
+    [self deleteMarkdownWebView];
+    [self setupContentView];
+    [self updateUIFromNote];
+  }
+}
+
+- (void)webView:(WKWebView *)webView
+  didFinishNavigation:(WKNavigation *)navigation {
+  // The markdown.html file is loaded and ready, next we try to convert the
+  // markdown text to HTML with the JS library
+  if (!self.note)
+    return;
+
+  // We need to replace these characters, otherwise the webview can not execute
+  // the conversion script
+  NSString* markdownText = base::SysUTF16ToNSString(self.note->GetContent());
+  markdownText = [markdownText stringByReplacingOccurrencesOfString:@"\""
+                                                        withString:@"\\\""];
+  markdownText = [markdownText stringByReplacingOccurrencesOfString:@"\n"
+                                                        withString:@"\\n"];
+  // Conversion script
+  NSString* textToHTMLScript =
+      [NSString stringWithFormat:@"textToHTML(\"%@\")", markdownText];
+
+  __weak __typeof(self) weakSelf = self;
+  [self.webView evaluateJavaScript:textToHTMLScript
+                 completionHandler:^(id object, NSError* err) {
+    if (err != nil) {
+      // TODO(tomas@vivaldi): What should happen in case of JS error?
+      // For now, fall back to the markdown view
+      [weakSelf fallbackToMarkdownViewDueToError];
+      return;
+    }
+  }];
 }
 
 - (void)setupKeyboardObservers {
@@ -513,6 +653,9 @@ CGFloat bodyContainerCornerRadius = 6;
   [self cancel];
   [self removeKeyboardObservers];
   [self.delegate noteEditorWantsDismissal:self];
+  if (IsViewMarkdownAsHTMLEnabled()) {
+    [self deleteMarkdownWebView];
+  }
 }
 
 #pragma mark - Layout
@@ -522,6 +665,9 @@ CGFloat bodyContainerCornerRadius = 6;
 }
 
 - (void)updateUIFromNote {
+  if (!self.note) {
+    return;
+  }
   self.noteTextView.text = base::SysUTF16ToNSString(self.note->GetContent());
   // Save button state.
   [self updateSaveButtonState];

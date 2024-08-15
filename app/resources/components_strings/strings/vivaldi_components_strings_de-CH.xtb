@@ -163,7 +163,6 @@
 <translation id="7353601530677266744">Befehlszeile</translation>
 <translation id="7364115444476960850">Die Seite, auf die Sie zugreifen wollten, wurde von Vivaldis <ph name="BLOCKER_NAME" /> geblockt</translation>
 <translation id="7419106976560586862">Profilpfad</translation>
-<translation id="7445762425076701745">Die Identität des Servers, mit dem Sie verbunden sind, kann nicht vollständig überprüft werden. Sie sind mit einem Server verbunden, dessen Name nur innerhalb Ihres Netzwerks gültig ist. Eine externe Zertifizierungsstelle hat keine Möglichkeit, den Eigentümer dieses Namens zu bestätigen. Da einige Zertifizierungsstellen ungeachtet dessen dennoch Zertifikate für derartige Namen ausstellen, gibt es keine Möglichkeit sicherzustellen, dass Sie mit der gewünschten Website und nicht mit einem Angreifer verbunden sind.</translation>
 <translation id="7455133967321480974">Globalen Standard verwenden (Blockieren)</translation>
 <translation id="7518003948725431193">Für die folgende Webadresse wurde keine Webseite gefunden: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Damit diese Webseite richtig angezeigt wird, werden die Daten benötigt, die Sie zuvor eingegeben haben. Sie können diese Daten erneut senden, dabei werden jedoch sämtliche Aktionen wiederholt, die zuvor durch diese Seite ausgeführt wurden.</translation>

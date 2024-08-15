@@ -11,11 +11,21 @@
 #import "components/autofill/core/browser/ui/payments/card_unmask_otp_input_dialog_controller_impl.h"
 #import "ios/chrome/browser/ui/autofill/authentication/otp_input_dialog_consumer.h"
 #import "ios/chrome/browser/ui/autofill/authentication/otp_input_dialog_content.h"
+#import "ios/chrome/browser/ui/autofill/authentication/otp_input_dialog_mediator_delegate.h"
+#import "ios/chrome/browser/ui/autofill/authentication/otp_input_dialog_mutator.h"
+#import "ios/chrome/browser/ui/autofill/authentication/otp_input_dialog_mutator_bridge.h"
+#import "ios/chrome/browser/ui/autofill/authentication/otp_input_dialog_mutator_bridge_target.h"
 
 OtpInputDialogMediator::OtpInputDialogMediator(
     base::WeakPtr<autofill::CardUnmaskOtpInputDialogControllerImpl>
-        model_controller)
-    : model_controller_(model_controller) {}
+        model_controller,
+    id<OtpInputDialogMediatorDelegate> delegate)
+    : model_controller_(model_controller), delegate_(delegate) {
+  base::WeakPtr<OtpInputDialogMutatorBridgeTarget>
+      mutator_bridge_target_weak_ptr(weak_ptr_factory_.GetWeakPtr());
+  mutator_bridge_ = [[OtpInputDialogMutatorBridge alloc]
+      initWithTarget:mutator_bridge_target_weak_ptr];
+}
 
 OtpInputDialogMediator::~OtpInputDialogMediator() {
   // If the closure is not initiated from the backend side (via Dismiss()), it
@@ -43,13 +53,38 @@ void OtpInputDialogMediator::Dismiss(bool show_confirmation_before_closing,
                                       show_confirmation_before_closing);
     model_controller_ = nullptr;
   }
-  // TODO(b/324611600): Invoked MediatorDelegate to close the view and terminate
-  // everything.
+  [delegate_ dismissDialog];
 }
 
 base::WeakPtr<autofill::CardUnmaskOtpInputDialogView>
 OtpInputDialogMediator::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
+}
+
+void OtpInputDialogMediator::DidTapConfirmButton(
+    const std::u16string& input_value) {
+  if (model_controller_) {
+    model_controller_->OnOkButtonClicked(input_value);
+    [consumer_ showPendingState];
+  }
+}
+
+void OtpInputDialogMediator::DidTapCancelButton() {
+  [delegate_ dismissDialog];
+}
+
+void OtpInputDialogMediator::OnOtpInputChanges(
+    const std::u16string& input_value) {
+  if (model_controller_) {
+    [consumer_
+        setConfirmButtonEnabled:model_controller_->IsValidOtp(input_value)];
+  }
+}
+
+void OtpInputDialogMediator::DidTapNewCodeLink() {
+  if (model_controller_) {
+    model_controller_->OnNewCodeLinkClicked();
+  }
 }
 
 void OtpInputDialogMediator::SetConsumer(id<OtpInputDialogConsumer> consumer) {
@@ -65,4 +100,8 @@ void OtpInputDialogMediator::SetConsumer(id<OtpInputDialogConsumer> consumer) {
   content.confirmButtonLabel =
       base::SysUTF16ToNSString(model_controller_->GetOkButtonLabel());
   [consumer_ setContent:content];
+}
+
+id<OtpInputDialogMutator> OtpInputDialogMediator::AsMutator() {
+  return mutator_bridge_;
 }

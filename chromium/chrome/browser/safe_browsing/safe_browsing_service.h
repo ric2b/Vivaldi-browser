@@ -145,6 +145,11 @@ class SafeBrowsingService : public SafeBrowsingServiceInterface,
   void FlushNetworkInterfaceForTesting(
       content::BrowserContext* browser_context);
 
+  void SetURLLoaderFactoryForTesting(
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+    url_loader_factory_for_testing_ = url_loader_factory;
+  }
+
   const scoped_refptr<SafeBrowsingUIManager>& ui_manager() const;
 
   virtual const scoped_refptr<SafeBrowsingDatabaseManager>& database_manager()
@@ -195,6 +200,14 @@ class SafeBrowsingService : public SafeBrowsingServiceInterface,
   // Sends download report to backend. Returns true if the report is sent
   // successfully.
   virtual bool SendDownloadReport(
+      download::DownloadItem* download,
+      ClientSafeBrowsingReportRequest::ReportType report_type,
+      bool did_proceed,
+      std::optional<bool> show_download_in_folder);
+
+  // Persists download report on disk and sends it to backend on next startup.
+  // Returns true if the report is persisted successfully.
+  virtual bool PersistDownloadReportAndSendOnNextStartup(
       download::DownloadItem* download,
       ClientSafeBrowsingReportRequest::ReportType report_type,
       bool did_proceed,
@@ -260,6 +273,13 @@ class SafeBrowsingService : public SafeBrowsingServiceInterface,
   friend class TestSafeBrowsingServiceFactory;
   friend class V4SafeBrowsingServiceTest;
   friend class SendNotificationsAcceptedTest;
+
+  FRIEND_TEST_ALL_PREFIXES(
+      SafeBrowsingServiceTest,
+      SaveExtendedReportingPrefValueOnProfileAddedFeatureFlagEnabled);
+  FRIEND_TEST_ALL_PREFIXES(
+      SafeBrowsingServiceTest,
+      SaveExtendedReportingPrefValueOnProfileAddedFeatureFlagDisabled);
 
   void SetDatabaseManagerForTest(SafeBrowsingDatabaseManager* database_manager);
 
@@ -353,6 +373,9 @@ class SafeBrowsingService : public SafeBrowsingServiceInterface,
   std::unique_ptr<TriggerManager> trigger_manager_;
 
   bool url_is_allowlisted_for_testing_ = false;
+
+  scoped_refptr<network::SharedURLLoaderFactory>
+      url_loader_factory_for_testing_;
 };
 
 SafeBrowsingServiceFactory* GetSafeBrowsingServiceFactory();

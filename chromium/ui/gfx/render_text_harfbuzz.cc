@@ -6,6 +6,7 @@
 
 #include <limits>
 #include <set>
+#include <string_view>
 
 #include "base/command_line.h"
 #include "base/containers/contains.h"
@@ -28,7 +29,6 @@
 #include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
@@ -193,7 +193,7 @@ struct GraphemeProperties {
 };
 
 // Returns the properties for the codepoints part of the given text.
-GraphemeProperties RetrieveGraphemeProperties(const base::StringPiece16& text,
+GraphemeProperties RetrieveGraphemeProperties(std::u16string_view text,
                                               bool retrieve_block) {
   GraphemeProperties properties;
   bool first_char = true;
@@ -252,7 +252,7 @@ size_t FindRunBreakingCharacter(const std::u16string& text,
                                 size_t run_break,
                                 size_t run_end) {
   const size_t run_length = run_end - run_start;
-  const base::StringPiece16 run_text(text.c_str() + run_start, run_length);
+  const std::u16string_view run_text(text.c_str() + run_start, run_length);
   const bool is_common_script = (script == USCRIPT_COMMON);
 
   DCHECK(!run_text.empty());
@@ -267,16 +267,16 @@ size_t FindRunBreakingCharacter(const std::u16string& text,
   }
 
   // Retrieve the first grapheme and its codepoint properties.
-  const base::StringPiece16 first_grapheme_text =
-      grapheme_iterator.GetStringPiece();
+  const std::u16string_view first_grapheme_text =
+      grapheme_iterator.GetStringView();
   const GraphemeProperties first_grapheme_properties =
       RetrieveGraphemeProperties(first_grapheme_text, is_common_script);
 
   // Append subsequent graphemes in this grapheme cluster if they are
   // compatible, otherwise break the current run.
   while (grapheme_iterator.Advance()) {
-    const base::StringPiece16 current_grapheme_text =
-        grapheme_iterator.GetStringPiece();
+    const std::u16string_view current_grapheme_text =
+        grapheme_iterator.GetStringView();
     const GraphemeProperties current_grapheme_properties =
         RetrieveGraphemeProperties(current_grapheme_text, is_common_script);
 
@@ -315,7 +315,7 @@ size_t ScriptInterval(const std::u16string& text,
   UScriptCode scripts[kMaxScripts] = { USCRIPT_INVALID_CODE };
 
   base::i18n::UTF16CharIterator char_iterator(
-      base::StringPiece16(text.c_str() + start, length));
+      std::u16string_view(text.c_str() + start, length));
   size_t scripts_size = GetScriptExtensions(char_iterator.get(), scripts);
   *script = scripts[0];
 
@@ -1763,7 +1763,7 @@ void RenderTextHarfBuzz::EnsureLayout() {
     // In multiline, only ELIDE_TAIL is supported. max_lines_ is not used
     // otherwise.
     if (multiline() && max_lines() && elide_behavior() == ELIDE_TAIL) {
-      // TODO(crbug.com/866720): no more than max_lines() should be rendered.
+      // TODO(crbug.com/40586307): no more than max_lines() should be rendered.
       // Remove the IsHomogeneous() condition for the following DCHECK when the
       // bug is fixed.
       if (IsHomogeneous()) {
@@ -2102,7 +2102,7 @@ void RenderTextHarfBuzz::ShapeRuns(
       SCOPED_UMA_HISTOGRAM_LONG_TIMER("RenderTextHarfBuzz.GetFallbackFontTime");
       TRACE_EVENT1("ui", "RenderTextHarfBuzz::GetFallbackFont", "script",
                    TRACE_STR_COPY(uscript_getShortName(font_params.script)));
-      const base::StringPiece16 run_text(&text[current_run->range.start()],
+      const std::u16string_view run_text(&text[current_run->range.start()],
                                          current_run->range.length());
       fallback_found =
           GetFallbackFont(primary_font, locale_, run_text, &fallback_font);

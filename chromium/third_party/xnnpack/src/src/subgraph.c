@@ -3,15 +3,17 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <math.h>
+#include <assert.h>
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
-
-#include <fp16/fp16.h>
+#include <string.h>
 
 #include <xnnpack.h>
+#include <xnnpack/allocation-type.h>
 #include <xnnpack/allocator.h>
+#include <xnnpack/common.h>
 #include <xnnpack/config.h>
 #include <xnnpack/log.h>
 #include <xnnpack/math.h>
@@ -19,6 +21,7 @@
 #include <xnnpack/params.h>
 #include <xnnpack/subgraph.h>
 
+#include <fp16/fp16.h>
 
 #ifndef XNN_ENABLE_SPARSE
   #error "XNN_ENABLE_SPARSE not defined"
@@ -746,6 +749,7 @@ bool xnn_subgraph_rewrite_for_fp16(xnn_subgraph_t subgraph)
       case xnn_node_type_concatenate2:
       case xnn_node_type_concatenate3:
       case xnn_node_type_concatenate4:
+      case xnn_node_type_concatenate5:
       case xnn_node_type_convert:
       case xnn_node_type_squared_difference:
       case xnn_node_type_subtract:
@@ -771,6 +775,7 @@ bool xnn_subgraph_rewrite_for_fp16(xnn_subgraph_t subgraph)
       case xnn_node_type_max_pooling_2d:
       case xnn_node_type_negate:
       case xnn_node_type_prelu:
+      case xnn_node_type_reciprocal_square_root:
       case xnn_node_type_sigmoid:
       case xnn_node_type_softmax:
       case xnn_node_type_space_to_depth_2d:
@@ -1348,50 +1353,5 @@ enum xnn_status xnn_delete_subgraph(
     memset(subgraph, 0, sizeof(struct xnn_subgraph));
     xnn_release_memory(subgraph);
   }
-  return xnn_status_success;
-}
-
-enum xnn_status xnn_subgraph_infer_shape(xnn_subgraph_t subgraph, uint32_t flags)
-{
-  enum xnn_shape_inference_status forward_status = xnn_shape_inference_status_no_change;
-  enum xnn_shape_inference_status backward_status = xnn_shape_inference_status_no_change;
-
-  do {
-    // Forward pass.
-    for (uint32_t n = 0; n < subgraph->num_nodes; n++) {
-      struct xnn_node* node = &subgraph->nodes[n];
-      if (node->type == xnn_node_type_invalid) {
-        continue;
-      }
-
-      if (node->infer_shape_forward != NULL) {
-        forward_status = node->infer_shape_forward(node, subgraph->values);
-        if (forward_status == xnn_shape_inference_status_error) {
-          xnn_log_error("failed to infer shape (forward pass) for node ID #%" PRIu32 " of type %s",
-                        node->id, xnn_node_type_to_string(node->type));
-          return xnn_status_invalid_state;
-        }
-      }
-    }
-
-    // Backward pass.
-    for (uint32_t n = subgraph->num_nodes; n > 0; n--) {
-      struct xnn_node* node = &subgraph->nodes[n-1];
-      if (node->type == xnn_node_type_invalid) {
-        continue;
-      }
-
-      if (node->infer_shape_backward != NULL) {
-        backward_status = node->infer_shape_backward(node, subgraph->values);
-        if (backward_status == xnn_shape_inference_status_error) {
-          xnn_log_error("failed to infer shape (backward pass) for node ID #%" PRIu32 " of type %s",
-                        node->id, xnn_node_type_to_string(node->type));
-          return xnn_status_invalid_state;
-        }
-      }
-    }
-  } while (forward_status == xnn_shape_inference_status_changed ||
-           backward_status == xnn_shape_inference_status_changed);
-
   return xnn_status_success;
 }

@@ -1,0 +1,33 @@
+# Copyright (c) 2024 Vivaldi Technologies AS. All rights reserved
+
+source_set("most_visited_sites") {
+  sources = [
+    "vivaldi_most_visited_sites_manager.h",
+    "vivaldi_most_visited_sites_manager.mm",
+    "vivaldi_most_visited_sites_consumer.h",
+  ]
+
+  deps = [
+    "//base",
+    "//base",
+    "//components/favicon/core",
+    "//components/favicon/ios",
+    "//components/ntp_tiles",
+    "//ios/chrome/browser/favicon/model",
+    "//ios/chrome/browser/ntp/model",
+    "//ios/chrome/browser/ntp_tiles/model",
+    "//ios/chrome/browser/shared/model/application_context",
+    "//ios/chrome/browser/shared/model/browser",
+    "//ios/chrome/browser/shared/model/browser_state",
+    "//ios/chrome/browser/ui/favicon",
+    "//ios/chrome/common/ntp_tile",
+    "//ios/chrome/common/ui/favicon",
+    "//ios/web/public",
+    "//ui/base",
+    "//url",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+  ]
+}

@@ -33,16 +33,11 @@
 #include "components/autofill/core/browser/mock_iban_manager.h"
 #include "components/autofill/core/browser/mock_merchant_promo_code_manager.h"
 #include "components/autofill/core/browser/payments/autofill_offer_manager.h"
-#include "components/autofill/core/browser/payments/credit_card_cvc_authenticator.h"
-#include "components/autofill/core/browser/payments/credit_card_otp_authenticator.h"
-#include "components/autofill/core/browser/payments/credit_card_risk_based_authenticator.h"
 #include "components/autofill/core/browser/payments/legal_message_line.h"
 #include "components/autofill/core/browser/payments/local_card_migration_manager.h"
 #include "components/autofill/core/browser/payments/mandatory_reauth_manager.h"
 #include "components/autofill/core/browser/payments/mock_iban_access_manager.h"
-#include "components/autofill/core/browser/payments/payments_window_manager.h"
 #include "components/autofill/core/browser/payments/test/mock_mandatory_reauth_manager.h"
-#include "components/autofill/core/browser/payments/test/test_credit_card_risk_based_authenticator.h"
 #include "components/autofill/core/browser/payments/test_payments_autofill_client.h"
 #include "components/autofill/core/browser/payments/test_payments_network_interface.h"
 #include "components/autofill/core/browser/strike_databases/payments/test_strike_database.h"
@@ -51,8 +46,8 @@
 #include "components/autofill/core/browser/test_personal_data_manager.h"
 #include "components/autofill/core/browser/ui/mock_fast_checkout_client.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_prompt_options.h"
-#include "components/autofill/core/browser/ui/popup_hiding_reasons.h"
-#include "components/autofill/core/browser/ui/popup_item_ids.h"
+#include "components/autofill/core/browser/ui/suggestion_hiding_reason.h"
+#include "components/autofill/core/browser/ui/suggestion_type.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/device_reauth/mock_device_authenticator.h"
@@ -158,28 +153,6 @@ class TestAutofillClientTemplate : public T {
     return &mock_merchant_promo_code_manager_;
   }
 
-  CreditCardCvcAuthenticator* GetCvcAuthenticator() override {
-    if (!cvc_authenticator_) {
-      cvc_authenticator_ = std::make_unique<CreditCardCvcAuthenticator>(this);
-    }
-    return cvc_authenticator_.get();
-  }
-
-  CreditCardOtpAuthenticator* GetOtpAuthenticator() override {
-    if (!otp_authenticator_) {
-      otp_authenticator_ = std::make_unique<CreditCardOtpAuthenticator>(this);
-    }
-    return otp_authenticator_.get();
-  }
-
-  TestCreditCardRiskBasedAuthenticator* GetRiskBasedAuthenticator() override {
-    if (!risk_based_authenticator_) {
-      risk_based_authenticator_ =
-          std::make_unique<TestCreditCardRiskBasedAuthenticator>(this);
-    }
-    return risk_based_authenticator_.get();
-  }
-
   PrefService* GetPrefs() override {
     if (!prefs_) {
       prefs_ = autofill::test::PrefServiceForTesting();
@@ -210,13 +183,9 @@ class TestAutofillClientTemplate : public T {
   payments::TestPaymentsAutofillClient* GetPaymentsAutofillClient() override {
     if (!payments_autofill_client_) {
       payments_autofill_client_ =
-          std::make_unique<payments::TestPaymentsAutofillClient>();
+          std::make_unique<payments::TestPaymentsAutofillClient>(this);
     }
     return payments_autofill_client_.get();
-  }
-
-  payments::PaymentsWindowManager* GetPaymentsWindowManager() override {
-    return payments_window_manager_.get();
   }
 
   TestStrikeDatabase* GetStrikeDatabase() override {
@@ -292,10 +261,6 @@ class TestAutofillClientTemplate : public T {
 
   void ShowAutofillSettings(FillingProduct main_filling_product) override {}
 
-  VirtualCardEnrollmentManager* GetVirtualCardEnrollmentManager() override {
-    return form_data_importer_->GetVirtualCardEnrollmentManager();
-  }
-
   void ShowVirtualCardEnrollDialog(
       const VirtualCardEnrollmentFields& virtual_card_enrollment_fields,
       base::OnceClosure accept_virtual_card_callback,
@@ -334,23 +299,6 @@ class TestAutofillClientTemplate : public T {
 #endif
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-  void ConfirmSaveIbanLocally(
-      const Iban& iban,
-      bool should_show_prompt,
-      AutofillClient::SaveIbanPromptCallback callback) override {
-    confirm_save_iban_locally_called_ = true;
-    offer_to_save_iban_bubble_was_shown_ = should_show_prompt;
-  }
-
-  void ConfirmUploadIbanToCloud(
-      const Iban& iban,
-      LegalMessageLines legal_message_lines,
-      bool should_show_prompt,
-      AutofillClient::SaveIbanPromptCallback callback) override {
-    confirm_upload_iban_to_cloud_called_ = true;
-    legal_message_lines_ = std::move(legal_message_lines);
-    offer_to_save_iban_bubble_was_shown_ = should_show_prompt;
-  }
 
   bool CloseWebauthnDialog() override { return true; }
 
@@ -428,33 +376,52 @@ class TestAutofillClientTemplate : public T {
     return false;
   }
 
+  bool ShowTouchToFillIban(
+      base::WeakPtr<TouchToFillDelegate> delegate,
+      base::span<const autofill::Iban> ibans_to_suggest) override {
+    return false;
+  }
+
   void HideTouchToFillCreditCard() override {}
 
-  void ShowAutofillPopup(
+  void ShowAutofillSuggestions(
       const AutofillClient::PopupOpenArgs& open_args,
-      base::WeakPtr<AutofillPopupDelegate> delegate) override {
+      base::WeakPtr<AutofillSuggestionDelegate> delegate) override {
     is_showing_popup_ = true;
   }
 
-  void UpdateAutofillPopupDataListValues(
+  void UpdateAutofillDataListValues(
       base::span<const SelectOption> options) override {}
 
-  std::vector<Suggestion> GetPopupSuggestions() const override { return {}; }
+  base::span<const Suggestion> GetAutofillSuggestions() const override {
+    return {};
+  }
 
-  void PinPopupView() override {}
+  void PinAutofillSuggestions() override {}
 
   void UpdatePopup(const std::vector<Suggestion>& suggestions,
                    FillingProduct main_filling_product,
                    AutofillSuggestionTriggerSource trigger_source) override {}
 
-  void HideAutofillPopup(PopupHidingReason reason) override {
+  void HideAutofillSuggestions(SuggestionHidingReason reason) override {
     popup_hidden_reason_ = reason;
     is_showing_popup_ = false;
   }
 
   bool IsShowingAutofillPopup() { return is_showing_popup_; }
 
-  PopupHidingReason popup_hiding_reason() { return popup_hidden_reason_; }
+  SuggestionHidingReason popup_hiding_reason() { return popup_hidden_reason_; }
+
+  void ShowAutofillFieldIphForManualFallbackFeature(
+      const FormFieldData& field) override {
+    is_showing_manual_fallback_iph_ = true;
+  }
+
+  void HideAutofillFieldIphForManualFallbackFeature() override {
+    is_showing_manual_fallback_iph_ = false;
+  }
+
+  bool IsShowingManualFallbackIph() { return is_showing_manual_fallback_iph_; }
 
   bool IsAutocompleteEnabled() const override { return true; }
 
@@ -532,6 +499,15 @@ class TestAutofillClientTemplate : public T {
   bool IsLastQueriedField(FieldGlobalId field_id) override { return true; }
 #endif
 
+  void set_test_addresses(
+      std::vector<AutofillProfile> test_addresses) override {
+    test_addresses_ = std::move(test_addresses);
+  }
+
+  base::span<const AutofillProfile> GetTestAddresses() const override {
+    return test_addresses_;
+  }
+
   void SetPrefs(std::unique_ptr<PrefService> prefs) {
     prefs_ = std::move(prefs);
   }
@@ -545,26 +521,9 @@ class TestAutofillClientTemplate : public T {
     payments_autofill_client_ = std::move(payments_client);
   }
 
-  void set_cvc_authenticator(
-      std::unique_ptr<CreditCardCvcAuthenticator> authenticator) {
-    cvc_authenticator_ = std::move(authenticator);
-  }
-
-  void set_otp_authenticator(
-      std::unique_ptr<CreditCardOtpAuthenticator> authenticator) {
-    otp_authenticator_ = std::move(authenticator);
-  }
-
   void set_test_strike_database(
       std::unique_ptr<TestStrikeDatabase> test_strike_database) {
     test_strike_database_ = std::move(test_strike_database);
-  }
-
-
-  void set_payments_window_manager(
-      std::unique_ptr<payments::PaymentsWindowManager>
-          payments_window_manager) {
-    payments_window_manager_ = std::move(payments_window_manager);
   }
 
   void set_test_form_data_importer(
@@ -594,6 +553,9 @@ class TestAutofillClientTemplate : public T {
   void SetVariationConfigCountryCode(
       const GeoIpCountryCode& variation_config_country_code) {
     variation_config_country_code_ = variation_config_country_code;
+    GetPersonalDataManager()
+        ->test_address_data_manager()
+        .SetVariationCountryCode(variation_config_country_code);
   }
 
   void set_save_card_offer_user_decision(
@@ -613,19 +575,6 @@ class TestAutofillClientTemplate : public T {
     return confirm_save_credit_card_to_cloud_called_;
   }
 
-  bool ConfirmSaveIbanLocallyWasCalled() const {
-    return confirm_save_iban_locally_called_;
-  }
-
-  bool ConfirmUploadIbanToCloudWasCalled() const {
-    return confirm_upload_iban_to_cloud_called_ &&
-           !legal_message_lines_.empty();
-  }
-
-  bool offer_to_save_iban_bubble_was_shown() {
-    return offer_to_save_iban_bubble_was_shown_;
-  }
-
   bool get_offer_to_save_credit_card_bubble_was_shown() {
     return offer_to_save_credit_card_bubble_was_shown_.value();
   }
@@ -633,11 +582,6 @@ class TestAutofillClientTemplate : public T {
   void set_format_for_large_keyboard_accessory(
       bool format_for_large_keyboard_accessory) {
     format_for_large_keyboard_accessory_ = format_for_large_keyboard_accessory;
-  }
-
-  bool risk_based_authentication_invoked() {
-    return risk_based_authenticator_ &&
-           risk_based_authenticator_->authenticate_invoked();
   }
 
   AutofillClient::SaveCreditCardOptions get_save_credit_card_options() {
@@ -745,15 +689,7 @@ class TestAutofillClientTemplate : public T {
   std::unique_ptr<AutofillOfferManager> autofill_offer_manager_;
   std::unique_ptr<payments::TestPaymentsAutofillClient>
       payments_autofill_client_;
-  std::unique_ptr<payments::PaymentsWindowManager> payments_window_manager_;
   std::unique_ptr<testing::NiceMock<MockIbanManager>> mock_iban_manager_;
-
-  // The below objects must be destroyed before `PaymentsNetworkInterface`
-  // because they (or their members) keep a reference to it.
-  std::unique_ptr<CreditCardCvcAuthenticator> cvc_authenticator_;
-  std::unique_ptr<CreditCardOtpAuthenticator> otp_authenticator_;
-  std::unique_ptr<TestCreditCardRiskBasedAuthenticator>
-      risk_based_authenticator_;
   std::unique_ptr<FormDataImporter> form_data_importer_;
 
   GURL form_origin_{"https://example.test"};
@@ -769,9 +705,6 @@ class TestAutofillClientTemplate : public T {
 
   bool confirm_save_credit_card_to_cloud_called_ = false;
 
-  bool confirm_save_iban_locally_called_ = false;
-  bool confirm_upload_iban_to_cloud_called_ = false;
-  LegalMessageLines legal_message_lines_;
 
   bool format_for_large_keyboard_accessory_ = false;
 
@@ -788,7 +721,9 @@ class TestAutofillClientTemplate : public T {
 
   bool is_showing_popup_ = false;
 
-  PopupHidingReason popup_hidden_reason_;
+  SuggestionHidingReason popup_hidden_reason_;
+
+  bool is_showing_manual_fallback_iph_ = false;
 
   network::TestURLLoaderFactory test_url_loader_factory_;
   scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_ =
@@ -805,14 +740,13 @@ class TestAutofillClientTemplate : public T {
   AutofillClient::SaveCardOfferUserDecision save_card_offer_user_decision_ =
       AutofillClient::SaveCardOfferUserDecision::kAccepted;
 
-  // Populated if IBAN save was offered. True if bubble was shown, false
-  // otherwise.
-  bool offer_to_save_iban_bubble_was_shown_ = false;
-
   // Populated if mandatory re-auth opt-in was offered, or re-offered,
   // respectively.
   bool mandatory_reauth_opt_in_prompt_was_shown_ = false;
   bool mandatory_reauth_opt_in_prompt_was_reshown_ = false;
+
+  // Test addresses used to allow developers to test their forms.
+  std::vector<AutofillProfile> test_addresses_;
 
   std::vector<std::string> migration_card_selection_;
 

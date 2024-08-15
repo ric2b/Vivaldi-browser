@@ -230,44 +230,6 @@ enum class FetcherRequestStatus {
   kMaxValue = kUserNotSignedIn
 };
 
-// Reasons for whether the on-device model was eligible for use.
-//
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-enum class OnDeviceModelEligibilityReason {
-  kUnknown = 0,
-  // Success.
-  kSuccess = 1,
-  // The feature flag gating on-device model execution was disabled.
-  kFeatureNotEnabled = 2,
-  // There was no on-device model available.
-  kModelNotAvailable = 3,
-  // The on-device model was available but there was not an execution config
-  // available for the feature.
-  kConfigNotAvailableForFeature = 4,
-  // The GPU is blocked.
-  kGpuBlocked = 5,
-  // The on-device model process crashed too many times for this version.
-  kTooManyRecentCrashes = 6,
-  // The on-device model took too long too many times for this version.
-  kTooManyRecentTimeouts = 7,
-  // The on-device safety model was required but not available.
-  kSafetyModelNotAvailable = 8,
-  // The on-device safety model was available but there was not a safety config
-  // available for the feature.
-  kSafetyConfigNotAvailableForFeature = 9,
-  // The on-device language detection model was required but not available.
-  kLanguageDetectionModelNotAvailable = 10,
-  // On-device model execution for this feature was not enabled.
-  kFeatureExecutionNotEnabled = 11,
-
-  // This must be kept in sync with
-  // OptimizationGuideOnDeviceModelEligibilityReason in optimization/enums.xml.
-
-  // Insert new values before this line.
-  kMaxValue = kFeatureExecutionNotEnabled,
-};
-
 // Status of the on-device model.
 //
 // These values are persisted to logs. Entries should not be renumbered and
@@ -305,15 +267,16 @@ enum class ModelQualityLogsUploadStatus {
   kLoggingNotEnabled = 2,
   // Upload was not successful because of network error.
   kNetError = 3,
-  // Upload is disabled due to user's metrics consent.
-  kNoMetricsConsent = 4,
+  // Upload is disabled due to metrics reporting being disabled in
+  // chrome://settings.
+  kMetricsReportingDisabled = 4,
   // Upload is disabled due to enterprise policy.
   kDisabledDueToEnterprisePolicy = 5,
 
   // Insert new values before this line.
   // This enum must remain synchronized with the enum
   // |OptimizationGuideModelQualityLogsUploadStatus| in
-  // tools/metrics/histograms/enums.xml.
+  // tools/metrics/histograms/metadata/optimization/enums.xml.
   kMaxValue = kDisabledDueToEnterprisePolicy,
 };
 
@@ -397,6 +360,39 @@ enum class TextSafetyModelMetadataValidity {
   // optimization/enums.xml.
 
   kMaxValue = kValid,
+};
+
+// Enumerates the different reasons for model remote disconnection.
+enum class ModelRemoteDisconnectReason {
+  kDisconncted,
+  kRemoteIdle,
+
+  kGpuBlocked,
+  kModelLoadFailed,
+};
+
+enum class OnDeviceModelAdaptationAvailability {
+  // Adaptation model was available.
+  kAvailable = 0,
+
+  // Base model was not available.
+  kBaseModelUnavailable = 1,
+
+  // Base model spec was invalid, so adaptation model cannot be fetched.
+  kBaseModelSpecInvalid = 2,
+
+  // Adaptation model was not available.
+  kAdaptationModelUnavailable = 3,
+
+  // The received adaptation model was invalid.
+  kAdaptationModelInvalid = 4,
+
+  // The received adaptation model was incompatible with the base model.
+  kAdaptationModelIncompatible = 5,
+
+  // This must be kept in sync with OnDeviceModelAdaptationAvailability in
+  // optimization/enums.xml.
+  kMaxValue = kAdaptationModelIncompatible,
 };
 
 }  // namespace optimization_guide

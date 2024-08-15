@@ -11,7 +11,7 @@ namespace autofill {
 
 namespace {
 
-FieldTypeSet GetServerFieldsForFieldGroup(FieldTypeGroup group) {
+FieldTypeSet GetFieldTypesForFieldGroup(FieldTypeGroup group) {
   switch (group) {
     case FieldTypeGroup::kName:
       return GetFieldTypesOfGroup(FieldTypeGroup::kName);
@@ -61,6 +61,21 @@ FillingMethod GetFillingMethodFromTargetedFields(
   return FillingMethod::kNone;
 }
 
+FillingMethod GetFillingMethodFromSuggestionType(SuggestionType type) {
+  switch (type) {
+    case SuggestionType::kFillFullAddress:
+      return FillingMethod::kGroupFillingAddress;
+    case SuggestionType::kFillFullName:
+      return FillingMethod::kGroupFillingName;
+    case SuggestionType::kFillFullPhoneNumber:
+      return FillingMethod::kGroupFillingPhoneNumber;
+    case SuggestionType::kFillFullEmail:
+      return FillingMethod::kGroupFillingEmail;
+    default:
+      NOTREACHED_NORETURN();  // Unrelated SuggestionTypes.
+  }
+}
+
 FieldTypeSet GetAddressFieldsForGroupFilling() {
   FieldTypeSet fields = GetFieldTypesOfGroup(FieldTypeGroup::kAddress);
   fields.insert_all(GetFieldTypesOfGroup(FieldTypeGroup::kCompany));
@@ -74,6 +89,25 @@ bool AreFieldsGranularFillingGroup(const FieldTypeSet& field_types) {
          field_types == GetFieldTypesOfGroup(FieldTypeGroup::kPhone);
 }
 
+FieldTypeSet GetTargetFieldTypesFromFillingMethod(
+    FillingMethod filling_method) {
+  switch (filling_method) {
+    case FillingMethod::kFullForm:
+      return kAllFieldTypes;
+    case FillingMethod::kGroupFillingName:
+      return GetFieldTypesOfGroup(FieldTypeGroup::kName);
+    case FillingMethod::kGroupFillingAddress:
+      return GetAddressFieldsForGroupFilling();
+    case FillingMethod::kGroupFillingEmail:
+      return GetFieldTypesOfGroup(FieldTypeGroup::kEmail);
+    case FillingMethod::kGroupFillingPhoneNumber:
+      return GetFieldTypesOfGroup(FieldTypeGroup::kPhone);
+    case FillingMethod::kFieldByFieldFilling:
+    case FillingMethod::kNone:
+      NOTREACHED_NORETURN();
+  }
+}
+
 FieldTypeSet GetTargetServerFieldsForTypeAndLastTargetedFields(
     const FieldTypeSet& last_targeted_field_types,
     FieldType triggering_field_type) {
@@ -82,7 +116,7 @@ FieldTypeSet GetTargetServerFieldsForTypeAndLastTargetedFields(
     case FillingMethod::kGroupFillingAddress:
     case FillingMethod::kGroupFillingEmail:
     case FillingMethod::kGroupFillingPhoneNumber:
-      return GetServerFieldsForFieldGroup(
+      return GetFieldTypesForFieldGroup(
           GroupTypeOfFieldType(triggering_field_type));
     case FillingMethod::kFullForm:
       return kAllFieldTypes;

@@ -33,8 +33,8 @@ const char kDeletedPresetsKey[] = "deleted-presets";
 
 const char kSourceUrlKey[] = "source-url";
 const char kSourceFileKey[] = "source-file";
-const char kGroupKey[] = "group";
 const char kAllowAbpSnippets[] = "allow-abp-snippets";
+const char kNakedHostnameIsPureHost[] = "naked-hostname-is-pure-host";
 const char kRulesListChecksumKey[] = "rules-list-checksum";
 const char kLastUpdateKey[] = "last-upate";
 const char kNextFetchKey[] = "next-fetch";
@@ -72,72 +72,90 @@ void BackupCallback(const base::FilePath& path) {
   base::CopyFile(path, backup_path);
 }
 
-void LoadCounters(const base::Value& counters_value,
-                  std::map<std::string, int>& counters) {
+std::map<std::string, int> LoadCounters(const base::Value& counters_value) {
+  std::map<std::string, int> counters;
   DCHECK(counters_value.is_dict());
 
-  for (const auto counter : counters_value.GetDict()) {
-    if (!counter.second.is_int())
+  for (const auto [counter, value] : counters_value.GetDict()) {
+    if (!value.is_int())
       continue;
-    counters[counter.first] = counter.second.GetInt();
+    counters[counter] = value.GetInt();
   }
+
+  return counters;
 }
 
-void LoadSourcesList(base::Value::List& sources_list,
-                     RuleSources& rule_sources) {
+std::optional<RuleSourceCore> LoadRuleSourceCore(
+    base::Value::Dict& source_dict) {
+  const std::string* source_url_string = source_dict.FindString(kSourceUrlKey);
+  const std::string* source_file = source_dict.FindString(kSourceFileKey);
+
+  std::optional<RuleSourceCore> core;
+  if (source_url_string) {
+    core = RuleSourceCore::FromUrl(GURL(*source_url_string));
+  } else if (source_file) {
+    core =
+        RuleSourceCore::FromFile(base::FilePath::FromUTF8Unsafe(*source_file));
+  }
+
+  if (!core) {
+    return core;
+  }
+
+  RuleSourceSettings settings;
+
+  std::optional<bool> allow_abp_snippets =
+      source_dict.FindBool(kAllowAbpSnippets);
+  settings.allow_abp_snippets =
+      allow_abp_snippets && allow_abp_snippets.value();
+
+  std::optional<bool> naked_hostname_is_pure_host =
+      source_dict.FindBool(kNakedHostnameIsPureHost);
+  // Enabled by default.
+  settings.naked_hostname_is_pure_host =
+      !naked_hostname_is_pure_host || naked_hostname_is_pure_host.value();
+
+  core->set_settings(settings);
+
+  return core;
+}
+
+ActiveRuleSources LoadSourcesList(base::Value::List& sources_list) {
+  ActiveRuleSources rule_sources;
+
   for (auto& source_value : sources_list) {
     if (!source_value.is_dict())
       continue;
 
-    const std::string* source_file =
-        source_value.GetDict().FindString(kSourceFileKey);
-    const std::string* source_url_string =
-        source_value.GetDict().FindString(kSourceUrlKey);
+    auto& source_dict = source_value.GetDict();
 
-    std::optional<int> group = source_value.GetDict().FindInt(kGroupKey);
-    // The rule must have its group set
-    if (!group || group.value() < static_cast<int>(RuleGroup::kFirst) ||
-        group.value() > static_cast<int>(RuleGroup::kLast))
-      continue;
+    std::optional<RuleSourceCore> core = LoadRuleSourceCore(source_dict);
 
-    GURL source_url;
-    if (source_url_string) {
-      source_url = GURL(*source_url_string);
-      if (!source_url.is_valid() || source_url.is_empty())
-        continue;
-      rule_sources.emplace_back(source_url, RuleGroup(group.value()));
-    } else if (source_file) {
-      rule_sources.emplace_back(base::FilePath::FromUTF8Unsafe(*source_file),
-                                RuleGroup(group.value()));
-    } else {
-      // The rules must either come form a file or a URL
+    if (!core) {
       continue;
     }
 
-    std::optional<bool> allow_abp_snippets =
-        source_value.GetDict().FindBool(kAllowAbpSnippets);
-    if (allow_abp_snippets && allow_abp_snippets.value())
-      rule_sources.back().allow_abp_snippets = true;
+    rule_sources.emplace_back(std::move(*core));
 
     std::string* rules_list_checksum =
-        source_value.GetDict().FindString(kRulesListChecksumKey);
+        source_dict.FindString(kRulesListChecksumKey);
     if (rules_list_checksum)
       rule_sources.back().rules_list_checksum = std::move(*rules_list_checksum);
 
     std::optional<base::Time> last_update =
-        base::ValueToTime(source_value.GetDict().Find(kLastUpdateKey));
+        base::ValueToTime(source_dict.Find(kLastUpdateKey));
     if (last_update) {
       rule_sources.back().last_update = last_update.value();
     }
 
     std::optional<base::Time> next_fetch =
-        base::ValueToTime(source_value.GetDict().Find(kNextFetchKey));
+        base::ValueToTime(source_dict.Find(kNextFetchKey));
     if (next_fetch) {
       rule_sources.back().next_fetch = next_fetch.value();
     }
 
     std::optional<int> last_fetch_result =
-        source_value.GetDict().FindInt(kLastFetchResultKey);
+        source_dict.FindInt(kLastFetchResultKey);
     if (last_fetch_result &&
         last_fetch_result.value() >= static_cast<int>(FetchResult::kFirst) &&
         last_fetch_result.value() <= static_cast<int>(FetchResult::kLast))
@@ -145,114 +163,98 @@ void LoadSourcesList(base::Value::List& sources_list,
           FetchResult(last_fetch_result.value());
 
     std::optional<bool> has_tracker_infos =
-        source_value.GetDict().FindBool(kHasTrackerInfosKey);
+        source_dict.FindBool(kHasTrackerInfosKey);
     if (has_tracker_infos)
       rule_sources.back().has_tracker_infos = has_tracker_infos.value();
 
     std::optional<int> valid_rules_count =
-        source_value.GetDict().FindInt(kValidRulesCountKey);
+        source_dict.FindInt(kValidRulesCountKey);
     if (valid_rules_count)
       rule_sources.back().rules_info.valid_rules = *valid_rules_count;
 
     std::optional<int> unsupported_rules_count =
-        source_value.GetDict().FindInt(kUnsupportedRulesCountKey);
+        source_dict.FindInt(kUnsupportedRulesCountKey);
     if (unsupported_rules_count)
       rule_sources.back().rules_info.unsupported_rules =
           *unsupported_rules_count;
 
     std::optional<int> invalid_rules_count =
-        source_value.GetDict().FindInt(kInvalidRulesCountKey);
+        source_dict.FindInt(kInvalidRulesCountKey);
     if (invalid_rules_count)
       rule_sources.back().rules_info.invalid_rules = *invalid_rules_count;
 
-    std::string* title = source_value.GetDict().FindString(kTitleKey);
+    std::string* title = source_dict.FindString(kTitleKey);
     if (title)
       rule_sources.back().unsafe_adblock_metadata.title = std::move(*title);
 
-    const std::string* homepage =
-        source_value.GetDict().FindString(kHomePageKey);
+    const std::string* homepage = source_dict.FindString(kHomePageKey);
     if (homepage)
       rule_sources.back().unsafe_adblock_metadata.homepage = GURL(*homepage);
 
-    const std::string* license = source_value.GetDict().FindString(kLicenseKey);
+    const std::string* license = source_dict.FindString(kLicenseKey);
     if (license)
       rule_sources.back().unsafe_adblock_metadata.license = GURL(*license);
 
-    const std::string* redirect =
-        source_value.GetDict().FindString(kRedirectKey);
+    const std::string* redirect = source_dict.FindString(kRedirectKey);
     if (redirect)
       rule_sources.back().unsafe_adblock_metadata.redirect = GURL(*redirect);
 
     std::optional<int64_t> version =
-        base::ValueToInt64(source_value.GetDict().Find(kVersionKey));
+        base::ValueToInt64(source_dict.Find(kVersionKey));
     if (version)
       rule_sources.back().unsafe_adblock_metadata.version = *version;
 
     std::optional<base::TimeDelta> expires =
-        base::ValueToTimeDelta(source_value.GetDict().Find(kExpiresKey));
+        base::ValueToTimeDelta(source_dict.Find(kExpiresKey));
     if (last_update) {
       rule_sources.back().unsafe_adblock_metadata.expires = expires.value();
     }
   }
+
+  return rule_sources;
 }
 
-void LoadStringSetFromList(base::Value::List& list,
-                           std::set<std::string>& string_set) {
+std::set<std::string> LoadStringSetFromList(base::Value::List& list) {
+  std::set<std::string> string_set;
   for (auto& item : list) {
     if (!item.is_string())
       continue;
     string_set.insert(std::move(item.GetString()));
   }
+
+  return string_set;
 }
 
-void LoadKnownSources(base::Value::List& sources_list,
-                      std::vector<KnownRuleSource>& known_sources) {
+std::vector<KnownRuleSource> LoadKnownSources(base::Value::List& sources_list) {
+  std::vector<KnownRuleSource> known_sources;
+
   for (auto& source_value : sources_list) {
     if (!source_value.is_dict())
       continue;
 
-    const std::string* source_file =
-        source_value.GetDict().FindString(kSourceFileKey);
-    const std::string* source_url_string =
-        source_value.GetDict().FindString(kSourceUrlKey);
+    auto& source_dict = source_value.GetDict();
 
-    std::optional<int> group = source_value.GetDict().FindInt(kGroupKey);
-    // The rule must have its group set
-    if (!group || group.value() < static_cast<int>(RuleGroup::kFirst) ||
-        group.value() > static_cast<int>(RuleGroup::kLast))
-      continue;
+    std::optional<RuleSourceCore> core = LoadRuleSourceCore(source_dict);
 
-    GURL source_url;
-    if (source_url_string) {
-      source_url = GURL(*source_url_string);
-      if (!source_url.is_valid() || source_url.is_empty())
-        continue;
-      known_sources.emplace_back(source_url, RuleGroup(group.value()));
-    } else if (source_file) {
-      known_sources.emplace_back(base::FilePath::FromUTF8Unsafe(*source_file),
-                                 RuleGroup(group.value()));
-    } else {
-      // The rules must either come form a file or a URL
+    if (!core) {
       continue;
     }
 
-    std::optional<bool> allow_abp_snippets =
-        source_value.GetDict().FindBool(kAllowAbpSnippets);
-    if (allow_abp_snippets && allow_abp_snippets.value())
-      known_sources.back().allow_abp_snippets = true;
+    known_sources.emplace_back(std::move(*core));
 
-    std::string* preset_id = source_value.GetDict().FindString(kPresetIdKey);
+    std::string* preset_id = source_dict.FindString(kPresetIdKey);
     if (preset_id)
       known_sources.back().preset_id = std::move(*preset_id);
   }
+
+  return known_sources;
 }
 
 void LoadRulesGroup(RuleGroup group,
-                    base::Value& rule_group_value,
+                    base::Value::Dict& rule_group_dict,
                     RuleServiceStorage::LoadResult& load_result) {
-  DCHECK(rule_group_value.is_dict());
   std::optional<int> active_exception_list =
-      rule_group_value.GetDict().FindInt(kExceptionsTypeKey);
+      rule_group_dict.FindInt(kExceptionsTypeKey);
   if (active_exception_list &&
       active_exception_list >= RuleManager::kFirstExceptionList &&
       active_exception_list <= RuleManager::kLastExceptionList) {
@@ -260,63 +262,55 @@ void LoadRulesGroup(RuleGroup group,
         RuleManager::ExceptionsList(active_exception_list.value());
   }
 
-  base::Value::List* process_list =
-      rule_group_value.GetDict().FindList(kProcessListKey);
+  base::Value::List* process_list = rule_group_dict.FindList(kProcessListKey);
   if (process_list)
-    LoadStringSetFromList(*process_list,
-                          load_result.exceptions[static_cast<size_t>(group)]
-                                                [RuleManager::kProcessList]);
+    load_result
+        .exceptions[static_cast<size_t>(group)][RuleManager::kProcessList] =
+        LoadStringSetFromList(*process_list);
 
-  base::Value::List* exempt_list =
-      rule_group_value.GetDict().FindList(kExemptListKey);
+  base::Value::List* exempt_list = rule_group_dict.FindList(kExemptListKey);
   if (exempt_list)
-    LoadStringSetFromList(*exempt_list,
-                          load_result.exceptions[static_cast<size_t>(group)]
-                                                [RuleManager::kExemptList]);
+    load_result
+        .exceptions[static_cast<size_t>(group)][RuleManager::kExemptList] =
+        LoadStringSetFromList(*exempt_list);
 
-  std::optional<bool> enabled =
-      rule_group_value.GetDict().FindBool(kEnabledKey);
+  std::optional<bool> enabled = rule_group_dict.FindBool(kEnabledKey);
   if (enabled)
     load_result.groups_enabled[static_cast<size_t>(group)] = enabled.value();
 
-  std::string* index_checksum =
-      rule_group_value.GetDict().FindString(kIndexChecksum);
+  std::string* index_checksum = rule_group_dict.FindString(kIndexChecksum);
   if (index_checksum)
     load_result.index_checksums[static_cast<size_t>(group)] =
         std::move(*index_checksum);
 
-  base::Value::List* sources_list =
-      rule_group_value.GetDict().FindList(kRuleSourcesKey);
+  base::Value::List* sources_list = rule_group_dict.FindList(kRuleSourcesKey);
   if (sources_list)
-    LoadSourcesList(*sources_list,
-                    load_result.rule_sources[static_cast<size_t>(group)]);
+    load_result.rule_sources[static_cast<size_t>(group)] =
+        LoadSourcesList(*sources_list);
 
   base::Value::List* known_sources_list =
-      rule_group_value.GetDict().FindList(kKnownSourcesKey);
+      rule_group_dict.FindList(kKnownSourcesKey);
   if (known_sources_list)
-    LoadKnownSources(*known_sources_list,
-                     load_result.known_sources[static_cast<size_t>(group)]);
+    load_result.known_sources[static_cast<size_t>(group)] =
+        LoadKnownSources(*known_sources_list);
 
   base::Value::List* deleted_presets_list =
-      rule_group_value.GetDict().FindList(kDeletedPresetsKey);
+      rule_group_dict.FindList(kDeletedPresetsKey);
   if (deleted_presets_list)
-    LoadStringSetFromList(
-        *deleted_presets_list,
-        load_result.deleted_presets[static_cast<size_t>(group)]);
+    load_result.deleted_presets[static_cast<size_t>(group)] =
+        LoadStringSetFromList(*deleted_presets_list);
 
   base::Value* blocked_domains_counters =
-      rule_group_value.GetDict().Find(kBlockedDomainsCountersKey);
+      rule_group_dict.Find(kBlockedDomainsCountersKey);
   if (blocked_domains_counters)
-    LoadCounters(
-        *blocked_domains_counters,
-        load_result.blocked_domains_counters[static_cast<size_t>(group)]);
+    load_result.blocked_domains_counters[static_cast<size_t>(group)] =
+        LoadCounters(*blocked_domains_counters);
 
   base::Value* blocked_for_origin_counters =
-      rule_group_value.GetDict().Find(kBlockedForOriginCountersKey);
+      rule_group_dict.Find(kBlockedForOriginCountersKey);
   if (blocked_for_origin_counters)
-    LoadCounters(
-        *blocked_for_origin_counters,
-        load_result.blocked_for_origin_counters[static_cast<size_t>(group)]);
+    load_result.blocked_for_origin_counters[static_cast<size_t>(group)] =
+        LoadCounters(*blocked_for_origin_counters);
 }
 
 RuleServiceStorage::LoadResult DoLoad(const base::FilePath& path) {
@@ -326,11 +320,13 @@ RuleServiceStorage::LoadResult DoLoad(const base::FilePath& path) {
   std::unique_ptr<base::Value> root(serializer.Deserialize(nullptr, nullptr));
 
   if (root.get() && root->is_dict()) {
-    base::Value* tracking_rules = root->GetDict().Find(kTrackingRulesKey);
+    base::Value::Dict* tracking_rules =
+        root->GetDict().FindDict(kTrackingRulesKey);
     if (tracking_rules) {
       LoadRulesGroup(RuleGroup::kTrackingRules, *tracking_rules, load_result);
     }
-    base::Value* ad_blocking_rules = root->GetDict().Find(kAdBlockingRulesKey);
+    base::Value::Dict* ad_blocking_rules =
+        root->GetDict().FindDict(kAdBlockingRulesKey);
     if (ad_blocking_rules) {
       LoadRulesGroup(RuleGroup::kAdBlockingRules, *ad_blocking_rules,
                      load_result);
@@ -352,24 +348,32 @@ RuleServiceStorage::LoadResult DoLoad(const base::FilePath& path) {
 
 base::Value SerializeCounters(const std::map<std::string, int>& counters) {
   base::Value::Dict buffer;
-  for (const auto& counter : counters) {
-    buffer.Set(counter.first, counter.second);
+  for (const auto& [counter, value] : counters) {
+    buffer.Set(counter, value);
   }
   return base::Value(std::move(buffer));
 }
 
+base::Value::Dict SerializeRuleCore(const RuleSourceCore& core) {
+  base::Value::Dict core_dict;
+
+  if (core.is_from_url())
+    core_dict.Set(kSourceUrlKey, core.source_url().spec());
+  else
+    core_dict.Set(kSourceFileKey, core.source_file().AsUTF8Unsafe());
+
+  core_dict.Set(kAllowAbpSnippets, core.settings().allow_abp_snippets);
+  core_dict.Set(kNakedHostnameIsPureHost,
+                core.settings().naked_hostname_is_pure_host);
+
+  return core_dict;
+}
+
 base::Value::List SerializeSourcesList(
-    const std::map<uint32_t, RuleSource>& rule_sources) {
+    const std::map<uint32_t, ActiveRuleSource>& rule_sources) {
   base::Value::List sources_list;
-  for (const auto& map_entry : rule_sources) {
-    const RuleSource& rule_source = map_entry.second;
-    base::Value::Dict source_dict;
-    if (rule_source.is_from_url)
-      source_dict.Set(kSourceUrlKey, rule_source.source_url.spec());
-    else
-      source_dict.Set(kSourceFileKey, rule_source.source_file.AsUTF8Unsafe());
-    source_dict.Set(kGroupKey, static_cast<int>(rule_source.group));
-    source_dict.Set(kAllowAbpSnippets, rule_source.allow_abp_snippets);
+  for (const auto& [id, rule_source] : rule_sources) {
+    base::Value::Dict source_dict = SerializeRuleCore(rule_source.core);
     source_dict.Set(kRulesListChecksumKey, rule_source.rules_list_checksum);
     source_dict.Set(kLastUpdateKey, base::TimeToValue(rule_source.last_update));
     source_dict.Set(kNextFetchKey, base::TimeToValue(rule_source.next_fetch));
@@ -412,18 +416,11 @@ base::Value SerializeStringSetToList(const std::set<std::string>& string_set) {
 base::Value::List SerializeKnownSourcesList(
     const KnownRuleSources& rule_sources) {
   base::Value::List sources_list;
-  for (const auto& map_entry : rule_sources) {
-    const KnownRuleSource& rule_source = map_entry.second;
+  for (const auto& [id, rule_source] : rule_sources) {
     if (!rule_source.removable)
       continue;
 
-    base::Value::Dict source;
-    if (rule_source.is_from_url)
-      source.Set(kSourceUrlKey, rule_source.source_url.spec());
-    else
-      source.Set(kSourceFileKey, rule_source.source_file.AsUTF8Unsafe());
-    source.Set(kGroupKey, static_cast<int>(rule_source.group));
-    source.Set(kAllowAbpSnippets, rule_source.allow_abp_snippets);
+    base::Value::Dict source = SerializeRuleCore(rule_source.core);
     if (!rule_source.preset_id.empty())
       source.Set(kPresetIdKey, rule_source.preset_id);
     sources_list.Append(std::move(source));

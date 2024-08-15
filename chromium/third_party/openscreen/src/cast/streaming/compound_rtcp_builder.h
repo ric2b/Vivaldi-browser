@@ -40,7 +40,7 @@ class RtcpSession;
 //         immediately conveyed to the sender.
 class CompoundRtcpBuilder {
  public:
-  explicit CompoundRtcpBuilder(RtcpSession* session);
+  explicit CompoundRtcpBuilder(RtcpSession& session);
   ~CompoundRtcpBuilder();
 
   // Gets/Sets the checkpoint |frame_id| that will be included in built RTCP
@@ -115,7 +115,7 @@ class CompoundRtcpBuilder {
   int AppendCastFeedbackLossFields(ByteBuffer& buffer);
   void AppendCastFeedbackAckFields(ByteBuffer& buffer);
 
-  RtcpSession* const session_;
+  RtcpSession& session_;
 
   // Data to include in the next built RTCP packet.
   FrameId checkpoint_frame_id_ = FrameId::leader();

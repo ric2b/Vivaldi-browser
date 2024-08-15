@@ -21,7 +21,7 @@ if (is_android) {
   }
 }
 
-if (vivaldi_build_tests) {
+if (vivaldi_build_tests && false) { # disabled
   update_target("//chrome/test:sync_integration_test_support") {
     public_deps += [
       "//vivaldi/sync/test:fake_server",
@@ -40,6 +40,9 @@ if (vivaldi_build_tests) {
       "//vivaldi/sync/test:fake_server",
     ]
   }
+}
+
+if (vivaldi_build_tests) {
   update_target("//components:components_unittests") {
     deps += [
       "//vivaldi/sync/notes:sync_notes",

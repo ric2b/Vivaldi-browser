@@ -25,6 +25,7 @@ void selfadjointeigensolver_essential_check(const MatrixType& m) {
   VERIFY_IS_EQUAL(eiSymm.info(), Success);
 
   RealScalar scaling = m.cwiseAbs().maxCoeff();
+  RealScalar unitary_error_factor = RealScalar(16);
 
   if (scaling < (std::numeric_limits<RealScalar>::min)()) {
     VERIFY(eiSymm.eigenvalues().cwiseAbs().maxCoeff() <= (std::numeric_limits<RealScalar>::min)());
@@ -33,7 +34,7 @@ void selfadjointeigensolver_essential_check(const MatrixType& m) {
                      (eiSymm.eigenvectors() * eiSymm.eigenvalues().asDiagonal()) / scaling);
   }
   VERIFY_IS_APPROX(m.template selfadjointView<Lower>().eigenvalues(), eiSymm.eigenvalues());
-  VERIFY_IS_UNITARY(eiSymm.eigenvectors());
+  VERIFY(eiSymm.eigenvectors().isUnitary(test_precision<RealScalar>() * unitary_error_factor));
 
   if (m.cols() <= 4) {
     SelfAdjointEigenSolver<MatrixType> eiDirect;
@@ -56,7 +57,7 @@ void selfadjointeigensolver_essential_check(const MatrixType& m) {
       VERIFY_IS_APPROX(m.template selfadjointView<Lower>().eigenvalues() / scaling, eiDirect.eigenvalues() / scaling);
     }
 
-    VERIFY_IS_UNITARY(eiDirect.eigenvectors());
+    VERIFY(eiDirect.eigenvectors().isUnitary(test_precision<RealScalar>() * unitary_error_factor));
   }
 }
 

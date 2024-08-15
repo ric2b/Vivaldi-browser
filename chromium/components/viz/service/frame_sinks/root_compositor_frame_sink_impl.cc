@@ -167,15 +167,20 @@ RootCompositorFrameSinkImpl::Create(
                 restart_id, base::SingleThreadTaskRunner::GetCurrentDefault());
       }
 #elif BUILDFLAG(IS_MAC)
-      if (base::FeatureList::IsEnabled(
-              features::kCVDisplayLinkBeginFrameSource)) {
+      if (features::IsCVDisplayLinkBeginFrameSourceEnabled()) {
         external_begin_frame_source =
             std::make_unique<ExternalBeginFrameSourceMac>(
                 restart_id, params->renderer_settings.display_id,
                 output_surface.get());
+      } else {
+        auto time_source = std::make_unique<DelayBasedTimeSource>(
+            base::SingleThreadTaskRunner::GetCurrentDefault().get());
+        synthetic_begin_frame_source =
+            std::make_unique<DelayBasedBeginFrameSourceMac>(
+                std::move(time_source), restart_id);
       }
 #endif
-      if (!external_begin_frame_source) {
+      if (!external_begin_frame_source && !synthetic_begin_frame_source) {
         auto time_source = std::make_unique<DelayBasedTimeSource>(
             base::SingleThreadTaskRunner::GetCurrentDefault().get());
         synthetic_begin_frame_source =
@@ -569,7 +574,9 @@ RootCompositorFrameSinkImpl::RootCompositorFrameSinkImpl(
       synthetic_begin_frame_source_(std::move(synthetic_begin_frame_source)),
       external_begin_frame_source_(std::move(external_begin_frame_source)),
       display_(std::move(display)),
-      eviction_handler_(display_.get(), support_.get()) {
+      eviction_handler_(display_.get(),
+                        support_.get(),
+                        frame_sink_manager->reserved_resource_id_tracker()) {
   DCHECK(display_);
   DCHECK(begin_frame_source());
   frame_sink_manager->RegisterBeginFrameSource(begin_frame_source(),

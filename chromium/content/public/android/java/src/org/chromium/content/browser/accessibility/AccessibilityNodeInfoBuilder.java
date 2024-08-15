@@ -92,9 +92,10 @@ public class AccessibilityNodeInfoBuilder {
 
     // Keys used for Bundle extras of parent relative bounds values, without screen clipping.
     public static final String EXTRAS_KEY_UNCLIPPED_TOP = "AccessibilityNodeInfo.unclippedTop";
-    public static final String EXTRAS_KEY_UNCLIPPED_LEFT = "AccessibilityNodeInfo.unclippedLeft";
     public static final String EXTRAS_KEY_UNCLIPPED_BOTTOM =
             "AccessibilityNodeInfo.unclippedBottom";
+    public static final String EXTRAS_KEY_UNCLIPPED_LEFT = "AccessibilityNodeInfo.unclippedLeft";
+    public static final String EXTRAS_KEY_UNCLIPPED_RIGHT = "AccessibilityNodeInfo.unclippedRight";
     public static final String EXTRAS_KEY_UNCLIPPED_WIDTH = "AccessibilityNodeInfo.unclippedWidth";
     public static final String EXTRAS_KEY_UNCLIPPED_HEIGHT =
             "AccessibilityNodeInfo.unclippedHeight";
@@ -488,7 +489,11 @@ public class AccessibilityNodeInfoBuilder {
         node.setBoundsInParent(boundsInParent);
 
         Rect rect = new Rect(absoluteLeft, absoluteTop, absoluteLeft + width, absoluteTop + height);
-        convertWebRectToAndroidCoordinates(rect, node.getExtras());
+        convertWebRectToAndroidCoordinates(
+                rect,
+                node.getExtras(),
+                mDelegate.getAccessibilityCoordinates(),
+                mDelegate.getView());
 
         node.setBoundsInScreen(rect);
 
@@ -623,9 +628,13 @@ public class AccessibilityNodeInfoBuilder {
         return charSequence;
     }
 
-    protected void convertWebRectToAndroidCoordinates(Rect rect, Bundle extras) {
+    public static void convertWebRectToAndroidCoordinates(
+            Rect rect,
+            Bundle extras,
+            AccessibilityDelegate.AccessibilityCoordinates accessibilityCoordinates,
+            View view) {
         // Offset by the scroll position.
-        AccessibilityDelegate.AccessibilityCoordinates ac = mDelegate.getAccessibilityCoordinates();
+        AccessibilityDelegate.AccessibilityCoordinates ac = accessibilityCoordinates;
         rect.offset(-(int) ac.getScrollX(), -(int) ac.getScrollY());
 
         // Convert CSS (web) pixels to Android View pixels
@@ -639,29 +648,51 @@ public class AccessibilityNodeInfoBuilder {
 
         // Finally offset by the location of the view within the screen.
         final int[] viewLocation = new int[2];
-        mDelegate.getView().getLocationOnScreen(viewLocation);
+        view.getLocationOnScreen(viewLocation);
         rect.offset(viewLocation[0], viewLocation[1]);
 
-        // Clip to the viewport bounds, and add unclipped values to the Bundle.
-        int viewportRectTop = viewLocation[1] + (int) ac.getContentOffsetYPix();
-        int viewportRectBottom = viewportRectTop + ac.getLastFrameViewportHeightPixInt();
+        // rect is the unclipped values, but we need to clip to viewport bounds. The original
+        // unclipped values will be placed in the Bundle extras.
+        int clippedTop = viewLocation[1] + (int) ac.getContentOffsetYPix();
+        int clippedBottom = clippedTop + ac.getLastFrameViewportHeightPixInt();
+        // There is currently no x offset, y offset comes from tab bar / browser controls.
+        int clippedLeft = viewLocation[0];
+        int clippedRight = clippedLeft + ac.getLastFrameViewportWidthPixInt();
+        int clippedWidth = clippedRight - clippedLeft;
+        int clippedHeight = clippedBottom - clippedTop;
 
         // A cached node will contain Bundle extras values from the last time it was populated. For
         // unclipped bounds, the extras would be stale and should be removed if present.
-        if (extras.containsKey(EXTRAS_KEY_UNCLIPPED_TOP)) {
-            extras.remove(EXTRAS_KEY_UNCLIPPED_TOP);
-        }
-        if (extras.containsKey(EXTRAS_KEY_UNCLIPPED_BOTTOM)) {
-            extras.remove(EXTRAS_KEY_UNCLIPPED_BOTTOM);
-        }
+        extras.remove(EXTRAS_KEY_UNCLIPPED_TOP);
+        extras.remove(EXTRAS_KEY_UNCLIPPED_BOTTOM);
+        extras.remove(EXTRAS_KEY_UNCLIPPED_LEFT);
+        extras.remove(EXTRAS_KEY_UNCLIPPED_RIGHT);
+        extras.remove(EXTRAS_KEY_UNCLIPPED_WIDTH);
+        extras.remove(EXTRAS_KEY_UNCLIPPED_HEIGHT);
 
-        if (rect.top < viewportRectTop) {
+        if (rect.top < clippedTop) {
             extras.putInt(EXTRAS_KEY_UNCLIPPED_TOP, rect.top);
-            rect.top = viewportRectTop;
+            rect.top = clippedTop;
         }
-        if (rect.bottom > viewportRectBottom) {
+        if (rect.bottom > clippedBottom) {
             extras.putInt(EXTRAS_KEY_UNCLIPPED_BOTTOM, rect.bottom);
-            rect.bottom = viewportRectBottom;
+            rect.bottom = clippedBottom;
+        }
+        if (rect.left < clippedLeft) {
+            extras.putInt(EXTRAS_KEY_UNCLIPPED_LEFT, rect.left);
+            rect.left = clippedLeft;
+        }
+        if (rect.right > clippedRight) {
+            extras.putInt(EXTRAS_KEY_UNCLIPPED_RIGHT, rect.right);
+            rect.right = clippedRight;
+        }
+        if (rect.width() > clippedWidth) {
+            extras.putInt(EXTRAS_KEY_UNCLIPPED_WIDTH, rect.width());
+            // No rect.width to set, it is computed by width().
+        }
+        if (rect.height() > clippedHeight) {
+            extras.putInt(EXTRAS_KEY_UNCLIPPED_HEIGHT, rect.height());
+            // No rect.height to set, it is computed by height().
         }
     }
 }

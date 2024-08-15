@@ -164,6 +164,14 @@ class PasswordsPrivateApiTest : public ExtensionApiTest {
     return test_delegate_->get_exported_file_shown_in_shell();
   }
 
+  bool get_change_password_manager_pin_called() const {
+    return test_delegate_->get_change_password_manager_pin_called();
+  }
+
+  bool get_disconnect_cloud_authenticator_called() const {
+    return test_delegate_->get_disconnect_cloud_authenticator_called();
+  }
+
  private:
   scoped_refptr<TestPasswordsPrivateDelegate> test_delegate_;
 };
@@ -429,6 +437,25 @@ IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, ShowExportedFileInShell) {
   EXPECT_FALSE(get_exported_file_shown_in_shell());
   EXPECT_TRUE(RunPasswordsSubtest("showExportedFileInShell")) << message_;
   EXPECT_TRUE(get_exported_file_shown_in_shell());
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, ChangePasswordManagerPin) {
+  EXPECT_TRUE(RunPasswordsSubtest("changePasswordManagerPin"));
+  EXPECT_TRUE(get_change_password_manager_pin_called());
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, IsPasswordManagerPinAvailable) {
+  EXPECT_TRUE(RunPasswordsSubtest("isPasswordManagerPinAvailable"));
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, DisconnectCloudAuthenticator) {
+  EXPECT_TRUE(RunPasswordsSubtest("disconnectCloudAuthenticator"));
+  EXPECT_TRUE(get_disconnect_cloud_authenticator_called());
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
+                       IsConnectedToCloudAuthenticator) {
+  EXPECT_TRUE(RunPasswordsSubtest("isConnectedToCloudAuthenticator"));
 }
 
 }  // namespace extensions

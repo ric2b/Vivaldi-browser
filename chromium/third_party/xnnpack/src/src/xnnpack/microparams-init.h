@@ -258,6 +258,7 @@ DECLARE_INIT_F16_F32ACC_SCALE_PARAMS_FUNCTION(xnn_init_f16_f32acc_scale_scalar_p
 
 DECLARE_INIT_F32_SCALE_PARAMS_FUNCTION(xnn_init_f32_scale_scalar_params)
 #if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  DECLARE_INIT_F32_SCALE_PARAMS_FUNCTION(xnn_init_f32_scale_sse_params)
   DECLARE_INIT_F32_SCALE_PARAMS_FUNCTION(xnn_init_f32_scale_avx_params)
 #endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
@@ -378,6 +379,7 @@ DECLARE_INIT_BF16_MINMAX_PARAMS_FUNCTION(xnn_init_bf16_minmax_scalar_params)
 #if XNN_ARCH_X86 || XNN_ARCH_X86_64
   DECLARE_INIT_F16_MINMAX_PARAMS_FUNCTION(xnn_init_f16_minmax_avx_params)
   DECLARE_INIT_F16_MINMAX_PARAMS_FUNCTION(xnn_init_f16_minmax_avxvnni_params)
+  DECLARE_INIT_F16_MINMAX_PARAMS_FUNCTION(xnn_init_f16_minmax_scalar_params)
 #endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
 
@@ -424,7 +426,6 @@ DECLARE_INIT_F32_MINMAX_PARAMS_FUNCTION(xnn_init_f32_minmax_scalar_params)
 DECLARE_INIT_F32_QC4W_MINMAX_PARAMS_FUNCTION(xnn_init_f32_qc4w_minmax_scalar_params)
 #if XNN_ARCH_X86 || XNN_ARCH_X86_64
   DECLARE_INIT_F32_QC4W_MINMAX_PARAMS_FUNCTION(xnn_init_f32_qc4w_minmax_sse_params)
-  DECLARE_INIT_F32_QC4W_MINMAX_PARAMS_FUNCTION(xnn_init_f32_qc4w_minmax_xop_params)
   DECLARE_INIT_F32_QC4W_MINMAX_PARAMS_FUNCTION(xnn_init_f32_qc4w_minmax_avx_params)
   DECLARE_INIT_F32_QC4W_MINMAX_PARAMS_FUNCTION(xnn_init_f32_qc4w_minmax_avx512_params)
   DECLARE_INIT_F32_QC4W_MINMAX_PARAMS_FUNCTION(xnn_init_f32_qc4w_minmax_avx512vnni_params)
@@ -560,15 +561,19 @@ DECLARE_INIT_F32_TANH_PARAMS_FUNCTION(xnn_init_f32_tanh_scalar_expm1minus_rr1_p6
 #if XNN_ARCH_X86 || XNN_ARCH_X86_64
   DECLARE_INIT_F32_TANH_PARAMS_FUNCTION(xnn_init_f32_tanh_sse_expm1minus_rr1_lut8_p4h3_params)
   DECLARE_INIT_F32_TANH_PARAMS_FUNCTION(xnn_init_f32_tanh_sse_expm1minus_rr1_p6h5_params)
+  DECLARE_INIT_F32_TANH_PARAMS_FUNCTION(xnn_init_f32_tanh_sse_rational_9_6_params)
   DECLARE_INIT_F32_TANH_PARAMS_FUNCTION(xnn_init_f32_tanh_avx_expm1minus_rr1_lut4_p4h2_perm_params)
   DECLARE_INIT_F32_TANH_PARAMS_FUNCTION(xnn_init_f32_tanh_avx_expm1minus_rr1_lut4_p4h3_perm_params)
   DECLARE_INIT_F32_TANH_PARAMS_FUNCTION(xnn_init_f32_tanh_avx_expm1minus_rr1_lut8_p4h3_perm_params)
   DECLARE_INIT_F32_TANH_PARAMS_FUNCTION(xnn_init_f32_tanh_avx_expm1minus_rr1_lut8_p4h3_params)
   DECLARE_INIT_F32_TANH_PARAMS_FUNCTION(xnn_init_f32_tanh_avx_expm1minus_rr1_p6h5_params)
+  DECLARE_INIT_F32_TANH_PARAMS_FUNCTION(xnn_init_f32_tanh_avx_rational_9_6_params)
+  DECLARE_INIT_F32_TANH_PARAMS_FUNCTION(xnn_init_f32_tanh_fma3_rational_9_6_params)
   DECLARE_INIT_F32_TANH_PARAMS_FUNCTION(xnn_init_f32_tanh_avx512_expm1minus_rr1_lut4_p4h3_perm_params)
   DECLARE_INIT_F32_TANH_PARAMS_FUNCTION(xnn_init_f32_tanh_avx512_expm1minus_rr1_lut8_p4h3_perm_params)
   DECLARE_INIT_F32_TANH_PARAMS_FUNCTION(xnn_init_f32_tanh_avx512_expm1minus_rr1_lut8_p4h3_params)
   DECLARE_INIT_F32_TANH_PARAMS_FUNCTION(xnn_init_f32_tanh_avx512_expm1minus_rr1_p6h5_params)
+  DECLARE_INIT_F32_TANH_PARAMS_FUNCTION(xnn_init_f32_tanh_avx512_rational_9_6_params)
 #endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 #if XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
   DECLARE_INIT_F32_TANH_PARAMS_FUNCTION(xnn_init_f32_tanh_wasmsimd_expm1minus_rr1_lut8_p4h3_abs_params)
@@ -608,6 +613,14 @@ DECLARE_INIT_F32_TANH_PARAMS_FUNCTION(xnn_init_f32_tanh_scalar_expm1minus_rr1_p6
   DECLARE_INIT_F32_NEG_PARAMS_FUNCTION(xnn_init_f32_neg_wasmsimd_params)
 #endif  // XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
 
+
+#define DECLARE_INIT_BF16_ABS_PARAMS_FUNCTION(fn_name)      \
+  XNN_INTERNAL size_t fn_name(                             \
+    union xnn_bf16_abs_params params[XNN_MIN_ELEMENTS(1)]);
+
+#if XNN_ARCH_ARM || XNN_ARCH_ARM64
+  DECLARE_INIT_BF16_ABS_PARAMS_FUNCTION(xnn_init_bf16_abs_neon_params)
+#endif  // XNN_ARCH_ARM || XNN_ARCH_ARM64
 
 #define DECLARE_INIT_F16_ABS_PARAMS_FUNCTION(fn_name)      \
   XNN_INTERNAL size_t fn_name(                             \
@@ -810,6 +823,7 @@ DECLARE_INIT_QU8_LRELU_PARAMS_FUNCTION(xnn_init_qu8_lrelu_scalar_select_params)
     union xnn_f32_sqrt_params params[XNN_MIN_ELEMENTS(1)]);
 
 #if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  DECLARE_INIT_F32_SQRT_PARAMS_FUNCTION(xnn_init_f32_sqrt_sse_params)
   DECLARE_INIT_F32_SQRT_PARAMS_FUNCTION(xnn_init_f32_sqrt_avx_params)
   DECLARE_INIT_F32_SQRT_PARAMS_FUNCTION(xnn_init_f32_sqrt_fma_params)
   DECLARE_INIT_F32_SQRT_PARAMS_FUNCTION(xnn_init_f32_sqrt_avx512_params)

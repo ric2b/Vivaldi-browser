@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: recreating-a-snapshot-or-buildspec
 title: Recreating a Snapshot or Buildspec
 ---
@@ -191,7 +191,7 @@ if you are a Googler. Once that completes, run
 $ repo sync -j <number>
 ```
 
-`git log` in one of the git respositories should now show the latest commit
+`git log` in one of the git repositories should now show the latest commit
 tagged with "m/main" and "cros/main".
 
 Remember to `cros workon` any projects you stopped working on above.

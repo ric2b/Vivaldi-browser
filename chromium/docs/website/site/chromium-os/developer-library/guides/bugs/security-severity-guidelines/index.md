@@ -1,9 +1,9 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: security-severity-guidelines
-title: Chrome OS Security Severity Guidelines
+title: ChromeOS Security Severity Guidelines
 ---
 
 These are the severity guidelines for ChromeOS Security Issues.

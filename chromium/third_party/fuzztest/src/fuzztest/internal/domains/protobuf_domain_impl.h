@@ -833,6 +833,8 @@ class ProtobufDomainUntypedImpl
     auto subs = obj.Subs();
     if (!subs) return std::nullopt;
     absl::flat_hash_set<int> present_fields;
+    present_fields.reserve(subs->size());
+    out.reserve(subs->size());
     for (const auto& sub : *subs) {
       auto pair_subs = sub.Subs();
       if (!pair_subs || pair_subs->size() != 2) return std::nullopt;
@@ -885,11 +887,13 @@ class ProtobufDomainUntypedImpl
   IRObject SerializeCorpus(const corpus_type& v) const {
     IRObject out;
     auto& subs = out.MutableSubs();
+    subs.reserve(v.size());
     for (auto& [number, inner] : v) {
       auto* field = GetField(number);
       FUZZTEST_INTERNAL_CHECK(field, "Field not found by number: ", number);
       IRObject& pair = subs.emplace_back();
       auto& pair_subs = pair.MutableSubs();
+      pair_subs.reserve(2);
       pair_subs.emplace_back(GetFieldName(field));
       VisitProtobufField(
           field, SerializeVisitor{*this, inner, pair_subs.emplace_back()});
@@ -899,33 +903,40 @@ class ProtobufDomainUntypedImpl
 
   struct ValidateVisitor {
     const ProtobufDomainUntypedImpl& self;
-    // nullopt indicates that the field is not set.
-    const std::optional<GenericDomainCorpusType>& corpus_value;
+    // nullptr indicates that the field is not set.
+    const GenericDomainCorpusType* corpus_value;
     absl::Status& out;
 
     template <typename T>
     void VisitSingular(const FieldDescriptor* field) {
-      const GenericDomainCorpusType value =
-          corpus_value.has_value()
-              ? *corpus_value
-              : *self.GetSubDomain<T, /*is_repeated=*/false>(field).FromValue(
-                    std::nullopt);
-      absl::Status s = self.GetSubDomain<T, /*is_repeated=*/false>(field)
-                           .ValidateCorpusValue(value);
-      out = Prefix(s, absl::StrCat("Invalid value for field ", field->name()));
+      if (corpus_value) {
+        out = self.GetSubDomain<T, /*is_repeated=*/false>(field)
+                  .ValidateCorpusValue(*corpus_value);
+      } else {
+        out = self.GetSubDomain<T, /*is_repeated=*/false>(field)
+                  .ValidateCorpusValue(
+                      *self.GetSubDomain<T, /*is_repeated=*/false>(field)
+                           .FromValue(std::nullopt));
+      }
+      if (out.ok()) return;
+      out =
+          Prefix(out, absl::StrCat("Invalid value for field ", field->name()));
     }
 
     template <typename T>
     void VisitRepeated(const FieldDescriptor* field) {
-      const GenericDomainCorpusType value =
-          corpus_value.has_value()
-              ? *corpus_value
-              : *self.GetSubDomain<T, /*is_repeated=*/true>(field).FromValue(
-                    {});
-      absl::Status s =
-          self.GetSubDomain<T, /*is_repeated=*/true>(field).ValidateCorpusValue(
-              value);
-      out = Prefix(s, absl::StrCat("Invalid value for field ", field->name()));
+      if (corpus_value) {
+        out = self.GetSubDomain<T, /*is_repeated=*/true>(field)
+                  .ValidateCorpusValue(*corpus_value);
+      } else {
+        out = self.GetSubDomain<T, /*is_repeated=*/true>(field)
+                  .ValidateCorpusValue(
+                      *self.GetSubDomain<T, /*is_repeated=*/true>(field)
+                           .FromValue({}));
+      }
+      if (out.ok()) return;
+      out =
+          Prefix(out, absl::StrCat("Invalid value for field ", field->name()));
     }
   };
 
@@ -935,7 +946,8 @@ class ProtobufDomainUntypedImpl
     for (int i = 0; i < oneof->field_count(); ++i) {
       auto field_number_value = corpus_value.find(oneof->field(i)->number());
       if (field_number_value == corpus_value.end()) continue;
-      auto inner_corpus_value = field_number_value->second;
+      const GenericDomainCorpusType* inner_corpus_value =
+          &field_number_value->second;
       absl::Status status;
       VisitProtobufField(oneof->field(i),
                          ValidateVisitor{*this, inner_corpus_value, status});
@@ -964,9 +976,10 @@ class ProtobufDomainUntypedImpl
          GetProtobufFields(prototype_.Get()->GetDescriptor())) {
       if (field->containing_oneof()) continue;
       auto field_number_value = corpus_value.find(field->number());
-      auto inner_corpus_value = (field_number_value != corpus_value.end())
-                                    ? std::optional(field_number_value->second)
-                                    : std::nullopt;
+      const GenericDomainCorpusType* inner_corpus_value =
+          (field_number_value != corpus_value.end())
+              ? &field_number_value->second
+              : nullptr;
       absl::Status result;
       VisitProtobufField(field,
                          ValidateVisitor{*this, inner_corpus_value, result});
@@ -1317,7 +1330,7 @@ class ProtobufDomainUntypedImpl
   template <typename T>
   static auto ModifyDomainForOptionalFieldRule(const Domain<T>& d,
                                                OptionalPolicy optional_policy) {
-    auto result = OptionalOfImpl<std::optional<T>, Domain<T>>(d);
+    auto result = OptionalOfImpl<std::optional<T>>(d);
     if (optional_policy == OptionalPolicy::kWithoutNull) {
       result.SetWithoutNull();
     } else if (optional_policy == OptionalPolicy::kAlwaysNull) {
@@ -1328,7 +1341,7 @@ class ProtobufDomainUntypedImpl
 
   template <typename T>
   static auto ModifyDomainForRequiredFieldRule(const Domain<T>& d) {
-    return OptionalOfImpl<std::optional<T>, Domain<T>>(d).SetWithoutNull();
+    return OptionalOfImpl<std::optional<T>>(d).SetWithoutNull();
   }
 
   // Returns the default "base domain" for a `field` solely based on its type
@@ -1757,8 +1770,7 @@ class ProtobufDomainImpl
     } else {                                                                   \
       inner_.WithOneofField(field, OptionalPolicy::kWithoutNull);              \
       inner_.WithField(                                                        \
-          field, OptionalOfImpl<std::optional<Camel##type>, decltype(domain)>( \
-                     std::move(domain))                                        \
+          field, OptionalOfImpl<std::optional<Camel##type>>(std::move(domain)) \
                      .SetWithoutNull());                                       \
     }                                                                          \
     return std::move(*this);                                                   \
@@ -1769,11 +1781,9 @@ class ProtobufDomainImpl
     auto default_domain =                                                      \
         inner_.template GetFieldTypeDefaultDomain<TAG>(field);                 \
     inner_.WithOneofField(field, OptionalPolicy::kAlwaysNull);                 \
-    inner_.WithField(                                                          \
-        field,                                                                 \
-        OptionalOfImpl<std::optional<Camel##type>, decltype(default_domain)>(  \
-            std::move(default_domain))                                         \
-            .SetAlwaysNull());                                                 \
+    inner_.WithField(field, OptionalOfImpl<std::optional<Camel##type>>(        \
+                                std::move(default_domain))                     \
+                                .SetAlwaysNull());                             \
     return std::move(*this);                                                   \
   }                                                                            \
   ProtobufDomainImpl&& With##Camel##FieldAlwaysSet(                            \

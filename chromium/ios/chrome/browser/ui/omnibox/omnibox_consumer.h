@@ -33,6 +33,10 @@
 // Notifies the consumer to update the text immediately.
 - (void)updateText:(NSAttributedString*)text;
 
+// Notifies the consumer to update the additional text. Pass `nil` to
+// remove additional text.
+- (void)updateAdditionalText:(NSAttributedString*)additionalText;
+
 // Vivaldi
 @optional
 - (void)updateSearchEngineList:

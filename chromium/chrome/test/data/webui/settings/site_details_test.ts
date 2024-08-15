@@ -169,6 +169,9 @@ suite('SiteDetails', function() {
           createContentSettingTypeToValuePair(
               ContentSettingsTypes.AUTOMATIC_FULLSCREEN,
               [createRawSiteException('https://foo.com:443')]),
+          createContentSettingTypeToValuePair(
+              ContentSettingsTypes.CAPTURED_SURFACE_CONTROL,
+              [createRawSiteException('https://foo.com:443')]),
         ],
         [
           createContentSettingTypeToValuePair(
@@ -206,7 +209,6 @@ suite('SiteDetails', function() {
     browserProxy.setPrefs(prefs);
     testElement = createSiteDetails('https://foo.com:443');
     await websiteUsageProxy.whenCalled('fetchUsageTotal');
-    assertTrue(!!testElement.$.usage);
 
     // When there's no usage, there should be a string that says so.
     assertEquals(

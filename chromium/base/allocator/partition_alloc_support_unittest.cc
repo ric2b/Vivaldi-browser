@@ -30,7 +30,7 @@ TEST(PartitionAllocSupportTest,
   std::string dpd_group =
       ProposeSyntheticFinchTrials()["DanglingPointerDetector"];
 
-#if BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS)
+#if PA_BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS)
   EXPECT_EQ(dpd_group, "Enabled");
 #else
   EXPECT_EQ(dpd_group, "Disabled");
@@ -38,7 +38,7 @@ TEST(PartitionAllocSupportTest,
 }
 
 // - Death tests misbehave on Android, http://crbug.com/643760.
-#if BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS) && !BUILDFLAG(IS_ANDROID) && \
+#if PA_BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS) && !BUILDFLAG(IS_ANDROID) && \
     defined(GTEST_HAS_DEATH_TEST)
 
 namespace {
@@ -103,7 +103,7 @@ TEST(PartitionAllocDanglingPtrChecks, FreeNotRecorded) {
             HasSubstr("The dangling raw_ptr was released at:")));
 }
 
-// TODO(https://crbug.com/1425095): Check for leaked refcount on Android.
+// TODO(crbug.com/40260713): Check for leaked refcount on Android.
 #if BUILDFLAG(IS_ANDROID)
 // Some raw_ptr might never release their refcount. Make sure this cause a
 // crash on exit.
@@ -254,7 +254,7 @@ TEST(PartitionAllocDanglingPtrChecks,
 
 #endif
 
-#if BUILDFLAG(HAS_MEMORY_TAGGING)
+#if PA_BUILDFLAG(HAS_MEMORY_TAGGING)
 TEST(PartitionAllocSupportTest,
      ProposeSyntheticFinchTrials_MemoryTaggingDogfood) {
   {
@@ -283,6 +283,81 @@ TEST(PartitionAllocSupportTest,
     EXPECT_EQ(group_iter->second, expectation);
   }
 }
-#endif  // BUILDFLAG(HAS_MEMORY_TAGGING)
+#endif  // PA_BUILDFLAG(HAS_MEMORY_TAGGING)
+
+class MemoryReclaimerSupportTest : public ::testing::Test {
+ public:
+  void SetUp() override {
+    feature_list_.InitWithFeatures(
+        {base::features::kPartitionAllocMemoryReclaimer,
+         base::allocator::kDisableMemoryReclaimerInBackground},
+        {});
+    MemoryReclaimerSupport::Instance().ResetForTesting();
+  }
+
+ protected:
+  base::test::SingleThreadTaskEnvironment task_environment_{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
+  test::ScopedFeatureList feature_list_;
+};
+
+TEST_F(MemoryReclaimerSupportTest, StartSeveralTimes) {
+  test::ScopedFeatureList feature_list{
+      base::features::kPartitionAllocMemoryReclaimer};
+  auto& instance = MemoryReclaimerSupport::Instance();
+  EXPECT_FALSE(instance.has_pending_task_for_testing());
+  instance.Start(task_environment_.GetMainThreadTaskRunner());
+  instance.Start(task_environment_.GetMainThreadTaskRunner());
+  instance.Start(task_environment_.GetMainThreadTaskRunner());
+  // Only one task.
+  EXPECT_TRUE(instance.has_pending_task_for_testing());
+  EXPECT_EQ(1u, task_environment_.GetPendingMainThreadTaskCount());
+}
+
+TEST_F(MemoryReclaimerSupportTest, ForegroundToBackground) {
+  test::ScopedFeatureList feature_list{
+      base::features::kPartitionAllocMemoryReclaimer};
+  auto& instance = MemoryReclaimerSupport::Instance();
+  EXPECT_FALSE(instance.has_pending_task_for_testing());
+  instance.Start(task_environment_.GetMainThreadTaskRunner());
+  EXPECT_TRUE(instance.has_pending_task_for_testing());
+  EXPECT_EQ(1u, task_environment_.GetPendingMainThreadTaskCount());
+
+  task_environment_.FastForwardBy(
+      MemoryReclaimerSupport::kFirstPAPurgeOrReclaimDelay);
+  // Task gets reposted.
+  EXPECT_TRUE(instance.has_pending_task_for_testing());
+  EXPECT_EQ(1u, task_environment_.GetPendingMainThreadTaskCount());
+
+  instance.SetForegrounded(false);
+  task_environment_.FastForwardBy(MemoryReclaimerSupport::GetInterval());
+  // But not once in background.
+  EXPECT_FALSE(instance.has_pending_task_for_testing());
+  EXPECT_EQ(0u, task_environment_.GetPendingMainThreadTaskCount());
+}
+
+TEST_F(MemoryReclaimerSupportTest, ForegroundToBackgroundAndBack) {
+  test::ScopedFeatureList feature_list{
+      base::features::kPartitionAllocMemoryReclaimer};
+  auto& instance = MemoryReclaimerSupport::Instance();
+  instance.Start(task_environment_.GetMainThreadTaskRunner());
+  task_environment_.FastForwardBy(
+      MemoryReclaimerSupport::kFirstPAPurgeOrReclaimDelay);
+
+  // Task gets reposted.
+  EXPECT_TRUE(instance.has_pending_task_for_testing());
+  EXPECT_EQ(1u, task_environment_.GetPendingMainThreadTaskCount());
+
+  instance.SetForegrounded(false);
+  task_environment_.FastForwardBy(MemoryReclaimerSupport::GetInterval());
+  // But not once in background.
+  EXPECT_FALSE(instance.has_pending_task_for_testing());
+  EXPECT_EQ(0u, task_environment_.GetPendingMainThreadTaskCount());
+
+  // Until we go to foreground again.
+  instance.SetForegrounded(true);
+  EXPECT_TRUE(instance.has_pending_task_for_testing());
+  EXPECT_EQ(1u, task_environment_.GetPendingMainThreadTaskCount());
+}
 
 }  // namespace base::allocator

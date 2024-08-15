@@ -115,7 +115,7 @@ FormData CreateFeedbackTestFormData() {
                           FormControlType::kInputText, "cc-family-name"),
       CreateTestFormField("Email", "email", "", FormControlType::kInputEmail)};
   for (FormFieldData& field : form.fields) {
-    field.host_frame = form.host_frame;
+    field.set_host_frame(form.host_frame);
   }
   return form;
 }
@@ -165,7 +165,7 @@ TEST_F(AutofillFeedbackDataUnitTest, IncludesLastAutofillEventLogEntry) {
 
   // Simulates an autofill event.
   browser_autofill_manager_->OnSingleFieldSuggestionSelected(
-      u"TestValue", PopupItemId::kIbanEntry, form, field);
+      u"TestValue", SuggestionType::kIbanEntry, form, field);
 
   ASSERT_OK_AND_ASSIGN(
       auto expected_data,
@@ -197,7 +197,7 @@ TEST_F(AutofillFeedbackDataUnitTest,
 
   // Simulates an autofill event.
   browser_autofill_manager_->OnSingleFieldSuggestionSelected(
-      u"TestValue", PopupItemId::kIbanEntry, form, field);
+      u"TestValue", SuggestionType::kIbanEntry, form, field);
 
   // Advance the clock 4 minutes should disregard the last autofill event log.
   clock.Advance(base::Minutes(4));

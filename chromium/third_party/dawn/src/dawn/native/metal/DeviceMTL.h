@@ -53,7 +53,8 @@ class Device final : public DeviceBase {
     static ResultOrError<Ref<Device>> Create(AdapterBase* adapter,
                                              NSPRef<id<MTLDevice>> mtlDevice,
                                              const UnpackedPtr<DeviceDescriptor>& descriptor,
-                                             const TogglesState& deviceToggles);
+                                             const TogglesState& deviceToggles,
+                                             Ref<DeviceBase::DeviceLostEvent>&& lostEvent);
     ~Device() override;
 
     MaybeError Initialize(const UnpackedPtr<DeviceDescriptor>& descriptor);
@@ -90,7 +91,8 @@ class Device final : public DeviceBase {
     Device(AdapterBase* adapter,
            NSPRef<id<MTLDevice>> mtlDevice,
            const UnpackedPtr<DeviceDescriptor>& descriptor,
-           const TogglesState& deviceToggles);
+           const TogglesState& deviceToggles,
+           Ref<DeviceBase::DeviceLostEvent>&& lostEvent);
 
     ResultOrError<Ref<BindGroupBase>> CreateBindGroupImpl(
         const BindGroupDescriptor* descriptor) override;
@@ -113,22 +115,18 @@ class Device final : public DeviceBase {
     ResultOrError<Ref<SwapChainBase>> CreateSwapChainImpl(
         Surface* surface,
         SwapChainBase* previousSwapChain,
-        const SwapChainDescriptor* descriptor) override;
+        const SurfaceConfiguration* config) override;
     ResultOrError<Ref<TextureBase>> CreateTextureImpl(
         const UnpackedPtr<TextureDescriptor>& descriptor) override;
     ResultOrError<Ref<TextureViewBase>> CreateTextureViewImpl(
         TextureBase* texture,
-        const TextureViewDescriptor* descriptor) override;
+        const UnpackedPtr<TextureViewDescriptor>& descriptor) override;
     Ref<ComputePipelineBase> CreateUninitializedComputePipelineImpl(
         const UnpackedPtr<ComputePipelineDescriptor>& descriptor) override;
     Ref<RenderPipelineBase> CreateUninitializedRenderPipelineImpl(
         const UnpackedPtr<RenderPipelineDescriptor>& descriptor) override;
-    void InitializeComputePipelineAsyncImpl(Ref<ComputePipelineBase> computePipeline,
-                                            WGPUCreateComputePipelineAsyncCallback callback,
-                                            void* userdata) override;
-    void InitializeRenderPipelineAsyncImpl(Ref<RenderPipelineBase> renderPipeline,
-                                           WGPUCreateRenderPipelineAsyncCallback callback,
-                                           void* userdata) override;
+    void InitializeComputePipelineAsyncImpl(Ref<CreateComputePipelineAsyncEvent> event) override;
+    void InitializeRenderPipelineAsyncImpl(Ref<CreateRenderPipelineAsyncEvent> event) override;
 
     ResultOrError<wgpu::TextureUsage> GetSupportedSurfaceUsageImpl(
         const Surface* surface) const override;

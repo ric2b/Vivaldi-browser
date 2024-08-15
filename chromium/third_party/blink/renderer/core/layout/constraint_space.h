@@ -19,6 +19,7 @@
 #include "third_party/blink/renderer/core/layout/geometry/margin_strut.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_size.h"
 #include "third_party/blink/renderer/core/layout/grid/grid_data.h"
+#include "third_party/blink/renderer/core/layout/line_clamp_data.h"
 #include "third_party/blink/renderer/core/layout/min_max_sizes.h"
 #include "third_party/blink/renderer/core/layout/table/table_constraint_space_data.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
@@ -84,6 +85,19 @@ enum class AutoSizeBehavior : uint8_t {
 // This enum gives the caching logic a hint into which cache "slot" it should
 // store a result in.
 enum class LayoutResultCacheSlot { kLayout, kMeasure };
+
+// How to resolve percentage-based margin and padding.
+enum class DecorationPercentageResolutionType {
+  // Resolve margins and padding on any side against the inline-size of the
+  // containing block. This is the default, and the behavior for regular CSS
+  // boxes.
+  kContainingBlockInlineSize,
+
+  // Resolve block margins and padding against the block-size of the containing
+  // block, and inline ones against the inline-size of the containing block.
+  // This is only used by @page boxes.
+  kContainingBlockSize
+};
 
 // The ConstraintSpace represents a set of constraints and available space
 // which a layout algorithm may produce a LogicalFragment within.
@@ -258,17 +272,44 @@ class CORE_EXPORT ConstraintSpace final {
             ReplacedPercentageResolutionBlockSize()};
   }
 
-  // The size to use for percentage resolution for margin/border/padding.
-  // They are always get computed relative to the inline size, in the parent
-  // writing mode.
-  LayoutUnit PercentageResolutionInlineSizeForParentWritingMode() const {
-    if (!IsOrthogonalWritingModeRoot())
-      return PercentageResolutionInlineSize();
-    if (PercentageResolutionBlockSize() != kIndefiniteSize)
-      return PercentageResolutionBlockSize();
-    // TODO(mstensho): Figure out why we get here. It seems wrong, but we do get
-    // here in some grid layout situations.
-    return LayoutUnit();
+  // Return the size to use for percentage resolution for margin/padding.
+  LogicalSize MarginPaddingPercentageResolutionSize() const {
+    if (GetDecorationPercentageResolutionType() ==
+        DecorationPercentageResolutionType::kContainingBlockSize) {
+      // @page margin and padding are different from those on regular CSS boxes.
+      // Inline percentages are resolved against the inline-size of the margin
+      // box, and block percentages are resolved against its block-size.
+      DCHECK(!IsOrthogonalWritingModeRoot());
+      return PercentageResolutionSize();
+    }
+
+    // For regular CSS boxes, percentage-based margin and padding get computed
+    // relatively to the inline-size of the containing block.
+    LayoutUnit cb_inline_size;
+    if (!IsOrthogonalWritingModeRoot()) {
+      cb_inline_size = PercentageResolutionInlineSize();
+    } else {
+      // Since the constraint space has been set up for the writing-mode of the
+      // node that is to be laid out, if the node is an orthogonal writing mode
+      // root, we need to flip and use the available block-size.
+      if (PercentageResolutionBlockSize() != kIndefiniteSize) {
+        cb_inline_size = PercentageResolutionBlockSize();
+      } else {
+        // There are cases where the inline-size of the containing block is
+        // indefinite, e.g. when performing a measure pass whose purpose is to
+        // resolve the inline-size of the containing block. In such cases,
+        // return zero. Example:
+        //
+        // <div style="float:left;">
+        //   <div style="writing-mode:vertical-rl; padding-left:10%;"></div>
+        // </div>
+        //
+        // TODO(layout-dev): It would be nice if we could DCHECK that the cache
+        // slot is kMeasure here, but there are cases in flex, and especially in
+        // grid, where the cache slot is kLayout.
+      }
+    }
+    return LogicalSize(cb_inline_size, cb_inline_size);
   }
 
   std::optional<MinMaxSizes> OverrideMinMaxBlockSizes() const {
@@ -750,13 +791,8 @@ class CORE_EXPORT ConstraintSpace final {
     return HasRareData() && rare_data_->is_pushed_by_floats;
   }
 
-  // Return true if this is participating within a -webkit-line-clamp context.
-  bool IsLineClampContext() const {
-    return HasRareData() && rare_data_->is_line_clamp_context;
-  }
-
-  std::optional<int> LinesUntilClamp() const {
-    return HasRareData() ? rare_data_->LinesUntilClamp() : std::nullopt;
+  LineClampData GetLineClampData() const {
+    return HasRareData() ? rare_data_->GetLineClampData() : LineClampData();
   }
 
   // Return true if `text-box-trim` is in effect for the block-start/end.
@@ -765,6 +801,16 @@ class CORE_EXPORT ConstraintSpace final {
   }
   bool ShouldTextBoxTrimEnd() const {
     return HasRareData() && rare_data_->should_text_box_trim_end;
+  }
+
+  // Return how percentage-based margins and padding should be resolved.
+  DecorationPercentageResolutionType GetDecorationPercentageResolutionType()
+      const {
+    if (!HasRareData()) {
+      return DecorationPercentageResolutionType::kContainingBlockInlineSize;
+    }
+    return static_cast<DecorationPercentageResolutionType>(
+        rare_data_->decoration_percentage_resolution_type);
   }
 
   const GridLayoutSubtree* GetGridLayoutSubtree() const {
@@ -901,7 +947,6 @@ class CORE_EXPORT ConstraintSpace final {
           fragmentainer_block_size(other.fragmentainer_block_size),
           fragmentainer_offset(other.fragmentainer_offset),
           data_union_type(other.data_union_type),
-          is_line_clamp_context(other.is_line_clamp_context),
           is_pushed_by_floats(other.is_pushed_by_floats),
           is_restricted_block_size_table_cell(
               other.is_restricted_block_size_table_cell),
@@ -930,7 +975,9 @@ class CORE_EXPORT ConstraintSpace final {
           should_repeat(other.should_repeat),
           is_inside_repeatable_content(other.is_inside_repeatable_content),
           should_text_box_trim_start(other.should_text_box_trim_start),
-          should_text_box_trim_end(other.should_text_box_trim_end) {
+          should_text_box_trim_end(other.should_text_box_trim_end),
+          decoration_percentage_resolution_type(
+              other.decoration_percentage_resolution_type) {
       switch (GetDataUnionType()) {
         case DataUnionType::kNone:
           break;
@@ -992,7 +1039,6 @@ class CORE_EXPORT ConstraintSpace final {
 
     bool MaySkipLayout(const RareData& other) const {
       if (data_union_type != other.data_union_type ||
-          is_line_clamp_context != other.is_line_clamp_context ||
           is_pushed_by_floats != other.is_pushed_by_floats ||
           is_restricted_block_size_table_cell !=
               other.is_restricted_block_size_table_cell ||
@@ -1014,7 +1060,9 @@ class CORE_EXPORT ConstraintSpace final {
           should_repeat != other.should_repeat ||
           is_inside_repeatable_content != other.is_inside_repeatable_content ||
           should_text_box_trim_start != other.should_text_box_trim_start ||
-          should_text_box_trim_end != other.should_text_box_trim_end) {
+          should_text_box_trim_end != other.should_text_box_trim_end ||
+          decoration_percentage_resolution_type !=
+              other.decoration_percentage_resolution_type) {
         return false;
       }
 
@@ -1043,9 +1091,8 @@ class CORE_EXPORT ConstraintSpace final {
     // Must be kept in sync with members checked within |MaySkipLayout|.
     bool IsInitialForMaySkipLayout() const {
       if (page_name || fragmentainer_block_size != kIndefiniteSize ||
-          fragmentainer_offset || is_line_clamp_context ||
-          is_pushed_by_floats || is_restricted_block_size_table_cell ||
-          hide_table_cell_if_empty ||
+          fragmentainer_offset || is_pushed_by_floats ||
+          is_restricted_block_size_table_cell || hide_table_cell_if_empty ||
           block_direction_fragmentation_type != kFragmentNone ||
           is_block_fragmentation_forced_off ||
           is_monolithic_overflow_propagation_disabled ||
@@ -1054,7 +1101,8 @@ class CORE_EXPORT ConstraintSpace final {
           min_break_appeal != kBreakAppealLastResort ||
           propagate_child_break_values || is_at_fragmentainer_start ||
           should_repeat || is_inside_repeatable_content ||
-          should_text_box_trim_start || should_text_box_trim_end) {
+          should_text_box_trim_start || should_text_box_trim_end ||
+          decoration_percentage_resolution_type) {
         return false;
       }
 
@@ -1145,14 +1193,14 @@ class CORE_EXPORT ConstraintSpace final {
       EnsureBlockData()->clearance_offset = clearance_offset;
     }
 
-    std::optional<int> LinesUntilClamp() const {
+    LineClampData GetLineClampData() const {
       return GetDataUnionType() == DataUnionType::kBlockData
-                 ? block_data_.lines_until_clamp
-                 : std::nullopt;
+                 ? block_data_.line_clamp_data
+                 : LineClampData();
     }
 
-    void SetLinesUntilClamp(int value) {
-      EnsureBlockData()->lines_until_clamp = value;
+    void SetLineClampData(LineClampData value) {
+      EnsureBlockData()->line_clamp_data = value;
     }
 
     void SetIsTableCell() { EnsureTableCellData(); }
@@ -1303,7 +1351,6 @@ class CORE_EXPORT ConstraintSpace final {
 
     unsigned data_union_type : 3 = static_cast<unsigned>(DataUnionType::kNone);
 
-    unsigned is_line_clamp_context : 1 = false;
     unsigned is_pushed_by_floats : 1 = false;
 
     unsigned is_restricted_block_size_table_cell : 1 = false;
@@ -1330,22 +1377,24 @@ class CORE_EXPORT ConstraintSpace final {
     unsigned is_inside_repeatable_content : 1 = false;
     unsigned should_text_box_trim_start : 1 = false;
     unsigned should_text_box_trim_end : 1 = false;
+    unsigned decoration_percentage_resolution_type : 1 = static_cast<unsigned>(
+        DecorationPercentageResolutionType::kContainingBlockInlineSize);
 
    private:
     struct BlockData {
       bool MaySkipLayout(const BlockData& other) const {
-        return lines_until_clamp == other.lines_until_clamp;
+        return line_clamp_data == other.line_clamp_data;
       }
 
       bool IsInitialForMaySkipLayout() const {
-        return !lines_until_clamp.has_value();
+        return line_clamp_data.state == LineClampData::kDisabled;
       }
 
       MarginStrut margin_strut;
       std::optional<LayoutUnit> optimistic_bfc_block_offset;
       std::optional<LayoutUnit> forced_bfc_block_offset;
       LayoutUnit clearance_offset = LayoutUnit::Min();
-      std::optional<int> lines_until_clamp;
+      LineClampData line_clamp_data;
     };
 
     struct TableCellData {

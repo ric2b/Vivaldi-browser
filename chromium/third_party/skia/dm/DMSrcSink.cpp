@@ -8,6 +8,7 @@
 #include "dm/DMSrcSink.h"
 #include "include/codec/SkAndroidCodec.h"
 #include "include/codec/SkCodec.h"
+#include "include/codec/SkPixmapUtils.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
 #include "include/core/SkDocument.h"
@@ -21,7 +22,6 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkSurfaceProps.h"
 #include "include/docs/SkMultiPictureDocument.h"
-#include "include/codec/SkPixmapUtils.h"
 #include "include/docs/SkPDFDocument.h"
 #include "include/encode/SkPngEncoder.h"
 #include "include/gpu/GrBackendSurface.h"
@@ -38,6 +38,7 @@
 #include "include/utils/SkPaintFilterCanvas.h"
 #include "modules/skcms/skcms.h"
 #include "modules/skottie/utils/SkottieUtils.h"
+#include "modules/skshaper/utils/FactoryHelpers.h"
 #include "src/base/SkAutoMalloc.h"
 #include "src/base/SkRandom.h"
 #include "src/base/SkTLazy.h"
@@ -73,23 +74,24 @@
 #include "tools/gpu/MemoryCache.h"
 
 #if defined(SK_BUILD_FOR_WIN)
-    #include "include/docs/SkXPSDocument.h"
-    #include "src/utils/win/SkAutoCoInitialize.h"
-    #include "src/utils/win/SkHRESULT.h"
-    #include "src/utils/win/SkTScopedComPtr.h"
-    #include <XpsObjectModel.h>
+#include "include/docs/SkXPSDocument.h"
+#include "src/utils/win/SkAutoCoInitialize.h"
+#include "src/utils/win/SkHRESULT.h"
+#include "src/utils/win/SkTScopedComPtr.h"
+
+#include <XpsObjectModel.h>
 #endif
 
 #if defined(SK_ENABLE_SKOTTIE)
-    #include "modules/skottie/include/Skottie.h"
-    #include "modules/skresources/include/SkResources.h"
+#include "modules/skottie/include/Skottie.h"
+#include "modules/skresources/include/SkResources.h"
 #endif
 
 #if defined(SK_ENABLE_SVG)
-    #include "include/svg/SkSVGCanvas.h"
-    #include "modules/svg/include/SkSVGDOM.h"
-    #include "modules/svg/include/SkSVGNode.h"
-    #include "src/xml/SkXMLWriter.h"
+#include "include/svg/SkSVGCanvas.h"
+#include "modules/svg/include/SkSVGDOM.h"
+#include "modules/svg/include/SkSVGNode.h"
+#include "src/xml/SkXMLWriter.h"
 #endif
 
 #if defined(SK_GRAPHITE)
@@ -111,6 +113,7 @@
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
 #include "src/gpu/graphite/PublicPrecompile.h"
 #include "src/gpu/graphite/RecorderPriv.h"
+#include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/RendererProvider.h"
 #include "tools/graphite/UniqueKeyUtils.h"
 #endif // SK_ENABLE_PRECOMPILE
@@ -1288,6 +1291,7 @@ Result SkottieSrc::draw(SkCanvas* canvas, GraphiteTestContext*) const {
         .setFontManager(ToolUtils::TestFontMgr())
         .setResourceProvider(std::move(resource_provider))
         .setPrecompInterceptor(std::move(precomp_interceptor))
+        .setTextShapingFactory(SkShapers::BestAvailable())
         .makeFromFile(fPath.c_str());
     if (!animation) {
         return Result::Fatal("Unable to parse file: %s", fPath.c_str());
@@ -1366,9 +1370,11 @@ SVGSrc::SVGSrc(Path path)
             predecode,
             ToolUtils::TestFontMgr());
 
-    fDom = SkSVGDOM::Builder().setResourceProvider(std::move(rp))
-                              .setFontManager(ToolUtils::TestFontMgr())
-                              .make(*stream);
+    fDom = SkSVGDOM::Builder()
+                   .setResourceProvider(std::move(rp))
+                   .setFontManager(ToolUtils::TestFontMgr())
+                   .setTextShapingFactory(SkShapers::BestAvailable())
+                   .make(*stream);
     if (!fDom) {
         return;
     }
@@ -2312,6 +2318,7 @@ Result GraphitePrecompileTestingSink::resetAndRecreatePipelines(
 
 #ifdef SK_DEBUG
                 const RendererProvider* rendererProvider = context->priv().rendererProvider();
+                const ShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
 
                 {
                     GraphicsPipelineDesc originalPipelineDesc;
@@ -2322,7 +2329,7 @@ Result GraphitePrecompileTestingSink::resetAndRecreatePipelines(
 
                     SkDebugf("------- Missing key from rebuilt keys:\n");
                     origKey.dump("original key:");
-                    UniqueKeyUtils::DumpDescs(rendererProvider,
+                    UniqueKeyUtils::DumpDescs(rendererProvider, dict,
                                               originalPipelineDesc,
                                               originalRenderPassDesc);
                 }
@@ -2339,7 +2346,7 @@ Result GraphitePrecompileTestingSink::resetAndRecreatePipelines(
 
                     SkDebugf("%d ----\n", count++);
                     recreatedKey.dump("recreated key:");
-                    UniqueKeyUtils::DumpDescs(rendererProvider,
+                    UniqueKeyUtils::DumpDescs(rendererProvider, dict,
                                               recreatedPipelineDesc,
                                               recreatedRenderPassDesc);
                 }
@@ -2600,10 +2607,6 @@ Result ViaRuntimeBlend::draw(const Src& src,
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 #ifdef TEST_VIA_SVG
-#include "include/svg/SkSVGCanvas.h"
-#include "modules/svg/include/SkSVGDOM.h"
-#include "src/xml/SkXMLWriter.h"
-
 Result ViaSVG::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
     auto size = src.size();
     return draw_to_canvas(fSink.get(), bitmap, stream, log, size,
@@ -2615,9 +2618,18 @@ Result ViaSVG::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkStrin
         if (!result.isOk()) {
             return result;
         }
+
+        auto shapingFactory = SkShapers::BestAvailable();
+        auto fontMgr = ToolUtils::TestFontMgr();
+        // When rendering our SVGs we want to be sure we are using shaping.
+        // If we fail to make a shaper, then it can mean something like skunicode is misconfigured.
+        SkASSERT(shapingFactory->makeShaper(fontMgr));
+
         std::unique_ptr<SkStream> rstream(wstream.detachAsStream());
-        sk_sp<SkSVGDOM> dom =
-                SkSVGDOM::Builder().setFontManager(ToolUtils::TestFontMgr()).make(*rstream);
+        sk_sp<SkSVGDOM> dom = SkSVGDOM::Builder()
+                                      .setFontManager(std::move(fontMgr))
+                                      .setTextShapingFactory(std::move(shapingFactory))
+                                      .make(*rstream);
         if (dom) {
             dom->setContainerSize(SkSize::Make(size));
             dom->render(canvas);

@@ -28,7 +28,7 @@ extern "C" int EIGEN_CAT(i, EIGEN_BLAS_FUNC_NAME(amax))(int *n, Scalar *px, int 
   if (*n <= 0) return 0;
   Scalar *x = reinterpret_cast<Scalar *>(px);
 
-  DenseIndex ret;
+  Eigen::DenseIndex ret;
   if (*incx == 1)
     make_vector(x, *n).cwiseAbs().maxCoeff(&ret);
   else
@@ -40,7 +40,7 @@ extern "C" int EIGEN_CAT(i, EIGEN_BLAS_FUNC_NAME(amin))(int *n, Scalar *px, int 
   if (*n <= 0) return 0;
   Scalar *x = reinterpret_cast<Scalar *>(px);
 
-  DenseIndex ret;
+  Eigen::DenseIndex ret;
   if (*incx == 1)
     make_vector(x, *n).cwiseAbs().minCoeff(&ret);
   else
@@ -97,15 +97,15 @@ EIGEN_BLAS_FUNC(rot)(int *n, Scalar *px, int *incx, Scalar *py, int *incy, Scala
   StridedVectorType vx(make_vector(x, *n, std::abs(*incx)));
   StridedVectorType vy(make_vector(y, *n, std::abs(*incy)));
 
-  Reverse<StridedVectorType> rvx(vx);
-  Reverse<StridedVectorType> rvy(vy);
+  Eigen::Reverse<StridedVectorType> rvx(vx);
+  Eigen::Reverse<StridedVectorType> rvy(vy);
 
   if (*incx < 0 && *incy > 0)
-    internal::apply_rotation_in_the_plane(rvx, vy, JacobiRotation<Scalar>(c, s));
+    Eigen::internal::apply_rotation_in_the_plane(rvx, vy, Eigen::JacobiRotation<Scalar>(c, s));
   else if (*incx > 0 && *incy < 0)
-    internal::apply_rotation_in_the_plane(vx, rvy, JacobiRotation<Scalar>(c, s));
+    Eigen::internal::apply_rotation_in_the_plane(vx, rvy, Eigen::JacobiRotation<Scalar>(c, s));
   else
-    internal::apply_rotation_in_the_plane(vx, vy, JacobiRotation<Scalar>(c, s));
+    Eigen::internal::apply_rotation_in_the_plane(vx, vy, Eigen::JacobiRotation<Scalar>(c, s));
 }
 
 /*

@@ -61,10 +61,8 @@ NSString* const kNoteCreateNewFolderCellIdentifier =
 NSString* const kNoteEmptyStateExplanatoryLabelIdentifier =
     @"kNoteEmptyStateExplanatoryLabelIdentifier";
 
-#if BUILDFLAG(IS_IOS)
 NSString* const kToolsMenuNotesId = @"kToolsMenuNotesId";
 NSString* const kToolsMenuAddToNotes = @"kToolsMenuAddToNotes";
-#endif
 
 #pragma mark - ICONS
 // Image name for the note icon.
@@ -94,3 +92,7 @@ CGFloat vNoteFolderSelectionHeaderViewHeight = 60.0;
 #pragma mark - OTHERS
 // Maximum number of entries to fetch when searching on notes folder page.
 const int vMaxNoteFolderSearchResults = 50;
+
+#pragma mark - MARKDOWN
+NSString* vMarkdownLibraryBundleName = @"mobile-markdown-bundle";
+NSString* vMarkdownHTMLFilename = @"markdown";

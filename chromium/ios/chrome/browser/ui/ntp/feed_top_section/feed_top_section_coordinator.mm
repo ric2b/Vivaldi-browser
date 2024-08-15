@@ -4,15 +4,18 @@
 
 #import "ios/chrome/browser/ui/ntp/feed_top_section/feed_top_section_coordinator.h"
 
-#import "base/feature_list.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
+#import "components/search_engines/prepopulated_engines.h"
+#import "components/search_engines/template_url.h"
+#import "components/search_engines/template_url_prepopulate_data.h"
+#import "components/search_engines/template_url_service.h"
 #import "components/signin/public/base/signin_metrics.h"
-#import "components/sync/base/features.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_client_id.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_service.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_util.h"
+#import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/alert/alert_coordinator.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
@@ -109,17 +112,22 @@ using base::UserMetricsAction;
                       signinPresenter:self
              accountSettingsPresenter:nil];
 
-    if (base::FeatureList::IsEnabled(
-            syncer::kReplaceSyncPromosWithSignInPromos)) {
-      self.signinPromoMediator.signinPromoAction =
-          SigninPromoAction::kSigninWithNoDefaultIdentity;
-    }
+    self.signinPromoMediator.signinPromoAction =
+        SigninPromoAction::kSigninWithNoDefaultIdentity;
     self.signinPromoMediator.consumer = self.feedTopSectionMediator;
     self.feedTopSectionMediator.signinPromoMediator = self.signinPromoMediator;
     self.feedTopSectionViewController.signinPromoDelegate =
         self.signinPromoMediator;
   }
 
+  const TemplateURL* defaultSearchURLTemplate =
+      ios::TemplateURLServiceFactory::GetForBrowserState(browserState)
+          ->GetDefaultSearchProvider();
+
+  bool isDefaultSearchEngine =
+      defaultSearchURLTemplate && defaultSearchURLTemplate->prepopulate_id() ==
+                                      TemplateURLPrepopulateData::google.id;
+  self.feedTopSectionMediator.isDefaultSearchEngine = isDefaultSearchEngine;
   self.feedTopSectionMediator.presenter = self;
   self.feedTopSectionMediator.NTPDelegate = self.NTPDelegate;
   self.feedTopSectionViewController.delegate = self.feedTopSectionMediator;
@@ -211,10 +219,12 @@ using base::UserMetricsAction;
           "ContentNotifications.Promo.TopOfFeed.Permission.Declined"));
       [self logHistogramForAction:ContentNotificationTopOfFeedPromoAction::
                                       kDecline];
+      [self.feedTopSectionMediator updateFeedTopSectionWhenClosed];
       break;
     case NotificationsOptInAlertResult::kCanceled:
       [self logHistogramForEvent:ContentNotificationTopOfFeedPromoEvent::
                                      kCanceled];
+      [self.feedTopSectionMediator updateFeedTopSectionWhenClosed];
       break;
     case NotificationsOptInAlertResult::kError:
       [self
@@ -223,12 +233,14 @@ using base::UserMetricsAction;
     case NotificationsOptInAlertResult::kOpenedSettings:
       [self logHistogramForEvent:ContentNotificationTopOfFeedPromoEvent::
                                      kNotifActive];
+      [self.feedTopSectionMediator updateFeedTopSectionWhenClosed];
       break;
     case NotificationsOptInAlertResult::kPermissionGranted:
       RecordAction(UserMetricsAction(
           "ContentNotifications.Promo.TopOfFeed.Permission.Accepted"));
       [self logHistogramForAction:ContentNotificationTopOfFeedPromoAction::
                                       kAccept];
+      [self.feedTopSectionMediator updateFeedTopSectionWhenClosed];
       break;
   }
 }

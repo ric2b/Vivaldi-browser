@@ -4,6 +4,7 @@
 
 #include "chrome/browser/android/cookies/cookies_fetcher_restore_util.h"
 
+#include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "content/public/browser/storage_partition.h"
@@ -12,6 +13,16 @@
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 
 namespace cookie_fetcher_restore_util {
+
+namespace {
+
+// Let's monitor just the success/failure rate of restoring cookies so we have
+// an easy metric to check if there are future issues.
+void TriedToRestoreCookieMetric(bool success) {
+  base::UmaHistogramBoolean("Cookie.AndroidOTRRestore", success);
+}
+
+}  // namespace
 
 // Returns the cookie service at the client end of the mojo pipe.
 network::mojom::CookieManager* GetCookieServiceClient() {
@@ -39,8 +50,10 @@ void CookiesFetcherRestoreCookiesImpl(
     jint priority,
     const jni_zero::JavaParamRef<jstring>& partition_key,
     jint source_scheme,
-    jint source_port) {
+    jint source_port,
+    jint source_type) {
   if (!ProfileManager::GetPrimaryUserProfile()->HasPrimaryOTRProfile()) {
+    TriedToRestoreCookieMetric(/*success=*/false);
     return;  // Don't create it. There is nothing to do.
   }
 
@@ -53,8 +66,9 @@ void CookiesFetcherRestoreCookiesImpl(
   // implemented update this method utilize the ancestor bit.
   base::expected<std::optional<net::CookiePartitionKey>, std::string>
       serialized_cookie_partition_key = net::CookiePartitionKey::FromStorage(
-          top_level_site);
+          top_level_site, /*has_cross_site_ancestor=*/true);
   if (!serialized_cookie_partition_key.has_value()) {
+    TriedToRestoreCookieMetric(/*success=*/false);
     return;
   }
 
@@ -73,30 +87,26 @@ void CookiesFetcherRestoreCookiesImpl(
           secure, httponly, static_cast<net::CookieSameSite>(same_site),
           static_cast<net::CookiePriority>(priority),
           serialized_cookie_partition_key.value(),
-          static_cast<net::CookieSourceScheme>(source_scheme), source_port);
+          static_cast<net::CookieSourceScheme>(source_scheme), source_port,
+          static_cast<net::CookieSourceType>(source_type));
   // FromStorage() uses a less strict version of IsCanonical(), we need to check
   // the stricter version as well here. This is safe because this function is
   // only used for incognito cookies which don't survive Chrome updates and
   // therefore should never be the "older" less strict variety.
   if (!cookie || !cookie->IsCanonical()) {
+    TriedToRestoreCookieMetric(/*success=*/false);
     return;
   }
 
-  // Assume HTTPS - since the cookies are being restored from another store,
-  // they have already gone through the strict secure check.
-  //
-  // Similarly, permit samesite cookies to be imported.
-  net::CookieOptions options;
-  options.set_include_httponly();
-  options.set_same_site_cookie_context(
-      net::CookieOptions::SameSiteCookieContext::MakeInclusive());
-  options.set_do_not_update_access_time();
+  // Fetch cookies all-inclusive as we are doing so for the OTR profile.
   GetCookieServiceClient()->SetCanonicalCookie(
       *cookie,
       net::cookie_util::CookieDomainAndPathToURL(
           domain_str, path_str,
           static_cast<net::CookieSourceScheme>(source_scheme)),
-      options, network::mojom::CookieManager::SetCanonicalCookieCallback());
+      net::CookieOptions::MakeAllInclusive(),
+      network::mojom::CookieManager::SetCanonicalCookieCallback());
+  TriedToRestoreCookieMetric(/*success=*/true);
 }
 
 }  // namespace cookie_fetcher_restore_util

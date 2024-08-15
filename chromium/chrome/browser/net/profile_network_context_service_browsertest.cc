@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/check_op.h"
@@ -20,7 +21,6 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
@@ -101,7 +101,7 @@ class ProfileNetworkContextServiceBrowsertest : public InProcessBrowserTest {
 
   ~ProfileNetworkContextServiceBrowsertest() override = default;
 
-  // TODO(crbug.com/1491942): This fails with the field trial testing config.
+  // TODO(crbug.com/40285326): This fails with the field trial testing config.
   void SetUpCommandLine(base::CommandLine* command_line) override {
     InProcessBrowserTest::SetUpCommandLine(command_line);
     command_line->AppendSwitch("disable-field-trial-config");
@@ -250,8 +250,8 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest, BrotliEnabled) {
 }
 
 void CheckCacheResetStatus(base::HistogramTester* histograms, bool reset) {
-  // TODO(crbug/1041810): The failure case, here, is to time out.  Since Chrome
-  // doesn't synchronize cache loading, there's no guarantee that this is
+  // TODO(crbug.com/40114587): The failure case, here, is to time out.  Since
+  // Chrome doesn't synchronize cache loading, there's no guarantee that this is
   // complete and it's merely available at earliest convenience.  If shutdown
   // occurs prior to the cache being loaded, then nothing is reported.  This
   // should probably be fixed to avoid the use of the sleep function, but that
@@ -772,8 +772,8 @@ class ProfileNetworkContextTrustTokensBrowsertest
   }
 
   void ProvideRequestHandlerKeyCommitmentsToNetworkService(
-      base::StringPiece host) {
-    base::flat_map<url::Origin, base::StringPiece> origins_and_commitments;
+      std::string_view host) {
+    base::flat_map<url::Origin, std::string_view> origins_and_commitments;
     std::string key_commitments = request_handler_.GetKeyCommitmentRecord();
 
     GURL::Replacements replacements;

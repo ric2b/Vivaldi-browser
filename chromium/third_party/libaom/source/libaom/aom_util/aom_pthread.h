@@ -28,6 +28,7 @@ extern "C" {
 #define NOMINMAX
 #undef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#include <errno.h>    // NOLINT
 #include <process.h>  // NOLINT
 #include <stddef.h>   // NOLINT
 #include <windows.h>  // NOLINT
@@ -69,6 +70,20 @@ static INLINE int pthread_attr_init(pthread_attr_t *attr) {
 static INLINE int pthread_attr_destroy(pthread_attr_t *attr) {
   (void)attr;
   return 0;
+}
+
+static INLINE int pthread_attr_getstacksize(const pthread_attr_t *attr,
+                                            size_t *stacksize) {
+  (void)attr;
+  (void)stacksize;
+  return EINVAL;
+}
+
+static INLINE int pthread_attr_setstacksize(pthread_attr_t *attr,
+                                            size_t stacksize) {
+  (void)attr;
+  (void)stacksize;
+  return EINVAL;
 }
 
 static INLINE int pthread_create(pthread_t *const thread,

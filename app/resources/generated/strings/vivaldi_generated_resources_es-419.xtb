@@ -92,7 +92,6 @@
 <translation id="2678100101831051676">No se puede transmitir.</translation>
 <translation id="2721037002783622288">Bu&amp;scar imagen en <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2785873697295365461">Descriptores de archivo</translation>
-<translation id="2809586584051668049">y <ph name="NUMBER_ADDITIONAL_DISABLED" /> más</translation>
 <translation id="2850541429955027218">Agregar tema</translation>
 <translation id="2861941300086904918">Administrador de seguridad NATIVE_CLIENT</translation>
 <translation id="2881076733170862447">Cuando haces clic en la extensión</translation>
@@ -120,7 +119,6 @@
 <translation id="3275778913554317645">Abrir como ventana</translation>
 <translation id="3280237271814976245">Gu&amp;ardar como...</translation>
 <translation id="3285322247471302225">Nueva pes&amp;taña</translation>
-<translation id="3288047731229977326">Las extensiones que se ejecutan en modo de programador pueden dañar tu computadora. Si no eres programador, debes inhabilitar las extensiones que se ejecutan en modo de programador para mantenerte protegido.</translation>
 <translation id="329838636886466101">Reparar extensión</translation>
 <translation id="33022249435934718">Handles GDI</translation>
 <translation id="3303818374450886607">Copias</translation>
@@ -166,7 +164,6 @@
 <translation id="4087089424473531098">Se creó la extensión:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Inhabilitar extensiones en modo de programador</translation>
 <translation id="4100839878934973028">Otro programa en tu computadora agregó una aplicación que puede cambiar el funcionamiento de Vivaldi.</translation>
 <translation id="4109898769411476438">Cerrar el navegador antes de importar</translation>
 <translation id="4131410914670010031">Blanco y negro</translation>
@@ -220,7 +217,6 @@
 <translation id="5269977353971873915">Error de impresión</translation>
 <translation id="5284445933715251131">Continuar con la descarga</translation>
 <translation id="52912272896845572">El archivo de clave privada no es válido.</translation>
-<translation id="5301954838959518834">Entendido</translation>
 <translation id="5302932258331363306">Mostrar sustituciones</translation>
 <translation id="5317780077021120954">Guardar</translation>
 <translation id="5334142896108694079">Caché de la secuencia de comandos</translation>

@@ -46,6 +46,7 @@ class ProfileMenuView : public ProfileMenuViewBase {
 
  private:
   friend class ProfileMenuViewExtensionsTest;
+  friend class ProfileMenuViewSigninPendingTest;
   friend class ProfileMenuViewSignoutTest;
   friend class ProfileMenuViewSyncErrorButtonTest;
   friend class ProfileMenuInteractiveUiTest;
@@ -96,7 +97,6 @@ class ProfileMenuView : public ProfileMenuViewBase {
 
   std::u16string menu_title_;
   std::u16string menu_subtitle_;
-  std::u16string management_label_;
 
 #if !BUILDFLAG(IS_CHROMEOS)
   // A profile switcher object needed if the user triggers opening other

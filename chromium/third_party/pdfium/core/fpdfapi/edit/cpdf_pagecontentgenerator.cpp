@@ -65,9 +65,9 @@ bool WriteColorToStream(fxcrt::ostringstream& buf, const CPDF_Color* color) {
   }
 
   // TODO(thestig): Remove float to int to float conversion.
-  buf << FXSYS_GetRValue(colors.value()) / 255.0f << " "
-      << FXSYS_GetGValue(colors.value()) / 255.0f << " "
-      << FXSYS_GetBValue(colors.value()) / 255.0f;
+  WriteFloat(buf, FXSYS_GetRValue(colors.value()) / 255.0f) << " ";
+  WriteFloat(buf, FXSYS_GetGValue(colors.value()) / 255.0f) << " ";
+  WriteFloat(buf, FXSYS_GetBValue(colors.value()) / 255.0f);
   return true;
 }
 
@@ -138,8 +138,7 @@ CPDF_PageContentGenerator::CPDF_PageContentGenerator(
     CPDF_PageObjectHolder* pObjHolder)
     : m_pObjHolder(pObjHolder), m_pDocument(pObjHolder->GetDocument()) {
   for (const auto& pObj : *pObjHolder) {
-    if (pObj)
-      m_pageObjects.emplace_back(pObj.get());
+    m_pageObjects.emplace_back(pObj.get());
   }
 }
 

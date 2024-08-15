@@ -6,7 +6,6 @@ import * as Root from '../../../core/root/root.js';
 import * as Protocol from '../../../generated/protocol.js';
 import {getHeaderCells, getValuesOfAllBodyRows} from '../../../testing/DataGridHelpers.js';
 import {
-  assertShadowRoot,
   getElementWithinComponent,
   renderElementIntoDOM,
 } from '../../../testing/DOMHelpers.js';
@@ -16,8 +15,6 @@ import * as Coordinator from '../../../ui/components/render_coordinator/render_c
 
 import * as ApplicationComponents from './components.js';
 
-const {assert} = chai;
-
 const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
 const renderReportsGrid = async (data?: ApplicationComponents.ReportsGrid.ReportsGridData|null) => {
@@ -26,7 +23,7 @@ const renderReportsGrid = async (data?: ApplicationComponents.ReportsGrid.Report
     component.data = data;
   }
   renderElementIntoDOM(component);
-  assertShadowRoot(component.shadowRoot);
+  assert.isNotNull(component.shadowRoot);
   await coordinator.done();
   if (!data) {
     return component;
@@ -34,9 +31,9 @@ const renderReportsGrid = async (data?: ApplicationComponents.ReportsGrid.Report
 
   const controller = getElementWithinComponent(
       component, 'devtools-data-grid-controller', DataGrid.DataGridController.DataGridController);
-  assertShadowRoot(controller.shadowRoot);
+  assert.isNotNull(controller.shadowRoot);
   const datagrid = getElementWithinComponent(controller, 'devtools-data-grid', DataGrid.DataGrid.DataGrid);
-  assertShadowRoot(datagrid.shadowRoot);
+  assert.isNotNull(datagrid.shadowRoot);
   return datagrid;
 };
 
@@ -78,7 +75,7 @@ describeWithEnvironment('ReportsGrid', () => {
     };
 
     const dataGrid = await renderReportsGrid(data);
-    assertShadowRoot(dataGrid.shadowRoot);
+    assert.isNotNull(dataGrid.shadowRoot);
 
     const headerCells = getHeaderCells(dataGrid.shadowRoot);
     const values = Array.from(headerCells, getHeaderText);
@@ -117,7 +114,7 @@ describeWithEnvironment('ReportsGrid', () => {
     };
 
     const dataGrid = await renderReportsGrid(data);
-    assertShadowRoot(dataGrid.shadowRoot);
+    assert.isNotNull(dataGrid.shadowRoot);
 
     const headerCells = getHeaderCells(dataGrid.shadowRoot);
     const values = Array.from(headerCells, getHeaderText);

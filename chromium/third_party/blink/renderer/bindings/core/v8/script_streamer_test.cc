@@ -9,11 +9,13 @@
 
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
+#include "base/synchronization/waitable_event.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/threading/thread_restrictions.h"
 #include "mojo/public/cpp/base/big_buffer.h"
 #include "mojo/public/cpp/system/data_pipe_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -151,7 +153,7 @@ class NoopLoaderFactory final : public ResourceFetcher::LoaderFactory {
 
 void AppendDataToDataPipe(const char* data,
                           mojo::ScopedDataPipeProducerHandle& producer_handle) {
-  uint32_t data_len = base::checked_cast<uint32_t>(strlen(data));
+  size_t data_len = strlen(data);
   MojoResult result = producer_handle->WriteData(
       data, &data_len, MOJO_WRITE_DATA_FLAG_ALL_OR_NONE);
   EXPECT_EQ(result, MOJO_RESULT_OK);
@@ -228,16 +230,6 @@ class ScriptStreamingTest : public testing::Test {
     AppendDataToDataPipe(data, producer_handle_);
   }
 
-  void AppendPadding() {
-    for (int i = 0; i < 10; ++i) {
-      AppendDataToDataPipe(
-          " /* this is padding to make the script long enough, so "
-          "that V8's buffer gets filled and it starts processing "
-          "the data */ ",
-          producer_handle_);
-    }
-  }
-
   void Finish() {
     resource_->Loader()->DidFinishLoading(base::TimeTicks(), 0, 0, 0);
     producer_handle_.reset();
@@ -268,9 +260,7 @@ TEST_F(ScriptStreamingTest, CompilingStreamedScript) {
   Init(scope.GetIsolate());
 
   AppendData("function foo() {");
-  AppendPadding();
   AppendData("return 5; }");
-  AppendPadding();
   AppendData("foo();");
   EXPECT_FALSE(resource_client_->Finished());
   Finish();
@@ -305,10 +295,6 @@ TEST_F(ScriptStreamingTest, CompilingStreamedScriptWithParseError) {
 
   AppendData("function foo() {");
   AppendData("this is the part which will be a parse error");
-  // V8 won't realize the parse error until it actually starts parsing the
-  // script, and this happens only when its buffer is filled.
-  AppendPadding();
-
   EXPECT_FALSE(resource_client_->Finished());
   Finish();
 
@@ -378,7 +364,6 @@ TEST_F(ScriptStreamingTest, DataAfterCancelling) {
 
   // Append data to the streamer's data pipe.
   AppendData("function foo() {");
-  AppendPadding();
 
   // The V8 side will complete too. This should not crash. We don't receive
   // any results from the streaming and the resource client should finish with
@@ -407,7 +392,6 @@ TEST_F(ScriptStreamingTest, SuppressingStreaming) {
                                    reinterpret_cast<const uint8_t*>("X"), 1);
 
   AppendData("function foo() {");
-  AppendPadding();
   Finish();
   RunUntilResourceLoaded();
   EXPECT_TRUE(resource_client_->Finished());
@@ -525,10 +509,8 @@ TEST_F(ScriptStreamingTest, ScriptsWithSmallFirstChunk) {
   EXPECT_TRUE(resource_->HasStreamer());
   EXPECT_FALSE(resource_->HasRunningStreamer());
 
-  // Now add more padding so that streaming does start.
-  AppendPadding();
-  AppendPadding();
-  AppendPadding();
+  // Now add more data so that streaming does start.
+  AppendData("/*------*/");
   EXPECT_TRUE(resource_->HasRunningStreamer());
 
   Finish();
@@ -642,7 +624,6 @@ TEST_F(ScriptStreamingTest, ResourceSetRevalidatingRequest) {
 
   // Kick the streaming off.
   AppendData("function foo() {");
-  AppendPadding();
   AppendData("}");
   Finish();
   RunUntilResourceLoaded();
@@ -787,8 +768,8 @@ class DummyLoaderFactory final : public ResourceFetcher::LoaderFactory {
   CodeCacheHost* GetCodeCacheHost() override { return nullptr; }
 
   bool load_started() const { return load_started_; }
-  scoped_refptr<BackgroundResponseProcessor> GetBackgroundResponseProcessor() {
-    return background_response_processor_;
+  scoped_refptr<BackgroundResponseProcessor> TakeBackgroundResponseProcessor() {
+    return std::move(background_response_processor_);
   }
 
  private:
@@ -889,7 +870,7 @@ class DummyBackgroundResponseProcessorClient
     }
     ASSERT_EQ(expected_cached_metadata, cached_metadata_);
     if (expected_cached_metadata) {
-      EXPECT_THAT(cached_metadata_->byte_span(),
+      EXPECT_THAT(*cached_metadata_,
                   testing::ElementsAreArray(*expected_cached_metadata));
     }
   }
@@ -1005,7 +986,7 @@ class BackgroundResourceScriptStreamerTest : public testing::Test {
 
     CHECK(dummy_loader_factory->load_started());
     background_response_processor_ =
-        dummy_loader_factory->GetBackgroundResponseProcessor();
+        dummy_loader_factory->TakeBackgroundResponseProcessor();
 
     background_resource_fetch_task_runner_ =
         base::ThreadPool::CreateSequencedTaskRunner(
@@ -1113,7 +1094,7 @@ TEST_F(BackgroundResourceScriptStreamerTest, HasCodeCache) {
   V8TestingScope scope;
   Init(scope.GetIsolate());
   mojo_base::BigBuffer code_cache_data = CreateDummyCodeCacheData();
-  std::vector<const uint8_t> code_cache_data_copy(
+  const std::vector<uint8_t> code_cache_data_copy(
       code_cache_data.data(), code_cache_data.data() + code_cache_data.size());
   RunInBackgroundThred(base::BindLambdaForTesting([&]() {
     network::mojom::URLResponseHeadPtr head = CreateURLResponseHead();
@@ -1129,7 +1110,7 @@ TEST_F(BackgroundResourceScriptStreamerTest, HasCodeCache) {
     EXPECT_TRUE(head);
     EXPECT_TRUE(consumer_handle_);
     ASSERT_TRUE(cached_metadata);
-    EXPECT_THAT(cached_metadata->byte_span(),
+    EXPECT_THAT(*cached_metadata,
                 testing::ElementsAreArray(code_cache_data_copy));
   }));
   Finish();
@@ -1143,7 +1124,7 @@ TEST_F(BackgroundResourceScriptStreamerTest, HasTimeStampData) {
   V8TestingScope scope;
   Init(scope.GetIsolate());
   mojo_base::BigBuffer time_stamp_data = CreateDummyTimeStampData();
-  std::vector<const uint8_t> time_stamp_data_copy(
+  const std::vector<uint8_t> time_stamp_data_copy(
       time_stamp_data.data(), time_stamp_data.data() + time_stamp_data.size());
   RunInBackgroundThred(base::BindLambdaForTesting([&]() {
     network::mojom::URLResponseHeadPtr head = CreateURLResponseHead();
@@ -1643,6 +1624,47 @@ TEST_F(BackgroundResourceScriptStreamerTest,
                    compile_options, no_cache_reason)
                    .ToLocal(&script));
   EXPECT_TRUE(try_catch.HasCaught());
+}
+
+// Regression test for https://crbug.com/337998760.
+TEST_F(BackgroundResourceScriptStreamerTest, DataPipeReadableAfterGC) {
+  V8TestingScope scope;
+  Init(scope.GetIsolate());
+  RunInBackgroundThred(base::BindLambdaForTesting([&]() {
+    network::mojom::URLResponseHeadPtr head = CreateURLResponseHead();
+    std::optional<mojo_base::BigBuffer> cached_metadata;
+    EXPECT_TRUE(background_response_processor_->MaybeStartProcessingResponse(
+        head, consumer_handle_, cached_metadata,
+        background_resource_fetch_task_runner_,
+        &background_response_processor_client_));
+    EXPECT_FALSE(head);
+    EXPECT_FALSE(consumer_handle_);
+    EXPECT_FALSE(cached_metadata);
+  }));
+
+  // Start blocking the background thread.
+  base::WaitableEvent waitable_event;
+  background_resource_fetch_task_runner_->PostTask(
+      FROM_HERE, base::BindLambdaForTesting([&]() {
+        base::ScopedAllowBaseSyncPrimitivesForTesting allow_wait;
+        waitable_event.Wait();
+      }));
+
+  // Resetting `producer_handle_` will triggers OnDataPipeReadable() on the
+  // background thread. But the background thread is still blocked by the
+  // `waitable_event`.
+  producer_handle_.reset();
+
+  Cancel();
+  background_response_processor_.reset();
+  resource_ = nullptr;
+  resource_client_ = nullptr;
+  ThreadState::Current()->CollectAllGarbageForTesting();
+
+  // Unblock the background thread to call OnDataPipeReadable().
+  waitable_event.Signal();
+
+  task_environment_.RunUntilIdle();
 }
 
 }  // namespace blink

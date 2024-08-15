@@ -15,15 +15,13 @@ import org.chromium.base.cached_flags.IntCachedFieldTrialParameter;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.logo.LogoUtils.LogoSizeForLogoPolish;
-import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
-import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
 
 /**
- * Flag configuration for Start Surface. Source of truth for whether it should be enabled and
- * which variation should be used.
+ * Flag configuration for Start Surface. Source of truth for whether it should be enabled and which
+ * variation should be used.
  */
 public class StartSurfaceConfiguration {
     private static final String TAG = "StartSurfaceConfig";
@@ -97,20 +95,6 @@ public class StartSurfaceConfiguration {
                     START_SURFACE_RETURN_TIME_USE_MODEL_PARAM,
                     false);
 
-    public static final BooleanCachedFieldTrialParameter SURFACE_POLISH_OMNIBOX_COLOR =
-            ChromeFeatureList.newBooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.SURFACE_POLISH, "polish_omnibox_color", true);
-
-    private static final String SURFACE_POLISH_MOVE_DOWN_LOGO_PARAM = "move_down_logo";
-    public static final BooleanCachedFieldTrialParameter SURFACE_POLISH_MOVE_DOWN_LOGO =
-            ChromeFeatureList.newBooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.SURFACE_POLISH, SURFACE_POLISH_MOVE_DOWN_LOGO_PARAM, true);
-
-    private static final String SURFACE_POLISH_LESS_BRAND_SPACE_PARAM = "less_brand_space";
-    public static final BooleanCachedFieldTrialParameter SURFACE_POLISH_LESS_BRAND_SPACE =
-            ChromeFeatureList.newBooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.SURFACE_POLISH, SURFACE_POLISH_LESS_BRAND_SPACE_PARAM, true);
-
     private static final String SURFACE_POLISH_SCROLLABLE_MVT_PARAM = "scrollable_mvt";
     public static final BooleanCachedFieldTrialParameter SURFACE_POLISH_SCROLLABLE_MVT =
             ChromeFeatureList.newBooleanCachedFieldTrialParameter(
@@ -127,8 +111,6 @@ public class StartSurfaceConfiguration {
                     ChromeFeatureList.LOGO_POLISH, LOGO_POLISH_MEDIUM_SIZE_PARAM, false);
 
     private static final String STARTUP_UMA_PREFIX = "Startup.Android.";
-    private static final String INSTANT_START_SUBFIX = ".Instant";
-    private static final String REGULAR_START_SUBFIX = ".NoInstant";
 
     /**
      * @return Whether the Start Surface feature flag is enabled.
@@ -145,20 +127,26 @@ public class StartSurfaceConfiguration {
     public static boolean isNtpAsHomeSurfaceEnabled(boolean isTablet) {
         // ReturnToChromeUtil#isStartSurfaceEnabled() will return false when
         // ChromeFeatureList.SHOW_NTP_AT_STARTUP_ANDROID is enabled.
-        return (isTablet && ChromeFeatureList.sStartSurfaceOnTablet.isEnabled())
-                || !isTablet && ChromeFeatureList.sShowNtpAtStartupAndroid.isEnabled();
+        return isTablet || !isTablet && ChromeFeatureList.sShowNtpAtStartupAndroid.isEnabled();
     }
 
     /** Returns whether a magic stack is enabled on Start surface. */
     public static boolean useMagicStack() {
-        return ChromeFeatureList.sSurfacePolish.isEnabled()
-                && ChromeFeatureList.sMagicStackAndroid.isEnabled();
+        return ChromeFeatureList.sMagicStackAndroid.isEnabled();
     }
 
-    /** Returns whether logo polish is enabled in the given context. */
+    /** Returns whether logo polish flag is enabled in the given context. */
     public static boolean isLogoPolishEnabled() {
-        return ChromeFeatureList.sSurfacePolish.isEnabled()
-                && ChromeFeatureList.sLogoPolish.isEnabled();
+        return ChromeFeatureList.sLogoPolish.isEnabled();
+    }
+
+    /**
+     * Returns whether logo is Google doodle and logo polish is enabled in the given context.
+     *
+     * @param isLogoDoodle True if the current logo is Google doodle.
+     */
+    public static boolean isLogoPolishEnabledWithGoogleDoodle(boolean isLogoDoodle) {
+        return isLogoDoodle && isLogoPolishEnabled();
     }
 
     /**
@@ -181,27 +169,21 @@ public class StartSurfaceConfiguration {
      * Records histograms of showing the StartSurface. Nothing will be recorded if timeDurationMs
      * isn't valid.
      */
-    public static void recordHistogram(String name, long timeDurationMs, boolean isInstantStart) {
+    public static void recordHistogram(String name, long timeDurationMs) {
         if (timeDurationMs < 0) return;
-        Log.i(TAG, "Recorded %s = %d ms", getHistogramName(name, isInstantStart), timeDurationMs);
-        RecordHistogram.recordTimesHistogram(
-                getHistogramName(name, isInstantStart), timeDurationMs);
+
+        String histogramName = getHistogramName(name);
+        Log.i(TAG, "Recorded %s = %d ms", histogramName, timeDurationMs);
+        RecordHistogram.recordTimesHistogram(histogramName, timeDurationMs);
     }
 
     @VisibleForTesting
-    public static String getHistogramName(String name, boolean isInstantStart) {
-        return STARTUP_UMA_PREFIX
-                + name
-                + (isInstantStart ? INSTANT_START_SUBFIX : REGULAR_START_SUBFIX);
+    public static String getHistogramName(String name) {
+        return STARTUP_UMA_PREFIX + name;
     }
 
     @CalledByNative
     private static boolean isBehaviouralTargetingEnabled() {
         return false;
-    }
-
-    static void setFeedVisibilityForTesting(boolean isVisible) {
-        ChromeSharedPreferences.getInstance()
-                .writeBoolean(ChromePreferenceKeys.FEED_ARTICLES_LIST_VISIBLE, isVisible);
     }
 }

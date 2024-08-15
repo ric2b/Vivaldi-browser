@@ -8,6 +8,7 @@
 #include <limits>
 #include <map>
 #include <set>
+#include <string_view>
 #include <utility>
 
 #include "base/files/file_util.h"
@@ -54,6 +55,8 @@ class LoopbackServerEntity;
 
 namespace {
 
+static const char kHistogramSuffix[] = "LoopBackServer";
+
 static const int kCurrentLoopbackServerProtoVersion = 1;
 static const int kKeystoreKeyLength = 16;
 
@@ -82,7 +85,7 @@ class ProgressMarkerToken {
 
   static ProgressMarkerToken FromString(const std::string& s) {
     DCHECK(!s.empty());
-    const vector<base::StringPiece> splits = base::SplitStringPiece(
+    const vector<std::string_view> splits = base::SplitStringPiece(
         s, "/", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
     if (splits.size() != 2) {
       ProgressMarkerToken token;
@@ -240,7 +243,8 @@ LoopbackServer::LoopbackServer(const base::FilePath& persistent_file)
       writer_(
           persistent_file_,
           base::ThreadPool::CreateSequencedTaskRunner(
-              {base::MayBlock(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN})) {
+              {base::MayBlock(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN}),
+          kHistogramSuffix) {
   DCHECK(!persistent_file_.empty());
   Init();
 }
@@ -262,7 +266,7 @@ void LoopbackServer::Init() {
 
 std::vector<uint8_t> LoopbackServer::GenerateNewKeystoreKey() const {
   std::vector<uint8_t> generated_key(kKeystoreKeyLength);
-  base::RandBytes(generated_key.data(), generated_key.size());
+  base::RandBytes(generated_key);
   return generated_key;
 }
 
@@ -365,7 +369,7 @@ net::HttpStatusCode LoopbackServer::HandleCommand(
         response->add_migrated_data_type_id(
             GetSpecificsFieldNumberFromModelType(type));
       }
-    } else if (!throttled_datatypes_in_request.Empty()) {
+    } else if (!throttled_datatypes_in_request.empty()) {
       DLOG(WARNING) << "Throttled datatypes: "
                     << ModelTypeSetToDebugString(
                            throttled_datatypes_in_request);
@@ -730,13 +734,17 @@ bool LoopbackServer::HandleCommitRequest(
             specifics.redirect_entries(specifics.redirect_entries_size() - 1)
                 .url());
       }
+      if (client_entity.deleted() && client_entity.has_deletion_origin()) {
+        observer_for_tests_->OnCommittedDeletionOrigin(
+            iter->second->GetModelType(), client_entity.deletion_origin());
+      }
     }
   }
 
   if (observer_for_tests_)
     observer_for_tests_->OnCommit(committed_model_types);
 
-  return throttled_datatypes_in_request->Empty();
+  return throttled_datatypes_in_request->empty();
 }
 
 void LoopbackServer::ClearServerData() {

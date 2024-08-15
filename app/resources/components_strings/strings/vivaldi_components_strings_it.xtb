@@ -169,7 +169,6 @@
 <translation id="7353601530677266744">Riga di comando</translation>
 <translation id="7364115444476960850">La pagina a cui stavi provando ad accedere è stata bloccata da Vivaldi <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Percorso profilo</translation>
-<translation id="7445762425076701745">L'identità del server a cui sei connesso non può essere completamente convalidata. Sei connesso a un server utilizzando un nome valido solo all'interno della rete, che un'autorità di certificazione esterna non ha alcun modo per convalidarne la proprietà. Poiché alcune autorità di certificazione emettono comunque certificati per questi nomi, non è in alcun modo possibile garantire che tu sia collegato al sito web desiderato anziché a un sito dannoso.</translation>
 <translation id="7455133967321480974">Usa predefinita globale (Blocca)</translation>
 <translation id="7518003948725431193">Nessuna pagina web trovata per l'indirizzo web: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Questa pagina web richiede dati che hai inserito in precedenza per poter essere visualizzata correttamente. Puoi inviare di nuovo i dati, ma in questo caso ripeterai l'azione precedentemente eseguita nella pagina.</translation>

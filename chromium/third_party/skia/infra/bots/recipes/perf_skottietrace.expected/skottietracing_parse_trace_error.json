@@ -8,7 +8,7 @@
       "/path/to/tmp/json",
       "ensure-directory",
       "--mode",
-      "0777",
+      "0o777",
       "[START_DIR]/tmp"
     ],
     "infra_step": true,
@@ -522,8 +522,8 @@
     "name": "parse skottie_asset_000 trace",
     "~followup_annotations": [
       "@@@STEP_LOG_LINE@json.output@{@@@",
-      "@@@STEP_LOG_LINE@json.output@  \"frame_avg_us\": 179.71, @@@",
-      "@@@STEP_LOG_LINE@json.output@  \"frame_max_us\": 218.25, @@@",
+      "@@@STEP_LOG_LINE@json.output@  \"frame_avg_us\": 179.71,@@@",
+      "@@@STEP_LOG_LINE@json.output@  \"frame_max_us\": 218.25,@@@",
       "@@@STEP_LOG_LINE@json.output@  \"frame_min_us\": 141.17@@@",
       "@@@STEP_LOG_LINE@json.output@}@@@",
       "@@@STEP_LOG_END@json.output@@@",

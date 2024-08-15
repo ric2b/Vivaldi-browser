@@ -28,7 +28,7 @@
 
 namespace content {
 
-class ServiceWorkerContainerHost;
+class ServiceWorkerClient;
 class ServiceWorkerContextCore;
 class ServiceWorkerRegistration;
 class ServiceWorkerVersion;
@@ -38,7 +38,7 @@ class ServiceWorkerVersion;
 // live across redirects. ServiceWorkerMainResourceLoaderInterceptor creates
 // one instance of this class for each request/redirect.
 //
-// This class associates the ServiceWorkerContainerHost undergoing navigation
+// This class associates the ServiceWorkerClient undergoing navigation
 // with a controller service worker, after looking up the registration and
 // activating the service worker if needed.  Once ready, it creates
 // ServiceWorkerMainResourceLoader to perform the resource load.
@@ -62,22 +62,29 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler final {
     kNoFetchHandler = 0,
     kNotSkipped = 1,
     kSkippedForEmptyFetchHandler = 2,
-    kMainResourceSkippedDueToOriginTrial = 3,
-    kMainResourceSkippedDueToFeatureFlag = 4,
+    // kMainResourceSkippedDueToOriginTrial = 3,
+    // kMainResourceSkippedDueToFeatureFlag = 4,
     // kMainResourceSkippedBecauseMatchedWithAllowedOriginList = 5,
-    kMainResourceSkippedBecauseMatchedWithAllowedScriptList = 6,
-    kBypassFetchHandlerForAllOnlyIfServiceWorkerNotStarted_Status_Stop = 7,
-    kBypassFetchHandlerForAllOnlyIfServiceWorkerNotStarted_Status_Starting = 8,
+    // kMainResourceSkippedBecauseMatchedWithAllowedScriptList = 6,
+    // kBypassFetchHandlerForAllOnlyIfServiceWorkerNotStarted_Status_Stop = 7,
+    // kBypassFetchHandlerForAllOnlyIfServiceWorkerNotStarted_Status_Starting =
+    // 8,
 
-    kMaxValue =
-        kBypassFetchHandlerForAllOnlyIfServiceWorkerNotStarted_Status_Starting,
+    kMaxValue = kSkippedForEmptyFetchHandler,
   };
+
+  // Default duration to start fetch handler when service worker is started in
+  // `TaskRunner::PostDelayTask`.
+  static constexpr int kStartServiceWorkerForEmptyFetchHandlerDurationInMs = 50;
+
+  static void SetStartServiceWorkerForEmptyFetchHandlerDurationForTesting(
+      int duration);
 
   // If |skip_service_worker| is true, service workers are bypassed for
   // request interception.
   ServiceWorkerControlleeRequestHandler(
       base::WeakPtr<ServiceWorkerContextCore> context,
-      base::WeakPtr<ServiceWorkerContainerHost> container_host,
+      base::WeakPtr<ServiceWorkerClient> service_worker_client,
       network::mojom::RequestDestination destination,
       bool skip_service_worker,
       int frame_tree_node_id,
@@ -112,8 +119,8 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler final {
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerControlleeRequestHandlerTest,
                            ActivateWaitingVersion);
 
-  // Does all initialization of |container_host_| for a request.
-  void InitializeContainerHost(
+  // Does all initialization of |service_worker_client_| for a request.
+  void InitializeServiceWorkerClient(
       const network::ResourceRequest& tentative_request,
       const blink::StorageKey& storage_key);
 
@@ -153,15 +160,17 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler final {
 
   // Runs after ServiceWorker has started.
   // Normally ServiceWorker starts before dispatching the main resource request,
-  // but if the ServiceWorkerBypassFetchHandler feature is enabled, we bypass
-  // the main resource request and then start ServiceWorker for subresources.
-  // Also, if we decided to start the service worker for
-  // the ServiceWorkerSkipEmptyFetchHandler feature and the browser handles
-  // an empty fetch handler, this runs after the service worker starts.
+  // but if the browser handles an empty fetch handler, this runs after the
+  // service worker starts.
   void DidStartWorker(blink::ServiceWorkerStatusCode status);
 
+  int GetServiceWorkerForEmptyFetchHandlerDurationMs();
+
+  static std::optional<int>
+      start_service_worker_for_empty_fetch_handler_duration_for_testing_;
+
   const base::WeakPtr<ServiceWorkerContextCore> context_;
-  const base::WeakPtr<ServiceWorkerContainerHost> container_host_;
+  const base::WeakPtr<ServiceWorkerClient> service_worker_client_;
   const network::mojom::RequestDestination destination_;
 
   // If true, service workers are bypassed for request interception.

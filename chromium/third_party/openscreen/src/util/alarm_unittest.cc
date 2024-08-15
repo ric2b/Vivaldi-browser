@@ -23,7 +23,7 @@ class AlarmTest : public testing::Test {
 
  private:
   FakeClock clock_{Clock::now()};
-  FakeTaskRunner task_runner_{&clock_};
+  FakeTaskRunner task_runner_{clock_};
   Alarm alarm_{&FakeClock::now, task_runner_};
 };
 

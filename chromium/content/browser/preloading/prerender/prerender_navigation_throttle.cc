@@ -63,30 +63,20 @@ void AnalyzeCrossOriginRedirection(
   }
 }
 
-// This is deprecated in favor of kPrerender2EmbedderBlockedHosts. See
-// https://crbug.com/1509271.
-//
-// Prerender2 Embedders trigger based on rules decided by the browser. Prevent
-// the browser from triggering on the hosts listed.
-// Blocked hosts are expected to be passed as a comma separated string.
-// e.g. example1.test,example2.test
-const base::FeatureParam<std::string> kPrerender2EmbedderBlockedHostsDeprecated{
-    &blink::features::kPrerender2, "embedder_blocked_hosts", ""};
-
+// Returns true if a host of the given url is on the predefined blocked list as
+// they cannot support prerendering.
 bool ShouldSkipHostInBlockList(const GURL& url) {
-  // Keep this as static because the blocked origins are served via feature
-  // parameters and are never changed until browser restart.
+  // Keep the blocked list as static because the blocked hosts are served via
+  // feature parameters and are never changed until browser restarts.
+  //
+  // Blocked hosts are expected to be passed as a comma separated string.
+  // e.g. example1.test,example2.test
   const static base::NoDestructor<std::vector<std::string>>
       embedder_blocked_hosts(base::SplitString(
           features::kPrerender2EmbedderBlockedHostsParam.Get(), ",",
           base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY));
-  const static base::NoDestructor<std::vector<std::string>>
-      embedder_blocked_hosts_deprecated(base::SplitString(
-          kPrerender2EmbedderBlockedHostsDeprecated.Get(), ",",
-          base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY));
 
-  return base::Contains(*embedder_blocked_hosts, url.host()) ||
-         base::Contains(*embedder_blocked_hosts_deprecated, url.host());
+  return base::Contains(*embedder_blocked_hosts, url.host());
 }
 
 }  // namespace
@@ -199,7 +189,7 @@ PrerenderNavigationThrottle::WillStartOrRedirectRequest(bool is_redirection) {
       // cross-site to the initial prerendering URL.
       if (prerender_navigation_utils::IsCrossSite(
               navigation_url, initial_prerendering_origin)) {
-        // TODO(crbug.com/1456866): Remove this crash key when investigation is
+        // TODO(crbug.com/40918153): Remove this crash key when investigation is
         // completed.
         if (!is_redirection) {
           SCOPED_CRASH_KEY_BOOL("Bug1456866", "scheme",
@@ -228,7 +218,7 @@ PrerenderNavigationThrottle::WillStartOrRedirectRequest(bool is_redirection) {
     } else if (prerender_navigation_utils::IsCrossSite(
                    navigation_url,
                    prerender_host_->initiator_origin().value())) {
-      // TODO(crbug.com/1176054): Once cross-site prerendering is implemented,
+      // TODO(crbug.com/40168192): Once cross-site prerendering is implemented,
       // we'll need to enforce strict referrer policies
       // (https://wicg.github.io/nav-speculation/prefetch.html#list-of-sufficiently-strict-speculative-navigation-referrer-policies).
       //
@@ -331,7 +321,7 @@ PrerenderNavigationThrottle::WillProcessResponse() {
 
   std::optional<PrerenderFinalStatus> cancel_reason;
 
-  // TODO(crbug.com/1318739): Delay until activation instead of cancellation.
+  // TODO(crbug.com/40222993): Delay until activation instead of cancellation.
   if (navigation_handle()->IsDownload()) {
     // Disallow downloads during prerendering and cancel the prerender.
     cancel_reason = PrerenderFinalStatus::kDownload;

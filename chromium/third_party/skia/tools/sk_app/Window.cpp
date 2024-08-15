@@ -173,6 +173,25 @@ skgpu::graphite::Context* Window::graphiteContext() const {
 #endif
 }
 
+skgpu::graphite::Recorder* Window::graphiteRecorder() const {
+#if defined(SK_GRAPHITE)
+    if (!fWindowContext) {
+        return nullptr;
+    }
+    return fWindowContext->graphiteRecorder();
+#else
+    return nullptr;
+#endif
+}
+
+#if defined(SK_GRAPHITE)
+void Window::snapRecordingAndSubmit() {
+    if (fWindowContext) {
+        fWindowContext->snapRecordingAndSubmit();
+    }
+}
+#endif
+
 void Window::inval() {
     if (!fWindowContext) {
         return;

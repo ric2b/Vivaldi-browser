@@ -10,6 +10,10 @@ assert(!is_android)
 mojom("mojo_bindings") {
   sources = [ "history_embeddings.mojom" ]
   webui_module_path = ""
+  public_deps = [
+    "//mojo/public/mojom/base",
+    "//url/mojom:url_mojom_gurl",
+  ]
 }
 
 build_webui("build") {
@@ -29,10 +33,12 @@ build_webui("build") {
   ts_composite = true
   ts_deps = [
     "//third_party/polymer/v3_0:library",
+    "//ui/webui/resources/cr_components/history:build_ts",
     "//ui/webui/resources/cr_elements:build_ts",
     "//ui/webui/resources/js:build_ts",
     "//ui/webui/resources/mojo:build_ts",
   ]
+  webui_context_type = "relative"
   generate_grdp = true
   grd_resource_path_prefix = rebase_path(".", "//ui/webui/resources")
 }

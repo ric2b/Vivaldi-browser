@@ -30,11 +30,6 @@ struct UpdateScrollbarThemeParams {
 };
 
 struct UpdateSystemColorInfoParams {
-// TODO(crbug.com/40779801): Remove `forced_colors` when we use the forced
-// colors web setting in Blink.
-  bool is_dark_mode;
-  bool forced_colors;
-
   // Accent color used by the system. Currently only set on ChromeOS.
   uint32? accent_color;
 };
@@ -163,7 +158,7 @@ interface Renderer {
   // Similarly to the `SetIsCrossOriginIsolated()` method above, this flag is
   // process global, and called at most once, prior to committing a navigation.
   //
-  // TODO(crbug.com/1206150): We need a specification for this restriction.
+  // TODO(crbug.com/40180791): We need a specification for this restriction.
   SetIsIsolatedContext(bool value);
 
   // Initialize renderer user agent string, user agent metadata, CORS exempt

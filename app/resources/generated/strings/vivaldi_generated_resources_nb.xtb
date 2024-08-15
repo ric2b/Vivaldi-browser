@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">Ikke etter</translation>
 <translation id="2749881179542288782">Kontroller grammatikk og stavemåte</translation>
 <translation id="2785873697295365461">Filbeskrivelser</translation>
-<translation id="2809586584051668049">og <ph name="NUMBER_ADDITIONAL_DISABLED" /> til</translation>
 <translation id="2825758591930162672">Subjektets offentlige nøkkel</translation>
 <translation id="2850541429955027218">Legg til tema</translation>
 <translation id="2861941300086904918">Sikkerhetsadministrator for Native Client</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">Åpne som vindu</translation>
 <translation id="3280237271814976245">L&amp;agre som...</translation>
 <translation id="3285322247471302225">Ny &amp;fane</translation>
-<translation id="3288047731229977326">Utvidelser i utviklermodus kan skade datamaskinen din. Hvis du ikke er en utvikler, bør du av hensyn til sikkerheten deaktivere utvidelsene som kjører i utviklermodus.</translation>
 <translation id="329838636886466101">Reparer</translation>
 <translation id="33022249435934718">GDI-håndtak</translation>
 <translation id="3303818374450886607">Kopier</translation>
@@ -167,6 +165,7 @@
 <translation id="3727187387656390258">Inspiser oppsprett</translation>
 <translation id="3760460896538743390">Inspiser &amp;bakgrunnsside</translation>
 <translation id="3786224729726357296">Slett nettstedsdata og tillatelser for <ph name="SITE" /></translation>
+<translation id="3797900183766075808">&amp;Søk etter «<ph name="SEARCH_TERMS" />» på <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3798449238516105146">Versjon</translation>
 <translation id="3810973564298564668">Håndter</translation>
 <translation id="3838085852053358637">Utvidelsen kunne ikke lastes inn</translation>
@@ -191,7 +190,6 @@
 <translation id="4087089424473531098">Opprettet utvidelsen:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Deaktiver utvidelser i utviklermodus</translation>
 <translation id="4100839878934973028">Et annet program på datamaskinen la til et program som kan endre hvordan Vivaldi virker.</translation>
 <translation id="4104163789986725820">E&amp;ksporter...</translation>
 <translation id="4109898769411476438">Lukk nettleser før du importerer</translation>
@@ -218,6 +216,7 @@
 <translation id="4536111748245793305">Profil <ph name="VALUE" /></translation>
 <translation id="456449593072900590">Slett ved avslutning</translation>
 <translation id="4580596421317071374">Passord lagres i <ph name="GOOGLE_PASSWORD_MANAGER" /> på denne enheten.</translation>
+<translation id="4593021220803146968">&amp;Gå til <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apper og utvidelser kan bare bli endret av administratoren (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">En utvidelse har endret hvilken side som vises når du åpner en ny fane.</translation>
 <translation id="4616405296204756919">Du kan bruke lagrede passord på en hvilken som helst enhet. De lagres i <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
@@ -259,7 +258,6 @@
 <translation id="5269977353971873915">Utskrift mislyktes</translation>
 <translation id="5284445933715251131">Fortsett nedlastingen</translation>
 <translation id="52912272896845572">Fil med privat nøkkel er ugyldig.</translation>
-<translation id="5301954838959518834">OK, den er grei</translation>
 <translation id="5302932258331363306">Vis automatiske endringer</translation>
 <translation id="5317780077021120954">Lagre</translation>
 <translation id="5334142896108694079">Skriptbuffer</translation>
@@ -364,6 +362,7 @@
 <translation id="7070484045139057854">Kan lese og endre nettstedsdata</translation>
 <translation id="708060913198414444">K&amp;opier lydadressen</translation>
 <translation id="7121728544325372695">Smarte tankestreker</translation>
+<translation id="7144856456372460176">&amp;Installer <ph name="APP" />…</translation>
 <translation id="7175353351958621980">Lastet fra:</translation>
 <translation id="7186088072322679094">Behold i verktøylinjen</translation>
 <translation id="7287143125007575591">Ingen tilgang.</translation>
@@ -456,6 +455,7 @@ Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av ut
 <translation id="895944840846194039">JavaScript-minne</translation>
 <translation id="8962083179518285172">Skjul detaljer</translation>
 <translation id="8973557916016709913">Opphev forstørrelsesnivå</translation>
+<translation id="897939795688207351">På <ph name="ORIGIN" /></translation>
 <translation id="9003647077635673607">Tillat på alle nettsider</translation>
 <translation id="9027459031423301635">Åpne lenken i ny &amp;fane</translation>
 <translation id="9033857511263905942">&amp;Lim inn</translation>

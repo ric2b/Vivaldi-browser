@@ -141,6 +141,7 @@ class PLATFORM_EXPORT CanvasResource
   // The mailbox which can be used to reference this resource in GPU commands.
   // The sync mode indicates how the sync token for the resource should be
   // prepared.
+  // NOTE: Valid to call only if SupportsAcceleratedCompositing() is true.
   virtual const gpu::Mailbox& GetOrCreateGpuMailbox(MailboxSyncMode) = 0;
 
   // A CanvasResource is not thread-safe and does not allow concurrent usage
@@ -227,10 +228,6 @@ class PLATFORM_EXPORT CanvasResource
   // for direct scanout by the display.
   virtual bool IsOverlayCandidate() const { return false; }
 
-  // Returns true if the resource is backed by memory that can be referenced
-  // using a mailbox.
-  virtual bool HasGpuMailbox() const = 0;
-
   // Destroys the backing memory and any other references to it kept alive by
   // this object. This must be called from the same thread where the resource
   // was created.
@@ -247,11 +244,24 @@ class PLATFORM_EXPORT CanvasResource
     NOTREACHED();
     return nullptr;
   }
+
+  // Prepares GPU TransferableResource. Default implementation creates a
+  // TransferableResource that wraps GetOrCreateGpuMailbox(). Subclasses needing
+  // different behavior should override this method.
+  // NOTE: Will be called only if SupportsAcceleratedCompositing() is true.
   virtual bool PrepareAcceleratedTransferableResource(
       viz::TransferableResource* out_resource,
       MailboxSyncMode);
-  bool PrepareUnacceleratedTransferableResource(
-      viz::TransferableResource* out_resource);
+
+  // Prepares software TransferableResource if supported (by default it is not).
+  // Subclasses that return false for SupportsAcceleratedCompositing() must
+  // override this method to implement support.
+  // NOTE: Will be called only if SupportsAcceleratedCompositing() is false.
+  virtual bool PrepareUnacceleratedTransferableResource(
+      viz::TransferableResource* out_resource) {
+    NOTREACHED();
+    return false;
+  }
   const SkColorInfo& GetSkColorInfo() const { return info_; }
   void OnDestroy();
   CanvasResourceProvider* Provider() { return provider_.get(); }
@@ -282,6 +292,8 @@ class PLATFORM_EXPORT CanvasResourceSharedBitmap final : public CanvasResource {
   bool IsAccelerated() const final { return false; }
   bool IsValid() const final;
   bool SupportsAcceleratedCompositing() const final { return false; }
+  bool PrepareUnacceleratedTransferableResource(
+      viz::TransferableResource* out_resource) final;
   bool NeedsReadLockFences() const final { return false; }
   void Abandon() final;
   gfx::Size Size() const final;
@@ -294,7 +306,6 @@ class PLATFORM_EXPORT CanvasResourceSharedBitmap final : public CanvasResource {
 
  private:
   void TearDown() override;
-  bool HasGpuMailbox() const override;
 
   CanvasResourceSharedBitmap(const SkImageInfo&,
                              base::WeakPtr<CanvasResourceProvider>,
@@ -422,7 +433,6 @@ class PLATFORM_EXPORT CanvasResourceRasterSharedImage final
   void Abandon() override;
   base::WeakPtr<WebGraphicsContext3DProviderWrapper> ContextProviderWrapper()
       const override;
-  bool HasGpuMailbox() const override;
   const gpu::SyncToken GetSyncToken() override;
   bool IsOverlayCandidate() const final { return is_overlay_candidate_; }
 
@@ -531,12 +541,12 @@ class PLATFORM_EXPORT ExternalCanvasResource final : public CanvasResource {
  private:
   void TearDown() override;
   GLenum TextureTarget() const final {
-    return transferable_resource_.mailbox_holder.texture_target;
+    return transferable_resource_.texture_target();
   }
   bool IsOverlayCandidate() const final {
     return transferable_resource_.is_overlay_candidate;
   }
-  bool HasGpuMailbox() const override;
+  bool HasGpuMailbox() const;
   const gpu::SyncToken GetSyncToken() override;
   base::WeakPtr<WebGraphicsContext3DProviderWrapper> ContextProviderWrapper()
       const override;
@@ -600,7 +610,7 @@ class PLATFORM_EXPORT CanvasResourceSwapChain final : public CanvasResource {
  private:
   void TearDown() override;
   bool IsOverlayCandidate() const final { return true; }
-  bool HasGpuMailbox() const override;
+  bool HasGpuMailbox() const;
   const gpu::SyncToken GetSyncToken() override;
   base::WeakPtr<WebGraphicsContext3DProviderWrapper> ContextProviderWrapper()
       const override;

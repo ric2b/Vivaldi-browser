@@ -27,13 +27,16 @@ class TestGerritClient(unittest.TestCase):
                                           'branchname')
 
     @mock.patch('gerrit_util.CreateGerritBranch', return_value='')
-    def test_branch(self, util_mock):
+    @mock.patch('gerrit_util.GetGerritBranch', return_value='')
+    def test_branch(self, _, CreateGerritBranch_mock):
         gerrit_client.main([
             'branch', '--host', 'https://example.org/foo', '--project',
             'projectname', '--branch', 'branchname', '--commit', 'commitname'
         ])
-        util_mock.assert_called_once_with('example.org', 'projectname',
-                                          'branchname', 'commitname')
+        CreateGerritBranch_mock.assert_called_once_with('example.org',
+                                                        'projectname',
+                                                        'branchname',
+                                                        'commitname')
 
     @mock.patch('gerrit_util.QueryChanges', return_value='')
     def test_changes(self, util_mock):

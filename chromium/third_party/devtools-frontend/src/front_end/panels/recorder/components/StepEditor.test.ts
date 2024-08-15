@@ -2,22 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
+import {
+  dispatchKeyDownEvent,
+  getEventPromise,
+  renderElementIntoDOM,
+} from '../../../testing/DOMHelpers.js';
 // eslint-disable-next-line rulesdir/es_modules_import
 import * as EnvironmentHelpers from '../../../testing/EnvironmentHelpers.js';
-import type * as Components from './components.js';
+import type * as SuggestionInput from '../../../ui/components/suggestion_input/suggestion_input.js';
 import * as Models from '../models/models.js';
 // eslint-disable-next-line rulesdir/es_modules_import
 import * as RecorderHelpers from '../testing/RecorderHelpers.js';
-import type * as SuggestionInput from '../../../ui/components/suggestion_input/suggestion_input.js';
 
-import {
-  renderElementIntoDOM,
-  getEventPromise,
-  assertElement,
-  dispatchKeyDownEvent,
-} from '../../../testing/DOMHelpers.js';
+import type * as Components from './components.js';
 
 const {describeWithLocale} = EnvironmentHelpers;
 
@@ -80,7 +77,7 @@ describeWithLocale('StepEditor', () => {
     const button = editor.renderRoot.querySelector(
         `devtools-button.add-row[data-attribute="${attribute}"]`,
     );
-    assertElement(button, HTMLElement);
+    assert.instanceOf(button, HTMLElement);
     button.click();
     await triggerMicroTaskQueue();
     await editor.updateComplete;
@@ -93,7 +90,7 @@ describeWithLocale('StepEditor', () => {
     const button = editor.renderRoot.querySelector(
         `devtools-button.delete-row[data-attribute="${attribute}"]`,
     );
-    assertElement(button, HTMLElement);
+    assert.instanceOf(button, HTMLElement);
     button.click();
     await triggerMicroTaskQueue();
     await editor.updateComplete;
@@ -106,7 +103,7 @@ describeWithLocale('StepEditor', () => {
     const button = editor.renderRoot.querySelector(
         `.attribute[data-attribute="frame"] devtools-button${className}`,
     );
-    assertElement(button, HTMLElement);
+    assert.instanceOf(button, HTMLElement);
     button.click();
     await editor.updateComplete;
   }
@@ -119,7 +116,7 @@ describeWithLocale('StepEditor', () => {
     const button = editor.renderRoot.querySelector(
         `[data-selector-path="${path.join('.')}"] devtools-button${className}`,
     );
-    assertElement(button, HTMLElement);
+    assert.instanceOf(button, HTMLElement);
     button.click();
     await editor.updateComplete;
   }

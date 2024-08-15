@@ -31,7 +31,6 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1633720957382884102">Aiheeseen liittyvät sivustot</translation>
 <translation id="1644574205037202324">Historia</translation>
-<translation id="1647582022260550163">Haluatko varmasti nollata luvat sekä tyhjentää evästeet ja sivustodatan?</translation>
 <translation id="1652197001188145583">Kun tämä on päällä, sivustot voivat pyytää lupaa käyttää NFC-laitteita. Kun tämä on pois päältä, sivustot eivät voi käyttää NFC-laitteita.</translation>
 <translation id="1660204651932907780">Salli sivustojen toistaa ääniä (suositus)</translation>
 <translation id="1677097821151855053">Evästeillä ja muulla sivustodatalla tunnistetaan sinut, jotta voit esimerkiksi kirjautua sisään tai nähdä personoituja mainoksia. Jos haluat ylläpitää kaikkien sivustojen evästeitä, siirry <ph name="BEGIN_LINK" />Asetuksiin<ph name="END_LINK" />.</translation>
@@ -69,7 +68,6 @@
 <translation id="2241587408274973373">Uusi välilehti ‐sivun kortit</translation>
 <translation id="2241634353105152135">Vain kerran</translation>
 <translation id="2253414712144136228">Poista <ph name="NAME_OF_LIST_ITEM" /></translation>
-<translation id="2253989982043948086">{NUM_SELECTED,plural, =1{1 sivusto estetty}other{# sivustoa estetty}}</translation>
 <translation id="228293613124499805">Useimmat avaamasi sivustot tallentavat todennäköisesti dataa laitteellesi. Tarkoituksena on yleensä parantaa kokemustasi tallentamalla sivustolle jakamiasi asetuksia tai tietoja. Suosittelemme pitämään asetuksen päällä.</translation>
 <translation id="2289270750774289114">Kysy aina, kun sivusto pyytää lupaa löytää lähellä olevat Bluetooth-laitteet (suositus)</translation>
 <translation id="2315043854645842844">Käyttöjärjestelmä ei tue palvelimen varmennevalintaa.</translation>
@@ -94,7 +92,6 @@
 <translation id="2501278716633472235">Takaisin</translation>
 <translation id="2546283357679194313">Evästeet ja sivustotiedot</translation>
 <translation id="2550801787432930915">Hinnanlaskukortti</translation>
-<translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{1 eväste estetty}other{# evästettä estetty}}</translation>
 <translation id="2570922361219980984">Sijainti on poissa käytöstä myös tällä laitteella. Voit ottaa sen käyttöön <ph name="BEGIN_LINK" />Android-asetuksista<ph name="END_LINK" />.</translation>
 <translation id="257931822824936280">Laajennettu – tiivistä klikkaamalla.</translation>
 <translation id="2586657967955657006">Leikepöytä</translation>
@@ -124,7 +121,6 @@
 <translation id="3008272652534848354">Nollaa luvat</translation>
 <translation id="301521992641321250">Estetty automaattisesti</translation>
 <translation id="3069226013421428034">Salli kolmannen osapuolen sisäänkirjautuminen tietylle sivustolle.</translation>
-<translation id="3082992102194421695">{COUNT,plural, =1{Vanhenee huomenna}other{Vanhenee # päivän kuluttua}}</translation>
 <translation id="310297983047869047">Edellinen dia</translation>
 <translation id="3109724472072898302">Tiivistetty</translation>
 <translation id="3114012059975132928">Videosoitin</translation>
@@ -136,6 +132,7 @@
 <translation id="3198916472715691905"><ph name="STORAGE_AMOUNT" /> tallennettua tietoa</translation>
 <translation id="321187648315454507">Ota ilmoitukset käyttöön myös <ph name="BEGIN_LINK" />Androidin asetuksista<ph name="END_LINK" />, jotta <ph name="APP_NAME" /> voi lähettää sinulle ilmoituksia.</translation>
 <translation id="3227137524299004712">Mikrofoni</translation>
+<translation id="3232293466644486101">Poista selausdata…</translation>
 <translation id="3242646949159196181">Kun tämä on päällä, sivustot voivat toistaa ääntä. Kun tämä on pois päältä, sivustot eivät voi toistaa ääntä.</translation>
 <translation id="3277252321222022663">Anna sivustojen käyttää tunnistimia (suositus)</translation>
 <translation id="3285500645985761267">Salli toisiinsa liittyvien sivustojen nähdä toimintasi ryhmässä</translation>
@@ -177,6 +174,7 @@
 <translation id="3895926599014793903">Ota zoomaus käyttöön</translation>
 <translation id="3908288065506437185">Estä kolmannen osapuolen evästeet incognito-tilassa</translation>
 <translation id="3918378745482005425">Kaikki ominaisuudet eivät välttämättä toimi. Aiheeseen liittyvät sivustot voivat edelleen käyttää kolmannen osapuolen evästeitä.</translation>
+<translation id="3933121352599513978">Tiivistä ei-toivotut pyynnöt (suositus)</translation>
 <translation id="3955193568934677022">Salli sivustojen toistaa suojattua sisältöä (suositus)</translation>
 <translation id="3967822245660637423">Lataus on valmis</translation>
 <translation id="3974105241379491420">Sivustot voivat pyytää lupaa sinusta tallennettujen tietojen käytölle</translation>
@@ -198,7 +196,9 @@
 <translation id="4278390842282768270">Sallittu</translation>
 <translation id="429312253194641664">Sivusto toistaa mediaa</translation>
 <translation id="42981349822642051">Laajenna</translation>
+<translation id="4336219115486912529">{COUNT,plural, =1{Vanhenee huomenna}other{Vanhenee # päivän kuluttua}}</translation>
 <translation id="4336566011000459927">Chrome rajoittaa evästeet uudelleen tänään</translation>
+<translation id="4336836404251800362">Viimeisin välilehti: <ph name="RECENCY" /> <ph name="SEPARATOR" /></translation>
 <translation id="4338831206024587507">Kaikki sivustot, jotka kuuluvat verkkotunnukseen <ph name="DOMAIN" /></translation>
 <translation id="4402755511846832236">Estä sivustoja tietämästä, kun käytät tätä laitetta aktiivisesti</translation>
 <translation id="4412992751769744546">Salli kolmannen osapuolen evästeet</translation>
@@ -289,6 +289,7 @@
 <translation id="5853982612236235577">Kun tämä on päällä, sivustot voivat pyytää lupaa lähettää ilmoituksia. Kun tämä on pois päältä, sivustot eivät voi lähettää ilmoituksia.</translation>
 <translation id="5860033963881614850">Pois päältä</translation>
 <translation id="5876056640971328065">Keskeytä video</translation>
+<translation id="5877248419911025165">Tiivistä kaikki pyynnöt</translation>
 <translation id="5884085660368669834">Sivustotoivomus</translation>
 <translation id="5887687176710214216">Avattu viimeksi eilen</translation>
 <translation id="5916664084637901428">Päällä</translation>
@@ -303,9 +304,11 @@
 <translation id="6015775454662021376">Valitse, mitä tämä sivusto saa tehdä laitteellasi</translation>
 <translation id="6040143037577758943">Sulje</translation>
 <translation id="6042308850641462728">Lisää</translation>
+<translation id="6060464773477604108"><ph name="HOST_NAME" /> <ph name="SEPARATOR1" /> <ph name="RECENCY" /> <ph name="SEPARATOR2" /> Viimeisin välilehti</translation>
 <translation id="6064125863973209585">Valmiit lataukset</translation>
 <translation id="6071501408666570960">Sinut voidaan kirjata ulos tältä sivustolta</translation>
 <translation id="6120483543004435978">Kun tämä on päällä, sivustot voivat pyytää lupaa nähdä, milloin käytät laitetta aktiivisesti. Kun tämä on pois päältä, sivustot eivät saa tietää, milloin käytät laitetta aktiivisesti.</translation>
+<translation id="6140839633433422817">Haluatko varmasti nollata luvat sekä tyhjentää evästeet ja sivustodatan?</translation>
 <translation id="6165508094623778733">Lisätietoja</translation>
 <translation id="6171020522141473435">Kun tämä on päällä, sivustot voivat pyytää lupaa käyttää Bluetooth-laitteita. Kun tämä on pois päältä, sivustot eivät voi käyttää Bluetooth-laitteita.</translation>
 <translation id="6177111841848151710">Estetty nykyiseltä hakukoneelta</translation>
@@ -339,6 +342,7 @@
 <translation id="6545864417968258051">Bluetooth-haku</translation>
 <translation id="6552800053856095716">{PERMISSIONS_SUMMARY_BLOCKED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> ja <ph name="NUM_MORE" /> muuta estetty}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> ja <ph name="NUM_MORE" /> muuta estetty}}</translation>
 <translation id="6554732001434021288">Viimeksi avattu <ph name="NUM_DAYS" /> päivää sitten</translation>
+<translation id="656065428026159829">Katso lisää</translation>
 <translation id="6561560012278703671">Hiljaisemmat viestit (estää ilmoituksia häiritsemästä sinua)</translation>
 <translation id="6593061639179217415">Tietokonesivusto</translation>
 <translation id="6608650720463149374"><ph name="GIGABYTES" /> Gt</translation>
@@ -399,7 +403,6 @@
 <translation id="7561196759112975576">Aina</translation>
 <translation id="757524316907819857">Estä sivustoja toistamasta suojattua sisältöä</translation>
 <translation id="7594634374516752650">Yhdistetty Bluetooth-laitteeseen</translation>
-<translation id="7641339528570811325">Poista selaustiedot…</translation>
 <translation id="7649070708921625228">Ohje</translation>
 <translation id="7658239707568436148">Peru</translation>
 <translation id="7667547420449112975">Ihmemaa Oz</translation>
@@ -423,6 +426,7 @@
 <translation id="7986741934819883144">Valitse yhteystieto</translation>
 <translation id="7990211076305263060">Kun tämä on päällä, sivustot voivat pyytää lupaa mikrofonin käyttöön. Kun tämä on pois päältä, sivustot eivät voi käyttää mikrofonia.</translation>
 <translation id="8007176423574883786">Ei käytössä tällä laitteella</translation>
+<translation id="8009579582995973057"><ph name="HOST_NAME" /> <ph name="SEPARATOR1" /> <ph name="RECENCY" /> <ph name="SEPARATOR2" /> Lähteestä <ph name="FROM_DEVICE" /></translation>
 <translation id="802154636333426148">Lataus epäonnistui.</translation>
 <translation id="8042586301629853791">Lajitteluperuste:</translation>
 <translation id="8067883171444229417">Toista video</translation>
@@ -457,7 +461,6 @@
 <translation id="8441146129660941386">Kelaa taaksepäin</translation>
 <translation id="8444433999583714703">Ota sijaintitiedot käyttöön myös <ph name="BEGIN_LINK" />Androidin asetuksista<ph name="END_LINK" />, jotta <ph name="APP_NAME" /> saa pääsyn sijaintiisi.</translation>
 <translation id="8447861592752582886">Peru laitteen käyttöoikeus</translation>
-<translation id="8451050538944905715">{NUM_SELECTED,plural, =1{1 eväste käytössä}other{# evästettä käytössä}}</translation>
 <translation id="8487700953926739672">Käytettävissä offline-tilassa</translation>
 <translation id="848952951823693243">Pyydä aina mobiilisivustoa</translation>
 <translation id="8499083585497694743">Poista mikrofonin mykistys</translation>
@@ -478,7 +481,6 @@
 <translation id="8721719390026067591">Kun tämä on päällä, sivustot voivat pyytää lupaa etsiä Bluetooth-laitteita. Kun tämä on pois päältä, sivustot eivät voi etsiä Bluetooth-laitteita.</translation>
 <translation id="8725066075913043281">Yritä uudelleen</translation>
 <translation id="8730621377337864115">Valmis</translation>
-<translation id="8736193154595564524">{NUM_SELECTED,plural, =1{1 sivusto sallittu}other{# sivustoa sallittu}}</translation>
 <translation id="8751914237388039244">Valitse kuva</translation>
 <translation id="8800034312320686233">Eikö sivusto toimi?</translation>
 <translation id="8801436777607969138">Estä JavaScript tietyllä sivustolla.</translation>
@@ -497,6 +499,7 @@
 <translation id="8959122750345127698">Kohde ei ole saatavilla: <ph name="URL" /></translation>
 <translation id="8986362086234534611">Unohda</translation>
 <translation id="8990043154272859344">Sinut kirjataan ulos kaikilta sivustoilta</translation>
+<translation id="8993853206419610596">Laajenna kaikki pyynnöt</translation>
 <translation id="9002538116239926534">Kun tämä on päällä, sivustot voivat tallentaa dataa laitteellesi. Kun tämä on pois päältä, sivustot eivät voi tallentaa dataa laitteellesi.</translation>
 <translation id="9011903857143958461"><ph name="SITE_NAME" /> sallittu</translation>
 <translation id="9019902583201351841">Vanhempiesi hallinnoima</translation>

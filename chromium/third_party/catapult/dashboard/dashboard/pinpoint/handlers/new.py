@@ -83,6 +83,8 @@ REGULAR_TELEMETRY_TESTS_WITH_FALLBACKS[
 
 _NON_CHROME_TARGETS = ['v8']
 
+_ATTEMPT_COUNT_LIMIT = 128
+_ATTEMPT_LIMIT_EXCEPTION_USERS = ['bartekn@google.com', 'keishi@google.com']
 
 def _CheckUser():
   if utils.IsDevAppserver():
@@ -182,6 +184,13 @@ def _CreateJob(req):
     initial_attempt_count = int(initial_attempt_count)
   except (TypeError, ValueError):
     initial_attempt_count = None
+
+  if initial_attempt_count and initial_attempt_count > _ATTEMPT_COUNT_LIMIT \
+    and user not in _ATTEMPT_LIMIT_EXCEPTION_USERS:
+    raise ValueError('Attempt count cannot be greater than %d. If you need a'
+                      ' high attempt count, please file an exemption request'
+                      ' at go/pinpoint-attempt-exemption-request'
+                       % _ATTEMPT_COUNT_LIMIT)
 
   # Create job.
   try:
@@ -521,6 +530,8 @@ def GetIsolateTarget(bot_name, suite):
     return 'performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle'
   if bot_name in ['android-pixel6-pro-perf', 'android-pixel6-pro-perf-pgo']:
     return 'performance_test_suite_android_clank_trichrome_bundle'
+  if bot_name == 'android-pixel-fold-perf':
+    return 'performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle'
   if 'android' in bot_name.lower():
     raise Exception(
         'Given Android bot %s does not have an isolate mapped to it' % bot_name)

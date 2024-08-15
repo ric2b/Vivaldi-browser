@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
@@ -10,8 +9,6 @@ import {createTarget, stubNoopSettings} from '../../testing/EnvironmentHelpers.j
 import {describeWithMockConnection, setMockConnectionResponseHandler} from '../../testing/MockConnection.js';
 
 import * as Accessibility from './accessibility.js';
-
-const {assert} = chai;
 
 const NODE_ID = 1 as Protocol.DOM.NodeId;
 
@@ -35,9 +32,9 @@ describeWithMockConnection('AccessibilitySidebarView', () => {
   const updatesUiOnEvent = (event: any, inScope: boolean) => async () => {
     SDK.TargetManager.TargetManager.instance().setScopeTarget(inScope ? target : null);
     const domModel = target.model(SDK.DOMModel.DOMModel);
-    assertNotNullOrUndefined(domModel);
+    assert.exists(domModel);
     const accessibilityModel = target.model(SDK.AccessibilityModel.AccessibilityModel);
-    assertNotNullOrUndefined(accessibilityModel);
+    assert.exists(accessibilityModel);
     const requestPartialAXTree = sinon.stub(accessibilityModel, 'requestPartialAXTree');
     requestPartialAXTree.resolves();
     const node = new SDK.DOMModel.DOMNode(domModel);

@@ -169,7 +169,6 @@
 <translation id="7353601530677266744">Komut Satırı</translation>
 <translation id="7364115444476960850">Ulaşmaya çalıştığınız sayda Vivaldi'nin <ph name="BLOCKER_NAME" /> engelleyicisi tarafından engellendi</translation>
 <translation id="7419106976560586862">Profil Yolu</translation>
-<translation id="7445762425076701745">Bağlı olduğunuz sunucunun kimliği tam olarak doğrulanamıyor. Sunucuya yalnızca ağınızın içinde geçerli olan ve dış sertifika yetkilisi tarafından hiçbir şekilde sahipliği doğrulanamayacak bir isim kullanarak bağlandınız. Bazı sertifika yetkilileri bu adlar için sertifikalar yayınlasa da, bir saldırgana değil, hedeflenen web sitesine bağlandığınızdan emin olmanın herhangi bir yolu yoktur.</translation>
 <translation id="7455133967321480974">Genel varsayılanı kullan (Engelle)</translation>
 <translation id="7518003948725431193">Şu web adresi için web sayfası bulunamadı:<ph name="URL" /></translation>
 <translation id="7549584377607005141">Bu Web sayfasının düzgün şekilde görüntülenmesi için, önceden girdiğiniz veriler gerekiyor. Bu verileri tekrar gönderebilirsiniz, ancak bunu yaptığınızda bu sayfanın daha önce gerçekleştirdiği işlemler de tekrar edilir.</translation>

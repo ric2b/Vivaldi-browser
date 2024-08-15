@@ -168,7 +168,15 @@ _non_android_locales = [ "cy" ]
 platform_pak_locales = all_chrome_locales
 if (is_android) {
   if (is_vivaldi) {
-    extended_locales -= [ "az", "is", "hy", "be" , "gl" ]
+    extended_locales -= [
+      "az",
+      "is",
+      "hy",
+      "be",
+      "gl",
+      "ka",
+      "si",
+    ]
   }
 
   platform_pak_locales -= _non_android_locales

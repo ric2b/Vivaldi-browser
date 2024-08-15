@@ -188,7 +188,7 @@ bool ChromeOmniboxClientIOS::ProcessExtensionKeyword(
 
 void ChromeOmniboxClientIOS::OnFocusChanged(OmniboxFocusState state,
                                             OmniboxFocusChangeReason reason) {
-  // TODO(crbug.com/754050): OnFocusChanged is not the correct place to be
+  // TODO(crbug.com/40534385): OnFocusChanged is not the correct place to be
   // canceling prerenders, but this is the closest match to the original
   // location of this code, which was in OmniboxViewIOS::OnDidEndEditing().  The
   // goal of this code is to cancel prerenders when the omnibox loses focus.
@@ -230,7 +230,7 @@ void ChromeOmniboxClientIOS::OnResultChanged(
   const AutocompleteMatch& match = result.match_at(0);
   bool is_inline_autocomplete = !match.inline_autocompletion.empty();
 
-  // TODO(crbug.com/228480): When prerendering the result of a paste
+  // TODO(crbug.com/40311794): When prerendering the result of a paste
   // operation, we should change the transition to LINK instead of TYPED.
 
   // Only prerender HISTORY_URL matches, which come from the history DB.  Do

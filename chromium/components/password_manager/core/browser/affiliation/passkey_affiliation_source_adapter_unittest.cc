@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/location.h"
 #include "base/rand_util.h"
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
@@ -45,8 +46,8 @@ class PasskeyAffiliationSourceAdapterTest : public testing::Test {
   void SetUp() override {
     mock_source_observer_ =
         std::make_unique<testing::StrictMock<MockAffiliationSourceObserver>>();
-    adapter_ = std::make_unique<PasskeyAffiliationSourceAdapter>(
-        test_passkey_model(), mock_source_observer());
+    adapter_ =
+        std::make_unique<PasskeyAffiliationSourceAdapter>(test_passkey_model());
   }
 
   testing::AssertionResult ExpectAdapterToReturnFacets(
@@ -120,7 +121,7 @@ TEST_F(PasskeyAffiliationSourceAdapterTest, TestNewPasskeyDownloaded) {
       GetTestPasskey(kTestRpIdFacetURIAlpha1));
   RunUntilIdle();
 
-  adapter()->StartObserving();
+  adapter()->StartObserving(mock_source_observer());
 
   EXPECT_CALL(*mock_source_observer(),
               OnFacetsAdded(ElementsAre(
@@ -138,12 +139,12 @@ TEST_F(PasskeyAffiliationSourceAdapterTest, TestPasskeyDeleted) {
   test_passkey_model()->AddNewPasskeyForTesting(passkey);
   RunUntilIdle();
 
-  adapter()->StartObserving();
+  adapter()->StartObserving(mock_source_observer());
 
   EXPECT_CALL(*mock_source_observer(),
               OnFacetsRemoved(ElementsAre(
                   FacetURI::FromCanonicalSpec(kTestWebFacetURIAlpha1))));
-  test_passkey_model()->DeletePasskey(passkey.credential_id());
+  test_passkey_model()->DeletePasskey(passkey.credential_id(), FROM_HERE);
   RunUntilIdle();
 }
 

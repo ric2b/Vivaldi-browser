@@ -498,6 +498,10 @@ TEST(EventReportWindowsTest, ComputeReportTime) {
           .expected = kSourceTime + base::Hours(2),
       },
       {
+          .trigger_time = kSourceTime - base::Seconds(1),
+          .expected = kSourceTime + base::Hours(2),
+      },
+      {
           .trigger_time = kSourceTime + base::Hours(2) - base::Milliseconds(1),
           .expected = kSourceTime + base::Hours(2),
       },
@@ -591,7 +595,7 @@ TEST(EventReportWindowsTest, FallsWithin) {
           .trigger_moment = base::Hours(2),
           .expected = WindowResult::kPassed,
       },
-      // TODO(crbug.com/1489333): Remove case once DCHECK is used in
+      // TODO(crbug.com/40283992): Remove case once DCHECK is used in
       // implementation.
       {
           .report_windows = kDefaultReportWindowsNoStartTime,

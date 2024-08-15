@@ -4,7 +4,7 @@
 # found in the LICENSE file.
 
 import textwrap
-from typing import Dict, List, Union
+from typing import Dict, List, Optional
 
 _CHROMIUM_METADATA_PRESCRIPT = "Third party metadata issue:"
 _CHROMIUM_METADATA_POSTSCRIPT = ("Check //third_party/README.chromium.template "
@@ -36,6 +36,33 @@ class ValidationResult:
     def __repr__(self) -> str:
         return str(self)
 
+    # PEP 8 recommends implementing all 6 rich comparisons.
+    # Here we make use of tuple comparison, and order based on the severity
+    # (e.g. fatal comes before non-fatal), then the message.
+    def __lt__(self, other) -> bool:
+        return (not self._fatal, self._message) < (not other._fatal,
+                                                   other._message)
+
+    def __le__(self, other) -> bool:
+        return (not self._fatal, self._message) <= (not other._fatal,
+                                                    other._message)
+
+    def __gt__(self, other) -> bool:
+        return (not self._fatal, self._message) > (not other._fatal,
+                                                   other._message)
+
+    def __ge__(self, other) -> bool:
+        return (not self._fatal, self._message) >= (not other._fatal,
+                                                    other._message)
+
+    def __eq__(self, other) -> bool:
+        return (not self._fatal, self._message) == (not other._fatal,
+                                                    other._message)
+
+    def __ne__(self, other) -> bool:
+        return (not self._fatal, self._message) != (not other._fatal,
+                                                    other._message)
+
     def is_fatal(self) -> bool:
         return self._fatal
 
@@ -50,7 +77,7 @@ class ValidationResult:
     def set_tag(self, tag: str, value: str) -> bool:
         self._tags[tag] = value
 
-    def get_tag(self, tag: str) -> Union[str, None]:
+    def get_tag(self, tag: str) -> Optional[str]:
         return self._tags.get(tag)
 
     def get_all_tags(self) -> Dict[str, str]:

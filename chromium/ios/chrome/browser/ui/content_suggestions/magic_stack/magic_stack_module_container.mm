@@ -73,11 +73,13 @@ const CGFloat kSeparatorHeight = 0.5;
     MagicStackModuleContentsFactory* _magicStackModuleContentsFactory;
     NSLayoutConstraint* _containerHeightAnchor;
     NSLayoutConstraint* _contentStackViewBottomMarginAnchor;
+    UIContextMenuInteraction* _contextMenuInteraction;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
   if (self) {
+    self.maximumContentSizeCategory = UIContentSizeCategoryAccessibilityMedium;
     _magicStackModuleContentsFactory = [[MagicStackModuleContentsFactory alloc] init];
 
     self.contentView.backgroundColor = [UIColor colorNamed:kBackgroundColor];
@@ -95,7 +97,7 @@ const CGFloat kSeparatorHeight = 0.5;
                                        forAxis:UILayoutConstraintAxisVertical];
 
     _title = [[UILabel alloc] init];
-    _title.font = [MagicStackModuleContainer fontForTitle];
+    _title.font = [self fontForTitle];
     _title.textColor = [UIColor colorNamed:kTextPrimaryColor];
     _title.numberOfLines = 1;
     _title.lineBreakMode = NSLineBreakByWordWrapping;
@@ -237,8 +239,16 @@ const CGFloat kSeparatorHeight = 0.5;
   }
   _type = config.type;
   if ([self allowsLongPress]) {
-    [self addInteraction:[[UIContextMenuInteraction alloc]
-                             initWithDelegate:self]];
+    if (!_contextMenuInteraction) {
+      _contextMenuInteraction =
+          [[UIContextMenuInteraction alloc] initWithDelegate:self];
+      [self addInteraction:_contextMenuInteraction];
+    }
+  } else {
+    if (_contextMenuInteraction) {
+      [self removeInteraction:_contextMenuInteraction];
+      _contextMenuInteraction = nil;
+    }
   }
 
   _title.text = [MagicStackModuleContainer titleStringForModule:_type];
@@ -248,7 +258,7 @@ const CGFloat kSeparatorHeight = 0.5;
   _seeMoreButton.hidden = !config.shouldShowSeeMore;
 
   if ([self shouldShowSubtitle]) {
-    // TODO(crbug.com/1474992): Update MagicStackModuleContainer to take an id
+    // TODO(crbug.com/40279482): Update MagicStackModuleContainer to take an id
     // config in its initializer so the container can build itself from a
     // passed config/state object.
     NSString* subtitle = [self subtitleStringForConfig:config];
@@ -324,15 +334,15 @@ const CGFloat kSeparatorHeight = 0.5;
       return kMagicStackContentSuggestionsModuleTabResumptionAccessibilityIdentifier;
 
     default:
-      // TODO(crbug.com/1506038): the code should use constants for
+      // TODO(crbug.com/40946679): the code should use constants for
       // accessibility identifiers, and not localized strings.
       return [self titleStringForModule:type];
   }
 }
 
 // Returns the font for the module title string.
-+ (UIFont*)fontForTitle {
-  return CreateDynamicFont(UIFontTextStyleFootnote, UIFontWeightSemibold);
+- (UIFont*)fontForTitle {
+  return CreateDynamicFont(UIFontTextStyleFootnote, UIFontWeightSemibold, self);
 }
 
 // Returns the font for the module subtitle string.
@@ -345,6 +355,7 @@ const CGFloat kSeparatorHeight = 0.5;
   switch (config.type) {
     case ContentSuggestionsModuleType::kMostVisited:
     case ContentSuggestionsModuleType::kShortcuts:
+    case ContentSuggestionsModuleType::kCompactedSetUpList:
       _contentStackViewBottomMarginAnchor.constant =
           -kReducedContentBottomInset;
       break;
@@ -376,7 +387,7 @@ const CGFloat kSeparatorHeight = 0.5;
   [super traitCollectionDidChange:previousTraitCollection];
   if (previousTraitCollection.preferredContentSizeCategory !=
       self.traitCollection.preferredContentSizeCategory) {
-    _title.font = [MagicStackModuleContainer fontForTitle];
+    _title.font = [self fontForTitle];
   }
 }
 
@@ -404,9 +415,8 @@ const CGFloat kSeparatorHeight = 0.5;
 - (NSArray<UIAction*>*)contextMenuActions {
   NSMutableArray<UIAction*>* actions = [[NSMutableArray alloc] init];
 
-  if (IsSetUpListModuleType(self.type) && IsIOSTipsNotificationsEnabled() &&
-      ![self optedInToTipsNotifications]) {
-    [actions addObject:[self turnOnTipsNotificationsAction]];
+  if (IsSetUpListModuleType(self.type) && IsIOSTipsNotificationsEnabled()) {
+    [actions addObject:[self toggleTipsNotificationsAction]];
   }
   [actions addObject:[self hideAction]];
   return actions;
@@ -427,18 +437,35 @@ const CGFloat kSeparatorHeight = 0.5;
 }
 
 // Returns the menu action to opt-in to Tips Notifications.
-- (UIAction*)turnOnTipsNotificationsAction {
+- (UIAction*)toggleTipsNotificationsAction {
+  BOOL optedIn = [self optedInToTipsNotifications];
   __weak __typeof(self) weakSelf = self;
-  NSString* title = l10n_util::GetNSStringF(
-      IDS_IOS_TIPS_NOTIFICATIONS_CONTEXT_MENU_ITEM,
-      l10n_util::GetStringUTF16(content_suggestions::SetUpListTitleStringID()));
-  return
-      [UIAction actionWithTitle:title
-                          image:DefaultSymbolWithPointSize(kBellSymbol, 18)
-                     identifier:nil
-                        handler:^(UIAction* action) {
-                          [weakSelf.delegate enableNotifications:weakSelf.type];
-                        }];
+  NSString* title;
+  NSString* symbol;
+  if (optedIn) {
+    title = l10n_util::GetNSStringF(
+        IDS_IOS_TIPS_NOTIFICATIONS_CONTEXT_MENU_ITEM_OFF,
+        l10n_util::GetStringUTF16(
+            content_suggestions::SetUpListTitleStringID()));
+    symbol = kBellSlashSymbol;
+  } else {
+    title = l10n_util::GetNSStringF(
+        IDS_IOS_TIPS_NOTIFICATIONS_CONTEXT_MENU_ITEM,
+        l10n_util::GetStringUTF16(
+            content_suggestions::SetUpListTitleStringID()));
+    symbol = kBellSymbol;
+  }
+  return [UIAction
+      actionWithTitle:title
+                image:DefaultSymbolWithPointSize(symbol, 18)
+           identifier:nil
+              handler:^(UIAction* action) {
+                if (optedIn) {
+                  [weakSelf.delegate disableNotifications:weakSelf.type];
+                } else {
+                  [weakSelf.delegate enableNotifications:weakSelf.type];
+                }
+              }];
 }
 
 - (void)seeMoreButtonWasTapped:(UIButton*)button {

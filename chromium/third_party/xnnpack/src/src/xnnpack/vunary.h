@@ -16,6 +16,13 @@ extern "C" {
 #endif
 
 
+#define DECLARE_BF16_UKERNEL_FUNCTION(fn_name, params_union) \
+  XNN_INTERNAL void fn_name(                                 \
+      size_t n,                                              \
+      const void* x,                                         \
+      void* y,                                               \
+      const union params_union params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
+
 #define DECLARE_F16_UKERNEL_FUNCTION(fn_name, params_union) \
   XNN_INTERNAL void fn_name(                                \
       size_t n,                                             \
@@ -30,6 +37,13 @@ extern "C" {
       float* y,                                             \
       const union params_union params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
 
+
+#define DECLARE_BF16_VABS_UKERNEL_FUNCTION(fn_name) \
+  DECLARE_BF16_UKERNEL_FUNCTION(fn_name, xnn_bf16_abs_params);
+
+DECLARE_BF16_VABS_UKERNEL_FUNCTION(xnn_bf16_vabs_ukernel__neonbf16_u8)
+DECLARE_BF16_VABS_UKERNEL_FUNCTION(xnn_bf16_vabs_ukernel__neonbf16_u16)
+DECLARE_BF16_VABS_UKERNEL_FUNCTION(xnn_bf16_vabs_ukernel__neonbf16_u24)
 
 #define DECLARE_F16_VABS_UKERNEL_FUNCTION(fn_name) \
   DECLARE_F16_UKERNEL_FUNCTION(fn_name, xnn_f16_abs_params);
@@ -939,6 +953,14 @@ DECLARE_F16_VSQRT_UKERNEL_FUNCTION(xnn_f16_vsqrt_ukernel__aarch64_neonfp16arith_
 DECLARE_F16_VSQRT_UKERNEL_FUNCTION(xnn_f16_vsqrt_ukernel__aarch64_neonfp16arith_sqrt_u16)
 DECLARE_F16_VSQRT_UKERNEL_FUNCTION(xnn_f16_vsqrt_ukernel__aarch64_neonfp16arith_sqrt_u32)
 
+DECLARE_F16_VSQRT_UKERNEL_FUNCTION(xnn_f16_vsqrt_ukernel__avx512fp16_sqrt_u32)
+DECLARE_F16_VSQRT_UKERNEL_FUNCTION(xnn_f16_vsqrt_ukernel__avx512fp16_sqrt_u64)
+DECLARE_F16_VSQRT_UKERNEL_FUNCTION(xnn_f16_vsqrt_ukernel__avx512fp16_sqrt_u128)
+
+DECLARE_F16_VSQRT_UKERNEL_FUNCTION(xnn_f16_vsqrt_ukernel__avx512skx_sqrt_u16)
+DECLARE_F16_VSQRT_UKERNEL_FUNCTION(xnn_f16_vsqrt_ukernel__avx512skx_sqrt_u32)
+DECLARE_F16_VSQRT_UKERNEL_FUNCTION(xnn_f16_vsqrt_ukernel__avx512skx_sqrt_u64)
+
 DECLARE_F16_VSQRT_UKERNEL_FUNCTION(xnn_f16_vsqrt_ukernel__f16c_sqrt_u8)
 DECLARE_F16_VSQRT_UKERNEL_FUNCTION(xnn_f16_vsqrt_ukernel__f16c_sqrt_u16)
 DECLARE_F16_VSQRT_UKERNEL_FUNCTION(xnn_f16_vsqrt_ukernel__f16c_sqrt_u32)
@@ -954,21 +976,6 @@ DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__aarch64_neon_sqrt_u4)
 DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__aarch64_neon_sqrt_u8)
 DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__aarch64_neon_sqrt_u16)
 
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__neonfma_nr1rsqrts1fma1adj_u4)
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__neonfma_nr1rsqrts1fma1adj_u8)
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__neonfma_nr1rsqrts1fma1adj_u16)
-
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__neonfma_nr2fma1adj_u4)
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__neonfma_nr2fma1adj_u8)
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__neonfma_nr2fma1adj_u12)
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__neonfma_nr2fma1adj_u16)
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__neonfma_nr2fma1adj_u20)
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__neonfma_nr2fma1adj_u24)
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__neonfma_nr2fma1adj_u28)
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__neonfma_nr2fma1adj_u32)
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__neonfma_nr2fma1adj_u36)
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__neonfma_nr2fma1adj_u40)
-
 DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__rvv_sqrt_u1v)
 DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__rvv_sqrt_u2v)
 DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__rvv_sqrt_u4v)
@@ -978,18 +985,25 @@ DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__sse_sqrt_u4)
 DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__sse_sqrt_u8)
 DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__sse_sqrt_u16)
 
+DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__sse_rsqrt_u4)
+DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__sse_rsqrt_u8)
+DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__sse_rsqrt_u12)
+
 DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__avx_sqrt_u8)
 DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__avx_sqrt_u16)
 DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__avx_sqrt_u32)
 
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__fma3_nr1fma1adj_u8)
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__fma3_nr1fma1adj_u16)
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__fma3_nr1fma1adj_u24)
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__fma3_nr1fma1adj_u32)
+DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__avx_rsqrt_u8)
+DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__avx_rsqrt_u16)
+DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__avx_rsqrt_u32)
 
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__avx512f_nr1fma1adj_u16)
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__avx512f_nr1fma1adj_u32)
-DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__avx512f_nr1fma1adj_u64)
+DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__fma3_rsqrt_u8)
+DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__fma3_rsqrt_u16)
+DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__fma3_rsqrt_u32)
+
+DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__avx512f_rsqrt_u16)
+DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__avx512f_rsqrt_u32)
+DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__avx512f_rsqrt_u48)
 
 DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__wasmsimd_sqrt_u4)
 DECLARE_F32_VSQRT_UKERNEL_FUNCTION(xnn_f32_vsqrt_ukernel__wasmsimd_sqrt_u8)
@@ -1545,6 +1559,51 @@ DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__wasmsimd_expm1minus_rr
 DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__wasmsimd_expm1minus_rr1_p6h5ts_div_nabs_pmax_u12)
 DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__wasmsimd_expm1minus_rr1_p6h5ts_div_nabs_pmax_u16)
 
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__scalar_rational_9_6_u1)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__scalar_rational_9_6_u2)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__scalar_rational_9_6_u4)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__scalar_rational_9_6_u8)
+
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__sse2_rational_9_6_div_u4)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__sse2_rational_9_6_div_u8)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__sse2_rational_9_6_div_u12)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__sse2_rational_9_6_div_u16)
+
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__sse2_rational_9_6_nr_u4)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__sse2_rational_9_6_nr_u8)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__sse2_rational_9_6_nr_u12)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__sse2_rational_9_6_nr_u16)
+
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__avx_rational_9_6_div_u8)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__avx_rational_9_6_div_u16)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__avx_rational_9_6_div_u24)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__avx_rational_9_6_div_u32)
+
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__avx_rational_9_6_nr_u8)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__avx_rational_9_6_nr_u16)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__avx_rational_9_6_nr_u24)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__avx_rational_9_6_nr_u32)
+
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__fma3_rational_9_6_div_u8)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__fma3_rational_9_6_div_u16)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__fma3_rational_9_6_div_u24)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__fma3_rational_9_6_div_u32)
+
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__fma3_rational_9_6_nr_u8)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__fma3_rational_9_6_nr_u16)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__fma3_rational_9_6_nr_u24)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__fma3_rational_9_6_nr_u32)
+
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__avx512f_rational_9_6_div_u16)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__avx512f_rational_9_6_div_u32)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__avx512f_rational_9_6_div_u48)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__avx512f_rational_9_6_div_u64)
+
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__avx512f_rational_9_6_nr_u16)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__avx512f_rational_9_6_nr_u32)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__avx512f_rational_9_6_nr_u48)
+DECLARE_F32_VTANH_UKERNEL_FUNCTION(xnn_f32_vtanh_ukernel__avx512f_rational_9_6_nr_u64)
+
 
 #define DECLARE_F32_VHSWISH_UKERNEL_FUNCTION(fn_name) \
   DECLARE_F32_UKERNEL_FUNCTION(fn_name, xnn_f32_hswish_params);
@@ -1682,6 +1741,21 @@ DECLARE_F32_VRSQRT_UKERNEL_FUNCTION(xnn_f32_vrsqrt_ukernel__fma3_rsqrt_u32)
 DECLARE_F32_VRSQRT_UKERNEL_FUNCTION(xnn_f32_vrsqrt_ukernel__avx512f_rsqrt_u16)
 DECLARE_F32_VRSQRT_UKERNEL_FUNCTION(xnn_f32_vrsqrt_ukernel__avx512f_rsqrt_u32)
 DECLARE_F32_VRSQRT_UKERNEL_FUNCTION(xnn_f32_vrsqrt_ukernel__avx512f_rsqrt_u64)
+
+DECLARE_F32_VRSQRT_UKERNEL_FUNCTION(xnn_f32_vrsqrt_ukernel__neon_rsqrt_u4)
+DECLARE_F32_VRSQRT_UKERNEL_FUNCTION(xnn_f32_vrsqrt_ukernel__neon_rsqrt_u8)
+DECLARE_F32_VRSQRT_UKERNEL_FUNCTION(xnn_f32_vrsqrt_ukernel__neon_rsqrt_u16)
+
+#define DECLARE_F16_VRSQRT_UKERNEL_FUNCTION(fn_name) \
+  DECLARE_F16_UKERNEL_FUNCTION(fn_name, xnn_f16_rsqrt_params);
+
+DECLARE_F16_VRSQRT_UKERNEL_FUNCTION(xnn_f16_vrsqrt_ukernel__neonfp16arith_rsqrt_u8)
+DECLARE_F16_VRSQRT_UKERNEL_FUNCTION(xnn_f16_vrsqrt_ukernel__neonfp16arith_rsqrt_u16)
+DECLARE_F16_VRSQRT_UKERNEL_FUNCTION(xnn_f16_vrsqrt_ukernel__neonfp16arith_rsqrt_u32)
+
+DECLARE_F16_VRSQRT_UKERNEL_FUNCTION(xnn_f16_vrsqrt_ukernel__f16c_rsqrt_u8)
+DECLARE_F16_VRSQRT_UKERNEL_FUNCTION(xnn_f16_vrsqrt_ukernel__f16c_rsqrt_u16)
+DECLARE_F16_VRSQRT_UKERNEL_FUNCTION(xnn_f16_vrsqrt_ukernel__f16c_rsqrt_u32)
 
 
 #define DECLARE_U64_U32_VSQRTSHIFT_UKERNEL_FUNCTION(fn_name) \

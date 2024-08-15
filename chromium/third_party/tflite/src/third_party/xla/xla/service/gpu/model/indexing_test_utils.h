@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef XLA_SERVICE_GPU_MODEL_INDEXING_TEST_UTILS_H_
 #define XLA_SERVICE_GPU_MODEL_INDEXING_TEST_UTILS_H_
 
+#include <memory>
 #include <string_view>
 
 #include <gmock/gmock.h>
@@ -23,13 +24,18 @@ limitations under the License.
 #include "mlir/IR/AffineExpr.h"  // from @llvm-project
 #include "mlir/IR/AffineMap.h"  // from @llvm-project
 #include "mlir/IR/MLIRContext.h"  // from @llvm-project
+#include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/service/gpu/model/indexing_analysis.h"
 #include "xla/tests/hlo_test_base.h"
+#include "xla/tests/verified_hlo_module.h"
 
 namespace xla {
 namespace gpu {
 
 // Matches two strings ignoring whitespaces.
+// 'lhs' may contain regions bounded by the special pattern '###',
+// in which case, each region is parsed as a sequence of terms separated by
+// '+ signs. The function will try to match all permutations of terms.
 bool ApproximateMatch(std::string_view lhs, std::string_view rhs);
 
 MATCHER(UndefinedMap, "") { return arg.IsUndefined(); }
@@ -46,6 +52,22 @@ MATCHER_P(MatchIndexingString, indexing_string, "") {
   return ExplainMatchResult(true, ApproximateMatch(indexing_string, arg),
                             result_listener);
 }
+
+class IndexingTestBase : public HloTestBase {
+ public:
+  HloInstruction* ParseAndGetRoot(absl::string_view hlo_string);
+
+  HloInstructionIndexing GetOutputToInputIndexing(
+      const HloInstruction* instr, int output_id = 0,
+      bool use_physical_layout = false);
+
+  HloInstructionIndexing GetInputToOutputIndexing(
+      const HloInstruction* instr, int input_id = 0,
+      bool use_physical_layout = false);
+
+  mlir::MLIRContext mlir_context_;
+  std::unique_ptr<VerifiedHloModule> module_;
+};
 
 HloInstructionIndexing ComputeOutputToInputIndexingForEntryComputation(
     HloTestBase* test_base, mlir::MLIRContext* mlir_context,

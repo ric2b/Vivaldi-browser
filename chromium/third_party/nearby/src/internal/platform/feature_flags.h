@@ -62,9 +62,13 @@ class FeatureFlags {
     // requested service id before attempting to connect over rfcomm. SDP fails
     // on Windows when connecting to FP service id but the rfcomm is successful.
     bool skip_service_discovery_before_connecting_to_rfcomm = false;
-    // Controls enable or disable the use of async methods for StartScanning,
-    // StopScanning, StartAdvertising, and StopAdvertising for BLE V2.
-    bool enable_ble_v2_async_scanning_advertising = false;
+    // Controls enable or disable the use of async methods for StartScanning
+    // and StopScanning for BLE V2.
+    // TODO(b/333408829): Add flag to control async advertising.
+    bool enable_ble_v2_async_scanning = false;
+    // Enable legacy device discovered callback being used inside ble v2
+    // DiscoverPeripheralTracker flow.
+    bool enable_invoking_legacy_device_discovered_cb = false;
 
     std::int32_t min_nc_version_supports_safe_to_disconnect = 1;
     std::int32_t min_nc_version_supports_auto_reconnect = 3;
@@ -88,6 +92,21 @@ class FeatureFlags {
     // If the receiver doesn't ack with payload_received_ack frame in 1s, the
     // sender will timeout the waiting.
     absl::Duration wait_payload_received_ack_millis = absl::Milliseconds(1000);
+
+    // Multiplex related flags
+    // Timeout value for read frame operation in endpoint channel.
+    absl::Duration mediums_frame_read_timeout_millis =
+        absl::Milliseconds(15000);
+    // Timeout value for write frame operation in endpoint channel.
+    absl::Duration mediums_frame_write_timeout_millis =
+        absl::Milliseconds(15000);
+    // The timeout for waiting on connection request response.
+    absl::Duration multiplex_socket_connection_response_timeout_millis =
+        absl::Milliseconds(3000);
+    // The capacity of the middle priority queue inner MultiplexOutputStream.
+    // The new outgoing frame with the middle priority will wait for space to
+    // become available if the queue is full.'
+    std::uint32_t multiplex_socket_middle_priority_queue_capacity = 50;
   };
 
   static const FeatureFlags& GetInstance() {

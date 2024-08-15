@@ -28,7 +28,8 @@
       "vivaldi_proxy.exe",
       "update_notifier.exe"
     ],
-    "dirs": [ "resources" ]
+    "dirs": [ "resources" ],
+    "versioned": true
   },
   "chrome-win32-syms": {
     "files": [
@@ -38,7 +39,8 @@
       "vivaldi_elf.dll.pdb",
       "vivaldi_proxy.exe.pdb",
       "update_notifier.exe.pdb"
-    ]
+    ],
+    "versioned": true
   },
   "Vivaldi.*.exe": {
     "file_globs": [ "Vivaldi.*.exe" ],
@@ -46,12 +48,12 @@
   },
   "zucchini.exe": {},
   "zucchini64.exe": {},
-  "background-bundle.js.map": {},
-  "bundle.js.map": {},
-  "inject-root-bundle.js.map": {},
-  "background-common-bundle.js.map": {},
-  "bundle-mailreader-worker.js.map": {},
-  "inject-all-bundle.js.map": {},
-  "translate-bundle.js.map": {},
-  "vendor-bundle.js.map": {}
+  "background-bundle.js.map": { "versioned": true },
+  "bundle.js.map": { "versioned": true },
+  "inject-root-bundle.js.map": { "versioned": true },
+  "background-common-bundle.js.map": { "versioned": true },
+  "bundle-mailreader-worker.js.map": { "versioned": true },
+  "inject-all-bundle.js.map": { "versioned": true },
+  "translate-bundle.js.map": { "versioned": true },
+  "vendor-bundle.js.map": { "versioned": true }
 }

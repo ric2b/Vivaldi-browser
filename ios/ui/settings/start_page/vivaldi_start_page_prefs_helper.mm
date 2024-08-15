@@ -24,6 +24,10 @@
   return [VivaldiStartPagePrefs getStartPageSpeedDialMaximumColumns];
 }
 
++ (BOOL)showFrequentlyVisitedPages {
+  return [VivaldiStartPagePrefs showFrequentlyVisitedPages];
+}
+
 + (BOOL)showSpeedDials {
   return [VivaldiStartPagePrefs showSpeedDials];
 }
@@ -65,6 +69,10 @@
 
 + (void)setShowSpeedDials:(BOOL)show {
   [VivaldiStartPagePrefs setShowSpeedDials:show];
+}
+
++ (void)setShowFrequentlyVisitedPages:(BOOL)show {
+  [VivaldiStartPagePrefs setShowFrequentlyVisitedPages:show];
 }
 
 + (void)setShowStartPageCustomizeButton:(BOOL)show {

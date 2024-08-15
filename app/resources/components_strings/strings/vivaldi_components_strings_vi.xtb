@@ -157,7 +157,6 @@
 <translation id="7353601530677266744">Dòng Lệnh</translation>
 <translation id="7364115444476960850">Trang bạn đang cố truy cập đã bị chặn bởi <ph name="BLOCKER_NAME" /> của Vivaldi</translation>
 <translation id="7419106976560586862">Đường dẫn cấu hình</translation>
-<translation id="7445762425076701745">Không thể xác thực đầy đủ nhận dạng của máy chủ bạn đã kết nối. Bạn đã kết nối vào máy chủ bằng một tên chỉ hợp lệ trong mạng của bạn và đó là tên mà các tổ chức phát hành chứng chỉ bên ngoài không thể xác thực được. Vì một số tổ chức phát hành chứng chỉ sẽ cấp chứng chỉ cho các tên này thay thế, nên không có cách nào đảm bảo bạn được kết nối tới trang web đã chỉ định hay là một trang của kẻ tấn công.</translation>
 <translation id="7455133967321480974">Sử dụng cài đặt mặc định chung (Chặn)</translation>
 <translation id="7518003948725431193">Không tìm thấy trang web nào ứng với địa chỉ web:<ph name="URL" /></translation>
 <translation id="7549584377607005141">Trang web này yêu cầu dữ liệu mà bạn đã nhập trước đó để được hiển thị đúng cách. Bạn có thể gửi lại dữ liệu này nhưng làm như vậy bạn sẽ lặp lại mọi hoạt động mà trang này đã thực hiện trước đó.</translation>

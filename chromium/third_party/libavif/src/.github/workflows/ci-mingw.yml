@@ -27,7 +27,7 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+    - uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b # v4.1.4
     - uses: msys2/setup-msys2@v2
       with:
         msystem: ${{ matrix.sys }}
@@ -48,20 +48,12 @@ jobs:
           zlib:p
     - name: Cache external dependencies
       id: cache-ext
-      uses: actions/cache@ab5e6d0c87105b4c9c2047343972218f562e4319 # v4.0.1
+      uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
       with:
-        path: ext
-        key: ${{ matrix.sys }}-mingw-${{ hashFiles('ext/*.cmd') }}
+        path: ext, build/_deps
+        key: ${{ runner.os }}-mingw-${{ hashFiles('cmake/Modules/*', 'ext/*.cmd', 'ext/*.sh') }}
     - name: Print cmake version
       run: cmake --version
-    - name: Build libsharpyuv
-      if: steps.cache-ext.outputs.cache-hit != 'true'
-      working-directory: ./ext
-      run: ./libsharpyuv.cmd
-    - name: Build GoogleTest
-      if: steps.cache-ext.outputs.cache-hit != 'true'
-      working-directory: ./ext
-      run: ./googletest.cmd
 
     - name: Prepare libavif (cmake)
       run: >
@@ -74,7 +66,7 @@ jobs:
         -DAVIF_CODEC_DAV1D=SYSTEM
         -DAVIF_LIBSHARPYUV=LOCAL -DAVIF_LIBYUV=SYSTEM
         -DAVIF_BUILD_EXAMPLES=ON -DAVIF_BUILD_APPS=ON
-        -DAVIF_BUILD_TESTS=ON -DAVIF_ENABLE_GTEST=ON -DAVIF_LOCAL_GTEST=ON
+        -DAVIF_BUILD_TESTS=ON -DAVIF_ENABLE_GTEST=ON -DAVIF_GTEST=LOCAL
         -DAVIF_BUILD_GDK_PIXBUF=ON -DCMAKE_INSTALL_PREFIX=./install
         -DAVIF_ENABLE_WERROR=ON
     - name: Build libavif (ninja)
@@ -82,4 +74,4 @@ jobs:
       run: ninja
     - name: Run AVIF Tests
       working-directory: ./build
-      run: ctest -j $Env:NUMBER_OF_PROCESSORS --output-on-failure
+      run: ctest -j --output-on-failure

@@ -12,12 +12,12 @@
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1591562245178063882">Denne måned</translation>
 <translation id="1637811476055996098">Vælg filer</translation>
+<translation id="1680090928918677457">Brug kamera</translation>
 <translation id="1681022320378710418">aktuelt klokkeslæt</translation>
 <translation id="1727839386348365796">Pipette</translation>
 <translation id="1729654308190250600">Angiv en mailadresse, der ikke er tom.</translation>
 <translation id="1758486001363313524">Andet...</translation>
 <translation id="1787192514241997742">tid i alt: <ph name="REMAINING_TIME" /></translation>
-<translation id="1800494066469288780">Tillad kamera</translation>
 <translation id="1822429046913737220">f.m./e.m.</translation>
 <translation id="1832974991323546415">afspil på en enhed via fjernadgang</translation>
 <translation id="1921819250265091946">dd</translation>
@@ -54,7 +54,6 @@
 <translation id="3220661731597678625">aktuelt trin</translation>
 <translation id="3321030238473337787">Afspilningshastighed</translation>
 <translation id="3329013043687509092">Mætning</translation>
-<translation id="3377518164566272702">Tillad mikrofon og kamera</translation>
 <translation id="3450233048674729344">Værdien skal være mindre end eller lig med <ph name="MAXIMUM" />.</translation>
 <translation id="3732799496749320381">mm</translation>
 <translation id="3754210790023674521">Afslut integreret billede</translation>
@@ -62,6 +61,7 @@
 <translation id="3822383571486410024">Forlæng denne tekst til <ph name="MIN_CHARACTERS" /> eller flere tegn (du bruger i øjeblikket <ph name="CURRENT_LENGTH" /> tegn).</translation>
 <translation id="383465348367842624">Den del, der kommer før "<ph name="ATSIGN" />", må ikke indeholde "<ph name="INVALIDCHARACTER" />".</translation>
 <translation id="3846214748874656680">Afslut fuld skærm</translation>
+<translation id="3914173277599553213">Påkrævet</translation>
 <translation id="4031179711345676612">Der er givet adgang til mikrofonen</translation>
 <translation id="4103419683916926126">Millisekunder</translation>
 <translation id="4201051445878709314">Vis den foregående måned</translation>
@@ -77,6 +77,7 @@
 <translation id="4912200001568447310">aktuelt element</translation>
 <translation id="4915360478455618802">Vis tidsvælger</translation>
 <translation id="4924138096460353083">ubestemt</translation>
+<translation id="49269513399674318">Brug mikrofon</translation>
 <translation id="4950364064308314478">Vis lokal dato- og tidsvælger</translation>
 <translation id="4971739861736909480"><ph name="ACCNAME" /> er valgt</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> er valgt</translation>
@@ -144,6 +145,7 @@
 <translation id="7080893216867146095">Deling af lokation er tilladt</translation>
 <translation id="709897737746224366">Find et match til det anmodede format.</translation>
 <translation id="7102274145889307184">aktuel lokation</translation>
+<translation id="7134810312945846184">Brug mikrofon og kamera</translation>
 <translation id="7263440858009898357">Vælg et punkt på listen.</translation>
 <translation id="7320576522385648310">gemmer i buffer</translation>
 <translation id="7341556277900466204">Farvevælger</translation>
@@ -188,7 +190,6 @@
 <translation id="9132465097189459683">Andet...</translation>
 <translation id="9155987714137265666"><ph name="WEEK" />, med start <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Integreret billede</translation>
-<translation id="918430632320614861">Tillad mikrofon</translation>
 <translation id="945780513535800434">Delvis markering</translation>
 <translation id="954003015749068518">start integreret billede</translation>
 </translationbundle>

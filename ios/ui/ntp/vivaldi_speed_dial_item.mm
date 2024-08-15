@@ -6,16 +6,12 @@
 #import "components/bookmarks/browser/bookmark_node.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
-#import "ios/chrome/browser/ui/bookmarks/cells/table_view_bookmarks_folder_item.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 
 using vivaldi_bookmark_kit::GetNickname;
 using vivaldi_bookmark_kit::GetThumbnail;
 using vivaldi_bookmark_kit::GetSpeeddial;
 using vivaldi_bookmark_kit::GetDescription;
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @interface VivaldiSpeedDialItem() <NSItemProviderWriting>{}
 @end
@@ -25,10 +21,30 @@ using vivaldi_bookmark_kit::GetDescription;
 @synthesize bookmarkNode = _bookmarkNode;
 
 #pragma mark - INITIALIZER
-- (instancetype) initWithBookmark: (const bookmarks::BookmarkNode*)node {
+- (instancetype)initWithBookmark:(const bookmarks::BookmarkNode*)node {
   self = [super init];
   if (self) {
-    _bookmarkNode = node;
+    if (node != nullptr) {
+      _bookmarkNode = node;
+      _title = bookmark_utils_ios::TitleForBookmarkNode(node);
+      _url = node->url();
+      _isFolder = node->is_folder();
+      _isSpeedDial = GetSpeeddial(_bookmarkNode);
+    }
+    _isFrequentlyVisited = NO;
+  }
+  return self;
+}
+
+- (instancetype)initWithTitle:(NSString*)title
+                          url:(GURL)url {
+  self = [super init];
+  if (self) {
+    _title = title;
+    _url = url;
+    _isFolder = NO;
+    _isSpeedDial = NO;
+    _isFrequentlyVisited = YES;
   }
   return self;
 }
@@ -53,25 +69,9 @@ using vivaldi_bookmark_kit::GetDescription;
   return @(self.id);
 }
 
-- (BOOL)isFolder {
-  return _bookmarkNode->is_folder();
-}
-
-- (BOOL)isSpeedDial {
-  return GetSpeeddial(_bookmarkNode);
-}
-
-- (NSString*)title {
-  return bookmark_utils_ios::TitleForBookmarkNode(_bookmarkNode);
-}
-
 - (NSString*)nickname {
   const std::string nick = GetNickname(_bookmarkNode);
   return [NSString stringWithUTF8String:nick.c_str()];
-}
-
-- (GURL)url {
-  return _bookmarkNode->url();
 }
 
 - (NSString*)urlString {
@@ -92,21 +92,9 @@ using vivaldi_bookmark_kit::GetDescription;
 }
 
 - (BOOL)isInternalPage {
-  NSString* prefixStringVivaldi = @"vivaldi://";
-  NSString* prefixStringChrome = @"chrome://";
-  NSString* urlString = [[self urlString] lowercaseString];
-
-  BOOL isInternal = NO;
-
-  if (urlString.length > 0) {
-    if ([urlString containsString:prefixStringVivaldi] ||
-        [urlString containsString:prefixStringChrome])
-      isInternal = YES;
-  } else {
+  if (![self urlString])
     return NO;
-  }
-
-  return isInternal;
+  return [VivaldiGlobalHelpers isURLInternalPage:[self urlString]];
 }
 
 - (NSString*)thumbnail {

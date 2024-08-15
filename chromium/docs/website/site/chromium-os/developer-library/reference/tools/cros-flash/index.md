@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: cros-flash
 title: cros flash
 ---
@@ -174,8 +174,8 @@ start update-engine
 
 [available here]: https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/cli/cros/cros_flash.py
 [devserver]: https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/docs/devserver.md
-[Setting up SSH Access]: developer_guide.md#Set-up-SSH-connection-between-chroot-and-DUT
-[Simple Chrome]: simple_chrome_workflow.md
-[developer guide]: developer_guide.md
-[xBuddy]: xbuddy.md
-[gsutil]: gsutil.md
+[Setting up SSH Access]: /chromium-os/developer-library/guides/development/developer-guide/#Set-up-SSH-connection-between-chroot-and-DUT
+[Simple Chrome]: /chromium-os/developer-library/guides/development/simple-chrome-workflow/
+[developer guide]: /chromium-os/developer-library/guides/development/developer-guide/
+[xBuddy]: /chromium-os/developer-library/reference/tools/xbuddy/
+[gsutil]: /chromium-os/developer-library/reference/tools/gsutil/

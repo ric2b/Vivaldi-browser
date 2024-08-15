@@ -58,7 +58,7 @@ static void deinit(AVFormatContext *s)
     }
 }
 
-static int write_header(AVFormatContext *s)
+static av_cold int init(AVFormatContext *s)
 {
     ChromaprintMuxContext *cpr = s->priv_data;
     AVStream *st;
@@ -83,11 +83,6 @@ static int write_header(AVFormatContext *s)
                                 "version 0.7.0 or later.\n");
         return AVERROR(ENOSYS);
 #endif
-    }
-
-    if (s->nb_streams != 1) {
-        av_log(s, AV_LOG_ERROR, "Only one stream is supported\n");
-        return AVERROR(EINVAL);
     }
 
     st = s->streams[0];
@@ -182,7 +177,11 @@ const FFOutputFormat ff_chromaprint_muxer = {
     .p.long_name       = NULL_IF_CONFIG_SMALL("Chromaprint"),
     .priv_data_size    = sizeof(ChromaprintMuxContext),
     .p.audio_codec     = AV_NE(AV_CODEC_ID_PCM_S16BE, AV_CODEC_ID_PCM_S16LE),
-    .write_header      = write_header,
+    .p.video_codec     = AV_CODEC_ID_NONE,
+    .p.subtitle_codec  = AV_CODEC_ID_NONE,
+    .flags_internal    = FF_OFMT_FLAG_MAX_ONE_OF_EACH |
+                         FF_OFMT_FLAG_ONLY_DEFAULT_CODECS,
+    .init              = init,
     .write_packet      = write_packet,
     .write_trailer     = write_trailer,
     .deinit            = deinit,

@@ -34,22 +34,23 @@ using ::testing::Field;
 using ::testing::InSequence;
 using ::testing::MockFunction;
 using ::testing::Not;
+using ::testing::Property;
 
 // Returns a matcher that matches a `FormFieldData::id_attribute`.
 auto HasFieldIdAttribute(std::u16string id_attribute) {
-  return Field("id_attribute", &FormFieldData::id_attribute, id_attribute);
+  return Property("id_attribute", &FormFieldData::id_attribute, id_attribute);
 }
 
 // Returns a matcher that matches a `FormFieldData::form_control_type`.
 auto HasType(FormControlType type) {
-  return Field(&FormFieldData::form_control_type, type);
+  return Property(&FormFieldData::form_control_type, type);
 }
 
 auto IsContentEditable() {
   return HasType(FormControlType::kContentEditable);
 }
 
-// TODO(crbug.com/1496382): Clean up these functions once
+// TODO(crbug.com/40286775): Clean up these functions once
 // `kAutofillAndroidDisableSuggestionsOnJSFocus` is launched and Android and
 // Desktop behave identically.
 
@@ -90,22 +91,12 @@ int NumCallsToHidePopupOnFocusLoss() {
   return 1;  // Any dropdown should disappear on focus loss.
 }
 
-AutofillSuggestionTriggerSource TriggerSourceOnTextareaFocus() {
-  if constexpr (BUILDFLAG(IS_ANDROID)) {
-    return base::FeatureList::IsEnabled(
-               (features::kAutofillAndroidDisableSuggestionsOnJSFocus))
-               ? AutofillSuggestionTriggerSource::kTextareaFocusedWithoutClick
-               : AutofillSuggestionTriggerSource::kFormControlElementClicked;
-  }
-  return AutofillSuggestionTriggerSource::kTextareaFocusedWithoutClick;
-}
-
 }  // namespace
 
 class AutofillAgentFormInteractionTest : public test::AutofillRendererTest {
  public:
   void SetUp() override {
-    // TODO(crbug.com/63573): parameterize tests over AutofillAgent::Config.
+    // TODO(crbug.com/41268731): parameterize tests over AutofillAgent::Config.
     test::AutofillRendererTest::SetUp();
     web_view_->SetDefaultPageScaleLimits(1, 4);
 
@@ -230,28 +221,30 @@ TEST_F(AutofillAgentFormInteractionTest, TextAreaLeftClick) {
   EXPECT_TRUE(SimulateElementClickAndWait("button"));
 }
 
-// Tests that focusing the text field without a click calls AskForValuesToFill
-// on all platforms, but potentially with different trigger source:
-// - On Desktop, the trigger source is `kTextareaFocusedWithoutClick`.
-// - On Android, the trigger source is `kTextareaFocusedWithoutClick` iff
-//   `kAutofillAndroidDisableSuggestionsOnJSFocus`. Otherwise it is treated as a
-//    normal left click and the trigger source is `kFormControlElementClicked`.
-//
-// A subsequent left click then triggers the normal call with
-// `kFormControlElementClicked` as a trigger source.
+// Tests that focusing a textarea without a click calls AskForValuesToFill with
+// trigger source `kTextareaFocusedWithoutClick` on Desktop.
 TEST_F(AutofillAgentFormInteractionTest, TextareaFocusAndLeftClick) {
+  base::test::ScopedFeatureList feature_list{
+      features::kAutofillAndroidDisableSuggestionsOnJSFocus};
   MockFunction<void(int)> check;
   {
     InSequence s;
+    using enum AutofillSuggestionTriggerSource;
+    if constexpr (!BUILDFLAG(IS_ANDROID)) {
+      EXPECT_CALL(autofill_driver(),
+                  AskForValuesToFill(_, HasFieldIdAttribute(u"textarea"), _,
+                                     kTextareaFocusedWithoutClick));
+    } else {
+      EXPECT_CALL(autofill_driver(),
+                  AskForValuesToFill(_, HasFieldIdAttribute(u"textarea"), _,
+                                     kFormControlElementClicked))
+          .Times(
+              NumCallsToAskForValuesToFillOnTextfieldFocusWithoutLeftClick());
+    }
+    EXPECT_CALL(check, Call(1));
     EXPECT_CALL(autofill_driver(),
                 AskForValuesToFill(_, HasFieldIdAttribute(u"textarea"), _,
-                                   TriggerSourceOnTextareaFocus()));
-    EXPECT_CALL(check, Call(1));
-    EXPECT_CALL(
-        autofill_driver(),
-        AskForValuesToFill(
-            _, HasFieldIdAttribute(u"textarea"), _,
-            AutofillSuggestionTriggerSource::kFormControlElementClicked));
+                                   kFormControlElementClicked));
     EXPECT_CALL(check, Call(2));
   }
 
@@ -379,7 +372,7 @@ TEST_F(AutofillAgentContentEditableInteractionTest, LeftClick) {
 // Tests that unfocusing a contenteditable triggers a call to
 // `AutofillDriver::HidePopup()`.
 TEST_F(AutofillAgentContentEditableInteractionTest,
-       LossOfFocusOfContentEditableTriggersHideAutofillPopup) {
+       LossOfFocusOfContentEditableTriggersHideAutofillSuggestions) {
   MockFunction<void()> check;
   {
     InSequence s;
@@ -401,6 +394,22 @@ TEST_F(AutofillAgentContentEditableInteractionTest,
   check.Call();
   ChangeFocusToNull(GetMainFrame()->GetDocument());
 }
+
+// Scrolling doesn't hide the popup on Android.
+#if !BUILDFLAG(IS_ANDROID)
+// Tests that scrolling triggers a call to `AutofillDriver::HidePopup()`.
+TEST_F(AutofillAgentContentEditableInteractionTest,
+       ScrollingHidesAutofillPopup) {
+  EXPECT_CALL(autofill_driver(), HidePopup);
+  // "height" is needed so that the page is long enough to be able to scroll.
+  LoadHTML(
+      "<body><textarea style=\"height:10000px\" id=ce "
+      "contenteditable></textarea></body>");
+  SimulateElementClickAndWait("ce");
+  SimulateElementFocusAndWait("ce");
+  SimulateScrollingAndWait();
+}
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 // Tests that clicking on a contenteditable form is ignored.
 TEST_F(AutofillAgentContentEditableInteractionTest,

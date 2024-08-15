@@ -75,11 +75,6 @@
   </settings-toggle-button>
   <div class="sub-item"
       hidden$="[[!prefs.settings.a11y.mouse_keys.enabled.value]]">
-    <settings-toggle-button id="enableMouseKeysShortcutToPause"
-        class="settings-box hr"
-        pref="{{prefs.settings.a11y.mouse_keys.ctrl_to_pause_enabled}}"
-        label="$i18n{mouseKeysShortcutToPause}">
-    </settings-toggle-button>
     <settings-toggle-button id="enableMouseKeysDisableInTextFields"
         class="settings-box hr"
         pref="{{prefs.settings.a11y.mouse_keys.disable_in_text_fields}}"
@@ -194,6 +189,14 @@
     label="$i18n{cursorHighlightLabel}"
     deep-link-focus-id$="[[Setting.kHighlightCursorWhileMoving]]">
 </settings-toggle-button>
+<template is="dom-if" if="[[isAccessibilityOverscrollSettingFeatureEnabled_]]">
+  <settings-toggle-button id="overscrollToggle"
+      class="hr"
+      pref="{{prefs.settings.a11y.overscroll_history_navigation}}"
+      label="$i18n{overscrollHistoryNavigationTitle}"
+      deep-link-focus-id$="[[Setting.kOverscrollEnabled]]">
+  </settings-toggle-button>
+</template>
 <template is="dom-if" if="[[showShelfNavigationButtonsSettings_]]" restamp>
   <!-- If shelf navigation buttons are implicitly enabled by other a11y
       settings (e.g. by spoken feedback), the toggle control should be
@@ -217,6 +220,6 @@
   </settings-toggle-button>
 </template>
 <cr-link-row id="pointerSubpageButton" class="hr"
-    label="$i18n{mouseSettingsTitle}" on-click="onMouseClick_"
+    label="$i18n{mouseSettingsTitle}" on-click="onNavigateToSubpageClick"
     role-description="$i18n{subpageArrowRoleDescription}" embedded>
 </cr-link-row>

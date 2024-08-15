@@ -2,11 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
 import type * as Protocol from '../../../generated/protocol.js';
-import * as TraceModel from '../trace.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
+import * as TraceModel from '../trace.js';
 
 describe('LargestTextPaintHandler', function() {
   beforeEach(() => {
@@ -23,7 +21,7 @@ describe('LargestTextPaintHandler', function() {
     const data = TraceModel.Handlers.ModelHandlers.LargestTextPaint.data();
     assert.strictEqual(data.size, 1);
     const textCandidate = data.get(8 as Protocol.DOM.BackendNodeId);
-    assert.isDefined(textCandidate);
+    assert.exists(textCandidate);
     assert.strictEqual(textCandidate?.args.data?.DOMNodeId, 8 as Protocol.DOM.BackendNodeId);
   });
 });

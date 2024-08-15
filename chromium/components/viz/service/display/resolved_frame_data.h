@@ -119,6 +119,12 @@ struct VIZ_SERVICE_EXPORT AggregationPassData {
   // The damage added from its descandant surfaces during aggregation. This is
   // not part of the original render_pass->damage_rect from CC.
   gfx::Rect added_damage;
+
+  // |true| to if this pass should embedded and not merged. This is to support
+  // |kDelegatedCompositingLimitToUi| on Windows to keep the web contents
+  // surface in a swap chain instead of delegating its quads.
+  // TODO(crbug.com/324460866): Used for partially delegated compositing.
+  bool prevent_merge = false;
 };
 
 // Render pass data that must be recomputed each aggregation and needs to be
@@ -161,10 +167,6 @@ class VIZ_SERVICE_EXPORT ResolvedPassData {
   bool is_root() const { return fixed_.is_root; }
   const std::vector<ResolvedQuadData>& draw_quads() const {
     return fixed_.draw_quads;
-  }
-  const std::vector<raw_ptr<const DrawQuad, VectorExperimental>>&
-  prewalk_quads() const {
-    return fixed_.prewalk_quads;
   }
 
   // Returns true if the render pass is not embedded by another render pass and

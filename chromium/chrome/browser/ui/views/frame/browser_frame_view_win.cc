@@ -71,7 +71,7 @@ base::win::ScopedHICON CreateHICONFromSkBitmapSizedTo(
 }
 
 // Additional left margin in the title bar when the window is maximized.
-// TODO(https://crbug.com/1411801): Avoid hardcoding sizes like this.
+// TODO(crbug.com/40890502): Avoid hardcoding sizes like this.
 constexpr int kMaximizedLeftMargin = 2;
 
 constexpr int kIconTitleSpacing = 5;
@@ -168,7 +168,7 @@ void BrowserFrameViewWin::LayoutWebAppWindowTitle(
   gfx::Rect bounds = available_space;
   // If nothing has been added to the left, match native Windows 10 UWP apps
   // that don't have window icons.
-  // TODO(https://crbug.com/1411801): Avoid hardcoding sizes like this.
+  // TODO(crbug.com/40890502): Avoid hardcoding sizes like this.
   constexpr int kMinimumTitleLeftBorderMargin = 11;
   if (bounds.x() < kMinimumTitleLeftBorderMargin) {
     bounds.SetHorizontalBounds(kMinimumTitleLeftBorderMargin, bounds.right());
@@ -373,7 +373,7 @@ int BrowserFrameViewWin::NonClientHitTest(const gfx::Point& point) {
                                       &button_bounds, sizeof(button_bounds)))) {
     gfx::RectF button_bounds_in_dips = gfx::ConvertRectToDips(
         gfx::Rect(button_bounds), display::win::GetDPIScale());
-    // TODO(crbug.com/1131681): GetMirroredRect() requires an integer rect,
+    // TODO(crbug.com/40150311): GetMirroredRect() requires an integer rect,
     // but the size in DIPs may not be an integer with a fractional device
     // scale factor. If we want to keep using integers, the choice to use
     // ToFlooredRectDeprecated() seems to be doing the wrong thing given the

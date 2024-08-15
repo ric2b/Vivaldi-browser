@@ -25,6 +25,7 @@
 #include "libavutil/common.h"
 #include "libavutil/internal.h"
 #include "libavutil/log.h"
+#include "libavutil/mem.h"
 #include "libavutil/pixdesc.h"
 
 #include "vaapi_encode.h"
@@ -914,7 +915,6 @@ static int vaapi_encode_free(AVCodecContext *avctx,
         for (i = 0; i < pic->nb_slices; i++)
             av_freep(&pic->slices[i].codec_slice_params);
     }
-    av_freep(&pic->codec_picture_params);
 
     av_frame_free(&pic->input_image);
     av_frame_free(&pic->recon_image);
@@ -1806,6 +1806,19 @@ static av_cold int vaapi_encode_init_rate_control(AVCodecContext *avctx)
         int i, first = 1, res;
 
         supported_va_rc_modes = rc_attr.value;
+        if (ctx->blbrc) {
+#if VA_CHECK_VERSION(0, 39, 2)
+            if (!(supported_va_rc_modes & VA_RC_MB)) {
+                ctx->blbrc = 0;
+                av_log(avctx, AV_LOG_WARNING, "Driver does not support BLBRC.\n");
+            }
+#else
+            ctx->blbrc = 0;
+            av_log(avctx, AV_LOG_WARNING, "Please consider to update to VAAPI 0.39.2 "
+                   "or above, which can support BLBRC.\n");
+#endif
+        }
+
         for (i = 0; i < FF_ARRAY_ELEMS(vaapi_encode_rc_modes); i++) {
             rc_mode = &vaapi_encode_rc_modes[i];
             if (supported_va_rc_modes & rc_mode->va_mode) {
@@ -1957,7 +1970,10 @@ rc_mode_found:
         if (ctx->explicit_qp) {
             rc_quality = ctx->explicit_qp;
         } else if (avctx->global_quality > 0) {
-            rc_quality = avctx->global_quality;
+            if (avctx->flags & AV_CODEC_FLAG_QSCALE)
+                rc_quality = avctx->global_quality / FF_QP2LAMBDA;
+            else
+                rc_quality = avctx->global_quality;
         } else {
             rc_quality = ctx->codec->default_quality;
             av_log(avctx, AV_LOG_WARNING, "No quality level set; "
@@ -2017,13 +2033,22 @@ rc_mode_found:
     ctx->va_bit_rate = rc_bits_per_second;
 
     av_log(avctx, AV_LOG_VERBOSE, "RC mode: %s.\n", rc_mode->name);
+
+    if (ctx->blbrc && ctx->va_rc_mode == VA_RC_CQP)
+        ctx->blbrc = 0;
+    av_log(avctx, AV_LOG_VERBOSE, "Block Level bitrate control: %s.\n", ctx->blbrc ? "ON" : "OFF");
+
     if (rc_attr.value == VA_ATTRIB_NOT_SUPPORTED) {
         // This driver does not want the RC mode attribute to be set.
     } else {
         ctx->config_attributes[ctx->nb_config_attributes++] =
             (VAConfigAttrib) {
             .type  = VAConfigAttribRateControl,
+#if VA_CHECK_VERSION(0, 39, 2)
+            .value = ctx->blbrc ? ctx->va_rc_mode | VA_RC_MB : ctx->va_rc_mode,
+#else
             .value = ctx->va_rc_mode,
+#endif
         };
     }
 
@@ -2055,6 +2080,9 @@ rc_mode_found:
 #endif
 #if VA_CHECK_VERSION(1, 3, 0)
             .quality_factor     = rc_quality,
+#endif
+#if VA_CHECK_VERSION(0, 39, 2)
+            .rc_flags.bits.mb_rate_control = ctx->blbrc ? 1 : 2,
 #endif
         };
         vaapi_encode_add_global_param(avctx,

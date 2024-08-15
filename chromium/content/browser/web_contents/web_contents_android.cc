@@ -5,6 +5,7 @@
 #include "content/browser/web_contents/web_contents_android.h"
 
 #include <stdint.h>
+
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -24,6 +25,7 @@
 #include "content/browser/android/java/gin_java_bridge_dispatcher_host.h"
 #include "content/browser/media/media_web_contents_observer.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
+#include "content/browser/renderer_host/view_transition_opt_in_state.h"
 #include "content/browser/web_contents/view_structure_builder_android.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view_android.h"
@@ -368,6 +370,11 @@ bool WebContentsAndroid::ShouldShowLoadingUI(JNIEnv* env) const {
   return web_contents_->ShouldShowLoadingUI();
 }
 
+bool WebContentsAndroid::HasUncommittedNavigationInPrimaryMainFrame(
+    JNIEnv* env) const {
+  return web_contents_->HasUncommittedNavigationInPrimaryMainFrame();
+}
+
 void WebContentsAndroid::DispatchBeforeUnload(JNIEnv* env, bool auto_cancel) {
   web_contents_->DispatchBeforeUnload(auto_cancel);
 }
@@ -449,14 +456,7 @@ RenderWidgetHostViewAndroid*
 }
 
 jint WebContentsAndroid::GetBackgroundColor(JNIEnv* env) {
-  RenderWidgetHostViewAndroid* rwhva = GetRenderWidgetHostViewAndroid();
-
-  // Return transparent as an indicator that the web content background color
-  // is not specified, and a default background color will be used on the Java
-  // side.
-  if (!rwhva || !rwhva->GetCachedBackgroundColor())
-    return SK_ColorTRANSPARENT;
-  return *rwhva->GetCachedBackgroundColor();
+  return web_contents_->GetBackgroundColor().value_or(SK_ColorTRANSPARENT);
 }
 
 ScopedJavaLocalRef<jobject> WebContentsAndroid::GetLastCommittedURL(
@@ -659,6 +659,14 @@ jboolean WebContentsAndroid::HasAccessedInitialDocument(JNIEnv* env) {
       HasAccessedInitialDocument();
 }
 
+jboolean WebContentsAndroid::HasViewTransitionOptIn(JNIEnv* env) {
+  auto* opt_in_state = ViewTransitionOptInState::GetForCurrentDocument(
+      web_contents_->GetPrimaryMainFrame());
+  return opt_in_state &&
+         opt_in_state->same_origin_opt_in() ==
+             blink::mojom::ViewTransitionSameOriginOptIn::kEnabled;
+}
+
 jint WebContentsAndroid::GetThemeColor(JNIEnv* env) {
   return web_contents_->GetThemeColor().value_or(SK_ColorTRANSPARENT);
 }
@@ -766,7 +774,7 @@ int WebContentsAndroid::DownloadImage(
     const base::android::JavaParamRef<jobject>& jcallback) {
   const gfx::Size preferred_size;
   return web_contents_->DownloadImage(
-      *url::GURLAndroid::ToNativeGURL(env, jurl), is_fav_icon, preferred_size,
+      url::GURLAndroid::ToNativeGURL(env, jurl), is_fav_icon, preferred_size,
       max_bitmap_size, bypass_cache,
       base::BindOnce(&WebContentsAndroid::OnFinishDownloadImage,
                      weak_factory_.GetWeakPtr(), obj_,

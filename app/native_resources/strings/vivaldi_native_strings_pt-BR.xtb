@@ -13,6 +13,7 @@
 <translation id="1462666970065907900">Deseja realmente fechar esta janela?</translation>
 <translation id="1480046233931937785">Créditos</translation>
 <translation id="1526344461589023948">Ocorreu um erro ao tentar salvar a atualização baixada. Por favor, cheque se o computador tem espaço em disco suficiente e tente novamente mais tarde.</translation>
+<translation id="1635542496948266458">Alternar perfis</translation>
 <translation id="1657174850639146440">Monstro 9</translation>
 <translation id="1676595396635191120">Nova Janela Privada</translation>
 <translation id="1702758681952953055">Se um erro persistir, por favor, reporte ele e inclua os seguintes detalhes:</translation>
@@ -28,6 +29,7 @@
 <translation id="1985669426322966465">Atualização de Software</translation>
 <translation id="2079036669923635404">Clique aqui para atualizar o Vivaldi para a versão <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Ocorreu um erro enquanto baixava a atualização. Por favor, cheque sua conexão com a internet e tente novamente mais tarde.</translation>
+<translation id="2226825946708954262">⚠ Continuar com perda de dados</translation>
 <translation id="2339641773402824483">Procurando atualizações...</translation>
 <translation id="2441056087170876076">Monstro 2</translation>
 <translation id="2444387452209867610">Inserir &amp;nota</translation>
@@ -83,6 +85,9 @@
 <translation id="3943857333388298514">Colar</translation>
 <translation id="4005270918754737597">Pular esta versão</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi não conseguiu desbloquear seu armazenamento de chaves seguro. Sem o armazenamento de chaves, você perderá seus logins salvos, cookies seguros e alguns recursos como Sincronização, Mail e Calendário deixarão de funcionar.
+
+    Saia agora, desbloqueie ou repare seu armazenamento de chaves e tente novamente. Você realmente deseja continuar, mas perde dados?</translation>
 <translation id="4074744496918018786">Abrir imagem em janela &amp;privada</translation>
 <translation id="410351446219883937">Reprodução automática</translation>
 <translation id="4281844954008187215">Termos de serviço</translation>
@@ -104,6 +109,7 @@
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> de <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Speed Dial Importado</translation>
 <translation id="5092656712000637858">Criar pai&amp;nel web desta página</translation>
+<translation id="5106275083540628394">Falha na descriptografia: risco de perda de dados</translation>
 <translation id="5177818338935286353">Monstro 7</translation>
 <translation id="5213743983876949565">Animal 1</translation>
 <translation id="5238244642230426581">Marcadores importados</translation>
@@ -125,6 +131,7 @@
 <translation id="6229528619562190452">Clique aqui para atualizar o Vivaldi.</translation>
 <translation id="6234173136417926046">Usar imagem como fundo da Discagem Rápida</translation>
 <translation id="6339818817272922368">Conta Local</translation>
+<translation id="6398710281890660037">Proteger meu perfil</translation>
 <translation id="6438786710866753178">Paisagem 4</translation>
 <translation id="6477028720702061455">Selecione a pasta do perfil do Opera para importar</translation>
 <translation id="6510706699590490869">&amp;Atualizar Vivaldi</translation>
@@ -136,7 +143,9 @@
 <translation id="6726279523566323394">Selecione a pasta de perfil do Brave para ser importado</translation>
 <translation id="6892812721183419409">Abrir Link como <ph name="USER" /></translation>
 <translation id="6896758677409633944">Copiar</translation>
+<translation id="6960139763942959188">Este perfil está atualmente armazenado de forma insegura em um formato não criptografado. O Vivaldi está prestes a atualizar seu perfil para um formato criptografado mais seguro. Você deve sair agora e fazer backup do seu perfil antes de continuar.</translation>
 <translation id="7086554968911045110">Paisagem 7</translation>
+<translation id="7099506190679014195">Atualização segura do armazenamento de chaves</translation>
 <translation id="7111492742514999492">Paisagem 9</translation>
 <translation id="7208252576848052204">Infelizmente, as configurações do Arc não estão disponíveis enquanto o navegador está em execução. Para importar essas configurações para o Vivaldi, salve seu trabalho e feche todas as janelas do Arc. Em seguida, clique em Continuar.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -169,6 +178,7 @@
 <translation id="8669345741879513971">Monstro 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Inspecionar documento do portal</translation>
+<translation id="875142999698251063">Saia agora</translation>
 <translation id="8768970203213061953">Paisagem 14</translation>
 <translation id="8773635261052182196">Você não haverá notificações. Você pode ativá-las de novo nas configurações do Vivaldi.</translation>
 <translation id="8774017153185436870">Sites podem rodar vídeos automaticamente</translation>
@@ -180,6 +190,7 @@
 <translation id="9048058608784130603">Atualização pendente: <ph name="VERSION" /></translation>
 <translation id="9048224371732578627">Permitido rodar vídeos automaticamente</translation>
 <translation id="9065203028668620118">Editar</translation>
+<translation id="9090254883741610153">Deixe-me continuar</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Abrir Imagem como <ph name="USER" /></translation>
 <translation id="9157539936604258187">&amp;Abrir link</translation>

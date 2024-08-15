@@ -195,9 +195,6 @@ struct packet_traits<float> : default_packet_traits {
     HasRsqrt = 1,
     HasTanh = 1,
     HasErf = 1,
-    HasRound = 1,
-    HasFloor = 1,
-    HasCeil = 1,
     HasNegate = 1,
     HasBlend = 1
   };
@@ -225,9 +222,6 @@ struct packet_traits<double> : default_packet_traits {
     HasExp = 1,
     HasSqrt = 1,
     HasRsqrt = 1,
-    HasRound = 1,
-    HasFloor = 1,
-    HasCeil = 1,
     HasNegate = 1,
     HasBlend = 1
   };

@@ -135,6 +135,22 @@ class WindowPrivateSetControlButtonsPaddingFunction : public ExtensionFunction {
                      vivaldi::window_private::ControlButtonsPadding padding);
 };
 
+class WindowPrivatePerformHapticFeedbackFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("windowPrivate.performHapticFeedback",
+                             WINDOW_PRIVATE_PERFORM_HAPTIC_FEEDBACK)
+
+  WindowPrivatePerformHapticFeedbackFunction() = default;
+
+ protected:
+  ~WindowPrivatePerformHapticFeedbackFunction() override = default;
+
+ private:
+  ResponseAction Run() override;
+
+  void PerformHapticFeedback();
+};
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_WINDOW_WINDOW_PRIVATE_API_H_

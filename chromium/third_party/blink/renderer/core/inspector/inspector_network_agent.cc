@@ -1086,13 +1086,18 @@ BuildObjectForResourceResponse(const ResourceResponse& response,
     response_object->setCacheStorageCacheName(response.CacheStorageCacheName());
   }
   if (response.GetServiceWorkerRouterInfo()) {
-    response_object->setServiceWorkerRouterInfo(
-        protocol::Network::ServiceWorkerRouterInfo::create()
-            .setRuleIdMatched(
-                response.GetServiceWorkerRouterInfo()->RuleIdMatched())
-            .setMatchedSourceType(BuildServiceWorkerRouterSourceType(
-                response.GetServiceWorkerRouterInfo()->MatchedSourceType()))
-            .build());
+    auto router_info =
+        protocol::Network::ServiceWorkerRouterInfo::create().build();
+    if (response.GetServiceWorkerRouterInfo()->RuleIdMatched()) {
+      router_info->setRuleIdMatched(
+          *response.GetServiceWorkerRouterInfo()->RuleIdMatched());
+    }
+
+    if (response.GetServiceWorkerRouterInfo()->MatchedSourceType()) {
+      router_info->setMatchedSourceType(BuildServiceWorkerRouterSourceType(
+          *response.GetServiceWorkerRouterInfo()->MatchedSourceType()));
+    }
+    response_object->setServiceWorkerRouterInfo(std::move(router_info));
   }
 
   response_object->setFromPrefetchCache(response.WasInPrefetchCache());
@@ -1107,26 +1112,8 @@ BuildObjectForResourceResponse(const ResourceResponse& response,
     response_object->setRemotePort(remote_ip_endpoint.port());
   }
 
-  String protocol = response.AlpnNegotiatedProtocol();
-  if (protocol.empty() || protocol == "unknown") {
-    if (response.WasFetchedViaSPDY()) {
-      protocol = "h2";
-    } else if (response.IsHTTP()) {
-      protocol = "http";
-      if (response.HttpVersion() ==
-          ResourceResponse::HTTPVersion::kHTTPVersion_0_9)
-        protocol = "http/0.9";
-      else if (response.HttpVersion() ==
-               ResourceResponse::HTTPVersion::kHTTPVersion_1_0)
-        protocol = "http/1.0";
-      else if (response.HttpVersion() ==
-               ResourceResponse::HTTPVersion::kHTTPVersion_1_1)
-        protocol = "http/1.1";
-    } else {
-      protocol = response.CurrentRequestUrl().Protocol();
-    }
-  }
-  response_object->setProtocol(protocol);
+  response_object->setProtocol(
+      InspectorNetworkAgent::GetProtocolAsString(response));
   if (response.AlternateProtocolUsage() !=
       net::AlternateProtocolUsage::
           ALTERNATE_PROTOCOL_USAGE_UNSPECIFIED_REASON) {
@@ -1137,6 +1124,10 @@ BuildObjectForResourceResponse(const ResourceResponse& response,
   const std::optional<net::SSLInfo>& ssl_info = response.GetSSLInfo();
   if (ssl_info.has_value()) {
     response_object->setSecurityDetails(BuildSecurityDetails(*ssl_info));
+  }
+
+  if (cached_resource && cached_resource->IsPreloadedByEarlyHints()) {
+    response_object->setFromEarlyHints(true);
   }
 
   return response_object;
@@ -1842,6 +1833,31 @@ InspectorNetworkAgent::BuildInitiatorObject(
   return protocol::Network::Initiator::create()
       .setType(protocol::Network::Initiator::TypeEnum::Other)
       .build();
+}
+
+String InspectorNetworkAgent::GetProtocolAsString(
+    const ResourceResponse& response) {
+  String protocol = response.AlpnNegotiatedProtocol();
+  if (protocol.empty() || protocol == "unknown") {
+    if (response.WasFetchedViaSPDY()) {
+      protocol = "h2";
+    } else if (response.IsHTTP()) {
+      protocol = "http";
+      if (response.HttpVersion() ==
+          ResourceResponse::HTTPVersion::kHTTPVersion_0_9) {
+        protocol = "http/0.9";
+      } else if (response.HttpVersion() ==
+                 ResourceResponse::HTTPVersion::kHTTPVersion_1_0) {
+        protocol = "http/1.0";
+      } else if (response.HttpVersion() ==
+                 ResourceResponse::HTTPVersion::kHTTPVersion_1_1) {
+        protocol = "http/1.1";
+      }
+    } else {
+      protocol = response.CurrentRequestUrl().Protocol();
+    }
+  }
+  return protocol;
 }
 
 void InspectorNetworkAgent::WillCreateP2PSocketUdp(

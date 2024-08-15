@@ -16,11 +16,15 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac_bridge.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 namespace {
 
 // Layout constants.
 const CGFloat kTopPadding = 14;
-// TODO(crbug.com/1504112): Remove these when the compositional layout is fully
+// TODO(crbug.com/40944622): Remove these when the compositional layout is fully
 // landed.
 const CGFloat kBottomPadding = 10;
 const CGFloat kHorizontalPadding = 16;
@@ -38,8 +42,11 @@ const CGFloat kHorizontalPadding = 16;
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
   if (self) {
+
+    if (!vivaldi::IsVivaldiRunning()) {
     // Use dark mode colors for this header's elements.
     self.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+    } // End Vivaldi
 
     _textView = CreateUITextViewWithTextKit1();
     _textView.scrollEnabled = NO;

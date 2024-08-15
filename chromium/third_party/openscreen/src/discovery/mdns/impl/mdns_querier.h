@@ -27,13 +27,13 @@ class ReportingClient;
 
 class MdnsQuerier : public MdnsReceiver::ResponseClient {
  public:
-  MdnsQuerier(MdnsSender* sender,
-              MdnsReceiver* receiver,
+  MdnsQuerier(MdnsSender& sender,
+              MdnsReceiver& receiver,
               TaskRunner& task_runner,
               ClockNowFunctionPtr now_function,
-              MdnsRandom* random_delay,
-              ReportingClient* reporting_client,
-              Config config);
+              MdnsRandom& random_delay,
+              ReportingClient& reporting_client,
+              const Config& config);
   MdnsQuerier(const MdnsQuerier& other) = delete;
   MdnsQuerier(MdnsQuerier&& other) noexcept = delete;
   MdnsQuerier& operator=(const MdnsQuerier& other) = delete;
@@ -84,12 +84,12 @@ class MdnsQuerier : public MdnsReceiver::ResponseClient {
         std::function<bool(const MdnsRecordTracker&)>;
     using TrackerChangeCallback = std::function<void(const MdnsRecordTracker&)>;
 
-    RecordTrackerLruCache(MdnsQuerier* querier,
-                          MdnsSender* sender,
-                          MdnsRandom* random_delay,
+    RecordTrackerLruCache(MdnsQuerier& querier,
+                          MdnsSender& sender,
+                          MdnsRandom& random_delay,
                           TaskRunner& task_runner,
                           ClockNowFunctionPtr now_function,
-                          ReportingClient* reporting_client,
+                          ReportingClient& reporting_client,
                           const Config& config);
 
     // Returns all trackers with the associated |name| such that its type
@@ -130,13 +130,13 @@ class MdnsQuerier : public MdnsReceiver::ResponseClient {
     void MoveToBeginning(RecordMap::iterator iterator);
     void MoveToEnd(RecordMap::iterator iterator);
 
-    MdnsQuerier* const querier_;
-    MdnsSender* const sender_;
-    MdnsRandom* const random_delay_;
+    MdnsQuerier& querier_;
+    MdnsSender& sender_;
+    MdnsRandom& random_delay_;
     TaskRunner& task_runner_;
     ClockNowFunctionPtr now_function_;
-    ReportingClient* reporting_client_;
-    const Config& config_;
+    ReportingClient& reporting_client_;
+    Config config_;
 
     // List of RecordTracker instances used by this instance where the least
     // recently updated element (or next to be deleted element) appears at the
@@ -205,12 +205,12 @@ class MdnsQuerier : public MdnsReceiver::ResponseClient {
   // Applies the supplied pending changes.
   void ApplyPendingChanges(std::vector<PendingQueryChange> pending_changes);
 
-  MdnsSender* const sender_;
-  MdnsReceiver* const receiver_;
+  MdnsSender& sender_;
+  MdnsReceiver& receiver_;
   TaskRunner& task_runner_;
   const ClockNowFunctionPtr now_function_;
-  MdnsRandom* const random_delay_;
-  ReportingClient* reporting_client_;
+  MdnsRandom& random_delay_;
+  ReportingClient& reporting_client_;
   Config config_;
 
   // A collection of active question trackers, each is uniquely identified by

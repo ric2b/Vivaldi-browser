@@ -23,17 +23,16 @@ const char kRemotingRpcNamespace[] = "urn:x-cast:com.google.cast.remoting";
 
 MirroringApplication::MirroringApplication(TaskRunner& task_runner,
                                            const IPAddress& interface_address,
-                                           ApplicationAgent* agent)
+                                           ApplicationAgent& agent)
     : task_runner_(task_runner),
       interface_address_(interface_address),
       app_ids_(GetCastStreamingAppIds()),
       agent_(agent) {
-  OSP_CHECK(agent_);
-  agent_->RegisterApplication(this);
+  agent_.RegisterApplication(this);
 }
 
 MirroringApplication::~MirroringApplication() {
-  agent_->UnregisterApplication(this);  // ApplicationAgent may call Stop().
+  agent_.UnregisterApplication(this);  // ApplicationAgent may call Stop().
   OSP_CHECK(!current_session_);
 }
 
@@ -64,9 +63,8 @@ bool MirroringApplication::Launch(const std::string& app_id,
   constraints.video_codecs.insert(constraints.video_codecs.begin(),
                                   {VideoCodec::kAv1, VideoCodec::kVp9});
   constraints.remoting = std::make_unique<RemotingConstraints>();
-  current_session_ =
-      std::make_unique<ReceiverSession>(controller_.get(), environment_.get(),
-                                        message_port, std::move(constraints));
+  current_session_ = std::make_unique<ReceiverSession>(
+      *controller_, *environment_, *message_port, std::move(constraints));
   return true;
 }
 
@@ -90,9 +88,9 @@ void MirroringApplication::Stop() {
 }
 
 void MirroringApplication::OnPlaybackError(StreamingPlaybackController*,
-                                           Error error) {
+                                           const Error& error) {
   OSP_LOG_ERROR << "[MirroringApplication] " << error;
-  agent_->StopApplicationIfRunning(this);  // ApplicationAgent calls Stop().
+  agent_.StopApplicationIfRunning(this);  // ApplicationAgent calls Stop().
 }
 
 }  // namespace openscreen::cast

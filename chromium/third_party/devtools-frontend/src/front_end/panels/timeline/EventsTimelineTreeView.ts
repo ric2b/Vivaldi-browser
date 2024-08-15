@@ -18,10 +18,6 @@ import {TimelineUIUtils} from './TimelineUIUtils.js';
 
 const UIStrings = {
   /**
-   *@description Aria-label for filter bar in Event Log view
-   */
-  filterEventLog: 'Filter event log',
-  /**
    *@description Text for the start time of an activity
    */
   startTime: 'Start Time',
@@ -64,10 +60,6 @@ export class EventsTimelineTreeView extends TimelineTreeView {
     if (TimelineSelection.isTraceEventSelection(selection.object)) {
       this.selectEvent(selection.object, true);
     }
-  }
-
-  override getToolbarInputAccessiblePlaceHolder(): string {
-    return i18nString(UIStrings.filterEventLog);
   }
 
   override buildTree(): TimelineModel.TimelineProfileTree.Node {
@@ -140,16 +132,15 @@ export class EventsTimelineTreeView extends TimelineTreeView {
   }
 
   override showDetailsForNode(node: TimelineModel.TimelineProfileTree.Node): boolean {
+    const traceParseData = this.traceParseData();
+    if (!traceParseData) {
+      return false;
+    }
     const traceEvent = node.event;
     if (!traceEvent) {
       return false;
     }
-    const model = this.model();
-    if (!model) {
-      return false;
-    }
-    void TimelineUIUtils
-        .buildTraceEventDetails(traceEvent, model.timelineModel(), this.linkifier, false, this.traceParseData())
+    void TimelineUIUtils.buildTraceEventDetails(traceParseData, traceEvent, this.linkifier, false)
         .then(fragment => this.detailsView.element.appendChild(fragment));
     return true;
   }
@@ -202,7 +193,7 @@ export class Filters extends Common.ObjectWrapper.ObjectWrapper<EventTypes> {
     function durationFilterChanged(this: Filters): void {
       const duration = (durationFilterUI.selectedOption() as HTMLOptionElement).value;
       const minimumRecordDuration = parseInt(duration, 10);
-      this.durationFilter.setMinimumRecordDuration(minimumRecordDuration);
+      this.durationFilter.setMinimumRecordDuration(TraceEngine.Types.Timing.MilliSeconds(minimumRecordDuration));
       this.notifyFiltersChanged();
     }
 

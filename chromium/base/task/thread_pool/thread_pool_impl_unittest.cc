@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/task/thread_pool/thread_pool_impl.h"
 
 #include <stddef.h>
@@ -944,7 +949,8 @@ TEST_P(ThreadPoolImplTest, FileDescriptorWatcherNoOpsAfterShutdown) {
           [](int read_fd) {
             std::unique_ptr<FileDescriptorWatcher::Controller> controller =
                 FileDescriptorWatcher::WatchReadable(
-                    read_fd, BindRepeating([]() { NOTREACHED(); }));
+                    read_fd,
+                    BindRepeating([]() { NOTREACHED_IN_MIGRATION(); }));
 
             // This test is for components that intentionally leak their
             // watchers at shutdown. We can't clean |controller| up because its

@@ -43,7 +43,10 @@ export function checkElementsEqual(
   expected: TypedArrayBufferView
 ): ErrorWithExtra | undefined {
   assert(actual.constructor === expected.constructor, 'TypedArray type mismatch');
-  assert(actual.length === expected.length, 'size mismatch');
+  assert(
+    actual.length === expected.length,
+    `length mismatch: expected ${expected.length} got ${actual.length}`
+  );
 
   let failedElementsFirstMaybe: number | undefined = undefined;
   /** Sparse array with `true` for elements that failed. */

@@ -35,11 +35,11 @@ import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
-import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.profiles.ProfileProvider;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab_ui.TabContentManager;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelFilterProvider;
@@ -92,6 +92,7 @@ public class TabSwitcherPaneCoordinatorFactoryUnitTest {
     @Mock private TabSwitcherResetHandler mResetHandler;
     @Mock private Callback<Integer> mOnTabClickedCallback;
     @Mock private BottomSheetController mBottomSheetController;
+    @Mock private ProfileProvider mProfileProvider;
 
     @Captor private ArgumentCaptor<TabModelSelectorObserver> mTabModelSelectorObserverCaptor;
 
@@ -104,12 +105,15 @@ public class TabSwitcherPaneCoordinatorFactoryUnitTest {
     @Before
     public void setUp() {
         mTab1 = TabUiUnitTestUtils.prepareTab(TAB1_ID, TAB1_TITLE);
+        mProfileProviderSupplier.set(mProfileProvider);
 
         when(mTabModelSelector.getTabModelFilterProvider()).thenReturn(mTabModelFilterProvider);
+        when(mTabModelSelector.getModel(false)).thenReturn(mTabModel);
         when(mTabModelFilterProvider.getTabModelFilter(false)).thenReturn(mTabModelFilter);
         when(mTabModelFilter.getTabModel()).thenReturn(mTabModel);
         when(mTabModel.getCount()).thenReturn(1);
         when(mTabModel.getTabAt(0)).thenReturn(mTab1);
+        when(mTabModel.getTabById(TAB1_ID)).thenReturn(mTab1);
 
         mActivityScenarioRule.getScenario().onActivity(this::onActivityReady);
     }

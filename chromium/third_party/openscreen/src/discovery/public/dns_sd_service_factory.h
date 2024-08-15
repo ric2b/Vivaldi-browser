@@ -21,7 +21,7 @@ class ReportingClient;
 
 std::unique_ptr<DnsSdService, TaskRunnerDeleter> CreateDnsSdService(
     TaskRunner& task_runner,
-    ReportingClient* reporting_client,
+    ReportingClient& reporting_client,
     const Config& config);
 
 }  // namespace discovery

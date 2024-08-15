@@ -15,16 +15,12 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
 #include "components/viz/common/features.h"
+#include "components/viz/common/hit_test/hit_test_data_provider.h"
 #include "components/viz/common/hit_test/hit_test_region_list.h"
 #include "components/viz/common/quads/surface_draw_quad.h"
-#include "components/viz/host/host_frame_sink_manager.h"
-#include "content/browser/compositor/surface_utils.h"
 #include "content/browser/renderer_host/cursor_manager.h"
 #include "content/browser/renderer_host/input/touch_emulator.h"
-#include "content/browser/renderer_host/render_widget_host_impl.h"
-#include "content/browser/renderer_host/render_widget_host_view_base.h"
-#include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
-#include "content/public/browser/render_widget_host_iterator.h"
+#include "content/common/input/render_input_router.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/compositor/compositor.h"
@@ -62,13 +58,11 @@ bool IsMouseButtonDown(const blink::WebMouseEvent& event) {
 namespace content {
 
 // Helper method also used from hit_test_debug_key_event_observer.cc
-viz::HitTestQuery* GetHitTestQuery(
-    viz::HostFrameSinkManager* host_frame_sink_manager,
-    const viz::FrameSinkId& frame_sink_id) {
+viz::HitTestQuery* GetHitTestQuery(viz::HitTestDataProvider* provider,
+                                   const viz::FrameSinkId& frame_sink_id) {
   if (!frame_sink_id.is_valid())
     return nullptr;
-  const auto& display_hit_test_query_map =
-      host_frame_sink_manager->display_hit_test_query();
+  const auto& display_hit_test_query_map = provider->GetDisplayHitTestQuery();
   const auto iter = display_hit_test_query_map.find(frame_sink_id);
   if (iter == display_hit_test_query_map.end())
     return nullptr;
@@ -93,8 +87,8 @@ class TouchEventAckQueue {
   enum class TouchEventSource { SystemTouchEvent, EmulatedTouchEvent };
   struct AckData {
     TouchEventWithLatencyInfo touch_event;
-    raw_ptr<RenderWidgetHostViewBase> target_view;
-    raw_ptr<RenderWidgetHostViewBase> root_view;
+    raw_ptr<RenderWidgetHostViewInput> target_view;
+    raw_ptr<RenderWidgetHostViewInput> root_view;
     TouchEventSource touch_event_source;
     TouchEventAckStatus touch_event_ack_status;
     blink::mojom::InputEventResultState ack_result;
@@ -106,22 +100,22 @@ class TouchEventAckQueue {
   }
 
   void Add(const TouchEventWithLatencyInfo& touch_event,
-           RenderWidgetHostViewBase* target_view,
-           RenderWidgetHostViewBase* root_view,
+           RenderWidgetHostViewInput* target_view,
+           RenderWidgetHostViewInput* root_view,
            TouchEventSource touch_event_source,
            TouchEventAckStatus touch_event_ack_status,
            blink::mojom::InputEventResultState ack_result);
 
   void Add(const TouchEventWithLatencyInfo& touch_event,
-           RenderWidgetHostViewBase* target_view,
-           RenderWidgetHostViewBase* root_view,
+           RenderWidgetHostViewInput* target_view,
+           RenderWidgetHostViewInput* root_view,
            TouchEventSource touch_event_source);
 
   void MarkAcked(const TouchEventWithLatencyInfo& touch_event,
                  blink::mojom::InputEventResultState ack_result,
-                 RenderWidgetHostViewBase* target_view);
+                 RenderWidgetHostViewInput* target_view);
 
-  void UpdateQueueAfterTargetDestroyed(RenderWidgetHostViewBase* target_view);
+  void UpdateQueueAfterTargetDestroyed(RenderWidgetHostViewInput* target_view);
 
   size_t length_for_testing() { return ack_queue_.size(); }
 
@@ -133,8 +127,8 @@ class TouchEventAckQueue {
 };
 
 void TouchEventAckQueue::Add(const TouchEventWithLatencyInfo& touch_event,
-                             RenderWidgetHostViewBase* target_view,
-                             RenderWidgetHostViewBase* root_view,
+                             RenderWidgetHostViewInput* target_view,
+                             RenderWidgetHostViewInput* root_view,
                              TouchEventSource touch_event_source,
                              TouchEventAckStatus touch_event_ack_status,
                              blink::mojom::InputEventResultState ack_result) {
@@ -150,8 +144,8 @@ void TouchEventAckQueue::Add(const TouchEventWithLatencyInfo& touch_event,
 }
 
 void TouchEventAckQueue::Add(const TouchEventWithLatencyInfo& touch_event,
-                             RenderWidgetHostViewBase* target_view,
-                             RenderWidgetHostViewBase* root_view,
+                             RenderWidgetHostViewInput* target_view,
+                             RenderWidgetHostViewInput* root_view,
                              TouchEventSource touch_event_source) {
   Add(touch_event, target_view, root_view, touch_event_source,
       TouchEventAckStatus::TouchEventNotAcked,
@@ -161,7 +155,7 @@ void TouchEventAckQueue::Add(const TouchEventWithLatencyInfo& touch_event,
 void TouchEventAckQueue::MarkAcked(
     const TouchEventWithLatencyInfo& touch_event,
     blink::mojom::InputEventResultState ack_result,
-    RenderWidgetHostViewBase* target_view) {
+    RenderWidgetHostViewInput* target_view) {
   auto it = find_if(ack_queue_.begin(), ack_queue_.end(),
                     [touch_event](AckData data) {
                       return data.touch_event.event.unique_touch_event_id ==
@@ -209,7 +203,7 @@ void TouchEventAckQueue::ProcessAckedTouchEvents() {
 }
 
 void TouchEventAckQueue::UpdateQueueAfterTargetDestroyed(
-    RenderWidgetHostViewBase* target_view) {
+    RenderWidgetHostViewInput* target_view) {
   // If a queue entry's root view is being destroyed, just delete it.
   std::erase_if(ack_queue_, [target_view](AckData data) {
     return data.root_view == target_view;
@@ -329,9 +323,19 @@ size_t RenderWidgetHostInputEventRouter::RegisteredViewCountForTesting() const {
   return owner_map_.size();
 }
 
-void RenderWidgetHostInputEventRouter::OnRenderWidgetHostViewBaseDestroyed(
-    RenderWidgetHostViewBase* view) {
-  // RenderWidgetHostViewBase::RemoveObserver() should only ever be called
+RenderWidgetHostViewInput*
+RenderWidgetHostInputEventRouter::GetLastMouseMoveTargetForTest() {
+  return last_mouse_move_target_.get();
+}
+
+RenderWidgetHostViewInput*
+RenderWidgetHostInputEventRouter::GetLastMouseMoveRootViewForTest() {
+  return last_mouse_move_root_view_.get();
+}
+
+void RenderWidgetHostInputEventRouter::OnRenderWidgetHostViewInputDestroyed(
+    RenderWidgetHostViewInput* view) {
+  // RenderWidgetHostViewInput::RemoveObserver() should only ever be called
   // in this function, except during the shutdown of this class. This prevents
   // removal of an observed view that is being tracked as an event target
   // without cleaning up dangling pointers to it.
@@ -393,10 +397,8 @@ void RenderWidgetHostInputEventRouter::OnRenderWidgetHostViewBaseDestroyed(
     // most recent target, if possible. In some cases the parent might already
     // have been destroyed, in which case the last target is cleared.
     if (view != last_mouse_move_root_view_) {
-      DCHECK(last_mouse_move_target_->IsRenderWidgetHostViewChildFrame());
-      last_mouse_move_target_ =
-          static_cast<RenderWidgetHostViewChildFrame*>(last_mouse_move_target_)
-              ->GetParentView();
+      last_mouse_move_target_ = last_mouse_move_target_->GetParentViewInput();
+
       // NOTE(andre@vivaldi.com) : In case the parent dies we need to get
       // informed. This could happen if a webview was tiled and the user moved
       // the mouse over the closing view. |last_mouse_move_target_| would then
@@ -431,29 +433,28 @@ void RenderWidgetHostInputEventRouter::OnRenderWidgetHostViewBaseDestroyed(
 }
 
 void RenderWidgetHostInputEventRouter::ClearAllObserverRegistrations() {
-  // Since we're shutting down, it's safe to call RenderWidgetHostViewBase::
+  // Since we're shutting down, it's safe to call RenderWidgetHostViewInput::
   // RemoveObserver() directly here.
   for (auto entry : owner_map_) {
     if (entry.second)
       entry.second->RemoveObserver(this);
   }
   owner_map_.clear();
-  viz::HostFrameSinkManager* manager = GetHostFrameSinkManager();
-  if (manager)
-    manager->RemoveHitTestRegionObserver(this);
+  hit_test_provider_->RemoveHitTestRegionObserver(this);
 }
 
-RenderWidgetHostInputEventRouter::RenderWidgetHostInputEventRouter()
+RenderWidgetHostInputEventRouter::RenderWidgetHostInputEventRouter(
+    viz::HitTestDataProvider* provider)
     : last_mouse_move_target_(nullptr),
       last_mouse_move_root_view_(nullptr),
       last_emulated_event_root_view_(nullptr),
       last_device_scale_factor_(1.f),
       active_touches_(0),
+      hit_test_provider_(provider),
       event_targeter_(std::make_unique<RenderWidgetTargeter>(this)),
       touch_event_ack_queue_(new TouchEventAckQueue(this)) {
-  viz::HostFrameSinkManager* manager = GetHostFrameSinkManager();
-  DCHECK(manager);
-  manager->AddHitTestRegionObserver(this);
+  DCHECK(hit_test_provider_);
+  hit_test_provider_->AddHitTestRegionObserver(this);
 }
 
 RenderWidgetHostInputEventRouter::~RenderWidgetHostInputEventRouter() {
@@ -463,9 +464,9 @@ RenderWidgetHostInputEventRouter::~RenderWidgetHostInputEventRouter() {
 }
 
 RenderWidgetTargetResult RenderWidgetHostInputEventRouter::FindMouseEventTarget(
-    RenderWidgetHostViewBase* root_view,
+    RenderWidgetHostViewInput* root_view,
     const blink::WebMouseEvent& event) const {
-  RenderWidgetHostViewBase* target = nullptr;
+  RenderWidgetHostViewInput* target = nullptr;
   bool needs_transform_point = true;
   bool latched_target = true;
   // Allow devtools to route events into the root view based on the
@@ -475,8 +476,9 @@ RenderWidgetTargetResult RenderWidgetHostInputEventRouter::FindMouseEventTarget(
 
   if (!target && root_view->IsPointerLocked() &&
       // Vivaldi GUI web_contents may/will not have PointerLock widget (VB-68886)
-      root_view->host()->delegate()->GetPointerLockWidget()) {
-    target = root_view->host()->delegate()->GetPointerLockWidget()->GetView();
+      root_view->GetViewRenderInputRouter()->delegate()->GetPointerLockView()) {
+    target =
+        root_view->GetViewRenderInputRouter()->delegate()->GetPointerLockView();
   }
 
   gfx::PointF transformed_point;
@@ -491,7 +493,7 @@ RenderWidgetTargetResult RenderWidgetHostInputEventRouter::FindMouseEventTarget(
     // the OOPIF renderer. Instead of using the coordinate transformation in the
     // browser process process, use the cached coordinates that were determined
     // by the renderer process on the previous MouseDown.
-    // TODO(crbug.com/989109): Currently there is a mismatch between the
+    // TODO(crbug.com/41473630): Currently there is a mismatch between the
     // coordinate transforms from browser process and renderer process. We need
     // to fix it so that we don't need to cache the transform from MouseDown.
     if (event.GetType() == blink::WebInputEvent::Type::kMouseUp &&
@@ -529,14 +531,15 @@ RenderWidgetTargetResult RenderWidgetHostInputEventRouter::FindMouseEventTarget(
 
 RenderWidgetTargetResult
 RenderWidgetHostInputEventRouter::FindMouseWheelEventTarget(
-    RenderWidgetHostViewBase* root_view,
+    RenderWidgetHostViewInput* root_view,
     const blink::WebMouseWheelEvent& event) const {
-  RenderWidgetHostViewBase* target = nullptr;
+  RenderWidgetHostViewInput* target = nullptr;
   gfx::PointF transformed_point;
   if (root_view->IsPointerLocked() &&
       // Vivaldi GUI web_contents may/will not have PointerLock widget (VB-68886)
-      root_view->host()->delegate()->GetPointerLockWidget()) {
-    target = root_view->host()->delegate()->GetPointerLockWidget()->GetView();
+      root_view->GetViewRenderInputRouter()->delegate()->GetPointerLockView()) {
+    target =
+        root_view->GetViewRenderInputRouter()->delegate()->GetPointerLockView();
     if (!root_view->TransformPointToCoordSpaceForView(
             event.PositionInWidget(), target, &transformed_point)) {
       return {nullptr, false, std::nullopt, true};
@@ -556,7 +559,7 @@ RenderWidgetHostInputEventRouter::FindMouseWheelEventTarget(
 }
 
 RenderWidgetTargetResult RenderWidgetHostInputEventRouter::FindViewAtLocation(
-    RenderWidgetHostViewBase* root_view,
+    RenderWidgetHostViewInput* root_view,
     const gfx::PointF& point,
     viz::EventSource source,
     gfx::PointF* transformed_point) const {
@@ -569,8 +572,8 @@ RenderWidgetTargetResult RenderWidgetHostInputEventRouter::FindViewAtLocation(
 
   viz::FrameSinkId frame_sink_id;
   bool query_renderer = false;
-  viz::HitTestQuery* query = GetHitTestQuery(GetHostFrameSinkManager(),
-                                             root_view->GetRootFrameSinkId());
+  viz::HitTestQuery* query =
+      GetHitTestQuery(hit_test_provider_, root_view->GetRootFrameSinkId());
   if (!query) {
     *transformed_point = point;
     return {root_view, false, *transformed_point, false};
@@ -611,7 +614,7 @@ RenderWidgetTargetResult RenderWidgetHostInputEventRouter::FindViewAtLocation(
 }
 
 void RenderWidgetHostInputEventRouter::RouteMouseEvent(
-    RenderWidgetHostViewBase* root_view,
+    RenderWidgetHostViewInput* root_view,
     const blink::WebMouseEvent* event,
     const ui::LatencyInfo& latency) {
   if (VivaldiEventHooks::HandleMouseEvent(root_view, *event))
@@ -620,8 +623,8 @@ void RenderWidgetHostInputEventRouter::RouteMouseEvent(
 }
 
 void RenderWidgetHostInputEventRouter::DispatchMouseEvent(
-    RenderWidgetHostViewBase* root_view,
-    RenderWidgetHostViewBase* target,
+    RenderWidgetHostViewInput* root_view,
+    RenderWidgetHostViewInput* target,
     const blink::WebMouseEvent& mouse_event,
     const ui::LatencyInfo& latency,
     const std::optional<gfx::PointF>& target_location) {
@@ -650,11 +653,11 @@ void RenderWidgetHostInputEventRouter::DispatchMouseEvent(
     auto hit_test_result =
         FindViewAtLocation(root_view, mouse_event.PositionInWidget(),
                            viz::EventSource::MOUSE, &transformed_point);
-    // TODO(crbug.com/893101): This is skipped if the HitTestResult is requiring
-    // an asynchronous hit test to the renderer process, because it might mean
-    // sending extra MouseMoves to renderers that don't need the event updates
-    // which is a worse outcome than the cursor being delayed in updating.
-    // An asynchronous hit test can be added here to fix the problem.
+    // TODO(crbug.com/41419447): This is skipped if the HitTestResult is
+    // requiring an asynchronous hit test to the renderer process, because it
+    // might mean sending extra MouseMoves to renderers that don't need the
+    // event updates which is a worse outcome than the cursor being delayed in
+    // updating. An asynchronous hit test can be added here to fix the problem.
     if (hit_test_result.view != target && !hit_test_result.should_query_view) {
       SendMouseEnterOrLeaveEvents(
           mouse_event, hit_test_result.view, root_view,
@@ -706,7 +709,7 @@ void RenderWidgetHostInputEventRouter::DispatchMouseEvent(
 }
 
 void RenderWidgetHostInputEventRouter::RouteMouseWheelEvent(
-    RenderWidgetHostViewBase* root_view,
+    RenderWidgetHostViewInput* root_view,
     blink::WebMouseWheelEvent* event,
     const ui::LatencyInfo& latency) {
   if (VivaldiEventHooks::HandleWheelEvent(root_view, *event, latency))
@@ -715,8 +718,8 @@ void RenderWidgetHostInputEventRouter::RouteMouseWheelEvent(
 }
 
 void RenderWidgetHostInputEventRouter::DispatchMouseWheelEvent(
-    RenderWidgetHostViewBase* root_view,
-    RenderWidgetHostViewBase* target,
+    RenderWidgetHostViewInput* root_view,
+    RenderWidgetHostViewInput* target,
     const blink::WebMouseWheelEvent& mouse_wheel_event,
     const ui::LatencyInfo& latency,
     const std::optional<gfx::PointF>& target_location) {
@@ -779,7 +782,7 @@ vivaldi_after_process_event:
 }
 
 void RenderWidgetHostInputEventRouter::RouteGestureEvent(
-    RenderWidgetHostViewBase* root_view,
+    RenderWidgetHostViewInput* root_view,
     const blink::WebGestureEvent* event,
     const ui::LatencyInfo& latency) {
   if (event->IsTargetViewport()) {
@@ -854,7 +857,7 @@ void RenderWidgetHostInputEventRouter::OnHandledTouchStartOrFirstTouchMove(
 }
 
 RenderWidgetTargetResult RenderWidgetHostInputEventRouter::FindTouchEventTarget(
-    RenderWidgetHostViewBase* root_view,
+    RenderWidgetHostViewInput* root_view,
     const blink::WebTouchEvent& event) {
   // Tests may call this without an initial TouchStart, so check event type
   // explicitly here.
@@ -871,8 +874,8 @@ RenderWidgetTargetResult RenderWidgetHostInputEventRouter::FindTouchEventTarget(
 }
 
 void RenderWidgetHostInputEventRouter::DispatchTouchEvent(
-    RenderWidgetHostViewBase* root_view,
-    RenderWidgetHostViewBase* target,
+    RenderWidgetHostViewInput* root_view,
+    RenderWidgetHostViewInput* target,
     const blink::WebTouchEvent& touch_event,
     const ui::LatencyInfo& latency,
     const std::optional<gfx::PointF>& target_location,
@@ -888,13 +891,13 @@ void RenderWidgetHostInputEventRouter::DispatchTouchEvent(
                touch_event.unique_touch_event_id) ==
            touchscreen_gesture_target_map_.end());
     touchscreen_gesture_target_map_[touch_event.unique_touch_event_id] =
-        touch_target_->GetWeakPtr();
+        touch_target_->GetInputWeakPtr();
   } else if (touch_event.GetType() == blink::WebInputEvent::Type::kTouchStart) {
     active_touches_ += CountChangedTouchPoints(touch_event);
   }
 
   // Test active_touches_ before decrementing, since its value can be
-  // reset to 0 in OnRenderWidgetHostViewBaseDestroyed, and this can
+  // reset to 0 in OnRenderWidgetHostViewInputDestroyed, and this can
   // happen between the TouchStart and a subsequent TouchMove/End/Cancel.
   if ((touch_event.GetType() == blink::WebInputEvent::Type::kTouchEnd ||
        touch_event.GetType() == blink::WebInputEvent::Type::kTouchCancel) &&
@@ -939,7 +942,7 @@ void RenderWidgetHostInputEventRouter::DispatchTouchEvent(
     } else {
       // GetTransformToViewCoordSpace() fails when viz_hit_test is off but
       // TransformRootPointToViewCoordSpace() still works at this case.
-      // TODO(crbug.com/917015) remove the extra code when viz_hit_test is
+      // TODO(crbug.com/41432837) remove the extra code when viz_hit_test is
       // always on.
       gfx::PointF point_in_target =
           touch_target_->TransformRootPointToViewCoordSpace(
@@ -967,14 +970,14 @@ void RenderWidgetHostInputEventRouter::DispatchTouchEvent(
 void RenderWidgetHostInputEventRouter::ProcessAckedTouchEvent(
     const TouchEventWithLatencyInfo& event,
     blink::mojom::InputEventResultState ack_result,
-    RenderWidgetHostViewBase* view) {
+    RenderWidgetHostViewInput* view) {
   TRACE_EVENT("input",
               "RenderWidgetHostInputEventRouter::ProcessAckedTouchEvent");
   touch_event_ack_queue_->MarkAcked(event, ack_result, view);
 }
 
 void RenderWidgetHostInputEventRouter::RouteTouchEvent(
-    RenderWidgetHostViewBase* root_view,
+    RenderWidgetHostViewInput* root_view,
     blink::WebTouchEvent* event,
     const ui::LatencyInfo& latency) {
   event_targeter_->FindTargetAndDispatch(root_view, *event, latency);
@@ -982,8 +985,8 @@ void RenderWidgetHostInputEventRouter::RouteTouchEvent(
 
 void RenderWidgetHostInputEventRouter::SendMouseEnterOrLeaveEvents(
     const blink::WebMouseEvent& event,
-    RenderWidgetHostViewBase* target,
-    RenderWidgetHostViewBase* root_view,
+    RenderWidgetHostViewInput* target,
+    RenderWidgetHostViewInput* root_view,
     blink::WebInputEvent::Modifiers extra_modifiers,
     bool include_target_view) {
   // This method treats RenderWidgetHostViews as a tree, where the mouse
@@ -1013,55 +1016,44 @@ void RenderWidgetHostInputEventRouter::SendMouseEnterOrLeaveEvents(
 
   // Finding the LCA uses a standard approach. We build vectors of the
   // ancestors of each node up to the root, and then remove common ancestors.
-  std::vector<RenderWidgetHostViewBase*> entered_views;
-  std::vector<RenderWidgetHostViewBase*> exited_views;
-  RenderWidgetHostViewBase* cur_view = target;
+  std::vector<RenderWidgetHostViewInput*> entered_views;
+  std::vector<RenderWidgetHostViewInput*> exited_views;
+  RenderWidgetHostViewInput* cur_view = target;
   entered_views.push_back(cur_view);
   // Non-root RWHVs are guaranteed to be RenderWidgetHostViewChildFrames,
   // as long as they are the only embeddable RWHVs.
-  while (cur_view->IsRenderWidgetHostViewChildFrame()) {
-    cur_view =
-        static_cast<RenderWidgetHostViewChildFrame*>(cur_view)->GetParentView();
-    // cur_view can possibly be nullptr for guestviews that are not currently
-    // connected to the webcontents tree.
-    if (!cur_view) {
-      last_mouse_move_target_ = target;
-      last_mouse_move_root_view_ = root_view;
-      return;
-    }
+  while (cur_view->GetParentViewInput()) {
+    cur_view = cur_view->GetParentViewInput();
     entered_views.push_back(cur_view);
   }
-
-  // On Windows, it appears to be possible that render widget targeting could
-  // produce a target that is outside of the specified root. For now, we'll
-  // just give up in such a case. See https://crbug.com/851958.
-  if (cur_view != root_view)
+  // There are two cases where cur_view != root_view :
+  // 1. On Windows, render widget targeting could produce a target that is
+  // outside of the specified root. See https://crbug.com/851958. In this case,
+  // we'll just give up.
+  // 2. cur_view's GetParentViewInput() can possibly be nullptr for
+  // guestviews (Chrome App or WebUI) that are not currently connected to
+  // the webcontents tree. It is fine to return early since this would be
+  // attempted again on next mouse event and once guestview is connected, the
+  // ancestors will be notified and state would be updated.
+  if (cur_view != root_view) {
     return;
+  }
 
   cur_view = last_mouse_move_target_;
   if (cur_view) {
     exited_views.push_back(cur_view);
-    while (cur_view->IsRenderWidgetHostViewChildFrame()) {
-      cur_view = static_cast<RenderWidgetHostViewChildFrame*>(cur_view)
-                     ->GetParentView();
-      if (!cur_view) {
-        last_mouse_move_target_ = target;
-        last_mouse_move_root_view_ = root_view;
-        return;
-      }
+    while (cur_view->GetParentViewInput()) {
+      cur_view = cur_view->GetParentViewInput();
       exited_views.push_back(cur_view);
     }
-    // NOTE(andre@vivaldi.com) : In Vivaldi we can end up with a non root here
-    // as we have patches in the event emit functions. See
-    // |RenderWidgetTargeter::FoundTarget| Might be problematic, but hide this
-    // as it happens often when moving views between windows.
-    if (!vivaldi::IsVivaldiRunning()) {
-    DCHECK_EQ(cur_view, root_view);
+    if (cur_view != root_view) {
+      return;
     }
+    DCHECK_EQ(cur_view, root_view);
   }
 
   // This removes common ancestors from the root downward.
-  RenderWidgetHostViewBase* common_ancestor = nullptr;
+  RenderWidgetHostViewInput* common_ancestor = nullptr;
   while (entered_views.size() > 0 && exited_views.size() > 0 &&
          entered_views.back() == exited_views.back()) {
     common_ancestor = entered_views.back();
@@ -1124,11 +1116,11 @@ void RenderWidgetHostInputEventRouter::SendMouseEnterOrLeaveEvents(
 
 void RenderWidgetHostInputEventRouter::ReportBubblingScrollToSameView(
     const blink::WebGestureEvent& event,
-    const RenderWidgetHostViewBase* view) {
+    const RenderWidgetHostViewInput* view) {
 #if 0
   // For now, we've disabled the DumpWithoutCrashing as it's no longer
   // providing useful information.
-  // TODO(828422): Determine useful crash keys and reenable the report.
+  // TODO(crbug.com/41380487): Determine useful crash keys and reenable the report.
   base::debug::DumpWithoutCrashing();
 #endif
 }
@@ -1138,10 +1130,10 @@ namespace {
 // Returns true if |target_view| is one of |starting_view|'s ancestors.
 // If |stay_within| is provided, we only consider ancestors within that
 // sub-tree.
-bool IsAncestorView(RenderWidgetHostViewChildFrame* starting_view,
-                    const RenderWidgetHostViewBase* target_view,
-                    const RenderWidgetHostViewBase* stay_within = nullptr) {
-  RenderWidgetHostViewBase* cur_view = starting_view->GetParentView();
+bool IsAncestorView(RenderWidgetHostViewInput* starting_view,
+                    const RenderWidgetHostViewInput* target_view,
+                    const RenderWidgetHostViewInput* stay_within = nullptr) {
+  RenderWidgetHostViewInput* cur_view = starting_view->GetParentViewInput();
   while (cur_view) {
     if (cur_view == target_view)
       return true;
@@ -1149,10 +1141,7 @@ bool IsAncestorView(RenderWidgetHostViewChildFrame* starting_view,
     if (stay_within && cur_view == stay_within)
       return false;
 
-    cur_view = cur_view->IsRenderWidgetHostViewChildFrame()
-                   ? static_cast<RenderWidgetHostViewChildFrame*>(cur_view)
-                         ->GetParentView()
-                   : nullptr;
+    cur_view = cur_view->GetParentViewInput();
   }
   return false;
 }
@@ -1161,7 +1150,7 @@ bool IsAncestorView(RenderWidgetHostViewChildFrame* starting_view,
 // coordinates.
 blink::WebGestureEvent GestureEventInTarget(
     const blink::WebGestureEvent& event,
-    RenderWidgetHostViewBase* target_view) {
+    RenderWidgetHostViewInput* target_view) {
   const gfx::PointF point_in_target =
       target_view->TransformRootPointToViewCoordSpace(event.PositionInWidget());
   blink::WebGestureEvent event_for_target(event);
@@ -1172,8 +1161,8 @@ blink::WebGestureEvent GestureEventInTarget(
 }  // namespace
 
 bool RenderWidgetHostInputEventRouter::BubbleScrollEvent(
-    RenderWidgetHostViewBase* target_view,
-    RenderWidgetHostViewChildFrame* resending_view,
+    RenderWidgetHostViewInput* target_view,
+    RenderWidgetHostViewInput* resending_view,
     const blink::WebGestureEvent& event) {
   DCHECK(target_view);
   DCHECK(event.GetType() == blink::WebInputEvent::Type::kGestureScrollBegin ||
@@ -1242,7 +1231,7 @@ bool RenderWidgetHostInputEventRouter::BubbleScrollEvent(
   // We've seen reports of this, but don't know the cause yet. For now,
   // instead of CHECKing or hanging, we'll report the issue and abort scroll
   // bubbling.
-  // TODO(828422): Remove once this issue no longer occurs.
+  // TODO(crbug.com/41380487): Remove once this issue no longer occurs.
   if (resending_view == bubbling_gesture_scroll_target_) {
     ReportBubblingScrollToSameView(event, resending_view);
     CancelScrollBubbling();
@@ -1251,7 +1240,7 @@ bool RenderWidgetHostInputEventRouter::BubbleScrollEvent(
 
   const bool touchscreen_bubble_to_root =
       event.SourceDevice() == blink::WebGestureDevice::kTouchscreen &&
-      !bubbling_gesture_scroll_target_->IsRenderWidgetHostViewChildFrame();
+      !bubbling_gesture_scroll_target_->GetParentViewInput();
   if (touchscreen_bubble_to_root) {
     if (event.GetType() == blink::WebInputEvent::Type::kGestureScrollBegin) {
       touchscreen_pinch_state_.DidStartBubblingToRoot();
@@ -1283,7 +1272,7 @@ bool RenderWidgetHostInputEventRouter::BubbleScrollEvent(
 }
 
 void RenderWidgetHostInputEventRouter::SendGestureScrollBegin(
-    RenderWidgetHostViewBase* view,
+    RenderWidgetHostViewInput* view,
     const blink::WebGestureEvent& event) {
   DCHECK_EQ(blink::WebInputEvent::Type::kGesturePinchBegin, event.GetType());
   DCHECK_EQ(blink::WebGestureDevice::kTouchscreen, event.SourceDevice());
@@ -1301,7 +1290,7 @@ void RenderWidgetHostInputEventRouter::SendGestureScrollBegin(
 }
 
 void RenderWidgetHostInputEventRouter::SendGestureScrollEnd(
-    RenderWidgetHostViewBase* view,
+    RenderWidgetHostViewInput* view,
     const blink::WebGestureEvent& event) {
   blink::WebGestureEvent scroll_end(event);
   scroll_end.SetType(blink::WebInputEvent::Type::kGestureScrollEnd);
@@ -1329,7 +1318,7 @@ void RenderWidgetHostInputEventRouter::SendGestureScrollEnd(
 }
 
 void RenderWidgetHostInputEventRouter::SendGestureScrollEnd(
-    RenderWidgetHostViewBase* view,
+    RenderWidgetHostViewInput* view,
     blink::WebGestureDevice source_device) {
   blink::WebGestureEvent scroll_end(
       blink::WebInputEvent::Type::kGestureScrollEnd,
@@ -1345,7 +1334,7 @@ void RenderWidgetHostInputEventRouter::SendGestureScrollEnd(
 }
 
 void RenderWidgetHostInputEventRouter::WillDetachChildView(
-    const RenderWidgetHostViewChildFrame* detaching_view) {
+    const RenderWidgetHostViewInput* detaching_view) {
   // If necessary, cancel ongoing scroll bubbling in response to a frame
   // connector change.
   if (!bubbling_gesture_scroll_target_ || !bubbling_gesture_scroll_origin_)
@@ -1367,7 +1356,7 @@ void RenderWidgetHostInputEventRouter::CancelScrollBubbling() {
   const bool touchscreen_bubble_to_root =
       bubbling_gesture_scroll_source_device_ ==
           blink::WebGestureDevice::kTouchscreen &&
-      !bubbling_gesture_scroll_target_->IsRenderWidgetHostViewChildFrame();
+      !bubbling_gesture_scroll_target_->GetParentViewInput();
   if (touchscreen_bubble_to_root)
     touchscreen_pinch_state_.DidStopBubblingToRoot();
 
@@ -1382,7 +1371,7 @@ void RenderWidgetHostInputEventRouter::CancelScrollBubbling() {
 }
 
 void RenderWidgetHostInputEventRouter::CancelScrollBubblingIfConflicting(
-    const RenderWidgetHostViewBase* target) {
+    const RenderWidgetHostViewInput* target) {
   if (!target)
     return;
   if (!bubbling_gesture_scroll_target_ || !bubbling_gesture_scroll_origin_)
@@ -1398,22 +1387,24 @@ void RenderWidgetHostInputEventRouter::StopFling() {
   if (!bubbling_gesture_scroll_target_)
     return;
 
-  if (!last_fling_start_target_ || !last_fling_start_target_->host())
+  if (!last_fling_start_target_ ||
+      !last_fling_start_target_->GetViewRenderInputRouter()) {
     return;
+  }
 
   // The last_fling_start_target_'s fling controller must stop flinging when its
   // generated GSUs are not consumed by the bubbling target view.
-  last_fling_start_target_->host()->StopFling();
+  last_fling_start_target_->GetViewRenderInputRouter()->StopFling();
   forced_last_fling_start_target_to_stop_flinging_for_test_ = true;
 }
 void RenderWidgetHostInputEventRouter::AddFrameSinkIdOwner(
     const viz::FrameSinkId& id,
-    RenderWidgetHostViewBase* owner) {
+    RenderWidgetHostViewInput* owner) {
   DCHECK(owner_map_.find(id) == owner_map_.end());
   // We want to be notified if the owner is destroyed so we can remove it from
   // our map.
   owner->AddObserver(this);
-  owner_map_.insert(std::make_pair(id, owner->GetWeakPtr()));
+  owner_map_.insert(std::make_pair(id, owner->GetInputWeakPtr()));
 }
 
 void RenderWidgetHostInputEventRouter::RemoveFrameSinkIdOwner(
@@ -1426,25 +1417,25 @@ void RenderWidgetHostInputEventRouter::RemoveFrameSinkIdOwner(
     // Note: the view the iterator points at will be deleted in the following
     // call, and shouldn't be used after this point.
     if (it_to_remove->second)
-      OnRenderWidgetHostViewBaseDestroyed(it_to_remove->second.get());
+      OnRenderWidgetHostViewInputDestroyed(it_to_remove->second.get());
   }
 }
 
-RenderWidgetHostImpl*
-RenderWidgetHostInputEventRouter::GetRenderWidgetHostAtPoint(
-    RenderWidgetHostViewBase* root_view,
+RenderWidgetHostViewInput*
+RenderWidgetHostInputEventRouter::GetRenderWidgetHostViewInputAtPoint(
+    RenderWidgetHostViewInput* root_view,
     const gfx::PointF& point,
     gfx::PointF* transformed_point) {
-  if (!root_view)
+  if (!root_view) {
     return nullptr;
-  return RenderWidgetHostImpl::From(FindViewAtLocation(root_view, point,
-                                                       viz::EventSource::MOUSE,
-                                                       transformed_point)
-                                        .view->GetRenderWidgetHost());
+  }
+  return FindViewAtLocation(root_view, point, viz::EventSource::MOUSE,
+                            transformed_point)
+      .view;
 }
 
 void RenderWidgetHostInputEventRouter::GetRenderWidgetHostAtPointAsynchronously(
-    RenderWidgetHostViewBase* root_view,
+    RenderWidgetHostViewInput* root_view,
     const gfx::PointF& point,
     RenderWidgetTargeter::RenderWidgetHostAtPointCallback callback) {
   event_targeter_->FindTargetAndCallback(root_view, point, std::move(callback));
@@ -1452,7 +1443,7 @@ void RenderWidgetHostInputEventRouter::GetRenderWidgetHostAtPointAsynchronously(
 
 RenderWidgetTargetResult
 RenderWidgetHostInputEventRouter::FindTouchscreenGestureEventTarget(
-    RenderWidgetHostViewBase* root_view,
+    RenderWidgetHostViewInput* root_view,
     const blink::WebGestureEvent& gesture_event) {
 #if !BUILDFLAG(IS_ANDROID)
   if (vivaldi::IsVivaldiRunning() &&
@@ -1485,7 +1476,7 @@ RenderWidgetHostInputEventRouter::FindTouchscreenGestureEventTarget(
 }
 
 bool RenderWidgetHostInputEventRouter::IsViewInMap(
-    const RenderWidgetHostViewBase* view) const {
+    const RenderWidgetHostViewInput* view) const {
   if (!view)
     return false;
 
@@ -1503,14 +1494,12 @@ bool RenderWidgetHostInputEventRouter::ViewMapIsEmpty() const {
 
 namespace {
 
-bool IsPinchCurrentlyAllowedInTarget(RenderWidgetHostViewBase* target) {
+bool IsPinchCurrentlyAllowedInTarget(RenderWidgetHostViewInput* target) {
   std::optional<cc::TouchAction> target_active_touch_action(
       cc::TouchAction::kNone);
   if (target) {
     target_active_touch_action =
-        (static_cast<RenderWidgetHostImpl*>(target->GetRenderWidgetHost()))
-            ->input_router()
-            ->ActiveTouchAction();
+        target->GetViewRenderInputRouter()->input_router()->ActiveTouchAction();
   }
   // This function is called on GesturePinchBegin, by which time there should
   // be an active touch action assessed for the target.
@@ -1526,8 +1515,8 @@ bool IsPinchCurrentlyAllowedInTarget(RenderWidgetHostViewBase* target) {
 }  // namespace
 
 void RenderWidgetHostInputEventRouter::DispatchTouchscreenGestureEvent(
-    RenderWidgetHostViewBase* root_view,
-    RenderWidgetHostViewBase* target,
+    RenderWidgetHostViewInput* root_view,
+    RenderWidgetHostViewInput* target,
     const blink::WebGestureEvent& gesture_event,
     const ui::LatencyInfo& latency,
     const std::optional<gfx::PointF>& target_location) {
@@ -1543,18 +1532,17 @@ void RenderWidgetHostInputEventRouter::DispatchTouchscreenGestureEvent(
       // pinch events to the root. Have the events go to the child whose
       // TouchActionFilter will discard them.
 
-      auto* root_rwhi =
-          static_cast<RenderWidgetHostImpl*>(root_view->GetRenderWidgetHost());
+      auto* rir = root_view->GetViewRenderInputRouter();
 
       // The pinch gesture will be sent to the root view and it may not have a
       // valid touch action yet. In this case, set the touch action to auto.
-      root_rwhi->input_router()->ForceSetTouchActionAuto();
+      rir->input_router()->ForceSetTouchActionAuto();
 
       if (touchscreen_pinch_state_.NeedsWrappingScrollSequence()) {
         // If the root view is not the gesture target, and a scroll gesture has
         // not already started in the root from scroll bubbling, then we need
         // to warp the diverted pinch events in a GestureScrollBegin/End.
-        DCHECK(!root_rwhi->is_in_touchscreen_gesture_scroll());
+        DCHECK(!rir->is_in_touchscreen_gesture_scroll());
 #if !BUILDFLAG(IS_ANDROID)
         if (vivaldi::IsVivaldiRunning() && target) // Prevent pinching UI
           SendGestureScrollBegin(target, gesture_event);
@@ -1582,9 +1570,8 @@ void RenderWidgetHostInputEventRouter::DispatchTouchscreenGestureEvent(
       touchscreen_pinch_state_.DidStopPinch();
 
       if (send_scroll_end) {
-        auto* root_rwhi = static_cast<RenderWidgetHostImpl*>(
-            root_view->GetRenderWidgetHost());
-        DCHECK(root_rwhi->is_in_touchscreen_gesture_scroll());
+        auto* rir = root_view->GetViewRenderInputRouter();
+        DCHECK(rir->is_in_touchscreen_gesture_scroll());
 #if !BUILDFLAG(IS_ANDROID)
         if (vivaldi::IsVivaldiRunning() && target) // Prevent pinching UI
           SendGestureScrollEnd(target, gesture_event);
@@ -1705,7 +1692,7 @@ void RenderWidgetHostInputEventRouter::DispatchTouchscreenGestureEvent(
   event.SetPositionInWidget(point_in_target);
 
   if (events_being_flushed_) {
-    touchscreen_gesture_target_->host()
+    touchscreen_gesture_target_->GetViewRenderInputRouter()
         ->input_router()
         ->ForceSetTouchActionAuto();
   }
@@ -1733,7 +1720,7 @@ void RenderWidgetHostInputEventRouter::DispatchTouchscreenGestureEvent(
 }
 
 void RenderWidgetHostInputEventRouter::RouteTouchscreenGestureEvent(
-    RenderWidgetHostViewBase* root_view,
+    RenderWidgetHostViewInput* root_view,
     const blink::WebGestureEvent* event,
     const ui::LatencyInfo& latency) {
   DCHECK_EQ(blink::WebGestureDevice::kTouchscreen, event->SourceDevice());
@@ -1742,7 +1729,7 @@ void RenderWidgetHostInputEventRouter::RouteTouchscreenGestureEvent(
 
 RenderWidgetTargetResult
 RenderWidgetHostInputEventRouter::FindTouchpadGestureEventTarget(
-    RenderWidgetHostViewBase* root_view,
+    RenderWidgetHostViewInput* root_view,
     const blink::WebGestureEvent& event) const {
 #if !BUILDFLAG(IS_ANDROID)
   if (vivaldi::IsVivaldiRunning() &&
@@ -1766,7 +1753,7 @@ RenderWidgetHostInputEventRouter::FindTouchpadGestureEventTarget(
 }
 
 void RenderWidgetHostInputEventRouter::RouteTouchpadGestureEvent(
-    RenderWidgetHostViewBase* root_view,
+    RenderWidgetHostViewInput* root_view,
     const blink::WebGestureEvent* event,
     const ui::LatencyInfo& latency) {
   DCHECK_EQ(blink::WebGestureDevice::kTouchpad, event->SourceDevice());
@@ -1774,8 +1761,8 @@ void RenderWidgetHostInputEventRouter::RouteTouchpadGestureEvent(
 }
 
 void RenderWidgetHostInputEventRouter::DispatchTouchpadGestureEvent(
-    RenderWidgetHostViewBase* root_view,
-    RenderWidgetHostViewBase* target,
+    RenderWidgetHostViewInput* root_view,
+    RenderWidgetHostViewInput* target,
     const blink::WebGestureEvent& touchpad_gesture_event,
     const ui::LatencyInfo& latency,
     const std::optional<gfx::PointF>& target_location) {
@@ -1848,7 +1835,7 @@ void RenderWidgetHostInputEventRouter::DispatchTouchpadGestureEvent(
   }
 }
 
-RenderWidgetHostViewBase*
+RenderWidgetHostViewInput*
 RenderWidgetHostInputEventRouter::FindViewFromFrameSinkId(
     const viz::FrameSinkId& frame_sink_id) const {
   // TODO(kenrb): There should be a better way to handle hit tests to surfaces
@@ -1861,22 +1848,23 @@ RenderWidgetHostInputEventRouter::FindViewFromFrameSinkId(
 }
 
 bool RenderWidgetHostInputEventRouter::ShouldContinueHitTesting(
-    RenderWidgetHostViewBase* target_view) const {
+    RenderWidgetHostViewInput* target_view) const {
   // Determine if |view| has any embedded children that could potentially
   // receive the event.
-  auto* widget_host =
-      static_cast<RenderWidgetHostImpl*>(target_view->GetRenderWidgetHost());
-  std::unique_ptr<RenderWidgetHostIterator> child_widgets(
-      widget_host->GetEmbeddedRenderWidgetHosts());
-  if (child_widgets->GetNextHost())
+  auto* rir = target_view->GetViewRenderInputRouter();
+  std::unique_ptr<RenderInputRouterIterator> child_rirs(
+      rir->GetEmbeddedRenderInputRouters());
+  if (child_rirs->GetNextRouter()) {
     return true;
+  }
 
   return false;
 }
 
-std::vector<RenderWidgetHostView*>
-RenderWidgetHostInputEventRouter::GetRenderWidgetHostViewsForTests() const {
-  std::vector<RenderWidgetHostView*> hosts;
+std::vector<RenderWidgetHostViewInput*>
+RenderWidgetHostInputEventRouter::GetRenderWidgetHostViewInputsForTests()
+    const {
+  std::vector<RenderWidgetHostViewInput*> hosts;
   for (auto entry : owner_map_) {
     DCHECK(entry.second);
     hosts.push_back(entry.second.get());
@@ -1892,7 +1880,7 @@ RenderWidgetHostInputEventRouter::GetRenderWidgetTargeterForTests() {
 
 RenderWidgetTargetResult
 RenderWidgetHostInputEventRouter::FindTargetSynchronouslyAtPoint(
-    RenderWidgetHostViewBase* root_view,
+    RenderWidgetHostViewInput* root_view,
     const gfx::PointF& location) {
   gfx::PointF transformed_pt;
   // The transformed point is already in the return value of FindViewAtLocation.
@@ -1902,7 +1890,7 @@ RenderWidgetHostInputEventRouter::FindTargetSynchronouslyAtPoint(
 
 RenderWidgetTargetResult
 RenderWidgetHostInputEventRouter::FindTargetSynchronously(
-    RenderWidgetHostViewBase* root_view,
+    RenderWidgetHostViewInput* root_view,
     const blink::WebInputEvent& event) {
   if (blink::WebInputEvent::IsMouseEventType(event.GetType())) {
     return FindMouseEventTarget(
@@ -1936,10 +1924,10 @@ void RenderWidgetHostInputEventRouter::SetEventsBeingFlushed(
 }
 
 void RenderWidgetHostInputEventRouter::SetTouchscreenGestureTarget(
-    RenderWidgetHostViewBase* target,
+    RenderWidgetHostViewInput* target,
     bool moved_recently,
     bool moved_recently_for_iov2) {
-  touchscreen_gesture_target_ = target ? target->GetWeakPtr() : nullptr;
+  touchscreen_gesture_target_ = target ? target->GetInputWeakPtr() : nullptr;
   touchscreen_gesture_target_moved_recently_ = moved_recently;
   touchscreen_gesture_target_moved_recently_for_iov2_ = moved_recently_for_iov2;
 }
@@ -1949,8 +1937,8 @@ void RenderWidgetHostInputEventRouter::ClearTouchscreenGestureTarget() {
 }
 
 void RenderWidgetHostInputEventRouter::DispatchEventToTarget(
-    RenderWidgetHostViewBase* root_view,
-    RenderWidgetHostViewBase* target,
+    RenderWidgetHostViewInput* root_view,
+    RenderWidgetHostViewInput* target,
     blink::WebInputEvent* event,
     const ui::LatencyInfo& latency,
     const std::optional<gfx::PointF>& target_location) {
@@ -2031,14 +2019,14 @@ void RenderWidgetHostInputEventRouter::ForwardEmulatedGestureEvent(
 
 void RenderWidgetHostInputEventRouter::ForwardEmulatedTouchEvent(
     const blink::WebTouchEvent& event,
-    RenderWidgetHostViewBase* target) {
+    RenderWidgetHostViewInput* target) {
   TRACE_EVENT0("input",
                "RenderWidgetHostInputEventRouter::ForwardEmulatedTouchEvent");
   // Here we re-use the last root view we saw for a mouse move event, or fall
   // back to using |target| as the root_view if we haven't seen a mouse event;
   // this latter case only happens for injected touch events.
   // TODO(wjmaclean): Why doesn't this class just track its root view?
-  DCHECK(IsViewInMap(static_cast<RenderWidgetHostViewBase*>(target)));
+  DCHECK(IsViewInMap(target));
   last_emulated_event_root_view_ =
       last_mouse_move_root_view_ ? last_mouse_move_root_view_.get() : target;
 
@@ -2058,27 +2046,29 @@ void RenderWidgetHostInputEventRouter::SetCursor(const ui::Cursor& cursor) {
       last_mouse_move_root_view_->GetDeviceScaleFactor();
   if (touch_emulator_)
     touch_emulator_->SetDeviceScaleFactor(last_device_scale_factor_);
-  if (auto* cursor_manager = last_mouse_move_root_view_->GetCursorManager()) {
+  /* if (auto* cursor_manager =
+             last_mouse_move_root_view_->GetCursorManager()) {
     for (auto it : owner_map_) {
       // NOTE(david@vivaldi.com): In Vivaldi we need to check if the device
       // emulation is active for that specific view and then change the cursor
       // accordingly.
-      if (it.second && (!vivaldi::IsVivaldiRunning() ||
-          it.second->host()->IsDeviceEmulationActive()))
+      if (it.second &&
+             (!vivaldi::IsVivaldiRunning() ||
+           it.second->GetViewRenderInputRouter()->IsDeviceEmulationActive()))
         cursor_manager->UpdateCursor(it.second.get(), cursor);
     }
   }
+  */
 }
 
 void RenderWidgetHostInputEventRouter::ShowContextMenuAtPoint(
     const gfx::Point& point,
     const ui::MenuSourceType source_type,
-    RenderWidgetHostViewBase* target) {
+    RenderWidgetHostViewInput* target) {
   DCHECK(IsViewInMap(target));
-  auto* rwhi =
-      static_cast<RenderWidgetHostImpl*>(target->GetRenderWidgetHost());
-  DCHECK(rwhi);
-  rwhi->ShowContextMenuAtPoint(point, source_type);
+  auto* rir = target->GetViewRenderInputRouter();
+  DCHECK(rir);
+  rir->ShowContextMenuAtPoint(point, source_type);
 }
 
 void RenderWidgetHostInputEventRouter::OnAggregatedHitTestRegionListUpdated(
@@ -2092,7 +2082,7 @@ void RenderWidgetHostInputEventRouter::OnAggregatedHitTestRegionListUpdated(
 }
 
 void RenderWidgetHostInputEventRouter::SetMouseCaptureTarget(
-    RenderWidgetHostViewBase* target,
+    RenderWidgetHostViewInput* target,
     bool capture) {
   if (touch_emulator_ && touch_emulator_->enabled())
     return;
@@ -2122,65 +2112,34 @@ bool IsMoveEvent(ui::EventType type) {
 }
 
 void RenderWidgetHostInputEventRouter::ForwardDelegatedInkPoint(
-    RenderWidgetHostViewBase* target_view,
-    RenderWidgetHostViewBase* root_view,
+    RenderWidgetHostViewInput* target_view,
+    RenderWidgetHostViewInput* root_view,
     const blink::WebInputEvent& input_event,
     const blink::WebPointerProperties& pointer_properties,
     bool hovering) {
   const std::optional<cc::DelegatedInkBrowserMetadata>& metadata =
-      target_view->host()
-          ->render_frame_metadata_provider()
-          ->LastRenderFrameMetadata()
+      target_view->GetViewRenderInputRouter()
+          ->delegate()
+          ->GetLastRenderFrameMetadata()
           .delegated_ink_metadata;
 
   if (IsMoveEvent(input_event.GetTypeAsUiEventType()) && metadata &&
       hovering == metadata.value().delegated_ink_is_hovering) {
-    if (!delegated_ink_point_renderer_.is_bound()) {
-      ui::Compositor* compositor = target_view->GetCompositor();
-
-      // The remote can't be bound if the compositor is null, so bail if that
-      // is the case so we don't crash by trying to use an unbound remote.
-      if (!compositor)
-        return;
-
-      TRACE_EVENT_INSTANT0("delegated_ink_trails",
-                           "Binding mojo interface for delegated ink points.",
-                           TRACE_EVENT_SCOPE_THREAD);
-      compositor->SetDelegatedInkPointRenderer(
-          delegated_ink_point_renderer_.BindNewPipeAndPassReceiver());
-      delegated_ink_point_renderer_.reset_on_disconnect();
-    }
-
     gfx::PointF position = pointer_properties.PositionInWidget();
     root_view->TransformPointToRootSurface(&position);
     position.Scale(target_view->GetDeviceScaleFactor());
 
     gfx::DelegatedInkPoint delegated_ink_point(
         position, input_event.TimeStamp(), pointer_properties.id);
-    TRACE_EVENT_WITH_FLOW1("delegated_ink_trails",
-                           "Forwarding delegated ink point from browser.",
-                           TRACE_ID_GLOBAL(delegated_ink_point.trace_id()),
-                           TRACE_EVENT_FLAG_FLOW_OUT, "delegated point",
-                           delegated_ink_point.ToString());
 
-    // Calling this will result in IPC calls to get |delegated_ink_point| to
-    // viz. The decision to do this here was made with the understanding that
-    // the IPC overhead will result in a minor increase in latency for getting
-    // this event to the renderer. However, by sending it here, the event is
-    // given the greatest possible chance to make it to viz before
-    // DrawAndSwap() is called, allowing more points to be drawn as part of
-    // the delegated ink trail, and thus reducing user perceived latency.
-    delegated_ink_point_renderer_->StoreDelegatedInkPoint(delegated_ink_point);
-    ended_delegated_ink_trail_ = false;
-  } else if (delegated_ink_point_renderer_.is_bound() &&
-             !ended_delegated_ink_trail_) {
-    // Let viz know that the most recent point it received from us is probably
-    // the last point the user is inking, so it shouldn't predict anything
-    // beyond it.
-    TRACE_EVENT_INSTANT0("delegated_ink_trails", "Delegated ink trail ended",
-                         TRACE_EVENT_SCOPE_THREAD);
-    delegated_ink_point_renderer_->ResetPrediction();
-    ended_delegated_ink_trail_ = true;
+    target_view->GetViewRenderInputRouter()
+        ->delegate()
+        ->ForwardDelegatedInkPoint(delegated_ink_point,
+                                   ended_delegated_ink_trail_);
+  } else {
+    target_view->GetViewRenderInputRouter()
+        ->delegate()
+        ->ResetDelegatedInkPointPrediction(ended_delegated_ink_trail_);
   }
 }
 

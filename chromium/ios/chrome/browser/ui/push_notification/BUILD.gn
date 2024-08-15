@@ -46,6 +46,7 @@ source_set("notifications_opt_in") {
     "//components/signin/public/base",
     "//components/sync/base:features",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser/content_notification/model:util",
     "//ios/chrome/browser/ntp/model:set_up_list_item_type",
     "//ios/chrome/browser/ntp/model:set_up_list_prefs",
     "//ios/chrome/browser/push_notification/model:push_notification_client",
@@ -70,12 +71,13 @@ source_set("notifications_opt_in_ui") {
     "notifications_opt_in_view_controller.mm",
   ]
   deps = [
-    "resources:notifications_opt_in_banner",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
     "//ios/chrome/browser/shared/public/features",
+    "//ios/chrome/browser/shared/ui/symbols",
     "//ios/chrome/browser/shared/ui/table_view:utils",
     "//ios/chrome/browser/shared/ui/table_view/cells",
+    "//ios/chrome/browser/shared/ui/util",
     "//ios/chrome/common/ui/colors",
     "//ios/chrome/common/ui/promo_style",
     "//ui/base",

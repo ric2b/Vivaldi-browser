@@ -46,6 +46,7 @@
 #include "ui/compositor/compositor_export.h"
 #include "ui/compositor/compositor_lock.h"
 #include "ui/compositor/compositor_observer.h"
+#include "ui/compositor/host_begin_frame_observer.h"
 #include "ui/compositor/layer_animator_collection.h"
 #include "ui/compositor/throughput_tracker.h"
 #include "ui/compositor/throughput_tracker_host.h"
@@ -414,7 +415,7 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
                  base::TimeTicks,
                  base::TimeTicks) override;
   void DidCommitAndDrawFrame(int source_frame_number) override {}
-  void DidReceiveCompositorFrameAck() override;
+  void DidReceiveCompositorFrameAckDeprecatedForCompositor() override;
   void DidCompletePageScaleAnimation(int source_frame_number) override {}
   void DidPresentCompositorFrame(
       uint32_t frame_token,
@@ -471,7 +472,6 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
   }
 
   const viz::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
-  int activated_frame_count() const { return activated_frame_count_; }
   float refresh_rate() const { return refresh_rate_; }
 
   bool use_external_begin_frame_control() const {
@@ -505,6 +505,15 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
 
   const cc::LayerTreeHost* host_for_testing() const { return host_.get(); }
 
+  void AddSimpleBeginFrameObserver(
+      ui::HostBeginFrameObserver::SimpleBeginFrameObserver* obs);
+  void RemoveSimpleBeginFrameObserver(
+      ui::HostBeginFrameObserver::SimpleBeginFrameObserver* obs);
+
+  const std::optional<base::TimeDelta>& max_vrr_interval_for_testing() const {
+    return max_vrr_interval_;
+  }
+
  private:
   friend class base::RefCounted<Compositor>;
   friend class TotalAnimationThroughputReporter;
@@ -516,6 +525,8 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
   void ReportMetricsForTracker(
       int tracker_id,
       const cc::FrameSequenceMetrics::CustomReportData& data);
+
+  void MaybeUpdateObserveBeginFrame();
 
   gfx::Size size_;
 
@@ -533,6 +544,10 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
 
   std::unique_ptr<PendingBeginFrameArgs> pending_begin_frame_args_;
 
+  ui::HostBeginFrameObserver::SimpleBeginFrameObserverList
+      simple_begin_frame_observers_;
+  std::unique_ptr<ui::HostBeginFrameObserver> host_begin_frame_observer_;
+
   // The root of the Layer tree drawn by this compositor.
   raw_ptr<Layer> root_layer_ = nullptr;
 
@@ -541,8 +556,6 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
       animation_observer_list_;
 
   gfx::AcceleratedWidget widget_ = gfx::kNullAcceleratedWidget;
-  // A sequence number of a current compositor frame for use with metrics.
-  int activated_frame_count_ = 0;
 
 #if BUILDFLAG(IS_MAC)
   // Current CGDirectDisplayID for the screen.

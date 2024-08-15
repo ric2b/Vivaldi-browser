@@ -36,19 +36,8 @@ class FakeBackgroundColorPaintImageGenerator
   FakeBackgroundColorPaintImageGenerator() = default;
 
   scoped_refptr<Image> Paint(const gfx::SizeF& container_size,
-                             const Node* node,
-                             const Vector<Color>& animated_colors,
-                             const Vector<double>& offsets,
-                             const std::optional<double>& progress) override {
+                             const Node* node) override {
     return BitmapImage::Create();
-  }
-
-  bool GetBGColorPaintWorkletParams(Node* node,
-                                    Vector<Color>* animated_colors,
-                                    Vector<double>* offsets,
-                                    std::optional<double>* progress) override {
-    return BackgroundColorPaintDefinition::GetBGColorPaintWorkletParams(
-        node, animated_colors, offsets, progress);
   }
 
   Animation* GetAnimationIfCompositable(const Element* element) override {
@@ -72,6 +61,7 @@ class BackgroundColorPaintDefinitionTest : public RenderingTest {
         generator);
   }
 
+  // Crash testing of BackgroundColorPaintDefinition::Paint
   void RunPaintForTest(const Vector<Color>& animated_colors,
                        const Vector<double>& offsets,
                        const CompositorPaintWorkletJob::AnimatedPropertyValues&
@@ -125,14 +115,8 @@ TEST_F(BackgroundColorPaintDefinitionTest, SimpleBGColorAnimationNotFallback) {
 
   EXPECT_TRUE(element->GetElementAnimations());
   EXPECT_EQ(element->GetElementAnimations()->Animations().size(), 1u);
-  Vector<Color> animated_colors;
-  Vector<double> offsets;
-  std::optional<double> progress;
-  EXPECT_TRUE(BackgroundColorPaintDefinition::GetBGColorPaintWorkletParams(
-      element, &animated_colors, &offsets, &progress));
-  EXPECT_EQ(
-      element->GetElementAnimations()->CompositedBackgroundColorStatus(),
-      ElementAnimations::CompositedPaintStatus::kNeedsRepaintOrNoAnimation);
+  EXPECT_EQ(element->GetElementAnimations()->CompositedBackgroundColorStatus(),
+            ElementAnimations::CompositedPaintStatus::kNeedsRepaint);
 
   UpdateAllLifecyclePhasesForTest();
   EXPECT_EQ(element->GetElementAnimations()->CompositedBackgroundColorStatus(),
@@ -192,9 +176,8 @@ TEST_F(BackgroundColorPaintDefinitionTest, FallbackWithPixelMovingFilter) {
   EXPECT_TRUE(element->ComputedStyleRef().HasCurrentBackgroundColorAnimation());
   ElementAnimations* element_animations = element->GetElementAnimations();
   EXPECT_TRUE(element_animations);
-  EXPECT_EQ(
-      element_animations->CompositedBackgroundColorStatus(),
-      ElementAnimations::CompositedPaintStatus::kNeedsRepaintOrNoAnimation);
+  EXPECT_EQ(element_animations->CompositedBackgroundColorStatus(),
+            ElementAnimations::CompositedPaintStatus::kNeedsRepaint);
 
   // Run paint.
   UpdateAllLifecyclePhasesForTest();
@@ -268,62 +251,6 @@ TEST_F(BackgroundColorPaintDefinitionTest, FallbackToMainNoAnimation) {
   )HTML");
   Element* element = GetElementById("target");
   EXPECT_FALSE(element->GetElementAnimations());
-  Vector<Color> animated_colors;
-  Vector<double> offsets;
-  std::optional<double> progress;
-  EXPECT_FALSE(BackgroundColorPaintDefinition::GetBGColorPaintWorkletParams(
-      element, &animated_colors, &offsets, &progress));
-}
-
-// Test that when an element has other animations but no background color
-// animation, then we fall back to the main thread. Also testing that calling
-// BackgroundColorPaintDefinition::GetBGColorPaintWorkletParams do not crash.
-TEST_F(BackgroundColorPaintDefinitionTest, NoBGColorAnimationFallback) {
-  ScopedCompositeBGColorAnimationForTest composite_bgcolor_animation(true);
-  SetBodyInnerHTML(R"HTML(
-    <div id ="target" style="width: 100px; height: 100px">
-    </div>
-  )HTML");
-
-  Timing timing;
-  timing.iteration_duration = ANIMATION_TIME_DELTA_FROM_SECONDS(30);
-
-  CSSPropertyID property_id = CSSPropertyID::kColor;
-  Persistent<StringKeyframe> start_keyframe =
-      MakeGarbageCollected<StringKeyframe>();
-  start_keyframe->SetCSSPropertyValue(
-      property_id, "red", SecureContextMode::kInsecureContext, nullptr);
-  Persistent<StringKeyframe> end_keyframe =
-      MakeGarbageCollected<StringKeyframe>();
-  end_keyframe->SetCSSPropertyValue(
-      property_id, "green", SecureContextMode::kInsecureContext, nullptr);
-
-  StringKeyframeVector keyframes;
-  keyframes.push_back(start_keyframe);
-  keyframes.push_back(end_keyframe);
-
-  auto* model = MakeGarbageCollected<StringKeyframeEffectModel>(keyframes);
-  model->SetComposite(EffectModel::kCompositeAccumulate);
-
-  Element* element = GetElementById("target");
-  NonThrowableExceptionState exception_state;
-  DocumentTimeline* timeline =
-      MakeGarbageCollected<DocumentTimeline>(&GetDocument());
-  Animation* animation = Animation::Create(
-      MakeGarbageCollected<KeyframeEffect>(element, model, timing), timeline,
-      exception_state);
-  UpdateAllLifecyclePhasesForTest();
-  animation->play();
-
-  EXPECT_TRUE(element->GetElementAnimations());
-  EXPECT_EQ(element->GetElementAnimations()->Animations().size(), 1u);
-  Vector<Color> animated_colors;
-  Vector<double> offsets;
-  std::optional<double> progress;
-  EXPECT_FALSE(BackgroundColorPaintDefinition::GetBGColorPaintWorkletParams(
-      element, &animated_colors, &offsets, &progress));
-  EXPECT_TRUE(animated_colors.empty());
-  EXPECT_TRUE(offsets.empty());
 }
 
 // Test the case where the composite mode is not replace.
@@ -366,11 +293,11 @@ TEST_F(BackgroundColorPaintDefinitionTest, FallbackToMainCompositeAccumulate) {
 
   EXPECT_TRUE(element->GetElementAnimations());
   EXPECT_EQ(element->GetElementAnimations()->Animations().size(), 1u);
-  Vector<Color> animated_colors;
-  Vector<double> offsets;
-  std::optional<double> progress;
-  EXPECT_FALSE(BackgroundColorPaintDefinition::GetBGColorPaintWorkletParams(
-      element, &animated_colors, &offsets, &progress));
+  EXPECT_EQ(element->GetElementAnimations()->CompositedBackgroundColorStatus(),
+            ElementAnimations::CompositedPaintStatus::kNeedsRepaint);
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_EQ(element->GetElementAnimations()->CompositedBackgroundColorStatus(),
+            ElementAnimations::CompositedPaintStatus::kNotComposited);
 }
 
 TEST_F(BackgroundColorPaintDefinitionTest, MultipleAnimationsFallback) {
@@ -424,16 +351,15 @@ TEST_F(BackgroundColorPaintDefinitionTest, MultipleAnimationsFallback) {
   // Two active background-color animations, fall back to main.
   EXPECT_TRUE(element->GetElementAnimations());
   EXPECT_EQ(element->GetElementAnimations()->Animations().size(), 2u);
-  Vector<Color> animated_colors;
-  Vector<double> offsets;
-  std::optional<double> progress;
-  EXPECT_FALSE(BackgroundColorPaintDefinition::GetBGColorPaintWorkletParams(
-      element, &animated_colors, &offsets, &progress));
+  EXPECT_EQ(element->GetElementAnimations()->CompositedBackgroundColorStatus(),
+            ElementAnimations::CompositedPaintStatus::kNeedsRepaint);
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_EQ(element->GetElementAnimations()->CompositedBackgroundColorStatus(),
+            ElementAnimations::CompositedPaintStatus::kNotComposited);
 }
 
-// Test that style->CompositablePaintAnimationChanged() should be true in the
-// case where we initially have one background-color animation, and then changed
-// to have two background-color animation on the element.
+// Test that paint is invalidated in the case that a second background color
+// animation is added.
 TEST_F(BackgroundColorPaintDefinitionTest,
        TriggerRepaintCompositedToNonComposited) {
   ScopedCompositeBGColorAnimationForTest composite_bgcolor_animation(true);
@@ -498,17 +424,13 @@ TEST_F(BackgroundColorPaintDefinitionTest,
 
   ASSERT_TRUE(element->GetElementAnimations());
   EXPECT_EQ(element->GetElementAnimations()->Animations().size(), 2u);
-  style = GetDocument().GetStyleResolver().ResolveStyle(element,
-                                                        style_recalc_context);
-  EXPECT_TRUE(style->HasCurrentBackgroundColorAnimation());
-  // CompositablePaintAnimationChanged() being true will trigger a repaint. See
-  // ComputedStyle::UpdatePropertySpecificDifferences().
-  EXPECT_TRUE(style->CompositablePaintAnimationChanged());
+  GetDocument().View()->UpdateLifecycleToCompositingInputsClean(
+      DocumentUpdateReason::kTest);
+  EXPECT_TRUE(element->GetLayoutObject()->ShouldDoFullPaintInvalidation());
+  EXPECT_TRUE(element->ComputedStyleRef().HasCurrentBackgroundColorAnimation());
 }
 
-// Test that style->CompositablePaintAnimationChanged() should be true in the
-// case where we initially have one background-color animation, and then we
-// changed one of the animation's keyframes.
+// Test that paint is invalidated when an animation's keyframe is changed
 TEST_F(BackgroundColorPaintDefinitionTest, TriggerRepaintChangedKeyframe) {
   ScopedCompositeBGColorAnimationForTest composite_bgcolor_animation(true);
   SetBodyInnerHTML(R"HTML(
@@ -550,11 +472,11 @@ TEST_F(BackgroundColorPaintDefinitionTest, TriggerRepaintChangedKeyframe) {
   animation->play();
   ASSERT_TRUE(element->GetElementAnimations());
   EXPECT_EQ(element->GetElementAnimations()->Animations().size(), 1u);
-  style = GetDocument().GetStyleResolver().ResolveStyle(element,
-                                                        style_recalc_context);
-  // Previously no background-color animation, now it has. This should trigger
-  // a repaint, see ComputedStyle::UpdatePropertySpecificDifferences().
-  EXPECT_TRUE(style->HasCurrentBackgroundColorAnimation());
+  GetDocument().View()->UpdateLifecycleToCompositingInputsClean(
+      DocumentUpdateReason::kTest);
+  EXPECT_TRUE(element->GetLayoutObject()->ShouldDoFullPaintInvalidation());
+  EXPECT_TRUE(element->ComputedStyleRef().HasCurrentBackgroundColorAnimation());
+  UpdateAllLifecyclePhasesForTest();
 
   start_keyframe->SetCSSPropertyValue(
       property_id, "red", SecureContextMode::kInsecureContext, nullptr);
@@ -563,20 +485,17 @@ TEST_F(BackgroundColorPaintDefinitionTest, TriggerRepaintChangedKeyframe) {
   keyframes.clear();
   keyframes.push_back(start_keyframe);
   keyframes.push_back(end_keyframe);
-  animation->play();
+  To<KeyframeEffect>(animation->effect())->SetKeyframes(keyframes);
 
   ASSERT_TRUE(element->GetElementAnimations());
   EXPECT_EQ(element->GetElementAnimations()->Animations().size(), 1u);
-  style = GetDocument().GetStyleResolver().ResolveStyle(element,
-                                                        style_recalc_context);
-  EXPECT_TRUE(style->HasCurrentBackgroundColorAnimation());
-  // CompositablePaintAnimationChanged() being true will trigger a repaint. See
-  // ComputedStyle::UpdatePropertySpecificDifferences().
-  EXPECT_TRUE(style->CompositablePaintAnimationChanged());
+  GetDocument().View()->UpdateLifecycleToCompositingInputsClean(
+      DocumentUpdateReason::kTest);
+  EXPECT_TRUE(element->GetLayoutObject()->ShouldDoFullPaintInvalidation());
+  EXPECT_TRUE(element->ComputedStyleRef().HasCurrentBackgroundColorAnimation());
 }
 
-TEST_F(BackgroundColorPaintDefinitionTest,
-       CompositablePaintAnimationChangedFlagInvalidatesPaint) {
+TEST_F(BackgroundColorPaintDefinitionTest, TriggerRepaintNewStartTime) {
   ScopedCompositeBGColorAnimationForTest composite_bgcolor_animation(true);
   SetBodyInnerHTML("<div id=target></div>");
 
@@ -607,48 +526,27 @@ TEST_F(BackgroundColorPaintDefinitionTest,
 
   animation->play();
 
-  UpdateAllLifecyclePhasesForTest();
+  GetDocument().View()->UpdateLifecycleToCompositingInputsClean(
+      DocumentUpdateReason::kTest);
+  EXPECT_TRUE(element->GetLayoutObject()->ShouldDoFullPaintInvalidation());
   EXPECT_TRUE(element->ComputedStyleRef().HasCurrentBackgroundColorAnimation());
-  EXPECT_TRUE(element->ComputedStyleRef().CompositablePaintAnimationChanged());
-
-  // Unrelated style change to clear the CompositablePaintAnimationChanged
-  // flag.
-  element->SetInlineStyleProperty(CSSPropertyID::kWidth, "200px");
   UpdateAllLifecyclePhasesForTest();
-  EXPECT_TRUE(element->ComputedStyleRef().HasCurrentBackgroundColorAnimation());
-  EXPECT_FALSE(element->ComputedStyleRef().CompositablePaintAnimationChanged());
 
   // Set compositor pending.
   animation->setStartTime(MakeGarbageCollected<V8CSSNumberish>(0.5),
                           ASSERT_NO_EXCEPTION);
   EXPECT_TRUE(animation->CompositorPending());
-  element->SetNeedsAnimationStyleRecalc();
-  GetDocument().UpdateStyleAndLayoutTree();
+  GetDocument().View()->UpdateLifecycleToCompositingInputsClean(
+      DocumentUpdateReason::kTest);
+  EXPECT_TRUE(element->GetLayoutObject()->ShouldDoFullPaintInvalidation());
   EXPECT_TRUE(element->ComputedStyleRef().HasCurrentBackgroundColorAnimation());
-  EXPECT_TRUE(element->ComputedStyleRef().CompositablePaintAnimationChanged());
   ASSERT_TRUE(element->GetLayoutObject());
-  EXPECT_TRUE(element->GetLayoutObject()->ShouldCheckForPaintInvalidation());
 
-  // Run paint.
   UpdateAllLifecyclePhasesForTest();
   EXPECT_FALSE(animation->CompositorPending());
-  EXPECT_FALSE(element->GetLayoutObject()->ShouldCheckForPaintInvalidation());
-
-  // Set compositor pending again. This time the current style already has
-  // CompositablePaintAnimationChanged, hence the old and new styles are
-  // identical, but the new style should still invalidate paint.
-  animation->setStartTime(MakeGarbageCollected<V8CSSNumberish>(0.7),
-                          ASSERT_NO_EXCEPTION);
-  EXPECT_TRUE(animation->CompositorPending());
-  element->SetNeedsAnimationStyleRecalc();
-  GetDocument().UpdateStyleAndLayoutTree();
-  EXPECT_TRUE(element->ComputedStyleRef().HasCurrentBackgroundColorAnimation());
-  EXPECT_TRUE(element->ComputedStyleRef().CompositablePaintAnimationChanged());
-  ASSERT_TRUE(element->GetLayoutObject());
-  EXPECT_TRUE(element->GetLayoutObject()->ShouldCheckForPaintInvalidation());
 }
 
-// Test that calling BackgroundColorPaintWorkletProxyClient::Paint won't crash
+// Test that calling BackgroundColorPaintDefinition::Paint won't crash
 // when the animated property value is empty.
 TEST_F(BackgroundColorPaintDefinitionTest,
        ProxyClientPaintWithNoPropertyValue) {
@@ -659,7 +557,7 @@ TEST_F(BackgroundColorPaintDefinitionTest,
   RunPaintForTest(animated_colors, offsets, property_values);
 }
 
-// Test that BackgroundColorPaintWorkletProxyClient::Paint won't crash if the
+// Test that BackgroundColorPaintDefinition::Paint won't crash if the
 // progress of the animation is a negative number.
 TEST_F(BackgroundColorPaintDefinitionTest,
        ProxyClientPaintWithNegativeProgress) {
@@ -675,7 +573,7 @@ TEST_F(BackgroundColorPaintDefinitionTest,
   RunPaintForTest(animated_colors, offsets, property_values);
 }
 
-// Test that BackgroundColorPaintWorkletProxyClient::Paint won't crash if the
+// Test that BackgroundColorPaintDefinition::Paint won't crash if the
 // progress of the animation is > 1.
 TEST_F(BackgroundColorPaintDefinitionTest,
        ProxyClientPaintWithLargerThanOneProgress) {
@@ -692,7 +590,7 @@ TEST_F(BackgroundColorPaintDefinitionTest,
   RunPaintForTest(animated_colors, offsets, property_values);
 }
 
-// Test that BackgroundColorPaintWorkletProxyClient::Paint won't crash when the
+// Test that BackgroundColorPaintDefinition::Paint won't crash when the
 // largest offset is not exactly one.
 TEST_F(BackgroundColorPaintDefinitionTest,
        ProxyClientPaintWithCloseToOneOffset) {
@@ -710,7 +608,7 @@ TEST_F(BackgroundColorPaintDefinitionTest,
   RunPaintForTest(animated_colors, offsets, property_values);
 }
 
-// Test that BackgroundColorPaintWorkletProxyClient::Paint handles colors with
+// Test that BackgroundColorPaintDefinition::Paint handles colors with
 // differing color spaces - i.e won't crash/DCHECK.
 TEST_F(BackgroundColorPaintDefinitionTest,
        ProxyClientPaintWithColorOfDifferingColorSpaces) {
@@ -718,6 +616,26 @@ TEST_F(BackgroundColorPaintDefinitionTest,
   Vector<Color> animated_colors = {
       Color::FromColorSpace(Color::ColorSpace::kSRGBLegacy, 1, 0, 0, 1),
       Color::FromColorSpace(Color::ColorSpace::kSRGB, 0, 0.5, 0, 1),
+  };
+  Vector<double> offsets = {0, 1};
+  CompositorPaintWorkletJob::AnimatedPropertyValues property_values;
+  CompositorPaintWorkletInput::PropertyKey property_key(
+      CompositorPaintWorkletInput::NativePropertyType::kBackgroundColor,
+      CompositorElementId(1u));
+  float progress = 0.5f;
+  CompositorPaintWorkletInput::PropertyValue property_value(progress);
+  property_values.insert(std::make_pair(property_key, property_value));
+  RunPaintForTest(animated_colors, offsets, property_values);
+}
+
+// Test that BackgroundColorPaintDefinition::Paint handles colors with
+// differing color spaces - i.e won't crash/DCHECK.
+TEST_F(BackgroundColorPaintDefinitionTest,
+       ProxyClientPaintWithColorOfDifferingColorSpacesReverse) {
+  ScopedCompositeBGColorAnimationForTest composite_bgcolor_animation(true);
+  Vector<Color> animated_colors = {
+      Color::FromColorSpace(Color::ColorSpace::kSRGB, 1, 0, 0, 1),
+      Color::FromColorSpace(Color::ColorSpace::kSRGBLegacy, 0, 0.5, 0, 1),
   };
   Vector<double> offsets = {0, 1};
   CompositorPaintWorkletJob::AnimatedPropertyValues property_values;

@@ -2,8 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "build/build_config.h"
+#include <string_view>
 
+#include "build/build_config.h"
 // Need to include this before most other files because it defines
 // IPC_MESSAGE_LOG_ENABLED. We need to use it to define
 // IPC_MESSAGE_MACROS_LOG_ENABLED so render_messages.h will generate the
@@ -26,11 +27,9 @@
 #include <windows.h>
 #endif
 
-#include "chrome/common/logging_chrome.h"
-
-#include <fstream>  // NOLINT
-#include <memory>   // NOLINT
-#include <string>   // NOLINT
+#include <fstream>
+#include <memory>
+#include <string>
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
@@ -52,6 +51,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/env_vars.h"
+#include "chrome/common/logging_chrome.h"
 #include "content/public/common/content_switches.h"
 #include "ipc/ipc_logging.h"
 
@@ -116,8 +116,8 @@ const GUID kChromeTraceProviderName = {
 // with that error in the str parameter.
 NOINLINE void SilentRuntimeAssertHandler(const char* file,
                                          int line,
-                                         const base::StringPiece message,
-                                         const base::StringPiece stack_trace) {
+                                         const std::string_view message,
+                                         const std::string_view stack_trace) {
   base::debug::BreakDebugger();
 }
 
@@ -170,19 +170,13 @@ LoggingDestination LoggingDestFromCommandLine(
     const base::CommandLine& command_line,
     bool& filename_is_handle) {
   filename_is_handle = false;
-#if BUILDFLAG(IS_FUCHSIA)
-  // Fuchsia provides a system log that can be filtered for logs from specific
-  // components (e.g. Chrome), and which is easier to access than logs in a
-  // file in the component's namespace would be, so always use the system log
-  // by default.
-  const LoggingDestination kDefaultLoggingMode = LOG_TO_SYSTEM_DEBUG_LOG;
-#elif defined(NDEBUG)
+#if defined(NDEBUG)
   // In Release builds, log only to the log file.
   const LoggingDestination kDefaultLoggingMode = LOG_TO_FILE;
 #else
   // In Debug builds log to all destinations, for ease of discovery.
   const LoggingDestination kDefaultLoggingMode = LOG_TO_ALL;
-#endif  // BUILDFLAG(IS_FUCHSIA)
+#endif
 
 #if BUILDFLAG(CHROME_ENABLE_LOGGING_BY_DEFAULT)
   bool enable_logging = true;
@@ -380,7 +374,7 @@ base::FilePath SetUpLogFile(const base::FilePath& target_path, bool new_log) {
       !(target_path.IsAbsolute() &&
         base::StartsWith(target_path.value(), kChronosHomeDir));
 
-  // TODO(crbug.com/1326369): Remove the old symlink logic.
+  // TODO(crbug.com/40225776): Remove the old symlink logic.
   if (supports_symlinks) {
     // As for now, we keep the original log rotation logic on the file system
     // which supports symlinks.

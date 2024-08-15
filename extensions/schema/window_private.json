@@ -316,6 +316,12 @@
             "$ref": "ControlButtonsPadding"
           }
         ]
+      },
+      {
+        "name": "performHapticFeedback",
+        "type": "function",
+        "description": "Performs a haptic feedback.",
+        "parameters": []
       }
     ],
     "events": [

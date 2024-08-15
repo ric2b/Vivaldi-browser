@@ -13,10 +13,13 @@
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/connectors/common.h"
-#include "chrome/browser/enterprise/connectors/connectors_prefs.h"
 #include "chrome/browser/enterprise/connectors/reporting/realtime_reporting_client.h"
+#include "chrome/browser/enterprise/connectors/reporting/realtime_reporting_client_factory.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
+#include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
+#include "chrome/browser/policy/dm_token_utils.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/enterprise/connectors/connectors_prefs.h"
 #include "components/policy/core/common/cloud/cloud_policy_client_registration_helper.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
 #include "components/policy/core/common/cloud/realtime_reporting_job_configuration.h"
@@ -24,6 +27,7 @@
 #include "components/policy/core/common/policy_types.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "content/public/browser/browser_context.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -51,7 +55,7 @@ void EventReportValidator::ExpectUnscannedFileEvent(
     const std::string& expected_trigger,
     const std::string& expected_reason,
     const std::set<std::string>* expected_mimetypes,
-    int64_t expected_content_size,
+    std::optional<int64_t> expected_content_size,
     const std::string& expected_result,
     const std::string& expected_profile_username,
     const std::string& expected_profile_identifier,
@@ -184,7 +188,8 @@ void EventReportValidator::ExpectSensitiveDataEvent(
     const std::string& expected_profile_username,
     const std::string& expected_profile_identifier,
     const std::string& expected_scan_id,
-    const std::optional<std::string>& expected_content_transfer_method) {
+    const std::optional<std::string>& expected_content_transfer_method,
+    const std::optional<std::u16string>& expected_user_justification) {
   event_key_ = SafeBrowsingPrivateEventRouter::kKeySensitiveDataEvent;
   url_ = expected_url;
   tab_url_ = expected_tab_url;
@@ -200,6 +205,44 @@ void EventReportValidator::ExpectSensitiveDataEvent(
   profile_identifier_ = expected_profile_identifier;
   scan_ids_[expected_filename] = expected_scan_id;
   content_transfer_method_ = expected_content_transfer_method;
+  user_justification_ = expected_user_justification;
+  EXPECT_CALL(*client_, UploadSecurityEventReport)
+      .WillOnce(
+          [this](content::BrowserContext* context, bool include_device_info,
+                 base::Value::Dict report,
+                 base::OnceCallback<void(policy::CloudPolicyClient::Result)>
+                     callback) {
+            ValidateReport(&report);
+            if (!done_closure_.is_null()) {
+              done_closure_.Run();
+            }
+          });
+}
+
+void EventReportValidator::ExpectDataControlsSensitiveDataEvent(
+    const std::string& expected_url,
+    const std::string& expected_tab_url,
+    const std::string& expected_source,
+    const std::string& expected_destination,
+    const std::set<std::string>* expected_mimetypes,
+    const std::string& expected_trigger,
+    const data_controls::Verdict::TriggeredRules& triggered_rules,
+    const std::string& expected_result,
+    const std::string& expected_profile_username,
+    const std::string& expected_profile_identifier,
+    int64_t expected_content_size) {
+  event_key_ = SafeBrowsingPrivateEventRouter::kKeySensitiveDataEvent;
+  url_ = expected_url;
+  tab_url_ = expected_tab_url;
+  source_ = expected_source;
+  destination_ = expected_destination;
+  data_controls_triggered_rules_ = triggered_rules;
+  mimetypes_ = expected_mimetypes;
+  trigger_ = expected_trigger;
+  content_size_ = expected_content_size;
+  data_controls_result_ = expected_result;
+  username_ = expected_profile_username;
+  profile_identifier_ = expected_profile_identifier;
   EXPECT_CALL(*client_, UploadSecurityEventReport)
       .WillOnce(
           [this](content::BrowserContext* context, bool include_device_info,
@@ -228,7 +271,8 @@ void EventReportValidator::ExpectSensitiveDataEvents(
     const std::string& expected_profile_username,
     const std::string& expected_profile_identifier,
     const std::vector<std::string>& expected_scan_ids,
-    const std::optional<std::string>& expected_content_transfer_method) {
+    const std::optional<std::string>& expected_content_transfer_method,
+    const std::optional<std::u16string>& expected_user_justification) {
   for (size_t i = 0; i < expected_filenames.size(); ++i) {
     filenames_and_hashes_[expected_filenames[i]] = expected_sha256s[i];
     dlp_verdicts_[expected_filenames[i]] = expected_dlp_verdicts[i];
@@ -247,6 +291,7 @@ void EventReportValidator::ExpectSensitiveDataEvents(
   username_ = expected_profile_username;
   profile_identifier_ = expected_profile_identifier;
   content_transfer_method_ = expected_content_transfer_method;
+  user_justification_ = expected_user_justification;
 
   EXPECT_CALL(*client_, UploadSecurityEventReport)
       .Times(expected_filenames.size())
@@ -450,6 +495,32 @@ void EventReportValidator::ExpectPasswordBreachEvent(
           });
 }
 
+void EventReportValidator::ExpectURLFilteringInterstitialEvent(
+    const std::string& expected_url,
+    const std::string& expected_event_result,
+    const std::string& expected_profile_username,
+    const std::string& expected_profile_identifier,
+    safe_browsing::RTLookupResponse expected_rt_lookup_response) {
+  event_key_ =
+      SafeBrowsingPrivateEventRouter::kKeyUrlFilteringInterstitialEvent;
+  url_ = expected_url;
+  url_filtering_event_result_ = expected_event_result;
+  username_ = expected_profile_username;
+  profile_identifier_ = expected_profile_identifier;
+  rt_lookup_response_ = expected_rt_lookup_response;
+  EXPECT_CALL(*client_, UploadSecurityEventReport)
+      .WillOnce(
+          [this](content::BrowserContext* context, bool include_device_info,
+                 base::Value::Dict report,
+                 base::OnceCallback<void(policy::CloudPolicyClient::Result)>
+                     callback) {
+            ValidateReport(&report);
+            if (!done_closure_.is_null()) {
+              done_closure_.Run();
+            }
+          });
+}
+
 void EventReportValidator::ValidateReport(const base::Value::Dict* report) {
   DCHECK(report);
 
@@ -485,6 +556,8 @@ void EventReportValidator::ValidateReport(const base::Value::Dict* report) {
   ValidateField(event,
                 SafeBrowsingPrivateEventRouter::kKeyContentTransferMethod,
                 content_transfer_method_);
+  ValidateField(event, SafeBrowsingPrivateEventRouter::kKeyUserJustification,
+                user_justification_);
   ValidateField(event, SafeBrowsingPrivateEventRouter::kKeyProfileUserName,
                 username_);
   ValidateField(event, RealtimeReportingClient::kKeyProfileIdentifier,
@@ -496,6 +569,18 @@ void EventReportValidator::ValidateReport(const base::Value::Dict* report) {
   ValidateFederatedOrigin(event);
   ValidateIdentities(event);
   ValidateMimeType(event);
+  ValidateRTLookupResponse(event);
+  ValidateDataControlsAttributes(event);
+
+  // This field is checked using other members for non URLF events, so
+  // `url_filtering_event_result_` is always expected to be empty in other
+  // cases and shouldn't be used to validate `kKeyEventResult`.
+  if (rt_lookup_response_) {
+    ValidateField(event, SafeBrowsingPrivateEventRouter::kKeyEventResult,
+                  url_filtering_event_result_);
+  } else {
+    EXPECT_FALSE(url_filtering_event_result_);
+  }
 }
 
 void EventReportValidator::ValidateFederatedOrigin(
@@ -579,6 +664,42 @@ void EventReportValidator::ValidateDlpRule(
                 expected_rule.rule_id());
 }
 
+void EventReportValidator::ValidateRTLookupResponse(
+    const base::Value::Dict* value) {
+  if (rt_lookup_response_) {
+    const base::Value::List* triggered_rules =
+        value->FindList(SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleInfo);
+    ASSERT_TRUE(triggered_rules);
+    ASSERT_EQ(
+        base::checked_cast<size_t>(rt_lookup_response_->threat_info_size()),
+        triggered_rules->size());
+    for (size_t i = 0; i < triggered_rules->size(); ++i) {
+      const base::Value::Dict& rule = (*triggered_rules)[i].GetDict();
+      ValidateThreatInfo(&rule, rt_lookup_response_->threat_info(i));
+    }
+  }
+}
+
+void EventReportValidator::ValidateThreatInfo(
+    const base::Value::Dict* value,
+    const safe_browsing::RTLookupResponse::ThreatInfo& expected_threat_info) {
+  ValidateField(value, SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleName,
+                expected_threat_info.matched_url_navigation_rule().rule_name());
+  ValidateField(value, SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleId,
+                expected_threat_info.matched_url_navigation_rule().rule_id());
+  ValidateField(value, SafeBrowsingPrivateEventRouter::kKeyUrlCategory,
+                expected_threat_info.matched_url_navigation_rule()
+                    .matched_url_category());
+
+  std::optional<bool> expect_watermarking;
+  if (expected_threat_info.matched_url_navigation_rule()
+          .has_watermark_message()) {
+    expect_watermarking = true;
+  }
+  ValidateField(value, SafeBrowsingPrivateEventRouter::kKeyHasWatermarking,
+                expect_watermarking);
+}
+
 void EventReportValidator::ValidateFilenameMappedAttributes(
     const base::Value::Dict* value) {
   if (filenames_and_hashes_.empty()) {
@@ -596,7 +717,7 @@ void EventReportValidator::ValidateFilenameMappedAttributes(
       filenames += fh.first + "; ";
     }
 #if BUILDFLAG(IS_CHROMEOS)
-    // TODO(crbug.com/1501186): To fix the tests for ChromeOS.
+    // TODO(crbug.com/40941444): To fix the tests for ChromeOS.
     // If filename is not found as expected, try the filename without path.
     if (!base::Contains(filenames_and_hashes_, filename)) {
       for (const auto& fh : filenames_and_hashes_) {
@@ -684,12 +805,81 @@ void EventReportValidator::ValidateField(
       << "\nExpected value: " << expected_value.value();
 }
 
+void EventReportValidator::ValidateDataControlsAttributes(
+    const base::Value::Dict* event) {
+  if (data_controls_result_) {
+    ValidateField(event, SafeBrowsingPrivateEventRouter::kKeyEventResult,
+                  data_controls_result_);
+
+    ASSERT_FALSE(data_controls_triggered_rules_.empty());
+    const base::Value::List* triggered_rules =
+        event->FindList(SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleInfo);
+    ASSERT_TRUE(triggered_rules);
+    ASSERT_EQ(data_controls_triggered_rules_.size(), triggered_rules->size());
+    for (const base::Value& rule : *triggered_rules) {
+      const std::string* name = rule.GetDict().FindString(
+          SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleName);
+      ASSERT_TRUE(name);
+
+      const std::string* id = rule.GetDict().FindString(
+          SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleId);
+      ASSERT_TRUE(id);
+
+      ASSERT_TRUE(data_controls_triggered_rules_.count(*id));
+      ASSERT_EQ(data_controls_triggered_rules_[*id], *name);
+    }
+  }
+}
+
 void EventReportValidator::ExpectNoReport() {
   EXPECT_CALL(*client_, UploadSecurityEventReport).Times(0);
 }
 
 void EventReportValidator::SetDoneClosure(base::RepeatingClosure closure) {
   done_closure_ = std::move(closure);
+}
+
+EventReportValidatorHelper::EventReportValidatorHelper(Profile* profile,
+                                                       bool browser_test)
+    : profile_(profile),
+      client_(std::make_unique<policy::MockCloudPolicyClient>()) {
+  DCHECK(profile);
+
+  policy::SetDMTokenForTesting(policy::DMToken::CreateValidToken("dm_token"));
+  client_->SetDMToken("dm_token");
+
+  if (!browser_test) {
+    extensions::SafeBrowsingPrivateEventRouterFactory::GetInstance()
+        ->SetTestingFactory(
+            profile, base::BindRepeating([](content::BrowserContext* context) {
+              return std::unique_ptr<KeyedService>(
+                  new extensions::SafeBrowsingPrivateEventRouter(context));
+            }));
+    RealtimeReportingClientFactory::GetInstance()->SetTestingFactory(
+        profile, base::BindRepeating([](content::BrowserContext* context) {
+          return std::unique_ptr<KeyedService>(
+              new enterprise_connectors::RealtimeReportingClient(context));
+        }));
+  }
+
+  RealtimeReportingClientFactory::GetForProfile(profile)
+      ->SetBrowserCloudPolicyClientForTesting(client_.get());
+  identity_test_environment_.MakePrimaryAccountAvailable(
+      "test-user@chromium.org", signin::ConsentLevel::kSync);
+  RealtimeReportingClientFactory::GetForProfile(profile)
+      ->SetIdentityManagerForTesting(
+          identity_test_environment_.identity_manager());
+  SetOnSecurityEventReporting(profile->GetPrefs(), true);
+}
+
+EventReportValidatorHelper::~EventReportValidatorHelper() {
+  RealtimeReportingClientFactory::GetForProfile(profile_)
+      ->SetBrowserCloudPolicyClientForTesting(nullptr);
+  policy::SetDMTokenForTesting(policy::DMToken::CreateEmptyToken());
+}
+
+EventReportValidator EventReportValidatorHelper::CreateValidator() {
+  return EventReportValidator(client_.get());
 }
 
 void SetAnalysisConnector(PrefService* prefs,

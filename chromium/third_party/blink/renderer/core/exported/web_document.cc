@@ -283,11 +283,11 @@ void WebDocument::WatchCSSSelectors(const WebVector<WebString>& web_selectors) {
 WebVector<WebDraggableRegion> WebDocument::DraggableRegions() const {
   WebVector<WebDraggableRegion> draggable_regions;
   const Document* document = ConstUnwrap<Document>();
-  if (document->HasAnnotatedRegions()) {
-    const Vector<AnnotatedRegionValue>& regions = document->AnnotatedRegions();
+  if (document->HasDraggableRegions()) {
+    const Vector<DraggableRegionValue>& regions = document->DraggableRegions();
     draggable_regions = WebVector<WebDraggableRegion>(regions.size());
     for (wtf_size_t i = 0; i < regions.size(); i++) {
-      const AnnotatedRegionValue& value = regions[i];
+      const DraggableRegionValue& value = regions[i];
       draggable_regions[i].draggable = value.draggable;
       draggable_regions[i].bounds = ToPixelSnappedRect(value.bounds);
     }
@@ -324,10 +324,6 @@ bool WebDocument::IsPrerendering() {
 
 bool WebDocument::HasDocumentPictureInPictureWindow() const {
   return ConstUnwrap<Document>()->HasDocumentPictureInPictureWindow();
-}
-
-bool WebDocument::IsAccessibilityEnabled() {
-  return ConstUnwrap<Document>()->IsAccessibilityEnabled();
 }
 
 void WebDocument::AddPostPrerenderingActivationStep(

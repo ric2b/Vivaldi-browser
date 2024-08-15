@@ -1820,7 +1820,8 @@ void CaptivePortalBrowserTest::RunNavigateLoadingTabToTimeoutTest(
              TabStripUserGestureDetails::GestureType::kOther));
   browser->OpenURL(content::OpenURLParams(timeout_url, content::Referrer(),
                                           WindowOpenDisposition::CURRENT_TAB,
-                                          ui::PAGE_TRANSITION_TYPED, false));
+                                          ui::PAGE_TRANSITION_TYPED, false),
+                   /*navigation_handle_callback=*/{});
   portal_observer.WaitForResults(1);
   EXPECT_FALSE(CheckPending(browser));
   EXPECT_EQ(1, NumLoadingTabs());
@@ -2267,9 +2268,11 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
   // Can't use ui_test_utils::NavigateToURLWithDisposition because it waits for
   // a load stop notification before starting a new navigation.
   MultiNavigationObserver test_navigation_observer;
-  browser()->OpenURL(content::OpenURLParams(
-      embedded_test_server()->GetURL("/title2.html"), content::Referrer(),
-      WindowOpenDisposition::CURRENT_TAB, ui::PAGE_TRANSITION_TYPED, false));
+  browser()->OpenURL(
+      content::OpenURLParams(
+          embedded_test_server()->GetURL("/title2.html"), content::Referrer(),
+          WindowOpenDisposition::CURRENT_TAB, ui::PAGE_TRANSITION_TYPED, false),
+      /*navigation_handle_callback=*/{});
   test_navigation_observer.WaitForNavigations(1);
 
   // Make sure that the |ssl_error_handler| is deleted.
@@ -2334,7 +2337,8 @@ IN_PROC_BROWSER_TEST_F(
   MultiNavigationObserver test_navigation_observer;
   browser()->OpenURL(content::OpenURLParams(cert_error_url, content::Referrer(),
                                             WindowOpenDisposition::CURRENT_TAB,
-                                            ui::PAGE_TRANSITION_TYPED, false));
+                                            ui::PAGE_TRANSITION_TYPED, false),
+                     /*navigation_handle_callback=*/{});
   test_navigation_observer.WaitForNavigations(1);
   // Should end up with an SSL interstitial.
   ASSERT_TRUE(IsShowingInterstitial(broken_tab_contents));
@@ -2378,7 +2382,8 @@ IN_PROC_BROWSER_TEST_F(
   MultiNavigationObserver test_navigation_observer;
   browser()->OpenURL(content::OpenURLParams(cert_error_url, content::Referrer(),
                                             WindowOpenDisposition::CURRENT_TAB,
-                                            ui::PAGE_TRANSITION_TYPED, false));
+                                            ui::PAGE_TRANSITION_TYPED, false),
+                     /*navigation_handle_callback=*/{});
   // Expect two navigations:
   // 1- For completing the load of the above navigation.
   // 2- For completing the load of the login tab.
@@ -2879,7 +2884,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, Status511) {
 // The second check finds no captive portal. The reloader triggers a reload at
 // the same time SSL error handler tries to show an interstitial. Should result
 // in an SSL interstitial.
-// TODO(crbug.com/1271739): Flaky on all platforms.
+// TODO(crbug.com/40805743): Flaky on all platforms.
 IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
                        DISABLED_InterstitialTimerCertErrorAfterSlowLoad) {
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
@@ -2926,7 +2931,13 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
             GetInterstitialType(broken_tab_contents));
 }
 
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, SecureDnsCaptivePortal) {
+// TODO(crbug.com/339524384) Flaky on Windows.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_SecureDnsCaptivePortal DISABLED_SecureDnsCaptivePortal
+#else
+#define MAYBE_SecureDnsCaptivePortal SecureDnsCaptivePortal
+#endif
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, MAYBE_SecureDnsCaptivePortal) {
   PrefService* local_state = g_browser_process->local_state();
   local_state->SetString(prefs::kDnsOverHttpsMode,
                          SecureDnsConfig::kModeSecure);
@@ -2964,7 +2975,14 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, SecureDnsCaptivePortal) {
 // An HTTP load results in a secure DNS error, which triggers a captive portal
 // probe that fails. After logging in, the secure DNS error happens again,
 // triggering a captive portal probe that now succeeds.
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, SecureDnsErrorTriggersCheck) {
+// TODO(crbug.com/339524384) Flaky on Windows.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_SecureDnsErrorTriggersCheck DISABLED_SecureDnsErrorTriggersCheck
+#else
+#define MAYBE_SecureDnsErrorTriggersCheck SecureDnsErrorTriggersCheck
+#endif
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
+                       MAYBE_SecureDnsErrorTriggersCheck) {
   PrefService* local_state = g_browser_process->local_state();
   local_state->SetString(prefs::kDnsOverHttpsTemplates,
                          "https://bar.test/dns-query{?dns}");
@@ -3003,8 +3021,16 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, SecureDnsErrorTriggersCheck) {
 // which finds a captive portal. The HTTPS load finally completes with a secure
 // DNS error, which does not trigger another captive portal check. Only one
 // login tab should exist.
+// TODO(crbug.com/339524384) Flaky on Windows.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_SlowLoadSecureDnsErrorWithCaptivePortal \
+  DISABLED_SlowLoadSecureDnsErrorWithCaptivePortal
+#else
+#define MAYBE_SlowLoadSecureDnsErrorWithCaptivePortal \
+  SlowLoadSecureDnsErrorWithCaptivePortal
+#endif
 IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
-                       SlowLoadSecureDnsErrorWithCaptivePortal) {
+                       MAYBE_SlowLoadSecureDnsErrorWithCaptivePortal) {
   PrefService* local_state = g_browser_process->local_state();
   local_state->SetString(prefs::kDnsOverHttpsTemplates,
                          "https://bar.test/dns-query{?dns}");
@@ -3032,8 +3058,15 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
 // which finds a captive portal. After logging in, the HTTPS load finally
 // completes with a secure DNS error, which triggers another captive portal
 // check that should succeed.
+// TODO(crbug.com/339524384) Flaky on Windows.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_SlowLoadSecureDnsErrorAfterLogin \
+  DISABLED_SlowLoadSecureDnsErrorAfterLogin
+#else
+#define MAYBE_SlowLoadSecureDnsErrorAfterLogin SlowLoadSecureDnsErrorAfterLogin
+#endif
 IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
-                       SlowLoadSecureDnsErrorAfterLogin) {
+                       MAYBE_SlowLoadSecureDnsErrorAfterLogin) {
   PrefService* local_state = g_browser_process->local_state();
   local_state->SetString(prefs::kDnsOverHttpsTemplates,
                          "https://bar.test/dns-query{?dns}");

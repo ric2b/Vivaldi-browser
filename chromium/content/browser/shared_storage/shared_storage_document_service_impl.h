@@ -7,7 +7,6 @@
 
 #include <stdint.h>
 
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -86,16 +85,31 @@ class CONTENT_EXPORT SharedStorageDocumentServiceImpl final
 
   explicit SharedStorageDocumentServiceImpl(RenderFrameHost*);
 
+  void OnCreateWorkletResponseIntercepted(
+      bool is_same_origin,
+      bool prefs_success,
+      bool prefs_failure_is_site_specific,
+      CreateWorkletCallback original_callback,
+      bool post_prefs_success,
+      const std::string& error_message);
+
   SharedStorageWorkletHostManager* GetSharedStorageWorkletHostManager();
 
   SharedStorageWorkletHost* GetSharedStorageWorkletHost();
 
   storage::SharedStorageManager* GetSharedStorageManager();
 
-  bool IsSharedStorageAllowed(std::string* out_debug_message = nullptr);
+  bool IsSharedStorageAllowed(std::string* out_debug_message,
+                              bool* out_block_is_site_specific = nullptr);
 
-  bool IsSharedStorageAddModuleAllowed(
-      std::string* out_debug_message = nullptr);
+  bool IsSharedStorageAllowedForOrigin(const url::Origin& accessing_origin,
+                                       std::string* out_debug_message,
+                                       bool* out_block_is_site_specific);
+
+  bool IsSharedStorageAddModuleAllowedForOrigin(
+      const url::Origin& accessing_origin,
+      std::string* out_debug_message,
+      bool* out_block_is_site_specific);
 
   std::string SerializeLastCommittedOrigin() const;
 

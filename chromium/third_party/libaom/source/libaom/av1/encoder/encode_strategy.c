@@ -712,20 +712,6 @@ int av1_get_refresh_frame_flags(
 }
 
 #if !CONFIG_REALTIME_ONLY
-void setup_mi(AV1_COMP *const cpi, YV12_BUFFER_CONFIG *src) {
-  AV1_COMMON *const cm = &cpi->common;
-  const int num_planes = av1_num_planes(cm);
-  MACROBLOCK *const x = &cpi->td.mb;
-  MACROBLOCKD *const xd = &x->e_mbd;
-
-  av1_setup_src_planes(x, src, 0, 0, num_planes, cm->seq_params->sb_size);
-
-  av1_setup_block_planes(xd, cm->seq_params->subsampling_x,
-                         cm->seq_params->subsampling_y, num_planes);
-
-  set_mi_offsets(&cm->mi_params, xd, 0, 0);
-}
-
 // Apply temporal filtering to source frames and encode the filtered frame.
 // If the current frame does not require filtering, this function is identical
 // to av1_encode() except that tpl is not performed.

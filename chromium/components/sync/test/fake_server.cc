@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <limits>
 #include <set>
+#include <string_view>
 #include <utility>
 
 #include "base/command_line.h"
@@ -118,7 +119,7 @@ HashAndTime UnpackProgressMarkerToken(const std::string& token) {
   // The hash is stored as a first piece of the string (space delimited), the
   // second piece is the timestamp.
   HashAndTime hash_and_time;
-  std::vector<base::StringPiece> pieces =
+  std::vector<std::string_view> pieces =
       base::SplitStringPiece(token, base::kWhitespaceASCII,
                              base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   uint64_t micros_since_windows_epoch = 0;
@@ -644,6 +645,12 @@ void FakeServer::OnHistoryCommit(const std::string& url) {
   committed_history_urls_.insert(url);
 }
 
+void FakeServer::OnCommittedDeletionOrigin(
+    syncer::ModelType type,
+    const sync_pb::DeletionOrigin& deletion_origin) {
+  committed_deletion_origins_[type].push_back(deletion_origin);
+}
+
 void FakeServer::EnableStrongConsistencyWithConflictDetectionModel() {
   DCHECK(thread_checker_.CalledOnValidThread());
   loopback_server_->EnableStrongConsistencyWithConflictDetectionModel();
@@ -680,6 +687,16 @@ const std::set<std::string>& FakeServer::GetCommittedHistoryURLs() const {
 
 std::string FakeServer::GetStoreBirthday() const {
   return loopback_server_->GetStoreBirthday();
+}
+
+const std::vector<sync_pb::DeletionOrigin>&
+FakeServer::GetCommittedDeletionOrigins(syncer::ModelType type) const {
+  auto it = committed_deletion_origins_.find(type);
+  if (it == committed_deletion_origins_.end()) {
+    static const std::vector<sync_pb::DeletionOrigin> empty_result;
+    return empty_result;
+  }
+  return it->second;
 }
 
 base::WeakPtr<FakeServer> FakeServer::AsWeakPtr() {

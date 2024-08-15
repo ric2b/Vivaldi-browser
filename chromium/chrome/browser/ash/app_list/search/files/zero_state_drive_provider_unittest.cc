@@ -165,7 +165,7 @@ class ZeroStateDriveProviderTest : public testing::Test {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-// TODO(crbug.com/1348339): Add a test for a file mount-triggered update at
+// TODO(crbug.com/40855240): Add a test for a file mount-triggered update at
 // construction time.
 
 // Test that each of the trigger events causes an update.
@@ -261,11 +261,13 @@ TEST_F(ZeroStateDriveProviderTest, RespondOnSuggestDataFetched) {
         drive_fs_mount_point_.get()->CreateArbitraryFile();
     suggestions.emplace_back(ash::FileSuggestionType::kDriveFile,
                              suggested_file_path,
-                             ash::FileSuggestionJustificationType::kUnknown,
                              /*new_prediction_reason=*/std::nullopt,
-                             /*timestamp=*/std::nullopt,
-                             /*secondary_timestamp=*/std::nullopt,
-                             /*new_score=*/std::nullopt);
+                             /*modified_time=*/std::nullopt,
+                             /*viewed_time=*/std::nullopt,
+                             /*shared_time=*/std::nullopt,
+                             /*new_score=*/std::nullopt,
+                             /*drive_file_id=*/std::nullopt,
+                             /*icon_url=*/std::nullopt);
   }
 
   // Only test this logic if the `file_suggest_service_` is ready for test.

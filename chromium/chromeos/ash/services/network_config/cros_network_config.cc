@@ -13,6 +13,7 @@
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/i18n/time_formatting.h"
+#include "base/not_fatal_until.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -203,7 +204,6 @@ mojom::ConnectionStateType GetMojoConnectionStateType(
         return mojom::ConnectionStateType::kOnline;
       case NetworkState::PortalState::kPortalSuspected:
       case NetworkState::PortalState::kPortal:
-      case NetworkState::PortalState::kProxyAuthRequired:
       case NetworkState::PortalState::kNoInternet:
         // See PortalState for differentiation of portal states.
         return mojom::ConnectionStateType::kPortal;
@@ -339,8 +339,6 @@ mojom::PortalState GetMojoPortalState(
       return mojom::PortalState::kPortalSuspected;
     case NetworkState::PortalState::kPortal:
       return mojom::PortalState::kPortal;
-    case NetworkState::PortalState::kProxyAuthRequired:
-      return mojom::PortalState::kProxyAuthRequired;
     case NetworkState::PortalState::kNoInternet:
       return mojom::PortalState::kNoInternet;
   }
@@ -356,9 +354,7 @@ std::optional<GURL> GetPortalProbeUrl(const NetworkState* network) {
       return std::nullopt;
     case NetworkState::PortalState::kPortalSuspected:
       [[fallthrough]];
-    case NetworkState::PortalState::kPortal:
-      [[fallthrough]];
-    case NetworkState::PortalState::kProxyAuthRequired: {
+    case NetworkState::PortalState::kPortal: {
       const GURL& probe_url = network->probe_url();
       if (probe_url.is_valid())
         return probe_url;
@@ -678,7 +674,7 @@ mojom::DeviceStatePropertiesPtr DeviceStateToMojo(
 std::string GetRequiredString(const base::Value::Dict* dict, const char* key) {
   const base::Value* v = dict->Find(key);
   if (!v) {
-    NOTREACHED() << "Required key missing: " << key;
+    NOTREACHED(base::NotFatalUntil::M127) << "Required key missing: " << key;
     return std::string();
   }
   if (!v->is_string()) {
@@ -1116,6 +1112,7 @@ std::string MojoApnSourceToOnc(mojom::ApnSource source) {
       return ::onc::cellular_apn::kSourceModb;
     case mojom::ApnSource::kUi:
       return ::onc::cellular_apn::kSourceUi;
+      // TODO(b/5429735): Add mojom::ApnSource::kAdmin in follow up CL
   }
   NOTREACHED() << "Unexpected mojo ApnSource: " << source;
   return ::onc::cellular_apn::kSourceModem;
@@ -2385,6 +2382,16 @@ CrosNetworkConfig::CrosNetworkConfig(
       network_profile_handler_(network_profile_handler),
       technology_state_controller_(technology_state_controller) {
   CHECK(network_state_handler);
+
+  // Start observing the `network_state_handler_` so we know to unset our local
+  // pointer to it when it's destroyed.
+  network_state_handler_observer_.Observe(network_state_handler_.get());
+
+  // Start observing the `network_configuration_handler_` so we know to unset
+  // our local pointer to it when it's destroyed.
+  if (network_configuration_handler_) {
+    network_configuration_handler_->AddObserver(this);
+  }
   if (features::IsCellularCarrierLockEnabled()) {
     const std::optional<std::string_view> serial_number =
         system::StatisticsProvider::GetInstance()->GetMachineID();
@@ -2417,19 +2424,12 @@ void CrosNetworkConfig::BindReceiver(
 
 void CrosNetworkConfig::AddObserver(
     mojo::PendingRemote<mojom::CrosNetworkConfigObserver> observer) {
-  if (!network_state_handler_observer_.IsObserving()) {
-    network_state_handler_observer_.Observe(network_state_handler_.get());
-  }
   if (network_certificate_handler_ &&
       !network_certificate_handler_->HasObserver(this)) {
     network_certificate_handler_->AddObserver(this);
   }
   if (cellular_inhibitor_ && !cellular_inhibitor_->HasObserver(this))
     cellular_inhibitor_->AddObserver(this);
-  if (network_configuration_handler_ &&
-      !network_configuration_handler_->HasObserver(this)) {
-    network_configuration_handler_->AddObserver(this);
-  }
   observers_.Add(std::move(observer));
 }
 
@@ -3150,6 +3150,11 @@ void CrosNetworkConfig::GetGlobalPolicy(GetGlobalPolicyCallback callback) {
   // If there is no key (in the case of non-managed devices), the default
   // mojom::GlobalPolicy() boolean value(s) specified explicitly in
   // cros_network_config.mojom is used instead.
+  if (features::IsApnRevampAndPoliciesEnabled()) {
+    result->allow_apn_modification = GetBoolean(
+        global_policy_dict, ::onc::global_network_config::kAllowAPNModification,
+        /*value_if_key_missing_from_dict=*/result->allow_apn_modification);
+  }
   result->allow_cellular_sim_lock = GetBoolean(
       global_policy_dict, ::onc::global_network_config::kAllowCellularSimLock,
       /*value_if_key_missing_from_dict=*/result->allow_cellular_sim_lock);
@@ -3560,6 +3565,14 @@ void CrosNetworkConfig::CreateCustomApn(const std::string& network_guid,
     return;
   }
 
+  if (features::IsApnRevampAndPoliciesEnabled() &&
+      !network_configuration_handler_->AllowApnModification()) {
+    NET_LOG(ERROR)
+        << "Cannot create custom APN if AllowAPNModification is false.";
+    std::move(callback).Run(/*success=*/false);
+    return;
+  }
+
   const NetworkState* network =
       network_state_handler_->GetNetworkStateFromGuid(network_guid);
   if (!network || network->profile_path().empty()) {
@@ -3670,6 +3683,13 @@ void CrosNetworkConfig::RemoveCustomApn(const std::string& network_guid,
     return;
   }
 
+  if (features::IsApnRevampAndPoliciesEnabled() &&
+      !network_configuration_handler_->AllowApnModification()) {
+    NET_LOG(ERROR)
+        << "Cannot remove custom APN if AllowAPNModification is false.";
+    return;
+  }
+
   const NetworkState* network =
       network_state_handler_->GetNetworkStateFromGuid(network_guid);
   if (!network || network->profile_path().empty()) {
@@ -3749,6 +3769,13 @@ void CrosNetworkConfig::ModifyCustomApn(const std::string& network_guid,
     receivers_.ReportBadMessage(
         "ModifyCustomApn: Cannot be called if the APN Revamp feature flag is "
         "disabled.");
+    return;
+  }
+
+  if (features::IsApnRevampAndPoliciesEnabled() &&
+      !network_configuration_handler_->AllowApnModification()) {
+    NET_LOG(ERROR)
+        << "Cannot modify custom APN if AllowAPNModification is false.";
     return;
   }
 

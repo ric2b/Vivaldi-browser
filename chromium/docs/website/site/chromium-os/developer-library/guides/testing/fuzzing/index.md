@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: fuzzing
 title: Fuzz testing in ChromeOS
 ---
@@ -1307,7 +1307,7 @@ gdb by invoking `gdbserver` with the environment variable
 If you want to suppress some errors reported by fuzzer that are not interesting
 or not actionable, those errors can be suppressed by:
 
-*   (*Preferred*) Using clang's no_sanitize attibute:
+*   (*Preferred*) Using clang's no_sanitize attribute:
     [Clang's no_sanitize attributes] can be used to suppress the specific error
     (e.g. [skia error suppression]). This is strongly preferred for cases where
     source code can be modified.
@@ -1316,7 +1316,7 @@ or not actionable, those errors can be suppressed by:
 
 *   Using a blocklist file:
     If modifying source code is not an option, then a blocklist file can be
-    used to specify compile time supressions. It requires that the package
+    used to specify compile time suppressions. It requires that the package
     [inherits cros-sanitizers eclass] and [calls sanitizers-setup-env] in
     the src_configure stage. Packages that [inherit platform eclass] do not
     need to add this step as the [platform eclass] takes care of calling
@@ -1421,8 +1421,8 @@ ask questions.
 [Getting a coverage report for your fuzzer]: #getting-a-coverage-report-for-your-fuzzer
 [What is fuzz testing?]: #what-is-fuzz-testing
 [clang's source based coverage]: https://clang.llvm.org/docs/SourceBasedCodeCoverage.html
-[Configuring Authentication]: ../gsutil.md#setup
-[cros-workon]: ../developer_guide.md#Making-changes-to-packages-whose-source-code-is-checked-into-ChromiumOS-git-repositories
+[Configuring Authentication]: /chromium-os/developer-library/reference/tools/gsutil/#setup
+[cros-workon]: /chromium-os/developer-library/guides/development/developer-guide/#Making-changes-to-packages-whose-source-code-is-checked-into-ChromiumOS-git-repositories
 [Clang's no_sanitize attributes]: https://clang.llvm.org/docs/AttributeReference.html#no-sanitize
 [macros provided in libchrome]: https://chromium.googlesource.com/chromiumos/platform/libchrome/+/5ca6b5581735fdb7a46249d4eb587aff936434f5/base/compiler_specific.h#168
 [skia error suppression]: https://skia.googlesource.com/skia.git/+/d6f3f18d51ec612d38019ce6cb3021050c6b5a84/include/private/SkFloatingPoint.h#157
@@ -1433,7 +1433,7 @@ ask questions.
 [libchrome blocklist]: https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/8c39d9715e86a6a62cc327bf2aefe4a18b430a02/chromeos-base/libchrome/files/ubsan_blocklist.txt
 [clang's sanitizer special case list page]: https://clang.llvm.org/docs/SanitizerSpecialCaseList.html
 [grammar-based-fuzzer]: https://chromium.googlesource.com/chromium/src/+/HEAD/testing/libfuzzer/libprotobuf-mutator.md
-[uprev the ebuild]: ../portage/ebuild_faq.md#TOC-How-do-I-uprev-an-ebuild-
+[uprev the ebuild]: /chromium-os/developer-library/guides/portage/ebuild-faq/#TOC-How-do-I-uprev-an-ebuild-
 [lsan]: https://github.com/google/sanitizers/wiki/AddressSanitizerLeakSanitizer
 [ptrace-manual]: https://man7.org/linux/man-pages/man2/ptrace.2.html
 [Machine-found-bugs]: https://buganizer.corp.google.com/issues?q=componentid:1099326

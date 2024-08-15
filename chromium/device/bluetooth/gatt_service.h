@@ -28,11 +28,16 @@ namespace bluetooth {
 class GattService : public mojom::GattService,
                     public device::BluetoothLocalGattService::Delegate {
  public:
+  // When owners are notified the `GattService` is invalidated via
+  // `on_gatt_service_invalidated`, they are expected to destroy their
+  // `GattService` instance.
   GattService(
       mojo::PendingReceiver<mojom::GattService> pending_gatt_service_receiver,
       mojo::PendingRemote<mojom::GattServiceObserver> pending_observer_remote,
       const device::BluetoothUUID& service_id,
-      scoped_refptr<device::BluetoothAdapter> adapter);
+      scoped_refptr<device::BluetoothAdapter> adapter,
+      base::OnceCallback<void(device::BluetoothUUID)>
+          on_gatt_service_invalidated);
   ~GattService() override;
   GattService(const GattService&) = delete;
   GattService& operator=(const GattService&) = delete;
@@ -44,6 +49,7 @@ class GattService : public mojom::GattService,
       const device::BluetoothGattCharacteristic::Permissions& permission,
       const device::BluetoothGattCharacteristic::Properties& property,
       CreateCharacteristicCallback callback) override;
+  void Register(RegisterCallback callback) override;
 
   // device::BluetoothLocalGattService::Delegate:
   void OnCharacteristicReadRequest(
@@ -86,6 +92,18 @@ class GattService : public mojom::GattService,
       const device::BluetoothDevice* device,
       const device::BluetoothLocalGattCharacteristic* characteristic) override;
 
+  void OnLocalCharacteristicReadResponse(
+      ValueCallback callback,
+      mojom::LocalCharacteristicReadResultPtr read_result);
+
+  void OnMojoDisconnect();
+
+  void OnRegisterSuccess(RegisterCallback callback);
+  void OnRegisterFailure(
+      RegisterCallback callback,
+      device::BluetoothGattService::GattErrorCode error_code);
+
+  base::OnceCallback<void(device::BluetoothUUID)> on_gatt_service_invalidated_;
   const device::BluetoothUUID service_id_;
   std::set<device::BluetoothUUID> characteristic_uuids_;
   mojo::Remote<mojom::GattServiceObserver> observer_remote_;

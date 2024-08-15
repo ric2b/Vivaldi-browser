@@ -74,12 +74,14 @@ class ShellContentBrowserClient : public ContentBrowserClient {
       content::RenderFrameHost* rfh,
       const url::Origin& top_frame_origin,
       const url::Origin& accessing_origin,
-      std::string* out_debug_message = nullptr) override;
+      std::string* out_debug_message,
+      bool* out_block_is_site_setting_specific) override;
   bool IsSharedStorageSelectURLAllowed(
       content::BrowserContext* browser_context,
       const url::Origin& top_frame_origin,
       const url::Origin& accessing_origin,
-      std::string* out_debug_message = nullptr) override;
+      std::string* out_debug_message,
+      bool* out_block_is_site_setting_specific) override;
   bool IsCookieDeprecationLabelAllowed(
       content::BrowserContext* browser_context) override;
   bool IsCookieDeprecationLabelAllowedForContext(
@@ -114,6 +116,9 @@ class ShellContentBrowserClient : public ContentBrowserClient {
                base::OnceCallback<void(WebContents*)> callback) override;
   std::vector<std::unique_ptr<NavigationThrottle>> CreateThrottlesForNavigation(
       NavigationHandle* navigation_handle) override;
+#if BUILDFLAG(IS_WIN)
+  std::string GetAppContainerId() override;
+#endif  // BUILDFLAG(IS_WIN)
   std::unique_ptr<LoginDelegate> CreateLoginDelegate(
       const net::AuthChallengeInfo& auth_info,
       content::WebContents* web_contents,

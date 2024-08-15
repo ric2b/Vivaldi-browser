@@ -272,8 +272,7 @@ struct Robustness::State {
                 }
                 // Note: Don't be tempted to use the array override variable as an expression here,
                 // the name might be shadowed!
-                b.Diagnostics().AddError(diag::System::Transform, Source{})
-                    << core::type::Array::kErrExpectedConstantCount;
+                b.Diagnostics().AddError(Source{}) << core::type::Array::kErrExpectedConstantCount;
                 return nullptr;
             },  //
             TINT_ICE_ON_NO_MATCH);
@@ -651,7 +650,6 @@ struct Robustness::State {
                 break;
         }
         TINT_UNREACHABLE() << "unhandled address space" << address_space;
-        return Action::kDefault;
     }
 
     /// @returns the vector width of @p ty, or 1 if @p ty is not a vector

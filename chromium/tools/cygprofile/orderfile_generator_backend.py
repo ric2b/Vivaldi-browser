@@ -15,6 +15,7 @@ Example usage:
 
 
 import argparse
+import ast
 import csv
 import hashlib
 import json
@@ -23,6 +24,7 @@ import logging
 import os
 import pathlib
 import shutil
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -55,6 +57,9 @@ _ARCH_GN_ARGS = {
     # Telemetry does not work with x64 yet: https://crbug.com/327791269
     'x64': ['target_cpu="x64"'],
 }
+
+_RESULTS_KEY_SPEEDOMETER = 'Speedometer2.0'
+
 
 class CommandError(Exception):
   """Indicates that a dispatched shell command exited with a non-zero status."""
@@ -156,7 +161,7 @@ class StepRecorder:
                  cmd: List[str],
                  cwd: pathlib.Path = _SRC_PATH,
                  raise_on_error: bool = True,
-                 stdout=None):
+                 capture_output: bool = False) -> subprocess.CompletedProcess:
     """Execute a shell command.
 
     Args:
@@ -165,21 +170,30 @@ class StepRecorder:
            root of script's location if not specified.
       raise_on_error: If true will raise a CommandError if the call doesn't
           succeed and mark the step as failed.
-      stdout: A file to redirect stdout for the command to.
 
     Returns:
-      The process's return code.
+      A CompletedProcess instance.
 
     Raises:
       CommandError: An error executing the specified command.
     """
     print('Executing %s in %s' % (' '.join(cmd), cwd))
-    process = subprocess.Popen(cmd, stdout=stdout, cwd=cwd, env=os.environ)
-    process.wait()
+    process = subprocess.run(
+        cmd,
+        capture_output=capture_output,
+        check=False,  # This allows for raise_on_error.
+        text=True,
+        cwd=cwd,
+        env=os.environ)
     if raise_on_error and process.returncode != 0:
-      self.FailStep()
+      if capture_output:
+        self.FailStep(str(process.stdout) + str(process.stderr))
+      else:
+        self.FailStep()
       raise CommandError('Exception executing command %s' % ' '.join(cmd))
-    return process.returncode
+    if capture_output:
+      print(f'Output:\n{process.stdout}')
+    return process
 
 
 class NativeLibraryBuildVariant:
@@ -194,8 +208,8 @@ class NativeLibraryBuildVariant:
 class ClankCompiler:
   """Handles compilation of clank."""
 
-  def __init__(self, out_dir: pathlib.Path, step_recorder, options,
-               orderfile_location, native_library_build_variant):
+  def __init__(self, out_dir: pathlib.Path, step_recorder: StepRecorder,
+               options, orderfile_location, native_library_build_variant):
     self._out_dir = out_dir
     self._step_recorder = step_recorder
     self._options = options
@@ -232,8 +246,7 @@ class ClankCompiler:
         'is_official_build=true',
         'symbol_level=1',  # to fit 30 GiB RAM on the bot when LLD is running
         'target_os="android"',
-        # TODO(b/236070141): remove goma config.
-        'use_goma=' + str(self._options.use_goma).lower(),
+        'enable_proguard_obfuscation=false',  # More debuggable stacktraces.
         'use_remoteexec=' + str(self._options.use_remoteexec).lower(),
         'use_order_profiling=' + str(instrumented).lower(),
         'devtools_instrumentation_dumping=' + str(instrumented).lower()
@@ -242,7 +255,7 @@ class ClankCompiler:
     if self._options.goma_dir:
       gn_args += ['goma_dir="%s"' % self._options.goma_dir]
 
-    if self._options.public and os.path.exists(self._orderfile_location):
+    if os.path.exists(self._orderfile_location):
       # GN needs the orderfile path to be source-absolute.
       src_abs_orderfile = os.path.relpath(self._orderfile_location, _SRC_PATH)
       gn_args += ['chrome_orderfile_path="//{}"'.format(src_abs_orderfile)]
@@ -358,8 +371,9 @@ class OrderfileUpdater:
   _CLOUD_STORAGE_BUCKET_FOR_DEBUG = None
   _CLOUD_STORAGE_BUCKET = None
   _UPLOAD_TO_CLOUD_COMMAND = 'upload_to_google_storage.py'
+  _UPLOAD_TO_NEW_CLOUD_COMMAND = 'upload_to_google_storage_first_class.py'
 
-  def __init__(self, repository_root, step_recorder):
+  def __init__(self, repository_root, step_recorder: StepRecorder):
     """Constructor.
 
     Args:
@@ -369,40 +383,78 @@ class OrderfileUpdater:
     self._repository_root = repository_root
     self._step_recorder = step_recorder
 
-  def CommitStashedFileHashes(self, files):
-    """Commits unpatched and patched orderfiles hashes if changed.
-
-    The files are committed only if their associated sha1 hash files match, and
-    are modified in git. In normal operations the hash files are changed only
-    when a file is uploaded to cloud storage. If the hash file is not modified
-    in git, the file is skipped.
-
-    Args:
-      files: [str or None] specifies file paths. None items are ignored.
-
-    Raises:
-      Exception if the hash file does not match the file.
-      NotImplementedError when the commit logic hasn't been overridden.
-    """
-    files_to_commit = [_f for _f in files if _f]
-    if files_to_commit:
-      self._CommitStashedFiles(files_to_commit)
-
-  def UploadToCloudStorage(self, filename, use_debug_location):
+  def UploadToCloudStorage(self,
+                           filename,
+                           use_debug_location,
+                           use_new_cloud=False):
     """Uploads a file to cloud storage.
+
+    Here's an example of what the JSON object looks like for the new cloud: # pylint: disable=line-too-long
+    {
+      "path": {
+        "dep_type": "gcs",
+        "bucket": "orderfile-test",
+        "objects": [
+          {
+            "object_name": "e8e5ffb467e8cd784a7a7fbe8c4e840118306959c4b01c810eb6af9169b4c624",
+            "sha256sum": "e8e5ffb467e8cd784a7a7fbe8c4e840118306959c4b01c810eb6af9169b4c624",
+            "size_bytes": 32374172,
+            "generation": 1715099523335361
+          }
+        ]
+      }
+    }
+    See https://chromium.googlesource.com/chromium/src.git/+/refs/heads/main/docs/gcs_dependencies.md
 
     Args:
       filename: (str) File to upload.
       use_debug_location: (bool) Whether to use the debug location.
+      use_new_cloud: (bool) Whether to use the new workflow and modify DEPS.
     """
     bucket = (self._CLOUD_STORAGE_BUCKET_FOR_DEBUG if use_debug_location
               else self._CLOUD_STORAGE_BUCKET)
     extension = _GetFileExtension(filename)
-    cmd = [self._UPLOAD_TO_CLOUD_COMMAND, '--bucket', bucket]
+    if use_new_cloud:
+      cmd = [self._UPLOAD_TO_NEW_CLOUD_COMMAND]
+    else:
+      cmd = [self._UPLOAD_TO_CLOUD_COMMAND]
+    cmd += ['--bucket', bucket]
     if extension:
       cmd.extend(['-z', extension])
     cmd.append(filename)
-    self._step_recorder.RunCommand(cmd)
+    stdout: str = self._step_recorder.RunCommand(cmd,
+                                                 capture_output=True).stdout
+    if use_new_cloud:
+      logging.info('Uploading using the new cloud:')
+      # The first line is "Uploading ... ", the rest of the lines is valid json.
+      json_string = stdout.split('\n', 1)[1]
+      logging.info(json_string)
+      json_object = json.loads(json_string)['path']['objects'][0]
+      logging.info(json_object)
+      output_file = os.path.basename(filename)
+      logging.info(output_file)
+      # Load existing objects to avoid overwriting other arch's objects.
+      getdep_cmd = ['gclient', 'getdep', '-r', 'orderfiles']
+      dep_str: str = self._step_recorder.RunCommand(getdep_cmd,
+                                                    cwd=self._repository_root,
+                                                    capture_output=True).stdout
+      # dep_str is a python representation of the object, not valid JSON.
+      dep_objects = ast.literal_eval(dep_str)
+      values = []
+      for dep_object in dep_objects:
+        if dep_object['output_file'] == output_file:
+          # Replace the values in this matching object with the new object.
+          values.append(",".join([
+              json_object['object_name'],
+              json_object['sha256sum'],
+              str(json_object['size_bytes']),
+              str(json_object['generation']),
+              output_file,
+          ]))
+        else:
+          values.append(",".join(map(str, dep_object.values())))
+      setdep_cmd = ['gclient', 'setdep', '-r', f'orderfiles@{"?".join(values)}']
+      self._step_recorder.RunCommand(setdep_cmd, cwd=self._repository_root)
     print('Download: https://sandbox.google.com/storage/%s/%s' %
           (bucket, _GenerateHash(filename)))
 
@@ -473,17 +525,7 @@ class OrderfileGenerator:
 
   def _GetPathToOrderfile(self):
     """Gets the path to the architecture-specific orderfile."""
-    # TODO(https://crbug.com/1517659): We are testing if arm64 can improve perf
-    #     while not regressing arm32 memory or perf by too much. For now we are
-    #     keeping the fake arch as 'arm' to avoid needing to change the path. In
-    #     the future we should consider either generating multiple orderfiles,
-    #     one per architecture, or remove the fake arch as it would no longer be
-    #     accurate.
-    # Build GN files use the ".arm" orderfile irrespective of the actual
-    # architecture. Fake it, otherwise the orderfile we generate here is not
-    # going to be picked up by builds.
-    orderfile_fake_arch = 'arm'
-    return str(self._orderfiles_dir / f'orderfile.{orderfile_fake_arch}.out')
+    return str(self._orderfiles_dir / f'orderfile.{self._options.arch}.out')
 
   def _GetUnpatchedOrderfileFilename(self):
     """Gets the path to the architecture-specific unpatched orderfile."""
@@ -545,17 +587,13 @@ class OrderfileGenerator:
       self._host_profile_root = _SRC_PATH / 'profile_data'
       urls = [profile_android_startup.AndroidProfileTool.TEST_URL]
       use_wpr = True
-      simulate_user = False
       urls = options.urls
       use_wpr = not options.no_wpr
-      simulate_user = options.simulate_user
       device = self._SetDevice()
       self._profiler = profile_android_startup.AndroidProfileTool(
-          str(self._instrumented_out_dir),
           str(self._host_profile_root),
           use_wpr,
           urls,
-          simulate_user,
           device,
           debug=self._options.streamline_for_debugging,
           verbosity=self._options.verbosity)
@@ -683,9 +721,11 @@ class OrderfileGenerator:
         str(self._CHECK_ORDERFILE_SCRIPT), self._compiler.lib_chrome_so,
         self._GetPathToOrderfile()
     ]
-    return_code = self._step_recorder.RunCommand(cmd, raise_on_error=False)
+    return_code = self._step_recorder.RunCommand(
+        cmd, raise_on_error=False).returncode
     if return_code:
       self._step_recorder.FailStep('Orderfile check returned %d.' % return_code)
+    return return_code == 0
 
   def _RecordHash(self, file_name):
     """Records the hash of the file into the output_data dictionary."""
@@ -731,20 +771,22 @@ class OrderfileGenerator:
       print('Uploaded to: https://sandbox.google.com/storage/' +
             upload_location)
 
-  def _MaybeArchiveOrderfile(self, filename):
+  def _MaybeArchiveOrderfile(self, filename, use_new_cloud: bool = False):
     """In buildbot configuration, uploads the generated orderfile to
     Google Cloud Storage.
 
     Args:
       filename: (str) Orderfile to upload.
+      use_new_cloud: (bool) Whether to upload using the new flow.
     """
     # First compute hashes so that we can download them later if we need to.
     self._step_recorder.BeginStep('Compute hash for ' + filename)
     self._RecordHash(filename)
     if self._options.buildbot:
       self._step_recorder.BeginStep('Archive ' + filename)
-      self._orderfile_updater.UploadToCloudStorage(
-          filename, use_debug_location=False)
+      self._orderfile_updater.UploadToCloudStorage(filename,
+                                                   use_debug_location=False,
+                                                   use_new_cloud=use_new_cloud)
 
   def UploadReadyOrderfiles(self):
     self._step_recorder.BeginStep('Upload Ready Orderfiles')
@@ -918,7 +960,7 @@ class OrderfileGenerator:
       # Build APK to be installed on the device.
       self._compiler.CompileChromeApk(instrumented=False,
                                       force_relink=True)
-      benchmark_results['Speedometer2.0'] = self._PerformanceBenchmark(
+      benchmark_results[_RESULTS_KEY_SPEEDOMETER] = self._PerformanceBenchmark(
           self._compiler.chrome_apk_path)
       benchmark_results['orderfile.memory_mobile'] = (
           self._NativeCodeMemoryBenchmark(self._compiler.chrome_apk_path))
@@ -938,6 +980,24 @@ class OrderfileGenerator:
 
     return benchmark_results
 
+  def _SaveBenchmarkResultsToOutput(self, with_orderfile_results,
+                                    no_orderfile_results):
+    self._output_data['orderfile_benchmark_results'] = with_orderfile_results
+    self._output_data['no_orderfile_benchmark_results'] = no_orderfile_results
+    with_orderfile_samples = with_orderfile_results[_RESULTS_KEY_SPEEDOMETER]
+    no_orderfile_samples = no_orderfile_results[_RESULTS_KEY_SPEEDOMETER]
+    self._output_data['orderfile_median_speedup'] = (
+        statistics.median(no_orderfile_samples) /
+        statistics.median(with_orderfile_samples))
+
+    def RelativeStdev(samples):
+      return statistics.stdev(samples) / statistics.median(samples)
+
+    self._output_data['orderfile_benchmark_stdev_relative'] = RelativeStdev(
+        with_orderfile_samples)
+    self._output_data['no_orderfile_benchmark_stdev_relative'] = RelativeStdev(
+        no_orderfile_samples)
+
   def Generate(self):
     """Generates and maybe upload an order."""
     assert (bool(self._options.profile) ^
@@ -947,8 +1007,12 @@ class OrderfileGenerator:
       assert self._options.buildbot, '--clobber is intended for the buildbot.'
       # This is useful on the bot when we need to start from scratch to rebuild.
       if _OUT_PATH.exists():
+        logging.info('Clobbering %s...', _OUT_PATH)
         shutil.rmtree(_OUT_PATH, ignore_errors=True)
-        _OUT_PATH.mkdir()
+        # The bot assumes that `out/Release` is always available.
+        out_release_path = _OUT_PATH / 'Release'
+        logging.info('mkdir %s', out_release_path)
+        out_release_path.mkdir(parents=True)
 
     if self._options.profile:
       self._compiler = ClankCompiler(self._instrumented_out_dir,
@@ -999,14 +1063,17 @@ class OrderfileGenerator:
       self._PatchOrderfile()
       self._compiler.CompileLibchrome(instrumented=False,
                                       force_relink=True)
-      self._VerifySymbolOrder()
-      self._MaybeArchiveOrderfile(self._GetPathToOrderfile())
+      if self._VerifySymbolOrder():
+        self._MaybeArchiveOrderfile(
+            self._GetPathToOrderfile(),
+            use_new_cloud=bool(self._options.arch == 'arm64'))
+      else:
+        self._SaveForDebugging(self._GetPathToOrderfile())
 
     if self._options.benchmark:
-      self._output_data['orderfile_benchmark_results'] = self.RunBenchmark(
-          self._uninstrumented_out_dir)
-      self._output_data['no_orderfile_benchmark_results'] = self.RunBenchmark(
-          self._no_orderfile_out_dir, no_orderfile=True)
+      self._SaveBenchmarkResultsToOutput(
+          self.RunBenchmark(self._uninstrumented_out_dir),
+          self.RunBenchmark(self._no_orderfile_out_dir, no_orderfile=True))
 
     if self._options.buildbot:
       self._orderfile_updater._GitStash()
@@ -1028,10 +1095,15 @@ class OrderfileGenerator:
     if not self._options.buildbot:
       logging.error('Trying to commit when not running on the buildbot')
       return False
-    self._orderfile_updater._CommitStashedFiles([
+    paths = [
         filename + '.sha1'
         for filename in (self._GetUnpatchedOrderfileFilename(),
-                         self._GetPathToOrderfile())])
+                         self._GetPathToOrderfile())
+    ]
+    if self._options.arch == 'arm64':
+      # DEPS is updated as well in the new cloud flow.
+      paths.append(str(self._clank_dir / 'DEPS'))
+    self._orderfile_updater._CommitStashedFiles(paths)
     return True
 
 
@@ -1180,6 +1252,8 @@ def CreateOrderfile(options, orderfile_updater_class=None):
       return generator.UploadReadyOrderfiles()
     else:
       return generator.Generate()
+  except Exception:
+    logging.exception('Generator failure')
   finally:
     json_output = json.dumps(generator.GetReportingData(),
                              indent=2) + '\n'

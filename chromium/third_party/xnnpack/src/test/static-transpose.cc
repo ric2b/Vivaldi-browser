@@ -3,24 +3,24 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <algorithm>
-#include <array>
-#include <cstddef>
-#include <cstdint>
-#include <limits>
-#include <memory>
-#include <numeric>
-#include <random>
-
-#include <fp16/fp16.h>
-#include <gtest/gtest.h>
-
 #include <xnnpack.h>
 #include <xnnpack/node-type.h>
 #include <xnnpack/operator.h>
 #include <xnnpack/subgraph.h>
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <numeric>
+#include <random>
+#include <vector>
+
 #include "subgraph-unary-tester.h"
+#include <gtest/gtest.h>
+#include <fp16/fp16.h>
 
 using StaticTransposeTestQS8 = UnaryTest<int8_t, int8_t, /*min_dim=*/1>;
 using StaticTransposeTestQU8 = UnaryTest<uint8_t, uint8_t, /*min_dim=*/1>;
@@ -28,8 +28,9 @@ using StaticTransposeTestF16 = UnaryTest<uint16_t, uint16_t, /*min_dim=*/1>;
 using StaticTransposeTestF32 = UnaryTest<float, float, /*min_dim=*/1>;
 
 namespace {
-template <typename Rng> std::vector<size_t> RandomPermutation(const std::vector<size_t>& input, Rng rng)
-{
+template <typename Rng>
+std::vector<size_t> RandomPermutation(const std::vector<size_t>& input,
+                                      Rng& rng) {
   std::vector<size_t> perm = std::vector<size_t>(input);
   std::iota(perm.begin(), perm.end(), 0);
   std::shuffle(perm.begin(), perm.end(), rng);
@@ -358,8 +359,8 @@ TEST_F(StaticTransposeTestQU8, matches_operator_api)
 TEST_F(StaticTransposeTestF16, matches_operator_api)
 {
   std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-  std::fill(operator_output.begin(), operator_output.end(), fp16_ieee_from_fp32_value(nanf("")));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), fp16_ieee_from_fp32_value(nanf("")));
+  std::fill(operator_output.begin(), operator_output.end(), UINT16_C(0x7E00) /* NaN */);
+  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT16_C(0x7E00) /* NaN */);
   std::vector<size_t> perm = RandomPermutation(dims, rng);
   std::vector<size_t> output_dims = PermuteInputDimensions(dims, perm);
 

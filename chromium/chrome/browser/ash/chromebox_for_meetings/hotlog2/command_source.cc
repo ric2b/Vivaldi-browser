@@ -3,35 +3,33 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/chromebox_for_meetings/hotlog2/command_source.h"
+
+#include "base/process/launch.h"
 #include "base/strings/string_split.h"
+#include "base/time/time.h"
 
 namespace ash::cfm {
 
-CommandSource::CommandSource(std::string command, bool should_be_uploaded)
-    : command_(command), should_be_uploaded_(should_be_uploaded) {
+CommandSource::CommandSource(const std::string& command,
+                             base::TimeDelta poll_rate)
+    : LocalDataSource(poll_rate,
+                      /*data_needs_redacting=*/false,
+                      /*is_incremental=*/false),
+      command_(command) {
   command_split_ = base::SplitString(command, " ", base::KEEP_WHITESPACE,
                                      base::SPLIT_WANT_NONEMPTY);
 }
 
 inline CommandSource::~CommandSource() = default;
 
-void CommandSource::GetSourceName(GetSourceNameCallback callback) {
-  std::move(callback).Run(command_);
+const std::string& CommandSource::GetDisplayName() {
+  return command_;
 }
 
-void CommandSource::Fetch(FetchCallback callback) {
-  // TODO: (b/326440931)
-  (void)callback;
-}
-
-void CommandSource::AddWatchDog(
-    mojo::PendingRemote<mojom::DataWatchDog> watch_dog) {
-  // TODO: (b/326440932)
-  (void)watch_dog;
-}
-
-void CommandSource::ShouldBeUploaded(ShouldBeUploadedCallback callback) {
-  std::move(callback).Run(should_be_uploaded_);
+std::vector<std::string> CommandSource::GetNextData() {
+  std::string output;
+  base::GetAppOutputAndError(command_split_, &output);
+  return {output};
 }
 
 }  // namespace ash::cfm

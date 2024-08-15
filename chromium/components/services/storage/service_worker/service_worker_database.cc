@@ -58,7 +58,7 @@
 //
 //   Note: This has changed from `GURL origin` to StorageKey but the name will
 //   be updated in the future to avoid a migration.
-//   TODO(crbug.com/1199077): Update name during a migration to Version 3.
+//   TODO(crbug.com/40177656): Update name during a migration to Version 3.
 //   See StorageKey::Deserialize() for more information on the format.
 //   key: "INITDATA_UNIQUE_ORIGIN:" + <StorageKey>
 //   value: <empty>
@@ -68,7 +68,7 @@
 //
 //   Note: This has changed from `GURL origin` to StorageKey but the name will
 //   be updated in the future to avoid a migration.
-//   TODO(crbug.com/1199077): Update name during a migration to Version 3.
+//   TODO(crbug.com/40177656): Update name during a migration to Version 3.
 //   See StorageKey::Deserialize() for more information on the format.
 //   key: "REG:" + <StorageKey> + '\x00' + <int64_t 'registration_id'>
 //    (ex. "REG:https://example.com/\x00123456")
@@ -95,7 +95,7 @@
 //
 //   Note: This has changed from `GURL origin` to StorageKey but the name will
 //   be updated in the future to avoid a migration.
-//   TODO(crbug.com/1199077): Update name during a migration to Version 3.
+//   TODO(crbug.com/40177656): Update name during a migration to Version 3.
 //   See StorageKey::Deserialize() for more information on the format.
 //   key: "REGID_TO_ORIGIN:" + <int64_t 'registration_id'>
 //   value: <StorageKey>
@@ -672,6 +672,11 @@ bool WriteToBlinkCondition(
               Request::kJsonDestination:
             request.destination = network::mojom::RequestDestination::kJson;
             break;
+          case ServiceWorkerRegistrationData::RouterRules::RuleV1::Condition::
+              Request::kSharedStorageWorkletDestination:
+            request.destination =
+                network::mojom::RequestDestination::kSharedStorageWorklet;
+            break;
         }
       }
       out_request = request;
@@ -1025,6 +1030,11 @@ void WriteConditionToProtoWithHelper(
           mutable_request->set_destination(
               ServiceWorkerRegistrationData::RouterRules::RuleV1::Condition::
                   Request::kJsonDestination);
+          break;
+        case network::mojom::RequestDestination::kSharedStorageWorklet:
+          mutable_request->set_destination(
+              ServiceWorkerRegistrationData::RouterRules::RuleV1::Condition::
+                  Request::kSharedStorageWorkletDestination);
           break;
       }
     }

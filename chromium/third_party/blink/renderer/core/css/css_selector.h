@@ -231,6 +231,7 @@ class CORE_EXPORT CSSSelector {
     kPseudoBefore,
     kPseudoChecked,
     kPseudoCornerPresent,
+    kPseudoCurrent,
     kPseudoDecrement,
     kPseudoDefault,
     kPseudoDetailsContent,
@@ -291,8 +292,11 @@ class CORE_EXPORT CSSSelector {
     kPseudoScrollbarThumb,
     kPseudoScrollbarTrack,
     kPseudoScrollbarTrackPiece,
-    kPseudoSelectAuthorButton,
-    kPseudoSelectAuthorDatalist,
+    kPseudoSearchText,
+    kPseudoSelectFallbackButton,
+    kPseudoSelectFallbackButtonIcon,
+    kPseudoSelectFallbackButtonText,
+    kPseudoSelectFallbackDatalist,
     kPseudoSelection,
     kPseudoSelectorFragmentAnchor,
     kPseudoSingleButton,
@@ -365,14 +369,16 @@ class CORE_EXPORT CSSSelector {
 
     // The following selectors are used to target pseudo elements created for
     // ViewTransition.
-    // See
-    // https://github.com/WICG/view-transitions/blob/main/explainer.md
+    // See https://drafts.csswg.org/css-view-transitions-1/#pseudo
     // for details.
     kPseudoViewTransition,
     kPseudoViewTransitionGroup,
     kPseudoViewTransitionImagePair,
     kPseudoViewTransitionNew,
     kPseudoViewTransitionOld,
+    // Scroll markers pseudos for Carousel
+    kPseudoScrollMarker,
+    kPseudoScrollMarkers,
   };
 
   enum class AttributeMatchType : int {
@@ -497,6 +503,9 @@ class CORE_EXPORT CSSSelector {
     return GetPseudoType() == kPseudoHost ||
            GetPseudoType() == kPseudoHostContext;
   }
+  // Test for combinations including :host() or :host-context()
+  // (See Example 3 under https://drafts.csswg.org/selectors-4/#data-model).
+  bool IsOrContainsHostPseudoClass() const;
   bool IsUserActionPseudoClass() const;
   bool IsIdClassOrAttributeSelector() const;
 

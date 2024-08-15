@@ -22,6 +22,7 @@ namespace apps {
 enum class AppInstallSurface {
   kAppPreloadServiceOem,
   kAppPreloadServiceDefault,
+  kOobeAppRecommendations,
 
   // kAppInstallUri* values are not trustworthy, no decision making should
   // depend on these values.
@@ -30,6 +31,7 @@ enum class AppInstallSurface {
   kAppInstallUriMall,
   kAppInstallUriGetit,
   kAppInstallUriLauncher,
+  kAppInstallUriPeripherals,
 };
 
 std::ostream& operator<<(std::ostream& out, AppInstallSurface surface);
@@ -45,7 +47,21 @@ struct AppInstallIcon {
   bool is_masking_allowed;
 };
 
-std::ostream& operator<<(std::ostream& out, const AppInstallIcon& data);
+std::ostream& operator<<(std::ostream& out, const AppInstallIcon& icon);
+
+// App screenshots hosted by Almanac for use during app installation.
+struct AppInstallScreenshot {
+  GURL url;
+
+  std::string mime_type;
+
+  int32_t width_in_pixels;
+
+  int32_t height_in_pixels;
+};
+
+std::ostream& operator<<(std::ostream& out,
+                         const AppInstallScreenshot& screenshot);
 
 // Android specific data for use during Android app installation.
 // Currently empty but available to be extended with data if needed.
@@ -72,6 +88,19 @@ struct WebAppInstallData {
 
 std::ostream& operator<<(std::ostream& out, const WebAppInstallData& data);
 
+// GeForce Now specific data for use during GeForce Now app installation.
+// Currently empty but available to be extended with data if needed.
+struct GeForceNowAppInstallData {};
+
+std::ostream& operator<<(std::ostream& out,
+                         const GeForceNowAppInstallData& data);
+
+// Steam specific data for use during Steam app installation.
+// Currently empty but available to be extended with data if needed.
+struct SteamAppInstallData {};
+
+std::ostream& operator<<(std::ostream& out, const SteamAppInstallData& data);
+
 // Generic app metadata for use in dialogs during app installation plus any app
 // type specific information necessary for performing the app installation.
 struct AppInstallData {
@@ -88,9 +117,17 @@ struct AppInstallData {
 
   std::string description;
 
-  std::vector<AppInstallIcon> icons;
+  std::optional<AppInstallIcon> icon;
 
-  absl::variant<AndroidAppInstallData, WebAppInstallData> app_type_data;
+  std::vector<AppInstallScreenshot> screenshots;
+
+  GURL install_url;
+
+  absl::variant<AndroidAppInstallData,
+                WebAppInstallData,
+                GeForceNowAppInstallData,
+                SteamAppInstallData>
+      app_type_data;
 };
 
 std::ostream& operator<<(std::ostream& out, const AppInstallData& data);

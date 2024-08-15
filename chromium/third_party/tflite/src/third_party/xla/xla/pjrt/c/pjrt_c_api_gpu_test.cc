@@ -54,6 +54,7 @@ limitations under the License.
 #include "xla/shape_util.h"
 #include "xla/status.h"
 #include "xla/statusor.h"
+#include "xla/stream_executor/gpu/gpu_init.h"
 #include "xla/tests/literal_test_util.h"
 #include "tsl/platform/status.h"
 #include "tsl/platform/status_matchers.h"
@@ -148,7 +149,7 @@ TEST_F(PjrtCApiGpuTest, CreateViewOfDeviceBuffer) {
   PJRT_Error* to_host_error = api_->PJRT_Buffer_ToHostBuffer(&to_host_args);
 
   ASSERT_EQ(to_host_error, nullptr);
-  xla::PjRtFuture<absl::Status> transfer_to_host =
+  xla::PjRtFuture<> transfer_to_host =
       ::pjrt::ConvertCEventToCppFuture(to_host_args.event, api_);
   TF_CHECK_OK(transfer_to_host.Await());
   ASSERT_EQ(literal->data<float>().size(), 4);
@@ -399,8 +400,8 @@ TEST(PjrtCApiGpuExtensionTest, CustomCallUntyped) {
       reinterpret_cast<const PJRT_Gpu_Custom_Call*>(next)->custom_call(&args);
 
   CHECK_EQ(error, nullptr);
-  void* custom_call =
-      xla::CustomCallTargetRegistry::Global()->Lookup(function_name, "CUDA");
+  void* custom_call = xla::CustomCallTargetRegistry::Global()->Lookup(
+      function_name, stream_executor::GpuPlatformName());
   EXPECT_EQ(custom_call, reinterpret_cast<void*>(&TestCustomCallV2));
 }
 
@@ -430,8 +431,10 @@ TEST(PjrtCApiGpuExtensionTest, CustomCallTyped) {
       reinterpret_cast<const PJRT_Gpu_Custom_Call*>(next)->custom_call(&args);
 
   CHECK_EQ(error, nullptr);
-  auto* custom_call = xla::ffi::FindHandler(function_name, "CUDA").value();
-  EXPECT_EQ(reinterpret_cast<void*>(custom_call), kNoop);
+  auto registration =
+      xla::ffi::FindHandler(function_name, stream_executor::GpuPlatformName())
+          .value();
+  EXPECT_EQ(reinterpret_cast<void*>(registration.handler), kNoop);
 }
 
 }  // namespace

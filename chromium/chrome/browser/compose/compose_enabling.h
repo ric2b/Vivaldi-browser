@@ -22,6 +22,20 @@
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/render_frame_host.h"
 
+namespace compose {
+
+enum class ComposeNudgeDenyReason {
+  kSavedStateNotificationDisabled = 0,
+  kSavedStateNudgeDisabled = 1,
+  // The proactive nudge could have shown but was disabled by preference or
+  // config values.
+  kProactiveNudgeDisabled = 2,
+  // The proactive nudge can not be shown for this user, page, or field.
+  kProactiveNudgeBlocked = 3,
+};
+
+}  // namespace compose
+
 class ComposeEnabling {
  public:
   using ScopedOverride = std::unique_ptr<base::ScopedClosureRunner>;
@@ -53,15 +67,20 @@ class ComposeEnabling {
   static ScopedOverride ScopedEnableComposeForTesting();
   static ScopedOverride ScopedSkipUserCheckForTesting();
 
-  bool ShouldTriggerPopup(
+  base::expected<void, compose::ComposeShowStatus> ShouldTriggerNoStatePopup(
       std::string_view autocomplete_attribute,
+      bool writingsuggestions_attribute,
       Profile* profile,
+      PrefService* prefs,
       translate::TranslateManager* translate_manager,
-      bool ongoing_session,
       const url::Origin& top_level_frame_origin,
       const url::Origin& element_frame_origin,
       GURL url,
+      bool is_msbb_enabled);
+
+  bool ShouldTriggerSavedStatePopup(
       autofill::AutofillSuggestionTriggerSource trigger_source);
+
   bool ShouldTriggerContextMenu(Profile* profile,
                                 translate::TranslateManager* translate_manager,
                                 content::RenderFrameHost* rfh,

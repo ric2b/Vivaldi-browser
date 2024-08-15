@@ -4,42 +4,58 @@
 
 package org.chromium.chrome.test.transit;
 
+import org.chromium.base.supplier.Supplier;
+import org.chromium.base.test.transit.ConditionStatus;
 import org.chromium.base.test.transit.UiThreadCondition;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.content_public.browser.WebContents;
 
 /** Fulfilled when a page is loaded. */
-class PageLoadedCondition extends UiThreadCondition {
-    private final ChromeTabbedActivityTestRule mChromeTabbedActivityTestRule;
+public class PageLoadedCondition extends UiThreadCondition implements Supplier<Tab> {
+    private final Supplier<Tab> mActivityTabSupplier;
     private final boolean mIncognito;
-    private Tab mMatchedTab;
+    private Tab mLoadedTab;
 
-    PageLoadedCondition(
-            ChromeTabbedActivityTestRule chromeTabbedActivityTestRule, boolean incognito) {
-        mChromeTabbedActivityTestRule = chromeTabbedActivityTestRule;
+    PageLoadedCondition(Supplier<Tab> activityTabSupplier, boolean incognito) {
+        mActivityTabSupplier = dependOnSupplier(activityTabSupplier, "ActivityTab");
         mIncognito = incognito;
     }
 
     @Override
     public String buildDescription() {
-        return "Tab loaded";
+        return mIncognito ? "Incognito tab loaded" : "Regular tab loaded";
     }
 
     @Override
-    public boolean check() {
-        Tab tab = mChromeTabbedActivityTestRule.getActivity().getActivityTab();
-        if (tab != null
-                && tab.isIncognito() == mIncognito
-                && !tab.isLoading()
-                && !tab.getWebContents().shouldShowLoadingUI()) {
-            mMatchedTab = tab;
-            return true;
+    protected ConditionStatus checkWithSuppliers() {
+        Tab tab = mActivityTabSupplier.get();
+
+        boolean isIncognito = tab.isIncognito();
+        boolean isLoading = tab.isLoading();
+        WebContents webContents = tab.getWebContents();
+        boolean shouldShowLoadingUi = webContents != null && webContents.shouldShowLoadingUI();
+        String message =
+                String.format(
+                        "incognito %b, isLoading %b, hasWebContents %b, shouldShowLoadingUI %b",
+                        isIncognito, isLoading, webContents != null, shouldShowLoadingUi);
+        if (isIncognito == mIncognito
+                && !isLoading
+                && webContents != null
+                && !shouldShowLoadingUi) {
+            mLoadedTab = tab;
+            return fulfilled(message);
         } else {
-            return false;
+            return notFulfilled(message);
         }
     }
 
-    public Tab getMatchedTab() {
-        return mMatchedTab;
+    @Override
+    public Tab get() {
+        return mLoadedTab;
+    }
+
+    @Override
+    public boolean hasValue() {
+        return mLoadedTab != null;
     }
 }

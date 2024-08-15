@@ -16,7 +16,6 @@
 #include "chrome/browser/web_applications/os_integration/web_app_shortcuts_menu.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
-#include "chrome/browser/web_applications/web_app_registrar.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 class Profile;
@@ -40,7 +39,7 @@ using ShortcutLocationCallback =
 // This class manages creation/update/deletion of OS shortcuts for web
 // applications.
 //
-// TODO(crbug.com/860581): Migrate functions from
+// TODO(crbug.com/40583793): Migrate functions from
 // web_app_extension_shortcut.(h|cc) and
 // platform_apps/shortcut_manager.(h|cc) to WebAppShortcutManager.
 class WebAppShortcutManager {
@@ -86,7 +85,7 @@ class WebAppShortcutManager {
   // Registers a shortcuts menu for a web app after reading its shortcuts menu
   // icons from disk.
   //
-  // TODO(crbug.com/1098471): Consider unifying this method and
+  // TODO(crbug.com/40701951): Consider unifying this method and
   // RegisterShortcutsMenuWithOs() below.
   void ReadAllShortcutsMenuIconsAndRegisterShortcutsMenu(
       const webapps::AppId& app_id,
@@ -106,7 +105,7 @@ class WebAppShortcutManager {
   // Builds initial ShortcutInfo without |ShortcutInfo::favicon| being read.
   // virtual for testing.
   //
-  // TODO(crbug.com/1225132): Get rid of |BuildShortcutInfo| method: inline it
+  // TODO(crbug.com/40775647): Get rid of |BuildShortcutInfo| method: inline it
   // or make it private.
   virtual std::unique_ptr<ShortcutInfo> BuildShortcutInfo(
       const webapps::AppId& app_id);

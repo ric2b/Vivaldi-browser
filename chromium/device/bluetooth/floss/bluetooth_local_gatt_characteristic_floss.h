@@ -51,6 +51,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLocalGattCharacteristicFloss
                                         const std::vector<uint8_t>& new_value,
                                         bool indicate) override;
   device::BluetoothLocalGattService* GetService() const override;
+  std::vector<device::BluetoothLocalGattDescriptor*> GetDescriptors()
+      const override;
 
   // floss::FlossGattServerObserver overrides.
   void GattServerCharacteristicReadRequest(std::string address,
@@ -73,12 +75,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLocalGattCharacteristicFloss
 
   void ResolveInstanceId(const GattService& service);
   int32_t InstanceId() const { return floss_instance_id_; }
-  const std::vector<std::unique_ptr<BluetoothLocalGattDescriptorFloss>>&
-  GetDescriptors() const;
+  NotificationType CccdNotificationType();
 
  private:
   friend class BluetoothLocalGattServiceFloss;
   friend class BluetoothLocalGattDescriptorFloss;
+  friend class BluetoothLocalGattServiceFlossTest;
 
   BluetoothLocalGattCharacteristicFloss(
       const device::BluetoothUUID& uuid,
@@ -86,7 +88,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLocalGattCharacteristicFloss
       Permissions permissions,
       BluetoothLocalGattServiceFloss* service);
 
-  // Convert this characteristic to GattCharacteristic struct.
+  // Convert this characteristic to DBUS |GattCharacteristic| struct.
   GattCharacteristic ToGattCharacteristic();
 
   // Adds a descriptor to this characteristic. Returns the index of the
@@ -128,7 +130,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLocalGattCharacteristicFloss
 
   // Client and Floss-assigned instance ids.
   int32_t client_instance_id_;
-  int32_t floss_instance_id_;
+  int32_t floss_instance_id_ = -1;
 
   // Index of this characteristic within the containing service.
   int32_t index_;

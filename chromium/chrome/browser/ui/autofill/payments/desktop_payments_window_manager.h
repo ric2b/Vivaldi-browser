@@ -5,6 +5,9 @@
 #ifndef CHROME_BROWSER_UI_AUTOFILL_PAYMENTS_DESKTOP_PAYMENTS_WINDOW_MANAGER_H_
 #define CHROME_BROWSER_UI_AUTOFILL_PAYMENTS_DESKTOP_PAYMENTS_WINDOW_MANAGER_H_
 
+#include <memory>
+#include <optional>
+
 #include "base/memory/raw_ref.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/payments/payments_network_interface.h"
@@ -19,11 +22,17 @@
 
 class GURL;
 
+namespace content {
+class NavigationHandle;
+}  // namespace content
+
 namespace autofill {
 
 class ContentAutofillClient;
 
 namespace payments {
+
+class PaymentsWindowUserConsentDialogControllerImpl;
 
 // Desktop implementation of the PaymentsWindowManager interface. One per
 // WebContents, owned by the ChromeAutofillClient associated with the
@@ -45,6 +54,8 @@ class DesktopPaymentsWindowManager : public PaymentsWindowManager,
   void InitVcn3dsAuthentication(Vcn3dsContext context) override;
 
   // content::WebContentsObserver:
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void WebContentsDestroyed() override;
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -62,10 +73,14 @@ class DesktopPaymentsWindowManager : public PaymentsWindowManager,
     kMaxValue = kVcn3ds,
   };
 
-  // Creates a pop-up for `flow_type_`, with an initial URL of `url`. This
-  // pop-up will go through a couple of URL navigations specific to the flow
-  // that it is created for.
-  void CreatePopup(const GURL& url);
+  // Creates a pop-up for `flow_type_`, with an initial URL of `url` and size of
+  // `popup_size`. This pop-up will go through a couple of URL navigations
+  // specific to the flow that it is created for.
+  void CreatePopup(const GURL& url, gfx::Rect popup_size);
+
+  // Triggered when a pop-up navigation has finished, and the `flow_type_` is
+  // kVcn3ds.
+  void OnDidFinishNavigationForVcn3ds();
 
   // Triggered when a pop-up is destroyed, and the `flow_type_` is kVcn3ds.
   void OnWebContentsDestroyedForVcn3ds();
@@ -90,6 +105,19 @@ class DesktopPaymentsWindowManager : public PaymentsWindowManager,
   // UnmaskCardRequest is triggered.
   void OnVcn3dsAuthenticationProgressDialogCancelled();
 
+  // Shows the VCN 3DS consent dialog, which the user must accept for the pop-up
+  // window to trigger. If the user cancels the dialog the flow will end.
+  void ShowVcn3dsConsentDialog();
+
+  // Handles the user accepting the VCN 3DS consent dialog.
+  void OnVcn3dsConsentDialogAccepted();
+
+  // Handles the user cancelling the VCN 3DS consent dialog.
+  void OnVcn3dsConsentDialogCancelled();
+
+  // Resets the state of `this` in relation to the ongoing flow.
+  void Reset();
+
   // Only present if `flow_type_` is `kVcn3ds`.
   std::optional<Vcn3dsContext> vcn_3ds_context_;
 
@@ -98,6 +126,11 @@ class DesktopPaymentsWindowManager : public PaymentsWindowManager,
 
   // ContentAutofillClient that owns `this`.
   const raw_ref<ContentAutofillClient> client_;
+
+  // Controller for the VCN 3DS consent dialog. Set (and re-set if it was
+  // previously set) when the dialog is triggered.
+  std::unique_ptr<PaymentsWindowUserConsentDialogControllerImpl>
+      payments_window_user_consent_dialog_controller_;
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   base::ScopedObservation<BrowserList, BrowserListObserver> scoped_observation_{

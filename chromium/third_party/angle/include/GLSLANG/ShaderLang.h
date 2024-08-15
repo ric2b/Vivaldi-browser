@@ -26,7 +26,7 @@
 
 // Version number for shader translation API.
 // It is incremented every time the API changes.
-#define ANGLE_SH_VERSION 349
+#define ANGLE_SH_VERSION 351
 
 enum ShShaderSpec
 {
@@ -74,6 +74,9 @@ enum ShShaderOutput
 
     // Output for MSL
     SH_MSL_METAL_OUTPUT = 0x8B4D,
+
+    // Output for WGSL
+    SH_WGSL_OUTPUT = 0x8B4E,
 };
 
 struct ShCompileOptionsMetal
@@ -563,6 +566,9 @@ struct ShBuiltInResources
 
     // The maximum complexity an expression can be when limitExpressionComplexity is turned on.
     int MaxExpressionComplexity;
+
+    // The maximum depth of certain nestable statements (while, switch);
+    int MaxStatementDepth;
 
     // The maximum depth a call stack can be.
     int MaxCallStackDepth;

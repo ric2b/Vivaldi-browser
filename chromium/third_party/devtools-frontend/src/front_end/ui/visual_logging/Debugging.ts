@@ -76,11 +76,78 @@ function processElementForDebugging(element: Element, loggingState: LoggingState
   }
 }
 
-export function showDebugPopoverForEvent(name: string, config?: LoggingConfig, context?: string): void {
-  if (!veDebuggingEnabled) {
+export function processEventForDebugging(event: string, state: LoggingState|null, extraInfo?: Entry): void {
+  const veDebugLoggingEnabled = localStorage.getItem('veDebugLoggingEnabled');
+  if (!veDebuggingEnabled && !veDebugLoggingEnabled) {
     return;
   }
-  showDebugPopover(`${name}: ${config ? debugString(config) : ''}; ${context ? 'context: ' + context : ''}`);
+
+  const entry: Entry =
+      {event, ve: state ? VisualElements[state?.config.ve] : undefined, context: state?.config.context, ...extraInfo};
+  for (const stringKey in entry) {
+    const key = stringKey as keyof Entry;
+    if (typeof entry[key] === 'undefined') {
+      delete entry[key];
+    }
+  }
+
+  if (veDebuggingEnabled) {
+    showDebugPopover(`${Object.entries(entry).map(([k, v]) => `${k}: ${v}`).join('; ')}`);
+  }
+  const time = Date.now() - sessionStartTime;
+  maybeLogDebugEvent({...entry, veid: state?.veid, time});
+}
+
+type Entry = {
+  event?: string,
+  ve?: string,
+  context?: string,
+  veid?: number,
+  children?: Entry[],
+  parent?: number,
+  time?: number,
+  width?: number,
+  height?: number,
+  mouseButton?: number,
+  doubleClick?: boolean,
+};
+
+export function processImpressionsForDebugging(states: LoggingState[]): void {
+  if (!localStorage.getItem('veDebugLoggingEnabled')) {
+    return;
+  }
+  const impressions = new Map<number, Entry>();
+  for (const state of states) {
+    const entry: Entry = {
+      event: 'Impression',
+      ve: VisualElements[state.config.ve],
+    };
+    if (state.config.context) {
+      entry.context = state.config.context;
+    }
+    if (state.size) {
+      entry.width = state.size.width;
+      entry.height = state.size.height;
+    }
+    entry.veid = state.veid,
+
+    impressions.set(state.veid, entry);
+    if (!state.parent || !impressions.has(state.parent?.veid)) {
+      entry.parent = state.parent?.veid;
+    } else {
+      const parent = impressions.get(state.parent?.veid) as Entry;
+      parent.children = parent.children || [];
+      parent.children.push(entry);
+    }
+  }
+
+  const entries = [...impressions.values()].filter(i => 'parent' in i);
+  if (entries.length === 1) {
+    entries[0].time = Date.now() - sessionStartTime;
+    maybeLogDebugEvent(entries[0]);
+  } else {
+    maybeLogDebugEvent({event: 'Impression', children: entries, time: Date.now() - sessionStartTime});
+  }
 }
 
 function processNonDomLoggableForDebugging(loggable: Loggable, loggingState: LoggingState): void {
@@ -128,3 +195,59 @@ export function debugString(config: LoggingConfig): string {
   }
   return components.join('; ');
 }
+
+const veDebugEventsLog: Entry[] = [];
+
+function maybeLogDebugEvent(entry: Entry): void {
+  if (!localStorage.getItem('veDebugLoggingEnabled')) {
+    return;
+  }
+  veDebugEventsLog.push(entry);
+  // eslint-disable-next-line no-console
+  console.info('VE Debug:', entry);
+}
+
+function setVeDebugLoggingEnabled(enabled: boolean): void {
+  if (enabled) {
+    localStorage.setItem('veDebugLoggingEnabled', 'true');
+  } else {
+    localStorage.removeItem('veDebugLoggingEnabled');
+  }
+}
+
+function findVeDebugImpression(veid: number, includeAncestorChain?: boolean): Entry|undefined {
+  const findImpression = (entry: Entry): Entry|undefined => {
+    if (entry.event === 'Impression' && entry.veid === veid) {
+      return entry;
+    }
+    let i = 0;
+    for (const childEntry of entry.children || []) {
+      const matchingEntry = findImpression(childEntry);
+      if (matchingEntry) {
+        if (includeAncestorChain) {
+          const children = [];
+          children[i] = matchingEntry;
+          return {...entry, children};
+        }
+        return matchingEntry;
+      }
+      ++i;
+    }
+    return undefined;
+  };
+  return findImpression({children: veDebugEventsLog});
+}
+
+let sessionStartTime: number = Date.now();
+
+export function processStartLoggingForDebugging(): void {
+  sessionStartTime = Date.now();
+  maybeLogDebugEvent({event: 'SessionStart'});
+}
+
+// @ts-ignore
+globalThis.setVeDebugLoggingEnabled = setVeDebugLoggingEnabled;
+// @ts-ignore
+globalThis.veDebugEventsLog = veDebugEventsLog;
+// @ts-ignore
+globalThis.findVeDebugImpression = findVeDebugImpression;

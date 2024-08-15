@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/threading/thread_local_storage.h"
 
 #include <algorithm>
@@ -384,7 +389,7 @@ void OnThreadExitInternal(TlsVectorEntry* tls_data) {
     }
 
     if (--remaining_attempts == 0) {
-      NOTREACHED();  // Destructors might not have been called.
+      NOTREACHED_IN_MIGRATION();  // Destructors might not have been called.
       break;
     }
   }

@@ -166,6 +166,14 @@ export class Fixture<S extends SubcaseBatchState = SubcaseBatchState> {
     this.rec.debug(new Error(msg));
   }
 
+  /**
+   * Log an info message.
+   * **Use sparingly. Use `debug()` instead if logs are only needed with debug logging enabled.**
+   */
+  info(msg: string): void {
+    this.rec.info(new Error(msg));
+  }
+
   /** Throws an exception marking the subcase as skipped. */
   skip(msg: string): never {
     throw new SkipTestCase(msg);

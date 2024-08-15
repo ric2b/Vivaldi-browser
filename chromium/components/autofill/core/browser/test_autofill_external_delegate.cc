@@ -8,6 +8,7 @@
 #include "base/strings/stringprintf.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/geometry/rect_f.h"
 
 namespace autofill {
 
@@ -19,13 +20,13 @@ TestAutofillExternalDelegate::TestAutofillExternalDelegate(
 
 TestAutofillExternalDelegate::~TestAutofillExternalDelegate() = default;
 
-void TestAutofillExternalDelegate::OnPopupShown() {
+void TestAutofillExternalDelegate::OnSuggestionsShown() {
   popup_hidden_ = false;
 
-  AutofillExternalDelegate::OnPopupShown();
+  AutofillExternalDelegate::OnSuggestionsShown();
 }
 
-void TestAutofillExternalDelegate::OnPopupHidden() {
+void TestAutofillExternalDelegate::OnSuggestionsHidden() {
   popup_hidden_ = true;
 
   run_loop_.Quit();
@@ -34,7 +35,7 @@ void TestAutofillExternalDelegate::OnPopupHidden() {
 void TestAutofillExternalDelegate::OnQuery(
     const FormData& form,
     const FormFieldData& field,
-    const gfx::RectF& bounds,
+    const gfx::Rect& caret_bounds,
     AutofillSuggestionTriggerSource trigger_source) {
   on_query_seen_ = true;
   on_suggestions_returned_seen_ = false;
@@ -43,7 +44,8 @@ void TestAutofillExternalDelegate::OnQuery(
   // If necessary, call the superclass's OnQuery to set up its other fields
   // properly.
   if (call_parent_methods_)
-    AutofillExternalDelegate::OnQuery(form, field, bounds, trigger_source);
+    AutofillExternalDelegate::OnQuery(form, field, caret_bounds,
+                                      trigger_source);
 }
 
 void TestAutofillExternalDelegate::OnSuggestionsReturned(
@@ -97,8 +99,7 @@ void TestAutofillExternalDelegate::CheckSuggestions(
               suggestions_[i].minor_text.value);
     EXPECT_EQ(expected_suggestions[i].labels, suggestions_[i].labels);
     EXPECT_EQ(expected_suggestions[i].icon, suggestions_[i].icon);
-    EXPECT_EQ(expected_suggestions[i].popup_item_id,
-              suggestions_[i].popup_item_id);
+    EXPECT_EQ(expected_suggestions[i].type, suggestions_[i].type);
     EXPECT_EQ(expected_suggestions[i].is_acceptable,
               suggestions_[i].is_acceptable);
   }

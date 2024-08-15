@@ -57,7 +57,7 @@ constexpr char kNextCollectionImagePath[] =
 
 // The options to be added to an image URL, specifying resolution, cropping,
 // etc. Options appear on an image URL after the '=' character.
-// TODO(crbug.com/874339): Set options based on display resolution capability.
+// TODO(crbug.com/41408116): Set options based on display resolution capability.
 constexpr char kImageOptions[] = "=w3840-h2160-p-k-no-nd-mv";
 
 // Label added to request to filter out unwanted collections.
@@ -151,9 +151,7 @@ void NtpBackgroundService::FetchCollectionInfo() {
   request.add_filtering_label(base::StrCat(
       {kFilteringLabel, ".M", version_info::GetMajorVersionNumber()}));
   // Add filtering for Panorama feature.
-  if (base::FeatureList::IsEnabled(features::kCustomizeChromeSidePanel)) {
-    request.add_filtering_label(base::StrCat({kFilteringLabel, ".panorama"}));
-  }
+  request.add_filtering_label(base::StrCat({kFilteringLabel, ".panorama"}));
   if (features::IsChromeWebuiRefresh2023()) {
     request.add_filtering_label(base::StrCat({kFilteringLabel, ".gm3"}));
   }
@@ -259,7 +257,7 @@ void NtpBackgroundService::FetchCollectionImageInfo(
     const std::string& collection_id) {
   collection_images_error_info_.ClearError();
   // Ignore subsequent requests to fetch collection image info.
-  // TODO(crbug.com/1454463): Prioritize the latest request to fetch collection
+  // TODO(crbug.com/40916951): Prioritize the latest request to fetch collection
   // images.
   if (!requested_collection_id_.empty()) {
     return;

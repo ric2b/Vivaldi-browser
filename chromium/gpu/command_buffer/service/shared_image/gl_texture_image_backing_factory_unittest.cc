@@ -57,7 +57,7 @@ class GLTextureImageBackingFactoryTestBase : public SharedImageTestBase {
   GLTextureImageBackingFactoryTestBase() = default;
   ~GLTextureImageBackingFactoryTestBase() override = default;
 
-  void SetUpBase(bool for_cpu_upload_usage) {
+  void SetUp() override {
     ASSERT_NO_FATAL_FAILURE(InitializeContext(GrContextType::kGL));
     auto* feature_info = context_state_->feature_info();
 
@@ -85,7 +85,7 @@ class GLTextureImageBackingFactoryTestBase : public SharedImageTestBase {
     std::unique_ptr<GLTextureImageBackingFactory> backing_factory =
         std::make_unique<GLTextureImageBackingFactory>(
             gpu_preferences_, gpu_workarounds_, context_state_->feature_info(),
-            &progress_reporter_, for_cpu_upload_usage);
+            &progress_reporter_);
     backing_factory->EnableSupportForAllMetalUsagesForTesting(true);
     backing_factory_ = std::move(backing_factory);
   }
@@ -140,10 +140,7 @@ class GLTextureImageBackingFactoryTestBase : public SharedImageTestBase {
 
 // Non-parameterized tests.
 class GLTextureImageBackingFactoryTest
-    : public GLTextureImageBackingFactoryTestBase {
- public:
-  void SetUp() override { SetUpBase(/*for_cpu_upload_usage=*/false); }
-};
+    : public GLTextureImageBackingFactoryTestBase {};
 
 // SharedImageFormat parameterized tests.
 class GLTextureImageBackingFactoryWithFormatTest
@@ -164,7 +161,6 @@ class GLTextureImageBackingFactoryWithUploadTest
     : public GLTextureImageBackingFactoryTestBase,
       public testing::WithParamInterface<viz::SharedImageFormat> {
  public:
-  void SetUp() override { SetUpBase(/*for_cpu_upload_usage=*/true); }
   viz::SharedImageFormat get_format() { return GetParam(); }
 };
 
@@ -172,7 +168,7 @@ using GLTextureImageBackingFactoryWithReadbackTest =
     GLTextureImageBackingFactoryWithUploadTest;
 
 TEST_F(GLTextureImageBackingFactoryTest, InvalidFormat) {
-  auto format = viz::LegacyMultiPlaneFormat::kNV12;
+  auto format = viz::SinglePlaneFormat::kBGR_565;
   gfx::Size size(256, 256);
   // Note: The specific usage doesn't matter here as long as it's supported by
   // GLTextureImageBacking.
@@ -189,8 +185,7 @@ TEST_F(GLTextureImageBackingFactoryTest, InvalidUsageWithANGLEMetal) {
 
   for (uint32_t metal_invalid_usage :
        {SHARED_IMAGE_USAGE_DISPLAY_READ, SHARED_IMAGE_USAGE_GLES2_READ,
-        SHARED_IMAGE_USAGE_GLES2_WRITE,
-        SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT}) {
+        SHARED_IMAGE_USAGE_GLES2_WRITE}) {
     bool supported = backing_factory_->CanCreateSharedImage(
         metal_invalid_usage, format, size, /*thread_safe=*/false,
         gfx::EMPTY_BUFFER, GrContextType::kGL, {});
@@ -611,7 +606,7 @@ TEST_P(GLTextureImageBackingFactoryInitialDataTest, InitialData) {
 
   auto backing = backing_factory_->CreateSharedImage(
       mailbox, format, size, color_space, surface_origin, alpha_type, usage,
-      "TestLabel", initial_data);
+      "TestLabel", /*is_thread_safe=*/false, initial_data);
   ASSERT_TRUE(backing);
   EXPECT_TRUE(backing->IsCleared());
 
@@ -677,14 +672,12 @@ TEST_F(GLTextureImageBackingFactoryWithUploadTest, InvalidUsageWithANGLEMetal) {
   auto format = viz::SinglePlaneFormat::kRGBA_8888;
   gfx::Size size(256, 256);
 
-  // NOTE: SCANOUT is not supported by GLTextureImageBackingFactory at all
-  // unless SHARED_IMAGE_USAGE_CPU_UPLOAD is also specified.
-  uint32_t usage = SHARED_IMAGE_USAGE_SCANOUT | SHARED_IMAGE_USAGE_CPU_UPLOAD;
+  uint32_t usage = SHARED_IMAGE_USAGE_DISPLAY_READ;
 
   bool supported = backing_factory_->CanCreateSharedImage(
       usage, format, size, /*thread_safe=*/false, gfx::EMPTY_BUFFER,
       GrContextType::kGL, {});
-  EXPECT_TRUE(supported) << usage;
+  EXPECT_TRUE(supported);
 
   backing_factory()->ForceSetUsingANGLEMetalForTesting(true);
   backing_factory()->EnableSupportForAllMetalUsagesForTesting(false);
@@ -692,10 +685,7 @@ TEST_F(GLTextureImageBackingFactoryWithUploadTest, InvalidUsageWithANGLEMetal) {
   supported = backing_factory_->CanCreateSharedImage(
       usage, format, size, /*thread_safe=*/false, gfx::EMPTY_BUFFER,
       GrContextType::kGL, {});
-  EXPECT_FALSE(supported) << usage;
-
-  backing_factory()->ForceSetUsingANGLEMetalForTesting(false);
-  backing_factory()->EnableSupportForAllMetalUsagesForTesting(true);
+  EXPECT_FALSE(supported);
 }
 
 TEST_P(GLTextureImageBackingFactoryWithUploadTest, UploadFromMemory) {

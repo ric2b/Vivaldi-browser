@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import androidx.test.filters.SmallTest;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -41,11 +42,17 @@ public class FacilitatedPaymentsApiClientBridgeUnitTest {
         mJniMocker.mock(FacilitatedPaymentsApiClientBridgeJni.TEST_HOOKS, mBridgeNatives);
     }
 
+    @After
+    public void tearDown() {
+        FacilitatedPaymentsApiClient.setFactory(null);
+    }
+
     @Test
     public void apiIsNotAvailableByDefault() throws Exception {
         FacilitatedPaymentsApiClientBridge bridge =
                 new FacilitatedPaymentsApiClientBridge(
-                        NATIVE_FACILITATED_PAYMENTS_API_CLIENT_ANDROID);
+                        NATIVE_FACILITATED_PAYMENTS_API_CLIENT_ANDROID,
+                        /* renderFrameHost= */ null);
 
         bridge.isAvailable();
 
@@ -57,7 +64,8 @@ public class FacilitatedPaymentsApiClientBridgeUnitTest {
     public void cannotRetrieveClientTokenByDefault() throws Exception {
         FacilitatedPaymentsApiClientBridge bridge =
                 new FacilitatedPaymentsApiClientBridge(
-                        NATIVE_FACILITATED_PAYMENTS_API_CLIENT_ANDROID);
+                        NATIVE_FACILITATED_PAYMENTS_API_CLIENT_ANDROID,
+                        /* renderFrameHost= */ null);
 
         bridge.getClientToken();
 
@@ -69,20 +77,23 @@ public class FacilitatedPaymentsApiClientBridgeUnitTest {
     public void purchaseActionFailsByDefault() throws Exception {
         FacilitatedPaymentsApiClientBridge bridge =
                 new FacilitatedPaymentsApiClientBridge(
-                        NATIVE_FACILITATED_PAYMENTS_API_CLIENT_ANDROID);
+                        NATIVE_FACILITATED_PAYMENTS_API_CLIENT_ANDROID,
+                        /* renderFrameHost= */ null);
 
-        bridge.invokePurchaseAction(new byte[] {'A', 'c', 't', 'i', 'o', 'n'});
+        bridge.invokePurchaseAction(
+                /* primaryAccount= */ null, new byte[] {'A', 'c', 't', 'i', 'o', 'n'});
 
         verify(mBridgeNatives)
-                .onPurchaseActionResult(
-                        eq(NATIVE_FACILITATED_PAYMENTS_API_CLIENT_ANDROID), eq(false));
+                .onPurchaseActionResultEnum(eq(NATIVE_FACILITATED_PAYMENTS_API_CLIENT_ANDROID),
+                        eq(PurchaseActionResult.COULD_NOT_INVOKE));
     }
 
     @Test
     public void cannotCheckApiAvailabilityAfterNativePointerReset() throws Exception {
         FacilitatedPaymentsApiClientBridge bridge =
                 new FacilitatedPaymentsApiClientBridge(
-                        NATIVE_FACILITATED_PAYMENTS_API_CLIENT_ANDROID);
+                        NATIVE_FACILITATED_PAYMENTS_API_CLIENT_ANDROID,
+                        /* renderFrameHost= */ null);
         bridge.resetNativePointer();
 
         bridge.isAvailable();
@@ -94,7 +105,8 @@ public class FacilitatedPaymentsApiClientBridgeUnitTest {
     public void cannotRetrieveClientTokenAfterNativePointerReset() throws Exception {
         FacilitatedPaymentsApiClientBridge bridge =
                 new FacilitatedPaymentsApiClientBridge(
-                        NATIVE_FACILITATED_PAYMENTS_API_CLIENT_ANDROID);
+                        NATIVE_FACILITATED_PAYMENTS_API_CLIENT_ANDROID,
+                        /* renderFrameHost= */ null);
         bridge.resetNativePointer();
 
         bridge.getClientToken();
@@ -106,11 +118,34 @@ public class FacilitatedPaymentsApiClientBridgeUnitTest {
     public void cannotInvokePurchaseActionAfterNativePointerReset() throws Exception {
         FacilitatedPaymentsApiClientBridge bridge =
                 new FacilitatedPaymentsApiClientBridge(
-                        NATIVE_FACILITATED_PAYMENTS_API_CLIENT_ANDROID);
+                        NATIVE_FACILITATED_PAYMENTS_API_CLIENT_ANDROID,
+                        /* renderFrameHost= */ null);
         bridge.resetNativePointer();
 
-        bridge.invokePurchaseAction(new byte[] {'A', 'c', 't', 'i', 'o', 'n'});
+        bridge.invokePurchaseAction(
+                /* primaryAccount= */ null, new byte[] {'A', 'c', 't', 'i', 'o', 'n'});
 
         verifyNoInteractions(mBridgeNatives);
+    }
+
+    /**
+     * If there is a mismatch between the public interface and the private implementation then the
+     * JNI bridge continues to work, e.g., calling bridge.isAvailable() will not throw a
+     * NullPointerException.
+     */
+    @Test
+    public void mismatchedInterfaceAndImplementationCreatesNonNullApiClients() throws Exception {
+        // A factory that does not override any of the interface methods. This simulates a mismatch
+        // between the public interface and private implementation.
+        FacilitatedPaymentsApiClient.setFactory(new FacilitatedPaymentsApiClient.Factory() {});
+
+        FacilitatedPaymentsApiClientBridge bridge =
+                new FacilitatedPaymentsApiClientBridge(
+                        NATIVE_FACILITATED_PAYMENTS_API_CLIENT_ANDROID,
+                        /* renderFrameHost= */ null);
+        bridge.isAvailable();
+
+        verify(mBridgeNatives)
+                .onIsAvailable(eq(NATIVE_FACILITATED_PAYMENTS_API_CLIENT_ANDROID), eq(false));
     }
 }

@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os
-  - Chromium OS
+  - ChromiumOS
 page_name: sideload-android-apps-on-chromebook
 title: Sideload Android apps on your Chromebook
 ---

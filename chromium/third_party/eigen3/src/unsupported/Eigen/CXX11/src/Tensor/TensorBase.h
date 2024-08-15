@@ -999,8 +999,9 @@ class TensorBase<Derived, ReadOnlyAccessors>
     }
 
     // Returns a formatted tensor ready for printing to a stream
-    inline const TensorWithFormat<Derived,DerivedTraits::Layout,DerivedTraits::NumDimensions> format(const TensorIOFormat& fmt) const {
-      return TensorWithFormat<Derived,DerivedTraits::Layout,DerivedTraits::NumDimensions>(derived(), fmt);
+    template<typename Format>
+    inline const TensorWithFormat<Derived,DerivedTraits::Layout,DerivedTraits::NumDimensions, Format> format(const Format& fmt) const {
+      return TensorWithFormat<Derived,DerivedTraits::Layout,DerivedTraits::NumDimensions, Format>(derived(), fmt);
     }
 
     #ifdef EIGEN_READONLY_TENSORBASE_PLUGIN

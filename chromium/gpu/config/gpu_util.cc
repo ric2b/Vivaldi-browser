@@ -4,6 +4,8 @@
 
 #include "gpu/config/gpu_util.h"
 
+#include <string_view>
+
 #include "build/build_config.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -264,11 +266,6 @@ GpuFeatureStatus GetCanvasOopRasterizationFeatureStatus(
   if (feature_list && feature_list->IsFeatureOverriddenFromCommandLine(
                           features::kCanvasOopRasterization.name,
                           base::FeatureList::OVERRIDE_DISABLE_FEATURE))
-    return kGpuFeatureStatusDisabled;
-
-  // VDA video decoder on ChromeOS uses legacy mailboxes which is not compatible
-  // with OOP-C
-  if (!gpu_preferences.enable_chromeos_direct_video_decoder)
     return kGpuFeatureStatusDisabled;
 
   // On certain ChromeOS devices, using Vulkan without OOP-C results in video
@@ -653,7 +650,7 @@ GpuFeatureInfo ComputeGpuFeatureInfo(const GPUInfo& gpu_info,
   std::string disabled_gl_extensions_value =
       command_line->GetSwitchValueASCII(switches::kDisableGLExtensions);
   if (!disabled_gl_extensions_value.empty()) {
-    std::vector<base::StringPiece> command_line_disabled_extensions =
+    std::vector<std::string_view> command_line_disabled_extensions =
         base::SplitStringPiece(disabled_gl_extensions_value, ", ;",
                                base::KEEP_WHITESPACE,
                                base::SPLIT_WANT_NONEMPTY);
@@ -1068,6 +1065,15 @@ void RecordDiscreteGpuHistograms(const GPUInfo& gpu_info) {
 }
 
 #if BUILDFLAG(IS_WIN)
+std::string DirectMLFeatureLevelToString(uint32_t directml_feature_level) {
+  if (directml_feature_level == 0) {
+    return "Not supported";
+  } else {
+    return base::StringPrintf("%d.%d", (directml_feature_level >> 12) & 0xF,
+                              (directml_feature_level >> 8) & 0xF);
+  }
+}
+
 std::string D3DFeatureLevelToString(uint32_t d3d_feature_level) {
   if (d3d_feature_level == 0) {
     return "Not supported";

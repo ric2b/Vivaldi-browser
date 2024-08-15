@@ -66,7 +66,7 @@ public class MinorModeHelper implements IdentityManager.Observer {
     private static final String BUTTONS_SHOWN_HISTOGRAM_NAME = "Signin.SyncButtons.Shown";
     private static final String BUTTON_CLICKED_HISTOGRAM_NAME = "Signin.SyncButtons.Clicked";
 
-    @interface SyncButtonsType {
+    public @interface SyncButtonsType {
         // These values are persisted to logs. Entries should not be renumbered and
         // numeric values should never be reused.
         int SYNC_EQUAL_WEIGHTED = 0;
@@ -76,7 +76,7 @@ public class MinorModeHelper implements IdentityManager.Observer {
         int NUM_ENTRIES = 4;
     };
 
-    @interface SyncButtonClicked {
+    public @interface SyncButtonClicked {
         // These values are persisted to logs. Entries should not be renumbered and
         // numeric values should never be reused.
         int SYNC_OPT_IN_EQUAL_WEIGHTED = 0;
@@ -92,14 +92,15 @@ public class MinorModeHelper implements IdentityManager.Observer {
         int NUM_ENTRIES = 8;
     };
 
-    private static final int CAPABILITY_TIMEOUT_MS = 400;
+    private static final int CAPABILITY_TIMEOUT_MS = 1000;
 
     private static boolean sDisableHistorySyncOptInTimeout;
 
     private final long mCreated = SystemClock.elapsedRealtime();
 
     private final IdentityManager mIdentityManager;
-    private final AccountInfo mPrimaryAccount;
+
+    private final CoreAccountInfo mPrimaryAccount;
 
     // Disposable updater which is executed only once.
     private UiUpdater mUiUpdater;
@@ -110,15 +111,16 @@ public class MinorModeHelper implements IdentityManager.Observer {
      * relatively short {@link CAPABILITY_TIMEOUT_MS} time then minor more is resolved with a
      * default value.
      *
-     * <p>Tracks the availability latency of {@link AccountCapabilities} for the primary account.
+     * <p>Tracks the availability latency of {@link AccountCapabilities} for the signed-in primary
+     * account.
      */
     static void resolveMinorMode(
-            IdentityManager identityManager, CoreAccountInfo account, UiUpdater uiUpdater) {
+            IdentityManager identityManager, CoreAccountInfo primaryAccount, UiUpdater uiUpdater) {
         if (uiUpdater == null) {
             throw new IllegalArgumentException("uiUpdater must not be null.");
         }
         AccountInfo accountInfo =
-                identityManager.findExtendedAccountInfoByEmailAddress(account.getEmail());
+                identityManager.findExtendedAccountInfoByEmailAddress(primaryAccount.getEmail());
 
         // TODO(b/40284908): remove accountInfo null check
         if (accountInfo != null && hasCapabilities(accountInfo)) {
@@ -129,7 +131,8 @@ public class MinorModeHelper implements IdentityManager.Observer {
         }
 
         recordNoImmediateAvailability();
-        identityManager.addObserver(new MinorModeHelper(identityManager, accountInfo, uiUpdater));
+        identityManager.addObserver(
+                new MinorModeHelper(identityManager, primaryAccount, uiUpdater));
     }
 
     /** Similar to {@link resolveMinorMode}, but only tracks latency, without altering the UI. */
@@ -174,7 +177,7 @@ public class MinorModeHelper implements IdentityManager.Observer {
     }
 
     private MinorModeHelper(
-            IdentityManager identityManager, AccountInfo primaryAccount, UiUpdater uiUpdater) {
+            IdentityManager identityManager, CoreAccountInfo primaryAccount, UiUpdater uiUpdater) {
         this.mIdentityManager = identityManager;
         this.mPrimaryAccount = primaryAccount;
         mUiUpdater = uiUpdater;

@@ -2,8 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "core/fxcodec/flate/flatemodule.h"
 
+#include "core/fxcrt/compiler_specific.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/test_support.h"
 
@@ -35,9 +41,12 @@ TEST(FlateModule, Decode) {
     const pdfium::DecodeTestData& data = flate_decode_cases[i];
     std::unique_ptr<uint8_t, FxFreeDeleter> buf;
     uint32_t buf_size;
-    EXPECT_EQ(data.processed_size, FlateModule::FlateOrLZWDecode(
-                                       false, {data.input, data.input_size},
-                                       false, 0, 0, 0, 0, 0, &buf, &buf_size))
+    EXPECT_EQ(
+        data.processed_size,
+        FlateModule::FlateOrLZWDecode(
+            false,
+            UNSAFE_BUFFERS(pdfium::make_span(data.input, data.input_size)),
+            false, 0, 0, 0, 0, 0, &buf, &buf_size))
         << " for case " << i;
     ASSERT_TRUE(buf);
     EXPECT_EQ(data.expected_size, buf_size) << " for case " << i;
@@ -70,8 +79,8 @@ TEST(FlateModule, Encode) {
 
   for (size_t i = 0; i < std::size(flate_encode_cases); ++i) {
     const pdfium::StrFuncTestData& data = flate_encode_cases[i];
-    DataVector<uint8_t> result =
-        FlateModule::Encode({data.input, data.input_size});
+    DataVector<uint8_t> result = FlateModule::Encode(
+        UNSAFE_BUFFERS(pdfium::make_span(data.input, data.input_size)));
     EXPECT_EQ(data.expected_size, result.size()) << " for case " << i;
     if (data.expected_size != result.size()) {
       continue;

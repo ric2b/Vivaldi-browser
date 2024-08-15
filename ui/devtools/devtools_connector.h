@@ -140,7 +140,9 @@ class DevtoolsConnectorItem : public content::WebContentsDelegate {
                          const content::ContextMenuParams& params) override;
   content::WebContents* OpenURLFromTab(
       content::WebContents* source,
-      const content::OpenURLParams& params) override;
+      const content::OpenURLParams& params,
+      base::OnceCallback<void(content::NavigationHandle&)> navigation_handle_callback)
+      override;
   std::unique_ptr<content::EyeDropper> OpenEyeDropper(
       content::RenderFrameHost* frame,
       content::EyeDropperListener* listener) override;

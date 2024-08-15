@@ -220,6 +220,15 @@ class ASH_PUBLIC_EXPORT SystemTrayClient {
   // `device_id`.
   virtual void ShowRemapKeysSubpage(int device_id) = 0;
 
+  // Shows a page about premium plans.
+  virtual void ShowYouTubeMusicPremiumPage() = 0;
+
+  // Shows settings related to keyboards.
+  virtual void ShowKeyboardSettings() = 0;
+
+  // Shows settings related to pointing sticks.
+  virtual void ShowPointingStickSettings() = 0;
+
  protected:
   SystemTrayClient() {}
 };

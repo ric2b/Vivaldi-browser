@@ -10,6 +10,7 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <array>
 #include <iterator>
 #include <memory>
 
@@ -25,11 +26,11 @@
 #include "base/memory/scoped_policy.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
+#include "base/numerics/byte_conversions.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/sys_byteorder.h"
 #include "base/system/sys_info.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
@@ -43,6 +44,7 @@
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
+#include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
 #include "gpu/ipc/service/shared_image_stub.h"
 #include "media/base/limits.h"
@@ -400,24 +402,6 @@ void OutputThunk(void* decompression_output_refcon,
   VTVideoDecodeAccelerator* vda =
       reinterpret_cast<VTVideoDecodeAccelerator*>(decompression_output_refcon);
   vda->Output(source_frame_refcon, status, image_buffer);
-}
-
-gfx::BufferFormat ToBufferFormat(viz::SharedImageFormat format) {
-  DCHECK(format.is_multi_plane());
-  if (format == viz::MultiPlaneFormat::kYV12) {
-    return gfx::BufferFormat::YVU_420;
-  }
-  if (format == viz::MultiPlaneFormat::kNV12) {
-    return gfx::BufferFormat::YUV_420_BIPLANAR;
-  }
-  if (format == viz::MultiPlaneFormat::kNV12A) {
-    return gfx::BufferFormat::YUVA_420_TRIPLANAR;
-  }
-  if (format == viz::MultiPlaneFormat::kP010) {
-    return gfx::BufferFormat::P010;
-  }
-  NOTREACHED() << "format=" << format.ToString();
-  return gfx::BufferFormat::RGBA_8888;
 }
 
 bool HasPlatformHevcSupport() {
@@ -813,7 +797,7 @@ bool VTVideoDecodeAccelerator::ConfigureDecoder() {
     return false;
   }
 
-  // TODO(crbug.com/1103432): We should use
+  // TODO(crbug.com/40139254): We should use
   // VTDecompressionSessionCanAcceptFormatDescription() on |format| here to
   // avoid the configuration change if possible.
 
@@ -881,7 +865,7 @@ void VTVideoDecodeAccelerator::DecodeTaskAv1(
   if (!av1_cc_detector_) {
     av1_cc_detector_ = std::make_unique<AV1ConfigChangeDetector>();
   }
-  av1_cc_detector_->DetectConfig(buffer->data(), buffer->data_size());
+  av1_cc_detector_->DetectConfig(buffer->data(), buffer->size());
 
   if (!session_ || av1_cc_detector_->config_changed()) {
     // ConfigureDecoder() calls NotifyError() on failure.
@@ -948,7 +932,7 @@ void VTVideoDecodeAccelerator::DecodeTaskVp9(
   if (!vp9_cc_detector_) {
     vp9_cc_detector_ = std::make_unique<VP9ConfigChangeDetector>();
   }
-  vp9_cc_detector_->DetectConfig(buffer->data(), buffer->data_size());
+  vp9_cc_detector_->DetectConfig(buffer->data(), buffer->size());
 
   if (!session_ || vp9_cc_detector_->config_changed()) {
     // ConfigureDecoder() calls NotifyError() on failure.
@@ -1027,7 +1011,7 @@ void VTVideoDecodeAccelerator::DecodeTaskH264(
   size_t data_size = 0;
   std::vector<H264NALU> nalus;
   size_t first_slice_index = 0;
-  h264_parser_.SetStream(buffer->data(), buffer->data_size());
+  h264_parser_.SetStream(buffer->data(), buffer->size());
   H264NALU nalu;
   while (true) {
     H264Parser::Result result = h264_parser_.AdvanceToNextNALU(&nalu);
@@ -1287,7 +1271,7 @@ void VTVideoDecodeAccelerator::DecodeTaskH264(
       data_size += kNALUHeaderLength + pps_nalu.size;
       first_slice_index += 1;
 
-      // Update the configured SPS/SPSext/PPS in case VT referrence to the wrong
+      // Update the configured SPS/SPSext/PPS in case VT reference to the wrong
       // parameter sets.
       configured_sps_ = active_sps_;
       configured_spsext_ = active_spsext_;
@@ -1336,18 +1320,19 @@ void VTVideoDecodeAccelerator::DecodeTaskH264(
   }
 
   // Copy NALU data into the CMBlockBuffer, inserting length headers.
-  size_t offset = 0;
+  size_t offset = 0u;
   for (size_t i = 0; i < nalus.size(); i++) {
     H264NALU& nalu_ref = nalus[i];
-    uint32_t header = base::HostToNet32(static_cast<uint32_t>(nalu_ref.size));
-    status = CMBlockBufferReplaceDataBytes(&header, data.get(), offset,
-                                           kNALUHeaderLength);
+    std::array<uint8_t, kNALUHeaderLength> header =
+        base::numerics::U32ToBigEndian(static_cast<uint32_t>(nalu_ref.size));
+    status = CMBlockBufferReplaceDataBytes(header.data(), data.get(), offset,
+                                           header.size());
     if (status) {
       NOTIFY_STATUS("CMBlockBufferReplaceDataBytes()", status,
                     SFT_PLATFORM_ERROR);
       return;
     }
-    offset += kNALUHeaderLength;
+    offset += header.size();
     status = CMBlockBufferReplaceDataBytes(nalu_ref.data, data.get(), offset,
                                            nalu_ref.size);
     if (status) {
@@ -1414,7 +1399,7 @@ void VTVideoDecodeAccelerator::DecodeTaskHEVC(
   int active_vps_id = 0;
   int active_sps_id = 0;
   int active_pps_id = 0;
-  hevc_parser_.SetStream(buffer->data(), buffer->data_size());
+  hevc_parser_.SetStream(buffer->data(), buffer->size());
   H265NALU nalu;
   while (true) {
     H265Parser::Result result = hevc_parser_.AdvanceToNextNALU(&nalu);
@@ -1725,7 +1710,7 @@ void VTVideoDecodeAccelerator::DecodeTaskHEVC(
       data_size += kNALUHeaderLength + pps_nalu.size;
       first_slice_index += 1;
 
-      // Update the configured VPSs/SPSs/PPSs in case VT referrence to the wrong
+      // Update the configured VPSs/SPSs/PPSs in case VT reference to the wrong
       // parameter sets.
       configured_vpss_[active_vps_id].assign(
           active_vps_.data(), active_vps_.data() + active_vps_.size());
@@ -1769,18 +1754,19 @@ void VTVideoDecodeAccelerator::DecodeTaskHEVC(
   }
 
   // Copy NALU data into the CMBlockBuffer, inserting length headers.
-  size_t offset = 0;
+  size_t offset = 0u;
   for (size_t i = 0; i < nalus.size(); i++) {
     H265NALU& nalu_ref = nalus[i];
-    uint32_t header = base::HostToNet32(static_cast<uint32_t>(nalu_ref.size));
-    status = CMBlockBufferReplaceDataBytes(&header, data.get(), offset,
-                                           kNALUHeaderLength);
+    std::array<uint8_t, kNALUHeaderLength> header =
+        base::numerics::U32ToBigEndian(static_cast<uint32_t>(nalu_ref.size));
+    status = CMBlockBufferReplaceDataBytes(header.data(), data.get(), offset,
+                                           header.size());
     if (status) {
       NOTIFY_STATUS("CMBlockBufferReplaceDataBytes()", status,
                     SFT_PLATFORM_ERROR);
       return;
     }
-    offset += kNALUHeaderLength;
+    offset += header.size();
     status = CMBlockBufferReplaceDataBytes(nalu_ref.data, data.get(), offset,
                                            nalu_ref.size);
     if (status) {
@@ -1846,7 +1832,7 @@ void VTVideoDecodeAccelerator::Output(void* source_frame_refcon,
   //
   // Sometimes, for unknown reasons (http://crbug.com/453050), |image_buffer| is
   // NULL, which causes CFGetTypeID() to crash. While the rest of the code would
-  // smoothly handle NULL as a dropped frame, we choose to fail permanantly here
+  // smoothly handle NULL as a dropped frame, we choose to fail permanently here
   // until the issue is better understood.
   if (!image_buffer || CFGetTypeID(image_buffer) != CVPixelBufferGetTypeID()) {
     DLOG(ERROR) << "Decoded frame is not a CVPixelBuffer";
@@ -1989,11 +1975,6 @@ void VTVideoDecodeAccelerator::AssignPictureBuffers(
     assigned_picture_ids_.insert(picture.id());
     available_picture_ids_.push_back(picture.id());
 
-    // PictureBufferManager::CreatePictureBuffers() never creates
-    // PictureBuffer instances with texture IDs on Apple platforms: it does so
-    // only when requested to allocate GL textures, which is neither supported
-    // nor ever requested on these platforms.
-    CHECK_EQ(picture.service_texture_id(), 0u);
     picture_info_map_.insert(
         std::make_pair(picture.id(), std::make_unique<PictureInfo>()));
   }
@@ -2019,7 +2000,7 @@ void VTVideoDecodeAccelerator::ReusePictureBuffer(int32_t picture_id) {
 
   // Drop references to allow the underlying buffer to be released.
   PictureInfo* picture_info = it->second.get();
-  picture_info->scoped_shared_images.clear();
+  picture_info->scoped_shared_image.reset();
   picture_info->bitstream_id = 0;
 
   // Mark the picture as available and try to complete pending output work.
@@ -2229,9 +2210,9 @@ bool VTVideoDecodeAccelerator::ProcessFrame(const Frame& frame) {
 
     DVLOG(3) << "ProvidePictureBuffers(" << kNumPictureBuffers
              << frame.image_size.ToString() << ")";
+
     client_->ProvidePictureBuffers(kNumPictureBuffers, picture_format_,
-                                   frame.image_size,
-                                   gpu::GetPlatformSpecificTextureTarget());
+                                   frame.image_size);
     return false;
   }
   return SendFrame(frame);
@@ -2267,93 +2248,59 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
     }
   }
 
-  std::vector<gfx::BufferPlane> planes;
-  if (IsMultiPlaneFormatForHardwareVideoEnabled()) {
-    planes.push_back(gfx::BufferPlane::DEFAULT);
-  } else {
-    switch (picture_format_) {
-      case PIXEL_FORMAT_NV12:
-      case PIXEL_FORMAT_P016LE:
-        planes.push_back(gfx::BufferPlane::Y);
-        planes.push_back(gfx::BufferPlane::UV);
-        break;
-      case PIXEL_FORMAT_NV12A:
-        planes.push_back(gfx::BufferPlane::Y);
-        planes.push_back(gfx::BufferPlane::UV);
-        planes.push_back(gfx::BufferPlane::A);
-        break;
-      default:
-        NOTREACHED();
-        break;
-    }
+  gpu::SharedImageStub* shared_image_stub = client_->GetSharedImageStub();
+  if (!shared_image_stub) {
+    DLOG(ERROR) << "Failed to get SharedImageStub";
+    NotifyError(PLATFORM_FAILURE, SFT_PLATFORM_ERROR);
+    return false;
   }
-  for (size_t plane = 0; plane < planes.size(); ++plane) {
-    gpu::SharedImageStub* shared_image_stub = client_->GetSharedImageStub();
-    if (!shared_image_stub) {
-      DLOG(ERROR) << "Failed to get SharedImageStub";
-      NotifyError(PLATFORM_FAILURE, SFT_PLATFORM_ERROR);
-      return false;
-    }
 
-    const gfx::Size frame_size(CVPixelBufferGetWidth(frame.image.get()),
-                               CVPixelBufferGetHeight(frame.image.get()));
-    // These SharedImages may be read by the raster interface for import of
-    // video frames to canvas as well as 2-copy import of video frames to WebGL
-    // and by the GLES2 interface for 1-copy import of video frames to WebGL.
-    const uint32_t shared_image_usage =
-        gpu::SHARED_IMAGE_USAGE_DISPLAY_READ | gpu::SHARED_IMAGE_USAGE_SCANOUT |
-        gpu::SHARED_IMAGE_USAGE_MACOS_VIDEO_TOOLBOX |
-        gpu::SHARED_IMAGE_USAGE_RASTER_READ |
-        gpu::SHARED_IMAGE_USAGE_GLES2_READ;
-    GLenum target = gl_client_.supports_arb_texture_rectangle
-                        ? GL_TEXTURE_RECTANGLE_ARB
-                        : GL_TEXTURE_2D;
+  const gfx::Size frame_size(CVPixelBufferGetWidth(frame.image.get()),
+                             CVPixelBufferGetHeight(frame.image.get()));
+  // These SharedImages may be read by the raster interface for import of
+  // video frames to canvas as well as 2-copy import of video frames to WebGL
+  // and by the GLES2 interface for 1-copy import of video frames to WebGL.
+  constexpr uint32_t shared_image_usage =
+      gpu::SHARED_IMAGE_USAGE_DISPLAY_READ | gpu::SHARED_IMAGE_USAGE_SCANOUT |
+      gpu::SHARED_IMAGE_USAGE_MACOS_VIDEO_TOOLBOX |
+      gpu::SHARED_IMAGE_USAGE_RASTER_READ | gpu::SHARED_IMAGE_USAGE_GLES2_READ;
+  GLenum target = gl_client_.supports_arb_texture_rectangle
+                      ? GL_TEXTURE_RECTANGLE_ARB
+                      : GL_TEXTURE_2D;
 
-    gfx::GpuMemoryBufferHandle handle;
-    handle.id = gfx::GpuMemoryBufferHandle::kInvalidId;
-    handle.type = gfx::GpuMemoryBufferType::IO_SURFACE_BUFFER;
-    handle.io_surface.reset(CVPixelBufferGetIOSurface(frame.image.get()),
-                            base::scoped_policy::RETAIN);
+  gfx::GpuMemoryBufferHandle handle;
+  handle.id = gfx::GpuMemoryBufferHandle::kInvalidId;
+  handle.type = gfx::GpuMemoryBufferType::IO_SURFACE_BUFFER;
+  handle.io_surface.reset(CVPixelBufferGetIOSurface(frame.image.get()),
+                          base::scoped_policy::RETAIN);
 
-    gpu::Mailbox mailbox = gpu::Mailbox::GenerateForSharedImage();
-    bool success;
-    constexpr char kDebugLabel[] = "VTVideoDecodeAccelerator";
-    if (IsMultiPlaneFormatForHardwareVideoEnabled()) {
-      success = shared_image_stub->CreateSharedImage(
-          mailbox, std::move(handle), si_format_, frame_size, color_space,
-          kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType, shared_image_usage,
-          kDebugLabel);
-    } else {
-      success = shared_image_stub->CreateSharedImage(
-          mailbox, std::move(handle), ToBufferFormat(si_format_), planes[plane],
-          frame_size, color_space, kTopLeft_GrSurfaceOrigin,
-          kOpaque_SkAlphaType, shared_image_usage, kDebugLabel);
-    }
-    if (!success) {
-      DLOG(ERROR) << "Failed to create shared image";
-      NotifyError(PLATFORM_FAILURE, SFT_PLATFORM_ERROR);
-      return false;
-    }
-
-    // Wrap the destroy callback in a lambda that ensures that it be called on
-    // the appropriate thread. Retain the image buffer so that VideoToolbox
-    // will not reuse the IOSurface as long as the SharedImage is alive.
-    auto destroy_shared_image_lambda =
-        [](gpu::SharedImageStub::SharedImageDestructionCallback callback,
-           base::apple::ScopedCFTypeRef<CVImageBufferRef> image,
-           scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-          task_runner->PostTask(
-              FROM_HERE, base::BindOnce(std::move(callback), gpu::SyncToken()));
-        };
-    auto destroy_shared_image_callback = base::BindOnce(
-        destroy_shared_image_lambda,
-        shared_image_stub->GetSharedImageDestructionCallback(mailbox),
-        frame.image, gpu_task_runner_);
-    picture_info->scoped_shared_images.push_back(
-        scoped_refptr<Picture::ScopedSharedImage>(
-            new Picture::ScopedSharedImage(
-                mailbox, target, std::move(destroy_shared_image_callback))));
+  gpu::Mailbox mailbox = gpu::Mailbox::GenerateForSharedImage();
+  bool success = shared_image_stub->CreateSharedImage(
+      mailbox, std::move(handle), si_format_, frame_size, color_space,
+      kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType, shared_image_usage,
+      "VTVideoDecodeAccelerator");
+  if (!success) {
+    DLOG(ERROR) << "Failed to create shared image";
+    NotifyError(PLATFORM_FAILURE, SFT_PLATFORM_ERROR);
+    return false;
   }
+
+  // Wrap the destroy callback in a lambda that ensures that it be called on
+  // the appropriate thread. Retain the image buffer so that VideoToolbox
+  // will not reuse the IOSurface as long as the SharedImage is alive.
+  auto destroy_shared_image_callback = base::BindOnce(
+      [](gpu::SharedImageStub::SharedImageDestructionCallback callback,
+         base::apple::ScopedCFTypeRef<CVImageBufferRef> image,
+         scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+        task_runner->PostTask(
+            FROM_HERE, base::BindOnce(std::move(callback), gpu::SyncToken()));
+      },
+      shared_image_stub->GetSharedImageDestructionCallback(mailbox),
+      frame.image, gpu_task_runner_);
+  picture_info->scoped_shared_image =
+      base::MakeRefCounted<Picture::ScopedSharedImage>(
+          mailbox, target, std::move(destroy_shared_image_callback));
+
   picture_info->bitstream_id = frame.bitstream_id;
   available_picture_ids_.pop_back();
 
@@ -2373,15 +2320,12 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
   picture.set_read_lock_fences_enabled(true);
   if (frame.hdr_metadata)
     picture.set_hdr_metadata(frame.hdr_metadata);
-  if (IsMultiPlaneFormatForHardwareVideoEnabled()) {
-    picture.set_shared_image_format_type(
-        SharedImageFormatType::kSharedImageFormat);
-  }
-  // For multiplanar shared images, planes.size() is 1.
-  for (size_t plane = 0; plane < planes.size(); ++plane) {
-    picture.set_scoped_shared_image(picture_info->scoped_shared_images[plane],
-                                    plane);
-  }
+
+  picture.set_shared_image_format_type(
+      SharedImageFormatType::kSharedImageFormat);
+  // For multiplanar shared images, plane is always DEFAULT.
+  picture.set_scoped_shared_image(picture_info->scoped_shared_image,
+                                  /*plane=*/0);
 
   if (IOSurfaceIsWebGPUCompatible(
           CVPixelBufferGetIOSurface(frame.image.get()))) {

@@ -40,9 +40,8 @@
 
 #include <float.h>
 #include "libavutil/avassert.h"
-#include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
-#include "libavutil/eval.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/samplefmt.h"
 #include "libavutil/tx.h"
@@ -531,19 +530,19 @@ static int yae_load_frag(ATempoContext *atempo,
     dst = frag->data;
 
     start = atempo->position[0] - atempo->size;
-    zeros = 0;
 
-    if (frag->position[0] < start) {
-        // what we don't have we substitute with zeros:
-        zeros = FFMIN(start - frag->position[0], (int64_t)nsamples);
-        av_assert0(zeros != nsamples);
-
-        memset(dst, 0, zeros * atempo->stride);
-        dst += zeros * atempo->stride;
-    }
+    // what we don't have we substitute with zeros:
+    zeros =
+      frag->position[0] < start ?
+      FFMIN(start - frag->position[0], (int64_t)nsamples) : 0;
 
     if (zeros == nsamples) {
         return 0;
+    }
+
+    if (frag->position[0] < start) {
+        memset(dst, 0, zeros * atempo->stride);
+        dst += zeros * atempo->stride;
     }
 
     // get the remaining data from the ring buffer:

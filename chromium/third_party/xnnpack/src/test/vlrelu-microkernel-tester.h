@@ -5,81 +5,81 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
+#include <xnnpack.h>
+#include <xnnpack/math.h>
+#include <xnnpack/microfnptr.h>
+#include <xnnpack/microparams.h>
 
 #include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
-#include <functional>
 #include <limits>
 #include <random>
 #include <vector>
 
-#include <xnnpack.h>
-#include <xnnpack/math.h>
-#include <xnnpack/microfnptr.h>
-#include <xnnpack/microparams-init.h>
-
+#include "replicable_random_device.h"
+#include <gtest/gtest.h>
 
 class VLReLUMicrokernelTester {
  public:
-  inline VLReLUMicrokernelTester& batch_size(size_t batch_size) {
+  VLReLUMicrokernelTester& batch_size(size_t batch_size) {
     assert(batch_size != 0);
     this->batch_size_ = batch_size;
     return *this;
   }
 
-  inline size_t batch_size() const {
+  size_t batch_size() const {
     return this->batch_size_;
   }
 
-  inline VLReLUMicrokernelTester& positive_scale(float positive_scale) {
+  VLReLUMicrokernelTester& positive_scale(float positive_scale) {
     assert(positive_scale > 0.0f);
     assert(std::isnormal(positive_scale));
     this->positive_scale_ = positive_scale;
     return *this;
   }
 
-  inline float positive_scale() const {
+  float positive_scale() const {
     return this->positive_scale_;
   }
 
-  inline VLReLUMicrokernelTester& negative_scale(float negative_scale) {
+  VLReLUMicrokernelTester& negative_scale(float negative_scale) {
     assert(std::isnormal(negative_scale));
     this->negative_scale_ = negative_scale;
     return *this;
   }
 
-  inline float negative_scale() const {
+  float negative_scale() const {
     return this->negative_scale_;
   }
 
-  inline VLReLUMicrokernelTester& input_zero_point(int16_t input_zero_point) {
+  VLReLUMicrokernelTester& input_zero_point(int16_t input_zero_point) {
     this->input_zero_point_ = input_zero_point;
     return *this;
   }
 
-  inline int16_t input_zero_point() const {
+  int16_t input_zero_point() const {
     return this->input_zero_point_;
   }
 
-  inline VLReLUMicrokernelTester& output_zero_point(int16_t output_zero_point) {
+  VLReLUMicrokernelTester& output_zero_point(int16_t output_zero_point) {
     this->output_zero_point_ = output_zero_point;
     return *this;
   }
 
-  inline int16_t output_zero_point() const {
+  int16_t output_zero_point() const {
     return this->output_zero_point_;
   }
 
-  inline VLReLUMicrokernelTester& iterations(size_t iterations) {
+  VLReLUMicrokernelTester& iterations(size_t iterations) {
     this->iterations_ = iterations;
     return *this;
   }
 
-  inline size_t iterations() const {
+  size_t iterations() const {
     return this->iterations_;
   }
 
@@ -89,8 +89,7 @@ class VLReLUMicrokernelTester {
     ASSERT_GE(output_zero_point(), std::numeric_limits<int8_t>::min());
     ASSERT_LE(output_zero_point(), std::numeric_limits<int8_t>::max());
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_int_distribution<int32_t> i8dist(
       std::numeric_limits<int8_t>::min(), std::numeric_limits<int8_t>::max());
 
@@ -134,8 +133,7 @@ class VLReLUMicrokernelTester {
     ASSERT_GE(output_zero_point(), std::numeric_limits<uint8_t>::min());
     ASSERT_LE(output_zero_point(), std::numeric_limits<uint8_t>::max());
 
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_int_distribution<int32_t> u8dist(
       std::numeric_limits<uint8_t>::min(), std::numeric_limits<uint8_t>::max());
 

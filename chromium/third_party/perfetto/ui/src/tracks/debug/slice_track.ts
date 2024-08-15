@@ -12,12 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import m from 'mithril';
-
-import {Actions} from '../../common/actions';
-import {globals} from '../../frontend/globals';
 import {NamedSliceTrackTypes} from '../../frontend/named_slice_track';
-import {TrackButton} from '../../frontend/track_panel';
 import {TrackContext} from '../../public';
 import {EngineProxy} from '../../trace_processor/engine';
 import {
@@ -38,7 +33,6 @@ import {uuidv4Sql} from '../../base/uuid';
 export interface DebugTrackV2Config {
   data: SqlDataSource;
   columns: SliceColumns;
-  closeable: boolean;
   argColumns: string[];
 }
 
@@ -81,21 +75,6 @@ export class DebugTrackV2 extends CustomSqlTableSliceTrack<NamedSliceTrackTypes>
     };
   }
 
-  getTrackShellButtons(): m.Children {
-    return this.config.closeable
-      ? m(TrackButton, {
-          action: () => {
-            globals.dispatch(
-              Actions.removeTracks({trackKeys: [this.trackKey]}),
-            );
-          },
-          i: 'close',
-          tooltip: 'Close',
-          showButton: true,
-        })
-      : [];
-  }
-
   private async createTrackTable(
     data: SqlDataSource,
     sliceColumns: SliceColumns,
@@ -111,13 +90,12 @@ export class DebugTrackV2 extends CustomSqlTableSliceTrack<NamedSliceTrackTypes>
     // TODO(altimin): Support removing this table when the track is closed.
     const dur = sliceColumns.dur === '0' ? 0 : sliceColumns.dur;
     await this.engine.query(`
-      create table ${this.sqlTableName} as
+      create perfetto table ${this.sqlTableName} as
       with data${dataColumns} as (
         ${data.sqlSource}
       ),
       prepared_data as (
         select
-          row_number() over () as id,
           ${sliceColumns.ts} as ts,
           ifnull(cast(${dur} as int), -1) as dur,
           printf('%s', ${sliceColumns.name}) as name
@@ -126,6 +104,7 @@ export class DebugTrackV2 extends CustomSqlTableSliceTrack<NamedSliceTrackTypes>
         from data
       )
       select
+        row_number() over (order by ts) as id,
         *
       from prepared_data
       order by ts;`);

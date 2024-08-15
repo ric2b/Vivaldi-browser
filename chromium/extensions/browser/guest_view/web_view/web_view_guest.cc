@@ -56,7 +56,6 @@
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/extension_web_contents_observer.h"
 #include "extensions/browser/extensions_browser_client.h"
-#include "extensions/browser/guest_view/guest_view_feature_util.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/guest_view/web_view/web_view_content_script_manager.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
@@ -282,9 +281,9 @@ static base::LazyInstance<WebViewKeyToIDMap>::DestructorAtExit
     web_view_key_to_id_map = LAZY_INSTANCE_INITIALIZER;
 
 bool IsInWebViewMainFrame(content::NavigationHandle* navigation_handle) {
-  // TODO(1261928): Due to the use of inner WebContents, a WebView's main frame
-  // is considered primary. This will no longer be the case once we migrate
-  // guest views to MPArch.
+  // TODO(crbug.com/40202416): Due to the use of inner WebContents, a WebView's
+  // main frame is considered primary. This will no longer be the case once we
+  // migrate guest views to MPArch.
   return navigation_handle->IsInPrimaryMainFrame();
 }
 
@@ -456,7 +455,8 @@ void WebViewGuest::CreateWebContentsWithStoragePartition(
 void WebViewGuest::DidAttachToEmbedder() {
   ApplyAttributes(attach_params());
   if (delayed_open_url_.get()) {
-    NavigateGuest(*delayed_open_url_.get(), false);
+    NavigateGuest(*delayed_open_url_.get(),
+                  /*navigation_handle_callback=*/{}, false);
     delayed_open_url_.reset(nullptr);
 
   }
@@ -509,9 +509,6 @@ void WebViewGuest::DidInitialize(const base::Value::Dict& create_params) {
 
 void WebViewGuest::MaybeRecreateGuestContents(
     content::RenderFrameHost* outer_contents_frame) {
-  if (!AreWebviewMPArchBehaviorsEnabled(browser_context())) {
-    return;
-  }
 
   // NOTE(andre@vivaldi.com) : If the contents are owned by someone else we
   // cannot recreate it. This came in cr114 and flagged in VB-96819.
@@ -548,8 +545,9 @@ void WebViewGuest::MaybeRecreateGuestContents(
   recreate_initial_nav_ = base::BindOnce(
       &WebViewGuest::LoadURLWithParams, weak_ptr_factory_.GetWeakPtr(),
       new_web_contents_create_params.initial_popup_url, content::Referrer(),
-      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, /*force_navigation=*/true,
-      /*params=*/std::nullopt);
+      ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
+      base::OnceCallback<void(content::NavigationHandle&)>(),
+      /*force_navigation=*/true, /*params=*/std::nullopt);
 }
 
 void WebViewGuest::ClearCodeCache(base::Time remove_since,
@@ -1313,7 +1311,7 @@ bool WebViewGuest::IsPermissionRequestable(ContentSettingsType type) const {
       // BrowserContext, not a StoragePartition, a permission granted to an
       // origin loaded in a regular tab could be applied to a webview, hence the
       // need to preemptively reject it.
-      // TODO(crbug.com/1469672): Permissions should be scoped to
+      // TODO(crbug.com/40068594): Permissions should be scoped to
       // StoragePartitions.
       return false;
   }
@@ -1324,10 +1322,13 @@ content::JavaScriptDialogManager* WebViewGuest::GetJavaScriptDialogManager(
   return &javascript_dialog_helper_;
 }
 
-void WebViewGuest::NavigateGuest(const std::string& src,
-                                 bool force_navigation,
-                                 ui::PageTransition transition_type,
-                                 std::optional<content::OpenURLParams> params) {
+void WebViewGuest::NavigateGuest(
+    const std::string& src,
+    base::OnceCallback<void(content::NavigationHandle&)>
+        navigation_handle_callback,
+    bool force_navigation,
+    ui::PageTransition transition_type,
+    std::optional<content::OpenURLParams> params) {
   if (src.empty())
     return;
 
@@ -1349,15 +1350,14 @@ void WebViewGuest::NavigateGuest(const std::string& src,
   // if the navigation is embedder-initiated. For browser-initiated navigations,
   // content scripts will be ready.
   if (force_navigation) {
-    SignalWhenReady(
-        base::BindOnce(&WebViewGuest::LoadURLWithParams,
-                   weak_ptr_factory_.GetWeakPtr(), url,
-                   params ? params->referrer : content::Referrer(),
-                   transition_type, force_navigation, std::move(params)));
+    SignalWhenReady(base::BindOnce(
+        &WebViewGuest::LoadURLWithParams, weak_ptr_factory_.GetWeakPtr(), url,
+        content::Referrer(),  transition_type,
+        std::move(navigation_handle_callback), force_navigation, std::move(params)));
     return;
   }
-  LoadURLWithParams(url, params ? params->referrer : content::Referrer(),
-                    transition_type, force_navigation, std::move(params));
+  LoadURLWithParams(url, content::Referrer(),  transition_type,
+                    std::move(navigation_handle_callback), force_navigation, std::move(params));
 }
 
 bool WebViewGuest::HandleKeyboardShortcuts(
@@ -1462,7 +1462,9 @@ void WebViewGuest::ApplyAttributes(const base::Value::Dict& params) {
       if (!new_window_info.did_start_navigating_away_from_initial_url &&
           (new_window_info.url_changed_via_open_url ||
            !web_contents()->HasOpener())) {
-        NavigateGuest(new_window_info.url.spec(), false /* force_navigation */,
+        NavigateGuest(new_window_info.url.spec(),
+                      /*navigation_handle_callback=*/{},
+                      false /* force_navigation */,
                       ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
                       new_window_info.params);
       }
@@ -1478,7 +1480,8 @@ void WebViewGuest::ApplyAttributes(const base::Value::Dict& params) {
   // Only read the src attribute if this is not a New Window API flow.
   if (!is_pending_new_window) {
     if (const std::string* src = params.FindString(kAttributeSrc)) {
-      NavigateGuest(*src, true /* force_navigation */);
+      NavigateGuest(*src, /*navigation_handle_callback=*/{},
+                    true /* force_navigation */);
     }
   }
 
@@ -1650,7 +1653,9 @@ void WebViewGuest::AddNewContents(
 
 WebContents* WebViewGuest::OpenURLFromTab(
     WebContents* source,
-    const content::OpenURLParams& params) {
+    const content::OpenURLParams& params,
+    base::OnceCallback<void(content::NavigationHandle&)>
+        navigation_handle_callback) {
   // Most navigations should be handled by WebViewGuest::LoadURLWithParams,
   // which takes care of blocking chrome:// URLs and other web-unsafe schemes.
   // (NavigateGuest and CreateNewGuestWebViewWindow also go through
@@ -1669,7 +1674,7 @@ WebContents* WebViewGuest::OpenURLFromTab(
     if (!owner_web_contents()->GetDelegate())
       return nullptr;
     return owner_web_contents()->GetDelegate()->OpenURLFromTab(
-        owner_web_contents(), params);
+        owner_web_contents(), params, std::move(navigation_handle_callback));
   }
   }
 
@@ -1686,6 +1691,8 @@ WebContents* WebViewGuest::OpenURLFromTab(
       if (it == opener->pending_new_windows_.end())
         return nullptr;
       const NewWindowInfo& info = it->second;
+      // TODO(https://crbug.com/40275094): Consider plumbing
+      // `navigation_handle_callback`.
       NewWindowInfo new_window_info(params.url, info.name);
       new_window_info.url_changed_via_open_url =
           new_window_info.url != info.url;
@@ -1705,7 +1712,8 @@ WebContents* WebViewGuest::OpenURLFromTab(
     // links from devtools.
     DevToolsWindow* window = DevToolsWindow::AsDevToolsWindow(web_contents());
     if (window) {
-      return window->OpenURLFromTab(source, params);
+      return window->OpenURLFromTab(source, params,
+                                    /*navigation_handle_callback=*/{});
     }
 
     // This is mostly mimicking Browser::OpenURLFromTab. We must navigate in the
@@ -1728,6 +1736,8 @@ WebContents* WebViewGuest::OpenURLFromTab(
   // This code path is taken if Ctrl+Click, middle click or any of the
   // keyboard/mouse combinations are used to open a link in a new tab/window.
   // This code path is also taken on client-side redirects from about:blank.
+  // TODO(https://crbug.com/40275094): Consider plumbing
+  // `navigation_handle_callback`.
   CreateNewGuestWebViewWindow(params);
   return nullptr;
 }
@@ -1795,14 +1805,18 @@ void WebViewGuest::RequestPointerLock(WebContents* web_contents,
           base::Unretained(web_contents)));
 }
 
-void WebViewGuest::LoadURLWithParams(const GURL& url,
-                                     const content::Referrer& referrer,
-                                     ui::PageTransition transition_type,
-                                     bool force_navigation,
-                                     std::optional<content::OpenURLParams> params) {
+void WebViewGuest::LoadURLWithParams(
+    const GURL& url,
+    const content::Referrer& referrer,
+    ui::PageTransition transition_type,
+    base::OnceCallback<void(content::NavigationHandle&)>
+        navigation_handle_callback,
+    bool force_navigation,
+    std::optional<content::OpenURLParams> params) {
   if (!url.is_valid()) {
     LoadAbort(true /* is_top_level */, url, net::ERR_INVALID_URL);
-    NavigateGuest(url::kAboutBlankURL, false /* force_navigation */);
+    NavigateGuest(url::kAboutBlankURL, std::move(navigation_handle_callback),
+                  false /* force_navigation */);
     return;
   }
 
@@ -1854,7 +1868,8 @@ void WebViewGuest::LoadURLWithParams(const GURL& url,
   // chrome://.
   if (scheme_is_blocked) {
     LoadAbort(true /* is_top_level */, url, net::ERR_DISALLOWED_URL_SCHEME);
-    NavigateGuest(url::kAboutBlankURL, false /* force_navigation */);
+    NavigateGuest(url::kAboutBlankURL, std::move(navigation_handle_callback),
+                  false /* force_navigation */);
     return;
   }
 
@@ -1895,7 +1910,11 @@ void WebViewGuest::LoadURLWithParams(const GURL& url,
     }
   }
 
-  GetController().LoadURLWithParams(load_url_params);
+  base::WeakPtr<content::NavigationHandle> navigation =
+      GetController().LoadURLWithParams(load_url_params);
+  if (navigation_handle_callback && navigation) {
+    std::move(navigation_handle_callback).Run(*navigation);
+  }
 }
 
 void WebViewGuest::RequestNewWindowPermission(

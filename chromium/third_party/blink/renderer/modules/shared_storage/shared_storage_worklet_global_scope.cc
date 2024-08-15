@@ -21,6 +21,7 @@
 #include "third_party/blink/public/common/shared_storage/module_script_downloader.h"
 #include "third_party/blink/public/common/shared_storage/shared_storage_utils.h"
 #include "third_party/blink/public/mojom/private_aggregation/private_aggregation_host.mojom-blink.h"
+#include "third_party/blink/public/mojom/shared_storage/shared_storage_worklet_service.mojom-blink.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
@@ -50,9 +51,6 @@
 namespace blink {
 
 namespace {
-
-constexpr char kCannotDeserializeDataErrorMessage[] =
-    "Cannot deserialize data.";
 
 std::optional<ScriptValue> Deserialize(
     v8::Isolate* isolate,
@@ -141,16 +139,14 @@ class SelectURLResolutionSuccessCallback final
     v8::Local<v8::Uint32> v8_result_index;
     if (!v8_value->ToUint32(context).ToLocal(&v8_result_index)) {
       std::move(request_->callback)
-          .Run(/*success=*/false,
-               "Promise did not resolve to an uint32 number.",
+          .Run(/*success=*/false, kSharedStorageReturnValueToIntErrorMessage,
                /*index=*/0);
     } else {
       uint32_t result_index = v8_result_index->Value();
       if (result_index >= request_->urls_size) {
         std::move(request_->callback)
             .Run(/*success=*/false,
-                 "Promise resolved to a number outside the length of the input "
-                 "urls.",
+                 kSharedStorageReturnValueOutOfRangeErrorMessage,
                  /*index=*/0);
       } else {
         std::move(request_->callback)
@@ -366,8 +362,7 @@ void SharedStorageWorkletGlobalScope::RunURLSelectionOperation(
     const String& name,
     const Vector<KURL>& urls,
     BlinkCloneableMessage serialized_data,
-    mojo::PendingRemote<mojom::blink::PrivateAggregationHost>
-        private_aggregation_host,
+    mojom::blink::PrivateAggregationOperationDetailsPtr pa_operation_details,
     RunURLSelectionOperationCallback callback) {
   String error_message;
   SharedStorageOperationDefinition* operation_definition = nullptr;
@@ -380,7 +375,7 @@ void SharedStorageWorkletGlobalScope::RunURLSelectionOperation(
   }
 
   base::OnceClosure operation_completion_cb =
-      StartOperation(std::move(private_aggregation_host));
+      StartOperation(std::move(pa_operation_details));
   RunURLSelectionOperationCallback combined_operation_completion_cb =
       std::move(callback).Then(std::move(operation_completion_cb));
 
@@ -406,12 +401,12 @@ void SharedStorageWorkletGlobalScope::RunURLSelectionOperation(
       Deserialize(isolate, /*execution_context=*/this, serialized_data);
   if (!data_param) {
     std::move(combined_operation_completion_cb)
-        .Run(/*success=*/false, kCannotDeserializeDataErrorMessage,
+        .Run(/*success=*/false, kSharedStorageCannotDeserializeDataErrorMessage,
              /*index=*/0);
     return;
   }
 
-  v8::Maybe<ScriptPromise> result = registered_run_function->Invoke(
+  v8::Maybe<ScriptPromiseUntyped> result = registered_run_function->Invoke(
       instance.Get(isolate), urls_param, *data_param);
 
   if (try_catch.HasCaught()) {
@@ -424,7 +419,7 @@ void SharedStorageWorkletGlobalScope::RunURLSelectionOperation(
 
   if (result.IsNothing()) {
     std::move(combined_operation_completion_cb)
-        .Run(/*success=*/false, "Internal error.",
+        .Run(/*success=*/false, kSharedStorageEmptyScriptResultErrorMessage,
              /*index=*/0);
     return;
   }
@@ -432,7 +427,7 @@ void SharedStorageWorkletGlobalScope::RunURLSelectionOperation(
   auto* unresolved_request = MakeGarbageCollected<UnresolvedSelectURLRequest>(
       urls.size(), std::move(combined_operation_completion_cb));
 
-  ScriptPromise promise = result.FromJust();
+  ScriptPromiseUntyped promise = result.FromJust();
 
   auto* success_callback = MakeGarbageCollected<ScriptFunction>(
       script_state, MakeGarbageCollected<SelectURLResolutionSuccessCallback>(
@@ -447,8 +442,7 @@ void SharedStorageWorkletGlobalScope::RunURLSelectionOperation(
 void SharedStorageWorkletGlobalScope::RunOperation(
     const String& name,
     BlinkCloneableMessage serialized_data,
-    mojo::PendingRemote<mojom::blink::PrivateAggregationHost>
-        private_aggregation_host,
+    mojom::blink::PrivateAggregationOperationDetailsPtr pa_operation_details,
     RunOperationCallback callback) {
   String error_message;
   SharedStorageOperationDefinition* operation_definition = nullptr;
@@ -460,7 +454,7 @@ void SharedStorageWorkletGlobalScope::RunOperation(
   }
 
   base::OnceClosure operation_completion_cb =
-      StartOperation(std::move(private_aggregation_host));
+      StartOperation(std::move(pa_operation_details));
   mojom::blink::SharedStorageWorkletService::RunOperationCallback
       combined_operation_completion_cb =
           std::move(callback).Then(std::move(operation_completion_cb));
@@ -483,11 +477,12 @@ void SharedStorageWorkletGlobalScope::RunOperation(
       Deserialize(isolate, /*execution_context=*/this, serialized_data);
   if (!data_param) {
     std::move(combined_operation_completion_cb)
-        .Run(/*success=*/false, kCannotDeserializeDataErrorMessage);
+        .Run(/*success=*/false,
+             kSharedStorageCannotDeserializeDataErrorMessage);
     return;
   }
 
-  v8::Maybe<ScriptPromise> result =
+  v8::Maybe<ScriptPromiseUntyped> result =
       registered_run_function->Invoke(instance.Get(isolate), *data_param);
 
   if (try_catch.HasCaught()) {
@@ -499,14 +494,14 @@ void SharedStorageWorkletGlobalScope::RunOperation(
 
   if (result.IsNothing()) {
     std::move(combined_operation_completion_cb)
-        .Run(/*success=*/false, "Internal error.");
+        .Run(/*success=*/false, kSharedStorageEmptyScriptResultErrorMessage);
     return;
   }
 
   auto* unresolved_request = MakeGarbageCollected<UnresolvedRunRequest>(
       std::move(combined_operation_completion_cb));
 
-  ScriptPromise promise = result.FromJust();
+  ScriptPromiseUntyped promise = result.FromJust();
 
   auto* success_callback = MakeGarbageCollected<ScriptFunction>(
       script_state,
@@ -655,13 +650,13 @@ bool SharedStorageWorkletGlobalScope::PerformCommonOperationChecks(
     // TODO(http://crbug/1249581): if this operation comes while fetching the
     // module script, we might want to queue the operation to be handled later
     // after addModule completes.
-    error_message = "The module script hasn't been loaded.";
+    error_message = kSharedStorageModuleScriptNotLoadedErrorMessage;
     return false;
   }
 
   auto it = operation_definition_map_.find(operation_name);
   if (it == operation_definition_map_.end()) {
-    error_message = "Cannot find operation name.";
+    error_message = kSharedStorageOperationNotFoundErrorMessage;
     return false;
   }
 
@@ -674,7 +669,7 @@ bool SharedStorageWorkletGlobalScope::PerformCommonOperationChecks(
   TraceWrapperV8Reference<v8::Value> instance =
       operation_definition->GetInstance();
   if (instance.IsEmpty()) {
-    error_message = "Internal error.";
+    error_message = kSharedStorageEmptyOperationDefinitionInstanceErrorMessage;
     return false;
   }
 
@@ -682,10 +677,9 @@ bool SharedStorageWorkletGlobalScope::PerformCommonOperationChecks(
 }
 
 base::OnceClosure SharedStorageWorkletGlobalScope::StartOperation(
-    mojo::PendingRemote<mojom::blink::PrivateAggregationHost>
-        private_aggregation_host) {
+    mojom::blink::PrivateAggregationOperationDetailsPtr pa_operation_details) {
   CHECK(add_module_finished_);
-  CHECK_EQ(!!private_aggregation_host,
+  CHECK_EQ(!!pa_operation_details,
            ShouldDefinePrivateAggregationInSharedStorage());
 
   int64_t operation_id = operation_counter_++;
@@ -701,7 +695,7 @@ base::OnceClosure SharedStorageWorkletGlobalScope::StartOperation(
 
   if (ShouldDefinePrivateAggregationInSharedStorage()) {
     GetOrCreatePrivateAggregation()->OnOperationStarted(
-        operation_id, std::move(private_aggregation_host));
+        operation_id, std::move(pa_operation_details));
   }
 
   return WTF::BindOnce(&SharedStorageWorkletGlobalScope::FinishOperation,

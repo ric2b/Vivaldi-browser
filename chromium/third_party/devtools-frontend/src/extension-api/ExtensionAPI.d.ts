@@ -70,6 +70,7 @@ export namespace Chrome {
     export interface Panels {
       elements: PanelWithSidebar;
       sources: PanelWithSidebar;
+      network: NetworkPanel;
       themeName: string;
 
       create(title: string, iconPath: string, pagePath: string, callback?: (panel: ExtensionPanel) => unknown): void;
@@ -94,12 +95,17 @@ export namespace Chrome {
       getHAR(callback: (harLog: object) => unknown): void;
     }
 
+    export interface NetworkPanel {
+      show(options?: {filter: string}): Promise<void>;
+    }
+
     export interface DevToolsAPI {
       network: Network;
       panels: Panels;
       inspectedWindow: InspectedWindow;
       languageServices: LanguageExtensions;
       recorder: RecorderExtensions;
+      performance: Performance;
     }
 
     export interface ExperimentalDevToolsAPI {
@@ -214,7 +220,8 @@ export namespace Chrome {
        * the location is inside of an inlined function with the innermost function at index 0.
        */
       getFunctionInfo(rawLocation: RawLocation):
-          Promise<{frames: Array<FunctionInfo>}|{missingSymbolFiles: Array<string>}>;
+          Promise<{frames: Array<FunctionInfo>, missingSymbolFiles: Array<string>}|{missingSymbolFiles: Array<string>}|
+                  {frames: Array<FunctionInfo>}>;
 
       /**
        * Find locations in raw modules corresponding to the inline function
@@ -282,6 +289,11 @@ export namespace Chrome {
           Promise<void>;
       unregisterRecorderExtensionPlugin(plugin: RecorderExtensionPlugin): Promise<void>;
       createView(title: string, pagePath: string): Promise<RecorderView>;
+    }
+
+    export interface Performance {
+      onProfilingStarted: EventSink<() => unknown>;
+      onProfilingStopped: EventSink<() => unknown>;
     }
 
     export interface Chrome {

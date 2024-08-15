@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: cros-tools
 title: CrOS Tools
 ---
@@ -36,12 +36,12 @@ be flashed to a device or USB stick.
 #### cros deploy
 
 `cros deploy` is used to install a single package to a [DUT][glossary-acronyms] (Device Under Test).
-See the [`cros deploy` documentation](cros_deploy.md) for more information.
+See the [`cros deploy` documentation](/chromium-os/developer-library/reference/tools/cros-deploy/) for more information.
 
 #### cros flash
 
 `cros flash` is used to flash an image to a [DUT][glossary-acronyms] or a USB drive.
-See the [tool's documentation](cros_flash.md) for more information.
+See the [tool's documentation](/chromium-os/developer-library/reference/tools/cros-flash/) for more information.
 
 #### cros_run_unit_tests
 
@@ -158,5 +158,5 @@ The current test/install phases of the sysroot are very limited and not distinct
 [cros_sdk_src]: https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/scripts/cros_sdk.py
 [crosutils]: https://chromium.googlesource.com/chromiumos/platform/crosutils/
 [cros-workon-make-src]: https://chromium.googlesource.com/chromiumos/platform/dev-util/+/HEAD/host/cros_workon_make
-[build-glossary]: glossary.md#cros-build
-[glossary-acronyms]: glossary.md#acronyms
+[build-glossary]: /chromium-os/developer-library/glossary/#cros-build
+[glossary-acronyms]: /chromium-os/developer-library/glossary/#acronyms

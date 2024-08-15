@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: source-layout
 title: Local & Remote Source Tree Layouts
 ---
@@ -496,7 +496,7 @@ Be sure to fill out the template, and to provide these details:
     a completely new (empty) project.
 *   Any non-standard permissions/access to the repository.
     NB: We try to avoid this, but we may consider anything that is reasonable
-    and allowed by our [security policy](./contributing.md#policies).
+    and allowed by our [security policy](/chromium-os/developer-library/guides/development/contributing/#policies).
 
 Feel free to provide any other information you think would help with processing
 the request.
@@ -572,7 +572,7 @@ If you want to use a project that's hosted on another GoB instance, see
 [How do I mirror an upstream repository onto the git server?].
 
 Do not attempt to add any new remotes to CrOS manifests without first starting
-a discussion on [chops-cros-help@](./contact.md) and getting approval from CrOS
+a discussion on [chops-cros-help@](/chromium-os/developer-library/guides/who-do-i-notify/contact/) and getting approval from CrOS
 infra.
 
 ### How do I test a manifest change?
@@ -674,8 +674,8 @@ See the previous questions in this FAQ for more details.
 [Chromium GoB]: https://chromium.googlesource.com/
 [chromiumos-overlay]: https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/
 [chroot]: filesystem_layout.md#SDK
-[Cq-Depend]: contributing.md#CQ-DEPEND
-[Contact]: contact.md
+[Cq-Depend]: /chromium-os/developer-library/guides/development/contributing/#CQ-DEPEND
+[Contact]: /chromium-os/developer-library/guides/who-do-i-notify/contact/
 [contrib]: https://chromium.googlesource.com/chromiumos/platform/dev-util/+/HEAD/contrib/
 [cros-signing]: https://chrome-internal.googlesource.com/chromeos/cros-signing/
 [crostools]: https://chrome-internal.googlesource.com/chromeos/crostools/
@@ -699,19 +699,19 @@ See the previous questions in this FAQ for more details.
 [manifest]: https://chromium.googlesource.com/chromiumos/manifest/
 [manifest-internal]: https://chrome-internal.googlesource.com/chromeos/manifest-internal/
 [board-overlays]: https://chromium.googlesource.com/chromiumos/overlays/board-overlays/
-[Package Upgrade Process]: portage/package_upgrade_process.md
+[Package Upgrade Process]: /chromium-os/developer-library/guides/portage/package-upgrade-process/
 [platform2]: https://chromium.googlesource.com/chromiumos/platform2/
 [portage-stable]: https://chromium.googlesource.com/chromiumos/overlays/portage-stable/
 [portage_tool]: https://chromium.googlesource.com/chromiumos/third_party/portage_tool/
-[PRD]: glossary.md#PRD
+[PRD]: /chromium-os/developer-library/glossary/#PRD
 [Public Chromium GoB]: #gob-chromium
 [Repo internal filesystem layout]: https://gerrit.googlesource.com/git-repo/+/HEAD/docs/internal-fs-layout.md
 [repo]: https://gerrit.googlesource.com/git-repo
 [repohooks]: https://chromium.googlesource.com/chromiumos/repohooks/
-[RVG]: glossary.md#RVG
-[sandbox]: contributing.md#sandbox
+[RVG]: /chromium-os/developer-library/glossary/#RVG
+[sandbox]: /chromium-os/developer-library/guides/development/contributing/#sandbox
 [Server Layout]: #server-layout
 [SemVerTag]: https://semver.org/spec/v1.0.0.html#tagging-specification-semvertag
-[ToT]: glossary.md#ToT
+[ToT]: /chromium-os/developer-library/glossary/#ToT
 [vboot_reference]: https://chromium.googlesource.com/chromiumos/platform/vboot_reference/
-[VM/containers]: containers_and_vms.md
+[VM/containers]: /chromium-os/developer-library/guides/containers/containers-and-vms/

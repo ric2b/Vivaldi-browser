@@ -6,7 +6,6 @@
 
 #import "base/feature_list.h"
 #import "base/metrics/histogram_functions.h"
-#import "base/timer/elapsed_timer.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "components/signin/public/base/signin_switches.h"
 #import "ios/chrome/browser/shared/ui/elements/activity_overlay_view.h"
@@ -29,11 +28,7 @@ constexpr base::TimeDelta kAnimationDuration = base::Milliseconds(200);
 
 @end
 
-@implementation HistorySyncViewController {
-  // Tracks the duration between when the view appeared with hidden buttons
-  // and when the buttons are shown.
-  std::unique_ptr<base::ElapsedTimer> _userVisibileLatency;
-}
+@implementation HistorySyncViewController
 
 @dynamic delegate;
 
@@ -72,12 +67,12 @@ constexpr base::TimeDelta kAnimationDuration = base::Milliseconds(200);
       [self.view addSubview:self.overlay];
       AddSameConstraints(self.view, self.overlay);
       [self.overlay.indicator startAnimating];
-
-      // Record availability metrics and start the latency timer.
-      base::UmaHistogramBoolean(
-          "Signin.AccountCapabilities.ImmediatelyAvailable", false);
-      _userVisibileLatency = std::make_unique<base::ElapsedTimer>();
     }
+  } else if (base::FeatureList::GetInstance() &&
+             base::FeatureList::GetInstance()->IsFeatureOverridden(
+                 switches::kMinorModeRestrictionsForHistorySyncOptIn.name)) {
+    // Record button type metrics when the feature is overriden to be disabled.
+    [self recordButtonTypeMetricsWithRestrictionStatus:NO];
   }
 }
 
@@ -107,15 +102,7 @@ constexpr base::TimeDelta kAnimationDuration = base::Milliseconds(200);
 - (void)displayButtonsWithRestrictionStatus:(BOOL)isRestricted {
   if (base::FeatureList::IsEnabled(
           switches::kMinorModeRestrictionsForHistorySyncOptIn)) {
-    if (self.actionButtonsVisibility == ActionButtonsVisibility::kDefault) {
-      // Buttons are updated without ever being hidden when capabilities are
-      // immediately available.
-      base::UmaHistogramBoolean(
-          "Signin.AccountCapabilities.ImmediatelyAvailable", true);
-      base::UmaHistogramTimes("Signin.AccountCapabilities.UserVisibleLatency",
-                              base::Seconds(0));
-    } else if (self.actionButtonsVisibility ==
-               ActionButtonsVisibility::kHidden) {
+    if (self.actionButtonsVisibility == ActionButtonsVisibility::kHidden) {
       // Fade out the spinner while fading in the title and subtitle.
       // The buttons will be shown simultaneously.
       __weak __typeof(self) weakSelf = self;
@@ -131,7 +118,6 @@ constexpr base::TimeDelta kAnimationDuration = base::Milliseconds(200);
           }
           completion:^(BOOL finished) {
             [weakSelf.overlay removeFromSuperview];
-            [weakSelf recordLatencyMetrics];
           }];
     }
 
@@ -139,23 +125,16 @@ constexpr base::TimeDelta kAnimationDuration = base::Milliseconds(200);
     self.actionButtonsVisibility =
         isRestricted ? ActionButtonsVisibility::kEquallyWeightedButtonShown
                      : ActionButtonsVisibility::kRegularButtonsShown;
-    signin_metrics::SyncButtonsType buttonType =
-        isRestricted
-            ? signin_metrics::SyncButtonsType::kHistorySyncEqualWeighted
-            : signin_metrics::SyncButtonsType::kHistorySyncNotEqualWeighted;
-    base::UmaHistogramEnumeration("Signin.SyncButtons.Shown", buttonType);
+    [self recordButtonTypeMetricsWithRestrictionStatus:isRestricted];
   }
 }
 
-#pragma mark - HistorySyncConsumer
-
-- (void)recordLatencyMetrics {
-  if (_userVisibileLatency) {
-    base::TimeDelta elapsed = _userVisibileLatency->Elapsed();
-    base::UmaHistogramTimes("Signin.AccountCapabilities.UserVisibleLatency",
-                            elapsed);
-    base::UmaHistogramTimes("Signin.AccountCapabilities.FetchLatency", elapsed);
-  }
+- (void)recordButtonTypeMetricsWithRestrictionStatus:(BOOL)isRestricted {
+  signin_metrics::SyncButtonsType buttonType =
+      isRestricted
+          ? signin_metrics::SyncButtonsType::kHistorySyncEqualWeighted
+          : signin_metrics::SyncButtonsType::kHistorySyncNotEqualWeighted;
+  base::UmaHistogramEnumeration("Signin.SyncButtons.Shown", buttonType);
 }
 
 @end

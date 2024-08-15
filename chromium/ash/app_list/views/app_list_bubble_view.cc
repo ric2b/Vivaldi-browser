@@ -12,6 +12,7 @@
 #include "ash/accessibility/accessibility_controller.h"
 #include "ash/app_list/app_list_model_provider.h"
 #include "ash/app_list/app_list_util.h"
+#include "ash/app_list/apps_collections_controller.h"
 #include "ash/app_list/model/app_list_folder_item.h"
 #include "ash/app_list/views/app_list_a11y_announcer.h"
 #include "ash/app_list/views/app_list_bubble_apps_collections_page.h"
@@ -35,7 +36,6 @@
 #include "ash/public/cpp/metrics_util.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shelf_types.h"
-#include "ash/public/cpp/view_shadow.h"
 #include "ash/search_box/search_box_constants.h"
 #include "ash/shell.h"
 #include "ash/style/ash_color_id.h"
@@ -75,6 +75,7 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/view_class_properties.h"
+#include "ui/views/view_shadow.h"
 
 using views::BoxLayout;
 
@@ -114,7 +115,8 @@ class SeparatorWithLayer : public views::View {
   ~SeparatorWithLayer() override = default;
 
   // views::View:
-  gfx::Size CalculatePreferredSize() const override {
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override {
     // The parent's layout manager will stretch it horizontally.
     return gfx::Size(1, 1);
   }
@@ -214,10 +216,11 @@ AppListBubbleView::AppListBubbleView(
   DCHECK(drag_and_drop_host);
   SetProperty(views::kElementIdentifierKey, kAppListBubbleViewElementId);
 
+  const float corner_radius = GetBubbleCornerRadius();
   // Set up rounded corners and background blur, similar to TrayBubbleView.
   // Layer background is set in OnThemeChanged().
   SetPaintToLayer();
-  layer()->SetRoundedCornerRadius(gfx::RoundedCornersF{kBubbleCornerRadius});
+  layer()->SetRoundedCornerRadius(gfx::RoundedCornersF{corner_radius});
   layer()->SetFillsBoundsOpaquely(false);
   layer()->SetIsFastRoundedCorner(true);
   layer()->SetBackgroundBlur(ColorProvider::kBackgroundBlurSigma);
@@ -229,10 +232,10 @@ AppListBubbleView::AppListBubbleView(
           ? static_cast<ui::ColorId>(cros_tokens::kCrosSysSystemBaseElevated)
           : kColorAshShieldAndBase80;
   SetBackground(views::CreateThemedRoundedRectBackground(background_color_id,
-                                                         kBubbleCornerRadius));
+                                                         corner_radius));
 
   SetBorder(std::make_unique<views::HighlightBorder>(
-      kBubbleCornerRadius,
+      corner_radius,
       is_jelly_enabled ? views::HighlightBorder::Type::kHighlightBorderOnShadow
                        : views::HighlightBorder::Type::kHighlightBorder1,
       /*insets_type=*/views::HighlightBorder::InsetsType::kHalfInsets));
@@ -746,7 +749,7 @@ void AppListBubbleView::QueryChanged(const std::u16string& trimmed_query,
     search_page_->search_view()->UpdateForNewSearch(!trimmed_query.empty());
     if (!trimmed_query.empty()) {
       ShowPage(AppListBubblePage::kSearch);
-    } else if (app_list_features::IsAppsCollectionsEnabled()) {
+    } else if (AppsCollectionsController::Get()->ShouldShowAppsCollection()) {
       ShowPage(AppListBubblePage::kAppsCollections);
     } else {
       ShowPage(AppListBubblePage::kApps);
@@ -873,8 +876,14 @@ void AppListBubbleView::OnShowAnimationEnded(const gfx::Rect& layer_bounds) {
   // consistency with bubbles in status area. Add it when status area bubbles
   // get updated.
   if (!chromeos::features::IsJellyEnabled()) {
-    view_shadow_ = std::make_unique<ViewShadow>(this, kShadowElevation);
-    view_shadow_->SetRoundedCornerRadius(kBubbleCornerRadius);
+    view_shadow_ = std::make_unique<views::ViewShadow>(this, kShadowElevation);
+    view_shadow_->SetRoundedCornerRadius(GetBubbleCornerRadius());
+  }
+
+  if (current_page_ == AppListBubblePage::kAppsCollections) {
+    apps_collections_page_->RecordAboveTheFoldMetrics();
+  } else if (current_page_ == AppListBubblePage::kApps) {
+    apps_page_->RecordAboveTheFoldMetrics();
   }
 }
 

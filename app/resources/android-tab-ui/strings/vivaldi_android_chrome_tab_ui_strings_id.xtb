@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="id">
+<translation id="2947471979790858922">Aktivitas Anda di tab pribadi ini akan dihapus dari perangkat</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Anda dapat menemukan tab tertutup di tab Terkini di bawah menu utama Vivaldi. Tab pribadi Anda tidak akan tersedia..}
+        other {Anda dapat menemukan tab tertutup di tab Terkini di bawah menu utama Vivaldi. # tab pribadi Anda tidak akan tersedia.}}</translation>
+<translation id="4871187110787939393">Tutup semua tab pribadi?</translation>
 </translationbundle>

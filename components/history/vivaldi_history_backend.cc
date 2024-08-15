@@ -31,9 +31,8 @@ void HistoryBackend::DropHistoryTables() {
 
 history::TypedUrlResults HistoryBackend::QueryTypedHistory(
     const std::string query,
-    KeywordID prefix_keyword,
     int max_results) {
-  return db_->GetVivaldiTypedHistory(query, prefix_keyword, max_results);
+  return db_->GetVivaldiTypedHistory(query, max_results);
 }
 
 history::DetailedUrlResults HistoryBackend::GetVivaldiDetailedHistory(

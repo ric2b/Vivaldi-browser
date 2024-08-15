@@ -6,6 +6,7 @@ import * as Common from '../../../core/common/common.js';
 import * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as Platform from '../../../core/platform/platform.js';
+import * as Root from '../../../core/root/root.js';
 import * as SDK from '../../../core/sdk/sdk.js';
 import * as Marked from '../../../third_party/marked/marked.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
@@ -20,6 +21,7 @@ import {type PromptBuilder, type Source, SourceType} from '../PromptBuilder.js';
 import styles from './consoleInsight.css.js';
 import listStyles from './consoleInsightSourcesList.css.js';
 
+// Note: privacy and legal notices are not localized so far.
 const UIStrings = {
   /**
    * @description The title of the insight source "Console message".
@@ -120,6 +122,34 @@ const UIStrings = {
    * @description The title of the button that cancels a console insight flow.
    */
   cancel: 'Cancel',
+  /**
+   * @description The title of the button that disables the Console insight (this) feature.
+   */
+  disableFeature: 'Disable this feature',
+  /**
+   * @description The title of the button that goes to the next page.
+   */
+  next: 'Next',
+  /**
+   * @description The title of the button that goes back to the previous page.
+   */
+  back: 'Back',
+  /**
+   * @description The title of the button that lets the user to continue
+   * with using the feature.
+   */
+  continue: 'Continue',
+  /**
+   * @description The title of the button that searches for the console
+   * insight using a search engine instead of using console insights.
+   */
+  search: 'Use search instead',
+  /**
+   * @description Shown to the user when the network request data is not
+   * available and a page reload might populate it.
+   */
+  reloadRecommendation:
+      'Reload the page to capture related network request data for this message in order to create a better insight.',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/explain/components/ConsoleInsight.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -150,36 +180,16 @@ function localizeType(sourceType: SourceType): string {
   }
 }
 
+const TERMS_OF_SERVICE_URL = 'https://policies.google.com/terms';
+// Note: concatenation avoids presubmit rules.
+const GEN_AI_TERMS_OF_SERVICE_URL = 'https://policies.google.com/terms/gener' +
+    'ative-ai';
+const PRIVACY_POLICY_URL = 'https://policies.google.com/privacy';
+const CODE_SNIPPET_WARNING_URL = 'https://support.google.com/legal/answer/13505487';
 const LEARNMORE_URL = 'https://goo.gle/devtools-console-messages-ai' as Platform.DevToolsPath.UrlString;
 const REPORT_URL = 'https://support.google.com/legal/troubleshooter/1114905?hl=en#ts=1115658%2C13380504' as
     Platform.DevToolsPath.UrlString;
-
-function buildRatingFormLink(
-    rating: 'Positive'|'Negative', comment: string, explanation: string, consoleMessage: string, stackTrace: string,
-    relatedCode: string, networkData: string): Platform.DevToolsPath.UrlString {
-  const params: {[key: string]: string} = rating === 'Negative' ? {
-    'entry.1465663861': rating,
-    'entry.1232404632': explanation,
-    'entry.37285503': stackTrace,
-    'entry.542010749': consoleMessage,
-    'entry.420621380': relatedCode,
-    'entry.822323774': networkData,
-  } :
-                                                                  {
-                                                                    'entry.1465663861': rating,
-                                                                    'entry.1805879004': explanation,
-                                                                    'entry.720239045': stackTrace,
-                                                                    'entry.623054399': consoleMessage,
-                                                                    'entry.1520357991': relatedCode,
-                                                                    'entry.1966708581': networkData,
-                                                                  };
-  return `http://go/console-insights-experiment-rating?usp=pp_url&${
-             Object.keys(params)
-                 .map(param => {
-                   return `${param}=${encodeURIComponent(params[param])}`;
-                 })
-                 .join('&')}` as Platform.DevToolsPath.UrlString;
-}
+const CHROME_SETTINGS_URL = 'chrome://settings' as Platform.DevToolsPath.UrlString;
 
 const enum State {
   INSIGHT = 'insight',
@@ -206,12 +216,14 @@ type StateData = {
   tokens: MarkdownView.MarkdownView.MarkdownViewData['tokens'],
   validMarkdown: boolean,
   sources: Source[],
+  isPageReloadRecommended: boolean,
 }&Host.AidaClient.AidaResponse|{
   type: State.ERROR,
   error: string,
 }|{
   type: State.CONSENT_REMINDER,
   sources: Source[],
+  isPageReloadRecommended: boolean,
 }|{
   type: State.CONSENT_ONBOARDING,
   page: ConsentOnboardingPage,
@@ -291,7 +303,6 @@ export class ConsoleInsight extends HTMLElement {
     this.addEventListener('click', e => {
       e.stopPropagation();
     });
-    this.tabIndex = 0;
     this.focus();
     // Measure the height of the element after an animation. `--actual-height` can
     // be used as the `from` value for the subsequent animation.
@@ -317,6 +328,9 @@ export class ConsoleInsight extends HTMLElement {
       this.classList.add('loaded');
     }
     this.#render();
+    if (newState.type !== previousState.type) {
+      this.#focusHeader();
+    }
   }
 
   async #generateInsightIfNeeded(): Promise<void> {
@@ -331,10 +345,11 @@ export class ConsoleInsight extends HTMLElement {
       return;
     }
     if (!this.#state.consentReminderConfirmed) {
-      const {sources} = await this.#promptBuilder.buildPrompt();
+      const {sources, isPageReloadRecommended} = await this.#promptBuilder.buildPrompt();
       this.#transitionTo({
         type: State.CONSENT_REMINDER,
         sources,
+        isPageReloadRecommended,
       });
       return;
     }
@@ -345,25 +360,16 @@ export class ConsoleInsight extends HTMLElement {
     this.classList.add('closing');
   }
 
-  #openFeedbackFrom(): void {
-    if (this.#state.type !== State.INSIGHT) {
-      throw new Error('Unexpected state');
-    }
-    const link = buildRatingFormLink(
-        this.#selectedRating ? 'Positive' : 'Negative', this.#shadow.querySelector('textarea')?.value || '',
-        this.#state.explanation,
-        this.#state.sources.filter(s => s.type === SourceType.MESSAGE).map(s => s.value).join('\n'),
-        this.#state.sources.filter(s => s.type === SourceType.STACKTRACE).map(s => s.value).join('\n'),
-        this.#state.sources.filter(s => s.type === SourceType.RELATED_CODE).map(s => s.value).join('\n'),
-        this.#state.sources.filter(s => s.type === SourceType.NETWORK_REQUEST).map(s => s.value).join('\n'));
-    Host.InspectorFrontendHost.InspectorFrontendHostInstance.openInNewTab(link);
-  }
-
   #onRating(event: Event): void {
     if (this.#state.type !== State.INSIGHT) {
       throw new Error('Unexpected state');
     }
+    // If it was rated, do not record again.
+    if (this.#selectedRating !== undefined) {
+      return;
+    }
     this.#selectedRating = (event.target as HTMLElement).dataset.rating === 'true';
+    this.#render();
     if (this.#selectedRating) {
       Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightRatedPositive);
     } else {
@@ -379,7 +385,6 @@ export class ConsoleInsight extends HTMLElement {
         },
       },
     }));
-    this.#openFeedbackFrom();
   }
 
   #onReport(): void {
@@ -398,7 +403,7 @@ export class ConsoleInsight extends HTMLElement {
       consentOnboardingFinished: this.#getOnboardingCompletedSetting().get(),
     });
     try {
-      for await (const {sources, explanation, metadata} of this.#getInsight()) {
+      for await (const {sources, isPageReloadRecommended, explanation, metadata} of this.#getInsight()) {
         const tokens = this.#validateMarkdown(explanation);
         const valid = tokens !== false;
         this.#transitionTo({
@@ -408,6 +413,7 @@ export class ConsoleInsight extends HTMLElement {
           explanation,
           sources,
           metadata,
+          isPageReloadRecommended,
         });
       }
       Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightGenerated);
@@ -436,11 +442,13 @@ export class ConsoleInsight extends HTMLElement {
     }
   }
 
-  async * #getInsight(): AsyncGenerator<{sources: Source[]}&Host.AidaClient.AidaResponse, void, void> {
-    const {prompt, sources} = await this.#promptBuilder.buildPrompt();
+  async *
+      #getInsight(): AsyncGenerator<
+          {sources: Source[], isPageReloadRecommended: boolean}&Host.AidaClient.AidaResponse, void, void> {
+    const {prompt, sources, isPageReloadRecommended} = await this.#promptBuilder.buildPrompt();
     try {
       for await (const response of this.#aidaClient.fetch(prompt)) {
-        yield {sources, ...response};
+        yield {sources, isPageReloadRecommended, ...response};
       }
     } catch (err) {
       if (err.message === 'Server responded: permission denied') {
@@ -467,7 +475,7 @@ export class ConsoleInsight extends HTMLElement {
     if (rootTarget === null) {
       return;
     }
-    const url = 'chrome://settings' as Platform.DevToolsPath.UrlString;
+    const url = CHROME_SETTINGS_URL;
     void rootTarget.targetAgent().invoke_createTarget({url}).then(result => {
       if (result.getError()) {
         Host.InspectorFrontendHost.InspectorFrontendHostInstance.openInNewTab(url);
@@ -489,6 +497,10 @@ export class ConsoleInsight extends HTMLElement {
       type: State.CONSENT_ONBOARDING,
       page: ConsentOnboardingPage.PAGE2,
     });
+  }
+
+  #focusHeader(): void {
+    (this.#shadow.querySelector('header h2') as HTMLElement | undefined)?.focus();
   }
 
   #termsChecked(): boolean {
@@ -526,12 +538,12 @@ export class ConsoleInsight extends HTMLElement {
       @click=${this.#onClose}
       .data=${
         {
-          variant: Buttons.Button.Variant.SECONDARY,
+          variant: Buttons.Button.Variant.OUTLINED,
           jslogContext: 'cancel',
         } as Buttons.Button.ButtonData
       }
     >
-      ${UIStrings.cancel}
+      ${i18nString(UIStrings.cancel)}
     </${Buttons.Button.Button.litTagName}>`;
     // clang-format on
   }
@@ -543,12 +555,12 @@ export class ConsoleInsight extends HTMLElement {
       class="disable-button"
       .data=${
         {
-          variant: Buttons.Button.Variant.SECONDARY,
+          variant: Buttons.Button.Variant.OUTLINED,
           jslogContext: 'disable',
         } as Buttons.Button.ButtonData
       }
     >
-      Disable this feature
+      ${i18nString(UIStrings.disableFeature)}
     </${Buttons.Button.Button.litTagName}>`;
     // clang-format on
   }
@@ -565,7 +577,7 @@ export class ConsoleInsight extends HTMLElement {
         } as Buttons.Button.ButtonData
       }
     >
-      Next
+      ${i18nString(UIStrings.next)}
     </${Buttons.Button.Button.litTagName}>`;
     // clang-format on
   }
@@ -576,12 +588,12 @@ export class ConsoleInsight extends HTMLElement {
       @click=${this.#goToPrevPage}
       .data=${
         {
-          variant: Buttons.Button.Variant.SECONDARY,
+          variant: Buttons.Button.Variant.OUTLINED,
           jslogContext: 'back',
         } as Buttons.Button.ButtonData
       }
     >
-      Back
+      ${i18nString(UIStrings.back)}
     </${Buttons.Button.Button.litTagName}>`;
     // clang-format on
   }
@@ -599,7 +611,7 @@ export class ConsoleInsight extends HTMLElement {
         } as Buttons.Button.ButtonData
       }
     >
-      Continue
+      ${i18nString(UIStrings.continue)}
     </${Buttons.Button.Button.litTagName}>`;
     // clang-format on
   }
@@ -611,18 +623,21 @@ export class ConsoleInsight extends HTMLElement {
       class="search-button"
       .data=${
         {
-          variant: Buttons.Button.Variant.SECONDARY,
+          variant: Buttons.Button.Variant.OUTLINED,
+          jslogContext: 'search',
         } as Buttons.Button.ButtonData
       }
     >
-      Use search instead
+      ${i18nString(UIStrings.search)}
     </${Buttons.Button.Button.litTagName}>`;
     // clang-format on
   }
 
   #renderLearnMoreAboutInsights(): LitHtml.TemplateResult {
     // clang-format off
-    return html`<x-link href=${LEARNMORE_URL} class="link" jslog=${VisualLogging.link('learn-more').track({click: true})}>Learn more</x-link>`;
+    return html`<x-link href=${LEARNMORE_URL} class="link" jslog=${VisualLogging.link('learn-more').track({click: true})}>
+      ${i18nString(UIStrings.learnMore)}
+    </x-link>`;
     // clang-format on
   }
 
@@ -653,9 +668,9 @@ export class ConsoleInsight extends HTMLElement {
               .data=${{tokens: this.#state.tokens, renderer: this.#renderer} as MarkdownView.MarkdownView.MarkdownViewData}>
             </${MarkdownView.MarkdownView.MarkdownView.litTagName}>`: this.#state.explanation
           }
-          <details style="--list-height: ${this.#state.sources.length * 20}px;">
+          <details style="--list-height: ${(this.#state.sources.length + (this.#state.isPageReloadRecommended ? 1 : 0)) * 20}px;">
             <summary>${i18nString(UIStrings.inputData)}</summary>
-            <${ConsoleInsightSourcesList.litTagName} .sources=${this.#state.sources}>
+            <${ConsoleInsightSourcesList.litTagName} .sources=${this.#state.sources} .isPageReloadRecommended=${this.#state.isPageReloadRecommended}>
             </${ConsoleInsightSourcesList.litTagName}>
           </details>
           <div class="buttons">
@@ -671,10 +686,10 @@ export class ConsoleInsight extends HTMLElement {
         return html`
           <main>
             <p>The following data will be sent to Google to understand the context for the console message.
-            Human reviewers may process this information for quality purposes.
-            Don’t submit sensitive information. Read Google’s <x-link href="https://policies.google.com/terms" class="link" jslog=${VisualLogging.link('terms-of-service').track({click: true})}>Terms of Service</x-link> and
-            the <x-link href=${'https://policies.google.com/terms/gener' + 'ative-ai'} class="link" jslog=${VisualLogging.link('gener' + 'ative-ai-terms-of-service').track({click: true})}>${'Gener' + 'ative'} AI Additional Terms of Service</x-link>.</p>
-            <${ConsoleInsightSourcesList.litTagName} .sources=${this.#state.sources}>
+            ${Root.Runtime.Runtime.queryParam('ci_disallowLogging') === 'true' ? '' : 'Human reviewers may process this information for quality purposes. Don’t submit sensitive information.'}
+            Read Google’s <x-link href=${TERMS_OF_SERVICE_URL} class="link" jslog=${VisualLogging.link('terms-of-service').track({click: true})}>Terms of Service</x-link> and
+            the <x-link href=${GEN_AI_TERMS_OF_SERVICE_URL} class="link" jslog=${VisualLogging.link('gener' + 'ative-ai-terms-of-service').track({click: true})}>${'Gener' + 'ative'} AI Additional Terms of Service</x-link>.</p>
+            <${ConsoleInsightSourcesList.litTagName} .sources=${this.#state.sources} .isPageReloadRecommended=${this.#state.isPageReloadRecommended}>
             </${ConsoleInsightSourcesList.litTagName}>
           </main>
         `;
@@ -682,11 +697,11 @@ export class ConsoleInsight extends HTMLElement {
         switch (this.#state.page) {
           case ConsentOnboardingPage.PAGE1:
             return html`<main>
-              <p>This notice and our <x-link href="https://policies.google.com/privacy" class="link" jslog=${VisualLogging.link('privacy-notice').track({click: true})}>privacy notice</x-link> describe how Chrome DevTools handles your data. Please read them carefully.</p>
+              <p>This notice and our <x-link href=${PRIVACY_POLICY_URL} class="link" jslog=${VisualLogging.link('privacy-notice').track({click: true})}>privacy notice</x-link> describe how Chrome DevTools handles your data. Please read them carefully.</p>
 
               <p>Chrome DevTools uses the console message, associated stack trace, related source code, and the associated network headers as input data. When you use "Understand this message", Google collects this input data, generated output, related feature usage information, and your feedback. Google uses this data to provide, improve, and develop Google products and services and machine learning technologies, including Google's enterprise products such as Google Cloud.</p>
 
-              <p>To help with quality and improve our products, human reviewers may read, annotate, and process the above-mentioned input data, generated output, related feature usage information, and your feedback. <strong>Please do not include sensitive (e.g., confidential) or personal information that can be used to identify you or others in your prompts or feedback.</strong> Your data will be stored in a way where Google cannot tell who provided it and can no longer fulfill any deletion requests and will be retained for up to 18 months.</p>
+              <p>To help with quality and improve our products, human reviewers may read, annotate, and process the above-mentioned input data, generated output, related feature usage information, and your feedback. <strong>Please do not include sensitive (e.g., confidential) or personal information that can be used to identify you or others in your prompts or feedback.</strong> Your data will be stored in a way where Google cannot tell who provided it and can no longer fulfill any deletion requests and will be retained for up to 18 months. We may refrain from collecting data to improve our product if your Google account is managed by an organization.</p>
             </main>`;
           case ConsentOnboardingPage.PAGE2:
             return html`<main>
@@ -696,14 +711,14 @@ export class ConsoleInsight extends HTMLElement {
               <li>Chrome DevTools uses console message, associated stack trace, related source code, and the associated network headers to provide answers.</li>
               <li>Chrome DevTools uses experimental technology, and may generate inaccurate or offensive information that doesn't represent Google's views. Voting on the responses will help make this feature better.</li>
               <li>This feature is an experimental feature and subject to future changes.</li>
-              <li><strong><x-link class="link" href="https://support.google.com/legal/answer/13505487" jslog=${VisualLogging.link('use-code-with-caution').track({click: true})}>Use generated code snippets with caution</x-link>.</strong></li>
+              <li><strong><x-link class="link" href=${CODE_SNIPPET_WARNING_URL} jslog=${VisualLogging.link('use-code-with-caution').track({click: true})}>Use generated code snippets with caution</x-link>.</strong></li>
             </ul>
             </p>
 
             <p>
             <label>
               <input class="terms" @change=${this.#onTermsChange} type="checkbox" jslog=${VisualLogging.toggle('terms-of-service-accepted')}>
-              <span>I accept my use of "Understand this message" is subject to the <x-link href="https://policies.google.com/terms" class="link" jslog=${VisualLogging.link('terms-of-service').track({click: true})}>Google Terms of Service</x-link> and the <x-link href=${'https://policies.google.com/terms/gener' + 'ative-ai'} class="link" jslog=${VisualLogging.link('gener' + 'ative-ai-terms-of-service').track({click: true})}>${'Gener' + 'ative'} AI Additional Terms of Service</x-link>.</span>
+              <span>I accept my use of "Understand this message" is subject to the <x-link href=${GEN_AI_TERMS_OF_SERVICE_URL} class="link" jslog=${VisualLogging.link('terms-of-service').track({click: true})}>Google Terms of Service</x-link> and the <x-link href=${GEN_AI_TERMS_OF_SERVICE_URL} class="link" jslog=${VisualLogging.link('gener' + 'ative-ai-terms-of-service').track({click: true})}>${'Gener' + 'ative'} AI Additional Terms of Service</x-link>.</span>
             </label>
             </p>
             </main>`;
@@ -728,6 +743,8 @@ export class ConsoleInsight extends HTMLElement {
   }
 
   #renderFooter(): LitHtml.LitTemplate {
+    const showThumbsUpDownButtons = Root.Runtime.Runtime.queryParam('ci_disallowLogging') !== 'true';
+    // clang-format off
     const disclaimer = LitHtml.html`<span>
               This feature may display inaccurate or offensive information that doesn't represent Google's views.
               <x-link href=${LEARNMORE_URL} class="link" jslog=${
@@ -806,38 +823,40 @@ export class ConsoleInsight extends HTMLElement {
         </div>
         <div class="filler"></div>
         <div class="rating">
+          ${showThumbsUpDownButtons ? html`
+            <${Buttons.Button.Button.litTagName}
+              data-rating=${'true'}
+              .data=${
+                {
+                  variant: Buttons.Button.Variant.ICON,
+                  size: Buttons.Button.Size.SMALL,
+                  iconName: 'thumb-up',
+                  active: this.#selectedRating !== undefined && this.#selectedRating,
+                  title: i18nString(UIStrings.thumbsUp),
+                  jslogContext: 'thumbs-up',
+                } as Buttons.Button.ButtonData
+              }
+              @click=${this.#onRating}
+            ></${Buttons.Button.Button.litTagName}>
+            <${Buttons.Button.Button.litTagName}
+              data-rating=${'false'}
+              .data=${
+                {
+                  variant: Buttons.Button.Variant.ICON,
+                  size: Buttons.Button.Size.SMALL,
+                  iconName: 'thumb-down',
+                  active: this.#selectedRating !== undefined && !this.#selectedRating,
+                  title: i18nString(UIStrings.thumbsDown),
+                  jslogContext: 'thumbs-down',
+                } as Buttons.Button.ButtonData
+              }
+              @click=${this.#onRating}
+            ></${Buttons.Button.Button.litTagName}>
+          ` : LitHtml.nothing}
           <${Buttons.Button.Button.litTagName}
-            data-rating=${'true'}
             .data=${
               {
-                variant: Buttons.Button.Variant.ROUND,
-                size: Buttons.Button.Size.SMALL,
-                iconName: 'thumb-up',
-                active: this.#selectedRating,
-                title: i18nString(UIStrings.thumbsUp),
-                jslogContext: 'thumbs-up',
-              } as Buttons.Button.ButtonData
-            }
-            @click=${this.#onRating}
-          ></${Buttons.Button.Button.litTagName}>
-          <${Buttons.Button.Button.litTagName}
-            data-rating=${'false'}
-            .data=${
-              {
-                variant: Buttons.Button.Variant.ROUND,
-                size: Buttons.Button.Size.SMALL,
-                iconName: 'thumb-down',
-                active: this.#selectedRating !== undefined && !this.#selectedRating,
-                title: i18nString(UIStrings.thumbsDown),
-                jslogContext: 'thumbs-down',
-              } as Buttons.Button.ButtonData
-            }
-            @click=${this.#onRating}
-          ></${Buttons.Button.Button.litTagName}>
-          <${Buttons.Button.Button.litTagName}
-            .data=${
-              {
-                variant: Buttons.Button.Variant.ROUND,
+                variant: Buttons.Button.Variant.ICON,
                 size: Buttons.Button.Size.SMALL,
                 iconName: 'report',
                 title: i18nString(UIStrings.report),
@@ -868,7 +887,7 @@ export class ConsoleInsight extends HTMLElement {
       case State.ERROR:
         return i18nString(UIStrings.error);
       case State.CONSENT_REMINDER:
-        return 'Data used to understand this message';
+        return i18nString(UIStrings.inputData);
       case State.CONSENT_ONBOARDING:
         switch (this.#state.page) {
           case ConsentOnboardingPage.PAGE1:
@@ -885,7 +904,7 @@ export class ConsoleInsight extends HTMLElement {
       <div class="wrapper" jslog=${VisualLogging.pane('console-insights').track({resize: true})}>
         <header>
           <div class="filler">
-            <h2>
+            <h2 tabindex="-1">
               ${this.#getHeader()}
             </h2>
           </div>
@@ -893,7 +912,7 @@ export class ConsoleInsight extends HTMLElement {
             <${Buttons.Button.Button.litTagName}
               .data=${
                 {
-                  variant: Buttons.Button.Variant.ROUND,
+                  variant: Buttons.Button.Variant.ICON,
                   size: Buttons.Button.Size.SMALL,
                   iconName: 'cross',
                   title: i18nString(UIStrings.closeInsight),
@@ -918,6 +937,7 @@ class ConsoleInsightSourcesList extends HTMLElement {
   static readonly litTagName = LitHtml.literal`devtools-console-insight-sources-list`;
   readonly #shadow = this.attachShadow({mode: 'open'});
   #sources: Source[] = [];
+  #isPageReloadRecommended = false;
 
   constructor() {
     super();
@@ -934,6 +954,9 @@ class ConsoleInsightSourcesList extends HTMLElement {
             ${localizeType(item.type)}
           </x-link></li>`;
         })}
+        ${this.#isPageReloadRecommended ? LitHtml.html`<li class="source-disclaimer">
+          <${IconButton.Icon.Icon.litTagName} name="warning"></${IconButton.Icon.Icon.litTagName}>
+          ${i18nString(UIStrings.reloadRecommendation)}</li>` : LitHtml.nothing}
       </ul>
     `, this.#shadow, {
       host: this,
@@ -943,6 +966,11 @@ class ConsoleInsightSourcesList extends HTMLElement {
 
   set sources(values: Source[]) {
     this.#sources = values;
+    this.#render();
+  }
+
+  set isPageReloadRecommended(isPageReloadRecommended: boolean) {
+    this.#isPageReloadRecommended = isPageReloadRecommended;
     this.#render();
   }
 }

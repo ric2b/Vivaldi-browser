@@ -5,9 +5,9 @@
 #ifndef CHROME_BROWSER_ASH_LOGIN_UI_LOGIN_DISPLAY_HOST_H_
 #define CHROME_BROWSER_ASH_LOGIN_UI_LOGIN_DISPLAY_HOST_H_
 
-#include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "ash/public/cpp/login_accelerators.h"
 #include "base/functional/callback_forward.h"
@@ -35,7 +35,6 @@ namespace ash {
 
 class ExistingUserController;
 class KioskAppId;
-class KioskLaunchController;
 class OobeUI;
 class WebUILoginView;
 class WizardContext;
@@ -115,9 +114,6 @@ class LoginDisplayHost {
   // call the instance will be gone.
   virtual void FinalizeImmediately() = 0;
 
-  // Toggles status area visibility.
-  virtual void SetStatusAreaVisible(bool visible) = 0;
-
   // Starts out-of-box-experience flow or shows other screen handled by
   // Wizard controller i.e. camera, recovery.
   // One could specify start screen with `first_screen`.
@@ -130,10 +126,6 @@ class LoginDisplayHost {
   virtual WizardContext* GetWizardContext() = 0;
 
   virtual OobeMetricsHelper* GetOobeMetricsHelper() = 0;
-
-  // Returns current KioskLaunchController, if it exists.
-  // Result should not be stored.
-  virtual KioskLaunchController* GetKioskLaunchController() = 0;
 
   // Cancel addint user into session.
   virtual void CancelUserAdding() = 0;

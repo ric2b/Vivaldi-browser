@@ -682,4 +682,5 @@ message ProbeSsfcComponentsResponse {
   repeated EcI2c ec_i2c = 12;
   repeated Tcpc tcpc = 13;
   repeated InputDevice touchscreen = 14;
+  repeated Camera camera = 15;
 }

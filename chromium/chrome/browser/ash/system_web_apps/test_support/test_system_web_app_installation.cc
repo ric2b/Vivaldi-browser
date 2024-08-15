@@ -20,6 +20,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/web_applications/web_app_ui_manager_impl.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
+#include "chrome/browser/web_applications/test/fake_web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_icon_generator.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
@@ -751,8 +752,8 @@ CreateSystemAppDelegateWithWindowConfig(
     SystemWebAppWindowConfig window_config) {
   auto* delegate = new UnittestingSystemAppDelegate(
       type, "Test App", app_url, base::BindLambdaForTesting([=]() {
-        auto info = std::make_unique<web_app::WebAppInstallInfo>();
-        info->start_url = app_url;
+        auto info =
+            web_app::WebAppInstallInfo::CreateWithStartUrlForTesting(app_url);
         info->scope = app_url.DeprecatedGetOriginAsURL();
         info->title = u"Test System App";
         info->theme_color = 0xFF00FF00;

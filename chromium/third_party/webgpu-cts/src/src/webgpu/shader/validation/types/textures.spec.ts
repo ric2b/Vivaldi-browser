@@ -1,12 +1,5 @@
 export const description = `
 Validation tests for various texture types in shaders.
-
-TODO:
-- Sampled Texture Types
-- Multisampled Texture Types
-- External Sampled Texture Types
-- Depth Texture Types
-- Sampler Types
 `;
 
 import { makeTestGroup } from '../../../../common/framework/test_group.js';
@@ -88,11 +81,22 @@ g.test('sampled_texture_types')
         '1',
         '1u',
       ] as const)
+      .combine('comma', ['', ','] as const)
   )
   .fn(t => {
-    const { textureType, sampledType } = t.params;
-    const wgsl = `@group(0) @binding(0) var tex: ${textureType}<${sampledType}>;`;
+    const { textureType, sampledType, comma } = t.params;
+    const wgsl = `@group(0) @binding(0) var tex: ${textureType}<${sampledType}${comma}>;`;
     t.expectCompileResult(kValidTextureSampledTypes.includes(sampledType), wgsl);
+  });
+
+g.test('external_sampled_texture_types')
+  .desc(
+    `Test that texture_extenal compiles and cannot specify address space
+`
+  )
+  .fn(t => {
+    t.expectCompileResult(true, `@group(0) @binding(0) var tex: texture_external;`);
+    t.expectCompileResult(false, `@group(0) @binding(0) var<private> tex: texture_external;`);
   });
 
 const kAccessModes = ['read', 'write', 'read_write'];
@@ -107,10 +111,13 @@ Besides, the shader compilation should always pass regardless of whether the for
 `
   )
   .params(u =>
-    u.combine('access', [...kAccessModes, 'storage'] as const).combine('format', kAllTextureFormats)
+    u
+      .combine('access', [...kAccessModes, 'storage'] as const)
+      .combine('format', kAllTextureFormats)
+      .combine('comma', ['', ','] as const)
   )
   .fn(t => {
-    const { format, access } = t.params;
+    const { format, access, comma } = t.params;
     const info = kTextureFormatInfo[format];
     // bgra8unorm is considered a valid storage format at shader compilation stage
     const isFormatValid =
@@ -119,6 +126,49 @@ Besides, the shader compilation should always pass regardless of whether the for
       info.stencil?.storage ||
       format === 'bgra8unorm';
     const isAccessValid = kAccessModes.includes(access);
-    const wgsl = `@group(0) @binding(0) var tex: texture_storage_2d<${format}, ${access}>;`;
+    const wgsl = `@group(0) @binding(0) var tex: texture_storage_2d<${format}, ${access}${comma}>;`;
     t.expectCompileResult(isFormatValid && isAccessValid, wgsl);
+  });
+
+g.test('depth_texture_types')
+  .desc(
+    `Test that for texture_depth_xx
+- must not specify an address space
+`
+  )
+  .params(u =>
+    u.combine('textureType', [
+      'texture_depth_2d',
+      'texture_depth_2d_array',
+      'texture_depth_cube',
+      'texture_depth_cube_array',
+    ])
+  )
+  .fn(t => {
+    const { textureType } = t.params;
+    t.expectCompileResult(true, `@group(0) @binding(0) var t: ${textureType};`);
+    t.expectCompileResult(false, `@group(0) @binding(0) var<private> t: ${textureType};`);
+    t.expectCompileResult(false, `@group(0) @binding(0) var<storage, read> t: ${textureType};`);
+  });
+
+g.test('sampler_types')
+  .desc(
+    `Test that for sampler and sampler_comparison
+- cannot specify address space
+- cannot be declared in WGSL function scope
+`
+  )
+  .params(u => u.combine('samplerType', ['sampler', 'sampler_comparison']))
+  .fn(t => {
+    const { samplerType } = t.params;
+    t.expectCompileResult(true, `@group(0) @binding(0) var s: ${samplerType};`);
+    t.expectCompileResult(false, `@group(0) @binding(0) var<private> s: ${samplerType};`);
+    t.expectCompileResult(
+      false,
+      `
+      @compute @workgroup_size(1) fn main() {
+        var s: ${samplerType};
+      }
+    `
+    );
   });

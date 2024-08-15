@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: review-process
 title: The ChromeOS security review process
 ---
@@ -106,4 +106,4 @@ to them. Also, ensure that folks provide feedback to the feature owner before
 launch review meetings.
 
 [crbug.com]: https://crbug.com
-[security review HOWTO]: ../security_review_howto.md
+[security review HOWTO]: /chromium-os/developer-library/guides/security/security-review-howto/

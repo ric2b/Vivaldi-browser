@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/containers/intrusive_heap.h"
 
 #include "base/check_op.h"
@@ -131,7 +136,7 @@ void DoGrowingOperation(IntrusiveHeap<T>* heap) {
     }
 
     case kGrowingOperationsCount:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   EXPECT_EQ(old_size + 1, heap->size());
@@ -215,7 +220,7 @@ void DoShrinkingOperation(IntrusiveHeap<T>* heap) {
     }
 
     case kShrinkingOperationsCount:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   EXPECT_EQ(old_size - 1, heap->size());
@@ -254,7 +259,7 @@ void DoSameSizeOperation(IntrusiveHeap<T>* heap) {
     }
 
     case kSameSizeOperationsCount:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 
   EXPECT_EQ(old_size, heap->size());
@@ -291,7 +296,7 @@ void DoRandomHeapOperation(IntrusiveHeap<T>* heap) {
       DoSameSizeOperation(heap);
       break;
     case kOperationTypesCount:
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
   }
 }
 

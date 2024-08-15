@@ -5,13 +5,15 @@
 <translation id="1118377629180821201">Բնապատկեր 12</translation>
 <translation id="1158503667684816647">Այլևս չպահանջել հաստատում</translation>
 <translation id="1222195720020481779">Տեղակայիչի գործարկում…</translation>
-<translation id="1276145862619442150">Արագ կանչեր</translation>
+<translation id="1270785070369717623">Ցավոք, Ձեր Opera GX-ի կարգավորումները հասանելի չեն, քանի դեռ այդ բրաուզերը բացված է։Այդ կարգավորումները Vivaldi ներկրելու համար, պահպանեք Ձեր աշխատանքը և փակեք Opera GX-ի բոլոր պատուհանները։ Հետո սեղմեք Շարունակել։</translation>
+<translation id="1276145862619442150">Արագ կոճակներ</translation>
 <translation id="1281950884873973195">Գազան 6</translation>
 <translation id="1411638389238344450">Ուղարկել հղումը փոստով</translation>
 <translation id="1454726940098520109">Այլևս չպահանջել հաստատում</translation>
 <translation id="1462666970065907900">Դուք իրո՞ք ցանկանում եք փակել այս պատուհանը։</translation>
 <translation id="1480046233931937785">Շնորհակալություններ</translation>
 <translation id="1526344461589023948">Ներբեռնված թարմացումը պահպանելիս տեղի ունեցավ սխալ։ Խնդրում ենք ստուգել համակարգչի սկավառակում բավարար ծավալի առկայությունն ու փորձել նորից։</translation>
+<translation id="1635542496948266458">Անցնել այլ պրոֆիլի</translation>
 <translation id="1657174850639146440">Հրեշ 9</translation>
 <translation id="1676595396635191120">Նոր գաղտնի պատուհան</translation>
 <translation id="1702758681952953055">Եթե սխալը չի վերանում, խնդրում ենք հաղորդել դրա մասին՝ ներառելով հետևյալ մանրամասները.</translation>
@@ -27,12 +29,14 @@
 <translation id="1985669426322966465">Ծրագրի թարմացում</translation>
 <translation id="2079036669923635404">Սեղմեք այստեղ՝ Vivaldi-ն <ph name="VERSION" /> տարբերակով թարմացնելու համար։</translation>
 <translation id="2141974047387702305">Թարմացման ֆայլերը ներբեռնելիս տեղի ունեցավ սխալ։ Խնդրում ենք ստուգել Ձեր ինտերնետի միացումն ու փորձել նորից։</translation>
+<translation id="2226825946708954262">⚠ Շարունակել տվյալների կորստով</translation>
 <translation id="2339641773402824483">Թարմացումների ստուգում…</translation>
 <translation id="2441056087170876076">Հրեշ 2</translation>
 <translation id="2444387452209867610">Տեղադրել նոթ</translation>
 <translation id="2486841023299517366">Գազան 4</translation>
 <translation id="2612127540243995147">Պատրաստ է տեղակայման։ Vivaldi-ն կփակվի ու նորից կմեկնարկի։</translation>
 <translation id="2613387515621326337">Գնալ թարմացման վեբ կայք</translation>
+<translation id="2645477450146475243">Ցավոք, Ձեր Opera-ի կարգավորումները հասանելի չեն, քանի դեռ այդ բրաուզերը բացված է։Այդ կարգավորումները Vivaldi ներկրելու համար, պահպանեք Ձեր աշխատանքը և փակեք Opera-ի բոլոր պատուհանները։ Հետո սեղմեք Շարունակել։</translation>
 <translation id="2647368062414805334">Ցավոք՝ Ձեր Edge-ի կարգավորումները հասանելի չեն, քանի դեռ տվյալ բրաուզերը բաց է։ Այդ կարգավորումները Vivaldi ներկրելու համար պահպանեք Ձեր աշխատանքն ու փակեք Edge-ի բոլոր պատուհանները։ Հետո սեղմեք Շարունակել։</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Գազան 3</translation>
@@ -41,11 +45,14 @@
 <translation id="2923448633003185837">Փակցնել ու բացել</translation>
 <translation id="2953943267837858202">Թույլատրված չէ ավտոմատ նվագարկել տեսանյութերը</translation>
 <translation id="2977472760057091832">Բացել հղումը գաղտնի պատուհանում</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Բացել նոր ներդիրում</translation>
 <translation id="3027988479108856431">Ցավոք՝ Ձեր Yandex-ի կարգավորումները հասանելի չեն, քանի դեռ այդ բրաուզերն աշխատում է։ Այդ կարգավորումները Vivaldi ներկրելու համար պահպանեք Ձեր գործն ու փակեք Yandex-ի բոլոր պատուհանները։ Հետո սեղմեք «Շարունակել»։</translation>
 <translation id="3084011186245865060">Բնապատկեր 6</translation>
+<translation id="3085906383264247940">Opera (Beta)</translation>
 <translation id="3093931836425623631">Vivaldi-ի ստեղծումը հնարավոր է դարձել շնորհիվ Chromium բաց կոդով նախագծի և այլ բաց կոդով ծրագրակազմերի։</translation>
 <translation id="3127383884976966729">Գազան 7</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">Նոր էջանիշ</translation>
 <translation id="3255747772218936245">Տեղակայել թարմացումը</translation>
 <translation id="3259769196742189631">Վավերացնել</translation>
@@ -64,6 +71,7 @@
 <translation id="3588820906588687999">Բացել պատկերը նոր ներդիրում</translation>
 <translation id="3601066750251199488">Հրեշ 3</translation>
 <translation id="3620979700683094848">Կայքերը կարող են ավտոմատ նվագարկել տեսանյութերը</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Հասանելի է Vivaldi-ի նոր տարբերակ։</translation>
 <translation id="3708982624815781692">Ներբեռնումը չեղարկվել է։</translation>
 <translation id="3732157130969736834">Հղումը հավելել էջանիշերին</translation>
@@ -96,13 +104,15 @@
 <translation id="4861715717329665002">Ավտոմատ պահպանված սեսիաներ</translation>
 <translation id="4881695831933465202">Բացել</translation>
 <translation id="498766871928286903"><ph name="DOWNLOADED" />-ը <ph name="TOTAL_SIZE_TO_DOWNLOAD" />-ից</translation>
-<translation id="5014281392052865061">Ներկրված Արագ կանչ</translation>
+<translation id="5014281392052865061">Ներկրված արագ կոճակներ</translation>
 <translation id="5092656712000637858">Էջը հավելել վեբ վահանակին</translation>
+<translation id="5106275083540628394">Վերծանումը ձախողվեց. Տվյալների կորստի ռիսկ</translation>
 <translation id="5177818338935286353">Հրեշ 7</translation>
 <translation id="5213743983876949565">Գազան 1</translation>
 <translation id="5238244642230426581">Ներկրված էջանիշեր</translation>
 <translation id="527605719918376753">Լռեցնել ներդիրը</translation>
 <translation id="5305569355661722298">Հաստատեք պատուհանի փակումը</translation>
+<translation id="5322922669477407077">Opera (Developer)</translation>
 <translation id="5388358297987318779">Բացել պատկերը</translation>
 <translation id="5416008465899576639">Հասանելի է Vivaldi-ի նոր տարբերակ։</translation>
 <translation id="5497042274492038489">Հաստատեք պատուհանի փակումը</translation>
@@ -118,6 +128,7 @@
 <translation id="6229528619562190452">Սեղմեք այստեղ՝ Vivaldi-ն թարմացնելու համար։</translation>
 <translation id="6234173136417926046">Պատկերն օգտագործել որպես սկզբնական էջի ֆոն</translation>
 <translation id="6339818817272922368">Լոկալ հաշիվ</translation>
+<translation id="6398710281890660037">Պաշտպանել իմ պրոֆիլը</translation>
 <translation id="6438786710866753178">Բնապատկեր 4</translation>
 <translation id="6477028720702061455">Ընտրեք Opera-ի պրոֆիլի պանակը՝ ներկրելու համար</translation>
 <translation id="6510706699590490869">Թ&amp;արմացնել Vivaldi-ն</translation>
@@ -129,8 +140,11 @@
 <translation id="6726279523566323394">Ընտրեք Brave-ի պրոֆիլի պանակը՝ ներկրման համար</translation>
 <translation id="6892812721183419409">Բացել հղումը որպես <ph name="USER" /></translation>
 <translation id="6896758677409633944">Պատճենել</translation>
+<translation id="6960139763942959188">Այս պրոֆիլը ներկայումս պահված է ոչ անվտանգ ձևով՝ չգաղտնագրված։ Vivaldi-ն այժմ պատրաստվում է թարմացնել Ձեր պրոֆիլն ավելի անվտանգ՝ գաղտնագրված ձևաչափով։ Դուք հիմա պետք է դուրս գաք և Ձեր պրոֆիլի պահուստային պատճենը ստեղծեք, մինչ շարունակելը։</translation>
 <translation id="7086554968911045110">Բնապատկեր 7</translation>
+<translation id="7099506190679014195">Անվտանգ բանալիների պահոցի թարմացում</translation>
 <translation id="7111492742514999492">Բնապատկեր 9</translation>
+<translation id="7208252576848052204">Ցավոք, Ձեր Arc-ի կարգավորումները հասանելի չեն, քանի դեռ այդ բրաուզերը բացված է։Այդ կարգավորումները Vivaldi ներկրելու համար, պահպանեք Ձեր աշխատանքը և փակեք Arc-ի բոլոր պատուհանները։ Հետո սեղմեք Շարունակել։</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Չհաջողվեց գործարկել թարմացման տեղակայիչը։ Խնդրում ենք ստուգել համակարգչի հիշողության կամ սկավառակի մեջ բավարար ծավալի առկայությունն ու փորձել նորից։</translation>
 <translation id="7658239707568436148">Չեղարկել</translation>
@@ -172,6 +186,7 @@
 <translation id="9048058608784130603">Սպասում է թարմացում <ph name="VERSION" /></translation>
 <translation id="9048224371732578627">Թույլատրված է տեսանյութերի ավտոմատ նվագարկումը</translation>
 <translation id="9065203028668620118">Խմբագրել</translation>
+<translation id="9090254883741610153">Ցանկանում եմ շարունակել</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Բացել պատկերը որպես <ph name="USER" /></translation>
 <translation id="9157539936604258187">Բացել հղումը</translation>

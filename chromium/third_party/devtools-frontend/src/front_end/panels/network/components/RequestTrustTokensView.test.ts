@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertNotNullOrUndefined} from '../../../core/platform/platform.js';
 import type * as SDK from '../../../core/sdk/sdk.js';
 import * as Protocol from '../../../generated/protocol.js';
 import {
@@ -13,8 +12,6 @@ import {
 import {describeWithLocale} from '../../../testing/EnvironmentHelpers.js';
 
 import * as NetworkComponents from './components.js';
-
-const {assert} = chai;
 
 describeWithLocale('RequestTrustTokensView', () => {
   const mockId = 'mockId' as Protocol.Network.RequestId;
@@ -65,7 +62,7 @@ describeWithLocale('RequestTrustTokensView', () => {
     }));
 
     const simpleText = getElementWithinComponent(component, 'span > strong', HTMLElement);
-    assertNotNullOrUndefined(simpleText);
+    assert.exists(simpleText);
     assert.strictEqual(simpleText.textContent, 'Success');
   });
 
@@ -77,7 +74,7 @@ describeWithLocale('RequestTrustTokensView', () => {
     }));
 
     const simpleText = getElementWithinComponent(component, 'span > strong', HTMLElement);
-    assertNotNullOrUndefined(simpleText);
+    assert.exists(simpleText);
     assert.strictEqual(simpleText.textContent, 'Failure');
   });
 });

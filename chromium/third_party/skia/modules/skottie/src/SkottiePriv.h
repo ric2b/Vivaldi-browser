@@ -23,6 +23,8 @@
 #include "src/base/SkUTF.h"
 #include "src/core/SkTHash.h"
 
+#include "modules/skshaper/include/SkShaper_factory.h"
+
 #include <vector>
 
 namespace skjson {
@@ -65,7 +67,7 @@ class AnimationBuilder final : public SkNoncopyable {
 public:
     AnimationBuilder(sk_sp<ResourceProvider>, sk_sp<SkFontMgr>, sk_sp<PropertyObserver>,
                      sk_sp<Logger>, sk_sp<MarkerObserver>, sk_sp<PrecompInterceptor>,
-                     sk_sp<ExpressionManager>,
+                     sk_sp<ExpressionManager>, sk_sp<SkShapers::Factory>,
                      Animation::Builder::Stats*, const SkSize& comp_size,
                      float duration, float framerate, uint32_t flags);
 
@@ -196,6 +198,8 @@ public:
         return fSlotsRoot;
     }
 
+    void parseFonts (const skjson::ObjectValue* jfonts, const skjson::ArrayValue* jchars);
+
 private:
     friend class CompositionBuilder;
     friend class CustomFont;
@@ -208,8 +212,6 @@ private:
     struct LayerInfo;
 
     void parseAssets(const skjson::ArrayValue*);
-    void parseFonts (const skjson::ObjectValue* jfonts,
-                     const skjson::ArrayValue* jchars);
 
     // Return true iff all fonts were resolved.
     bool resolveNativeTypefaces();
@@ -243,6 +245,7 @@ private:
     sk_sp<MarkerObserver>        fMarkerObserver;
     sk_sp<PrecompInterceptor>    fPrecompInterceptor;
     sk_sp<ExpressionManager>     fExpressionManager;
+    sk_sp<SkShapers::Factory>    fShapingFactory;
     sk_sp<SceneGraphRevalidator> fRevalidator;
     sk_sp<SlotManager>           fSlotManager;
     Animation::Builder::Stats*   fStats;

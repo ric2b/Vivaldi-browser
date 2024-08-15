@@ -99,6 +99,10 @@
             "type": "boolean",
             "description": "Does profile support contacts."
           },
+          "extensions": {
+            "type": "boolean",
+            "description": "Does profile support extensions import."
+          },
           "hasDefaultInstall": {
             "type": "boolean",
             "description": "Is a default installation detected."
@@ -187,6 +191,9 @@
                 "type": "boolean"
               },
               "notes": {
+                "type": "boolean"
+              },
+              "extensions": {
                 "type": "boolean"
               }
             }

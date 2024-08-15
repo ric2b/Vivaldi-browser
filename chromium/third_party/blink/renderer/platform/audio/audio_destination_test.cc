@@ -39,6 +39,7 @@ class MockWebAudioDevice : public WebAudioDevice {
   double SampleRate() override { return sample_rate_; }
   int FramesPerBuffer() override { return frames_per_buffer_; }
   int MaxChannelCount() override { return 2; }
+  void SetDetectSilence(bool detect_silence) override {}
   media::OutputDeviceStatus CreateSinkAndGetDeviceStatus() override {
     // In this test, we assume the sink creation always succeeds.
     return media::OUTPUT_DEVICE_STATUS_OK;
@@ -139,8 +140,8 @@ class AudioDestinationTest
     }
     const int expected_frames_processed =
         std::ceil(exact_frames_required /
-                  static_cast<double>(destination->RenderQuantumFrames())) *
-        destination->RenderQuantumFrames();
+                  static_cast<double>(render_quantum_frames)) *
+        render_quantum_frames;
 
     // TODO(crbug.com/329876634): Replace it so that it tests the path passing
     // through the bad device_params (`if (!device_params.IsValid())`) in the

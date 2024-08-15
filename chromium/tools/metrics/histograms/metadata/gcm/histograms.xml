@@ -102,7 +102,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="GCM.DeliveredToAppHandler{AppHandler}" enum="BooleanDelivered"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>peter@chromium.org</owner>
   <owner>rushans@google.com</owner>
   <summary>
@@ -171,7 +171,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="GCM.RegistrationRequestStatus"
-    enum="GCMRegistrationRequestStatus" expires_after="2024-06-30">
+    enum="GCMRegistrationRequestStatus" expires_after="2024-09-22">
   <owner>peter@chromium.org</owner>
   <summary>
     Status code of the outcome of a GCM registration request. The Unknown error
@@ -182,7 +182,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="GCM.SendWebPushMessageResult" enum="SendWebPushMessageResult"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>knollr@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>

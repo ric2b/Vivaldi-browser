@@ -20,7 +20,9 @@ found in the LICENSE file.
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:visibility="visible"
-    android:orientation="horizontal" >
+    android:orientation="horizontal"
+    android:paddingStart="@dimen/toolbar_buttons_offset_padding"
+    android:paddingEnd="@dimen/toolbar_buttons_offset_padding" >
 
     <!-- Vivaldi -->
     <org.vivaldi.browser.toolbar.PanelButton
@@ -75,9 +77,6 @@ found in the LICENSE file.
         android:layout_gravity="top|end"
         android:focusable="true"
         android:focusableInTouchMode="true">
-
-        <!-- Vivaldi -->
-        <include layout="@layout/tracker_shield_button"/>
 
         <ViewStub
             android:id="@+id/optional_button_stub"

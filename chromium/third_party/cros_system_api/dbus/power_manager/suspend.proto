@@ -64,11 +64,8 @@ message SuspendImminent {
   }
 
   enum Action {
-    // The system is going to suspend, hibernate, or both. (The exact
-    // destination power state is not specified.)
+    // The system is going to suspend.
     SUSPEND = 0;
-    // The system is about to resume from hibernate.
-    HIBERNATE_RESUME = 1;
   }
 
   // Unique ID corresponding to this suspend request. This is included in the
@@ -101,8 +98,6 @@ message SuspendDone {
   enum SuspendState {
     // Suspended to RAM, S0ix or S3.
     TO_RAM = 0;
-    // Hibernated to disk, S4 or lower.
-    TO_DISK = 1;
   }
 
   // Unique ID corresponding to the suspend request.
@@ -175,12 +170,4 @@ message DarkResumeWakeReason {
 
   // Wake reason that caused the current dark resume.
   optional string wake_reason = 1;
-}
-
-// Included in powerd's HibernateResumeReady signal.
-message HibernateResumeReady {
-  // Next ID to use: 2
-
-  // Indicates the suspend_id that's ready to resume.
-  optional int32 suspend_id = 1;
 }

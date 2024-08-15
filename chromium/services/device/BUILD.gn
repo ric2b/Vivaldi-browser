@@ -5,6 +5,7 @@
 import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/features.gni")
+import("//services/device/public/cpp/geolocation/buildflags.gni")
 import("//testing/test.gni")
 
 if (is_android) {
@@ -46,6 +47,7 @@ source_set("lib") {
     "//services/device/screen_orientation",
     "//services/device/time_zone_monitor",
     "//services/device/usb/mojo",
+    "//services/device/vibration",
     "//services/device/wake_lock",
     "//services/service_manager/public/cpp",
     "//ui/gfx",
@@ -64,7 +66,6 @@ source_set("lib") {
     deps += [
       "//services/device/battery",
       "//services/device/hid",
-      "//services/device/vibration",
     ]
   }
 
@@ -170,7 +171,6 @@ source_set("tests") {
     ":test_support",
     "//base",
     "//base/test:test_support",
-    "//base/third_party/dynamic_annotations",
     "//build:chromeos_buildflags",
     "//components/system_cpu:test_support",
     "//components/variations",
@@ -187,6 +187,7 @@ source_set("tests") {
     "//services/device/public/cpp/power_monitor",
     "//services/device/public/mojom",
     "//services/device/public/mojom:geolocation_internals",
+    "//services/device/vibration",
     "//services/device/wake_lock",
     "//services/network:test_support",
     "//testing/gmock",
@@ -205,7 +206,7 @@ source_set("tests") {
     ]
   }
 
-  if (is_chromeos || is_mac) {
+  if (os_level_geolocation_permission_supported) {
     sources += [ "public/cpp/geolocation/geolocation_system_permission_manager_unittest.cc" ]
   }
 
@@ -257,12 +258,7 @@ source_set("tests") {
       "geolocation/network_location_provider_unittest.cc",
       "geolocation/wifi_data_provider_common_unittest.cc",
     ]
-    deps += [
-      ":device_service_jni_headers",
-      "//services/device/public/java:geolocation_java_test_support",
-      "//services/device/usb:java",
-      "//services/device/vibration/android:vibration_jni_headers",
-    ]
+    deps += [ ":device_service_jni_headers" ]
   } else {
     sources += [
       "battery/battery_monitor_impl_unittest.cc",
@@ -274,7 +270,6 @@ source_set("tests") {
       "//components/variations:test_support",
       "//services/device/battery",
       "//services/device/hid",
-      "//services/device/vibration",
     ]
 
     if ((!is_linux && !is_chromeos) || use_udev) {
@@ -366,7 +361,7 @@ source_set("tests") {
   }
 
   # UsbContext is a libusb-specific object.
-  # TODO(https://crbug.com/1096743) Remove these tests.
+  # TODO(crbug.com/40136337) Remove these tests.
   if (is_mac) {
     sources += [ "usb/usb_context_unittest.cc" ]
     deps += [ "//third_party/libusb" ]

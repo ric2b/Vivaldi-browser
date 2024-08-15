@@ -132,6 +132,19 @@ sign_bundle("sign_search_widget_extension") {
   ]
 }
 
+sign_bundle("sign_push_notification_service_extension") {
+  bindir = "$root_out_dir/ios_clang_arm64_app_ext/obj/ios/chrome/push_notification_service_extension/appex"
+  gendir = "$root_out_dir/ios_clang_arm64_app_ext/gen/ios/chrome/push_notification_service_extension/appex"
+
+  binary = "$bindir/push_notification_service_extension"
+  entitlements = "$gendir/push_notification_service_extension.appex.entitlements"
+  app = "${vivaldi_profiles}/push_notification_service_extension.appex"
+  plists =[
+    "$gendir/appex_generate_info_plist.plist",
+    "$gendir/appex_partial_info.plist",
+  ]
+}
+
 sign_bundle("sign_MaterialComponents") {
   bindir = "$root_out_dir/obj/ios/third_party/material_components_ios"
 
@@ -169,5 +182,6 @@ sign_bundle("sign_ios") {
     ":sign_widget_kit_extension",
     ":sign_intents_extension",
     ":sign_share_extension",
+    ":sign_push_notification_service_extension",
   ]
 }

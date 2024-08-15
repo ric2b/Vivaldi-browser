@@ -1494,7 +1494,7 @@ FIO_compressZstdFrame(FIO_ctx_t* const fCtx,
                       int compressionLevel, U64* readsize)
 {
     cRess_t const ress = *ressPtr;
-    IOJob_t *writeJob = AIO_WritePool_acquireJob(ressPtr->writeCtx);
+    IOJob_t* writeJob = AIO_WritePool_acquireJob(ressPtr->writeCtx);
 
     U64 compressedfilesize = 0;
     ZSTD_EndDirective directive = ZSTD_e_continue;
@@ -1526,8 +1526,7 @@ FIO_compressZstdFrame(FIO_ctx_t* const fCtx,
       CHECK( ZSTD_CCtx_setPledgedSrcSize(ress.cctx, prefs->streamSrcSize) );
     }
 
-    {
-        int windowLog;
+    {   int windowLog;
         UTIL_HumanReadableSize_t windowSize;
         CHECK(ZSTD_CCtx_getParameter(ress.cctx, ZSTD_c_windowLog, &windowLog));
         if (windowLog == 0) {
@@ -1542,7 +1541,6 @@ FIO_compressZstdFrame(FIO_ctx_t* const fCtx,
         windowSize = UTIL_makeHumanReadableSize(MAX(1ULL, MIN(1ULL << windowLog, pledgedSrcSize)));
         DISPLAYLEVEL(4, "Decompression will require %.*f%s of memory\n", windowSize.precision, windowSize.value, windowSize.suffix);
     }
-    (void)srcFileName;
 
     /* Main compression loop */
     do {
@@ -1907,6 +1905,110 @@ static const char *compressedFileExtensions[] = {
     TXZ_EXTENSION,
     LZ4_EXTENSION,
     TLZ4_EXTENSION,
+    ".7z",
+    ".aa3",
+    ".aac",
+    ".aar",
+    ".ace",
+    ".alac",
+    ".ape",
+    ".apk",
+    ".apng",
+    ".arc",
+    ".archive",
+    ".arj",
+    ".ark",
+    ".asf",
+    ".avi",
+    ".avif",
+    ".ba",
+    ".br",
+    ".bz2",
+    ".cab",
+    ".cdx",
+    ".chm",
+    ".cr2",
+    ".divx",
+    ".dmg",
+    ".dng",
+    ".docm",
+    ".docx",
+    ".dotm",
+    ".dotx",
+    ".dsft",
+    ".ear",
+    ".eftx",
+    ".emz",
+    ".eot",
+    ".epub",
+    ".f4v",
+    ".flac",
+    ".flv",
+    ".gho",
+    ".gif",
+    ".gifv",
+    ".gnp",
+    ".iso",
+    ".jar",
+    ".jpeg",
+    ".jpg",
+    ".jxl",
+    ".lz",
+    ".lzh",
+    ".m4a",
+    ".m4v",
+    ".mkv",
+    ".mov",
+    ".mp2",
+    ".mp3",
+    ".mp4",
+    ".mpa",
+    ".mpc",
+    ".mpe",
+    ".mpeg",
+    ".mpg",
+    ".mpl",
+    ".mpv",
+    ".msi",
+    ".odp",
+    ".ods",
+    ".odt",
+    ".ogg",
+    ".ogv",
+    ".otp",
+    ".ots",
+    ".ott",
+    ".pea",
+    ".png",
+    ".pptx",
+    ".qt",
+    ".rar",
+    ".s7z",
+    ".sfx",
+    ".sit",
+    ".sitx",
+    ".sqx",
+    ".svgz",
+    ".swf",
+    ".tbz2",
+    ".tib",
+    ".tlz",
+    ".vob",
+    ".war",
+    ".webm",
+    ".webp",
+    ".wma",
+    ".wmv",
+    ".woff",
+    ".woff2",
+    ".wvl",
+    ".xlsx",
+    ".xpi",
+    ".xps",
+    ".zip",
+    ".zipx",
+    ".zoo",
+    ".zpaq",
     NULL
 };
 
@@ -2335,11 +2437,14 @@ FIO_decompressZstdFrame(FIO_ctx_t* const fCtx, dRess_t* ress,
                         U64 alreadyDecoded)  /* for multi-frames streams */
 {
     U64 frameSize = 0;
-    IOJob_t *writeJob = AIO_WritePool_acquireJob(ress->writeCtx);
+    const char* srcFName20 = srcFileName;
+    IOJob_t* writeJob = AIO_WritePool_acquireJob(ress->writeCtx);
+    assert(writeJob);
 
-    /* display last 20 characters only */
+    /* display last 20 characters only when not --verbose */
     {   size_t const srcFileLength = strlen(srcFileName);
-        if (srcFileLength>20) srcFileName += srcFileLength-20;
+        if ((srcFileLength>20) && (g_display_prefs.displayLevel<3))
+            srcFName20 += srcFileLength-20;
     }
 
     ZSTD_DCtx_reset(ress->dctx, ZSTD_reset_session_only);
@@ -2366,19 +2471,12 @@ FIO_decompressZstdFrame(FIO_ctx_t* const fCtx, dRess_t* ress,
         AIO_WritePool_enqueueAndReacquireWriteJob(&writeJob);
         frameSize += outBuff.pos;
         if (fCtx->nbFilesTotal > 1) {
-            size_t srcFileNameSize = strlen(srcFileName);
-            if (srcFileNameSize > 18) {
-                const char* truncatedSrcFileName = srcFileName + srcFileNameSize - 15;
-                DISPLAYUPDATE_PROGRESS(
-                        "\rDecompress: %2u/%2u files. Current: ...%s : %.*f%s...    ",
-                        fCtx->currFileIdx+1, fCtx->nbFilesTotal, truncatedSrcFileName, hrs.precision, hrs.value, hrs.suffix);
-            } else {
-                DISPLAYUPDATE_PROGRESS("\rDecompress: %2u/%2u files. Current: %s : %.*f%s...    ",
-                            fCtx->currFileIdx+1, fCtx->nbFilesTotal, srcFileName, hrs.precision, hrs.value, hrs.suffix);
-            }
+            DISPLAYUPDATE_PROGRESS(
+                        "\rDecompress: %2u/%2u files. Current: %s : %.*f%s...    ",
+                        fCtx->currFileIdx+1, fCtx->nbFilesTotal, srcFName20, hrs.precision, hrs.value, hrs.suffix);
         } else {
             DISPLAYUPDATE_PROGRESS("\r%-20.20s : %.*f%s...     ",
-                            srcFileName, hrs.precision, hrs.value, hrs.suffix);
+                            srcFName20, hrs.precision, hrs.value, hrs.suffix);
         }
 
         AIO_ReadPool_consumeBytes(ress->readCtx, inBuff.pos);

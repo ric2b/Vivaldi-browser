@@ -60,8 +60,7 @@ class DirectPluginOpKernelConstruction : public PluginOpKernelConstruction {
 
 class DirectPluginOpKernelContext : public PluginOpKernelContext {
  public:
-  explicit DirectPluginOpKernelContext(void* ctx)
-      : ctx_(reinterpret_cast<OpKernelContext*>(ctx)) {}
+  explicit DirectPluginOpKernelContext(OpKernelContext* ctx) : ctx_(ctx) {}
 
   std::string_view GetResourceMgrDefaultContainerName() override;
 
@@ -72,8 +71,8 @@ class DirectPluginOpKernelContext : public PluginOpKernelContext {
                                 void* create_func_args,
                                 void (*delete_func)(void*)) override;
 
-  PluginCoordinationServiceAgent* GetPluginCoordinationServiceAgent()
-      const override {
+  std::unique_ptr<PluginCoordinationServiceAgent>
+  GetPluginCoordinationServiceAgent() const override {
     return CreatePluginCoordinationServiceAgent(
         ctx_->coordination_service_agent());
   }

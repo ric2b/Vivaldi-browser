@@ -231,6 +231,10 @@ void DumpAccessibilityTestBase::ChooseFeatures(
   // corresponding code in AXPosition on the browser that collects those
   // markers.
   enabled_features->emplace_back(features::kUseAXPositionForDocumentMarkers);
+  // For improved test coverage ahead of a finch trial, enable the feature that
+  // prunes redundant text for inline text boxes.
+  enabled_features->emplace_back(
+      features::kAccessibilityPruneRedundantInlineText);
 }
 
 std::string DumpAccessibilityTestBase::DumpTreeAsString() const {
@@ -377,10 +381,9 @@ void DumpAccessibilityTestBase::RunTestForPlatform(
     const base::FilePath file_path,
     const char* file_dir,
     const base::FilePath::StringType& expectations_qualifier) {
-  // Disable the "hot tracked" state (set when the mouse is hovering over
+  // Ignore the hovered state (set when the mouse is hovering over
   // an object) because it makes test output change based on the mouse position.
-  BrowserAccessibilityStateImpl::GetInstance()
-      ->set_disable_hot_tracking_for_testing(true);
+  BrowserAccessibility::ignore_hovered_state_for_testing_ = true;
 
   // Normally some accessibility events that would be fired are suppressed or
   // delayed, depending on what has focus or the type of event. For testing,
@@ -434,7 +437,7 @@ void DumpAccessibilityTestBase::RunTestForPlatform(
     AccessibilityNotificationWaiter accessibility_waiter(
         web_contents, mode, ax::mojom::Event::kLoadComplete);
     EXPECT_TRUE(NavigateToURL(shell(), url));
-    // TODO(https://crbug.com/1332468): Investigate why this does not return
+    // TODO(crbug.com/40844856): Investigate why this does not return
     // true.
     ASSERT_TRUE(accessibility_waiter.WaitForNotification());
   }
@@ -623,7 +626,7 @@ DumpAccessibilityTestBase::CaptureEvents(InvokeAction invoke_action,
   // Wait for at least one event. This may unblock either when |waiter|
   // observes either an ax::mojom::Event or ui::AXEventGenerator::Event, or
   // when |event_recorder| records a platform event.
-  // TODO(https://crbug.com/1332468): Investigate why this does not return
+  // TODO(crbug.com/40844856): Investigate why this does not return
   // true.
   EXPECT_TRUE(waiter.WaitForNotification());
 

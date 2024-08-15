@@ -30,7 +30,6 @@
 #include "fusebox/dbus-constants.h"
 #include "hammerd/dbus-constants.h"
 #include "hermes/dbus-constants.h"
-#include "hiberman/dbus-constants.h"
 #include "hps/dbus-constants.h"
 #include "ip_peripheral/dbus-constants.h"
 #include "login_manager/dbus-constants.h"
@@ -43,8 +42,10 @@
 #include "patchpanel/dbus-constants.h"
 #include "permission_broker/dbus-constants.h"
 #include "power_manager/dbus-constants.h"
+#include "primary_io_manager/dbus-constants.h"
 #include "printscanmgr/dbus-constants.h"
 #include "privacy_screen/dbus-constants.h"
+#include "regmon/dbus-constants.h"
 #include "resource_manager/dbus-constants.h"
 #include "rgbkbd/dbus-constants.h"
 #include "rmad/dbus-constants.h"
@@ -554,13 +555,6 @@ constexpr char kRemoveHostnameIpMappingMethod[] = "RemoveHostnameIpMapping";
 
 namespace arc {
 
-constexpr char kArcServiceName[] = "org.chromium.Arc";
-constexpr char kArcServicePath[] = "/org/chromium/Arc";
-constexpr char kArcInterfaceName[] = "org.chromium.Arc";
-
-// Signal
-constexpr char kArcStopped[] = "ArcStopped";
-
 namespace keymaster {
 constexpr char kArcKeymasterServiceName[] = "org.chromium.ArcKeymaster";
 constexpr char kArcKeymasterServicePath[] = "/org/chromium/ArcKeymaster";
@@ -603,6 +597,17 @@ constexpr char kMountMethod[] = "Mount";
 constexpr char kUnmountMethod[] = "Unmount";
 constexpr char kOpenFileMethod[] = "OpenFile";
 }  // namespace appfuse
+
+namespace tracing {
+// D-Bus service constants.
+constexpr char kArcTracingServiceName[] = "org.chromium.ArcTracing";
+constexpr char kArcTracingServicePath[] = "/org/chromium/ArcTracing";
+constexpr char kArcTracingInterfaceName[] = "org.chromium.ArcTracing";
+
+// Method names.
+constexpr char kArcTracingStartMethod[] = "StartTrace";
+constexpr char kArcTracingGetStatusMethod[] = "GetStatus";
+}  // namespace tracing
 
 }  // namespace arc
 

@@ -7,7 +7,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux Builder (Wayland)",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-linux-archive",
@@ -34,7 +34,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux Tests (Wayland)",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-linux-archive",
@@ -58,7 +58,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Linux Builder (Wayland)",
-                "project": "chromium-m124"
+                "project": "chromium-m126"
               }
             }
           }
@@ -68,7 +68,7 @@
         {
           "bucket": "ci",
           "builder": "Linux Tests (Wayland)",
-          "project": "chromium-m124"
+          "project": "chromium-m126"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -76,7 +76,8 @@
           "builder": "linux-wayland-rel",
           "group": "tryserver.chromium.linux"
         }
-      ]
+      ],
+      "targets_spec_directory": "src/infra/config/generated/builders/ci/Linux Tests (Wayland)/targets"
     }
   },
   "$recipe_engine/resultdb/test_presentation": {

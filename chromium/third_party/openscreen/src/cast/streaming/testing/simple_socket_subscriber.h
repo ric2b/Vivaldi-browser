@@ -12,7 +12,7 @@ namespace openscreen::cast {
 
 class SimpleSubscriber : public Environment::SocketSubscriber {
   void OnSocketReady() {}
-  void OnSocketInvalid(Error error) { ASSERT_TRUE(error.ok()) << error; }
+  void OnSocketInvalid(const Error& error) { ASSERT_TRUE(error.ok()) << error; }
 };
 
 }  // namespace openscreen::cast

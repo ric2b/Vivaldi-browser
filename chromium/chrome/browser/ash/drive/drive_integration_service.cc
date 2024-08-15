@@ -50,6 +50,8 @@
 #include "chrome/common/pref_names.h"
 #include "chromeos/ash/components/drivefs/drivefs_bootstrap.h"
 #include "chromeos/ash/components/drivefs/drivefs_pinning_manager.h"
+#include "chromeos/ash/components/drivefs/mojom/drivefs.mojom-shared.h"
+#include "chromeos/ash/components/drivefs/mojom/notifications.mojom.h"
 #include "chromeos/components/drivefs/mojom/drivefs_native_messaging.mojom.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/crosapi/mojom/drive_integration_service.mojom.h"
@@ -585,6 +587,24 @@ class DriveIntegrationService::DriveFsHolder
     profile_->GetPrefs()->SetString(prefs::kDriveFsMirrorSyncMachineRootId, id);
   }
 
+  void PersistNotification(
+      drivefs::mojom::DriveFsNotificationPtr notification) override {
+    if (!ash::features::IsDriveFsMirroringEnabled()) {
+      return;
+    }
+    switch (notification->which()) {
+      case drivefs::mojom::DriveFsNotification::Tag::kMirrorDownloadDeleted:
+        persisted_notification_
+            [drivefs::mojom::DriveFsNotification::Tag::kMirrorDownloadDeleted]
+                .emplace_back(
+                    notification->get_mirror_download_deleted()->parent_title);
+        break;
+      case drivefs::mojom::DriveFsNotification::Tag::kUnknown:
+        LOG(ERROR) << "unknown notification received";
+        break;
+    }
+  }
+
   const raw_ptr<Profile> profile_;
   const raw_ptr<drivefs::DriveFsHost::MountObserver> mount_observer_;
 
@@ -599,6 +619,10 @@ class DriveIntegrationService::DriveFsHolder
   mojo::Remote<crosapi::mojom::DriveFsNativeMessageHostBridge>
       native_message_host_bridge_;
   base::OnceClosure pending_connect_to_extension_request_;
+  // Notification received from DriveFS which requires persistence.
+  std::unordered_map<drivefs::mojom::DriveFsNotification::Tag,
+                     std::vector<std::string>>
+      persisted_notification_;
 };
 
 DriveIntegrationService::DriveIntegrationService(
@@ -1356,10 +1380,63 @@ void DriveIntegrationService::OnEnableMirroringStatusUpdate(
     drivefs::mojom::MirrorSyncStatus status) {
   mirroring_enabled_ = (status == drivefs::mojom::MirrorSyncStatus::kSuccess);
   if (mirroring_enabled_) {
+    // Add ~/MyFiles as sync root by default.
+    const base::FilePath my_files_path =
+        file_manager::util::GetMyFilesFolderForProfile(profile_);
+    ToggleSyncForPath(
+        my_files_path, drivefs::mojom::MirrorPathStatus::kStart,
+        base::BindOnce(&DriveIntegrationService::OnMyFilesSyncRootAdded,
+                       weak_ptr_factory_.GetWeakPtr()));
+  }
+}
+
+void DriveIntegrationService::OnMyFilesSyncRootAdded(drive::FileError status) {
+  if (status != drive::FILE_ERROR_OK) {
+    LOG(ERROR) << "Add sync root for ~/MyFiles failed: " << status;
+    // We need to turn off the Pref which will turn off the toggle in Settings
+    // UI, so users can turn it on again to add MyFiles next time.
+    GetPrefs()->SetBoolean(prefs::kDriveFsEnableMirrorSync, false);
+  } else {
     for (Observer& observer : observers_) {
       DCHECK_EQ(observer.GetService(), this);
       observer.OnMirroringEnabled();
     }
+  }
+}
+
+void DriveIntegrationService::OnGetSyncPathsForRemovingAllRoots(
+    drive::FileError status,
+    const std::vector<::base::FilePath>& paths) {
+  // If the GetSyncPaths fails or there's no sync roots, we toggle the syncing
+  // off directly.
+  if (status != drive::FILE_ERROR_OK || paths.size() == 0) {
+    ToggleMirroring(
+        false,
+        base::BindOnce(&DriveIntegrationService::OnDisableMirroringStatusUpdate,
+                       weak_ptr_factory_.GetWeakPtr()));
+    return;
+  }
+
+  number_of_sync_roots_to_remove_ = paths.size();
+  for (const base::FilePath& path : paths) {
+    ToggleSyncForPath(
+        path, drivefs::mojom::MirrorPathStatus::kStop,
+        base::BindOnce(&DriveIntegrationService::OnSyncRootRemoved,
+                       weak_ptr_factory_.GetWeakPtr(), path));
+  }
+}
+
+void DriveIntegrationService::OnSyncRootRemoved(const base::FilePath& path,
+                                                drive::FileError status) {
+  LOG_IF(ERROR, status != drive::FILE_ERROR_OK)
+      << "Failed to remove Sync root: " << path;
+  // Even the removal fails we still proceed to turn the syncing off.
+  number_of_sync_roots_to_remove_--;
+  if (number_of_sync_roots_to_remove_ == 0) {
+    ToggleMirroring(
+        false,
+        base::BindOnce(&DriveIntegrationService::OnDisableMirroringStatusUpdate,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 }
 
@@ -1723,10 +1800,10 @@ void DriveIntegrationService::OnMirroringPrefChanged() {
         base::BindOnce(&DriveIntegrationService::OnEnableMirroringStatusUpdate,
                        weak_ptr_factory_.GetWeakPtr()));
   } else {
-    ToggleMirroring(
-        false,
-        base::BindOnce(&DriveIntegrationService::OnDisableMirroringStatusUpdate,
-                       weak_ptr_factory_.GetWeakPtr()));
+    // Remove all sync root before disabling mirror sync.
+    GetSyncingPaths(base::BindOnce(
+        &DriveIntegrationService::OnGetSyncPathsForRemovingAllRoots,
+        weak_ptr_factory_.GetWeakPtr()));
   }
 }
 
@@ -1788,7 +1865,7 @@ DriveIntegrationServiceFactory::DriveIntegrationServiceFactory()
           "DriveIntegrationService",
           ProfileSelections::Builder()
               .WithRegular(ProfileSelection::kRedirectedToOriginal)
-              // TODO(crbug.com/1418376): Check if this service is needed in
+              // TODO(crbug.com/40257657): Check if this service is needed in
               // Guest mode.
               .WithGuest(ProfileSelection::kRedirectedToOriginal)
               .Build()) {

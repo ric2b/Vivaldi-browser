@@ -160,7 +160,7 @@ suite('Consent', function() {
     // becomes scrollable with a separator in the bottom. The collapse section
     // is opened and the native UI is notified about the action.
     testClickButton('#expandSection cr-expand-button', page);
-    // TODO(crbug.com/1286276): Add testing for the scroll position.
+    // TODO(crbug.com/40210776): Add testing for the scroll position.
     const [openedAction] =
         await browserProxy.whenCalled('promptActionOccurred');
     assertEquals(
@@ -444,7 +444,7 @@ suite('Combined', function() {
         browserProxy, PrivacySandboxPromptAction.CONSENT_SHOWN);
     const consentStep = getActiveStep()!;
     assertEquals(consentStep!.id, PrivacySandboxCombinedDialogStep.CONSENT);
-    // TODO(crbug.com/1378703): Test scrolling behaviour.
+    // TODO(crbug.com/40244046): Test scrolling behaviour.
     // The collapse section is closed.
     const learnMoreElement = consentStep!.shadowRoot!.querySelector(
         'privacy-sandbox-dialog-learn-more');
@@ -582,7 +582,7 @@ suite('NoticeEEA', function() {
         browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
     const noticeStep = getActiveStep();
     assertEquals(noticeStep!.id, PrivacySandboxCombinedDialogStep.NOTICE);
-    // TODO(crbug.com/1378703): Test scrolling behaviour.
+    // TODO(crbug.com/40244046): Test scrolling behaviour.
     // The collapse section is closed.
     const learnMoreElement = noticeStep!.shadowRoot!.querySelector(
         'privacy-sandbox-dialog-learn-more');
@@ -703,7 +703,7 @@ suite('NoticeROW', function() {
   test('learnMoreClicked', async function() {
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
-    // TODO(crbug.com/1378703): Test scrolling behaviour.
+    // TODO(crbug.com/40244046): Test scrolling behaviour.
     // The collapse section is closed.
     const learnMoreElement =
         page.shadowRoot!.querySelector('privacy-sandbox-dialog-learn-more');
@@ -768,7 +768,7 @@ suite('NoticeRestricted', function() {
 
   // TODO(b/277180533): determine whether some of the more button test logic can
   // be shared.
-  // TODO(crbug.com/1432915): various more button test issues. Re-enable once
+  // TODO(crbug.com/40903181): various more button test issues. Re-enable once
   // resolved.
   test.skip('moreButton', async function() {
     await verifyActionOccured(

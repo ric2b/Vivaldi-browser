@@ -6,9 +6,13 @@ import("//build/buildflag_header.gni")
 import("//components/plus_addresses/buildflags.gni")
 
 source_set("types") {
-  sources = [ "plus_address_types.h" ]
+  sources = [
+    "plus_address_types.cc",
+    "plus_address_types.h",
+  ]
   public_deps = [
     "//base",
+    "//components/affiliations/core/browser:affiliations",
     "//components/autofill/core/browser",
   ]
 }
@@ -18,7 +22,10 @@ source_set("parsing") {
     "plus_address_parsing_utils.cc",
     "plus_address_parsing_utils.h",
   ]
-  deps = []
+
+  # TODO(b/322147254): The webdata dependency only exists to check if sync
+  # support is enabled. Remove when fully launched.
+  deps = [ "//components/plus_addresses/webdata" ]
   public_deps = [
     ":types",
     "//base",
@@ -28,6 +35,8 @@ source_set("parsing") {
 
 source_set("plus_addresses") {
   sources = [
+    "affiliations/plus_address_affiliation_match_helper.cc",
+    "affiliations/plus_address_affiliation_match_helper.h",
     "affiliations/plus_address_affiliation_source_adapter.cc",
     "affiliations/plus_address_affiliation_source_adapter.h",
     "plus_address_allocator.h",
@@ -87,6 +96,7 @@ buildflag_header("plus_addresses_buildflags") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "affiliations/plus_address_affiliation_match_helper_unittest.cc",
     "affiliations/plus_address_affiliation_source_adapter_unittest.cc",
     "plus_address_http_client_impl_unittest.cc",
     "plus_address_jit_allocator_unittest.cc",
@@ -125,6 +135,7 @@ static_library("test_support") {
   ]
   deps = [
     "//base",
+    "//base/test:test_support",
     "//components/autofill/core/browser",
     "//testing/gmock",
   ]

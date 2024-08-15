@@ -20,15 +20,24 @@ import org.chromium.chrome.browser.util.BrowserUiUtils.HostSurface;
 /** The utility class for magic stack. */
 public class HomeModulesMetricsUtils {
     @VisibleForTesting static final String HISTOGRAM_OS_PREFIX = "MagicStack.Clank.";
-    @VisibleForTesting static final String HISTOGRAM_MAGIC_STACK_MODULE_CLICK = ".Module.Click.";
+    @VisibleForTesting static final String HISTOGRAM_MAGIC_STACK_MODULE_CLICK = ".Module.Click";
+    @VisibleForTesting static final String HISTOGRAM_MAGIC_STACK_MODULE = ".Module.";
+    @VisibleForTesting static final String HISTOGRAM_MAGIC_STACK_HOST_SURFACE_REGULAR = ".Regular";
+    @VisibleForTesting static final String HISTOGRAM_MAGIC_STACK_HOST_SURFACE_STARTUP = ".Startup";
 
     @VisibleForTesting
-    static final String HISTOGRAM_MAGIC_STACK_MODULE_IMPRESSION = ".Module.TopImpression.";
+    static final String HISTOGRAM_MAGIC_STACK_MODULE_CLICK_WITH_POSITION = ".Click";
 
-    @VisibleForTesting static final String HISTOGRAM_CONTEXT_MENU_SHOWN = ".ContextMenu.Shown.";
+    @VisibleForTesting static final String HISTOGRAM_MAGIC_STACK_MODULE_BUILD = ".Build";
+    static final String HISTOGRAM_MAGIC_STACK_MODULE_IMPRESSION_WITH_POSITION = ".Impression";
 
     @VisibleForTesting
-    static final String HISTOGRAM_CONTEXT_MENU_REMOVE_MODULE = ".ContextMenu.RemoveModule.";
+    static final String HISTOGRAM_MAGIC_STACK_MODULE_IMPRESSION = ".Module.TopImpressionV2";
+
+    @VisibleForTesting static final String HISTOGRAM_CONTEXT_MENU_SHOWN = ".ContextMenu.ShownV2";
+
+    @VisibleForTesting
+    static final String HISTOGRAM_CONTEXT_MENU_REMOVE_MODULE = ".ContextMenu.RemoveModuleV2";
 
     @VisibleForTesting
     static final String HISTOGRAM_CONTEXT_MENU_OPEN_CUSTOMIZE_SETTINGS =
@@ -42,7 +51,7 @@ public class HomeModulesMetricsUtils {
             ".Module.FetchDataTimeoutDurationMs.";
 
     @VisibleForTesting
-    static final String HISTOGRAM_MODULE_FETCH_DATA_TIMEOUT_TYPE = ".Module.FetchDataTimeoutType.";
+    static final String HISTOGRAM_MODULE_FETCH_DATA_TIMEOUT_TYPE = ".Module.FetchDataTimeoutTypeV2";
 
     @VisibleForTesting
     static final String HISTOGRAM_MODULE_FETCH_DATA_FAILED_DURATION_MS =
@@ -73,7 +82,11 @@ public class HomeModulesMetricsUtils {
     @VisibleForTesting
     static final String HISTOGRAM_CONFIGURATION_TURN_OFF_MODULE = "Settings.TurnOffModule";
 
-    @VisibleForTesting static final String HISTOGRAM_MAGIC_STACK_MODULE_BUILD = ".Module.Build.";
+    private static final String SINGLE_TAB_FRESHNESS_INPUT_CONTEXT = "single_tab_freshness";
+
+    private static final String PRICE_CHANGE_FRESHNESS_INPUT_CONTEXT = "price_change_freshness";
+
+    private static final String TAB_RESUMPTION_FRESHNESS_INPUT_CONTEXT = "tab_resumption_freshness";
 
     private static final String HOME_MODULES_SHOW_ALL_MODULES_PARAM = "show_all_modules";
     public static final BooleanCachedFieldTrialParameter HOME_MODULES_SHOW_ALL_MODULES =
@@ -81,6 +94,11 @@ public class HomeModulesMetricsUtils {
                     ChromeFeatureList.MAGIC_STACK_ANDROID,
                     HOME_MODULES_SHOW_ALL_MODULES_PARAM,
                     false);
+
+    private static final String HOME_MODULES_COMBINE_TABS_PARAM = "show_tabs_in_one_module";
+    public static final BooleanCachedFieldTrialParameter HOME_MODULES_COMBINE_TABS =
+            ChromeFeatureList.newBooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.MAGIC_STACK_ANDROID, HOME_MODULES_COMBINE_TABS_PARAM, false);
 
     /**
      * Returns a string name of a module. Remember to update the variant ModuleType in
@@ -94,6 +112,25 @@ public class HomeModulesMetricsUtils {
                 return "PriceChange";
             case (TAB_RESUMPTION):
                 return "TabResumption";
+            default:
+                assert false : "Module type not supported!";
+                return null;
+        }
+    }
+
+    /**
+     * Returns the freshness score key used by InputContext for the given module. Remember to update
+     * the variant ModuleType in tools/metrics/histograms/metadata/magic_stack/histograms.xml when
+     * adding a new module type
+     */
+    public static String getFreshnessInputContextString(@ModuleType int moduleType) {
+        switch (moduleType) {
+            case SINGLE_TAB:
+                return SINGLE_TAB_FRESHNESS_INPUT_CONTEXT;
+            case (PRICE_CHANGE):
+                return PRICE_CHANGE_FRESHNESS_INPUT_CONTEXT;
+            case (TAB_RESUMPTION):
+                return TAB_RESUMPTION_FRESHNESS_INPUT_CONTEXT;
             default:
                 assert false : "Module type not supported!";
                 return null;
@@ -119,9 +156,21 @@ public class HomeModulesMetricsUtils {
      *
      * @param hostSurface The type of the host surface of the magic stack.
      * @param moduleType The type of module.
+     * @param modulePosition The position of the module on the recyclerview.
+     * @param isShownAtStartup Whether the host surface is a home surface which is shown at startup.
      */
-    public static void recordModuleShown(@HostSurface int hostSurface, @ModuleType int moduleType) {
+    public static void recordModuleShown(
+            @HostSurface int hostSurface,
+            @ModuleType int moduleType,
+            int modulePosition,
+            boolean isShownAtStartup) {
         recordUma(hostSurface, moduleType, HISTOGRAM_MAGIC_STACK_MODULE_IMPRESSION);
+        recordUmaWithPosition(
+                hostSurface,
+                HISTOGRAM_MAGIC_STACK_MODULE_IMPRESSION_WITH_POSITION,
+                moduleType,
+                modulePosition,
+                isShownAtStartup);
     }
 
     /**
@@ -284,10 +333,20 @@ public class HomeModulesMetricsUtils {
      * @param hostSurface The type of the host surface of the magic stack.
      * @param moduleType The type of module.
      * @param modulePosition The position of the module which got clicked.
+     * @param isShownAtStartup Whether the host surface is a home surface which is shown at startup.
      */
-    public static void recordModuleClickedPosition(
-            @HostSurface int hostSurface, @ModuleType int moduleType, int modulePosition) {
-        recordUma(hostSurface, HISTOGRAM_MAGIC_STACK_MODULE_CLICK, moduleType, modulePosition);
+    public static void recordModuleClicked(
+            @HostSurface int hostSurface,
+            @ModuleType int moduleType,
+            int modulePosition,
+            boolean isShownAtStartup) {
+        recordUma(hostSurface, moduleType, HISTOGRAM_MAGIC_STACK_MODULE_CLICK);
+        recordUmaWithPosition(
+                hostSurface,
+                HISTOGRAM_MAGIC_STACK_MODULE_CLICK_WITH_POSITION,
+                moduleType,
+                modulePosition,
+                isShownAtStartup);
     }
 
     /**
@@ -297,10 +356,19 @@ public class HomeModulesMetricsUtils {
      * @param hostSurface The type of the host surface of the magic stack.
      * @param moduleType The type of module.
      * @param modulePosition The position of the module when it is built in home modules.
+     * @param isShownAtStartup Whether the host surface is a home surface which is shown at startup.
      */
     public static void recordModuleBuiltPosition(
-            @HostSurface int hostSurface, @ModuleType int moduleType, int modulePosition) {
-        recordUma(hostSurface, HISTOGRAM_MAGIC_STACK_MODULE_BUILD, moduleType, modulePosition);
+            @HostSurface int hostSurface,
+            @ModuleType int moduleType,
+            int modulePosition,
+            boolean isShownAtStartup) {
+        recordUmaWithPosition(
+                hostSurface,
+                HISTOGRAM_MAGIC_STACK_MODULE_BUILD,
+                moduleType,
+                modulePosition,
+                isShownAtStartup);
     }
 
     /**
@@ -320,21 +388,28 @@ public class HomeModulesMetricsUtils {
                 HISTOGRAM_OS_PREFIX + umaName, moduleType, ModuleType.NUM_ENTRIES);
     }
 
-    private static void recordUma(
+    // TODO(b/340578084): Clean up all deprecated metrics.
+    private static void recordUmaWithPosition(
             @HostSurface int hostSurface,
             String umaName,
             @ModuleType int moduleType,
-            int modulePosition) {
+            int modulePosition,
+            boolean isShownAtStartup) {
         assert 0 <= modulePosition && modulePosition < ModuleType.NUM_ENTRIES;
         StringBuilder builder = new StringBuilder();
         builder.append(HISTOGRAM_OS_PREFIX);
         builder.append(BrowserUiUtils.getHostName(hostSurface));
-        builder.append(umaName);
+        if (isShownAtStartup) {
+            builder.append(HISTOGRAM_MAGIC_STACK_HOST_SURFACE_STARTUP);
+        } else {
+            builder.append(HISTOGRAM_MAGIC_STACK_HOST_SURFACE_REGULAR);
+        }
+        builder.append(HISTOGRAM_MAGIC_STACK_MODULE);
         builder.append(getModuleName(moduleType));
-        builder.append(".");
-        builder.append(modulePosition);
+        builder.append(umaName);
         String name = builder.toString();
-        RecordHistogram.recordCount1MHistogram(name, 1);
+        RecordHistogram.recordEnumeratedHistogram(
+                name, modulePosition, HomeModulesCoordinator.MAXIMUM_MODULE_SIZE);
     }
 
     private static void recordUma(

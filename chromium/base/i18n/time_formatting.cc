@@ -31,7 +31,7 @@ namespace base {
 namespace {
 
 UDate ToUDate(const Time& time) {
-  // TODO(crbug.com/1392437): Consider using the `...IgnoringNull` variant and
+  // TODO(crbug.com/40247732): Consider using the `...IgnoringNull` variant and
   // adding a `CHECK(!time.is_null())`; trying to format a null Time as a string
   // is almost certainly an indication that the caller has made a mistake.
   return time.InMillisecondsFSinceUnixEpoch();
@@ -95,7 +95,7 @@ UMeasureFormatWidth DurationWidthToMeasureWidth(DurationFormatWidth width) {
     case DURATION_WIDTH_NARROW: return UMEASFMT_WIDTH_NARROW;
     case DURATION_WIDTH_NUMERIC: return UMEASFMT_WIDTH_NUMERIC;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return UMEASFMT_WIDTH_COUNT;
 }
 
@@ -106,7 +106,7 @@ const char* DateFormatToString(DateFormat format) {
     case DATE_FORMAT_MONTH_WEEKDAY_DAY:
       return UDAT_MONTH_WEEKDAY_DAY;
   }
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return UDAT_YEAR_MONTH_DAY;
 }
 

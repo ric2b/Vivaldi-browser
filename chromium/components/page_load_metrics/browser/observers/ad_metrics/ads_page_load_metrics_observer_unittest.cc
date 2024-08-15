@@ -1412,7 +1412,7 @@ TEST_P(AdsPageLoadMetricsObserverTest, FilterAds_DoNotLogMetrics) {
 // Per-frame histograms recorded when root ad frame is destroyed.
 TEST_P(AdsPageLoadMetricsObserverTest,
        FrameDestroyed_PerFrameHistogramsLogged) {
-  // TODO(https://crbug.com/1301880): RenderFrameHostTester::Detach() doesn't
+  // TODO(crbug.com/40216775): RenderFrameHostTester::Detach() doesn't
   // work well with FencedFrames. Find a graceful way to detach it and enable
   // the test.
   if (WithFencedFrames())
@@ -1558,7 +1558,7 @@ TEST_P(AdsPageLoadMetricsObserverTest, MemoryCacheAdBytesRecorded) {
 }
 
 // UKM metrics for ad page load are recorded correctly.
-// TODO(crbug.com/1043619) test is flaky on bots.
+// TODO(crbug.com/40669132) test is flaky on bots.
 TEST_P(AdsPageLoadMetricsObserverTest, AdPageLoadUKM) {
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   RenderFrameHost* main_frame = NavigateMainFrame(kNonAdUrl);

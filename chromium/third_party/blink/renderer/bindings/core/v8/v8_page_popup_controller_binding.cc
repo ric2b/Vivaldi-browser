@@ -21,15 +21,15 @@ void PagePopupControllerAttributeGetter(
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   v8::Local<v8::Object> holder = info.Holder();
   LocalFrame* frame =
-      To<LocalDOMWindow>(V8Window::ToWrappableUnsafe(holder))->GetFrame();
+      To<LocalDOMWindow>(V8Window::ToWrappableUnsafe(info.GetIsolate(), holder))
+          ->GetFrame();
   if (!frame) {
     V8SetReturnValue(info, v8::Null(info.GetIsolate()));
     return;
   }
-  V8SetReturnValue(
-      info, ToV8Traits<PagePopupController>::ToV8(
-                ScriptState::From(info.GetIsolate()->GetCurrentContext()),
-                PagePopupController::From(*frame->GetPage())));
+  V8SetReturnValue(info, ToV8Traits<PagePopupController>::ToV8(
+                             ScriptState::ForCurrentRealm(info.GetIsolate()),
+                             PagePopupController::From(*frame->GetPage())));
 }
 
 void PagePopupControllerAttributeGetterCallback(
@@ -50,9 +50,10 @@ void V8PagePopupControllerBinding::InstallPagePopupController(
   }
 
   window_wrapper
-      ->SetAccessor(
+      ->SetNativeDataProperty(
           context, V8AtomicString(context->GetIsolate(), "pagePopupController"),
-          PagePopupControllerAttributeGetterCallback)
+          PagePopupControllerAttributeGetterCallback, nullptr,
+          v8::Local<v8::Value>(), v8::ReadOnly)
       .ToChecked();
 }
 

@@ -857,52 +857,73 @@ Example
 
 const char kCodeSigningArgs[] = "code_signing_args";
 const char kCodeSigningArgs_HelpShort[] =
-    "code_signing_args: [string list] Arguments passed to code signing script.";
+    "code_signing_args: [string list] [deprecated] Args for the "
+    "post-processing script.";
 const char kCodeSigningArgs_Help[] =
-    R"(code_signing_args: [string list] Arguments passed to code signing script.
+    R"(code_signing_args: [string list] [deprecated] Args for the post-processing script.
 
-  For create_bundle targets, code_signing_args is the list of arguments to pass
-  to the code signing script. Typically you would use source expansion (see "gn
-  help source_expansion") to insert the source file names.
+  For create_bundle targets, post_processing_args is the list of arguments to
+  pass to the post-processing script. Typically you would use source expansion
+  (see "gn help source_expansion") to insert the source file names.
 
-  See also "gn help create_bundle".
-)";
+  Deprecated: this is an old name for the "post_processing_args" property of
+  the "create_bundle" target. It is still supported to avoid breaking existing
+  build rules, but a warning will be emitted when it is used.
 
-const char kCodeSigningScript[] = "code_signing_script";
-const char kCodeSigningScript_HelpShort[] =
-    "code_signing_script: [file name] Script for code signing.";
-const char kCodeSigningScript_Help[] =
-    R"(code_signing_script: [file name] Script for code signing."
-
-  An absolute or buildfile-relative file name of a Python script to run for a
-  create_bundle target to perform code signing step.
-
-  See also "gn help create_bundle".
-)";
-
-const char kCodeSigningSources[] = "code_signing_sources";
-const char kCodeSigningSources_HelpShort[] =
-    "code_signing_sources: [file list] Sources for code signing step.";
-const char kCodeSigningSources_Help[] =
-    R"(code_signing_sources: [file list] Sources for code signing step.
-
-  A list of files used as input for code signing script step of a create_bundle
-  target. Non-absolute paths will be resolved relative to the current build
-  file.
-
-  See also "gn help create_bundle".
+  See also "gn help create_bundle" and "gn help post_processing_args".
 )";
 
 const char kCodeSigningOutputs[] = "code_signing_outputs";
 const char kCodeSigningOutputs_HelpShort[] =
-    "code_signing_outputs: [file list] Output files for code signing step.";
+    "code_signing_outputs: [file list] [deprecated] Outputs of the "
+    "post-processing step.";
 const char kCodeSigningOutputs_Help[] =
-    R"(code_signing_outputs: [file list] Output files for code signing step.
+    R"(code_signing_outputs: [file list] [deprecated] Outputs of the post-processing step.
 
-  Outputs from the code signing step of a create_bundle target. Must refer to
+  Outputs from the post-processing step of a create_bundle target. Must refer to
   files in the build directory.
 
-  See also "gn help create_bundle".
+  Deprecated: this is an old name for the "post_processing_outputs" property of
+  the "create_bundle" target. It is still supported to avoid breaking existing
+  build rules, but a warning will be emitted when it is used.
+
+  See also "gn help create_bundle" and "gn help post_processing_args".
+)";
+
+const char kCodeSigningScript[] = "code_signing_script";
+const char kCodeSigningScript_HelpShort[] =
+    "code_signing_script: [file name] [deprecated] Script for the "
+    "post-processing step.";
+const char kCodeSigningScript_Help[] =
+    R"(code_signing_script: [file name] [deprecated] Script for the post-processing step."
+
+  An absolute or buildfile-relative file name of a Python script to run for a
+  create_bundle target to perform the post-processing step.
+
+  Deprecated: this is an old name for the "post_processing_script" property of
+  the "create_bundle" target. It is still supported to avoid breaking existing
+  build rules, but a warning will be emitted when it is used.
+
+  See also "gn help create_bundle" and "gn help post_processing_args".
+)";
+
+const char kCodeSigningSources[] = "code_signing_sources";
+const char kCodeSigningSources_HelpShort[] =
+    "code_signing_sources: [file list] [deprecated] Sources for the "
+    "post-processing "
+    "step.";
+const char kCodeSigningSources_Help[] =
+    R"(code_signing_sources: [file list] [deprecated] Sources for the post-processing step.
+
+  A list of files used as input for the post-processing step of a create_bundle
+  target. Non-absolute paths will be resolved relative to the current build
+  file.
+
+  Deprecated: this is an old name for the "post_processing_sources" property of
+  the "create_bundle" target. It is still supported to avoid breaking existing
+  build rules, but a warning will be emitted when it is used.
+
+  See also "gn help create_bundle" and "gn help post_processing_args".
 )";
 
 const char kCompleteStaticLib[] = "complete_static_lib";
@@ -1639,7 +1660,7 @@ const char kPartialInfoPlist_Help[] =
 
   Valid for create_bundle target, corresponds to the path for the partial
   Info.plist created by the asset catalog compiler that needs to be merged
-  with the application Info.plist (usually done by the code signing script).
+  with the application Info.plist (usually done by the post-processing script).
 
   The file will be generated regardless of whether the asset compiler has
   been invoked or not. See "gn help create_bundle".
@@ -1692,6 +1713,57 @@ Example
     pool = "//build:custom_pool"
     ...
   }
+)";
+
+const char kPostProcessingArgs[] = "post_processing_args";
+const char kPostProcessingArgs_HelpShort[] =
+    "post_processing_args: [string list] Args for the post-processing script.";
+const char kPostProcessingArgs_Help[] =
+    R"(post_processing_args: [string list] Args for the post-processing script.
+
+  For create_bundle targets, post_processing_args is the list of arguments to
+  pass to the post-processing script. Typically you would use source expansion
+  (see "gn help source_expansion") to insert the source file names.
+
+  See also "gn help create_bundle".
+)";
+
+const char kPostProcessingOutputs[] = "post_processing_outputs";
+const char kPostProcessingOutputs_HelpShort[] =
+    "post_processing_outputs: [file list] Outputs of the post-processing step.";
+const char kPostProcessingOutputs_Help[] =
+    R"(post_processing_outputs: [file list] Outputs of the post-processing step.
+
+  Outputs from the post-processing step of a create_bundle target. Must refer to
+  files in the build directory.
+
+  See also "gn help create_bundle".
+)";
+
+const char kPostProcessingScript[] = "post_processing_script";
+const char kPostProcessingScript_HelpShort[] =
+    "post_processing_script: [file name] Script for the post-processing step.";
+const char kPostProcessingScript_Help[] =
+    R"(post_processing_script: [file name] Script for the post-processing step."
+
+  An absolute or buildfile-relative file name of a Python script to run for a
+  create_bundle target to perform the post-processing step.
+
+  See also "gn help create_bundle".
+)";
+
+const char kPostProcessingSources[] = "post_processing_sources";
+const char kPostProcessingSources_HelpShort[] =
+    "post_processing_sources: [file list] Sources for the post-processing "
+    "step.";
+const char kPostProcessingSources_Help[] =
+    R"(post_processing_sources: [file list] Sources for the post-processing step.
+
+  A list of files used as input for the post-processing step of a create_bundle
+  target. Non-absolute paths will be resolved relative to the current build
+  file.
+
+  See also "gn help create_bundle".
 )";
 
 const char kPrecompiledHeader[] = "precompiled_header";
@@ -2355,9 +2427,9 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(CflagsObjCC)
     INSERT_VARIABLE(CheckIncludes)
     INSERT_VARIABLE(CodeSigningArgs)
+    INSERT_VARIABLE(CodeSigningOutputs)
     INSERT_VARIABLE(CodeSigningScript)
     INSERT_VARIABLE(CodeSigningSources)
-    INSERT_VARIABLE(CodeSigningOutputs)
     INSERT_VARIABLE(CompleteStaticLib)
     INSERT_VARIABLE(Configs)
     INSERT_VARIABLE(Data)
@@ -2384,6 +2456,10 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(Outputs)
     INSERT_VARIABLE(PartialInfoPlist)
     INSERT_VARIABLE(Pool)
+    INSERT_VARIABLE(PostProcessingArgs)
+    INSERT_VARIABLE(PostProcessingOutputs)
+    INSERT_VARIABLE(PostProcessingScript)
+    INSERT_VARIABLE(PostProcessingSources)
     INSERT_VARIABLE(PrecompiledHeader)
     INSERT_VARIABLE(PrecompiledHeaderType)
     INSERT_VARIABLE(PrecompiledSource)

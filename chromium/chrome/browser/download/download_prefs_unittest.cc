@@ -716,22 +716,6 @@ TEST(DownloadPrefsTest, ManagedPromptForDownload) {
       prefs::kPromptForDownload, std::make_unique<base::Value>(false));
   EXPECT_FALSE(prefs.PromptForDownload());
 }
-
-// Verifies the returned value of PromptForDownload()
-// when prefs::kPromptForDownload is managed by enterprise policy,
-TEST(DownloadPrefsTest, AutoOpenPdfEnabled) {
-  content::BrowserTaskEnvironment task_environment;
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      chrome::android::kOpenDownloadDialog);
-  TestingProfile profile;
-  DownloadPrefs prefs(&profile);
-
-  EXPECT_FALSE(prefs.IsAutoOpenPdfEnabled());
-
-  profile.GetPrefs()->SetBoolean(prefs::kAutoOpenPdfEnabled, true);
-  EXPECT_TRUE(prefs.IsAutoOpenPdfEnabled());
-}
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -762,7 +746,7 @@ class DownloadDirOneDrive : public testing::Test {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   void AddOneDriveFuseboxVolume() {
     auto* fake_provided_fs =
-        file_manager::test::CreateFakeProvidedFileSystemOneDrive(profile_);
+        file_manager::test::MountFakeProvidedFileSystemOneDrive(profile_);
 
     file_manager::VolumeManager* const volume_manager =
         file_manager::VolumeManager::Get(profile_);

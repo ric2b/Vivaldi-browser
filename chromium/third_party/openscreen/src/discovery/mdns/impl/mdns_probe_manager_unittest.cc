@@ -32,7 +32,7 @@ class MockDomainConfirmedProvider : public MdnsDomainConfirmedProvider {
 
 class MockMdnsSender : public MdnsSender {
  public:
-  explicit MockMdnsSender(UdpSocket* socket) : MdnsSender(socket) {}
+  explicit MockMdnsSender(UdpSocket& socket) : MdnsSender(socket) {}
 
   MOCK_METHOD1(SendMulticast, Error(const MdnsMessage& message));
   MOCK_METHOD2(SendMessage,
@@ -99,10 +99,10 @@ class MdnsProbeManagerTests : public testing::Test {
  public:
   MdnsProbeManagerTests()
       : clock_(Clock::now()),
-        task_runner_(&clock_),
-        sender_(&socket_),
+        task_runner_(clock_),
+        sender_(socket_),
         receiver_(config_),
-        manager_(&sender_, &receiver_, &random_, task_runner_, FakeClock::now) {
+        manager_(sender_, receiver_, random_, task_runner_, FakeClock::now) {
     ExpectProbeStopped(name_);
     ExpectProbeStopped(name2_);
     ExpectProbeStopped(name_retry_);

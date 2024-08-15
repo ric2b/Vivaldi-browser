@@ -812,6 +812,10 @@ Tool variables
         Expands to the list of flags specified in corresponding
         create_bundle target.
 
+  The inputs for compile_xcassets tool will be found from the bundle_data
+  dependencies by looking for any file matching "*/*.xcassets/*" pattern.
+  The "$assets.xcassets" directory will be added as input to the tool.
+
   The Swift tool has multiple input and outputs. It must have exactly one
   output of .swiftmodule type, but can have one or more object file outputs,
   in addition to other type of outputs. The following expansions are available:

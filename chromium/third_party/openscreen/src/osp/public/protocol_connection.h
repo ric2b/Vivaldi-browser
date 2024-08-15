@@ -11,6 +11,7 @@
 
 #include "osp/msgs/osp_messages.h"
 #include "platform/base/error.h"
+#include "platform/base/span.h"
 #include "util/osp_logging.h"
 
 namespace openscreen {
@@ -71,7 +72,7 @@ class ProtocolConnection {
       return Error::Code::kParseError;
     }
 
-    Write(buffer.data(), buffer.size());
+    Write(ByteView(buffer.data(), buffer.size()));
 
     return Error::None();
   }
@@ -81,7 +82,7 @@ class ProtocolConnection {
   uint64_t endpoint_id() const { return endpoint_id_; }
   uint64_t id() const { return id_; }
 
-  virtual void Write(const uint8_t* data, size_t data_size) = 0;
+  virtual void Write(const ByteView& bytes) = 0;
   virtual void CloseWriteEnd() = 0;
 
  protected:

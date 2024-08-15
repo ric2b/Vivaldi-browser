@@ -10,6 +10,7 @@
 #ifndef EIGEN_PACKED_TRIANGULAR_SOLVER_VECTOR_H
 #define EIGEN_PACKED_TRIANGULAR_SOLVER_VECTOR_H
 
+namespace Eigen {
 namespace internal {
 
 template <typename LhsScalar, typename RhsScalar, typename Index, int Side, int Mode, bool Conjugate, int StorageOrder>
@@ -69,6 +70,7 @@ struct packed_triangular_solve_vector<LhsScalar, RhsScalar, Index, OnTheRight, M
   }
 };
 
-}  // end namespace internal
+}  // namespace internal
+}  // namespace Eigen
 
 #endif  // EIGEN_PACKED_TRIANGULAR_SOLVER_VECTOR_H

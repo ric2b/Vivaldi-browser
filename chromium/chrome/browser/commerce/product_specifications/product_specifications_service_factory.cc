@@ -4,9 +4,12 @@
 
 #include "chrome/browser/commerce/product_specifications/product_specifications_service_factory.h"
 
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/model_type_store_service_factory.h"
 #include "chrome/common/channel_info.h"
+#include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/product_specifications/product_specifications_service.h"
 #include "components/commerce/core/product_specifications/product_specifications_sync_bridge.h"
 #include "components/sync/base/report_unrecoverable_error.h"
@@ -30,12 +33,15 @@ namespace commerce {
 commerce::ProductSpecificationsService*
 ProductSpecificationsServiceFactory::GetForBrowserContext(
     content::BrowserContext* context) {
-  // Not available in incognito mode.
-  if (context->IsOffTheRecord()) {
-    return nullptr;
+  // Not available in incognito mode. Only available if
+  // kProductSpecificationsSync is enabled. as the sync integration
+  // is still under development
+  if (!context->IsOffTheRecord() &&
+      base::FeatureList::IsEnabled(commerce::kProductSpecificationsSync)) {
+    return static_cast<commerce::ProductSpecificationsService*>(
+        GetInstance()->GetServiceForBrowserContext(context, true));
   }
-  return static_cast<commerce::ProductSpecificationsService*>(
-      GetInstance()->GetServiceForBrowserContext(context, true));
+  return nullptr;
 }
 
 // static

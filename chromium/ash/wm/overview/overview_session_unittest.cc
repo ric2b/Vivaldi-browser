@@ -17,10 +17,8 @@
 #include "ash/accessibility/test_accessibility_controller_client.h"
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/app_list/test/app_list_test_helper.h"
-#include "ash/constants/app_types.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
-#include "ash/constants/ash_switches.h"
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
 #include "ash/frame_throttler/frame_throttling_controller.h"
@@ -34,19 +32,23 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shelf/shelf_view_test_api.h"
+#include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/style/close_button.h"
 #include "ash/style/rounded_label_widget.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/raster_scale_change_tracker.h"
 #include "ash/test/test_window_builder.h"
+#include "ash/utility/forest_util.h"
 #include "ash/wallpaper/views/wallpaper_view.h"
 #include "ash/wallpaper/views/wallpaper_widget_controller.h"
 #include "ash/wm/desks/desk.h"
 #include "ash/wm/desks/desk_action_button.h"
 #include "ash/wm/desks/desk_action_view.h"
+#include "ash/wm/desks/desk_bar_view_base.h"
 #include "ash/wm/desks/desk_icon_button.h"
 #include "ash/wm/desks/desks_constants.h"
+#include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/desks_test_util.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/desks/legacy_desk_bar_view.h"
@@ -59,7 +61,7 @@
 #include "ash/wm/overview/overview_constants.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_drop_target.h"
-#include "ash/wm/overview/overview_focus_cycler.h"
+#include "ash/wm/overview/overview_focus_cycler_old.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_grid_event_handler.h"
 #include "ash/wm/overview/overview_grid_test_api.h"
@@ -101,6 +103,8 @@
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
+#include "chromeos/ui/base/app_types.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "chromeos/ui/base/window_state_type.h"
 #include "chromeos/ui/frame/caption_buttons/snap_controller.h"
 #include "ui/aura/client/aura_constants.h"
@@ -127,6 +131,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/size_f.h"
@@ -868,9 +873,50 @@ TEST_P(OverviewSessionTest, CloseButtonOnMultipleDisplay) {
   EXPECT_TRUE(widget->IsClosed());
 }
 
+// Test that we mirror the the correct widgets when dragging across displays.
+TEST_P(OverviewSessionTest, DraggingOnMultipleDisplay) {
+  UpdateDisplay("600x400,600x400");
+
+  // Create one normal window and one minimzied window.
+  auto normal_window = CreateAppWindow();
+  auto minimized_window = CreateAppWindow();
+  WMEvent minimize_event(WM_EVENT_MINIMIZE);
+  WindowState::Get(minimized_window.get())->OnWMEvent(&minimize_event);
+
+  ToggleOverview();
+  auto* generator = GetEventGenerator();
+  OverviewItem* normal_item =
+      static_cast<OverviewItem*>(GetOverviewItemForWindow(normal_window.get()));
+  OverviewItem* minimized_item = static_cast<OverviewItem*>(
+      GetOverviewItemForWindow(minimized_window.get()));
+
+  // Start dragging the normal window. We mirror both the overview item widget
+  // and the normal window.
+  generator->set_current_screen_location(
+      gfx::ToRoundedPoint(normal_item->target_bounds().CenterPoint()));
+  generator->PressLeftButton();
+  generator->MoveMouseBy(20, 20);
+  EXPECT_TRUE(normal_item->item_mirror_for_dragging_for_testing());
+  EXPECT_TRUE(normal_item->window_mirror_for_dragging_for_testing());
+  EXPECT_FALSE(minimized_item->item_mirror_for_dragging_for_testing());
+  EXPECT_FALSE(minimized_item->window_mirror_for_dragging_for_testing());
+
+  // Start dragging the minimzed window. We don't mirror the original window,
+  // since the overview item widget already contains a mirror.
+  generator->ReleaseLeftButton();
+  generator->set_current_screen_location(
+      gfx::ToRoundedPoint(minimized_item->target_bounds().CenterPoint()));
+  generator->PressLeftButton();
+  generator->MoveMouseBy(20, 20);
+  EXPECT_FALSE(normal_item->item_mirror_for_dragging_for_testing());
+  EXPECT_FALSE(normal_item->window_mirror_for_dragging_for_testing());
+  EXPECT_TRUE(minimized_item->item_mirror_for_dragging_for_testing());
+  EXPECT_FALSE(minimized_item->window_mirror_for_dragging_for_testing());
+}
+
 // Tests that dragging an overview item with multiple displays and then exiting
 // overview does not result in a u-a-f. Regression test for b/293867778.
-TEST_P(OverviewSessionTest, DraggingOnMultipleDisplay) {
+TEST_P(OverviewSessionTest, ExitOverviewWhileDraggingOnMultipleDisplay) {
   UpdateDisplay("600x400,600x400");
 
   auto window = CreateAppWindow();
@@ -1012,7 +1058,7 @@ TEST_P(OverviewSessionTest, DISABLED_TabletModeHistograms) {
 // Tests that entering overview when a fullscreen window is active in maximized
 // mode correctly applies the transformations to the window and correctly
 // updates the window bounds on exiting overview mode: http://crbug.com/401664.
-// TODO(crbug.com/1523918): Fix flaky test.
+// TODO(crbug.com/41496866): Fix flaky test.
 TEST_P(OverviewSessionTest, DISABLED_FullscreenWindowTabletMode) {
   ui::ScopedAnimationDurationScaleMode animation_scale(
       ui::ScopedAnimationDurationScaleMode::FAST_DURATION);
@@ -1574,30 +1620,13 @@ TEST_P(OverviewSessionTest, DropTargetOnCorrectDisplayForDraggingFromOverview) {
   EXPECT_FALSE(GetDropTarget(1));
 }
 
-namespace {
-
-// A simple window delegate that returns the specified hit-test code when
-// requested and applies a minimum size constraint if there is one.
-class TestDragWindowDelegate : public aura::test::TestWindowDelegate {
- public:
-  TestDragWindowDelegate() { set_window_component(HTCAPTION); }
-
-  TestDragWindowDelegate(const TestDragWindowDelegate&) = delete;
-  TestDragWindowDelegate& operator=(const TestDragWindowDelegate&) = delete;
-
-  ~TestDragWindowDelegate() override = default;
-
- private:
-  // aura::Test::TestWindowDelegate:
-  void OnWindowDestroyed(aura::Window* window) override { delete this; }
-};
-
-}  // namespace
-
 // Tests that toggling overview on and off does not cancel drag.
 TEST_P(OverviewSessionTest, DragDropInProgress) {
+  auto* window_delegate =
+      aura::test::TestWindowDelegate::CreateSelfDestroyingDelegate();
+  window_delegate->set_window_component(HTCAPTION);
   std::unique_ptr<aura::Window> window(CreateTestWindowInShellWithDelegate(
-      new TestDragWindowDelegate(), -1, gfx::Rect(100, 100)));
+      window_delegate, -1, gfx::Rect(100, 100)));
 
   GetEventGenerator()->set_current_screen_location(
       window->GetBoundsInScreen().CenterPoint());
@@ -1845,24 +1874,51 @@ TEST_P(OverviewSessionTest, NoWindowsIndicatorPosition) {
       GetOverviewSession()->grid_list()[0]->no_windows_widget();
   ASSERT_TRUE(no_windows_widget);
 
-  // Verify that originally the label is in the center of the workspace.
-  // Midpoint of height minus shelf.
-  int expected_y =
-      (300 - ShelfConfig::Get()->shelf_size() + kDeskBarZeroStateHeight) / 2;
-  EXPECT_EQ(gfx::Point(200, expected_y),
-            no_windows_widget->GetWindowBoundsInScreen().CenterPoint());
+  display::Screen* screen = display::Screen::GetScreen();
+
+  // The expected y of the label will be the screen minus the shelf and desks
+  // bar.
+  auto get_expected_y = [&screen]() -> int {
+    const int display_height = screen->GetPrimaryDisplay().bounds().height();
+    const int grid_y = kDeskBarZeroStateHeight;
+    int grid_height = display_height - ShelfConfig::Get()->shelf_size() -
+                      kDeskBarZeroStateHeight;
+    return grid_y + grid_height / 2;
+  };
+
+  // Verify that originally the label is in the center of the workspace. For
+  // forest, the padding calculations are much more complicated and we need to
+  // account for the birch bar, so we just check that the widget is roughly
+  // centered vertically.
+  gfx::Point no_windows_centerpoint =
+      no_windows_widget->GetWindowBoundsInScreen().CenterPoint();
+  if (IsForestFeatureEnabled()) {
+    EXPECT_EQ(200, no_windows_centerpoint.x());
+    EXPECT_GT(no_windows_centerpoint.y(), kDeskBarZeroStateHeight);
+    EXPECT_LT(no_windows_centerpoint.y(),
+              screen->GetPrimaryDisplay().bounds().height() -
+                  ShelfConfig::Get()->shelf_size());
+  } else {
+    EXPECT_EQ(gfx::Point(200, get_expected_y()), no_windows_centerpoint);
+  }
 
   // Verify that after rotating the display, the label is centered in the
-  // workspace 300x(400-shelf).
-  display::Screen* screen = display::Screen::GetScreen();
+  // workspace.
   const display::Display& display = screen->GetPrimaryDisplay();
   display_manager()->SetDisplayRotation(
       display.id(), display::Display::ROTATE_90,
       display::Display::RotationSource::ACTIVE);
-  expected_y =
-      (400 - ShelfConfig::Get()->shelf_size() + kDeskBarZeroStateHeight) / 2;
-  EXPECT_EQ(gfx::Point(150, expected_y),
-            no_windows_widget->GetWindowBoundsInScreen().CenterPoint());
+  no_windows_centerpoint =
+      no_windows_widget->GetWindowBoundsInScreen().CenterPoint();
+  if (IsForestFeatureEnabled()) {
+    EXPECT_EQ(150, no_windows_centerpoint.x());
+    EXPECT_GT(no_windows_centerpoint.y(), kDeskBarZeroStateHeight);
+    EXPECT_LT(no_windows_centerpoint.y(),
+              screen->GetPrimaryDisplay().bounds().height() -
+                  ShelfConfig::Get()->shelf_size());
+  } else {
+    EXPECT_EQ(gfx::Point(150, get_expected_y()), no_windows_centerpoint);
+  }
 }
 
 // Tests that toggling overview on removes any resize shadows that may have been
@@ -1912,10 +1968,13 @@ TEST_P(OverviewSessionTest, OverviewGridBounds) {
 
   Shelf* shelf = Shelf::ForWindow(Shell::GetPrimaryRootWindow());
   const gfx::Rect shelf_bounds = shelf->GetIdealBounds();
-  const gfx::Rect hotseat_bounds =
-      shelf->hotseat_widget()->GetWindowBoundsInScreen();
   EXPECT_FALSE(GetGridBounds().Intersects(shelf_bounds));
-  EXPECT_FALSE(GetGridBounds().Intersects(hotseat_bounds));
+
+  if (!IsForestFeatureEnabled()) {
+    const gfx::Rect hotseat_bounds =
+        shelf->hotseat_widget()->GetWindowBoundsInScreen();
+    EXPECT_FALSE(GetGridBounds().Intersects(hotseat_bounds));
+  }
 }
 
 TEST_P(OverviewSessionTest, NoWindowsIndicatorPositionSplitview) {
@@ -1935,24 +1994,41 @@ TEST_P(OverviewSessionTest, NoWindowsIndicatorPositionSplitview) {
   no_windows_widget = GetOverviewSession()->grid_list()[0]->no_windows_widget();
   ASSERT_TRUE(no_windows_widget);
 
-  // There is a 8dp divider in splitview, the indicator should take that into
-  // account.
-  const int bounds_left = 200 + 4;
+  // Take that into account of the divider width.
+  const int bounds_left = 200 + kSplitviewDividerShortSideLength / 2;
   int expected_x = bounds_left + (400 - (bounds_left)) / 2;
-  const int workarea_bottom_inset =
-      ShelfConfig::Get()->in_app_shelf_size() +
-      ShelfConfig::Get()->system_shelf_size() +
-      ShelfConfig::Get()->hotseat_bottom_padding();
+  ShelfConfig* shelf_config = ShelfConfig::Get();
+  const int workarea_bottom_inset = shelf_config->in_app_shelf_size() +
+                                    shelf_config->system_shelf_size() +
+                                    shelf_config->hotseat_bottom_padding();
   const int expected_y = (300 - workarea_bottom_inset) / 2;
-  EXPECT_EQ(gfx::Point(expected_x, expected_y),
-            no_windows_widget->GetWindowBoundsInScreen().CenterPoint());
+
+  // The x location should be in the center. The y location is roughly in the
+  // center. A lot of calculations go towards the padding and birch and desks
+  // bar for the y location.
+  gfx::Point no_windows_centerpoint =
+      no_windows_widget->GetWindowBoundsInScreen().CenterPoint();
+  if (IsForestFeatureEnabled()) {
+    EXPECT_EQ(expected_x, no_windows_centerpoint.x());
+    EXPECT_GT(no_windows_centerpoint.y(), kDeskBarZeroStateHeight);
+    EXPECT_LT(no_windows_centerpoint.y(), 300 - workarea_bottom_inset);
+  } else {
+    EXPECT_EQ(gfx::Point(expected_x, expected_y), no_windows_centerpoint);
+  }
 
   // Tests that when snapping a window to the right in splitview, the no windows
   // indicator shows up in the middle of the left side of the screen.
   GetSplitViewController()->SnapWindow(window.get(), SnapPosition::kSecondary);
+  no_windows_centerpoint =
+      no_windows_widget->GetWindowBoundsInScreen().CenterPoint();
   expected_x = /*bounds_right=*/(200 - 4) / 2;
-  EXPECT_EQ(gfx::Point(expected_x, expected_y),
-            no_windows_widget->GetWindowBoundsInScreen().CenterPoint());
+  if (IsForestFeatureEnabled()) {
+    EXPECT_EQ(expected_x, no_windows_centerpoint.x());
+    EXPECT_GT(no_windows_centerpoint.y(), kDeskBarZeroStateHeight);
+    EXPECT_LT(no_windows_centerpoint.y(), 300 - workarea_bottom_inset);
+  } else {
+    EXPECT_EQ(gfx::Point(expected_x, expected_y), no_windows_centerpoint);
+  }
 }
 
 // Tests that the no windows indicator shows properly after adding an item.
@@ -3370,8 +3446,7 @@ TEST_P(OverviewSessionTest, FrameThrottlingBrowser) {
   for (int i = 0; i < window_count; ++i) {
     windows.emplace_back(
         CreateTestWindowInShellWithDelegate(nullptr, -1, gfx::Rect()));
-    windows[i]->SetProperty(aura::client::kAppType,
-                            static_cast<int>(AppType::BROWSER));
+    windows[i]->SetProperty(chromeos::kAppTypeKey, chromeos::AppType::BROWSER);
     windows[i]->SetEmbedFrameSinkId(ids[i]);
   }
 
@@ -3384,8 +3459,7 @@ TEST_P(OverviewSessionTest, FrameThrottlingBrowser) {
       CreateTestWindowInShellWithDelegate(nullptr, -1, gfx::Rect()));
   constexpr viz::FrameSinkId new_window_id{6u, 6u};
   new_window->SetEmbedFrameSinkId(new_window_id);
-  new_window->SetProperty(aura::client::kAppType,
-                          static_cast<int>(AppType::BROWSER));
+  new_window->SetProperty(chromeos::kAppTypeKey, chromeos::AppType::BROWSER);
   OverviewGrid* grid = GetOverviewSession()->grid_list()[0].get();
   grid->AppendItem(new_window.get(), /*reposition=*/false, /*animate=*/false,
                    /*use_spawn_animation=*/false);
@@ -3416,8 +3490,7 @@ TEST_P(OverviewSessionTest, FrameThrottlingLacros) {
   for (int i = 0; i < window_count; ++i) {
     windows.emplace_back(
         CreateTestWindowInShellWithDelegate(nullptr, -1, gfx::Rect()));
-    windows[i]->SetProperty(aura::client::kAppType,
-                            static_cast<int>(AppType::LACROS));
+    windows[i]->SetProperty(chromeos::kAppTypeKey, chromeos::AppType::LACROS);
     windows[i]->SetEmbedFrameSinkId(ids[i]);
   }
   for (auto& w : windows)
@@ -3434,8 +3507,7 @@ TEST_P(OverviewSessionTest, FrameThrottlingLacros) {
       CreateTestWindowInShellWithDelegate(nullptr, -1, gfx::Rect()));
   constexpr viz::FrameSinkId new_window_id{6u, 6u};
   new_window->SetEmbedFrameSinkId(new_window_id);
-  new_window->SetProperty(aura::client::kAppType,
-                          static_cast<int>(AppType::LACROS));
+  new_window->SetProperty(chromeos::kAppTypeKey, chromeos::AppType::LACROS);
   OverviewGrid* grid = GetOverviewSession()->grid_list()[0].get();
   grid->AppendItem(new_window.get(), /*reposition=*/false, /*animate=*/false,
                    /*use_spawn_animation=*/false);
@@ -3470,8 +3542,7 @@ TEST_P(OverviewSessionTest, FrameThrottlingArc) {
   for (int i = 0; i < window_count; ++i) {
     windows.emplace_back(
         CreateTestWindowInShellWithDelegate(nullptr, -1, gfx::Rect()));
-    windows[i]->SetProperty(aura::client::kAppType,
-                            static_cast<int>(AppType::ARC_APP));
+    windows[i]->SetProperty(chromeos::kAppTypeKey, chromeos::AppType::ARC_APP);
   }
 
   auto windows_to_throttle =
@@ -3485,8 +3556,7 @@ TEST_P(OverviewSessionTest, FrameThrottlingArc) {
   // Add a new window to overview.
   std::unique_ptr<aura::Window> new_window(
       CreateTestWindowInShellWithDelegate(nullptr, -1, gfx::Rect()));
-  new_window->SetProperty(aura::client::kAppType,
-                          static_cast<int>(AppType::ARC_APP));
+  new_window->SetProperty(chromeos::kAppTypeKey, chromeos::AppType::ARC_APP);
   windows_to_throttle.push_back(new_window.get());
   EXPECT_CALL(observer, OnThrottlingEnded());
   EXPECT_CALL(observer,
@@ -3687,6 +3757,75 @@ TEST_P(OverviewSessionTest,
   EXPECT_EQ(OcclusionState::VISIBLE, window1->GetOcclusionState());
 }
 
+// Verify the following behavior when dragging an `OverviewItem` to the new desk
+// button on a different display:
+// 1. The new desk button on the target display changes to
+// `DeskIconButton::State::kActive`.
+// 2. New desk buttons on other displays remain in
+// `DeskIconButton::State::kExpanded`.
+// 3. Upon dropping the OverviewItem, all new desk buttons (including the target
+// display) are restored to `DeskIconButton::State::kExpanded` state.
+TEST_P(OverviewSessionTest, NewDeskButtonStateUpdateOnMultiDisplay) {
+  auto skip_scale_up_new_desk_button_duration = OverviewWindowDragController::
+      SkipNewDeskButtonScaleUpDurationForTesting();
+
+  UpdateDisplay("800x700,801+0-800x700");
+  display::DisplayManager* display_manager = Shell::Get()->display_manager();
+  const auto& displays = display_manager->active_display_list();
+  ASSERT_EQ(2U, displays.size());
+
+  const gfx::Point point_in_display1(502, 300);
+  ASSERT_TRUE(displays[0].bounds().Contains(point_in_display1));
+  ASSERT_FALSE(displays[1].bounds().Contains(point_in_display1));
+
+  std::unique_ptr<aura::Window> window =
+      CreateAppWindow(gfx::Rect(10, 10, 200, 100));
+  ToggleOverview();
+  ASSERT_TRUE(IsInOverviewSession());
+  ASSERT_TRUE(IsWindowInItsCorrespondingOverviewGrid(window.get()));
+
+  // Verify that the new desk buttons on both displays have
+  // `DeskIconButton::State::kZero` state initially.
+  const auto& grids = GetOverviewSession()->grid_list();
+  ASSERT_EQ(2u, grids.size());
+  auto* grid0 = grids[0].get();
+  ASSERT_TRUE(grid0);
+  auto* desks_bar_view0 = grid0->desks_bar_view();
+  const DeskIconButton* new_desk_button0 = desks_bar_view0->new_desk_button();
+  ASSERT_TRUE(new_desk_button0);
+  ASSERT_TRUE(new_desk_button0->GetVisible());
+  ASSERT_EQ(DeskIconButton::State::kZero, new_desk_button0->state());
+
+  auto* grid1 = grids[1].get();
+  ASSERT_TRUE(grid1);
+  auto* desks_bar_view1 = grid1->desks_bar_view();
+  const DeskIconButton* new_desk_button1 = desks_bar_view1->new_desk_button();
+  ASSERT_TRUE(new_desk_button1);
+  ASSERT_TRUE(new_desk_button1->GetVisible());
+  ASSERT_EQ(DeskIconButton::State::kZero, new_desk_button1->state());
+
+  OverviewItemBase* overview_item = GetOverviewItemForWindow(window.get());
+  ASSERT_TRUE(overview_item);
+
+  // Drag the `overview_item` to new desk button on display #2 w/o releasing the
+  // mouse. Verify that the new desk button on display #2 turns into
+  // `DeskIconButton::State::kActive` state.
+  auto* event_generator = GetEventGenerator();
+  DragItemToPoint(overview_item,
+                  new_desk_button1->GetBoundsInScreen().CenterPoint(),
+                  event_generator, /*by_touch_gestures=*/false, /*drop=*/false);
+  EXPECT_EQ(DeskIconButton::State::kExpanded, new_desk_button0->state());
+  EXPECT_EQ(DeskIconButton::State::kActive, new_desk_button1->state());
+
+  // Drag the `overview_item` back to display #1 w/o and drop. Verify that the
+  // new desk buttons on all displays are restored to
+  // `DeskIconButton::State::kExpanded` state.
+  DragItemToPoint(overview_item, point_in_display1, event_generator,
+                  /*by_touch_gestures=*/false, /*drop=*/true);
+  EXPECT_EQ(DeskIconButton::State::kExpanded, new_desk_button0->state());
+  EXPECT_EQ(DeskIconButton::State::kExpanded, new_desk_button1->state());
+}
+
 // Verify that when an overview item is moved to a different display, it
 // is properly removed from the original grid and displayed in the new one with
 // no crash. See original crash reported at http://b/320479135.
@@ -3709,7 +3848,7 @@ TEST_P(OverviewSessionTest,
 
   const auto& grids = GetOverviewSession()->grid_list();
   ASSERT_EQ(2u, grids.size());
-  auto grid0 = grids[0].get();
+  auto* grid0 = grids[0].get();
   ASSERT_TRUE(grid0);
   const auto& overview_items = grid0->window_list();
   ASSERT_EQ(overview_items.size(), 1u);
@@ -3723,6 +3862,101 @@ TEST_P(OverviewSessionTest,
           Shell::GetAllRootWindows()[1].get()));
   EXPECT_NE(window->GetRootWindow(), old_root_window);
   EXPECT_TRUE(IsWindowInItsCorrespondingOverviewGrid(window.get()));
+}
+
+// Used to replicate the behavior of the Crostini app window, which would set
+// the window bounds to its registered display on the window's visibility
+// changed. See
+// `AppServiceAppWindowCrostiniTracker::OnWindowVisibilityChanged()` for more
+// details.
+class CrostiniWindowVisibilityObserver : public aura::WindowObserver {
+ public:
+  explicit CrostiniWindowVisibilityObserver(aura::Window* window)
+      : window_(window) {
+    window->AddObserver(this);
+  }
+
+  ~CrostiniWindowVisibilityObserver() override {
+    window_->RemoveObserver(this);
+  }
+
+  // aura::WindowObserver:
+  void OnWindowVisibilityChanged(aura::Window* window, bool visible) override {
+    if (visible) {
+      auto current_display =
+          display::Screen::GetScreen()->GetDisplayNearestWindow(window);
+      const auto dst_display =
+          display::Screen::GetScreen()->GetPrimaryDisplay();
+      window->SetBoundsInScreen(
+          gfx::Rect(dst_display.bounds().origin(), window->bounds().size()),
+          dst_display);
+    }
+  }
+
+ private:
+  raw_ptr<aura::Window> window_;
+};
+
+// Test verifies that dragging a minimized Crostini window to an external
+// display in Overview mode and then clicking to activate it doesn't cause a
+// crash. The crash would typically occur due to the
+// `AppServiceAppWindowCrostiniTracker` attempting to move the window back to
+// its registered display, which triggers a `CHECK_EQ(root_window_,
+// window->GetRootWindow())` crash in `OverviewItem::SetItemBounds()`. See
+// http://b/334911238 for more details.
+TEST_P(OverviewSessionTest,
+       NoCrashWhenSettingMinimizedOverviewItemBoundsOnAnotherDisplay) {
+  UpdateDisplay("1410x940,1411+0-2560x1440");
+  display::DisplayManager* display_manager = Shell::Get()->display_manager();
+  EXPECT_EQ(2U, display_manager->GetNumDisplays());
+  const auto& displays = display_manager->active_display_list();
+  aura::Window::Windows root_windows = Shell::GetAllRootWindows();
+
+  const gfx::Point point_in_display2(2500, 500);
+  ASSERT_FALSE(displays[0].bounds().Contains(point_in_display2));
+  ASSERT_TRUE(displays[1].bounds().Contains(point_in_display2));
+
+  std::unique_ptr<aura::Window> window(
+      CreateAppWindow(gfx::Rect(10, 10, 500, 300)));
+
+  WMEvent minimize_event(WM_EVENT_MINIMIZE);
+  WindowState::Get(window.get())->OnWMEvent(&minimize_event);
+  ASSERT_TRUE(WindowState::Get(window.get())->IsMinimized());
+  EXPECT_FALSE(window->IsVisible());
+  EXPECT_EQ(0.f, window->layer()->GetTargetOpacity());
+
+  CrostiniWindowVisibilityObserver visibility_observer(window.get());
+
+  ToggleOverview();
+  WaitForOverviewEntered();
+  ASSERT_TRUE(IsInOverviewSession());
+
+  const auto& grids = GetOverviewSession()->grid_list();
+  ASSERT_EQ(2u, grids.size());
+  auto grid0 = grids[0].get();
+  ASSERT_TRUE(grid0);
+  const auto& overview_items = grid0->window_list();
+  ASSERT_EQ(overview_items.size(), 1u);
+  EXPECT_TRUE(IsWindowInItsCorrespondingOverviewGrid(window.get()));
+
+  auto* event_generator = GetEventGenerator();
+  auto* overview_item = overview_items[0].get();
+  ASSERT_TRUE(overview_item);
+  DragItemToPoint(overview_item, point_in_display2, event_generator,
+                  /*by_touch_gestures=*/false, /*drop=*/true);
+  EXPECT_TRUE(IsWindowInItsCorrespondingOverviewGrid(window.get()));
+
+  // Verify that the windows are moved to the `displays[1]` properly.
+  display::Screen* screen = display::Screen::GetScreen();
+  EXPECT_EQ(displays[1].id(),
+            screen->GetDisplayNearestWindow(window.get()).id());
+
+  event_generator->set_current_screen_location(gfx::ToRoundedPoint(
+      GetOverviewItemForWindow(window.get())->target_bounds().CenterPoint()));
+
+  // Verify that there will be no crash when activating the minimized Crostini
+  // window.
+  event_generator->ClickLeftButton();
 }
 
 // If you update the parameterisation of OverviewSessionTest also update the
@@ -5098,7 +5332,7 @@ TEST_P(OverviewRasterScaleTest,
 }
 
 // Tests raster scale changes work in tablet mode.
-// TODO(crbug.com/1508655): Fix flaky test.
+// TODO(crbug.com/40949385): Fix flaky test.
 TEST_P(OverviewRasterScaleTest, DISABLED_RasterScaleTabletMode) {
   EnterTabletMode();
 
@@ -5357,7 +5591,7 @@ class FloatOverviewSessionTest : public OverviewTestBase {
   // it is not true on any of the root windows.
   bool IsFloatContainerNormalStacked() const {
     for (aura::Window* root : Shell::GetAllRootWindows()) {
-      if (features::IsForestFeatureEnabled()) {
+      if (IsForestFeatureEnabled()) {
         // The float container should be the top-most child of the
         // `ShutdownScreenshotContainer` when the feature `ForestFeature` is
         // enabled.
@@ -5703,7 +5937,7 @@ TEST_F(TabletModeOverviewSessionTest, CheckNoOverviewItemShift) {
 // Tests to see if windows are shifted if at least one window is
 // partially/completely positioned offscreen.
 TEST_F(TabletModeOverviewSessionTest, CheckOverviewItemShift) {
-  auto windows = CreateAppWindows(7);
+  auto windows = CreateAppWindows(9);
   ToggleOverview();
   ASSERT_TRUE(InOverviewSession());
 
@@ -5894,7 +6128,7 @@ TEST_F(TabletModeOverviewSessionTest, StackingOrderAfterGestureEvent) {
 // Test that scrolling occurs if started on top of a window using the window's
 // center-point as a start.
 TEST_F(TabletModeOverviewSessionTest, HorizontalScrollingOnOverviewItem) {
-  auto windows = CreateAppWindows(8);
+  auto windows = CreateAppWindows(9);
   ToggleOverview();
   ASSERT_TRUE(InOverviewSession());
 
@@ -6331,7 +6565,7 @@ TEST_F(TabletModeOverviewSessionTest, VerticalScrollingOnOverviewItem) {
 
 // Test that scrolling occurs if we hit the associated keyboard shortcut.
 TEST_F(TabletModeOverviewSessionTest, CheckScrollingWithKeyboardShortcut) {
-  auto windows = CreateAppWindows(8);
+  auto windows = CreateAppWindows(9);
   ToggleOverview();
   ASSERT_TRUE(InOverviewSession());
 
@@ -6370,7 +6604,7 @@ TEST_F(TabletModeOverviewSessionTest, LayoutValidAfterRotation) {
   display::test::ScopedSetInternalDisplayId set_internal(
       Shell::Get()->display_manager(),
       display::Screen::GetScreen()->GetPrimaryDisplay().id());
-  auto windows = CreateAppWindows(7);
+  auto windows = CreateAppWindows(9);
 
   // Helper to determine whether a grid layout is valid. It is considered valid
   // if the left edge of the first item is close enough to the left edge of the
@@ -6877,13 +7111,15 @@ class SplitViewOverviewSessionTest : public OverviewTestBase {
  protected:
   aura::Window* CreateWindow(const gfx::Rect& bounds) {
     aura::Window* window = CreateTestWindowInShellWithDelegate(
-        new SplitViewTestWindowDelegate, -1, bounds);
+        aura::test::TestWindowDelegate::CreateSelfDestroyingDelegate(), -1,
+        bounds);
     return window;
   }
 
   aura::Window* CreateWindowWithMinimumSize(const gfx::Rect& bounds,
                                             const gfx::Size& size) {
-    SplitViewTestWindowDelegate* delegate = new SplitViewTestWindowDelegate();
+    auto* delegate =
+        aura::test::TestWindowDelegate::CreateSelfDestroyingDelegate();
     aura::Window* window =
         CreateTestWindowInShellWithDelegate(delegate, -1, bounds);
     delegate->set_minimum_size(size);
@@ -6904,7 +7140,7 @@ class SplitViewOverviewSessionTest : public OverviewTestBase {
       // If we are dragging to snap, `SplitViewOverviewSession` is not active
       // yet, but the overview grid bounds are split.
       gfx::Rect left_bounds, right_bounds;
-      overview_bounds.SplitVertically(&left_bounds, &right_bounds);
+      overview_bounds.SplitVertically(left_bounds, right_bounds);
       // If we are dragging to snap in tablet mode, `split_view_divider` hasn't
       // been created yet, but we still need to subtract the divider width.
       const int divider_width = display::Screen::GetScreen()->InTabletMode()
@@ -6996,16 +7232,6 @@ class SplitViewOverviewSessionTest : public OverviewTestBase {
   }
 
  private:
-  class SplitViewTestWindowDelegate : public aura::test::TestWindowDelegate {
-   public:
-    SplitViewTestWindowDelegate() = default;
-    ~SplitViewTestWindowDelegate() override = default;
-
-    // aura::test::TestWindowDelegate:
-    void OnWindowDestroying(aura::Window* window) override { window->Hide(); }
-    void OnWindowDestroyed(aura::Window* window) override { delete this; }
-  };
-
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
@@ -7311,7 +7537,8 @@ TEST_F(SplitViewOverviewSessionTest, Clipping) {
     const gfx::Rect split_view_bounds_right =
         split_view_controller()->GetSnappedWindowBoundsInScreen(
             SnapPosition::kSecondary,
-            /*window_for_minimum_size=*/nullptr, chromeos::kDefaultSnapRatio);
+            /*window_for_minimum_size=*/nullptr, chromeos::kDefaultSnapRatio,
+            /*account_for_divider_width=*/true);
 
     ToggleOverview();
 
@@ -8761,24 +8988,26 @@ TEST_F(SplitViewOverviewSessionTest, SwapWindowAndOverviewGrid) {
   EXPECT_EQ(split_view_controller()->default_snap_position(),
             SnapPosition::kPrimary);
   EXPECT_TRUE(GetOverviewController()->InOverviewSession());
-  EXPECT_EQ(GetGridBounds(),
-            ShrinkBoundsByHotseatInset(
-                split_view_controller()->GetSnappedWindowBoundsInScreen(
-                    SnapPosition::kSecondary,
-                    /*window_for_minimum_size=*/nullptr,
-                    chromeos::kDefaultSnapRatio)));
+  EXPECT_EQ(
+      GetGridBounds(),
+      ShrinkBoundsByHotseatInset(
+          split_view_controller()->GetSnappedWindowBoundsInScreen(
+              SnapPosition::kSecondary,
+              /*window_for_minimum_size=*/nullptr, chromeos::kDefaultSnapRatio,
+              /*account_for_divider_width=*/true)));
 
   split_view_controller()->SwapWindows();
   EXPECT_EQ(split_view_controller()->state(),
             SplitViewController::State::kSecondarySnapped);
   EXPECT_EQ(split_view_controller()->default_snap_position(),
             SnapPosition::kSecondary);
-  EXPECT_EQ(GetGridBounds(),
-            ShrinkBoundsByHotseatInset(
-                split_view_controller()->GetSnappedWindowBoundsInScreen(
-                    SnapPosition::kPrimary,
-                    /*window_for_minimum_size=*/nullptr,
-                    chromeos::kDefaultSnapRatio)));
+  EXPECT_EQ(
+      GetGridBounds(),
+      ShrinkBoundsByHotseatInset(
+          split_view_controller()->GetSnappedWindowBoundsInScreen(
+              SnapPosition::kPrimary,
+              /*window_for_minimum_size=*/nullptr, chromeos::kDefaultSnapRatio,
+              /*account_for_divider_width=*/true)));
 }
 
 // Test that in tablet mode, pressing tab key in overview should not crash.
@@ -9680,12 +9909,14 @@ TEST_F(SplitViewOverviewSessionInClamshellTest,
       top_snapped_bounds,
       split_view_controller()->GetSnappedWindowBoundsInScreen(
           SnapPosition::kPrimary,
-          /*window_for_minimum_size=*/nullptr, chromeos::kDefaultSnapRatio));
+          /*window_for_minimum_size=*/nullptr, chromeos::kDefaultSnapRatio,
+          /*account_for_divider_width=*/false));
   EXPECT_EQ(
       bottom_snapped_bounds,
       split_view_controller()->GetSnappedWindowBoundsInScreen(
           SnapPosition::kSecondary,
-          /*window_for_minimum_size=*/nullptr, chromeos::kDefaultSnapRatio));
+          /*window_for_minimum_size=*/nullptr, chromeos::kDefaultSnapRatio,
+          /*account_for_divider_width=*/false));
 
   // Switch from clamshell mode to tablet mode and then back to clamshell mode.
   display::test::DisplayManagerTestApi(Shell::Get()->display_manager())
@@ -9702,12 +9933,14 @@ TEST_F(SplitViewOverviewSessionInClamshellTest,
       top_snapped_bounds,
       split_view_controller()->GetSnappedWindowBoundsInScreen(
           SnapPosition::kPrimary,
-          /*window_for_minimum_size=*/nullptr, chromeos::kDefaultSnapRatio));
+          /*window_for_minimum_size=*/nullptr, chromeos::kDefaultSnapRatio,
+          /*account_for_divider_width=*/false));
   EXPECT_EQ(
       bottom_snapped_bounds,
       split_view_controller()->GetSnappedWindowBoundsInScreen(
           SnapPosition::kSecondary,
-          /*window_for_minimum_size=*/nullptr, chromeos::kDefaultSnapRatio));
+          /*window_for_minimum_size=*/nullptr, chromeos::kDefaultSnapRatio,
+          /*account_for_divider_width=*/false));
 }
 
 // Tests that the ratio between the divider position and the work area width is
@@ -9983,27 +10216,31 @@ TEST_F(SplitViewOverviewSessionInClamshellTestMultiDisplayOnly,
   EXPECT_EQ(
       gfx::Rect(0, 0, 400, height),
       SplitViewController::Get(root_windows[0])
-          ->GetSnappedWindowBoundsInScreen(SnapPosition::kPrimary,
-                                           /*window_for_minimum_size=*/nullptr,
-                                           chromeos::kDefaultSnapRatio));
+          ->GetSnappedWindowBoundsInScreen(
+              SnapPosition::kPrimary,
+              /*window_for_minimum_size=*/nullptr, chromeos::kDefaultSnapRatio,
+              /*account_for_divider_width=*/false));
   EXPECT_EQ(
       gfx::Rect(400, 0, 400, height),
       SplitViewController::Get(root_windows[0])
-          ->GetSnappedWindowBoundsInScreen(SnapPosition::kSecondary,
-                                           /*window_for_minimum_size=*/nullptr,
-                                           chromeos::kDefaultSnapRatio));
+          ->GetSnappedWindowBoundsInScreen(
+              SnapPosition::kSecondary,
+              /*window_for_minimum_size=*/nullptr, chromeos::kDefaultSnapRatio,
+              /*account_for_divider_width=*/false));
   EXPECT_EQ(
       gfx::Rect(800, 0, 400, height),
       SplitViewController::Get(root_windows[1])
-          ->GetSnappedWindowBoundsInScreen(SnapPosition::kPrimary,
-                                           /*window_for_minimum_size=*/nullptr,
-                                           chromeos::kDefaultSnapRatio));
+          ->GetSnappedWindowBoundsInScreen(
+              SnapPosition::kPrimary,
+              /*window_for_minimum_size=*/nullptr, chromeos::kDefaultSnapRatio,
+              /*account_for_divider_width=*/false));
   EXPECT_EQ(
       gfx::Rect(1200, 0, 400, height),
       SplitViewController::Get(root_windows[1])
-          ->GetSnappedWindowBoundsInScreen(SnapPosition::kSecondary,
-                                           /*window_for_minimum_size=*/nullptr,
-                                           chromeos::kDefaultSnapRatio));
+          ->GetSnappedWindowBoundsInScreen(
+              SnapPosition::kSecondary,
+              /*window_for_minimum_size=*/nullptr, chromeos::kDefaultSnapRatio,
+              /*account_for_divider_width=*/false));
 }
 
 // Test that if clamshell split view is started by snapping a window that is the
@@ -10083,7 +10320,8 @@ TEST_F(SplitViewOverviewSessionInClamshellTestMultiDisplayOnly,
       SplitViewController::Get(root_windows[1])
           ->GetSnappedWindowBoundsInScreen(SnapPosition::kPrimary,
                                            /*window_for_minimum_size=*/nullptr,
-                                           chromeos::kDefaultSnapRatio),
+                                           chromeos::kDefaultSnapRatio,
+                                           /*account_for_divider_width=*/false),
       OverviewGridTestApi(grid_on_root2).bounds());
   event_generator->ReleaseLeftButton();
   EXPECT_EQ(SplitViewController::State::kSecondarySnapped,
@@ -10161,7 +10399,8 @@ TEST_F(SplitViewOverviewSessionInClamshellTestMultiDisplayOnly,
       SplitViewController::Get(root_windows[0])
           ->GetSnappedWindowBoundsInScreen(SnapPosition::kSecondary,
                                            /*window_for_minimum_size=*/nullptr,
-                                           chromeos::kDefaultSnapRatio),
+                                           chromeos::kDefaultSnapRatio,
+                                           /*account_for_divider_width=*/false),
       OverviewGridTestApi(grid_on_root1).bounds());
   EXPECT_EQ(SplitViewDragIndicators::WindowDraggingState::kOtherDisplay,
             indicators_on_root2->current_window_dragging_state());
@@ -10187,7 +10426,8 @@ TEST_F(SplitViewOverviewSessionInClamshellTestMultiDisplayOnly,
       SplitViewController::Get(root_windows[0])
           ->GetSnappedWindowBoundsInScreen(SnapPosition::kPrimary,
                                            /*window_for_minimum_size=*/nullptr,
-                                           chromeos::kDefaultSnapRatio),
+                                           chromeos::kDefaultSnapRatio,
+                                           /*account_for_divider_width=*/false),
       OverviewGridTestApi(grid_on_root1).bounds());
   EXPECT_EQ(SplitViewDragIndicators::WindowDraggingState::kOtherDisplay,
             indicators_on_root2->current_window_dragging_state());
@@ -10206,7 +10446,8 @@ TEST_F(SplitViewOverviewSessionInClamshellTestMultiDisplayOnly,
       SplitViewController::Get(root_windows[1])
           ->GetSnappedWindowBoundsInScreen(SnapPosition::kSecondary,
                                            /*window_for_minimum_size=*/nullptr,
-                                           chromeos::kDefaultSnapRatio),
+                                           chromeos::kDefaultSnapRatio,
+                                           /*account_for_divider_width=*/false),
       OverviewGridTestApi(grid_on_root2).bounds());
 
   const gfx::Point root2_left_snap_point_away_from_edge(816, 300);
@@ -10221,7 +10462,8 @@ TEST_F(SplitViewOverviewSessionInClamshellTestMultiDisplayOnly,
       SplitViewController::Get(root_windows[1])
           ->GetSnappedWindowBoundsInScreen(SnapPosition::kSecondary,
                                            /*window_for_minimum_size=*/nullptr,
-                                           chromeos::kDefaultSnapRatio),
+                                           chromeos::kDefaultSnapRatio,
+                                           /*account_for_divider_width=*/false),
       OverviewGridTestApi(grid_on_root2).bounds());
 
   const gfx::Point root2_right_snap_point(1599, 300);
@@ -10236,7 +10478,8 @@ TEST_F(SplitViewOverviewSessionInClamshellTestMultiDisplayOnly,
       SplitViewController::Get(root_windows[1])
           ->GetSnappedWindowBoundsInScreen(SnapPosition::kPrimary,
                                            /*window_for_minimum_size=*/nullptr,
-                                           chromeos::kDefaultSnapRatio),
+                                           chromeos::kDefaultSnapRatio,
+                                           /*account_for_divider_width=*/false),
       OverviewGridTestApi(grid_on_root2).bounds());
 
   const gfx::Point root2_middle_point(1200, 300);
@@ -10810,7 +11053,7 @@ TEST_F(SplitViewOverviewSessionInClamshellTestMultiDisplayOnly,
 // -----------------------------------------------------------------------------
 // OakTest:
 
-// Test fixture to validate overview behavior with forest enabled.
+// Test fixture to validate Overview behavior with forest enabled.
 class OakTest : public OverviewTestBase {
  public:
   OakTest() {
@@ -10819,11 +11062,10 @@ class OakTest : public OverviewTestBase {
                               features::kFasterSplitScreenSetup,
                               features::kOsSettingsRevampWayfinding},
         /*disabled_features=*/{});
-    switches::SetIgnoreForestSecretKeyForTest(true);
   }
   OakTest(const OakTest&) = delete;
   OakTest& operator=(const OakTest&) = delete;
-  ~OakTest() override { switches::SetIgnoreForestSecretKeyForTest(false); }
+  ~OakTest() override = default;
 
   void SnapOneTestWindow(aura::Window* window,
                          WindowStateType state_type,
@@ -10850,6 +11092,27 @@ class OakTest : public OverviewTestBase {
         ->wallpaper_widget_controller()
         ->wallpaper_view()
         ->layer();
+  }
+
+  // Test that:
+  // Upon Entering Overview:
+  // -Wallpaper view layer should be clipped across all displays;
+  // - Wallpaper underlay layer should be visible across all displays.
+  // Upon Exiting Overview:
+  // - Wallpaper view layer should be restored across all displays;
+  // - Wallpaper underlay layer should not be visible across all displays.
+  void VerifyLayersBoundsOnAllDisplays(bool in_overview) {
+    for (auto root : Shell::GetAllRootWindows()) {
+      auto* wallpaper_widget_controller =
+          RootWindowController::ForWindow(root)->wallpaper_widget_controller();
+      auto* wallpaper_view_layer =
+          wallpaper_widget_controller->wallpaper_view()->layer();
+      auto* wallpaper_underlay_layer =
+          wallpaper_widget_controller->wallpaper_underlay_layer();
+      EXPECT_EQ(root->bounds(), wallpaper_underlay_layer->bounds());
+      EXPECT_EQ(in_overview, wallpaper_underlay_layer->IsVisible());
+      EXPECT_EQ(in_overview, !wallpaper_view_layer->clip_rect().IsEmpty());
+    }
   }
 
  private:
@@ -10882,7 +11145,7 @@ TEST_F(OakTest, WallpaperClipRectAndRoundedCorners) {
   // corners.
   ToggleOverview();
   OverviewGrid* overview_grid = GetOverviewSession()->grid_list()[0].get();
-  EXPECT_EQ(overview_grid->GetGridEffectiveBounds(),
+  EXPECT_EQ(overview_grid->GetWallpaperClipBounds(),
             wallpaper_view_layer->clip_rect());
   EXPECT_EQ(kWallpaperClipRoundedCornerRadii,
             wallpaper_view_layer->rounded_corner_radii());
@@ -10925,7 +11188,7 @@ TEST_F(OakTest, DisplayChange) {
   ToggleOverview();
   OverviewGrid* overview_grid = GetOverviewSession()->grid_list()[0].get();
   EXPECT_EQ(display_bounds2, wallpaper_underlay_layer->bounds());
-  EXPECT_EQ(overview_grid->GetGridEffectiveBounds(),
+  EXPECT_EQ(overview_grid->GetWallpaperClipBounds(),
             wallpaper_view_layer->clip_rect());
   EXPECT_TRUE(wallpaper_underlay_layer->IsVisible());
 
@@ -10934,6 +11197,77 @@ TEST_F(OakTest, DisplayChange) {
       GetDisplayBoundsForRootWindow(Shell::GetPrimaryRootWindow()));
   EXPECT_EQ(display_bounds3, wallpaper_underlay_layer->bounds());
   EXPECT_EQ(display_bounds3, wallpaper_view_layer->bounds());
+}
+
+// Tests that when rotating display, the bounds of the clip wallpaper will be
+// adjusted properly.
+TEST_F(OakTest, DisplayRotation) {
+  UpdateDisplay("900x600");
+  auto* wallpaper_widget_controller =
+      Shell::GetPrimaryRootWindowController()->wallpaper_widget_controller();
+  auto* wallpaper_view_layer =
+      wallpaper_widget_controller->wallpaper_view()->layer();
+  auto* wallpaper_underlay_layer =
+      wallpaper_widget_controller->wallpaper_underlay_layer();
+  auto* display_manager = Shell::Get()->display_manager();
+
+  for (auto rotation :
+       {display::Display::ROTATE_270, display::Display::ROTATE_180,
+        display::Display::ROTATE_90, display::Display::ROTATE_0}) {
+    display_manager->SetDisplayRotation(
+        WindowTreeHostManager::GetPrimaryDisplayId(), rotation,
+        display::Display::RotationSource::USER);
+    const gfx::Rect display_bounds(
+        GetDisplayBoundsForRootWindow(Shell::GetPrimaryRootWindow()));
+    EXPECT_EQ(display_bounds, wallpaper_underlay_layer->bounds());
+    EXPECT_TRUE(display_bounds.Contains(wallpaper_view_layer->bounds()));
+  }
+}
+
+// Verifies that wallpaper clipping and underlay layer visibility update
+// properly on multiple displays during overview transitions.
+TEST_F(OakTest, MultiDisplayTest) {
+  UpdateDisplay("800x700,801+0-800x700,1602+0-800x700");
+  display::DisplayManager* display_manager = Shell::Get()->display_manager();
+  ASSERT_EQ(3U, display_manager->GetNumDisplays());
+
+  ToggleOverview();
+  ASSERT_TRUE(IsInOverviewSession());
+  VerifyLayersBoundsOnAllDisplays(/*in_overview=*/true);
+
+  ToggleOverview();
+  ASSERT_FALSE(IsInOverviewSession());
+  VerifyLayersBoundsOnAllDisplays(/*in_overview=*/false);
+}
+
+// Tests that wallpaper clip rect updates properly on all displays on overview
+// grid effective bounds change (e.g., virtual desktop bar state changes).
+TEST_F(OakTest, WallpaperClipRefreshWithMultiDisplay) {
+  UpdateDisplay("800x700,801+0-800x700,1602+0-800x700");
+  display::DisplayManager* display_manager = Shell::Get()->display_manager();
+  ASSERT_EQ(3U, display_manager->GetNumDisplays());
+
+  ToggleOverview();
+
+  OverviewGrid* overview_grid = GetOverviewSession()->grid_list()[0].get();
+  auto* desks_bar_view = overview_grid->desks_bar_view();
+
+  // The virtual desks bar is at zero state initially.
+  EXPECT_EQ(DeskBarViewBase::State::kZero, desks_bar_view->state());
+  SCOPED_TRACE("Desks bar at zero state");
+  VerifyLayersBoundsOnAllDisplays(/*in_overview=*/true);
+
+  // Upon expanding the virtual desks bar to state 'kExpanded' by creating a new
+  // desk, the wallpaper clip rect bounds will be refreshed.
+  DesksController::Get()->NewDesk(DesksCreationRemovalSource::kButton);
+  EXPECT_EQ(DeskBarViewBase::State::kExpanded, desks_bar_view->state());
+  SCOPED_TRACE("Desks bar at expanded state");
+  VerifyLayersBoundsOnAllDisplays(/*in_overview=*/true);
+
+  ToggleOverview();
+  ASSERT_FALSE(IsInOverviewSession());
+  SCOPED_TRACE("Overview exit");
+  VerifyLayersBoundsOnAllDisplays(/*in_overview=*/false);
 }
 
 // Tests that the wallpaper is clipped in partial overview mode and adjusts
@@ -10959,7 +11293,7 @@ TEST_F(OakTest, PartialOverviewVisualsAndResize) {
   OverviewGrid* overview_grid = GetOverviewSession()->grid_list()[0].get();
   // Verify that wallpaper is clipped properly with rounded corners applied in
   // partial overview.
-  EXPECT_EQ(overview_grid->GetGridEffectiveBounds(),
+  EXPECT_EQ(overview_grid->GetWallpaperClipBounds(),
             wallpaper_view_layer->clip_rect());
   EXPECT_EQ(kWallpaperClipRoundedCornerRadii,
             wallpaper_view_layer->rounded_corner_radii());
@@ -10974,11 +11308,48 @@ TEST_F(OakTest, PartialOverviewVisualsAndResize) {
   event_generator->MoveMouseBy(-10, 0);
   ASSERT_TRUE(IsInOverviewSession());
   EXPECT_TRUE(WindowState::Get(win1.get())->is_dragged());
-  EXPECT_EQ(overview_grid->GetGridEffectiveBounds(),
+  EXPECT_EQ(overview_grid->GetWallpaperClipBounds(),
             wallpaper_view_layer->clip_rect());
   EXPECT_EQ(kWallpaperClipRoundedCornerRadii,
             wallpaper_view_layer->rounded_corner_radii());
   event_generator->ReleaseLeftButton();
+}
+
+// Tests that snapping a window in full Overview hides desks widgets; closing
+// the window restores full Overview and shows the desks widgets again.
+TEST_F(OakTest, HideDesksWidgetInPartialOverview) {
+  std::unique_ptr<aura::Window> win1(
+      CreateAppWindow(gfx::Rect(10, 10, 200, 100)));
+  std::unique_ptr<aura::Window> win2(
+      CreateAppWindow(gfx::Rect(20, 20, 500, 200)));
+
+  ToggleOverview();
+  ASSERT_TRUE(IsInOverviewSession());
+  DesksController::Get()->NewDesk(DesksCreationRemovalSource::kButton);
+  OverviewGrid* overview_grid = GetOverviewSession()->grid_list()[0].get();
+  auto* desks_widget = overview_grid->desks_widget();
+  ASSERT_TRUE(desks_widget->IsVisible());
+
+  SnapOneTestWindow(win2.get(), chromeos::WindowStateType::kSecondarySnapped,
+                    chromeos::kTwoThirdSnapRatio,
+                    WindowSnapActionSource::kSnapByWindowLayoutMenu);
+  ASSERT_TRUE(IsInOverviewSession());
+  EXPECT_FALSE(desks_widget->IsVisible());
+
+  // Verify that the desks bar remain invisible in tablet partial overview mode.
+  EnterTabletMode();
+  ASSERT_TRUE(IsInOverviewSession());
+  EXPECT_FALSE(desks_widget->IsVisible());
+
+  LeaveTabletMode();
+  ASSERT_TRUE(IsInOverviewSession());
+  EXPECT_FALSE(desks_widget->IsVisible());
+
+  // Closing `w2` in partial overview restores full Overview mode, making desks
+  // widgets visible again.
+  win2.reset();
+  ASSERT_TRUE(IsInOverviewSession());
+  EXPECT_TRUE(desks_widget->IsVisible());
 }
 
 // Tests that the wallpaper view layer clips correctly with animation upon
@@ -11005,22 +11376,22 @@ TEST_F(OakTest, WallpaperClipAnimation) {
 
   ToggleOverview();
   OverviewGrid* overview_grid = GetOverviewSession()->grid_list()[0].get();
-  const auto& grid_effective_bounds = overview_grid->GetGridEffectiveBounds();
+  const auto& wallpaper_clip_bounds = overview_grid->GetWallpaperClipBounds();
   EXPECT_TRUE(wallpaper_view_layer_animator->is_animating());
   EXPECT_TRUE(
-      wallpaper_view_layer->clip_rect().Contains(grid_effective_bounds));
+      wallpaper_view_layer->clip_rect().Contains(wallpaper_clip_bounds));
   EXPECT_TRUE(display_bounds.Contains(wallpaper_view_layer->clip_rect()));
 
   ui::LayerAnimationStoppedWaiter layer_animation_stopped_waiter;
   layer_animation_stopped_waiter.Wait(wallpaper_view_layer);
   EXPECT_TRUE(wallpaper_underlay_layer->IsVisible());
   EXPECT_FALSE(wallpaper_view_layer_animator->is_animating());
-  EXPECT_EQ(wallpaper_view_layer->clip_rect(), grid_effective_bounds);
+  EXPECT_EQ(wallpaper_view_layer->clip_rect(), wallpaper_clip_bounds);
 
   ToggleOverview();
   EXPECT_TRUE(wallpaper_view_layer_animator->is_animating());
   EXPECT_TRUE(
-      wallpaper_view_layer->clip_rect().Contains(grid_effective_bounds));
+      wallpaper_view_layer->clip_rect().Contains(wallpaper_clip_bounds));
   EXPECT_TRUE(display_bounds.Contains(wallpaper_view_layer->clip_rect()));
 
   layer_animation_stopped_waiter.Wait(wallpaper_view_layer);
@@ -11028,6 +11399,72 @@ TEST_F(OakTest, WallpaperClipAnimation) {
   ASSERT_EQ(display_bounds, wallpaper_view_layer->bounds());
   EXPECT_FALSE(wallpaper_underlay_layer->IsVisible());
   EXPECT_TRUE(wallpaper_view_layer->clip_rect().IsEmpty());
+}
+
+// Tests that the shelf's opaque background transitions from visible (default)
+// to invisible (overview) and back to visible (overview exit).
+TEST_F(OakTest, ShelfOpaqueBackground) {
+  EXPECT_FALSE(display::Screen::GetScreen()->InTabletMode());
+  ShelfWidget* shelf_widget = GetPrimaryShelf()->shelf_widget();
+  ui::Layer* opaque_background_layer =
+      shelf_widget->GetDelegateViewOpaqueBackgroundLayerForTesting();
+  ASSERT_TRUE(opaque_background_layer->IsVisible());
+
+  ToggleOverview();
+  ASSERT_TRUE(IsInOverviewSession());
+  EXPECT_FALSE(opaque_background_layer->IsVisible());
+
+  ToggleOverview();
+  ASSERT_FALSE(IsInOverviewSession());
+  EXPECT_TRUE(opaque_background_layer->IsVisible());
+}
+
+// Tests that wallpaper clip rect bounds update upon virtual desk bar state
+// changes, and that oak does not configure the desk bar background.
+TEST_F(OakTest, VirtualDesksBarStateChange) {
+  const gfx::Rect display_bounds(
+      GetDisplayBoundsForRootWindow(Shell::GetPrimaryRootWindow()));
+  auto* wallpaper_widget_controller =
+      Shell::GetPrimaryRootWindowController()->wallpaper_widget_controller();
+  auto* wallpaper_view_layer =
+      wallpaper_widget_controller->wallpaper_view()->layer();
+  auto* wallpaper_underlay_layer =
+      wallpaper_widget_controller->wallpaper_underlay_layer();
+  EXPECT_EQ(display_bounds, wallpaper_view_layer->bounds());
+  EXPECT_TRUE(wallpaper_view_layer->clip_rect().IsEmpty());
+  EXPECT_TRUE(wallpaper_view_layer->rounded_corner_radii().IsEmpty());
+  EXPECT_FALSE(wallpaper_underlay_layer->IsVisible());
+
+  ToggleOverview();
+  OverviewGrid* overview_grid = GetOverviewSession()->grid_list()[0].get();
+  auto* desks_bar_view = overview_grid->desks_bar_view();
+  // The virtual desks bar is at zero state initially.
+  EXPECT_EQ(DeskBarViewBase::State::kZero, desks_bar_view->state());
+  EXPECT_FALSE(desks_bar_view->background_view());
+  gfx::Rect wallpaper_clip_rect_for_zero_state(
+      wallpaper_view_layer->clip_rect());
+  EXPECT_EQ(overview_grid->GetWallpaperClipBounds(),
+            wallpaper_clip_rect_for_zero_state);
+  EXPECT_EQ(kWallpaperClipRoundedCornerRadii,
+            wallpaper_view_layer->rounded_corner_radii());
+  EXPECT_TRUE(wallpaper_underlay_layer->IsVisible());
+
+  // Upon expanding the virtual desks bar to state 'kExpanded' by creating a new
+  // desk, the wallpaper clip rect bounds will be refreshed.
+  DesksController::Get()->NewDesk(DesksCreationRemovalSource::kButton);
+  EXPECT_EQ(DeskBarViewBase::State::kExpanded, desks_bar_view->state());
+  gfx::Rect wallpaper_clip_rect_for_expanded_state(
+      wallpaper_view_layer->clip_rect());
+
+  // The updated `wallpaper_clip_rect_for_expanded_state` will be smaller than
+  // the previous `wallpaper_clip_rect_for_zero_state`.
+  EXPECT_TRUE(wallpaper_clip_rect_for_zero_state.Contains(
+      wallpaper_clip_rect_for_expanded_state));
+  EXPECT_EQ(overview_grid->GetWallpaperClipBounds(),
+            wallpaper_clip_rect_for_expanded_state);
+  EXPECT_EQ(kWallpaperClipRoundedCornerRadii,
+            wallpaper_view_layer->rounded_corner_radii());
+  EXPECT_TRUE(wallpaper_underlay_layer->IsVisible());
 }
 
 TEST_F(OakTest, CenterOverviewItems) {
@@ -11062,6 +11499,61 @@ TEST_F(OakTest, CenterOverviewItems) {
 
   EXPECT_NEAR(overview_grid->GetGridEffectiveBounds().CenterPoint().x(),
               union_bounds.CenterPoint().x(), 1);
+}
+
+// Tests that the drop target bounds are configured to match the overview item
+// it is a placeholder for with the center overview items processing. See
+// regression at http://b/330386194.
+TEST_F(OakTest, DropTargetBounds) {
+  // Pre-add a desk to prevent the desks bar from expanding when dragging
+  // starts.
+  auto* desks_controller = DesksController::Get();
+  desks_controller->NewDesk(DesksCreationRemovalSource::kButton);
+  ASSERT_EQ(2u, desks_controller->desks().size());
+
+  auto window0 = CreateAppWindow(gfx::Rect(10, 10, 200, 100));
+  auto window1 = CreateAppWindow(gfx::Rect(20, 20, 300, 200));
+  auto window2 = CreateAppWindow(gfx::Rect(30, 30, 220, 110));
+  auto window3 = CreateAppWindow(gfx::Rect(30, 20, 300, 200));
+  auto window4 = CreateAppWindow(gfx::Rect(40, 30, 400, 300));
+  auto window5 = CreateAppWindow(gfx::Rect(50, 40, 500, 400));
+
+  OverviewController* overview_controller = OverviewController::Get();
+  overview_controller->StartOverview(OverviewStartAction::kTests,
+                                     OverviewEnterExitType::kImmediateEnter);
+  ASSERT_TRUE(overview_controller->InOverviewSession());
+
+  aura::Window* primary_root_window = Shell::GetPrimaryRootWindow();
+  auto* overview_grid = GetOverviewGridForRoot(primary_root_window);
+  ASSERT_TRUE(overview_grid);
+  const auto& item_list = overview_grid->window_list();
+  ASSERT_EQ(6u, item_list.size());
+
+  for (const auto& overview_item : item_list) {
+    auto* event_generator = GetEventGenerator();
+    const gfx::RectF target_bounds_before_dragging =
+        overview_item->target_bounds();
+    for (const bool by_touch : {false, true}) {
+      DragItemToPoint(overview_item.get(),
+                      primary_root_window->GetBoundsInScreen().CenterPoint(),
+                      event_generator, by_touch, /*drop=*/false);
+      ASSERT_TRUE(overview_controller->InOverviewSession());
+
+      auto* drop_target = overview_grid->drop_target();
+      ASSERT_TRUE(drop_target);
+
+      // Verify that the bounds of the `drop_target` will be the same as the
+      // `target_bounds_before_dragging`.
+      ASSERT_EQ(gfx::RectF(drop_target->target_bounds()),
+                target_bounds_before_dragging);
+
+      if (by_touch) {
+        event_generator->ReleaseTouch();
+      } else {
+        event_generator->ReleaseLeftButton();
+      }
+    }
+  }
 }
 
 }  // namespace ash

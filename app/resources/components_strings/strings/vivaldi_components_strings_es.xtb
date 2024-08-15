@@ -169,7 +169,6 @@
 <translation id="7353601530677266744">Línea de comandos</translation>
 <translation id="7364115444476960850">La página a la que intentabas acceder ha sido bloqueada por el <ph name="BLOCKER_NAME" /> de Vivaldi</translation>
 <translation id="7419106976560586862">Ruta del perfil</translation>
-<translation id="7445762425076701745">La identidad del servidor al que estás conectado no se puede validar por completo. Estás conectado a un servidor con un nombre que sólo es válido dentro tu red y cuya propiedad no puede validar una entidad externa emisora de certificados. A pesar de que algunas entidades emisoras emiten certificados para esos nombres, no es posible garantizar que estés conectado al sitio web que quieres, y no al de un atacante.</translation>
 <translation id="7455133967321480974">Usar valor por defecto global (bloquear)</translation>
 <translation id="7518003948725431193">No se ha encontrado una página web en la dirección: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Esta página web requiere los datos que has introducido anteriormente para mostrarse correctamente. Puedes volver a enviarlos, pero al hacerlo, repetirás las acciones que esta página haya realizado previamente .</translation>

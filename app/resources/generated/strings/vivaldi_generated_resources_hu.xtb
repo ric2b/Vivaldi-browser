@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">Ezután nem:</translation>
 <translation id="2749881179542288782">Nyelvhelyesség és helyesírás ellenőrzése</translation>
 <translation id="2785873697295365461">Fájlleírók</translation>
-<translation id="2809586584051668049">és <ph name="NUMBER_ADDITIONAL_DISABLED" /> további</translation>
 <translation id="2825758591930162672">Nyilvános kulcs</translation>
 <translation id="2850541429955027218">Téma hozzáadása</translation>
 <translation id="2861941300086904918">Natív kliens biztonságkezelő</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">Megnyitás ablakként</translation>
 <translation id="3280237271814976245">Mentés &amp;másként...</translation>
 <translation id="3285322247471302225">Új &amp;lap</translation>
-<translation id="3288047731229977326">A fejlesztői módban futó bővítmények kárt okozhatnak számítógépén. Ha Ön nem fejlesztő, akkor a biztonság kedvéért kapcsolja ki a fejlesztői módban futó bővítményeket.</translation>
 <translation id="329838636886466101">Javítás</translation>
 <translation id="33022249435934718">GDI azonosítók</translation>
 <translation id="3303818374450886607">Példányszám</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">Bővítmény létrehozva:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">A fejlesztői módban futó bővítmények kikapcsolása</translation>
 <translation id="4100839878934973028">A számítógépen lévő egyik program olyan alkalmazást adott hozzá, amely módosíthatja a Vivaldi működését.</translation>
 <translation id="4104163789986725820">E&amp;xportálás...</translation>
 <translation id="4109898769411476438">Importálás előtt zárd be a böngészőt</translation>
@@ -261,7 +258,6 @@
 <translation id="5269977353971873915">A nyomtatás nem sikerült</translation>
 <translation id="5284445933715251131">Letöltés folytatása</translation>
 <translation id="52912272896845572">A privátkulcs-fájl érvénytelen.</translation>
-<translation id="5301954838959518834">Rendben, értem</translation>
 <translation id="5302932258331363306">Cserék megjelenítése</translation>
 <translation id="5317780077021120954">Mentés</translation>
 <translation id="5334142896108694079">Szkript gyorsítótár</translation>

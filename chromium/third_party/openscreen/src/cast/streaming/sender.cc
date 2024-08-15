@@ -145,8 +145,8 @@ void DispatchFrameLogMessages(
 
 }  // namespace
 
-Sender::Sender(Environment* environment,
-               SenderPacketRouter* packet_router,
+Sender::Sender(Environment& environment,
+               SenderPacketRouter& packet_router,
                SessionConfig config,
                RtpPayloadType rtp_payload_type)
     : environment_(environment),
@@ -154,27 +154,26 @@ Sender::Sender(Environment* environment,
       packet_router_(packet_router),
       rtcp_session_(config.sender_ssrc,
                     config.receiver_ssrc,
-                    environment->now()),
-      rtcp_parser_(&rtcp_session_, this),
-      sender_report_builder_(&rtcp_session_),
+                    environment.now()),
+      rtcp_parser_(rtcp_session_, *this),
+      sender_report_builder_(rtcp_session_),
       rtp_packetizer_(rtp_payload_type,
                       config.sender_ssrc,
-                      packet_router_->max_packet_size()),
+                      packet_router_.max_packet_size()),
       rtp_timebase_(config.rtp_timebase),
       crypto_(config.aes_secret_key, config.aes_iv_mask),
       target_playout_delay_(config.target_playout_delay) {
-  OSP_CHECK(packet_router_);
   OSP_CHECK_NE(rtcp_session_.sender_ssrc(), rtcp_session_.receiver_ssrc());
   OSP_CHECK_GT(rtp_timebase_, 0);
   OSP_CHECK_GT(target_playout_delay_, milliseconds::zero());
 
   pending_sender_report_.reference_time = SenderPacketRouter::kNever;
 
-  packet_router_->OnSenderCreated(rtcp_session_.receiver_ssrc(), this);
+  packet_router_.OnSenderCreated(rtcp_session_.receiver_ssrc(), this);
 }
 
 Sender::~Sender() {
-  packet_router_->OnSenderDestroyed(rtcp_session_.receiver_ssrc());
+  packet_router_.OnSenderDestroyed(rtcp_session_.receiver_ssrc());
 }
 
 void Sender::SetObserver(Sender::Observer* observer) {
@@ -191,7 +190,7 @@ Clock::duration Sender::GetInFlightMediaDuration(
     return Clock::duration::zero();  // No frames are currently in-flight.
   }
 
-  const PendingFrameSlot& oldest_slot = *get_slot_for(checkpoint_frame_id_ + 1);
+  const PendingFrameSlot& oldest_slot = get_slot_for(checkpoint_frame_id_ + 1);
   // Note: The oldest slot's frame cannot have been canceled because the
   // protocol does not allow ACK'ing this particular frame without also moving
   // the checkpoint forward. See "CST2 feedback" discussion in rtp_defines.h.
@@ -233,7 +232,12 @@ Sender::EnqueueFrameResult Sender::EnqueueFrame(const EncodedFrame& frame) {
   OSP_CHECK_GE(frame.referenced_frame_id, FrameId::first());
   if (frame.frame_id != FrameId::first()) {
     OSP_CHECK_GT(frame.rtp_timestamp, pending_sender_report_.rtp_timestamp);
-    OSP_CHECK_GT(frame.reference_time, pending_sender_report_.reference_time);
+    if (frame.reference_time <= pending_sender_report_.reference_time) {
+      OSP_DLOG_WARN << "Frame " << frame.frame_id
+                    << " has non-monotonic reference_time: "
+                    << frame.reference_time
+                    << " <= " << pending_sender_report_.reference_time;
+    }
   }
   OSP_CHECK(frame.data.data());
 
@@ -252,35 +256,40 @@ Sender::EnqueueFrameResult Sender::EnqueueFrame(const EncodedFrame& frame) {
   }
 
   // Encrypt the frame and initialize the slot tracking its sending.
-  PendingFrameSlot* const slot = get_slot_for(frame.frame_id);
-  OSP_CHECK(!slot->frame);
-  slot->frame = crypto_.Encrypt(frame);
-  const int packet_count = rtp_packetizer_.ComputeNumberOfPackets(*slot->frame);
+  PendingFrameSlot& slot = get_slot_for(frame.frame_id);
+  OSP_CHECK(!slot.frame);
+  slot.frame = crypto_.Encrypt(frame);
+  const int packet_count = rtp_packetizer_.ComputeNumberOfPackets(*slot.frame);
   if (packet_count <= 0) {
-    slot->frame.reset();
+    slot.frame.reset();
     return PAYLOAD_TOO_LARGE;
   }
-  slot->send_flags.Resize(packet_count, YetAnotherBitVector::SET);
-  slot->packet_sent_times.assign(packet_count, SenderPacketRouter::kNever);
+  slot.send_flags.Resize(packet_count, YetAnotherBitVector::SET);
+  slot.packet_sent_times.assign(packet_count, SenderPacketRouter::kNever);
 
   // Officially record the "enqueue."
   ++num_frames_in_flight_;
-  last_enqueued_frame_id_ = slot->frame->frame_id;
+  last_enqueued_frame_id_ = slot.frame->frame_id;
   OSP_CHECK_LE(num_frames_in_flight_,
                last_enqueued_frame_id_ - checkpoint_frame_id_);
-  if (slot->frame->dependency == EncodedFrame::Dependency::kKeyFrame) {
-    last_enqueued_key_frame_id_ = slot->frame->frame_id;
+  if (slot.frame->dependency == EncodedFrame::Dependency::kKeyFrame) {
+    last_enqueued_key_frame_id_ = slot.frame->frame_id;
   }
 
   // Update the target playout delay, if necessary.
-  if (slot->frame->new_playout_delay > milliseconds::zero()) {
-    target_playout_delay_ = slot->frame->new_playout_delay;
-    playout_delay_change_at_frame_id_ = slot->frame->frame_id;
+  if (slot.frame->new_playout_delay > milliseconds::zero()) {
+    target_playout_delay_ = slot.frame->new_playout_delay;
+    playout_delay_change_at_frame_id_ = slot.frame->frame_id;
   }
 
-  // Update the lip-sync information for the next Sender Report.
-  pending_sender_report_.reference_time = slot->frame->reference_time;
-  pending_sender_report_.rtp_timestamp = slot->frame->rtp_timestamp;
+  // Update the lip-sync information for the next Sender Report, ensuring that
+  // the reference time is monotonically increasing.
+  pending_sender_report_.reference_time =
+      frame.frame_id == FrameId::first()
+          ? slot.frame->reference_time
+          : std::max(slot.frame->reference_time,
+                     pending_sender_report_.reference_time);
+  pending_sender_report_.rtp_timestamp = slot.frame->rtp_timestamp;
 
   // If the round trip time hasn't been computed yet, immediately send a RTCP
   // packet (i.e., before the RTP packets are sent). The RTCP packet will
@@ -293,12 +302,12 @@ Sender::EnqueueFrameResult Sender::EnqueueFrame(const EncodedFrame& frame) {
   // Sender Report from this Sender. Thus, this Sender really needs to send
   // that, right now!
   if (round_trip_time_ == Clock::duration::zero()) {
-    packet_router_->RequestRtcpSend(rtcp_session_.receiver_ssrc());
+    packet_router_.RequestRtcpSend(rtcp_session_.receiver_ssrc());
   }
 
   // Re-activate RTP sending if it was suspended.
-  packet_router_->RequestRtpSend(rtcp_session_.receiver_ssrc());
-  DispatchEnqueueEvents(config_.stream_type, frame, *environment_);
+  packet_router_.RequestRtpSend(rtcp_session_.receiver_ssrc());
+  DispatchEnqueueEvents(config_.stream_type, frame, environment_);
 
   return OK;
 }
@@ -321,7 +330,7 @@ void Sender::OnReceivedRtcpPacket(Clock::time_point arrival_time,
   // This call to Parse() invoke zero or more of the OnReceiverXYZ() methods in
   // the current call stack:
   if (rtcp_parser_.Parse(packet, last_enqueued_frame_id_)) {
-    packet_router_->OnRtcpReceived(arrival_time, round_trip_time_);
+    packet_router_.OnRtcpReceived(arrival_time, round_trip_time_);
   }
 }
 
@@ -461,7 +470,7 @@ void Sender::OnReceiverReport(const RtcpReportBlock& receiver_report) {
 
 void Sender::OnCastReceiverFrameLogMessages(
     std::vector<RtcpReceiverFrameLogMessage> messages) {
-  DispatchFrameLogMessages(config_.stream_type, messages, *environment_);
+  DispatchFrameLogMessages(config_.stream_type, messages, environment_);
 }
 
 void Sender::OnReceiverIndicatesPictureLoss() {
@@ -508,11 +517,11 @@ void Sender::OnReceiverCheckpoint(FrameId frame_id,
   OSP_CHECK_GE(playout_delay, milliseconds::zero());
   while (checkpoint_frame_id_ < frame_id) {
     ++checkpoint_frame_id_;
-    PendingFrameSlot* const slot = get_slot_for(checkpoint_frame_id_);
-    if (slot && slot->is_active_for_frame(checkpoint_frame_id_)) {
-      const RtpTimeTicks rtp_timestamp = slot->frame->rtp_timestamp;
+    PendingFrameSlot& slot = get_slot_for(checkpoint_frame_id_);
+    if (slot.is_active_for_frame(checkpoint_frame_id_)) {
+      const RtpTimeTicks rtp_timestamp = slot.frame->rtp_timestamp;
       DispatchAckEvent(config_.stream_type, rtp_timestamp, checkpoint_frame_id_,
-                       *environment_);
+                       environment_);
       CancelPendingFrame(checkpoint_frame_id_, /*was_acked*/ true);
     }
   }
@@ -542,10 +551,10 @@ void Sender::OnReceiverHasFrames(std::vector<FrameId> acks) {
   }
 
   for (FrameId id : acks) {
-    PendingFrameSlot* const slot = get_slot_for(id);
-    if (slot && slot->is_active_for_frame(id)) {
-      const RtpTimeTicks rtp_timestamp = slot->frame->rtp_timestamp;
-      DispatchAckEvent(config_.stream_type, rtp_timestamp, id, *environment_);
+    PendingFrameSlot& slot = get_slot_for(id);
+    if (slot.is_active_for_frame(id)) {
+      const RtpTimeTicks rtp_timestamp = slot.frame->rtp_timestamp;
+      DispatchAckEvent(config_.stream_type, rtp_timestamp, id, environment_);
     }
     CancelPendingFrame(id, /*was_acked*/ true);
   }
@@ -575,9 +584,9 @@ void Sender::OnReceiverIsMissingPackets(std::vector<PacketNack> nacks) {
     const FrameId frame_id = nack_it->frame_id;
     PendingFrameSlot* slot = nullptr;
     if (frame_id <= last_enqueued_frame_id_) {
-      PendingFrameSlot* const candidate_slot = get_slot_for(frame_id);
-      if (candidate_slot->is_active_for_frame(frame_id)) {
-        slot = candidate_slot;
+      PendingFrameSlot& candidate_slot = get_slot_for(frame_id);
+      if (candidate_slot.is_active_for_frame(frame_id)) {
+        slot = &candidate_slot;
       }
     }
 
@@ -624,7 +633,7 @@ void Sender::OnReceiverIsMissingPackets(std::vector<PacketNack> nacks) {
   }
 
   if (need_to_send) {
-    packet_router_->RequestRtpSend(rtcp_session_.receiver_ssrc());
+    packet_router_.RequestRtpSend(rtcp_session_.receiver_ssrc());
   }
 }
 
@@ -632,13 +641,13 @@ Sender::ChosenPacket Sender::ChooseNextRtpPacketNeedingSend() {
   // Find the oldest packet needing to be sent (or re-sent).
   for (FrameId frame_id = checkpoint_frame_id_ + 1;
        frame_id <= last_enqueued_frame_id_; ++frame_id) {
-    PendingFrameSlot* const slot = get_slot_for(frame_id);
-    if (!slot->is_active_for_frame(frame_id)) {
+    PendingFrameSlot& slot = get_slot_for(frame_id);
+    if (!slot.is_active_for_frame(frame_id)) {
       continue;  // Frame was canceled. None of its packets need to be sent.
     }
-    const FramePacketId packet_id = slot->send_flags.FindFirstSet();
-    if (packet_id < slot->send_flags.size()) {
-      return {slot, packet_id};
+    const FramePacketId packet_id = slot.send_flags.FindFirstSet();
+    if (packet_id < slot.send_flags.size()) {
+      return {&slot, packet_id};
     }
   }
 
@@ -658,7 +667,7 @@ Sender::ChosenPacketAndWhen Sender::ChooseKickstartPacket() {
   // packet count. For historical reasons, all sender implementations have
   // always just sent the last packet; and so that tradition is continued here.
   ChosenPacketAndWhen chosen;
-  chosen.slot = get_slot_for(last_enqueued_frame_id_);
+  chosen.slot = &get_slot_for(last_enqueued_frame_id_);
   // Note: This frame cannot have been canceled since
   // `latest_expected_frame_id_` hasn't yet reached this point.
   OSP_CHECK(chosen.slot->is_active_for_frame(last_enqueued_frame_id_));
@@ -695,17 +704,17 @@ void Sender::CancelPendingFrame(FrameId frame_id, bool was_acked) {
   TRACE_SCOPED1(TraceCategory::kSender, "CancelPendingFrame", "frame_id",
                 frame_id.ToString());
 
-  PendingFrameSlot* const slot = get_slot_for(frame_id);
-  if (!slot->is_active_for_frame(frame_id)) {
+  PendingFrameSlot& slot = get_slot_for(frame_id);
+  if (!slot.is_active_for_frame(frame_id)) {
     return;  // Frame was already canceled.
   }
 
   if (was_acked) {
-    packet_router_->OnPayloadReceived(
-        slot->frame->data.size(), rtcp_packet_arrival_time_, round_trip_time_);
+    packet_router_.OnPayloadReceived(
+        slot.frame->data.size(), rtcp_packet_arrival_time_, round_trip_time_);
   }
 
-  slot->frame.reset();
+  slot.frame.reset();
   OSP_CHECK_GT(num_frames_in_flight_, 0);
   --num_frames_in_flight_;
   if (observer_) {
@@ -725,7 +734,7 @@ void Sender::DispatchCancellations() {
   // immediately after `checkpoint_frame_id_` must be valid.
   OSP_DCHECK((num_frames_in_flight_ == 0) ||
              get_slot_for(checkpoint_frame_id_ + 1)
-                 ->is_active_for_frame(checkpoint_frame_id_ + 1));
+                 .is_active_for_frame(checkpoint_frame_id_ + 1));
 }
 
 void Sender::Observer::OnFrameCanceled(FrameId frame_id) {}

@@ -189,7 +189,7 @@ class SceneControllerTest : public PlatformTest {
   }
 
   web::WebTaskEnvironment task_environment_{
-      web::WebTaskEnvironment::Options::IO_MAINLOOP,
+      web::WebTaskEnvironment::MainThreadType::IO,
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   IOSChromeScopedTestingLocalState local_state_;
   variations::ScopedVariationsIdsProvider scoped_variations_ids_provider_{
@@ -206,9 +206,10 @@ class SceneControllerTest : public PlatformTest {
   network::TestURLLoaderFactory test_loader_factory_;
 };
 
-// TODO(crbug.com/1084905): Add a test for keeping validity of detecting a fresh
-// open in new window coming from ios dock. 'Dock' is considered the default
-// when the new window opening request is external to chrome and unknown.
+// TODO(crbug.com/40693350): Add a test for keeping validity of detecting a
+// fresh open in new window coming from ios dock. 'Dock' is considered the
+// default when the new window opening request is external to chrome and
+// unknown.
 
 // Tests that scene controller updates scene state's incognitoContentVisible
 // when the relevant application command is called.
@@ -223,7 +224,7 @@ TEST_F(SceneControllerTest, UpdatesIncognitoContentVisibility) {
 
 // Tests that scene controller correctly handles an external intent to
 // OpenIncognitoSearch.
-// TODO(crbug.com/1506950): re-enabled the test.
+// TODO(crbug.com/40947630): re-enabled the test.
 TEST_F(SceneControllerTest, DISABLED_TestOpenIncognitoSearchForShortcutItem) {
   UIApplicationShortcutItem* shortcut = [[UIApplicationShortcutItem alloc]
         initWithType:kShortcutNewIncognitoSearch
@@ -304,11 +305,9 @@ TEST_F(SceneControllerTest, TestReportAnIssueViewControllerWithFamilyResponse) {
                               completion:std::move(completion)];
 
   // Create the family members fetch response.
-  kids_chrome_management::ListMembersResponse
-      list_family_members_response;
+  kidsmanagement::ListMembersResponse list_family_members_response;
   supervised_user::SetFamilyMemberAttributesForTesting(
-      list_family_members_response.add_members(), kids_chrome_management::CHILD,
-      "foo");
+      list_family_members_response.add_members(), kidsmanagement::CHILD, "foo");
   test_loader_factory_.SimulateResponseForPendingRequest(
       "https://kidsmanagement-pa.googleapis.com/kidsmanagement/v1/families/"
       "mine/members?alt=proto",

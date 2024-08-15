@@ -19,6 +19,7 @@ limitations under the License.
 #define MLIR_HLO_DIALECT_MHLO_IR_HLO_OPS
 
 include "mlir/Dialect/Shape/IR/ShapeBase.td"
+include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
@@ -1292,11 +1293,7 @@ def MHLO_AsyncUpdateOp : MHLO_Op<"async_update", [DeclareOpInterfaceMethods<Infe
     See the documentation for AsyncStart for more information.
   }];
 
-  let arguments = (ins
-    MHLO_AsyncBundle:$bundle,
-    FlatSymbolRefAttr:$called_computation,
-    StrAttr:$execution_thread
-    );
+  let arguments = (ins MHLO_AsyncBundle:$bundle);
 
   let results = (outs MHLO_AsyncBundle);
 
@@ -1316,11 +1313,7 @@ def MHLO_AsyncDoneOp : MHLO_Op<"async_done", [DeclareOpInterfaceMethods<InferTyp
     See the documentation for AsyncStart for more information.
   }];
 
-  let arguments = (ins
-    MHLO_AsyncBundle:$bundle,
-    FlatSymbolRefAttr:$called_computation,
-    StrAttr:$execution_thread
-    );
+  let arguments = (ins MHLO_AsyncBundle:$bundle);
 
   let results = (outs Variadic<MHLO_TensorOrTokenOrTuple>);
   let hasVerifier = 1;
@@ -2331,6 +2324,44 @@ def MHLO_CollectivePermuteOp: MHLO_Op<"collective_permute",
       "::mlir::DenseIntElementsAttr":$source_target_pairs)>];
 }
 
+def MHLO_CompositeOp : MHLO_Op<"composite", [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Composite operation";
+  let description = [{
+    Encapsulates an operation made up (composed) of other StableHLO operations,
+    taking `inputs` and `composite_attributes` and producing `results`. The
+    semantics of the op are implemented by the `decomposition` attribute. The
+    `composite` op can be replaced with its decomposition without changing program
+    semantics. In cases where inlining the decomposition does not provide the same
+    op semantics, prefer using `custom_call`.
+
+    The `version` field (defaults to `0`) is used to denote when a composite's
+    semantics change.
+
+    See:
+    https://github.com/openxla/stablehlo/blob/main/docs/spec.md#composite
+
+    Example:
+    ```mlir
+    %results = mhlo.composite "my.op" %arg0, %arg1 {
+      decomposition = @my_op,
+      composite_attributes = { my_attribute = "my_value" },
+      version = 1 : i32
+    } : (tensor<f32>, tensor<f32>) -> tensor<f32>
+    ```
+  }];
+
+  let arguments = (ins
+    Variadic<MHLO_TensorOrTokenOrTuple>:$inputs,
+    StrAttr:$name,
+    DefaultValuedOptionalAttr<DictionaryAttr, "{}">:$composite_attributes,
+    FlatSymbolRefAttr:$decomposition,
+    DefaultValuedOptionalAttr<I32Attr, "0">:$version
+  );
+  let results = (outs Variadic<MHLO_TensorOrTokenOrTuple>);
+  let hasCustomHLOConverter = 1;
+  let assemblyFormat = "$name $inputs attr-dict `:` functional-type(operands, results)";
+}
+
 def MHLO_ConvolutionOp : MHLO_Op<"convolution", [Pure]> {
   let summary = "Convolution operation";
   let description = [{
@@ -2588,6 +2619,29 @@ def MHLO_DotGeneralOp: MHLO_ShapedInterfaceOp<"dot_general", [Pure]> {
 
   let results = (outs MHLO_Tensor);
   // DotGeneral op required custom exporter to pass the preferred element type
+  // to Xla builder.
+  let hasCustomHLOConverter = 1;
+  let hasVerifier = 1;
+}
+
+def MHLO_SparseDotOp: MHLO_Op<"sparse_dot", [Pure]> {
+  let summary = "Sparse dot operation";
+  let description = [{
+    Similar to `dot_general` operation, with one or both of the operands being
+    sparse. An additional argument provides sparsity meta information.
+    Disclaimer: this op is experimental / a work in progress.
+  }];
+  let arguments = (ins
+    MHLO_Tensor:$lhs,
+    MHLO_Tensor:$rhs,
+    Variadic<MHLO_Tensor>:$meta,
+    OptionalAttr<MHLO_SparsityDescriptor>:$lhs_sparsity,
+    OptionalAttr<MHLO_SparsityDescriptor>:$rhs_sparsity,
+    MHLO_DotDimensionNumbers:$dot_dimension_numbers,
+    MHLO_PrecisionConfigAttr:$precision_config
+  );
+  let results = (outs MHLO_Tensor);
+  // SparseDot op required custom exporter to pass the preferred element type
   // to Xla builder.
   let hasCustomHLOConverter = 1;
   let hasVerifier = 1;
@@ -3787,61 +3841,50 @@ def MHLO_DynamicConvOp : MHLO_Op<"dynamic_conv", [Pure]> {
   let hasCustomHLOConverter = 1;
 }
 
-def MHLO_ComputeReshapeShapeOp :
-    MHLO_Op<"compute_reshape_shape", [Pure]> {
-  let summary = "ComputeReshapeShape operation";
-  let description = [{
-    This operation is a work in progress, so it is not yet included in
-    the specification: https://github.com/openxla/stablehlo/issues/8.
+// WARNING: This op was ported from CHLO and is currently only used by
+// KernelGen. Please do not add new uses of this op.
+def MHLO_MinimumBroadcastShapesOp : CppDeprecated<"Do not use this op outside of KernelGen">,
+    MHLO_Op<"minimum_broadcast_shapes", [Pure]> {
+  string summary = "Minimizes the rank of two or more shapes to be broadcasted";
 
-    Informally, this operation computes an output_shape for DynamicReshapeOp
-    from the `num_elements` number of elements in an operand of DynamicReshapeOp
-    and the `dynamic_shape` shape provided to TF's reshape:
-    https://www.tensorflow.org/api_docs/python/tf/reshape
+  string description = [{
+    Given two or more 1D tensors representing shapes, returns one 1D tensor for
+    each operand, where operand `i` corresponds to output `i`.
 
-    For example, for `num_elements = 12` and `dynamic_shape = [2, -1]`,
-    the `result` is going to be `[2, 6]`. If operands are not valid (e.g. if
-    dimensions do not evenly divide the number of elements, or if there are
-    multiple -1 values in dimensions), this leads to undefined behavior.
+    The returned tensors have the property that they specify a shape which is a
+    reshape of the corresponding input shape, and the broadcasted output shape
+    (using shape::BroadcastOp) of the returned shapes is a reshape of the
+    broadcasted output shape of the input shapes. Among all possibilities with
+    this property, the one is chosen which minimizes the rank of each returned
+    shape.
 
-    Example:
+    The general idea of this op is that it can be used for ops which have a
+    broadcasting semantic to operate on shapes with a possibly smaller rank
+    while preserving equivalence of the computed values. After computing the
+    result of the op using reshaped operands, the result can be reshaped to the
+    result that would have been originally computed.
+
+    Here is an example with two input shapes:
+
     ```mlir
-    %result = mhlo.compute_reshape_shape %num_elements, %dynamic_shape
-           : (index, tensor<2xi32>) -> tensor<2xi32>
+    mhlo.minimum_broadcast_shapes [1, 2, 3, 1, 2, 1],
+                                     [1, 1, 1, 2, 3] -> [6, 2, 1], [2, 3]
     ```
+
+    The broadcasted output shape of the operands is [1, 2, 3, 1, 2, 3], the
+    broadcasted output shape of the outputs is [6, 2, 3]. These two shapes are
+    reshapes of each other, and also each output is a reshape of the
+    corresponding input.
   }];
 
-  let arguments = (ins Index:$num_elements, 1DTensorOf<[AnyInteger, Index]>:$dynamic_shape);
-  let results = (outs 1DTensorOf<[AnyInteger, Index]>:$result);
+  let arguments = (ins Variadic<1DTensorOf<[Index]>>:$shapes);
+  let results = (outs Variadic<1DTensorOf<[Index]>>:$results);
+
+  let assemblyFormat = "$shapes attr-dict `:` type($shapes) `->` type($results)";
+
+  let hasVerifier = 1;
 
   let hasCustomHLOConverter = 1;
-
-  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
-}
-
-def MHLO_CstrReshapableOp :
-    MHLO_Op<"cstr_reshapable", [Pure]> {
-  let summary = "CstrReshapable operation";
-  let description = [{
-    This operation is a work in progress, so it is not yet included in
-    the specification: https://github.com/openxla/stablehlo/issues/8.
-
-    Informally, this operation creates a witness on the constraint that
-    ComputeReshapeShape would succeed with the provided operands.
-
-    Example:
-    ```mlir
-    %result = mhlo.cstr_reshapable %num_elements, %dynamic_shape
-           : (index, tensor<3xi32>) -> !shape.witness
-    ```
-  }];
-
-  let arguments = (ins Index:$num_elements, 1DTensorOf<[AnyInteger, Index]>:$dynamic_shape);
-  let results = (outs Shape_WitnessType:$result);
-
-  let hasCustomHLOConverter = 1;
-
-  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
 #endif // MLIR_HLO_DIALECT_MHLO_IR_HLO_OPS

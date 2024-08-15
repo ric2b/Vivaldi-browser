@@ -34,7 +34,10 @@ class COMPONENT_EXPORT(MANTA) OrcaProvider : virtual public BaseProvider {
   // arguments.
   OrcaProvider(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      signin::IdentityManager* identity_manager);
+      signin::IdentityManager* identity_manager,
+      bool is_demo_mode,
+      const std::string& chrome_version,
+      const std::string& locale);
 
   OrcaProvider(const OrcaProvider&) = delete;
   OrcaProvider& operator=(const OrcaProvider&) = delete;
@@ -45,7 +48,9 @@ class COMPONENT_EXPORT(MANTA) OrcaProvider : virtual public BaseProvider {
   // populated with the `input` parameters.
   // The fetched response is processed and returned to the caller via an
   // `MantaGenericCallback` callback.
-  // Will give an empty response if `IdentityManager` is no longer valid.
+  // In demo mode, it uses the Google API key for authentication, otherwise uses
+  // `IdentityManager`, in this case it will give an empty response if
+  // `IdentityManager` is no longer valid.
   void Call(const std::map<std::string, std::string>& input,
             MantaGenericCallback done_callback);
 

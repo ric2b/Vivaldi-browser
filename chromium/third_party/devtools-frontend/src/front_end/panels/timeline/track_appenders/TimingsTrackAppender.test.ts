@@ -2,22 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type * as TimelineModel from '../../../models/timeline_model/timeline_model.js';
+import * as Root from '../../../core/root/root.js';
 import * as TraceModel from '../../../models/trace/trace.js';
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
 import * as PerfUI from '../../../ui/legacy/components/perf_ui/perf_ui.js';
+import * as ThemeSupport from '../../../ui/legacy/theme_support/theme_support.js';
 import * as Timeline from '../timeline.js';
 
-const {assert} = chai;
-
 function initTrackAppender(
-    flameChartData: PerfUI.FlameChart.FlameChartTimelineData, traceParsedData: TraceModel.Handlers.Types.TraceParseData,
+    flameChartData: PerfUI.FlameChart.FlameChartTimelineData,
+    traceParsedData: TraceModel.Handlers.Types.TraceParseData,
     entryData: Timeline.TimelineFlameChartDataProvider.TimelineFlameChartEntry[],
     entryTypeByLevel: Timeline.TimelineFlameChartDataProvider.EntryType[],
-    timelineModel: TimelineModel.TimelineModel.TimelineModelImpl): Timeline.TimingsTrackAppender.TimingsTrackAppender {
+    ): Timeline.TimingsTrackAppender.TimingsTrackAppender {
   const compatibilityTracksAppender = new Timeline.CompatibilityTracksAppender.CompatibilityTracksAppender(
-      flameChartData, traceParsedData, entryData, entryTypeByLevel, timelineModel);
+      flameChartData, traceParsedData, entryData, entryTypeByLevel);
   return compatibilityTracksAppender.timingsTrackAppender();
 }
 
@@ -28,10 +28,8 @@ describeWithEnvironment('TimingTrackAppender', function() {
   let flameChartData = PerfUI.FlameChart.FlameChartTimelineData.createEmpty();
   let entryTypeByLevel: Timeline.TimelineFlameChartDataProvider.EntryType[] = [];
   beforeEach(async function() {
-    const data = await TraceLoader.allModels(this, 'timings-track.json.gz');
-    traceParsedData = data.traceParsedData;
-    timingsTrackAppender =
-        initTrackAppender(flameChartData, traceParsedData, entryData, entryTypeByLevel, data.timelineModel);
+    traceParsedData = await TraceLoader.traceEngine(this, 'timings-track.json.gz');
+    timingsTrackAppender = initTrackAppender(flameChartData, traceParsedData, entryData, entryTypeByLevel);
     timingsTrackAppender.appendTrackAtLevel(0);
   });
   afterEach(() => {
@@ -72,7 +70,7 @@ describeWithEnvironment('TimingTrackAppender', function() {
         const markerTimeMs = TraceModel.Helpers.Timing.microSecondsToMilliseconds(traceMarker.ts);
         const flameChartMarker =
             flameChartData.markers.find(flameChartMarker => flameChartMarker.startTime() === markerTimeMs);
-        assert.isDefined(flameChartMarker);
+        assert.exists(flameChartMarker);
       }
       assert.strictEqual(flameChartData.markers.length, traceMarkers.length);
     });
@@ -86,7 +84,7 @@ describeWithEnvironment('TimingTrackAppender', function() {
                of [...traceMarkers, ...performanceMarks, ...performanceMeasures, ...consoleTimings,
                    ...consoleTimestamps]) {
         const markerIndex = entryData.indexOf(event);
-        assert.isDefined(markerIndex);
+        assert.exists(markerIndex);
         assert.strictEqual(
             flameChartData.entryStartTimes[markerIndex],
             TraceModel.Helpers.Timing.microSecondsToMilliseconds(event.ts));
@@ -102,8 +100,8 @@ describeWithEnvironment('TimingTrackAppender', function() {
                of [...traceMarkers, ...performanceMarks, ...performanceMeasures, ...consoleTimings,
                    ...consoleTimestamps]) {
         const markerIndex = entryData.indexOf(event);
-        assert.isDefined(markerIndex);
-        if (TraceModel.Handlers.ModelHandlers.PageLoadMetrics.isTraceEventMarkerEvent(event)) {
+        assert.exists(markerIndex);
+        if (TraceModel.Types.TraceEvents.isTraceEventMarkerEvent(event)) {
           assert.isNaN(flameChartData.entryTotalTimes[markerIndex]);
           continue;
         }
@@ -253,6 +251,77 @@ describeWithEnvironment('TimingTrackAppender', function() {
       const highlightedEntryInfo = timingsTrackAppender.highlightedEntryInfo(consoleTimings[0]);
       // The i18n encodes spaces using the u00A0 unicode character.
       assert.strictEqual(highlightedEntryInfo.formattedTime, ('1.60\u00A0s'));
+    });
+  });
+
+  describe('extension markers', () => {
+    beforeEach(async function() {
+      Root.Runtime.experiments.enableForTest('timeline-extensions');
+
+      traceParsedData = await TraceLoader.traceEngine(this, 'extension-tracks-and-marks.json.gz');
+      timingsTrackAppender = initTrackAppender(flameChartData, traceParsedData, entryData, entryTypeByLevel);
+      timingsTrackAppender.appendTrackAtLevel(0);
+      // Rather than use the real colours here and burden the test with having to
+      // inject loads of CSS, we fake out the colours. this is fine for our tests as
+      // the exact value of the colours is not important; we just make sure that it
+      // parses them out correctly. Each variable is given a different rgb() value to
+      // ensure we know the code is working and using the right one.
+      const styleElement = document.createElement('style');
+      styleElement.id = 'fake-perf-panel-colors';
+      styleElement.textContent = `
+        :root {
+          --ref-palette-error40: rgb(10 10 10);
+        }
+      `;
+      document.documentElement.appendChild(styleElement);
+      ThemeSupport.ThemeSupport.clearThemeCache();
+    });
+    afterEach(() => {
+      Root.Runtime.experiments.disableForTest('timeline-extensions');
+      entryData = [];
+      flameChartData = PerfUI.FlameChart.FlameChartTimelineData.createEmpty();
+      entryTypeByLevel = [];
+      const styleElementToRemove = document.documentElement.querySelector('#fake-perf-panel-colors');
+      if (styleElementToRemove) {
+        document.documentElement.removeChild(styleElementToRemove);
+      }
+      ThemeSupport.ThemeSupport.clearThemeCache();
+    });
+
+    it('creates a TimelineFlameChartMarker for each extension marker event in a trace', () => {
+      const extensionMarkers = traceParsedData.ExtensionTraceData.extensionMarkers;
+      for (const traceMarker of extensionMarkers) {
+        const markerTimeMs = TraceModel.Helpers.Timing.microSecondsToMilliseconds(traceMarker.ts);
+        const flameChartMarker =
+            flameChartData.markers.find(flameChartMarker => flameChartMarker.startTime() === markerTimeMs);
+        assert.exists(flameChartMarker);
+      }
+    });
+
+    it('returns the correct color and title for extension markers', function() {
+      const extensionMarkers = traceParsedData.ExtensionTraceData.extensionMarkers;
+      for (const event of extensionMarkers) {
+        assert.strictEqual(timingsTrackAppender.titleForEvent(event), event.name);
+        // "error" color category is mapped to --ref-palette-error40
+        // which is faked out to 10, 10, 10
+        assert.strictEqual(timingsTrackAppender.colorForEvent(event), 'rgb(10 10 10)');
+      }
+    });
+    it('returns the correct color and title for extension markers', function() {
+      const extensionMarkers = traceParsedData.ExtensionTraceData.extensionMarkers;
+      for (const event of extensionMarkers) {
+        assert.strictEqual(timingsTrackAppender.titleForEvent(event), event.name);
+        // "error" color category is mapped to --ref-palette-error40
+        // which is faked out to 10, 10, 10
+        assert.strictEqual(timingsTrackAppender.colorForEvent(event), 'rgb(10 10 10)');
+      }
+    });
+    it('returns the tool tip info for an entry correctly', function() {
+      const extensionMarker = traceParsedData.ExtensionTraceData.extensionMarkers.at(0);
+      assert.isOk(extensionMarker, 'did not find any extension markers');
+
+      const highlightedEntryInfo = timingsTrackAppender.highlightedEntryInfo(extensionMarker);
+      assert.strictEqual(highlightedEntryInfo.title, 'A mark');
     });
   });
 });

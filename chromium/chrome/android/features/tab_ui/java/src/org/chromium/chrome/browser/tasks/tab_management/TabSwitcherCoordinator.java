@@ -29,7 +29,6 @@ import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
-import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthController;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthManager;
@@ -41,12 +40,15 @@ import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingUtilities;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab_ui.RecyclerViewPosition;
+import org.chromium.chrome.browser.tab_ui.TabContentManager;
+import org.chromium.chrome.browser.tab_ui.TabSwitcher;
+import org.chromium.chrome.browser.tab_ui.TabSwitcherCustomViewManager;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
-import org.chromium.chrome.browser.tasks.pseudotab.TabAttributeCache;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListMode;
 import org.chromium.chrome.browser.tasks.tab_management.suggestions.TabSuggestionsOrchestrator;
@@ -78,7 +80,7 @@ public class TabSwitcherCoordinator
                 TabSwitcher.TabListDelegate,
                 TabSwitcherResetHandler,
                 TabGridItemTouchHelperCallback.OnLongPressTabItemEventListener {
-    // TODO(crbug.com/982018): Rename 'COMPONENT_NAME' so as to add different metrics for carousel
+    // TODO(crbug.com/40635216): Rename 'COMPONENT_NAME' so as to add different metrics for carousel
     // tab switcher.
     static final String COMPONENT_NAME = "GridTabSwitcher";
     private final Activity mActivity;
@@ -99,7 +101,6 @@ public class TabSwitcherCoordinator
     private final TabSwitcherMessageManager mMessageManager;
     private final TabListEditorManager mTabListEditorManager;
     private TabSuggestionsOrchestrator mTabSuggestionsOrchestrator;
-    private TabAttributeCache mTabAttributeCache;
     private ViewGroup mContainer;
     private TabCreatorManager mTabCreatorManager;
     private boolean mIsInitialized;
@@ -110,7 +111,7 @@ public class TabSwitcherCoordinator
     private final @NonNull BottomSheetController mBottomSheetController;
 
     /**
-     * TODO(crbug.com/1227656): Refactor this to pass a supplier instead to ensure we re-use the
+     * TODO(crbug.com/40056462): Refactor this to pass a supplier instead to ensure we re-use the
      * same instance of {@link IncognitoReauthManager} across the codebase.
      */
     private IncognitoReauthManager mIncognitoReauthManager;
@@ -257,13 +258,14 @@ public class TabSwitcherCoordinator
                     int emptySubheadingStringResId =
                             R.string.tabswitcher_no_tabs_open_to_visit_different_pages;
                     TabListCoordinator tabListCoordinator = new TabListCoordinator(mode, activity,
-                            mBrowserControlsStateProvider, currentTabModelFilterSupplier,
+                            mBrowserControlsStateProvider, modalDialogManager,
+                            currentTabModelFilterSupplier,
                             ()
                                     -> tabModelSelector.getModel(false),
                             mMultiThumbnailCardProvider, titleProvider, true, mMediator, null,
-                            TabProperties.UiType.CLOSABLE, null, this ::getMessageManager,
-                            container, false, COMPONENT_NAME, mRootView, null, false, emptyImageResId,
-                            emptyHeadingStringResId, emptySubheadingStringResId);
+                            TabProperties.TabActionState.CLOSABLE, null, this::getMessageManager,
+                            container, false, COMPONENT_NAME, mRootView, null, false,
+                            emptyImageResId, emptyHeadingStringResId, emptySubheadingStringResId);
                     mTabGridCoordinators.add(tabListCoordinator);
                     mContainerViewChangeProcessors.add(PropertyModelChangeProcessor.create(
                             containerViewModel, tabListCoordinator.getContainerView(),
@@ -294,6 +296,7 @@ public class TabSwitcherCoordinator
                             mode,
                             activity,
                             mBrowserControlsStateProvider,
+                            modalDialogManager,
                             currentTabModelFilterSupplier,
                             () -> tabModelSelector.getModel(false),
                             mMultiThumbnailCardProvider,
@@ -301,7 +304,7 @@ public class TabSwitcherCoordinator
                             true,
                             mMediator,
                             null,
-                            TabProperties.UiType.CLOSABLE,
+                            TabProperties.TabActionState.CLOSABLE,
                             null,
                             this::getMessageManager,
                             container,
@@ -377,10 +380,6 @@ public class TabSwitcherCoordinator
             mMenuOrKeyboardActionController.registerMenuOrKeyboardActionHandler(
                     mTabSwitcherMenuActionHandler);
 
-            if (ChromeFeatureList.sInstantStart.isEnabled()) {
-                mTabAttributeCache = new TabAttributeCache(mTabModelSelector);
-            }
-
             mLifecycleDispatcher = lifecycleDispatcher;
             mLifecycleDispatcher.register(this);
         }
@@ -394,6 +393,7 @@ public class TabSwitcherCoordinator
     private void initTabGridDialogCoordinator() {
         var currentTabModelFilterSupplier =
                 mTabModelSelector.getTabModelFilterProvider().getCurrentTabModelFilterSupplier();
+
         mTabGridDialogCoordinator =
                 new TabGridDialogCoordinator(
                         mActivity,
@@ -409,7 +409,8 @@ public class TabSwitcherCoordinator
                         TabSwitcherCoordinator.this::getTabGridDialogAnimationSourceView,
                         mGridDialogScrimCoordinator,
                         mTabListCoordinator.getTabGroupTitleEditor(),
-                        mRootView);
+                        mRootView,
+                        /* actionConfirmationManager= */ null);
     }
 
     private ScrimCoordinator createScrimCoordinator() {
@@ -537,7 +538,7 @@ public class TabSwitcherCoordinator
 
     @Override
     public void requestFocusOnCurrentTab() {
-        // TODO(crbug.com/1447564): Ideally, this shouldn't be called directly and instead mediator
+        // TODO(crbug.com/40269022): Ideally, this shouldn't be called directly and instead mediator
         // should listen for |requestFocusOnCurrentTab| signal implicitly and apply changes. This
         // would require refactoring TabSwitcher.TabListDelegate and its implementation.
         mMediator.requestAccessibilityFocusOnCurrentTab();
@@ -630,10 +631,9 @@ public class TabSwitcherCoordinator
         RecordUserAction.record("TabMultiSelectV2.OpenLongPressInGrid");
     }
 
-
     private View getTabGridDialogAnimationSourceView(int tabId) {
         int index = mTabListCoordinator.getTabIndexFromTabId(tabId);
-        // TODO(crbug.com/999372): This is band-aid fix that will show basic fade-in/fade-out
+        // TODO(crbug.com/41479135): This is band-aid fix that will show basic fade-in/fade-out
         // animation when we cannot find the animation source view holder. This is happening due to
         // current group id in TabGridDialog can not be indexed in TabListModel, which should never
         // happen. Remove this when figure out the actual cause.
@@ -684,9 +684,6 @@ public class TabSwitcherCoordinator
         mMediator.destroy();
         mMessageManager.destroy();
         mLifecycleDispatcher.unregister(this);
-        if (mTabAttributeCache != null) {
-            mTabAttributeCache.destroy();
-        }
         if (mPriceAnnotationsPrefListener != null) {
             ContextUtils.getAppSharedPreferences()
                     .unregisterOnSharedPreferenceChangeListener(mPriceAnnotationsPrefListener);
@@ -710,5 +707,10 @@ public class TabSwitcherCoordinator
 
     private TabSwitcherMessageManager getMessageManager() {
         return mMessageManager;
+    }
+
+    @Override
+    public void openInvitationModal(String invitationId) {
+        return;
     }
 }

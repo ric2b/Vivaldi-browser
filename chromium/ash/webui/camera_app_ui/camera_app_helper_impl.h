@@ -116,6 +116,10 @@ class CameraAppHelperImpl : public ScreenBacklightObserver,
   void GetEventsSender(GetEventsSenderCallback callback) override;
   void SetScreenLockedMonitor(mojo::PendingRemote<ScreenLockedMonitor> monitor,
                               SetScreenLockedMonitorCallback callback) override;
+  void RenderPdfAsJpeg(const std::vector<uint8_t>& pdf_data,
+                       RenderPdfAsJpegCallback callback) override;
+  void PerformOcr(const std::vector<uint8_t>& jpeg_data,
+                  PerformOcrCallback callback) override;
 
  private:
   void CheckExternalScreenState();
@@ -141,7 +145,7 @@ class CameraAppHelperImpl : public ScreenBacklightObserver,
 
   // display::DisplayObserver overrides;
   void OnDisplayAdded(const display::Display& new_display) override;
-  void OnDisplayRemoved(const display::Display& old_display) override;
+  void OnDisplaysRemoved(const display::Displays& removed_displays) override;
   void OnDisplayTabletStateChanged(display::TabletState state) override;
   void OnLidStateChanged(cros::mojom::LidState state) override;
 

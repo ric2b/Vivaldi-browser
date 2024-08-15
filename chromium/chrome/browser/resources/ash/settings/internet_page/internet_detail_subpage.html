@@ -321,6 +321,11 @@
           warning$="[[showRestrictedConnectivity_(managedProperties_,
               deviceState_)]]"
           disabled="[[disabled_]]">
+        <template is="dom-if" if="[[isApnManaged_(globalPolicy)]]">
+          <cr-policy-indicator id="apnManagedIcon"
+              indicator-type="devicePolicy">
+          </cr-policy-indicator>
+        </template>
       </cr-link-row>
     </template>
   </template>

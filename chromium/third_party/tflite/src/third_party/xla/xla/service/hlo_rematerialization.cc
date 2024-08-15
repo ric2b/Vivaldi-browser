@@ -2060,7 +2060,8 @@ absl::StatusOr<int64_t> RematerializeInstructions(
                 HloInstruction::CreateGetTupleElement(
                     ShapeUtil::GetTupleElementShape(remat_use->shape(),
                                                     *user.index),
-                    remat_use, *user.index));
+                    remat_use, *user.index),
+                /*new_name=*/"gte.remat");
             indirect_users.push_back(instruction_list->CreateItem(remat_use));
             gte_cache[*user.index] = remat_use;
           } else {
@@ -2069,7 +2070,8 @@ absl::StatusOr<int64_t> RematerializeInstructions(
         }
         if (user_operand->shape() != remat_use->shape()) {
           remat_use = computation->AddInstruction(
-              HloInstruction::CreateBitcast(user_operand->shape(), remat_use));
+              HloInstruction::CreateBitcast(user_operand->shape(), remat_use),
+              /*new_name=*/"bitcast.remat");
           indirect_users.push_back(instruction_list->CreateItem(remat_use));
         }
         TF_RETURN_IF_ERROR(user.user->instruction->ReplaceOperandWith(
@@ -2162,6 +2164,10 @@ absl::StatusOr<int64_t> RematerializeInstructions(
       VLOG(2) << "The old instruction " << best->name()
               << " is an async op. Removing to maintain one start to one done "
                  "invariant to keep the HLO valid.";
+      // We need to remove all control dependencies from best before removing it
+      // from the computation.  Its control dependencies were previously copied
+      // to the remat instruction.
+      TF_RETURN_IF_ERROR(best->DropAllControlDeps());
       TF_RETURN_IF_ERROR(computation->RemoveInstruction(best));
     }
   }

@@ -25,6 +25,9 @@ extern NSString* vTabGridEmptyStatePrivateTabsImage;
 extern NSString* vTabGridEmptyStateSyncedTabsImage;
 extern NSString* vTabGridEmptyStateClosedTabsImage;
 
+// Assets for inactive tabs
+extern NSString* vTabGridInactiveTabsEduIcon;
+
 // Colors for grid cell item
 extern NSString* const vTabGridSelectedColor;
 extern NSString* const vTabGridNotSelectedColor;
@@ -35,28 +38,13 @@ extern CGFloat const vTabGridEmptyStateViewContainerPadding;
 extern CGFloat const vTabGridSelectedBorderWidth;
 // Border width for not selected cell
 extern CGFloat const vTabGridNotSelectedBorderWidth;
-// Tab grid collection top padding
-extern const CGFloat vTabGridCollectionTopPadding;
-// Tab grid collection bottom padding
-extern const CGFloat vTabGridCollectionBottomPadding;
-// Tab grid item size multiplier for iPad
-extern const CGFloat vTabGridItemSizeMultiplieriPad;
-// Tab grid item size multiplier for iPhone portrait
-extern const CGFloat vTabGridItemSizeMultiplieriPhonePortrait;
-// Tab grid item size multiplier for iPhone landscape
-extern const CGFloat vTabGridItemSizeMultiplieriPhoneLandscape;
-// Tab grid item padding for iPhone
-extern const CGFloat vTabGridItemPaddingiPhone;
-// Tab grid item padding for iPad
-extern const CGFloat vTabGridItemPaddingiPad;
-// Tab grid section padding for iPhone portrait
-extern const CGFloat vTabGridSectionPaddingiPhonePortrait;
-// Tab grid section padding for iPhone landscape
-extern const CGFloat vTabGridSectionPaddingiPhoneLandscape;
-// Tab grid section padding for iPad portrait
-extern const CGFloat vTabGridSectionPaddingiPadPortrait;
-// Tab grid section padding for iPad landscape
-extern const CGFloat vTabGridSectionPaddingiPadLandscape;
+// Aspect Ratio for portrait mode.
+extern CGFloat const vTabGridPortraitAspectRatio;
+// Aspect Ratio for landscape mode on iPhone.
+extern CGFloat const vTabGridLandscapeAspectRatio;
+// Width thresholds for determining the columns count for
+// large width screen bounds.
+extern CGFloat const vTabGridLargeWidthThreshold;
 
 // Section header height for recent and sync tabs.
 extern const CGFloat vSectionHeaderHeight;

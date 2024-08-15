@@ -11,7 +11,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/ui/autofill/autofill_popup_controller.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_view_utils.h"
 #include "content/public/common/input/native_web_keyboard_event.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -71,6 +70,11 @@ class PopupRowView : public views::View, public views::ViewObserver {
                                  PopupCellSelectionSource source) = 0;
   };
 
+  // Returns the margin on the left and right of the row. When hovering in the
+  // content cell, this is the distance one sees between the updated
+  // background and the edge of the row.
+  static int GetHorizontalMargin();
+
   PopupRowView(AccessibilitySelectionDelegate& a11y_selection_delegate,
                SelectionDelegate& selection_delegate,
                base::WeakPtr<AutofillPopupController> controller,
@@ -123,8 +127,6 @@ class PopupRowView : public views::View, public views::ViewObserver {
   int line_number() const { return line_number_; }
 
  private:
-  void RunOnAccepted();
-
   AccessibilitySelectionDelegate& GetA11ySelectionDelegate() {
     return a11y_selection_delegate_.get();
   }

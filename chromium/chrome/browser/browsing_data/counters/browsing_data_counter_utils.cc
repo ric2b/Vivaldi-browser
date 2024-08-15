@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "base/i18n/number_formatting.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browsing_data/counters/cache_counter.h"
@@ -20,11 +21,13 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/signin/public/identity_manager/identity_utils.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/text/bytes_formatting.h"
 
 #if BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/browsing_data/counters/tabs_counter.h"
 #include "chrome/browser/flags/android/chrome_feature_list.h"
 #endif
 
@@ -156,10 +159,8 @@ std::u16string GetChromeCounterTextFromResult(
     int del_cookie_counter_msg_id =
         ShouldShowCookieException(profile) ||
                 (identity_manager &&
-                 identity_manager->HasPrimaryAccount(
-                     signin::ConsentLevel::kSignin) &&
-                 switches::IsExplicitBrowserSigninUIOnDesktopEnabled(
-                     switches::ExplicitBrowserSigninPhase::kExperimental))
+                 signin::AreGoogleCookiesRebuiltAfterClearingWhenSignedIn(
+                     *identity_manager, *profile->GetPrefs()))
             ? IDS_DEL_COOKIES_COUNTER_ADVANCED_WITH_SIGNED_IN_EXCEPTION
             : IDS_DEL_COOKIES_COUNTER_ADVANCED;
 
@@ -212,7 +213,7 @@ std::u16string GetChromeCounterTextFromResult(
     ResultInt signin_data_count = signin_result->WebAuthnCredentialsValue();
 
     std::vector<std::u16string> counts;
-    // TODO(crbug.com/1086433): If there are profile passwords, account
+    // TODO(crbug.com/40132590): If there are profile passwords, account
     // passwords and other sign-in data, these are combined as
     // "<1>; <2>; <3>" by recursively applying a "<1>; <2>" message.
     // Maybe we should do something more pretty?
@@ -238,6 +239,27 @@ std::u16string GetChromeCounterTextFromResult(
     }
     NOTREACHED();
   }
+
+#if BUILDFLAG(IS_ANDROID)
+  if (pref_name == browsing_data::prefs::kCloseTabs) {
+    const TabsCounter::TabsResult* tabs_result =
+        static_cast<const TabsCounter::TabsResult*>(result);
+    BrowsingDataCounter::ResultInt tab_count = tabs_result->Value();
+    BrowsingDataCounter::ResultInt window_count = tabs_result->window_count();
+
+    if (window_count > 1) {
+      std::u16string tabs_counter_string =
+          l10n_util::GetPluralStringFUTF16(IDS_TABS_COUNT, tab_count);
+      std::u16string windows_counter_string =
+          l10n_util::GetPluralStringFUTF16(IDS_WINDOWS_COUNT, window_count);
+      return l10n_util::GetStringFUTF16(IDS_DEL_TABS_MULTIWINDOW_COUNTER,
+                                        tabs_counter_string,
+                                        windows_counter_string);
+    } else {
+      return l10n_util::GetPluralStringFUTF16(IDS_DEL_TABS_COUNTER, tab_count);
+    }
+  }
+#endif
 
   return browsing_data::GetCounterTextFromResult(result);
 }

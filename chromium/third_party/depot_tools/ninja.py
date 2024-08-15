@@ -30,10 +30,37 @@ def findNinjaInPath():
             return ninja_path
 
 
+def checkOutdir(ninja_args):
+    out_dir = "."
+    tool = ""
+    for i, arg in enumerate(ninja_args):
+        if arg == "-t":
+            tool = ninja_args[i + 1]
+        elif arg.startswith("-t"):
+            tool = arg[2:]
+        elif arg == "-C":
+            out_dir = ninja_args[i + 1]
+        elif arg.startswith("-C"):
+            out_dir = arg[2:]
+    if tool in ["list", "commands", "inputs", "targets"]:
+        # These tools are just inspect ninja rules and not modify out dir.
+        # TODO: b/339320220 - implement these in siso
+        return
+    siso_marker = os.path.join(out_dir, ".siso_deps")
+    if os.path.exists(siso_marker):
+        print("depot_tools/ninja.py: %s contains Siso state file.\n"
+              "Use `autoninja` to choose appropriate build tool,\n"
+              "or run `gn clean %s` to switch from siso to ninja\n" %
+              (out_dir, out_dir),
+              file=sys.stderr)
+        sys.exit(1)
+
+
 def fallback(ninja_args):
     # Try to find ninja in PATH.
     ninja_path = findNinjaInPath()
     if ninja_path:
+        checkOutdir(ninja_args)
         return subprocess.call([ninja_path] + ninja_args)
 
     print(
@@ -84,6 +111,7 @@ def main(args):
             "ninja" + gclient_paths.GetExeSuffix(),
         )
         if os.path.isfile(ninja_path):
+            checkOutdir(args[1:])
             return subprocess.call([ninja_path] + args[1:])
 
     return fallback(args[1:])

@@ -6,27 +6,29 @@
 #include "components/notes/notes_model_loaded_observer.h"
 
 #include "app/vivaldi_apptools.h"
-#include "components/notes/notes_model.h"
-
 #include "chrome/browser/sync/sync_service_factory.h"
+#include "components/notes/notes_model.h"
 
 namespace vivaldi {
 
-NotesModelLoadedObserver::NotesModelLoadedObserver(Profile* profile)
-    : profile_(profile) {}
+NotesModelLoadedObserver::NotesModelLoadedObserver(Profile* profile,
+                                                   NotesModel* model)
+    : profile_(profile) {
+  CHECK(model);
+  observation_.Observe(model);
+}
 
-void NotesModelLoadedObserver::NotesModelLoaded(NotesModel* model,
-                                                bool ids_reassigned) {
+NotesModelLoadedObserver::~NotesModelLoadedObserver() = default;
+
+void NotesModelLoadedObserver::NotesModelLoaded(bool ids_reassigned) {
   if (vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning()) {
     // Causes lazy-load if sync is enabled.
     SyncServiceFactory::GetInstance()->GetForProfile(profile_);
   }
-  model->RemoveObserver(this);
   delete this;
 }
 
-void NotesModelLoadedObserver::NotesModelBeingDeleted(NotesModel* model) {
-  model->RemoveObserver(this);
+void NotesModelLoadedObserver::NotesModelBeingDeleted() {
   delete this;
 }
 

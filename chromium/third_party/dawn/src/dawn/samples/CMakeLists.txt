@@ -25,7 +25,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-add_library(dawn_sample_utils STATIC ${DAWN_PLACEHOLDER_FILE})
+add_library(dawn_sample_utils STATIC)
 common_compile_options(dawn_sample_utils)
 target_sources(dawn_sample_utils PRIVATE
     "SampleUtils.cpp"
@@ -43,13 +43,9 @@ target_link_libraries(dawn_sample_utils PUBLIC
     glfw
 )
 
-add_executable(CppHelloTriangle "CppHelloTriangle.cpp")
-common_compile_options(CppHelloTriangle)
-target_link_libraries(CppHelloTriangle dawn_sample_utils)
-
-add_executable(CHelloTriangle "CHelloTriangle.cpp")
-common_compile_options(CHelloTriangle)
-target_link_libraries(CHelloTriangle dawn_sample_utils)
+add_executable(HelloTriangle "HelloTriangle.cpp")
+common_compile_options(HelloTriangle)
+target_link_libraries(HelloTriangle dawn_sample_utils)
 
 add_executable(ComputeBoids "ComputeBoids.cpp")
 common_compile_options(ComputeBoids)
@@ -63,3 +59,6 @@ add_executable(DawnInfo "DawnInfo.cpp")
 common_compile_options(DawnInfo)
 target_link_libraries(DawnInfo dawn_sample_utils)
 
+add_executable(ManualSurfaceTest "ManualSurfaceTest.cpp")
+common_compile_options(ManualSurfaceTest)
+target_link_libraries(ManualSurfaceTest dawn_sample_utils)

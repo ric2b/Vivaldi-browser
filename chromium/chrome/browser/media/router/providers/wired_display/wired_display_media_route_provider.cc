@@ -12,6 +12,7 @@
 #include "base/functional/bind.h"
 #include "base/i18n/number_formatting.h"
 #include "base/ranges/algorithm.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/media/router/providers/wired_display/wired_display_presentation_receiver_factory.h"
@@ -70,7 +71,7 @@ const mojom::MediaRouteProviderId WiredDisplayMediaRouteProvider::kProviderId =
 // static
 std::string WiredDisplayMediaRouteProvider::GetSinkIdForDisplay(
     const Display& display) {
-  return "wired_display_" + std::to_string(display.id());
+  return "wired_display_" + base::NumberToString(display.id());
 }
 
 // static
@@ -232,17 +233,20 @@ void WiredDisplayMediaRouteProvider::OnDisplayAdded(
   NotifySinkObservers();
 }
 
-void WiredDisplayMediaRouteProvider::OnDisplayRemoved(
-    const Display& old_display) {
-  const std::string sink_id =
-      WiredDisplayMediaRouteProvider::GetSinkIdForDisplay(old_display);
-  auto it =
-      base::ranges::find(presentations_, sink_id,
-                         [](const Presentations::value_type& presentation) {
-                           return presentation.second.route().media_sink_id();
-                         });
-  if (it != presentations_.end())
-    it->second.receiver()->ExitFullscreen();
+void WiredDisplayMediaRouteProvider::OnDisplaysRemoved(
+    const display::Displays& removed_displays) {
+  for (const auto& display : removed_displays) {
+    const std::string sink_id =
+        WiredDisplayMediaRouteProvider::GetSinkIdForDisplay(display);
+    auto it =
+        base::ranges::find(presentations_, sink_id,
+                           [](const Presentations::value_type& presentation) {
+                             return presentation.second.route().media_sink_id();
+                           });
+    if (it != presentations_.end()) {
+      it->second.receiver()->ExitFullscreen();
+    }
+  }
   NotifySinkObservers();
 }
 

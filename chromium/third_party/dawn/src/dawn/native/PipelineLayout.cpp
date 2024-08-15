@@ -31,6 +31,7 @@
 #include <map>
 #include <utility>
 
+#include "absl/container/inlined_vector.h"
 #include "dawn/common/Assert.h"
 #include "dawn/common/BitSetIterator.h"
 #include "dawn/common/Enumerator.h"
@@ -57,7 +58,7 @@ ResultOrError<UnpackedPtr<PipelineLayoutDescriptor>> ValidatePipelineLayoutDescr
 
     // Validation for any pixel local storage.
     if (auto* pls = unpacked.Get<PipelineLayoutPixelLocalStorage>()) {
-        StackVector<StorageAttachmentInfoForValidation, 4> attachments;
+        absl::InlinedVector<StorageAttachmentInfoForValidation, 4> attachments;
         for (size_t i = 0; i < pls->storageAttachmentCount; i++) {
             const PipelineLayoutStorageAttachment& attachment = pls->storageAttachments[i];
 
@@ -68,11 +69,11 @@ ResultOrError<UnpackedPtr<PipelineLayoutDescriptor>> ValidatePipelineLayoutDescr
                             "storageAttachments[%i]'s format (%s) cannot be used with %s.", i,
                             format->format, wgpu::TextureUsage::StorageAttachment);
 
-            attachments->push_back({attachment.offset, attachment.format});
+            attachments.push_back({attachment.offset, attachment.format});
         }
 
         DAWN_TRY(ValidatePLSInfo(device, pls->totalPixelLocalStorageSize,
-                                 {attachments->data(), attachments->size()}));
+                                 {attachments.data(), attachments.size()}));
     }
 
     DAWN_INVALID_IF(descriptor->bindGroupLayoutCount > kMaxBindGroups,
@@ -240,41 +241,17 @@ ResultOrError<Ref<PipelineLayoutBase>> PipelineLayoutBase::CreateDefault(
                 entry.buffer.type = bindingInfo.type;
                 entry.buffer.minBindingSize = bindingInfo.minBindingSize;
             },
-            [&](const SamplerBindingInfo& bindingInfo) {
-                if (bindingInfo.isComparison) {
-                    entry.sampler.type = wgpu::SamplerBindingType::Comparison;
-                } else {
-                    entry.sampler.type = wgpu::SamplerBindingType::Filtering;
-                }
-            },
-            [&](const SampledTextureBindingInfo& bindingInfo) {
-                switch (bindingInfo.compatibleSampleTypes) {
-                    case SampleTypeBit::Depth:
-                        entry.texture.sampleType = wgpu::TextureSampleType::Depth;
-                        break;
-                    case SampleTypeBit::Sint:
-                        entry.texture.sampleType = wgpu::TextureSampleType::Sint;
-                        break;
-                    case SampleTypeBit::Uint:
-                        entry.texture.sampleType = wgpu::TextureSampleType::Uint;
-                        break;
-                    case SampleTypeBit::Float:
-                    case SampleTypeBit::UnfilterableFloat:
-                    case SampleTypeBit::None:
-                        DAWN_UNREACHABLE();
-                        break;
-                    default:
-                        if (bindingInfo.compatibleSampleTypes ==
-                            (SampleTypeBit::Float | SampleTypeBit::UnfilterableFloat)) {
-                            // Default to UnfilterableFloat. It will be promoted to Float
-                            // if it is used with a sampler.
-                            entry.texture.sampleType = wgpu::TextureSampleType::UnfilterableFloat;
-                        } else {
-                            DAWN_UNREACHABLE();
-                        }
-                }
+            [&](const SamplerBindingInfo& bindingInfo) { entry.sampler.type = bindingInfo.type; },
+            [&](const TextureBindingInfo& bindingInfo) {
+                entry.texture.sampleType = bindingInfo.sampleType;
                 entry.texture.viewDimension = bindingInfo.viewDimension;
                 entry.texture.multisampled = bindingInfo.multisampled;
+
+                // Default to UnfilterableFloat for texture_Nd<f32> as it will be promoted to Float
+                // if it is used with a sampler.
+                if (entry.texture.sampleType == wgpu::TextureSampleType::Float) {
+                    entry.texture.sampleType = wgpu::TextureSampleType::UnfilterableFloat;
+                }
             },
             [&](const StorageTextureBindingInfo& bindingInfo) {
                 entry.storageTexture.access = bindingInfo.access;

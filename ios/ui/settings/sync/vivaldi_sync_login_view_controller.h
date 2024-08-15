@@ -19,10 +19,12 @@
 // Log In
 - (void)logInButtonPressed:(NSString*)username
                   password:(NSString*)password
+                deviceName:(NSString*)deviceName
               savePassword:(BOOL)savePassword;
 
 - (void)createAccountLinkPressed;
 
+- (void)dismissVivaldiSyncLoginViewController;
 @end
 
 @interface VivaldiSyncLoginViewController : SettingsRootTableViewController
@@ -41,6 +43,9 @@
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
 
 - (void)loginFailed:(NSString*)errorMessage;
+
+// Setup the cancel button on the navigation's left bar button.
+- (void)setupLeftCancelButton;
 
 @end
 

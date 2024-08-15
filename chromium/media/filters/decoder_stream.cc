@@ -11,6 +11,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/trace_event/trace_event.h"
@@ -80,7 +81,7 @@ const char* GetPrepareTraceString<DemuxerStream::AUDIO>() {
 }
 
 const char* GetStatusString(const DecoderStatus& status) {
-  // TODO(crbug.com/1129662): Replace this with generic Status-to-string.
+  // TODO(crbug.com/40149493): Replace this with generic Status-to-string.
   switch (status.code()) {
     case DecoderStatus::Codes::kOk:
       return "okay";
@@ -399,7 +400,7 @@ void DecoderStream<StreamType>::OnDecoderSelected(
   }
 
   // Attempt to decode buffers from previous decoders (when those decoders have
-  // never successfully outputed a frame).
+  // never successfully outputted a frame).
   fallback_buffers_ = pending_buffers_;
 
   if (!decoder_or_error.has_value()) {
@@ -490,7 +491,7 @@ void DecoderStream<StreamType>::Decode(scoped_refptr<DecoderBuffer> buffer) {
     }
   }
 
-  // TODO(https://crbug.com/1324732): We should DCHECK(CanDecodeMore()) here,
+  // TODO(crbug.com/40839438): We should DCHECK(CanDecodeMore()) here,
   // but this breaks a number of tests.
 
   if (!fallback_buffers_.empty()) {
@@ -530,7 +531,7 @@ void DecoderStream<StreamType>::DecodeInternal(
 
   ++pending_decode_requests_;
 
-  const int buffer_size = is_eos ? 0 : buffer->data_size();
+  const int buffer_size = is_eos ? 0 : base::checked_cast<int>(buffer->size());
   decoder_->Decode(
       std::move(buffer),
       base::BindOnce(&DecoderStream<StreamType>::OnDecodeDone,
@@ -692,7 +693,7 @@ void DecoderStream<StreamType>::OnDecodeOutputReady(
 
   if (read_cb_) {
     // If |ready_outputs_| was non-empty, the read would have already been
-    // satisifed by Read().
+    // satisfied by Read().
     DCHECK(ready_outputs_.empty());
     SatisfyRead(std::move(output));
     return;

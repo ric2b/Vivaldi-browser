@@ -10,7 +10,9 @@
 #include "base/component_export.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
+#include "build/chromeos_buildflags.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/manta/sparky/sparky_delegate.h"
 
 namespace signin {
 class IdentityManager;
@@ -30,6 +32,7 @@ enum class FeatureSupportStatus {
 class MahiProvider;
 class OrcaProvider;
 class SnapperProvider;
+class SparkyProvider;
 
 // The MantaService class is a KeyedService for the Chrome/ChromeOS Manta
 // project. It serves two main functions:
@@ -41,7 +44,10 @@ class COMPONENT_EXPORT(MANTA) MantaService : public KeyedService {
  public:
   MantaService(
       scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory,
-      signin::IdentityManager* identity_manager);
+      signin::IdentityManager* identity_manager,
+      bool is_demo_mode,
+      const std::string& chrome_version,
+      const std::string& locale);
 
   MantaService(const MantaService&) = delete;
   MantaService& operator=(const MantaService&) = delete;
@@ -51,9 +57,13 @@ class COMPONENT_EXPORT(MANTA) MantaService : public KeyedService {
   // Returns a unique pointer to an instance of the Providers for the
   // profile associated with the MantaService instance from which this method
   // is called.
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   std::unique_ptr<MahiProvider> CreateMahiProvider();
   std::unique_ptr<OrcaProvider> CreateOrcaProvider();
   virtual std::unique_ptr<SnapperProvider> CreateSnapperProvider();
+  std::unique_ptr<SparkyProvider> CreateSparkyProvider(
+      std::unique_ptr<SparkyDelegate> sparky_delegate);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   // Determines whether the profile for this KeyedService support Orca feature.
   FeatureSupportStatus SupportsOrca();
@@ -64,6 +74,9 @@ class COMPONENT_EXPORT(MANTA) MantaService : public KeyedService {
  private:
   scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory_;
   raw_ptr<signin::IdentityManager> identity_manager_;
+  const bool is_demo_mode_;
+  const std::string chrome_version_;
+  const std::string locale_;
 };
 
 }  // namespace manta

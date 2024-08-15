@@ -10,6 +10,7 @@
 #include <unordered_map>
 
 #include "base/functional/bind.h"
+#include "base/metrics/user_metrics.h"
 #include "base/types/to_address.h"
 #include "base/uuid.h"
 #include "chrome/browser/profiles/profile.h"
@@ -25,6 +26,7 @@
 #include "chrome/browser/ui/views/bookmarks/saved_tab_groups/saved_tab_group_overflow_button.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/saved_tab_groups/features.h"
 #include "components/saved_tab_groups/saved_tab_group_tab.h"
 #include "ui/accessibility/ax_enums.mojom-shared.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -193,11 +195,11 @@ SavedTabGroupBar::SavedTabGroupBar(Browser* browser,
                                    bool animations_enabled = true)
     : saved_tab_group_model_(saved_tab_group_model),
       browser_(browser),
-      animations_enabled_(animations_enabled) {
+      animations_enabled_(animations_enabled),
+      v2_ui_enabled_(tab_groups::IsTabGroupsSaveUIUpdateEnabled()) {
   // When the #tab-groups-saved feature flag is turned on and profile is
   // regular, `SavedTabGroupBar` is instantiated. If the #tab-groups-saved
   // feature flag is turned off, there is no SavedTabGroupModel.
-  DCHECK(base::FeatureList::IsEnabled(features::kTabGroupsSave));
   DCHECK(browser_->profile()->IsRegularProfile());
   DCHECK(saved_tab_group_model_);
   SetAccessibilityProperties(
@@ -220,9 +222,11 @@ SavedTabGroupBar::SavedTabGroupBar(Browser* browser,
 
   saved_tab_group_model_->AddObserver(this);
 
-  overflow_button_ = AddChildView(
-      std::make_unique<SavedTabGroupOverflowButton>(base::BindRepeating(
-          &SavedTabGroupBar::MaybeShowOverflowMenu, base::Unretained(this))));
+  overflow_button_ = AddChildView(std::make_unique<SavedTabGroupOverflowButton>(
+      base::BindRepeating(IsTabGroupsSaveUIUpdateEnabled()
+                              ? &SavedTabGroupBar::ShowEverythingMenu
+                              : &SavedTabGroupBar::MaybeShowOverflowMenu,
+                          base::Unretained(this))));
 
   HideOverflowButton();
   LoadAllButtonsFromModel();
@@ -236,12 +240,27 @@ SavedTabGroupBar::SavedTabGroupBar(Browser* browser,
                        animations_enabled) {}
 
 SavedTabGroupBar::~SavedTabGroupBar() {
+  everything_menu_.reset();
+
   // Remove all buttons from the hierarchy
   RemoveAllButtons();
 
   if (saved_tab_group_model_) {
     saved_tab_group_model_->RemoveObserver(this);
   }
+}
+
+void SavedTabGroupBar::ShowEverythingMenu() {
+  CHECK(IsTabGroupsSaveUIUpdateEnabled());
+  base::RecordAction(base::UserMetricsAction(
+      "TabGroups_SavedTabGroups_EverythingButtonPressed"));
+  if (everything_menu_ && everything_menu_->IsShowing()) {
+    return;
+  }
+
+  everything_menu_ = std::make_unique<STGEverythingMenu>(
+      overflow_button_->button_controller(), browser_);
+  everything_menu_->RunMenu();
 }
 
 void SavedTabGroupBar::GetAccessibleNodeData(ui::AXNodeData* node_data) {
@@ -382,14 +401,18 @@ int SavedTabGroupBar::OnDragUpdated(const ui::DropTargetEvent& event) {
   drag_data_->SetLocation(gfx::Point(mirrored_x, event.location().y()));
   UpdateDropIndex();
 
-  const bool dragging_over_button =
-      overflow_button_->GetVisible() &&
-      mirrored_x >= overflow_button_->bounds().x();
-  const bool would_drop_into_overflow =
-      GetDropIndex() >= static_cast<size_t>(GetNumberOfVisibleGroups());
+  // Since v2 do not support dragging tab group into overflow menu, we only need
+  // to show the menu for v1;
+  if (!tab_groups::IsTabGroupsSaveUIUpdateEnabled()) {
+    const bool dragging_over_button =
+        overflow_button_->GetVisible() &&
+        mirrored_x >= overflow_button_->bounds().x();
+    const bool would_drop_into_overflow =
+        GetDropIndex() >= static_cast<size_t>(GetNumberOfVisibleGroups());
 
-  if (dragging_over_button || would_drop_into_overflow) {
-    MaybeShowOverflowMenu();
+    if (dragging_over_button || would_drop_into_overflow) {
+      MaybeShowOverflowMenu();
+    }
   }
 
   return ui::DragDropTypes::DRAG_MOVE;
@@ -474,12 +497,21 @@ void SavedTabGroupBar::OnWidgetDestroying(views::Widget* widget) {
 
 void SavedTabGroupBar::Layout(PassKey) {
   LayoutSuperclass<views::View>(this);
+
+  // The box layout manager has applied a vertical inset of `kButtonPadding` to
+  // the `overflow_button_`. This is not what we want. So manually layout
+  // `overflow_button_` again to make sure it gets the same height as `this`
+  // height and vertically centered.
+  const auto overflow_button_bounds = overflow_button_->bounds();
+  overflow_button_->SetBounds(overflow_button_bounds.x(), 0,
+                              overflow_button_bounds.width(), height());
+
   const int stg_bar_width = width();
   bool should_show_overflow = ShouldShowOverflowButtonForWidth(stg_bar_width);
   const int overflow_button_width =
       overflow_button_->GetPreferredSize().width() + kBetweenElementSpacing;
 
-  if (base::FeatureList::IsEnabled(features::kTabGroupsSaveV2)) {
+  if (IsTabGroupsSaveUIUpdateEnabled()) {
     if (stg_bar_width == 0) {
       return;
     } else {
@@ -496,7 +528,7 @@ void SavedTabGroupBar::Layout(PassKey) {
 
 int SavedTabGroupBar::V2CalculatePreferredWidthRestrictedBy(
     int max_width) const {
-  DCHECK(base::FeatureList::IsEnabled(features::kTabGroupsSaveV2));
+  DCHECK(IsTabGroupsSaveUIUpdateEnabled());
 
   // For V2, the preferred width of Saved tab groups bar depends on the number
   // of pinned tab groups (pinned state is WIP) in bookmark bar (plus Everything
@@ -522,7 +554,7 @@ int SavedTabGroupBar::V2CalculatePreferredWidthRestrictedBy(
 }
 
 int SavedTabGroupBar::CalculatePreferredWidthRestrictedBy(int max_width) const {
-  if (base::FeatureList::IsEnabled(features::kTabGroupsSaveV2)) {
+  if (IsTabGroupsSaveUIUpdateEnabled()) {
     return V2CalculatePreferredWidthRestrictedBy(max_width);
   }
 
@@ -562,14 +594,17 @@ bool SavedTabGroupBar::IsOverflowButtonVisible() {
 
 void SavedTabGroupBar::AddTabGroupButton(const SavedTabGroup& group,
                                          int index) {
+  // Do not add unpinned tab group for v2.
+  if (v2_ui_enabled_ && !group.is_pinned()) {
+    return;
+  }
+
   // Check that the index is valid for buttons
   DCHECK_LE(index, static_cast<int>(children().size()));
 
   AddChildViewAt(
       std::make_unique<SavedTabGroupButton>(
           group,
-          base::BindRepeating(&SavedTabGroupBar::page_navigator,
-                              base::Unretained(this)),
           base::BindRepeating(&SavedTabGroupBar::OnTabGroupButtonPressed,
                               base::Unretained(this), group.saved_guid()),
           browser_, animations_enabled_),
@@ -600,9 +635,24 @@ void SavedTabGroupBar::SavedTabGroupUpdated(const base::Uuid& guid) {
   const SavedTabGroup* group = saved_tab_group_model_->Get(guid);
   SavedTabGroupButton* button =
       views::AsViewClass<SavedTabGroupButton>(GetButton(group->saved_guid()));
-  DCHECK(button);
 
-  button->UpdateButtonData(*group);
+  // In v2, update can trigger by pin/unpin. Add TabGroupButton for a pin tab
+  // group if not present. Remove TabGroupButton for an unpinned tab group if
+  // present.
+  if (v2_ui_enabled_) {
+    if (!button && !group->is_pinned()) {
+      return;
+    } else if (!button && group->is_pinned()) {
+      AddTabGroupButton(*group, 0);
+    } else if (button && !group->is_pinned()) {
+      RemoveChildViewT(button);
+    } else {
+      button->UpdateButtonData(*group);
+    }
+  } else {
+    DCHECK(button);
+    button->UpdateButtonData(*group);
+  }
 
   InvalidateLayout();
 }
@@ -622,8 +672,10 @@ void SavedTabGroupBar::SavedTabGroupReordered() {
       saved_tab_group_model_->saved_tab_groups();
   for (size_t i = 0; i < groups.size(); ++i) {
     const std::string guid = groups[i].saved_guid().AsLowercaseString();
-    views::View* const button = buttons_by_guid[guid];
-    ReorderChildView(button, i);
+    if (base::Contains(buttons_by_guid, guid)) {
+      views::View* const button = buttons_by_guid[guid];
+      ReorderChildView(button, i);
+    }
   }
 
   // Ensure the overflow button is the last button in the view hierarchy.
@@ -644,8 +696,9 @@ void SavedTabGroupBar::LoadAllButtonsFromModel() {
 void SavedTabGroupBar::RemoveTabGroupButton(const base::Uuid& guid) {
   // Make sure we have a valid button before trying to remove it.
   views::View* button = GetButton(guid);
-  DCHECK(button);
-  RemoveChildViewT(button);
+  if (button) {
+    RemoveChildViewT(button);
+  }
 }
 
 void SavedTabGroupBar::RemoveAllButtons() {
@@ -708,7 +761,8 @@ void SavedTabGroupBar::MaybeShowOverflowMenu() {
   // 2. Create the bubble / background which will hold the overflow menu.
   // TODO(dljames): Set the background color to match the current theme.
   auto bubble_delegate = std::make_unique<views::BubbleDialogDelegate>(
-      overflow_button_, views::BubbleBorder::TOP_LEFT);
+      overflow_button_, views::BubbleBorder::TOP_LEFT,
+      views::BubbleBorder::DIALOG_SHADOW, true);
   bubble_delegate->set_fixed_width(200);
   bubble_delegate->set_margins(gfx::Insets());
   bubble_delegate->set_adjust_if_offscreen(true);
@@ -756,8 +810,6 @@ void SavedTabGroupBar::UpdateOverflowMenu() {
 
     overflow_menu_->AddChildView(std::make_unique<SavedTabGroupButton>(
         *group,
-        base::BindRepeating(&SavedTabGroupBar::page_navigator,
-                            base::Unretained(this)),
         base::BindRepeating(&SavedTabGroupBar::OnTabGroupButtonPressed,
                             base::Unretained(this), group->saved_guid()),
         browser_, animations_enabled_));
@@ -766,8 +818,6 @@ void SavedTabGroupBar::UpdateOverflowMenu() {
   if (overflow_menu_->GetWidget()) {
     if (overflow_menu_->children().empty()) {
       overflow_menu_->GetWidget()->Close();
-    } else {
-      bubble_delegate_->SizeToContents();
     }
   }
 }
@@ -791,12 +841,11 @@ int SavedTabGroupBar::GetNumberOfVisibleGroups() const {
   return count;
 }
 
-void SavedTabGroupBar::UpdateButtonVisibilities(
-    bool show_overflow,
-    size_t last_visible_button_index) {
+void SavedTabGroupBar::UpdateButtonVisibilities(bool show_overflow,
+                                                int last_visible_button_index) {
   // Update visibilities
   overflow_button_->SetVisible(show_overflow);
-  for (size_t i = 0; i < children().size() - 1; ++i) {
+  for (int i = 0; i < static_cast<int>(children().size()) - 1; ++i) {
     views::View* button = children()[i];
     button->SetVisible(i <= last_visible_button_index);
   }
@@ -809,8 +858,11 @@ bool SavedTabGroupBar::ShouldShowOverflowButtonForWidth(int max_width) const {
 
 int SavedTabGroupBar::CalculateLastVisibleButtonIndexForWidth(
     int max_width) const {
+  // kMaxVisibleButtons does not apply to v2.
   const int buttons_to_consider =
-      std::min(children().size() - 1, size_t(kMaxVisibleButtons));
+      v2_ui_enabled_
+          ? children().size() - 1
+          : std::min(children().size() - 1, size_t(kMaxVisibleButtons));
   int current_width = 0;
 
   // Returns an invalid index when no button is visible.

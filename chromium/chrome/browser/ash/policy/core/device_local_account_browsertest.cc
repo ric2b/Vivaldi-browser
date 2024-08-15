@@ -51,6 +51,7 @@
 #include "chrome/browser/ash/login/existing_user_controller.h"
 #include "chrome/browser/ash/login/helper.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
+#include "chrome/browser/ash/login/session/chrome_session_manager.h"
 #include "chrome/browser/ash/login/session/user_session_manager.h"
 #include "chrome/browser/ash/login/session/user_session_manager_test_api.h"
 #include "chrome/browser/ash/login/signin_specifics.h"
@@ -2041,7 +2042,9 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest,
   VerifyKeyboardLayoutMatchesLocale();
 }
 
-IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, TermsOfServiceWithLocaleSwitch) {
+// TODO(crbug.com/40923043): Flaky.
+IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest,
+                       DISABLED_TermsOfServiceWithLocaleSwitch) {
   // Specify Terms of Service URL.
   ASSERT_TRUE(embedded_test_server()->Start());
   device_local_account_policy_.payload().mutable_termsofserviceurl()->set_value(
@@ -2255,7 +2258,8 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, SessionLengthLimit) {
   // Setup a fake delegate to advance clock.
   auto delegate_ptr = std::make_unique<FakeDelegateImpl>();
   auto* delegate = delegate_ptr.get();
-  static_cast<ash::ChromeUserManagerImpl*>(user_manager::UserManager::Get())
+  static_cast<ash::ChromeSessionManager*>(
+      session_manager::SessionManager::Get())
       ->GetSessionLengthLimiterForTesting()
       ->SetDelegateForTesting(std::move(delegate_ptr));
 

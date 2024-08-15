@@ -8,8 +8,6 @@ import {describeWithMockConnection} from '../../testing/MockConnection.js';
 
 import * as SDK from './sdk.js';
 
-const {assert} = chai;
-
 describeWithMockConnection('AutofillModel', () => {
   it('can enable and disable the Autofill CDP domain', () => {
     const target = createTarget();
@@ -27,6 +25,19 @@ describeWithMockConnection('AutofillModel', () => {
     autofillModel!.enable();
     assert.isTrue(enableSpy.calledOnce);
     assert.isTrue(disableSpy.notCalled);
+  });
+
+  it('sets test addresses by calling the Autofill backend', () => {
+    const target = createTarget();
+    const autofillModel = target.model(SDK.AutofillModel.AutofillModel);
+    const setAddressSpy = sinon.spy(autofillModel!.agent, 'invoke_setAddresses');
+    assert.isTrue(setAddressSpy.notCalled);
+
+    autofillModel!.disable();
+    assert.isTrue(setAddressSpy.notCalled);
+
+    autofillModel!.enable();
+    assert.isTrue(setAddressSpy.calledOnce);
   });
 
   it('dispatches addressFormFilledEvent on autofill event', () => {

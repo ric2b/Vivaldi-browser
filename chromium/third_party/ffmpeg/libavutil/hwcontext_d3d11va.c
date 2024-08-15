@@ -36,6 +36,7 @@
 #include "hwcontext_d3d11va.h"
 #include "hwcontext_internal.h"
 #include "imgutils.h"
+#include "mem.h"
 #include "pixdesc.h"
 #include "pixfmt.h"
 #include "thread.h"
@@ -62,7 +63,9 @@ static av_cold void load_functions(void)
         return;
 
     mD3D11CreateDevice = (PFN_D3D11_CREATE_DEVICE) GetProcAddress(d3dlib, "D3D11CreateDevice");
-    mCreateDXGIFactory = (PFN_CREATE_DXGI_FACTORY) GetProcAddress(dxgilib, "CreateDXGIFactory");
+    mCreateDXGIFactory = (PFN_CREATE_DXGI_FACTORY) GetProcAddress(dxgilib, "CreateDXGIFactory1");
+    if (!mCreateDXGIFactory)
+        mCreateDXGIFactory = (PFN_CREATE_DXGI_FACTORY) GetProcAddress(dxgilib, "CreateDXGIFactory");
 #else
     // In UWP (which lacks LoadLibrary), CreateDXGIFactory isn't available,
     // only CreateDXGIFactory1
@@ -72,6 +75,11 @@ static av_cold void load_functions(void)
 }
 
 typedef struct D3D11VAFramesContext {
+    /**
+     * The public AVD3D11VAFramesContext. See hwcontext_d3d11va.h for it.
+     */
+    AVD3D11VAFramesContext p;
+
     int nb_surfaces;
     int nb_surfaces_used;
 
@@ -113,8 +121,8 @@ static void d3d11va_default_unlock(void *ctx)
 
 static void d3d11va_frames_uninit(AVHWFramesContext *ctx)
 {
-    AVD3D11VAFramesContext *frames_hwctx = ctx->hwctx;
-    D3D11VAFramesContext *s = ctx->internal->priv;
+    D3D11VAFramesContext *s = ctx->hwctx;
+    AVD3D11VAFramesContext *frames_hwctx = &s->p;
 
     if (frames_hwctx->texture)
         ID3D11Texture2D_Release(frames_hwctx->texture);
@@ -169,8 +177,8 @@ static AVBufferRef *wrap_texture_buf(AVHWFramesContext *ctx, ID3D11Texture2D *te
 {
     AVBufferRef *buf;
     AVD3D11FrameDescriptor         *desc = av_mallocz(sizeof(*desc));
-    D3D11VAFramesContext              *s = ctx->internal->priv;
-    AVD3D11VAFramesContext *frames_hwctx = ctx->hwctx;
+    D3D11VAFramesContext              *s = ctx->hwctx;
+    AVD3D11VAFramesContext *frames_hwctx = &s->p;
     if (!desc) {
         ID3D11Texture2D_Release(tex);
         return NULL;
@@ -206,8 +214,8 @@ static AVBufferRef *wrap_texture_buf(AVHWFramesContext *ctx, ID3D11Texture2D *te
 
 static AVBufferRef *d3d11va_alloc_single(AVHWFramesContext *ctx)
 {
-    D3D11VAFramesContext       *s = ctx->internal->priv;
-    AVD3D11VAFramesContext *hwctx = ctx->hwctx;
+    D3D11VAFramesContext       *s = ctx->hwctx;
+    AVD3D11VAFramesContext *hwctx = &s->p;
     AVD3D11VADeviceContext *device_hwctx = ctx->device_ctx->hwctx;
     HRESULT hr;
     ID3D11Texture2D *tex;
@@ -235,8 +243,8 @@ static AVBufferRef *d3d11va_alloc_single(AVHWFramesContext *ctx)
 static AVBufferRef *d3d11va_pool_alloc(void *opaque, size_t size)
 {
     AVHWFramesContext        *ctx = (AVHWFramesContext*)opaque;
-    D3D11VAFramesContext       *s = ctx->internal->priv;
-    AVD3D11VAFramesContext *hwctx = ctx->hwctx;
+    D3D11VAFramesContext       *s = ctx->hwctx;
+    AVD3D11VAFramesContext *hwctx = &s->p;
     D3D11_TEXTURE2D_DESC  texDesc;
 
     if (!hwctx->texture)
@@ -255,9 +263,9 @@ static AVBufferRef *d3d11va_pool_alloc(void *opaque, size_t size)
 
 static int d3d11va_frames_init(AVHWFramesContext *ctx)
 {
-    AVD3D11VAFramesContext *hwctx        = ctx->hwctx;
     AVD3D11VADeviceContext *device_hwctx = ctx->device_ctx->hwctx;
-    D3D11VAFramesContext              *s = ctx->internal->priv;
+    D3D11VAFramesContext              *s = ctx->hwctx;
+    AVD3D11VAFramesContext        *hwctx = &s->p;
 
     int i;
     HRESULT hr;
@@ -314,9 +322,10 @@ static int d3d11va_frames_init(AVHWFramesContext *ctx)
         return AVERROR(ENOMEM);
     s->nb_surfaces = ctx->initial_pool_size;
 
-    ctx->internal->pool_internal = av_buffer_pool_init2(sizeof(AVD3D11FrameDescriptor),
-                                                        ctx, d3d11va_pool_alloc, NULL);
-    if (!ctx->internal->pool_internal)
+    ffhwframesctx(ctx)->pool_internal =
+        av_buffer_pool_init2(sizeof(AVD3D11FrameDescriptor),
+                             ctx, d3d11va_pool_alloc, NULL);
+    if (!ffhwframesctx(ctx)->pool_internal)
         return AVERROR(ENOMEM);
 
     return 0;
@@ -345,7 +354,7 @@ static int d3d11va_transfer_get_formats(AVHWFramesContext *ctx,
                                         enum AVHWFrameTransferDirection dir,
                                         enum AVPixelFormat **formats)
 {
-    D3D11VAFramesContext *s = ctx->internal->priv;
+    D3D11VAFramesContext *s = ctx->hwctx;
     enum AVPixelFormat *fmts;
 
     fmts = av_malloc_array(2, sizeof(*fmts));
@@ -367,7 +376,7 @@ static int d3d11va_transfer_get_formats(AVHWFramesContext *ctx,
 static int d3d11va_create_staging_texture(AVHWFramesContext *ctx, DXGI_FORMAT format)
 {
     AVD3D11VADeviceContext *device_hwctx = ctx->device_ctx->hwctx;
-    D3D11VAFramesContext              *s = ctx->internal->priv;
+    D3D11VAFramesContext              *s = ctx->hwctx;
     HRESULT hr;
     D3D11_TEXTURE2D_DESC texDesc = {
         .Width          = ctx->width,
@@ -407,7 +416,7 @@ static int d3d11va_transfer_data(AVHWFramesContext *ctx, AVFrame *dst,
                                  const AVFrame *src)
 {
     AVD3D11VADeviceContext *device_hwctx = ctx->device_ctx->hwctx;
-    D3D11VAFramesContext              *s = ctx->internal->priv;
+    D3D11VAFramesContext              *s = ctx->hwctx;
     int download = src->format == AV_PIX_FMT_D3D11;
     const AVFrame *frame = download ? src : dst;
     const AVFrame *other = download ? dst : src;
@@ -606,14 +615,10 @@ static int d3d11va_device_create(AVHWDeviceContext *ctx, const char *device,
     int ret;
     int adapter = -1;
 
-    // (On UWP we can't check this.)
-#if !HAVE_UWP
-    if (!LoadLibrary("d3d11_1sdklayers.dll"))
-        is_debug = 0;
-#endif
-
-    if (is_debug)
+    if (is_debug) {
         creationFlags |= D3D11_CREATE_DEVICE_DEBUG;
+        av_log(ctx, AV_LOG_INFO, "Enabling d3d11 debugging.\n");
+    }
 
     if ((ret = ff_thread_once(&functions_loaded, load_functions)) != 0)
         return AVERROR_UNKNOWN;
@@ -681,9 +686,17 @@ static int d3d11va_device_create(AVHWDeviceContext *ctx, const char *device,
             if (pf_DXGIGetDebugInterface) {
                 IDXGIDebug *dxgi_debug = NULL;
                 hr = pf_DXGIGetDebugInterface(&IID_IDXGIDebug, (void**)&dxgi_debug);
-                if (SUCCEEDED(hr) && dxgi_debug)
+                if (SUCCEEDED(hr) && dxgi_debug) {
                     IDXGIDebug_ReportLiveObjects(dxgi_debug, DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL);
+                    av_log(ctx, AV_LOG_INFO, "Enabled dxgi debugging.\n");
+                } else {
+                    av_log(ctx, AV_LOG_WARNING, "Failed enabling dxgi debugging.\n");
+                }
+            } else {
+                av_log(ctx, AV_LOG_WARNING, "Failed getting dxgi debug interface.\n");
             }
+        } else {
+            av_log(ctx, AV_LOG_WARNING, "Failed loading dxgi debug library.\n");
         }
     }
 #endif
@@ -696,8 +709,7 @@ const HWContextType ff_hwcontext_type_d3d11va = {
     .name                 = "D3D11VA",
 
     .device_hwctx_size    = sizeof(AVD3D11VADeviceContext),
-    .frames_hwctx_size    = sizeof(AVD3D11VAFramesContext),
-    .frames_priv_size     = sizeof(D3D11VAFramesContext),
+    .frames_hwctx_size    = sizeof(D3D11VAFramesContext),
 
     .device_create        = d3d11va_device_create,
     .device_init          = d3d11va_device_init,

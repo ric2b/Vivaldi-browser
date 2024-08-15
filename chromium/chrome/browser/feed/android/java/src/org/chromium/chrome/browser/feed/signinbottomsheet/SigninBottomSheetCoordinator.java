@@ -5,6 +5,7 @@ package org.chromium.chrome.browser.feed.signinbottomsheet;
 
 import android.view.View;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
@@ -43,7 +44,7 @@ public class SigninBottomSheetCoordinator implements AccountPickerDelegate {
             DeviceLockActivityLauncher deviceLockActivityLauncher,
             BottomSheetController controller,
             Profile profile,
-            @Nullable AccountPickerBottomSheetStrings bottomSheetStrings,
+            @NonNull AccountPickerBottomSheetStrings bottomSheetStrings,
             @Nullable Runnable onSigninSuccessCallback,
             @SigninAccessPoint int signinAccessPoint) {
         mWindowAndroid = windowAndroid;
@@ -54,23 +55,29 @@ public class SigninBottomSheetCoordinator implements AccountPickerDelegate {
         mSetTestToast = false;
         mOnSigninSuccessCallback = onSigninSuccessCallback;
         mSigninAccessPoint = signinAccessPoint;
-
-        if (bottomSheetStrings == null) {
-            mBottomSheetStrings =
-                    new AccountPickerBottomSheetStrings(
-                            R.string
-                                    .signin_account_picker_bottom_sheet_title_for_back_of_card_menu_signin,
-                            R.string
-                                    .signin_account_picker_bottom_sheet_subtitle_for_back_of_card_menu_signin,
-                            R.string.close);
-        } else {
-            mBottomSheetStrings = bottomSheetStrings;
-        }
+        mBottomSheetStrings = bottomSheetStrings;
     }
 
+    /** Implements {@link AccountPickerDelegate}. */
     @Override
     public void onAccountPickerDestroy() {}
 
+    /** Implements {@link AccountPickerDelegate}. */
+    @Override
+    public boolean canHandleAddAccount() {
+        return false;
+    }
+
+    /** Implements {@link AccountPickerDelegate}. */
+    @Override
+    public void addAccount() {
+        // TODO(b/326019991): Remove this exception along with the delegate implementation once
+        // all bottom sheet entry points will be started from `SigninAndHistoryOptInActivity`.
+        throw new UnsupportedOperationException(
+                "SigninBottomSheetCoordinator.addAccount() should never be called.");
+    }
+
+    /** Implements {@link AccountPickerDelegate}. */
     @Override
     public void signIn(CoreAccountInfo accountInfo, AccountPickerBottomSheetMediator mediator) {
         SigninManager.SignInCallback callback =
@@ -103,16 +110,19 @@ public class SigninBottomSheetCoordinator implements AccountPickerDelegate {
         }
     }
 
+    /** Implements {@link AccountPickerDelegate}. */
     @Override
     public void isAccountManaged(CoreAccountInfo accountInfo, Callback<Boolean> callback) {
         mSigninManager.isAccountManaged(accountInfo, callback);
     }
 
+    /** Implements {@link AccountPickerDelegate}. */
     @Override
     public void setUserAcceptedAccountManagement(boolean confirmed) {
         mSigninManager.setUserAcceptedAccountManagement(confirmed);
     }
 
+    /** Implements {@link AccountPickerDelegate}. */
     @Override
     public String extractDomainName(String accountEmail) {
         return mSigninManager.extractDomainName(accountEmail);
@@ -128,7 +138,7 @@ public class SigninBottomSheetCoordinator implements AccountPickerDelegate {
                         mDeviceLockActivityLauncher,
                         AccountPickerLaunchMode.DEFAULT,
                         /* isWebSignin= */ false,
-                        SigninAccessPoint.NTP_FEED_CARD_MENU_PROMO);
+                        mSigninAccessPoint);
     }
 
     private void makeSigninNotAllowedToast() {

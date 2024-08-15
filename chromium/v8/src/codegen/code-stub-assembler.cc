@@ -1510,6 +1510,9 @@ TNode<HeapObject> CodeStubAssembler::AllocateRaw(TNode<IntPtrT> size_in_bytes,
   }
 
   BIND(&out);
+  if (v8_flags.sticky_mark_bits && (flags & AllocationFlag::kPretenured)) {
+    CSA_DCHECK(this, IsMarked(result.value()));
+  }
   return UncheckedCast<HeapObject>(result.value());
 }
 
@@ -1555,8 +1558,13 @@ TNode<HeapObject> CodeStubAssembler::Allocate(TNode<IntPtrT> size_in_bytes,
   if (v8_flags.single_generation) flags |= AllocationFlag::kPretenured;
   bool const new_space = !(flags & AllocationFlag::kPretenured);
   if (!(flags & AllocationFlag::kDoubleAlignment)) {
-    return OptimizedAllocate(size_in_bytes, new_space ? AllocationType::kYoung
-                                                      : AllocationType::kOld);
+    TNode<HeapObject> heap_object =
+        OptimizedAllocate(size_in_bytes, new_space ? AllocationType::kYoung
+                                                   : AllocationType::kOld);
+    if (v8_flags.sticky_mark_bits && !new_space) {
+      CSA_DCHECK(this, IsMarked(heap_object));
+    }
+    return heap_object;
   }
   TNode<ExternalReference> top_address = ExternalConstant(
       new_space
@@ -3812,9 +3820,19 @@ TNode<Smi> CodeStubAssembler::BuildAppendJSArray(ElementsKind kind,
   Comment("BuildAppendJSArray: ", ElementsKindToString(kind));
   Label pre_bailout(this);
   Label success(this);
-  TVARIABLE(Smi, var_tagged_length);
-  TVARIABLE(BInt, var_length, SmiToBInt(LoadFastJSArrayLength(array)));
+  TVARIABLE(Smi, var_tagged_length, LoadFastJSArrayLength(array));
+  TVARIABLE(BInt, var_length, SmiToBInt(var_tagged_length.value()));
   TVARIABLE(FixedArrayBase, var_elements, LoadElements(array));
+
+  // Trivial case: no values are being appended.
+  // We have this special case here so that callers of this function can assume
+  // that there is at least one argument if this function bails out. This may
+  // otherwise not be the case if, due to another bug or in-sandbox memory
+  // corruption, the JSArray's length is larger than that of its backing
+  // FixedArray. In that case, PossiblyGrowElementsCapacity can fail even if no
+  // element are to be appended.
+  GotoIf(IntPtrEqual(args->GetLengthWithoutReceiver(), IntPtrConstant(0)),
+         &success);
 
   // Resize the capacity of the fixed array if it doesn't fit.
   TNode<IntPtrT> first = arg_index->value();
@@ -5070,7 +5088,7 @@ TNode<FixedArray> CodeStubAssembler::ExtractToFixedArray(
         to_kind, capacity, allocation_flags, var_target_map.value());
     var_result = to_elements;
 
-#ifndef V8_ENABLE_SINGLE_GENERATION
+#if !defined(V8_ENABLE_SINGLE_GENERATION) && !V8_ENABLE_STICKY_MARK_BITS_BOOL
 #ifdef DEBUG
     TNode<IntPtrT> object_word = BitcastTaggedToWord(to_elements);
     TNode<IntPtrT> object_page_header = MemoryChunkFromAddress(object_word);
@@ -7242,6 +7260,12 @@ TNode<BoolT> CodeStubAssembler::IsPrototypeTypedArrayPrototype(
   return TaggedEqual(proto_of_proto, typed_array_prototype);
 }
 
+void CodeStubAssembler::InvalidateStringWrapperToPrimitiveProtector() {
+  TNode<Smi> invalid = SmiConstant(Protectors::kProtectorInvalid);
+  TNode<PropertyCell> cell = StringWrapperToPrimitiveProtectorConstant();
+  StoreObjectField(cell, PropertyCell::kValueOffset, invalid);
+}
+
 TNode<BoolT> CodeStubAssembler::IsFastAliasedArgumentsMap(
     TNode<Context> context, TNode<Map> map) {
   const TNode<NativeContext> native_context = LoadNativeContext(context);
@@ -7432,6 +7456,7 @@ TNode<BoolT> CodeStubAssembler::IsNullOrJSReceiver(TNode<HeapObject> object) {
 }
 
 TNode<BoolT> CodeStubAssembler::IsNullOrUndefined(TNode<Object> value) {
+  // TODO(ishell): consider using Select<BoolT>() here.
   return UncheckedCast<BoolT>(Word32Or(IsUndefined(value), IsNull(value)));
 }
 
@@ -9966,8 +9991,10 @@ void CodeStubAssembler::InsertEntry<NameDictionary>(
   PropertyDetails d(PropertyKind::kData, NONE,
                     PropertyDetails::kConstIfDictConstnessTracking);
 
-  enum_index =
-      SmiShl(enum_index, PropertyDetails::DictionaryStorageField::kShift);
+  // We ignore overflow of |enum_index| here and accept potentially
+  // broken enumeration order (https://crbug.com/41432983).
+  enum_index = UnsignedSmiShl(enum_index,
+                              PropertyDetails::DictionaryStorageField::kShift);
   // We OR over the actual index below, so we expect the initial value to be 0.
   DCHECK_EQ(0, d.dictionary_index());
   TVARIABLE(Smi, var_details, SmiOr(SmiConstant(d.AsSmi()), enum_index));
@@ -9975,8 +10002,8 @@ void CodeStubAssembler::InsertEntry<NameDictionary>(
   // Private names must be marked non-enumerable.
   Label not_private(this, &var_details);
   GotoIfNot(IsPrivateSymbol(name), &not_private);
-  TNode<Smi> dont_enum =
-      SmiShl(SmiConstant(DONT_ENUM), PropertyDetails::AttributesField::kShift);
+  TNode<Smi> dont_enum = UnsignedSmiShl(
+      SmiConstant(DONT_ENUM), PropertyDetails::AttributesField::kShift);
   var_details = SmiOr(var_details.value(), dont_enum);
   Goto(&not_private);
   BIND(&not_private);
@@ -10336,8 +10363,8 @@ void CodeStubAssembler::ForEachEnumerableOwnProperty(
         TNode<Name> next_key =
             LoadKeyByKeyIndex(var_descriptors.value(), descriptor_key_index);
 
-        TVARIABLE(Object, var_value, SmiConstant(0));
-        Label callback(this), next_iteration(this);
+        TVARIABLE(Object, var_value_or_accessor, SmiConstant(0));
+        Label next_iteration(this);
 
         if (mode == kEnumerationOrder) {
           // |next_key| is either a string or a symbol
@@ -10418,7 +10445,7 @@ void CodeStubAssembler::ForEachEnumerableOwnProperty(
 
             LoadPropertyFromFastObject(object, var_map.value(), descriptors,
                                        name_index, var_details.value(),
-                                       &var_value);
+                                       &var_value_or_accessor);
             Goto(&if_found);
           }
           BIND(&if_found_dict);
@@ -10434,7 +10461,7 @@ void CodeStubAssembler::ForEachEnumerableOwnProperty(
                 &next_iteration);
 
             var_details = details;
-            var_value =
+            var_value_or_accessor =
                 LoadValueByKeyIndex<PropertyDictionary>(dictionary, entry);
             Goto(&if_found);
           }
@@ -10442,20 +10469,24 @@ void CodeStubAssembler::ForEachEnumerableOwnProperty(
           // Here we have details and value which could be an accessor.
           BIND(&if_found);
           {
-            Label slow_load(this, Label::kDeferred);
+            TNode<Object> value_or_accessor = var_value_or_accessor.value();
+            body(next_key, [&]() {
+              TVARIABLE(Object, var_value);
+              Label value_ready(this), slow_load(this, Label::kDeferred);
 
-            var_value = CallGetterIfAccessor(
-                var_value.value(), object, var_details.value(), context, object,
-                next_key, &slow_load, kCallJSGetterUseCachedName);
-            Goto(&callback);
+              var_value = CallGetterIfAccessor(
+                  value_or_accessor, object, var_details.value(), context,
+                  object, next_key, &slow_load, kCallJSGetterUseCachedName);
+              Goto(&value_ready);
 
-            BIND(&slow_load);
-            var_value =
-                CallRuntime(Runtime::kGetProperty, context, object, next_key);
-            Goto(&callback);
+              BIND(&slow_load);
+              var_value =
+                  CallRuntime(Runtime::kGetProperty, context, object, next_key);
+              Goto(&value_ready);
 
-            BIND(&callback);
-            body(next_key, var_value.value());
+              BIND(&value_ready);
+              return var_value.value();
+            });
 
             // Check if |object| is still stable, i.e. the descriptors in the
             // preloaded |descriptors| are still the same modulo in-place
@@ -12093,6 +12124,20 @@ void CodeStubAssembler::CheckForAssociatedProtector(TNode<Name> name,
   GotoIf(IsInRange(name_ptr, first_ptr, last_ptr), if_protector);
 }
 
+void CodeStubAssembler::DCheckReceiver(ConvertReceiverMode mode,
+                                       TNode<Object> receiver) {
+  switch (mode) {
+    case ConvertReceiverMode::kNullOrUndefined:
+      CSA_DCHECK(this, IsNullOrUndefined(receiver));
+      break;
+    case ConvertReceiverMode::kNotNullOrUndefined:
+      CSA_DCHECK(this, Word32BinaryNot(IsNullOrUndefined(receiver)));
+      break;
+    case ConvertReceiverMode::kAny:
+      break;
+  }
+}
+
 TNode<Map> CodeStubAssembler::LoadReceiverMap(TNode<Object> receiver) {
   TVARIABLE(Map, value);
   Label vtrue(this, Label::kDeferred), vfalse(this), end(this);
@@ -13194,8 +13239,26 @@ TNode<IntPtrT> CodeStubAssembler::MemoryChunkFromAddress(
 TNode<IntPtrT> CodeStubAssembler::PageMetadataFromMemoryChunk(
     TNode<IntPtrT> address) {
   DCHECK(!V8_ENABLE_THIRD_PARTY_HEAP_BOOL);
+#ifdef V8_ENABLE_SANDBOX
+  TNode<RawPtrT> table = ExternalConstant(
+      ExternalReference::memory_chunk_metadata_table_address());
+  TNode<Uint32T> index = Load<Uint32T>(
+      address, IntPtrConstant(MemoryChunkLayout::kMetadataIndexOffset));
+  index = Word32And(
+      index, UniqueUint32Constant(MemoryChunk::kMetadataPointerTableSizeMask));
+  TNode<IntPtrT> offset = ChangeInt32ToIntPtr(
+      Word32Shl(index, UniqueUint32Constant(kSystemPointerSizeLog2)));
+  TNode<IntPtrT> metadata = Load<IntPtrT>(table, offset);
+  // Check that the Metadata belongs to this Chunk, since an attacker with write
+  // inside the sandbox could've swapped the index.
+  TNode<IntPtrT> metadata_chunk = MemoryChunkFromAddress(Load<IntPtrT>(
+      metadata, IntPtrConstant(MemoryChunkLayout::kAreaStartOffset)));
+  CSA_CHECK(this, WordEqual(metadata_chunk, address));
+  return metadata;
+#else
   return Load<IntPtrT>(address,
                        IntPtrConstant(MemoryChunkLayout::kMetadataOffset));
+#endif
 }
 
 TNode<IntPtrT> CodeStubAssembler::PageMetadataFromAddress(
@@ -13286,6 +13349,11 @@ TNode<Int32T> CodeStubAssembler::LoadElementsKind(
           SmiToInt32(transition_info)));
   CSA_DCHECK(this, IsFastElementsKind(elements_kind));
   return elements_kind;
+}
+
+TNode<Object> CodeStubAssembler::LoadNestedAllocationSite(
+    TNode<AllocationSite> allocation_site) {
+  return LoadObjectField(allocation_site, AllocationSite::kNestedSiteOffset);
 }
 
 template <typename TIndex>
@@ -15640,7 +15708,9 @@ TNode<Boolean> CodeStubAssembler::InstanceOf(TNode<Object> object,
     GotoIf(IsUndefined(inst_of_handler), &if_nohandler);
 
     // Call the {inst_of_handler} for {callable} and {object}.
-    TNode<Object> result = Call(context, inst_of_handler, callable, object);
+    TNode<Object> result =
+        Call(context, inst_of_handler, ConvertReceiverMode::kNotNullOrUndefined,
+             callable, object);
 
     // Convert the {result} to a Boolean.
     BranchIfToBooleanIsTrue(result, &return_true, &return_false);
@@ -18270,6 +18340,45 @@ TNode<Object> CodeStubAssembler::CallOnCentralStack(TNode<Context> context,
   return result.value();
 }
 #endif
+
+TNode<BoolT> CodeStubAssembler::IsMarked(TNode<Object> object) {
+  TNode<IntPtrT> cell;
+  TNode<IntPtrT> mask;
+  GetMarkBit(BitcastTaggedToWordForTagAndSmiBits(object), &cell, &mask);
+  // Marked only requires checking a single bit here.
+  return WordNotEqual(WordAnd(Load<IntPtrT>(cell), mask), IntPtrConstant(0));
+}
+
+void CodeStubAssembler::GetMarkBit(TNode<IntPtrT> object, TNode<IntPtrT>* cell,
+                                   TNode<IntPtrT>* mask) {
+  TNode<IntPtrT> page = PageMetadataFromAddress(object);
+  TNode<IntPtrT> bitmap =
+      IntPtrAdd(page, IntPtrConstant(MemoryChunkLayout::kMarkingBitmapOffset));
+
+  {
+    // Temp variable to calculate cell offset in bitmap.
+    TNode<WordT> r0;
+    int shift = MarkingBitmap::kBitsPerCellLog2 + kTaggedSizeLog2 -
+                MarkingBitmap::kBytesPerCellLog2;
+    r0 = WordShr(object, IntPtrConstant(shift));
+    r0 = WordAnd(
+        r0,
+        IntPtrConstant((MemoryChunk::GetAlignmentMaskForAssembler() >> shift) &
+                       ~(MarkingBitmap::kBytesPerCell - 1)));
+    *cell = IntPtrAdd(bitmap, Signed(r0));
+  }
+  {
+    // Temp variable to calculate bit offset in cell.
+    TNode<WordT> r1;
+    r1 = WordShr(object, IntPtrConstant(kTaggedSizeLog2));
+    r1 =
+        WordAnd(r1, IntPtrConstant((1 << MarkingBitmap::kBitsPerCellLog2) - 1));
+    // It seems that LSB(e.g. cl) is automatically used, so no manual masking
+    // is needed. Uncomment the following line otherwise.
+    // WordAnd(r1, IntPtrConstant((1 << kBitsPerByte) - 1)));
+    *mask = WordShl(IntPtrConstant(1), r1);
+  }
+}
 
 }  // namespace internal
 }  // namespace v8

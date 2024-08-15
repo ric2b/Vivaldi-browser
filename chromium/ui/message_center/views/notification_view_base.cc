@@ -131,7 +131,8 @@ CompactTitleMessageView::CompactTitleMessageView() {
   message_->SetHorizontalAlignment(gfx::ALIGN_RIGHT);
 }
 
-gfx::Size CompactTitleMessageView::CalculatePreferredSize() const {
+gfx::Size CompactTitleMessageView::CalculatePreferredSize(
+    const views::SizeBounds& /*available_size*/) const {
   gfx::Size title_size = title_->GetPreferredSize();
   gfx::Size message_size = message_->GetPreferredSize();
   return gfx::Size(title_size.width() + message_size.width() +
@@ -660,7 +661,7 @@ void NotificationViewBase::CreateOrUpdateActionButtonViews(
       // in the right location in the view hierarchy when
       // SynthesizeMouseMoveEvent() is called.
       DeprecatedLayoutImmediately();
-      widget->SetSize(widget->GetContentsView()->GetPreferredSize());
+      widget->SetSize(widget->GetContentsView()->GetPreferredSize({}));
       widget->SynthesizeMouseMoveEvent();
     }
   }

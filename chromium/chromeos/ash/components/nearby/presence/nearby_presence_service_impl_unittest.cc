@@ -10,7 +10,9 @@
 #include "base/test/mock_callback.h"
 #include "chromeos/ash/components/nearby/presence/credentials/fake_nearby_presence_credential_manager.h"
 #include "chromeos/ash/components/nearby/presence/credentials/nearby_presence_credential_manager_impl.h"
+#include "chromeos/ash/components/nearby/presence/nearby_presence_connections_manager.h"
 #include "chromeos/ash/services/nearby/public/cpp/fake_nearby_presence.h"
+#include "chromeos/ash/services/nearby/public/cpp/mock_nearby_connections.h"
 #include "chromeos/ash/services/nearby/public/cpp/mock_nearby_process_manager.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
@@ -26,15 +28,15 @@
 
 namespace ash::nearby::presence {
 
-const char kAccountName[] = "Pepper@gmail.com";
-const char kDeviceName[] = "Pepper's Request";
-const char kDeviceProfileUrl[] = "some_url";
+const char kDeviceName[] = "DeviceName";
 const char kEndpointId[] = "00000001";
 const char kStableDeviceId[] = "00000002";
-const char kUserName[] = "Pepper";
 const char kMalformedTypeId[] = "not_nearby_presence";
 const char kMalformedClientId[] = "not_nearby";
 const std::vector<uint8_t> kMacAddress = {0x11, 0x11, 0x11, 0x11, 0x11, 0x11};
+const std::vector<uint8_t> kDeviceId = {0x01, 0x23, 0x45, 0x67, 0x89, 0xab,
+                                        0xcd, 0xef, 0x01, 0x23, 0x45, 0x67,
+                                        0x89, 0xab, 0xcd, 0xef};
 const mojom::ActionType kAction1 = mojom::ActionType::kInstantTetheringAction;
 const mojom::ActionType kAction2 = mojom::ActionType::kActiveUnlockAction;
 const mojom::ActionType kAction3 = mojom::ActionType::kPhoneHubAction;
@@ -51,18 +53,57 @@ class FakeScanDelegate : public NearbyPresenceService::ScanDelegate {
   void OnPresenceDeviceFound(
       ::nearby::presence::PresenceDevice presence_device) override {
     found_called = true;
+
+    EXPECT_EQ(kEndpointId, presence_device.GetEndpointId());
+    EXPECT_EQ(::nearby::internal::DEVICE_TYPE_PHONE,
+              presence_device.GetDeviceIdentityMetadata().device_type());
+    EXPECT_EQ(kDeviceName,
+              presence_device.GetDeviceIdentityMetadata().device_name());
+    EXPECT_EQ(
+        std::string(kMacAddress.begin(), kMacAddress.end()),
+        presence_device.GetDeviceIdentityMetadata().bluetooth_mac_address());
+    EXPECT_EQ(std::string(kDeviceId.begin(), kDeviceId.end()),
+              presence_device.GetDeviceIdentityMetadata().device_id());
+
     std::move(next_scan_delegate_callback_).Run();
   }
+
   void OnPresenceDeviceChanged(
       ::nearby::presence::PresenceDevice presence_device) override {
     changed_called = true;
+
+    EXPECT_EQ(kEndpointId, presence_device.GetEndpointId());
+    EXPECT_EQ(::nearby::internal::DEVICE_TYPE_PHONE,
+              presence_device.GetDeviceIdentityMetadata().device_type());
+    EXPECT_EQ(kDeviceName,
+              presence_device.GetDeviceIdentityMetadata().device_name());
+    EXPECT_EQ(
+        std::string(kMacAddress.begin(), kMacAddress.end()),
+        presence_device.GetDeviceIdentityMetadata().bluetooth_mac_address());
+    EXPECT_EQ(std::string(kDeviceId.begin(), kDeviceId.end()),
+              presence_device.GetDeviceIdentityMetadata().device_id());
+
     std::move(next_scan_delegate_callback_).Run();
   }
+
   void OnPresenceDeviceLost(
       ::nearby::presence::PresenceDevice presence_device) override {
     lost_called = true;
+
+    EXPECT_EQ(kEndpointId, presence_device.GetEndpointId());
+    EXPECT_EQ(::nearby::internal::DEVICE_TYPE_PHONE,
+              presence_device.GetDeviceIdentityMetadata().device_type());
+    EXPECT_EQ(kDeviceName,
+              presence_device.GetDeviceIdentityMetadata().device_name());
+    EXPECT_EQ(
+        std::string(kMacAddress.begin(), kMacAddress.end()),
+        presence_device.GetDeviceIdentityMetadata().bluetooth_mac_address());
+    EXPECT_EQ(std::string(kDeviceId.begin(), kDeviceId.end()),
+              presence_device.GetDeviceIdentityMetadata().device_id());
+
     std::move(next_scan_delegate_callback_).Run();
   }
+
   void OnScanSessionInvalidated() override {}
   bool WasOnPresenceDeviceFoundCalled() { return found_called; }
   bool WasOnPresenceDeviceChangedCalled() { return changed_called; }
@@ -106,6 +147,9 @@ class NearbyPresenceServiceImplTest : public testing::Test {
           EXPECT_CALL(*(nearby_process_reference_.get()), GetNearbyPresence)
               .WillRepeatedly(
                   testing::ReturnRef(fake_nearby_presence_.shared_remote()));
+          ON_CALL(*(nearby_process_reference_.get()), GetNearbyConnections)
+              .WillByDefault(
+                  testing::ReturnRef(nearby_connections_.shared_remote()));
           return std::move(nearby_process_reference_);
         });
     push_notification_service_ =
@@ -118,12 +162,7 @@ class NearbyPresenceServiceImplTest : public testing::Test {
             &test_url_loader_factory_),
         push_notification_service_.get());
 
-    auto fake_credential_manager =
-        std::make_unique<FakeNearbyPresenceCredentialManager>();
-    fake_credential_manager_ptr_ = fake_credential_manager.get();
-    NearbyPresenceCredentialManagerImpl::Creator::
-        SetCredentialManagerForTesting(std::move(fake_credential_manager));
-    EXPECT_FALSE(fake_credential_manager_ptr_->WasUpdateCredentialsCalled());
+    InitializeNearbyPresenceService();
   }
 
   void TestStartScan(::nearby::internal::IdentityType identity_type) {
@@ -158,8 +197,8 @@ class NearbyPresenceServiceImplTest : public testing::Test {
           mojom::PresenceDevice::New(
               kEndpointId, actions, kStableDeviceId,
               mojom::Metadata::New(mojom::PresenceDeviceType::kPhone,
-                                   kAccountName, kDeviceName, kUserName,
-                                   kDeviceProfileUrl, kMacAddress)));
+                                   kDeviceName, kMacAddress, kDeviceId),
+              /*decrypt_shared_credential=*/nullptr));
       run_loop.Run();
     }
 
@@ -183,6 +222,7 @@ class NearbyPresenceServiceImplTest : public testing::Test {
  protected:
   content::BrowserTaskEnvironment task_environment_;
   FakeNearbyPresence fake_nearby_presence_;
+  testing::NiceMock<ash::nearby::MockNearbyConnections> nearby_connections_;
   testing::NiceMock<MockNearbyProcessManager> nearby_process_manager_;
   std::unique_ptr<
       ash::nearby::MockNearbyProcessManager::MockNearbyProcessReference>
@@ -199,10 +239,34 @@ class NearbyPresenceServiceImplTest : public testing::Test {
       scan_session_;
   raw_ptr<FakeNearbyPresenceCredentialManager> fake_credential_manager_ptr_;
   base::WeakPtrFactory<NearbyPresenceServiceImplTest> weak_ptr_factory_{this};
+
+ private:
+  // This work is collected into a helper function to ensure it all happens
+  // together. Most notably, `SetNextCredentialManagerInstanceForTesting()`
+  // leaves `NearbyPresenceCredentialManagerImpl::Creator` in a dangling state
+  // (holding onto a static test instance) until
+  // `NearbyPresenceCredentialManagerImpl::Creator::Create()` is called (in
+  // `NearbyPresenceService::Initialize`).
+  //
+  // `NearbyPresenceService` should also not be used until it is initialized,
+  // and this function helps codify that.
+  void InitializeNearbyPresenceService() {
+    auto fake_credential_manager =
+        std::make_unique<FakeNearbyPresenceCredentialManager>();
+    fake_credential_manager_ptr_ = fake_credential_manager.get();
+    NearbyPresenceCredentialManagerImpl::Creator::
+        SetNextCredentialManagerInstanceForTesting(
+            std::move(fake_credential_manager));
+    EXPECT_FALSE(fake_credential_manager_ptr_->WasUpdateCredentialsCalled());
+
+    base::MockCallback<base::OnceClosure> mock_on_initialized_callback;
+    EXPECT_CALL(mock_on_initialized_callback, Run);
+    nearby_presence_service_->Initialize(mock_on_initialized_callback.Get());
+  }
 };
 
 TEST_F(NearbyPresenceServiceImplTest, StartPrivateScan) {
-  TestStartScan(::nearby::internal::IdentityType::IDENTITY_TYPE_PRIVATE);
+  TestStartScan(::nearby::internal::IdentityType::IDENTITY_TYPE_PRIVATE_GROUP);
 }
 
 TEST_F(NearbyPresenceServiceImplTest, StartPublicScan) {
@@ -210,12 +274,12 @@ TEST_F(NearbyPresenceServiceImplTest, StartPublicScan) {
 }
 
 TEST_F(NearbyPresenceServiceImplTest, StartTrustedScan) {
-  TestStartScan(::nearby::internal::IdentityType::IDENTITY_TYPE_TRUSTED);
+  TestStartScan(::nearby::internal::IdentityType::IDENTITY_TYPE_CONTACTS_GROUP);
 }
 
 TEST_F(NearbyPresenceServiceImplTest, StartScan_DeviceChanged) {
   NearbyPresenceService::ScanFilter filter(
-      ::nearby::internal::IdentityType::IDENTITY_TYPE_PRIVATE,
+      ::nearby::internal::IdentityType::IDENTITY_TYPE_PRIVATE_GROUP,
       /*actions=*/{});
   FakeScanDelegate scan_delegate;
   {
@@ -242,9 +306,9 @@ TEST_F(NearbyPresenceServiceImplTest, StartScan_DeviceChanged) {
     fake_nearby_presence_.ReturnScanObserver()->OnDeviceChanged(
         mojom::PresenceDevice::New(
             kEndpointId, actions, kStableDeviceId,
-            mojom::Metadata::New(mojom::PresenceDeviceType::kPhone,
-                                 kAccountName, kDeviceName, kUserName,
-                                 kDeviceProfileUrl, kMacAddress)));
+            mojom::Metadata::New(mojom::PresenceDeviceType::kPhone, kDeviceName,
+                                 kMacAddress, kDeviceId),
+            /*decrypt_shared_credential=*/nullptr));
     run_loop.Run();
   }
 
@@ -254,7 +318,7 @@ TEST_F(NearbyPresenceServiceImplTest, StartScan_DeviceChanged) {
 
 TEST_F(NearbyPresenceServiceImplTest, StartScan_DeviceLost) {
   NearbyPresenceService::ScanFilter filter(
-      ::nearby::internal::IdentityType::IDENTITY_TYPE_PRIVATE,
+      ::nearby::internal::IdentityType::IDENTITY_TYPE_PRIVATE_GROUP,
       /*actions=*/{});
   FakeScanDelegate scan_delegate;
   {
@@ -278,9 +342,9 @@ TEST_F(NearbyPresenceServiceImplTest, StartScan_DeviceLost) {
     fake_nearby_presence_.ReturnScanObserver()->OnDeviceLost(
         mojom::PresenceDevice::New(
             kEndpointId, actions, kStableDeviceId,
-            mojom::Metadata::New(mojom::PresenceDeviceType::kPhone,
-                                 kAccountName, kDeviceName, kUserName,
-                                 kDeviceProfileUrl, kMacAddress)));
+            mojom::Metadata::New(mojom::PresenceDeviceType::kPhone, kDeviceName,
+                                 kMacAddress, kDeviceId),
+            /*decrypt_shared_credential=*/nullptr));
     run_loop.Run();
   }
 
@@ -290,7 +354,7 @@ TEST_F(NearbyPresenceServiceImplTest, StartScan_DeviceLost) {
 
 TEST_F(NearbyPresenceServiceImplTest, EndScan) {
   NearbyPresenceService::ScanFilter filter(
-      ::nearby::internal::IdentityType::IDENTITY_TYPE_PRIVATE,
+      ::nearby::internal::IdentityType::IDENTITY_TYPE_PRIVATE_GROUP,
       /*actions=*/{});
   FakeScanDelegate scan_delegate;
 
@@ -316,9 +380,9 @@ TEST_F(NearbyPresenceServiceImplTest, EndScan) {
     fake_nearby_presence_.ReturnScanObserver()->OnDeviceFound(
         mojom::PresenceDevice::New(
             kEndpointId, actions, kStableDeviceId,
-            mojom::Metadata::New(mojom::PresenceDeviceType::kPhone,
-                                 kAccountName, kDeviceName, kUserName,
-                                 kDeviceProfileUrl, kMacAddress)));
+            mojom::Metadata::New(mojom::PresenceDeviceType::kPhone, kDeviceName,
+                                 kMacAddress, kDeviceId),
+            /*decrypt_shared_credential=*/nullptr));
 
     // Allow the ScanObserver function to finish before checking EXPECTs.
     run_loop.Run();
@@ -339,7 +403,7 @@ TEST_F(NearbyPresenceServiceImplTest, EndScan) {
 
 TEST_F(NearbyPresenceServiceImplTest, EndScanBeforeStart) {
   NearbyPresenceService::ScanFilter filter(
-      ::nearby::internal::IdentityType::IDENTITY_TYPE_PRIVATE,
+      ::nearby::internal::IdentityType::IDENTITY_TYPE_PRIVATE_GROUP,
       /*actions=*/{});
   FakeScanDelegate scan_delegate;
 
@@ -360,15 +424,6 @@ TEST_F(NearbyPresenceServiceImplTest, EndScanBeforeStart) {
   }
 
   EXPECT_TRUE(IsScanSessionActive());
-}
-
-TEST_F(NearbyPresenceServiceImplTest, Initialize) {
-  base::MockCallback<base::OnceClosure> mock_on_initialized_callback;
-  EXPECT_CALL(mock_on_initialized_callback, Run);
-  nearby_presence_service_->Initialize(mock_on_initialized_callback.Get());
-
-  nearby_presence_service_->UpdateCredentials();
-  EXPECT_TRUE(fake_credential_manager_ptr_->WasUpdateCredentialsCalled());
 }
 
 TEST_F(NearbyPresenceServiceImplTest, UpdateCredentials) {
@@ -417,7 +472,7 @@ TEST_F(NearbyPresenceServiceImplTest, InvalidPushNotificationClientId) {
 
 TEST_F(NearbyPresenceServiceImplTest, NullProcessReference) {
   NearbyPresenceService::ScanFilter filter(
-      ::nearby::internal::IdentityType::IDENTITY_TYPE_PRIVATE,
+      ::nearby::internal::IdentityType::IDENTITY_TYPE_PRIVATE_GROUP,
       /*actions=*/{});
   FakeScanDelegate scan_delegate;
 
@@ -443,6 +498,12 @@ TEST_F(NearbyPresenceServiceImplTest, Reset) {
   // TODO(b/277819923): When metric is added for Nearby Process shutdown
   // reason, test the metric is correctly recorded here.
   nearby_process_reference_.reset();
+}
+
+TEST_F(NearbyPresenceServiceImplTest, CreateNearbyPresenceConnectionsManager) {
+  auto connections_manager =
+      nearby_presence_service_->CreateNearbyPresenceConnectionsManager();
+  EXPECT_TRUE(connections_manager);
 }
 
 }  // namespace ash::nearby::presence

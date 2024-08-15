@@ -2,9 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/files/file_util.h"
 
 #include <windows.h>
+#include <winsock2.h>
 
 #include <io.h>
 #include <psapi.h>
@@ -13,7 +19,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <time.h>
-#include <winsock2.h>
 
 #include <algorithm>
 #include <limits>
@@ -921,7 +926,7 @@ bool GetFileInfo(const FilePath& file_path, File::Info* results) {
   ULARGE_INTEGER size;
   size.HighPart = attr.nFileSizeHigh;
   size.LowPart = attr.nFileSizeLow;
-  // TODO(crbug.com/1333521): Change Info::size to uint64_t and eliminate this
+  // TODO(crbug.com/40227936): Change Info::size to uint64_t and eliminate this
   // cast.
   results->size = checked_cast<int64_t>(size.QuadPart);
 
@@ -994,7 +999,7 @@ std::optional<uint64_t> ReadFile(const FilePath& filename, span<char> buffer) {
     return std::nullopt;
   }
 
-  // TODO(crbug.com/1333521): Consider supporting reading more than INT_MAX
+  // TODO(crbug.com/40227936): Consider supporting reading more than INT_MAX
   // bytes.
   DWORD bytes_to_read = static_cast<DWORD>(checked_cast<int>(buffer.size()));
 

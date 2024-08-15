@@ -18,6 +18,7 @@
 
 #include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
+#include "libavutil/mem.h"
 
 #include "bytestream.h"
 #include "cbs.h"
@@ -234,6 +235,16 @@ static int cbs_h265_payload_extension_present(GetBitContext *gbc, uint32_t paylo
 #define FUNC_H265(name) FUNC_NAME1(READWRITE, h265, name)
 #define FUNC_H266(name) FUNC_NAME1(READWRITE, h266, name)
 #define FUNC_SEI(name)  FUNC_NAME1(READWRITE, sei,  name)
+
+#define SEI_FUNC(name, args) \
+static int FUNC(name) args;  \
+static int FUNC(name ## _internal)(CodedBitstreamContext *ctx, \
+                                   RWContext *rw, void *cur,   \
+                                   SEIMessageState *state)     \
+{ \
+    return FUNC(name)(ctx, rw, cur, state); \
+} \
+static int FUNC(name) args
 
 #define SUBSCRIPTS(subs, ...) (subs > 0 ? ((int[subs + 1]){ subs, __VA_ARGS__ }) : NULL)
 
@@ -2069,6 +2080,11 @@ const CodedBitstreamType ff_cbs_type_h266 = {
     .flush             = &cbs_h266_flush,
     .close             = &cbs_h266_close,
 };
+
+// Macro for the read/write pair.
+#define SEI_MESSAGE_RW(codec, name) \
+    .read  = cbs_ ## codec ## _read_  ## name ## _internal, \
+    .write = cbs_ ## codec ## _write_ ## name ## _internal
 
 static const SEIMessageTypeDescriptor cbs_sei_common_types[] = {
     {

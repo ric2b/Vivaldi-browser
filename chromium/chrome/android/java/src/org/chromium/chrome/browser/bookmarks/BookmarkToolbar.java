@@ -35,8 +35,6 @@ import android.text.style.ForegroundColorSpan;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.read_later.ReadingListUtils;
-import org.vivaldi.browser.common.VivaldiBookmarkUtils;
-import org.vivaldi.browser.panels.PanelUtils;
 // End Vivaldi
 
 /**
@@ -45,7 +43,7 @@ import org.vivaldi.browser.panels.PanelUtils;
  */
 public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
         implements OnMenuItemClickListener, OnClickListener {
-    // TODO(crbug.com/1425201): Remove BookmarkModel reference.
+    // TODO(crbug.com/40898590): Remove BookmarkModel reference.
     private BookmarkModel mBookmarkModel;
     private BookmarkOpener mBookmarkOpener;
     private SelectionDelegate<BookmarkId> mSelectionDelegate;
@@ -92,20 +90,18 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
             }
         }
 
-        if (BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) {
-            inflateMenu(R.menu.bookmark_toolbar_menu_improved);
-            MenuCompat.setGroupDividerEnabled(
-                    getMenu().findItem(R.id.normal_options_submenu).getSubMenu(), true);
-        } else {
-            inflateMenu(R.menu.bookmark_toolbar_menu);
+        inflateMenu(R.menu.bookmark_toolbar_menu_improved);
+        MenuCompat.setGroupDividerEnabled(
+                getMenu().findItem(R.id.normal_options_submenu).getSubMenu(), true);
 
-            if (ChromeApplicationImpl.isVivaldi()) {
-                    getMenu().findItem(R.id.add_page_to_reading_list_menu_id).setVisible(false);
-                if (mCurrentFolder != null &&
-                        mCurrentFolder.getId().equals(mBookmarkModel.getTrashFolderId()))
-                    BookmarkUtils.setLastUsedParent(mCurrentFolder.getId());
-            }
-        }
+	    if (ChromeApplicationImpl.isVivaldi()) {
+            getMenu().removeItem(R.id.normal_options_submenu);
+            getMenu().findItem(R.id.add_page_to_reading_list_menu_id).setVisible(false);
+	        if (mCurrentFolder != null &&
+	                mCurrentFolder.getId().equals(mBookmarkModel.getTrashFolderId()))
+	            BookmarkUtils.setLastUsedParent(mCurrentFolder.getId());
+	    }
+
         setOnMenuItemClickListener(this);
     }
 
@@ -131,14 +127,6 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
         if (mBookmarkUiMode != BookmarkUiMode.LOADING) {
             showNormalView();
         }
-
-        if (!BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) {
-            if (mBookmarkUiMode == BookmarkUiMode.SEARCHING) {
-                showSearchView(mSoftKeyboardVisible);
-            } else {
-                hideSearchView(/* notify= */ false);
-            }
-        }
     }
 
     void setSoftKeyboardVisible(boolean visible) {
@@ -161,28 +149,25 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
         setOnMenuItemClickListener(dragEnabled ? null : this);
     }
 
-    void setSearchButtonVisible(boolean visible) {
-        // The improved bookmarks experience embeds search in the list.
-        if (BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) return;
-        mSearchButtonVisible = visible;
-        getMenu().findItem(R.id.search_menu_id).setVisible(visible);
-    }
-
     void setEditButtonVisible(boolean visible) {
         mEditButtonVisible = visible;
         getMenu().findItem(R.id.edit_menu_id).setVisible(visible);
     }
 
     void setNewFolderButtonVisible(boolean visible) {
-        // The new folder button is only visible when improved bookmarks is enabled.
-        if (!BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) return;
+        if (ChromeApplicationImpl.isVivaldi()) {
+            getMenu().findItem(R.id.create_new_folder_menu_id).setVisible(false);
+            return;
+        }
         mNewFolderButtonVisible = visible;
         getMenu().findItem(R.id.create_new_folder_menu_id).setVisible(visible);
     }
 
     void setNewFolderButtonEnabled(boolean enabled) {
-        // The new folder button is only visible when improved bookmarks is enabled.
-        if (!BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) return;
+        if (ChromeApplicationImpl.isVivaldi()) {
+            getMenu().findItem(R.id.create_new_folder_menu_id).setEnabled(false);
+            return;
+        }
         mNewFolderButtonEnabled = enabled;
         getMenu().findItem(R.id.create_new_folder_menu_id).setEnabled(enabled);
     }
@@ -192,16 +177,20 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
     }
 
     void setCheckedSortMenuId(@IdRes int id) {
+        if (ChromeApplicationImpl.isVivaldi()) {
+            MenuItem item = getMenu().findItem(id);
+            if (item != null && item.isVisible()
+                ) item.setChecked(true);
+        } else // End Vivaldi
         getMenu().findItem(id).setChecked(true);
     }
 
     void setSortMenuIds(List<Integer> sortMenuIds) {
-        if (!BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) return;
         mSortMenuIds = sortMenuIds;
     }
 
     void setSortMenuIdsEnabled(boolean enabled) {
-        if (!BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) return;
+        if (ChromeApplicationImpl.isVivaldi()) return;
         mSortMenuIdsEnabled = enabled;
         for (Integer id : mSortMenuIds) {
             getMenu().findItem(id).setEnabled(enabled);
@@ -209,6 +198,7 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
     }
 
     void setCheckedViewMenuId(@IdRes int id) {
+        if (ChromeApplicationImpl.isVivaldi()) return;
         getMenu().findItem(id).setChecked(true);
     }
 
@@ -240,11 +230,6 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
 
     @Override
     public void onNavigationBack() {
-        if (isSearching()) {
-            super.onNavigationBack();
-            return;
-        }
-
         // The navigation button shouldn't be visible unless the current folder is non-null.
         mNavigateBackRunnable.run();
     }
@@ -254,7 +239,6 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
         super.showNormalView();
 
         // SelectableListToolbar will show/hide the entire group.
-        setSearchButtonVisible(mSearchButtonVisible);
         setEditButtonVisible(mEditButtonVisible);
         setNewFolderButtonVisible(mNewFolderButtonVisible);
         setNewFolderButtonEnabled(mNewFolderButtonEnabled);
@@ -262,7 +246,6 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
 
         if (mCurrentFolder!= null && mCurrentFolder.getId().getType() == BookmarkType.READING_LIST) {
             setSortButtonVisible(false);
-            setSearchButtonVisible(false);
         } else setAddToReadingListButtonVisible(false);
     }
 
@@ -381,7 +364,7 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
     }
 
     void setSortButtonVisible(boolean visible) {
-//!!        getMenu().findItem(R.id.sort_bookmarks_id).setVisible(visible); TODO 122
+        getMenu().findItem(R.id.sort_bookmarks_id).setVisible(visible);
     }
 
     void setCloseButtonVisible(boolean visible) {

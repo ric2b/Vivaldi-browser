@@ -181,14 +181,8 @@ base::FilePath EncodeBitmapToFile(base::FilePath directory,
   filename += base::Uuid::GenerateRandomV4().AsLowercaseString();
   filename += ext;
 
-  base_path = base_path.AppendASCII(filename);
+  base_path = base::GetUniquePath(base_path.AppendASCII(filename));
 
-  // Ensure unique filename.
-  int unique_number = base::GetUniquePathNumber(base_path);
-  if (unique_number > 0) {
-    base_path = base_path.InsertBeforeExtensionASCII(
-        base::StringPrintf(" (%d)", unique_number));
-  }
   int bytes =
       base::WriteFile(base_path, reinterpret_cast<const char*>(&image_bytes[0]),
                       static_cast<int>(image_bytes.size()));

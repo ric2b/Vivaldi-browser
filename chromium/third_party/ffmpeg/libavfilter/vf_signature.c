@@ -26,6 +26,7 @@
 
 #include "libavcodec/put_bits.h"
 #include "libavformat/avformat.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/avstring.h"
 #include "libavutil/file_open.h"
@@ -378,6 +379,9 @@ static int xml_export(AVFilterContext *ctx, StreamContext *sc, const char* filen
     int i, j;
     FILE* f;
     unsigned int pot3[5] = { 3*3*3*3, 3*3*3, 3*3, 3, 1 };
+
+    if (!sc->coarseend->last)
+        return AVERROR(EINVAL); // No frames ?
 
     f = avpriv_fopen_utf8(filename, "w");
     if (!f) {

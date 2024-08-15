@@ -84,6 +84,8 @@ typedef const struct fpdf_signature_t__* FPDF_SIGNATURE;
 typedef void* FPDF_SKIA_CANVAS;  // Passed into Skia as an SkCanvas.
 typedef struct fpdf_structelement_t__* FPDF_STRUCTELEMENT;
 typedef const struct fpdf_structelement_attr_t__* FPDF_STRUCTELEMENT_ATTR;
+typedef const struct fpdf_structelement_attr_value_t__*
+FPDF_STRUCTELEMENT_ATTR_VALUE;
 typedef struct fpdf_structtree_t__* FPDF_STRUCTTREE;
 typedef struct fpdf_textpage_t__* FPDF_TEXTPAGE;
 typedef struct fpdf_widget_t__* FPDF_WIDGET;
@@ -1309,14 +1311,14 @@ FPDF_VIEWERREF_GetDuplex(FPDF_DOCUMENT document);
 //          document    -   Handle to the loaded document.
 //          key         -   Name of the key in the viewer pref dictionary,
 //                          encoded in UTF-8.
-//          buffer      -   A string to write the contents of the key to.
+//          buffer      -   Caller-allocate buffer to receive the key, or NULL
+//                      -   to query the required length.
 //          length      -   Length of the buffer.
 // Return value:
 //          The number of bytes in the contents, including the NULL terminator.
 //          Thus if the return value is 0, then that indicates an error, such
-//          as when |document| is invalid or |buffer| is NULL. If |length| is
-//          less than the returned length, or |buffer| is NULL, |buffer| will
-//          not be modified.
+//          as when |document| is invalid. If |length| is less than the required
+//          length, or |buffer| is NULL, |buffer| will not be modified.
 FPDF_EXPORT unsigned long FPDF_CALLCONV
 FPDF_VIEWERREF_GetName(FPDF_DOCUMENT document,
                        FPDF_BYTESTRING key,

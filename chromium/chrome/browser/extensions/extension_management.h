@@ -82,7 +82,7 @@ class ExtensionManagement : public KeyedService {
   //                     it afterwards.
   // * kForcePinned: Extension starts pinned to the toolbar, and the user
   //                 cannot unpin it.
-  // TODO(crbug.com/1071314): Add kDefaultPinned state.
+  // TODO(crbug.com/40126725): Add kDefaultPinned state.
   enum class ToolbarPinMode {
     kDefaultUnpinned = 0,
     kForcePinned,
@@ -163,6 +163,12 @@ class ExtensionManagement : public KeyedService {
                                 const std::string& extension_id,
                                 Manifest::Type manifest_type);
   bool IsAllowedManifestVersion(const Extension* extension);
+
+  // Returns true if the extension associated with the given `extension_id` is
+  // exempt from the MV2 deprecation because of an active admin policy.
+  bool IsExemptFromMV2DeprecationByPolicy(int manifest_version,
+                                          const std::string& extension_id,
+                                          Manifest::Type manifest_type);
 
   bool IsAllowedByUnpublishedAvailabilityPolicy(const Extension* extension);
 

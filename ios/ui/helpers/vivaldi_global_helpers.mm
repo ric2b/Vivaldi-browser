@@ -2,13 +2,13 @@
 
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 
+#import "app/vivaldi_constants.h"
 #import "base/apple/bundle_locations.h"
 #import "base/apple/foundation_util.h"
-#import "base/check.h"
-#import "base/strings/sys_string_conversions.h"
-#import "base/strings/utf_string_conversions.h"
-#import "components/url_formatter/url_fixer.h"
+#import "ios/components/webui/web_ui_url_constants.h"
 #import "url/gurl.h"
+
+using vivaldi::kVivaldiUIScheme;
 
 @implementation VivaldiGlobalHelpers
 
@@ -396,4 +396,39 @@
   return hexComponent / 255.0;
 }
 
++ (NSString* _Nonnull)formattedURLStringForChromeScheme:
+  (NSString* _Nonnull)urlText {
+  NSString* chromeSchemeString =
+      [NSString stringWithUTF8String:kChromeUIScheme];
+  NSString* vivaldiSchemeString =
+      [NSString stringWithUTF8String:kVivaldiUIScheme];
+  if ([urlText hasPrefix:chromeSchemeString]) {
+    NSRange range = NSMakeRange(0, chromeSchemeString.length);
+    return
+        [urlText stringByReplacingOccurrencesOfString:chromeSchemeString
+                                           withString:vivaldiSchemeString
+                                              options:0
+                                                range:range];
+  }
+
+  return urlText;
+}
+
++ (BOOL)isURLInternalPage:(NSString* _Nonnull)urlString {
+  NSString* prefixStringVivaldi = @"vivaldi://";
+  NSString* prefixStringChrome = @"chrome://";
+  NSString* url = [urlString lowercaseString];
+
+  BOOL isInternal = NO;
+
+  if (url.length > 0) {
+    if ([url containsString:prefixStringVivaldi] ||
+        [url containsString:prefixStringChrome])
+      isInternal = YES;
+  } else {
+    return NO;
+  }
+
+  return isInternal;
+}
 @end

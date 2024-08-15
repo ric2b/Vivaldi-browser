@@ -11,6 +11,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.jni_zero.CalledByNative;
+import org.jni_zero.JniType;
 import org.jni_zero.NativeMethods;
 
 import org.chromium.base.ApiCompatibilityUtils;
@@ -60,6 +61,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 
@@ -216,12 +218,14 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager, Acco
         @Nullable
         CoreAccountInfo primaryAccountInfo =
                 mIdentityManager.getPrimaryAccountInfo(ConsentLevel.SIGNIN);
-        if (primaryAccountInfo == null
-                || AccountUtils.findCoreAccountInfoByGaiaId(
-                                coreAccountInfos, primaryAccountInfo.getGaiaId())
-                        != null) {
-            // Reload the coreAccountInfos if the primary account is still on the device or if the
-            // user is signed out.
+        if (primaryAccountInfo == null) {
+            seedThenReloadAllAccountsFromSystem(null);
+            return;
+        }
+        if (AccountUtils.findCoreAccountInfoByGaiaId(
+                        coreAccountInfos, primaryAccountInfo.getGaiaId())
+                != null) {
+            // The primary account is still on the device, reseed accounts.
             seedThenReloadAllAccountsFromSystem(CoreAccountInfo.getIdFrom(primaryAccountInfo));
             return;
         }
@@ -232,6 +236,29 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager, Acco
             // Sign out if the current primary account is no longer on the device.
             signOut(SignoutReason.ACCOUNT_REMOVED_FROM_DEVICE);
         }
+    }
+
+    /**
+     * Updates the email of the primary account stored in shared preferences to match the one used
+     * by the native component. Sets the email of the primary account stored in shared preferences
+     * to null in case the user is signed out.
+     */
+    private void maybeUpdateLegacyPrimaryAccountEmail() {
+        @ConsentLevel
+        int consentLevel =
+                SigninFeatureMap.isEnabled(
+                                SigninFeatures
+                                        .USE_CONSENT_LEVEL_SIGNIN_FOR_LEGACY_ACCOUNT_EMAIL_PREF)
+                        ? ConsentLevel.SIGNIN
+                        : ConsentLevel.SYNC;
+        CoreAccountInfo accountInfo = mIdentityManager.getPrimaryAccountInfo(consentLevel);
+        if (Objects.equals(
+                CoreAccountInfo.getEmailFrom(accountInfo),
+                SigninPreferencesManager.getInstance().getLegacyPrimaryAccountEmail())) {
+            return;
+        }
+        SigninPreferencesManager.getInstance()
+                .setLegacyPrimaryAccountEmail(CoreAccountInfo.getEmailFrom(accountInfo));
     }
 
     /** Extracts the domain name of a given account's email. */
@@ -380,7 +407,8 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager, Acco
         // started until this one completes (see {@link isOperationInProgress()}).
         mSignInState = signInState;
 
-        if (SigninFeatureMap.isEnabled(SigninFeatures.ENTERPRISE_POLICY_ON_SIGNIN)
+        if (!SigninFeatureMap.isEnabled(SigninFeatures.SKIP_CHECK_FOR_ACCOUNT_MANAGEMENT_ON_SIGNIN)
+                && SigninFeatureMap.isEnabled(SigninFeatures.ENTERPRISE_POLICY_ON_SIGNIN)
                 && !getUserAcceptedAccountManagement()) {
             isAccountManaged(
                     mSignInState.mCoreAccountInfo,
@@ -491,12 +519,10 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager, Acco
             return;
         }
 
-        if (mSignInState.shouldTurnSyncOn()) {
-            // TODO(https://crbug.com/1091858): Remove this after migrating the legacy code that
-            // uses the sync account before the native is loaded.
-            SigninPreferencesManager.getInstance()
-                    .setLegacySyncAccountEmail(mSignInState.mCoreAccountInfo.getEmail());
+        // Should be called after setting the primary account.
+        maybeUpdateLegacyPrimaryAccountEmail();
 
+        if (mSignInState.shouldTurnSyncOn()) {
             mSyncService.setSyncRequested();
 
             RecordUserAction.record("Signin_Signin_Succeed");
@@ -727,7 +753,9 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager, Acco
     public void isAccountManaged(
             @NonNull CoreAccountInfo account, final Callback<Boolean> callback) {
         assert account != null;
-        SigninManagerImplJni.get().isAccountManaged(mNativeSigninManagerAndroid, account, callback);
+        SigninManagerImplJni.get()
+                .isAccountManaged(
+                        mNativeSigninManagerAndroid, mAccountTrackerService, account, callback);
     }
 
     @Override
@@ -751,6 +779,8 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager, Acco
                 mAccountManagerFacade.getCoreAccountInfos().getResult(), primaryAccountId);
         mIdentityManager.refreshAccountInfoIfStale(
                 mAccountManagerFacade.getCoreAccountInfos().getResult());
+        // Should be called after re-seeding accounts to make sure that we get the new email.
+        maybeUpdateLegacyPrimaryAccountEmail();
     }
 
     /**
@@ -781,9 +811,9 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager, Acco
         }
     }
 
-    // TODO(crbug.com/1272911): this function and disableSyncAndWipeData() have very similar
+    // TODO(crbug.com/40806620): this function and disableSyncAndWipeData() have very similar
     // functionality, but with different implementations.  Consider merging them.
-    // TODO(crbug.com/1272911): add test coverage for this function (including its effect on
+    // TODO(crbug.com/40806620): add test coverage for this function (including its effect on
     // notifyCallbacksWaitingForOperation()), after resolving the TODO above.
     private void wipeSyncUserDataOnly(Runnable wipeDataCallback) {
         final BookmarkModel model = BookmarkModel.getForProfile(mProfile);
@@ -859,10 +889,7 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager, Acco
                 "Native signout complete, wiping data (user callback: %s)",
                 mSignOutState.mDataWipeAction);
 
-        // TODO(https://crbug.com/1091858): Remove this after migrating the legacy code that
-        //                                  uses the sync account before the native is
-        //                                  loaded.
-        SigninPreferencesManager.getInstance().setLegacySyncAccountEmail(null);
+        maybeUpdateLegacyPrimaryAccountEmail();
 
         if (mSignOutState.mSignOutCallback != null) {
             mSignOutState.mSignOutCallback.preWipeData();
@@ -895,7 +922,7 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager, Acco
          * Contains the full Core account info, which will be updated once account seeding is
          * complete.
          *
-         * <p>TODO(crbug.com/1491005): Update comment and make this field private if possible.
+         * <p>TODO(crbug.com/40284908): Update comment and make this field private if possible.
          */
         CoreAccountInfo mCoreAccountInfo;
 
@@ -993,7 +1020,8 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager, Acco
 
         boolean isForceSigninEnabled(long nativeSigninManagerAndroid);
 
-        String extractDomainName(String email);
+        @JniType("std::string")
+        String extractDomainName(@JniType("std::string") String email);
 
         void fetchAndApplyCloudPolicy(
                 long nativeSigninManagerAndroid, CoreAccountInfo account, Runnable callback);
@@ -1002,9 +1030,11 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager, Acco
 
         void isAccountManaged(
                 long nativeSigninManagerAndroid,
+                AccountTrackerService accountTrackerService,
                 CoreAccountInfo account,
                 Callback<Boolean> callback);
 
+        @Nullable
         String getManagementDomain(long nativeSigninManagerAndroid);
 
         void wipeProfileData(long nativeSigninManagerAndroid, Runnable callback);

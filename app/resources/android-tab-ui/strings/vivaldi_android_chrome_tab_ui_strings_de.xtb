@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="de">
+<translation id="2947471979790858922">Ihre Aktivitäten auf diesen privaten Tabs werden von diesem Gerät entfernt</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, Plural,
+        =1 {Ihre geschlossenen Tabs finden Sie unter Letzte Tabs im Hauptmenü von Vivaldi. Ihr privater Tab wird nicht verfügbar sein.}
+        other {Sie finden Ihre geschlossenen Tabs in den letzten Tabs unter dem Vivaldi-Hauptmenü. Ihre # privaten Tabs werden nicht verfügbar sein.}}</translation>
+<translation id="4871187110787939393">Alle privaten Tabs schließen?</translation>
 </translationbundle>

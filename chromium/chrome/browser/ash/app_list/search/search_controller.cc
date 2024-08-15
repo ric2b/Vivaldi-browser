@@ -25,16 +25,20 @@
 #include "chrome/browser/ash/app_list/app_list_model_updater.h"
 #include "chrome/browser/ash/app_list/search/app_search_data_source.h"
 #include "chrome/browser/ash/app_list/search/chrome_search_result.h"
+#include "chrome/browser/ash/app_list/search/common/file_util.h"
 #include "chrome/browser/ash/app_list/search/common/keyword_util.h"
 #include "chrome/browser/ash/app_list/search/common/string_util.h"
 #include "chrome/browser/ash/app_list/search/common/types_util.h"
 #include "chrome/browser/ash/app_list/search/ranking/ranker_manager.h"
 #include "chrome/browser/ash/app_list/search/ranking/sorting.h"
 #include "chrome/browser/ash/app_list/search/search_engine.h"
+#include "chrome/browser/ash/app_list/search/search_features.h"
+#include "chrome/browser/ash/app_list/search/search_file_scanner.h"
 #include "chrome/browser/ash/app_list/search/search_metrics_manager.h"
 #include "chrome/browser/ash/app_list/search/search_provider.h"
 #include "chrome/browser/ash/app_list/search/search_session_metrics_manager.h"
 #include "chrome/browser/ash/app_list/search/types.h"
+#include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/metrics/structured/event_logging_features.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
@@ -87,6 +91,12 @@ void SearchController::Initialize() {
   app_discovery_metrics_manager_ =
       std::make_unique<AppDiscoveryMetricsManager>(profile_);
   search_engine_ = std::make_unique<SearchEngine>(profile_);
+
+  if (search_features::IsLauncherSearchFileScanEnabled()) {
+    search_file_scanner_ = std::make_unique<SearchFileScanner>(
+        profile_, file_manager::util::GetMyFilesFolderForProfile(profile_),
+        GetTrashPaths(profile_));
+  }
 }
 
 std::vector<ash::AppListSearchControlCategory>
@@ -227,8 +237,7 @@ void SearchController::OnZeroStateTimedOut() {
 void SearchController::AppListViewChanging(bool is_visible) {
   // In tablet mode, the launcher is always visible so do not log launcher open
   // if the device is in tablet mode.
-  if (is_visible && !display::Screen::GetScreen()->InTabletMode() &&
-      base::FeatureList::IsEnabled(metrics::structured::kAppDiscoveryLogging)) {
+  if (is_visible && !display::Screen::GetScreen()->InTabletMode()) {
     app_discovery_metrics_manager_->OnLauncherOpen();
   }
 
@@ -246,9 +255,7 @@ void SearchController::OpenResult(ChromeSearchResult* result, int event_flags) {
   }
 
   metrics_manager_->OnOpen(result->result_type(), last_query_);
-  if (base::FeatureList::IsEnabled(metrics::structured::kAppDiscoveryLogging)) {
-    app_discovery_metrics_manager_->OnOpenResult(result, last_query_);
-  }
+  app_discovery_metrics_manager_->OnOpenResult(result, last_query_);
 
   const bool dismiss_view_on_open = result->dismiss_view_on_open();
 

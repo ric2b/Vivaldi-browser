@@ -81,7 +81,8 @@ std::unique_ptr<SearchController> CreateSearchController(
 
   if (crosapi::browser_util::IsLacrosEnabled()) {
     controller->AddProvider(std::make_unique<OmniboxLacrosProvider>(
-        profile, list_controller, crosapi::CrosapiManager::Get()));
+        profile, list_controller,
+        OmniboxLacrosProvider::GetSingletonControllerCallback()));
   } else {
     controller->AddProvider(std::make_unique<OmniboxProvider>(
         profile, list_controller, crosapi::ProviderTypes()));
@@ -96,7 +97,7 @@ std::unique_ptr<SearchController> CreateSearchController(
         profile, base::FileEnumerator::FileType::FILES |
                      base::FileEnumerator::FileType::DIRECTORIES));
     controller->AddProvider(std::make_unique<DriveSearchProvider>(profile));
-    if (search_features::isLauncherSystemInfoAnswerCardsEnabled()) {
+    if (search_features::IsLauncherSystemInfoAnswerCardsEnabled()) {
       controller->AddProvider(
           std::make_unique<SystemInfoCardProvider>(profile));
     }
@@ -141,10 +142,7 @@ std::unique_ptr<SearchController> CreateSearchController(
         os_settings_manager->hierarchy()));
   }
 
-  controller->AddProvider(std::make_unique<KeyboardShortcutProvider>(
-      profile, std::make_unique<ManateeCache>(
-                   profile, profile->GetDefaultStoragePartition()
-                                ->GetURLLoaderFactoryForBrowserProcess())));
+  controller->AddProvider(std::make_unique<KeyboardShortcutProvider>(profile));
 
   if (base::FeatureList::IsEnabled(ash::features::kHelpAppLauncherSearch)) {
     controller->AddProvider(std::make_unique<HelpAppProvider>(

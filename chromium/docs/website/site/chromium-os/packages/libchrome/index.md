@@ -11,6 +11,6 @@ title: libchrome
 #### Deprecation warning
 
 [This page has been
-migrated](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/packages/libchrome.md)!
+migrated](https://www.chromium.org/chromium-os/developer-library/guides/infrastructure/libchrome/)!
 
 Please update bookmarks and referring links to point to the in-repo markdown.

@@ -268,8 +268,6 @@ export class MainImpl {
   #initializeExperiments(): void {
     Root.Runtime.experiments.register('apply-custom-stylesheet', 'Allow extensions to load custom stylesheets');
     Root.Runtime.experiments.register('capture-node-creation-stacks', 'Capture node creation stacks');
-    Root.Runtime.experiments.register(
-        'ignore-list-js-frames-on-timeline', 'Ignore List for JavaScript frames on Timeline', true);
     Root.Runtime.experiments.register('live-heap-profile', 'Live heap profile', true);
     Root.Runtime.experiments.register(
         'protocol-monitor', 'Protocol Monitor', undefined,
@@ -282,29 +280,29 @@ export class MainImpl {
         'In heap snapshots, treat backing store size as part of the containing object');
 
     // Timeline
-    Root.Runtime.experiments.register('timeline-invalidation-tracking', 'Timeline: invalidation tracking', true);
-    Root.Runtime.experiments.register('timeline-show-all-events', 'Timeline: show all events', true);
     Root.Runtime.experiments.register(
-        'timeline-v8-runtime-call-stats', 'Timeline: V8 Runtime Call Stats on Timeline', true);
+        'timeline-invalidation-tracking', 'Performance panel: invalidation tracking', true);
+    Root.Runtime.experiments.register('timeline-show-all-events', 'Performance panel: show all events', true);
     Root.Runtime.experiments.register(
-        'timeline-as-console-profile-result-panel',
-        'View console.profile() results in the Performance panel for Node.js', true);
+        'timeline-v8-runtime-call-stats', 'Performance panel: V8 runtime call stats', true);
     Root.Runtime.experiments.register(
-        'timeline-track-configuration',
-        'Timeline: Enable track configuration feature that can reorder or hide a track in the flame chart', true);
+        'timeline-extensions', 'Performance panel: enable user timings based extensions', true);
+    Root.Runtime.experiments.register(
+        'timeline-enhanced-traces', 'Performance panel: Enable collecting enhanced traces', true);
+    Root.Runtime.experiments.register(
+        'timeline-compiled-sources', 'Performance panel: Enable collecting source text for compiled script', true);
+    Root.Runtime.experiments.register(
+        Root.Runtime.ExperimentName.TIMELINE_DEBUG_MODE,
+        'Performance panel: Enable debug mode (trace event details, etc)', true);
 
     // Sources
     Root.Runtime.experiments.register(
-        Root.Runtime.ExperimentName.INDENTATION_MARKERS_TEMP_DISABLE, 'Disable Indentation Markers temporarily',
+        Root.Runtime.ExperimentName.INDENTATION_MARKERS_TEMP_DISABLE, 'Disable indentation markers temporarily',
         /* unstable= */ false, 'https://developer.chrome.com/blog/new-in-devtools-121/#indentation',
         'https://crbug.com/1479986');
 
     // Debugging
-    Root.Runtime.experiments.register(
-        'evaluate-expressions-with-source-maps', 'Resolve variable names in expressions using source maps', undefined,
-        'https://goo.gle/evaluate-source-var-default', 'https://crbug.com/1504123');
     Root.Runtime.experiments.register('instrumentation-breakpoints', 'Enable instrumentation breakpoints', true);
-    Root.Runtime.experiments.register('set-all-breakpoints-eagerly', 'Set all breakpoints eagerly at startup');
     Root.Runtime.experiments.register('use-source-map-scopes', 'Use scope information from source maps', true);
 
     // Advanced Perceptual Contrast Algorithm.
@@ -321,7 +319,7 @@ export class MainImpl {
 
     // Font Editor
     Root.Runtime.experiments.register(
-        'font-editor', 'Enable new Font Editor tool within the Styles tab.', undefined,
+        'font-editor', 'Enable new font editor within the Styles tab', undefined,
         'https://developer.chrome.com/blog/new-in-devtools-89/#font');
 
     // Contrast issues reported via the Issues panel.
@@ -339,7 +337,7 @@ export class MainImpl {
 
     // Integrate CSS changes in the Styles pane.
     Root.Runtime.experiments.register(
-        Root.Runtime.ExperimentName.STYLES_PANE_CSS_CHANGES, 'Sync CSS changes in the Styles pane');
+        Root.Runtime.ExperimentName.STYLES_PANE_CSS_CHANGES, 'Sync CSS changes in the Styles tab');
 
     // Highlights a violating node or attribute by rendering a squiggly line under it and adding a tooltip linking to the issues panel.
     // Right now violating nodes are exclusively form fields that contain an HTML issue, for example, and <input /> whose id is duplicate inside the form.
@@ -349,32 +347,29 @@ export class MainImpl {
 
     // Change grouping of sources panel to use Authored/Deployed trees
     Root.Runtime.experiments.register(
-        Root.Runtime.ExperimentName.AUTHORED_DEPLOYED_GROUPING, 'Group sources into Authored and Deployed trees',
+        Root.Runtime.ExperimentName.AUTHORED_DEPLOYED_GROUPING, 'Group sources into authored and deployed trees',
         undefined, 'https://goo.gle/authored-deployed', 'https://goo.gle/authored-deployed-feedback');
 
     // Hide third party code (as determined by ignore lists or source maps)
     Root.Runtime.experiments.register(
-        Root.Runtime.ExperimentName.JUST_MY_CODE, 'Hide ignore-listed code in sources tree view');
+        Root.Runtime.ExperimentName.JUST_MY_CODE, 'Hide ignore-listed code in Sources tree view');
 
     // Highlight important DOM properties in the Object Properties viewer.
     Root.Runtime.experiments.register(
         Root.Runtime.ExperimentName.IMPORTANT_DOM_PROPERTIES,
-        'Highlight important DOM properties in the Object Properties viewer');
+        'Highlight important DOM properties in the Properties tab');
 
     Root.Runtime.experiments.register(
-        Root.Runtime.ExperimentName.PRELOADING_STATUS_PANEL, 'Enable Speculative Loads Panel in Application panel',
+        Root.Runtime.ExperimentName.PRELOADING_STATUS_PANEL, 'Enable speculative loads panel in Application panel',
         true);
 
     Root.Runtime.experiments.register(
-        Root.Runtime.ExperimentName.OUTERMOST_TARGET_SELECTOR,
-        'Enable background page selector (e.g. for prerendering debugging)', false);
-
-    Root.Runtime.experiments.register(
-        Root.Runtime.ExperimentName.STORAGE_BUCKETS_TREE, 'Enable Storage Buckets Tree in Application panel', true);
+        Root.Runtime.ExperimentName.OUTERMOST_TARGET_SELECTOR, 'Enable background page selector (for prerendering)',
+        false);
 
     Root.Runtime.experiments.register(
         Root.Runtime.ExperimentName.NETWORK_PANEL_FILTER_BAR_REDESIGN,
-        'Redesign of the filter bar in the Network Panel',
+        'Redesign of the filter bar in the Network panel',
         false,
         'https://goo.gle/devtools-network-filter-redesign',
         'https://crbug.com/1500573',
@@ -390,22 +385,26 @@ export class MainImpl {
 
     Root.Runtime.experiments.register(
         Root.Runtime.ExperimentName.TIMELINE_SHOW_POST_MESSAGE_EVENTS,
-        'Timeline: Show postMessage dispatch and handling flows',
+        'Performance panel: show postMessage dispatch and handling flows',
     );
 
     Root.Runtime.experiments.register(
-        Root.Runtime.ExperimentName.SAVE_AND_LOAD_TRACE_WITH_ANNOTATIONS,
-        'Enable save and load trace with annotations in Performance Panel',
+        Root.Runtime.ExperimentName.PERF_PANEL_ANNOTATIONS,
+        'Enable saving and loading traces with annotations in the Performance panel',
+    );
+
+    Root.Runtime.experiments.register(
+        Root.Runtime.ExperimentName.TIMELINE_EXECUTE_OLD_ENGINE,
+        'Enable the legacy tracing model when inspecting Chrome traces using the performance panel',
+        true,  // mark as unstable as we don't expect users to change this setting
     );
 
     Root.Runtime.experiments.enableExperimentsByDefault([
       'css-type-component-length-deprecate',
-      'set-all-breakpoints-eagerly',
-      Root.Runtime.ExperimentName.TIMELINE_AS_CONSOLE_PROFILE_RESULT_PANEL,
       Root.Runtime.ExperimentName.OUTERMOST_TARGET_SELECTOR,
       Root.Runtime.ExperimentName.PRELOADING_STATUS_PANEL,
-      'evaluate-expressions-with-source-maps',
       Root.Runtime.ExperimentName.AUTOFILL_VIEW,
+      Root.Runtime.ExperimentName.TIMELINE_EXECUTE_OLD_ENGINE,
       ...(Root.Runtime.Runtime.queryParam('isChromeForTesting') ? ['protocol-monitor'] : []),
     ]);
 
@@ -593,7 +592,7 @@ export class MainImpl {
     }
 
     // Initialize ARIAUtils.alert Element
-    UI.ARIAUtils.alertElementInstance();
+    UI.ARIAUtils.getOrCreateAlertElements();
     UI.DockController.DockController.instance().announceDockLocation();
 
     // Allow UI cycles to repaint prior to creating connection.

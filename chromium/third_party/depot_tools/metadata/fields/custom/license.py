@@ -6,7 +6,7 @@
 import os
 import re
 import sys
-from typing import List, Union, Tuple
+from typing import List, Tuple, Optional
 
 _THIS_DIR = os.path.abspath(os.path.dirname(__file__))
 # The repo's root directory.
@@ -48,6 +48,11 @@ _PATTERN_LICENSE_ALLOWED = re.compile(
 )
 
 _PATTERN_VERBOSE_DELIMITER = re.compile(r" and | or | / ")
+
+# Split on the canonical delimiter, or any of the non-canonical delimiters.
+_PATTERN_SPLIT_LICENSE = re.compile("{}|{}".format(
+    _PATTERN_VERBOSE_DELIMITER.pattern,
+    field_types.MetadataField.VALUE_DELIMITER))
 
 
 def process_license_value(value: str,
@@ -95,15 +100,15 @@ def is_license_allowlisted(value: str) -> bool:
     return util.matches(_PATTERN_LICENSE_ALLOWED, value)
 
 
-class LicenseField(field_types.MetadataField):
+class LicenseField(field_types.SingleLineTextField):
     """Custom field for the package's license type(s).
 
     e.g. Apache 2.0, MIT, BSD, Public Domain.
     """
     def __init__(self):
-        super().__init__(name="License", one_liner=False)
+        super().__init__(name="License")
 
-    def validate(self, value: str) -> Union[vr.ValidationResult, None]:
+    def validate(self, value: str) -> Optional[vr.ValidationResult]:
         """Checks the given value consists of recognized license types.
 
         Note: this field supports multiple values.
@@ -134,3 +139,11 @@ class LicenseField(field_types.MetadataField):
                 reason=f"Separate licenses using a '{self.VALUE_DELIMITER}'.")
 
         return None
+
+    def narrow_type(self, value: str) -> Optional[List[str]]:
+        if not value:
+            # Empty License field is equivalent to "not declared".
+            return None
+
+        parts = _PATTERN_SPLIT_LICENSE.split(value)
+        return list(filter(bool, map(lambda str: str.strip(), parts)))

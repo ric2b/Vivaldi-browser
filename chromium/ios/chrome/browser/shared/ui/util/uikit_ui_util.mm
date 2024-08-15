@@ -10,6 +10,7 @@
 #import <UIKit/UIKit.h>
 #import <stddef.h>
 #import <stdint.h>
+
 #import <cmath>
 
 #import "base/apple/foundation_util.h"
@@ -24,6 +25,7 @@
 #import "ios/chrome/browser/shared/ui/util/dynamic_type_util.h"
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
+#import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "ui/base/resource/resource_bundle.h"
@@ -72,6 +74,15 @@ void MaybeSetUITextFieldScaledFont(BOOL maybe,
 UIFont* CreateDynamicFont(UIFontTextStyle style, UIFontWeight weight) {
   UIFontDescriptor* fontDescriptor =
       [UIFontDescriptor preferredFontDescriptorWithTextStyle:style];
+  return [UIFont systemFontOfSize:fontDescriptor.pointSize weight:weight];
+}
+
+UIFont* CreateDynamicFont(UIFontTextStyle style,
+                          UIFontWeight weight,
+                          id<UITraitEnvironment> environment) {
+  UIFontDescriptor* fontDescriptor = [UIFontDescriptor
+      preferredFontDescriptorWithTextStyle:style
+             compatibleWithTraitCollection:environment.traitCollection];
   return [UIFont systemFontOfSize:fontDescriptor.pointSize weight:weight];
 }
 
@@ -210,15 +221,6 @@ bool IsCompactHeight(id<UITraitEnvironment> environment) {
 
 bool IsCompactHeight(UITraitCollection* traitCollection) {
   return traitCollection.verticalSizeClass == UIUserInterfaceSizeClassCompact;
-}
-
-bool IsRegularXRegularSizeClass(id<UITraitEnvironment> environment) {
-  return IsRegularXRegularSizeClass(environment.traitCollection);
-}
-
-bool IsRegularXRegularSizeClass(UITraitCollection* traitCollection) {
-  return traitCollection.verticalSizeClass == UIUserInterfaceSizeClassRegular &&
-         traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassRegular;
 }
 
 bool ShouldShowCompactToolbar(id<UITraitEnvironment> environment) {
@@ -436,4 +438,12 @@ CGFloat DeviceCornerRadius() {
   const BOOL isRoundedDevice =
       (idiom == UIUserInterfaceIdiomPhone && window.safeAreaInsets.bottom);
   return isRoundedDevice ? 40.0 : 0.0;
+}
+
+bool IsBottomOmniboxAvailable() {
+  // Note: (prio@vivaldi.com) - We have bottom omnibox for both iPad and iPhones
+  if (vivaldi::IsVivaldiRunning())
+    return true; // End Vivaldi
+
+  return ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE;
 }

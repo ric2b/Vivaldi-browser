@@ -164,7 +164,7 @@ class CONTENT_EXPORT FrameTree {
     // LoadingTree would return the frame tree to which loading events should be
     // directed.
     //
-    // TODO(crbug.com/1261928): Remove this method and directly rely on
+    // TODO(crbug.com/40202416): Remove this method and directly rely on
     // GetOutermostMainFrame() once guest views are migrated to MPArch.
     virtual FrameTree* LoadingTree() = 0;
 
@@ -382,19 +382,25 @@ class CONTENT_EXPORT FrameTree {
   // node cannot be removed this way.
   void RemoveFrame(FrameTreeNode* child);
 
-  // This method walks the entire frame tree and creates a RenderFrameProxyHost
-  // for the given |site_instance| in each node except the |source| one --
-  // the source will have a RenderFrameHost.  |source| may be null if there is
-  // no node navigating in this frame tree (such as when this is called
-  // for an opener's frame tree), in which case no nodes are skipped for
-  // RenderFrameProxyHost creation. |source_new_browsing_context_state| is the
-  // BrowsingContextState used by the speculative frame host, which may differ
-  // from the BrowsingContextState in |source| during cross-origin cross-
-  // browsing-instance navigations.
-  void CreateProxiesForSiteInstance(FrameTreeNode* source,
-                                    SiteInstanceImpl* site_instance,
-                                    const scoped_refptr<BrowsingContextState>&
-                                        source_new_browsing_context_state);
+  // This method walks the entire frame tree and creates RenderFrameProxyHosts
+  // as needed. Proxies are not created if suitable proxies already exist. See
+  // below for special handling of |source|. Otherwise proxies are created for
+  // the given |site_instance_group| in each node.
+  //
+  // |source| may be null if there is no node navigating in this frame tree
+  // (such as when this is called for an opener's frame tree), in which case no
+  // nodes are skipped for RenderFrameProxyHost creation. Otherwise, a proxy is
+  // temporarily created for |source| in cross-SiteInstanceGroup cases (to allow
+  // a remote-to-local swap to the new RenderFrameHost in |source|), but the
+  // subtree rooted at source is skipped.
+  // |source_new_browsing_context_state| is the BrowsingContextState used by the
+  // speculative frame host, which may differ from the BrowsingContextState in
+  // |source| during cross-origin cross- browsing-instance navigations.
+  void CreateProxiesForSiteInstanceGroup(
+      FrameTreeNode* source,
+      SiteInstanceGroup* site_instance_group,
+      const scoped_refptr<BrowsingContextState>&
+          source_new_browsing_context_state);
 
   // Convenience accessor for the main frame's RenderFrameHostImpl.
   RenderFrameHostImpl* GetMainFrame() const;
@@ -551,21 +557,21 @@ class CONTENT_EXPORT FrameTree {
   // This should only be called by NavigationRequest when it detects that an
   // origin is participating in the deprecation trial.
   //
-  // TODO(crbug.com/1407150): Remove this when deprecation trial is complete.
+  // TODO(crbug.com/40887671): Remove this when deprecation trial is complete.
   void RegisterOriginForUnpartitionedSessionStorageAccess(
       const url::Origin& origin);
 
   // This should only be called by NavigationRequest when it detects that an
   // origin is not participating in the deprecation trial.
   //
-  // TODO(crbug.com/1407150): Remove this when deprecation trial is complete.
+  // TODO(crbug.com/40887671): Remove this when deprecation trial is complete.
   void UnregisterOriginForUnpartitionedSessionStorageAccess(
       const url::Origin& origin);
 
   // This should be used for all session storage related bindings as it adjusts
   // the storage key used depending on the deprecation trial.
   //
-  // TODO(crbug.com/1407150): Remove this when deprecation trial is complete.
+  // TODO(crbug.com/40887671): Remove this when deprecation trial is complete.
   const blink::StorageKey GetSessionStorageKey(
       const blink::StorageKey& storage_key);
 
@@ -681,7 +687,7 @@ class CONTENT_EXPORT FrameTree {
   // partitioning of session storage when embedded as a third-party iframe.
   // This list persists for the lifetime of the associated tab.
   //
-  // TODO(crbug.com/1407150): Remove this when deprecation trial is complete.
+  // TODO(crbug.com/40887671): Remove this when deprecation trial is complete.
   std::set<url::Origin> unpartitioned_session_storage_origins_;
 
   // Used to track loaded bytes and elements.

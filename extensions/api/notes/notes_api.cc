@@ -51,8 +51,7 @@ vivaldi::notes::NodeType ToJSAPINodeType(NoteNode::Type type) {
   }
 }
 
-std::optional<NoteNode::Type> FromJSAPINodeType(
-    vivaldi::notes::NodeType type) {
+std::optional<NoteNode::Type> FromJSAPINodeType(vivaldi::notes::NodeType type) {
   switch (type) {
     case vivaldi::notes::NodeType::kNote:
       return NoteNode::NOTE;
@@ -170,8 +169,7 @@ void NotesAPI::OnListenerAdded(const EventListenerInfo& details) {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
-void NotesAPI::NotesNodeMoved(NotesModel* model,
-                              const NoteNode* old_parent,
+void NotesAPI::NotesNodeMoved(const NoteNode* old_parent,
                               size_t old_index,
                               const NoteNode* new_parent,
                               size_t new_index) {
@@ -190,9 +188,7 @@ void NotesAPI::NotesNodeMoved(NotesModel* model,
                             browser_context_);
 }
 
-void NotesAPI::NotesNodeAdded(NotesModel* model,
-                              const NoteNode* parent,
-                              size_t index) {
+void NotesAPI::NotesNodeAdded(const NoteNode* parent, size_t index) {
   const NoteNode* new_node = parent->children()[index].get();
   vivaldi::notes::NoteTreeNode treenode = MakeTreeNode(new_node);
 
@@ -201,10 +197,10 @@ void NotesAPI::NotesNodeAdded(NotesModel* model,
                                 base::NumberToString(new_node->id()), treenode),
                             browser_context_);
 }
-void NotesAPI::NotesNodeRemoved(NotesModel* model,
-                                const NoteNode* parent,
+void NotesAPI::NotesNodeRemoved(const NoteNode* parent,
                                 size_t old_index,
-                                const NoteNode* node) {
+                                const NoteNode* node,
+                                const base::Location& location) {
   vivaldi::notes::OnRemoved::RemoveInfo info;
 
   info.parent_id = base::NumberToString(parent->id());
@@ -216,7 +212,7 @@ void NotesAPI::NotesNodeRemoved(NotesModel* model,
       browser_context_);
 }
 
-void NotesAPI::NotesNodeChanged(NotesModel* model, const NoteNode* node) {
+void NotesAPI::NotesNodeChanged(const NoteNode* node) {
   vivaldi::notes::OnChanged::NoteAfterChange note_after_change;
   note_after_change.title = base::UTF16ToUTF8(node->GetTitle());
   note_after_change.date_modified =
@@ -233,15 +229,13 @@ void NotesAPI::NotesNodeChanged(NotesModel* model, const NoteNode* node) {
       browser_context_);
 }
 
-void NotesAPI::ExtensiveNotesChangesBeginning(NotesModel* model) {
-  DCHECK(model_ == model);
+void NotesAPI::ExtensiveNotesChangesBeginning() {
   ::vivaldi::BroadcastEvent(vivaldi::notes::OnImportBegan::kEventName,
                             vivaldi::notes::OnImportBegan::Create(),
                             browser_context_);
 }
 
-void NotesAPI::ExtensiveNotesChangesEnded(NotesModel* model) {
-  DCHECK(model_ == model);
+void NotesAPI::ExtensiveNotesChangesEnded() {
   ::vivaldi::BroadcastEvent(vivaldi::notes::OnImportEnded::kEventName,
                             vivaldi::notes::OnImportEnded::Create(),
                             browser_context_);
@@ -303,14 +297,15 @@ void NotesGetTreeFunction::SendGetTreeResponse(NotesModel* model) {
   Respond(ArgumentList(vivaldi::notes::GetTree::Results::Create(notes)));
 }
 
-void NotesGetTreeFunction::NotesModelLoaded(NotesModel* model,
-                                            bool ids_reassigned) {
+void NotesGetTreeFunction::NotesModelLoaded(bool ids_reassigned) {
+  NotesModel* model = GetNotesModel(this);
   SendGetTreeResponse(model);
   model->RemoveObserver(this);
   Release();
 }
 
-void NotesGetTreeFunction::NotesModelBeingDeleted(NotesModel* model) {
+void NotesGetTreeFunction::NotesModelBeingDeleted() {
+  NotesModel* model = GetNotesModel(this);
   Respond(Error("NotesModelBeingDeleted"));
   model->RemoveObserver(this);
   Release();
@@ -515,7 +510,7 @@ ExtensionFunction::ResponseAction NotesRemoveFunction::Run() {
     model->Move(node, trash_node, 0);
     return RespondNow(ArgumentList(vivaldi::notes::Remove::Results::Create()));
   } else {
-    model->Remove(node);
+    model->Remove(node, FROM_HERE);
     return RespondNow(ArgumentList(vivaldi::notes::Remove::Results::Create()));
   }
 }
@@ -631,7 +626,7 @@ ExtensionFunction::ResponseAction NotesEmptyTrashFunction::Run() {
   const NoteNode* trash_node = model->trash_node();
   if (trash_node) {
     while (!trash_node->children().empty()) {
-      model->Remove(trash_node->children()[0].get());
+      model->Remove(trash_node->children()[0].get(), FROM_HERE);
     }
     success = true;
   }

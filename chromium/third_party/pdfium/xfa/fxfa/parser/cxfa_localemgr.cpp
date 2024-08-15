@@ -13,6 +13,7 @@
 
 #include "core/fxcodec/flate/flatemodule.h"
 #include "core/fxcrt/check.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_memory_wrappers.h"
 #include "fxjs/gc/container_trace.h"
 #include "fxjs/xfa/cjx_object.h"
@@ -1076,7 +1077,9 @@ CXFA_XMLLocale* GetLocaleFromBuffer(cppgc::Heap* heap,
   if (!output)
     return nullptr;
 
-  return CXFA_XMLLocale::Create(heap, pdfium::make_span(output.get(), dwSize));
+  // TODO(crbug.com/pdfuim/2155): investigate safety issues.
+  return CXFA_XMLLocale::Create(
+      heap, UNSAFE_BUFFERS(pdfium::make_span(output.get(), dwSize)));
 }
 
 CXFA_LocaleMgr::LangID GetLanguageID(WideString wsLanguage) {

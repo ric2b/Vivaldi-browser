@@ -13,6 +13,7 @@
 #include "ash/webui/settings/public/constants/routes.mojom.h"
 #include "ash/webui/settings/public/constants/setting.mojom-shared.h"
 #include "base/check_is_test.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
@@ -29,7 +30,6 @@
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/ui/login_display_host_webui.h"
 #include "chrome/browser/ash/login/ui/user_adding_screen.h"
-#include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client_impl.h"
@@ -37,6 +37,8 @@
 #include "chrome/browser/ui/webui/ash/lock_screen_reauth/lock_screen_reauth_dialogs.h"
 #include "chrome/browser/ui/webui/ash/login/l10n_util.h"
 #include "chrome/common/webui_url_constants.h"
+#include "chromeos/ash/components/install_attributes/install_attributes.h"
+#include "chromeos/ash/components/settings/cros_settings.h"
 #include "chromeos/ash/components/settings/cros_settings_provider.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user_names.h"
@@ -357,16 +359,15 @@ void LoginScreenClientImpl::LoginAsGuest() {
 }
 
 void LoginScreenClientImpl::ShowGuestTosScreen() {
-  // Guet ToS screen is only shown if EULA was not already accepted.
-  if (ash::StartupUtils::IsEulaAccepted()) {
+  // EULA is already accepted on enterprise managed devices.
+  // Unmanaged guests on managed devices should login directly without seeing
+  // the ToS screen. Managed guest sessions are handled separately.
+  if (ash::InstallAttributes::Get()->IsEnterpriseManaged()) {
     LoginAsGuest();
     return;
   }
 
-  DCHECK(!ash::ScreenLocker::default_screen_locker());
-  if (ash::LoginDisplayHost::default_host()) {
-    ash::LoginDisplayHost::default_host()->ShowGuestTosScreen();
-  }
+  ash::LoginDisplayHost::default_host()->ShowGuestTosScreen();
 }
 
 void LoginScreenClientImpl::OnMaxIncorrectPasswordAttempted(
@@ -426,12 +427,21 @@ void LoginScreenClientImpl::OnParentAccessValidation(
 
 void LoginScreenClientImpl::ShowGaiaSigninInternal(
     const AccountId& prefilled_account) {
+  // It is possible that the call will come during the session start and after
+  // the LoginDisplayHost destruction. Ignore such calls.
   if (ash::LoginDisplayHost::default_host()) {
-    // Login screen case.
     ash::LoginDisplayHost::default_host()->ShowGaiaDialog(prefilled_account);
-  } else {
-    // Lock screen case.
+  } else if (session_manager::SessionManager::Get()->session_state() ==
+             session_manager::SessionState::LOCKED) {
     ash::LockScreenStartReauthDialog::Show();
+  } else {
+    // TODO(b/332715260): In general this shouldn't happen, however there might
+    // be transition states when pending calls still arrive. It should be safe
+    // to remove the DumpWithoutCrashing if the number of reports will be low.
+    base::debug::DumpWithoutCrashing();
+    LOG(WARNING) << __func__ << ": ignoring the call, session state: "
+                 << static_cast<int>(session_manager::SessionManager::Get()
+                                         ->session_state());
   }
 }
 

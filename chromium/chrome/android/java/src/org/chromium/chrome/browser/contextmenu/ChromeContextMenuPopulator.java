@@ -585,7 +585,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
             }
         } else if (itemId == R.id.contextmenu_share_link) {
             recordContextMenuSelection(ContextMenuUma.Action.SHARE_LINK);
-            // TODO(https://crbug.com/783819): Migrate ShareParams to GURL.
+            // TODO(crbug.com/40549331): Migrate ShareParams to GURL.
             ShareParams linkShareParams =
                     new ShareParams.Builder(
                                     getWindow(),
@@ -600,7 +600,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
                             ShareOrigin.CONTEXT_MENU);
         } else if (itemId == R.id.contextmenu_read_later) {
             recordContextMenuSelection(ContextMenuUma.Action.READ_LATER);
-            // TODO(crbug.com/1147475): Download the page to offline page backend.
+            // TODO(crbug.com/40156623): Download the page to offline page backend.
             String title = mParams.getTitleText();
             if (TextUtils.isEmpty(title)) {
                 title = mParams.getLinkText();
@@ -809,7 +809,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
     @Override
     public @Nullable ChipDelegate getChipDelegate() {
         if (LensChipDelegate.isEnabled(isIncognito(), isTabletScreen())) {
-            // TODO(crbug.com/783819): Migrate LensChipDelegate to GURL.
+            // TODO(crbug.com/40549331): Migrate LensChipDelegate to GURL.
             return new LensChipDelegate(
                     mParams.getPageUrl().getSpec(),
                     mParams.getTitleText(),

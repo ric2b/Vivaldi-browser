@@ -63,7 +63,8 @@ class VivaldiQuitConfirmationDialog : public views::DialogDelegateView {
   bool ShouldShowCloseButton() const override;
 
   // views::View:
-  gfx::Size CalculatePreferredSize() const override;
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override;
 
  private:
   void RunCallback(bool accepted);

@@ -15,6 +15,7 @@
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
+#include "components/ml/webnn/features.mojom-features.h"
 #include "content/browser/attribution_reporting/attribution_internals.mojom.h"
 #include "content/browser/attribution_reporting/attribution_internals_ui.h"
 #include "content/browser/background_fetch/background_fetch_service_impl.h"
@@ -93,6 +94,7 @@
 #include "media/capture/mojom/video_capture.mojom.h"
 #include "media/midi/midi_service.h"
 #include "media/mojo/mojom/interface_factory.mojom.h"
+#include "media/mojo/mojom/key_system_support.mojom.h"
 #include "media/mojo/mojom/media_metrics_provider.mojom.h"
 #include "media/mojo/mojom/media_player.mojom.h"
 #include "media/mojo/mojom/remoting.mojom.h"
@@ -115,6 +117,7 @@
 #include "services/shape_detection/public/mojom/facedetection_provider.mojom.h"
 #include "services/shape_detection/public/mojom/shape_detection_service.mojom.h"
 #include "services/shape_detection/public/mojom/textdetection.mojom.h"
+#include "services/webnn/public/mojom/webnn_context_provider.mojom.h"
 #include "storage/browser/quota/quota_internals.mojom.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
@@ -140,7 +143,6 @@
 #include "third_party/blink/public/mojom/filesystem/file_system.mojom.h"
 #include "third_party/blink/public/mojom/font_access/font_access.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom.h"
-#include "third_party/blink/public/mojom/frame/pending_beacon.mojom.h"
 #include "third_party/blink/public/mojom/geolocation/geolocation_service.mojom.h"
 #include "third_party/blink/public/mojom/idle/idle_manager.mojom.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom.h"
@@ -241,10 +243,10 @@
 #include "media/mojo/mojom/fuchsia_media.mojom.h"
 #endif
 
-#if !BUILDFLAG(IS_CHROMEOS)
-#include "components/ml/webnn/features.mojom-features.h"
+#if BUILDFLAG(IS_CHROMEOS)
+#include "services/webnn/webnn_context_provider_impl.h"
+#else
 #include "components/viz/host/gpu_client.h"
-#include "services/webnn/public/mojom/webnn_context_provider.mojom.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -297,22 +299,28 @@ void BindTextDetection(
   GetShapeDetectionService()->BindTextDetection(std::move(receiver));
 }
 
-#if !BUILDFLAG(IS_CHROMEOS)
 void BindWebNNContextProviderForRenderFrame(
     RenderFrameHost* host,
     mojo::PendingReceiver<webnn::mojom::WebNNContextProvider> receiver) {
+#if BUILDFLAG(IS_CHROMEOS)
+  webnn::WebNNContextProviderImpl::Create(std::move(receiver));
+#else
   auto* process_host = static_cast<RenderProcessHostImpl*>(host->GetProcess());
   process_host->GetGpuClient()->BindWebNNContextProvider(std::move(receiver));
+#endif
 }
 
 void BindWebNNContextProviderForDedicatedWorker(
     DedicatedWorkerHost* host,
     mojo::PendingReceiver<webnn::mojom::WebNNContextProvider> receiver) {
+#if BUILDFLAG(IS_CHROMEOS)
+  webnn::WebNNContextProviderImpl::Create(std::move(receiver));
+#else
   auto* process_host =
       static_cast<RenderProcessHostImpl*>(host->GetProcessHost());
   process_host->GetGpuClient()->BindWebNNContextProvider(std::move(receiver));
-}
 #endif
+}
 
 #if BUILDFLAG(IS_MAC)
 void BindTextInputHost(
@@ -695,12 +703,15 @@ VibrationManagerBinder& GetVibrationManagerBinderOverride() {
 }
 
 void BindVibrationManager(
+    RenderFrameHostImpl* frame,
     mojo::PendingReceiver<device::mojom::VibrationManager> receiver) {
   const auto& binder = GetVibrationManagerBinderOverride();
-  if (binder)
-    binder.Run(std::move(receiver));
-  else
-    GetDeviceService().BindVibrationManager(std::move(receiver));
+  if (binder) {
+    binder.Run(std::move(receiver), frame->CreateVibrationManagerListener());
+  } else {
+    GetDeviceService().BindVibrationManager(
+        std::move(receiver), frame->CreateVibrationManagerListener());
+  }
 }
 
 void BindMediaPlayerObserverClientHandler(
@@ -817,6 +828,11 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
   map->Add<media::mojom::MediaPlayerObserverClient>(base::BindRepeating(
       &BindMediaPlayerObserverClientHandler, base::Unretained(host)));
 
+  if (base::FeatureList::IsEnabled(blink::features::kEnableModelExecutionAPI)) {
+    map->Add<blink::mojom::ModelManager>(base::BindRepeating(
+        &RenderFrameHostImpl::BindModelManager, base::Unretained(host)));
+  }
+
   map->Add<blink::mojom::NotificationService>(base::BindRepeating(
       &RenderFrameHostImpl::CreateNotificationService, base::Unretained(host)));
 
@@ -903,7 +919,7 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
       &RenderFrameHostImpl::GetSensorProvider, base::Unretained(host)));
 
   map->Add<device::mojom::VibrationManager>(
-      base::BindRepeating(&BindVibrationManager));
+      base::BindRepeating(&BindVibrationManager, base::Unretained(host)));
 
   map->Add<payments::mojom::PaymentManager>(base::BindRepeating(
       &RenderFrameHostImpl::CreatePaymentManager, base::Unretained(host)));
@@ -917,17 +933,10 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
         base::BindRepeating(&CreateMLService));
   }
 
-#if !BUILDFLAG(IS_CHROMEOS)
   if (base::FeatureList::IsEnabled(
           webnn::mojom::features::kWebMachineLearningNeuralNetwork)) {
     map->Add<webnn::mojom::WebNNContextProvider>(base::BindRepeating(
         &BindWebNNContextProviderForRenderFrame, base::Unretained(host)));
-  }
-#endif
-
-  if (base::FeatureList::IsEnabled(blink::features::kPendingBeaconAPI)) {
-    map->Add<blink::mojom::PendingBeaconHost>(base::BindRepeating(
-        &RenderFrameHostImpl::GetPendingBeaconHost, base::Unretained(host)));
   }
 
   map->Add<blink::mojom::WebBluetoothService>(base::BindRepeating(
@@ -993,6 +1002,12 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
   map->Add<media::mojom::InterfaceFactory>(base::BindRepeating(
       &RenderFrameHostImpl::BindMediaInterfaceFactoryReceiver,
       base::Unretained(host)));
+
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+  map->Add<media::mojom::KeySystemSupport>(
+      base::BindRepeating(&RenderFrameHostImpl::BindKeySystemSupportReceiver,
+                          base::Unretained(host)));
+#endif
 
   map->Add<media::mojom::MediaMetricsProvider>(base::BindRepeating(
       &RenderFrameHostImpl::BindMediaMetricsProviderReceiver,
@@ -1297,7 +1312,6 @@ void PopulateDedicatedWorkerBinders(DedicatedWorkerHost* host,
       base::ThreadPool::CreateSequencedTaskRunner(
           {base::MayBlock(), base::TaskPriority::USER_VISIBLE}));
 
-#if !BUILDFLAG(IS_CHROMEOS)
   if (base::FeatureList::IsEnabled(
           webnn::mojom::features::kWebMachineLearningNeuralNetwork)) {
     // base::Unretained(host->GetProcessHost()) is safe because the map is owned
@@ -1305,7 +1319,6 @@ void PopulateDedicatedWorkerBinders(DedicatedWorkerHost* host,
     map->Add<webnn::mojom::WebNNContextProvider>(base::BindRepeating(
         &BindWebNNContextProviderForDedicatedWorker, base::Unretained(host)));
   }
-#endif
 
 #if !BUILDFLAG(IS_ANDROID)
   map->Add<blink::mojom::DirectSocketsService>(

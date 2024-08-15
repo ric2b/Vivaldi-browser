@@ -66,7 +66,7 @@ void WebView::OnServiceConnectionError() {
   provider_resolvers_.clear();
 }
 
-ScriptPromiseTyped<MediaIntegrityTokenProvider>
+ScriptPromise<MediaIntegrityTokenProvider>
 WebView::getExperimentalMediaIntegrityTokenProvider(
     ScriptState* script_state,
     GetMediaIntegrityTokenProviderParams* params,
@@ -74,14 +74,25 @@ WebView::getExperimentalMediaIntegrityTokenProvider(
   if (!script_state->ContextIsValid()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       kInvalidContext);
-    return ScriptPromiseTyped<MediaIntegrityTokenProvider>();
+    return ScriptPromise<MediaIntegrityTokenProvider>();
   }
 
-  ScriptPromiseResolverTyped<MediaIntegrityTokenProvider>* resolver =
-      MakeGarbageCollected<
-          ScriptPromiseResolverTyped<MediaIntegrityTokenProvider>>(
+  ExecutionContext* execution_context = ExecutionContext::From(script_state);
+  const SecurityOrigin* origin = execution_context->GetSecurityOrigin();
+  if ((origin->Protocol() != url::kHttpScheme &&
+       origin->Protocol() != url::kHttpsScheme) ||
+      !origin->IsPotentiallyTrustworthy()) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kNotSupportedError,
+        "getExperimentalMediaIntegrityTokenProvider: "
+        "can only be used from trustworthy http/https origins");
+    return ScriptPromise<MediaIntegrityTokenProvider>();
+  }
+
+  ScriptPromiseResolver<MediaIntegrityTokenProvider>* resolver =
+      MakeGarbageCollected<ScriptPromiseResolver<MediaIntegrityTokenProvider>>(
           script_state, exception_state.GetContext());
-  ScriptPromiseTyped<MediaIntegrityTokenProvider> promise = resolver->Promise();
+  ScriptPromise<MediaIntegrityTokenProvider> promise = resolver->Promise();
 
   if (!params->hasCloudProjectNumber()) {
     resolver->Reject(MediaIntegrityError::CreateForName(
@@ -101,7 +112,6 @@ WebView::getExperimentalMediaIntegrityTokenProvider(
     return promise;
   }
 
-  ExecutionContext* execution_context = ExecutionContext::From(script_state);
   EnsureServiceConnection(execution_context);
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
       execution_context->GetTaskRunner(TaskType::kInternalDefault);
@@ -127,7 +137,7 @@ void WebView::OnGetIntegrityProviderResponse(
     mojo::PendingRemote<mojom::blink::WebViewMediaIntegrityProvider>
         provider_pending_remote,
     const uint64_t cloud_project_number,
-    ScriptPromiseResolverTyped<MediaIntegrityTokenProvider>* resolver,
+    ScriptPromiseResolver<MediaIntegrityTokenProvider>* resolver,
     const std::optional<mojom::blink::WebViewMediaIntegrityErrorCode> error) {
   provider_resolvers_.erase(resolver);
 

@@ -39,6 +39,7 @@
 #include "src/tint/lang/core/type/invalid.h"
 #include "src/tint/lang/core/type/matrix.h"
 #include "src/tint/lang/core/type/pointer.h"
+#include "src/tint/lang/core/type/reference.h"
 #include "src/tint/lang/core/type/type.h"
 #include "src/tint/lang/core/type/u32.h"
 #include "src/tint/lang/core/type/vector.h"
@@ -203,10 +204,15 @@ const core::type::Pointer* Manager::ptr(core::AddressSpace address_space,
         access == core::Access::kUndefined ? DefaultAccessFor(address_space) : access);
 }
 
+const core::type::Reference* Manager::ref(core::AddressSpace address_space,
+                                          const core::type::Type* subtype,
+                                          core::Access access /* = core::Access::kReadWrite */) {
+    return Get<core::type::Reference>(address_space, subtype, access);
+}
+
 core::type::Struct* Manager::Struct(Symbol name, VectorRef<const StructMember*> members) {
     if (auto* existing = Find<type::Struct>(name); TINT_UNLIKELY(existing)) {
         TINT_ICE() << "attempting to construct two structs named " << name.NameView();
-        return existing;
     }
 
     uint32_t max_align = 0u;
@@ -221,7 +227,6 @@ core::type::Struct* Manager::Struct(Symbol name, VectorRef<const StructMember*> 
 core::type::Struct* Manager::Struct(Symbol name, VectorRef<StructMemberDesc> md) {
     if (auto* existing = Find<type::Struct>(name); TINT_UNLIKELY(existing)) {
         TINT_ICE() << "attempting to construct two structs named " << name.NameView();
-        return existing;
     }
 
     tint::Vector<const StructMember*, 4> members;

@@ -201,6 +201,24 @@ chromium-metrics-reviews@google.com.
   <int value="7" label="Required credential field missing"/>
 </enum>
 
+<enum name="ChromeSigninSettingModification">
+  <int value="0" label="No modifications"/>
+  <int value="1" label="Modified to always ask"/>
+  <int value="2" label="Modified to always sign in"/>
+  <int value="3" label="Modified to never sign in"/>
+</enum>
+
+<enum name="FRESigninEvents">
+  <int value="0" label="Checking managed status"/>
+  <int value="1" label="Signing in - unmanaged"/>
+  <int value="2" label="Signin complete - unmanaged"/>
+  <int value="3" label="Accepting management"/>
+  <int value="4" label="Signing in - managed"/>
+  <int value="5" label="Signin complete - managed"/>
+  <int value="6" label="Signin aborted - unmanaged"/>
+  <int value="7" label="Signin aborted - managed"/>
+</enum>
+
 <enum name="GaiaCookieStateOnSignedInNavigation">
   <int value="0" label="Gaia cookie is present"/>
   <int value="1" label="Gaia cookie is missing from Google-associated domain"/>
@@ -418,6 +436,12 @@ chromium-metrics-reviews@google.com.
   <int value="57" label="Save to Drive iOS"/>
   <int value="58" label="Tips Notification on iOS"/>
   <int value="59" label="Notifications Opt-In Screen Content Toggle"/>
+  <int value="60" label="Sign-in choice remembered"/>
+  <int value="61" label="Signout confirmation prompt in profile menu"/>
+  <int value="62" label="Signout confirmation prompt in settings"/>
+  <int value="63" label="NTP Identity Disc"/>
+  <int value="64" label="OIDC auth redirect URI interception"/>
+  <int value="65" label="WebAuthn modal dialog"/>
 </enum>
 
 <enum name="SigninAccountReconcilorState">
@@ -547,6 +571,11 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Revoked by Dice migration"/>
   <int value="2" label="Revoked as secondary account"/>
   <int value="3" label="Revoked on load due to cookie settings"/>
+</enum>
+
+<enum name="SigninPendingResolution">
+  <int value="0" label="Sign in (reauth)"/>
+  <int value="1" label="Sign out"/>
 </enum>
 
 <enum name="SigninReason">
@@ -745,6 +774,10 @@ chromium-metrics-reviews@google.com.
     profile switch, enterprise related interception or sync merge data
     confirmation.
   </int>
+  <int value="34" label="Signed out during profile deletion">
+    The primary account might be signed out when a profile is being deleted, to
+    avoid that deletion of data propagates via sync to other devices.
+  </int>
 </enum>
 
 <enum name="SigninSSOIdentityListRequestCacheState">
@@ -798,6 +831,9 @@ chromium-metrics-reviews@google.com.
   <int value="19" label="LogoutTabHelper::DidFinishNavigation"/>
   <int value="20" label="ForceSigninReauthWithDifferentAccount"/>
   <int value="21" label="AccountReconcilor::RevokeTokensNotInCookies"/>
+  <int value="22"
+      label="DiceResponseHandler::Signin from sign in promo after password
+             save"/>
 </enum>
 
 <enum name="SyncButtonClicked">
@@ -811,13 +847,23 @@ chromium-metrics-reviews@google.com.
   <int value="7" label="Equal weighted history sync cancel button clicked"/>
   <int value="8" label="Not-Equal weighted history sync opt-in button clicked"/>
   <int value="9" label="Not-Equal weighted history sync cancel button clicked"/>
+  <int value="10" label="Unknown weighted sync settings button clicked"/>
 </enum>
 
 <enum name="SyncButtonsType">
-  <int value="0" label="Equal weighted buttons on sync screen"/>
-  <int value="1" label="Not-Equal weighted buttons on sync screen"/>
-  <int value="2" label="Equal weighted buttons on history sync screen"/>
-  <int value="3" label="Not-Equal weighted buttons on history sync screen"/>
+  <int value="0" label="Equal weighted buttons on sync screen (Android)"/>
+  <int value="1"
+      label="Not-Equal weighted buttons on sync screen (Android, Windows, Mac
+             and Linux)"/>
+  <int value="2" label="Equal weighted buttons on history sync screen (iOS)"/>
+  <int value="3"
+      label="Not-Equal weighted buttons on history sync screen (iOS)"/>
+  <int value="4"
+      label="Equal weighted buttons on sync screen from deadline (Windows,
+             Mac and Linux)"/>
+  <int value="5"
+      label="Equal weighted buttons on sync screen from capability (Windows,
+             Mac and Linux)"/>
 </enum>
 
 <enum name="SyncErrorPromptUIAction">

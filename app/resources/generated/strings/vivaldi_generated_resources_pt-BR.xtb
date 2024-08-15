@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">Não após</translation>
 <translation id="2749881179542288782">Verificar a gramática com a ortografia</translation>
 <translation id="2785873697295365461">Descritores de arquivo</translation>
-<translation id="2809586584051668049">e mais <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2825758591930162672">Chave pública do assunto</translation>
 <translation id="2850541429955027218">Adicionar tema</translation>
 <translation id="2861941300086904918">Gerenciador de segurança do Cliente Nativo</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">Abrir como janela</translation>
 <translation id="3280237271814976245">Salvar &amp;como...</translation>
 <translation id="3285322247471302225">Nova &amp;Aba</translation>
-<translation id="3288047731229977326">Extensões executadas no modo de desenvolvedor podem prejudicar o computador. Se você não for desenvolvedor, para sua segurança, desative essas extensões que estão sendo executadas no modo de desenvolvedor.</translation>
 <translation id="329838636886466101">Reparar</translation>
 <translation id="33022249435934718">Identificadores de GDI</translation>
 <translation id="3303818374450886607">Cópias</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">A extensão foi compactada em:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Desativar extensões no modo de desenvolvedor</translation>
 <translation id="4100839878934973028">Outro programa em seu computador adicionou um aplicativo que pode modificar a forma como o Vivaldi funciona.</translation>
 <translation id="4104163789986725820">E&amp;xportar...</translation>
 <translation id="4109898769411476438">Fechar o Navegador Antes de Importar</translation>
@@ -261,7 +258,6 @@
 <translation id="5269977353971873915">Falha ao imprimir</translation>
 <translation id="5284445933715251131">Continuar a transferência</translation>
 <translation id="52912272896845572">O arquivo de chave privada é inválido.</translation>
-<translation id="5301954838959518834">Entendi</translation>
 <translation id="5302932258331363306">Mostrar substituições</translation>
 <translation id="5317780077021120954">Salvar</translation>
 <translation id="5334142896108694079">Cache de Script</translation>

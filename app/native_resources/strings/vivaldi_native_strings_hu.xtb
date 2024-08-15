@@ -13,6 +13,7 @@
 <translation id="1462666970065907900">Biztos be akarod zárni az ablakot?</translation>
 <translation id="1480046233931937785">Készítők</translation>
 <translation id="1526344461589023948">Hiba lépett fel a letöltött frissítés mentésekor. Ellenőrizd, hogy a gépen van elegendő szabad lemezterület, és később próbáld újra.</translation>
+<translation id="1635542496948266458">Profil váltása</translation>
 <translation id="1657174850639146440">Szörny 9</translation>
 <translation id="1676595396635191120">Új privát ablak</translation>
 <translation id="1702758681952953055">Ha a hiba továbbra is fennáll, jelentsd be a következő adatokkal:</translation>
@@ -28,6 +29,7 @@
 <translation id="1985669426322966465">Szoftverfrissítés</translation>
 <translation id="2079036669923635404">Kattints ide a Vivaldi <ph name="VERSION" /> verziójára frissítéshez.</translation>
 <translation id="2141974047387702305">Hiba lépett fel a frissítése letöltése közben. Ellenőrizd az internetkapcsolatot és próbáld újra.</translation>
+<translation id="2226825946708954262">⚠ Folytatás adatvesztéssel</translation>
 <translation id="2339641773402824483">Frissítések keresése...</translation>
 <translation id="2441056087170876076">Szörny 2</translation>
 <translation id="2444387452209867610">Jegyzet beszúrása</translation>
@@ -83,6 +85,9 @@
 <translation id="3943857333388298514">Beillesztés</translation>
 <translation id="4005270918754737597">A verzió kihagyása</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">A Vivaldi nem tudja feloldani a biztonsági kulcstárat. A kulcstár nélkül elveszíted az elmentett jelszavakat, a biztonságos cookie-kat, és az olyan funkciók, mint a Szinkronizálás, a Levelezés és a Naptár, nem fognak működni.
+
+    Kérlek, zárd be a böngészőt, oldd fel vagy javítsd ki a kulcstáradat, majd próbáld újra. Biztos folytatni akarod adatvesztés terhe mellett?</translation>
 <translation id="4074744496918018786">Kép megnyitása privát ablakban</translation>
 <translation id="410351446219883937">Automatikus lejátszás</translation>
 <translation id="4281844954008187215">Szolgáltatási feltételek</translation>
@@ -104,6 +109,7 @@
 <translation id="498766871928286903"><ph name="TOTAL_SIZE_TO_DOWNLOAD" /> / <ph name="DOWNLOADED" /></translation>
 <translation id="5014281392052865061">Importált Gyorshívó</translation>
 <translation id="5092656712000637858">Oldal web oldalsávhoz adása</translation>
+<translation id="5106275083540628394">Sikertelen dekódolás: adatvesztés veszélye</translation>
 <translation id="5177818338935286353">Szörny 7</translation>
 <translation id="5213743983876949565">Állat 1</translation>
 <translation id="5238244642230426581">Importált könyvjelzők</translation>
@@ -125,6 +131,7 @@
 <translation id="6229528619562190452">Kattints ide a Vivaldi frissítéséhez.</translation>
 <translation id="6234173136417926046">Kép beállítása Induló oldal háttereként</translation>
 <translation id="6339818817272922368">Helyi fiók</translation>
+<translation id="6398710281890660037">Profilom biztosítása</translation>
 <translation id="6438786710866753178">Tájkép 4</translation>
 <translation id="6477028720702061455">Opera profil mappa kiválasztása importáláshoz</translation>
 <translation id="6510706699590490869">Vivaldi &amp;frissítése</translation>
@@ -136,7 +143,9 @@
 <translation id="6726279523566323394">Importálandó Brave profil kiválasztása</translation>
 <translation id="6892812721183419409">Hivatkozás megnyitása mint <ph name="USER" /></translation>
 <translation id="6896758677409633944">Másolás</translation>
+<translation id="6960139763942959188">A profil jelenleg nem titkosított formátumban, nem biztonságos módon van tárolva. A Vivaldi frissíteni fogja a profilodat egy biztonságosabb, titkosított formátumba. A folytatás előtt most kiléphetsz és biztonsági másolatot készíthetsz a profilodról.</translation>
 <translation id="7086554968911045110">Tájkép 7</translation>
+<translation id="7099506190679014195">Biztonsági kulcstár frissítése</translation>
 <translation id="7111492742514999492">Tájkép 9</translation>
 <translation id="7208252576848052204">Sajnos az Arc beállításai nem érhetők el, míg a böngésző fut. A beállítások Vivaldiba importálásához mentsd el a munkáid és zárj be minden Arc ablakot. Majd Tovább gomb.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -169,6 +178,7 @@
 <translation id="8669345741879513971">Szörny 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Portáldokumentum vizsgálata</translation>
+<translation id="875142999698251063">Kilépés most</translation>
 <translation id="8768970203213061953">Tájkép 14</translation>
 <translation id="8773635261052182196">Nem fogod többet látni ezeket az értesítéseket. A Vivaldi beállításaiban visszakapcsolhatod.</translation>
 <translation id="8774017153185436870">A webhelyek automatikusan lejátszhatnak videókat</translation>

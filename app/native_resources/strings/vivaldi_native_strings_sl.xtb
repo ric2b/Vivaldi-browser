@@ -83,11 +83,11 @@
 <translation id="3914946330804881301">Uvoženo iz Opera</translation>
 <translation id="3921292902397893431">Pošast 8</translation>
 <translation id="3943857333388298514">Prilepi</translation>
-<translation id="3974783668264968389">Vivaldi ni mogel odkleniti vaše varne shrambe ključev. Brez shrambe ključev boste izgubili shranjene prijave, varne piškotke in nekatere funkcije, kot so sinhronizacija, pošta in koledar, ne bodo več delovale.
-
-    Zaprite zdaj, odklenite ali popravite shrambo ključev in poskusite znova. Če res želite nadaljevati, kliknite potrditveno polje in pritisnite gumb "Nadaljuj z izgubo podatkov".</translation>
 <translation id="4005270918754737597">Preskoči to različico</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi ni mogel odkleniti vaše varne shrambe ključev. Brez shrambe ključev boste izgubili shranjene prijave, varne piškotke in nekatere funkcije, kot so sinhronizacija, pošta in koledar, ne bodo več delovale.
+
+    Zaprite zdaj, odklenite ali popravite shrambo ključev in poskusite znova. Ali res želite nadaljevati in izgubiti podatke?</translation>
 <translation id="4074744496918018786">Odpri sliko v zasebnem oknu</translation>
 <translation id="410351446219883937">Samodejno predvajanje</translation>
 <translation id="4281844954008187215">Pogoji storitve</translation>
@@ -178,6 +178,7 @@
 <translation id="8669345741879513971">Pošast 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Preglejte dokument portala</translation>
+<translation id="875142999698251063">Končaj zdaj</translation>
 <translation id="8768970203213061953">Pokrajina 14</translation>
 <translation id="8773635261052182196">Teh obvestil ne boste več videli. Ponovno jih lahko omogočite iz Vivaldi nastavitev.</translation>
 <translation id="8774017153185436870">Spletna mesta lahko samodejno predvajajo video</translation>

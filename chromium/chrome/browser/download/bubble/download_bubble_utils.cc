@@ -148,7 +148,7 @@ DownloadBubbleAccessibleAlertsMap::Alert GetAccessibleAlertForModel(
           // download is paused.
           {State::IN_PROGRESS, IDS_DOWNLOAD_PAUSED_ACCESSIBLE_ALERT},
       });
-      if (const auto* it = kMap.find(state); it != kMap.end()) {
+      if (const auto it = kMap.find(state); it != kMap.end()) {
         return Alert{Alert::Urgency::kAlertSoon,
                      l10n_util::GetStringFUTF16(it->second, filename)};
       }
@@ -173,7 +173,10 @@ DownloadBubbleAccessibleAlertsMap::Alert GetAccessibleAlertForModel(
           l10n_util::GetStringFUTF16(
               IDS_PROMPT_DOWNLOAD_INSECURE_BLOCKED_ACCESSIBLE_ALERT, filename)};
     case download::DownloadItemMode::kDeepScanning:
-      return Alert{Alert::Urgency::kAlertWhenAppropriate,
+      // Note: kAlertSoon (as opposed to kAlertWhenAppropriate) is correct here,
+      // because observers are updated when a deep scan begins, and not
+      // continuously during a deep scan.
+      return Alert{Alert::Urgency::kAlertSoon,
                    l10n_util::GetStringFUTF16(
                        IDS_DEEP_SCANNING_ACCESSIBLE_ALERT, filename)};
   }

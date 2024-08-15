@@ -103,6 +103,21 @@ tast_disabled_tests_from_chrome_all = [
   "platform.Drivefs@reven-vmtest",
   "platform.Drivefs@betty-pi-arc",
 
+  # b/331384750
+  "videoconferencing.TrayTriggersExtension@brya",
+  "videoconferencing.TrayTriggersExtension.lacros@brya",
+
+  # b/338111076
+  "crostini.AppAndroidStudio.bookworm_clamshell_stable@octopus",
+
+  # b/339349824, temporarily until LKGM uprev with crrev.com/c/5516014
+  "arc.Print.container_p",
+  "inputs.PhysicalKeyboardKoreanTyping",
+
+  # b/307328625
+  "login.ChangePassword.consumer_update",
+  "login.ChangePassword.no_consumer_update",
+
   # READ COMMENT AT TOP BEFORE ADDING NEW TESTS HERE.
 ]
 
@@ -149,18 +164,25 @@ tast_disabled_tests_from_lacros_all = [
   # On branch day, Lacros is +3 newer than ash which break the test.
   "lacros.CompareVersionWithAsh",
 
+  # b/339482904
+  "videoconferencing.TrayTriggersExtension.lacros",
+
   # THIS IS THE LACROS LIST, SCROLL UP FOR CHROME/CHROMEOS.
 ]
 
 if (!is_official_build) {
-  # b/315373487 the team working on the fix on CrOS side
-  tast_disabled_tests_from_chrome_all +=
-      [ "ui.ChromeCrashLoopV2.crashpad_mock_consent@jacuzzi" ]
-
   # b/322444880 Should be fixed by the next LKGM uprev.
   tast_disabled_tests_from_chrome_all += [ "terminal.SSH@octopus" ]
 
   # b/324521903 temporary disabled until the test fixes
   tast_disabled_tests_from_chrome_all +=
       [ "secagentd.AuthenticationEvents.mainline@octopus" ]
+
+  # b/336365285 disabled until bug is fixed.
+  tast_disabled_tests_from_chrome_all +=
+      [ "secagentd.AuthenticationEvents.mainline@jacuzzi" ]
+
+  # b/274341001: By design, ui.ChromeCrashEarly.strict fails on non-official
+  # builds.
+  tast_disabled_tests_from_lacros_all += [ "ui.ChromeCrashEarly.strict_lacros" ]
 }

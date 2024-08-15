@@ -41,7 +41,7 @@ using ::testing::NiceMock;
 
 void OnTextFieldDidChangeForAutofillManager(AutofillManager& autofill_manager) {
   FormData form = CreateTestAddressFormData();
-  autofill_manager.OnTextFieldDidChange(form, form.fields.front(), gfx::RectF(),
+  autofill_manager.OnTextFieldDidChange(form, form.fields.front(),
                                         base::TimeTicks::Now());
 }
 
@@ -274,7 +274,7 @@ TEST_F(TabInteractionRecorderAndroidTest, ResetInteractions) {
   EXPECT_FALSE(helper->HadFormInteractionInActivePage(env));
 }
 
-// TODO(crbug.com/1523245): Re-enable this test.
+// TODO(crbug.com/41496197): Re-enable this test.
 TEST_F(TabInteractionRecorderAndroidTest, DISABLED_TestFormSeen) {
   std::unique_ptr<content::WebContents> contents = CreateTestWebContents();
   OnFormsSeenForAutofillManager(autofill_manager(),

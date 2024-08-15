@@ -2,15 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/hash/hash.h"
 
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <string>
 #include <string_view>
 
-#include "base/check_op.h"
+#include "base/containers/span.h"
+#include "base/dcheck_is_on.h"
 #include "base/notreached.h"
-#include "base/rand_util.h"
 #include "base/third_party/cityhash/city.h"
-#include "build/build_config.h"
 
 // Definition in base/third_party/superfasthash/superfasthash.c. (Third-party
 // code did not come with its own header file, so declaring the function here.)
@@ -136,7 +144,7 @@ uint32_t PersistentHash(span<const uint8_t> data) {
   // This hash function must not change, since it is designed to be persistable
   // to disk.
   if (data.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
     return 0;
   }
   return ::SuperFastHash(reinterpret_cast<const char*>(data.data()),

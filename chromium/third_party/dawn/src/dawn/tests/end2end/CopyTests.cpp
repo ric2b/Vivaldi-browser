@@ -1722,9 +1722,6 @@ class CopyTests_T2B_Compat : public CopyTests_T2B {
         CopyTests_T2B::SetUp();
         DAWN_SUPPRESS_TEST_IF(!IsCompatibilityMode());
         DAWN_SUPPRESS_TEST_IF(IsANGLESwiftShader());
-        // TODO(dawn:2131): remove once fully implemented, so cube texture doesn't require a copy.
-        DAWN_SUPPRESS_TEST_IF((IsOpenGL() || IsOpenGLES()) &&
-                              (GetParam().mTextureFormat == wgpu::TextureFormat::RGB9E5Ufloat));
     }
 };
 
@@ -1732,6 +1729,8 @@ class CopyTests_T2B_Compat : public CopyTests_T2B {
 TEST_P(CopyTests_T2B_Compat, TextureCubeFull) {
     // TODO(crbug.com/dawn/2294): diagnose T2B failures on Pixel 4 OpenGLES
     DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
+    // TODO(crbug.com/dawn/2294): diagnose T2B failures on Pixel 6 OpenGLES
+    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
 
     constexpr uint32_t kWidth = 32;
     constexpr uint32_t kHeight = 32;
@@ -1748,6 +1747,8 @@ TEST_P(CopyTests_T2B_Compat, TextureCubeFull) {
 TEST_P(CopyTests_T2B_Compat, TextureCubeSubRegion) {
     // TODO(crbug.com/dawn/2294): diagnose T2B failures on Pixel 4 OpenGLES
     DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
+    // TODO(crbug.com/dawn/2294): diagnose T2B failures on Pixel 6 OpenGLES
+    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
 
     constexpr uint32_t kWidth = 32;
     constexpr uint32_t kHeight = 32;
@@ -1768,6 +1769,8 @@ TEST_P(CopyTests_T2B_Compat, TextureCubeSubRegion) {
 TEST_P(CopyTests_T2B_Compat, TextureCubeMip) {
     // TODO(crbug.com/dawn/2294): diagnose T2B failures on Pixel 4 OpenGLES
     DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
+    // TODO(crbug.com/dawn/2294): diagnose T2B failures on Pixel 6 OpenGLES
+    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
 
     constexpr uint32_t kWidth = 32;
     constexpr uint32_t kHeight = 32;
@@ -1792,6 +1795,8 @@ TEST_P(CopyTests_T2B_Compat, TextureCubeMip) {
 TEST_P(CopyTests_T2B_Compat, TextureCubeRegionNonzeroRowsPerImage) {
     // TODO(crbug.com/dawn/2294): diagnose T2B failures on Pixel 4 OpenGLES
     DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
+    // TODO(crbug.com/dawn/2294): diagnose T2B failures on Pixel 6 OpenGLES
+    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
 
     constexpr uint32_t kWidth = 32;
     constexpr uint32_t kHeight = 32;
@@ -2658,6 +2663,9 @@ TEST_P(CopyTests_T2T, CopyWithinSameTextureNonOverlappedSlices) {
 // A regression test (from WebGPU CTS) for an Intel D3D12 driver bug about T2T copy with specific
 // texture formats. See http://crbug.com/1161355 for more details.
 TEST_P(CopyTests_T2T, CopyFromNonZeroMipLevelWithTexelBlockSizeLessThan4Bytes) {
+    // TODO(crbug.com/dawn/2553): diagnose this flake on Pixel 6 OpenGLES
+    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
+
     constexpr std::array<wgpu::TextureFormat, 11> kFormats = {
         {wgpu::TextureFormat::RG8Sint, wgpu::TextureFormat::RG8Uint, wgpu::TextureFormat::RG8Snorm,
          wgpu::TextureFormat::RG8Unorm, wgpu::TextureFormat::R16Float, wgpu::TextureFormat::R16Sint,

@@ -83,11 +83,11 @@
 <translation id="3914946330804881301">Uvezeno iz Opera</translation>
 <translation id="3921292902397893431">Čudovište 8</translation>
 <translation id="3943857333388298514">Nalepi</translation>
-<translation id="3974783668264968389">Vivaldi nije mogao da otključa vaše bezbedno skladište ključeva. Bez skladišta ključeva, izgubićete sačuvane podatke za prijavljivanje, bezbedne kolačiće, a neke funkcije kao što su sinhronizacija, pošta i kalendar će prestati da rade.
-
-     Izađite sada, otključajte ili popravite skladište ključeva, a zatim pokušajte ponovo. Ako zaista želite da nastavite, kliknite na polje za potvrdu i pritisnite dugme „Nastavi sa gubitkom podataka”.</translation>
 <translation id="4005270918754737597">Preskoči ovu verziju</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi nije mogao da otključa vaše bezbedne skladište ključeva. Bez skladišta ključeva, izgubićete sačuvane podatke za prijavljivanje, bezbedne kolačiće, a neke funkcije kao što su sinhronizacija, pošta i kalendar će prestati da rade.
+
+    Izađite sada, otključajte ili popravite skladište ključeva, a zatim pokušajte ponovo. Da li zaista želite da nastavite i izgubite podatke?</translation>
 <translation id="4074744496918018786">Otvori sliku u privatnom prozoru</translation>
 <translation id="410351446219883937">Automatska reprodukcija</translation>
 <translation id="4281844954008187215">Uslovi korišćenja</translation>
@@ -178,6 +178,7 @@
 <translation id="8669345741879513971">Čudovište 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Ispitaj dokument portala</translation>
+<translation id="875142999698251063">Izađi sada</translation>
 <translation id="8768970203213061953">Pejzaž 14</translation>
 <translation id="8773635261052182196">Više nećete videti ova obaveštenja. Možete ih omogućiti ponovo u podešavanjima Vivaldi pregledača.</translation>
 <translation id="8774017153185436870">Sajtovi bi mogli automatski da reprodukuju video</translation>

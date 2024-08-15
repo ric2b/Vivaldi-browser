@@ -41,7 +41,6 @@
 <translation id="1689333818294560261">Bynaam</translation>
 <translation id="1711184756728070210"><ph name="BEGIN_LINK" />Gebruiksvoorwaardes ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />Privaatheidsbeleid ➔<ph name="END_LINK2" /></translation>
 <translation id="1717473843091433383">Dwing ’n donker tema op alle webwerwe</translation>
-<translation id="1721552494230946796">Nuwe snelkieservouer</translation>
 <translation id="173924678149983125">Voer bronadres in om versperderreëls in te voer</translation>
 <translation id="1751280147639351837">Advertensie- en naspoorderversperder</translation>
 <translation id="1752547299766512813">Bewaar wagwoorde</translation>
@@ -59,7 +58,6 @@
 <translation id="2034405583989639424">Wysig snelkieser</translation>
 <translation id="2048247880942380698">Arabies (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">Ontdoen</translation>
-<translation id="2117093051794889870">Volgens inhoud</translation>
 <translation id="2129408066358825297">Ouderdom</translation>
 <translation id="2148384276939959392">Sinchroniseer seleksie</translation>
 <translation id="2195713384412091023">Dit sal alle sinchroniseerdata op ons bediener verwyder, u enkripsiewagwoord terugstel en u afteken.</translation>
@@ -144,7 +142,6 @@ versper</translation>
 <translation id="3858860766373142691">Naam</translation>
 <translation id="3866249974567520381">Beskrywing</translation>
 <translation id="3872195896030547485">Voer asb. ’n geldige e-posadres in.</translation>
-<translation id="3894427358181296146">Voeg vouer toe</translation>
 <translation id="3897092660631435901">Kieslys</translation>
 <translation id="3921585859122905677">Adresbalkposisie</translation>
 <translation id="3953599441418463312">Japannees (<ph name="ORIGIN" />)</translation>
@@ -165,6 +162,7 @@ versper</translation>
 <translation id="4176463684765177261">Gedeaktiveer</translation>
 <translation id="4209092469652827314">Groot</translation>
 <translation id="4219175188138757774">Tsjeggies en Slowaaks (<ph name="ORIGIN" />)</translation>
+<translation id="4222285809803895512">Datum geskep</translation>
 <translation id="4276839458685471670">Volgens geskep</translation>
 <translation id="4277085371281330061">Naspoorders
 versper</translation>
@@ -192,6 +190,7 @@ versper</translation>
 <translation id="457386861538956877">Nog…</translation>
 <translation id="460370326897402035">Wagwoord is ongeldig.</translation>
 <translation id="4619615317237390068">Oortjies van ander toestelle</translation>
+<translation id="462860218383788109">Datum gewysig</translation>
 <translation id="4640946580087069269">Kopieer na nota</translation>
 <translation id="4654578955713250802">Versper advertensies en naspoorders</translation>
 <translation id="4655510151391078468">Hierdie kode stem nie ooreen met wat aan u gestuur is nie.
@@ -202,6 +201,7 @@ versper</translation>
 <translation id="4727698999970341158">Yslands (<ph name="ORIGIN" />)</translation>
 <translation id="473775607612524610">Werk by</translation>
 <translation id="4739712911308055817">Nie opgehaal</translation>
+<translation id="4759399863961855552">Sortering</translation>
 <translation id="4780953868408193639">Naspoorder
 versper</translation>
 <translation id="4807415245238822255">Wagwoorde moet ooreenstem.</translation>
@@ -210,7 +210,6 @@ versper</translation>
 <translation id="4833044618885331665">U moet Vivaldi opgradeer om te kan sinchroniseer.</translation>
 <translation id="484462545196658690">Outomaties</translation>
 <translation id="4852383705713307704">Advertensie is versper</translation>
-<translation id="4871370605780490696">Voeg boekmerk toe</translation>
 <translation id="4903325570808402486">Sinchroniseer Vivaldi-instellings (nie alle instellings is al sinchroniseerbaar nie)</translation>
 <translation id="4929196061847506605">Kragtig. Persoonlik. Privaat.</translation>
 <translation id="4936710149174207991">Nie gesinchroniseer</translation>
@@ -246,6 +245,7 @@ versper</translation>
 <translation id="5639137028584114536">U organisasie vereis dat u privaat blaai. Oortjies word nie in privaatmodus bewaar nie.
         <ph name="BEGIN_LINK" />Meer inligting<ph name="END_LINK" /></translation>
 <translation id="5684277895745049190">Lys</translation>
+<translation id="5710478562694930157">Stygend</translation>
 <translation id="574392208103952083">Gemiddeld</translation>
 <translation id="5787420647064736989">Toestelnaam</translation>
 <translation id="5822336771053074270">Voeg nota toe</translation>
@@ -265,7 +265,6 @@ versper</translation>
 <translation id="6193995664633100765">Indies (<ph name="ORIGIN" />)</translation>
 <translation id="6224086034182508647">Webwerfvoorkomsopsies</translation>
 <translation id="6365929278691047681">Duits (<ph name="ORIGIN" />)</translation>
-<translation id="6404511346730675251">Wysig boekmerk</translation>
 <translation id="6406506848690869874">Sinchroniseer</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> gekies</translation>
 <translation id="6468130661190228905">Jammer, dit lyk of u nog ’n ruk moet wag voor u by ons gemeenskap aansluit. Ons vereis dat lede ten minste 16 jaar oud moet wees om te kan aansluit.</translation>
@@ -276,7 +275,6 @@ versper</translation>
 <translation id="659351303388691480">Wis blaaidata…</translation>
 <translation id="6602272356389933803">Voorkoms &amp; tema</translation>
 <translation id="6614744450826097546">Advertensiedetails</translation>
-<translation id="6627583120233659107">Wysig vouer</translation>
 <translation id="6631760746795162665">Colombiaans (<ph name="ORIGIN" />)</translation>
 <translation id="6639866709520319699">Naspoorders en advertensies is versper. Sommige werke kan breek.</translation>
 <translation id="6642196070615520677">Skrap afstandsinchroniseerdata</translation>
@@ -306,11 +304,11 @@ versper</translation>
 <translation id="7029809446516969842">Wagwoorde</translation>
 <translation id="7041964446309059643">Handleiding</translation>
 <translation id="7110758301321962823">Kry gebruikersnaam terug</translation>
+<translation id="7192066917392691622">Dalend</translation>
 <translation id="7194677467200983873">Laaste sinchronisering:</translation>
 <translation id="7210372243397300116">Deursoek vouer</translation>
 <translation id="7215420652436283416">Volgens adres</translation>
 <translation id="7229439505896086266">Skep nota</translation>
-<translation id="7299721129597238157">Skrap boekmerk</translation>
 <translation id="7311118006561484338">Volgens titel</translation>
 <translation id="7325310788570036874">Blaai slimmer, soepeler en vinniger op die internet met Vivaldi.</translation>
 <translation id="734110743815267231">Hebreeus (<ph name="ORIGIN" />)</translation>

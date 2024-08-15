@@ -157,9 +157,9 @@ bool MoveTabToWindow(Browser* source_browser,
   *new_index += iteration;
 
   TabStripModel* source_tab_strip = source_browser->tab_strip_model();
-  std::unique_ptr<content::WebContents> web_contents =
-      source_tab_strip->DetachWebContentsAtForInsertion(tab_index);
-  if (!web_contents) {
+  std::unique_ptr<tabs::TabModel> tab =
+      source_tab_strip->DetachTabAtForInsertion(tab_index);
+  if (!tab) {
     return false;
   }
   TabStripModel* target_tab_strip = target_browser->tab_strip_model();
@@ -170,7 +170,7 @@ bool MoveTabToWindow(Browser* source_browser,
   if (*new_index > target_tab_strip->count() || *new_index < 0)
     *new_index = target_tab_strip->count();
 
-  target_tab_strip->InsertWebContentsAt(*new_index, std::move(web_contents),
+  target_tab_strip->InsertDetachedTabAt(*new_index, std::move(tab),
                                         add_types);
 
   return true;

@@ -25,9 +25,6 @@ CGFloat const kLogoPadding = 16;
 // The padding above and below the illustration image.
 CGFloat const kIllustrationPadding = 20;
 
-// The extra padding on the left and right of the title and explanatory message.
-CGFloat const kTitlePadding = 24;
-
 // The spacing between vertically stacked elements.
 CGFloat const kVerticalSpacingMedium = 16;
 
@@ -139,8 +136,6 @@ CGFloat const kCreditCardCellHeight = 64;
   UIStackView* aboveTitleStackView =
       [[UIStackView alloc] initWithFrame:CGRectZero];
   aboveTitleStackView.layoutMarginsRelativeArrangement = YES;
-  aboveTitleStackView.layoutMargins =
-      UIEdgeInsetsMake(0, kTitlePadding, 0, kTitlePadding);
   aboveTitleStackView.axis = UILayoutConstraintAxisVertical;
   aboveTitleStackView.spacing = kVerticalSpacingMedium;
 
@@ -197,9 +192,15 @@ CGFloat const kCreditCardCellHeight = 64;
 
 - (UILabel*)createTitleLabel {
   UILabel* titleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+  titleLabel.accessibilityTraits |= UIAccessibilityTraitHeader;
   titleLabel.text = _bottomSheetData.title;
   titleLabel.numberOfLines = 0;  // Allow multiple lines.
-  titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+  UIFontDescriptor* title2FontDescriptor =
+      [UIFont preferredFontForTextStyle:UIFontTextStyleTitle2].fontDescriptor;
+  titleLabel.font = [UIFont
+      fontWithDescriptor:[title2FontDescriptor fontDescriptorWithSymbolicTraits:
+                                                   UIFontDescriptorTraitBold]
+                    size:0];
   titleLabel.textColor = [UIColor colorNamed:kTextPrimaryColor];
   titleLabel.textAlignment = NSTextAlignmentCenter;
   return titleLabel;
@@ -228,9 +229,11 @@ CGFloat const kCreditCardCellHeight = 64;
   NSMutableAttributedString* attributedText = [[NSMutableAttributedString alloc]
       initWithString:_bottomSheetData.explanatoryMessage
           attributes:@{
-            NSParagraphStyleAttributeName : centeredTextStyle,
             NSForegroundColorAttributeName :
-                [UIColor colorNamed:kTextSecondaryColor]
+                [UIColor colorNamed:kTextPrimaryColor],
+            NSFontAttributeName :
+                [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote],
+            NSParagraphStyleAttributeName : centeredTextStyle,
           }];
   [attributedText addAttribute:NSLinkAttributeName
                          value:@"unused"
@@ -322,14 +325,16 @@ CGFloat const kCreditCardCellHeight = 64;
   if (textView == _explanatoryMessageView) {
     // The learn more link was clicked.
     [self.delegate
-        didTapLinkURL:
-            [[CrURL alloc]
-                initWithGURL:autofill::payments::
-                                 GetVirtualCardEnrollmentSupportUrl()]];
+        didTapLinkURL:[[CrURL alloc]
+                          initWithGURL:autofill::payments::
+                                           GetVirtualCardEnrollmentSupportUrl()]
+                 text:[textView.text substringWithRange:characterRange]];
     return NO;
   } else {
     // A link in a legal message was clicked.
-    [self.delegate didTapLinkURL:[[CrURL alloc] initWithNSURL:URL]];
+    [self.delegate
+        didTapLinkURL:[[CrURL alloc] initWithNSURL:URL]
+                 text:[textView.text substringWithRange:characterRange]];
     return NO;
   }
 }
@@ -346,7 +351,9 @@ CGFloat const kCreditCardCellHeight = 64;
   }
   __weak VirtualCardEnrollmentBottomSheetViewController* weakSelf = self;
   return [UIAction actionWithHandler:^(UIAction* action) {
-    [weakSelf.delegate didTapLinkURL:url];
+    [weakSelf.delegate
+        didTapLinkURL:url
+                 text:[textView.text substringWithRange:textItem.range]];
   }];
 }
 

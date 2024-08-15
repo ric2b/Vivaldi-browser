@@ -45,7 +45,8 @@ class Metadata:
         self.impl_dir = metadata.get('impl_dir', '')
         self.native_namespace = metadata['native_namespace']
         self.copyright_year = metadata.get('copyright_year', None)
-
+        self.kotlin_package = 'android.dawn'
+        self.kotlin_path = self.kotlin_package.replace('.', '/')
 
 class Name:
     def __init__(self, name, native=False):
@@ -158,6 +159,14 @@ class BitmaskType(Type):
         for value in self.values:
             self.full_mask = self.full_mask | value.value
         self.is_wire_transparent = True
+
+
+class CallbackFunctionType(Type):
+
+    def __init__(self, is_enabled, name, json_data):
+        Type.__init__(self, name, json_data)
+        self.return_type = None
+        self.arguments = []
 
 
 class FunctionPointerType(Type):
@@ -319,6 +328,14 @@ class StructureType(Record, Type):
     def any_member_requires_struct_defaulting(self):
         return any(member.requires_struct_defaulting
                    for member in self.members)
+
+
+
+class CallbackInfoType(StructureType):
+
+    def __init__(self, is_enabled, name, json_data):
+        StructureType.__init__(self, is_enabled, name, json_data)
+        self.extensible = 'in'
 
 
 class ConstantDefinition():
@@ -495,6 +512,8 @@ def parse_json(json, enabled_tags, disabled_tags=None):
             disabled_tags, json_data)
     category_to_parser = {
         'bitmask': BitmaskType,
+        'callback function': CallbackFunctionType,
+        'callback info': CallbackInfoType,
         'enum': EnumType,
         'native': NativeType,
         'function pointer': FunctionPointerType,
@@ -541,6 +560,12 @@ def parse_json(json, enabled_tags, disabled_tags=None):
                 no_cpp=True)
             types[name] = func_decl
             by_category['function'].append(func_decl)
+
+    for callback_info in by_category['callback info']:
+        link_structure(callback_info, types)
+
+    for callback_function in by_category['callback function']:
+        link_function_pointer(callback_function, types)
 
     for function_pointer in by_category['function pointer']:
         link_function_pointer(function_pointer, types)
@@ -791,6 +816,10 @@ def as_cppType(name):
         return name.CamelCase()
 
 
+def as_ktName(name):
+    return '_' + name if '0' <= name[0] <= '9' else name
+
+
 def as_jsEnumValue(value):
     if 'jsrepr' in value.json_data: return value.json_data['jsrepr']
     return "'" + value.name.js_enum_case() + "'"
@@ -896,18 +925,11 @@ def as_wireType(metadata, typ):
         return as_cppType(typ.name)
 
 
-def as_formatType(typ):
-    # Unsigned integral types
-    if typ.json_data['type'] in ['bool', 'uint32_t', 'uint64_t']:
-        return 'u'
-
-    # Defaults everything else to strings.
-    return 's'
-
-
 def c_methods(params, typ):
     return typ.methods + [
+        # TODO(dawn:2234): Deprecated. Remove when no longer used.
         Method(Name('reference'), params['types']['void'], [], False, {}),
+        Method(Name('add ref'), params['types']['void'], [], False, {}),
         Method(Name('release'), params['types']['void'], [], False, {}),
     ]
 
@@ -922,9 +944,25 @@ def has_callback_arguments(method):
     return any(arg.type.category == 'function pointer' for arg in method.arguments)
 
 
+# TODO: crbug.com/dawn/2509 - Remove this helper when once we deprecate older APIs.
 def has_callback_info(method):
     return method.return_type.name.get() == 'future' and any(
-        arg.name.get() == 'callback info' for arg in method.arguments)
+        arg.name.get() == 'callback info'
+        and arg.type.category != 'callback info' for arg in method.arguments)
+
+
+def has_callbackInfoStruct(method):
+    return any(arg.type.category == 'callback info'
+               for arg in method.arguments)
+
+
+def is_wire_serializable(type):
+    # Function pointers, callback functions, and "void *" types (i.e. userdata) cannot
+    # be serialized.
+    return (type.category != 'function pointer'
+            and type.category != 'callback function'
+            and type.name.get() != 'void *')
+
 
 def make_base_render_params(metadata):
     c_prefix = metadata.c_prefix
@@ -938,14 +976,19 @@ def make_base_render_params(metadata):
         assert not type_name.native and not value_name.native
         return c_prefix + type_name.CamelCase() + '_' + value_name.CamelCase()
 
-    def as_cMethod(type_name, method_name):
+    def as_cMethodNamespaced(type_name, method_name, namespace=None):
         c_method = c_prefix.lower()
-        if type_name != None:
+        if namespace is not None:
+            c_method += namespace.CamelCase()
+        if type_name is not None:
             assert not type_name.native
             c_method += type_name.CamelCase()
         assert not method_name.native
         c_method += method_name.CamelCase()
         return c_method
+
+    def as_cMethod(type_name, method_name):
+        return as_cMethodNamespaced(type_name, method_name)
 
     def as_cProc(type_name, method_name):
         c_proc = c_prefix + 'Proc'
@@ -965,6 +1008,7 @@ def make_base_render_params(metadata):
             'as_cEnum': as_cEnum,
             'as_cppEnum': as_cppEnum,
             'as_cMethod': as_cMethod,
+            'as_cMethodNamespaced': as_cMethodNamespaced,
             'as_MethodSuffix': as_MethodSuffix,
             'as_CppMethodSuffix': as_CppMethodSuffix,
             'as_cProc': as_cProc,
@@ -975,7 +1019,8 @@ def make_base_render_params(metadata):
             'convert_cType_to_cppType': convert_cType_to_cppType,
             'as_varName': as_varName,
             'decorate': decorate,
-            'as_formatType': as_formatType
+            'as_ktName': as_ktName,
+            'has_callbackInfoStruct': has_callbackInfoStruct,
         }
 
 
@@ -986,7 +1031,7 @@ class MultiGeneratorFromDawnJSON(Generator):
     def add_commandline_arguments(self, parser):
         allowed_targets = [
             'dawn_headers', 'cpp_headers', 'cpp', 'proc', 'mock_api', 'wire',
-            'native_utils', 'dawn_lpmfuzz_cpp', 'dawn_lpmfuzz_proto'
+            'native_utils', 'dawn_lpmfuzz_cpp', 'dawn_lpmfuzz_proto', 'kotlin'
         ]
 
         parser.add_argument('--dawn-json',
@@ -1039,14 +1084,32 @@ class MultiGeneratorFromDawnJSON(Generator):
                 FileRender('api.h', 'include/dawn/' + api + '.h',
                            [RENDER_PARAMS_BASE, params_dawn]))
             renders.append(
+                FileRender('dawn/wire/client/api.h',
+                           'include/dawn/wire/client/' + api + '.h',
+                           [RENDER_PARAMS_BASE, params_dawn]))
+            renders.append(
                 FileRender('dawn_proc_table.h',
                            'include/dawn/' + prefix + '_proc_table.h',
                            [RENDER_PARAMS_BASE, params_dawn]))
 
         if 'cpp_headers' in targets:
             renders.append(
-                FileRender('api_cpp.h', 'include/dawn/' + api + '_cpp.h',
-                           [RENDER_PARAMS_BASE, params_dawn]))
+                FileRender('api_cpp.h', 'include/dawn/' + api + '_cpp.h', [
+                    RENDER_PARAMS_BASE, params_dawn, {
+                        'c_header': api + '/' + api + '.h',
+                        'c_namespace': None,
+                    }
+                ]))
+
+            renders.append(
+                FileRender(
+                    'api_cpp.h', 'include/dawn/wire/client/' + api + '_cpp.h',
+                    [
+                        RENDER_PARAMS_BASE, params_dawn, {
+                            'c_header': 'dawn/wire/client/' + api + '.h',
+                            'c_namespace': Name('dawn wire client'),
+                        }
+                    ]))
 
             renders.append(
                 FileRender('api_cpp_print.h',
@@ -1060,7 +1123,7 @@ class MultiGeneratorFromDawnJSON(Generator):
 
         if 'proc' in targets:
             renders.append(
-                FileRender('dawn_proc.c', 'src/dawn/' + prefix + '_proc.c',
+                FileRender('dawn_proc.cpp', 'src/dawn/' + prefix + '_proc.cpp',
                            [RENDER_PARAMS_BASE, params_dawn]))
             renders.append(
                 FileRender('dawn_thread_dispatch_proc.cpp',
@@ -1071,11 +1134,6 @@ class MultiGeneratorFromDawnJSON(Generator):
             renders.append(
                 FileRender('dawn/native/api_dawn_native_proc.cpp',
                            'src/dawn/native/webgpu_dawn_native_proc.cpp',
-                           [RENDER_PARAMS_BASE, params_dawn]))
-
-        if 'cpp' in targets:
-            renders.append(
-                FileRender('api_cpp.cpp', 'src/dawn/' + api + '_cpp.cpp',
                            [RENDER_PARAMS_BASE, params_dawn]))
 
         if 'webgpu_headers' in targets:
@@ -1098,18 +1156,17 @@ class MultiGeneratorFromDawnJSON(Generator):
             renders.append(
                 FileRender(
                     'api_cpp.h',
-                    'emscripten-bits/system/include/webgpu/webgpu_cpp.h',
-                    [RENDER_PARAMS_BASE, params_emscripten]))
+                    'emscripten-bits/system/include/webgpu/webgpu_cpp.h', [
+                        RENDER_PARAMS_BASE, params_emscripten, {
+                            'c_header': api + '/' + api + '.h',
+                            'c_namespace': None,
+                        }
+                    ]))
             renders.append(
                 FileRender(
                     'api_cpp_chained_struct.h',
                     'emscripten-bits/system/include/webgpu/webgpu_cpp_chained_struct.h',
                     [RENDER_PARAMS_BASE, params_emscripten]))
-            # system/lib/webgpu
-            renders.append(
-                FileRender('api_cpp.cpp',
-                           'emscripten-bits/system/lib/webgpu/webgpu_cpp.cpp',
-                           [RENDER_PARAMS_BASE, params_emscripten]))
             # Snippets to paste into existing Emscripten files
             renders.append(
                 FileRender('api_struct_info.json',
@@ -1221,6 +1278,7 @@ class MultiGeneratorFromDawnJSON(Generator):
                     'as_wireType': lambda type : as_wireType(metadata, type),
                     'as_annotated_wireType': \
                         lambda arg: annotated(as_wireType(metadata, arg.type), arg),
+                    'is_wire_serializable': lambda type : is_wire_serializable(type),
                 }, additional_params
             ]
             renders.append(
@@ -1270,6 +1328,11 @@ class MultiGeneratorFromDawnJSON(Generator):
                     'dawn/wire/server/ServerPrototypes.inc',
                     'src/dawn/wire/server/ServerPrototypes_autogen.inc',
                     wire_params))
+            renders.append(
+                FileRender('dawn/wire/server/WGPUTraits.h',
+                           'src/dawn/wire/server/WGPUTraits_autogen.h',
+                           wire_params))
+
 
         if 'dawn_lpmfuzz_proto' in targets:
             params_dawn_wire = parse_json(loaded_json,
@@ -1332,6 +1395,26 @@ class MultiGeneratorFromDawnJSON(Generator):
                     'dawn/fuzzers/lpmfuzz/DawnLPMConstants.h',
                     'src/dawn/fuzzers/lpmfuzz/DawnLPMConstants_autogen.h',
                     lpm_params))
+
+        if 'kotlin' in targets:
+            params_kotlin = parse_json(loaded_json,
+                                       enabled_tags=['dawn', 'native'])
+
+            for enum in (params_kotlin['by_category']['bitmask'] +
+                         params_kotlin['by_category']['enum']):
+                renders.append(
+                    FileRender(
+                        'art/api_kotlin_enum.kt',
+                        'java/' + metadata.kotlin_path + '/' +
+                        enum.name.CamelCase() + '.kt',
+                        [RENDER_PARAMS_BASE, params_kotlin, {
+                            'enum': enum
+                        }]))
+
+            renders.append(
+                FileRender('art/api_kotlin_constants.kt',
+                           'java/' + metadata.kotlin_path + '/Constants.kt',
+                           [RENDER_PARAMS_BASE, params_kotlin]))
 
         return renders
 

@@ -4,6 +4,11 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "core/fxge/agg/fx_agg_driver.h"
 
 #include <math.h>
@@ -1055,9 +1060,12 @@ void CFX_AggDeviceDriver::SetClipMask(agg::rasterizer_scanline_aa& rasterizer) {
   FX_RECT path_rect(rasterizer.min_x(), rasterizer.min_y(),
                     rasterizer.max_x() + 1, rasterizer.max_y() + 1);
   path_rect.Intersect(m_pClipRgn->GetBox());
+  if (path_rect.IsEmpty()) {
+    return;
+  }
   auto pThisLayer = pdfium::MakeRetain<CFX_DIBitmap>();
-  pThisLayer->Create(path_rect.Width(), path_rect.Height(),
-                     FXDIB_Format::k8bppMask);
+  CHECK(pThisLayer->Create(path_rect.Width(), path_rect.Height(),
+                           FXDIB_Format::k8bppMask));
   agg::rendering_buffer raw_buf(pThisLayer->GetWritableBuffer().data(),
                                 pThisLayer->GetWidth(), pThisLayer->GetHeight(),
                                 pThisLayer->GetPitch());

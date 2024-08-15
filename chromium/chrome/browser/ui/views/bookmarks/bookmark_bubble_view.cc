@@ -15,16 +15,16 @@
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/image_fetcher/image_fetcher_service_factory.h"
-#include "chrome/browser/image_service/image_service_factory.h"
+#include "chrome/browser/page_image_service/image_service_factory.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_key.h"
+#include "chrome/browser/signin/signin_promo_util.h"
 #include "chrome/browser/ui/bookmarks/bookmark_editor.h"
 #include "chrome/browser/ui/bookmarks/recently_used_folders_combo_model.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/sync/sync_promo_ui.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/commerce/price_tracking_email_dialog_view.h"
 #include "chrome/browser/ui/views/commerce/price_tracking_view.h"
@@ -75,7 +75,6 @@ views::BubbleDialogDelegate* BookmarkBubbleView::bookmark_bubble_ = nullptr;
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kBookmarkBubbleOkButtonId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kBookmarkFolderFieldId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kBookmarkNameFieldId);
-DEFINE_ELEMENT_IDENTIFIER_VALUE(kBookmarkSaveLocationTextId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kBookmarkSecondaryButtonId);
 
 namespace {
@@ -203,12 +202,8 @@ class BookmarkBubbleView::BookmarkBubbleDelegate
  public:
   BookmarkBubbleDelegate(std::unique_ptr<BubbleSignInPromoDelegate> delegate,
                          Browser* browser,
-                         const GURL& url,
-                         bool simplified_flow_shown)
-      : delegate_(std::move(delegate)),
-        browser_(browser),
-        url_(url),
-        is_showing_simplified_flow_(simplified_flow_shown) {}
+                         const GURL& url)
+      : delegate_(std::move(delegate)), browser_(browser), url_(url) {}
 
   // Handles presses on the secondary (usually cancel) button and returns
   // whether the dialog should close as a result of the button press. In this
@@ -216,22 +211,6 @@ class BookmarkBubbleView::BookmarkBubbleDelegate
   // the dialog or an "edit" button which shows more options and then transforms
   // into the cancel button.
   bool HandleSecondaryButton() {
-    // If we started by showing the simplified flow, the secondary/cancel button
-    // is named "edit" and should show controls for changing the bookmark
-    // details if pressed.
-    if (is_showing_simplified_flow_) {
-      dialog_model()->SetVisible(kBookmarkNameFieldId, true);
-      dialog_model()->SetVisible(kBookmarkFolderFieldId, true);
-      dialog_model()->SetVisible(kBookmarkSaveLocationTextId, false);
-
-      dialog_model()->SetButtonLabel(
-          dialog_model()->GetButtonByUniqueId(kBookmarkSecondaryButtonId),
-          l10n_util::GetStringUTF16(IDS_BOOKMARK_BUBBLE_REMOVE_BOOKMARK));
-
-      is_showing_simplified_flow_ = false;
-      return false;
-    }
-
     base::RecordAction(UserMetricsAction("BookmarkBubble_Unstar"));
     should_apply_edits_ = false;
     bookmarks::BookmarkModel* model =
@@ -239,7 +218,8 @@ class BookmarkBubbleView::BookmarkBubbleDelegate
     const bookmarks::BookmarkNode* node =
         model->GetMostRecentlyAddedUserNodeForURL(url_);
     if (node)
-      model->Remove(node, bookmarks::metrics::BookmarkEditSource::kUser);
+      model->Remove(node, bookmarks::metrics::BookmarkEditSource::kUser,
+                    FROM_HERE);
 
     return true;
   }
@@ -341,7 +321,6 @@ class BookmarkBubbleView::BookmarkBubbleDelegate
   const raw_ptr<Browser> browser_;
   const GURL url_;
   base::OnceCallback<void()> close_callback_;
-  bool is_showing_simplified_flow_;
 
   bool should_apply_edits_ = true;
 };
@@ -373,10 +352,8 @@ void BookmarkBubbleView::ShowBubble(
       CreatePriceTrackingEmailCallback(profile, anchor_view, web_contents,
                                        bookmark_node);
 
-  bool show_simplified_flow = !already_bookmarked;
-
   auto bubble_delegate_unique = std::make_unique<BookmarkBubbleDelegate>(
-      std::move(delegate), browser, url, show_simplified_flow);
+      std::move(delegate), browser, url);
   BookmarkBubbleDelegate* bubble_delegate = bubble_delegate_unique.get();
 
   auto dialog_model_builder =
@@ -403,13 +380,6 @@ void BookmarkBubbleView::ShowBubble(
   ui::ElementIdentifier initially_focused_field = kBookmarkNameFieldId;
   std::u16string secondary_button_label =
       l10n_util::GetStringUTF16(IDS_BOOKMARK_BUBBLE_REMOVE_BOOKMARK);
-  if (show_simplified_flow) {
-    // The name field will be invisible if using the simplified flow. In that
-    // case focus the accept ("done") button.
-    initially_focused_field = kBookmarkBubbleOkButtonId;
-    secondary_button_label =
-        l10n_util::GetStringUTF16(IDS_BOOKMARK_BUBBLE_EDIT_BOOKMARK);
-  }
 
   dialog_model_builder
       .SetTitle(l10n_util::GetStringUTF16(
@@ -428,43 +398,9 @@ void BookmarkBubbleView::ShowBubble(
                               base::Unretained(bubble_delegate)),
           ui::DialogModel::Button::Params()
               .SetLabel(secondary_button_label)
-              .SetStyle(features::IsChromeRefresh2023()
-                            ? ui::ButtonStyle::kTonal
-                            : ui::ButtonStyle::kDefault)
+              .SetStyle(ui::ButtonStyle::kTonal)
               .AddAccelerator(ui::Accelerator(ui::VKEY_R, ui::EF_ALT_DOWN))
-              .SetId(kBookmarkSecondaryButtonId));
-
-  if (show_simplified_flow) {
-    // A bookmark should always have a parent node.
-    CHECK(bookmark_node->parent());
-    std::u16string folder_name = bookmark_node->parent()->GetTitle();
-    auto save_location_text =
-        l10n_util::GetStringFUTF16(IDS_BOOKMARK_BUBBLE_SAVED_TO, folder_name);
-
-    std::unique_ptr<views::StyledLabel> description_label =
-        views::Builder<views::StyledLabel>()
-            .SetDefaultTextStyle(views::style::STYLE_SECONDARY)
-            .SetTextContext(views::style::CONTEXT_DIALOG_BODY_TEXT)
-            .SetText(save_location_text)
-            .SetHorizontalAlignment(gfx::ALIGN_LEFT)
-            .Build();
-
-    int32_t offset = save_location_text.find(folder_name);
-    views::StyledLabel::RangeStyleInfo style_info =
-        views::StyledLabel::RangeStyleInfo::CreateForLink(
-            base::BindRepeating(&BookmarkBubbleDelegate::ShowEditor,
-                                base::Unretained(bubble_delegate)));
-    description_label->AddStyleRange(
-        gfx::Range(offset, offset + folder_name.length()), style_info);
-
-    dialog_model_builder.AddCustomField(
-        std::make_unique<views::BubbleDialogModelHost::CustomView>(
-            std::move(description_label),
-            views::BubbleDialogModelHost::FieldType::kText),
-        kBookmarkSaveLocationTextId);
-  }
-
-  dialog_model_builder
+              .SetId(kBookmarkSecondaryButtonId))
       .AddTextfield(
           kBookmarkNameFieldId,
           l10n_util::GetStringUTF16(IDS_BOOKMARK_BUBBLE_NAME_LABEL),
@@ -506,14 +442,9 @@ void BookmarkBubbleView::ShowBubble(
 
   // views:: land below, there's no agnostic reference to arrow / anchors /
   // bubbles.
-  std::unique_ptr<ui::DialogModel> dialog_model = dialog_model_builder.Build();
-  if (show_simplified_flow) {
-    dialog_model->SetVisible(kBookmarkNameFieldId, false);
-    dialog_model->SetVisible(kBookmarkFolderFieldId, false);
-  }
-
   auto bubble = std::make_unique<views::BubbleDialogModelHost>(
-      std::move(dialog_model), anchor_view, views::BubbleBorder::TOP_RIGHT);
+      dialog_model_builder.Build(), anchor_view,
+      views::BubbleBorder::TOP_RIGHT);
   bookmark_bubble_ = bubble.get();
   if (highlighted_button)
     bubble->SetHighlightedButton(highlighted_button);
@@ -522,7 +453,7 @@ void BookmarkBubbleView::ShowBubble(
                                            bookmark_node)) {
     bubble->SetFootnoteView(
         std::make_unique<commerce::ShoppingCollectionIphView>());
-  } else if (SyncPromoUI::ShouldShowSyncPromo(profile)) {
+  } else if (signin::ShouldShowSyncPromo(*profile)) {
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
     // TODO(pbos): Consider adding model support for footnotes so that this does
     // not need to be tied to views.

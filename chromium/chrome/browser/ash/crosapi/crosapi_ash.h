@@ -54,6 +54,7 @@ class AutomationAsh;
 class BrowserServiceHostAsh;
 class BrowserVersionServiceAsh;
 class GuestOsSkForwarderFactoryAsh;
+class CecPrivateAsh;
 class CertDatabaseAsh;
 class CertProvisioningAsh;
 class ChapsServiceAsh;
@@ -88,11 +89,13 @@ class FileManagerAsh;
 class FileSystemAccessCloudIdentifierProviderAsh;
 class FileSystemProviderServiceAsh;
 class ForceInstalledTrackerAsh;
+class FullRestoreAsh;
 class FullscreenControllerAsh;
 class GeolocationServiceAsh;
 class IdentityManagerAsh;
 class IdleServiceAsh;
 class ImageWriterAsh;
+class InputMethodsAsh;
 class KerberosInBrowserAsh;
 class KeystoreServiceAsh;
 class KioskSessionServiceAsh;
@@ -127,6 +130,7 @@ class RemotingAsh;
 class ResourceManagerAsh;
 class ScreenAIDownloaderAsh;
 class ScreenManagerAsh;
+class SearchControllerFactoryAsh;
 class SearchProviderAsh;
 class SelectFileAsh;
 class SharesheetAsh;
@@ -189,6 +193,8 @@ class CrosapiAsh : public mojom::Crosapi {
       mojo::PendingReceiver<mojom::AppShortcutPublisher> receiver) override;
   void BindBrowserVersionService(
       mojo::PendingReceiver<mojom::BrowserVersionService> receiver) override;
+  void BindCecPrivate(
+      mojo::PendingReceiver<mojom::CecPrivate> receiver) override;
   void BindCertDatabase(
       mojo::PendingReceiver<mojom::CertDatabase> receiver) override;
   void BindCertProvisioning(
@@ -269,6 +275,8 @@ class CrosapiAsh : public mojom::Crosapi {
       override;
   void BindForceInstalledTracker(
       mojo::PendingReceiver<mojom::ForceInstalledTracker> receiver) override;
+  void BindFullRestore(
+      mojo::PendingReceiver<mojom::FullRestore> receiver) override;
   void BindFullscreenController(
       mojo::PendingReceiver<mojom::FullscreenController> receiver) override;
   void BindGeolocationService(
@@ -283,6 +291,8 @@ class CrosapiAsh : public mojom::Crosapi {
       mojo::PendingReceiver<mojom::IdleService> receiver) override;
   void BindImageWriter(
       mojo::PendingReceiver<mojom::ImageWriter> receiver) override;
+  void BindInputMethods(
+      mojo::PendingReceiver<mojom::InputMethods> receiver) override;
   void BindInSessionAuth(
       mojo::PendingReceiver<chromeos::auth::mojom::InSessionAuth> receiver)
       override;
@@ -370,6 +380,8 @@ class CrosapiAsh : public mojom::Crosapi {
       mojo::PendingReceiver<mojom::ScreenAIDownloader> receiver) override;
   void BindScreenManager(
       mojo::PendingReceiver<mojom::ScreenManager> receiver) override;
+  void BindSearchControllerFactory(
+      mojo::PendingRemote<mojom::SearchControllerFactory> remote) override;
   void BindSearchControllerRegistry(
       mojo::PendingReceiver<mojom::SearchControllerRegistry> receiver) override;
   void BindSelectFile(
@@ -454,6 +466,8 @@ class CrosapiAsh : public mojom::Crosapi {
     return browser_service_host_ash_.get();
   }
 
+  CecPrivateAsh* cec_private_ash() { return cec_private_ash_.get(); }
+
   CertDatabaseAsh* cert_database_ash() { return cert_database_ash_.get(); }
 
   CertProvisioningAsh* cert_provisioning_ash() {
@@ -523,11 +537,15 @@ class CrosapiAsh : public mojom::Crosapi {
     return force_installed_tracker_ash_.get();
   }
 
+  FullRestoreAsh* full_restore_ash() { return full_restore_ash_.get(); }
+
   FullscreenControllerAsh* fullscreen_controller_ash() {
     return fullscreen_controller_ash_.get();
   }
 
   ImageWriterAsh* image_writer_ash() { return image_writer_ash_.get(); }
+
+  InputMethodsAsh* input_methods_ash() { return input_methods_ash_.get(); }
 
   KeystoreServiceAsh* keystore_service_ash() {
     return keystore_service_ash_.get();
@@ -584,6 +602,10 @@ class CrosapiAsh : public mojom::Crosapi {
   }
 
   ScreenManagerAsh* screen_manager_ash() { return screen_manager_ash_.get(); }
+
+  SearchControllerFactoryAsh* search_controller_factory_ash() {
+    return search_controller_factory_ash_.get();
+  }
 
   SearchProviderAsh* search_provider_ash() {
     return search_provider_ash_.get();
@@ -652,6 +674,7 @@ class CrosapiAsh : public mojom::Crosapi {
   std::unique_ptr<BrowserVersionServiceAsh> browser_version_service_ash_;
   std::unique_ptr<GuestOsSkForwarderFactoryAsh>
       guest_os_sk_forwarder_factory_ash_;
+  std::unique_ptr<CecPrivateAsh> cec_private_ash_;
   std::unique_ptr<CertDatabaseAsh> cert_database_ash_;
   std::unique_ptr<CertProvisioningAsh> cert_provisioning_ash_;
   std::unique_ptr<ChapsServiceAsh> chaps_service_ash_;
@@ -691,10 +714,12 @@ class CrosapiAsh : public mojom::Crosapi {
   std::unique_ptr<FileSystemProviderServiceAsh>
       file_system_provider_service_ash_;
   std::unique_ptr<ForceInstalledTrackerAsh> force_installed_tracker_ash_;
+  std::unique_ptr<FullRestoreAsh> full_restore_ash_;
   std::unique_ptr<FullscreenControllerAsh> fullscreen_controller_ash_;
   std::unique_ptr<GeolocationServiceAsh> geolocation_service_ash_;
   std::unique_ptr<IdentityManagerAsh> identity_manager_ash_;
   std::unique_ptr<IdleServiceAsh> idle_service_ash_;
+  std::unique_ptr<InputMethodsAsh> input_methods_ash_;
   std::unique_ptr<ImageWriterAsh> image_writer_ash_;
   std::unique_ptr<KerberosInBrowserAsh> kerberos_in_browser_ash_;
   std::unique_ptr<KeystoreServiceAsh> keystore_service_ash_;
@@ -739,6 +764,7 @@ class CrosapiAsh : public mojom::Crosapi {
   std::unique_ptr<ResourceManagerAsh> resource_manager_ash_;
   std::unique_ptr<ScreenAIDownloaderAsh> screen_ai_downloader_ash_;
   std::unique_ptr<ScreenManagerAsh> screen_manager_ash_;
+  std::unique_ptr<SearchControllerFactoryAsh> search_controller_factory_ash_;
   std::unique_ptr<SearchProviderAsh> search_provider_ash_;
   std::unique_ptr<SelectFileAsh> select_file_ash_;
   std::unique_ptr<SharesheetAsh> sharesheet_ash_;

@@ -2,18 +2,151 @@
 
 import("//testing/test.gni")
 
-source_set("adblock_parser") {
+ublock_dir = "//vivaldi/thirdparty/ublock"
+ublock_resources = ublock_dir + "/src/web_accessible_resources"
+
+adblockplus_main_snippets = "//vivaldi/thirdparty/abp_snippets/dist/main.js"
+adblockplus_isolated_snippets = "//vivaldi/thirdparty/abp_snippets/dist/isolated.js"
+compiled_adblockplus_snippets_loader_dir = "$root_out_dir/gen/vivaldi/components/ad_blocker/abp_snippets"
+
+adblockplus_main_snippets_bundle_file = "//vivaldi/thirdparty/abp_snippets/bundle/main.js"
+adblockplus_isolated_snippets_bundle_file = "//vivaldi/thirdparty/abp_snippets/bundle/isolated.js"
+adblockplus_snippets_lists_dir = "$root_out_dir/gen/vivaldi/components/ad_blocker/abp_snippets_lists"
+
+resources_output = "$root_out_dir/resources/vivaldi/adblocker_resources"
+if (is_ios) {
+  bundle_output = "{{bundle_resources_dir}}/res/adblocker_resources"
+}
+
+if (!is_ios) {
+  copy("ublock_license") {
+    sources = [
+      "$ublock_dir/LICENSE.txt",
+    ]
+    outputs = [
+      "$resources_output/{{source_file_part}}",
+    ]
+  }
+}
+
+action_foreach("make_snippets_loader") {
+  script = "//vivaldi/components/ad_blocker/abp_snippets_tools/make_snippets_loader.py"
+
   sources = [
+    adblockplus_main_snippets,
+    adblockplus_isolated_snippets
+  ]
+
+  outputs = [
+    "$compiled_adblockplus_snippets_loader_dir/abp-{{source_name_part}}.js",
+  ]
+
+  args = [
+    "--snippets", rebase_path("{{source}}", root_build_dir),
+    "--output", rebase_path(compiled_adblockplus_snippets_loader_dir, root_build_dir) + "/abp-{{source_name_part}}.js",
+  ]
+}
+
+action_foreach("make_snippets_lists") {
+  script = "//vivaldi/components/ad_blocker/abp_snippets_tools/make_snippets_list.py"
+
+  sources = [
+    adblockplus_main_snippets_bundle_file,
+    adblockplus_isolated_snippets_bundle_file
+  ]
+
+  outputs = [
+    "$adblockplus_snippets_lists_dir/{{source_name_part}}.inc",
+  ]
+
+  args = [
+    "--snippets_bundle", rebase_path("{{source}}", root_build_dir),
+    "--output", rebase_path(adblockplus_snippets_lists_dir, root_build_dir) + "/{{source_name_part}}.inc",
+  ]
+}
+
+action("package_redirectable_resources") {
+  resources = "$resources_output/redirectable_resources.json"
+
+  sources = [
+    ublock_resources,
+  ]
+
+  outputs = [
+    resources
+  ]
+
+  script = "//vivaldi/tools/resources2json/resources2json.py"
+
+  args = [
+    "--input_dir", rebase_path(ublock_resources, root_build_dir),
+    "--output", rebase_path(resources, root_build_dir),
+    "--exclude", "README.txt", "empty", "click2load.html", "epicker-ui.html",
+    "--add-empty", "noop.css"
+  ]
+}
+
+action("package_injectable_resources") {
+  resources = "$resources_output/injectable_resources.json"
+
+  deps= [
+    ":make_snippets_loader",
+  ]
+
+  sources = get_target_outputs(":make_snippets_loader")
+
+  outputs = [
+    resources
+  ]
+
+  script = "//vivaldi/tools/resources2json/resources2json.py"
+
+  args = [
+    "--input_dir", rebase_path(compiled_adblockplus_snippets_loader_dir, root_build_dir),
+    "--output", rebase_path(resources, root_build_dir),
+  ]
+}
+
+if (!is_ios) {
+  group("package_adblocker_files") {
+    deps = [
+      # adblockplus and ublock use the same license, so we only need one of
+      # their license files
+      ":ublock_license",
+      ":package_redirectable_resources",
+      ":package_injectable_resources"
+    ]
+  }
+} else {
+  bundle_data("package_adblocker_files") {
+    sources = [
+      # adblockplus and ublock use the same license, so we only need one of
+      # their license files
+      "$ublock_dir/LICENSE.txt",
+      "$resources_output/injectable_resources.json",
+      "$resources_output/redirectable_resources.json"
+    ]
+    public_deps = [
+      ":package_redirectable_resources",
+      ":package_injectable_resources"
+    ]
+    outputs = [ "$bundle_output/{{source_file_part}}" ]
+  }
+}
+
+source_set("adblock_parser") {
+  sources = get_target_outputs(":make_snippets_lists")
+  sources += [
     "adblock_content_injection_rule.cc",
     "adblock_content_injection_rule.h",
     "adblock_request_filter_rule.cc",
     "adblock_request_filter_rule.h",
-    "adblock_metadata.cc",
-    "adblock_metadata.h",
     "adblock_rule_parser.cc",
     "adblock_rule_parser.h",
     "adblock_ruleset_file_parser.cc",
     "adblock_ruleset_file_parser.h",
+    "adblock_types.cc",
+    "adblock_types.h",
     "ddg_rules_parser.cc",
     "ddg_rules_parser.h",
     "parse_result.cc",
@@ -25,6 +158,8 @@ source_set("adblock_parser") {
     "//base",
     "//base:i18n",
     "//url",
+    "//net",
+    ":make_snippets_lists"
   ]
 }
 
@@ -82,117 +217,4 @@ source_set("unit_tests") {
      "//base",
     "//testing/gtest",
   ]
-}
-
-ublock_dir = "//vivaldi/thirdparty/ublock"
-ublock_resources = ublock_dir + "/src/web_accessible_resources"
-adblockplus_snippets = "//vivaldi/thirdparty/adblockpluscore/lib/content/snippets.js"
-adblockplus_snippets_loader = "//vivaldi/thirdparty/adblockpluscore/lib/snippets.js"
-compiled_adblockplus_snippets_loader_dir = "$root_out_dir/gen/components/request_filter/adblock_filter/abp_snippets"
-compiled_adblockplus_snippets_loader = compiled_adblockplus_snippets_loader_dir + "/snippets.js"
-resources_output = "$root_out_dir/resources/vivaldi/adblocker_resources"
-if (is_ios) {
-  bundle_output = "{{bundle_resources_dir}}/res/adblocker_resources"
-}
-
-if (!is_ios) {
-  copy("ublock_license") {
-    sources = [
-      "$ublock_dir/LICENSE.txt",
-    ]
-    outputs = [
-      "$resources_output/{{source_file_part}}",
-    ]
-  }
-}
-
-action("make_snippets_loader") {
-  script = "//vivaldi/components/ad_blocker/abp_snippets_tools/make_snippets_loader.py"
-
-  sources = [
-    adblockplus_snippets,
-    adblockplus_snippets_loader
-  ]
-
-  outputs = [
-    compiled_adblockplus_snippets_loader_dir,
-    compiled_adblockplus_snippets_loader
-  ]
-
-  args = [
-    "--loader", rebase_path(adblockplus_snippets_loader, root_build_dir),
-    "--snippets", rebase_path(adblockplus_snippets, root_build_dir),
-    "--output", rebase_path(compiled_adblockplus_snippets_loader, root_build_dir),
-  ]
-}
-
-action("package_redirectable_resources") {
-  resources = "$resources_output/redirectable_resources.json"
-
-  sources = [
-    ublock_resources,
-  ]
-
-  outputs = [
-    resources
-  ]
-
-  script = "//vivaldi/tools/resources2json/resources2json.py"
-
-  args = [
-    "--input_dir", rebase_path(ublock_resources, root_build_dir),
-    "--output", rebase_path(resources, root_build_dir),
-    "--exclude", "README.txt", "empty", "click2load.html", "epicker-ui.html",
-    "--add-empty", "noop.css"
-  ]
-}
-
-action("package_injectable_resources") {
-  resources = "$resources_output/injectable_resources.json"
-
-  deps= [
-    ":make_snippets_loader",
-  ]
-
-  sources = [
-    compiled_adblockplus_snippets_loader_dir,
-  ]
-
-  outputs = [
-    resources
-  ]
-
-  script = "//vivaldi/tools/resources2json/resources2json.py"
-
-  args = [
-    "--input_dir", rebase_path(compiled_adblockplus_snippets_loader_dir, root_build_dir),
-    "--output", rebase_path(resources, root_build_dir),
-  ]
-}
-
-if (!is_ios) {
-  group("package_adblocker_files") {
-    deps = [
-      # adblockplus and ublock use the same license, so we only need one of
-      # their license files
-      ":ublock_license",
-      ":package_redirectable_resources",
-      ":package_injectable_resources"
-    ]
-  }
-} else {
-  bundle_data("package_adblocker_files") {
-    sources = [
-      # adblockplus and ublock use the same license, so we only need one of
-      # their license files
-      "$ublock_dir/LICENSE.txt",
-      "$resources_output/injectable_resources.json",
-      "$resources_output/redirectable_resources.json"
-    ]
-    public_deps = [
-      ":package_redirectable_resources",
-      ":package_injectable_resources"
-    ]
-    outputs = [ "$bundle_output/{{source_file_part}}" ]
-  }
 }

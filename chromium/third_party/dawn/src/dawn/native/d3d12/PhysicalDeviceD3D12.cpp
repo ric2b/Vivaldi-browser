@@ -45,7 +45,7 @@
 
 namespace dawn::native::d3d12 {
 
-PhysicalDevice::PhysicalDevice(Backend* backend, ComPtr<IDXGIAdapter3> hardwareAdapter)
+PhysicalDevice::PhysicalDevice(Backend* backend, ComPtr<IDXGIAdapter4> hardwareAdapter)
     : Base(backend, std::move(hardwareAdapter), wgpu::BackendType::D3D12) {}
 
 PhysicalDevice::~PhysicalDevice() {
@@ -102,21 +102,6 @@ MaybeError PhysicalDevice::InitializeImpl() {
     if (mAdapterType == wgpu::AdapterType::DiscreteGPU && mDeviceInfo.isUMA) {
         mAdapterType = wgpu::AdapterType::IntegratedGPU;
     }
-
-    if (GetInstance()->IsAdapterBlocklistEnabled()) {
-#if DAWN_PLATFORM_IS(I386)
-        DAWN_INVALID_IF(
-            mDeviceInfo.highestSupportedShaderModel >= 60,
-            "D3D12 x86 SM6.0+ adapter is blocklisted. See https://crbug.com/tint/1753.");
-
-        DAWN_INVALID_IF(
-            gpu_info::IsNvidia(mVendorId),
-            "D3D12 NVIDIA x86 adapter is blocklisted. See https://crbug.com/dawn/1196.");
-#elif DAWN_PLATFORM_IS(ARM)
-        return DAWN_VALIDATION_ERROR(
-            "D3D12 on ARM CPU is blocklisted. See https://crbug.com/dawn/884.");
-#endif
-    }
     return {};
 }
 
@@ -151,12 +136,15 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     EnableFeature(Feature::SurfaceCapabilities);
     EnableFeature(Feature::Float32Filterable);
     EnableFeature(Feature::DualSourceBlending);
+    EnableFeature(Feature::Unorm16TextureFormats);
+    EnableFeature(Feature::Snorm16TextureFormats);
     EnableFeature(Feature::Norm16TextureFormats);
     EnableFeature(Feature::AdapterPropertiesMemoryHeaps);
     EnableFeature(Feature::AdapterPropertiesD3D);
     EnableFeature(Feature::MultiPlanarRenderTargets);
     EnableFeature(Feature::R8UnormStorage);
     EnableFeature(Feature::SharedBufferMemoryD3D12Resource);
+    EnableFeature(Feature::ShaderModuleCompilationOptions);
 
     if (AreTimestampQueriesSupported()) {
         EnableFeature(Feature::TimestampQuery);
@@ -402,8 +390,7 @@ FeatureValidationResult PhysicalDevice::ValidateFeatureSupportedWithTogglesImpl(
             case wgpu::FeatureName::ShaderF16:
             case wgpu::FeatureName::ChromiumExperimentalSubgroups:
                 return FeatureValidationResult(
-                    absl::StrFormat("Feature %s requires DXC for D3D12.",
-                                    GetInstance()->GetFeatureInfo(feature)->name));
+                    absl::StrFormat("Feature %s requires DXC for D3D12.", feature));
             default:
                 break;
         }
@@ -413,9 +400,8 @@ FeatureValidationResult PhysicalDevice::ValidateFeatureSupportedWithTogglesImpl(
         // The feature `shader-f16` requires using shader model 6.2 or higher.
         case wgpu::FeatureName::ShaderF16: {
             if (!(GetAppliedShaderModelUnderToggles(toggles) >= 62)) {
-                return FeatureValidationResult(
-                    absl::StrFormat("Feature %s requires shader model 6.2 or higher for D3D12.",
-                                    GetInstance()->GetFeatureInfo(feature)->name));
+                return FeatureValidationResult(absl::StrFormat(
+                    "Feature %s requires shader model 6.2 or higher for D3D12.", feature));
             }
             break;
         }
@@ -792,8 +778,9 @@ void PhysicalDevice::SetupBackendDeviceToggles(TogglesState* deviceToggles) cons
 ResultOrError<Ref<DeviceBase>> PhysicalDevice::CreateDeviceImpl(
     AdapterBase* adapter,
     const UnpackedPtr<DeviceDescriptor>& descriptor,
-    const TogglesState& deviceToggles) {
-    return Device::Create(adapter, descriptor, deviceToggles);
+    const TogglesState& deviceToggles,
+    Ref<DeviceBase::DeviceLostEvent>&& lostEvent) {
+    return Device::Create(adapter, descriptor, deviceToggles, std::move(lostEvent));
 }
 
 // Resets the backend device and creates a new one. If any D3D12 objects belonging to the

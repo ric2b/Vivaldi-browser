@@ -25,7 +25,7 @@
 #include "ash/wm/desks/templates/saved_desk_presenter.h"
 #include "ash/wm/desks/templates/saved_desk_util.h"
 #include "ash/wm/overview/overview_controller.h"
-#include "ash/wm/overview/overview_focus_cycler.h"
+#include "ash/wm/overview/overview_focus_cycler_old.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_session.h"
 #include "ash/wm/overview/overview_utils.h"
@@ -121,7 +121,7 @@ SavedDeskItemView::SavedDeskItemView(std::unique_ptr<DeskTemplate> saved_desk)
   views::Builder<SavedDeskItemView>(this)
       .SetPreferredSize(kPreferredSize)
       .SetUseDefaultFillLayout(true)
-      .SetAccessibleName(saved_desk_name)
+      .SetAccessibleName(ComputeAccessibleName())
       .SetCallback(std::move(launch_template_callback))
       .AddChildren(
           views::Builder<View>()
@@ -387,7 +387,7 @@ void SavedDeskItemView::UpdateSavedDesk(
   auto new_name = saved_desk_->template_name();
   DCHECK(!new_name.empty());
   name_view_->SetText(new_name);
-  SetAccessibleName(new_name);
+  SetAccessibleName(ComputeAccessibleName());
 
   // This will trigger `name_view_` to compute its new preferred bounds and
   // invalidate the layout for `this`
@@ -395,17 +395,8 @@ void SavedDeskItemView::UpdateSavedDesk(
 }
 
 void SavedDeskItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  int accessible_text_id =
-      saved_desk_->type() == DeskTemplateType::kTemplate
-          ? IDS_ASH_DESKS_TEMPLATES_LIBRARY_TEMPLATES_GRID_ITEM_ACCESSIBLE_NAME
-          : IDS_ASH_DESKS_TEMPLATES_LIBRARY_SAVE_AND_RECALL_GRID_ITEM_ACCESSIBLE_NAME;
-
   node_data->role = ax::mojom::Role::kButton;
-
-  node_data->AddStringAttribute(
-      ax::mojom::StringAttribute::kName,
-      l10n_util::GetStringFUTF8(accessible_text_id,
-                                saved_desk_->template_name()));
+  node_data->SetName(ComputeAccessibleName());
 
   node_data->AddStringAttribute(
       ax::mojom::StringAttribute::kDescription,
@@ -426,7 +417,7 @@ void SavedDeskItemView::Layout(PassKey) {
   }
 
   const gfx::Size launch_button_preferred_size =
-      launch_button_->CalculatePreferredSize();
+      launch_button_->CalculatePreferredSize({});
   launch_button_->SetBoundsRect(
       gfx::Rect({(width() - launch_button_preferred_size.width()) / 2,
                  height() - launch_button_preferred_size.height() -
@@ -456,8 +447,10 @@ void SavedDeskItemView::OnViewFocused(views::View* observed_view) {
   icon_container_view_->layer()->SetOpacity(1.0f);
 
   // Move the overview focus ring to `name_view_`.
-  auto* focus_cycler =
-      Shell::Get()->overview_controller()->overview_session()->focus_cycler();
+  auto* focus_cycler = Shell::Get()
+                           ->overview_controller()
+                           ->overview_session()
+                           ->focus_cycler_old();
   if (focus_cycler->IsFocusVisible()) {
     focus_cycler->MoveFocusToView(name_view_);
 
@@ -575,6 +568,16 @@ void SavedDeskItemView::UpdateSavedDeskName() {
         /*is_update=*/true, GetWidget()->GetNativeWindow()->GetRootWindow(),
         saved_desk_->Clone());
   }
+}
+
+std::u16string SavedDeskItemView::ComputeAccessibleName() const {
+  int accessible_text_id =
+      saved_desk_->type() == DeskTemplateType::kTemplate
+          ? IDS_ASH_DESKS_TEMPLATES_LIBRARY_TEMPLATES_GRID_ITEM_ACCESSIBLE_NAME
+          : IDS_ASH_DESKS_TEMPLATES_LIBRARY_SAVE_AND_RECALL_GRID_ITEM_ACCESSIBLE_NAME;
+
+  return l10n_util::GetStringFUTF16(accessible_text_id,
+                                    saved_desk_->template_name());
 }
 
 void SavedDeskItemView::AnimateHover(ui::Layer* layer_to_show,
@@ -734,7 +737,7 @@ void SavedDeskItemView::OnSavedDeskNameChanged(const std::u16string& new_name) {
   DCHECK(!new_name.empty());
   name_view_->SetText(new_name);
   name_view_->ResetTemporaryName();
-  SetAccessibleName(new_name);
+  SetAccessibleName(ComputeAccessibleName());
 
   // This will trigger `name_view_` to compute its new preferred bounds and
   // invalidate the layout for `this`.

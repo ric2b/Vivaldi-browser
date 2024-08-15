@@ -222,15 +222,7 @@ base::FilePath ConstructCaptureFilename(
     base_path = base_path.Append(base::UTF8ToWide(new_string));
 #endif
   }
-  base_path = base_path.AddExtension(extension);
-
-  // Ensure unique filename.
-  int unique_number = base::GetUniquePathNumber(base_path);
-  if (unique_number > 0) {
-    base_path = base_path.InsertBeforeExtensionASCII(
-        base::StringPrintf(" (%d)", unique_number));
-  }
-  return base_path;
+  return base::GetUniquePath(base_path.AddExtension(extension));
 }
 
 std::unique_ptr<CaptureData> SaveBitmapOnWorkerThread(

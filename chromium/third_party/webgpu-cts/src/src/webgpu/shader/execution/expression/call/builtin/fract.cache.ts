@@ -1,4 +1,6 @@
-import { FP } from '../../../../../util/floating_point.js';
+import { assert } from '../../../../../../common/util/util.js';
+import { FP, FPInterval } from '../../../../../util/floating_point.js';
+import { kFractTable } from '../../binary/af_data.js';
 import { makeCaseCache } from '../../case_cache.js';
 
 const kCommonValues = [
@@ -29,8 +31,8 @@ const kTraitSpecificValues = {
   ],
 };
 
-// Cases: [f32|f16]
-const cases = (['f32', 'f16'] as const)
+// Cases: [f32|f16|abstract]
+const concrete_cases = (['f32', 'f16'] as const)
   .map(trait => ({
     [`${trait}`]: () => {
       return FP[trait].generateScalarToIntervalCases(
@@ -42,4 +44,19 @@ const cases = (['f32', 'f16'] as const)
   }))
   .reduce((a, b) => ({ ...a, ...b }), {});
 
-export const d = makeCaseCache('fract', cases);
+// Cases: [abstract]
+const abstract_cases = () => {
+  return FP.abstract.generateScalarToIntervalCases(
+    [...kFractTable.keys()],
+    'finite',
+    (x: number) => {
+      assert(kFractTable.has(x));
+      return kFractTable.get(x) as FPInterval;
+    }
+  );
+};
+
+export const d = makeCaseCache('fract', {
+  abstract: abstract_cases,
+  ...concrete_cases,
+});

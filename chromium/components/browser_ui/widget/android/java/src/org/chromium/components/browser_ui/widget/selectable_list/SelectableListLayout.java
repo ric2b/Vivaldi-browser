@@ -73,6 +73,7 @@ public class SelectableListLayout<E> extends FrameLayout
     private FadingShadowView mToolbarShadow;
 
     private int mEmptyStringResId;
+    private CharSequence mEmptySubheadingString;
 
     private UiConfig mUiConfig;
 
@@ -214,19 +215,19 @@ public class SelectableListLayout<E> extends FrameLayout
     /**
      * Initializes the SelectionToolbar.
      *
-     * @param toolbarLayoutId The resource id of the toolbar layout. This will be inflated into
-     *                        a ViewStub.
+     * @param toolbarLayoutId The resource id of the toolbar layout. This will be inflated into a
+     *     ViewStub.
      * @param delegate The SelectionDelegate that will inform the toolbar of selection changes.
      * @param titleResId The resource id of the title string. May be 0 if this class shouldn't set
-     *                   set a title when the selection is cleared.
+     *     set a title when the selection is cleared.
      * @param normalGroupResId The resource id of the menu group to show when a selection isn't
-     *                         established.
+     *     established.
      * @param selectedGroupResId The resource id of the menu item to show when a selection is
-     *                           established.
+     *     established.
      * @param listener The OnMenuItemClickListener to set on the toolbar.
      * @param updateStatusBarColor Whether the status bar color should be updated to match the
-     *                             toolbar color. If true, the status bar will only be updated if
-     *                             the current device fully supports theming and is on Android M+.
+     *     toolbar color. If true, the status bar will only be updated if the current device fully
+     *     supports theming and is on Android M+.
      * @return The initialized SelectionToolbar.
      */
     public SelectableListToolbar<E> initializeToolbar(
@@ -237,12 +238,61 @@ public class SelectableListLayout<E> extends FrameLayout
             int selectedGroupResId,
             @Nullable OnMenuItemClickListener listener,
             boolean updateStatusBarColor) {
+        return initializeToolbar(
+                toolbarLayoutId,
+                delegate,
+                titleResId,
+                normalGroupResId,
+                selectedGroupResId,
+                listener,
+                updateStatusBarColor,
+                /* menuResId= */ 0,
+                false);
+    }
+
+    /**
+     * Initializes the SelectionToolbar with the option to show the back button in normal view.
+     * #onNavigationBack must also be overridden in order to assign behavior to the button.
+     *
+     * @param toolbarLayoutId The resource id of the toolbar layout. This will be inflated into a
+     *     ViewStub.
+     * @param delegate The SelectionDelegate that will inform the toolbar of selection changes.
+     * @param titleResId The resource id of the title string. May be 0 if this class shouldn't set
+     *     set a title when the selection is cleared.
+     * @param normalGroupResId The resource id of the menu group to show when a selection isn't
+     *     established.
+     * @param selectedGroupResId The resource id of the menu item to show when a selection is
+     *     established.
+     * @param listener The OnMenuItemClickListener to set on the toolbar.
+     * @param updateStatusBarColor Whether the status bar color should be updated to match the
+     *     toolbar color. If true, the status bar will only be updated if the current device fully
+     *     supports theming and is on Android M+.
+     * @param menuResId The resource id of the menu. {@code 0} if not required.
+     * @param showBackInNormalView Whether the back arrow should appear on the normal view.
+     * @return The initialized SelectionToolbar.
+     */
+    public SelectableListToolbar<E> initializeToolbar(
+            int toolbarLayoutId,
+            SelectionDelegate<E> delegate,
+            int titleResId,
+            int normalGroupResId,
+            int selectedGroupResId,
+            @Nullable OnMenuItemClickListener listener,
+            boolean updateStatusBarColor,
+            int menuResId,
+            boolean showBackInNormalView) {
         mToolbarStub.setLayoutResource(toolbarLayoutId);
         @SuppressWarnings("unchecked")
         SelectableListToolbar<E> toolbar = (SelectableListToolbar<E>) mToolbarStub.inflate();
         mToolbar = toolbar;
         mToolbar.initialize(
-                delegate, titleResId, normalGroupResId, selectedGroupResId, updateStatusBarColor);
+                delegate,
+                titleResId,
+                normalGroupResId,
+                selectedGroupResId,
+                updateStatusBarColor,
+                menuResId,
+                showBackInNormalView);
 
         if (listener != null) {
             mToolbar.setOnMenuItemClickListener(listener);
@@ -275,6 +325,7 @@ public class SelectableListLayout<E> extends FrameLayout
 
     /**
      * Initializes the empty state view with an image, heading, and subheading.
+     *
      * @param imageResId Image view to show when the selectable list is empty.
      * @param emptyHeadingStringResId Heading string to show when the selectable list is empty.
      * @param emptySubheadingStringResId SubString to show when the selectable list is empty.
@@ -283,6 +334,15 @@ public class SelectableListLayout<E> extends FrameLayout
     // @TODO: (crbugs.com/1443648) Refactor return value for ForTesting method
     public TextView initializeEmptyStateView(
             int imageResId, int emptyHeadingStringResId, int emptySubheadingStringResId) {
+        CharSequence emptySubheadingString = getResources().getString(emptySubheadingStringResId);
+        return initializeEmptyStateView(imageResId, emptyHeadingStringResId, emptySubheadingString);
+    }
+
+    /**
+     * @see {@link #initializeEmptyStateView(int, int, int)}
+     */
+    public TextView initializeEmptyStateView(
+            int imageResId, int emptyHeadingStringResId, CharSequence emptySubheadingString) {
         // Initialize and inflate empty state view stub.
         ViewStub emptyViewStub = findViewById(R.id.empty_state_view_stub);
         View emptyStateView = emptyViewStub.inflate();
@@ -295,7 +355,7 @@ public class SelectableListLayout<E> extends FrameLayout
 
         // Set empty state properties.
         setEmptyStateImageRes(imageResId);
-        setEmptyStateViewText(emptyHeadingStringResId, emptySubheadingStringResId);
+        setEmptyStateViewText(emptyHeadingStringResId, emptySubheadingString);
         return mEmptyView;
     }
 
@@ -315,22 +375,31 @@ public class SelectableListLayout<E> extends FrameLayout
      */
     public void setEmptyViewText(int emptyStringResId) {
         mEmptyStringResId = emptyStringResId;
-
         mEmptyView.setText(mEmptyStringResId);
     }
 
     /**
      * Sets the view text when the selectable list is empty.
+     *
      * @param emptyStringResId Heading string to show when the selectable list is empty.
      * @param emptySubheadingStringResId SubString to show when the selectable list is empty.
      */
     public void setEmptyStateViewText(int emptyHeadingStringResId, int emptySubheadingStringResId) {
-        mEmptyStringResId = emptyHeadingStringResId;
+        CharSequence emptySubheadingString = getResources().getString(emptySubheadingStringResId);
+        setEmptyStateViewText(emptyHeadingStringResId, emptySubheadingString);
+    }
 
+    /**
+     * @see {@link #setEmptyStateViewText(int, int)}
+     */
+    public void setEmptyStateViewText(
+            int emptyHeadingStringResId, CharSequence emptySubheadingString) {
+        mEmptyStringResId = emptyHeadingStringResId;
+        mEmptySubheadingString = emptySubheadingString;
         mEmptyView.setText(mEmptyStringResId);
         // Vivaldi
         if (mEmptyStateSubHeadingView != null) // End Vivaldi
-        mEmptyStateSubHeadingView.setText(emptySubheadingStringResId);
+        mEmptyStateSubHeadingView.setText(emptySubheadingString);
     }
 
     /**
@@ -390,22 +459,36 @@ public class SelectableListLayout<E> extends FrameLayout
 
     /**
      * Called when a search is starting.
+     *
      * @param searchEmptyStringResId The string to show when the selectable list is empty during a
-     *         search.
+     *     search.
+     */
+    public void onStartSearch(String searchEmptyString) {
+        onStartSearch(searchEmptyString, 0);
+    }
+
+    /**
+     * @see {@link #onStartSearch(String, int)}
      */
     public void onStartSearch(@StringRes int searchEmptyStringResId) {
-        onStartSearch(getContext().getString(searchEmptyStringResId));
+        onStartSearch(getContext().getString(searchEmptyStringResId), 0);
     }
 
     /**
      * Called when a search is starting.
+     *
      * @param searchEmptyString The string to show when the selectable list is empty during a
-     *         search.
+     *     search.
+     * @param searchEmptySubheadingResId The resource ID of the string to show as the description.
      */
-    public void onStartSearch(String searchEmptyString) {
+    public void onStartSearch(String searchEmptyString, int searchEmptySubheadingResId) {
         mRecyclerView.setItemAnimator(null);
         mToolbarShadow.setVisibility(View.VISIBLE);
         mEmptyView.setText(searchEmptyString);
+        if (searchEmptySubheadingResId != 0) {
+            if (BuildConfig.IS_VIVALDI && mEmptyStateSubHeadingView != null) // End Vivaldi
+            mEmptyStateSubHeadingView.setText(searchEmptySubheadingResId);
+        }
         onBackPressStateChanged();
 
         if (BuildConfig.IS_VIVALDI) // Vivaldi
@@ -417,6 +500,9 @@ public class SelectableListLayout<E> extends FrameLayout
         mRecyclerView.setItemAnimator(mItemAnimator);
         setToolbarShadowVisibility();
         mEmptyView.setText(mEmptyStringResId);
+        if (BuildConfig.IS_VIVALDI && mEmptyStateSubHeadingView != null) // End Vivaldi
+        mEmptyStateSubHeadingView.setText(mEmptySubheadingString);
+
         onBackPressStateChanged();
 
         if (BuildConfig.IS_VIVALDI) // Vivaldi

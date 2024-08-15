@@ -8,53 +8,127 @@
 #include <vector>
 
 #include "ash/ash_export.h"
-#include "base/containers/flat_map.h"
-#include "base/functional/callback_forward.h"
+#include "ash/birch/birch_model.h"
+#include "ash/wm/overview/birch/birch_bar_constants.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "ui/base/models/simple_menu_model.h"
+#include "ui/base/ui_base_types.h"
+#include "ui/gfx/geometry/point.h"
+
+class PrefRegistrySimple;
 
 namespace ash {
 
+class BirchBarMenuModelAdapter;
 class BirchBarView;
+class BirchChipButton;
 class BirchItem;
 
 // The controller used to manage the birch bar in every `OverviewGrid`. It will
 // fetch data from `BirchModel` and distribute the data to birch bars.
-class BirchBarController {
+class ASH_EXPORT BirchBarController : public BirchModel::Observer,
+                                      public ui::SimpleMenuModel::Delegate {
  public:
-  BirchBarController();
+  explicit BirchBarController(bool from_pine_service);
   BirchBarController(const BirchBarController&) = delete;
   BirchBarController& operator=(const BirchBarController&) = delete;
-  ~BirchBarController();
+  ~BirchBarController() override;
 
   // Gets the instance of the controller. It can be nullptr when the Overview
   // session is shutting down.
   static BirchBarController* Get();
 
-  // Register a bar view with its initialized callback which will be called
-  // after initialization.
-  void RegisterBar(BirchBarView* bar_view,
-                   base::OnceClosure bar_initialized_callback);
+  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
+
+  // Register a bar view.
+  void RegisterBar(BirchBarView* bar_view);
 
   // Called if the given `bar_view` is being destroyed.
   void OnBarDestroying(BirchBarView* bar_view);
 
+  // Show a context menu for the chip which is right clicked by the user.
+  void ShowChipContextMenu(BirchChipButton* chip,
+                           BirchSuggestionType chip_type,
+                           const gfx::Point& point,
+                           ui::MenuSourceType source_type);
+
+  // Called if a suggestion is hidden by user from context menu.
+  void OnItemHiddenByUser(BirchItem* item);
+
+  // Called if the user shows/hides the suggestions from context menu.
+  void SetShowBirchSuggestions(bool show);
+
+  // Gets if the user allows the suggestions to show.
+  bool GetShowBirchSuggestions() const;
+
+  // Called if the user shows/hides the given type of suggestions.
+  void SetShowSuggestionType(BirchSuggestionType type, bool show);
+
+  // Gets if the user allows to show the given type of suggestions.
+  bool GetShowSuggestionType(BirchSuggestionType type) const;
+
+  // ui::SimpleMenuModel::Delegate:
+  void ExecuteCommand(int command_id, int event_flags) override;
+
+  BirchBarMenuModelAdapter* chip_menu_model_adapter_for_testing() {
+    return chip_menu_model_adapter_.get();
+  }
+
  private:
+  friend class BirchBarMenuTest;
+
+  // Fetches data from birch model if there is no fetching in progress.
+  void MaybeFetchDataFromModel();
+
   // Called when birch items are fetched from model or the fetching process
   // timed out.
-  void OnItemsFecthedFromModel();
+  void OnItemsFetchedFromModel();
 
-  // initialize the given `bar_view` with the items fetched from model.
-  void InitBar(BirchBarView* bar_view);
+  // initialize the given `bar_view` with the `items`.
+  void InitBarWithItems(BirchBarView* bar_view,
+                        const std::vector<std::unique_ptr<BirchItem>>& items);
+
+  // Called when the context menu is closed.
+  void OnChipContextMenuClosed();
+
+  // BirchModel::Observer:
+  void OnBirchClientSet() override;
+
+  // Called when the show suggestions pref changes.
+  void OnShowSuggestionsPrefChanged();
+
+  // Called when the customize suggestion prefs change.
+  void OnCustomizeSuggestionsPrefChanged();
 
   // Birch items fetched from model.
   std::vector<std::unique_ptr<BirchItem>> items_;
 
-  // The map of each bar view to corresponding initialized callback.
-  base::flat_map<raw_ptr<BirchBarView>, base::OnceClosure> bar_map_;
+  std::unique_ptr<BirchBarMenuModelAdapter> chip_menu_model_adapter_;
 
-  // Indicates if the data fetching process completes or not.
-  bool data_fetch_complete_ = false;
+  std::vector<raw_ptr<BirchBarView>> bar_views_;
+
+  // Indicates if the data fetching is in progress.
+  bool data_fetch_in_progress_ = false;
+
+  // True if the overview session was triggered by the pine service.
+  const bool from_pine_service_;
+
+  // Show/hide suggestions pref change registrar.
+  PrefChangeRegistrar show_suggestions_pref_registrar_;
+
+  // Customize suggestions pref change registrar.
+  PrefChangeRegistrar customize_suggestions_pref_registrar_;
+
+  // To avoid sending multiple data requests when reset suggestions, the
+  // variable is used as an indicator to block the data request from
+  // `OnCustomizeSuggestionsPrefChanged`.
+  bool hold_data_request_on_suggestion_pref_change_ = false;
+
+  base::ScopedObservation<BirchModel, BirchModel::Observer>
+      birch_model_observer_{this};
 
   base::WeakPtrFactory<BirchBarController> weak_ptr_factory_{this};
 };

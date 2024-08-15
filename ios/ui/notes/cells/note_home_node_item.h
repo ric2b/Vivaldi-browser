@@ -27,10 +27,9 @@ class NoteNode;
 #pragma mark - Helpers
 
 - (NSString*)noteTitle;
-
 - (NSDate*)createdAt;
-
 - (NSDate*)lastModified;
+- (BOOL)isFolder;
 
 @end
 

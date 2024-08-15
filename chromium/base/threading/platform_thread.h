@@ -16,7 +16,6 @@
 #include <type_traits>
 
 #include "base/base_export.h"
-#include "base/feature_list.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/process/process_handle.h"
 #include "base/sequence_checker_impl.h"
@@ -35,6 +34,10 @@
 #elif BUILDFLAG(IS_POSIX)
 #include <pthread.h>
 #include <unistd.h>
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS)
+#include "base/feature_list.h"
 #endif
 
 namespace base {
@@ -286,11 +289,8 @@ class BASE_EXPORT PlatformThreadApple : public PlatformThreadBase {
 
   static TimeDelta GetCurrentThreadRealtimePeriodForTest();
 
-  // Signals that the feature list has been initialized which allows to check
-  // the feature's value now and initialize state. This prevents race
-  // conditions where the feature is being checked while it is being
-  // initialized, which can cause a crash.
-  static void InitFeaturesPostFieldTrial();
+  // Initializes features for this class. See `base::features::Init()`.
+  static void InitializeFeatures();
 };
 #endif  // BUILDFLAG(IS_APPLE)
 
@@ -335,11 +335,18 @@ class BASE_EXPORT PlatformThreadLinux : public PlatformThreadBase {
 #if BUILDFLAG(IS_CHROMEOS)
 BASE_EXPORT BASE_DECLARE_FEATURE(kSetRtForDisplayThreads);
 
+class CrossProcessPlatformThreadDelegate;
+
 class BASE_EXPORT PlatformThreadChromeOS : public PlatformThreadLinux {
  public:
-  // Signals that the feature list has been initialized. Used for preventing
-  // race conditions and crashes, see comments in PlatformThreadApple.
-  static void InitFeaturesPostFieldTrial();
+  // Sets a delegate which handles thread type changes for threads of another
+  // process. This must be externally synchronized with any call to
+  // SetCurrentThreadType.
+  static void SetCrossProcessPlatformThreadDelegate(
+      CrossProcessPlatformThreadDelegate* delegate);
+
+  // Initializes features for this class. See `base::features::Init()`.
+  static void InitializeFeatures();
 
   // Toggles a specific thread's type at runtime. This is the ChromeOS-specific
   // version and includes Linux's functionality but does slightly more. See
@@ -391,6 +398,24 @@ void SetCurrentThreadType(ThreadType thread_type,
 
 void SetCurrentThreadTypeImpl(ThreadType thread_type,
                               MessagePumpType pump_type_hint);
+
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+void SetThreadTypeLinux(PlatformThreadId process_id,
+                        PlatformThreadId thread_id,
+                        ThreadType thread_type,
+                        IsViaIPC via_ipc);
+#endif
+#if BUILDFLAG(IS_CHROMEOS)
+void SetThreadTypeChromeOS(PlatformThreadId process_id,
+                           PlatformThreadId thread_id,
+                           ThreadType thread_type,
+                           IsViaIPC via_ipc);
+#endif
+#if BUILDFLAG(IS_CHROMEOS)
+inline constexpr auto SetThreadType = SetThreadTypeChromeOS;
+#elif BUILDFLAG(IS_LINUX)
+inline constexpr auto SetThreadType = SetThreadTypeLinux;
+#endif
 
 }  // namespace internal
 

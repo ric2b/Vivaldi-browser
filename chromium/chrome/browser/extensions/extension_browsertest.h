@@ -65,6 +65,8 @@ class ExtensionBrowserTest : virtual public InProcessBrowserTest,
     kEventPage,
     // A Service Worker based extension.
     kServiceWorker,
+    // A Service Worker based extension that uses MV2.
+    kServiceWorkerMV2,
     // An extension with a persistent background page.
     kPersistentBackground,
     // Use the value from the manifest. This is used when the test
@@ -82,6 +84,15 @@ class ExtensionBrowserTest : virtual public InProcessBrowserTest,
   void OnExtensionLoaded(content::BrowserContext* browser_context,
                          const Extension* extension) override;
   void OnShutdown(ExtensionRegistry* registry) override;
+
+  static bool IsServiceWorkerContext(ContextType context_type) {
+    return context_type == ContextType::kServiceWorker ||
+           context_type == ContextType::kServiceWorkerMV2;
+  }
+
+  bool IsContextTypeForServiceWorker() const {
+    return IsServiceWorkerContext(context_type_);
+  }
 
  protected:
   struct LoadOptions {
@@ -426,11 +437,11 @@ class ExtensionBrowserTest : virtual public InProcessBrowserTest,
 
   // Used for setting the default scoped current channel for extension browser
   // tests to UNKNOWN (trunk), in order to enable channel restricted features.
-  // TODO(crbug/1427323): We should remove this and have the current channel
-  // respect what is defined on the builder. If a test requires a specific
-  // channel for a channel restricted feature, it should be defining its own
-  // scoped channel override. As this stands, it means we don't really have
-  // non-trunk coverage for most extension browser tests.
+  // TODO(crbug.com/40261741): We should remove this and have the current
+  // channel respect what is defined on the builder. If a test requires a
+  // specific channel for a channel restricted feature, it should be defining
+  // its own scoped channel override. As this stands, it means we don't really
+  // have non-trunk coverage for most extension browser tests.
   ScopedCurrentChannel current_channel_;
 
   // Disable external install UI.

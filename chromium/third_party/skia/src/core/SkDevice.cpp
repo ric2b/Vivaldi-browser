@@ -19,6 +19,7 @@
 #include "include/core/SkPixmap.h"
 #include "include/core/SkRRect.h"
 #include "include/core/SkRSXform.h"
+#include "include/core/SkScalar.h"
 #include "include/core/SkShader.h"
 #include "include/core/SkSpan.h"
 #include "include/core/SkSurface.h"
@@ -130,12 +131,10 @@ void SkDevice::drawRegion(const SkRegion& region, const SkPaint& paint) {
     }
 }
 
-void SkDevice::drawArc(const SkRect& oval, SkScalar startAngle,
-                       SkScalar sweepAngle, bool useCenter, const SkPaint& paint) {
+void SkDevice::drawArc(const SkArc& arc, const SkPaint& paint) {
     SkPath path;
     bool isFillNoPathEffect = SkPaint::kFill_Style == paint.getStyle() && !paint.getPathEffect();
-    SkPathPriv::CreateDrawArcPath(&path, oval, startAngle, sweepAngle, useCenter,
-                                  isFillNoPathEffect);
+    SkPathPriv::CreateDrawArcPath(&path, arc, isFillNoPathEffect);
     this->drawPath(path, paint);
 }
 
@@ -336,14 +335,15 @@ void SkDevice::drawDevice(SkDevice* device,
         this->drawSpecial(deviceImage.get(), device->getRelativeTransform(*this), sampling, paint);
 #else
         // SkCanvas only calls drawDevice() when there are no filters (so the transform is pixel
-        // aligned), and it will have added transparent padding. Inset the special image by 1px
-        // and draw with a fast constraint.
-        deviceImage = deviceImage->makeSubset(SkIRect::MakeSize(deviceImage->dimensions())
-                                                      .makeInset(1, 1));
-        SkMatrix offsetTransform = device->getRelativeTransform(*this);
-        offsetTransform.preTranslate(1.f, 1.f); // account for the 1px inset
-        this->drawSpecial(deviceImage.get(), offsetTransform, sampling, paint,
-                          SkCanvas::kFast_SrcRectConstraint);
+        // aligned). As such it can be drawn without clamping.
+        SkMatrix relativeTransform = device->getRelativeTransform(*this);
+        const bool strict = sampling != SkFilterMode::kNearest ||
+                            !relativeTransform.isTranslate() ||
+                            !SkScalarIsInt(relativeTransform.getTranslateX()) ||
+                            !SkScalarIsInt(relativeTransform.getTranslateY());
+        this->drawSpecial(deviceImage.get(), relativeTransform, sampling, paint,
+                          strict ? SkCanvas::kStrict_SrcRectConstraint
+                                 : SkCanvas::kFast_SrcRectConstraint);
 #endif
     }
 }

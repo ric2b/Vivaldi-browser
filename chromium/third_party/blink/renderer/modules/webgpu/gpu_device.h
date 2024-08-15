@@ -69,7 +69,7 @@ enum class GPUSingletonWarning {
 
 class GPUDevice final : public EventTarget,
                         public ExecutionContextClient,
-                        public DawnObject<WGPUDevice> {
+                        public DawnObject<wgpu::Device> {
   DEFINE_WRAPPERTYPEINFO();
   USING_PRE_FINALIZER(GPUDevice, Dispose);
 
@@ -77,7 +77,7 @@ class GPUDevice final : public EventTarget,
   explicit GPUDevice(ExecutionContext* execution_context,
                      scoped_refptr<DawnControlClientHolder> dawn_control_client,
                      GPUAdapter* adapter,
-                     WGPUDevice dawn_device,
+                     wgpu::Device dawn_device,
                      const GPUDeviceDescriptor* descriptor,
                      GPUDeviceLostInfo* lost_info = nullptr);
 
@@ -92,7 +92,7 @@ class GPUDevice final : public EventTarget,
   GPUAdapter* adapter() const;
   GPUSupportedFeatures* features() const;
   GPUSupportedLimits* limits() const { return limits_.Get(); }
-  ScriptPromiseTyped<GPUDeviceLostInfo> lost(ScriptState* script_state);
+  ScriptPromise<GPUDeviceLostInfo> lost(ScriptState* script_state);
 
   GPUQueue* queue();
   bool destroyed() const;
@@ -126,10 +126,10 @@ class GPUDevice final : public EventTarget,
   GPUComputePipeline* createComputePipeline(
       const GPUComputePipelineDescriptor* descriptor,
       ExceptionState& exception_state);
-  ScriptPromiseTyped<GPURenderPipeline> createRenderPipelineAsync(
+  ScriptPromise<GPURenderPipeline> createRenderPipelineAsync(
       ScriptState* script_state,
       const GPURenderPipelineDescriptor* descriptor);
-  ScriptPromiseTyped<GPUComputePipeline> createComputePipelineAsync(
+  ScriptPromise<GPUComputePipeline> createComputePipelineAsync(
       ScriptState* script_state,
       const GPUComputePipelineDescriptor* descriptor);
 
@@ -143,8 +143,7 @@ class GPUDevice final : public EventTarget,
                               ExceptionState& exception_state);
 
   void pushErrorScope(const V8GPUErrorFilter& filter);
-  ScriptPromiseTyped<IDLNullable<GPUError>> popErrorScope(
-      ScriptState* script_state);
+  ScriptPromise<IDLNullable<GPUError>> popErrorScope(ScriptState* script_state);
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(uncapturederror, kUncapturederror)
 
@@ -152,7 +151,7 @@ class GPUDevice final : public EventTarget,
   const AtomicString& InterfaceName() const override;
   ExecutionContext* GetExecutionContext() const override;
 
-  void InjectError(WGPUErrorType type, const char* message);
+  void InjectError(wgpu::ErrorType type, const char* message);
   void AddConsoleWarning(const String& message);
   void AddConsoleWarning(const char* message);
   void AddSingletonWarning(GPUSingletonWarning type);
@@ -184,26 +183,26 @@ class GPUDevice final : public EventTarget,
   void OnDeviceLostError(WGPUDeviceLostReason, const char* message);
 
   void OnPopErrorScopeCallback(
-      ScriptPromiseResolverTyped<IDLNullable<GPUError>>* resolver,
+      ScriptPromiseResolver<IDLNullable<GPUError>>* resolver,
       WGPUErrorType type,
       const char* message);
 
   void OnCreateRenderPipelineAsyncCallback(
       const String& label,
-      ScriptPromiseResolverTyped<GPURenderPipeline>* resolver,
+      ScriptPromiseResolver<GPURenderPipeline>* resolver,
       WGPUCreatePipelineAsyncStatus status,
       WGPURenderPipeline render_pipeline,
       const char* message);
   void OnCreateComputePipelineAsyncCallback(
       const String& label,
-      ScriptPromiseResolverTyped<GPUComputePipeline>* resolver,
+      ScriptPromiseResolver<GPUComputePipeline>* resolver,
       WGPUCreatePipelineAsyncStatus status,
       WGPUComputePipeline compute_pipeline,
       const char* message);
 
   void setLabelImpl(const String& value) override {
     std::string utf8_label = value.Utf8();
-    GetProcs().deviceSetLabel(GetHandle(), utf8_label.c_str());
+    GetHandle().SetLabel(utf8_label.c_str());
   }
 
   Member<GPUAdapter> adapter_;

@@ -24,7 +24,6 @@ import com.google.android.material.color.MaterialColors;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.night_mode.NightModeUtils;
-import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
@@ -381,10 +380,8 @@ public class OmniboxResourceProvider {
      * the given context.
      */
     public static @ColorInt int getStandardSuggestionBackgroundColor(Context context) {
-        return OmniboxFeatures.shouldShowModernizeVisualUpdate(context)
-                ? ChromeColors.getSurfaceColor(
-                        context, R.dimen.omnibox_suggestion_bg_elevation_modern)
-                : ChromeColors.getSurfaceColor(context, R.dimen.omnibox_suggestion_bg_elevation);
+        return ChromeColors.getSurfaceColor(
+                context, R.dimen.omnibox_suggestion_bg_elevation_modern);
     }
 
     /**
@@ -418,11 +415,6 @@ public class OmniboxResourceProvider {
 
     /** Get the top padding for the MV carousel. */
     public static @Px int getMostVisitedCarouselTopPadding(Context context) {
-        if (!OmniboxFeatures.shouldShowModernizeVisualUpdate(context)) {
-            return context.getResources()
-                    .getDimensionPixelSize(R.dimen.omnibox_carousel_suggestion_padding);
-        }
-
         context = maybeReplaceContextForSmallTabletWindow(context);
         return context.getResources()
                 .getDimensionPixelSize(R.dimen.omnibox_carousel_suggestion_padding_smaller);
@@ -430,11 +422,6 @@ public class OmniboxResourceProvider {
 
     /** Get the bottom padding for the MV carousel. */
     public static @Px int getMostVisitedCarouselBottomPadding(Context context) {
-        if (!OmniboxFeatures.shouldShowModernizeVisualUpdate(context)) {
-            return context.getResources()
-                    .getDimensionPixelSize(R.dimen.omnibox_carousel_suggestion_padding);
-        }
-
         context = maybeReplaceContextForSmallTabletWindow(context);
         return context.getResources()
                 .getDimensionPixelSize(R.dimen.omnibox_carousel_suggestion_padding);
@@ -458,10 +445,6 @@ public class OmniboxResourceProvider {
      * focused.
      */
     public static @Px int getFocusedStatusViewLeftSpacing(Context context) {
-        if (!OmniboxFeatures.shouldShowModernizeVisualUpdate(context)) {
-            return 0;
-        }
-
         return context.getResources()
                 .getDimensionPixelSize(R.dimen.location_bar_status_view_left_space_width_bigger);
     }
@@ -471,15 +454,8 @@ public class OmniboxResourceProvider {
      * focused.
      */
     public static @Px int getToolbarOnFocusHeightIncrease(Context context) {
-        if (!OmniboxFeatures.shouldShowModernizeVisualUpdate(context)) {
-            return 0;
-        }
-
         return context.getResources()
-                .getDimensionPixelSize(
-                        OmniboxFeatures.shouldShowActiveColorOnOmnibox()
-                                ? R.dimen.toolbar_url_focus_height_increase_active_color
-                                : R.dimen.toolbar_url_focus_height_increase_no_active_color);
+                .getDimensionPixelSize(R.dimen.toolbar_url_focus_height_increase);
     }
 
     /** Returns the amount of pixels for the toolbar's side padding when the omnibox is focused. */
@@ -500,7 +476,6 @@ public class OmniboxResourceProvider {
     public static @Px int getSuggestionDecorationIconSizeWidth(Context context) {
         Context wrappedContext = maybeReplaceContextForSmallTabletWindow(context);
         if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
-                && OmniboxFeatures.shouldShowModernizeVisualUpdate(context)
                 && wrappedContext == context) {
             return context.getResources()
                     .getDimensionPixelSize(R.dimen.omnibox_suggestion_icon_area_size_modern);
@@ -539,8 +514,7 @@ public class OmniboxResourceProvider {
      */
     @VisibleForTesting
     static Context maybeReplaceContextForSmallTabletWindow(Context context) {
-        if (!OmniboxFeatures.shouldShowModernizeVisualUpdate(context)
-                || !DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)) {
+        if (!DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)) {
             return context;
         }
 

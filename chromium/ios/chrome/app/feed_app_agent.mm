@@ -8,17 +8,26 @@
 #import <UserNotifications/UserNotifications.h>
 
 #import "components/metrics/metrics_service.h"
+#import "components/search_engines/prepopulated_engines.h"
+#import "components/search_engines/template_url.h"
+#import "components/search_engines/template_url_prepopulate_data.h"
+#import "components/search_engines/template_url_service.h"
+#import "components/signin/public/identity_manager/identity_manager.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
+#import "ios/chrome/browser/content_notification/model/content_notification_util.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service_factory.h"
 #import "ios/chrome/browser/discover_feed/model/feed_constants.h"
 #import "ios/chrome/browser/push_notification/model/provisional_push_notification_util.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_client_id.h"
+#import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/utils/first_run_util.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_constants.h"
 #import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h"
 
@@ -72,9 +81,35 @@ NSString* const kFeedLastBackgroundRefreshTimestamp =
             self.appState.mainBrowserState);
       }
     }
+
+    BOOL isContentNotificationProvisionalEnabled = NO;
+    if (IsContentNotificationExperimentEnalbed()) {
+      // Only start doing the content notificaiton user eligibiliey check when
+      // content notification experiment is enabled.
+      AuthenticationService* authService =
+          AuthenticationServiceFactory::GetForBrowserState(
+              self.appState.mainBrowserState);
+      bool isUserSignedIn = authService && authService->HasPrimaryIdentity(
+                                               signin::ConsentLevel::kSignin);
+
+      const TemplateURL* defaultSearchURLTemplate =
+          ios::TemplateURLServiceFactory::GetForBrowserState(
+              self.appState.mainBrowserState)
+              ->GetDefaultSearchProvider();
+
+      bool isDefaultSearchEngine = defaultSearchURLTemplate &&
+                                   defaultSearchURLTemplate->prepopulate_id() ==
+                                       TemplateURLPrepopulateData::google.id;
+
+      PrefService* pref_service = self.appState.mainBrowserState->GetPrefs();
+
+      isContentNotificationProvisionalEnabled =
+          IsContentNotificationProvisionalEnabled(
+              isUserSignedIn, isDefaultSearchEngine, pref_service);
+    }
+
     if ((!IsFirstRunRecent(base::Days(30)) &&
-         IsContentPushNotificationsProvisionalEnabled()) ||
-        IsContentPushNotificationsProvisionalBypass()) {
+         isContentNotificationProvisionalEnabled)) {
       // This method does not show a UI prompt to the user. Provisional
       // notifications are authorized without any user input if the user hasn't
       // previously disabled notifications.
@@ -109,7 +144,8 @@ NSString* const kFeedLastBackgroundRefreshTimestamp =
     // This is not strictly necessary, but it makes it more explicit. The OS
     // limits to 1 refresh task at any time, and a new request will replace a
     // previous request. Tasks are only executed in the background.
-    // TODO(crbug.com/1344866): Coordinate background tasks when more are added.
+    // TODO(crbug.com/40231943): Coordinate background tasks when more are
+    // added.
     [BGTaskScheduler.sharedScheduler cancelAllTaskRequests];
   }
 }
@@ -157,7 +193,7 @@ NSString* const kFeedLastBackgroundRefreshTimestamp =
 // Schedules a background refresh task with an earliest begin date in the
 // future. The OS limits to 1 refresh task at any time, and a new request will
 // replace a previous request. Tasks are only executed in the background.
-// TODO(crbug.com/1343695): It is critically important that we do not schedule
+// TODO(crbug.com/40231475): It is critically important that we do not schedule
 // other background fetch tasks (e.g., with other identifiers) anywhere,
 // including other files. The OS only allows one fetch task at a time.
 // Eventually, background fetches should be managed by a central manager.
@@ -173,7 +209,7 @@ NSString* const kFeedLastBackgroundRefreshTimestamp =
   request.earliestBeginDate = [self earliestBackgroundRefreshBeginDate];
   // Error in scheduling is intentionally not handled since the fallback is that
   // the user will just refresh in the foreground.
-  // TODO(crbug.com/1343695): Consider logging error in histogram.
+  // TODO(crbug.com/40231475): Consider logging error in histogram.
   [BGTaskScheduler.sharedScheduler submitTaskRequest:request error:nil];
 }
 
@@ -201,7 +237,7 @@ NSString* const kFeedLastBackgroundRefreshTimestamp =
     return;
   }
 
-  // TODO(crbug.com/1396459): Kill the app if in a cold start because currently
+  // TODO(crbug.com/40249480): Kill the app if in a cold start because currently
   // there are issues with background cold starts.
   if (!_wasForegroundedAtLeastOnce) {
     [self handleColdStartAndKillApp];
@@ -233,7 +269,7 @@ NSString* const kFeedLastBackgroundRefreshTimestamp =
   [FeedMetricsRecorder
       recordFeedRefreshTrigger:FeedRefreshTrigger::kBackgroundColdStart];
 
-  // TODO(crbug.com/1396459): Remove this workaround and enable background
+  // TODO(crbug.com/40249480): Remove this workaround and enable background
   // cold starts.
   [self maybeNotifyRefreshSuccess:NO];
   GetApplicationContext()->GetMetricsService()->OnAppEnterBackground();

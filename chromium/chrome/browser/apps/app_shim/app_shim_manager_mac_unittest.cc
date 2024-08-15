@@ -32,7 +32,6 @@
 #include "chrome/test/base/test_browser_window.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/prefs/testing_pref_service.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_task_environment.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -296,6 +295,9 @@ class TestAppShim : public chrome::mojom::AppShim,
       RequestNotificationPermissionCallback callback) override {
     request_notification_permission_callback_.SetValue(std::move(callback));
   }
+  void BindChildHistogramFetcherFactory(
+      mojo::PendingReceiver<metrics::mojom::ChildHistogramFetcherFactory>
+          receiver) override {}
 
   // mac_notifications::mojom::MacNotificationProvider:
   void BindNotificationService(
@@ -959,6 +961,9 @@ TEST_F(AppShimManagerTest, AppLifetimeOld) {
 }
 
 TEST_F(AppShimManagerTest, FailToLaunch) {
+  AppShimRegistry::Get()->OnAppInstalledForProfile(kTestAppIdA,
+                                                   profile_path_a_);
+
   // When the app activates, it requests a launch.
   ShimLaunchedCallback launch_callback;
   delegate_->SetCaptureShimLaunchedCallback(&launch_callback);
@@ -988,6 +993,9 @@ TEST_F(AppShimManagerTest, FailToLaunch) {
 }
 
 TEST_F(AppShimManagerTest, FailToConnect) {
+  AppShimRegistry::Get()->OnAppInstalledForProfile(kTestAppIdA,
+                                                   profile_path_a_);
+
   // When the app activates, it requests a launch.
   ShimLaunchedCallback launched_callback;
   delegate_->SetCaptureShimLaunchedCallback(&launched_callback);
@@ -1033,6 +1041,9 @@ TEST_F(AppShimManagerTest, FailToConnect) {
 }
 
 TEST_F(AppShimManagerTest, FailCodeSignature) {
+  AppShimRegistry::Get()->OnAppInstalledForProfile(kTestAppIdA,
+                                                   profile_path_a_);
+
   manager_->SetAcceptablyCodeSigned(false);
   ShimLaunchedCallback launched_callback;
   delegate_->SetCaptureShimLaunchedCallback(&launched_callback);

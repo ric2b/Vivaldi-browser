@@ -9,6 +9,7 @@
  */
 #include "call/rtp_transport_controller_send.h"
 
+#include <cstdint>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -26,7 +27,9 @@
 #include "call/rtp_video_sender.h"
 #include "logging/rtc_event_log/events/rtc_event_remote_estimate.h"
 #include "logging/rtc_event_log/events/rtc_event_route_change.h"
+#include "modules/rtp_rtcp/include/rtp_rtcp_defines.h"
 #include "modules/rtp_rtcp/source/rtcp_packet/transport_feedback.h"
+#include "modules/rtp_rtcp/source/rtp_header_extensions.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/logging.h"
 #include "rtc_base/rate_limiter.h"
@@ -82,10 +85,12 @@ RtpTransportControllerSend::RtpTransportControllerSend(
       controller_factory_override_(config.network_controller_factory),
       controller_factory_fallback_(
           std::make_unique<GoogCcNetworkControllerFactory>(
-              config.network_state_predictor_factory)),
+              GoogCcFactoryConfig{.network_state_predictor_factory =
+                                      config.network_state_predictor_factory})),
       process_interval_(controller_factory_fallback_->GetProcessInterval()),
       last_report_block_time_(
           Timestamp::Millis(env_.clock().TimeInMilliseconds())),
+      initial_config_(env_),
       reset_feedback_on_route_change_(
           !env_.field_trials().IsEnabled("WebRTC-Bwe-NoFeedbackReset")),
       add_pacing_to_cwin_(env_.field_trials().IsEnabled(
@@ -101,8 +106,6 @@ RtpTransportControllerSend::RtpTransportControllerSend(
       env_.field_trials().Lookup("WebRTC-Bwe-NetworkRouteConstraints"));
   initial_config_.constraints =
       ConvertConstraints(config.bitrate_config, &env_.clock());
-  initial_config_.event_log = &env_.event_log();
-  initial_config_.key_value_config = &env_.field_trials();
   RTC_DCHECK(config.bitrate_config.start_bitrate_bps > 0);
 
   pacer_.SetPacingRates(
@@ -112,6 +115,11 @@ RtpTransportControllerSend::RtpTransportControllerSend(
     // Default burst interval overriden by config.
     pacer_.SetSendBurstInterval(*config.pacer_burst_interval);
   }
+  packet_router_.RegisterNotifyBweCallback(
+      [this](const RtpPacketToSend& packet,
+             const PacedPacketInfo& pacing_info) {
+        return NotifyBweOfPacedSentPacket(packet, pacing_info);
+      });
 }
 
 RtpTransportControllerSend::~RtpTransportControllerSend() {
@@ -224,11 +232,6 @@ RtpTransportControllerSend::network_state_estimate_observer() {
   return this;
 }
 
-TransportFeedbackObserver*
-RtpTransportControllerSend::transport_feedback_observer() {
-  return this;
-}
-
 RtpPacketSender* RtpTransportControllerSend::packet_sender() {
   return &pacer_;
 }
@@ -259,6 +262,12 @@ void RtpTransportControllerSend::ReconfigureBandwidthEstimation(
   RTC_DCHECK_RUN_ON(&sequence_checker_);
   bwe_settings_ = settings;
 
+  streams_config_.enable_repeated_initial_probing =
+      bwe_settings_.allow_probe_without_media;
+  bool allow_probe_without_media = bwe_settings_.allow_probe_without_media &&
+                                   packet_router_.SupportsRtxPayloadPadding();
+  pacer_.SetAllowProbeWithoutMediaPacket(allow_probe_without_media);
+
   if (controller_) {
     // Recreate the controller and handler.
     control_handler_ = nullptr;
@@ -272,9 +281,6 @@ void RtpTransportControllerSend::ReconfigureBandwidthEstimation(
       UpdateNetworkAvailability();
     }
   }
-  pacer_.SetAllowProbeWithoutMediaPacket(
-      bwe_settings_.allow_probe_without_media &&
-      packet_router_.SupportsRtxPayloadPadding());
 }
 
 void RtpTransportControllerSend::RegisterTargetTransferRateObserver(
@@ -570,9 +576,20 @@ void RtpTransportControllerSend::OnRttUpdate(Timestamp receive_time,
     PostUpdates(controller_->OnRoundTripTimeUpdate(report));
 }
 
-void RtpTransportControllerSend::OnAddPacket(
-    const RtpPacketSendInfo& packet_info) {
+void RtpTransportControllerSend::NotifyBweOfPacedSentPacket(
+    const RtpPacketToSend& packet,
+    const PacedPacketInfo& pacing_info) {
   RTC_DCHECK_RUN_ON(&sequence_checker_);
+
+  if (!packet.transport_sequence_number()) {
+    return;
+  }
+  if (!packet.packet_type()) {
+    RTC_DCHECK_NOTREACHED() << "Unknown packet type";
+    return;
+  }
+
+  RtpPacketSendInfo packet_info = RtpPacketSendInfo::From(packet, pacing_info);
   Timestamp creation_time =
       Timestamp::Millis(env_.clock().TimeInMilliseconds());
   feedback_demuxer_.AddPacket(packet_info);

@@ -9,6 +9,7 @@
   <script src="/dom/events/scrolling/scroll_support.js"></script>
   <script src="/css/css-scroll-snap-2/resources/common.js"></script>
   <script src="/css/css-scroll-snap-2/resources/user-scroll-common.js"></script>
+  <script src="/web-animations/testcommon.js"></script>
 </head>
 
 <body>
@@ -179,6 +180,27 @@
         assertSnapEvent(evts[0], { block: snap_area_2, inline: null });
         assertSnapEvent(evts[1], { block: snap_area_1, inline: null });
       }, "snapchanging fires as scroll moves through different snap targets.");
+
+      // Touch scroll test.
+      promise_test(async (t) => {
+        await waitForCompositorCommit();
+        const scroller_middle = Math.round(scroller.clientWidth / 2);
+        const test_data = {
+          scroller: scroller,
+          scrolling_function: async () => {
+            const start_pos = { x: scroller_middle, y: snap_area_2.offsetTop };
+            const end_pos = { x: scroller_middle, y: 0 };
+            await snap_event_touch_scroll_helper(start_pos, end_pos);
+          },
+          expected_snap_targets: { block: snap_area_2, inline: null },
+          expected_scroll_offsets: {
+            x: 0,
+            y: snap_area_2.offsetTop
+          }
+        };
+        await test_snap_event(t, test_data, "snapchanging",
+                              /*use_onsnap_member*/true);
+      }, "touch scrolling fires Element.onsnapchanging.");
 
     // snapchanging doesn't fire test.
     promise_test(async (t) => {

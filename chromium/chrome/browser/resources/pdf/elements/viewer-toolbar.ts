@@ -5,17 +5,18 @@
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
+import 'chrome://resources/cr_elements/cr_progress/cr_progress.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
-import 'chrome://resources/polymer/v3_0/paper-progress/paper-progress.js';
 import './icons.html.js';
 import './viewer-download-controls.js';
 import './viewer-page-selector.js';
 import './pdf-shared.css.js';
 import './shared-vars.css.js';
-// <if expr="enable_ink">
+// <if expr="enable_ink or enable_pdf_ink2">
 import './viewer-annotations-bar.js';
+// </if>
+// <if expr="enable_ink">
 import './viewer-annotations-mode-dialog.js';
-
 // </if>
 
 import type {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
@@ -60,7 +61,7 @@ export class ViewerToolbarElement extends PolymerElement {
 
   static get properties() {
     return {
-      // <if expr="enable_ink">
+      // <if expr="enable_ink or enable_pdf_ink2">
       annotationAvailable: Boolean,
       annotationMode: {
         type: Boolean,
@@ -88,6 +89,9 @@ export class ViewerToolbarElement extends PolymerElement {
 
       pageNo: Number,
       pdfAnnotationsEnabled: Boolean,
+      // <if expr="enable_pdf_ink2">
+      pdfInk2Enabled: Boolean,
+      // </if>
       // <if expr="enable_screen_ai_service">
       pdfOcrEnabled: Boolean,
       // </if>
@@ -141,7 +145,9 @@ export class ViewerToolbarElement extends PolymerElement {
         type: Boolean,
         value: false,
       },
+      // </if>
 
+      // <if expr="enable_ink or enable_pdf_ink2">
       showAnnotationsBar_: {
         type: Boolean,
         computed: 'computeShowAnnotationsBar_(' +
@@ -174,11 +180,19 @@ export class ViewerToolbarElement extends PolymerElement {
   private loading_: boolean = true;
   private viewportZoomPercent_: number;
 
-  // <if expr="enable_ink">
+  // <if expr="enable_ink or enable_pdf_ink2">
   annotationAvailable: boolean;
   annotationMode: boolean;
-  private showAnnotationsModeDialog_: boolean;
+
   private showAnnotationsBar_: boolean;
+  // </if>
+
+  // <if expr="enable_ink">
+  private showAnnotationsModeDialog_: boolean;
+  // </if>
+
+  // <if expr="enable_pdf_ink2">
+  pdfInk2Enabled: boolean;
   // </if>
 
   // <if expr="enable_screen_ai_service">
@@ -232,7 +246,7 @@ export class ViewerToolbarElement extends PolymerElement {
     this.getZoomInput_().value = `${this.viewportZoomPercent_}%`;
   }
 
-  // <if expr="enable_ink">
+  // <if expr="enable_ink or enable_pdf_ink2">
   private computeShowAnnotationsBar_(): boolean {
     return this.pdfAnnotationsEnabled && !this.loading_ && this.annotationMode;
   }
@@ -388,14 +402,25 @@ export class ViewerToolbarElement extends PolymerElement {
       this.toggleAnnotation();
     }
   }
+  // </if>
 
+  // <if expr="enable_ink or enable_pdf_ink2">
   private onAnnotationClick_() {
+    // <if expr="enable_pdf_ink2">
+    if (this.pdfInk2Enabled) {
+      this.toggleAnnotation();
+      return;
+    }
+    // </if> enable_pdf_ink2
+
+    // <if expr="enable_ink">
     if (!this.rotated && !this.twoUpViewEnabled) {
       this.toggleAnnotation();
       return;
     }
 
     this.showAnnotationsModeDialog_ = true;
+    // </if> enable_ink
   }
 
   toggleAnnotation() {
@@ -403,11 +428,18 @@ export class ViewerToolbarElement extends PolymerElement {
     this.dispatchEvent(new CustomEvent(
         'annotation-mode-toggled', {detail: newAnnotationMode}));
 
+    // <if expr="enable_pdf_ink2">
+    // Don't toggle display annotations for Ink2.
+    if (this.pdfInk2Enabled) {
+      return;
+    }
+    // </if> enable_pdf_ink2
+
     if (newAnnotationMode && !this.displayAnnotations_) {
       this.toggleDisplayAnnotations_();
     }
   }
-  // </if>
+  // </if> enable_ink or enable_pdf_ink2
 
   // <if expr="enable_screen_ai_service">
   private async onPdfOcrClick_() {

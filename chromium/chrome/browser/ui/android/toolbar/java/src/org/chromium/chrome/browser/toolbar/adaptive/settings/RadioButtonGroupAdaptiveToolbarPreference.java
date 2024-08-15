@@ -42,6 +42,9 @@ public class RadioButtonGroupAdaptiveToolbarPreference extends Preference
     private boolean mCanUseAddToBookmarks;
     private boolean mCanUseReadAloud;
 
+    // Vivaldi
+    private @NonNull RadioButtonWithDescription mTrackerShield;
+
     public RadioButtonGroupAdaptiveToolbarPreference(Context context, AttributeSet attrs) {
         super(context, attrs);
         // Inflating from XML.
@@ -53,6 +56,10 @@ public class RadioButtonGroupAdaptiveToolbarPreference extends Preference
         super.onBindViewHolder(holder);
         mGroup = (RadioButtonWithDescriptionLayout) holder.findViewById(R.id.adaptive_radio_group);
         mGroup.setOnCheckedChangeListener(this);
+
+        // Vivaldi
+        mTrackerShield = (RadioButtonWithDescription) holder.findViewById(
+                R.id.adaptive_option_tacker_shield);
 
         mAutoButton =
                 (RadioButtonWithDescription)
@@ -69,6 +76,10 @@ public class RadioButtonGroupAdaptiveToolbarPreference extends Preference
                         holder.findViewById(R.id.adaptive_option_add_to_bookmarks);
         mReadAloudButton =
                 (RadioButtonWithDescription) holder.findViewById(R.id.adaptive_option_read_aloud);
+
+        // Vivaldi
+        mAutoButton.setVisibility(View.GONE);
+
         initializeRadioButtonSelection();
         RecordUserAction.record("Mobile.AdaptiveToolbarButton.SettingsPage.Opened");
     }
@@ -124,6 +135,8 @@ public class RadioButtonGroupAdaptiveToolbarPreference extends Preference
             mSelected = AdaptiveToolbarButtonVariant.ADD_TO_BOOKMARKS;
         } else if (mReadAloudButton.isChecked()) {
             mSelected = AdaptiveToolbarButtonVariant.READ_ALOUD;
+        } else if (mTrackerShield.isChecked()) { // Vivaldi
+            mSelected = AdaptiveToolbarButtonVariant.TRACKER_SHIELD;
         } else {
             assert false : "No matching setting found.";
         }
@@ -162,6 +175,8 @@ public class RadioButtonGroupAdaptiveToolbarPreference extends Preference
                 return mAddToBookmarksButton;
             case AdaptiveToolbarButtonVariant.READ_ALOUD:
                 return mReadAloudButton;
+            case AdaptiveToolbarButtonVariant.TRACKER_SHIELD: // Vivaldi
+                return mTrackerShield;
         }
         return null;
     }
@@ -186,6 +201,9 @@ public class RadioButtonGroupAdaptiveToolbarPreference extends Preference
                 break;
             case AdaptiveToolbarButtonVariant.READ_ALOUD:
                 stringRes = R.string.adaptive_toolbar_button_preference_read_aloud;
+                break;
+            case AdaptiveToolbarButtonVariant.TRACKER_SHIELD: // Vivaldi
+                stringRes = R.string.prefs_ads_tracking;
                 break;
             default:
                 assert false : "Unknown variant " + variant;

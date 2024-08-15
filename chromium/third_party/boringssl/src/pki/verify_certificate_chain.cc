@@ -229,6 +229,23 @@ void VerifyExtendedKeyUsage(const ParsedCertificate &cert,
     }
   }
 
+  // Apply strict only to leaf certificates in these cases.
+  if (required_key_purpose == KeyPurpose::CLIENT_AUTH_STRICT_LEAF) {
+    if (!is_target_cert) {
+      required_key_purpose = KeyPurpose::CLIENT_AUTH;
+    } else {
+      required_key_purpose = KeyPurpose::CLIENT_AUTH_STRICT;
+    }
+  }
+
+  if (required_key_purpose == KeyPurpose::SERVER_AUTH_STRICT_LEAF) {
+    if (!is_target_cert) {
+      required_key_purpose = KeyPurpose::SERVER_AUTH;
+    } else {
+      required_key_purpose = KeyPurpose::SERVER_AUTH_STRICT;
+    }
+  }
+
   auto add_error_if_strict = [&](CertErrorId id) {
     if (required_key_purpose == KeyPurpose::SERVER_AUTH_STRICT ||
         required_key_purpose == KeyPurpose::CLIENT_AUTH_STRICT) {
@@ -300,6 +317,8 @@ void VerifyExtendedKeyUsage(const ParsedCertificate &cert,
 
   switch (required_key_purpose) {
     case KeyPurpose::ANY_EKU:
+    case KeyPurpose::CLIENT_AUTH_STRICT_LEAF:
+    case KeyPurpose::SERVER_AUTH_STRICT_LEAF:
       assert(0);  // NOTREACHED
       return;
     case KeyPurpose::SERVER_AUTH:
@@ -1023,6 +1042,15 @@ void PathVerifier::BasicCertificateProcessing(
       *shortcircuit_chain_validation = true;
       errors->AddError(cert_errors::kVerifySignedDataFailed);
     }
+  } else {
+    // If `working_public_key_` is null, that indicates the SPKI of the issuer
+    // could not be parsed. Handle this the same way as an invalid signature by
+    // shortcircuiting the rest of verification.
+    // An error should already have been added by ParseAndCheckPublicKey, but
+    // it's added on the CertErrors for the issuer, so we can't BSSL_CHECK
+    // errors->ContainsAnyErrorWithSeverity here. (It will be BSSL_CHECKed when
+    // the shortcircuit_chain_validation is acted on in PathVerifier::Run.)
+    *shortcircuit_chain_validation = true;
   }
   if (*shortcircuit_chain_validation) {
     return;
@@ -1192,6 +1220,8 @@ void VerifyTargetCertIsNotCA(const ParsedCertificate &cert,
         break;
       case KeyPurpose::SERVER_AUTH_STRICT:
       case KeyPurpose::CLIENT_AUTH_STRICT:
+      case KeyPurpose::CLIENT_AUTH_STRICT_LEAF:
+      case KeyPurpose::SERVER_AUTH_STRICT_LEAF:
         errors->AddError(cert_errors::kTargetCertShouldNotBeCa);
         break;
     }
@@ -1570,11 +1600,11 @@ void PathVerifier::Run(
                                time, required_key_purpose, cert_errors,
                                &shortcircuit_chain_validation);
     if (shortcircuit_chain_validation) {
-      // Signature errors should short-circuit the rest of the verification, as
-      // accumulating more errors from untrusted certificates would not be
-      // meaningful.
+      // Signature errors or unparsable SPKIs should short-circuit the rest of
+      // the verification, as accumulating more errors from untrusted
+      // certificates would not be meaningful.
       BSSL_CHECK(
-          cert_errors->ContainsAnyErrorWithSeverity(CertError::SEVERITY_HIGH));
+          errors->ContainsAnyErrorWithSeverity(CertError::SEVERITY_HIGH));
       return;
     }
     if (!is_target_cert) {

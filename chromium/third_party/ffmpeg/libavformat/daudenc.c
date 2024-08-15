@@ -25,6 +25,7 @@
 static int daud_init(struct AVFormatContext *s)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
+    int ret;
 
     if (par->ch_layout.nb_channels != 6) {
         av_log(s, AV_LOG_ERROR,
@@ -40,17 +41,15 @@ static int daud_init(struct AVFormatContext *s)
         return AVERROR(EINVAL);
     }
 
+    ret = ff_stream_add_bitstream_filter(s->streams[0], "pcm_rechunk", "n=2000:pad=0");
+    if (ret < 0)
+        return ret;
+
     return 0;
 }
 
 static int daud_write_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
-    if (pkt->size > 65535) {
-        av_log(s, AV_LOG_ERROR,
-               "Packet size %d too large for s302m, must be <= 65535.\n",
-               pkt->size);
-        return AVERROR_INVALIDDATA;
-    }
     avio_wb16(s->pb, pkt->size);
     avio_wb16(s->pb, 0x8010); // unknown
     avio_write(s->pb, pkt->data, pkt->size);
@@ -63,7 +62,10 @@ const FFOutputFormat ff_daud_muxer = {
     .p.extensions  = "302",
     .p.audio_codec = AV_CODEC_ID_PCM_S24DAUD,
     .p.video_codec = AV_CODEC_ID_NONE,
+    .p.subtitle_codec = AV_CODEC_ID_NONE,
     .p.flags       = AVFMT_NOTIMESTAMPS,
+    .flags_internal   = FF_OFMT_FLAG_MAX_ONE_OF_EACH |
+                        FF_OFMT_FLAG_ONLY_DEFAULT_CODECS,
     .init         = daud_init,
     .write_packet = daud_write_packet,
 };

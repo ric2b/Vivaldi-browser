@@ -263,6 +263,7 @@ class DawnTestBase {
     bool IsANGLESwiftShader() const;
     bool IsANGLED3D11() const;
     bool IsWARP() const;
+    bool IsMesaSoftware() const;
 
     bool IsIntelGen9() const;
     bool IsIntelGen12() const;
@@ -271,6 +272,8 @@ class DawnTestBase {
     bool IsLinux() const;
     bool IsMacOS(int32_t majorVersion = -1, int32_t minorVersion = -1) const;
     bool IsAndroid() const;
+
+    bool IsMesa(const std::string& mesaVersion = "") const;
 
     bool UsesWire() const;
     bool IsImplicitDeviceSyncEnabled() const;
@@ -334,7 +337,7 @@ class DawnTestBase {
     // device loss that aren't expected should result in test failures and not just some warnings
     // printed to stdout.
     testing::StrictMock<testing::MockCallback<WGPUErrorCallback>> mDeviceErrorCallback;
-    testing::StrictMock<testing::MockCallback<WGPUDeviceLostCallback>> mDeviceLostCallback;
+    testing::StrictMock<testing::MockCallback<WGPUDeviceLostCallbackNew>> mDeviceLostCallback;
 
     // Helper methods to implement the EXPECT_ macros
     std::ostringstream& AddBufferExpectation(const char* file,

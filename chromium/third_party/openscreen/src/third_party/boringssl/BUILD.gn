@@ -31,19 +31,7 @@ if (build_with_chromium) {
       "OPENSSL_SMALL",
     ]
 
-    # TODO(https://issuetracker.google.com/202964797): Possibly remove once
-    # building with updated clang.
-    if (current_os == "mac") {
-      defines += [
-        # Since BoringSSL includes .../usr/include/sys/proc.h, which use u_int,
-        # u_short, and u_char, this define is necessary enable the _u_char.h,
-        # _u_short.h, and _u_int.h headers in <sys/_types>.
-        "_DARWIN_C_SOURCE",
-      ]
-    }
     cflags = [ "-w" ]  # Disable all warnings.
-
-    defines += [ "_XOPEN_SOURCE=700" ]
   }
 
   config("no_asm_config") {

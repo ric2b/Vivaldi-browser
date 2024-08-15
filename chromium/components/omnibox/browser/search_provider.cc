@@ -59,6 +59,7 @@
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
+#include "third_party/omnibox_proto/navigational_intent.pb.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/url_constants.h"
 #include "url/url_util.h"
@@ -185,8 +186,8 @@ int SearchProvider::CalculateRelevanceForKeywordVerbatim(
 
 bool SearchProvider::CanSendCurrentPageURLInRequest(
     const GURL& current_page_url,
-    const TemplateURL* template_url,
     metrics::OmniboxEventProto::PageClassification page_classification,
+    const TemplateURL* template_url,
     const SearchTermsData& search_terms_data,
     const AutocompleteProviderClient* client) {
   // Send the current page URL if the request eligiblility and the user settings
@@ -322,9 +323,11 @@ void SearchProvider::Start(const AutocompleteInput& input,
 
   input_ = input;
 
-  // Don't search the query history database for on-focus inputs; these inputs
-  // should only be used to warm up the suggest server.
-  if (!input.IsZeroSuggest()) {
+  // Don't search the history database for on-focus inputs or lens searchboxes.
+  // On-focus inputs should only be used to warm up the suggest server; and Lens
+  // searchboxes do not show suggestions from the history database.
+  if (!input.IsZeroSuggest() &&
+      !omnibox::IsLensSearchbox(input_.current_page_classification())) {
     DoHistoryQuery(minimal_changes);
     // Answers needs scored history results before any suggest query has been
     // started, since the query for answer-bearing results needs additional
@@ -915,6 +918,7 @@ std::unique_ptr<network::SimpleURLLoader> SearchProvider::CreateSuggestLoader(
   search_term_args.input_type = input.type();
   search_term_args.cursor_position = input.cursor_position();
   search_term_args.page_classification = input.current_page_classification();
+  search_term_args.request_source = input.request_source();
   // Session token and prefetch data required for answers.
   search_term_args.session_token =
       client()->GetTemplateURLService()->GetSessionToken();
@@ -924,14 +928,18 @@ std::unique_ptr<network::SimpleURLLoader> SearchProvider::CreateSuggestLoader(
     search_term_args.prefetch_query_type =
         base::NumberToString(prefetch_data_.query_type);
   }
+  // Make sure the Lens interaction response is sent in the request, if
+  // available.
+  search_term_args.lens_overlay_interaction_response =
+      input.lens_overlay_interaction_response();
 
   const SearchTermsData& search_terms_data =
       client()->GetTemplateURLService()->search_terms_data();
 
   // Make sure the current page URL is sent in the request, if it is allowed.
-  if (CanSendCurrentPageURLInRequest(input.current_url(), template_url,
-                                     input.current_page_classification(),
-                                     search_terms_data, client())) {
+  if (CanSendCurrentPageURLInRequest(
+          input.current_url(), input.current_page_classification(),
+          template_url, search_terms_data, client())) {
     search_term_args.current_page_url = input.current_url().spec();
   }
 
@@ -996,7 +1004,8 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
         /*suggestion=*/trimmed_verbatim,
         AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED,
         /*suggest_type=*/omnibox::TYPE_NATIVE_CHROME,
-        /*subtypes=*/{}, /*from_keyword=*/false, verbatim_relevance,
+        /*subtypes=*/{}, /*from_keyword=*/false,
+        /*navigational_intent=*/omnibox::NAV_INTENT_NONE, verbatim_relevance,
         relevance_from_server,
         /*input_text=*/trimmed_verbatim);
     if (has_answer)
@@ -1031,8 +1040,9 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
             /*suggestion=*/trimmed_verbatim,
             AutocompleteMatchType::SEARCH_OTHER_ENGINE,
             /*suggest_type=*/omnibox::TYPE_NATIVE_CHROME,
-            /*subtypes=*/{}, /*from_keyword=*/true, keyword_verbatim_relevance,
-            keyword_relevance_from_server,
+            /*subtypes=*/{}, /*from_keyword=*/true,
+            /*navigational_intent=*/omnibox::NAV_INTENT_NONE,
+            keyword_verbatim_relevance, keyword_relevance_from_server,
             /*input_text=*/trimmed_verbatim);
         AddMatchToMap(verbatim, std::string(),
                       GetInput(verbatim.from_keyword()),
@@ -1215,7 +1225,7 @@ SearchProvider::ScoreHistoryResultsHelper(const HistoryResults& results,
         /*suggestion=*/trimmed_suggestion,
         AutocompleteMatchType::SEARCH_HISTORY,
         /*suggest_type=*/omnibox::TYPE_NATIVE_CHROME, /*subtypes=*/{},
-        is_keyword, relevance,
+        is_keyword, /*navigational_intent=*/omnibox::NAV_INTENT_NONE, relevance,
         /*relevance_from_server=*/false, /*input_text=*/trimmed_input);
     // History results are synchronous; they are received on the last keystroke.
     history_suggestion.set_received_after_last_keystroke(false);

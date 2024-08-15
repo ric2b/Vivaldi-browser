@@ -1,6 +1,10 @@
 load("//bazel:cc_binary_with_flags.bzl", "cc_binary_with_flags")
 load("//bazel:skia_rules.bzl", "exports_files_legacy")
 
+package(
+    default_applicable_licenses = ["//:license"],
+)
+
 licenses(["notice"])
 
 exports_files_legacy()
@@ -55,7 +59,6 @@ cc_binary_with_flags(
         "include_fontmgr": ["custom_directory_fontmgr"],
         "enable_gpu_test_utils": ["True"],
         "enable_svg_canvas": ["True"],
-        "enable_sksl_tracing": ["True"],
     },
     deps = [
         "//:skia_internal",
@@ -66,7 +69,7 @@ cc_binary_with_flags(
         "//tools:registry",
         "//tools:runtime_blend_utils",
         "//tools/gpu:utils",
-        "//tools/sk_app",
+        "//tools/sk_app:legacy_sk_app",
         "//tools/skui",
         "@imgui",
     ],

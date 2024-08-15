@@ -22,11 +22,11 @@
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
-#include "components/subresource_filter/content/browser/ruleset_service.h"
 #include "components/subresource_filter/content/browser/subresource_filter_content_settings_manager.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_test_utils.h"
 #include "components/subresource_filter/content/browser/subresource_filter_profile_context.h"
 #include "components/subresource_filter/content/browser/test_ruleset_publisher.h"
+#include "components/subresource_filter/content/shared/browser/ruleset_service.h"
 #include "components/subresource_filter/core/common/activation_decision.h"
 #include "components/subresource_filter/core/common/activation_list.h"
 #include "components/subresource_filter/core/common/test_ruleset_creator.h"
@@ -67,7 +67,8 @@ void AdverseAdFilterTestHarness::SetUp() {
   // Set up the ruleset service.
   ASSERT_TRUE(ruleset_service_dir_.CreateUniqueTempDir());
   subresource_filter::IndexedRulesetVersion::RegisterPrefs(
-      pref_service_.registry(), subresource_filter::kSafeBrowsingFilterTag);
+      pref_service_.registry(),
+      subresource_filter::kSafeBrowsingRulesetConfig.filter_tag);
   // TODO(csharrison): having separated blocking and background task runners
   // for |ContentRulesetService| and |RulesetService| would be a good idea, but
   // external unit tests code implicitly uses knowledge that blocking and
@@ -79,6 +80,7 @@ void AdverseAdFilterTestHarness::SetUp() {
   //    |AsyncDocumentSubresourceFilter| posts core initialization tasks on
   //    blocking task runner and this it is the current thread task runner.
   auto ruleset_service = std::make_unique<subresource_filter::RulesetService>(
+    subresource_filter::kSafeBrowsingRulesetConfig,
     &pref_service_, base::SingleThreadTaskRunner::GetCurrentDefault(),
     ruleset_service_dir_.GetPath(),
     base::SingleThreadTaskRunner::GetCurrentDefault());

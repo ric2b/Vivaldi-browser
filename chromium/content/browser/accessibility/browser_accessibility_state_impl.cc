@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/check.h"
+#include "base/check_deref.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
@@ -28,6 +29,7 @@
 #include "content/public/browser/scoped_accessibility_mode.h"
 #include "content/public/common/content_switches.h"
 #include "ui/accessibility/accessibility_features.h"
+#include "ui/accessibility/accessibility_switches.h"
 #include "ui/accessibility/ax_mode_histogram_logger.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/events/base_event_utils.h"
@@ -144,7 +146,7 @@ class ModeCollectionForTarget : public base::SupportsUserData::Data {
 const int ModeCollectionForTarget::kUserDataKey;
 
 // Returns a subset of `mode` for delivery to a WebContents.
-ui::AXMode FilterAccessibilityMode(ui::AXMode mode) {
+ui::AXMode FilterAccessibilityModeInvariants(ui::AXMode mode) {
   // Strip kLabelImages if kScreenReader is absent.
   // TODO(grt): kLabelImages is a feature of //chrome. Find a way to
   // achieve this filtering without teaching //content about it. Perhaps via
@@ -162,6 +164,38 @@ ui::AXMode FilterAccessibilityMode(ui::AXMode mode) {
   return mode.has_mode(ui::AXMode::kWebContents)
              ? mode
              : (mode & ui::AXMode::kNativeAPIs);
+}
+
+// Helper for GetProductName and GetProductVersion, gets the product name and
+// version from the content client.
+std::vector<std::string> GetProductNameAndVersion() {
+  // GetProduct() returns a string like "Chrome/aa.bb.cc.dd", split out
+  // the part before and after the "/".
+  std::vector<std::string> product_components = base::SplitString(
+      CHECK_DEREF(CHECK_DEREF(GetContentClient()).browser()).GetProduct(), "/",
+      base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  return product_components;
+}
+
+std::string GetProductName() {
+  std::vector<std::string> product_components = GetProductNameAndVersion();
+  if (product_components.size() != 2) {
+    return "";
+  }
+  return product_components[0];
+}
+
+std::string GetProductVersion() {
+  std::vector<std::string> product_components = GetProductNameAndVersion();
+  if (product_components.size() != 2) {
+    return "";
+  }
+  return product_components[1];
+}
+
+std::string GetToolkitVersion() {
+  CHECK(GetContentClient() && GetContentClient()->browser());
+  return CHECK_DEREF(CHECK_DEREF(GetContentClient()).browser()).GetUserAgent();
 }
 
 }  // namespace
@@ -189,6 +223,10 @@ BrowserAccessibilityStateImpl::Create() {
 
 BrowserAccessibilityStateImpl::BrowserAccessibilityStateImpl()
     : BrowserAccessibilityState(),
+      ax_platform_(*this,
+                   GetProductName(),
+                   GetProductVersion(),
+                   GetToolkitVersion()),
       histogram_delay_(base::Seconds(ACCESSIBILITY_HISTOGRAM_DELAY_SECS)),
       scoped_modes_for_process_(base::BindRepeating(
           &BrowserAccessibilityStateImpl::OnModeChangedForProcess,
@@ -366,14 +404,6 @@ void BrowserAccessibilityStateImpl::UpdateHistogramsForTesting() {
   UpdateHistogramsOnOtherThread();
 }
 
-void BrowserAccessibilityStateImpl::SetCaretBrowsingState(bool enabled) {
-  caret_browsing_enabled_ = enabled;
-}
-
-bool BrowserAccessibilityStateImpl::IsCaretBrowsingEnabled() const {
-  return caret_browsing_enabled_;
-}
-
 void BrowserAccessibilityStateImpl::SetPerformanceFilteringAllowed(
     bool allowed) {
   performance_filtering_allowed_ = allowed;
@@ -435,8 +465,9 @@ ui::AXMode BrowserAccessibilityStateImpl::GetAccessibilityMode() {
 
 ui::AXMode BrowserAccessibilityStateImpl::GetAccessibilityModeForBrowserContext(
     BrowserContext* browser_context) {
-  return GetAccessibilityMode() |
-         ModeCollectionForTarget::GetAccessibilityMode(browser_context);
+  return FilterAccessibilityModeInvariants(
+      GetAccessibilityMode() |
+      ModeCollectionForTarget::GetAccessibilityMode(browser_context));
 }
 
 void BrowserAccessibilityStateImpl::OnUserInputEvent() {
@@ -485,23 +516,6 @@ void BrowserAccessibilityStateImpl::OnUserInputEvent() {
       accessibility_disabled_time_ = now;
       DisableAccessibility();
     }
-  }
-}
-
-void BrowserAccessibilityStateImpl::OnAccessibilityApiUsage() {
-  // See OnUserInputEvent for how this is used to disable accessibility.
-  user_input_event_count_ = 0;
-
-  // See comment above kOnAccessibilityUsageUpdateDelaySecs for why we post a
-  // delayed task.
-  if (!accessibility_update_task_pending_) {
-    accessibility_update_task_pending_ = true;
-    GetUIThreadTaskRunner({})->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(
-            &BrowserAccessibilityStateImpl::UpdateAccessibilityActivityTask,
-            base::Unretained(this)),
-        base::Seconds(kOnAccessibilityUsageUpdateDelaySecs));
   }
 }
 
@@ -581,6 +595,23 @@ void BrowserAccessibilityStateImpl::SetProcessMode(ui::AXMode new_mode) {
   process_accessibility_mode_ = CreateScopedModeForProcess(new_mode);
 }
 
+void BrowserAccessibilityStateImpl::OnAccessibilityApiUsage() {
+  // See OnUserInputEvent for how this is used to disable accessibility.
+  user_input_event_count_ = 0;
+
+  // See comment above kOnAccessibilityUsageUpdateDelaySecs for why we post a
+  // delayed task.
+  if (!accessibility_update_task_pending_) {
+    accessibility_update_task_pending_ = true;
+    GetUIThreadTaskRunner({})->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(
+            &BrowserAccessibilityStateImpl::UpdateAccessibilityActivityTask,
+            base::Unretained(this)),
+        base::Seconds(kOnAccessibilityUsageUpdateDelaySecs));
+  }
+}
+
 std::unique_ptr<ScopedAccessibilityMode>
 BrowserAccessibilityStateImpl::CreateScopedModeForProcess(ui::AXMode mode) {
   return scoped_modes_for_process_.Add(mode);
@@ -607,7 +638,7 @@ void BrowserAccessibilityStateImpl::OnModeChangedForProcess(
       WebContentsImpl::GetAllWebContents(),
       [new_mode](WebContentsImpl* web_contents) {
         if (!web_contents->IsBeingDestroyed()) {
-          web_contents->SetAccessibilityMode(FilterAccessibilityMode(
+          web_contents->SetAccessibilityMode(FilterAccessibilityModeInvariants(
               new_mode |
               ModeCollectionForTarget::GetAccessibilityMode(
                   web_contents->GetBrowserContext()) |
@@ -657,7 +688,7 @@ void BrowserAccessibilityStateImpl::OnModeChangedForBrowserContext(
       [browser_context, mode_for_context](WebContentsImpl* web_contents) {
         if (!web_contents->IsBeingDestroyed() &&
             web_contents->GetBrowserContext() == browser_context) {
-          web_contents->SetAccessibilityMode(FilterAccessibilityMode(
+          web_contents->SetAccessibilityMode(FilterAccessibilityModeInvariants(
               mode_for_context |
               ModeCollectionForTarget::GetAccessibilityMode(web_contents)));
         }
@@ -684,11 +715,11 @@ void BrowserAccessibilityStateImpl::OnModeChangedForWebContents(
   // Combine the effective modes for the process, `web_contents`'s
   // BrowserContext, and for `web_contents.
   static_cast<WebContentsImpl*>(web_contents)
-      ->SetAccessibilityMode(
-          FilterAccessibilityMode(GetAccessibilityMode() |
-                                  ModeCollectionForTarget::GetAccessibilityMode(
-                                      web_contents->GetBrowserContext()) |
-                                  new_mode));
+      ->SetAccessibilityMode(FilterAccessibilityModeInvariants(
+          GetAccessibilityMode() |
+          ModeCollectionForTarget::GetAccessibilityMode(
+              web_contents->GetBrowserContext()) |
+          new_mode));
 }
 
 void BrowserAccessibilityStateImpl::CallInitBackgroundTasksForTesting(

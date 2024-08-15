@@ -198,12 +198,22 @@ enum class ActionButtonsVisibility {
 // Adds a rounded corner limit to the banner view to mimic a two card view.
 @property(nonatomic, assign) BOOL bannerLimitWithRoundedCorner;
 
+// If YES, constrains the scroll view to the top of the view (outside
+// safeAreaLayoutGuide), putting it behind any navigation bars. By default,
+// scroll view is constrained within the safeAreaLayoutGuide.
+// Must be set before view is loaded.
+@property(nonatomic, assign) BOOL layoutBehindNavigationBar;
+
 // Aligns the elements to the top of the view.
 @property(nonatomic, assign) BOOL topAlignedLayout;
 
 // Visibility and style indicator of the primary and secondary action buttons.
 @property(nonatomic, assign, readwrite)
     ActionButtonsVisibility actionButtonsVisibility;
+
+// Whether the primary button should be disabled and have its button text
+// replaced with a spinner. Should be set only after the view is loaded.
+@property(nonatomic, assign) BOOL primaryButtonSpinnerEnabled;
 
 @end
 

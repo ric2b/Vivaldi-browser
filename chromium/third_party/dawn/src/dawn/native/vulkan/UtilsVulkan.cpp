@@ -36,6 +36,7 @@
 #include "dawn/native/vulkan/Forward.h"
 #include "dawn/native/vulkan/TextureVk.h"
 #include "dawn/native/vulkan/VulkanError.h"
+#include "dawn/native/vulkan/VulkanFunctions.h"
 
 namespace dawn::native::vulkan {
 
@@ -280,6 +281,102 @@ std::string GetDeviceDebugPrefixFromDebugName(const char* debugName) {
 
     size_t length = separator - debugName;
     return std::string(debugName, length);
+}
+
+std::vector<VkDrmFormatModifierPropertiesEXT> GetFormatModifierProps(
+    const VulkanFunctions& fn,
+    VkPhysicalDevice vkPhysicalDevice,
+    VkFormat format) {
+    VkFormatProperties2 formatProps = {};
+    formatProps.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
+    PNextChainBuilder formatPropsChain(&formatProps);
+
+    // Obtain the list of Linux DRM format modifiers compatible with a VkFormat
+    VkDrmFormatModifierPropertiesListEXT formatModifierPropsList = {};
+    formatModifierPropsList.drmFormatModifierCount = 0;
+    formatModifierPropsList.pDrmFormatModifierProperties = nullptr;
+    formatPropsChain.Add(&formatModifierPropsList,
+                         VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT);
+
+    fn.GetPhysicalDeviceFormatProperties2(vkPhysicalDevice, format, &formatProps);
+
+    const uint32_t modifierCount = formatModifierPropsList.drmFormatModifierCount;
+
+    std::vector<VkDrmFormatModifierPropertiesEXT> formatModifierPropsVector;
+    formatModifierPropsVector.resize(modifierCount);
+    formatModifierPropsList.pDrmFormatModifierProperties = formatModifierPropsVector.data();
+
+    fn.GetPhysicalDeviceFormatProperties2(vkPhysicalDevice, format, &formatProps);
+    return formatModifierPropsVector;
+}
+
+ResultOrError<VkDrmFormatModifierPropertiesEXT> GetFormatModifierProps(
+    const VulkanFunctions& fn,
+    VkPhysicalDevice vkPhysicalDevice,
+    VkFormat format,
+    uint64_t modifier) {
+    std::vector<VkDrmFormatModifierPropertiesEXT> formatModifierPropsVector =
+        GetFormatModifierProps(fn, vkPhysicalDevice, format);
+
+    // Find the modifier props that match the modifier, and return them.
+    for (const auto& props : formatModifierPropsVector) {
+        if (props.drmFormatModifier == modifier) {
+            return VkDrmFormatModifierPropertiesEXT{props};
+        }
+    }
+    return DAWN_VALIDATION_ERROR("DRM format modifier %u not supported.", modifier);
+}
+
+ResultOrError<VkSamplerYcbcrConversion> CreateSamplerYCbCrConversionCreateInfo(
+    YCbCrVkDescriptor yCbCrDescriptor,
+    Device* device) {
+    uint64_t externalFormat = yCbCrDescriptor.externalFormat;
+    VkFormat vulkanFormat = static_cast<VkFormat>(yCbCrDescriptor.vkFormat);
+    DAWN_INVALID_IF((externalFormat == 0 && vulkanFormat == VK_FORMAT_UNDEFINED),
+                    "Both VkFormat and VkExternalFormatANDROID are undefined.");
+
+    VkComponentMapping vulkanComponent;
+    vulkanComponent.r = static_cast<VkComponentSwizzle>(yCbCrDescriptor.vkComponentSwizzleRed);
+    vulkanComponent.g = static_cast<VkComponentSwizzle>(yCbCrDescriptor.vkComponentSwizzleGreen);
+    vulkanComponent.b = static_cast<VkComponentSwizzle>(yCbCrDescriptor.vkComponentSwizzleBlue);
+    vulkanComponent.a = static_cast<VkComponentSwizzle>(yCbCrDescriptor.vkComponentSwizzleAlpha);
+
+    VkSamplerYcbcrConversionCreateInfo vulkanYCbCrCreateInfo;
+    vulkanYCbCrCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_CREATE_INFO;
+    vulkanYCbCrCreateInfo.pNext = nullptr;
+    vulkanYCbCrCreateInfo.format = vulkanFormat;
+    vulkanYCbCrCreateInfo.ycbcrModel =
+        static_cast<VkSamplerYcbcrModelConversion>(yCbCrDescriptor.vkYCbCrModel);
+    vulkanYCbCrCreateInfo.ycbcrRange =
+        static_cast<VkSamplerYcbcrRange>(yCbCrDescriptor.vkYCbCrRange);
+    vulkanYCbCrCreateInfo.components = vulkanComponent;
+    vulkanYCbCrCreateInfo.xChromaOffset =
+        static_cast<VkChromaLocation>(yCbCrDescriptor.vkXChromaOffset);
+    vulkanYCbCrCreateInfo.yChromaOffset =
+        static_cast<VkChromaLocation>(yCbCrDescriptor.vkYChromaOffset);
+    vulkanYCbCrCreateInfo.chromaFilter = static_cast<VkFilter>(yCbCrDescriptor.vkChromaFilter);
+    vulkanYCbCrCreateInfo.forceExplicitReconstruction =
+        static_cast<VkBool32>(yCbCrDescriptor.forceExplicitReconstruction);
+
+#if DAWN_PLATFORM_IS(ANDROID)
+    VkExternalFormatANDROID vulkanExternalFormat;
+    // Chain VkExternalFormatANDROID only if needed.
+    if (externalFormat != 0) {
+        vulkanExternalFormat.sType = VK_STRUCTURE_TYPE_EXTERNAL_FORMAT_ANDROID;
+        vulkanExternalFormat.pNext = nullptr;
+        vulkanExternalFormat.externalFormat = externalFormat;
+
+        vulkanYCbCrCreateInfo.pNext = &vulkanExternalFormat;
+    }
+#endif  // DAWN_PLATFORM_IS(ANDROID)
+
+    VkSamplerYcbcrConversion samplerYCbCrConversion = VK_NULL_HANDLE;
+    DAWN_TRY(CheckVkSuccess(
+        device->fn.CreateSamplerYcbcrConversion(device->GetVkDevice(), &vulkanYCbCrCreateInfo,
+                                                nullptr, &*samplerYCbCrConversion),
+        "CreateSamplerYcbcrConversion"));
+
+    return samplerYCbCrConversion;
 }
 
 }  // namespace dawn::native::vulkan

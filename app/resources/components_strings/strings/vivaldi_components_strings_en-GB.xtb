@@ -6,6 +6,7 @@
 <translation id="1110994991967754504">Select permission for <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> unexpectedly closed the connection.</translation>
 <translation id="1161325031994447685">Reconnecting to Wi-Fi</translation>
+<translation id="1175364870820465910">&amp;Print...</translation>
 <translation id="1375198122581997741">About Version</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> didn’t send any data.</translation>
 <translation id="1559528461873125649">No such file or directory</translation>
@@ -28,6 +29,7 @@
 <translation id="2355395290879513365">Attackers might be able to see the images you’re looking at on this site and trick you by modifying them.</translation>
 <translation id="2356070529366658676">Ask</translation>
 <translation id="2359808026110333948">Continue</translation>
+<translation id="2388886110302389394">Open page in a new Private window (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Running Network Diagnostics<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">This page has been blocked by an extension</translation>
 <translation id="2501278716633472235">Go back</translation>
@@ -57,6 +59,7 @@
 <translation id="3226128629678568754">Press the reload button to resubmit the data needed to load the page.</translation>
 <translation id="3234666976984236645">Always detect important content on this site</translation>
 <translation id="3308738399950580893">ads</translation>
+<translation id="3384522979010096022">Your organization doesn’t allow you to view this site</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> is currently unreachable.</translation>
 <translation id="3427092606871434483">Allow (default)</translation>
 <translation id="3447661539832366887">The owner of this device turned off the dinosaur game.</translation>
@@ -76,6 +79,7 @@
 <translation id="3950820424414687140">Sign in</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> is blocked</translation>
 <translation id="3987940399970879459">Less than 1 MB</translation>
+<translation id="4075123085690634698">Open page in a new Private window (⇧⌘N)</translation>
 <translation id="4075732493274867456">The client and server don't support a common SSL protocol version or cipher suite.</translation>
 <translation id="4116663294526079822">Always allow on this site</translation>
 <translation id="4130226655945681476">Checking the network cables, modem and router</translation>
@@ -152,6 +156,7 @@
 <translation id="6757797048963528358">Your device went to sleep.</translation>
 <translation id="6890956352250146925">Options for cookies and site data</translation>
 <translation id="6897140037006041989">User Agent</translation>
+<translation id="6957624206566198865">Open page in a new Private tab</translation>
 <translation id="7053983685419859001">Block</translation>
 <translation id="7079718277001814089">This site contains malware</translation>
 <translation id="7096937462164235847">The identity of this website isn't verified.</translation>
@@ -164,7 +169,6 @@
 <translation id="7353601530677266744">Command Line</translation>
 <translation id="7364115444476960850">The page you were trying to access was blocked by Vivaldi's <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profile Path</translation>
-<translation id="7445762425076701745">The identity of the server to which you are connected cannot be fully validated. You are connected to a server using a name valid only within your network, and an external certificate authority has no way to validate ownership. As some certificate authorities will issue certificates for these names regardless, there is no way to ensure that you are connected to the intended website and not to an attacker.</translation>
 <translation id="7455133967321480974">Use global default (Block)</translation>
 <translation id="7518003948725431193">No web page was found for the web address: <ph name="URL" /></translation>
 <translation id="7549584377607005141">This web page requires data that you entered earlier in order to be properly displayed. You can send this data again, but by doing so you will repeat any action this page previously performed.</translation>
@@ -180,6 +184,7 @@
 <translation id="7834399512844817676"><ph name="SITE" /> normally uses encryption to protect your information. When Vivaldi tried to connect to <ph name="SITE" /> this time, the website sent back unusual and incorrect credentials. This may happen when an attacker is trying to pretend to be <ph name="SITE" />, or a Wi-Fi sign-in screen has interrupted the connection. Your information is still secure because Vivaldi stopped the connection before any data was exchanged.</translation>
 <translation id="7878562273885520351">Your password may be compromised</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
+<translation id="7953236668995583915">Reload this page to apply your updated settings on this site</translation>
 <translation id="8025119109950072390">Attackers on this site may trick you into doing something dangerous like installing software or revealing your personal information (for example, passwords, phone numbers, or credit cards).</translation>
 <translation id="8037357227543935929">Ask (default)</translation>
 <translation id="8041940743680923270">Use global default (Ask)</translation>
@@ -203,6 +208,7 @@
 <translation id="8940028675168378100">Blocked by <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Go to site settings</translation>
 <translation id="9001074447101275817">The proxy <ph name="DOMAIN" /> requires a username and password.</translation>
+<translation id="9008201768610948239">Ignore</translation>
 <translation id="9025348182339809926">(Invalid)</translation>
 <translation id="9039213469156557790">Furthermore, this page includes other resources which are not secure. These resources can be viewed by others while in transit, and can be modified by an attacker to change the behaviour of the page.</translation>
 <translation id="9062620674789239642">It may have been moved, edited, or deleted.</translation>

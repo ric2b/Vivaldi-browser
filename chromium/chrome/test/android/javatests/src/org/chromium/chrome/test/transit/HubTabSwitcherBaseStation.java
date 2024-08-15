@@ -21,14 +21,14 @@ import android.view.View;
 import org.hamcrest.Matcher;
 
 import org.chromium.base.test.transit.Elements;
-import org.chromium.base.test.transit.StationFacility;
+import org.chromium.base.test.transit.Facility;
 import org.chromium.base.test.transit.Trip;
 import org.chromium.base.test.transit.ViewElement;
 import org.chromium.base.test.util.ViewActionOnDescendant;
 import org.chromium.chrome.browser.hub.HubToolbarView;
 import org.chromium.chrome.browser.hub.PaneId;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tasks.tab_management.ClosableTabGridView;
+import org.chromium.chrome.browser.tasks.tab_management.TabGridView;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
 
@@ -52,7 +52,7 @@ public abstract class HubTabSwitcherBaseStation extends HubBaseStation {
                     isDescendantOfA(
                             allOf(
                                     withId(R.id.content_view),
-                                    withParent(instanceOf(ClosableTabGridView.class)))),
+                                    withParent(instanceOf(TabGridView.class)))),
                     isDisplayed());
     public static final Matcher<View> TAB_THUMBNAIL =
             allOf(
@@ -60,7 +60,7 @@ public abstract class HubTabSwitcherBaseStation extends HubBaseStation {
                     isDescendantOfA(
                             allOf(
                                     withId(R.id.content_view),
-                                    withParent(instanceOf(ClosableTabGridView.class)))),
+                                    withParent(instanceOf(TabGridView.class)))),
                     isDisplayed());
 
     private final boolean mIsIncognito;
@@ -90,32 +90,30 @@ public abstract class HubTabSwitcherBaseStation extends HubBaseStation {
     public HubTabSwitcherAppMenuFacility openAppMenu() {
         recheckActiveConditions();
 
-        HubTabSwitcherAppMenuFacility menu =
-                new HubTabSwitcherAppMenuFacility(this, mChromeTabbedActivityTestRule);
+        HubTabSwitcherAppMenuFacility menu = new HubTabSwitcherAppMenuFacility(this, mIsIncognito);
 
-        // TODO(crbug/1506104): Click the menu button instead of using test shortcuts. Presently
-        // using the menu directly is flaky.
-        // onView(HUB_MENU_BUTTON).perform(click())
-        return StationFacility.enterSync(menu, (e) -> {});
+        return Facility.enterSync(menu, () -> HUB_MENU_BUTTON.perform(click()));
     }
 
     /**
      * @param index The tab index to select.
-     * @return the {@link BasePageStation} for the tab that was selected.
+     * @return the {@link PageStation} for the tab that was selected.
      */
-    public BasePageStation selectTabAtIndex(int index) {
+    public PageStation selectTabAtIndex(int index) {
         recheckActiveConditions();
 
         PageStation destination =
-                new PageStation(
-                        mChromeTabbedActivityTestRule,
-                        /* incognito= */ false,
-                        /* isOpeningTab= */ false,
-                        /* isSelectingTab= */ true);
+                PageStation.newPageStationBuilder()
+                        .withActivityTestRule(mChromeTabbedActivityTestRule)
+                        .withIncognito(mIsIncognito)
+                        .withIsOpeningTabs(0)
+                        .withIsSelectingTabs(1)
+                        .build();
+
         return Trip.travelSync(
                 this,
                 destination,
-                (t) -> {
+                () -> {
                     ViewActionOnDescendant.performOnRecyclerViewNthItemDescendant(
                             TAB_LIST_RECYCLER_VIEW.getViewMatcher(), index, TAB_THUMBNAIL, click());
                 });
@@ -153,7 +151,7 @@ public abstract class HubTabSwitcherBaseStation extends HubBaseStation {
         return Trip.travelSync(
                 this,
                 tabSwitcher,
-                (t) -> {
+                () -> {
                     ViewActionOnDescendant.performOnRecyclerViewNthItemDescendant(
                             TAB_LIST_RECYCLER_VIEW.getViewMatcher(),
                             index,
@@ -167,11 +165,12 @@ public abstract class HubTabSwitcherBaseStation extends HubBaseStation {
         recheckActiveConditions();
 
         PageStation page =
-                new PageStation(
-                        mChromeTabbedActivityTestRule,
-                        mIsIncognito,
-                        /* isOpeningTab= */ true,
-                        /* isSelectingTab= */ true);
-        return Trip.travelSync(this, page, t -> TOOLBAR_NEW_TAB_BUTTON.perform(click()));
+                PageStation.newPageStationBuilder()
+                        .withActivityTestRule(mChromeTabbedActivityTestRule)
+                        .withIncognito(mIsIncognito)
+                        .withIsOpeningTabs(1)
+                        .withIsSelectingTabs(1)
+                        .build();
+        return Trip.travelSync(this, page, () -> TOOLBAR_NEW_TAB_BUTTON.perform(click()));
     }
 }

@@ -59,7 +59,7 @@ bool ShouldIgnoreAXEventForAutomation(ax::mojom::Event event_type) {
     case ax::mojom::Event::kMediaStartedPlaying:
     case ax::mojom::Event::kMediaStoppedPlaying:
     case ax::mojom::Event::kMenuEnd:
-    case ax::mojom::Event::kMenuListValueChanged:
+    case ax::mojom::Event::kMenuListValueChangedDeprecated:
     case ax::mojom::Event::kMenuPopupEnd:
     case ax::mojom::Event::kMenuPopupStart:
     case ax::mojom::Event::kMenuStart:
@@ -120,14 +120,12 @@ bool ShouldIgnoreGeneratedEventForAutomation(
     case AXEventGenerator::Event::DESCRIPTION_CHANGED:
     case AXEventGenerator::Event::DOCUMENT_SELECTION_CHANGED:
     case AXEventGenerator::Event::DOCUMENT_TITLE_CHANGED:
-    case AXEventGenerator::Event::DROPEFFECT_CHANGED:
     case AXEventGenerator::Event::EDITABLE_TEXT_CHANGED:
     case AXEventGenerator::Event::ENABLED_CHANGED:
     case AXEventGenerator::Event::EXPANDED:
     case AXEventGenerator::Event::FOCUS_CHANGED:
     case AXEventGenerator::Event::FLOW_FROM_CHANGED:
     case AXEventGenerator::Event::FLOW_TO_CHANGED:
-    case AXEventGenerator::Event::GRABBED_CHANGED:
     case AXEventGenerator::Event::HASPOPUP_CHANGED:
     case AXEventGenerator::Event::HIERARCHICAL_LEVEL_CHANGED:
     case AXEventGenerator::Event::IGNORED_CHANGED:

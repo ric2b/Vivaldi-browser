@@ -63,10 +63,6 @@ const char kModernTabStripParameterName[] = "modern-tab-strip-new-tab-button";
 const char kModernTabStripNTBDynamicParam[] = "dynamic";
 const char kModernTabStripNTBStaticParam[] = "static";
 
-BASE_FEATURE(kIncognitoNtpRevamp,
-             "IncognitoNtpRevamp",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kDefaultBrowserIntentsShowSettings,
              "DefaultBrowserIntentsShowSettings",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -80,6 +76,10 @@ const char kIOSDockingPromoNewUserInactiveThresholdHours[] =
     "IOSDockingPromoNewUserInactiveThresholdHours";
 const char kIOSDockingPromoOldUserInactiveThresholdHours[] =
     "IOSDockingPromoOldUserInactiveThresholdHours";
+const char kIOSDockingPromoNewUserInactiveThreshold[] =
+    "IOSDockingPromoNewUserInactiveThreshold";
+const char kIOSDockingPromoOldUserInactiveThreshold[] =
+    "IOSDockingPromoOldUserInactiveThreshold";
 
 BASE_FEATURE(kIOSDockingPromo,
              "IOSDockingPromo",
@@ -101,10 +101,6 @@ constexpr base::FeatureParam<int>
     kNonModalDefaultBrowserPromoCooldownRefactorParam{
         &kNonModalDefaultBrowserPromoCooldownRefactor,
         /*name=*/"cooldown-days", /*default_value=*/14};
-
-BASE_FEATURE(kDefaultBrowserVideoPromo,
-             "DefaultBrowserVideoPromo",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const char kIOSEditMenuPartialTranslateNoIncognitoParam[] =
     "IOSEditMenuPartialTranslateNoIncognitoParam";
@@ -205,6 +201,23 @@ bool IsContextualPanelEnabled() {
   return base::FeatureList::IsEnabled(kContextualPanel);
 }
 
+constexpr base::FeatureParam<int> kLargeContextualPanelEntrypointDelayInSeconds{
+    &kContextualPanel,
+    /*name=*/"large-entrypoint-delay-seconds", /*default_value=*/2};
+
+int LargeContextualPanelEntrypointDelayInSeconds() {
+  return kLargeContextualPanelEntrypointDelayInSeconds.Get();
+}
+
+constexpr base::FeatureParam<int>
+    kLargeContextualPanelEntrypointDisplayedInSeconds{
+        &kContextualPanel,
+        /*name=*/"large-entrypoint-displayed-seconds", /*default_value=*/5};
+
+int LargeContextualPanelEntrypointDisplayedInSeconds() {
+  return kLargeContextualPanelEntrypointDisplayedInSeconds.Get();
+}
+
 BASE_FEATURE(kNonModalDefaultBrowserPromoImpressionLimit,
              "NonModalDefaultBrowserPromoImpressionLimit",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -230,14 +243,6 @@ BASE_FEATURE(kSpotlightDonateNewIntents,
              "SpotlightDonateNewIntents",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kConsistencyNewAccountInterface,
-             "ConsistencyNewAccountInterface",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-bool IsConsistencyNewAccountInterfaceEnabled() {
-  return base::FeatureList::IsEnabled(kConsistencyNewAccountInterface);
-}
-
 BASE_FEATURE(kNewNTPOmniboxLayout,
              "kNewNTPOmniboxLayout",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -252,18 +257,6 @@ BASE_FEATURE(kBottomOmniboxDefaultSetting,
              "BottomOmniboxDefaultSetting",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-bool IsBottomOmniboxSteadyStateEnabled() {
-
-  // Note: (prio@vivaldi.com) - We have bottom omnibox for both iPad and iPhones
-  if (vivaldi::IsVivaldiRunning())
-    return true; // End Vivaldi
-
-  // Bottom omnibox is only available on phones.
-  // TODO(crbug.com/1508532): Cleanup usage of this function as the feature flag
-  // is now enabled by default.
-  return ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE;
-}
-
 BASE_FEATURE(kBottomOmniboxPromoFRE,
              "BottomOmniboxPromoFRE",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -276,7 +269,7 @@ const char kBottomOmniboxPromoParam[] = "BottomOmniboxPromoParam";
 const char kBottomOmniboxPromoParamForced[] = "Forced";
 
 bool IsBottomOmniboxPromoFlagEnabled(BottomOmniboxPromoType type) {
-  if (!IsBottomOmniboxSteadyStateEnabled()) {
+  if (ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_PHONE) {
     return false;
   }
   if ((type == BottomOmniboxPromoType::kFRE ||
@@ -310,7 +303,7 @@ BASE_FEATURE(kOnlyAccessClipboardAsync,
              base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kDefaultBrowserVideoInSettings,
              "DefaultBrowserVideoInSettings",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kThemeColorInTopToolbar,
              "ThemeColorInTopToolbar",
@@ -342,27 +335,27 @@ BASE_FEATURE(kIOSSaveToDrive,
 
 BASE_FEATURE(kIOSSaveToPhotos,
              "IOSSaveToPhotos",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kEnableUIEditMenuInteraction,
-             "EnableUIEditMenuInteraction",
+BASE_FEATURE(kIOSDownloadNoUIUpdateInBackground,
+             "IOSDownloadNoUIUpdateInBackground",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kHistoryOptInForRestoreShortyAndReSignin,
              "HistoryOptInForRestoreShortyAndReSignin",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableBatchUploadFromBookmarksManager,
              "EnableBatchUploadFromBookmarksManager",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableReviewAccountSettingsPromo,
              "EnableReviewAccountSettingsPromo",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kLinkAccountSettingsToPrivacyFooter,
              "LinkAccountSettingsToPrivacyFooter",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableWebChannels,
              "EnableWebChannels",
@@ -395,13 +388,17 @@ BASE_FEATURE(kContentPushNotifications,
              "ContentPushNotifications",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kContentNotificationExperiment,
+             "ContentNotificationExperiment",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsContentNotificationExperimentEnalbed() {
+  return base::FeatureList::IsEnabled(kContentNotificationExperiment);
+}
+
 BASE_FEATURE(kIOSLargeFakebox,
              "IOSLargeFakebox",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kIOSHideFeedWithSearchChoice,
-             "IOSHideFeedWithSearchChoice",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kFullscreenImprovement,
              "FullscreenImprovement",
@@ -411,13 +408,24 @@ BASE_FEATURE(kTabGroupsInGrid,
              "TabGroupsInGrid",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kTabGroupsIPad,
+             "TabGroupsIPad",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 bool IsTabGroupInGridEnabled() {
+  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
+    return base::FeatureList::IsEnabled(kTabGroupsIPad) &&
+           base::FeatureList::IsEnabled(kModernTabStrip);
+  }
   return base::FeatureList::IsEnabled(kTabGroupsInGrid);
 }
 
-BASE_FEATURE(kIOSExternalActionURLs,
-             "IOSExternalActionURLs",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kTabGroupSync, "TabGroupSync", base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsTabGroupSyncEnabled() {
+  return IsTabGroupInGridEnabled() &&
+         base::FeatureList::IsEnabled(kTabGroupSync);
+}
 
 BASE_FEATURE(kDisableLensCamera,
              "DisableLensCamera",
@@ -448,8 +456,6 @@ const char kBackgroundRefreshIntervalInSeconds[] =
     "BackgroundRefreshIntervalInSeconds";
 const char kBackgroundRefreshMaxAgeInSeconds[] =
     "BackgroundRefreshMaxAgeInSeconds";
-const char kIOSHideFeedWithSearchChoiceTargeted[] =
-    "IOSHideFeedWithSearchChoiceTargeted";
 
 bool IsDockingPromoEnabled() {
   return base::FeatureList::IsEnabled(kIOSDockingPromo);
@@ -460,6 +466,20 @@ DockingPromoDisplayTriggerArm DockingPromoExperimentTypeEnabled() {
       base::GetFieldTrialParamByFeatureAsInt(
           kIOSDockingPromo, kIOSDockingPromoExperimentType,
           /*default_value=*/(int)DockingPromoDisplayTriggerArm::kAfterFRE));
+}
+
+const base::TimeDelta InactiveThresholdForNewUsersUntilDockingPromoShown() {
+  return base::GetFieldTrialParamByFeatureAsTimeDelta(
+      kIOSDockingPromo, kIOSDockingPromoNewUserInactiveThreshold,
+      /*default_value=*/
+      base::Hours(HoursInactiveForNewUsersUntilShowingDockingPromo()));
+}
+
+const base::TimeDelta InactiveThresholdForOldUsersUntilDockingPromoShown() {
+  return base::GetFieldTrialParamByFeatureAsTimeDelta(
+      kIOSDockingPromo, kIOSDockingPromoOldUserInactiveThreshold,
+      /*default_value=*/
+      base::Hours(HoursInactiveForOldUsersUntilShowingDockingPromo()));
 }
 
 int HoursInactiveForNewUsersUntilShowingDockingPromo() {
@@ -593,12 +613,6 @@ double GetBackgroundRefreshMaxAgeInSeconds() {
       /*default=*/0);
 }
 
-bool IsIOSHideFeedWithSearchChoiceTargeted() {
-  return base::GetFieldTrialParamByFeatureAsBool(
-      kIOSHideFeedWithSearchChoice, kIOSHideFeedWithSearchChoiceTargeted,
-      /*default=*/true);
-}
-
 bool IsFeedAblationEnabled() {
   return base::FeatureList::IsEnabled(kEnableFeedAblation);
 }
@@ -650,12 +664,23 @@ bool IsContentPushNotificationsProvisionalBypass() {
           NotificationsExperimentTypeProvisionalBypass);
 }
 
-bool IsIOSLargeFakeboxEnabled() {
-  return base::FeatureList::IsEnabled(kIOSLargeFakebox);
+bool IsContentPushNotificationsPromoRegistrationOnly() {
+  return (ContentNotificationsExperimentTypeEnabled() ==
+          NotificationsExperimentTypePromoRegistrationOnly);
 }
 
-bool IsIOSHideFeedWithSearchChoiceEnabled() {
-  return base::FeatureList::IsEnabled(kIOSHideFeedWithSearchChoice);
+bool IsContentPushNotificationsProvisionalRegistrationOnly() {
+  return (ContentNotificationsExperimentTypeEnabled() ==
+          NotificationsExperimentTypeProvisionalRegistrationOnly);
+}
+
+bool IsContentPushNotificationsSetUpListRegistrationOnly() {
+  return (ContentNotificationsExperimentTypeEnabled() ==
+          NotificationsExperimentTypeSetUpListsRegistrationOnly);
+}
+
+bool IsIOSLargeFakeboxEnabled() {
+  return base::FeatureList::IsEnabled(kIOSLargeFakebox);
 }
 
 bool IsKeyboardAccessoryUpgradeEnabled() {
@@ -698,9 +723,9 @@ bool IsFeedContainmentEnabled() {
   return base::FeatureList::IsEnabled(kEnableFeedContainment);
 }
 
-int HomeModuleMinimumPadding() {
-  return base::GetFieldTrialParamByFeatureAsInt(kEnableFeedContainment,
-                                                kHomeModuleMinimumPadding, 30);
+CGFloat HomeModuleMinimumPadding() {
+  return base::GetFieldTrialParamByFeatureAsDouble(
+      kEnableFeedContainment, kHomeModuleMinimumPadding, 8.0);
 }
 
 bool IsTabResumptionEnabled() {
@@ -745,10 +770,6 @@ int TimeUntilShowingCompactedSetUpList() {
       kMagicStack, kSetUpListCompactedTimeThresholdDays, 0);
 }
 
-bool IsExternalActionSchemeHandlingEnabled() {
-  return base::FeatureList::IsEnabled(kIOSExternalActionURLs);
-}
-
 BASE_FEATURE(kInactiveNavigationAfterAppLaunchKillSwitch,
              "kInactiveNavigationAfterAppLaunchKillSwitch",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -776,6 +797,13 @@ BASE_FEATURE(kDisableFullscreenScrolling,
              "DisableFullscreenScrolling",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+bool IsPinnedTabsEnabled() {
+  if (vivaldi::IsVivaldiRunning())
+    return true; // End Vivaldi
+
+  return ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET;
+}
+
 BASE_FEATURE(kPrefetchSystemCapabilitiesOnFirstRun,
              "PrefetchSystemCapabilitiesOnFirstRun",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -784,12 +812,6 @@ bool IsPrefetchingSystemCapabilitiesOnFirstRun() {
   return base::FeatureList::IsEnabled(kPrefetchSystemCapabilitiesOnFirstRun);
 }
 
-// Vivaldi
-BASE_FEATURE(kNewStartPage,
-             "kNewStartPage",
+BASE_FEATURE(kSegmentationPlatformIosModuleRankerCaching,
+             "SegmentationPlatformIosModuleRankerCaching",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-bool IsNewStartPageIsEnabled() {
-  return base::FeatureList::IsEnabled(kNewStartPage);
-}
-// End Vivaldi

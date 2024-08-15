@@ -26,9 +26,9 @@ const UIEdgeInsets titleLabelMaskViewPadding =
 const CGFloat titleLabelMaskBottomPadding = 8.f;
 const CGFloat titleLabelMaskViewHeight = 10.f;
 
-const CGFloat titleLabelMaskBottomPaddingiPad = 4.f;
-const CGFloat titleLabelMaskViewHeightiPad = 6.f;
-const CGSize faviconMaskSizeiPad = CGSizeMake(16.f, 16.f);
+const CGFloat titleLabelMaskBottomPaddingiPad = 6.f;
+const CGFloat titleLabelMaskViewHeightiPad = 10.f;
+const CGSize faviconMaskSizeiPad = CGSizeMake(26.f, 26.f);
 }
 
 @interface VivaldiSpeedDialSmallCell()

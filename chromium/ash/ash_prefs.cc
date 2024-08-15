@@ -41,6 +41,7 @@
 #include "ash/shelf/shelf_controller.h"
 #include "ash/style/color_palette_controller.h"
 #include "ash/style/dark_light_mode_controller_impl.h"
+#include "ash/system/brightness/brightness_controller_chromeos.h"
 #include "ash/system/camera/autozoom_controller_impl.h"
 #include "ash/system/camera/autozoom_nudge_controller.h"
 #include "ash/system/camera/camera_app_prefs.h"
@@ -64,6 +65,7 @@
 #include "ash/system/pcie_peripheral/pcie_peripheral_notification_controller.h"
 #include "ash/system/phonehub/onboarding_nudge_controller.h"
 #include "ash/system/power/battery_saver_controller.h"
+#include "ash/system/power/power_notification_controller.h"
 #include "ash/system/power/power_prefs.h"
 #include "ash/system/power/power_sounds_controller.h"
 #include "ash/system/privacy_hub/privacy_hub_controller.h"
@@ -72,8 +74,10 @@
 #include "ash/system/unified/quick_settings_footer.h"
 #include "ash/system/unified/unified_system_tray_controller.h"
 #include "ash/system/usb_peripheral/usb_peripheral_notification_controller.h"
+#include "ash/system/video_conference/video_conference_tray_controller.h"
 #include "ash/touch/touch_devices_controller.h"
 #include "ash/user_education/user_education_controller.h"
+#include "ash/wallpaper/sea_pen_wallpaper_manager.h"
 #include "ash/wallpaper/wallpaper_daily_refresh_scheduler.h"
 #include "ash/wallpaper/wallpaper_pref_manager.h"
 #include "ash/wallpaper/wallpaper_time_of_day_scheduler.h"
@@ -81,6 +85,7 @@
 #include "ash/wm/desks/templates/saved_desk_util.h"
 #include "ash/wm/float/tablet_mode_tuck_education.h"
 #include "ash/wm/lock_state_controller.h"
+#include "ash/wm/overview/birch/birch_bar_controller.h"
 #include "ash/wm/window_cycle/window_cycle_controller.h"
 #include "ash/wm/window_util.h"
 #include "chromeos/ash/services/assistant/public/cpp/assistant_prefs.h"
@@ -109,6 +114,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry,
   AutozoomControllerImpl::RegisterProfilePrefs(registry);
   AutozoomNudgeController::RegisterProfilePrefs(registry);
   AmbientController::RegisterProfilePrefs(registry);
+  BirchBarController::RegisterProfilePrefs(registry);
   BirchModel::RegisterProfilePrefs(registry);
   CalendarController::RegisterProfilePrefs(registry);
   camera_app_prefs::RegisterProfilePrefs(registry);
@@ -154,14 +160,17 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry,
   ProjectorControllerImpl::RegisterProfilePrefs(registry);
   quick_pair::Mediator::RegisterProfilePrefs(registry);
   ScreensaverImagesPolicyHandler::RegisterPrefs(registry);
+  SeaPenWallpaperManager::RegisterProfilePrefs(registry);
   SearchNotifierController::RegisterProfilePrefs(registry);
   ShelfController::RegisterProfilePrefs(registry);
   SnoopingProtectionController::RegisterProfilePrefs(registry);
+  system::BrightnessControllerChromeos::RegisterProfilePrefs(registry);
   TabletModeTuckEducation::RegisterProfilePrefs(registry);
   TouchDevicesController::RegisterProfilePrefs(registry, for_test);
   UserEducationController::RegisterProfilePrefs(registry);
   MediaTray::RegisterProfilePrefs(registry);
   UsbPeripheralNotificationController::RegisterProfilePrefs(registry);
+  VideoConferenceTrayController::RegisterProfilePrefs(registry);
   VpnDetailedView::RegisterProfilePrefs(registry);
   WallpaperDailyRefreshScheduler::RegisterProfilePrefs(registry);
   WallpaperTimeOfDayScheduler::RegisterProfilePrefs(registry);
@@ -175,6 +184,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry,
     registry->RegisterBooleanPref(prefs::kMouseReverseScroll, false);
     registry->RegisterBooleanPref(prefs::kSendFunctionKeys, false);
     registry->RegisterBooleanPref(prefs::kSuggestedContentEnabled, true);
+    registry->RegisterBooleanPref(prefs::kMahiEnabled, true);
     registry->RegisterBooleanPref(::prefs::kLiveCaptionEnabled, false);
     registry->RegisterListPref(
         chromeos::prefs::kKeepFullscreenWithoutNotificationUrlAllowList);
@@ -214,6 +224,7 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry, bool for_test) {
   KeyboardBacklightColorController::RegisterPrefs(registry);
   BatterySaverController::RegisterLocalStatePrefs(registry);
   PowerSoundsController::RegisterLocalStatePrefs(registry);
+  PowerNotificationController::RegisterLocalStatePrefs(registry);
   quick_pair::ScanningEnabledProvider::RegisterLocalStatePrefs(registry);
 
   if (for_test) {

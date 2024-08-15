@@ -57,7 +57,9 @@ bool AppWebContentsHelper::ShouldSuppressGestureEvent(
 }
 
 content::WebContents* AppWebContentsHelper::OpenURLFromTab(
-    const content::OpenURLParams& params) const {
+    const content::OpenURLParams& params,
+    base::OnceCallback<void(content::NavigationHandle&)>
+        navigation_handle_callback) const {
   // NOTE(andre@vivadi.com): Since we are using WebContents owned by the
   // tabstrip this is all ok. Allow opening urls in the current tab.
   if (vivaldi::IsVivaldiRunning()) {
@@ -85,7 +87,8 @@ content::WebContents* AppWebContentsHelper::OpenURLFromTab(
     return nullptr;
 
   content::WebContents* contents =
-      app_delegate_->OpenURLFromTab(browser_context_, web_contents_, params);
+      app_delegate_->OpenURLFromTab(browser_context_, web_contents_, params,
+                                    std::move(navigation_handle_callback));
   if (!contents) {
     web_contents_->GetPrimaryMainFrame()->AddMessageToConsole(
         blink::mojom::ConsoleMessageLevel::kError,

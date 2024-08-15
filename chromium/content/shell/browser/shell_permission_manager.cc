@@ -167,7 +167,8 @@ ShellPermissionManager::GetPermissionResultForOriginWithoutContext(
 blink::mojom::PermissionStatus
 ShellPermissionManager::GetPermissionStatusForCurrentDocument(
     PermissionType permission,
-    content::RenderFrameHost* render_frame_host) {
+    content::RenderFrameHost* render_frame_host,
+    bool should_include_device_status) {
   if (render_frame_host->IsNestedWithinFencedFrame())
     return blink::mojom::PermissionStatus::DENIED;
   return GetPermissionStatus(
@@ -206,6 +207,7 @@ ShellPermissionManager::SubscribeToPermissionStatusChange(
     RenderProcessHost* render_process_host,
     RenderFrameHost* render_frame_host,
     const GURL& requesting_origin,
+    bool should_include_device_status,
     base::RepeatingCallback<void(blink::mojom::PermissionStatus)> callback) {
   return SubscriptionId();
 }

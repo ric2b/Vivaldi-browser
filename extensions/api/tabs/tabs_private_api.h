@@ -10,6 +10,7 @@
 
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "chrome/browser/extensions/api/tabs/tabs_api.h"
+#include "chrome/browser/ui/performance_controls/tab_resource_usage_collector.h"
 #include "chrome/browser/ui/tabs/tab_change_type.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -100,7 +101,8 @@ class VivaldiPrivateTabObserver
       public translate::TranslateDriver::LanguageDetectionObserver,
       public zoom::ZoomObserver,
       public vivaldi_content::TabActivationDelegate,
-      public content::WebContentsUserData<VivaldiPrivateTabObserver> {
+      public content::WebContentsUserData<VivaldiPrivateTabObserver>,
+      public TabResourceUsageCollector::Observer {
  public:
   explicit VivaldiPrivateTabObserver(content::WebContents* web_contents);
   ~VivaldiPrivateTabObserver() override;
@@ -205,6 +207,9 @@ class VivaldiPrivateTabObserver
 
   void OnPrefsChanged(const std::string& path);
 
+  // TabResourceUsageCollector::Observer:
+  void OnTabResourceMetricsRefreshed() override;
+
   // Show images for all pages loaded in this tab. Default is true.
   bool show_images_ = true;
 
@@ -252,20 +257,6 @@ class TabsPrivateGetFunction : public ExtensionFunction {
 
  protected:
   ~TabsPrivateGetFunction() override = default;
-
- private:
-  // BookmarksFunction:
-  ResponseAction Run() override;
-};
-
-class TabsPrivateDiscardFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("tabsPrivate.discard", TABSPRIVATE_DISCARD)
-
-  TabsPrivateDiscardFunction() = default;
-
- protected:
-  ~TabsPrivateDiscardFunction() override = default;
 
  private:
   // BookmarksFunction:
@@ -422,6 +413,34 @@ class TabsPrivateDetermineTextLanguageFunction : public ExtensionFunction {
  private:
   ResponseAction Run() override;
   void DetermineTextLanguageDone(const std::string& langCode);
+};
+
+class TabsPrivateLoadViaLifeCycleUnitFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.loadViaLifeCycleUnit",
+                             TABSPRIVATE_LOADTHROUGHTABLIFECYCLEUNIT)
+
+  TabsPrivateLoadViaLifeCycleUnitFunction() = default;
+
+ protected:
+  ~TabsPrivateLoadViaLifeCycleUnitFunction() override = default;
+
+ private:
+  ResponseAction Run() override;
+};
+
+class TabsPrivateGetTabPerformanceDataFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.getTabPerformanceData",
+                             TABSPRIVATE_GETTABPERFORMANCEDATA)
+
+  TabsPrivateGetTabPerformanceDataFunction() = default;
+
+ protected:
+  ~TabsPrivateGetTabPerformanceDataFunction() override = default;
+
+ private:
+  ResponseAction Run() override;
 };
 
 }  // namespace extensions

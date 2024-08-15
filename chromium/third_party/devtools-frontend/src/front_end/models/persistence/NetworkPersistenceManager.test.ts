@@ -2,14 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import type * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
-import * as Persistence from '../persistence/persistence.js';
-import * as Workspace from '../workspace/workspace.js';
 import * as Protocol from '../../generated/protocol.js';
 import {
   createTarget,
@@ -18,7 +14,10 @@ import {
 } from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
 import {createWorkspaceProject, setUpEnvironment} from '../../testing/OverridesHelpers.js';
+import {setMockResourceTree} from '../../testing/ResourceTreeHelpers.js';
 import {createFileSystemUISourceCode} from '../../testing/UISourceCodeHelpers.js';
+import * as Persistence from '../persistence/persistence.js';
+import * as Workspace from '../workspace/workspace.js';
 
 const setUpEnvironmentWithUISourceCode =
     (url: string, resourceType: Common.ResourceType.ResourceType, project?: Workspace.Workspace.Project) => {
@@ -112,6 +111,17 @@ describeWithMockConnection('NetworkPersistenceManager', () => {
     ];
     assert.deepStrictEqual(patterns, expected);
   });
+
+  it('recognizes forbidden network URLs', () => {
+    assert.isTrue(Persistence.NetworkPersistenceManager.NetworkPersistenceManager.isForbiddenNetworkUrl(
+        'chrome://version' as Platform.DevToolsPath.UrlString));
+    assert.isTrue(Persistence.NetworkPersistenceManager.NetworkPersistenceManager.isForbiddenNetworkUrl(
+        'https://chromewebstore.google.com/index.html' as Platform.DevToolsPath.UrlString));
+    assert.isTrue(Persistence.NetworkPersistenceManager.NetworkPersistenceManager.isForbiddenNetworkUrl(
+        'https://chrome.google.com/script.js' as Platform.DevToolsPath.UrlString));
+    assert.isFalse(Persistence.NetworkPersistenceManager.NetworkPersistenceManager.isForbiddenNetworkUrl(
+        'https://www.example.com/script.js' as Platform.DevToolsPath.UrlString));
+  });
 });
 
 describeWithMockConnection('NetworkPersistenceManager', () => {
@@ -119,6 +129,7 @@ describeWithMockConnection('NetworkPersistenceManager', () => {
 
   beforeEach(async () => {
     SDK.NetworkManager.MultitargetNetworkManager.dispose();
+    setMockResourceTree(false);
     const target = createTarget();
     networkPersistenceManager =
         await createWorkspaceProject('file:///path/to/overrides' as Platform.DevToolsPath.UrlString, [

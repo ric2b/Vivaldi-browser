@@ -595,12 +595,13 @@ TEST_F(VaapiTest, LowQualityEncodingSetting) {
       ASSERT_EQ(wrapper->pending_va_buffers_.size(), 1u);
       {
         base::AutoLockMaybe auto_lock(wrapper->va_lock_.get());
-        ScopedVABufferMapping mapping(wrapper->va_lock_, wrapper->va_display_,
-                                      wrapper->pending_va_buffers_.front());
-        ASSERT_TRUE(mapping.IsValid());
 
+        auto mapping = ScopedVABufferMapping::Create(
+            wrapper->va_lock_, wrapper->va_display_,
+            wrapper->pending_va_buffers_.front());
+        ASSERT_TRUE(mapping);
         auto* const va_buffer =
-            reinterpret_cast<VAEncMiscParameterBuffer*>(mapping.data());
+            reinterpret_cast<VAEncMiscParameterBuffer*>(mapping->data());
         EXPECT_EQ(va_buffer->type, VAEncMiscParameterTypeQualityLevel);
 
         auto* const enc_quality =
@@ -625,7 +626,10 @@ TEST_F(VaapiTest, CheckSupportedSVCScalabilityModes) {
       SVCScalabilityMode::kL1T1,    SVCScalabilityMode::kL1T2,
       SVCScalabilityMode::kL1T3,    SVCScalabilityMode::kL2T2Key,
       SVCScalabilityMode::kL2T3Key, SVCScalabilityMode::kL3T2Key,
-      SVCScalabilityMode::kL3T3Key};
+      SVCScalabilityMode::kL3T3Key, SVCScalabilityMode::kS2T1,
+      SVCScalabilityMode::kS2T2,    SVCScalabilityMode::kS2T3,
+      SVCScalabilityMode::kS3T1,    SVCScalabilityMode::kS3T2,
+      SVCScalabilityMode::kS3T3};
 #endif
 
   const auto scalability_modes_vp9_profile0 =

@@ -120,7 +120,8 @@
   if (animated) {
     // Prepare for animation.
     BOOL shouldCrossfadeEditAndSteadyViews =
-        _trigger != OmniboxFocusTrigger::kUnpinnedLargeFakebox;
+        _trigger != OmniboxFocusTrigger::kUnpinnedLargeFakebox &&
+        _trigger != OmniboxFocusTrigger::kUnpinnedFakebox;
     if (shouldCrossfadeEditAndSteadyViews) {
       [self.locationBarAnimatee offsetTextFieldToMatchSteadyView];
       [self.locationBarAnimatee setEditViewFaded:YES];
@@ -133,10 +134,11 @@
       [self.locationBarAnimatee setSteadyViewFaded:YES];
     }
 
-    // Hide badge view before the transform regardless of current displayed
-    // state to prevent it from being visible outside of the location bar as the
-    // steadView moves outside to the leading side of the location bar.
-    [self.locationBarAnimatee hideSteadyViewBadgeView];
+    // Hide badge and entrypoint views before the transform regardless of
+    // current displayed state to prevent them from being visible outside of the
+    // location bar as the steadView moves outside to the leading side of the
+    // location bar.
+    [self.locationBarAnimatee hideSteadyViewBadgeAndEntrypointViews];
     // Make edit view transparent, but not hidden.
     [self.locationBarAnimatee setEditViewHidden:NO];
     [self.editViewAnimatee setLeadingIconScale:0];
@@ -208,7 +210,7 @@
   void (^cleanup)() = ^{
     [self.locationBarAnimatee setEditViewHidden:YES];
     [self.locationBarAnimatee setSteadyViewHidden:NO];
-    [self.locationBarAnimatee showSteadyViewBadgeView];
+    [self.locationBarAnimatee showSteadyViewBadgeAndEntrypointViews];
     [self.locationBarAnimatee resetTransforms];
     [self.locationBarAnimatee setSteadyViewFaded:NO];
     [self.editViewAnimatee setLeadingIconScale:1];
@@ -311,7 +313,7 @@
           [UIView addKeyframeWithRelativeStartTime:0
                                   relativeDuration:1
                                         animations:^{
-                                          [self expansion:animated];
+                                          [self expansion];
                                         }];
           [UIView
               addKeyframeWithRelativeStartTime:0
@@ -326,7 +328,7 @@
         }];
 
   } else {
-    [self expansion:animated];
+    [self expansion];
     [self.toolbarAnimatee hideControlButtons];
   }
 }
@@ -347,7 +349,7 @@
           [UIView addKeyframeWithRelativeStartTime:0
                                   relativeDuration:relativeDurationAnimation1
                                         animations:^{
-                                          [self contraction:animated];
+                                          [self contraction];
                                         }];
           [UIView
               addKeyframeWithRelativeStartTime:relativeDurationAnimation1
@@ -361,7 +363,7 @@
           [self animationFinished];
         }];
   } else {
-    [self contraction:animated];
+    [self contraction];
     [self.toolbarAnimatee showControlButtons];
     [self.toolbarAnimatee hideCancelButton];
   }
@@ -406,8 +408,8 @@
 #pragma mark - Private animation helpers
 
 // Visually expands the location bar for focus.
-- (void)expansion:(BOOL)animated {
-  [self.toolbarAnimatee expandLocationBar:animated];
+- (void)expansion {
+  [self.toolbarAnimatee expandLocationBar];
   [self.toolbarAnimatee showCancelButton];
   switch (_trigger) {
     case OmniboxFocusTrigger::kPinnedLargeFakebox:
@@ -422,8 +424,8 @@
 }
 
 // Visually contracts the location bar for defocus.
-- (void)contraction:(BOOL)animated {
-  [self.toolbarAnimatee contractLocationBar:animated];
+- (void)contraction {
+  [self.toolbarAnimatee contractLocationBar];
   if (_trigger == OmniboxFocusTrigger::kPinnedLargeFakebox) {
     [self.toolbarAnimatee setLocationBarHeightToMatchFakeOmnibox];
   }
@@ -433,7 +435,7 @@
 - (void)updateUIToExpandedState:(BOOL)animated
                  omniboxFocused:(BOOL)omniboxFocused {
   void (^expansion)() = ^{
-    [self.toolbarAnimatee expandLocationBar:animated];
+    [self.toolbarAnimatee expandLocationBar];
     [self.toolbarAnimatee showCancelButton];
     [self.locationBarAnimatee setSteadyViewFaded:omniboxFocused];
     [self.locationBarAnimatee setEditViewFaded:!omniboxFocused];
@@ -471,7 +473,7 @@
 - (void)updateUIToContractedState:(BOOL)animated
                    omniboxFocused:(BOOL)omniboxFocused {
   void (^contraction)() = ^{
-    [self.toolbarAnimatee contractLocationBar:animated];
+    [self.toolbarAnimatee contractLocationBar];
     [self.toolbarAnimatee hideCancelButton];
     [self.locationBarAnimatee setSteadyViewFaded:omniboxFocused];
     [self.locationBarAnimatee setEditViewFaded:!omniboxFocused];

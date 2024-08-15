@@ -15,12 +15,9 @@
 #import "ios/ui/settings/sync/vivaldi_sync_settings_constants.h"
 #import "ios/ui/table_view/cells/vivaldi_input_error_item.h"
 #import "ios/ui/table_view/cells/vivaldi_table_view_illustrated_item.h"
+#import "ios/ui/table_view/cells/vivaldi_table_view_text_spinner_button_item.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierHeader = kSectionIdentifierEnumZero,
@@ -52,6 +49,7 @@ BOOL emailIsValid;
 @property(nonatomic, strong) VivaldiTableViewTextEditItem* recoveryEmailItem;
 @property(nonatomic, strong) VivaldiTableViewTextEditItem*
     confirmRecoveryEmailItem;
+@property(nonatomic, strong) VivaldiTableViewTextSpinnerButtonItem* nextButton;
 
 @property(nonatomic, copy) NSURLSessionDataTask* task;
 
@@ -177,17 +175,18 @@ BOOL emailIsValid;
   [model addItem:self.confirmRecoveryEmailItem
       toSectionWithIdentifier:SectionIdentifierUserDetails];
 
-  TableViewTextButtonItem* nextButton =
-      [[TableViewTextButtonItem alloc] initWithType:ItemTypeNextButton];
-  nextButton.buttonText =
+  self.nextButton =
+      [[VivaldiTableViewTextSpinnerButtonItem alloc]
+          initWithType:ItemTypeNextButton];
+  self.nextButton.buttonText =
       l10n_util::GetNSString(IDS_VIVALDI_CREATE_ACCOUNT_NEXT);
-  nextButton.textAlignment = NSTextAlignmentNatural;
-  nextButton.buttonBackgroundColor = [UIColor colorNamed:kBlueColor];
-  nextButton.buttonTextColor = [UIColor colorNamed:kSolidButtonTextColor];
-  nextButton.cellBackgroundColor = nextButton.buttonBackgroundColor;
-  nextButton.disableButtonIntrinsicWidth = YES;
+  self.nextButton.textAlignment = NSTextAlignmentNatural;
+  self.nextButton.buttonBackgroundColor = [UIColor colorNamed:kBlueColor];
+  self.nextButton.buttonTextColor = [UIColor colorNamed:kSolidButtonTextColor];
+  self.nextButton.cellBackgroundColor = self.nextButton.buttonBackgroundColor;
+  self.nextButton.disableButtonIntrinsicWidth = YES;
 
-  [self.tableViewModel addItem:nextButton
+  [self.tableViewModel addItem:self.nextButton
       toSectionWithIdentifier:SectionIdentifierNextButton];
 }
 
@@ -195,7 +194,12 @@ BOOL emailIsValid;
 
 - (CGFloat)tableView:(UITableView*)tableView
     heightForFooterInSection:(NSInteger)section {
-  return kFooterSectionHeight;
+  return 0;
+}
+
+- (CGFloat)tableView:(UITableView*)tableView
+    heightForHeaderInSection:(NSInteger)section {
+  return kCommonHeaderSectionHeight;
 }
 
 #pragma mark - UITableViewDataSource
@@ -210,12 +214,15 @@ BOOL emailIsValid;
 
   switch (itemType) {
     case ItemTypeNextButton: {
-      TableViewTextButtonCell* tableViewTextButtonCell =
-          base::apple::ObjCCastStrict<TableViewTextButtonCell>(cell);
+      VivaldiTableViewTextSpinnerButtonCell* tableViewTextButtonCell =
+          base::apple::ObjCCastStrict<VivaldiTableViewTextSpinnerButtonCell>
+                                                                        (cell);
       [tableViewTextButtonCell.button
                  addTarget:self
                     action:@selector(nextButtonPressed:)
           forControlEvents:UIControlEventTouchUpInside];
+      [tableViewTextButtonCell
+          setActivityIndicatorEnabled:self.nextButton.activityInProgress];
       break;
     }
     case ItemTypeUsername: {
@@ -408,11 +415,13 @@ BOOL emailIsValid;
     errorMessage = l10n_util::GetNSString(IDS_SYNC_USER_NAME_LENGTH_ERROR);
   } else if (!usernameIsValid) {
     __weak __typeof__(self) weakSelf = self;
+    [self setNextButtonActivityEnabled:YES];
     [self validateFieldWithServer:vParamUsername
                 value:base::SysNSStringToUTF8(self.usernameItem.textFieldValue)
                 completionHandler:^(NSData* data, NSURLResponse* response,
                                       NSError* error) {
       dispatch_async(dispatch_get_main_queue(), ^{
+        [weakSelf setNextButtonActivityEnabled:NO];
         [weakSelf onUserNameValidationResponse:data
                                       response:response
                                         error:error];
@@ -429,11 +438,13 @@ BOOL emailIsValid;
     errorMessage = l10n_util::GetNSString(IDS_SYNC_NOT_VALID_EMAIL_ERROR);
   } else if (!emailIsValid) {
     __weak __typeof__(self) weakSelf = self;
+    [self setNextButtonActivityEnabled:YES];
     [self validateFieldWithServer:vParamEmailFieldName
             value:base::SysNSStringToUTF8(self.recoveryEmailItem.textFieldValue)
             completionHandler:^(NSData* data, NSURLResponse* response,
                                       NSError* error) {
       dispatch_async(dispatch_get_main_queue(), ^{
+        [weakSelf setNextButtonActivityEnabled:NO];
         [weakSelf onEmailValidationResponse:data
                                       response:response
                                         error:error];
@@ -460,6 +471,11 @@ BOOL emailIsValid;
   [self showErrorCellWithMessage:message
                          section:SectionIdentifierUserDetails
                         itemType:ItemTypeError];
+}
+
+- (void)setNextButtonActivityEnabled:(BOOL)enable {
+  self.nextButton.activityInProgress = enable;
+  [self reloadSection:SectionIdentifierNextButton];
 }
 
 @end

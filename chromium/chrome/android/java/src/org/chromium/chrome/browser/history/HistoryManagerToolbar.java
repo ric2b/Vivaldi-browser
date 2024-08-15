@@ -27,13 +27,20 @@ public class HistoryManagerToolbar extends SelectableListToolbar<HistoryItem> {
     private HistoryManager mManager;
     private PrefService mPrefService;
 
+    /**
+     * Interface to the Chrome preference storage used to keep the last visibility state of the info
+     * header.
+     */
+    public interface InfoHeaderPref {
+        default boolean isVisible() {
+            return false;
+        }
+
+        default void setVisible(boolean visible) {}
+    }
+
     public HistoryManagerToolbar(Context context, AttributeSet attrs) {
         super(context, attrs);
-        inflateMenu(R.menu.history_manager_menu);
-
-        getMenu()
-                .findItem(R.id.selection_mode_open_in_incognito)
-                .setTitle(R.string.contextmenu_open_in_incognito_tab);
     }
 
     /**
@@ -96,6 +103,10 @@ public class HistoryManagerToolbar extends SelectableListToolbar<HistoryItem> {
         super.setSearchEnabled(searchEnabled);
         updateInfoMenuItem(
                 mManager.shouldShowInfoButton(), mManager.shouldShowInfoHeaderIfAvailable());
+        // shouldShowInfoButton is checked to ensure all the menu items are ready.
+        if (searchEnabled && mManager.shouldShowInfoButton()) {
+            mManager.showIPH();
+        }
     }
 
     /** Should be called when the user's sign in state changes. */
@@ -103,6 +114,11 @@ public class HistoryManagerToolbar extends SelectableListToolbar<HistoryItem> {
         updateMenuItemVisibility();
         updateInfoMenuItem(
                 mManager.shouldShowInfoButton(), mManager.shouldShowInfoHeaderIfAvailable());
+    }
+
+    @Override
+    protected void onNavigationBack() {
+        mManager.finish();
     }
 
     private void updateMenuItemVisibility() {

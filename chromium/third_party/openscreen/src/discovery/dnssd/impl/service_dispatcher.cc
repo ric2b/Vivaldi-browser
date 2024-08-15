@@ -53,7 +53,7 @@ Error ForAllPublishers(
 // static
 std::unique_ptr<DnsSdService, TaskRunnerDeleter> CreateDnsSdService(
     TaskRunner& task_runner,
-    ReportingClient* reporting_client,
+    ReportingClient& reporting_client,
     const Config& config) {
   return std::unique_ptr<DnsSdService, TaskRunnerDeleter>(
       new ServiceDispatcher(task_runner, reporting_client, config),
@@ -61,7 +61,7 @@ std::unique_ptr<DnsSdService, TaskRunnerDeleter> CreateDnsSdService(
 }
 
 ServiceDispatcher::ServiceDispatcher(TaskRunner& task_runner,
-                                     ReportingClient* reporting_client,
+                                     ReportingClient& reporting_client,
                                      const Config& config)
     : task_runner_(task_runner),
       publisher_(config.enable_publication ? this : nullptr),

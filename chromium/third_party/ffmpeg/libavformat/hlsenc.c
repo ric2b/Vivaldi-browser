@@ -33,6 +33,7 @@
 #include "libavutil/avstring.h"
 #include "libavutil/bprint.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/log.h"
 #include "libavutil/random_seed.h"
@@ -569,12 +570,6 @@ static void reflush_dynbuf(VariantStream *vs, int *range_length)
     avio_write(vs->out, vs->temp_buffer, *range_length);
 }
 
-#if HAVE_DOS_PATHS
-#define SEPARATOR '\\'
-#else
-#define SEPARATOR '/'
-#endif
-
 static int hls_delete_file(HLSContext *hls, AVFormatContext *avf,
                            char *path, const char *proto)
 {
@@ -667,7 +662,7 @@ static int hls_delete_old_segments(AVFormatContext *s, HLSContext *hls,
         av_log(hls, AV_LOG_DEBUG, "deleting old segment %s\n",
                segment->filename);
         if (!hls->use_localtime_mkdir) // segment->filename contains basename only
-            av_bprintf(&path, "%s%c", dirname, SEPARATOR);
+            av_bprintf(&path, "%s/", dirname);
         av_bprintf(&path, "%s", segment->filename);
 
         if (!av_bprint_is_complete(&path)) {
@@ -684,8 +679,7 @@ static int hls_delete_old_segments(AVFormatContext *s, HLSContext *hls,
             vtt_dirname = av_dirname(vtt_dirname_r);
 
             av_bprint_clear(&path);
-            av_bprintf(&path, "%s%c%s", vtt_dirname, SEPARATOR,
-                                         segment->sub_filename);
+            av_bprintf(&path, "%s/%s", vtt_dirname, segment->sub_filename);
             av_freep(&vtt_dirname_r);
 
             if (!av_bprint_is_complete(&path)) {
@@ -865,11 +859,6 @@ static int hls_mux_init(AVFormatContext *s, VariantStream *vs)
     oc->max_delay                = s->max_delay;
     oc->opaque                   = s->opaque;
     oc->io_open                  = s->io_open;
-#if FF_API_AVFORMAT_IO_CLOSE
-FF_DISABLE_DEPRECATION_WARNINGS
-    oc->io_close                 = s->io_close;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
     oc->io_close2                = s->io_close2;
     oc->strict_std_compliance    = s->strict_std_compliance;
     av_dict_copy(&oc->metadata, s->metadata, 0);
@@ -1878,18 +1867,23 @@ fail:
 
 static const char * get_default_pattern_localtime_fmt(AVFormatContext *s)
 {
+    HLSContext *hls = s->priv_data;
+#if HAVE_LIBC_MSVCRT
+    // no %s support on MSVC, which invokes the invalid parameter handler
+    // on unsupported format strings, instead of returning an error
+    int strftime_s_supported = 0;
+#else
     char b[21];
     time_t t = time(NULL);
-    struct tm *p, tmbuf;
-    HLSContext *hls = s->priv_data;
-
-    p = localtime_r(&t, &tmbuf);
+    struct tm tmbuf, *p = localtime_r(&t, &tmbuf);
     // no %s support when strftime returned error or left format string unchanged
-    // also no %s support on MSVC, which invokes the invalid parameter handler on unsupported format strings, instead of returning an error
+    int strftime_s_supported = strftime(b, sizeof(b), "%s", p) && strcmp(b, "%s");
+#endif
+
     if (hls->segment_type == SEGMENT_TYPE_FMP4) {
-        return (HAVE_LIBC_MSVCRT || !strftime(b, sizeof(b), "%s", p) || !strcmp(b, "%s")) ? "-%Y%m%d%H%M%S.m4s" : "-%s.m4s";
+        return strftime_s_supported ? "-%s.m4s" : "-%Y%m%d%H%M%S.m4s";
     }
-    return (HAVE_LIBC_MSVCRT || !strftime(b, sizeof(b), "%s", p) || !strcmp(b, "%s")) ? "-%Y%m%d%H%M%S.ts" : "-%s.ts";
+    return strftime_s_supported ? "-%s.ts" : "-%Y%m%d%H%M%S.ts";
 }
 
 static int append_postfix(char *name, int name_buf_len, int i)
@@ -2367,7 +2361,7 @@ static int hls_write_header(AVFormatContext *s)
         }
     }
 
-    return ret;
+    return 0;
 }
 
 static int hls_init_file_resend(AVFormatContext *s, VariantStream *vs)
@@ -3205,7 +3199,7 @@ const FFOutputFormat ff_hls_muxer = {
     .p.flags          = AVFMT_NOFILE | AVFMT_GLOBALHEADER | AVFMT_NODIMENSIONS,
 #endif
     .p.priv_class     = &hls_class,
-    .flags_internal   = FF_FMT_ALLOW_FLUSH,
+    .flags_internal   = FF_OFMT_FLAG_ALLOW_FLUSH,
     .priv_data_size = sizeof(HLSContext),
     .init           = hls_init,
     .write_header   = hls_write_header,

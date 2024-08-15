@@ -63,7 +63,6 @@ if (!is_ios) {
 
   foreach(_target,
           [
-            "//media/cast:testing_tools",
             "//v8:gn_all",
           ]) {
     update_target(_target) {
@@ -142,7 +141,7 @@ if (!is_ios) {
 
   update_target("//chrome/browser/autofill:autofill") {
     deps += [
-      "//chrome/browser/password_manager:password_manager_buildflags",
+      "//components/password_manager/core/browser:password_manager_buildflags",
     ]
   }
 
@@ -223,4 +222,5 @@ if (!is_ios) {
 
 } else { # !is_ios
   import("//vivaldi/ios/deps_update_ios.gni")
+  import("//vivaldi/ios/chrome/browser/features/deps_updates.gni")
 } # is_ios

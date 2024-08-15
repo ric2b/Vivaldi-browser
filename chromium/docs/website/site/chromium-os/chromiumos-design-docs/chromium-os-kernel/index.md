@@ -16,7 +16,7 @@ This document outlines the overall design of the kernel, as it relates to
 Chromium OS.
 
 See also the [Frequently Asked Questions
-page](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/kernel_faq.md)
+page](/chromium-os/how-tos-and-troubleshooting/kernel-faq/)
 for more day-to-day details.
 
 ## Background

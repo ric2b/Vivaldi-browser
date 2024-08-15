@@ -16,6 +16,15 @@
 
 namespace gpu {
 
+bool IsWebGPUAdapterBlocklisted(const WGPUAdapterProperties& properties,
+                                const char* blocklist_string = "") {
+  return detail::IsWebGPUAdapterBlocklisted(
+      *reinterpret_cast<const wgpu::AdapterProperties*>(&properties),
+      {
+          .blocklist_string = blocklist_string,
+      });
+}
+
 class WebGPUBlocklistTest : public testing::Test {};
 
 #if BUILDFLAG(IS_ANDROID)

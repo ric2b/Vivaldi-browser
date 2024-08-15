@@ -1,4 +1,9 @@
 export type TestConfig = {
+  /**
+   * Enable debug-level logs (normally logged via `Fixture.debug()`).
+   */
+  enableDebugLogs: boolean;
+
   maxSubcasesInFlight: number;
   testHeartbeatCallback: () => void;
   noRaceWithRejectOnTimeout: boolean;
@@ -26,13 +31,20 @@ export type TestConfig = {
    * Whether or not to request a fallback adapter.
    */
   forceFallbackAdapter: boolean;
+
+  /**
+   * Whether to enable the `logToWebSocket` function used for out-of-band test logging.
+   */
+  logToWebSocket: boolean;
 };
 
 export const globalTestConfig: TestConfig = {
+  enableDebugLogs: false,
   maxSubcasesInFlight: 500,
   testHeartbeatCallback: () => {},
   noRaceWithRejectOnTimeout: false,
   unrollConstEvalLoops: false,
   compatibility: false,
   forceFallbackAdapter: false,
+  logToWebSocket: false,
 };

@@ -385,8 +385,6 @@ TEST_F(FullRestoreServiceTest, AskEveryTime) {
   EXPECT_EQ(RestoreOption::kAskEveryTime, GetRestoreOption());
 }
 
-// TODO(http://b/326982900): Migrate this test suite to test with forest
-// enabled.
 class FullRestoreServiceTestHavingFullRestoreFile
     : public FullRestoreServiceTest {
  public:
@@ -1018,6 +1016,9 @@ class ForestFullRestoreServiceTest : public FullRestoreServiceTest {
   ForestFullRestoreServiceTest() {
     scoped_feature_list_.Reset();
     scoped_feature_list_.InitAndEnableFeature(features::kForestFeature);
+
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        ::switches::kNoFirstRun);
   }
   ForestFullRestoreServiceTest(const ForestFullRestoreServiceTest&) = delete;
   ForestFullRestoreServiceTest& operator=(const ForestFullRestoreServiceTest&) =
@@ -1072,17 +1073,13 @@ TEST_F(ForestFullRestoreServiceTest, Always) {
   EXPECT_TRUE(CanPerformRestore(account_id()));
 }
 
-// If the OS restore setting is 'Do not restore', after reboot, start a
-// zero-state pine session.
+// If the OS restore setting is 'Do not restore', after reboot, don't show the
+// pine dialog and verify the restore flag.
 TEST_F(ForestFullRestoreServiceTest, NotRestore) {
   SetRestoreOption(RestoreOption::kDoNotRestore);
   auto mock_delegate = std::make_unique<MockFullRestoreServiceDelegate>();
   EXPECT_CALL(*mock_delegate, MaybeStartPineOverviewSession(testing::_))
-      .WillOnce([](std::unique_ptr<PineContentsData> data) {
-        ASSERT_TRUE(data);
-        EXPECT_TRUE(data->apps_infos.empty());
-      });
-
+      .Times(0);
   CreateFullRestoreServiceForTesting(std::move(mock_delegate));
   VerifyRestoreInitSettingHistogram(RestoreOption::kDoNotRestore, 1);
   EXPECT_EQ(RestoreOption::kDoNotRestore, GetRestoreOption());
@@ -1297,6 +1294,9 @@ class ForestFullRestoreServiceMultipleUsersTest
   ForestFullRestoreServiceMultipleUsersTest() {
     scoped_feature_list_.Reset();
     scoped_feature_list_.InitAndEnableFeature(features::kForestFeature);
+
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        ::switches::kNoFirstRun);
   }
   ForestFullRestoreServiceMultipleUsersTest(
       const ForestFullRestoreServiceMultipleUsersTest&) = delete;

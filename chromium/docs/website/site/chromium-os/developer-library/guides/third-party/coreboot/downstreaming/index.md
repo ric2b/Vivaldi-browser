@@ -1,6 +1,6 @@
 --------------------------------------------------------------------------------
 
-breadcrumbs: - - /chromium-os/developer-library/guides - Chromium OS > Developer
+breadcrumbs: - - /chromium-os/developer-library/guides - ChromiumOS > Developer
 Library > Guides page_name: downstreaming
 
 ## title: Downstreaming coreboot into the Chromium repo.

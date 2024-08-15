@@ -2,14 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
 import * as SDK from '../../core/sdk/sdk.js';
-import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import type * as Protocol from '../../generated/protocol.js';
-import * as Resources from './application.js';
 import {createTarget} from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
+
+import * as Resources from './application.js';
 
 describeWithMockConnection('DOMStorageModel', () => {
   let domStorageModel: Resources.DOMStorageModel.DOMStorageModel;
@@ -34,13 +32,13 @@ describeWithMockConnection('DOMStorageModel', () => {
 
     domStorageModel.enable();
     const manager = target.model(SDK.StorageKeyManager.StorageKeyManager);
-    assertNotNullOrUndefined(manager);
+    assert.exists(manager);
 
     assert.isEmpty(domStorageModel.storages());
     manager.dispatchEventToListeners(SDK.StorageKeyManager.Events.StorageKeyAdded, testKey);
-    assertNotNullOrUndefined(domStorageModel.storageForId(testId));
+    assert.exists(domStorageModel.storageForId(testId));
 
-    assertNotNullOrUndefined(domStorageModel.storageForId(testId));
+    assert.exists(domStorageModel.storageForId(testId));
     manager.dispatchEventToListeners(SDK.StorageKeyManager.Events.StorageKeyRemoved, testKey);
     assert.isUndefined(domStorageModel.storageForId(testId));
   });

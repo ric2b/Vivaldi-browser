@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "discovery/common/reporting_client.h"
-#include "osp/impl/with_destruction_callback.h"
 #include "osp/public/service_publisher.h"
 #include "platform/base/macros.h"
 
@@ -16,8 +15,7 @@ namespace openscreen::osp {
 
 class ServicePublisherImpl final
     : public ServicePublisher,
-      public openscreen::discovery::ReportingClient,
-      public WithDestructionCallback {
+      public openscreen::discovery::ReportingClient {
  public:
   class Delegate {
    public:
@@ -39,11 +37,12 @@ class ServicePublisherImpl final
     ServicePublisherImpl* publisher_ = nullptr;
   };
 
-  // |observer| is optional.  If it is provided, it will receive appropriate
-  // notifications about this ServicePublisher.  |delegate| is required and
-  // is used to implement state transitions.
-  ServicePublisherImpl(Observer* observer, std::unique_ptr<Delegate> delegate);
+  // |delegate| is required and is used to implement state transitions.
+  explicit ServicePublisherImpl(std::unique_ptr<Delegate> delegate);
   ~ServicePublisherImpl() override;
+
+  // Called by |delegate_| when an internal error occurs.
+  void OnError(const Error& error);
 
   // ServicePublisher overrides.
   bool Start() override;
@@ -51,18 +50,20 @@ class ServicePublisherImpl final
   bool Stop() override;
   bool Suspend() override;
   bool Resume() override;
+  void AddObserver(Observer& observer) override;
+  void RemoveObserver(Observer& observer) override;
 
  private:
   // openscreen::discovery::ReportingClient overrides.
-  void OnFatalError(Error) override;
-  void OnRecoverableError(Error) override;
+  void OnFatalError(const Error&) override;
+  void OnRecoverableError(const Error&) override;
 
   // Called by |delegate_| to transition the state machine (except kStarting and
   // kStopping which are done automatically).
   void SetState(State state);
 
-  // Notifies |observer_| if the transition to |state_| is one that is watched
-  // by the observer interface.
+  // Notifies each observer in |observers_| if the transition to |state_| is one
+  // that is watched by the observer interface.
   void MaybeNotifyObserver();
 
   std::unique_ptr<Delegate> delegate_;

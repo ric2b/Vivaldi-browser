@@ -28,7 +28,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/search_engine_choice/search_engine_choice_service.h"
-#include "components/search_engines/search_engine_choice_utils.h"
+#include "components/search_engines/search_engine_choice/search_engine_choice_utils.h"
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
@@ -218,8 +218,7 @@ base::Value::Dict SearchEnginesHandler::CreateDictionaryForEngine(
   dict.Set("displayName",
            table_model->GetText(index,
                                 IDS_SEARCH_ENGINES_EDITOR_DESCRIPTION_COLUMN));
-  dict.Set("keyword", table_model->GetText(
-                          index, IDS_SEARCH_ENGINES_EDITOR_KEYWORD_COLUMN));
+  dict.Set("keyword", table_model->GetKeywordToDisplay(index));
   Profile* profile = Profile::FromWebUI(web_ui());
   dict.Set("url",
            template_url->url_ref().DisplayURL(UIThreadSearchTermsData()));

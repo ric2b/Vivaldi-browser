@@ -486,7 +486,8 @@ AwPermissionManager::GetPermissionResultForOriginWithoutContext(
 
 PermissionStatus AwPermissionManager::GetPermissionStatusForCurrentDocument(
     PermissionType permission,
-    content::RenderFrameHost* render_frame_host) {
+    content::RenderFrameHost* render_frame_host,
+    bool should_include_device_status) {
   return GetPermissionStatus(
       permission,
       permissions::PermissionUtil::GetLastCommittedOriginAsURL(
@@ -518,6 +519,7 @@ AwPermissionManager::SubscribeToPermissionStatusChange(
     content::RenderProcessHost* render_process_host,
     content::RenderFrameHost* render_frame_host,
     const GURL& requesting_origin,
+    bool should_include_device_status,
     base::RepeatingCallback<void(PermissionStatus)> callback) {
   return SubscriptionId();
 }

@@ -46,6 +46,9 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.HashSet;
 import java.util.Set;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /** A popup that handles displaying the navigation history for a given tab. */
 public class NavigationPopup implements AdapterView.OnItemClickListener {
     private static final int MAXIMUM_HISTORY_ITEMS = 8;
@@ -340,6 +343,7 @@ public class NavigationPopup implements AdapterView.OnItemClickListener {
             viewHolder.mImageView.setImageBitmap(entry.getFavicon());
 
             if (entry.getIndex() == FULL_HISTORY_ENTRY_INDEX) {
+                if (!BuildConfig.IS_VIVALDI) // Vivaldi Ref. VAB-9101
                 ImageViewCompat.setImageTintList(
                         viewHolder.mImageView,
                         AppCompatResources.getColorStateList(

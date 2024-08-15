@@ -13,7 +13,6 @@
 #include "osp/public/endpoint_request_ids.h"
 #include "osp/public/message_demuxer.h"
 #include "osp/public/protocol_connection.h"
-#include "osp/public/server_config.h"
 #include "platform/base/error.h"
 #include "platform/base/ip_address.h"
 #include "platform/base/macros.h"
@@ -65,13 +64,18 @@ class ProtocolConnectionServer {
   // connections.
   virtual bool Resume() = 0;
 
+  // Returns the fingerprint of the server's certificate. The fingerprint is
+  // sent to the client as a DNS TXT record. Client uses the fingerprint to
+  // verify server's certificate.
+  virtual std::string GetFingerprint() = 0;
+
   // Synchronously open a new connection to an endpoint identified by
   // |endpoint_id|.  Returns nullptr if it can't be completed synchronously
   // (e.g. there are no existing open connections to that endpoint).
   virtual std::unique_ptr<ProtocolConnection> CreateProtocolConnection(
       uint64_t endpoint_id) = 0;
 
-  MessageDemuxer* message_demuxer() const { return demuxer_; }
+  MessageDemuxer* message_demuxer() const { return &demuxer_; }
 
   EndpointRequestIds* endpoint_request_ids() { return &endpoint_request_ids_; }
 
@@ -82,14 +86,13 @@ class ProtocolConnectionServer {
   const Error& last_error() const { return last_error_; }
 
  protected:
-  explicit ProtocolConnectionServer(MessageDemuxer* demuxer,
-                                    Observer* observer);
+  ProtocolConnectionServer(MessageDemuxer& demuxer, Observer& observer);
 
   State state_ = State::kStopped;
   Error last_error_;
-  MessageDemuxer* const demuxer_;
+  MessageDemuxer& demuxer_;
   EndpointRequestIds endpoint_request_ids_;
-  Observer* const observer_;
+  Observer& observer_;
 
   OSP_DISALLOW_COPY_AND_ASSIGN(ProtocolConnectionServer);
 };

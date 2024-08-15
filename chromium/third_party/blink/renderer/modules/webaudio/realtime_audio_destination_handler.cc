@@ -314,6 +314,14 @@ void RealtimeAudioDestinationHandler::SetDetectSilence(bool detect_silence) {
 
 void RealtimeAudioDestinationHandler::NotifyAudioContext() {
   DCHECK(IsMainThread());
+
+  // When this method gets executed by the task runner, it is possible that
+  // the corresponding GC-managed objects are not valid anymore. Check the
+  // initialization state and stop if the disposition already happened.
+  if (!IsInitialized()) {
+    return;
+  }
+
   Context()->OnRenderError();
 }
 
@@ -342,17 +350,9 @@ base::TimeDelta RealtimeAudioDestinationHandler::GetPlatformBufferDuration()
 void RealtimeAudioDestinationHandler::CreatePlatformDestination() {
   DCHECK(IsMainThread());
 
-  if (base::FeatureList::IsEnabled(features::kWebAudioSinkSelection)) {
-    platform_destination_ = AudioDestination::Create(
-        *this, sink_descriptor_, ChannelCount(), latency_hint_, sample_rate_,
-        Context()->GetDeferredTaskHandler().RenderQuantumFrames());
-  } else {
-    WebAudioSinkDescriptor
-        sink_descriptor(String(""), sink_descriptor_.Token());
-    platform_destination_ = AudioDestination::Create(
-        *this, sink_descriptor, ChannelCount(), latency_hint_, sample_rate_,
-        Context()->GetDeferredTaskHandler().RenderQuantumFrames());
-  }
+  platform_destination_ = AudioDestination::Create(
+      *this, sink_descriptor_, ChannelCount(), latency_hint_, sample_rate_,
+      Context()->GetDeferredTaskHandler().RenderQuantumFrames());
 
   // if `sample_rate_` is nullopt, it is supposed to use the default device
   // sample rate. Update the internal sample rate for subsequent device change
@@ -378,6 +378,12 @@ void RealtimeAudioDestinationHandler::StartPlatformDestination() {
                   sample_rate_.has_value() ? sample_rate_.value() : -1,
                   GetCallbackBufferSize()));
   DCHECK(IsMainThread());
+
+  // Since we access `Context()` in this function and this object is not
+  // garbage-collected, check that we are still initialized.
+  if (!IsInitialized()) {
+    return;
+  }
 
   if (platform_destination_->IsPlaying()) {
     return;

@@ -61,11 +61,14 @@ class PageInfoSubpageView : public views::View {
     content_ = AddChildView(std::move(content));
   }
 
-  gfx::Size CalculatePreferredSize() const override {
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override {
     // Only the with of |content_| is taken into account, because the header
     // view contains site origin in the subtitle which can be very long.
-    const int width = content_->GetPreferredSize().width();
-    return gfx::Size(width, GetHeightForWidth(width));
+    const int width = content_->GetPreferredSize(available_size).width();
+    // TODO(crbug.com/40232718): Remove this line.
+    return gfx::Size(
+        width, GetLayoutManager()->GetPreferredHeightForWidth(this, width));
   }
 
   void ChildPreferredSizeChanged(views::View* child) override {
@@ -265,6 +268,9 @@ const ui::ImageModel PageInfoViewFactory::GetPermissionIcon(
           ? setting == CONTENT_SETTING_BLOCK || setting == CONTENT_SETTING_ASK
           : setting == CONTENT_SETTING_BLOCK;
 
+  // TODO(crbug.com/335848275): Migrate the icons in 2 steps.
+  // 1 - Copy contents of refresh icons into current non-refresh icons.
+  // 2 - In a separate change, remove the refresh icons.
   if (features::IsChromeRefresh2023()) {
     // Cr2023 does not add an additional blocked badge for block states,
     // instead it uses a completely different icon. This icon usually has the
@@ -396,11 +402,23 @@ const ui::ImageModel PageInfoViewFactory::GetPermissionIcon(
         break;
       case ContentSettingsType::IDLE_DETECTION:
         icon = show_blocked_badge ? &vector_icons::kDevicesOffChromeRefreshIcon
-                                  : &vector_icons::kDevicesChromeRefreshIcon;
+                                  : &vector_icons::kDevicesIcon;
         break;
       case ContentSettingsType::STORAGE_ACCESS:
         icon = show_blocked_badge ? &vector_icons::kStorageAccessOffIcon
                                   : &vector_icons::kStorageAccessIcon;
+        break;
+      case ContentSettingsType::KEYBOARD_LOCK:
+        icon = show_blocked_badge ? &vector_icons::kKeyboardLockOffIcon
+                                  : &vector_icons::kKeyboardLockIcon;
+        break;
+      case ContentSettingsType::POINTER_LOCK:
+        icon = show_blocked_badge ? &vector_icons::kPointerLockOffIcon
+                                  : &vector_icons::kPointerLockIcon;
+        break;
+      case ContentSettingsType::CAPTURED_SURFACE_CONTROL:
+        icon = show_blocked_badge ? &vector_icons::kTouchpadMouseOffIcon
+                                  : &vector_icons::kTouchpadMouseIcon;
         break;
       default:
         break;
@@ -520,6 +538,15 @@ const ui::ImageModel PageInfoViewFactory::GetPermissionIcon(
     case ContentSettingsType::AUTOMATIC_FULLSCREEN:
       icon = &kFullscreenIcon;
       break;
+    case ContentSettingsType::CAPTURED_SURFACE_CONTROL:
+      icon = &vector_icons::kTouchpadMouseIcon;
+      break;
+    case ContentSettingsType::KEYBOARD_LOCK:
+      icon = &vector_icons::kKeyboardLockIcon;
+      break;
+    case ContentSettingsType::POINTER_LOCK:
+      icon = &vector_icons::kPointerLockIcon;
+      break;
 
 #if defined(VIVALDI_BUILD)
     case ContentSettingsType::AUTOPLAY:
@@ -543,7 +570,7 @@ const ui::ImageModel PageInfoViewFactory::GetChosenObjectIcon(
     bool deleted) {
   // The permissions data for device APIs will always appear even if the device
   // is not currently conncted to the system.
-  // TODO(https://crbug.com/1048860): Check the connected status of devices and
+  // TODO(crbug.com/40672237): Check the connected status of devices and
   // change the icon to one that reflects that status.
   const gfx::VectorIcon* icon = &gfx::kNoneIcon;
   switch (object.ui_info->content_settings_type) {
@@ -682,7 +709,7 @@ const ui::ImageModel PageInfoViewFactory::GetAdPersonalizationIcon() {
 const ui::ImageModel PageInfoViewFactory::GetManagedPermissionIcon(
     const PageInfo::PermissionInfo& info) {
   const gfx::VectorIcon& managed_vector_icon =
-      info.source == content_settings::SETTING_SOURCE_EXTENSION
+      info.source == content_settings::SettingSource::kExtension
           ? vector_icons::kExtensionIcon
           : vector_icons::kBusinessIcon;
   return GetImageModel(managed_vector_icon);
@@ -705,6 +732,11 @@ const ui::ImageModel PageInfoViewFactory::GetBlockingThirdPartyCookiesIcon() {
   return GetImageModel(features::IsChromeRefresh2023()
                            ? views::kEyeCrossedRefreshIcon
                            : views::kEyeCrossedIcon);
+}
+
+// static
+const ui::ImageModel PageInfoViewFactory::GetBusinessIcon() {
+  return GetImageModel(vector_icons::kBusinessIcon);
 }
 
 // static

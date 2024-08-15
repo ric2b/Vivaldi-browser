@@ -8,7 +8,6 @@
 
 #include "base/check.h"
 #include "base/time/time.h"
-#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/content_settings/content_setting_image_model.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
@@ -44,6 +43,10 @@ base::TimeDelta GetAnimationDuration(base::TimeDelta duration) {
 // This method updates indicators' visibility set in
 // `PageSpecificContentSettings`.
 void UpdateIndicatorsVisibilityFlags(LocationBarView* location_bar) {
+  if (!location_bar->GetWebContents()) {
+    return;
+  }
+
   content_settings::PageSpecificContentSettings* pscs =
       content_settings::PageSpecificContentSettings::GetForFrame(
           location_bar->GetWebContents()->GetPrimaryMainFrame());
@@ -146,14 +149,12 @@ bool SuppressVerboseState(ChipController* request_chip_controller) {
 }  // namespace
 
 PermissionDashboardController::PermissionDashboardController(
-    Browser* browser,
     LocationBarView* location_bar_view,
     PermissionDashboardView* permission_dashboard_view)
-    : browser_(browser),
-      location_bar_view_(location_bar_view),
+    : location_bar_view_(location_bar_view),
       permission_dashboard_view_(permission_dashboard_view) {
   request_chip_controller_ = std::make_unique<ChipController>(
-      browser, permission_dashboard_view_->GetRequestChip(),
+      location_bar_view, permission_dashboard_view_->GetRequestChip(),
       permission_dashboard_view_, this);
   observation_.Observe(permission_dashboard_view_->GetIndicatorChip());
 
@@ -179,6 +180,13 @@ bool PermissionDashboardController::Update(
   if (!indicator_model->is_visible()) {
     if (!indicator_chip->GetVisible()) {
       return false;
+    }
+
+    // When `WebContents` is nullptr, `indicator_model->is_visible()` is always
+    // false.
+    if (!location_bar_view_->GetWebContents()) {
+      HideIndicators();
+      return true;
     }
 
     // In case `GetPrimaryMainFrame()` changed, we should immediately hide
@@ -259,7 +267,8 @@ bool PermissionDashboardController::Update(
     indicator_chip->SetAccessibleName(name);
     const std::u16string& accessible_description =
         l10n_util::GetStringUTF16(IDS_A11Y_OMNIBOX_CHIP_HINT);
-    indicator_chip->SetAccessibleDescription(accessible_description);
+    indicator_chip->GetViewAccessibility().SetDescription(
+        accessible_description);
     indicator_chip->NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
 
     RecordIndicators(indicator_model, content_settings, /*clicked=*/false);
@@ -274,6 +283,11 @@ bool PermissionDashboardController::Update(
 void PermissionDashboardController::OnChipVisibilityChanged(bool is_visible) {}
 
 void PermissionDashboardController::OnExpandAnimationEnded() {
+  if (!location_bar_view_->GetWebContents()) {
+    HideIndicators();
+    return;
+  }
+
   is_verbose_ = true;
 
   UpdateIndicatorsVisibilityFlags(location_bar_view_);
@@ -282,6 +296,11 @@ void PermissionDashboardController::OnExpandAnimationEnded() {
 }
 
 void PermissionDashboardController::OnCollapseAnimationEnded() {
+  if (!location_bar_view_->GetWebContents()) {
+    HideIndicators();
+    return;
+  }
+
   is_verbose_ = false;
   content_settings::PageSpecificContentSettings* content_settings =
       content_settings::PageSpecificContentSettings::GetForFrame(
@@ -342,7 +361,7 @@ void PermissionDashboardController::HideIndicators() {
 
   // If blocked on the system level, then the indicators will not be shown as
   // blocked in PSCS. Reset them manually.
-  if (blocked_on_system_level_) {
+  if (blocked_on_system_level_ && location_bar_view_->GetWebContents()) {
     content_settings::PageSpecificContentSettings* pscs =
         content_settings::PageSpecificContentSettings::GetForFrame(
             location_bar_view_->GetWebContents()->GetPrimaryMainFrame());

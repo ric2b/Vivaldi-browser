@@ -8,14 +8,7 @@
 #import "ios/chrome/common/ui/util/text_view_util.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
-// The insets of the View content and additional margin for some of its items.
-const CGFloat kStackMargin = 32.0;
-const CGFloat kItemMargin = 10.0;
 // Spacing within stackView.
 const CGFloat kStackViewSpacing = 13.0;
 // Height of the image.
@@ -88,34 +81,12 @@ const CGFloat kImageViewHeight = 80.0;
     UIStackView* stackView = [[UIStackView alloc] initWithArrangedSubviews:@[
       _illustratedImageView, _titleLabel, self.subtitleLabel
     ]];
+    [_illustratedImageView setHeightWithConstant:kImageViewHeight];
     stackView.axis = UILayoutConstraintAxisVertical;
     stackView.alignment = UIStackViewAlignmentCenter;
     stackView.spacing = kStackViewSpacing;
     [self.contentView addSubview:stackView];
-
-    // Layout
-    [_illustratedImageView anchorTop:nil
-           leading:stackView.leadingAnchor
-            bottom:nil
-          trailing:stackView.trailingAnchor
-              size:CGSizeMake(0,kImageViewHeight)];
-
-    [_titleLabel anchorTop:nil
-           leading:stackView.leadingAnchor
-            bottom:nil
-          trailing:stackView.trailingAnchor];
-
-    [self.subtitleLabel anchorTop:nil
-           leading:stackView.leadingAnchor
-            bottom:nil
-          trailing:stackView.trailingAnchor
-          padding:UIEdgeInsetsMake(0,kItemMargin,0,kItemMargin)];
-
-    [stackView anchorTop:self.contentView.topAnchor
-           leading:self.contentView.leadingAnchor
-            bottom:self.contentView.bottomAnchor
-          trailing:self.contentView.trailingAnchor
-           padding:UIEdgeInsetsMake(0,kStackMargin,0,kStackMargin)];
+    [stackView fillSuperview];
   }
   return self;
 }

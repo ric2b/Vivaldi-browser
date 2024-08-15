@@ -79,7 +79,7 @@ ReceiverError::ReceiverError(Error::Code code, std::string_view description)
       openscreen_code(code),
       description(description) {}
 
-ReceiverError::ReceiverError(Error error)
+ReceiverError::ReceiverError(const Error& error)
     : code(static_cast<int>(error.code()) + kOpenscreenErrorOffset),
       openscreen_code(error.code()),
       description(error.message()) {}

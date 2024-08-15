@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/rand_util.h"
 
 #include <zircon/syscalls.h>
@@ -50,10 +55,6 @@ void RandBytes(span<uint8_t> output) {
   }
 
   zx_cprng_draw(output.data(), output.size());
-}
-
-void RandBytes(void* output, size_t output_length) {
-  RandBytes(make_span(static_cast<uint8_t*>(output), output_length));
 }
 
 namespace internal {

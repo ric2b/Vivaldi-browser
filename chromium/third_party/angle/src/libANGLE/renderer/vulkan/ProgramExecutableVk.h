@@ -309,26 +309,31 @@ class ProgramExecutableVk : public ProgramExecutableImpl
 
     const ShaderInterfaceVariableInfoMap &getVariableInfoMap() const { return mVariableInfoMap; }
 
-    angle::Result prepareForWarmUpPipelineCache(
-        vk::Context *context,
+    angle::Result warmUpPipelineCache(vk::Renderer *renderer,
+                                      vk::PipelineRobustness pipelineRobustness,
+                                      vk::PipelineProtectedAccess pipelineProtectedAccess,
+                                      vk::GraphicsPipelineSubset subset)
+    {
+        return getPipelineCacheWarmUpTasks(renderer, pipelineRobustness, pipelineProtectedAccess,
+                                           subset, nullptr);
+    }
+    angle::Result getPipelineCacheWarmUpTasks(
+        vk::Renderer *renderer,
         vk::PipelineRobustness pipelineRobustness,
         vk::PipelineProtectedAccess pipelineProtectedAccess,
-        bool *isComputeOut,
-        angle::FixedVector<bool, 2> *surfaceRotationVariationsOut,
-        vk::GraphicsPipelineDesc *graphicsPipelineDescOut,
-        vk::RenderPass *renderPassOut);
+        vk::GraphicsPipelineSubset subset,
+        std::vector<std::shared_ptr<LinkSubTask>> *postLinkSubTasksOut);
+    void waitForPostLinkTasks(const gl::Context *context) override
+    {
+        ContextVk *contextVk = vk::GetImpl(context);
+        waitForPostLinkTasksImpl(contextVk);
+    }
 
-    angle::Result warmUpComputePipelineCache(vk::Context *context,
-                                             vk::PipelineRobustness pipelineRobustness,
-                                             vk::PipelineProtectedAccess pipelineProtectedAccess);
+    void waitForPostLinkTasksIfNecessary(
+        ContextVk *contextVk,
+        const vk::GraphicsPipelineDesc *currentGraphicsPipelineDesc);
 
-    angle::Result warmUpGraphicsPipelineCache(vk::Context *context,
-                                              vk::PipelineRobustness pipelineRobustness,
-                                              vk::PipelineProtectedAccess pipelineProtectedAccess,
-                                              vk::GraphicsPipelineSubset subset,
-                                              const bool isSurfaceRotated,
-                                              const vk::GraphicsPipelineDesc &graphicsPipelineDesc,
-                                              const vk::RenderPass &renderPass);
+    angle::Result mergePipelineCacheToRenderer(vk::Context *context) const;
 
     const vk::WriteDescriptorDescs &getShaderResourceWriteDescriptorDescs() const
     {
@@ -366,8 +371,13 @@ class ProgramExecutableVk : public ProgramExecutableImpl
     }
 
   private:
+    class WarmUpTaskCommon;
+    class WarmUpComputeTask;
+    class WarmUpGraphicsTask;
     friend class ProgramVk;
     friend class ProgramPipelineVk;
+    friend class WarmUpComputeTask;
+    friend class WarmUpGraphicsTask;
 
     void reset(ContextVk *contextVk);
 
@@ -451,6 +461,15 @@ class ProgramExecutableVk : public ProgramExecutableImpl
     angle::Result initGraphicsShaderPrograms(vk::Context *context,
                                              ProgramTransformOptions transformOptions,
                                              vk::ShaderProgramHelper **shaderProgramOut);
+    angle::Result initProgramThenCreateGraphicsPipeline(vk::Context *context,
+                                                        ProgramTransformOptions transformOptions,
+                                                        vk::GraphicsPipelineSubset pipelineSubset,
+                                                        vk::PipelineCacheAccess *pipelineCache,
+                                                        PipelineSource source,
+                                                        const vk::GraphicsPipelineDesc &desc,
+                                                        const vk::RenderPass &compatibleRenderPass,
+                                                        const vk::GraphicsPipelineDesc **descPtrOut,
+                                                        vk::PipelineHelper **pipelineOut);
     angle::Result createGraphicsPipelineImpl(vk::Context *context,
                                              ProgramTransformOptions transformOptions,
                                              vk::GraphicsPipelineSubset pipelineSubset,
@@ -460,6 +479,27 @@ class ProgramExecutableVk : public ProgramExecutableImpl
                                              const vk::RenderPass &compatibleRenderPass,
                                              const vk::GraphicsPipelineDesc **descPtrOut,
                                              vk::PipelineHelper **pipelineOut);
+    angle::Result prepareForWarmUpPipelineCache(
+        vk::Context *context,
+        vk::PipelineRobustness pipelineRobustness,
+        vk::PipelineProtectedAccess pipelineProtectedAccess,
+        vk::GraphicsPipelineSubset subset,
+        bool *isComputeOut,
+        angle::FixedVector<bool, 2> *surfaceRotationVariationsOut,
+        vk::GraphicsPipelineDesc **graphicsPipelineDescOut,
+        vk::RenderPass *renderPassOut);
+    angle::Result warmUpComputePipelineCache(vk::Context *context,
+                                             vk::PipelineRobustness pipelineRobustness,
+                                             vk::PipelineProtectedAccess pipelineProtectedAccess);
+    angle::Result warmUpGraphicsPipelineCache(vk::Context *context,
+                                              vk::PipelineRobustness pipelineRobustness,
+                                              vk::PipelineProtectedAccess pipelineProtectedAccess,
+                                              vk::GraphicsPipelineSubset subset,
+                                              const bool isSurfaceRotated,
+                                              const vk::GraphicsPipelineDesc &graphicsPipelineDesc,
+                                              const vk::RenderPass &renderPass,
+                                              vk::PipelineHelper *placeholderPipelineHelper);
+    void waitForPostLinkTasksImpl(ContextVk *contextVk);
 
     angle::Result getOrAllocateDescriptorSet(vk::Context *context,
                                              UpdateDescriptorSetsBuilder *updateBuilder,
@@ -482,7 +522,6 @@ class ProgramExecutableVk : public ProgramExecutableImpl
     vk::DescriptorSetArray<VkDescriptorSet> mDescriptorSets;
     vk::DescriptorSetArray<vk::DescriptorPoolPointer> mDescriptorPools;
     vk::DescriptorSetArray<vk::RefCountedDescriptorPoolBinding> mDescriptorPoolBindings;
-    uint32_t mNumDefaultUniformDescriptors;
     vk::BufferSerial mCurrentDefaultUniformBufferSerial;
 
     // We keep a reference to the pipeline and descriptor set layouts. This ensures they don't get
@@ -534,6 +573,8 @@ class ProgramExecutableVk : public ProgramExecutableImpl
     // With VK_EXT_graphics_pipeline_library, this cache is used for the "shaders" subset of the
     // pipeline.
     vk::PipelineCache mPipelineCache;
+
+    vk::GraphicsPipelineDesc mWarmUpGraphicsPipelineDesc;
 
     // The "layout" information for descriptorSets
     vk::WriteDescriptorDescs mShaderResourceWriteDescriptorDescs;

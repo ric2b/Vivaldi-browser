@@ -2,34 +2,25 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
-import type * as Protocol from '../../generated/protocol.js';
-import * as SDK from '../../core/sdk/sdk.js';
 import * as ProtocolClient from '../../core/protocol_client/protocol_client.js';
 import * as Root from '../../core/root/root.js';
-import type * as UI from '../../ui/legacy/legacy.js';
-import * as InspectorMain from './inspector_main.js';
+import * as SDK from '../../core/sdk/sdk.js';
+import type * as Protocol from '../../generated/protocol.js';
 import {
   createTarget,
   stubNoopSettings,
 } from '../../testing/EnvironmentHelpers.js';
-
+import {expectCall} from '../../testing/ExpectStubCall.js';
 import {
   describeWithMockConnection,
   setMockConnectionResponseHandler,
 } from '../../testing/MockConnection.js';
+import type * as UI from '../../ui/legacy/legacy.js';
+
+import * as InspectorMain from './inspector_main.js';
 
 describeWithMockConnection('FocusDebuggeeActionDelegate', () => {
-  it('uses main frame without tab tatget', async () => {
-    const target = createTarget();
-    const delegate = new InspectorMain.InspectorMain.FocusDebuggeeActionDelegate();
-    const bringToFront = sinon.spy(target.pageAgent(), 'invoke_bringToFront');
-    delegate.handleAction({} as UI.Context.Context, 'foo');
-    assert.isTrue(bringToFront.calledOnce);
-  });
-
-  it('uses main frame with tab tatget', async () => {
+  it('uses main frame', async () => {
     const tabTarget = createTarget({type: SDK.Target.Type.Tab});
     createTarget({parentTarget: tabTarget, subtype: 'prerender'});
     const frameTarget = createTarget({parentTarget: tabTarget});
@@ -128,7 +119,7 @@ describeWithMockConnection('InspectorMainImpl', () => {
 
     const debuggerPause = sinon.stub();
     setMockConnectionResponseHandler('Debugger.pause', debuggerPause);
-    const debuggerPauseCalled = new Promise<void>(resolve => debuggerPause.callsFake(resolve));
+    const debuggerPauseCalled = expectCall(debuggerPause);
 
     let debuggerEnable = (_: Protocol.Debugger.EnableResponse) => {};
     setMockConnectionResponseHandler('Debugger.enable', () => new Promise<Protocol.Debugger.EnableResponse>(resolve => {

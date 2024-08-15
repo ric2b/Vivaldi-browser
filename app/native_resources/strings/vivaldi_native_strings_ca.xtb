@@ -83,11 +83,11 @@
 <translation id="3914946330804881301">Importat des de l'Opera</translation>
 <translation id="3921292902397893431">Monstre 8</translation>
 <translation id="3943857333388298514">Enganxa</translation>
-<translation id="3974783668264968389">Vivaldi no ha pogut obrir el teu magatzem de claus segures. Sense el magatzem de claus, perdràs els teus inicis de sessió desats, galetes segures i algunes funcionalitats com la sincronització, el correu i el calendari deixaran de funcionar.
-
-    Si us plau, surt ara, desbloqueja o repara el magatzem de claus i torna-ho a provar. Si realment vols continuar, marca la casella i prem el botó "Continua, amb pèrdua de dades".</translation>
 <translation id="4005270918754737597">Omet aquesta versió</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi no ha pogut obrir el teu magatzem de claus segures. Sense la clau del magatzem, pots perdre tots els teus inicis de sessió desats, galetes segures i algunes funcionalitats com Sync, el correu o el calendari deixaran de funcionar.
+
+    Si us plau, desbloqueja o repara el teu magatzem de claus i torna-ho a provar. Segur que vols continuar, tot i perdre les dades?</translation>
 <translation id="4074744496918018786">Obre la imatge a una finestra privada</translation>
 <translation id="410351446219883937">Reproducció automàtica</translation>
 <translation id="4281844954008187215">Condicions d'ús</translation>
@@ -178,6 +178,7 @@
 <translation id="8669345741879513971">Monstre 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Inspecciona el document del portal</translation>
+<translation id="875142999698251063">Surt ara</translation>
 <translation id="8768970203213061953">Paisatge 14</translation>
 <translation id="8773635261052182196">No tornaràs a veure aquestes notificacions. Pots activar-les de nou des dels ajustos de Vivaldi.</translation>
 <translation id="8774017153185436870">Els llocs podrien reproduir vídeo automàticament</translation>

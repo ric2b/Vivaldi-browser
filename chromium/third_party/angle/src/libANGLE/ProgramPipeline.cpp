@@ -21,11 +21,6 @@
 namespace gl
 {
 
-enum SubjectIndexes : angle::SubjectIndex
-{
-    kExecutableSubjectIndex = 0
-};
-
 ProgramPipelineState::ProgramPipelineState(rx::GLImplFactory *factory)
     : mLabel(),
       mActiveShaderProgram(nullptr),
@@ -71,10 +66,11 @@ void ProgramPipelineState::useProgramStage(const Context *context,
     {
         mPrograms[shaderType] = shaderProgram;
         // Install the program executable, if not already
-        if (shaderProgram->getSharedExecutable().get() != mProgramExecutables[shaderType].get())
+        if (shaderProgram->getSharedExecutable().get() !=
+            mExecutable->mPPOProgramExecutables[shaderType].get())
         {
             InstallExecutable(context, shaderProgram->getSharedExecutable(),
-                              &mProgramExecutables[shaderType]);
+                              &mExecutable->mPPOProgramExecutables[shaderType]);
         }
         shaderProgram->addRef();
     }
@@ -84,11 +80,11 @@ void ProgramPipelineState::useProgramStage(const Context *context,
         // given stage, it is as if the pipeline object has no programmable stage configured for the
         // indicated shader stage.
         mPrograms[shaderType] = nullptr;
-        UninstallExecutable(context, &mProgramExecutables[shaderType]);
+        UninstallExecutable(context, &mExecutable->mPPOProgramExecutables[shaderType]);
     }
 
     programObserverBinding->bind(mPrograms[shaderType]);
-    programExecutableObserverBinding->bind(mProgramExecutables[shaderType].get());
+    programExecutableObserverBinding->bind(mExecutable->mPPOProgramExecutables[shaderType].get());
 }
 
 void ProgramPipelineState::useProgramStages(
@@ -149,8 +145,7 @@ void ProgramPipelineState::updateExecutableSpecConstUsageBits()
 ProgramPipeline::ProgramPipeline(rx::GLImplFactory *factory, ProgramPipelineID handle)
     : RefCountObject(factory->generateSerial(), handle),
       mProgramPipelineImpl(factory->createProgramPipeline(mState)),
-      mState(factory),
-      mExecutableObserverBinding(this, kExecutableSubjectIndex)
+      mState(factory)
 {
     ASSERT(mProgramPipelineImpl);
 
@@ -160,7 +155,6 @@ ProgramPipeline::ProgramPipeline(rx::GLImplFactory *factory, ProgramPipelineID h
         mProgramExecutableObserverBindings.emplace_back(
             this, static_cast<angle::SubjectIndex>(shaderType));
     }
-    mExecutableObserverBinding.bind(mState.mExecutable.get());
 }
 
 ProgramPipeline::~ProgramPipeline()
@@ -181,14 +175,6 @@ void ProgramPipeline::onDestroy(const Context *context)
 
     getImplementation()->destroy(context);
     UninstallExecutable(context, &mState.mExecutable);
-
-    for (SharedProgramExecutable &executable : mState.mProgramExecutables)
-    {
-        if (executable)
-        {
-            mState.mProgramExecutablesToDiscard.emplace_back(std::move(executable));
-        }
-    }
 
     mState.destroyDiscardedExecutables(context);
 }
@@ -512,10 +498,11 @@ angle::Result ProgramPipeline::link(const Context *context)
     mState.destroyDiscardedExecutables(context);
 
     // Make a new executable to hold the result of the link.
-    InstallExecutable(
-        context,
-        std::make_shared<ProgramExecutable>(context->getImplementation(), &mState.mInfoLog),
-        &mState.mExecutable);
+    SharedProgramExecutable newExecutable =
+        std::make_shared<ProgramExecutable>(context->getImplementation(), &mState.mInfoLog);
+    newExecutable->mPPOProgramExecutables = std::move(mState.mExecutable->mPPOProgramExecutables);
+
+    InstallExecutable(context, newExecutable, &mState.mExecutable);
     onStateChange(angle::SubjectMessage::ProgramUnlinked);
 
     updateLinkedShaderStages();
@@ -534,6 +521,12 @@ angle::Result ProgramPipeline::link(const Context *context)
     const Limitations &limitations = context->getLimitations();
     const Version &clientVersion   = context->getClientVersion();
     const bool isWebGL             = context->isWebGL();
+
+    if (mState.mExecutable->hasLinkedShaderStage(gl::ShaderType::TessControl) !=
+        mState.mExecutable->hasLinkedShaderStage(gl::ShaderType::TessEvaluation))
+    {
+        return angle::Result::Stop;
+    }
 
     if (mState.mExecutable->hasLinkedShaderStage(ShaderType::Vertex))
     {
@@ -598,7 +591,7 @@ angle::Result ProgramPipeline::link(const Context *context)
     }
 
     // Merge uniforms.
-    mState.mExecutable->copyUniformsFromProgramMap(mState.mProgramExecutables);
+    mState.mExecutable->copyUniformsFromProgramMap(mState.mExecutable->mPPOProgramExecutables);
 
     if (mState.mExecutable->hasLinkedShaderStage(ShaderType::Vertex))
     {
@@ -706,6 +699,15 @@ void ProgramPipeline::validate(const Context *context)
     mState.mValid    = true;
     mState.mInfoLog.reset();
 
+    if (mState.mExecutable->hasLinkedShaderStage(gl::ShaderType::TessControl) !=
+        mState.mExecutable->hasLinkedShaderStage(gl::ShaderType::TessEvaluation))
+    {
+        mState.mValid = false;
+        mState.mInfoLog << "Program pipeline must have both a Tessellation Control and Evaluation "
+                           "shader or neither\n";
+        return;
+    }
+
     for (const ShaderType shaderType : mState.mExecutable->getLinkedShaderStages())
     {
         Program *shaderProgram = mState.mPrograms[shaderType];
@@ -777,12 +779,12 @@ void ProgramPipeline::onSubjectStateChange(angle::SubjectIndex index, angle::Sub
         {
             ShaderType shaderType = static_cast<ShaderType>(index);
             ASSERT(mState.mPrograms[shaderType] != nullptr);
-            ASSERT(mState.mProgramExecutables[shaderType]);
+            ASSERT(mState.mExecutable->mPPOProgramExecutables[shaderType]);
 
             mState.mIsLinked = false;
             mState.mProgramExecutablesToDiscard.emplace_back(
-                std::move(mState.mProgramExecutables[shaderType]));
-            mState.mProgramExecutables[shaderType] =
+                std::move(mState.mExecutable->mPPOProgramExecutables[shaderType]));
+            mState.mExecutable->mPPOProgramExecutables[shaderType] =
                 mState.mPrograms[shaderType]->getSharedExecutable();
 
             break;

@@ -22,7 +22,6 @@ from py_utils import logging_util  # pylint: disable=import-error
 from py_utils.constants import exit_codes
 
 from telemetry.core import exceptions
-from telemetry.core import optparse_argparse_migration as oam
 from telemetry.internal.actions import page_action
 from telemetry.internal.browser import browser_finder
 from telemetry.internal.browser import browser_finder_exceptions
@@ -58,50 +57,52 @@ class ArchiveError(Exception):
 def AddCommandLineArgs(parser):
   story_filter_module.StoryFilterFactory.AddCommandLineArgs(parser)
 
-  group = oam.CreateOptionGroup(parser, 'Story runner options')
+  group = parser.add_argument_group('Story runner options')
   # Note that the default for pageset-repeat is 1 unless the benchmark
   # specifies a different default by adding
   # `options = {'pageset_repeat': X}` in their benchmark. Defaults are always
   # overridden by passed in commandline arguments.
-  group.add_option('--pageset-repeat', default=1, type='int',
-                   help='Number of times to repeat the entire pageset. ')
+  group.add_argument('--pageset-repeat',
+                     default=1,
+                     type=int,
+                     help='Number of times to repeat the entire pageset.')
   # TODO(crbug.com/910809): Add flag to reduce iterations to 1.
   # (An iteration is a repeat of the benchmark without restarting Chrome. It
   # must be supported in benchmark-specific code.) This supports the smoke
   # test use case since we don't want to waste time with iterations in smoke
   # tests.
-  group.add_option('--max-failures', default=None, type='int',
-                   help='Maximum number of test failures before aborting '
-                   'the run. Defaults to the number specified by the '
-                   'PageTest.')
-  group.add_option('--pause', dest='pause', default=None,
-                   choices=_PAUSE_STAGES,
-                   help='Pause for interaction at the specified stage. '
-                   'Valid stages are %s.' % ', '.join(_PAUSE_STAGES))
-  group.add_option('--suppress-gtest-report', action='store_true',
-                   help='Suppress gtest style report of progress as stories '
-                   'are being run.')
-  group.add_option('--skip-typ-expectations-tags-validation',
-                   action='store_true',
-                   help='Suppress typ expectation tags validation errors.')
-  parser.add_option_group(group)
+  group.add_argument('--max-failures',
+                     default=None,
+                     type=int,
+                     help=('Maximum number of test failures before aborting '
+                           'the run. Defaults to the number specified by the '
+                           'PageTest.'))
+  group.add_argument('--pause',
+                     choices=_PAUSE_STAGES,
+                     help='Pause for interaction at the specified stage.')
+  group.add_argument('--suppress-gtest-report',
+                     action='store_true',
+                     help=('Suppress gtest style report of progress as stories '
+                           'are being run.'))
+  group.add_argument('--skip-typ-expectations-tags-validation',
+                     action='store_true',
+                     help='Suppress typ expectation tags validation errors.')
 
-  group = oam.CreateOptionGroup(parser, 'Web Page Replay options')
-  group.add_option(
+  group = parser.add_argument_group('Web Page Replay options')
+  group.add_argument(
       '--use-live-sites',
-      dest='use_live_sites', action='store_true',
+      action='store_true',
       help='Run against live sites and ignore the Web Page Replay archives.')
-  parser.add_option_group(group)
 
-  parser.add_option('-p', '--print-only', dest='print_only',
-                    choices=['stories', 'tags', 'both'], default=None)
-  parser.add_option('-w', '--wait-for-cpu-temp',
-                    dest='wait_for_cpu_temp', action='store_true',
-                    default=False,
-                    help='Introduces a wait between each story '
-                    'until the device CPU has cooled down. If '
-                    'not specified, this wait is disabled. '
-                    'Device must be supported. ')
+  parser.add_argument('-p', '--print-only', choices=['stories', 'tags', 'both'])
+  parser.add_argument(
+      '-w',
+      '--wait-for-cpu-temp',
+      action='store_true',
+      default=False,
+      help=('Introduces a wait between each story until the device CPU has '
+            'cooled down. If not specified, this wait is disabled. Device must '
+            'be supported. '))
 
 
 def ProcessCommandLineArgs(parser, args, environment=None):

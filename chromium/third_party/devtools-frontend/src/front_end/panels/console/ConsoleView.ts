@@ -193,10 +193,6 @@ const UIStrings = {
    */
   searching: 'Searching…',
   /**
-   *@description Text to filter result items
-   */
-  filter: 'Filter',
-  /**
    *@description Text in Console View of the Console panel
    */
   egEventdCdnUrlacom: 'e.g. `/event\d/ -cdn url:a.com`',
@@ -216,10 +212,6 @@ const UIStrings = {
    *@description Text for errors
    */
   errors: 'Errors',
-  /**
-   *@description Text in Console View of the Console panel
-   */
-  logLevels: 'Log levels',
   /**
    *@description Title text of a setting in Console View of the Console panel
    */
@@ -276,7 +268,7 @@ export class ConsoleView extends UI.Widget.VBox implements
   private filter: ConsoleViewFilter;
   private readonly consoleToolbarContainer: HTMLElement;
   private readonly splitWidget: UI.SplitWidget.SplitWidget;
-  private readonly contentsElement: UI.Widget.WidgetElement;
+  private readonly contentsElement: typeof UI.Widget.Widget.prototype.element;
   private visibleViewMessages: ConsoleViewMessage[];
   private hiddenByFilterCount: number;
   private shouldBeHiddenCache: Set<ConsoleViewMessage>;
@@ -1346,7 +1338,8 @@ export class ConsoleView extends UI.Widget.VBox implements
   }
 
   private messagesPasted(event: Event): void {
-    if (!Root.Runtime.Runtime.queryParam('isChromeForTesting') && !this.selfXssWarningDisabledSetting.get()) {
+    if (!Root.Runtime.Runtime.queryParam('isChromeForTesting') &&
+        !Root.Runtime.Runtime.queryParam('disableSelfXssWarnings') && !this.selfXssWarningDisabledSetting.get()) {
       event.preventDefault();
       this.prompt.showSelfXssWarning();
     }
@@ -1617,7 +1610,7 @@ export class ConsoleViewFilter {
   private readonly filterParser: TextUtils.TextUtils.FilterParser;
   currentFilter: ConsoleFilter;
   private levelLabels: Map<Protocol.Log.LogEntryLevel, string>;
-  readonly levelMenuButton: UI.Toolbar.ToolbarButton;
+  readonly levelMenuButton: UI.Toolbar.ToolbarMenuButton;
 
   constructor(filterChangedCallback: () => void) {
     this.filterChanged = filterChangedCallback;
@@ -1635,8 +1628,8 @@ export class ConsoleViewFilter {
 
     const filterKeys = Object.values(FilterType);
     this.suggestionBuilder = new UI.FilterSuggestionBuilder.FilterSuggestionBuilder(filterKeys);
-    this.textFilterUI = new UI.Toolbar.ToolbarInput(
-        i18nString(UIStrings.filter), '', 1, 1, i18nString(UIStrings.egEventdCdnUrlacom),
+    this.textFilterUI = new UI.Toolbar.ToolbarFilter(
+        undefined, 1, 1, i18nString(UIStrings.egEventdCdnUrlacom),
         this.suggestionBuilder.completions.bind(this.suggestionBuilder), true);
     this.textFilterSetting = Common.Settings.Settings.instance().createSetting('console.text-filter', '');
     if (this.textFilterSetting.get()) {
@@ -1656,11 +1649,10 @@ export class ConsoleViewFilter {
       [Protocol.Log.LogEntryLevel.Error, i18nString(UIStrings.errors)],
     ]));
 
-    this.levelMenuButton = new UI.Toolbar.ToolbarButton(i18nString(UIStrings.logLevels));
+    this.levelMenuButton =
+        new UI.Toolbar.ToolbarMenuButton(this.appendLevelMenuItems.bind(this), undefined, 'log-level');
+    this.levelMenuButton.setGlyph('');
     this.levelMenuButton.turnIntoSelect();
-    this.levelMenuButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.showLevelContextMenu.bind(this));
-    UI.ARIAUtils.markAsMenuButton(this.levelMenuButton.element);
-    this.levelMenuButton.element.setAttribute('jslog', `${VisualLogging.dropDown('log-level').track({click: true})}`);
 
     this.updateLevelMenuButtonText();
     this.messageLevelFiltersSetting.addChangeListener(this.updateLevelMenuButtonText.bind(this));
@@ -1749,17 +1741,10 @@ export class ConsoleViewFilter {
     this.levelMenuButton.setTitle(i18nString(UIStrings.logLevelS, {PH1: text}));
   }
 
-  private showLevelContextMenu(event: Common.EventTarget.EventTargetEvent<Event>): void {
-    const mouseEvent = event.data;
+  private appendLevelMenuItems(contextMenu: UI.ContextMenu.ContextMenu): void {
     const setting = this.messageLevelFiltersSetting;
     const levels = setting.get();
 
-    const contextMenu = new UI.ContextMenu.ContextMenu(mouseEvent, {
-      useSoftMenu: true,
-      x: this.levelMenuButton.element.getBoundingClientRect().left,
-      y: this.levelMenuButton.element.getBoundingClientRect().top +
-          (this.levelMenuButton.element as HTMLElement).offsetHeight,
-    });
     contextMenu.headerSection().appendItem(
         i18nString(UIStrings.default), () => setting.set(ConsoleFilter.defaultLevelsFilterValue()),
         {jslogContext: 'default'});
@@ -1767,7 +1752,6 @@ export class ConsoleViewFilter {
       contextMenu.defaultSection().appendCheckboxItem(
           levelText, toggleShowLevel.bind(null, level), {checked: levels[level], jslogContext: level});
     }
-    void contextMenu.show();
 
     function toggleShowLevel(level: string): void {
       levels[level] = !levels[level];
@@ -1806,7 +1790,7 @@ export class ActionDelegate implements UI.ActionRegistration.ActionDelegate {
   handleAction(_context: UI.Context.Context, actionId: string): boolean {
     switch (actionId) {
       case 'console.toggle':
-        if (ConsoleView.instance().isShowing() && UI.InspectorView.InspectorView.instance().drawerVisible()) {
+        if (ConsoleView.instance().hasFocus() && UI.InspectorView.InspectorView.instance().drawerVisible()) {
           UI.InspectorView.InspectorView.instance().closeDrawer();
           return true;
         }

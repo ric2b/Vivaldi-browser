@@ -294,7 +294,7 @@ int SearchResultListView::DoUpdate() {
 
   auto* notifier = view_delegate()->GetNotifier();
 
-  // TODO(crbug/1216097): replace metrics with something more meaningful.
+  // TODO(crbug.com/40184658): replace metrics with something more meaningful.
   if (notifier) {
     std::vector<AppListNotifier::Result> notifier_results;
     for (const auto* result : displayed_results)
@@ -334,8 +334,9 @@ void SearchResultListView::Layout(PassKey) {
   results_container_->SetBoundsRect(GetLocalBounds());
 }
 
-gfx::Size SearchResultListView::CalculatePreferredSize() const {
-  return results_container_->GetPreferredSize();
+gfx::Size SearchResultListView::CalculatePreferredSize(
+    const views::SizeBounds& available_size) const {
+  return results_container_->GetPreferredSize(available_size);
 }
 
 int SearchResultListView::GetHeightForWidth(int w) const {

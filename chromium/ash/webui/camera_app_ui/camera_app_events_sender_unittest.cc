@@ -94,6 +94,7 @@ TEST_F(CameraAppEventsSenderTest, Capture) {
   params->resolution_height = 1920;
   params->resolution_level = ash::camera_app::mojom::ResolutionLevel::kFullHD;
   params->aspect_ratio_set = ash::camera_app::mojom::AspectRatioSet::k16To9;
+  params->zoom_ratio = 1;
 
   auto video_details = ash::camera_app::mojom::VideoDetails::New();
   video_details->is_muted = true;
@@ -146,7 +147,8 @@ TEST_F(CameraAppEventsSenderTest, Capture) {
       .SetGifResultType(static_cast<cros_events::CameraAppGifResultType>(
           ash::camera_app::mojom::GifResultType::kNotGif))
       .SetTimelapseSpeed(
-          static_cast<int64_t>(timelapse_video_details->timelapse_speed));
+          static_cast<int64_t>(timelapse_video_details->timelapse_speed))
+      .SetZoomRatio(static_cast<double>(params->zoom_ratio));
 
   events_sender_->SendCaptureEvent(std::move(params));
 
@@ -349,6 +351,18 @@ TEST_F(CameraAppEventsSenderTest, Perf) {
   EXPECT_EQ(received_event.metric_values(), expected_event.metric_values());
 }
 
+TEST_F(CameraAppEventsSenderTest, UnsupportedProtocol) {
+  cros_events::CameraApp_UnsupportedProtocol expected_event;
+
+  events_sender_->SendUnsupportedProtocolEvent();
+  const std::vector<metrics::structured::Event>& events =
+      metrics_recorder_->GetEvents();
+  ASSERT_EQ(events.size(), 1U);
+
+  auto& received_event = events[0];
+  EXPECT_EQ(received_event.event_name(), expected_event.event_name());
+}
+
 TEST_F(CameraAppEventsSenderTest, EndSession) {
   // To send a end session event, a start session event should be sent first.
   auto start_session_params =
@@ -356,14 +370,6 @@ TEST_F(CameraAppEventsSenderTest, EndSession) {
   start_session_params->launch_type =
       ash::camera_app::mojom::LaunchType::kAssistant;
   events_sender_->SendStartSessionEvent(std::move(start_session_params));
-
-  // Updates the memory usage event to be brought with the end session event.
-  auto params = ash::camera_app::mojom::MemoryUsageEventParams::New();
-  params->behaviors_mask = static_cast<uint32_t>(
-      ash::camera_app::mojom::UserBehavior::kRecordTimelapseVideo);
-  params->memory_usage = 10000;
-
-  events_sender_->UpdateMemoryUsageEventParams(params.Clone());
 
   // The end session event will be sent when the mojo connection dropped.
   events_sender_->OnMojoDisconnected();
@@ -376,6 +382,36 @@ TEST_F(CameraAppEventsSenderTest, EndSession) {
   auto& received_event = events[1];
 
   cros_events::CameraApp_EndSession expected_event;
+  EXPECT_EQ(received_event.event_name(), expected_event.event_name());
+}
+
+TEST_F(CameraAppEventsSenderTest, MemoryUsage) {
+  // To send a memory usage event, a start session event should be sent first.
+  auto start_session_params =
+      ash::camera_app::mojom::StartSessionEventParams::New();
+  start_session_params->launch_type =
+      ash::camera_app::mojom::LaunchType::kAssistant;
+  events_sender_->SendStartSessionEvent(std::move(start_session_params));
+
+  // Updates the memory usage event to be brought with the end session event.
+  auto params = ash::camera_app::mojom::MemoryUsageEventParams::New();
+  params->behaviors_mask = static_cast<uint32_t>(
+      ash::camera_app::mojom::UserBehavior::kRecordTimelapseVideo);
+  params->memory_usage = 10000;
+  events_sender_->UpdateMemoryUsageEventParams(params.Clone());
+
+  // The memory usage event will be sent when the mojo connection dropped.
+  events_sender_->OnMojoDisconnected();
+
+  // [0]: Start Session Event.
+  // [1]: End Session Event.
+  // [2]: Memory usage Event.
+  const std::vector<metrics::structured::Event>& events =
+      metrics_recorder_->GetEvents();
+  ASSERT_EQ(events.size(), 3U);
+  auto& received_event = events[2];
+
+  cros_events::CameraApp_MemoryUsage expected_event;
   expected_event.SetBehaviors(static_cast<int64_t>(params->behaviors_mask))
       .SetMemoryUsage(static_cast<int64_t>(params->memory_usage));
 
@@ -383,10 +419,6 @@ TEST_F(CameraAppEventsSenderTest, EndSession) {
   auto& received_metrics = received_event.metric_values();
   auto& expected_metrics = expected_event.metric_values();
   for (auto it = received_metrics.begin(); it != received_metrics.end(); it++) {
-    // Skip the verification of session duration.
-    if (it->first == "Duration") {
-      continue;
-    }
     EXPECT_EQ(it->second, expected_metrics.at(it->first));
   }
 }

@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os
-  - Chromium OS
+  - ChromiumOS
 page_name: android-apps
 title: Optimize Android Apps for Chromebooks
 ---

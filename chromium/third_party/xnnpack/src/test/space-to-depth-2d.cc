@@ -3,24 +3,23 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <algorithm>
-#include <array>
-#include <cstddef>
-#include <cstdint>
-#include <limits>
-#include <memory>
-#include <random>
-#include <vector>
-
-#include <fp16/fp16.h>
-#include <gtest/gtest.h>
-
 #include <xnnpack.h>
 #include <xnnpack/node-type.h>
 #include <xnnpack/operator.h>
 #include <xnnpack/subgraph.h>
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <random>
+#include <vector>
+
 #include "subgraph-unary-tester.h"
+#include <gtest/gtest.h>
+#include <fp16/fp16.h>
 
 using SpaceToDepth2DTestQS8 = UnaryTest<int8_t, int8_t, /*min_dim=*/4, /*max_dim=*/4>;
 using SpaceToDepth2DTestQU8 = UnaryTest<uint8_t, uint8_t, /*min_dim=*/4, /*max_dim=*/4>;
@@ -383,8 +382,8 @@ TEST_F(SpaceToDepth2DTestF16, matches_operator_api)
   size_t batch_size = dims[0];
 
   std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-  std::fill(operator_output.begin(), operator_output.end(), fp16_ieee_from_fp32_value(nanf("")));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), fp16_ieee_from_fp32_value(nanf("")));
+  std::fill(operator_output.begin(), operator_output.end(), UINT16_C(0x7E00) /* NaN */);
+  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT16_C(0x7E00) /* NaN */);
 
   // Call operator API.
   ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));

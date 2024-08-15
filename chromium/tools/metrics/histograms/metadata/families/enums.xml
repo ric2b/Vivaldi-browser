@@ -40,6 +40,24 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Has conflict"/>
 </enum>
 
+<!-- LINT.IfChange(FamilyInfoLogSourceFetchStatus) -->
+
+<enum name="FamilyInfoLogSourceFetchStatus">
+  <int value="0" label="Ok">
+    Recorded when a successful response is received from the fetch.
+  </int>
+  <int value="1" label="Failure response">
+    Recorded when an unsuccessful completion is signaled by the fetcher. This
+    corresponds to the non-successful response codes in the
+    SupervisedUserProtoFetcherStatus enum.
+  </int>
+  <int value="2" label="Timeout">
+    Recorded when no completion is signaled by the fetcher within a timeout.
+  </int>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/feedback/system_logs/log_sources/family_info_log_source.h:FetchStatus) -->
+
 <enum name="FamilyLinkFilteringSubdomainConflictType">
   <int value="0" label="Only trivial subdomain conflict">
     Recorded when, for an input host, the matching conflicting entries from the
@@ -250,14 +268,39 @@ chromium-metrics-reviews@google.com.
   <int value="6" label="Requests Disabled"/>
 </enum>
 
+<!-- LINT.IfChange(SupervisedUserExtension2) -->
+
 <enum name="SupervisedUserExtension2">
   <summary>
     Tracks the state of a supervised user trying to install an extension.
   </summary>
-  <int value="0" label="Extension Approval Granted"/>
-  <int value="1" label="Permissions Increase Granted"/>
-  <int value="2" label="Extension Approval Removed"/>
+  <int value="0" label="Extension Approval Granted">
+    Incremented when the custodian explicitly grants approval to install an
+    extension for the first time. This is not output if the parent configuration
+    is set to not require approvals.
+  </int>
+  <int value="1" label="Permissions Increase Granted">
+    Incremeted when the custodian approves a newer version of an existing
+    extension with increased permissions.
+  </int>
+  <int value="2" label="Extension Approval Removed">
+    Incremented when the supervised user removes an extension (which removes the
+    previously granted custodian approval).
+  </int>
+  <int value="3" label="Extension Approval Granted by Default">
+    Incremented when the supervised user installs an extension, and the parent
+    configuration is set to not require approvals. The approval is therefore
+    granted implicitly.
+  </int>
+  <int value="4" label="Local Extension Approval Granted">
+    Incremented when an extension is marked as approved only on this device.
+    This happens on Windows/Mac/Linux when a supervised user had
+    previously-installed extensions, and the
+    SkipParentApprovalToInstallExtensions feature is first released.
+  </int>
 </enum>
+
+<!-- LINT.ThenChange(//chrome/browser/supervised_user/supervised_user_extensions_metrics_recorder.h:UmaExtensionState) -->
 
 <enum name="SupervisedUserExtensionEnablement">
   <summary>
@@ -557,6 +600,25 @@ chromium-metrics-reviews@google.com.
     Other navigation; Allowed by allowlist
   </int>
 </enum>
+
+<!-- LINT.IfChange(SupervisedUserToggleState) -->
+
+<enum name="SupervisedUserToggleState">
+  <int value="0" label="Disabled">
+    There is at least one supervised profile, and all supervised profiles have
+    the toggle disabled.
+  </int>
+  <int value="1" label="Enabled">
+    There is at least one supervised profile, and all supervised profiles have
+    the toggle enabled.
+  </int>
+  <int value="2" label="Mixed">
+    There are multiple supervised profiles, some with the toggle disabled and
+    some with it enabled.
+  </int>
+</enum>
+
+<!-- LINT.ThenChange(//components/supervised_user/core/common/supervised_user_constants.h:ToggleState) -->
 
 <enum name="SupervisionStatusReportEvent">
   <summary>Events that trigger status report for supervised accounts</summary>

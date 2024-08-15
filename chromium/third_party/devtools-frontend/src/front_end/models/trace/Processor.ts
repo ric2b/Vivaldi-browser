@@ -35,11 +35,12 @@ export class TraceProcessor<EnabledModelHandlers extends {[key: string]: Handler
   // the model handlers the user passes in and the Meta handler.
   readonly #traceHandlers: Handlers.Types.HandlersWithMeta<EnabledModelHandlers>;
   #status = Status.IDLE;
-  #modelConfiguration = Types.Configuration.DEFAULT;
+  #modelConfiguration = Types.Configuration.defaults();
+  #data: Handlers.Types.EnabledHandlerDataWithMeta<EnabledModelHandlers>|null = null;
   #insights: Insights.Types.TraceInsightData<EnabledModelHandlers>|null = null;
 
   static createWithAllHandlers(): TraceProcessor<typeof Handlers.ModelHandlers> {
-    return new TraceProcessor(Handlers.ModelHandlers, Types.Configuration.DEFAULT);
+    return new TraceProcessor(Handlers.ModelHandlers, Types.Configuration.defaults());
   }
 
   constructor(traceHandlers: EnabledModelHandlers, modelConfiguration?: Types.Configuration.Configuration) {
@@ -53,11 +54,6 @@ export class TraceProcessor<EnabledModelHandlers extends {[key: string]: Handler
     if (modelConfiguration) {
       this.#modelConfiguration = modelConfiguration;
     }
-    this.#passConfigToHandlers();
-  }
-
-  updateConfiguration(config: Types.Configuration.Configuration): void {
-    this.#modelConfiguration = config;
     this.#passConfigToHandlers();
   }
 
@@ -118,8 +114,8 @@ export class TraceProcessor<EnabledModelHandlers extends {[key: string]: Handler
       handler.reset();
     }
 
+    this.#data = null;
     this.#insights = null;
-
     this.#status = Status.IDLE;
   }
 
@@ -138,11 +134,15 @@ export class TraceProcessor<EnabledModelHandlers extends {[key: string]: Handler
   }
 
   async #parse(traceEvents: readonly Types.TraceEvents.TraceEventData[], freshRecording: boolean): Promise<void> {
-    // This iterator steps through all events, periodically yielding back to the
-    // main thread to avoid blocking execution. It uses `dispatchEvent` to
-    // provide status update events, and other various bits of config like the
-    // pause duration and frequency.
-    const {pauseDuration, eventsPerChunk} = this.#modelConfiguration.processing;
+    /**
+     * We want to yield regularly to maintain responsiveness. If we yield too often, we're wasting idle time.
+     * We could do this by checking `performance.now()` regularly, but it's an expensive call in such a hot loop.
+     * `eventsPerChunk` is an approximated proxy metric.
+     * But how big a chunk? We're aiming for long tasks that are no smaller than 100ms and not bigger than 200ms.
+     * It's CPU dependent, so it should be calibrated on oldish hardware.
+     * Illustration of a previous change to `eventsPerChunk`: https://imgur.com/wzp8BnR
+     */
+    const eventsPerChunk = 50_000;
 
     // Convert to array so that we are able to iterate all handlers multiple times.
     const sortedHandlers = [...sortHandlers(this.#traceHandlers).values()];
@@ -162,9 +162,8 @@ export class TraceProcessor<EnabledModelHandlers extends {[key: string]: Handler
       if (i % eventsPerChunk === 0 && i) {
         // Take the opportunity to provide status update events.
         this.dispatchEvent(new TraceParseProgressEvent({index: i, total: traceEvents.length}));
-        // Wait for rendering before resuming.
-        // TODO(paulirish): consider using `scheduler.await()` or `scheduler.postTask(() => {}, {priority: 'user-blocking'})`
-        await new Promise(resolve => setTimeout(resolve, pauseDuration));
+        // TODO(paulirish): consider using `scheduler.yield()` or `scheduler.postTask(() => {}, {priority: 'user-blocking'})`
+        await new Promise(resolve => setTimeout(resolve, 0));
       }
       const event = traceEvents[i];
       for (let j = 0; j < sortedHandlers.length; ++j) {
@@ -183,12 +182,44 @@ export class TraceProcessor<EnabledModelHandlers extends {[key: string]: Handler
       return null;
     }
 
-    const traceParsedData = {};
-    for (const [name, handler] of Object.entries(this.#traceHandlers)) {
-      Object.assign(traceParsedData, {[name]: handler.data()});
+    if (this.#data) {
+      return this.#data;
     }
 
-    return traceParsedData as Handlers.Types.EnabledHandlerDataWithMeta<EnabledModelHandlers>;
+    // Handlers that depend on other handlers do so via .data(), which used to always
+    // return a shallow clone of its internal data structures. However, that pattern
+    // easily results in egregious amounts of allocation. Now .data() does not do any
+    // cloning, and it happens here instead so that users of the trace processor may
+    // still assume that the parsed data is theirs.
+    // See: crbug/41484172
+    const shallowClone = (value: unknown, recurse = true): unknown => {
+      if (value instanceof Map) {
+        return new Map(value);
+      }
+      if (value instanceof Set) {
+        return new Set(value);
+      }
+      if (Array.isArray(value)) {
+        return [...value];
+      }
+      if (typeof value === 'object' && value && recurse) {
+        const obj: Record<string, unknown> = {};
+        for (const [key, v] of Object.entries(value)) {
+          obj[key] = shallowClone(v, false);
+        }
+        return obj;
+      }
+      return value;
+    };
+
+    const traceParsedData = {};
+    for (const [name, handler] of Object.entries(this.#traceHandlers)) {
+      const data = shallowClone(handler.data());
+      Object.assign(traceParsedData, {[name]: data});
+    }
+
+    this.#data = traceParsedData as Handlers.Types.EnabledHandlerDataWithMeta<EnabledModelHandlers>;
+    return this.#data;
   }
 
   #getEnabledInsightRunners(traceParsedData: Handlers.Types.EnabledHandlerDataWithMeta<EnabledModelHandlers>):

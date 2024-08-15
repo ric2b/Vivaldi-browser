@@ -53,6 +53,7 @@
 #include "third_party/blink/renderer/core/animation/element_animations.h"
 #include "third_party/blink/renderer/core/animation/keyframe_effect.h"
 #include "third_party/blink/renderer/core/animation/pending_animations.h"
+#include "third_party/blink/renderer/core/css/background_color_paint_image_generator.h"
 #include "third_party/blink/renderer/core/css/css_custom_ident_value.h"
 #include "third_party/blink/renderer/core/css/css_paint_value.h"
 #include "third_party/blink/renderer/core/css/css_syntax_definition.h"
@@ -77,6 +78,7 @@
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 #include "third_party/blink/renderer/core/testing/null_execution_context.h"
+#include "third_party/blink/renderer/platform/graphics/bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/thread_state.h"
@@ -112,6 +114,7 @@ CSSPaintImageGenerator* ProvideOverrideGenerator(
     CSSPaintImageGenerator::Observer*) {
   return g_override_generator;
 }
+
 }  // namespace
 
 using css_test_helpers::RegisterProperty;
@@ -400,6 +403,16 @@ class AnimationCompositorAnimationsTest : public PaintTestConfigurations,
     EXPECT_TRUE(element_->style()->getPropertyValue(name));
   }
 
+  bool IsUseCounted(mojom::WebFeature feature) {
+    return GetDocument().IsUseCounted(feature);
+  }
+
+  void ClearUseCounters() {
+    GetDocument().ClearUseCounterForTesting(
+        WebFeature::kStaticPropertyInAnimation);
+    // If other use counters are test, be sure the clear them here.
+  }
+
   // This class exists to dodge the interlock between creating compositor
   // keyframe values iff we can animate them on the compositor, and hence can
   // start their animations on it. i.e. two far away switch statements have
@@ -625,7 +638,6 @@ class LayoutObjectProxy : public LayoutObject {
   static void Dispose(LayoutObjectProxy* proxy) { proxy->Destroy(); }
 
   const char* GetName() const override { return nullptr; }
-  void UpdateLayout() override {}
   gfx::RectF LocalBoundingBoxRectForAccessibility() const override {
     return gfx::RectF();
   }
@@ -2716,7 +2728,46 @@ TEST_P(AnimationCompositorAnimationsTest,
                   GetDocument().View()->GetPaintArtifactCompositor()));
 }
 
+class ScopedBackgroundColorPaintImageGenerator {
+ public:
+  explicit ScopedBackgroundColorPaintImageGenerator(LocalFrame* frame)
+      : paint_image_generator_(
+        MakeGarbageCollected<FakeBackgroundColorPaintImageGenerator>()),
+        frame_(frame) {
+    frame_->SetBackgroundColorPaintImageGeneratorForTesting(
+        paint_image_generator_);
+  }
+
+  ~ScopedBackgroundColorPaintImageGenerator() {
+    frame_->SetBackgroundColorPaintImageGeneratorForTesting(nullptr);
+  }
+
+ private:
+  class FakeBackgroundColorPaintImageGenerator
+      : public BackgroundColorPaintImageGenerator {
+    scoped_refptr<Image> Paint(const gfx::SizeF& container_size,
+                               const Node* node) override {
+      return BitmapImage::Create();
+    }
+
+    Animation* GetAnimationIfCompositable(const Element* element) override {
+      // Note that the complete test for determining eligibility to run on the
+      // compositor is in modules code. It is a layering violation to include
+      // here. Instead, we assume that no paint definition specific constraints
+      // are violated. These additional constraints should be tested in
+      // *_paint_definitiion_test.cc.
+      return element->GetElementAnimations()->Animations().begin()->key;
+    }
+
+    void Shutdown() override {}
+  };
+
+  Persistent<FakeBackgroundColorPaintImageGenerator> paint_image_generator_;
+  Persistent<LocalFrame> frame_;
+};
+
 TEST_P(AnimationCompositorAnimationsTest, BackgroundShorthand) {
+  ClearUseCounters();
   SetBodyInnerHTML(R"HTML(
     <style>
       @keyframes colorize {
@@ -2732,18 +2783,25 @@ TEST_P(AnimationCompositorAnimationsTest, BackgroundShorthand) {
     <div id="target"></div>
   )HTML");
 
+  // Normally, we don't get image generators set up in a testing environment.
+  // Construct a fake one to allow us to test that we are making the correct
+  // compositing decision.
+  ScopedBackgroundColorPaintImageGenerator image_generator(
+      GetDocument().GetFrame());
+
   Element* target = GetDocument().getElementById(AtomicString("target"));
   Animation* animation =
       target->GetElementAnimations()->Animations().begin()->key;
 
-  // TODO(kevers): Update NativeCssPaintDefinition to only consider dynamic
-  // properties when determining if an animation can be composited.
-  EXPECT_TRUE(CompositorAnimations::kUnsupportedCSSProperty &
-              animation->CheckCanStartAnimationOnCompositor(
-                  GetDocument().View()->GetPaintArtifactCompositor()));
+  EXPECT_EQ(CompositorAnimations::kNoFailure,
+            animation->CheckCanStartAnimationOnCompositor(
+                GetDocument().View()->GetPaintArtifactCompositor()));
+
+  EXPECT_TRUE(IsUseCounted(WebFeature::kStaticPropertyInAnimation));
 }
 
 TEST_P(AnimationCompositorAnimationsTest, StaticNonCompositableProperty) {
+  ClearUseCounters();
   SetBodyInnerHTML(R"HTML(
     <style>
       @keyframes fade-in {
@@ -2765,9 +2823,11 @@ TEST_P(AnimationCompositorAnimationsTest, StaticNonCompositableProperty) {
   EXPECT_EQ(CompositorAnimations::kNoFailure,
             animation->CheckCanStartAnimationOnCompositor(
                 GetDocument().View()->GetPaintArtifactCompositor()));
+  EXPECT_TRUE(IsUseCounted(WebFeature::kStaticPropertyInAnimation));
 }
 
 TEST_P(AnimationCompositorAnimationsTest, StaticCompositableProperty) {
+  ClearUseCounters();
   SetBodyInnerHTML(R"HTML(
     <style>
       @keyframes static {
@@ -2789,9 +2849,11 @@ TEST_P(AnimationCompositorAnimationsTest, StaticCompositableProperty) {
   EXPECT_TRUE(CompositorAnimations::kAnimationHasNoVisibleChange &
               animation->CheckCanStartAnimationOnCompositor(
                   GetDocument().View()->GetPaintArtifactCompositor()));
+  EXPECT_TRUE(IsUseCounted(WebFeature::kStaticPropertyInAnimation));
 }
 
 TEST_P(AnimationCompositorAnimationsTest, EmptyKeyframes) {
+  ClearUseCounters();
   SetBodyInnerHTML(R"HTML(
     <style>
       @keyframes no-op {
@@ -2804,13 +2866,13 @@ TEST_P(AnimationCompositorAnimationsTest, EmptyKeyframes) {
     </style>
     <div id="target"></div>
   )HTML");
-
   Element* target = GetDocument().getElementById(AtomicString("target"));
   Animation* animation =
       target->GetElementAnimations()->Animations().begin()->key;
   EXPECT_TRUE(CompositorAnimations::kAnimationHasNoVisibleChange &
               animation->CheckCanStartAnimationOnCompositor(
                   GetDocument().View()->GetPaintArtifactCompositor()));
+  EXPECT_FALSE(IsUseCounted(WebFeature::kStaticPropertyInAnimation));
 }
 
 }  // namespace blink

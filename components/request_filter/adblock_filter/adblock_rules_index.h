@@ -57,11 +57,11 @@ class RulesIndex : public content::RenderProcessHostObserver {
 
   static std::unique_ptr<RulesIndex> CreateInstance(
       std::map<uint32_t, const RuleBufferHolder&> rules_buffers,
-      std::unique_ptr<std::string> rules_index_buffer,
+      std::string rules_index_buffer,
       bool* uses_all_buffers);
 
   RulesIndex(RulesBufferMap rules_buffers,
-             std::unique_ptr<std::string> rules_index_buffer,
+             std::string rules_index_buffer,
              const flat::RulesIndex* const rules_index);
   ~RulesIndex() override;
   RulesIndex(const RulesIndex&) = delete;

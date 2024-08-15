@@ -56,6 +56,7 @@
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
+#include "third_party/blink/renderer/core/loader/anchor_element_interaction_tracker.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/core/loader/navigation_policy.h"
 #include "third_party/blink/renderer/core/loader/ping_loader.h"
@@ -101,10 +102,7 @@ bool ShouldInterveneDownloadByFramePolicy(LocalFrame* frame) {
     if (!has_gesture) {
       UseCounter::Count(document,
                         WebFeature::kDownloadInAdFrameWithoutUserGesture);
-      if (base::FeatureList::IsEnabled(
-              blink::features::
-                  kBlockingDownloadsInAdFrameWithoutUserActivation))
-        should_intervene_download = true;
+      should_intervene_download = true;
     }
   }
   if (frame->DomWindow()->IsSandboxed(
@@ -268,7 +266,8 @@ void HTMLAnchorElement::DefaultEventHandler(Event& event) {
     }
 
     if (IsLinkClick(event) && IsLiveLink()) {
-      HandleClick(event);
+      // IsLinkClick validates that |event| is a MouseEvent.
+      HandleClick(To<MouseEvent>(event));
       return;
     }
   }
@@ -573,7 +572,8 @@ void HTMLAnchorElement::NavigateToHyperlink(ResourceRequest request,
     frame_request.SetImpression(
         frame->GetAttributionSrcLoader()->RegisterNavigation(
             /*navigation_url=*/completed_url, attribution_src,
-            /*element=*/this, request.HasUserGesture()));
+            /*element=*/this, request.HasUserGesture(),
+            request.GetReferrerPolicy()));
   }
 
   Frame* target_frame =
@@ -619,7 +619,7 @@ Element* HTMLAnchorElement::interestTargetElement() {
 }
 
 AtomicString HTMLAnchorElement::interestAction() const {
-  DCHECK(RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled());
+  CHECK(RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled());
   const AtomicString& attribute_value =
       FastGetAttribute(html_names::kInterestactionAttr);
   if (attribute_value && !attribute_value.IsNull() &&
@@ -629,7 +629,7 @@ AtomicString HTMLAnchorElement::interestAction() const {
   return g_empty_atom;
 }
 
-void HTMLAnchorElement::HandleClick(Event& event) {
+void HTMLAnchorElement::HandleClick(MouseEvent& event) {
   event.SetDefaultHandled();
 
   LocalDOMWindow* window = GetDocument().domWindow();
@@ -641,9 +641,8 @@ void HTMLAnchorElement::HandleClick(Event& event) {
                       WebFeature::kAnchorClickDispatchForNonConnectedNode);
   }
 
-  if (auto* sender =
-          AnchorElementMetricsSender::GetForFrame(GetDocument().GetFrame())) {
-    sender->MaybeReportClickedMetricsOnClick(*this);
+  if (auto* tracker = GetDocument().GetAnchorElementInteractionTracker()) {
+    tracker->OnClickEvent(*this, event);
   }
 
   StringBuilder url;

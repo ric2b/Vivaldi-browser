@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/types/optional_ref.h"
@@ -38,7 +39,7 @@ class StorageHandler
       public content::InterestGroupManagerImpl::InterestGroupObserver,
       public AttributionObserver {
  public:
-  explicit StorageHandler(bool client_is_trusted);
+  explicit StorageHandler(DevToolsAgentHostClient* client);
 
   StorageHandler(const StorageHandler&) = delete;
   StorageHandler& operator=(const StorageHandler&) = delete;
@@ -155,6 +156,8 @@ class StorageHandler
       std::unique_ptr<SetAttributionReportingLocalTestingModeCallback>)
       override;
   Response SetAttributionReportingTracking(bool enable) override;
+  void SendPendingAttributionReports(
+      std::unique_ptr<SendPendingAttributionReportsCallback>) override;
 
   void NotifyInterestGroupAuctionEventOccurred(
       base::Time event_time,
@@ -235,10 +238,13 @@ class StorageHandler
   // have to work on `storage_partition_`, unlike the public version.
   Response SetInterestGroupTrackingInternal(StoragePartition* storage_partition,
                                             bool enable);
+  void GotAllCookies(
+      std::unique_ptr<Storage::Backend::GetCookiesCallback> callback,
+      const std::vector<net::CanonicalCookie>& cookies);
 
   std::unique_ptr<Storage::Frontend> frontend_;
-  StoragePartition* storage_partition_{nullptr};
-  RenderFrameHostImpl* frame_host_ = nullptr;
+  raw_ptr<StoragePartition> storage_partition_{nullptr};
+  raw_ptr<RenderFrameHostImpl> frame_host_ = nullptr;
   std::unique_ptr<CacheStorageObserver> cache_storage_observer_;
   std::unique_ptr<IndexedDBObserver> indexed_db_observer_;
   std::unique_ptr<SharedStorageObserver> shared_storage_observer_;
@@ -246,7 +252,7 @@ class StorageHandler
 
   // Exposes the API for managing storage quota overrides.
   std::unique_ptr<storage::QuotaOverrideHandle> quota_override_handle_;
-  bool client_is_trusted_;
+  raw_ptr<DevToolsAgentHostClient> client_;
 
   bool interest_group_tracking_enabled_ = false;
   bool interest_group_auction_tracking_enabled_ = false;

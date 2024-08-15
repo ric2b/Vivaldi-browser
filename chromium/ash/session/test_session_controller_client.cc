@@ -328,8 +328,9 @@ base::FilePath TestSessionControllerClient::GetProfilePath(
   return base::FilePath("/profile/path").Append(account_id.GetUserEmail());
 }
 
-bool TestSessionControllerClient::IsEnterpriseManaged() const {
-  return is_enterprise_managed_;
+bool TestSessionControllerClient::IsEligibleForSeaPen(
+    const AccountId& account_id) {
+  return is_eligible_for_background_replace_;
 }
 
 std::optional<int> TestSessionControllerClient::GetExistingUsersCount() const {

@@ -9,12 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "third_party/libunwindstack/src/libunwindstack/include/unwindstack/Elf.h"
-#include "third_party/libunwindstack/src/libunwindstack/include/unwindstack/Maps.h"
-#include "third_party/libunwindstack/src/libunwindstack/include/unwindstack/Memory.h"
-#include "third_party/libunwindstack/src/libunwindstack/include/unwindstack/Regs.h"
-
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/notreached.h"
 #include "base/profiler/module_cache.h"
@@ -22,6 +18,10 @@
 #include "base/profiler/native_unwinder_android_memory_regions_map_impl.h"
 #include "base/profiler/profile_builder.h"
 #include "build/build_config.h"
+#include "third_party/libunwindstack/src/libunwindstack/include/unwindstack/Elf.h"
+#include "third_party/libunwindstack/src/libunwindstack/include/unwindstack/Maps.h"
+#include "third_party/libunwindstack/src/libunwindstack/include/unwindstack/Memory.h"
+#include "third_party/libunwindstack/src/libunwindstack/include/unwindstack/Regs.h"
 
 #if defined(ARCH_CPU_ARM_FAMILY) && defined(ARCH_CPU_32_BITS)
 #include "third_party/libunwindstack/src/libunwindstack/include/unwindstack/MachineArm.h"
@@ -84,7 +84,7 @@ std::unique_ptr<unwindstack::Regs> CreateFromRegisterContext(
   return WrapUnique<unwindstack::Regs>(unwindstack::RegsArm64::Read(
       reinterpret_cast<void*>(&thread_context->regs[0])));
 #else   // #if defined(ARCH_CPU_ARM_FAMILY) && defined(ARCH_CPU_32_BITS)
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return nullptr;
 #endif  // #if defined(ARCH_CPU_ARM_FAMILY) && defined(ARCH_CPU_32_BITS)
 }
@@ -98,7 +98,7 @@ void CopyToRegisterContext(unwindstack::Regs* regs,
   memcpy(reinterpret_cast<void*>(&thread_context->regs[0]), regs->RawData(),
          unwindstack::ARM64_REG_LAST * sizeof(uintptr_t));
 #else   // #if defined(ARCH_CPU_ARM_FAMILY) && defined(ARCH_CPU_32_BITS)
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 #endif  // #if defined(ARCH_CPU_ARM_FAMILY) && defined(ARCH_CPU_32_BITS)
 }
 
@@ -301,7 +301,9 @@ void NativeUnwinderAndroid::EmitDexFrame(uintptr_t dex_pc,
     stack->emplace_back(
         HashMetricNameAs32Bits(static_cast<const std::string&>(function_name)),
         module);
-
+    UMA_HISTOGRAM_COUNTS_1000(
+        "UMA.StackProfiler.JavaNameLength",
+        static_cast<const std::string&>(function_name).size());
   } else {
     stack->emplace_back(dex_pc, module);
   }

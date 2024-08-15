@@ -12,10 +12,6 @@ To run the `cast_sender` and `cast_receiver`, you first need to [install
 external libraries](external_libraries.md).
 
 ## Compilation
-NOTE: To use a developer-signed certificate, the cast sender and receiver
-binaries must be built with the GN argument `cast_allow_developer_certificate`
-set to true.
-
 Putting this together with the [
 external libraries](external_libraries.md) configuration, a complete GN
 configuration might look like:
@@ -26,13 +22,12 @@ have_ffmpeg=true
 have_libsdl2=true
 have_libopus=true
 have_libvpx=true
-cast_allow_developer_certificate=true
 ```
 
 This can be done on the command line as:
 ```bash
 $ mkdir -p out/Default
-$ gn gen --args="is_debug=true have_ffmpeg=true have_libsdl2=true have_libopus=true have_libvpx=true cast_allow_developer_certificate=true" out/Default
+$ gn gen --args="is_debug=true have_ffmpeg=true have_libsdl2=true have_libopus=true have_libvpx=true" out/Default
 $ autoninja -C out/Default cast_sender cast_receiver
 ```
 

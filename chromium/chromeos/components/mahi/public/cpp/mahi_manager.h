@@ -16,6 +16,8 @@
 #include "chromeos/crosapi/mojom/mahi.mojom.h"
 #include "ui/gfx/image/image_skia.h"
 
+class GURL;
+
 namespace chromeos {
 
 struct MahiOutline {
@@ -33,6 +35,7 @@ enum class COMPONENT_EXPORT(MAHI_PUBLIC_CPP) MahiResponseStatus {
   kResourceExhausted = 5,
   kContentExtractionError = 6,
   kCantFindOutputData = 7,
+  kMax = kCantFindOutputData,
 };
 
 // An interface serves as the connection between mahi system and the UI.
@@ -45,14 +48,12 @@ class COMPONENT_EXPORT(MAHI_PUBLIC_CPP) MahiManager {
 
   static MahiManager* Get();
 
-  static bool IsEnabledWithCorrectFeatureKey();
-
-  // Opens the Mahi Panel in the display with `display_id`.
-  virtual void OpenMahiPanel(int64_t display_id) = 0;
+  static bool IsSupportedWithCorrectFeatureKey();
 
   // Gets information about the content on the corresponding surface.
   virtual std::u16string GetContentTitle() = 0;
   virtual gfx::ImageSkia GetContentIcon() = 0;
+  virtual GURL GetContentUrl() = 0;
 
   // Returns the quick summary of the current active content on the
   // corresponding surface.
@@ -73,7 +74,8 @@ class COMPONENT_EXPORT(MAHI_PUBLIC_CPP) MahiManager {
   // determine if the question is regarding the current content displayed on
   // the panel.
   using MahiAnswerQuestionCallback =
-      base::OnceCallback<void(std::u16string, MahiResponseStatus)>;
+      base::OnceCallback<void(std::optional<std::u16string>,
+                              MahiResponseStatus)>;
   virtual void AnswerQuestion(const std::u16string& question,
                               bool current_panel_content,
                               MahiAnswerQuestionCallback callback) = 0;
@@ -93,6 +95,9 @@ class COMPONENT_EXPORT(MAHI_PUBLIC_CPP) MahiManager {
 
   // Opens the feedback dialog.
   virtual void OpenFeedbackDialog() = 0;
+
+  // Check if the feature is enabled.
+  virtual bool IsEnabled() = 0;
 
  protected:
   MahiManager();

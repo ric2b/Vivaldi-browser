@@ -150,7 +150,7 @@ scoped_refptr<media::StreamParserBuffer> MakeAudioStreamParserBuffer(
   // same underlying DecoderBuffer.
   auto stream_parser_buffer = media::StreamParserBuffer::CopyFrom(
       audio_chunk.buffer()->data(),
-      base::checked_cast<int>(audio_chunk.buffer()->data_size()),
+      base::checked_cast<int>(audio_chunk.buffer()->size()),
       audio_chunk.buffer()->is_key_frame(), media::DemuxerStream::AUDIO,
       kWebCodecsAudioTrackId);
 
@@ -175,7 +175,7 @@ scoped_refptr<media::StreamParserBuffer> MakeVideoStreamParserBuffer(
   // same underlying DecoderBuffer.
   auto stream_parser_buffer = media::StreamParserBuffer::CopyFrom(
       video_chunk.buffer()->data(),
-      base::checked_cast<int>(video_chunk.buffer()->data_size()),
+      base::checked_cast<int>(video_chunk.buffer()->size()),
       video_chunk.buffer()->is_key_frame(), media::DemuxerStream::VIDEO,
       kWebCodecsVideoTrackId);
 
@@ -624,7 +624,7 @@ void SourceBuffer::appendBuffer(NotShared<DOMArrayBufferView> data,
 // implementation. Further note, |chunks| may instead be a single audio or a
 // single video chunk as a helpful additional overload for one-chunk-at-a-time
 // append use-cases.
-ScriptPromiseTyped<IDLUndefined> SourceBuffer::appendEncodedChunks(
+ScriptPromise<IDLUndefined> SourceBuffer::appendEncodedChunks(
     ScriptState* script_state,
     const V8EncodedChunks* chunks,
     ExceptionState& exception_state) {
@@ -640,7 +640,7 @@ ScriptPromiseTyped<IDLUndefined> SourceBuffer::appendEncodedChunks(
                                         exception_state)) {
     TRACE_EVENT_NESTABLE_ASYNC_END0(
         "media", "SourceBuffer::appendEncodedChunks", TRACE_ID_LOCAL(this));
-    return ScriptPromiseTyped<IDLUndefined>();
+    return ScriptPromise<IDLUndefined>();
   }
 
   // Convert |chunks| to a StreamParser::BufferQueue.
@@ -657,7 +657,7 @@ ScriptPromiseTyped<IDLUndefined> SourceBuffer::appendEncodedChunks(
     case V8EncodedChunks::ContentType::kEncodedAudioChunk:
       buffer_queue->emplace_back(
           MakeAudioStreamParserBuffer(*(chunks->GetAsEncodedAudioChunk())));
-      size += buffer_queue->back()->data_size();
+      size += buffer_queue->back()->size();
       break;
     case V8EncodedChunks::ContentType::kEncodedVideoChunk: {
       const auto& video_chunk = *(chunks->GetAsEncodedVideoChunk());
@@ -666,10 +666,10 @@ ScriptPromiseTyped<IDLUndefined> SourceBuffer::appendEncodedChunks(
             exception_state,
             "EncodedVideoChunk is missing duration, required for use with "
             "SourceBuffer.");
-        return ScriptPromiseTyped<IDLUndefined>();
+        return ScriptPromise<IDLUndefined>();
       }
       buffer_queue->emplace_back(MakeVideoStreamParserBuffer(video_chunk));
-      size += buffer_queue->back()->data_size();
+      size += buffer_queue->back()->size();
       break;
     }
     case V8EncodedChunks::ContentType::
@@ -682,7 +682,7 @@ ScriptPromiseTyped<IDLUndefined> SourceBuffer::appendEncodedChunks(
               kEncodedAudioChunk:
             buffer_queue->emplace_back(MakeAudioStreamParserBuffer(
                 *(av_chunk->GetAsEncodedAudioChunk())));
-            size += buffer_queue->back()->data_size();
+            size += buffer_queue->back()->size();
             break;
           case V8UnionEncodedAudioChunkOrEncodedVideoChunk::ContentType::
               kEncodedVideoChunk: {
@@ -692,11 +692,11 @@ ScriptPromiseTyped<IDLUndefined> SourceBuffer::appendEncodedChunks(
                   exception_state,
                   "EncodedVideoChunk is missing duration, required for use "
                   "with SourceBuffer.");
-              return ScriptPromiseTyped<IDLUndefined>();
+              return ScriptPromise<IDLUndefined>();
             }
             buffer_queue->emplace_back(
                 MakeVideoStreamParserBuffer(video_chunk));
-            size += buffer_queue->back()->data_size();
+            size += buffer_queue->back()->size();
             break;
           }
         }
@@ -706,7 +706,7 @@ ScriptPromiseTyped<IDLUndefined> SourceBuffer::appendEncodedChunks(
 
   DCHECK(!append_encoded_chunks_resolver_);
   append_encoded_chunks_resolver_ =
-      MakeGarbageCollected<ScriptPromiseResolverTyped<IDLUndefined>>(
+      MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
           script_state, exception_state.GetContext());
   auto promise = append_encoded_chunks_resolver_->Promise();
 
@@ -724,7 +724,7 @@ ScriptPromiseTyped<IDLUndefined> SourceBuffer::appendEncodedChunks(
         exception_state, DOMExceptionCode::kInvalidStateError,
         "Worker MediaSource attachment is closing");
     append_encoded_chunks_resolver_ = nullptr;
-    return ScriptPromiseTyped<IDLUndefined>();
+    return ScriptPromise<IDLUndefined>();
   }
 
   return promise;

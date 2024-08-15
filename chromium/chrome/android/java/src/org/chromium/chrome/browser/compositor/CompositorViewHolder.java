@@ -51,7 +51,6 @@ import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerHost;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
-import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
@@ -64,6 +63,7 @@ import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLoadIfNeededCaller;
 import org.chromium.chrome.browser.tab.TabObscuringHandler;
 import org.chromium.chrome.browser.tab.TabObserver;
+import org.chromium.chrome.browser.tab_ui.TabContentManager;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -321,8 +321,8 @@ public class CompositorViewHolder extends FrameLayout
                 }
 
                 @Override
-                public void onWillShowBrowserControls(Tab tab) {
-                    CompositorViewHolder.this.onWillShowBrowserControls();
+                public void onWillShowBrowserControls(Tab tab, boolean viewTransitionOptIn) {
+                    CompositorViewHolder.this.onWillShowBrowserControls(viewTransitionOptIn);
                 }
 
                 @Override
@@ -562,7 +562,7 @@ public class CompositorViewHolder extends FrameLayout
             if (mActivity != null
                     && mActivity.getWindow() != null
                     && mActivity.getWindow().getDecorView() != null) {
-                // TODO(crbug.com/1519669): Coordinate usage of #setDecorFitsSystemWindows
+                // TODO(crbug.com/41492646): Coordinate usage of #setDecorFitsSystemWindows
                 return !mActivity.getWindow().getDecorView().getFitsSystemWindows();
             } else {
                 return false;
@@ -613,7 +613,7 @@ public class CompositorViewHolder extends FrameLayout
                     final ViewGroup controlContainerVG = (ViewGroup) mControlContainer;
                     mCompositorView.setBackgroundResource(0);
                     if (controlContainerVG != null) {
-                        controlContainerVG.setBackgroundResource(0);
+                        mControlContainer.setCompositorBackgroundInitialized();
                     }
                 };
     }
@@ -770,7 +770,7 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     private void updateInMotion() {
-        // TODO(https://crbug.com/1378716): Track fling as well.
+        // TODO(crbug.com/40244051): Track fling as well.
         boolean inMotion = mInGesture || mContentViewScrolling;
         mInMotionSupplier.set(inMotion);
         if (mContentView != null) {
@@ -943,7 +943,7 @@ public class CompositorViewHolder extends FrameLayout
 
         // The view size takes into account of the browser controls whose height should be
         // subtracted from the view if they are visible, therefore shrink Blink-side view size.
-        // TODO(https://crbug.com/1211066): Centralize the logic for calculating bottom insets by
+        // TODO(crbug.com/40767446): Centralize the logic for calculating bottom insets by
         // merging them into ApplicationBottomInsetSupplier.
         int controlsInsets = 0;
         if (mBrowserControlsManager != null) {
@@ -1533,10 +1533,10 @@ public class CompositorViewHolder extends FrameLayout
                         // Note(david@vivaldi.com): This will trigger to focus the url bar when new tab was
                         // created by a user.
                         String homepageUrl = tab.isIncognito()
-                                ? HomepageManager.getDefaultHomepageGurl().getSpec()
-                                : HomepageManager.getHomepageGurl().getSpec();
-                        if (!HomepageManager.isHomepageEnabled())
-                            homepageUrl = HomepageManager.getHomepageGurl().getSpec();
+                                ? HomepageManager.getInstance().getDefaultHomepageGurl().getSpec()
+                                : HomepageManager.getInstance().getHomepageGurl().getSpec();
+                        if (!HomepageManager.getInstance().isHomepageEnabled())
+                            homepageUrl = HomepageManager.getInstance().getHomepageGurl().getSpec();
                         if (creationState == TabCreationState.LIVE_IN_FOREGROUND
                                 && tab.getUrl().getSpec().equalsIgnoreCase(homepageUrl))
                             VivaldiPreferences.getSharedPreferencesManager().writeBoolean(
@@ -1571,7 +1571,7 @@ public class CompositorViewHolder extends FrameLayout
             }
 
             // CompositorView always has index of 0.
-            // TODO(crbug.com/1216949): Look into enforcing the z-order of the views.
+            // TODO(crbug.com/40770763): Look into enforcing the z-order of the views.
             addView(mView, 1);
 
             setFocusable(false);
@@ -1611,10 +1611,12 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     @VisibleForTesting
-    void onWillShowBrowserControls() {
-        // TODO(bokan): Flag guarding new behavior, remove once M125 ships.
-        // https://crbug.com/41490049.
-        if (!ChromeFeatureList.sBrowserControlsEarlyResize.isEnabled()) return;
+    void onWillShowBrowserControls(boolean viewTransitionOptIn) {
+        // TODO(bokan): Flag guarding potential new behavior
+        // https://crbug.com/332331777.
+        if (!viewTransitionOptIn && !ChromeFeatureList.sBrowserControlsEarlyResize.isEnabled()) {
+            return;
+        }
 
         // Let observers know the controls will be shown, resize the web content
         // immediately rather than waiting for the controls animation to finish. This
@@ -1877,9 +1879,13 @@ public class CompositorViewHolder extends FrameLayout
 
             node.setBoundsInParent(rectToPx(mTouchTarget));
             node.setContentDescription(view.getAccessibilityDescription());
-            node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
+            if (view.hasClickAction()) {
+                node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
+            }
             node.addAction(AccessibilityNodeInfoCompat.ACTION_FOCUS);
-            node.addAction(AccessibilityNodeInfoCompat.ACTION_LONG_CLICK);
+            if (view.hasLongClickAction()) {
+                node.addAction(AccessibilityNodeInfoCompat.ACTION_LONG_CLICK);
+            }
         }
 
         private Rect rectToPx(RectF rect) {

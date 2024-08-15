@@ -18,6 +18,13 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 namespace {
 
 // Layout constants for the image.
@@ -27,7 +34,13 @@ const CGFloat kTileShadowRadius = 20;
 const CGFloat kTileShadowOffsetX = 0;
 const CGFloat kTileShadowOffsetY = 5;
 const CGFloat kTileShadowOpacity = 0.1;
+
+#if defined(VIVALDI_BUILD)
+const CGFloat kIconPadding = 0;
+#else
 const CGFloat kIconPadding = 12;
+#endif // End Vivaldi
+
 const CGFloat kImageTopSpacing = 20;
 const CGFloat kImageBottomSpacing = 8;
 const CGFloat kSpacing = 1;
@@ -49,6 +62,8 @@ UIImage* ConfirmationAlertImage() {
 
   return [renderer imageWithActions:^(
                        UIGraphicsImageRendererContext* UIContext) {
+
+    if (!IsVivaldiRunning()) {
     CGContextRef context = UIContext.CGContext;
 
     // Draw the background with a shadow.
@@ -67,8 +82,15 @@ UIImage* ConfirmationAlertImage() {
 
     // Draw the icon.
     [UIColor.whiteColor setFill];
+    } // End Vivaldi
+
     UIImage* icon =
         DefaultSymbolTemplateWithPointSize(kSquareOnSquareDashedSymbol, 0);
+
+    if (IsVivaldiRunning()) {
+      icon = [UIImage imageNamed:vTabGridInactiveTabsEduIcon];
+    } // End Vivaldi
+
     if (icon.size.width > icon.size.height) {
       CGFloat ratio = icon.size.height / icon.size.width;
       CGFloat drawingWidth = kTileSize - 2 * kIconPadding;

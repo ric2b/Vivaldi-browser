@@ -6,15 +6,17 @@
 
 #include <stddef.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <utility>
+#include <vector>
 
-#include "base/feature_list.h"
+#include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
 #include "base/path_service.h"
@@ -25,13 +27,13 @@
 #include "base/test/gtest_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "build/buildflag.h"
 #include "sql/database.h"
 #include "sql/meta_table.h"
 #include "sql/sql_features.h"
 #include "sql/sqlite_result_code.h"
 #include "sql/sqlite_result_code_values.h"
 #include "sql/statement.h"
-#include "sql/test/paths.h"
 #include "sql/test/scoped_error_expecter.h"
 #include "sql/test/test_helpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -864,7 +866,7 @@ TEST_P(SqlRecoveryTest, CannotRecoverDbWithErrorCallback) {
                          &db_, Recovery::Strategy::kRecoverOrRaze));
 }
 
-// TODO(https://crbug.com/1255316): Ideally this would be a
+// TODO(crbug.com/40199997): Ideally this would be a
 // `SqlRecoveryTest`, but `Recovery::RecoverDatabase()` does not DCHECK
 // that it is passed a non-null database pointer and will instead likely result
 // in unexpected behavior or crashes.
@@ -873,7 +875,7 @@ TEST_P(SqlRecoveryTest, CannotRecoverNullDb) {
                          nullptr, Recovery::Strategy::kRecoverOrRaze));
 }
 
-// TODO(https://crbug.com/1255316): Ideally this would be a
+// TODO(crbug.com/40199997): Ideally this would be a
 // `SqlRecoveryTest`, but `Recovery::RecoverDatabase()` does not DCHECK
 // whether the database is in-memory and will instead likely result in
 // unexpected behavior or crashes.

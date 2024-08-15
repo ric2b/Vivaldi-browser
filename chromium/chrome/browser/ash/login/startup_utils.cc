@@ -8,6 +8,7 @@
 
 #include "ash/components/arc/arc_prefs.h"
 #include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
@@ -21,15 +22,17 @@
 #include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/ash/login/login_pref_names.h"
 #include "chrome/browser/ash/login/onboarding_user_activity_counter.h"
+#include "chrome/browser/ash/login/oobe_configuration.h"
 #include "chrome/browser/ash/login/oobe_metrics_helper.h"
 #include "chrome/browser/ash/login/oobe_quick_start/oobe_quick_start_pref_names.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/ui/login_display_host_common.h"
-#include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
+#include "chrome/browser/ash/policy/enrollment/enrollment_token_provider.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/ash/components/dbus/oobe_config/oobe_configuration_client.h"
+#include "chromeos/ash/components/install_attributes/install_attributes.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -119,6 +122,12 @@ void StartupUtils::RegisterPrefs(PrefRegistrySimple* registry) {
                                 false);
   registry->RegisterStringPref(prefs::kUrlParameterToAutofillSAMLUsername,
                                std::string());
+  registry->RegisterStringPref(prefs::kOobeMetricsClientIdAtOobeStart,
+                               std::string());
+  registry->RegisterBooleanPref(prefs::kOobeMetricsReportedAsEnabled, false);
+  registry->RegisterBooleanPref(
+      prefs::kOobeStatsReportingControllerReportedReset, false);
+
   registry->RegisterBooleanPref(
       ash::quick_start::prefs::kShouldResumeQuickStartAfterReboot, false);
   registry->RegisterDictionaryPref(
@@ -154,6 +163,10 @@ void StartupUtils::RegisterOobeProfilePrefs(PrefRegistrySimple* registry) {
   if (drive::util::IsOobeDrivePinningScreenEnabled()) {
     registry->RegisterBooleanPref(prefs::kOobeDrivePinningEnabledDeferred,
                                   false);
+  }
+
+  if (features::IsOobePersonalizedOnboardingEnabled()) {
+    registry->RegisterListPref(prefs::kOobeCategoriesSelected);
   }
 
   if (features::IsOobeDisplaySizeEnabled()) {
@@ -200,12 +213,20 @@ void StartupUtils::SaveScreenAfterConsumerUpdate(const std::string& screen) {
 }
 
 // static
-base::TimeDelta StartupUtils::GetTimeSinceOobeFlagFileCreation() {
+base::Time StartupUtils::GetTimeOfOobeFlagFileCreation() {
   const base::FilePath oobe_complete_flag_path = GetOobeCompleteFlagPath();
   base::File::Info file_info;
-  if (base::GetFileInfo(oobe_complete_flag_path, &file_info))
-    return base::Time::Now() - file_info.creation_time;
-  return base::TimeDelta();
+  if (base::GetFileInfo(oobe_complete_flag_path, &file_info)) {
+    return file_info.creation_time;
+  }
+  return base::Time();
+}
+
+// static
+base::TimeDelta StartupUtils::GetTimeSinceOobeFlagFileCreation() {
+  base::Time creation_time = GetTimeOfOobeFlagFileCreation();
+  return !creation_time.is_null() ? base::Time::Now() - creation_time
+                                  : base::TimeDelta();
 }
 
 // static
@@ -253,6 +274,12 @@ void StartupUtils::MarkDeviceRegistered(base::OnceClosure done_callback) {
   }
 
   ClearSpecificOobePrefs();
+
+  if (policy::GetEnrollmentToken(OobeConfiguration::Get()).has_value()) {
+    VLOG(0) << "Clearing Flex OOBE config after enrollment.";
+    OobeConfigurationClient::Get()->DeleteFlexOobeConfig();
+  }
+
   if (done_callback.is_null()) {
     base::ThreadPool::PostTask(
         FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
@@ -299,10 +326,8 @@ void StartupUtils::SetInitialLocale(const std::string& locale) {
 
 // static
 bool StartupUtils::IsDeviceOwned() {
-  policy::BrowserPolicyConnectorAsh* connector =
-      g_browser_process->platform_part()->browser_policy_connector_ash();
   return !user_manager::UserManager::Get()->GetUsers().empty() ||
-         connector->IsDeviceEnterpriseManaged();
+         ash::InstallAttributes::Get()->IsEnterpriseManaged();
 }
 
 }  // namespace ash

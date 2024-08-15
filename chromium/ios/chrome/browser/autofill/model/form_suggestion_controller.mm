@@ -11,7 +11,7 @@
 #import "base/metrics/histogram_functions.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
-#import "components/autofill/core/browser/ui/autofill_popup_delegate.h"
+#import "components/autofill/core/browser/ui/autofill_suggestion_delegate.h"
 #import "components/autofill/ios/browser/form_suggestion.h"
 #import "components/autofill/ios/browser/form_suggestion_provider.h"
 #import "components/autofill/ios/form_util/form_activity_params.h"
@@ -21,6 +21,8 @@
 #import "ios/chrome/browser/autofill/model/form_suggestion_controller.mm"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/web/common/url_scheme_util.h"
 #import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/ui/crw_web_view_proxy.h"
@@ -34,17 +36,20 @@ using PipelineCompletionBlock = void (^)(NSUInteger index);
 
 namespace {
 
+// Point size of the SF Symbol used for default icons.
+const CGFloat kSymbolPointSize = 17.0f;
+
 // Struct that describes suggestion state.
 struct AutofillSuggestionState {
   AutofillSuggestionState(const autofill::FormActivityParams& params);
   // The name of the form for autofill.
   std::string form_name;
-  // The unique numeric identifier of the form for autofill.
-  FormRendererId unique_form_id;
+  // The numeric identifier of the form for autofill.
+  FormRendererId form_renderer_id;
   // The identifier of the field for autofill.
   std::string field_identifier;
-  // The unique numeric identifier of the field for autofill.
-  FieldRendererId unique_field_id;
+  // The numeric identifier of the field for autofill.
+  FieldRendererId field_renderer_id;
   // The identifier of the frame for autofill.
   std::string frame_identifier;
   // The user-typed value in the field.
@@ -56,9 +61,9 @@ struct AutofillSuggestionState {
 AutofillSuggestionState::AutofillSuggestionState(
     const autofill::FormActivityParams& params)
     : form_name(params.form_name),
-      unique_form_id(params.unique_form_id),
+      form_renderer_id(params.form_renderer_id),
       field_identifier(params.field_identifier),
-      unique_field_id(params.unique_field_id),
+      field_renderer_id(params.field_renderer_id),
       frame_identifier(params.frame_id),
       typed_value(params.value) {}
 
@@ -81,6 +86,17 @@ void RunSearchPipeline(NSArray<PipelineBlock>* blocks,
       RunSearchPipeline(blocks, on_complete, from_index + 1);
     }
   });
+}
+
+// Returns the default icon for the suggestion type.
+NSString* defaultIconForType(autofill::SuggestionType type) {
+  switch (type) {
+    case autofill::SuggestionType::kGeneratePasswordEntry:
+      return kPasswordManagerSymbol;
+    case autofill::SuggestionType::kAutocompleteEntry:
+    default:
+      return nil;
+  }
 }
 
 }  // namespace
@@ -188,9 +204,9 @@ void RunSearchPipeline(NSArray<PipelineBlock>* blocks,
 
   FormSuggestionProviderQuery* formQuery = [[FormSuggestionProviderQuery alloc]
       initWithFormName:base::SysUTF8ToNSString(params.form_name)
-          uniqueFormID:params.unique_form_id
+        formRendererID:params.form_renderer_id
        fieldIdentifier:base::SysUTF8ToNSString(params.field_identifier)
-         uniqueFieldID:params.unique_field_id
+       fieldRendererID:params.field_renderer_id
              fieldType:base::SysUTF8ToNSString(params.field_type)
                   type:base::SysUTF8ToNSString(params.type)
             typedValue:base::SysUTF8ToNSString(
@@ -275,7 +291,7 @@ void RunSearchPipeline(NSArray<PipelineBlock>* blocks,
   }
 
   _provider = provider;
-  _suggestionState->suggestions = [suggestions copy];
+  _suggestionState->suggestions = [self copyAndAdjustSuggestions:suggestions];
   [self updateKeyboard:_suggestionState.get()];
 }
 
@@ -350,12 +366,51 @@ void RunSearchPipeline(NSArray<PipelineBlock>* blocks,
 
 #pragma mark - Private
 
+// Copies the incoming suggestions, making adjustments if necessary.
+- (NSArray<FormSuggestion*>*)copyAndAdjustSuggestions:
+    (NSArray<FormSuggestion*>*)suggestions {
+  if (!IsKeyboardAccessoryUpgradeEnabled()) {
+    return [suggestions copy];
+  }
+
+  NSMutableArray<FormSuggestion*>* suggestionsCopy = [NSMutableArray array];
+  for (FormSuggestion* suggestion : suggestions) {
+    NSString* defaultIcon = defaultIconForType(suggestion.popupItemId);
+    // If there are no icons, but we have a default icon for this suggestion,
+    // copy the suggestion and add the default icon.
+    if (!suggestion.icon && defaultIcon) {
+      // If we ever get suggestions with metadata here, we'll need to use a
+      // different [FormSuggestion suggestionWithValue:...] to perform the copy.
+      CHECK(!suggestion.metadata.is_single_username_form);
+
+      UIImage* icon = MakeSymbolMulticolor(
+          CustomSymbolWithPointSize(defaultIcon, kSymbolPointSize));
+      [suggestionsCopy
+          addObject:[FormSuggestion
+                               suggestionWithValue:suggestion.value
+                                        minorValue:suggestion.minorValue
+                                displayDescription:suggestion.displayDescription
+                                              icon:icon
+                                       popupItemId:suggestion.popupItemId
+                                 backendIdentifier:suggestion.backendIdentifier
+                                    requiresReauth:suggestion.requiresReauth
+                        acceptanceA11yAnnouncement:
+                            suggestion.acceptanceA11yAnnouncement]];
+    } else {
+      [suggestionsCopy addObject:suggestion];
+    }
+  }
+  return suggestionsCopy;
+}
+
 // Performs the suggestion selection based on the provided suggestion state.
 - (void)didSelectSuggestion:(FormSuggestion*)suggestion
                       state:(const AutofillSuggestionState&)suggestionState {
-  // If a suggestion was selected, reset the password bottom sheet dismiss count
-  // to 0.
-  [self resetPasswordBottomSheetDismissCount];
+  // If a password related suggestion was selected, reset the password bottom
+  // sheet dismiss count to 0.
+  if (_provider.type == SuggestionProviderTypePassword) {
+    [self resetPasswordBottomSheetDismissCount];
+  }
 
   // Send the suggestion to the provider. Upon completion advance the cursor
   // for single-field Autofill, or close the keyboard for full-form Autofill.
@@ -363,10 +418,10 @@ void RunSearchPipeline(NSArray<PipelineBlock>* blocks,
   [_provider
       didSelectSuggestion:suggestion
                      form:base::SysUTF8ToNSString(suggestionState.form_name)
-             uniqueFormID:suggestionState.unique_form_id
+           formRendererID:suggestionState.form_renderer_id
           fieldIdentifier:base::SysUTF8ToNSString(
                               suggestionState.field_identifier)
-            uniqueFieldID:suggestionState.unique_field_id
+          fieldRendererID:suggestionState.field_renderer_id
                   frameID:base::SysUTF8ToNSString(
                               suggestionState.frame_identifier)
         completionHandler:^{

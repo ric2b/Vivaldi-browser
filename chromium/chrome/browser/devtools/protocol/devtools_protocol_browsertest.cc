@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <string>
+#include <string_view>
 
 #include "base/base64.h"
 #include "base/check_deref.h"
@@ -387,10 +388,11 @@ IN_PROC_BROWSER_TEST_F(
   GURL url("invalid.scheme:for-sure");
   ui_test_utils::AllBrowserTabAddedWaiter tab_added_waiter;
 
-  content::WebContents* web_contents =
-      browser()->OpenURL(content::OpenURLParams(
-          url, content::Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
-          ui::PAGE_TRANSITION_TYPED, false));
+  content::WebContents* web_contents = browser()->OpenURL(
+      content::OpenURLParams(url, content::Referrer(),
+                             WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                             ui::PAGE_TRANSITION_TYPED, false),
+      /*navigation_handle_callback=*/{});
   tab_added_waiter.Wait();
   ASSERT_TRUE(WaitForLoadStop(web_contents));
 
@@ -812,7 +814,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, VisibleSecurityStateSecureState) {
     ASSERT_TRUE(base::Base64Decode(cert.GetString(), &decoded));
     der_certs.push_back(decoded);
   }
-  std::vector<base::StringPiece> cert_string_piece;
+  std::vector<std::string_view> cert_string_piece;
   for (const auto& str : der_certs) {
     cert_string_piece.push_back(str);
   }
@@ -872,7 +874,6 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest,
 }
 
 IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, UntrustedClient) {
-  std::unique_ptr<base::Value::Dict> params(new base::Value::Dict());
   SetIsTrusted(false);
   Attach();
   EXPECT_FALSE(SendCommandSync("HeapProfiler.enable"));  // Implemented in V8
@@ -880,8 +881,6 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, UntrustedClient) {
   EXPECT_FALSE(SendCommandSync(
       "Memory.prepareForLeakDetection"));        // Implemented in content
   EXPECT_FALSE(SendCommandSync("Cast.enable"));  // Implemented in content
-  EXPECT_FALSE(SendCommandSync("Storage.getCookies"));
-  EXPECT_FALSE(SendCommandSync("Network.getAllCookies"));
   EXPECT_TRUE(SendCommandSync("Accessibility.enable"));
 }
 
@@ -953,9 +952,9 @@ class ExtensionProtocolTest : public DevToolsProtocolTest {
   }
 
  private:
-  extensions::ExtensionService* extension_service_;
-  extensions::ExtensionRegistry* extension_registry_;
-  content::WebContents* background_web_contents_;
+  raw_ptr<extensions::ExtensionService, DanglingUntriaged> extension_service_;
+  raw_ptr<extensions::ExtensionRegistry, DanglingUntriaged> extension_registry_;
+  raw_ptr<content::WebContents, DanglingUntriaged> background_web_contents_;
 #if BUILDFLAG(IS_WIN)
   // This is needed to stop ExtensionProtocolTestsfrom creating a
   // shortcut in the Windows start menu. The override needs to last until the

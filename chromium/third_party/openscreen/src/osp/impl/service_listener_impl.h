@@ -10,16 +10,15 @@
 
 #include "discovery/common/reporting_client.h"
 #include "osp/impl/receiver_list.h"
-#include "osp/impl/with_destruction_callback.h"
 #include "osp/public/service_info.h"
 #include "osp/public/service_listener.h"
 #include "platform/base/macros.h"
 
 namespace openscreen::osp {
 
-class ServiceListenerImpl final : public ServiceListener,
-                                  public openscreen::discovery::ReportingClient,
-                                  public WithDestructionCallback {
+class ServiceListenerImpl final
+    : public ServiceListener,
+      public openscreen::discovery::ReportingClient {
  public:
   class Delegate {
    public:
@@ -51,7 +50,7 @@ class ServiceListenerImpl final : public ServiceListener,
   void OnReceiverUpdated(const std::vector<ServiceInfo>& new_receivers);
 
   // Called by |delegate_| when an internal error occurs.
-  void OnError(Error error);
+  void OnError(const Error& error);
 
   // ServiceListener overrides.
   bool Start() override;
@@ -60,16 +59,14 @@ class ServiceListenerImpl final : public ServiceListener,
   bool Suspend() override;
   bool Resume() override;
   bool SearchNow() override;
-
-  void AddObserver(Observer* observer) override;
-  void RemoveObserver(Observer* observer) override;
-
+  void AddObserver(Observer& observer) override;
+  void RemoveObserver(Observer& observer) override;
   const std::vector<ServiceInfo>& GetReceivers() const override;
 
  private:
   // openscreen::discovery::ReportingClient overrides.
-  void OnFatalError(Error) override;
-  void OnRecoverableError(Error) override;
+  void OnFatalError(const Error&) override;
+  void OnRecoverableError(const Error&) override;
 
   // Called by OnReceiverUpdated according to different situations, repectively.
   void OnReceiverAdded(const ServiceInfo& info);

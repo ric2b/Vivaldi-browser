@@ -8,11 +8,22 @@ if(POLICY CMP0092)
     cmake_policy(SET CMP0092 NEW)
 endif()
 
+# Prevent warnings in CMake>=3.24 for ExternalProject_Add()
+# see https://cmake.org/cmake/help/latest/policy/CMP0135.html
+if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW) # valid for DOWNLOAD_EXTRACT_TIMESTAMP option in CMake 3.24 and later
+endif()
+
 # The root directory of the avif source
 set(AVIF_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 
 # Specify search path for CMake modules to be loaded by include() and find_package()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
+
+include(ExternalProject)
+include(FetchContent)
+include(FindPkgConfig)
+include(AvifExternalProjectUtils)
 
 project(libavif LANGUAGES C VERSION 1.0.4)
 
@@ -41,7 +52,8 @@ option(AVIF_ENABLE_EXPERIMENTAL_YCGCO_R "Enable experimental YCgCo-R matrix code
 option(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP
        "Enable experimental gain map code (for HDR images that look good both on HDR and SDR displays)" OFF
 )
-option(AVIF_ENABLE_EXPERIMENTAL_AVIR "Enable experimental reduced header" OFF)
+option(AVIF_ENABLE_EXPERIMENTAL_MINI "Enable experimental reduced header" OFF)
+option(AVIF_ENABLE_EXPERIMENTAL_SAMPLE_TRANSFORM "Enable experimental sample transform code" OFF)
 
 set(AVIF_PKG_CONFIG_EXTRA_LIBS_PRIVATE "")
 set(AVIF_PKG_CONFIG_EXTRA_REQUIRES_PRIVATE "")
@@ -54,6 +66,7 @@ function(set_local_or_system_option VAR DEFAULT TEXT)
         else()
             set(DEFAULT "SYSTEM")
         endif()
+        message(WARNING "Setting AVIF_LOCAL_${VAR} is deprecated. " "Set AVIF_${VAR} to ${DEFAULT} instead.")
     elseif(DEFINED AVIF_${VAR})
         set(DEFAULT ${AVIF_${VAR}})
     endif()
@@ -99,8 +112,9 @@ cmake_dependent_option(
     AVIF_CODEC_AOM_ENCODE "if AVIF_CODEC_AOM is on, use/offer libaom's encoder" ON "NOT AVIF_CODEC_AOM STREQUAL OFF" OFF
 )
 
-option(AVIF_LOCAL_GTEST
-       "Build the GoogleTest framework by providing your own copy of the repo in ext/googletest (see Local Builds in README)" OFF
+set_local_or_system_option(
+    "GTEST" OFF
+    "Build the GoogleTest framework by providing your own copy of the repo in ext/googletest (see Local Builds in README)"
 )
 option(AVIF_LOCAL_FUZZTEST
        "Build the Google FuzzTest framework by providing your own copy of the repo in ext/fuzztest (see Local Builds in README)"
@@ -202,6 +216,8 @@ if(AVIF_JPEG STREQUAL "LOCAL")
 endif()
 
 set_local_or_system_option("LIBYUV" "SYSTEM" "Use libyuv.")
+# check_avif_option libyuv must precede libaom because the latter needs to link against the former
+# when building libaom locally
 check_avif_option(AVIF_LIBYUV TARGET yuv::yuv PKG_NAME libyuv)
 if(AVIF_LIBYUV_ENABLED)
     # libyuv 1755 exposed all of the I*Matrix() functions, which libavif relies on.
@@ -235,17 +251,13 @@ if(AVIF_LIBSHARPYUV_ENABLED)
     avif_target_link_library(sharpyuv::sharpyuv)
 endif(AVIF_LIBSHARPYUV_ENABLED)
 
-option(AVIF_LOCAL_LIBXML2 "Build libxml2 by providing your own copy inside the ext subdir. \
-libxml2 is used when AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP is ON" OFF
+set_local_or_system_option(
+    "LIBXML2" "OFF" "Build libxml2 by providing your own copy inside the ext subdir. \
+libxml2 is used when AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP is ON"
 )
+
 if(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
-    if(NOT TARGET LibXml2::LibXml2)
-        if(AVIF_LOCAL_LIBXML2)
-            include(LocalLibXml2)
-        else()
-            find_package(LibXml2 QUIET)
-        endif()
-    endif()
+    check_avif_option(AVIF_LIBXML2 TARGET LibXml2::LibXml2 PKG_NAME LibXml2)
 endif()
 # ---------------------------------------------------------------------------------------
 
@@ -324,8 +336,12 @@ if(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
     add_compile_definitions(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
 endif()
 
-if(AVIF_ENABLE_EXPERIMENTAL_AVIR)
-    add_compile_definitions(AVIF_ENABLE_EXPERIMENTAL_AVIR)
+if(AVIF_ENABLE_EXPERIMENTAL_MINI)
+    add_compile_definitions(AVIF_ENABLE_EXPERIMENTAL_MINI)
+endif()
+
+if(AVIF_ENABLE_EXPERIMENTAL_SAMPLE_TRANSFORM)
+    add_compile_definitions(AVIF_ENABLE_EXPERIMENTAL_SAMPLE_TRANSFORM)
 endif()
 
 set(AVIF_SRCS
@@ -350,6 +366,9 @@ set(AVIF_SRCS
 )
 if(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
     list(APPEND AVIF_SRCS src/gainmap.c)
+endif()
+if(AVIF_ENABLE_EXPERIMENTAL_SAMPLE_TRANSFORM)
+    list(APPEND AVIF_SRCS src/sampletransform.c)
 endif()
 
 if(AVIF_ENABLE_COMPLIANCE_WARDEN)
@@ -450,10 +469,13 @@ if(AVIF_CODEC_RAV1E_ENABLED)
     target_sources(avif_obj PRIVATE src/codec_rav1e.c)
 
     # Unfortunately, rav1e requires a few more libraries
-    if(WIN32)
-        target_link_libraries(rav1e::rav1e INTERFACE ntdll.lib userenv.lib ws2_32.lib bcrypt.lib)
-    elseif(UNIX AND NOT APPLE)
-        target_link_libraries(rav1e::rav1e INTERFACE ${CMAKE_DL_LIBS}) # for backtrace
+    # first check that RAV1E_LIBRARIES hasn't been populated by the LocalRav1e module
+    if(NOT RAV1E_LIBRARIES)
+        if(WIN32)
+            target_link_libraries(rav1e::rav1e INTERFACE ntdll.lib userenv.lib ws2_32.lib bcrypt.lib)
+        elseif(UNIX AND NOT APPLE)
+            target_link_libraries(rav1e::rav1e INTERFACE ${CMAKE_DL_LIBS}) # for backtrace
+        endif()
     endif()
 
     avif_target_link_library(rav1e::rav1e)
@@ -717,33 +739,31 @@ if(AVIF_BUILD_APPS)
     endif()
     if(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
         include(LocalLibargparse)
-        if(TARGET libargparse)
-            set(AVIF_ENABLE_AVIFGAINMAPUTIL TRUE)
+        set(AVIF_ENABLE_AVIFGAINMAPUTIL TRUE)
 
-            set(AVIFGAINMAPUTIL_SRCS
-                apps/avifgainmaputil/avifgainmaputil.cc
-                apps/avifgainmaputil/convert_command.cc
-                apps/avifgainmaputil/combine_command.cc
-                apps/avifgainmaputil/extractgainmap_command.cc
-                apps/avifgainmaputil/imageio.cc
-                apps/avifgainmaputil/printmetadata_command.cc
-                apps/avifgainmaputil/tonemap_command.cc
-                apps/avifgainmaputil/program_command.cc
-                apps/avifgainmaputil/swapbase_command.cc
-            )
+        set(AVIFGAINMAPUTIL_SRCS
+            apps/avifgainmaputil/avifgainmaputil.cc
+            apps/avifgainmaputil/convert_command.cc
+            apps/avifgainmaputil/combine_command.cc
+            apps/avifgainmaputil/extractgainmap_command.cc
+            apps/avifgainmaputil/imageio.cc
+            apps/avifgainmaputil/printmetadata_command.cc
+            apps/avifgainmaputil/tonemap_command.cc
+            apps/avifgainmaputil/program_command.cc
+            apps/avifgainmaputil/swapbase_command.cc
+        )
 
-            add_executable(avifgainmaputil "${AVIFGAINMAPUTIL_SRCS}")
-            if(WIN32)
-                target_sources(avifgainmaputil PRIVATE apps/utf8.rc)
-                if(NOT MINGW)
-                    target_link_options(avifgainmaputil PRIVATE /MANIFEST:NO)
-                endif()
+        add_executable(avifgainmaputil "${AVIFGAINMAPUTIL_SRCS}")
+        if(WIN32)
+            target_sources(avifgainmaputil PRIVATE apps/utf8.rc)
+            if(NOT MINGW)
+                target_link_options(avifgainmaputil PRIVATE /MANIFEST:NO)
             endif()
-            set_target_properties(avifgainmaputil PROPERTIES LINKER_LANGUAGE "CXX")
-            target_include_directories(avifgainmaputil PRIVATE apps/avifgainmaputil/)
-            target_link_libraries(avifgainmaputil libargparse avif_apps)
-            # Don't add avifgainmaputil to installed apps for now.
         endif()
+        set_target_properties(avifgainmaputil PROPERTIES LINKER_LANGUAGE "CXX")
+        target_include_directories(avifgainmaputil PRIVATE apps/avifgainmaputil/)
+        target_link_libraries(avifgainmaputil libargparse avif_apps)
+        # Don't add avifgainmaputil to installed apps for now.
     endif()
 endif()
 
@@ -865,10 +885,10 @@ if(WIN32)
         avif_exclude_safe(genfiles)
         avif_exclude_safe(minigzip)
     endif()
-    if(AVIF_LOCAL_JPEG)
+    if(AVIF_JPEG STREQUAL "LOCAL")
         avif_set_folder_safe(JPEG::JPEG "ext/libjpeg-turbo")
     endif()
-    if(AVIF_LOCAL_LIBXML2)
+    if(AVIF_LIBXML2 STREQUAL "LOCAL")
         avif_set_folder_safe(xml2 "ext/libxml2")
     endif()
 endif()

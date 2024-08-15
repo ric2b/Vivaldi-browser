@@ -16,7 +16,6 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ptr_exclusion.h"
-#include "base/rand_util.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
 #include "cc/base/devtools_instrumentation.h"
@@ -48,7 +47,7 @@ struct GlobalMetricsTrackers {
   RAW_PTR_EXCLUSION LatencyUkmReporter* latency_ukm_reporter = nullptr;
   RAW_PTR_EXCLUSION FrameSequenceTrackerCollection* frame_sequence_trackers =
       nullptr;
-  // TODO(crbug.com/1489080): This member was marked `DanglingUntriaged`
+  // TODO(crbug.com/40283905): This member was marked `DanglingUntriaged`
   // before being unrewritten.
   RAW_PTR_EXCLUSION EventLatencyTracker* event_latency_tracker = nullptr;
   RAW_PTR_EXCLUSION PredictorJankTracker* predictor_jank_tracker = nullptr;
@@ -608,8 +607,6 @@ class CC_EXPORT CompositorFrameReporter {
   std::vector<std::string> high_latency_substages_;
 
   ReporterType reporter_type_;
-
-  mutable base::MetricsSubSampler metrics_subsampler_;
 
   base::WeakPtrFactory<CompositorFrameReporter> weak_factory_{this};
 };

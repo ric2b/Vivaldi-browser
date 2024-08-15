@@ -6,7 +6,7 @@
 from collections import defaultdict
 import os
 import sys
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Set, Tuple, Union, Optional, Literal, Any
 
 _THIS_DIR = os.path.abspath(os.path.dirname(__file__))
 # The repo's root directory.
@@ -24,7 +24,19 @@ import metadata.validation_result as vr
 
 
 class DependencyMetadata:
-    """The metadata for a single dependency."""
+    """The metadata for a single dependency.
+
+       See @property declarations below to retrieve validated fields for
+       downstream consumption.
+
+       The property returns `None` if the provided value (e.g. in
+       README.chromium file) is clearly invalid.
+
+       Otherwise, it returns a suitably typed value (see comments on each
+       property).
+
+       To retrieve unvalidated (i.e. raw values) fields, use get_entries().
+    """
 
     # Fields that are always required.
     _MANDATORY_FIELDS = {
@@ -171,9 +183,11 @@ class DependencyMetadata:
         version_value = self._metadata.get(known_fields.VERSION)
         date_value = self._metadata.get(known_fields.DATE)
         revision_value = self._metadata.get(known_fields.REVISION)
-        if ((not version_value or version_util.is_unknown(version_value))
-                and (not date_value or util.is_unknown(date_value))
-                and (not revision_value or util.is_unknown(revision_value))):
+        if ((not version_value
+             or version_util.version_is_unknown(version_value)) and
+            (not date_value or version_util.version_is_unknown(date_value))
+                and (not revision_value
+                     or version_util.version_is_unknown(revision_value))):
             versioning_fields = [
                 known_fields.VERSION, known_fields.DATE, known_fields.REVISION
             ]
@@ -199,3 +213,105 @@ class DependencyMetadata:
                 results.append(result)
 
         return results
+
+    def _return_as_property(self, field: field_types.MetadataField) -> Any:
+        """Helper function to create a property for DependencyMetadata.
+
+        The property accessor will validate and return sanitized field value.
+        """
+        assert field in known_fields.ALL_FIELDS
+
+        raw_value = self._metadata.get(field, None)
+        if raw_value is None:
+            # Field is not set.
+            return None
+
+        return field.narrow_type(raw_value)
+
+    @property
+    def name(self) -> Optional[str]:
+        return self._return_as_property(known_fields.NAME)
+
+    @property
+    def short_name(self) -> Optional[str]:
+        return self._return_as_property(known_fields.SHORT_NAME)
+
+    @property
+    def url(self) -> Optional[List[str]]:
+        """
+        Returns a list of URLs that points to upstream repo.
+        The URLs are guaranteed to `urllib.parse.urlparse` without errors.
+
+        Returns None if this repository is the canonical repository of this
+        dependency (see is_canonical below).
+        """
+        return self._return_as_property(known_fields.URL)
+
+    @property
+    def is_canonical(self) -> bool:
+        """
+        Returns whether this repository is the canonical public repository of this dependency.
+
+        This is derived from a special value in the URL field.
+        """
+        value = self._metadata.get(known_fields.URL, "")
+        return known_fields.URL.repo_is_canonical(value)
+
+    @property
+    def version(self) -> Optional[str]:
+        return self._return_as_property(known_fields.VERSION)
+
+    @property
+    def date(self) -> Optional[str]:
+        """Returns in "YYYY-MM-DD" format."""
+        return self._return_as_property(known_fields.DATE)
+
+    @property
+    def revision(self) -> Optional[str]:
+        return self._return_as_property(known_fields.REVISION)
+
+    @property
+    def license(self) -> Optional[List[str]]:
+        """Returns a list of license names."""
+        return self._return_as_property(known_fields.LICENSE)
+
+    @property
+    def license_file(self) -> Optional[List[str]]:
+        # TODO(b/321154076): Consider excluding files that doesn't exist on
+        # disk if it's not too hard.
+        #
+        # Plumbing src_root and dependency_dir into field validator is
+        # required.
+        return self._return_as_property(known_fields.LICENSE_FILE)
+
+    @property
+    def security_critical(self) -> Optional[bool]:
+        return self._return_as_property(known_fields.SECURITY_CRITICAL)
+
+    @property
+    def shipped(self) -> Optional[bool]:
+        return self._return_as_property(known_fields.SHIPPED)
+
+    @property
+    def shipped_in_chromium(self) -> Optional[bool]:
+        return self._return_as_property(known_fields.SHIPPED_IN_CHROMIUM)
+
+    @property
+    def license_android_compatible(self) -> Optional[bool]:
+        return self._return_as_property(known_fields.LICENSE_ANDROID_COMPATIBLE)
+
+    @property
+    def cpe_prefix(self) -> Optional[str]:
+        """Returns a lowercase string (CPE names are case-insensitive)."""
+        return self._return_as_property(known_fields.CPE_PREFIX)
+
+    @property
+    def description(self) -> Optional[str]:
+        return self._return_as_property(known_fields.DESCRIPTION)
+
+    @property
+    def local_modifications(self) -> Optional[Union[Literal[False], str]]:
+        """Returns `False` if there's no local modifications.
+           Otherwise the text content extracted from the metadata.
+        """
+        return self._return_as_property(known_fields.LOCAL_MODIFICATIONS)

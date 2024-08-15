@@ -12,6 +12,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
+#include "chrome/browser/chromeos/launcher_search/search_util.h"
 #include "chrome/browser/chromeos/mahi/mahi_web_contents_manager.h"
 #include "chrome/browser/chromeos/reporting/metric_reporting_manager_lacros_factory.h"
 #include "chrome/browser/chromeos/smart_reader/smart_reader_client_impl.h"
@@ -34,6 +35,7 @@
 #include "chrome/browser/lacros/embedded_a11y_manager_lacros.h"
 #include "chrome/browser/lacros/field_trial_observer.h"
 #include "chrome/browser/lacros/force_installed_tracker_lacros.h"
+#include "chrome/browser/lacros/full_restore_client_lacros.h"
 #include "chrome/browser/lacros/fullscreen_controller_client_lacros.h"
 #include "chrome/browser/lacros/geolocation/system_geolocation_source_lacros.h"
 #include "chrome/browser/lacros/guest_os/vm_sk_forwarding_service.h"
@@ -42,6 +44,7 @@
 #include "chrome/browser/lacros/lacros_extension_apps_publisher.h"
 #include "chrome/browser/lacros/lacros_file_system_provider.h"
 #include "chrome/browser/lacros/lacros_memory_pressure_evaluator.h"
+#include "chrome/browser/lacros/launcher_search/search_controller_factory_lacros.h"
 #include "chrome/browser/lacros/launcher_search/search_controller_lacros.h"
 #include "chrome/browser/lacros/multitask_menu_nudge_delegate_lacros.h"
 #include "chrome/browser/lacros/net/network_change_manager_bridge.h"
@@ -212,6 +215,7 @@ void ChromeBrowserMainExtraPartsLacros::PostBrowserStart() {
   download_controller_client_ =
       std::make_unique<DownloadControllerClientLacros>();
   file_system_provider_ = std::make_unique<LacrosFileSystemProvider>();
+  full_restore_client_ = std::make_unique<FullRestoreClientLacros>();
   fullscreen_controller_client_ =
       std::make_unique<FullscreenControllerClientLacros>();
   kiosk_session_service_ = std::make_unique<KioskSessionServiceLacros>();
@@ -219,7 +223,11 @@ void ChromeBrowserMainExtraPartsLacros::PostBrowserStart() {
       std::make_unique<NetworkChangeManagerBridge>();
   screen_orientation_delegate_ =
       std::make_unique<ScreenOrientationDelegateLacros>();
-  search_controller_ = std::make_unique<crosapi::SearchControllerLacros>();
+  search_controller_ = std::make_unique<crosapi::SearchControllerLacros>(
+      crosapi::ProviderTypes());
+  search_controller_->RegisterWithAsh();
+  search_controller_factory_ =
+      std::make_unique<crosapi::SearchControllerFactoryLacros>();
   task_manager_provider_ = std::make_unique<crosapi::TaskManagerLacros>();
   web_page_info_provider_ =
       std::make_unique<crosapi::WebPageInfoProviderLacros>();

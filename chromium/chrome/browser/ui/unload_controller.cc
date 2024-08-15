@@ -19,7 +19,6 @@
 #include "chrome/browser/ui/web_applications/web_app_tabbed_utils.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
-#include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/render_view_host.h"
@@ -124,7 +123,7 @@ bool UnloadController::BeforeUnloadFired(content::WebContents* contents,
         browser_->tab_strip_model()->GetTabGroupForTab(
             browser_->tab_strip_model()->GetIndexOfWebContents(contents));
     if (group.has_value())
-      browser_->tab_strip_model()->delegate()->GroupCloseStopped(group.value());
+      browser_->tab_strip_model()->GroupCloseStopped(group.value());
   }
 
   if (!is_attempting_to_close_browser_) {
@@ -335,9 +334,9 @@ void UnloadController::TabAttachedImpl(content::WebContents* contents) {
 void UnloadController::TabDetachedImpl(content::WebContents* contents) {
   if (is_attempting_to_close_browser_)
     ClearUnloadState(contents, false);
-  // TODO(crbug.com/1171997): This CHECK is only in place to diagnose a UAF bug.
-  // This is both used to confirm that a WebContents* isn't being removed from
-  // this set, and also if that hypothesis is correct turns a UAF into a
+  // TODO(crbug.com/40054609): This CHECK is only in place to diagnose a UAF
+  // bug. This is both used to confirm that a WebContents* isn't being removed
+  // from this set, and also if that hypothesis is correct turns a UAF into a
   // non-security crash.
   CHECK(tabs_needing_before_unload_fired_.find(contents) ==
         tabs_needing_before_unload_fired_.end());

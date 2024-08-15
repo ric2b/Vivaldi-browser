@@ -25,8 +25,12 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include <cstddef>
 #include <string>
+#include <thread>
+#include <vector>
 
+#include "dawn/native/DawnNative.h"
 #include "dawn/tests/DawnTest.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
@@ -170,6 +174,115 @@ TEST_P(CreatePipelineAsyncTest, BasicUseOfCreateComputePipelineAsync) {
     ValidateCreateComputePipelineAsync();
 }
 
+// Verify that callback can be nullptr.
+TEST_P(CreatePipelineAsyncTest, CreateComputePipelineAsyncNullCallback) {
+    DAWN_TEST_UNSUPPORTED_IF(UsesWire());
+    // TODO(crbug.com/dawn/2471): QueueGL hangs
+    DAWN_SUPPRESS_TEST_IF(IsOpenGL() || IsOpenGLES());
+
+    wgpu::ComputePipelineDescriptor csDesc;
+    csDesc.compute.module = utils::CreateShaderModule(device, R"(
+        struct SSBO {
+            value : u32
+        }
+        @group(0) @binding(0) var<storage, read_write> ssbo : SSBO;
+
+        @compute @workgroup_size(1) fn main() {
+            ssbo.value = 1u;
+        })");
+
+    wgpu::CreateComputePipelineAsyncCallbackInfo callbackInfo;
+    callbackInfo.mode = wgpu::CallbackMode::AllowProcessEvents;
+    callbackInfo.callback = nullptr;
+    device.CreateComputePipelineAsync(&csDesc, callbackInfo);
+
+    while (dawn::native::InstanceProcessEvents(instance.Get())) {
+        WaitABit();
+    }
+}
+
+// Stress test that asynchronously creates many compute pipelines.
+TEST_P(CreatePipelineAsyncTest, CreateComputePipelineAsyncStress) {
+    DAWN_TEST_UNSUPPORTED_IF(UsesWire());
+    // TODO(crbug.com/dawn/2471): QueueGL hangs
+    DAWN_SUPPRESS_TEST_IF(IsOpenGL() || IsOpenGLES());
+
+    wgpu::CreateComputePipelineAsyncCallbackInfo callbackInfo;
+    callbackInfo.mode = wgpu::CallbackMode::AllowProcessEvents;
+    callbackInfo.callback = [](WGPUCreatePipelineAsyncStatus status, WGPUComputePipeline pipeline,
+                               const char* message, void* userdata) {
+        EXPECT_EQ(WGPUCreatePipelineAsyncStatus::WGPUCreatePipelineAsyncStatus_Success, status);
+        wgpu::ComputePipeline::Acquire(pipeline);
+    };
+
+    for (size_t i = 0; i < 100; i++) {
+        wgpu::ComputePipelineDescriptor csDesc;
+        std::string shader = R"(
+            struct SSBO {
+                value : u32
+            }
+            @group(0) @binding(0) var<storage, read_write> ssbo : SSBO;
+
+            @compute @workgroup_size(1) fn main() {
+                ssbo.value = )";
+        shader += std::to_string(i);
+        shader += "u;\n}";
+        csDesc.compute.module = utils::CreateShaderModule(device, shader);
+
+        device.CreateComputePipelineAsync(&csDesc, callbackInfo);
+    }
+
+    while (dawn::native::InstanceProcessEvents(instance.Get())) {
+        WaitABit();
+    }
+}
+
+// Stress test that asynchronously creates many compute pipelines in different threads.
+TEST_P(CreatePipelineAsyncTest, CreateComputePipelineAsyncStressManyThreads) {
+    DAWN_TEST_UNSUPPORTED_IF(UsesWire());
+    // TODO(crbug.com/dawn/2471): QueueGL hangs
+    DAWN_SUPPRESS_TEST_IF(IsOpenGL() || IsOpenGLES());
+
+    auto f = [&](size_t t) {
+        wgpu::ComputePipelineDescriptor csDesc;
+        std::string shader = R"(
+            struct SSBO {
+                value : u32
+            }
+            @group(0) @binding(0) var<storage, read_write> ssbo : SSBO;
+
+            @compute @workgroup_size(1) fn main() {
+                ssbo.value = )";
+        shader += std::to_string(t);
+        shader += "u;\n}";
+        csDesc.compute.module = utils::CreateShaderModule(device, shader);
+
+        wgpu::CreateComputePipelineAsyncCallbackInfo callbackInfo;
+        callbackInfo.mode = wgpu::CallbackMode::AllowProcessEvents;
+        callbackInfo.callback = [](WGPUCreatePipelineAsyncStatus status,
+                                   WGPUComputePipeline pipeline, const char* message,
+                                   void* userdata) {
+            EXPECT_EQ(WGPUCreatePipelineAsyncStatus::WGPUCreatePipelineAsyncStatus_Success, status);
+            wgpu::ComputePipeline::Acquire(pipeline);
+        };
+        device.CreateComputePipelineAsync(&csDesc, callbackInfo);
+    };
+
+    constexpr size_t kNumThreads = 100;
+
+    std::vector<std::thread> threads;
+    for (size_t t = 0; t < kNumThreads; t++) {
+        threads.emplace_back(f, t);
+    }
+    for (size_t t = 0; t < kNumThreads; t++) {
+        threads[t].join();
+    }
+
+    while (dawn::native::InstanceProcessEvents(instance.Get())) {
+        WaitABit();
+    }
+}
+
 // This is a regression test for a bug on the member "entryPoint" of FlatComputePipelineDescriptor.
 TEST_P(CreatePipelineAsyncTest, ReleaseEntryPointAfterCreatComputePipelineAsync) {
     wgpu::ComputePipelineDescriptor csDesc;
@@ -266,6 +379,103 @@ TEST_P(CreatePipelineAsyncTest, BasicUseOfCreateRenderPipelineAsync) {
     DoCreateRenderPipelineAsync(renderPipelineDescriptor);
 
     ValidateCreateRenderPipelineAsync();
+}
+
+// Verify that callback can be nullptr.
+TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineAsyncNullCallback) {
+    DAWN_TEST_UNSUPPORTED_IF(UsesWire());
+    // TODO(crbug.com/dawn/2471): QueueGL hangs
+    DAWN_SUPPRESS_TEST_IF(IsOpenGL() || IsOpenGLES());
+
+    utils::ComboRenderPipelineDescriptor renderPipelineDescriptor;
+    renderPipelineDescriptor.vertex.module = utils::CreateShaderModule(device, R"(
+        @vertex fn main() -> @builtin(position) vec4f {
+            return vec4f(0.0, 0.0, 0.0, 1.0);
+        })");
+    renderPipelineDescriptor.fragment = nullptr;
+
+    wgpu::CreateRenderPipelineAsyncCallbackInfo callbackInfo;
+    callbackInfo.mode = wgpu::CallbackMode::AllowProcessEvents;
+    callbackInfo.callback = nullptr;
+    device.CreateRenderPipelineAsync(&renderPipelineDescriptor, callbackInfo);
+
+    while (dawn::native::InstanceProcessEvents(instance.Get())) {
+        WaitABit();
+    }
+}
+
+// Stress test that asynchronously creates many render pipelines.
+TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineAsyncStress) {
+    DAWN_TEST_UNSUPPORTED_IF(UsesWire());
+    // TODO(crbug.com/dawn/2471): QueueGL hangs
+    DAWN_SUPPRESS_TEST_IF(IsOpenGL() || IsOpenGLES());
+
+    wgpu::CreateRenderPipelineAsyncCallbackInfo callbackInfo;
+    callbackInfo.mode = wgpu::CallbackMode::AllowProcessEvents;
+    callbackInfo.callback = [](WGPUCreatePipelineAsyncStatus status, WGPURenderPipeline pipeline,
+                               const char* message, void* userdata) {
+        EXPECT_EQ(WGPUCreatePipelineAsyncStatus::WGPUCreatePipelineAsyncStatus_Success, status);
+        wgpu::RenderPipeline::Acquire(pipeline);
+    };
+
+    for (size_t i = 0; i < 100; i++) {
+        utils::ComboRenderPipelineDescriptor desc;
+        std::string shader = R"(
+           @vertex fn main() -> @builtin(position) vec4f {
+            return vec4f()";
+        shader += std::to_string(i);
+        shader += ".0, 0.0, 0.0, 1.0);\n}";
+        desc.vertex.module = utils::CreateShaderModule(device, shader);
+        desc.fragment = nullptr;
+
+        device.CreateRenderPipelineAsync(&desc, callbackInfo);
+    }
+
+    while (dawn::native::InstanceProcessEvents(instance.Get())) {
+        WaitABit();
+    }
+}
+
+// Stress test that asynchronously creates many render pipelines in different threads.
+TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineAsyncStressManyThreads) {
+    DAWN_TEST_UNSUPPORTED_IF(UsesWire());
+    // TODO(crbug.com/dawn/2471): QueueGL hangs
+    DAWN_SUPPRESS_TEST_IF(IsOpenGL() || IsOpenGLES());
+
+    auto f = [&](size_t t) {
+        utils::ComboRenderPipelineDescriptor desc;
+        std::string shader = R"(
+           @vertex fn main() -> @builtin(position) vec4f {
+            return vec4f()";
+        shader += std::to_string(t);
+        shader += ".0, 0.0, 0.0, 1.0);\n}";
+        desc.vertex.module = utils::CreateShaderModule(device, shader);
+        desc.fragment = nullptr;
+
+        wgpu::CreateRenderPipelineAsyncCallbackInfo callbackInfo;
+        callbackInfo.mode = wgpu::CallbackMode::AllowProcessEvents;
+        callbackInfo.callback = [](WGPUCreatePipelineAsyncStatus status,
+                                   WGPURenderPipeline pipeline, const char* message,
+                                   void* userdata) {
+            EXPECT_EQ(WGPUCreatePipelineAsyncStatus::WGPUCreatePipelineAsyncStatus_Success, status);
+            wgpu::RenderPipeline::Acquire(pipeline);
+        };
+        device.CreateRenderPipelineAsync(&desc, callbackInfo);
+    };
+
+    constexpr size_t kNumThreads = 100;
+
+    std::vector<std::thread> threads;
+    for (size_t t = 0; t < kNumThreads; t++) {
+        threads.emplace_back(f, t);
+    }
+    for (size_t t = 0; t < kNumThreads; t++) {
+        threads[t].join();
+    }
+
+    while (dawn::native::InstanceProcessEvents(instance.Get())) {
+        WaitABit();
+    }
 }
 
 // Verify the render pipeline created with CreateRenderPipelineAsync() still works when the entry
@@ -878,6 +1088,8 @@ TEST_P(CreatePipelineAsyncTest, CreateRenderPipelineAsyncWithBlendState) {
 
     // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
     DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
+    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 6 OpenGLES
+    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
 
     std::array<wgpu::Texture, 2> renderTargets;
     std::array<wgpu::TextureView, 2> renderTargetViews;

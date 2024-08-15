@@ -7,7 +7,6 @@
 #include <cstddef>
 #include <map>
 #include <memory>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -257,9 +256,9 @@ HostIndexedContentSettings::HostIndexedContentSettings(base::Clock* clock)
   DCHECK(clock);
 }
 
-HostIndexedContentSettings::HostIndexedContentSettings(std::string source,
+HostIndexedContentSettings::HostIndexedContentSettings(ProviderType source,
                                                        bool off_the_record)
-    : source_(std::move(source)),
+    : source_(source),
       off_the_record_(off_the_record),
       clock_(base::DefaultClock::GetInstance()) {}
 

@@ -236,7 +236,8 @@ HistoryClustersService::QueryClusters(
     bool recluster,
     QueryClustersCallback callback) {
   if (!IsJourneysEnabledAndVisible()) {
-    // TODO(crbug/1441974): Make this into a CHECK after verifying all callers.
+    // TODO(crbug.com/40266727): Make this into a CHECK after verifying all
+    // callers.
     std::move(callback).Run({}, QueryClustersContinuationParams::DoneParams());
     return nullptr;
   }
@@ -384,7 +385,7 @@ void HistoryClustersService::OnURLVisited(
   }
 }
 
-void HistoryClustersService::OnURLsDeleted(
+void HistoryClustersService::OnHistoryDeletions(
     history::HistoryService* history_service,
     const history::DeletionInfo& deletion_info) {
   ClearKeywordCache();
@@ -443,6 +444,8 @@ void HistoryClustersService::StartKeywordCacheRefresh() {
                        weak_ptr_factory_.GetWeakPtr(), base::ElapsedTimer(),
                        all_keywords_cache_timestamp_,
                        std::make_unique<KeywordMap>(), &short_keyword_cache_));
+  } else if (keyword_cache_refresh_callback_for_testing_) {
+    std::move(keyword_cache_refresh_callback_for_testing_).Run();
   }
 }
 
@@ -474,12 +477,6 @@ void HistoryClustersService::PopulateClusterKeywordCache(
     if (visible_visits < 2) {
       // Only accept keywords from clusters with at least two visits. This is a
       // simple first-pass technique to avoid overtriggering the omnibox action.
-      continue;
-    }
-    if (!GetConfig().include_synced_visits &&
-        !cluster.originator_cache_guid.empty()) {
-      // Skip over remote clusters if remote visits do not intend to get
-      // incorporated.
       continue;
     }
     // Lowercase the keywords for case insensitive matching while adding to the
@@ -553,6 +550,10 @@ void HistoryClustersService::PopulateClusterKeywordCache(
                           populate_keywords_thread_timer.Elapsed());
   base::UmaHistogramMediumTimes("History.Clusters.KeywordCache.Latency",
                                 total_latency_timer.Elapsed());
+
+  if (keyword_cache_refresh_callback_for_testing_) {
+    std::move(keyword_cache_refresh_callback_for_testing_).Run();
+  }
 }
 
 void HistoryClustersService::LoadCachesFromPrefs() {

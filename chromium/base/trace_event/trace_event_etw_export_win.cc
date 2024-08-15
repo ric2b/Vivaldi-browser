@@ -2,13 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/trace_event/trace_event_etw_export_win.h"
+
+#include <windows.h>
 
 #include <evntrace.h>
 #include <guiddef.h>
 #include <stddef.h>
 #include <stdlib.h>
-#include <windows.h>
+
+#include <string_view>
 #include <utility>
 
 #include "base/at_exit.h"
@@ -89,7 +97,7 @@ namespace {
 //
 // The high 16 bits of the keyword have special semantics and should not be
 // set for enabling individual categories as they are reserved by winmeta.xml.
-// TODO(crbug.com/1497783): Move this to
+// TODO(crbug.com/40287173): Move this to
 // components/tracing/common/etw_export_win.cc once no longer used by
 // TraceEventETWExport.
 const char* const kFilteredEventGroupNames[] = {
@@ -324,7 +332,7 @@ void TraceEventETWExport::AddEvent(char phase,
         TlmMbcsStringField((args->names()[0]), (arg_values_string[0].c_str())),
         TlmMbcsStringField((args->names()[1]), (arg_values_string[1].c_str())));
   } else {
-    NOTREACHED();
+    NOTREACHED_IN_MIGRATION();
   }
 }
 
@@ -350,7 +358,7 @@ void TraceEventETWExport::AddCompleteEndEvent(
 
 // static
 bool TraceEventETWExport::IsCategoryGroupEnabled(
-    StringPiece category_group_name) {
+    std::string_view category_group_name) {
   DCHECK(!category_group_name.empty());
 
   auto* instance = GetInstanceIfExists();
@@ -363,7 +371,7 @@ bool TraceEventETWExport::IsCategoryGroupEnabled(
   StringViewTokenizer category_group_tokens(category_group_name.begin(),
                                             category_group_name.end(), ",");
   while (category_group_tokens.GetNext()) {
-    StringPiece category_group_token = category_group_tokens.token_piece();
+    std::string_view category_group_token = category_group_tokens.token_piece();
     if (instance->IsCategoryEnabled(category_group_token)) {
       return true;
     }
@@ -397,7 +405,8 @@ bool TraceEventETWExport::UpdateEnabledCategories() {
   return true;
 }
 
-bool TraceEventETWExport::IsCategoryEnabled(StringPiece category_name) const {
+bool TraceEventETWExport::IsCategoryEnabled(
+    std::string_view category_name) const {
   // Try to find the category and return its status if found
   auto it = categories_status_.find(category_name);
   if (it != categories_status_.end())
@@ -478,7 +487,7 @@ uint64_t CategoryGroupToETWKeyword(std::string_view category_group_name) {
   StringViewTokenizer category_group_tokens(category_group_name.begin(),
                                             category_group_name.end(), ",");
   while (category_group_tokens.GetNext()) {
-    StringPiece category_group_token = category_group_tokens.token_piece();
+    std::string_view category_group_token = category_group_tokens.token_piece();
 
     // Lookup the keyword for this part of the category_group_name
     // and or in the keyword.
@@ -496,8 +505,6 @@ uint64_t CategoryGroupToETWKeyword(std::string_view category_group_name) {
   return keyword;
 }
 
-#if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
-
 perfetto::protos::gen::TrackEventConfig ETWKeywordToTrackEventConfig(
     uint64_t keyword) {
   perfetto::protos::gen::TrackEventConfig track_event_config;
@@ -509,7 +516,9 @@ perfetto::protos::gen::TrackEventConfig ETWKeywordToTrackEventConfig(
   bool other_events_enabled = (keyword & (1ULL << kOtherEventsGroupNameIndex));
   bool disabled_other_events_enables =
       (keyword & (1ULL << kDisabledOtherEventsGroupNameIndex));
-  if (!other_events_enabled) {
+  if (other_events_enabled) {
+    track_event_config.add_enabled_categories("*");
+  } else {
     track_event_config.add_disabled_categories("*");
   }
   if (!disabled_other_events_enables) {
@@ -519,8 +528,6 @@ perfetto::protos::gen::TrackEventConfig ETWKeywordToTrackEventConfig(
   }
   return track_event_config;
 }
-
-#endif  // BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
 
 }  // namespace trace_event
 }  // namespace base

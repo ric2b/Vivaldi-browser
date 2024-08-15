@@ -19,6 +19,7 @@
 #include "base/system/sys_info.h"
 #include "build/build_config.h"
 #include "components/optimization_guide/core/insertion_ordered_set.h"
+#include "components/optimization_guide/core/model_execution/feature_keys.h"
 #include "components/optimization_guide/core/optimization_guide_constants.h"
 #include "components/optimization_guide/core/optimization_guide_enums.h"
 #include "components/optimization_guide/core/optimization_guide_switches.h"
@@ -167,8 +168,13 @@ BASE_FEATURE(kTextSafetyClassifier,
              "TextSafetyClassifier",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Whether the text safety remote fallback should be used.
+BASE_FEATURE(kTextSafetyRemoteFallback,
+             "TextSafetyRemoteFallback",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // The default value here is a bit of a guess.
-// TODO(crbug/1163244): This should be tuned once metrics are available.
+// TODO(crbug.com/40163041): This should be tuned once metrics are available.
 base::TimeDelta PageTextExtractionOutstandingRequestsGracePeriod() {
   return base::Milliseconds(GetFieldTrialParamByFeatureAsInt(
       kPageTextExtraction, "outstanding_requests_grace_period_ms", 1000));
@@ -282,38 +288,25 @@ bool IsModelQualityLoggingEnabled() {
   return base::FeatureList::IsEnabled(kModelQualityLogging);
 }
 
-bool IsModelQualityLoggingEnabledForFeature(
-    proto::ModelExecutionFeature feature) {
+bool IsModelQualityLoggingEnabledForFeature(UserVisibleFeatureKey key) {
   if (!IsModelQualityLoggingEnabled()) {
     return false;
   }
 
-  // Always disable logging for test features.
-  if (feature ==
-          proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_UNSPECIFIED ||
-      feature == proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_TEST) {
-    return false;
-  }
-
   bool default_logging_enabled = false;
-  switch (feature) {
-    case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_COMPOSE:
-    case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_TAB_ORGANIZATION:
-    case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_WALLPAPER_SEARCH:
+  switch (key) {
+    case UserVisibleFeatureKey::kCompose:
+    case UserVisibleFeatureKey::kTabOrganization:
+    case UserVisibleFeatureKey::kWallpaperSearch:
       // Enable logging when you have approvals. For new features please
       // consult with components/optimization_guide/core/model_quality/OWNERS to
       // discuss if you need logging or not for your feature.
       default_logging_enabled = true;
       break;
-    case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_UNSPECIFIED:
-    case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_TEST:
-      // Logging disabled.
-      NOTREACHED();
-      break;
   }
 
-  std::string param_name =
-      base::ToLowerASCII(proto::ModelExecutionFeature_Name(feature));
+  std::string param_name = base::ToLowerASCII(
+      proto::ModelExecutionFeature_Name(ToModelExecutionFeatureProto(key)));
   return GetFieldTrialParamByFeatureAsBool(kModelQualityLogging, param_name,
                                            default_logging_enabled);
 }
@@ -399,7 +392,7 @@ base::TimeDelta StoredHostModelFeaturesFreshnessDuration() {
 }
 
 base::TimeDelta StoredModelsValidDuration() {
-  // TODO(crbug.com/1234054) This field should not be changed without VERY
+  // TODO(crbug.com/40191801) This field should not be changed without VERY
   // careful consideration. This is the default duration for models that do not
   // specify retention, so changing this can cause models to be removed and
   // refetch would only apply to newer models. Any feature relying on the model
@@ -791,6 +784,10 @@ double GetOnDeviceModelLanguageDetectionMinimumReliability() {
           &kTextSafetyClassifier,
           "on_device_language_detection_minimum_reliability", 0.8};
   return kOnDeviceModelLanguageDetectionMinimumReliability.Get();
+}
+
+bool ShouldUseTextSafetyRemoteFallbackForEligibleFeatures() {
+  return base::FeatureList::IsEnabled(kTextSafetyRemoteFallback);
 }
 
 int GetOnDeviceModelNumRepeats() {

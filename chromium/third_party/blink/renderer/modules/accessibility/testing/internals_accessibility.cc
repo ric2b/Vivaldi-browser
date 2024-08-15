@@ -29,7 +29,7 @@ AXObject* GetAXObject(const Element* element) {
 WTF::String InternalsAccessibility::getComputedLabel(Internals&,
                                                      const Element* element) {
   AXObject* ax_object = GetAXObject(element);
-  if (!ax_object || ax_object->AccessibilityIsIgnored()) {
+  if (!ax_object || ax_object->IsIgnored()) {
     return g_empty_string;
   }
 
@@ -42,12 +42,12 @@ WTF::String InternalsAccessibility::getComputedLabel(Internals&,
 WTF::String InternalsAccessibility::getComputedRole(Internals&,
                                                     const Element* element) {
   AXObject* ax_object = GetAXObject(element);
-  if (!ax_object || ax_object->AccessibilityIsIgnored()) {
-    return AXObject::ARIARoleName(ax::mojom::Role::kNone);
+  if (!ax_object || ax_object->IsIgnored()) {
+    return AXObject::AriaRoleName(ax::mojom::Role::kNone);
   }
 
   ax::mojom::blink::Role role = ax_object->ComputeFinalRoleForSerialization();
-  return AXObject::ARIARoleName(role);
+  return AXObject::AriaRoleName(role);
 }
 
 }  // namespace blink

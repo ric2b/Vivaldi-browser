@@ -13,7 +13,7 @@
 namespace openscreen::discovery {
 
 ServiceInstance::ServiceInstance(TaskRunner& task_runner,
-                                 ReportingClient* reporting_client,
+                                 ReportingClient& reporting_client,
                                  const Config& config,
                                  const InterfaceInfo& network_info)
     : task_runner_(task_runner),
@@ -25,12 +25,12 @@ ServiceInstance::ServiceInstance(TaskRunner& task_runner,
                       network_info.GetIpAddressV4(),
                       network_info.GetIpAddressV6()) {
   if (config.enable_querying) {
-    querier_ = std::make_unique<QuerierImpl>(
-        mdns_service_.get(), task_runner_, reporting_client, &network_config_);
+    querier_ = std::make_unique<QuerierImpl>(*mdns_service_, task_runner_,
+                                             reporting_client, network_config_);
   }
   if (config.enable_publication) {
     publisher_ = std::make_unique<PublisherImpl>(
-        mdns_service_.get(), reporting_client, task_runner_, &network_config_);
+        *mdns_service_, reporting_client, task_runner_, network_config_);
   }
 }
 

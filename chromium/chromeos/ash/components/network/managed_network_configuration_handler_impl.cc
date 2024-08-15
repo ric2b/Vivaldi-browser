@@ -794,23 +794,7 @@ void ManagedNetworkConfigurationHandlerImpl::TriggerCellularPolicyApplication(
     const base::Value::Dict* network_policy = policies->GetPolicyByGuid(guid);
     DCHECK(network_policy);
 
-    if (ash::features::IsSmdsSupportEnabled()) {
-      cellular_policy_handler_->InstallESim(*network_policy);
-    } else {
-      const std::string* smdp_address =
-          policy_util::GetSMDPAddressFromONC(*network_policy);
-      if (smdp_address) {
-        NET_LOG(EVENT)
-            << "Found ONC configuration with SMDP: " << *smdp_address << ". "
-            << "Start installing policy eSim profile with ONC config: "
-            << *network_policy;
-        cellular_policy_handler_->InstallESim(*smdp_address, *network_policy);
-      } else {
-        NET_LOG(EVENT) << "Skip installing policy eSIM either because the eSIM "
-                       << "policy feature is not enabled or the SMDP address "
-                       << "is missing from ONC.";
-      }
-    }
+    cellular_policy_handler_->InstallESim(*network_policy);
   }
 }
 
@@ -1008,6 +992,13 @@ ManagedNetworkConfigurationHandlerImpl::GetAllowTextMessages() const {
   return PolicyTextMessageSuppressionState::kUnset;
 }
 
+bool ManagedNetworkConfigurationHandlerImpl::AllowApnModification() const {
+  CHECK(ash::features::IsApnRevampAndPoliciesEnabled());
+  return FindGlobalPolicyBool(
+             ::onc::global_network_config::kAllowAPNModification)
+      .value_or(true);
+}
+
 bool ManagedNetworkConfigurationHandlerImpl::AllowCellularSimLock() const {
   return FindGlobalPolicyBool(
              ::onc::global_network_config::kAllowCellularSimLock)
@@ -1068,18 +1059,15 @@ bool ManagedNetworkConfigurationHandlerImpl::IsProhibitedFromConfiguringVpn()
     const {
   if (!user_prefs_ ||
       !user_prefs_->FindPreference(arc::prefs::kAlwaysOnVpnPackage) ||
-      !user_prefs_->FindPreference(arc::prefs::kAlwaysOnVpnLockdown) ||
       !user_prefs_->FindPreference(prefs::kVpnConfigAllowed)) {
     return false;
   }
 
   // When an admin Activate Always ON VPN for all user traffic with an Android
-  // VPN, arc::prefs::kAlwaysOnVpnPackage will be non empty, and
-  // arc::prefs::kAlwaysOnVpnLockdown will be true. If additionally, the admin
-  // prohibits users from disconnecting from a VPN manually,
+  // VPN, arc::prefs::kAlwaysOnVpnPackage will be non empty. If additionally,
+  // the admin prohibits users from disconnecting from a VPN manually,
   // prefs::kVpnConfigAllowed becomes false. See go/test-cros-vpn-policies.
   return !user_prefs_->GetString(arc::prefs::kAlwaysOnVpnPackage).empty() &&
-         user_prefs_->GetBoolean(arc::prefs::kAlwaysOnVpnLockdown) &&
          !user_prefs_->GetBoolean(prefs::kVpnConfigAllowed);
 }
 

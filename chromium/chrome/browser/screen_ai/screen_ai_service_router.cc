@@ -32,7 +32,7 @@
 namespace {
 
 // Maximum time to wait for service initialization.
-// TODO(crbug.com/1506969): Update based on collected metrics.
+// TODO(crbug.com/40947650): Update based on collected metrics.
 constexpr base::TimeDelta kInitializationTimeout = base::Seconds(10);
 
 // The name of the file that contains the list of files that are downloaded with
@@ -108,7 +108,6 @@ std::unique_ptr<ComponentFiles> ComponentFiles::Load(
       files_list_file_name);
 }
 
-// TODO(https://crbug.com/41489907): Remove after the issue is fixed.
 void RecordComponentAvailablity(bool available) {
   base::UmaHistogramBoolean("Accessibility.ScreenAI.Component.Available",
                             available);

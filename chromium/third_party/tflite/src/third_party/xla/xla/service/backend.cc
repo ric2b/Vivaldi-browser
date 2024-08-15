@@ -30,6 +30,7 @@ limitations under the License.
 #include "xla/statusor.h"
 #include "xla/stream_executor/host/host_platform_id.h"
 #include "xla/stream_executor/stream_executor.h"
+#include "xla/stream_executor/stream_executor_interface.h"
 #include "xla/util.h"
 #include "tsl/platform/cpu_info.h"
 #include "tsl/platform/env.h"
@@ -114,9 +115,9 @@ absl::StatusOr<StreamPool::Ptr> Backend::BorrowStream(
     se::StreamExecutor* executor, se::StreamPriority priority) {
   absl::MutexLock l(&mu_);
   if (!stream_pools_.contains(executor)) {
-    stream_pools_.emplace(executor, std::make_unique<StreamPool>());
+    stream_pools_.emplace(executor, std::make_unique<StreamPool>(executor));
   }
-  return stream_pools_.at(executor)->BorrowStream(executor, priority);
+  return stream_pools_.at(executor)->BorrowStream(priority);
 }
 
 absl::StatusOr<std::vector<StreamPool::Ptr>> Backend::BorrowStreams(
@@ -124,13 +125,12 @@ absl::StatusOr<std::vector<StreamPool::Ptr>> Backend::BorrowStreams(
   absl::MutexLock l(&mu_);
   TF_ASSIGN_OR_RETURN(auto executor, stream_executor(device_ordinal));
   if (!stream_pools_.contains(executor)) {
-    stream_pools_.emplace(executor, std::make_unique<StreamPool>());
+    stream_pools_.emplace(executor, std::make_unique<StreamPool>(executor));
   }
 
   std::vector<StreamPool::Ptr> ptrs;
   for (int i = 0; i < num_streams; i++) {
-    StreamPool::Ptr ptr =
-        stream_pools_.at(executor)->BorrowStream(executor, priority);
+    StreamPool::Ptr ptr = stream_pools_.at(executor)->BorrowStream(priority);
     ptrs.push_back(std::move(ptr));
   }
   return ptrs;
@@ -148,7 +148,8 @@ Backend::Backend(se::Platform* platform, Compiler* compiler,
       stream_executors_(stream_executors.begin(), stream_executors.end()) {
   // Create a memory allocator for the valid stream executors.
   memory_allocator_ = std::make_shared<se::StreamExecutorMemoryAllocator>(
-      platform, stream_executors_);
+      platform, std::vector<se::StreamExecutorInterface*>{
+                    stream_executors_.begin(), stream_executors_.end()});
   CHECK(!stream_executors_.empty())
       << "Service found no devices for backend " << platform_->Name() << '.';
 

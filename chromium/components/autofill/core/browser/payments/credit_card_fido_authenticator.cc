@@ -127,7 +127,10 @@ void CreditCardFidoAuthenticator::Authorize(
     // opt-in.
     current_flow_ = user_is_opted_in_ ? FOLLOWUP_AFTER_CVC_AUTH_FLOW
                                       : OPT_IN_WITH_CHALLENGE_FLOW;
+    autofill_metrics::LogWebauthnEnrollmentPromptOffered(/*offered=*/true);
     GetAssertion(ParseRequestOptions(std::move(request_options)));
+  } else {
+    autofill_metrics::LogWebauthnEnrollmentPromptOffered(/*offered=*/false);
   }
 }
 
@@ -555,7 +558,8 @@ CreditCardFidoAuthenticator::ParseCreationOptions(
 
   const CoreAccountInfo account_info =
       autofill_client_->GetPersonalDataManager()
-          ->GetAccountInfoForPaymentsServer();
+          ->payments_data_manager()
+          .GetAccountInfoForPaymentsServer();
   options->user.id =
       std::vector<uint8_t>(account_info.gaia.begin(), account_info.gaia.end());
   options->user.name = account_info.email;
@@ -725,7 +729,8 @@ void CreditCardFidoAuthenticator::LogWebauthnResult(
       return;
   }
 
-  // TODO(crbug.com/949269): Add metrics for revoked pending WebAuthn requests.
+  // TODO(crbug.com/40621544): Add metrics for revoked pending WebAuthn
+  // requests.
   autofill_metrics::WebauthnResultMetric metric;
   switch (status) {
     case blink::mojom::AuthenticatorStatus::SUCCESS:

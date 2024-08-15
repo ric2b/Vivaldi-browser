@@ -4,7 +4,7 @@
 
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
-import {assertElement, dispatchMouseUpEvent} from '../../testing/DOMHelpers.js';
+import {dispatchMouseUpEvent} from '../../testing/DOMHelpers.js';
 import {describeWithEnvironment} from '../../testing/EnvironmentHelpers.js';
 import {stabilizeEvent, stabilizeImpressions} from '../../testing/VisualLoggingHelpers.js';
 import * as VisualLogging from '../visual_logging/visual_logging.js';
@@ -14,7 +14,7 @@ import * as UI from './legacy.js';
 function getContextMenuElement(): HTMLElement {
   const container = document.querySelector('div[data-devtools-glass-pane]');
   const softMenuElement = container!.shadowRoot!.querySelector('.widget > .soft-context-menu');
-  assertElement(softMenuElement, HTMLElement);
+  assert.instanceOf(softMenuElement, HTMLElement);
   return softMenuElement;
 }
 
@@ -44,9 +44,9 @@ describeWithEnvironment('ContextMenu', () => {
     const softMenuElement = getContextMenuElement();
 
     const item0 = softMenuElement.querySelector('[aria-label^="item0"]');
-    assertElement(item0, HTMLElement);
+    assert.instanceOf(item0, HTMLElement);
     const item1 = softMenuElement.querySelector('[aria-label^="item1"]');
-    assertElement(item1, HTMLElement);
+    assert.instanceOf(item1, HTMLElement);
 
     assert.isFalse(item0.hasAttribute('checked'));
     assert.isFalse(item1.hasAttribute('checked'));
@@ -72,7 +72,7 @@ describeWithEnvironment('ContextMenu', () => {
     const softMenuElement = getContextMenuElement();
 
     const item0 = softMenuElement.querySelector('[aria-label^="item0"]');
-    assertElement(item0, HTMLElement);
+    assert.instanceOf(item0, HTMLElement);
     dispatchMouseUpEvent(item0);
     assert.isTrue(contextMenuDiscardSpy.called);
 
@@ -116,17 +116,18 @@ describeWithEnvironment('ContextMenu', () => {
     assert.exists(throttler.process);
     await throttler.process?.();
     assert.isTrue(recordImpression.calledOnce);
-    assert.sameDeepMembers(
-        stabilizeImpressions(recordImpression.firstCall.firstArg.impressions),
-        [{id: 0, type: 67}, {id: 1, type: 29, parent: 0, context: 42}, {id: 2, type: 29, parent: 0, context: 44}]);
+    assert.sameDeepMembers(stabilizeImpressions(recordImpression.firstCall.firstArg.impressions), [
+      {id: 0, type: 67, height: 0, width: 0},
+      {id: 1, type: 29, parent: 0, context: 42, height: 0, width: 0},
+      {id: 2, type: 29, parent: 0, context: 44, height: 0, width: 0},
+    ]);
 
     Host.InspectorFrontendHost.InspectorFrontendHostInstance.events.dispatchEventToListeners(
         Host.InspectorFrontendHostAPI.Events.ContextMenuItemSelected, 1);
 
     await new Promise(resolve => setTimeout(resolve, 0));
     assert.isTrue(recordClick.calledOnce);
-    assert.deepStrictEqual(
-        stabilizeEvent(recordClick.firstCall.firstArg), {veid: 0, mouseButton: 0, doubleClick: false});
+    assert.deepStrictEqual(stabilizeEvent(recordClick.firstCall.firstArg), {veid: 0, doubleClick: false});
     VisualLogging.stopLogging();
   });
 });

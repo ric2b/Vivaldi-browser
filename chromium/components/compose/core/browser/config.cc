@@ -9,6 +9,7 @@
 #include "base/no_destructor.h"
 #include "base/types/cxx23_to_underlying.h"
 #include "components/compose/core/browser/compose_features.h"
+#include "components/segmentation_platform/public/features.h"
 
 namespace compose {
 
@@ -47,16 +48,64 @@ Config::Config() {
       features::kComposeInnerText, "inner_text_max_bytes",
       inner_text_max_bytes);
 
+  trimmed_inner_text_max_chars = base::GetFieldTrialParamByFeatureAsInt(
+      features::kComposeInnerText, "trimmed_inner_text_max_chars",
+      trimmed_inner_text_max_chars);
+
+  trimmed_inner_text_header_length = base::GetFieldTrialParamByFeatureAsInt(
+      features::kComposeInnerText, "trimmed_inner_text_header_length",
+      trimmed_inner_text_header_length);
+
   auto_submit_with_selection =
       base::FeatureList::IsEnabled(features::kComposeAutoSubmit);
 
-  popup_with_saved_state = base::GetFieldTrialParamByFeatureAsBool(
-      features::kEnableComposeNudge, "popup_with_saved_state",
-      popup_with_saved_state);
+  is_nudge_shown_at_cursor =
+      base::FeatureList::IsEnabled(features::kEnableComposeNudgeAtCursor);
 
-  popup_with_no_saved_state = base::GetFieldTrialParamByFeatureAsBool(
-      features::kEnableComposeNudge, "popup_with_no_saved_state",
-      popup_with_no_saved_state);
+  saved_state_nudge_enabled =
+      base::FeatureList::IsEnabled(features::kEnableComposeSavedStateNudge);
+
+  proactive_nudge_enabled =
+      base::FeatureList::IsEnabled(features::kEnableComposeProactiveNudge);
+
+  proactive_nudge_compact_ui = base::GetFieldTrialParamByFeatureAsBool(
+      features::kEnableComposeProactiveNudge, "proactive_nudge_compact_ui",
+      proactive_nudge_compact_ui);
+
+  proactive_nudge_show_probability = base::GetFieldTrialParamByFeatureAsDouble(
+      features::kEnableComposeProactiveNudge,
+      "proactive_nudge_show_probability", proactive_nudge_show_probability);
+
+  proactive_nudge_force_show_probability =
+      base::GetFieldTrialParamByFeatureAsDouble(
+          features::kEnableComposeProactiveNudge,
+          "proactive_nudge_force_show_probability",
+          proactive_nudge_force_show_probability);
+
+  proactive_nudge_always_collect_training_data =
+      base::GetFieldTrialParamByFeatureAsBool(
+          features::kEnableComposeProactiveNudge,
+          "proactive_nudge_always_collect_training_data",
+          proactive_nudge_always_collect_training_data);
+
+  proactive_nudge_delay =
+      base::Milliseconds(base::GetFieldTrialParamByFeatureAsInt(
+          features::kEnableComposeProactiveNudge,
+          "proactive_nudge_delay_milliseconds",
+          proactive_nudge_delay.InMilliseconds()));
+
+  nudge_field_change_event_max = base::GetFieldTrialParamByFeatureAsInt(
+      features::kEnableComposeProactiveNudge, "nudge_field_change_event_max",
+      nudge_field_change_event_max);
+
+  proactive_nudge_segmentation = base::FeatureList::IsEnabled(
+      segmentation_platform::features::kSegmentationPlatformComposePromotion);
+
+  proactive_nudge_field_per_navigation =
+      base::GetFieldTrialParamByFeatureAsBool(
+          features::kEnableComposeProactiveNudge,
+          "proactive_nudge_field_per_navigation",
+          proactive_nudge_field_per_navigation);
 
   saved_state_timeout_milliseconds = base::GetFieldTrialParamByFeatureAsInt(
       features::kEnableComposeSavedStateNotification,

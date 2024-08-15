@@ -263,6 +263,18 @@ using vivaldi::IsVivaldiRunning;
                addedInBackground:!status.active_web_state_change()];
       break;
     }
+    case WebStateListChange::Type::kGroupCreate:
+      // Do nothing when a group is created.
+      break;
+    case WebStateListChange::Type::kGroupVisualDataUpdate:
+      // Do nothing when a tab group's visual data are updated.
+      break;
+    case WebStateListChange::Type::kGroupMove:
+      // Do nothing when a tab group is moved.
+      break;
+    case WebStateListChange::Type::kGroupDelete:
+      // Do nothing when a group is deleted.
+      break;
   }
 
   if (status.active_web_state_change()) {
@@ -632,6 +644,7 @@ using vivaldi::IsVivaldiRunning;
     [self startObservingTabBarStyleChange:prefService];
     [self startObservingAccentColorChange:prefService];
     [self startObservingWebsiteAppearanceChange:prefService];
+    [self startObservingBrowserThemeChange:prefService];
   }
 }
 
@@ -682,6 +695,12 @@ using vivaldi::IsVivaldiRunning;
   [self onPreferenceChanged:vivaldiprefs::kVivaldiWebsiteAppearanceStyle];
 }
 
+- (void)startObservingBrowserThemeChange:(PrefService*)prefService {
+  _prefObserverBridge->ObserveChangesForPreference(
+      vivaldiprefs::kVivaldiAppearanceMode, &_prefChangeRegistrar);
+  [self onPreferenceChanged:vivaldiprefs::kVivaldiAppearanceMode];
+}
+
 #pragma mark - Helpers
 - (UIColor*)customAccentColor {
   NSString* color = [VivaldiAppearanceSettingsPrefsHelper getCustomAccentColor];
@@ -691,8 +710,20 @@ using vivaldi::IsVivaldiRunning;
 - (BOOL)forceDarkWebPages {
   if (!_forceDarkWebPagesEnabled)
     return NO;
-  return [_forceDarkWebPagesEnabled value] &&
-      [self websiteAppearanceStyle] != VivaldiWebsiteAppearanceStyleLight;
+
+  BOOL enabledToggle = [_forceDarkWebPagesEnabled value];
+  if (enabledToggle &&
+      [self websiteAppearanceStyle] == VivaldiWebsiteAppearanceStyleDark) {
+    return YES;
+  }
+
+  if (enabledToggle &&
+      [self websiteAppearanceStyle] == VivaldiWebsiteAppearanceStyleAuto &&
+      self.isBrowserOrSystemThemeDark) {
+    return YES;
+  }
+
+  return NO;
 }
 
 - (BOOL)isBottomOmniboxEnabled {
@@ -730,7 +761,16 @@ using vivaldi::IsVivaldiRunning;
   }
 }
 
+- (BOOL)isBrowserOrSystemThemeDark {
+  return [VivaldiAppearanceSettingsPrefsHelper isBrowserThemeDark] ||
+      UITraitCollection.currentTraitCollection.userInterfaceStyle ==
+          UIUserInterfaceStyleDark;
+}
+
 - (void)forceReloadWebpageIfNeeded {
+  if (!self.webStateList)
+    return;
+
   for (int i = 0; i < self.webStateList->count(); i++) {
     web::WebState* webState = self.webStateList->GetWebStateAt(i);
     WebsiteDarkModeJavaScriptFeature::GetInstance()->ToggleDarkMode(
@@ -745,7 +785,9 @@ using vivaldi::IsVivaldiRunning;
   } else if (observableBoolean == _bottomOmniboxEnabled) {
     [self.consumer setIsBottomOmniboxEnabled:[observableBoolean value]];
   } else if (observableBoolean == _dynamicAccentColorEnabled) {
-    [self.consumer setPageThemeColor:self.webState->GetThemeColor()];
+    if (self.webState) {
+      [self.consumer setPageThemeColor:self.webState->GetThemeColor()];
+    }
     [self.consumer setIsDynamicAccentColorEnabled:[observableBoolean value]];
   } else if (observableBoolean == _forceDarkWebPagesEnabled) {
     [self forceReloadWebpageIfNeeded];
@@ -756,7 +798,15 @@ using vivaldi::IsVivaldiRunning;
 - (void)onPreferenceChanged:(const std::string&)preferenceName {
   if (preferenceName == vivaldiprefs::kVivaldiCustomAccentColor) {
     [self.consumer setCustomAccentColor:[self customAccentColor]];
-  } else if (preferenceName == vivaldiprefs::kVivaldiWebsiteAppearanceStyle) {
+  } else if (preferenceName == vivaldiprefs::kVivaldiWebsiteAppearanceStyle ||
+             preferenceName == vivaldiprefs::kVivaldiAppearanceMode) {
+    [self forceReloadWebpageIfNeeded];
+  }
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
+  if (UITraitCollection.currentTraitCollection.userInterfaceStyle
+      != previousTraitCollection.userInterfaceStyle) {
     [self forceReloadWebpageIfNeeded];
   }
 }

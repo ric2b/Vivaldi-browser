@@ -9,6 +9,7 @@ import { Expectation, toComparator } from '../shader/execution/expression/expect
 
 import BinaryStream from './binary_stream.js';
 import {
+  ArrayValue,
   isFloatValue,
   isScalarValue,
   MatrixValue,
@@ -118,8 +119,8 @@ function compareValue(got: Value, expected: Value): Comparison {
     };
   }
 
-  if (got instanceof VectorValue) {
-    const e = expected as VectorValue;
+  if (got instanceof VectorValue || got instanceof ArrayValue) {
+    const e = expected as VectorValue | ArrayValue;
     const gLen = got.elements.length;
     const eLen = e.elements.length;
     let matched = gLen === eLen;
@@ -160,7 +161,7 @@ function compareValue(got: Value, expected: Value): Comparison {
     };
   }
 
-  throw new Error(`unhandled type '${typeof got}`);
+  throw new Error(`unhandled type '${typeof got}'`);
 }
 
 /**

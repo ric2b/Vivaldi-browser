@@ -1,5 +1,12 @@
 name: CI Unix Static AV2
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+    paths:
+      - '.github/workflows/ci-unix-static-av2.yml'
+      - '**CMakeLists.txt'
+      - 'cmake/**'
+      - 'ext/**'
 
 permissions:
   contents: read
@@ -22,11 +29,11 @@ jobs:
             gcc: 13
 
     steps:
-    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+    - uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b # v4.1.4
     - name: Set GCC & G++ compiler (on Linux)
       if: runner.os == 'Linux'
       run: echo "CC=gcc-${{matrix.gcc}}" >> $GITHUB_ENV && echo "CXX=g++-${{matrix.gcc}}" >> $GITHUB_ENV
-    - uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5.0.0
+    - uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
       with:
         python-version: '3.x'
     - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
@@ -34,54 +41,28 @@ jobs:
         profile: minimal
         toolchain: stable
         override: true
-
+    - name: Install cargo-c
+      env:
+        LINK: https://github.com/lu-zero/cargo-c/releases/latest/download
+        CARGO_C_FILE: cargo-c-x86_64-unknown-linux-musl.tar.gz
+      run: |
+        curl -L $LINK/$CARGO_C_FILE | tar xz -C ~/.cargo/bin
     - name: Cache external dependencies
       id: cache-ext
-      uses: actions/cache@ab5e6d0c87105b4c9c2047343972218f562e4319 # v4.0.1
+      uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
       with:
-        path: ext
-        key: ${{ runner.os }}-static-av2-${{ hashFiles('ext/*.cmd', 'ext/svt.sh') }}
+        path: ext, build/_deps
+        key: ${{ runner.os }}-${{ matrix.also-enable-av1-codec }}-unix-static-av2-${{ hashFiles('cmake/Modules/*', 'ext/*.cmd', 'ext/*.sh') }}
     - name: Setup cmake
-      uses: jwlawson/actions-setup-cmake@959f1116cf9f1ae42fff8ec1a4aaae6d4a0e348b # v2.0.1
+      uses: jwlawson/actions-setup-cmake@802fa1a2c4e212495c05bf94dba2704a92a472be # v2.0.2
       with:
         # CMake version 3.17 is required to build libwebp (which libsharpyuv is part of) on macOS.
         cmake-version: '3.17.x'
     - name: Print cmake version
       run: cmake --version
     - uses: ilammy/setup-nasm@13cbeb366c45c4379d3478cdcbadd8295feb5028 # v1.5.1
-      with:
-        version: 2.15.05
     - uses: seanmiddleditch/gha-setup-ninja@8b297075da4cd2a5f1fd21fe011b499edf06e9d2 # v4
     - run: pip install meson
-    - name: Build avm
-      if: steps.cache-ext.outputs.cache-hit != 'true'
-      working-directory: ./ext
-      run: bash -e avm.cmd
-    - name: Build dav1d
-      if: steps.cache-ext.outputs.cache-hit != 'true'
-      working-directory: ./ext
-      run: bash -e dav1d.cmd
-    - name: Build rav1e
-      if: steps.cache-ext.outputs.cache-hit != 'true'
-      working-directory: ./ext
-      run: bash -e rav1e.cmd
-    - name: Build SVT-AV1
-      if: steps.cache-ext.outputs.cache-hit != 'true'
-      working-directory: ./ext
-      run: bash -e svt.cmd
-    - name: Build libyuv
-      if: steps.cache-ext.outputs.cache-hit != 'true'
-      working-directory: ./ext
-      run: bash -e libyuv.cmd
-    - name: Build libsharpyuv
-      if: steps.cache-ext.outputs.cache-hit != 'true'
-      working-directory: ./ext
-      run: bash -e libsharpyuv.cmd
-    - name: Build GoogleTest
-      if: steps.cache-ext.outputs.cache-hit != 'true'
-      working-directory: ./ext
-      # Note: "apt install googletest" is sometimes insufficient for find_package(GTest) so build in ext/ instead.
-      run: bash -e googletest.cmd
 
     - name: Prepare libavif (cmake)
       run: >
@@ -96,8 +77,17 @@ jobs:
         -DAVIF_LIBYUV=LOCAL
         -DAVIF_LIBSHARPYUV=LOCAL
         -DAVIF_BUILD_EXAMPLES=ON -DAVIF_BUILD_APPS=ON
-        -DAVIF_BUILD_TESTS=ON -DAVIF_ENABLE_GTEST=ON -DAVIF_LOCAL_GTEST=ON
+        -DAVIF_BUILD_TESTS=ON -DAVIF_ENABLE_GTEST=ON -DAVIF_GTEST=LOCAL
         -DAVIF_ENABLE_WERROR=ON
+    - name: Cache cargo registry
+      uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+      continue-on-error: true
+      with:
+        path: ~/.cargo/registry/cache
+        key: cargo-registry-${{ runner.os }}-${{ hashFiles('ext/rav1e/Cargo.lock') }}-unix-static-av2
+        restore-keys: |
+          cargo-registry-${{ runner.os }}-${{ hashFiles('ext/rav1e/Cargo.lock') }}-
+          cargo-registry-${{ runner.os }}-
     - name: Build libavif (ninja)
       working-directory: ./build
       run: ninja

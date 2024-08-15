@@ -22,7 +22,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ui/frame/frame_utils.h"
 #include "components/omnibox/browser/location_bar_model_impl.h"
-#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/document_picture_in_picture_window_controller.h"
 #include "content/public/browser/web_contents.h"
@@ -124,10 +123,7 @@ class BackToTabButton : public OverlayWindowImageButton {
  public:
   explicit BackToTabButton(PressedCallback callback)
       : OverlayWindowImageButton(std::move(callback)) {
-    auto* icon = &vector_icons::kBackToTabIcon;
-    if (OmniboxFieldTrial::IsChromeRefreshIconsEnabled()) {
-      icon = &vector_icons::kBackToTabChromeRefreshIcon;
-    }
+    auto* icon = &vector_icons::kBackToTabChromeRefreshIcon;
     SetImageModel(views::Button::STATE_NORMAL,
                   ui::ImageModel::FromVectorIcon(
                       *icon, kColorPipWindowForeground, kBackToTabImageSize));
@@ -166,7 +162,7 @@ class WindowEventObserver : public ui::EventObserver {
       return;
     }
 
-    // TODO(crbug.com/1400085): Windows doesn't capture mouse exit event
+    // TODO(crbug.com/40883490): Windows doesn't capture mouse exit event
     // sometimes when mouse leaves the window.
     // TODO(jazzhsu): We are checking if mouse is in bounds rather than strictly
     // checking mouse enter/exit event because of two reasons: 1. We are getting
@@ -435,7 +431,7 @@ PictureInPictureBrowserFrameView::PictureInPictureBrowserFrameView(
   browser_view->top_container()->SetVisible(false);
   browser_view->top_container()->SetEnabled(false);
   browser_view->top_container()->GetViewAccessibility().SetIsIgnored(true);
-  browser_view->top_container()->GetViewAccessibility().OverrideIsLeaf(true);
+  browser_view->top_container()->GetViewAccessibility().SetIsLeaf(true);
 
   location_bar_model_ = std::make_unique<LocationBarModelImpl>(
       this, content::kMaxURLDisplayChars);
@@ -452,12 +448,10 @@ PictureInPictureBrowserFrameView::PictureInPictureBrowserFrameView(
       CONTEXT_OMNIBOX_PRIMARY, views::style::STYLE_PRIMARY);
   location_icon_view_ = top_bar_container_view_->AddChildView(
       std::make_unique<LocationIconView>(font_list, this, this));
-  if (OmniboxFieldTrial::IsChromeRefreshIconsEnabled()) {
     // The PageInfo icon should be 8px from the left of the window and 4px from
     // the right of the origin.
     location_icon_view_->SetProperty(views::kMarginsKey,
                                      gfx::Insets::TLBR(0, 8, 0, 4));
-  }
 
   // For file URLs, we want to elide the tail, since the file name and/or query
   // part of the file URL can be made to look like an origin for spoofing. For
@@ -853,7 +847,7 @@ void PictureInPictureBrowserFrameView::AddedToWidget() {
     hide_close_button_animation_.SetContainer(animation_container);
   }
 
-  // TODO(https://crbug.com/1475419): Don't force dark mode once we support a
+  // TODO(crbug.com/40279642): Don't force dark mode once we support a
   // light mode window.
   GetWidget()->SetColorModeOverride(ui::ColorProviderKey::ColorMode::kDark);
 
@@ -999,9 +993,6 @@ LocationBarModel* PictureInPictureBrowserFrameView::GetLocationBarModel()
 
 ui::ImageModel PictureInPictureBrowserFrameView::GetLocationIcon(
     LocationIconView::Delegate::IconFetchedCallback on_icon_fetched) const {
-  ui::ColorId foreground_color_id = kColorOmniboxSecurityChipSecure;
-
-  if (OmniboxFieldTrial::IsChromeRefreshIconsEnabled()) {
     // If we're animating between colors, use the current color value.
     if (current_foreground_color_.has_value()) {
       return ui::ImageModel::FromVectorIcon(
@@ -1009,14 +1000,14 @@ ui::ImageModel PictureInPictureBrowserFrameView::GetLocationIcon(
           kWindowIconImageSize);
     }
 
-    foreground_color_id = (top_bar_color_animation_.GetCurrentValue() == 0)
-                              ? kColorPipWindowForegroundInactive
-                              : kColorPipWindowForeground;
-  }
+    ui::ColorId foreground_color_id =
+        (top_bar_color_animation_.GetCurrentValue() == 0)
+            ? kColorPipWindowForegroundInactive
+            : kColorPipWindowForeground;
 
-  return ui::ImageModel::FromVectorIcon(location_bar_model_->GetVectorIcon(),
-                                        foreground_color_id,
-                                        kWindowIconImageSize);
+    return ui::ImageModel::FromVectorIcon(location_bar_model_->GetVectorIcon(),
+                                          foreground_color_id,
+                                          kWindowIconImageSize);
 }
 
 std::optional<ui::ColorId>
@@ -1108,10 +1099,8 @@ void PictureInPictureBrowserFrameView::AnimationProgressed(
     for (ContentSettingImageView* view : content_setting_views_) {
       view->SetIconColor(color);
     }
-    if (OmniboxFieldTrial::IsChromeRefreshIconsEnabled()) {
       current_foreground_color_ = color;
       location_icon_view_->Update(/*suppress_animations=*/false);
-    }
     return;
   }
 

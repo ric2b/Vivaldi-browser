@@ -88,7 +88,6 @@ class ChromeRenderFrameObserver : public content::RenderFrameObserver,
   void DidMeaningfulLayout(blink::WebMeaningfulLayout layout_type) override;
   void OnDestruct() override;
   void WillDetach(blink::DetachReason detach_reason) override;
-  void DraggableRegionsChanged() override;
 
   // chrome::mojom::ChromeRenderFrame:
   void SetWindowFeatures(
@@ -102,13 +101,15 @@ class ChromeRenderFrameObserver : public content::RenderFrameObserver,
       RequestImageForContextNodeCallback callback) override;
   void RequestBitmapForContextNode(
       RequestBitmapForContextNodeCallback callback) override;
+  void RequestBoundsForContextNodeDiagnostic(
+      RequestBoundsForContextNodeDiagnosticCallback callback) override;
   void RequestReloadImageForContextNode() override;
 #if BUILDFLAG(IS_ANDROID)
   void SetCCTClientHeader(const std::string& header) override;
 #endif
   void GetMediaFeedURL(GetMediaFeedURLCallback callback) override;
   void LoadBlockedPlugins(const std::string& identifier) override;
-  void SetSupportsAppRegion(bool supports_app_region) override;
+  void SetSupportsDraggableRegions(bool supports_draggable_regions) override;
 
   // Initialize a |phishing_classifier_delegate_|.
   void SetClientSidePhishingDetection();

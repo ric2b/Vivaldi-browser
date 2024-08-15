@@ -44,10 +44,8 @@ class PLATFORM_EXPORT WidgetSchedulerImpl : public WidgetScheduler {
       const WebInputEventAttribution& web_input_event_attribution) override;
   void DidHandleInputEventOnMainThread(const WebInputEvent& web_input_event,
                                        WebInputEventResult result) override;
-  void DidAnimateForInputOnCompositorThread() override;
   void DidRunBeginMainFrame() override;
   void SetHidden(bool hidden) override;
-  void SetHasTouchHandler(bool has_touch_handler) override;
 
  private:
   scoped_refptr<MainThreadTaskQueue> input_task_queue_;
@@ -59,7 +57,6 @@ class PLATFORM_EXPORT WidgetSchedulerImpl : public WidgetScheduler {
       main_thread_scheduler_;
   const raw_ptr<RenderWidgetSignals, DanglingUntriaged> render_widget_signals_;
   bool hidden_ = false;
-  bool has_touch_handler_ = false;
 };
 
 }  // namespace blink::scheduler

@@ -19,7 +19,7 @@
 #include "cast/sender/channel/message_util.h"
 #include "gtest/gtest.h"
 #include "platform/test/paths.h"
-#include "testing/util/read_file.h"
+#include "util/read_file.h"
 
 namespace openscreen::cast {
 namespace {
@@ -127,7 +127,7 @@ class DeviceAuthTest : public ::testing::Test {
 
   StaticCredentialsProvider creds_;
   VirtualConnectionRouter router_;
-  DeviceAuthNamespaceHandler auth_handler_{&creds_};
+  DeviceAuthNamespaceHandler auth_handler_{creds_};
 };
 
 TEST_F(DeviceAuthTest, MANUAL_SerializeTestData) {

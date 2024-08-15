@@ -2,14 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertElement, dispatchKeyDownEvent, renderElementIntoDOM} from '../../../testing/DOMHelpers.js';
+import {dispatchKeyDownEvent, renderElementIntoDOM} from '../../../testing/DOMHelpers.js';
 import * as Coordinator from '../render_coordinator/render_coordinator.js';
 
 import * as Buttons from './buttons.js';
 
 const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
-
-const {assert} = chai;
 
 describe('Button', () => {
   const iconUrl = new URL('../../../Images/file-image.svg', import.meta.url).toString();
@@ -22,7 +20,7 @@ describe('Button', () => {
     const button = new Buttons.Button.Button();
     button.data = data;
     // Toolbar and round buttons do not take text, and error if you try to set any.
-    if (data.variant !== Buttons.Button.Variant.TOOLBAR && data.variant !== Buttons.Button.Variant.ROUND) {
+    if (data.variant !== Buttons.Button.Variant.TOOLBAR && data.variant !== Buttons.Button.Variant.ICON) {
       button.innerText = text;
     }
     renderElementIntoDOM(button);
@@ -42,7 +40,7 @@ describe('Button', () => {
     button.onclick = () => clicks++;
 
     const innerButton = button.shadowRoot?.querySelector('button') as HTMLButtonElement;
-    assertElement(innerButton, HTMLButtonElement);
+    assert.instanceOf(innerButton, HTMLButtonElement);
 
     innerButton.click();
     dispatchKeyDownEvent(innerButton, {
@@ -69,14 +67,14 @@ describe('Button', () => {
 
   it('secondary button can be clicked', async () => {
     await testClick({
-      variant: Buttons.Button.Variant.SECONDARY,
+      variant: Buttons.Button.Variant.OUTLINED,
     });
   });
 
   it('disabled secondary button cannot be clicked', async () => {
     await testClick(
         {
-          variant: Buttons.Button.Variant.SECONDARY,
+          variant: Buttons.Button.Variant.OUTLINED,
           disabled: true,
         },
         0);

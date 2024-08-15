@@ -25,8 +25,8 @@ class SenderReportTest : public testing::Test {
 
  private:
   RtcpSession session_{kSenderSsrc, kReceiverSsrc, Clock::now()};
-  SenderReportBuilder builder_{&session_};
-  SenderReportParser parser_{&session_};
+  SenderReportBuilder builder_{session_};
+  SenderReportParser parser_{session_};
 };
 
 // Tests that the compound RTCP packets containing a Sender Report alongside

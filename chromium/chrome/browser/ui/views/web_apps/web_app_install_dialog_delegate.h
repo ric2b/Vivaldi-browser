@@ -9,8 +9,6 @@
 #include <string>
 
 #include "base/memory/raw_ptr.h"
-#include "base/memory/ref_counted.h"
-#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/web_applications/web_app_dialogs.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
@@ -23,9 +21,9 @@
 class PrefService;
 
 namespace content {
-class NavigationHandle;
+class Page;
 class WebContents;
-}
+}  // namespace content
 
 namespace feature_engagement {
 class Tracker;
@@ -57,15 +55,11 @@ inline constexpr int kIconSize = 32;
 // result in a weird filename), it only restricts what we suggest as titles.
 std::u16string NormalizeSuggestedAppTitle(const std::u16string& title);
 
-inline constexpr int kTextFieldId = 1;
-
-using DiyAppTitleFieldTextTracker =
-    scoped_refptr<base::RefCountedData<std::u16string>>;
-
-class WebAppInstallDialogDelegate
-    : public ui::DialogModelDelegate,
-      public content::WebContentsObserver {
+class WebAppInstallDialogDelegate : public ui::DialogModelDelegate,
+                                    public content::WebContentsObserver {
  public:
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kDiyAppsDialogOkButtonId);
+
   WebAppInstallDialogDelegate(
       content::WebContents* web_contents,
       std::unique_ptr<WebAppInstallInfo> install_info,
@@ -74,15 +68,19 @@ class WebAppInstallDialogDelegate
       PwaInProductHelpState iph_state,
       PrefService* prefs,
       feature_engagement::Tracker* tracker,
-      InstallDialogType dialog_type,
-      DiyAppTitleFieldTextTracker title_field_data =
-          base::MakeRefCounted<base::RefCountedData<std::u16string>>());
+      InstallDialogType dialog_type);
 
   ~WebAppInstallDialogDelegate() override;
 
   void OnAccept();
   void OnCancel();
   void OnClose();
+
+  // Takes care of enabling or disabling the dialog model's OK button for DIY
+  // apps based on changes in the text field, and also keeps track of the text
+  // field's contents.
+  void OnTextFieldChangedMaybeUpdateButton(
+      const std::u16string& text_field_contents);
 
   base::WeakPtr<WebAppInstallDialogDelegate> AsWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();
@@ -91,8 +89,7 @@ class WebAppInstallDialogDelegate
   // content::WebContentsObserver:
   void OnVisibilityChanged(content::Visibility visibility) override;
   void WebContentsDestroyed() override;
-  void DidFinishNavigation(
-      content::NavigationHandle* navigation_handle) override;
+  void PrimaryPageChanged(content::Page& page) override;
 
  private:
   void CloseDialogAsIgnored();
@@ -108,10 +105,9 @@ class WebAppInstallDialogDelegate
   raw_ptr<PrefService> prefs_;
   raw_ptr<feature_engagement::Tracker> tracker_;
   InstallDialogType dialog_type_;
-  DiyAppTitleFieldTextTracker title_field_data_;
+  std::u16string text_field_contents_;
 
-  base::WeakPtrFactory<WebAppInstallDialogDelegate> weak_ptr_factory_{
-      this};
+  base::WeakPtrFactory<WebAppInstallDialogDelegate> weak_ptr_factory_{this};
 };
 
 }  // namespace web_app

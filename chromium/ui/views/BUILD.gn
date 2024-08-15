@@ -276,6 +276,7 @@ component("views") {
     "view_model.h",
     "view_model_utils.h",
     "view_observer.h",
+    "view_shadow.h",
     "view_targeter.h",
     "view_targeter_delegate.h",
     "view_tracker.h",
@@ -492,6 +493,7 @@ component("views") {
     "view_constants.cc",
     "view_model.cc",
     "view_model_utils.cc",
+    "view_shadow.cc",
     "view_targeter.cc",
     "view_targeter_delegate.cc",
     "view_tracker.cc",
@@ -531,7 +533,7 @@ component("views") {
   # Other targets in this file (e.g. tests) get access to the internal headers.
   friend = [ ":*" ]
 
-  # Internal sources. TODO(https://crbug.com/871123): Move more headers from
+  # Internal sources. TODO(crbug.com/41406123): Move more headers from
   # public into this list, along with the implementation file.
   sources += [
     "controls/button/label_button_label.cc",
@@ -551,7 +553,6 @@ component("views") {
 
   deps = [
     "//base:i18n",
-    "//base/third_party/dynamic_annotations",
     "//build:chromeos_buildflags",
     "//cc/paint",
     "//components/url_formatter",
@@ -565,6 +566,7 @@ component("views") {
     "//ui/base/emoji",
     "//ui/color",
     "//ui/color:mixers",
+    "//ui/compositor_extra",
     "//ui/display",
     "//ui/gfx:native_widget_types",
     "//ui/latency",
@@ -738,7 +740,7 @@ component("views") {
       "win/fullscreen_handler.cc",
       "win/hwnd_message_handler.cc",
       "win/hwnd_message_handler_headless.cc",
-      "win/hwnd_util_aurawin.cc",
+      "win/hwnd_util.cc",
       "win/pen_event_processor.cc",
       "win/pen_id_handler.cc",
       "win/scoped_enable_unadjusted_mouse_events_win.cc",
@@ -908,7 +910,6 @@ component("views") {
       if (is_chromeos_lacros) {
         public += [ "widget/desktop_aura/desktop_window_tree_host_lacros.h" ]
         sources += [
-          # TODO: do we need one for lacros?
           "widget/desktop_aura/desktop_window_tree_host_lacros.cc",
           "widget/desktop_aura/window_event_filter_lacros.cc",
           "widget/desktop_aura/window_event_filter_lacros.h",
@@ -1323,6 +1324,7 @@ test("views_unittests") {
     "test/widget_test_unittest.cc",
     "view_model_unittest.cc",
     "view_model_utils_unittest.cc",
+    "view_shadow_unittest.cc",
     "view_targeter_unittest.cc",
     "view_tracker_unittest.cc",
     "view_unittest.cc",
@@ -1373,6 +1375,7 @@ test("views_unittests") {
     "//ui/color",
     "//ui/color:mixers",
     "//ui/compositor:test_support",
+    "//ui/compositor_extra",
     "//ui/display:test_support",
     "//ui/events:dom_keycode_converter",
     "//ui/events:events_base",

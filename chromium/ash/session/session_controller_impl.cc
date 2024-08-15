@@ -253,10 +253,6 @@ bool SessionControllerImpl::IsUserFirstLogin() const {
   return GetUserSession(0)->user_info.is_new_profile;
 }
 
-bool SessionControllerImpl::IsEnterpriseManaged() const {
-  return client_ && client_->IsEnterpriseManaged();
-}
-
 std::optional<int> SessionControllerImpl::GetExistingUsersCount() const {
   return client_ ? std::optional<int>(client_->GetExistingUsersCount())
                  : std::nullopt;
@@ -323,6 +319,11 @@ PrefService* SessionControllerImpl::GetUserPrefServiceForUser(
 base::FilePath SessionControllerImpl::GetProfilePath(
     const AccountId& account_id) const {
   return client_ ? client_->GetProfilePath(account_id) : base::FilePath();
+}
+
+bool SessionControllerImpl::IsEligibleForSeaPen(
+    const AccountId& account_id) const {
+  return client_ ? client_->IsEligibleForSeaPen(account_id) : false;
 }
 
 PrefService* SessionControllerImpl::GetPrimaryUserPrefService() const {

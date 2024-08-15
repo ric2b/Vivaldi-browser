@@ -2,15 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
 import type * as Common from '../../core/common/common.js';
 import * as SDK from '../../core/sdk/sdk.js';
-import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import * as Protocol from '../../generated/protocol.js';
-import * as Resources from './application.js';
 import {createTarget} from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
+import {
+  getInitializedResourceTreeModel,
+  getMainFrame,
+  MAIN_FRAME_ID,
+  navigate,
+} from '../../testing/ResourceTreeHelpers.js';
+
+import * as Resources from './application.js';
 
 class SharedStorageListener {
   #model: Resources.SharedStorageModel.SharedStorageModel;
@@ -118,8 +122,6 @@ describeWithMockConnection('SharedStorageModel', () => {
   const TEST_ORIGIN_B = 'http://b.test';
   const TEST_ORIGIN_C = 'http://c.test';
 
-  const ID = 'AA' as Protocol.Page.FrameId;
-
   const METADATA = {
     creationTime: 100 as Protocol.Network.TimeSinceEpoch,
     length: 3,
@@ -146,49 +148,50 @@ describeWithMockConnection('SharedStorageModel', () => {
     {
       accessTime: 0,
       type: Protocol.Storage.SharedStorageAccessType.DocumentAppend,
-      mainFrameId: ID,
+      mainFrameId: MAIN_FRAME_ID,
       ownerOrigin: TEST_ORIGIN_A,
       params: {key: 'key0', value: 'value0'} as Protocol.Storage.SharedStorageAccessParams,
     },
     {
       accessTime: 10,
       type: Protocol.Storage.SharedStorageAccessType.WorkletGet,
-      mainFrameId: ID,
+      mainFrameId: MAIN_FRAME_ID,
       ownerOrigin: TEST_ORIGIN_A,
       params: {key: 'key0'} as Protocol.Storage.SharedStorageAccessParams,
     },
     {
       accessTime: 15,
       type: Protocol.Storage.SharedStorageAccessType.WorkletLength,
-      mainFrameId: ID,
+      mainFrameId: MAIN_FRAME_ID,
       ownerOrigin: TEST_ORIGIN_B,
       params: {} as Protocol.Storage.SharedStorageAccessParams,
     },
     {
       accessTime: 20,
       type: Protocol.Storage.SharedStorageAccessType.DocumentClear,
-      mainFrameId: ID,
+      mainFrameId: MAIN_FRAME_ID,
       ownerOrigin: TEST_ORIGIN_B,
       params: {} as Protocol.Storage.SharedStorageAccessParams,
     },
     {
       accessTime: 100,
       type: Protocol.Storage.SharedStorageAccessType.WorkletSet,
-      mainFrameId: ID,
+      mainFrameId: MAIN_FRAME_ID,
       ownerOrigin: TEST_ORIGIN_C,
       params: {key: 'key0', value: 'value1', ignoreIfPresent: true} as Protocol.Storage.SharedStorageAccessParams,
     },
     {
       accessTime: 150,
       type: Protocol.Storage.SharedStorageAccessType.WorkletRemainingBudget,
-      mainFrameId: ID,
+      mainFrameId: MAIN_FRAME_ID,
       ownerOrigin: TEST_ORIGIN_C,
       params: {} as Protocol.Storage.SharedStorageAccessParams,
     },
   ];
 
-  beforeEach(() => {
+  beforeEach(async () => {
     target = createTarget();
+    await getInitializedResourceTreeModel(target);
     sharedStorageModel = target.model(Resources.SharedStorageModel.SharedStorageModel) as
         Resources.SharedStorageModel.SharedStorageModel;
     listener = new SharedStorageListener(sharedStorageModel);
@@ -246,14 +249,14 @@ describeWithMockConnection('SharedStorageModel', () => {
     assert.isEmpty(sharedStorageModel.storages());
 
     const manager = target.model(SDK.SecurityOriginManager.SecurityOriginManager);
-    assertNotNullOrUndefined(manager);
+    assert.exists(manager);
 
     const addedPromise = listener.waitForStoragesAdded(1);
 
     manager.dispatchEventToListeners(SDK.SecurityOriginManager.Events.SecurityOriginAdded, TEST_ORIGIN_A);
     await addedPromise;
 
-    assertNotNullOrUndefined(sharedStorageModel.storageForOrigin(TEST_ORIGIN_A));
+    assert.exists(sharedStorageModel.storageForOrigin(TEST_ORIGIN_A));
 
     manager.dispatchEventToListeners(SDK.SecurityOriginManager.Events.SecurityOriginRemoved, TEST_ORIGIN_A);
     assert.isEmpty(sharedStorageModel.storages());
@@ -270,7 +273,7 @@ describeWithMockConnection('SharedStorageModel', () => {
     assert.isEmpty(sharedStorageModel.storages());
 
     const manager = target.model(SDK.SecurityOriginManager.SecurityOriginManager);
-    assertNotNullOrUndefined(manager);
+    assert.exists(manager);
 
     manager.dispatchEventToListeners(SDK.SecurityOriginManager.Events.SecurityOriginAdded, 'invalid');
     assert.isEmpty(sharedStorageModel.storages());
@@ -288,16 +291,13 @@ describeWithMockConnection('SharedStorageModel', () => {
 
     const addedPromise = listener.waitForStoragesAdded(1);
 
-    const manager = target.model(SDK.SecurityOriginManager.SecurityOriginManager);
-    assertNotNullOrUndefined(manager);
-
-    manager.dispatchEventToListeners(SDK.SecurityOriginManager.Events.SecurityOriginAdded, TEST_ORIGIN_A);
+    navigate(getMainFrame(target), {url: TEST_ORIGIN_A});
     await addedPromise;
 
-    assertNotNullOrUndefined(sharedStorageModel.storageForOrigin(TEST_ORIGIN_A));
+    assert.exists(sharedStorageModel.storageForOrigin(TEST_ORIGIN_A));
     assert.strictEqual(1, sharedStorageModel.numStoragesForTesting());
 
-    manager.dispatchEventToListeners(SDK.SecurityOriginManager.Events.SecurityOriginAdded, TEST_ORIGIN_A);
+    navigate(getMainFrame(target), {url: TEST_ORIGIN_A});
     assert.strictEqual(1, sharedStorageModel.numStoragesForTesting());
   });
 
@@ -307,7 +307,7 @@ describeWithMockConnection('SharedStorageModel', () => {
     });
 
     const manager = target.model(SDK.SecurityOriginManager.SecurityOriginManager);
-    assertNotNullOrUndefined(manager);
+    assert.exists(manager);
 
     const originSet = new Set([TEST_ORIGIN_A, TEST_ORIGIN_B, TEST_ORIGIN_C]);
     manager.updateSecurityOrigins(originSet);
@@ -321,9 +321,9 @@ describeWithMockConnection('SharedStorageModel', () => {
     await addedPromise;
     assert.strictEqual(3, sharedStorageModel.numStoragesForTesting());
 
-    assertNotNullOrUndefined(sharedStorageModel.storageForOrigin(TEST_ORIGIN_A));
-    assertNotNullOrUndefined(sharedStorageModel.storageForOrigin(TEST_ORIGIN_B));
-    assertNotNullOrUndefined(sharedStorageModel.storageForOrigin(TEST_ORIGIN_C));
+    assert.exists(sharedStorageModel.storageForOrigin(TEST_ORIGIN_A));
+    assert.exists(sharedStorageModel.storageForOrigin(TEST_ORIGIN_B));
+    assert.exists(sharedStorageModel.storageForOrigin(TEST_ORIGIN_C));
 
     sharedStorageModel.disable();
     assert.isEmpty(sharedStorageModel.storages());
@@ -335,7 +335,7 @@ describeWithMockConnection('SharedStorageModel', () => {
     });
 
     const manager = target.model(SDK.SecurityOriginManager.SecurityOriginManager);
-    assertNotNullOrUndefined(manager);
+    assert.exists(manager);
 
     await sharedStorageModel.enable();
     assert.isTrue(setTrackingSpy.calledOnceWithExactly({enable: true}));
@@ -353,7 +353,7 @@ describeWithMockConnection('SharedStorageModel', () => {
     });
 
     const manager = target.model(SDK.SecurityOriginManager.SecurityOriginManager);
-    assertNotNullOrUndefined(manager);
+    assert.exists(manager);
 
     await sharedStorageModel.enable();
     assert.isTrue(setTrackingSpy.calledOnceWithExactly({enable: true}));
@@ -367,7 +367,7 @@ describeWithMockConnection('SharedStorageModel', () => {
     }
     await addedPromise;
 
-    assert.strictEqual(3, sharedStorageModel.numStoragesForTesting());
+    assert.strictEqual(4, sharedStorageModel.numStoragesForTesting());
     assert.deepEqual(EVENTS, listener.accessEvents);
     assert.isTrue(listener.changeEventsEmpty());
 
@@ -380,34 +380,34 @@ describeWithMockConnection('SharedStorageModel', () => {
     assert.deepEqual(EVENTS.concat(EVENTS), listener.accessEvents);
 
     const storageA = sharedStorageModel.storageForOrigin(TEST_ORIGIN_A);
-    assertNotNullOrUndefined(storageA);
+    assert.exists(storageA);
     assert.deepEqual(listener.changeEventsForStorage(storageA), [
       {
         accessTime: 0,
         type: Protocol.Storage.SharedStorageAccessType.DocumentAppend,
-        mainFrameId: ID,
+        mainFrameId: MAIN_FRAME_ID,
         params: {key: 'key0', value: 'value0'} as Protocol.Storage.SharedStorageAccessParams,
       },
     ]);
 
     const storageB = sharedStorageModel.storageForOrigin(TEST_ORIGIN_B);
-    assertNotNullOrUndefined(storageB);
+    assert.exists(storageB);
     assert.deepEqual(listener.changeEventsForStorage(storageB), [
       {
         accessTime: 20,
         type: Protocol.Storage.SharedStorageAccessType.DocumentClear,
-        mainFrameId: ID,
+        mainFrameId: MAIN_FRAME_ID,
         params: {} as Protocol.Storage.SharedStorageAccessParams,
       },
     ]);
 
     const storageC = sharedStorageModel.storageForOrigin(TEST_ORIGIN_C);
-    assertNotNullOrUndefined(storageC);
+    assert.exists(storageC);
     assert.deepEqual(listener.changeEventsForStorage(storageC), [
       {
         accessTime: 100,
         type: Protocol.Storage.SharedStorageAccessType.WorkletSet,
-        mainFrameId: ID,
+        mainFrameId: MAIN_FRAME_ID,
         params: {key: 'key0', value: 'value1', ignoreIfPresent: true} as Protocol.Storage.SharedStorageAccessParams,
       },
     ]);

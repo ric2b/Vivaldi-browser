@@ -91,6 +91,10 @@ class SafetyHubMenuNotificationService : public KeyedService {
   void DismissActiveNotificationOfModule(
       safety_hub::SafetyHubModuleType module);
 
+  // Returns the module of the notification that was last displayed to the user.
+  std::optional<safety_hub::SafetyHubModuleType>
+  GetLastShownNotificationModule() const;
+
   // Returns the |service_info_map_|. For testing purposes only.
   SafetyHubMenuNotification* GetNotificationForTesting(
       safety_hub::SafetyHubModuleType service_type);
@@ -132,16 +136,8 @@ class SafetyHubMenuNotificationService : public KeyedService {
   // Called when the pref for Safe Browsing has been updated.
   void OnSafeBrowsingPrefUpdate();
 
-  const std::map<safety_hub::SafetyHubModuleType, const char*>
-      pref_dict_key_map_ = {
-          {safety_hub::SafetyHubModuleType::UNUSED_SITE_PERMISSIONS,
-           "unused-site-permissions"},
-          {safety_hub::SafetyHubModuleType::NOTIFICATION_PERMISSIONS,
-           "notification-permissions"},
-          {safety_hub::SafetyHubModuleType::SAFE_BROWSING, "safe-browsing"},
-          {safety_hub::SafetyHubModuleType::EXTENSIONS, "extensions"},
-          {safety_hub::SafetyHubModuleType::PASSWORDS, "passwords"},
-      };
+  // Holds the mapping from module type to pref name.
+  std::map<safety_hub::SafetyHubModuleType, const char*> pref_dict_key_map_;
 
   // Preference service that persists the notifications.
   raw_ptr<PrefService> pref_service_;
@@ -154,6 +150,9 @@ class SafetyHubMenuNotificationService : public KeyedService {
 
   // Registrar to record the pref changes to Safe Browsing.
   PrefChangeRegistrar registrar_;
+
+  // The module of the last notification that has been shown.
+  std::optional<safety_hub::SafetyHubModuleType> last_shown_module_;
 };
 
 #endif  // CHROME_BROWSER_UI_SAFETY_HUB_MENU_NOTIFICATION_SERVICE_H_

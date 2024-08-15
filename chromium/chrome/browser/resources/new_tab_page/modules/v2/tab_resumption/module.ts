@@ -80,7 +80,7 @@ tabs:
           action: 'disable',
           icon: 'modules:block',
           text: this.i18nRecursive(
-              '', 'modulesDisableButtonTextV2', 'modulesThisTypeOfCardText'),
+              '', 'modulesDisableButtonTextV2', 'modulesTabResumptionTitle'),
         },
         {
           action: 'info',
@@ -119,6 +119,7 @@ tabs:
   }
 
   private onTabClick_(e: DomRepeatEvent<Tab>) {
+    this.dispatchEvent(new Event('usage', {bubbles: true, composed: true}));
     chrome.metricsPrivate.recordSmallCount(
         'NewTabPage.TabResumption.ClickIndex', e.model.index);
 
@@ -186,6 +187,8 @@ async function createElement(): Promise<TabResumptionModuleElement|null> {
 
   const element = new TabResumptionModuleElement();
   element.tabs = tabs.slice(0, MAX_TABS);
+  chrome.metricsPrivate.recordSmallCount('NewTabPage.TabResumption.TabCount',
+    element.tabs.length);
 
   return element;
 }

@@ -2,6 +2,7 @@
 
 #include "vivaldi_account/vivaldi_account_manager.h"
 
+#include "app/vivaldi_version_info.h"
 #include "base/base64.h"
 #include "base/i18n/case_conversion.h"
 #include "base/json/json_reader.h"
@@ -31,8 +32,13 @@ namespace vivaldi {
 
 namespace {
 
+#if TO_RELEASE_TYPE_ID(VIVALDI_RELEASE_KIND) != RELEASE_TYPE_ID_vivaldi_final
+constexpr char kClientId[] = "AxWv6DRV0M0WK03xcNof5gNf6RAa";
+constexpr char kClientSecret[] = "OgyH7rCuaGaLLdIJ9tlVYw416y4a";
+#else
 constexpr char kClientId[] = "2s_O6XheApKcXNKG3jUeHjPRKDMa";
 constexpr char kClientSecret[] = "AESC013J3umoN7tpkuaHROXAD28a";
+#endif
 
 constexpr char kRequestTokenFromRefreshToken[] =
     "client_id=%s&"

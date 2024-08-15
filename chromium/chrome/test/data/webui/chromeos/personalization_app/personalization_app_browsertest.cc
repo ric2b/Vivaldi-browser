@@ -151,9 +151,13 @@ IN_PROC_BROWSER_TEST_F(PersonalizationAppComponentTest, SeaPenTemplateQuery) {
           "mocha.run()");
 }
 
-// TODO(b/322108635): Re-enable when the flakiness is resolved.
 IN_PROC_BROWSER_TEST_F(PersonalizationAppComponentTest, SeaPenTemplates) {
   RunTest("chromeos/personalization_app/sea_pen_templates_element_test.js",
+          "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(PersonalizationAppComponentTest, SeaPenToast) {
+  RunTest("chromeos/personalization_app/sea_pen_toast_element_test.js",
           "mocha.run()");
 }
 
@@ -226,7 +230,7 @@ IN_PROC_BROWSER_TEST_F(PersonalizationAppControllerTest, All) {
 // implementations but with mocked out network handler helper classes.
 using PersonalizationAppBrowserTest = PersonalizationAppMochaTestBase;
 
-// TODO(crbug.com/1517028): Re-enable this test flakily failing on dbg builds.
+// TODO(crbug.com/41490011): Re-enable this test flakily failing on dbg builds.
 #if !defined(NDEBUG)
 #define MAYBE_Main DISABLED_Main
 #else

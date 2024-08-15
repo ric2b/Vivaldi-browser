@@ -199,6 +199,10 @@ TEST(NinjaCreateBundleTargetWriter, AssetCatalog) {
       SourceFile("//foo/Foo.xcassets/foo.dataset/Contents.json"));
   bundle_data.sources().push_back(
       SourceFile("//foo/Foo.xcassets/foo.dataset/FooScript.js"));
+  bundle_data.sources().push_back(
+      SourceFile("//foo/Foo.xcassets/file/with/no/known/pattern"));
+  bundle_data.sources().push_back(
+      SourceFile("//foo/Foo.xcassets/nested/bar.xcassets/my/file"));
   bundle_data.action_values().outputs() = SubstitutionList::MakeForTest(
       "{{bundle_resources_dir}}/{{source_file_part}}");
   bundle_data.SetToolchain(setup.toolchain());
@@ -313,6 +317,10 @@ TEST(NinjaCreateBundleTargetWriter, Complex) {
       SourceFile("//foo/Foo.xcassets/foo.dataset/Contents.json"));
   bundle_data2.sources().push_back(
       SourceFile("//foo/Foo.xcassets/foo.dataset/FooScript.js"));
+  bundle_data2.sources().push_back(
+      SourceFile("//foo/Foo.xcassets/file/with/no/known/pattern"));
+  bundle_data2.sources().push_back(
+      SourceFile("//foo/Foo.xcassets/nested/bar.xcassets/my/file"));
   bundle_data2.action_values().outputs() = SubstitutionList::MakeForTest(
       "{{bundle_resources_dir}}/{{source_file_part}}");
   bundle_data2.SetToolchain(setup.toolchain());
@@ -406,8 +414,8 @@ TEST(NinjaCreateBundleTargetWriter, Complex) {
   EXPECT_EQ(expected, out_str);
 }
 
-// Tests code signing steps.
-TEST(NinjaCreateBundleTargetWriter, CodeSigning) {
+// Tests post-processing step.
+TEST(NinjaCreateBundleTargetWriter, PostProcessing) {
   Err err;
   TestWithScope setup;
 
@@ -437,15 +445,15 @@ TEST(NinjaCreateBundleTargetWriter, CodeSigning) {
             setup.toolchain()->label().name()));
   SetupBundleDataDir(&create_bundle.bundle_data(), "//out/Debug");
   create_bundle.set_output_type(Target::CREATE_BUNDLE);
-  create_bundle.bundle_data().set_code_signing_script(
+  create_bundle.bundle_data().set_post_processing_script(
       SourceFile("//build/codesign.py"));
-  create_bundle.bundle_data().code_signing_sources().push_back(
+  create_bundle.bundle_data().post_processing_sources().push_back(
       SourceFile("//out/Debug/quz"));
-  create_bundle.bundle_data().code_signing_outputs() =
+  create_bundle.bundle_data().post_processing_outputs() =
       SubstitutionList::MakeForTest(
           "//out/Debug/bar.bundle/Contents/quz",
           "//out/Debug/bar.bundle/_CodeSignature/CodeResources");
-  create_bundle.bundle_data().code_signing_args() =
+  create_bundle.bundle_data().post_processing_args() =
       SubstitutionList::MakeForTest("-b=quz", "bar.bundle");
   create_bundle.public_deps().push_back(LabelTargetPair(&executable));
   create_bundle.private_deps().push_back(LabelTargetPair(&bundle_data));
@@ -460,24 +468,24 @@ TEST(NinjaCreateBundleTargetWriter, CodeSigning) {
   const char expected[] =
       "build obj/baz/bar.inputdeps.stamp: stamp ./quz obj/foo/bar.stamp "
       "obj/foo/data.stamp\n"
-      "rule __baz_bar___toolchain_default__code_signing_rule\n"
+      "rule __baz_bar___toolchain_default__post_processing_rule\n"
       "  command =  ../../build/codesign.py -b=quz bar.bundle\n"
-      "  description = CODE SIGNING //baz:bar(//toolchain:default)\n"
+      "  description = POST PROCESSING //baz:bar(//toolchain:default)\n"
       "  restat = 1\n"
       "\n"
       "build bar.bundle/Contents/Resources/input1.txt: copy_bundle_data "
       "../../foo/input1.txt || obj/baz/bar.inputdeps.stamp\n"
       "build bar.bundle/Contents/Resources/input2.txt: copy_bundle_data "
       "../../foo/input2.txt || obj/baz/bar.inputdeps.stamp\n"
-      "build obj/baz/bar.codesigning.inputdeps.stamp: stamp "
+      "build obj/baz/bar.postprocessing.inputdeps.stamp: stamp "
       "../../build/codesign.py "
       "quz "
       "bar.bundle/Contents/Resources/input1.txt "
       "bar.bundle/Contents/Resources/input2.txt || "
       "obj/baz/bar.inputdeps.stamp\n"
       "build bar.bundle/Contents/quz bar.bundle/_CodeSignature/CodeResources: "
-      "__baz_bar___toolchain_default__code_signing_rule "
-      "| obj/baz/bar.codesigning.inputdeps.stamp\n"
+      "__baz_bar___toolchain_default__post_processing_rule "
+      "| obj/baz/bar.postprocessing.inputdeps.stamp\n"
       "build obj/baz/bar.stamp: stamp "
       "bar.bundle/Contents/quz "
       "bar.bundle/_CodeSignature/CodeResources || obj/baz/bar.inputdeps.stamp\n"

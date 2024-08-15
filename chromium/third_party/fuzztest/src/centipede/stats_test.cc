@@ -14,6 +14,8 @@
 
 #include "./centipede/stats.h"
 
+#include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>  // NOLINT
 #include <sstream>
@@ -69,43 +71,47 @@ uint64_t CivilTimeToUnixMicros(  //
 }  // namespace
 
 TEST(Stats, PrintStatsToLog) {
-  std::vector<Stats> stats_vec(4);
-  for (int i = 0; i < stats_vec.size(); ++i) {
-    const auto j = i + 1;
-    auto &stats = stats_vec[i];
-    // NOTE: Use placement-new because `Stats` is not copyable nor moveable but
-    // we want designated initializers, for convenience and to compile-enforce
-    // the order as in the declaration. This is safe, because `~Stats` is
-    // trivial.
-    new (&stats) Stats{
-        .timestamp_unix_micros = CivilTimeToUnixMicros(1970, 1, 1, 0, 0, i),
-
-        .fuzz_time_sec = 10 * j,
-        .num_executions = 12 * j,
-        .num_target_crashes = 13 * j,
-
-        .num_covered_pcs = 21 * j,
-        .num_8bit_counter_features = 22 * j,
-        .num_data_flow_features = 23 * j,
-        .num_cmp_features = 24 * j,
-        .num_call_stack_features = 25 * j,
-        .num_bounded_path_features = 26 * j,
-        .num_pc_pair_features = 27 * j,
-        .num_user_features = 28 * j,
-        .num_unknown_features = 29 * j,
-
-        .num_funcs_in_frontier = 31 * j,
-
-        .active_corpus_size = 101 * j,
-        .total_corpus_size = 102 * j,
-        .max_corpus_element_size = 103 * j,
-        .avg_corpus_element_size = 104 * j,
-
-        .engine_rusage_avg_millicores = 201 * j,
-        .engine_rusage_cpu_percent = 202 * j,
-        .engine_rusage_rss_mb = 203 * j,
-        .engine_rusage_vsize_mb = 204 * j,
-    };
+  std::vector<std::atomic<Stats>> stats_vec(4);
+  for (uint64_t i = 0; i < stats_vec.size(); ++i) {
+    const uint64_t j = i + 1;
+    stats_vec[i].store(Stats{
+        StatsMeta{
+            .timestamp_unix_micros = CivilTimeToUnixMicros(1970, 1, 1, 0, 0, i),
+        },
+        ExecStats{
+            .fuzz_time_sec = 10 * j,
+            .num_executions = 12 * j,
+            .num_target_crashes = 13 * j,
+        },
+        CovStats{
+            .num_covered_pcs = 21 * j,
+            .num_8bit_counter_features = 22 * j,
+            .num_data_flow_features = 23 * j,
+            .num_cmp_features = 24 * j,
+            .num_call_stack_features = 25 * j,
+            .num_bounded_path_features = 26 * j,
+            .num_pc_pair_features = 27 * j,
+            .num_user_features = 28 * j,
+            // NOTE: These two don't add up to `num_user_features`, but that's
+            // ok for the purposes of this test.
+            .num_user0_features = 28 * j + 1,
+            .num_user10_features = 28 * j + 2,
+            .num_unknown_features = 29 * j,
+            .num_funcs_in_frontier = 31 * j,
+        },
+        CorpusStats{
+            .active_corpus_size = 101 * j,
+            .total_corpus_size = 102 * j,
+            .max_corpus_element_size = 103 * j,
+            .avg_corpus_element_size = 104 * j,
+        },
+        RusageStats{
+            .engine_rusage_avg_millicores = 201 * j,
+            .engine_rusage_cpu_percent = 202 * j,
+            .engine_rusage_rss_mb = 203 * j,
+            .engine_rusage_vsize_mb = 204 * j,
+        },
+    });
   }
 
   const std::vector<Environment> env_vec = {
@@ -171,6 +177,54 @@ TEST(Stats, PrintStatsToLog) {
         "Num funcs in frontier:",
         "  Experiment A: min:\t31\tmax:\t93\tavg:\t62.0\t--\t31\t93",
         "  Experiment B: min:\t62\tmax:\t124\tavg:\t93.0\t--\t62\t124",
+        "Num user0 features:",
+        "  Experiment A: min:\t29\tmax:\t85\tavg:\t57.0\t--\t29\t85",
+        "  Experiment B: min:\t57\tmax:\t113\tavg:\t85.0\t--\t57\t113",
+        "Num user1 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user2 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user3 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user4 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user5 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user6 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user7 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user8 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user9 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user10 features:",
+        "  Experiment A: min:\t30\tmax:\t86\tavg:\t58.0\t--\t30\t86",
+        "  Experiment B: min:\t58\tmax:\t114\tavg:\t86.0\t--\t58\t114",
+        "Num user11 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user12 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user13 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user14 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user15 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
         "Flags:",
         "  Experiment A: AAA",
         "  Experiment B: BBB",
@@ -187,32 +241,38 @@ TEST(Stats, PrintStatsToLog) {
 
   {
     for (auto &stats : stats_vec) {
-      stats.timestamp_unix_micros += 1000000;
+      auto new_stats = stats.load();
 
-      stats.fuzz_time_sec += 1;
-      stats.num_executions += 1;
-      stats.num_target_crashes += 1;
+      new_stats.timestamp_unix_micros += 1000000;
 
-      stats.num_covered_pcs += 1;
-      stats.num_8bit_counter_features += 1;
-      stats.num_data_flow_features += 1;
-      stats.num_cmp_features += 1;
-      stats.num_call_stack_features += 1;
-      stats.num_bounded_path_features += 1;
-      stats.num_pc_pair_features += 1;
-      stats.num_user_features += 1;
-      stats.num_unknown_features += 1;
-      stats.num_funcs_in_frontier += 1;
+      new_stats.fuzz_time_sec += 1;
+      new_stats.num_executions += 1;
+      new_stats.num_target_crashes += 1;
 
-      stats.active_corpus_size += 1;
-      stats.total_corpus_size += 1;
-      stats.max_corpus_element_size += 1;
-      stats.avg_corpus_element_size += 1;
+      new_stats.num_covered_pcs += 1;
+      new_stats.num_8bit_counter_features += 1;
+      new_stats.num_data_flow_features += 1;
+      new_stats.num_cmp_features += 1;
+      new_stats.num_call_stack_features += 1;
+      new_stats.num_bounded_path_features += 1;
+      new_stats.num_pc_pair_features += 1;
+      new_stats.num_user_features += 1;
+      new_stats.num_user0_features += 1;
+      new_stats.num_user10_features += 1;
+      new_stats.num_unknown_features += 1;
+      new_stats.num_funcs_in_frontier += 1;
 
-      stats.engine_rusage_avg_millicores += 1;
-      stats.engine_rusage_cpu_percent += 1;
-      stats.engine_rusage_rss_mb += 1;
-      stats.engine_rusage_vsize_mb += 1;
+      new_stats.active_corpus_size += 1;
+      new_stats.total_corpus_size += 1;
+      new_stats.max_corpus_element_size += 1;
+      new_stats.avg_corpus_element_size += 1;
+
+      new_stats.engine_rusage_avg_millicores += 1;
+      new_stats.engine_rusage_cpu_percent += 1;
+      new_stats.engine_rusage_rss_mb += 1;
+      new_stats.engine_rusage_vsize_mb += 1;
+
+      stats.store(new_stats);
     }
 
     const std::vector<std::string_view> kExpectedLogLines = {
@@ -268,6 +328,54 @@ TEST(Stats, PrintStatsToLog) {
         "Num funcs in frontier:",
         "  Experiment A: min:\t32\tmax:\t94\tavg:\t63.0\t--\t32\t94",
         "  Experiment B: min:\t63\tmax:\t125\tavg:\t94.0\t--\t63\t125",
+        "Num user0 features:",
+        "  Experiment A: min:\t30\tmax:\t86\tavg:\t58.0\t--\t30\t86",
+        "  Experiment B: min:\t58\tmax:\t114\tavg:\t86.0\t--\t58\t114",
+        "Num user1 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user2 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user3 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user4 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user5 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user6 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user7 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user8 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user9 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user10 features:",
+        "  Experiment A: min:\t31\tmax:\t87\tavg:\t59.0\t--\t31\t87",
+        "  Experiment B: min:\t59\tmax:\t115\tavg:\t87.0\t--\t59\t115",
+        "Num user11 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user12 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user13 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user14 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "Num user15 features:",
+        "  Experiment A: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
+        "  Experiment B: min:\t0\tmax:\t0\tavg:\t0.0\t--\t0\t0",
         "Flags:",
         "  Experiment A: AAA",
         "  Experiment B: BBB",
@@ -284,43 +392,47 @@ TEST(Stats, PrintStatsToLog) {
 TEST(Stats, DumpStatsToCsvFile) {
   const std::filesystem::path workdir = GetTestTempDir(test_info_->name());
 
-  std::vector<Stats> stats_vec(4);
-  for (int i = 0; i < stats_vec.size(); ++i) {
-    const auto j = i + 1;
-    auto &stats = stats_vec[i];
-    // NOTE: Use placement-new because `Stats` is not copyable nor moveable but
-    // we want designated initializers, for convenience and to compile-enforce
-    // the order as in the declaration. This is safe, because `~Stats` is
-    // trivial.
-    new (&stats) Stats{
-        .timestamp_unix_micros = 1000000 * j,
-
-        .fuzz_time_sec = 10 * j,
-        .num_executions = 12 * j,
-        .num_target_crashes = 13 * j,
-
-        .num_covered_pcs = 21 * j,
-        .num_8bit_counter_features = 22 * j,
-        .num_data_flow_features = 23 * j,
-        .num_cmp_features = 24 * j,
-        .num_call_stack_features = 25 * j,
-        .num_bounded_path_features = 26 * j,
-        .num_pc_pair_features = 27 * j,
-        .num_user_features = 28 * j,
-        .num_unknown_features = 29 * j,
-
-        .num_funcs_in_frontier = 31 * j,
-
-        .active_corpus_size = 101 * j,
-        .total_corpus_size = 102 * j,
-        .max_corpus_element_size = 103 * j,
-        .avg_corpus_element_size = 104 * j,
-
-        .engine_rusage_avg_millicores = 201 * j,
-        .engine_rusage_cpu_percent = 202 * j,
-        .engine_rusage_rss_mb = 203 * j,
-        .engine_rusage_vsize_mb = 204 * j,
-    };
+  std::vector<std::atomic<Stats>> stats_vec(4);
+  for (uint64_t i = 0; i < stats_vec.size(); ++i) {
+    const uint64_t j = i + 1;
+    stats_vec[i].store(Stats{
+        StatsMeta{
+            .timestamp_unix_micros = 1000000 * j,
+        },
+        ExecStats{
+            .fuzz_time_sec = 10 * j,
+            .num_executions = 12 * j,
+            .num_target_crashes = 13 * j,
+        },
+        CovStats{
+            .num_covered_pcs = 21 * j,
+            .num_8bit_counter_features = 22 * j,
+            .num_data_flow_features = 23 * j,
+            .num_cmp_features = 24 * j,
+            .num_call_stack_features = 25 * j,
+            .num_bounded_path_features = 26 * j,
+            .num_pc_pair_features = 27 * j,
+            .num_user_features = 28 * j,
+            // NOTE: These two don't add up to `num_user_features`, but that's
+            // ok for the purposes of this test.
+            .num_user0_features = 28 * j + 1,
+            .num_user10_features = 28 * j + 2,
+            .num_unknown_features = 29 * j,
+            .num_funcs_in_frontier = 31 * j,
+        },
+        CorpusStats{
+            .active_corpus_size = 101 * j,
+            .total_corpus_size = 102 * j,
+            .max_corpus_element_size = 103 * j,
+            .avg_corpus_element_size = 104 * j,
+        },
+        RusageStats{
+            .engine_rusage_avg_millicores = 201 * j,
+            .engine_rusage_cpu_percent = 202 * j,
+            .engine_rusage_rss_mb = 203 * j,
+            .engine_rusage_vsize_mb = 204 * j,
+        },
+    });
   }
 
   const std::vector<Environment> env_vec = {
@@ -355,33 +467,38 @@ TEST(Stats, DumpStatsToCsvFile) {
     // should increase by 0.5.
     for (int i = 2; i < stats_vec.size(); ++i) {
       auto &stats = stats_vec[i];
+      auto new_stats = stats.load();
 
-      stats.timestamp_unix_micros += 1;
+      new_stats.timestamp_unix_micros += 1;
 
-      stats.fuzz_time_sec += 1;
-      stats.num_executions += 1;
-      stats.num_target_crashes += 1;
+      new_stats.fuzz_time_sec += 1;
+      new_stats.num_executions += 1;
+      new_stats.num_target_crashes += 1;
 
-      stats.num_covered_pcs += 1;
-      stats.num_8bit_counter_features += 1;
-      stats.num_data_flow_features += 1;
-      stats.num_cmp_features += 1;
-      stats.num_call_stack_features += 1;
-      stats.num_bounded_path_features += 1;
-      stats.num_pc_pair_features += 1;
-      stats.num_user_features += 1;
-      stats.num_unknown_features += 1;
-      stats.num_funcs_in_frontier += 1;
+      new_stats.num_covered_pcs += 1;
+      new_stats.num_8bit_counter_features += 1;
+      new_stats.num_data_flow_features += 1;
+      new_stats.num_cmp_features += 1;
+      new_stats.num_call_stack_features += 1;
+      new_stats.num_bounded_path_features += 1;
+      new_stats.num_pc_pair_features += 1;
+      new_stats.num_user_features += 1;
+      new_stats.num_user0_features += 1;
+      new_stats.num_user10_features += 1;
+      new_stats.num_unknown_features += 1;
+      new_stats.num_funcs_in_frontier += 1;
 
-      stats.active_corpus_size += 1;
-      stats.total_corpus_size += 1;
-      stats.max_corpus_element_size += 1;
-      stats.avg_corpus_element_size += 1;
+      new_stats.active_corpus_size += 1;
+      new_stats.total_corpus_size += 1;
+      new_stats.max_corpus_element_size += 1;
+      new_stats.avg_corpus_element_size += 1;
 
-      stats.engine_rusage_avg_millicores += 1;
-      stats.engine_rusage_cpu_percent += 1;
-      stats.engine_rusage_rss_mb += 1;
-      stats.engine_rusage_vsize_mb += 1;
+      new_stats.engine_rusage_avg_millicores += 1;
+      new_stats.engine_rusage_cpu_percent += 1;
+      new_stats.engine_rusage_rss_mb += 1;
+      new_stats.engine_rusage_vsize_mb += 1;
+
+      stats.store(new_stats);
     }
 
     stats_csv_appender.ReportCurrStats();
@@ -415,7 +532,23 @@ TEST(Stats, DumpStatsToCsvFile) {
           "NumUnknownFts_Min,NumUnknownFts_Max,NumUnknownFts_Avg,"
           "NumFuncsInFrontier_Min,NumFuncsInFrontier_Max,NumFuncsInFrontier_Avg,"  // NOLINT
           "EngineRusageAvgCores_Max,EngineRusageCpuPct_Max,"
-          "EngineRusageRssMb_Max,EngineRusageVSizeMb_Max,",
+          "EngineRusageRssMb_Max,EngineRusageVSizeMb_Max,"
+          "NumUser0Fts_Min,NumUser0Fts_Max,NumUser0Fts_Avg,"
+          "NumUser1Fts_Min,NumUser1Fts_Max,NumUser1Fts_Avg,"
+          "NumUser2Fts_Min,NumUser2Fts_Max,NumUser2Fts_Avg,"
+          "NumUser3Fts_Min,NumUser3Fts_Max,NumUser3Fts_Avg,"
+          "NumUser4Fts_Min,NumUser4Fts_Max,NumUser4Fts_Avg,"
+          "NumUser5Fts_Min,NumUser5Fts_Max,NumUser5Fts_Avg,"
+          "NumUser6Fts_Min,NumUser6Fts_Max,NumUser6Fts_Avg,"
+          "NumUser7Fts_Min,NumUser7Fts_Max,NumUser7Fts_Avg,"
+          "NumUser8Fts_Min,NumUser8Fts_Max,NumUser8Fts_Avg,"
+          "NumUser9Fts_Min,NumUser9Fts_Max,NumUser9Fts_Avg,"
+          "NumUser10Fts_Min,NumUser10Fts_Max,NumUser10Fts_Avg,"
+          "NumUser11Fts_Min,NumUser11Fts_Max,NumUser11Fts_Avg,"
+          "NumUser12Fts_Min,NumUser12Fts_Max,NumUser12Fts_Avg,"
+          "NumUser13Fts_Min,NumUser13Fts_Max,NumUser13Fts_Avg,"
+          "NumUser14Fts_Min,NumUser14Fts_Max,NumUser14Fts_Avg,"
+          "NumUser15Fts_Min,NumUser15Fts_Max,NumUser15Fts_Avg,",
           // Line 1.
           "21,63,42.0,"
           "12,36,24.0,"
@@ -436,7 +569,23 @@ TEST(Stats, DumpStatsToCsvFile) {
           "29,87,58.0,"
           "31,93,62.0,"
           "603,606,"
-          "609,612,",
+          "609,612,"
+          "29,85,57.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "30,86,58.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,",
           // Line 2.
           "21,64,42.5,"
           "12,37,24.5,"
@@ -457,7 +606,23 @@ TEST(Stats, DumpStatsToCsvFile) {
           "29,88,58.5,"
           "31,94,62.5,"
           "604,607,"
-          "610,613,",
+          "610,613,"
+          "29,86,57.5,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "30,87,58.5,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,",
           "",  // empty line at EOF
           // clang-format on
       },
@@ -484,7 +649,23 @@ TEST(Stats, DumpStatsToCsvFile) {
           "NumUnknownFts_Min,NumUnknownFts_Max,NumUnknownFts_Avg,"
           "NumFuncsInFrontier_Min,NumFuncsInFrontier_Max,NumFuncsInFrontier_Avg,"  // NOLINT
           "EngineRusageAvgCores_Max,EngineRusageCpuPct_Max,"
-          "EngineRusageRssMb_Max,EngineRusageVSizeMb_Max,",
+          "EngineRusageRssMb_Max,EngineRusageVSizeMb_Max,"
+          "NumUser0Fts_Min,NumUser0Fts_Max,NumUser0Fts_Avg,"
+          "NumUser1Fts_Min,NumUser1Fts_Max,NumUser1Fts_Avg,"
+          "NumUser2Fts_Min,NumUser2Fts_Max,NumUser2Fts_Avg,"
+          "NumUser3Fts_Min,NumUser3Fts_Max,NumUser3Fts_Avg,"
+          "NumUser4Fts_Min,NumUser4Fts_Max,NumUser4Fts_Avg,"
+          "NumUser5Fts_Min,NumUser5Fts_Max,NumUser5Fts_Avg,"
+          "NumUser6Fts_Min,NumUser6Fts_Max,NumUser6Fts_Avg,"
+          "NumUser7Fts_Min,NumUser7Fts_Max,NumUser7Fts_Avg,"
+          "NumUser8Fts_Min,NumUser8Fts_Max,NumUser8Fts_Avg,"
+          "NumUser9Fts_Min,NumUser9Fts_Max,NumUser9Fts_Avg,"
+          "NumUser10Fts_Min,NumUser10Fts_Max,NumUser10Fts_Avg,"
+          "NumUser11Fts_Min,NumUser11Fts_Max,NumUser11Fts_Avg,"
+          "NumUser12Fts_Min,NumUser12Fts_Max,NumUser12Fts_Avg,"
+          "NumUser13Fts_Min,NumUser13Fts_Max,NumUser13Fts_Avg,"
+          "NumUser14Fts_Min,NumUser14Fts_Max,NumUser14Fts_Avg,"
+          "NumUser15Fts_Min,NumUser15Fts_Max,NumUser15Fts_Avg,",
           // Line 1.
           "42,84,63.0,"
           "24,48,36.0,"
@@ -505,7 +686,23 @@ TEST(Stats, DumpStatsToCsvFile) {
           "58,116,87.0,"
           "62,124,93.0,"
           "804,808,"
-          "812,816,",
+          "812,816,"
+          "57,113,85.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "58,114,86.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,",
           // Line 2.
           "42,85,63.5,"
           "24,49,36.5,"
@@ -526,7 +723,23 @@ TEST(Stats, DumpStatsToCsvFile) {
           "58,117,87.5,"
           "62,125,93.5,"
           "805,809,"
-          "813,817,",
+          "813,817,"
+          "57,114,85.5,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "58,115,86.5,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,"
+          "0,0,0.0,",
           "",  // empty line at EOF
           // clang-format on
       },
@@ -536,8 +749,12 @@ TEST(Stats, DumpStatsToCsvFile) {
     ASSERT_TRUE(std::filesystem::exists(kExpectedCsvs[i]));
     std::string csv_contents;
     ReadFromLocalFile(kExpectedCsvs[i], csv_contents);
-    const auto csv_lines = absl::StrSplit(csv_contents, '\n');
-    EXPECT_THAT(csv_lines, ElementsAreArray(kExpectedCsvLines[i])) << VV(i);
+    const std::vector<std::string_view> csv_lines =
+        absl::StrSplit(csv_contents, '\n');
+    ASSERT_EQ(csv_lines.size(), kExpectedCsvLines[i].size());
+    for (size_t j = 0; j < csv_lines.size(); ++j) {
+      EXPECT_EQ(csv_lines[j], kExpectedCsvLines[i][j]) << VV(i) << VV(j);
+    }
   }
 }
 
@@ -558,9 +775,9 @@ TEST(Stats, DumpStatsToExistingCsvFile) {
       {.workdir = workdir},
   };
 
-  std::vector<Stats> stats_vec(2);
-  stats_vec[0].timestamp_unix_micros = 1000000;
-  stats_vec[1].timestamp_unix_micros = 2000000;
+  std::vector<std::atomic<Stats>> stats_vec(2);
+  stats_vec[0].store({StatsMeta{.timestamp_unix_micros = 1000000}});
+  stats_vec[1].store({StatsMeta{.timestamp_unix_micros = 2000000}});
 
   const std::string kExpectedCsv = workdir / "fuzzing-stats-.000000.csv";
   const std::string kExpectedCsvBak = workdir / "fuzzing-stats-.000000.csv.bak";
@@ -584,8 +801,8 @@ TEST(Stats, DumpStatsToExistingCsvFile) {
   // `StatsCsvFileAppender` finds an existing file with a CSV header matching
   // the current version and appends a 2nd stats line to it.
   {
-    stats_vec[0].timestamp_unix_micros = 3000000;
-    stats_vec[1].timestamp_unix_micros = 4000000;
+    stats_vec[0].store({StatsMeta{.timestamp_unix_micros = 3000000}});
+    stats_vec[1].store({StatsMeta{.timestamp_unix_micros = 4000000}});
 
     TestStatsCsvFileAppender stats_csv_appender{stats_vec, env_vec};
     stats_csv_appender.ReportCurrStats();
@@ -611,8 +828,8 @@ TEST(Stats, DumpStatsToExistingCsvFile) {
     };
     WriteToLocalFile(kExpectedCsv, absl::StrJoin(kFakeOldCsvLines, "\n"));
 
-    stats_vec[0].timestamp_unix_micros = 5000000;
-    stats_vec[1].timestamp_unix_micros = 6000000;
+    stats_vec[0].store({StatsMeta{.timestamp_unix_micros = 5000000}});
+    stats_vec[1].store({StatsMeta{.timestamp_unix_micros = 6000000}});
 
     TestStatsCsvFileAppender stats_csv_appender{stats_vec, env_vec};
     stats_csv_appender.ReportCurrStats();
@@ -637,11 +854,15 @@ TEST(Stats, DumpStatsToExistingCsvFile) {
 
 TEST(Stats, PrintRewardValues) {
   std::stringstream ss;
-  std::vector<Stats> stats_vec(4);
-  stats_vec[0].num_covered_pcs = 15;
-  stats_vec[1].num_covered_pcs = 10;
-  stats_vec[2].num_covered_pcs = 40;
-  stats_vec[3].num_covered_pcs = 25;
+  std::vector<std::atomic<Stats>> stats_vec(4);
+  stats_vec[0].store(
+      {StatsMeta{}, ExecStats{}, CovStats{.num_covered_pcs = 15}});
+  stats_vec[1].store(
+      {StatsMeta{}, ExecStats{}, CovStats{.num_covered_pcs = 10}});
+  stats_vec[2].store(
+      {StatsMeta{}, ExecStats{}, CovStats{.num_covered_pcs = 40}});
+  stats_vec[3].store(
+      {StatsMeta{}, ExecStats{}, CovStats{.num_covered_pcs = 25}});
   PrintRewardValues(stats_vec, ss);
   const char *expected =
       "REWARD_MAX 40\n"

@@ -372,6 +372,8 @@ void Scope::SetDefaults() {
   needs_home_object_ = false;
   is_block_scope_for_object_literal_ = false;
 
+  has_using_declaration_ = false;
+
   num_stack_slots_ = 0;
   num_heap_slots_ = ContextHeaderLength();
 
@@ -2445,7 +2447,7 @@ bool Scope::MustAllocate(Variable* var) {
     var->set_is_used();
     if (inner_scope_calls_eval_ && !var->is_this()) var->SetMaybeAssigned();
   }
-  DCHECK(!var->has_forced_context_allocation() || var->is_used());
+  CHECK(!var->has_forced_context_allocation() || var->is_used());
   // Global variables do not need to be allocated.
   return !var->IsGlobalObjectProperty() && var->is_used();
 }
@@ -2930,7 +2932,7 @@ Variable* ClassScope::LookupPrivateNameInScopeInfo(const AstRawString* name) {
     return nullptr;
   }
 
-  DCHECK(IsConstVariableMode(lookup_result.mode));
+  DCHECK(IsImmutableLexicalOrPrivateVariableMode(lookup_result.mode));
   DCHECK_EQ(lookup_result.init_flag, InitializationFlag::kNeedsInitialization);
   DCHECK_EQ(lookup_result.maybe_assigned_flag, MaybeAssignedFlag::kNotAssigned);
 
@@ -3076,9 +3078,10 @@ Variable* ClassScope::DeclareClassVariable(AstValueFactory* ast_value_factory,
                                            const AstRawString* name,
                                            int class_token_pos) {
   DCHECK_NULL(class_variable_);
+  DCHECK_NOT_NULL(name);
   bool was_added;
   class_variable_ =
-      Declare(zone(), name == nullptr ? ast_value_factory->dot_string() : name,
+      Declare(zone(), name->IsEmpty() ? ast_value_factory->dot_string() : name,
               VariableMode::kConst, NORMAL_VARIABLE,
               InitializationFlag::kNeedsInitialization,
               MaybeAssignedFlag::kMaybeAssigned, &was_added);

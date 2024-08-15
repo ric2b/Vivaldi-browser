@@ -30,7 +30,7 @@ declare_args() {
   vivaldi_notarytool_password = ""
 }
 
-if (is_win) {
+if (is_win && vivaldi_signing_key != "") {
   _vivaldi_sdk_config = read_file("//vivaldi/build/toolchain.json", "json")
   vivaldi_win_sdk_version = _vivaldi_sdk_config.version
 }

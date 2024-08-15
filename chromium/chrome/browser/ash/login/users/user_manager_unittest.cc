@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/user_manager/user_manager.h"
+
 #include <cstdlib>
 #include <cstring>
 #include <memory>
@@ -43,7 +45,6 @@
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user.h"
-#include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_manager_pref_names.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/common/content_switches.h"
@@ -150,7 +151,7 @@ class UserManagerTest : public testing::Test {
     TestingBrowserProcess::GetGlobal()->SetProfileManager(
         std::make_unique<FakeProfileManager>(temp_dir_.GetPath()));
 
-    // TODO(crbug.com/1466777): UserManager must be initialized before
+    // TODO(crbug.com/40276503): UserManager must be initialized before
     // ProfileManager to align with the production behavior, but it currently
     // cannot do so since ProfileManager is initialized by ChromeUserManagerImpl
     // constroctor if ProfileManager is not initialized yet so

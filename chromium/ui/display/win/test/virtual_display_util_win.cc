@@ -150,13 +150,15 @@ void VirtualDisplayUtilWin::OnDisplayAdded(
   OnDisplayAddedOrRemoved(new_display.id());
 }
 
-void VirtualDisplayUtilWin::OnDisplayRemoved(
-    const display::Display& old_display) {
-  base::EraseIf(virtual_displays_,
-                [&old_display](const std::pair<unsigned short, int64_t>& obj) {
-                  return obj.second == old_display.id();
-                });
-  OnDisplayAddedOrRemoved(old_display.id());
+void VirtualDisplayUtilWin::OnDisplaysRemoved(
+    const display::Displays& removed_displays) {
+  for (const auto& display : removed_displays) {
+    base::EraseIf(virtual_displays_,
+                  [&display](const std::pair<unsigned short, int64_t>& obj) {
+                    return obj.second == display.id();
+                  });
+    OnDisplayAddedOrRemoved(display.id());
+  }
 }
 
 bool VirtualDisplayUtilWin::SetDriverProperties(DriverProperties properties) {
@@ -193,5 +195,20 @@ const DisplayParams VirtualDisplayUtilWin::k1920x1080 =
     DisplayParams(MonitorConfig::k1920x1080);
 const DisplayParams VirtualDisplayUtilWin::k1024x768 =
     DisplayParams(MonitorConfig::k1024x768);
+
+// VirtualDisplayUtil definitions:
+const DisplayParams VirtualDisplayUtil::k1920x1080 =
+    VirtualDisplayUtilWin::k1920x1080;
+const DisplayParams VirtualDisplayUtil::k1024x768 =
+    VirtualDisplayUtilWin::k1024x768;
+
+// static
+std::unique_ptr<VirtualDisplayUtil> VirtualDisplayUtil::TryCreate(
+    Screen* screen) {
+  if (!VirtualDisplayUtilWin::IsAPIAvailable()) {
+    return nullptr;
+  }
+  return std::make_unique<VirtualDisplayUtilWin>(screen);
+}
 
 }  // namespace display::test

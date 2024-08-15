@@ -40,6 +40,7 @@
 #include "third_party/blink/renderer/platform/fonts/font_smoothing_mode.h"
 #include "third_party/blink/renderer/platform/fonts/font_variant_alternates.h"
 #include "third_party/blink/renderer/platform/fonts/font_variant_east_asian.h"
+#include "third_party/blink/renderer/platform/fonts/font_variant_emoji.h"
 #include "third_party/blink/renderer/platform/fonts/font_variant_numeric.h"
 #include "third_party/blink/renderer/platform/fonts/font_width_variant.h"
 #include "third_party/blink/renderer/platform/fonts/opentype/font_settings.h"
@@ -342,6 +343,9 @@ class PLATFORM_EXPORT FontDescription {
   FontVariantPosition VariantPosition() const {
     return static_cast<FontVariantPosition>(fields_.variant_position_);
   }
+  FontVariantEmoji VariantEmoji() const {
+    return static_cast<FontVariantEmoji>(fields_.variant_emoji_);
+  }
 
   float EffectiveFontSize()
       const;  // Returns either the computedSize or the computedPixelSize
@@ -426,6 +430,9 @@ class PLATFORM_EXPORT FontDescription {
   }
   void SetVariantPosition(FontVariantPosition variant_position) {
     fields_.variant_position_ = variant_position;
+  }
+  void SetVariantEmoji(FontVariantEmoji variant_emoji) {
+    fields_.variant_emoji_ = variant_emoji;
   }
   void SetWordSpacing(float s) { word_spacing_ = s; }
   void SetLetterSpacing(float s) {
@@ -557,6 +564,7 @@ class PLATFORM_EXPORT FontDescription {
     unsigned font_optical_sizing_ : 1;
     unsigned has_size_adjust_descriptor_ : 1;
     unsigned variant_position_ : 2;
+    unsigned variant_emoji_ : 2;
     unsigned text_spacing_trim_ : kTextSpacingTrimBitCount;
 
     unsigned hash_category_ : 2;  // HashCategory

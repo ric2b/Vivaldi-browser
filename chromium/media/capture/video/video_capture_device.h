@@ -255,7 +255,10 @@ class CAPTURE_EXPORT VideoCaptureDevice
     // of |dimensions| frame dimensions. It is permissible for |dimensions| to
     // be zero; in which case the returned Buffer does not guarantee memory
     // backing, but functions as a reservation for external input for the
-    // purposes of buffer throttling.
+    // purposes of buffer throttling. |require_new_buffer_id| and
+    // |retire_old_buffer_id| returns the NEW and/or RETIRED buffer id which
+    // needs to notify the buffer pool synchronizer to register or retire the
+    // buffer object.
     //
     // The buffer stays reserved for use by the caller as long as it
     // holds on to the contained |buffer_read_write_permission|.
@@ -263,7 +266,9 @@ class CAPTURE_EXPORT VideoCaptureDevice
         const gfx::Size& dimensions,
         VideoPixelFormat format,
         int frame_feedback_id,
-        Buffer* buffer) = 0;
+        Buffer* buffer,
+        int* require_new_buffer_id,
+        int* retire_old_buffer_id) = 0;
 
     // Provides VCD::Client with a populated Buffer containing the content of
     // the next video frame. The |buffer| must originate from an earlier call to
@@ -409,7 +414,7 @@ class CAPTURE_EXPORT VideoCaptureDevice
   // Asynchronously takes a photo, possibly reconfiguring the capture objects
   // and/or interrupting the capture flow. Runs |callback|, if the photo was
   // successfully taken. On failure, drops callback without invoking it.
-  // Note that |callback| may be runned on a thread different than the thread
+  // Note that |callback| may be run on a thread different than the thread
   // where TakePhoto() was called.
   using TakePhotoCallback = base::OnceCallback<void(mojom::BlobPtr blob)>;
   virtual void TakePhoto(TakePhotoCallback callback);

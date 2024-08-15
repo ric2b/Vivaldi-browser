@@ -18,6 +18,10 @@ import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+// End Vivaldi
+
 /** Self-documenting preference class for bookmarks. */
 public class BookmarkUiPrefs {
     private static final @BookmarkRowDisplayPref int INITIAL_BOOKMARK_ROW_DISPLAY_PREF =
@@ -98,6 +102,7 @@ public class BookmarkUiPrefs {
     @SuppressWarnings("UseSharedPreferencesManagerFromChromeCheck")
     public BookmarkUiPrefs(SharedPreferencesManager prefsManager) {
         mPrefsManager = prefsManager;
+        if (!ChromeApplicationImpl.isVivaldi())
         ContextUtils.getAppSharedPreferences()
                 .registerOnSharedPreferenceChangeListener(mPrefsListener);
     }
@@ -114,12 +119,8 @@ public class BookmarkUiPrefs {
 
     /** Returns how the bookmark rows should be displayed, doesn't write anything to prefs. */
     public @BookmarkRowDisplayPref int getBookmarkRowDisplayPref() {
-        // Special cases for when the new visuals aren't enabled. We should either fallback to the
-        // shopping visuals or the compact.
-        if (!BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) {
-            return getDisplayPrefForLegacy();
-        }
-
+        if (ChromeApplicationImpl.isVivaldi())
+            return BookmarkRowDisplayPref.COMPACT;
         return mPrefsManager.readInt(
                 ChromePreferenceKeys.BOOKMARKS_VISUALS_PREF, INITIAL_BOOKMARK_ROW_DISPLAY_PREF);
     }
@@ -202,16 +203,5 @@ public class BookmarkUiPrefs {
 
     void notifyObserversForSortOrderChange(@BookmarkRowSortOrder int sortOrder) {
         for (Observer obs : mObservers) obs.onBookmarkRowSortOrderChanged(sortOrder);
-    }
-
-    /**
-     * Some places use {@link BookmarkRowDisplayPref} even for legacy handling. This converts to the
-     * new display pref from feature flags.
-     */
-    public static @BookmarkRowDisplayPref int getDisplayPrefForLegacy() {
-        assert !BookmarkFeatures.isAndroidImprovedBookmarksEnabled();
-        return BookmarkFeatures.isLegacyBookmarksVisualRefreshEnabled()
-                ? BookmarkRowDisplayPref.VISUAL
-                : BookmarkRowDisplayPref.COMPACT;
     }
 }

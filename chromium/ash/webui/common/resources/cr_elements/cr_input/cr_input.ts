@@ -4,7 +4,6 @@
 
 // Forked from ui/webui/resources/cr_elements/cr_input/cr_input.ts
 
-import '//resources/polymer/v3_0/paper-styles/color.js';
 import '../cr_hidden_style.css.js';
 import '../cr_shared_style.css.js';
 import '../cr_shared_vars.css.js';
@@ -299,8 +298,8 @@ export class CrInputElement extends PolymerElement {
 
   /**
    * Focuses the input element.
-   * TODO(crbug.com/882612): Replace this with focus() after resolving the text
-   * selection issue described in onFocus_().
+   * TODO(crbug.com/40593040): Replace this with focus() after resolving the
+   * text selection issue described in onFocus_().
    * @return Whether the <input> element was focused.
    */
   focusInput(): boolean {

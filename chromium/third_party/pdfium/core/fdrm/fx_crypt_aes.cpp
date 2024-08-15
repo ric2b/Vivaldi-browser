@@ -4,13 +4,18 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#include "core/fdrm/fx_crypt.h"
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
 
-#include <string.h>
+#include "core/fdrm/fx_crypt_aes.h"
 
 #include "core/fxcrt/byteorder.h"
 #include "core/fxcrt/check.h"
 #include "core/fxcrt/check_op.h"
+#include "core/fxcrt/compiler_specific.h"
+#include "core/fxcrt/fx_memcpy_wrappers.h"
 
 #define mulby2(x) (((x & 0x7F) << 1) ^ (x & 0x80 ? 0x1B : 0))
 
@@ -589,23 +594,25 @@ void CRYPT_AESDecrypt(CRYPT_aes_context* ctx,
   unsigned int ct[4];
   int i;
   CHECK_EQ((size & 15), 0);
-  memcpy(iv, ctx->iv, sizeof(iv));
+  FXSYS_memcpy(iv, ctx->iv, sizeof(iv));
   while (size != 0) {
     for (i = 0; i < 4; i++) {
       // TODO(tsepez): Create actual span.
-      x[i] = ct[i] = fxcrt::GetUInt32MSBFirst(pdfium::span(src + 4 * i, 4u));
+      x[i] = ct[i] = fxcrt::GetUInt32MSBFirst(
+          UNSAFE_BUFFERS(pdfium::make_span(src + 4 * i, 4u)));
     }
     aes_decrypt_nb_4(ctx, x);
     for (i = 0; i < 4; i++) {
       // TODO(tsepez): Create actual span.
-      fxcrt::PutUInt32MSBFirst(iv[i] ^ x[i], pdfium::span(dest + 4 * i, 4u));
+      fxcrt::PutUInt32MSBFirst(
+          iv[i] ^ x[i], UNSAFE_BUFFERS(pdfium::make_span(dest + 4 * i, 4u)));
       iv[i] = ct[i];
     }
     dest += 16;
     src += 16;
     size -= 16;
   }
-  memcpy(ctx->iv, iv, sizeof(iv));
+  FXSYS_memcpy(ctx->iv, iv, sizeof(iv));
 }
 
 void CRYPT_AESEncrypt(CRYPT_aes_context* ctx,
@@ -615,20 +622,22 @@ void CRYPT_AESEncrypt(CRYPT_aes_context* ctx,
   unsigned int iv[4];
   int i;
   CHECK_EQ((size & 15), 0);
-  memcpy(iv, ctx->iv, sizeof(iv));
+  FXSYS_memcpy(iv, ctx->iv, sizeof(iv));
   while (size != 0) {
     for (i = 0; i < 4; i++) {
       // TODO(tsepez): use an actual span.
-      iv[i] ^= fxcrt::GetUInt32MSBFirst(pdfium::span(src + 4 * i, 4u));
+      iv[i] ^= fxcrt::GetUInt32MSBFirst(
+          UNSAFE_BUFFERS(pdfium::make_span(src + 4 * i, 4u)));
     }
     aes_encrypt_nb_4(ctx, iv);
     for (i = 0; i < 4; i++) {
       // TODO(tsepez): use an actual span.
-      fxcrt::PutUInt32MSBFirst(iv[i], pdfium::span(dest + 4 * i, 4u));
+      fxcrt::PutUInt32MSBFirst(
+          iv[i], UNSAFE_BUFFERS(pdfium::make_span(dest + 4 * i, 4u)));
     }
     dest += 16;
     src += 16;
     size -= 16;
   }
-  memcpy(ctx->iv, iv, sizeof(iv));
+  FXSYS_memcpy(ctx->iv, iv, sizeof(iv));
 }

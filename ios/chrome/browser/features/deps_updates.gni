@@ -1,0 +1,4 @@
+
+update_target("//ios/chrome/browser/flags:flags") {
+  deps += [ "//vivaldi/ios/chrome/browser/features" ]
+}

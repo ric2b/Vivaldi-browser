@@ -13,7 +13,6 @@
 #include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/enterprise/connectors/connectors_manager.h"
 #include "chrome/browser/enterprise/connectors/reporting/browser_crash_event_router.h"
-#include "chrome/browser/enterprise/connectors/service_provider_config.h"
 #include "chrome/browser/enterprise/connectors/test/deep_scanning_test_utils.h"
 #include "chrome/browser/policy/dm_token_utils.h"
 #include "chrome/browser/profiles/profile_testing_helper.h"
@@ -21,12 +20,17 @@
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/enterprise/browser/controller/fake_browser_dm_token_storage.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
+#include "components/enterprise/connectors/service_provider_config.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "content/public/test/browser_task_environment.h"
 #include "storage/browser/file_system/file_system_url.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chromeos/components/mgs/managed_guest_session_test_utils.h"
+#endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "base/strings/strcat.h"
@@ -226,6 +230,46 @@ TEST_P(ConnectorsServiceReportingFeatureTest, Test) {
                  ->GetReportingConnectorsSettingsForTesting()
                  .empty());
 }
+
+#if BUILDFLAG(IS_CHROMEOS)
+TEST_P(ConnectorsServiceReportingFeatureTest,
+       ChromeOsManagedGuestSessionFlagSetInMgs) {
+  // A fake Managed Guest Session that gets destroyed at the end of the test.
+  chromeos::FakeManagedGuestSession fake_mgs;
+
+  if (policy_value() != 0) {
+    profile_->GetPrefs()->Set(pref(), *base::JSONReader::Read(pref_value()));
+    profile_->GetPrefs()->SetInteger(scope_pref(),
+                                     policy::POLICY_SCOPE_MACHINE);
+  }
+
+  EXPECT_TRUE(ConnectorsServiceFactory::GetForBrowserContext(profile_)
+                  ->BuildClientMetadata(/*is_cloud=*/true)
+                  ->is_chrome_os_managed_guest_session());
+
+  // The flag is currently not included for local content scanning.
+  EXPECT_FALSE(ConnectorsServiceFactory::GetForBrowserContext(profile_)
+                   ->BuildClientMetadata(/*is_cloud=*/false)
+                   ->is_chrome_os_managed_guest_session());
+}
+
+TEST_P(ConnectorsServiceReportingFeatureTest,
+       ChromeOsManagedGuestSessionFlagNotSetInUserSession) {
+  if (policy_value() != 0) {
+    profile_->GetPrefs()->Set(pref(), *base::JSONReader::Read(pref_value()));
+    profile_->GetPrefs()->SetInteger(scope_pref(),
+                                     policy::POLICY_SCOPE_MACHINE);
+  }
+
+  EXPECT_FALSE(ConnectorsServiceFactory::GetForBrowserContext(profile_)
+                   ->BuildClientMetadata(/*is_cloud=*/true)
+                   ->is_chrome_os_managed_guest_session());
+
+  EXPECT_FALSE(ConnectorsServiceFactory::GetForBrowserContext(profile_)
+                   ->BuildClientMetadata(/*is_cloud=*/false)
+                   ->is_chrome_os_managed_guest_session());
+}
+#endif
 
 INSTANTIATE_TEST_SUITE_P(
     ,

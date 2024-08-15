@@ -28,6 +28,8 @@ const char kErrorResultFailedToPrepareFirmwareFile[] =
     "org.chromium.Modemfwd.Error.FailedToPrepareFirmwareFile";
 const char kErrorResultFailureReturnedByHelper[] =
     "org.chromium.Modemfwd.Error.FailureReturnedByHelper";
+const char kErrorResultFailureReturnedByHelperModemNeverSeen[] =
+    "org.chromium.Modemfwd.Error.FailureReturnedByHelperModemNeverSeen";
 const char kErrorResultFlashFailure[] =
     "org.chromium.Modemfwd.Error.FlashFailure";
 

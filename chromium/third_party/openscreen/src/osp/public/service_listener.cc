@@ -6,12 +6,6 @@
 
 namespace openscreen::osp {
 
-ServiceListener::Metrics::Metrics() = default;
-ServiceListener::Metrics::~Metrics() = default;
-
-ServiceListener::Config::Config() = default;
-ServiceListener::Config::~Config() = default;
-
 bool ServiceListener::Config::IsValid() const {
   return !network_interfaces.empty();
 }

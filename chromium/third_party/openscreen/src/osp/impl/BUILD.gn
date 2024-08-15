@@ -4,8 +4,18 @@
 
 import("../../gni/openscreen.gni")
 
-if (!is_win && !is_mac) {
+if (!is_win) {
   visibility = [ "./*" ]
+
+  config("impl_internal_config") {
+    cflags = []
+    if (is_clang) {
+      cflags += [
+        "-Wno-shadow-field",
+        "-Wno-implicit-int-float-conversion",
+      ]
+    }
+  }
 
   openscreen_source_set("impl") {
     visibility += [ "..:*" ]
@@ -19,6 +29,7 @@ if (!is_win && !is_mac) {
       "dns_sd_watcher_client.h",
       "message_demuxer.cc",
       "network_service_manager.cc",
+      "osp_constants.h",
       "presentation/presentation_common.cc",
       "presentation/presentation_common.h",
       "presentation/presentation_connection.cc",
@@ -26,15 +37,16 @@ if (!is_win && !is_mac) {
       "presentation/presentation_receiver.cc",
       "presentation/url_availability_requester.cc",
       "presentation/url_availability_requester.h",
+      "protocol_connection_client_factory.cc",
+      "protocol_connection_server_factory.cc",
       "receiver_list.cc",
       "receiver_list.h",
       "service_listener_impl.cc",
       "service_listener_impl.h",
       "service_publisher_impl.cc",
       "service_publisher_impl.h",
-      "with_destruction_callback.cc",
-      "with_destruction_callback.h",
     ]
+    configs = [ ":impl_internal_config" ]
     public_deps = [
       "../msgs",
       "../public",
@@ -44,6 +56,7 @@ if (!is_win && !is_mac) {
       "../../discovery:public",
       "../../platform",
       "../../third_party/abseil",
+      "../../third_party/quiche",
       "../../util",
       "quic",
     ]

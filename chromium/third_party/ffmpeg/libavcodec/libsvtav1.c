@@ -27,12 +27,14 @@
 #include "libavutil/common.h"
 #include "libavutil/frame.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/intreadwrite.h"
+#include "libavutil/mastering_display_metadata.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/avassert.h"
 
 #include "codec_internal.h"
-#include "internal.h"
 #include "encode.h"
 #include "packet_internal.h"
 #include "avcodec.h"
@@ -62,16 +64,6 @@ typedef struct SvtContext {
 
     // User options.
     AVDictionary *svtav1_opts;
-#if FF_API_SVTAV1_OPTS
-    int hierarchical_level;
-    int la_depth;
-    int scd;
-
-    int tier;
-
-    int tile_columns;
-    int tile_rows;
-#endif
     int enc_mode;
     int crf;
     int qp;
@@ -146,6 +138,69 @@ static int alloc_buffer(EbSvtAv1EncConfiguration *config, SvtContext *svt_enc)
 
 }
 
+static void handle_mdcv(struct EbSvtAv1MasteringDisplayInfo *dst,
+                        const AVMasteringDisplayMetadata *mdcv)
+{
+    if (mdcv->has_primaries) {
+        const struct EbSvtAv1ChromaPoints *const points[] = {
+            &dst->r,
+            &dst->g,
+            &dst->b,
+        };
+
+        for (int i = 0; i < 3; i++) {
+            const struct EbSvtAv1ChromaPoints *dst = points[i];
+            const AVRational *src = mdcv->display_primaries[i];
+
+            AV_WB16(&dst->x,
+                    av_rescale_q(1, src[0], (AVRational){ 1, (1 << 16) }));
+            AV_WB16(&dst->y,
+                    av_rescale_q(1, src[1], (AVRational){ 1, (1 << 16) }));
+        }
+
+        AV_WB16(&dst->white_point.x,
+                av_rescale_q(1, mdcv->white_point[0],
+                             (AVRational){ 1, (1 << 16) }));
+        AV_WB16(&dst->white_point.y,
+                av_rescale_q(1, mdcv->white_point[1],
+                             (AVRational){ 1, (1 << 16) }));
+    }
+
+    if (mdcv->has_luminance) {
+        AV_WB32(&dst->max_luma,
+                av_rescale_q(1, mdcv->max_luminance,
+                             (AVRational){ 1, (1 << 8) }));
+        AV_WB32(&dst->min_luma,
+                av_rescale_q(1, mdcv->min_luminance,
+                             (AVRational){ 1, (1 << 14) }));
+    }
+}
+
+static void handle_side_data(AVCodecContext *avctx,
+                             EbSvtAv1EncConfiguration *param)
+{
+    const AVFrameSideData *cll_sd =
+        av_frame_side_data_get(avctx->decoded_side_data,
+            avctx->nb_decoded_side_data, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL);
+    const AVFrameSideData *mdcv_sd =
+        av_frame_side_data_get(avctx->decoded_side_data,
+            avctx->nb_decoded_side_data,
+            AV_FRAME_DATA_MASTERING_DISPLAY_METADATA);
+
+    if (cll_sd) {
+        const AVContentLightMetadata *cll =
+            (AVContentLightMetadata *)cll_sd->data;
+
+        AV_WB16(&param->content_light_level.max_cll, cll->MaxCLL);
+        AV_WB16(&param->content_light_level.max_fall, cll->MaxFALL);
+    }
+
+    if (mdcv_sd) {
+        handle_mdcv(&param->mastering_display,
+                    (AVMasteringDisplayMetadata *)mdcv_sd->data);
+    }
+}
+
 static int config_enc_params(EbSvtAv1EncConfiguration *param,
                              AVCodecContext *avctx)
 {
@@ -154,22 +209,6 @@ static int config_enc_params(EbSvtAv1EncConfiguration *param,
     AVDictionaryEntry *en = NULL;
 
     // Update param from options
-#if FF_API_SVTAV1_OPTS
-    if (svt_enc->hierarchical_level >= 0)
-        param->hierarchical_levels    = svt_enc->hierarchical_level;
-    if (svt_enc->tier >= 0)
-        param->tier                   = svt_enc->tier;
-    if (svt_enc->scd >= 0)
-        param->scene_change_detection = svt_enc->scd;
-    if (svt_enc->tile_columns >= 0)
-        param->tile_columns           = svt_enc->tile_columns;
-    if (svt_enc->tile_rows >= 0)
-        param->tile_rows              = svt_enc->tile_rows;
-
-    if (svt_enc->la_depth >= 0)
-        param->look_ahead_distance    = svt_enc->la_depth;
-#endif
-
     if (svt_enc->enc_mode >= -1)
         param->enc_mode             = svt_enc->enc_mode;
 
@@ -279,6 +318,8 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
     /* 2 = IDR, closed GOP, 1 = CRA, open GOP */
     param->intra_refresh_type = avctx->flags & AV_CODEC_FLAG_CLOSED_GOP ? 2 : 1;
+
+    handle_side_data(avctx, param);
 
 #if SVT_AV1_CHECK_VERSION(0, 9, 1)
     while ((en = av_dict_get(svt_enc->svtav1_opts, "", en, AV_DICT_IGNORE_SUFFIX))) {
@@ -445,6 +486,7 @@ static int eb_send_frame(AVCodecContext *avctx, const AVFrame *frame)
 {
     SvtContext           *svt_enc = avctx->priv_data;
     EbBufferHeaderType  *headerPtr = svt_enc->in_buf;
+    EbErrorType svt_ret;
     int ret;
 
     if (!frame) {
@@ -483,7 +525,9 @@ static int eb_send_frame(AVCodecContext *avctx, const AVFrame *frame)
     if (avctx->gop_size == 1)
         headerPtr->pic_type = EB_AV1_KEY_PICTURE;
 
-    svt_av1_enc_send_picture(svt_enc->svt_handle, headerPtr);
+    svt_ret = svt_av1_enc_send_picture(svt_enc->svt_handle, headerPtr);
+    if (svt_ret != EB_ErrorNone)
+        return svt_print_error(avctx, svt_ret, "Error sending a frame to encoder");
 
     return 0;
 }
@@ -538,6 +582,16 @@ static int eb_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
     svt_ret = svt_av1_enc_get_packet(svt_enc->svt_handle, &headerPtr, svt_enc->eos_flag);
     if (svt_ret == EB_NoErrorEmptyQueue)
         return AVERROR(EAGAIN);
+    else if (svt_ret != EB_ErrorNone)
+        return svt_print_error(avctx, svt_ret, "Error getting an output packet from encoder");
+
+#if SVT_AV1_CHECK_VERSION(2, 0, 0)
+    if (headerPtr->flags & EB_BUFFERFLAG_EOS) {
+         svt_enc->eos_flag = EOS_RECEIVED;
+         svt_av1_enc_release_out_buffer(&headerPtr);
+         return AVERROR_EOF;
+    }
+#endif
 
     ref = get_output_ref(avctx, svt_enc, headerPtr->n_filled_len);
     if (!ref) {
@@ -573,8 +627,10 @@ static int eb_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
     if (headerPtr->pic_type == EB_AV1_NON_REF_PICTURE)
         pkt->flags |= AV_PKT_FLAG_DISPOSABLE;
 
+#if !(SVT_AV1_CHECK_VERSION(2, 0, 0))
     if (headerPtr->flags & EB_BUFFERFLAG_EOS)
         svt_enc->eos_flag = EOS_RECEIVED;
+#endif
 
     ff_side_data_set_encoder_stats(pkt, headerPtr->qp * FF_QP2LAMBDA, NULL, 0, pict_type);
 
@@ -605,20 +661,6 @@ static av_cold int eb_enc_close(AVCodecContext *avctx)
 #define OFFSET(x) offsetof(SvtContext, x)
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption options[] = {
-#if FF_API_SVTAV1_OPTS
-    { "hielevel", "Hierarchical prediction levels setting (Deprecated, use svtav1-params)", OFFSET(hierarchical_level),
-      AV_OPT_TYPE_INT, { .i64 = -1 }, -1, 4, VE | AV_OPT_FLAG_DEPRECATED, .unit = "hielevel"},
-        { "3level", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 3 },  INT_MIN, INT_MAX, VE, .unit = "hielevel" },
-        { "4level", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 4 },  INT_MIN, INT_MAX, VE, .unit = "hielevel" },
-
-    { "la_depth", "Look ahead distance [0, 120] (Deprecated, use svtav1-params)", OFFSET(la_depth),
-      AV_OPT_TYPE_INT, { .i64 = -1 }, -1, 120, VE | AV_OPT_FLAG_DEPRECATED },
-
-    { "tier", "Set operating point tier (Deprecated, use svtav1-params)", OFFSET(tier),
-      AV_OPT_TYPE_INT, { .i64 = -1 }, -1, 1, VE | AV_OPT_FLAG_DEPRECATED, .unit = "tier" },
-        { "main", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 0 }, 0, 0, VE, .unit = "tier" },
-        { "high", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 1 }, 0, 0, VE, .unit = "tier" },
-#endif
     { "preset", "Encoding preset",
       OFFSET(enc_mode), AV_OPT_TYPE_INT, { .i64 = -2 }, -2, MAX_ENC_PRESET, VE },
 
@@ -656,14 +698,6 @@ static const AVOption options[] = {
       AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 63, VE },
     { "qp", "Initial Quantizer level value", OFFSET(qp),
       AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 63, VE },
-#if FF_API_SVTAV1_OPTS
-    { "sc_detection", "Scene change detection (Deprecated, use svtav1-params)", OFFSET(scd),
-      AV_OPT_TYPE_BOOL, { .i64 = -1 }, -1, 1, VE | AV_OPT_FLAG_DEPRECATED },
-
-    { "tile_columns", "Log2 of number of tile columns to use (Deprecated, use svtav1-params)", OFFSET(tile_columns), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, 4, VE | AV_OPT_FLAG_DEPRECATED },
-    { "tile_rows", "Log2 of number of tile rows to use (Deprecated, use svtav1-params)", OFFSET(tile_rows), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, 6, VE | AV_OPT_FLAG_DEPRECATED },
-#endif
-
     { "svtav1-params", "Set the SVT-AV1 configuration using a :-separated list of key=value parameters", OFFSET(svtav1_opts), AV_OPT_TYPE_DICT, { 0 }, 0, 0, VE },
 
     {NULL},

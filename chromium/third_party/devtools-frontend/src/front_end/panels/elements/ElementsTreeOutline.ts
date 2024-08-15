@@ -33,7 +33,6 @@
  */
 
 import * as Common from '../../core/common/common.js';
-import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
@@ -67,7 +66,7 @@ const UIStrings = {
    *@description Tree element expand all button element button text content in Elements Tree Outline of the Elements panel
    *@example {3} PH1
    */
-  showAllNodesDMore: 'Show All Nodes ({PH1} More)',
+  showAllNodesDMore: 'Show all nodes ({PH1} more)',
   /**
    *@description Link text content in Elements Tree Outline of the Elements panel
    */
@@ -130,7 +129,7 @@ export class ElementsTreeOutline extends
 
     this.treeElementByNode = new WeakMap();
     const shadowContainer = document.createElement('div');
-    this.shadowRoot = UI.Utils.createShadowRootWithCoreStyles(
+    this.shadowRoot = UI.UIUtils.createShadowRootWithCoreStyles(
         shadowContainer,
         {cssFile: [elementsTreeOutlineStyles, CodeHighlighter.Style.default], delegatesFocus: undefined});
     const outlineDisclosureElement = this.shadowRoot.createChild('div', 'elements-disclosure');
@@ -159,7 +158,7 @@ export class ElementsTreeOutline extends
 
     outlineDisclosureElement.appendChild(this.elementInternal);
     this.element = shadowContainer;
-    this.element.setAttribute('jslog', `${VisualLogging.tree('elements')}`);
+    this.contentElement.setAttribute('jslog', `${VisualLogging.tree('elements')}`);
 
     this.includeRootDOMNode = !omitRootDOMNode;
     this.selectEnabled = selectEnabled;
@@ -1795,7 +1794,6 @@ export class ShortcutTreeElement extends UI.TreeOutline.TreeElement {
     };
     this.listItemElement.appendChild(adorner);
     const onClick = ((() => {
-                       Host.userMetrics.badgeActivated(Host.UserMetrics.BadgeType.REVEAL);
                        this.nodeShortcut.deferredNode.resolve(
                            node => {
                              void Common.Revealer.reveal(node);

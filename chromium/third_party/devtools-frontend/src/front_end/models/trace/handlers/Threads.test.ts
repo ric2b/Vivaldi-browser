@@ -7,8 +7,6 @@ import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
 import * as TraceEngine from '../trace.js';
 
-const {assert} = chai;
-
 describeWithEnvironment('Handler Threads helper', function() {
   it('returns all the threads for a trace that used tracing', async function() {
     const traceData = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
@@ -44,8 +42,7 @@ describeWithEnvironment('Handler Threads helper', function() {
     const rawEvents = await TraceLoader.rawCPUProfile(this, 'node-fibonacci-website.cpuprofile.gz');
     const events = TimelineModel.TimelineJSProfile.TimelineJSProfileProcessor.createFakeTraceFromCpuProfile(
         rawEvents,
-        1,
-        true,
+        TraceEngine.Types.TraceEvents.ThreadID(1),
     );
     const {traceParsedData} = await TraceLoader.executeTraceEngineOnFileContents(
         events as unknown as TraceEngine.Types.TraceEvents.TraceEventData[]);

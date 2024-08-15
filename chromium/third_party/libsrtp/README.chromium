@@ -1,9 +1,10 @@
 Name: libsrtp
 URL: https://github.com/cisco/libsrtp
-Version: 94ac00d5ac6409e3f6409e4a5edfcdbdaa7fdabe
+Version: 860492290f7d1f25e2bd45da6471bfd4cd4d7add
 License: 3-clause BSD
 License File: LICENSE
 Security Critical: Yes
+Shipped: yes
 
 Description:
   Libsrtp provides secure media transmission in a real

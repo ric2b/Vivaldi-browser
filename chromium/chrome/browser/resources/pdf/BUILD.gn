@@ -42,13 +42,18 @@ build_webui("build") {
     "pdf_viewer_print.ts",
   ]
 
-  if (enable_ink) {
+  if (enable_ink || enable_pdf_ink2) {
     web_component_files += [
       "elements/viewer-annotations-bar.ts",
-      "elements/viewer-annotations-mode-dialog.ts",
-      "elements/viewer-ink-host.ts",
       "elements/viewer-pen-options.ts",
       "elements/viewer-toolbar-dropdown.ts",
+    ]
+  }
+
+  if (enable_ink) {
+    web_component_files += [
+      "elements/viewer-annotations-mode-dialog.ts",
+      "elements/viewer-ink-host.ts",
     ]
   }
 
@@ -73,7 +78,6 @@ build_webui("build") {
     "pdf_internal_plugin_wrapper.ts",
     "swipe_detector.ts",
     "viewport.ts",
-    "viewport_scroller.ts",
     "zoom_manager.ts",
 
     # Files only used in Print Preview's PDF viewer UI.
@@ -81,9 +85,12 @@ build_webui("build") {
     "toolbar_manager.ts",
   ]
 
+  if (enable_ink || enable_pdf_ink2) {
+    non_web_component_files += [ "annotation_tool.ts" ]
+  }
+
   if (enable_ink) {
     non_web_component_files += [
-      "annotation_tool.ts",
       "ink/ink_api.ts",
       "ink_controller.ts",
     ]
@@ -131,9 +138,10 @@ build_webui("build") {
   grd_resource_path_prefix = "pdf"
 
   # Optimization parameters
-  webui_host = "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai"
+  webui_context_type = "trusted_only"
   optimize = optimize_webui
   if (optimize) {
+    optimize_webui_host = "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai"
     optimize_webui_in_files = [
       "pdf_viewer_wrapper.js",
       "pdf_print_wrapper.js",

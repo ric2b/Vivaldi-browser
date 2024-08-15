@@ -1,0 +1,20 @@
+# Official framework image. Look for the different tagged releases at:
+# https://hub.docker.com/r/library/node/tags/
+image: "registry.gitlab.com/eyeo/docker/adblockplus-ci:node16-no-python"
+
+# This folder is cached between builds
+# https://docs.gitlab.com/ee/ci/yaml/index.html#cache
+cache:
+  paths:
+    - node_modules/
+
+artifacts:
+  script:
+    - npm install
+    - npm run build
+    - npm run test
+
+audit:
+  script:
+    - npm audit
+

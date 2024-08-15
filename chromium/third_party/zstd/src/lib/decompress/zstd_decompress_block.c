@@ -727,6 +727,7 @@ size_t ZSTD_decodeSeqHeaders(ZSTD_DCtx* dctx, int* nbSeqPtr,
 
     /* FSE table descriptors */
     RETURN_ERROR_IF(ip+1 > iend, srcSize_wrong, ""); /* minimum possible size: 1 byte for symbol encoding types */
+    RETURN_ERROR_IF(*ip & 3, corruption_detected, ""); /* The last field, Reserved, must be all-zeroes. */
     {   symbolEncodingType_e const LLtype = (symbolEncodingType_e)(*ip >> 6);
         symbolEncodingType_e const OFtype = (symbolEncodingType_e)((*ip >> 4) & 3);
         symbolEncodingType_e const MLtype = (symbolEncodingType_e)((*ip >> 2) & 3);
@@ -1304,7 +1305,7 @@ ZSTD_decodeSequence(seqState_t* seqState, const ZSTD_longOffset_e longOffsets, c
                 } else {
                     offset = ofBase + ll0 + BIT_readBitsFast(&seqState->DStream, 1);
                     {   size_t temp = (offset==3) ? seqState->prevOffset[0] - 1 : seqState->prevOffset[offset];
-                        temp += !temp;   /* 0 is not valid; input is corrupted; force offset to 1 */
+                        temp -= !temp; /* 0 is not valid: input corrupted => force offset to -1 => corruption detected at execSequence */
                         if (offset != 1) seqState->prevOffset[2] = seqState->prevOffset[1];
                         seqState->prevOffset[1] = seqState->prevOffset[0];
                         seqState->prevOffset[0] = offset = temp;
@@ -2073,7 +2074,7 @@ ZSTD_decompressBlock_internal(ZSTD_DCtx* dctx,
                         const void* src, size_t srcSize, const streaming_operation streaming)
 {   /* blockType == blockCompressed */
     const BYTE* ip = (const BYTE*)src;
-    DEBUGLOG(5, "ZSTD_decompressBlock_internal (size : %u)", (U32)srcSize);
+    DEBUGLOG(5, "ZSTD_decompressBlock_internal (cSize : %u)", (unsigned)srcSize);
 
     /* Note : the wording of the specification
      * allows compressed block to be sized exactly ZSTD_blockSizeMax(dctx).

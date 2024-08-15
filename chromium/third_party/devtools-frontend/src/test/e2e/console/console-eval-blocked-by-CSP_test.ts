@@ -48,17 +48,20 @@ describe('The Console Tab', function() {
 
     await step('wait for the result to appear in the console', async () => {
       await frontend.waitForFunction(() => {
-        return document.querySelectorAll('.console-user-command-result').length === 1;
+        const commandResults = [...document.querySelectorAll('.console-user-command-result')];
+        // Stack trace rendering is lazy, we need to wait not only for the element, but for the text content
+        // to be present.
+        return commandResults.length === 1 && commandResults[0].textContent?.includes('EvalError');
       });
     });
 
     await step('get the result text from the console', async () => {
       const evaluateResult = await frontend.evaluate(() => {
-        return document.querySelectorAll('.console-user-command-result')[0].textContent;
+        return [...document.querySelectorAll('.console-user-command-result')].map(e => e.textContent).join(' ');
       });
       assert.include(
           evaluateResult || '', '\'unsafe-eval\' is not an allowed source of script',
-          'Didn\'t find expected CSP error message');
+          'Didn\'t find expected CSP error message in ' + evaluateResult);
     });
   });
 });

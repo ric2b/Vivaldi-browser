@@ -40,6 +40,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/signin/dice_web_signin_interceptor_delegate.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
+#include "chrome/browser/web_applications/test/os_integration_test_override_impl.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -57,6 +58,7 @@
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/base/signin_switches.h"
+#include "components/signin/public/identity_manager/account_capabilities_test_mutator.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/accounts_mutator.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -98,10 +100,16 @@ const char kMultiloginSuccessResponse[] =
 
 class FakeDiceWebSigninInterceptorDelegate;
 
-class FakeBubbleHandle : public ScopedWebSigninInterceptionBubbleHandle,
-                         public base::SupportsWeakPtr<FakeBubbleHandle> {
+class FakeBubbleHandle final : public ScopedWebSigninInterceptionBubbleHandle {
  public:
   ~FakeBubbleHandle() override = default;
+
+  base::WeakPtr<FakeBubbleHandle> AsWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
+
+ private:
+  base::WeakPtrFactory<FakeBubbleHandle> weak_ptr_factory_{this};
 };
 
 // Dummy interception delegate that automatically accepts multi user
@@ -259,6 +267,11 @@ class DiceWebSigninInterceptorBrowserTest : public SigninBrowserTestBase {
     account_info.hosted_domain = hosted_domain;
     account_info.locale = "en";
     account_info.picture_url = "https://example.com";
+
+    // Fill in the required account capabilities for the sign in intercept.
+    AccountCapabilitiesTestMutator mutator(&account_info.capabilities);
+    mutator.set_is_subject_to_parental_controls(false);
+
     DCHECK(account_info.IsValid());
     identity_test_env()->UpdateAccountInfoForAccount(account_info);
     return account_info;
@@ -294,6 +307,8 @@ class DiceWebSigninInterceptorBrowserTest : public SigninBrowserTestBase {
     return std::make_unique<DiceWebSigninInterceptor>(
         Profile::FromBrowserContext(context), std::move(fake_delegate));
   }
+
+  web_app::OsIntegrationTestOverrideBlockingRegistration faked_os_integration_;
 
   std::map<content::BrowserContext*, FakeDiceWebSigninInterceptorDelegate*>
       interceptor_delegates_;
@@ -497,35 +512,14 @@ class DiceWebSigninInterceptorWithChromeSigninHelpersBrowserTest
  public:
   ChromeSigninUserChoice GetChromeSigninUserChoicePref(
       const AccountInfo& account_info) {
-    return DiceWebSigninInterceptor::GetChromeSigninUserChoice(
-        *GetProfile()->GetPrefs(), account_info.email);
+    return SigninPrefs(*GetProfile()->GetPrefs())
+        .GetChromeSigninInterceptionUserChoice(account_info.gaia);
   }
 
-  std::optional<int> GetChromeSigninInterceptDismissCountPref(
+  int GetChromeSigninInterceptDismissCountPref(
       const AccountInfo& account_info) {
-    return GetProfile()
-        ->GetPrefs()
-        ->GetDict(prefs::kChromeSigninInterceptionDismissCount)
-        .FindInt(DiceWebSigninInterceptor::GetPersistentEmailHash(
-            account_info.email));
-  }
-
-  std::optional<int> GetChromeSigninInterceptDeclinedCountPref(
-      const AccountInfo& account_info) {
-    return GetProfile()
-        ->GetPrefs()
-        ->GetDict(prefs::kChromeSigninInterceptionDeclined)
-        .FindInt(DiceWebSigninInterceptor::GetPersistentEmailHash(
-            account_info.email));
-  }
-
-  std::optional<int> GetChromeSigninInterceptShownCountPref(
-      const AccountInfo& account_info) {
-    return GetProfile()
-        ->GetPrefs()
-        ->GetDict(prefs::kChromeSigninInterceptionShownCount)
-        .FindInt(DiceWebSigninInterceptor::GetPersistentEmailHash(
-            account_info.email));
+    return SigninPrefs(*GetProfile()->GetPrefs())
+        .GetChromeSigninInterceptionDismissCount(account_info.gaia);
   }
 
   void Signout() { identity_test_env()->ClearPrimaryAccount(); }
@@ -582,21 +576,6 @@ class DiceWebSigninInterceptorWithChromeSigninHelpersBrowserTest
     EXPECT_FALSE(delegate->intercept_bubble_shown());
   }
 
-  void ExpectChromeSigninBubbleShownCount(
-      const base::HistogramTester& histogram_tester,
-      size_t times,
-      size_t count) {
-    histogram_tester.ExpectBucketCount(
-        "Signin.Intercept.ChromeSignin.BubbleShownCount", times, count);
-  }
-
-  void ExpectTotalChromeSigninBubbleShownCount(
-      const base::HistogramTester& histogram_tester,
-      size_t count) {
-    histogram_tester.ExpectTotalCount(
-        "Signin.Intercept.ChromeSignin.BubbleShownCount", count);
-  }
-
   bool IsChromeSignedIn() const {
     return identity_manager()->HasPrimaryAccount(signin::ConsentLevel::kSignin);
   }
@@ -612,36 +591,15 @@ class DiceWebSigninInterceptorWithChromeSigninHelpersBrowserTest
   }
 };
 
-// Test to sign in to Chrome from the Chrome Signin Bubble Intercept with the
-// experimental and full phase with `switches::kUnoDesktop` or
-// `switches::kExplicitBrowserSigninUIOnDesktop` enabled.
+// Test to sign in to Chrome from the Chrome Signin Bubble Intercept.
 class DiceWebSigninInterceptorWithExplicitSigninEnabledBrowserTest
-    : public DiceWebSigninInterceptorWithChromeSigninHelpersBrowserTest,
-      public testing::WithParamInterface<switches::ExplicitBrowserSigninPhase> {
- public:
-  DiceWebSigninInterceptorWithExplicitSigninEnabledBrowserTest() {
-    if (GetParam() == switches::ExplicitBrowserSigninPhase::kFull) {
-      feature_list_.InitAndEnableFeature(
-          switches::kExplicitBrowserSigninUIOnDesktop);
-    } else if (GetParam() ==
-               switches::ExplicitBrowserSigninPhase::kExperimental) {
-      feature_list_.InitAndEnableFeature(switches::kUnoDesktop);
-    }
-  }
-
-  bool IsFullPhase() const {
-    return GetParam() == switches::ExplicitBrowserSigninPhase::kFull;
-  }
-
-  bool IsExperimentalPhase() const {
-    return GetParam() == switches::ExplicitBrowserSigninPhase::kExperimental;
-  }
-
+    : public DiceWebSigninInterceptorWithChromeSigninHelpersBrowserTest {
  private:
-  base::test::ScopedFeatureList feature_list_;
+  base::test::ScopedFeatureList feature_list_{
+      switches::kExplicitBrowserSigninUIOnDesktop};
 };
 
-IN_PROC_BROWSER_TEST_P(
+IN_PROC_BROWSER_TEST_F(
     DiceWebSigninInterceptorWithExplicitSigninEnabledBrowserTest,
     ChromeSigninInterceptAccepted) {
   base::HistogramTester histogram_tester;
@@ -676,24 +634,13 @@ IN_PROC_BROWSER_TEST_P(
   histogram_tester.ExpectUniqueSample("Signin.SignIn.Started", access_point, 1);
   histogram_tester.ExpectUniqueSample("Signin.SignIn.Completed", access_point,
                                       1);
-  if (IsFullPhase()) {
-    histogram_tester.ExpectUniqueSample(
-        "Signin.Intercept.ChromeSignin.DismissesBeforeAccept", 0, 1);
-  } else if (IsExperimentalPhase()) {
-    histogram_tester.ExpectUniqueSample(
-        "Signin.Intercept.ChromeSignin.AttemptsBeforeAccept", 0, 1);
-  }
-
-  ExpectTotalChromeSigninBubbleShownCount(histogram_tester, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Signin.Intercept.ChromeSignin.DismissesBeforeAccept", 0, 1);
 
   ChromeSigninUserChoice user_choice =
       GetChromeSigninUserChoicePref(account_info);
-  // User choice is remembered in the Full phase, not in the experimental one.
-  if (IsFullPhase()) {
-    EXPECT_EQ(user_choice, ChromeSigninUserChoice::kSignin);
-  } else if (IsExperimentalPhase()) {
-    EXPECT_EQ(user_choice, ChromeSigninUserChoice::kNoChoice);
-  }
+  // User choice is remembered.
+  EXPECT_EQ(user_choice, ChromeSigninUserChoice::kSignin);
 
   // Attempting to show the bubble after an explicit choice.
 
@@ -702,17 +649,11 @@ IN_PROC_BROWSER_TEST_P(
   ASSERT_FALSE(IsChromeSignedIn());
   // Make account available again.
   account_info = MakeAccountInfoAvailableAndUpdate(account_email);
-  if (IsFullPhase()) {
-    // Chrome Signin bubble should not show if the user already made a choice.
-    ExpectAttemptToShowChromeSigninBubbleNotToShow(account_info);
-  } else if (IsExperimentalPhase()) {
-    // Showing the bubble should still succeed -- result is not important.
-    ShowAndCompleteSigninBubbleWithResult(account_info,
-                                          SigninInterceptionResult::kDeclined);
-  }
+  // Chrome Signin bubble should not show if the user already made a choice.
+  ExpectAttemptToShowChromeSigninBubbleNotToShow(account_info);
 }
 
-IN_PROC_BROWSER_TEST_P(
+IN_PROC_BROWSER_TEST_F(
     DiceWebSigninInterceptorWithExplicitSigninEnabledBrowserTest,
     ChromeSigninInterceptDeclined) {
   base::HistogramTester histogram_tester;
@@ -725,10 +666,6 @@ IN_PROC_BROWSER_TEST_P(
   // bubble.
   ASSERT_FALSE(IsChromeSignedIn());
 
-  // This pref should contain no data before the bubble is shown.
-  ASSERT_FALSE(
-      GetChromeSigninInterceptDeclinedCountPref(account_info).has_value());
-
   ShowAndCompleteSigninBubbleWithResult(account_info,
                                         SigninInterceptionResult::kDeclined);
 
@@ -736,11 +673,6 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_FALSE(password_manager::features_util::IsOptedInForAccountStorage(
       GetProfile()->GetPrefs(),
       SyncServiceFactory::GetForProfile(GetProfile())));
-
-  if (IsExperimentalPhase()) {
-    // The pref should have recorded the declined action.
-    EXPECT_EQ(GetChromeSigninInterceptDeclinedCountPref(account_info), 1);
-  }
 
   CheckHistograms(histogram_tester,
                   SigninInterceptionHeuristicOutcome::kInterceptChromeSignin);
@@ -750,37 +682,23 @@ IN_PROC_BROWSER_TEST_P(
   histogram_tester.ExpectUniqueSample("Signin.SignIn.Completed", access_point,
                                       0);
 
-  ExpectTotalChromeSigninBubbleShownCount(histogram_tester, 1);
-
   ChromeSigninUserChoice user_choice =
       GetChromeSigninUserChoicePref(account_info);
-  // User choice is remembered in the Full phase, not in the experimental one.
-  if (IsFullPhase()) {
-    EXPECT_EQ(user_choice, ChromeSigninUserChoice::kDoNotSignin);
-  } else if (IsExperimentalPhase()) {
-    EXPECT_EQ(user_choice, ChromeSigninUserChoice::kNoChoice);
-  }
+  // User choice is remembered.
+  EXPECT_EQ(user_choice, ChromeSigninUserChoice::kDoNotSignin);
 
-  if (IsFullPhase()) {
-    histogram_tester.ExpectUniqueSample(
-        "Signin.Intercept.ChromeSignin.DismissesBeforeDecline", 0, 1);
-  }
+  histogram_tester.ExpectUniqueSample(
+      "Signin.Intercept.ChromeSignin.DismissesBeforeDecline", 0, 1);
 
   // Attempting to show the bubble after an explicit choice.
 
   ASSERT_FALSE(IsChromeSignedIn());
-  if (IsFullPhase()) {
-    // Chrome Signin bubble should not show if the user already made a choice.
-    ExpectAttemptToShowChromeSigninBubbleNotToShow(account_info);
-  } else if (IsExperimentalPhase()) {
-    // Showing the bubble should still succeed -- result is not important.
-    ShowAndCompleteSigninBubbleWithResult(account_info,
-                                          SigninInterceptionResult::kDeclined);
-  }
+  // Chrome Signin bubble should not show if the user already made a choice.
+  ExpectAttemptToShowChromeSigninBubbleNotToShow(account_info);
 }
 
 // Test the memory of the user's account storage preference.
-IN_PROC_BROWSER_TEST_P(
+IN_PROC_BROWSER_TEST_F(
     DiceWebSigninInterceptorWithExplicitSigninEnabledBrowserTest,
     OptOutOfAccountStorage) {
   // Setup account and accept intersection.
@@ -811,31 +729,14 @@ IN_PROC_BROWSER_TEST_P(
       pref_service, sync_service));
 
   // Log in again.
-  if (IsFullPhase()) {
-    // Force a Chrome Signin. The bubble will not be shown again.
-    identity_test_env()->MakePrimaryAccountAvailable(
-        email, signin::ConsentLevel::kSignin);
-  } else if (IsExperimentalPhase()) {
-    account_info = MakeAccountInfoAvailableAndUpdate(email);
-    ShowAndCompleteSigninBubbleWithResult(account_info,
-                                          SigninInterceptionResult::kAccepted);
-  }
+  // Force a Chrome Signin. The bubble will not be shown again.
+  identity_test_env()->MakePrimaryAccountAvailable(
+      email, signin::ConsentLevel::kSignin);
 
   // Check that the password account storage is still disabled.
   EXPECT_FALSE(password_manager::features_util::IsOptedInForAccountStorage(
       pref_service, sync_service));
 }
-
-INSTANTIATE_TEST_SUITE_P(
-    ,
-    DiceWebSigninInterceptorWithExplicitSigninEnabledBrowserTest,
-    ::testing::Values(switches::ExplicitBrowserSigninPhase::kFull,
-                      switches::ExplicitBrowserSigninPhase::kExperimental),
-    [](const auto& info) {
-      return info.param == switches::ExplicitBrowserSigninPhase::kFull
-                 ? "Full"
-                 : "Experimental";
-    });
 
 // Test to sign in to Chrome from the Chrome Signin Bubble Intercept with
 // the full `switches::kExplicitBrowserSigninUIOnDesktop` enabled.
@@ -864,7 +765,7 @@ IN_PROC_BROWSER_TEST_F(
   // Setup a first account for interception.
   const std::string email1("alice1@example.com");
   AccountInfo info1 = MakeAccountInfoAvailableAndUpdate(email1);
-  ASSERT_FALSE(GetChromeSigninInterceptDismissCountPref(info1).has_value());
+  ASSERT_EQ(GetChromeSigninInterceptDismissCountPref(info1), 0);
   ASSERT_EQ(GetChromeSigninUserChoicePref(info1),
             ChromeSigninUserChoice::kNoChoice);
 
@@ -890,7 +791,7 @@ IN_PROC_BROWSER_TEST_F(
   // Setup the second account for interception.
   AccountInfo info2 = MakeAccountInfoAvailableAndUpdate("alice2@example.com");
   ASSERT_FALSE(info2.IsEmpty());
-  ASSERT_FALSE(GetChromeSigninInterceptDismissCountPref(info2).has_value());
+  ASSERT_EQ(GetChromeSigninInterceptDismissCountPref(info2), 0);
 
   // Intercept dismissed on account2.
   ShowAndCompleteSigninBubbleWithResult(info2,
@@ -938,9 +839,9 @@ IN_PROC_BROWSER_TEST_F(
   // Make account1 available again.
   info1 = MakeAccountInfoAvailableAndUpdate(email1);
   // Override account1 pref to always ask.
-  DiceWebSigninInterceptor::SetChromeSigninUserChoice(
-      *GetProfile()->GetPrefs(), info1.email,
-      ChromeSigninUserChoice::kAlwaysAsk);
+  SigninPrefs(*GetProfile()->GetPrefs())
+      .SetChromeSigninInterceptionUserChoice(
+          info1.gaia, ChromeSigninUserChoice::kAlwaysAsk);
   // Showing the bubble should succeed -- result is not important, only affect
   // histogram recorded.
   ShowAndCompleteSigninBubbleWithResult(info1,
@@ -978,8 +879,9 @@ IN_PROC_BROWSER_TEST_F(
 
   // Override account1 pref to always ask -- simulating changing it through the
   // settings.
-  DiceWebSigninInterceptor::SetChromeSigninUserChoice(
-      *GetProfile()->GetPrefs(), email, ChromeSigninUserChoice::kAlwaysAsk);
+  SigninPrefs(*GetProfile()->GetPrefs())
+      .SetChromeSigninInterceptionUserChoice(
+          info.gaia, ChromeSigninUserChoice::kAlwaysAsk);
   // Showing the bubble should succeed -- result is not important.
   ShowAndCompleteSigninBubbleWithResult(info,
                                         SigninInterceptionResult::kDismissed);
@@ -1008,215 +910,24 @@ IN_PROC_BROWSER_TEST_F(
 
   // Override account1 pref to always ask -- simulating changing it through the
   // settings.
-  DiceWebSigninInterceptor::SetChromeSigninUserChoice(
-      *GetProfile()->GetPrefs(), email, ChromeSigninUserChoice::kAlwaysAsk);
+  SigninPrefs(*GetProfile()->GetPrefs())
+      .SetChromeSigninInterceptionUserChoice(
+          info.gaia, ChromeSigninUserChoice::kAlwaysAsk);
   // Showing the bubble should succeed -- result is not important.
   ShowAndCompleteSigninBubbleWithResult(info,
                                         SigninInterceptionResult::kDismissed);
 }
 
-// Test to sign in to Chrome from the Chrome Signin Bubble Intercept with
-// the experimental `switches::kUnoDesktop` enabled.
-class DiceWebSigninInterceptorWithBrowserSigninExperimentPhaseBrowserTest
-    : public DiceWebSigninInterceptorWithChromeSigninHelpersBrowserTest {
- private:
-  base::test::ScopedFeatureList feature_list_{switches::kUnoDesktop};
-};
-
-IN_PROC_BROWSER_TEST_F(
-    DiceWebSigninInterceptorWithBrowserSigninExperimentPhaseBrowserTest,
-    ChromeSigninInterceptDeclinedPrefCheck) {
-  base::HistogramTester histogram_tester;
-
-  // Setup a first account for interception.
-  AccountInfo info1 = MakeAccountInfoAvailableAndUpdate("alice1@example.com");
-
-  // Makes sure Chrome is not signed in to trigger the Chrome Sigin intercept
-  // bubble.
-  ASSERT_FALSE(IsChromeSignedIn());
-
-  // This pref should contain no data before the bubble is shown.
-  ASSERT_FALSE(GetChromeSigninInterceptDeclinedCountPref(info1).has_value());
-
-  // Intercept declined on account1 twice.
-  ShowAndCompleteSigninBubbleWithResult(info1,
-                                        SigninInterceptionResult::kDeclined);
-  ShowAndCompleteSigninBubbleWithResult(info1,
-                                        SigninInterceptionResult::kDeclined);
-
-  // Expect the pref to record both declines.
-  int expected_info1_decline_count = 2;
-  EXPECT_EQ(GetChromeSigninInterceptDeclinedCountPref(info1),
-            expected_info1_decline_count);
-
-  // Setup the second account for interception.
-  AccountInfo info2 = MakeAccountInfoAvailableAndUpdate("alice2@example.com");
-  ASSERT_FALSE(info2.IsEmpty());
-  ASSERT_FALSE(GetChromeSigninInterceptDeclinedCountPref(info2).has_value());
-  // Signout the account1 so that the account2 can get the interception.
-  identity_test_env()->RemoveRefreshTokenForAccount(info1.account_id);
-
-  // Intercept declined on account2.
-  ShowAndCompleteSigninBubbleWithResult(info2,
-                                        SigninInterceptionResult::kDeclined);
-
-  // Account2 pref should be affected and account1 should not.
-  EXPECT_EQ(GetChromeSigninInterceptDeclinedCountPref(info1),
-            expected_info1_decline_count);
-  EXPECT_EQ(GetChromeSigninInterceptDeclinedCountPref(info2), 1);
-
-  // Accepting the intercept on account2 should reset the pref and log in the
-  // histogram.
-  ShowAndCompleteSigninBubbleWithResult(info2,
-                                        SigninInterceptionResult::kAccepted);
-
-  EXPECT_FALSE(GetChromeSigninInterceptDeclinedCountPref(info2).has_value());
-  EXPECT_EQ(GetChromeSigninInterceptDeclinedCountPref(info1),
-            expected_info1_decline_count);
-  // Record the 1 declines that happened before accepting the intercept.
-  histogram_tester.ExpectUniqueSample(
-      "Signin.Intercept.ChromeSignin.AttemptsBeforeAccept",
-      /*sample=*/1, /*expected_bucket_count=*/1);
-
-  ExpectTotalChromeSigninBubbleShownCount(histogram_tester, 4);
-}
-
-// In the following test, we show the bubble multiple times with different
-// results and two different accounts to test the max number of times the bubble
-// is allowed to be shown. We reach the maximum with account1 then continue
-// trying with account2. The maximum is `kMaxChromeSigninInterceptionShownCount`
-// (5) times. The 6th time the bubble is tried to be shown, it should fail.
-// Trying with another account should not be blocking though, which is what is
-// shown with account2 showing the bubble even though account1 reached the max.
-// Only 1 account is allowed to be signed in at a time in order to show the
-// bubble.
-// Also checks the `Signin.Intercept.ChromeSignin.NumBubbleShown` histogram
-// values after each time the bubble is shown.
-IN_PROC_BROWSER_TEST_F(
-    DiceWebSigninInterceptorWithBrowserSigninExperimentPhaseBrowserTest,
-    ChromeSigninInterceptShownCount) {
-  base::HistogramTester histogram_tester;
-
-  // Setup a first account for interception.
-  AccountInfo info1 =
-      MakeAccountInfoAvailableAndUpdate("alice1@consumer.example.com");
-
-  // Makes sure Chrome is not signed in to trigger the Chrome Sigin intercept
-  // bubble.
-  ASSERT_FALSE(IsChromeSignedIn());
-
-  // This pref should contain no data before the bubble is shown.
-  ASSERT_FALSE(GetChromeSigninInterceptShownCountPref(info1).has_value());
-
-  // Intercept declined on account1 twice.
-  ShowAndCompleteSigninBubbleWithResult(info1,
-                                        SigninInterceptionResult::kDeclined);
-  ExpectChromeSigninBubbleShownCount(histogram_tester, 1, 1);
-  ShowAndCompleteSigninBubbleWithResult(info1,
-                                        SigninInterceptionResult::kDeclined);
-  ExpectChromeSigninBubbleShownCount(histogram_tester, 2, 1);
-  ShowAndCompleteSigninBubbleWithResult(info1,
-                                        SigninInterceptionResult::kAccepted);
-  ExpectChromeSigninBubbleShownCount(histogram_tester, 3, 1);
-
-  // Expect the pref to record all the times the bubble was shown for `info1`,
-  // even when accepting.
-  int expected_bubble_shown_count_info1 = 3;
-  EXPECT_EQ(GetChromeSigninInterceptShownCountPref(info1),
-            expected_bubble_shown_count_info1);
-
-  // Signout the account1 so that the account2 can get the interception.
-  identity_test_env()->RemoveRefreshTokenForAccount(info1.account_id);
-
-  // Setup the second account for interception.
-  AccountInfo info2 =
-      MakeAccountInfoAvailableAndUpdate("alice2@consumer.exmaple.com");
-  ASSERT_FALSE(info2.IsEmpty());
-  ASSERT_FALSE(GetChromeSigninInterceptShownCountPref(info2).has_value());
-
-  // Intercept declined on account2.
-  ShowAndCompleteSigninBubbleWithResult(info2,
-                                        SigninInterceptionResult::kDeclined);
-  ExpectChromeSigninBubbleShownCount(histogram_tester, 1, 2);
-
-  // Account2 pref should be affected and account1 should not.
-  EXPECT_EQ(GetChromeSigninInterceptShownCountPref(info1),
-            expected_bubble_shown_count_info1);
-  int expected_bubble_shown_count_info2 = 1;
-  EXPECT_EQ(GetChromeSigninInterceptShownCountPref(info2),
-            expected_bubble_shown_count_info2);
-
-  // Signout account 2 and make account 1 available again.
-  identity_test_env()->RemoveRefreshTokenForAccount(info2.account_id);
-  info1 = MakeAccountInfoAvailableAndUpdate(info1.email);
-
-  // Proceed with showing the bubble 2 more times (5 times overall).
-  ShowAndCompleteSigninBubbleWithResult(info1,
-                                        SigninInterceptionResult::kAccepted);
-  ExpectChromeSigninBubbleShownCount(histogram_tester, 4, 1);
-
-  // Sign out account 1 after accepting the bubble and resign in.
-  identity_test_env()->RemoveRefreshTokenForAccount(info1.account_id);
-  info1 = MakeAccountInfoAvailableAndUpdate(info1.email);
-  ShowAndCompleteSigninBubbleWithResult(info1,
-                                        SigninInterceptionResult::kDeclined);
-  ExpectChromeSigninBubbleShownCount(histogram_tester, 5, 1);
-
-  expected_bubble_shown_count_info1 += 2;
-  EXPECT_EQ(GetChromeSigninInterceptShownCountPref(info1),
-            expected_bubble_shown_count_info1);
-
-  ExpectTotalChromeSigninBubbleShownCount(
-      histogram_tester,
-      expected_bubble_shown_count_info1 + expected_bubble_shown_count_info2);
-
-  // Attempts to show a 6th time. It should not show the bubble.
-  // No expected result since the bubble should be not be shown.
-  ExpectAttemptToShowChromeSigninBubbleNotToShow(info1);
-  histogram_tester.ExpectBucketCount(
-      "Signin.Intercept.Heuristic.ShouldShowChromeSigninBubbleWithReason",
-      ShouldShowChromeSigninBubbleWithReason::
-          kShouldNotShowMaxShownCountReached,
-      1);
-  // Pref bubble shown count should remain the same.
-  EXPECT_EQ(GetChromeSigninInterceptShownCountPref(info1),
-            expected_bubble_shown_count_info1);
-
-  // Signout account 1 and make account 2 available again.
-  identity_test_env()->RemoveRefreshTokenForAccount(info1.account_id);
-  info2 = MakeAccountInfoAvailableAndUpdate(info2.email);
-  // Make sure that this value did not change after attempting to show the
-  // bubble for the 6th time for info1.
-  ExpectTotalChromeSigninBubbleShownCount(
-      histogram_tester,
-      expected_bubble_shown_count_info1 + expected_bubble_shown_count_info2);
-
-  // Account 2 can still show the bubble since it didn't reach the max count
-  // yet.
-  ShowAndCompleteSigninBubbleWithResult(info2,
-                                        SigninInterceptionResult::kDeclined);
-  ExpectChromeSigninBubbleShownCount(histogram_tester, 2, 2);
-  expected_bubble_shown_count_info2 += 1;
-  EXPECT_EQ(GetChromeSigninInterceptShownCountPref(info2),
-            expected_bubble_shown_count_info2);
-
-  ExpectTotalChromeSigninBubbleShownCount(
-      histogram_tester,
-      expected_bubble_shown_count_info1 + expected_bubble_shown_count_info2);
-}
-
-// Test Suite where PRE_* tests are with `switches::kUnoDesktop` disabled, and
-// regular test with `switches::kUnoDesktop` enabled, simulating users
-// transitioning in to `switches::kUnoDesktop` active.
+// Test Suite where PRE_* tests are with
+// `switches::kExplicitBrowserSigninUIOnDesktop` disabled, and regular test with
+// `switches::kExplicitBrowserSigninUIOnDesktop` enabled, simulating users
+// transitioning in to `switches::kExplicitBrowserSigninUIOnDesktop` active.
 class DiceWebSigninInterceptorWithUnoEnabledAndPREDisabledBrowserTest
     : public DiceWebSigninInterceptorWithChromeSigninHelpersBrowserTest {
  public:
   DiceWebSigninInterceptorWithUnoEnabledAndPREDisabledBrowserTest() {
-    if (content::IsPreTest()) {
-      feature_list_.InitAndDisableFeature(switches::kUnoDesktop);
-    } else {
-      feature_list_.InitAndEnableFeature(switches::kUnoDesktop);
-    }
+    feature_list_.InitWithFeatureState(
+        switches::kExplicitBrowserSigninUIOnDesktop, !content::IsPreTest());
   }
 
  protected:
@@ -1226,14 +937,14 @@ class DiceWebSigninInterceptorWithUnoEnabledAndPREDisabledBrowserTest
   base::test::ScopedFeatureList feature_list_;
 };
 
-// Signing in to Chrome while `switches::kUnoDesktop` is disabled, to simulate a
-// signed in user prior to `switches::kUnoDesktop` activation, then enabling the
+// Signing in to Chrome while `switches::kExplicitBrowserSigninUIOnDesktop` is
+// disabled, to simulate a signed in user prior to
+// `switches::kExplicitBrowserSigninUIOnDesktop` activation, then enabling the
 // feature for them.
 IN_PROC_BROWSER_TEST_F(
     DiceWebSigninInterceptorWithUnoEnabledAndPREDisabledBrowserTest,
     PRE_ChromeSignedInTransitionToUnoEnabled) {
-  ASSERT_FALSE(switches::IsExplicitBrowserSigninUIOnDesktopEnabled(
-      switches::ExplicitBrowserSigninPhase::kExperimental));
+  ASSERT_FALSE(switches::IsExplicitBrowserSigninUIOnDesktopEnabled());
 
   signin::AccountAvailabilityOptionsBuilder builder;
   AccountInfo account_info = signin::MakeAccountAvailable(
@@ -1255,17 +966,18 @@ IN_PROC_BROWSER_TEST_F(
   SetSignoutAllowed(false);
 }
 
-// Enabling `switches::kUnoDesktop`, after being signed in already.
+// Enabling `switches::kExplicitBrowserSigninUIOnDesktop`, after being signed in
+// already.
 IN_PROC_BROWSER_TEST_F(
     DiceWebSigninInterceptorWithUnoEnabledAndPREDisabledBrowserTest,
     ChromeSignedInTransitionToUnoEnabled) {
-  ASSERT_TRUE(switches::IsExplicitBrowserSigninUIOnDesktopEnabled(
-      switches::ExplicitBrowserSigninPhase::kExperimental));
+  ASSERT_TRUE(switches::IsExplicitBrowserSigninUIOnDesktopEnabled());
   // We are still signed in from the PRE_ test.
   ASSERT_TRUE(IsChromeSignedIn());
 
-  // Starting Chrome with a Signed in account prior to `switches::kUnoDesktop`
-  // activation should not turn this pref on.
+  // Starting Chrome with a Signed in account prior to
+  // `switches::kExplicitBrowserSigninUIOnDesktop` activation should not turn
+  // this pref on.
   EXPECT_FALSE(browser()->profile()->GetPrefs()->GetBoolean(
       prefs::kExplicitBrowserSignin));
   // Since we did not interact with passwords before, passwords should remain
@@ -1288,12 +1000,12 @@ IN_PROC_BROWSER_TEST_F(
                                ACCESS_POINT_CHROME_SIGNIN_INTERCEPT_BUBBLE)
           .Build(email_));
 
-  // Explicit Signing in while `switches::kUnoDesktop` is active should be
-  // stored.
+  // Explicit Signing in while `switches::kExplicitBrowserSigninUIOnDesktop` is
+  // active should be stored.
   EXPECT_TRUE(browser()->profile()->GetPrefs()->GetBoolean(
       prefs::kExplicitBrowserSignin));
-  // Signing in with `switches::kUnoDesktop` enabled, should affect the
-  // passwords default.
+  // Signing in with `switches::kExplicitBrowserSigninUIOnDesktop` enabled,
+  // should affect the passwords default.
   EXPECT_TRUE(password_manager::features_util::IsOptedInForAccountStorage(
       pref_service, sync_service));
 
@@ -1303,17 +1015,16 @@ IN_PROC_BROWSER_TEST_F(
       prefs::kExplicitBrowserSignin));
 }
 
-// Test Suite where PRE_* tests are with `switches::kUnoDesktop` enabled, and
-// regular test with `switches::kUnoDesktop` disabled. Simulating a rollback.
+// Test Suite where PRE_* tests are with
+// `switches::kExplicitBrowserSigninUIOnDesktop` enabled, and regular test with
+// `switches::kExplicitBrowserSigninUIOnDesktop` disabled. Simulating a
+// rollback.
 class DiceWebSigninInterceptorWithUnoDisabledAndPREEnabledBrowserTest
     : public DiceWebSigninInterceptorWithChromeSigninHelpersBrowserTest {
  public:
   DiceWebSigninInterceptorWithUnoDisabledAndPREEnabledBrowserTest() {
-    if (content::IsPreTest()) {
-      feature_list_.InitAndEnableFeature(switches::kUnoDesktop);
-    } else {
-      feature_list_.InitAndDisableFeature(switches::kUnoDesktop);
-    }
+    feature_list_.InitWithFeatureState(
+        switches::kExplicitBrowserSigninUIOnDesktop, content::IsPreTest());
   }
 
  private:
@@ -1323,8 +1034,7 @@ class DiceWebSigninInterceptorWithUnoDisabledAndPREEnabledBrowserTest
 IN_PROC_BROWSER_TEST_F(
     DiceWebSigninInterceptorWithUnoDisabledAndPREEnabledBrowserTest,
     PRE_ChromeSignedinWithUnoShouldRevertBackToDefaultWithUnoDisabled) {
-  ASSERT_TRUE(switches::IsExplicitBrowserSigninUIOnDesktopEnabled(
-      switches::ExplicitBrowserSigninPhase::kExperimental));
+  ASSERT_TRUE(switches::IsExplicitBrowserSigninUIOnDesktopEnabled());
 
   signin::MakeAccountAvailable(
       identity_manager(),
@@ -1338,7 +1048,7 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_TRUE(browser()->profile()->GetPrefs()->GetBoolean(
       prefs::kExplicitBrowserSignin));
   // Passwords are defaulted to enabled with an explicit sign in and
-  // `switches::kUnoDesktop` active.
+  // `switches::kExplicitBrowserSigninUIOnDesktop` active.
   EXPECT_TRUE(password_manager::features_util::IsOptedInForAccountStorage(
       GetProfile()->GetPrefs(),
       SyncServiceFactory::GetForProfile(GetProfile())));
@@ -1349,15 +1059,15 @@ IN_PROC_BROWSER_TEST_F(
 IN_PROC_BROWSER_TEST_F(
     DiceWebSigninInterceptorWithUnoDisabledAndPREEnabledBrowserTest,
     ChromeSignedinWithUnoShouldRevertBackToDefaultWithUnoDisabled) {
-  ASSERT_FALSE(switches::IsExplicitBrowserSigninUIOnDesktopEnabled(
-      switches::ExplicitBrowserSigninPhase::kExperimental));
+  ASSERT_FALSE(switches::IsExplicitBrowserSigninUIOnDesktopEnabled());
 
-  // Disabling `switches::kUnoDesktop` should not reset the pref.
-  EXPECT_TRUE(browser()->profile()->GetPrefs()->GetBoolean(
+  // Disabling `switches::kExplicitBrowserSigninUIOnDesktop` should reset the
+  // pref.
+  EXPECT_FALSE(browser()->profile()->GetPrefs()->GetBoolean(
       prefs::kExplicitBrowserSignin));
-  // Disabling `switches::kUnoDesktop` feature should revert back to the
-  // previous default state, since there were no interactions, defaults to
-  // disabled.
+  // Disabling `switches::kExplicitBrowserSigninUIOnDesktop` feature should
+  // revert back to the previous default state, since there were no
+  // interactions, defaults to disabled.
   EXPECT_FALSE(password_manager::features_util::IsOptedInForAccountStorage(
       GetProfile()->GetPrefs(),
       SyncServiceFactory::GetForProfile(GetProfile())));
@@ -1378,8 +1088,8 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest,
   // Install web app
   Profile* profile = browser()->profile();
   const GURL kWebAppURL("http://www.webapp.com");
-  auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
-  web_app_info->start_url = kWebAppURL;
+  auto web_app_info =
+      web_app::WebAppInstallInfo::CreateWithStartUrlForTesting(kWebAppURL);
   web_app_info->scope = kWebAppURL.GetWithoutFilename();
   web_app_info->user_display_mode =
       web_app::mojom::UserDisplayMode::kStandalone;

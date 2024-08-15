@@ -22,7 +22,8 @@
 // on the stack and we push 232 bytes which maintains 16-byte stack alignment
 // at the call.
 // Source: https://docs.microsoft.com/en-us/cpp/build/x64-calling-convention
-asm(".globl PushAllRegistersAndIterateStack             \n"
+asm(".att_syntax                                        \n"
+    ".globl PushAllRegistersAndIterateStack             \n"
     "PushAllRegistersAndIterateStack:                   \n"
     // rbp is callee-saved. Maintain proper frame pointer for debugging.
     "  push %rbp                                        \n"
@@ -101,6 +102,12 @@ asm(
     "  add $48, %rsp                                    \n"
     // Restore rbp as it was used as frame pointer.
     "  pop %rbp                                         \n"
-    "  ret                                              \n");
+    "  ret                                              \n"
+#if !defined(__APPLE__)
+    ".Lfunc_end0:                                       \n"
+    ".size PushAllRegistersAndIterateStack, "
+    ".Lfunc_end0-PushAllRegistersAndIterateStack        \n"
+#endif  // !defined(__APPLE__)
+    );
 
 #endif  // !_WIN64

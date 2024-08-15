@@ -169,7 +169,6 @@
 <translation id="7353601530677266744">Kommandorad</translation>
 <translation id="7364115444476960850">Sidan du försökte komma åt blockerades av Vivaldis <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profilsökväg</translation>
-<translation id="7445762425076701745">Det går inte att fastställa identiteten hos servern som du är ansluten till. Servernamnet som du angav vid anslutningen är bara giltigt inom ditt nätverk och externa certifikatutfärdare kan inte fastställa dess ägarskap. Vissa certifikatutfärdare utfärdar certifikat oavsett namn och därför går det inte att säkerställa att du är ansluten till den avsedda webbplatsen och inte till en skadlig server.</translation>
 <translation id="7455133967321480974">Använd global standardinställning (Blockera)</translation>
 <translation id="7518003948725431193">Det fanns ingen webbsida på webbadressen: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Den här webbsidan kräver uppgifter som du har angett tidigare för att kunna visas korrekt. Du kan skicka uppgifterna igen, men om du gör det upprepas de åtgärder som har utförts av sidan tidigare.</translation>

@@ -16,8 +16,7 @@ class SidePanelCustomizeChromeTest : public WebUIMochaBrowserTest {
   SidePanelCustomizeChromeTest() {
     set_test_loader_host(chrome::kChromeUICustomizeChromeSidePanelHost);
     scoped_feature_list_.InitWithFeatures(
-        {features::kCustomizeChromeSidePanel,
-         ntp_features::kCustomizeChromeWallpaperSearch,
+        {ntp_features::kCustomizeChromeWallpaperSearch,
          optimization_guide::features::kOptimizationGuideModelExecution},
         {});
   }
@@ -69,16 +68,6 @@ IN_PROC_BROWSER_TEST_F(SidePanelCustomizeChromeTest, Themes) {
 
 IN_PROC_BROWSER_TEST_F(SidePanelCustomizeChromeTest, ThemeSnapshot) {
   RunTest("side_panel/customize_chrome/theme_snapshot_test.js", "mocha.run()");
-}
-
-#if BUILDFLAG(USE_JAVASCRIPT_COVERAGE)
-// TODO(b/327036381): Fails on JS coverage bot.
-#define MAYBE_ChromeColors DISABLED_ChromeColors
-#else
-#define MAYBE_ChromeColors ChromeColors
-#endif
-IN_PROC_BROWSER_TEST_F(SidePanelCustomizeChromeTest, MAYBE_ChromeColors) {
-  RunTest("side_panel/customize_chrome/chrome_colors_test.js", "mocha.run()");
 }
 
 using CustomizeChromeWallpaperSearchTest = SidePanelCustomizeChromeTest;

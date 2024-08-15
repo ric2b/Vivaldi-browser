@@ -53,6 +53,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
     std::string type;
   };
 
+  // This is reflected by network/enums.xml:NetworkPortalState.
   enum class PortalState {
     // The network is not connected or the portal state is not available.
     kUnknown,
@@ -62,8 +63,6 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
     kPortalSuspected,
     // The network is in a portal state with a redirect URL.
     kPortal,
-    // A proxy requiring authentication is detected.
-    kProxyAuthRequired,
     // The network is connected but no internet is available and no proxy was
     // detected.
     kNoInternet,
@@ -324,9 +323,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
 
   void SetVpnProvider(const std::string& id, const std::string& type);
 
-  void set_chrome_portal_state(PortalState portal_state) {
-    chrome_portal_state_ = portal_state;
-  }
+  void SetChromePortalState(PortalState portal_state);
 
   // Set to true if the network is a member of Manager.Services.
   bool visible_ = false;

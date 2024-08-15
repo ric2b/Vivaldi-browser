@@ -17,6 +17,7 @@
 @implementation SUPipedUnarchiver
 {
     NSString *_archivePath;
+    NSString *_extractionDirectory;
 }
 
 static NSArray <NSString *> * _Nullable _commandAndArgumentsConformingToTypeOfPath(NSString *path)
@@ -25,6 +26,7 @@ static NSArray <NSString *> * _Nullable _commandAndArgumentsConformingToTypeOfPa
     NSArray <NSString *> *extractTBZ = @[@"/usr/bin/tar", @"-jxC"];
     NSArray <NSString *> *extractTXZ = extractTGZ;
     
+    // Note: keep this list in sync with generate_appcast's unarchiveUpdates()
     NSDictionary <NSString *, NSArray<NSString *> *> *extractCommandDictionary =
     @{
       @".zip" : @[@"/usr/bin/ditto", @"-x",@"-k",@"-"],
@@ -58,11 +60,12 @@ static NSArray <NSString *> * _Nullable _commandAndArgumentsConformingToTypeOfPa
     return NO;
 }
 
-- (instancetype)initWithArchivePath:(NSString *)archivePath
+- (instancetype)initWithArchivePath:(NSString *)archivePath extractionDirectory:(NSString *)extractionDirectory
 {
     self = [super init];
     if (self != nil) {
         _archivePath = [archivePath copy];
+        _extractionDirectory = [extractionDirectory copy];
     }
     return self;
 }
@@ -88,7 +91,7 @@ static NSArray <NSString *> * _Nullable _commandAndArgumentsConformingToTypeOfPa
 {
     // *** GETS CALLED ON NON-MAIN THREAD!!!
 	@autoreleasepool {
-        NSString *destination = [_archivePath stringByDeletingLastPathComponent];
+        NSString *destination = _extractionDirectory;
         
         SULog(SULogLevelDefault, @"Extracting using '%@' '%@' < '%@' '%@'", command, [args componentsJoinedByString:@"' '"], _archivePath, destination);
         

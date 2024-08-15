@@ -284,6 +284,17 @@ ash/ambient/util/time_of_day_utils.h -->
   <int value="3" label="Medium"/>
   <int value="4" label="Heavy"/>
   <int value="5" label="Maximum"/>
+  <int value="6" label="Image"/>
+</enum>
+
+<enum name="BirchItemType">
+  <int value="0" label="Test"/>
+  <int value="1" label="Calendar"/>
+  <int value="2" label="Attachment"/>
+  <int value="3" label="File"/>
+  <int value="4" label="Tab"/>
+  <int value="5" label="Weather"/>
+  <int value="6" label="Release notes"/>
 </enum>
 
 <enum name="BooleanMuted">
@@ -322,7 +333,7 @@ ash/ambient/util/time_of_day_utils.h -->
   <int value="17" label="MoveMergedItemsBackToAshCopyDirectoryFailed"/>
 </enum>
 
-<enum name="CalendarEventFetchApiError">
+<enum name="CalendarDataFetchApiError">
   <int value="200" label="HTTP_SUCCESS"/>
   <int value="201" label="HTTP_CREATED"/>
   <int value="204" label="HTTP_NO_CONTENT"/>
@@ -402,19 +413,6 @@ ash/ambient/util/time_of_day_utils.h -->
   <int value="2" label="Camera privacy switch on notification shown"/>
 </enum>
 
-<enum name="CampaignsManagerError">
-  <int value="0" label="Loading campaigns component failed"/>
-  <int value="1" label="Loading campaigns file failed"/>
-  <int value="2" label="Parsing campaigns file failed"/>
-  <int value="3" label="User pref is not available at campaigns matching"/>
-  <int value="4" label="Invalid campaign"/>
-  <int value="5" label="Invalid targeting"/>
-  <int value="6" label="Invalid scheduling targeting"/>
-  <int value="7" label="Invalid scheduling"/>
-  <int value="8" label="Demo Mode app version is not available at matching"/>
-  <int value="9" label="Serializing Demo Mode payload failed"/>
-</enum>
-
 <enum name="CaptureModeBarButtonType">
   <int value="0" label="Screen Capture Button"/>
   <int value="1" label="Screen Record Button"/>
@@ -481,6 +479,42 @@ ash/ambient/util/time_of_day_utils.h -->
   <int value="0" label="Assignment list selected"/>
   <int value="1" label="Header icon pressed"/>
   <int value="2" label="Student assignment pressed"/>
+</enum>
+
+<enum name="ClosePineDialogType">
+  <int value="0" label="Restore button clicked while showing listview"/>
+  <int value="1" label="Cancel button clicked while showing listview"/>
+  <int value="2"
+      label="Some other way of closing the pine dialog while showing listview"/>
+  <int value="3" label="Restore button clicked while showing screenshot"/>
+  <int value="4" label="Cancel button clicked while showing screenshot"/>
+  <int value="5"
+      label="Some other way of closing the pine dialog while showing
+             screenshot"/>
+</enum>
+
+<enum name="ContainerAppPage">
+  <int value="0" label="Congratulations"/>
+  <int value="1" label="Offer"/>
+  <int value="2" label="Terms &amp; Conditions"/>
+</enum>
+
+<enum name="ContextualGoogleIntegrationStatus">
+  <int value="0" label="Enabled"/>
+  <int value="1" label="Disabled by policy"/>
+  <int value="2"
+      label="Disabled because the related app is disabled by policy"/>
+  <int value="3"
+      label="Disabled because the related URLs are blocked by policy"/>
+</enum>
+
+<enum name="CriticalNotificationOutcome">
+  <int value="0" label="NotificationShown"/>
+  <int value="1" label="Crashed"/>
+  <int value="2" label="LowBatteryShutdown"/>
+  <int value="3" label="PluggedIn"/>
+  <int value="4" label="Suspended"/>
+  <int value="5" label="UserShutdown"/>
 </enum>
 
 <enum name="DataFetchEventSource">
@@ -569,6 +603,14 @@ ash/ambient/util/time_of_day_utils.h -->
       label="Desk switch by clicking on a mini view in the desk button desk
              bar"/>
   <int value="16" label="Desk switch due to session restore"/>
+</enum>
+
+<enum name="DNDStateOnFocusEndType">
+  <int value="0" label="FocusModeOn"/>
+  <int value="1" label="AlreadyOn"/>
+  <int value="2" label="AlreadyOff"/>
+  <int value="3" label="TurnedOn"/>
+  <int value="4" label="TurnedOff"/>
 </enum>
 
 <enum name="DockedAction">
@@ -1056,6 +1098,7 @@ ash/ambient/util/time_of_day_utils.h -->
   <int value="20" label="Stop screen recording keyboard shortcut"/>
   <int value="21" label="Game dashboard stop recording button"/>
   <int value="22" label="Game toolbar stop recording button"/>
+  <int value="23" label="Game dashboard stop recording for tablet mode"/>
 </enum>
 
 <enum name="EolIncentiveButtonType">
@@ -1098,6 +1141,28 @@ ash/ambient/util/time_of_day_utils.h -->
   <int value="2" label="Expand Group"/>
   <int value="3" label="Collapse Group"/>
 </enum>
+
+<!-- LINT.IfChange(ExtendedUpdatesDialogEventEnum) -->
+
+<enum name="ExtendedUpdatesDialogEventEnum">
+  <int value="0" label="Dialog shown"/>
+  <int value="1" label="Opt in confirmed"/>
+</enum>
+
+<!-- LINT.ThenChange(//ash/system/extended_updates/extended_updates_metrics.h:ExtendedUpdatesDialogEvent) -->
+
+<!-- LINT.IfChange(ExtendedUpdatesEntryPointEventEnum) -->
+
+<enum name="ExtendedUpdatesEntryPointEventEnum">
+  <int value="0" label="Settings page set up button shown"/>
+  <int value="1" label="Settings page set up button clicked"/>
+  <int value="2" label="Quick settings banner shown"/>
+  <int value="3" label="Quick settings banner clicked"/>
+  <int value="4" label="No ARC notification shown"/>
+  <int value="5" label="No ARC notification clicked"/>
+</enum>
+
+<!-- LINT.ThenChange(//ash/system/extended_updates/extended_updates_metrics.h:ExtendedUpdatesEntryPointEvent) -->
 
 <enum name="FloatingWorkspaceV1RestoredSessionType">
   <int value="0" label="Unknown browser session type"/>
@@ -1154,6 +1219,18 @@ ash/ambient/util/time_of_day_utils.h -->
   <int value="1" label="Swipe down the hotseat"/>
   <int value="2" label="Fling up the hotseat to show homescreen"/>
   <int value="3" label="Interact outside of shelf to hide hotseat"/>
+</enum>
+
+<enum name="KcerPkcs12MigrationEvent">
+  <int value="0" label="MigrationStarted"/>
+  <int value="1" label="NothingToMigrate"/>
+  <int value="2" label="MigrationFinishedSuccess"/>
+  <int value="3" label="MigrationFinishedFailure"/>
+  <int value="4" label="CertMigratedSuccess"/>
+  <int value="5" label="FailedToReimportCert"/>
+  <int value="6" label="ExportedPkcs12EmptyError"/>
+  <int value="7" label="FailedToGetKcerCerts"/>
+  <int value="8" label="FailedToGetNssCerts"/>
 </enum>
 
 <enum name="LacrosLaunchMode">
@@ -1213,6 +1290,27 @@ ash/ambient/util/time_of_day_utils.h -->
   <int value="4" label="System tray"/>
   <int value="5" label="Virtual keyboard tray"/>
   <int value="6" label="IME tray"/>
+</enum>
+
+<enum name="MahiQuestionSource">
+  <int value="0" label="menu view"/>
+  <int value="1" label="panel view"/>
+  <int value="2" label="retry button"/>
+</enum>
+
+<enum name="MantaStatusCode">
+  <int value="0" label="kOk"/>
+  <int value="1" label="kGenericError"/>
+  <int value="2" label="kInvalidInput"/>
+  <int value="3" label="kResourceExhausted"/>
+  <int value="4" label="kBackendFailure"/>
+  <int value="5" label="kMalformedResponse"/>
+  <int value="6" label="kNoInternetConnection"/>
+  <int value="7" label="kUnsupportedLanguage"/>
+  <int value="8" label="kBlockedOutputs"/>
+  <int value="9" label="kRestrictedCountry"/>
+  <int value="10" label="kNoIdentityManager"/>
+  <int value="11" label="kPerUserQuotaExceeded"/>
 </enum>
 
 <enum name="ModifyGlanceablesTaskResult">
@@ -1328,6 +1426,8 @@ ash/ambient/util/time_of_day_utils.h -->
   <int value="12" label="Rollback failed, not user account id was found"/>
   <int value="13"
       label="Rollback failed, failed to reset rollback required flag"/>
+  <int value="14" label="Reset for NSS certificates cache successful"/>
+  <int value="15" label="Reset for NSS certificates cache has failed"/>
 </enum>
 
 <enum name="NudgeCatalogName">
@@ -1369,6 +1469,10 @@ ash/ambient/util/time_of_day_utils.h -->
   <int value="27" label="Standalone Window Migration Ux"/>
   <int value="28" label="Focus Mode Ending Moment Nudge"/>
   <int value="29" label="Pine Education Nudge"/>
+  <int value="30" label="Growth Campaigns Nudge"/>
+  <int value="31" label="Search Plus Top Row Key Pressed Nudge"/>
+  <int value="32" label="Six Pack Key Pressed Nudge"/>
+  <int value="33" label="Switch Caps Lock Key Pressed Nudge"/>
 </enum>
 
 <enum name="OnDeviceToServerSpeechRecognitionFallbackReason">
@@ -1486,6 +1590,15 @@ ash/ambient/util/time_of_day_utils.h -->
   <int value="9" label="Enter capture mode"/>
 </enum>
 
+<enum name="PanelButton">
+  <int value="0" label="Close button"/>
+  <int value="1" label="Learn more link"/>
+  <int value="2" label="Send question button"/>
+  <int value="3" label="Back to Summary Outlines button"/>
+  <int value="4" label="Refresh button"/>
+  <int value="5" label="Back to Question and Answer button"/>
+</enum>
+
 <enum name="PeripheralConnectivityResult">
 <!-- This must be kept current with PeripheralConnectivityResults located in
 chromeos/ash/components/peripheral_notification/peripheral_notification_manager.h
@@ -1572,6 +1685,8 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   <int value="0" label="Unknown"/>
   <int value="1" label="User inserts or copies a result."/>
   <int value="2" label="User abandons the session."/>
+  <int value="3" label="User selects an action to open another window."/>
+  <int value="4" label="User selects an action related to text format."/>
 </enum>
 
 <enum name="PinAutosubmitBackfillEvent">
@@ -1666,6 +1781,7 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   <int value="14" label="PowerSignoutMenuButton"/>
   <int value="15" label="PowerLockMenuButton"/>
   <int value="16" label="SupervisedButton"/>
+  <int value="19" label="ExtendedUpdatesNoticeButton"/>
 </enum>
 
 <enum name="QsFeatureCatalogName">
@@ -1764,6 +1880,26 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   <int value="2" label="AlreadyAcceptedDialog"/>
 </enum>
 
+<enum name="ScreenshotOnShutdownStatus">
+  <int value="0" label="Succeeded"/>
+  <int value="1" label="Failed as in overview"/>
+  <int value="2" label="Failed as in lock screen"/>
+  <int value="3" label="Failed as in home launcher"/>
+  <int value="4" label="Failed as screen is pinned"/>
+  <int value="5" label="Failed as incognito window"/>
+  <int value="6" label="Failed as no un-minimized windows opened"/>
+  <int value="7" label="Failed as it takes too long to take the screenshot"/>
+  <int value="8"
+      label="Failed as the screenshot and display have different orientations"/>
+  <int value="9" label="Failed on DLP checking"/>
+</enum>
+
+<enum name="SeaPenActionMenuItem">
+  <int value="0" label="Create More Like This"/>
+  <int value="1" label="Delete"/>
+  <int value="2" label="About"/>
+</enum>
+
 <enum name="SeaPenTemplateId">
 <!-- Defined in ash/webui/common/mojom/sea_pen.mojom -->
 
@@ -1788,6 +1924,13 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   <int value="105" label="kVcBackgroundDreamscapesVc"/>
   <int value="106" label="kVcBackgroundCharacters"/>
   <int value="107" label="kVcBackgroundGlowscapes"/>
+</enum>
+
+<enum name="SeaPenWallpaperManagerMigrationStatus">
+  <int value="0" label="kNotStarted"/>
+  <int value="1" label="kCrashed"/>
+  <int value="2" label="kFailed"/>
+  <int value="3" label="kSuccess"/>
 </enum>
 
 <enum name="SetWallpaperResult">
@@ -1894,6 +2037,13 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
       label="Shutdown confirmation bubbble dismissed by clicking ouside"/>
 </enum>
 
+<enum name="SnapGroupExitPoint">
+  <int value="0" label="Drag window out"/>
+  <int value="1" label="Window state change"/>
+  <int value="2" label="Window destruction"/>
+  <int value="3" label="Tablet transition"/>
+</enum>
+
 <enum name="SpeechRecognitionEndState">
   <int value="0" label="Speech recognition successfully stopped"/>
   <int value="1" label="Speech recognition enountered error while recognizing"/>
@@ -1937,9 +2087,9 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
 
 <enum name="TimeManagementGlanceablesFeatureStatus">
   <int value="0" label="Disabled"/>
-  <int value="1" label="Enabled - trusted tester"/>
+  <int value="1" label="Enabled - trusted tester (deprecated)"/>
   <int value="2" label="Enabled - GlanceablesV2 flag"/>
-  <int value="3" label="Enabled with pref bypass switch"/>
+  <int value="3" label="Enabled with pref bypass switch (deprecated)"/>
   <int value="4" label="Enabled - full launch"/>
 </enum>
 
@@ -1995,6 +2145,7 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   <int value="47" label="Dictation Mic Muted"/>
   <int value="48" label="Video Conference Speak On Mute Opt In Confirmation"/>
   <int value="50" label="Game Dashboard Disabled In Tablet Mode"/>
+  <int value="51" label="Pine Onboarding Turn On Ask Every Time"/>
 </enum>
 
 <enum name="TrayBackgroundViewCatalogName">
@@ -2521,6 +2672,12 @@ chromeos/ash/components/peripheral_notification/peripheral_notification_manager.
   </int>
   <int value="11" label="Once-Google-Photos">
     Wallpaper chosen by the user from their Google Photos collection.
+  </int>
+  <int value="12" label="Oobe">
+    Wallpaper shown during OOBE if not overridden.
+  </int>
+  <int value="13" label="Sea Pen">
+    User selected wallpaper from the Manta API.
   </int>
 </enum>
 

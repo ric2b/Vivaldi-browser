@@ -6,6 +6,7 @@
 
 #include "base/containers/adapters.h"
 #include "third_party/blink/renderer/core/layout/inline/inline_break_token.h"
+#include "third_party/blink/renderer/core/layout/inline/inline_item_result_ruby_column.h"
 #include "third_party/blink/renderer/core/layout/inline/inline_node.h"
 #include "third_party/blink/renderer/core/layout/layout_object_inlines.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_view.h"
@@ -66,7 +67,8 @@ void LineInfo::Reset() {
   needs_accurate_end_position_ = false;
   is_ruby_base_ = false;
   is_ruby_text_ = false;
-  may_have_text_combine_item_ = false;
+  may_have_text_combine_or_ruby_item_ = false;
+  may_have_ruby_overhang_ = false;
   allow_hang_for_alignment_ = false;
 }
 
@@ -78,8 +80,10 @@ void LineInfo::SetLineStyle(const InlineNode& node,
   const LayoutBox* box = node.GetLayoutBox();
   line_style_ = box->Style(use_first_line_style_);
   needs_accurate_end_position_ = ComputeNeedsAccurateEndPosition();
-  is_ruby_base_ = box->IsRubyBase();
-  is_ruby_text_ = box->IsRubyText();
+  if (!RuntimeEnabledFeatures::RubyLineBreakableEnabled()) {
+    is_ruby_base_ = box->IsRubyBase();
+    is_ruby_text_ = box->IsRubyText();
+  }
 
   // Reset block start offset related members.
   annotation_block_start_adjustment_ = LayoutUnit();
@@ -153,22 +157,44 @@ bool LineInfo::ComputeNeedsAccurateEndPosition() const {
 }
 
 InlineItemTextIndex LineInfo::End() const {
-  return GetBreakToken() ? GetBreakToken()->Start() : ItemsData().End();
+  if (GetBreakToken()) {
+    return GetBreakToken()->Start();
+  }
+  if (end_item_index_ && end_item_index_ < ItemsData().items.size()) {
+    return {end_item_index_, ItemsData().items[end_item_index_].StartOffset()};
+  }
+  return ItemsData().End();
 }
 
 unsigned LineInfo::EndTextOffset() const {
-  return GetBreakToken() ? GetBreakToken()->StartTextOffset()
-                         : ItemsData().text_content.length();
+  if (GetBreakToken()) {
+    return GetBreakToken()->StartTextOffset();
+  }
+  if (end_item_index_ && end_item_index_ < ItemsData().items.size()) {
+    return ItemsData().items[end_item_index_].StartOffset();
+  }
+  return ItemsData().text_content.length();
 }
 
-unsigned LineInfo::InflowEndOffset() const {
+unsigned LineInfo::InflowEndOffsetInternal(bool skip_forced_break) const {
   for (const auto& item_result : base::Reversed(Results())) {
     DCHECK(item_result.item);
     const InlineItem& item = *item_result.item;
+    if (skip_forced_break && item.Type() == InlineItem::kControl &&
+        ItemsData().text_content[item.StartOffset()] == kNewlineCharacter) {
+      continue;
+    }
     if (item.Type() == InlineItem::kText ||
         item.Type() == InlineItem::kControl ||
         item.Type() == InlineItem::kAtomicInline) {
       return item_result.EndOffset();
+    } else if (item_result.IsRubyColumn()) {
+      const LineInfo& base_line = item_result.ruby_column->base_line;
+      unsigned end_offset =
+          base_line.InflowEndOffsetInternal(skip_forced_break);
+      if (end_offset != base_line.StartOffset()) {
+        return end_offset;
+      }
     }
   }
   return StartOffset();
@@ -525,7 +551,7 @@ std::ostream& operator<<(std::ostream& ostream, const LineInfo& line_info) {
           << " width_=" << line_info.Width() << " Results=[\n";
   const String& text_content = line_info.ItemsData().text_content;
   for (const auto& result : line_info.Results()) {
-    ostream << "\t" << result.ToString(text_content).Utf8().c_str() << "\n";
+    ostream << result.ToString(text_content, "\t").Utf8() << "\n";
   }
   return ostream << "]";
 }

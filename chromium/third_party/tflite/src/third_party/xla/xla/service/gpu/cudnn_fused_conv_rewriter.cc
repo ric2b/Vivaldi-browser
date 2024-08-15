@@ -15,23 +15,35 @@ limitations under the License.
 
 #include "xla/service/gpu/cudnn_fused_conv_rewriter.h"
 
+#include <algorithm>
 #include <array>
+#include <cstdint>
 #include <functional>
 #include <limits>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
 
+#include "absl/algorithm/container.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/container/inlined_vector.h"
 #include "absl/log/check.h"
+#include "absl/log/log.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
+#include "absl/strings/str_join.h"
+#include "absl/strings/string_view.h"
+#include "xla/comparison_util.h"
 #include "xla/debug_options_flags.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/literal.h"
+#include "xla/shape.h"
 #include "xla/shape_util.h"
-#include "xla/statusor.h"
+#include "xla/stream_executor/device_description.h"
 #include "xla/util.h"
 #include "tsl/platform/ml_dtypes.h"
 
@@ -770,6 +782,12 @@ absl::StatusOr<bool> FuseBiasOrSideInput(HloComputation* comp) {
       continue;
     }
 
+    if (!ConsumeFuel("cudnn-fused-convolution-rewriter", [&] {
+          return absl::StrCat("FuseBiasOrSideInput: ", conv->ToString());
+        })) {
+      continue;
+    }
+
     // If it's a vanilla forward conv, upgrade it to a bias-activation conv.  We
     // only want to do this if the fusion will succeed, but we're guaranteed
     // that it will, because the only reason we'll bail at this point is if
@@ -833,12 +851,6 @@ absl::StatusOr<bool> FuseBiasOrSideInput(HloComputation* comp) {
       config.set_side_input_scale(1);
     } else {
       // Can't fuse; this op already has a bias and a side-input.
-      continue;
-    }
-
-    if (!ConsumeFuel("cudnn-fused-convolution-rewriter", [&] {
-          return absl::StrCat("FuseBiasOrSideInput: ", conv->ToString());
-        })) {
       continue;
     }
 

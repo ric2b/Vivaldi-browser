@@ -24,11 +24,17 @@ class ShellSpeechRecognitionManagerDelegate
 
   ~ShellSpeechRecognitionManagerDelegate() override;
 
+#if !BUILDFLAG(IS_FUCHSIA) && !BUILDFLAG(IS_ANDROID)
+  // It is empty in this delegate.
+  void BindSpeechRecognitionContext(
+      mojo::PendingReceiver<media::mojom::SpeechRecognitionContext> receiver)
+      override;
+#endif  // !BUILDFLAG(IS_FUCHSIA) && !BUILDFLAG(IS_ANDROID)
+
  private:
   // SpeechRecognitionEventListener methods.
   void OnRecognitionStart(int session_id) override;
   void OnAudioStart(int session_id) override;
-  void OnEnvironmentEstimationComplete(int session_id) override;
   void OnSoundStart(int session_id) override;
   void OnSoundEnd(int session_id) override;
   void OnAudioEnd(int session_id) override;

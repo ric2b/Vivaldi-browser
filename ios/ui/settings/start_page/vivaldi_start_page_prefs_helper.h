@@ -20,6 +20,8 @@
 + (const VivaldiStartPageLayoutStyle)getStartPageLayoutStyle;
 /// Returns the start page speed dial maximum columns
 + (const VivaldiStartPageLayoutColumn)getStartPageSpeedDialMaximumColumns;
+/// Returns whether frequently visited pages are visible on the start page.
++ (BOOL)showFrequentlyVisitedPages;
 /// Returns whether speed dials are visible on the start page.
 + (BOOL)showSpeedDials;
 /// Returns whether start page customize button is visible on the start page.
@@ -41,6 +43,8 @@
 /// Sets the start page speed dial maximum columns.
 + (void)setStartPageSpeedDialMaximumColumns:
     (VivaldiStartPageLayoutColumn)columns;
+/// Sets whether frequently visited pages are visible on the start page.
++ (void)setShowFrequentlyVisitedPages:(BOOL)show;
 /// Sets whether speed dials are visible on the start page.
 + (void)setShowSpeedDials:(BOOL)show;
 /// Sets whether start page customize button is visible on the start page.

@@ -6,6 +6,7 @@
 
 #include "core/fpdfdoc/cpdf_aaction.h"
 
+#include <array>
 #include <iterator>
 #include <utility>
 
@@ -13,34 +14,32 @@
 
 namespace {
 
-constexpr const char* kAATypes[] = {
-    "E",   // kCursorEnter
-    "X",   // kCursorExit
-    "D",   // kButtonDown
-    "U",   // kButtonUp
-    "Fo",  // kGetFocus
-    "Bl",  // kLoseFocus
-    "PO",  // kPageOpen
-    "PC",  // kPageClose
-    "PV",  // kPageVisible
-    "PI",  // kPageInvisible
-    "O",   // kOpenPage
-    "C",   // kClosePage
-    "K",   // kKeyStroke
-    "F",   // kFormat
-    "V",   // kValidate
-    "C",   // kCalculate
-    "WC",  // kCloseDocument
-    "WS",  // kSaveDocument
-    "DS",  // kDocumentSaved
-    "WP",  // kPrintDocument
-    "DP",  // kDocumentPrinted
-};
-
 // |kAATypes| should have one less element than enum AActionType due to
 // |kDocumentOpen|, which is an artificial type.
-static_assert(std::size(kAATypes) == CPDF_AAction::kNumberOfActions - 1,
-              "kAATypes count mismatch");
+constexpr const std::array<const char*, CPDF_AAction::kNumberOfActions - 1>
+    kAATypes = {{
+        "E",   // kCursorEnter
+        "X",   // kCursorExit
+        "D",   // kButtonDown
+        "U",   // kButtonUp
+        "Fo",  // kGetFocus
+        "Bl",  // kLoseFocus
+        "PO",  // kPageOpen
+        "PC",  // kPageClose
+        "PV",  // kPageVisible
+        "PI",  // kPageInvisible
+        "O",   // kOpenPage
+        "C",   // kClosePage
+        "K",   // kKeyStroke
+        "F",   // kFormat
+        "V",   // kValidate
+        "C",   // kCalculate
+        "WC",  // kCloseDocument
+        "WS",  // kSaveDocument
+        "DS",  // kDocumentSaved
+        "WP",  // kPrintDocument
+        "DP",  // kDocumentPrinted
+    }};
 
 }  // namespace
 

@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "osp/impl/quic/quic_connection_factory_impl.h"
+#include "osp/impl/quic/quic_connection_factory_server.h"
 #include "osp/impl/quic/quic_server.h"
 #include "osp/public/network_service_manager.h"
 #include "platform/api/task_runner.h"
@@ -17,13 +17,14 @@ namespace openscreen::osp {
 // static
 std::unique_ptr<ProtocolConnectionServer>
 ProtocolConnectionServerFactory::Create(
-    const ServerConfig& config,
-    MessageDemuxer* demuxer,
-    ProtocolConnectionServer::Observer* observer,
+    const EndpointConfig& config,
+    MessageDemuxer& demuxer,
+    ProtocolConnectionServer::Observer& observer,
     TaskRunner& task_runner) {
   return std::make_unique<QuicServer>(
-      config, demuxer, std::make_unique<QuicConnectionFactoryImpl>(task_runner),
-      observer, &Clock::now, task_runner);
+      config, demuxer,
+      std::make_unique<QuicConnectionFactoryServer>(task_runner), observer,
+      &Clock::now, task_runner);
 }
 
 }  // namespace openscreen::osp

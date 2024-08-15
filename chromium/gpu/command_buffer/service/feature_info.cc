@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <set>
+#include <string_view>
 #include <vector>
 
 #include "base/command_line.h"
@@ -190,8 +191,7 @@ FeatureInfo::FeatureInfo(
                            ? base::CommandLine::ForCurrentProcess()
                            : nullptr);
 
-#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_CAST_ANDROID) || \
-    BUILDFLAG(IS_FUCHSIA)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
   feature_flags_.chromium_image_ycbcr_420v = base::Contains(
       gpu_feature_info.supported_buffer_formats_for_allocation_and_texturing,
       gfx::BufferFormat::YUV_420_BIPLANAR);
@@ -280,10 +280,7 @@ bool IsGL_REDSupportedOnFBOs() {
 #else
 
 #if BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(
-          features::kCmdDecoderSkipGLRedMesaWorkaroundOnAndroid)) {
-    return true;
-  }
+  return true;
 #endif
 
   DCHECK(glGetError() == GL_NO_ERROR);
@@ -2194,7 +2191,7 @@ bool FeatureInfo::IsES31ForTestingContext() const {
   return IsES31ForTestingContextType(context_type_);
 }
 
-void FeatureInfo::AddExtensionString(const base::StringPiece& extension) {
+void FeatureInfo::AddExtensionString(std::string_view extension) {
   extensions_.insert(extension);
 }
 

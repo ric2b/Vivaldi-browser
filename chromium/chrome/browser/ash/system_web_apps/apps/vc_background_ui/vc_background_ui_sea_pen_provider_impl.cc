@@ -9,6 +9,7 @@
 #include <string>
 
 #include "ash/constants/ash_features.h"
+#include "ash/controls/contextual_tooltip.h"
 #include "ash/public/cpp/image_util.h"
 #include "ash/shell.h"
 #include "ash/system/camera/camera_effects_controller.h"
@@ -18,7 +19,9 @@
 #include "base/json/json_writer.h"
 #include "chrome/browser/ash/system_web_apps/apps/personalization_app/personalization_app_sea_pen_provider_base.h"
 #include "chrome/browser/ash/wallpaper_handlers/wallpaper_fetcher_delegate.h"
+#include "chrome/browser/ui/webui/sanitized_image_source.h"
 #include "components/manta/features.h"
+#include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_ui.h"
 #include "ui/gfx/image/image_skia.h"
 
@@ -32,20 +35,6 @@ CameraEffectsController* GetCameraEffectsController() {
   return controller;
 }
 
-void OnImageDecoded(
-    SeaPenWallpaperManager::GetImageAndMetadataCallback callback,
-    const std::string metadata,
-    const gfx::ImageSkia& image) {
-  if (image.isNull()) {
-    LOG(WARNING) << "Failed decoding image";
-    std::move(callback).Run(gfx::ImageSkia(), nullptr);
-    return;
-  }
-  const std::string extracted_metadata = ExtractDcDescriptionContents(metadata);
-  DecodeJsonMetadata(extracted_metadata.empty() ? metadata : extracted_metadata,
-                     base::BindOnce(std::move(callback), image));
-}
-
 void OnGetBackgroundImageInfo(
     SeaPenWallpaperManager::GetImageAndMetadataCallback callback,
     const std::optional<CameraEffectsController::BackgroundImageInfo>&
@@ -54,12 +43,15 @@ void OnGetBackgroundImageInfo(
     std::move(callback).Run(gfx::ImageSkia(), nullptr);
     return;
   }
-  image_util::DecodeImageData(
-      base::BindOnce(&OnImageDecoded, std::move(callback),
-                     std::move(background_image_info->metadata)),
-      data_decoder::mojom::ImageCodec::kDefault,
-      background_image_info->jpeg_bytes);
+
+  const std::string extracted_metadata =
+      ExtractDcDescriptionContents(background_image_info->metadata);
+  DecodeJsonMetadata(
+      extracted_metadata.empty() ? background_image_info->metadata
+                                 : extracted_metadata,
+      base::BindOnce(std::move(callback), background_image_info->image));
 }
+
 }  // namespace
 
 VcBackgroundUISeaPenProviderImpl::VcBackgroundUISeaPenProviderImpl(
@@ -69,7 +61,10 @@ VcBackgroundUISeaPenProviderImpl::VcBackgroundUISeaPenProviderImpl(
     : PersonalizationAppSeaPenProviderBase(
           web_ui,
           std::move(wallpaper_fetcher_delegate),
-          manta::proto::FeatureName::CHROMEOS_VC_BACKGROUNDS) {}
+          manta::proto::FeatureName::CHROMEOS_VC_BACKGROUNDS) {
+  content::URLDataSource::Add(profile_,
+                              std::make_unique<SanitizedImageSource>(profile_));
+}
 
 VcBackgroundUISeaPenProviderImpl::~VcBackgroundUISeaPenProviderImpl() = default;
 
@@ -101,6 +96,22 @@ void VcBackgroundUISeaPenProviderImpl::GetRecentSeaPenImageThumbnailInternal(
   GetCameraEffectsController()->GetBackgroundImageInfo(
       CameraEffectsController::SeaPenIdToRelativePath(id),
       base::BindOnce(&OnGetBackgroundImageInfo, std::move(callback)));
+}
+
+void VcBackgroundUISeaPenProviderImpl::
+    ShouldShowSeaPenIntroductionDialogInternal(
+        ShouldShowSeaPenIntroductionDialogCallback callback) {
+  std::move(callback).Run(contextual_tooltip::ShouldShowNudge(
+      profile_->GetPrefs(),
+      contextual_tooltip::TooltipType::kSeaPenVcBackgroundIntroDialog,
+      /*recheck_delay=*/nullptr));
+}
+
+void VcBackgroundUISeaPenProviderImpl::
+    HandleSeaPenIntroductionDialogClosedInternal() {
+  contextual_tooltip::HandleGesturePerformed(
+      profile_->GetPrefs(),
+      contextual_tooltip::TooltipType::kSeaPenVcBackgroundIntroDialog);
 }
 
 void VcBackgroundUISeaPenProviderImpl::DeleteRecentSeaPenImage(

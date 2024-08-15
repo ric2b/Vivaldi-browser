@@ -174,6 +174,7 @@ static struct ImportItemToStringMapping {
     {importer::NOTES, "notes"},
     {importer::SPEED_DIAL, "speeddial"},
     {importer::CONTACTS, "contacts"},
+    {importer::EXTENSIONS, "extensions"},
     // clang-format on
 };
 
@@ -544,6 +545,7 @@ void ImportDataGetProfilesFunction::Finished() {
     profile->speeddial = ((browser_services & importer::SPEED_DIAL) != 0);
     profile->email = ((browser_services & importer::EMAIL) != 0);
     profile->contacts = ((browser_services & importer::CONTACTS) != 0);
+    profile->extensions = ((browser_services & importer::EXTENSIONS) != 0);
 
     profile->import_type = MapImportType(source_profile.importer_type);
 
@@ -635,6 +637,9 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
   }
   if (params->types_to_import.speeddial) {
     selected_items |= importer::SPEED_DIAL;
+  }
+  if (params->types_to_import.extensions) {
+    selected_items |= importer::EXTENSIONS;
   }
 
   imported_items_ = (selected_items & supported_items);

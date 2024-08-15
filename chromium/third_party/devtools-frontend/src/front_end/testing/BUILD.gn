@@ -13,7 +13,9 @@ ts_library("testing") {
     "DOMHelpers.ts",
     "DataGridHelpers.ts",
     "EnvironmentHelpers.ts",
+    "ExpectStubCall.ts",
     "ExtensionHelpers.ts",
+    "FileManagerHelpers.ts",
     "LanguagePluginHelpers.ts",
     "MockConnection.ts",
     "MockExecutionContext.ts",
@@ -26,7 +28,9 @@ ts_library("testing") {
     "MutationHelpers.ts",
     "OverridesHelpers.ts",
     "PersistenceHelpers.ts",
+    "PropertyParser.ts",
     "RealConnection.ts",
+    "ResourceTreeHelpers.ts",
     "SourceMapEncoder.test.ts",
     "SourceMapEncoder.ts",
     "SourceMapHelpers.ts",
@@ -37,6 +41,7 @@ ts_library("testing") {
     "UISourceCodeHelpers.ts",
     "UserMetricsHelpers.ts",
     "VisualLoggingHelpers.ts",
+    "test_post_setup.ts",
     "test_setup.ts",
   ]
 

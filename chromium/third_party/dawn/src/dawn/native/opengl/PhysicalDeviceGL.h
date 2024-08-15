@@ -46,6 +46,8 @@ class PhysicalDevice : public PhysicalDeviceBase {
     // PhysicalDeviceBase Implementation
     bool SupportsExternalImages() const override;
     bool SupportsFeatureLevel(FeatureLevel featureLevel) const override;
+    ResultOrError<PhysicalDeviceSurfaceCapabilities> GetSurfaceCapabilities(
+        const Surface* surface) const override;
 
   private:
     PhysicalDevice(InstanceBase* instance, wgpu::BackendType backendType, EGLDisplay display);
@@ -61,9 +63,11 @@ class PhysicalDevice : public PhysicalDeviceBase {
 
     void SetupBackendAdapterToggles(TogglesState* adapterToggles) const override;
     void SetupBackendDeviceToggles(TogglesState* deviceToggles) const override;
-    ResultOrError<Ref<DeviceBase>> CreateDeviceImpl(AdapterBase* adapter,
-                                                    const UnpackedPtr<DeviceDescriptor>& descriptor,
-                                                    const TogglesState& deviceToggles) override;
+    ResultOrError<Ref<DeviceBase>> CreateDeviceImpl(
+        AdapterBase* adapter,
+        const UnpackedPtr<DeviceDescriptor>& descriptor,
+        const TogglesState& deviceToggles,
+        Ref<DeviceBase::DeviceLostEvent>&& lostEvent) override;
 
     void PopulateBackendProperties(UnpackedPtr<AdapterProperties>& properties) const override;
 

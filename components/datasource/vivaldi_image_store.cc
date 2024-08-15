@@ -2,6 +2,8 @@
 
 #include "components/datasource/vivaldi_image_store.h"
 
+#include <string_view>
+
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
@@ -371,7 +373,7 @@ void VivaldiImageStore::LoadMappingsOnFileThread() {
     return;
 
   auto root = base::JSONReader::ReadAndReturnValueWithError(
-      base::StringPiece(data->front_as<char>(), data->size()));
+      base::as_string_view(*data));
   if (!root.has_value()) {
     LOG(ERROR) << file_path.value() << " is not a valid JSON - "
                << root.error().message;
@@ -1119,9 +1121,7 @@ std::string VivaldiImageStore::StoreImageDataOnFileThread(
   }
 
   // The caller must ensure that data fit 2G.
-  int bytes = base::WriteFile(path, image_data->front_as<char>(),
-                              static_cast<int>(image_data->size()));
-  if (bytes < 0 || static_cast<size_t>(bytes) != image_data->size()) {
+  if (!base::WriteFile(path, base::as_string_view(*image_data))) {
     LOG(ERROR) << "Error writing to file: " << path.value();
     return std::string();
   }

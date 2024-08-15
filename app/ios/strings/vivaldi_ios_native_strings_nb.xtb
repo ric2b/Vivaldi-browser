@@ -41,7 +41,6 @@
 <translation id="1689333818294560261">Kallenavn</translation>
 <translation id="1711184756728070210"><ph name="BEGIN_LINK" />Bruksvilkår<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />Personvernretningslinjene<ph name="END_LINK2" /></translation>
 <translation id="1717473843091433383">Tving mørkt tema på alle nettsteder</translation>
-<translation id="1721552494230946796">Ny hurtigvalgmappe</translation>
 <translation id="173924678149983125">Skriv inn en URL for å importere blokkeringsregler</translation>
 <translation id="1751280147639351837">Reklame- og sporingsblokkering</translation>
 <translation id="1752547299766512813">Lagre passord</translation>
@@ -59,7 +58,6 @@
 <translation id="2034405583989639424">Rediger hurtigvalg</translation>
 <translation id="2048247880942380698">Arabisk (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">Angre</translation>
-<translation id="2117093051794889870">Etter innhold</translation>
 <translation id="2129408066358825297">Alder</translation>
 <translation id="2148384276939959392">Synkroniser valgte</translation>
 <translation id="2195713384412091023">Dette vil fjerne alle synkroniserte data lagret på vår tjener, nullstille krypteringspassordet ditt og logge deg ut.</translation>
@@ -144,7 +142,6 @@ blokkert</translation>
 <translation id="3858860766373142691">Navn</translation>
 <translation id="3866249974567520381">Beskrivelse</translation>
 <translation id="3872195896030547485">Skriv inn en gyldig e-postadresse.</translation>
-<translation id="3894427358181296146">Legg til mappe</translation>
 <translation id="3897092660631435901">Meny</translation>
 <translation id="3921585859122905677">Adresselinjeposisjon</translation>
 <translation id="3953599441418463312">Japansk (<ph name="ORIGIN" />)</translation>
@@ -210,7 +207,6 @@ blokkert</translation>
 <translation id="4833044618885331665">Du må oppgradere Vivaldi for å bruke Sync.</translation>
 <translation id="484462545196658690">Automatisk</translation>
 <translation id="4852383705713307704">Reklame blokkert</translation>
-<translation id="4871370605780490696">Legg til bokmerke</translation>
 <translation id="4903325570808402486">Synkroniser Vivaldi-innstillinger (ikke alle innstillinger er synkroniserbare ennå)</translation>
 <translation id="4929196061847506605">Kraftig. Personlig. Privat.</translation>
 <translation id="4936710149174207991">Ikke synkronisert</translation>
@@ -265,7 +261,6 @@ blokkert</translation>
 <translation id="6193995664633100765">Indisk (<ph name="ORIGIN" />)</translation>
 <translation id="6224086034182508647">Valg for utseende for nettsteder</translation>
 <translation id="6365929278691047681">Tysk (<ph name="ORIGIN" />)</translation>
-<translation id="6404511346730675251">Rediger bokmerke</translation>
 <translation id="6406506848690869874">Sync</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> valgt</translation>
 <translation id="6468130661190228905">Beklager, men det ser ut som om du må vente litt til før du kan bli med i fellesskapet. Vi krever at medlemmene er minst 16 år gamle før de får bli med.</translation>
@@ -276,7 +271,6 @@ blokkert</translation>
 <translation id="659351303388691480">Fjern surfedata...</translation>
 <translation id="6602272356389933803">Utseende og tema</translation>
 <translation id="6614744450826097546">Reklamedetaljer</translation>
-<translation id="6627583120233659107">Rediger mappe</translation>
 <translation id="6631760746795162665">Colombiansk (<ph name="ORIGIN" />)</translation>
 <translation id="6639866709520319699">Sporing og reklame er blokkert. Noen nettsteder kan slutte å fungere korrekt.</translation>
 <translation id="6642196070615520677">Tilbakestill eksterne synkroniserte data</translation>
@@ -310,7 +304,6 @@ blokkert</translation>
 <translation id="7210372243397300116">Søke i mappe</translation>
 <translation id="7215420652436283416">Etter adresse</translation>
 <translation id="7229439505896086266">Opprett notat</translation>
-<translation id="7299721129597238157">Slett bokmerke</translation>
 <translation id="7311118006561484338">Etter tittel</translation>
 <translation id="7325310788570036874">Fortsett med å surfe smartere, smidigere og raskere med Vivaldi.</translation>
 <translation id="734110743815267231">Hebraisk (<ph name="ORIGIN" />)</translation>

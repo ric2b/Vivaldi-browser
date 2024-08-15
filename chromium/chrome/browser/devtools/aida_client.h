@@ -41,7 +41,17 @@ class AidaClient {
   static constexpr std::string_view kRegisterClientEventUrlPath =
       "/v1:registerClientEvent";
 
-  static bool CanUseAida(Profile* profile);
+  struct BlockedReason {
+    bool blocked = false;
+    bool blocked_by_age = false;
+    bool blocked_by_enterprise_policy = false;
+    bool blocked_by_feature_flag = false;
+    bool blocked_by_geo = false;
+    bool blocked_by_rollout = false;
+    bool disallow_logging = false;
+  };
+
+  static BlockedReason CanUseAida(Profile* profile);
 
  private:
   void PrepareAidaRequest(

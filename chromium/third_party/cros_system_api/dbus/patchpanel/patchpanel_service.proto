@@ -13,6 +13,8 @@ option optimize_for = LITE_RUNTIME;
 package patchpanel;
 option go_package = "go.chromium.org/chromiumos/system_api/patchpanel_proto";
 
+import "traffic_annotation.proto";
+
 // Notification that the ARC++ container is starting up.
 // This is informational. The ARC boot and setup sequences do not require
 // any information or permission from networking to continue.
@@ -725,6 +727,8 @@ enum DownstreamNetworkResult {
   INVALID_REQUEST = 7;
 }
 
+// Describes a network created by Patchpanel for a CreateTetheredNetwork or
+// CreateLocalOnlyNetwork request.
 message DownstreamNetwork {
   // Name of the network interface on which the downstream L3 network was
   // created.
@@ -739,6 +743,10 @@ message DownstreamNetwork {
   // network and the next hop address for remote clients connected to the
   // network. Empty if the upstream network does not have IPv4 connectivity.
   bytes ipv4_gateway_addr = 3;
+
+  // The unique network id assigned by patchpanel to the downstream network.
+  // TODO(b/322083502): Add a link/description to explain network_id.
+  int32 network_id = 4;
 }
 
 // Request to create a L3 logical network on a network interface and share
@@ -810,6 +818,10 @@ message TetheredNetworkRequest {
 message TetheredNetworkResponse {
   // Status of the request.
   DownstreamNetworkResult response_code = 1;
+
+  // Describes the network created by patchpanel for the CreateTetheredNetwork
+  // request.
+  DownstreamNetwork downstream_network = 2;
 }
 
 // Request to create an isolated L3 logical network on a network interface like
@@ -841,6 +853,10 @@ message LocalOnlyNetworkRequest {
 message LocalOnlyNetworkResponse {
   // Status of the request.
   DownstreamNetworkResult response_code = 1;
+
+  // Describes the network created by patchpanel for the CreateTetheredNetwork
+  // request.
+  DownstreamNetwork downstream_network = 2;
 }
 
 // GetDownstreamNetworkInfo request object to obtain the IP configuration of a
@@ -1114,6 +1130,9 @@ message TagSocketRequest {
   }
 
   VpnRoutingPolicy vpn_policy = 2;
+
+  // Semantic description of the traffic that will go through the socket.
+  optional traffic_annotation.TrafficAnnotation traffic_annotation = 3;
 }
 
 // Response to a TagSocketRequest. Note that on failure, patchpanel may leave

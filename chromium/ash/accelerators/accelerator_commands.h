@@ -115,6 +115,9 @@ ASH_EXPORT bool CanWindowSnap();
 // Accelerator commands.
 // Note: These functions should be independent and not depend on ui::Accelerator
 
+// Runs the assigned accessibility action.
+ASH_EXPORT void AccessibilityAction();
+
 // Activates desk on the left/right.
 ASH_EXPORT void ActivateDesk(bool activate_left);
 
@@ -275,9 +278,6 @@ ASH_EXPORT void ShiftPrimaryDisplay();
 // `accelerator_timestamp` is the timestamp associated with the accelerator that
 // triggered the emoji picker.
 ASH_EXPORT void ShowEmojiPicker(base::TimeTicks accelerator_timestamp);
-
-// Sees keyboard shortcut helper.
-ASH_EXPORT void ShowKeyboardShortcutViewer();
 
 // Opens Shortcut Customization.
 ASH_EXPORT void ShowShortcutCustomizationApp();

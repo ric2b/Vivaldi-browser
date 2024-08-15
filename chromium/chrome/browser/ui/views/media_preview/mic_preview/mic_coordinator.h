@@ -30,7 +30,7 @@ class MicCoordinator {
                  const std::vector<std::string>& eligible_mic_ids,
                  PrefService& prefs,
                  bool allow_device_selection,
-                 media_preview_metrics::Context metrics_context);
+                 const media_preview_metrics::Context& metrics_context);
   MicCoordinator(const MicCoordinator&) = delete;
   MicCoordinator& operator=(const MicCoordinator&) = delete;
   ~MicCoordinator();
@@ -67,9 +67,11 @@ class MicCoordinator {
   std::vector<media::AudioDeviceDescription> eligible_device_infos_;
   raw_ptr<PrefService> prefs_;
   const bool allow_device_selection_;
-  media_preview_metrics::Context metrics_context_;
+  const media_preview_metrics::Context metrics_context_;
   std::optional<MicViewController> mic_view_controller_;
   std::optional<AudioStreamCoordinator> audio_stream_coordinator_;
+
+  base::WeakPtrFactory<MicCoordinator> weak_factory_{this};
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_MEDIA_PREVIEW_MIC_PREVIEW_MIC_COORDINATOR_H_

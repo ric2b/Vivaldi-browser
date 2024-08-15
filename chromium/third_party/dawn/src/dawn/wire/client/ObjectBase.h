@@ -63,8 +63,8 @@ class ObjectBase : public LinkNode<ObjectBase> {
     ObjectGeneration GetWireGeneration() const;
     Client* GetClient() const;
 
-    void Reference();
-    void Release();
+    void AddRef();
+    uint32_t Release();
 
   protected:
     uint32_t GetRefcount() const { return mRefcount; }

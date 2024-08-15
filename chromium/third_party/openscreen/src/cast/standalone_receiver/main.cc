@@ -111,15 +111,6 @@ void RunCastService(TaskRunnerImpl* runner, CastService::Configuration config) {
 }
 
 int RunStandaloneReceiver(int argc, char* argv[]) {
-#if !defined(CAST_ALLOW_DEVELOPER_CERTIFICATE)
-  OSP_LOG_FATAL
-      << "It compiled! However cast_receiver currently only supports using a "
-         "passed-in certificate and private key, and must be built with "
-         "cast_allow_developer_certificate=true set in the GN args to "
-         "actually do anything interesting.";
-  return 1;
-#endif
-
 #if !defined(CAST_STANDALONE_RECEIVER_HAVE_EXTERNAL_LIBS)
   OSP_LOG_INFO
       << "Note: compiled without external libs. The dummy player will "

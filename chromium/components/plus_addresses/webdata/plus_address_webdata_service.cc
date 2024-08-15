@@ -9,10 +9,13 @@
 #include "base/check.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/location.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/task/bind_post_task.h"
 #include "components/plus_addresses/plus_address_types.h"
 #include "components/plus_addresses/webdata/plus_address_sync_bridge.h"
+#include "components/plus_addresses/webdata/plus_address_sync_util.h"
 #include "components/plus_addresses/webdata/plus_address_table.h"
 #include "components/sync/base/features.h"
 #include "components/sync/base/model_type.h"
@@ -31,25 +34,40 @@ PlusAddressWebDataService::PlusAddressWebDataService(
     scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
     scoped_refptr<base::SequencedTaskRunner> db_task_runner)
     : WebDataServiceBase(wdbs, ui_task_runner),
-      ui_task_runner_(ui_task_runner),
-      db_task_runner_(db_task_runner) {
+      ui_task_runner_(std::move(ui_task_runner)),
+      db_task_runner_(std::move(db_task_runner)) {
   if (base::FeatureList::IsEnabled(syncer::kSyncPlusAddress)) {
     sync_bridge_wrapper_ =
-        base::MakeRefCounted<SyncBridgeDBSequenceWrapper>(db_task_runner);
+        base::MakeRefCounted<SyncBridgeDBSequenceWrapper>(db_task_runner_);
+
+    // When sync changes `PlusAddressTable`, observers on the `ui_task_runner_`
+    // are notified. To avoid round trips to the `db_task_runner_`, this
+    // notification includes the set of addition and removal operations
+    // committed to the database from the sync bridge.
+    PlusAddressSyncBridge::DataChangedBySyncCallback notify_sync_observers =
+        base::BindPostTask(
+            ui_task_runner_,
+            base::BindRepeating(
+                &PlusAddressWebDataService::NotifyOnWebDataChangedBySync,
+                weak_factory_.GetWeakPtr()));
+
     // The `state->sync_bridge` can only be used on the sequence that it
     // was constructed on. Ensure it is created on the `db_task_runner_`.
     db_task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(
             [](scoped_refptr<WebDatabaseBackend> db_backend,
+               PlusAddressSyncBridge::DataChangedBySyncCallback
+                   notify_observers,
                SyncBridgeDBSequenceWrapper* wrapper) {
               wrapper->sync_bridge = std::make_unique<PlusAddressSyncBridge>(
                   std::make_unique<syncer::ClientTagBasedModelTypeProcessor>(
                       syncer::PLUS_ADDRESS,
                       /*dump_stack=*/base::DoNothing()),
-                  std::move(db_backend));
+                  std::move(db_backend), std::move(notify_observers));
             },
-            wdbs_->GetBackend(), base::RetainedRef(sync_bridge_wrapper_)));
+            wdbs_->GetBackend(), std::move(notify_sync_observers),
+            base::RetainedRef(sync_bridge_wrapper_)));
   }
 }
 
@@ -77,11 +95,13 @@ void PlusAddressWebDataService::GetPlusProfiles(
       consumer);
 }
 
-void PlusAddressWebDataService::AddPlusProfile(const PlusProfile& profile) {
+void PlusAddressWebDataService::AddOrUpdatePlusProfile(
+    const PlusProfile& profile) {
   CHECK(ui_task_runner_->RunsTasksInCurrentSequence());
   auto db_task = base::BindOnce(
       [](const PlusProfile& profile, WebDatabase* db) {
-        return PlusAddressTable::FromWebDatabase(db)->AddPlusProfile(profile)
+        return PlusAddressTable::FromWebDatabase(db)->AddOrUpdatePlusProfile(
+                   profile)
                    ? WebDatabase::COMMIT_NEEDED
                    : WebDatabase::COMMIT_NOT_NEEDED;
       },
@@ -115,6 +135,18 @@ PlusAddressWebDataService::GetSyncControllerDelegate() {
                                  ->GetControllerDelegate();
                            },
                            base::RetainedRef(sync_bridge_wrapper_)));
+}
+
+void PlusAddressWebDataService::NotifyOnWebDataChangedBySync(
+    std::vector<PlusAddressDataChange> changes) {
+  CHECK(ui_task_runner_->RunsTasksInCurrentSequence());
+  for (Observer& o : observers_) {
+    o.OnWebDataChangedBySync(changes);
+  }
+}
+
+bool IsSyncingPlusAddresses() {
+  return base::FeatureList::IsEnabled(syncer::kSyncPlusAddress);
 }
 
 }  // namespace plus_addresses

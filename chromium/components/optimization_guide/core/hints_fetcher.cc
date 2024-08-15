@@ -320,6 +320,18 @@ bool HintsFetcher::FetchOptimizationGuideServiceHints(
       "OptimizationGuide.HintsFetcher.GetHintsRequest.UrlCount",
       valid_urls.size());
 
+  // Record histogram variants based on request context.
+  // Histogram macro doesn't allow dynamic string. Use function.
+  base::UmaHistogramCounts100(
+      "OptimizationGuide.HintsFetcher.GetHintsRequest.HostCount." +
+          GetStringNameForRequestContext(request_context_),
+      filtered_hosts.size());
+
+  base::UmaHistogramCounts100(
+      "OptimizationGuide.HintsFetcher.GetHintsRequest.UrlCount." +
+          GetStringNameForRequestContext(request_context_),
+      valid_urls.size());
+
   // It's safe to use |base::Unretained(this)| here because |this| owns
   // |active_url_loader_| and the callback will be canceled if
   // |active_url_loader_| is destroyed.
@@ -405,8 +417,9 @@ void HintsFetcher::UpdateHostsSuccessfullyFetched(
   // Remove any expired hosts.
   std::vector<std::string> entries_to_remove;
   for (auto it : *hosts_fetched_list) {
-    if (base::Time::FromDeltaSinceWindowsEpoch(
-            base::Seconds(it.second.GetDouble())) < time_clock_->Now()) {
+    auto seconds = it.second.GetIfDouble();
+    if (!seconds || base::Time::FromDeltaSinceWindowsEpoch(
+                        base::Seconds(*seconds)) < time_clock_->Now()) {
       entries_to_remove.emplace_back(it.first);
     }
   }

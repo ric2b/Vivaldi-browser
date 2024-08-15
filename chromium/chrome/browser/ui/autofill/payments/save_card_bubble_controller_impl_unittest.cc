@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.h"
 
 #include <stddef.h>
+
 #include <string>
 #include <tuple>
 #include <utility>
@@ -19,6 +20,7 @@
 #include "base/values.h"
 #include "chrome/browser/ui/autofill/autofill_bubble_base.h"
 #include "chrome/browser/ui/autofill/payments/save_card_ui.h"
+#include "chrome/browser/ui/autofill/payments/save_payment_icon_controller.h"
 #include "chrome/browser/ui/autofill/test/test_autofill_bubble_handler.h"
 #include "chrome/browser/ui/hats/mock_trust_safety_sentiment_service.h"
 #include "chrome/browser/ui/hats/trust_safety_sentiment_service_factory.h"
@@ -155,10 +157,6 @@ class TestSaveCardBubbleControllerImpl : public SaveCardBubbleControllerImpl {
   explicit TestSaveCardBubbleControllerImpl(content::WebContents* web_contents)
       : SaveCardBubbleControllerImpl(web_contents) {}
 
-  void set_security_level(security_state::SecurityLevel security_level) {
-    security_level_ = security_level;
-  }
-
   void SimulateNavigation() {
     content::MockNavigationHandle handle;
     handle.set_has_committed(true);
@@ -166,17 +164,9 @@ class TestSaveCardBubbleControllerImpl : public SaveCardBubbleControllerImpl {
   }
 
  protected:
-  security_state::SecurityLevel GetSecurityLevel() const override {
-    return security_level_;
-  }
-
   bool IsPaymentsSyncTransportEnabledWithoutSyncFeature() const override {
     return false;
   }
-
- private:
-  security_state::SecurityLevel security_level_ =
-      security_state::SecurityLevel::NONE;
 };
 
 class SaveCardBubbleControllerImplTest : public BrowserWithTestWindowTest {
@@ -607,18 +597,6 @@ TEST_P(SaveCardBubbleLoggingTest, Metrics_Unknown) {
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveCreditCardPromptResult" + GetHistogramNameSuffix(),
       autofill_metrics::SaveCardPromptResult::kUnknown, 1);
-}
-
-TEST_P(SaveCardBubbleLoggingTest, Metrics_SecurityLevel) {
-  base::HistogramTester histogram_tester;
-  controller()->set_security_level(security_state::SecurityLevel::SECURE);
-  TriggerFlow();
-
-  int expected_count = (show_type_ == "Reshows") ? 2 : 1;
-
-  histogram_tester.ExpectUniqueSample(
-      "Autofill.SaveCreditCardPromptOffer." + save_destination_ + ".SECURE",
-      autofill_metrics::SaveCardPromptOffer::kShown, expected_count);
 }
 
 TEST_P(SaveCardBubbleLoggingTest, Metrics_LegalMessageLinkedClicked) {
@@ -1057,21 +1035,26 @@ class SaveCardBubbleControllerImplTestWithLoadingAndConfirmation
 // callback.
 TEST_F(SaveCardBubbleControllerImplTestWithLoadingAndConfirmation,
        Upload_OnSave_ShowConfirmationBubbleView) {
+  using enum SavePaymentIconController::PaymentBubbleType;
+
   ShowUploadBubble();
   EXPECT_EQ(controller()->GetBubbleType(), BubbleType::UPLOAD_SAVE);
   EXPECT_TRUE(controller()->IsIconVisible());
   EXPECT_TRUE(IsSaveCardBubbleVisible());
+  EXPECT_EQ(controller()->GetPaymentBubbleType(), kCreditCard);
 
   controller()->OnSaveButton({});
   EXPECT_EQ(controller()->GetBubbleType(), BubbleType::UPLOAD_IN_PROGRESS);
   EXPECT_TRUE(IsSaveCardBubbleVisible());
   EXPECT_FALSE(IsConfirmationBubbleVisible());
+  EXPECT_EQ(controller()->GetPaymentBubbleType(), kCreditCard);
 
   controller()->ShowConfirmationBubbleView(/*card_saved=*/true);
   EXPECT_EQ(controller()->GetBubbleType(), BubbleType::UPLOAD_COMPLETED);
   EXPECT_FALSE(IsSaveCardBubbleVisible());
   EXPECT_TRUE(IsConfirmationBubbleVisible());
   EXPECT_TRUE(controller()->GetConfirmationUiParams().is_success);
+  EXPECT_EQ(controller()->GetPaymentBubbleType(), kCreditCardSaveConfirmation);
 
   controller()->HideSaveCardBubble();
   EXPECT_EQ(controller()->GetBubbleType(), BubbleType::INACTIVE);

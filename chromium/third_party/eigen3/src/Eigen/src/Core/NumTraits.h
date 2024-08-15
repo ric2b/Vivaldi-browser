@@ -101,10 +101,10 @@ namespace numext {
 template <typename Tgt, typename Src>
 EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC Tgt bit_cast(const Src& src) {
   // The behaviour of memcpy is not specified for non-trivially copyable types
-  EIGEN_STATIC_ASSERT(std::is_trivially_copyable<Src>::value, THIS_TYPE_IS_NOT_SUPPORTED);
+  EIGEN_STATIC_ASSERT(std::is_trivially_copyable<Src>::value, THIS_TYPE_IS_NOT_SUPPORTED)
   EIGEN_STATIC_ASSERT(std::is_trivially_copyable<Tgt>::value && std::is_default_constructible<Tgt>::value,
-                      THIS_TYPE_IS_NOT_SUPPORTED);
-  EIGEN_STATIC_ASSERT(sizeof(Src) == sizeof(Tgt), THIS_TYPE_IS_NOT_SUPPORTED);
+                      THIS_TYPE_IS_NOT_SUPPORTED)
+  EIGEN_STATIC_ASSERT(sizeof(Src) == sizeof(Tgt), THIS_TYPE_IS_NOT_SUPPORTED)
 
   Tgt tgt;
   // Load src into registers first. This allows the memcpy to be elided by CUDA.

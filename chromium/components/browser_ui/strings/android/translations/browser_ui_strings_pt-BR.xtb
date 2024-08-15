@@ -31,7 +31,6 @@
 <translation id="1620510694547887537">Câmera</translation>
 <translation id="1633720957382884102">Sites relacionados</translation>
 <translation id="1644574205037202324">Histórico</translation>
-<translation id="1647582022260550163">Tem certeza de que quer redefinir as permissões e apagar os cookies e dados do site?</translation>
 <translation id="1652197001188145583">Quando essa configuração está ativada, os sites podem pedir para usar dispositivos NFC. Quando está desativada, os sites não podem usar dispositivos NFC.</translation>
 <translation id="1660204651932907780">Permitir o áudio dos sites (recomendado)</translation>
 <translation id="1677097821151855053">Os cookies e outros dados do site são usados para lembrar de você, por exemplo, para conectar sua conta ou personalizar anúncios. Para gerenciar os cookies de todos os sites, acesse <ph name="BEGIN_LINK" />Configurações<ph name="END_LINK" />.</translation>
@@ -69,7 +68,6 @@
 <translation id="2241587408274973373">Cards da página "Nova guia"</translation>
 <translation id="2241634353105152135">Apenas uma vez</translation>
 <translation id="2253414712144136228">Remover <ph name="NAME_OF_LIST_ITEM" /></translation>
-<translation id="2253989982043948086">{NUM_SELECTED,plural, =1{1 site bloqueado}one{# site bloqueado}other{# sites bloqueados}}</translation>
 <translation id="228293613124499805">A maioria dos sites que você visita provavelmente salva dados no seu dispositivo, muitas vezes para melhorar a experiência ao salvar suas preferências ou as informações que você compartilha com o site. Recomendamos manter essa configuração ativada.</translation>
 <translation id="2289270750774289114">Perguntar quando um site quer descobrir dispositivos Bluetooth nas proximidades (recomendado)</translation>
 <translation id="2315043854645842844">A seleção de certificado do cliente não é compatível com o sistema operacional.</translation>
@@ -94,7 +92,6 @@
 <translation id="2501278716633472235">Voltar</translation>
 <translation id="2546283357679194313">Cookies e dados do site</translation>
 <translation id="2550801787432930915">Card de redução no preço</translation>
-<translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{1 cookie bloqueado}one{# cookie bloqueado}other{# cookies bloqueados}}</translation>
 <translation id="2570922361219980984">O acesso ao local também está desativado para este dispositivo. Ative-o nas <ph name="BEGIN_LINK" />Configurações do Android<ph name="END_LINK" />.</translation>
 <translation id="257931822824936280">Visualização expandida. Clique para recolher</translation>
 <translation id="2586657967955657006">Área de transferência</translation>
@@ -124,7 +121,6 @@
 <translation id="3008272652534848354">Redefinir permissões</translation>
 <translation id="301521992641321250">Bloqueada automaticamente</translation>
 <translation id="3069226013421428034">Permita o login de terceiros em um site específico.</translation>
-<translation id="3082992102194421695">{COUNT,plural, =1{Expira amanhã}one{Expira em # dia}other{Expira em # dias}}</translation>
 <translation id="310297983047869047">Slide anterior</translation>
 <translation id="3109724472072898302">Recolhido</translation>
 <translation id="3114012059975132928">Player de vídeo</translation>
@@ -136,6 +132,7 @@
 <translation id="3198916472715691905"><ph name="STORAGE_AMOUNT" /> de dados armazenados</translation>
 <translation id="321187648315454507">Para permitir que o app <ph name="APP_NAME" /> envie notificações, também é necessário ativá-las nas <ph name="BEGIN_LINK" />configurações do Android<ph name="END_LINK" />.</translation>
 <translation id="3227137524299004712">Microfone</translation>
+<translation id="3232293466644486101">Excluir dados de navegação…</translation>
 <translation id="3242646949159196181">Quando essa configuração está ativada, os sites podem tocar sons. Quando está desativada, os sites não podem tocar sons.</translation>
 <translation id="3277252321222022663">Permitir que sites acessem os sensores (recomendado)</translation>
 <translation id="3285500645985761267">Permitir que sites relacionados vejam sua atividade no grupo</translation>
@@ -177,6 +174,7 @@
 <translation id="3895926599014793903">Forçar zoom</translation>
 <translation id="3908288065506437185">Bloquear cookies de terceiros no modo de navegação anônima</translation>
 <translation id="3918378745482005425">É possível que alguns recursos não funcionem. Os sites relacionados ainda podem usar cookies de terceiros.</translation>
+<translation id="3933121352599513978">Recolher solicitações indesejadas (recomendado)</translation>
 <translation id="3955193568934677022">Permitir que os sites mostrem conteúdo protegido (recomendado)</translation>
 <translation id="3967822245660637423">Download concluído</translation>
 <translation id="3974105241379491420">Os sites podem pedir para usar informações que salvaram sobre você</translation>
@@ -198,7 +196,9 @@
 <translation id="4278390842282768270">Permitido</translation>
 <translation id="429312253194641664">Um site está com mídia aberta</translation>
 <translation id="42981349822642051">Expandir</translation>
+<translation id="4336219115486912529">{COUNT,plural, =1{Expira amanhã}one{Expira em # dia}other{Expira em # dias}}</translation>
 <translation id="4336566011000459927">O Chrome vai limitar os cookies de novo hoje</translation>
+<translation id="4336836404251800362"><ph name="RECENCY" /> <ph name="SEPARATOR" /> Sua última guia</translation>
 <translation id="4338831206024587507">Todos os sites em <ph name="DOMAIN" /></translation>
 <translation id="4402755511846832236">Impedir que sites saibam quando você está usando este dispositivo</translation>
 <translation id="4412992751769744546">Permitir cookies de terceiros</translation>
@@ -289,6 +289,7 @@
 <translation id="5853982612236235577">Quando essa configuração está ativada, os sites podem pedir para enviar notificações. Quando está desativada, os sites não podem enviar notificações.</translation>
 <translation id="5860033963881614850">Desativada</translation>
 <translation id="5876056640971328065">Pausar vídeo</translation>
+<translation id="5877248419911025165">Fechar todas as solicitações</translation>
 <translation id="5884085660368669834">Preferência do site</translation>
 <translation id="5887687176710214216">Última visita: ontem</translation>
 <translation id="5916664084637901428">Ativada</translation>
@@ -303,9 +304,11 @@
 <translation id="6015775454662021376">Controle o acesso deste site ao seu dispositivo</translation>
 <translation id="6040143037577758943">Fechar</translation>
 <translation id="6042308850641462728">Mais</translation>
+<translation id="6060464773477604108"><ph name="HOST_NAME" /> <ph name="SEPARATOR1" /> <ph name="RECENCY" /> <ph name="SEPARATOR2" /> Sua última guia</translation>
 <translation id="6064125863973209585">Downloads concluídos</translation>
 <translation id="6071501408666570960">Sua conta pode ser desconectada deste site</translation>
 <translation id="6120483543004435978">Quando essa configuração está ativada, os sites podem pedir para saber quando você está usando o dispositivo ativamente. Quando está desativada, os sites não conseguem saber quando você está usando o dispositivo ativamente.</translation>
+<translation id="6140839633433422817">Tem certeza de que quer redefinir as permissões e excluir os cookies e dados do site?</translation>
 <translation id="6165508094623778733">Saiba mais</translation>
 <translation id="6171020522141473435">Quando essa configuração está ativada, os sites podem pedir para usar dispositivos Bluetooth. Quando está desativada, os sites não podem usar dispositivos Bluetooth.</translation>
 <translation id="6177111841848151710">Bloqueado para o mecanismo de pesquisa atual</translation>
@@ -339,6 +342,7 @@
 <translation id="6545864417968258051">Busca por Bluetooth</translation>
 <translation id="6552800053856095716">{PERMISSIONS_SUMMARY_BLOCKED,plural, =1{Bloqueadas: <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> e mais <ph name="NUM_MORE" />}one{Bloqueadas: <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> e mais <ph name="NUM_MORE" />}other{Bloqueadas: <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> e mais <ph name="NUM_MORE" />}}</translation>
 <translation id="6554732001434021288">Última visita: <ph name="NUM_DAYS" /> dias atrás</translation>
+<translation id="656065428026159829">Ver mais</translation>
 <translation id="6561560012278703671">Usar mensagens mais silenciosas (bloqueia notificações que interrompem você)</translation>
 <translation id="6593061639179217415">Para computador</translation>
 <translation id="6608650720463149374"><ph name="GIGABYTES" /> GB</translation>
@@ -399,7 +403,6 @@
 <translation id="7561196759112975576">Sempre</translation>
 <translation id="757524316907819857">Impedir que sites mostrem conteúdo protegido</translation>
 <translation id="7594634374516752650">Conectado a um dispositivo Bluetooth</translation>
-<translation id="7641339528570811325">Remover dados de navegação…</translation>
 <translation id="7649070708921625228">Ajuda</translation>
 <translation id="7658239707568436148">Cancelar</translation>
 <translation id="7667547420449112975">O Mágico de Oz</translation>
@@ -423,6 +426,7 @@
 <translation id="7986741934819883144">Selecione um contato</translation>
 <translation id="7990211076305263060">Quando essa configuração está ativada, os sites podem pedir para usar o microfone. Quando está desativada, os sites não podem usar o microfone.</translation>
 <translation id="8007176423574883786">Desativado neste dispositivo</translation>
+<translation id="8009579582995973057"><ph name="HOST_NAME" /> <ph name="SEPARATOR1" /> <ph name="RECENCY" /> <ph name="SEPARATOR2" /> De <ph name="FROM_DEVICE" /></translation>
 <translation id="802154636333426148">Falha no download</translation>
 <translation id="8042586301629853791">Ordenar por:</translation>
 <translation id="8067883171444229417">Assistir vídeo</translation>
@@ -457,7 +461,6 @@
 <translation id="8441146129660941386">Voltar</translation>
 <translation id="8444433999583714703">Para permitir que o app <ph name="APP_NAME" /> acesse seu local, ative-o também nas <ph name="BEGIN_LINK" />configurações do Android<ph name="END_LINK" />.</translation>
 <translation id="8447861592752582886">Revogar permissão do dispositivo</translation>
-<translation id="8451050538944905715">{NUM_SELECTED,plural, =1{1 cookie em uso}one{# cookie em uso}other{# cookies em uso}}</translation>
 <translation id="8487700953926739672">Disponível off-line</translation>
 <translation id="848952951823693243">Sempre ver a versão para dispositivos móveis</translation>
 <translation id="8499083585497694743">Ativar microfone</translation>
@@ -478,7 +481,6 @@
 <translation id="8721719390026067591">Quando essa configuração está ativada, os sites podem pedir para procurar dispositivos Bluetooth. Quando está desativada, os sites não podem procurar dispositivos Bluetooth.</translation>
 <translation id="8725066075913043281">Tentar novamente</translation>
 <translation id="8730621377337864115">Concluir</translation>
-<translation id="8736193154595564524">{NUM_SELECTED,plural, =1{1 site permitido}one{# site permitido}other{# sites permitidos}}</translation>
 <translation id="8751914237388039244">Selecione uma imagem</translation>
 <translation id="8800034312320686233">Site indisponível?</translation>
 <translation id="8801436777607969138">Bloquear JavaScript para um site específico.</translation>
@@ -497,6 +499,7 @@
 <translation id="8959122750345127698">A Navegação GPS está inacessível: <ph name="URL" /></translation>
 <translation id="8986362086234534611">Esquecer</translation>
 <translation id="8990043154272859344">Sua conta vai ser desconectada de todos os sites</translation>
+<translation id="8993853206419610596">Abrir todas as solicitações</translation>
 <translation id="9002538116239926534">Quando essa configuração está ativada, os sites podem salvar dados no seu dispositivo. Quando está desativada, os sites não podem salvar dados no seu dispositivo.</translation>
 <translation id="9011903857143958461"><ph name="SITE_NAME" /> permitido</translation>
 <translation id="9019902583201351841">Gerenciado pelos seus pais</translation>

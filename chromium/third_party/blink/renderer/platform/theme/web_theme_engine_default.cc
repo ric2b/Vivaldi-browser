@@ -171,9 +171,6 @@ static ui::NativeTheme::ExtraParams GetNativeThemeExtraParams(
       ui::NativeTheme::ScrollbarThumbExtraParams native_scrollbar_thumb;
       const auto& scrollbar_thumb =
           absl::get<WebThemeEngine::ScrollbarThumbExtraParams>(*extra_params);
-      native_scrollbar_thumb.scrollbar_theme =
-          NativeThemeScrollbarOverlayColorTheme(
-              scrollbar_thumb.scrollbar_theme);
       native_scrollbar_thumb.thumb_color = scrollbar_thumb.thumb_color;
       native_scrollbar_thumb.is_thumb_minimal_mode =
           scrollbar_thumb.is_thumb_minimal_mode;
@@ -241,15 +238,15 @@ void WebThemeEngineDefault::Paint(
     const gfx::Rect& rect,
     const WebThemeEngine::ExtraParams* extra_params,
     mojom::ColorScheme color_scheme,
+    bool in_forced_colors,
     const ui::ColorProvider* color_provider,
     const std::optional<SkColor>& accent_color) {
   ui::NativeTheme::ExtraParams native_theme_extra_params =
       GetNativeThemeExtraParams(part, state, extra_params);
-
   ui::NativeTheme::GetInstanceForWeb()->Paint(
       canvas, color_provider, NativeThemePart(part), NativeThemeState(state),
       rect, native_theme_extra_params, NativeColorScheme(color_scheme),
-      accent_color);
+      in_forced_colors, accent_color);
 }
 
 void WebThemeEngineDefault::GetOverlayScrollbarStyle(ScrollbarStyle* style) {
@@ -306,42 +303,5 @@ void WebThemeEngineDefault::cacheScrollBarMetrics(
   g_horizontal_arrow_bitmap_width = horizontal_arrow_bitmap_width;
 }
 #endif
-
-ForcedColors WebThemeEngineDefault::GetForcedColors() const {
-  return ui::NativeTheme::GetInstanceForWeb()->InForcedColorsMode()
-             ? ForcedColors::kActive
-             : ForcedColors::kNone;
-}
-
-// TODO(crbug.com/40779801): Remove this when we use the forced colors web
-// setting in Blink.
-void WebThemeEngineDefault::OverrideForcedColorsTheme() {
-  ui::NativeTheme::GetInstanceForWeb()->UpdateSystemColorInfo(false, true);
-}
-
-void WebThemeEngineDefault::SetForcedColors(const ForcedColors forced_colors) {
-  ui::NativeTheme::GetInstanceForWeb()->set_forced_colors(
-      forced_colors == ForcedColors::kActive);
-}
-
-// TODO(crbug.com/40779801): Remove this when we use the forced colors web
-// setting in Blink.
-void WebThemeEngineDefault::ResetToSystemColors(
-    SystemColorInfoState system_color_info_state) {
-  ui::NativeTheme::GetInstanceForWeb()->UpdateSystemColorInfo(
-      system_color_info_state.is_dark_mode,
-      system_color_info_state.forced_colors);
-}
-
-WebThemeEngine::SystemColorInfoState
-WebThemeEngineDefault::GetSystemColorInfo() {
-  WebThemeEngine::SystemColorInfoState state;
-  state.is_dark_mode =
-      ui::NativeTheme::GetInstanceForWeb()->ShouldUseDarkColors();
-  state.forced_colors =
-      ui::NativeTheme::GetInstanceForWeb()->InForcedColorsMode();
-
-  return state;
-}
 
 }  // namespace blink

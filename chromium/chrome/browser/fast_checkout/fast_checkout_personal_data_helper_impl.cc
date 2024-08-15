@@ -11,6 +11,7 @@
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/autofill/core/browser/geo/autofill_country.h"
+#include "components/autofill/core/browser/payments_data_manager.h"
 
 FastCheckoutPersonalDataHelperImpl::FastCheckoutPersonalDataHelperImpl(
     content::WebContents* web_contents)
@@ -28,13 +29,17 @@ FastCheckoutPersonalDataHelperImpl::GetPersonalDataManager() const {
 
 std::vector<autofill::AutofillProfile*>
 FastCheckoutPersonalDataHelperImpl::GetProfilesToSuggest() const {
-  return GetPersonalDataManager()->GetProfilesToSuggest();
+  return GetPersonalDataManager()
+      ->address_data_manager()
+      .GetProfilesToSuggest();
 }
 
 std::vector<autofill::CreditCard*>
 FastCheckoutPersonalDataHelperImpl::GetCreditCardsToSuggest() const {
   std::vector<autofill::CreditCard*> cards_to_suggest =
-      GetPersonalDataManager()->GetCreditCardsToSuggest();
+      GetPersonalDataManager()
+          ->payments_data_manager()
+          .GetCreditCardsToSuggest();
   // Do not offer cards with empty number.
   std::erase_if(cards_to_suggest, [](const autofill::CreditCard* card) {
     return !card->HasRawInfo(autofill::CREDIT_CARD_NUMBER);
@@ -62,8 +67,9 @@ bool FastCheckoutPersonalDataHelperImpl::IsCompleteAddressProfile(
 
 std::vector<autofill::CreditCard*>
 FastCheckoutPersonalDataHelperImpl::GetValidCreditCards() const {
-  std::vector<autofill::CreditCard*> cards =
-      GetPersonalDataManager()->GetCreditCardsToSuggest();
+  std::vector<autofill::CreditCard*> cards = GetPersonalDataManager()
+                                                 ->payments_data_manager()
+                                                 .GetCreditCardsToSuggest();
   std::erase_if(cards, std::not_fn(&autofill::CreditCard::IsCompleteValidCard));
   return cards;
 }
@@ -73,7 +79,7 @@ FastCheckoutPersonalDataHelperImpl::GetValidAddressProfiles() const {
   autofill::PersonalDataManager* pdm = GetPersonalDataManager();
   // Trigger only if there is at least 1 complete address profile on file.
   std::vector<autofill::AutofillProfile*> profiles =
-      pdm->GetProfilesToSuggest();
+      pdm->address_data_manager().GetProfilesToSuggest();
 
   std::erase_if(profiles,
                 [&pdm, this](const autofill::AutofillProfile* profile) {

@@ -281,13 +281,9 @@ class PaintPreviewCaptureState {
     if (begin_composite_request->recording_map.empty())
       return nullptr;
 
-    auto read_only_proto =
-        ToReadOnlySharedMemory(std::move(map_and_proto.second));
-    if (!read_only_proto) {
-      VLOG(1) << "Failed to read proto to read-only shared memory.";
-      return nullptr;
-    }
-    begin_composite_request->proto = std::move(read_only_proto.value());
+    begin_composite_request->preview =
+        mojo_base::ProtoWrapper(std::move(map_and_proto.second));
+
     return begin_composite_request;
   }
 

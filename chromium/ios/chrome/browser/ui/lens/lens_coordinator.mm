@@ -32,6 +32,7 @@
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
+#import "ios/chrome/browser/ui/lens/features.h"
 #import "ios/chrome/browser/ui/lens/lens_availability.h"
 #import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
 #import "ios/chrome/browser/ui/lens/lens_modal_animator.h"
@@ -206,7 +207,8 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
   const bool isIncognito = browserState->IsOffTheRecord();
   LensConfiguration* configuration = [[LensConfiguration alloc] init];
   configuration.isIncognito = isIncognito;
-  configuration.ssoService = GetApplicationContext()->GetSSOService();
+  configuration.singleSignOnService =
+      GetApplicationContext()->GetSingleSignOnService();
   configuration.entrypoint = entrypoint;
 
   // Mark IPHs as completed.
@@ -248,7 +250,7 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
   UIViewController* viewController =
       [lensController inputSelectionViewController];
 
-  // TODO(crbug.com/1353430): the returned UIViewController
+  // TODO(crbug.com/40235185): the returned UIViewController
   // must not be nil, remove this check once the internal
   // implementation of the method is complete.
   if (!viewController) {
@@ -376,11 +378,26 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
 
 #pragma mark - CRWWebStateObserver methods
 
+- (void)webState:(web::WebState*)webState
+    didChangeLoadingProgress:(double)progress {
+  if (base::FeatureList::IsEnabled(kLensWebPageEarlyTransitionEnabled) &&
+      progress >= LensWebPageEarlyTransitionLoadingProgressThreshold()) {
+    [self transitionToLensWebPageWithWebState:webState];
+  }
+}
+
 - (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
+  [self transitionToLensWebPageWithWebState:webState];
+}
+
+// Triggers the dismissal of the Lens UI (LVF) and display of the Lens web page
+// load.
+- (void)transitionToLensWebPageWithWebState:(web::WebState*)webState {
   DCHECK_EQ(webState, self.loadingWebState);
-  // If the loaded page is a Lens Web page and we are expecting a Lens Web page
-  // load, dismiss the Lens UI.
-  if (self.lensWebPageLoadTriggeredFromInputSelection &&
+
+  // Check if the Lens UI has not already been dismissed, loaded page is a Lens
+  // Web page and we are expecting a Lens Web page load, dismiss the Lens UI.
+  if (self.viewController && self.lensWebPageLoadTriggeredFromInputSelection &&
       ios::provider::IsLensWebResultsURL(webState->GetLastCommittedURL())) {
     self.lensWebPageLoadTriggeredFromInputSelection = NO;
     self.loadingWebState = nil;

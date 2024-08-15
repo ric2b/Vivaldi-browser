@@ -6,7 +6,7 @@
 
 bool TabStripModel::IsVivPanel(int index) const {
   CHECK(ContainsIndex(index)) << index;
-  return contents_data_[index]->is_viv_panel();
+  return GetTabAtIndex(index)->is_viv_panel();
 }
 
 int TabStripModel::ConstrainVivaldiIndex(int index, bool is_viv_panel) const {
@@ -18,9 +18,9 @@ int TabStripModel::ConstrainVivaldiIndex(int index, bool is_viv_panel) const {
 
   // Find the first panel.
   for (int i = 0; i < count(); ++i) {
-    if (contents_data_[i]->is_viv_panel()) {
+    if (IsVivPanel(i)) {
       // The tab can't be placed among the panels.
-      return std::min(index, i);
+      return std::min(index, std::max(i, 0));
     }
   }
 

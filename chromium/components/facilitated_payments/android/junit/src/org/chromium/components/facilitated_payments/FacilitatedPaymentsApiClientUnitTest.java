@@ -13,6 +13,8 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Batch;
+import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.content_public.browser.RenderFrameHost;
 
 /** Tests for the facilitated payment API client. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -35,7 +37,7 @@ public class FacilitatedPaymentsApiClientUnitTest {
         public byte[] mClientToken;
 
         public boolean mIsPurchaseActionInvoked;
-        public boolean mIsPurchaseActionSuccessful;
+        public @PurchaseActionResult int mPurchaseActionResult;
 
         @Override
         public void onIsAvailable(boolean isAvailable) {
@@ -50,16 +52,17 @@ public class FacilitatedPaymentsApiClientUnitTest {
         }
 
         @Override
-        public void onPurchaseActionResult(boolean isPurchaseActionSuccessful) {
+        public void onPurchaseActionResultEnum(@PurchaseActionResult int purchaseActionResult) {
             mIsPurchaseActionInvoked = true;
-            mIsPurchaseActionSuccessful = isPurchaseActionSuccessful;
+            mPurchaseActionResult = purchaseActionResult;
         }
     }
 
     @Test
     public void apiIsNotAvailableByDefault() throws Exception {
         TestDelegate delegate = new TestDelegate();
-        FacilitatedPaymentsApiClient apiClient = FacilitatedPaymentsApiClient.create(delegate);
+        FacilitatedPaymentsApiClient apiClient =
+                FacilitatedPaymentsApiClient.create(/* renderFrameHost= */ null, delegate);
 
         apiClient.isAvailable();
 
@@ -70,7 +73,8 @@ public class FacilitatedPaymentsApiClientUnitTest {
     @Test
     public void cannotRetrieveClientTokenByDefault() throws Exception {
         TestDelegate delegate = new TestDelegate();
-        FacilitatedPaymentsApiClient apiClient = FacilitatedPaymentsApiClient.create(delegate);
+        FacilitatedPaymentsApiClient apiClient =
+                FacilitatedPaymentsApiClient.create(/* renderFrameHost= */ null, delegate);
 
         apiClient.getClientToken();
 
@@ -81,12 +85,14 @@ public class FacilitatedPaymentsApiClientUnitTest {
     @Test
     public void purchaseActionFailsByDefault() throws Exception {
         TestDelegate delegate = new TestDelegate();
-        FacilitatedPaymentsApiClient apiClient = FacilitatedPaymentsApiClient.create(delegate);
+        FacilitatedPaymentsApiClient apiClient =
+                FacilitatedPaymentsApiClient.create(/* renderFrameHost= */ null, delegate);
 
-        apiClient.invokePurchaseAction(new byte[] {'A', 'c', 't', 'i', 'o', 'n'});
+        apiClient.invokePurchaseAction(
+                /* primaryAccount= */ null, new byte[] {'A', 'c', 't', 'i', 'o', 'n'});
 
         Assert.assertTrue(delegate.mIsPurchaseActionInvoked);
-        Assert.assertFalse(delegate.mIsPurchaseActionSuccessful);
+        Assert.assertEquals(PurchaseActionResult.COULD_NOT_INVOKE, delegate.mPurchaseActionResult);
     }
 
     /** A fake implementation of the API client, which always succeeds. */
@@ -107,8 +113,8 @@ public class FacilitatedPaymentsApiClientUnitTest {
         }
 
         @Override
-        public void invokePurchaseAction(byte[] actionToken) {
-            mDelegate.onPurchaseActionResult(/* isPurchaseActionSuccessful= */ true);
+        public void invokePurchaseAction(CoreAccountInfo primaryAccount, byte[] actionToken) {
+            mDelegate.onPurchaseActionResultEnum(PurchaseActionResult.RESULT_OK);
         }
     }
 
@@ -116,7 +122,7 @@ public class FacilitatedPaymentsApiClientUnitTest {
     public class FakeApiClientFactory implements FacilitatedPaymentsApiClient.Factory {
         @Override
         public FacilitatedPaymentsApiClient factoryCreate(
-                FacilitatedPaymentsApiClient.Delegate delegate) {
+                RenderFrameHost renderFrameHost, FacilitatedPaymentsApiClient.Delegate delegate) {
             return new FakeApiClient(delegate);
         }
     }
@@ -125,7 +131,8 @@ public class FacilitatedPaymentsApiClientUnitTest {
     public void factoryCanOverrideApiAvailableResult() throws Exception {
         FacilitatedPaymentsApiClient.setFactory(new FakeApiClientFactory());
         TestDelegate delegate = new TestDelegate();
-        FacilitatedPaymentsApiClient apiClient = FacilitatedPaymentsApiClient.create(delegate);
+        FacilitatedPaymentsApiClient apiClient =
+                FacilitatedPaymentsApiClient.create(/* renderFrameHost= */ null, delegate);
 
         apiClient.isAvailable();
 
@@ -137,7 +144,8 @@ public class FacilitatedPaymentsApiClientUnitTest {
     public void factoryCanOverrideClientTokenResult() throws Exception {
         FacilitatedPaymentsApiClient.setFactory(new FakeApiClientFactory());
         TestDelegate delegate = new TestDelegate();
-        FacilitatedPaymentsApiClient apiClient = FacilitatedPaymentsApiClient.create(delegate);
+        FacilitatedPaymentsApiClient apiClient =
+                FacilitatedPaymentsApiClient.create(/* renderFrameHost= */ null, delegate);
 
         apiClient.getClientToken();
 
@@ -149,11 +157,31 @@ public class FacilitatedPaymentsApiClientUnitTest {
     public void factoryCanOverridePurchaseActionResult() throws Exception {
         FacilitatedPaymentsApiClient.setFactory(new FakeApiClientFactory());
         TestDelegate delegate = new TestDelegate();
-        FacilitatedPaymentsApiClient apiClient = FacilitatedPaymentsApiClient.create(delegate);
+        FacilitatedPaymentsApiClient apiClient =
+                FacilitatedPaymentsApiClient.create(/* renderFrameHost= */ null, delegate);
 
-        apiClient.invokePurchaseAction(new byte[] {'A', 'c', 't', 'i', 'o', 'n'});
+        apiClient.invokePurchaseAction(
+                /* primaryAccount= */ null, new byte[] {'A', 'c', 't', 'i', 'o', 'n'});
 
         Assert.assertTrue(delegate.mIsPurchaseActionInvoked);
-        Assert.assertTrue(delegate.mIsPurchaseActionSuccessful);
+        Assert.assertEquals(PurchaseActionResult.RESULT_OK, delegate.mPurchaseActionResult);
+    }
+
+    /**
+     * If there is a mismatch between the public interface and the private implementation (e.g., one
+     * of the interface methods is not implemented), then the create() method still continues to
+     * return non-null instances of the API client.
+     */
+    @Test
+    public void mismatchedInterfaceAndImplementationCreatesNonNullInstances() throws Exception {
+        // A factory that does not override any of the interface methods. This simulates a mismatch
+        // between the public interface and private implementation.
+        FacilitatedPaymentsApiClient.setFactory(new FacilitatedPaymentsApiClient.Factory() {});
+
+        FacilitatedPaymentsApiClient apiClient =
+                FacilitatedPaymentsApiClient.create(
+                        /* renderFrameHost= */ null, new TestDelegate());
+
+        Assert.assertNotNull(apiClient);
     }
 }

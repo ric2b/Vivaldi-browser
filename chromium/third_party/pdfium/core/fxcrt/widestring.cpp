@@ -8,12 +8,14 @@
 
 #include <stddef.h>
 #include <string.h>
+#include <wchar.h>
 
 #include <algorithm>
 #include <sstream>
 
 #include "core/fxcrt/check.h"
 #include "core/fxcrt/check_op.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_codepage.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_memcpy_wrappers.h"
@@ -266,15 +268,15 @@ std::optional<WideString> TryVSWPrintf(size_t size,
     // Span's lifetime must end before ReleaseBuffer() below.
     pdfium::span<wchar_t> buffer = str.GetBuffer(size);
 
-    // In the following two calls, there's always space in the WideString
-    // for a terminating NUL that's not included in the span.
+    // SAFETY: In the following two calls, there's always space in the
+    // WideString for a terminating NUL that's not included in the span.
     // For vswprintf(), MSAN won't untaint the buffer on a truncated write's
     // -1 return code even though the buffer is written. Probably just as well
     // not to trust the vendor's implementation to write anything anyways.
     // See https://crbug.com/705912.
-    memset(buffer.data(), 0, (size + 1) * sizeof(wchar_t));
+    UNSAFE_BUFFERS(
+        FXSYS_memset(buffer.data(), 0, (size + 1) * sizeof(wchar_t)));
     int ret = vswprintf(buffer.data(), size + 1, pFormat, argList);
-
     bool bSufficientBuffer = ret >= 0 || buffer[size - 1] == 0;
     if (!bSufficientBuffer)
       return std::nullopt;
@@ -391,9 +393,11 @@ WideString WideString::Format(const wchar_t* pFormat, ...) {
   return ret;
 }
 
+// TODO(tsepez): should be UNSAFE_BUFFER_USAGE.
 WideString::WideString(const wchar_t* pStr, size_t nLen) {
   if (nLen) {
-    m_pData = StringData::Create({pStr, nLen});
+    // SAFETY: caller ensures `pStr` points to al least `nLen` wchar_t.
+    m_pData = StringData::Create(UNSAFE_BUFFERS(pdfium::make_span(pStr, nLen)));
   }
 }
 
@@ -507,17 +511,23 @@ bool WideString::operator==(const wchar_t* ptr) const {
   if (!ptr)
     return m_pData->m_nDataLength == 0;
 
+  // SAFTEY: `wsclen()` comparison ensures there are `m_nDataLength` wchars at
+  // `ptr` before the terminator, and `m_nDataLength` is within `m_String`.
   return wcslen(ptr) == m_pData->m_nDataLength &&
-         FXSYS_wmemcmp(ptr, m_pData->m_String, m_pData->m_nDataLength) == 0;
+         UNSAFE_BUFFERS(FXSYS_wmemcmp(ptr, m_pData->m_String,
+                                      m_pData->m_nDataLength)) == 0;
 }
 
 bool WideString::operator==(WideStringView str) const {
   if (!m_pData)
     return str.IsEmpty();
 
+  // SAFTEY: Comparison ensure there are `m_nDataLength` wchars in `str`
+  // and `m_nDataLength is within `m_String`.
   return m_pData->m_nDataLength == str.GetLength() &&
-         FXSYS_wmemcmp(m_pData->m_String, str.unterminated_c_str(),
-                       str.GetLength()) == 0;
+         UNSAFE_BUFFERS(FXSYS_wmemcmp(
+             m_pData->m_String, str.unterminated_c_str(), str.GetLength())) ==
+             0;
 }
 
 bool WideString::operator==(const WideString& other) const {
@@ -547,8 +557,10 @@ bool WideString::operator<(WideStringView str) const {
 
   size_t len = GetLength();
   size_t other_len = str.GetLength();
-  int result = FXSYS_wmemcmp(c_str(), str.unterminated_c_str(),
-                             std::min(len, other_len));
+
+  // SAFETY: Comparison limited to minimum valid length of either argument.
+  int result = UNSAFE_BUFFERS(FXSYS_wmemcmp(c_str(), str.unterminated_c_str(),
+                                            std::min(len, other_len)));
   return result < 0 || (result == 0 && len < other_len);
 }
 
@@ -789,7 +801,10 @@ int WideString::Compare(const WideString& str) const {
   size_t this_len = m_pData->m_nDataLength;
   size_t that_len = str.m_pData->m_nDataLength;
   size_t min_len = std::min(this_len, that_len);
-  int result = FXSYS_wmemcmp(m_pData->m_String, str.m_pData->m_String, min_len);
+
+  // SAFTEY: Comparison limited to minimum length of either argument.
+  int result = UNSAFE_BUFFERS(
+      FXSYS_wmemcmp(m_pData->m_String, str.m_pData->m_String, min_len));
   if (result != 0)
     return result;
   if (this_len == that_len)

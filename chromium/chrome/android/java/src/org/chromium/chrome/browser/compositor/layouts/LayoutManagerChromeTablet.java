@@ -9,27 +9,30 @@ import android.view.ViewGroup;
 import android.view.ViewStub;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
-import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager.TabModelStartupInfo;
 import org.chromium.chrome.browser.device.DeviceClassManager;
+import org.chromium.chrome.browser.hub.HubLayout;
 import org.chromium.chrome.browser.hub.HubLayoutDependencyHolder;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
 import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab_ui.TabContentManager;
+import org.chromium.chrome.browser.tab_ui.TabSwitcher;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
+import org.chromium.chrome.browser.ui.desktop_windowing.DesktopWindowStateProvider;
 import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.ui.base.WindowAndroid;
@@ -44,8 +47,8 @@ import java.util.List;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
- * {@link LayoutManagerChromeTablet} is the specialization of {@link LayoutManagerChrome} for
- * the tablet.
+ * {@link LayoutManagerChromeTablet} is the specialization of {@link LayoutManagerChrome} for the
+ * tablet.
  */
 public class LayoutManagerChromeTablet extends LayoutManagerChrome {
     // Tab Strip
@@ -73,6 +76,7 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
      *     Start surface refactor is disabled.
      * @param tabSwitcherSupplier Supplier for an interface to talk to the Grid Tab Switcher when
      *     Start surface refactor is enabled.
+     * @param tabModelSelectorSupplier Supplier for an interface to talk to the Tab Model Selector.
      * @param browserControlsStateProvider The {@link BrowserControlsStateProvider} for top
      *     controls.
      * @param tabContentManagerSupplier Supplier of the {@link TabContentManager} instance.
@@ -92,12 +96,14 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
      *     drag and drop.
      * @param tabHoverCardViewStub The {@link ViewStub} representing the strip tab hover card.
      * @param toolbarManager The {@link ToolbarManager} instance.
+     * @param desktopWindowStateProvider The {@link DesktopWindowStateProvider} for the app header.
      */
     public LayoutManagerChromeTablet(
             LayoutManagerHost host,
             ViewGroup contentContainer,
             Supplier<StartSurface> startSurfaceSupplier,
             Supplier<TabSwitcher> tabSwitcherSupplier,
+            Supplier<TabModelSelector> tabModelSelectorSupplier,
             BrowserControlsStateProvider browserControlsStateProvider,
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             Supplier<TopUiThemeColorProvider> topUiThemeColorProvider,
@@ -112,12 +118,15 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
             View toolbarContainerView,
             @NonNull ViewStub tabHoverCardViewStub,
             @NonNull WindowAndroid windowAndroid,
-            @NonNull ToolbarManager toolbarManager) {
+            @NonNull ToolbarManager toolbarManager,
+            @Nullable DesktopWindowStateProvider desktopWindowStateProvider,
+            @NonNull ViewStub tabHoverCardViewStubStack) { // Vivaldi
         super(
                 host,
                 contentContainer,
                 startSurfaceSupplier,
                 tabSwitcherSupplier,
+                tabModelSelectorSupplier,
                 browserControlsStateProvider,
                 tabContentManagerSupplier,
                 topUiThemeColorProvider,
@@ -142,21 +151,23 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
                         tabContentManagerSupplier,
                         browserControlsStateProvider,
                         windowAndroid,
-                        toolbarManager);
+                        toolbarManager,
+                        desktopWindowStateProvider);
         addSceneOverlay(mTabStripLayoutHelperManager);
         addObserver(mTabStripLayoutHelperManager.getTabSwitcherObserver());
+        mDesktopWindowStateProvider = desktopWindowStateProvider;
         } // vivaldi
 
         // Note(david@vivaldi.com): We create two tab strips here. The first one is the main strip.
         // The second one is the stack strip.
         for (int i = 0; i < 2; i++) {
             mTabStrips.add(new StripLayoutHelperManager(host.getContext(), host, this,
-                    mHost.getLayoutRenderHost(),
-                    mLayerTitleCacheSupplier,
+                    mHost.getLayoutRenderHost(), new ObservableSupplierImpl<>(mLayerTitleCache),
                     tabModelStartupInfoSupplier, lifecycleDispatcher, multiInstanceManager,
-                    dragAndDropDelegate, toolbarContainerView, tabHoverCardViewStub,
+                    dragAndDropDelegate, toolbarContainerView,
+                    i == 0 ? tabHoverCardViewStub : tabHoverCardViewStubStack,
                     tabContentManagerSupplier, browserControlsStateProvider, windowAndroid,
-                    toolbarManager));
+                    toolbarManager, desktopWindowStateProvider));
             mTabStrips.get(i).setIsStackStrip(i != 0);
             addObserver(mTabStrips.get(i).getTabSwitcherObserver());
             addSceneOverlay(mTabStrips.get(i));
@@ -251,22 +262,10 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
     }
 
     @Override
-    public void initLayoutTabFromHost(final int tabId) {
-        if (mLayerTitleCache != null) {
-            mLayerTitleCache.removeTabTitle(tabId);
-        }
-        super.initLayoutTabFromHost(tabId);
-    }
-
-    @Override
-    public void releaseTabLayout(int id) {
-        mLayerTitleCache.removeTabTitle(id);
-        super.releaseTabLayout(id);
-    }
-
-    @Override
     public void releaseResourcesForTab(int tabId) {
         super.releaseResourcesForTab(tabId);
+        // Vivaldi
+        if (mLayerTitleCache != null)
         mLayerTitleCache.removeTabTitle(tabId);
     }
 

@@ -684,6 +684,16 @@ Enable to set MPEG version bit in the ADTS frame header to 1 which
 indicates MPEG-2. Default is 0, which indicates MPEG-4.
 @end table
 
+@anchor{aea}
+@section aea
+MD STUDIO audio muxer.
+
+This muxer accepts a single ATRAC1 audio stream with either one or two channels
+and a sample rate of 44100Hz.
+
+As AEA supports storing the track title, this muxer will also write
+the title from stream's metadata to the container.
+
 @anchor{aiff}
 @section aiff
 Audio Interchange File Format muxer.
@@ -1387,23 +1397,17 @@ D-Cinema audio muxer.
 It accepts a single 6-channels audio stream resampled at 96000 Hz
 encoded with the @samp{pcm_24daud} codec.
 
-In addition, each muxed packet size must not be greater than 65535 bytes.
-
 @subsection Example
 Use @command{ffmpeg} to mux input audio to a @samp{5.1} channel layout
 resampled at 96000Hz:
 @example
-ffmpeg -i INPUT -af aresample=96000,pan=5.1,asetnsamples=3640 slow.302
+ffmpeg -i INPUT -af aresample=96000,pan=5.1 slow.302
 @end example
 
-The @samp{asetnsamples} filter is used to reduce the number of samples
-of each audio packet, with a size computed according to the formula:
-@example
-65535 / (@var{channels} * @var{encoded_sample_size}) = 655535 / (6 * 3) = 3640
-@end example
-
-The @var{encoded_sample_size} = 3 factor is due to sample size of the
-@samp{pcm_24daud} encoder.
+For ffmpeg versions before 7.0 you might have to use the @samp{asetnsamples}
+filter to limit the muxed packet size, because this format does not support
+muxing packets larger than 65535 bytes (3640 samples). For newer ffmpeg
+versions audio is automatically packetized to 36000 byte (2000 sample) packets.
 
 @section dv
 DV (Digital Video) muxer.
@@ -1419,119 +1423,188 @@ Use @command{ffmpeg} to convert the input:
 ffmpeg -i INPUT -s:v 720x480 -pix_fmt yuv411p -r 29.97 -ac 2 -ar 48000 -y out.dv
 @end example
 
+@section ffmetadata
+FFmpeg metadata muxer.
+
+This muxer writes the streams metadata in the @samp{ffmetadata}
+format.
+
+See @ref{metadata,,the Metadata chapter,ffmpeg-formats} for
+information about the format.
+
+@subsection Example
+
+Use @command{ffmpeg} to extract metadata from an input file to a @file{metadata.ffmeta}
+file in @samp{ffmetadata} format:
+@example
+ffmpeg -i INPUT -f ffmetadata metadata.ffmeta
+@end example
+
 @anchor{fifo}
 @section fifo
+FIFO (First-In First-Out) muxer.
 
-The fifo pseudo-muxer allows the separation of encoding and muxing by using
-first-in-first-out queue and running the actual muxer in a separate thread. This
-is especially useful in combination with the @ref{tee} muxer and can be used to
-send data to several destinations with different reliability/writing speed/latency.
+The @samp{fifo} pseudo-muxer allows the separation of encoding and
+muxing by using a first-in-first-out queue and running the actual muxer
+in a separate thread.
 
-API users should be aware that callback functions (interrupt_callback,
-io_open and io_close) used within its AVFormatContext must be thread-safe.
+This is especially useful in combination with
+the @ref{tee} muxer and can be used to send data to several
+destinations with different reliability/writing speed/latency.
 
-The behavior of the fifo muxer if the queue fills up or if the output fails is
-selectable,
+The target muxer is either selected from the output name or specified
+through the @option{fifo_format} option.
 
+The behavior of the @samp{fifo} muxer if the queue fills up or if the
+output fails (e.g. if a packet cannot be written to the output) is
+selectable:
 @itemize @bullet
+@item
+Output can be transparently restarted with configurable delay between
+retries based on real time or time of the processed stream.
 
 @item
-output can be transparently restarted with configurable delay between retries
-based on real time or time of the processed stream.
-
-@item
-encoding can be blocked during temporary failure, or continue transparently
-dropping packets in case fifo queue fills up.
-
+Encoding can be blocked during temporary failure, or continue transparently
+dropping packets in case the FIFO queue fills up.
 @end itemize
 
+API users should be aware that callback functions
+(@code{interrupt_callback}, @code{io_open} and @code{io_close}) used
+within its @code{AVFormatContext} must be thread-safe.
+
+@subsection Options
 @table @option
 
-@item fifo_format
+@item attempt_recovery @var{bool}
+If failure occurs, attempt to recover the output. This is especially
+useful when used with network output, since it makes it possible to
+restart streaming transparently. By default this option is set to
+@code{false}.
+
+@item drop_pkts_on_overflow @var{bool}
+If set to @code{true}, in case the fifo queue fills up, packets will
+be dropped rather than blocking the encoder. This makes it possible to
+continue streaming without delaying the input, at the cost of omitting
+part of the stream. By default this option is set to @code{false}, so in
+such cases the encoder will be blocked until the muxer processes some
+of the packets and none of them is lost.
+
+@item fifo_format @var{format_name}
 Specify the format name. Useful if it cannot be guessed from the
 output name suffix.
 
-@item queue_size
-Specify size of the queue (number of packets). Default value is 60.
+@item format_opts @var{options}
+Specify format options for the underlying muxer. Muxer options can be
+specified as a list of @var{key}=@var{value} pairs separated by ':'.
 
-@item format_opts
-Specify format options for the underlying muxer. Muxer options can be specified
-as a list of @var{key}=@var{value} pairs separated by ':'.
+@item max_recovery_attempts @var{count}
+Set maximum number of successive unsuccessful recovery attempts after
+which the output fails permanently. By default this option is set to
+@code{0} (unlimited).
 
-@item drop_pkts_on_overflow @var{bool}
-If set to 1 (true), in case the fifo queue fills up, packets will be dropped
-rather than blocking the encoder. This makes it possible to continue streaming without
-delaying the input, at the cost of omitting part of the stream. By default
-this option is set to 0 (false), so in such cases the encoder will be blocked
-until the muxer processes some of the packets and none of them is lost.
-
-@item attempt_recovery @var{bool}
-If failure occurs, attempt to recover the output. This is especially useful
-when used with network output, since it makes it possible to restart streaming transparently.
-By default this option is set to 0 (false).
-
-@item max_recovery_attempts
-Sets maximum number of successive unsuccessful recovery attempts after which
-the output fails permanently. By default this option is set to 0 (unlimited).
-
-@item recovery_wait_time @var{duration}
-Waiting time before the next recovery attempt after previous unsuccessful
-recovery attempt. Default value is 5 seconds.
-
-@item recovery_wait_streamtime @var{bool}
-If set to 0 (false), the real time is used when waiting for the recovery
-attempt (i.e. the recovery will be attempted after at least
-recovery_wait_time seconds).
-If set to 1 (true), the time of the processed stream is taken into account
-instead (i.e. the recovery will be attempted after at least @var{recovery_wait_time}
-seconds of the stream is omitted).
-By default, this option is set to 0 (false).
+@item queue_size @var{size}
+Specify size of the queue as a number of packets. Default value is
+@code{60}.
 
 @item recover_any_error @var{bool}
-If set to 1 (true), recovery will be attempted regardless of type of the error
-causing the failure. By default this option is set to 0 (false) and in case of
-certain (usually permanent) errors the recovery is not attempted even when
-@var{attempt_recovery} is set to 1.
+If set to @code{true}, recovery will be attempted regardless of type
+of the error causing the failure. By default this option is set to
+@code{false} and in case of certain (usually permanent) errors the
+recovery is not attempted even when the @option{attempt_recovery}
+option is set to @code{true}.
+
+@item recovery_wait_streamtime @var{bool}
+If set to @code{false}, the real time is used when waiting for the
+recovery attempt (i.e. the recovery will be attempted after the time
+specified by the @option{recovery_wait_time} option).
+
+If set to @code{true}, the time of the processed stream is taken into
+account instead (i.e. the recovery will be attempted after discarding
+the packets corresponding to the @option{recovery_wait_time} option).
+
+By default this option is set to @code{false}.
+
+@item recovery_wait_time @var{duration}
+Specify waiting time in seconds before the next recovery attempt after
+previous unsuccessful recovery attempt. Default value is @code{5}.
 
 @item restart_with_keyframe @var{bool}
 Specify whether to wait for the keyframe after recovering from
-queue overflow or failure. This option is set to 0 (false) by default.
+queue overflow or failure. This option is set to @code{false} by default.
 
 @item timeshift @var{duration}
-Buffer the specified amount of packets and delay writing the output. Note that
-@var{queue_size} must be big enough to store the packets for timeshift. At the
-end of the input the fifo buffer is flushed at realtime speed.
-
+Buffer the specified amount of packets and delay writing the
+output. Note that the value of the @option{queue_size} option must be
+big enough to store the packets for timeshift. At the end of the input
+the fifo buffer is flushed at realtime speed.
 @end table
 
-@subsection Examples
+@subsection Example
 
-@itemize
-
-@item
-Stream something to rtmp server, continue processing the stream at real-time
-rate even in case of temporary failure (network outage) and attempt to recover
-streaming every second indefinitely.
+Use @command{ffmpeg} to stream to an RTMP server, continue processing
+the stream at real-time rate even in case of temporary failure
+(network outage) and attempt to recover streaming every second
+indefinitely:
 @example
-ffmpeg -re -i ... -c:v libx264 -c:a aac -f fifo -fifo_format flv -map 0:v -map 0:a
-  -drop_pkts_on_overflow 1 -attempt_recovery 1 -recovery_wait_time 1 rtmp://example.com/live/stream_name
+ffmpeg -re -i ... -c:v libx264 -c:a aac -f fifo -fifo_format flv \
+  -drop_pkts_on_overflow 1 -attempt_recovery 1 -recovery_wait_time 1 \
+  -map 0:v -map 0:a rtmp://example.com/live/stream_name
 @end example
 
-@end itemize
+@section film_cpk
+Sega film (.cpk) muxer.
+
+This format was used as internal format for several Sega games.
+
+For more information regarding the Sega film file format, visit
+@url{http://wiki.multimedia.cx/index.php?title=Sega_FILM}.
+
+It accepts at maximum one @samp{cinepak} or raw video stream, and at
+maximum one audio stream.
+
+@section filmstrip
+Adobe Filmstrip muxer.
+
+This format is used by several Adobe tools to store a generated filmstrip export. It
+accepts a single raw video stream.
+
+@section fits
+Flexible Image Transport System (FITS) muxer.
+
+This image format is used to store astronomical data.
+
+For more information regarding the format, visit
+@url{https://fits.gsfc.nasa.gov}.
+
+@section flac
+Raw FLAC audio muxer.
+
+This muxer accepts exactly one FLAC audio stream. Additionally, it is possible to add
+images with disposition @samp{attached_pic}.
+
+@subsection Options
+@table @option
+@item write_header @var{bool}
+write the file header if set to @code{true}, default is @code{true}
+@end table
+
+@subsection Example
+Use @command{ffmpeg} to store the audio stream from an input file,
+together with several pictures used with @samp{attached_pic}
+disposition:
+@example
+ffmpeg -i INPUT -i pic1.png -i pic2.jpg -map 0:a -map 1 -map 2 -disposition:v attached_pic OUTPUT
+@end example
 
 @section flv
-
 Adobe Flash Video Format muxer.
 
-This muxer accepts the following options:
-
+@subsection Options
 @table @option
-
 @item flvflags @var{flags}
 Possible values:
 
 @table @samp
-
 @item aac_seq_header_detect
 Place AAC sequence header based on audio stream data.
 
@@ -1672,24 +1745,26 @@ See also the @ref{framehash} and @ref{md5} muxers.
 
 @anchor{gif}
 @section gif
-
 Animated GIF muxer.
 
-It accepts the following options:
+Note that the GIF format has a very large time base: the delay between two frames can
+therefore not be smaller than one centi second.
 
+@subsection Options
 @table @option
-@item loop
+@item loop @var{bool}
 Set the number of times to loop the output. Use @code{-1} for no loop, @code{0}
 for looping indefinitely (default).
 
-@item final_delay
+@item final_delay @var{delay}
 Force the delay (expressed in centiseconds) after the last frame. Each frame
 ends with a delay until the next frame. The default is @code{-1}, which is a
 special value to tell the muxer to re-use the previous delay. In case of a
 loop, you might want to customize this value to mark a pause for instance.
 @end table
 
-For example, to encode a gif looping 10 times, with a 5 seconds delay between
+@subsection Example
+Encode a gif looping 10 times, with a 5 seconds delay between
 the loops:
 @example
 ffmpeg -i INPUT -loop 10 -final_delay 500 out.gif
@@ -1701,8 +1776,17 @@ force the @ref{image2} muxer:
 ffmpeg -i INPUT -c:v gif -f image2 "out%d.gif"
 @end example
 
-Note 2: the GIF format has a very large time base: the delay between two frames
-can therefore not be smaller than one centi second.
+@section gxf
+General eXchange Format (GXF) muxer.
+
+GXF was developed by Grass Valley Group, then standardized by SMPTE as SMPTE
+360M and was extended in SMPTE RDD 14-2007 to include high-definition video
+resolutions.
+
+It accepts at most one video stream with codec @samp{mjpeg}, or
+@samp{mpeg1video}, or @samp{mpeg2video}, or @samp{dvvideo} with resolution
+@samp{512x480} or @samp{608x576}, and several audio streams with rate 48000Hz
+and codec @samp{pcm16_le}.
 
 @anchor{hash}
 @section hash
@@ -1749,6 +1833,45 @@ ffmpeg -i INPUT -f hash -hash md5 -
 
 See also the @ref{framehash} muxer.
 
+@anchor{hds}
+@section hds
+HTTP Dynamic Streaming (HDS) muxer.
+
+HTTP dynamic streaming, or HDS, is an adaptive bitrate streaming method
+developed by Adobe. HDS delivers MP4 video content over HTTP connections. HDS
+can be used for on-demand streaming or live streaming.
+
+This muxer creates an .f4m (Adobe Flash Media Manifest File) manifest, an .abst
+(Adobe Bootstrap File) for each stream, and segment files in a directory
+specified as the output.
+
+These needs to be accessed by an HDS player throuhg HTTPS for it to be able to
+perform playback on the generated stream.
+
+@subsection Options
+@table @option
+@item extra_window_size @var{int}
+number of fragments kept outside of the manifest before removing from disk
+
+@item min_frag_duration @var{microseconds}
+minimum fragment duration (in microseconds), default value is 1 second
+(@code{10000000})
+
+@item remove_at_exit @var{bool}
+remove all fragments when finished when set to @code{true}
+
+@item window_size @var{int}
+number of fragments kept in the manifest, if set to a value different from
+@code{0}. By default all segments are kept in the output directory.
+@end table
+
+@subsection Example
+Use @command{ffmpeg} to generate HDS files to the @file{output.hds} directory in
+real-time rate:
+@example
+ffmpeg -re -i INPUT -f hds -b:v 200k output.hds
+@end example
+
 @anchor{hls}
 @section hls
 
@@ -1777,9 +1900,6 @@ flexible implementation of a segmenter, and can be used to perform HLS
 segmentation.
 
 @subsection Options
-
-This muxer supports the following options:
-
 @table @option
 @item hls_init_time @var{duration}
 Set the initial target segment length. Default value is @var{0}.
@@ -1787,9 +1907,9 @@ Set the initial target segment length. Default value is @var{0}.
 @var{duration} must be a time duration specification,
 see @ref{time duration syntax,,the Time duration section in the ffmpeg-utils(1) manual,ffmpeg-utils}.
 
-Segment will be cut on the next key frame after this time has passed on the first m3u8 list.
-After the initial playlist is filled @command{ffmpeg} will cut segments
-at duration equal to @code{hls_time}
+Segment will be cut on the next key frame after this time has passed on the
+first m3u8 list. After the initial playlist is filled, @command{ffmpeg} will cut
+segments at duration equal to @option{hls_time}.
 
 @item hls_time @var{duration}
 Set the target segment length. Default value is 2.
@@ -1806,12 +1926,12 @@ will contain all the segments. Default value is 5.
 Set the number of unreferenced segments to keep on disk before @code{hls_flags delete_segments}
 deletes them. Increase this to allow continue clients to download segments which
 were recently referenced in the playlist. Default value is 1, meaning segments older than
-@code{hls_list_size+1} will be deleted.
+@option{hls_list_size+1} will be deleted.
 
-@item hls_start_number_source
+@item hls_start_number_source @var{source}
 Start the playlist sequence number (@code{#EXT-X-MEDIA-SEQUENCE}) according to the specified source.
-Unless @code{hls_flags single_file} is set, it also specifies source of starting sequence numbers of
-segment and subtitle filenames. In any case, if @code{hls_flags append_list}
+Unless @option{hls_flags single_file} is set, it also specifies source of starting sequence numbers of
+segment and subtitle filenames. In any case, if @option{hls_flags append_list}
 is set and read playlist sequence number is greater than the specified start sequence number,
 then that value will be used as start value.
 
@@ -1820,26 +1940,25 @@ It accepts the following values:
 @table @option
 
 @item generic (default)
-Set the starting sequence numbers according to @var{start_number} option value.
+Set the start numbers according to the @option{start_number} option value.
 
 @item epoch
-The start number will be the seconds since epoch (1970-01-01 00:00:00)
+Set the start number as the seconds since epoch (1970-01-01 00:00:00).
 
 @item epoch_us
-The start number will be the microseconds since epoch (1970-01-01 00:00:00)
+Set the start number as the microseconds since epoch (1970-01-01 00:00:00).
 
 @item datetime
-The start number will be based on the current date/time as YYYYmmddHHMMSS. e.g. 20161231235759.
-
+Set the start number based on the current date/time as YYYYmmddHHMMSS. e.g. 20161231235759.
 @end table
 
 @item start_number @var{number}
 Start the playlist sequence number (@code{#EXT-X-MEDIA-SEQUENCE}) from the specified @var{number}
-when @var{hls_start_number_source} value is @var{generic}. (This is the default case.)
-Unless @code{hls_flags single_file} is set, it also specifies starting sequence numbers of segment and subtitle filenames.
+when @option{hls_start_number_source} value is @var{generic}. (This is the default case.)
+Unless @option{hls_flags single_file} is set, it also specifies starting sequence numbers of segment and subtitle filenames.
 Default value is 0.
 
-@item hls_allow_cache @var{allowcache}
+@item hls_allow_cache @var{bool}
 Explicitly set whether the client MAY (1) or MUST NOT (0) cache media segments.
 
 @item hls_base_url @var{baseurl}
@@ -1852,29 +1971,37 @@ which can be cyclic, for example if the @option{wrap} option is
 specified.
 
 @item hls_segment_filename @var{filename}
-Set the segment filename. Unless @code{hls_flags single_file} is set,
-@var{filename} is used as a string format with the segment number:
+Set the segment filename. Unless the @option{hls_flags} option is set with
+@samp{single_file}, @var{filename} is used as a string format with the
+segment number appended.
+
+For example:
 @example
 ffmpeg -i in.nut -hls_segment_filename 'file%03d.ts' out.m3u8
 @end example
-This example will produce the playlist, @file{out.m3u8}, and segment files:
+
+will produce the playlist, @file{out.m3u8}, and segment files:
 @file{file000.ts}, @file{file001.ts}, @file{file002.ts}, etc.
 
-@var{filename} may contain full path or relative path specification,
-but only the file name part without any path info will be contained in the m3u8 segment list.
+@var{filename} may contain a full path or relative path specification,
+but only the file name part without any path will be contained in the m3u8 segment list.
 Should a relative path be specified, the path of the created segment
 files will be relative to the current working directory.
-When strftime_mkdir is set, the whole expanded value of @var{filename} will be written into the m3u8 segment list.
+When @option{strftime_mkdir} is set, the whole expanded value of @var{filename} will be written into the m3u8 segment list.
 
-When @code{var_stream_map} is set with two or more variant streams, the
-@var{filename} pattern must contain the string "%v", this string specifies
-the position of variant stream index in the generated segment file names.
+When @option{var_stream_map} is set with two or more variant streams, the
+@var{filename} pattern must contain the string "%v", and this string will be
+expanded to the position of variant stream index in the generated segment file
+names.
+
+For example:
 @example
 ffmpeg -i in.ts -b:v:0 1000k -b:v:1 256k -b:a:0 64k -b:a:1 32k \
   -map 0:v -map 0:a -map 0:v -map 0:a -f hls -var_stream_map "v:0,a:0 v:1,a:1" \
   -hls_segment_filename 'file_%v_%03d.ts' out_%v.m3u8
 @end example
-This example will produce the playlists segment file sets:
+
+will produce the playlists segment file sets:
 @file{file_0_000.ts}, @file{file_0_001.ts}, @file{file_0_002.ts}, etc. and
 @file{file_1_000.ts}, @file{file_1_001.ts}, @file{file_1_002.ts}, etc.
 
@@ -1884,48 +2011,60 @@ sub-directory or filename.) If the string %v is present in the directory name, t
 sub-directories are created after expanding the directory name pattern. This
 enables creation of segments corresponding to different variant streams in
 subdirectories.
+
+For example:
 @example
 ffmpeg -i in.ts -b:v:0 1000k -b:v:1 256k -b:a:0 64k -b:a:1 32k \
   -map 0:v -map 0:a -map 0:v -map 0:a -f hls -var_stream_map "v:0,a:0 v:1,a:1" \
   -hls_segment_filename 'vs%v/file_%03d.ts' vs%v/out.m3u8
 @end example
-This example will produce the playlists segment file sets:
+will produce the playlists segment file sets:
 @file{vs0/file_000.ts}, @file{vs0/file_001.ts}, @file{vs0/file_002.ts}, etc. and
 @file{vs1/file_000.ts}, @file{vs1/file_001.ts}, @file{vs1/file_002.ts}, etc.
 
-@item strftime
-Use strftime() on @var{filename} to expand the segment filename with localtime.
-The segment number is also available in this mode, but to use it, you need to specify second_level_segment_index
-hls_flag and %%d will be the specifier.
+@item strftime @var{bool}
+Use @code{strftime()} on @var{filename} to expand the segment filename with
+localtime. The segment number is also available in this mode, but to use it,
+you need to set @samp{second_level_segment_index} in the @option{hls_flag} and
+%%d will be the specifier.
+
+For example:
 @example
 ffmpeg -i in.nut -strftime 1 -hls_segment_filename 'file-%Y%m%d-%s.ts' out.m3u8
 @end example
-This example will produce the playlist, @file{out.m3u8}, and segment files:
+will produce the playlist, @file{out.m3u8}, and segment files:
 @file{file-20160215-1455569023.ts}, @file{file-20160215-1455569024.ts}, etc.
-Note: On some systems/environments, the @code{%s} specifier is not available. See
-  @code{strftime()} documentation.
+Note: On some systems/environments, the @code{%s} specifier is not
+available. See @code{strftime()} documentation.
+
+For example:
 @example
 ffmpeg -i in.nut -strftime 1 -hls_flags second_level_segment_index -hls_segment_filename 'file-%Y%m%d-%%04d.ts' out.m3u8
 @end example
-This example will produce the playlist, @file{out.m3u8}, and segment files:
+will produce the playlist, @file{out.m3u8}, and segment files:
 @file{file-20160215-0001.ts}, @file{file-20160215-0002.ts}, etc.
 
-@item strftime_mkdir
-Used together with -strftime_mkdir, it will create all subdirectories which
-is expanded in @var{filename}.
+@item strftime_mkdir @var{bool}
+Used together with @option{strftime}, it will create all subdirectories which
+are present in the expanded values of option @option{hls_segment_filename}.
+
+For example:
 @example
 ffmpeg -i in.nut -strftime 1 -strftime_mkdir 1 -hls_segment_filename '%Y%m%d/file-%Y%m%d-%s.ts' out.m3u8
 @end example
-This example will create a directory 201560215 (if it does not exist), and then
+will create a directory @file{201560215} (if it does not exist), and then
 produce the playlist, @file{out.m3u8}, and segment files:
-@file{20160215/file-20160215-1455569023.ts}, @file{20160215/file-20160215-1455569024.ts}, etc.
+@file{20160215/file-20160215-1455569023.ts},
+@file{20160215/file-20160215-1455569024.ts}, etc.
 
+For example:
 @example
 ffmpeg -i in.nut -strftime 1 -strftime_mkdir 1 -hls_segment_filename '%Y/%m/%d/file-%Y%m%d-%s.ts' out.m3u8
 @end example
-This example will create a directory hierarchy 2016/02/15 (if any of them do not exist), and then
-produce the playlist, @file{out.m3u8}, and segment files:
-@file{2016/02/15/file-20160215-1455569023.ts}, @file{2016/02/15/file-20160215-1455569024.ts}, etc.
+will create a directory hierarchy @file{2016/02/15} (if any of them do not
+exist), and then produce the playlist, @file{out.m3u8}, and segment files:
+@file{2016/02/15/file-20160215-1455569023.ts},
+@file{2016/02/15/file-20160215-1455569024.ts}, etc.
 
 @item hls_segment_options @var{options_list}
 Set output format options using a :-separated list of key=value
@@ -1942,7 +2081,7 @@ format. The optional third line specifies the initialization vector (IV) as a
 hexadecimal string to be used instead of the segment sequence number (default)
 for encryption. Changes to @var{key_info_file} will result in segment
 encryption with the new key/IV and an entry in the playlist for the new key
-URI/IV if @code{hls_flags periodic_rekey} is enabled.
+URI/IV if @option{hls_flags periodic_rekey} is enabled.
 
 Key info file format:
 @example
@@ -1988,22 +2127,22 @@ ffmpeg -f lavfi -re -i testsrc -c:v h264 -hls_flags delete_segments \
   -hls_key_info_file file.keyinfo out.m3u8
 @end example
 
-@item -hls_enc @var{enc}
+@item hls_enc @var{bool}
 Enable (1) or disable (0) the AES128 encryption.
 When enabled every segment generated is encrypted and the encryption key
 is saved as @var{playlist name}.key.
 
-@item -hls_enc_key @var{key}
-16-octet key to encrypt the segments, by default it
-is randomly generated.
+@item hls_enc_key @var{key}
+Specify a 16-octet key to encrypt the segments, by default it is randomly
+generated.
 
-@item -hls_enc_key_url @var{keyurl}
+@item hls_enc_key_url @var{keyurl}
 If set, @var{keyurl} is prepended instead of @var{baseurl} to the key filename
 in the playlist.
 
-@item -hls_enc_iv @var{iv}
-16-octet initialization vector for every segment instead
-of the autogenerated ones.
+@item hls_enc_iv @var{iv}
+Specify the 16-octet initialization vector for every segment instead of the
+autogenerated ones.
 
 @item hls_segment_type @var{flags}
 Possible values:
@@ -2016,23 +2155,23 @@ compatible with all HLS versions.
 @item fmp4
 Output segment files in fragmented MP4 format, similar to MPEG-DASH.
 fmp4 files may be used in HLS version 7 and above.
-
 @end table
 
 @item hls_fmp4_init_filename @var{filename}
-Set filename to the fragment files header file, default filename is @file{init.mp4}.
+Set filename for the fragment files header file, default filename is @file{init.mp4}.
 
-Use @code{-strftime 1} on @var{filename} to expand the segment filename with localtime.
+When @option{strftime} is enabled, @var{filename} is expanded to the segment filename with localtime.
+
+For example:
 @example
-ffmpeg -i in.nut  -hls_segment_type fmp4 -strftime 1 -hls_fmp4_init_filename "%s_init.mp4" out.m3u8
+ffmpeg -i in.nut -hls_segment_type fmp4 -strftime 1 -hls_fmp4_init_filename "%s_init.mp4" out.m3u8
 @end example
-This will produce init like this
-@file{1602678741_init.mp4}
+will produce init like this @file{1602678741_init.mp4}.
 
-@item hls_fmp4_init_resend
+@item hls_fmp4_init_resend @var{bool}
 Resend init file after m3u8 file refresh every time, default is @var{0}.
 
-When @code{var_stream_map} is set with two or more variant streams, the
+When @option{var_stream_map} is set with two or more variant streams, the
 @var{filename} pattern must contain the string "%v", this string specifies
 the position of variant stream index in the generated init file names.
 The string "%v" may be present in the filename or in the last directory name
@@ -2049,11 +2188,12 @@ Possible values:
 If this flag is set, the muxer will store all segments in a single MPEG-TS
 file, and will use byte ranges in the playlist. HLS playlists generated with
 this way will have the version number 4.
+
 For example:
 @example
 ffmpeg -i in.nut -hls_flags single_file out.m3u8
 @end example
-Will produce the playlist, @file{out.m3u8}, and a single segment file,
+will produce the playlist, @file{out.m3u8}, and a single segment file,
 @file{out.ts}.
 
 @item delete_segments
@@ -2068,7 +2208,7 @@ and remove the @code{#EXT-X-ENDLIST} from the old segment list.
 Round the duration info in the playlist file segment info to integer
 values, instead of using floating point.
 If there are no other features requiring higher HLS versions be used,
-then this will allow ffmpeg to output a HLS version 2 m3u8.
+then this will allow @command{ffmpeg} to output a HLS version 2 m3u8.
 
 @item discont_start
 Add the @code{#EXT-X-DISCONTINUITY} tag to the playlist, before the
@@ -2083,137 +2223,165 @@ detect updates to the encryption info. Be sure to replace this file atomically,
 including the file containing the AES encryption key.
 
 @item independent_segments
-Add the @code{#EXT-X-INDEPENDENT-SEGMENTS} to playlists that has video segments
-and when all the segments of that playlist are guaranteed to start with a Key frame.
+Add the @code{#EXT-X-INDEPENDENT-SEGMENTS} tag to playlists that has video segments
+and when all the segments of that playlist are guaranteed to start with a key frame.
 
 @item iframes_only
-Add the @code{#EXT-X-I-FRAMES-ONLY} to playlists that has video segments
+Add the @code{#EXT-X-I-FRAMES-ONLY} tag to playlists that has video segments
 and can play only I-frames in the @code{#EXT-X-BYTERANGE} mode.
 
 @item split_by_time
-Allow segments to start on frames other than keyframes. This improves
-behavior on some players when the time between keyframes is inconsistent,
+Allow segments to start on frames other than key frames. This improves
+behavior on some players when the time between key frames is inconsistent,
 but may make things worse on others, and can cause some oddities during
-seeking. This flag should be used with the @code{hls_time} option.
+seeking. This flag should be used with the @option{hls_time} option.
 
 @item program_date_time
 Generate @code{EXT-X-PROGRAM-DATE-TIME} tags.
 
 @item second_level_segment_index
-Makes it possible to use segment indexes as %%d in hls_segment_filename expression
-besides date/time values when strftime is on.
-To get fixed width numbers with trailing zeroes, %%0xd format is available where x is the required width.
+Make it possible to use segment indexes as %%d in the
+@option{hls_segment_filename} option expression besides date/time values when
+@option{strftime} option is on. To get fixed width numbers with trailing zeroes, %%0xd format
+is available where x is the required width.
 
 @item second_level_segment_size
-Makes it possible to use segment sizes (counted in bytes) as %%s in hls_segment_filename
-expression besides date/time values when strftime is on.
-To get fixed width numbers with trailing zeroes, %%0xs format is available where x is the required width.
+Make it possible to use segment sizes (counted in bytes) as %%s in
+@option{hls_segment_filename} option expression besides date/time values when
+strftime is on. To get fixed width numbers with trailing zeroes, %%0xs format
+is available where x is the required width.
 
 @item second_level_segment_duration
-Makes it possible to use segment duration (calculated  in microseconds) as %%t in hls_segment_filename
-expression besides date/time values when strftime is on.
-To get fixed width numbers with trailing zeroes, %%0xt format is available where x is the required width.
+Make it possible to use segment duration (calculated in microseconds) as %%t in
+@option{hls_segment_filename} option expression besides date/time values when
+strftime is on. To get fixed width numbers with trailing zeroes, %%0xt format
+is available where x is the required width.
 
+For example:
 @example
 ffmpeg -i sample.mpeg \
    -f hls -hls_time 3 -hls_list_size 5 \
    -hls_flags second_level_segment_index+second_level_segment_size+second_level_segment_duration \
    -strftime 1 -strftime_mkdir 1 -hls_segment_filename "segment_%Y%m%d%H%M%S_%%04d_%%08s_%%013t.ts" stream.m3u8
 @end example
-This will produce segments like this:
+will produce segments like this:
 @file{segment_20170102194334_0003_00122200_0000003000000.ts}, @file{segment_20170102194334_0004_00120072_0000003000000.ts} etc.
 
 @item temp_file
-Write segment data to filename.tmp and rename to filename only once the segment is complete. A webserver
-serving up segments can be configured to reject requests to *.tmp to prevent access to in-progress segments
-before they have been added to the m3u8 playlist. This flag also affects how m3u8 playlist files are created.
-If this flag is set, all playlist files will written into temporary file and renamed after they are complete, similarly as segments are handled.
-But playlists with @code{file} protocol and with type (@code{hls_playlist_type}) other than @code{vod}
-are always written into temporary file regardless of this flag. Master playlist files (@code{master_pl_name}), if any, with @code{file} protocol,
-are always written into temporary file regardless of this flag if @code{master_pl_publish_rate} value is other than zero.
+Write segment data to @file{filename.tmp} and rename to filename only once the
+segment is complete.
 
+A webserver serving up segments can be configured to reject requests to *.tmp to
+prevent access to in-progress segments before they have been added to the m3u8
+playlist.
+
+This flag also affects how m3u8 playlist files are created. If this flag is set,
+all playlist files will be written into a temporary file and renamed after they
+are complete, similarly as segments are handled. But playlists with @code{file}
+protocol and with @option{hls_playlist_type} type other than @samp{vod} are
+always written into a temporary file regardless of this flag.
+
+Master playlist files specified with @option{master_pl_name}, if any, with
+@code{file} protocol, are always written into temporary file regardless of this
+flag if @option{master_pl_publish_rate} value is other than zero.
 @end table
 
-@item hls_playlist_type event
-Emit @code{#EXT-X-PLAYLIST-TYPE:EVENT} in the m3u8 header. Forces
-@option{hls_list_size} to 0; the playlist can only be appended to.
+@item hls_playlist_type @var{type}
+If type is @samp{event}, emit @code{#EXT-X-PLAYLIST-TYPE:EVENT} in the m3u8
+header. This forces @option{hls_list_size} to 0; the playlist can only be
+appended to.
 
-@item hls_playlist_type vod
-Emit @code{#EXT-X-PLAYLIST-TYPE:VOD} in the m3u8 header. Forces
-@option{hls_list_size} to 0; the playlist must not change.
+If type is @samp{vod}, emit @code{#EXT-X-PLAYLIST-TYPE:VOD} in the m3u8
+header. This forces @option{hls_list_size} to 0; the playlist must not change.
 
-@item method
+@item method @var{method}
 Use the given HTTP method to create the hls files.
+
+For example:
 @example
 ffmpeg -re -i in.ts -f hls -method PUT http://example.com/live/out.m3u8
 @end example
-This example will upload all the mpegts segment files to the HTTP
-server using the HTTP PUT method, and update the m3u8 files every
-@code{refresh} times using the same method.
-Note that the HTTP server must support the given method for uploading
+will upload all the mpegts segment files to the HTTP server using the HTTP PUT
+method, and update the m3u8 files every @code{refresh} times using the same
+method. Note that the HTTP server must support the given method for uploading
 files.
 
-@item http_user_agent
+@item http_user_agent @var{agent}
 Override User-Agent field in HTTP header. Applicable only for HTTP output.
 
-@item var_stream_map
-Map string which specifies how to group the audio, video and subtitle streams
-into different variant streams. The variant stream groups are separated
-by space.
+@item var_stream_map @var{stream_map}
+Specify a map string defining how to group the audio, video and subtitle streams
+into different variant streams. The variant stream groups are separated by
+space.
+
 Expected string format is like this "a:0,v:0 a:1,v:1 ....". Here a:, v:, s: are
 the keys to specify audio, video and subtitle streams respectively.
 Allowed values are 0 to 9 (limited just based on practical usage).
 
 When there are two or more variant streams, the output filename pattern must
-contain the string "%v", this string specifies the position of variant stream
+contain the string "%v": this string specifies the position of variant stream
 index in the output media playlist filenames. The string "%v" may be present in
 the filename or in the last directory name containing the file. If the string is
 present in the directory name, then sub-directories are created after expanding
 the directory name pattern. This enables creation of variant streams in
 subdirectories.
 
+A few examples follow.
+
+@itemize
+@item
+Create two hls variant streams. The first variant stream will contain video
+stream of bitrate 1000k and audio stream of bitrate 64k and the second variant
+stream will contain video stream of bitrate 256k and audio stream of bitrate
+32k. Here, two media playlist with file names @file{out_0.m3u8} and
+@file{out_1.m3u8} will be created.
 @example
 ffmpeg -re -i in.ts -b:v:0 1000k -b:v:1 256k -b:a:0 64k -b:a:1 32k \
   -map 0:v -map 0:a -map 0:v -map 0:a -f hls -var_stream_map "v:0,a:0 v:1,a:1" \
   http://example.com/live/out_%v.m3u8
 @end example
-This example creates two hls variant streams. The first variant stream will
-contain video stream of bitrate 1000k and audio stream of bitrate 64k and the
-second variant stream will contain video stream of bitrate 256k and audio
-stream of bitrate 32k. Here, two media playlist with file names out_0.m3u8 and
-out_1.m3u8 will be created. If you want something meaningful text instead of indexes
-in result names, you may specify names for each or some of the variants
-as in the following example.
 
-
+@item
+If you want something meaningful text instead of indexes in result names, you
+may specify names for each or some of the variants. The following example will
+create two hls variant streams as in the previous one. But here, the two media
+playlist with file names @file{out_my_hd.m3u8} and @file{out_my_sd.m3u8} will be
+created.
 @example
 ffmpeg -re -i in.ts -b:v:0 1000k -b:v:1 256k -b:a:0 64k -b:a:1 32k \
   -map 0:v -map 0:a -map 0:v -map 0:a -f hls -var_stream_map "v:0,a:0,name:my_hd v:1,a:1,name:my_sd" \
   http://example.com/live/out_%v.m3u8
 @end example
 
-This example creates two hls variant streams as in the previous one.
-But here, the two media playlist with file names out_my_hd.m3u8 and
-out_my_sd.m3u8 will be created.
-
+@item
+Create three hls variant streams. The first variant stream will be a video only
+stream with video bitrate 1000k, the second variant stream will be an audio only
+stream with bitrate 64k and the third variant stream will be a video only stream
+with bitrate 256k. Here, three media playlist with file names @file{out_0.m3u8},
+@file{out_1.m3u8} and @file{out_2.m3u8} will be created.
 @example
 ffmpeg -re -i in.ts -b:v:0 1000k -b:v:1 256k -b:a:0 64k \
   -map 0:v -map 0:a -map 0:v -f hls -var_stream_map "v:0 a:0 v:1" \
   http://example.com/live/out_%v.m3u8
 @end example
-This example creates three hls variant streams. The first variant stream will
-be a video only stream with video bitrate 1000k, the second variant stream will
-be an audio only stream with bitrate 64k and the third variant stream will be a
-video only stream with bitrate 256k. Here, three media playlist with file names
-out_0.m3u8, out_1.m3u8 and out_2.m3u8 will be created.
+
+@item
+Create the variant streams in subdirectories. Here, the first media playlist is
+created at @file{http://example.com/live/vs_0/out.m3u8} and the second one at
+@file{http://example.com/live/vs_1/out.m3u8}.
 @example
 ffmpeg -re -i in.ts -b:v:0 1000k -b:v:1 256k -b:a:0 64k -b:a:1 32k \
   -map 0:v -map 0:a -map 0:v -map 0:a -f hls -var_stream_map "v:0,a:0 v:1,a:1" \
   http://example.com/live/vs_%v/out.m3u8
 @end example
-This example creates the variant streams in subdirectories. Here, the first
-media playlist is created at @file{http://example.com/live/vs_0/out.m3u8} and
-the second one at @file{http://example.com/live/vs_1/out.m3u8}.
+
+@item
+Create two audio only and two video only variant streams. In addition to the
+@code{#EXT-X-STREAM-INF} tag for each variant stream in the master playlist, the
+@code{#EXT-X-MEDIA} tag is also added for the two audio only variant streams and
+they are mapped to the two video only variant streams with audio group names
+'aud_low' and 'aud_high'.
+By default, a single hls variant containing all the encoded streams is created.
 @example
 ffmpeg -re -i in.ts -b:a:0 32k -b:a:1 64k -b:v:0 1000k -b:v:1 3000k  \
   -map 0:a -map 0:a -map 0:v -map 0:v -f hls \
@@ -2221,14 +2389,15 @@ ffmpeg -re -i in.ts -b:a:0 32k -b:a:1 64k -b:v:0 1000k -b:v:1 3000k  \
   -master_pl_name master.m3u8 \
   http://example.com/live/out_%v.m3u8
 @end example
-This example creates two audio only and two video only variant streams. In
-addition to the #EXT-X-STREAM-INF tag for each variant stream in the master
-playlist, #EXT-X-MEDIA tag is also added for the two audio only variant streams
-and they are mapped to the two video only variant streams with audio group names
-'aud_low' and 'aud_high'.
 
+@item
+
+Create two audio only and one video only variant streams. In addition to the
+@code{#EXT-X-STREAM-INF} tag for each variant stream in the master playlist, the
+@code{#EXT-X-MEDIA} tag is also added for the two audio only variant streams and
+they are mapped to the one video only variant streams with audio group name
+'aud_low', and the audio group have default stat is NO or YES.
 By default, a single hls variant containing all the encoded streams is created.
-
 @example
 ffmpeg -re -i in.ts -b:a:0 32k -b:a:1 64k -b:v:0 1000k \
   -map 0:a -map 0:a -map 0:v -f hls \
@@ -2236,14 +2405,15 @@ ffmpeg -re -i in.ts -b:a:0 32k -b:a:1 64k -b:v:0 1000k \
   -master_pl_name master.m3u8 \
   http://example.com/live/out_%v.m3u8
 @end example
-This example creates two audio only and one video only variant streams. In
-addition to the #EXT-X-STREAM-INF tag for each variant stream in the master
-playlist, #EXT-X-MEDIA tag is also added for the two audio only variant streams
-and they are mapped to the one video only variant streams with audio group name
-'aud_low', and the audio group have default stat is NO or YES.
 
-By default, a single hls variant containing all the encoded streams is created.
-
+@item
+Create two audio only and one video only variant streams. In addition to the
+@code{#EXT-X-STREAM-INF} tag for each variant stream in the master playlist, the
+@code{#EXT-X-MEDIA} tag is also added for the two audio only variant streams and
+they are mapped to the one video only variant streams with audio group name
+'aud_low', and the audio group have default stat is NO or YES, and one audio
+have and language is named ENG, the other audio language is named CHN. By
+default, a single hls variant containing all the encoded streams is created.
 @example
 ffmpeg -re -i in.ts -b:a:0 32k -b:a:1 64k -b:v:0 1000k \
   -map 0:a -map 0:a -map 0:v -f hls \
@@ -2251,15 +2421,11 @@ ffmpeg -re -i in.ts -b:a:0 32k -b:a:1 64k -b:v:0 1000k \
   -master_pl_name master.m3u8 \
   http://example.com/live/out_%v.m3u8
 @end example
-This example creates two audio only and one video only variant streams. In
-addition to the #EXT-X-STREAM-INF tag for each variant stream in the master
-playlist, #EXT-X-MEDIA tag is also added for the two audio only variant streams
-and they are mapped to the one video only variant streams with audio group name
-'aud_low', and the audio group have default stat is NO or YES, and one audio
-have and language is named ENG, the other audio language is named CHN.
 
-By default, a single hls variant containing all the encoded streams is created.
-
+@item
+Create a single variant stream. Add the @code{#EXT-X-MEDIA} tag with
+@code{TYPE=SUBTITLES} in the master playlist with webvtt subtitle group name
+'subtitle'. Make sure the input file has one text subtitle stream at least.
 @example
 ffmpeg -y -i input_with_subtitle.mkv \
  -b:v:0 5250k -c:v h264 -pix_fmt yuv420p -profile:v main -level 4.1 \
@@ -2267,84 +2433,102 @@ ffmpeg -y -i input_with_subtitle.mkv \
  -c:s webvtt -c:a mp2 -ar 48000 -ac 2 -map 0:v -map 0:a:0 -map 0:s:0 \
  -f hls -var_stream_map "v:0,a:0,s:0,sgroup:subtitle" \
  -master_pl_name master.m3u8 -t 300 -hls_time 10 -hls_init_time 4 -hls_list_size \
- 10 -master_pl_publish_rate 10  -hls_flags \
+ 10 -master_pl_publish_rate 10 -hls_flags \
  delete_segments+discont_start+split_by_time ./tmp/video.m3u8
 @end example
+@end itemize
 
-This example adds @code{#EXT-X-MEDIA} tag with @code{TYPE=SUBTITLES} in
-the master playlist with webvtt subtitle group name 'subtitle'. Please make sure
-the input file has one text subtitle stream at least.
-
-@item cc_stream_map
+@item cc_stream_map @var{cc_stream_map}
 Map string which specifies different closed captions groups and their
 attributes. The closed captions stream groups are separated by space.
+
 Expected string format is like this
 "ccgroup:<group name>,instreamid:<INSTREAM-ID>,language:<language code> ....".
 'ccgroup' and 'instreamid' are mandatory attributes. 'language' is an optional
 attribute.
+
 The closed captions groups configured using this option are mapped to different
 variant streams by providing the same 'ccgroup' name in the
-@code{var_stream_map} string. If @code{var_stream_map} is not set, then the
-first available ccgroup in @code{cc_stream_map} is mapped to the output variant
-stream. The examples for these two use cases are given below.
+@option{var_stream_map} string.
 
-@example
-ffmpeg -re -i in.ts -b:v 1000k -b:a 64k -a53cc 1 -f hls \
-  -cc_stream_map "ccgroup:cc,instreamid:CC1,language:en" \
-  -master_pl_name master.m3u8 \
-  http://example.com/live/out.m3u8
-@end example
-This example adds @code{#EXT-X-MEDIA} tag with @code{TYPE=CLOSED-CAPTIONS} in
-the master playlist with group name 'cc', language 'en' (english) and
-INSTREAM-ID 'CC1'. Also, it adds @code{CLOSED-CAPTIONS} attribute with group
-name 'cc' for the output variant stream.
+For example:
 @example
 ffmpeg -re -i in.ts -b:v:0 1000k -b:v:1 256k -b:a:0 64k -b:a:1 32k \
-  -a53cc:0 1 -a53cc:1 1\
+  -a53cc:0 1 -a53cc:1 1 \
   -map 0:v -map 0:a -map 0:v -map 0:a -f hls \
   -cc_stream_map "ccgroup:cc,instreamid:CC1,language:en ccgroup:cc,instreamid:CC2,language:sp" \
   -var_stream_map "v:0,a:0,ccgroup:cc v:1,a:1,ccgroup:cc" \
   -master_pl_name master.m3u8 \
   http://example.com/live/out_%v.m3u8
 @end example
-This example adds two @code{#EXT-X-MEDIA} tags with @code{TYPE=CLOSED-CAPTIONS} in
-the master playlist for the INSTREAM-IDs 'CC1' and 'CC2'. Also, it adds
+will add two @code{#EXT-X-MEDIA} tags with @code{TYPE=CLOSED-CAPTIONS} in the
+master playlist for the INSTREAM-IDs 'CC1' and 'CC2'. Also, it will add
 @code{CLOSED-CAPTIONS} attribute with group name 'cc' for the two output variant
 streams.
 
-@item master_pl_name
+If @option{var_stream_map} is not set, then the first available ccgroup in
+@option{cc_stream_map} is mapped to the output variant stream.
+
+For example:
+@example
+ffmpeg -re -i in.ts -b:v 1000k -b:a 64k -a53cc 1 -f hls \
+  -cc_stream_map "ccgroup:cc,instreamid:CC1,language:en" \
+  -master_pl_name master.m3u8 \
+  http://example.com/live/out.m3u8
+@end example
+this will add @code{#EXT-X-MEDIA} tag with @code{TYPE=CLOSED-CAPTIONS} in the
+master playlist with group name 'cc', language 'en' (english) and INSTREAM-ID
+'CC1'. Also, it will add @code{CLOSED-CAPTIONS} attribute with group name 'cc'
+for the output variant stream.
+
+@item master_pl_name @var{name}
 Create HLS master playlist with the given name.
 
+For example:
 @example
 ffmpeg -re -i in.ts -f hls -master_pl_name master.m3u8 http://example.com/live/out.m3u8
 @end example
-This example creates HLS master playlist with name master.m3u8 and it is
-published at http://example.com/live/
+creates an HLS master playlist with name @file{master.m3u8} which is published
+at @url{http://example.com/live/}.
 
-@item master_pl_publish_rate
+@item master_pl_publish_rate @var{count}
 Publish master play list repeatedly every after specified number of segment intervals.
 
+For example:
 @example
 ffmpeg -re -i in.ts -f hls -master_pl_name master.m3u8 \
 -hls_time 2 -master_pl_publish_rate 30 http://example.com/live/out.m3u8
 @end example
-
-This example creates HLS master playlist with name master.m3u8 and keep
+creates an HLS master playlist with name @file{master.m3u8} and keeps
 publishing it repeatedly every after 30 segments i.e. every after 60s.
 
-@item http_persistent
+@item http_persistent @var{bool}
 Use persistent HTTP connections. Applicable only for HTTP output.
 
-@item timeout
+@item timeout @var{timeout}
 Set timeout for socket I/O operations. Applicable only for HTTP output.
 
-@item ignore_io_errors
+@item ignore_io_errors @var{bool}
 Ignore IO errors during open, write and delete. Useful for long-duration runs with network output.
 
-@item headers
+@item headers @var{headers}
 Set custom HTTP headers, can override built in default headers. Applicable only for HTTP output.
-
 @end table
+
+@section iamf
+Immersive Audio Model and Formats (IAMF) muxer.
+
+IAMF is used to provide immersive audio content for presentation on a wide range
+of devices in both streaming and offline applications. These applications
+include internet audio streaming, multicasting/broadcasting services, file
+download, gaming, communication, virtual and augmented reality, and others. In
+these applications, audio may be played back on a wide range of devices, e.g.,
+headphones, mobile phones, tablets, TVs, sound bars, home theater systems, and
+big screens.
+
+This format was promoted and desgined by Alliance for Open Media.
+
+For more information about this format, see @url{https://aomedia.org/iamf/}.
 
 @anchor{ico}
 @section ico
@@ -2379,11 +2563,16 @@ If a BMP image is used, it must use the BITMAPINFOHEADER DIB header
 If a PNG image is used, it must use the rgba pixel format
 @end itemize
 
+@section ilbc
+Internet Low Bitrate Codec (iLBC) raw muxer.
+
+It accepts a single @samp{ilbc} audio stream.
+
 @anchor{image2}
-@section image2
+@section image2, image2pipe
 Image file muxer.
 
-The image file muxer writes video frames to image files.
+The @samp{image2} muxer writes video frames to image files.
 
 The output filenames are specified by a pattern, which can be used to
 produce sequentially numbered series of files.
@@ -2414,40 +2603,42 @@ each of the YUV420P components. To read or write this image file format,
 specify the name of the '.Y' file. The muxer will automatically open the
 '.U' and '.V' files as required.
 
-@subsection Options
+The @samp{image2pipe} muxer accepts the same options as the @samp{image2} muxer,
+but ignores the pattern verification and expansion, as it is supposed to write
+to the command output rather than to an actual stored file.
 
+@subsection Options
 @table @option
-@item frame_pts
-If set to 1, expand the filename with pts from pkt->pts.
+@item frame_pts @var{bool}
+If set to 1, expand the filename with the packet PTS (presentation time stamp).
 Default value is 0.
 
-@item start_number
+@item start_number @var{count}
 Start the sequence from the specified number. Default value is 1.
 
-@item update
+@item update @var{bool}
 If set to 1, the filename will always be interpreted as just a
 filename, not a pattern, and the corresponding file will be continuously
 overwritten with new images. Default value is 0.
 
-@item strftime
+@item strftime @var{bool}
 If set to 1, expand the filename with date and time information from
 @code{strftime()}. Default value is 0.
 
-@item atomic_writing
+@item atomic_writing @var{bool}
 Write output to a temporary file, which is renamed to target filename once
 writing is completed. Default is disabled.
 
 @item protocol_opts @var{options_list}
 Set protocol options as a :-separated list of key=value parameters. Values
 containing the @code{:} special character must be escaped.
-
 @end table
 
 @subsection Examples
-
-The following example shows how to use @command{ffmpeg} for creating a
-sequence of files @file{img-001.jpeg}, @file{img-002.jpeg}, ...,
-taking one image every second from the input video:
+@itemize
+@item
+Use @command{ffmpeg} for creating a sequence of files @file{img-001.jpeg},
+@file{img-002.jpeg}, ..., taking one image every second from the input video:
 @example
 ffmpeg -i in.avi -vsync cfr -r 1 -f image2 'img-%03d.jpeg'
 @end example
@@ -2467,36 +2658,104 @@ Note also that the pattern must not necessarily contain "%d" or
 ffmpeg -i in.avi -f image2 -frames:v 1 img.jpeg
 @end example
 
+@item
 The @option{strftime} option allows you to expand the filename with
 date and time information. Check the documentation of
 the @code{strftime()} function for the syntax.
 
-For example to generate image files from the @code{strftime()}
-"%Y-%m-%d_%H-%M-%S" pattern, the following @command{ffmpeg} command
-can be used:
+To generate image files from the @code{strftime()} "%Y-%m-%d_%H-%M-%S" pattern,
+the following @command{ffmpeg} command can be used:
 @example
 ffmpeg -f v4l2 -r 1 -i /dev/video0 -f image2 -strftime 1 "%Y-%m-%d_%H-%M-%S.jpg"
 @end example
 
-You can set the file name with current frame's PTS:
+@item
+Set the file name with current frame's PTS:
 @example
 ffmpeg -f v4l2 -r 1 -i /dev/video0 -copyts -f image2 -frame_pts true %d.jpg
 @end example
 
-A more complex example is to publish contents of your desktop directly to a
-WebDAV server every second:
+@item
+Publish contents of your desktop directly to a WebDAV server every second:
 @example
 ffmpeg -f x11grab -framerate 1 -i :0.0 -q:v 6 -update 1 -protocol_opts method=PUT http://example.com/desktop.jpg
 @end example
+@end itemize
+
+@section ircam
+Berkeley / IRCAM / CARL Sound Filesystem (BICSF) format muxer.
+
+The Berkeley/IRCAM/CARL Sound Format, developed in the 1980s, is a result of the
+merging of several different earlier sound file formats and systems including
+the csound system developed by Dr Gareth Loy at the Computer Audio Research Lab
+(CARL) at UC San Diego, the IRCAM sound file system developed by Rob Gross and
+Dan Timis at the Institut de Recherche et Coordination Acoustique / Musique in
+Paris and the Berkeley Fast Filesystem.
+
+It was developed initially as part of the Berkeley/IRCAM/CARL Sound Filesystem,
+a suite of programs designed to implement a filesystem for audio applications
+running under Berkeley UNIX. It was particularly popular in academic music
+research centres, and was used a number of times in the creation of early
+computer-generated compositions.
+
+This muxer accepts a single audio stream containing PCM data.
+
+@section ivf
+On2 IVF muxer.
+
+IVF was developed by On2 Technologies (formerly known as Duck
+Corporation), to store internally developed codecs.
+
+This muxer accepts a single @samp{vp8}, @samp{vp9}, or @samp{av1}
+video stream.
+
+@section jacosub
+JACOsub subtitle format muxer.
+
+This muxer accepts a single @samp{jacosub} subtitles stream.
+
+For more information about the format, see
+@url{http://unicorn.us.com/jacosub/jscripts.html}.
+
+@section kvag
+Simon & Schuster Interactive VAG muxer.
+
+This custom VAG container is used by some Simon & Schuster Interactive
+games such as "Real War", and "Real War: Rogue States".
+
+This muxer accepts a single @samp{adpcm_ima_ssi} audio stream.
+
+@section lrc
+LRC lyrics file format muxer.
+
+LRC (short for LyRiCs) is a computer file format that synchronizes
+song lyrics with an audio file, such as MP3, Vorbis, or MIDI.
+
+This muxer accepts a single @samp{subrip} or @samp{text} subtitles stream.
+
+@subsection Metadata
+The following metadata tags are converted to the format corresponding
+metadata:
+
+@table @option
+@item title
+@item album
+@item artist
+@item author
+@item creator
+@item encoder
+@item encoder_version
+@end table
+
+If @samp{encoder_version} is not explicitly set, it is automatically
+set to the libavformat version.
 
 @section matroska
-
 Matroska container muxer.
 
 This muxer implements the matroska and webm container specs.
 
 @subsection Metadata
-
 The recognized metadata settings in this muxer are:
 
 @table @option
@@ -2556,11 +2815,8 @@ ffmpeg -i sample_left_right_clip.mpg -an -c:v libvpx -metadata stereo_mode=left_
 @end example
 
 @subsection Options
-
-This muxer supports the following options:
-
 @table @option
-@item reserve_index_space
+@item reserve_index_space @var{index}
 By default, this muxer writes the index for seeking (called cues in Matroska
 terms) at the end of the file, because it cannot know in advance how much space
 to leave for the index at the beginning of the file. However for some use cases
@@ -2576,7 +2832,7 @@ A safe size for most use cases should be about 50kB per hour of video.
 Note that cues are only written if the output is seekable and this option will
 have no effect if it is not.
 
-@item cues_to_front
+@item cues_to_front @var{bool}
 If set, the muxer will write the index at the beginning of the file
 by shifting the main data if necessary. This can be combined with
 reserve_index_space in which case the data is only shifted if
@@ -2584,7 +2840,7 @@ the initially reserved space turns out to be insufficient.
 
 This option is ignored if the output is unseekable.
 
-@item default_mode
+@item default_mode @var{mode}
 This option controls how the FlagDefault of the output tracks will be set.
 It influences which tracks players should play by default. The default mode
 is @samp{passthrough}.
@@ -2604,12 +2860,11 @@ In this mode the FlagDefault is set if and only if the AV_DISPOSITION_DEFAULT
 flag is set in the disposition of the corresponding stream.
 @end table
 
-@item flipped_raw_rgb
+@item flipped_raw_rgb @var{bool}
 If set to true, store positive height for raw RGB bitmaps, which indicates
 bitmap is stored bottom-up. Note that this option does not flip the bitmap
 which has to be done manually beforehand, e.g. by using the vflip filter.
 Default is @var{false} and indicates bitmap is stored top down.
-
 @end table
 
 @anchor{md5}
@@ -2915,19 +3170,18 @@ ogg files can be safely chained.
 
 @end table
 
-@anchor{rcwt}
+@anchor{rcwtenc}
 @section rcwt
 
-Raw Captions With Time (RCWT) is a format native to ccextractor, a commonly
-used open source tool for processing 608/708 closed caption (CC) sources.
-It can be used to archive the original, raw CC bitstream and to produce
-a source file for later CC processing or conversion. As a result,
-it also allows for interopability with ccextractor for processing CC data
-extracted via ffmpeg. The format is simple to parse and can be used
-to retain all lines and variants of CC.
+RCWT (Raw Captions With Time) is a format native to ccextractor, a commonly
+used open source tool for processing 608/708 Closed Captions (CC) sources.
+It can be used to archive the original extracted CC bitstream and to produce
+a source file for later processing or conversion. The format allows
+for interoperability between ccextractor and FFmpeg, is simple to parse,
+and can be used to create a backup of the CC presentation.
 
-This muxer implements the specification as of 2024-01-05, which has
-been stable and unchanged for 10 years as of this writing.
+This muxer implements the specification as of March 2024, which has
+been stable and unchanged since April 2014.
 
 This muxer will have some nuances from the way that ccextractor muxes RCWT.
 No compatibility issues when processing the output with ccextractor
@@ -2936,6 +3190,16 @@ and outputs will not be a bit-exact match.
 
 A free specification of RCWT can be found here:
 @url{https://github.com/CCExtractor/ccextractor/blob/master/docs/BINARY_FILE_FORMAT.TXT}
+
+@subsection Examples
+
+@itemize
+@item
+Extract Closed Captions to RCWT using lavfi:
+@example
+ffmpeg -f lavfi -i "movie=INPUT.mkv[out+subcc]" -map 0:s:0 -c:s copy -f rcwt CC.rcwt.bin
+@end example
+@end itemize
 
 @anchor{segment}
 @section segment, stream_segment, ssegment

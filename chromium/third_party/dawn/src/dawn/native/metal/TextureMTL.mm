@@ -101,8 +101,9 @@ MTLTextureType MetalTextureViewType(wgpu::TextureViewDimension dimension,
     }
 }
 
-bool RequiresCreatingNewTextureView(const TextureBase* texture,
-                                    const TextureViewDescriptor* textureViewDescriptor) {
+bool RequiresCreatingNewTextureView(
+    const TextureBase* texture,
+    const UnpackedPtr<TextureViewDescriptor>& textureViewDescriptor) {
     constexpr wgpu::TextureUsage kShaderUsageNeedsView =
         wgpu::TextureUsage::StorageBinding | wgpu::TextureUsage::TextureBinding;
     constexpr wgpu::TextureUsage kUsageNeedsView = kShaderUsageNeedsView |
@@ -321,7 +322,7 @@ ResultOrError<Ref<Texture>> Texture::CreateFromSharedTextureMemory(
     Device* device = ToBackend(memory->GetDevice());
     Ref<Texture> texture = AcquireRef(new Texture(device, descriptor));
     DAWN_TRY(texture->InitializeFromSharedTextureMemory(memory, descriptor));
-    texture->mSharedTextureMemoryContents = memory->GetContents();
+    texture->mSharedResourceMemoryContents = memory->GetContents();
     return texture;
 }
 
@@ -341,7 +342,7 @@ MaybeError Texture::InitializeAsInternalTexture(const UnpackedPtr<TextureDescrip
         NSRef<MTLTextureDescriptor> mtlDesc = CreateMetalTextureDescriptor();
         mMtlUsage = [*mtlDesc usage];
         mMtlFormat = [*mtlDesc pixelFormat];
-        mMtlPlaneTextures->resize(1);
+        mMtlPlaneTextures.resize(1);
         mMtlPlaneTextures[0] =
             AcquireNSPRef([device->GetMTLDevice() newTextureWithDescriptor:mtlDesc.Get()]);
 
@@ -368,7 +369,7 @@ MaybeError Texture::InitializeAsInternalTexture(const UnpackedPtr<TextureDescrip
         // Multiplanar format doesn't have equivalent MTLPixelFormat so just set it to invalid.
         mMtlFormat = MTLPixelFormatInvalid;
         const size_t numPlanes = IOSurfaceGetPlaneCount(GetIOSurface());
-        mMtlPlaneTextures->resize(numPlanes);
+        mMtlPlaneTextures.resize(numPlanes);
         for (size_t plane = 0; plane < numPlanes; ++plane) {
             mMtlPlaneTextures[plane] = AcquireNSPRef(CreateTextureMtlForPlane(
                 mMtlUsage, GetFormat(), plane, device, GetSampleCount(), GetIOSurface()));
@@ -388,7 +389,7 @@ void Texture::InitializeAsWrapping(const UnpackedPtr<TextureDescriptor>& descrip
     NSRef<MTLTextureDescriptor> mtlDesc = CreateMetalTextureDescriptor();
     mMtlUsage = [*mtlDesc usage];
     mMtlFormat = [*mtlDesc pixelFormat];
-    mMtlPlaneTextures->resize(1);
+    mMtlPlaneTextures.resize(1);
     mMtlPlaneTextures[0] = std::move(wrapped);
     SetLabelImpl();
 }
@@ -414,13 +415,13 @@ MaybeError Texture::InitializeFromSharedTextureMemory(
 void Texture::SynchronizeTextureBeforeUse(CommandRecordingContext* commandContext) {
     if (@available(macOS 10.14, iOS 12.0, *)) {
         SharedTextureMemoryBase::PendingFenceList fences;
-        SharedTextureMemoryContents* contents = GetSharedTextureMemoryContents();
+        SharedResourceMemoryContents* contents = GetSharedResourceMemoryContents();
         if (contents != nullptr) {
             contents->AcquirePendingFences(&fences);
             contents->SetLastUsageSerial(GetDevice()->GetQueue()->GetPendingCommandSerial());
         }
 
-        if (!mWaitEvents.empty() || !fences->empty()) {
+        if (!mWaitEvents.empty() || !fences.empty()) {
             // There may be an open blit encoder from a copy command or writeBuffer.
             // Wait events are only allowed if there is no encoder open.
             commandContext->EndBlit();
@@ -440,14 +441,6 @@ void Texture::SynchronizeTextureBeforeUse(CommandRecordingContext* commandContex
     }
 }
 
-void Texture::IOSurfaceEndAccess(ExternalImageIOSurfaceEndAccessDescriptor* descriptor) {
-    DAWN_ASSERT(descriptor);
-    ToBackend(GetDevice()->GetQueue())->ExportLastSignaledEvent(descriptor);
-    descriptor->isInitialized = IsSubresourceContentInitialized(GetAllSubresources());
-    // Destroy the texture as it should not longer be used after EndAccess.
-    Destroy();
-}
-
 Texture::Texture(DeviceBase* dev, const UnpackedPtr<TextureDescriptor>& desc)
     : TextureBase(dev, desc) {}
 
@@ -462,16 +455,16 @@ void Texture::DestroyImpl() {
     //   is implicitly destroyed. This case is thread-safe because there are no
     //   other threads using the texture since there are no other live refs.
     TextureBase::DestroyImpl();
-    mMtlPlaneTextures->clear();
+    mMtlPlaneTextures.clear();
     mIOSurface = nullptr;
 }
 
 void Texture::SetLabelImpl() {
     if (!GetFormat().IsMultiPlanar()) {
-        DAWN_ASSERT(mMtlPlaneTextures->size() == 1);
+        DAWN_ASSERT(mMtlPlaneTextures.size() == 1);
         SetDebugName(GetDevice(), mMtlPlaneTextures[0].Get(), "Dawn_Texture", GetLabel());
     } else {
-        for (size_t i = 0; i < mMtlPlaneTextures->size(); ++i) {
+        for (size_t i = 0; i < mMtlPlaneTextures.size(); ++i) {
             SetDebugName(GetDevice(), mMtlPlaneTextures[i].Get(),
                          absl::StrFormat("Dawn_Plane_Texture[%zu]", i).c_str(), GetLabel());
         }
@@ -481,16 +474,16 @@ void Texture::SetLabelImpl() {
 id<MTLTexture> Texture::GetMTLTexture(Aspect aspect) const {
     switch (aspect) {
         case Aspect::Plane0:
-            DAWN_ASSERT(mMtlPlaneTextures->size() > 1);
+            DAWN_ASSERT(mMtlPlaneTextures.size() > 1);
             return mMtlPlaneTextures[0].Get();
         case Aspect::Plane1:
-            DAWN_ASSERT(mMtlPlaneTextures->size() > 1);
+            DAWN_ASSERT(mMtlPlaneTextures.size() > 1);
             return mMtlPlaneTextures[1].Get();
         case Aspect::Plane2:
-            DAWN_ASSERT(mMtlPlaneTextures->size() > 2);
+            DAWN_ASSERT(mMtlPlaneTextures.size() > 2);
             return mMtlPlaneTextures[2].Get();
         default:
-            DAWN_ASSERT(mMtlPlaneTextures->size() == 1);
+            DAWN_ASSERT(mMtlPlaneTextures.size() == 1);
             return mMtlPlaneTextures[0].Get();
     }
 }
@@ -783,14 +776,15 @@ MaybeError Texture::EnsureSubresourceContentInitialized(CommandRecordingContext*
 }
 
 // static
-ResultOrError<Ref<TextureView>> TextureView::Create(TextureBase* texture,
-                                                    const TextureViewDescriptor* descriptor) {
+ResultOrError<Ref<TextureView>> TextureView::Create(
+    TextureBase* texture,
+    const UnpackedPtr<TextureViewDescriptor>& descriptor) {
     Ref<TextureView> view = AcquireRef(new TextureView(texture, descriptor));
     DAWN_TRY(view->Initialize(descriptor));
     return view;
 }
 
-MaybeError TextureView::Initialize(const TextureViewDescriptor* descriptor) {
+MaybeError TextureView::Initialize(const UnpackedPtr<TextureViewDescriptor>& descriptor) {
     DeviceBase* device = GetDevice();
     Texture* texture = ToBackend(GetTexture());
 

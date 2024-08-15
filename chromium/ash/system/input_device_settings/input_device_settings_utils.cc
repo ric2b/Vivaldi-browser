@@ -9,7 +9,9 @@
 #include "ash/public/cpp/accelerators_util.h"
 #include "ash/public/mojom/input_device_settings.mojom-shared.h"
 #include "ash/public/mojom/input_device_settings.mojom.h"
+#include "ash/shell.h"
 #include "ash/system/input_device_settings/input_device_settings_pref_names.h"
+#include "base/containers/contains.h"
 #include "base/containers/fixed_flat_set.h"
 #include "base/containers/flat_set.h"
 #include "base/export_template.h"
@@ -22,6 +24,7 @@
 #include "base/values.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/known_user.h"
+#include "ui/events/ash/keyboard_capability.h"
 #include "ui/events/ash/mojom/extended_fkeys_modifier.mojom-shared.h"
 #include "ui/events/ash/mojom/modifier_key.mojom.h"
 #include "ui/events/event.h"
@@ -412,6 +415,18 @@ mojom::ButtonRemappingPtr ConvertDictToButtonRemapping(
 bool IsChromeOSKeyboard(const mojom::Keyboard& keyboard) {
   return keyboard.meta_key == mojom::MetaKey::kLauncher ||
          keyboard.meta_key == mojom::MetaKey::kSearch;
+}
+
+bool IsSplitModifierKeyboard(const mojom::Keyboard& keyboard) {
+  return base::Contains(keyboard.modifier_keys,
+                        ui::mojom::ModifierKey::kFunction) &&
+         base::Contains(keyboard.modifier_keys,
+                        ui::mojom::ModifierKey::kRightAlt);
+}
+
+bool IsSplitModifierKeyboard(int device_id) {
+  return Shell::Get()->keyboard_capability()->HasFunctionKey(device_id) &&
+         Shell::Get()->keyboard_capability()->HasRightAltKey(device_id);
 }
 
 }  // namespace ash

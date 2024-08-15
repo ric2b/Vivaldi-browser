@@ -10,6 +10,7 @@
 #ifndef EIGEN_RANK2UPDATE_H
 #define EIGEN_RANK2UPDATE_H
 
+namespace Eigen {
 namespace internal {
 
 /* Optimized selfadjoint matrix += alpha * uv' + conj(alpha)*vu'
@@ -49,6 +50,7 @@ struct packed_rank2_update_selector {
   }
 };
 
-}  // end namespace internal
+}  // namespace internal
+}  // namespace Eigen
 
 #endif  // EIGEN_RANK2UPDATE_H

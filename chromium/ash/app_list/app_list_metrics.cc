@@ -15,6 +15,7 @@
 #include "ash/app_list/model/app_list_item_list.h"
 #include "ash/app_list/views/continue_section_view.h"
 #include "ash/constants/ash_features.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/public/cpp/app_menu_constants.h"
 #include "ash/shell.h"
@@ -262,6 +263,31 @@ void RecordPeriodicAppListMetrics() {
                            number_of_non_system_folders);
   UMA_HISTOGRAM_COUNTS_100("Apps.AppList.NumberOfAppsInNonSystemFolders",
                            number_of_apps_in_non_system_folders);
+}
+
+void RecordAppListByCollectionLaunched(AppCollection collection,
+                                       bool is_apps_collections_page) {
+  AppEntity app_entity = collection == AppCollection::kUnknown
+                             ? AppEntity::kThirdPartyApp
+                             : AppEntity::kDefaultApp;
+
+  const std::string experimental_arm =
+      app_list_features::IsAppsCollectionsEnabledCounterfactually()
+          ? ".Counterfactual"
+          : ".Enabled";
+  const std::string apps_collections_state =
+      app_list_features::IsAppsCollectionsEnabled() ? experimental_arm : "";
+  const std::string app_list_page =
+      is_apps_collections_page ? "AppsCollectionsPage" : "AppsPage";
+
+  base::UmaHistogramEnumeration(
+      base::StrCat({"Apps.AppListBubble.", app_list_page,
+                    ".AppLaunchesByEntity", apps_collections_state}),
+      app_entity);
+  base::UmaHistogramEnumeration(
+      base::StrCat({"Apps.AppListBubble.", app_list_page,
+                    ".AppLaunchesByCategory", apps_collections_state}),
+      collection);
 }
 
 void RecordAppListAppLaunched(AppListLaunchedFrom launched_from,

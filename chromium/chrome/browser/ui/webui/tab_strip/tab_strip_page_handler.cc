@@ -39,7 +39,7 @@
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_util.h"
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/browser/ui/webui/util/image_util.h"
-#include "chrome/browser/ui/webui/webui_util.h"
+#include "chrome/browser/ui/webui/webui_util_desktop.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
@@ -191,7 +191,8 @@ TabStripPageHandler::TabStripPageHandler(
   ThemeServiceFactory::GetForProfile(browser_->profile())->AddObserver(this);
 
   // Or native theme change.
-  theme_observation_.Observe(webui::GetNativeTheme(web_ui_->GetWebContents()));
+  theme_observation_.Observe(
+      webui::GetNativeThemeDeprecated(web_ui_->GetWebContents()));
 }
 
 void TabStripPageHandler::NotifyLayoutChanged() {
@@ -431,7 +432,7 @@ bool TabStripPageHandler::CanDragEnter(
     content::WebContents* source,
     const content::DropData& data,
     blink::DragOperationsMask operations_allowed) {
-  // TODO(crbug.com/1032592): Prevent dragging across Chromium instances.
+  // TODO(crbug.com/40110968): Prevent dragging across Chromium instances.
   if (auto it = data.custom_data.find(kWebUITabIdDataType);
       it != data.custom_data.end()) {
     int tab_id;
@@ -746,7 +747,7 @@ void TabStripPageHandler::ShowTabContextMenu(int32_t tab_id,
   }
 
   if (browser != browser_) {
-    // TODO(crbug.com/1141573): Investigate how a context menu is being opened
+    // TODO(crbug.com/40727240): Investigate how a context menu is being opened
     // for a tab that is no longer in the tab strip. Until then, fire a
     // tab-removed event so the tab is removed from this tab strip.
     page_->TabRemoved(tab_id);
@@ -886,7 +887,7 @@ void TabStripPageHandler::OnNativeThemeUpdated(
   // switch between light/dark mode. b) A different theme is enabled. e.g.
   // switch between GTK and classic theme on Linux. Reset observer in case b).
   ui::NativeTheme* current_theme =
-      webui::GetNativeTheme(web_ui_->GetWebContents());
+      webui::GetNativeThemeDeprecated(web_ui_->GetWebContents());
   if (observed_theme != current_theme) {
     theme_observation_.Reset();
     theme_observation_.Observe(current_theme);

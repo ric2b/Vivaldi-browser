@@ -17,7 +17,7 @@ source_set("helpers") {
   deps = [
    "//base",
    "//url",
-   "//components/url_formatter",
+   "//ios/components/webui:url_constants",
   ]
 
  frameworks = [

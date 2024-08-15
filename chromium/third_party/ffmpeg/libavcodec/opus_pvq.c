@@ -27,6 +27,7 @@
 
 #include "config_components.h"
 
+#include "libavutil/mem.h"
 #include "mathops.h"
 #include "opustab.h"
 #include "opus_pvq.h"
@@ -80,7 +81,7 @@ static inline int celt_pulses2bits(const uint8_t *cache, int pulses)
    return (pulses == 0) ? 0 : cache[pulses] + 1;
 }
 
-static inline void celt_normalize_residual(const int * av_restrict iy, float * av_restrict X,
+static inline void celt_normalize_residual(const int * restrict iy, float * restrict X,
                                            int N, float g)
 {
     int i;

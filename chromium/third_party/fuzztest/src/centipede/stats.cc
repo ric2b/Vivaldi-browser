@@ -15,6 +15,7 @@
 #include "./centipede/stats.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cinttypes>
 #include <cstddef>
 #include <cstdint>
@@ -56,7 +57,7 @@ using TraitBits = Stats::TraitBits;
 // -----------------------------------------------------------------------------
 //                               StatsReporter
 
-StatsReporter::StatsReporter(const std::vector<Stats> &stats_vec,
+StatsReporter::StatsReporter(const std::vector<std::atomic<Stats>> &stats_vec,
                              const std::vector<Environment> &env_vec)
     : stats_vec_{stats_vec}, env_vec_{env_vec} {
   CHECK_EQ(stats_vec.size(), env_vec.size());
@@ -70,6 +71,16 @@ StatsReporter::StatsReporter(const std::vector<Stats> &stats_vec,
 }
 
 void StatsReporter::ReportCurrStats() {
+  // Collect snapshots of the current elements of `stats_vec_`: the elements
+  // are `std::atomic`s; snapshotting them is required, and also provides
+  // temporal consistency between the fields of each `Stats` object, even
+  // as it is being modified by a different thread.
+  std::vector<Stats> stats_snapshots;
+  stats_snapshots.reserve(stats_vec_.size());
+  for (const auto &stats : stats_vec_) {
+    stats_snapshots.push_back(stats.load());
+  }
+
   PreAnnounceFields(Stats::kFieldInfos);
   for (const Stats::FieldInfo &field_info : Stats::kFieldInfos) {
     if (!ShouldReportThisField(field_info)) continue;
@@ -80,7 +91,7 @@ void StatsReporter::ReportCurrStats() {
       std::vector<uint64_t> stat_values;
       stat_values.reserve(group_indices.size());
       for (const auto idx : group_indices) {
-        stat_values.push_back(stats_vec_.at(idx).*(field_info.field));
+        stat_values.push_back(stats_snapshots.at(idx).*(field_info.field));
       }
       ReportCurrFieldSample(std::move(stat_values));
     }
@@ -161,7 +172,7 @@ void StatsLogger::DoneFieldSamplesBatch() {
 
 StatsCsvFileAppender::~StatsCsvFileAppender() {
   for (const auto &[group_name, file] : files_) {
-    RemoteFileClose(file);
+    RemoteFileClose(file.file);
   }
 }
 
@@ -183,8 +194,8 @@ void StatsCsvFileAppender::PreAnnounceFields(
 }
 
 void StatsCsvFileAppender::SetCurrGroup(const Environment &master_env) {
-  RemoteFile *&file = files_[master_env.experiment_name];
-  if (file == nullptr) {
+  BufferedRemoteFile &file = files_[master_env.experiment_name];
+  if (file.file == nullptr) {
     const std::string filename =
         WorkDir{master_env}.FuzzingStatsPath(master_env.experiment_name);
     // If a non-empty file already exists and has the same CVS header, then
@@ -204,11 +215,14 @@ void StatsCsvFileAppender::SetCurrGroup(const Environment &master_env) {
         RemoteFileSetContents(GetBackupFilename(filename), contents);
       }
     }
-    file = RemoteFileOpen(filename, append ? "a" : "w");
-    CHECK(file != nullptr) << VV(filename);
-    if (!append) RemoteFileAppend(file, csv_header_);
+    file.file = RemoteFileOpen(filename, append ? "a" : "w");
+    CHECK(file.file != nullptr) << VV(filename);
+    if (!append) {
+      RemoteFileAppend(file.file, csv_header_);
+      RemoteFileFlush(file.file);
+    }
   }
-  curr_file_ = file;
+  curr_file_ = &file;
 }
 
 void StatsCsvFileAppender::SetCurrField(const Stats::FieldInfo &field_info) {
@@ -227,7 +241,8 @@ void StatsCsvFileAppender::ReportCurrFieldSample(
   }
   double avg = !values.empty() ? (1.0 * sum / values.size()) : 0;
 
-  std::string values_str;
+  CHECK(curr_file_ != nullptr);
+  std::string &values_str = curr_file_->buffer;
   if (curr_field_info_.traits & TraitBits::kMin)
     absl::StrAppendFormat(&values_str, "%" PRIu64 ",", min);
   if (curr_field_info_.traits & TraitBits::kMax)
@@ -236,8 +251,6 @@ void StatsCsvFileAppender::ReportCurrFieldSample(
     absl::StrAppendFormat(&values_str, "%.1lf,", avg);
   if (curr_field_info_.traits & TraitBits::kSum)
     absl::StrAppendFormat(&values_str, "%" PRIu64 ",", sum);
-
-  RemoteFileAppend(curr_file_, values_str);
 }
 
 void StatsCsvFileAppender::ReportFlags(const GroupToFlags &group_to_flags) {
@@ -246,8 +259,10 @@ void StatsCsvFileAppender::ReportFlags(const GroupToFlags &group_to_flags) {
 }
 
 void StatsCsvFileAppender::DoneFieldSamplesBatch() {
-  for (const auto &[group_name, file] : files_) {
-    RemoteFileAppend(file, "\n");
+  for (auto &&[group_name, file] : files_) {
+    RemoteFileAppend(file.file, absl::StrCat(file.buffer, "\n"));
+    RemoteFileFlush(file.file);
+    file.buffer.clear();
   }
 }
 
@@ -263,12 +278,13 @@ std::string StatsCsvFileAppender::GetBackupFilename(
 
 // -----------------------------------------------------------------------------
 
-void PrintRewardValues(absl::Span<const Stats> stats_vec, std::ostream &os) {
+void PrintRewardValues(absl::Span<const std::atomic<Stats>> stats_vec,
+                       std::ostream &os) {
   size_t n = stats_vec.size();
   CHECK_GT(n, 0);
   std::vector<size_t> num_covered_pcs(n);
   for (size_t i = 0; i < n; ++i) {
-    num_covered_pcs[i] = stats_vec[i].num_covered_pcs;
+    num_covered_pcs[i] = stats_vec[i].load().num_covered_pcs;
   }
   std::sort(num_covered_pcs.begin(), num_covered_pcs.end());
   os << "REWARD_MAX " << num_covered_pcs.back() << "\n";

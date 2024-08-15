@@ -4,19 +4,6 @@
     padding: 0 12px;
     width: 45%;
   }
-
-  /* Some button styles are not available before Chrome Refresh 2023.
-   * cr-buttons that use these classes will fallback to the default
-   * button styles for non-[chrome-refresh-2023]. */
-  .tonal-button,
-  .floating-button {
-    display: none;
-  }
-
-  :host-context([chrome-refresh-2023]) .tonal-button,
-  :host-context([chrome-refresh-2023]) .floating-button {
-    display: inherit;
-  }
 </style>
 
 <h1>cr-button</h1>
@@ -37,26 +24,26 @@
   <div class="row">
     <cr-button>
       Outline button with icon
-      <iron-icon icon="cr:open-in-new" slot="suffix-icon"></iron-icon>
+      <cr-icon icon="cr:open-in-new" slot="suffix-icon"></cr-icon>
     </cr-button>
     <cr-button>
-      <iron-icon icon="cr:add" slot="prefix-icon"></iron-icon>
+      <cr-icon icon="cr:add" slot="prefix-icon"></cr-icon>
       Outline button with icon
     </cr-button>
   </div>
   <div class="row">
     <cr-button class="action-button">
-      <iron-icon icon="cr:add" slot="prefix-icon"></iron-icon>
+      <cr-icon icon="cr:add" slot="prefix-icon"></cr-icon>
       Primary button with icon
     </cr-button>
     <cr-button class="tonal-button">
-      <iron-icon icon="cr:add" slot="prefix-icon"></iron-icon>
+      <cr-icon icon="cr:add" slot="prefix-icon"></cr-icon>
       Tonal button with icon
     </cr-button>
   </div>
   <div class="row">
     <cr-button class="floating-button">
-      <iron-icon icon="cr:add" slot="prefix-icon"></iron-icon>
+      <cr-icon icon="cr:add" slot="prefix-icon"></cr-icon>
       Floating button with icon
     </cr-button>
   </div>
@@ -77,7 +64,7 @@
     <div hidden$="[[expanded_]]">Expand row</div>
     <div hidden$="[[!expanded_]]">Collapse row</div>
   </cr-expand-button>
-  <iron-collapse opened="[[expanded_]]">Some content goes here.</iron-collapse>
+  <cr-collapse opened="[[expanded_]]">Some content goes here.</cr-collapse>
 
   <cr-expand-button expand-icon="cr:arrow-drop-down"
       collapse-icon="cr:arrow-drop-up">

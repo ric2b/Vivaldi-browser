@@ -6,7 +6,7 @@
 import os
 import re
 import sys
-from typing import Union
+from typing import Optional
 
 _THIS_DIR = os.path.abspath(os.path.dirname(__file__))
 # The repo's root directory.
@@ -63,17 +63,20 @@ def is_formatted_string_cpe(value: str) -> bool:
     return util.matches(_PATTERN_CPE_FORMATTED_STRING, value)
 
 
-class CPEPrefixField(field_types.MetadataField):
+class CPEPrefixField(field_types.SingleLineTextField):
     """Custom field for the package's CPE."""
     def __init__(self):
-        super().__init__(name="CPEPrefix", one_liner=True)
+        super().__init__(name="CPEPrefix")
 
-    def validate(self, value: str) -> Union[vr.ValidationResult, None]:
+    def _is_valid(self, value: str) -> bool:
+        return (util.is_unknown(value) or is_formatted_string_cpe(value)
+                or is_uri_cpe(value))
+
+    def validate(self, value: str) -> Optional[vr.ValidationResult]:
         """Checks the given value is either 'unknown', or conforms to
         either the CPE 2.3 or 2.2 format.
         """
-        if (util.is_unknown(value) or is_formatted_string_cpe(value)
-                or is_uri_cpe(value)):
+        if self._is_valid(value):
             return None
 
         return vr.ValidationError(
@@ -85,3 +88,16 @@ class CPEPrefixField(field_types.MetadataField):
                 "https://nvd.nist.gov/products/cpe/search.",
                 f"Current value: '{value}'.",
             ])
+
+    def narrow_type(self, value: str) -> Optional[str]:
+        if not self._is_valid(value):
+            return None
+
+        if util.is_unknown(value):
+            return None
+
+        # CPE names are case-insensitive, we normalize to lowercase.
+        # See https://cpe.mitre.org/specification/.
+        value = value.lower()
+
+        return value

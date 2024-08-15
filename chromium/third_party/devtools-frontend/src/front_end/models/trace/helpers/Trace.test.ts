@@ -3,10 +3,15 @@
 // found in the LICENSE file.
 
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
+import {
+  getMainThread,
+  makeAsyncEndEvent,
+  makeAsyncStartEvent,
+  makeCompleteEvent,
+  makeInstantEvent,
+} from '../../../testing/TraceHelpers.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
 import * as TraceModel from '../trace.js';
-
-const {assert} = chai;
 
 describeWithEnvironment('TraceModel helpers', function() {
   describe('extractOriginFromTrace', () => {
@@ -124,7 +129,6 @@ describeWithEnvironment('TraceModel helpers', function() {
                       ?.get(TraceModel.Handlers.ModelHandlers.PageLoadMetrics.MetricName.FCP);
       if (!fcp || !fcp.event) {
         assert.fail('FCP not found');
-        return;
       }
       const navigationForFirstRequest =
           TraceModel.Helpers.Trace.getNavigationForTraceEvent(fcp.event, Meta.mainFrameId, Meta.navigationsByFrameId);
@@ -419,6 +423,303 @@ describeWithEnvironment('TraceModel helpers', function() {
         '@ 41818.833 for 2005.601: third measure',
       ]);
       assert.strictEqual(synthEvents.length, 237);
+    });
+    describe('createSortedSyntheticEvents()', () => {
+      it('correctly creates synthetic events when instant animation events are present', async function() {
+        const events = await TraceLoader.rawEvents(this, 'instant-animation-events.json.gz');
+        const animationEvents = events.filter(event => TraceModel.Types.TraceEvents.isTraceEventAnimation(event)) as
+            TraceModel.Types.TraceEvents.TraceEventAnimation[];
+        const animationSynthEvents = TraceModel.Helpers.Trace.createMatchedSortedSyntheticEvents(animationEvents);
+        const wantPairs = new Map<string, {compositeFailed: number, unsupportedProperties?: Array<string>}>([
+          [
+            'blink.animations,devtools.timeline,benchmark,rail:0x11d00230380:Animation',
+            {compositeFailed: 8224, unsupportedProperties: ['width']},
+          ],
+          ['blink.animations,devtools.timeline,benchmark,rail:0x11d00234738:Animation', {compositeFailed: 0}],
+          [
+            'blink.animations,devtools.timeline,benchmark,rail:0x11d00234b08:Animation',
+            {compositeFailed: 8224, unsupportedProperties: ['height']},
+          ],
+          [
+            'blink.animations,devtools.timeline,benchmark,rail:0x11d00234ed8:Animation',
+            {compositeFailed: 8224, unsupportedProperties: ['font-size']},
+          ],
+        ]);
+        // Ensure we have the correct numner of synthetic events created.
+        assert.deepEqual(wantPairs.size, animationSynthEvents.length);
+
+        animationSynthEvents.forEach(event => {
+          const id = event.id;
+          assert.exists(id);
+          assert.exists(wantPairs.get(id));
+
+          const beginEvent = event.args.data.beginEvent;
+          const endEvent = event.args.data.endEvent;
+          const instantEvents = event.args.data.instantEvents;
+
+          assert.exists(beginEvent);
+
+          // Check that the individual event ids match the synthetic id.
+          assert.isTrue(beginEvent.id2?.local && id.includes(beginEvent.id2?.local));
+          if (endEvent) {
+            assert.isTrue(endEvent.id2?.local && id?.includes(endEvent.id2?.local));
+          }
+          assert.isTrue(instantEvents?.every(event => event.id2?.local && id.includes(event.id2?.local)));
+
+          assert.strictEqual(instantEvents.length, 2);
+
+          // Check that the non-composited data matches the expected.
+          const nonCompositedEvents = instantEvents.filter(event => event.args.data.compositeFailed);
+          nonCompositedEvents.forEach(event => {
+            assert.strictEqual(event.args.data.compositeFailed, wantPairs.get(id)?.compositeFailed);
+            assert.deepEqual(event.args.data.unsupportedProperties, wantPairs.get(id)?.unsupportedProperties);
+          });
+        });
+      });
+    });
+  });
+
+  describe('getZeroIndexedLineAndColumnNumbersForEvent', () => {
+    it('subtracts one from the line number of a function call', async () => {
+      const fakeFunctionCall: TraceModel.Types.TraceEvents.TraceEventFunctionCall = {
+        name: TraceModel.Types.TraceEvents.KnownEventName.FunctionCall,
+        ph: TraceModel.Types.TraceEvents.Phase.COMPLETE,
+        cat: 'devtools-timeline',
+        dur: TraceModel.Types.Timing.MicroSeconds(100),
+        ts: TraceModel.Types.Timing.MicroSeconds(100),
+        pid: TraceModel.Types.TraceEvents.ProcessID(1),
+        tid: TraceModel.Types.TraceEvents.ThreadID(1),
+        args: {
+          data: {
+            functionName: 'test',
+            url: 'https://google.com/test.js',
+            scriptId: Number(123),
+            lineNumber: 1,
+            columnNumber: 1,
+          },
+        },
+      };
+      assert.deepEqual(TraceModel.Helpers.Trace.getZeroIndexedLineAndColumnForEvent(fakeFunctionCall), {
+        lineNumber: 0,
+        columnNumber: 0,
+      });
+    });
+  });
+
+  describe('frameIDForEvent', () => {
+    it('returns the frame ID from beginData if the event has it', async function() {
+      const traceParsedData = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
+      const parseHTMLEvent =
+          traceParsedData.Renderer.allTraceEntries.find(TraceModel.Types.TraceEvents.isTraceEventParseHTML);
+      assert.isOk(parseHTMLEvent);
+      const frameId = TraceModel.Helpers.Trace.frameIDForEvent(parseHTMLEvent);
+      assert.isNotNull(frameId);
+      assert.strictEqual(frameId, parseHTMLEvent.args.beginData.frame);
+    });
+
+    it('returns the frame ID from args.data if the event has it', async function() {
+      const traceParsedData = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
+      const invalidateLayoutEvent =
+          traceParsedData.Renderer.allTraceEntries.find(TraceModel.Types.TraceEvents.isTraceEventInvalidateLayout);
+      assert.isOk(invalidateLayoutEvent);
+      const frameId = TraceModel.Helpers.Trace.frameIDForEvent(invalidateLayoutEvent);
+      assert.isNotNull(frameId);
+      assert.strictEqual(frameId, invalidateLayoutEvent.args.data.frame);
+    });
+
+    it('returns null if the event does not have a frame', async function() {
+      const traceParsedData = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
+      const v8CompileEvent =
+          traceParsedData.Renderer.allTraceEntries.find(TraceModel.Types.TraceEvents.isTraceEventV8Compile);
+      assert.isOk(v8CompileEvent);
+      const frameId = TraceModel.Helpers.Trace.frameIDForEvent(v8CompileEvent);
+      assert.isNull(frameId);
+    });
+  });
+
+  describe('findUpdateLayoutTreeEvents', () => {
+    it('returns the set of UpdateLayoutTree events within the right time range', async function() {
+      const traceParsedData = await TraceLoader.traceEngine(this, 'selector-stats.json.gz');
+      const mainThread = getMainThread(traceParsedData.Renderer);
+      const foundEvents = TraceModel.Helpers.Trace.findUpdateLayoutTreeEvents(
+          mainThread.entries,
+          traceParsedData.Meta.traceBounds.min,
+      );
+      assert.lengthOf(foundEvents, 11);
+
+      const lastEvent = foundEvents.at(-1);
+      assert.isOk(lastEvent);
+
+      // Check we can filter by endTime by making the endTime less than the start
+      // time of the last event:
+      const filteredByEndTimeEvents = TraceModel.Helpers.Trace.findUpdateLayoutTreeEvents(
+          mainThread.entries,
+          traceParsedData.Meta.traceBounds.min,
+          TraceModel.Types.Timing.MicroSeconds(lastEvent.ts - 1_000),
+      );
+      assert.lengthOf(filteredByEndTimeEvents, 10);
+    });
+  });
+
+  describe('forEachEvent', () => {
+    const pid = TraceModel.Types.TraceEvents.ProcessID(1);
+    const tid = TraceModel.Types.TraceEvents.ThreadID(1);
+
+    it('iterates through the events in the expected tree-like order', async () => {
+      // |------------- RunTask -------------||-- RunTask --|
+      //  |-- RunMicrotasks --||-- Layout --|
+      //   |- FunctionCall -|
+      const traceEvents = [
+        makeCompleteEvent('RunTask', 0, 10, '*', pid, tid),       // 0..10
+        makeCompleteEvent('RunMicrotasks', 1, 3, '*', pid, tid),  // 1..4
+        makeCompleteEvent('FunctionCall', 2, 1, '*', pid, tid),   // 2..3
+        makeCompleteEvent('Layout', 5, 3, '*', pid, tid),         // 5..8
+        makeCompleteEvent('RunTask', 11, 3, '*', pid, tid),       // 11..14
+      ];
+      const onStartEvent = sinon.spy<(e: TraceModel.Types.TraceEvents.TraceEventData) => void>(_event => {});
+      const onEndEvent = sinon.spy<(e: TraceModel.Types.TraceEvents.TraceEventData) => void>(_event => {});
+
+      TraceModel.Helpers.Trace.forEachEvent(traceEvents, {
+        onEndEvent,
+        onStartEvent,
+      });
+      const eventsFromStartEventCalls = onStartEvent.getCalls().map(a => a.args[0]);
+      const eventsFromEndEventCalls = onEndEvent.getCalls().map(a => a.args[0]);
+      assert.deepEqual(
+          eventsFromStartEventCalls.map(e => e.name),
+          ['RunTask', 'RunMicrotasks', 'FunctionCall', 'Layout', 'RunTask'],
+      );
+      assert.deepEqual(
+          eventsFromEndEventCalls.map(e => e.name),
+          ['FunctionCall', 'RunMicrotasks', 'Layout', 'RunTask', 'RunTask'],
+      );
+    });
+
+    it('allows for a custom start and end time', async () => {
+      // |------------- RunTask -------------||-- RunTask --|
+      //  |-- RunMicrotasks --||-- Layout --|
+      //   |- FunctionCall -|
+      const traceEvents = [
+        makeCompleteEvent('RunTask', 0, 10, '*', pid, tid),       // 0..10
+        makeCompleteEvent('RunMicrotasks', 1, 3, '*', pid, tid),  // 1..4
+        makeCompleteEvent('FunctionCall', 2, 1, '*', pid, tid),   // 2..3
+        makeCompleteEvent('Layout', 5, 3, '*', pid, tid),         // 5..8
+      ];
+      const onStartEvent = sinon.spy<(e: TraceModel.Types.TraceEvents.TraceEventData) => void>(_event => {});
+      const onEndEvent = sinon.spy<(e: TraceModel.Types.TraceEvents.TraceEventData) => void>(_event => {});
+
+      TraceModel.Helpers.Trace.forEachEvent(traceEvents, {
+        onEndEvent,
+        onStartEvent,
+        startTime: TraceModel.Types.Timing.MicroSeconds(5),
+        endTime: TraceModel.Types.Timing.MicroSeconds(9),
+      });
+      const eventsFromStartEventCalls = onStartEvent.getCalls().map(a => a.args[0]);
+      const eventsFromEndEventCalls = onEndEvent.getCalls().map(a => a.args[0]);
+      // We expect the RunTask event (0-10) and the Layout event (5-8) as
+      // those fit in the 5-9 custom time range.
+      assert.deepEqual(
+          eventsFromStartEventCalls.map(e => e.name),
+          ['RunTask', 'Layout'],
+      );
+      assert.deepEqual(
+          eventsFromEndEventCalls.map(e => e.name),
+          ['Layout', 'RunTask'],
+      );
+    });
+
+    it('lets the user filter out events with a custom filter', async () => {
+      // |------------- RunTask -------------||-- RunTask --|
+      //  |-- RunMicrotasks --||-- Layout --|
+      //   |- FunctionCall -|
+      const traceEvents = [
+        makeCompleteEvent('RunTask', 0, 10, '*', pid, tid),       // 0..10
+        makeCompleteEvent('RunMicrotasks', 1, 3, '*', pid, tid),  // 1..4
+        makeCompleteEvent('FunctionCall', 2, 1, '*', pid, tid),   // 2..3
+        makeCompleteEvent('Layout', 5, 3, '*', pid, tid),         // 5..8
+        makeCompleteEvent('RunTask', 11, 3, '*', pid, tid),       // 11..14
+      ];
+      const onStartEvent = sinon.spy<(e: TraceModel.Types.TraceEvents.TraceEventData) => void>(_event => {});
+      const onEndEvent = sinon.spy<(e: TraceModel.Types.TraceEvents.TraceEventData) => void>(_event => {});
+
+      TraceModel.Helpers.Trace.forEachEvent(traceEvents, {
+        onEndEvent,
+        onStartEvent,
+        eventFilter(event) {
+          return event.name !== 'RunTask';
+        },
+      });
+      const eventsFromStartEventCalls = onStartEvent.getCalls().map(a => a.args[0]);
+      const eventsFromEndEventCalls = onEndEvent.getCalls().map(a => a.args[0]);
+
+      assert.deepEqual(
+          eventsFromStartEventCalls.map(e => e.name),
+          ['RunMicrotasks', 'FunctionCall', 'Layout'],
+      );
+      assert.deepEqual(
+          eventsFromEndEventCalls.map(e => e.name),
+          ['FunctionCall', 'RunMicrotasks', 'Layout'],
+      );
+    });
+
+    it('calls the onInstantEvent callback when it finds an event with 0 duration', async () => {
+      const traceEvents = [
+        makeInstantEvent('FakeInstantEvent', 0, '*', pid, tid),
+      ];
+      const onStartEvent = sinon.spy<(e: TraceModel.Types.TraceEvents.TraceEventData) => void>(_event => {});
+      const onEndEvent = sinon.spy<(e: TraceModel.Types.TraceEvents.TraceEventData) => void>(_event => {});
+      const onInstantEvent = sinon.spy<(e: TraceModel.Types.TraceEvents.TraceEventData) => void>(_event => {});
+
+      TraceModel.Helpers.Trace.forEachEvent(traceEvents, {
+        onEndEvent,
+        onStartEvent,
+        onInstantEvent,
+      });
+
+      assert.strictEqual(onStartEvent.callCount, 0);
+      assert.strictEqual(onEndEvent.callCount, 0);
+      assert.strictEqual(onInstantEvent.callCount, 1);
+    });
+
+    it('skips async events by default', async () => {
+      const traceEvents = [
+        makeAsyncStartEvent('FakeAsync', 0, pid, tid),
+        makeAsyncEndEvent('FakeAsync', 0, pid, tid),
+      ];
+      const onStartEvent = sinon.spy<(e: TraceModel.Types.TraceEvents.TraceEventData) => void>(_event => {});
+      const onEndEvent = sinon.spy<(e: TraceModel.Types.TraceEvents.TraceEventData) => void>(_event => {});
+      const onInstantEvent = sinon.spy<(e: TraceModel.Types.TraceEvents.TraceEventData) => void>(_event => {});
+
+      TraceModel.Helpers.Trace.forEachEvent(traceEvents, {
+        onEndEvent,
+        onStartEvent,
+        onInstantEvent,
+      });
+
+      assert.strictEqual(onStartEvent.callCount, 0);
+      assert.strictEqual(onEndEvent.callCount, 0);
+      assert.strictEqual(onInstantEvent.callCount, 0);
+    });
+
+    it('can be configured to include async events', async () => {
+      const traceEvents = [
+        makeAsyncStartEvent('FakeAsync', 0, pid, tid),
+        makeAsyncEndEvent('FakeAsync', 0, pid, tid),
+      ];
+      const onStartEvent = sinon.spy<(e: TraceModel.Types.TraceEvents.TraceEventData) => void>(_event => {});
+      const onEndEvent = sinon.spy<(e: TraceModel.Types.TraceEvents.TraceEventData) => void>(_event => {});
+      const onInstantEvent = sinon.spy<(e: TraceModel.Types.TraceEvents.TraceEventData) => void>(_event => {});
+
+      TraceModel.Helpers.Trace.forEachEvent(traceEvents, {
+        onEndEvent,
+        onStartEvent,
+        onInstantEvent,
+        ignoreAsyncEvents: false,
+      });
+
+      assert.strictEqual(onStartEvent.callCount, 0);
+      assert.strictEqual(onEndEvent.callCount, 0);
+      assert.strictEqual(onInstantEvent.callCount, 2);
     });
   });
 });

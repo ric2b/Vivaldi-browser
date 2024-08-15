@@ -79,6 +79,16 @@ void OverviewDropTarget::UpdateBackgroundVisibility(
       item_widget_->GetWindowBoundsInScreen().Contains(location_in_screen));
 }
 
+aura::Window::Windows OverviewDropTarget::GetWindowsForHomeGesture() {
+  return {item_widget_->GetNativeWindow()};
+}
+
+void OverviewDropTarget::SetOpacity(float opacity) {}
+
+void OverviewDropTarget::HideForSavedDeskLibrary(bool animate) {}
+
+void OverviewDropTarget::RevertHideForSavedDeskLibrary(bool animate) {}
+
 aura::Window* OverviewDropTarget::GetWindow() {
   return nullptr;
 }
@@ -143,9 +153,11 @@ views::View* OverviewDropTarget::GetBackDropView() const {
   return nullptr;
 }
 
-void OverviewDropTarget::UpdateRoundedCornersAndShadow() {}
+bool OverviewDropTarget::ShouldHaveShadow() const {
+  return false;
+}
 
-void OverviewDropTarget::SetOpacity(float opacity) {}
+void OverviewDropTarget::UpdateRoundedCornersAndShadow() {}
 
 float OverviewDropTarget::GetOpacity() const {
   return 1.f;
@@ -153,11 +165,9 @@ float OverviewDropTarget::GetOpacity() const {
 
 void OverviewDropTarget::PrepareForOverview() {}
 
+void OverviewDropTarget::SetShouldUseSpawnAnimation(bool value) {}
+
 void OverviewDropTarget::OnStartingAnimationComplete() {}
-
-void OverviewDropTarget::HideForSavedDeskLibrary(bool animate) {}
-
-void OverviewDropTarget::RevertHideForSavedDeskLibrary(bool animate) {}
 
 void OverviewDropTarget::CloseWindows() {}
 
@@ -165,19 +175,13 @@ void OverviewDropTarget::Restack() {}
 
 void OverviewDropTarget::StartDrag() {}
 
-void OverviewDropTarget::OnOverviewItemDragStarted(OverviewItemBase* item) {}
+void OverviewDropTarget::OnOverviewItemDragStarted() {}
 
 void OverviewDropTarget::OnOverviewItemDragEnded(bool snap) {}
 
 void OverviewDropTarget::OnOverviewItemContinuousScroll(
     const gfx::Transform& target_transform,
     float scroll_ratio) {}
-
-void OverviewDropTarget::SetVisibleDuringItemDragging(bool visible,
-                                                      bool animate) {
-  SetWindowsVisibleDuringItemDragging({item_widget_->GetNativeWindow()},
-                                      visible, animate);
-}
 
 void OverviewDropTarget::UpdateCannotSnapWarningVisibility(bool animate) {}
 

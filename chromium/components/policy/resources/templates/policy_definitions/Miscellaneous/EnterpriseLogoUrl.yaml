@@ -12,8 +12,10 @@ example_value: https://example.com/image.png
 features:
   dynamic_refresh: true
   per_profile: true
-future_on:
-- chrome.*
+  cloud_only: true
+  user_only: true
+supported_on:
+- chrome.*:125-
 owners:
 - file://components/policy/OWNERS
 - ydago@chromium.org

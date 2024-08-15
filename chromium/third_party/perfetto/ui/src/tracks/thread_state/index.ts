@@ -18,7 +18,6 @@ import {ThreadStateTab} from '../../frontend/thread_state_tab';
 import {
   BottomTabToSCSAdapter,
   Plugin,
-  PluginContext,
   PluginContextTrace,
   PluginDescriptor,
 } from '../../public';
@@ -30,8 +29,6 @@ import {ThreadStateTrack as ThreadStateTrackV2} from './thread_state_v2';
 export const THREAD_STATE_TRACK_KIND = 'ThreadStateTrack';
 
 class ThreadState implements Plugin {
-  onActivate(_ctx: PluginContext): void {}
-
   async onTraceLoad(ctx: PluginContextTrace): Promise<void> {
     const {engine} = ctx;
     const result = await engine.query(`
@@ -39,20 +36,15 @@ class ThreadState implements Plugin {
         utid,
         upid,
         tid,
-        pid,
         thread.name as threadName
-      from
-        thread_state
-        left join thread using(utid)
-        left join process using(upid)
-      where utid != 0
-      group by utid`);
+      from thread
+      join _sched_summary using (utid)
+    `);
 
     const it = result.iter({
       utid: NUM,
       upid: NUM_NULL,
       tid: NUM_NULL,
-      pid: NUM_NULL,
       threadName: STR_NULL,
     });
     for (; it.valid(); it.next()) {

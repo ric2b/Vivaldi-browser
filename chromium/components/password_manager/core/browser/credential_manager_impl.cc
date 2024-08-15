@@ -228,7 +228,8 @@ void CredentialManagerImpl::OnProvisionalSaveComplete() {
   if (form.match_type.has_value()) {
     // Having PSL or affiliated web match implies there is no credential with an
     // exactly matching origin and username. In order to avoid showing a save
-    // bubble to the user Save() is called directly.
+    // bubble to the user Save() is called directly. Save prompt is still
+    // offered for grouped credentials.
     GetLoginMatchType match_type = GetMatchType(form);
     if (match_type == GetLoginMatchType::kPSL ||
         (match_type == GetLoginMatchType::kAffiliated &&
@@ -245,7 +246,7 @@ void CredentialManagerImpl::OnProvisionalSaveComplete() {
          form_manager_->GetFormFetcher()->GetFederatedMatches()) {
       if (match->username_value == form.username_value &&
           match->federation_origin.IsSameOriginWith(form.federation_origin)) {
-        form_manager_->Update(*match);
+        form_manager_->Save();
         return;
       }
     }
@@ -256,7 +257,7 @@ void CredentialManagerImpl::OnProvisionalSaveComplete() {
     // signal that the page understands the credential management API and so can
     // be trusted to notify us when they sign the user out.
     bool is_update_confirmation = form_manager_->IsPasswordUpdate();
-    form_manager_->Update(form_manager_->GetPendingCredentials());
+    form_manager_->Save();
     if (is_update_confirmation) {
       client_->AutomaticPasswordSave(std::move(form_manager_),
                                      /*is_update_confirmation=*/true);

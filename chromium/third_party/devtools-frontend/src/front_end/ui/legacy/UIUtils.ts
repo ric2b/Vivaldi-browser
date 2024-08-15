@@ -37,25 +37,33 @@ import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as TextUtils from '../../models/text_utils/text_utils.js';
+import * as Buttons from '../components/buttons/buttons.js';
 import * as IconButton from '../components/icon_button/icon_button.js';
 import * as VisualLogging from '../visual_logging/visual_logging.js';
 
+import applicationColorTokensStyles from './applicationColorTokens.css.legacy.js';
 import * as ARIAUtils from './ARIAUtils.js';
 import checkboxTextLabelStyles from './checkboxTextLabel.css.legacy.js';
 import closeButtonStyles from './closeButton.css.legacy.js';
 import confirmDialogStyles from './confirmDialog.css.legacy.js';
+import designTokensStyles from './designTokens.css.legacy.js';
 import {Dialog} from './Dialog.js';
 import {Size} from './Geometry.js';
 import {GlassPane, PointerEventsBehavior, SizeBehavior} from './GlassPane.js';
 import inlineButtonStyles from './inlineButton.css.legacy.js';
+import inspectorCommonStyles from './inspectorCommon.css.legacy.js';
 import {KeyboardShortcut} from './KeyboardShortcut.js';
 import radioButtonStyles from './radioButton.css.legacy.js';
 import sliderStyles from './slider.css.legacy.js';
 import smallBubbleStyles from './smallBubble.css.legacy.js';
+import textButtonStyles from './textButton.css.legacy.js';
+import * as ThemeSupport from './theme_support/theme_support.js';
+import themeColorsStyles from './themeColors.css.legacy.js';
+import tokens from './tokens.css.legacy.js';
 import {Toolbar, type ToolbarButton} from './Toolbar.js';
 import {Tooltip} from './Tooltip.js';
 import {type TreeOutline} from './Treeoutline.js';
-import * as Utils from './utils/utils.js';
+import {Widget} from './Widget.js';
 
 const UIStrings = {
   /**
@@ -622,11 +630,11 @@ export function asyncStackTraceLabel(
 }
 
 export function installComponentRootStyles(element: Element): void {
-  Utils.injectCoreStyles(element);
+  injectCoreStyles(element);
   element.classList.add('platform-' + Host.Platform.platform());
 
   // Detect overlay scrollbar enable by checking for nonzero scrollbar width.
-  if (!Host.Platform.isMac() && Utils.measuredScrollbarWidth(element.ownerDocument) === 0) {
+  if (!Host.Platform.isMac() && measuredScrollbarWidth(element.ownerDocument) === 0) {
     element.classList.add('overlay-scrollbar-enabled');
   }
 }
@@ -1051,7 +1059,7 @@ export function initializeUIUtils(document: Document): void {
     document.defaultView.addEventListener('focus', windowFocused.bind(undefined, document), false);
     document.defaultView.addEventListener('blur', windowBlurred.bind(undefined, document), false);
   }
-  document.addEventListener('focus', Utils.focusChanged.bind(undefined), true);
+  document.addEventListener('focus', focusChanged.bind(undefined), true);
 
   const body = (document.body as Element);
   GlassPane.setContainer(body);
@@ -1076,25 +1084,26 @@ export const createTextChildren = (element: Element|DocumentFragment, ...childre
 export function createTextButton(text: string, clickHandler?: ((arg0: Event) => void), opts?: {
   className?: string,
   jslogContext?: string,
-  primary?: boolean,
-}): HTMLButtonElement {
-  const element = document.createElement('button');
+  variant?: Buttons.Button.Variant,
+  title?: string,
+}): Buttons.Button.Button {
+  const button = new Buttons.Button.Button();
   if (opts?.className) {
-    element.className = opts.className;
+    button.className = opts.className;
   }
-  element.textContent = text;
-  element.classList.add('text-button');
-  if (opts?.primary) {
-    element.classList.add('primary-button');
-  }
+  button.textContent = text;
+  button.variant = opts?.variant ? opts.variant : Buttons.Button.Variant.OUTLINED;
   if (clickHandler) {
-    element.addEventListener('click', clickHandler);
+    button.addEventListener('click', clickHandler);
   }
   if (opts?.jslogContext) {
-    element.setAttribute('jslog', `${VisualLogging.action().track({click: true}).context(opts.jslogContext)}`);
+    button.setAttribute('jslog', `${VisualLogging.action().track({click: true}).context(opts.jslogContext)}`);
   }
-  element.type = 'button';
-  return element;
+  if (opts?.title) {
+    button.setAttribute('title', opts.title);
+  }
+  button.type = 'button';
+  return button;
 }
 
 export function createInput(className?: string, type?: string, jslogContext?: string): HTMLInputElement {
@@ -1209,7 +1218,7 @@ export class CheckboxLabel extends HTMLSpanElement {
     CheckboxLabel.lastId = CheckboxLabel.lastId + 1;
     const id = 'ui-checkbox-label' + CheckboxLabel.lastId;
     this.shadowRootInternal =
-        Utils.createShadowRootWithCoreStyles(this, {cssFile: checkboxTextLabelStyles, delegatesFocus: undefined});
+        createShadowRootWithCoreStyles(this, {cssFile: checkboxTextLabelStyles, delegatesFocus: undefined});
     this.checkboxElement = (this.shadowRootInternal.createChild('input') as HTMLInputElement);
     this.checkboxElement.type = 'checkbox';
     this.checkboxElement.setAttribute('id', id);
@@ -1220,7 +1229,7 @@ export class CheckboxLabel extends HTMLSpanElement {
 
   static create(title?: string, checked?: boolean, subtitle?: string, jslogContext?: string): CheckboxLabel {
     if (!CheckboxLabel.constructorInternal) {
-      CheckboxLabel.constructorInternal = Utils.registerCustomElement('span', 'dt-checkbox', CheckboxLabel);
+      CheckboxLabel.constructorInternal = registerCustomElement('span', 'dt-checkbox', CheckboxLabel);
     }
     const element = (CheckboxLabel.constructorInternal() as CheckboxLabel);
     element.checkboxElement.checked = Boolean(checked);
@@ -1247,7 +1256,7 @@ export class DevToolsIconLabel extends HTMLSpanElement {
 
   constructor() {
     super();
-    const root = Utils.createShadowRootWithCoreStyles(this, {
+    const root = createShadowRootWithCoreStyles(this, {
       cssFile: undefined,
       delegatesFocus: undefined,
     });
@@ -1285,7 +1294,7 @@ export class DevToolsRadioButton extends HTMLSpanElement {
     this.radioElement.id = id;
     this.radioElement.type = 'radio';
     this.labelElement.htmlFor = id;
-    const root = Utils.createShadowRootWithCoreStyles(this, {cssFile: radioButtonStyles, delegatesFocus: undefined});
+    const root = createShadowRootWithCoreStyles(this, {cssFile: radioButtonStyles, delegatesFocus: undefined});
     root.createChild('slot');
     this.addEventListener('click', this.radioClickHandler.bind(this), false);
   }
@@ -1299,15 +1308,15 @@ export class DevToolsRadioButton extends HTMLSpanElement {
   }
 }
 
-Utils.registerCustomElement('span', 'dt-radio', DevToolsRadioButton);
-Utils.registerCustomElement('span', 'dt-icon-label', DevToolsIconLabel);
+registerCustomElement('span', 'dt-radio', DevToolsRadioButton);
+registerCustomElement('span', 'dt-icon-label', DevToolsIconLabel);
 
 export class DevToolsSlider extends HTMLSpanElement {
   sliderElement: HTMLInputElement;
 
   constructor() {
     super();
-    const root = Utils.createShadowRootWithCoreStyles(this, {cssFile: sliderStyles, delegatesFocus: undefined});
+    const root = createShadowRootWithCoreStyles(this, {cssFile: sliderStyles, delegatesFocus: undefined});
     this.sliderElement = document.createElement('input');
     this.sliderElement.classList.add('dt-range-input');
     this.sliderElement.type = 'range';
@@ -1323,14 +1332,14 @@ export class DevToolsSlider extends HTMLSpanElement {
   }
 }
 
-Utils.registerCustomElement('span', 'dt-slider', DevToolsSlider);
+registerCustomElement('span', 'dt-slider', DevToolsSlider);
 
 export class DevToolsSmallBubble extends HTMLSpanElement {
   private textElement: Element;
 
   constructor() {
     super();
-    const root = Utils.createShadowRootWithCoreStyles(this, {cssFile: smallBubbleStyles, delegatesFocus: undefined});
+    const root = createShadowRootWithCoreStyles(this, {cssFile: smallBubbleStyles, delegatesFocus: undefined});
     this.textElement = root.createChild('div');
     this.textElement.className = 'info';
     this.textElement.createChild('slot');
@@ -1341,14 +1350,14 @@ export class DevToolsSmallBubble extends HTMLSpanElement {
   }
 }
 
-Utils.registerCustomElement('span', 'dt-small-bubble', DevToolsSmallBubble);
+registerCustomElement('span', 'dt-small-bubble', DevToolsSmallBubble);
 
 export class DevToolsCloseButton extends HTMLDivElement {
   private buttonElement: HTMLElement;
 
   constructor() {
     super();
-    const root = Utils.createShadowRootWithCoreStyles(this, {cssFile: closeButtonStyles, delegatesFocus: undefined});
+    const root = createShadowRootWithCoreStyles(this, {cssFile: closeButtonStyles, delegatesFocus: undefined});
     this.buttonElement = (root.createChild('div', 'close-button') as HTMLElement);
     this.buttonElement.setAttribute('jslog', `${VisualLogging.close().track({click: true})}`);
     Tooltip.install(this.buttonElement, i18nString(UIStrings.close));
@@ -1371,7 +1380,7 @@ export class DevToolsCloseButton extends HTMLDivElement {
   }
 }
 
-Utils.registerCustomElement('div', 'dt-close-button', DevToolsCloseButton);
+registerCustomElement('div', 'dt-close-button', DevToolsCloseButton);
 
 export function bindInput(
     input: HTMLInputElement, apply: (arg0: string) => void, validate: (arg0: string) => {
@@ -1559,11 +1568,12 @@ export class MessageDialog {
     const dialog = new Dialog(jslogContext);
     dialog.setSizeBehavior(SizeBehavior.MeasureContent);
     dialog.setDimmed(true);
-    const shadowRoot = Utils.createShadowRootWithCoreStyles(
+    const shadowRoot = createShadowRootWithCoreStyles(
         dialog.contentElement, {cssFile: confirmDialogStyles, delegatesFocus: undefined});
     const content = shadowRoot.createChild('div', 'widget');
     await new Promise(resolve => {
-      const okButton = createTextButton(i18nString(UIStrings.ok), resolve, {jslogContext: 'confirm', primary: true});
+      const okButton = createTextButton(
+          i18nString(UIStrings.ok), resolve, {jslogContext: 'confirm', variant: Buttons.Button.Variant.PRIMARY});
       content.createChild('div', 'message').createChild('span').textContent = message;
       content.createChild('div', 'button').appendChild(okButton);
       dialog.setOutsideClickCallback(event => {
@@ -1583,7 +1593,7 @@ export class ConfirmDialog {
     dialog.setSizeBehavior(SizeBehavior.MeasureContent);
     dialog.setDimmed(true);
     ARIAUtils.setLabel(dialog.contentElement, message);
-    const shadowRoot = Utils.createShadowRootWithCoreStyles(
+    const shadowRoot = createShadowRootWithCoreStyles(
         dialog.contentElement, {cssFile: confirmDialogStyles, delegatesFocus: undefined});
     const content = shadowRoot.createChild('div', 'widget');
     content.createChild('div', 'message').createChild('span').textContent = message;
@@ -1591,7 +1601,7 @@ export class ConfirmDialog {
     const result = await new Promise<boolean>(resolve => {
       const okButton = createTextButton(
           /* text= */ options?.okButtonLabel || i18nString(UIStrings.ok), /* clickHandler= */ () => resolve(true),
-          {jslogContext: 'confirm', primary: true});
+          {jslogContext: 'confirm', variant: Buttons.Button.Variant.PRIMARY});
       buttonsBar.appendChild(okButton);
       buttonsBar.appendChild(createTextButton(
           options?.cancelButtonLabel || i18nString(UIStrings.cancel), () => resolve(false), {jslogContext: 'cancel'}));
@@ -1609,8 +1619,7 @@ export class ConfirmDialog {
 
 export function createInlineButton(toolbarButton: ToolbarButton): Element {
   const element = document.createElement('span');
-  const shadowRoot =
-      Utils.createShadowRootWithCoreStyles(element, {cssFile: inlineButtonStyles, delegatesFocus: undefined});
+  const shadowRoot = createShadowRootWithCoreStyles(element, {cssFile: inlineButtonStyles, delegatesFocus: undefined});
   element.classList.add('inline-button');
   const toolbar = new Toolbar('');
   toolbar.appendToolbarItem(toolbarButton);
@@ -1756,4 +1765,128 @@ export interface ConfirmDialogOptions {
   okButtonLabel?: string;
   cancelButtonLabel?: string;
   jslogContext?: string;
+}
+
+function updateWidgetfocusWidgetForNode(node: Node|null): void {
+  while (node) {
+    if (Widget.get(node)) {
+      break;
+    }
+
+    node = node.parentNodeOrShadowHost();
+  }
+  if (!node) {
+    return;
+  }
+
+  let widget = Widget.get(node);
+  while (widget && widget.parentWidget()) {
+    const parentWidget = widget.parentWidget();
+    if (!parentWidget) {
+      break;
+    }
+
+    parentWidget.defaultFocusedChild = widget;
+    widget = parentWidget;
+  }
+}
+
+function updateXWidgetfocusWidgetForNode(node: Node|null): void {
+  node = node && node.parentNodeOrShadowHost();
+  const XWidgetCtor = customElements.get('x-widget');
+  let widget = null;
+  while (node) {
+    if (XWidgetCtor && node instanceof XWidgetCtor) {
+      if (widget) {
+        // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (node as any).defaultFocusedElement = widget;
+      }
+      widget = node;
+    }
+    node = node.parentNodeOrShadowHost();
+  }
+}
+
+function focusChanged(event: Event): void {
+  const target = event.target as HTMLElement;
+  const document = target ? target.ownerDocument : null;
+  const element = document ? Platform.DOMUtilities.deepActiveElement(document) : null;
+  updateWidgetfocusWidgetForNode(element);
+  updateXWidgetfocusWidgetForNode(element);
+}
+
+export function injectCoreStyles(root: Element|ShadowRoot): void {
+  ThemeSupport.ThemeSupport.instance().appendStyle(root, applicationColorTokensStyles);
+  ThemeSupport.ThemeSupport.instance().appendStyle(root, designTokensStyles);
+  ThemeSupport.ThemeSupport.instance().appendStyle(root, inspectorCommonStyles);
+  ThemeSupport.ThemeSupport.instance().appendStyle(root, textButtonStyles);
+  ThemeSupport.ThemeSupport.instance().appendStyle(root, themeColorsStyles);
+  ThemeSupport.ThemeSupport.instance().appendStyle(root, tokens);
+
+  ThemeSupport.ThemeSupport.instance().injectHighlightStyleSheets(root);
+  ThemeSupport.ThemeSupport.instance().injectCustomStyleSheets(root);
+}
+
+export function createShadowRootWithCoreStyles(
+    element: Element, options: {cssFile?: CSSStyleSheet[]|{cssContent: string}, delegatesFocus?: boolean} = {
+      delegatesFocus: undefined,
+      cssFile: undefined,
+    }): ShadowRoot {
+  const {
+    cssFile,
+    delegatesFocus,
+  } = options;
+
+  const shadowRoot = element.attachShadow({mode: 'open', delegatesFocus});
+  injectCoreStyles(shadowRoot);
+  if (cssFile) {
+    if ('cssContent' in cssFile) {
+      ThemeSupport.ThemeSupport.instance().appendStyle(shadowRoot, cssFile);
+    } else {
+      shadowRoot.adoptedStyleSheets = cssFile;
+    }
+  }
+  shadowRoot.addEventListener('focus', focusChanged, true);
+  return shadowRoot;
+}
+
+let cachedMeasuredScrollbarWidth: number|undefined;
+
+export function resetMeasuredScrollbarWidthForTest(): void {
+  cachedMeasuredScrollbarWidth = undefined;
+}
+
+export function measuredScrollbarWidth(document?: Document|null): number {
+  if (typeof cachedMeasuredScrollbarWidth === 'number') {
+    return cachedMeasuredScrollbarWidth;
+  }
+  if (!document) {
+    return 16;
+  }
+
+  const scrollDiv = document.createElement('div');
+  const innerDiv = document.createElement('div');
+  scrollDiv.setAttribute('style', 'display: block; width: 100px; height: 100px; overflow: scroll;');
+  innerDiv.setAttribute('style', 'height: 200px');
+  scrollDiv.appendChild(innerDiv);
+  document.body.appendChild(scrollDiv);
+  cachedMeasuredScrollbarWidth = scrollDiv.offsetWidth - scrollDiv.clientWidth;
+  document.body.removeChild(scrollDiv);
+  return cachedMeasuredScrollbarWidth;
+}
+
+export function registerCustomElement(
+    localName: string, typeExtension: string, definition: new () => HTMLElement): () => Element {
+  self.customElements.define(typeExtension, class extends definition {
+    constructor() {
+      // The JSDoc above does not allow the super call to have no params, but
+      // it seems to be the nearest to something both Closure and TS understand.
+      // @ts-ignore crbug.com/1011811: Fix after Closure has been removed.
+      super();
+      // TODO(einbinder) convert to classes and custom element tags
+      this.setAttribute('is', typeExtension);
+    }
+  }, {extends: localName});
+  return (): Element => document.createElement(localName, {is: typeExtension});
 }

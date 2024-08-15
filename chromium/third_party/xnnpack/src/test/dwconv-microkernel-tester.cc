@@ -8,16 +8,7 @@
 
 #include "dwconv-microkernel-tester.h"
 
-#include <algorithm>
-#include <cassert>
-#include <cmath>
-#include <cstddef>
-#include <cstdint>
-#include <cstdlib>
-#include <limits>
-#include <random>
-#include <vector>
-
+#include <stdint.h>
 #include <xnnpack.h>
 #include <xnnpack/aligned-allocator.h>
 #include <xnnpack/common.h>
@@ -29,15 +20,69 @@
 #include <xnnpack/pack.h>
 #include <xnnpack/requantization.h>
 
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <limits>
+#include <random>
+#include <vector>
+
+#include "replicable_random_device.h"
 #include <gtest/gtest.h>
 #include <fp16/fp16.h>
+
+TEST_P(DWConvTest, Test) {
+  const DWConvTestParams& params = GetParam();
+  DWConvMicrokernelTester tester = params.tester;
+
+  // Make sure that we can execute this test.
+  if (params.isa_check) {
+    params.isa_check();
+    if (IsSkipped()) {
+      return;
+    }
+  }
+
+  // Loop over the kernel size and channels, if required.
+  for (size_t ks = params.loop_kernel_size_.from;
+       ks <= params.loop_kernel_size_.to; ks += params.loop_kernel_size_.step) {
+    if (params.loop_kernel_size_.is_set) {
+      tester.kernel_size(ks);
+    }
+    for (size_t c = params.loop_channels_.from; c <= params.loop_channels_.to;
+         c += params.loop_channels_.step) {
+      if (params.loop_channels_.is_set) {
+        tester.channels(c);
+      }
+      for (size_t s = params.loop_step_.from; s <= params.loop_step_.to;
+           s += params.loop_step_.step) {
+        if (params.loop_step_.is_set) {
+          tester.step(s);
+        }
+        for (size_t zi = params.loop_zi_.from; zi <= params.loop_zi_.to;
+             zi += params.loop_zi_.step) {
+          if (params.loop_zi_.is_set) {
+            tester.zero_index(zi);
+          }
+
+          // Call the test function.
+          params.test_func(tester);
+        }
+      }
+    }
+  }
+}
+
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(DWConvTest);
 
 void DWConvMicrokernelTester::Test(
     xnn_qu8_dwconv_minmax_unipass_ukernel_fn dwconv_minmax,
     xnn_init_qu8_conv_minmax_params_fn init_params,
     xnn_qu8_requantize_fn requantize) const {
-  std::random_device random_device;
-  auto rng = std::mt19937(random_device());
+  xnnpack::ReplicableRandomDevice rng;
   std::uniform_int_distribution<int32_t> i32dist(-10000, 10000);
   std::uniform_int_distribution<int32_t> u8dist(
       std::numeric_limits<uint8_t>::min(), std::numeric_limits<uint8_t>::max());
@@ -171,8 +216,7 @@ void DWConvMicrokernelTester::Test(
     xnn_qu8_dwconv_minmax_multipass_ukernel_fn dwconv_minmax,
     xnn_init_qu8_conv_minmax_params_fn init_params,
     xnn_qu8_requantize_fn requantize) const {
-  std::random_device random_device;
-  auto rng = std::mt19937(random_device());
+  xnnpack::ReplicableRandomDevice rng;
   std::uniform_int_distribution<int32_t> i32dist(-10000, 10000);
   std::uniform_int_distribution<int32_t> u8dist(
       std::numeric_limits<uint8_t>::min(), std::numeric_limits<uint8_t>::max());
@@ -321,8 +365,7 @@ void DWConvMicrokernelTester::Test(
     xnn_qs8_qc8w_dwconv_minmax_unipass_ukernel_fn dwconv_minmax,
     xnn_init_qs8_qc8w_conv_minmax_params_fn init_params,
     xnn_qs8_requantize_fn requantize) const {
-  std::random_device random_device;
-  auto rng = std::mt19937(random_device());
+  xnnpack::ReplicableRandomDevice rng;
   std::uniform_int_distribution<int32_t> i32dist(-10000, 10000);
   std::uniform_int_distribution<int32_t> i8dist(
       std::numeric_limits<int8_t>::min(), std::numeric_limits<int8_t>::max());
@@ -471,8 +514,7 @@ void DWConvMicrokernelTester::Test(
     xnn_qs8_qc8w_dwconv_minmax_multipass_ukernel_fn dwconv_minmax,
     xnn_init_qs8_qc8w_conv_minmax_params_fn init_params,
     xnn_qs8_requantize_fn requantize) const {
-  std::random_device random_device;
-  auto rng = std::mt19937(random_device());
+  xnnpack::ReplicableRandomDevice rng;
   std::uniform_int_distribution<int32_t> i32dist(-10000, 10000);
   std::uniform_int_distribution<int32_t> i8dist(
       std::numeric_limits<int8_t>::min(), std::numeric_limits<int8_t>::max());
@@ -645,8 +687,7 @@ void DWConvMicrokernelTester::Test(
     xnn_qs8_dwconv_minmax_unipass_ukernel_fn dwconv_minmax,
     xnn_init_qs8_conv_minmax_params_fn init_params,
     xnn_qs8_requantize_fn requantize) const {
-  std::random_device random_device;
-  auto rng = std::mt19937(random_device());
+  xnnpack::ReplicableRandomDevice rng;
   std::uniform_int_distribution<int32_t> i32dist(-10000, 10000);
   std::uniform_int_distribution<int32_t> i8dist(
       std::numeric_limits<int8_t>::min(), std::numeric_limits<int8_t>::max());
@@ -783,8 +824,7 @@ void DWConvMicrokernelTester::Test(
     xnn_qs8_dwconv_minmax_multipass_ukernel_fn dwconv_minmax,
     xnn_init_qs8_conv_minmax_params_fn init_params,
     xnn_qs8_requantize_fn requantize) const {
-  std::random_device random_device;
-  auto rng = std::mt19937(random_device());
+  xnnpack::ReplicableRandomDevice rng;
   std::uniform_int_distribution<int32_t> i32dist(-10000, 10000);
   std::uniform_int_distribution<int32_t> i8dist(
       std::numeric_limits<int8_t>::min(), std::numeric_limits<int8_t>::max());
@@ -935,8 +975,7 @@ void DWConvMicrokernelTester::Test(
 void DWConvMicrokernelTester::Test(
     xnn_f16_dwconv_minmax_unipass_ukernel_fn dwconv_minmax,
     xnn_init_f16_minmax_params_fn init_params) const {
-  std::random_device random_device;
-  auto rng = std::mt19937(random_device());
+  xnnpack::ReplicableRandomDevice rng;
   std::uniform_real_distribution<float> f32dist;
 
   std::vector<const uint16_t*> indirection((width() - 1) * step() +
@@ -1046,8 +1085,7 @@ void DWConvMicrokernelTester::Test(
 void DWConvMicrokernelTester::Test(
     xnn_f16_dwconv_minmax_multipass_ukernel_fn dwconv_minmax,
     xnn_init_f16_minmax_params_fn init_params) const {
-  std::random_device random_device;
-  auto rng = std::mt19937(random_device());
+  xnnpack::ReplicableRandomDevice rng;
   std::uniform_real_distribution<float> f32dist;
 
   const size_t tile_size = xnn_dwconv_multipass_tile_size(
@@ -1178,8 +1216,7 @@ void DWConvMicrokernelTester::Test(
 
 void DWConvMicrokernelTester::Test(
     xnn_f32_dwconv_unipass_ukernel_fn dwconv) const {
-  std::random_device random_device;
-  auto rng = std::mt19937(random_device());
+  xnnpack::ReplicableRandomDevice rng;
   std::uniform_real_distribution<float> f32dist;
 
   std::vector<const float*> indirection((width() - 1) * step() + kernel_tile());
@@ -1253,8 +1290,7 @@ void DWConvMicrokernelTester::Test(
 void DWConvMicrokernelTester::Test(
     xnn_f32_dwconv_minmax_unipass_ukernel_fn dwconv_minmax,
     xnn_init_f32_minmax_params_fn init_params) const {
-  std::random_device random_device;
-  auto rng = std::mt19937(random_device());
+  xnnpack::ReplicableRandomDevice rng;
   std::uniform_real_distribution<float> f32dist;
 
   std::vector<const float*> indirection((width() - 1) * step() + kernel_tile());
@@ -1352,8 +1388,7 @@ void DWConvMicrokernelTester::Test(
 
 void DWConvMicrokernelTester::Test(
     xnn_f32_dwconv_multipass_ukernel_fn dwconv) const {
-  std::random_device random_device;
-  auto rng = std::mt19937(random_device());
+  xnnpack::ReplicableRandomDevice rng;
   std::uniform_real_distribution<float> f32dist;
 
   const size_t tile_size = xnn_dwconv_multipass_tile_size(
@@ -1449,8 +1484,7 @@ void DWConvMicrokernelTester::Test(
 void DWConvMicrokernelTester::Test(
     xnn_f32_dwconv_minmax_multipass_ukernel_fn dwconv_minmax,
     xnn_init_f32_minmax_params_fn init_params) const {
-  std::random_device random_device;
-  auto rng = std::mt19937(random_device());
+  xnnpack::ReplicableRandomDevice rng;
   std::uniform_real_distribution<float> f32dist;
 
   const size_t tile_size = xnn_dwconv_multipass_tile_size(

@@ -267,7 +267,7 @@ NET_ERROR(TEMPORARILY_THROTTLED, -139)
 // received a 302 (temporary redirect) response.  The response body might
 // include a description of why the request failed.
 //
-// TODO(https://crbug.com/928551): This is deprecated and should not be used by
+// TODO(crbug.com/40093955): This is deprecated and should not be used by
 // new code.
 NET_ERROR(HTTPS_PROXY_TUNNEL_RESPONSE_REDIRECT, -140)
 
@@ -830,6 +830,11 @@ NET_ERROR(ZSTD_WINDOW_SIZE_TOO_BIG, -386)
 // The compression dictionary cannot be loaded.
 NET_ERROR(DICTIONARY_LOAD_FAILED, -387)
 
+// The "content-dictionary" response header is unexpected. This is used both
+// when there is no "content-dictionary" response header and when the received
+// "content-dictionary" response header does not match the expected value.
+NET_ERROR(UNEXPECTED_CONTENT_DICTIONARY_HEADER, -388)
+
 // The cache does not have the requested entry.
 NET_ERROR(CACHE_MISS, -400)
 
@@ -1020,6 +1025,10 @@ NET_ERROR(DNS_NO_MATCHING_SUPPORTED_ALPN, -811)
 
 // Error -812 was removed
 // Error -813 was removed
+
+// When checking whether secure DNS can be used, the response returned for the
+// requested probe record either had no answer or was invalid.
+NET_ERROR(DNS_SECURE_PROBE_RECORD_INVALID, -814)
 
 // CAUTION: Before adding errors here, please check the ranges of errors written
 // in the top of this file.

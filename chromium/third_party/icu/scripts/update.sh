@@ -43,10 +43,13 @@ do
 done
 
 echo "Extracting ${version} to ICU tree root"
-for file in source LICENSE license.html readme.html APIChangeReport.html
+for file in source license.html readme.html APIChangeReport.html
 do
   tar -xf $tarball -C $treeroot "icu-release-${version}/icu4c/${file}" --strip-components=2
 done
+
+echo "Extracting License to ICU tree root"
+tar -xf $tarball -C $treeroot "icu-release-${version}/LICENSE" --strip-components=1
 
 echo "Cleaning up tmp directory"
 rm -rf $tmp_dir

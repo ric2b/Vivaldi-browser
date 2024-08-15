@@ -21,7 +21,7 @@ class GitApi(recipe_api.RecipeApi):
     options = kwargs.pop('git_config_options', {})
     for k, v in sorted(options.items()):
       git_cmd.extend(['-c', '%s=%s' % (k, v)])
-    with self.m.context(cwd=(self.m.context.cwd or self.m.path['checkout'])):
+    with self.m.context(cwd=(self.m.context.cwd or self.m.path.checkout_dir)):
       return self.m.step(name, git_cmd + list(args), infra_step=infra_step,
                           **kwargs)
 
@@ -178,10 +178,10 @@ class GitApi(recipe_api.RecipeApi):
       # ex: ssh://host:repo/foobar/.git
       dir_path = dir_path or dir_path.rsplit('/', 1)[-1]
 
-      dir_path = self.m.path['start_dir'].join(dir_path)
+      dir_path = self.m.path.start_dir / dir_path
 
     if 'checkout' not in self.m.path:
-      self.m.path['checkout'] = dir_path
+      self.m.path.checkout_dir = dir_path
 
     git_setup_args = ['--path', dir_path, '--url', url]
 
@@ -203,12 +203,12 @@ class GitApi(recipe_api.RecipeApi):
       if use_git_cache:
         with self.m.context(env={'PATH': path}):
           self('cache', 'populate', '-c',
-               self.m.path['cache'].join('git'), url,
+               self.m.path.cache_dir / 'git', url,
                name='populate cache',
                raise_on_failure=raise_on_failure)
           dir_cmd = self(
               'cache', 'exists', '--quiet',
-              '--cache-dir', self.m.path['cache'].join('git'), url,
+              '--cache-dir', self.m.path.cache_dir / 'git', url,
               raise_on_failure=raise_on_failure,
               stdout=self.m.raw_io.output(),
               step_test_data=lambda:

@@ -83,11 +83,11 @@
 <translation id="3914946330804881301">Importerade från Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
 <translation id="3943857333388298514">Klistra in</translation>
-<translation id="3974783668264968389">Vivaldi kunde inte låsa upp ditt säkra nyckelarkiv. Utan nyckelarkivet kommer du att förlora dina sparade inloggningar, säkra cookies och vissa funktioner som Sync, Mail och Kalender kommer att sluta fungera.
-
-     Avsluta nu, lås upp eller reparera dit nyckelarkiv och försök sedan igen. Om du verkligen vill fortsätta, klicka på kryssrutan och tryck på knappen "Fortsätt med dataförlust".</translation>
 <translation id="4005270918754737597">Hoppa över den här versionen</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi kunde inte låsa upp ditt säkra nyckelarkiv. Utan nyckelarkivet kommer du att förlora dina sparade inloggningar, säkra cookies och vissa funktioner som Sync, Mail och Kalender kommer att sluta fungera.
+
+     Avsluta nu, lås upp eller reparera ditt nyckelarkiv och försök sedan igen. Vill du verkligen fortsätta, men förlora data?</translation>
 <translation id="4074744496918018786">Öppna bild i privat fönster</translation>
 <translation id="410351446219883937">Autospela</translation>
 <translation id="4281844954008187215">Användarvillkor</translation>
@@ -178,6 +178,7 @@
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Inspektera portaldokumentet</translation>
+<translation id="875142999698251063">Sluta nu</translation>
 <translation id="8768970203213061953">Landskap 14</translation>
 <translation id="8773635261052182196">Du kommer inte längre se dessa aviseringar. Du kan aktivera dem igen från Vivaldiinställningarna.</translation>
 <translation id="8774017153185436870">Webbplatser kan spela upp video automatiskt</translation>

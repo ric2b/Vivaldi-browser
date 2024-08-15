@@ -135,9 +135,6 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
     {USER_CONSENTS, "USER_CONSENT", "user_consent", "User Consents",
      sync_pb::EntitySpecifics::kUserConsentFieldNumber,
      ModelTypeForHistograms::kUserConsents},
-    {SEGMENTATION, "SEGMENTATION", "segmentation", "Segmentation",
-     sync_pb::EntitySpecifics::kSegmentationFieldNumber,
-     ModelTypeForHistograms::kSegmentation},
     {SEND_TAB_TO_SELF, "SEND_TAB_TO_SELF", "send_tab_to_self",
      "Send Tab To Self", sync_pb::EntitySpecifics::kSendTabToSelfFieldNumber,
      ModelTypeForHistograms::kSendTabToSelf},
@@ -213,9 +210,14 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
     {COMPARE, "COMPARE", "compare", "Compare",
      sync_pb::EntitySpecifics::kCompareFieldNumber,
      ModelTypeForHistograms::kCompare},
+    {COOKIES, "COOKIE", "cookies", "Cookies",
+     sync_pb::EntitySpecifics::kCookieFieldNumber,
+     ModelTypeForHistograms::kCookies},
+
     {NOTES, "NOTES", "vivaldi_notes", "Notes",
      sync_pb::EntitySpecifics::kNotesFieldNumber,
      ModelTypeForHistograms::kNotes},
+
     // ---- Control Types ----
     {NIGORI, "NIGORI", "nigori", "Encryption Keys",
      sync_pb::EntitySpecifics::kNigoriFieldNumber,
@@ -282,7 +284,6 @@ constexpr kSpecificsFieldNumberToModelTypeMap
         {sync_pb::EntitySpecifics::kReadingListFieldNumber, READING_LIST},
         {sync_pb::EntitySpecifics::kUserEventFieldNumber, USER_EVENTS},
         {sync_pb::EntitySpecifics::kUserConsentFieldNumber, USER_CONSENTS},
-        {sync_pb::EntitySpecifics::kSegmentationFieldNumber, SEGMENTATION},
         {sync_pb::EntitySpecifics::kSendTabToSelfFieldNumber, SEND_TAB_TO_SELF},
         {sync_pb::EntitySpecifics::kSecurityEventFieldNumber, SECURITY_EVENTS},
         {sync_pb::EntitySpecifics::kWifiConfigurationFieldNumber,
@@ -314,6 +315,7 @@ constexpr kSpecificsFieldNumberToModelTypeMap
          COLLABORATION_GROUP},
         {sync_pb::EntitySpecifics::kPlusAddressFieldNumber, PLUS_ADDRESS},
         {sync_pb::EntitySpecifics::kCompareFieldNumber, COMPARE},
+        {sync_pb::EntitySpecifics::kCookieFieldNumber, COOKIES},
         // ---- Control Types ----
         {sync_pb::EntitySpecifics::kNigoriFieldNumber, NIGORI},
 
@@ -452,9 +454,6 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
     case CONTACT_INFO:
       specifics->mutable_contact_info();
       break;
-    case SEGMENTATION:
-      specifics->mutable_segmentation();
-      break;
     case SAVED_TAB_GROUP:
       specifics->mutable_saved_tab_group();
       break;
@@ -481,6 +480,9 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
       break;
     case COMPARE:
       specifics->mutable_compare();
+      break;
+    case COOKIES:
+      specifics->mutable_cookie();
       break;
 
 
@@ -601,8 +603,6 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
     return CONTACT_INFO;
   if (specifics.has_autofill_wallet_usage())
     return AUTOFILL_WALLET_USAGE;
-  if (specifics.has_segmentation())
-    return SEGMENTATION;
   if (specifics.has_saved_tab_group())
     return SAVED_TAB_GROUP;
   if (specifics.has_power_bookmark())
@@ -630,6 +630,9 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
   }
   if (specifics.has_compare()) {
     return COMPARE;
+  }
+  if (specifics.has_cookie()) {
+    return COOKIES;
   }
 
   if (specifics.has_notes())

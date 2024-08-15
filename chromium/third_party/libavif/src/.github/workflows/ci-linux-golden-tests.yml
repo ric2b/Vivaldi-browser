@@ -26,42 +26,27 @@ jobs:
             gcc: 13
 
     steps:
-    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+    - uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b # v4.1.4
     - name: Set GCC & G++ compiler (on Linux)
       run: echo "CC=gcc-${{matrix.gcc}}" >> $GITHUB_ENV && echo "CXX=g++-${{matrix.gcc}}" >> $GITHUB_ENV
-    - uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5.0.0
+    - uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
       with:
         python-version: '3.x'
-
     - name: Cache external dependencies
       id: cache-ext
-      uses: actions/cache@ab5e6d0c87105b4c9c2047343972218f562e4319 # v4.0.1
+      uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
       with:
-        path: ext
-        key: ${{ runner.os }}-golden-tests-${{ hashFiles('ext/aom.cmd', 'ext/libyuv.cmd', 'ext/libxml2.cmd', 'ext/mp4box.sh') }}
+        path: ext, build/_deps
+        key: ${{ runner.os }}-golden-tests-${{ hashFiles('cmake/Modules/*', 'ext/*.cmd', 'ext/*.sh') }}
     - name: Setup cmake
-      uses: jwlawson/actions-setup-cmake@959f1116cf9f1ae42fff8ec1a4aaae6d4a0e348b
+      uses: jwlawson/actions-setup-cmake@802fa1a2c4e212495c05bf94dba2704a92a472be
       with:
         # CMake 3.18 or higher is required for libxml2
         cmake-version: '3.18.x'
     - name: Print cmake version
       run: cmake --version
     - uses: ilammy/setup-nasm@13cbeb366c45c4379d3478cdcbadd8295feb5028 # v1.5.1
-      with:
-        version: 2.15.05
     - uses: seanmiddleditch/gha-setup-ninja@8b297075da4cd2a5f1fd21fe011b499edf06e9d2 # v4
-    - name: Build aom
-      if: steps.cache-ext.outputs.cache-hit != 'true'
-      working-directory: ./ext
-      run: bash -e aom.cmd
-    - name: Build libyuv
-      if: steps.cache-ext.outputs.cache-hit != 'true'
-      working-directory: ./ext
-      run: bash -e libyuv.cmd
-    - name: Build libxml2
-      if: steps.cache-ext.outputs.cache-hit != 'true'
-      working-directory: ./ext
-      run: bash -e libxml2.cmd
     - name: Build mp4box
       if: steps.cache-ext.outputs.cache-hit != 'true'
       working-directory: ./ext
@@ -76,7 +61,7 @@ jobs:
         -DAVIF_CODEC_AOM=LOCAL -DAVIF_LIBYUV=LOCAL
         -DAVIF_BUILD_EXAMPLES=ON -DAVIF_BUILD_APPS=ON
         -DAVIF_ENABLE_EXPERIMENTAL_GAIN_MAP=ON
-        -DAVIF_LOCAL_LIBXML2=ON
+        -DAVIF_LIBXML2=LOCAL
         -DAVIF_BUILD_TESTS=ON -DAVIF_ENABLE_GOLDEN_TESTS=ON
         -DAVIF_ENABLE_GTEST=OFF -DAVIF_ENABLE_WERROR=ON
         -DGOLDEN_TESTS_OUTPUT_DIR=${{ runner.temp }}/golden_tests
@@ -91,7 +76,7 @@ jobs:
     # See https://docs.github.com/en/actions/using-workflows/storing-workflow-data-as-artifacts
     - name: Archive golden tests output for debugging
       if: failure()
-      uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+      uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
       with:
         name: golden-tests-output
         path: ${{ runner.temp }}/golden_tests/**/*

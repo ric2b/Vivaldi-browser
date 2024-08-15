@@ -15,7 +15,6 @@
 #include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
-#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
@@ -46,6 +45,7 @@
 #include "gpu/ipc/service/gpu_channel.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
 #include "gpu/ipc/service/shared_image_stub.h"
+#include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
@@ -187,16 +187,17 @@ void ImageDecodeAcceleratorStub::ProcessCompletedDecode(
   // the sequence gets disabled if there are no more completed decodes after
   // this. base::Unretained(this) is safe because *this outlives the
   // ScopedClosureRunner.
-  base::ScopedClosureRunner finalizer(
-      base::BindOnce(&ImageDecodeAcceleratorStub::FinishCompletedDecode,
-                     base::Unretained(this), decode_release_count));
+  absl::Cleanup finalizer = [this, decode_release_count] {
+    lock_.AssertAcquired();
+    FinishCompletedDecode(decode_release_count);
+  };
 
   if (!completed_decode) {
     DLOG(ERROR) << "The image could not be decoded";
     return;
   }
 
-  // TODO(crbug.com/995883): the output_size parameter is going away, so this
+  // TODO(crbug.com/40641220): the output_size parameter is going away, so this
   // validation is not needed. Checking if the size is too small should happen
   // at the level of the decoder (since that's the component that's aware of its
   // own capabilities).

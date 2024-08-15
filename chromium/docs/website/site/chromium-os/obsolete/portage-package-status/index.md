@@ -11,7 +11,7 @@ title: Portage Package Upgrade Initiative
 ### How to add/update a package
 
 Read the ["Portage New & Upgrade Package
-Process"](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/portage/package_upgrade_process.md).
+Process"](/chromium-os/developer-library/guides/portage/package-upgrade-process/).
 
 **Note: The following material is old - we do not maintain this process
 anymore.**

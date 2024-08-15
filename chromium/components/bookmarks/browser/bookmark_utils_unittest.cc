@@ -271,7 +271,7 @@ TEST_F(BookmarkUtilsTest, PasteBookmarkFromURL) {
             ASCIIToUTF16(new_folder->children().front()->url().spec()));
 }
 
-// TODO(https://crbug.com/1010182): Fix flakes and re-enable this test.
+// TODO(crbug.com/40651002): Fix flakes and re-enable this test.
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 #define MAYBE_CopyPaste DISABLED_CopyPaste
 #else
@@ -286,7 +286,8 @@ TEST_F(BookmarkUtilsTest, MAYBE_CopyPaste) {
   std::vector<raw_ptr<const BookmarkNode, VectorExperimental>> nodes;
   nodes.push_back(node);
   CopyToClipboard(model.get(), nodes, false,
-                  metrics::BookmarkEditSource::kOther);
+                  metrics::BookmarkEditSource::kOther,
+                  /*is_off_the_record=*/false);
 
   // And make sure we can paste a bookmark from the clipboard.
   EXPECT_TRUE(CanPasteFromClipboard(model.get(), model->bookmark_bar_node()));
@@ -320,7 +321,8 @@ TEST_F(BookmarkUtilsTest, MakeTitleUnique) {
   std::vector<raw_ptr<const BookmarkNode, VectorExperimental>> nodes;
   nodes.push_back(node);
   CopyToClipboard(model.get(), nodes, false,
-                  metrics::BookmarkEditSource::kOther);
+                  metrics::BookmarkEditSource::kOther,
+                  /*is_off_the_record=*/false);
 
   // Now we should be able to paste from the clipboard.
   EXPECT_TRUE(CanPasteFromClipboard(model.get(), bookmark_bar_node));
@@ -347,7 +349,8 @@ TEST_F(BookmarkUtilsTest, CopyPasteMetaInfo) {
   std::vector<raw_ptr<const BookmarkNode, VectorExperimental>> nodes;
   nodes.push_back(node);
   CopyToClipboard(model.get(), nodes, false,
-                  metrics::BookmarkEditSource::kOther);
+                  metrics::BookmarkEditSource::kOther,
+                  /*is_off_the_record=*/false);
 
   // Paste node to a different folder.
   const BookmarkNode* folder =
@@ -392,8 +395,8 @@ TEST_F(BookmarkUtilsTest, MAYBE_CutToClipboard) {
   std::vector<raw_ptr<const BookmarkNode, VectorExperimental>> nodes;
   nodes.push_back(n1);
   nodes.push_back(n2);
-  CopyToClipboard(model.get(), nodes, true,
-                  metrics::BookmarkEditSource::kOther);
+  CopyToClipboard(model.get(), nodes, true, metrics::BookmarkEditSource::kOther,
+                  /*is_off_the_record=*/false);
 
   // Make sure the nodes were removed.
   EXPECT_EQ(0u, model->other_node()->children().size());
@@ -425,7 +428,8 @@ TEST_F(BookmarkUtilsTest, MAYBE_PasteNonEditableNodes) {
   std::vector<raw_ptr<const BookmarkNode, VectorExperimental>> nodes;
   nodes.push_back(node);
   CopyToClipboard(model.get(), nodes, false,
-                  metrics::BookmarkEditSource::kOther);
+                  metrics::BookmarkEditSource::kOther,
+                  /*is_off_the_record=*/false);
 
   // And make sure we can paste a bookmark from the clipboard.
   EXPECT_TRUE(CanPasteFromClipboard(model.get(), model->bookmark_bar_node()));
@@ -552,7 +556,7 @@ TEST_F(BookmarkUtilsTest, RemoveAllBookmarks) {
       model->GetNodesByURL(url);
   ASSERT_EQ(4u, nodes.size());
 
-  RemoveAllBookmarks(model.get(), url);
+  RemoveAllBookmarks(model.get(), url, FROM_HERE);
 
   nodes = model->GetNodesByURL(url);
   ASSERT_EQ(1u, nodes.size());

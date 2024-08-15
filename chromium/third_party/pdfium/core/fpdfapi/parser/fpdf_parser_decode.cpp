@@ -4,6 +4,11 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "core/fpdfapi/parser/fpdf_parser_decode.h"
 
 #include <ctype.h>
@@ -22,9 +27,12 @@
 #include "core/fxcodec/flate/flatemodule.h"
 #include "core/fxcodec/scanlinedecoder.h"
 #include "core/fxcrt/check.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/fx_extension.h"
+#include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_safe_types.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/span_util.h"
 #include "core/fxcrt/utf16.h"
 
@@ -154,7 +162,7 @@ uint32_t A85Decode(pdfium::span<const uint8_t> src_span,
       continue;
 
     if (ch == 'z') {
-      memset(dest_buf_ptr + *dest_size, 0, 4);
+      FXSYS_memset(dest_buf_ptr + *dest_size, 0, 4);
       state = 0;
       res = 0;
       *dest_size += 4;
@@ -256,7 +264,9 @@ uint32_t RunLengthDecode(pdfium::span<const uint8_t> src_span,
     return FX_INVALID_OFFSET;
 
   dest_buf->reset(FX_Alloc(uint8_t, *dest_size));
-  pdfium::span<uint8_t> dest_span(dest_buf->get(), *dest_size);
+  // SAFETY: allocation of `*dest_size` above.
+  auto dest_span =
+      UNSAFE_BUFFERS(pdfium::make_span(dest_buf->get(), *dest_size));
   i = 0;
   int dest_count = 0;
   while (i < src_span.size()) {
@@ -456,7 +466,8 @@ bool PDF_DataDecode(pdfium::span<const uint8_t> src_span,
     if (offset == FX_INVALID_OFFSET)
       return false;
 
-    last_span = {new_buf.get(), new_size};
+    // SAFETY: relies on out params of FlateOrLZWDecode().
+    last_span = UNSAFE_BUFFERS(pdfium::make_span(new_buf.get(), new_size));
     result = std::move(new_buf);
   }
   ImageEncoding->clear();

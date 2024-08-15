@@ -1,9 +1,9 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: reporting-chromeos-bugs
-title: Reporting Chrome OS bugs
+title: Reporting ChromeOS bugs
 ---
 
 [TOC]
@@ -195,8 +195,8 @@ If you think you've identified a bug in ChromeOS, please do the following:
 [new.crbug.com]: https://new.crbug.com/
 [crbug.com/new]: https://crbug.com/new
 [go/newcrosbug]: https://goto.google.com/newcrosbug
-[ChromeOS Security Severity Guidelines]: security_severity_guidelines.md
-[instructions on filing bugs in ChromeOS ]: platform_public_tracker.md
+[ChromeOS Security Severity Guidelines]: /chromium-os/developer-library/guides/bugs/security-severity-guidelines/
+[instructions on filing bugs in ChromeOS ]: /chromium-os/developer-library/guides/bugs/platform-public-tracker/
 [ChromeOS Issue Tracker]: https://issuetracker.google.com
 [Bughunters]: https://bughunters.google.com/report/vrp
 [Bughunters rules]: https://bughunters.google.com/about/rules/4919474699501568/chromeos-vulnerability-reward-program-rules

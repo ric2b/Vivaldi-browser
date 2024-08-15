@@ -699,6 +699,16 @@ export namespace Animation {
      */
     animation: Animation;
   }
+
+  /**
+   * Event for animation that has been updated.
+   */
+  export interface AnimationUpdatedEvent {
+    /**
+     * Animation that was updated.
+     */
+    animation: Animation;
+  }
 }
 
 /**
@@ -1007,6 +1017,32 @@ export namespace Audits {
     NoRegisterOsTriggerHeader = 'NoRegisterOsTriggerHeader',
   }
 
+  export const enum SharedDictionaryError {
+    UseErrorCrossOriginNoCorsRequest = 'UseErrorCrossOriginNoCorsRequest',
+    UseErrorDictionaryLoadFailure = 'UseErrorDictionaryLoadFailure',
+    UseErrorMatchingDictionaryNotUsed = 'UseErrorMatchingDictionaryNotUsed',
+    UseErrorUnexpectedContentDictionaryHeader = 'UseErrorUnexpectedContentDictionaryHeader',
+    WriteErrorCossOriginNoCorsRequest = 'WriteErrorCossOriginNoCorsRequest',
+    WriteErrorDisallowedBySettings = 'WriteErrorDisallowedBySettings',
+    WriteErrorExpiredResponse = 'WriteErrorExpiredResponse',
+    WriteErrorFeatureDisabled = 'WriteErrorFeatureDisabled',
+    WriteErrorInsufficientResources = 'WriteErrorInsufficientResources',
+    WriteErrorInvalidMatchField = 'WriteErrorInvalidMatchField',
+    WriteErrorInvalidStructuredHeader = 'WriteErrorInvalidStructuredHeader',
+    WriteErrorNavigationRequest = 'WriteErrorNavigationRequest',
+    WriteErrorNoMatchField = 'WriteErrorNoMatchField',
+    WriteErrorNonListMatchDestField = 'WriteErrorNonListMatchDestField',
+    WriteErrorNonSecureContext = 'WriteErrorNonSecureContext',
+    WriteErrorNonStringIdField = 'WriteErrorNonStringIdField',
+    WriteErrorNonStringInMatchDestList = 'WriteErrorNonStringInMatchDestList',
+    WriteErrorNonStringMatchField = 'WriteErrorNonStringMatchField',
+    WriteErrorNonTokenTypeField = 'WriteErrorNonTokenTypeField',
+    WriteErrorRequestAborted = 'WriteErrorRequestAborted',
+    WriteErrorShuttingDown = 'WriteErrorShuttingDown',
+    WriteErrorTooLongIdField = 'WriteErrorTooLongIdField',
+    WriteErrorUnsupportedType = 'WriteErrorUnsupportedType',
+  }
+
   /**
    * Details for issues around "Attribution Reporting API" usage.
    * Explainer: https://github.com/WICG/attribution-reporting-api
@@ -1037,6 +1073,11 @@ export namespace Audits {
   export interface NavigatorUserAgentIssueDetails {
     url: string;
     location?: SourceCodeLocation;
+  }
+
+  export interface SharedDictionaryIssueDetails {
+    sharedDictionaryError: SharedDictionaryError;
+    request: AffectedRequest;
   }
 
   export const enum GenericIssueErrorType {
@@ -1101,6 +1142,8 @@ export namespace Audits {
    */
   export interface CookieDeprecationMetadataIssueDetails {
     allowedSites: string[];
+    optOutPercentage: number;
+    isOptOutTopLevel: boolean;
   }
 
   export const enum ClientHintIssueReason {
@@ -1157,6 +1200,8 @@ export namespace Audits {
     SilentMediationFailure = 'SilentMediationFailure',
     ThirdPartyCookiesBlocked = 'ThirdPartyCookiesBlocked',
     NotSignedInWithIdp = 'NotSignedInWithIdp',
+    MissingTransientUserActivation = 'MissingTransientUserActivation',
+    ReplacedByButtonMode = 'ReplacedByButtonMode',
   }
 
   export interface FederatedAuthUserInfoRequestIssueDetails {
@@ -1276,6 +1321,7 @@ export namespace Audits {
     StylesheetLoadingIssue = 'StylesheetLoadingIssue',
     FederatedAuthUserInfoRequestIssue = 'FederatedAuthUserInfoRequestIssue',
     PropertyRuleIssue = 'PropertyRuleIssue',
+    SharedDictionaryIssue = 'SharedDictionaryIssue',
   }
 
   /**
@@ -1304,6 +1350,7 @@ export namespace Audits {
     stylesheetLoadingIssueDetails?: StylesheetLoadingIssueDetails;
     propertyRuleIssueDetails?: PropertyRuleIssueDetails;
     federatedAuthUserInfoRequestIssueDetails?: FederatedAuthUserInfoRequestIssueDetails;
+    sharedDictionaryIssueDetails?: SharedDictionaryIssueDetails;
   }
 
   /**
@@ -1378,6 +1425,28 @@ export namespace Audits {
 
   export interface IssueAddedEvent {
     issue: InspectorIssue;
+  }
+}
+
+/**
+ * Defines commands and events for browser extensions. Available if the client
+ * is connected using the --remote-debugging-pipe flag and
+ * the --enable-unsafe-extension-debugging flag is set.
+ */
+export namespace Extensions {
+
+  export interface LoadUnpackedRequest {
+    /**
+     * Absolute file path.
+     */
+    path: string;
+  }
+
+  export interface LoadUnpackedResponse extends ProtocolResponseWithError {
+    /**
+     * Extension id.
+     */
+    id: string;
   }
 }
 
@@ -3632,11 +3701,14 @@ export namespace DOM {
     Marker = 'marker',
     Backdrop = 'backdrop',
     Selection = 'selection',
+    SearchText = 'search-text',
     TargetText = 'target-text',
     SpellingError = 'spelling-error',
     GrammarError = 'grammar-error',
     Highlight = 'highlight',
     FirstLineInherited = 'first-line-inherited',
+    ScrollMarker = 'scroll-marker',
+    ScrollMarkerGroup = 'scroll-marker-group',
     Scrollbar = 'scrollbar',
     ScrollbarThumb = 'scrollbar-thumb',
     ScrollbarButton = 'scrollbar-button',
@@ -4389,6 +4461,28 @@ export namespace DOM {
      * NodeIds of top layer elements
      */
     nodeIds: NodeId[];
+  }
+
+  export const enum GetElementByRelationRequestRelation {
+    PopoverTarget = 'PopoverTarget',
+  }
+
+  export interface GetElementByRelationRequest {
+    /**
+     * Id of the node from which to query the relation.
+     */
+    nodeId: NodeId;
+    /**
+     * Type of relation to get.
+     */
+    relation: GetElementByRelationRequestRelation;
+  }
+
+  export interface GetElementByRelationResponse extends ProtocolResponseWithError {
+    /**
+     * NodeId of the element matching the queried relation.
+     */
+    nodeId: NodeId;
   }
 
   export interface RemoveAttributeRequest {
@@ -5970,8 +6064,13 @@ export namespace Emulation {
     /**
      * If set, the posture of a foldable device. If not set the posture is set
      * to continuous.
+     * Deprecated, use Emulation.setDevicePostureOverride.
      */
     devicePosture?: DevicePosture;
+  }
+
+  export interface SetDevicePostureOverrideRequest {
+    posture: DevicePosture;
   }
 
   export interface SetScrollbarsHiddenRequest {
@@ -8007,6 +8106,7 @@ export namespace Network {
     headers: Headers;
     /**
      * HTTP POST request data.
+     * Use postDataEntries instead.
      */
     postData?: string;
     /**
@@ -8014,7 +8114,7 @@ export namespace Network {
      */
     hasPostData?: boolean;
     /**
-     * Request body elements. This will be converted from base64 to binary
+     * Request body elements (post data broken into individual entries).
      */
     postDataEntries?: PostDataEntry[];
     /**
@@ -8289,8 +8389,16 @@ export namespace Network {
   }
 
   export interface ServiceWorkerRouterInfo {
-    ruleIdMatched: integer;
-    matchedSourceType: ServiceWorkerRouterSource;
+    /**
+     * ID of the rule matched. If there is a matched rule, this field will
+     * be set, otherwiser no value will be set.
+     */
+    ruleIdMatched?: integer;
+    /**
+     * The router source of the matched rule. If there is a matched rule, this
+     * field will be set, otherwise no value will be set.
+     */
+    matchedSourceType?: ServiceWorkerRouterSource;
   }
 
   /**
@@ -8362,7 +8470,14 @@ export namespace Network {
      */
     fromPrefetchCache?: boolean;
     /**
-     * Information about how Service Worker Static Router was used.
+     * Specifies that the request was served from the prefetch cache.
+     */
+    fromEarlyHints?: boolean;
+    /**
+     * Information about how ServiceWorker Static Router API was used. If this
+     * field is set with `matchedSourceType` field, a matching rule is found.
+     * If this field is set without `matchedSource`, no matching rule is found.
+     * Otherwise, the API is not used.
      */
     serviceWorkerRouterInfo?: ServiceWorkerRouterInfo;
     /**
@@ -8694,6 +8809,10 @@ export namespace Network {
      * The reason the cookie was exempted.
      */
     exemptionReason: CookieExemptionReason;
+    /**
+     * The string representing this individual cookie as it would appear in the header.
+     */
+    cookieLine: string;
     /**
      * The cookie object representing the cookie.
      */
@@ -10182,6 +10301,22 @@ export namespace Network {
     exemptedCookies?: ExemptedSetCookieWithReason[];
   }
 
+  /**
+   * Fired when 103 Early Hints headers is received in addition to the common response.
+   * Not every responseReceived event will have an responseReceivedEarlyHints fired.
+   * Only one responseReceivedEarlyHints may be fired for eached responseReceived event.
+   */
+  export interface ResponseReceivedEarlyHintsEvent {
+    /**
+     * Request identifier. Used to match this information to another responseReceived event.
+     */
+    requestId: RequestId;
+    /**
+     * Raw response headers as they were received over the wire.
+     */
+    headers: Headers;
+  }
+
   export const enum TrustTokenOperationDoneEventStatus {
     Ok = 'Ok',
     InvalidArgument = 'InvalidArgument',
@@ -11235,7 +11370,6 @@ export namespace Page {
     WebPrinting = 'web-printing',
     WebShare = 'web-share',
     WindowManagement = 'window-management',
-    WindowPlacement = 'window-placement',
     XrSpatialTracking = 'xr-spatial-tracking',
   }
 
@@ -11796,6 +11930,136 @@ export namespace Page {
     eager?: boolean;
   }
 
+  export interface FileFilter {
+    name?: string;
+    accepts?: string[];
+  }
+
+  export interface FileHandler {
+    action: string;
+    name: string;
+    icons?: ImageResource[];
+    /**
+     * Mimic a map, name is the key, accepts is the value.
+     */
+    accepts?: FileFilter[];
+    /**
+     * Won't repeat the enums, using string for easy comparison. Same as the
+     * other enums below.
+     */
+    launchType: string;
+  }
+
+  /**
+   * The image definition used in both icon and screenshot.
+   */
+  export interface ImageResource {
+    /**
+     * The src field in the definition, but changing to url in favor of
+     * consistency.
+     */
+    url: string;
+    sizes?: string;
+    type?: string;
+  }
+
+  export interface LaunchHandler {
+    clientMode: string;
+  }
+
+  export interface ProtocolHandler {
+    protocol: string;
+    url: string;
+  }
+
+  export interface RelatedApplication {
+    id?: string;
+    url: string;
+  }
+
+  export interface ScopeExtension {
+    /**
+     * Instead of using tuple, this field always returns the serialized string
+     * for easy understanding and comparison.
+     */
+    origin: string;
+    hasOriginWildcard: boolean;
+  }
+
+  export interface Screenshot {
+    image: ImageResource;
+    formFactor: string;
+    label?: string;
+  }
+
+  export interface ShareTarget {
+    action: string;
+    method: string;
+    enctype: string;
+    /**
+     * Embed the ShareTargetParams
+     */
+    title?: string;
+    text?: string;
+    url?: string;
+    files?: FileFilter[];
+  }
+
+  export interface Shortcut {
+    name: string;
+    url: string;
+  }
+
+  export interface WebAppManifest {
+    backgroundColor?: string;
+    /**
+     * The extra description provided by the manifest.
+     */
+    description?: string;
+    dir?: string;
+    display?: string;
+    /**
+     * The overrided display mode controlled by the user.
+     */
+    displayOverrides?: string[];
+    /**
+     * The handlers to open files.
+     */
+    fileHandlers?: FileHandler[];
+    icons?: ImageResource[];
+    id?: string;
+    lang?: string;
+    /**
+     * TODO(crbug.com/1231886): This field is non-standard and part of a Chrome
+     * experiment. See:
+     * https://github.com/WICG/web-app-launch/blob/main/launch_handler.md
+     */
+    launchHandler?: LaunchHandler;
+    name?: string;
+    orientation?: string;
+    preferRelatedApplications?: boolean;
+    /**
+     * The handlers to open protocols.
+     */
+    protocolHandlers?: ProtocolHandler[];
+    relatedApplications?: RelatedApplication[];
+    scope?: string;
+    /**
+     * Non-standard, see
+     * https://github.com/WICG/manifest-incubations/blob/gh-pages/scope_extensions-explainer.md
+     */
+    scopeExtensions?: ScopeExtension[];
+    /**
+     * The screenshots used by chromium.
+     */
+    screenshots?: Screenshot[];
+    shareTarget?: ShareTarget;
+    shortName?: string;
+    shortcuts?: Shortcut[];
+    startUrl?: string;
+    themeColor?: string;
+  }
+
   /**
    * Enum of possible auto-response for permission / prompt dialogs.
    */
@@ -11950,6 +12214,7 @@ export namespace Page {
     EmbedderExtensionMessaging = 'EmbedderExtensionMessaging',
     EmbedderExtensionMessagingForOpenPort = 'EmbedderExtensionMessagingForOpenPort',
     EmbedderExtensionSentMessageToCachedFrame = 'EmbedderExtensionSentMessageToCachedFrame',
+    RequestedByWebViewClient = 'RequestedByWebViewClient',
   }
 
   /**
@@ -12143,6 +12408,10 @@ export namespace Page {
     url: string;
   }
 
+  export interface GetAppManifestRequest {
+    manifestId?: string;
+  }
+
   export interface GetAppManifestResponse extends ProtocolResponseWithError {
     /**
      * Manifest location.
@@ -12154,9 +12423,10 @@ export namespace Page {
      */
     data?: string;
     /**
-     * Parsed manifest properties
+     * Parsed manifest properties. Deprecated, use manifest instead.
      */
     parsed?: AppManifestParsedProperties;
+    manifest: WebAppManifest;
   }
 
   export interface GetInstallabilityErrorsResponse extends ProtocolResponseWithError {
@@ -12435,6 +12705,12 @@ export namespace Page {
      * Argument will be ignored if reloading dataURL origin.
      */
     scriptToEvaluateOnLoad?: string;
+    /**
+     * If set, an error will be thrown if the target page's main frame's
+     * loader id does not match the provided id. This prevents accidentally
+     * reloading an unintended target in case there's a racing navigation.
+     */
+    loaderId?: Network.LoaderId;
   }
 
   export interface RemoveScriptToEvaluateOnLoadRequest {
@@ -14054,6 +14330,7 @@ export namespace Storage {
     DestinationBothLimitsReached = 'destinationBothLimitsReached',
     ReportingOriginsPerSiteLimitReached = 'reportingOriginsPerSiteLimitReached',
     ExceedsMaxChannelCapacity = 'exceedsMaxChannelCapacity',
+    ExceedsMaxTriggerStateCardinality = 'exceedsMaxTriggerStateCardinality',
   }
 
   export const enum AttributionReportingSourceRegistrationTimeConfig {
@@ -14428,6 +14705,13 @@ export namespace Storage {
 
   export interface SetAttributionReportingTrackingRequest {
     enable: boolean;
+  }
+
+  export interface SendPendingAttributionReportsResponse extends ProtocolResponseWithError {
+    /**
+     * The number of reports that were sent.
+     */
+    numSent: integer;
   }
 
   export interface GetRelatedWebsiteSetsResponse extends ProtocolResponseWithError {
@@ -16690,6 +16974,9 @@ export namespace Preload {
     PrerenderingUrlHasEffectiveUrl = 'PrerenderingUrlHasEffectiveUrl',
     RedirectedPrerenderingUrlHasEffectiveUrl = 'RedirectedPrerenderingUrlHasEffectiveUrl',
     ActivationUrlHasEffectiveUrl = 'ActivationUrlHasEffectiveUrl',
+    JavaScriptInterfaceAdded = 'JavaScriptInterfaceAdded',
+    JavaScriptInterfaceRemoved = 'JavaScriptInterfaceRemoved',
+    AllPrerenderingCanceled = 'AllPrerenderingCanceled',
   }
 
   /**
@@ -16921,6 +17208,70 @@ export namespace FedCm {
    */
   export interface DialogClosedEvent {
     dialogId: string;
+  }
+}
+
+/**
+ * This domain allows interacting with the browser to control PWAs.
+ */
+export namespace PWA {
+
+  /**
+   * The following types are the replica of
+   * https://crsrc.org/c/chrome/browser/web_applications/proto/web_app_os_integration_state.proto;drc=9910d3be894c8f142c977ba1023f30a656bc13fc;l=67
+   */
+  export interface FileHandlerAccept {
+    /**
+     * New name of the mimetype according to
+     * https://www.iana.org/assignments/media-types/media-types.xhtml
+     */
+    mediaType: string;
+    fileExtensions: string[];
+  }
+
+  export interface FileHandler {
+    action: string;
+    accepts: FileHandlerAccept[];
+    displayName: string;
+  }
+
+  export interface GetOsAppStateRequest {
+    /**
+     * The id from the webapp's manifest file, commonly it's the url of the
+     * site installing the webapp. See
+     * https://web.dev/learn/pwa/web-app-manifest.
+     */
+    manifestId: string;
+  }
+
+  export interface GetOsAppStateResponse extends ProtocolResponseWithError {
+    badgeCount: integer;
+    fileHandlers: FileHandler[];
+  }
+
+  export interface InstallRequest {
+    manifestId: string;
+    /**
+     * The location of the app or bundle overriding the one derived from the
+     * manifestId.
+     */
+    installUrlOrBundleUrl?: string;
+  }
+
+  export interface UninstallRequest {
+    manifestId: string;
+  }
+
+  export interface LaunchRequest {
+    manifestId: string;
+    url?: string;
+  }
+
+  export interface LaunchResponse extends ProtocolResponseWithError {
+    /**
+     * ID of the tab target created as a result.
+     */
+    targetId: Target.TargetID;
   }
 }
 

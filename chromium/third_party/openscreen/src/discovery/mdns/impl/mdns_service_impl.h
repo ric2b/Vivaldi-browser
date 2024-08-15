@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "discovery/common/config.h"
 #include "discovery/mdns/impl/mdns_probe_manager.h"
 #include "discovery/mdns/impl/mdns_publisher.h"
 #include "discovery/mdns/impl/mdns_querier.h"
@@ -29,16 +28,17 @@ class TaskRunner;
 
 namespace discovery {
 
+struct config;
 class NetworkConfig;
 class ReportingClient;
 
 class MdnsServiceImpl : public MdnsService, public UdpSocket::Client {
  public:
-  // |task_runner|, |reporting_client|, and |config| must exist for the duration
-  // of this instance's life.
+  // |task_runner| and |reporting_client| must exist for the duration of this
+  // instance's life.
   MdnsServiceImpl(TaskRunner& task_runner,
                   ClockNowFunctionPtr now_function,
-                  ReportingClient* reporting_client,
+                  ReportingClient& reporting_client,
                   const Config& config,
                   const InterfaceInfo& network_info);
   ~MdnsServiceImpl() override;
@@ -63,15 +63,15 @@ class MdnsServiceImpl : public MdnsService, public UdpSocket::Client {
   Error UnregisterRecord(const MdnsRecord& record) override;
 
   // UdpSocket::Client overrides.
-  void OnError(UdpSocket* socket, Error error) override;
-  void OnSendError(UdpSocket* socket, Error error) override;
+  void OnError(UdpSocket* socket, const Error& error) override;
+  void OnSendError(UdpSocket* socket, const Error& error) override;
   void OnRead(UdpSocket* socket, ErrorOr<UdpPacket> packet) override;
   void OnBound(UdpSocket* socket) override;
 
  private:
   TaskRunner& task_runner_;
   ClockNowFunctionPtr now_function_;
-  ReportingClient* const reporting_client_;
+  ReportingClient& reporting_client_;
 
   MdnsRandom random_delay_;
   MdnsReceiver receiver_;

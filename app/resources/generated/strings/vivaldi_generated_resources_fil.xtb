@@ -25,7 +25,6 @@
 <translation id="2470702053775288986">Na-disable ang mga hindi sinusuportahang extension</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Muling paganahin</translation>
-<translation id="2809586584051668049">at <ph name="NUMBER_ADDITIONAL_DISABLED" /> pa</translation>
 <translation id="2850541429955027218">Magdagdag ng tema</translation>
 <translation id="2861941300086904918">Tagapamahala ng seguridad ng Native Client</translation>
 <translation id="2932883381142163287">I-ulat ang pang-aabuso</translation>
@@ -36,7 +35,6 @@
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3222066309010235055">Prerender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Piliin ang pinagmulang direktoryo ng extension sa pack. Upang mai-update ang extension, piliin rin ang file ng private na key na muling gagamitin.</translation>
-<translation id="3288047731229977326">Ang mga extension na tumatakbo sa developer mode ay maaaring makapinsala sa iyong computer. Kung hindi ka isang developer, dapat mong i-disable ang mga extension na tumatakbo sa developer mode upang manatiling ligtas.</translation>
 <translation id="3305661444342691068">Buksan ang PDF sa Preview</translation>
 <translation id="3341703758641437857">Payagan ang pag access sa mga URL ng file</translation>
 <translation id="3378572629723696641">Maaaring nasira ang extension na ito.</translation>
@@ -49,7 +47,6 @@
 <translation id="4087089424473531098">Nilikha ang extension na:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">I-disable ang mga extension ng developer mode</translation>
 <translation id="4100839878934973028">Ang isa pang program sa iyong computer ay nagdagdag ng app na maaaring magpabago sa paraan ng paggana ng Vivaldi.</translation>
 <translation id="4176463684765177261">Hindi Pinagana</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K live)</translation>
@@ -65,7 +62,6 @@
 <translation id="5143374789336132547">Binago ng extension na "<ph name="EXTENSION_NAME" />" ang ipinapakitang page kapag na-click mo ang button ng Home.</translation>
 <translation id="5233231016133573565">ID ng proseso</translation>
 <translation id="52912272896845572">Hindi wasto ang file ng private na key.</translation>
-<translation id="5301954838959518834">OK, nakuha ko na</translation>
 <translation id="5362741141255528695">Piliin ang file ng private na key.</translation>
 <translation id="5485102783864353244">Magdagdag ng app</translation>
 <translation id="5521078259930077036">Ito ba ang inaasahan mong home page?</translation>

@@ -257,9 +257,9 @@ DEALINGS IN THE SOFTWARE.
 
 libavutil/x86/x86inc.asm
 
-x86inc.asm: x264asm abstraction layer
+x86inc.asm: x86 abstraction layer
 
- Copyright (C) 2005-2018 x264 project
+ Copyright (C) 2005-2024 x264 project
 
  Authors: Loren Merritt <lorenm@u.washington.edu>
           Henrik Gramner <henrik@gramner.com>

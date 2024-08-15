@@ -24,7 +24,6 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
-#include "content/public/browser/ax_event_notification_details.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/tracing_controller.h"
@@ -45,6 +44,7 @@
 #include "ui/accessibility/ax_serializable_tree.h"
 #include "ui/accessibility/ax_tree.h"
 #include "ui/accessibility/ax_tree_serializer.h"
+#include "ui/accessibility/ax_updates_and_events.h"
 #include "ui/accessibility/tree_generator.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/display/display_switches.h"
@@ -917,7 +917,7 @@ IN_PROC_BROWSER_TEST_P(AutomationApiTestWithMockedSourceRenderer,
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_CHROMEOS)
-// TODO(crbug.com/1209766) Flaky on lacros
+// TODO(crbug.com/40766689) Flaky on lacros
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #define MAYBE_HitTestMultipleWindows DISABLED_HitTestMultipleWindows
 #else

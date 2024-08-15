@@ -12,6 +12,7 @@
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chromeos/components/libsegmentation/buildflags.h"
 #include "chromeos/constants/chromeos_features.h"
 
 namespace ash::features {
@@ -40,6 +41,12 @@ BASE_FEATURE(kAdaptiveCharging,
 // feature.
 BASE_FEATURE(kAdaptiveChargingForTesting,
              "AdaptiveChargingForTesting",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables the UI for additional on-device parental controls that can be used to
+// enable or block ARC++ apps.
+BASE_FEATURE(kOnDeviceAppControls,
+             "OnDeviceAppControls",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls whether the advanced documentScan APIs for document scanners
@@ -71,13 +78,6 @@ BASE_FEATURE(kAllowCrossDeviceFeatureSuite,
 // Lacros is the only browser.
 BASE_FEATURE(kAllowDevtoolsInSystemUI,
              "AllowDevtoolsInSystemUI",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Allows network connections which use EAP methods that validate the
-// server certificate to use the default server CA certificate without
-// verifying the servers identity.
-BASE_FEATURE(kAllowEapDefaultCasWithoutSubjectVerification,
-             "AllowEapDefaultCasWithoutSubjectVerification",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls whether devices are updated before reboot after the first update.
@@ -130,6 +130,11 @@ BASE_FEATURE(kAmbientModeManagedScreensaver,
 
 BASE_FEATURE(kApnRevamp, "ApnRevamp", base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Adds Borealis support to Almanac app install URIs.
+BASE_FEATURE(kAppInstallServiceUriBorealis,
+             "AppInstallServiceUriBorealis",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Controls whether to enable ARC ADB sideloading support.
 BASE_FEATURE(kArcAdbSideloadingFeature,
              "ArcAdbSideloading",
@@ -139,16 +144,6 @@ BASE_FEATURE(kArcAdbSideloadingFeature,
 // through the FuseBox service.
 BASE_FEATURE(kArcFuseBoxFileSharing,
              "ArcFuseBoxFileSharing",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Controls whether to enable support for ARC Input Overlay Beta.
-BASE_FEATURE(kArcInputOverlayBeta,
-             "ArcInputOverlayBeta",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Controls whether to enable support for ARC Input Overlay Alpha v2.
-BASE_FEATURE(kArcInputOverlayAlphaV2,
-             "ArcInputOverlayAlphaV2",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls whether to enable support for ARC ADB sideloading for managed
@@ -277,7 +272,7 @@ BASE_FEATURE(kBatterySaverAlwaysOn,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Display weather information in birch UI.
-BASE_FEATURE(kBirchWeather, "BirchWeather", base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kBirchWeather, "BirchWeather", base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables or disables the usage of fixed Bluetooth A2DP packet size to improve
 // audio performance in noisy environment.
@@ -288,7 +283,7 @@ BASE_FEATURE(kBluetoothFixA2dpPacketSize,
 // Enables or disables the Bluetooth Disconnect Warning feature.
 BASE_FEATURE(kBluetoothDisconnectWarning,
              "BluetoothDisconnectWarning",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables or disables the Bluetooth Quality Report feature.
 BASE_FEATURE(kBluetoothQualityReport,
@@ -301,11 +296,29 @@ BASE_FEATURE(kCameraAppAutoQRDetection,
 
 BASE_FEATURE(kCameraAppCrosEvents,
              "CameraAppCrosEvents",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Enables to enable digital zoom control inside Camera app.
+// Enables or disables digital zoom control inside Camera app.
 BASE_FEATURE(kCameraAppDigitalZoom,
              "CameraAppDigitalZoom",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Make the text on PDFs saved from Camera app accessible.
+BASE_FEATURE(kCameraAppPdfOcr,
+             "CameraAppPdfOcr",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enable OCR features on the preview in Camera app.
+BASE_FEATURE(kCameraAppPreviewOcr,
+             "CameraAppPreviewOcr",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Indicates whether the camera super resolution is supported. Note that this
+// feature is overridden by login_manager based on whether a per-board build
+// sets the USE camera_feature_super_res flag. Refer to:
+// chromiumos/src/platform2/login_manager/chrome_setup.cc
+BASE_FEATURE(kCameraSuperResSupported,
+             "CameraSuperResSupported",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enable Big GL when using Borealis.
@@ -357,14 +370,14 @@ BASE_FEATURE(kBorealisScaleClientByDPI,
              "BorealisScaleClientByDPI",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Use the new WebUI installer instead of views installer.
-BASE_FEATURE(kBorealisWebUIInstaller,
-             "BorealisWebUIInstaller",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kBorealisZinkGlDriver,
              "BorealisZinkGlDriver",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Allows UserDataAuth client to use fingerprint auth factor.
+BASE_FEATURE(kFingerprintAuthFactor,
+             "FingerprintAuthFactor",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 const base::FeatureParam<BorealisZinkGlDriverParam>::Option
     borealis_zink_gl_driver_options[] = {
@@ -376,23 +389,10 @@ const base::FeatureParam<BorealisZinkGlDriverParam> kBorealisZinkGlDriverParam{
     BorealisZinkGlDriverParam::kZinkEnableRecommended,
     &borealis_zink_gl_driver_options};
 
-// Controls whether the camera effects are supported by hardware.
-// Note that this feature can be overridden by login_manager based on
-// whether a per-board build sets the USE camera_feature_effects flag.
-// Refer to: chromiumos/src/platform2/login_manager/chrome_setup.cc
-BASE_FEATURE(kCameraEffectsSupportedByHardware,
-             "CameraEffectsSupportedByHardware",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enables the feature to parameterize glyph for "Campbell" feature.
 BASE_FEATURE(kCampbellGlyph,
              "CampbellGlyph",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Controls whether the capture mode advanced audio settings are enabled.
-BASE_FEATURE(kCaptureModeAudioMixing,
-             "CaptureModeAudioMixing",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables the nudges/tutorials that inform users of the screen capture keyboard
 // shortcut and feature tile.
@@ -428,7 +428,7 @@ BASE_FEATURE(kCellularBypassESimInstallationConnectivityCheck,
 // This flag will be removed before launch (http://launch/4211912).
 BASE_FEATURE(kCellularCarrierLock,
              "CellularCarrierLock",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 constexpr base::FeatureParam<int> kCellularCarrierLockLastConfig{
     &kCellularCarrierLock, "LastConfigDateDelta", -2};
@@ -472,6 +472,13 @@ BASE_FEATURE(kContinuousOverviewScrollAnimation,
 
 // Controls enabling/disabling the coral feature.
 BASE_FEATURE(kCoralFeature, "CoralFeature", base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables execution of routine for copying client keys and certs from NSS DB to
+// software backed Chaps slot. It's only respected if the
+// EnableNssDbClientCertsRollback feature flag is disabled.
+BASE_FEATURE(kCopyClientKeysCertsToChaps,
+             "CopyClientKeysCertsToChaps",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Adds location access control to Privacy Hub.
 BASE_FEATURE(kCrosPrivacyHub,
@@ -523,11 +530,6 @@ BASE_FEATURE(kCrostiniVirtualKeyboardSupport,
              "CrostiniVirtualKeyboardSupport",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enables or disables using newer infrastructure for termina-dlc.
-BASE_FEATURE(kCrostiniTerminaDlcForceOta,
-             "CrostiniTerminaDlcForceOta",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enables or disables always using device-activity-status data to filter
 // eligible host phones.
 BASE_FEATURE(kCryptAuthV2AlwaysUseActiveEligibleHosts,
@@ -565,23 +567,13 @@ BASE_FEATURE(kCryptAuthV2Enrollment,
              "CryptAuthV2Enrollment",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Temporary flag, needed to interlace code and tast test changes,
-// will be removed before M-121 branch.
-// - if enabled, keeps the old flow where recovery screen performs
-// authentication, updates password, and shows confirmation screen.
-// - if disabled, recovery screen only performs authentication, and
-// remaining steps are done by separate screens.
-BASE_FEATURE(kCryptohomeRecoveryBeforeFlowSplit,
-             "CryptohomeRecoveryBeforeFlowSplit",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Controls the default value for the option to set up
 // cryptohome recovery presented for consumer users.
 // - if enabled, recovery would set up by default (opt-out mode)
 // - if disabled, user have to explicitly opt-in to use recovery
 BASE_FEATURE(kCryptohomeRecoveryByDefaultForConsumers,
              "CryptohomeRecoveryByDefaultForConsumers",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls the behavior during onboarding when the RecoveryFactorBehavior
 // policy is unset.
@@ -614,6 +606,12 @@ BASE_FEATURE(kDeskTemplateSync,
 
 BASE_FEATURE(kDesksTemplates,
              "DesksTemplates",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Removes the portal detection at Chrome, and always relies on the result from
+// shill. The removal is tracked at b/336931625.
+BASE_FEATURE(kRemoveDetectPortalFromChrome,
+             "RemoveDetectPortalFromChrome",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables diacritics on longpress on the physical keyboard.
@@ -662,20 +660,6 @@ BASE_FEATURE(kDisplayAlignAssist,
              "DisplayAlignAssist",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enable DNS over HTTPS(DoH) with identifiers.Only available on ChromeOS.
-BASE_FEATURE(kDnsOverHttpsWithIdentifiers,
-             "DnsOverHttpsWithIdentifiers",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Enable experiment to support identifiers in the existing policy
-// DnsOverHttpsTemplates. When this option is enabled, a hard-coded salt value
-// is used for hashing the identifiers in the template URI. Only available on
-// ChromeOS.
-// TODO(acostinas, srad, b/233845305) Remove when policy is added to DPanel.
-BASE_FEATURE(kDnsOverHttpsWithIdentifiersReuseOldPolicy,
-             "DnsOverHttpsWithIdentifiersReuseOldPolicy",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enables the docked (a.k.a. picture-in-picture) magnifier.
 // TODO(afakhry): Remove this after the feature is fully launched.
 // https://crbug.com/709824.
@@ -718,11 +702,6 @@ BASE_FEATURE(kDriveFsShowCSEFiles,
              "DriveFsShowCSEFiles",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Enables support for the dropdown panel.
-BASE_FEATURE(kDropdownPanel,
-             "DropdownPanel",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enables authenticating to Wi-Fi networks using EAP-GTC.
 BASE_FEATURE(kEapGtcWifiAuthentication,
              "EapGtcWifiAuthentication",
@@ -762,7 +741,7 @@ BASE_FEATURE(kEcheSWACheckAndroidNetworkInfo,
 // accessibility tree information.
 BASE_FEATURE(kEcheSWAProcessAndroidAccessibilityTree,
              "EcheSWAProcessAndroidAccessibilityTree",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables metrics revamp for Eche.
 BASE_FEATURE(kEcheMetricsRevamp,
@@ -779,6 +758,12 @@ BASE_FEATURE(kEnableBackgroundBlur,
 // Enables settings to control internal display brightness and auto-brightness.
 BASE_FEATURE(kEnableBrightnessControlInSettings,
              "EnableBrightnessControlInSettings",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables an update to 24px rounded corners for all `TrayBubbleView`s and
+// `AppListBubbleView`.
+BASE_FEATURE(kEnableBubbleCornerRadiusUpdate,
+             "EnableBubbleCornerRadiusUpdate",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables exporting of the selected Preferences so that they can be accessed
@@ -810,7 +795,7 @@ BASE_FEATURE(kEnableKeyboardBacklightToggle,
 // Enable keyboard rewriter fix.
 BASE_FEATURE(kEnableKeyboardRewriterFix,
              "EnableKeyboardRewriterFix",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Login WebUI was always loaded for legacy reasons even when it was not needed.
 // When enabled, it will make login WebUI loaded only before showing it.
@@ -862,7 +847,7 @@ BASE_FEATURE(kEnablePerDeskZOrder,
 // Enables RFC8925 (prefer IPv6-only on an IPv6-only-capable network).
 BASE_FEATURE(kEnableRFC8925,
              "EnableRFC8925",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, touchpad cards will be shown in the diagnostics app's input
 // section.
@@ -983,17 +968,9 @@ BASE_FEATURE(kExperimentalRgbKeyboardPatterns,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables extended updates opt-in functionality.
-// TODO(b/322418004): Change to enabled by default once functionality is
-// fully implemented.
 BASE_FEATURE(kExtendedUpdatesOptInFeature,
              "ExtendedUpdatesOptInFeature",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Requires user opt-in to receive extended updates support.
-// This is only enabled for applicable devices.
-BASE_FEATURE(kExtendedUpdatesRequireOptIn,
-             "ExtendedUpdatesRequireOptIn",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables policy that controls feature to allow Family Link accounts on school
 // owned devices.
@@ -1106,6 +1083,12 @@ BASE_FEATURE(kFeatureManagementBorealis,
              "FeatureManagementBorealis",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Restricts some content in the Help app to the intended target population.
+// This flag is only intended to be modified by the feature management module.
+BASE_FEATURE(kFeatureManagementShowoff,
+             "FeatureManagementShowoff",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Restricts the time-of-day wallpaper/screensaver features to the intended
 // target population, whereas the `kTimeOfDayScreenSaver|Wallpaper` flags
 // control the feature's rollout within said target population. These flags are
@@ -1160,7 +1143,7 @@ BASE_FEATURE(kFederatedLauncherQueryAnalyticsVersion2Task,
 // Enable the new notifications for downloaded files and screen captures.
 BASE_FEATURE(kFileNotificationRevamp,
              "kFileNotificationRevamp",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables experimental UI features in Files app.
 BASE_FEATURE(kFilesAppExperimental,
@@ -1217,6 +1200,9 @@ BASE_FEATURE(kFloatingWorkspace,
              "FloatingWorkspace",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Enables or disables Floating Workspace feature on ChromeOS
+BASE_FEATURE(kClassHub, "ClassHub", base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enables chrome.fileSystemProvider file systems in Files app Recents view.
 BASE_FEATURE(kFSPsInRecents, "FSPsInRecents", base::FEATURE_ENABLED_BY_DEFAULT);
 
@@ -1253,6 +1239,13 @@ BASE_FEATURE(kForceEnableServerSideSpeechRecognitionForDev,
              "ForceEnableServerSideSpeechRecognitionForDev",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Force enables on-device apps controls regardless of the device region.
+// Used for development and testing only. Should remain disabled by default.
+// See `kOnDeviceAppControls` description for the feature details.
+BASE_FEATURE(kForceOnDeviceAppControlsForAllRegions,
+             "ForceOnDeviceAppControlsForAllRegions",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enables Drive to forcibly resync office files. Operations such as copy,
 // move, ZIP on MS Office files call on the Drive to resync the files.
 BASE_FEATURE(kForceReSyncDrive,
@@ -1273,7 +1266,7 @@ BASE_FEATURE(kFullscreenAfterUnlockAllowed,
 // When enabled, there will be an alert bubble showing up when the device
 // returns from low brightness (e.g., sleep, closed cover) without a lock screen
 // and the active window is in fullscreen.
-// TODO(https://crbug.com/1107185): Remove this after the feature is launched.
+// TODO(crbug.com/40140761): Remove this after the feature is launched.
 BASE_FEATURE(kFullscreenAlertBubble,
              "EnableFullscreenBubble",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -1303,30 +1296,15 @@ BASE_FEATURE(kGlanceablesV2,
              "GlanceablesV2",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enables glanceables on time management surface for trusted testers.
-BASE_FEATURE(kGlanceablesV2TrustedTesters,
-             "GlanceablesV2TrustedTesters",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Enables glanceables on time management surface for classroom teachers.
-BASE_FEATURE(kGlanceablesV2ClassroomTeacherView,
-             "GlanceablesV2ClassroomTeacherView",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enables glanceables on time management surface for calendar.
-BASE_FEATURE(kGlanceablesV2CalendarView,
-             "GlanceablesV2CalendarView",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enables showing error messages for glanceables bubbles.
-BASE_FEATURE(kGlanceablesV2ErrorMessage,
-             "GlanceablesV2ErrorMessage",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enables Classroom Student Glanceable on time management surface for stable
 // launch.
 BASE_FEATURE(kGlanceablesTimeManagementClassroomStudentView,
              "GlanceablesTimeManagementClassroomStudentView",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables Classroom API, data-only integration.
+BASE_FEATURE(kGlanceablesTimeManagementClassroomStudentData,
+             "GlanceablesTimeManagementClassroomStudentData",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables Tasks Glanceable on time management surface for stable launch.
@@ -1347,9 +1325,7 @@ BASE_FEATURE(kGaiaReauthEndpoint,
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables the Game Dashboard.
-BASE_FEATURE(kGameDashboard,
-             "GameDashboard",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kGameDashboard, "GameDashboard", base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables the Game Dashboard's Record Game feature. This flag is to be enabled
 // by the feature management module.
@@ -1369,7 +1345,7 @@ BASE_FEATURE(kGesturePropertiesDBusService,
 
 // Enables the ability to record the screen into an animated GIF image from the
 // native screen capture tool.
-BASE_FEATURE(kGifRecording, "GifRecording", base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kGifRecording, "GifRecording", base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables a Files banner about Google One offer.
 BASE_FEATURE(kGoogleOneOfferFilesBanner,
@@ -1387,15 +1363,15 @@ BASE_FEATURE(kGrowthFramework,
              "GrowthFramework",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Enables consumer session customizations with growth campaigns.
-BASE_FEATURE(kGrowthCampaignsInConsumerSession,
-             "GrowthCampaignsInConsumerSession",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enables Demo Mode customizations with growth campaigns.
-BASE_FEATURE(kGrowthCampaignsInDemoMode,
-             "GrowthCampaignsInDemoMode",
+// Close the nudge when targeted app window is inactive.
+BASE_FEATURE(kGrowthCampaignsCloseNudgeWhenTargetInactivated,
+             "GrowthCampaignsCloseNudgeWhenTargetInactivated",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables CrOS events recording with growth campaigns.
+BASE_FEATURE(kGrowthCampaignsCrOSEvents,
+             "GrowthCampaignsCrOSEvents",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls whether growth campaigns experiment tag targeting is enabled. The
 // flag also used by finch to tag the session with finch params.
@@ -1403,24 +1379,44 @@ BASE_FEATURE(kGrowthCampaignsExperimentTagTargeting,
              "GrowthCampaignsExperimentTagTargeting",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Enables new on-device recognition for legacy handwriting input.
-// This flag should be OVERRIDDEN for devices which do not have on-device
-// handwriting (b/316981973). Please check before using this flag.
-BASE_FEATURE(kHandwritingLegacyRecognition,
-             "HandwritingLegacyRecognition",
+// Enables consumer session customizations with growth campaigns.
+BASE_FEATURE(kGrowthCampaignsInConsumerSession,
+             "GrowthCampaignsInConsumerSession",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Enables downloading the handwriting libraries via DLC.
-// This flag should be OVERRIDDEN for devices which do not have on-device
-// handwriting (b/316981973). Please check before using this flag.
-BASE_FEATURE(kHandwritingLibraryDlc,
-             "HandwritingLibraryDlc",
+// Enables Demo Mode customizations with growth campaigns.
+BASE_FEATURE(kGrowthCampaignsInDemoMode,
+             "GrowthCampaignsInDemoMode",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Parent the nudge widget to the default container.
+BASE_FEATURE(kGrowthCampaignsShowNudgeInDefaultParent,
+             "GrowthCampaignsShowNudgeInDefaultParent",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Controls whether growth campaigns triggering when loading campaigns complete.
+BASE_FEATURE(kGrowthCampaignsTriggerAtLoadComplete,
+             "GrowthCampaignsTriggerAtLoadComplete",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Controls whether growth campaigns triggering by app open event is enabled.
+// This flag is used as a kill switch to disable the feature in the case that
+// the feature introduces any unexpected behaviours.
+BASE_FEATURE(kGrowthCampaignsTriggerByAppOpen,
+             "GrowthCampaignsTriggerByAppOpen",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Controls whether growth campaigns triggering by url navigation is enabled.
+// This flag is used as a kill switch to disable the feature in the case that
+// the feature introduces any unexpected behaviours.
+BASE_FEATURE(kGrowthCampaignsTriggerByBrowser,
+             "kGrowthCampaignsTriggerByBrowser",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // If enabled, the Help app will render the App Detail Page and entry point.
 BASE_FEATURE(kHelpAppAppDetailPage,
              "HelpAppAppDetailPage",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, the Help app will render the Apps List page and entry point.
 BASE_FEATURE(kHelpAppAppsList,
@@ -1431,11 +1427,6 @@ BASE_FEATURE(kHelpAppAppsList,
 // install flow initiated from the Help App.
 BASE_FEATURE(kHelpAppAutoTriggerInstallDialog,
              "HelpAppAutoTriggerInstallDialog",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// If enabled, the Help app will render with Cros components.
-BASE_FEATURE(kHelpAppCrosComponents,
-             "HelpAppCrosComponents",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, the home page of the Help App will show a section containing
@@ -1467,7 +1458,11 @@ BASE_FEATURE(kHibernate, "Hibernate", base::FEATURE_DISABLED_BY_DEFAULT);
 // Enables image search for productivity launcher.
 BASE_FEATURE(kProductivityLauncherImageSearch,
              "ProductivityLauncherImageSearch",
+#if BUILDFLAG(ENABLE_MERGE_REQUEST)
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else   //  BUILDFLAG(ENABLE_MERGE_REQUEST)
              base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // !BUILDFLAG(ENABLE_MERGE_REQUEST)
 
 // Enables a warning about connecting to hidden WiFi networks.
 // https://crbug.com/903908
@@ -1603,11 +1598,6 @@ BASE_FEATURE(kStartAssistantAudioDecoderOnDemand,
              "StartAssistantAudioDecoderOnDemand",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Enable or disable a new header bar for the ChromeOS virtual keyboard.
-BASE_FEATURE(kVirtualKeyboardNewHeader,
-             "VirtualKeyboardNewHeader",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // If enabled, used to configure the heuristic rules for some advanced IME
 // features (e.g. auto-correct).
 BASE_FEATURE(kImeRuleConfig, "ImeRuleConfig", base::FEATURE_ENABLED_BY_DEFAULT);
@@ -1615,7 +1605,7 @@ BASE_FEATURE(kImeRuleConfig, "ImeRuleConfig", base::FEATURE_ENABLED_BY_DEFAULT);
 // Enables IME downloader experiment logic.
 BASE_FEATURE(kImeDownloaderExperiment,
              "ImeDownloaderExperiment",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // If enabled, use the updated logic for downloading IME artifacts.
 BASE_FEATURE(kImeDownloaderUpdate,
@@ -1695,7 +1685,12 @@ BASE_FEATURE(kImprovedLoginErrorHandling,
              "ImprovedLoginErrorHandling",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enables Instant Hotspot rebrand/feature improvements. crbug/290075504.
+// Enables Instant Hotspot on Nearby. b/303121363.
+BASE_FEATURE(kInstantHotspotOnNearby,
+             "InstantHotspotOnNearby",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables Instant Hotspot rebrand/feature improvements. b/290075504.
 BASE_FEATURE(kInstantHotspotRebrand,
              "InstantHotspotRebrand",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -1779,6 +1774,10 @@ BASE_FEATURE(kLanguagePacksFonts,
              "LanguagePacksFonts",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Enables loading in fonts via language packs on login, even after a download.
+const base::FeatureParam<bool> kLanguagePacksFontsLoadAfterDownloadDuringLogin =
+    {&kLanguagePacksFonts, "load_after_download_during_login", true};
+
 // If enabled, the Language Pack corresponding to the application locale is
 // downloaded and installed during OOBE. This pre-fetching is aimed at improving
 // user experience so that they have language resources available as early as
@@ -1805,7 +1804,7 @@ BASE_FEATURE(kLauncherContinueSectionWithRecents,
 // from enabling the feature on versions where
 // LauncherContinueSectionWithRecents was first added.
 BASE_FEATURE(kLauncherContinueSectionWithRecentsRollout,
-             "LauncherContinueSectionWithRecentsRollout",
+             "LauncherContinueSectionWithRecentsRollout125",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Uses short intervals for launcher nudge for testing if enabled.
@@ -1822,6 +1821,15 @@ BASE_FEATURE(kLauncherNudgeSessionReset,
 // If enabled, the launcher will only provide results based on the user control.
 BASE_FEATURE(kLauncherSearchControl,
              "LauncherSearchControl",
+#if BUILDFLAG(ENABLE_MERGE_REQUEST)
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else   //  BUILDFLAG(ENABLE_MERGE_REQUEST)
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // !BUILDFLAG(ENABLE_MERGE_REQUEST)
+
+// Segmentation flag for local image search.
+BASE_FEATURE(kFeatureManagementLocalImageSearch,
+             "FeatureManagementLocalImageSearch",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables new flow for license packaged devices with enterprise license.
@@ -1845,7 +1853,7 @@ BASE_FEATURE(kLinkCrossDeviceInternals,
 // (This feature is only available for consumer users)
 BASE_FEATURE(kLocalPasswordForConsumers,
              "LocalPasswordForConsumers",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Supports the feature to hide sensitive content in notifications on the lock
 // screen. This option is effective when |kLockScreenNotification| is enabled.
@@ -1899,6 +1907,16 @@ BASE_FEATURE(kMojoDBusRelay,
 BASE_FEATURE(kModifierSplit,
              "ModifierSplit",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables to split left and right modifiers in settings for dogfood.
+BASE_FEATURE(kModifierSplitDogfood,
+             "ModifierSplitDogfood",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables to split left and right modifiers in settings.
+BASE_FEATURE(kMouseImposterCheck,
+             "MouseImposterCheck",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables the full apps list in Phone Hub bubble.
 BASE_FEATURE(kEcheLauncher, "EcheLauncher", base::FEATURE_ENABLED_BY_DEFAULT);
@@ -1954,11 +1972,6 @@ BASE_FEATURE(kMultiZoneRgbKeyboard,
              "MultiZoneRgbKeyboard",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Enables support for multilingual assistive typing on ChromeOS.
-BASE_FEATURE(kMultilingualTyping,
-             "MultilingualTyping",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enables Nearby Connections to specificy KeepAlive interval and timeout while
 // also making the Nearby Connections WebRTC defaults longer.
 BASE_FEATURE(kNearbyKeepAliveFix,
@@ -1991,6 +2004,23 @@ BASE_FEATURE(kSysUiDownloadsIntegrationV2,
              "SysUiDownloadsIntegrationV2",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Feature Management flag for the Sys UI holdback experiment, used to avoid
+// certain devices.
+BASE_FEATURE(kFeatureManagementShouldExcludeFromSysUiHoldback,
+             "FeatureManagementShouldExcludeFromSysUiHoldback",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables a holdback experiment for GIF Recording.
+BASE_FEATURE(kSysUiShouldHoldbackGifRecording,
+             "SysUiShouldHoldbackGifRecording",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables a holdback experiment for Task Management
+// Glanceables.
+BASE_FEATURE(kSysUiShouldHoldbackTaskManagement,
+             "SysUiShouldHoldbackTaskManagement",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enables the Night Light feature.
 BASE_FEATURE(kNightLight, "NightLight", base::FEATURE_ENABLED_BY_DEFAULT);
 
@@ -2019,6 +2049,9 @@ BASE_FEATURE(kNotificationScrollBar,
 BASE_FEATURE(kNotificationsInContextMenu,
              "NotificationsInContextMenu",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// For more info, see go/crosforest.
+BASE_FEATURE(kOakFeature, "OakFeature", base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls whether to enable on-device grammar check service.
 BASE_FEATURE(kOnDeviceGrammarCheck,
@@ -2083,13 +2116,6 @@ BASE_FEATURE(kOobeDisplaySize,
              "OobeDisplaySize",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Enables or disables the ChromeOS OOBE HID Detection Revamp, which updates
-// the OOBE HID detection screen UI and related infrastructure. See
-// https://crbug.com/1299099.
-BASE_FEATURE(kOobeHidDetectionRevamp,
-             "OobeHidDetectionRevamp",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Enables OOBE Jelly features.
 BASE_FEATURE(kOobeJelly, "OobeJelly", base::FEATURE_ENABLED_BY_DEFAULT);
 
@@ -2103,9 +2129,23 @@ BASE_FEATURE(kOobeLazyLoading,
              "OobeLazyLoading",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Enables OOBE ai intro feature.
+BASE_FEATURE(kOobeAiIntro, "OobeAiIntro", base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kFeatureManagementOobeAiIntro,
+             "FeatureManagementOobeAiIntro",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enables boot animation feature.
 BASE_FEATURE(kFeatureManagementOobeSimon,
              "FeatureManagementOobeSimon",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables OOBE tuna feature.
+BASE_FEATURE(kOobeTuna, "OobeTuna", base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kFeatureManagementOobeTuna,
+             "FeatureManagementOobeTuna",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables Skipping the assistant setup screen in OOBE.
@@ -2116,7 +2156,7 @@ BASE_FEATURE(kOobeSkipAssistant,
 // Enables or disables the OOBE QuickStart flow.
 BASE_FEATURE(kOobeQuickStart,
              "OobeQuickStart",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables or disables the OOBE QuickStart flow on the login screen.
 BASE_FEATURE(kOobeQuickStartOnLoginScreen,
@@ -2156,15 +2196,40 @@ BASE_FEATURE(kOrcaRephrase, "OrcaRephrase", base::FEATURE_ENABLED_BY_DEFAULT);
 // Enables or disables shorten for Orca.
 BASE_FEATURE(kOrcaShorten, "OrcaShorten", base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Enables or disables Orca dragging support.
+BASE_FEATURE(kOrcaDraggingSupport,
+             "OrcaDraggingSupport",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // Enables or disables Orca capability check.
 BASE_FEATURE(kOrcaUseAccountCapabilities,
              "OrcaUseAccountCapabilities",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables or disables Orca on Workspace.
+BASE_FEATURE(kOrcaForceFetchContextOnGetEditorPanelContext,
+             "OrcaForceFetchContextOnGetEditorPanelContext",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// If enabled, we force fetching input context
 BASE_FEATURE(kOrcaOnWorkspace,
              "OrcaOnWorkspace",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, Orca will only be available in English locales.
+BASE_FEATURE(kOrcaOnlyInEnglishLocales,
+             "OrcaOnlyInEnglishLocales",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables or disables Orca resizing support.
+BASE_FEATURE(kOrcaResizingSupport,
+             "OrcaResizingSupport",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables or disables Orca on Demo mode.
+BASE_FEATURE(kOrcaSupportDemoMode,
+             "OrcaSupportDemoMode",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, a new App Notifications subpage will appear in CrOS Apps section.
 BASE_FEATURE(kOsSettingsAppNotificationsPage,
@@ -2189,12 +2254,6 @@ BASE_FEATURE(kOsSettingsDeprecateDnsDialog,
              "OsSettingsDeprecateDnsDialog",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Whether the metrics toggle in settings user sync options page should be
-// deprecated.
-BASE_FEATURE(kOsSettingsDeprecateSyncMetricsToggle,
-             "OsSettingsDeprecateSyncMetricsToggle",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Enables the wayfinding improvements for the ChromeOS Settings revamp
 BASE_FEATURE(kOsSettingsRevampWayfinding,
              "OsSettingsRevampWayfinding",
@@ -2206,8 +2265,8 @@ BASE_FEATURE(kOverviewDeskNavigation,
              "OverviewDeskNavigation",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kOverviewUpdates,
-             "OverviewUpdates",
+BASE_FEATURE(kOverviewNewFocus,
+             "OverviewNewFocus",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables Jelly colors and components to appear in the Parent Access Widget
@@ -2219,7 +2278,7 @@ BASE_FEATURE(kParentAccessJelly,
 // Enables user to display Passpoint credentials in the UI.
 BASE_FEATURE(kPasspointSettings,
              "PasspointSettings",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // This feature allows usage of passwordless flow in GAIA.
 // (This feature is only available for consumer users)
@@ -2229,8 +2288,8 @@ BASE_FEATURE(kPasswordlessGaiaForConsumers,
 
 // Enables a notification warning users that their Thunderbolt device is not
 // supported on their CrOS device.
-// TODO(crbug/1254930): Revisit this flag when there is a way to query billboard
-// devices correctly.
+// TODO(crbug.com/40199811): Revisit this flag when there is a way to query
+// billboard devices correctly.
 BASE_FEATURE(kPcieBillboardNotification,
              "PcieBillboardNotification",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -2331,18 +2390,20 @@ BASE_FEATURE(kPhoneHubShortQuickActionPodsTitles,
 // Enables the new picker feature.
 BASE_FEATURE(kPicker, "Picker", base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Enables Dogfood for picker.
+BASE_FEATURE(kPickerDogfood,
+             "PickerDogfood",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables the new picker flip feature.
+BASE_FEATURE(kPickerFlip, "PickerFlip", base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kPipDoubleTapToResize,
              "PipDoubleTapToResize",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables or disables the tuck feature for Picture in Picture.
 BASE_FEATURE(kPipTuck, "PipTuck", base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Controls whether policy provided trust anchors are allowed at the lock
-// screen.
-BASE_FEATURE(kPolicyProvidedTrustAnchorsAllowedAtLockScreen,
-             "PolicyProvidedTrustAnchorsAllowedAtLockScreen",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables or disables the preference of using constant frame rate for camera
 // when streaming.
@@ -2356,12 +2417,6 @@ BASE_FEATURE(kPreferConstantFrameRate,
 BASE_FEATURE(kPrintPreviewCrosApp,
              "PrintPreviewCrosApp",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enables showing notification and status area indicators when an app is
-// using camera/microphone.
-BASE_FEATURE(kPrivacyIndicators,
-             "PrivacyIndicators",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables a bubble-based launcher in clamshell mode. Changes the suggestions
 // that appear in the launcher in both clamshell and tablet modes. Removes pages
@@ -2445,6 +2500,9 @@ BASE_FEATURE(kProjectorDynamicColors,
              "ProjectorDynamicColors",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// controls whether the projector app uses updated styles and ui components.
+BASE_FEATURE(kProjectorGm3, "ProjectorGm3", base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Controls whether to show promise icons during app installations.
 BASE_FEATURE(kPromiseIcons, "PromiseIcons", base::FEATURE_ENABLED_BY_DEFAULT);
 
@@ -2511,7 +2569,7 @@ BASE_FEATURE(kResetShortcutCustomizations,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables ChromeOS scalable IPH.
-BASE_FEATURE(kScalableIph, "ScalableIph", base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kScalableIph, "ScalableIph", base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables debug feature of ChromeOS Scalable Iph.
 BASE_FEATURE(kScalableIphDebug,
@@ -2528,13 +2586,14 @@ BASE_FEATURE(kScalableIphClientConfig,
              "ScalableIphClientConfig",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enables screensaver customized running time.
-BASE_FEATURE(kScreenSaverDuration,
-             "ScreenSaverDuration",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+// Adds a shelf pod button that appears whenever the shelf has limited space and
+// acts as an entrypoint to other shelf pod buttons to prevent overflow.
+BASE_FEATURE(kScalableShelfPods,
+             "ScalableShelfPods",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables sea pen feature in the personalization app.
-BASE_FEATURE(kSeaPen, "SeaPen", base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kSeaPen, "SeaPen", base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kFeatureManagementSeaPen,
              "FeatureManagementSeaPen",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -2544,9 +2603,27 @@ BASE_FEATURE(kSeaPenTextInput,
              "SeaPenTextInput",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enables the system tray to show more information in larger screen.
+// Enables sea pen feature for ChromeOS demo mode.
+BASE_FEATURE(kSeaPenDemoMode,
+             "SeaPenDemoMode",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables sea pen feature with new UI enhancement.
+BASE_FEATURE(kSeaPenUINext, "SeaPenUINext", base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables sea pen features for enterprise users controlled by the policy.
+BASE_FEATURE(kSeaPenEnterprise,
+             "SeaPenEnterprise",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables automated control of the refresh rate for the internal display.
 BASE_FEATURE(kSeamlessRefreshRateSwitching,
              "SeamlessRefreshRateSwitching",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Controls whether to enable kSecondaryAccountAllowedInArc policy.
+BASE_FEATURE(kSecondaryAccountAllowedInArcPolicy,
+             "SecondaryAccountAllowedInArcPolicy",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables displaying separate network icons for different networks types.
@@ -2600,13 +2677,7 @@ BASE_FEATURE(kShelfLauncherNudge,
              "ShelfLauncherNudge",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Stacks the hotseat app bar above the shelf button panels/system tray when
-// there is not enough space for the app bar.
-BASE_FEATURE(kShelfStackedHotseat,
-             "ShelfStackedHotseat",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Enables or disables the OS update page in the shimless RMA flow.
+// Enables or disables the OS update page in the Shimless RMA flow.
 BASE_FEATURE(kShimlessRMAOsUpdate,
              "ShimlessRMAOsUpdate",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -2614,11 +2685,6 @@ BASE_FEATURE(kShimlessRMAOsUpdate,
 // Enables or disables device compliance check in the Shimless RMA flow.
 BASE_FEATURE(kShimlessRMAComplianceCheck,
              "ShimlessRMAComplianceCheck",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Enables or disables SKU description in the Shimless RMA flow.
-BASE_FEATURE(kShimlessRMASkuDescription,
-             "ShimlessRMASkuDescription",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables 3p diagnostics in the Shimless RMA flow.
@@ -2631,6 +2697,12 @@ BASE_FEATURE(kShimlessRMA3pDiagnostics,
 // purpose.
 BASE_FEATURE(kShimlessRMA3pDiagnosticsDevMode,
              "ShimlessRMA3pDiagnosticsDevMode",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Controls whether Shimless diagnostics IWAs can access user permission through
+// requesting permission at install time.
+BASE_FEATURE(kShimlessRMA3pDiagnosticsAllowPermissionPolicy,
+             "ShimlessRMA3pDiagnosticsAllowPermissionPolicy",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // If enabled, system shortcuts will utilize state machiens instead of
@@ -2670,6 +2742,11 @@ BASE_FEATURE(kSuspendToDisk,
              "CrOSSuspendToDisk",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Enable the suspend state machine to better handle suspend accelerators.
+BASE_FEATURE(kSuspendStateMachine,
+             "SuspendStateMachine",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 const base::FeatureParam<int> kHibernateAfterTimeHours{
     &kSuspendToDisk, "HibernateAfterTimeHours", 8};
 
@@ -2702,11 +2779,6 @@ BASE_FEATURE(kSmartDimExperimentalComponent,
 BASE_FEATURE(kSmartLockSignInRemoved,
              "SmartLockSignInRemoved",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Enables the consumer and enterprise support for provisioning eSIM profiles
-// using Subscription Manager Discovery Service (SM-DS). This flag is a no-op
-// unless the SmdsDbusMigration flag is enabled.
-BASE_FEATURE(kSmdsSupport, "SmdsSupport", base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls whether the snap group feature is enabled or not.
 BASE_FEATURE(kSnapGroup, "SnapGroup", base::FEATURE_DISABLED_BY_DEFAULT);
@@ -2767,13 +2839,6 @@ BASE_FEATURE(kTilingWindowResize,
              "TilingWindowResize",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Forces the time of day wallpaper to change on an automatic sunset-to-sunrise
-// schedule, regardless of what dark/light mode settings are active.
-// Not used if time of day wallpaper is not enabled.
-BASE_FEATURE(kTimeOfDayWallpaperForcedAutoSchedule,
-             "TimeOfDayWallpaperForcedAutoSchedule",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enables retrieving time of day screen saver assets from DLC, rather than from
 // rootfs.
 BASE_FEATURE(kTimeOfDayDlc, "TimeOfDayDlc", base::FEATURE_DISABLED_BY_DEFAULT);
@@ -2803,11 +2868,17 @@ BASE_FEATURE(kUnmanagedDeviceDeviceTrustConnectorEnabled,
 // Enables firmware updates for valid firmwares uploaded to lvfs.
 BASE_FEATURE(kUpstreamTrustedReportsFirmware,
              "UpstreamTrustedReportsFirmware",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Use the Android staging SM-DS server when fetching pending eSIM profiles.
 BASE_FEATURE(kUseAndroidStagingSmds,
              "UseAndroidStagingSmds",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Use the AnnotatedAccountId for mapping between User and BrowserContext
+// (a.k.a. browser's Profile).
+BASE_FEATURE(kUseAnnotatedAccountId,
+             "UseAnnotatedAccountId",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // This features toggles which implementation is used for authentication UIs on
@@ -2828,6 +2899,12 @@ BASE_FEATURE(kUseAuthPanelInSettings,
 // Devices" settings.
 BASE_FEATURE(kUseMessagesStagingUrl,
              "UseMessagesStagingUrl",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Use ML Service for non-Longform handwriting in CrOS 1P Virtual Keyboard on
+// all boards. When this flag is OFF, such usage exists on certain boards only.
+BASE_FEATURE(kUseMlServiceForNonLongformHandwritingOnAllBoards,
+             "UseMlServiceForNonLongformHandwritingOnAllBoards",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Remap search+click to right click instead of the legacy alt+click on
@@ -2855,10 +2932,6 @@ BASE_FEATURE(kUserActivityPrediction,
              "UserActivityPrediction",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Controls whether the video conference feature is enabled.
-BASE_FEATURE(kVideoConference,
-             "VideoConference",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 // Restricts the video conference feature to the intended
 // target population,
 BASE_FEATURE(kFeatureManagementVideoConference,
@@ -2868,7 +2941,7 @@ BASE_FEATURE(kFeatureManagementVideoConference,
 // Controls whether the vc background replace is enabled.
 BASE_FEATURE(kVcBackgroundReplace,
              "VCBackgroundReplace",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls whether the DLC downloading UI for video conferencing tiles is
 // enabled.
@@ -2931,9 +3004,19 @@ BASE_FEATURE(kWallpaperGooglePhotosSharedAlbums,
              "WallpaperGooglePhotosSharedAlbums",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Enables wallpaper info improvement.
+BASE_FEATURE(kWallpaperInfoImprovement,
+             "WallpaperInfoImprovement",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enable different wallpapers per desk.
 BASE_FEATURE(kWallpaperPerDesk,
              "WallpaperPerDesk",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables a new Welcome Experience for first-time peripheral connections.
+BASE_FEATURE(kWelcomeExperience,
+             "WelcomeExperience",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables the Welcome Tour that walks new users through ChromeOS System UI.
@@ -2955,6 +3038,12 @@ BASE_FEATURE(kWelcomeTourChromeVoxSupported,
 // also enabled.
 BASE_FEATURE(kWelcomeTourForceUserEligibility,
              "WelcomeTourForceUserEligibility",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables the Welcome Tour V2 that has different strings and steps than V1.
+// Enabling this flag has no effect unless `kWelcomeTour` is also enabled.
+BASE_FEATURE(kWelcomeTourV2,
+             "WelcomeTourV2",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls whether to enable MAC Address Randomization on WiFi connection.
@@ -3022,7 +3111,7 @@ BASE_FEATURE(kDeviceActiveClientChurnObservationCheckMembership,
 // the churn observation check in ping.
 BASE_FEATURE(kDeviceActiveClientChurnObservationNewDeviceMetadata,
              "DeviceActiveClientChurnObservationNewDeviceMetadata",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables or disables forced reboots when DeviceScheduledReboot policy is set.
 BASE_FEATURE(kDeviceForceScheduledReboot,
@@ -3074,12 +3163,6 @@ BASE_FEATURE(kPeripheralNotification,
              "PeripheralNotification",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enables or disables whether to store UMA logs per-user and whether metrics
-// consent is per-user.
-BASE_FEATURE(kPerUserMetrics,
-             "PerUserMetricsConsent",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Enable fast ink for software cursor. Fast ink provides a low-latency
 // cursor with possible tearing artifacts.
 BASE_FEATURE(kEnableFastInkForSoftwareCursor,
@@ -3097,11 +3180,6 @@ bool AreHelpAppWelcomeTipsEnabled() {
          base::FeatureList::IsEnabled(kScalableIph);
 }
 
-bool ArePolicyProvidedTrustAnchorsAllowedAtLockScreen() {
-  return base::FeatureList::IsEnabled(
-      kPolicyProvidedTrustAnchorsAllowedAtLockScreen);
-}
-
 bool ArePromiseIconsEnabled() {
   return base::FeatureList::IsEnabled(kPromiseIcons);
 }
@@ -3115,6 +3193,10 @@ bool AreSideAlignedToastsEnabled() {
   // Side aligned toasts are launching together with Notifier Collision.
   return IsNotifierCollisionEnabled() ||
          base::FeatureList::IsEnabled(kSideAlignedToasts);
+}
+
+bool ForceOnDeviceAppControlsForAllRegions() {
+  return base::FeatureList::IsEnabled(kForceOnDeviceAppControlsForAllRegions);
 }
 
 bool IsAudioHFPMicSRToggleEnabled() {
@@ -3141,6 +3223,10 @@ bool IsAdaptiveChargingForTestingEnabled() {
   return base::FeatureList::IsEnabled(kAdaptiveChargingForTesting);
 }
 
+bool IsOnDeviceAppControlsEnabled() {
+  return base::FeatureList::IsEnabled(kOnDeviceAppControls);
+}
+
 bool IsAdvancedDocumentScanAPIEnabled() {
   return base::FeatureList::IsEnabled(kAdvancedDocumentScanAPI);
 }
@@ -3152,11 +3238,6 @@ bool IsAllowAmbientEQEnabled() {
 bool IsAllowScrollSettingsEnabled() {
   return IsInputDeviceSettingsSplitEnabled() &&
          base::FeatureList::IsEnabled(kAllowScrollSettings);
-}
-
-bool IsEapDefaultCasWithoutSubjectVerificationAllowed() {
-  return base::FeatureList::IsEnabled(
-      kAllowEapDefaultCasWithoutSubjectVerification);
 }
 
 bool IsAltClickAndSixPackCustomizationEnabled() {
@@ -3184,21 +3265,16 @@ bool IsApnRevampEnabled() {
   return base::FeatureList::IsEnabled(kApnRevamp);
 }
 
+bool IsApnRevampAndPoliciesEnabled() {
+  return IsApnRevampEnabled() && chromeos::features::IsApnPoliciesEnabled();
+}
+
 bool IsAppNotificationsPageEnabled() {
   return base::FeatureList::IsEnabled(kOsSettingsAppNotificationsPage);
 }
 
 bool IsArcFuseBoxFileSharingEnabled() {
   return base::FeatureList::IsEnabled(kArcFuseBoxFileSharing);
-}
-
-bool IsArcInputOverlayBetaEnabled() {
-  return base::FeatureList::IsEnabled(kArcInputOverlayBeta) ||
-         base::FeatureList::IsEnabled(kDropdownPanel);
-}
-
-bool IsArcInputOverlayAlphaV2Enabled() {
-  return base::FeatureList::IsEnabled(kArcInputOverlayAlphaV2);
 }
 
 bool IsAssistantNativeIconsEnabled() {
@@ -3251,8 +3327,8 @@ bool IsBrightnessControlInSettingsEnabled() {
   return base::FeatureList::IsEnabled(kEnableBrightnessControlInSettings);
 }
 
-bool IsCaptureModeAudioMixingEnabled() {
-  return base::FeatureList::IsEnabled(kCaptureModeAudioMixing);
+bool IsBubbleCornerRadiusUpdateEnabled() {
+  return base::FeatureList::IsEnabled(kEnableBubbleCornerRadiusUpdate);
 }
 
 bool IsCaptureModeEducationEnabled() {
@@ -3298,17 +3374,13 @@ bool IsDeprecateOldKeyboardShortcutsAcceleratorEnabled() {
       kDeprecateOldKeyboardShortcutsAccelerator);
 }
 
-bool IsDnsOverHttpsWithIdentifiersReuseOldPolicyEnabled() {
-  return base::FeatureList::IsEnabled(
-      kDnsOverHttpsWithIdentifiersReuseOldPolicy);
-}
-
-bool IsDnsOverHttpsWithIdentifiersEnabled() {
-  return base::FeatureList::IsEnabled(kDnsOverHttpsWithIdentifiers);
-}
-
 bool IsConsumerAutoUpdateToggleAllowed() {
   return base::FeatureList::IsEnabled(kConsumerAutoUpdateToggleAllowed);
+}
+
+bool IsCopyClientKeysCertsToChapsEnabled() {
+  return !IsNssDbClientCertsRollbackEnabled() &&
+         base::FeatureList::IsEnabled(kCopyClientKeysCertsToChaps);
 }
 
 bool IsCrosPrivacyHubAppPermissionsEnabled() {
@@ -3399,10 +3471,8 @@ bool IsExperimentalRgbKeyboardPatternsEnabled() {
   return base::FeatureList::IsEnabled(kExperimentalRgbKeyboardPatterns);
 }
 
-bool IsExtendedUpdatesRequireOptInEnabled() {
-  // Boolean order matters due to how finch experiments are recorded.
-  return base::FeatureList::IsEnabled(kExtendedUpdatesRequireOptIn) &&
-         base::FeatureList::IsEnabled(kExtendedUpdatesOptInFeature);
+bool IsExtendedUpdatesOptInFeatureEnabled() {
+  return base::FeatureList::IsEnabled(kExtendedUpdatesOptInFeature);
 }
 
 bool IsExternalKeyboardInDiagnosticsAppEnabled() {
@@ -3501,6 +3571,10 @@ bool IsFilesLocalImageSearchEnabled() {
   return base::FeatureList::IsEnabled(kFilesLocalImageSearch);
 }
 
+bool IsFingerprintAuthFactorEnabled() {
+  return base::FeatureList::IsEnabled(kFingerprintAuthFactor);
+}
+
 bool IsFirmwareUpdateUIV2Enabled() {
   return base::FeatureList::IsEnabled(kFirmwareUpdateUIV2);
 }
@@ -3518,6 +3592,10 @@ bool IsFloatingWorkspaceV2Enabled() {
   return base::FeatureList::IsEnabled(kFloatingWorkspaceV2);
 }
 
+bool IsClassHubEnabled() {
+  return base::FeatureList::IsEnabled(kClassHub);
+}
+
 bool IsFocusModeEnabled() {
   return base::FeatureList::IsEnabled(kFocusMode);
 }
@@ -3533,11 +3611,6 @@ bool ShouldForceEnableServerSideSpeechRecognitionForDev() {
 
 bool IsForceReSyncDriveEnabled() {
   return base::FeatureList::IsEnabled(kForceReSyncDrive);
-}
-
-bool IsForestFeatureEnabled() {
-  return base::FeatureList::IsEnabled(kForestFeature) &&
-         switches::IsForestSecretKeyMatched();
 }
 
 bool IsFullscreenAfterUnlockAllowed() {
@@ -3565,7 +3638,12 @@ bool IsGalleryAppPdfEditNotificationEnabled() {
 }
 
 bool IsGifRecordingEnabled() {
-  return base::FeatureList::IsEnabled(kGifRecording);
+  const bool device_enrolled_in_holdback =
+      !base::FeatureList::IsEnabled(
+          kFeatureManagementShouldExcludeFromSysUiHoldback) &&
+      base::FeatureList::IsEnabled(kSysUiShouldHoldbackGifRecording);
+  return !device_enrolled_in_holdback &&
+         base::FeatureList::IsEnabled(kGifRecording);
 }
 
 bool IsFeatureManagementGrowthFrameworkEnabled() {
@@ -3574,6 +3652,15 @@ bool IsFeatureManagementGrowthFrameworkEnabled() {
 
 bool IsGrowthFrameworkEnabled() {
   return base::FeatureList::IsEnabled(kGrowthFramework);
+}
+
+bool IsGrowthCampaignsCloseNudgeWhenTargetInactivated() {
+  return base::FeatureList::IsEnabled(
+      kGrowthCampaignsCloseNudgeWhenTargetInactivated);
+}
+
+bool IsGrowthCampaignsCrOSEventsEnabled() {
+  return base::FeatureList::IsEnabled(kGrowthCampaignsCrOSEvents);
 }
 
 bool IsGrowthCampaignsExperimentTagTargetingEnabled() {
@@ -3590,25 +3677,24 @@ bool IsGrowthCampaignsInDemoModeEnabled() {
          base::FeatureList::IsEnabled(kGrowthCampaignsInDemoMode);
 }
 
+bool IsGrowthCampaignsShowNudgeInDefaultParentEnabled() {
+  return base::FeatureList::IsEnabled(kGrowthCampaignsShowNudgeInDefaultParent);
+}
+
+bool IsGrowthCampaignsTriggerAtLoadComplete() {
+  return base::FeatureList::IsEnabled(kGrowthCampaignsTriggerAtLoadComplete);
+}
+
+bool IsGrowthCampaignsTriggerByAppOpenEnabled() {
+  return base::FeatureList::IsEnabled(kGrowthCampaignsTriggerByAppOpen);
+}
+
+bool IsGrowthCampaignsTriggerByBrowserEnabled() {
+  return base::FeatureList::IsEnabled(kGrowthCampaignsTriggerByBrowser);
+}
+
 bool AreGlanceablesV2Enabled() {
   return base::FeatureList::IsEnabled(kGlanceablesV2);
-}
-
-bool AreGlanceablesV2EnabledForTrustedTesters() {
-  return base::FeatureList::IsEnabled(kGlanceablesV2TrustedTesters);
-}
-
-bool IsGlanceablesV2ClassroomTeacherViewEnabled() {
-  return base::FeatureList::IsEnabled(kGlanceablesV2ClassroomTeacherView);
-}
-
-bool IsGlanceablesV2CalendarViewEnabled() {
-  return base::FeatureList::IsEnabled(kGlanceablesV2CalendarView) ||
-         AreAnyGlanceablesTimeManagementViewsEnabled();
-}
-
-bool IsGlanceablesV2ErrorMessageEnabled() {
-  return base::FeatureList::IsEnabled(kGlanceablesV2ErrorMessage);
 }
 
 bool IsGlanceablesTimeManagementClassroomStudentViewEnabled() {
@@ -3616,8 +3702,29 @@ bool IsGlanceablesTimeManagementClassroomStudentViewEnabled() {
       kGlanceablesTimeManagementClassroomStudentView);
 }
 
+bool IsGlanceablesTimeManagementClassroomStudentDataEnabled() {
+  return base::FeatureList::IsEnabled(
+      kGlanceablesTimeManagementClassroomStudentData);
+}
+
 bool IsGlanceablesTimeManagementTasksViewEnabled() {
   const auto* const command_line = base::CommandLine::ForCurrentProcess();
+
+#if BUILDFLAG(ENABLE_MERGE_REQUEST)
+  if (!command_line->HasSwitch(
+          switches::kGlanceablesIgnoreEnableMergeRequestBuildFlag)) {
+    return true;
+  }
+#endif  // BUILDFLAG(ENABLE_MERGE_REQUEST)
+
+  const bool device_enrolled_in_holdback =
+      !base::FeatureList::IsEnabled(
+          kFeatureManagementShouldExcludeFromSysUiHoldback) &&
+      base::FeatureList::IsEnabled(kSysUiShouldHoldbackTaskManagement);
+  if (device_enrolled_in_holdback) {
+    return false;
+  }
+
   if (command_line->HasSwitch(switches::kGlanceablesKeySwitch)) {
     // Force-enable or -disable based on hash correctness.
     return base::SHA1HashString(command_line->GetSwitchValueASCII(
@@ -3713,10 +3820,6 @@ bool IsInstantHotspotRebrandEnabled() {
   return base::FeatureList::IsEnabled(kInstantHotspotRebrand);
 }
 
-bool IsScreenSaverDurationEnabled() {
-  return base::FeatureList::IsEnabled(kScreenSaverDuration);
-}
-
 bool IsSnoopingProtectionEnabled() {
   return base::FeatureList::IsEnabled(kSnoopingProtection) &&
          switches::HasHps();
@@ -3791,10 +3894,6 @@ bool IsKeyboardRewriterFixEnabled() {
   return base::FeatureList::IsEnabled(kEnableKeyboardRewriterFix);
 }
 
-bool IsLanguagePacksEnabled() {
-  return base::FeatureList::IsEnabled(kHandwritingLegacyRecognition);
-}
-
 bool IsLanguagePacksInOobeEnabled() {
   return base::FeatureList::IsEnabled(kLanguagePacksInOobe);
 }
@@ -3814,7 +3913,8 @@ bool IsLauncherNudgeSessionResetEnabled() {
 }
 
 bool IsLauncherSearchControlEnabled() {
-  return base::FeatureList::IsEnabled(kLauncherSearchControl);
+  return base::FeatureList::IsEnabled(kLauncherSearchControl) &&
+         base::FeatureList::IsEnabled(kFeatureManagementLocalImageSearch);
 }
 
 bool IsLicensePackagedOobeFlowEnabled() {
@@ -3851,8 +3951,7 @@ bool IsEducationEnrollmentOobeFlowEnabled() {
 }
 
 bool IsGameDashboardEnabled() {
-  return base::FeatureList::IsEnabled(kGameDashboard) ||
-         base::FeatureList::IsEnabled(kDropdownPanel);
+  return base::FeatureList::IsEnabled(kGameDashboard);
 }
 
 bool IsLockScreenInlineReplyEnabled() {
@@ -3864,7 +3963,8 @@ bool IsLockScreenNotificationsEnabled() {
 }
 
 bool IsProductivityLauncherImageSearchEnabled() {
-  return base::FeatureList::IsEnabled(kProductivityLauncherImageSearch);
+  return base::FeatureList::IsEnabled(kProductivityLauncherImageSearch) &&
+         base::FeatureList::IsEnabled(kFeatureManagementLocalImageSearch);
 }
 
 bool IsMacAddressRandomizationEnabled() {
@@ -3938,7 +4038,6 @@ bool IsNewLockScreenReauthLayoutEnabled() {
   return base::FeatureList::IsEnabled(kNewLockScreenReauthLayout);
 }
 
-
 bool IsSysUiDownloadsIntegrationV2Enabled() {
   return base::FeatureList::IsEnabled(kSysUiDownloadsIntegrationV2);
 }
@@ -3966,6 +4065,10 @@ bool IsNotificationsInContextMenuEnabled() {
   return base::FeatureList::IsEnabled(kNotificationsInContextMenu);
 }
 
+bool IsOakFeatureEnabled() {
+  return base::FeatureList::IsEnabled(kOakFeature);
+}
+
 bool IsNssDbClientCertsRollbackEnabled() {
   return base::FeatureList::IsEnabled(kEnableNssDbClientCertsRollback);
 }
@@ -3982,10 +4085,6 @@ bool IsOobeGaiaInfoScreenEnabled() {
   return base::FeatureList::IsEnabled(kOobeGaiaInfoScreen);
 }
 
-bool IsOobeHidDetectionRevampEnabled() {
-  return base::FeatureList::IsEnabled(kOobeHidDetectionRevamp);
-}
-
 bool IsKioskEnrollmentInOobeEnabled() {
   return base::FeatureList::IsEnabled(kEnableKioskEnrollmentInOobe);
 }
@@ -4000,31 +4099,29 @@ bool IsOobeJellyEnabled() {
 }
 
 bool IsModifierSplitEnabled() {
-  static std::optional<bool> enabled;
-  if (enabled) {
-    return *enabled;
-  }
+  return IsInputDeviceSettingsSplitEnabled() &&
+         base::FeatureList::IsEnabled(kModifierSplit) &&
+         (IsModifierSplitDogfoodEnabled() ||
+          switches::IsModifierSplitSecretKeyMatched());
+}
 
-  if (!base::FeatureList::IsEnabled(kModifierSplit)) {
-    enabled = false;
-    return false;
-  }
+bool IsModifierSplitDogfoodEnabled() {
+  return base::FeatureList::IsEnabled(kModifierSplitDogfood);
+}
 
-  const std::string debug_key_hash = base::SHA1HashString(
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          ash::switches::kModifierSplitFeatureKey));
-
-  const std::string hash =
-      "\xFC\xEF\x09\x7D\x01\x39\x86\x6A\x57\x08\x7C\x22\x5F\x1C\xEF\x8A\x3B"
-      "\x7E\x10\x99";
-  enabled = debug_key_hash == hash;
-
-  return *enabled;
+bool IsMouseImposterCheckEnabled() {
+  return base::FeatureList::IsEnabled(kMouseImposterCheck) &&
+         IsInputDeviceSettingsSplitEnabled();
 }
 
 bool IsSplitKeyboardRefactorEnabled() {
   return base::FeatureList::IsEnabled(kSplitKeyboardRefactor) &&
          IsModifierSplitEnabled();
+}
+
+bool IsOobeAiIntroEnabled() {
+  return base::FeatureList::IsEnabled(kOobeAiIntro) &&
+         base::FeatureList::IsEnabled(kFeatureManagementOobeAiIntro);
 }
 
 bool IsOobeJellyModalEnabled() {
@@ -4055,11 +4152,25 @@ bool IsOobeSoftwareUpdateEnabled() {
   return base::FeatureList::IsEnabled(kOobeSoftwareUpdate);
 }
 
+bool IsOobeTunaEnabled() {
+  return base::FeatureList::IsEnabled(kOobeTuna) &&
+         base::FeatureList::IsEnabled(kFeatureManagementOobeTuna);
+}
+
 bool IsOobeLazyLoadingEnabled() {
   return base::FeatureList::IsEnabled(kOobeLazyLoading);
 }
 
 bool IsOobeQuickStartEnabled() {
+  if (switches::IsRevenBranding()) {
+    return false;
+  }
+
+  // QuickStart directly depends on the 'Local Password' feature.
+  if (!base::FeatureList::IsEnabled(kLocalPasswordForConsumers)) {
+    return false;
+  }
+
   return base::FeatureList::IsEnabled(kOobeQuickStart);
 }
 
@@ -4086,10 +4197,6 @@ bool IsOsSettingsDeprecateDnsDialogEnabled() {
   return base::FeatureList::IsEnabled(kOsSettingsDeprecateDnsDialog);
 }
 
-bool IsOsSettingsDeprecateSyncMetricsToggleEnabled() {
-  return base::FeatureList::IsEnabled(kOsSettingsDeprecateSyncMetricsToggle);
-}
-
 bool IsOsSettingsRevampWayfindingEnabled() {
   return base::FeatureList::IsEnabled(kOsSettingsRevampWayfinding);
 }
@@ -4102,9 +4209,8 @@ bool IsOverviewDeskNavigationEnabled() {
   return base::FeatureList::IsEnabled(kOverviewDeskNavigation);
 }
 
-bool IsOverviewUpdatesEnabled() {
-  return chromeos::features::IsRoundedWindowsEnabled() &&
-         base::FeatureList::IsEnabled(kOverviewUpdates);
+bool IsOverviewNewFocusEnabled() {
+  return base::FeatureList::IsEnabled(kOverviewNewFocus);
 }
 
 bool IsPasspointSettingsEnabled() {
@@ -4135,6 +4241,10 @@ bool IsPeripheralNotificationEnabled() {
 
 bool IsPersonalizationJellyEnabled() {
   return chromeos::features::IsJellyEnabled();
+}
+
+bool IsRemoveDetectPortalFromChromeEnabled() {
+  return base::FeatureList::IsEnabled(kRemoveDetectPortalFromChrome);
 }
 
 bool IsPhoneHubCameraRollEnabled() {
@@ -4177,6 +4287,10 @@ bool IsPickerUpdateEnabled() {
   return base::FeatureList::IsEnabled(kPicker);
 }
 
+bool IsPickerFlipEnabled() {
+  return base::FeatureList::IsEnabled(kPickerFlip) && IsPickerUpdateEnabled();
+}
+
 bool IsPinAutosubmitBackfillFeatureEnabled() {
   return base::FeatureList::IsEnabled(kQuickUnlockPinAutosubmitBackfill);
 }
@@ -4195,13 +4309,6 @@ bool IsPipTuckEnabled() {
 
 bool IsPrinterPreviewCrosAppEnabled() {
   return base::FeatureList::IsEnabled(kPrintPreviewCrosApp);
-}
-
-// TODO(b/305749608): Remove this function and only use
-// `IsVideoConferenceEnabled()`.
-bool IsPrivacyIndicatorsEnabled() {
-  // Privacy indicators should not be enabled when video conference is enabled.
-  return !IsVideoConferenceEnabled();
 }
 
 bool IsProductivityLauncherEnabled() {
@@ -4258,7 +4365,13 @@ bool IsProjectorUseUSMForS3Enabled() {
 }
 
 bool IsProjectorDynamicColorsEnabled() {
-  return base::FeatureList::IsEnabled(kProjectorDynamicColors);
+  // For Projector, Gm3 requires dynamic colors.
+  return base::FeatureList::IsEnabled(kProjectorDynamicColors) ||
+         base::FeatureList::IsEnabled(kProjectorGm3);
+}
+
+bool IsProjectorGm3Enabled() {
+  return base::FeatureList::IsEnabled(kProjectorGm3);
 }
 
 bool IsQuickDimEnabled() {
@@ -4306,14 +4419,29 @@ bool IsScalableIphClientConfigEnabled() {
   return base::FeatureList::IsEnabled(kScalableIphClientConfig);
 }
 
+bool IsScalableShelfPodsEnabled() {
+  return base::FeatureList::IsEnabled(kScalableShelfPods);
+}
+
+bool IsSeaPenDemoModeEnabled() {
+  return IsSeaPenEnabled() && base::FeatureList::IsEnabled(kSeaPenDemoMode);
+}
+
 bool IsSeaPenEnabled() {
   return base::FeatureList::IsEnabled(kSeaPen) &&
          base::FeatureList::IsEnabled(kFeatureManagementSeaPen);
 }
 
 bool IsSeaPenTextInputEnabled() {
-  return base::FeatureList::IsEnabled(kSeaPen) &&
-         base::FeatureList::IsEnabled(kSeaPenTextInput);
+  return IsSeaPenEnabled() && base::FeatureList::IsEnabled(kSeaPenTextInput);
+}
+
+bool IsSeaPenUINextEnabled() {
+  return IsSeaPenEnabled() && base::FeatureList::IsEnabled(kSeaPenUINext);
+}
+
+bool IsSeaPenEnterpriseEnabled() {
+  return IsSeaPenEnabled() && base::FeatureList::IsEnabled(kSeaPenEnterprise);
 }
 
 bool IsSeparateNetworkIconsEnabled() {
@@ -4337,20 +4465,12 @@ bool IsShelfLauncherNudgeEnabled() {
   return base::FeatureList::IsEnabled(kShelfLauncherNudge);
 }
 
-bool IsShelfStackedHotseatEnabled() {
-  return base::FeatureList::IsEnabled(kShelfStackedHotseat);
-}
-
 bool IsShimlessRMAOsUpdateEnabled() {
   return base::FeatureList::IsEnabled(kShimlessRMAOsUpdate);
 }
 
 bool IsShimlessRMAComplianceCheckEnabled() {
   return base::FeatureList::IsEnabled(kShimlessRMAComplianceCheck);
-}
-
-bool IsShimlessRMASkuDescriptionEnabled() {
-  return base::FeatureList::IsEnabled(kShimlessRMASkuDescription);
 }
 
 bool IsShimlessRMA3pDiagnosticsEnabled() {
@@ -4361,14 +4481,15 @@ bool IsShimlessRMA3pDiagnosticsDevModeEnabled() {
   return base::FeatureList::IsEnabled(kShimlessRMA3pDiagnosticsDevMode);
 }
 
+bool IsShimlessRMA3pDiagnosticsAllowPermissionPolicyEnabled() {
+  return base::FeatureList::IsEnabled(
+      kShimlessRMA3pDiagnosticsAllowPermissionPolicy);
+}
+
 bool IsShowSharingUserInLauncherContinueSectionEnabled() {
   return IsLauncherContinueSectionWithRecentsEnabled() &&
          base::FeatureList::IsEnabled(
              kShowSharingUserInLauncherContinueSection);
-}
-
-bool IsSmdsSupportEnabled() {
-  return base::FeatureList::IsEnabled(kSmdsSupport);
 }
 
 bool IsSmartReaderEnabled() {
@@ -4377,6 +4498,10 @@ bool IsSmartReaderEnabled() {
 
 bool IsSnapGroupEnabled() {
   return base::FeatureList::IsEnabled(kSnapGroup);
+}
+
+bool IsSuspendStateMachineEnabled() {
+  return base::FeatureList::IsEnabled(kSuspendStateMachine);
 }
 
 bool IsSystemLiveCaptionEnabled() {
@@ -4409,11 +4534,6 @@ bool IsTimeOfDayScreenSaverEnabled() {
 
 bool IsTimeOfDayWallpaperEnabled() {
   return base::FeatureList::IsEnabled(kFeatureManagementTimeOfDayWallpaper);
-}
-
-bool IsTimeOfDayWallpaperForcedAutoScheduleEnabled() {
-  return IsTimeOfDayWallpaperEnabled() &&
-         base::FeatureList::IsEnabled(kTimeOfDayWallpaperForcedAutoSchedule);
 }
 
 bool IsTimeOfDayDlcEnabled() {
@@ -4465,9 +4585,7 @@ bool IsUpstreamTrustedReportsFirmwareEnabled() {
 }
 
 bool IsVideoConferenceEnabled() {
-  return (base::FeatureList::IsEnabled(kVideoConference) ||
-          base::FeatureList::IsEnabled(kFeatureManagementVideoConference)) &&
-         base::FeatureList::IsEnabled(kCameraEffectsSupportedByHardware);
+  return base::FeatureList::IsEnabled(kFeatureManagementVideoConference);
 }
 
 bool IsStopAllScreenShareEnabled() {
@@ -4505,8 +4623,17 @@ bool IsWallpaperGooglePhotosSharedAlbumsEnabled() {
   return base::FeatureList::IsEnabled(kWallpaperGooglePhotosSharedAlbums);
 }
 
+bool IsWallpaperInfoImprovementEnabled() {
+  return base::FeatureList::IsEnabled(kWallpaperInfoImprovement);
+}
+
 bool IsWallpaperPerDeskEnabled() {
   return base::FeatureList::IsEnabled(kWallpaperPerDesk);
+}
+
+bool IsWelcomeExperienceEnabled() {
+  return IsPeripheralCustomizationEnabled() &&
+         base::FeatureList::IsEnabled(kWelcomeExperience);
 }
 
 bool IsWelcomeTourChromeVoxSupported() {
@@ -4525,6 +4652,10 @@ bool IsWelcomeTourEnabledCounterfactually() {
 bool IsWelcomeTourForceUserEligibilityEnabled() {
   return IsWelcomeTourEnabled() &&
          base::FeatureList::IsEnabled(kWelcomeTourForceUserEligibility);
+}
+
+bool IsWelcomeTourV2Enabled() {
+  return IsWelcomeTourEnabled() && base::FeatureList::IsEnabled(kWelcomeTourV2);
 }
 
 bool IsWifiDirectEnabled() {

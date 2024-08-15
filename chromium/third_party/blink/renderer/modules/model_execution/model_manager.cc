@@ -4,9 +4,7 @@
 
 #include "third_party/blink/renderer/modules/model_execution/model_manager.h"
 
-#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/task/sequenced_task_runner.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/model_execution/model_manager.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/model_execution/model_manager.mojom-blink.h"
@@ -14,9 +12,11 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_generic_model_availability.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_model_generic_session_options.h"
-#include "third_party/blink/renderer/core/streams/readable_stream.h"
+#include "third_party/blink/renderer/core/dom/dom_exception.h"
+#include "third_party/blink/renderer/modules/model_execution/exception_helpers.h"
 #include "third_party/blink/renderer/modules/model_execution/model_execution_metrics.h"
 #include "third_party/blink/renderer/modules/model_execution/model_generic_session.h"
+#include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -41,7 +41,8 @@ V8GenericModelAvailability AvailabilityToV8(
 
 ModelManager::ModelManager(LocalDOMWindow* window)
     : ExecutionContextClient(window),
-      task_runner_(window->GetTaskRunner(TaskType::kInternalDefault)) {}
+      task_runner_(window->GetTaskRunner(TaskType::kInternalDefault)),
+      model_manager_remote_(window) {}
 
 void ModelManager::Trace(Visitor* visitor) const {
   ScriptWrappable::Trace(visitor);
@@ -61,7 +62,7 @@ ModelManager::GetModelManagerRemote() {
 }
 
 void ResolveAvailability(
-    ScriptPromiseResolverTyped<V8GenericModelAvailability>* resolver,
+    ScriptPromiseResolver<V8GenericModelAvailability>* resolver,
     ModelManager::ModelAvailability availability) {
   base::UmaHistogramEnumeration(
       ModelExecutionMetrics::GetModelExecutionAvailabilityMetricName(
@@ -70,13 +71,12 @@ void ResolveAvailability(
   resolver->Resolve(AvailabilityToV8(availability));
 }
 
-ScriptPromiseTyped<V8GenericModelAvailability>
-ModelManager::canCreateGenericSession(ScriptState* script_state,
-                                      ExceptionState& exception_state) {
+ScriptPromise<V8GenericModelAvailability> ModelManager::canCreateGenericSession(
+    ScriptState* script_state,
+    ExceptionState& exception_state) {
   if (!script_state->ContextIsValid()) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                      "The execution context is not valid.");
-    return ScriptPromiseTyped<V8GenericModelAvailability>();
+    ThrowInvalidContextException(exception_state);
+    return ScriptPromise<V8GenericModelAvailability>();
   }
 
   base::UmaHistogramEnumeration(
@@ -84,37 +84,37 @@ ModelManager::canCreateGenericSession(ScriptState* script_state,
           ModelExecutionMetrics::ModelExecutionSessionType::kGeneric),
       ModelExecutionMetrics::ModelExecutionAPI::kModelCanCreateSession);
 
-  auto* resolver = MakeGarbageCollected<
-      ScriptPromiseResolverTyped<V8GenericModelAvailability>>(script_state);
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolver<V8GenericModelAvailability>>(
+          script_state);
   auto promise = resolver->Promise();
 
   if (!GetModelManagerRemote().is_connected()) {
     ResolveAvailability(resolver, ModelAvailability::kNo);
-  } else {
-    GetModelManagerRemote()->CanCreateGenericSession(WTF::BindOnce(
-        [](ScriptPromiseResolverTyped<V8GenericModelAvailability>* resolver,
-           bool can_create) {
-          ModelAvailability availability = ModelAvailability::kNo;
-          if (can_create) {
-            availability = ModelAvailability::kReadily;
-          }
-          ResolveAvailability(resolver, availability);
-        },
-        WrapPersistent(resolver)));
+    return promise;
   }
+
+  GetModelManagerRemote()->CanCreateGenericSession(WTF::BindOnce(
+      [](ScriptPromiseResolver<V8GenericModelAvailability>* resolver,
+         bool can_create) {
+        if (can_create) {
+          ResolveAvailability(resolver, ModelAvailability::kReadily);
+        } else {
+          ResolveAvailability(resolver, ModelAvailability::kNo);
+        }
+      },
+      WrapPersistent(resolver)));
 
   return promise;
 }
 
-ScriptPromiseTyped<ModelGenericSession> ModelManager::createGenericSession(
+ScriptPromise<ModelGenericSession> ModelManager::createGenericSession(
     ScriptState* script_state,
     ModelGenericSessionOptions* options,
     ExceptionState& exception_state) {
-  if (!script_state->ContextIsValid() ||
-      !GetModelManagerRemote().is_connected()) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                      "The execution context is not valid.");
-    return ScriptPromiseTyped<ModelGenericSession>();
+  if (!script_state->ContextIsValid()) {
+    ThrowInvalidContextException(exception_state);
+    return ScriptPromise<ModelGenericSession>();
   }
 
   base::UmaHistogramEnumeration(
@@ -123,9 +123,14 @@ ScriptPromiseTyped<ModelGenericSession> ModelManager::createGenericSession(
       ModelExecutionMetrics::ModelExecutionAPI::kModelCreateSession);
 
   auto* resolver =
-      MakeGarbageCollected<ScriptPromiseResolverTyped<ModelGenericSession>>(
+      MakeGarbageCollected<ScriptPromiseResolver<ModelGenericSession>>(
           script_state);
   auto promise = resolver->Promise();
+
+  if (!GetModelManagerRemote().is_connected()) {
+    RejectPromiseWithInternalError(resolver);
+    return promise;
+  }
 
   mojom::blink::ModelGenericSessionSamplingParamsPtr sampling_params;
   if (options) {
@@ -135,27 +140,71 @@ ScriptPromiseTyped<ModelGenericSession> ModelManager::createGenericSession(
       sampling_params = mojom::blink::ModelGenericSessionSamplingParams::New(
           options->topK(), options->temperature());
     } else {
-      exception_state.ThrowTypeError(
+      resolver->Reject(DOMException::Create(
           "Initializing a new session must either specify both topK and "
-          "temperature, or neither of them.");
-      return ScriptPromiseTyped<ModelGenericSession>();
+          "temperature, or neither of them.",
+          DOMException::GetErrorName(DOMExceptionCode::kNotSupportedError)));
+      return promise;
     }
   }
 
   ModelGenericSession* generic_session =
-      MakeGarbageCollected<ModelGenericSession>(task_runner_);
+      MakeGarbageCollected<ModelGenericSession>(GetExecutionContext(),
+                                                task_runner_);
   GetModelManagerRemote()->CreateGenericSession(
       generic_session->GetModelSessionReceiver(), std::move(sampling_params),
       WTF::BindOnce(
-          [](ScriptPromiseResolverTyped<ModelGenericSession>* resolver,
+          [](ScriptPromiseResolver<ModelGenericSession>* resolver,
              ModelGenericSession* generic_session, bool success) {
             if (success) {
               resolver->Resolve(generic_session);
             } else {
-              resolver->Reject();
+              resolver->Reject(DOMException::Create(
+                  "The session cannot be created.",
+                  DOMException::GetErrorName(
+                      DOMExceptionCode::kInvalidStateError)));
             }
           },
           WrapPersistent(resolver), WrapPersistent(generic_session)));
+
+  return promise;
+}
+
+ScriptPromise<ModelGenericSessionOptions>
+ModelManager::defaultGenericSessionOptions(ScriptState* script_state,
+                                           ExceptionState& exception_state) {
+  if (!script_state->ContextIsValid()) {
+    ThrowInvalidContextException(exception_state);
+    return ScriptPromise<ModelGenericSessionOptions>();
+  }
+
+  base::UmaHistogramEnumeration(
+      ModelExecutionMetrics::GetModelExecutionAPIUsageMetricName(
+          ModelExecutionMetrics::ModelExecutionSessionType::kGeneric),
+      ModelExecutionMetrics::ModelExecutionAPI::
+          kModelDefaultGenericSessionOptions);
+
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolver<ModelGenericSessionOptions>>(
+          script_state);
+  auto promise = resolver->Promise();
+
+  if (!GetModelManagerRemote().is_connected()) {
+    RejectPromiseWithInternalError(resolver);
+    return promise;
+  }
+
+  GetModelManagerRemote()->GetDefaultGenericSessionSamplingParams(WTF::BindOnce(
+      [](ScriptPromiseResolver<ModelGenericSessionOptions>* resolver,
+         mojom::blink::ModelGenericSessionSamplingParamsPtr default_params) {
+        ModelGenericSessionOptions* options =
+            ModelGenericSessionOptions::Create();
+        CHECK(default_params);
+        options->setTopK(default_params->top_k);
+        options->setTemperature(default_params->temperature);
+        resolver->Resolve(options);
+      },
+      WrapPersistent(resolver)));
 
   return promise;
 }

@@ -5,6 +5,7 @@
 #include "components/autofill/core/common/form_data.h"
 
 #include <stddef.h>
+#include <string_view>
 #include <tuple>
 
 #include "base/base64.h"
@@ -131,8 +132,9 @@ bool FormData::DeepEqual(const FormData& a, const FormData& b) {
 bool FormHasNonEmptyPasswordField(const FormData& form) {
   for (const auto& field : form.fields) {
     if (field.IsPasswordInputElement()) {
-      if (!field.value.empty() || !field.user_input.empty())
+      if (!field.value().empty() || !field.user_input().empty()) {
         return true;
+      }
     }
   }
   return false;
@@ -157,7 +159,7 @@ const FormFieldData* FormData::FindFieldByGlobalId(
   return fields_it != fields.end() ? &*fields_it : nullptr;
 }
 
-FormFieldData* FormData::FindFieldByName(const base::StringPiece16 name_or_id) {
+FormFieldData* FormData::FindFieldByName(std::u16string_view name_or_id) {
   auto fields_it = base::ranges::find(fields, name_or_id, &FormFieldData::name);
 
   // If the field is found, return a pointer to the field, otherwise return

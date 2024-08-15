@@ -15,6 +15,7 @@
 #include "libANGLE/queryconversions.h"
 #include "libANGLE/renderer/GLImplFactory.h"
 #include "libANGLE/renderer/ProgramExecutableImpl.h"
+#include "libANGLE/renderer/ProgramImpl.h"
 
 namespace gl
 {
@@ -735,12 +736,22 @@ ProgramExecutable::ProgramExecutable(rx::GLImplFactory *factory, InfoLog *infoLo
 
 ProgramExecutable::~ProgramExecutable()
 {
+    ASSERT(mPostLinkSubTasks.empty());
+    ASSERT(mPostLinkSubTaskWaitableEvents.empty());
     ASSERT(mImplementation == nullptr);
 }
 
 void ProgramExecutable::destroy(const Context *context)
 {
     ASSERT(mImplementation != nullptr);
+
+    for (SharedProgramExecutable &executable : mPPOProgramExecutables)
+    {
+        if (executable)
+        {
+            UninstallExecutable(context, &executable);
+        }
+    }
 
     mImplementation->destroy(context);
     SafeDelete(mImplementation);
@@ -820,6 +831,9 @@ void ProgramExecutable::reset()
     mSamplerBindings.clear();
     mSamplerBoundTextureUnits.clear();
     mImageBindings.clear();
+
+    mPostLinkSubTasks.clear();
+    mPostLinkSubTaskWaitableEvents.clear();
 }
 
 void ProgramExecutable::load(gl::BinaryInputStream *stream)
@@ -3150,6 +3164,16 @@ void ProgramExecutable::setBaseInstanceUniform(GLuint baseInstance)
     mCachedBaseInstance   = baseInstance;
     GLint baseInstanceInt = baseInstance;
     mImplementation->setUniform1iv(mPod.baseInstanceLocation, 1, &baseInstanceInt);
+}
+
+void ProgramExecutable::waitForPostLinkTasks(const Context *context)
+{
+    if (mPostLinkSubTasks.empty())
+    {
+        return;
+    }
+
+    mImplementation->waitForPostLinkTasks(context);
 }
 
 void InstallExecutable(const Context *context,

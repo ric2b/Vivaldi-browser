@@ -112,13 +112,21 @@ KURL DummyModulator::ResolveModuleSpecifier(const String&,
   return KURL();
 }
 
+String DummyModulator::GetIntegrityMetadataString(const KURL&) const {
+  return String();
+}
+
+IntegrityMetadataSet DummyModulator::GetIntegrityMetadata(const KURL&) const {
+  return IntegrityMetadataSet();
+}
+
 bool DummyModulator::HasValidContext() {
   return true;
 }
 
 void DummyModulator::ResolveDynamically(const ModuleRequest& module_request,
                                         const ReferrerScriptInfo&,
-                                        ScriptPromiseResolverTyped<IDLAny>*) {
+                                        ScriptPromiseResolver<IDLAny>*) {
   NOTREACHED();
 }
 

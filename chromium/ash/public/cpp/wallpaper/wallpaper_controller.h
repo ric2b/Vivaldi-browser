@@ -226,25 +226,14 @@ class ASH_PUBLIC_EXPORT WallpaperController {
                                       WallpaperLayout layout,
                                       const gfx::ImageSkia& image) = 0;
 
-  // Sets `sea_pen_image` received from the Manta API as system wallpaper for
-  // user with `account_id` and saves the image to disk with xmp metadata
-  // containing query info from SeaPenQuery `query`.
-  // @see //components/manta
-  // Calls `callback` with boolean success. Can fail if `account_id` is not
-  // allowed to set wallpaper, or the image failed to decode.
-  virtual void SetSeaPenWallpaper(
-      const AccountId& account_id,
-      const SeaPenImage& sea_pen_image,
-      const personalization_app::mojom::SeaPenQueryPtr& query,
-      SetWallpaperCallback callback) = 0;
-
-  // Sets the recently used Sea Pen wallpaper as system wallpaper for
-  // user with `account_id`.
-  // Calls `callback` with boolean success. Can fail if `account_id` is not
-  // allowed to set wallpaper, or the image failed to decode.
-  virtual void SetSeaPenWallpaperFromFile(const AccountId& account_id,
-                                          uint32_t id,
-                                          SetWallpaperCallback callback) = 0;
+  // Sets `image_id` as system wallpaper for user with `account_id`. A
+  // corresponding image with id `image_id` is expected to be present on disk
+  // and will be loaded via SeaPenWallpaperManager. Calls `callback` with
+  // boolean success. Can fail if `account_id` is not allowed to set wallpaper,
+  // or the image failed to decode.
+  virtual void SetSeaPenWallpaper(const AccountId& account_id,
+                                  uint32_t image_id,
+                                  SetWallpaperCallback callback) = 0;
 
   // Confirms the wallpaper being previewed to be set as the actual user
   // wallpaper. Must be called in preview mode.
@@ -358,10 +347,6 @@ class ASH_PUBLIC_EXPORT WallpaperController {
   // Returns a struct with info about the active user's wallpaper if there is an
   // active user.
   virtual std::optional<WallpaperInfo> GetActiveUserWallpaperInfo() const = 0;
-
-  // Returns true if the wallpaper setting (used to open the wallpaper picker)
-  // should be visible.
-  virtual bool ShouldShowWallpaperSetting() = 0;
 
   // Set and store the collection id used to update refreshable wallpapers.
   // Empty if daily refresh is not enabled.

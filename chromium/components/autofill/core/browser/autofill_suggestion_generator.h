@@ -31,7 +31,7 @@ struct CardMetadataLoggingContext;
 class AutofillClient;
 class AutofillOfferData;
 class CreditCard;
-struct FormFieldData;
+class FormFieldData;
 class Iban;
 class PersonalDataManager;
 
@@ -66,7 +66,7 @@ class AutofillSuggestionGenerator {
   // `with_cvc` is set to true if ANY card has cvc saved.
   // `metadata_logging_context` contains card metadata related information used
   // for metrics logging.
-  // TODO(crbug.com/1519179): Merging out-parameters into a struct.
+  // TODO(crbug.com/41492160): Merging out-parameters into a struct.
   std::vector<Suggestion> GetSuggestionsForCreditCards(
       const FormFieldData& trigger_field,
       FieldType trigger_field_type,
@@ -108,7 +108,7 @@ class AutofillSuggestionGenerator {
 
   // Generates suggestions for all available IBANs.
   static std::vector<Suggestion> GetSuggestionsForIbans(
-      const std::vector<const Iban*>& ibans);
+      const std::vector<Iban>& ibans);
 
   // Converts the vector of promo code offers that is passed in to a vector of
   // suggestions that can be displayed to the user for a promo code field.
@@ -156,9 +156,6 @@ class AutofillSuggestionGenerator {
   // `field_types` holds the type of fields relevant for the current suggestion.
   // The profiles passed to this function should already have been matched on
   // `trigger_field_contents_canon` and deduplicated.
-  // `previously_hidden_profiles_guid` stores the guids of the profiles that
-  // were not displayed prior to the effects of the Finch feature
-  // kAutofillUseAddressRewriterInProfileSubsetComparison.
   std::vector<Suggestion> CreateSuggestionsFromProfiles(
       const std::vector<raw_ptr<const AutofillProfile, VectorExperimental>>&
           profiles,
@@ -243,17 +240,17 @@ class AutofillSuggestionGenerator {
   GetSuggestionMainTextAndMinorTextForCard(const CreditCard& credit_card,
                                            FieldType trigger_field_type) const;
 
-  // Return the labels to be shown in the suggestion. Note this does not account
-  // for virtual cards or card-linked offers. Also writes to
+  // Set the labels to be shown in the suggestion. Note that this does not
+  // account for virtual cards or card-linked offers.
   // `metadata_logging_context` the instrument ids of credit cards for which
   // benefits data is available. When displaying card benefits is disabled,
   // `metadata_logging_context` will be populated but a benefit label will not
   // be shown.
-  std::vector<std::vector<Suggestion::Text>> CreateSuggestionLabelsForCard(
+  void SetSuggestionLabelsForCard(
       const CreditCard& credit_card,
       FieldType trigger_field_type,
-      autofill_metrics::CardMetadataLoggingContext& metadata_logging_context)
-      const;
+      autofill_metrics::CardMetadataLoggingContext& metadata_logging_context,
+      Suggestion& suggestion) const;
 
   // Returns the benefit text to display in credit card suggestions if it is
   // available.
@@ -296,6 +293,9 @@ class AutofillSuggestionGenerator {
   // Returns true if we should show a virtual card option for the server card
   // `card`, false otherwise.
   bool ShouldShowVirtualCardOptionForServerCard(const CreditCard& card) const;
+
+  // Returns the acceptability of the card suggestion.
+  bool IsCardAcceptable(const CreditCard& card, bool is_manual_fallback) const;
 
   const PersonalDataManager& personal_data() const {
     // The PDM outlives the ASG, hence this is safe.

@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: security-whitepaper
 title: Security in ChromeOS
 ---
@@ -168,7 +168,7 @@ These dimensions combine into different personifications of attackers:
     but targeted and likely sophisticated attacker.
 
 Given the use-cases ChromeOS enables, ChromeOS' main threat model is remote:
-ChromeOS protects against malicous webpages, and malicious or compromised
+ChromeOS protects against malicious webpages, and malicious or compromised
 Android apps, that attempt to take over the user's device or steal user data.
 These attacks can be opportunistic or targeted.
 
@@ -223,7 +223,7 @@ enforcing the principle of least privilege, deploying several layers of defense,
 and having fast, automatic updates.
 
 The Chrome browser implements a _multi-process_ architecture. This allows
-separating, in different operating system processes, the parts of the brower
+separating, in different operating system processes, the parts of the browser
 processing untrusted input, like a web page, and the parts of the browser
 accessing system resources or user data. This enforces the principle of least
 privilege by only giving web pages access to a very limited set of resources

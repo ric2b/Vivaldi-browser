@@ -23,6 +23,7 @@
 #include "media/base/async_destroy_video_decoder.h"
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
+#include "media/base/media_util.h"
 #include "media/gpu/chromeos/dmabuf_video_frame_pool.h"
 #include "media/gpu/chromeos/image_processor.h"
 #include "media/gpu/chromeos/image_processor_factory.h"
@@ -72,20 +73,37 @@ std::optional<Fourcc> PickRenderableFourcc(
 // Estimates the number of buffers needed in the output frame pool to fill the
 // Renderer pipeline (this pool may provide buffers to the VideoDecoder
 // directly or to the ImageProcessor, when this is instantiated).
-size_t EstimateRequiredRendererPipelineBuffers(bool low_delay) {
+size_t EstimateRequiredRendererPipelineBuffers(bool low_delay,
+                                               bool use_protected) {
   // kMaxVideoFrames is meant to be the number of VideoFrames needed to populate
   // the whole Renderer playback pipeline when there's no smoothing playback
   // queue, i.e. in low latency scenarios such as WebRTC etc. For non-low
   // latency scenarios, a large smoothing playback is used in the Renderer
   // process. Heuristically, the extra depth needed is in the range of 15 or
   // so, so we need to add a few extra buffers.
+  // For V4L2 secure playback, we need to limit the pipeline depth or we will
+  // run out of memory. We are going further than we are with the test because
+  // the memory consequences of using more are too great and so far have yielded
+  // no problems in testing.
   constexpr size_t kExpectedNonLatencyPipelineDepth = 16;
+#if BUILDFLAG(USE_V4L2_CODEC)
+  constexpr size_t kExpectedNonLatencyPipelineDepthSecure = 6;
+#endif
   static_assert(kExpectedNonLatencyPipelineDepth > limits::kMaxVideoFrames,
                 "kMaxVideoFrames is expected to be relatively small");
-  if (low_delay)
+  constexpr size_t kReducedNonLatencyPipelineDepth = 8;
+
+  if (low_delay) {
     return limits::kMaxVideoFrames + 1;
-  else
+#if BUILDFLAG(USE_V4L2_CODEC)
+  } else if (use_protected) {
+    return kExpectedNonLatencyPipelineDepthSecure;
+#endif
+  } else if (base::FeatureList::IsEnabled(kReduceHardwareVideoDecoderBuffers)) {
+    return kReducedNonLatencyPipelineDepth;
+  } else {
     return kExpectedNonLatencyPipelineDepth;
+  }
 }
 
 scoped_refptr<base::SequencedTaskRunner> GetDecoderTaskRunner(
@@ -194,6 +212,42 @@ std::unique_ptr<VideoDecoder> VideoDecoderPipeline::Create(
       std::move(frame_converter), std::move(renderable_fourccs),
       std::move(media_log), std::move(create_decoder_function_cb),
       uses_oop_video_decoder, in_video_decoder_process);
+  return std::make_unique<AsyncDestroyVideoDecoder<VideoDecoderPipeline>>(
+      base::WrapUnique(pipeline));
+}
+
+// static
+std::unique_ptr<VideoDecoder> VideoDecoderPipeline::CreateForVDAAdapterForARC(
+    const gpu::GpuDriverBugWorkarounds& workarounds,
+    scoped_refptr<base::SequencedTaskRunner> client_task_runner,
+    std::unique_ptr<DmabufVideoFramePool> frame_pool,
+    std::vector<Fourcc> renderable_fourccs) {
+  DCHECK(client_task_runner);
+  DCHECK(frame_pool);
+  DCHECK(!renderable_fourccs.empty());
+
+  CreateDecoderFunctionCB create_decoder_function_cb;
+#if BUILDFLAG(USE_VAAPI)
+  create_decoder_function_cb = base::BindOnce(&VaapiVideoDecoder::Create);
+#elif BUILDFLAG(USE_V4L2_CODEC)
+  if (base::FeatureList::IsEnabled(kV4L2FlatVideoDecoder) &&
+      !IsV4L2DecoderStateful()) {
+    create_decoder_function_cb =
+        base::BindOnce(&V4L2StatelessVideoDecoder::Create);
+  } else {
+    create_decoder_function_cb = base::BindOnce(&V4L2VideoDecoder::Create);
+  }
+#else
+  return nullptr;
+#endif
+
+  auto* pipeline = new VideoDecoderPipeline(
+      workarounds, std::move(client_task_runner), std::move(frame_pool),
+      /*frame_converter=*/nullptr, std::move(renderable_fourccs),
+      std::make_unique<NullMediaLog>(), std::move(create_decoder_function_cb),
+      /*uses_oop_video_decoder=*/false,
+      // TODO(b/195769334): Set this properly once OOP-VD is enabled for ARC.
+      /*in_video_decoder_process=*/false);
   return std::make_unique<AsyncDestroyVideoDecoder<VideoDecoderPipeline>>(
       base::WrapUnique(pipeline));
 }
@@ -591,7 +645,12 @@ void VideoDecoderPipeline::InitializeTask(const VideoDecoderConfig& config,
   }
 
   estimated_num_buffers_for_renderer_ =
-      EstimateRequiredRendererPipelineBuffers(low_delay);
+      EstimateRequiredRendererPipelineBuffers(low_delay, config.is_encrypted());
+
+#if BUILDFLAG(USE_V4L2_CODEC)
+  decryption_needs_vp9_superframe_splitting_ =
+      config.codec() == VideoCodec::kVP9;
+#endif
 
 #if BUILDFLAG(USE_VAAPI)
   if (ignore_resolution_changes_to_smaller_for_testing_) {
@@ -650,7 +709,7 @@ void VideoDecoderPipeline::OnInitializeDone(InitCB init_cb,
     } else {
       // We need to enable transcryption for protected content.
       buffer_transcryptor_ = std::make_unique<DecoderBufferTranscryptor>(
-          cdm_context, *decoder_,
+          cdm_context, *decoder_, decryption_needs_vp9_superframe_splitting_,
           base::BindRepeating(&VideoDecoderPipeline::OnBufferTranscrypted,
                               decoder_weak_this_),
           base::BindRepeating(&VideoDecoderPipeline::OnDecoderWaiting,
@@ -1043,11 +1102,10 @@ VideoDecoderPipeline::PickDecoderOutputFormat(
   // libva) and a PlatformVideoFramePool.
   CHECK(allocator.has_value());
   CHECK(main_frame_pool_->AsPlatformVideoFramePool());
-  // The custom allocator creates frames backed by GPU memory buffers.
-  // TODO(nhebert): Change the storage type argument when |allocator| switches
-  // to create NativePixmap-backed frames.
+  // The custom allocator creates frames backed by NativePixmap, which uses a
+  // VideoFrame::StorageType of VideoFrame::STORAGE_DMABUFS.
   main_frame_pool_->AsPlatformVideoFramePool()->SetCustomFrameAllocator(
-      *allocator, VideoFrame::STORAGE_GPU_MEMORY_BUFFER);
+      *allocator, VideoFrame::STORAGE_DMABUFS);
 #elif BUILDFLAG(IS_LINUX) && BUILDFLAG(USE_V4L2_CODEC)
   // Linux w/ V4L2 should not use a custom allocator
   // Only tested with video_decode_accelerator_tests
@@ -1100,6 +1158,35 @@ VideoDecoderPipeline::PickDecoderOutputFormat(
         num_codec_reference_frames + 1 + estimated_num_buffers_for_renderer_);
     VLOGF(1) << "Initializing frame pool with up to " << num_pictures
              << " VideoFrames. No ImageProcessor needed.";
+
+#if BUILDFLAG(USE_V4L2_CODEC)
+    if (use_protected) {
+      // Check to make sure we aren't going to blow our memory budget for V4L2
+      // secure playback. We have 210MB reserved for the frame pool we allocate
+      // here.
+      constexpr size_t kMaxV4L2ProtectedMemory = 210 * 1024 * 1024;
+      // Resolution
+      size_t mem_required =
+          viable_candidate->size.width() * viable_candidate->size.height();
+      // YUV 4:2:0
+      mem_required = mem_required * 3 / 2;
+      if (viable_candidate->fourcc == Fourcc(Fourcc::MT2T)) {
+        // 10-bit
+        mem_required = mem_required * 5 / 4;
+      }
+      // For each picture
+      mem_required *= num_pictures;
+      VLOGF(1) << "V4L2 secure memory requirement is "
+               << (mem_required / (1024 * 1024)) << "MB";
+      if (mem_required > kMaxV4L2ProtectedMemory) {
+        LOG(ERROR) << "Exceeded max memory for secure V4L2: "
+                   << (mem_required / (1024 * 1024)) << "MB of "
+                   << (kMaxV4L2ProtectedMemory / (1024 * 1024)) << "MB";
+        return CroStatus::Codes::kUnableToAllocateSecureBuffer;
+      }
+    }
+#endif  // BUILDFLAG(USE_V4L2_CODEC)
+
     CroStatus::Or<GpuBufferLayout> status_or_layout =
         main_frame_pool_->Initialize(viable_candidate->fourcc,
                                      viable_candidate->size,
@@ -1180,7 +1267,8 @@ VideoDecoderPipeline::PickDecoderOutputFormat(
 
   if (!image_processor) {
     DVLOGF(2) << "Unable to find ImageProcessor to convert format";
-    // TODO(crbug/1103510): Make CreateWithInputCandidates return an Or type.
+    // TODO(crbug.com/40139291): Make CreateWithInputCandidates return an Or
+    // type.
     return CroStatus::Codes::kFailedToCreateImageProcessor;
   }
 
@@ -1207,10 +1295,10 @@ VideoDecoderPipeline::PickDecoderOutputFormat(
     auxiliary_frame_pool_->set_parent_task_runner(decoder_task_runner_);
 
 #if BUILDFLAG(IS_LINUX)
-    // TODO(nhebert): Change the storage type argument when |allocator| switches
-    // to create NativePixmap-backed frames.
+    // The custom allocator creates frames backed by NativePixmap, which uses a
+    // VideoFrame::StorageType of VideoFrame::STORAGE_DMABUFS.
     auxiliary_frame_pool_->AsPlatformVideoFramePool()->SetCustomFrameAllocator(
-        *allocator, VideoFrame::STORAGE_GPU_MEMORY_BUFFER);
+        *allocator, VideoFrame::STORAGE_DMABUFS);
 #endif
 
     CroStatus::Or<GpuBufferLayout> status_or_layout =

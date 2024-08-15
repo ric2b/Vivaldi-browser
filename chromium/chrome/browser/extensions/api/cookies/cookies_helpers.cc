@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/check.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -30,6 +31,8 @@
 #include "net/cookies/cookie_store.h"
 #include "net/cookies/cookie_util.h"
 #include "url/gurl.h"
+
+#include "app/vivaldi_apptools.h"
 
 using extensions::api::cookies::Cookie;
 using extensions::api::cookies::CookieStore;
@@ -135,6 +138,13 @@ Cookie CreateCookie(const net::CanonicalCookie& canonical_cookie,
   }
   cookie.store_id = store_id;
 
+  // Vivaldi had crashes here with not serializable cookies. VB-106321.
+  if (canonical_cookie.PartitionKey() &&
+      !canonical_cookie.PartitionKey()->IsSerializeable() &&
+      vivaldi::IsVivaldiRunning()) {
+    return cookie;
+  }
+
   if (canonical_cookie.PartitionKey()) {
     base::expected<net::CookiePartitionKey::SerializedCookiePartitionKey,
                    std::string>
@@ -234,12 +244,19 @@ bool ValidateCookieApiPartitionKey(
       !partition_key->top_level_site->empty()) {
     base::expected<net::CookiePartitionKey, std::string> key =
         net::CookiePartitionKey::FromUntrustedInput(
-            partition_key->top_level_site.value());
+            partition_key->top_level_site.value(),
+            /*has_cross_site_ancestor=*/true);
     if (!key.has_value()) {
       error_message = key.error();
       return false;
     }
     net_partition_key = key.value();
+    // Record 'well formatted' uma here so that we count only coercible
+    // partition keys.
+    base::UmaHistogramBoolean(
+        "Extensions.CookieAPIPartitionKeyWellFormatted",
+        net::SchemefulSite::Deserialize(partition_key->top_level_site.value())
+                .Serialize() == partition_key->top_level_site.value());
   }
   return true;
 }
@@ -305,7 +322,8 @@ CookiePartitionKeyCollectionFromApiPartitionKey(
   // update this method utilize the ancestor bit.
   base::expected<net::CookiePartitionKey, std::string> net_partition_key =
       net::CookiePartitionKey::FromUntrustedInput(
-          partition_key->top_level_site.value());
+          partition_key->top_level_site.value(),
+          /*has_cross_site_ancestor=*/true);
   if (!net_partition_key.has_value()) {
     return net::CookiePartitionKeyCollection();
   }

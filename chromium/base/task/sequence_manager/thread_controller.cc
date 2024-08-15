@@ -78,9 +78,11 @@ ThreadController::RunLevelTracker::~RunLevelTracker() {
 }
 
 // static
-void ThreadController::InitializeFeatures(bool record_sample_metadata) {
+void ThreadController::InitializeFeatures(
+    features::EmitThreadControllerProfilerMetadata emit_profiler_metadata) {
   g_thread_controller_sets_profiler_metadata.store(
-      record_sample_metadata ||
+      emit_profiler_metadata ==
+              features::EmitThreadControllerProfilerMetadata::kForce ||
           base::FeatureList::IsEnabled(kThreadControllerSetsProfilerMetadata),
       std::memory_order_relaxed);
 }
@@ -115,23 +117,30 @@ std::string ThreadController::RunLevelTracker::RunLevel::GetSuffixForHistogram(
 }
 
 void ThreadController::EnableMessagePumpTimeKeeperMetrics(
-    const char* thread_name) {
+    const char* thread_name,
+    bool wall_time_based_metrics_enabled_for_testing) {
   // MessagePump runs too fast, a low-res clock would result in noisy metrics.
   if (!base::TimeTicks::IsHighResolution())
     return;
 
-  run_level_tracker_.EnableTimeKeeperMetrics(thread_name);
+  run_level_tracker_.EnableTimeKeeperMetrics(
+      thread_name, wall_time_based_metrics_enabled_for_testing);
 }
 
 void ThreadController::RunLevelTracker::EnableTimeKeeperMetrics(
-    const char* thread_name) {
-  time_keeper_.EnableRecording(thread_name);
+    const char* thread_name,
+    bool wall_time_based_metrics_enabled_for_testing) {
+  time_keeper_.EnableRecording(thread_name,
+                               wall_time_based_metrics_enabled_for_testing);
 }
 
 void ThreadController::RunLevelTracker::TimeKeeper::EnableRecording(
-    const char* thread_name) {
+    const char* thread_name,
+    bool wall_time_based_metrics_enabled_for_testing) {
   DCHECK(!histogram_);
   thread_name_ = thread_name;
+  wall_time_based_metrics_enabled_for_testing_ =
+      wall_time_based_metrics_enabled_for_testing;
 
   histogram_ = LinearHistogram::FactoryGet(
       JoinString({"Scheduling.MessagePumpTimeKeeper", thread_name}, "."), 1,
@@ -141,13 +150,13 @@ void ThreadController::RunLevelTracker::TimeKeeper::EnableRecording(
 #if BUILDFLAG(ENABLE_BASE_TRACING)
   perfetto_track_.emplace(
       reinterpret_cast<uint64_t>(this),
-      // TODO(crbug.com/1006541): Replace with ThreadTrack::Current() after SDK
+      // TODO(crbug.com/42050015): Replace with ThreadTrack::Current() after SDK
       // migration.
       // In the non-SDK version, ThreadTrack::Current() returns a different
       // track id on some platforms (for example Mac OS), which results in
       // async tracks not being associated with their thread.
       perfetto::ThreadTrack::ForThread(base::PlatformThread::CurrentId()));
-  // TODO(1006541): Use Perfetto library to name this Track.
+  // TODO(crbug.com/42050015): Use Perfetto library to name this Track.
   // auto desc = perfetto_track_->Serialize();
   // desc.set_name(JoinString({"MessagePumpPhases", thread_name}, " "));
   // perfetto::internal::TrackEventDataSource::SetTrackDescriptor(
@@ -160,12 +169,7 @@ void ThreadController::RunLevelTracker::OnRunLoopStarted(State initial_state,
   DCHECK_CALLED_ON_VALID_THREAD(outer_->associated_thread_->thread_checker);
 
   const bool is_nested = !run_levels_.empty();
-  run_levels_.emplace(initial_state, is_nested, time_keeper_, lazy_now
-#if BUILDFLAG(ENABLE_BASE_TRACING)
-                      ,
-                      terminating_wakeup_lambda_
-#endif
-  );
+  run_levels_.emplace(initial_state, is_nested, time_keeper_, lazy_now);
 
   // In unit tests, RunLoop::Run() acts as the initial wake-up.
   if (!is_nested && initial_state != kIdle)
@@ -201,12 +205,7 @@ void ThreadController::RunLevelTracker::OnWorkStarted(LazyNow& lazy_now) {
   // Already running a work item? => #work-in-work-implies-nested
   if (run_levels_.top().state() == kRunningWorkItem) {
     run_levels_.emplace(kRunningWorkItem, /*nested=*/true, time_keeper_,
-                        lazy_now
-#if BUILDFLAG(ENABLE_BASE_TRACING)
-                        ,
-                        terminating_wakeup_lambda_
-#endif
-    );
+                        lazy_now);
   } else {
     if (run_levels_.top().state() == kIdle) {
       time_keeper_.RecordWakeUp(lazy_now);
@@ -288,25 +287,14 @@ void ThreadController::RunLevelTracker::SetTraceObserverForTesting(
 ThreadController::RunLevelTracker::TraceObserverForTesting*
     ThreadController::RunLevelTracker::trace_observer_for_testing_ = nullptr;
 
-ThreadController::RunLevelTracker::RunLevel::RunLevel(
-    State initial_state,
-    bool is_nested,
-    TimeKeeper& time_keeper,
-    LazyNow& lazy_now
-#if BUILDFLAG(ENABLE_BASE_TRACING)
-    ,
-    TerminatingFlowLambda& terminating_wakeup_flow_lambda
-#endif
-    )
+ThreadController::RunLevelTracker::RunLevel::RunLevel(State initial_state,
+                                                      bool is_nested,
+                                                      TimeKeeper& time_keeper,
+                                                      LazyNow& lazy_now)
     : is_nested_(is_nested),
       time_keeper_(time_keeper),
       thread_controller_sample_metadata_("ThreadController active",
-                                         base::SampleMetadataScope::kThread)
-#if BUILDFLAG(ENABLE_BASE_TRACING)
-      ,
-      terminating_wakeup_flow_lambda_(terminating_wakeup_flow_lambda)
-#endif
-{
+                                         base::SampleMetadataScope::kThread) {
   if (is_nested_) {
     // Stop the current kWorkItem phase now, it will resume after the kNested
     // phase ends.
@@ -339,6 +327,13 @@ ThreadController::RunLevelTracker::RunLevel::~RunLevel() {
 
 ThreadController::RunLevelTracker::RunLevel::RunLevel(RunLevel&& other) =
     default;
+
+void ThreadController::RunLevelTracker::RunLevel::LogPercentageMetric(
+    const char* name,
+    int percentage) {
+  UmaHistogramPercentage(base::StrCat({name, ".", GetThreadName()}),
+                         percentage);
+}
 
 void ThreadController::RunLevelTracker::RunLevel::LogPercentageMetric(
     const char* name,
@@ -379,12 +374,18 @@ void ThreadController::RunLevelTracker::RunLevel::LogOnActiveMetrics(
     LogIntervalMetric("Scheduling.ThreadController.IdleDuration", idle_time,
                       idle_time);
     last_active_end_ = base::TimeTicks();
+    accumulated_idle_time_ += idle_time;
   }
 
   // Taking thread ticks can be expensive. Make sure to do it rarely enough to
   // not have a discernible impact on performance.
   static const bool thread_ticks_supported = ThreadTicks::IsSupported();
-  if (thread_ticks_supported && metrics_sub_sampler_.ShouldSample(0.001)) {
+  // Disable subsampling to support wall-time based metrics. Only supported for
+  // testing purposes. By default, the subsampling probability is 0.1%.
+  const double probability =
+      time_keeper_->wall_time_based_metrics_enabled_for_testing() ? 1.0 : 0.001;
+  if (thread_ticks_supported &&
+      metrics_sub_sampler_.ShouldSample(probability)) {
     last_active_start_ = lazy_now.Now();
     last_active_threadtick_start_ = ThreadTicks::Now();
   }
@@ -420,6 +421,44 @@ void ThreadController::RunLevelTracker::RunLevel::LogOnIdleMetrics(
         "Scheduling.ThreadController.ActiveIntervalOnCpuPercentage",
         active_interval_cpu_percentage, elapsed_ticks);
 
+    if (time_keeper_->wall_time_based_metrics_enabled_for_testing()) {
+      accumulated_active_time_ += elapsed_ticks;
+      accumulated_active_on_cpu_time_ += elapsed_thread_ticks;
+      accumulated_active_off_cpu_time_ +=
+          (elapsed_ticks - elapsed_thread_ticks);
+
+      // Accumulated wall-time since last wall-time based metric was stored.
+      const base::TimeDelta accumulated_wall_time =
+          accumulated_active_time_ + accumulated_idle_time_;
+
+      // Add wall-time based ratio metrics (in percent) when the total sum of
+      // active and idle times is larger than one second.
+      if (accumulated_wall_time > Seconds(1)) {
+        const int active_vs_wall_time_percentage = checked_cast<int>(
+            (accumulated_active_time_ * 100).IntDiv(accumulated_wall_time));
+        LogPercentageMetric(
+            "Scheduling.ThreadController.ActiveVsWallTimePercentage",
+            active_vs_wall_time_percentage);
+        const int active_on_cpu_vs_wall_time_percentage =
+            checked_cast<int>((accumulated_active_on_cpu_time_ * 100)
+                                  .IntDiv(accumulated_wall_time));
+        LogPercentageMetric(
+            "Scheduling.ThreadController.ActiveOnCpuVsWallTimePercentage",
+            active_on_cpu_vs_wall_time_percentage);
+        const int active_off_cpu_vs_wall_time_percentage =
+            checked_cast<int>((accumulated_active_off_cpu_time_ * 100)
+                                  .IntDiv(accumulated_wall_time));
+        LogPercentageMetric(
+            "Scheduling.ThreadController.ActiveOffCpuVsWallTimePercentage",
+            active_off_cpu_vs_wall_time_percentage);
+
+        accumulated_idle_time_ = base::TimeDelta();
+        accumulated_active_time_ = base::TimeDelta();
+        accumulated_active_on_cpu_time_ = base::TimeDelta();
+        accumulated_active_off_cpu_time_ = base::TimeDelta();
+      }
+    }
+
     // Reset timings.
     last_active_start_ = base::TimeTicks();
     last_active_threadtick_start_ = base::ThreadTicks();
@@ -449,7 +488,9 @@ void ThreadController::RunLevelTracker::RunLevel::UpdateState(
     // Flow emission is found at
     // ThreadController::RunLevelTracker::RecordScheduleWork.
     TRACE_EVENT_BEGIN("base", "ThreadController active", lazy_now.Now(),
-                      *terminating_wakeup_flow_lambda_);
+                      [&](perfetto::EventContext& ctx) {
+                        time_keeper_->MaybeEmitIncomingWakeupFlow(ctx);
+                      });
 
     if (ShouldRecordSampleMetadata()) {
       // Overriding the annotation from the previous RunLevel is intentional.
@@ -465,7 +506,7 @@ void ThreadController::RunLevelTracker::RunLevel::UpdateState(
     LogOnIdleMetrics(lazy_now);
 
     TRACE_EVENT_END("base", lazy_now.Now());
-    // TODO(crbug.com/1021571): Remove this once fixed.
+    // TODO(crbug.com/40657156): Remove this once fixed.
     PERFETTO_INTERNAL_ADD_EMPTY_EVENT();
   }
 
@@ -569,8 +610,8 @@ void ThreadController::RunLevelTracker::TimeKeeper::RecordEndOfPhase(
   if (is_tracing_enabled) {
     if (!was_tracing_enabled_) {
       // The first event name on the track hackily names the track...
-      // TODO(1006541): Use the Perfetto library to properly name this Track in
-      // EnableRecording above.
+      // TODO(crbug.com/42050015): Use the Perfetto library to properly name
+      // this Track in EnableRecording above.
       TRACE_EVENT_INSTANT(TRACE_DISABLED_BY_DEFAULT("base"),
                           "MessagePumpPhases", *perfetto_track_,
                           last_phase_end_ - Seconds(1));
@@ -589,6 +630,20 @@ void ThreadController::RunLevelTracker::TimeKeeper::RecordEndOfPhase(
   last_phase_end_ = phase_end;
 }
 
+void ThreadController::RunLevelTracker::TimeKeeper::MaybeEmitIncomingWakeupFlow(
+    perfetto::EventContext& ctx) {
+#if BUILDFLAG(ENABLE_BASE_TRACING)
+  static const uint8_t* flow_enabled =
+      TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED("wakeup.flow");
+  if (!*flow_enabled) {
+    return;
+  }
+
+  perfetto::Flow::ProcessScoped(reinterpret_cast<uint64_t>(&(outer_.get())))(
+      ctx);
+#endif
+}
+
 bool ThreadController::RunLevelTracker::TimeKeeper::ShouldRecordNow(
     ShouldRecordReqs reqs) {
   DCHECK_CALLED_ON_VALID_THREAD(
@@ -598,7 +653,7 @@ bool ThreadController::RunLevelTracker::TimeKeeper::ShouldRecordNow(
   // cycle in which `histogram_` is enabled. Only start recording from there.
   // Ignore any nested phases. `reqs` may indicate exceptions to this.
   //
-  // TODO(crbug.com/1329717): In a follow-up, we could probably always be
+  // TODO(crbug.com/40226913): In a follow-up, we could probably always be
   // tracking the phases of the pump and merely ignore the reporting if
   // `histogram_` isn't set.
   switch (reqs) {
@@ -666,7 +721,7 @@ const char* ThreadController::RunLevelTracker::TimeKeeper::PhaseToEventName(
     case kWorkItemSuspendedOnNested:
       // kWorkItemSuspendedOnNested should be transformed into kNativeWork or
       // kApplicationTask before this point.
-      NOTREACHED();
+      NOTREACHED_IN_MIGRATION();
       return "";
   }
 }

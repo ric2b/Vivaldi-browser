@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">Όχι αργότερα από</translation>
 <translation id="2749881179542288782">Γραμματικός Έλεγχος Μαζί με τον Ορθογραφικό</translation>
 <translation id="2785873697295365461">Περιγραφές αρχείων</translation>
-<translation id="2809586584051668049">και ακόμη <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2825758591930162672">Δημόσιο Κλειδί Θέματος</translation>
 <translation id="2850541429955027218">Προσθήκη θέματος</translation>
 <translation id="2861941300086904918">Πρόγραμμα διαχείρισης ασφαλείας Native Client</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">Άνοιγμα ως παράθυρο</translation>
 <translation id="3280237271814976245">Αποθήκευση &amp;ως...</translation>
 <translation id="3285322247471302225">Νέα &amp;Καρτέλα</translation>
-<translation id="3288047731229977326">Οι επεκτάσεις που εκτελούνται σε λειτουργία προγραμματιστή μπορούν να βλάψουν τον υπολογιστή σας. Εάν δεν είστε προγραμματιστής, θα πρέπει να απενεργοποιήσετε αυτές τις επεκτάσεις που εκτελούνται σε λειτουργία προγραμματιστή για να διατηρήσετε την ασφάλειά σας.</translation>
 <translation id="329838636886466101">Επιδιόρθωση</translation>
 <translation id="33022249435934718">Χειρισμοί GDI</translation>
 <translation id="3303818374450886607">Αντίγραφα</translation>
@@ -190,7 +188,6 @@
 <translation id="4087089424473531098">Δημιουργήθηκε η επέκταση:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Απενεργοποίηση επεκτάσεων λειτουργίας προγραμματιστή</translation>
 <translation id="4100839878934973028">Κάποιο άλλο πρόγραμμα στον υπολογιστή σας πρόσθεσε μια εφαρμογή, η οποία ενδέχεται να αλλάξει τον τρόπο λειτουργίας του Vivaldi.</translation>
 <translation id="4104163789986725820">Ε&amp;ξαγωγή...</translation>
 <translation id="4109898769411476438">Κλείσιμο Προγράμματος Περιήγησης Πριν από την Εισαγωγή</translation>
@@ -259,7 +256,6 @@
 <translation id="5269977353971873915">Η Εκτύπωση Απέτυχε</translation>
 <translation id="5284445933715251131">Συνέχιση λήψης</translation>
 <translation id="52912272896845572">Το ιδιωτικό κλειδί δεν είναι έγκυρο.</translation>
-<translation id="5301954838959518834">Εντάξει, το κατάλαβα</translation>
 <translation id="5302932258331363306">Εμφάνιση Αντικαταστάσεων</translation>
 <translation id="5317780077021120954">Αποθήκευση</translation>
 <translation id="5334142896108694079">Προσωρινή Μνήμη Δέσμης Ενεργειών</translation>

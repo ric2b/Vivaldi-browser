@@ -7,10 +7,6 @@
 #import "ios/chrome/common/ui/util/image_util.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 
 const CGFloat kStackMargin = 13.0;
@@ -19,7 +15,7 @@ const CGFloat kVerticalStackViewSpacing = 4.0;
 const CGFloat kAvatarImageSize = 54.0;
 
 const UIFontTextStyle nameTextStyle = UIFontTextStyleHeadline;
-const UIFontTextStyle emailTextStyle = UIFontTextStyleSubheadline;
+const UIFontTextStyle sessionTextStyle = UIFontTextStyleFootnote;
 
 }
 
@@ -39,7 +35,7 @@ const UIFontTextStyle emailTextStyle = UIFontTextStyleSubheadline;
            withStyler:(ChromeTableViewStyler*)styler {
   [super configureHeaderFooterView:header withStyler:styler];
   header.userNameLabel.text = self.userName;
-  header.userEmailLabel.text = self.userEmail;
+  header.sessionNameLabel.text = self.sessionName;
   [header setUserAvatar:self.userAvatar];
 }
 
@@ -59,18 +55,18 @@ const UIFontTextStyle emailTextStyle = UIFontTextStyleSubheadline;
     _userNameLabel = [[UILabel alloc] init];
     _userNameLabel.textColor = [UIColor colorNamed:kTextPrimaryColor];
     _userNameLabel.font = [UIFont preferredFontForTextStyle:nameTextStyle];
-    _userNameLabel.textAlignment = NSTextAlignmentCenter;
+    _userNameLabel.textAlignment = NSTextAlignmentLeft;
     _userNameLabel.numberOfLines = 0;
 
-    _userEmailLabel = [[UILabel alloc] init];
-    _userEmailLabel.textColor = [UIColor colorNamed:kTextSecondaryColor];
-    _userEmailLabel.font =
-        [UIFont preferredFontForTextStyle:emailTextStyle];
-    _userEmailLabel.textAlignment = NSTextAlignmentCenter;
-    _userEmailLabel.numberOfLines = 0;
+    _sessionNameLabel = [[UILabel alloc] init];
+    _sessionNameLabel.textColor = [UIColor colorNamed:kTextSecondaryColor];
+    _sessionNameLabel.font =
+        [UIFont preferredFontForTextStyle:sessionTextStyle];
+    _sessionNameLabel.textAlignment = NSTextAlignmentCenter;
+    _sessionNameLabel.numberOfLines = 0;
 
     UIStackView* verticalStackView = [[UIStackView alloc]
-        initWithArrangedSubviews:@[_userNameLabel, _userEmailLabel]];
+        initWithArrangedSubviews:@[_userNameLabel, _sessionNameLabel]];
     verticalStackView.axis = UILayoutConstraintAxisVertical;
     verticalStackView.alignment = UIStackViewAlignmentLeading;
     verticalStackView.spacing = kVerticalStackViewSpacing;
@@ -98,7 +94,7 @@ const UIFontTextStyle emailTextStyle = UIFontTextStyleSubheadline;
   [super prepareForReuse];
 
   self.userNameLabel.hidden = NO;
-  self.userEmailLabel.hidden = NO;
+  self.sessionNameLabel.hidden = NO;
   self.imageView.hidden = NO;
   [self setUserAvatar:nil];
 }

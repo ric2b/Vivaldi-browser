@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/profiler/frame_pointer_unwinder.h"
 
 #include "base/check_op.h"
@@ -108,7 +113,7 @@ UnwindResult FramePointerUnwinder::TryUnwind(RegisterContext* thread_context,
     stack->emplace_back(retaddr, module);
   }
 
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
   return UnwindResult::kCompleted;
 }
 

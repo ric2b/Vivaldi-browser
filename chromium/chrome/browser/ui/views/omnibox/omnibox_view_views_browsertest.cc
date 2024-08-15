@@ -300,7 +300,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, DISABLED_SelectAllOnClick) {
   ASSERT_NO_FATAL_FAILURE(ClickBrowserWindowCenter());
   ASSERT_NO_FATAL_FAILURE(Click(ui_controls::MIDDLE,
                                 click_location, click_location));
-// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// TODO(crbug.com/40118868): Revisit the macro expression once build flag switch
 // of lacros-chrome is complete.
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   EXPECT_TRUE(ui_test_utils::IsViewFocused(browser(), VIEW_ID_OMNIBOX));
@@ -310,9 +310,12 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, DISABLED_SelectAllOnClick) {
   EXPECT_FALSE(omnibox_view->IsSelectAll());
 }
 
-// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// TODO(crbug.com/40118868): Revisit the macro expression once build flag switch
 // of lacros-chrome is complete.
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+// TODO(crbug.com/339098004): Flaky on ASan/LSan/TSan builders.
+#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) &&  \
+    !(defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || \
+      defined(THREAD_SANITIZER))
 IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, SelectionClipboard) {
   OmniboxView* omnibox_view = nullptr;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &omnibox_view));
@@ -1058,7 +1061,9 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsIMETest, TextInputTypeInitRespectsIME) {
 // Looks like the same problem as in the SelectAllOnClick().
 // Tracked in: https://crbug.com/915591
 // Test is also flaky on Linux: https://crbug.com/1157250
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+// Click goes to the popup widget, but doesn't sets focus to the popup view if
+// it's a separate accelerated widget on Lacros: https://crbug.com/329271186
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #define MAYBE_HandleExternalProtocolURLs DISABLED_HandleExternalProtocolURLs
 #else
 #define MAYBE_HandleExternalProtocolURLs HandleExternalProtocolURLs
@@ -1142,7 +1147,8 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, MAYBE_HandleExternalProtocolURLs) {
 }
 
 // SendKeyPressSync times out on Mac, probably due to https://crbug.com/824418.
-#if BUILDFLAG(IS_MAC)
+// TODO(crbug.com/332299695): Also fails on lacros.
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #define MAYBE_DefaultTypedNavigationsToHttps_ZeroSuggest_NoUpgrade \
   DISABLED_DefaultTypedNavigationsToHttps_ZeroSuggest_NoUpgrade
 #else

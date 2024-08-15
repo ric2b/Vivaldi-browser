@@ -10,6 +10,8 @@ source_set("vivaldi_sync_settings_table_view_cells") {
     "vivaldi_table_view_sync_user_info_item.mm",
     "vivaldi_table_view_text_edit_item.h",
     "vivaldi_table_view_text_edit_item.mm",
+    "vivaldi_table_view_attributed_text_view_item.h",
+    "vivaldi_table_view_attributed_text_view_item.mm",
   ]
   deps = [
     "//base",

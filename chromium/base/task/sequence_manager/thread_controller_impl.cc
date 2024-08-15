@@ -151,7 +151,7 @@ void ThreadControllerImpl::RestoreDefaultTaskRunner() {
 
 void ThreadControllerImpl::BindToCurrentThread(
     std::unique_ptr<MessagePump> message_pump) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 void ThreadControllerImpl::WillQueueTask(PendingTask* pending_task) {
@@ -292,7 +292,7 @@ void ThreadControllerImpl::DoWork(WorkType work_type) {
   // callback.
   main_sequence_only().next_delayed_do_work = next_wake_up_time;
   cancelable_delayed_do_work_closure_.Reset(delayed_do_work_closure_);
-  // TODO(1153139): Use PostDelayedTaskAt().
+  // TODO(crbug.com/40158967): Use PostDelayedTaskAt().
   task_runner_->PostDelayedTask(FROM_HERE,
                                 cancelable_delayed_do_work_closure_.callback(),
                                 next_wake_up_time - lazy_now_after_work.Now());
@@ -337,8 +337,9 @@ void ThreadControllerImpl::SetWorkBatchSize(int work_batch_size) {
   main_sequence_only().work_batch_size_ = work_batch_size;
 }
 
-void ThreadControllerImpl::SetTaskExecutionAllowed(bool allowed) {
-  NOTREACHED();
+void ThreadControllerImpl::SetTaskExecutionAllowedInNativeNestedLoop(
+    bool allowed) {
+  NOTREACHED_IN_MIGRATION();
 }
 
 bool ThreadControllerImpl::IsTaskExecutionAllowed() const {
@@ -356,18 +357,18 @@ MessagePump* ThreadControllerImpl::GetBoundMessagePump() const {
 
 #if BUILDFLAG(IS_IOS) || BUILDFLAG(IS_ANDROID)
 void ThreadControllerImpl::AttachToMessagePump() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 #endif  // BUILDFLAG(IS_IOS) || BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_IOS)
 void ThreadControllerImpl::DetachFromMessagePump() {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 #endif  // BUILDFLAG(IS_IOS)
 
 void ThreadControllerImpl::PrioritizeYieldingToNative(base::TimeTicks) {
-  NOTREACHED();
+  NOTREACHED_IN_MIGRATION();
 }
 
 }  // namespace internal

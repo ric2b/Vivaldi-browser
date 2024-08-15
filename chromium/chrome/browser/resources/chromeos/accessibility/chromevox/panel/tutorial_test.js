@@ -83,7 +83,7 @@ ChromeVoxTutorialTest = class extends ChromeVoxPanelTestBase {
   }
 };
 
-// TODO(crbug.com/1501314): Flaky on ChromeOS.
+// TODO(crbug.com/40941587): Flaky on ChromeOS.
 AX_TEST_F('ChromeVoxTutorialTest', 'DISABLED_BasicTest', async function() {
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithLoadedTree(this.simpleDoc);
@@ -468,7 +468,8 @@ AX_TEST_F('ChromeVoxTutorialTest', 'EarconLesson', async function() {
   nextObjectAndExpectSpeechAndEarcon('A modal alert', EarconId.ALERT_MODAL);
   nextObjectAndExpectSpeechAndEarcon(
       'A non modal alert', EarconId.ALERT_NONMODAL);
-  nextObjectAndExpectSpeechAndEarcon('A button', EarconId.BUTTON);
+  // TODO(anastasi): Identify why the button is not present in the tutorial.
+  // nextObjectAndExpectSpeechAndEarcon('A button', EarconId.BUTTON);
   await mockFeedback.replay();
 });
 
@@ -567,7 +568,9 @@ AX_TEST_F('ChromeVoxTutorialTest', 'RestartNudges', async function() {
 });
 
 // Tests that the tutorial closes and ChromeVox navigates to a resource link.
-AX_TEST_F('ChromeVoxTutorialTest', 'ResourcesTest', async function() {
+//
+// Flaky. See crbug.com/336702956.
+AX_TEST_F('ChromeVoxTutorialTest', 'DISABLED_ResourcesTest', async function() {
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithLoadedTree(this.simpleDoc);
   await this.launchAndWaitForTutorial();

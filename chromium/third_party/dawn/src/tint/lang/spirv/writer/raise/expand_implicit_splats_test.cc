@@ -50,8 +50,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, NoModify_Construct_VectorIdentity) 
     });
 
     auto* expect = R"(
-%foo = func(%vector:vec2<i32>):vec2<i32> -> %b1 {
-  %b1 = block {
+%foo = func(%vector:vec2<i32>):vec2<i32> {
+  $B1: {
     %3:vec2<i32> = construct %vector
     ret %3
   }
@@ -75,8 +75,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, NoModify_Construct_MixedScalarVecto
     });
 
     auto* expect = R"(
-%foo = func(%scalar:i32, %vector:vec2<i32>):vec3<i32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:i32, %vector:vec2<i32>):vec3<i32> {
+  $B1: {
     %4:vec3<i32> = construct %scalar, %vector
     ret %4
   }
@@ -99,8 +99,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, NoModify_Construct_AllScalars) {
     });
 
     auto* expect = R"(
-%foo = func(%scalar:i32):vec3<i32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:i32):vec3<i32> {
+  $B1: {
     %3:vec3<i32> = construct %scalar, %scalar, %scalar
     ret %3
   }
@@ -123,8 +123,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, Construct_Splat_Vec2i) {
     });
 
     auto* src = R"(
-%foo = func(%scalar:i32):vec2<i32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:i32):vec2<i32> {
+  $B1: {
     %3:vec2<i32> = construct %scalar
     ret %3
   }
@@ -133,8 +133,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, Construct_Splat_Vec2i) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%scalar:i32):vec2<i32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:i32):vec2<i32> {
+  $B1: {
     %3:vec2<i32> = construct %scalar, %scalar
     ret %3
   }
@@ -157,8 +157,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, Construct_Splat_Vec3u) {
     });
 
     auto* src = R"(
-%foo = func(%scalar:u32):vec3<u32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:u32):vec3<u32> {
+  $B1: {
     %3:vec3<u32> = construct %scalar
     ret %3
   }
@@ -167,8 +167,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, Construct_Splat_Vec3u) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%scalar:u32):vec3<u32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:u32):vec3<u32> {
+  $B1: {
     %3:vec3<u32> = construct %scalar, %scalar, %scalar
     ret %3
   }
@@ -191,8 +191,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, Construct_Splat_Vec4f) {
     });
 
     auto* src = R"(
-%foo = func(%scalar:f32):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32):vec4<f32> {
+  $B1: {
     %3:vec4<f32> = construct %scalar
     ret %3
   }
@@ -201,8 +201,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, Construct_Splat_Vec4f) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%scalar:f32):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32):vec4<f32> {
+  $B1: {
     %3:vec4<f32> = construct %scalar, %scalar, %scalar, %scalar
     ret %3
   }
@@ -226,8 +226,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryAdd_VectorScalar_Vec4f) {
     });
 
     auto* src = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = add %vector, %scalar
     ret %4
   }
@@ -236,8 +236,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryAdd_VectorScalar_Vec4f) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = construct %scalar, %scalar, %scalar, %scalar
     %5:vec4<f32> = add %vector, %4
     ret %5
@@ -262,8 +262,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryAdd_ScalarVector_Vec4f) {
     });
 
     auto* src = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = add %scalar, %vector
     ret %4
   }
@@ -272,8 +272,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryAdd_ScalarVector_Vec4f) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = construct %scalar, %scalar, %scalar, %scalar
     %5:vec4<f32> = add %4, %vector
     ret %5
@@ -298,8 +298,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinarySubtract_VectorScalar_Vec4f) 
     });
 
     auto* src = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = sub %vector, %scalar
     ret %4
   }
@@ -308,8 +308,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinarySubtract_VectorScalar_Vec4f) 
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = construct %scalar, %scalar, %scalar, %scalar
     %5:vec4<f32> = sub %vector, %4
     ret %5
@@ -334,8 +334,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinarySubtract_ScalarVector_Vec4f) 
     });
 
     auto* src = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = sub %scalar, %vector
     ret %4
   }
@@ -344,8 +344,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinarySubtract_ScalarVector_Vec4f) 
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = construct %scalar, %scalar, %scalar, %scalar
     %5:vec4<f32> = sub %4, %vector
     ret %5
@@ -370,8 +370,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryDivide_VectorScalar_Vec4f) {
     });
 
     auto* src = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = div %vector, %scalar
     ret %4
   }
@@ -380,8 +380,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryDivide_VectorScalar_Vec4f) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = construct %scalar, %scalar, %scalar, %scalar
     %5:vec4<f32> = div %vector, %4
     ret %5
@@ -406,8 +406,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryDivide_ScalarVector_Vec4f) {
     });
 
     auto* src = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = div %scalar, %vector
     ret %4
   }
@@ -416,8 +416,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryDivide_ScalarVector_Vec4f) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = construct %scalar, %scalar, %scalar, %scalar
     %5:vec4<f32> = div %4, %vector
     ret %5
@@ -442,8 +442,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryModulo_VectorScalar_Vec4f) {
     });
 
     auto* src = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = mod %vector, %scalar
     ret %4
   }
@@ -452,8 +452,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryModulo_VectorScalar_Vec4f) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = construct %scalar, %scalar, %scalar, %scalar
     %5:vec4<f32> = mod %vector, %4
     ret %5
@@ -478,8 +478,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryModulo_ScalarVector_Vec4f) {
     });
 
     auto* src = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = mod %scalar, %vector
     ret %4
   }
@@ -488,8 +488,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryModulo_ScalarVector_Vec4f) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = construct %scalar, %scalar, %scalar, %scalar
     %5:vec4<f32> = mod %4, %vector
     ret %5
@@ -514,8 +514,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryMultiply_VectorScalar_Vec4f) 
     });
 
     auto* src = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = mul %vector, %scalar
     ret %4
   }
@@ -524,8 +524,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryMultiply_VectorScalar_Vec4f) 
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = spirv.vector_times_scalar %vector, %scalar
     ret %4
   }
@@ -549,8 +549,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryMultiply_ScalarVector_Vec4f) 
     });
 
     auto* src = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = mul %scalar, %vector
     ret %4
   }
@@ -559,8 +559,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryMultiply_ScalarVector_Vec4f) 
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:f32, %vector:vec4<f32>):vec4<f32> {
+  $B1: {
     %4:vec4<f32> = spirv.vector_times_scalar %vector, %scalar
     ret %4
   }
@@ -584,8 +584,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryMultiply_VectorScalar_Vec4i) 
     });
 
     auto* src = R"(
-%foo = func(%scalar:i32, %vector:vec4<i32>):vec4<i32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:i32, %vector:vec4<i32>):vec4<i32> {
+  $B1: {
     %4:vec4<i32> = mul %vector, %scalar
     ret %4
   }
@@ -594,8 +594,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryMultiply_VectorScalar_Vec4i) 
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%scalar:i32, %vector:vec4<i32>):vec4<i32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:i32, %vector:vec4<i32>):vec4<i32> {
+  $B1: {
     %4:vec4<i32> = construct %scalar, %scalar, %scalar, %scalar
     %5:vec4<i32> = mul %vector, %4
     ret %5
@@ -620,8 +620,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryMultiply_ScalarVector_Vec4i) 
     });
 
     auto* src = R"(
-%foo = func(%scalar:i32, %vector:vec4<i32>):vec4<i32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:i32, %vector:vec4<i32>):vec4<i32> {
+  $B1: {
     %4:vec4<i32> = mul %scalar, %vector
     ret %4
   }
@@ -630,8 +630,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, BinaryMultiply_ScalarVector_Vec4i) 
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%scalar:i32, %vector:vec4<i32>):vec4<i32> -> %b1 {
-  %b1 = block {
+%foo = func(%scalar:i32, %vector:vec4<i32>):vec4<i32> {
+  $B1: {
     %4:vec4<i32> = construct %scalar, %scalar, %scalar, %scalar
     %5:vec4<i32> = mul %4, %vector
     ret %5
@@ -657,8 +657,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, Mix_VectorOperands_ScalarFactor) {
     });
 
     auto* src = R"(
-%foo = func(%arg1:vec4<f32>, %arg2:vec4<f32>, %factor:f32):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%arg1:vec4<f32>, %arg2:vec4<f32>, %factor:f32):vec4<f32> {
+  $B1: {
     %5:vec4<f32> = mix %arg1, %arg2, %factor
     ret %5
   }
@@ -667,8 +667,8 @@ TEST_F(SpirvWriter_ExpandImplicitSplatsTest, Mix_VectorOperands_ScalarFactor) {
     EXPECT_EQ(src, str());
 
     auto* expect = R"(
-%foo = func(%arg1:vec4<f32>, %arg2:vec4<f32>, %factor:f32):vec4<f32> -> %b1 {
-  %b1 = block {
+%foo = func(%arg1:vec4<f32>, %arg2:vec4<f32>, %factor:f32):vec4<f32> {
+  $B1: {
     %5:vec4<f32> = construct %factor, %factor, %factor, %factor
     %6:vec4<f32> = mix %arg1, %arg2, %5
     ret %6

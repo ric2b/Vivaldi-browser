@@ -78,8 +78,8 @@ class MessagePipe {
 
   // Access the ends of the pipe, which can be used as a standard
   // message port.
-  MessagePipeEnd* left() { return &left_; }
-  MessagePipeEnd* right() { return &right_; }
+  MessagePipeEnd& left() { return left_; }
+  MessagePipeEnd& right() { return right_; }
 
  private:
   std::string left_id_;

@@ -98,6 +98,11 @@
       FullscreenController::FromBrowser(browser), self.viewController);
 
   self.viewController.menuProvider = self.mediator;
+
+  // Vivaldi
+  self.viewController.vivaldiDelegate = self.mediator;
+  // End Vivaldi
+
 }
 
 - (void)stop {

@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.tasks.tab_management;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.GradientDrawable;
@@ -21,13 +22,13 @@ import android.widget.LinearLayout;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.ColorRes;
+import androidx.annotation.StringRes;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.core.widget.ImageViewCompat;
 
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.tab_ui.R;
-import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.tab_groups.TabGroupColorId;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.widget.ChromeImageView;
@@ -49,6 +50,7 @@ public class TabGroupUiToolbarView extends FrameLayout {
     private ViewGroup mContainerView;
     private EditText mTitleTextView;
     private LinearLayout mMainContent;
+    private FrameLayout mColorIconContainer;
     private ImageView mColorIcon;
 
     // Vivaldi
@@ -71,6 +73,7 @@ public class TabGroupUiToolbarView extends FrameLayout {
         mContainerView = (ViewGroup) findViewById(R.id.toolbar_container_view);
         mTitleTextView = (EditText) findViewById(R.id.title);
         mMainContent = findViewById(R.id.main_content);
+        mColorIconContainer = findViewById(R.id.tab_group_color_icon_container);
         mColorIcon = findViewById(R.id.tab_group_color_icon);
 
         if (ChromeApplicationImpl.isVivaldi()) {
@@ -80,8 +83,8 @@ public class TabGroupUiToolbarView extends FrameLayout {
         }
 
         // Vivaldi
-        mThemeColorObserver = (color, shouldAnimate) -> setPrimaryColor(color);
-        mTintObserver = (tint, useLight) -> setTint(tint);
+        mThemeColorObserver = (color, shouldAnimate) -> setContentBackgroundColor(color);
+        mTintObserver = (tint, activityFocusTint, useLight) -> setTint(tint);
     }
 
     void setLeftButtonOnClickListener(OnClickListener listener) {
@@ -121,7 +124,7 @@ public class TabGroupUiToolbarView extends FrameLayout {
         // This is equal to the animation duration of toolbar menu hiding.
         int showKeyboardDelay = 150;
         if (shouldShow) {
-            // TODO(crbug.com/1116644) Figure out why a call to show keyboard without delay still
+            // TODO(crbug.com/40144823) Figure out why a call to show keyboard without delay still
             // won't work when the window gets focus in onWindowFocusChanged call.
             // Wait until the current window has focus to show the keyboard. This is to deal with
             // the case where the keyboard showing is caused by toolbar menu. In this case, we need
@@ -174,13 +177,6 @@ public class TabGroupUiToolbarView extends FrameLayout {
     }
 
     void setIsIncognito(boolean isIncognito) {
-        @ColorInt
-        int primaryColor =
-                isIncognito
-                        ? getContext().getColor(R.color.dialog_bg_color_dark_baseline)
-                        : SemanticColorUtils.getDialogBgColor(getContext());
-        setPrimaryColor(primaryColor);
-
         @ColorRes
         int tintListRes =
                 isIncognito
@@ -190,7 +186,7 @@ public class TabGroupUiToolbarView extends FrameLayout {
         setTint(tintList);
     }
 
-    void setPrimaryColor(int color) {
+    void setContentBackgroundColor(int color) {
         mMainContent.setBackgroundColor(color);
         if (mFadingEdgeStart == null || mFadingEdgeEnd == null) return;
         mFadingEdgeStart.setColorFilter(color, PorterDuff.Mode.SRC_IN);
@@ -251,7 +247,7 @@ public class TabGroupUiToolbarView extends FrameLayout {
     /** Set the color icon of type {@link TabGroupColorId} on the tab group card view. */
     void setColorIconColor(@TabGroupColorId int colorId, boolean isIncognito) {
         if (ChromeFeatureList.sTabGroupParityAndroid.isEnabled()) {
-            mColorIcon.setVisibility(View.VISIBLE);
+            mColorIconContainer.setVisibility(View.VISIBLE);
 
             final @ColorInt int color =
                     ColorPickerUtils.getTabGroupColorPickerItemColor(
@@ -259,13 +255,23 @@ public class TabGroupUiToolbarView extends FrameLayout {
 
             GradientDrawable gradientDrawable = (GradientDrawable) mColorIcon.getBackground();
             gradientDrawable.setColor(color);
+
+            // Set accessibility content for the color icon.
+            Resources res = getContext().getResources();
+            final @StringRes int colorDescRes =
+                    ColorPickerUtils.getTabGroupColorPickerItemColorAccessibilityString(colorId);
+            String colorDesc = res.getString(colorDescRes);
+            String contentDescription =
+                    res.getString(
+                            R.string.accessibility_tab_group_color_icon_description, colorDesc);
+            mColorIconContainer.setContentDescription(contentDescription);
         } else {
-            mColorIcon.setVisibility(View.GONE);
+            mColorIconContainer.setVisibility(View.GONE);
         }
     }
 
     void setColorIconOnClickListener(OnClickListener listener) {
-        mColorIcon.setOnClickListener(listener);
+        mColorIconContainer.setOnClickListener(listener);
     }
 
     /** Vivaldi **/

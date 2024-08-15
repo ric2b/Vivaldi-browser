@@ -184,7 +184,12 @@ void CalendarTest::runIndexedTest( int32_t index, UBool exec, const char* &name,
     TESTCASE_AUTO(TestLimitsOrdinalMonth);
     TESTCASE_AUTO(TestActualLimitsOrdinalMonth);
     TESTCASE_AUTO(TestChineseCalendarMonthInSpecialYear);
-  
+    TESTCASE_AUTO(TestClearMonth);
+
+    TESTCASE_AUTO(TestFWWithISO8601);
+    TESTCASE_AUTO(TestDangiOverflowIsLeapMonthBetween22507);
+    TESTCASE_AUTO(TestRollWeekOfYear);
+
     TESTCASE_AUTO_END;
 }
 
@@ -3887,6 +3892,33 @@ void CalendarTest::TestChineseCalendarMapping() {
     }
 }
 
+void CalendarTest::TestClearMonth() {
+    UErrorCode status = U_ZERO_ERROR;
+    LocalPointer<Calendar> cal(Calendar::createInstance(Locale::getRoot(), status));
+    if (failure(status, "construct Calendar")) return;
+    cal->set(2023, UCAL_JUNE, 29);
+    assertEquals("Calendar::get(UCAL_MONTH)", UCAL_JUNE, cal->get(UCAL_MONTH, status));
+    if (failure(status, "Calendar::get(UCAL_MONTH)")) return;
+    cal->clear(UCAL_MONTH);
+    assertEquals("Calendar::isSet(UCAL_MONTH) after clear(UCAL_MONTH)", false, !!cal->isSet(UCAL_MONTH));
+    assertEquals("Calendar::get(UCAL_MONTH after clear(UCAL_MONTH))", UCAL_JANUARY, !!cal->get(UCAL_MONTH, status));
+    if (failure(status, "Calendar::get(UCAL_MONTH)")) return;
+
+    cal->set(UCAL_ORDINAL_MONTH, 7);
+    assertEquals("Calendar::get(UCAL_MONTH) after set(UCAL_ORDINAL_MONTH, 7)", UCAL_AUGUST, cal->get(UCAL_MONTH, status));
+    if (failure(status, "Calendar::get(UCAL_MONTH) after set(UCAL_ORDINAL_MONTH, 7)")) return;
+    assertEquals("Calendar::get(UCAL_ORDINAL_MONTH) after set(UCAL_ORDINAL_MONTH, 7)", 7, cal->get(UCAL_ORDINAL_MONTH, status));
+    if (failure(status, "Calendar::get(UCAL_ORDINAL_MONTH) after set(UCAL_ORDINAL_MONTH, 7)")) return;
+
+    cal->clear(UCAL_ORDINAL_MONTH);
+    assertEquals("Calendar::isSet(UCAL_ORDINAL_MONTH) after clear(UCAL_ORDINAL_MONTH)", false, !!cal->isSet(UCAL_ORDINAL_MONTH));
+    assertEquals("Calendar::get(UCAL_MONTH) after clear(UCAL_ORDINAL_MONTH)", UCAL_JANUARY, cal->get(UCAL_MONTH, status));
+    if (failure(status, "Calendar::get(UCAL_MONTH) after clear(UCAL_ORDINAL_MONTH)")) return;
+    assertEquals("Calendar::get(UCAL_ORDINAL_MONTH) after clear(UCAL_ORDINAL_MONTH)", 0, cal->get(UCAL_ORDINAL_MONTH, status));
+    if (failure(status, "Calendar::get(UCAL_ORDINAL_MONTH) after clear(UCAL_ORDINAL_MONTH)")) return;
+
+}
+
 void CalendarTest::TestGregorianCalendarInTemporalLeapYear() {
     // test from year 1800 to 2500
     UErrorCode status = U_ZERO_ERROR;
@@ -3998,6 +4030,7 @@ void CalendarTest::TestHebrewCalendarInTemporalLeapYear() {
     for (gc.set(startYear, UCAL_JANUARY, 1);
          gc.get(UCAL_YEAR, status) <= stopYear;
          gc.add(UCAL_DATE, incrementDays, status)) {
+        cal->setTime(gc.getTime(status), status);
         if (failure(status, "add/get/set/getTime/setTime incorrect")) return;
 
         int32_t cal_year = cal->get(UCAL_EXTENDED_YEAR, status);
@@ -4006,6 +4039,7 @@ void CalendarTest::TestHebrewCalendarInTemporalLeapYear() {
             leapTest->set(UCAL_MONTH, 0);
             leapTest->set(UCAL_DATE, 1);
             // If 10 months after TISHRI is TAMUZ, then it is a leap year.
+            leapTest->add(UCAL_MONTH, 10, status);
             hasLeapMonth = leapTest->get(UCAL_MONTH, status) == icu::HebrewCalendar::TAMUZ;
             yearForHasLeapMonth = cal_year;
         }
@@ -4726,7 +4760,7 @@ void CalendarTest::TestEthiopicCalendarSetTemporalMonthCode() {
       { 2022, UCAL_MAY, 15, 2014, icu::EthiopicCalendar::GENBOT, 7, "M09", 8},
       { 2022, UCAL_JUNE, 16, 2014, icu::EthiopicCalendar::SENE, 9, "M10", 9},
       { 2022, UCAL_JULY, 17, 2014, icu::EthiopicCalendar::HAMLE, 10, "M11", 10},
-      { 2022, UCAL_AUGUST, 18, 2014, icu::EthiopicCalendar::NEHASSA, 12, "M12", 11},
+      { 2022, UCAL_AUGUST, 18, 2014, icu::EthiopicCalendar::NEHASSE, 12, "M12", 11},
       { 2022, UCAL_SEPTEMBER, 6, 2014, icu::EthiopicCalendar::PAGUMEN, 1, "M13", 12},
       { 2022, UCAL_SEPTEMBER, 10, 2014, icu::EthiopicCalendar::PAGUMEN, 5, "M13", 12},
       { 2022, UCAL_SEPTEMBER, 11, 2015, icu::EthiopicCalendar::MESKEREM, 1, "M01", 0},
@@ -5127,7 +5161,7 @@ void CalendarTest::TestHebrewCalendarOrdinalMonthSet() {
     VerifyMonth(this, "cc2", cc2.getAlias(), icu::HebrewCalendar::ADAR, 6, false, "M06");
     VerifyMonth(this, "cc3", cc3.getAlias(), icu::HebrewCalendar::ADAR, 6, false, "M06");
 
-    cc1->set(UCAL_ORDINAL_MONTH, 6);
+    cc1->set(UCAL_ORDINAL_MONTH, 7);
     cc2->setTemporalMonthCode("M07", status);
     if (failure(status, "setTemporalMonthCode failure")) return;
     cc3->set(UCAL_MONTH, icu::HebrewCalendar::NISAN);
@@ -5465,6 +5499,58 @@ void CalendarTest::TestChineseCalendarMonthInSpecialYear() {
                   actual_month+1, ((actual_in_leap_month != 0) ? "L" : ""), actual_date );
         }
     }
+}
+
+// Test the stack will not overflow with dangi calendar during "roll".
+void CalendarTest::TestDangiOverflowIsLeapMonthBetween22507() {
+    Locale locale("en@calendar=dangi");
+    UErrorCode status = U_ZERO_ERROR;
+    LocalPointer<Calendar> cal(Calendar::createInstance(
+            *TimeZone::getGMT(), locale, status));
+    cal->clear();
+    status = U_ZERO_ERROR;
+    cal->add(UCAL_MONTH, 1242972234, status);
+    status = U_ZERO_ERROR;
+    cal->roll(UCAL_MONTH, 1249790538, status);
+    status = U_ZERO_ERROR;
+    // Without the fix, the stack will overflow during this roll().
+    cal->roll(UCAL_MONTH, 1246382666, status);
+}
+
+void CalendarTest::TestFWWithISO8601() {
+    // ICU UCAL_SUNDAY is 1, UCAL_MONDAY is 2, ... UCAL_SATURDAY is 7.
+    const char *locales[]  = {
+      "",
+      "en-u-ca-iso8601-fw-sun",
+      "en-u-ca-iso8601-fw-mon",
+      "en-u-ca-iso8601-fw-tue",
+      "en-u-ca-iso8601-fw-wed",
+      "en-u-ca-iso8601-fw-thu",
+      "en-u-ca-iso8601-fw-fri",
+      "en-u-ca-iso8601-fw-sat"
+    };
+    for (int i = UCAL_SUNDAY; i <= UCAL_SATURDAY; i++) {
+        UErrorCode status = U_ZERO_ERROR;
+        const char* locale = locales[i];
+        LocalPointer<Calendar> cal(
+            Calendar::createInstance(
+                Locale(locale), status), status);
+        if (failure(status, "Constructor failed")) continue;
+        std::string msg("Calendar::createInstance(\"");
+        msg = msg + locale + "\")->getFirstDayOfWeek()";
+        assertEquals(msg.c_str(), i, cal->getFirstDayOfWeek());
+    }
+}
+void CalendarTest::TestRollWeekOfYear() {
+    UErrorCode status = U_ZERO_ERROR;
+    Locale l("zh_TW@calendar=chinese");
+    LocalPointer<Calendar> cal(Calendar::createInstance(l, status), status);
+    cal->set(UCAL_EXTENDED_YEAR, -1107626);
+    cal->set(UCAL_MONTH, UCAL_JANUARY);
+    cal->set(UCAL_DATE, 1);
+    cal->roll(UCAL_WEEK_OF_YEAR, 0x7fffff, status);
+    U_ASSERT(U_SUCCESS(status));
+    cal->roll(UCAL_WEEK_OF_YEAR, 1, status);
 }
 #endif /* #if !UCONFIG_NO_FORMATTING */
 

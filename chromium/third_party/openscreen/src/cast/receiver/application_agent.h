@@ -81,7 +81,7 @@ class ApplicationAgent final
 
   ApplicationAgent(
       TaskRunner& task_runner,
-      DeviceAuthNamespaceHandler::CredentialsProvider* credentials_provider);
+      DeviceAuthNamespaceHandler::CredentialsProvider& credentials_provider);
 
   ~ApplicationAgent() final;
 
@@ -106,7 +106,7 @@ class ApplicationAgent final
   void OnConnected(ReceiverSocketFactory* factory,
                    const IPEndpoint& endpoint,
                    std::unique_ptr<CastSocket> socket) final;
-  void OnError(ReceiverSocketFactory* factory, Error error) final;
+  void OnError(ReceiverSocketFactory* factory, const Error& error) final;
 
   // CastMessageHandler overrides.
   void OnMessage(VirtualConnectionRouter* router,
@@ -118,7 +118,7 @@ class ApplicationAgent final
 
   // VirtualConnectionRouter::SocketErrorHandler overrides.
   void OnClose(CastSocket* socket) final;
-  void OnError(CastSocket* socket, Error error) final;
+  void OnError(CastSocket* socket, const Error& error) final;
 
   // OnMessage() delegates to these to take action for each |request|. Each of
   // these returns a non-empty response message if a reply should be sent back

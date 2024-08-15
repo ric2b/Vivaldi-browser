@@ -207,21 +207,32 @@ public class SectionHeaderView extends LinearLayout {
                 updateTabLayoutHeaderWidth(false);
                 mTabLayout.setTabGravity(TabLayout.GRAVITY_FILL);
                 mTabLayout.setBackgroundResource(
-                        R.drawable.header_title_section_tab_background_polished);
+                        ChromeFeatureList.isEnabled(ChromeFeatureList.FEED_CONTAINMENT)
+                                ? R.drawable.header_title_section_tab_background
+                                : R.drawable.header_title_section_tab_background_polished);
             }
         }
 
         if (mIsSurfacePolishEnabled) {
             // Add 20dp padding at each sides for the SectionHeaderView.
-            int lateralPadding =
-                    getResources().getDimensionPixelSize(R.dimen.feed_header_menu_end_margin);
-            mContent.setPadding(lateralPadding, 0, lateralPadding, 0);
+            int startLateralPadding =
+                    getResources().getDimensionPixelSize(R.dimen.feed_header_menu_start_margin);
+            int endLateralPadding =
+                    getResources()
+                            .getDimensionPixelSize(
+                                    ChromeFeatureList.isEnabled(ChromeFeatureList.FEED_CONTAINMENT)
+                                            ? R.dimen.feed_containment_feed_header_menu_end_margin
+                                            : R.dimen.feed_header_menu_end_margin);
+            mContent.setPadding(startLateralPadding, 0, endLateralPadding, 0);
             MarginLayoutParams contentMarginLayoutParams =
                     (MarginLayoutParams) mContent.getLayoutParams();
             contentMarginLayoutParams.topMargin =
-                    getResources().getDimensionPixelSize(R.dimen.feed_header_top_margin);
+                    getResources()
+                            .getDimensionPixelSize(
+                                    ChromeFeatureList.isEnabled(ChromeFeatureList.FEED_CONTAINMENT)
+                                            ? R.dimen.feed_containment_feed_header_top_margin
+                                            : R.dimen.feed_header_top_margin);
 
-            mMenuView.setImageResource(R.drawable.gs_settings_gear_24dp);
             MarginLayoutParams marginLayoutParams =
                     (MarginLayoutParams) mMenuView.getLayoutParams();
             marginLayoutParams.width =
@@ -555,7 +566,7 @@ public class SectionHeaderView extends LinearLayout {
     public void showWebFeedAwarenessIph(
             UserEducationHelper helper, int tabIndex, Runnable scroller) {
         // Stop showing before in the view hierarchy, as this will fail/assert.
-        // TODO(https://crbug.com/1448368): Request IPH after parent set or something.
+        // TODO(crbug.com/40914294): Request IPH after parent set or something.
         if (getParent() == null) return;
 
         helper.requestShowIPH(

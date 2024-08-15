@@ -30,6 +30,7 @@
 #include "components/performance_manager/public/user_tuning/tab_revisit_tracker.h"
 #include "components/url_matcher/url_matcher.h"
 #include "components/url_matcher/url_util.h"
+#include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #include "url/gurl.h"
 
 using performance_manager::mechanism::PageDiscarder;
@@ -69,7 +70,7 @@ NodeRssMap GetPageNodeRssEstimateKb(
   }
   NodeRssMap result(std::move(result_container));
 
-  // TODO(crbug/1240994): Use visitor to accumulate the result to avoid
+  // TODO(crbug.com/40194476): Use visitor to accumulate the result to avoid
   // allocating extra lists of frame nodes behind the scenes.
 
   // List all the processes associated with these page nodes.
@@ -135,9 +136,9 @@ void PageDiscardingHelper::DiscardMultiplePages(
   }
 
   // Ensures running post_discard_cb on early return.
-  auto split_callback = base::SplitOnceCallback(std::move(post_discard_cb));
-  base::ScopedClosureRunner run_post_discard_cb_on_return(
-      base::BindOnce(std::move(split_callback.first), false));
+  absl::Cleanup run_post_discard_cb_on_return = [&post_discard_cb] {
+    std::move(post_discard_cb).Run(false);
+  };
 
   std::vector<const PageNode*> page_nodes = graph_->GetAllPageNodes();
 
@@ -212,34 +213,41 @@ void PageDiscardingHelper::DiscardMultiplePages(
   }
 
   // Got to the end successfully, don't call the early return callback.
-  run_post_discard_cb_on_return.ReplaceClosure(base::DoNothing());
+  std::move(run_post_discard_cb_on_return).Cancel();
 
   page_discarder_->DiscardPageNodes(
       discard_attempts, discard_reason,
       base::BindOnce(&PageDiscardingHelper::PostDiscardAttemptCallback,
                      weak_factory_.GetWeakPtr(), reclaim_target,
-                     discard_protected_tabs, std::move(split_callback.second),
+                     discard_protected_tabs, std::move(post_discard_cb),
                      discard_reason, minimum_time_in_background));
 }
 
-void PageDiscardingHelper::ImmediatelyDiscardSpecificPage(
-    const PageNode* page_node,
+void PageDiscardingHelper::ImmediatelyDiscardMultiplePages(
+    const std::vector<const PageNode*>& page_nodes,
     DiscardReason discard_reason,
     base::OnceCallback<void(bool)> post_discard_cb) {
-  // Pass 0 TimeDelta to bypass the minimum time in background check.
-  if (CanDiscard(page_node, discard_reason,
-                 /*minimum_time_in_background=*/base::TimeDelta()) ==
-      CanDiscardResult::kEligible) {
+  std::vector<const PageNode*> eligible_nodes;
+  for (const PageNode* node : page_nodes) {
+    // Pass 0 TimeDelta to bypass the minimum time in background check.
+    if (CanDiscard(node, discard_reason,
+                   /*minimum_time_in_background=*/base::TimeDelta()) ==
+        CanDiscardResult::kEligible) {
+      eligible_nodes.emplace_back(node);
+    }
+  }
+
+  if (eligible_nodes.empty()) {
+    std::move(post_discard_cb).Run(false);
+  } else {
     page_discarder_->DiscardPageNodes(
-        {page_node}, discard_reason,
+        std::move(eligible_nodes), discard_reason,
         base::BindOnce(
             [](base::OnceCallback<void(bool)> callback,
                const std::vector<PageDiscarder::DiscardEvent>& discard_events) {
               std::move(callback).Run(discard_events.size() > 0);
             },
             std::move(post_discard_cb)));
-  } else {
-    std::move(post_discard_cb).Run(false);
   }
 }
 
@@ -303,16 +311,19 @@ PageDiscardingHelper::CanDiscardResult PageDiscardingHelper::CanDiscard(
     return CanDiscardResult::kMarked;
   }
 
-  bool is_proactive;
+  bool is_proactive_or_suggested;
   switch (discard_reason) {
     case DiscardReason::EXTERNAL:
       // Always allow discards from external sources like extensions.
       return CanDiscardResult::kEligible;
     case DiscardReason::URGENT:
-      is_proactive = false;
+      is_proactive_or_suggested = false;
       break;
     case DiscardReason::PROACTIVE:
-      is_proactive = true;
+      is_proactive_or_suggested = true;
+      break;
+    case DiscardReason::SUGGESTED:
+      is_proactive_or_suggested = true;
       break;
   }
 
@@ -345,7 +356,7 @@ PageDiscardingHelper::CanDiscardResult PageDiscardingHelper::CanDiscard(
   }
 
   // Don't discard tabs that don't have a main frame yet.
-  // TODO(crbug.com/1441986): Due to a state tracking bug, sometimes there are
+  // TODO(crbug.com/40910297): Due to a state tracking bug, sometimes there are
   // two frames marked "current". In that case GetMainFrameNode() returns an
   // arbitrary one, which may not have the url set correctly. As a workaround
   // ignore the returned frame and use GetMainFrameUrl() for the url.
@@ -373,8 +384,9 @@ PageDiscardingHelper::CanDiscardResult PageDiscardingHelper::CanDiscard(
     return CanDiscardResult::kProtected;
   }
 
-  if (is_proactive && page_node->GetNotificationPermissionStatus() ==
-                          blink::mojom::PermissionStatus::GRANTED) {
+  if (is_proactive_or_suggested &&
+      page_node->GetNotificationPermissionStatus() ==
+          blink::mojom::PermissionStatus::GRANTED) {
     return CanDiscardResult::kProtected;
   }
 
@@ -424,7 +436,8 @@ PageDiscardingHelper::CanDiscardResult PageDiscardingHelper::CanDiscard(
     if (live_state_data->IsDevToolsOpen()) {
       return CanDiscardResult::kProtected;
     }
-    if (is_proactive && live_state_data->UpdatedTitleOrFaviconInBackground()) {
+    if (is_proactive_or_suggested &&
+        live_state_data->UpdatedTitleOrFaviconInBackground()) {
       return CanDiscardResult::kProtected;
     }
 #if !BUILDFLAG(IS_CHROMEOS)
@@ -453,10 +466,12 @@ bool PageDiscardingHelper::IsPageOptedOutOfDiscarding(
     const std::string& browser_context_id,
     const GURL& url) const {
   auto it = profiles_no_discard_patterns_.find(browser_context_id);
-  // TODO(crbug.com/1308741): Change the CHECK to a DCHECK in Sept 2022, after
-  // verifying that there are no crash reports.
-  CHECK(it != profiles_no_discard_patterns_.end());
-
+  if (it == profiles_no_discard_patterns_.end()) {
+    // There's can be narrow window between profile creation and when prefs are
+    // read, which is when `profiles_no_discard_patterns_` is populated. During
+    // that time assume that a page might be opted out of discarding.
+    return true;
+  }
   return !it->second->MatchURL(url).empty();
 }
 

@@ -28,6 +28,8 @@
 #ifndef SRC_DAWN_NATIVE_WEBGPU_ABSL_FORMAT_H_
 #define SRC_DAWN_NATIVE_WEBGPU_ABSL_FORMAT_H_
 
+#include <optional>
+
 #include "absl/strings/str_format.h"
 #include "dawn/native/dawn_platform.h"
 #include "dawn/native/webgpu_absl_format_autogen.h"
@@ -82,6 +84,60 @@ absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConv
     const absl::FormatConversionSpec& spec,
     absl::FormatSink* s);
 
+struct BufferBindingInfo;
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
+    const BufferBindingInfo& value,
+    const absl::FormatConversionSpec& spec,
+    absl::FormatSink* s);
+
+struct BufferBindingLayout;
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
+    const BufferBindingLayout& value,
+    const absl::FormatConversionSpec& spec,
+    absl::FormatSink* s);
+
+struct TextureBindingInfo;
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
+    const TextureBindingInfo& value,
+    const absl::FormatConversionSpec& spec,
+    absl::FormatSink* s);
+
+struct TextureBindingLayout;
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
+    const TextureBindingLayout& value,
+    const absl::FormatConversionSpec& spec,
+    absl::FormatSink* s);
+
+struct StorageTextureBindingInfo;
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
+    const StorageTextureBindingInfo& value,
+    const absl::FormatConversionSpec& spec,
+    absl::FormatSink* s);
+
+struct StorageTextureBindingLayout;
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
+    const StorageTextureBindingLayout& value,
+    const absl::FormatConversionSpec& spec,
+    absl::FormatSink* s);
+
+struct SamplerBindingInfo;
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
+    const SamplerBindingInfo& value,
+    const absl::FormatConversionSpec& spec,
+    absl::FormatSink* s);
+
+struct SamplerBindingLayout;
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
+    const SamplerBindingLayout& value,
+    const absl::FormatConversionSpec& spec,
+    absl::FormatSink* s);
+
+struct StaticSamplerBindingInfo;
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
+    const StaticSamplerBindingInfo& value,
+    const absl::FormatConversionSpec& spec,
+    absl::FormatSink* s);
+
 struct ImageCopyTexture;
 absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
     const ImageCopyTexture* value,
@@ -106,6 +162,12 @@ absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConv
 
 class DeviceBase;
 absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
+    const AdapterBase* value,
+    const absl::FormatConversionSpec& spec,
+    absl::FormatSink* s);
+
+class DeviceBase;
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
     const DeviceBase* value,
     const absl::FormatConversionSpec& spec,
     absl::FormatSink* s);
@@ -119,6 +181,12 @@ absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConv
 class AttachmentState;
 absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
     const AttachmentState* value,
+    const absl::FormatConversionSpec& spec,
+    absl::FormatSink* s);
+
+class Surface;
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
+    const Surface* value,
     const absl::FormatConversionSpec& spec,
     absl::FormatSink* s);
 
@@ -207,6 +275,29 @@ absl::FormatConvertResult<absl::FormatConversionCharSet::kNumeric> AbslFormatCon
     const absl::FormatConversionSpec& spec,
     absl::FormatSink* s) {
     s->Append(absl::StrFormat("%u", static_cast<T>(value)));
+    return {true};
+}
+
+template <typename T>
+struct UndefinedWrapper {
+    std::optional<T> value;
+};
+
+template <typename T>
+UndefinedWrapper<T> WrapUndefined(T value, T undefinedValue) {
+    return value == undefinedValue ? UndefinedWrapper<T>() : UndefinedWrapper<T>{value};
+}
+
+template <typename T>
+absl::FormatConvertResult<absl::FormatConversionCharSet::kNumeric> AbslFormatConvert(
+    const UndefinedWrapper<T>& value,
+    const absl::FormatConversionSpec& spec,
+    absl::FormatSink* s) {
+    if (!value.value) {
+        s->Append("undefined");
+    } else {
+        s->Append(absl::StrFormat("%u", static_cast<T>(*value.value)));
+    }
     return {true};
 }
 

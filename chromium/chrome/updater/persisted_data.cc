@@ -355,9 +355,9 @@ void PersistedData::SetThrottleUpdatesUntil(const base::Time& time) {
 }
 
 void PersistedData::RegisterApp(const RegistrationRequest& rq) {
-  VLOG(2) << __func__ << ": Registering " << rq.app_id << " at version "
-          << rq.version;
+  VLOG(2) << __func__ << ": Registering " << rq.app_id;
   if (rq.version.IsValid()) {
+    VLOG(2) << __func__ << ": app version " << rq.version;
     SetProductVersion(rq.app_id, rq.version);
   }
   if (!rq.version_path.empty()) {
@@ -418,7 +418,7 @@ bool PersistedData::RemoveApp(const std::string& id) {
                               update_client::kPersistedDataPreference);
   base::Value::Dict* apps = update->FindDict("apps");
 
-  return apps ? apps->Remove(id) : false;
+  return apps ? apps->Remove(base::ToLowerASCII(id)) : false;
 }
 
 std::vector<std::string> PersistedData::GetAppIds() const {

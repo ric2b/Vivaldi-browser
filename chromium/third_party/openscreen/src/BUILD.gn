@@ -50,14 +50,17 @@ group("gn_all") {
     "util",
   ]
 
-  # TODO(issuetracker.google.com/169447969): Re-enable OSP builds for Mac.
   # TODO(issuetracker.google.com/236160471): CDDL does not compile on Windows.
-  if (!is_mac && !is_win) {
+  if (!is_win) {
     deps += [
       "osp",
       "osp/msgs",
       "tools/cddl($host_toolchain)",
     ]
+
+    if (!build_with_chromium) {
+      deps += [ "osp:osp_demo" ]
+    }
   }
 
   if (!build_with_chromium) {
@@ -92,9 +95,8 @@ openscreen_source_set("openscreen_unittests_all") {
     ]
   }
 
-  # TODO(issuetracker.google.com/169447969): Re-enable OSP builds for Mac.
   # TODO(issuetracker.google.com/236160471): CDDL does not compile on Windows.
-  if (!is_mac && !is_win) {
+  if (!is_win) {
     public_deps += [
       "osp:unittests",
       "osp/msgs:unittests",

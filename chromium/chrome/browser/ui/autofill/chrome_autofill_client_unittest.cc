@@ -15,8 +15,10 @@
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/autofill/ui/ui_util.h"
 #include "chrome/browser/fast_checkout/fast_checkout_client_impl.h"
+#include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/plus_addresses/plus_address_service_factory.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
+#include "chrome/browser/ui/autofill/autofill_field_promo_controller.h"
 #include "chrome/browser/ui/autofill/edit_address_profile_dialog_controller_impl.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "components/autofill/content/browser/test_autofill_client_injector.h"
@@ -29,12 +31,17 @@
 #include "components/autofill/core/browser/test_autofill_clock.h"
 #include "components/autofill/core/browser/test_browser_autofill_manager.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
+#include "components/autofill/core/browser/ui/mock_autofill_suggestion_delegate.h"
 #include "components/autofill/core/browser/ui/mock_fast_checkout_client.h"
+#include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/form_interactions_flow.h"
+#include "components/keyed_service/core/keyed_service.h"
 #include "components/plus_addresses/features.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/unified_consent/pref_names.h"
+#include "components/user_education/test/mock_feature_promo_controller.h"
+#include "content/public/browser/browser_context.h"
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -51,6 +58,7 @@
 #include "chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.h"
 #include "chrome/browser/ui/hats/hats_service_factory.h"
 #include "chrome/browser/ui/hats/mock_hats_service.h"
+#include "components/feature_engagement/test/mock_tracker.h"  // nogncheck
 #endif
 
 namespace autofill {
@@ -62,6 +70,7 @@ using ::testing::Field;
 using ::testing::InSequence;
 using ::testing::Ref;
 using ::testing::Return;
+using user_education::test::MockFeaturePromoController;
 
 #if BUILDFLAG(IS_ANDROID)
 class MockAutofillSaveCardBottomSheetBridge
@@ -88,6 +97,13 @@ class MockSaveCardBubbleController : public SaveCardBubbleControllerImpl {
 };
 #endif
 
+class MockAutofillFieldPromoController : public AutofillFieldPromoController {
+ public:
+  ~MockAutofillFieldPromoController() override = default;
+  MOCK_METHOD(void, Show, (const gfx::RectF&), (override));
+  MOCK_METHOD(void, Hide, (), (override));
+};
+
 class TestChromeAutofillClient : public ChromeAutofillClient {
  public:
   explicit TestChromeAutofillClient(content::WebContents* web_contents)
@@ -105,7 +121,8 @@ class TestChromeAutofillClient : public ChromeAutofillClient {
   InjectMockAutofillSaveCardBottomSheetBridge() {
     auto mock = std::make_unique<MockAutofillSaveCardBottomSheetBridge>();
     auto* pointer = mock.get();
-    SetAutofillSaveCardBottomSheetBridgeForTesting(std::move(mock));
+    GetPaymentsAutofillClient()->SetAutofillSaveCardBottomSheetBridgeForTesting(
+        std::move(mock));
     return pointer;
   }
 
@@ -121,6 +138,13 @@ class ChromeAutofillClientTest : public ChromeRenderViewHostTestHarness {
     // Creates the AutofillDriver and AutofillManager.
     NavigateAndCommit(GURL("about:blank"));
 
+    auto autofill_field_promo_controller_manual_fallback =
+        std::make_unique<MockAutofillFieldPromoController>();
+    autofill_field_promo_controller_manual_fallback_ =
+        autofill_field_promo_controller_manual_fallback.get();
+    client()->SetAutofillFieldPromoControllerManualFallbackForTesting(
+        std::move(autofill_field_promo_controller_manual_fallback));
+
 #if !BUILDFLAG(IS_ANDROID)
     SecurityStateTabHelper::CreateForWebContents(web_contents());
 
@@ -134,6 +158,7 @@ class ChromeAutofillClientTest : public ChromeRenderViewHostTestHarness {
   void TearDown() override {
     // Avoid that the raw pointer becomes dangling.
     personal_data_manager_ = nullptr;
+    autofill_field_promo_controller_manual_fallback_ = nullptr;
     ChromeRenderViewHostTestHarness::TearDown();
   }
 
@@ -144,6 +169,11 @@ class ChromeAutofillClientTest : public ChromeRenderViewHostTestHarness {
 
   TestPersonalDataManager* personal_data_manager() {
     return personal_data_manager_;
+  }
+
+  MockAutofillFieldPromoController*
+  autofill_field_promo_controller_manual_fallback() {
+    return autofill_field_promo_controller_manual_fallback_;
   }
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -173,6 +203,8 @@ class ChromeAutofillClientTest : public ChromeRenderViewHostTestHarness {
   }
 
   raw_ptr<TestPersonalDataManager> personal_data_manager_ = nullptr;
+  raw_ptr<MockAutofillFieldPromoController>
+      autofill_field_promo_controller_manual_fallback_;
   TestAutofillClientInjector<TestChromeAutofillClient>
       test_autofill_client_injector_;
   base::OnceCallback<void()> setup_flags_;
@@ -244,9 +276,9 @@ TEST_F(ChromeAutofillClientTest,
 }
 
 #if !BUILDFLAG(IS_ANDROID)
-// Test that the hats service is called with the expected params.
-// Note that Surveys are only launched on Desktop.
-TEST_F(ChromeAutofillClientTest, TriggerUserPerceptionOfAutofillSurvey) {
+// Test that the hats service is called with the expected params for different
+// surveys. Note that Surveys are only launched on Desktop.
+TEST_F(ChromeAutofillClientTest, TriggerUserPerceptionOfAutofillAddressSurvey) {
   MockHatsService* mock_hats_service = static_cast<MockHatsService*>(
       HatsServiceFactory::GetInstance()->SetTestingFactoryAndUse(
           profile(), base::BindRepeating(&BuildMockHatsService)));
@@ -260,7 +292,26 @@ TEST_F(ChromeAutofillClientTest, TriggerUserPerceptionOfAutofillSurvey) {
                   kHatsSurveyTriggerAutofillAddressUserPerception, _, _,
                   expected_bits, Ref(field_filling_stats_data), _, _, _, _, _));
 
-  client()->TriggerUserPerceptionOfAutofillSurvey(field_filling_stats_data);
+  client()->TriggerUserPerceptionOfAutofillSurvey(FillingProduct::kAddress,
+                                                  field_filling_stats_data);
+}
+
+TEST_F(ChromeAutofillClientTest,
+       TriggerUserPerceptionOfAutofillCreditCardSurvey) {
+  MockHatsService* mock_hats_service = static_cast<MockHatsService*>(
+      HatsServiceFactory::GetInstance()->SetTestingFactoryAndUse(
+          profile(), base::BindRepeating(&BuildMockHatsService)));
+  EXPECT_CALL(*mock_hats_service, CanShowAnySurvey)
+      .WillRepeatedly(Return(true));
+
+  const SurveyStringData field_filling_stats_data;
+  EXPECT_CALL(*mock_hats_service,
+              LaunchDelayedSurveyForWebContents(
+                  kHatsSurveyTriggerAutofillCreditCardUserPerception, _, _, _,
+                  Ref(field_filling_stats_data), _, _, _, _, _));
+
+  client()->TriggerUserPerceptionOfAutofillSurvey(FillingProduct::kCreditCard,
+                                                  field_filling_stats_data);
 }
 
 TEST_F(ChromeAutofillClientTest,
@@ -300,31 +351,47 @@ TEST_F(ChromeAutofillClientTest, EditAddressDialogFooter) {
                 IDS_AUTOFILL_UPDATE_PROMPT_ACCOUNT_ADDRESS_SOURCE_NOTICE,
                 base::ASCIIToUTF16(account->email)));
 }
-#endif
 
-// Test that there is always an PaymentsWindowManager present if attempted
-// to be retrieved.
-TEST_F(ChromeAutofillClientTest, GetPaymentsWindowManager) {
-  if constexpr (BUILDFLAG(IS_ANDROID)) {
-    EXPECT_EQ(client()->GetPaymentsWindowManager(), nullptr);
-  } else {
-    EXPECT_NE(client()->GetPaymentsWindowManager(), nullptr);
-  }
+TEST_F(ChromeAutofillClientTest, AutofillManualFallbackIPH_IsShown) {
+  EXPECT_CALL(*autofill_field_promo_controller_manual_fallback(), Show);
+  client()->ShowAutofillFieldIphForManualFallbackFeature(FormFieldData{});
 }
 
-#if BUILDFLAG(IS_ANDROID)
-class ChromeAutofillClientTestWithPaymentsAndroidBottomSheetFeature
-    : public ChromeAutofillClientTest {
- private:
-  base::test::ScopedFeatureList scoped_feature_list_{
-      features::kAutofillEnablePaymentsAndroidBottomSheet};
-};
+TEST_F(ChromeAutofillClientTest,
+       AutofillManualFallbackIPH_HideOnShowAutofillSuggestions) {
+  auto delegate = std::make_unique<MockAutofillSuggestionDelegate>();
 
-// Verify that when `AutofillEnablePaymentsAndroidBottomSheet` feature is
-// enabled, the prompt to upload save a user's card without CVC is shown in a
+  EXPECT_CALL(*autofill_field_promo_controller_manual_fallback(), Hide);
+  client()->ShowAutofillSuggestions(AutofillClient::PopupOpenArgs(),
+                                    delegate->GetWeakPtr());
+
+  // Showing the Autofill Popup is an asynchronous task.
+  task_environment()->RunUntilIdle();
+
+  testing::Mock::VerifyAndClearExpectations(
+      autofill_field_promo_controller_manual_fallback());
+}
+
+TEST_F(ChromeAutofillClientTest, AutofillManualFallbackIPH_NotifyFeatureUsed) {
+  feature_engagement::TrackerFactory::GetInstance()->SetTestingFactory(
+      profile(), base::BindRepeating([](content::BrowserContext* context)
+                                         -> std::unique_ptr<KeyedService> {
+        return std::make_unique<feature_engagement::test::MockTracker>();
+      }));
+
+  EXPECT_CALL(
+      *static_cast<feature_engagement::test::MockTracker*>(
+          feature_engagement::TrackerFactory::GetForBrowserContext(profile())),
+      NotifyUsedEvent);
+  client()->NotifyAutofillManualFallbackUsed();
+}
+#endif
+
+#if BUILDFLAG(IS_ANDROID)
+// Verify that the prompt to upload save a user's card without CVC is shown in a
 // bottom sheet.
 TEST_F(
-    ChromeAutofillClientTestWithPaymentsAndroidBottomSheetFeature,
+    ChromeAutofillClientTest,
     ConfirmSaveCreditCardToCloud_CardSaveTypeIsOnlyCard_RequestsBottomSheet) {
   TestChromeAutofillClient* autofill_client = client();
   auto* bottom_sheet_bridge =
@@ -354,10 +421,9 @@ TEST_F(
       base::DoNothing());
 }
 
-// Verify that when `AutofillEnablePaymentsAndroidBottomSheet` feature is
-// enabled, the prompt to upload save a user's card with CVC is shown in a
+// Verify that the prompt to upload save a user's card with CVC is shown in a
 // bottom sheet.
-TEST_F(ChromeAutofillClientTestWithPaymentsAndroidBottomSheetFeature,
+TEST_F(ChromeAutofillClientTest,
        ConfirmSaveCreditCardToCloud_CardSaveTypeIsWithCvc_RequestsBottomSheet) {
   TestChromeAutofillClient* autofill_client = client();
   auto* bottom_sheet_bridge =
@@ -387,7 +453,7 @@ TEST_F(ChromeAutofillClientTestWithPaymentsAndroidBottomSheetFeature,
       base::DoNothing());
 }
 
-TEST_F(ChromeAutofillClientTestWithPaymentsAndroidBottomSheetFeature,
+TEST_F(ChromeAutofillClientTest,
        ConfirmSaveCreditCardToCloud_DoesNotFailWithoutAWindow) {
   TestChromeAutofillClient* autofill_client = client();
 
@@ -397,10 +463,10 @@ TEST_F(ChromeAutofillClientTestWithPaymentsAndroidBottomSheetFeature,
       base::DoNothing()));
 }
 
-// Verify that when `AutofillEnablePaymentsAndroidBottomSheet` feature is
-// enabled, the prompt to local save a user's card is shown in a bottom sheet.
+// Verify that the prompt to local save a user's card is shown in a bottom
+// sheet.
 TEST_F(
-    ChromeAutofillClientTestWithPaymentsAndroidBottomSheetFeature,
+    ChromeAutofillClientTest,
     ConfirmSaveCreditCardLocally_CardSaveTypeIsOnlyCard_RequestsBottomSheet) {
   base::test::ScopedFeatureList scoped_feature_list{
       features::kAutofillEnableCvcStorageAndFilling};
@@ -428,9 +494,9 @@ TEST_F(
       base::DoNothing());
 }
 
-// Verify that when `AutofillEnablePaymentsAndroidBottomSheet` feature is
-// enabled, the prompt to local save a user's card is shown in a bottom sheet.
-TEST_F(ChromeAutofillClientTestWithPaymentsAndroidBottomSheetFeature,
+// Verify that the prompt to local save a user's card and CVC is shown in a
+// bottom sheet.
+TEST_F(ChromeAutofillClientTest,
        ConfirmSaveCreditCardLocally_CardSaveTypeIsWithCvc_RequestsBottomSheet) {
   base::test::ScopedFeatureList scoped_feature_list{
       features::kAutofillEnableCvcStorageAndFilling};
@@ -457,7 +523,7 @@ TEST_F(ChromeAutofillClientTestWithPaymentsAndroidBottomSheetFeature,
       base::DoNothing());
 }
 
-TEST_F(ChromeAutofillClientTestWithPaymentsAndroidBottomSheetFeature,
+TEST_F(ChromeAutofillClientTest,
        ConfirmSaveCreditCardLocally_DoesNotFailWithoutAWindow) {
   TestChromeAutofillClient* autofill_client = client();
 

@@ -1,5 +1,9 @@
 load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup")
 
+package(
+    default_applicable_licenses = ["//:license"],
+)
+
 licenses(["notice"])
 
 exports_files_legacy()
@@ -8,8 +12,10 @@ skia_filegroup(
     name = "hdrs",
     srcs = [
         "SkShaper.h",
+        "SkShaper_factory.h",
         "SkShaper_harfbuzz.h",
         "SkShaper_skunicode.h",
+        "//modules/skshaper/utils:core_hdrs",
     ],
     visibility = ["//modules/skshaper:__pkg__"],
 )
@@ -18,6 +24,7 @@ skia_filegroup(
     name = "core_hdrs",
     srcs = [
         "SkShaper.h",
+        "SkShaper_factory.h",
     ],
     visibility = ["//modules/skshaper:__pkg__"],
 )

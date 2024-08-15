@@ -23,13 +23,6 @@ update_target("//ios/chrome/browser/ui/toolbar:toolbar_ui") {
   ]
 }
 
-update_target("//ios/chrome/browser/ui/toolbar/buttons:buttons") {
-  deps -= [
-    "resources:tab_toolbar_button_color_highlighted",
-    "resources:tab_toolbar_button_color_highlighted_incognito",
-  ]
-}
-
 update_target("//ios/chrome/browser/ui/popup_menu/overflow_menu:overflow_menu") {
   deps += [
     "//vivaldi/ios/ui/vivaldi_overflow_menu:vivaldi_overflow_menu",
@@ -44,81 +37,25 @@ update_target("//ios/chrome/browser/ui/settings/default_browser:default_browser"
 
 update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_ui_constants") {
   deps += [
-    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:vivaldi_grid_background_color",
-    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_empty_state_title_text_color",
-    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_empty_state_body_text_color",
-    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_empty_state_login_button_bg_color",
-    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_toolbar_text_button_color",
-    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:page_control_background_color",
-    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:page_control_icon_not_selected_color",
-    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_selected_color",
-    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_not_selected_color",
-
-  ]
-}
-
-update_target("//ios/chrome/browser/ui/first_run/signin:signin_ui") {
-  deps -= [
-    "//ios/chrome/browser/ui/first_run/resources:signin_banner",
-  ]
-  deps += [
-    "//vivaldi/ios/chrome/browser/ui/first_run/resources:signin_banner",
-  ]
-}
-
-update_target("//ios/chrome/browser/ui/first_run/default_browser:default_browser_ui") {
-  deps -= [
-    "//ios/chrome/browser/ui/first_run/resources:default_browser_screen_banner",
-  ]
-  deps += [
-    "//vivaldi/ios/chrome/browser/ui/first_run/resources:default_browser_screen_banner",
-  ]
-}
-
-update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid/grid:grid_ui") {
-  deps -= [
-    "resources:tab_grid_incognito_tabs_empty",
-    "resources:tab_grid_regular_tabs_empty",
-  ]
-  deps += [
-    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:page_control_assets",
-    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:tab_grid_incognito_tabs_empty",
-    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:tab_grid_regular_tabs_empty",
-    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:tab_grid_remote_tabs_empty",
-    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:tab_grid_closed_tabs_empty",
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources",
   ]
 }
 
 update_template_instance("//ios/chrome/widget_kit_extension:widget_kit_extension_swift") {
-  deps -= [
-    "resources:widget_background_color",
-    "resources:widget_search_bar_color",
-    "resources:widget_separator_color",
-    "resources:widget_text_color",
-    "resources:widget_incognito_icon",
-    "resources:widget_password_manager_logo",
-  ]
   deps += [
-    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_vivaldi_logo",
-    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_background_color",
-    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_search_bar_color",
-    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_separator_color",
-    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_text_color",
-    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_button_background_color",
-    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_incognito_icon",
-    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_qr_icon",
-    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_lock_screen_search",
-    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_lock_screen_private_search",
-    "//vivaldi/ios/chrome/widget_kit_extension/resources:widget_password_manager_logo",
+    "//vivaldi/ios/chrome/widget_kit_extension/resources",
   ]
 }
 
-update_target("//ios/chrome/common/ui/colors/resources:resources") {
-  deps -= [
-    ":toolbar_button_color",
-  ]
+update_template_instance("//ios/chrome/credential_provider_extension/ui:ui") {
   deps += [
-    "//vivaldi/ios/ui/toolbar/resources:toolbar_button_color",
+    "//vivaldi/ios/ui/widget/resources"
+  ]
+}
+
+update_template_instance("//ios/chrome/open_extension:open") {
+  deps += [
+    "//vivaldi/ios/app/resources"
   ]
 }
 
@@ -241,5 +178,17 @@ update_target("//ios/chrome/browser/ui/autofill/manual_fill:manual_fill_ui") {
     "//vivaldi//ios/ui/autofill/resources:vivaldi_autofill_passwords",
     "//vivaldi//ios/ui/autofill/resources:vivaldi_autofill_credit_card",
     "//vivaldi//ios/ui/autofill/resources:vivaldi_autofill_place",
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid/inactive_tabs:inactive_tabs") {
+  deps += [
+    "//vivaldi/ios/chrome/browser/ui/tab_switcher/tab_grid/inactive_tabs/resources:vivaldi_inactive_tabs_edu_icon",
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/browser_container:browser_container") {
+  deps += [
+    "//vivaldi/ios/ui/copy_to_note",
   ]
 }

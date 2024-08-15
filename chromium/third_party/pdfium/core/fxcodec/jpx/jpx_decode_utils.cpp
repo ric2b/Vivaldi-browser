@@ -4,14 +4,18 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#include "core/fxcodec/jpx/jpx_decode_utils.h"
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
 
-#include <stddef.h>
-#include <string.h>
+#include "core/fxcodec/jpx/jpx_decode_utils.h"
 
 #include <algorithm>
 #include <limits>
 #include <type_traits>
+
+#include "core/fxcrt/fx_memcpy_wrappers.h"
 
 namespace fxcodec {
 
@@ -28,7 +32,7 @@ OPJ_SIZE_T opj_read_from_memory(void* p_buffer,
 
   OPJ_SIZE_T bufferLength = srcData->src_size - srcData->offset;
   OPJ_SIZE_T readlength = nb_bytes < bufferLength ? nb_bytes : bufferLength;
-  memcpy(p_buffer, &srcData->src_data[srcData->offset], readlength);
+  FXSYS_memcpy(p_buffer, &srcData->src_data[srcData->offset], readlength);
   srcData->offset += readlength;
   return readlength;
 }

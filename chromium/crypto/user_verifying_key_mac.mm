@@ -7,17 +7,21 @@
 #include <memory>
 #include <utility>
 
+#import <LocalAuthentication/LocalAuthentication.h>
+
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/memory/weak_ptr.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_thread_priority.h"
+#include "crypto/apple_keychain_v2.h"
+#include "crypto/scoped_lacontext.h"
 #include "crypto/unexportable_key.h"
+#include "crypto/unexportable_key_mac.h"
 #include "crypto/user_verifying_key.h"
 
 namespace crypto {
@@ -96,10 +100,57 @@ class UserVerifyingSigningKeyMac : public UserVerifyingSigningKey {
   const scoped_refptr<RefCountedUnexportableSigningKey> key_;
 };
 
+std::unique_ptr<UserVerifyingSigningKey> DoGenerateKey(
+    base::span<const SignatureVerifier::SignatureAlgorithm>
+        acceptable_algorithms,
+    UnexportableKeyProvider::Config config,
+    LAContext* lacontext) {
+  std::unique_ptr<UnexportableKeyProviderMac> key_provider =
+      GetUnexportableKeyProviderMac(std::move(config));
+  if (!key_provider) {
+    return nullptr;
+  }
+
+  std::unique_ptr<UnexportableSigningKey> key =
+      key_provider->GenerateSigningKeySlowly(acceptable_algorithms, lacontext);
+  if (!key) {
+    return nullptr;
+  }
+  return std::make_unique<UserVerifyingSigningKeyMac>(std::move(key));
+}
+
+std::unique_ptr<UserVerifyingSigningKey> DoGetKey(
+    std::vector<uint8_t> wrapped_key,
+    UnexportableKeyProvider::Config config,
+    LAContext* lacontext) {
+  std::unique_ptr<UnexportableKeyProviderMac> key_provider =
+      GetUnexportableKeyProviderMac(std::move(config));
+  if (!key_provider) {
+    return nullptr;
+  }
+  std::unique_ptr<UnexportableSigningKey> key =
+      key_provider->FromWrappedSigningKeySlowly(wrapped_key, lacontext);
+  if (!key) {
+    return nullptr;
+  }
+  return std::make_unique<UserVerifyingSigningKeyMac>(std::move(key));
+}
+
+bool DoDeleteKey(std::vector<uint8_t> wrapped_key,
+                 UnexportableKeyProvider::Config config) {
+  std::unique_ptr<UnexportableKeyProvider> key_provider =
+      GetUnexportableKeyProvider(std::move(config));
+  if (!key_provider) {
+    return false;
+  }
+  return key_provider->DeleteSigningKeySlowly(wrapped_key);
+}
+
 class UserVerifyingKeyProviderMac : public UserVerifyingKeyProvider {
  public:
   explicit UserVerifyingKeyProviderMac(UserVerifyingKeyProvider::Config config)
-      : config_(std::move(config)) {}
+      : lacontext_(config.lacontext ? config.lacontext->release() : nil),
+        config_(std::move(config)) {}
   ~UserVerifyingKeyProviderMac() override = default;
 
   void GenerateUserVerifyingSigningKey(
@@ -107,64 +158,62 @@ class UserVerifyingKeyProviderMac : public UserVerifyingKeyProvider {
           acceptable_algorithms,
       base::OnceCallback<void(std::unique_ptr<UserVerifyingSigningKey>)>
           callback) override {
-    std::unique_ptr<UnexportableKeyProvider> key_provider =
-        GetUnexportableKeyProvider(MakeUnexportableKeyConfig());
-    if (!key_provider) {
-      std::move(callback).Run(nullptr);
-      return;
-    }
-    std::unique_ptr<UnexportableSigningKey> key =
-        key_provider->GenerateSigningKeySlowly(acceptable_algorithms);
-    if (!key) {
-      std::move(callback).Run(nullptr);
-      return;
-    }
-    std::move(callback).Run(
-        std::make_unique<UserVerifyingSigningKeyMac>(std::move(key)));
+    // Creating a key may result in disk access, so do it in a separate thread
+    // to avoid blocking the UI.
+    scoped_refptr<base::SequencedTaskRunner> worker_task_runner =
+        base::ThreadPool::CreateSequencedTaskRunner(
+            {base::MayBlock(), base::TaskPriority::USER_BLOCKING});
+    std::vector<SignatureVerifier::SignatureAlgorithm> algorithms(
+        acceptable_algorithms.begin(), acceptable_algorithms.end());
+    worker_task_runner->PostTaskAndReplyWithResult(
+        FROM_HERE,
+        base::BindOnce(&DoGenerateKey, std::move(algorithms),
+                       MakeUnexportableKeyConfig(), lacontext_),
+        std::move(callback));
   }
 
   void GetUserVerifyingSigningKey(
       UserVerifyingKeyLabel key_label,
       base::OnceCallback<void(std::unique_ptr<UserVerifyingSigningKey>)>
           callback) override {
+    // Retrieving a key may result in disk access, so do it in a separate thread
+    // to avoid blocking the UI.
+    scoped_refptr<base::SequencedTaskRunner> worker_task_runner =
+        base::ThreadPool::CreateSequencedTaskRunner(
+            {base::MayBlock(), base::TaskPriority::USER_BLOCKING});
     std::vector<uint8_t> wrapped_key(key_label.begin(), key_label.end());
-    std::unique_ptr<UnexportableKeyProvider> key_provider =
-        GetUnexportableKeyProvider(MakeUnexportableKeyConfig());
-    if (!key_provider) {
-      std::move(callback).Run(nullptr);
-      return;
-    }
-    std::unique_ptr<UnexportableSigningKey> key =
-        key_provider->FromWrappedSigningKeySlowly(wrapped_key);
-    if (!key) {
-      std::move(callback).Run(nullptr);
-      return;
-    }
-    std::move(callback).Run(
-        std::make_unique<UserVerifyingSigningKeyMac>(std::move(key)));
+    worker_task_runner->PostTaskAndReplyWithResult(
+        FROM_HERE,
+        base::BindOnce(&DoGetKey, std::move(std::move(wrapped_key)),
+                       MakeUnexportableKeyConfig(), lacontext_),
+        std::move(callback));
   }
 
   void DeleteUserVerifyingKey(
       UserVerifyingKeyLabel key_label,
       base::OnceCallback<void(bool)> callback) override {
-    std::unique_ptr<UnexportableKeyProvider> key_provider =
-        GetUnexportableKeyProvider(MakeUnexportableKeyConfig());
-    if (!key_provider) {
-      std::move(callback).Run(false);
-      return;
-    }
+    // Deleting a key may result in disk access, so do it in a separate thread
+    // to avoid blocking the UI.
+    scoped_refptr<base::SequencedTaskRunner> worker_task_runner =
+        base::ThreadPool::CreateSequencedTaskRunner(
+            {base::MayBlock(), base::TaskPriority::USER_BLOCKING});
     std::vector<uint8_t> wrapped_key(key_label.begin(), key_label.end());
-    std::move(callback).Run(key_provider->DeleteSigningKey(wrapped_key));
+    worker_task_runner->PostTaskAndReplyWithResult(
+        FROM_HERE,
+        base::BindOnce(&DoDeleteKey, std::move(wrapped_key),
+                       MakeUnexportableKeyConfig()),
+        std::move(callback));
   }
 
  private:
   UnexportableKeyProvider::Config MakeUnexportableKeyConfig() {
     return {
         .keychain_access_group = config_.keychain_access_group,
-        .access_control =
-            UnexportableKeyProvider::Config::AccessControl::kUserPresence,
+        .access_control = UnexportableKeyProvider::Config::AccessControl::
+            kUserPresenceOrWatch,
     };
   }
+  LAContext* __strong lacontext_;
   const UserVerifyingKeyProvider::Config config_;
 };
 
@@ -182,8 +231,9 @@ void AreMacUnexportableKeysAvailable(UserVerifyingKeyProvider::Config config,
     std::move(callback).Run(false);
     return;
   }
-  // TODO(nsatragno): check for biometry.
-  std::move(callback).Run(true);
+  std::move(callback).Run(
+      AppleKeychainV2::GetInstance().LAContextCanEvaluatePolicy(
+          LAPolicyDeviceOwnerAuthentication, /*error=*/nil));
 }
 
 }  // namespace crypto

@@ -64,8 +64,8 @@ using base::android::JavaRef;
 
 namespace {
 
-// TODO(crbug.com/1297672): This is what shows up as filename in errors. Revisit
-// this once error handling is in place.
+// TODO(crbug.com/40215244): This is what shows up as filename in errors.
+// Revisit this once error handling is in place.
 constexpr std::string_view resource_name = "<expression>";
 constexpr jlong kUnknownAssetFileDescriptorLength = -1;
 constexpr int64_t kDefaultChunkSize = 1 << 16;
@@ -700,8 +700,7 @@ void JsSandboxIsolate::EvaluateJavascriptOnThread(
   v8::TryCatch try_catch(v8_isolate);
 
   // Compile
-  v8::ScriptOrigin origin(v8_isolate,
-                          gin::StringToV8(v8_isolate, resource_name));
+  v8::ScriptOrigin origin(gin::StringToV8(v8_isolate, resource_name));
   v8::MaybeLocal<v8::Script> maybe_script = v8::Script::Compile(
       context_holder_->context(), gin::StringToV8(v8_isolate, code), &origin);
   std::string compile_error = "";
@@ -716,7 +715,6 @@ void JsSandboxIsolate::EvaluateJavascriptOnThread(
   }
 
   // Run
-  v8::Isolate::SafeForTerminationScope safe_for_termination(v8_isolate);
   v8::MaybeLocal<v8::Value> maybe_result =
       script->Run(context_holder_->context());
   std::string run_error = "";

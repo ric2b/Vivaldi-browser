@@ -169,7 +169,6 @@ zariadenia, ktoré možno používate.</translation>
 <translation id="7353601530677266744">Príkazový riadok</translation>
 <translation id="7364115444476960850">Stránka, ktorú sa chystávate navštíviť bola zablokovaná blokovačom <ph name="BLOCKER_NAME" /> prehliadača Vivaldi</translation>
 <translation id="7419106976560586862">Cesta k profilu</translation>
-<translation id="7445762425076701745">Identita servera, ku ktorému ste pripojení, sa nedá úplne overiť. Ste pripojení k serveru, ktorý používa názov platný iba v rámci vašej siete. Externá certifikačná autorita nemôže vlastníctvo názvu nijakým spôsobom overiť. Niektoré certifikačné autority však vydajú certifikát aj pre takéto názvy, a preto sa nedá zaručiť, že ste pripojení k požadovaným webovým stránkam a nie k stránkam útočníka.</translation>
 <translation id="7455133967321480974">Použiť predvolené všeobecné nastavenie (Blokovať)</translation>
 <translation id="7518003948725431193">Na webovej adrese <ph name="URL" /> sa nepodarilo nájsť žiadne webové stránky</translation>
 <translation id="7549584377607005141">Správne zobrazenie tejto webovej stránky si vyžaduje údaje, ktoré ste zadali v minulosti. Tieto údaje môžete poslať znova, ale v tom prípade zopakujete všetky akcie, ktoré sa na tejto stránke vykonali v minulosti.</translation>

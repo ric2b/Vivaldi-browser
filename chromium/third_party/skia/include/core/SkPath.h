@@ -26,6 +26,7 @@
 #include <tuple>
 #include <type_traits>
 
+struct SkArc;
 class SkData;
 class SkPathRef;
 class SkRRect;
@@ -136,6 +137,18 @@ public:
         example: https://fiddle.skia.org/c/@Path_destructor
     */
     ~SkPath();
+
+    /** Returns a copy of this path in the current state. */
+    SkPath snapshot() const {
+        return *this;
+    }
+
+    /** Returns a copy of this path in the current state, and resets the path to empty. */
+    SkPath detach() {
+        SkPath result = *this;
+        this->reset();
+        return result;
+    }
 
     /** Constructs a copy of an existing path.
         SkPath assignment makes two paths identical by value. Internally, assignment
@@ -267,6 +280,16 @@ public:
         example: https://fiddle.skia.org/c/@Path_isRRect
     */
     bool isRRect(SkRRect* rrect) const;
+
+    /** Returns true if path is representable as an oval arc. In other words, could this
+        path be drawn using SkCanvas::drawArc.
+
+        arc  receives parameters of arc
+
+       @param arc  storage for arc; may be nullptr
+       @return     true if SkPath contains only a single arc from an oval
+    */
+    bool isArc(SkArc* arc) const;
 
     /** Sets SkPath to its initial state.
         Removes verb array, SkPoint array, and weights, and sets FillType to kWinding.
@@ -537,15 +560,17 @@ public:
     */
     bool conservativelyContainsRect(const SkRect& rect) const;
 
-    /** Grows SkPath verb array and SkPoint array to contain extraPtCount additional SkPoint.
+    /** Grows SkPath verb array, SkPoint array, and conics to contain additional space.
         May improve performance and use less memory by
         reducing the number and size of allocations when creating SkPath.
 
         @param extraPtCount  number of additional SkPoint to allocate
+        @param extraVerbCount  number of additional verbs
+        @param extraConicCount  number of additional conics
 
         example: https://fiddle.skia.org/c/@Path_incReserve
     */
-    void incReserve(int extraPtCount);
+    void incReserve(int extraPtCount, int extraVerbCount = 0, int extraConicCount = 0);
 
 #ifdef SK_HIDE_PATH_EDIT_METHODS
 private:
@@ -1114,6 +1139,14 @@ private:
     */
     SkPath& addOval(const SkRect& oval, SkPathDirection dir, unsigned start);
 
+    /** Experimental, subject to change or removal.
+
+        Adds an "open" oval to SkPath. This follows canvas2D semantics: The oval is not
+        a separate contour. If the path was empty, then kMove_Verb is appended. Otherwise,
+        kLine_Verb is appended. Four kConic_Verbs are appended. kClose_Verb is not appended.
+    */
+    SkPath& addOpenOval(const SkRect& oval, SkPathDirection dir, unsigned start);
+
     /** Adds circle centered at (x, y) of size radius to SkPath, appending kMove_Verb,
         four kConic_Verb, and kClose_Verb. Circle begins at: (x + radius, y), continuing
         clockwise if dir is kCW_Direction, and counterclockwise if dir is kCCW_Direction.
@@ -1332,8 +1365,9 @@ public:
         @param dx  offset added to SkPoint array x-axis coordinates
         @param dy  offset added to SkPoint array y-axis coordinates
     */
-    void offset(SkScalar dx, SkScalar dy) {
+    SkPath& offset(SkScalar dx, SkScalar dy) {
         this->offset(dx, dy, this);
+        return *this;
     }
 
     /** Transforms verb array, SkPoint array, and weight by matrix.
@@ -1357,9 +1391,10 @@ public:
         @param matrix  SkMatrix to apply to SkPath
         @param pc      whether to apply perspective clipping
     */
-    void transform(const SkMatrix& matrix,
+    SkPath& transform(const SkMatrix& matrix,
                    SkApplyPerspectiveClip pc = SkApplyPerspectiveClip::kYes) {
         this->transform(matrix, this, pc);
+        return *this;
     }
 
     SkPath makeTransform(const SkMatrix& m,
@@ -1790,7 +1825,6 @@ private:
 
     /** Resets all fields other than fPathRef to their initial 'empty' values.
      *  Assumes the caller has already emptied fPathRef.
-     *  On Android increments fGenerationID without reseting it.
      */
     void resetFields();
 

@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "base/component_export.h"
+#include "base/types/expected.h"
 #include "third_party/abseil-cpp/absl/numeric/int128.h"
 
 namespace attribution_reporting {
@@ -21,9 +22,6 @@ namespace attribution_reporting {
 class MaxEventLevelReports;
 class TriggerSpecs;
 
-// TODO(apaseltiner): Use `uint8_t` as the type of both fields here, as the
-// trigger data *index* is guaranteed to be < 32 and the window index is
-// guaranteed to be < 5.
 struct FakeEventLevelReport {
   uint32_t trigger_data;
   int window_index;
@@ -39,10 +37,19 @@ struct FakeEventLevelReport {
 // non-empty vector -> `StoredSource::AttributionLogic::kFalsely`
 using RandomizedResponse = std::optional<std::vector<FakeEventLevelReport>>;
 
+COMPONENT_EXPORT(ATTRIBUTION_REPORTING)
+bool IsValid(const RandomizedResponse&,
+             const TriggerSpecs&,
+             MaxEventLevelReports);
+
+enum class RandomizedResponseError {
+  kExceedsChannelCapacityLimit,
+  kExceedsTriggerStateCardinalityLimit,
+};
+
 class COMPONENT_EXPORT(ATTRIBUTION_REPORTING) RandomizedResponseData {
  public:
   RandomizedResponseData(double rate,
-                         double channel_capacity,
                          RandomizedResponse);
 
   ~RandomizedResponseData();
@@ -54,18 +61,16 @@ class COMPONENT_EXPORT(ATTRIBUTION_REPORTING) RandomizedResponseData {
   RandomizedResponseData& operator=(RandomizedResponseData&&);
 
   double rate() const { return rate_; }
-  double channel_capacity() const { return channel_capacity_; }
 
   const RandomizedResponse& response() const { return response_; }
 
-  RandomizedResponse&& ResponseForTesting() && { return std::move(response_); }
+  RandomizedResponse& response() { return response_; }
 
   friend bool operator==(const RandomizedResponseData&,
                          const RandomizedResponseData&) = default;
 
  private:
   double rate_;
-  double channel_capacity_;
   RandomizedResponse response_;
 };
 
@@ -86,9 +91,12 @@ absl::uint128 GetNumStates(const TriggerSpecs& specs, MaxEventLevelReports);
 // Returns `std::nullopt` if the output should be determined truthfully.
 // Otherwise will return a vector of fake reports.
 COMPONENT_EXPORT(ATTRIBUTION_REPORTING)
-RandomizedResponseData DoRandomizedResponse(const TriggerSpecs& specs,
-                                            MaxEventLevelReports,
-                                            double epsilon);
+base::expected<RandomizedResponseData, RandomizedResponseError>
+DoRandomizedResponse(const TriggerSpecs& specs,
+                     MaxEventLevelReports,
+                     double epsilon,
+                     absl::uint128 max_trigger_state_cardinality,
+                     double max_channel_capacity);
 
 // Exposed for testing purposes.
 namespace internal {
@@ -175,10 +183,13 @@ std::vector<FakeEventLevelReport> GetFakeReportsForSequenceIndex(
 // Exposed to speed up tests which perform randomized response many times in a
 // row.
 COMPONENT_EXPORT(ATTRIBUTION_REPORTING)
-RandomizedResponseData DoRandomizedResponseWithCache(const TriggerSpecs& specs,
-                                                     int max_reports,
-                                                     double epsilon,
-                                                     StateMap& map);
+base::expected<RandomizedResponseData, RandomizedResponseError>
+DoRandomizedResponseWithCache(const TriggerSpecs& specs,
+                              int max_reports,
+                              double epsilon,
+                              StateMap& map,
+                              absl::uint128 max_trigger_state_cardinality,
+                              double max_channel_capacity);
 
 }  // namespace internal
 

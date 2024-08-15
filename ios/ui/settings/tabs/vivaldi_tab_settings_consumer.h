@@ -15,6 +15,11 @@
 - (void)setPreferenceForReverseSearchResultOrder:(BOOL)reverseOrder;
 // Updates the state with the tab bar preference value.
 - (void)setPreferenceForShowTabBar:(BOOL)showTabBar;
+// Updates the state with the inactive tabs threshold preference value.
+- (void)setPreferenceForInactiveTabsTimeThreshold:(int)threshold;
+// Updates the state with the show inactive tabs preference value.
+@optional
+- (void)setPreferenceForShowInactiveTabs:(BOOL)showInactiveTabs;
 
 @end
 

@@ -14,13 +14,11 @@ import {CustomizeChromeApiProxy} from 'chrome://customize-chrome-side-panel.top-
 import type {CrCheckboxElement} from 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
 import type {CrToggleElement} from 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import type {IronCollapseElement} from 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import type {MetricsTracker} from 'chrome://webui-test/metrics_test_support.js';
 import {fakeMetricsPrivate} from 'chrome://webui-test/metrics_test_support.js';
-import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import type {TestMock} from 'chrome://webui-test/test_mock.js';
-import {isVisible} from 'chrome://webui-test/test_util.js';
+import {isVisible, microtasksFinished} from 'chrome://webui-test/test_util.js';
 
 import {assertNotStyle, assertStyle, installMock} from './test_support.js';
 
@@ -51,24 +49,25 @@ suite('CardsTest', () => {
     customizeCards = document.createElement('customize-chrome-cards');
     document.body.appendChild(customizeCards);
     await handler.whenCalled('updateModulesSettings');
-    await waitAfterNextRender(customizeCards);
+    await microtasksFinished();
   }
 
   function getToggleElement(): CrToggleElement {
     return customizeCards.$['showToggleContainer']!.querySelector('cr-toggle')!;
   }
 
-  function getCollapseElement(): IronCollapseElement {
-    return customizeCards.shadowRoot!.querySelector('iron-collapse')!;
+  function getCollapseElement() {
+    return customizeCards.shadowRoot!.querySelector('cr-collapse')!;
   }
 
   function getCardsMap(): Map<string, HTMLElement> {
     const elements: HTMLElement[] = Array.from(
         customizeCards.shadowRoot!.querySelectorAll<HTMLElement>('.card'));
     return Object.freeze(new Map(elements.map(cardEl => {
-      assertNotEquals(null, cardEl.firstChild);
-      assertNotEquals(null, cardEl.firstChild!.textContent);
-      return [cardEl.firstChild!.textContent!, cardEl];
+      const cardNameEl = cardEl.querySelector('.card-name, .card-option-name');
+      assertTrue(!!cardNameEl);
+      assertNotEquals(null, cardNameEl.textContent);
+      return [cardNameEl.textContent!, cardEl];
     })));
   }
 
@@ -124,7 +123,7 @@ suite('CardsTest', () => {
       assertEquals(visible, getCollapseElement().opened);
       getToggleElement().click();
       await callbackRouterRemote.$.flushForTesting();
-      await waitAfterNextRender(customizeCards);
+      await microtasksFinished();
 
       // Assert.
       assertEquals(!visible, getToggleElement().checked);
@@ -296,7 +295,7 @@ suite('CardsTest', () => {
           ],
           false, true);
       await callbackRouterRemote.$.flushForTesting();
-      await waitAfterNextRender(customizeCards);
+      await microtasksFinished();
 
       const cartCardOptionName =
           customizeCards.shadowRoot!.querySelector('.card-option-name')!;
@@ -531,7 +530,7 @@ suite('CardsTest', () => {
               'modulesCartSentence'))!.querySelector('cr-checkbox')!;
       cartCardCheckbox.click();
       await handler.whenCalled('setModuleDisabled');
-      await waitAfterNextRender(customizeCards);
+      await microtasksFinished();
 
       // Assert.
       const discountCardOptionName =
@@ -586,7 +585,7 @@ suite('CardsTest', () => {
               cards.get('History Cluster')!.querySelector('cr-checkbox')!;
           historyCardCheckbox.click();
           await handler.whenCalled('setModuleDisabled');
-          await waitAfterNextRender(customizeCards);
+          await microtasksFinished();
 
           // Assert.
           const discountCardOptionName =
@@ -605,7 +604,7 @@ suite('CardsTest', () => {
     test('Clicking show cards toggle sets metric', async () => {
       getToggleElement().click();
       await callbackRouterRemote.$.flushForTesting();
-      await waitAfterNextRender(customizeCards);
+      await microtasksFinished();
 
       assertEquals(
           1, metrics.count('NewTabPage.CustomizeChromeSidePanelAction'));

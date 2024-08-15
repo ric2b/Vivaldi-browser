@@ -6,7 +6,9 @@
 
 #include <atomic>
 
+#include "base/functional/bind.h"
 #include "base/no_destructor.h"
+#include "base/trace_event/malloc_dump_provider.h"
 #include "components/gwp_asan/client/sampling_state.h"
 #include "components/gwp_asan/common/extreme_lightweight_detector_util.h"
 #include "partition_alloc/lightweight_quarantine.h"
@@ -32,6 +34,7 @@ extern AllocatorDispatch allocator_dispatch;
 SamplingState<EXTREMELIGHTWEIGHTDETECTOR> sampling_state;
 
 using partition_alloc::internal::LightweightQuarantineBranch;
+using partition_alloc::internal::LightweightQuarantineBranchConfig;
 using partition_alloc::internal::LightweightQuarantineRoot;
 
 ExtremeLightweightDetectorOptions init_options;
@@ -100,12 +103,14 @@ bool TryInitSlow() {
     partition_alloc::PartitionRoot* partition_root =
         allocator_shim::internal::PartitionAllocMalloc::Allocator();
 
+    LightweightQuarantineBranchConfig quarantine_config = {
+        .lock_required = true,
+        .branch_capacity_in_bytes = init_options.quarantine_capacity_in_bytes,
+    };
     lightweight_quarantine_partition_root = partition_root;
-    lightweight_quarantine_root_storage.emplace(
-        *partition_root, init_options.quarantine_capacity_in_bytes);
+    lightweight_quarantine_root_storage.emplace(*partition_root);
     lightweight_quarantine_branch_storage.emplace(
-        lightweight_quarantine_root_storage->CreateBranch(
-            /*lock_required=*/true));
+        lightweight_quarantine_root_storage->CreateBranch(quarantine_config));
     lightweight_quarantine_branch =
         lightweight_quarantine_branch_storage.value().get();
 
@@ -162,41 +167,6 @@ inline bool Quarantine(void* object) {
   return true;
 }
 
-void* AllocFn(const AllocatorDispatch* self, size_t size, void* context) {
-  return self->next->alloc_function(self->next, size, context);
-}
-
-void* AllocUncheckedFn(const AllocatorDispatch* self,
-                       size_t size,
-                       void* context) {
-  return self->next->alloc_unchecked_function(self->next, size, context);
-}
-
-void* AllocZeroInitializedFn(const AllocatorDispatch* self,
-                             size_t n,
-                             size_t size,
-                             void* context) {
-  return self->next->alloc_zero_initialized_function(self->next, n, size,
-                                                     context);
-}
-
-void* AllocAlignedFn(const AllocatorDispatch* self,
-                     size_t alignment,
-                     size_t size,
-                     void* context) {
-  return self->next->alloc_aligned_function(self->next, alignment, size,
-                                            context);
-}
-
-void* ReallocFn(const AllocatorDispatch* self,
-                void* address,
-                size_t size,
-                void* context) {
-  // realloc doesn't always deallocate memory, so the Extreme LUD doesn't
-  // support realloc (for now).
-  return self->next->realloc_function(self->next, address, size, context);
-}
-
 void FreeFn(const AllocatorDispatch* self, void* address, void* context) {
   if (UNLIKELY(sampling_state.Sample())) {
     if (LIKELY(Quarantine(address))) {
@@ -204,41 +174,6 @@ void FreeFn(const AllocatorDispatch* self, void* address, void* context) {
     }
   }
   self->next->free_function(self->next, address, context);
-}
-
-size_t GetSizeEstimateFn(const AllocatorDispatch* self,
-                         void* address,
-                         void* context) {
-  return self->next->get_size_estimate_function(self->next, address, context);
-}
-
-size_t GoodSizeFn(const AllocatorDispatch* self, size_t size, void* context) {
-  return self->next->good_size_function(self->next, size, context);
-}
-
-bool ClaimedAddressFn(const AllocatorDispatch* self,
-                      void* address,
-                      void* context) {
-  return self->next->claimed_address_function(self->next, address, context);
-}
-
-unsigned BatchMallocFn(const AllocatorDispatch* self,
-                       size_t size,
-                       void** results,
-                       unsigned num_requested,
-                       void* context) {
-  return self->next->batch_malloc_function(self->next, size, results,
-                                           num_requested, context);
-}
-
-void BatchFreeFn(const AllocatorDispatch* self,
-                 void** to_be_freed,
-                 unsigned num_to_be_freed,
-                 void* context) {
-  // batch_free is rarely used, so the Extreme LUD doesn't support batch_free
-  // (at least for now).
-  self->next->batch_free_function(self->next, to_be_freed, num_to_be_freed,
-                                  context);
 }
 
 void FreeDefiniteSizeFn(const AllocatorDispatch* self,
@@ -253,59 +188,46 @@ void FreeDefiniteSizeFn(const AllocatorDispatch* self,
   self->next->free_definite_size_function(self->next, address, size, context);
 }
 
-void TryFreeDefaultFn(const AllocatorDispatch* self,
-                      void* address,
-                      void* context) {
-  // try_free_default is rarely used, so the Extreme LUD doesn't support
-  // try_free_default (at least for now).
-  self->next->try_free_default_function(self->next, address, context);
-}
-
-void* AlignedMallocFn(const AllocatorDispatch* self,
-                      size_t size,
-                      size_t alignment,
-                      void* context) {
-  return self->next->aligned_malloc_function(self->next, size, alignment,
-                                             context);
-}
-
-void* AlignedReallocFn(const AllocatorDispatch* self,
-                       void* address,
-                       size_t size,
-                       size_t alignment,
-                       void* context) {
-  // Just the same as realloc, no support yet.
-  return self->next->aligned_realloc_function(self->next, address, size,
-                                              alignment, context);
-}
-
-void AlignedFreeFn(const AllocatorDispatch* self,
-                   void* address,
-                   void* context) {
-  // As of 2024 Jan, only _aligned_free on Windows calls this function, so the
-  // Extreme LUD doesn't support this for now.
-  self->next->aligned_free_function(self->next, address, context);
-}
-
 AllocatorDispatch allocator_dispatch = {
-    &AllocFn,
-    &AllocUncheckedFn,
-    &AllocZeroInitializedFn,
-    &AllocAlignedFn,
-    &ReallocFn,
-    &FreeFn,
-    &GetSizeEstimateFn,
-    &GoodSizeFn,
-    &ClaimedAddressFn,
-    &BatchMallocFn,
-    &BatchFreeFn,
-    &FreeDefiniteSizeFn,
-    &TryFreeDefaultFn,
-    &AlignedMallocFn,
-    &AlignedReallocFn,
-    &AlignedFreeFn,
-    nullptr,  // next
+    nullptr,  // alloc_function
+    nullptr,  // alloc_unchecked_function
+    nullptr,  // alloc_zero_initialized_function
+    nullptr,  // alloc_aligned_function
+    // realloc doesn't always deallocate memory, so the Extreme LUD doesn't
+    // support realloc.
+    nullptr,  // realloc_function
+    FreeFn,   // free_function
+    nullptr,  // get_size_estimate_function
+    nullptr,  // good_size_function
+    nullptr,  // claimed_address_function
+    nullptr,  // batch_malloc_function
+    // batch_free is rarely used, so the Extreme LUD doesn't support batch_free
+    // (at least for now).
+    nullptr,             // batch_free_function
+    FreeDefiniteSizeFn,  // free_definite_size_function
+    // try_free_default is rarely used, so the Extreme LUD doesn't support
+    // try_free_default (at least for now).
+    nullptr,  // try_free_default_function
+    nullptr,  // aligned_malloc_function
+    // The same reason with realloc_function.
+    nullptr,  // aligned_realloc_function
+    // As of 2024 Jan, only _aligned_free on Windows calls this function. The
+    // function is rarely used, so the Extreme LUD doesn't support this for now.
+    nullptr,  // aligned_free_function
+    nullptr   // next
 };
+
+[[maybe_unused]] base::trace_event::MallocDumpProvider::ExtremeLUDStats
+GetStats() {
+  if (!lightweight_quarantine_branch) {  // Not yet initialized.
+    return {};
+  }
+
+  base::trace_event::MallocDumpProvider::ExtremeLUDStats stats{
+      .capacity_in_bytes = lightweight_quarantine_branch->GetCapacityInBytes()};
+  lightweight_quarantine_branch->GetRoot().AccumulateStats(stats.lq_stats);
+  return stats;
+}
 
 }  // namespace
 
@@ -318,6 +240,11 @@ void InstallExtremeLightweightDetectorHooks(
 
   sampling_state.Init(init_options.sampling_frequency);
   allocator_shim::InsertAllocatorDispatch(&allocator_dispatch);
+
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+  base::trace_event::MallocDumpProvider::SetExtremeLUDGetStatsCallback(
+      base::BindRepeating(GetStats));
+#endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 }
 
 partition_alloc::internal::LightweightQuarantineBranch&

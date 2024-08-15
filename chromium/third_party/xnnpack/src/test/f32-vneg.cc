@@ -8,14 +8,19 @@
 //   Generator: tools/generate-vunary-test.py
 
 
-#include <vector>
+#include <array>
+#include <cmath>
+#include <cstddef>
+#include <limits>
 
-#include <gtest/gtest.h>
-
+#include <xnnpack.h>
 #include <xnnpack/common.h>
 #include <xnnpack/isa-checks.h>
+#include <xnnpack/microparams-init.h>
+#include <xnnpack/microparams.h>
 #include <xnnpack/vunary.h>
 
+#include <gtest/gtest.h>
 #include "vunary-microkernel-tester.h"
 
 

@@ -4,11 +4,9 @@
 
 #import "components/pref_registry/pref_registry_syncable.h"
 #import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/tabs/model/inactive_tabs/features.h"
 #import "prefs/vivaldi_pref_names.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @implementation VivaldiTabSettingPrefs
 
@@ -32,6 +30,11 @@
   return prefService->GetBoolean(vivaldiprefs::kVivaldiTabStackEnabled);;
 }
 
+/// Returns whether inactive tabs available.
++ (BOOL)isInactiveTabsAvailable {
+  return IsInactiveTabsAvailable();
+}
+
 /// Sets the desktop style tab mode.
 + (void)setDesktopTabsMode:(BOOL)enabled
             inPrefServices:(PrefService*)prefService {
@@ -41,6 +44,19 @@
 + (void)setUseTabStack:(BOOL)enabled
         inPrefServices:(PrefService*)prefService {
   prefService->SetBoolean(vivaldiprefs::kVivaldiTabStackEnabled, enabled);
+}
+
+/// Sets the bottom omnibox.
++ (void)setBottomOmniboxEnabled:(BOOL)enabled
+                 inPrefServices:(PrefService*)prefService {
+  prefService->SetBoolean(prefs::kBottomOmnibox, enabled);
+}
+
+/// Sets the reverse search suggestion for bottom omnibox.
++ (void)setReverseSearchSuggestionsEnabled:(BOOL)enabled
+                            inPrefServices:(PrefService*)prefService {
+  prefService->SetBoolean(vivaldiprefs::kVivaldiReverseSearchResultsEnabled,
+                          enabled);
 }
 
 @end

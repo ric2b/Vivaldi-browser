@@ -62,7 +62,7 @@ void VivaldiAccountPasswordHandler::ForgetPassword() {
   password_form.url = GURL(kSyncOrigin);
   password_form.username_value = base::UTF8ToUTF16(delegate_->GetUsername());
 
-  password_store_->RemoveLogin(password_form);
+  password_store_->RemoveLogin(FROM_HERE, password_form);
 }
 
 void VivaldiAccountPasswordHandler::OnGetPasswordStoreResults(

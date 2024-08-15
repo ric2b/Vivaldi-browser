@@ -27,8 +27,8 @@
 #include "libavutil/avassert.h"
 #include "libavutil/bprint.h"
 #include "libavutil/channel_layout.h"
-#include "libavutil/hwcontext.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 
@@ -251,7 +251,7 @@ static int graph_config_links(AVFilterGraph *graph, void *log_ctx)
         filt = graph->filters[i];
 
         if (!filt->nb_outputs) {
-            if ((ret = avfilter_config_links(filt)))
+            if ((ret = ff_filter_config_links(filt)))
                 return ret;
         }
     }
@@ -733,12 +733,6 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
         ret = av_channel_layout_copy(&link->ch_layout, &link->incfg.channel_layouts->channel_layouts[0]);
         if (ret < 0)
             return ret;
-#if FF_API_OLD_CHANNEL_LAYOUT
-FF_DISABLE_DEPRECATION_WARNINGS
-        link->channel_layout = link->ch_layout.order == AV_CHANNEL_ORDER_NATIVE ?
-                               link->ch_layout.u.mask : 0;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
     }
 
     ff_formats_unref(&link->incfg.formats);
@@ -799,6 +793,10 @@ static int reduce_formats_on_filter(AVFilterContext *filter)
     REDUCE_FORMATS(int,      AVFilterFormats,        formats,         formats,
                    nb_formats, ff_add_format);
     REDUCE_FORMATS(int,      AVFilterFormats,        samplerates,     formats,
+                   nb_formats, ff_add_format);
+    REDUCE_FORMATS(int,      AVFilterFormats,        color_spaces,    formats,
+                   nb_formats, ff_add_format);
+    REDUCE_FORMATS(int,      AVFilterFormats,        color_ranges,    formats,
                    nb_formats, ff_add_format);
 
     /* reduce channel layouts */
@@ -910,82 +908,6 @@ static void swap_samplerates(AVFilterGraph *graph)
 
     for (i = 0; i < graph->nb_filters; i++)
         swap_samplerates_on_filter(graph->filters[i]);
-}
-
-static void swap_color_spaces_on_filter(AVFilterContext *filter)
-{
-    AVFilterLink *link = NULL;
-    enum AVColorSpace csp;
-    int i;
-
-    for (i = 0; i < filter->nb_inputs; i++) {
-        link = filter->inputs[i];
-        if (link->type == AVMEDIA_TYPE_VIDEO &&
-            link->outcfg.color_spaces->nb_formats == 1)
-            break;
-    }
-    if (i == filter->nb_inputs)
-        return;
-
-    csp = link->outcfg.color_spaces->formats[0];
-
-    for (i = 0; i < filter->nb_outputs; i++) {
-        AVFilterLink *outlink = filter->outputs[i];
-        if (outlink->type != AVMEDIA_TYPE_VIDEO)
-            continue;
-        /* there is no meaningful 'score' between different yuv matrices,
-         * so just prioritize an exact match if it exists */
-        for (int j = 0; j < outlink->incfg.color_spaces->nb_formats; j++) {
-            if (csp == outlink->incfg.color_spaces->formats[j]) {
-                FFSWAP(int, outlink->incfg.color_spaces->formats[0],
-                       outlink->incfg.color_spaces->formats[j]);
-                break;
-            }
-        }
-    }
-}
-
-static void swap_color_spaces(AVFilterGraph *graph)
-{
-    for (int i = 0; i < graph->nb_filters; i++)
-        swap_color_spaces_on_filter(graph->filters[i]);
-}
-
-static void swap_color_ranges_on_filter(AVFilterContext *filter)
-{
-    AVFilterLink *link = NULL;
-    enum AVColorRange range;
-    int i;
-
-    for (i = 0; i < filter->nb_inputs; i++) {
-        link = filter->inputs[i];
-        if (link->type == AVMEDIA_TYPE_VIDEO &&
-            link->outcfg.color_ranges->nb_formats == 1)
-            break;
-    }
-    if (i == filter->nb_inputs)
-        return;
-
-    range = link->outcfg.color_ranges->formats[0];
-
-    for (i = 0; i < filter->nb_outputs; i++) {
-        AVFilterLink *outlink = filter->outputs[i];
-        if (outlink->type != AVMEDIA_TYPE_VIDEO)
-            continue;
-        for (int j = 0; j < outlink->incfg.color_ranges->nb_formats; j++) {
-            if (range == outlink->incfg.color_ranges->formats[j]) {
-                FFSWAP(int, outlink->incfg.color_ranges->formats[0],
-                       outlink->incfg.color_ranges->formats[j]);
-                break;
-            }
-        }
-    }
-}
-
-static void swap_color_ranges(AVFilterGraph *graph)
-{
-    for (int i = 0; i < graph->nb_filters; i++)
-        swap_color_ranges_on_filter(graph->filters[i]);
 }
 
 #define CH_CENTER_PAIR (AV_CH_FRONT_LEFT_OF_CENTER | AV_CH_FRONT_RIGHT_OF_CENTER)
@@ -1263,10 +1185,6 @@ static int graph_config_formats(AVFilterGraph *graph, void *log_ctx)
      * of format conversion inside filters */
     if ((ret = reduce_formats(graph)) < 0)
         return ret;
-
-    /* for video filters, ensure that the best colorspace metadata is selected */
-    swap_color_spaces(graph);
-    swap_color_ranges(graph);
 
     /* for audio filters, ensure the best format, sample rate and channel layout
      * is selected */

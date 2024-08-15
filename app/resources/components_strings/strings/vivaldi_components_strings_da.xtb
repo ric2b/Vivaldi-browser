@@ -169,7 +169,6 @@
 <translation id="7353601530677266744">Kommandolinje</translation>
 <translation id="7364115444476960850">Siden du forsøgte at få adgang tit blev blokeret af Vivaldi's <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profilsti</translation>
-<translation id="7445762425076701745">Identiteten på den server, som du er tilknyttet, kan ikke bekræftes. Du er tilknyttet en server via et navn, der kun er gyldigt i dit netværk, og som en ekstern certifikatautoritet derfor ikke har mulighed for at bekræfte ejerskabet på. Da enkelte certifikatautoriteter alligevel udsteder certifikater for disse navne, kan vi på ingen måde sikre, at du er tilknyttet det tilsigtede website og ikke til en forbryder.</translation>
 <translation id="7455133967321480974">Brug global standard (bloker)</translation>
 <translation id="7518003948725431193">Ingen webside fundet på webadressen: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Denne webside kræver data, du tidligere har indtastet, før den kan vises korrekt. Du kan sende disse data igen, men hvis du gør dette, gentager du enhver handling, som denne side tidligere har foretaget.</translation>

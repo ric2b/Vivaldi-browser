@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/functional/callback.h"
+#include "base/functional/callback_forward.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/federated_identity_modal_dialog_view_delegate.h"
 #include "content/public/browser/identity_request_account.h"
@@ -22,12 +23,15 @@ namespace content {
 class WebContents;
 
 struct CONTENT_EXPORT ClientMetadata {
-  ClientMetadata(const GURL& tos_url, const GURL& privacy_policy_url);
+  ClientMetadata(const GURL& terms_of_service_url,
+                 const GURL& privacy_policy_url,
+                 const GURL& brand_icon_url);
   ClientMetadata(const ClientMetadata& other);
   ~ClientMetadata();
 
   GURL terms_of_service_url;
   GURL privacy_policy_url;
+  GURL brand_icon_url;
 };
 
 struct CONTENT_EXPORT IdentityCredentialTokenError {
@@ -44,6 +48,7 @@ struct CONTENT_EXPORT IdentityProviderMetadata {
   std::optional<SkColor> brand_background_color;
   GURL brand_icon_url;
   GURL idp_login_url;
+  std::string requested_label;
   // The URL of the configuration endpoint. This is stored in
   // IdentityProviderMetadata so that the UI code can pass it along when an
   // Account is selected by the user.
@@ -111,8 +116,8 @@ class CONTENT_EXPORT IdentityRequestDialogController {
   using DismissCallback =
       base::OnceCallback<void(DismissReason dismiss_reason)>;
   using LoginToIdPCallback =
-      base::OnceCallback<void(const GURL& /*idp_config_url*/,
-                              GURL /*idp_login_url*/)>;
+      base::RepeatingCallback<void(const GURL& /*idp_config_url*/,
+                                   GURL /*idp_login_url*/)>;
   using MoreDetailsCallback = base::OnceCallback<void()>;
   using AccountsDisplayedCallback = base::OnceCallback<void()>;
 

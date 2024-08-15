@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 
+#include "platform/base/span.h"
 #include "util/osp_logging.h"
 
 namespace openscreen::osp {
@@ -25,7 +26,7 @@ void FakeQuicConnectionFactoryBridge::OnConnectionClosed(
     connections_.receiver = nullptr;
     return;
   }
-  OSP_DCHECK(false) << "reporting an unknown connection as closed";
+  OSP_CHECK(false) << "reporting an unknown connection as closed";
 }
 
 void FakeQuicConnectionFactoryBridge::OnOutgoingStream(
@@ -39,15 +40,15 @@ void FakeQuicConnectionFactoryBridge::OnOutgoingStream(
   }
 
   if (remote_connection) {
-    remote_connection->delegate()->OnIncomingStream(
+    remote_connection->delegate().OnIncomingStream(
         remote_connection->id(), remote_connection->MakeIncomingStream());
   }
 }
 
 void FakeQuicConnectionFactoryBridge::SetServerDelegate(
-    QuicConnectionFactory::ServerDelegate* delegate,
+    QuicConnectionFactoryServer::ServerDelegate* delegate,
     const IPEndpoint& endpoint) {
-  OSP_DCHECK(!delegate_ || !delegate);
+  OSP_CHECK(!delegate_ || !delegate);
   delegate_ = delegate;
   receiver_endpoint_ = endpoint;
 }
@@ -62,9 +63,9 @@ void FakeQuicConnectionFactoryBridge::RunTasks(bool is_client) {
 
   if (connections_pending_) {
     *idle_flag = false;
-    connections_.receiver->delegate()->OnCryptoHandshakeComplete(
+    connections_.receiver->delegate().OnCryptoHandshakeComplete(
         connections_.receiver->id());
-    connections_.controller->delegate()->OnCryptoHandshakeComplete(
+    connections_.controller->delegate().OnCryptoHandshakeComplete(
         connections_.controller->id());
     connections_pending_ = false;
     return;
@@ -78,27 +79,26 @@ void FakeQuicConnectionFactoryBridge::RunTasks(bool is_client) {
                      connections_.receiver->streams().begin());
 
   for (size_t i = 0; i < num_streams; ++i) {
-    auto* controller_stream = stream_it_pair.first->second;
-    auto* receiver_stream = stream_it_pair.second->second;
+    auto* controller_stream = stream_it_pair.first->second.get();
+    auto* receiver_stream = stream_it_pair.second->second.get();
 
     std::vector<uint8_t> written_data = controller_stream->TakeWrittenData();
-    OSP_DCHECK(controller_stream->TakeReceivedData().empty());
+    OSP_CHECK(controller_stream->TakeReceivedData().empty());
 
     if (!written_data.empty()) {
       *idle_flag = false;
-      receiver_stream->delegate()->OnReceived(
-          receiver_stream, reinterpret_cast<const char*>(written_data.data()),
-          written_data.size());
+      receiver_stream->delegate().OnReceived(
+          receiver_stream, ByteView(written_data.data(), written_data.size()));
     }
 
     written_data = receiver_stream->TakeWrittenData();
-    OSP_DCHECK(receiver_stream->TakeReceivedData().empty());
+    OSP_CHECK(receiver_stream->TakeReceivedData().empty());
 
     if (written_data.size()) {
       *idle_flag = false;
-      controller_stream->delegate()->OnReceived(
-          controller_stream, reinterpret_cast<const char*>(written_data.data()),
-          written_data.size());
+      controller_stream->delegate().OnReceived(
+          controller_stream,
+          ByteView(written_data.data(), written_data.size()));
     }
 
     // Close the read end for closed write ends
@@ -111,11 +111,13 @@ void FakeQuicConnectionFactoryBridge::RunTasks(bool is_client) {
 
     if (controller_stream->both_ends_closed() &&
         receiver_stream->both_ends_closed()) {
-      controller_stream->delegate()->OnClose(controller_stream->id());
-      receiver_stream->delegate()->OnClose(receiver_stream->id());
+      controller_stream->delegate().OnClose(controller_stream->GetStreamId());
+      receiver_stream->delegate().OnClose(receiver_stream->GetStreamId());
 
-      controller_stream->delegate()->OnReceived(controller_stream, nullptr, 0);
-      receiver_stream->delegate()->OnReceived(receiver_stream, nullptr, 0);
+      controller_stream->delegate().OnReceived(controller_stream,
+                                               ByteView(nullptr, size_t(0)));
+      receiver_stream->delegate().OnReceived(receiver_stream,
+                                             ByteView(nullptr, size_t(0)));
 
       stream_it_pair.first =
           connections_.controller->streams().erase(stream_it_pair.first);
@@ -129,50 +131,51 @@ void FakeQuicConnectionFactoryBridge::RunTasks(bool is_client) {
   }
 }
 
-std::unique_ptr<QuicConnection> FakeQuicConnectionFactoryBridge::Connect(
+ErrorOr<std::unique_ptr<QuicConnection>>
+FakeQuicConnectionFactoryBridge::Connect(
     const IPEndpoint& endpoint,
     QuicConnection::Delegate* connection_delegate) {
   if (endpoint != receiver_endpoint_) {
-    return nullptr;
+    return Error::Code::kParameterInvalid;
   }
 
-  OSP_DCHECK(!connections_.controller);
-  OSP_DCHECK(!connections_.receiver);
+  OSP_CHECK(!connections_.controller);
+  OSP_CHECK(!connections_.receiver);
   auto controller_connection = std::make_unique<FakeQuicConnection>(
-      this, next_connection_id_++, connection_delegate);
+      *this, std::to_string(next_connection_id_++), *connection_delegate);
   connections_.controller = controller_connection.get();
 
   auto receiver_connection = std::make_unique<FakeQuicConnection>(
-      this, next_connection_id_++,
-      delegate_->NextConnectionDelegate(controller_endpoint_));
+      *this, std::to_string(next_connection_id_++),
+      *delegate_->NextConnectionDelegate(controller_endpoint_));
   connections_.receiver = receiver_connection.get();
   delegate_->OnIncomingConnection(std::move(receiver_connection));
-  return controller_connection;
+  return ErrorOr<std::unique_ptr<QuicConnection>>(
+      std::move(controller_connection));
 }
 
 FakeClientQuicConnectionFactory::FakeClientQuicConnectionFactory(
+    TaskRunner& task_runner,
     FakeQuicConnectionFactoryBridge* bridge)
-    : bridge_(bridge) {}
+    : QuicConnectionFactoryClient(task_runner), bridge_(bridge) {}
 FakeClientQuicConnectionFactory::~FakeClientQuicConnectionFactory() = default;
 
-void FakeClientQuicConnectionFactory::SetServerDelegate(
-    ServerDelegate* delegate,
-    const std::vector<IPEndpoint>& endpoints) {
-  OSP_DCHECK(false) << "don't call SetServerDelegate from QuicClient side";
-}
-
-std::unique_ptr<QuicConnection> FakeClientQuicConnectionFactory::Connect(
-    const IPEndpoint& endpoint,
+ErrorOr<std::unique_ptr<QuicConnection>>
+FakeClientQuicConnectionFactory::Connect(
+    const IPEndpoint& local_endpoint,
+    const IPEndpoint& remote_endpoint,
+    const std::string& fingerprint,
     QuicConnection::Delegate* connection_delegate) {
-  return bridge_->Connect(endpoint, connection_delegate);
+  return bridge_->Connect(remote_endpoint, connection_delegate);
 }
 
-void FakeClientQuicConnectionFactory::OnError(UdpSocket* socket, Error error) {
+void FakeClientQuicConnectionFactory::OnError(UdpSocket* socket,
+                                              const Error& error) {
   OSP_UNIMPLEMENTED();
 }
 
 void FakeClientQuicConnectionFactory::OnSendError(UdpSocket* socket,
-                                                  Error error) {
+                                                  const Error& error) {
   OSP_UNIMPLEMENTED();
 }
 
@@ -183,34 +186,29 @@ void FakeClientQuicConnectionFactory::OnRead(UdpSocket* socket,
 }
 
 FakeServerQuicConnectionFactory::FakeServerQuicConnectionFactory(
+    TaskRunner& task_runner,
     FakeQuicConnectionFactoryBridge* bridge)
-    : bridge_(bridge) {}
+    : QuicConnectionFactoryServer(task_runner), bridge_(bridge) {}
 FakeServerQuicConnectionFactory::~FakeServerQuicConnectionFactory() = default;
 
 void FakeServerQuicConnectionFactory::SetServerDelegate(
     ServerDelegate* delegate,
     const std::vector<IPEndpoint>& endpoints) {
   if (delegate) {
-    OSP_DCHECK_EQ(1u, endpoints.size())
+    OSP_CHECK_EQ(1u, endpoints.size())
         << "fake bridge doesn't support multiple server endpoints";
   }
   bridge_->SetServerDelegate(delegate,
                              endpoints.empty() ? IPEndpoint{} : endpoints[0]);
 }
 
-std::unique_ptr<QuicConnection> FakeServerQuicConnectionFactory::Connect(
-    const IPEndpoint& endpoint,
-    QuicConnection::Delegate* connection_delegate) {
-  OSP_DCHECK(false) << "don't call Connect() from QuicServer side";
-  return nullptr;
-}
-
-void FakeServerQuicConnectionFactory::OnError(UdpSocket* socket, Error error) {
+void FakeServerQuicConnectionFactory::OnError(UdpSocket* socket,
+                                              const Error& error) {
   OSP_UNIMPLEMENTED();
 }
 
 void FakeServerQuicConnectionFactory::OnSendError(UdpSocket* socket,
-                                                  Error error) {
+                                                  const Error& error) {
   OSP_UNIMPLEMENTED();
 }
 

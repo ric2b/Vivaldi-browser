@@ -42,16 +42,6 @@ import org.chromium.build.BuildConfig;
         TouchDelegate touchDelegate = new TouchDelegate(delegateArea, mUrlActionContainer);
         assert mUrlActionContainer.getParent() == this;
         mCompositeTouchDelegate.addDelegateForDescendantView(touchDelegate);
-
-        if (OmniboxFeatures.shouldShowModernizeVisualUpdate(getContext())) {
-            setPaddingRelative(
-                    getContext()
-                            .getResources()
-                            .getDimensionPixelSize(R.dimen.location_bar_start_padding_modern),
-                    getPaddingTop(),
-                    getPaddingEnd(),
-                    getPaddingBottom());
-        }
     }
 
     @Override
@@ -98,7 +88,7 @@ import org.chromium.build.BuildConfig;
     /**
      * Returns {@link FrameLayout.LayoutParams} of the LocationBar view.
      *
-     * <p>TODO(1133482): Hide this View interaction if possible.
+     * <p>TODO(crbug.com/40151029): Hide this View interaction if possible.
      *
      * @see View#getLayoutParams()
      */

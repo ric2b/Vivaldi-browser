@@ -292,6 +292,11 @@ void WidgetDelegate::DeleteDelegate() {
   for (auto&& callback : delete_callbacks)
     std::move(callback).Run();
 
+  if (weak_this && !owned_by_widget && widget_ &&
+      widget_->ownership() == Widget::InitParams::CLIENT_OWNS_WIDGET) {
+    WidgetIsZombie(widget_.get());
+  }
+
   // TODO(kylixrd): Eventually the widget will never own the delegate, so much
   // of this code will need to be reworked.
   //
@@ -504,6 +509,26 @@ void WidgetDelegate::SetContentsViewImpl(std::unique_ptr<View> contents) {
   DCHECK(!unowned_contents_view_);
   owned_contents_view_ = std::move(contents);
   unowned_contents_view_ = owned_contents_view_.get();
+}
+
+gfx::Rect WidgetDelegate::GetDesiredWidgetBounds() {
+  DCHECK(GetWidget());
+
+  if (has_desired_bounds_delegate()) {
+    const gfx::Rect desired_bounds = params_.desired_bounds_delegate.Run();
+    // This can for instance be empty during browser shutdown where the delegate
+    // fails to find the appropriate Widget native view to generate bounds. See
+    // GetModalDialogBounds in constrained_window which as of this commit return
+    // empty bounds if it can't find the the host widget. Ideally this Widget
+    // would go away or at least be "in shutdown" and probably avoid this code
+    // path before the underlying host Widget or native view goes away.
+    if (!desired_bounds.IsEmpty()) {
+      return desired_bounds;
+    }
+  }
+
+  return gfx::Rect(GetWidget()->GetWindowBoundsInScreen().origin(),
+                   GetWidget()->GetContentsView()->GetPreferredSize({}));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

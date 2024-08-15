@@ -10,6 +10,7 @@ await ComponentHelpers.ComponentServerSetup.setup();
 await FrontendHelpers.initializeGlobalVars();
 
 const testIcon = 'file-image';
+const toggledIconName = 'file-document';
 const plusIcon = 'plus';
 const minusIcon = 'minus';
 
@@ -35,16 +36,6 @@ primaryButton.title = 'Custom title';
 primaryButton.onclick = () => alert('clicked');
 appendButton(primaryButton);
 
-const primaryButtonWithoutRightBorderRadius = new Buttons.Button.Button();
-primaryButtonWithoutRightBorderRadius.data = {
-  variant: Buttons.Button.Variant.PRIMARY,
-};
-primaryButtonWithoutRightBorderRadius.style.setProperty('--override-button-no-right-border-radius', '1');
-primaryButtonWithoutRightBorderRadius.innerText = 'No right border radius';
-primaryButtonWithoutRightBorderRadius.title = 'Custom title';
-primaryButtonWithoutRightBorderRadius.onclick = () => alert('clicked');
-appendButton(primaryButtonWithoutRightBorderRadius);
-
 // Primary (forced active)
 const forcedActive = new Buttons.Button.Button();
 forcedActive.data = {
@@ -66,11 +57,21 @@ forcedSpinner.onclick = () => alert('clicked');
 appendButton(forcedSpinner);
 
 // Secondary
+const secondarymicroButton = new Buttons.Button.Button();
+secondarymicroButton.innerText = 'Click me';
+secondarymicroButton.onclick = () => alert('clicked');
+secondarymicroButton.data = {
+  variant: Buttons.Button.Variant.OUTLINED,
+  size: Buttons.Button.Size.MICRO,
+};
+appendButton(secondarymicroButton);
+
+// Secondary
 const secondaryButton = new Buttons.Button.Button();
 secondaryButton.innerText = 'Click me';
 secondaryButton.onclick = () => alert('clicked');
 secondaryButton.data = {
-  variant: Buttons.Button.Variant.SECONDARY,
+  variant: Buttons.Button.Variant.OUTLINED,
 };
 appendButton(secondaryButton);
 
@@ -79,10 +80,19 @@ const secondarySpinnerButton = new Buttons.Button.Button();
 secondarySpinnerButton.innerText = 'Click me';
 secondarySpinnerButton.onclick = () => alert('clicked');
 secondarySpinnerButton.data = {
-  variant: Buttons.Button.Variant.SECONDARY,
+  variant: Buttons.Button.Variant.OUTLINED,
   spinner: true,
 };
 appendButton(secondarySpinnerButton);
+
+// Secondary spinner
+const textButton = new Buttons.Button.Button();
+textButton.innerText = 'Click me';
+textButton.onclick = () => alert('clicked');
+textButton.data = {
+  variant: Buttons.Button.Variant.TEXT,
+};
+appendButton(textButton);
 
 // Primary
 const disabledPrimaryButtons = new Buttons.Button.Button();
@@ -110,7 +120,7 @@ const disabledSecondaryButton = new Buttons.Button.Button();
 disabledSecondaryButton.innerText = 'Cannot click me';
 disabledSecondaryButton.onclick = () => alert('clicked');
 disabledSecondaryButton.data = {
-  variant: Buttons.Button.Variant.SECONDARY,
+  variant: Buttons.Button.Variant.OUTLINED,
   disabled: true,
 };
 appendButton(disabledSecondaryButton);
@@ -120,7 +130,7 @@ const disabledSpinnerSecondaryButton = new Buttons.Button.Button();
 disabledSpinnerSecondaryButton.innerText = 'Cannot click me';
 disabledSpinnerSecondaryButton.onclick = () => alert('clicked');
 disabledSpinnerSecondaryButton.data = {
-  variant: Buttons.Button.Variant.SECONDARY,
+  variant: Buttons.Button.Variant.OUTLINED,
   disabled: true,
   spinner: true,
 };
@@ -143,10 +153,33 @@ secondaryIconButton.onclick = () => {
   primaryButton.focus();
 };
 secondaryIconButton.data = {
-  variant: Buttons.Button.Variant.SECONDARY,
+  variant: Buttons.Button.Variant.OUTLINED,
   iconName: testIcon,
 };
 appendButton(secondaryIconButton);
+
+// Text Icon
+const textIconButton = new Buttons.Button.Button();
+textIconButton.innerText = 'Click me';
+textIconButton.onclick = () => alert('clicked');
+textIconButton.data = {
+  variant: Buttons.Button.Variant.TEXT,
+  iconName: testIcon,
+};
+appendButton(textIconButton);
+
+// Secondary Icon Micro
+const secondaryMicroIconButton = new Buttons.Button.Button();
+secondaryMicroIconButton.innerText = 'Click me';
+secondaryMicroIconButton.onclick = () => {
+  primaryButton.focus();
+};
+secondaryMicroIconButton.data = {
+  variant: Buttons.Button.Variant.OUTLINED,
+  iconName: testIcon,
+  size: Buttons.Button.Size.MICRO,
+};
+appendButton(secondaryMicroIconButton);
 
 // Primary Icon Only
 const primaryIconOnlyButton = new Buttons.Button.Button();
@@ -173,10 +206,34 @@ const secondaryIconOnlyButton = new Buttons.Button.Button();
 secondaryIconOnlyButton.onclick = () => alert('clicked');
 secondaryIconOnlyButton.style.width = '24px';
 secondaryIconOnlyButton.data = {
-  variant: Buttons.Button.Variant.SECONDARY,
+  variant: Buttons.Button.Variant.OUTLINED,
   iconName: testIcon,
 };
 appendButton(secondaryIconOnlyButton);
+
+// Primary Toggle
+const primaryToggleIconButton = new Buttons.Button.Button();
+primaryToggleIconButton.style.width = '24px';
+primaryToggleIconButton.data = {
+  variant: Buttons.Button.Variant.ICON_TOGGLE,
+  toggleType: Buttons.Button.ToggleType.PRIMARY,
+  iconName: testIcon,
+  toggledIconName: toggledIconName,
+  toggled: false,
+};
+appendButton(primaryToggleIconButton);
+
+// Red Toggle
+const redToggleIconButton = new Buttons.Button.Button();
+redToggleIconButton.style.width = '24px';
+redToggleIconButton.data = {
+  variant: Buttons.Button.Variant.ICON_TOGGLE,
+  toggleType: Buttons.Button.ToggleType.RED,
+  iconName: testIcon,
+  toggledIconName: toggledIconName,
+  toggled: true,
+};
+appendButton(redToggleIconButton);
 
 // Small Primary Icon
 const smallPrimaryIconButton = new Buttons.Button.Button();
@@ -194,7 +251,7 @@ const smallSecondaryIconOnlyButton = new Buttons.Button.Button();
 smallSecondaryIconOnlyButton.onclick = () => alert('clicked');
 smallSecondaryIconOnlyButton.style.width = '18px';
 smallSecondaryIconOnlyButton.data = {
-  variant: Buttons.Button.Variant.SECONDARY,
+  variant: Buttons.Button.Variant.OUTLINED,
   iconName: testIcon,
   size: Buttons.Button.Size.SMALL,
 };
@@ -217,7 +274,7 @@ const disabledSecondaryIconOnlyButton = new Buttons.Button.Button();
 disabledSecondaryIconOnlyButton.onclick = () => alert('clicked');
 disabledSecondaryIconOnlyButton.style.width = '18px';
 disabledSecondaryIconOnlyButton.data = {
-  variant: Buttons.Button.Variant.SECONDARY,
+  variant: Buttons.Button.Variant.OUTLINED,
   iconName: testIcon,
   size: Buttons.Button.Size.SMALL,
   disabled: true,
@@ -227,7 +284,7 @@ appendButton(disabledSecondaryIconOnlyButton);
 // Round Button
 const roundButton = new Buttons.Button.Button();
 roundButton.data = {
-  variant: Buttons.Button.Variant.ROUND,
+  variant: Buttons.Button.Variant.ICON,
   iconName: testIcon,
 };
 roundButton.title = 'Round Button';
@@ -237,7 +294,7 @@ appendButton(roundButton);
 // Disabled Round Button
 const roundButtonDisabled = new Buttons.Button.Button();
 roundButtonDisabled.data = {
-  variant: Buttons.Button.Variant.ROUND,
+  variant: Buttons.Button.Variant.ICON,
   iconName: testIcon,
   disabled: true,
 };
@@ -254,7 +311,7 @@ const roundIcons = [
 for (const roundIcon of roundIcons) {
   const smallRoundButton = new Buttons.Button.Button();
   smallRoundButton.data = {
-    variant: Buttons.Button.Variant.ROUND,
+    variant: Buttons.Button.Variant.ICON,
     size: Buttons.Button.Size.SMALL,
     ...roundIcon,
   };
@@ -266,7 +323,7 @@ for (const roundIcon of roundIcons) {
 // Small Disabled Round Button
 const smallRoundButtonDisabled = new Buttons.Button.Button();
 smallRoundButtonDisabled.data = {
-  variant: Buttons.Button.Variant.ROUND,
+  variant: Buttons.Button.Variant.ICON,
   iconName: testIcon,
   disabled: true,
   size: Buttons.Button.Size.SMALL,
@@ -340,7 +397,7 @@ document.querySelector('#form')?.append(submitButton);
 // Reset Button
 const resetButton = new Buttons.Button.Button();
 resetButton.data = {
-  variant: Buttons.Button.Variant.SECONDARY,
+  variant: Buttons.Button.Variant.OUTLINED,
   type: 'reset',
 };
 resetButton.innerText = 'Reset';

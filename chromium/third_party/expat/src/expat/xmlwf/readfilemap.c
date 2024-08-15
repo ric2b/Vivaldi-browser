@@ -13,6 +13,7 @@
    Copyright (c) 2016-2017 Sebastian Pipping <sebastian@pipping.org>
    Copyright (c) 2017      Rhodri James <rhodri@wildebeest.org.uk>
    Copyright (c) 2017      Franek Korta <fkorta@gmail.com>
+   Copyright (c) 2022      Sean McBride <sean@rogue-research.com>
    Licensed under the MIT license:
 
    Permission is  hereby granted,  free of charge,  to any  person obtaining
@@ -67,7 +68,7 @@
 #  ifndef S_IFMT
 #    define S_IFMT _S_IFMT
 #  endif
-#  define S_ISREG(m) (((m)&S_IFMT) == S_IFREG)
+#  define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
 #endif /* not S_ISREG */
 
 #ifndef O_BINARY

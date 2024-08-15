@@ -40,8 +40,7 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
       content::WebContents* source,
       const content::NativeWebKeyboardEvent& event) override;
   void ContentsMouseEvent(content::WebContents* source,
-                          bool motion,
-                          bool exited) override;
+                          const ui::Event& event) override;
   bool PreHandleGestureEvent(content::WebContents* source,
                              const blink::WebGestureEvent& event) override;
 #if BUILDFLAG(IS_ANDROID)
@@ -76,7 +75,9 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
       content::NavigationHandle* navigation_handle) override;
   content::WebContents* OpenURLFromTab(
       content::WebContents* source,
-      const content::OpenURLParams& params) override;
+      const content::OpenURLParams& params,
+      base::OnceCallback<void(content::NavigationHandle&)> navigation_handle_callback)
+      override;
   std::unique_ptr<content::EyeDropper> OpenEyeDropper(
       content::RenderFrameHost* frame,
       content::EyeDropperListener* listener) override;
@@ -113,6 +114,9 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
   void DocumentOnLoadCompletedInPrimaryMainFrame() override;
   void PrimaryMainDocumentElementAvailable() override;
   void BeforeUnloadFired(bool proceed) override;
+  void DraggableRegionsChanged(
+      const std::vector<blink::mojom::DraggableRegionPtr>& regions,
+      content::WebContents* contents) override;
 
   bool has_resumed_ = false;
 

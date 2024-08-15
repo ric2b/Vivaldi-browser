@@ -115,8 +115,8 @@ class Sender final : public SenderPacketRouter::Sender,
   // the overall end-to-end connection process that occurs before Cast Streaming
   // is started). The `rtp_payload_type` does not affect the behavior of this
   // Sender. It is simply passed along to a Receiver in the RTP packet stream.
-  Sender(Environment* environment,
-         SenderPacketRouter* packet_router,
+  Sender(Environment& environment,
+         SenderPacketRouter& packet_router,
          SessionConfig config,
          RtpPayloadType rtp_payload_type);
 
@@ -270,18 +270,18 @@ class Sender final : public SenderPacketRouter::Sender,
 
   // Inline helper to return the slot that would contain the tracking info for
   // the given `frame_id`.
-  const PendingFrameSlot* get_slot_for(FrameId frame_id) const {
-    return &pending_frames_[(frame_id - FrameId::first()) %
-                            pending_frames_.size()];
+  const PendingFrameSlot& get_slot_for(FrameId frame_id) const {
+    return pending_frames_[(frame_id - FrameId::first()) %
+                           pending_frames_.size()];
   }
-  PendingFrameSlot* get_slot_for(FrameId frame_id) {
-    return &pending_frames_[(frame_id - FrameId::first()) %
-                            pending_frames_.size()];
+  PendingFrameSlot& get_slot_for(FrameId frame_id) {
+    return pending_frames_[(frame_id - FrameId::first()) %
+                           pending_frames_.size()];
   }
 
-  Environment* const environment_;
+  Environment& environment_;
   const SessionConfig config_;
-  SenderPacketRouter* const packet_router_;
+  SenderPacketRouter& packet_router_;
   RtcpSession rtcp_session_;
   CompoundRtcpParser rtcp_parser_;
   SenderReportBuilder sender_report_builder_;

@@ -185,6 +185,58 @@ IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticRoutineObserverBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticRoutineObserverBrowserTest,
+                       CanObserveOnRoutineRunningWithNetworkBandwidthInfo) {
+  SetRoutineObservation();
+  RegisterEventObserver(
+      api::os_diagnostics::OnRoutineRunning::kEventName,
+      base::BindLambdaForTesting([this] {
+        auto network_bandwidth_info = crosapi::
+            TelemetryDiagnosticNetworkBandwidthRoutineRunningInfo::New();
+        network_bandwidth_info->type =
+            crosapi::TelemetryDiagnosticNetworkBandwidthRoutineRunningInfo::
+                Type::kDownload;
+        network_bandwidth_info->speed_kbps = 100.0;
+
+        auto running_state =
+            crosapi::TelemetryDiagnosticRoutineStateRunning::New();
+        running_state->info =
+            crosapi::TelemetryDiagnosticRoutineRunningInfo::NewNetworkBandwidth(
+                std::move(network_bandwidth_info));
+
+        auto state = crosapi::TelemetryDiagnosticRoutineState::New();
+        state->state_union =
+            crosapi::TelemetryDiagnosticRoutineStateUnion::NewRunning(
+                std::move(running_state));
+        state->percentage = 50;
+
+        remote_->OnRoutineStateChange(std::move(state));
+      }));
+
+  CreateExtensionAndRunServiceWorker(
+      base::StringPrintf(R"(
+    chrome.test.runTests([
+      async function canObserveOnRoutineRunningWithNetworkBandwidthInfo() {
+        chrome.os.diagnostics.onRoutineRunning.addListener((event) => {
+          chrome.test.assertEq(event, {
+            info: {
+              "networkBandwidth": {
+                "speedKbps": 100.0,
+                "type": "download",
+              }
+            },
+            percentage: 50,
+            uuid:"%s",
+          });
+
+          chrome.test.succeed();
+        });
+      }
+    ]);
+  )",
+                         uuid_.AsLowercaseString().c_str()));
+}
+
+IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticRoutineObserverBrowserTest,
                        CanObserveOnRoutineWaiting) {
   SetRoutineObservation();
   RegisterEventObserver(
@@ -223,7 +275,7 @@ IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticRoutineObserverBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticRoutineObserverBrowserTest,
-                       CanObserveOnMemoryRoutineFinished) {
+                       CanObserveLegacyOnMemoryRoutineFinished) {
   SetLegacyFinishedEventRoutineObservation(
       crosapi::TelemetryDiagnosticRoutineArgument::Tag::kMemory);
   RegisterEventObserver(
@@ -294,7 +346,7 @@ IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticRoutineObserverBrowserTest,
 // contain the routine detail.
 IN_PROC_BROWSER_TEST_F(
     TelemetryExtensionDiagnosticRoutineObserverBrowserTest,
-    CanObserveOnVolumeButtonRoutineFinishedWithoutRoutineDetail) {
+    CanObserveLegacyOnVolumeButtonRoutineFinishedWithoutRoutineDetail) {
   SetLegacyFinishedEventRoutineObservation(
       crosapi::TelemetryDiagnosticRoutineArgument::Tag::kVolumeButton);
   RegisterEventObserver(
@@ -337,7 +389,7 @@ IN_PROC_BROWSER_TEST_F(
 // a routine detail.
 IN_PROC_BROWSER_TEST_F(
     TelemetryExtensionDiagnosticRoutineObserverBrowserTest,
-    CanObserveOnVolumeButtonRoutineFinishedWithRoutineDetail) {
+    CanObserveLegacyOnVolumeButtonRoutineFinishedWithRoutineDetail) {
   SetLegacyFinishedEventRoutineObservation(
       crosapi::TelemetryDiagnosticRoutineArgument::Tag::kVolumeButton);
   RegisterEventObserver(
@@ -384,7 +436,7 @@ IN_PROC_BROWSER_TEST_F(
 }
 
 IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticRoutineObserverBrowserTest,
-                       CanObserveOnFanRoutineFinished) {
+                       CanObserveLegacyOnFanRoutineFinished) {
   SetLegacyFinishedEventRoutineObservation(
       crosapi::TelemetryDiagnosticRoutineArgument::Tag::kFan);
   RegisterEventObserver(
@@ -420,6 +472,273 @@ IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticRoutineObserverBrowserTest,
             "failed_fan_ids": [1],
             "fan_count_status": "matched",
             "has_passed": true,
+            "uuid":"%s"
+          });
+
+          chrome.test.succeed();
+        });
+      }
+    ]);
+  )",
+                         uuid_.AsLowercaseString().c_str()));
+
+  auto info = WaitForFinishedReport();
+  EXPECT_EQ(info.extension_id, extension_id());
+  EXPECT_EQ(info.uuid, uuid_);
+}
+
+IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticRoutineObserverBrowserTest,
+                       CanObserveOnRoutineFinishedWithNullDetail) {
+  SetRoutineObservation();
+  RegisterEventObserver(
+      api::os_diagnostics::OnRoutineFinished::kEventName,
+      base::BindLambdaForTesting([this] {
+        auto finished_state = crosapi::TelemetryDiagnosticRoutineState::New();
+        finished_state->state_union =
+            crosapi::TelemetryDiagnosticRoutineStateUnion::NewFinished(
+                crosapi::TelemetryDiagnosticRoutineStateFinished::New(
+                    /*has_passed=*/true, /*detail=*/nullptr));
+        finished_state->percentage = 100;
+
+        remote_->OnRoutineStateChange(std::move(finished_state));
+      }));
+
+  CreateExtensionAndRunServiceWorker(
+      base::StringPrintf(R"(
+    chrome.test.runTests([
+      async function canObserveOnRoutineFinishedWithNullDetail() {
+        chrome.os.diagnostics.onRoutineFinished.addListener((event) => {
+          chrome.test.assertEq(event, {
+            "hasPassed": true,
+            "uuid":"%s"
+          });
+
+          chrome.test.succeed();
+        });
+      }
+    ]);
+  )",
+                         uuid_.AsLowercaseString().c_str()));
+
+  auto info = WaitForFinishedReport();
+  EXPECT_EQ(info.extension_id, extension_id());
+  EXPECT_EQ(info.uuid, uuid_);
+}
+
+IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticRoutineObserverBrowserTest,
+                       CanObserveOnRoutineFinishedWithMemoryDetail) {
+  SetRoutineObservation();
+  RegisterEventObserver(
+      api::os_diagnostics::OnRoutineFinished::kEventName,
+      base::BindLambdaForTesting([this] {
+        auto memtester_result =
+            crosapi::TelemetryDiagnosticMemtesterResult::New();
+        memtester_result->passed_items = {
+            crosapi::TelemetryDiagnosticMemtesterTestItemEnum::kCompareDIV,
+            crosapi::TelemetryDiagnosticMemtesterTestItemEnum::kCompareMUL};
+        memtester_result->failed_items = {
+            crosapi::TelemetryDiagnosticMemtesterTestItemEnum::kCompareAND,
+            crosapi::TelemetryDiagnosticMemtesterTestItemEnum::kCompareSUB};
+
+        auto memory_detail =
+            crosapi::TelemetryDiagnosticMemoryRoutineDetail::New();
+        memory_detail->bytes_tested = 500;
+        memory_detail->result = std::move(memtester_result);
+
+        auto finished_detail =
+            crosapi::TelemetryDiagnosticRoutineDetail::NewMemory(
+                std::move(memory_detail));
+
+        auto finished_state = crosapi::TelemetryDiagnosticRoutineState::New();
+        finished_state->state_union =
+            crosapi::TelemetryDiagnosticRoutineStateUnion::NewFinished(
+                crosapi::TelemetryDiagnosticRoutineStateFinished::New(
+                    /*has_passed=*/true, std::move(finished_detail)));
+        finished_state->percentage = 100;
+
+        remote_->OnRoutineStateChange(std::move(finished_state));
+      }));
+
+  CreateExtensionAndRunServiceWorker(
+      base::StringPrintf(R"(
+    chrome.test.runTests([
+      async function canObserveOnRoutineFinishedWithMemoryDetail() {
+        chrome.os.diagnostics.onRoutineFinished.addListener((event) => {
+          chrome.test.assertEq(event, {
+            "hasPassed": true,
+            "detail": {
+              "memory": {
+                "bytesTested": 500,
+                "result": {
+                  "failedItems": [
+                    "compare_and",
+                    "compare_sub"
+                  ],
+                  "passedItems": [
+                    "compare_div",
+                    "compare_mul"
+                  ]
+                },
+              }
+            },
+            "uuid":"%s"
+          });
+
+          chrome.test.succeed();
+        });
+      }
+    ]);
+  )",
+                         uuid_.AsLowercaseString().c_str()));
+
+  auto info = WaitForFinishedReport();
+  EXPECT_EQ(info.extension_id, extension_id());
+  EXPECT_EQ(info.uuid, uuid_);
+}
+
+// In older implementation of healthd, a finished volume button routine contains
+// a routine detail.
+IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticRoutineObserverBrowserTest,
+                       CanObserveOnRoutineFinishedWithVolumeButtonDetail) {
+  SetRoutineObservation();
+  RegisterEventObserver(
+      api::os_diagnostics::OnRoutineFinished::kEventName,
+      base::BindLambdaForTesting([this] {
+        auto volume_button_detail =
+            crosapi::TelemetryDiagnosticVolumeButtonRoutineDetail::New();
+
+        auto finished_detail =
+            crosapi::TelemetryDiagnosticRoutineDetail::NewVolumeButton(
+                std::move(volume_button_detail));
+
+        auto finished_state = crosapi::TelemetryDiagnosticRoutineState::New();
+        finished_state->state_union =
+            crosapi::TelemetryDiagnosticRoutineStateUnion::NewFinished(
+                crosapi::TelemetryDiagnosticRoutineStateFinished::New(
+                    /*has_passed=*/true, std::move(finished_detail)));
+        finished_state->percentage = 100;
+
+        remote_->OnRoutineStateChange(std::move(finished_state));
+      }));
+
+  CreateExtensionAndRunServiceWorker(
+      base::StringPrintf(R"(
+    chrome.test.runTests([
+      async function canObserveOnRoutineFinishedWithVolumeButtonDetail() {
+        chrome.os.diagnostics.onRoutineFinished.addListener(
+          (event) => {
+            chrome.test.assertEq(event, {
+              "hasPassed": true,
+              "uuid":"%s"
+            });
+
+            chrome.test.succeed();
+        });
+      }
+    ]);
+  )",
+                         uuid_.AsLowercaseString().c_str()));
+
+  auto info = WaitForFinishedReport();
+  EXPECT_EQ(info.extension_id, extension_id());
+  EXPECT_EQ(info.uuid, uuid_);
+}
+
+IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticRoutineObserverBrowserTest,
+                       CanObserveOnRoutineFinishedWithFanDetail) {
+  SetRoutineObservation();
+  RegisterEventObserver(
+      api::os_diagnostics::OnRoutineFinished::kEventName,
+      base::BindLambdaForTesting([this] {
+        auto fan_detail = crosapi::TelemetryDiagnosticFanRoutineDetail::New();
+        fan_detail->passed_fan_ids = {0};
+        fan_detail->failed_fan_ids = {1};
+        fan_detail->fan_count_status =
+            crosapi::TelemetryDiagnosticHardwarePresenceStatus::kMatched;
+
+        auto finished_detail =
+            crosapi::TelemetryDiagnosticRoutineDetail::NewFan(
+                std::move(fan_detail));
+
+        auto finished_state = crosapi::TelemetryDiagnosticRoutineState::New();
+        finished_state->state_union =
+            crosapi::TelemetryDiagnosticRoutineStateUnion::NewFinished(
+                crosapi::TelemetryDiagnosticRoutineStateFinished::New(
+                    /*has_passed=*/true, std::move(finished_detail)));
+        finished_state->percentage = 100;
+
+        remote_->OnRoutineStateChange(std::move(finished_state));
+      }));
+
+  CreateExtensionAndRunServiceWorker(
+      base::StringPrintf(R"(
+    chrome.test.runTests([
+      async function canObserveOnRoutineFinishedWithFanDetail() {
+        chrome.os.diagnostics.onRoutineFinished.addListener((event) => {
+          chrome.test.assertEq(event, {
+            "detail": {
+              "fan": {
+                "passedFanIds": [0],
+                "failedFanIds": [1],
+                "fanCountStatus": "matched"
+              }
+            },
+            "hasPassed": true,
+            "uuid":"%s"
+          });
+
+          chrome.test.succeed();
+        });
+      }
+    ]);
+  )",
+                         uuid_.AsLowercaseString().c_str()));
+
+  auto info = WaitForFinishedReport();
+  EXPECT_EQ(info.extension_id, extension_id());
+  EXPECT_EQ(info.uuid, uuid_);
+}
+
+IN_PROC_BROWSER_TEST_F(TelemetryExtensionDiagnosticRoutineObserverBrowserTest,
+                       CanObserveOnRoutineFinishedWithNetworkBandwidthDetail) {
+  SetRoutineObservation();
+  RegisterEventObserver(
+      api::os_diagnostics::OnRoutineFinished::kEventName,
+      base::BindLambdaForTesting([this] {
+        auto network_bandwidth_detail =
+            crosapi::TelemetryDiagnosticNetworkBandwidthRoutineDetail::New();
+        network_bandwidth_detail->download_speed_kbps = 123.0;
+        network_bandwidth_detail->upload_speed_kbps = 456.0;
+
+        auto finished_state =
+            crosapi::TelemetryDiagnosticRoutineStateFinished::New();
+        finished_state->detail =
+            crosapi::TelemetryDiagnosticRoutineDetail::NewNetworkBandwidth(
+                std::move(network_bandwidth_detail));
+        finished_state->has_passed = true;
+
+        auto state = crosapi::TelemetryDiagnosticRoutineState::New();
+        state->state_union =
+            crosapi::TelemetryDiagnosticRoutineStateUnion::NewFinished(
+                std::move(finished_state));
+        state->percentage = 100;
+
+        remote_->OnRoutineStateChange(std::move(state));
+      }));
+
+  CreateExtensionAndRunServiceWorker(
+      base::StringPrintf(R"(
+    chrome.test.runTests([
+      async function canObserveOnRoutineFinishedWithNetworkBandwidthDetail() {
+        chrome.os.diagnostics.onRoutineFinished.addListener((event) => {
+          chrome.test.assertEq(event, {
+            "detail": {
+              "networkBandwidth": {
+                "downloadSpeedKbps": 123.0,
+                "uploadSpeedKbps": 456.0
+              }
+            },
+            "hasPassed": true,
             "uuid":"%s"
           });
 

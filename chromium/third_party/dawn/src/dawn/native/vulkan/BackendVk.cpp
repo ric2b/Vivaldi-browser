@@ -44,7 +44,7 @@
 
 // TODO(crbug.com/dawn/283): Link against the Vulkan Loader and remove this.
 #if defined(DAWN_ENABLE_SWIFTSHADER)
-#if DAWN_PLATFORM_IS(LINUX) || DAWN_PLATFORM_IS(FUSCHIA)
+#if DAWN_PLATFORM_IS(LINUX) || DAWN_PLATFORM_IS(FUCHSIA)
 constexpr char kSwiftshaderLibName[] = "libvk_swiftshader.so";
 #elif DAWN_PLATFORM_IS(WINDOWS)
 constexpr char kSwiftshaderLibName[] = "vk_swiftshader.dll";
@@ -477,11 +477,12 @@ ResultOrError<VulkanGlobalKnobs> VulkanInstance::CreateVkInstance(const Instance
     createInfo.enabledExtensionCount = static_cast<uint32_t>(extensionNames.size());
     createInfo.ppEnabledExtensionNames = extensionNames.data();
 
+    VkDebugUtilsMessengerCreateInfoEXT utilsMessengerCreateInfo;
+    VkValidationFeaturesEXT validationFeatures;
     PNextChainBuilder createInfoChain(&createInfo);
 
     // Register the debug callback for instance creation so we receive message for any errors
     // (validation or other).
-    VkDebugUtilsMessengerCreateInfoEXT utilsMessengerCreateInfo;
     if (usedKnobs.HasExt(InstanceExt::DebugUtils)) {
         utilsMessengerCreateInfo.flags = 0;
         utilsMessengerCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
@@ -497,7 +498,6 @@ ResultOrError<VulkanGlobalKnobs> VulkanInstance::CreateVkInstance(const Instance
 
     // Try to turn on synchronization validation if the instance was created with backend
     // validation enabled.
-    VkValidationFeaturesEXT validationFeatures;
     VkValidationFeatureEnableEXT kEnableSynchronizationValidation =
         VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT;
     if (instance->IsBackendValidationEnabled() &&
@@ -573,10 +573,12 @@ std::vector<Ref<PhysicalDeviceBase>> Backend::DiscoverPhysicalDevices(
             if (!mVulkanInstancesCreated[icd]) {
                 mVulkanInstancesCreated.set(icd);
 
-                instance->ConsumedErrorAndWarnOnce([&]() -> MaybeError {
-                    DAWN_TRY_ASSIGN(mVulkanInstances[icd], VulkanInstance::Create(instance, icd));
-                    return {};
-                }());
+                [[maybe_unused]] bool hadError =
+                    instance->ConsumedErrorAndWarnOnce([&]() -> MaybeError {
+                        DAWN_TRY_ASSIGN(mVulkanInstances[icd],
+                                        VulkanInstance::Create(instance, icd));
+                        return {};
+                    }());
             }
 
             if (mVulkanInstances[icd] == nullptr) {

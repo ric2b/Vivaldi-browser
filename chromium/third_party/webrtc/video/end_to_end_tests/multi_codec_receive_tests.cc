@@ -13,7 +13,6 @@
 #include "api/test/simulated_network.h"
 #include "api/test/video/function_video_encoder_factory.h"
 #include "call/fake_network_pipe.h"
-#include "call/simulated_network.h"
 #include "modules/include/module_common_types_public.h"
 #include "modules/rtp_rtcp/source/rtp_packet.h"
 #include "modules/video_coding/codecs/h264/include/h264.h"
@@ -24,6 +23,7 @@
 #include "test/call_test.h"
 #include "test/gmock.h"
 #include "test/gtest.h"
+#include "test/network/simulated_network.h"
 #include "test/video_test_constants.h"
 
 using ::testing::Contains;
@@ -202,13 +202,13 @@ void MultiCodecReceiveTest::RunTestWithCodecs(
       [](const Environment& env,
          const SdpVideoFormat& format) -> std::unique_ptr<VideoEncoder> {
         if (format.name == "VP8") {
-          return VP8Encoder::Create();
+          return CreateVp8Encoder(env);
         }
         if (format.name == "VP9") {
-          return VP9Encoder::Create();
+          return CreateVp9Encoder(env);
         }
         if (format.name == "H264") {
-          return H264Encoder::Create();
+          return CreateH264Encoder(env);
         }
         RTC_DCHECK_NOTREACHED() << format.name;
         return nullptr;

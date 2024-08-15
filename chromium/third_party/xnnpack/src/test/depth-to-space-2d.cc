@@ -3,30 +3,31 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <algorithm>
-#include <array>
-#include <cassert>
-#include <cstddef>
-#include <cstdint>
-#include <limits>
-#include <memory>
-#include <numeric>
-#include <random>
-
-#include <fp16/fp16.h>
-#include <gtest/gtest.h>
-
 #include <xnnpack.h>
 #include <xnnpack/node-type.h>
 #include <xnnpack/operator.h>
 #include <xnnpack/subgraph.h>
 
+#include <algorithm>
+#include <array>
+#include <cassert>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <limits>
+#include <memory>
+#include <numeric>
+#include <random>
+#include <vector>
+
+#include "replicable_random_device.h"
+#include <gtest/gtest.h>
+#include <fp16/fp16.h>
+
 template <typename T> class DepthToSpaceTest : public ::testing::Test {
-protected:
-  DepthToSpaceTest()
-  {
-    random_device = std::make_unique<std::random_device>();
-    rng = std::mt19937((*random_device)());
+ protected:
+  DepthToSpaceTest() {
     dim_dist = std::uniform_int_distribution<size_t>(1, 9);
     i8dist =
       std::uniform_int_distribution<int32_t>(std::numeric_limits<int8_t>::min(), std::numeric_limits<int8_t>::max());
@@ -70,8 +71,7 @@ protected:
   size_t input_channel() { return input_dims[3]; }
   size_t output_channel() { return output_dims[3]; }
 
-  std::unique_ptr<std::random_device> random_device;
-  std::mt19937 rng;
+  xnnpack::ReplicableRandomDevice rng;
   std::uniform_int_distribution<size_t> dim_dist;
   std::uniform_real_distribution<float> scale_dist;
   std::uniform_int_distribution<int32_t> i8dist;
@@ -387,8 +387,8 @@ TEST_F(DepthToSpaceTestF16, matches_operator_api)
 {
   std::uniform_real_distribution<float> f32dist(-255.0f, 255.0f);
   std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-  std::fill(operator_output.begin(), operator_output.end(), fp16_ieee_from_fp32_value(nanf("")));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), fp16_ieee_from_fp32_value(nanf("")));
+  std::fill(operator_output.begin(), operator_output.end(), UINT16_C(0x7E00) /* NaN */);
+  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT16_C(0x7E00) /* NaN */);
 
   ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));
 

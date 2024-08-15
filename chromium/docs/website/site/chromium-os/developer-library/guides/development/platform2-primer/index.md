@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: platform2-primer
 title: Getting started with platform2
 ---
@@ -75,12 +75,10 @@ DEPEND="
 "
 
 # NB: src_install should be omitted and all install handled by GN.
-# See the install section of chromeos_gn.md.
+# See the install section of https://www.chromium.org/chromium-os/developer-library/reference/build/chromeos-gn/#how-to-install-files
 
-# This boilerplate function runs all tests registered in the GN files.
-platform_pkg_test() {
-	platform test_all
-}
+# NB: src_test should be omitted and all tests handled by GN.
+# See the test section of https://www.chromium.org/chromium-os/developer-library/guides/testing/running-unit-tests/#for-platform2-packages
 ```
 
 ## Adding generators
@@ -106,7 +104,7 @@ of a `USE` flag at the time of build. This is useful, for example, if
 certain targets must only be built if a certain feature (controlled by a
 `USE` flag) is enabled.
 
-See the instructions in [GN in ChromeOS](chromeos_gn.md#how-to-check-use-flags-in-gn).
+See the instructions in [GN in ChromeOS](/chromium-os/developer-library/reference/build/chromeos-gn/#how-to-check-use-flags-in-gn).
 
 ## Rapid development
 
@@ -136,8 +134,8 @@ See [ChromiumOS Unit Testing].
 * [GN] on Google Git
 * (internal) Introduction to GN tech talk [GN video]/[GN slides]
 
-[ChromiumOS Unit Testing]: testing/running_unit_tests.md
-[GN in ChromeOS]: chromeos_gn.md
+[ChromiumOS Unit Testing]: /chromium-os/developer-library/guides/testing/running-unit-tests/
+[GN in ChromeOS]: /chromium-os/developer-library/reference/build/chromeos-gn/
 [GN]: https://gn.googlesource.com/gn/
 [GN video]: https://goto.google.com/gn-intro-tech-talk
 [GN slides]: https://goto.google.com/gn-intro-slides

@@ -158,6 +158,15 @@ _CONFIG = [
             'base::ranges::.+',
             'base::sequence_manager::TaskTimeObserver',
             'base::span',
+            'base::Span(Reader|Writer)',
+            'base::as_byte_span',
+            'base::as_writable_byte_span',
+            'base::as_bytes',
+            'base::as_writable_bytes',
+            'base::as_chars',
+            'base::as_writable_chars',
+            'base::as_string_view',
+            'base::(byte_)?span_from_ref',
             'logging::GetVlogLevel',
             'logging::SetLogItems',
 
@@ -169,6 +178,7 @@ _CONFIG = [
 
             # //base/types/expected.h
             'base::expected',
+            'base::ok',
             'base::unexpected',
 
             # //base/functional/bind.h
@@ -294,10 +304,9 @@ _CONFIG = [
             'base::SingleThreadTaskRunnerThreadMode',
 
             # Byte order
-            'base::ByteSwap',
-            'base::ReadBigEndian',
-            'base::NetToHost(16|32|64)',
-            'base::HostToNet(16|32|64)',
+            'base::BigEndian(Reader|Writer)',
+            'base::numerics::U(8|16|32|64)(To|From)(Big|Little|Native)Endian',
+            'base::numerics::ByteSwap',
 
             # (Cryptographic) random number generation
             'base::RandUint64',
@@ -335,6 +344,8 @@ _CONFIG = [
             # cc painting and raster types.
             'cc::CategorizedWorkerPool',
             'cc::ColorFilter',
+            'cc::DrawLooper',
+            'cc::PathEffect',
             'cc::InspectablePaintRecorder',
             'cc::InspectableRecordPaintCanvas',
             'cc::PaintCanvas',
@@ -496,6 +507,7 @@ _CONFIG = [
             "gfx::KeyframedFloatAnimationCurve",
             "gfx::KeyframedTransformAnimationCurve",
             "gfx::LinearEasingPoint",
+            "gfx::TimingFunction",
             "gfx::TransformKeyframe",
             "gfx::TransformOperations",
 
@@ -536,8 +548,6 @@ _CONFIG = [
             # View transitions
             'cc::ViewTransitionContentLayer',
             'cc::ViewTransitionRequest',
-            'viz::NavigationId',
-            'viz::TransitionId',
             'viz::ViewTransitionElementResourceId',
 
             # base/types/strong_alias.h
@@ -761,8 +771,8 @@ _CONFIG = [
             'base::AutoWritableMemory',
         ],
         'disallowed': [
-            ('base::Bind(|Once|Repeating)',
-             'Use WTF::Bind or WTF::BindRepeating.'),
+            ('base::Bind(Once|Repeating)',
+             'Use WTF::BindOnce or WTF::BindRepeating.'),
             'base::BindPostTaskToCurrentDefault',
             _DISALLOW_NON_BLINK_MOJOM,
             _DISALLOW_CONTINUATION_DATA_,
@@ -780,8 +790,10 @@ _CONFIG = [
         'allowed': ['gin::.+'],
     },
     {
-        'paths':
-        ['third_party/blink/renderer/bindings/core/v8/serialization/'],
+        'paths': [
+            'third_party/blink/renderer/bindings/core/v8/serialization/',
+            'third_party/blink/renderer/core/typed_arrays/',
+        ],
         'allowed': ['base::BufferIterator'],
     },
     {
@@ -1070,6 +1082,7 @@ _CONFIG = [
     {
         'paths': [
             'third_party/blink/public/web/web_frame_widget.h',
+            'third_party/blink/renderer/core/frame/animation_frame_timing_monitor',
             'third_party/blink/renderer/core/frame/local_frame_client_impl.cc',
             'third_party/blink/renderer/core/frame/web_frame_widget',
             'third_party/blink/renderer/core/page/chrome_client.h',
@@ -1086,6 +1099,7 @@ _CONFIG = [
         ],
         'allowed': [
             'base::OnceCallback',
+            'gfx::Rect',
         ],
     },
     {
@@ -1119,6 +1133,7 @@ _CONFIG = [
     {
         'paths': [
             'third_party/blink/renderer/core/css/properties/css_parsing_utils.cc',
+            'third_party/blink/renderer/core/html/html_permission_element.cc',
             'third_party/blink/renderer/core/paint/box_border_painter.cc',
         ],
         'allowed': [
@@ -1253,6 +1268,7 @@ _CONFIG = [
         'allowed': [
             'base::flat_map',
             'gl::GpuPreference',
+            'gpu::ClientSharedImage',
             'gpu::SHARED_IMAGE_USAGE_.+',
             'gpu::gles2::GLES2Interface',
             'gpu::raster::RasterInterface',
@@ -1272,6 +1288,7 @@ _CONFIG = [
             'viz::SinglePlaneFormat',
             'viz::ToClosestSkColorType',
             'viz::TransferableResource',
+            'wgpu::.+',
         ],
     },
     {
@@ -1641,10 +1658,6 @@ _CONFIG = [
             "absl::Status",
             "absl::StatusOr",
 
-            # Required by liburlpattern API in order to pass string data
-            # efficiently.
-            "absl::string_view",
-
             # Needed to work with std::string values returned from
             # liburlpattern API.
             "base::IsStringASCII",
@@ -1785,7 +1798,6 @@ _CONFIG = [
 
             # Needed to use the liburlpattern API.
             "absl::StatusOr",
-            "absl::string_view",
             'liburlpattern::.+',
         ],
     },

@@ -321,7 +321,7 @@ EventCounts* Performance::eventCounts() {
   return nullptr;
 }
 
-ScriptPromise Performance::measureUserAgentSpecificMemory(
+ScriptPromise<MemoryMeasurement> Performance::measureUserAgentSpecificMemory(
     ScriptState* script_state,
     ExceptionState& exception_state) const {
   return MeasureMemoryController::StartMeasurement(script_state,
@@ -704,6 +704,10 @@ void Performance::setBackForwardCacheRestorationBufferSizeForTest(
   back_forward_cache_restoration_buffer_size_limit_ = size;
 }
 
+void Performance::setEventTimingBufferSizeForTest(unsigned size) {
+  event_timing_buffer_max_size_ = size;
+}
+
 void Performance::AddResourceTiming(mojom::blink::ResourceTimingInfoPtr info,
                                     const AtomicString& initiator_type) {
   ExecutionContext* context = GetExecutionContext();
@@ -780,7 +784,7 @@ void Performance::FireResourceTimingBufferFull(TimerBase*) {
   resource_timing_buffer_full_event_pending_ = false;
 }
 
-void Performance::AddElementTimingBuffer(PerformanceElementTiming& entry) {
+void Performance::AddToElementTimingBuffer(PerformanceElementTiming& entry) {
   if (!IsElementTimingBufferFull()) {
     InsertEntryIntoSortedBuffer(element_timing_buffer_, entry, kRecordSwaps);
   } else {
@@ -788,7 +792,7 @@ void Performance::AddElementTimingBuffer(PerformanceElementTiming& entry) {
   }
 }
 
-void Performance::AddEventTimingBuffer(PerformanceEventTiming& entry) {
+void Performance::AddToEventTimingBuffer(PerformanceEventTiming& entry) {
   if (!IsEventTimingBufferFull()) {
     InsertEntryIntoSortedBuffer(event_timing_buffer_, entry, kRecordSwaps);
   } else {
@@ -796,7 +800,7 @@ void Performance::AddEventTimingBuffer(PerformanceEventTiming& entry) {
   }
 }
 
-void Performance::AddLayoutShiftBuffer(LayoutShift& entry) {
+void Performance::AddToLayoutShiftBuffer(LayoutShift& entry) {
   probe::PerformanceEntryAdded(GetExecutionContext(), &entry);
   if (layout_shift_buffer_.size() < kDefaultLayoutShiftBufferSize) {
     InsertEntryIntoSortedBuffer(layout_shift_buffer_, entry, kRecordSwaps);
@@ -945,7 +949,8 @@ PerformanceMark* Performance::mark(ScriptState* script_state,
   if (performance_mark) {
     background_tracing_helper_->MaybeEmitBackgroundTracingPerformanceMarkEvent(
         *performance_mark);
-    GetUserTiming().AddMarkToPerformanceTimeline(*performance_mark);
+    GetUserTiming().AddMarkToPerformanceTimeline(*performance_mark,
+                                                 mark_options);
     if (mark_name == mark_fully_loaded) {
       if (LocalDOMWindow* window = LocalDOMWindow::From(script_state)) {
         window->GetFrame()

@@ -10,16 +10,12 @@
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/layout/box_layout_view.h"
 
-namespace views {
-class ImageView;
-}  // namespace views
-
 namespace ash {
 
-// TODO(hewer|sammiequon|minch): There are some duplicates among this class,
+// TODO(hewer): There are some duplicates among this class, PineItemView,
 // PineItemsOverflowView and PineItemsContainerView. Especially the logic to get
-// the app icons, tab fav icons. See whether we can do some refactoring to
-// reduce the duplicate after finishing all the functionality.
+// the app icons, tab favicon. Refactoring to eliminate the duplicate after
+// finishing all the functionality.
 //
 // The view holds a row of icons resides at the bottom-left of the pine
 // screenshot preview.
@@ -35,21 +31,8 @@ class ASH_EXPORT PineScreenshotIconRowView : public views::BoxLayoutView {
   ~PineScreenshotIconRowView() override;
 
  private:
-  friend class PineScreenshotIconRowViewTestApi;
-
-  // The callback to set the `icon` to the image view at the `index` of
-  // `image_view_map_`.
-  void SetIconForIndex(int index, const gfx::ImageSkia& icon);
-
   // views::View:
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
-
-  // The map stores the ImageView's position inside the icon row. The image view
-  // will be created in order, but its icon will be set later in unpredicted
-  // order as the call to get the icon can be asynchronously.
-  base::flat_map<int, views::ImageView*> image_view_map_;
-
-  base::WeakPtrFactory<PineScreenshotIconRowView> weak_ptr_factory_{this};
 };
 
 }  // namespace ash

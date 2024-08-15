@@ -345,6 +345,10 @@ const kValidationTests = {
     src: `@location(vec2(1,1))`,
     pass: false,
   },
+  duplicate: {
+    src: `@location(0) @location(0)`,
+    pass: false,
+  },
 };
 g.test('validation')
   .desc(`Test validation of location`)

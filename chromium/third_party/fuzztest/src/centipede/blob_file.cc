@@ -121,17 +121,16 @@ class SimpleBlobFileWriter : public BlobFileWriter {
     if (file_) return absl::FailedPreconditionError("already open");
     file_ = RemoteFileOpen(path, mode.data());
     if (file_ == nullptr) return absl::UnknownError("can't open file");
+    RemoteFileSetWriteBufferSize(file_, kMaxBufferedBytes);
     return absl::OkStatus();
   }
 
   absl::Status Write(ByteSpan blob) override {
     if (closed_) return absl::FailedPreconditionError("already closed");
     if (!file_) return absl::FailedPreconditionError("was not open");
-    // TODO(kcc): [as-needed] This copy from a span to vector is clumsy. Change
-    //  RemoteFileAppend to accept a span.
-    ByteArray bytes(blob.begin(), blob.end());
-    ByteArray packed = PackBytesForAppendFile(bytes);
+    ByteArray packed = PackBytesForAppendFile(blob);
     RemoteFileAppend(file_, packed);
+    RemoteFileFlush(file_);
     return absl::OkStatus();
   }
 
@@ -144,6 +143,9 @@ class SimpleBlobFileWriter : public BlobFileWriter {
   }
 
  private:
+  static constexpr uint64_t kMB = 1024UL * 1024UL;
+  static constexpr uint64_t kMaxBufferedBytes = 100 * kMB;
+
   RemoteFile *file_ = nullptr;
   bool closed_ = false;
 };

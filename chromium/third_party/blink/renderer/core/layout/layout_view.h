@@ -71,6 +71,7 @@ class CORE_EXPORT LayoutView : public LayoutNGBlockFlow {
   ~LayoutView() override;
   void Trace(Visitor*) const override;
 
+  void LayoutRoot();
   void WillBeDestroyed() override;
 
   // hitTest() will update layout, style and compositing first while
@@ -112,7 +113,6 @@ class CORE_EXPORT LayoutView : public LayoutNGBlockFlow {
   bool IsChildAllowed(LayoutObject*, const ComputedStyle&) const override;
 
   void InvalidateSvgRootsWithRelativeLengthDescendents();
-  void UpdateLayout() final;
   LayoutUnit ComputeMinimumWidth();
 
   // Based on LocalFrameView::LayoutSize, but:
@@ -201,19 +201,14 @@ class CORE_EXPORT LayoutView : public LayoutNGBlockFlow {
     return initial_containing_block_size_for_pagination_;
   }
 
-  void SetPageScaleFactor(float factor) {
+  void SetPaginationScaleFactor(float factor) {
     NOT_DESTROYED();
-    page_scale_factor_ = factor;
+    pagination_scale_factor_ = factor;
   }
-  float PageScaleFactor() const {
+  float PaginationScaleFactor() const {
     NOT_DESTROYED();
-    return page_scale_factor_;
+    return pagination_scale_factor_;
   }
-
-  // Get the page area size (fragmentainer size) for a given page number and
-  // name.
-  PhysicalSize PageAreaSize(wtf_size_t page_index,
-                            const AtomicString& page_name) const;
 
   AtomicString NamedPageAtIndex(wtf_size_t page_index) const;
 
@@ -263,10 +258,9 @@ class CORE_EXPORT LayoutView : public LayoutNGBlockFlow {
   // node within the same lifecycle update will return false.
   bool AffectedByResizedInitialContainingBlock(const LayoutResult&);
 
-  // Update generated markers and counters after style and layout tree update.
+  // Update generated counters after style and layout tree update.
   // container - The container for container queries, otherwise nullptr.
-  void UpdateMarkersAndCountersAfterStyleChange(
-      LayoutObject* container = nullptr);
+  void UpdateCountersAfterStyleChange(LayoutObject* container = nullptr);
 
   bool BackgroundIsKnownToBeOpaqueInRect(
       const PhysicalRect& local_rect) const override;
@@ -389,7 +383,7 @@ class CORE_EXPORT LayoutView : public LayoutNGBlockFlow {
   // the print parameters. If this results in inline overflow, we'll increase
   // the scale factor and relayout, to fit more content, as an attempt to avoid
   // inline overflow.
-  float page_scale_factor_ = 1.0;
+  float pagination_scale_factor_ = 1.0;
 
   Member<LocalFrameView> frame_view_;
   unsigned layout_counter_count_ = 0;

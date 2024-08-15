@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/functional/bind.h"
+#include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -48,6 +49,10 @@
 #include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/browser/web_applications/web_contents/web_contents_manager.h"
 #include "chrome/browser/webapps/webapps_client_desktop.h"
+#include "chrome/browser/webauthn/change_pin_controller.h"
+#include "chrome/browser/webauthn/enclave_manager.h"
+#include "chrome/browser/webauthn/enclave_manager_factory.h"
+#include "chrome/browser/webauthn/enclave_manager_interface.h"
 #include "chrome/browser/webauthn/passkey_model_factory.h"
 #include "chrome/common/extensions/api/passwords_private.h"
 #include "chrome/test/base/test_browser_window.h"
@@ -161,6 +166,15 @@ class MockPasswordManagerPorter : public PasswordManagerPorterInterface {
   MOCK_METHOD(void, ResetImporter, (bool delete_file), (override));
 };
 
+class MockChangePinController : public ChangePinController {
+ public:
+  MOCK_METHOD(bool, IsChangePinFlowAvailable, (), (override));
+  MOCK_METHOD(void,
+              StartChangePin,
+              (base::OnceCallback<void(bool)>),
+              (override));
+};
+
 class FakePasswordManagerPorter : public PasswordManagerPorterInterface {
  public:
   bool Export(base::WeakPtr<content::WebContents> web_contents) override {
@@ -232,6 +246,17 @@ class MockPasswordManagerClient : public ChromePasswordManagerClient {
       : ChromePasswordManagerClient(web_contents) {}
 
   password_manager::MockPasswordFeatureManager mock_password_feature_manager_;
+};
+
+class MockEnclaveManager : public EnclaveManagerInterface {
+ public:
+  MockEnclaveManager() = default;
+  ~MockEnclaveManager() override = default;
+  MockEnclaveManager(const EnclaveManager&) = delete;
+  MockEnclaveManager(const EnclaveManager&&) = delete;
+
+  MOCK_METHOD(void, Unenroll, (Callback), (override));
+  MOCK_METHOD(bool, is_registered, (), (const override));
 };
 
 // static
@@ -412,6 +437,7 @@ class PasswordsPrivateDelegateImplTest : public WebAppTest {
   scoped_refptr<TestPasswordStore> profile_store_;
   scoped_refptr<TestPasswordStore> account_store_;
   raw_ptr<ui::TestClipboard, DanglingUntriaged> test_clipboard_;
+  MockChangePinController change_pin_controller_;
 
  private:
   base::HistogramTester histogram_tester_;
@@ -444,6 +470,14 @@ void PasswordsPrivateDelegateImplTest::SetUp() {
                                          -> std::unique_ptr<KeyedService> {
         return std::make_unique<password_manager::MockPasswordSenderService>();
       }));
+  ChangePinController::set_instance_for_testing(&change_pin_controller_);
+
+  EnclaveManagerFactory::GetInstance()->SetTestingFactoryAndUse(
+      profile(),
+      base::BindRepeating(
+          [](content::BrowserContext*) -> std::unique_ptr<KeyedService> {
+            return std::make_unique<MockEnclaveManager>();
+          }));
 }
 
 void PasswordsPrivateDelegateImplTest::SetUpPasswordStores(
@@ -1034,7 +1068,7 @@ TEST_F(PasswordsPrivateDelegateImplTest, TestCopyPasswordCallbackResult) {
 }
 
 TEST_F(PasswordsPrivateDelegateImplTest,
-       TestShouldReauthForOptInIfImplicitSignin) {
+       TestShouldNotReauthForOptInIfExplicitSigninUIEnabled) {
   base::test::ScopedFeatureList scoped_feature_list(
       switches::kExplicitBrowserSigninUIOnDesktop);
   profile()->GetPrefs()->SetBoolean(prefs::kExplicitBrowserSignin, false);
@@ -1047,32 +1081,15 @@ TEST_F(PasswordsPrivateDelegateImplTest,
 
   EXPECT_CALL(*client,
               TriggerReauthForPrimaryAccount(
-                  signin_metrics::ReauthAccessPoint::kPasswordSettings, _));
+                  signin_metrics::ReauthAccessPoint::kPasswordSettings, _))
+      .Times(0);
 
   auto delegate = CreateDelegate();
   delegate->SetAccountStorageOptIn(true, web_contents.get());
-}
 
-TEST_F(PasswordsPrivateDelegateImplTest,
-       TestShouldNotReauthForOptInIfExplicitSignin) {
-  base::test::ScopedFeatureList scoped_feature_list(
-      switches::kExplicitBrowserSigninUIOnDesktop);
   profile()->GetPrefs()->SetBoolean(prefs::kExplicitBrowserSignin, true);
 
-  std::unique_ptr<content::WebContents> web_contents = CreateWebContents();
-  auto* client =
-      MockPasswordManagerClient::CreateForWebContentsAndGet(web_contents.get());
-  ON_CALL(*(client->GetPasswordFeatureManager()), IsOptedInForAccountStorage)
-      .WillByDefault(Return(false));
-
-  // Optin without reauth when the signin is explicit.
-  EXPECT_CALL(*client,
-              TriggerReauthForPrimaryAccount(
-                  signin_metrics::ReauthAccessPoint::kPasswordSettings, _))
-      .Times(0);
-  EXPECT_CALL(*(client->GetPasswordFeatureManager()), OptInToAccountStorage);
-
-  auto delegate = CreateDelegate();
+  // Implicit and explicit sign-ins are treated alike.
   delegate->SetAccountStorageOptIn(true, web_contents.get());
 }
 
@@ -1870,6 +1887,40 @@ TEST_F(PasswordsPrivateDelegateImplTest, ShareNonExistentPassword) {
   delegate->SharePassword(/*id=*/100, recipients);
 }
 
+TEST_F(PasswordsPrivateDelegateImplTest, IsChangePinFlowAvailable) {
+  auto delegate = CreateDelegate();
+  std::unique_ptr<content::WebContents> web_contents = CreateWebContents();
+
+  EXPECT_CALL(change_pin_controller_, IsChangePinFlowAvailable)
+      .WillOnce(Return(true));
+
+  EXPECT_TRUE(delegate->IsPasswordManagerPinAvailable(web_contents.get()));
+}
+
+TEST_F(PasswordsPrivateDelegateImplTest, DisconnectCloudAuthenticator) {
+  auto delegate = CreateDelegate();
+  std::unique_ptr<content::WebContents> web_contents = CreateWebContents();
+
+  MockEnclaveManager* enclave_manager_mock = static_cast<MockEnclaveManager*>(
+      EnclaveManagerFactory::GetForProfile(profile()));
+  EXPECT_CALL(*enclave_manager_mock, Unenroll).Times(1);
+
+  delegate->DisconnectCloudAuthenticator(
+      web_contents.get(),
+      base::BindLambdaForTesting([](bool success) { EXPECT_TRUE(success); }));
+}
+
+TEST_F(PasswordsPrivateDelegateImplTest, IsConnecetdToCloudAuthenticator) {
+  auto delegate = CreateDelegate();
+  std::unique_ptr<content::WebContents> web_contents = CreateWebContents();
+
+  MockEnclaveManager* enclave_manager_mock = static_cast<MockEnclaveManager*>(
+      EnclaveManagerFactory::GetForProfile(profile()));
+  EXPECT_CALL(*enclave_manager_mock, is_registered).Times(1);
+
+  delegate->IsConnectedToCloudAuthenticator(web_contents.get());
+}
+
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
 class PasswordsPrivateDelegateImplMockTaskEnvironmentTest
     : public testing::Test {
@@ -1944,7 +1995,7 @@ TEST_F(PasswordsPrivateDelegateImplMockTaskEnvironmentTest,
   delegate->RequestCredentialsDetails({0}, callback.Get(), web_contents_ptr);
 
   histogram_tester().ExpectUniqueTimeSample(
-      "PasswordManager.Settings.AuthenticationTime", base::Seconds(10), 1);
+      "PasswordManager.Settings.AuthenticationTime2", base::Seconds(10), 1);
 }
 
 TEST_F(PasswordsPrivateDelegateImplMockTaskEnvironmentTest,

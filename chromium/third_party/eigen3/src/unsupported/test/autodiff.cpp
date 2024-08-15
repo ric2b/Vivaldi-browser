@@ -175,15 +175,11 @@ void forward_jacobian(const Func& f) {
   jref.setZero();
   yref.setZero();
   f(x, &yref, &jref);
-  //     std::cerr << y.transpose() << "\n\n";;
-  //     std::cerr << j << "\n\n";;
 
   j.setZero();
   y.setZero();
   AutoDiffJacobian<Func> autoj(f);
   autoj(x, &y, &j);
-  //     std::cerr << y.transpose() << "\n\n";;
-  //     std::cerr << j << "\n\n";;
 
   VERIFY_IS_APPROX(y, yref);
   VERIFY_IS_APPROX(j, jref);
@@ -277,8 +273,6 @@ double bug_1222() {
   return denom.value();
 }
 
-#ifdef EIGEN_TEST_PART_5
-
 double bug_1223() {
   using std::min;
   typedef Eigen::AutoDiffScalar<Eigen::Vector3d> AD;
@@ -337,8 +331,6 @@ double bug_1281() {
   y3 = x0 * (AD(c) * (-AD(c)) + AD(c));
   return (y1 + y2 + y3).value();
 }
-
-#endif
 
 EIGEN_DECLARE_TEST(autodiff) {
   for (int i = 0; i < g_repeat; i++) {

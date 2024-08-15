@@ -29,9 +29,9 @@ class MockTlsConnection : public TlsConnection {
 
   IPEndpoint GetRemoteEndpoint() const override { return remote_address_; }
 
-  void OnError(Error error) {
+  void OnError(const Error& error) {
     if (client_) {
-      client_->OnError(this, std::move(error));
+      client_->OnError(this, error);
     }
   }
   void OnRead(std::vector<uint8_t> block) {

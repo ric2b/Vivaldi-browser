@@ -28,6 +28,7 @@ import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
+import org.chromium.chrome.browser.ui.google_bottom_bar.GoogleBottomBarCoordinator;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.ui.util.ColorUtils;
@@ -185,14 +186,21 @@ public class CustomTabToolbarColorController {
         final ColorStateList tint =
                 ThemeUtils.getThemedToolbarIconTint(mActivity, brandedColorScheme);
         mToolbarManager.onThemeColorChanged(color, false);
-        mToolbarManager.onTintChanged(tint, brandedColorScheme);
+        mToolbarManager.onTintChanged(tint, tint, brandedColorScheme);
         mToolbarManager.setShouldUpdateToolbarPrimaryColor(false);
     }
 
     private @ColorInt int computeColor(Tab tab, @ToolbarColorType int toolbarColorType) {
-        // TODO(b/300419189): Pass the CCT Top Bar Color in AGSA intent after the Chrome side LE for
-        // Page Insights Hub
-        if (PageInsightsCoordinator.isFeatureEnabled()
+        // TODO(b/300419189): Pass the CCT Top Bar Color in AGSA intent after Page Insights Hub is
+        // launched
+        if (GoogleBottomBarCoordinator.isFeatureEnabled()
+                && CustomTabsConnection.getInstance()
+                        .shouldEnableGoogleBottomBarForIntent(mIntentDataProvider)) {
+            return mActivity.getColor(R.color.google_bottom_bar_background_color);
+        }
+        // TODO(b/300419189): Pass the CCT Top Bar Color in AGSA intent after Page Insights Hub is
+        // launched
+        else if (PageInsightsCoordinator.isFeatureEnabled()
                 && CustomTabsConnection.getInstance()
                         .shouldEnablePageInsightsForIntent(mIntentDataProvider)) {
             return mActivity.getColor(R.color.gm3_baseline_surface_container);

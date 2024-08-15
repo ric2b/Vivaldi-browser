@@ -105,18 +105,15 @@ NotesModelObserverImpl::NotesModelObserverImpl(
 
 NotesModelObserverImpl::~NotesModelObserverImpl() = default;
 
-void NotesModelObserverImpl::NotesModelLoaded(vivaldi::NotesModel* /*unused*/,
-                                              bool ids_reassigned) {
+void NotesModelObserverImpl::NotesModelLoaded(bool ids_reassigned) {
   // This class isn't responsible for any loading-related logic.
 }
 
-void NotesModelObserverImpl::NotesModelBeingDeleted(
-    vivaldi::NotesModel* /*unused*/) {
+void NotesModelObserverImpl::NotesModelBeingDeleted() {
   std::move(on_notes_model_being_deleted_closure_).Run();
 }
 
-void NotesModelObserverImpl::NotesNodeMoved(vivaldi::NotesModel* /*unused*/,
-                                            const vivaldi::NoteNode* old_parent,
+void NotesModelObserverImpl::NotesNodeMoved(const vivaldi::NoteNode* old_parent,
                                             size_t old_index,
                                             const vivaldi::NoteNode* new_parent,
                                             size_t new_index) {
@@ -128,7 +125,7 @@ void NotesModelObserverImpl::NotesNodeMoved(vivaldi::NotesModel* /*unused*/,
   // Handle moves that make a node newly syncable.
   if (!note_model_->IsNodeSyncable(old_parent) &&
       note_model_->IsNodeSyncable(new_parent)) {
-    NotesNodeAdded(nullptr /*unused*/, new_parent, new_index);
+    NotesNodeAdded(new_parent, new_index);
     return;
   }
 
@@ -138,12 +135,11 @@ void NotesModelObserverImpl::NotesNodeMoved(vivaldi::NotesModel* /*unused*/,
     // OnWillRemoveNotes() cannot be invoked here because |node| is already
     // moved and unsyncable, whereas OnWillRemoveNotes() assumes the change
     // hasn't happened yet.
-    ProcessDelete(node);
+    ProcessDelete(node, FROM_HERE);
     nudge_for_commit_closure_.Run();
     note_tracker_->CheckAllNodesTracked(note_model_);
     return;
   }
-
 
   // Ignore changes to non-syncable nodes (e.g. managed nodes).
   if (!note_model_->IsNodeSyncable(node)) {
@@ -170,8 +166,7 @@ void NotesModelObserverImpl::NotesNodeMoved(vivaldi::NotesModel* /*unused*/,
   note_tracker_->CheckAllNodesTracked(note_model_);
 }
 
-void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* /*unused*/,
-                                            const vivaldi::NoteNode* parent,
+void NotesModelObserverImpl::NotesNodeAdded(const vivaldi::NoteNode* parent,
                                             size_t index) {
   const vivaldi::NoteNode* node = parent->children()[index].get();
 
@@ -219,36 +214,36 @@ void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* /*unused*/,
   // children will be added soon.
 }
 
-void NotesModelObserverImpl::OnWillRemoveNotes(vivaldi::NotesModel* /*unused*/,
-                                               const vivaldi::NoteNode* parent,
+void NotesModelObserverImpl::OnWillRemoveNotes(const vivaldi::NoteNode* parent,
                                                size_t old_index,
-                                               const vivaldi::NoteNode* node) {
+                                               const vivaldi::NoteNode* node,
+                                               const base::Location& location) {
   // Ignore changes to non-syncable nodes (e.g. managed nodes).
   if (!note_model_->IsNodeSyncable(node)) {
     return;
   }
   note_tracker_->CheckAllNodesTracked(note_model_);
-  ProcessDelete(node);
+  ProcessDelete(node, location);
   nudge_for_commit_closure_.Run();
 }
 
-void NotesModelObserverImpl::NotesNodeRemoved(vivaldi::NotesModel* /*unused*/,
-                                              const vivaldi::NoteNode* parent,
+void NotesModelObserverImpl::NotesNodeRemoved(const vivaldi::NoteNode* parent,
                                               size_t old_index,
-                                              const vivaldi::NoteNode* node) {
+                                              const vivaldi::NoteNode* node,
+                                              const base::Location& location) {
   // All the work should have already been done in OnWillRemoveNotes.
   DCHECK(note_tracker_->GetEntityForNoteNode(node) == nullptr);
   note_tracker_->CheckAllNodesTracked(note_model_);
 }
 
 void NotesModelObserverImpl::OnWillRemoveAllNotes(
-    vivaldi::NotesModel* /*unused*/) {
+    const base::Location& location) {
   note_tracker_->CheckAllNodesTracked(note_model_);
   const vivaldi::NoteNode* root_node = note_model_->root_node();
   for (const auto& permanent_node : root_node->children()) {
     for (const auto& child : permanent_node->children()) {
       if (note_model_->IsNodeSyncable(child.get())) {
-        ProcessDelete(child.get());
+        ProcessDelete(child.get(), location);
       }
     }
     nudge_for_commit_closure_.Run();
@@ -256,14 +251,13 @@ void NotesModelObserverImpl::OnWillRemoveAllNotes(
 }
 
 void NotesModelObserverImpl::NotesAllNodesRemoved(
-    vivaldi::NotesModel* /*unused*/) {
+    const base::Location& location) {
   // All the work should have already been done in
   // OnWillRemoveAllUserNotes.
   note_tracker_->CheckAllNodesTracked(note_model_);
 }
 
-void NotesModelObserverImpl::NotesNodeChanged(vivaldi::NotesModel* /*unused*/,
-                                              const vivaldi::NoteNode* node) {
+void NotesModelObserverImpl::NotesNodeChanged(const vivaldi::NoteNode* node) {
   // Ignore changes to non-syncable nodes (e.g. managed nodes).
   if (!note_model_->IsNodeSyncable(node)) {
     return;
@@ -308,7 +302,6 @@ void NotesModelObserverImpl::NotesNodeChanged(vivaldi::NotesModel* /*unused*/,
 }
 
 void NotesModelObserverImpl::NotesNodeChildrenReordered(
-    vivaldi::NotesModel* /*unused*/,
     const vivaldi::NoteNode* node) {
   // Ignore changes to non-syncable nodes (e.g. managed nodes).
   if (!note_model_->IsNodeSyncable(node)) {
@@ -472,10 +465,11 @@ syncer::UniquePosition NotesModelObserverImpl::ComputePosition(
       suffix);
 }
 
-void NotesModelObserverImpl::ProcessDelete(const vivaldi::NoteNode* node) {
+void NotesModelObserverImpl::ProcessDelete(const vivaldi::NoteNode* node,
+                                           const base::Location& location) {
   // If not a leaf node, process all children first.
   for (const auto& child : node->children()) {
-    ProcessDelete(child.get());
+    ProcessDelete(child.get(), location);
   }
   // Process the current node.
   const SyncedNoteTrackerEntity* entity =
@@ -489,7 +483,7 @@ void NotesModelObserverImpl::ProcessDelete(const vivaldi::NoteNode* node) {
     note_tracker_->Remove(entity);
     return;
   }
-  note_tracker_->MarkDeleted(entity);
+  note_tracker_->MarkDeleted(entity, location);
   // Mark the entity that it needs to be committed.
   note_tracker_->IncrementSequenceNumber(entity);
 }

@@ -135,7 +135,7 @@ const UIStrings = {
   /**
    *@description Example for placeholder text
    */
-  enterRegex: 'Enter regex, for example: (web)?socket',
+  filterUsingRegex: 'Filter using regex (example: (web)?socket)',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/network/ResourceWebSocketFrameView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -193,7 +193,7 @@ export class ResourceWebSocketFrameView extends UI.Widget.VBox {
     this.dataGrid.setStickToBottom(true);
     this.dataGrid.setCellClass('websocket-frame-view-td');
     this.timeComparator =
-        (ResourceWebSocketFrameNodeTimeComparator as
+        (resourceWebSocketFrameNodeTimeComparator as
              (arg0: DataGrid.SortableDataGrid.SortableDataGridNode<ResourceWebSocketFrameNode>,
               arg1: DataGrid.SortableDataGrid.SortableDataGridNode<ResourceWebSocketFrameNode>) => number);
     this.dataGrid.sortNodes(this.timeComparator, false);
@@ -214,15 +214,15 @@ export class ResourceWebSocketFrameView extends UI.Widget.VBox {
 
     this.filterTypeCombobox =
         new UI.Toolbar.ToolbarComboBox(this.updateFilterSetting.bind(this), i18nString(UIStrings.filter));
-    for (const filterItem of _filterTypes) {
+    for (const filterItem of FILTER_TYPES) {
       const option = this.filterTypeCombobox.createOption(filterItem.label(), filterItem.name);
       this.filterTypeCombobox.addOption(option);
     }
     this.mainToolbar.appendToolbarItem(this.filterTypeCombobox);
     this.filterType = null;
 
-    const placeholder = i18nString(UIStrings.enterRegex);
-    this.filterTextInput = new UI.Toolbar.ToolbarInput(placeholder, '', 0.4);
+    const placeholder = i18nString(UIStrings.filterUsingRegex);
+    this.filterTextInput = new UI.Toolbar.ToolbarFilter(placeholder, 0.4);
     this.filterTextInput.addEventListener(UI.Toolbar.ToolbarInput.Event.TextChanged, this.updateFilterSetting, this);
     const filter = this.messageFilterSetting.get();
     if (filter) {
@@ -311,7 +311,15 @@ export class ResourceWebSocketFrameView extends UI.Widget.VBox {
 
   private applyFilter(text: string): void {
     const type = (this.filterTypeCombobox.selectedOption() as HTMLOptionElement).value;
-    this.filterRegex = text ? new RegExp(Platform.StringUtilities.escapeForRegExp(text), 'i') : null;
+    if (text) {
+      try {
+        this.filterRegex = new RegExp(text, 'i');
+      } catch (e: unknown) {
+        this.filterRegex = new RegExp(Platform.StringUtilities.escapeForRegExp(text), 'i');
+      }
+    } else {
+      this.filterRegex = null;
+    }
     this.filterType = type === 'all' ? null : type;
     this.refresh();
   }
@@ -380,9 +388,7 @@ export const opCodeDescriptions: (() => string)[] = (function(): (() => Common.U
   return map;
 })();
 
-// TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-// eslint-disable-next-line @typescript-eslint/naming-convention
-export const _filterTypes: UI.FilterBar.Item[] = [
+const FILTER_TYPES: UI.FilterBar.Item[] = [
   {name: 'all', label: i18nLazyString(UIStrings.all), jslogContext: 'all'},
   {name: 'send', label: i18nLazyString(UIStrings.send), jslogContext: 'send'},
   {name: 'receive', label: i18nLazyString(UIStrings.receive), jslogContext: 'receive'},
@@ -470,9 +476,7 @@ export class ResourceWebSocketFrameNode extends DataGrid.SortableDataGrid.Sortab
   }
 }
 
-// TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-// eslint-disable-next-line @typescript-eslint/naming-convention
-export function ResourceWebSocketFrameNodeTimeComparator(
+function resourceWebSocketFrameNodeTimeComparator(
     a: ResourceWebSocketFrameNode, b: ResourceWebSocketFrameNode): number {
   return a.frame.time - b.frame.time;
 }

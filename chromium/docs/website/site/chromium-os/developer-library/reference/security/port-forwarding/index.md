@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: port-forwarding
 title: Port forwarding and tunneling in ChromeOS
 ---
@@ -23,7 +23,7 @@ developers to use Chrome to access their development environment inside
 Moreover, tunneled ports are [locked down](https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/patchpanel/firewall.cc#347)
 to reject traffic from non-`chronos` UIDs.
 
-[Crostini]: /containers_and_vms.md
+[Crostini]: /chromium-os/developer-library/guides/containers/containers-and-vms/
 [cicerone]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/vm_tools/cicerone/
 [chunnel]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/vm_tools/chunnel/
 [Link-Local Multicast Name Resolution]: https://en.wikipedia.org/wiki/Link-Local_Multicast_Name_Resolution

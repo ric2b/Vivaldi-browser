@@ -38,7 +38,7 @@
     margin-inline-end: 16px;
   }
 
-  /* TODO(crbug.com/986596): Don't use browser icons here. Fork them. */
+  /* TODO(crbug.com/40637166): Don't use browser icons here. Fork them. */
   iron-icon[icon='settings:check-circle'] {
     fill: var(--cros-icon-color-prominent);
   }
@@ -123,7 +123,7 @@
           <template is="dom-if" if="[[!isRevampWayfindingEnabled_]]">
             <div class="icon-container"
                 hidden="[[!shouldShowIcons_(showUpdateStatus_)]]">
-              <!-- TODO(crbug.com/986596): Don't use browser icons here. Fork
+              <!-- TODO(crbug.com/40637166): Don't use browser icons here. Fork
                 them. -->
               <iron-icon id="updateRowIcon"
                   icon$="[[getUpdateStatusIcon_(
@@ -169,20 +169,20 @@
                 id="endOfLifeMessage" hidden="[[!hasEndOfLife_]]"
                 localized-string="$i18n{endOfLifeMessage}">
             </localized-link>
-            <div id="extendedUpdatesMainMessage"
-                hidden="[[!showExtendedUpdatesOption_]]">
-              $i18n{extendedUpdatesMainMessage}
+            <div hidden="[[!showExtendedUpdatesOption_]]">
+              <div id="extendedUpdatesMainMessage">
+                $i18n{extendedUpdatesMainMessage}
+              </div>
+              <localized-link
+                  id="extendedUpdatesSecondaryMessage"
+                  class="secondary"
+                  localized-string="$i18n{extendedUpdatesSecondaryMessage}">
+              </localized-link>
             </div>
             <div class="secondary" hidden="[[!hasDeferredUpdate_]]">
               $i18n{aboutDeferredUpdate}
             </div>
             <div class="secondary">$i18n{aboutBrowserVersion}</div>
-            <div class="secondary" hidden="[[!showExtendedUpdatesOption_]]">
-              <localized-link
-                  id="extendedUpdatesSecondaryMessage"
-                  localized-string="$i18n{extendedUpdatesSecondaryMessage}">
-              </localized-link>
-            </div>
           </div>
           <div class="separator" hidden="[[!showButtonContainer_]]"></div>
           <span id="buttonContainer" hidden="[[!showButtonContainer_]]">
@@ -441,6 +441,14 @@
           </settings-guest-os-shared-paths>
         </os-settings-subpage>
       </template>
+    </template>
+
+    <!-- Internal subpages -->
+    <template is="dom-if" route-path="/_internal/_storybook">
+      <os-settings-subpage page-title="Storybook"
+          hide-back-button>
+        <settings-storybook-subpage></settings-storybook-subpage>
+      </os-settings-subpage>
     </template>
   </os-settings-animated-pages>
 

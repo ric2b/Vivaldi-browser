@@ -47,6 +47,9 @@ class Device;
 class Texture;
 
 VkFormat VulkanImageFormat(const Device* device, wgpu::TextureFormat format);
+// This version does not support depth stencil formats which can depend on
+// properties of the Device.
+VkFormat ColorVulkanImageFormat(wgpu::TextureFormat format);
 ResultOrError<wgpu::TextureFormat> FormatFromVkFormat(const Device* device, VkFormat vkFormat);
 VkImageUsageFlags VulkanImageUsage(wgpu::TextureUsage usage, const Format& format);
 VkImageLayout VulkanImageLayout(const Format& format, wgpu::TextureUsage usage);
@@ -231,8 +234,9 @@ class Texture final : public TextureBase {
 
 class TextureView final : public TextureViewBase {
   public:
-    static ResultOrError<Ref<TextureView>> Create(TextureBase* texture,
-                                                  const TextureViewDescriptor* descriptor);
+    static ResultOrError<Ref<TextureView>> Create(
+        TextureBase* texture,
+        const UnpackedPtr<TextureViewDescriptor>& descriptor);
     VkImageView GetHandle() const;
     VkImageView GetHandleForBGRA8UnormStorage() const;
 
@@ -242,7 +246,7 @@ class TextureView final : public TextureViewBase {
     ~TextureView() override;
     void DestroyImpl() override;
     using TextureViewBase::TextureViewBase;
-    MaybeError Initialize(const TextureViewDescriptor* descriptor);
+    MaybeError Initialize(const UnpackedPtr<TextureViewDescriptor>& descriptor);
 
     VkImageViewCreateInfo GetCreateInfo(wgpu::TextureFormat format,
                                         wgpu::TextureViewDimension dimension,
@@ -253,6 +257,8 @@ class TextureView final : public TextureViewBase {
 
     VkImageView mHandle = VK_NULL_HANDLE;
     VkImageView mHandleForBGRA8UnormStorage = VK_NULL_HANDLE;
+    VkSamplerYcbcrConversion mSamplerYCbCrConversion = VK_NULL_HANDLE;
+    YCbCrVkDescriptor mYCbCrVkDescriptor;
     std::vector<VkImageView> mHandlesFor2DViewOn3D;
 };
 

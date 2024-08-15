@@ -56,12 +56,12 @@ EIGEN_LAPACK_FUNC(gesdd)
   PlainMatrixType mat(*m, *n);
   mat = matrix(a, *m, *n, *lda);
 
-  int option = *jobz == 'A'   ? ComputeFullU | ComputeFullV
-               : *jobz == 'S' ? ComputeThinU | ComputeThinV
-               : *jobz == 'O' ? ComputeThinU | ComputeThinV
+  int option = *jobz == 'A'   ? Eigen::ComputeFullU | Eigen::ComputeFullV
+               : *jobz == 'S' ? Eigen::ComputeThinU | Eigen::ComputeThinV
+               : *jobz == 'O' ? Eigen::ComputeThinU | Eigen::ComputeThinV
                               : 0;
 
-  BDCSVD<PlainMatrixType> svd(mat, option);
+  Eigen::BDCSVD<PlainMatrixType> svd(mat, option);
 
   make_vector(s, diag_size) = svd.singularValues().head(diag_size);
 
@@ -119,14 +119,14 @@ EIGEN_LAPACK_FUNC(gesvd)
   PlainMatrixType mat(*m, *n);
   mat = matrix(a, *m, *n, *lda);
 
-  int option = (*jobu == 'A'                   ? ComputeFullU
-                : *jobu == 'S' || *jobu == 'O' ? ComputeThinU
+  int option = (*jobu == 'A'                   ? Eigen::ComputeFullU
+                : *jobu == 'S' || *jobu == 'O' ? Eigen::ComputeThinU
                                                : 0) |
-               (*jobv == 'A'                   ? ComputeFullV
-                : *jobv == 'S' || *jobv == 'O' ? ComputeThinV
+               (*jobv == 'A'                   ? Eigen::ComputeFullV
+                : *jobv == 'S' || *jobv == 'O' ? Eigen::ComputeThinV
                                                : 0);
 
-  JacobiSVD<PlainMatrixType> svd(mat, option);
+  Eigen::JacobiSVD<PlainMatrixType> svd(mat, option);
 
   make_vector(s, diag_size) = svd.singularValues().head(diag_size);
   {

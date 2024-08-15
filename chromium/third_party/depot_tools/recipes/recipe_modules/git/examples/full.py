@@ -24,7 +24,7 @@ def RunSteps(api):
   # useful for debugging git access issues that are reproducible only on bots.
   curl_trace_file = None
   if api.properties.get('use_curl_trace'):
-    curl_trace_file = api.path['start_dir'].join('curl_trace.log')
+    curl_trace_file = api.path.start_dir / 'curl_trace.log'
 
   submodule_update_force = api.properties.get('submodule_update_force', False)
   submodule_update_recursive = api.properties.get('submodule_update_recursive',
@@ -68,7 +68,7 @@ def RunSteps(api):
 
   # If you need to run more arbitrary git commands, you can use api.git itself,
   # which behaves like api.step(), but automatically sets the name of the step.
-  with api.context(cwd=api.path['checkout']):
+  with api.context(cwd=api.path.checkout_dir):
     api.git('status')
 
   api.git('status', name='git status can_fail_build', raise_on_failure=True)
@@ -86,7 +86,7 @@ def RunSteps(api):
   api.git.new_branch('track_current', upstream_current=True)
   # You can use api.git.rebase to rebase the current branch onto another one
   api.git.rebase(name_prefix='my repo', branch='origin/main',
-                 dir_path=api.path['checkout'],
+                 dir_path=api.path.checkout_dir,
                  remote_name=api.properties.get('remote_name'))
 
   if api.properties.get('cat_file', None):
@@ -98,7 +98,7 @@ def RunSteps(api):
 
   # Bundle the repository.
   api.git.bundle_create(
-        api.path['start_dir'].join('all.bundle'))
+        api.path.start_dir / 'all.bundle')
 
 
 def GenTests(api):

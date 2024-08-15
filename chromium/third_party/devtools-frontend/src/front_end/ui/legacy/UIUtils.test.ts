@@ -6,8 +6,6 @@ import type * as Platform from '../../core/platform/platform.js';
 
 import * as UI from './legacy.js';
 
-const {assert} = chai;
-
 describe('UIUtils', () => {
   describe('addReferrerToURL', () => {
     it('correctly adds referrer info to URLs', () => {
@@ -72,6 +70,38 @@ describe('UIUtils', () => {
       assert.isTrue(callback.calledOnce);
 
       setTimeout.restore();
+    });
+  });
+
+  describe('measuredScrollbarWidth', () => {
+    let style: HTMLStyleElement;
+    before(() => {
+      UI.UIUtils.resetMeasuredScrollbarWidthForTest();
+    });
+    after(() => {
+      style.remove();
+    });
+
+    it('provides a default value', () => {
+      const expectedDefaultWidth = 16;
+      assert.strictEqual(UI.UIUtils.measuredScrollbarWidth(), expectedDefaultWidth);
+    });
+
+    it('calculates specific widths correctly', () => {
+      const width = 20;
+
+      // Enforce custom width on scrollbars to test.
+      style = document.createElement('style');
+      style.textContent = `::-webkit-scrollbar {
+        appearance: none;
+        width: ${width}px;
+      }`;
+      document.head.appendChild(style);
+      assert.strictEqual(UI.UIUtils.measuredScrollbarWidth(document), width);
+
+      // Remove the styles and try again to detect that cached values are used.
+      style.remove();
+      assert.strictEqual(UI.UIUtils.measuredScrollbarWidth(document), width);
     });
   });
 });

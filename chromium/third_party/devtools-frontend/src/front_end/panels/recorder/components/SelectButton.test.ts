@@ -2,14 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
-import * as RecorderComponents from './components.js';
+import {renderElementIntoDOM} from '../../../testing/DOMHelpers.js';
 import * as Menus from '../../../ui/components/menus/menus.js';
-
 import * as Coordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
 
-import {renderElementIntoDOM} from '../../../testing/DOMHelpers.js';
+import * as RecorderComponents from './components.js';
 
 const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
@@ -39,7 +36,7 @@ describe('SelectButton', () => {
     assert.strictEqual(event.value, 'item1');
   });
 
-  it('should emit selectbuttonclick event on item click in select menu', async () => {
+  it('should emit SelectMenuSelected event on item click in select menu', async () => {
     const component = new RecorderComponents.SelectButton.SelectButton();
     component.value = 'item1';
     component.items = [
@@ -48,23 +45,16 @@ describe('SelectButton', () => {
     ];
     component.connectedCallback();
     await coordinator.done();
-    const onceClicked = new Promise<RecorderComponents.SelectButton.SelectButtonClickEvent>(
-        resolve => {
-          component.addEventListener('selectbuttonclick', resolve, {
-            once: true,
-          });
-        },
-    );
-
+    const dispatcherSpy = sinon.spy(component, 'dispatchEvent');
     const selectMenu = component.shadowRoot?.querySelector(
         'devtools-select-menu',
     );
     assert.exists(selectMenu);
-    selectMenu?.dispatchEvent(
+    selectMenu.dispatchEvent(
         new Menus.SelectMenu.SelectMenuItemSelectedEvent('item1'),
     );
 
-    const event = await onceClicked;
-    assert.strictEqual(event.value, 'item1');
+    dispatcherSpy.calledOnceWithExactly(
+        RecorderComponents.SelectButton.SelectMenuSelectedEvent as unknown as sinon.SinonMatcher);
   });
 });

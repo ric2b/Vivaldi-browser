@@ -24,6 +24,10 @@
 #include "components/policy/proto/chrome_extension_policy.pb.h"
 #endif
 
+namespace enterprise_management {
+class CloudPolicySettings;
+}  // namespace enterprise_management
+
 namespace policy {
 
 // A helper class for testing that provides a straightforward interface for
@@ -110,6 +114,7 @@ class PolicyBuilder {
   // Verification signatures for the two hard-coded testing keys above. These
   // signatures are valid only for the kFakeDomain domain.
   static std::string GetTestSigningKeySignature();
+  static std::string GetTestSigningKeySignatureForChild();
   static std::string GetTestOtherSigningKeySignature();
 
   std::vector<uint8_t> raw_signing_key() const { return raw_signing_key_; }

@@ -11,13 +11,13 @@
 #include <unistd.h>
 
 #include <memory>
+#include <string_view>
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/i18n/icu_util.h"
 #include "base/i18n/message_formatter.h"
 #include "base/logging.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -44,8 +44,7 @@ std::string LoadStringFromDataPack(ui::DataPack* data_pack,
                                    const std::string& data_pack_lang,
                                    uint32_t resource_id,
                                    const char* resource_id_str) {
-  std::optional<base::StringPiece> data =
-      data_pack->GetStringPiece(resource_id);
+  std::optional<std::string_view> data = data_pack->GetStringPiece(resource_id);
   CHECK(data.has_value()) << "failed to load string " << resource_id_str
                           << " for lang " << data_pack_lang;
 
@@ -164,6 +163,10 @@ int main(int argc, char* const argv[]) {
                                IDS_RUNTIME_PERMISSION_OS_REASON_TEXT,
                                "IDS_RUNTIME_PERMISSION_OS_REASON_TEXT");
 
+    std::string chromium_shortcut_description = LoadStringFromDataPack(
+        branded_data_pack.get(), cur_lang, IDS_CHROMIUM_SHORCUT_DESCRIPTION,
+        "IDS_CHROMIUM_SHORCUT_DESCRIPTION");
+
     // For now, assume this is ok for all languages. If we need to, this could
     // be moved into generated_resources.grd and fetched.
     std::string get_info = base::StringPrintf(
@@ -180,6 +183,7 @@ int main(int argc, char* const argv[]) {
         {"NSLocationUsageDescription", permission_reason},
         {"NSMicrophoneUsageDescription", permission_reason},
         {"NSWebBrowserPublicKeyCredentialUsageDescription", permission_reason},
+        {"\"Chromium Shortcut\"", chromium_shortcut_description},
     };
     std::string strings_file_contents_string;
     for (const auto& kv : infoplist_strings) {

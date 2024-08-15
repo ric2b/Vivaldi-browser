@@ -12,10 +12,12 @@ import org.chromium.base.FeatureList;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.readaloud.ReadAloudFeatures;
 
 import java.util.HashMap;
+
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /** A utility class for handling feature flags used by {@link AdaptiveToolbarButtonController}. */
 public class AdaptiveToolbarFeatures {
@@ -70,9 +72,10 @@ public class AdaptiveToolbarFeatures {
     private static Boolean sShowUiOnlyAfterReadyForTesting;
     private static HashMap<Integer, Boolean> sActionChipOverridesForTesting;
     private static HashMap<Integer, Boolean> sAlternativeColorOverridesForTesting;
-    private static Profile sProfileForTesting;
 
-    /** @return Whether the button variant is a dynamic action. */
+    /**
+     * @return Whether the button variant is a dynamic action.
+     */
     public static boolean isDynamicAction(@AdaptiveToolbarButtonVariant int variant) {
         switch (variant) {
             case AdaptiveToolbarButtonVariant.UNKNOWN:
@@ -108,8 +111,7 @@ public class AdaptiveToolbarFeatures {
      * <p>Must be called with the {@link FeatureList} initialized.
      */
     public static boolean isCustomizationEnabled() {
-        if (!ChromeFeatureList.isEnabled(
-                ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_V2)) {
+        if (!ChromeFeatureList.sAdaptiveButtonInTopToolbarCustomizationV2.isEnabled()) {
             return false;
         }
         final int minVersion =
@@ -223,14 +225,8 @@ public class AdaptiveToolbarFeatures {
                 false);
     }
 
-    // TODO: This should use a passed in reference to a Profile rather than
-    // getLastUsedRegularProfile, but for starters we use it, just like in
-    // AdaptiveStatePredictor#readFromSegmentationPlatform.
-    public static boolean isAdaptiveToolbarReadAloudEnabled() {
-        return ReadAloudFeatures.isAllowed(
-                sProfileForTesting != null
-                        ? sProfileForTesting
-                        : ProfileManager.getLastUsedRegularProfile());
+    public static boolean isAdaptiveToolbarReadAloudEnabled(Profile profile) {
+        return ReadAloudFeatures.isAllowed(profile);
     }
 
     /**
@@ -264,6 +260,9 @@ public class AdaptiveToolbarFeatures {
                 sButtonVariant = AdaptiveToolbarButtonVariant.UNKNOWN;
                 break;
         }
+        // Note(david@vivaldi.com): We setup our default here.
+        if (BuildConfig.IS_VIVALDI) sButtonVariant = AdaptiveToolbarButtonVariant.TRACKER_SHIELD;
+
         return sButtonVariant;
     }
 
@@ -307,6 +306,7 @@ public class AdaptiveToolbarFeatures {
     /**
      * Returns whether the UI can be shown only after the backend is ready and has sufficient
      * information for result computation.
+     * Default value is false, so the UI will be shown even if the model isn't ready.
      */
     static boolean showUiOnlyAfterReady() {
         if (sShowUiOnlyAfterReadyForTesting != null) return sShowUiOnlyAfterReadyForTesting;
@@ -314,7 +314,7 @@ public class AdaptiveToolbarFeatures {
         return ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
                 ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_V2,
                 VARIATION_PARAM_SHOW_UI_ONLY_AFTER_READY,
-                true);
+                false);
     }
 
     static void setDefaultSegmentForTesting(String defaultSegment) {
@@ -353,12 +353,6 @@ public class AdaptiveToolbarFeatures {
         }
         sAlternativeColorOverridesForTesting.put(buttonVariant, useAlternativeColor);
         ResettersForTesting.register(() -> sAlternativeColorOverridesForTesting = null);
-    }
-
-    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
-    public static void setProfile(Profile profile) {
-        sProfileForTesting = profile;
-        ResettersForTesting.register(() -> sProfileForTesting = null);
     }
 
     public static void clearParsedParamsForTesting() {

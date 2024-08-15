@@ -53,7 +53,6 @@
 #include "rtc_base/network.h"
 #include "rtc_base/network/received_packet.h"
 #include "rtc_base/network/sent_packet.h"
-#include "rtc_base/proxy_info.h"
 #include "rtc_base/rate_tracker.h"
 #include "rtc_base/socket_address.h"
 #include "rtc_base/system/rtc_export.h"
@@ -123,8 +122,6 @@ typedef std::vector<CandidateStats> CandidateStatsList;
 
 const char* ProtoToString(ProtocolType proto);
 absl::optional<ProtocolType> StringToProto(absl::string_view proto_name);
-webrtc::IceCandidateType PortTypeToIceCandidateType(
-    const absl::string_view type);
 
 struct ProtocolAddress {
   rtc::SocketAddress address;
@@ -325,13 +322,6 @@ class RTC_EXPORT Port : public PortInterface, public sigslot::has_slots<> {
       const rtc::SocketAddress& addr,
       const std::vector<uint16_t>& unknown_types);
 
-  void set_proxy(absl::string_view user_agent, const rtc::ProxyInfo& proxy) {
-    user_agent_ = std::string(user_agent);
-    proxy_ = proxy;
-  }
-  const std::string& user_agent() override { return user_agent_; }
-  const rtc::ProxyInfo& proxy() override { return proxy_; }
-
   void EnablePortPackets() override;
 
   // Called if the port has no connections and is no longer useful.
@@ -501,9 +491,6 @@ class RTC_EXPORT Port : public PortInterface, public sigslot::has_slots<> {
   IceRole ice_role_;
   uint64_t tiebreaker_;
   bool shared_socket_;
-  // Information to use when going through a proxy.
-  std::string user_agent_;
-  rtc::ProxyInfo proxy_;
 
   // A virtual cost perceived by the user, usually based on the network type
   // (WiFi. vs. Cellular). It takes precedence over the priority when

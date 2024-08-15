@@ -72,7 +72,7 @@
 
 namespace content {
 
-class ServiceWorkerContainerHost;
+class ServiceWorkerClient;
 class ServiceWorkerContextCore;
 class ServiceWorkerHost;
 class ServiceWorkerInstalledScriptsSender;
@@ -240,27 +240,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
   FetchHandlerType fetch_handler_type() const;
   void set_fetch_handler_type(FetchHandlerType fetch_handler_type);
 
-  // If the feature flag for `fetch_handler_type_` is enabled,
-  // the function returns `fetch_handler_type_`.
-  // Otherwise, kNotSkippable would be returned if `fetch_handler_type_`
-  // is not kNoHandler.  Note that kNoHandler will be returned if
-  // `fetch_handler_type_` is kNoHandler.
-  //
-  // You may wonder why we need to introduce the effective fetch handler
-  // type in addition to the existing fetch_handler_type.  That is because
-  // we cannot change the fetch_handler_type behavior for the service
-  // worker registration and the metrics.  Since the service worker
-  // registration is persistent data, I do not think it is good idea to
-  // change its contents by the flag.  For metrics, we want to compare the
-  // same fetch handler case with the different flags.  The
-  // fetch_handler_type should also need to be persistent here.
-  // Note that FCP/LCP with skippable fetch handler type is taken in this
-  // way.
-  FetchHandlerType EffectiveFetchHandlerType() const;
-
   // Return the option indicating how the fetch handler should be bypassed.
-  // ServiceWorkerBypassFetchHandler feature uses this to let the renderer know
-  // to bypass fetch handlers for subresources.
+  // This is used to let the renderer know to bypass fetch handlers for
+  // subresources.
   FetchHandlerBypassOption fetch_handler_bypass_option() {
     return fetch_handler_bypass_option_;
   }
@@ -441,7 +423,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   }
 
   // Adds and removes the specified host as a controllee of this service worker.
-  void AddControllee(ServiceWorkerContainerHost* container_host);
+  void AddControllee(ServiceWorkerClient* service_worker_client);
   void RemoveControllee(const std::string& client_uuid);
 
   // Called when the navigation for a window client commits to a render frame
@@ -466,10 +448,12 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // Note regarding BackForwardCache:
   // Clients in back-forward cache don't count as controllees.
   bool HasControllee() const { return !controllee_map_.empty(); }
-  const std::map<std::string, base::WeakPtr<ServiceWorkerContainerHost>>&
+  const std::map<std::string, base::WeakPtr<ServiceWorkerClient>>&
   controllee_map() const {
     return controllee_map_;
   }
+  // Returns true if |uuid| is captured by BFCache.
+  bool BFCacheContainsControllee(const std::string& uuid) const;
 
   // BackForwardCache:
   // Evicts all the controllees from back-forward cache. The controllees in
@@ -478,7 +462,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   void EvictBackForwardCachedControllees(
       BackForwardCacheMetrics::NotRestoredReason reason);
   void EvictBackForwardCachedControllee(
-      ServiceWorkerContainerHost* controllee,
+      ServiceWorkerClient* controllee,
       BackForwardCacheMetrics::NotRestoredReason reason);
 
   // The worker host hosting this version. Only valid while the version is
@@ -737,6 +721,13 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // Check if the static router should be evaluated.
   bool NeedRouterEvaluate() const;
 
+  // Get an associated cache storage interface.
+  mojo::PendingRemote<blink::mojom::CacheStorage> GetRemoteCacheStorage();
+
+  // Describes whether the client has a controller and if it has a fetch event
+  // handler.
+  blink::mojom::ControllerServiceWorkerMode GetControllerMode() const;
+
   // Timeout for a request to be handled.
   static constexpr base::TimeDelta kRequestTimeout = base::Minutes(5);
 
@@ -841,15 +832,15 @@ class CONTENT_EXPORT ServiceWorkerVersion
   struct InflightRequestTimeoutInfo {
     InflightRequestTimeoutInfo(int id,
                                ServiceWorkerMetrics::EventType event_type,
-                               const base::TimeTicks& expiration,
+                               const base::TimeTicks& expiration_time,
                                TimeoutBehavior timeout_behavior);
     ~InflightRequestTimeoutInfo();
-    // Compares |expiration|, or |id| if |expiration| is the same.
+    // Compares |expiration_time|, or |id| if |expiration_time| is the same.
     bool operator<(const InflightRequestTimeoutInfo& other) const;
 
     const int id;
     const ServiceWorkerMetrics::EventType event_type;
-    const base::TimeTicks expiration;
+    const base::TimeTicks expiration_time;
     const TimeoutBehavior timeout_behavior;
   };
 
@@ -882,7 +873,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // The following methods all rely on the internal |tick_clock_| for the
   // current time.
   void RestartTick(base::TimeTicks* time) const;
-  bool RequestExpired(const base::TimeTicks& expiration) const;
+  bool RequestExpired(const base::TimeTicks& expiration_time) const;
   base::TimeDelta GetTickDuration(const base::TimeTicks& time) const;
 
   // EmbeddedWorkerInstance::Listener overrides:
@@ -933,10 +924,8 @@ class CONTENT_EXPORT ServiceWorkerVersion
                       const GURL& url,
                       NavigateClientCallback callback) override;
   void SkipWaiting(SkipWaitingCallback callback) override;
-  void RegisterRouter(const blink::ServiceWorkerRouterRules& rules,
-                      RegisterRouterCallback callback) override;
   void AddRoutes(const blink::ServiceWorkerRouterRules& rules,
-                 RegisterRouterCallback callback) override;
+                 AddRoutesCallback callback) override;
 
   // Implements blink::mojom::AssociatedInterfaceProvider.
   void GetAssociatedInterface(
@@ -1002,7 +991,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // The caller of MaybeTimeoutRequest must increase reference count of |this|
   // to avoid it deleted during the execution.
   bool MaybeTimeoutRequest(const InflightRequestTimeoutInfo& info);
-  void SetAllRequestExpirations(const base::TimeTicks& expiration);
+  void SetAllRequestExpirations(const base::TimeTicks& expiration_time);
 
   // Sets |stale_time_| if this worker is stale, causing an update to eventually
   // occur once the worker stops or is running too long.
@@ -1094,9 +1083,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // the updated script headers have been fetched.
   // For service workers loaded from disk, this is restored from disk.
   //
-  // TODO(https://crbug.com/1239551): Set all of this, not just COEP, on script
+  // TODO(crbug.com/40056874): Set all of this, not just COEP, on script
   // updates.
-  // TODO(https://crbug.com/1239551): Persist all of this to disk, not just the
+  // TODO(crbug.com/40056874): Persist all of this to disk, not just the
   // COEP field.
   network::mojom::ClientSecurityStatePtr client_security_state_;
 
@@ -1110,7 +1099,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // from calling nested StartWorker(). A nested StartWorker() call makes `this`
   // enter an invalid state (i.e., `start_callbacks_` is empty even when
   // `running_status()` is STARTING) so it should not happen.
-  // TODO(crbug.com/1161800): Figure out a way to disallow a callback to
+  // TODO(crbug.com/40739069): Figure out a way to disallow a callback to
   // re-enter StartWorker().
   bool is_running_start_callbacks_ = false;
   std::vector<StatusCallback> start_callbacks_;
@@ -1174,19 +1163,18 @@ class CONTENT_EXPORT ServiceWorkerVersion
   std::unique_ptr<content::ServiceWorkerHost> worker_host_;
 
   // |controllee_map_| and |bfcached_controllee_map_| should not share the same
-  // controllee.  ServiceWorkerContainerHost in the controllee maps should be
+  // controllee.  ServiceWorkerClient in the controllee maps should be
   // non-null.
-  // TODO(crbug.com/1253581): Fix cases where hosts can become nullptr while
+  // TODO(crbug.com/40199210): Fix cases where hosts can become nullptr while
   //                          stored in the maps.
-  std::map<std::string, base::WeakPtr<ServiceWorkerContainerHost>>
-      controllee_map_;
-  std::map<std::string, base::WeakPtr<ServiceWorkerContainerHost>>
+  std::map<std::string, base::WeakPtr<ServiceWorkerClient>> controllee_map_;
+  std::map<std::string, base::WeakPtr<ServiceWorkerClient>>
       bfcached_controllee_map_;
 
-  // Keeps track of the |client_uuid| of ContainerHost that is being evicted,
-  // and the reason why it is evicted. Once eviction is complete, the entry will
-  // be removed.
-  // TODO(crbug.com/1021718): Remove this once we fix the crash.
+  // Keeps track of the |client_uuid| of ServiceWorkerClient that is being
+  // evicted, and the reason why it is evicted. Once eviction is complete, the
+  // entry will be removed.
+  // TODO(crbug.com/40657227): Remove this once we fix the crash.
   std::map<std::string, BackForwardCacheMetrics::NotRestoredReason>
       controllees_to_be_evicted_;
 
@@ -1306,9 +1294,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // version is created.
   std::optional<std::string> sha256_script_checksum_;
 
-  using RouterRegistrationMethod = blink::mojom::RouterRegistrationMethod;
-  RouterRegistrationMethod router_registration_method_ =
-      RouterRegistrationMethod::Uninitialized;
   std::unique_ptr<content::ServiceWorkerRouterEvaluator> router_evaluator_;
 
   std::unique_ptr<blink::AssociatedInterfaceRegistry> associated_registry_;

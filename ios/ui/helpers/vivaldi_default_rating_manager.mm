@@ -114,6 +114,11 @@ namespace {
                             component:NSCalendarUnitMonth
                              fromDate:currentDate];
 
+  // Handle the nil case for lastPromptDate
+  if (self.lastPromptDate == nil) {
+    self.lastPromptDate = [NSDate distantPast];
+  }
+
   NSInteger lastPromptYear = [self.utcCalendar
                               component:NSCalendarUnitYear
                                fromDate:self.lastPromptDate];

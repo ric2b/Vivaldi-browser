@@ -14,6 +14,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
+#include "ui/events/event_handler.h"
 #include "ui/views/view_observer.h"
 #include "ui/views/widget/unique_widget_ptr.h"
 
@@ -35,18 +36,11 @@ class GameDashboardToolbarView;
 
 // This class manages Game Dashboard related UI for a given `aura::Window`, and
 // its instance is managed by the `GameDashboardController`.
-class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
+class ASH_EXPORT GameDashboardContext : public ui::EventHandler,
+                                        public views::ViewObserver,
                                         public views::WidgetObserver,
                                         public WindowStateObserver {
  public:
-  // Indicator for the 4 quadrants that the toolbar is able to be placed.
-  enum class ToolbarSnapLocation {
-    kTopLeft,
-    kTopRight,
-    kBottomLeft,
-    kBottomRight
-  };
-
   explicit GameDashboardContext(aura::Window* game_window);
   GameDashboardContext(const GameDashboardContext&) = delete;
   GameDashboardContext& operator=(const GameDashboardContext&) = delete;
@@ -66,7 +60,7 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
     return game_dashboard_button_widget_.get();
   }
 
-  ToolbarSnapLocation toolbar_snap_location() const {
+  GameDashboardToolbarSnapLocation toolbar_snap_location() const {
     return toolbar_snap_location_;
   }
 
@@ -80,6 +74,14 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
 
   const std::u16string& GetRecordingDuration() const;
 
+  // Initializes the context. Creates and starts showing the Game Dashboard
+  // button. Also shows the welcome dialog, if
+  // `prefs::kGameDashboardShowWelcomeDialog` is true. Separating this logic
+  // ensures the constructor never references the context created before the
+  // instance is assigned. Note that this logic should be called once the
+  // context is created.
+  void Initialize();
+
   // Stacks Game Dashboard UI widgets above `widget` if it is needed.
   void MaybeStackAboveWidget(views::Widget* widget);
 
@@ -91,7 +93,8 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
 
   // Reassigns the new `toolbar_snap_location_` and performs an animation as the
   // toolbar moves to its new location.
-  void SetToolbarSnapLocation(ToolbarSnapLocation new_location);
+  void SetGameDashboardToolbarSnapLocation(
+      GameDashboardToolbarSnapLocation new_location);
 
   // Called by `GameDashboardController` when the game window bounds change.
   void OnWindowBoundsChanged();
@@ -137,6 +140,17 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
 
   // Controls the Game Dashboard Button visibility.
   void SetGameDashboardButtonVisibility(bool visible);
+
+  // Conditionally, adds this context to the pre-target handler if it hasn't
+  // already been added.
+  void MaybeAddPreTargetHandler();
+
+  // Conditionally, removes this context from the pre-target handler if it
+  // hasn't already been removed.
+  void MaybeRemovePreTargetHandler();
+
+  // ui::EventHandler:
+  void OnEvent(ui::Event* event) override;
 
   // views::ViewObserver:
   void OnViewPreferredSizeChanged(views::View* observed_view) override;
@@ -196,9 +210,9 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
   // recording session duration.
   void OnUpdateRecordingTimer();
 
-  // Closes and deletes the Game Dashboard welcome dialog once it's no longer
-  // needed.
-  void CloseWelcomeDialogIfAny();
+  // Closes and deletes the Game Dashboard welcome dialog. After closing the
+  // dialog, if `show_toolbar` is true, call `MaybeShowToolbar`.
+  void CloseWelcomeDialogIfAny(bool show_toolbar = true);
 
   // Callback when the `GameDashboardWelcomeDialog`'s timer has completed.
   void OnWelcomeDialogTimerCompleted();
@@ -206,6 +220,22 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
   // Resets the `main_menu_view_`, removes the cursor handler, and updates the
   // `game_dashboard_button_` UI.
   void UpdateOnMainMenuClosed();
+
+  // Ensures that the main menu stacks above the toolbar.
+  void EnsureMainMenuAboveToolbar();
+
+  // Determines whether it's required to tab navigate from one Game Dashboard
+  // widget to another widget. Returns false if tab-navigating within the same
+  // widget.
+  bool ShouldNavigateToNewWidget(const ui::KeyEvent* event) const;
+
+  // Returns a list of visible Game Dashboard widgets that are available to be
+  // traversed.
+  std::vector<views::Widget*> GetTraversableWidgets() const;
+
+  // Manually moves focus to the `new_widget`. If `reverse` is true, focus will
+  // move backwards.
+  void MoveFocus(views::Widget* new_widget, ui::Event* event, bool reverse);
 
   const raw_ptr<aura::Window> game_window_;
 
@@ -231,7 +261,7 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
   std::unique_ptr<views::Widget> welcome_dialog_widget_;
 
   // The indicator of the current corner that the toolbar is placed.
-  ToolbarSnapLocation toolbar_snap_location_;
+  GameDashboardToolbarSnapLocation toolbar_snap_location_;
 
   // The `GameDashboardButton` view in the `game_dashboard_button_widget_`.
   // Owned by the views hierarchy.
@@ -268,6 +298,11 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
   // false if the recording starts from the toolbar. It is null if the recording
   // is started from somewhere else.
   std::optional<bool> recording_from_main_menu_;
+
+  // Indicates whether this context has been added as a Shell's pre-target
+  // handler. This param ensures this context isn't added as a pre-target
+  // handler multiple times.
+  bool added_to_pre_target_handler_ = false;
 
   base::ScopedObservation<WindowState, WindowStateObserver>
       window_state_observation_{this};

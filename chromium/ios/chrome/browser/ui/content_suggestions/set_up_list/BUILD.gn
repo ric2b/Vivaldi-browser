@@ -29,9 +29,12 @@ source_set("set_up_list") {
     "//components/password_manager/core/common:features",
     "//components/prefs",
     "//components/prefs/ios",
+    "//components/signin/public/identity_manager",
     "//components/signin/public/identity_manager/objc",
     "//components/sync/base:features",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser/content_notification/model:util",
+    "//ios/chrome/browser/default_browser/model:utils",
     "//ios/chrome/browser/ntp/model:set_up_list",
     "//ios/chrome/browser/ntp/model:set_up_list_item_type",
     "//ios/chrome/browser/ntp/model:set_up_list_prefs",
@@ -120,7 +123,7 @@ source_set("content_notification_promo_ui") {
   deps = [
     ":constants",
     "//ios/chrome/app/strings",
-    "//ios/chrome/browser/ui/content_suggestions/set_up_list/resources:content_notification_promo_banner",
+    "//ios/chrome/browser/ui/content_suggestions/set_up_list/resources",
     "//ios/chrome/common/ui/promo_style",
     "//ui/base",
   ]

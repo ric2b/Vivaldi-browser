@@ -30,7 +30,7 @@
 #include "media/gpu/windows/mf_audio_encoder.h"
 
 // The AAC tests are failing on Arm64. Disable the AAC part of these tests until
-// those failures can be fixed. TOOO(https://crbug.com/1424215): FIx tests,
+// those failures can be fixed. TODO(https://crbug.com/1424215): Fix tests,
 // and/or investigate if AAC support should be turned off in Chrome for Arm64
 // Windows, or if these are an issue with the tests.
 #if !defined(ARCH_CPU_ARM64)
@@ -737,7 +737,7 @@ TEST_P(AudioOpusEncoderTest, FullCycleEncodeDecode) {
     // Use the libopus decoder to decode the |encoded_data| and check we
     // get the expected number of frames per buffer.
     EXPECT_EQ(kOpusDecoderFramesPerBuffer,
-              opus_decode_float(opus_decoder, output.encoded_data.get(),
+              opus_decode_float(opus_decoder, output.encoded_data.data(),
                                 output.encoded_data_size, buffer.data(),
                                 kOpusDecoderFramesPerBuffer, 0));
   };
@@ -790,7 +790,7 @@ TEST_P(AudioOpusEncoderTest, FullCycleEncodeDecode_BitrateMode) {
       // Use the libopus decoder to decode the |encoded_data| and check we
       // get the expected number of frames per buffer.
       EXPECT_EQ(kOpusDecoderFramesPerBuffer,
-                opus_decode_float(opus_decoder, output.encoded_data.get(),
+                opus_decode_float(opus_decoder, output.encoded_data.data(),
                                   output.encoded_data_size, buffer.data(),
                                   kOpusDecoderFramesPerBuffer, 0));
     };
@@ -818,7 +818,7 @@ TEST_P(AudioOpusEncoderTest, FullCycleEncodeDecode_BitrateMode) {
 
 // Tests we can configure the AudioOpusEncoder's extra options.
 TEST_P(AudioOpusEncoderTest, FullCycleEncodeDecode_OpusOptions) {
-  // TODO(crbug.com/1378399): Test an OpusOptions::frame_duration which forces
+  // TODO(crbug.com/40243924): Test an OpusOptions::frame_duration which forces
   // repacketization.
   constexpr media::AudioEncoder::OpusOptions kTestOpusOptions[] = {
       // Base case
@@ -873,7 +873,7 @@ TEST_P(AudioOpusEncoderTest, FullCycleEncodeDecode_OpusOptions) {
       // Use the libopus decoder to decode the |encoded_data| and check we
       // get the expected number of frames per buffer.
       EXPECT_EQ(decoder_frames_per_buffer,
-                opus_decode_float(opus_decoder, output.encoded_data.get(),
+                opus_decode_float(opus_decoder, output.encoded_data.data(),
                                   output.encoded_data_size, buffer.data(),
                                   decoder_frames_per_buffer, 0));
     };

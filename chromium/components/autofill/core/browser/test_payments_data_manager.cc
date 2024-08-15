@@ -4,20 +4,21 @@
 
 #include "components/autofill/core/browser/test_payments_data_manager.h"
 
+#include "base/strings/utf_string_conversions.h"
 #include "base/uuid.h"
-#include "components/autofill/core/browser/personal_data_manager.h"
 
 namespace autofill {
 
-TestPaymentsDataManager::TestPaymentsDataManager(const std::string& app_locale,
-                                                 PersonalDataManager* pdm)
+TestPaymentsDataManager::TestPaymentsDataManager(const std::string& app_locale)
     : PaymentsDataManager(/*profile_database=*/nullptr,
                           /*account_database=*/nullptr,
                           /*image_fetcher=*/nullptr,
                           /*shared_storage_handler=*/nullptr,
                           /*pref_service=*/nullptr,
-                          app_locale,
-                          pdm) {}
+                          /*sync_service=*/nullptr,
+                          /*identity_manager=*/nullptr,
+                          /*variations_country_code=*/GeoIpCountryCode("US"),
+                          app_locale) {}
 
 TestPaymentsDataManager::~TestPaymentsDataManager() = default;
 
@@ -82,12 +83,12 @@ bool TestPaymentsDataManager::RemoveByGUID(const std::string& guid) {
   if (CreditCard* credit_card = GetCreditCardByGUID(guid)) {
     local_credit_cards_.erase(base::ranges::find(
         local_credit_cards_, credit_card, &std::unique_ptr<CreditCard>::get));
-    pdm_->NotifyPersonalDataObserver();
+    NotifyObservers();
     return true;
   } else if (const Iban* iban = GetIbanByGUID(guid)) {
     local_ibans_.erase(
         base::ranges::find(local_ibans_, iban, &std::unique_ptr<Iban>::get));
-    pdm_->NotifyPersonalDataObserver();
+    NotifyObservers();
     return true;
   }
   return false;
@@ -119,7 +120,7 @@ void TestPaymentsDataManager::AddCreditCard(const CreditCard& credit_card) {
   std::unique_ptr<CreditCard> local_credit_card =
       std::make_unique<CreditCard>(credit_card);
   local_credit_cards_.push_back(std::move(local_credit_card));
-  pdm_->NotifyPersonalDataObserver();
+  NotifyObservers();
 }
 
 std::string TestPaymentsDataManager::AddAsLocalIban(Iban iban) {
@@ -129,7 +130,7 @@ std::string TestPaymentsDataManager::AddAsLocalIban(Iban iban) {
       Iban::Guid(base::Uuid::GenerateRandomV4().AsLowercaseString()));
   std::unique_ptr<Iban> local_iban = std::make_unique<Iban>(iban);
   local_ibans_.push_back(std::move(local_iban));
-  pdm_->NotifyPersonalDataObserver();
+  NotifyObservers();
   return iban.guid();
 }
 
@@ -148,7 +149,7 @@ void TestPaymentsDataManager::DeleteLocalCreditCards(
     // behavior of PersonalDataManager.
     RemoveCardWithoutNotification(card);
   }
-  pdm_->NotifyPersonalDataObserver();
+  NotifyObservers();
 }
 
 void TestPaymentsDataManager::UpdateCreditCard(const CreditCard& credit_card) {
@@ -172,6 +173,12 @@ void TestPaymentsDataManager::AddServerCvc(int64_t instrument_id,
   if (card_iterator != server_credit_cards_.end()) {
     card_iterator->get()->set_cvc(cvc);
   }
+}
+
+std::string TestPaymentsDataManager::SaveImportedCreditCard(
+    const CreditCard& imported_credit_card) {
+  AddCreditCard(imported_credit_card);
+  return imported_credit_card.guid();
 }
 
 void TestPaymentsDataManager::ClearServerCvcs() {
@@ -199,6 +206,56 @@ bool TestPaymentsDataManager::IsAutofillPaymentMethodsEnabled() const {
   return PaymentsDataManager::IsAutofillPaymentMethodsEnabled();
 }
 
+bool TestPaymentsDataManager::IsAutofillWalletImportEnabled() const {
+  // Return the value of autofill_wallet_import_enabled_ if it has been set,
+  // otherwise fall back to the normal behavior of checking the pref_service.
+  if (autofill_wallet_import_enabled_.has_value()) {
+    return autofill_wallet_import_enabled_.value();
+  }
+  return PaymentsDataManager::IsAutofillWalletImportEnabled();
+}
+
+bool TestPaymentsDataManager::IsPaymentsWalletSyncTransportEnabled() const {
+  if (payments_wallet_sync_transport_enabled_.has_value()) {
+    return *payments_wallet_sync_transport_enabled_;
+  }
+  return PaymentsDataManager::IsPaymentsWalletSyncTransportEnabled();
+}
+
+bool TestPaymentsDataManager::ShouldSuggestServerPaymentMethods() const {
+  return IsAutofillPaymentMethodsEnabled() && IsAutofillWalletImportEnabled();
+}
+
+bool TestPaymentsDataManager::IsPaymentMethodsMandatoryReauthEnabled() {
+  if (payment_methods_mandatory_reauth_enabled_.has_value()) {
+    return payment_methods_mandatory_reauth_enabled_.value();
+  }
+  return PaymentsDataManager::IsPaymentMethodsMandatoryReauthEnabled();
+}
+
+void TestPaymentsDataManager::SetPaymentMethodsMandatoryReauthEnabled(
+    bool enabled) {
+  payment_methods_mandatory_reauth_enabled_ = enabled;
+  PaymentsDataManager::SetPaymentMethodsMandatoryReauthEnabled(enabled);
+}
+
+bool TestPaymentsDataManager::IsPaymentCvcStorageEnabled() {
+  if (payments_cvc_storage_enabled_.has_value()) {
+    return payments_cvc_storage_enabled_.value();
+  }
+  return PaymentsDataManager::IsPaymentCvcStorageEnabled();
+}
+
+bool TestPaymentsDataManager::IsSyncFeatureEnabledForPaymentsServerMetrics()
+    const {
+  return false;
+}
+
+CoreAccountInfo TestPaymentsDataManager::GetAccountInfoForPaymentsServer()
+    const {
+  return account_info_;
+}
+
 void TestPaymentsDataManager::ClearCreditCards() {
   local_credit_cards_.clear();
   server_credit_cards_.clear();
@@ -206,6 +263,62 @@ void TestPaymentsDataManager::ClearCreditCards() {
 
 void TestPaymentsDataManager::ClearCreditCardOfferData() {
   autofill_offer_data_.clear();
+}
+
+void TestPaymentsDataManager::ClearAllLocalData() {
+  local_credit_cards_.clear();
+  local_ibans_.clear();
+}
+
+void TestPaymentsDataManager::AddServerCreditCard(
+    const CreditCard& credit_card) {
+  std::unique_ptr<CreditCard> server_credit_card =
+      std::make_unique<CreditCard>(credit_card);
+  server_credit_cards_.push_back(std::move(server_credit_card));
+  NotifyObservers();
+}
+
+void TestPaymentsDataManager::AddAutofillOfferData(
+    const AutofillOfferData& offer_data) {
+  std::unique_ptr<AutofillOfferData> data =
+      std::make_unique<AutofillOfferData>(offer_data);
+  autofill_offer_data_.emplace_back(std::move(data));
+  NotifyObservers();
+}
+
+void TestPaymentsDataManager::AddServerIban(const Iban& iban) {
+  CHECK(iban.value().empty());
+  server_ibans_.push_back(std::make_unique<Iban>(iban));
+  NotifyObservers();
+}
+
+void TestPaymentsDataManager::AddCardArtImage(const GURL& url,
+                                              const gfx::Image& image) {
+  credit_card_art_images_[url] = std::make_unique<gfx::Image>(image);
+  NotifyObservers();
+}
+
+void TestPaymentsDataManager::AddVirtualCardUsageData(
+    const VirtualCardUsageData& usage_data) {
+  autofill_virtual_card_usage_data_.push_back(
+      std::make_unique<VirtualCardUsageData>(usage_data));
+  NotifyObservers();
+}
+
+void TestPaymentsDataManager::SetNicknameForCardWithGUID(
+    std::string_view guid,
+    std::string_view nickname) {
+  for (auto& card : local_credit_cards_) {
+    if (card->guid() == guid) {
+      card->SetNickname(base::ASCIIToUTF16(nickname));
+    }
+  }
+  for (auto& card : server_credit_cards_) {
+    if (card->guid() == guid) {
+      card->SetNickname(base::ASCIIToUTF16(nickname));
+    }
+  }
+  NotifyObservers();
 }
 
 void TestPaymentsDataManager::RemoveCardWithoutNotification(

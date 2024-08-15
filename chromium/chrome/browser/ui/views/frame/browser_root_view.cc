@@ -225,7 +225,7 @@ bool BrowserRootView::CanDrop(const ui::OSExchangeData& data) {
   // necessary because we don't want to return true if the custom MIME type is
   // there but the mouse is not over the tab strip region, and we don't know the
   // current mouse location.
-  // TODO(crbug.com/1307594): This is a smoking gun code smell;
+  // TODO(crbug.com/40828528): This is a smoking gun code smell;
   // TabStripRegionView and Toolbar have different affordances, so they should
   // separately override the drag&drop methods.
   if (data.HasCustomFormat(
@@ -401,7 +401,8 @@ void BrowserRootView::OnMouseExited(const ui::MouseEvent& event) {
   RootView::OnMouseExited(event);
 }
 
-gfx::Size BrowserRootView::CalculatePreferredSize() const {
+gfx::Size BrowserRootView::CalculatePreferredSize(
+    const views::SizeBounds& available_size) const {
   return browser_view_->GetRestoredBounds().size();
 }
 
@@ -459,28 +460,23 @@ void BrowserRootView::PaintChildren(const views::PaintInfo& paint_info) {
     cc::PaintFlags flags;
     flags.setColor(toolbar_top_separator_color);
     flags.setAntiAlias(true);
-    if (features::IsChromeRefresh2023()) {
-      const float stroke_width = scale;
-      // Outset the rectangle and corner radius by half the stroke width
-      // to draw an outer stroke.
-      const float stroke_outset = stroke_width / 2;
-      const float corner_radius =
-          GetLayoutConstant(TOOLBAR_CORNER_RADIUS) * scale + stroke_outset;
+    const float stroke_width = scale;
+    // Outset the rectangle and corner radius by half the stroke width
+    // to draw an outer stroke.
+    const float stroke_outset = stroke_width / 2;
+    const float corner_radius =
+        GetLayoutConstant(TOOLBAR_CORNER_RADIUS) * scale + stroke_outset;
 
-      flags.setStyle(cc::PaintFlags::kStroke_Style);
-      flags.setStrokeWidth(stroke_width);
+    flags.setStyle(cc::PaintFlags::kStroke_Style);
+    flags.setStrokeWidth(stroke_width);
 
-      // Only draw the top half of the rounded rect.
-      canvas->ClipRect(gfx::RectF(x, 0, width, bottom + corner_radius),
-                       SkClipOp::kIntersect);
+    // Only draw the top half of the rounded rect.
+    canvas->ClipRect(gfx::RectF(x, 0, width, bottom + corner_radius),
+                     SkClipOp::kIntersect);
 
-      gfx::RectF rect(x, bottom, width, 2 * corner_radius);
-      rect.Outset(stroke_outset);
-      canvas->DrawRoundRect(rect, corner_radius, flags);
-    } else {
-      flags.setStyle(cc::PaintFlags::kFill_Style);
-      canvas->DrawRect(gfx::RectF(x, bottom - scale, width, scale), flags);
-    }
+    gfx::RectF rect(x, bottom, width, 2 * corner_radius);
+    rect.Outset(stroke_outset);
+    canvas->DrawRoundRect(rect, corner_radius, flags);
   }
 }
 

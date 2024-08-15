@@ -14,6 +14,7 @@
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation_traits.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "chrome/browser/ui/side_panel/side_panel_ui.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_toolbar_actions_model.h"
@@ -88,9 +89,10 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
 
   // Returns the web contents in a side panel if one exists.
   content::WebContents* GetWebContentsForTest(SidePanelEntryId id) override;
+  void DisableAnimationsForTesting() override;
 
-  // TODO(crbug.com/1341399): Move this method to `SidePanelUI` after decoupling
-  // `SidePanelEntry` from views.
+  // TODO(crbug.com/40851017): Move this method to `SidePanelUI` after
+  // decoupling `SidePanelEntry` from views.
   bool IsSidePanelEntryShowing(const SidePanelEntry* entry) const;
 
   // Re-runs open new tab URL check and sets button state to enabled/disabled
@@ -101,9 +103,7 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
 
   // Prevent content swapping delays from happening for testing.
   // This should be called before the side panel is first shown.
-  void SetNoDelaysForTesting(bool no_delays_for_testing) {
-    no_delays_for_testing_ = no_delays_for_testing;
-  }
+  void SetNoDelaysForTesting(bool no_delays_for_testing);
 
   SidePanelEntry* GetCurrentSidePanelEntryForTesting() {
     return current_entry_.get();
@@ -129,6 +129,8 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
 
   void RemoveSidePanelViewStateObserver(SidePanelViewStateObserver* observer);
 
+  void Close(bool supress_animations);
+
  private:
   friend class SidePanelCoordinatorTest;
   FRIEND_TEST_ALL_PREFIXES(UserNoteUICoordinatorTest,
@@ -141,7 +143,9 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
   // entry instead of letting GetEntryForKey() decide for us.
   void Show(SidePanelEntry* entry,
             std::optional<SidePanelUtil::SidePanelOpenTrigger> open_trigger =
-                std::nullopt);
+                std::nullopt,
+            bool supress_animations = false);
+  void OnClosed();
 
   views::View* GetContentContainerView() const;
 
@@ -170,6 +174,7 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
   // `content_view` if provided, otherwise get the content_view from the
   // provided SidePanelEntry.
   void PopulateSidePanel(
+      bool supress_animations,
       SidePanelEntry* entry,
       std::optional<std::unique_ptr<views::View>> content_view);
 
@@ -180,7 +185,9 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
   void UpdateToolbarButtonHighlight(bool side_panel_visible);
 
   void UpdatePanelIconAndTitle(const ui::ImageModel& icon,
-                               const std::u16string& text);
+                               const std::u16string& text,
+                               const bool should_show_title_text,
+                               const bool is_extension);
 
   // views::ViewObserver:
   void OnViewVisibilityChanged(views::View* observed_view,
@@ -241,6 +248,10 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
 
   void NotifyPinnedContainerOfActiveStateChange(SidePanelEntryKey key,
                                                 bool is_active);
+
+  void MaybeQueuePinPromo();
+  void ShowPinPromo();
+  void MaybeEndPinPromo(bool pinned);
 
   // SidePanelRegistryObserver:
   void OnEntryRegistered(SidePanelRegistry* registry,
@@ -306,6 +317,13 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
   // Used to update the visibility of the pin header button.
   raw_ptr<views::ToggleImageButton, AcrossTasksDanglingUntriaged>
       header_pin_button_ = nullptr;
+
+  // Provides delay on pinning promo.
+  base::OneShotTimer pin_promo_timer_;
+
+  // Set to the appropriate pin promo for the current side panel entry, or null
+  // if none. (Not set if e.g. already pinned.)
+  raw_ptr<const base::Feature> pending_pin_promo_ = nullptr;
 
   base::ScopedObservation<ToolbarActionsModel, ToolbarActionsModel::Observer>
       extensions_model_observation_{this};

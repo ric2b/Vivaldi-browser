@@ -76,7 +76,7 @@ v8::Local<v8::Value> JSEventHandlerForContentAttribute::GetCompiledHandler(
     return v8::Null(GetIsolate());
 
   ScriptState* script_state_of_event_target =
-      ScriptState::From(v8_context_of_event_target);
+      ScriptState::From(GetIsolate(), v8_context_of_event_target);
   if (!script_state_of_event_target->ContextIsValid())
     return v8::Null(GetIsolate());
 
@@ -207,7 +207,7 @@ v8::Local<v8::Value> JSEventHandlerForContentAttribute::GetCompiledHandler(
   DCHECK_LE(scopes_size, std::size(scopes));
 
   v8::ScriptOrigin origin(
-      isolate, V8String(isolate, source_url_), position_.line_.ZeroBasedInt(),
+      V8String(isolate, source_url_), position_.line_.ZeroBasedInt(),
       position_.column_.ZeroBasedInt(),
       true);  // true as |SanitizeScriptErrors::kDoNotSanitize|
   v8::ScriptCompiler::Source source(V8String(isolate, script_body_), origin);

@@ -10,19 +10,16 @@ import android.graphics.Bitmap;
 import android.text.TextUtils;
 import android.util.SparseArray;
 
-import androidx.annotation.NonNull;
-
 import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
 
-import org.chromium.base.ObserverList;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.layouts.content.TitleBitmapFactory;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabFavicon;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupTitleUtils;
+import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper.DefaultFaviconHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper.FaviconImageCallback;
@@ -56,8 +53,6 @@ public class LayerTitleCache {
     private FaviconHelper mFaviconHelper;
     private DefaultFaviconHelper mDefaultFaviconHelper;
 
-    private ObserverList<GroupTitleObserver> mGroupTitleObservers = new ObserverList<>();
-
     /** Responsible for building titles on light themes or standard tabs. */
     protected TitleBitmapFactory mStandardTitleBitmapFactory;
 
@@ -66,19 +61,6 @@ public class LayerTitleCache {
 
     // Vivaldi
     boolean mIsStackStrip;
-
-    /** Observer for tab group title layers. */
-    public interface GroupTitleObserver {
-        /**
-         * This method will be called when the result group title bitmap is ready.
-         *
-         * @param incognito Whether the title's source group is Incognito or not.
-         * @param rootId The title's source group's root ID.
-         * @param title The text the group title bitmap represents.
-         * @param widthPx The width of the title in px.
-         */
-        void onGroupTitleUpdated(boolean incognito, int rootId, String title, int widthPx);
-    }
 
     /** Builds an instance of the LayerTitleCache. */
     public LayerTitleCache(Context context, ResourceManager resourceManager) {
@@ -188,7 +170,7 @@ public class LayerTitleCache {
         originalFavicon.setDensity(mContext.getResources().getDisplayMetrics().densityDpi);
 
         title.set(
-                titleBitmapFactory.getTitleBitmap(mContext, titleString),
+                titleBitmapFactory.getTabTitleBitmap(titleString),
                 titleBitmapFactory.getFaviconBitmap(originalFavicon),
                 fetchFaviconFromHistory);
 
@@ -212,22 +194,26 @@ public class LayerTitleCache {
     }
 
     @CalledByNative
-    private void buildUpdatedGroupTitle(int groupRootId) {
-        getUpdatedGroupTitle(groupRootId, "");
+    private void buildUpdatedGroupTitle(int groupRootId, boolean incognito) {
+        // TODO(crbug.com/331642736): Investigate if this can be called with a different width than
+        //  what is stored for the corresponding group title.
+        TabGroupModelFilter filter =
+                (TabGroupModelFilter)
+                        mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(incognito);
+        if (!filter.tabGroupExistsForRootId(groupRootId)) return;
+
+        String titleString = filter.getTabGroupTitle(groupRootId);
+        getUpdatedGroupTitle(groupRootId, titleString, incognito);
     }
 
-    public String getUpdatedGroupTitle(int groupRootId, String defaultTitle) {
-        String titleString = TabGroupTitleUtils.getTabGroupTitle(groupRootId);
-        if (titleString == null) titleString = defaultTitle;
+    public String getUpdatedGroupTitle(int groupRootId, String titleString, boolean incognito) {
+        if (TextUtils.isEmpty(titleString)) return null;
 
-        getUpdatedGroupTitleInternal(groupRootId, titleString);
+        getUpdatedGroupTitleInternal(groupRootId, titleString, incognito);
         return titleString;
     }
 
-    private String getUpdatedGroupTitleInternal(int rootId, String titleString) {
-        Tab tab = mTabModelSelector.getTabById(rootId);
-        boolean incognito = tab.isIncognito();
-
+    private String getUpdatedGroupTitleInternal(int rootId, String titleString, boolean incognito) {
         TitleBitmapFactory titleBitmapFactory =
                 incognito ? mDarkTitleBitmapFactory : mStandardTitleBitmapFactory;
 
@@ -238,17 +224,13 @@ public class LayerTitleCache {
             title.register();
         }
 
-        Bitmap titleBitmap = titleBitmapFactory.getTitleBitmap(mContext, titleString);
-        for (GroupTitleObserver observer : mGroupTitleObservers) {
-            observer.onGroupTitleUpdated(incognito, rootId, titleString, titleBitmap.getWidth());
-        }
+        Bitmap titleBitmap = titleBitmapFactory.getGroupTitleBitmap(mContext, rootId, titleString);
         title.set(titleBitmap);
 
         if (mNativeLayerTitleCache != 0) {
-            String tabTitle = tab.getTitle();
             boolean isRtl =
-                    tabTitle != null
-                            && LocalizationUtils.getFirstStrongCharacterDirection(tabTitle)
+                    titleString != null
+                            && LocalizationUtils.getFirstStrongCharacterDirection(titleString)
                                     == LocalizationUtils.RIGHT_TO_LEFT;
             LayerTitleCacheJni.get()
                     .updateGroupLayer(
@@ -260,6 +242,19 @@ public class LayerTitleCache {
                             isRtl);
         }
         return titleString;
+    }
+
+    /**
+     * @param incognito Whether or not the tab group is from the Incognito model.
+     * @param titleString The title of the tab group.
+     * @return The width in px of the title.
+     */
+    public int getGroupTitleWidth(boolean incognito, String titleString) {
+        if (titleString == null) return 0;
+
+        TitleBitmapFactory titleBitmapFactory =
+                incognito ? mDarkTitleBitmapFactory : mStandardTitleBitmapFactory;
+        return titleBitmapFactory.getGroupTitleWidth(titleString);
     }
 
     private void fetchFaviconForTab(final Tab tab) {
@@ -345,8 +340,6 @@ public class LayerTitleCache {
     }
 
     public void removeGroupTitle(int rootId) {
-        // TODO(crbug.com/326492787): Currently unused. Call to release bitmaps when we actually
-        // observe tab group changes (i.e. call this when a tab group is destroyed).
         Title title = mGroupTitles.get(rootId);
         if (title == null) return;
         title.unregister();
@@ -355,24 +348,6 @@ public class LayerTitleCache {
         LayerTitleCacheJni.get()
                 .updateGroupLayer(
                         mNativeLayerTitleCache, LayerTitleCache.this, rootId, -1, false, false);
-    }
-
-    /**
-     * Adds an observer.
-     *
-     * @param observer The observer to add.
-     */
-    public void addObserver(@NonNull GroupTitleObserver observer) {
-        mGroupTitleObservers.addObserver(observer);
-    }
-
-    /**
-     * Removes an observer.
-     *
-     * @param observer The observer to remove.
-     */
-    public void removeObserver(@NonNull GroupTitleObserver observer) {
-        mGroupTitleObservers.removeObserver(observer);
     }
 
     private class Title {

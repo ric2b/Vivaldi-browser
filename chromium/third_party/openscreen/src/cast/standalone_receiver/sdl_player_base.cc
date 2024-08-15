@@ -20,7 +20,7 @@ namespace openscreen::cast {
 
 SDLPlayerBase::SDLPlayerBase(ClockNowFunctionPtr now_function,
                              TaskRunner& task_runner,
-                             Receiver* receiver,
+                             Receiver& receiver,
                              const std::string& codec_name,
                              std::function<void()> error_callback,
                              const char* media_type)
@@ -32,25 +32,24 @@ SDLPlayerBase::SDLPlayerBase(ClockNowFunctionPtr now_function,
       decode_alarm_(now_, task_runner),
       render_alarm_(now_, task_runner),
       presentation_alarm_(now_, task_runner) {
-  OSP_CHECK(receiver_);
   OSP_CHECK(media_type_);
 
   decoder_.set_client(this);
-  receiver_->SetConsumer(this);
+  receiver_.SetConsumer(this);
   ResumeRendering();
 }
 
 SDLPlayerBase::~SDLPlayerBase() {
-  receiver_->SetConsumer(nullptr);
+  receiver_.SetConsumer(nullptr);
   decoder_.set_client(nullptr);
 }
 
-void SDLPlayerBase::OnFatalError(std::string message) {
+void SDLPlayerBase::OnFatalError(const std::string& message) {
   state_ = kError;
-  error_status_ = Error(Error::Code::kUnknownError, std::move(message));
+  error_status_ = Error(Error::Code::kUnknownError, message);
 
   // Halt decoding and clear the rendering queue.
-  receiver_->SetConsumer(nullptr);
+  receiver_.SetConsumer(nullptr);
   decoder_.set_client(nullptr);
   decode_alarm_.Cancel();
   frames_to_render_.clear();
@@ -69,7 +68,7 @@ Clock::time_point SDLPlayerBase::ResyncAndDeterminePresentationTime(
   constexpr auto kMaxPlayoutDrift = milliseconds(100);
   const auto media_time_since_last_sync =
       (frame.rtp_timestamp - last_sync_rtp_timestamp_)
-          .ToDuration<Clock::duration>(receiver_->rtp_timebase());
+          .ToDuration<Clock::duration>(receiver_.rtp_timebase());
   Clock::time_point presentation_time =
       last_sync_reference_time_ + media_time_since_last_sync;
   const auto drift = to_milliseconds(frame.reference_time - presentation_time);
@@ -100,7 +99,7 @@ void SDLPlayerBase::OnFramesReady(int buffer_size) {
   // Consume the next frame.
   const Clock::time_point start_time = now_();
   buffer_.Resize(buffer_size);
-  EncodedFrame frame = receiver_->ConsumeNextFrame(buffer_.AsByteBuffer());
+  EncodedFrame frame = receiver_.ConsumeNextFrame(buffer_.AsByteBuffer());
 
   // Create the tracking state for the frame in the player pipeline.
   OSP_CHECK_EQ(frames_to_render_.count(frame.frame_id), 0);
@@ -127,7 +126,8 @@ void SDLPlayerBase::OnFrameDecoded(FrameId frame_id, const AVFrame& frame) {
   ResumeRendering();
 }
 
-void SDLPlayerBase::OnDecodeError(FrameId frame_id, std::string message) {
+void SDLPlayerBase::OnDecodeError(FrameId frame_id,
+                                  const std::string& message) {
   const auto it = frames_to_render_.find(frame_id);
   if (it != frames_to_render_.end()) {
     frames_to_render_.erase(it);
@@ -135,7 +135,7 @@ void SDLPlayerBase::OnDecodeError(FrameId frame_id, std::string message) {
   OSP_LOG_WARN << "Requesting " << media_type_
                << " key frame because of error decoding" << frame_id << ": "
                << message;
-  receiver_->RequestKeyFrame();
+  receiver_.RequestKeyFrame();
   ResumeDecoding();
 }
 
@@ -215,13 +215,13 @@ void SDLPlayerBase::RenderAndSchedulePresentation() {
       ((kCumulativeAveragePoints - 1) * recent_processing_time_ +
        1 * measured_processing_time) /
       kCumulativeAveragePoints;
-  receiver_->SetPlayerProcessingTime(recent_processing_time_);
+  receiver_.SetPlayerProcessingTime(recent_processing_time_);
 }
 
 void SDLPlayerBase::ResumeDecoding() {
   decode_alarm_.Schedule(
       [this] {
-        const int buffer_size = receiver_->AdvanceToNextFrame();
+        const int buffer_size = receiver_.AdvanceToNextFrame();
         if (buffer_size != Receiver::kNoFramesReady) {
           OnFramesReady(buffer_size);
         }

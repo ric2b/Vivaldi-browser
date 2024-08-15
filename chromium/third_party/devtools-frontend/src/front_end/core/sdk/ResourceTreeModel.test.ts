@@ -9,11 +9,12 @@ import {
   dispatchEvent,
   setMockConnectionResponseHandler,
 } from '../../testing/MockConnection.js';
-import {assertNotNullOrUndefined} from '../platform/platform.js';
+import {
+  getInitializedResourceTreeModel,
+  LOADER_ID,
+} from '../../testing/ResourceTreeHelpers.js';
 
 import * as SDK from './sdk.js';
-
-const {assert} = chai;
 
 function navigateFrameWithMockConnection(
     storageKey: string, resourceTreeModel: SDK.ResourceTreeModel.ResourceTreeModel|null) {
@@ -31,31 +32,10 @@ function navigateFrameWithMockConnection(
 }
 
 describeWithMockConnection('ResourceTreeModel', () => {
-  const beforeGetResourceTree = Promise.resolve();
-
-  beforeEach(async () => {
-    setMockConnectionResponseHandler('Page.getResourceTree', async () => {
-      await beforeGetResourceTree;
-      return {
-        frameTree: {
-          frame: {
-            id: 'main',
-            loaderId: 'test',
-            url: 'http://example.com',
-            securityOrigin: 'http://example.com',
-            mimeType: 'text/html',
-          },
-          resources: [],
-        },
-      };
-    });
-  });
-
-  it('calls clearRequests on reloadPage', () => {
-    const target = createTarget();
-    const resourceTreeModel = target.model(SDK.ResourceTreeModel.ResourceTreeModel);
+  it('calls clearRequests on reloadPage', async () => {
+    const resourceTreeModel = await getInitializedResourceTreeModel(createTarget());
     const clearRequests = sinon.stub(SDK.NetworkManager.NetworkManager.prototype, 'clearRequests');
-    resourceTreeModel!.reloadPage();
+    resourceTreeModel.reloadPage();
     assert.isTrue(clearRequests.calledOnce, 'Not called just once');
   });
 
@@ -111,7 +91,7 @@ describeWithMockConnection('ResourceTreeModel', () => {
     const resourceTreeModel = target.model(SDK.ResourceTreeModel.ResourceTreeModel);
     assert.isEmpty(resourceTreeModel?.frames());
     const manager = target.model(SDK.StorageKeyManager.StorageKeyManager);
-    assertNotNullOrUndefined(manager);
+    assert.exists(manager);
     const storageKeyAddedPromise = new Promise<void>(resolve => {
       manager.addEventListener(SDK.StorageKeyManager.Events.StorageKeyAdded, () => {
         resolve();
@@ -139,22 +119,11 @@ describeWithMockConnection('ResourceTreeModel', () => {
 
   function getResourceTreeModel(target: SDK.Target.Target): SDK.ResourceTreeModel.ResourceTreeModel {
     const resourceTreeModel = target.model(SDK.ResourceTreeModel.ResourceTreeModel);
-    assertNotNullOrUndefined(resourceTreeModel);
+    assert.exists(resourceTreeModel);
     return resourceTreeModel;
   }
 
-  it('calls reloads only top frames without tab target', () => {
-    const mainFrameTarget = createTarget();
-    const subframeTarget = createTarget({parentTarget: mainFrameTarget});
-    const reloadMainFramePage = sinon.spy(getResourceTreeModel(mainFrameTarget), 'reloadPage');
-    const reloadSubframePage = sinon.spy(getResourceTreeModel(subframeTarget), 'reloadPage');
-    SDK.ResourceTreeModel.ResourceTreeModel.reloadAllPages();
-
-    assert.isTrue(reloadMainFramePage.calledOnce);
-    assert.isTrue(reloadSubframePage.notCalled);
-  });
-
-  it('calls reloads only top frames with tab target', () => {
+  it('calls reloads only top frames', () => {
     const tabTarget = createTarget({type: SDK.Target.Type.Tab});
     const mainFrameTarget = createTarget({parentTarget: tabTarget});
     const subframeTarget = createTarget({parentTarget: mainFrameTarget});
@@ -166,17 +135,19 @@ describeWithMockConnection('ResourceTreeModel', () => {
     assert.isTrue(reloadSubframePage.notCalled);
   });
 
-  it('identifies top frame without tab target', async () => {
-    const mainFrameTarget = createTarget();
-    const subframeTarget = createTarget({parentTarget: mainFrameTarget});
+  it('tags reloads with the targets loaderId', async () => {
+    const target = createTarget();
+    const resourceTreeModel = await getInitializedResourceTreeModel(target);
 
-    dispatchEvent(mainFrameTarget, 'Page.frameNavigated', frameNavigatedEvent());
-    dispatchEvent(subframeTarget, 'Page.frameNavigated', frameNavigatedEvent('parentId'));
-    assert.isTrue(getResourceTreeModel(mainFrameTarget).mainFrame!.isOutermostFrame());
-    assert.isFalse(getResourceTreeModel(subframeTarget).mainFrame!.isOutermostFrame());
+    const reload = sinon.spy(target.pageAgent(), 'invoke_reload');
+    assert.isNotNull(resourceTreeModel.mainFrame);
+    resourceTreeModel.reloadPage();
+    assert.isTrue(reload.calledOnce);
+    assert.deepStrictEqual(
+        reload.args[0], [{ignoreCache: undefined, loaderId: LOADER_ID, scriptToEvaluateOnLoad: undefined}]);
   });
 
-  it('identifies not top frame with tab target', async () => {
+  it('identifies not top frame', async () => {
     const tabTarget = createTarget({type: SDK.Target.Type.Tab});
     const mainFrameTarget = createTarget({parentTarget: tabTarget});
     const subframeTarget = createTarget({parentTarget: mainFrameTarget});
@@ -190,7 +161,7 @@ describeWithMockConnection('ResourceTreeModel', () => {
   it('emits PrimaryPageChanged event upon prerender activation', async () => {
     const tabTarget = createTarget({type: SDK.Target.Type.Tab});
     const childTargetManager = tabTarget.model(SDK.ChildTargetManager.ChildTargetManager);
-    assertNotNullOrUndefined(childTargetManager);
+    assert.exists(childTargetManager);
 
     const targetId = 'target_id' as Protocol.Target.TargetID;
     const targetInfo = {
@@ -207,9 +178,9 @@ describeWithMockConnection('ResourceTreeModel', () => {
         {sessionId: 'session_id' as Protocol.Target.SessionID, targetInfo, waitingForDebugger: false});
 
     const prerenderTarget = SDK.TargetManager.TargetManager.instance().targetById(targetId);
-    assertNotNullOrUndefined(prerenderTarget);
+    assert.exists(prerenderTarget);
     const resourceTreeModel = prerenderTarget.model(SDK.ResourceTreeModel.ResourceTreeModel);
-    assertNotNullOrUndefined(resourceTreeModel);
+    assert.exists(resourceTreeModel);
 
     const primaryPageChangedEvents:
         {frame: SDK.ResourceTreeModel.ResourceTreeFrame, type: SDK.ResourceTreeModel.PrimaryPageChangeType}[] = [];

@@ -99,7 +99,7 @@ Shape GetShapeFromTensorType(mlir::Value value) {
 
   mlir::Operation* op = value.getDefiningOp();
   CHECK(op);
-  CHECK(value.getType().isa<mlir::TensorType>());
+  CHECK(mlir::isa<mlir::TensorType>(value.getType()));
   Shape shape;
   if (auto attr = op->getAttrOfType<mlir::StringAttr>(kDefaultLayoutAttrName)) {
     shape = *xla::ParseShape(
@@ -123,9 +123,11 @@ bool IsMatrixMultiplication(const HloInstruction& dot) {
   PrimitiveType output_primitive_type = dot.shape().element_type();
   bool type_is_allowed =
       (output_primitive_type == F8E4M3FN || output_primitive_type == F8E5M2 ||
-       output_primitive_type == F16 || output_primitive_type == BF16 ||
-       output_primitive_type == F32 || output_primitive_type == F64 ||
-       output_primitive_type == C64 || output_primitive_type == C128) ||
+       output_primitive_type == F8E4M3FNUZ ||
+       output_primitive_type == F8E5M2FNUZ || output_primitive_type == F16 ||
+       output_primitive_type == BF16 || output_primitive_type == F32 ||
+       output_primitive_type == F64 || output_primitive_type == C64 ||
+       output_primitive_type == C128) ||
       (output_primitive_type == S32 && lhs_shape.element_type() == S8 &&
        rhs_shape.element_type() == S8);
   bool shapes_are_valid =
@@ -136,17 +138,7 @@ bool IsMatrixMultiplication(const HloInstruction& dot) {
       !ShapeUtil::IsZeroElementArray(lhs_shape) &&
       !ShapeUtil::IsZeroElementArray(rhs_shape);
 
-  if (!shapes_are_valid) {
-    return false;
-  }
-
-  // The size of the reduction dimension should match. The shape inference
-  // guarantees this invariant, so the check here is for programming
-  // errors.
-  CHECK_EQ(lhs_shape.dimensions(dim_numbers.lhs_contracting_dimensions(0)),
-           rhs_shape.dimensions(dim_numbers.rhs_contracting_dimensions(0)));
-
-  return true;
+  return shapes_are_valid;
 }
 
 bool IsMatrixVectorMultiplication(const HloInstruction& dot) {
@@ -176,17 +168,7 @@ bool IsMatrixVectorMultiplication(const HloInstruction& dot) {
       !ShapeUtil::IsZeroElementArray(lhs_shape) &&
       !ShapeUtil::IsZeroElementArray(rhs_shape);
 
-  if (!shapes_are_valid) {
-    return false;
-  }
-
-  // The size of the reduction dimension should match. The shape inference
-  // guarantees this invariant, so the check here is for programming
-  // errors.
-  CHECK_EQ(lhs_shape.dimensions(dim_numbers.lhs_contracting_dimensions(0)),
-           rhs_shape.dimensions(dim_numbers.rhs_contracting_dimensions(0)));
-
-  return true;
+  return shapes_are_valid;
 }
 
 const char* const kCusolverCholeskyCallTarget = "__cusolver$cholesky";
@@ -216,13 +198,17 @@ bool IsContiguousSlice(const HloInstruction& instr) {
   // src and dst dimensions match.
   const Shape& src_shape = slice->operand(0)->shape();
   const Shape& dst_shape = slice->shape();
+  return IsContiguousSlice(src_shape, dst_shape);
+}
+
+bool IsContiguousSlice(const Shape& orig, const Shape& sliced) {
   bool sliced_dim_found = false;
-  for (auto dim : src_shape.layout().minor_to_major()) {
+  for (auto dim : orig.layout().minor_to_major()) {
     if (!sliced_dim_found) {
-      sliced_dim_found = dst_shape.dimensions(dim) < src_shape.dimensions(dim);
+      sliced_dim_found = sliced.dimensions(dim) < orig.dimensions(dim);
       continue;
     }
-    if (dst_shape.dimensions(dim) != 1) return false;
+    if (sliced.dimensions(dim) != 1) return false;
   }
   return true;
 }
@@ -360,7 +346,7 @@ static int64_t GetMemRefSizeInBytes(mlir::MemRefType type) {
   if (type.getElementType().isInteger(/*width=*/1)) {
     return type.getNumElements();
   } else if (auto complexType =
-                 type.getElementType().dyn_cast<mlir::ComplexType>()) {
+                 mlir::dyn_cast<mlir::ComplexType>(type.getElementType())) {
     auto elementType = complexType.getElementType();
     return elementType.getIntOrFloatBitWidth() * type.getNumElements() * 2 /
            CHAR_BIT;
@@ -376,15 +362,15 @@ absl::StatusOr<BufferAllocation::Slice> GetAllocationSlice(
 }
 
 std::vector<const HloInstruction*> GetOutputDefiningDynamicUpdateSlices(
-    const std::vector<const HloInstruction*>& roots) {
+    absl::Span<HloInstructionAdaptor const> roots) {
   std::vector<const HloInstruction*> dus_ops;
-  for (const HloInstruction* root : roots) {
-    while (root->opcode() == HloOpcode::kBitcast) {
-      root = root->operand(0);
+  for (HloInstructionAdaptor root : roots) {
+    while (root.opcode() == HloOpcode::kBitcast) {
+      root = root.GetOperand(0);
     }
 
-    if (root->opcode() == HloOpcode::kDynamicUpdateSlice) {
-      dus_ops.push_back(root);
+    if (root.opcode() == HloOpcode::kDynamicUpdateSlice) {
+      dus_ops.push_back(&root.instruction());
     }
   }
   return dus_ops;
@@ -404,7 +390,7 @@ absl::InlinedVector<const HloInstruction*, 4> GetStartIndices(T instr) {
 absl::StatusOr<bool> CanEmitFusedDynamicUpdateSliceInPlaceForGpu(
     const HloFusionInstruction* fusion,
     const BufferAssignment* buffer_assignment,
-    const std::vector<const HloInstruction*>& roots) {
+    absl::Span<HloInstructionAdaptor const> roots) {
   std::vector<const HloInstruction*> dus_instrs =
       GetOutputDefiningDynamicUpdateSlices(roots);
 
@@ -533,7 +519,7 @@ absl::StatusOr<bool> CanEmitFusedDynamicUpdateSliceInPlaceForGpu(
     // be necessary for the shape to be the same for all the dynamic slice
     // updates. Note that this equality check purposefully ignores the element
     // type.
-    if (dus->operand(1)->shape() != update_shape) {
+    if (dus->update()->shape() != update_shape) {
       return false;
     }
 
@@ -551,18 +537,19 @@ absl::StatusOr<bool> CanEmitFusedDynamicUpdateSliceInPlaceForGpu(
 
 Shape GetShape(mlir::Value value) {
   Shape shape;
-  if (value.getType().isa<mlir::MemRefType>()) {
+  if (mlir::isa<mlir::MemRefType>(value.getType())) {
     shape = TypeToShape(value.getType());
-  } else if (value.getType().isa<mlir::TensorType>()) {
+  } else if (mlir::isa<mlir::TensorType>(value.getType())) {
     shape = GetShapeFromTensorType(value);
-  } else if (value.getType().isa<mlir::TupleType>()) {
+  } else if (mlir::isa<mlir::TupleType>(value.getType())) {
     shape = TypeToShape(value.getType());
   } else {
     LOG(FATAL) << "Unexpected value type to get shape for";
   }
-  if (primitive_util::Is4BitType(shape.element_type())) {
+  if (primitive_util::IsSubByteNonPredType(shape.element_type())) {
     // 4-bit types are always packed on the GPU
-    shape.mutable_layout()->set_element_size_in_bits(4);
+    shape.mutable_layout()->set_element_size_in_bits(
+        primitive_util::BitWidth(shape.element_type()));
   }
   return shape;
 }
@@ -665,11 +652,11 @@ bool IsIntermediate(const HloInstruction* instr, int allowed_operand_count,
     // TODO(akuegel): Figure out why we still need this check for transpose
     // fusions.
     int64_t num_users =
-        fusion ? absl::c_count_if(HloInstructionAdaptor{*instr}.GetUsers(),
-                                  [&](auto user) {
-                                    return fusion->ContainsInstruction(user);
-                                  })
-               : instr->user_count();
+        fusion
+            ? absl::c_count_if(
+                  HloInstructionAdaptor{*instr, fusion}.GetUsers(),
+                  [&](auto user) { return fusion->ContainsInstruction(user); })
+            : instr->user_count();
     if (num_users > 1) {
       return false;
     }
@@ -701,7 +688,7 @@ bool IsIntermediate(const HloInstruction* instr, int allowed_operand_count,
 }
 
 static std::optional<HloInstructionAdaptor> FindNonTrivialHero(
-    HloInstructionAdaptor root, const HloFusionAdaptor& fusion,
+    const HloInstructionAdaptor& root,
     const std::function<bool(const HloInstruction&)>& predicate) {
   std::optional<HloInstructionAdaptor> hero = std::nullopt;
   auto visitor = [&](HloInstructionAdaptor node) {
@@ -723,7 +710,7 @@ static std::optional<HloInstructionAdaptor> FindNonTrivialHero(
     }
     return TraversalResult::kAdvance;
   };
-  HloBfsConsumersFirstTraversal({root}, fusion, visitor);
+  HloBfsConsumersFirstTraversal({root}, root.parent(), visitor);
   if (!hero) {
     return std::nullopt;
   }
@@ -740,23 +727,23 @@ static std::optional<HloInstructionAdaptor> FindNonTrivialHero(
                            /*add_single_user_check=*/true);
   };
   bool visit_operands = false;
-  if (HloAnyOf(hero->GetUsers(), fusion, is_nontrivial, visit_operands)) {
+  if (HloAnyOf(hero->GetUsers(), hero->parent(), is_nontrivial,
+               visit_operands)) {
     return std::nullopt;
   }
 
   return hero;
 }
 
-const HloInstruction& FindNonTrivialHero(const HloInstruction& instr,
-                                         const HloFusionAdaptor& fusion) {
-  HloInstructionAdaptor hero{instr};
+HloInstructionAdaptor FindNonTrivialHero(const HloInstructionAdaptor& instr) {
+  HloInstructionAdaptor hero = instr;
 
   // Go up the chain of trivial element-wise(+bitcast, -copy) operations. Note
   // that no memoization is needed due to number of operands constraints: we
   // never have to revisit same nodes.
   while (IsIntermediate(&hero.instruction(), /*allowed_operand_count=*/1,
-                        &fusion) &&
-         fusion.ContainsInstruction(hero.GetOperand(0))) {
+                        &hero.parent()) &&
+         hero.parent().ContainsInstruction(hero.GetOperand(0))) {
     hero = hero.GetOperand(0);
   }
 
@@ -766,25 +753,26 @@ const HloInstruction& FindNonTrivialHero(const HloInstruction& instr,
   auto is_transpose = [](const HloInstruction& node) {
     return FindTiledLogicalTranspose(node).has_value();
   };
-  if (auto transpose = FindNonTrivialHero(hero, fusion, is_transpose)) {
-    return transpose->instruction();
+  if (auto transpose = FindNonTrivialHero(hero, is_transpose)) {
+    return *transpose;
   }
   auto is_concatenate = [](const HloInstruction& node) {
     return node.opcode() == HloOpcode::kConcatenate;
   };
-  if (auto concatenate = FindNonTrivialHero(hero, fusion, is_concatenate)) {
-    return concatenate->instruction();
+  if (auto concatenate = FindNonTrivialHero(hero, is_concatenate)) {
+    return *concatenate;
   }
   if (hero.opcode() != HloOpcode::kReduce) {
     return instr;
   }
-  return hero.instruction();
+  return hero;
 }
 
 const HloInstruction& FindNonTrivialHero(const HloInstruction& instr) {
   CHECK_NE(instr.opcode(), HloOpcode::kFusion);
-  return FindNonTrivialHero(instr,
-                            *HloFusionAdaptor::ForComputation(instr.parent()));
+  auto fusion_adaptor = HloFusionAdaptor::ForComputation(instr.parent());
+  HloInstructionAdaptor instr_adaptor(instr, fusion_adaptor.get());
+  return FindNonTrivialHero(instr_adaptor).instruction();
 }
 
 void VLogModule(int level, const llvm::Module& module) {
@@ -872,11 +860,13 @@ absl::StatusOr<DenseDataIntermediate> LiteralToXlaFormat(
   }
 
   int64_t byte_size = literal.size_bytes();
-  if (primitive_util::Is4BitType(element_type)) {
-    std::vector<uint8_t> output(CeilOfRatio(byte_size, int64_t{2}));
+  if (primitive_util::IsSubByteNonPredType(element_type)) {
+    auto bit_width = primitive_util::BitWidth(element_type);
+    std::vector<uint8_t> output(CeilOfRatio<int64_t>(byte_size, 8 / bit_width));
     absl::Span<char> output_span =
         absl::MakeSpan(reinterpret_cast<char*>(output.data()), output.size());
-    PackInt4(
+    PackIntN(
+        bit_width,
         absl::MakeSpan(reinterpret_cast<const char*>(literal.untyped_data()),
                        byte_size),
         output_span);

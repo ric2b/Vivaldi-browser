@@ -83,11 +83,11 @@
 <translation id="3914946330804881301">从 Opera 导入</translation>
 <translation id="3921292902397893431">怪兽 8</translation>
 <translation id="3943857333388298514">粘贴</translation>
-<translation id="3974783668264968389">Vivaldi 无法解锁您的安全密钥存储空间。如果没有密钥存储空间，您将丢失已保存的登录信息和安全 cookie，而且某些功能（如同步、邮件和日历）也将停止工作。
-
-    请立即退出，解锁或修复密钥存储空间，然后再试一次。如果真的要继续，请单击复选框并按下 "放弃数据继续 "按钮。</translation>
 <translation id="4005270918754737597">跳过此版本</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi 无法解锁您的安全密钥存储。如果没有密钥存储，您将丢失保存的登录信息、安全 cookie，并且同步、邮件和日历等一些功能将停止工作。
+
+    Please quit now, unlock or repair your key store, and then try again. Do you really want to continue, but lose data?请立即退出，解锁或修复您的密钥存储，然后重试。您确认要放弃数据并继续吗？</translation>
 <translation id="4074744496918018786">在隐身窗口中打开图片</translation>
 <translation id="410351446219883937">自动播放</translation>
 <translation id="4281844954008187215">服务条款</translation>
@@ -178,6 +178,7 @@
 <translation id="8669345741879513971">怪兽 10</translation>
 <translation id="867544375504146191">Yandex 浏览器</translation>
 <translation id="8689295374912158752">检查入口文档</translation>
+<translation id="875142999698251063">立即退出</translation>
 <translation id="8768970203213061953">风景 14</translation>
 <translation id="8773635261052182196">你将不会再收到通知，你可以在 vivaldi 设置中重新打开。</translation>
 <translation id="8774017153185436870">网站可能会自动播放视频</translation>

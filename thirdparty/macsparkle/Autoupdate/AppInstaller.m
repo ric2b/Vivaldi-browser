@@ -27,6 +27,7 @@
 #import "SPUInstallerAgentProtocol.h"
 #import "SPUInstallationType.h"
 #import "SPULocalCacheDirectory.h"
+#import "SPUVerifierInformation.h"
 
 
 #include "AppKitPrevention.h"
@@ -58,11 +59,13 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
     NSString *_userName;
     SUHost *_host;
     NSString *_updateDirectoryPath;
+    NSString *_extractionDirectory;
     NSString *_downloadName;
     NSString *_decryptionPassword;
     SUSignatures *_signatures;
     NSString *_relaunchPath;
     NSString *_installationType;
+    SPUVerifierInformation *_verifierInformation;
 
     id<SUInstallerProtocol> _installer;
 
@@ -170,7 +173,8 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
     [_communicator handleMessageWithIdentifier:SPUExtractionStarted data:[NSData data]];
     
     NSString *archivePath = [_updateDirectoryPath stringByAppendingPathComponent:_downloadName];
-    id<SUUnarchiverProtocol> unarchiver = [SUUnarchiver unarchiverForPath:archivePath updatingHostBundlePath:_host.bundlePath decryptionPassword:_decryptionPassword expectingInstallationType:_installationType];
+    
+    id<SUUnarchiverProtocol> unarchiver = [SUUnarchiver unarchiverForPath:archivePath extractionDirectory:_extractionDirectory updatingHostBundlePath:_host.bundlePath decryptionPassword:_decryptionPassword expectingInstallationType:_installationType];
     
     NSError *unarchiverError = nil;
     BOOL success = NO;
@@ -179,7 +183,15 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
         
         success = NO;
     } else {
-        _updateValidator = [[SUUpdateValidator alloc] initWithDownloadPath:archivePath signatures:_signatures host:_host];
+        NSError *fileAttributesError = nil;
+        NSDictionary<NSFileAttributeKey, id> *archiveFileAttributes = [NSFileManager.defaultManager attributesOfItemAtPath:archivePath error:&fileAttributesError];
+        if (archiveFileAttributes == nil) {
+            SULog(SULogLevelError, @"Failed to retrieve file attributes from archive: %@.", fileAttributesError);
+        } else {
+            _verifierInformation.actualContentLength = (uint64_t)(archiveFileAttributes.fileSize);
+        }
+        
+        _updateValidator = [[SUUpdateValidator alloc] initWithDownloadPath:archivePath signatures:_signatures host:_host verifierInformation:_verifierInformation];
 
         // Delta & package updates will require validation before extraction
         // Normal application updates are a bit more lenient allowing developers to change one of apple dev ID or EdDSA keys
@@ -203,7 +215,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
                  [self->_communicator handleMessageWithIdentifier:SPUValidationStarted data:[NSData data]];
                  
                  NSError *validationError = nil;
-                 BOOL validationSuccess = [self->_updateValidator validateWithUpdateDirectory:self->_updateDirectoryPath error:&validationError];
+                 BOOL validationSuccess = [self->_updateValidator validateWithUpdateDirectory:self->_extractionDirectory error:&validationError];
                  
                  if (!validationSuccess) {
                      [self cleanupAndExitWithStatus:EXIT_FAILURE error:[NSError errorWithDomain:SUSparkleErrorDomain code:SPUInstallerError userInfo:@{ NSLocalizedDescriptionKey: @"Update validation was a failure", NSUnderlyingErrorKey: validationError }]];
@@ -253,6 +265,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
     // but may as well set other fields to nil too
     [self clearUpdateDirectory];
     _downloadName = nil;
+    _extractionDirectory = nil;
     _decryptionPassword = nil;
     _signatures = nil;
     _relaunchPath = nil;
@@ -315,7 +328,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(RETRIEVE_PROCESS_IDENTIFIER_TIMEOUT * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (!receivedResponse) {
-            [self cleanupAndExitWithStatus:EXIT_FAILURE error:[NSError errorWithDomain:SUSparkleErrorDomain code:SPUInstallerError userInfo:@{ NSLocalizedDescriptionKey: @"Timeout error: failed to retreive process identifier from agent" }]];
+            [self cleanupAndExitWithStatus:EXIT_FAILURE error:[NSError errorWithDomain:SUSparkleErrorDomain code:SPUInstallerError userInfo:@{ NSLocalizedDescriptionKey: @"Timeout error: failed to retrieve process identifier from agent" }]];
         }
     });
 }
@@ -443,14 +456,23 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
                 return;
             }
             
-            // Carry these properities separately rather than using the SUInstallationInputData object
+            NSString *extractionDirectory = [SPULocalCacheDirectory createUniqueDirectoryInDirectory:cacheInstallationPath];
+            if (extractionDirectory == nil) {
+                [self cleanupAndExitWithStatus:EXIT_FAILURE error:[NSError errorWithDomain:SUSparkleErrorDomain code:SPUInstallerError userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Error: Failed to create installation extraction directory in %@", cacheInstallationPath] }]];
+                
+                return;
+            }
+            
+            // Carry these properties separately rather than using the SUInstallationInputData object
             // Some of our properties may slightly differ than our input and we don't want to make the mistake of using one of those
             self->_installationType = installationType;
             self->_relaunchPath = installationData.relaunchPath;
             self->_downloadName = downloadName;
             self->_signatures = installationData.signatures;
             self->_updateDirectoryPath = cacheInstallationPath;
+            self->_extractionDirectory = extractionDirectory;
             self->_host = [[SUHost alloc] initWithBundle:hostBundle];
+            self->_verifierInformation = [[SPUVerifierInformation alloc] initWithExpectedVersion:installationData.expectedVersion expectedContentLength:installationData.expectedContentLength];
             
             [self extractAndInstallUpdate];
         });
@@ -510,7 +532,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
     
     dispatch_async(_installerQueue, ^{
         NSError *installerError = nil;
-        id <SUInstallerProtocol> installer = [SUInstaller installerForHost:self->_host expectedInstallationType:self->_installationType updateDirectory:self->_updateDirectoryPath homeDirectory:self->_homeDirectory userName:self->_userName error:&installerError];
+        id <SUInstallerProtocol> installer = [SUInstaller installerForHost:self->_host expectedInstallationType:self->_installationType updateDirectory:self->_extractionDirectory homeDirectory:self->_homeDirectory userName:self->_userName error:&installerError];
         
         if (installer == nil) {
             dispatch_async(dispatch_get_main_queue(), ^{

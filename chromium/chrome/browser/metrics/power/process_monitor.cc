@@ -16,6 +16,8 @@
 #include "base/process/process_metrics.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "base/types/expected.h"
+#include "base/types/optional_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/chrome_content_browser_client_extensions_part.h"
 #include "chrome/browser/metrics/power/power_metrics_constants.h"
@@ -58,7 +60,8 @@ std::unique_ptr<base::ProcessMetrics> CreateProcessMetrics(
 ProcessMonitor::Metrics SampleMetrics(base::ProcessMetrics& process_metrics) {
   ProcessMonitor::Metrics metrics;
 
-  metrics.cpu_usage = process_metrics.GetPlatformIndependentCPUUsage();
+  metrics.cpu_usage = base::OptionalFromExpected(
+      process_metrics.GetPlatformIndependentCPUUsage());
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
     BUILDFLAG(IS_AIX)
@@ -108,25 +111,12 @@ MonitoredProcessType GetMonitoredProcessTypeForRenderProcess(
     return MonitoredProcessType::kRenderer;
   }
 
-  extensions::ProcessMap* extension_process_map =
-      extensions::ProcessMap::Get(browser_context);
-  DCHECK(extension_process_map);
-  std::set<std::string> extension_ids =
-      extension_process_map->GetExtensionsInProcess(host->GetID());
-
-  // We only collect more granular metrics when there's only one extension
-  // running in a given renderer, to reduce noise.
-  if (extension_ids.size() != 1)
-    return MonitoredProcessType::kRenderer;
-
-  extensions::ExtensionRegistry* extension_registry =
-      extensions::ExtensionRegistry::Get(browser_context);
-
   const extensions::Extension* extension =
-      extension_registry->enabled_extensions().GetByID(*extension_ids.begin());
-
-  if (!extension)
-    return MonitoredProcessType::kRenderer;
+      extensions::ProcessMap::Get(browser_context)
+          ->GetEnabledExtensionByProcessID(host->GetID());
+  if (!extension) {
+    return kRenderer;
+  }
 
   return extensions::BackgroundInfo::HasPersistentBackgroundPage(extension)
              ? MonitoredProcessType::kExtensionPersistent

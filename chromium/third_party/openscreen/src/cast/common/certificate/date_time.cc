@@ -77,10 +77,11 @@ bool DateTimeFromSeconds(uint64_t seconds, DateTime* time) {
 static_assert(sizeof(time_t) >= 4, "Can't avoid overflow with < 32-bits");
 
 std::chrono::seconds DateTimeToSeconds(const DateTime& time) {
-  OSP_CHECK_GE(time.month, 1);
-  OSP_CHECK_GE(time.year, 1900);
-  // NOTE: Guard against overflow if time_t is 32-bit.
-  OSP_CHECK(sizeof(time_t) >= 8 || time.year < 2038) << time.year;
+  if (time.month < 1 || time.year < 1900 ||
+      (sizeof(time_t) < 8 && time.year >= 2038)) {
+    OSP_LOG_WARN << "Convert an invalid DateTime to seconds.";
+    return std::chrono::seconds(0);
+  }
   struct tm tm = {};
   tm.tm_sec = time.second;
   tm.tm_min = time.minute;

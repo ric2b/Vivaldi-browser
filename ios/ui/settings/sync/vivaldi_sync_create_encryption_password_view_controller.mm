@@ -13,10 +13,6 @@
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierHeader = kSectionIdentifierEnumZero,
   SectionIdentifierEncryptionPassword,
@@ -133,30 +129,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (CGFloat)tableView:(UITableView*)tableView
     heightForFooterInSection:(NSInteger)section {
-  NSInteger sectionIdentifier =
-      [self.tableViewModel sectionIdentifierForSectionIndex:section];
-
-  if (sectionIdentifier == SectionIdentifierEncryptionPassword) {
-    return kPasswordSectionFooterHeight;
-  }
-  return kFooterSectionHeight;
+  return 0;
 }
 
 - (CGFloat)tableView:(UITableView*)tableView
     heightForHeaderInSection:(NSInteger)section {
-  NSInteger sectionIdentifier =
-      [self.tableViewModel sectionIdentifierForSectionIndex:section];
-
-  if (sectionIdentifier == SectionIdentifierHeader) {
-    return kHeaderSectionHeight;
-  }
-  if (sectionIdentifier == SectionIdentifierLogOutButton) {
-    return kLogoutSectionHeaderHeight;
-  }
-  if (sectionIdentifier == SectionIdentifierSaveButton) {
-    return kSaveSectionHeaderHeight;
-  }
-  return 0;
+  return kCommonHeaderSectionHeight;
 }
 
 #pragma mark - UITableViewDataSource

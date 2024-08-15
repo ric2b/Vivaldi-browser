@@ -29,14 +29,18 @@ If you want to integrate with our infrastructure, please follow these steps:
 *   If your type should have its own toggle in sync settings, add an entry to
     the [`UserSelectableType`][UserSelectableType] enum, add a
     [preference][pref_names] for tracking whether your type is enabled, and
-    map your type to the pref in [`GetPrefNameForType`][GetPrefName].
+    map your type to the pref in [`GetPrefNameForType`][GetPrefName]. Add the
+    toggle UI for each supported platform:
+    * [Desktop][toggles_desktop]
+    * [Android][toggles_android]
+    * [iOS][toggles_ios]
 *   Otherwise, if your type should be included in an existing toggle in sync
     settings, add it in
     [`GetUserSelectableTypeInfo`][GetUserSelectableTypeInfo].
 *   Register a [`ModelTypeController`][ModelTypeController] for your type in
-    [`SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers`][CreateCommonDataTypeControllers]
+    [`SyncApiComponentFactoryImpl::CreateCommonModelTypeControllers`][CreateCommonModelTypeControllers]
     or platform-specific equivalent in
-    [`ChromeSyncClient::CreateDataTypeControllers`][CreateDataTypeControllers].
+    [`ChromeSyncClient::CreateModelTypeControllers`][CreateModelTypeControllers].
 *   Add your KeyedService dependency to
     [`SyncServiceFactory`][SyncServiceFactory].
 *   Implement the actual data type logic. This will mostly be an implementation
@@ -51,14 +55,19 @@ If you want to integrate with our infrastructure, please follow these steps:
 [ModelType]: https://cs.chromium.org/chromium/src/components/sync/base/model_type.h
 [info_map]: https://cs.chromium.org/search/?q="kModelTypeInfoMap%5B%5D"+file:model_type.cc
 [conversions]: https://cs.chromium.org/chromium/src/components/sync/protocol/proto_value_conversions.h
+[EntitySpecifics]: https://source.chromium.org/chromium/chromium/src/+/main:components/sync/protocol/entity_specifics.proto
 [ModelTypeController]: https://cs.chromium.org/chromium/src/components/sync/service/model_type_controller.h
-[CreateCommonDataTypeControllers]: https://cs.chromium.org/search/?q="SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers"
-[CreateDataTypeControllers]: https://cs.chromium.org/search/?q="ChromeSyncClient::CreateDataTypeControllers"
+[CreateCommonModelTypeControllers]: https://cs.chromium.org/search/?q="SyncApiComponentFactoryImpl::CreateCommonModelTypeControllers"
+[CreateModelTypeControllers]: https://cs.chromium.org/search/?q="ChromeSyncClient::CreateModelTypeControllers"
 [SyncServiceFactory]: https://cs.chromium.org/search/?q=:SyncServiceFactory%5C(%5C)
+[Bridge]: https://source.chromium.org/search?q=%5CbModelTypeSyncBridge%5Cb
 [NigoriSpecifics]: https://cs.chromium.org/chromium/src/components/sync/protocol/nigori_specifics.proto
 [UserSelectableType]: https://cs.chromium.org/chromium/src/components/sync/base/user_selectable_type.h?type=cs&q="enum+class+UserSelectableType"
 [pref_names]: https://cs.chromium.org/chromium/src/components/sync/base/pref_names.h
 [GetPrefName]: https://cs.chromium.org/search/?q=GetPrefNameForType+file:sync_prefs.cc
+[toggles_desktop]: https://source.chromium.org/chromium/chromium/src/+/main:chrome/browser/resources/settings/people_page/sync_controls.html
+[toggles_android]: https://source.chromium.org/chromium/chromium/src/+/main:chrome/android/java/src/org/chromium/chrome/browser/sync/settings/ManageSyncSettings.java
+[toggles_ios]: https://source.chromium.org/chromium/chromium/src/+/main:ios/chrome/browser/ui/settings/google_services/manage_sync_settings_mediator.mm
 [GetUserSelectableTypeInfo]: https://cs.chromium.org/chromium/src/components/sync/base/user_selectable_type.cc?type=cs&q="UserSelectableTypeInfo+GetUserSelectableTypeInfo"+f:components/sync/base/user_selectable_type.cc
 [enums]: https://source.chromium.org/chromium/chromium/src/+/main:tools/metrics/histograms/metadata/sync/enums.xml
 [histograms]: https://source.chromium.org/chromium/chromium/src/+/main:tools/metrics/histograms/metadata/sync/histograms.xml

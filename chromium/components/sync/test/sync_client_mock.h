@@ -26,8 +26,8 @@ class SyncClientMock : public SyncClient {
   MOCK_METHOD(PrefService*, GetPrefService, (), (override));
   MOCK_METHOD(signin::IdentityManager*, GetIdentityManager, (), (override));
   MOCK_METHOD(base::FilePath, GetLocalSyncBackendFolder, (), (override));
-  MOCK_METHOD(DataTypeController::TypeVector,
-              CreateDataTypeControllers,
+  MOCK_METHOD(ModelTypeController::TypeVector,
+              CreateModelTypeControllers,
               (SyncService * sync_service),
               (override));
   MOCK_METHOD(syncer::SyncInvalidationsService*,
@@ -63,6 +63,10 @@ class SyncClientMock : public SyncClient {
   MOCK_METHOD(void,
               TriggerLocalDataMigration,
               (ModelTypeSet types),
+              (override));
+  MOCK_METHOD(void,
+              RegisterTrustedVaultAutoUpgradeSyntheticFieldTrial,
+              (const TrustedVaultAutoUpgradeSyntheticFieldTrialGroup&),
               (override));
 };
 

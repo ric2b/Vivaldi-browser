@@ -31,7 +31,6 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1633720957382884102">Relaterade webbplatser</translation>
 <translation id="1644574205037202324">Historik</translation>
-<translation id="1647582022260550163">Vill du återställa behörigheter och rensa cookies och webbplatsdata?</translation>
 <translation id="1652197001188145583">När detta är aktiverat kan webbplatser be om att få använda NFC-enheter. När detta är inaktiverat får webbplatser inte använda NFC-enheter.</translation>
 <translation id="1660204651932907780">Tillåt att ljud spelas upp på webbplatser (rekommenderas)</translation>
 <translation id="1677097821151855053">Cookies och annan webbplatsdata används för att komma ihåg dig, till exempel vid inloggning och annonsanpassning. Du kan hantera cookies för alla webbplatser i <ph name="BEGIN_LINK" />inställningarna<ph name="END_LINK" />.</translation>
@@ -69,7 +68,6 @@
 <translation id="2241587408274973373">Kort på sidan Ny flik</translation>
 <translation id="2241634353105152135">Bara en gång</translation>
 <translation id="2253414712144136228"><ph name="NAME_OF_LIST_ITEM" /> Ta bort</translation>
-<translation id="2253989982043948086">{NUM_SELECTED,plural, =1{1 webbplats blockeras}other{# webbplatser blockeras}}</translation>
 <translation id="228293613124499805">De flesta webbplatser du besöker sparar troligen data på enheten, oftast för att förbättra upplevelsen genom att spara dina inställningar eller information som du delar med webbplatsen. Vi rekommenderar att du låter den här inställningen vara aktiverad.</translation>
 <translation id="2289270750774289114">Fråga när en webbplats försöker söka efter Bluetooth-enheter i närheten (rekommenderas)</translation>
 <translation id="2315043854645842844">Val av certifikat på klienten stöds inte av operativsystemet.</translation>
@@ -94,7 +92,6 @@
 <translation id="2501278716633472235">Föregående</translation>
 <translation id="2546283357679194313">Cookies och webbplatsdata</translation>
 <translation id="2550801787432930915">Kort om prissänkning</translation>
-<translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{1 cookie har blockerats}other{# cookies har blockerats}}</translation>
 <translation id="2570922361219980984">Platsåtkomst har inaktiverats på enheten också. Aktivera det i <ph name="BEGIN_LINK" />Android-inställningarna<ph name="END_LINK" />.</translation>
 <translation id="257931822824936280">Vyn har expanderats. Komprimera den genom att klicka.</translation>
 <translation id="2586657967955657006">Urklipp</translation>
@@ -124,7 +121,6 @@
 <translation id="3008272652534848354">Återställ behörigheter</translation>
 <translation id="301521992641321250">Blockerades automatiskt</translation>
 <translation id="3069226013421428034">Tillåt inloggning hos tredje part på en viss webbplats.</translation>
-<translation id="3082992102194421695">{COUNT,plural, =1{Löper ut i morgon}other{Löper ut om # dagar}}</translation>
 <translation id="310297983047869047">Föregående bild</translation>
 <translation id="3109724472072898302">Komprimerat</translation>
 <translation id="3114012059975132928">Videospelare</translation>
@@ -136,6 +132,7 @@
 <translation id="3198916472715691905"><ph name="STORAGE_AMOUNT" /> sparad data</translation>
 <translation id="321187648315454507">Om du vill få aviseringar från <ph name="APP_NAME" /> måste du även aktivera aviseringar i <ph name="BEGIN_LINK" />Android-inställningarna<ph name="END_LINK" />.</translation>
 <translation id="3227137524299004712">Mikrofon</translation>
+<translation id="3232293466644486101">Radera webbinformation …</translation>
 <translation id="3242646949159196181">När detta är aktiverat kan webbplatser spela upp ljud. När detta är inaktiverat får webbplatser inte spela upp ljud.</translation>
 <translation id="3277252321222022663">Tillåt att webbplatser får åtkomst till enhetens sensorer (rekommenderas)</translation>
 <translation id="3285500645985761267">Tillåt att relaterade webbplatser ser din aktivitet i gruppen</translation>
@@ -177,6 +174,7 @@
 <translation id="3895926599014793903">Tvinga aktivering av zoom</translation>
 <translation id="3908288065506437185">Blockera tredjepartscookies i inkognitoläge</translation>
 <translation id="3918378745482005425">En del funktioner fungerar eventuellt inte. Relaterade webbplatser kan fortfarande använda tredjepartscookies.</translation>
+<translation id="3933121352599513978">Komprimera oönskade förfrågningar (rekommenderas)</translation>
 <translation id="3955193568934677022">Tillåt att skyddat innehåll spelas upp på webbplatser (rekommenderas)</translation>
 <translation id="3967822245660637423">Nedladdning slutförd</translation>
 <translation id="3974105241379491420">Webbplatser får begära tillstånd att använda uppgifter som de har sparat om dig</translation>
@@ -198,7 +196,9 @@
 <translation id="4278390842282768270">Tillåts</translation>
 <translation id="429312253194641664">Media spelas upp på en webbplats</translation>
 <translation id="42981349822642051">Expandera</translation>
+<translation id="4336219115486912529">{COUNT,plural, =1{Löper ut i morgon}other{Löper ut om # dagar}}</translation>
 <translation id="4336566011000459927">Chrome begränsar cookies igen i dag</translation>
+<translation id="4336836404251800362"><ph name="RECENCY" /> <ph name="SEPARATOR" /> Din senaste flik</translation>
 <translation id="4338831206024587507">Alla webbplatser under <ph name="DOMAIN" /></translation>
 <translation id="4402755511846832236">Blockera webbplatser från att veta när du använder enheten aktivt</translation>
 <translation id="4412992751769744546">Tillåt cookies från tredje part</translation>
@@ -289,6 +289,7 @@
 <translation id="5853982612236235577">När detta är aktiverat kan webbplatser be om att få skicka aviseringar. När detta är inaktiverat får webbplatser inte skicka aviseringar.</translation>
 <translation id="5860033963881614850">Av</translation>
 <translation id="5876056640971328065">Pausa video</translation>
+<translation id="5877248419911025165">Komprimera alla förfrågningar</translation>
 <translation id="5884085660368669834">Webbplatsinställning</translation>
 <translation id="5887687176710214216">Besöktes senast i går</translation>
 <translation id="5916664084637901428">På</translation>
@@ -303,9 +304,11 @@
 <translation id="6015775454662021376">Styr webbplatsens åtkomst till enheten</translation>
 <translation id="6040143037577758943">Stäng</translation>
 <translation id="6042308850641462728">Mer</translation>
+<translation id="6060464773477604108"><ph name="HOST_NAME" /> <ph name="SEPARATOR1" /> <ph name="RECENCY" /> <ph name="SEPARATOR2" /> Din senaste flik</translation>
 <translation id="6064125863973209585">Slutförda nedladdningar</translation>
 <translation id="6071501408666570960">Du kan loggas ut från den här webbplatsen</translation>
 <translation id="6120483543004435978">När detta är aktiverat kan webbplatser be om att få veta om du använder enheten aktivt. När detta är inaktiverat får webbplatser inte veta om du använder enheten aktivt.</translation>
+<translation id="6140839633433422817">Vill du återställa behörigheter och radera cookies och webbplatsdata?</translation>
 <translation id="6165508094623778733">Läs mer</translation>
 <translation id="6171020522141473435">När detta är aktiverat kan webbplatser be om att få använda Bluetooth-enheter. När detta är inaktiverat får webbplatser inte använda Bluetooth-enheter.</translation>
 <translation id="6177111841848151710">Blockerad för den nuvarande sökmotorn</translation>
@@ -339,6 +342,7 @@
 <translation id="6545864417968258051">Bluetooth-sökning</translation>
 <translation id="6552800053856095716">{PERMISSIONS_SUMMARY_BLOCKED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> och <ph name="NUM_MORE" /> till blockeras}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> och <ph name="NUM_MORE" /> till blockeras}}</translation>
 <translation id="6554732001434021288">Besöktes senast för <ph name="NUM_DAYS" /> dagar sedan</translation>
+<translation id="656065428026159829">Visa fler</translation>
 <translation id="6561560012278703671">Få mer diskreta meddelanden (blockera störande aviseringar)</translation>
 <translation id="6593061639179217415">Datoranpassad webbplats</translation>
 <translation id="6608650720463149374"><ph name="GIGABYTES" /> GB</translation>
@@ -399,7 +403,6 @@
 <translation id="7561196759112975576">Alltid</translation>
 <translation id="757524316907819857">Blockera webbplatser från att spela upp skyddat innehåll</translation>
 <translation id="7594634374516752650">Ansluten till en Bluetooth-enhet</translation>
-<translation id="7641339528570811325">Rensa webbinformation …</translation>
 <translation id="7649070708921625228">Hjälp</translation>
 <translation id="7658239707568436148">Avbryt</translation>
 <translation id="7667547420449112975">Trollkarlen från Oz</translation>
@@ -423,6 +426,7 @@
 <translation id="7986741934819883144">Välj en kontakt</translation>
 <translation id="7990211076305263060">När detta är aktiverat kan webbplatser be om att få använda mikrofonen. När detta är inaktiverat får webbplatser inte använda mikrofonen.</translation>
 <translation id="8007176423574883786">Inaktiverad för den här enheten</translation>
+<translation id="8009579582995973057"><ph name="HOST_NAME" /> <ph name="SEPARATOR1" /> <ph name="RECENCY" /> <ph name="SEPARATOR2" /> Från <ph name="FROM_DEVICE" /></translation>
 <translation id="802154636333426148">Nedladdningen misslyckades</translation>
 <translation id="8042586301629853791">Sortera efter:</translation>
 <translation id="8067883171444229417">Spela upp video</translation>
@@ -457,7 +461,6 @@
 <translation id="8441146129660941386">Sök bakåt</translation>
 <translation id="8444433999583714703">Om du vill ge <ph name="APP_NAME" /> åtkomst till din plats måste du även aktivera plats i <ph name="BEGIN_LINK" />Android-inställningarna<ph name="END_LINK" />.</translation>
 <translation id="8447861592752582886">Återkalla enhetsbehörighet</translation>
-<translation id="8451050538944905715">{NUM_SELECTED,plural, =1{1 cookie används}other{# cookies används}}</translation>
 <translation id="8487700953926739672">Tillgänglig offline</translation>
 <translation id="848952951823693243">Begär alltid mobilversionen</translation>
 <translation id="8499083585497694743">Slå på mikrofonen</translation>
@@ -478,7 +481,6 @@
 <translation id="8721719390026067591">När detta är aktiverat kan webbplatser be om att få söka efter Bluetooth-enheter. När detta är inaktiverat får webbplatser inte söka efter Bluetooth-enheter.</translation>
 <translation id="8725066075913043281">Försök igen</translation>
 <translation id="8730621377337864115">Klart</translation>
-<translation id="8736193154595564524">{NUM_SELECTED,plural, =1{1 webbplats tillåts}other{# webbplatser tillåts}}</translation>
 <translation id="8751914237388039244">Välj en bild</translation>
 <translation id="8800034312320686233">Fungerar inte webbplatsen?</translation>
 <translation id="8801436777607969138">Blockera JavaScript på en enskild webbplats.</translation>
@@ -497,6 +499,7 @@
 <translation id="8959122750345127698">Det går inte att nå webbadressen: <ph name="URL" /></translation>
 <translation id="8986362086234534611">Glöm</translation>
 <translation id="8990043154272859344">Du loggas ut från alla webbplatser</translation>
+<translation id="8993853206419610596">Utöka alla begäranden</translation>
 <translation id="9002538116239926534">När detta är aktiverat kan webbplatser spara data på enheten. När detta är inaktiverat får webbplatser inte spara data på enheten.</translation>
 <translation id="9011903857143958461"><ph name="SITE_NAME" /> tillåts</translation>
 <translation id="9019902583201351841">Hanteras av dina föräldrar</translation>

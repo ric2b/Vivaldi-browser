@@ -23,7 +23,7 @@ namespace openscreen::cast {
 class CastAppDiscoveryServiceImpl : public CastAppDiscoveryService {
  public:
   // |platform_client| must outlive |this|.
-  CastAppDiscoveryServiceImpl(CastPlatformClient* platform_client,
+  CastAppDiscoveryServiceImpl(CastPlatformClient& platform_client,
                               ClockNowFunctionPtr clock);
   ~CastAppDiscoveryServiceImpl() override;
 
@@ -80,7 +80,7 @@ class CastAppDiscoveryServiceImpl : public CastAppDiscoveryService {
   // Callback ID tracking.
   uint32_t next_avail_query_id_ = 1U;
 
-  CastPlatformClient* const platform_client_;
+  CastPlatformClient& platform_client_;
 
   CastAppAvailabilityTracker availability_tracker_;
 

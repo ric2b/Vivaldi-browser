@@ -40,7 +40,7 @@ LoopingFileCastAgent::LoopingFileCastAgent(
                       std::move(cast_trust_store),
                       CastCRLTrustStore::Create()),
       connection_factory_(
-          TlsConnectionFactory::CreateFactory(&socket_factory_, task_runner_)),
+          TlsConnectionFactory::CreateFactory(socket_factory_, task_runner_)),
       message_port_(&router_) {
   router_.AddHandlerForLocalId(kPlatformSenderId, this);
   socket_factory_.set_factory(connection_factory_.get());
@@ -91,7 +91,7 @@ void LoopingFileCastAgent::OnConnected(SenderSocketFactory* factory,
 
 void LoopingFileCastAgent::OnError(SenderSocketFactory* factory,
                                    const IPEndpoint& endpoint,
-                                   Error error) {
+                                   const Error& error) {
   OSP_LOG_ERROR << "Cast agent received socket factory error: " << error;
   Shutdown();
 }
@@ -101,7 +101,7 @@ void LoopingFileCastAgent::OnClose(CastSocket* cast_socket) {
   Shutdown();
 }
 
-void LoopingFileCastAgent::OnError(CastSocket* socket, Error error) {
+void LoopingFileCastAgent::OnError(CastSocket* socket, const Error& error) {
   OSP_LOG_ERROR << "Cast agent received socket error: " << error;
   Shutdown();
 }
@@ -340,7 +340,8 @@ void LoopingFileCastAgent::OnNegotiated(
   }
 }
 
-void LoopingFileCastAgent::OnError(const SenderSession* session, Error error) {
+void LoopingFileCastAgent::OnError(const SenderSession* session,
+                                   const Error& error) {
   OSP_LOG_ERROR << "SenderSession fatal error: " << error;
   Shutdown();
 }

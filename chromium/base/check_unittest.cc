@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <string_view>
 #include <tuple>
 
 #include "base/check_deref.h"
@@ -15,13 +16,21 @@
 #include "base/macros/concat.h"
 #include "base/notimplemented.h"
 #include "base/notreached.h"
-#include "base/strings/string_piece.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/gtest_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if BUILDFLAG(IS_POSIX)
+#include <errno.h>
+#endif
+
+#if BUILDFLAG(IS_WIN)
+#include <windows.h>
+#endif
 
 namespace {
 
@@ -82,7 +91,7 @@ MATCHER_P2(LogErrorMatches, line, expected_msg, "") {
   } while (0)
 #else
 #define EXPECT_CHECK(msg, check_expr) \
-  EXPECT_DEATH_IF_SUPPORTED(check_expr, CHECK_MATCHER(__LINE__, msg))
+  BASE_EXPECT_DEATH(check_expr, CHECK_MATCHER(__LINE__, msg))
 #endif  // !CHECK_WILL_STREAM()
 
 // Macro which expects a DCHECK to fire if DCHECKs are enabled.
@@ -91,7 +100,7 @@ MATCHER_P2(LogErrorMatches, line, expected_msg, "") {
 #define EXPECT_DCHECK(msg, check_expr)                                         \
   do {                                                                         \
     if (DCHECK_IS_ON() && logging::LOGGING_DCHECK == logging::LOGGING_FATAL) { \
-      EXPECT_DEATH_IF_SUPPORTED(check_expr, CHECK_MATCHER(__LINE__, msg));     \
+      BASE_EXPECT_DEATH(check_expr, CHECK_MATCHER(__LINE__, msg));             \
     } else if (DCHECK_IS_ON()) {                                               \
       ScopedExpectDumpWithoutCrashing expect_dump;                             \
       check_expr;                                                              \
@@ -112,7 +121,7 @@ MATCHER_P2(LogErrorMatches, line, expected_msg, "") {
       got_log_message = true;                                                  \
       EXPECT_EQ(severity, logging::LOGGING_ERROR);                             \
       EXPECT_EQ(str.substr(message_start), (msg));                             \
-      if (base::StringPiece(expected_file) != "") {                            \
+      if (std::string_view(expected_file) != "") {                             \
         EXPECT_STREQ(expected_file, file);                                     \
       }                                                                        \
       if (expected_line != -1) {                                               \
@@ -512,14 +521,14 @@ TEST(CheckDeathTest, NotReached) {
 
 #if DCHECK_IS_ON()
   // Expect a DCHECK with streamed params intact.
-  EXPECT_DCHECK("Check failed: false. foo", NOTREACHED() << "foo");
+  EXPECT_DCHECK("Check failed: false. foo", NOTREACHED_IN_MIGRATION() << "foo");
 #elif CHECK_WILL_STREAM() || BUILDFLAG(ENABLE_LOG_ERROR_NOT_REACHED)
   // This block makes sure that base::Location::Current() returns non-dummy
   // values for file_name() and line_number(). This is necessary to avoid a
   // false negative inside EXPECT_LOG_ERROR_WITH_FILENAME() where we exhonorate
-  // the NOTREACHED() macro below even though it didn't provide the expected
-  // filename and line numbers.
-  // See EXPECT_LOG_ERROR_WITH_FILENAME() for the exclusion of "" and -1.
+  // the NOTREACHED_IN_MIGRATION() macro below even though it didn't provide the
+  // expected filename and line numbers. See EXPECT_LOG_ERROR_WITH_FILENAME()
+  // for the exclusion of "" and -1.
   ASSERT_NE(base::Location::Current().file_name(), nullptr);
   EXPECT_STRNE(base::Location::Current().file_name(), "");
   EXPECT_NE(base::Location::Current().line_number(), -1);
@@ -528,7 +537,7 @@ TEST(CheckDeathTest, NotReached) {
   // match __FILE__ (strips ../../ prefix) and __LINE__ (uses __builtin_LINE()).
   EXPECT_LOG_ERROR_WITH_FILENAME(base::Location::Current().file_name(),
                                  base::Location::Current().line_number(),
-                                 NOTREACHED() << "foo",
+                                 NOTREACHED_IN_MIGRATION() << "foo",
                                  "Check failed: false. foo\n");
 #else
   // Expect LOG(ERROR) that looks like CHECK(false) without file or line intact.
@@ -536,7 +545,7 @@ TEST(CheckDeathTest, NotReached) {
   // The actual location comes from
   // logging::NotReachedError::TriggerNotReached() but we have no good way of
   // asserting what that filename or line number is from here.
-  EXPECT_LOG_ERROR_WITH_FILENAME("", -1, NOTREACHED() << "foo",
+  EXPECT_LOG_ERROR_WITH_FILENAME("", -1, NOTREACHED_IN_MIGRATION() << "foo",
                                  "Check failed: false. NOTREACHED log messages "
                                  "are omitted in official builds. Sorry!\n");
 #endif
@@ -547,7 +556,7 @@ TEST(CheckDeathTest, NotReached) {
 TEST(CheckDeathTest, NotReachedFatalExperiment) {
   base::test::ScopedFeatureList feature_list(
       base::features::kNotReachedIsFatal);
-  EXPECT_CHECK_DEATH(NOTREACHED());
+  EXPECT_CHECK_DEATH(NOTREACHED_IN_MIGRATION());
 }
 
 TEST(CheckDeathTest, DumpWillBeCheck) {
@@ -736,6 +745,44 @@ TEST(CheckDeathTest, NotReachedNotFatalUntil) {
   // Fatal in current major version.
   EXPECT_CHECK("Check failed: false. foo", NOTREACHED(kCurrentMilestone)
                                                << "foo");
+}
+
+TEST(CheckDeathTest, CorrectSystemErrorUsed) {
+  const logging::SystemErrorCode kTestError = 28;
+  const std::string kExpectedCheckMessageRegex = base::StrCat(
+      {" Check failed: false. ", base::NumberToString(kTestError)});
+  const std::string kExpectedPCheckMessageRegex =
+      base::StrCat({" Check failed: false. ", base::NumberToString(kTestError),
+                    ": ", logging::SystemErrorCodeToString(kTestError)});
+
+  auto set_last_error = [](logging::SystemErrorCode error) {
+#if BUILDFLAG(IS_WIN)
+    ::SetLastError(error);
+#else
+    errno = error;
+#endif
+  };
+
+  // Test that the last system error code was used as expected.
+  set_last_error(kTestError);
+  EXPECT_CHECK(kExpectedCheckMessageRegex,
+               CHECK(false) << logging::GetLastSystemErrorCode());
+
+  set_last_error(kTestError);
+  EXPECT_DCHECK(kExpectedCheckMessageRegex,
+                DCHECK(false) << logging::GetLastSystemErrorCode());
+
+  set_last_error(kTestError);
+  EXPECT_CHECK(kExpectedPCheckMessageRegex,
+               PCHECK(false) << logging::GetLastSystemErrorCode());
+
+  set_last_error(kTestError);
+  EXPECT_DCHECK(kExpectedPCheckMessageRegex,
+                DPCHECK(false) << logging::GetLastSystemErrorCode());
+
+  set_last_error(kTestError);
+  EXPECT_DCHECK(kExpectedCheckMessageRegex,
+                NOTREACHED_IN_MIGRATION() << logging::GetLastSystemErrorCode());
 }
 
 }  // namespace

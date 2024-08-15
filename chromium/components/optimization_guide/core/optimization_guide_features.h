@@ -15,6 +15,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/time/time.h"
+#include "components/optimization_guide/core/model_execution/feature_keys.h"
 #include "components/optimization_guide/core/optimization_guide_enums.h"
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "components/optimization_guide/proto/model_execution.pb.h"
@@ -69,6 +70,8 @@ COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 BASE_DECLARE_FEATURE(kLogOnDeviceMetricsOnStartup);
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 BASE_DECLARE_FEATURE(kTextSafetyClassifier);
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+BASE_DECLARE_FEATURE(kTextSafetyRemoteFallback);
 
 typedef base::EnumSet<proto::RequestContext,
                       proto::RequestContext_MIN,
@@ -336,8 +339,7 @@ bool IsModelQualityLoggingEnabled();
 
 // Whether model quality logging is enabled for a feature.
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
-bool IsModelQualityLoggingEnabledForFeature(
-    proto::ModelExecutionFeature feature);
+bool IsModelQualityLoggingEnabledForFeature(UserVisibleFeatureKey feature);
 
 // Returns whether the `model_version` for `opt_target` is part of emergency
 // killswitch, and this model should be stopped serving immediately.
@@ -460,6 +462,11 @@ uint32_t GetOnDeviceModelTextSafetyTokenInterval();
 // range [0, 1].
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 double GetOnDeviceModelLanguageDetectionMinimumReliability();
+
+// Whether to use text safety remote fallback for on-device text safety
+// evaluation.
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+bool ShouldUseTextSafetyRemoteFallbackForEligibleFeatures();
 
 // These params configure the repetition checker. See HasRepeatingSuffix() in
 // repetition_checker.h for explanation. A value of 2 for num repeats and 16 for

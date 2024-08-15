@@ -484,6 +484,96 @@ void check_sparse_spd_determinant(Solver& solver) {
   }
 }
 
+template <typename Solver, typename DenseMat>
+int generate_sparse_nonhermitian_problem(Solver&, typename Solver::MatrixType& A, typename Solver::MatrixType& halfA,
+                                         DenseMat& dA, int maxSize = 300) {
+  typedef typename Solver::MatrixType Mat;
+  typedef typename Mat::Scalar Scalar;
+  typedef Matrix<Scalar, Dynamic, Dynamic> DenseMatrix;
+
+  int size = internal::random<int>(1, maxSize);
+  double density = (std::max)(8. / static_cast<double>(size * size), 0.01);
+
+  Mat M(size, size);
+  DenseMatrix dM(size, size);
+
+  initSparse<Scalar>(density, dM, M, ForceNonZeroDiag);
+
+  A = M * M.transpose();
+  dA = dM * dM.transpose();
+
+  halfA.resize(size, size);
+  if (Solver::UpLo == (Lower | Upper))
+    halfA = A;
+  else
+    halfA = A.template triangularView<Solver::UpLo>();
+
+  return size;
+}
+
+template <typename Solver>
+void check_sparse_nonhermitian_solving(Solver& solver, int maxSize = (std::min)(300, EIGEN_TEST_MAX_SIZE),
+                                       int maxRealWorldSize = 100000) {
+  typedef typename Solver::MatrixType Mat;
+  typedef typename Mat::Scalar Scalar;
+  typedef typename Mat::StorageIndex StorageIndex;
+  typedef SparseMatrix<Scalar, ColMajor, StorageIndex> SpMat;
+  typedef SparseVector<Scalar, 0, StorageIndex> SpVec;
+  typedef Matrix<Scalar, Dynamic, Dynamic> DenseMatrix;
+  typedef Matrix<Scalar, Dynamic, 1> DenseVector;
+
+  // generate the problem
+  Mat A, halfA;
+  DenseMatrix dA;
+  for (int i = 0; i < g_repeat; i++) {
+    int size = generate_sparse_nonhermitian_problem(solver, A, halfA, dA, maxSize);
+
+    // generate the right hand sides
+    int rhsCols = internal::random<int>(1, 16);
+    double density = (std::max)(8. / static_cast<double>(size * rhsCols), 0.1);
+    SpMat B(size, rhsCols);
+    DenseVector b = DenseVector::Random(size);
+    DenseMatrix dB(size, rhsCols);
+    initSparse<Scalar>(density, dB, B, ForceNonZeroDiag);
+    SpVec c = B.col(0);
+    DenseVector dc = dB.col(0);
+
+    CALL_SUBTEST(check_sparse_solving(solver, A, b, dA, b));
+    CALL_SUBTEST(check_sparse_solving(solver, halfA, b, dA, b));
+    CALL_SUBTEST(check_sparse_solving(solver, A, dB, dA, dB));
+    CALL_SUBTEST(check_sparse_solving(solver, halfA, dB, dA, dB));
+    CALL_SUBTEST(check_sparse_solving(solver, A, B, dA, dB));
+    CALL_SUBTEST(check_sparse_solving(solver, halfA, B, dA, dB));
+    CALL_SUBTEST(check_sparse_solving(solver, A, c, dA, dc));
+    CALL_SUBTEST(check_sparse_solving(solver, halfA, c, dA, dc));
+
+    // check only once
+    if (i == 0) {
+      b = DenseVector::Zero(size);
+      check_sparse_solving(solver, A, b, dA, b);
+    }
+  }
+
+  EIGEN_UNUSED_VARIABLE(maxRealWorldSize);
+}
+
+template <typename Solver>
+void check_sparse_nonhermitian_determinant(Solver& solver) {
+  typedef typename Solver::MatrixType Mat;
+  typedef typename Mat::Scalar Scalar;
+  typedef Matrix<Scalar, Dynamic, Dynamic> DenseMatrix;
+
+  // generate the problem
+  Mat A, halfA;
+  DenseMatrix dA;
+  generate_sparse_nonhermitian_problem(solver, A, halfA, dA, 30);
+
+  for (int i = 0; i < g_repeat; i++) {
+    check_sparse_determinant(solver, A, dA);
+    check_sparse_determinant(solver, halfA, dA);
+  }
+}
+
 template <typename Solver>
 void check_sparse_zero_matrix(Solver& solver) {
   typedef typename Solver::MatrixType Mat;

@@ -6,8 +6,6 @@
 
 #import "base/memory/ptr_util.h"
 #import "base/metrics/histogram_functions.h"
-#import "base/metrics/user_metrics.h"
-#import "base/metrics/user_metrics_action.h"
 #import "ios/chrome/browser/download/model/mime_type_util.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
@@ -20,7 +18,7 @@
 
 // static
 FullscreenController* FullscreenController::FromBrowser(Browser* browser) {
-  // TODO(crbug.com/1469841): Do not create FullscreenController and
+  // TODO(crbug.com/40277656): Do not create FullscreenController and
   // FullscreenWebStateListObserver for an inactive browser.
   FullscreenController* fullscreen_controller =
       static_cast<FullscreenController*>(
@@ -156,17 +154,14 @@ UIEdgeInsets FullscreenControllerImpl::GetCurrentViewportInsets() const {
 }
 
 void FullscreenControllerImpl::EnterFullscreen() {
-  base::RecordAction(base::UserMetricsAction("MobileFullscreenEntered"));
   mediator_.EnterFullscreen();
 }
 
 void FullscreenControllerImpl::ExitFullscreen() {
-  base::RecordAction(base::UserMetricsAction("MobileFullscreenExited"));
   mediator_.ExitFullscreen();
 }
 
 void FullscreenControllerImpl::ExitFullscreenWithoutAnimation() {
-  base::RecordAction(base::UserMetricsAction("MobileFullscreenExited"));
   mediator_.ExitFullscreenWithoutAnimation();
 }
 
@@ -175,7 +170,6 @@ bool FullscreenControllerImpl::IsForceFullscreenMode() const {
 }
 
 void FullscreenControllerImpl::EnterForceFullscreenMode() {
-  CHECK(IsBottomOmniboxSteadyStateEnabled());
   if (IsForceFullscreenMode()) {
     return;
   }
@@ -189,7 +183,6 @@ void FullscreenControllerImpl::EnterForceFullscreenMode() {
 }
 
 void FullscreenControllerImpl::ExitForceFullscreenMode() {
-  CHECK(IsBottomOmniboxSteadyStateEnabled());
   if (!IsForceFullscreenMode()) {
     return;
   }
@@ -199,7 +192,7 @@ void FullscreenControllerImpl::ExitForceFullscreenMode() {
 }
 
 void FullscreenControllerImpl::ResizeHorizontalViewport() {
-  // TODO(crbug.com/1114054) this hack temporarily force change webview's
+  // TODO(crbug.com/40143738) this hack temporarily force change webview's
   // width insets to trigger a width recomputation of its content. It will cause
   // two relayouts.
   mediator_.ResizeHorizontalInsets();

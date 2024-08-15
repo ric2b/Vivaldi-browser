@@ -43,6 +43,8 @@
 #include "ash/system/keyboard_brightness_control_delegate.h"
 #include "ash/system/power/power_button_controller_test_api.h"
 #include "ash/system/status_area_widget_test_helper.h"
+#include "ash/system/toast/anchored_nudge.h"
+#include "ash/system/toast/anchored_nudge_manager_impl.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test_media_client.h"
@@ -72,6 +74,7 @@
 #include "base/test/scoped_chromeos_version_info.h"
 #include "base/test/scoped_feature_list.h"
 #include "chromeos/ui/base/window_state_type.h"
+#include "chromeos/ui/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "chromeos/ui/frame/caption_buttons/frame_size_button.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
@@ -92,7 +95,9 @@
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
+#include "ui/events/ash/keyboard_capability.h"
 #include "ui/events/devices/device_data_manager_test_api.h"
+#include "ui/events/devices/keyboard_device.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/event_sink.h"
@@ -118,6 +123,8 @@ struct PrefToAcceleratorEntry {
   const char* notification_id;
   const ui::Accelerator accelerator;
 };
+
+constexpr char kCapsLockNoMatchNudgeId[] = "caps-lock-no-match-nudge-id";
 
 const PrefToAcceleratorEntry kAccessibilityAcceleratorMap[] = {
     {
@@ -190,10 +197,21 @@ class DummyBrightnessControlDelegate : public BrightnessControlDelegate {
     ++handle_brightness_up_count_;
     last_accelerator_ = ui::Accelerator(ui::VKEY_BRIGHTNESS_UP, ui::EF_NONE);
   }
-  void SetBrightnessPercent(double percent, bool gradual) override {}
+  void SetBrightnessPercent(double percent,
+                            bool gradual,
+                            BrightnessChangeSource source) override {}
   void GetBrightnessPercent(
       base::OnceCallback<void(std::optional<double>)> callback) override {
     std::move(callback).Run(100.0);
+  }
+  void SetAmbientLightSensorEnabled(bool enabled) override {}
+  void GetAmbientLightSensorEnabled(
+      base::OnceCallback<void(std::optional<bool>)> callback) override {
+    std::move(callback).Run(true);
+  }
+  void HasAmbientLightSensor(
+      base::OnceCallback<void(std::optional<bool>)> callback) override {
+    std::move(callback).Run(true);
   }
 
   int handle_brightness_down_count() const {
@@ -240,6 +258,16 @@ class DummyKeyboardBrightnessControlDelegate
 
   void HandleSetKeyboardBrightness(double percent, bool gradual) override {}
 
+  void HandleGetKeyboardBrightness(
+      base::OnceCallback<void(std::optional<double>)> callback) override {
+    std::move(callback).Run(100.0);
+  }
+
+  void HandleSetKeyboardAmbientLightSensorEnabled(bool enabled) override {}
+
+  void HandleGetKeyboardAmbientLightSensorEnabled(
+      base::OnceCallback<void(std::optional<bool>)> callback) override {}
+
   int handle_keyboard_brightness_down_count() const {
     return handle_keyboard_brightness_down_count_;
   }
@@ -265,7 +293,6 @@ class MockNewWindowDelegate : public testing::NiceMock<TestNewWindowDelegate> {
  public:
   // TestNewWindowDelegate:
   MOCK_METHOD(void, OpenCalculator, (), (override));
-  MOCK_METHOD(void, ShowKeyboardShortcutViewer, (), (override));
   MOCK_METHOD(void,
               OpenUrl,
               (const GURL& url, OpenUrlFrom from, Disposition disposition),
@@ -1892,6 +1919,64 @@ INSTANTIATE_TEST_SUITE_P(
          std::make_pair<std::string, std::string>(kVolumeButtonRegionScreen,
                                                   kVolumeButtonSideBottom)}));
 
+TEST_F(AcceleratorControllerTest, ToggleCapsLockAcceleratorsWithFunctionKey) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {features::kModifierSplit, features::kShortcutStateMachines,
+       features::kPeripheralCustomization, features::kInputDeviceSettingsSplit},
+      {});
+  auto reset = switches::SetIgnoreModifierSplitSecretKeyForTest();
+  Shell::Get()
+      ->keyboard_capability()
+      ->ResetModifierSplitDogfoodControllerForTesting();
+
+  AnchoredNudgeManagerImpl* nudge_manager =
+      Shell::Get()->anchored_nudge_manager();
+  ASSERT_TRUE(nudge_manager);
+
+  const int kKeyboardDeviceId = 123;
+  const ui::KeyboardDevice keyboard(
+      kKeyboardDeviceId, ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
+      /*name=*/"test keyboard with function key",
+      /*phys=*/"",
+      base::FilePath("/devices/platform/i8042/serio2/input/input1"),
+      /*vendor=*/-1,
+      /*product=*/-1, /*version=*/-1,
+      /*has_assistant_key=*/true,
+      /*has_function_key=*/true);
+
+  // // Reset the state of the device manager.
+  ui::DeviceDataManagerTestApi().SetKeyboardDevices({keyboard});
+  test_api_->SetCanHandleCapsLock(true);
+
+  ImeControllerImpl* controller = Shell::Get()->ime_controller();
+  TestImeControllerClient client;
+  controller->SetClient(&client);
+  EXPECT_EQ(0, client.set_caps_lock_count_);
+
+  // Create an event with a keyboard that has function key. The controller
+  // shouldn't process the capsLock key event.
+  ui::KeyEvent press_event(ui::ET_KEY_PRESSED, ui::VKEY_LWIN,
+                           /*flags=*/ui::EF_ALT_DOWN);
+  press_event.set_source_device_id(kKeyboardDeviceId);
+  const ui::Accelerator press_search_after_alt(press_event);
+  EXPECT_FALSE(ProcessInController(press_search_after_alt));
+
+  ui::KeyEvent release_event(ui::ET_KEY_RELEASED, ui::VKEY_LWIN,
+                             /*flags=*/ui::EF_ALT_DOWN);
+  release_event.set_source_device_id(kKeyboardDeviceId);
+  const ui::Accelerator release_search_after_alt(release_event);
+  EXPECT_FALSE(ProcessInController(release_search_after_alt));
+
+  EXPECT_EQ(0, client.set_caps_lock_count_);
+  EXPECT_FALSE(controller->IsCapsLockEnabled());
+
+  // Notification showing caps lock blocked by function key should show up.
+  EXPECT_TRUE(nudge_manager->GetNudgeIfShown(kCapsLockNoMatchNudgeId));
+  nudge_manager->Cancel(kCapsLockNoMatchNudgeId);
+  feature_list.Reset();
+}
+
 // Tests the AcceleratorAction::kToggleCapsLock accelerator.
 TEST_F(AcceleratorControllerTest, ToggleCapsLockAccelerators) {
   base::test::ScopedFeatureList feature_list;
@@ -3393,16 +3478,18 @@ TEST_P(MediaSessionAcceleratorTest,
   }
 }
 
+// TODO(b:332383246): Remove once the feature is enabled permanently.
 class AcceleratorControllerGameDashboardTests
     : public AcceleratorControllerTest {
  public:
-  AcceleratorControllerGameDashboardTests()
-      : scoped_version_info_("CHROMEOS_RELEASE_TRACK=testimage-channel",
-                             base::SysInfo::GetLsbReleaseTime()) {}
+  AcceleratorControllerGameDashboardTests() = default;
+  AcceleratorControllerGameDashboardTests(
+      const AcceleratorControllerTestWithClamshellSplitView&) = delete;
+  AcceleratorControllerGameDashboardTests& operator=(
+      const AcceleratorControllerGameDashboardTests&) = delete;
   ~AcceleratorControllerGameDashboardTests() override = default;
 
   void SetUp() override {
-    EXPECT_FALSE(features::IsGameDashboardEnabled());
     scoped_feature_list_.InitAndEnableFeature(features::kGameDashboard);
     AcceleratorControllerTest::SetUp();
     EXPECT_TRUE(features::IsGameDashboardEnabled());
@@ -3410,7 +3497,6 @@ class AcceleratorControllerGameDashboardTests
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-  base::test::ScopedChromeOSVersionInfo scoped_version_info_;
 };
 
 TEST_F(AcceleratorControllerGameDashboardTests,
@@ -3420,30 +3506,28 @@ TEST_F(AcceleratorControllerGameDashboardTests,
   // No active window.
   EXPECT_FALSE(ProcessInController(accelerator));
 
-  // Verify cannot toggle for unsupported app types.
-  const AppType unsupported_window_types[] = {
-      AppType::NON_APP,      AppType::BROWSER,    AppType::CHROME_APP,
-      AppType::CROSTINI_APP, AppType::SYSTEM_APP, AppType::LACROS};
-  for (AppType unsupported_window_type : unsupported_window_types) {
-    std::unique_ptr<aura::Window> window =
-        CreateAppWindow(gfx::Rect(5, 5, 20, 20), unsupported_window_type);
-    window->SetProperty(aura::client::kAppType,
-                        static_cast<int>(unsupported_window_type));
-    EXPECT_FALSE(ProcessInController(accelerator));
-  }
-
+  // Create an ARC app window.
   std::unique_ptr<aura::Window> window =
-      CreateAppWindow(gfx::Rect(5, 5, 20, 20), AppType::ARC_APP);
+      CreateAppWindow(gfx::Rect(5, 5, 20, 20), chromeos::AppType::ARC_APP);
   window->SetProperty(kAppIDKey,
                       std::string(TestGameDashboardDelegate::kGameAppId));
+  // Verify the accelerator is not processed until the game controls status is
+  // known for ARC apps.
   EXPECT_FALSE(ProcessInController(accelerator));
   window->SetProperty(kArcGameControlsFlagsKey, ArcGameControlsFlag::kKnown);
   EXPECT_TRUE(ProcessInController(accelerator));
+  // Verify the accelerator is not processed when game controls is in edit mode.
   window->SetProperty(
       kArcGameControlsFlagsKey,
-      static_cast<ash::ArcGameControlsFlag>(ArcGameControlsFlag::kKnown |
-                                            ArcGameControlsFlag::kEdit));
+      static_cast<ArcGameControlsFlag>(ArcGameControlsFlag::kKnown |
+                                       ArcGameControlsFlag::kEdit));
   EXPECT_FALSE(ProcessInController(accelerator));
+
+  // Create a non-ARC app window.
+  window = CreateAppWindow(gfx::Rect(5, 5, 20, 20), chromeos::AppType::BROWSER);
+  window->SetProperty(
+      kAppIDKey, std::string(TestGameDashboardDelegate::kAllowlistedAppId));
+  EXPECT_TRUE(ProcessInController(accelerator));
 }
 
 }  // namespace ash

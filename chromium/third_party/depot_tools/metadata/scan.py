@@ -96,7 +96,7 @@ def main() -> None:
         count = len(results)
         plural = "s" if count > 1 else ""
         print(f"\n  {count} issue{plural}: {summary_key}")
-        for result in results:
+        for result in sorted(results):
             print(f"    {result}")
 
     print(f"\n\n{invalid_file_count} / {file_count} metadata files are "

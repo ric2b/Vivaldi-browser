@@ -69,10 +69,11 @@ class MEDIA_GPU_EXPORT V4L2StatefulVideoDecoder : public VideoDecoderMixin {
   size_t GetMaxOutputFramePoolSize() const override;
   void SetDmaIncoherentV4L2(bool incoherent) override;
 
- private:
-  FRIEND_TEST_ALL_PREFIXES(V4L2StatefulVideoDecoder, UnsupportedVideoCodec);
-  FRIEND_TEST_ALL_PREFIXES(V4L2StatefulVideoDecoder, TooManyDecoderInstances);
+  static int GetMaxNumDecoderInstancesForTesting() {
+    return GetMaxNumDecoderInstances();
+  }
 
+ private:
   V4L2StatefulVideoDecoder(std::unique_ptr<MediaLog> media_log,
                            scoped_refptr<base::SequencedTaskRunner> task_runner,
                            base::WeakPtr<VideoDecoderMixin::Client> client);
@@ -144,10 +145,12 @@ class MEDIA_GPU_EXPORT V4L2StatefulVideoDecoder : public VideoDecoderMixin {
   // one started by e.g. RearmCAPTUREQueueMonitoring().
   base::ScopedFD wake_event_ GUARDED_BY_CONTEXT(sequence_checker_);
 
+  // VideoDecoderConfigs supported by the driver. Cached on first Initialize().
+  SupportedVideoDecoderConfigs supported_configs_
+      GUARDED_BY_CONTEXT(sequence_checker_);
+
   // Bitstream information and other stuff collected during Initialize().
-  VideoCodecProfile profile_ GUARDED_BY_CONTEXT(sequence_checker_) =
-      VIDEO_CODEC_PROFILE_UNKNOWN;
-  VideoAspectRatio aspect_ratio_ GUARDED_BY_CONTEXT(sequence_checker_);
+  VideoDecoderConfig config_ GUARDED_BY_CONTEXT(sequence_checker_);
   PipelineOutputCB output_cb_ GUARDED_BY_CONTEXT(sequence_checker_);
   DecodeCB flush_cb_ GUARDED_BY_CONTEXT(sequence_checker_);
   // Set to true when the driver identifies itself as a Mediatek 8173.

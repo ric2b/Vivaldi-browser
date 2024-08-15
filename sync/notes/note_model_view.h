@@ -63,7 +63,7 @@ class NoteModelView {
   void RemoveObserver(vivaldi::NotesModelObserver* observer);
   void BeginExtensiveChanges();
   void EndExtensiveChanges();
-  void Remove(const vivaldi::NoteNode* node);
+  void Remove(const vivaldi::NoteNode* node, const base::Location& location);
   void Move(const vivaldi::NoteNode* node,
             const vivaldi::NoteNode* new_parent,
             size_t index);

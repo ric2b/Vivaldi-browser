@@ -227,8 +227,7 @@ ResultOrError<d3d::CompiledShader> ShaderModule::Compile(
                 bindings.sampler.emplace(
                     srcBindingPoint, tint::hlsl::writer::binding::Sampler{dstBindingPoint.group,
                                                                           dstBindingPoint.binding});
-            } else if (std::holds_alternative<SampledTextureBindingInfo>(
-                           shaderBindingInfo.bindingInfo)) {
+            } else if (std::holds_alternative<TextureBindingInfo>(shaderBindingInfo.bindingInfo)) {
                 bindings.texture.emplace(
                     srcBindingPoint, tint::hlsl::writer::binding::Texture{dstBindingPoint.group,
                                                                           dstBindingPoint.binding});
@@ -260,7 +259,7 @@ ResultOrError<d3d::CompiledShader> ShaderModule::Compile(
 
             if (bufferBindingInfo) {
                 const auto& bindingLayout =
-                    std::get<BufferBindingLayout>(bgl->GetBindingInfo(bindingIndex).bindingLayout);
+                    std::get<BufferBindingInfo>(bgl->GetBindingInfo(bindingIndex).bindingLayout);
 
                 // Declaring a read-only storage buffer in HLSL but specifying a storage
                 // buffer in the BGL produces the wrong output. Force read-only storage

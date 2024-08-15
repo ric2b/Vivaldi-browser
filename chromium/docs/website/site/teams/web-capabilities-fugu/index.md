@@ -56,7 +56,7 @@ We prioritize capabilities by which partners we enable or improve by a given
 capability.
 
 [Full list of
-capabilities](https://bugs.chromium.org/p/chromium/issues/list?can=2&q=proj-fugu&sort=pri&colspec=ID+Pri+M+Stars+ReleaseBlock+Component+Status+Owner+Summary+OS+Modified&x=m&y=releaseblock&cells=ids):
+capabilities](https://goo.gle/fugu-api-tracker):
 Every capability that is currently considered as part of Fugu
 
 [Bug Tracking

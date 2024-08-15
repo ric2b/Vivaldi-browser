@@ -69,7 +69,7 @@ static constexpr wgpu::BufferUsage kShaderBufferUsages =
 static constexpr wgpu::BufferUsage kReadOnlyShaderBufferUsages =
     kShaderBufferUsages & kReadOnlyBufferUsages;
 
-class BufferBase : public ApiObjectBase {
+class BufferBase : public SharedResource {
   public:
     enum class BufferState {
         Unmapped,
@@ -86,6 +86,7 @@ class BufferBase : public ApiObjectBase {
 
     uint64_t GetSize() const;
     uint64_t GetAllocatedSize() const;
+    ExecutionSerial GetLastUsageSerial() const;
 
     // |GetUsageExternalOnly| returns the usage with which the buffer was created using the
     // base WebGPU API. Additional usages may be added for internal state tracking. |GetUsage|
@@ -100,16 +101,21 @@ class BufferBase : public ApiObjectBase {
 
     bool IsFullBufferRange(uint64_t offset, uint64_t size) const;
     bool NeedsInitialization() const;
-    bool IsDataInitialized() const;
-    void SetIsDataInitialized();
     void MarkUsedInPendingCommands();
+    virtual MaybeError UploadData(uint64_t bufferOffset, const void* data, size_t size);
 
-    // SetHasAccess determines Dawn's ability to access SharedBufferMemory.
-    void SetHasAccess(bool hasAccess);
+    // SharedResource impl.
+    void SetHasAccess(bool hasAccess) override;
+    bool HasAccess() const override;
+    bool IsDestroyed() const override;
+    void SetInitialized(bool initialized) override;
+    bool IsInitialized() const override;
 
     virtual void* GetMappedPointer() = 0;
     void* GetMappedRange(size_t offset, size_t size, bool writable = true);
     MaybeError Unmap();
+
+    void DumpMemoryStatistics(dawn::native::MemoryDump* dump, const char* prefix) const;
 
     // Dawn API
     void APIMapAsync(wgpu::MapMode mode,
@@ -142,9 +148,6 @@ class BufferBase : public ApiObjectBase {
     uint64_t mAllocatedSize = 0;
 
     ExecutionSerial mLastUsageSerial = ExecutionSerial(0);
-
-    // The shared buffer memory state the buffer was created from. May be null.
-    Ref<SharedBufferMemoryContents> mSharedBufferMemoryContents;
 
   private:
     std::function<void()> PrepareMappingCallback(MapRequestID mapID,
@@ -179,15 +182,13 @@ class BufferBase : public ApiObjectBase {
     Ref<BufferBase> mStagingBuffer;
 
     WGPUBufferMapCallback mMapCallback = nullptr;
-    // TODO(https://crbug.com/dawn/2349): Investigate DanglingUntriaged in dawn/native.
-    raw_ptr<void, DanglingUntriaged> mMapUserdata = nullptr;
+    raw_ptr<void> mMapUserdata = nullptr;
     MapRequestID mLastMapID = MapRequestID(0);
     wgpu::MapMode mMapMode = wgpu::MapMode::None;
     size_t mMapOffset = 0;
     size_t mMapSize = 0;
 
     struct MapAsyncEvent;
-    FutureID mPendingMapFutureID = kNullFutureID;
     Ref<MapAsyncEvent> mPendingMapEvent;
 };
 

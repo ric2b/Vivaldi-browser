@@ -87,6 +87,7 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
   void GetInterestGroupAdAuctionData(
       const url::Origin& seller,
       const std::optional<url::Origin>& coordinator,
+      blink::mojom::AuctionDataConfigPtr config,
       GetInterestGroupAdAuctionDataCallback callback) override;
   void CreateAdRequest(blink::mojom::AdRequestConfigPtr config,
                        CreateAdRequestCallback callback) override;
@@ -127,6 +128,7 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
     base::Uuid request_id;
     url::Origin seller;
     std::optional<url::Origin> coordinator;
+    blink::mojom::AuctionDataConfigPtr config;
     GetInterestGroupAdAuctionDataCallback callback;
   };
 
@@ -235,6 +237,7 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
   bool has_logged_private_aggregation_web_features_ = false;
   bool has_logged_extended_private_aggregation_web_feature_ = false;
   bool has_logged_private_aggregation_enable_debug_mode_web_feature_ = false;
+  bool has_logged_private_aggregation_filtering_id_web_feature_ = false;
 
   // Track the state of GetInterestGroupAdAuctionData calls. One request will be
   // handled at a time (the first in the queue). The first

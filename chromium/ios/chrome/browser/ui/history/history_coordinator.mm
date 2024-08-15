@@ -296,6 +296,16 @@ history::WebHistoryService* WebHistoryServiceGetter(
                                          [weakSelf onOpenedURLInNewTab];
                                        }]];
 
+    // Vivaldi: Option for open tab in background.
+    if (vivaldi::IsVivaldiRunning()) {
+      UIAction* openNewBackgroundTab =
+          [actionFactory actionToOpenInNewBackgroundTabWithURL:item.URL
+                                                    completion:^{
+            [weakSelf onOpenedURLInNewTab];
+          }];
+      [menuElements addObject:openNewBackgroundTab];
+    } // End Vivaldi
+
     UIAction* incognitoAction = [actionFactory
         actionToOpenInNewIncognitoTabWithURL:item.URL
                                   completion:^{

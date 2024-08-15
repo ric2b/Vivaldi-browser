@@ -17,5 +17,3 @@ lang/an.txt
 lang/ku.txt
 lang/tg.txt
 lang/wa.txt
-misc/langInfo.txt
-misc/likelySubtags.txt

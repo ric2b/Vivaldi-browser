@@ -9,6 +9,7 @@
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
 #include "base/process/process_metrics.h"
+#include "base/types/expected.h"
 #include "build/build_config.h"
 #include "components/performance_manager/public/graph/process_node.h"
 #include "components/performance_manager/resource_attribution/cpu_measurement_monitor.h"
@@ -28,7 +29,8 @@ class CPUMeasurementDelegateImpl final : public CPUMeasurementDelegate {
   explicit CPUMeasurementDelegateImpl(const ProcessNode* process_node);
   ~CPUMeasurementDelegateImpl() final = default;
 
-  std::optional<base::TimeDelta> GetCumulativeCPUUsage() final;
+  base::expected<base::TimeDelta, ProcessCPUUsageError> GetCumulativeCPUUsage()
+      final;
 
  private:
   std::unique_ptr<base::ProcessMetrics> process_metrics_;
@@ -45,7 +47,7 @@ CPUMeasurementDelegateImpl::CPUMeasurementDelegateImpl(
 #endif
 }
 
-std::optional<base::TimeDelta>
+base::expected<base::TimeDelta, CPUMeasurementDelegate::ProcessCPUUsageError>
 CPUMeasurementDelegateImpl::GetCumulativeCPUUsage() {
   return process_metrics_->GetCumulativeCPUUsage();
 }

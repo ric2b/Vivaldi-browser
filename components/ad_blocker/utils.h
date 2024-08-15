@@ -5,7 +5,7 @@
 
 #include "base/files/file_path.h"
 
-#include "components/ad_blocker/adblock_metadata.h"
+#include "components/ad_blocker/adblock_types.h"
 
 namespace adblock_filter {
 base::FilePath::StringType GetRulesFolderName();

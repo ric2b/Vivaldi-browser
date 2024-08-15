@@ -46,7 +46,6 @@
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
 #include "third_party/blink/renderer/platform/timer.h"
-#include "third_party/blink/renderer/platform/weborigin/kurl.h"
 
 namespace blink {
 
@@ -123,7 +122,7 @@ class MODULES_EXPORT Notification final
 
   static String PermissionString(mojom::blink::PermissionStatus permission);
   static String permission(ExecutionContext* context);
-  static ScriptPromiseTyped<V8NotificationPermission> requestPermission(
+  static ScriptPromise<V8NotificationPermission> requestPermission(
       ScriptState* script_state,
       V8NotificationPermissionCallback* deprecated_callback = nullptr);
 

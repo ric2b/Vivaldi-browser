@@ -151,6 +151,7 @@ using vivaldi::IsVivaldiRunning;
 @synthesize canShowBack = _canShowBack;
 @synthesize canShowForward = _canShowForward;
 @synthesize canShowAdTrackerBlocker = _canShowAdTrackerBlocker;
+@synthesize isNTP = _isNTP;
 // End Vivaldi
 
 #pragma mark - Public
@@ -598,15 +599,26 @@ using vivaldi::IsVivaldiRunning;
     if (self.bottomOmniboxEnabled && self.tabBarEnabled) {
       return @[ self.vivaldiMoreButton, self.toolsMenuButton ];
     } else {
-      return @[ self.shieldButton, self.toolsMenuButton ];
+      if (self.isNTP) {
+        return @[ self.toolsMenuButton ];
+      } else {
+        return @[ self.shieldButton, self.toolsMenuButton ];
+      }
     }
   } else {
     self.trailingStackView.spacing = kAdaptiveToolbarStackViewSpacing;
-    return @[
-      self.shieldButton,
-      self.tabGridButton,
-      self.toolsMenuButton
-    ];
+    if (self.isNTP) {
+      return @[
+        self.tabGridButton,
+        self.toolsMenuButton
+      ];
+    } else {
+      return @[
+        self.shieldButton,
+        self.tabGridButton,
+        self.toolsMenuButton
+      ];
+    }
   }
 }
 
@@ -632,7 +644,8 @@ using vivaldi::IsVivaldiRunning;
 
 - (void)reloadButtonsWithNewTabPage:(BOOL)isNewTabPage
                   desktopTabEnabled:(BOOL)desktopTabEnabled {
-  // No op.
+  self.isNTP = isNewTabPage;
+  [self redrawToolbarButtons];
 }
 
 #pragma mark Setter

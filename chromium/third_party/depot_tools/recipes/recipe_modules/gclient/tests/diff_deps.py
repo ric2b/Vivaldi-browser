@@ -19,7 +19,7 @@ DEPS = [
 ]
 
 def RunSteps(api):
-  src_cfg = api.gclient.make_config(CACHE_DIR=api.path['cache'].join('git'))
+  src_cfg = api.gclient.make_config(CACHE_DIR=api.path.cache_dir / 'git')
 
   soln = src_cfg.solutions.add()
   soln.name = 'src'
@@ -33,7 +33,7 @@ def RunSteps(api):
   })
 
   api.gclient.c = src_cfg
-  affected_files = api.gclient.diff_deps(api.path['cache'])
+  affected_files = api.gclient.diff_deps(api.path.cache_dir)
 
   api.assertions.assertEqual(
       affected_files,

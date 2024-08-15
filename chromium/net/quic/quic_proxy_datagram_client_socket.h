@@ -7,6 +7,9 @@
 
 #include <stdint.h>
 
+#include <queue>
+#include <string_view>
+
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_export.h"
 #include "net/log/net_log.h"
@@ -108,7 +111,7 @@ class NET_EXPORT_PRIVATE QuicProxyDatagramClientSocket
 
   // Http3DatagramVisitor implementation.
   void OnHttp3Datagram(quic::QuicStreamId stream_id,
-                       absl::string_view payload) override;
+                       std::string_view payload) override;
   void OnUnknownCapsule(quic::QuicStreamId stream_id,
                         const quiche::UnknownCapsule& capsule) override;
 
@@ -116,6 +119,12 @@ class NET_EXPORT_PRIVATE QuicProxyDatagramClientSocket
   bool IsConnected() const;
 
   const std::queue<std::string>& GetDatagramsForTesting() { return datagrams_; }
+
+  static constexpr char kMaxQueueSizeHistogram[] =
+      "Net.QuicProxyDatagramClientSocket.MaxQueueSizeReached";
+
+  // Upper bound for datagrams in queue.
+  static constexpr size_t kMaxDatagramQueueSize = 16;
 
  private:
   enum State {
@@ -165,8 +174,6 @@ class NET_EXPORT_PRIVATE QuicProxyDatagramClientSocket
   // a buffer, allowing datagrams to be stored when received and processed
   // asynchronously at a later time.
   std::queue<std::string> datagrams_;
-  // Upper bound for datagrams in queue.
-  static constexpr size_t kMaxDatagramQueueSize = 16;
   // Visitor on stream is registered to receive HTTP/3 datagrams.
   bool datagram_visitor_registered_ = false;
 

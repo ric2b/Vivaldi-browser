@@ -10,6 +10,7 @@
 #include <cmath>
 #include <functional>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <optional>
 #include <utility>
@@ -19,11 +20,14 @@
 #include "base/notreached.h"
 #include "base/numerics/byte_conversions.h"
 #include "base/numerics/checked_math.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/rand_util.h"
 #include "base/ranges/algorithm.h"
+#include "base/types/expected.h"
 #include "components/attribution_reporting/event_report_windows.h"
 #include "components/attribution_reporting/max_event_level_reports.h"
 #include "components/attribution_reporting/trigger_config.h"
+#include "components/attribution_reporting/trigger_data_matching.mojom.h"
 #include "third_party/abseil-cpp/absl/numeric/int128.h"
 
 namespace attribution_reporting {
@@ -214,14 +218,11 @@ absl::uint128 GetNumStatesCached(const TriggerSpecs& specs,
 }  // namespace
 
 RandomizedResponseData::RandomizedResponseData(double rate,
-                                               double channel_capacity,
                                                RandomizedResponse response)
     : rate_(rate),
-      channel_capacity_(channel_capacity),
       response_(std::move(response)) {
   DCHECK_GE(rate_, 0);
   DCHECK_LE(rate_, 1);
-  DCHECK_GE(channel_capacity_, 0);
 }
 
 RandomizedResponseData::~RandomizedResponseData() = default;
@@ -257,12 +258,35 @@ absl::uint128 GetNumStates(const TriggerSpecs& specs,
   return GetNumStatesCached(specs, max_reports, map);
 }
 
-RandomizedResponseData DoRandomizedResponse(const TriggerSpecs& specs,
-                                            MaxEventLevelReports max_reports,
-                                            double epsilon) {
+base::expected<RandomizedResponseData, RandomizedResponseError>
+DoRandomizedResponse(const TriggerSpecs& specs,
+                     MaxEventLevelReports max_reports,
+                     double epsilon,
+                     absl::uint128 max_trigger_state_cardinality,
+                     double max_channel_capacity) {
   internal::StateMap map;
-  return internal::DoRandomizedResponseWithCache(specs, max_reports, epsilon,
-                                                 map);
+  return internal::DoRandomizedResponseWithCache(
+      specs, max_reports, epsilon, map, max_trigger_state_cardinality,
+      max_channel_capacity);
+}
+
+bool IsValid(const RandomizedResponse& response,
+             const TriggerSpecs& specs,
+             const MaxEventLevelReports max_reports) {
+  if (!response.has_value()) {
+    return true;
+  }
+
+  return base::MakeStrictNum(response->size()) <=
+             static_cast<int>(max_reports) &&
+         base::ranges::all_of(*response, [&](const FakeEventLevelReport&
+                                                 report) {
+           const auto spec = specs.find(report.trigger_data,
+                                        mojom::TriggerDataMatching::kExact);
+           return spec != specs.end() && report.window_index >= 0 &&
+                  base::MakeStrictNum(report.window_index) <
+                      (*spec).second.event_report_windows().end_times().size();
+         });
 }
 
 namespace internal {
@@ -499,12 +523,26 @@ std::vector<FakeEventLevelReport> GetFakeReportsForSequenceIndex(
   return fake_reports;
 }
 
-RandomizedResponseData DoRandomizedResponseWithCache(const TriggerSpecs& specs,
-                                                     int max_reports,
-                                                     double epsilon,
-                                                     StateMap& map) {
+base::expected<RandomizedResponseData, RandomizedResponseError>
+DoRandomizedResponseWithCache(const TriggerSpecs& specs,
+                              int max_reports,
+                              double epsilon,
+                              StateMap& map,
+                              absl::uint128 max_trigger_state_cardinality,
+                              double max_channel_capacity) {
   const absl::uint128 num_states = GetNumStatesCached(specs, max_reports, map);
+  if (num_states > max_trigger_state_cardinality) {
+    return base::unexpected(
+        RandomizedResponseError::kExceedsTriggerStateCardinalityLimit);
+  }
+
   double rate = GetRandomizedResponseRate(num_states, epsilon);
+  double channel_capacity = internal::ComputeChannelCapacity(num_states, rate);
+  if (channel_capacity > max_channel_capacity) {
+    return base::unexpected(
+        RandomizedResponseError::kExceedsChannelCapacityLimit);
+  }
+
   std::optional<std::vector<FakeEventLevelReport>> fake_reports;
   if (GenerateWithRate(rate)) {
     // TODO(csharrison): Justify the fast path with `single_spec` with
@@ -523,9 +561,7 @@ RandomizedResponseData DoRandomizedResponseWithCache(const TriggerSpecs& specs,
                        : internal::GetFakeReportsForSequenceIndex(
                              specs, max_reports, sequence_index, map);
   }
-  return RandomizedResponseData(
-      rate, internal::ComputeChannelCapacity(num_states, rate),
-      std::move(fake_reports));
+  return RandomizedResponseData(rate, std::move(fake_reports));
 }
 
 }  // namespace internal

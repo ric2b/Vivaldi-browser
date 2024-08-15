@@ -4,6 +4,11 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "xfa/fde/cfde_textout.h"
 
 #include <algorithm>
@@ -303,12 +308,12 @@ void CFDE_TextOut::DrawLogicText(CFX_RenderDevice* device,
     for (size_t i = 0; i < line.GetSize(); ++i) {
       const Piece* pPiece = line.GetPieceAtIndex(i);
       size_t szCount = GetDisplayPos(pPiece);
-      if (szCount == 0)
+      if (szCount == 0) {
         continue;
-
+      }
       CFDE_TextOut::DrawString(device, m_TxtColor, m_pFont,
-                               {m_CharPos.data(), szCount}, m_fFontSize,
-                               m_Matrix);
+                               pdfium::make_span(m_CharPos).first(szCount),
+                               m_fFontSize, m_Matrix);
     }
   }
   device->RestoreState(false);

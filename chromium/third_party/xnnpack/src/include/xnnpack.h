@@ -1494,7 +1494,7 @@ enum xnn_status xnn_define_static_resize_bilinear_2d(
 /// @param input_id - Value ID for the input tensor. The input tensor must be a 4D tensor defined in the @a subgraph
 ///                   with [N, H, W, channels] dimensions.
 /// @param slope_id - Value ID for the slope tensor. The slope tensor must be a 1D tensor defined in the @a subgraph with
-///                   [channels] dimensions.
+///                   either [1] or [channels] dimensions.
 /// @param output_id - Value ID for the output tensor. The output tensor must be a 4D tensor defined in the @a subgraph
 ///                    with [N, H, W, channels] dimensions.
 /// @param flags - binary features of the PReLU Node. No supported flags are currently defined.
@@ -1904,6 +1904,9 @@ enum xnn_status xnn_create_weights_cache(xnn_weights_cache_t* weights_cache_out)
 enum xnn_status xnn_finalize_weights_cache(
   xnn_weights_cache_t weights_cache,
   enum xnn_weights_cache_finalization_kind finalization_kind);
+
+// Wrapper function of the function pointers in `xnn_weights_cache_t`.
+bool xnn_weights_cache_is_finalized(xnn_weights_cache_t cache);
 
 /// Destroy a weights cache object, as well as memory used for the cache.
 /// @param weights_cache - the weights cache object to destroy.
@@ -2474,11 +2477,8 @@ enum xnn_status xnn_reshape_batch_matrix_multiply_nc_f16(
     pthreadpool_t threadpool);
 
 enum xnn_status xnn_setup_batch_matrix_multiply_nc_f16(
-  xnn_operator_t batch_matrix_multiply_op,
-  void* workspace,
-  const void* lhs_input,
-  const void* rhs_input,
-  void* output);
+    xnn_operator_t batch_matrix_multiply_op, void* workspace,
+    const void* input_a, const void* input_b, void* output);
 
 enum xnn_status xnn_create_batch_matrix_multiply_nc_f32(
   uint32_t flags,
@@ -2491,11 +2491,23 @@ enum xnn_status xnn_reshape_batch_matrix_multiply_nc_f32(
     pthreadpool_t threadpool);
 
 enum xnn_status xnn_setup_batch_matrix_multiply_nc_f32(
-  xnn_operator_t batch_matrix_multiply_op,
-  void* workspace,
-  const float* lhs_input,
-  const float* rhs_input,
-  float* output);
+    xnn_operator_t batch_matrix_multiply_op, void* workspace,
+    const float* input_a, const float* input_b, float* output);
+
+enum xnn_status xnn_create_batch_matrix_multiply_nc_qd8_f32_qc8w(
+    size_t batch_size_b, size_t k, size_t n, const int8_t* data_b,
+    const float* scale_b, uint32_t flags,
+    xnn_operator_t* batch_matrix_multiply_op);
+
+enum xnn_status xnn_reshape_batch_matrix_multiply_nc_qd8_f32_qc8w(
+    xnn_operator_t batch_matrix_multiply_op, size_t num_batch_dims,
+    const size_t* batch_dims_a, const size_t* batch_dims_b, size_t m, size_t k,
+    size_t n, pthreadpool_t threadpool);
+
+enum xnn_status xnn_setup_batch_matrix_multiply_nc_qd8_f32_qc8w(
+    xnn_operator_t batch_matrix_multiply_op, const int8_t* input_a,
+    const struct xnn_dynamic_quantization_params* quantization_params,
+    float* output);
 
 enum xnn_status xnn_create_ceiling_nc_f16(
   uint32_t flags,
@@ -3591,6 +3603,49 @@ enum xnn_status xnn_setup_deconvolution2d_nhwc_f32(
   xnn_operator_t deconvolution_op,
   const float* input,
   float* output);
+
+enum xnn_status xnn_create_deconvolution2d_nhwc_qd8_f32_qc8w(
+  uint32_t output_padding_top,
+  uint32_t output_padding_right,
+  uint32_t output_padding_bottom,
+  uint32_t output_padding_left,
+  uint32_t kernel_height,
+  uint32_t kernel_width,
+  uint32_t stride_height,
+  uint32_t stride_width,
+  uint32_t dilation_height,
+  uint32_t dilation_width,
+  uint32_t groups,
+  size_t group_input_channels,
+  size_t group_output_channels,
+  size_t input_pixel_stride,
+  size_t output_pixel_stride,
+  const float* kernel_scale,
+  const int8_t* kernel,
+  const float* bias,
+  float output_min,
+  float output_max,
+  uint32_t flags,
+  xnn_code_cache_t code_cache,
+  xnn_weights_cache_t weights_cache,
+  xnn_operator_t* deconvolution_op_out);
+
+enum xnn_status xnn_reshape_deconvolution2d_nhwc_qd8_f32_qc8w(
+  xnn_operator_t deconvolution_op,
+  size_t batch_size,
+  size_t input_height,
+  size_t input_width,
+  uint32_t adjustment_height,
+  uint32_t adjustment_width,
+  size_t* output_height_out,
+  size_t* output_width_out,
+  pthreadpool_t threadpool);
+
+enum xnn_status xnn_setup_deconvolution2d_nhwc_qd8_f32_qc8w(
+  xnn_operator_t deconvolution_op,
+  const int8_t* input,
+  float* output,
+  const struct xnn_dynamic_quantization_params* quantization_params);
 
 enum xnn_status xnn_create_deconvolution2d_nhwc_qs8(
   uint32_t output_padding_top,
@@ -5072,7 +5127,8 @@ enum xnn_status xnn_run_negate_nc_f32(
   pthreadpool_t threadpool);
 
 enum xnn_status xnn_create_prelu_nc_f16(
-  size_t channels,
+  size_t input_channels,
+  size_t slope_channels,
   size_t input_stride,
   size_t output_stride,
   const void* negative_slope,
@@ -5092,7 +5148,8 @@ enum xnn_status xnn_setup_prelu_nc_f16(
   void* output);
 
 enum xnn_status xnn_create_prelu_nc_f32(
-  size_t channels,
+  size_t input_channels,
+  size_t slope_channels,
   size_t input_stride,
   size_t output_stride,
   const float* negative_slope,
@@ -5683,6 +5740,17 @@ enum xnn_status xnn_run_square_root_nc_f32(
   float* output,
   uint32_t flags,
   pthreadpool_t threadpool);
+
+enum xnn_status xnn_create_reciprocal_square_root_nc_f16(
+    uint32_t flags, xnn_operator_t* sqrt_op_out);
+
+enum xnn_status xnn_reshape_reciprocal_square_root_nc_f16(
+    xnn_operator_t sqrt_op, size_t batch_size, size_t channels,
+    size_t input_stride, size_t output_stride, pthreadpool_t threadpool);
+
+enum xnn_status xnn_setup_reciprocal_square_root_nc_f16(xnn_operator_t sqrt_op,
+                                                        const void* input,
+                                                        void* output);
 
 enum xnn_status xnn_create_reciprocal_square_root_nc_f32(
     uint32_t flags, xnn_operator_t* sqrt_op_out);

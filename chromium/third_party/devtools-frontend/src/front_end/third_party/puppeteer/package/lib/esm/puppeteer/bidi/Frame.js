@@ -41,11 +41,13 @@ var __setFunctionName = (this && this.__setFunctionName) || function (f, name, p
     if (typeof name === "symbol") name = name.description ? "[".concat(name.description, "]") : "";
     return Object.defineProperty(f, "name", { configurable: true, value: prefix ? "".concat(prefix, " ", name) : name });
 };
+import * as Bidi from 'chromium-bidi/lib/cjs/protocol/protocol.js';
 import { combineLatest, defer, delayWhen, filter, first, firstValueFrom, map, of, raceWith, switchMap, } from '../../third_party/rxjs/rxjs.js';
 import { Frame, throwIfDetached, } from '../api/Frame.js';
 import { ConsoleMessage, } from '../common/ConsoleMessage.js';
 import { TargetCloseError, UnsupportedOperation } from '../common/Errors.js';
 import { debugError, fromEmitterEvent, timeout } from '../common/util.js';
+import { isErrorLike } from '../util/ErrorLike.js';
 import { BidiCdpSession } from './CDPSession.js';
 import { BidiDeserializer } from './Deserializer.js';
 import { BidiDialog } from './Dialog.js';
@@ -67,6 +69,7 @@ let BidiFrame = (() => {
     let _private_waitForNetworkIdle$_decorators;
     let _private_waitForNetworkIdle$_descriptor;
     let _setFiles_decorators;
+    let _locateNodes_decorators;
     return class BidiFrame extends _classSuper {
         static {
             const _metadata = typeof Symbol === "function" && Symbol.metadata ? Object.create(_classSuper[Symbol.metadata] ?? null) : void 0;
@@ -76,6 +79,7 @@ let BidiFrame = (() => {
             _private_waitForLoad$_decorators = [throwIfDetached];
             _private_waitForNetworkIdle$_decorators = [throwIfDetached];
             _setFiles_decorators = [throwIfDetached];
+            _locateNodes_decorators = [throwIfDetached];
             __esDecorate(this, null, _goto_decorators, { kind: "method", name: "goto", static: false, private: false, access: { has: obj => "goto" in obj, get: obj => obj.goto }, metadata: _metadata }, null, _instanceExtraInitializers);
             __esDecorate(this, null, _setContent_decorators, { kind: "method", name: "setContent", static: false, private: false, access: { has: obj => "setContent" in obj, get: obj => obj.setContent }, metadata: _metadata }, null, _instanceExtraInitializers);
             __esDecorate(this, null, _waitForNavigation_decorators, { kind: "method", name: "waitForNavigation", static: false, private: false, access: { has: obj => "waitForNavigation" in obj, get: obj => obj.waitForNavigation }, metadata: _metadata }, null, _instanceExtraInitializers);
@@ -135,6 +139,7 @@ let BidiFrame = (() => {
                     });
                 }, "#waitForNetworkIdle$") }, _private_waitForNetworkIdle$_decorators, { kind: "method", name: "#waitForNetworkIdle$", static: false, private: true, access: { has: obj => #waitForNetworkIdle$ in obj, get: obj => obj.#waitForNetworkIdle$ }, metadata: _metadata }, null, _instanceExtraInitializers);
             __esDecorate(this, null, _setFiles_decorators, { kind: "method", name: "setFiles", static: false, private: false, access: { has: obj => "setFiles" in obj, get: obj => obj.setFiles }, metadata: _metadata }, null, _instanceExtraInitializers);
+            __esDecorate(this, null, _locateNodes_decorators, { kind: "method", name: "locateNodes", static: false, private: false, access: { has: obj => "locateNodes" in obj, get: obj => obj.locateNodes }, metadata: _metadata }, null, _instanceExtraInitializers);
             if (_metadata) Object.defineProperty(this, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
         }
         static from(parent, browsingContext) {
@@ -169,7 +174,7 @@ let BidiFrame = (() => {
             this.browsingContext.on('closed', () => {
                 for (const session of BidiCdpSession.sessions.values()) {
                     if (session.frame === this) {
-                        void session.detach().catch(debugError);
+                        session.onClose();
                     }
                 }
                 this.page().trustedEmitter.emit("framedetached" /* PageEvent.FrameDetached */, this);
@@ -177,12 +182,12 @@ let BidiFrame = (() => {
             this.browsingContext.on('request', ({ request }) => {
                 const httpRequest = BidiHTTPRequest.from(request, this);
                 request.once('success', () => {
-                    // SAFETY: BidiHTTPRequest will create this before here.
                     this.page().trustedEmitter.emit("requestfinished" /* PageEvent.RequestFinished */, httpRequest);
                 });
                 request.once('error', () => {
                     this.page().trustedEmitter.emit("requestfailed" /* PageEvent.RequestFailed */, httpRequest);
                 });
+                void httpRequest.finalizeInterceptions();
             });
             this.browsingContext.on('navigation', ({ navigation }) => {
                 navigation.once('fragment', () => {
@@ -314,7 +319,15 @@ let BidiFrame = (() => {
                 // readiness=interactive.
                 //
                 // Related: https://bugzilla.mozilla.org/show_bug.cgi?id=1846601
-                this.browsingContext.navigate(url, "interactive" /* Bidi.BrowsingContext.ReadinessState.Interactive */),
+                this.browsingContext
+                    .navigate(url, "interactive" /* Bidi.BrowsingContext.ReadinessState.Interactive */)
+                    .catch(error => {
+                    if (isErrorLike(error) &&
+                        error.message.includes('net::ERR_HTTP_RESPONSE_CODE_FAILURE')) {
+                        return;
+                    }
+                    throw error;
+                }),
             ]).catch(rewriteNavigationError(url, options.timeout ?? this.timeoutSettings.navigationTimeout()));
             return response;
         }
@@ -339,9 +352,7 @@ let BidiFrame = (() => {
                             return of(undefined);
                         }
                         return combineLatest(frames);
-                    }), raceWith(fromEmitterEvent(navigation, 'fragment'), fromEmitterEvent(navigation, 'failed').pipe(map(({ url }) => {
-                        throw new Error(`Navigation failed: ${url}`);
-                    })), fromEmitterEvent(navigation, 'aborted').pipe(map(({ url }) => {
+                    }), raceWith(fromEmitterEvent(navigation, 'fragment'), fromEmitterEvent(navigation, 'failed'), fromEmitterEvent(navigation, 'aborted').pipe(map(({ url }) => {
                         throw new Error(`Navigation aborted: ${url}`);
                     }))), switchMap(() => {
                         if (navigation.request) {
@@ -372,9 +383,9 @@ let BidiFrame = (() => {
                 if (!request) {
                     return null;
                 }
-                const httpRequest = requests.get(request);
-                const lastRedirect = httpRequest.redirectChain().at(-1);
-                return (lastRedirect !== undefined ? lastRedirect : httpRequest).response();
+                const lastRequest = request.lastRedirect ?? request;
+                const httpRequest = requests.get(lastRequest);
+                return httpRequest.response();
             }), raceWith(timeout(ms), this.#detached$().pipe(map(() => {
                 throw new TargetCloseError('Frame detached.');
             })))));
@@ -412,6 +423,7 @@ let BidiFrame = (() => {
                 targetId: this._id,
                 flatten: true,
             });
+            await this.browsingContext.subscribe([Bidi.ChromiumBidi.BiDiModule.Cdp]);
             return new BidiCdpSession(this, sessionId);
         }
         get #waitForLoad$() { return _private_waitForLoad$_descriptor.value; }
@@ -420,6 +432,11 @@ let BidiFrame = (() => {
             await this.browsingContext.setFiles(
             // SAFETY: ElementHandles are always remote references.
             element.remoteValue(), files);
+        }
+        async locateNodes(element, locator) {
+            return await this.browsingContext.locateNodes(locator, 
+            // SAFETY: ElementHandles are always remote references.
+            [element.remoteValue()]);
         }
     };
 })();

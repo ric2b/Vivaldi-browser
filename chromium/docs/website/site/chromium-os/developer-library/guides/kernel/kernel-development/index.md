@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: kernel-development
 title: Kernel Development
 ---
@@ -44,7 +44,7 @@ If you are making any changes to the kernel sources, and want to build the
 kernel with your changes, you must first tell the build system to use your
 local sources:
 ```bash
-(chroot) $ cros-workon-${BOARD} start chromeos-kernel-[x_y]  # first time
+(chroot) $ cros workon --board ${BOARD} start chromeos-kernel-[x_y]  # first time
 ```
 
 #### Building with emerge
@@ -320,7 +320,7 @@ device.
 
 *** note
 **Note:** no supported CrOS hardware boots via legacy BIOS. Legacy BIOS is
-typically used by QEMU VMs (e.g., [`cros_vm`](cros_vm.md)).
+typically used by QEMU VMs (e.g., [`cros_vm`](/chromium-os/developer-library/guides/containers/cros-vm/)).
 ***
 
 First, locate the EFI system partition (a.k.a., boot partition). This is often
@@ -539,7 +539,7 @@ An example message is: **CHROMIUM: config: enable aebl config**
 
 #### Committing
 
-See the [Contributing Guide](contributing.md) for details on how to upload your
+See the [Contributing Guide](/chromium-os/developer-library/guides/development/contributing/) for details on how to upload your
 changes, get them tested & reviewed, and ultimately get them into the tree.
 
 ## Debugging
@@ -1007,7 +1007,7 @@ kill -9 %
 
 #### QEMU notes
 
-Debugging a QEMU system (such as one launched via [cros_vm](cros_vm.md))
+Debugging a QEMU system (such as one launched via [cros_vm](/chromium-os/developer-library/guides/containers/cros-vm/))
 requires a few tweaks.
 
 For one, you need to establish a virtual serial console by adding `-serial pty`
@@ -1661,7 +1661,7 @@ to obtain an @chromium.org address.
 
 For google-mail-based addresses, it's recommended to use an "App
 Password" for convenience when storing your real password on disk is
-undesireable (which should be most cases). Follow [these
+undesirable (which should be most cases). Follow [these
 instructions](https://support.google.com/accounts/answer/185833) to obtain an
 App Password, and use it as the `smtppass` value in the next section.
 
@@ -1718,7 +1718,7 @@ cat $OUT
 
 [cros-kernel eclass documentation]: https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/eclass/cros-kernel/README.md
 [fromupstream.py]: https://chromium.googlesource.com/chromiumos/platform/dev-util/+/HEAD/contrib/fromupstream.py
-[cros deploy]: cros_deploy.md
+[cros deploy]: /chromium-os/developer-library/reference/tools/cros-deploy/
 [kernel parameters guide]: https://www.kernel.org/doc/html/latest/admin-guide/kernel-parameters.html
 [Dynamic Debug]: https://www.kernel.org/doc/html/v4.19/admin-guide/dynamic-debug-howto.html
 [dynamic debug is disabled on ChromeOS]: https://crbug.com/188825
@@ -1729,8 +1729,8 @@ cat $OUT
 [Heisenbug]: https://en.wikipedia.org/wiki/Heisenbug
 [imap-upload]: https://github.com/rgladwell/imap-upload
 [KASan]: https://www.kernel.org/doc/html/v4.14/dev-tools/kasan.html
-[UPSTREAM, BACKPORT and FROMLIST]: ./kernel_development.md#UPSTREAM_BACKPORT_FROMLIST_and-you
-[SSH keys]: developer_guide.md#Set-up-SSH-connection-between-chroot-and-DUT
+[UPSTREAM, BACKPORT and FROMLIST]: /chromium-os/developer-library/guides/kernel/kernel-development/#UPSTREAM_BACKPORT_FROMLIST_and-you
+[SSH keys]: /chromium-os/developer-library/guides/development/developer-guide/#Set-up-SSH-connection-between-chroot-and-DUT
 [trace-cmd man pages]: https://man7.org/linux/man-pages/man1/trace-cmd.1.html
 [LWN trace-cmd HOWTO]: https://lwn.net/Articles/410200/
 [kernel.eclass]: https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/eclass/cros-kernel.eclass

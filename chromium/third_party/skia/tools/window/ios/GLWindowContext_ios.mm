@@ -9,6 +9,7 @@
 #include "include/gpu/gl/GrGLInterface.h"
 #include "tools/window/GLWindowContext.h"
 #include "tools/window/ios/WindowContextFactory_ios.h"
+#include "include/gpu/ganesh/gl/ios/GrGLMakeIOSInterface.h"
 
 #import <OpenGLES/ES3/gl.h>
 #import <UIKit/UIKit.h>
@@ -56,7 +57,7 @@ GLWindowContext_ios::GLWindowContext_ios(const IOSWindowInfo& info, const Displa
         , fViewController(info.fViewController)
         , fGLContext(nil) {
 
-    // any config code here (particularly for msaa)?
+    // iOS test apps currently ignore MSAA settings.
 
     this->initializeContext();
 }
@@ -127,7 +128,7 @@ sk_sp<const GrGLInterface> GLWindowContext_ios::onInitializeContext() {
 
     glViewport(0, 0, fWidth, fHeight);
 
-    return GrGLMakeNativeInterface();
+    return GrGLInterfaces::MakeIOS();
 }
 
 void GLWindowContext_ios::onDestroyContext() {
@@ -144,8 +145,6 @@ void GLWindowContext_ios::onSwapBuffers() {
 }
 
 void GLWindowContext_ios::resize(int w, int h) {
-    // TODO: handle rotation
-    // [fGLContext update];
     GLWindowContext::resize(w, h);
 }
 

@@ -16,6 +16,7 @@
 #include "build/blink_buildflags.h"
 #include "build/build_config.h"
 #include "mojo/core/embedder/embedder.h"
+#include "mojo/core/ipcz_driver/mojo_message.h"
 #include "mojo/core/test/mojo_test_base.h"
 #include "mojo/core/user_message_impl.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
@@ -246,7 +247,7 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(ReceiveMessageNoHandles, MessageTest, h) {
 }
 
 #if BUILDFLAG(IS_IOS)
-// TODO(crbug.com/1418597): Test currently fails on iOS.
+// TODO(crbug.com/40257752): Test currently fails on iOS.
 #define MAYBE_SerializeSimpleMessageNoHandlesWithContext \
   DISABLED_SerializeSimpleMessageNoHandlesWithContext
 #else
@@ -262,7 +263,7 @@ TEST_F(MessageTest, MAYBE_SerializeSimpleMessageNoHandlesWithContext) {
 }
 
 #if BUILDFLAG(IS_IOS)
-// TODO(crbug.com/1418597): Test currently fails on iOS.
+// TODO(crbug.com/40257752): Test currently fails on iOS.
 #define MAYBE_SerializeDynamicallySizedMessage \
   DISABLED_SerializeDynamicallySizedMessage
 #else
@@ -304,7 +305,7 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(ReceiveMessageOneHandle, MessageTest, h) {
 }
 
 #if BUILDFLAG(IS_IOS)
-// TODO(crbug.com/1418597): Test currently fails on iOS.
+// TODO(crbug.com/40257752): Test currently fails on iOS.
 #define MAYBE_SerializeSimpleMessageOneHandleWithContext \
   DISABLED_SerializeSimpleMessageOneHandleWithContext
 #else
@@ -343,7 +344,7 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(ReceiveMessageWithHandles, MessageTest, h) {
 }
 
 #if BUILDFLAG(IS_IOS)
-// TODO(crbug.com/1418597): Test currently fails on iOS.
+// TODO(crbug.com/40257752): Test currently fails on iOS.
 #define MAYBE_SerializeSimpleMessageWithHandlesWithContext \
   DISABLED_SerializeSimpleMessageWithHandlesWithContext
 #else
@@ -689,23 +690,19 @@ TEST_F(MessageTest, ExtendMessagePayload) {
   EXPECT_EQ(MOJO_RESULT_OK, MojoDestroyMessage(message));
 }
 
-// TODO(crbug.com/329911837): Enable the following two tests
-// on other platforms when preallocation is supported by IPCz.
 TEST_F(MessageTest, PreallocateEnoughMemoryForMessage) {
-  if (IsMojoIpczEnabled()) {
-    GTEST_SKIP()
-        << "MojoReserveMessageCapacity API is not supported by MojoIpcz.";
-  }
-
   MojoMessageHandle message;
   EXPECT_EQ(MOJO_RESULT_OK, MojoCreateMessage(nullptr, &message));
 
-  // We need to use `kMinimumPayloadBufferSize` here, because if we use a
-  // payload size smaller than that, the buffer may not be reallocated
-  // when we expect it to (since at least `kMinimumPayloadBufferSize`
-  // bytes of capacity will be allocated).
-  const std::string kMsgPart1(32, 'x');
-  const std::string kMsgPart2(kMinimumPayloadBufferSize, 'y');
+  // We need to calculate our payload sizes based on `kMinimumBufferSize` here,
+  // because if we use a total payload size smaller than that, the buffer may
+  // not be reallocated when we expect it to (since at least
+  // `kMinimumBufferSize` bytes of capacity will be allocated).
+  const size_t kMinimumBufferSize =
+      IsMojoIpczEnabled() ? ipcz_driver::MojoMessage::kMinBufferSize
+                          : kMinimumPayloadBufferSize;
+  const std::string kMsgPart1(kMinimumBufferSize / 2, 'x');
+  const std::string kMsgPart2(kMinimumBufferSize, 'y');
   const std::string kCombined = kMsgPart1 + kMsgPart2;
   // Overestimate the amount of memory required. 16 is picked as it should
   // be larger than adjustments due to memory alignment.
@@ -762,20 +759,18 @@ TEST_F(MessageTest, PreallocateEnoughMemoryForMessage) {
 }
 
 TEST_F(MessageTest, PreallocateNotEnoughMemoryForMessage) {
-  if (IsMojoIpczEnabled()) {
-    GTEST_SKIP()
-        << "MojoReserveMessageCapacity API is not supported by MojoIpcz.";
-  }
-
   MojoMessageHandle message;
   EXPECT_EQ(MOJO_RESULT_OK, MojoCreateMessage(nullptr, &message));
 
-  // We need to use `kMinimumPayloadBufferSize` here, because if we use a
-  // payload size smaller than that, the buffer may not be reallocated
-  // when we expect it to (since at least `kMinimumPayloadBufferSize`
-  // bytes of capacity will be allocated).
-  const std::string kMsgPart1(32, 'x');
-  const std::string kMsgPart2(kMinimumPayloadBufferSize, 'y');
+  // We need to calculate our payload sizes based on `kMinimumBufferSize` here,
+  // because if we use a total payload size smaller than that, the buffer may
+  // not be reallocated when we expect it to (since at least
+  // `kMinimumBufferSize` bytes of capacity will be allocated).
+  const size_t kMinimumBufferSize =
+      IsMojoIpczEnabled() ? ipcz_driver::MojoMessage::kMinBufferSize
+                          : kMinimumPayloadBufferSize;
+  const std::string kMsgPart1(kMinimumBufferSize / 2, 'x');
+  const std::string kMsgPart2(kMinimumBufferSize, 'y');
   const std::string kCombined = kMsgPart1 + kMsgPart2;
   // Underestimate the amount of memory required. 16 is picked as it should
   // be larger than adjustments due to memory alignment.
@@ -904,7 +899,7 @@ TEST_F(MessageTest, ExtendMessagePayloadLarge) {
     // progressively extend the payload to this size.
     constexpr size_t kTestMessagePayloadSize = 512 * 1024;
     std::vector<uint8_t> test_payload(kTestMessagePayloadSize);
-    base::RandBytes(test_payload.data(), kTestMessagePayloadSize);
+    base::RandBytes(test_payload);
 
     size_t current_payload_size = 0;
     while (current_payload_size < kTestMessagePayloadSize) {
@@ -1009,7 +1004,7 @@ TEST_F(MessageTest, CommitInvalidMessageContents) {
 #if BUILDFLAG(USE_BLINK)
 
 #if BUILDFLAG(IS_IOS)
-// TODO(crbug.com/1418597): Test currently fails on iOS.
+// TODO(crbug.com/40257752): Test currently fails on iOS.
 #define MAYBE_ExtendPayloadWithHandlesAttached \
   DISABLED_ExtendPayloadWithHandlesAttached
 #else
@@ -1074,7 +1069,7 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(ReadAndIgnoreMessage, MessageTest, h) {
 }
 
 #if BUILDFLAG(IS_IOS)
-// TODO(crbug.com/1418597): Test currently fails on iOS.
+// TODO(crbug.com/40257752): Test currently fails on iOS.
 #define MAYBE_ExtendPayloadWithHandlesAttachedViaExtension \
   DISABLED_ExtendPayloadWithHandlesAttachedViaExtension
 #else

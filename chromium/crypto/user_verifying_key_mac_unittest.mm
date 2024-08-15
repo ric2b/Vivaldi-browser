@@ -2,20 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/task/single_thread_task_runner.h"
 #include "crypto/user_verifying_key.h"
 
 #include <iterator>
 #include <memory>
 
+#include <LocalAuthentication/LocalAuthentication.h>
+
 #include "base/functional/bind.h"
 #include "base/run_loop.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "crypto/fake_apple_keychain_v2.h"
 #include "crypto/features.h"
 #include "crypto/scoped_fake_apple_keychain_v2.h"
+#include "crypto/scoped_lacontext.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace crypto {
@@ -26,9 +29,11 @@ constexpr char kTestKeychainAccessGroup[] = "test-keychain-access-group";
 constexpr SignatureVerifier::SignatureAlgorithm kAcceptableAlgos[] = {
     SignatureVerifier::ECDSA_SHA256};
 
-const UserVerifyingKeyProvider::Config config = {
-    .keychain_access_group = kTestKeychainAccessGroup,
-};
+UserVerifyingKeyProvider::Config MakeConfig() {
+  UserVerifyingKeyProvider::Config config;
+  config.keychain_access_group = kTestKeychainAccessGroup;
+  return config;
+}
 
 class UserVerifyingKeyMacTest : public testing::Test {
  public:
@@ -95,51 +100,76 @@ class UserVerifyingKeyMacTest : public testing::Test {
       kEnableMacUnexportableKeys};
 
   std::unique_ptr<UserVerifyingKeyProvider> provider_ =
-      crypto::GetUserVerifyingKeyProvider(config);
+      crypto::GetUserVerifyingKeyProvider(MakeConfig());
 };
 
 TEST_F(UserVerifyingKeyMacTest, RoundTrip) {
-  std::unique_ptr<UserVerifyingSigningKey> key =
-      GenerateUserVerifyingSigningKey();
-  ASSERT_TRUE(key);
-  ASSERT_TRUE(!key->GetKeyLabel().empty());
+  for (bool use_lacontext : {false, true}) {
+    SCOPED_TRACE(use_lacontext);
+    UserVerifyingKeyProvider::Config config = MakeConfig();
+    if (use_lacontext) {
+      config.lacontext = ScopedLAContext([[LAContext alloc] init]);
+    }
+    provider_ = crypto::GetUserVerifyingKeyProvider(std::move(config));
 
-  const std::vector<uint8_t> spki = key->GetPublicKey();
-  const uint8_t message[] = {1, 2, 3, 4};
-  std::optional<std::vector<uint8_t>> signature = Sign(key.get(), message);
-  ASSERT_TRUE(signature);
+    std::unique_ptr<UserVerifyingSigningKey> key =
+        GenerateUserVerifyingSigningKey();
+    ASSERT_TRUE(key);
+    ASSERT_TRUE(!key->GetKeyLabel().empty());
 
-  crypto::SignatureVerifier verifier;
-  ASSERT_TRUE(verifier.VerifyInit(kAcceptableAlgos[0], *signature, spki));
-  verifier.VerifyUpdate(message);
-  ASSERT_TRUE(verifier.VerifyFinal());
+    const std::vector<uint8_t> spki = key->GetPublicKey();
+    const uint8_t message[] = {1, 2, 3, 4};
+    std::optional<std::vector<uint8_t>> signature = Sign(key.get(), message);
+    ASSERT_TRUE(signature);
 
-  std::unique_ptr<UserVerifyingSigningKey> key2 =
-      GetUserVerifyingSigningKey(key->GetKeyLabel());
-  ASSERT_TRUE(key2);
+    crypto::SignatureVerifier verifier;
+    ASSERT_TRUE(verifier.VerifyInit(kAcceptableAlgos[0], *signature, spki));
+    verifier.VerifyUpdate(message);
+    ASSERT_TRUE(verifier.VerifyFinal());
 
-  std::optional<std::vector<uint8_t>> signature2 = Sign(key.get(), message);
-  ASSERT_TRUE(signature2);
+    std::unique_ptr<UserVerifyingSigningKey> key2 =
+        GetUserVerifyingSigningKey(key->GetKeyLabel());
+    ASSERT_TRUE(key2);
 
-  crypto::SignatureVerifier verifier2;
-  ASSERT_TRUE(verifier2.VerifyInit(kAcceptableAlgos[0], *signature2, spki));
-  verifier2.VerifyUpdate(message);
-  ASSERT_TRUE(verifier2.VerifyFinal());
+    std::optional<std::vector<uint8_t>> signature2 = Sign(key.get(), message);
+    ASSERT_TRUE(signature2);
+
+    crypto::SignatureVerifier verifier2;
+    ASSERT_TRUE(verifier2.VerifyInit(kAcceptableAlgos[0], *signature2, spki));
+    verifier2.VerifyUpdate(message);
+    ASSERT_TRUE(verifier2.VerifyFinal());
+  }
 }
 
 TEST_F(UserVerifyingKeyMacTest, SecureEnclaveAvailability) {
-  for (bool available : {true, false}) {
+  using UVMethod = FakeAppleKeychainV2::UVMethod;
+  struct {
+    bool enclave_available;
+    UVMethod uv_method;
+    bool expected_uvk_available;
+  } kTests[] = {
+      {false, UVMethod::kNone, false},
+      {false, UVMethod::kPasswordOnly, false},
+      {false, UVMethod::kBiometrics, false},
+      {true, UVMethod::kNone, false},
+      {true, UVMethod::kPasswordOnly, true},
+      {true, UVMethod::kBiometrics, true},
+  };
+  for (auto test : kTests) {
+    SCOPED_TRACE(test.enclave_available);
+    SCOPED_TRACE(static_cast<int>(test.uv_method));
     scoped_fake_apple_keychain_.keychain()->set_secure_enclave_available(
-        available);
+        test.enclave_available);
+    scoped_fake_apple_keychain_.keychain()->set_uv_method(test.uv_method);
     std::optional<bool> result;
     base::RunLoop run_loop;
-    AreUserVerifyingKeysSupported(config,
+    AreUserVerifyingKeysSupported(MakeConfig(),
                                   base::BindLambdaForTesting([&](bool ret) {
                                     result = ret;
                                     run_loop.Quit();
                                   }));
     run_loop.Run();
-    EXPECT_EQ(result.value(), available);
+    EXPECT_EQ(result.value(), test.expected_uvk_available);
   }
 }
 

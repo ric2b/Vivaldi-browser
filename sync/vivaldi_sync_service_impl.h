@@ -47,8 +47,6 @@ class VivaldiSyncServiceImpl : public syncer::SyncServiceImpl {
  private:
   friend class VivaldiSyncUIHelper;
 
-  void ResetEngine(syncer::ShutdownReason reason,
-                   ResetEngineReason reset_reason) override;
   void OnEngineInitialized(
       bool success,
       bool is_first_time_sync_configure) override;

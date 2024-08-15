@@ -24,6 +24,8 @@ declare namespace ProtocolProxyApi {
 
     Audits: AuditsApi;
 
+    Extensions: ExtensionsApi;
+
     Autofill: AutofillApi;
 
     BackgroundService: BackgroundServiceApi;
@@ -106,6 +108,8 @@ declare namespace ProtocolProxyApi {
 
     FedCm: FedCmApi;
 
+    PWA: PWAApi;
+
     Debugger: DebuggerApi;
 
     HeapProfiler: HeapProfilerApi;
@@ -124,6 +128,8 @@ declare namespace ProtocolProxyApi {
     Animation: AnimationDispatcher;
 
     Audits: AuditsDispatcher;
+
+    Extensions: ExtensionsDispatcher;
 
     Autofill: AutofillDispatcher;
 
@@ -206,6 +212,8 @@ declare namespace ProtocolProxyApi {
     Preload: PreloadDispatcher;
 
     FedCm: FedCmDispatcher;
+
+    PWA: PWADispatcher;
 
     Debugger: DebuggerDispatcher;
 
@@ -352,6 +360,11 @@ declare namespace ProtocolProxyApi {
      */
     animationStarted(params: Protocol.Animation.AnimationStartedEvent): void;
 
+    /**
+     * Event for animation that has been updated.
+     */
+    animationUpdated(params: Protocol.Animation.AnimationUpdatedEvent): void;
+
   }
 
   export interface AuditsApi {
@@ -388,6 +401,18 @@ declare namespace ProtocolProxyApi {
   export interface AuditsDispatcher {
     issueAdded(params: Protocol.Audits.IssueAddedEvent): void;
 
+  }
+
+  export interface ExtensionsApi {
+    /**
+     * Installs an unpacked extension from the filesystem similar to
+     * --load-extension CLI flags. Returns extension ID once the extension
+     * has been installed.
+     */
+    invoke_loadUnpacked(params: Protocol.Extensions.LoadUnpackedRequest): Promise<Protocol.Extensions.LoadUnpackedResponse>;
+
+  }
+  export interface ExtensionsDispatcher {
   }
 
   export interface AutofillApi {
@@ -1008,6 +1033,11 @@ declare namespace ProtocolProxyApi {
     invoke_getTopLayerElements(): Promise<Protocol.DOM.GetTopLayerElementsResponse>;
 
     /**
+     * Returns the NodeId of the matched element according to certain relations.
+     */
+    invoke_getElementByRelation(params: Protocol.DOM.GetElementByRelationRequest): Promise<Protocol.DOM.GetElementByRelationResponse>;
+
+    /**
      * Re-does the last undone action.
      */
     invoke_redo(): Promise<Protocol.ProtocolResponseWithError>;
@@ -1419,6 +1449,20 @@ declare namespace ProtocolProxyApi {
      * query results).
      */
     invoke_setDeviceMetricsOverride(params: Protocol.Emulation.SetDeviceMetricsOverrideRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Start reporting the given posture value to the Device Posture API.
+     * This override can also be set in setDeviceMetricsOverride().
+     */
+    invoke_setDevicePostureOverride(params: Protocol.Emulation.SetDevicePostureOverrideRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Clears a device posture override set with either setDeviceMetricsOverride()
+     * or setDevicePostureOverride() and starts using posture information from the
+     * platform again.
+     * Does nothing if no override is set.
+     */
+    invoke_clearDevicePostureOverride(): Promise<Protocol.ProtocolResponseWithError>;
 
     invoke_setScrollbarsHidden(params: Protocol.Emulation.SetScrollbarsHiddenRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -2192,6 +2236,13 @@ declare namespace ProtocolProxyApi {
     responseReceivedExtraInfo(params: Protocol.Network.ResponseReceivedExtraInfoEvent): void;
 
     /**
+     * Fired when 103 Early Hints headers is received in addition to the common response.
+     * Not every responseReceived event will have an responseReceivedEarlyHints fired.
+     * Only one responseReceivedEarlyHints may be fired for eached responseReceived event.
+     */
+    responseReceivedEarlyHints(params: Protocol.Network.ResponseReceivedEarlyHintsEvent): void;
+
+    /**
      * Fired exactly once for each Trust Token operation. Depending on
      * the type of the operation and whether the operation succeeded or
      * failed, the event is fired before the corresponding request was sent
@@ -2460,7 +2511,14 @@ declare namespace ProtocolProxyApi {
      */
     invoke_enable(): Promise<Protocol.ProtocolResponseWithError>;
 
-    invoke_getAppManifest(): Promise<Protocol.Page.GetAppManifestResponse>;
+    /**
+     * Gets the processed manifest for this current document.
+     *   This API always waits for the manifest to be loaded.
+     *   If manifestId is provided, and it does not match the manifest of the
+     *     current document, this API errors out.
+     *   If there is not a loaded page, this API errors out immediately.
+     */
+    invoke_getAppManifest(params: Protocol.Page.GetAppManifestRequest): Promise<Protocol.Page.GetAppManifestResponse>;
 
     invoke_getInstallabilityErrors(): Promise<Protocol.Page.GetInstallabilityErrorsResponse>;
 
@@ -3150,6 +3208,12 @@ declare namespace ProtocolProxyApi {
      * Enables/disables issuing of Attribution Reporting events.
      */
     invoke_setAttributionReportingTracking(params: Protocol.Storage.SetAttributionReportingTrackingRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Sends all pending Attribution Reports immediately, regardless of their
+     * scheduled report time.
+     */
+    invoke_sendPendingAttributionReports(): Promise<Protocol.Storage.SendPendingAttributionReportsResponse>;
 
     /**
      * Returns the effective Related Website Sets in use by this profile for the browser
@@ -3850,6 +3914,43 @@ declare namespace ProtocolProxyApi {
      */
     dialogClosed(params: Protocol.FedCm.DialogClosedEvent): void;
 
+  }
+
+  export interface PWAApi {
+    /**
+     * Returns the following OS state for the given manifest id.
+     */
+    invoke_getOsAppState(params: Protocol.PWA.GetOsAppStateRequest): Promise<Protocol.PWA.GetOsAppStateResponse>;
+
+    /**
+     * Installs the given manifest identity, optionally using the given install_url
+     * or IWA bundle location.
+     *
+     * TODO(crbug.com/337872319) Support IWA to meet the following specific
+     * requirement.
+     * IWA-specific install description: If the manifest_id is isolated-app://,
+     * install_url_or_bundle_url is required, and can be either an http(s) URL or
+     * file:// URL pointing to a signed web bundle (.swbn). The .swbn file's
+     * signing key must correspond to manifest_id. If Chrome is not in IWA dev
+     * mode, the installation will fail, regardless of the state of the allowlist.
+     */
+    invoke_install(params: Protocol.PWA.InstallRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Uninstals the given manifest_id and closes any opened app windows.
+     */
+    invoke_uninstall(params: Protocol.PWA.UninstallRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Launches the installed web app, or an url in the same web app instead of the
+     * default start url if it is provided. Returns a tab / web contents based
+     * Target.TargetID which can be used to attach to via Target.attachToTarget or
+     * similar APIs.
+     */
+    invoke_launch(params: Protocol.PWA.LaunchRequest): Promise<Protocol.PWA.LaunchResponse>;
+
+  }
+  export interface PWADispatcher {
   }
 
   export interface DebuggerApi {

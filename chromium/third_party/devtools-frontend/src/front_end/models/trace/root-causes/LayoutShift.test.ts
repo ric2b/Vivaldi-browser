@@ -9,10 +9,10 @@ import {
 import {getBaseTraceParseModelData} from '../../../testing/TraceHelpers.js';
 import * as TraceEngine from '../trace.js';
 
+import * as RootCauses from './RootCauses.js';
+
 type TraceParseData = TraceEngine.Handlers.Types.TraceParseData;
 type TraceParseDataMutable = TraceEngine.Handlers.Types.TraceParseDataMutable;
-
-const {assert} = chai;
 
 function assertArrayHasNoNulls<T>(inputArray: Array<T|null>): asserts inputArray is T[] {
   inputArray.forEach((item, index) => {
@@ -47,7 +47,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
      * required.
      */
   describe('assigns root causes to layout shifts', () => {
-    let rootCausesEngine: TraceEngine.RootCauses.RootCauses.RootCauses;
+    let layoutShifts: RootCauses.LayoutShiftRootCauses;
     let prePaintEvents: TraceEngine.Types.TraceEvents.TraceEventPrePaint[];
     let resizeEvents: TraceEngine.Types.TraceEvents.TraceEventLayoutInvalidationTracking[];
     let injectedIframeEvents: TraceEngine.Types.TraceEvents.TraceEventLayoutInvalidationTracking[];
@@ -60,6 +60,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
     let iframesNodeIds: number[];
     let shifts: TraceEngine.Types.TraceEvents.SyntheticLayoutShift[];
     let matchedStylesMock: Omit<Protocol.CSS.GetMatchedStylesForNodeResponse, 'getError'>;
+    let protocolInterface: RootCauses.RootCauseProtocolInterface;
     let computedStylesMock: Protocol.CSS.CSSComputedStyleProperty[];
     let fontFaceMock: Protocol.CSS.FontFace;
     const fontSource = 'mock-source.woff';
@@ -109,6 +110,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
           data: {
             nodeId: i + 1 as Protocol.DOM.BackendNodeId,
             reason: TraceEngine.Types.TraceEvents.LayoutInvalidationReason.SIZE_CHANGED,
+            nodeName: 'IMG',
             frame: 'frame-id-123',
           },
         };
@@ -118,6 +120,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
           data: {
             nodeId: i + 11 as Protocol.DOM.BackendNodeId,
             reason: TraceEngine.Types.TraceEvents.LayoutInvalidationReason.ADDED_TO_LAYOUT,
+            nodeName: 'IFRAME',
             frame: 'frame-id-123',
           },
         };
@@ -127,6 +130,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
           data: {
             nodeId: i + 21 as Protocol.DOM.BackendNodeId,
             reason: TraceEngine.Types.TraceEvents.LayoutInvalidationReason.FONTS_CHANGED,
+            nodeName: 'DIV',
             frame: 'frame-id-123',
           },
         };
@@ -136,6 +140,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
           data: {
             nodeId: i + 31 as Protocol.DOM.BackendNodeId,
             reason: TraceEngine.Types.TraceEvents.LayoutInvalidationReason.UNKNOWN,
+            nodeName: 'DIV',
             frame: 'frame-id-123',
           },
         };
@@ -147,6 +152,10 @@ describeWithMockConnection('LayoutShift root causes', () => {
         ...unknownLayoutInvalidation,
       ].sort((a, b) => a.ts - b.ts);
 
+      for (const e of layoutInvalidationEvents) {
+        e.name = TraceEngine.Types.TraceEvents.KnownEventName.LayoutInvalidationTracking;
+      }
+
       // Map from fake BackendNodeId to fake Protocol.DOM.Node used by the handler to
       // resolve the nodeIds in the traces.
       const domNodeByBackendIdMapEntries: [Protocol.DOM.BackendNodeId, Protocol.DOM.Node|null][] = [];
@@ -154,14 +163,12 @@ describeWithMockConnection('LayoutShift root causes', () => {
       for (let i = 0 as Protocol.DOM.BackendNodeId; i < layoutInvalidationEvents.length; i++) {
         const backendNodeId = layoutInvalidationEvents[i].args.data.nodeId;
         const nodeId = i as unknown as Protocol.DOM.NodeId;
+        const nodeName = layoutInvalidationEvents[i].args.data.nodeName || 'DIV';
         const fakeNode = {
           backendNodeId,
           nodeId,
-          localName: 'img',
-          nodeName: layoutInvalidationEvents[i].args.data.reason ===
-                  TraceEngine.Types.TraceEvents.LayoutInvalidationReason.ADDED_TO_LAYOUT ?
-              'IFRAME' :
-              'IMG',
+          localName: nodeName.toLowerCase(),
+          nodeName,
           attributes: [],
           nodeType: Node.ELEMENT_NODE,
         } as unknown as Protocol.DOM.Node;
@@ -192,7 +199,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
       computedStylesMock = [];
       matchedStylesMock = {};
 
-      rootCausesEngine = new TraceEngine.RootCauses.RootCauses.RootCauses({
+      protocolInterface = {
         getInitiatorForRequest(_: string): Protocol.Network.Initiator |
             null {
               return null;
@@ -230,14 +237,32 @@ describeWithMockConnection('LayoutShift root causes', () => {
               }
               return;
             },
+      };
+
+      layoutShifts = new RootCauses.LayoutShiftRootCauses(protocolInterface, {enableIframeRootCauses: true});
+    });
+
+    it('uses cached node details', async () => {
+      // Use duplicate node ids for invalidation events that use `getNode`
+      resizeEvents.forEach(e => {
+        e.args.data.nodeId = 1 as Protocol.DOM.BackendNodeId;
       });
+      injectedIframeEvents.forEach(e => {
+        e.args.data.nodeId = 11 as Protocol.DOM.BackendNodeId;
+      });
+
+      const getNodeSpy = sinon.spy(protocolInterface, 'getNode');
+
+      const rootCauses = await Promise.all(shifts.map(shift => layoutShifts.rootCausesForEvent(model, shift)));
+      assertArrayHasNoNulls(rootCauses);
+
+      assert.strictEqual(getNodeSpy.callCount, 2);
     });
 
     describe('Unsized media', () => {
       it('marks unsized media node in LayoutInvalidation events as a potential root cause to layout shifts correctly',
          async () => {
-           const rootCauses =
-               await Promise.all(shifts.map(shift => rootCausesEngine.layoutShifts.rootCausesForEvent(model, shift)));
+           const rootCauses = await Promise.all(shifts.map(shift => layoutShifts.rootCausesForEvent(model, shift)));
            assertArrayHasNoNulls(rootCauses);
 
            const shiftCausesNodeIds = rootCauses.map(cause => {
@@ -268,7 +293,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
           inlineStyle: createMockStyle([{name: 'height', value: '20px'}]),
           matchedCSSRules: createMockMatchedRules([{name: 'height', value: '10px'}]),
         };
-        const rootCause = await rootCausesEngine.layoutShifts.rootCausesForEvent(model, shifts[0]);
+        const rootCause = await layoutShifts.rootCausesForEvent(model, shifts[0]);
 
         const authoredDimensions = rootCause?.unsizedMedia[0].authoredDimensions;
         if (!authoredDimensions) {
@@ -289,7 +314,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
           matchedCSSRules: createMockMatchedRules([{name: 'height', value: '30px'}]),
         };
 
-        const rootCause = await rootCausesEngine.layoutShifts.rootCausesForEvent(model, shifts[1]);
+        const rootCause = await layoutShifts.rootCausesForEvent(model, shifts[1]);
         const authoredDimensions = rootCause?.unsizedMedia[0].authoredDimensions;
         if (!authoredDimensions) {
           assert.fail('Expected defined authored dimensions');
@@ -307,7 +332,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
           {name: 'width', value: width},
         ];
 
-        const rootCause = await rootCausesEngine.layoutShifts.rootCausesForEvent(model, shifts[1]);
+        const rootCause = await layoutShifts.rootCausesForEvent(model, shifts[1]);
         const computedDimensions = rootCause?.unsizedMedia[0].computedDimensions;
         if (!computedDimensions) {
           assert.fail('Expected defined computed dimensions');
@@ -320,7 +345,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
 
       async function assertAmountOfBlamedLayoutInvalidations(amount: number) {
         const allShiftsRootCauses =
-            await Promise.all(shifts.map(shift => rootCausesEngine.layoutShifts.rootCausesForEvent(model, shift)));
+            await Promise.all(shifts.map(shift => layoutShifts.rootCausesForEvent(model, shift)));
 
         const nodesFromLayoutInvalidations = new Set<number>();
         for (const currentShiftRootCauses of allShiftsRootCauses) {
@@ -401,7 +426,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
         modelMut.LayoutShifts.clusters = clusters;
 
         assert.doesNotThrow(async () => {
-          await Promise.all(shifts.map(shift => rootCausesEngine.layoutShifts.rootCausesForEvent(model, shift)));
+          await Promise.all(shifts.map(shift => layoutShifts.rootCausesForEvent(model, shift)));
         });
       });
     });
@@ -409,8 +434,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
     describe('Injected iframes', () => {
       it('marks injected iframes in LayoutInvalidation events as a potential root cause to layout shifts correctly',
          async () => {
-           const rootCauses =
-               await Promise.all(shifts.map(shift => rootCausesEngine.layoutShifts.rootCausesForEvent(model, shift)));
+           const rootCauses = await Promise.all(shifts.map(shift => layoutShifts.rootCausesForEvent(model, shift)));
            assertArrayHasNoNulls(rootCauses);
            const shiftCausesNodeIds = rootCauses.map(cause => {
              return cause.iframes.map(node => Number(node.iframe.backendNodeId));
@@ -423,6 +447,24 @@ describeWithMockConnection('LayoutShift root causes', () => {
            assert.strictEqual(shiftCausesNodeIds[4].length, 1);
            assert.strictEqual(shiftCausesNodeIds[4][0], iframesNodeIds[1]);
          });
+
+      it('ignores injected iframes if disabled', async () => {
+        layoutShifts = new RootCauses.LayoutShiftRootCauses(protocolInterface, {enableIframeRootCauses: false});
+        const rootCauses = await Promise.all(shifts.map(shift => layoutShifts.rootCausesForEvent(model, shift)));
+        assertArrayHasNoNulls(rootCauses);
+        assert(rootCauses.every(cause => cause.iframes.length === 0), 'contained iframe root causes');
+      });
+
+      it('ignores events that could not add or resize an iframe', async () => {
+        injectedIframeEvents.forEach(e => {
+          e.args.data.nodeName = 'DIV';
+          e.args.data.reason = TraceEngine.Types.TraceEvents.LayoutInvalidationReason.SIZE_CHANGED;
+        });
+
+        const rootCauses = await Promise.all(shifts.map(shift => layoutShifts.rootCausesForEvent(model, shift)));
+        assertArrayHasNoNulls(rootCauses);
+        assert(rootCauses.every(cause => cause.iframes.length === 0), 'contained iframe root causes');
+      });
     });
 
     describe('Font changes', () => {
@@ -455,8 +497,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
          async () => {
            modelMut.NetworkRequests.byTime = fontRequests;
 
-           const rootCauses =
-               await Promise.all(shifts.map(shift => rootCausesEngine.layoutShifts.rootCausesForEvent(model, shift)));
+           const rootCauses = await Promise.all(shifts.map(shift => layoutShifts.rootCausesForEvent(model, shift)));
            assertArrayHasNoNulls(rootCauses);
            const shiftCausesNodeIds = rootCauses.map(cause => {
              return cause.fontChanges;
@@ -485,8 +526,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
                                      }] as unknown as TraceEngine.Types.TraceEvents.SyntheticNetworkRequest[];
         modelMut.NetworkRequests.byTime = optionalFontRequests;
         fontFaceMock = {fontFamily: 'Roboto', src: fontSource, fontDisplay: 'optional'} as Protocol.CSS.FontFace;
-        const rootCauses =
-            await Promise.all(shifts.map(shift => rootCausesEngine.layoutShifts.rootCausesForEvent(model, shift)));
+        const rootCauses = await Promise.all(shifts.map(shift => layoutShifts.rootCausesForEvent(model, shift)));
         assertArrayHasNoNulls(rootCauses);
         const shiftCausesNodeIds = rootCauses.map(cause => {
           return cause.fontChanges;
@@ -512,8 +552,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
                                         }] as unknown as TraceEngine.Types.TraceEvents.SyntheticNetworkRequest[];
            modelMut.NetworkRequests.byTime = optionalFontRequests;
            fontFaceMock = {fontFamily: 'Roboto', src: fontSource, fontDisplay: 'swap'} as Protocol.CSS.FontFace;
-           const rootCauses =
-               await Promise.all(shifts.map(shift => rootCausesEngine.layoutShifts.rootCausesForEvent(model, shift)));
+           const rootCauses = await Promise.all(shifts.map(shift => layoutShifts.rootCausesForEvent(model, shift)));
            assertArrayHasNoNulls(rootCauses);
            const shiftCausesNodeIds = rootCauses.map(cause => {
              return cause.fontChanges;
@@ -557,8 +596,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
          async () => {
            modelMut.NetworkRequests.byTime = RenderBlockingRequest;
 
-           const rootCauses =
-               await Promise.all(shifts.map(shift => rootCausesEngine.layoutShifts.rootCausesForEvent(model, shift)));
+           const rootCauses = await Promise.all(shifts.map(shift => layoutShifts.rootCausesForEvent(model, shift)));
            assertArrayHasNoNulls(rootCauses);
            const shiftCausesNodeIds = rootCauses.map(cause => {
              return cause.renderBlockingRequests;
@@ -613,8 +651,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
         } as TraceEngine.Types.TraceEvents.TraceEventData);
 
         // Verify the Layout initiator's stack trace is added to the last shift.
-        const rootCauses =
-            await Promise.all(shifts.map(shift => rootCausesEngine.layoutShifts.rootCausesForEvent(model, shift)));
+        const rootCauses = await Promise.all(shifts.map(shift => layoutShifts.rootCausesForEvent(model, shift)));
         assertArrayHasNoNulls(rootCauses);
         const rootCauseStackTraces = rootCauses.map(cause => {
           return cause.scriptStackTrace;

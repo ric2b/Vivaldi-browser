@@ -33,7 +33,10 @@ import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.cached_flags.AllCachedFieldTrialParameters;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.BackupSigninProcessor;
 import org.chromium.chrome.browser.IntentHandler;
@@ -49,6 +52,7 @@ import org.chromium.chrome.browser.dependency_injection.ChromeActivityCommonsMod
 import org.chromium.chrome.browser.firstrun.FirstRunSignInProcessor;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fonts.FontPreloader;
+import org.chromium.chrome.browser.history.HistoryManager;
 import org.chromium.chrome.browser.history.HistoryManagerUtils;
 import org.chromium.chrome.browser.history.HistoryTabHelper;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
@@ -56,6 +60,7 @@ import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.night_mode.NightModeStateProvider;
 import org.chromium.chrome.browser.page_info.ChromePageInfo;
 import org.chromium.chrome.browser.page_info.ChromePageInfoHighlight;
+import org.chromium.chrome.browser.searchwidget.SearchActivityUtils;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TrustedCdn;
 import org.chromium.chrome.browser.ui.google_bottom_bar.GoogleBottomBarCoordinator;
@@ -70,6 +75,7 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     private CustomTabsSessionToken mSession;
 
     private final CustomTabsConnection mConnection = CustomTabsConnection.getInstance();
+    private int mNumOmniboxNavigationEventsPerSession;
 
     /** Contains all the parameters of the EXPERIMENTS_FOR_AGSA feature. */
     public static final AllCachedFieldTrialParameters EXPERIMENTS_FOR_AGSA_PARAMS =
@@ -115,6 +121,7 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     }
 
     private void maybeCreateHistoryTabHelper(Tab tab) {
+        if (!HistoryManager.isAppSpecificHistoryEnabled()) return;
         String appId = mIntentDataProvider.getClientPackageNameIdentitySharing();
         if (appId != null) HistoryTabHelper.from(tab).setAppId(appId, tab.getWebContents());
     }
@@ -186,15 +193,13 @@ public class CustomTabActivity extends BaseCustomTabActivity {
         GoogleBottomBarCoordinator googleBottomBarCoordinator =
                 mBaseCustomTabRootUiCoordinator.getGoogleBottomBarCoordinator();
 
-        // Display Google Bottom Bar using BottomBarDelegate only when PageInsightsHub is not
-        // enabled.
-        if (googleBottomBarCoordinator != null
-                && !mBaseCustomTabRootUiCoordinator.isPageInsightsHubEnabled()) {
+        if (googleBottomBarCoordinator != null) {
             View googleBottomBarView = googleBottomBarCoordinator.createGoogleBottomBarView();
-            getComponent()
-                    .resolveBottomBarDelegate()
-                    .setBottomBarHeight(googleBottomBarView.getHeight());
-            getComponent().resolveBottomBarDelegate().setBottomBarContentView(googleBottomBarView);
+            CustomTabBottomBarDelegate delegate = getComponent().resolveBottomBarDelegate();
+            delegate.setBottomBarHeight(GoogleBottomBarCoordinator.getBottomBarHeightInPx(this));
+            delegate.setKeepContentView(true);
+            delegate.setBottomBarContentView(googleBottomBarView);
+            delegate.setCustomButtonsUpdater(googleBottomBarCoordinator::updateBottomBarButton);
         }
 
         getComponent().resolveBottomBarDelegate().showBottomBarIfNecessary();
@@ -319,16 +324,17 @@ public class CustomTabActivity extends BaseCustomTabActivity {
             pageInsights.launch();
             return true;
         } else if (id == R.id.open_history_menu_id) {
-            if (ChromeFeatureList.sAppSpecificHistory.isEnabled()) {
-                HistoryManagerUtils.showAppSpecificHistoryManager(
-                        this,
-                        getTabModelSelector().isIncognitoSelected(),
-                        mIntentDataProvider.getClientPackageNameIdentitySharing());
-                CustomTabHistoryIPHController historyIPH =
-                        mBaseCustomTabRootUiCoordinator.getHistoryIPHController();
-                if (historyIPH != null) {
-                    historyIPH.notifyUserEngaged();
-                }
+            // The menu is visible only when the app-specific history is enabled. Assert that.
+            assert HistoryManager.isAppSpecificHistoryEnabled();
+            HistoryManagerUtils.showAppSpecificHistoryManager(
+                    this,
+                    getTabModelSelector().isIncognitoSelected(),
+                    mIntentDataProvider.getClientPackageNameIdentitySharing());
+
+            CustomTabHistoryIPHController historyIPH =
+                    mBaseCustomTabRootUiCoordinator.getHistoryIPHController();
+            if (historyIPH != null) {
+                historyIPH.notifyUserEngaged();
             }
             return true;
         }
@@ -342,6 +348,18 @@ public class CustomTabActivity extends BaseCustomTabActivity {
             return true;
         }
         return super.dispatchTouchEvent(ev);
+    }
+
+    @Override
+    public void finish() {
+        RecordHistogram.recordLinearCountHistogram(
+                "CustomTabs.Omnibox.NumNavigationsPerSession",
+                mNumOmniboxNavigationEventsPerSession,
+                1,
+                10,
+                10);
+
+        super.finish();
     }
 
     @VisibleForTesting(otherwise = PRIVATE)
@@ -370,7 +388,8 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     @Override
     protected BrowserServicesIntentDataProvider buildIntentDataProvider(
             Intent intent, @CustomTabsIntent.ColorScheme int colorScheme) {
-        if (IncognitoCustomTabIntentDataProvider.isValidIncognitoIntent(intent)) {
+        if (IncognitoCustomTabIntentDataProvider.isValidIncognitoIntent(intent)
+                || IncognitoCustomTabIntentDataProvider.isValidEphemeralTabIntent(intent)) {
             return new IncognitoCustomTabIntentDataProvider(intent, this, colorScheme);
         }
         return new CustomTabIntentDataProvider(intent, this, colorScheme);
@@ -427,11 +446,6 @@ public class CustomTabActivity extends BaseCustomTabActivity {
         return new CustomTabLaunchCauseMetrics(this);
     }
 
-    @Override
-    protected boolean supportsTabModalDialogs() {
-        return ChromeFeatureList.sCctTabModalDialog.isEnabled();
-    }
-
     public NightModeStateProvider getNightModeStateProviderForTesting() {
         return super.getNightModeStateProvider();
     }
@@ -445,9 +459,27 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (ChromeFeatureList.sAppSpecificHistory.isEnabled()
-                && requestCode == HistoryManagerUtils.HISTORY_REQUEST_CODE
-                && resultCode == RESULT_OK) {
+
+        if (resultCode != Activity.RESULT_OK) return;
+
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SEARCH_IN_CCT)
+                && SearchActivityUtils.isOmniboxResult(requestCode, data)) {
+            LoadUrlParams params =
+                    SearchActivityUtils.getOmniboxResult(requestCode, resultCode, data);
+
+            RecordHistogram.recordBooleanHistogram(
+                    "CustomTabs.Omnibox.FocusResultedInNavigation", params != null);
+
+            if (params == null) return;
+
+            mNumOmniboxNavigationEventsPerSession++;
+            // Yield to give the called activity time to close.
+            // Loading URL directly will result in Activity closing after URL loading completes.
+            PostTask.postTask(TaskTraits.UI_DEFAULT, () -> mTabProvider.getTab().loadUrl(params));
+        }
+
+        if (HistoryManager.isAppSpecificHistoryEnabled()
+                && requestCode == HistoryManagerUtils.HISTORY_REQUEST_CODE) {
             LoadUrlParams params =
                     new LoadUrlParams(
                             data.getData().toString(),

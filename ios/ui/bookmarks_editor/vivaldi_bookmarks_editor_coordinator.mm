@@ -142,6 +142,8 @@ using bookmarks::BookmarkNode;
       if (![self hasTitle])
         return;
       [_mediator
+          setPreferenceShowSpeedDials:[self.viewProvider shouldShowSpeedDials]];
+      [_mediator
           saveBookmarkFolderWithTitle:[self.viewProvider titleString]
                            useAsGroup:YES
                            parentNode:self.parentFolderItem.bookmarkNode];
@@ -181,6 +183,9 @@ using bookmarks::BookmarkNode;
   UIViewController *controller =
       [self.viewProvider makeViewControllerWithEntryPoint:self.entryPoint
                                              entryPurpose:entryPurpose
+                                onKeyboardReturnButtonTap:^{
+        [self handleDoneButtonTap];
+      }
                                      onFolderSelectionTap:^{
         [self didTapParentFolderForSelection];
       }
@@ -283,6 +288,8 @@ using bookmarks::BookmarkNode;
 - (void)updateFolderState {
   if (self.entryPoint == VivaldiBookmarksEditorEntryPointGroup && !_isEditing)
     return;
+  if (self.parentFolderItem.bookmarkNode == nullptr)
+    return;
   [self.viewProvider updateParentWithTitle:self.parentFolderItem.title
                              parentIsGroup:self.parentFolderItem.isSpeedDial];
 }
@@ -364,6 +371,22 @@ using bookmarks::BookmarkNode;
 - (void)bookmarksEditorShouldClose {
   [self.viewProvider reset];
   [self dismiss];
+}
+
+- (void)bookmarksEditorTopSitesDidUpdate:
+    (NSMutableArray<VivaldiBookmarksEditorTopSitesItem*>*)topSites {
+  [self.viewProvider updateEditorWithTopSites:topSites];
+}
+
+- (void)bookmarksEditorTopSiteDidUpdate:
+    (VivaldiBookmarksEditorTopSitesItem*)topSite {
+  [self.viewProvider updateEditorWithTopSite:topSite];
+}
+
+#pragma mark - VivaldiBookmarksEditorConsumer
+
+- (void)setPreferenceShowSpeedDials:(BOOL)showSpeedDials {
+  [self.viewProvider updateEditorWithShowSpeedDials:showSpeedDials];
 }
 
 @end

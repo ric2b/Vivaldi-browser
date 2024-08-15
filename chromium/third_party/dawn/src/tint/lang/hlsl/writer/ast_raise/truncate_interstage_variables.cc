@@ -70,7 +70,7 @@ ast::transform::Transform::ApplyResult TruncateInterstageVariables::Apply(
 
     const auto* data = config.Get<Config>();
     if (data == nullptr) {
-        b.Diagnostics().AddError(diag::System::Transform, Source{})
+        b.Diagnostics().AddError(Source{})
             << "missing transform data for "
             << tint::TypeInfo::Of<TruncateInterstageVariables>().name;
         return resolver::Resolve(b);
@@ -104,7 +104,6 @@ ast::transform::Transform::ApplyResult TruncateInterstageVariables::Apply(
             TINT_ICE() << "Entrypoint function return type is non-struct.\n"
                        << "TruncateInterstageVariables transform needs to run after "
                           "CanonicalizeEntryPointIO transform.";
-            continue;
         }
 
         // A prepass to check if any interstage variable locations in the entry point needs

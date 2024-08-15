@@ -35,6 +35,7 @@
 
 #include "dawn/common/Assert.h"
 #include "dawn/common/NonCopyable.h"
+#include "dawn/common/NonMovable.h"
 #include "dawn/common/Ref.h"
 #include "dawn/common/RefCounted.h"
 

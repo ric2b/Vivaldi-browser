@@ -25,6 +25,8 @@
   std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
   // Registrar for pref changes notifications.
   PrefChangeRegistrar _prefChangeRegistrar;
+  // Observer for frequently visited pages visibility state
+  PrefBackedBoolean* _showFrequentlyVisited;
   // Observer for speed dials visibility state
   PrefBackedBoolean* _showSpeedDials;
   // Observer for start page customize button visibility state
@@ -43,6 +45,12 @@
     _prefObserverBridge->ObserveChangesForPreference(
           vivaldiprefs::kVivaldiStartPageSDMaximumColumns,
               &_prefChangeRegistrar);
+
+    _showFrequentlyVisited =
+        [[PrefBackedBoolean alloc]
+            initWithPrefService:originalPrefService
+                prefName:vivaldiprefs::kVivaldiStartPageShowFrequentlyVisited];
+    [_showFrequentlyVisited setObserver:self];
 
     _showSpeedDials =
         [[PrefBackedBoolean alloc]
@@ -68,6 +76,10 @@
   _prefObserverBridge.reset();
   _prefs = nil;
 
+  [_showFrequentlyVisited stop];
+  [_showFrequentlyVisited setObserver:nil];
+  _showFrequentlyVisited = nil;
+
   [_showSpeedDials stop];
   [_showSpeedDials setObserver:nil];
   _showSpeedDials = nil;
@@ -80,18 +92,26 @@
 
 #pragma mark - Properties
 
-- (void)setConsumer:(id<VivaldiStartPageQuickSettingsConsumer>)consumer {
+- (void)setConsumer:(id<VivaldiStartPageSettingsConsumer>)consumer {
   _consumer = consumer;
 
   [self.consumer setPreferenceSpeedDialLayout: [self currentLayoutStyle]];
   [self.consumer setPreferenceSpeedDialColumn:[self currentLayoutColumn]];
+  [self.consumer
+      setPreferenceShowFrequentlyVisitedPages:[_showFrequentlyVisited value]];
   [self.consumer setPreferenceShowSpeedDials:[_showSpeedDials value]];
   [self.consumer
       setPreferenceShowCustomizeStartPageButton:
           [_showCustomizeStartPageButton value]];
 }
 
-#pragma mark - VivaldiStartPageQuickSettingsConsumer
+#pragma mark - VivaldiStartPageSettingsConsumer
+
+- (void)setPreferenceShowFrequentlyVisitedPages:(BOOL)showFrequentlyVisited {
+  if (showFrequentlyVisited != [_showFrequentlyVisited value])
+    [_showFrequentlyVisited setValue:showFrequentlyVisited];
+}
+
 - (void)setPreferenceShowSpeedDials:(BOOL)showSpeedDials {
   if (showSpeedDials != [_showSpeedDials value])
     [_showSpeedDials setValue:showSpeedDials];
@@ -115,6 +135,9 @@
 - (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
   if (observableBoolean == _showSpeedDials) {
     [self.consumer setPreferenceShowSpeedDials:[observableBoolean value]];
+  } else if (observableBoolean == _showFrequentlyVisited) {
+    [self.consumer
+        setPreferenceShowFrequentlyVisitedPages:[observableBoolean value]];
   } else if (observableBoolean == _showCustomizeStartPageButton) {
     [self.consumer
         setPreferenceShowCustomizeStartPageButton:[observableBoolean value]];

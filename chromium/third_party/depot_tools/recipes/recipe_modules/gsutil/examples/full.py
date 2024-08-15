@@ -12,7 +12,7 @@ DEPS = [
 
 def RunSteps(api):
   """Move things around in a loop!"""
-  local_file = api.path['tmp_base'].join('boom')
+  local_file = api.path.tmp_base_dir / 'boom'
   bucket = 'example'
   cloud_file = 'some/random/path/to/boom'
 
@@ -40,13 +40,13 @@ def RunSteps(api):
 
   # Upload directory contents.
   api.gsutil.upload(
-      api.path['tmp_base'],
+      api.path.tmp_base_dir,
       bucket,
       'some/random/path',
       args=['-r'],
       name='upload -r')
   api.gsutil.upload(
-      api.path['tmp_base'],
+      api.path.tmp_base_dir,
       bucket,
       'some/other/random/path',
       args=['--recursive'],
@@ -75,7 +75,7 @@ def RunSteps(api):
     pass
 
   new_cloud_file = 'staging/to/boom'
-  new_local_file = api.path['tmp_base'].join('erang')
+  new_local_file = api.path.tmp_base_dir / 'erang'
   api.gsutil.download(bucket, new_cloud_file, new_local_file)
 
   private_key_file = 'path/to/key'

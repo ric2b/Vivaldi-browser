@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 /** @fileoverview Definitions for chrome.passwordsPrivate API */
-// TODO(crbug.com/1203307): Auto-generate this file.
+// TODO(crbug.com/40179454): Auto-generate this file.
 
 import {ChromeEvent} from './chrome_event.js';
 
@@ -147,6 +147,7 @@ declare global {
         note?: string;
         changePasswordUrl?: string;
         compromisedInfo?: CompromisedInfo;
+        creationTime?: number;
       }
 
       export interface CredentialGroup {
@@ -231,6 +232,10 @@ declare global {
       export function switchBiometricAuthBeforeFillingState(): void;
       export function showAddShortcutDialog(): void;
       export function showExportedFileInShell(filePath: string): void;
+      export function changePasswordManagerPin(): Promise<boolean>;
+      export function isPasswordManagerPinAvailable(): Promise<boolean>;
+      export function disconnectCloudAuthenticator(): Promise<boolean>;
+      export function isConnectedToCloudAuthenticator(): Promise<boolean>;
 
       export const onSavedPasswordsListChanged:
           ChromeEvent<(entries: PasswordUiEntry[]) => void>;

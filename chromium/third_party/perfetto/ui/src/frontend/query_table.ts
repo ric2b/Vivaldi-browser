@@ -211,7 +211,6 @@ class QueryTableContent implements m.ClassComponent<QueryTableContentAttrs> {
 
 interface QueryTableAttrs {
   query: string;
-  onClose: () => void;
   resp?: QueryResponse;
   contextButtons?: m.Child[];
   fillParent: boolean;
@@ -219,14 +218,14 @@ interface QueryTableAttrs {
 
 export class QueryTable implements m.ClassComponent<QueryTableAttrs> {
   view({attrs}: m.CVnode<QueryTableAttrs>) {
-    const {resp, query, onClose, contextButtons = [], fillParent} = attrs;
+    const {resp, query, contextButtons = [], fillParent} = attrs;
 
     return m(
       DetailsShell,
       {
         title: this.renderTitle(resp),
         description: query,
-        buttons: this.renderButtons(query, onClose, contextButtons, resp),
+        buttons: this.renderButtons(query, contextButtons, resp),
         fillParent,
       },
       resp && this.renderTableContent(resp),
@@ -243,7 +242,6 @@ export class QueryTable implements m.ClassComponent<QueryTableAttrs> {
 
   renderButtons(
     query: string,
-    onClose: () => void,
     contextButtons: m.Child[],
     resp?: QueryResponse,
   ) {
@@ -251,7 +249,6 @@ export class QueryTable implements m.ClassComponent<QueryTableAttrs> {
       contextButtons,
       m(Button, {
         label: 'Copy query',
-        minimal: true,
         onclick: () => {
           copyToClipboard(query);
         },
@@ -260,16 +257,10 @@ export class QueryTable implements m.ClassComponent<QueryTableAttrs> {
         resp.error === undefined &&
         m(Button, {
           label: 'Copy result (.tsv)',
-          minimal: true,
           onclick: () => {
             queryResponseToClipboard(resp);
           },
         }),
-      m(Button, {
-        minimal: true,
-        label: 'Close',
-        onclick: onClose,
-      }),
     ];
   }
 

@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: xbuddy
 title: xBuddy for Devserver
 ---
@@ -25,7 +25,7 @@ values such as:
     *   `remote` - xBuddy will search Google storage for artifacts. The exact
         bucket is automatically detected based on the other arguments below.
 *   **board** (required) - Mostly self-explanatory e.g. `amd64-generic` or a
-    specifc builder alias like `amd64-generic-paladin` or
+    specific builder alias like `amd64-generic-paladin` or
     `amd64-generic-paladin-tryjob`.
 *   **version** (optional) - A version string or an alias that maps to a
     version.
@@ -139,6 +139,6 @@ update_engine_client --update --omaha_url=${HOST}:${PORT}/update/xbuddy/{XBUDDY_
 
 See [update engine] page for more details.
 
-[cros flash]: /cros_flash.md
+[cros flash]: /chromium-os/developer-library/reference/tools/cros-flash/
 [Using The Devserver]: https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/docs/devserver.md
 [update engine]: https://chromium.googlesource.com/aosp/platform/system/update_engine/

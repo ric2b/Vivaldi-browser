@@ -856,7 +856,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   // 'extraHeaders' option. We need to repopulate the ParsedHeader to reflect
   // the modified headers.
   //
-  // TODO(https://crbug.com/1208142): Once problems with 'extraHeaders' are
+  // TODO(crbug.com/40765899): Once problems with 'extraHeaders' are
   // sorted out, migrate these headers over to requiring 'extraHeaders' and
   // remove this code.
   //

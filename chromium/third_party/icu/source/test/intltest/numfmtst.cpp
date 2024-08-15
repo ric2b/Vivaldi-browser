@@ -2138,10 +2138,10 @@ void NumberFormatTest::TestCurrencyVariants(){
         {"en-US", u"CDF", u"CDF", u"CDF", u"CDF", u"CDF", U_USING_FALLBACK_WARNING}, // narrow: fallback to short
         {"sw-CD", u"CDF", u"FC", u"FC", u"FC", u"FC", U_USING_FALLBACK_WARNING}, // narrow: fallback to short
         {"en-US", u"GEL", u"GEL", u"₾", u"GEL", u"GEL", U_USING_DEFAULT_WARNING}, // narrow: fallback to root
-        {"ka-GE", u"GEL", u"₾", u"₾", u"₾", u"₾", U_USING_FALLBACK_WARNING}, // narrow: fallback to ka
-        {"ka", u"GEL", u"₾", u"₾", u"₾", u"₾", U_ZERO_ERROR}, // no fallback on narrow
-        {"zh-TW", u"TWD", u"$", u"$", u"NT$", u"$", U_USING_FALLBACK_WARNING}, // narrow: fallback to short
-        {"ccp", u"TRY", u"TRY", u"₺", u"TRY", u"TL", U_ZERO_ERROR}, // no fallback on variant
+        {"ka-GE", u"GEL", u"₾", u"₾", u"₾", u"₾", U_USING_DEFAULT_WARNING}, // narrow: fallback to ka
+        {"ka", u"GEL", u"₾", u"₾", u"₾", u"₾", U_USING_DEFAULT_WARNING}, // narrow fallback to short
+        {"zh-TW", u"TWD", u"$", u"$", u"NT$", u"$", U_USING_DEFAULT_WARNING}, // narrow: fallback to short
+        {"ccp", u"TRY", u"TRY", u"₺", u"TRY", u"TL", U_USING_DEFAULT_WARNING}, // everything fallback to root
     };
     for (const auto& cas : cases) {
         status.setScope(cas.isoCode);
@@ -8099,9 +8099,9 @@ void NumberFormatTest::TestAccountingCurrency() {
     expect(NumberFormat::createInstance("de_DE", style, status),
         (Formattable)(double)-23456.7, UnicodeString("-23.456,70\\u00A0\\u20AC").unescape(), true, status);
     expect(NumberFormat::createInstance("en_ID", style, status),
-        (Formattable)(double)0, UnicodeString("IDR\\u00A00.00").unescape(), true, status);
+        (Formattable)(double)0, UnicodeString("Rp\\u00A00,00").unescape(), true, status);
     expect(NumberFormat::createInstance("en_ID", style, status),
-        (Formattable)(double)-0.2, UnicodeString("(IDR\\u00A00.20)").unescape(), true, status);
+        (Formattable)(double)-0.2, UnicodeString("(Rp\\u00A00,20)").unescape(), true, status);
     expect(NumberFormat::createInstance("sh_ME", style, status),
         (Formattable)(double)0, UnicodeString("0,00\\u00A0\\u20AC").unescape(), true, status);
     expect(NumberFormat::createInstance("sh_ME", style, status),

@@ -26,8 +26,9 @@
 
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
-#include "internal/crypto_cros/random.h"
+#include "internal/base/files.h"
 #include "internal/interop/authentication_status.h"
+#include "internal/platform/crypto.h"
 #include "sharing/common/compatible_u8_string.h"
 
 namespace nearby {
@@ -439,8 +440,9 @@ struct Payload {
     id = std::hash<std::string>()(GetCompatibleU8String(file.path.u8string()));
 
     content.type = PayloadContent::Type::kFile;
-    if (std::filesystem::exists(file.path)) {
-      content.file_payload.size = std::filesystem::file_size(file.path);
+    std::optional<uintmax_t> size = GetFileSize(file.path);
+    if (size.has_value()) {
+      content.file_payload.size = *size;
     }
 
     content.file_payload.file = std::move(file);
@@ -456,8 +458,9 @@ struct Payload {
           absl::string_view parent_folder = absl::string_view())
       : id(id) {
     content.type = PayloadContent::Type::kFile;
-    if (std::filesystem::exists(file.path)) {
-      content.file_payload.size = std::filesystem::file_size(file.path);
+    std::optional<uintmax_t> size = GetFileSize(file.path);
+    if (size.has_value()) {
+      content.file_payload.size = *size;
     }
 
     content.file_payload.file = std::move(file);
@@ -469,7 +472,7 @@ struct Payload {
 
   int64_t GenerateId() {
     int64_t id;
-    crypto::RandBytes(&id, sizeof(id));
+    RandBytes(&id, sizeof(id));
     return id;
   }
 };

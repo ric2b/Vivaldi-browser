@@ -287,6 +287,10 @@ static void ExtractSelectorValues(const CSSSelector* selector,
         case CSSSelector::kPseudoHost:
         case CSSSelector::kPseudoHostContext:
         case CSSSelector::kPseudoSlotted:
+        case CSSSelector::kPseudoSelectFallbackButton:
+        case CSSSelector::kPseudoSelectFallbackButtonIcon:
+        case CSSSelector::kPseudoSelectFallbackButtonText:
+        case CSSSelector::kPseudoSelectFallbackDatalist:
         case CSSSelector::kPseudoSelectorFragmentAnchor:
         case CSSSelector::kPseudoRoot:
           pseudo_type = selector->GetPseudoType();
@@ -518,14 +522,39 @@ void RuleSet::FindBestRuleSetAndAdd(CSSSelector& component,
       return;
     case CSSSelector::kPseudoPlaceholder:
     case CSSSelector::kPseudoFileSelectorButton:
+    case CSSSelector::kPseudoSelectFallbackButton:
+    case CSSSelector::kPseudoSelectFallbackButtonIcon:
+    case CSSSelector::kPseudoSelectFallbackButtonText:
+    case CSSSelector::kPseudoSelectFallbackDatalist:
       if (it->FollowsPart()) {
         AddToRuleSet(part_pseudo_rules_, rule_data);
       } else if (it->FollowsSlotted()) {
         AddToRuleSet(slotted_pseudo_element_rules_, rule_data);
       } else {
-        const auto& name = pseudo_type == CSSSelector::kPseudoFileSelectorButton
-                               ? shadow_element_names::kPseudoFileUploadButton
-                               : shadow_element_names::kPseudoInputPlaceholder;
+        AtomicString name;
+        switch (pseudo_type) {
+          case CSSSelector::kPseudoPlaceholder:
+            name = shadow_element_names::kPseudoInputPlaceholder;
+            break;
+          case CSSSelector::kPseudoFileSelectorButton:
+            name = shadow_element_names::kPseudoFileUploadButton;
+            break;
+          case CSSSelector::kPseudoSelectFallbackButton:
+            name = shadow_element_names::kSelectFallbackButton;
+            break;
+          case CSSSelector::kPseudoSelectFallbackButtonIcon:
+            name = shadow_element_names::kSelectFallbackButtonIcon;
+            break;
+          case CSSSelector::kPseudoSelectFallbackButtonText:
+            name = shadow_element_names::kSelectFallbackButtonText;
+            break;
+          case CSSSelector::kPseudoSelectFallbackDatalist:
+            name = shadow_element_names::kSelectFallbackDatalist;
+            break;
+          default:
+            NOTREACHED();
+            break;
+        }
         AddToRuleSet(name, ua_shadow_pseudo_element_rules_, rule_data);
       }
       return;
@@ -568,7 +597,14 @@ void RuleSet::FindBestRuleSetAndAdd(CSSSelector& component,
   // relation=kScopeActivation to any compound that contains :scope
   // or the parent pseudo-class (&).
   if (component.Relation() == CSSSelector::kScopeActivation) {
-    may_have_scope_in_universal_bucket_ = true;
+    must_check_universal_bucket_for_shadow_host_ = true;
+  }
+
+  // Normally, rules involving :host would be stuck in their own bucket
+  // above; if we came here, it is because we have something like :is(:host,
+  // .foo). Mark that we have this case.
+  if (component.IsOrContainsHostPseudoClass()) {
+    must_check_universal_bucket_for_shadow_host_ = true;
   }
 
   // If we didn't find a specialized map to stick it in, file under universal

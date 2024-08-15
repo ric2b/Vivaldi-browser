@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: developer-mode
 title: Developer mode
 ---
@@ -290,7 +290,7 @@ bootloader when you see the developer mode boot screen.
 <!-- Links -->
 
 [`VT-2`]: #vt2
-[Building ChromiumOS]: developer_guide.md#Building-ChromiumOS
+[Building ChromiumOS]: /chromium-os/developer-library/guides/development/developer-guide/#Building-ChromiumOS
 [crosh]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/crosh
 [debug buttons]: /chromium-os/developer-library/guides/debugging/debug-buttons
 [keyboard developer mode]: /chromium-os/developer-library/guides/debugging/debug-buttons#firmware-keyboard-interface

@@ -82,6 +82,7 @@
 #include "chromeos/ash/services/recording/recording_service_test_api.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/dbus/power_manager/suspend.pb.h"
+#include "chromeos/ui/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "chromeos/ui/frame/frame_header.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/user_type.h"
@@ -4449,11 +4450,11 @@ TEST_F(CaptureModeTest, QuickActionHistograms) {
     controller->PerformCapture();
     waiter.Wait();
   }
-  // Click on the notification body. This should take us to the files app.
+  // Click on the notification body. This should open the default handler.
   ClickOnNotification(std::nullopt);
   EXPECT_FALSE(GetPreviewNotification());
   histogram_tester.ExpectBucketCount(kQuickActionHistogramName,
-                                     CaptureQuickAction::kFiles, 1);
+                                     CaptureQuickAction::kOpenDefault, 1);
 
   controller = StartCaptureSession(CaptureModeSource::kFullscreen,
                                    CaptureModeType::kImage);

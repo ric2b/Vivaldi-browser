@@ -37,6 +37,7 @@
 #import "ios/chrome/browser/ui/toolbar/secondary_toolbar_coordinator.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_coordinatee.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_mediator.h"
+#import "ios/chrome/common/ui/util/ui_util.h"
 #import "ios/components/webui/web_ui_url_constants.h"
 
 // Vivaldi
@@ -44,6 +45,7 @@
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_steady_view_consumer.h"
 #import "ios/chrome/browser/ui/tabs/tab_strip_constants.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button.h"
@@ -235,7 +237,7 @@ using vivaldi::IsVivaldiRunning;
   self.orchestrator.editViewAnimatee =
       [self.locationBarCoordinator editViewAnimatee];
 
-  if (IsBottomOmniboxSteadyStateEnabled()) {
+  if (IsBottomOmniboxAvailable()) {
     [self.toolbarMediator setInitialOmniboxPosition];
   } else {
     [self.primaryToolbarCoordinator
@@ -398,7 +400,7 @@ using vivaldi::IsVivaldiRunning;
   [self.toolbarMediator locationBarFocusChangedTo:focused];
 
   // Disable toolbar animations when focusing the omnibox on secondary toolbar.
-  // TODO(crbug.com/1462889): Add animation in OmniboxFocusOrchestrator if
+  // TODO(crbug.com/40275116): Add animation in OmniboxFocusOrchestrator if
   // needed.
   BOOL animateTransition = _enableAnimationsForOmniboxFocus &&
                            _steadyStateOmniboxPosition == ToolbarType::kPrimary;
@@ -439,8 +441,7 @@ using vivaldi::IsVivaldiRunning;
 
 - (CGFloat)collapsedPrimaryToolbarHeight {
   if (_omniboxPosition == ToolbarType::kSecondary) {
-    CHECK(IsBottomOmniboxSteadyStateEnabled());
-    // TODO(crbug.com/1473629): Find out why primary toolbar height cannot be
+    // TODO(crbug.com/40279063): Find out why primary toolbar height cannot be
     // zero. This is a temporary fix for the pdf bug.
 
     if (IsVivaldiRunning()) {
@@ -456,8 +457,7 @@ using vivaldi::IsVivaldiRunning;
 
 - (CGFloat)expandedPrimaryToolbarHeight {
   if (_omniboxPosition == ToolbarType::kSecondary) {
-    CHECK(IsBottomOmniboxSteadyStateEnabled());
-    // TODO(crbug.com/1473629): Find out why primary toolbar height cannot be
+    // TODO(crbug.com/40279063): Find out why primary toolbar height cannot be
     // zero. This is a temporary fix for the pdf bug.
 
     if (IsVivaldiRunning()) {
@@ -478,7 +478,6 @@ using vivaldi::IsVivaldiRunning;
 
 - (CGFloat)collapsedSecondaryToolbarHeight {
   if (_omniboxPosition == ToolbarType::kSecondary) {
-    CHECK(IsBottomOmniboxSteadyStateEnabled());
     return ToolbarCollapsedHeight(
         self.traitEnvironment.traitCollection.preferredContentSizeCategory);
   }
@@ -494,7 +493,7 @@ using vivaldi::IsVivaldiRunning;
       CGFloat height =
           self.secondaryToolbarViewController.view.intrinsicContentSize.height;
       if (_tabBarEnabled || [VivaldiGlobalHelpers isDeviceTablet]) {
-        CHECK(IsBottomOmniboxSteadyStateEnabled());
+        CHECK(IsBottomOmniboxAvailable());
         height += ToolbarExpandedHeight(
             self.traitEnvironment.traitCollection.preferredContentSizeCategory);
       } else {
@@ -509,7 +508,6 @@ using vivaldi::IsVivaldiRunning;
   CGFloat height =
       self.secondaryToolbarViewController.view.intrinsicContentSize.height;
   if (_omniboxPosition == ToolbarType::kSecondary) {
-    CHECK(IsBottomOmniboxSteadyStateEnabled());
     height += ToolbarExpandedHeight(
         self.traitEnvironment.traitCollection.preferredContentSizeCategory);
   }
@@ -797,7 +795,8 @@ using vivaldi::IsVivaldiRunning;
     return _fakeboxPinned ? OmniboxFocusTrigger::kPinnedLargeFakebox
                           : OmniboxFocusTrigger::kUnpinnedLargeFakebox;
   }
-  return OmniboxFocusTrigger::kPinnedFakebox;
+  return _fakeboxPinned ? OmniboxFocusTrigger::kPinnedFakebox
+                        : OmniboxFocusTrigger::kUnpinnedFakebox;
 }
 
 - (void)focusTransitionDidComplete:(BOOL)focused

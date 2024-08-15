@@ -223,14 +223,16 @@ class DownloadTests(unittest.TestCase):
         for item in download_from_google_storage.enumerate_input(
                 self.base_path, True, True, False, None, False, False):
             self.queue.put(item)
-        expected_queue = [('e6c4fbd4fe7607f3e6ebf68b2ea4ef694da7b4fe',
-                           os.path.join(self.base_path, 'rootfolder_text.txt')),
-                          ('7871c8e24da15bad8b0be2c36edc9dc77e37727f',
-                           os.path.join(self.base_path,
-                                        'uploaded_lorem_ipsum.txt')),
-                          ('b5415aa0b64006a95c0c409182e628881d6d6463',
-                           os.path.join(self.base_path, 'subfolder',
-                                        'subfolder_text.txt'))]
+        expected_queue = [
+            ('e6c4fbd4fe7607f3e6ebf68b2ea4ef694da7b4fe',
+             os.path.join(self.base_path, 'rootfolder_text.txt')),
+            ('7871c8e24da15bad8b0be2c36edc9dc77e37727f',
+             os.path.join(self.base_path, 'uploaded_lorem_ipsum.txt')),
+            ('b5415aa0b64006a95c0c409182e628881d6d6463',
+             os.path.join(self.base_path, 'subfolder', 'subfolder_text.txt')),
+            ('b5415aa0b64006a95c0c409182e628881d6d6463',
+             os.path.join(self.base_path, 'subfolder2', 'subfolder_text.txt')),
+        ]
         self.assertEqual(sorted(expected_queue), sorted(self.queue.queue))
 
     def test_download_worker_single_file(self):

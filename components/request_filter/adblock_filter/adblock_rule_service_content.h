@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "components/ad_blocker/adblock_metadata.h"
+#include "components/ad_blocker/adblock_types.h"
 #include "components/ad_blocker/adblock_rule_service.h"
 #include "url/origin.h"
 

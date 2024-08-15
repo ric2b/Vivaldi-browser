@@ -61,7 +61,6 @@
 <translation id="2662876636500006917">Magazinul web Vivaldi</translation>
 <translation id="2678063897982469759">Reactivează</translation>
 <translation id="2721037002783622288">&amp;Caută imaginea cu <ph name="SEARCH_ENGINE" /></translation>
-<translation id="2809586584051668049">și încă <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2850541429955027218">Adaugă o temă</translation>
 <translation id="2861941300086904918">Manager de securitate pentru clientul nativ</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> nu a putut comunica cu imprimanta. Asigurați-vă că imprimanta este conectată și încercați din nou.</translation>
@@ -78,7 +77,6 @@
 <translation id="3129173833825111527">Marginea din stânga</translation>
 <translation id="3222066309010235055">Program de randare în avans: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Selectați directorul rădăcină al extensiei de împachetat. Pentru a actualiza o extensie, selectați de asemenea și fișierul cheii private de reutilizat.</translation>
-<translation id="3288047731229977326">Extensiile care rulează în modul pentru dezvoltatori pot dăuna calculatorului. Dacă nu sunteți dezvoltator, pentru siguranță ar fi bine să dezactivați aceste extensii.</translation>
 <translation id="329838636886466101">Repară</translation>
 <translation id="3303818374450886607">Cópii</translation>
 <translation id="3305661444342691068">Deschide PDF-ul în previzualizare</translation>
@@ -108,7 +106,6 @@
 <translation id="4087089424473531098">A fost creată extensia:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Dezactivați extensiile care rulează în modul pentru dezvoltatori</translation>
 <translation id="4100839878934973028">Un alt program de pe calculator a adăugat o aplicație care poate schimba modul în care funcționează Vivaldi.</translation>
 <translation id="4109898769411476438">Închide browserul înainte de a importa</translation>
 <translation id="4131410914670010031">Alb-negru</translation>
@@ -139,7 +136,6 @@
 <translation id="5233736638227740678">Li&amp;pește</translation>
 <translation id="5269977353971873915">Tipărirea a eșuat</translation>
 <translation id="52912272896845572">Fișierul cu cheia privată este nevalid.</translation>
-<translation id="5301954838959518834">OK, am înțeles</translation>
 <translation id="5317780077021120954">Salvează</translation>
 <translation id="5360150013186312835">Arată în bara de instrumente</translation>
 <translation id="5362741141255528695">Selectați fișierul cu cheia privată.</translation>

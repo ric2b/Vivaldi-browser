@@ -18,7 +18,7 @@ RuleManagerImpl::RuleManagerImpl(
     scoped_refptr<base::SequencedTaskRunner> file_task_runner,
     const base::FilePath& profile_path,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-    std::array<RuleSources, kRuleGroupCount> rule_sources,
+    std::array<ActiveRuleSources, kRuleGroupCount> rule_sources,
     ActiveExceptionsLists active_exceptions_lists,
     Exceptions exceptions,
     base::RepeatingClosure schedule_save,
@@ -40,12 +40,13 @@ RuleManagerImpl::RuleManagerImpl(
 
   for (auto group : {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
     for (const auto& rule_source : rule_sources[static_cast<size_t>(group)]) {
-      GetSourceMap(group)[rule_source.id] = std::make_unique<RuleSourceHandler>(
-          rule_source, profile_path_, url_loader_factory_, file_task_runner_,
-          rules_compiler_,
-          base::BindRepeating(&RuleManagerImpl::OnSourceUpdated,
-                              base::Unretained(this)),
-          on_tracker_infos_update_callback_);
+      GetSourceMap(group)[rule_source.core.id()] =
+          std::make_unique<RuleSourceHandler>(
+              group, rule_source, profile_path_, url_loader_factory_,
+              file_task_runner_, rules_compiler_,
+              base::BindRepeating(&RuleManagerImpl::OnSourceUpdated,
+                                  base::Unretained(this), group),
+              on_tracker_infos_update_callback_);
     }
   }
 }
@@ -69,27 +70,28 @@ RuleManagerImpl::GetSourceMap(RuleGroup group) const {
   return rule_sources_[static_cast<size_t>(group)];
 }
 
-bool RuleManagerImpl::AddRulesSource(const KnownRuleSource& known_source) {
+bool RuleManagerImpl::AddRulesSource(RuleGroup group,
+                                     const RuleSourceCore& source_core) {
   // If a source with the same id exists, that means the corresponding known
   // source was already added
-  auto& rule_sources = GetSourceMap(known_source.group);
-  if (rule_sources.find(known_source.id) != rule_sources.end())
+  auto& rule_sources = GetSourceMap(group);
+  if (rule_sources.find(source_core.id()) != rule_sources.end())
     return false;
   // base::Unretained is safe. We own both the rule_sources and the
   // blocked_urls_reporter
-  rule_sources[known_source.id] = std::make_unique<RuleSourceHandler>(
-      RuleSource(known_source), profile_path_, url_loader_factory_,
+  rule_sources[source_core.id()] = std::make_unique<RuleSourceHandler>(
+      group, ActiveRuleSource(source_core), profile_path_, url_loader_factory_,
       file_task_runner_, rules_compiler_,
       base::BindRepeating(&RuleManagerImpl::OnSourceUpdated,
-                          base::Unretained(this)),
+                          base::Unretained(this), group),
       on_tracker_infos_update_callback_);
-  rule_sources[known_source.id]->FetchNow();
-  return known_source.id;
+  rule_sources[source_core.id()]->FetchNow();
+  return source_core.id();
 }
 
-std::map<uint32_t, RuleSource> RuleManagerImpl::GetRuleSources(
+std::map<uint32_t, ActiveRuleSource> RuleManagerImpl::GetRuleSources(
     RuleGroup group) const {
-  std::map<uint32_t, RuleSource> output;
+  std::map<uint32_t, ActiveRuleSource> output;
   for (const auto& context : GetSourceMap(group)) {
     output.insert({context.first, context.second->rule_source()});
   }
@@ -97,8 +99,9 @@ std::map<uint32_t, RuleSource> RuleManagerImpl::GetRuleSources(
   return output;
 }
 
-std::optional<RuleSource> RuleManagerImpl::GetRuleSource(RuleGroup group,
-                                                          uint32_t source_id) {
+std::optional<ActiveRuleSource> RuleManagerImpl::GetRuleSource(
+    RuleGroup group,
+    uint32_t source_id) {
   const auto& rule_sources = GetSourceMap(group);
   const auto& source_context = rule_sources.find(source_id);
   if (source_context == rule_sources.end())
@@ -117,10 +120,11 @@ bool RuleManagerImpl::FetchRuleSourceNow(RuleGroup group, uint32_t source_id) {
   return true;
 }
 
-void RuleManagerImpl::DeleteRuleSource(const KnownRuleSource& known_source) {
-  auto& rule_sources = GetSourceMap(known_source.group);
+void RuleManagerImpl::DeleteRuleSource(RuleGroup group,
+                                       const RuleSourceCore& source_core) {
+  auto& rule_sources = GetSourceMap(group);
 
-  const auto& rule_source = rule_sources.find(known_source.id);
+  const auto& rule_source = rule_sources.find(source_core.id());
   if (rule_source == rule_sources.end())
     return;
 
@@ -130,7 +134,7 @@ void RuleManagerImpl::DeleteRuleSource(const KnownRuleSource& known_source) {
   schedule_save_.Run();
 
   for (Observer& observer : observers_)
-    observer.OnRuleSourceDeleted(known_source.id, known_source.group);
+    observer.OnRuleSourceDeleted(source_core.id(), group);
 }
 
 void RuleManagerImpl::SetActiveExceptionList(RuleGroup group,
@@ -232,22 +236,19 @@ bool RuleManagerImpl::IsExemptOfFiltering(RuleGroup group,
   return default_exempt;
 }
 
-void RuleManagerImpl::OnSourceUpdated(RuleSourceHandler* rule_source_handler) {
+void RuleManagerImpl::OnSourceUpdated(RuleGroup group,
+                                      RuleSourceHandler* rule_source_handler) {
   schedule_save_.Run();
 
   for (Observer& observer : observers_)
-    observer.OnRulesSourceUpdated(rule_source_handler->rule_source());
+    observer.OnRuleSourceUpdated(group, rule_source_handler->rule_source());
 }
 
 void RuleManagerImpl::OnCompiledRulesReadFailCallback(RuleGroup rule_group,
                                                       uint32_t source_id) {
   const auto& rule_sources = GetSourceMap(rule_group);
   const auto& source_context = rule_sources.find(source_id);
-  DCHECK(source_context != rule_sources.end());
-  // If the last fetch attempt failed, don't try again immediately to make sure
-  // that we don't end up in an infinite rety loop.
-  if (source_context->second->rule_source().last_fetch_result ==
-      FetchResult::kSuccess)
-    source_context->second->FetchNow();
+  CHECK(source_context != rule_sources.end());
+  source_context->second->FetchNow();
 }
 }  // namespace adblock_filter

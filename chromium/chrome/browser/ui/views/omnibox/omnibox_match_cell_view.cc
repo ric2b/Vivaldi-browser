@@ -18,12 +18,15 @@
 #include "chrome/grit/theme_resources.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
+#include "components/omnibox/browser/autocomplete_provider.h"
+#include "components/omnibox/browser/omnibox_feature_configs.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/suggestion_answer.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "content/public/common/color_parser.h"
 #include "skia/ext/image_operations.h"
+#include "third_party/omnibox_proto/rich_answer_template.pb.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -245,15 +248,19 @@ OmniboxMatchCellView::OmniboxMatchCellView(OmniboxResultView* result_view) {
 OmniboxMatchCellView::~OmniboxMatchCellView() = default;
 
 // static
-int OmniboxMatchCellView::GetTextIndent() {
-  return ui::TouchUiController::Get()->touch_ui() ||
-                 OmniboxFieldTrial::IsCr23LayoutEnabled()
-             ? 52
-             : 47;
+int OmniboxMatchCellView::GetTextIndent(bool is_iph_type) {
+  // The IPH row left inset is +8 from other suggestions, so the text indent
+  // should be -8 to keep the text aligned.
+  return is_iph_type ? 44 : 52;
 }
 
 // static
 bool OmniboxMatchCellView::ShouldDisplayImage(const AutocompleteMatch& match) {
+  if (omnibox_feature_configs::SuggestionAnswerMigration::Get().enabled) {
+    return match.answer_template.has_value() ||
+           match.type == AutocompleteMatchType::CALCULATOR ||
+           !match.image_url.is_empty();
+  }
   return match.answer || match.type == AutocompleteMatchType::CALCULATOR ||
          !match.image_url.is_empty();
 }
@@ -261,6 +268,7 @@ bool OmniboxMatchCellView::ShouldDisplayImage(const AutocompleteMatch& match) {
 void OmniboxMatchCellView::OnMatchUpdate(const OmniboxResultView* result_view,
                                          const AutocompleteMatch& match) {
   is_search_type_ = AutocompleteMatch::IsSearchType(match.type);
+  is_iph_type = match.IsIPHSuggestion();
   has_image_ = ShouldDisplayImage(match);
   // Decide layout style once before Layout, while match data is available.
   layout_style_ = has_image_ && !OmniboxFieldTrial::IsUniformRowHeightEnabled()
@@ -323,14 +331,25 @@ void OmniboxMatchCellView::OnMatchUpdate(const OmniboxResultView* result_view,
     answer_image_view_->SetSize(gfx::Size());
   } else {
     // Determine if we have a local icon (or else it will be downloaded).
-    if (match.answer) {
+    if (omnibox_feature_configs::SuggestionAnswerMigration::Get().enabled &&
+        match.answer_template.has_value()) {
+      if (match.answer_template->answer_type() ==
+          omnibox::RichAnswerTemplate::WEATHER) {
+        // Weather icons are downloaded. We just need to set the correct size.
+        answer_image_view_->SetImageSize(
+            gfx::Size(GetAnswerImageSize(), GetAnswerImageSize()));
+      } else {
+        apply_vector_icon(AutocompleteMatch::AnswerTypeToAnswerIcon(
+            match.answer_template->answer_type()));
+      }
+    } else if (match.answer) {
       if (match.answer->type() == SuggestionAnswer::ANSWER_TYPE_WEATHER) {
         // Weather icons are downloaded. We just need to set the correct size.
         answer_image_view_->SetImageSize(
             gfx::Size(GetAnswerImageSize(), GetAnswerImageSize()));
       } else {
-        apply_vector_icon(
-            AutocompleteMatch::AnswerTypeToAnswerIcon(match.answer->type()));
+        apply_vector_icon(AutocompleteMatch::AnswerTypeToAnswerIconDeprecated(
+            match.answer->type()));
       }
     } else {
       SkColor color = GetColorProvider()->GetColor(
@@ -390,8 +409,12 @@ void OmniboxMatchCellView::SetImage(const gfx::ImageSkia& image,
   // Weather icons are also sourced remotely and therefore fall into this flow.
   // Other answers don't.
   bool is_weather_answer =
-      match.answer &&
-      match.answer->type() == SuggestionAnswer::ANSWER_TYPE_WEATHER;
+      omnibox_feature_configs::SuggestionAnswerMigration::Get().enabled
+          ? (match.answer_template.has_value() &&
+             match.answer_template->answer_type() ==
+                 omnibox::RichAnswerTemplate::WEATHER)
+          : (match.answer &&
+             match.answer->type() == SuggestionAnswer::ANSWER_TYPE_WEATHER);
 
   int width = image.width();
   int height = image.height();
@@ -436,18 +459,7 @@ void OmniboxMatchCellView::SetImage(const gfx::ImageSkia& image,
 }
 
 gfx::Insets OmniboxMatchCellView::GetInsets() const {
-  int vertical_margin = 0;
-  if (OmniboxFieldTrial::IsChromeRefreshSuggestHoverFillShapeEnabled()) {
-    vertical_margin = 0;
-  } else if (OmniboxFieldTrial::IsUniformRowHeightEnabled()) {
-    vertical_margin = OmniboxFieldTrial::kRichSuggestionVerticalMargin.Get();
-  } else if (layout_style_ == LayoutStyle::ONE_LINE_SUGGESTION) {
-    vertical_margin = ChromeLayoutProvider::Get()->GetDistanceMetric(
-        DISTANCE_OMNIBOX_CELL_VERTICAL_PADDING);
-  } else {
-    vertical_margin = ChromeLayoutProvider::Get()->GetDistanceMetric(
-        DISTANCE_OMNIBOX_TWO_LINE_CELL_VERTICAL_PADDING);
-  }
+  const int vertical_margin = 0;
   const int right_margin = 7;
   return gfx::Insets::TLBR(vertical_margin, OmniboxMatchCellView::kMarginLeft,
                            vertical_margin, right_margin);
@@ -474,15 +486,13 @@ void OmniboxMatchCellView::Layout(PassKey) {
   // This applies to both touch-UI and non-touch-UI.
   // TODO(manukh): Once we have a clearer picture of what will launch, this can
   //   be simplified.
-  const int image_x =
-      OmniboxFieldTrial::IsCr23LayoutEnabled()
-          ? 16 + GetEntityImageSize() / 2 - kImageBoundsWidth / 2
-          : x;
+  const int image_x = 16 + GetEntityImageSize() / 2 - kImageBoundsWidth / 2;
   views::ImageView* const image_view =
       has_image_ ? answer_image_view_.get() : icon_view_.get();
   image_view->SetBounds(image_x, y, kImageBoundsWidth, row_height);
 
-  const int text_indent = GetTextIndent() + tail_suggest_common_prefix_width_;
+  const int text_indent =
+      GetTextIndent(is_iph_type) + tail_suggest_common_prefix_width_;
   x += text_indent;
   const int text_width = child_area.width() - text_indent;
 
@@ -532,13 +542,15 @@ bool OmniboxMatchCellView::GetCanProcessEventsWithinSubtree() const {
   return false;
 }
 
-gfx::Size OmniboxMatchCellView::CalculatePreferredSize() const {
+gfx::Size OmniboxMatchCellView::CalculatePreferredSize(
+    const views::SizeBounds& available_size) const {
   int height = GetEntityImageSize() +
                2 * OmniboxFieldTrial::kRichSuggestionVerticalMargin.Get();
   if (layout_style_ == LayoutStyle::TWO_LINE_SUGGESTION)
-    height += description_view_->GetHeightForWidth(width() - GetTextIndent());
+    height += description_view_->GetHeightForWidth(width() -
+                                                   GetTextIndent(is_iph_type));
 
-  int width = GetInsets().width() + GetTextIndent() +
+  int width = GetInsets().width() + GetTextIndent(is_iph_type) +
               tail_suggest_common_prefix_width_ +
               content_view_->GetPreferredSize().width();
 

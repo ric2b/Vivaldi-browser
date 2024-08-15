@@ -6,7 +6,7 @@
 #                      \___/_/\_\ .__/ \__,_|\__|
 #                               |_| XML parser
 #
-# Copyright (c) 2020-2021 Sebastian Pipping <sebastian@pipping.org>
+# Copyright (c) 2020-2023 Sebastian Pipping <sebastian@pipping.org>
 # Licensed under the MIT license:
 #
 # Permission is  hereby granted,  free of charge,  to any  person obtaining
@@ -28,4 +28,4 @@
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 # USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-grep -Eo '(define|undef) [a-zA-Z0-9_]+' "${1}" | awk '{print $2}' | sort -u
+grep -Eo '(define|undef) [a-zA-Z0-9_]+' "${1}" | awk '{print $2}' | grep -vw if | sort -u

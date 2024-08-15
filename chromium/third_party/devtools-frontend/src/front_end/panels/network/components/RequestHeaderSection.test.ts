@@ -4,8 +4,6 @@
 
 import type * as SDK from '../../../core/sdk/sdk.js';
 import {
-  assertElement,
-  assertShadowRoot,
   getCleanTextContentFromElements,
   renderElementIntoDOM,
 } from '../../../testing/DOMHelpers.js';
@@ -16,16 +14,14 @@ import * as NetworkComponents from './components.js';
 
 const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
-const {assert} = chai;
-
 async function renderRequestHeaderSection(request: SDK.NetworkRequest.NetworkRequest):
     Promise<NetworkComponents.RequestHeaderSection.RequestHeaderSection> {
   const component = new NetworkComponents.RequestHeaderSection.RequestHeaderSection();
   renderElementIntoDOM(component);
   component.data = {request};
   await coordinator.done();
-  assertElement(component, HTMLElement);
-  assertShadowRoot(component.shadowRoot);
+  assert.instanceOf(component, HTMLElement);
+  assert.isNotNull(component.shadowRoot);
   return component;
 }
 
@@ -42,7 +38,7 @@ describeWithEnvironment('RequestHeaderSection', () => {
     } as unknown as SDK.NetworkRequest.NetworkRequest;
 
     const component = await renderRequestHeaderSection(request);
-    assertShadowRoot(component.shadowRoot);
+    assert.isNotNull(component.shadowRoot);
 
     assert.strictEqual(
         getCleanTextContentFromElements(component.shadowRoot, '.call-to-action')[0],
@@ -64,11 +60,11 @@ describeWithEnvironment('RequestHeaderSection', () => {
     } as unknown as SDK.NetworkRequest.NetworkRequest;
 
     const component = await renderRequestHeaderSection(request);
-    assertShadowRoot(component.shadowRoot);
+    assert.isNotNull(component.shadowRoot);
 
     const rows = component.shadowRoot.querySelectorAll('devtools-header-section-row');
     const sorted = Array.from(rows).map(row => {
-      assertShadowRoot(row.shadowRoot);
+      assert.isNotNull(row.shadowRoot);
       return [
         row.shadowRoot.querySelector('.header-name')?.textContent?.trim() || '',
         row.shadowRoot.querySelector('.header-value')?.textContent?.trim() || '',
@@ -96,11 +92,11 @@ describeWithEnvironment('RequestHeaderSection', () => {
     } as unknown as SDK.NetworkRequest.NetworkRequest;
 
     const component = await renderRequestHeaderSection(request);
-    assertShadowRoot(component.shadowRoot);
+    assert.isNotNull(component.shadowRoot);
 
     const rows = component.shadowRoot.querySelectorAll('devtools-header-section-row');
     for (const row of rows) {
-      assertShadowRoot(row.shadowRoot);
+      assert.isNotNull(row.shadowRoot);
       assert.isNull(row.shadowRoot.querySelector('.disallowed-characters'));
     }
   });

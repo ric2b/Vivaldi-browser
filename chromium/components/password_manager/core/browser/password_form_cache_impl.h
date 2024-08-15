@@ -6,9 +6,9 @@
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_FORM_CACHE_IMPL_H_
 
 #include <memory>
-#include <optional>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/password_manager/core/browser/password_form_cache.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
@@ -18,7 +18,6 @@ class PasswordManagerDriver;
 
 // Implementation of the `PasswordFormCache` that stores parsed password forms
 // in the form of a vector of `PasswordFormManager` instances.
-// TODO(b/326033879): Use in `PasswordManager`.
 class PasswordFormCacheImpl : public PasswordFormCache {
  public:
   PasswordFormCacheImpl();
@@ -38,6 +37,9 @@ class PasswordFormCacheImpl : public PasswordFormCache {
   void Clear();
   bool IsEmpty() const;
 
+  base::span<const std::unique_ptr<PasswordFormManager>> GetFormManagers()
+      const;
+
  private:
   // PasswordFormCache:
   bool HasPasswordForm(PasswordManagerDriver* driver,
@@ -45,6 +47,7 @@ class PasswordFormCacheImpl : public PasswordFormCache {
   bool HasPasswordForm(PasswordManagerDriver* driver,
                        autofill::FieldRendererId field_id) const override;
 
+  // TODO(b/330313855): Check if `unique_ptr` can be removed here.
   std::vector<std::unique_ptr<PasswordFormManager>> form_managers_;
 };
 

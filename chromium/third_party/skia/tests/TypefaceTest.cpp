@@ -36,6 +36,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cinttypes>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -93,10 +94,11 @@ static void TypefaceStyle_test(skiatest::Reporter* reporter,
                     (weight == 1000 && newStyle.weight() == 999)     // DW weirdness
     );
 
-    // Some back-ends (GDI) don't support width, ensure these always report 'medium'.
-    REPORTER_ASSERT(reporter,
-                    newStyle.width() == width ||
-                    newStyle.width() == 5);
+    // Some back-ends (GDI) don't support width, ensure these always report 'normal'.
+    REPORTER_ASSERT(
+            reporter,
+            newStyle.width() == width || newStyle.width() == SkFontStyle::Width::kNormal_Width,
+            "newStyle.width(): %d width: %" PRIu16, newStyle.width(), width);
 }
 DEF_TEST(TypefaceStyle, reporter) {
     std::unique_ptr<SkStreamAsset> stream(GetResourceAsStream("fonts/Em.ttf"));
@@ -112,6 +114,95 @@ DEF_TEST(TypefaceStyle, reporter) {
     }
     for (int width = SkFS::kUltraCondensed_Width; width <= SkFS::kUltraExpanded_Width; ++width) {
         TypefaceStyle_test(reporter, 400, width, data.get());
+    }
+}
+
+DEF_TEST(TypefaceStyleVariable, reporter) {
+    using Variation = SkFontArguments::VariationPosition;
+    sk_sp<SkFontMgr> fm = ToolUtils::TestFontMgr();
+
+    std::unique_ptr<SkStreamAsset> stream(GetResourceAsStream("fonts/Variable.ttf"));
+    if (!stream) {
+        REPORT_FAILURE(reporter, "fonts/Variable.ttf", SkString("Cannot load resource"));
+        return;
+    }
+    sk_sp<SkTypeface> typeface(ToolUtils::TestFontMgr()->makeFromStream(stream->duplicate()));
+    if (!typeface) {
+        // Not all SkFontMgr can MakeFromStream().
+        return;
+    }
+
+    // Creating Variable.ttf without any extra parameters should have a normal font style.
+    SkFontStyle fs = typeface->fontStyle();
+    REPORTER_ASSERT(reporter, fs == SkFontStyle::Normal(),
+                    "fs: %d %d %d", fs.weight(), fs.width(), fs.slant());
+
+    // Ensure that the font supports variable stuff
+    Variation::Coordinate varPos[2];
+    int numAxes = typeface->getVariationDesignPosition(varPos, std::size(varPos));
+    if (numAxes <= 0) {
+        // Not all SkTypeface can get the variation.
+        return;
+    }
+    if (numAxes != 2) {
+        // Variable.ttf has two axes.
+        REPORTER_ASSERT(reporter, numAxes == 2);
+        return;
+    }
+
+    // If a fontmgr or typeface can do variations, ensure the variation affects the reported style.
+    struct TestCase {
+        std::vector<Variation::Coordinate> position;
+        SkFontStyle expected;
+
+        // On Mac10.15 and earlier, the wdth affected the style using the old gx ranges.
+        // On macOS 11 and later, the wdth affects the style using the new OpenType ranges.
+        // Allow old CoreText to report the wrong width values.
+        SkFontStyle mac1015expected;
+    } testCases[] = {
+      // In range but non-default
+      { {{ SkSetFourByteTag('w','g','h','t'), 200.0f },
+         { SkSetFourByteTag('w','d','t','h'), 75.0f  }},
+        {200, 3, SkFontStyle::kUpright_Slant},
+        {200, 9, SkFontStyle::kUpright_Slant}},
+
+      // Out of range low, should clamp
+      { {{ SkSetFourByteTag('w','g','h','t'), 0.0f },
+         { SkSetFourByteTag('w','d','t','h'), 75.0f  }},
+        {100, 3, SkFontStyle::kUpright_Slant},
+        {100, 9, SkFontStyle::kUpright_Slant}},
+
+      // Out of range high, should clamp
+      { {{ SkSetFourByteTag('w','g','h','t'), 10000.0f },
+         { SkSetFourByteTag('w','d','t','h'), 75.0f  }},
+        {900, 3, SkFontStyle::kUpright_Slant},
+        {900, 9, SkFontStyle::kUpright_Slant}},
+    };
+
+    auto runTest = [&fm, &typeface, &stream, &reporter](TestCase& test){
+        static const constexpr bool isMac =
+#if defined(SK_BUILD_FOR_MAC)
+            true;
+#else
+            false;
+#endif
+        SkFontArguments args;
+        args.setVariationDesignPosition(Variation{test.position.data(), (int)test.position.size()});
+
+        sk_sp<SkTypeface> nonDefaultTypeface = fm->makeFromStream(stream->duplicate(), args);
+        SkFontStyle ndfs = nonDefaultTypeface->fontStyle();
+        REPORTER_ASSERT(reporter, ndfs == test.expected || (isMac && ndfs == test.mac1015expected),
+                        "ndfs: %d %d %d", ndfs.weight(), ndfs.width(), ndfs.slant());
+
+        sk_sp<SkTypeface> cloneTypeface = typeface->makeClone(args);
+        SkFontStyle cfs = cloneTypeface->fontStyle();
+        REPORTER_ASSERT(reporter, cfs == test.expected || (isMac && cfs == test.mac1015expected),
+                        "cfs: %d %d %d", cfs.weight(), cfs.width(), cfs.slant());
+
+    };
+
+    for (auto&& testCase : testCases) {
+        runTest(testCase);
     }
 }
 
@@ -228,10 +319,10 @@ DEF_TEST(TypefaceAxes, reporter) {
             }
             REPORTER_ASSERT(reporter, actualFound,
                 "Actual axis '%c%c%c%c' with value '%f' not expected",
-                (actual[actualIdx].axis >> 24) & 0xFF,
-                (actual[actualIdx].axis >> 16) & 0xFF,
-                (actual[actualIdx].axis >>  8) & 0xFF,
-                (actual[actualIdx].axis      ) & 0xFF,
+                (char)((actual[actualIdx].axis >> 24) & 0xFF),
+                (char)((actual[actualIdx].axis >> 16) & 0xFF),
+                (char)((actual[actualIdx].axis >>  8) & 0xFF),
+                (char)((actual[actualIdx].axis      ) & 0xFF),
                 SkScalarToDouble(actual[actualIdx].value));
         }
     };
@@ -335,7 +426,8 @@ DEF_TEST(TypefaceVariationIndex, reporter) {
         return;
     }
     REPORTER_ASSERT(reporter, positionRead[0].axis == SkSetFourByteTag('w','g','h','t'));
-    REPORTER_ASSERT(reporter, positionRead[0].value == 0.5);
+    REPORTER_ASSERT(reporter, positionRead[0].value == 0.5,
+                    "positionRead[0].value: %f", positionRead[0].value);
 }
 
 DEF_TEST(Typeface, reporter) {
@@ -430,10 +522,10 @@ DEF_TEST(TypefaceAxesParameters, reporter) {
             }
             REPORTER_ASSERT(reporter, actualFound,
                 "Actual axis '%c%c%c%c' with min %f max %f default %f hidden %s not expected",
-                (actual[actualIdx].tag >> 24) & 0xFF,
-                (actual[actualIdx].tag >> 16) & 0xFF,
-                (actual[actualIdx].tag >>  8) & 0xFF,
-                (actual[actualIdx].tag      ) & 0xFF,
+                (char)((actual[actualIdx].tag >> 24) & 0xFF),
+                (char)((actual[actualIdx].tag >> 16) & 0xFF),
+                (char)((actual[actualIdx].tag >>  8) & 0xFF),
+                (char)((actual[actualIdx].tag      ) & 0xFF),
                 actual[actualIdx].min,
                 actual[actualIdx].def,
                 actual[actualIdx].max,

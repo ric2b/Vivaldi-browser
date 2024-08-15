@@ -52,7 +52,6 @@ struct DisplayParams {
         , fSurfaceProps(0, kRGB_H_SkPixelGeometry)
         , fDisableVsync(false)
         , fDelayDrawableAcquisition(false)
-        , fEnableBinaryArchive(false)
         , fCreateProtectedNativeBackend(false)
     {}
 
@@ -62,11 +61,13 @@ struct DisplayParams {
     GrContextOptions       fGrContextOptions;
 #if defined(SK_GRAPHITE)
     GraphiteContextOptions fGraphiteContextOptions;
+#if defined(SK_DAWN)
+    bool fDisableTintSymbolRenaming = false;
+#endif
 #endif
     SkSurfaceProps         fSurfaceProps;
     bool                   fDisableVsync;
     bool                   fDelayDrawableAcquisition;
-    bool                   fEnableBinaryArchive;
     bool                   fCreateProtectedNativeBackend = false;
 };
 

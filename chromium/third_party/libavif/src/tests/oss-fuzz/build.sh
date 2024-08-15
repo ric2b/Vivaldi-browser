@@ -49,7 +49,7 @@ if [ "$SANITIZER" == "memory" ]
 then
   DAV1D_EXTRA_FLAGS="${DAV1D_EXTRA_FLAGS} -Denable_asm=false"
 fi
-sed -i 's/meson setup \(.*\) \.\./meson setup \1 '"${DAV1D_EXTRA_FLAGS}"' ../g' ./ext/dav1d.cmd
+sed -i "s/meson setup \(.*\) \.\./meson setup \1${DAV1D_EXTRA_FLAGS} ../g" ./ext/dav1d.cmd
 
 # Build libaom with sanitizer flags.
 # Adds extra flags: -DAOM_TARGET_CPU=generic for msan.
@@ -82,8 +82,8 @@ cmake .. -G Ninja -DBUILD_SHARED_LIBS=OFF -DAVIF_CODEC_AOM=LOCAL -DAVIF_CODEC_DA
       -DAVIF_CODEC_AOM_DECODE=ON -DAVIF_CODEC_AOM_ENCODE=ON \
       -DAVIF_ENABLE_WERROR=OFF \
       -DAVIF_LOCAL_FUZZTEST=ON \
-      -DAVIF_LOCAL_GTEST=OFF -DAVIF_LOCAL_JPEG=ON -DAVIF_LOCAL_LIBSHARPYUV=ON \
-      -DAVIF_LIBYUV=LOCAL -DAVIF_LOCAL_ZLIBPNG=ON \
+      -DAVIF_JPEG=LOCAL -DAVIF_LIBSHARPYUV=LOCAL \
+      -DAVIF_LIBYUV=LOCAL -DAVIF_ZLIBPNG=LOCAL \
       -DAVIF_BUILD_TESTS=ON -DAVIF_ENABLE_GTEST=OFF -DAVIF_ENABLE_WERROR=ON \
       ${EXTRA_CMAKE_FLAGS}
 

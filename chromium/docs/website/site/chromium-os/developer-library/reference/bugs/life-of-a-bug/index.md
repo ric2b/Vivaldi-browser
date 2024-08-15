@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: life-of-a-bug
 title: Life of a ChromeOS Bug
 ---
@@ -117,4 +117,4 @@ states in a formal progression. We try to keep the system up to date, but we
 tend to do so in periodic _bug sweeps_ where we review the database and make
 updates.
 
-[Reporting Bugs]: reporting_bugs.md
+[Reporting Bugs]: /chromium-os/developer-library/guides/bugs/reporting-bugs/

@@ -30,7 +30,6 @@ import org.chromium.chrome.browser.ui.signin.SigninUtils;
 import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerCoordinator;
 import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerDialogCoordinator;
 import org.chromium.chrome.browser.ui.signin.fullscreen_signin.FullscreenSigninCoordinator.Delegate;
-import org.chromium.chrome.browser.ui.signin.fullscreen_signin.FullscreenSigninProperties.FrePolicy;
 import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
@@ -93,9 +92,9 @@ public class FullscreenSigninMediator
     private boolean mInitialLoadCompleted;
 
     private AccountPickerDialogCoordinator mDialogCoordinator;
-    // TODO(crbug.com/1462558): Replace with CoreAccountInfo.
+    // TODO(crbug.com/40921927): Replace with CoreAccountInfo.
     private @Nullable String mSelectedAccountEmail;
-    // TODO(crbug.com/1462558): Replace with CoreAccountInfo.
+    // TODO(crbug.com/40921927): Replace with CoreAccountInfo.
     private @Nullable String mDefaultAccountEmail;
     private boolean mAllowMetricsAndCrashUploading;
 
@@ -194,7 +193,7 @@ public class FullscreenSigninMediator
                 && !mInitialLoadCompleted) {
             mInitialLoadCompleted = true;
             onInitialLoadCompleted(mDelegate.getPolicyLoadListener().get());
-            // TODO(https://crbug.com/1353330): Rename this method and the corresponding histogram.
+            // TODO(crbug.com/40235150): Rename this method and the corresponding histogram.
             mDelegate.recordNativePolicyAndChildStatusLoadedHistogram();
             RecordHistogram.recordEnumeratedHistogram(
                     "MobileFre.SlowestLoadPoint", mSlowestLoadPoint, LoadPoint.MAX);
@@ -229,10 +228,9 @@ public class FullscreenSigninMediator
                             + isSigninDisabledByPolicy);
             isMetricsReportingDisabledByPolicy =
                     !mPrivacyPreferencesManager.isUsageAndCrashReportingPermittedByPolicy();
-
-            final FrePolicy frePolicy = new FrePolicy();
-            frePolicy.metricsReportingDisabledByPolicy = isMetricsReportingDisabledByPolicy;
-            mModel.set(FullscreenSigninProperties.FRE_POLICY, frePolicy);
+            mModel.set(
+                    FullscreenSigninProperties.SHOW_ENTERPRISE_MANAGEMENT_NOTICE,
+                    mDelegate.shouldDisplayManagementNoticeOnManagedDevices());
         }
 
         boolean isSigninSupported =
@@ -263,7 +261,7 @@ public class FullscreenSigninMediator
     /** Implements {@link AccountsChangeObserver}. */
     @Override
     public void onCoreAccountInfosChanged() {
-        // TODO(crbug.com/1450614): Replace onAccountsChanged() with this method.
+        // TODO(crbug.com/40065164): Replace onAccountsChanged() with this method.
         mAccountManagerFacade.getCoreAccountInfos().then(this::updateAccounts);
     }
 
@@ -364,7 +362,8 @@ public class FullscreenSigninMediator
 
                     @Override
                     public void onSignInAborted() {
-                        // TODO(crbug/1248090): For now we enable the buttons again to not block the
+                        // TODO(crbug.com/40790332): For now we enable the buttons again to not
+                        // block the
                         // users from continuing to the next page. Should show a dialog with the
                         // signin error.
                         mModel.set(
@@ -483,11 +482,13 @@ public class FullscreenSigninMediator
     }
 
     /**
-     * Builds footer string dynamically.
-     * First line has a TOS link. Second line appears only if MetricsReporting is not
-     * disabled by policy.
+     * Builds footer string dynamically. Returns null if no footer text should be displayed. First
+     * line has a TOS link. Second line appears only if MetricsReporting is not disabled by policy.
      */
-    private SpannableString getFooterString(boolean isMetricsReportingDisabled) {
+    private @Nullable SpannableString getFooterString(boolean isMetricsReportingDisabled) {
+        if (!mDelegate.shouldDisplayFooterText()) {
+            return null;
+        }
         String footerString = mContext.getString(R.string.signin_fre_footer_tos);
 
         ArrayList<SpanApplier.SpanInfo> spans = new ArrayList<>();

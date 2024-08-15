@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: cros-vm
 title: ChromeOS VM for Chromium developers
 ---
@@ -113,7 +113,7 @@ To install `vncviewer`:
 (shell) sudo apt-get install vncviewer
 ```
 
-See the [ChromiumOS developer guide](developer_guide.md#vm) for additional
+See the [ChromiumOS developer guide](/chromium-os/developer-library/guides/development/developer-guide/#vm) for additional
 options.
 
 ### Stop the VM
@@ -380,17 +380,17 @@ To lookup release versions for a particular board (e.g. betty):
 [go/cros-qemu]: https://storage.cloud.google.com/achuith-cloud.google.com.a.appspot.com/qemu.tar.gz
 [Linux Chromium checkout]: https://chromium.googlesource.com/chromium/src/+/HEAD/docs/linux/build_instructions.md
 [Virtualization enabled]: https://g3doc.corp.google.com/tools/android/g3doc/development/crow/enable_kvm.md
-[Simple Chrome]: simple_chrome_workflow.md
-[chroot]: developer_guide.md
+[Simple Chrome]: /chromium-os/developer-library/guides/development/simple-chrome-workflow/
+[chroot]: /chromium-os/developer-library/guides/development/developer-guide/
 [Tast: Running Tests]: https://chromium.googlesource.com/chromiumos/platform/tast/+/HEAD/docs/running_tests.md
 [full]: https://cros-goldeneye.corp.google.com/chromeos/legoland/builderSummary?builderGroups=full
 [release]: https://cros-goldeneye.corp.google.com/chromeos/legoland/builderSummary?builderGroups=release
 [amd64-generic]: https://cros-goldeneye.corp.google.com/chromeos/legoland/builderHistory?buildConfig=amd64-generic-full&buildBranch=master
 [betty]: https://cros-goldeneye.corp.google.com/chromeos/legoland/builderHistory?buildConfig=betty-release&buildBranch=master
-[build ChromiumOS]: developer_guide.md
+[build ChromiumOS]: /chromium-os/developer-library/guides/development/developer-guide/
 [attribute expression]: https://chromium.googlesource.com/chromiumos/platform/tast/+/HEAD/docs/test_attributes.md
 [Launch a locally built VM from within the chroot]: #Launch-a-locally-built-VM-from-within-the-chroot
 [go/tast-infra]: https://chrome-internal.googlesource.com/chromeos/chromeos-admin/+/HEAD/doc/tast_integration.md
-[go/cros-vm]: cros_vm.md
+[go/cros-vm]: /chromium-os/developer-library/guides/containers/cros-vm/
 [chromeos-amd64-generic-rel]: https://ci.chromium.org/p/chromium/builders/luci.chromium.ci/chromeos-amd64-generic-rel
 [GPU test]: https://chromium.googlesource.com/chromium/src.git/+/HEAD/docs/gpu/gpu_testing.md#Running-the-GPU-Tests-Locally

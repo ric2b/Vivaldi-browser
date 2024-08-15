@@ -263,6 +263,23 @@
     constraintEqualToAnchor:self.superview.centerYAnchor] setActive:YES];
 }
 
+
+- (void) centerToView:(UIView*)view {
+  [self centerXToView:view];
+  [self centerYToView:view];
+}
+
+// Center the view horizontally with respect to a given value
+- (void) centerXToView:(UIView*)view {
+  self.translatesAutoresizingMaskIntoConstraints = NO;
+
+  if (!view)
+    return;
+
+  [[self.centerXAnchor
+      constraintEqualToAnchor:view.centerXAnchor] setActive:YES];
+}
+
 // Center the view vertically with respect to a given value
 - (void) centerYToView:(UIView*)view {
   self.translatesAutoresizingMaskIntoConstraints = NO;

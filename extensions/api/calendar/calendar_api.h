@@ -633,6 +633,23 @@ class CalendarDeleteEventTemplateFunction : public CalendarAsyncFunction {
   base::CancelableTaskTracker task_tracker_;
 };
 
+class CalendarGetParentExceptionIdFunction : public CalendarAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("calendar.getParentExceptionId",
+                             CALENDAR_GET_PARENT_EXCEPTION_ID)
+  CalendarGetParentExceptionIdFunction() = default;
+
+ private:
+  ~CalendarGetParentExceptionIdFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  void GetParentExceptionIdComplete(calendar::EventID parent_event_id);
+
+  // The task tracker for the CalendarService callbacks.
+  base::CancelableTaskTracker task_tracker_;
+};
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_CALENDAR_CALENDAR_API_H_

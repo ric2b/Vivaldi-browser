@@ -6,13 +6,22 @@
 #define CHROME_BROWSER_ASH_LOGIN_APP_MODE_KIOSK_LAUNCH_CONTROLLER_H_
 
 #include <memory>
+#include <optional>
+#include <string>
 
 #include "ash/public/cpp/login_accelerators.h"
+#include "base/auto_reset.h"
+#include "base/functional/callback.h"
 #include "base/functional/callback_forward.h"
+#include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
+#include "chrome/browser/ash/app_mode/cancellable_job.h"
+#include "chrome/browser/ash/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_launcher.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_types.h"
 #include "chrome/browser/ash/app_mode/kiosk_profile_loader.h"
@@ -107,11 +116,19 @@ class KioskLaunchController : public KioskAppLauncher::Observer,
           const KioskAppId&,
           KioskAppLauncher::NetworkDelegate*)>;
 
-  explicit KioskLaunchController(OobeUI* oobe_ui);
+  using LaunchCompleteCallback =
+      base::OnceCallback<void(std::optional<KioskAppLaunchError::Error> error)>;
+
+  KioskLaunchController(LoginDisplayHost* host,
+                        OobeUI* oobe_ui,
+                        LaunchCompleteCallback done_callback);
   KioskLaunchController(
       LoginDisplayHost* host,
       AppLaunchSplashScreenView* splash_screen,
       LoadProfileCallback profile_loader,
+      LaunchCompleteCallback done_callback,
+      base::OnceClosure attempt_relaunch,
+      base::OnceClosure attempt_logout,
       KioskAppLauncherFactory app_launcher_factory,
       std::unique_ptr<NetworkUiController::NetworkMonitor> network_monitor,
       std::unique_ptr<AcceleratorController> accelerator_controller);
@@ -123,6 +140,8 @@ class KioskLaunchController : public KioskAppLauncher::Observer,
   // when the returned objects are destroyed.
   [[nodiscard]] static base::AutoReset<bool> SkipSplashScreenWaitForTesting();
   [[nodiscard]] static base::AutoReset<bool> BlockAppLaunchForTesting();
+  [[nodiscard]] static base::AutoReset<bool>
+  BlockSystemSessionCreationForTesting();
   [[nodiscard]] static base::AutoReset<bool> BlockExitOnFailureForTesting();
 
   void Start(const KioskAppId& kiosk_app_id, bool auto_launch);
@@ -199,13 +218,16 @@ class KioskLaunchController : public KioskAppLauncher::Observer,
   void CleanUp();
   void LaunchApp();
 
+  void FinishLaunchWithSuccess();
+  void FinishLaunchWithError(KioskAppLaunchError::Error error);
+
   bool auto_launch_ = false;  // Whether current app is being auto-launched.
 
   // Current state of the controller.
   AppState app_state_ = AppState::kCreatingProfile;
 
   // Not owned, destructed upon shutdown.
-  raw_ptr<LoginDisplayHost> const host_;
+  raw_ptr<LoginDisplayHost> host_ = nullptr;
   // Owned by OobeUI.
   raw_ptr<AppLaunchSplashScreenView> splash_screen_view_ = nullptr;
   // Current app.
@@ -220,6 +242,15 @@ class KioskLaunchController : public KioskAppLauncher::Observer,
 
   // Whether the controller has already been cleaned-up.
   bool cleaned_up_ = false;
+
+  // Callback invoked when the launch is complete. The `error` field indicates
+  // if the launch was successful or not.
+  LaunchCompleteCallback done_callback_;
+
+  // When invoked will attempt to log out and return to the sign-in screen.
+  base::OnceClosure attempt_logout_;
+  // When invoked will attempt to restart the device.
+  base::OnceClosure attempt_relaunch_;
 
   // Handle to the job returned by `profile_loader_`.
   std::unique_ptr<CancellableJob> profile_loader_handle_;

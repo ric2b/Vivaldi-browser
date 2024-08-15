@@ -12,15 +12,22 @@ title: Third-Party Cookie Deprecation Testing and Debugging
 
 [TOC]
 
-## Enable Third-Party Cookie Blocking
+## Test Chrome with third-party cookie restrictions
 
-In Chrome settings, go to **Privacy and Security** -> **Cookies and other site data** or
-`chrome://settings/cookies`. Under **General Settings** ensure that **Block third-party
-cookies** is enabled.
+In Chrome 121 and higher, you can simulate the state after third-party cookie phase-out: 
 
-<img alt="image" src="/Home/chromium-privacy/privacy-sandbox/third-party-cookie-phaseout/3p-cookie-blocking.png" height=420 width=619>
+• Enable `chrome://flags/#test-third-party-cookie-phaseout`
 
-## Testing your site
+or
+
+• Run Chrome from the command line with the flag `--test-third-party-cookie-phaseout`
+
+This will set Chrome to restrict third-party cookies, and ensure that new features and mitigations are active.
+
+Find out more: [goo.gle/3pcd-test](https://goo.gle/3pcd-test).
+
+## Test your site
+
 Go to the actual site you want to test and thoroughly test site functionality, with a
 focus on anything involving federated login flows, online payments, 3-D Secure
 verification, multiple domains, or cross-site embedded content (iframes, images, videos,

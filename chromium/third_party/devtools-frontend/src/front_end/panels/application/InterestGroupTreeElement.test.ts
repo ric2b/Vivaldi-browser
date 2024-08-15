@@ -2,13 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
+import * as SDK from '../../core/sdk/sdk.js';
+import type * as Protocol from '../../generated/protocol.js';
+import {createTarget} from '../../testing/EnvironmentHelpers.js';
+import {describeWithMockConnection} from '../../testing/MockConnection.js';
 
 import * as Resources from './application.js';
-import type * as Protocol from '../../generated/protocol.js';
-import * as SDK from '../../core/sdk/sdk.js';
-import {describeWithMockConnection} from '../../testing/MockConnection.js';
-import {createTarget} from '../../testing/EnvironmentHelpers.js';
 
 describeWithMockConnection('InterestGroupTreeElement', () => {
   const OWNER = 'OWNER';
@@ -23,18 +22,7 @@ describeWithMockConnection('InterestGroupTreeElement', () => {
     adComponents: [],
   };
 
-  it('reads details without tab target', async () => {
-    const target = createTarget();
-    const view =
-        new Resources.InterestGroupTreeElement.InterestGroupTreeElement({} as Resources.ResourcesPanel.ResourcesPanel);
-    sinon.stub(target.storageAgent(), 'invoke_getInterestGroupDetails')
-        .withArgs({ownerOrigin: OWNER, name: NAME})
-        .returns(Promise.resolve({details: DETAILS} as Protocol.Storage.GetInterestGroupDetailsResponse));
-    const details = await view.getInterestGroupDetails(OWNER, NAME);
-    assert.deepStrictEqual(details, DETAILS);
-  });
-
-  it('reads details with tab target', async () => {
+  it('reads details', async () => {
     const tabTarget = createTarget({type: SDK.Target.Type.Tab});
     const frameTarget = createTarget({parentTarget: tabTarget});
     createTarget({parentTarget: tabTarget, subtype: 'prerender'});

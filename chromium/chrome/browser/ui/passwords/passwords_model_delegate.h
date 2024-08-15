@@ -161,7 +161,9 @@ class PasswordsModelDelegate {
       password_manager::PasswordCheckReferrer referrer) = 0;
   // Called by the view when the "Sign in to Chrome" button or the "Sync to"
   // button in the promo bubble are clicked.
-  virtual void SignIn(const AccountInfo& account) = 0;
+  virtual void SignIn(
+      const AccountInfo& account,
+      const password_manager::PasswordForm& password_to_move) = 0;
 
   // Called from the dialog controller when the dialog is hidden.
   virtual void OnDialogHidden() = 0;
@@ -204,7 +206,9 @@ class PasswordsModelDelegate {
   virtual void OnBiometricAuthBeforeFillingDeclined() = 0;
 
   // Called when user clicked "Add username" button in AddUsername bubble.
-  virtual void OnAddUsernameSaveClicked(const std::u16string& username) = 0;
+  virtual void OnAddUsernameSaveClicked(
+      const std::u16string& username,
+      const password_manager::PasswordForm& password_to_change) = 0;
 
   // Called from the Save/Update bubble controller to decide whether or not we
   // should show the user the Chrome for iOS promo.

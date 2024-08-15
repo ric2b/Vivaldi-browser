@@ -1,7 +1,6 @@
 set noparent
 
 ajp@google.com
-aravindvasudev@google.com
 ddoman@chromium.org
 gavinmak@google.com
 jojwang@google.com
@@ -40,12 +39,6 @@ per-file reclient*=file://RECLIENT_OWNERS
 # Bazel
 per-file bazel*=file://CROS_OWNERS
 per-file bazel*=file://BUILD_OWNERS
-
-# Goma
-per-file goma*=file://BUILD_OWNERS
-
-# For Goma client updates
-per-file cipd_manifest*=file://BUILD_OWNERS
 
 per-file presubmit*.py=brucedawson@chromium.org
 

@@ -21,7 +21,6 @@
 #import "components/bookmarks/managed/managed_bookmark_service.h"
 #import "components/prefs/pref_service.h"
 #import "components/strings/grit/components_strings.h"
-#import "components/sync/base/features.h"
 #import "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/browser/bookmarks/model/account_bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_bridge_observer.h"
@@ -30,7 +29,6 @@
 #import "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
 #import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/model/managed_bookmark_service_factory.h"
-#import "ios/chrome/browser/default_browser/model/default_browser_interest_signals.h"
 #import "ios/chrome/browser/drag_and_drop/model/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/model/table_view_url_drag_drop_handler.h"
 #import "ios/chrome/browser/favicon/model/favicon_loader.h"
@@ -101,7 +99,10 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
+#import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
 #import "ios/panel/panel_constants.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmarks_sorting_mode.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmark_prefs.h"
 #import "ios/ui/custom_views/vivaldi_search_bar_view.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
@@ -163,6 +164,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
     // Vivaldi
     VivaldiSearchBarViewDelegate,
+    SettingsNavigationControllerDelegate,
     // End Vivaldi
 
     UIGestureRecognizerDelegate,
@@ -181,7 +183,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 // The mediator that provides data for this view controller.
 @property(nonatomic, strong) BookmarksHomeMediator* mediator;
 
-// TODO(crbug.com/1402758): Move this to BookmarksHomeCoordinator.
+// TODO(crbug.com/40251259): Move this to BookmarksHomeCoordinator.
 // A reference to the presented folder chooser.
 @property(nonatomic, strong)
     BookmarksFolderChooserCoordinator* folderChooserCoordinator;
@@ -239,8 +241,30 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 @property(nonatomic, strong) SharingCoordinator* sharingCoordinator;
 
 // Vivaldi
+// Navigation View controller for the settings.
+@property(nonatomic, strong)
+    SettingsNavigationController* settingsNavigationController;
 // Custom Vivaldi tableHeaderView to host search bar.
 @property(nonatomic, strong) VivaldiSearchBarView* vivaldiSearchBarView;
+// Sort button
+@property(nonatomic, weak) UIButton* sortButton;
+// Array to hold the sort button context menu options
+@property (strong, nonatomic) NSMutableArray *bookmarksSortActions;
+// Array to hold ascendeing decending buttons for sort context menu options
+@property (strong, nonatomic) NSMutableArray *sortOrderActions;
+
+// Sort button context menu options
+@property(nonatomic, strong) UIAction* manualSortAction;
+@property(nonatomic, strong) UIAction* titleSortAction;
+@property(nonatomic, strong) UIAction* addressSortAction;
+@property(nonatomic, strong) UIAction* nicknameSortAction;
+@property(nonatomic, strong) UIAction* descriptionSortAction;
+@property(nonatomic, strong) UIAction* dateSortAction;
+@property(nonatomic, strong) UIAction* kindSortAction;
+
+// The current sort order Action
+@property(nonatomic, strong) UIAction* ascendingSortAction;
+@property(nonatomic, strong) UIAction* descendingSortAction;
 // End Vivaldi
 
 @end
@@ -289,6 +313,11 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
             ->AsWeakPtr();
     _accountBookmarkModelBridge = std::make_unique<BookmarkModelBridge>(
         self, _accountBookmarkModel.get());
+
+    // Vivaldi
+    [VivaldiBookmarkPrefs setPrefService:_browserState->GetPrefs()];
+    // End Vivaldi
+
   }
   return self;
 }
@@ -610,7 +639,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                                            _accountBookmarkModel.get())
                                     topMostRow:topMostVisibleIndexPathRow];
   } else {
-    // TODO(crbug.com/1061882):Remove DCHECK once we know the root cause of the
+    // TODO(crbug.com/40679851):Remove DCHECK once we know the root cause of the
     // bug, for now this will cause a crash on Dev/Canary and we should get
     // breadcrumbs.
     DCHECK(NO);
@@ -618,6 +647,15 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 }
 
 #pragma mark - BookmarksHomeConsumer
+
+- (void)closeThisFolder {
+  [self jumpToFolder:self.displayedFolderNode->parent()];
+}
+
+- (void)displayRoot {
+  [self jumpToFolder:_localOrSyncableBookmarkModel
+                         ->subtle_root_node_with_unspecified_children()];
+}
 
 - (void)setTableViewEditing:(BOOL)editing {
   self.mediator.currentlyInEditMode = editing;
@@ -769,6 +807,18 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
     openAction.attributes = UIMenuElementAttributesDisabled;
   }
   [menuElements addObject:openAction];
+
+  // Vivaldi: Add Open In Background tab option
+  if (IsVivaldiRunning()) {
+    UIAction* openNewBackgroundTab =
+    [actionFactory actionToOpenInNewBackgroundTabWithBlock:^{
+      [weakSelf openAllURLs:{
+        nodeURL
+      } inIncognito:NO newTab:YES openInBackground:YES];
+    }];
+    [menuElements addObject:openNewBackgroundTab];
+  } // End Vivaldi
+
   // Add open URL in incognito menu item.
   UIAction* openInIncognito =
       [actionFactory actionToOpenInNewIncognitoTabWithBlock:^{
@@ -902,7 +952,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 // Vivaldi
 - (void)moveNodesToTrash:(const bookmark_utils_ios::NodeSet&)nodes {
   DCHECK_GE(nodes.size(), 1u);
-  const BookmarkNode* trashFolder = _localOrSyncableBookmarkModel->trash_node();
+  const BookmarkNode* trashFolder =
+      _localOrSyncableBookmarkModel->getUnderlyingModel()->trash_node();
   std::vector<const bookmarks::BookmarkNode*> movedNodesVector(
       nodes.begin(), nodes.end());
   [self.snackbarCommandsHandler
@@ -955,7 +1006,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   }
   [self.snackbarCommandsHandler
       showSnackbarMessage:bookmark_utils_ios::DeleteBookmarksWithUndoToast(
-                              nodes, models, self.browserState)];
+                              nodes, models, self.browserState, FROM_HERE)];
   [self setTableViewEditing:NO];
 }
 
@@ -1112,7 +1163,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
 - (void)navigationBarCancel:(id)sender {
   base::RecordAction(base::UserMetricsAction("MobileBookmarkManagerClose"));
-  default_browser::NotifyBookmarkManagerClosed();
   [self navigateAway];
 
   [self dismissWithURL:GURL()];
@@ -1131,6 +1181,10 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
     [self.navigationController pushViewController:controller animated:YES];
     return;
   }
+  [self jumpToFolder:folder];
+}
+
+- (void)jumpToFolder:(const bookmarks::BookmarkNode*)folder {
   // Clear bookmark path cache.
   int64_t unusedFolderId;
   BookmarkModelType modelType;
@@ -1326,7 +1380,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   // is set to nil (if `self` holds the last reference to the object).
   std::set<const bookmarks::BookmarkNode*> editedNodesSet =
       _folderChooserCoordinator.editedNodes;
-  // TODO(crbug.com/1446131): Change the type of `editedNodes` to std::vector.
+  // TODO(crbug.com/40268466): Change the type of `editedNodes` to std::vector.
   std::vector<const bookmarks::BookmarkNode*> editedNodesVector(
       editedNodesSet.begin(), editedNodesSet.end());
   [self stopFolderChooserCoordinator];
@@ -1622,7 +1676,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                                     new_tab_page_uma::ACTION_OPENED_BOOKMARK);
   base::RecordAction(
       base::UserMetricsAction("MobileBookmarkManagerEntryOpened"));
-  default_browser::NotifyURLFromBookmarkOpened();
 
   UrlLoadParams params = UrlLoadParams::InCurrentTab(url);
   params.web_params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
@@ -1791,7 +1844,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
     return nodeItem.bookmarkNode;
   }
 
-  NOTREACHED() << "Unexpected item type " << item.type;
+  DUMP_WILL_BE_NOTREACHED_NORETURN() << "Unexpected item type " << item.type;
   return nullptr;
 }
 
@@ -2199,16 +2252,16 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 }
 
 - (void)setBookmarksContextBarButtonsDefaultState {
-  // Set New Folder button
-  NSString* titleString = GetNSString(IDS_IOS_BOOKMARK_CONTEXT_BAR_NEW_FOLDER);
-  UIBarButtonItem* newFolderButton =
-      [[UIBarButtonItem alloc] initWithTitle:titleString
-                                       style:UIBarButtonItemStylePlain
-                                      target:self
-                                      action:@selector(leadingButtonClicked)];
-  newFolderButton.accessibilityIdentifier =
-      kBookmarksHomeLeadingButtonIdentifier;
-  newFolderButton.enabled = [self allowsNewFolder];
+
+  // Set Context Menu button for sorting and new folder
+  UIImage* dotsIcon = [UIImage imageNamed:vPanelMoreAction];
+  UIBarButtonItem* contextMenu =
+      [[UIBarButtonItem alloc]
+           initWithImage:dotsIcon
+                   style:UIBarButtonItemStyleDone
+                  target:self
+                  action:nil];
+  contextMenu.menu = [self contextMenuForBookmarksSortButton];
 
   // Spacer button.
   UIBarButtonItem* spaceButton = [[UIBarButtonItem alloc]
@@ -2217,7 +2270,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                            action:nil];
 
   // Set Edit button.
-  titleString = GetNSString(IDS_IOS_BOOKMARK_CONTEXT_BAR_EDIT);
+  NSString* titleString = GetNSString(IDS_IOS_BOOKMARK_CONTEXT_BAR_EDIT);
   UIBarButtonItem* editButton =
       [[UIBarButtonItem alloc] initWithTitle:titleString
                                        style:UIBarButtonItemStylePlain
@@ -2257,13 +2310,13 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
          style:UIBarButtonItemStyleDone
          target:self
          action:@selector(handleAddBarButtonTap)];
-        [self setToolbarItems:@[ newFolderButton, spaceButton,
+        [self setToolbarItems:@[ contextMenu, spaceButton,
                                  plusButton, spaceButton, editButton ]
                      animated:NO];
         return;
     }
   }// End Vivaldi
-  [self setToolbarItems:@[ newFolderButton, spaceButton, editButton ]
+  [self setToolbarItems:@[ contextMenu, spaceButton, editButton ]
                animated:NO];
 }
 
@@ -2342,6 +2395,34 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                 }
                  style:UIAlertActionStyleDefault
                enabled:![self isIncognitoForced]];
+
+  // Vivaldi: Option for open tab in background.
+  if (IsVivaldiRunning()) {
+    titleString =
+        GetNSString(IDS_IOS_CONTENT_CONTEXT_OPEN_ALL_INBACKGROUND);
+    [coordinator
+        addItemWithTitle:titleString
+                  action:^{
+                    [weakSelf dismissActionSheetCoordinator];
+                    BookmarksHomeViewController* strongSelf = weakSelf;
+                    if (!strongSelf) {
+                      return;
+                    }
+                    if ([strongSelf isIncognitoForced]) {
+                      return;
+                    }
+                    std::vector<const bookmarks::BookmarkNode*>
+                    selectedNodesForEditMode =
+                    [strongSelf selectedNodesForEditMode];
+                    [strongSelf
+                        openAllURLs:GetUrlsToOpen(selectedNodesForEditMode)
+                        inIncognito:NO
+                             newTab:NO
+                        openInBackground:YES];
+    }
+     style:UIAlertActionStyleDefault
+     enabled:![self isIncognitoForced]];
+  } // End Vivaldi
 
   titleString = GetNSString(IDS_IOS_BOOKMARK_CONTEXT_MENU_OPEN_INCOGNITO);
   [coordinator
@@ -3129,7 +3210,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   }
   [self.snackbarCommandsHandler
       showSnackbarMessage:bookmark_utils_ios::DeleteBookmarksWithUndoToast(
-                              nodes, models, self.browserState)];
+                              nodes, models, self.browserState, FROM_HERE)];
   [self setTableViewEditing:NO];
 }
 
@@ -3151,6 +3232,375 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   }
   DCHECK(nodes.size() > 0);
   [self deleteBookmarkNodesVivaldi:nodes];
+}
+
+#pragma mark - SettingsNavigationControllerDelegate
+
+- (void)closeSettings {
+  __weak UIViewController* weakPresentingViewController =
+      [self.settingsNavigationController presentingViewController];
+  [self.settingsNavigationController cleanUpSettings];
+  UIViewController* strongPresentingViewController =
+      weakPresentingViewController;
+  if (strongPresentingViewController) {
+    [strongPresentingViewController
+        dismissViewControllerAnimated:YES
+            completion:nil];
+  }
+  self.settingsNavigationController = nil;
+}
+
+- (void)settingsWasDismissed {
+  [self.settingsNavigationController cleanUpSettings];
+  self.settingsNavigationController = nil;
+}
+
+#pragma mark - Sorting
+
+/// Returns the context menu actions for notes sort button action
+- (UIMenu*)contextMenuForBookmarksSortButton {
+
+  // Sync action button
+  NSString* syncTitleString =
+      GetNSString(IDS_IOS_NOTE_CONTEXT_BAR_SYNCHRONIZATION);
+  UIAction* syncAction =
+      [UIAction actionWithTitle:syncTitleString
+                          image:nil
+                     identifier:nil
+                        handler:^(__kindof UIAction*_Nonnull action) {
+    [self showVivaldiSync];
+  }];
+
+  // New Folder action Button
+  NSString* titleString = GetNSString(IDS_IOS_BOOKMARK_CONTEXT_BAR_NEW_FOLDER);
+  UIAction* newFolderAction =
+      [UIAction actionWithTitle:titleString
+                          image:nil
+                     identifier:nil
+                        handler:^(__kindof UIAction*_Nonnull
+                                  action) {
+    [self leadingButtonClicked];
+  }];
+
+  // Manual sorting action button
+  NSString* manualSortTitle = GetNSString(IDS_IOS_SORT_MANUAL);
+  UIAction* manualSortAction = [UIAction actionWithTitle:manualSortTitle
+                                              image:nil
+                                              identifier:nil
+                                            handler:^(__kindof UIAction*_Nonnull
+                                                      action) {
+    [self sortBookmarksWithMode:VivaldiBookmarksSortingModeManual];
+  }];
+  self.manualSortAction = manualSortAction;
+
+  // Sort by title action button
+  NSString* titleSortTitle = GetNSString(IDS_IOS_SORT_BY_TITLE);
+  UIAction* titleSortAction = [UIAction actionWithTitle:titleSortTitle
+                                              image:nil
+                                         identifier:nil
+                                            handler:^(__kindof UIAction*_Nonnull
+                                                      action) {
+    [self sortBookmarksWithMode:VivaldiBookmarksSortingModeByTitle];
+  }];
+  self.titleSortAction = titleSortAction;
+
+  // Sort by address action button
+  NSString* addressSortTitle = GetNSString(IDS_IOS_SORT_BY_ADDRESS);
+  UIAction* addressSortAction = [UIAction actionWithTitle:addressSortTitle
+                                              image:nil
+                                         identifier:nil
+                                            handler:^(__kindof UIAction*_Nonnull
+                                                      action) {
+    [self sortBookmarksWithMode:VivaldiBookmarksSortingModeByAddress];
+  }];
+  self.addressSortAction = addressSortAction;
+
+  // Sort by nickname action button
+  NSString* nicknameSortTitle = GetNSString(IDS_IOS_SORT_BY_NICKNAME);
+  UIAction* nicknameSortAction = [UIAction actionWithTitle:nicknameSortTitle
+                                              image:nil
+                                         identifier:nil
+                                            handler:^(__kindof UIAction*_Nonnull
+                                                      action) {
+    [self sortBookmarksWithMode:VivaldiBookmarksSortingModeByNickname];
+  }];
+  self.nicknameSortAction = nicknameSortAction;
+
+  // Sort by description action button
+  NSString* descriptionSortTitle = GetNSString(IDS_IOS_SORT_BY_DESCRIPTION);
+  UIAction* descriptionSortAction =
+    [UIAction actionWithTitle:descriptionSortTitle
+                        image:nil
+                   identifier:nil
+                      handler:^(__kindof UIAction*_Nonnull action) {
+    [self sortBookmarksWithMode:VivaldiBookmarksSortingModeByDescription];
+  }];
+  self.descriptionSortAction = descriptionSortAction;
+
+  // Sort by date created action button
+  NSString* dateSortTitle = GetNSString(IDS_IOS_SORT_BY_DATE);
+  UIAction* dateSortAction = [UIAction actionWithTitle:dateSortTitle
+                                              image:nil
+                                         identifier:nil
+                                            handler:^(__kindof UIAction*_Nonnull
+                                                      action) {
+    [self sortBookmarksWithMode:VivaldiBookmarksSortingModeByDate];
+  }];
+  self.dateSortAction = dateSortAction;
+
+  // Sort by kind action button
+  NSString* kindSortTitle = GetNSString(IDS_IOS_SORT_BY_KIND);
+  UIAction* kindSortAction =
+     [UIAction actionWithTitle:kindSortTitle
+                         image:nil
+                    identifier:nil
+                       handler:^(__kindof UIAction*_Nonnull
+                                 action) {
+    [self sortBookmarksWithMode:VivaldiBookmarksSortingModeByKind];
+  }];
+  self.kindSortAction = kindSortAction;
+
+  _bookmarksSortActions = [[NSMutableArray alloc] initWithArray:@[
+      manualSortAction, titleSortAction, addressSortAction,
+      nicknameSortAction, descriptionSortAction, dateSortAction, kindSortAction
+  ]];
+
+  // Refresh actions buttons states
+  [self setSortingStateOnContextMenuOption];
+
+  // Ascending sort action button
+  UIAction* ascendingSortAction =
+      [UIAction actionWithTitle:GetNSString(IDS_IOS_NOTE_ASCENDING_SORT_ORDER)
+                          image:nil
+                     identifier:nil
+                        handler:^(__kindof UIAction*_Nonnull
+                                  action) {
+        [self refreshSortOrder:VivaldiBookmarksSortingOrderAscending];
+      }];
+  self.ascendingSortAction = ascendingSortAction;
+
+  // Descending sort action button
+  UIAction* descendingSortAction =
+      [UIAction actionWithTitle:GetNSString(IDS_IOS_NOTE_DESCENDING_SORT_ORDER)
+                          image:nil
+                     identifier:nil
+                        handler:^(__kindof UIAction*_Nonnull
+                                  action) {
+        [self refreshSortOrder:VivaldiBookmarksSortingOrderDescending];
+      }];
+  self.descendingSortAction = descendingSortAction;
+
+  if (!self.isSortedByManual) {
+    _sortOrderActions = [[NSMutableArray alloc] initWithArray:@[
+      ascendingSortAction, descendingSortAction]
+    ];
+  } else {
+    _sortOrderActions = nil;
+  }
+  [self updateSortOrderStateOnContextMenuOption];
+
+  UIMenu* sortingActionsMenu =
+      [UIMenu menuWithTitle:@""
+                      image:nil
+                 identifier:nil
+                    options:UIMenuOptionsDisplayInline
+                   children:_bookmarksSortActions];
+
+  UIMenu* sortingOrderMenu =
+      [UIMenu menuWithTitle:@""
+                      image:nil
+                 identifier:nil
+                    options:UIMenuOptionsDisplayInline
+                   children:_sortOrderActions];
+
+  UIMenuOptions options = UIMenuOptionsDisplayInline;
+  if (@available(iOS 17.0, *)) {
+    options = UIMenuOptionsDisplayAsPalette;
+  }
+
+  titleString = GetNSString(IDS_IOS_NOTE_SORTING_SORT_ORDER);
+  UIMenu* subMenu =
+    [UIMenu menuWithTitle:titleString
+                    image:[UIImage imageNamed:vPanelSortOrderAction]
+               identifier:nil
+                  options:options
+                 children:@[sortingActionsMenu, sortingOrderMenu]];
+
+  NSMutableArray* menuItems = [[NSMutableArray alloc] initWithArray:@[]];
+  [menuItems addObject:subMenu];
+
+  if ([self allowsNewFolder]) {
+    [menuItems addObject:newFolderAction];
+  }
+  [menuItems addObject:syncAction];
+
+  UIMenu* menu = [UIMenu menuWithTitle:@""
+                              children:menuItems];
+  return menu;
+}
+
+-(void)refreshSortOrder:(VivaldiBookmarksSortingOrder) order {
+  if (self.currentSortingOrder == order)
+    return;
+  [self setSortingOrder:order];
+  [self refreshSortingViewWith:self.currentSortingMode];
+}
+
+/// Sets current sorting mode selected by the user
+/// on the pref and calls the mediator to handle the sorting
+/// and refreshes the UI with sorted items.
+- (void)sortBookmarksWithMode:(VivaldiBookmarksSortingMode)mode {
+  if (self.currentSortingMode == mode)
+    return;
+  // Reset the sorting order to ascending
+  [self setSortingOrder:VivaldiBookmarksSortingOrderAscending];
+  [self refreshSortingViewWith:mode];
+}
+
+-(void)refreshSortingViewWith:(VivaldiBookmarksSortingMode)mode {
+  // Set new mode to the pref.
+  [self setCurrentSortingMode:mode];
+
+  // Refresh context bar
+  [self handleRefreshContextBar];
+   // Restore current list.
+  [self.mediator computeBookmarkTableViewData];
+  [self.tableView reloadData];
+}
+
+/// Returns current sorting mode
+- (VivaldiBookmarksSortingMode)currentSortingMode {
+  return [VivaldiBookmarkPrefs getBookmarksSortingMode];
+}
+
+/// Sets the user selected sorting mode on the prefs
+- (void)setCurrentSortingMode:(VivaldiBookmarksSortingMode)mode {
+  // need to initalize the prefs first
+  [VivaldiBookmarkPrefs setBookmarksSortingMode:mode];
+}
+
+/// Returns YES if the current sorting mode is manual
+- (BOOL)isSortedByManual {
+  return self.currentSortingMode == VivaldiBookmarksSortingModeManual;
+}
+
+/// Gets the sorting mode from prefs and update
+/// the selection state on the context menu.
+- (void)setSortingStateOnContextMenuOption {
+
+  switch (self.currentSortingMode) {
+    case VivaldiBookmarksSortingModeManual:
+      [self updateSortActionButtonState:self.manualSortAction];
+      break;
+    case VivaldiBookmarksSortingModeByTitle:
+      [self updateSortActionButtonState:self.titleSortAction];
+      break;
+    case VivaldiBookmarksSortingModeByAddress:
+      [self updateSortActionButtonState:self.addressSortAction];
+      break;
+    case VivaldiBookmarksSortingModeByNickname:
+      [self updateSortActionButtonState:self.nicknameSortAction];
+      break;
+    case VivaldiBookmarksSortingModeByDescription:
+      [self updateSortActionButtonState:self.descriptionSortAction];
+      break;
+    case VivaldiBookmarksSortingModeByDate:
+      [self updateSortActionButtonState:self.dateSortAction];
+      break;
+    case VivaldiBookmarksSortingModeByKind:
+      [self updateSortActionButtonState:self.kindSortAction];
+      break;
+  }
+}
+
+/// Updates the state on the context menu actions
+/// by unchecking the all apart from the selected one.
+- (void)updateSortActionButtonState:(UIAction*)settable {
+  for (UIAction* action in self.bookmarksSortActions) {
+    if (action == settable) {
+      [action setState:UIMenuElementStateOn];
+    } else {
+      [action setState:UIMenuElementStateOff];
+    }
+  }
+}
+
+// Updates the state on the context menu actions for sorting order
+// by unchecking the all apart from the selected one.
+- (void) updateSortOrderStateOnContextMenuOption {
+  if (self.currentSortingOrder == VivaldiBookmarksSortingOrderAscending) {
+    [self updateSortOrderActionButtonState:self.ascendingSortAction];
+  } else {
+    [self updateSortOrderActionButtonState:self.descendingSortAction];
+  }
+}
+
+/// Set sorting order on the prefs
+- (void) setSortingOrder:(VivaldiBookmarksSortingOrder)order {
+  [VivaldiBookmarkPrefs setBookmarksSortingOrder:order];
+}
+
+/// Returns current sorting order
+- (VivaldiBookmarksSortingOrder)currentSortingOrder {
+  return [VivaldiBookmarkPrefs getBookmarksSortingOrder];
+}
+
+- (void)updateSortOrderActionButtonState:(UIAction*)settable {
+  for (UIAction* action in self.sortOrderActions) {
+    if (action == settable) {
+      [action setState:UIMenuElementStateOn];
+    } else {
+      [action setState:UIMenuElementStateOff];
+    }
+  }
+}
+
+- (void)showVivaldiSync {
+  self.settingsNavigationController =
+      [SettingsNavigationController
+          vivaldiSyncViewControllerForBrowser:_browser.get()
+              showCreateAccountFlow:NO
+                           delegate:self];
+  UISheetPresentationController *sheetPc =
+      self.settingsNavigationController.sheetPresentationController;
+  sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
+                      UISheetPresentationControllerDetent.largeDetent];
+  sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
+  sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
+  [self presentViewController:self.settingsNavigationController
+                     animated:YES
+                   completion:nil];
+}
+
+- (void)openAllURLs:(std::vector<GURL>)urls
+        inIncognito:(BOOL)inIncognito
+             newTab:(BOOL)newTab
+   openInBackground:(BOOL)openInBackground {
+  if (inIncognito) {
+    IncognitoReauthSceneAgent* reauthAgent =
+        [IncognitoReauthSceneAgent
+            agentFromScene:_browser.get()->GetSceneState()];
+    if (reauthAgent.authenticationRequired) {
+      __weak BookmarksHomeViewController* weakSelf = self;
+      [reauthAgent
+          authenticateIncognitoContentWithCompletionBlock:^(BOOL success) {
+        if (success) {
+          [weakSelf openAllURLs:urls
+                    inIncognito:inIncognito
+                         newTab:newTab
+               openInBackground:openInBackground];
+        }
+      }];
+      return;
+    }
+  }
+
+  [self cacheIndexPathRow];
+  [self.homeDelegate bookmarkHomeViewControllerWantsDismissal:self
+                                             navigationToUrls:urls
+                                                  inIncognito:inIncognito
+                                                       newTab:newTab
+                                             openInBackground:openInBackground];
 }
 
 @end

@@ -77,12 +77,12 @@ class MdnsProbeImpl : public MdnsProbe {
  public:
   // |sender|, |receiver|, |random_delay|, |task_runner|, and |observer| must
   // all persist for the duration of this object's lifetime.
-  MdnsProbeImpl(MdnsSender* sender,
-                MdnsReceiver* receiver,
-                MdnsRandom* random_delay,
+  MdnsProbeImpl(MdnsSender& sender,
+                MdnsReceiver& receiver,
+                MdnsRandom& random_delay,
                 TaskRunner& task_runner,
                 ClockNowFunctionPtr now_function,
-                Observer* observer,
+                Observer& observer,
                 DomainName target_name,
                 IPAddress address);
   MdnsProbeImpl(const MdnsProbeImpl& other) = delete;
@@ -107,7 +107,7 @@ class MdnsProbeImpl : public MdnsProbe {
   // MdnsReceiver::ResponseClient overrides.
   void OnMessageReceived(const MdnsMessage& message) override;
 
-  MdnsRandom* const random_delay_;
+  MdnsRandom& random_delay_;
   TaskRunner& task_runner_;
   ClockNowFunctionPtr now_function_;
 
@@ -115,9 +115,9 @@ class MdnsProbeImpl : public MdnsProbe {
 
   // NOTE: Access to all below variables should only be done from the task
   // runner thread.
-  MdnsSender* const sender_;
-  MdnsReceiver* const receiver_;
-  Observer* const observer_;
+  MdnsSender& sender_;
+  MdnsReceiver& receiver_;
+  Observer& observer_;
 
   int successful_probe_queries_ = 0;
   bool is_running_ = true;

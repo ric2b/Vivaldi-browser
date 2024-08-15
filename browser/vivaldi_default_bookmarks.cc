@@ -22,10 +22,6 @@
 #include "ui/base/models/tree_node_iterator.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
-#if BUILDFLAG(IS_IOS)
-#include "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
-#endif
-
 namespace vivaldi_default_bookmarks {
 
 bool g_bookmark_update_active = false;
@@ -96,7 +92,7 @@ class BookmarkUpdater {
 
   BookmarkUpdater(FaviconServiceGetter favicons_getter,
                   const DefaultBookmarkTree* default_bookmark_tree,
-                  VivaldiBookmarkModelType* model);
+                  bookmarks::BookmarkModel* model);
 
   void SetDeletedPartners(PrefService* prefs);
 
@@ -142,7 +138,7 @@ class BookmarkUpdater {
 
   FaviconServiceGetter favicons_getter_;
   const raw_ptr<const DefaultBookmarkTree> default_bookmark_tree_;
-  const raw_ptr<VivaldiBookmarkModelType> model_;
+  const raw_ptr<bookmarks::BookmarkModel> model_;
   std::set<base::Uuid> deleted_partner_uuids_;
 
   std::map<base::Uuid, const BookmarkNode*> uuid_node_map_;
@@ -317,14 +313,14 @@ void DefaultBookmarkParser::ParseJson(base::Value default_bookmarks_value) {
 }
 
 std::optional<base::Value> ReadDefaultBookmarks(std::string locale) {
-  return ResourceReader::ReadJSON(vivaldi_partners::kBookmarkResourceDir,
+  return ResourceReader::ReadJSON(vivaldi_partners::GetBookmarkResourceDir(),
                                   locale + ".json");
 }
 
 BookmarkUpdater::BookmarkUpdater(
     FaviconServiceGetter favicons_getter,
     const DefaultBookmarkTree* default_bookmark_tree,
-    VivaldiBookmarkModelType* model)
+    bookmarks::BookmarkModel* model)
     : favicons_getter_(std::move(favicons_getter)),
       default_bookmark_tree_(default_bookmark_tree),
       model_(model) {}
@@ -372,7 +368,7 @@ void BookmarkUpdater::RunCleanUpdate() {
           VLOG(2) << "Removing non-existing partner title=" << node->GetTitle()
                   << " uuid=" << node->uuid();
           i = existing_partner_bookmarks_.erase(i);
-          model_->Remove(node, {});
+          model_->Remove(node, {}, FROM_HERE);
           continue;
         }
       }
@@ -681,7 +677,7 @@ void UpdatePartnersInModel(std::unique_ptr<UpdaterClient> client,
                            const std::string& locale,
                            std::optional<base::Value> default_bookmarks_value,
                            UpdateCallback callback,
-                           VivaldiBookmarkModelType* model) {
+                           bookmarks::BookmarkModel* model) {
   bool ok = false;
   bool no_version = false;
   do {
@@ -773,7 +769,7 @@ void UpdatePartnersFromDefaults(
     const std::string& locale,
     UpdateCallback callback,
     std::optional<base::Value> default_bookmarks_value) {
-  VivaldiBookmarkModelType* model = client->GetBookmarkModel();
+  bookmarks::BookmarkModel* model = client->GetBookmarkModel();
   if (!model)
     return;
   vivaldi_bookmark_kit::RunAfterModelLoad(

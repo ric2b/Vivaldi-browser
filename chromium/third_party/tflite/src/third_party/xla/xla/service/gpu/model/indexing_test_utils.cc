@@ -21,6 +21,7 @@ limitations under the License.
 
 #include <gtest/gtest.h>
 #include "absl/container/flat_hash_set.h"
+#include "absl/log/check.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "llvm/ADT/STLExtras.h"
@@ -28,6 +29,7 @@ limitations under the License.
 #include "mlir/IR/AffineExpr.h"  // from @llvm-project
 #include "mlir/IR/BuiltinAttributes.h"  // from @llvm-project
 #include "mlir/IR/MLIRContext.h"  // from @llvm-project
+#include "mlir/Support/LLVM.h"  // from @llvm-project
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/service/gpu/model/indexing_analysis.h"
@@ -41,34 +43,28 @@ using ::mlir::AffineExpr;
 using ::mlir::AffineMap;
 using ::mlir::MLIRContext;
 
-HloInstructionIndexing ComputeOutputToInputIndexingForEntryComputation(
-    HloTestBase* test_base, MLIRContext* mlir_context,
-    absl::string_view hlo_string, int output_id, bool use_physical_layout) {
-  auto module = test_base->ParseAndReturnVerifiedModule(hlo_string);
-  EXPECT_TRUE(module.ok());
+HloInstruction* IndexingTestBase::ParseAndGetRoot(
+    absl::string_view hlo_string) {
+  auto module_or = ParseAndReturnVerifiedModule(hlo_string);
+  CHECK_OK(module_or);
+  module_ = std::move(module_or.value());
+  return module_->entry_computation()->root_instruction();
+}
 
-  HloInstruction* root =
-      module.value()->entry_computation()->root_instruction();
-
-  // If there are multiple instructions, they need to be wrapped in a fusion.
-  for (auto* operand : root->operands()) {
-    if (operand->opcode() != HloOpcode::kParameter &&
-        operand->opcode() != HloOpcode::kConstant) {
-      return {};
-    }
-  }
+HloInstructionIndexing IndexingTestBase::GetOutputToInputIndexing(
+    const HloInstruction* instr, int output_id, bool use_physical_layout) {
   HloInstructionIndexing indexing =
-      ComputeOutputToInputIndexing(root, output_id, mlir_context);
+      ComputeOutputToInputIndexing(instr, output_id, &mlir_context_);
 
   if (!use_physical_layout) return indexing;
 
   IndexingMap output_permutation = GetIndexingMapFromPhysicalLayoutToLogical(
-      GetOutputShape(root, output_id), mlir_context);
+      GetOutputShape(instr, output_id), &mlir_context_);
 
   for (const auto& [operand_id, indexing_maps] :
        llvm::enumerate(indexing.indexing_maps)) {
     IndexingMap operand_permutation = GetIndexingMapFromLogicalToPhysicalLayout(
-        root->operand(operand_id)->shape(), mlir_context);
+        instr->operand(operand_id)->shape(), &mlir_context_);
 
     absl::flat_hash_set<IndexingMap> operand_indexing_maps;
     for (const IndexingMap& indexing_map : indexing_maps) {
@@ -88,34 +84,20 @@ HloInstructionIndexing ComputeOutputToInputIndexingForEntryComputation(
   return indexing;
 }
 
-HloInstructionIndexing ComputeInputToOutputIndexingForEntryComputation(
-    HloTestBase* test_base, MLIRContext* mlir_context,
-    absl::string_view hlo_string, int input_id, bool use_physical_layout) {
-  auto module = test_base->ParseAndReturnVerifiedModule(hlo_string);
-  EXPECT_TRUE(module.ok());
-
-  HloInstruction* root =
-      module.value()->entry_computation()->root_instruction();
-
-  // If there are multiple instructions, they need to be wrapped in a fusion.
-  for (auto* operand : root->operands()) {
-    if (operand->opcode() != HloOpcode::kParameter &&
-        operand->opcode() != HloOpcode::kConstant) {
-      return {};
-    }
-  }
+HloInstructionIndexing IndexingTestBase::GetInputToOutputIndexing(
+    const HloInstruction* instr, int input_id, bool use_physical_layout) {
   HloInstructionIndexing indexing =
-      ComputeInputToOutputIndexing(root, input_id, mlir_context);
+      ComputeInputToOutputIndexing(instr, input_id, &mlir_context_);
 
   if (!use_physical_layout) return indexing;
 
   IndexingMap input_permutation = GetIndexingMapFromPhysicalLayoutToLogical(
-      root->operand(input_id)->shape(), mlir_context);
+      instr->operand(input_id)->shape(), &mlir_context_);
 
   for (const auto& [output_id, indexing_maps] :
        llvm::enumerate(indexing.indexing_maps)) {
     IndexingMap operand_permutation = GetIndexingMapFromLogicalToPhysicalLayout(
-        GetOutputShape(root, output_id), mlir_context);
+        GetOutputShape(instr, output_id), &mlir_context_);
 
     absl::flat_hash_set<IndexingMap> operand_indexing_maps;
     for (const IndexingMap& indexing_map : indexing_maps) {
@@ -139,8 +121,8 @@ AffineMap ParseAffineMap(absl::string_view serialized_affine_map,
                          MLIRContext* context) {
   std::string full_affine_map_string =
       absl::StrCat("affine_map<", serialized_affine_map, ">");
-  return mlir::parseAttribute(full_affine_map_string, context)
-      .cast<mlir::AffineMapAttr>()
+  return mlir::cast<mlir::AffineMapAttr>(
+             mlir::parseAttribute(full_affine_map_string, context))
       .getValue();
 }
 
@@ -152,31 +134,84 @@ AffineExpr ParseAffineExpr(absl::string_view serialized_affine_expr,
       "affine_map<(d0, d1, d2, d3, d4, d5, d6, d7, d8, d9)"
       "[s0, s1, s2, s3, s4, s5, s6, s7, s8, s9] -> (",
       serialized_affine_expr, ")>");
-  return mlir::parseAttribute(full_affine_map_string, context)
-      .cast<mlir::AffineMapAttr>()
+  return mlir::cast<mlir::AffineMapAttr>(
+             mlir::parseAttribute(full_affine_map_string, context))
       .getValue()
       .getResult(0);
 }
 
+inline std::vector<std::string> split_string(std::string s,
+                                             std::string pattern) {
+  std::vector<std::string> result;
+  size_t pos = 0;
+  while ((pos = s.find(pattern)) != std::string::npos) {
+    result.push_back(s.substr(0, pos));
+    s.erase(0, pos + pattern.length());
+  }
+  if (!s.empty()) result.push_back(s);
+  return result;
+}
+
+inline bool startswith(const std::string& s, const std::string& pattern) {
+  return s.substr(0, pattern.size()) == pattern;
+}
+
 bool ApproximateMatch(std::string_view lhs, std::string_view rhs) {
-  size_t lhs_length = lhs.size();
-  size_t rhs_length = rhs.size();
-  size_t l = 0, r = 0;
-  while (l < lhs_length && r < rhs_length) {
-    while (l < lhs_length && std::isspace(lhs[l])) {
-      ++l;
-    }
-    while (r < rhs_length && std::isspace(rhs[r])) {
-      ++r;
-    }
-    if (l == lhs_length || r == rhs_length) {
-      continue;
-    }
-    if (lhs[l++] != rhs[r++]) {
-      return false;
+  std::string lhs_unspaced, rhs_unspaced;
+  for (auto c : lhs) {
+    if (!std::isspace(c)) {
+      lhs_unspaced += c;
     }
   }
-  return l == lhs_length && r == rhs_length;
+  for (auto c : rhs) {
+    if (!std::isspace(c)) {
+      rhs_unspaced += c;
+    }
+  }
+
+  if (lhs_unspaced.find("###") == std::string::npos)
+    return lhs_unspaced == rhs_unspaced;
+
+  std::vector<std::string> frags = split_string(lhs_unspaced, "###");
+
+  while (frags.size() >= 2) {
+    if (!startswith(rhs_unspaced, frags[0])) {
+      return false;
+    }
+
+    rhs_unspaced = rhs_unspaced.substr(frags[0].size());
+
+    auto terms = split_string(frags[1], "+");
+    // iterate through permutations of terms
+    std::vector<int> indexes(terms.size());
+    for (auto i = 0; i < terms.size(); i++) {
+      indexes[i] = i;
+    }
+    bool match = false;
+    do {
+      std::string permuted = "";
+      for (auto i : indexes) {
+        permuted += terms[i] + "+";
+      }
+      permuted.pop_back();
+      if (startswith(rhs_unspaced, permuted)) {
+        match = true;
+        break;
+      }
+    } while (std::next_permutation(indexes.begin(), indexes.end()));
+
+    if (!match) {
+      return false;
+    }
+
+    rhs_unspaced = rhs_unspaced.substr(frags[1].size());
+    frags.erase(frags.begin());
+    frags.erase(frags.begin());
+  }
+  if (frags.empty())
+    return rhs_unspaced.empty();
+  else
+    return rhs_unspaced == frags[0];
 }
 
 }  // namespace gpu

@@ -295,13 +295,6 @@ bool WebAXObject::IsOffScreen() const {
   return private_->IsOffScreen();
 }
 
-bool WebAXObject::IsSelectedOptionActive() const {
-  if (IsDetached())
-    return false;
-
-  return private_->IsSelectedOptionActive();
-}
-
 bool WebAXObject::IsVisited() const {
   if (IsDetached())
     return false;
@@ -745,14 +738,14 @@ WebDocument WebAXObject::GetDocument() const {
   return WebDocument(document);
 }
 
-bool WebAXObject::AccessibilityIsIgnored() const {
+bool WebAXObject::IsIgnored() const {
   if (IsDetached())
     return false;
 
-  return private_->AccessibilityIsIgnored();
+  return private_->IsIgnored();
 }
 
-bool WebAXObject::AccessibilityIsIncludedInTree() const {
+bool WebAXObject::IsIncludedInTree() const {
   if (IsDetached())
     return false;
 
@@ -762,7 +755,7 @@ bool WebAXObject::AccessibilityIsIncludedInTree() const {
       << "Document lifecycle must be at LayoutClean or later, was "
       << private_->GetDocument()->Lifecycle().GetState();
 
-  return private_->AccessibilityIsIncludedInTree();
+  return private_->IsIncludedInTree();
 }
 
 unsigned WebAXObject::ColumnCount() const {
@@ -996,11 +989,27 @@ bool WebAXObject::ScrollToMakeVisibleWithSubFocus(
 
 void WebAXObject::HandleAutofillSuggestionAvailabilityChanged(
     blink::WebAXAutofillSuggestionAvailability suggestion_availability) const {
-  if (IsDetached() || !private_->IsAXLayoutObject())
+  if (IsDetached() || !private_->GetLayoutObject()) {
     return;
+  }
 
   private_->HandleAutofillSuggestionAvailabilityChanged(
       suggestion_availability);
+}
+
+int WebAXObject::GenerateAXID() {
+  DCHECK(private_->GetDocument() && private_->GetDocument()->IsActive());
+  return private_->AXObjectCache().GenerateAXID();
+}
+
+void WebAXObject::SetPluginTreeSource(
+    ui::AXTreeSource<const ui::AXNode*, ui::AXTreeData*, ui::AXNodeData>*
+        source) {
+  private_->AXObjectCache().SetPluginTreeSource(source);
+}
+
+void WebAXObject::MarkPluginDescendantDirty(ui::AXNodeID node_id) {
+  private_->AXObjectCache().MarkPluginDescendantDirty(node_id);
 }
 
 bool WebAXObject::CanCallAOMEventListenersForTesting() const {
@@ -1070,7 +1079,18 @@ WebAXObject WebAXObject::FromWebNode(const WebNode& web_node) {
   const Document* document = web_document.ConstUnwrap<Document>();
   auto* cache = To<AXObjectCacheImpl>(document->ExistingAXObjectCache());
   const Node* node = web_node.ConstUnwrap<Node>();
-  return cache ? WebAXObject(cache->Get(node)) : WebAXObject();
+
+  if (!cache) {
+    return WebAXObject();
+  }
+
+  // TODO: if this shouldn't be done by default, add a parameter passed by the
+  // caller.
+
+  // Since calls into this lookup might happen prior to the cache building
+  // everything from its backing objects like DOM, layout trees, force it here.
+  cache->UpdateAXForAllDocuments();
+  return WebAXObject(cache->Get(node));
 }
 
 // static
@@ -1089,6 +1109,15 @@ WebAXObject WebAXObject::FromWebDocumentByID(const WebDocument& web_document,
   const Document* document = web_document.ConstUnwrap<Document>();
   auto* cache = To<AXObjectCacheImpl>(document->ExistingAXObjectCache());
   return cache ? WebAXObject(cache->ObjectFromAXID(ax_id)) : WebAXObject();
+}
+
+// static
+WebAXObject WebAXObject::FromWebDocumentFirstWithRole(
+    const WebDocument& web_document,
+    ax::mojom::blink::Role role) {
+  const Document* document = web_document.ConstUnwrap<Document>();
+  auto* cache = To<AXObjectCacheImpl>(document->ExistingAXObjectCache());
+  return cache ? WebAXObject(cache->FirstObjectWithRole(role)) : WebAXObject();
 }
 
 // static

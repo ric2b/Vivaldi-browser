@@ -6,6 +6,7 @@
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 #include "chrome/browser/ui/views/message_box_dialog.h"
+#include "ui/vivaldi_message_box_dialog.h"
 #endif
 
 #include "components/os_crypt/sync/os_crypt.h"
@@ -18,7 +19,7 @@
 namespace vivaldi {
 namespace {
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_WIN)
 constexpr char kCanaryValue[] = "VivaldiKeystoreEncryptionCanary";
 
 bool AskShouldAllowUpgradeToEncrypted() {
@@ -32,13 +33,24 @@ bool AskShouldAllowUpgradeToEncrypted() {
 }
 
 bool AskShouldAllowInsecureAccess() {
-  auto result = MessageBoxDialog::Show(
-      nullptr, l10n_util::GetStringUTF16(IDS_VIVALDI_KEYSTORE_FAILED_TITLE),
+  VivaldiMessageBoxDialog::Config config{
+      l10n_util::GetStringUTF16(IDS_VIVALDI_KEYSTORE_FAILED_TITLE),
       l10n_util::GetStringUTF16(IDS_VIVALDI_KEYSTORE_UNCRYPTED),
       chrome::MESSAGE_BOX_TYPE_QUESTION,
       l10n_util::GetStringUTF16(IDS_VIVALDI_KEYSTORE_CONTINUE_DATALOSS),
       l10n_util::GetStringUTF16(IDS_VIVALDI_KEYSTORE_CANCEL),
-      l10n_util::GetStringUTF16(IDS_VIVALDI_KEYSTORE_CONTINUE_CHECKBOX));
+      u""  // l10n_util::GetStringUTF16(IDS_VIVALDI_KEYSTORE_CONTINUE_CHECKBOX)
+  };
+
+  // Some extra configs:
+
+  // Use cancel button as default - pressing enter will cause the dialog to cancel.
+  config.cancel_default = true;
+
+  // A reasonable sizing for the messagebox.
+  config.size = gfx::Size(700, 250);
+
+  auto result = VivaldiMessageBoxDialog::Show(nullptr, config);
 
   return result == chrome::MESSAGE_BOX_RESULT_YES;
 }
@@ -95,7 +107,7 @@ void StoreCanary(PrefService* prefs) {
 }  // namespace
 
 bool HasLockedKeystore(Profile* profile) {
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS) || BUILDFLAG(IS_WIN)
   // No verification on mobile platforms.
   return false;
 #else
@@ -113,6 +125,7 @@ bool HasLockedKeystore(Profile* profile) {
   // profile.
   if (preferences->GetInitializationStatus() ==
       PrefService::INITIALIZATION_STATUS_WAITING) {
+    LOG(INFO) << "KeyStoreChecker: New profile. Storing canary value.";
     return false;
   }
 
@@ -172,6 +185,51 @@ bool HasLockedKeystore(Profile* profile) {
     StoreCanary(preferences);
   }
   return false;
+#endif
+}
+
+bool InitOSCrypt(PrefService *local_state, bool *should_exit) {
+#if BUILDFLAG(IS_WIN)
+  OSCrypt::InitResult crypt_result = OSCrypt::InitWithExistingKey(local_state);
+  if (crypt_result == OSCrypt::kDecryptionFailed) {
+    // Ask user if they want the key to be overwritten...
+    // This uses native message box internally as vivaldi is not yet
+    // prepared to display normal message box.
+    // TODO: Maybe customize this behavior via direct call to ui::MessageBox
+    VivaldiMessageBoxDialog::Config config{
+        l10n_util::GetStringUTF16(IDS_VIVALDI_KEYSTORE_FAILED_TITLE),
+        l10n_util::GetStringUTF16(IDS_VIVALDI_KEYSTORE_UNCRYPTED),
+        chrome::MESSAGE_BOX_TYPE_QUESTION,
+        l10n_util::GetStringUTF16(IDS_VIVALDI_KEYSTORE_CONTINUE_DATALOSS),
+        l10n_util::GetStringUTF16(IDS_VIVALDI_KEYSTORE_QUIT),
+        u""};
+    // This makes the dialog safer and changes the type to warning.
+    config.cancel_default = true;
+    auto result = VivaldiMessageBoxDialog::Show(nullptr, config);
+
+    // User requested browser exit. We set the flag and return init failed.
+    if (!result) {
+      *should_exit = true;
+      return false;
+    }
+
+    // User does not want to terminate, we will rewrite the password
+    // by calling OSCrypt::Init...
+  }
+
+  // Handle normal init in case it is still needed...
+  *should_exit = false;
+  bool os_crypt_init = true;
+  if (crypt_result != OSCrypt::kSuccess) {
+    // In case previous call was not succesful we still have to init the
+    // key - this time potentially rewriting it.
+    os_crypt_init = OSCrypt::Init(local_state);
+  }
+
+  return os_crypt_init;
+
+#else
+  return true;
 #endif
 }
 

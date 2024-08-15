@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -118,7 +119,7 @@ DnsResourceRecord BuildTestDnsRecord(std::string name,
 }
 
 DnsResourceRecord BuildTestCnameRecord(std::string name,
-                                       base::StringPiece canonical_name,
+                                       std::string_view canonical_name,
                                        base::TimeDelta ttl) {
   DCHECK(!name.empty());
   DCHECK(!canonical_name.empty());
@@ -164,7 +165,7 @@ DnsResourceRecord BuildTestTextRecord(std::string name,
 }
 
 DnsResourceRecord BuildTestHttpsAliasRecord(std::string name,
-                                            base::StringPiece alias_name,
+                                            std::string_view alias_name,
                                             base::TimeDelta ttl) {
   DCHECK(!name.empty());
 
@@ -209,8 +210,7 @@ std::pair<uint16_t, std::string> BuildTestHttpsServiceMandatoryParam(
 
   std::string value;
   for (uint16_t param_key : param_key_list) {
-    std::array<uint8_t, 2> num_buffer =
-        base::numerics::U16ToBigEndian(param_key);
+    std::array<uint8_t, 2> num_buffer = base::U16ToBigEndian(param_key);
     value.append(num_buffer.begin(), num_buffer.end());
   }
 
@@ -219,7 +219,7 @@ std::pair<uint16_t, std::string> BuildTestHttpsServiceMandatoryParam(
 }
 
 std::pair<uint16_t, std::string> BuildTestHttpsServicePortParam(uint16_t port) {
-  std::array<uint8_t, 2> buffer = base::numerics::U16ToBigEndian(port);
+  std::array<uint8_t, 2> buffer = base::U16ToBigEndian(port);
   return std::pair(dns_protocol::kHttpsServiceParamKeyPort,
                    std::string(buffer.begin(), buffer.end()));
 }
@@ -227,7 +227,7 @@ std::pair<uint16_t, std::string> BuildTestHttpsServicePortParam(uint16_t port) {
 DnsResourceRecord BuildTestHttpsServiceRecord(
     std::string name,
     uint16_t priority,
-    base::StringPiece service_name,
+    std::string_view service_name,
     const std::map<uint16_t, std::string>& params,
     base::TimeDelta ttl) {
   DCHECK(!name.empty());
@@ -236,7 +236,7 @@ DnsResourceRecord BuildTestHttpsServiceRecord(
   std::string rdata;
 
   {
-    std::array<uint8_t, 2> buf = base::numerics::U16ToBigEndian(priority);
+    std::array<uint8_t, 2> buf = base::U16ToBigEndian(priority);
     rdata.append(buf.begin(), buf.end());
   }
 
@@ -256,11 +256,11 @@ DnsResourceRecord BuildTestHttpsServiceRecord(
 
   for (auto& param : params) {
     {
-      std::array<uint8_t, 2> buf = base::numerics::U16ToBigEndian(param.first);
+      std::array<uint8_t, 2> buf = base::U16ToBigEndian(param.first);
       rdata.append(buf.begin(), buf.end());
     }
     {
-      std::array<uint8_t, 2> buf = base::numerics::U16ToBigEndian(
+      std::array<uint8_t, 2> buf = base::U16ToBigEndian(
           base::checked_cast<uint16_t>(param.second.size()));
       rdata.append(buf.begin(), buf.end());
     }
@@ -381,17 +381,15 @@ DnsResponse BuildTestDnsServiceResponse(
     std::string rdata;
     {
       std::array<uint8_t, 2> buf =
-          base::numerics::U16ToBigEndian(service_record.priority);
+          base::U16ToBigEndian(service_record.priority);
       rdata.append(buf.begin(), buf.end());
     }
     {
-      std::array<uint8_t, 2> buf =
-          base::numerics::U16ToBigEndian(service_record.weight);
+      std::array<uint8_t, 2> buf = base::U16ToBigEndian(service_record.weight);
       rdata.append(buf.begin(), buf.end());
     }
     {
-      std::array<uint8_t, 2> buf =
-          base::numerics::U16ToBigEndian(service_record.port);
+      std::array<uint8_t, 2> buf = base::U16ToBigEndian(service_record.port);
       rdata.append(buf.begin(), buf.end());
     }
 
@@ -441,9 +439,7 @@ MockDnsClientRule::MockDnsClientRule(const std::string& prefix,
 MockDnsClientRule::MockDnsClientRule(MockDnsClientRule&& rule) = default;
 
 // A DnsTransaction which uses MockDnsClientRuleList to determine the response.
-class MockDnsTransactionFactory::MockTransaction
-    : public DnsTransaction,
-      public base::SupportsWeakPtr<MockTransaction> {
+class MockDnsTransactionFactory::MockTransaction final : public DnsTransaction {
  public:
   MockTransaction(const MockDnsClientRuleList& rules,
                   std::string hostname,
@@ -547,7 +543,8 @@ class MockDnsTransactionFactory::MockTransaction
       return;
     // Using WeakPtr to cleanly cancel when transaction is destroyed.
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(&MockTransaction::Finish, AsWeakPtr()));
+        FROM_HERE, base::BindOnce(&MockTransaction::Finish,
+                                  weak_ptr_factory_.GetWeakPtr()));
   }
 
   void FinishDelayedTransaction() {
@@ -557,6 +554,10 @@ class MockDnsTransactionFactory::MockTransaction
   }
 
   bool delayed() const { return delayed_; }
+
+  base::WeakPtr<MockTransaction> AsWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
 
  private:
   void SetResponse(const MockDnsClientRule::Result* result) {
@@ -626,6 +627,7 @@ class MockDnsTransactionFactory::MockTransaction
   ResponseCallback callback_;
   bool started_ = false;
   bool delayed_ = false;
+  base::WeakPtrFactory<MockTransaction> weak_ptr_factory_{this};
 };
 
 class MockDnsTransactionFactory::MockDohProbeRunner : public DnsProbeRunner {

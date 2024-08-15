@@ -37,6 +37,7 @@
 #include "presence/presence_device_provider.h"
 #include "presence/presence_service.h"
 #include "presence/scan_request.h"
+#include "internal/interop/device_provider.h"
 
 namespace nearby {
 namespace presence {
@@ -62,19 +63,21 @@ class PresenceServiceImpl : public PresenceService {
 
   void StopBroadcast(BroadcastSessionId session_id) override;
 
-  void UpdateLocalDeviceMetadata(
-      const ::nearby::internal::Metadata& metadata, bool regen_credentials,
-      absl::string_view manager_app_id,
+  void UpdateDeviceIdentityMetaData(
+      const ::nearby::internal::DeviceIdentityMetaData&
+          device_identity_metadata,
+      bool regen_credentials, absl::string_view manager_app_id,
       const std::vector<nearby::internal::IdentityType>& identity_types,
       int credential_life_cycle_days, int contiguous_copy_of_credentials,
       GenerateCredentialsResultCallback credentials_generated_cb) override;
 
-  PresenceDeviceProvider* GetLocalDeviceProvider() override {
+  NearbyDeviceProvider* GetLocalDeviceProvider() override {
     return &provider_;
   }
 
-  ::nearby::internal::Metadata GetLocalDeviceMetadata() override {
-    return service_controller_.GetLocalDeviceMetadata();
+  ::nearby::internal::DeviceIdentityMetaData GetDeviceIdentityMetaData()
+      override {
+    return service_controller_.GetDeviceIdentityMetaData();
   }
 
   void GetLocalPublicCredentials(

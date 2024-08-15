@@ -70,8 +70,6 @@ bool FakeLoginDisplayHost::IsFinalizing() {
 
 void FakeLoginDisplayHost::FinalizeImmediately() {}
 
-void FakeLoginDisplayHost::SetStatusAreaVisible(bool visible) {}
-
 void FakeLoginDisplayHost::StartWizard(OobeScreenId first_screen) {
   if (wizard_controller_) {
     wizard_controller_->AdvanceToScreen(first_screen);
@@ -86,10 +84,6 @@ void FakeLoginDisplayHost::StartWizard(OobeScreenId first_screen) {
 
 WizardController* FakeLoginDisplayHost::GetWizardController() {
   return wizard_controller_.get();
-}
-
-KioskLaunchController* FakeLoginDisplayHost::GetKioskLaunchController() {
-  return nullptr;
 }
 
 WizardContext* FakeLoginDisplayHost::GetWizardContext() {

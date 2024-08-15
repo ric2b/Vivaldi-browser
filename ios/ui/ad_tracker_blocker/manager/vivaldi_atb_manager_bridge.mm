@@ -55,15 +55,15 @@ void VivaldiATBManagerBridge::OnDoneApplyingIosRules(RuleGroup group) {
   [observer rulesListDidEndApplying:group];
 }
 
-void VivaldiATBManagerBridge::OnRulesSourceUpdated(
-   const RuleSource& rule_source) {
+void VivaldiATBManagerBridge::OnRuleSourceUpdated(RuleGroup group,
+   const ActiveRuleSource& rule_source) {
   id<VivaldiATBConsumer> observer = observer_;
   if (!observer)
     return;
   ATBFetchResult fetchResult =
       this->FlattenFetchResult(rule_source.last_fetch_result);
-  [observer ruleSourceDidUpdate:rule_source.id
-                          group:rule_source.group
+  [observer ruleSourceDidUpdate:rule_source.core.id()
+                          group:group
                     fetchResult:fetchResult];
 }
 
@@ -94,11 +94,12 @@ void VivaldiATBManagerBridge::OnExceptionListChanged(
 }
 
 void VivaldiATBManagerBridge::OnKnownSourceAdded(
+  RuleGroup group,
   const KnownRuleSource& rule_source) {
   id<VivaldiATBConsumer> observer = observer_;
   if (!observer)
     return;
-  [observer knownSourceDidAdd:rule_source.group key:rule_source.id];
+  [observer knownSourceDidAdd:group key:rule_source.core.id()];
 }
 
 void VivaldiATBManagerBridge::OnKnownSourceRemoved(RuleGroup group,

@@ -90,6 +90,10 @@ enum ResizePriority {
   RESIZE_PRIORITY_CACHED_APP = 9;
 
   // Deprecated = 10;
+
+  RESIZE_PRIORITY_STALE_CACHED_TAB = 11;
+
+  RESIZE_PRIORITY_STALE_CACHED_APP = 12;
 }
 
 enum PacketType {

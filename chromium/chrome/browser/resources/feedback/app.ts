@@ -159,11 +159,12 @@ export class FeedbackAppElement extends PolymerElement {
     }
 
     const isSeaPenFlow: boolean|undefined =
-        isAiFlow && feedbackInfo.aiMetadata?.includes('is_feature_sea_pen');
+        isAiFlow && feedbackInfo.aiMetadata?.includes('from_sea_pen');
 
     if (isSeaPenFlow) {
-      this.getRequiredElement<HTMLInputElement>('#sys-info-checkbox').checked =
-          false;
+      this.getRequiredElement('#log-id-container').hidden = true;
+      this.getRequiredElement('#screenshot-container').hidden = true;
+      this.getRequiredElement('#sys-info-container').hidden = true;
     }
 
     const whenScreenshotUpdated = takeScreenshot().then((screenshotCanvas) => {
@@ -285,7 +286,7 @@ export class FeedbackAppElement extends PolymerElement {
     }
 
     // The following URLs don't open on login screen, so hide them.
-    // TODO(crbug.com/1116383): Find a solution to display them properly.
+    // TODO(crbug.com/40144717): Find a solution to display them properly.
     // Update: the bluetooth and assistant logs links will work on login
     // screen now. But to limit the scope of this CL, they are still hidden.
     if (feedbackInfo.flow !== chrome.feedbackPrivate.FeedbackFlow.LOGIN) {
@@ -569,11 +570,16 @@ export class FeedbackAppElement extends PolymerElement {
       },
     ];
 
-    if (this.feedbackInfo.flow === chrome.feedbackPrivate.FeedbackFlow.AI) {
+    const isAiFlow: boolean =
+        this.feedbackInfo.flow === chrome.feedbackPrivate.FeedbackFlow.AI;
+    const isSeaPenFlow: boolean|undefined =
+        isAiFlow && this.feedbackInfo.aiMetadata?.includes('from_sea_pen');
+    if (isAiFlow) {
       this.feedbackInfo.isOffensiveOrUnsafe =
           this.getRequiredElement<HTMLInputElement>('#offensive-checkbox')
               .checked;
-      if (!this.getRequiredElement<HTMLInputElement>('#log-id-checkbox')
+      if (isSeaPenFlow ||
+          !this.getRequiredElement<HTMLInputElement>('#log-id-checkbox')
                .checked) {
         this.feedbackInfo.aiMetadata = undefined;
       }
@@ -590,7 +596,8 @@ export class FeedbackAppElement extends PolymerElement {
     let useHistograms = false;
     const checkbox =
         this.shadowRoot!.querySelector<HTMLInputElement>('#sys-info-checkbox');
-    if (checkbox != null && checkbox.checked) {
+    // SeaPen flow doesn't collect system info data.
+    if (checkbox != null && checkbox.checked && !isSeaPenFlow) {
       // Send histograms along with system info.
       useHistograms = true;
       useSystemInfo = true;
@@ -652,7 +659,7 @@ export class FeedbackAppElement extends PolymerElement {
   }
 
   /**
-   * TODO(crbug.com/1509032): A helper function in favor of converting feedback
+   * TODO(crbug.com/41481648): A helper function in favor of converting feedback
    * UI from non-web component HTML to PolymerElement. It's better to be
    * replaced by polymer's $ helper dictionary.
    */

@@ -105,7 +105,7 @@ enum class PrerenderFinalStatus {
   kActivatedInBackground = 51,
   kEmbedderHostDisallowed = 52,
   // Called when encounter failures during synchronous activation.
-  // TODO(https://crbug.com/1363550): Remove this reason if no sample is
+  // TODO(crbug.com/40238737): Remove this reason if no sample is
   // recorded in stable, or look into the reason if there are.
   kActivationNavigationDestroyedBeforeSuccess = 53,
   // See comments on WebContents::kTabClosedWithoutUserGesture for the
@@ -155,7 +155,12 @@ enum class PrerenderFinalStatus {
   kRedirectedPrerenderingUrlHasEffectiveUrl = 77,
   kActivationUrlHasEffectiveUrl = 78,
 
-  kMaxValue = kActivationUrlHasEffectiveUrl,
+  kJavaScriptInterfaceAdded = 79,
+  kJavaScriptInterfaceRemoved = 80,
+
+  kAllPrerenderingCanceled = 81,
+
+  kMaxValue = kAllPrerenderingCanceled,
 };
 // LINT.ThenChange()
 

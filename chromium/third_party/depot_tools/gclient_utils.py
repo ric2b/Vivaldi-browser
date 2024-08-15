@@ -56,7 +56,7 @@ def reraise(typ, value, tb=None):
 class Error(Exception):
     """gclient exception class."""
     def __init__(self, msg, *args, **kwargs):
-        index = getattr(threading.currentThread(), 'index', 0)
+        index = getattr(threading.current_thread(), 'index', 0)
         if index:
             msg = '\n'.join('%d> %s' % (index, l) for l in msg.splitlines())
         super(Error, self).__init__(msg, *args, **kwargs)
@@ -433,7 +433,7 @@ class Annotated(Wrapper):
         if not isinstance(out, bytes):
             out = out.encode('utf-8')
 
-        index = getattr(threading.currentThread(), 'index', 0)
+        index = getattr(threading.current_thread(), 'index', 0)
         if not index and not self.__include_zero:
             # Unindexed threads aren't buffered.
             return self._wrapped_write(out)
@@ -1201,6 +1201,11 @@ def RunEditor(content, git, git_editor=None):
         os.remove(filename)
 
 
+def IsEnvCog():
+    """Returns whether the command is running in a Cog environment."""
+    return os.getcwd().startswith('/google/cog/cloud')
+
+
 def UpgradeToHttps(url):
     """Upgrades random urls to https://.
 
@@ -1381,3 +1386,16 @@ class FrozenDict(collections.abc.Mapping):
 
     def __repr__(self):
         return 'FrozenDict(%r)' % (self._d.items(), )
+
+
+def merge_conditions(*conditions):
+    """combine multiple conditions into one expression"""
+    condition = None
+    for current_condition in conditions:
+        if not current_condition:
+            continue
+        if not condition:
+            condition = current_condition
+            continue
+        condition = f'({condition}) AND ({current_condition})'
+    return condition

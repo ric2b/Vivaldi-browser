@@ -53,7 +53,6 @@
 <translation id="2678063897982469759">Ponovo omogući</translation>
 <translation id="2721037002783622288">&amp;Traži sliku uz <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2785873697295365461">Deskriptori datoteke</translation>
-<translation id="2809586584051668049">i još <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2850541429955027218">Dodaj temu</translation>
 <translation id="2861941300086904918">Sigurnosni upravitelj izvornog klijenta</translation>
 <translation id="2902127500170292085">Proširenje <ph name="EXTENSION_NAME" /> nije uspostavilo komunikaciju s tim pisačem. Provjerite je li pisač priključen i pokušajte ponovo.</translation>
@@ -69,7 +68,6 @@
 <translation id="3122464029669770682">Procesor (CPU)</translation>
 <translation id="3222066309010235055">Iscrtavanje unaprijed: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Odaberite korijenski direktorij proširenja za pakiranje. Da biste ažurirali proširenje, odaberite i datoteku osobnog ključa za ponovnu upotrebu.</translation>
-<translation id="3288047731229977326">Proširenja pokrenuta u načinu rada razvojnog programera mogu naštetiti vašem računalu. Ako niste razvojni programer, trebali biste onemogućiti proširenja koja su pokrenuta u načinu rada razvojnog programera radi svoje zaštite.</translation>
 <translation id="33022249435934718">Rukuje GDI</translation>
 <translation id="3303818374450886607">Kopije</translation>
 <translation id="3341703758641437857">Omogući pristup URL datotekama</translation>
@@ -93,7 +91,6 @@
 <translation id="4087089424473531098">Stvoreno je proširenje:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Onemogućivanje proširenja u načinu rada razvojnog programera</translation>
 <translation id="4100839878934973028">Drugi program na vašem računalu dodao je aplikaciju koja može promijeniti način na koji radi Vivaldi.</translation>
 <translation id="4109898769411476438">Prije uvoza zatvorite preglednik</translation>
 <translation id="4131410914670010031">Crno-bijelo</translation>
@@ -117,7 +114,6 @@
 <translation id="5233736638227740678">&amp;Zalijepi</translation>
 <translation id="5284445933715251131">Nastavi preuzimanje</translation>
 <translation id="52912272896845572">Datoteka osobnog ključa nije važeća.</translation>
-<translation id="5301954838959518834">U redu, shvaćam</translation>
 <translation id="5362741141255528695">Odaberite datoteku s osobnim ključem.</translation>
 <translation id="5425042808445046667">Nastavi preuzimanje</translation>
 <translation id="5431318178759467895">Boja</translation>

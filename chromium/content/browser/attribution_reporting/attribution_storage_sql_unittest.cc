@@ -45,7 +45,6 @@
 #include "components/attribution_reporting/suitable_origin.h"
 #include "components/attribution_reporting/test_utils.h"
 #include "components/attribution_reporting/trigger_config.h"
-#include "content/browser/attribution_reporting/aggregatable_histogram_contribution.h"
 #include "content/browser/attribution_reporting/attribution_features.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
 #include "content/browser/attribution_reporting/attribution_reporting.pb.h"
@@ -568,14 +567,7 @@ TEST_F(AttributionStorageSqlTest, NullReportWithVerification_FeatureEnabled) {
       network::features::kAttributionReportingReportVerification);
   base::HistogramTester histograms;
 
-  delegate()->set_null_aggregatable_reports({
-      AttributionStorageDelegate::NullAggregatableReport{
-          .fake_source_time = base::Time::Now(),
-      },
-      AttributionStorageDelegate::NullAggregatableReport{
-          .fake_source_time = base::Time::Now() - base::Days(1),
-      },
-  });
+  delegate()->set_null_aggregatable_reports_lookback_days({0, 1});
   auto trigger_verification = network::TriggerVerification::Create(
       /*token=*/"verification-token", /*aggregatable_report_id=*/
       base::Uuid::ParseLowercase("55865da3-fb0e-4b71-965e-64fc4bf0a323"));
@@ -616,11 +608,7 @@ TEST_F(AttributionStorageSqlTest,
   StorableSource source = TestAggregatableSourceProvider().GetBuilder().Build();
   storage()->StoreSource(source);
 
-  delegate()->set_null_aggregatable_reports({
-      AttributionStorageDelegate::NullAggregatableReport{
-          .fake_source_time = base::Time::Now(),
-      },
-  });
+  delegate()->set_null_aggregatable_reports_lookback_days({1});
   auto trigger_verification = network::TriggerVerification::Create(
       /*token=*/"verification-token", /*aggregatable_report_id=*/
       base::Uuid::ParseLowercase("55865da3-fb0e-4b71-965e-64fc4bf0a323"));
@@ -665,11 +653,7 @@ TEST_F(AttributionStorageSqlTest,
   StorableSource source = TestAggregatableSourceProvider().GetBuilder().Build();
   storage()->StoreSource(source);
 
-  delegate()->set_null_aggregatable_reports({
-      AttributionStorageDelegate::NullAggregatableReport{
-          .fake_source_time = base::Time::Now(),
-      },
-  });
+  delegate()->set_null_aggregatable_reports_lookback_days({1});
   delegate()->set_reverse_reports_on_shuffle(true);
   auto trigger_verification = network::TriggerVerification::Create(
       /*token=*/"verification-token", /*aggregatable_report_id=*/
@@ -715,11 +699,7 @@ TEST_F(AttributionStorageSqlTest,
   StorableSource source = TestAggregatableSourceProvider().GetBuilder().Build();
   storage()->StoreSource(source);
 
-  delegate()->set_null_aggregatable_reports({
-      AttributionStorageDelegate::NullAggregatableReport{
-          .fake_source_time = base::Time::Now(),
-      },
-  });
+  delegate()->set_null_aggregatable_reports_lookback_days({1});
   delegate()->set_reverse_verifications_on_shuffle(true);
 
   std::vector<network::TriggerVerification> verifications = {
@@ -1029,10 +1009,7 @@ TEST_F(AttributionStorageSqlTest, DeleteAttributionDataByDataKey) {
                                  "https://report1.test"))
                              .Build());
 
-  delegate()->set_null_aggregatable_reports(
-      {AttributionStorageDelegate::NullAggregatableReport{
-          .fake_source_time = base::Time::Now(),
-      }});
+  delegate()->set_null_aggregatable_reports_lookback_days({0});
   AttributionTrigger trigger =
       DefaultAggregatableTriggerBuilder()
           .SetReportingOrigin(
@@ -1394,6 +1371,39 @@ TEST_F(AttributionStorageSqlTest, DeleteAggregatableAttributionReport) {
   EXPECT_TRUE(storage()->DeleteReport(AttributionReport::Id(2)));
   EXPECT_THAT(storage()->GetAttributionReports(base::Time::Max()),
               ElementsAre(ReportTypeIs(AttributionReport::Type::kEventLevel)));
+
+  CloseDatabase();
+}
+
+TEST_F(AttributionStorageSqlTest, NegativeTriggerMoment_HistogramRecorded) {
+  const char* sql = "UPDATE sources SET source_time=?";
+  base::HistogramTester histograms;
+
+  OpenDatabase();
+
+  storage()->StoreSource(TestAggregatableSourceProvider().GetBuilder().Build());
+
+  CloseDatabase();
+
+  {
+    sql::Database raw_db;
+    ASSERT_TRUE(raw_db.Open(db_path()));
+
+    sql::Statement statement(raw_db.GetUniqueStatement(sql));
+    statement.BindTime(0, base::Time::Now() + base::Hours(1));
+    ASSERT_TRUE(statement.Run());
+  }
+
+  OpenDatabase();
+
+  EXPECT_THAT(storage()->MaybeCreateAndStoreReport(
+                  DefaultAggregatableTriggerBuilder().Build()),
+              AllOf(CreateReportEventLevelStatusIs(
+                        AttributionTrigger::EventLevelResult::kSuccess),
+                    CreateReportAggregatableStatusIs(
+                        AttributionTrigger::AggregatableResult::kSuccess)));
+  histograms.ExpectUniqueSample("Conversions.TriggerTimeLessThanSourceTime", 1,
+                                1);
 
   CloseDatabase();
 }
@@ -2728,9 +2738,10 @@ TEST_F(AttributionStorageSqlTest, SourceDebugKeyAndDebugCookieSetCombination) {
 
     OpenDatabase();
 
-    storage()->StoreSource(
-        SourceBuilder().SetDebugKey(test_case.debug_key).Build(),
-        /*debug_cookie_set=*/true);
+    storage()->StoreSource(SourceBuilder()
+                               .SetDebugKey(test_case.debug_key)
+                               .SetDebugCookieSet(true)
+                               .Build());
     ASSERT_THAT(storage()->GetActiveSources(), SizeIs(1));
 
     CloseDatabase();

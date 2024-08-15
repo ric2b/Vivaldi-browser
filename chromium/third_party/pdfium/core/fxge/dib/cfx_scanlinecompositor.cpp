@@ -4,14 +4,20 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
-#include "core/fxge/dib/cfx_scanlinecompositor.h"
+#if defined(UNSAFE_BUFFERS_BUILD)
+// TODO(crbug.com/pdfium/2153): resolve buffer safety issues.
+#pragma allow_unsafe_buffers
+#endif
 
-#include <string.h>
+#include "core/fxge/dib/cfx_scanlinecompositor.h"
 
 #include <algorithm>
 
 #include "core/fxcrt/check.h"
 #include "core/fxcrt/check_op.h"
+#include "core/fxcrt/compiler_specific.h"
+#include "core/fxcrt/fx_memcpy_wrappers.h"
+#include "core/fxcrt/span_util.h"
 #include "core/fxge/dib/blend.h"
 #include "core/fxge/dib/fx_dib.h"
 
@@ -24,17 +30,11 @@ using fxge::Blend;
 
 namespace {
 
-struct RGB {
-  int red;
-  int green;
-  int blue;
-};
-
-int Lum(RGB color) {
+int Lum(FX_RGB<int> color) {
   return (color.red * 30 + color.green * 59 + color.blue * 11) / 100;
 }
 
-RGB ClipColor(RGB color) {
+FX_RGB<int> ClipColor(FX_RGB<int> color) {
   int l = Lum(color);
   int n = std::min(color.red, std::min(color.green, color.blue));
   int x = std::max(color.red, std::max(color.green, color.blue));
@@ -51,7 +51,7 @@ RGB ClipColor(RGB color) {
   return color;
 }
 
-RGB SetLum(RGB color, int l) {
+FX_RGB<int> SetLum(FX_RGB<int> color, int l) {
   int d = l - Lum(color);
   color.red += d;
   color.green += d;
@@ -59,16 +59,16 @@ RGB SetLum(RGB color, int l) {
   return ClipColor(color);
 }
 
-int Sat(RGB color) {
+int Sat(FX_RGB<int> color) {
   return std::max(color.red, std::max(color.green, color.blue)) -
          std::min(color.red, std::min(color.green, color.blue));
 }
 
-RGB SetSat(RGB color, int s) {
+FX_RGB<int> SetSat(FX_RGB<int> color, int s) {
   int min = std::min(color.red, std::min(color.green, color.blue));
   int max = std::max(color.red, std::max(color.green, color.blue));
   if (min == max)
-    return {0, 0, 0};
+    return {};
 
   color.red = (color.red - min) * s / (max - min);
   color.green = (color.green - min) * s / (max - min);
@@ -80,15 +80,11 @@ void RGB_Blend(BlendMode blend_mode,
                const uint8_t* src_scan,
                const uint8_t* dest_scan,
                int results[3]) {
-  RGB result = {0, 0, 0};
-  RGB src;
-  src.red = src_scan[2];
-  src.green = src_scan[1];
-  src.blue = src_scan[0];
-  RGB back;
-  back.red = dest_scan[2];
-  back.green = dest_scan[1];
-  back.blue = dest_scan[0];
+  FX_RGB<int> result = {};
+  FX_RGB<int> src = {
+      .red = src_scan[2], .green = src_scan[1], .blue = src_scan[0]};
+  FX_RGB<int> back = {
+      .red = dest_scan[2], .green = dest_scan[1], .blue = dest_scan[0]};
   switch (blend_mode) {
     case BlendMode::kHue:
       result = SetLum(SetSat(src, Sat(back)), Lum(back));
@@ -153,7 +149,7 @@ void CompositeRow_Rgb2Mask(pdfium::span<uint8_t> dest_span,
   uint8_t* dest_scan = dest_span.data();
   const uint8_t* clip_scan = clip_span.data();
   if (!clip_scan) {
-    memset(dest_scan, 0xff, width);
+    FXSYS_memset(dest_scan, 0xff, width);
     return;
   }
   for (int i = 0; i < width; ++i) {
@@ -249,7 +245,7 @@ void CompositeRow_Argb2Argb(pdfium::span<uint8_t> dest_span,
         FXARGB_SetDIB(dest_scan,
                       (FXARGB_GetDIB(src_scan) & 0xffffff) | (src_alpha << 24));
       } else {
-        memcpy(dest_scan, src_scan, 4);
+        FXSYS_memcpy(dest_scan, src_scan, 4);
       }
       dest_scan += kOffset;
       src_scan += kOffset;
@@ -340,7 +336,7 @@ void CompositeRow_Rgb2Argb_Blend_Clip(pdfium::span<uint8_t> dest_span,
     int src_alpha = *clip_scan++;
     uint8_t back_alpha = dest_scan[3];
     if (back_alpha == 0) {
-      memcpy(dest_scan, src_scan, 3);
+      FXSYS_memcpy(dest_scan, src_scan, 3);
       dest_scan += 3;
       src_scan += src_Bpp;
       dest_scan++;
@@ -383,7 +379,7 @@ void CompositeRow_Rgb2Argb_NoBlend_Clip(pdfium::span<uint8_t> dest_span,
   for (int col = 0; col < width; col++) {
     int src_alpha = clip_scan[col];
     if (src_alpha == 255) {
-      memcpy(dest_scan, src_scan, 3);
+      FXSYS_memcpy(dest_scan, src_scan, 3);
       dest_scan += 3;
       *dest_scan++ = 255;
       src_scan += src_Bpp;
@@ -484,7 +480,7 @@ void CompositeRow_Argb2Rgb_NoBlend(pdfium::span<uint8_t> dest_span,
       src_alpha = src_scan[3];
     }
     if (src_alpha == 255) {
-      memcpy(dest_scan, src_scan, 3);
+      FXSYS_memcpy(dest_scan, src_scan, 3);
       dest_scan += dest_Bpp;
       src_scan += 4;
       continue;
@@ -582,11 +578,11 @@ void CompositeRow_Rgb2Rgb_NoBlend_NoClip(pdfium::span<uint8_t> dest_span,
   uint8_t* dest_scan = dest_span.data();
   const uint8_t* src_scan = src_span.data();
   if (dest_Bpp == src_Bpp) {
-    memcpy(dest_scan, src_scan, width * dest_Bpp);
+    FXSYS_memcpy(dest_scan, src_scan, width * dest_Bpp);
     return;
   }
   for (int col = 0; col < width; col++) {
-    memcpy(dest_scan, src_scan, 3);
+    FXSYS_memcpy(dest_scan, src_scan, 3);
     dest_scan += dest_Bpp;
     src_scan += src_Bpp;
   }
@@ -604,7 +600,7 @@ void CompositeRow_Rgb2Rgb_NoBlend_Clip(pdfium::span<uint8_t> dest_span,
   for (int col = 0; col < width; col++) {
     int src_alpha = clip_scan[col];
     if (src_alpha == 255) {
-      memcpy(dest_scan, src_scan, 3);
+      FXSYS_memcpy(dest_scan, src_scan, 3);
     } else if (src_alpha) {
       *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, *src_scan, src_alpha);
       dest_scan++;
@@ -2161,8 +2157,7 @@ void CFX_ScanlineCompositor::InitSourcePalette(
       return;
     }
     pdfium::span<uint32_t> pPalette = m_SrcPalette.Make32BitPalette(pal_count);
-    for (size_t i = 0; i < pal_count; ++i)
-      pPalette[i] = src_palette[i];
+    fxcrt::spancpy(pPalette, src_palette.first(pal_count));
     return;
   }
   if (bIsDestBpp8) {
@@ -2540,7 +2535,9 @@ pdfium::span<uint8_t> CFX_ScanlineCompositor::Palette::Make8BitPalette(
   m_Width = sizeof(uint8_t);
   m_nElements = nElements;
   m_pData.reset(reinterpret_cast<uint32_t*>(FX_Alloc(uint8_t, m_nElements)));
-  return {reinterpret_cast<uint8_t*>(m_pData.get()), m_nElements};
+  // SAFETY: `m_nElements` passed to FX_Alloc() of type uint8_t.
+  return UNSAFE_BUFFERS(pdfium::make_span(
+      reinterpret_cast<uint8_t*>(m_pData.get()), m_nElements));
 }
 
 pdfium::span<uint32_t> CFX_ScanlineCompositor::Palette::Make32BitPalette(
@@ -2548,17 +2545,23 @@ pdfium::span<uint32_t> CFX_ScanlineCompositor::Palette::Make32BitPalette(
   m_Width = sizeof(uint32_t);
   m_nElements = nElements;
   m_pData.reset(FX_Alloc(uint32_t, m_nElements));
-  return {m_pData.get(), m_nElements};
+  // SAFETY: `m_nElements` passed to FX_Alloc() of type uint32_t.
+  return UNSAFE_BUFFERS(pdfium::make_span(m_pData.get(), m_nElements));
 }
 
 pdfium::span<const uint8_t> CFX_ScanlineCompositor::Palette::Get8BitPalette()
     const {
   CHECK(!m_pData || m_Width == sizeof(uint8_t));
-  return {reinterpret_cast<const uint8_t*>(m_pData.get()), m_nElements};
+  // SAFETY: `m_Width` only set to sizeof(uint8_t) just prior to passing
+  // `m_nElements` to FX_Alloc() of type uint8_t.
+  return UNSAFE_BUFFERS(pdfium::make_span(
+      reinterpret_cast<const uint8_t*>(m_pData.get()), m_nElements));
 }
 
 pdfium::span<const uint32_t> CFX_ScanlineCompositor::Palette::Get32BitPalette()
     const {
   CHECK(!m_pData || m_Width == sizeof(uint32_t));
-  return {m_pData.get(), m_nElements};
+  // SAFETY: `m_Width` only set to sizeof(uint32_t) just prior to passing
+  // `m_nElements` to FX_Alloc() of type uint32_t.
+  return UNSAFE_BUFFERS(pdfium::make_span(m_pData.get(), m_nElements));
 }

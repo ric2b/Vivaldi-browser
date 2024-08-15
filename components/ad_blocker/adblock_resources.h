@@ -6,6 +6,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -24,6 +25,11 @@ class SequencedTaskRunner;
 namespace adblock_filter {
 class Resources {
  public:
+  struct InjectableResource {
+    const std::string_view code;
+    const bool use_main_world;
+  };
+
   class Observer : public base::CheckedObserver {
    public:
     virtual void OnResourcesLoaded() {}
@@ -48,7 +54,7 @@ class Resources {
       flat::ResourceType resource_type) const;
 #endif  // !IS_IOS
 
-  std::map<std::string, base::StringPiece> GetInjections();
+  std::map<std::string, InjectableResource> GetInjections();
 
   bool loaded() const {
     return redirectable_resources_.is_dict() && injectable_resources_.is_dict();

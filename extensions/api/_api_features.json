@@ -19,164 +19,164 @@
   "accessKeys": {
     "vivaldi": true,
     "dependencies": [ "permission:accessKeys" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "autoUpdate": {
     "vivaldi": true,
     "dependencies": [ "permission:autoUpdate" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "bookmarkContextMenu": {
     "vivaldi": true,
     "dependencies": [ "permission:bookmarkContextMenu" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "bookmarksPrivate": {
     "vivaldi": true,
     "dependencies": [ "permission:bookmarksPrivate" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "calendar": {
     "vivaldi": true,
     "dependencies": [ "permission:calendar" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "contextMenu": {
     "vivaldi": true,
     "dependencies": [ "permission:contextMenu" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "contentBlocking": {
     "vivaldi": true,
     "dependencies": [ "permission:contentBlocking" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "contacts": {
     "vivaldi": true,
     "dependencies": [ "permission:contacts" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "devtoolsPrivate": {
     "vivaldi": true,
     "dependencies": [ "permission:devtoolsPrivate" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "editcommand": {
     "vivaldi": true,
     "dependencies": [ "permission:editcommand" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "extensionActionUtils": {
     "vivaldi": true,
     "dependencies": [ "permission:extensionActionUtils" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "historyPrivate": {
     "vivaldi": true,
     "dependencies": [ "permission:historyPrivate" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "importData": {
     "vivaldi": true,
     "dependencies": [ "permission:importData" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "infobars": {
     "vivaldi": true,
     "dependencies": [ "permission:infobars" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "mailPrivate": {
     "vivaldi": true,
     "dependencies": [ "permission:mailPrivate" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
    "menuContent": {
     "vivaldi": true,
     "dependencies": [ "permission:menuContent" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "menubar": {
     "vivaldi": true,
     "dependencies": [ "permission:menubar" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "menubarMenu": {
     "vivaldi": true,
     "dependencies": [ "permission:menubarMenu" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "notes": {
     "vivaldi": true,
     "dependencies": [ "permission:notes" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "pageActions": {
     "vivaldi": true,
     "dependencies": [ "permission:pageActions" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "pipPrivate": {
     "vivaldi": true,
     "dependencies": [ "permission:pipPrivate" ],
     "extension_types": ["extension"],
-    "contexts": [ "blessed_extension", "content_script", "unblessed_extension" ]
+    "contexts": [ "privileged_extension", "content_script", "unprivileged_extension" ]
   },
   "prefs": {
     "vivaldi": true,
     "dependencies": [ "permission:prefs" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "readingListPrivate": {
     "vivaldi": true,
     "dependencies": [ "permission:readingListPrivate" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "runtimePrivate": {
     "vivaldi": true,
     "dependencies": [ "permission:runtimePrivate" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "savedpasswords": {
     "vivaldi": true,
     "dependencies": [ "permission:savedpasswords" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "searchEngines": {
     "vivaldi": true,
     "dependencies": [ "permission:searchEngines" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "sessionsPrivate": {
     "vivaldi": true,
     "dependencies": [ "permission:sessionsPrivate" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "settings": {
     "vivaldi": true,
     "dependencies": [ "permission:settings" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "sync": {
     "vivaldi": true,
     "dependencies": [ "permission:sync" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "themePrivate": {
     "vivaldi": true,
     "dependencies": [ "permission:themePrivate" ],
     "extension_types": [ "platform_app", "extension" ],
-    "contexts": [ "blessed_extension", "content_script", "unblessed_extension" ]
+    "contexts": [ "privileged_extension", "content_script", "privileged_extension" ]
   },
   "tabsPrivate": {
     "vivaldi": true,
     "dependencies": [ "permission:tabsPrivate" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "thumbnails": [{
     "vivaldi": true,
     "dependencies": [ "permission:thumbnails" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   }, {
     "channel": "stable",
     "contexts": ["webui"],
@@ -187,22 +187,22 @@
    "translateHistory": {
     "vivaldi": true,
     "dependencies": [ "permission:translateHistory" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "utilities": {
     "vivaldi": true,
     "dependencies": [ "permission:utilities" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "vivaldiAccount": {
     "vivaldi": true,
     "dependencies": [ "permission:vivaldiAccount" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "webViewPrivate": [{
     "internal": true,
     "dependencies": ["permission:webview"],
-    "contexts": ["blessed_extension"]
+    "contexts": ["privileged_extension"]
   }, {
     "internal": true,
     "channel": "stable",
@@ -217,11 +217,11 @@
   "windowPrivate": {
     "vivaldi": true,
     "dependencies": [ "permission:windowPrivate" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   },
   "zoom": {
     "vivaldi": true,
     "dependencies": [ "permission:zoom" ],
-    "contexts": [ "blessed_extension" ]
+    "contexts": [ "privileged_extension" ]
   }
 }

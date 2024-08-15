@@ -119,15 +119,17 @@ Opening a pull request will automatically notify reviewers.
 To make the review process smoother, once a reviewer has started looking at your change:
 
 - Avoid major additions or changes that would be best done in a follow-up PR.
-- Avoid rebases (`git rebase`) and force pushes (`git push -f`). These can make
-  it difficult for reviewers to review incremental changes as GitHub often cannot
+- Avoid deleting commits that have already been reviewed, which occurs when using
+  rebases (`git rebase`) and force pushes (`git push -f`). These can make
+  it difficult for reviewers to review incremental changes as GitHub usually cannot
   view a useful diff across a rebase. If it's necessary to resolve conflicts
   with upstream changes, use a merge commit (`git merge`) and don't include any
-  consequential changes in the merge, so a reviewer can skip over merge commits
+  unnecessary changes in the merge, so that a reviewer can skip over merge commits
   when working through the individual commits in the PR.
-- When you address a review comment, mark the thread as "Resolved".
 
-Pull requests will (usually) be landed with the "Squash and merge" option.
+  The "Create a merge commit" merge option is disabled, so `main` history always
+  remains linear (no merge commits). PRs are usually landed using "Squash and merge".
+- When you address a review comment, mark the thread as "Resolved".
 
 ### TODOs
 

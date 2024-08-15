@@ -1,4 +1,4 @@
-import { Fixture } from '../../framework/fixture';
+import { Fixture } from '../../framework/fixture.js';
 import { LogMessageWithStack } from '../../internal/logging/log_message.js';
 import { comparePaths, comparePublicParamsPaths, Ordering } from '../../internal/query/compare.js';
 import { parseQuery } from '../../internal/query/parseQuery.js';
@@ -8,6 +8,13 @@ import { assert } from '../../util/util.js';
 
 import { setupWorkerEnvironment, WorkerTestRunRequest } from './utils_worker.js';
 
+/**
+ * Sets up the currently running Web Worker to wrap the TestGroup object `g`.
+ * `g` is the `g` exported from a `.spec.ts` file: a TestGroupBuilder<F> interface,
+ * which underneath is actually a TestGroup<F> object.
+ *
+ * This is used in the generated `.worker.js` files that are generated to use as service workers.
+ */
 export function wrapTestGroupForWorker(g: TestGroup<Fixture>) {
   self.onmessage = async (ev: MessageEvent) => {
     const { query, expectations, ctsOptions } = ev.data as WorkerTestRunRequest;
@@ -36,7 +43,11 @@ export function wrapTestGroupForWorker(g: TestGroup<Fixture>) {
       const ex = thrown instanceof Error ? thrown : new Error(`${thrown}`);
       ev.source?.postMessage({
         query,
-        result: { status: 'fail', timems: 0, logs: [new LogMessageWithStack('INTERNAL', ex)] },
+        result: {
+          status: 'fail',
+          timems: 0,
+          logs: [LogMessageWithStack.wrapError('INTERNAL', ex)],
+        },
       });
     }
   };

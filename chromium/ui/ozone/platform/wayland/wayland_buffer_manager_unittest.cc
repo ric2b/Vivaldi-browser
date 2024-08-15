@@ -327,9 +327,9 @@ class WaylandBufferManagerTest : public WaylandTest {
                     const gfx::RoundedCornersF& corners,
                     float surface_scale_factor,
                     const gfx::Rect& damage_region) {
-    buffer_manager_gpu_->CommitBuffer(widget, frame_id, buffer_id, data,
-                                      bounds_rect, corners,
-                                      surface_scale_factor, damage_region);
+    buffer_manager_gpu_->CommitBuffer(
+        widget, frame_id, buffer_id, data, bounds_rect, /*enable_blend=*/false,
+        corners, surface_scale_factor, damage_region);
     // Let the mojo message to be processed.
     base::RunLoop().RunUntilIdle();
   }
@@ -1477,10 +1477,9 @@ TEST_P(WaylandBufferManagerTest, TestCommitBufferConditions) {
 TEST_P(WaylandBufferManagerTest, TestCommitBufferConditionsAckConfigured) {
   constexpr uint32_t kDmabufBufferId = 1;
 
-  // Exercise three window types that create different windows - toplevel, popup
-  // and subsurface.
+  // Exercise two window types that create different windows - toplevel, menu.
+  // subsurface windows do not create xdg_surfaces so no need to configure them.
   std::vector<PlatformWindowType> window_types{PlatformWindowType::kWindow,
-                                               PlatformWindowType::kPopup,
                                                PlatformWindowType::kTooltip};
 
   for (const auto& type : window_types) {
@@ -1578,6 +1577,9 @@ TEST_P(WaylandBufferManagerTest,
   PlatformWindowInitProperties properties;
   properties.type = PlatformWindowType::kWindow;
   properties.bounds = kNormalBounds;
+  gfx::Insets insets;
+  EXPECT_CALL(delegate_, CalculateInsetsInDIP(PlatformWindowState::kNormal))
+      .WillRepeatedly(testing::Return(insets));
   auto window = WaylandWindow::Create(&delegate_, connection_.get(),
                                       std::move(properties));
   ASSERT_TRUE(window);
@@ -1591,8 +1593,6 @@ TEST_P(WaylandBufferManagerTest,
   window->SetRestoredBoundsInDIP(kRestoredBounds);
   wl::SyncDisplay(connection_->display_wrapper(), *connection_->display());
 
-  gfx::Insets insets;
-  window->SetDecorationInsets(&insets);
   window->Show(false);
 
   const uint32_t surface_id = window->root_surface()->get_surface_id();

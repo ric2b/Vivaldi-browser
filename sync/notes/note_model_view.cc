@@ -77,8 +77,9 @@ void NoteModelView::EndExtensiveChanges() {
   note_model_->EndExtensiveChanges();
 }
 
-void NoteModelView::Remove(const vivaldi::NoteNode* node) {
-  note_model_->Remove(node);
+void NoteModelView::Remove(const vivaldi::NoteNode* node,
+                           const base::Location& location) {
+  note_model_->Remove(node, location);
 }
 
 void NoteModelView::Move(const vivaldi::NoteNode* node,
@@ -196,7 +197,8 @@ void NoteModelViewUsingLocalOrSyncableNodes::RemoveAllSyncableNodes() {
 
     for (int i = static_cast<int>(permanent_node->children().size() - 1);
          i >= 0; --i) {
-      underlying_model()->Remove(permanent_node->children()[i].get());
+      underlying_model()->Remove(permanent_node->children()[i].get(),
+                                 FROM_HERE);
     }
   }
 

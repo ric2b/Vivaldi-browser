@@ -2369,7 +2369,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, OriginReplication) {
 
 // Test that HasReceivedUserGesture and HasReceivedUserGestureBeforeNavigation
 // are propagated correctly across origins.
-// TODO(crbug.com/1014175): This test is flaky.
+// TODO(crbug.com/40653035): This test is flaky.
 IN_PROC_BROWSER_TEST_P(SitePerProcessAutoplayBrowserTest,
                        DISABLED_PropagateUserGestureFlag) {
   GURL main_url(embedded_test_server()->GetURL(
@@ -2585,7 +2585,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, DynamicSandboxFlags) {
   // is currently a proxy in baz.com's renderer process.  This checks that the
   // proxies of |root->child_at(0)| were also updated with the latest sandbox
   // flags.
-  // TODO(https://crbug.com/1502845): When IsolateSandboxedIframes is enabled,
+  // TODO(crbug.com/40943240): When IsolateSandboxedIframes is enabled,
   // this test no longer uses the proxy inheritance mentioned above, because
   // sandboxed and unsandboxed baz.com pages will be in different SiteInstances.
   // Restructure the test so it still provides coverage for proxy inheritance
@@ -2617,7 +2617,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, DynamicSandboxFlags) {
             DepictFrameTree(root));
         break;
       case blink::features::IsolateSandboxedIframesGrouping::kPerDocument:
-        // TODO(https://crbug.com/1501430): Add output for the PerDocument
+        // TODO(crbug.com/40941714): Add output for the PerDocument
         // case, and parameterize this test to run all variants (none, per-site,
         // per-origin, per-document).
         break;
@@ -4991,7 +4991,7 @@ IN_PROC_BROWSER_TEST_P(
 // loads an image with certificate errors, the browser should be
 // notified about the subresource with certificate errors and downgrade
 // the UI appropriately.
-// TODO(crbug.com/1105145): Flaky.
+// TODO(crbug.com/40705650): Flaky.
 IN_PROC_BROWSER_TEST_P(SitePerProcessIgnoreCertErrorsBrowserTest,
                        DISABLED_SubresourceWithCertificateErrors) {
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
@@ -5071,7 +5071,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // The blocked url reported in the console message should only contain the
   // origin, in order to avoid sensitive data being leaked to the parent frame.
   //
-  // TODO(https://crbug.com/1146651): We should not leak any information at all
+  // TODO(crbug.com/40053800): We should not leak any information at all
   // to the parent frame. Instead, we should send a message directly to Devtools
   // (without passing through a renderer): that can also contain more
   // information (like the full blocked url).
@@ -5115,7 +5115,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 
     // X-Frame-Options and CSP frame-ancestors behave differently. XFO commits
     // an error page, while CSP commits a "data:," URL.
-    // TODO(https://crbug.com/870815): Use an error page for both.
+    // TODO(crbug.com/41405925): Use an error page for both.
     EXPECT_FALSE(load_observer.last_navigation_succeeded());
     EXPECT_EQ(net::ERR_BLOCKED_BY_RESPONSE,
               load_observer.last_net_error_code());
@@ -5446,8 +5446,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // `blink::WebView`, which is where the original bug was triggered.
   // Incrementing the keep alive ref count will cause
   // RenderProcessHostImpl::Cleanup to forego process termination.
-  RenderProcessHost* subframe_process =
-      root->child_at(0)->current_frame_host()->GetProcess();
+  RenderProcessHostImpl* subframe_process = static_cast<RenderProcessHostImpl*>(
+      root->child_at(0)->current_frame_host()->GetProcess());
   subframe_process->IncrementKeepAliveRefCount(0);
 
   // Navigate the subframe away from b.com.  Since this is the last active
@@ -5901,15 +5901,11 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   ASSERT_EQ(1U, new_root->child_count());
   EXPECT_EQ(main_url, new_root->current_url());
   EXPECT_TRUE(new_root->child_at(0)->current_url().IsAboutSrcdoc());
-  if (blink::features::IsNewBaseUrlInheritanceBehaviorEnabled()) {
-    // When NewBaseUrlInheritanceBehavior is enabled, not only should the srcdoc
-    // inherit its base url from its initiator, but it should also be properly
-    // restored from the session history.
-    EXPECT_EQ(
-        main_url,
-        GURL(
-            EvalJs(new_root->child_at(0), "document.baseURI").ExtractString()));
-  }
+  // Not only should the srcdoc inherit its base url from its initiator, but it
+  // should also be properly restored from the session history.
+  EXPECT_EQ(
+      main_url,
+      GURL(EvalJs(new_root->child_at(0), "document.baseURI").ExtractString()));
 
   EXPECT_EQ(new_root->current_frame_host()->GetSiteInstance(),
             new_root->child_at(0)->current_frame_host()->GetSiteInstance());
@@ -5982,7 +5978,7 @@ class ShowCreatedWindowInterceptor
   ~ShowCreatedWindowInterceptor() override = default;
 
   blink::mojom::LocalMainFrameHost* GetForwardingInterface() override {
-    return render_frame_host_;
+    return swapped_impl_.old_impl();
   }
 
   void ShowCreatedWindow(const blink::LocalFrameToken& opener_frame_token,
@@ -6013,8 +6009,7 @@ class ShowCreatedWindowInterceptor
   blink::mojom::WindowFeaturesPtr window_features_;
   bool user_gesture_ = false;
   WindowOpenDisposition disposition_;
-  mojo::test::ScopedSwapImplForTesting<
-      mojo::AssociatedReceiver<blink::mojom::LocalMainFrameHost>>
+  mojo::test::ScopedSwapImplForTesting<blink::mojom::LocalMainFrameHost>
       swapped_impl_;
 };
 
@@ -6131,23 +6126,20 @@ class RequestCloseWidgetInterceptor
  public:
   explicit RequestCloseWidgetInterceptor(
       RenderWidgetHostImpl* render_widget_host)
-      : render_widget_host_(render_widget_host),
-        swapped_impl_(
-            render_widget_host_->popup_widget_host_receiver_for_testing(),
+      : swapped_impl_(
+            render_widget_host->popup_widget_host_receiver_for_testing(),
             this) {}
 
   ~RequestCloseWidgetInterceptor() override = default;
 
   blink::mojom::PopupWidgetHost* GetForwardingInterface() override {
-    return render_widget_host_;
+    return swapped_impl_.old_impl();
   }
 
   void RequestClosePopup() override {}
 
  private:
-  raw_ptr<RenderWidgetHostImpl> render_widget_host_;
-  mojo::test::ScopedSwapImplForTesting<
-      mojo::AssociatedReceiver<blink::mojom::PopupWidgetHost>>
+  mojo::test::ScopedSwapImplForTesting<blink::mojom::PopupWidgetHost>
       swapped_impl_;
 };
 
@@ -6170,7 +6162,7 @@ class ShowCreatedPopupWidgetInterceptor
   ~ShowCreatedPopupWidgetInterceptor() override = default;
 
   blink::mojom::PopupWidgetHost* GetForwardingInterface() override {
-    return render_widget_host_;
+    return swapped_impl_.old_impl();
   }
 
   void ShowPopup(const gfx::Rect& initial_rect,
@@ -6197,8 +6189,7 @@ class ShowCreatedPopupWidgetInterceptor
   base::OnceCallback<void(int32_t pending_widget_routing_id)> test_callback_;
   ShowPopupCallback show_callback_;
   gfx::Rect initial_rect_;
-  mojo::test::ScopedSwapImplForTesting<
-      mojo::AssociatedReceiver<blink::mojom::PopupWidgetHost>>
+  mojo::test::ScopedSwapImplForTesting<blink::mojom::PopupWidgetHost>
       swapped_impl_;
 };
 
@@ -6209,16 +6200,11 @@ class NewPopupWidgetCreatedObserver {
   NewPopupWidgetCreatedObserver(
       RenderFrameHostImpl* frame_host,
       base::OnceCallback<void(int32_t pending_widget_routing_id)> test_callback)
-      : frame_host_(frame_host), test_callback_(std::move(test_callback)) {
-    frame_host_->SetCreateNewPopupCallbackForTesting(base::BindRepeating(
-        &NewPopupWidgetCreatedObserver::DidCreatePopupWidget,
-        base::Unretained(this)));
-  }
-
-  ~NewPopupWidgetCreatedObserver() {
-    if (frame_host_)
-      frame_host_->SetCreateNewPopupCallbackForTesting(base::NullCallback());
-  }
+      : create_new_popup_widget_interceptor_(
+            frame_host,
+            base::BindOnce(&NewPopupWidgetCreatedObserver::DidCreatePopupWidget,
+                           base::Unretained(this))),
+        test_callback_(std::move(test_callback)) {}
 
   void ResumeShowPopupWidget() { show_interceptor_->ResumeShowPopupWidget(); }
 
@@ -6226,13 +6212,9 @@ class NewPopupWidgetCreatedObserver {
   void DidCreatePopupWidget(RenderWidgetHostImpl* widget) {
     show_interceptor_ = std::make_unique<ShowCreatedPopupWidgetInterceptor>(
         widget, std::move(test_callback_));
-
-    // Stop observing now.
-    frame_host_->SetCreateNewPopupCallbackForTesting(base::NullCallback());
-    frame_host_ = nullptr;
   }
 
-  raw_ptr<RenderFrameHostImpl> frame_host_;
+  CreateNewPopupWidgetInterceptor create_new_popup_widget_interceptor_;
   std::unique_ptr<ShowCreatedPopupWidgetInterceptor> show_interceptor_;
   base::OnceCallback<void(int32_t pending_widget_routing_id)> test_callback_;
 };
@@ -6616,24 +6598,21 @@ class DispatchLoadInterceptor
     : public blink::mojom::LocalFrameHostInterceptorForTesting {
  public:
   explicit DispatchLoadInterceptor(RenderFrameHostImpl* render_frame_host)
-      : render_frame_host_(render_frame_host),
-        swapped_impl_(
-            render_frame_host_->local_frame_host_receiver_for_testing(),
+      : swapped_impl_(
+            render_frame_host->local_frame_host_receiver_for_testing(),
             this) {}
 
   ~DispatchLoadInterceptor() override = default;
 
   LocalFrameHost* GetForwardingInterface() override {
-    return render_frame_host_;
+    return swapped_impl_.old_impl();
   }
 
   // Discard incoming calls to LocalFrameHost::DispatchLoad().
   void DispatchLoad() override {}
 
  private:
-  raw_ptr<RenderFrameHostImpl> render_frame_host_;
-  mojo::test::ScopedSwapImplForTesting<
-      mojo::AssociatedReceiver<blink::mojom::LocalFrameHost>>
+  mojo::test::ScopedSwapImplForTesting<blink::mojom::LocalFrameHost>
       swapped_impl_;
 };
 
@@ -9887,7 +9866,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
     // a sandboxed mainframe, so before we call DepictFrameTree below we need to
     // wait for the RenderFrameHost from the initial mainframe to be deleted and
     // its proxies removed.
-    // TODO(https://crbug.com/1485586): See if we can reuse the initial RFH for
+    // TODO(crbug.com/40282613): See if we can reuse the initial RFH for
     // a navigation to a sandboxed frame instead?
     deleted_observer.WaitUntilDeleted();
   }
@@ -10127,7 +10106,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
             DepictFrameTree(root));
         break;
       case blink::features::IsolateSandboxedIframesGrouping::kPerDocument:
-        // TODO(https://crbug.com/1501430): Add output for the PerDocument
+        // TODO(crbug.com/40941714): Add output for the PerDocument
         // case, and parameterize this test to run all variants (none, per-site,
         // per-origin, per-document).
         break;
@@ -10146,7 +10125,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // Now navigate the first grandchild to a page on the same origin as the main
   // frame. It should still be sandboxed, as it should get its flags from its
   // (remote) parent.
-  // TODO(https://crbug.com/1502845): When IsolateSandboxedIframes is enabled,
+  // TODO(crbug.com/40943240): When IsolateSandboxedIframes is enabled,
   // this test no longer uses proxy inheritance; the grandchild and the main
   // frame won't be in the same SiteInstance anymore, so this test will no
   // longer exercise sandbox flags inheritance from an existing remote frame.
@@ -10171,7 +10150,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
             DepictFrameTree(root));
         break;
       case blink::features::IsolateSandboxedIframesGrouping::kPerDocument:
-        // TODO(https://crbug.com/1501430): Add output for the PerDocument
+        // TODO(crbug.com/40941714): Add output for the PerDocument
         // case, and parameterize this test to run all variants (none, per-site,
         // per-origin, per-document).
         break;
@@ -10226,7 +10205,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
             DepictFrameTree(root));
         break;
       case blink::features::IsolateSandboxedIframesGrouping::kPerDocument:
-        // TODO(https://crbug.com/1501430): Add output for the PerDocument
+        // TODO(crbug.com/40941714): Add output for the PerDocument
         // case, and parameterize this test to run all variants (none, per-site,
         // per-origin, per-document).
         break;
@@ -10617,7 +10596,8 @@ class CommitMessageOrderReverser : public DidCommitNavigationInterceptor {
 // Create an out-of-process iframe that causes itself to be detached during
 // its layout/animate phase. See https://crbug.com/802932.
 //
-// TODO(809580): Disabled on Android, Mac, and ChromeOS due to flakiness.
+// TODO(crbug.com/40561636): Disabled on Android, Mac, and ChromeOS due to
+// flakiness.
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS_ASH)
 #define MAYBE_OOPIFDetachDuringAnimation DISABLED_OOPIFDetachDuringAnimation
 #else
@@ -11696,7 +11676,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // Wait until the page with the crashed frame gets unloaded (triggering its
   // evicton if it got into the back/forward cache), so that the histogram will
   // be recorded when the renderer process is gone.
-  // TODO(https://crbug.com/1193386): Ensure pages with crashed subframes won't
+  // TODO(crbug.com/40175240): Ensure pages with crashed subframes won't
   // get into back/forward cache.
   InactiveRenderFrameHostDeletionObserver inactive_rfh_deletion_observer(
       web_contents());
@@ -12001,7 +11981,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 // Ensure that when a process is about to be destroyed after the last active
 // frame in it goes away, an attempt to reuse a proxy in that process doesn't
 // result in a crash.  See https://crbug.com/794625.
-// TODO(https://crbug.com/754084): This is flaky on Fuchsia because the
+// TODO(crbug.com/42050611): This is flaky on Fuchsia because the
 // MessagePort is not cleared on the other side, resulting in Zircon killing the
 // process. See the comment referencing the same bug in
 // //mojo/core/channel_fuchsia.cc
@@ -12133,7 +12113,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 // the hung renderer dialog used to undesirably show up for background tabs
 // (typically during session restore when many navigations would be happening in
 // backgrounded processes).
-// TODO(crbug.com/1246541): Flaky on LaCrOS, Mac, and Windows.
+// TODO(crbug.com/40196588): Flaky on LaCrOS, Mac, and Windows.
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #define MAYBE_NoCommitTimeoutForInvisibleWebContents \
   DISABLED_NoCommitTimeoutForInvisibleWebContents
@@ -13392,7 +13372,7 @@ class SitePerProcessWithMainFrameThresholdTestBase
     Shell* shell = CreateBrowser();
     // Navigate to a different site first so that the new shell has  a non empty
     // site info before navigating to the target site.
-    // TODO(https://crbug.com/1434900): Remove this workaround once we figure
+    // TODO(crbug.com/40264958): Remove this workaround once we figure
     // out how to handle navigation from an empty site to a new site.
     CHECK(NavigateToURL(shell, kOtherUrl));
     CHECK(NavigateToURL(shell, url));
@@ -13453,7 +13433,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessWithMainFrameThresholdTest,
   }
 
   Shell* non_shared_shell = CreateBrowser();
-  // TODO(https://crbug.com/1434900): Remove this workaround once we figure
+  // TODO(crbug.com/40264958): Remove this workaround once we figure
   // out how to handle navigation from an empty site to a new site.
   ASSERT_TRUE(NavigateToURL(non_shared_shell, kOtherUrl));
   ASSERT_TRUE(NavigateToURL(non_shared_shell, kUrl));
@@ -13491,7 +13471,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessWithMainFrameThresholdTest,
 
 // Tests that opening a new tab from an existing page via window.open reuses a
 // process when both pages are the same-site.
-// TODO(https://crbug.com/1434900): Change this test to use 'noopener' once we
+// TODO(crbug.com/40264958): Change this test to use 'noopener' once we
 // figure out how to handle navigation from an empty site to a new site.
 IN_PROC_BROWSER_TEST_P(SitePerProcessWithMainFrameThresholdTest,
                        ReuseProcessWithOpener) {

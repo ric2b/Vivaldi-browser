@@ -71,8 +71,8 @@ int VideoFrameResource::GetDmabufFd(size_t i) const {
   return frame_->GetDmabufFd(i);
 }
 
-scoped_refptr<gfx::NativePixmapDmaBuf>
-VideoFrameResource::CreateNativePixmapDmaBuf() const {
+scoped_refptr<const gfx::NativePixmapDmaBuf>
+VideoFrameResource::GetNativePixmapDmaBuf() const {
   return media::CreateNativePixmapDmaBuf(frame_.get());
 }
 

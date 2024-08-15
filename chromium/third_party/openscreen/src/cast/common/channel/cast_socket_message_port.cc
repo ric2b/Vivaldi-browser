@@ -12,7 +12,7 @@
 
 namespace openscreen::cast {
 
-CastSocketMessagePort::CastSocketMessagePort(VirtualConnectionRouter* router)
+CastSocketMessagePort::CastSocketMessagePort(VirtualConnectionRouter& router)
     : router_(router) {}
 
 CastSocketMessagePort::~CastSocketMessagePort() {
@@ -38,7 +38,7 @@ void CastSocketMessagePort::SetClient(MessagePort::Client& client) {
 
   client_ = &client;
   source_id_ = client.source_id();
-  router_->AddHandlerForLocalId(source_id_, this);
+  router_.AddHandlerForLocalId(source_id_, this);
 }
 
 void CastSocketMessagePort::ResetClient() {
@@ -47,8 +47,8 @@ void CastSocketMessagePort::ResetClient() {
   }
 
   client_ = nullptr;
-  router_->RemoveHandlerForLocalId(source_id_);
-  router_->RemoveConnectionsByLocalId(source_id_);
+  router_.RemoveHandlerForLocalId(source_id_);
+  router_.RemoveConnectionsByLocalId(source_id_);
   source_id_.clear();
 }
 
@@ -68,21 +68,21 @@ void CastSocketMessagePort::PostMessage(
 
   VirtualConnection connection{source_id_, destination_sender_id,
                                socket_->socket_id()};
-  if (!router_->GetConnectionData(connection)) {
-    router_->AddConnection(connection, VirtualConnection::AssociatedData{});
+  if (!router_.GetConnectionData(connection)) {
+    router_.AddConnection(connection, VirtualConnection::AssociatedData{});
   }
 
-  const Error send_error = router_->Send(
+  const Error send_error = router_.Send(
       std::move(connection), MakeSimpleUTF8Message(message_namespace, message));
   if (!send_error.ok()) {
-    client_->OnError(std::move(send_error));
+    client_->OnError(send_error);
   }
 }
 
 void CastSocketMessagePort::OnMessage(VirtualConnectionRouter* router,
                                       CastSocket* socket,
                                       ::cast::channel::CastMessage message) {
-  OSP_CHECK_EQ(router, router_);
+  OSP_CHECK_EQ(router, &router_);
   OSP_CHECK(!socket || socket_.get() == socket);
 
   // Message ports are for specific virtual connections, and do not pass-through

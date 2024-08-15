@@ -6,6 +6,7 @@
 #define COMPONENTS_EXO_BUFFER_H_
 
 #include <memory>
+#include <string_view>
 
 #include "base/cancelable_callback.h"
 #include "base/containers/flat_map.h"
@@ -33,13 +34,6 @@ class FrameSinkResourceManager;
 // and not defined as part of this class.
 class Buffer {
  public:
-  explicit Buffer(std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer);
-  Buffer(std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer,
-         unsigned query_type,
-         bool use_zero_copy,
-         bool is_overlay_candidate,
-         bool y_invert);
-
   Buffer(const Buffer&) = delete;
   Buffer& operator=(const Buffer&) = delete;
   virtual ~Buffer();
@@ -48,7 +42,7 @@ class Buffer {
   // required to move away clients from using GMB directly as a part of
   // MappableSI work.
   static std::unique_ptr<Buffer> CreateBufferFromGMBHandle(
-      gfx::GpuMemoryBufferHandle gpu_memory_buffer_handle,
+      gfx::GpuMemoryBufferHandle buffer_handle,
       const gfx::Size& buffer_size,
       gfx::BufferFormat buffer_format,
       gfx::BufferUsage buffer_usage,
@@ -61,7 +55,7 @@ class Buffer {
       gfx::Size buffer_size,
       gfx::BufferFormat buffer_format,
       gfx::BufferUsage buffer_usage,
-      base::StringPiece debug_label,
+      std::string_view debug_label,
       gpu::SurfaceHandle surface_handle,
       base::WaitableEvent* shutdown_event,
       bool is_overlay_candidate = false);
@@ -130,8 +124,32 @@ class Buffer {
 
   virtual base::WeakPtr<Buffer> AsWeakPtr();
 
+ protected:
+  // Currently only derived class access this constructor.
+  explicit Buffer(std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer);
+
  private:
+  // TODO(vikassoni): Once MappableSI is fully landed, these clients do not need
+  // to access the Buffer constructors. So it should be removed from the friend
+  // list.
+  friend class Display;
+  friend class SharedMemory;
+
   class Texture;
+
+  Buffer(std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer,
+         unsigned query_type,
+         bool use_zero_copy,
+         bool is_overlay_candidate,
+         bool y_invert);
+  Buffer(gfx::GpuMemoryBufferHandle gpu_memory_buffer_handle,
+         gfx::BufferFormat buffer_format,
+         gfx::Size size,
+         gfx::BufferUsage buffer_usage,
+         unsigned query_type,
+         bool use_zero_copy,
+         bool is_overlay_candidate,
+         bool y_invert);
 
   struct BufferRelease {
     BufferRelease(
@@ -194,6 +212,13 @@ class Buffer {
   // The GPU memory buffer that contains the contents of this buffer.
   std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer_;
 
+  // Contains the content of this buffer instead of |gpu_memory_buffer_| when
+  // MappableSI is enabled.
+  gfx::GpuMemoryBufferHandle gpu_memory_buffer_handle_;
+  const gfx::BufferFormat buffer_format_;
+  const gfx::Size size_;
+  gfx::BufferUsage buffer_usage_;
+
   // Query type that must be used when releasing buffer from a texture.
   const unsigned query_type_;
 
@@ -246,6 +271,8 @@ class Buffer {
 #if BUILDFLAG(USE_ARC_PROTECTED_MEDIA)
   ProtectedBufferState protected_buffer_state_ = ProtectedBufferState::UNKNOWN;
 #endif  // BUILDFLAG(USE_ARC_PROTECTED_MEDIA)
+
+  const bool is_mappable_si_enabled_;
 
   base::WeakPtrFactory<Buffer> weak_ptr_factory_{this};
 };

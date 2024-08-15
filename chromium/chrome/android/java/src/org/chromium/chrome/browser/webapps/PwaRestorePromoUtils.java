@@ -5,15 +5,16 @@
 package org.chromium.chrome.browser.webapps;
 
 import android.app.Activity;
+import android.graphics.Bitmap;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 
-import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
 
 import org.chromium.base.Log;
 import org.chromium.base.shared_preferences.SharedPreferencesManager;
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
@@ -25,6 +26,7 @@ import org.chromium.ui.base.WindowAndroid;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.List;
 
 /**
  * This class is responsible for coordinating the showing of the PWA Restore promo (which aims to
@@ -63,6 +65,15 @@ public class PwaRestorePromoUtils {
                 ChromePreferenceKeys.PWA_RESTORE_PROMO_STAGE, DisplayStage.SHOW_PROMO);
     }
 
+    public static boolean maybeForceShowPromo(Profile profile, WindowAndroid windowAndroid) {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.PWA_RESTORE_UI_AT_STARTUP)) {
+            Log.i(TAG, "Force showing PWA Restore promo at startup, feature flag is enabled.");
+            launchPromo(profile, windowAndroid);
+            return true;
+        }
+        return false;
+    }
+
     /**
      * Launch the PWA Restore promotion, if we've determined that this launch meets the criteria for
      * for showing it. The promo is intended to show as soon as possible after the user has switched
@@ -75,8 +86,7 @@ public class PwaRestorePromoUtils {
      * @param arrowResourceId The resource id for the Back arrow to use.
      * @return Whether the PWA Restore promo was shown.
      */
-    public static boolean launchPromoIfNeeded(
-            Profile profile, WindowAndroid windowAndroid, int arrowResourceId) {
+    public static boolean launchPromoIfNeeded(Profile profile, WindowAndroid windowAndroid) {
         if (!ChromeFeatureList.isEnabled(ChromeFeatureList.PWA_RESTORE_UI)) {
             Log.i(TAG, "Not showing PWA Restore promo, feature flag is disabled.");
             return false;
@@ -128,7 +138,7 @@ public class PwaRestorePromoUtils {
             case DisplayStage.SHOW_PROMO:
                 // We've determined that the promo should show. If successfully shown, we'll mark
                 // it as such, to prevent the promo from appearing in the future.
-                launchPromo(profile, windowAndroid, arrowResourceId);
+                launchPromo(profile, windowAndroid);
                 return true;
             default:
                 assert false;
@@ -136,16 +146,27 @@ public class PwaRestorePromoUtils {
         }
     }
 
-    private static void launchPromo(
-            Profile profile, WindowAndroid windowAndroid, int arrowResourceId) {
-      WebApkSyncService.fetchRestorableApps(profile, windowAndroid, arrowResourceId);
-        // Flow continues in onRestorableAppsAvailable.
+    private static void launchPromo(Profile profile, WindowAndroid windowAndroid) {
+        WebApkSyncService.fetchRestorableApps(
+                profile,
+                (success, appIds, names, lastUsedInDays, icons) -> {
+                    onRestorableAppsAvailable(
+                            success,
+                            appIds,
+                            names,
+                            lastUsedInDays,
+                            icons,
+                            windowAndroid,
+                            R.drawable.ic_arrow_back_24dp);
+                });
     }
 
-    @CalledByNative
     private static void onRestorableAppsAvailable(
             boolean success,
-            @NonNull String[][] appList,
+            @NonNull String[] appIds,
+            @NonNull String[] appNames,
+            @NonNull int[] lastUsedInDays,
+            @NonNull List<Bitmap> icons,
             WindowAndroid windowAndroid,
             int arrowResourceId) {
         BottomSheetController controller = BottomSheetControllerProvider.from(windowAndroid);
@@ -155,7 +176,13 @@ public class PwaRestorePromoUtils {
             Activity activity = windowAndroid.getActivity().get();
             PwaRestoreBottomSheetCoordinator pwaRestoreBottomSheetCoordinator =
                     new PwaRestoreBottomSheetCoordinator(
-                    appList, activity, controller, arrowResourceId);
+                            appIds,
+                            appNames,
+                            icons,
+                            lastUsedInDays,
+                            activity,
+                            controller,
+                            arrowResourceId);
             if (pwaRestoreBottomSheetCoordinator == null
                     || !pwaRestoreBottomSheetCoordinator.show()) {
                 success = false;

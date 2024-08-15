@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/check.h"
 #include "base/containers/span.h"
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
@@ -28,14 +29,14 @@
 namespace adblock_filter {
 
 namespace {
-constexpr int kMinTimeBetweenUpdates = 6;   // hours
+constexpr int kMinTimeBetweenUpdates = 1;   // hours
 constexpr int kMaxTimeBetweenUpdates = 14;  // days
 constexpr int kUpdateTimeJitter = 30;       // minutes
 constexpr int kInitialUpdateDelay = 1;      // minutes
 
 constexpr char kTrackerInfoFileSuffix[] = "_tracker_infos.json";
 
-base::Time CalculateNextUpdateTime(const RuleSource& source) {
+base::Time CalculateNextUpdateTime(const ActiveRuleSource& source) {
   return source.last_update +
          std::min(std::max(source.unsafe_adblock_metadata.expires,
                            base::Hours(kMinTimeBetweenUpdates)),
@@ -49,7 +50,7 @@ base::Time GetNextUpdateTimeAfterFailUpdate(base::Time last_update_time) {
 }
 
 void ParseContent(const std::string& file_contents,
-                  bool allow_abp_snippets,
+                  RuleSourceSettings source_settings,
                   ParseResult* parse_result) {
   JSONStringValueDeserializer serializer(file_contents);
   std::unique_ptr<base::Value> root(serializer.Deserialize(nullptr, nullptr));
@@ -58,7 +59,7 @@ void ParseContent(const std::string& file_contents,
     return;
   }
 
-  RulesetFileParser(parse_result, allow_abp_snippets).Parse(file_contents);
+  RulesetFileParser(parse_result, source_settings).Parse(file_contents);
   return;
 }
 
@@ -96,7 +97,7 @@ RuleSourceHandler::RulesReadResult RuleSourceHandler::ReadRules(
     const base::FilePath& output_path,
     const base::FilePath& tracker_info_output_path,
     RulesCompiler rules_compiler,
-    bool allow_abp_snippets,
+    RuleSourceSettings source_settings,
     bool delete_after_read) {
   RulesReadResult read_result;
   if (!base::PathExists(source_path)) {
@@ -110,7 +111,7 @@ RuleSourceHandler::RulesReadResult RuleSourceHandler::ReadRules(
     return read_result;
   }
   ParseResult parse_result;
-  ParseContent(file_contents, allow_abp_snippets, &parse_result);
+  ParseContent(file_contents, source_settings, &parse_result);
   read_result.fetch_result = parse_result.fetch_result;
   read_result.metadata = parse_result.metadata;
   read_result.rules_info = parse_result.rules_info;
@@ -120,6 +121,15 @@ RuleSourceHandler::RulesReadResult RuleSourceHandler::ReadRules(
     // just act as if we didn't get it.
     if (serializer.Serialize(*parse_result.tracker_infos))
       read_result.tracker_infos = std::move(parse_result.tracker_infos);
+  }
+
+  if (read_result.fetch_result == FetchResult::kFileUnsupported) {
+    // If the file used to have supported rules in a previous version, our
+    // compiled copy of it is now obsolete, remove it.
+    base::DeleteFile(output_path);
+    // We want to return an empty checksum and expect it hasn't been set to
+    // anything by this point.
+    CHECK(read_result.checksum.empty());
   }
 
   if (delete_after_read) {
@@ -136,7 +146,8 @@ RuleSourceHandler::RulesReadResult RuleSourceHandler::ReadRules(
 }
 
 RuleSourceHandler::RuleSourceHandler(
-    RuleSource rule_source,
+    RuleGroup group,
+    ActiveRuleSource rule_source,
     const base::FilePath& profile_path,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     scoped_refptr<base::SequencedTaskRunner> file_task_runner,
@@ -148,19 +159,18 @@ RuleSourceHandler::RuleSourceHandler(
       on_update_callback_(on_update_callback),
       on_tracker_infos_update_callback_(on_tracker_infos_update_callback),
       rule_source_(rule_source),
-      rules_list_path_(profile_path.Append(GetRulesFolderName())
-                           .Append(GetGroupFolderName(rule_source_.group))
-                           .AppendASCII(base::NumberToString(rule_source_.id))),
+      group_(group),
+      rules_list_path_(
+          profile_path.Append(GetRulesFolderName())
+              .Append(GetGroupFolderName(group))
+              .AppendASCII(base::NumberToString(rule_source_.core.id()))),
       tracker_infos_path_(
           profile_path.Append(GetRulesFolderName())
-              .Append(GetGroupFolderName(rule_source_.group))
-              .AppendASCII(base::NumberToString(rule_source_.id) +
+              .Append(GetGroupFolderName(group))
+              .AppendASCII(base::NumberToString(rule_source_.core.id()) +
                            kTrackerInfoFileSuffix)),
       file_task_runner_(file_task_runner),
       weak_factory_(this) {
-  DCHECK(rule_source_.is_from_url && !rule_source_.source_url.is_empty() &&
-             rule_source_.source_url.is_valid() ||
-         !rule_source_.is_from_url && !rule_source_.source_file.empty());
   if (rule_source_.next_fetch == base::Time()) {
     rule_source_.next_fetch = CalculateNextUpdateTime(rule_source_);
   }
@@ -181,7 +191,7 @@ RuleSourceHandler::~RuleSourceHandler() = default;
 void RuleSourceHandler::OnTrackerInfosLoaded(
     std::optional<base::Value::Dict> tracker_infos) {
   if (tracker_infos) {
-    on_tracker_infos_update_callback_.Run(rule_source_,
+    on_tracker_infos_update_callback_.Run(group_, rule_source_,
                                           std::move(*tracker_infos));
   }
 }
@@ -200,8 +210,7 @@ void RuleSourceHandler::Clear() {
   update_timer_.Stop();
 
   file_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(base::GetDeleteFileCallback(rules_list_path_)));
+      FROM_HERE, base::BindOnce(base::GetDeleteFileCallback(rules_list_path_)));
   file_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(base::GetDeleteFileCallback(tracker_infos_path_)));
@@ -221,15 +230,15 @@ void RuleSourceHandler::DoFetch() {
   rule_source_.is_fetching = true;
   on_update_callback_.Run(this);
 
-  if (rule_source_.is_from_url)
+  if (rule_source_.core.is_from_url())
     DownloadRules();
   else
-    ReadRulesFromFile(rule_source_.source_file, false);
+    ReadRulesFromFile(rule_source_.core.source_file(), false);
 }
 
 void RuleSourceHandler::DownloadRules() {
   auto resource_request = std::make_unique<network::ResourceRequest>();
-  resource_request->url = rule_source_.source_url;
+  resource_request->url = rule_source_.core.source_url();
   resource_request->method = "GET";
   resource_request->load_flags = net::LOAD_BYPASS_CACHE;
   resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
@@ -271,7 +280,7 @@ void RuleSourceHandler::OnRulesDownloaded(base::FilePath file) {
   url_loader_.swap(url_loader);
 
   if (file.empty()) {
-    LOG(WARNING) << "Downloading rule source:" << rule_source_.source_url
+    LOG(WARNING) << "Downloading rule source:" << rule_source_.core.source_url()
                  << " failed with error " << url_loader->NetError();
 
     rule_source_.is_fetching = false;
@@ -292,7 +301,7 @@ void RuleSourceHandler::ReadRulesFromFile(const base::FilePath& file,
       FROM_HERE,
       base::BindOnce(&RuleSourceHandler::ReadRules, file, rules_list_path_,
                      tracker_infos_path_, rules_compiler_,
-                     rule_source_.allow_abp_snippets, delete_after_read),
+                     rule_source_.core.settings(), delete_after_read),
       base::BindOnce(&RuleSourceHandler::OnRulesRead,
                      weak_factory_.GetWeakPtr()));
 }
@@ -300,7 +309,8 @@ void RuleSourceHandler::ReadRulesFromFile(const base::FilePath& file,
 void RuleSourceHandler::OnRulesRead(RulesReadResult result) {
   rule_source_.last_fetch_result = result.fetch_result;
   rule_source_.is_fetching = false;
-  if (rule_source_.last_fetch_result == FetchResult::kSuccess) {
+  if (rule_source_.last_fetch_result == FetchResult::kSuccess ||
+      rule_source_.last_fetch_result == FetchResult::kFileUnsupported) {
     rule_source_.unsafe_adblock_metadata = result.metadata;
     rule_source_.rules_info = result.rules_info;
     rule_source_.rules_list_checksum = result.checksum;
@@ -310,7 +320,7 @@ void RuleSourceHandler::OnRulesRead(RulesReadResult result) {
 
     if (result.tracker_infos) {
       rule_source_.has_tracker_infos = true;
-      on_tracker_infos_update_callback_.Run(rule_source_,
+      on_tracker_infos_update_callback_.Run(group_, rule_source_,
                                             std::move(*result.tracker_infos));
     }
   } else {

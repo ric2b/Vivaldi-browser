@@ -6,8 +6,8 @@
 
 namespace openscreen::osp {
 
-ProtocolConnectionServer::ProtocolConnectionServer(MessageDemuxer* demuxer,
-                                                   Observer* observer)
+ProtocolConnectionServer::ProtocolConnectionServer(MessageDemuxer& demuxer,
+                                                   Observer& observer)
     : demuxer_(demuxer),
       endpoint_request_ids_(EndpointRequestIds::Role::kServer),
       observer_(observer) {}

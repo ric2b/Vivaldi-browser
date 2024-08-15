@@ -7,7 +7,7 @@ import { makeCaseCache } from '../../case_cache.js';
 // interval, valid result may be 0.0 or 1.0 or both of them, but will never be a
 // value in interval (0.0, 1.0).
 // See the comment block on stepInterval for more details
-const makeCase = (trait: 'f32' | 'f16', edge: number, x: number): Case => {
+const makeCase = (trait: 'f32' | 'f16' | 'abstract', edge: number, x: number): Case => {
   const FPTrait = FP[trait];
   edge = FPTrait.quantize(edge);
   x = FPTrait.quantize(x);
@@ -27,13 +27,13 @@ const makeCase = (trait: 'f32' | 'f16', edge: number, x: number): Case => {
   };
 };
 
-// Cases: [f32|f16]
-const cases = (['f32', 'f16'] as const)
+// Cases: [f32|f16|abstract]
+const cases = (['f32', 'f16', 'abstract'] as const)
   .map(trait => ({
     [`${trait}`]: () => {
       return FP[trait]
-        .scalarRange()
-        .flatMap(edge => FP[trait].scalarRange().map(x => makeCase(trait, edge, x)));
+        .sparseScalarRange()
+        .flatMap(edge => FP[trait].sparseScalarRange().map(x => makeCase(trait, edge, x)));
     },
   }))
   .reduce((a, b) => ({ ...a, ...b }), {});

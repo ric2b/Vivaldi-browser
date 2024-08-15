@@ -66,7 +66,7 @@ static void avifBitsInit(avifBits * const bits, const uint8_t * const data, cons
     bits->bitsLeft = 0;
     bits->state = 0;
     bits->error = 0;
-    bits->eof = 0;
+    bits->eof = (size == 0);
 }
 
 static void avifBitsRefill(avifBits * const bits, const uint32_t n)
@@ -413,7 +413,10 @@ avifBool avifSequenceHeaderParse(avifSequenceHeader * header, const avifROData *
         avifBitsInit(&bits, obus.data, obus.size);
 
         // obu_header()
-        avifBitsRead(&bits, 1); // obu_forbidden_bit
+        const uint32_t obu_forbidden_bit = avifBitsRead(&bits, 1);
+        if (obu_forbidden_bit != 0) {
+            return AVIF_FALSE;
+        }
         const uint32_t obu_type = avifBitsRead(&bits, 4);
         const uint32_t obu_extension_flag = avifBitsRead(&bits, 1);
         const uint32_t obu_has_size_field = avifBitsRead(&bits, 1);
@@ -439,12 +442,14 @@ avifBool avifSequenceHeaderParse(avifSequenceHeader * header, const avifROData *
             return AVIF_FALSE;
 
         if (obu_type == 1) { // Sequence Header
+            avifBits seqHdrBits;
+            avifBitsInit(&seqHdrBits, obus.data + init_byte_pos, obu_size);
             switch (codecType) {
                 case AVIF_CODEC_TYPE_AV1:
-                    return parseAV1SequenceHeader(&bits, header);
+                    return parseAV1SequenceHeader(&seqHdrBits, header);
 #if defined(AVIF_CODEC_AVM)
                 case AVIF_CODEC_TYPE_AV2:
-                    return parseAV2SequenceHeader(&bits, header);
+                    return parseAV2SequenceHeader(&seqHdrBits, header);
 #endif
                 default:
                     return AVIF_FALSE;

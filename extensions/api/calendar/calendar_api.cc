@@ -2031,4 +2031,41 @@ void CalendarDeleteEventTemplateFunction::DeleteEventTemplateComplete(
   }
 }
 
+ExtensionFunction::ResponseAction CalendarGetParentExceptionIdFunction::Run() {
+  std::optional<vivaldi::calendar::GetParentExceptionId::Params> params(
+      vivaldi::calendar::GetParentExceptionId::Params::Create(args()));
+
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  std::u16string id;
+  id = base::UTF8ToUTF16(params->exception_event_id);
+  calendar::EventTemplateID event_exception_id;
+
+  if (!GetIdAsInt64(id, &event_exception_id)) {
+    return RespondNow(Error("Error. Invalid event id"));
+  }
+
+  CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
+
+  model->GetParentExceptionEventId(
+      event_exception_id,
+      base::BindOnce(
+          &CalendarGetParentExceptionIdFunction::GetParentExceptionIdComplete,
+          this),
+      &task_tracker_);
+  return RespondLater();
+}
+
+void CalendarGetParentExceptionIdFunction::GetParentExceptionIdComplete(
+    calendar::EventID parent_event_id) {
+  if (!parent_event_id) {
+    Respond(ArgumentList(
+        vivaldi::calendar::GetParentExceptionId::Results::Create("")));
+  } else {
+    std::string id = std::to_string(parent_event_id);
+    Respond(ArgumentList(
+        vivaldi::calendar::GetParentExceptionId::Results::Create(id)));
+  }
+}
+
 }  //  namespace extensions

@@ -18,12 +18,13 @@
 #include "media/base/audio_parameters.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 
-MicCoordinator::MicCoordinator(views::View& parent_view,
-                               bool needs_borders,
-                               const std::vector<std::string>& eligible_mic_ids,
-                               PrefService& prefs,
-                               bool allow_device_selection,
-                               media_preview_metrics::Context metrics_context)
+MicCoordinator::MicCoordinator(
+    views::View& parent_view,
+    bool needs_borders,
+    const std::vector<std::string>& eligible_mic_ids,
+    PrefService& prefs,
+    bool allow_device_selection,
+    const media_preview_metrics::Context& metrics_context)
     : mic_mediator_(
           prefs,
           base::BindRepeating(&MicCoordinator::OnAudioSourceInfosReceived,
@@ -32,15 +33,14 @@ MicCoordinator::MicCoordinator(views::View& parent_view,
       eligible_mic_ids_(eligible_mic_ids),
       prefs_(&prefs),
       allow_device_selection_(allow_device_selection),
-      metrics_context_(metrics_context) {
+      metrics_context_(metrics_context.ui_location,
+                       media_preview_metrics::PreviewType::kMic) {
   auto* mic_view = parent_view.AddChildView(std::make_unique<MediaView>());
   mic_view_tracker_.SetView(mic_view);
   // Safe to use base::Unretained() because `this` owns / outlives
   // `camera_view_tracker_`.
   mic_view_tracker_.SetIsDeletingCallback(base::BindOnce(
       &MicCoordinator::ResetViewController, base::Unretained(this)));
-
-  metrics_context_.preview_type = media_preview_metrics::PreviewType::kMic;
 
   // Safe to use base::Unretained() because `this` owns / outlives
   // `mic_view_controller_`.
@@ -52,6 +52,8 @@ MicCoordinator::MicCoordinator(views::View& parent_view,
 
   audio_stream_coordinator_.emplace(
       mic_view_controller_->GetLiveFeedContainer());
+
+  mic_mediator_.InitializeDeviceList();
 }
 
 MicCoordinator::~MicCoordinator() {
@@ -76,10 +78,23 @@ void MicCoordinator::OnAudioSourceInfosReceived(
     eligible_mic_ids.insert(*real_default_device_id);
   }
 
+  auto real_communications_device_id =
+      media_effects::GetRealCommunicationsDeviceId(device_infos);
+  if (real_communications_device_id &&
+      eligible_mic_ids.contains(
+          media::AudioDeviceDescription::kCommunicationsDeviceId)) {
+    eligible_mic_ids.insert(*real_communications_device_id);
+  }
+
   eligible_device_infos_.clear();
   for (const auto& device_info : device_infos) {
     if (real_default_device_id &&
         media::AudioDeviceDescription::IsDefaultDevice(device_info.unique_id)) {
+      continue;
+    }
+    if (real_communications_device_id &&
+        media::AudioDeviceDescription::IsCommunicationsDevice(
+            device_info.unique_id)) {
       continue;
     }
     if (!eligible_mic_ids.empty() &&
@@ -110,8 +125,10 @@ void MicCoordinator::OnAudioSourceChanged(
   active_device_id_ = device_info.unique_id;
   mic_mediator_.GetAudioInputDeviceFormats(
       active_device_id_,
+      // WeakPtr is needed because the callback is passed later to
+      // MediaDeviceInfo which outlives `this`.
       base::BindOnce(&MicCoordinator::ConnectAudioStream,
-                     base::Unretained(this), active_device_id_));
+                     weak_factory_.GetWeakPtr(), active_device_id_));
 }
 
 void MicCoordinator::ConnectAudioStream(

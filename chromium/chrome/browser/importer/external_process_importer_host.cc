@@ -144,8 +144,7 @@ void ExternalProcessImporterHost::ShowWarningDialog() {
   importer::ShowImportLockDialog(
       parent_window_,
       base::BindOnce(&ExternalProcessImporterHost::OnImportLockDialogEnd,
-                     weak_ptr_factory_.GetWeakPtr()),
-                     l10n_util::GetStringUTF16(IDS_IMPORTER_LOCK_TEXT));
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ExternalProcessImporterHost::OnImportLockDialogEnd(bool is_continue) {

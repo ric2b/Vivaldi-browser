@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: adding-builder-variants
 title: Adding Builder Variants using Profiles
 ---
@@ -160,7 +160,7 @@ See `_define_debug_kernel_builder_configs()` for an example.
 
 To specify which tests suites to run with images built by your builders, you
 must modify `infra/config/builderconfig/target_test_requirements_config.star`.
-If these tests are expirimental or purely informational, be sure to mark them as
+If these tests are experimental or purely informational, be sure to mark them as
 non-critical. See [this CL](https://crrev.com/i/2392510) for an example.
 
 __NOTE:__ The format of this file has changed substantially since the linked CL was

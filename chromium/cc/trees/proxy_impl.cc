@@ -113,7 +113,6 @@ ProxyImpl::ProxyImpl(
   DCHECK(IsMainThreadBlocked());
 
   host_impl_ = layer_tree_host->CreateLayerTreeHostImpl(this);
-  send_compositor_frame_ack_ = settings->send_compositor_frame_ack;
 
   SchedulerSettings scheduler_settings(settings->ToSchedulerSettings());
   scheduler_settings.main_frame_before_commit_enabled =
@@ -325,6 +324,14 @@ void ProxyImpl::FrameSinksToThrottleUpdated(
   NOTREACHED();
 }
 
+void ProxyImpl::SetHasActiveThreadedScroll(bool is_scrolling) {
+  scheduler_->SetIsScrolling(is_scrolling);
+}
+
+void ProxyImpl::SetWaitingForScrollEvent(bool waiting_for_scroll_event) {
+  scheduler_->SetWaitingForScrollEvent(waiting_for_scroll_event);
+}
+
 void ProxyImpl::NotifyReadyToCommitOnImpl(
     CompletionEvent* completion_event,
     std::unique_ptr<CommitState> commit_state,
@@ -417,11 +424,6 @@ void ProxyImpl::DidReceiveCompositorFrameAckOnImplThread() {
                "ProxyImpl::DidReceiveCompositorFrameAckOnImplThread");
   DCHECK(IsImplThread());
   scheduler_->DidReceiveCompositorFrameAck();
-  if (send_compositor_frame_ack_) {
-    MainThreadTaskRunner()->PostTask(
-        FROM_HERE, base::BindOnce(&ProxyMain::DidReceiveCompositorFrameAck,
-                                  proxy_main_frame_sink_bound_weak_ptr_));
-  }
 }
 
 void ProxyImpl::OnCanDrawStateChanged(bool can_draw) {
@@ -731,7 +733,6 @@ void ProxyImpl::ScheduledActionSendBeginMainFrame(
       FROM_HERE,
       base::BindOnce(&ProxyMain::BeginMainFrame, proxy_main_weak_ptr_,
                      std::move(begin_main_frame_state)));
-  host_impl_->DidSendBeginMainFrame(args);
   devtools_instrumentation::DidRequestMainThreadFrame(layer_tree_host_id_);
 }
 

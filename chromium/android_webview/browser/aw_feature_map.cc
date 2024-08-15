@@ -23,6 +23,7 @@ namespace {
 const base::Feature* const kFeaturesExposedToJava[] = {
     &features::kWebViewDisplayCutout,
     &features::kWebViewExitReasonMetric,
+    &features::kWebViewInvokeZoomPickerOnGSU,
     &features::kWebViewMixedContentAutoupgrades,
     &features::kWebViewTestFeature,
     &features::kWebViewJavaJsBridgeMojo,
@@ -31,7 +32,6 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &features::kWebViewXRequestedWithHeaderControl,
     &features::kWebViewXRequestedWithHeaderManifestAllowList,
     &features::kWebViewRestrictSensitiveContent,
-    &features::kWebViewUmaUploadQualityOfServiceSetToDefault,
     &metrics::kAndroidMetricsAsyncMetricLogging,
     &features::kWebViewZoomKeyboardShortcuts,
     &features::kWebViewClearFunctorInBackground,
@@ -47,6 +47,7 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &features::kWebViewUseInitialNetworkStateAtStartup,
     &features::kWebViewReduceUAAndroidVersionDeviceModel,
     &features::kWebViewEnableCrash,
+    &features::kWebViewPreloadClasses,
 };
 
 // static

@@ -62,14 +62,21 @@
 
 #define A53_MAX_CC_COUNT 2000
 
+enum Mpeg2ClosedCaptionsFormat {
+    CC_FORMAT_AUTO,
+    CC_FORMAT_A53_PART4,
+    CC_FORMAT_SCTE20,
+    CC_FORMAT_DVD
+};
+
 typedef struct Mpeg1Context {
     MpegEncContext mpeg_enc_ctx;
-    int mpeg_enc_ctx_allocated; /* true if decoding context allocated */
     int repeat_field;           /* true if we must repeat the field */
     AVPanScan pan_scan;         /* some temporary storage for the panscan */
     AVStereo3D stereo3d;
     int has_stereo3d;
     AVBufferRef *a53_buf_ref;
+    enum Mpeg2ClosedCaptionsFormat cc_format;
     uint8_t afd;
     int has_afd;
     int slice_count;
@@ -795,7 +802,6 @@ static av_cold int mpeg_decode_init(AVCodecContext *avctx)
     ff_mpeg12_init_vlcs();
 
     s2->chroma_format              = 1;
-    s->mpeg_enc_ctx_allocated      = 0;
     s->repeat_field                = 0;
     avctx->color_range             = AVCOL_RANGE_MPEG;
     return 0;
@@ -809,16 +815,14 @@ static int mpeg_decode_update_thread_context(AVCodecContext *avctx,
     MpegEncContext *s = &ctx->mpeg_enc_ctx, *s1 = &ctx_from->mpeg_enc_ctx;
     int err;
 
-    if (avctx == avctx_from               ||
-        !ctx_from->mpeg_enc_ctx_allocated ||
-        !s1->context_initialized)
+    if (avctx == avctx_from || !s1->context_initialized)
         return 0;
 
     err = ff_mpeg_update_thread_context(avctx, avctx_from);
     if (err)
         return err;
 
-    if (!ctx->mpeg_enc_ctx_allocated)
+    if (!s->context_initialized)
         memcpy(s + 1, s1 + 1, sizeof(Mpeg1Context) - sizeof(MpegEncContext));
 
     return 0;
@@ -953,7 +957,7 @@ static int mpeg_decode_postinit(AVCodecContext *avctx)
         avctx->sample_aspect_ratio = (AVRational){ 0, 1 };
     }
 
-    if ((s1->mpeg_enc_ctx_allocated == 0)                   ||
+    if (!s->context_initialized                             ||
         avctx->coded_width       != s->width                ||
         avctx->coded_height      != s->height               ||
         s1->save_width           != s->width                ||
@@ -961,10 +965,8 @@ static int mpeg_decode_postinit(AVCodecContext *avctx)
         av_cmp_q(s1->save_aspect, s->avctx->sample_aspect_ratio) ||
         (s1->save_progressive_seq != s->progressive_sequence && FFALIGN(s->height, 16) != FFALIGN(s->height, 32)) ||
         0) {
-        if (s1->mpeg_enc_ctx_allocated) {
+        if (s->context_initialized)
             ff_mpv_common_end(s);
-            s1->mpeg_enc_ctx_allocated = 0;
-        }
 
         ret = ff_set_dimensions(avctx, s->width, s->height);
         if (ret < 0)
@@ -1021,8 +1023,6 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
         if ((ret = ff_mpv_common_init(s)) < 0)
             return ret;
-
-        s1->mpeg_enc_ctx_allocated = 1;
     }
     return 0;
 }
@@ -1225,7 +1225,7 @@ static int mpeg_decode_picture_coding_extension(Mpeg1Context *s1)
     s->mpeg_f_code[0][1] += !s->mpeg_f_code[0][1];
     s->mpeg_f_code[1][0] += !s->mpeg_f_code[1][0];
     s->mpeg_f_code[1][1] += !s->mpeg_f_code[1][1];
-    if (!s->pict_type && s1->mpeg_enc_ctx_allocated) {
+    if (!s->pict_type && s->context_initialized) {
         av_log(s->avctx, AV_LOG_ERROR, "Missing picture start code\n");
         if (s->avctx->err_recognition & AV_EF_EXPLODE)
             return AVERROR_INVALIDDATA;
@@ -1291,6 +1291,21 @@ static int mpeg_field_start(MpegEncContext *s, const uint8_t *buf, int buf_size)
         if ((ret = ff_mpv_frame_start(s, avctx)) < 0)
             return ret;
 
+        if (s->picture_structure != PICT_FRAME) {
+            s->current_picture_ptr->f->flags |= AV_FRAME_FLAG_TOP_FIELD_FIRST *
+                                                (s->picture_structure == PICT_TOP_FIELD);
+
+            for (int i = 0; i < 3; i++) {
+                if (s->picture_structure == PICT_BOTTOM_FIELD) {
+                    s->current_picture.f->data[i] = FF_PTR_ADD(s->current_picture.f->data[i],
+                                                               s->current_picture.f->linesize[i]);
+                }
+                s->current_picture.f->linesize[i] *= 2;
+                s->last_picture.f->linesize[i]    *= 2;
+                s->next_picture.f->linesize[i]    *= 2;
+            }
+        }
+
         ff_mpeg_er_frame_start(s);
 
         /* first check if we must repeat the frame */
@@ -1306,20 +1321,20 @@ static int mpeg_field_start(MpegEncContext *s, const uint8_t *buf, int buf_size)
             }
         }
 
-        pan_scan = av_frame_new_side_data(s->current_picture_ptr->f,
-                                          AV_FRAME_DATA_PANSCAN,
-                                          sizeof(s1->pan_scan));
-        if (!pan_scan)
-            return AVERROR(ENOMEM);
-        memcpy(pan_scan->data, &s1->pan_scan, sizeof(s1->pan_scan));
+        ret = ff_frame_new_side_data(s->avctx, s->current_picture_ptr->f,
+                                     AV_FRAME_DATA_PANSCAN, sizeof(s1->pan_scan),
+                                     &pan_scan);
+        if (ret < 0)
+            return ret;
+        if (pan_scan)
+            memcpy(pan_scan->data, &s1->pan_scan, sizeof(s1->pan_scan));
 
         if (s1->a53_buf_ref) {
-            AVFrameSideData *sd = av_frame_new_side_data_from_buf(
-                s->current_picture_ptr->f, AV_FRAME_DATA_A53_CC,
-                s1->a53_buf_ref);
-            if (!sd)
-                av_buffer_unref(&s1->a53_buf_ref);
-            s1->a53_buf_ref = NULL;
+            ret = ff_frame_new_side_data_from_buf(
+                s->avctx, s->current_picture_ptr->f, AV_FRAME_DATA_A53_CC,
+                &s1->a53_buf_ref, NULL);
+            if (ret < 0)
+                return ret;
         }
 
         if (s1->has_stereo3d) {
@@ -1332,21 +1347,19 @@ static int mpeg_field_start(MpegEncContext *s, const uint8_t *buf, int buf_size)
         }
 
         if (s1->has_afd) {
-            AVFrameSideData *sd =
-                av_frame_new_side_data(s->current_picture_ptr->f,
-                                       AV_FRAME_DATA_AFD, 1);
-            if (!sd)
-                return AVERROR(ENOMEM);
-
-            *sd->data   = s1->afd;
+            AVFrameSideData *sd;
+            ret = ff_frame_new_side_data(s->avctx, s->current_picture_ptr->f,
+                                         AV_FRAME_DATA_AFD, 1, &sd);
+            if (ret < 0)
+                return ret;
+            if (sd)
+                *sd->data = s1->afd;
             s1->has_afd = 0;
         }
 
         if (HAVE_THREADS && (avctx->active_thread_type & FF_THREAD_FRAME))
             ff_thread_finish_setup(avctx);
     } else { // second field
-        int i;
-
         if (!s->current_picture_ptr) {
             av_log(s->avctx, AV_LOG_ERROR, "first field missing\n");
             return AVERROR_INVALIDDATA;
@@ -1360,7 +1373,7 @@ static int mpeg_field_start(MpegEncContext *s, const uint8_t *buf, int buf_size)
             }
         }
 
-        for (i = 0; i < 4; i++) {
+        for (int i = 0; i < 3; i++) {
             s->current_picture.f->data[i] = s->current_picture_ptr->f->data[i];
             if (s->picture_structure == PICT_BOTTOM_FIELD)
                 s->current_picture.f->data[i] +=
@@ -1719,7 +1732,7 @@ static int slice_end(AVCodecContext *avctx, AVFrame *pict)
     Mpeg1Context *s1  = avctx->priv_data;
     MpegEncContext *s = &s1->mpeg_enc_ctx;
 
-    if (!s1->mpeg_enc_ctx_allocated || !s->current_picture_ptr)
+    if (!s->context_initialized || !s->current_picture_ptr)
         return 0;
 
     if (s->avctx->hwaccel) {
@@ -1860,10 +1873,9 @@ static int vcr2_init_sequence(AVCodecContext *avctx)
 
     /* start new MPEG-1 context decoding */
     s->out_format = FMT_MPEG1;
-    if (s1->mpeg_enc_ctx_allocated) {
+    if (s->context_initialized)
         ff_mpv_common_end(s);
-        s1->mpeg_enc_ctx_allocated = 0;
-    }
+
     s->width            = avctx->coded_width;
     s->height           = avctx->coded_height;
     avctx->has_b_frames = 0; // true?
@@ -1873,7 +1885,6 @@ static int vcr2_init_sequence(AVCodecContext *avctx)
 
     if ((ret = ff_mpv_common_init(s)) < 0)
         return ret;
-    s1->mpeg_enc_ctx_allocated = 1;
 
     for (i = 0; i < 64; i++) {
         int j = s->idsp.idct_permutation[i];
@@ -1903,12 +1914,27 @@ static int vcr2_init_sequence(AVCodecContext *avctx)
     return 0;
 }
 
+static void mpeg_set_cc_format(AVCodecContext *avctx, enum Mpeg2ClosedCaptionsFormat format,
+                               const char *label)
+{
+    Mpeg1Context *s1 = avctx->priv_data;
+
+    av_assert2(format != CC_FORMAT_AUTO);
+
+    if (!s1->cc_format) {
+        s1->cc_format = format;
+
+        av_log(avctx, AV_LOG_DEBUG, "CC: first seen substream is %s format\n", label);
+    }
+}
+
 static int mpeg_decode_a53_cc(AVCodecContext *avctx,
                               const uint8_t *p, int buf_size)
 {
     Mpeg1Context *s1 = avctx->priv_data;
 
-    if (buf_size >= 6 &&
+    if ((!s1->cc_format || s1->cc_format == CC_FORMAT_A53_PART4) &&
+        buf_size >= 6 &&
         p[0] == 'G' && p[1] == 'A' && p[2] == '9' && p[3] == '4' &&
         p[4] == 3 && (p[5] & 0x40)) {
         /* extract A53 Part 4 CC data */
@@ -1927,9 +1953,11 @@ static int mpeg_decode_a53_cc(AVCodecContext *avctx,
                 memcpy(s1->a53_buf_ref->data + old_size, p + 7, cc_count * UINT64_C(3));
 
             avctx->properties |= FF_CODEC_PROPERTY_CLOSED_CAPTIONS;
+            mpeg_set_cc_format(avctx, CC_FORMAT_A53_PART4, "A/53 Part 4");
         }
         return 1;
-    } else if (buf_size >= 2 &&
+    } else if ((!s1->cc_format || s1->cc_format == CC_FORMAT_SCTE20) &&
+               buf_size >= 2 &&
                p[0] == 0x03 && (p[1]&0x7f) == 0x01) {
         /* extract SCTE-20 CC data */
         GetBitContext gb;
@@ -1973,10 +2001,13 @@ static int mpeg_decode_a53_cc(AVCodecContext *avctx,
                     cap += 3;
                 }
             }
+
             avctx->properties |= FF_CODEC_PROPERTY_CLOSED_CAPTIONS;
+            mpeg_set_cc_format(avctx, CC_FORMAT_SCTE20, "SCTE-20");
         }
         return 1;
-    } else if (buf_size >= 11 &&
+    } else if ((!s1->cc_format || s1->cc_format == CC_FORMAT_DVD) &&
+               buf_size >= 11 &&
                p[0] == 'C' && p[1] == 'C' && p[2] == 0x01 && p[3] == 0xf8) {
         /* extract DVD CC data
          *
@@ -2033,7 +2064,9 @@ static int mpeg_decode_a53_cc(AVCodecContext *avctx,
                     p += 6;
                 }
             }
+
             avctx->properties |= FF_CODEC_PROPERTY_CLOSED_CAPTIONS;
+            mpeg_set_cc_format(avctx, CC_FORMAT_DVD, "DVD");
         }
         return 1;
     }
@@ -2405,7 +2438,7 @@ static int decode_chunks(AVCodecContext *avctx, AVFrame *picture,
                     break;
                 }
 
-                if (!s->mpeg_enc_ctx_allocated)
+                if (!s2->context_initialized)
                     break;
 
                 if (s2->codec_id == AV_CODEC_ID_MPEG2VIDEO) {
@@ -2503,9 +2536,8 @@ static int mpeg_decode_frame(AVCodecContext *avctx, AVFrame *picture,
         return buf_size;
     }
 
-    if (s->mpeg_enc_ctx_allocated == 0 && (   s2->codec_tag == AV_RL32("VCR2")
-                                           || s2->codec_tag == AV_RL32("BW10")
-                                          ))
+    if (!s2->context_initialized &&
+        (s2->codec_tag == AV_RL32("VCR2") || s2->codec_tag == AV_RL32("BW10")))
         vcr2_init_sequence(avctx);
 
     s->slice_count = 0;
@@ -2563,8 +2595,7 @@ static av_cold int mpeg_decode_end(AVCodecContext *avctx)
 {
     Mpeg1Context *s = avctx->priv_data;
 
-    if (s->mpeg_enc_ctx_allocated)
-        ff_mpv_common_end(&s->mpeg_enc_ctx);
+    ff_mpv_common_end(&s->mpeg_enc_ctx);
     av_buffer_unref(&s->a53_buf_ref);
     return 0;
 }
@@ -2598,11 +2629,39 @@ const FFCodec ff_mpeg1video_decoder = {
                            },
 };
 
+#define M2V_OFFSET(x) offsetof(Mpeg1Context, x)
+#define M2V_PARAM     AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_DECODING_PARAM
+
+static const AVOption mpeg2video_options[] = {
+    { "cc_format", "extract a specific Closed Captions format",
+       M2V_OFFSET(cc_format), AV_OPT_TYPE_INT, { .i64 = CC_FORMAT_AUTO },
+        CC_FORMAT_AUTO, CC_FORMAT_DVD, M2V_PARAM, .unit = "cc_format" },
+
+       { "auto",   "pick first seen CC substream",  0, AV_OPT_TYPE_CONST,
+        { .i64 =   CC_FORMAT_AUTO },                .flags = M2V_PARAM, .unit = "cc_format" },
+       { "a53",    "pick A/53 Part 4 CC substream", 0, AV_OPT_TYPE_CONST,
+        { .i64 =   CC_FORMAT_A53_PART4 },           .flags = M2V_PARAM, .unit = "cc_format" },
+       { "scte20", "pick SCTE-20 CC substream",     0, AV_OPT_TYPE_CONST,
+        { .i64 =   CC_FORMAT_SCTE20 },              .flags = M2V_PARAM, .unit = "cc_format" },
+       { "dvd",    "pick DVD CC substream",         0, AV_OPT_TYPE_CONST,
+        { .i64 =   CC_FORMAT_DVD },                 .flags = M2V_PARAM, .unit = "cc_format" },
+    { NULL }
+};
+
+static const AVClass mpeg2video_class = {
+    .class_name = "MPEG-2 video",
+    .item_name  = av_default_item_name,
+    .option     = mpeg2video_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_DECODER,
+};
+
 const FFCodec ff_mpeg2video_decoder = {
     .p.name         = "mpeg2video",
     CODEC_LONG_NAME("MPEG-2 video"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_MPEG2VIDEO,
+    .p.priv_class   = &mpeg2video_class,
     .priv_data_size = sizeof(Mpeg1Context),
     .init           = mpeg_decode_init,
     .close          = mpeg_decode_end,
@@ -2797,15 +2856,6 @@ static av_cold int ipu_decode_init(AVCodecContext *avctx)
     return 0;
 }
 
-static av_cold int ipu_decode_end(AVCodecContext *avctx)
-{
-    IPUContext *s = avctx->priv_data;
-
-    ff_mpv_common_end(&s->m);
-
-    return 0;
-}
-
 const FFCodec ff_ipu_decoder = {
     .p.name         = "ipu",
     CODEC_LONG_NAME("IPU Video"),
@@ -2814,7 +2864,5 @@ const FFCodec ff_ipu_decoder = {
     .priv_data_size = sizeof(IPUContext),
     .init           = ipu_decode_init,
     FF_CODEC_DECODE_CB(ipu_decode_frame),
-    .close          = ipu_decode_end,
     .p.capabilities = AV_CODEC_CAP_DR1,
-    .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
 };

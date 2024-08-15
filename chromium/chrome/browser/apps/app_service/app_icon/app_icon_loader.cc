@@ -32,7 +32,6 @@
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
-#include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/favicon_base/favicon_types.h"
@@ -281,7 +280,7 @@ apps::IconValuePtr ApplyEffects(apps::IconEffects icon_effects,
   }
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (icon_effects & apps::IconEffects::kMdIconStyle) {
-    // TODO(crbug.com/826982): MD post-processing is not always applied: "See
+    // TODO(crbug.com/40569217): MD post-processing is not always applied: "See
     // legacy code:
     // https://cs.chromium.org/search/?q=ChromeAppIconLoader&type=cs In one
     // cases MD design is used in another not."
@@ -475,7 +474,7 @@ void AppIconLoader::LoadWebAppIcon(const std::string& web_app_id,
   // |icon_scale_for_compressed_response_| to apps::EncodeImageToPngBytes(). In
   // most cases AppIconLoader always uses the 1.0 intended icon scale
   // factor as an intermediate representation to be compressed and returned.
-  // TODO(crbug.com/1112737): Investigate how to unify it and set
+  // TODO(crbug.com/40709882): Investigate how to unify it and set
   // |icon_scale_for_compressed_response_| value in AppIconLoader()
   // constructor.
   icon_scale_for_compressed_response_ = icon_scale_;

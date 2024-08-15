@@ -8,10 +8,12 @@ import os
 import sys
 import subprocess
 import unittest
+from unittest import mock
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 
+import roll_dep
 from testing_support import fake_repos
 
 ROLL_DEP = os.path.join(ROOT_DIR, 'roll-dep')
@@ -202,6 +204,46 @@ class RollDepTest(fake_repos.FakeReposTestBase):
 
         self.assertIn(expected_message, stdout)
         self.assertIn(expected_message, commit_message)
+
+
+class CommitMessageTest(unittest.TestCase):
+
+    def setUp(self):
+        self.logs = '\n'.join([
+            '2024-04-05 alice Goodbye',
+            '2024-04-03 bob Hello World',
+        ])
+
+        # Mock the `git log` call.
+        mock.patch('roll_dep.check_output', return_value=self.logs).start()
+        self.addCleanup(mock.patch.stopall)
+
+    def testShowShortLog(self):
+        message = roll_dep.generate_commit_message(
+            '/path/to/dir', 'dep', 'abc', 'def',
+            'https://chromium.googlesource.com', True, 10)
+
+        self.assertIn('Roll dep/ abc..def (2 commits)', message)
+        self.assertIn('$ git log', message)
+        self.assertIn(self.logs, message)
+
+    def testHideShortLog(self):
+        message = roll_dep.generate_commit_message(
+            '/path/to/dir', 'dep', 'abc', 'def',
+            'https://chromium.googlesource.com', False, 10)
+
+        self.assertNotIn('$ git log', message)
+        self.assertNotIn(self.logs, message)
+
+    def testShouldShowLogWithPublicHost(self):
+        self.assertTrue(
+            roll_dep.should_show_log(
+                'https://chromium.googlesource.com/project'))
+
+    def testShouldNotShowLogWithPrivateHost(self):
+        self.assertFalse(
+            roll_dep.should_show_log(
+                'https://private.googlesource.com/project'))
 
 
 if __name__ == '__main__':

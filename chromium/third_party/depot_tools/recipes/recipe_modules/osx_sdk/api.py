@@ -15,23 +15,29 @@ from recipe_engine import recipe_api
 # implemented with a proto message.
 _PROPERTY_DEFAULTS = {
     'toolchain_pkg': 'infra/tools/mac_toolchain/${platform}',
-    'toolchain_ver': 'git_revision:59ddedfe3849abf560cbe0b41bb8e431041cd2bb',
+    'toolchain_ver': 'git_revision:26bb3effce1bc1896a3776c21b84e76ae82c3917',
 }
 
 # Rationalized from https://en.wikipedia.org/wiki/Xcode.
 #
 # Maps from OS version to the maximum supported version of Xcode for that OS.
 #
+# These correspond to package instance tags for:
+#
+#   https://chrome-infra-packages.appspot.com/p/infra_internal/ios/xcode/xcode_binaries/mac-amd64
+#
 # Keep this sorted by OS version.
 _DEFAULT_VERSION_MAP = [
-  ('10.12.6', '9c40b'),
-  ('10.13.2', '9f2000'),
-  ('10.13.6', '10b61'),
-  ('10.14.3', '10g8'),
-  ('10.14.4', '11b52'),
-  ('10.15.4', '12d4e'),
-  ('11.3', '13c100'),
-  ('13.3', '14c18')
+    ('10.12.6', '9c40b'),
+    ('10.13.2', '9f2000'),
+    ('10.13.6', '10b61'),
+    ('10.14.3', '10g8'),
+    ('10.14.4', '11b52'),
+    ('10.15.4', '12d4e'),
+    ('11.3', '13c100'),
+    ('13.0', '14e300c'),
+    ('13.5', '15c500b'),
+    ('14.0', '15e204a'),
 ]
 
 
@@ -52,14 +58,6 @@ class OSXSDKApi(recipe_api.RecipeApi):
 
     if 'sdk_version' in self._sdk_properties:
       self._sdk_version = self._sdk_properties['sdk_version'].lower()
-    else:
-      cur_os = self.m.platform.mac_release
-      for target_os, xcode in reversed(_DEFAULT_VERSION_MAP):
-        if cur_os >= self.m.version.parse(target_os):
-          self._sdk_version = xcode
-          break
-      else:
-        self._sdk_version = _DEFAULT_VERSION_MAP[0][-1]
 
   @contextmanager
   def __call__(self, kind):
@@ -68,7 +66,7 @@ class OSXSDKApi(recipe_api.RecipeApi):
     Is a no-op on non-mac platforms.
 
     This will deploy the helper tool and the XCode.app bundle at
-    `[START_DIR]/cache/osx_sdk`.
+    `api.path.cache_dir / 'osx_sdk'`.
 
     To avoid machines rebuilding these on every run, set up a named cache in
     your cr-buildbucket.cfg file like:
@@ -127,15 +125,30 @@ class OSXSDKApi(recipe_api.RecipeApi):
     """Ensures the mac_toolchain tool and OS X SDK packages are installed.
 
     Returns Path to the installed sdk app bundle."""
-    cache_dir = self.m.path['cache'].join('osx_sdk')
+    cache_dir = self.m.path.cache_dir / 'osx_sdk'
 
     ef = self.m.cipd.EnsureFile()
     ef.add_package(self._tool_pkg, self._tool_ver)
     self.m.cipd.ensure(cache_dir, ef)
 
-    sdk_app = cache_dir.join('XCode.app')
+    if self._sdk_version is None:
+      find_os = self.m.step(
+          'find macOS version', ['sw_vers', '-productVersion'],
+          stdout=self.m.raw_io.output_text(),
+          step_test_data=(lambda: self.m.raw_io.test_api.stream_output_text(
+              self.test_api.DEFAULT_MACOS_VERSION)))
+      cur_os = self.m.version.parse(find_os.stdout.strip())
+      find_os.presentation.step_text = f'Running on {str(cur_os)!r}.'
+      for target_os, xcode in reversed(_DEFAULT_VERSION_MAP):
+        if cur_os >= self.m.version.parse(target_os):
+          self._sdk_version = xcode
+          break
+      else:
+        self._sdk_version = _DEFAULT_VERSION_MAP[0][-1]
+
+    sdk_app = cache_dir / 'XCode.app'
     self.m.step('install xcode', [
-        cache_dir.join('mac_toolchain'), 'install',
+        cache_dir / 'mac_toolchain', 'install',
         '-kind', kind,
         '-xcode-version', self._sdk_version,
         '-output-dir', sdk_app,

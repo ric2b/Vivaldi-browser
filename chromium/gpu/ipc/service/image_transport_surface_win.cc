@@ -34,7 +34,6 @@ gl::DCompPresenter::Settings CreatDCompPresenterSettings(
       workarounds.disable_vp_super_resolution;
   settings.force_dcomp_triple_buffer_video_swap_chain =
       workarounds.force_dcomp_triple_buffer_video_swap_chain;
-  settings.use_angle_texture_offset = true;
   return settings;
 }
 }  // namespace
@@ -46,12 +45,8 @@ scoped_refptr<gl::Presenter> ImageTransportSurface::CreatePresenter(
     const GpuFeatureInfo& gpu_feature_info,
     SurfaceHandle surface_handle) {
   if (gl::DirectCompositionSupported()) {
-    auto settings = CreatDCompPresenterSettings(workarounds);
-    auto presenter = base::MakeRefCounted<gl::DCompPresenter>(settings);
-    if (!presenter->Initialize()) {
-      return nullptr;
-    }
-    return presenter;
+    return base::MakeRefCounted<gl::DCompPresenter>(
+        CreatDCompPresenterSettings(workarounds));
   }
 
   return nullptr;
@@ -66,6 +61,7 @@ scoped_refptr<gl::GLSurface> ImageTransportSurface::CreateNativeGLSurface(
   scoped_refptr<gl::GLSurface> surface;
 
   if (gl::GetGLImplementation() == gl::kGLImplementationEGLANGLE) {
+    // We always expect to succeed from |CreatePresenter| when DComp is enabled.
     CHECK(!gl::DirectCompositionSupported());
     surface = gl::InitializeGLSurface(
         base::MakeRefCounted<gl::NativeViewGLSurfaceEGL>(

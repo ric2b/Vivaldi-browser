@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: profile-bashrc
 title: CrOS bashrc Override Framework
 ---
@@ -15,7 +15,7 @@ delegation of maintenance (i.e. OWNERS), and cleaner separation of code.
 ## Portage Profile Settings
 
 Portage supports global `profile.bashrc` files that stack across
-[profiles](./ebuild_faq.md#profiles). These are bash scripts that are sourced
+[profiles](/chromium-os/developer-library/guides/portage/ebuild-faq/#profiles). These are bash scripts that are sourced
 before & after every ebuild phase, and are automatically loaded from the
 current board's set of profiles. The script can do pretty much anything: run
 arbitrary commands (patch or modify files, delete or create files, etc...),

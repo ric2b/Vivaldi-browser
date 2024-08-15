@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: rust-on-cros
 title: Rust on ChromeOS
 ---
@@ -225,10 +225,20 @@ calling cargo.
 
 The primary downside of using cargo directly is it will fetch dependencies from
 crates.io though the internet. These often do not match with the versions used
-by ChromeOS, leading to undesired consequences. One workaround is to have an
-up-to-date Cargo.lock file checked in for your project. Another is to use the
-same cargo config as cros_workon_make. There is a helper script that set this up
-for you:
+by ChromeOS, leading to undesired consequences.
+
+One workaround is to have an up-to-date Cargo.lock file checked in for your
+project. Run the following outside the chroot in the crate root:
+
+```bash
+cros_sdk --working-dir=. -- \
+  cargo --config 'source.crates-io.directory="/usr/lib/cros_rust_registry/registry"' generate-lockfile
+```
+
+Also make sure to allow the `Cargo.lock` in the `.gitignore` of your crate.
+
+Another is to use the same cargo config as cros_workon_make. There is a helper
+script that set this up for you:
 
 ```bash
 BOARD=<board> ~/chromiumos/src/platform/dev/contrib/setup_cros_cargo_home

@@ -62,10 +62,7 @@ struct State {
     void Process() {
         // Find the access instructions that need to be replaced.
         Vector<Access, 8> worklist;
-        for (auto* inst : ir.instructions.Objects()) {
-            if (!inst->Alive()) {
-                continue;
-            }
+        for (auto* inst : ir.Instructions()) {
             if (auto* access = inst->As<core::ir::Access>()) {
                 auto* source_ty = access->Object()->Type();
                 if (!source_ty->Is<core::type::Pointer>()) {
@@ -134,9 +131,8 @@ struct State {
             Switch(
                 use.instruction,
                 [&](core::ir::Load* load) {
-                    auto* lve = b.LoadVectorElement(object, index);
+                    auto* lve = b.LoadVectorElementWithResult(load->DetachResult(), object, index);
                     lve->InsertBefore(load);
-                    load->Result(0)->ReplaceAllUsesWith(lve->Result(0));
                     to_destroy.Push(load);
                 },
                 [&](core::ir::Store* store) {
@@ -163,7 +159,7 @@ struct State {
 
 Result<SuccessType> VectorElementPointer(core::ir::Module& ir) {
     auto result = ValidateAndDumpIfNeeded(ir, "VectorElementPointer transform",
-                                          EnumSet<core::ir::Capability>{
+                                          core::ir::Capabilities{
                                               core::ir::Capability::kAllowVectorElementPointer,
                                           });
     if (result != Success) {

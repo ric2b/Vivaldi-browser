@@ -4,6 +4,8 @@ static_library("importer") {
     sources = [
       "chrome_importer_bookmark.cpp",
       "chrome_importer_utils.h",
+      "chromium_extension_importer.cpp",
+      "chromium_extension_importer.h",
       "chromium_importer.cpp",
       "chromium_importer.h",
       "viv_importer_bookmark.cpp",

@@ -116,7 +116,14 @@ bool Resource::hasPendingWorks(Context *context) const
     return context->cmdQueue().resourceHasPendingWorks(this);
 }
 
-void Resource::setUsedByCommandBufferWithQueueSerial(uint64_t serial, bool writing)
+bool Resource::hasPendingRenderWorks(Context *context) const
+{
+    return context->cmdQueue().resourceHasPendingRenderWorks(this);
+}
+
+void Resource::setUsedByCommandBufferWithQueueSerial(uint64_t serial,
+                                                     bool writing,
+                                                     bool isRenderCommand)
 {
     if (writing)
     {
@@ -125,6 +132,18 @@ void Resource::setUsedByCommandBufferWithQueueSerial(uint64_t serial, bool writi
     }
 
     mUsageRef->cmdBufferQueueSerial = std::max(mUsageRef->cmdBufferQueueSerial, serial);
+
+    if (isRenderCommand)
+    {
+        if (writing)
+        {
+            mUsageRef->lastWritingRenderEncoderSerial = mUsageRef->cmdBufferQueueSerial;
+        }
+        else
+        {
+            mUsageRef->lastReadingRenderEncoderSerial = mUsageRef->cmdBufferQueueSerial;
+        }
+    }
 }
 
 // Texture implemenetation
@@ -481,13 +500,13 @@ Texture::Texture(ContextMtl *context,
     }
 }
 
-Texture::Texture(Texture *original, MTLPixelFormat format)
+Texture::Texture(Texture *original, MTLPixelFormat pixelFormat)
     : Resource(original),
       mColorWritableMask(original->mColorWritableMask)  // Share color write mask property
 {
     ANGLE_MTL_OBJC_SCOPE
     {
-        auto view = [original->get() newTextureViewWithPixelFormat:format];
+        auto view = [original->get() newTextureViewWithPixelFormat:pixelFormat];
 
         set([view ANGLE_MTL_AUTORELEASE]);
         // Texture views consume no additional memory
@@ -495,15 +514,19 @@ Texture::Texture(Texture *original, MTLPixelFormat format)
     }
 }
 
-Texture::Texture(Texture *original, MTLTextureType type, NSRange mipmapLevelRange, NSRange slices)
+Texture::Texture(Texture *original,
+                 MTLPixelFormat pixelFormat,
+                 MTLTextureType textureType,
+                 NSRange levels,
+                 NSRange slices)
     : Resource(original),
       mColorWritableMask(original->mColorWritableMask)  // Share color write mask property
 {
     ANGLE_MTL_OBJC_SCOPE
     {
-        auto view = [original->get() newTextureViewWithPixelFormat:original->pixelFormat()
-                                                       textureType:type
-                                                            levels:mipmapLevelRange
+        auto view = [original->get() newTextureViewWithPixelFormat:pixelFormat
+                                                       textureType:textureType
+                                                            levels:levels
                                                             slices:slices];
 
         set([view ANGLE_MTL_AUTORELEASE]);
@@ -512,19 +535,23 @@ Texture::Texture(Texture *original, MTLTextureType type, NSRange mipmapLevelRang
     }
 }
 
-Texture::Texture(Texture *original, MTLPixelFormat format, const TextureSwizzleChannels &swizzle)
+Texture::Texture(Texture *original,
+                 MTLPixelFormat pixelFormat,
+                 MTLTextureType textureType,
+                 NSRange levels,
+                 NSRange slices,
+                 const TextureSwizzleChannels &swizzle)
     : Resource(original),
       mColorWritableMask(original->mColorWritableMask)  // Share color write mask property
 {
 #if ANGLE_MTL_SWIZZLE_AVAILABLE
     ANGLE_MTL_OBJC_SCOPE
     {
-        auto view = [original->get()
-            newTextureViewWithPixelFormat:format
-                              textureType:original->textureType()
-                                   levels:NSMakeRange(0, original->mipmapLevels())
-                                   slices:NSMakeRange(0, original->cubeFacesOrArrayLength())
-                                  swizzle:swizzle];
+        auto view = [original->get() newTextureViewWithPixelFormat:pixelFormat
+                                                       textureType:textureType
+                                                            levels:levels
+                                                            slices:slices
+                                                           swizzle:swizzle];
 
         set([view ANGLE_MTL_AUTORELEASE]);
         // Texture views consume no additional memory
@@ -533,28 +560,6 @@ Texture::Texture(Texture *original, MTLPixelFormat format, const TextureSwizzleC
 #else
     UNREACHABLE();
 #endif
-}
-
-Texture::Texture(Texture *original,
-                 MTLTextureType type,
-                 const MipmapNativeLevel &level,
-                 int layer,
-                 MTLPixelFormat pixelFormat)
-    : Resource(original),
-      mColorWritableMask(std::make_shared<MTLColorWriteMask>(MTLColorWriteMaskAll))
-{
-    ANGLE_MTL_OBJC_SCOPE
-    {
-        ASSERT(original->pixelFormat() == pixelFormat || original->supportFormatView());
-        auto view = [original->get() newTextureViewWithPixelFormat:pixelFormat
-                                                       textureType:type
-                                                            levels:NSMakeRange(level.get(), 1)
-                                                            slices:NSMakeRange(layer, 1)];
-
-        set([view ANGLE_MTL_AUTORELEASE]);
-        // Texture views consume no additional memory
-        mEstimatedByteSize = 0;
-    }
 }
 
 void Texture::syncContent(ContextMtl *context, mtl::BlitCommandEncoder *blitEncoder)
@@ -681,8 +686,9 @@ TextureRef Texture::createCubeFaceView(uint32_t face)
         switch (textureType())
         {
             case MTLTextureTypeCube:
-                return TextureRef(new Texture(
-                    this, MTLTextureType2D, NSMakeRange(0, mipmapLevels()), NSMakeRange(face, 1)));
+                return TextureRef(new Texture(this, pixelFormat(), MTLTextureType2D,
+                                              NSMakeRange(0, mipmapLevels()),
+                                              NSMakeRange(face, 1)));
             default:
                 UNREACHABLE();
                 return nullptr;
@@ -699,8 +705,8 @@ TextureRef Texture::createSliceMipView(uint32_t slice, const MipmapNativeLevel &
             case MTLTextureTypeCube:
             case MTLTextureType2D:
             case MTLTextureType2DArray:
-                return TextureRef(new Texture(this, MTLTextureType2D, NSMakeRange(level.get(), 1),
-                                              NSMakeRange(slice, 1)));
+                return TextureRef(new Texture(this, pixelFormat(), MTLTextureType2D,
+                                              NSMakeRange(level.get(), 1), NSMakeRange(slice, 1)));
             default:
                 UNREACHABLE();
                 return nullptr;
@@ -713,8 +719,8 @@ TextureRef Texture::createMipView(const MipmapNativeLevel &level)
     ANGLE_MTL_OBJC_SCOPE
     {
         NSUInteger slices = cubeFacesOrArrayLength();
-        return TextureRef(
-            new Texture(this, textureType(), NSMakeRange(level.get(), 1), NSMakeRange(0, slices)));
+        return TextureRef(new Texture(this, pixelFormat(), textureType(),
+                                      NSMakeRange(level.get(), 1), NSMakeRange(0, slices)));
     }
 }
 
@@ -731,7 +737,8 @@ TextureRef Texture::createShaderImageView(const MipmapNativeLevel &level,
     ASSERT(isShaderReadable());
     ASSERT(isShaderWritable());
     ASSERT(format == pixelFormat() || supportFormatView());
-    return TextureRef(new Texture(this, textureType(), level, layer, format));
+    return TextureRef(new Texture(this, format, textureType(), NSMakeRange(level.get(), 1),
+                                  NSMakeRange(layer, 1)));
 }
 
 TextureRef Texture::createViewWithCompatibleFormat(MTLPixelFormat format)
@@ -742,7 +749,8 @@ TextureRef Texture::createViewWithCompatibleFormat(MTLPixelFormat format)
 TextureRef Texture::createSwizzleView(MTLPixelFormat format, const TextureSwizzleChannels &swizzle)
 {
 #if ANGLE_MTL_SWIZZLE_AVAILABLE
-    return TextureRef(new Texture(this, format, swizzle));
+    return TextureRef(new Texture(this, format, textureType(), NSMakeRange(0, mipmapLevels()),
+                                  NSMakeRange(0, cubeFacesOrArrayLength()), swizzle));
 #else
     WARN() << "Texture swizzle is not supported on pre iOS 13.0 and macOS 15.0";
     UNIMPLEMENTED();

@@ -51,26 +51,33 @@ void Instruction::Destroy() {
 }
 
 void Instruction::InsertBefore(Instruction* before) {
-    TINT_ASSERT_OR_RETURN(before);
-    TINT_ASSERT_OR_RETURN(before->Block() != nullptr);
+    TINT_ASSERT(before);
+    TINT_ASSERT(before->Block() != nullptr);
     before->Block()->InsertBefore(before, this);
 }
 
 void Instruction::InsertAfter(Instruction* after) {
-    TINT_ASSERT_OR_RETURN(after);
-    TINT_ASSERT_OR_RETURN(after->Block() != nullptr);
+    TINT_ASSERT(after);
+    TINT_ASSERT(after->Block() != nullptr);
     after->Block()->InsertAfter(after, this);
 }
 
 void Instruction::ReplaceWith(Instruction* replacement) {
-    TINT_ASSERT_OR_RETURN(replacement);
-    TINT_ASSERT_OR_RETURN(Block() != nullptr);
+    TINT_ASSERT(replacement);
+    TINT_ASSERT(Block() != nullptr);
     Block()->Replace(this, replacement);
 }
 
 void Instruction::Remove() {
-    TINT_ASSERT_OR_RETURN(Block() != nullptr);
+    TINT_ASSERT(Block() != nullptr);
     Block()->Remove(this);
+}
+
+InstructionResult* Instruction::DetachResult() {
+    TINT_ASSERT(Results().Length() == 1u);
+    auto* result = Results()[0];
+    SetResults({});
+    return result;
 }
 
 }  // namespace tint::core::ir

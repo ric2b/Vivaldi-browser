@@ -45,21 +45,19 @@ ErrorOr<std::vector<uint8_t>> GetDEREncodedPeerCertificate(const SSL& ssl) {
 }  // namespace
 
 std::unique_ptr<TlsConnectionFactory> TlsConnectionFactory::CreateFactory(
-    Client* client,
+    Client& client,
     TaskRunner& task_runner) {
   return std::unique_ptr<TlsConnectionFactory>(
       new TlsConnectionFactoryPosix(client, task_runner));
 }
 
 TlsConnectionFactoryPosix::TlsConnectionFactoryPosix(
-    Client* client,
+    Client& client,
     TaskRunner& task_runner,
     PlatformClientPosix* platform_client)
     : client_(client),
       task_runner_(task_runner),
-      platform_client_(platform_client) {
-  OSP_CHECK(client_);
-}
+      platform_client_(platform_client) {}
 
 TlsConnectionFactoryPosix::~TlsConnectionFactoryPosix() {
   OSP_CHECK(task_runner_.IsRunningOnTaskRunner());
@@ -138,7 +136,6 @@ void TlsConnectionFactoryPosix::Listen(const IPEndpoint& local_address,
   }
   OSP_CHECK(socket->state() == TcpSocketState::kListening);
 
-  OSP_CHECK(platform_client_);
   if (platform_client_) {
     platform_client_->tls_data_router()->RegisterAcceptObserver(
         std::move(socket), this);
@@ -275,8 +272,8 @@ void TlsConnectionFactoryPosix::Connect(
                          der = std::move(der_peer_cert.value()),
                          moved_connection = std::move(connection)]() mutable {
     if (auto* self = weak_this.get()) {
-      self->client_->OnConnected(self, std::move(der),
-                                 std::move(moved_connection));
+      self->client_.OnConnected(self, std::move(der),
+                                std::move(moved_connection));
     }
   });
 }
@@ -319,8 +316,8 @@ void TlsConnectionFactoryPosix::Accept(
                          der = std::move(der_peer_cert_value),
                          moved_connection = std::move(connection)]() mutable {
     if (auto* self = weak_this.get()) {
-      self->client_->OnAccepted(self, std::move(der),
-                                std::move(moved_connection));
+      self->client_.OnAccepted(self, std::move(der),
+                               std::move(moved_connection));
     }
   });
 }
@@ -330,7 +327,7 @@ void TlsConnectionFactoryPosix::DispatchConnectionFailed(
   task_runner_.PostTask(
       [weak_this = weak_factory_.GetWeakPtr(), remote = remote_endpoint] {
         if (auto* self = weak_this.get()) {
-          self->client_->OnConnectionFailed(self, remote);
+          self->client_.OnConnectionFailed(self, remote);
         }
       });
 }
@@ -339,7 +336,7 @@ void TlsConnectionFactoryPosix::DispatchError(Error error) {
   task_runner_.PostTask([weak_this = weak_factory_.GetWeakPtr(),
                          moved_error = std::move(error)]() mutable {
     if (auto* self = weak_this.get()) {
-      self->client_->OnError(self, std::move(moved_error));
+      self->client_.OnError(self, std::move(moved_error));
     }
   });
 }

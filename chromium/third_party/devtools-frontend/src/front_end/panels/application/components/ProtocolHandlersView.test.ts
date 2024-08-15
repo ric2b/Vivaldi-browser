@@ -4,7 +4,6 @@
 
 import type * as Platform from '../../../core/platform/platform.js';
 import {
-  assertElement,
   getCleanTextContentFromElements,
   getElementWithinComponent,
   renderElementIntoDOM,
@@ -12,8 +11,6 @@ import {
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 
 import * as ApplicationComponents from './components.js';
-
-const {assert} = chai;
 
 async function renderProtocolHandlersComponent(
     manifestLink: Platform.DevToolsPath.UrlString,
@@ -44,7 +41,7 @@ describeWithEnvironment('ProtocolHandlersView', () => {
         manifestURL, protocols as ApplicationComponents.ProtocolHandlersView.ProtocolHandler[]);
 
     const statusElement = component.shadowRoot!.querySelector('.protocol-handlers-row.status');
-    assertElement(statusElement, HTMLElement);
+    assert.instanceOf(statusElement, HTMLElement);
 
     // Tests if status message for when protocols are detected in the manifest is rendering
     const protocolsDetectedMessage = getCleanTextContentFromElements(statusElement, 'span');
@@ -65,7 +62,7 @@ describeWithEnvironment('ProtocolHandlersView', () => {
         manifestURL, protocols as ApplicationComponents.ProtocolHandlersView.ProtocolHandler[]);
 
     const noStatusElement = component.shadowRoot!.querySelector('.protocol-handlers-row.status');
-    assertElement(noStatusElement, HTMLElement);
+    assert.instanceOf(noStatusElement, HTMLElement);
 
     const protocolsNotDetectedMessage = getCleanTextContentFromElements(noStatusElement, 'span');
     const expectedStatusMessage =

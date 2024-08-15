@@ -6,7 +6,6 @@ import("//build_overrides/build.gni")
 import("//third_party/protobuf/proto_library.gni")
 import("../../gni/openscreen.gni")
 import("../../testing/libfuzzer/fuzzer_test.gni")
-import("./public/developer_certificate.gni")
 
 visibility = [ "./*" ]
 
@@ -16,10 +15,6 @@ config("certificate_config") {
     "../standalone_sender:cast_sender",
   ]
   defines = []
-
-  if (cast_allow_developer_certificate) {
-    defines += [ "CAST_ALLOW_DEVELOPER_CERTIFICATE" ]
-  }
 }
 
 openscreen_source_set("certificate") {

@@ -7,8 +7,6 @@ import sys
 from typing import Any, List, Optional, Union
 import unittest
 
-import six
-
 import dataclasses  # Built-in, but pylint gives an ordering false positive.
 
 from gpu_tests import common_typing as ct
@@ -36,13 +34,13 @@ class InfoCollectionTest(gpu_integration_test.GpuIntegrationTest):
   @classmethod
   def AddCommandlineArgs(cls, parser: ct.CmdArgParser) -> None:
     super(InfoCollectionTest, cls).AddCommandlineArgs(parser)
-    parser.add_option(
+    parser.add_argument(
         '--expected-device-id',
         action='append',
         dest='expected_device_ids',
         default=[],
         help='The expected device id. Can be specified multiple times.')
-    parser.add_option('--expected-vendor-id', help='The expected vendor id')
+    parser.add_argument('--expected-vendor-id', help='The expected vendor id')
 
   @classmethod
   def GenerateGpuTests(cls, options: ct.ParsedCmdArgs) -> ct.TestGenerator:
@@ -217,7 +215,7 @@ class InfoCollectionTest(gpu_integration_test.GpuIntegrationTest):
 
   @staticmethod
   def _ValueToStr(value: Union[str, bool]) -> str:
-    if isinstance(value, six.string_types):
+    if isinstance(value, str):
       return value
     if isinstance(value, bool):
       return 'supported' if value else 'unsupported'

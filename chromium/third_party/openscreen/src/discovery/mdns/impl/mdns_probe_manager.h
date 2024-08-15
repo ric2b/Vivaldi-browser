@@ -58,9 +58,9 @@ class MdnsProbeManagerImpl : public MdnsProbe::Observer,
  public:
   // |sender|, |receiver|, |random_delay|, and |task_runner|, must all persist
   // for the duration of this object's lifetime.
-  MdnsProbeManagerImpl(MdnsSender* sender,
-                       MdnsReceiver* receiver,
-                       MdnsRandom* random_delay,
+  MdnsProbeManagerImpl(MdnsSender& sender,
+                       MdnsReceiver& receiver,
+                       MdnsRandom& random_delay,
                        TaskRunner& task_runner,
                        ClockNowFunctionPtr now_function);
   MdnsProbeManagerImpl(const MdnsProbeManager& other) = delete;  // NOLINT
@@ -97,7 +97,7 @@ class MdnsProbeManagerImpl : public MdnsProbe::Observer,
   virtual std::unique_ptr<MdnsProbe> CreateProbe(DomainName name,
                                                  IPAddress address) {
     return std::make_unique<MdnsProbeImpl>(sender_, receiver_, random_delay_,
-                                           task_runner_, now_function_, this,
+                                           task_runner_, now_function_, *this,
                                            std::move(name), std::move(address));
   }
 
@@ -129,9 +129,9 @@ class MdnsProbeManagerImpl : public MdnsProbe::Observer,
   std::vector<OngoingProbe>::iterator FindOngoingProbe(const DomainName& name);
   std::vector<OngoingProbe>::iterator FindOngoingProbe(MdnsProbe* probe);
 
-  MdnsSender* const sender_;
-  MdnsReceiver* const receiver_;
-  MdnsRandom* const random_delay_;
+  MdnsSender& sender_;
+  MdnsReceiver& receiver_;
+  MdnsRandom& random_delay_;
   TaskRunner& task_runner_;
   ClockNowFunctionPtr now_function_;
 

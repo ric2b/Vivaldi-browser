@@ -1399,6 +1399,9 @@ void QueryProgramiv(Context *context, Program *program, GLenum pname, GLint *par
         case GL_ACTIVE_UNIFORM_MAX_LENGTH:
             *params = program->getExecutable().getActiveUniformMaxLength();
             return;
+        case GL_PROGRAM_BINARY_READY_ANGLE:
+            *params = program->isBinaryReady(context);
+            return;
         case GL_PROGRAM_BINARY_LENGTH_OES:
             *params = context->getCaps().programBinaryFormats.empty()
                           ? 0
@@ -4628,7 +4631,7 @@ egl::Error QuerySurfaceAttrib(const Display *display,
 
 egl::Error QuerySurfaceAttrib64KHR(const Display *display,
                                    const gl::Context *context,
-                                   const Surface *surface,
+                                   Surface *surface,
                                    EGLint attribute,
                                    EGLAttribKHR *value)
 {
@@ -4662,8 +4665,12 @@ egl::Error QuerySurfaceAttrib64KHR(const Display *display,
             *value = surface->getBitmapPointer();
             break;
         default:
-            UNREACHABLE();
-            break;
+        {
+            EGLint intValue = 0;
+            ANGLE_TRY(QuerySurfaceAttrib(display, context, surface, attribute, &intValue));
+            *value = static_cast<EGLAttribKHR>(intValue);
+        }
+        break;
     }
     return NoError();
 }

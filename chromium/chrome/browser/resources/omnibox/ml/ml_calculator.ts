@@ -10,7 +10,7 @@ import {clamp, createEl, setFormattedClipboardForMl, signalNames} from '../omnib
 
 import type {MlBrowserProxy} from './ml_browser_proxy.js';
 // @ts-ignore:next-line
-import sheet from './ml_calculator.css' assert {type : 'css'};
+import sheet from './ml_calculator.css' with {type : 'css'};
 import {getTemplate} from './ml_calculator.html.js';
 
 export class MlCalculatorElement extends CustomElement {
@@ -119,6 +119,12 @@ export class MlCalculatorElement extends CustomElement {
     window.history.replaceState(
         null, '', `?signals=${Object.values(this.signals)}`);
     this.dispatchEvent(new CustomEvent('updated'));
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'ml-calculator': MlCalculatorElement;
   }
 }
 

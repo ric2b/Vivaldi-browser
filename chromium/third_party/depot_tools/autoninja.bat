@@ -25,10 +25,6 @@ if not defined AUTONINJA_BUILD_ID (
 if "%NINJA_SUMMARIZE_BUILD%" == "1" set "NINJA_STATUS=[%%r processes, %%f/%%t @ %%o/s : %%es ] "
 
 :: Execute autoninja.py and pass all arguments to it.
-:: Don't use python3 because it doesn't work in git bash on Windows and we
-:: should be consistent between autoninja.bat and the autoninja script used by
-:: git bash.
-
 @call %scriptdir%\vpython3.bat %scriptdir%autoninja.py "%%*"
 @if errorlevel 1 goto buildfailure
 

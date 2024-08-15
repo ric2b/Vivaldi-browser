@@ -52,6 +52,8 @@ CalculationExpressionSizingKeywordNode::CalculationExpressionSizingKeywordNode(
   if (keyword != Keyword::kSize && keyword != Keyword::kAny) {
     if (keyword == Keyword::kAuto) {
       has_auto_ = true;
+    } else if (keyword == Keyword::kWebkitFillAvailable) {
+      has_stretch_ = true;
     } else {
       has_content_or_intrinsic_ = true;
     }
@@ -325,7 +327,9 @@ CalculationExpressionOperationNode::CreateSimplified(Children&& children,
         }
       }
     }
-    case CalculationOperator::kProgress: {
+    case CalculationOperator::kProgress:
+    case CalculationOperator::kMediaProgress:
+    case CalculationOperator::kContainerProgress: {
       DCHECK_EQ(children.size(), 3u);
       Vector<float, 3> operand_pixels;
       bool can_simplify = true;
@@ -380,6 +384,7 @@ CalculationExpressionOperationNode::CalculationExpressionOperationNode(
     has_content_or_intrinsic_ = basis->HasContentOrIntrinsicSize();
     has_auto_ = basis->HasAuto();
     has_percent_ = basis->HasPercent();
+    has_stretch_ = basis->HasStretch();
   } else {
     for (const auto& child : children_) {
       if (child->HasContentOrIntrinsicSize()) {
@@ -390,6 +395,9 @@ CalculationExpressionOperationNode::CalculationExpressionOperationNode(
       }
       if (child->HasPercent()) {
         has_percent_ = true;
+      }
+      if (child->HasStretch()) {
+        has_stretch_ = true;
       }
     }
   }
@@ -474,13 +482,6 @@ float CalculationExpressionOperationNode::Evaluate(
         return value > 0 ? 1 : -1;
       }
     }
-    case CalculationOperator::kProgress: {
-      DCHECK_EQ(children_.size(), 3u);
-      float progress = children_[0]->Evaluate(max_value, input);
-      float from = children_[1]->Evaluate(max_value, input);
-      float to = children_[2]->Evaluate(max_value, input);
-      return (progress - from) / (to - from);
-    }
     case CalculationOperator::kCalcSize: {
       DCHECK_EQ(children_.size(), 2u);
       Length::EvaluationInput calculation_input(input);
@@ -494,6 +495,15 @@ float CalculationExpressionOperationNode::Evaluate(
         max_value = 0.0f;
       }
       return children_[1]->Evaluate(max_value, calculation_input);
+    }
+    case CalculationOperator::kProgress:
+    case CalculationOperator::kMediaProgress:
+    case CalculationOperator::kContainerProgress: {
+      DCHECK(!children_.empty());
+      float progress = children_[0]->Evaluate(max_value, input);
+      float from = children_[1]->Evaluate(max_value, input);
+      float to = children_[2]->Evaluate(max_value, input);
+      return (progress - from) / (to - from);
     }
     case CalculationOperator::kInvalid:
       break;
@@ -550,7 +560,9 @@ CalculationExpressionOperationNode::Zoom(double factor) const {
     case CalculationOperator::kHypot:
     case CalculationOperator::kAbs:
     case CalculationOperator::kSign:
-    case CalculationOperator::kProgress: {
+    case CalculationOperator::kProgress:
+    case CalculationOperator::kMediaProgress:
+    case CalculationOperator::kContainerProgress: {
       DCHECK(children_.size());
       Vector<scoped_refptr<const CalculationExpressionNode>> cloned_operands;
       cloned_operands.reserve(children_.size());
@@ -628,7 +640,9 @@ CalculationExpressionOperationNode::ResolvedResultType() const {
       return first_child_type;
     }
     case CalculationOperator::kSign:
+    case CalculationOperator::kContainerProgress:
     case CalculationOperator::kProgress:
+    case CalculationOperator::kMediaProgress:
       return ResultType::kNumber;
     case CalculationOperator::kInvalid:
       NOTREACHED();

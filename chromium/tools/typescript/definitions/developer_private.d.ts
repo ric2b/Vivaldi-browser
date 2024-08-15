@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 /** @fileoverview Definitions for chrome.developerPrivate API */
-// TODO(crbug.com/1203307): Auto-generate this file.
+// TODO(crbug.com/40179454): Auto-generate this file.
 
 import {ChromeEvent} from './chrome_event.js';
 
@@ -93,6 +93,15 @@ declare global {
       export enum CommandScope {
         GLOBAL = 'GLOBAL',
         CHROME = 'CHROME',
+      }
+
+      export enum SafetyCheckWarningReason {
+        UNPUBLISHED = 'UNPUBLISHED',
+        POLICY = 'POLICY',
+        MALWARE = 'MALWARE',
+        OFFSTORE = 'OFFSTORE',
+        UNWANTED = 'UNWANTED',
+        NO_PRIVACY_PRACTICE = 'NO_PRIVACY_PRACTICE',
       }
 
       export interface AccessModifier {
@@ -242,6 +251,7 @@ declare global {
         path?: string;
         permissions: Permissions;
         prettifiedPath?: string;
+        recommendationsUrl?: string;
         runtimeErrors: RuntimeError[];
         runtimeWarnings: string[];
         state: ExtensionState;
@@ -253,8 +263,11 @@ declare global {
         webStoreUrl: string;
         showSafeBrowsingAllowlistWarning: boolean;
         showAccessRequestsInToolbar: boolean;
+        safetyCheckWarningReason: SafetyCheckWarningReason;
         acknowledgeSafetyCheckWarning: boolean;
         pinnedToToolbar?: boolean;
+        isAffectedByMV2Deprecation: boolean;
+        didAcknowledgeMV2DeprecationWarning: boolean;
       }
 
       export interface ProfileInfo {
@@ -263,6 +276,7 @@ declare global {
         isDeveloperModeControlledByPolicy: boolean;
         isIncognitoAvailable: boolean;
         isChildAccount: boolean;
+        isMv2DeprecationWarningDismissed: boolean;
       }
 
       export interface ExtensionConfigurationUpdate {
@@ -273,11 +287,14 @@ declare global {
         hostAccess?: HostAccess;
         showAccessRequestsInToolbar?: boolean;
         acknowledgeSafetyCheckWarning?: boolean;
+        acknowledgeSafetyCheckWarningReason?: SafetyCheckWarningReason;
+        acknowledgeMv2DeprecationWarning?: boolean;
         pinnedToToolbar?: boolean;
       }
 
       export interface ProfileConfigurationUpdate {
-        inDeveloperMode: boolean;
+        inDeveloperMode?: boolean;
+        isMv2DeprecationWarningDismissed?: boolean;
       }
 
       export interface ExtensionCommandUpdate {
@@ -489,6 +506,7 @@ declare global {
       export function updateSiteAccess(
           site: string, updates: ExtensionSiteAccessUpdate[]): Promise<void>;
       export function dismissSafetyHubExtensionsMenuNotification(): void;
+      export function dismissMv2DeprecationPanel(): void;
 
       export const onItemStateChanged: ChromeEvent<(data: EventData) => void>;
       export const onProfileStateChanged:

@@ -40,7 +40,7 @@ namespace {
 D3D12_DESCRIPTOR_RANGE_TYPE WGPUBindingInfoToDescriptorRangeType(const BindingInfo& bindingInfo) {
     return MatchVariant(
         bindingInfo.bindingLayout,
-        [](const BufferBindingLayout& layout) -> D3D12_DESCRIPTOR_RANGE_TYPE {
+        [](const BufferBindingInfo& layout) -> D3D12_DESCRIPTOR_RANGE_TYPE {
             switch (layout.type) {
                 case wgpu::BufferBindingType::Uniform:
                     return D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
@@ -53,13 +53,20 @@ D3D12_DESCRIPTOR_RANGE_TYPE WGPUBindingInfoToDescriptorRangeType(const BindingIn
                     DAWN_UNREACHABLE();
             }
         },
-        [](const SamplerBindingLayout&) -> D3D12_DESCRIPTOR_RANGE_TYPE {
+        [](const StaticSamplerBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_TYPE {
+            // Static samplers are handled in the frontend.
+            // TODO(crbug.com/dawn/2483): Implement static samplers in the
+            // D3D12 backend.
+            DAWN_UNREACHABLE();
             return D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
         },
-        [](const TextureBindingLayout&) -> D3D12_DESCRIPTOR_RANGE_TYPE {
+        [](const SamplerBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_TYPE {
+            return D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+        },
+        [](const TextureBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_TYPE {
             return D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
         },
-        [](const StorageTextureBindingLayout& layout) -> D3D12_DESCRIPTOR_RANGE_TYPE {
+        [](const StorageTextureBindingInfo& layout) -> D3D12_DESCRIPTOR_RANGE_TYPE {
             switch (layout.access) {
                 case wgpu::StorageTextureAccess::WriteOnly:
                 case wgpu::StorageTextureAccess::ReadWrite:
@@ -98,8 +105,8 @@ BindGroupLayout::BindGroupLayout(Device* device, const BindGroupLayoutDescriptor
         if (bindingIndex < GetDynamicBufferCount()) {
             continue;
         }
-        DAWN_ASSERT(!std::holds_alternative<BufferBindingLayout>(bindingInfo.bindingLayout) ||
-                    !std::get<BufferBindingLayout>(bindingInfo.bindingLayout).hasDynamicOffset);
+        DAWN_ASSERT(!std::holds_alternative<BufferBindingInfo>(bindingInfo.bindingLayout) ||
+                    !std::get<BufferBindingInfo>(bindingInfo.bindingLayout).hasDynamicOffset);
 
         mDescriptorHeapOffsets[bindingIndex] =
             descriptorRangeType == D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER
@@ -120,12 +127,19 @@ BindGroupLayout::BindGroupLayout(Device* device, const BindGroupLayoutDescriptor
         // don't need to set DESCRIPTORS_VOLATILE for any binding types.
         range.Flags = MatchVariant(
             bindingInfo.bindingLayout,
-            [](const SamplerBindingLayout&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
+            [](const StaticSamplerBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
+                // Static samplers are handled in the frontend.
+                // TODO(crbug.com/dawn/2483): Implement static samplers in the
+                // D3D12 backend.
+                DAWN_UNREACHABLE();
+                return D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
+            },
+            [](const SamplerBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
                 // Sampler descriptor ranges don't support DATA_* flags at all since samplers do not
                 // point to data.
                 return D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
             },
-            [](const BufferBindingLayout&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
+            [](const BufferBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
                 // In Dawn it's allowed to do state transitions on the buffers or textures after
                 // binding
                 // them on the current command list, which indicates a change to its data (or
@@ -137,10 +151,10 @@ BindGroupLayout::BindGroupLayout(Device* device, const BindGroupLayoutDescriptor
                 return D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_STATIC_KEEPING_BUFFER_BOUNDS_CHECKS |
                        D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
             },
-            [](const TextureBindingLayout&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
+            [](const TextureBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
                 return D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
             },
-            [](const StorageTextureBindingLayout&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
+            [](const StorageTextureBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
                 return D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
             });
 

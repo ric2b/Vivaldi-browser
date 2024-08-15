@@ -10,6 +10,7 @@
 #include "ash/birch/birch_item.h"
 #include "ash/birch/birch_model.h"
 #include "ash/shell.h"
+#include "ash/system/time/calendar_utils.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -37,6 +38,16 @@ void BirchCalendarProvider::Shutdown() {
 
 void BirchCalendarProvider::RequestBirchDataFetch() {
   VLOG(1) << "BirchCalendarProvider::RequestBirchDataFetch";
+  if (!calendar_utils::ShouldFetchCalendarData()) {
+    Shell::Get()->birch_model()->SetCalendarItems({});
+    Shell::Get()->birch_model()->SetAttachmentItems({});
+    return;
+  }
+
+  if (is_fetching_) {
+    return;
+  }
+  is_fetching_ = true;
 
   // Get all events from 2 hours ago until 1 day in the future.
   base::Time now = base::Time::Now();
@@ -54,6 +65,7 @@ void BirchCalendarProvider::OnEventsFetched(
     std::unique_ptr<google_apis::calendar::EventList> events) {
   VLOG(1) << "BirchCalendarProvider::OnEventsFetched error " << error
           << " size " << (events ? events->items().size() : -1);
+  is_fetching_ = false;
   auto* birch_model = Shell::Get()->birch_model();
 
   if (error != google_apis::HTTP_SUCCESS) {
@@ -80,7 +92,7 @@ void BirchCalendarProvider::OnEventsFetched(
     BirchCalendarItem birch_item(
         base::UTF8ToUTF16(item->summary()), item->start_time().date_time(),
         item->end_time().date_time(), GURL(item->html_link()),
-        item->conference_data_uri());
+        item->conference_data_uri(), item->id(), item->all_day_event());
     calendar_items.push_back(std::move(birch_item));
 
     // Attachments are stored as separate items.
@@ -88,7 +100,7 @@ void BirchCalendarProvider::OnEventsFetched(
       BirchAttachmentItem birch_attachment(
           base::UTF8ToUTF16(attachment.title()), attachment.file_url(),
           attachment.icon_link(), item->start_time().date_time(),
-          item->end_time().date_time());
+          item->end_time().date_time(), attachment.file_id());
       attachment_items.push_back(std::move(birch_attachment));
     }
   }

@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser;
 
 import android.annotation.SuppressLint;
-import android.app.Activity;
 import android.provider.Settings;
 import android.text.TextUtils;
 
@@ -20,7 +19,7 @@ import org.chromium.base.LocaleUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.base.supplier.Supplier;
+import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.chrome.browser.browsing_data.BrowsingDataBridge;
 import org.chromium.chrome.browser.browsing_data.BrowsingDataType;
 import org.chromium.chrome.browser.browsing_data.TimePeriod;
@@ -33,9 +32,11 @@ import org.chromium.chrome.browser.password_manager.PasswordManagerLifecycleHelp
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.preferences.Pref;
-import org.chromium.chrome.browser.profiles.ProfileManager;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.profiles.ProfileKeyedMap;
 import org.chromium.chrome.browser.profiles.ProfileManagerUtils;
-import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.profiles.ProfileProvider;
+import org.chromium.chrome.browser.safety_hub.SafetyHubFetchService;
 import org.chromium.chrome.browser.translate.TranslateBridge;
 import org.chromium.components.browser_ui.accessibility.DeviceAccessibilitySettingsHandler;
 import org.chromium.components.browser_ui.accessibility.FontSizePrefs;
@@ -43,9 +44,6 @@ import org.chromium.components.browser_ui.share.ShareImageFileUtils;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.user_prefs.UserPrefs;
-
-import java.util.HashMap;
-import java.util.Map;
 
 /** Tracks the foreground session state for the Chrome activities. */
 public class ChromeActivitySessionTracker {
@@ -55,11 +53,14 @@ public class ChromeActivitySessionTracker {
 
     private final OmahaServiceStartDelayer mOmahaServiceStartDelayer =
             new OmahaServiceStartDelayer();
-    private final Map<Activity, Supplier<TabModelSelector>> mTabModelSelectorSuppliers =
-            new HashMap<>();
 
     // Used to trigger variation changes (such as seed fetches) upon application foregrounding.
     private final VariationsSession mVariationsSession;
+
+    private final ProfileKeyedMap<Boolean> mStartupProfileTasksCompleted =
+            new ProfileKeyedMap<>(
+                    ProfileKeyedMap.ProfileSelection.REDIRECTED_TO_ORIGINAL,
+                    ProfileKeyedMap.NO_REQUIRED_CLEANUP_ACTION);
 
     private boolean mIsInitialized;
     private boolean mIsStarted;
@@ -83,26 +84,9 @@ public class ChromeActivitySessionTracker {
     }
 
     /**
-     * Register a supplier which returns the total tab count for the given application.
-     * @param activity The activity associated with the given tab count supplier.
-     * @param tabCountSupplier Supplies the current tab count for the given activity.
-     */
-    public void registerTabModelSelectorSupplier(
-            Activity activity, Supplier<TabModelSelector> tabCountSupplier) {
-        mTabModelSelectorSuppliers.put(activity, tabCountSupplier);
-    }
-
-    /**
-     * Unregisters the supplier associated with the given activity.
-     * @param activity Tha activity to unregister.
-     */
-    public void unregisterTabModelSelectorSupplier(Activity activity) {
-        mTabModelSelectorSuppliers.remove(activity);
-    }
-
-    /**
      * Asynchronously returns the value of the "restrict" URL param that the variations service
      * should use for variation seed requests.
+     *
      * @param callback Callback that will be called with the param value when available.
      */
     public void getVariationsRestrictModeValue(Callback<String> callback) {
@@ -129,45 +113,53 @@ public class ChromeActivitySessionTracker {
     }
 
     /**
-     * Each top-level activity (those extending {@link ChromeActivity}) should call this during
-     * its onStart phase. When called for the first time, this marks the beginning of a foreground
-     * session and calls onForegroundSessionStart(). Subsequent calls are noops until
-     * onForegroundSessionEnd() is called, to handle changing top-level Chrome activities in one
-     * foreground session.
+     * Each top-level activity (those extending {@link ChromeActivity}) should call this during its
+     * onStart phase. When called for the first time, this marks the beginning of a foreground
+     * session and initializes the appropriate app-level and profile-level tasks.
+     *
+     * <p>The app-level tasks will only be completed once per foreground session (e.g. until {@link
+     * #onForegroundSessionEnd()} is called).
+     *
+     * <p>The profile-level tasks will be completed once per profile per foreground session. Within
+     * a single foreground session, subsequent calls to this method with the same profile will be
+     * no-ops.
      */
-    public void onStartWithNative() {
+    public void onStartWithNative(OneshotSupplier<ProfileProvider> profileProviderSupplier) {
         ThreadUtils.assertOnUiThread();
 
-        if (mIsStarted) return;
-        mIsStarted = true;
+        if (!mIsStarted) {
+            mIsStarted = true;
 
-        assert mIsInitialized;
+            assert mIsInitialized;
+            handlePerAppForegroundSessionStart();
+        }
 
-        onForegroundSessionStart();
+        profileProviderSupplier.runSyncOrOnAvailable(
+                (profileProvider) -> {
+                    if (!mIsStarted) return;
+
+                    mStartupProfileTasksCompleted.getForProfile(
+                            profileProvider.getOriginalProfile(),
+                            this::handlePerProfileForegroundSessionStart);
+                });
     }
 
     /**
-     * Called when a top-level Chrome activity (ChromeTabbedActivity, CustomTabActivity) is
-     * started in foreground. It will not be called again when other Chrome activities take over
-     * (see onStart()), that is, when correct activity calls startActivity() for another Chrome
-     * activity.
+     * Called when a top-level Chrome activity (ChromeTabbedActivity, CustomTabActivity) is started
+     * in foreground. It will not be called again when other Chrome activities take over (see
+     * onStart()), that is, when correct activity calls startActivity() for another Chrome activity.
      */
-    private void onForegroundSessionStart() {
+    private void handlePerAppForegroundSessionStart() {
         try (TraceEvent te =
-                TraceEvent.scoped("ChromeActivitySessionTracker.onForegroundSessionStart")) {
+                TraceEvent.scoped(
+                        "ChromeActivitySessionTracker.handlePerAppForegroundSessionStart")) {
             UmaUtils.recordForegroundStartTimeWithNative();
-            updatePasswordEchoState();
-            FontSizePrefs.getInstance(ProfileManager.getLastUsedRegularProfile())
-                    .onSystemFontScaleChanged();
-            DeviceAccessibilitySettingsHandler.getInstance(
-                            ProfileManager.getLastUsedRegularProfile())
-                    .updateFontWeightAdjustment();
             ChromeLocalizationUtils.recordUiLanguageStatus();
-            updateAcceptLanguages();
             mVariationsSession.start();
             mOmahaServiceStartDelayer.onForegroundSessionStart();
             AppHooks.get().getChimeDelegate().startSession();
             PasswordManagerLifecycleHelper.getInstance().onStartForegroundSession();
+            SafetyHubFetchService.onForegroundSessionStart();
 
             // Track the ratio of Chrome startups that are caused by notification clicks.
             // TODO(johnme): Add other reasons (and switch to recordEnumeratedHistogram).
@@ -175,6 +167,22 @@ public class ChromeActivitySessionTracker {
                     "Startup.BringToForegroundReason",
                     NotificationPlatformBridge.wasNotificationRecentlyClicked());
         }
+    }
+
+    /**
+     * Handles per-profile per-foreground session startup tasks. For the lifetime of a foreground
+     * session, this will be called at most once per profile.
+     */
+    private boolean handlePerProfileForegroundSessionStart(Profile profile) {
+        try (TraceEvent te =
+                TraceEvent.scoped(
+                        "ChromeActivitySessionTracker.handlePerProfileForegroundSessionStart")) {
+            updatePasswordEchoState(profile);
+            FontSizePrefs.getInstance(profile).onSystemFontScaleChanged();
+            DeviceAccessibilitySettingsHandler.getInstance(profile).updateFontWeightAdjustment();
+            updateAcceptLanguages(profile);
+        }
+        return true; // Return a non-null value to ensure ProfileKeyedMap tracks this was completed.
     }
 
     /**
@@ -193,9 +201,11 @@ public class ChromeActivitySessionTracker {
         IntentHandler.clearPendingReferrer();
         IntentHandler.clearPendingIncognitoUrl();
 
-        Tracker tracker =
-                TrackerFactory.getTrackerForProfile(ProfileManager.getLastUsedRegularProfile());
-        tracker.notifyEvent(EventConstants.FOREGROUND_SESSION_DESTROYED);
+        for (Profile profile : mStartupProfileTasksCompleted.getTrackedProfiles()) {
+            Tracker tracker = TrackerFactory.getTrackerForProfile(profile);
+            tracker.notifyEvent(EventConstants.FOREGROUND_SESSION_DESTROYED);
+        }
+        mStartupProfileTasksCompleted.destroy();
     }
 
     private void onForegroundActivityDestroyed() {
@@ -218,10 +228,10 @@ public class ChromeActivitySessionTracker {
 
     /**
      * Update the accept languages after changing Android locale setting. Doing so kills the
-     * Activities but it doesn't kill the Application, so this should be called in
-     * {@link #onStart} instead of {@link #initialize}.
+     * Activities but it doesn't kill the Application, so this should be called in {@link #onStart}
+     * instead of {@link #initialize}.
      */
-    private void updateAcceptLanguages() {
+    private void updateAcceptLanguages(Profile profile) {
         String currentLocale = LocaleUtils.getDefaultLocaleListString();
         String previousLocale =
                 ChromeSharedPreferences.getInstance()
@@ -230,14 +240,14 @@ public class ChromeActivitySessionTracker {
         if (!TextUtils.equals(previousLocale, currentLocale)) {
             ChromeSharedPreferences.getInstance()
                     .writeString(ChromePreferenceKeys.APP_LOCALE, currentLocale);
-            TranslateBridge.resetAcceptLanguages(currentLocale);
+            TranslateBridge.resetAcceptLanguages(profile, currentLocale);
             if (previousLocale != null) {
                 // Clear cache so that accept-languages change can be applied immediately.
                 // TODO(changwan): The underlying BrowsingDataRemover::Remove() is an asynchronous
                 // call. So cache-clearing may not be effective if URL rendering can happen before
                 // OnBrowsingDataRemoverDone() is called, in which case we may have to reload as
                 // well. Check if it can happen.
-                BrowsingDataBridge.getForProfile(ProfileManager.getLastUsedRegularProfile())
+                BrowsingDataBridge.getForProfile(profile)
                         .clearBrowsingData(
                                 null, new int[] {BrowsingDataType.CACHE}, TimePeriod.ALL_TIME);
             }
@@ -248,21 +258,19 @@ public class ChromeActivitySessionTracker {
      * Honor the Android system setting about showing the last character of a password for a short
      * period of time.
      */
-    private void updatePasswordEchoState() {
+    private void updatePasswordEchoState(Profile profile) {
         boolean systemEnabled =
                 Settings.System.getInt(
                                 ContextUtils.getApplicationContext().getContentResolver(),
                                 Settings.System.TEXT_SHOW_PASSWORD,
                                 1)
                         == 1;
-        if (UserPrefs.get(ProfileManager.getLastUsedRegularProfile())
-                        .getBoolean(Pref.WEB_KIT_PASSWORD_ECHO_ENABLED)
+        if (UserPrefs.get(profile).getBoolean(Pref.WEB_KIT_PASSWORD_ECHO_ENABLED)
                 == systemEnabled) {
             return;
         }
 
-        UserPrefs.get(ProfileManager.getLastUsedRegularProfile())
-                .setBoolean(Pref.WEB_KIT_PASSWORD_ECHO_ENABLED, systemEnabled);
+        UserPrefs.get(profile).setBoolean(Pref.WEB_KIT_PASSWORD_ECHO_ENABLED, systemEnabled);
     }
 
     /**

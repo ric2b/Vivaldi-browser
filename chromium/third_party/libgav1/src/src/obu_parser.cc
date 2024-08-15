@@ -2621,9 +2621,14 @@ bool ObuParser::ParseHeader() {
   obu_header.has_extension = extension_flag;
   if (extension_flag) {
     if (extension_disallowed_) {
+#ifdef CHROMIUM
+      LIBGAV1_DLOG(WARNING,
+                   "OperatingPointIdc is 0, but obu_extension_flag is 1.");
+#else   // !CHROMIUM
       LIBGAV1_DLOG(ERROR,
                    "OperatingPointIdc is 0, but obu_extension_flag is 1.");
       return false;
+#endif  // CHROMIUM
     }
     OBU_READ_LITERAL_OR_FAIL(3);
     obu_header.temporal_id = scratch;

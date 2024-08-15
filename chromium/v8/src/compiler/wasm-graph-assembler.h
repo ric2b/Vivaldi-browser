@@ -127,6 +127,14 @@ class WasmGraphAssembler : public GraphAssembler {
     return LoadProtectedPointerFromObject(object, IntPtrConstant(offset));
   }
 
+  Node* LoadImmutableProtectedPointerFromObject(Node* object, Node* offset);
+  Node* LoadImmutableProtectedPointerFromObject(Node* object, int offset) {
+    return LoadImmutableProtectedPointerFromObject(object,
+                                                   IntPtrConstant(offset));
+  }
+
+  Node* BuildDecompressProtectedPointer(Node* tagged);
+
   Node* LoadImmutableFromObject(MachineType type, Node* base, Node* offset);
 
   Node* LoadImmutableFromObject(MachineType type, Node* base, int offset) {

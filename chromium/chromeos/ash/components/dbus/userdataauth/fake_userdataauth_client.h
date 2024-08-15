@@ -53,6 +53,7 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) FakeUserDataAuthClient
   enum class HomeEncryptionMethod {
     kDirCrypto,
     kEcryptfs,
+    kDmCrypt,
   };
 
   // The TestAPI of FakeUserDataAuth. Prefer to use `ash::CryptohomeMixin`,
@@ -213,10 +214,17 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) FakeUserDataAuthClient
   void AddFingerprintAuthObserver(FingerprintAuthObserver* observer) override;
   void RemoveFingerprintAuthObserver(
       FingerprintAuthObserver* observer) override;
+  void AddPrepareAuthFactorProgressObserver(
+      PrepareAuthFactorProgressObserver* observer) override;
+  void RemovePrepareAuthFactorProgressObserver(
+      PrepareAuthFactorProgressObserver* observer) override;
   void WaitForServiceToBeAvailable(
       chromeos::WaitForServiceToBeAvailableCallback callback) override;
   void IsMounted(const ::user_data_auth::IsMountedRequest& request,
                  IsMountedCallback callback) override;
+  void GetVaultProperties(
+      const ::user_data_auth::GetVaultPropertiesRequest& request,
+      GetVaultPropertiesCallback callback) override;
   void Unmount(const ::user_data_auth::UnmountRequest& request,
                UnmountCallback callback) override;
   void Remove(const ::user_data_auth::RemoveRequest& request,
@@ -279,9 +287,6 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) FakeUserDataAuthClient
   void GetAuthFactorExtendedInfo(
       const ::user_data_auth::GetAuthFactorExtendedInfoRequest& request,
       GetAuthFactorExtendedInfoCallback callback) override;
-  void GetRecoveryRequest(
-      const ::user_data_auth::GetRecoveryRequestRequest& request,
-      GetRecoveryRequestCallback callback) override;
   void GetAuthSessionStatus(
       const ::user_data_auth::GetAuthSessionStatusRequest& request,
       GetAuthSessionStatusCallback callback) override;
@@ -468,8 +473,11 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) FakeUserDataAuthClient
   // List of observers.
   base::ObserverList<Observer> observer_list_;
 
-  // List of fingerprint event observers.
+  // List of legacy fingerprint event observers.
   base::ObserverList<FingerprintAuthObserver> fingerprint_observers_;
+
+  // List of PrepareAuthFactorProgress event observers.
+  base::ObserverList<PrepareAuthFactorProgressObserver> progress_observers_;
 
   // Do we run the dircrypto migration, as in, emit signals, when
   // StartMigrateToDircrypto() is called?

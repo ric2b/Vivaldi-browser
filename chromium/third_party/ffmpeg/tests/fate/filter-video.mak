@@ -16,7 +16,7 @@ fate-filter-bwdif-mode0: CMD = framecrc -ec 0 -flags bitexact -idct simple -i $(
 fate-filter-bwdif-mode1: CMD = framecrc -ec 0 -flags bitexact -idct simple -i $(TARGET_SAMPLES)/mpeg2/mpeg2_field_encoding.ts -frames:v 59 -vf bwdif=send_field
 
 FATE_BWDIF-$(call FILTERDEMDEC, BWDIF SCALE, MPEGTS, MPEG2VIDEO) += fate-filter-bwdif10
-fate-filter-bwdif10: CMD = framecrc -ec 0 -flags bitexact -idct simple -i $(TARGET_SAMPLES)/mpeg2/mpeg2_field_encoding.ts -flags bitexact -pix_fmt yuv420p10le -frames:v 30 -vf scale,bwdif=0
+fate-filter-bwdif10: CMD = framecrc -ec 0 -flags bitexact -idct simple -i $(TARGET_SAMPLES)/mpeg2/mpeg2_field_encoding.ts -flags bitexact -pix_fmt yuv420p10le -frames:v 30 -vf scale,format=yuv420p10,bwdif=0,scale
 
 FATE_FILTER_SAMPLES-yes += $(FATE_BWDIF-yes)
 
@@ -25,8 +25,8 @@ fate-filter-yadif-mode0: CMD = framecrc -ec 0 -flags bitexact -idct simple -i $(
 fate-filter-yadif-mode1: CMD = framecrc -ec 0 -flags bitexact -idct simple -i $(TARGET_SAMPLES)/mpeg2/mpeg2_field_encoding.ts -frames:v 59 -vf yadif=1
 
 FATE_YADIF-$(call FILTERDEMDEC, YADIF SCALE, MPEGTS, MPEG2VIDEO) += fate-filter-yadif10 fate-filter-yadif16
-fate-filter-yadif10: CMD = framecrc -ec 0 -flags bitexact -idct simple -i $(TARGET_SAMPLES)/mpeg2/mpeg2_field_encoding.ts -flags bitexact -pix_fmt yuv420p10le -frames:v 30 -vf scale,yadif=0
-fate-filter-yadif16: CMD = framecrc -ec 0 -flags bitexact -idct simple -i $(TARGET_SAMPLES)/mpeg2/mpeg2_field_encoding.ts -flags bitexact -pix_fmt yuv420p16le -frames:v 30 -vf scale,yadif=0
+fate-filter-yadif10: CMD = framecrc -ec 0 -flags bitexact -idct simple -i $(TARGET_SAMPLES)/mpeg2/mpeg2_field_encoding.ts -flags bitexact -pix_fmt yuv420p10le -frames:v 30 -vf scale,format=yuv420p10,yadif=0,scale
+fate-filter-yadif16: CMD = framecrc -ec 0 -flags bitexact -idct simple -i $(TARGET_SAMPLES)/mpeg2/mpeg2_field_encoding.ts -flags bitexact -pix_fmt yuv420p16le -frames:v 30 -vf scale,format=yuv420p16,yadif=0,scale
 
 FATE_FILTER_SAMPLES-yes += $(FATE_YADIF-yes)
 
@@ -692,7 +692,7 @@ fate-filter-metadata-freezedetect: CMD = run $(FILTER_METADATA_COMMAND) "sws_fla
 SIGNALSTATS_DEPS = LAVFI_INDEV COLOR_FILTER SCALE_FILTER SIGNALSTATS_FILTER
 FATE_METADATA_FILTER-$(call ALLYES, $(SIGNALSTATS_DEPS)) += fate-filter-metadata-signalstats-yuv420p fate-filter-metadata-signalstats-yuv420p10
 fate-filter-metadata-signalstats-yuv420p: CMD = run $(FILTER_METADATA_COMMAND) "sws_flags=+accurate_rnd+bitexact;color=white:duration=1:r=1,signalstats"
-fate-filter-metadata-signalstats-yuv420p10: CMD = run $(FILTER_METADATA_COMMAND) "sws_flags=+accurate_rnd+bitexact;color=white:duration=1:r=1,format=yuv420p10,signalstats"
+fate-filter-metadata-signalstats-yuv420p10: CMD = run $(FILTER_METADATA_COMMAND) "sws_flags=+accurate_rnd+bitexact;color=white:duration=1:r=1,format=yuv420p10le,signalstats"
 
 SILENCEDETECT_DEPS = LAVFI_INDEV FILE_PROTOCOL AMOVIE_FILTER TTA_DEMUXER TTA_DECODER SILENCEDETECT_FILTER
 FATE_METADATA_FILTER-$(call ALLYES, $(SILENCEDETECT_DEPS)) += fate-filter-metadata-silencedetect

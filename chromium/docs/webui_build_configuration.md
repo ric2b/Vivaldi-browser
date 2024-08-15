@@ -501,7 +501,7 @@ grit("resources") {
 
 ### **build_webui**
 
-<!-- TODO(crbug.com/1340376): Elevate build_webui() to the top of this document
+<!-- TODO(crbug.com/40230335): Elevate build_webui() to the top of this document
       after it has been deployed to a few places. -->
 
 See the [go/build-webui-pipeline](http://go/build-webui-pipeline) design doc for
@@ -591,12 +591,14 @@ ts_deps: See |deps| in ts_library(). Also used for webui_path_mappings().
          Optional parameter.
 ts_extra_deps: See |extra_deps| in ts_library(). Optional parameter.
 ts_path_mappings: See |path_mappings| in ts_library(). Optional parameter.
-ts_tsconfig_base: The tsconfig file to use for ts_library(). Optional, defaults
-                  to "//tools/typescript/tsconfig_base_polymer.json" for Polymer
-                  UIs (i.e. UIs that specify |web_component_files| and/or
-                  |icons_html_files| and do not set |html_to_wrapper_template|
-                  to "native"). Defaults to
-                  "//tools/typescript/tsconfig_base.json" for non-Polymer UIs.
+ts_tsconfig_base: The tsconfig file to use for ts_library(). Optional. Defaults
+                  to "//tools/typescript/tsconfig_base_polymer.json" for UIs
+                  that depend on Polymer (i.e. have
+                  "//third_party/polymer/v3_0:library" in their |ts_deps|).
+                  Defaults to "//tools/typescript/tsconfig_base_lit.json" for
+                  UIs that do not depend on Polymer and depend on Lit (i.e. have
+                  "//third_party/lit/v3_0:build_ts" in |ts_deps|). Defaults to
+                  "//tools/typescript/tsconfig_base.json" for all other UIs.
 
 HTML/CSS/JS optimization related params:
 optimize: Specifies whether any optimization steps will be used. Defaults to the
@@ -606,27 +608,17 @@ optimize: Specifies whether any optimization steps will be used. Defaults to the
           When true, minify_js() will be invoked to minify JS code (using Terser).
           If |optimize_webui_in_files| is provided then bundle_js() will also be
           invoked to bundle JS code (using Rollup).
-          |webui_host| must be specified if |optimize_webui_in_files|
+          |optimize_webui_host| must be specified if |optimize_webui_in_files|
           is provided.
+optimize_ webui_host: See |host| in bundle_js().
 optimize_webui_excludes: See |excludes| in bundle_js(). Optional.
 optimize_webui_external_paths: See |external_paths| in optimize_webui().
                                Optional.
 optimize_webui_in_files: See |in_files| in bundle_js().
 
 Other params:
-webui_host: Used to set |webui_context_type| in webui_path_mappings(), as
-            follows:
-            - Shared code used by trusted and untrusted UIs should use a "//"
-              prefix (e.g. "//resources").
-            - Untrusted UIs should use a "chrome-untrusted://" prefix.
-            - Trusted UIs should use no prefix (e.g. "settings")
-            - Component extensions that can only use absolute chrome:// import
-              paths should use a "chrome-extension://" prefix (e.g. PDF).
-            When |optimize| is set to true, this parameter is also used for
-            bundling; see |host| in bundle_js().
-            Required when |optimize| is set. Optional otherwise. If this
-            parameter is not set and |ts_deps| are non-empty, a chrome://
-            (trusted) context will be assumed for import path mappings.
+webui_context_type: See |webui_context_type| in webui_path_mappings(). Optional,
+                    defaults to "relative".
 generate_grdp: Whether to generate grdp file instead of a grd file. Defaults to
                false.
 grd_prefix: See |grd_prefix| in generate_grd(). Required parameter.
@@ -738,6 +730,7 @@ TypeScript (ts_library()) related params:
 ts_tsconfig_base: See |tsconfig_base| in ts_library(). Optional parameter. If
                   not provided the default configuration at
                   '//chrome/test/data/webui/tsconfig_base.json' is used.
+ts_composite: See |composite| in ts_library(). Defaults to false, optional.
 ts_definitions: See |definitions| in ts_library(). Optional parameter.
 ts_deps: See |deps| in ts_library(). Required parameter.
 ts_path_mappings: See |path_mappings| in ts_library(). Optional parameter.

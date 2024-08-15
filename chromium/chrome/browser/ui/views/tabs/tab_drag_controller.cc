@@ -13,6 +13,7 @@
 #include "base/auto_reset.h"
 #include "base/containers/adapters.h"
 #include "base/containers/contains.h"
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/i18n/rtl.h"
@@ -56,6 +57,7 @@
 #include "chrome/browser/ui/web_applications/web_app_tabbed_utils.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "content/public/browser/web_contents.h"
@@ -171,9 +173,9 @@ bool IsSnapped(const TabDragContext* context) {
 
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
-// TODO(1509581): This should take a weak ref and return a Liveness, because
-// setting capture may cause the drag to end and the drag controller to be
-// destroyed.
+// TODO(crbug.com/41482188): This should take a weak ref and return a Liveness,
+// because setting capture may cause the drag to end and the drag controller to
+// be destroyed.
 void SetCapture(TabDragContext* context) {
   context->GetWidget()->SetCapture(context);
 }
@@ -415,7 +417,7 @@ TabDragController::Liveness TabDragController::Init(
   ref->last_point_in_screen_ = start_point_in_screen_;
   // Detachable tabs are not supported on Mac if the window is an out-of-process
   // (remote_cocoa) window, i.e. a PWA window.
-  // TODO(https://crbug.com/1076777): Make detachable tabs work in PWAs on Mac.
+  // TODO(crbug.com/40128833): Make detachable tabs work in PWAs on Mac.
 #if BUILDFLAG(IS_MAC)
   if (ref->source_context_->GetWidget() &&
       remote_cocoa::IsWindowRemote(
@@ -585,8 +587,12 @@ void TabDragController::TabWasAdded() {
   // results in a confusing state if the user attempts to reattach. We could
   // allow this and update ourselves during the add, but this comes up
   // infrequently enough that it's not worth the complexity.
-  if (current_state_ == DragState::kDraggingWindow && !is_mutating_)
+  // Note: When we're in the kDraggingUsingSystemDragAndDrop state, this method
+  // being called means a tab was added to the source window of the drag. We
+  // don't need to cancel the drag in that case.
+  if (current_state_ == DragState::kDraggingWindow && !is_mutating_) {
     EndDrag(END_DRAG_COMPLETE);
+  }
 }
 
 void TabDragController::OnTabWillBeRemoved(content::WebContents* contents) {
@@ -601,6 +607,17 @@ bool TabDragController::CanRemoveTabDuringDrag(
   // Tab removal can happen without interrupting dragging only if either a) the
   // tab isn't part of the drag or b) we're doing the removal ourselves.
   return !IsDraggingTab(contents) || is_mutating_;
+}
+
+bool TabDragController::CanRestoreFullscreenWindowDuringDrag() const {
+#if BUILDFLAG(IS_MAC)
+  // On macOS in immersive fullscreen mode restoring the window moves the tab
+  // strip between widgets breaking a number of assumptions during the drag.
+  // Disable window restoration during a drag while in immersive fullscreen.
+  return !base::FeatureList::IsEnabled(features::kImmersiveFullscreen);
+#else
+  return true;
+#endif
 }
 
 void TabDragController::Drag(const gfx::Point& point_in_screen) {
@@ -669,7 +686,8 @@ void TabDragController::Drag(const gfx::Point& point_in_screen) {
       views::Widget* widget = GetAttachedBrowserWidget();
       gfx::Rect new_bounds;
       gfx::Vector2d drag_offset;
-      if (was_source_maximized_ || was_source_fullscreen_) {
+      if (was_source_maximized_ ||
+          (was_source_fullscreen_ && CanRestoreFullscreenWindowDuringDrag())) {
         did_restore_window_ = true;
         // When all tabs in a maximized browser are dragged the browser gets
         // restored during the drag and maximized back when the drag ends.
@@ -981,7 +999,7 @@ TabDragController::Liveness TabDragController::ContinueDragging(
       return StartSystemDragAndDropSessionIfNecessary(point_in_screen);
     } else if (DragBrowserToNewTabStrip(target_context, point_in_screen) ==
                DRAG_BROWSER_RESULT_STOP) {
-      // TODO(1509581): This may not always be correct.
+      // TODO(crbug.com/41482188): This may not always be correct.
       // `DragBrowserToNewTabStrip` can delete `this` in some cases.
       return Liveness::ALIVE;
     }
@@ -1049,7 +1067,7 @@ TabDragController::DragBrowserToNewTabStrip(TabDragContext* target_context,
     else
       SetCapture(target_context);
 
-// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// TODO(crbug.com/40118868): Revisit the macro expression once build flag switch
 // of lacros-chrome is complete.
 #if !(BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
     // EndMoveLoop is going to snap the window back to its original location.
@@ -1875,16 +1893,35 @@ void TabDragController::EndDragImpl(EndDragType type) {
 void TabDragController::AttachTabsToNewBrowserOnDrop() {
   DCHECK(!attached_context_hidden_);
 
+  // TODO(crbug.com/40238145): `CreateBrowserForDrag()` does almost the same as
+  // this method. Factor out the common parts into a separate method.
+
+  // Find if there's a controlling app, and thus we should open an app window.
+  Browser* from_browser = BrowserView::GetBrowserViewForNativeWindow(
+                              GetAttachedBrowserWidget()->GetNativeWindow())
+                              ->browser();
+  const std::optional<webapps::AppId> controlling_app =
+      GetControllingAppForDrag(from_browser);
+  const bool open_as_web_app = controlling_app.has_value();
+
+  Browser::CreateParams create_params =
+      open_as_web_app
+          ? Browser::CreateParams::CreateForApp(
+                web_app::GenerateApplicationNameFromAppId(
+                    controlling_app.value()),
+                /* trusted_source=*/true, gfx::Rect(), from_browser->profile(),
+                /* user_gesture=*/true)
+          : from_browser->create_params();
+
   views::Widget* widget = attached_context_->GetWidget();
   gfx::Rect window_bounds(widget->GetRestoredBounds());
   window_bounds.set_origin(GetWindowCreatePoint(last_point_in_screen_));
 
-  Browser::CreateParams create_params =
-      BrowserView::GetBrowserViewForNativeWindow(
-          GetAttachedBrowserWidget()->GetNativeWindow())
-          ->browser()
-          ->create_params();
-  create_params.initial_bounds = window_bounds;
+  // Web app windows have their own initial size independent of the source
+  // browser window.
+  if (!open_as_web_app) {
+    create_params.initial_bounds = window_bounds;
+  }
 
   // Don't copy the initial workspace since the *current* workspace might be
   // different and copying the workspace will move the tab to the initial one.
@@ -1896,9 +1933,12 @@ void TabDragController::AttachTabsToNewBrowserOnDrop() {
   create_params.user_title = std::string();
 
   Browser* browser = Browser::Create(create_params);
-  // If the window is created maximized then the bounds we supplied are ignored.
-  // We need to reset them again so they are honored.
-  browser->window()->SetBounds(window_bounds);
+
+  if (!open_as_web_app) {
+    // If the window is created maximized then the bounds we supplied are
+    // ignored. We need to reset them again so they are honored.
+    browser->window()->SetBounds(window_bounds);
+  }
 
   auto* new_context = BrowserView::GetBrowserViewForBrowser(browser)
                           ->tabstrip()
@@ -1909,6 +1949,14 @@ void TabDragController::AttachTabsToNewBrowserOnDrop() {
   // Attach() expects |attached_context_| to be nullptr;
   attached_context_ = nullptr;
   Attach(new_context, last_point_in_screen_, std::move(me));
+
+  // Tabbed PWAs with a home tab should have a home tab in every window. This
+  // means when dragging tabs out to create a new window, a home tab needs to be
+  // added.
+  if (browser->app_controller() && browser->app_controller()->has_tab_strip()) {
+    web_app::MaybeAddPinnedHomeTab(browser,
+                                   browser->app_controller()->app_id());
+  }
 
   browser->window()->Show();
 }
@@ -2342,7 +2390,7 @@ void TabDragController::AdjustBrowserAndTabBoundsForDrag(
   // If the new tabstrip region is smaller than the old, resize and reposition
   // the tabs to provide a sense of continuity.
   if (current_tab_area_width < previous_tab_area_width) {
-    // TODO(https://crbug.com/1324577): Fix the case where the source window
+    // TODO(crbug.com/40839358): Fix the case where the source window
     // spans two monitors horizontally, and IsRTL is true.
 
     // `leading_ratio` is the proportion of the previous tab area width which is
@@ -2411,6 +2459,9 @@ Browser* TabDragController::CreateBrowserForDrag(
     const gfx::Point& point_in_screen,
     gfx::Vector2d* drag_offset,
     std::vector<gfx::Rect>* drag_bounds) {
+  // TODO(crbug.com/40238145): `AttachTabsToNewBrowserOnDrop()` does almost the
+  // same as this method. Factor out the common parts into a separate method.
+
   source->GetWidget()
       ->GetCompositor()
       ->RequestSuccessfulPresentationTimeForNextFrame(base::BindOnce(
@@ -2442,10 +2493,7 @@ Browser* TabDragController::CreateBrowserForDrag(
                     controlling_app.value()),
                 /* trusted_source=*/true, gfx::Rect(), from_browser->profile(),
                 /* user_gesture=*/true)
-          : BrowserView::GetBrowserViewForNativeWindow(
-                GetAttachedBrowserWidget()->GetNativeWindow())
-                ->browser()
-                ->create_params();
+          : from_browser->create_params();
 
   // Web app windows have their own initial size independent of the source
   // browser window.
@@ -2531,7 +2579,7 @@ TabDragController::Liveness TabDragController::GetLocalProcessWindow(
     if (dragged_window)
       exclude.insert(dragged_window);
   }
-// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// TODO(crbug.com/40118868): Revisit the macro expression once build flag switch
 // of lacros-chrome is complete.
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   // Exclude windows which are pending deletion via Browser::TabStripEmpty().
@@ -2678,8 +2726,8 @@ TabDragController::GetTabGroupForTargetIndex(const std::vector<int>& selected) {
     // window. In this case, since the dragged tabs can't move further right in
     // the tabstrip, it will never go "beyond" the left_group and therefore
     // never leave it unless we add this check. See crbug.com/1134376.
-    // TODO(crbug/1329344): Update this to work better with Tab Scrolling once
-    // dragging near the end of the tabstrip is cleaner.
+    // TODO(crbug.com/40842551): Update this to work better with Tab Scrolling
+    // once dragging near the end of the tabstrip is cleaner.
     if (tab_bounds_in_drag_context_coords(selected.back()).right() >=
         attached_context_->TabDragAreaEndX()) {
       return std::nullopt;
@@ -2727,8 +2775,8 @@ bool TabDragController::CanAttachTo(gfx::NativeWindow window) {
   const int active_index = model->active_index();
 
 #if BUILDFLAG(IS_MAC)
-  // TODO(crbug.com/1411448): Remove DumpWithoutCrashing() if Widget::IsClosed()
-  // check above works.
+  // TODO(crbug.com/40890295): Remove DumpWithoutCrashing() if
+  // Widget::IsClosed() check above works.
   if (!model->ContainsIndex(active_index)) {
     if (active_index == TabStripModel::kNoTab) {
       LOG(ERROR) << "TabStripModel of the browser tyring to attach to has no "
@@ -2818,8 +2866,7 @@ void TabDragController::NotifyEventIfTabAddedToGroup() {
 }
 
 void TabDragController::MaybePauseTrackingSavedTabGroup() {
-  if (!header_drag_ ||
-      !base::FeatureList::IsEnabled(features::kTabGroupsSave)) {
+  if (!header_drag_) {
     return;
   }
 
@@ -2843,7 +2890,6 @@ void TabDragController::MaybePauseTrackingSavedTabGroup() {
 
 void TabDragController::MaybeResumeTrackingSavedTabGroup() {
   if (!header_drag_ ||
-      !base::FeatureList::IsEnabled(features::kTabGroupsSave) ||
       !paused_saved_group_id_.has_value()) {
     return;
   }

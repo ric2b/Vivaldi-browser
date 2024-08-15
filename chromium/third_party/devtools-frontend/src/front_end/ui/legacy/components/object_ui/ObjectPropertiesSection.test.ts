@@ -2,14 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
-import * as SDK from '../../../../core/sdk/sdk.js';
 import * as Common from '../../../../core/common/common.js';
-import * as ObjectUI from './object_ui.js';
-import * as UI from '../../legacy.js';
-
-import {assertNotNullOrUndefined} from '../../../../core/platform/platform.js';
+import * as SDK from '../../../../core/sdk/sdk.js';
 import {dispatchClickEvent} from '../../../../testing/DOMHelpers.js';
 import {describeWithEnvironment} from '../../../../testing/EnvironmentHelpers.js';
 import {someMutations} from '../../../../testing/MutationHelpers.js';
@@ -17,6 +11,9 @@ import {
   describeWithRealConnection,
   getExecutionContext,
 } from '../../../../testing/RealConnection.js';
+import * as UI from '../../legacy.js';
+
+import * as ObjectUI from './object_ui.js';
 
 describe('ObjectPropertiesSection', () => {
   describeWithRealConnection('ObjectPropertiesSection', () => {
@@ -24,9 +21,9 @@ describe('ObjectPropertiesSection', () => {
         Promise<{object: SDK.RemoteObject.RemoteObject, properties: SDK.RemoteObject.RemoteObjectProperty[]}> {
       const targetManager = SDK.TargetManager.TargetManager.instance();
       const target = targetManager.rootTarget();
-      assertNotNullOrUndefined(target);
+      assert.exists(target);
       const runtimeModel = target.model(SDK.RuntimeModel.RuntimeModel);
-      assertNotNullOrUndefined(runtimeModel);
+      assert.exists(runtimeModel);
       const executionContext = await getExecutionContext(runtimeModel);
       UI.Context.Context.instance().setFlavor(SDK.RuntimeModel.ExecutionContext, executionContext);
       const {result} = await ObjectUI.JavaScriptREPL.JavaScriptREPL.evaluateAndBuildPreview(
@@ -36,7 +33,7 @@ describe('ObjectPropertiesSection', () => {
       }
       const {object} = result;
       const {properties} = await object.getAllProperties(accessorPropertiesOnly, generatePreview);
-      assertNotNullOrUndefined(properties);
+      assert.exists(properties);
       return {object, properties};
     }
 
@@ -66,7 +63,7 @@ describe('ObjectPropertiesSection', () => {
 
       const calculateValueButton =
           propertiesSection.valueElement.querySelector('.object-value-calculate-value-button') as HTMLElement;
-      assertNotNullOrUndefined(calculateValueButton);
+      assert.exists(calculateValueButton);
       const mutations = someMutations(propertiesSection.listItemElement);
       calculateValueButton.click();
       await mutations;
@@ -207,7 +204,7 @@ describe('ObjectPropertiesSection', () => {
         const div = document.createElement('div');
         ObjectUI.ObjectPropertiesSection.ObjectPropertiesSection.appendMemoryIcon(div, object, expression);
         const icon = div.querySelector('devtools-icon');
-        assertNotNullOrUndefined(icon);
+        assert.exists(icon);
         const reveal = sinon.stub(Common.Revealer.RevealerRegistry.prototype, 'reveal');
 
         dispatchClickEvent(icon);

@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <string_view>
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
@@ -362,8 +363,8 @@ class AlternatingCriticalCHRequestHandler {
 void ExpectUKMSeen(const ukm::TestAutoSetUkmRecorder& ukm_recorder,
                    const std::vector<network::mojom::WebClientHintsType>& hints,
                    size_t loads,
-                   const base::StringPiece metric_name,
-                   const base::StringPiece type_name) {
+                   const std::string_view metric_name,
+                   const std::string_view type_name) {
   auto ukm_entries = ukm_recorder.GetEntriesByName(metric_name);
   // We expect the same series of `hints` to appear `loads` times.
   ASSERT_EQ(ukm_entries.size(), hints.size() * loads);
@@ -1247,7 +1248,7 @@ class ClientHintsBrowserTest : public policy::PolicyTest {
         continue;
       }
 
-      // TODO(crbug.com/1286857): Skip over the `Sec-CH-UA-Full` client hint
+      // TODO(crbug.com/40211003): Skip over the `Sec-CH-UA-Full` client hint
       // because it is only added in the presence of a valid
       // "UserAgentDeprecation" Origin Trial token. Need to add `Sec-CH-UA-Full`
       // corresponding tests.
@@ -4092,7 +4093,7 @@ class ClientHintsBrowserTestWithEmulatedMedia
     return prefers_reduced_transparency_observed_;
   }
 
-  void EmulateMedia(base::StringPiece string) {
+  void EmulateMedia(std::string_view string) {
     base::Value features = base::test::ParseJson(string);
     DCHECK(features.is_list());
     base::Value::Dict params;

@@ -22,7 +22,6 @@
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
 #import "ios/chrome/browser/ui/first_run/omnibox_position/omnibox_position_choice_coordinator.h"
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_coordinator.h"
-#import "ios/chrome/browser/ui/first_run/tangible_sync/tangible_sync_screen_coordinator.h"
 #import "ios/chrome/browser/ui/screen/screen_provider.h"
 #import "ios/chrome/browser/ui/screen/screen_type.h"
 #import "ios/chrome/browser/ui/search_engine_choice/search_engine_choice_coordinator.h"
@@ -33,7 +32,6 @@
 
 #import "app/vivaldi_apptools.h"
 #import "components/prefs/pref_service.h"
-#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
@@ -185,12 +183,6 @@
                                 isOptional:YES
                                accessPoint:signin_metrics::AccessPoint::
                                                ACCESS_POINT_START_PAGE];
-    case kTangibleSync:
-      return [[TangibleSyncScreenCoordinator alloc]
-          initWithBaseNavigationController:self.navigationController
-                                   browser:self.browser
-                                  firstRun:YES
-                                  delegate:self];
     case kDefaultBrowserPromo:
       return [[DefaultBrowserScreenCoordinator alloc]
           initWithBaseNavigationController:self.navigationController
@@ -289,12 +281,12 @@
 
   [self.onboardingActionsBridge
     observeOmniboxPositionChange:^(BOOL isBottomOmniboxEnabled) {
-    self.browser->GetBrowserState()->GetPrefs()->
-        SetDefaultPrefValue(prefs::kBottomOmnibox,
-                            base::Value(isBottomOmniboxEnabled));
-    self.browser->GetBrowserState()->GetPrefs()->
-        SetDefaultPrefValue(vivaldiprefs::kVivaldiReverseSearchResultsEnabled,
-                            base::Value(isBottomOmniboxEnabled));
+    [VivaldiTabSettingPrefs
+        setBottomOmniboxEnabled:isBottomOmniboxEnabled
+            inPrefServices:self.browser->GetBrowserState()->GetPrefs()];
+    [VivaldiTabSettingPrefs
+        setReverseSearchSuggestionsEnabled:isBottomOmniboxEnabled
+            inPrefServices:self.browser->GetBrowserState()->GetPrefs()];
   }];
 
   [self.onboardingActionsBridge observeOnboardingFinishedState:^{

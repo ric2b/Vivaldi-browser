@@ -6,12 +6,11 @@
 // threat urls.  It then uses a real browser to go to these urls, and sends
 // "goback" or "proceed" commands and verifies they work.
 
-#include "components/safe_browsing/content/browser/safe_browsing_blocking_page.h"
-
 #include <algorithm>
 #include <map>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <utility>
 
 #include "base/command_line.h"
@@ -77,6 +76,7 @@
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/content/browser/async_check_tracker.h"
+#include "components/safe_browsing/content/browser/safe_browsing_blocking_page.h"
 #include "components/safe_browsing/content/browser/safe_browsing_blocking_page_factory.h"
 #include "components/safe_browsing/content/browser/threat_details.h"
 #include "components/safe_browsing/content/browser/ui_manager.h"
@@ -86,10 +86,10 @@
 #include "components/safe_browsing/core/browser/db/fake_database_manager.h"
 #include "components/safe_browsing/core/browser/db/util.h"
 #include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
-#include "components/safe_browsing/core/browser/hashprefix_realtime/hash_realtime_utils.h"
 #include "components/safe_browsing/core/browser/safe_browsing_metrics_collector.h"
 #include "components/safe_browsing/core/browser/verdict_cache_manager.h"
 #include "components/safe_browsing/core/common/features.h"
+#include "components/safe_browsing/core/common/hashprefix_realtime/hash_realtime_utils.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/core/common/web_ui_constants.h"
 #include "components/security_interstitials/content/security_interstitial_controller_client.h"
@@ -702,7 +702,7 @@ class SafeBrowsingBlockingPageBrowserTest
     if (testing::get<1>(GetParam())) {
       content::IsolateAllSitesForTesting(command_line);
     }
-    // TODO(crbug.com/1491942): This fails with the field trial testing config.
+    // TODO(crbug.com/40285326): This fails with the field trial testing config.
     command_line->AppendSwitch("disable-field-trial-config");
   }
 
@@ -806,8 +806,8 @@ class SafeBrowsingBlockingPageBrowserTest
   // Adds a safebrowsing threat results to the fake safebrowsing service,
   // navigates to a page with a subresource containing the threat site, and
   // returns the url of the parent page.
-  GURL SetupThreatOnSubresourceAndNavigate(base::StringPiece main_frame_url,
-                                           base::StringPiece subresource_url) {
+  GURL SetupThreatOnSubresourceAndNavigate(std::string_view main_frame_url,
+                                           std::string_view subresource_url) {
     GURL url = embedded_test_server()->GetURL(main_frame_url);
     GURL embedded_url = embedded_test_server()->GetURL(subresource_url);
     SetURLThreatType(embedded_url, GetThreatType());
@@ -1392,7 +1392,7 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
 }
 
 #if (BUILDFLAG(IS_MAC) && !defined(NDEBUG)) || defined(MEMORY_SANITIZER)
-// TODO(crbug.com/1132307): Address flaky timeout.
+// TODO(crbug.com/40721886): Address flaky timeout.
 #define MAYBE_LearnMore DISABLED_LearnMore
 #else
 #define MAYBE_LearnMore LearnMore
@@ -1677,7 +1677,7 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest, AllowlistUnsaved) {
 }
 
 #if (BUILDFLAG(IS_MAC) && !defined(NDEBUG)) || defined(MEMORY_SANITIZER)
-// TODO(crbug.com/1132307): Address flay failure.
+// TODO(crbug.com/40721886): Address flay failure.
 #define MAYBE_VerifyHitReportSentOnSBERAndNotIncognito \
   DISABLED_VerifyHitReportSentOnSBERAndNotIncognito
 #else
@@ -1910,7 +1910,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 // Check back and forward work correctly after clicking through an interstitial.
 #if (BUILDFLAG(IS_MAC) && !defined(NDEBUG)) || defined(MEMORY_SANITIZER)
-// TODO(crbug.com/1132307): Address flay failure.
+// TODO(crbug.com/40721886): Address flay failure.
 #define MAYBE_NavigatingBackAndForth DISABLED_NavigatingBackAndForth
 #else
 #define MAYBE_NavigatingBackAndForth NavigatingBackAndForth
@@ -2335,24 +2335,7 @@ IN_PROC_BROWSER_TEST_P(TrustSafetySentimentSurveyV2BrowserTest,
   observer.WaitForNavigationFinished();
 }
 
-class RedInterstitialFaceliftBrowserTest
-    : public SafeBrowsingBlockingPageBrowserTest {
- public:
-  RedInterstitialFaceliftBrowserTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        safe_browsing::kRedInterstitialFacelift);
-  }
-  ~RedInterstitialFaceliftBrowserTest() override = default;
-
-  void SetUp() override { SafeBrowsingBlockingPageBrowserTest::SetUp(); }
-
-  content::WebContents* GetWebContents() {
-    return browser()->tab_strip_model()->GetActiveWebContents();
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
+using RedInterstitialFaceliftBrowserTest = SafeBrowsingBlockingPageBrowserTest;
 
 INSTANTIATE_TEST_SUITE_P(
     RedInterstitialFaceliftBrowserTestWithThreatTypeAndIsolationSetting,
@@ -2366,7 +2349,7 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Bool()));  // If isolate all sites for testing.
 
 IN_PROC_BROWSER_TEST_P(RedInterstitialFaceliftBrowserTest,
-                       TestNewInterstitialPageStringsEnhancedEnabled) {
+                       TestInterstitialPageStringsEnhancedEnabled) {
   safe_browsing::SetSafeBrowsingState(
       browser()->profile()->GetPrefs(),
       safe_browsing::SafeBrowsingState::ENHANCED_PROTECTION);
@@ -2388,45 +2371,46 @@ IN_PROC_BROWSER_TEST_P(RedInterstitialFaceliftBrowserTest,
 
   // Safe browsing blocking page should use new heading and primary,
   // explanation, and proceed paragraph strings.
-  ASSERT_EQ(load_time_data.Find("heading")->GetString(),
-            base::UTF16ToUTF8(l10n_util::GetStringUTF16(IDS_HEADING_NEW)));
+  ASSERT_EQ(
+      load_time_data.Find("heading")->GetString(),
+      base::UTF16ToUTF8(l10n_util::GetStringUTF16(IDS_SAFEBROWSING_HEADING)));
   SBThreatType threat_type = GetThreatType();
   if (threat_type == SBThreatType::SB_THREAT_TYPE_URL_PHISHING ||
       threat_type == SBThreatType::SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING) {
     ASSERT_EQ(load_time_data.Find("primaryParagraph")->GetString(),
               base::UTF16ToUTF8(l10n_util::GetStringUTF16(
-                  IDS_PHISHING_V4_PRIMARY_PARAGRAPH_NEW)));
+                  IDS_PHISHING_V4_PRIMARY_PARAGRAPH)));
     ASSERT_EQ(load_time_data.Find("explanationParagraph")->GetString(),
               base::UTF16ToUTF8(l10n_util::GetStringUTF16(
-                  IDS_PHISHING_V4_EXPLANATION_PARAGRAPH_NEW)));
+                  IDS_PHISHING_V4_EXPLANATION_PARAGRAPH)));
     ASSERT_EQ(load_time_data.Find("finalParagraph")->GetString(),
               base::UTF16ToUTF8(l10n_util::GetStringUTF16(
-                  IDS_PHISHING_V4_PROCEED_PARAGRAPH_NEW)));
+                  IDS_PHISHING_V4_PROCEED_PARAGRAPH)));
   } else if (threat_type == SBThreatType::SB_THREAT_TYPE_URL_MALWARE) {
     ASSERT_EQ(load_time_data.Find("primaryParagraph")->GetString(),
-              base::UTF16ToUTF8(l10n_util::GetStringUTF16(
-                  IDS_MALWARE_V3_PRIMARY_PARAGRAPH_NEW)));
+              base::UTF16ToUTF8(
+                  l10n_util::GetStringUTF16(IDS_MALWARE_V3_PRIMARY_PARAGRAPH)));
     ASSERT_EQ(load_time_data.Find("explanationParagraph")->GetString(),
               base::UTF16ToUTF8(l10n_util::GetStringUTF16(
-                  IDS_MALWARE_V3_EXPLANATION_PARAGRAPH_NEW)));
+                  IDS_MALWARE_V3_EXPLANATION_PARAGRAPH)));
     ASSERT_EQ(load_time_data.Find("finalParagraph")->GetString(),
-              base::UTF16ToUTF8(l10n_util::GetStringUTF16(
-                  IDS_MALWARE_V3_PROCEED_PARAGRAPH_NEW)));
+              base::UTF16ToUTF8(
+                  l10n_util::GetStringUTF16(IDS_MALWARE_V3_PROCEED_PARAGRAPH)));
   } else {
     ASSERT_EQ(load_time_data.Find("primaryParagraph")->GetString(),
-              base::UTF16ToUTF8(l10n_util::GetStringUTF16(
-                  IDS_HARMFUL_V3_PRIMARY_PARAGRAPH_NEW)));
+              base::UTF16ToUTF8(
+                  l10n_util::GetStringUTF16(IDS_HARMFUL_V3_PRIMARY_PARAGRAPH)));
     ASSERT_EQ(load_time_data.Find("explanationParagraph")->GetString(),
               base::UTF16ToUTF8(l10n_util::GetStringUTF16(
-                  IDS_HARMFUL_V3_EXPLANATION_PARAGRAPH_NEW)));
+                  IDS_HARMFUL_V3_EXPLANATION_PARAGRAPH)));
     ASSERT_EQ(load_time_data.Find("finalParagraph")->GetString(),
-              base::UTF16ToUTF8(l10n_util::GetStringUTF16(
-                  IDS_HARMFUL_V3_PROCEED_PARAGRAPH_NEW)));
+              base::UTF16ToUTF8(
+                  l10n_util::GetStringUTF16(IDS_HARMFUL_V3_PROCEED_PARAGRAPH)));
   }
 }
 
 IN_PROC_BROWSER_TEST_P(RedInterstitialFaceliftBrowserTest,
-                       TestNewInterstitialPageStringsStandardEnabled) {
+                       TestInterstitialPageStringsStandardEnabled) {
   safe_browsing::SetSafeBrowsingState(
       browser()->profile()->GetPrefs(),
       safe_browsing::SafeBrowsingState::STANDARD_PROTECTION);
@@ -2448,13 +2432,14 @@ IN_PROC_BROWSER_TEST_P(RedInterstitialFaceliftBrowserTest,
 
   // Safe browsing blocking page should use new header and enhanced protection
   // promo message strings.
-  ASSERT_EQ(load_time_data.Find("heading")->GetString(),
-            base::UTF16ToUTF8(l10n_util::GetStringUTF16(IDS_HEADING_NEW)));
+  ASSERT_EQ(
+      load_time_data.Find("heading")->GetString(),
+      base::UTF16ToUTF8(l10n_util::GetStringUTF16(IDS_SAFEBROWSING_HEADING)));
   ASSERT_EQ(
       load_time_data.Find(security_interstitials::kEnhancedProtectionMessage)
           ->GetString(),
       base::UTF16ToUTF8(l10n_util::GetStringUTF16(
-          IDS_SAFE_BROWSING_ENHANCED_PROTECTION_MESSAGE_NEW)));
+          IDS_SAFE_BROWSING_ENHANCED_PROTECTION_MESSAGE)));
 }
 
 class SafeBrowsingBlockingPageDelayedWarningBrowserTest
@@ -2492,7 +2477,7 @@ class SafeBrowsingBlockingPageDelayedWarningBrowserTest
     if (testing::get<0>(GetParam())) {
       content::IsolateAllSitesForTesting(command_line);
     }
-    // TODO(crbug.com/1491942): This fails with the field trial testing config.
+    // TODO(crbug.com/40285326): This fails with the field trial testing config.
     command_line->AppendSwitch("disable-field-trial-config");
   }
 
@@ -2844,8 +2829,9 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageDelayedWarningBrowserTest,
                 ->GetLastCommittedURL());
 }
 
+// Disabled due to flakiness. https://crbug.com/332097746.
 IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageDelayedWarningBrowserTest,
-                       Fullscreen_WarningShown) {
+                       DISABLED_Fullscreen_WarningShown) {
   base::HistogramTester histograms;
   NavigateAndAssertNoInterstitial();
 
@@ -3095,7 +3081,7 @@ class SafeBrowsingBlockingPageIDNTest
   }
 };
 
-// TODO(crbug.com/1039367): VerifyIDNDecoded does not work with committed
+// TODO(crbug.com/40666794): VerifyIDNDecoded does not work with committed
 // interstitials, this test should be re-enabled once it is adapted.
 IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageIDNTest,
                        DISABLED_SafeBrowsingBlockingPageDecodesIDN) {
@@ -3671,8 +3657,15 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageAsyncChecksTimingTest,
                 ->GetLastCommittedURL());
 }
 
+// TODO(crbug.com/339333828): re-enable the test
+#if BUILDFLAG(IS_LINUX) && defined(UNDEFINED_SANITIZER)
+#define MAYBE_PostCommitInterstitialProceed \
+  DISABLED_PostCommitInterstitialProceed
+#else
+#define MAYBE_PostCommitInterstitialProceed PostCommitInterstitialProceed
+#endif
 IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageAsyncChecksTimingTest,
-                       PostCommitInterstitialProceed) {
+                       MAYBE_PostCommitInterstitialProceed) {
   EnableAsyncCheck();
   auto threat_report_sent_runner = std::make_unique<base::RunLoop>();
   GURL url = SetupPostCommitInterstitialAndNavigate(

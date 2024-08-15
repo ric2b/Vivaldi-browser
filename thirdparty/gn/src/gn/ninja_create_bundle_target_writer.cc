@@ -76,18 +76,19 @@ void NinjaCreateBundleTargetWriter::Run() {
   if (!EnsureAllToolsAvailable(target_))
     return;
 
-  // Stamp users are CopyBundleData, CompileAssetsCatalog, CodeSigning and
+  // Stamp users are CopyBundleData, CompileAssetsCatalog, PostProcessing and
   // StampForTarget.
   size_t num_stamp_uses = 4;
   std::vector<OutputFile> order_only_deps = WriteInputDepsStampAndGetDep(
       std::vector<const Target*>(), num_stamp_uses);
 
-  std::string code_signing_rule_name = WriteCodeSigningRuleDefinition();
+  std::string post_processing_rule_name = WritePostProcessingRuleDefinition();
 
   std::vector<OutputFile> output_files;
   WriteCopyBundleDataSteps(order_only_deps, &output_files);
   WriteCompileAssetsCatalogStep(order_only_deps, &output_files);
-  WriteCodeSigningStep(code_signing_rule_name, order_only_deps, &output_files);
+  WritePostProcessingStep(post_processing_rule_name, order_only_deps,
+                          &output_files);
 
   for (const Target* data_dep : resolved().GetDataDeps(target_))
     order_only_deps.push_back(data_dep->dependency_output_file());
@@ -106,22 +107,22 @@ void NinjaCreateBundleTargetWriter::Run() {
   out_ << std::endl;
 }
 
-std::string NinjaCreateBundleTargetWriter::WriteCodeSigningRuleDefinition() {
-  if (target_->bundle_data().code_signing_script().is_null())
+std::string NinjaCreateBundleTargetWriter::WritePostProcessingRuleDefinition() {
+  if (target_->bundle_data().post_processing_script().is_null())
     return std::string();
 
   std::string target_label = target_->label().GetUserVisibleName(true);
   std::string custom_rule_name(target_label);
   base::ReplaceChars(custom_rule_name, ":/()", "_", &custom_rule_name);
-  custom_rule_name.append("_code_signing_rule");
+  custom_rule_name.append("_post_processing_rule");
 
   out_ << "rule " << custom_rule_name << std::endl;
   out_ << "  command = ";
   path_output_.WriteFile(out_, settings_->build_settings()->python_path());
   out_ << " ";
-  path_output_.WriteFile(out_, target_->bundle_data().code_signing_script());
+  path_output_.WriteFile(out_, target_->bundle_data().post_processing_script());
 
-  const SubstitutionList& args = target_->bundle_data().code_signing_args();
+  const SubstitutionList& args = target_->bundle_data().post_processing_args();
   EscapeOptions args_escape_options;
   args_escape_options.mode = ESCAPE_NINJA_COMMAND;
 
@@ -130,7 +131,7 @@ std::string NinjaCreateBundleTargetWriter::WriteCodeSigningRuleDefinition() {
     SubstitutionWriter::WriteWithNinjaVariables(arg, args_escape_options, out_);
   }
   out_ << std::endl;
-  out_ << "  description = CODE SIGNING " << target_label << std::endl;
+  out_ << "  description = POST PROCESSING " << target_label << std::endl;
   out_ << "  restat = 1" << std::endl;
   out_ << std::endl;
 
@@ -302,65 +303,67 @@ NinjaCreateBundleTargetWriter::WriteCompileAssetsCatalogInputDepsStamp(
   return xcassets_input_stamp_file;
 }
 
-void NinjaCreateBundleTargetWriter::WriteCodeSigningStep(
-    const std::string& code_signing_rule_name,
+void NinjaCreateBundleTargetWriter::WritePostProcessingStep(
+    const std::string& post_processing_rule_name,
     const std::vector<OutputFile>& order_only_deps,
     std::vector<OutputFile>* output_files) {
-  if (code_signing_rule_name.empty())
+  if (post_processing_rule_name.empty())
     return;
 
-  OutputFile code_signing_input_stamp_file =
-      WriteCodeSigningInputDepsStamp(order_only_deps, output_files);
-  DCHECK(!code_signing_input_stamp_file.value().empty());
+  OutputFile post_processing_input_stamp_file =
+      WritePostProcessingInputDepsStamp(order_only_deps, output_files);
+  DCHECK(!post_processing_input_stamp_file.value().empty());
 
   out_ << "build";
-  std::vector<OutputFile> code_signing_output_files;
+  std::vector<OutputFile> post_processing_output_files;
   SubstitutionWriter::GetListAsOutputFiles(
-      settings_, target_->bundle_data().code_signing_outputs(),
-      &code_signing_output_files);
-  WriteOutputs(code_signing_output_files);
+      settings_, target_->bundle_data().post_processing_outputs(),
+      &post_processing_output_files);
+  WriteOutputs(post_processing_output_files);
 
-  // Since the code signature step depends on all the files from the bundle,
+  // Since the post-processing step depends on all the files from the bundle,
   // the create_bundle stamp can just depends on the output of the signature
   // script (dependencies are transitive).
-  *output_files = std::move(code_signing_output_files);
+  *output_files = std::move(post_processing_output_files);
 
-  out_ << ": " << code_signing_rule_name;
+  out_ << ": " << post_processing_rule_name;
   out_ << " | ";
-  path_output_.WriteFile(out_, code_signing_input_stamp_file);
+  path_output_.WriteFile(out_, post_processing_input_stamp_file);
   out_ << std::endl;
 }
 
-OutputFile NinjaCreateBundleTargetWriter::WriteCodeSigningInputDepsStamp(
+OutputFile NinjaCreateBundleTargetWriter::WritePostProcessingInputDepsStamp(
     const std::vector<OutputFile>& order_only_deps,
     std::vector<OutputFile>* output_files) {
-  std::vector<SourceFile> code_signing_input_files;
-  code_signing_input_files.push_back(
-      target_->bundle_data().code_signing_script());
-  code_signing_input_files.insert(
-      code_signing_input_files.end(),
-      target_->bundle_data().code_signing_sources().begin(),
-      target_->bundle_data().code_signing_sources().end());
+  std::vector<SourceFile> post_processing_input_files;
+  post_processing_input_files.push_back(
+      target_->bundle_data().post_processing_script());
+  post_processing_input_files.insert(
+      post_processing_input_files.end(),
+      target_->bundle_data().post_processing_sources().begin(),
+      target_->bundle_data().post_processing_sources().end());
   for (const OutputFile& output_file : *output_files) {
-    code_signing_input_files.push_back(
+    post_processing_input_files.push_back(
         output_file.AsSourceFile(settings_->build_settings()));
   }
 
-  DCHECK(!code_signing_input_files.empty());
-  if (code_signing_input_files.size() == 1 && order_only_deps.empty())
-    return OutputFile(settings_->build_settings(), code_signing_input_files[0]);
+  DCHECK(!post_processing_input_files.empty());
+  if (post_processing_input_files.size() == 1 && order_only_deps.empty())
+    return OutputFile(settings_->build_settings(),
+                      post_processing_input_files[0]);
 
-  OutputFile code_signing_input_stamp_file =
+  OutputFile post_processing_input_stamp_file =
       GetBuildDirForTargetAsOutputFile(target_, BuildDirType::OBJ);
-  code_signing_input_stamp_file.value().append(target_->label().name());
-  code_signing_input_stamp_file.value().append(".codesigning.inputdeps.stamp");
+  post_processing_input_stamp_file.value().append(target_->label().name());
+  post_processing_input_stamp_file.value().append(
+      ".postprocessing.inputdeps.stamp");
 
   out_ << "build ";
-  WriteOutput(code_signing_input_stamp_file);
+  WriteOutput(post_processing_input_stamp_file);
   out_ << ": " << GetNinjaRulePrefixForToolchain(settings_)
        << GeneralTool::kGeneralToolStamp;
 
-  for (const SourceFile& source : code_signing_input_files) {
+  for (const SourceFile& source : post_processing_input_files) {
     out_ << " ";
     path_output_.WriteFile(out_, source);
   }
@@ -369,5 +372,5 @@ OutputFile NinjaCreateBundleTargetWriter::WriteCodeSigningInputDepsStamp(
     path_output_.WriteFiles(out_, order_only_deps);
   }
   out_ << std::endl;
-  return code_signing_input_stamp_file;
+  return post_processing_input_stamp_file;
 }

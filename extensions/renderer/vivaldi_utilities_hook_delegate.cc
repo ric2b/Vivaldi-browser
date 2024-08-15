@@ -96,7 +96,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleGetUrlFragments(
 
   if (url.is_valid()) {
     if (url.SchemeIsFile()) {
-      ParseFileURL(url.spec().c_str(), url.spec().length(), &parsed);
+      parsed = url::ParseFileURL(std::string_view(url.spec()));
     } else {
       ParseStandardURL(url.spec().c_str(), url.spec().length(), &parsed);
       if (url.host().empty() && parsed.host.end() > 0) {

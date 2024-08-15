@@ -152,7 +152,7 @@ class EventCompletionTests : public DawnTestWithParams<EventCompletionTestParams
 
     void LoseTestDevice() {
         EXPECT_CALL(mDeviceLostCallback,
-                    Call(WGPUDeviceLostReason_Undefined, testing::_, testing::_))
+                    Call(testing::_, WGPUDeviceLostReason_Undefined, testing::_, testing::_))
             .Times(1);
         testDevice.ForceLoss(wgpu::DeviceLostReason::Undefined, "Device lost for testing");
         testInstance.ProcessEvents();
@@ -427,12 +427,15 @@ TEST_P(EventCompletionTests, WorkDoneDropInstanceBeforeEvent) {
                                    },
                                    &status});
 
-    // Callback should have been called immediately because we leaked it since there's no way to
-    // call WaitAny or ProcessEvents anymore.
-    //
-    // TODO(crbug.com/dawn/2059): Once Spontaneous is implemented, this should no longer expect the
-    // callback to be cleaned up immediately (and should expect it to happen on a future Tick).
-    ASSERT_EQ(status, WGPUQueueWorkDoneStatus_InstanceDropped);
+    if (IsSpontaneous()) {
+        // TODO(crbug.com/dawn/2059): Once Spontaneous is implemented, this should no longer expect
+        // the callback to be cleaned up immediately (and should expect it to happen on a future
+        // Tick).
+        ASSERT_THAT(status, AnyOf(Eq(WGPUQueueWorkDoneStatus_Success),
+                                  Eq(WGPUQueueWorkDoneStatus_InstanceDropped)));
+    } else {
+        ASSERT_EQ(status, WGPUQueueWorkDoneStatus_InstanceDropped);
+    }
 }
 
 TEST_P(EventCompletionTests, WorkDoneDropInstanceAfterEvent) {
@@ -449,8 +452,6 @@ TEST_P(EventCompletionTests, WorkDoneDropInstanceAfterEvent) {
                                    },
                                    &status});
 
-    // For spontaneous cases, it is possible that since there is no work to be done, the serial can
-    // already be caught up and hence the callback fires immediately.
     if (IsSpontaneous()) {
         testInstance = nullptr;  // Drop the last external ref to the instance.
 
@@ -472,8 +473,9 @@ TEST_P(EventCompletionTests, WorkDoneDropInstanceAfterEvent) {
 // - Other tests?
 
 DAWN_INSTANTIATE_TEST_P(EventCompletionTests,
-                        {D3D11Backend(), D3D12Backend(), MetalBackend(), VulkanBackend(),
-                         OpenGLBackend(), OpenGLESBackend()},
+                        {D3D11Backend(), D3D11Backend({"d3d11_use_unmonitored_fence"}),
+                         D3D12Backend(), MetalBackend(), VulkanBackend(), OpenGLBackend(),
+                         OpenGLESBackend()},
                         {
                             WaitTypeAndCallbackMode::TimedWaitAny_WaitAnyOnly,
                             WaitTypeAndCallbackMode::TimedWaitAny_AllowSpontaneous,
@@ -627,6 +629,7 @@ TEST_P(WaitAnyTests, UnsupportedMixedSources) {
 
 DAWN_INSTANTIATE_TEST(WaitAnyTests,
                       D3D11Backend(),
+                      D3D11Backend({"d3d11_use_unmonitored_fence"}),
                       D3D12Backend(),
                       MetalBackend(),
                       VulkanBackend(),
@@ -653,6 +656,7 @@ TEST_P(FutureTests, MixedSourcePolling) {
 
 DAWN_INSTANTIATE_TEST(FutureTests,
                       D3D11Backend(),
+                      D3D11Backend({"d3d11_use_unmonitored_fence"}),
                       D3D12Backend(),
                       MetalBackend(),
                       VulkanBackend(),

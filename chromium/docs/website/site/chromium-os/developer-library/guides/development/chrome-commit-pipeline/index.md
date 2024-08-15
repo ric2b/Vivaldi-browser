@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: chrome-commit-pipeline
 title: Life of a Chrome commit on ChromeOS
 ---
@@ -10,7 +10,7 @@ This document provides a brief overview of how Chrome changes get committed
 and tested on ChromeOS.
 
 For details on non-Chrome **ChromeOS** changes, see
-[Life of a ChromeOS commit](cros_commit_pipeline.md).
+[Life of a ChromeOS commit](/chromium-os/developer-library/reference/development/cros-commit-pipeline/).
 
 ## Create a Chrome change
 
@@ -83,7 +83,7 @@ Changes are included in ChromeOS builds once the uprev CL makes it through
 the ChromeOS CQ. There is a [PUpr Dashboard] that shows the current status
 of the uprev CLs as well as the age of the current chrome version on ChromeOS.
 
-[contributing code]: contributing.md
+[contributing code]: /chromium-os/developer-library/guides/development/contributing/
 [commit queue]: https://chromium.googlesource.com/chromium/src/+/HEAD/infra/config/generated/cq-builders.md
 [chromium.org]: https://www.chromium.org
 [Gerrit]: https://chromium-review.googlesource.com/

@@ -47,7 +47,7 @@ IndexedDBInternalsUI::IndexedDBInternalsUI(WebUI* web_ui)
       "script-src chrome://resources 'self' 'unsafe-eval';");
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::TrustedTypes,
-      "trusted-types jstemplate;");
+      "trusted-types jstemplate static-types;");
   source->UseStringsJs();
   source->AddResourcePaths(
       base::make_span(kIndexedDbResources, kIndexedDbResourcesSize));
@@ -88,9 +88,7 @@ void IndexedDBInternalsUI::GetAllBucketsAcrossAllStorageKeys(
 
   browser_context->ForEachLoadedStoragePartition(
       [&](StoragePartition* partition) {
-        storage::mojom::IndexedDBControl& control =
-            partition->GetIndexedDBControl();
-        control.GetAllBucketsDetails(base::BindOnce(
+        partition->GetIndexedDBControl().GetAllBucketsDetails(base::BindOnce(
             [](base::WeakPtr<IndexedDBInternalsUI> handler,
                base::RepeatingCallback<void(IdbPartitionMetadataPtr)>
                    collect_partitions,

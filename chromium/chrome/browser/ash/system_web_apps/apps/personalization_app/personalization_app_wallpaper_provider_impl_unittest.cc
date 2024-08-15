@@ -16,8 +16,8 @@
 #include "ash/public/cpp/wallpaper/wallpaper_controller_client.h"
 #include "ash/public/cpp/wallpaper/wallpaper_info.h"
 #include "ash/wallpaper/sea_pen_wallpaper_manager.h"
+#include "ash/wallpaper/test_sea_pen_wallpaper_manager_session_delegate.h"
 #include "ash/wallpaper/wallpaper_constants.h"
-#include "ash/wallpaper/wallpaper_file_manager.h"
 #include "ash/wallpaper/wallpaper_pref_manager.h"
 #include "ash/webui/common/mojom/sea_pen.mojom-forward.h"
 #include "ash/webui/common/mojom/sea_pen.mojom.h"
@@ -25,7 +25,6 @@
 #include "ash/webui/personalization_app/mojom/personalization_app.mojom.h"
 #include "base/containers/flat_map.h"
 #include "base/files/file_util.h"
-#include "base/files/scoped_temp_dir.h"
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
@@ -37,6 +36,7 @@
 #include "base/test/test_future.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/policy/external_data/handlers/device_wallpaper_image_external_data_handler.h"
+#include "chrome/browser/ash/settings/cros_settings_holder.h"
 #include "chrome/browser/ash/settings/device_settings_cache.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
@@ -206,9 +206,8 @@ class PersonalizationAppWallpaperProviderImplTest : public testing::Test {
  protected:
   // testing::Test:
   void SetUp() override {
-    ASSERT_TRUE(sea_pen_wallpaper_manager_storage_dir_.CreateUniqueTempDir());
-    sea_pen_wallpaper_manager_.SetStorageDirectory(
-        sea_pen_wallpaper_manager_storage_dir_.GetPath());
+    sea_pen_wallpaper_manager()->SetSessionDelegateForTesting(
+        std::make_unique<TestSeaPenWallpaperManagerSessionDelegate>());
 
     wallpaper_controller_client_ = std::make_unique<
         WallpaperControllerClientImpl>(
@@ -255,6 +254,12 @@ class PersonalizationAppWallpaperProviderImplTest : public testing::Test {
 
   SeaPenWallpaperManager* sea_pen_wallpaper_manager() {
     return &sea_pen_wallpaper_manager_;
+  }
+
+  TestSeaPenWallpaperManagerSessionDelegate*
+  sea_pen_wallpaper_manager_session_delegate() {
+    return static_cast<TestSeaPenWallpaperManagerSessionDelegate*>(
+        sea_pen_wallpaper_manager()->session_delegate_for_testing());
   }
 
   TestWallpaperController* test_wallpaper_controller() {
@@ -305,22 +310,20 @@ class PersonalizationAppWallpaperProviderImplTest : public testing::Test {
   // Note: `scoped_feature_list_` should be destroyed after `task_environment_`
   // (see crbug.com/846380).
   base::test::ScopedFeatureList scoped_feature_list_;
-  base::ScopedTempDir sea_pen_wallpaper_manager_storage_dir_;
   content::BrowserTaskEnvironment task_environment_;
   InProcessDataDecoder in_process_data_decoder_;
   TestingPrefServiceSimple pref_service_;
-  // Required for |ScopedTestCrosSettings|.
+  // Required for CrosSettings.
   ash::ScopedStubInstallAttributes scoped_stub_install_attributes_;
-  // Required for |ScopedTestCrosSettings|.
+  // Required for CrosSettings.
   ash::ScopedTestDeviceSettingsService scoped_device_settings_;
   // Required for |WallpaperControllerClientImpl|.
-  ash::ScopedTestCrosSettings scoped_testing_cros_settings_{
-      RegisterPrefs(&pref_service_)};
+  ash::CrosSettingsHolder cros_settings_holder_{
+      ash::DeviceSettingsService::Get(), RegisterPrefs(&pref_service_)};
   user_manager::ScopedUserManager scoped_user_manager_;
   TestingProfileManager profile_manager_;
   raw_ptr<TestingProfile> profile_;
-  WallpaperFileManager wallpaper_file_manager_;
-  SeaPenWallpaperManager sea_pen_wallpaper_manager_{&wallpaper_file_manager_};
+  SeaPenWallpaperManager sea_pen_wallpaper_manager_;
   TestWallpaperController test_wallpaper_controller_;
   // |wallpaper_controller_client_| must be destructed before
   // |test_wallpaper_controller_|.
@@ -453,17 +456,16 @@ TEST_F(PersonalizationAppWallpaperProviderImplTest, ValidSeaPenAttribution) {
             mojom::SeaPenUserVisibleQuery::New("test template query text",
                                                "test template query title")));
 
-    base::test::TestFuture<const gfx::ImageSkia&>
-        decode_and_save_sea_pen_image_future;
-    sea_pen_wallpaper_manager()->DecodeAndSaveSeaPenImage(
+    base::test::TestFuture<bool> save_sea_pen_image_future;
+    sea_pen_wallpaper_manager()->SaveSeaPenImage(
         GetTestAccountId(), {CreateJpgBytes(), 111u}, sea_pen_query_ptr,
-        decode_and_save_sea_pen_image_future.GetCallback());
-    ASSERT_FALSE(decode_and_save_sea_pen_image_future.Get().isNull());
+        save_sea_pen_image_future.GetCallback());
+    ASSERT_TRUE(save_sea_pen_image_future.Get());
   }
 
   // Set the image as user wallpaper.
-  test_wallpaper_controller()->SetSeaPenWallpaperFromFile(
-      GetTestAccountId(), 111u, base::DoNothing());
+  test_wallpaper_controller()->SetSeaPenWallpaper(GetTestAccountId(), 111u,
+                                                  base::DoNothing());
 
   SetWallpaperObserver();
   test_wallpaper_observer()->WaitForAttributionChange();
@@ -479,14 +481,15 @@ TEST_F(PersonalizationAppWallpaperProviderImplTest, ValidSeaPenAttribution) {
 
 TEST_F(PersonalizationAppWallpaperProviderImplTest, MissingSeaPenAttribution) {
   // Write a jpg with no metadata.
-  const base::FilePath jpg_path =
-      sea_pen_wallpaper_manager()->GetFilePathForImageId(GetTestAccountId(),
-                                                         111u);
+  const base::FilePath jpg_path = sea_pen_wallpaper_manager_session_delegate()
+                                      ->GetStorageDirectory(GetTestAccountId())
+                                      .Append("111")
+                                      .AddExtension(".jpg");
   ASSERT_TRUE(base::CreateDirectory(jpg_path.DirName()));
   ASSERT_TRUE(base::WriteFile(jpg_path, CreateJpgBytes()));
 
-  test_wallpaper_controller()->SetSeaPenWallpaperFromFile(
-      GetTestAccountId(), 111u, base::DoNothing());
+  test_wallpaper_controller()->SetSeaPenWallpaper(GetTestAccountId(), 111u,
+                                                  base::DoNothing());
 
   SetWallpaperObserver();
   test_wallpaper_observer()->WaitForAttributionChange();
@@ -569,8 +572,7 @@ TEST_F(PersonalizationAppWallpaperProviderImplTest,
        ShouldShowTimeOfDayWallpaperDialog) {
   test_wallpaper_controller()->ClearCounts();
   base::test::ScopedFeatureList features;
-  features.InitWithFeatures({features::kFeatureManagementTimeOfDayWallpaper,
-                             features::kTimeOfDayWallpaperForcedAutoSchedule},
+  features.InitWithFeatures({features::kFeatureManagementTimeOfDayWallpaper},
                             {});
 
   auto image_info = GetDefaultImageInfo();

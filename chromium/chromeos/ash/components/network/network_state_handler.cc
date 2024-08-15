@@ -641,6 +641,8 @@ void NetworkStateHandler::SetShillConnectError(
 void NetworkStateHandler::SetNetworkChromePortalState(
     const std::string& service_path,
     NetworkState::PortalState portal_state) {
+  CHECK(!features::IsRemoveDetectPortalFromChromeEnabled());
+
   NetworkState* network = GetModifiableNetworkState(service_path);
   if (!network) {
     return;
@@ -648,7 +650,7 @@ void NetworkStateHandler::SetNetworkChromePortalState(
   NET_LOG(USER) << "Setting Chrome PortalState for "
                 << NetworkPathId(service_path) << " = " << portal_state;
   auto prev_portal_state = network->GetPortalState();
-  network->set_chrome_portal_state(portal_state);
+  network->SetChromePortalState(portal_state);
   if (prev_portal_state == network->GetPortalState() ||
       service_path != default_network_path_) {
     return;
@@ -1332,11 +1334,17 @@ void NetworkStateHandler::SetFastTransitionStatus(bool enabled) {
 }
 
 void NetworkStateHandler::RequestPortalDetection() {
-  if (default_network_path_.empty()) {
+  const NetworkState* default_network = DefaultNetwork();
+  if (!default_network) {
+    NET_LOG(DEBUG) << "RequestPortalDetection skipped, no default network.";
     return;
   }
-  NET_LOG(USER) << "RequestPortalDetection for "
-                << NetworkPathId(default_network_path_);
+  if (default_network->IsOnline()) {
+    NET_LOG(DEBUG) << "RequestPortalDetection skipped for online network: "
+                   << NetworkId(default_network);
+    return;
+  }
+  NET_LOG(USER) << "RequestPortalDetection for " << NetworkId(default_network);
   shill_property_handler_->RequestPortalDetection(default_network_path_);
 }
 
@@ -2299,8 +2307,6 @@ void NetworkStateHandler::UpdatePortalStateAndNotify(
       case NetworkState::PortalState::kPortal:
         time_in_portal_ = base::ElapsedTimer();
         break;
-      case NetworkState::PortalState::kProxyAuthRequired:
-        [[fallthrough]];
       case NetworkState::PortalState::kNoInternet:
         // We don't track these states, reset the timer.
         time_in_portal_.reset();

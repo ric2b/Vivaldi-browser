@@ -73,6 +73,7 @@ class CONTENT_EXPORT WebContentsAndroid {
 
   bool IsLoading(JNIEnv* env) const;
   bool ShouldShowLoadingUI(JNIEnv* env) const;
+  bool HasUncommittedNavigationInPrimaryMainFrame(JNIEnv* env) const;
 
   void DispatchBeforeUnload(JNIEnv* env, bool auto_cancel);
 
@@ -134,6 +135,8 @@ class CONTENT_EXPORT WebContentsAndroid {
       const base::android::JavaParamRef<jobjectArray>& jports);
 
   jboolean HasAccessedInitialDocument(JNIEnv* env);
+
+  jboolean HasViewTransitionOptIn(JNIEnv* env);
 
   // No theme color is represented by SK_ColorTRANSPARENT.
   jint GetThemeColor(JNIEnv* env);

@@ -25,6 +25,7 @@ import {
   CallsiteInfo,
   FlamegraphState,
   FlamegraphStateViewingOption,
+  isHeapGraphDominatorTreeViewingOption,
   ProfileType,
 } from '../common/state';
 import {FlamegraphDetails, globals} from '../frontend/globals';
@@ -104,6 +105,10 @@ class TablesCache {
       this.cache.set(query, tableName);
     }
     return tableName;
+  }
+
+  hasQuery(query: string): boolean {
+    return this.cache.get(query) !== undefined;
   }
 }
 
@@ -197,13 +202,12 @@ export class FlamegraphController extends Controller<'main'> {
 
     this.lastSelectedFlamegraphState = {...selection};
 
-    const expandedId = selectedFlamegraphState.expandedCallsite
-      ? selectedFlamegraphState.expandedCallsite.id
-      : -1;
-    const rootSize =
-      selectedFlamegraphState.expandedCallsite === undefined
-        ? undefined
-        : selectedFlamegraphState.expandedCallsite.totalSize;
+    const expandedCallsite =
+      selectedFlamegraphState.expandedCallsiteByViewingOption[
+        selectedFlamegraphState.viewingOption
+      ];
+    const expandedId = expandedCallsite ? expandedCallsite.id : -1;
+    const rootSize = expandedCallsite?.totalSize;
 
     const key = `${selectedFlamegraphState.upids};${selectedFlamegraphState.start};${selectedFlamegraphState.end}`;
 
@@ -211,9 +215,8 @@ export class FlamegraphController extends Controller<'main'> {
       const flamegraphData = await this.getFlamegraphData(
         key,
         /* eslint-disable @typescript-eslint/strict-boolean-expressions */
-        selectedFlamegraphState.viewingOption
-          ? /* eslint-enable */
-            selectedFlamegraphState.viewingOption
+        selectedFlamegraphState.viewingOption /* eslint-enable */
+          ? selectedFlamegraphState.viewingOption
           : defaultViewingOption(selectedFlamegraphState.type),
         selection.start,
         selection.end,
@@ -238,7 +241,7 @@ export class FlamegraphController extends Controller<'main'> {
           this.lastSelectedFlamegraphState.viewingOption,
           isInAreaSelection,
           rootSize,
-          this.lastSelectedFlamegraphState.expandedCallsite,
+          expandedCallsite,
         );
       }
     } finally {
@@ -264,8 +267,10 @@ export class FlamegraphController extends Controller<'main'> {
         this.lastSelectedFlamegraphState.viewingOption !==
           selection.viewingOption ||
         this.lastSelectedFlamegraphState.focusRegex !== selection.focusRegex ||
-        this.lastSelectedFlamegraphState.expandedCallsite !==
-          selection.expandedCallsite)
+        this.lastSelectedFlamegraphState.expandedCallsiteByViewingOption[
+          selection.viewingOption
+        ] !==
+          selection.expandedCallsiteByViewingOption[selection.viewingOption])
     );
   }
 
@@ -294,6 +299,7 @@ export class FlamegraphController extends Controller<'main'> {
         await this.args.engine.query(`select value from stats
        where severity = 'error' and name = 'heap_graph_non_finalized_graph'`)
       ).firstRow({value: NUM}).value > 0;
+    flamegraphDetails.graphLoading = false;
     publishFlamegraphDetails(flamegraphDetails);
   }
 
@@ -311,8 +317,10 @@ export class FlamegraphController extends Controller<'main'> {
     if (this.flamegraphDatasets.has(key)) {
       currentData = this.flamegraphDatasets.get(key)!;
     } else {
-      // TODO(hjd): Show loading state.
-
+      publishFlamegraphDetails({
+        ...globals.flamegraphDetails,
+        graphLoading: true,
+      });
       // Collecting data for drawing flamegraph for selected profile.
       // Data needs to be in following format:
       // id, name, parent_id, depth, total_size
@@ -322,6 +330,7 @@ export class FlamegraphController extends Controller<'main'> {
         upids,
         type,
         focusRegex,
+        viewingOption,
       );
       currentData = await this.getFlamegraphDataFromTables(
         tableName,
@@ -374,6 +383,18 @@ export class FlamegraphController extends Controller<'main'> {
         totalColumnName = 'cumulativeSize';
         selfColumnName = 'size';
         break;
+      case FlamegraphStateViewingOption.DOMINATOR_TREE_OBJ_COUNT_KEY:
+        orderBy = `where depth < ${maxDepth} order by depth,
+          cumulativeCount desc, name`;
+        totalColumnName = 'cumulativeCount';
+        selfColumnName = 'count';
+        break;
+      case FlamegraphStateViewingOption.DOMINATOR_TREE_OBJ_SIZE_KEY:
+        orderBy = `where depth < ${maxDepth} order by depth,
+          cumulativeSize desc, name`;
+        totalColumnName = 'cumulativeSize';
+        selfColumnName = 'size';
+        break;
       default:
         const exhaustiveCheck: never = viewingOption;
         throw new Error(`Unhandled case: ${exhaustiveCheck}`);
@@ -381,21 +402,21 @@ export class FlamegraphController extends Controller<'main'> {
     }
 
     const callsites = await this.args.engine.query(`
-        SELECT
-        id as hash,
-        IFNULL(IFNULL(DEMANGLE(name), name), '[NULL]') as name,
-        IFNULL(parent_id, -1) as parentHash,
-        depth,
-        cumulative_size as cumulativeSize,
-        cumulative_alloc_size as cumulativeAllocSize,
-        cumulative_count as cumulativeCount,
-        cumulative_alloc_count as cumulativeAllocCount,
-        map_name as mapping,
-        size,
-        count,
-        IFNULL(source_file, '') as sourceFile,
-        IFNULL(line_number, -1) as lineNumber
-        from ${tableName} ${orderBy}`);
+      SELECT
+      id as hash,
+      IFNULL(IFNULL(DEMANGLE(name), name), '[NULL]') as name,
+      IFNULL(parent_id, -1) as parentHash,
+      depth,
+      cumulative_size as cumulativeSize,
+      cumulative_alloc_size as cumulativeAllocSize,
+      cumulative_count as cumulativeCount,
+      cumulative_alloc_count as cumulativeAllocCount,
+      map_name as mapping,
+      size,
+      count,
+      IFNULL(source_file, '') as sourceFile,
+      IFNULL(line_number, -1) as lineNumber
+      from ${tableName} ${orderBy}`);
 
     const flamegraphData: CallsiteInfo[] = [];
     const hashToindex: Map<number, number> = new Map();
@@ -467,6 +488,7 @@ export class FlamegraphController extends Controller<'main'> {
     upids: number[],
     type: ProfileType,
     focusRegex: string,
+    viewingOption: FlamegraphStateViewingOption,
   ): Promise<string> {
     const flamegraphType = getFlamegraphType(type);
     if (type === ProfileType.PERF_SAMPLE) {
@@ -493,6 +515,14 @@ export class FlamegraphController extends Controller<'main'> {
           )`,
       );
     }
+    if (
+      type === ProfileType.JAVA_HEAP_GRAPH &&
+      isHeapGraphDominatorTreeViewingOption(viewingOption)
+    ) {
+      return this.cache.getTableName(
+        await this.loadHeapGraphDominatorTreeQuery(upids[0], end),
+      );
+    }
     return this.cache.getTableName(
       `select id, name, map_name, parent_id, depth, cumulative_size,
           cumulative_alloc_size, cumulative_count, cumulative_alloc_count,
@@ -506,6 +536,90 @@ export class FlamegraphController extends Controller<'main'> {
             '${focusRegex}'
           )`,
     );
+  }
+
+  private async loadHeapGraphDominatorTreeQuery(upid: number, timestamp: time) {
+    const outputTableName = `heap_graph_type_dominated_${upid}_${timestamp}`;
+    const outputQuery = `SELECT * FROM ${outputTableName}`;
+    if (this.cache.hasQuery(outputQuery)) {
+      return outputQuery;
+    }
+
+    this.args.engine.query(`
+    INCLUDE PERFETTO MODULE memory.heap_graph_dominator_tree;
+
+    -- heap graph dominator tree with objects as nodes and all relavant
+    -- object self stats and dominated stats
+    CREATE PERFETTO TABLE _heap_graph_object_dominated AS
+    SELECT
+     node.id,
+     node.idom_id,
+     node.dominated_obj_count,
+     node.dominated_size_bytes + node.dominated_native_size_bytes AS dominated_size,
+     node.depth,
+     obj.type_id,
+     obj.root_type,
+     obj.self_size + obj.native_size AS self_size
+    FROM memory_heap_graph_dominator_tree node
+    JOIN heap_graph_object obj USING(id)
+    WHERE obj.upid = ${upid} AND obj.graph_sample_ts = ${timestamp}
+    -- required to accelerate the recursive cte below
+    ORDER BY idom_id;
+
+    -- calculate for each object node in the dominator tree the
+    -- HASH(path of type_id's from the super root to the object)
+    CREATE PERFETTO TABLE _dominator_tree_path_hash AS
+    WITH RECURSIVE _tree_visitor(id, path_hash) AS (
+      SELECT
+        id,
+        HASH(
+          CAST(type_id AS TEXT) || '-' || IFNULL(root_type, '')
+        ) AS path_hash
+      FROM _heap_graph_object_dominated
+      WHERE depth = 1
+      UNION ALL
+      SELECT
+        child.id,
+        HASH(CAST(parent.path_hash AS TEXT) || '/' || CAST(type_id AS TEXT)) AS path_hash
+      FROM _heap_graph_object_dominated child
+      JOIN _tree_visitor parent ON child.idom_id = parent.id
+    )
+    SELECT * from _tree_visitor
+    ORDER BY id;
+
+    -- merge object nodes with the same path into one "class type node", so the
+    -- end result is a tree where nodes are identified by their types and the
+    -- dominator relationships are preserved.
+    CREATE PERFETTO TABLE ${outputTableName} AS
+    SELECT
+      map.path_hash as id,
+      COALESCE(cls.deobfuscated_name, cls.name, '[NULL]') || IIF(
+        node.root_type IS NOT NULL,
+        ' [' || node.root_type || ']', ''
+      ) AS name,
+      IFNULL(parent_map.path_hash, -1) AS parent_id,
+      node.depth - 1 AS depth,
+      sum(dominated_size) AS cumulative_size,
+      -1 AS cumulative_alloc_size,
+      sum(dominated_obj_count) AS cumulative_count,
+      -1 AS cumulative_alloc_count,
+      '' as map_name,
+      '' as source_file,
+      -1 as line_number,
+      sum(self_size) AS size,
+      count(*) AS count
+    FROM _heap_graph_object_dominated node
+    JOIN _dominator_tree_path_hash map USING(id)
+    LEFT JOIN _dominator_tree_path_hash parent_map ON node.idom_id = parent_map.id
+    JOIN heap_graph_class cls ON node.type_id = cls.id
+    GROUP BY map.path_hash, name, parent_id, depth, map_name, source_file, line_number;
+
+    -- These are intermediates and not needed
+    DROP TABLE _heap_graph_object_dominated;
+    DROP TABLE _dominator_tree_path_hash;
+    `);
+
+    return outputQuery;
   }
 
   getMinSizeDisplayed(

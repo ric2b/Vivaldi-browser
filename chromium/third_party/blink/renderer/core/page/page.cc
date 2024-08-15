@@ -46,6 +46,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/frame/navigator.h"
 #include "third_party/blink/renderer/core/frame/page_scale_constraints.h"
 #include "third_party/blink/renderer/core/frame/page_scale_constraints_set.h"
 #include "third_party/blink/renderer/core/frame/remote_frame.h"
@@ -79,12 +80,16 @@
 #include "third_party/blink/renderer/core/page/spatial_navigation_controller.h"
 #include "third_party/blink/renderer/core/page/validation_message_client_impl.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+#include "third_party/blink/renderer/core/preferences/navigator_preferences.h"
+#include "third_party/blink/renderer/core/preferences/preference_manager.h"
 #include "third_party/blink/renderer/core/preferences/preference_overrides.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme_overlay_mobile.h"
 #include "third_party/blink/renderer/core/scroll/smooth_scroll_sequencer.h"
+#include "third_party/blink/renderer/core/svg/graphics/isolated_svg_document_host.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image_chrome_client.h"
+#include "third_party/blink/renderer/core/svg/svg_resource_document_cache.h"
 #include "third_party/blink/renderer/platform/bindings/source_location.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -249,6 +254,12 @@ Page::Page(base::PassKey<Page>,
                                !color_provider_colors->IsEmpty()
                            ? *color_provider_colors
                            : ColorProviderColorMaps::CreateDefault());
+  if (is_ordinary_) {
+    // TODO(crbug.com/336382906): We will revisit where we'll be doing this in
+    // production.
+    IsolatedSVGDocumentHostInitializer::Get()
+        ->MaybePrepareIsolatedSVGDocumentHost();
+  }
 }
 
 Page::~Page() {
@@ -456,6 +467,15 @@ SpatialNavigationController& Page::GetSpatialNavigationController() {
   return *spatial_navigation_controller_;
 }
 
+SVGResourceDocumentCache& Page::GetSVGResourceDocumentCache() {
+  if (!svg_resource_document_cache_) {
+    svg_resource_document_cache_ =
+        MakeGarbageCollected<SVGResourceDocumentCache>(
+            GetPageScheduler()->GetAgentGroupScheduler().DefaultTaskRunner());
+  }
+  return *svg_resource_document_cache_;
+}
+
 void Page::UsesOverlayScrollbarsChanged() {
   for (Page* page : AllPages()) {
     for (Frame* frame = page->MainFrame(); frame;
@@ -606,8 +626,9 @@ void Page::ResetPluginData() {
 static void RestoreSVGImageAnimations() {
   for (const Page* page : AllPages()) {
     if (auto* svg_image_chrome_client =
-            DynamicTo<SVGImageChromeClient>(page->GetChromeClient()))
+            DynamicTo<IsolatedSVGChromeClient>(page->GetChromeClient())) {
       svg_image_chrome_client->RestoreAnimationIfNeeded();
+    }
   }
 }
 
@@ -907,6 +928,13 @@ void Page::SettingsChanged(ChangeType change_type) {
         if (auto* local_frame = DynamicTo<LocalFrame>(frame)) {
           local_frame->GetDocument()->MediaQueryAffectingValueChanged(
               MediaValueChange::kOther);
+          if (RuntimeEnabledFeatures::WebPreferencesEnabled()) {
+            auto* navigator = local_frame->DomWindow()->navigator();
+            if (auto* preferences =
+                    NavigatorPreferences::preferences(*navigator)) {
+              preferences->PreferenceMaybeChanged();
+            }
+          }
         }
       }
       break;
@@ -1029,6 +1057,12 @@ void Page::InvalidateColorScheme() {
        frame = frame->Tree().TraverseNext()) {
     if (auto* local_frame = DynamicTo<LocalFrame>(frame)) {
       local_frame->GetDocument()->ColorSchemeChanged();
+      if (RuntimeEnabledFeatures::WebPreferencesEnabled()) {
+        auto* navigator = local_frame->DomWindow()->navigator();
+        if (auto* preferences = NavigatorPreferences::preferences(*navigator)) {
+          preferences->PreferenceMaybeChanged();
+        }
+      }
     }
   }
 }
@@ -1138,6 +1172,7 @@ void Page::Trace(Visitor* visitor) const {
   visitor->Trace(visual_viewport_);
   visitor->Trace(link_highlight_);
   visitor->Trace(spatial_navigation_controller_);
+  visitor->Trace(svg_resource_document_cache_);
   visitor->Trace(main_frame_);
   visitor->Trace(previous_main_frame_for_local_swap_);
   visitor->Trace(plugin_data_);
@@ -1196,6 +1231,10 @@ void Page::WillBeDestroyed() {
     next_related_page_ = nullptr;
   }
 
+  if (svg_resource_document_cache_) {
+    svg_resource_document_cache_->WillBeDestroyed();
+  }
+
   if (scrolling_coordinator_)
     scrolling_coordinator_->WillBeDestroyed();
 
@@ -1214,6 +1253,12 @@ void Page::WillBeDestroyed() {
   if (close_task_handler_) {
     close_task_handler_->SetPage(nullptr);
     close_task_handler_ = nullptr;
+  }
+
+  // Clear speculatively created resources for SVGImage when there are no
+  // ordinary pages. This is desirable to shutdown renderer gracefully.
+  if (is_ordinary_ && OrdinaryPages().empty()) {
+    IsolatedSVGDocumentHostInitializer::Get()->Clear();
   }
 }
 
@@ -1289,7 +1334,13 @@ void Page::SetMediaFeatureOverride(const AtomicString& media_feature,
       return;
     media_feature_overrides_ = std::make_unique<MediaFeatureOverrides>();
   }
-  media_feature_overrides_->SetOverride(media_feature, value);
+
+  const Document* document = nullptr;
+  if (auto* local_frame = DynamicTo<LocalFrame>(MainFrame())) {
+    document = local_frame->GetDocument();
+  }
+
+  media_feature_overrides_->SetOverride(media_feature, value, document);
   if (media_feature == "prefers-color-scheme" ||
       media_feature == "forced-colors")
     SettingsChanged(ChangeType::kColorScheme);
@@ -1311,7 +1362,13 @@ void Page::SetPreferenceOverride(const AtomicString& media_feature,
     }
     preference_overrides_ = std::make_unique<PreferenceOverrides>();
   }
-  preference_overrides_->SetOverride(media_feature, value);
+
+  const Document* document = nullptr;
+  if (auto* local_frame = DynamicTo<LocalFrame>(MainFrame())) {
+    document = local_frame->GetDocument();
+  }
+
+  preference_overrides_->SetOverride(media_feature, value, document);
   if (media_feature == "prefers-color-scheme") {
     SettingsChanged(ChangeType::kColorScheme);
   } else {
@@ -1407,6 +1464,9 @@ void Page::PrepareForLeakDetection() {
     // the page becomes interactive. Give it a chance to clean up.
     page->v8_compile_hints_producer_->ClearData();
   }
+
+  // Clear speculatively created resources for SVGImage.
+  IsolatedSVGDocumentHostInitializer::Get()->Clear();
 }
 
 // Ensure the 10 bits reserved for connected frame count in NodeRareData are

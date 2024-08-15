@@ -49,6 +49,8 @@
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/bind.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
+#include "chromeos/ui/base/app_types.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/user_names.h"
 #include "components/user_manager/user_type.h"
@@ -145,6 +147,9 @@ void AshTestBase::SetUp(std::unique_ptr<TestShellDelegate> delegate) {
 
   setup_called_ = true;
 
+  // TODO(http://b/338414459): Remove this once the secret key is removed.
+  switches::SetIgnoreForestSecretKeyForTest(true);
+
   AshTestHelper::InitParams params;
   params.start_session = start_session_;
   params.create_global_cras_audio_handler = create_global_cras_audio_handler_;
@@ -200,6 +205,9 @@ void AshTestBase::TearDown() {
 
   // Tests can add devices, so reset the lists for future tests.
   ui::DeviceDataManager::GetInstance()->ResetDeviceListsForTest();
+
+  // TODO(http://b/338414459): Remove this once the secret key is removed.
+  switches::SetIgnoreForestSecretKeyForTest(false);
 }
 
 // static
@@ -285,14 +293,13 @@ std::unique_ptr<views::Widget> AshTestBase::CreateFramelessTestWidget() {
 
 std::unique_ptr<aura::Window> AshTestBase::CreateAppWindow(
     const gfx::Rect& bounds_in_screen,
-    AppType app_type,
+    chromeos::AppType app_type,
     int shell_window_id,
     views::WidgetDelegate* delegate) {
   TestWidgetBuilder builder;
   builder.SetWindowTitle(u"Window " + base::NumberToString16(shell_window_id));
-  if (app_type != AppType::NON_APP) {
-    builder.SetWindowProperty(aura::client::kAppType,
-                              static_cast<int>(app_type));
+  if (app_type != chromeos::AppType::NON_APP) {
+    builder.SetWindowProperty(chromeos::kAppTypeKey, app_type);
   }
 
   if (delegate) {
@@ -321,7 +328,8 @@ std::unique_ptr<aura::Window> AshTestBase::CreateTestWindow(
         nullptr, type, shell_window_id, bounds_in_screen));
   }
 
-  return CreateAppWindow(bounds_in_screen, AppType::NON_APP, shell_window_id);
+  return CreateAppWindow(bounds_in_screen, chromeos::AppType::NON_APP,
+                         shell_window_id);
 }
 
 std::unique_ptr<aura::Window> AshTestBase::CreateToplevelTestWindow(

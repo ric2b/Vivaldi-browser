@@ -88,6 +88,7 @@
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <numeric>
 #include <utility>
@@ -344,18 +345,6 @@ class ChromePrintContext : public PrintContext {
   }
 
   void SpoolSinglePage(cc::PaintCanvas* canvas, wtf_size_t page_number) {
-    DispatchEventsForPrintingOnAllFrames();
-    if (!GetFrame()->GetDocument() ||
-        !GetFrame()->GetDocument()->GetLayoutView()) {
-      return;
-    }
-
-    GetFrame()->View()->UpdateLifecyclePhasesForPrinting();
-    if (!GetFrame()->GetDocument() ||
-        !GetFrame()->GetDocument()->GetLayoutView()) {
-      return;
-    }
-
     // The page rect gets scaled and translated, so specify the entire
     // print content area here as the recording rect.
     PaintRecordBuilder builder;
@@ -370,16 +359,6 @@ class ChromePrintContext : public PrintContext {
   void SpoolPagesWithBoundariesForTesting(cc::PaintCanvas* canvas,
                                           const gfx::Size& spool_size_in_pixels,
                                           const WebVector<uint32_t>* pages) {
-    DispatchEventsForPrintingOnAllFrames();
-    if (!GetFrame()->GetDocument() ||
-        !GetFrame()->GetDocument()->GetLayoutView())
-      return;
-
-    GetFrame()->View()->UpdateLifecyclePhasesForPrinting();
-    if (!GetFrame()->GetDocument() ||
-        !GetFrame()->GetDocument()->GetLayoutView())
-      return;
-
     gfx::Rect all_pages_rect(spool_size_in_pixels);
 
     PaintRecordBuilder builder;
@@ -417,8 +396,7 @@ class ChromePrintContext : public PrintContext {
           GetFrame()->GetDocument()->GetPageDescription(page_index);
 
       AffineTransform transform;
-      transform.Translate(description.margin_left,
-                          current_height + description.margin_top);
+      transform.Translate(0, current_height);
 
       if (description.orientation == PageOrientation::kUpright) {
         current_height += description.size.height() + 1;
@@ -447,43 +425,32 @@ class ChromePrintContext : public PrintContext {
 
  protected:
   virtual void SpoolPage(GraphicsContext& context, wtf_size_t page_number) {
+    DispatchEventsForPrintingOnAllFrames();
+    if (!IsFrameValid()) {
+      return;
+    }
+
+    auto* frame_view = GetFrame()->View();
+    DCHECK(frame_view);
+    frame_view->UpdateLifecyclePhasesForPrinting();
+
     if (!IsFrameValid() || page_number >= PageCount()) {
       // TODO(crbug.com/452672): The number of pages may change after layout for
       // pagination.
       return;
     }
     gfx::Rect page_rect = PageRect(page_number);
-    AffineTransform transform;
 
-    auto* frame_view = GetFrame()->View();
-    DCHECK(frame_view);
     const LayoutView* layout_view = frame_view->GetLayoutView();
 
-    // Layout may have used a larger viewport size in order to fit more
-    // unbreakable content in the inline direction. Now we need to scale it down
-    // to fit on the actual pages.
-    float inverse_scale = 1.f / layout_view->PageScaleFactor();
-    transform.Scale(inverse_scale, inverse_scale);
+    PaintRecordBuilder builder(context);
 
-    transform.Translate(static_cast<float>(-page_rect.x()),
-                        static_cast<float>(-page_rect.y()));
-    context.Save();
-    context.ConcatCTM(transform);
-    context.ClipRect(gfx::RectToSkRect(page_rect));
+    frame_view->PrintPage(builder.Context(), page_number, CullRect(page_rect));
 
     auto property_tree_state =
         layout_view->FirstFragment().LocalBorderBoxProperties();
-
-    PaintRecordBuilder builder(context);
-    frame_view->PaintOutsideOfLifecycle(
-        builder.Context(),
-        PaintFlag::kOmitCompositingInfo | PaintFlag::kAddUrlMetadata,
-        CullRect(page_rect));
-
     OutputLinkedDestinations(builder.Context(), property_tree_state, page_rect);
-
     context.DrawRecord(builder.EndRecording(property_tree_state.Unalias()));
-    context.Restore();
   }
 
  private:
@@ -591,8 +558,6 @@ class PaintPreviewContext : public PrintContext {
 
     LocalFrameView* frame_view = GetFrame()->View();
     DCHECK(frame_view);
-    auto property_tree_state =
-        frame_view->GetLayoutView()->FirstFragment().ContentsProperties();
 
     // This calls BeginRecording on |builder| with dimensions specified by the
     // CullRect.
@@ -602,6 +567,8 @@ class PaintPreviewContext : public PrintContext {
 
     frame_view->PaintOutsideOfLifecycle(builder.Context(), flags,
                                         CullRect(bounds));
+    PropertyTreeStateOrAlias property_tree_state =
+        frame_view->GetLayoutView()->FirstFragment().ContentsProperties();
     if (include_linked_destinations) {
       OutputLinkedDestinations(builder.Context(), property_tree_state, bounds);
     }
@@ -1150,7 +1117,8 @@ v8::Local<v8::Context> WebLocalFrameImpl::MainWorldScriptContext() const {
 int32_t WebLocalFrameImpl::GetScriptContextWorldId(
     v8::Local<v8::Context> script_context) const {
   DCHECK_EQ(this, FrameForContext(script_context));
-  return DOMWrapperWorld::World(script_context).GetWorldId();
+  v8::Isolate* isolate = script_context->GetIsolate();
+  return DOMWrapperWorld::World(isolate, script_context).GetWorldId();
 }
 
 v8::Local<v8::Context> WebLocalFrameImpl::GetScriptContextFromWorldId(
@@ -1430,10 +1398,11 @@ bool WebLocalFrameImpl::HasSelection() const {
   if (plugin_container)
     return plugin_container->Plugin()->HasSelection();
 
-  // frame()->selection()->isNone() never returns true.
-  const auto& selection =
-      GetFrame()->Selection().ComputeVisibleSelectionInDOMTreeDeprecated();
-  return selection.Start() != selection.End();
+  // TODO(editing-dev): The use of UpdateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  GetFrame()->GetDocument()->UpdateStyleAndLayout(
+      DocumentUpdateReason::kSelection);
+  return GetFrame()->Selection().ComputeVisibleSelectionInDOMTree().IsRange();
 }
 
 WebRange WebLocalFrameImpl::SelectionRange() const {
@@ -1444,7 +1413,7 @@ WebRange WebLocalFrameImpl::SelectionRange() const {
 
   return GetFrame()
       ->Selection()
-      .ComputeVisibleSelectionInDOMTreeDeprecated()
+      .ComputeVisibleSelectionInDOMTree()
       .ToNormalizedEphemeralRange();
 }
 
@@ -1975,6 +1944,15 @@ bool WebLocalFrameImpl::CapturePaintPreview(const gfx::Rect& bounds,
 
 WebPrintPageDescription WebLocalFrameImpl::GetPageDescription(
     uint32_t page_index) {
+  if (page_index >= print_context_->PageCount()) {
+    // TODO(crbug.com/452672): The number of pages may change after layout for
+    // pagination. Very bad, but let's avoid crashing. The GetPageDescription()
+    // API has no way of reporting failure, and the API user should be able to
+    // trust that the numbers of pages reported when generating print layout
+    // anyway. Due to Blink bugs, this isn't always the case, though. Get the
+    // description of the first page.
+    page_index = 0;
+  }
   return print_context_->GetPageDescription(page_index);
 }
 
@@ -2396,10 +2374,7 @@ LocalFrame* WebLocalFrameImpl::CreateChildFrame(
         std::make_unique<PolicyContainer>(std::move(policy_container_remote),
                                           std::move(policy_container_data));
 
-    KURL creator_base_url;
-    if (features::IsNewBaseUrlInheritanceBehaviorEnabled()) {
-      creator_base_url = owner_element->GetDocument().BaseURL();
-    }
+    KURL creator_base_url(owner_element->GetDocument().BaseURL());
     To<WebLocalFrameImpl>(new_child_frame)
         ->InitializeCoreFrameInternal(
             *GetFrame()->GetPage(), owner_element, this, LastChild(),
@@ -2678,8 +2653,7 @@ void WebLocalFrameImpl::CommitNavigation(
     if (navigation_params->is_synchronous_commit_for_bug_778318 &&
         // Explicitly check for about:blank or about:srcdoc to prevent things
         // like about:mumble propagating the base url.
-        (url.IsAboutBlankURL() || url.IsAboutSrcdocURL()) &&
-        features::IsNewBaseUrlInheritanceBehaviorEnabled()) {
+        (url.IsAboutBlankURL() || url.IsAboutSrcdocURL())) {
       navigation_params->fallback_base_url =
           GetFrame()->GetDocument()->BaseURL();
     }
@@ -3198,7 +3172,7 @@ WebLocalFrameImpl::ConvertNotRestoredReasons(
         CHECK_GT(reason_to_copy->source->column_number, 0U);
         mojom::blink::ScriptSourceLocationPtr source_location =
             mojom::blink::ScriptSourceLocation::New(
-                WTF::String(reason_to_copy->source->url),
+                KURL(reason_to_copy->source->url),
                 WTF::String(reason_to_copy->source->function_name),
                 reason_to_copy->source->line_number,
                 reason_to_copy->source->column_number);
@@ -3259,6 +3233,14 @@ void WebLocalFrameImpl::SetLCPPHint(
     preconnect_origins.emplace_back(url::Origin::Create(origin_url));
   }
   lcpp->set_preconnected_origins(preconnect_origins);
+
+  Vector<KURL> unused_preloads;
+  unused_preloads.reserve(
+      base::checked_cast<wtf_size_t>(hint->unused_preloads.size()));
+  for (const auto& url : hint->unused_preloads) {
+    unused_preloads.emplace_back(url);
+  }
+  lcpp->set_unused_preloads(std::move(unused_preloads));
 }
 
 void WebLocalFrameImpl::AddHitTestOnTouchStartCallback(
@@ -3342,6 +3324,12 @@ void WebLocalFrameImpl::RemoveObserver(WebLocalFrameObserver* observer) {
 void WebLocalFrameImpl::WillSendSubmitEvent(const WebFormElement& form) {
   for (auto& observer : observers_)
     observer.WillSendSubmitEvent(form);
+}
+
+bool WebLocalFrameImpl::AllowStorageAccessSyncAndNotify(
+    WebContentSettingsClient::StorageType storage_type) {
+  return LocalFrame::FromFrameToken(GetLocalFrameToken())
+      ->AllowStorageAccessSyncAndNotify(storage_type);
 }
 
 }  // namespace blink

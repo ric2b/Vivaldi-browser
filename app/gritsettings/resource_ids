@@ -34,7 +34,7 @@
     "messages": [90000],
   },
   "app/ios/vivaldi_ios_native_strings.grd": {
-    "messages": [40000],
+    "messages": [60000],
   },
   "app/resources/strings/vivaldi_strings.grd": {
     "messages": [90100],

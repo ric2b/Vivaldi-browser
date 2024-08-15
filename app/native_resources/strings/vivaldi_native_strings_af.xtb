@@ -13,6 +13,7 @@
 <translation id="1462666970065907900">Wil u regtig hierdie venster sluit?</translation>
 <translation id="1480046233931937785">Met dank aan</translation>
 <translation id="1526344461589023948">’n Fout het voorgekom toe ’n afgelaaide bywerking bewaar moes word. Maak seker u rekenaar het genoeg skyfspasie en probeer later weer.</translation>
+<translation id="1635542496948266458">Wissel profiele</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Nuwe Privaat Venster</translation>
 <translation id="1702758681952953055">Rapporteer die fout indien dit voortduur en sluit die volgende detail in:</translation>
@@ -28,6 +29,7 @@
 <translation id="1985669426322966465">Programmatuurbywerking</translation>
 <translation id="2079036669923635404">Klik hier om Vivaldi na weergawe <ph name="VERSION" /> by te werk.</translation>
 <translation id="2141974047387702305">’n Fout het voorgekom toe die opdateerlêers afgelaai is. Gaan u internetverbinding na en probeer later weer.</translation>
+<translation id="2226825946708954262">⚠ Gaan voort met dataverlies</translation>
 <translation id="2339641773402824483">Kyk tans vir bywerkings…</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Voeg Nota In</translation>
@@ -83,6 +85,9 @@
 <translation id="3943857333388298514">Plak</translation>
 <translation id="4005270918754737597">Slaan hierdie weergawe oor</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi kon nie die beveiligde sleutelopslag ontgrendel nie. Sonder die sleutelopslag verloor u u bewaarde aantekenings, beveiligde koekies en sommige funksies soos sinchronisering, e-pos en kalender hou op werk.
+
+… Sluit Vivaldi nou af, ontgrendel of herstel u sleutelopslag en probeer dan weer. Wil u regtig voortgaan en data verloor?</translation>
 <translation id="4074744496918018786">Open Beeld in Privaatvenster</translation>
 <translation id="410351446219883937">Speel outomaties af</translation>
 <translation id="4281844954008187215">Diensvoorwaardes</translation>
@@ -104,6 +109,7 @@
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> van <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Ingevoerde Snelkiesers</translation>
 <translation id="5092656712000637858">Voeg Blad toe tot Webpaneel</translation>
+<translation id="5106275083540628394">Dekripsie het misluk: risiko van totale dataverlies</translation>
 <translation id="5177818338935286353">Monster 7</translation>
 <translation id="5213743983876949565">Dier 1</translation>
 <translation id="5238244642230426581">Ingevoerde Boekmerke</translation>
@@ -125,6 +131,7 @@
 <translation id="6229528619562190452">Klik hier om Vivaldi by te werk.</translation>
 <translation id="6234173136417926046">Gebruik Beeld as Snelkieseragtergrond</translation>
 <translation id="6339818817272922368">Lokale rekening</translation>
+<translation id="6398710281890660037">Beveilig my profiel</translation>
 <translation id="6438786710866753178">Landskap 4</translation>
 <translation id="6477028720702061455">Kies Opera-profielvouer om in te voer</translation>
 <translation id="6510706699590490869">&amp;Werk Vivaldi By</translation>
@@ -136,7 +143,9 @@
 <translation id="6726279523566323394">Kies Brave-provielvouer vir invoer</translation>
 <translation id="6892812721183419409">Open skakel as <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopieer</translation>
+<translation id="6960139763942959188">Hierdie profiel word tans onveilig op ’n nie-vergrendelde formaat bewaar. Vivaldi staa op die punt om u profiel op te gradeer na ’n veiliger geënkripteerde formaat. U moet nou stop en ’n rugsteun van u profiel maak voordat u voortgaan.</translation>
 <translation id="7086554968911045110">Landskap 7</translation>
+<translation id="7099506190679014195">Veilige keystore-bywerking</translation>
 <translation id="7111492742514999492">Landskap 9</translation>
 <translation id="7208252576848052204">U Arc-instellings is ongelukkig onbeskikbaar terwyl daardie blaaier loop. Bewaar u werk en sluit alle Arc-vensters om daardie instellings na Vivaldi in te voer. Klik daarna op Gaan voort.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -169,6 +178,7 @@
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Inspekteer portaal-dokument</translation>
+<translation id="875142999698251063">Sluit nou af</translation>
 <translation id="8768970203213061953">Landskap 14</translation>
 <translation id="8773635261052182196">U gaan nie meer hierdie kennisgewings sien nie. U kan dit weer in Vivaldi se instellings aktiveer.</translation>
 <translation id="8774017153185436870">Werwe sou video outomaties kon afspeel</translation>
@@ -180,6 +190,7 @@
 <translation id="9048058608784130603">Hangende bywerking <ph name="VERSION" /></translation>
 <translation id="9048224371732578627">Toegelaat om video outomaties af te speel</translation>
 <translation id="9065203028668620118">Wysig</translation>
+<translation id="9090254883741610153">Laat my voortgaan</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Open beeld as <ph name="USER" /></translation>
 <translation id="9157539936604258187">Open Skakel</translation>

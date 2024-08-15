@@ -36,6 +36,7 @@
 #include "libavutil/emms.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/avassert.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "avcodec.h"
 #include "blockdsp.h"
@@ -52,7 +53,6 @@
 #include "jpeglsdec.h"
 #include "profiles.h"
 #include "put_bits.h"
-#include "tiff.h"
 #include "exif.h"
 #include "bytestream.h"
 #include "tiff_common.h"
@@ -2840,16 +2840,18 @@ the_end:
         for (i = 0; i < s->iccnum; i++)
             total_size += s->iccentries[i].length;
 
-        sd = av_frame_new_side_data(frame, AV_FRAME_DATA_ICC_PROFILE, total_size);
-        if (!sd) {
+        ret = ff_frame_new_side_data(avctx, frame, AV_FRAME_DATA_ICC_PROFILE, total_size, &sd);
+        if (ret < 0) {
             av_log(avctx, AV_LOG_ERROR, "Could not allocate frame side data\n");
-            return AVERROR(ENOMEM);
+            return ret;
         }
 
-        /* Reassemble the parts, which are now in-order. */
-        for (i = 0; i < s->iccnum; i++) {
-            memcpy(sd->data + offset, s->iccentries[i].data, s->iccentries[i].length);
-            offset += s->iccentries[i].length;
+        if (sd) {
+            /* Reassemble the parts, which are now in-order. */
+            for (i = 0; i < s->iccnum; i++) {
+                memcpy(sd->data + offset, s->iccentries[i].data, s->iccentries[i].length);
+                offset += s->iccentries[i].length;
+            }
         }
     }
 

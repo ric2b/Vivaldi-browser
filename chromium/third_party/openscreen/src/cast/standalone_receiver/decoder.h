@@ -39,8 +39,9 @@ class Decoder {
    public:
 
     virtual void OnFrameDecoded(FrameId frame_id, const AVFrame& frame) = 0;
-    virtual void OnDecodeError(FrameId frame_id, std::string message) = 0;
-    virtual void OnFatalError(std::string message) = 0;
+    virtual void OnDecodeError(FrameId frame_id,
+                               const std::string& message) = 0;
+    virtual void OnFatalError(const std::string& message) = 0;
 
    protected:
     Client();

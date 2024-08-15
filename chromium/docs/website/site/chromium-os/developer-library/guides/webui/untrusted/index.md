@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides > WebUI
+  - ChromiumOS > Guides > WebUI
 page_name: webui-untrusted
 title: Communication between chrome:// and chrome-untrusted://
 ---

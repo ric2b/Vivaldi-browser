@@ -5,57 +5,56 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
+#include <xnnpack.h>
+#include <xnnpack/microfnptr.h>
+#include <xnnpack/microparams.h>
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
-#include <functional>
 #include <numeric>
 #include <random>
 #include <vector>
 
+#include "replicable_random_device.h"
+#include <gtest/gtest.h>
 #include <fp16/fp16.h>
-
-#include <xnnpack.h>
-#include <xnnpack/microfnptr.h>
-#include <xnnpack/microparams-init.h>
-
 
 class RSumMicrokernelTester {
  public:
-  inline RSumMicrokernelTester& batch_size(size_t batch_size) {
+  RSumMicrokernelTester& batch_size(size_t batch_size) {
     assert(batch_size != 0);
     this->batch_size_ = batch_size;
     return *this;
   }
 
-  inline size_t batch_size() const {
+  size_t batch_size() const {
     return this->batch_size_;
   }
 
-  inline RSumMicrokernelTester& scale(float scale) {
+  RSumMicrokernelTester& scale(float scale) {
     this->scale_ = scale;
     return *this;
   }
 
-  inline float scale() const {
+  float scale() const {
     return this->scale_;
   }
 
-  inline RSumMicrokernelTester& iterations(size_t iterations) {
+  RSumMicrokernelTester& iterations(size_t iterations) {
     this->iterations_ = iterations;
     return *this;
   }
 
-  inline size_t iterations() const {
+  size_t iterations() const {
     return this->iterations_;
   }
 
   void Test(xnn_f16_rsum_ukernel_fn rsum, xnn_init_f16_scale_params_fn init_params) const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(0.01f, 1.0f);
 
     std::vector<uint16_t> input(batch_size() + XNN_EXTRA_BYTES / sizeof(uint16_t));
@@ -84,8 +83,7 @@ class RSumMicrokernelTester {
   }
 
   void Test(xnn_f16_f32acc_rsum_ukernel_fn rsum, xnn_init_f16_f32acc_scale_params_fn init_params) const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(0.01f, 1.0f);
 
     std::vector<uint16_t> input(batch_size() + XNN_EXTRA_BYTES / sizeof(uint16_t));
@@ -104,7 +102,7 @@ class RSumMicrokernelTester {
       init_params(&params, scale());
 
       // Call optimized micro-kernel.
-      uint16_t output = UINT16_C(0x7E00);  /* NaN */
+      uint16_t output = fp16_ieee_from_fp32_value(0.f);
       rsum(batch_size() * sizeof(uint16_t), input.data(), &output, &params);
 
       // Verify results.
@@ -114,8 +112,7 @@ class RSumMicrokernelTester {
   }
 
   void Test(xnn_f32_rsum_ukernel_fn rsum, xnn_init_f32_scale_params_fn init_params) const {
-    std::random_device random_device;
-    auto rng = std::mt19937(random_device());
+    xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(0.01f, 1.0f);
 
     std::vector<float> input(batch_size() + XNN_EXTRA_BYTES / sizeof(float));
@@ -130,7 +127,7 @@ class RSumMicrokernelTester {
       init_params(&params, scale());
 
       // Call optimized micro-kernel.
-      float output = std::nanf("");
+      float output = 0.f;
       rsum(batch_size() * sizeof(float), input.data(), &output, &params);
 
       // Verify results.

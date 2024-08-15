@@ -198,6 +198,12 @@ NSRef<MTLRenderPassDescriptor> CreateMTLRenderPassDescriptor(
                 descriptor.colorAttachments[i].loadAction = MTLLoadActionLoad;
                 break;
 
+            case wgpu::LoadOp::ExpandResolveTexture:
+                // The loading of resolve texture -> MSAA attachment is inserted at the beginning of
+                // the render pass. We don't care about the intial value of the MSAA attachment.
+                descriptor.colorAttachments[i].loadAction = MTLLoadActionDontCare;
+                break;
+
             case wgpu::LoadOp::Undefined:
                 DAWN_UNREACHABLE();
                 break;
@@ -279,6 +285,7 @@ NSRef<MTLRenderPassDescriptor> CreateMTLRenderPassDescriptor(
                     descriptor.depthAttachment.loadAction = MTLLoadActionLoad;
                     break;
 
+                case wgpu::LoadOp::ExpandResolveTexture:
                 case wgpu::LoadOp::Undefined:
                     DAWN_UNREACHABLE();
                     break;
@@ -314,6 +321,7 @@ NSRef<MTLRenderPassDescriptor> CreateMTLRenderPassDescriptor(
                     descriptor.stencilAttachment.loadAction = MTLLoadActionLoad;
                     break;
 
+                case wgpu::LoadOp::ExpandResolveTexture:
                 case wgpu::LoadOp::Undefined:
                     DAWN_UNREACHABLE();
                     break;
@@ -380,6 +388,13 @@ NSRef<MTLRenderPassDescriptor> CreateMTLRenderPassDescriptor(
 
                 case wgpu::LoadOp::Load:
                     mtlAttachment.loadAction = MTLLoadActionLoad;
+                    break;
+
+                case wgpu::LoadOp::ExpandResolveTexture:
+                    // The loading of resolve texture -> MSAA attachment is inserted at the
+                    // beginning of the render pass. We don't care about the intial value of the
+                    // MSAA attachment.
+                    mtlAttachment.loadAction = MTLLoadActionDontCare;
                     break;
 
                 case wgpu::LoadOp::Undefined:
@@ -573,7 +588,7 @@ class BindGroupTracker : public BindGroupTrackerBase<true, uint64_t> {
 
             MatchVariant(
                 bindingInfo.bindingLayout,
-                [&](const BufferBindingLayout& layout) {
+                [&](const BufferBindingInfo& layout) {
                     const BufferBinding& binding = group->GetBindingAsBufferBinding(bindingIndex);
                     ToBackend(binding.buffer)->TrackUsage();
                     const id<MTLBuffer> buffer = ToBackend(binding.buffer)->GetMTLBuffer();
@@ -609,7 +624,7 @@ class BindGroupTracker : public BindGroupTrackerBase<true, uint64_t> {
                                   withRange:NSMakeRange(computeIndex, 1)];
                     }
                 },
-                [&](const SamplerBindingLayout&) {
+                [&](const SamplerBindingInfo&) {
                     auto sampler = ToBackend(group->GetBindingAsSampler(bindingIndex));
                     if (hasVertStage) {
                         [render setVertexSamplerState:sampler->GetMTLSamplerState()
@@ -624,7 +639,13 @@ class BindGroupTracker : public BindGroupTrackerBase<true, uint64_t> {
                                          atIndex:computeIndex];
                     }
                 },
-                [&](const TextureBindingLayout&) {
+                [&](const StaticSamplerBindingInfo&) {
+                    // Static samplers are handled in the frontend.
+                    // TODO(crbug.com/dawn/2482): Implement static samplers in the
+                    // Metal backend.
+                    DAWN_UNREACHABLE();
+                },
+                [&](const TextureBindingInfo&) {
                     auto textureView = ToBackend(group->GetBindingAsTextureView(bindingIndex));
                     if (hasVertStage) {
                         [render setVertexTexture:textureView->GetMTLTexture() atIndex:vertIndex];
@@ -636,7 +657,7 @@ class BindGroupTracker : public BindGroupTrackerBase<true, uint64_t> {
                         [compute setTexture:textureView->GetMTLTexture() atIndex:computeIndex];
                     }
                 },
-                [&](const StorageTextureBindingLayout&) {
+                [&](const StorageTextureBindingInfo&) {
                     auto textureView = ToBackend(group->GetBindingAsTextureView(bindingIndex));
                     if (hasVertStage) {
                         [render setVertexTexture:textureView->GetMTLTexture() atIndex:vertIndex];

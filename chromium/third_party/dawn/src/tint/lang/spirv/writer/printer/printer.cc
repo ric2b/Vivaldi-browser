@@ -32,6 +32,7 @@
 #include "spirv/unified1/GLSL.std.450.h"
 #include "spirv/unified1/spirv.h"
 
+#include "src/tint/lang/core/access.h"
 #include "src/tint/lang/core/address_space.h"
 #include "src/tint/lang/core/builtin_value.h"
 #include "src/tint/lang/core/constant/scalar.h"
@@ -155,6 +156,10 @@ const core::type::Type* DedupType(const core::type::Type* ty, core::type::Manage
         },
         [&](const core::type::DepthMultisampledTexture* depth) {
             return types.Get<core::type::MultisampledTexture>(depth->dim(), types.f32());
+        },
+        [&](const core::type::StorageTexture* st) -> const core::type::Type* {
+            return types.Get<core::type::StorageTexture>(st->dim(), st->texel_format(),
+                                                         core::Access::kRead, st->type());
         },
 
         // Both sampler types are the same in SPIR-V.
@@ -764,7 +769,6 @@ class Printer {
             }
             case core::ir::Function::PipelineStage::kUndefined:
                 TINT_ICE() << "undefined pipeline stage for entry point";
-                return;
         }
 
         OperandList operands = {U32Operand(stage), id, ir_.NameOf(func).Name()};
@@ -1198,7 +1202,6 @@ class Printer {
             }
             default:
                 TINT_UNIMPLEMENTED() << binary->Op();
-                break;
         }
 
         // Emit the instruction.
@@ -1339,7 +1342,6 @@ class Printer {
                 break;
             case spirv::BuiltinFn::kNone:
                 TINT_ICE() << "undefined spirv ir function";
-                return;
         }
 
         OperandList operands;
@@ -1790,7 +1792,7 @@ class Printer {
                     one = b_.Constant(1_u);
                     zero = b_.Constant(0_u);
                 });
-            TINT_ASSERT_OR_RETURN(one && zero);
+            TINT_ASSERT(one && zero);
 
             if (auto* vec = res_ty->As<core::type::Vector>()) {
                 // Splat the scalars into vectors.
@@ -1976,7 +1978,6 @@ class Printer {
                 break;
             default:
                 TINT_UNIMPLEMENTED() << unary->Op();
-                break;
         }
         current_function_.push_inst(op, {Type(ty), id, Value(unary->Val())});
     }
@@ -2227,7 +2228,6 @@ class Printer {
         switch (format) {
             case core::TexelFormat::kBgra8Unorm:
                 TINT_ICE() << "bgra8unorm should have been polyfilled to rgba8unorm";
-                return SpvImageFormatUnknown;
             case core::TexelFormat::kR8Unorm:
                 module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
                 return SpvImageFormatR8;

@@ -1,0 +1,20 @@
+// Copyright 2024 Vivaldi Technologies. All rights reserved.
+
+#ifndef IOS_CHROME_BROWSER_FEATURES_VIVALDI_IOS_CHROME_FLAG_DESCRIPTIONS_H_
+#define IOS_CHROME_BROWSER_FEATURES_VIVALDI_IOS_CHROME_FLAG_DESCRIPTIONS_H_
+
+// Please add names and descriptions in alphabetical order.
+
+namespace flag_descriptions {
+
+extern const char kNewStartPageLayout[];
+extern const char kNewStartPageLayoutDescription[];
+
+extern const char kViewMarkdownAsHTMLName[];
+extern const char kkViewMarkdownAsHTMLDescription[];
+
+// Please add names and descriptions above in alphabetical order.
+
+}  // namespace flag_descriptions
+
+#endif  // IOS_CHROME_BROWSER_FEATURES_VIVALDI_IOS_CHROME_FLAG_DESCRIPTIONS_H_

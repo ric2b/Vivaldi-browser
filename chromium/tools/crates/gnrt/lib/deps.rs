@@ -14,8 +14,6 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::iter;
 use std::path::PathBuf;
 
-use anyhow::Result;
-
 pub use cargo_metadata::DependencyKind;
 pub use semver::Version;
 
@@ -177,7 +175,7 @@ pub fn collect_dependencies(
     roots: Option<Vec<String>>,
     exclude: Option<Vec<String>>,
     extra_config: &BuildConfig,
-) -> Result<Vec<Package>> {
+) -> Vec<Package> {
     // The metadata is split into two parts:
     // 1. A list of packages and associated info: targets (e.g. lib, bin, tests),
     //    source path, etc. This includes all workspace members and all transitive
@@ -262,7 +260,7 @@ pub fn collect_dependencies(
         dep.authors = package.authors.clone();
         dep.edition = package.edition.to_string();
 
-        // TODO(crbug.com/1291994): Resolve features independently per kind
+        // TODO(crbug.com/40212956): Resolve features independently per kind
         // and platform. This may require using the unstable unit-graph feature:
         // https://doc.rust-lang.org/cargo/reference/unstable.html#unit-graph
         for (_, kind_info) in dep.dependency_kinds.iter_mut() {
@@ -272,7 +270,7 @@ pub fn collect_dependencies(
             // choose to check "default" directly, but virtually none actually
             // do this.
             //
-            // TODO(crbug.com/1291994): Revisit this behavior and maybe keep
+            // TODO(crbug.com/40212956): Revisit this behavior and maybe keep
             // "default" features.
             if let Some(pos) = kind_info.features.iter().position(|x| x == "default") {
                 kind_info.features.remove(pos);
@@ -362,7 +360,7 @@ pub fn collect_dependencies(
     }
 
     // Return a flat list of dependencies.
-    Ok(dependencies.into_values().collect())
+    dependencies.into_values().collect()
 }
 
 /// Graph traversal state shared by recursive calls of `explore_node`.
@@ -569,7 +567,7 @@ mod tests {
 
         let metadata: cargo_metadata::Metadata =
             serde_json::from_str(SAMPLE_CARGO_METADATA).unwrap();
-        let mut dependencies = collect_dependencies(&metadata, None, None, &config).unwrap();
+        let mut dependencies = collect_dependencies(&metadata, None, None, &config);
         dependencies.sort_by(|left, right| {
             left.package_name.cmp(&right.package_name).then(left.version.cmp(&right.version))
         });
@@ -879,7 +877,7 @@ mod tests {
 
         // Start from "foo" workspace member.
         let mut dependencies =
-            collect_dependencies(&metadata, Some(vec!["foo".to_string()]), None, &config).unwrap();
+            collect_dependencies(&metadata, Some(vec!["foo".to_string()]), None, &config);
         dependencies.sort_by(|left, right| {
             left.package_name.cmp(&right.package_name).then(left.version.cmp(&right.version))
         });
@@ -913,9 +911,8 @@ mod tests {
         let config = BuildConfig::default();
 
         let deps_with_exclude =
-            collect_dependencies(&metadata, None, Some(vec!["serde_derive".to_string()]), &config)
-                .unwrap();
-        let deps_without_exclude = collect_dependencies(&metadata, None, None, &config).unwrap();
+            collect_dependencies(&metadata, None, Some(vec!["serde_derive".to_string()]), &config);
+        let deps_without_exclude = collect_dependencies(&metadata, None, None, &config);
 
         let pkgs_with_exclude: HashSet<&str> =
             deps_with_exclude.iter().map(|dep| dep.package_name.as_str()).collect();

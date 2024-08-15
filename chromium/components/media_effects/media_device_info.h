@@ -18,6 +18,11 @@ namespace media_effects {
 std::optional<std::string> GetRealDefaultDeviceId(
     const std::vector<media::AudioDeviceDescription>& infos);
 
+// Get the id of the real communications device if present in the passed
+// `infos`, otherwise return nullopt. Only relevant on Windows.
+std::optional<std::string> GetRealCommunicationsDeviceId(
+    const std::vector<media::AudioDeviceDescription>& infos);
+
 // Returns a list of the real mics names by excluding virtual devices such as
 // default.
 std::vector<std::string> GetRealAudioDeviceNames(
@@ -66,6 +71,11 @@ class MediaDeviceInfo : public base::SystemMonitor::DevicesChangedObserver {
   GetAudioDeviceInfos() const;
   const std::optional<std::vector<media::VideoCaptureDeviceInfo>>&
   GetVideoDeviceInfos() const;
+
+  // Used to get mic format info (e.g. sample rate).
+  void GetAudioInputStreamParameters(
+      const std::string& device_id,
+      audio::mojom::SystemInfo::GetInputStreamParametersCallback callback);
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);

@@ -13,25 +13,45 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "xla/service/gpu/gpu_compiler.h"
+
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include "absl/base/log_severity.h"
-#include "absl/log/scoped_mock_log.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "xla/autotune_results.pb.h"
-#include "xla/service/buffer_assignment.h"
-#include "xla/service/gpu/horizontal_loop_fusion.h"
+#include "xla/error_spec.h"
+#include "xla/hlo/ir/hlo_computation.h"
+#include "xla/hlo/ir/hlo_instruction.h"
+#include "xla/hlo/ir/hlo_module.h"
+#include "xla/hlo/ir/hlo_opcode.h"
+#include "xla/service/executable.h"
+#include "xla/service/gpu/autotuner_util.h"
+#include "xla/service/gpu/gpu_hlo_schedule.h"
 #include "xla/service/gpu/metrics.h"
 #include "xla/service/hlo_module_config.h"
 #include "xla/service/pattern_matcher.h"
 #include "xla/service/pattern_matcher_gmock.h"
 #include "xla/service/xla_debug_info_manager.h"
+#include "xla/stream_executor/device_description.h"
+#include "xla/tests/filecheck.h"
 #include "xla/tests/hlo_test_base.h"
 #include "tsl/lib/core/status_test_util.h"
+#include "tsl/platform/casts.h"
+#include "tsl/platform/env.h"
+#include "tsl/platform/errors.h"
+#include "tsl/platform/path.h"
+#include "tsl/platform/protobuf.h"
+#include "tsl/platform/statusor.h"
+#include "tsl/platform/test.h"
 
 namespace xla {
 namespace gpu {
@@ -45,10 +65,13 @@ using ::testing::TempDir;
 
 class GpuCompilerTest : public HloTestBase {
  public:
-  absl::StatusOr<std::unique_ptr<BufferAssignment>> AssignBuffers(
-      HloModule* module) {
+  absl::Status Schedule(HloModule* module) {
     auto compiler = backend().compiler();
-    return compiler->AssignBuffers(module, backend().default_stream_executor());
+    const se::DeviceDescription& gpu_device_info =
+        backend().default_stream_executor()->GetDeviceDescription();
+    TF_RETURN_IF_ERROR(ScheduleGpuModule(module, 4, gpu_device_info).status());
+    return tensorflow::down_cast<GpuCompiler*>(compiler)
+        ->RunPostSchedulingPipelines(module, 4 * 1024 * 1024, gpu_device_info);
   }
 };
 
@@ -301,7 +324,7 @@ ENTRY main {
   EXPECT_EQ(while_op->while_body()->root_instruction()->operand(1)->opcode(),
             HloOpcode::kCopy);
 
-  TF_ASSERT_OK_AND_ASSIGN(auto buffer_assignment, AssignBuffers(module.get()));
+  TF_ASSERT_OK(Schedule(module.get()));
   EXPECT_EQ(CountCopies(*module), 4);
   module->entry_computation()->root_instruction();
   while_op = root->operand(0)->operand(0);
@@ -311,7 +334,7 @@ ENTRY main {
 }
 
 TEST_F(GpuCompilerTest,
-       GemmRewriterTritonIsNoOpWhenGemmFusionAutotunerFallsBackToCublas) {
+       GemmFusionIsNoOpWhenGemmFusionAutotunerFallsBackToCublas) {
   const absl::string_view hlo_string = R"(
 HloModule test
 
@@ -339,16 +362,29 @@ ENTRY main {
 )";
 
   HloModuleConfig config;
-  DebugOptions debug_options = GetDebugOptionsForTest();
-  config.set_debug_options(GetDebugOptionsForTest());
+  DebugOptions triton_enabled_debug_options = GetDebugOptionsForTest();
+  triton_enabled_debug_options.set_xla_gpu_enable_address_computation_fusion(
+      false);
+  config.set_debug_options(triton_enabled_debug_options);
   config.set_replica_count(1);
   config.set_num_partitions(1);
+
+  // Load autotuning DB. We shouldn't depend on actual execution times in a unit
+  // test.
+  std::string path =
+      tsl::io::JoinPath(tsl::testing::XlaSrcRoot(), "service", "gpu",
+                        "gpu_compiler_test_autotune_db.textproto");
+  TF_EXPECT_OK(AutotunerUtil::LoadAutotuneResultsFromFile(path));
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_string, config));
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> triton_enabled_module,
                           GetOptimizedModule(std::move(module)));
-  debug_options.set_xla_gpu_enable_triton_gemm(false);
-  config.set_debug_options(debug_options);
+  AutotunerUtil::ClearAutotuneResults();
+  DebugOptions triton_disabled_debug_options = GetDebugOptionsForTest();
+  triton_disabled_debug_options.set_xla_gpu_enable_address_computation_fusion(
+      false);
+  triton_disabled_debug_options.set_xla_gpu_enable_triton_gemm(false);
+  config.set_debug_options(triton_disabled_debug_options);
   TF_ASSERT_OK_AND_ASSIGN(module,
                           ParseAndReturnVerifiedModule(hlo_string, config));
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> triton_disabled_module,
@@ -362,6 +398,126 @@ ENTRY main {
   // enabling triton gemm
   EXPECT_EQ(triton_enabled_module->computation_count(),
             triton_disabled_module->computation_count());
+}
+
+TEST_F(GpuCompilerTest, CollectivePermuteDecompositionAndPipelining) {
+  const char* kModuleStr = R"(
+HloModule cp
+
+cond {
+    param = (u32[], f32[1, 1024, 1024]) parameter(0)
+    count = get-tuple-element(%param), index=0
+    ub = u32[] constant(11)
+    ROOT result = pred[] compare(count, ub), direction=LT
+ }
+
+body {
+    param = (u32[], f32[1, 1024, 1024]) parameter(0)
+    count = get-tuple-element(%param), index=0
+    send-data = get-tuple-element(%param), index=1
+
+    recv-data = f32[1, 1024, 1024] collective-permute(send-data),
+      source_target_pairs={{0,1}, {1,2}, {2,3}, {3,4}}, channel_id=1
+
+    // The computation code that uses the current recv-data and
+    // produces the send-data for the next iteration.
+    c1 = u32[] constant(1)
+    new_count = u32[] add(count, c1)
+    replica = u32[] replica-id()
+    c10 = u32[] constant(10)
+    sum = u32[] add(replica, c10)
+    sum2 = u32[] add(sum, count)
+    conv = f32[] convert(sum2)
+    p = f32[1, 1024, 1024] broadcast(conv), dimensions={}
+    b = f32[1, 1024, 1024] add(p, recv-data)
+    c = f32[1, 1024, 1024] multiply(b, b)
+    d = f32[1, 1024, 1024] tan(c)
+    s = f32[1, 1024, 1024] dot(c, d), lhs_batch_dims={0},
+      lhs_contracting_dims={1}, rhs_batch_dims={0}, rhs_contracting_dims={1}
+
+    ROOT result = (u32[], f32[1, 1024, 1024]) tuple(new_count, s)
+}
+
+ENTRY test_computation {
+    c0 = u32[] constant(0)
+    f0 = f32[] constant(0.0)
+    init = f32[1, 1024, 1024] broadcast(f0), dimensions={}
+    while_init = (u32[], f32[1, 1024, 1024]) tuple(c0, init)
+    while_result = (u32[], f32[1, 1024, 1024]) while(while_init), body=body, condition=cond
+    ROOT result = f32[1, 1024, 1024] get-tuple-element(while_result), index=1
+}
+)";
+
+  const char* kExpected = R"(
+CHECK:       recv-done
+CHECK-SAME:    channel_id=[[CHANNEL_ID:[0-9]+]]
+CHECK-SAME:    frontend_attributes={_xla_send_recv_pipeline="0"}
+CHECK:       send-done
+CHECK-SAME:    channel_id=[[CHANNEL_ID]]
+CHECK-SAME:    frontend_attributes={_xla_send_recv_pipeline="0"}
+CHECK:       %[[CUSTOM_CALL:.*]] = custom-call
+CHECK:       %[[AFTER_ALL:.*]] = after-all
+CHECK:       %[[RESULT_RECV:.*]] = recv(%[[AFTER_ALL]])
+CHECK-SAME:    channel_id=[[CHANNEL_ID]]
+CHECK-SAME:    frontend_attributes={_xla_send_recv_pipeline="0",
+CHECK-SAME{LITERAL}:                _xla_send_recv_source_target_pairs="{{0,1},{1,2},{2,3},{3,4}}"},
+CHECK-SAME:                         control-predecessors={%[[CUSTOM_CALL]]}
+CHECK:       %[[RESULT_SEND:.*]] = send(%[[SOME_SEND_ARG:.*]], %[[AFTER_ALL]])
+CHECK-SAME:    channel_id=1
+CHECK-SAME:    frontend_attributes={_xla_send_recv_pipeline="0",
+CHECK-SAME{LITERAL}:                _xla_send_recv_source_target_pairs="{{0,1},{1,2},{2,3},{3,4}}"},
+CHECK-SAME:                         control-predecessors={%[[RESULT_RECV]]}
+CHECK:       ROOT
+// We actually expect both RESULT_RECV and RESULT_SEND to match on this line.
+// However, despite popular belief, CHECK-DAG-SAME is not actually a valid
+// directive. Checking for both without using a DAG would be inherently flaky,
+// so we take the hit and only check for one of them.
+CHECK-SAME:    %[[RESULT_RECV]]
+
+CHECK: ENTRY
+CHECK:       %[[ENTRY_AFTER_ALL:.*]] = after-all
+CHECK:       %[[ENTRY_RECV:.*]] = recv(%[[ENTRY_AFTER_ALL]])
+CHECK-SAME:    channel_id=[[CHANNEL_ID]]
+CHECK-SAME:    frontend_attributes={_xla_send_recv_pipeline="0",
+CHECK-SAME{LITERAL}:                _xla_send_recv_source_target_pairs="{{0,1},{1,2},{2,3},{3,4}}"}
+CHECK:       %[[ENTRY_SEND:.*]] = send(%[[SOME_SEND_ARG:.*]], %[[ENTRY_AFTER_ALL]])
+CHECK-SAME:    channel_id=1
+CHECK-SAME:    frontend_attributes={_xla_send_recv_pipeline="0",
+CHECK-SAME{LITERAL}:                _xla_send_recv_source_target_pairs="{{0,1},{1,2},{2,3},{3,4}}"},
+CHECK-SAME:                         control-predecessors={%[[ENTRY_RECV]]}
+CHECK:       %[[WHILE_INIT:.*]] = tuple
+// Check here that the send argument is likewise passed to the while loop, as
+// a counterpart to the check in the child computation above.
+CHECK-SAME:    %[[ENTRY_SEND]]
+CHECK:       while(%[[WHILE_INIT]])
+CHECK:       recv-done
+CHECK-SAME:    channel_id=[[CHANNEL_ID]]
+CHECK-SAME:    frontend_attributes={_xla_send_recv_pipeline="0"}
+CHECK:       send-done
+CHECK-SAME:    channel_id=[[CHANNEL_ID]]
+CHECK-SAME:    frontend_attributes={_xla_send_recv_pipeline="0"}
+)";
+
+  HloModuleConfig config;
+  DebugOptions debug_options = GetDebugOptionsForTest();
+  debug_options.set_xla_gpu_enable_latency_hiding_scheduler(true);
+  debug_options.set_xla_gpu_collective_permute_decomposer_threshold(1);
+  debug_options.set_xla_gpu_enable_pipelined_p2p(true);
+  debug_options.set_xla_gpu_enable_triton_gemm(false);
+  config.set_debug_options(debug_options);
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(kModuleStr, config));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> optimized_module,
+                          GetOptimizedModule(std::move(module)));
+  TF_ASSERT_OK(Schedule(optimized_module.get()));
+
+  HloPrintOptions options;
+  options.set_print_operand_shape(false);
+  options.set_print_result_shape(false);
+  TF_ASSERT_OK_AND_ASSIGN(
+      bool filecheck_matched,
+      RunFileCheck(optimized_module->ToString(options), kExpected));
+  EXPECT_TRUE(filecheck_matched);
 }
 
 }  // namespace

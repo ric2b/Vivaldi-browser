@@ -6,7 +6,6 @@ import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
 import * as TraceModel from '../trace.js';
 
-const {assert} = chai;
 function milliToMicro(value: number) {
   return TraceModel.Types.Timing.MicroSeconds(value * 1000);
 }
@@ -139,7 +138,7 @@ describeWithEnvironment('Timing helpers', () => {
         throw new Error('Could not find LCP event');
       }
       // Ensure we are testing the navigationID path!
-      assert.isDefined(lcpEvent.args.data?.navigationId);
+      assert.exists(lcpEvent.args.data?.navigationId);
       const adjustedTime = TraceModel.Helpers.Timing.timeStampForEventAdjustedByClosestNavigation(
           lcpEvent,
           traceParsedData.Meta.traceBounds,

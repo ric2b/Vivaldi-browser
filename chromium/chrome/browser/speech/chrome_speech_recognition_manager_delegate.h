@@ -30,7 +30,6 @@ class ChromeSpeechRecognitionManagerDelegate
   // SpeechRecognitionEventListener methods.
   void OnRecognitionStart(int session_id) override;
   void OnAudioStart(int session_id) override;
-  void OnEnvironmentEstimationComplete(int session_id) override;
   void OnSoundStart(int session_id) override;
   void OnSoundEnd(int session_id) override;
   void OnAudioEnd(int session_id) override;
@@ -53,6 +52,14 @@ class ChromeSpeechRecognitionManagerDelegate
       override;
   content::SpeechRecognitionEventListener* GetEventListener() override;
   bool FilterProfanities(int render_process_id) override;
+#if !BUILDFLAG(IS_ANDROID)
+  // This will bind to the Speech Recognition Service if available.
+  // On LaCros, it will forward to Ash. On other platforms (Ash, Desktop), it
+  // will bind to appropriate Speech Recognition Service when enabled.
+  void BindSpeechRecognitionContext(
+      mojo::PendingReceiver<media::mojom::SpeechRecognitionContext> receiver)
+      override;
+#endif  // !BUILDFLAG(IS_ANDROID)
 
  private:
   // Checks for mojom::ViewType::kTabContents host in the UI thread and notifies

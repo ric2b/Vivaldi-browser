@@ -7,14 +7,19 @@ import ios_chrome_browser_ui_tab_switcher_tab_strip_ui_swift_constants
 
 /// Bridge to access `TabStripConstants.CollectionView` from Objective-C code.
 @objcMembers public class TabStripCollectionViewConstants: NSObject {
+  public static let tabStripGroupCellPrefixIdentifier = TabStripConstants.CollectionView
+    .tabStripGroupCellPrefixIdentifier
   public static let tabStripTabCellPrefixIdentifier = TabStripConstants.CollectionView
     .tabStripTabCellPrefixIdentifier
+  public static let groupStrokeLineWidth = TabStripConstants.CollectionView.groupStrokeLineWidth
+  public static let groupStrokeExtension = TabStripConstants.CollectionView.groupStrokeExtension
 }
 
 /// Bridge to access `TabStripConstants.TabItem` from Objective-C code.
 @objcMembers public class TabStripTabItemConstants: NSObject {
   public static let fontSize = TabStripConstants.TabItem.fontSize
   public static let selectedZIndex = TabStripConstants.TabItem.selectedZIndex
+  public static let horizontalSpacing = TabStripConstants.TabItem.horizontalSpacing
 }
 
 /// Bridge to access `TabStripConstants.GroupItem` from Objective-C code.
@@ -24,6 +29,7 @@ import ios_chrome_browser_ui_tab_switcher_tab_strip_ui_swift_constants
   public static let titleContainerHorizontalMargin = TabStripConstants.GroupItem
     .titleContainerHorizontalMargin
   public static let fontSize = TabStripConstants.GroupItem.fontSize
+  public static let maxTitleWidth = TabStripConstants.GroupItem.maxTitleWidth
 }
 
 /// Bridge to access `TabStripConstants.StaticSeparator` from Objective-C code.

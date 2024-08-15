@@ -109,6 +109,11 @@
           "name": "force_installed",
           "description": "The extension is force installed or recommended by policy."
         }]
+      },
+      {
+        "id": "MV2DeprecationStatus",
+        "type": "string",
+        "enum": ["inactive", "warning"]
       }
     ],
     "functions": [
@@ -350,6 +355,35 @@
           "parameters": [
             { "name": "status", "$ref": "ExtensionInstallStatus" }
           ]
+        }
+      },
+      {
+        "name": "getFullChromeVersion",
+        "description": "Returns the full version number, e.g. '123.0.6312.112'.",
+        "parameters" : [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "info",
+              "type": "object",
+              "properties": {
+                "version_number": { "type": "string" }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "getMV2DeprecationStatus",
+        "description": "Returns the current state of the MV2 deprecation experiments.",
+        "parameters" : [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [{
+            "name": "status",
+            "$ref": "MV2DeprecationStatus"
+          }]
         }
       }
     ]

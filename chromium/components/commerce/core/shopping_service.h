@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 #include <tuple>
+#include <unordered_set>
 #include <utility>
 
 #include "base/cancelable_callback.h"
@@ -24,6 +25,8 @@
 #include "components/commerce/core/account_checker.h"
 #include "components/commerce/core/commerce_info_cache.h"
 #include "components/commerce/core/commerce_types.h"
+#include "components/commerce/core/product_specifications/product_specifications_service.h"
+#include "components/commerce/core/product_specifications/product_specifications_set.h"
 #include "components/commerce/core/proto/commerce_subscription_db_content.pb.h"
 #include "components/commerce/core/proto/discounts_db_content.pb.h"
 #include "components/commerce/core/proto/parcel_tracking_db_content.pb.h"
@@ -106,6 +109,7 @@ class ScheduledMetricsManager;
 }  // namespace metrics
 
 class BookmarkUpdateManager;
+class ClusterManager;
 class DiscountsStorage;
 class ParcelsManager;
 class ProductSpecificationsServerProxy;
@@ -117,47 +121,6 @@ class SubscriptionsObserver;
 class WebWrapper;
 enum class SubscriptionType;
 struct CommerceSubscription;
-
-// A struct that keeps track of cached product info related data about a url.
-struct ProductInfoCacheEntry {
- public:
-  ProductInfoCacheEntry();
-  ProductInfoCacheEntry(const ProductInfoCacheEntry&) = delete;
-  ProductInfoCacheEntry& operator=(const ProductInfoCacheEntry&) = delete;
-  ~ProductInfoCacheEntry();
-
-  // The number of pages that have the URL open.
-  size_t pages_with_url_open{0};
-
-  // Whether the fallback local extraction needs to run for page.
-  bool needs_local_extraction_run{false};
-
-  // The time that the local extraction execution started. This is primarily
-  // used for metrics.
-  base::Time local_extraction_execution_start_time;
-
-  std::unique_ptr<base::CancelableOnceClosure> run_local_extraction_task;
-
-  // The product info associated with the URL.
-  std::unique_ptr<ProductInfo> product_info;
-};
-
-// A struct that keeps track of cached price insights info related data about a
-// url.
-struct PriceInsightsInfoCacheEntry {
- public:
-  PriceInsightsInfoCacheEntry();
-  PriceInsightsInfoCacheEntry(const PriceInsightsInfoCacheEntry&) = delete;
-  PriceInsightsInfoCacheEntry& operator=(const PriceInsightsInfoCacheEntry&) =
-      delete;
-  ~PriceInsightsInfoCacheEntry();
-
-  // The number of pages that have the URL open.
-  size_t pages_with_url_open{0};
-
-  // The price insights info associated with the URL.
-  std::unique_ptr<PriceInsightsInfo> info;
-};
 
 // Types of shopping pages from backend.
 enum class ShoppingPageType {
@@ -432,6 +395,16 @@ class ShoppingService : public KeyedService,
   // when deciding to build infrastructure.
   virtual bool IsParcelTrackingEligible();
 
+  // Returns a list of URLs corresponding to active WebWrappers the shopping
+  // service is keeping track of. This does not map to open tabs across all
+  // platforms. Excludes non-HTTP/HTTPS URLs.
+  virtual const std::vector<UrlInfo> GetUrlInfosForActiveWebWrappers();
+
+  // Gets a list of URLs from web wrappers that were recently viewed by the
+  // user (ordered by most recent first). This generally aligns with recently
+  // viewed tabs.
+  virtual const std::vector<UrlInfo> GetUrlInfosForRecentlyViewedWebWrappers();
+
   // Starts tracking a list of parcels from a given page.
   void StartTrackingParcels(
       const std::vector<std::pair<ParcelIdentifier::Carrier, std::string>>&
@@ -456,10 +429,12 @@ class ShoppingService : public KeyedService,
   // Called to stop tracking all parcels.
   void StopTrackingAllParcels(base::OnceCallback<void(bool)> callback);
 
-  // Called to fetch product specs for a set of urls.
-  void GetProductSpecificationsSetForUrls(
-      const std::vector<GURL>& urls,
-      base::OnceCallback<void(const ProductSpecificationSet)> callback);
+  virtual ProductSpecificationsService* GetProductSpecificationsService();
+
+  // ClusterManager APIs.
+  virtual std::optional<EntryPointInfo> GetEntryPointInfoForSelection(
+      GURL old_url,
+      GURL new_url);
 
   // Get a weak pointer for this service instance.
   base::WeakPtr<ShoppingService> AsWeakPtr();
@@ -502,6 +477,10 @@ class ShoppingService : public KeyedService,
   // frame.
   void DidFinishLoad(WebWrapper* web);
 
+  // A notification that the active web wrapper was switched. This signal is
+  // analogous to switching tabs.
+  void OnWebWrapperSwitched(WebWrapper* web);
+
   // Schedule (or reschedule) the on-page local extraction execution. Calling
   // this sequentially for the same web wrapper with the same URL will cancel
   // the pending task and schedule a new one. The script will, at most, run once
@@ -532,7 +511,8 @@ class ShoppingService : public KeyedService,
   void PDPMetricsCallback(
       bool is_off_the_record,
       optimization_guide::OptimizationGuideDecision decision,
-      const optimization_guide::OptimizationMetadata& metadata);
+      const optimization_guide::OptimizationMetadata& metadata,
+      const GURL& url);
 
   void HandleOptGuideProductInfoResponse(
       const GURL& url,
@@ -592,9 +572,6 @@ class ShoppingService : public KeyedService,
       optimization_guide::OptimizationGuideDecision decision,
       const optimization_guide::OptimizationMetadata& metadata);
 
-  // Update the cache notifying that a tab is on the specified URL.
-  void UpdateProductInfoCacheForInsertion(const GURL& url);
-
   // Update the data stored in the cache.
   void UpdateProductInfoCache(const GURL& url,
                               bool needs_js,
@@ -602,10 +579,6 @@ class ShoppingService : public KeyedService,
 
   // Get the data stored in the cache or nullptr if none exists.
   const ProductInfo* GetFromProductInfoCache(const GURL& url);
-
-  // Update the cache storing product info for a navigation away from the
-  // provided URL or closing of a tab.
-  void UpdateProductInfoCacheForRemoval(const GURL& url);
 
   // Whether APIs like |GetPriceInsightsInfoForURL| are enabled and allowed to
   // be used.
@@ -625,10 +598,6 @@ class ShoppingService : public KeyedService,
 
   // Handle main frame navigation for the price insights info API.
   void HandleDidNavigatePrimaryMainFrameForPriceInsightsInfo(WebWrapper* web);
-
-  // Update the cache storing price insights info for a navigation away from the
-  // provided URL or closing of a tab.
-  void UpdatePriceInsightsInfoCacheForRemoval(const GURL& url);
 
   void HandleOptGuideShoppingPageTypesResponse(
       const GURL& url,
@@ -663,9 +632,9 @@ class ShoppingService : public KeyedService,
   void GetProductIdentifierForUrl(const GURL& url,
                                   UrlProductIdentifierTupleCallback callback);
 
-  void CreateProductSpecificationsSet(
-      base::OnceCallback<void(const ProductSpecificationSet)> callback,
-      const std::vector<UrlProductIdentifierTuple>& result);
+  // Return all ProductSpecificationsSets from ProductSpecificationsService.
+  virtual const std::vector<ProductSpecificationsSet>
+  GetAllProductSpecificationSets();
 
   // Updates the bookmark model used for sync (and shopping) if needed. Invoked
   // when sync state changes.
@@ -722,11 +691,6 @@ class ShoppingService : public KeyedService,
 
   std::unique_ptr<ProductSpecificationsServerProxy> product_specs_server_proxy_;
 
-  // This is a cache that maps URL to a cache entry that may or may not contain
-  // price insights info.
-  std::unordered_map<std::string, std::unique_ptr<PriceInsightsInfoCacheEntry>>
-      price_insights_info_cache_;
-
   std::unique_ptr<BookmarkUpdateManager> bookmark_update_manager_;
 
   // The object tracking metrics that are recorded at specific intervals.
@@ -745,6 +709,15 @@ class ShoppingService : public KeyedService,
 
   // The object for local extractions of commerce information.
   std::unique_ptr<commerce::WebExtractor> web_extractor_;
+
+  std::unordered_set<WebWrapper*> open_web_wrappers_;
+
+  // A list of UrlInfo ordered by most recently viewed. This is based on
+  // selected tab (not necessarily navigation).
+  std::vector<UrlInfo> recently_visited_tabs_;
+
+  // Class for clustering products.
+  std::unique_ptr<ClusterManager> cluster_manager_;
 
   // TODO(crbug.com/40067058): Delete this when ConsentLevel::kSync is deleted.
   //     See ConsentLevel::kSync documentation for details.

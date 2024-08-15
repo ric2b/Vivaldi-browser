@@ -33,7 +33,8 @@ void CookiesFetcherRestoreCookiesImpl(
     jint priority,
     const jni_zero::JavaParamRef<jstring>& partition_key,
     jint source_scheme,
-    jint source_port);
+    jint source_port,
+    jint source_type);
 
 }  // namespace cookie_fetcher_restore_util
 

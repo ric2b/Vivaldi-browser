@@ -98,7 +98,7 @@ EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
 namespace internal {
 
 template <int Arch, typename VectorLhs, typename VectorRhs, typename Scalar = typename VectorLhs::Scalar,
-          bool Vectorizable = bool((VectorLhs::Flags & VectorRhs::Flags) & PacketAccessBit)>
+          bool Vectorizable = bool((evaluator<VectorLhs>::Flags & evaluator<VectorRhs>::Flags) & PacketAccessBit)>
 struct cross3_impl {
   EIGEN_DEVICE_FUNC static inline typename internal::plain_matrix_type<VectorLhs>::type run(const VectorLhs& lhs,
                                                                                             const VectorRhs& rhs) {

@@ -84,10 +84,6 @@ const float kResourceAdjustedRatio = 0.5;
 
 bool g_should_fail_drawing_buffer_creation_for_testing = false;
 
-BASE_FEATURE(kAddSharedImageRasterUsageInDrawingBuffer,
-             "AddSharedImageRasterUsageInDrawingBuffer",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 void FlipVertically(base::span<uint8_t> framebuffer,
                     size_t num_rows,
                     size_t row_bytes) {
@@ -336,10 +332,9 @@ void DrawingBuffer::SetIsInHiddenPage(bool hidden) {
   // Make sure to interrupt pixel local storage.
   ScopedStateRestorer scoped_state_restorer(this);
 
-  if (base::FeatureList::IsEnabled(features::kCanvasFreeMemoryWhenHidden)) {
-    auto* context_support = ContextProvider()->ContextSupport();
-    if (context_support)
-      context_support->SetAggressivelyFreeResources(hidden);
+  auto* context_support = ContextProvider()->ContextSupport();
+  if (context_support) {
+    context_support->SetAggressivelyFreeResources(hidden);
   }
 
   gl_->ContextVisibilityHintCHROMIUM(is_hidden_ ? GL_FALSE : GL_TRUE);
@@ -519,7 +514,7 @@ bool DrawingBuffer::FinishPrepareTransferableResourceSoftware(
   ReadFramebufferIntoBitmapPixels(
       static_cast<uint8_t*>(registered.bitmap->memory()));
 
-  *out_resource = viz::TransferableResource::MakeSoftware(
+  *out_resource = viz::TransferableResource::MakeSoftwareSharedBitmap(
       registered.bitmap->id(), gpu::SyncToken(), size_,
       viz::SinglePlaneFormat::kRGBA_8888,
       viz::TransferableResource::ResourceSource::kDrawingBuffer);
@@ -731,14 +726,13 @@ scoped_refptr<StaticBitmapImage> DrawingBuffer::TransferToStaticBitmapImage() {
 
   // We reuse the same mailbox name from above since our texture id was consumed
   // from it.
-  const auto& sk_image_mailbox = transferable_resource.mailbox_holder.mailbox;
+  const auto& sk_image_mailbox = transferable_resource.mailbox();
   // Use the sync token generated after producing the mailbox. Waiting for this
   // before trying to use the mailbox with some other context will ensure it is
   // valid. We wouldn't need to wait for the consume done in this function
   // because the texture id it generated would only be valid for the
   // DrawingBuffer's context anyways.
-  const auto& sk_image_sync_token =
-      transferable_resource.mailbox_holder.sync_token;
+  const auto& sk_image_sync_token = transferable_resource.sync_token();
 
   auto sk_color_type = viz::ToClosestSkColorType(
       /*gpu_compositing=*/true, transferable_resource.format);
@@ -751,7 +745,7 @@ scoped_refptr<StaticBitmapImage> DrawingBuffer::TransferToStaticBitmapImage() {
   // in DrawingBuffer.
   return AcceleratedStaticBitmapImage::CreateFromCanvasMailbox(
       sk_image_mailbox, sk_image_sync_token, /* shared_image_texture_id = */ 0,
-      sk_image_info, transferable_resource.mailbox_holder.texture_target,
+      sk_image_info, transferable_resource.texture_target(),
       /* is_origin_top_left = */ opengl_flip_y_extension_,
       context_provider_->GetWeakPtr(), base::PlatformThread::CurrentRef(),
       ThreadScheduler::Current()->CleanupTaskRunner(),
@@ -786,8 +780,8 @@ scoped_refptr<CanvasResource> DrawingBuffer::ExportLowLatencyCanvasResource(
       using_swap_chain_ ? front_color_buffer_ : back_color_buffer_;
   viz::TransferableResource resource;
 
-  resource.mailbox_holder.mailbox = color_buffer->shared_image->mailbox();
-  resource.mailbox_holder.texture_target = color_buffer->texture_target;
+  resource.set_mailbox(color_buffer->shared_image->mailbox());
+  resource.set_texture_target(color_buffer->texture_target);
   resource.size = color_buffer->size;
   resource.format = color_buffer->format;
   resource.is_overlay_candidate = color_buffer->is_overlay_candidate;
@@ -1917,16 +1911,11 @@ scoped_refptr<DrawingBuffer::ColorBuffer> DrawingBuffer::CreateColorBuffer(
 
   // The SharedImages created here are read to and written from by WebGL. They
   // may also be read via the raster interface for WebGL->video and/or
-  // WebGL->canvas conversions. As RASTER_READ usage was not historically
-  // included here, we are rolling it out with a killswitch.
-  // TODO(crbug.com/1522121): Remove this killswitch post-safe rollout.
+  // WebGL->canvas conversions.
   uint32_t usage = gpu::SHARED_IMAGE_USAGE_GLES2_READ |
                    gpu::SHARED_IMAGE_USAGE_GLES2_WRITE |
-                   gpu::SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
-                   gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
-  if (base::FeatureList::IsEnabled(kAddSharedImageRasterUsageInDrawingBuffer)) {
-    usage = usage | gpu::SHARED_IMAGE_USAGE_RASTER_READ;
-  }
+                   gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
+                   gpu::SHARED_IMAGE_USAGE_RASTER_READ;
   if (initial_gpu_ == gl::GpuPreference::kHighPerformance)
     usage |= gpu::SHARED_IMAGE_USAGE_HIGH_PERFORMANCE_GPU;
   GrSurfaceOrigin origin = opengl_flip_y_extension_

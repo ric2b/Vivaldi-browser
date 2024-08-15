@@ -144,12 +144,13 @@ void CreditCardCvcAuthenticator::ShowUnmaskPrompt(
     const CreditCard& card,
     const CardUnmaskPromptOptions& card_unmask_prompt_options,
     base::WeakPtr<CardUnmaskDelegate> delegate) {
-  client_->ShowUnmaskPrompt(card, card_unmask_prompt_options, delegate);
+  client_->GetPaymentsAutofillClient()->ShowUnmaskPrompt(
+      card, card_unmask_prompt_options, delegate);
 }
 
 void CreditCardCvcAuthenticator::OnUnmaskVerificationResult(
     AutofillClient::PaymentsRpcResult result) {
-  client_->OnUnmaskVerificationResult(result);
+  client_->GetPaymentsAutofillClient()->OnUnmaskVerificationResult(result);
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -164,7 +165,7 @@ bool CreditCardCvcAuthenticator::UserOptedInToFidoFromSettingsPageOnMobile()
 #endif
 
 payments::FullCardRequest* CreditCardCvcAuthenticator::GetFullCardRequest() {
-  // TODO(crbug.com/951669): iOS and Android clients should use
+  // TODO(crbug.com/40622637): iOS and Android clients should use
   // CreditCardAccessManager to retrieve cards from payments instead of calling
   // this function directly.
   if (!full_card_request_) {

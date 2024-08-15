@@ -8,7 +8,7 @@
 
 #include "base/functional/callback.h"
 #include "base/observer_list.h"
-#include "components/ad_blocker/adblock_metadata.h"
+#include "components/ad_blocker/adblock_types.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
@@ -22,7 +22,8 @@ class KnownRuleSourcesHandler {
   class Observer : public base::CheckedObserver {
    public:
     ~Observer() override;
-    virtual void OnKnownSourceAdded(const KnownRuleSource& rule_source) {}
+    virtual void OnKnownSourceAdded(RuleGroup group,
+                                    const KnownRuleSource& rule_source) {}
     virtual void OnKnownSourceRemoved(RuleGroup group, uint32_t source_id) {}
 
     virtual void OnKnownSourceEnabled(RuleGroup group, uint32_t source_id) {}
@@ -35,18 +36,21 @@ class KnownRuleSourcesHandler {
   virtual const std::set<std::string>& GetDeletedPresets(
       RuleGroup group) const = 0;
 
-  virtual std::optional<uint32_t> AddSourceFromUrl(RuleGroup group,
-                                                    const GURL& url) = 0;
-  virtual std::optional<uint32_t> AddSourceFromFile(
-      RuleGroup group,
-      const base::FilePath& file) = 0;
+  virtual bool AddSource(RuleGroup group, RuleSourceCore source_core) = 0;
   virtual std::optional<KnownRuleSource> GetSource(RuleGroup group,
-                                                    uint32_t source_id) = 0;
+                                                   uint32_t source_id) = 0;
   virtual bool RemoveSource(RuleGroup group, uint32_t source_id) = 0;
 
   virtual bool EnableSource(RuleGroup group, uint32_t source_id) = 0;
   virtual void DisableSource(RuleGroup group, uint32_t source_id) = 0;
   virtual bool IsSourceEnabled(RuleGroup group, uint32_t source_id) = 0;
+
+  // Changes flags used when loading the rule source. This allow tweaking the
+  // behavior for a particular source to be more in line with one or another
+  // ad blocker. These can only be changed for non-loaded sources.
+  virtual bool SetSourceSettings(RuleGroup group,
+                                 uint32_t source_id,
+                                 RuleSourceSettings settings) = 0;
 
   virtual void ResetPresetSources(RuleGroup group) = 0;
 

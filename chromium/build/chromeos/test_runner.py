@@ -32,7 +32,7 @@ from pylib.base import base_test_result  # pylint: disable=import-error
 from pylib.results import json_results  # pylint: disable=import-error
 
 sys.path.insert(0, os.path.join(CHROMIUM_SRC_PATH, 'build', 'util'))
-# TODO(crbug.com/1421441): Re-enable the 'no-name-in-module' check.
+# TODO(crbug.com/40259280): Re-enable the 'no-name-in-module' check.
 from lib.results import result_sink  # pylint: disable=import-error,no-name-in-module
 
 import subprocess  # pylint: disable=import-error,wrong-import-order
@@ -561,7 +561,8 @@ class GTestTest(RemoteTest):
       if not os.path.exists(vpython_path) or not os.path.exists(cpython_path):
         raise TestFormatError(
             '--vpython-dir must point to a dir with both '
-            'infra/3pp/tools/cpython3 and infra/tools/luci/vpython installed.')
+            'infra/3pp/tools/cpython3 and infra/tools/luci/vpython3 '
+            'installed.')
       vpython_spec_path = os.path.relpath(
           os.path.join(CHROMIUM_SRC_PATH, '.vpython3'), self._path_to_outdir)
       # Initialize the vpython cache. This can take 10-20s, and some tests
@@ -837,7 +838,7 @@ def setup_env():
   # certain libraries need to be pushed to the device. It looks for the args via
   # an env var. To trigger the default deploying behavior, give it a dummy set
   # of args.
-  # TODO(crbug.com/823996): Make the GN-dependent deps controllable via cmd
+  # TODO(crbug.com/40567963): Make the GN-dependent deps controllable via cmd
   # line args.
   if not env.get('GN_ARGS'):
     env['GN_ARGS'] = 'enable_nacl = true'

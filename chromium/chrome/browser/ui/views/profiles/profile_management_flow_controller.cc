@@ -90,7 +90,7 @@ void ProfileManagementFlowController::FinishFlowAndRunInBrowser(
     PostHostClearedCallback post_host_cleared_callback) {
   DCHECK(clear_host_callback_.value());  // The host shouldn't be cleared yet.
 
-  // TODO(crbug.com/1383969): Handle the return value and don't open a browser
+  // TODO(crbug.com/40246333): Handle the return value and don't open a browser
   // if it is already going to be opened.
   PreFinishWithBrowser();
 
@@ -113,7 +113,7 @@ void ProfileManagementFlowController::FinishFlowAndRunInBrowser(
 
   // Start by opening the browser window, to ensure that we have another
   // KeepAlive for `profile` by the time we clear the flow and its host.
-  // TODO(crbug.com/1374315): Make sure we do something or log an error if
+  // TODO(crbug.com/40242414): Make sure we do something or log an error if
   // opening a browser window was not possible.
   profiles::OpenBrowserWindowForProfile(
       std::move(post_browser_open_callback),

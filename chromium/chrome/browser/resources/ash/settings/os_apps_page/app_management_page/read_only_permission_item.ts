@@ -3,18 +3,23 @@
 // found in the LICENSE file.
 
 import 'chrome://resources/ash/common/cr_elements/policy/cr_policy_indicator.js';
+import '../../os_privacy_page/privacy_hub_allow_sensor_access_dialog.js';
 
-import {App, TriState} from 'chrome://resources/cr_components/app_management/app_management.mojom-webui.js';
-import {PermissionTypeIndex} from 'chrome://resources/cr_components/app_management/permission_constants.js';
-import {getPermission, getPermissionValueAsTriState} from 'chrome://resources/cr_components/app_management/util.js';
+import {assert} from '//resources/js/assert.js';
+import {PrefsMixin} from '/shared/settings/prefs/prefs_mixin.js';
 import {I18nMixin} from 'chrome://resources/ash/common/cr_elements/i18n_mixin.js';
-import {assert} from 'chrome://resources/js/assert.js';
+import {App} from 'chrome://resources/cr_components/app_management/app_management.mojom-webui.js';
+import {PermissionTypeIndex} from 'chrome://resources/cr_components/app_management/permission_constants.js';
+import {getPermission} from 'chrome://resources/cr_components/app_management/util.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {PrivacyHubMixin} from './privacy_hub_mixin.js';
 import {getTemplate} from './read_only_permission_item.html.js';
+import {getPermissionDescriptionString} from './util.js';
 
 const AppManagementReadOnlyPermissionItemElementBase =
-    I18nMixin(PolymerElement);
+    PrivacyHubMixin(PrefsMixin(I18nMixin(PolymerElement)));
 
 export class AppManagementReadOnlyPermissionItemElement extends
     AppManagementReadOnlyPermissionItemElementBase {
@@ -54,6 +59,11 @@ export class AppManagementReadOnlyPermissionItemElement extends
         computed: 'computeAvailable_(app, permissionType)',
         reflectToAttribute: true,
       },
+
+      showAllowSensorAccessDialog_: {
+        type: Boolean,
+        value: false,
+      },
     };
   }
 
@@ -62,6 +72,7 @@ export class AppManagementReadOnlyPermissionItemElement extends
   permissionType: PermissionTypeIndex;
   icon: string;
   private available_: boolean;
+  private showAllowSensorAccessDialog_: boolean;
 
   private computeAvailable_(
       app: App|undefined,
@@ -76,28 +87,10 @@ export class AppManagementReadOnlyPermissionItemElement extends
   private getPermissionDescriptionString_(
       app: App|undefined,
       permissionType: PermissionTypeIndex|undefined): string {
-    if (app === undefined || permissionType === undefined) {
-      return '';
-    }
-
-    const permission = getPermission(app, permissionType);
-    assert(permission);
-
-    const value = getPermissionValueAsTriState(app, permissionType);
-
-    if (value === TriState.kAllow && permission.details) {
-      return this.i18n(
-          'appManagementPermissionAllowedWithDetails', permission.details);
-    }
-
-    switch (value) {
-      case TriState.kAllow:
-        return this.i18n('appManagementPermissionAllowed');
-      case TriState.kBlock:
-        return this.i18n('appManagementPermissionDenied');
-      case TriState.kAsk:
-        return this.i18n('appManagementPermissionAsk');
-    }
+    const isSensorBlocked =
+        loadTimeData.getBoolean('privacyHubAppPermissionsV2Enabled') &&
+        this.isSensorBlocked(permissionType);
+    return getPermissionDescriptionString(app, permissionType, isSensorBlocked);
   }
 
   private isManaged_(
@@ -111,6 +104,17 @@ export class AppManagementReadOnlyPermissionItemElement extends
     assert(permission);
 
     return permission.isManaged;
+  }
+
+  private launchAllowSensorAccessDialog_(e: CustomEvent): void {
+    e.detail.event.preventDefault();
+    e.stopPropagation();
+
+    this.showAllowSensorAccessDialog_ = true;
+  }
+
+  private onAllowSensorAccessDialogClose_(): void {
+    this.showAllowSensorAccessDialog_ = false;
   }
 }
 

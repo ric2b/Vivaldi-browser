@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/test/launcher/test_launcher.h"
 
 #include <stdio.h>
@@ -79,9 +84,9 @@
 #endif
 
 #if BUILDFLAG(IS_WIN)
-#include "base/strings/string_util_win.h"
-
 #include <windows.h>
+
+#include "base/strings/string_util_win.h"
 
 // To avoid conflicts with the macro from the Windows SDK...
 #undef GetCommandLine
@@ -689,6 +694,11 @@ ChildProcessResults DoLaunchChildTestProcess(
 
   LaunchOptions options;
 
+#if BUILDFLAG(IS_IOS)
+  // We need to allow XPC to start extension processes so magically we set this
+  // flag to 1.
+  options.environment.emplace("XPC_FLAGS", "1");
+#endif
   // Tell the child process to use its designated temporary directory.
   if (!process_temp_dir.empty())
     SetTemporaryDirectory(process_temp_dir, &options.environment);

@@ -29,7 +29,6 @@
 #include "chrome/browser/ash/hats/hats_notification_controller.h"
 #include "chrome/browser/ash/login/signin/oauth2_login_manager.h"
 #include "chrome/browser/ash/login/signin/token_handle_util.h"
-#include "chrome/browser/ash/net/secure_dns_manager.h"
 #include "chrome/browser/ash/net/xdr_manager.h"
 #include "chrome/browser/ash/release_notes/release_notes_notification.h"
 #include "chrome/browser/ash/system_web_apps/apps/help_app/help_app_notification_controller.h"
@@ -107,8 +106,7 @@ class UserSessionManager
     : public OAuth2LoginManager::Observer,
       public network::NetworkConnectionTracker::NetworkConnectionObserver,
       public UserSessionManagerDelegate,
-      public user_manager::UserManager::UserSessionStateObserver,
-      public user_manager::UserManager::Observer {
+      public user_manager::UserManager::UserSessionStateObserver {
  public:
   // Context of StartSession calls.
   enum class StartSessionType {
@@ -163,9 +161,6 @@ class UserSessionManager
   UserSessionManager(const UserSessionManager&) = delete;
   UserSessionManager& operator=(const UserSessionManager&) = delete;
 
-  // Called when user is logged in to override base::DIR_HOME path.
-  static void OverrideHomedir();
-
   // Registers session related preferences.
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
@@ -194,10 +189,6 @@ class UserSessionManager
                     bool has_auth_cookies,
                     bool has_active_session,
                     base::WeakPtr<UserSessionManagerDelegate> delegate);
-
-  // Perform additional actions once system wide notification
-  // "UserLoggedIn" has been sent.
-  void PerformPostUserLoggedInActions();
 
   // Restores authentication session after crash.
   void RestoreAuthenticationSession(Profile* profile);
@@ -375,9 +366,6 @@ class UserSessionManager
   void OnProfilePrepared(Profile* profile, bool browser_launched) override;
   base::WeakPtr<UserSessionManagerDelegate> AsWeakPtr() override;
 
-  // user_manager::UserManager::Observer overrides:
-  void OnUsersSignInConstraintsChanged() override;
-
   void ChildAccountStatusReceivedCallback(Profile* profile);
 
   void StopChildStatusObserving(Profile* profile);
@@ -453,14 +441,6 @@ class UserSessionManager
 
   // Restores GAIA auth cookies for the created user profile from OAuth2 token.
   void RestoreAuthSessionImpl(Profile* profile, bool restore_from_auth_cookies);
-
-  // If `user` is not a kiosk app, sets session type as seen by extensions
-  // feature system according to `user`'s type.
-  // The value should eventually be set for kiosk users, too - that's done as
-  // part of special, kiosk user session bring-up.
-  // NOTE: This has to be called before profile is initialized - so it is set up
-  // when extension are loaded during profile initialization.
-  void InitNonKioskExtensionFeaturesSessionType(const user_manager::User* user);
 
   // Callback to process RetrieveActiveSessions() request results.
   void OnRestoreActiveSessions(
@@ -628,8 +608,6 @@ class UserSessionManager
       user_profile_initialized_called_;
 
   std::unique_ptr<arc::AlwaysOnVpnManager> always_on_vpn_manager_;
-
-  std::unique_ptr<SecureDnsManager> secure_dns_manager_;
 
   std::unique_ptr<XdrManager> xdr_manager_;
 

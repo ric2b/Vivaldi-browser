@@ -121,7 +121,7 @@ void SavedpasswordsRemoveFunction::OnGetPasswordStoreResults(
   if (id_to_remove_ >= password_list.size()) {
     Respond(Error("id is outside the allowed range"));
   } else {
-    password_store_->RemoveLogin(*password_list[id_to_remove_]);
+    password_store_->RemoveLogin(FROM_HERE, *password_list[id_to_remove_]);
     Respond(ArgumentList(Results::Create()));
   }
 
@@ -256,7 +256,7 @@ ExtensionFunction::ResponseAction SavedpasswordsDeleteFunction::Run() {
   password_form.username_value =
       base::UTF8ToUTF16(params->password_form.username);
 
-  password_store->RemoveLogin(password_form);
+  password_store->RemoveLogin(FROM_HERE, password_form);
 
   return RespondNow(NoArguments());
 }

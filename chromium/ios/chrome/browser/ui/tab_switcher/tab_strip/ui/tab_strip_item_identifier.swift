@@ -18,9 +18,9 @@
 // which prevents consecutive identifiers to have consecutive hash values, while
 // the hashing for groups is based on NSValue's hashing of the TabGroup
 // pointer).
-@objc class TabStripItemIdentifier: NSObject {
+@objc class TabStripItemIdentifier: NSObject, NSCopying {
 
-  // Underlying representation of `TabStripItemIdentifier`.
+  // Item this identifier is referring to.
   // Since a tab strip item can either be a tab (represented by `TabSwitcherItem`)
   // or a group (represented by `TabGroupItem`), a tab strip item is represented
   // by the sum of these two types i.e. Item = TabSwitcherItem + TabGroupItem.
@@ -31,17 +31,21 @@
     case group(TabGroupItem)
   }
 
-  // Underlying representation of the identifier, either a `.tab(_)` or a `.group(_)`.
+  // Item this identifier is referring to, either a `.tab(_)` or a `.group(_)`.
   public let item: Item
+  // Hash of the item.
+  private let itemHash: Int
 
   // MARK: - Initialization
 
   public init(_ tabSwitcherItem: TabSwitcherItem) {
     self.item = .tab(tabSwitcherItem)
+    self.itemHash = Int(GetHashForTabSwitcherItem(tabSwitcherItem))
   }
 
   public init(_ tabGroupItem: TabGroupItem) {
     self.item = .group(tabGroupItem)
+    self.itemHash = Int(GetHashForTabGroupItem(tabGroupItem))
   }
 
   public convenience init?(_ tabSwitcherItem: TabSwitcherItem?) {
@@ -73,12 +77,7 @@
 
   // TODO(crbug.com/329073651): Refactor -hash and -isEqual.
   public override var hash: Int {
-    switch item {
-    case .tab(let tabSwitcherItem):
-      return Int(GetHashForTabSwitcherItem(tabSwitcherItem))
-    case .group(let tabGroupItem):
-      return Int(GetHashForTabGroupItem(tabGroupItem))
-    }
+    return itemHash
   }
 
   public override var description: String {
@@ -87,6 +86,17 @@
       return tabSwitcherItem.description
     case .group(let tabGroupItem):
       return tabGroupItem.description
+    }
+  }
+
+  // MARK: - NSCopying
+
+  public func copy(with zone: NSZone? = nil) -> Any {
+    switch item {
+    case .tab(let tabSwitcherItem):
+      return TabStripItemIdentifier(tabSwitcherItem)
+    case .group(let tabGroupItem):
+      return TabStripItemIdentifier(tabGroupItem)
     }
   }
 

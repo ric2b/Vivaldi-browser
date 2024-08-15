@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 import type * as Platform from '../../core/platform/platform.js';
-import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
@@ -11,8 +10,6 @@ import {renderElementIntoDOM} from '../../testing/DOMHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
 
 import * as Network from './network.js';
-
-const {assert} = chai;
 
 function renderCookiesView(request: SDK.NetworkRequest.NetworkRequest): Network.RequestCookiesView.RequestCookiesView {
   const component = new Network.RequestCookiesView.RequestCookiesView(request);
@@ -34,7 +31,7 @@ describeWithMockConnection('RequestCookiesView', () => {
         null, null, null);
     const component = renderCookiesView(request);
     const message = component.element.querySelector('.site-has-cookies-in-other-partition');
-    assertNotNullOrUndefined(message);
+    assert.exists(message);
     assert.isTrue(message.classList.contains('hidden'));
     request.addExtraRequestInfo({
       siteHasCookieInOtherPartition: true,

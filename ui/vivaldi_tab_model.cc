@@ -7,8 +7,11 @@
 
 namespace tabs {
 
-void TabModel::UpdateVivPanel() {
-  viv_panel_ = !!vivaldi::GetVivPanelId(contents_.get());
+bool TabModel::is_viv_panel() const {
+  if (vivaldi::GetVivPanelId(contents_.get())) {
+    return true;
+  }
+  return false;
 }
 
 }  // namespace tabs

@@ -2,24 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
-import {assertNotNullOrUndefined} from '../platform/platform.js';
-import * as SDK from './sdk.js';
-
 import type * as Protocol from '../../generated/protocol.js';
-import type * as Platform from '../platform/platform.js';
-import {
-  describeWithMockConnection,
-} from '../../testing/MockConnection.js';
 import {
   createTarget,
 } from '../../testing/EnvironmentHelpers.js';
+import {
+  describeWithMockConnection,
+} from '../../testing/MockConnection.js';
+import type * as Platform from '../platform/platform.js';
+
+import * as SDK from './sdk.js';
 
 describeWithMockConnection('ExecutionContext', () => {
   function createExecutionContext(target: SDK.Target.Target, name?: string, isDefault?: boolean) {
     const runtimeModel = target.model(SDK.RuntimeModel.RuntimeModel);
-    assertNotNullOrUndefined(runtimeModel);
+    assert.exists(runtimeModel);
     return new SDK.RuntimeModel.ExecutionContext(
         runtimeModel, 42 as Protocol.Runtime.ExecutionContextId, 'uniqueId', name ?? 'name',
         'http://www.example.com' as Platform.DevToolsPath.UrlString, Boolean(isDefault));
@@ -28,13 +25,6 @@ describeWithMockConnection('ExecutionContext', () => {
   it('can be compared based on target type', () => {
     const tabTarget = createTarget({type: SDK.Target.Type.Tab});
     const mainFrameTargetUnderTab = createTarget({type: SDK.Target.Type.Frame, parentTarget: tabTarget});
-    const mainFrameTargetWithoutTab = createTarget({type: SDK.Target.Type.Frame});
-    assert.strictEqual(
-        SDK.RuntimeModel.ExecutionContext.comparator(
-            createExecutionContext(mainFrameTargetWithoutTab),
-            createExecutionContext(
-                createTarget({type: SDK.Target.Type.Frame, parentTarget: mainFrameTargetWithoutTab}))),
-        -1);
     assert.strictEqual(
         SDK.RuntimeModel.ExecutionContext.comparator(
             createExecutionContext(mainFrameTargetUnderTab),

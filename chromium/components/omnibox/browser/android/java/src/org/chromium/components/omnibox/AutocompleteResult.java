@@ -23,6 +23,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+// Vivaldi
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
+
 /** AutocompleteResult encompasses and manages autocomplete results. */
 @MockedInTests
 public class AutocompleteResult {
@@ -50,7 +53,7 @@ public class AutocompleteResult {
     }
 
     /** An empty, initialized AutocompleteResult object. */
-    public static final AutocompleteResult EMPTY_RESULT =
+    public static final @NonNull AutocompleteResult EMPTY_RESULT =
             new AutocompleteResult(0, Collections.emptyList(), null);
 
     /** A special value indicating that action has no particular index associated. */
@@ -152,6 +155,11 @@ public class AutocompleteResult {
     /** @return List of Omnibox Suggestions. */
     @NonNull
     public List<AutocompleteMatch> getSuggestionsList() {
+        if(ChromeSharedPreferences.getInstance().readBoolean( // Vivaldi Ref. VAB-9121
+                "reverse_search_suggestion", false)) {
+            @NonNull List<AutocompleteMatch> reverseCopy = new ArrayList<>(mSuggestions);;
+            Collections.reverse(reverseCopy);
+        }
         return mSuggestions;
     }
 
@@ -233,6 +241,20 @@ public class AutocompleteResult {
                             NO_SUGGESTION_INDEX, VerificationPoint.GROUP_BY_SEARCH_VS_URL_AFTER)
                     : "Post-group verification failed";
         }
+    }
+
+    /**
+     * This is a counterpart of native AutocompleteResult#default_match.
+     *
+     * @return The default match if it exists, or nullptr otherwise.
+     */
+    @Nullable
+    public AutocompleteMatch getDefaultMatch() {
+        if (mSuggestions.size() > 0 && mSuggestions.get(0).allowedToBeDefaultMatch()) {
+            return mSuggestions.get(0);
+        }
+
+        return null;
     }
 
     @NativeMethods

@@ -83,11 +83,11 @@
 <translation id="3914946330804881301">Geïmporteerd uit Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
 <translation id="3943857333388298514">Plakken</translation>
-<translation id="3974783668264968389">Vivaldi kon jouw beveiligde sleutelopslag niet ontgrendelen. Zonder de sleutelopslag verlies je je opgeslagen aanmeldingen, beveiligde cookies en sommige functies zoals synchroniseren, e-mail en agenda werken niet meer.
-
-    Stop nu, ontgrendel of repareer je sleutelopslag en probeer het opnieuw. Als je echt door wilt gaan, klik dan op het selectievakje en druk op de knop "Doorgaan met verlies van gegevens".</translation>
 <translation id="4005270918754737597">Deze versie overslaan</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi kon de beveiligde sleutelopslag niet ontgrendelen. Zonder de sleutelopslag verlies je je opgeslagen aanmeldingen, beveiligde cookies en sommige functies zoals synchroniseren, e-mail en agenda werken niet meer.
+
+… Sluit Vivaldi nu af, ontgrendel of repareer je sleutelopslag en probeer het dan opnieuw. Wil je echt doorgaan en gegevens verliezen?</translation>
 <translation id="4074744496918018786">Afbeelding openen in &amp;privévenster</translation>
 <translation id="410351446219883937">Automatisch afspelen</translation>
 <translation id="4281844954008187215">Servicevoorwaarden</translation>
@@ -178,6 +178,7 @@
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Portal-document inspecteren</translation>
+<translation id="875142999698251063">Nu afsluiten</translation>
 <translation id="8768970203213061953">Landschap 14</translation>
 <translation id="8773635261052182196">Je krijgt deze meldingen niet meer te zien. Je kunt ze weer aanzetten in Vivaldi's instellingen.</translation>
 <translation id="8774017153185436870">Websites zouden video automatisch kunnen afspelen</translation>

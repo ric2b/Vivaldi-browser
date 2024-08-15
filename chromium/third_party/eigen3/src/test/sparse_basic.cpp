@@ -39,7 +39,7 @@ void sparse_basic(const SparseMatrixType& ref) {
   typedef Matrix<Scalar, Dynamic, Dynamic> DenseMatrix;
   typedef Matrix<Scalar, Dynamic, 1> DenseVector;
   typedef Matrix<Scalar, Dynamic, Dynamic, SparseMatrixType::IsRowMajor ? RowMajor : ColMajor> CompatibleDenseMatrix;
-  Scalar eps = 1e-6;
+  Scalar eps = Scalar(1e-6);
 
   Scalar s1 = internal::random<Scalar>();
   {
@@ -948,6 +948,27 @@ void sparse_basic(const SparseMatrixType& ref) {
     SparseMatrixType m2(rows, 0);
     m2.reserve(ArrayXi::Constant(m2.outerSize(), 1));
   }
+
+  // test move
+  {
+    using TransposedType = SparseMatrix<Scalar, SparseMatrixType::IsRowMajor ? ColMajor : RowMajor,
+                                        typename SparseMatrixType::StorageIndex>;
+    DenseMatrix refMat1 = DenseMatrix::Random(rows, cols);
+    SparseMatrixType m1(rows, cols);
+    initSparse<Scalar>(density, refMat1, m1);
+    // test move ctor
+    SparseMatrixType m2(std::move(m1));
+    VERIFY_IS_APPROX(m2, refMat1);
+    // test move assignment
+    m1 = std::move(m2);
+    VERIFY_IS_APPROX(m1, refMat1);
+    // test move ctor (SparseMatrixBase)
+    TransposedType m3(std::move(m1.transpose()));
+    VERIFY_IS_APPROX(m3, refMat1.transpose());
+    // test move assignment (SparseMatrixBase)
+    m2 = std::move(m3.transpose());
+    VERIFY_IS_APPROX(m2, refMat1);
+  }
 }
 
 template <typename SparseMatrixType>
@@ -994,7 +1015,7 @@ EIGEN_DECLARE_TEST(sparse_basic) {
   g_dense_op_sparse_count = 0;  // Suppresses compiler warning.
   for (int i = 0; i < g_repeat; i++) {
     int r = Eigen::internal::random<int>(1, 200), c = Eigen::internal::random<int>(1, 200);
-    if (Eigen::internal::random<int>(0, 4) == 0) {
+    if (Eigen::internal::random<int>(0, 3) == 0) {
       r = c;  // check square matrices in 25% of tries
     }
     EIGEN_UNUSED_VARIABLE(r + c);
@@ -1011,7 +1032,7 @@ EIGEN_DECLARE_TEST(sparse_basic) {
 
     r = Eigen::internal::random<int>(1, 100);
     c = Eigen::internal::random<int>(1, 100);
-    if (Eigen::internal::random<int>(0, 4) == 0) {
+    if (Eigen::internal::random<int>(0, 3) == 0) {
       r = c;  // check square matrices in 25% of tries
     }
 

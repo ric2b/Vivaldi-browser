@@ -139,8 +139,8 @@ uint8_t* TestingModuleBuilder::AddMemory(uint32_t size, SharedFlag shared,
   trusted_instance_data_->set_memory_objects(*memory_objects);
 
   // Create the memory_bases_and_sizes array.
-  Handle<FixedAddressArray> memory_bases_and_sizes =
-      FixedAddressArray::New(isolate_, 2);
+  Handle<TrustedFixedAddressArray> memory_bases_and_sizes =
+      TrustedFixedAddressArray::New(isolate_, 2);
   uint8_t* mem_start = reinterpret_cast<uint8_t*>(
       memory_object->array_buffer()->backing_store());
   memory_bases_and_sizes->set_sandboxed_pointer(
@@ -152,7 +152,9 @@ uint8_t* TestingModuleBuilder::AddMemory(uint32_t size, SharedFlag shared,
   mem0_size_ = size;
   CHECK(size == 0 || mem0_start_);
 
+  // TODO(14616): Add shared_trusted_instance_data_.
   WasmMemoryObject::UseInInstance(isolate_, memory_object,
+                                  trusted_instance_data_,
                                   trusted_instance_data_, 0);
   // TODO(wasm): Delete the following line when test-run-wasm will use a
   // multiple of kPageSize as memory size. At the moment, the effect of these
@@ -217,6 +219,7 @@ void TestingModuleBuilder::InitializeWrapperCache() {
   Handle<FixedArray> maps = isolate_->factory()->NewFixedArray(
       static_cast<int>(test_module_->types.size()));
   for (uint32_t index = 0; index < test_module_->types.size(); index++) {
+    // TODO(14616): Support shared types.
     CreateMapForType(isolate_, test_module_.get(), index, instance_object_,
                      maps);
   }
@@ -227,7 +230,7 @@ Handle<JSFunction> TestingModuleBuilder::WrapCode(uint32_t index) {
   InitializeWrapperCache();
   Handle<WasmFuncRef> func_ref = WasmTrustedInstanceData::GetOrCreateFuncRef(
       isolate_, trusted_instance_data_, index);
-  Handle<WasmInternalFunction> internal{func_ref->internal(), isolate_};
+  Handle<WasmInternalFunction> internal{func_ref->internal(isolate_), isolate_};
   return WasmInternalFunction::GetOrCreateExternal(internal);
 }
 
@@ -477,7 +480,7 @@ void WasmFunctionCompiler::Build(base::Vector<const uint8_t> bytes) {
                      static_cast<uint32_t>(bytes.size())};
 
   NativeModule* native_module =
-      builder_->instance_object()->module_object()->native_module();
+      builder_->trusted_instance_data()->native_module();
   base::Vector<const uint8_t> wire_bytes = native_module->wire_bytes();
 
   CompilationEnv env = CompilationEnv::ForModule(native_module);

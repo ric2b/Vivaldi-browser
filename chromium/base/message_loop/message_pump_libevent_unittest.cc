@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include <memory>
+#include <string_view>
 #include <utility>
 
 #include "base/containers/span.h"
@@ -163,9 +164,13 @@ class BaseWatcher : public MessagePumpLibevent::FdWatcher {
   ~BaseWatcher() override = default;
 
   // base:MessagePumpLibevent::FdWatcher interface
-  void OnFileCanReadWithoutBlocking(int /* fd */) override { NOTREACHED(); }
+  void OnFileCanReadWithoutBlocking(int /* fd */) override {
+    NOTREACHED_IN_MIGRATION();
+  }
 
-  void OnFileCanWriteWithoutBlocking(int /* fd */) override { NOTREACHED(); }
+  void OnFileCanWriteWithoutBlocking(int /* fd */) override {
+    NOTREACHED_IN_MIGRATION();
+  }
 };
 
 class DeleteWatcher : public BaseWatcher {
@@ -283,7 +288,7 @@ void WriteFDWrapper(const int fd,
                     const char* buf,
                     int size,
                     WaitableEvent* event) {
-  ASSERT_TRUE(WriteFileDescriptor(fd, StringPiece(buf, size)));
+  ASSERT_TRUE(WriteFileDescriptor(fd, std::string_view(buf, size)));
 }
 
 // Tests that MessagePumpLibevent quits immediately when it is quit from

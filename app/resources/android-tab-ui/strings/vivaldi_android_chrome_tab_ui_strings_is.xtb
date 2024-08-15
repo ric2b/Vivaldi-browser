@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="is">
+<translation id="2947471979790858922">Aðgerðir þínar í þessum einkaflipum verða fjarlægðar af þessu tæki</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Þú getur fundið lokaða flipa í nýlegum flipum undir valmyndinni í Vivaldi. Einkaflipinn þinn er ekki aðgengilegur þar.}
+        other {Þú getur fundið lokaða flipa í nýlegum flipum undir valmyndinni í Vivaldi. Einkafliparnir þínir, #, eru ekki aðgengilegir þar.}}</translation>
+<translation id="4871187110787939393">Loka öllum einkaflipum?</translation>
 </translationbundle>

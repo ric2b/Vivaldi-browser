@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <memory>
 
+#include "api/audio/audio_device.h"
 #include "api/audio_codecs/builtin_audio_decoder_factory.h"
 #include "api/audio_codecs/builtin_audio_encoder_factory.h"
 #include "api/environment/environment.h"
@@ -22,14 +23,13 @@
 #include "api/video/builtin_video_bitrate_allocator_factory.h"
 #include "call/fake_network_pipe.h"
 #include "call/packet_receiver.h"
-#include "call/simulated_network.h"
-#include "modules/audio_device/include/audio_device.h"
 #include "modules/audio_device/include/test_audio_device.h"
 #include "modules/audio_mixer/audio_mixer_impl.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/event.h"
 #include "rtc_base/task_queue_for_test.h"
 #include "test/fake_encoder.h"
+#include "test/network/simulated_network.h"
 #include "test/rtp_rtcp_observer.h"
 #include "test/testsupport/file_utils.h"
 #include "test/video_test_constants.h"
@@ -45,16 +45,17 @@ CallTest::CallTest()
       audio_send_config_(/*send_transport=*/nullptr),
       audio_send_stream_(nullptr),
       frame_generator_capturer_(nullptr),
-      fake_encoder_factory_([this]() {
-        std::unique_ptr<FakeEncoder> fake_encoder;
-        if (video_encoder_configs_[0].codec_type == kVideoCodecVP8) {
-          fake_encoder = std::make_unique<FakeVp8Encoder>(&env_.clock());
-        } else {
-          fake_encoder = std::make_unique<FakeEncoder>(&env_.clock());
-        }
-        fake_encoder->SetMaxBitrate(fake_encoder_max_bitrate_);
-        return fake_encoder;
-      }),
+      fake_encoder_factory_(
+          [this](const Environment& env, const SdpVideoFormat& format) {
+            std::unique_ptr<FakeEncoder> fake_encoder;
+            if (video_encoder_configs_[0].codec_type == kVideoCodecVP8) {
+              fake_encoder = std::make_unique<FakeVp8Encoder>(env);
+            } else {
+              fake_encoder = std::make_unique<FakeEncoder>(env);
+            }
+            fake_encoder->SetMaxBitrate(fake_encoder_max_bitrate_);
+            return fake_encoder;
+          }),
       fake_decoder_factory_([]() { return std::make_unique<FakeDecoder>(); }),
       bitrate_allocator_factory_(CreateBuiltinVideoBitrateAllocatorFactory()),
       num_video_streams_(1),

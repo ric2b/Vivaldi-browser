@@ -64,7 +64,7 @@ class IndexedDBPreCloseTaskQueue;
 // When these qualities are no longer true, `RunTasks()` will invoke
 // `ResetBackingStore()`, which returns `this` to an uninitialized state.
 //
-// TODO(crbug.com/1474996): it's intended that each bucket gets its own
+// TODO(crbug.com/40279485): it's intended that each bucket gets its own
 // IndexedDB task runner. To facilitate IndexedDB code running on multiple task
 // runners, `IndexedDBBucketContext` is in the process of becoming the single
 // point of communication between classes running on the main task runner, such
@@ -126,7 +126,7 @@ class CONTENT_EXPORT IndexedDBBucketContext
   // This structure defines the interface between `IndexedDBBucketContext` and
   // the broader context that exists per Storage Partition (i.e.
   // BrowserContext).
-  // TODO(crbug.com/1474996): for now these callbacks execute on the current
+  // TODO(crbug.com/40279485): for now these callbacks execute on the current
   // sequence, but in the future they should be bound to the main IDB sequence.
   struct CONTENT_EXPORT Delegate {
     Delegate();
@@ -147,7 +147,6 @@ class CONTENT_EXPORT IndexedDBBucketContext
     base::RepeatingCallback<void(
         mojo::PendingRemote<storage::mojom::IndexedDBClientStateChecker>
         /*client_state_checker_remote*/,
-        const base::UnguessableToken& /*client_token*/,
         mojo::PendingReceiver<blink::mojom::IDBFactory> /*pending_receiver*/)>
         on_receiver_bounced;
 
@@ -284,7 +283,6 @@ class CONTENT_EXPORT IndexedDBBucketContext
   void AddReceiver(
       mojo::PendingRemote<storage::mojom::IndexedDBClientStateChecker>
           client_state_checker_remote,
-      base::UnguessableToken client_token,
       mojo::PendingReceiver<blink::mojom::IDBFactory> pending_receiver);
 
   // blink::mojom::IDBFactory implementation:
@@ -304,10 +302,9 @@ class CONTENT_EXPORT IndexedDBBucketContext
                       bool force_close) override;
 
   // Finishes filling in `info` with data relevant to idb-internals and passes
-  // the result back via `result`.
-  void FillInMetadata(
-      storage::mojom::IdbBucketMetadataPtr info,
-      base::OnceCallback<void(storage::mojom::IdbBucketMetadataPtr)> result);
+  // the result back via the return value.
+  storage::mojom::IdbBucketMetadataPtr FillInMetadata(
+      storage::mojom::IdbBucketMetadataPtr info);
 
   // This exists to facilitate unit tests. Since `this` is owned via a
   // `SequenceBound`, it's not possible to directly grab pointer to `this`.
@@ -357,8 +354,7 @@ class CONTENT_EXPORT IndexedDBBucketContext
   struct ReceiverContext {
     ReceiverContext(
         mojo::PendingRemote<storage::mojom::IndexedDBClientStateChecker>
-            client_state_checker_remote,
-        base::UnguessableToken token);
+            client_state_checker_remote);
 
     ~ReceiverContext();
 
@@ -369,8 +365,6 @@ class CONTENT_EXPORT IndexedDBBucketContext
 
     mojo::Remote<storage::mojom::IndexedDBClientStateChecker>
         client_state_checker_remote;
-
-    base::UnguessableToken client_token;
   };
 
   // Used to synchronize the global throttling of LevelDB cleanup operations.
@@ -492,9 +486,8 @@ class CONTENT_EXPORT IndexedDBBucketContext
   base::TimeTicks bucket_space_remaining_timestamp_;
 
   // Members in the following block are used for `CreateAllExternalObjects`.
-  // Shared task runner used to read blob files on.
-  const scoped_refptr<base::TaskRunner> file_task_runner_;
-  // Shared task runner used for async I/O while reading blob files.
+  // This handle to the content IO thread is necessary because
+  // net::FileStream::Context can only be used from an IO thread on Windows.
   const scoped_refptr<base::TaskRunner> io_task_runner_;
   // Mojo connection to `BlobStorageContext`, which runs on the IO thread.
   mojo::Remote<storage::mojom::BlobStorageContext> blob_storage_context_;

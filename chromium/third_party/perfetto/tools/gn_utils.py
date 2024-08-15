@@ -123,7 +123,7 @@ def build_targets(out, targets, quiet=False, system_buildtools=False):
     source files in the amalgamated result.
     """
   targets = [t.replace('//', '') for t in targets]
-  with open(os.devnull, 'w') as devnull:
+  with open(os.devnull, 'w', newline='\n') as devnull:
     stdout = devnull if quiet else None
     cmd = _tool_path('ninja', system_buildtools) + targets
     subprocess.check_call(cmd, cwd=os.path.abspath(out), stdout=stdout)
@@ -137,6 +137,9 @@ def compute_source_dependencies(out, system_buildtools=False):
   current_source = None
   for line in ninja_deps.split('\n'):
     filename = os.path.relpath(os.path.join(out, line.strip()), repo_root())
+    # Sanitizer builds may have a dependency of ignorelist.txt. Just skip it.
+    if filename.endswith('gn/standalone/sanitizers/ignorelist.txt'):
+      continue
     if not line or line[0] != ' ':
       current_source = None
       continue
@@ -208,7 +211,7 @@ def check_or_commit_generated_files(tmp_files, check):
         res = 1
       os.unlink(tmp_file)
     else:
-      os.rename(tmp_file, target_file)
+      os.replace(tmp_file, target_file)
   return res
 
 
@@ -526,9 +529,8 @@ class GnParser(object):
     return metadata.get('exports', [])
 
   def get_proto_paths(self, proto_desc):
-    # import_dirs in metadata will be available for source_set targets.
     metadata = proto_desc.get('metadata', {})
-    return metadata.get('import_dirs', [])
+    return metadata.get('proto_import_dirs', [])
 
   def get_proto_target_type(self, target: Target
                            ) -> Tuple[Optional[str], Optional[Dict]]:

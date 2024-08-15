@@ -99,6 +99,11 @@ void ff_free_stream_group(AVStreamGroup **pstg)
         av_iamf_mix_presentation_free(&stg->params.iamf_mix_presentation);
         break;
     }
+    case AV_STREAM_GROUP_PARAMS_TILE_GRID:
+        av_opt_free(stg->params.tile_grid);
+        av_freep(&stg->params.tile_grid->offsets);
+        av_freep(&stg->params.tile_grid);
+        break;
     default:
         break;
     }
@@ -112,6 +117,14 @@ void ff_remove_stream(AVFormatContext *s, AVStream *st)
     av_assert0(s->streams[ s->nb_streams - 1 ] == st);
 
     ff_free_stream(&s->streams[ --s->nb_streams ]);
+}
+
+void ff_remove_stream_group(AVFormatContext *s, AVStreamGroup *stg)
+{
+    av_assert0(s->nb_stream_groups > 0);
+    av_assert0(s->stream_groups[ s->nb_stream_groups - 1 ] == stg);
+
+    ff_free_stream_group(&s->stream_groups[ --s->nb_stream_groups ]);
 }
 
 /* XXX: suppress the packet queue */
@@ -306,6 +319,16 @@ AVStream *ff_stream_clone(AVFormatContext *dst_ctx, const AVStream *src)
     }
 
     return st;
+}
+
+const char *avformat_stream_group_name(enum AVStreamGroupParamsType type)
+{
+    switch(type) {
+    case AV_STREAM_GROUP_PARAMS_IAMF_AUDIO_ELEMENT:        return "IAMF Audio Element";
+    case AV_STREAM_GROUP_PARAMS_IAMF_MIX_PRESENTATION:     return "IAMF Mix Presentation";
+    case AV_STREAM_GROUP_PARAMS_TILE_GRID:                 return "Tile Grid";
+    }
+    return NULL;
 }
 
 AVProgram *av_new_program(AVFormatContext *ac, int id)
@@ -921,18 +944,8 @@ void ff_format_set_url(AVFormatContext *s, char *url)
 int ff_format_io_close(AVFormatContext *s, AVIOContext **pb)
 {
     int ret = 0;
-    if (*pb) {
-#if FF_API_AVFORMAT_IO_CLOSE
-FF_DISABLE_DEPRECATION_WARNINGS
-        if (s->io_close == ff_format_io_close_default || s->io_close == NULL)
-#endif
-            ret = s->io_close2(s, *pb);
-#if FF_API_AVFORMAT_IO_CLOSE
-        else
-            s->io_close(s, *pb);
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
-    }
+    if (*pb)
+        ret = s->io_close2(s, *pb);
     *pb = NULL;
     return ret;
 }

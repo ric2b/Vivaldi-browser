@@ -31,8 +31,7 @@ MediaCoordinator::MediaCoordinator(
     EligibleDevices eligible_devices,
     PrefService& prefs,
     bool allow_device_selection,
-    media_preview_metrics::Context metrics_context)
-    : view_type_(view_type) {
+    const media_preview_metrics::Context& metrics_context) {
   media_view_ =
       parent_view.AddChildView(std::make_unique<MediaView>(is_subsection));
   media_view_->SetBetweenChildSpacing(
@@ -63,11 +62,6 @@ MediaCoordinator::MediaCoordinator(
                              eligible_devices.mics, prefs,
                              allow_device_selection, metrics_context);
   }
-
-  if (metrics_context.ui_location ==
-      media_preview_metrics::UiLocation::kPermissionPrompt) {
-    permission_prompt_start_time_ = base::TimeTicks::Now();
-  }
 }
 
 MediaCoordinator::~MediaCoordinator() {
@@ -78,7 +72,6 @@ MediaCoordinator::~MediaCoordinator() {
     media_view_->parent()->RemoveChildViewT(
         std::exchange(media_view_, nullptr));
   }
-  RecordPreviewDurationForPermissionPrompt();
 }
 
 void MediaCoordinator::UpdateDevicePreferenceRanking() {
@@ -90,16 +83,10 @@ void MediaCoordinator::UpdateDevicePreferenceRanking() {
   }
 }
 
-void MediaCoordinator::RecordPreviewDurationForPermissionPrompt() {
-  if (!permission_prompt_start_time_) {
-    return;
+void MediaCoordinator::OnPermissionChange(bool has_permission) {
+  if (camera_coordinator_) {
+    // TODO(b/332976491): Plumb permission state to VideoStream.
   }
-
-  media_preview_metrics::RecordMediaPreviewDuration(
-      {media_preview_metrics::UiLocation::kPermissionPrompt,
-       media_coordinator::GetPreviewTypeFromMediaCoordinatorViewType(
-           view_type_)},
-      base::TimeTicks::Now() - permission_prompt_start_time_.value());
 }
 
 namespace media_coordinator {

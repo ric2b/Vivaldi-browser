@@ -651,6 +651,11 @@ export const NativeFunctions = [
     receivers: ["CSSStyleValue"]
   },
   {
+    name: "parse",
+    signatures: [["url","?base"]],
+    receivers: ["URL"]
+  },
+  {
     name: "UTC",
     signatures: [["year","?monthIndex","?date","?hours","?minutes","?seconds","?ms"]]
   },
@@ -688,11 +693,23 @@ export const NativeFunctions = [
   },
   {
     name: "every",
-    signatures: [["predicate","?thisArg"]]
+    signatures: [["predicate","?thisArg"]],
+    receivers: ["ReadonlyArray","Array","Int8Array","Uint8Array","Uint8ClampedArray","Int16Array","Uint16Array","Int32Array","Uint32Array","Float32Array","Float64Array","BigInt64Array","BigUint64Array"]
+  },
+  {
+    name: "every",
+    signatures: [["predicate","?options"]],
+    receivers: ["Observable"]
   },
   {
     name: "some",
-    signatures: [["predicate","?thisArg"]]
+    signatures: [["predicate","?thisArg"]],
+    receivers: ["ReadonlyArray","Array","Int8Array","Uint8Array","Uint8ClampedArray","Int16Array","Uint16Array","Int32Array","Uint32Array","Float32Array","Float64Array","BigInt64Array","BigUint64Array"]
+  },
+  {
+    name: "some",
+    signatures: [["predicate","?options"]],
+    receivers: ["Observable"]
   },
   {
     name: "forEach",
@@ -855,6 +872,11 @@ export const NativeFunctions = [
   },
   {
     name: "find",
+    signatures: [["predicate","?options"]],
+    receivers: ["Observable"]
+  },
+  {
+    name: "find",
     signatures: [["?string","?caseSensitive","?backwards","?wrap","?wholeWord","?searchInFrames","?showDialog"]],
     receivers: ["Window"]
   },
@@ -879,6 +901,11 @@ export const NativeFunctions = [
     name: "from",
     signatures: [["iterable","?mapfn","?thisArg"],["arrayLike","?mapfn","?thisArg"]],
     receivers: ["ArrayConstructor"]
+  },
+  {
+    name: "from",
+    signatures: [["value"]],
+    receivers: ["Observable"]
   },
   {
     name: "drawArraysInstancedANGLE",
@@ -1248,7 +1275,7 @@ export const NativeFunctions = [
   {
     name: "add",
     signatures: [["key"]],
-    receivers: ["CustomStateSet"]
+    receivers: ["CustomStateSet","ViewTransitionTypeSet"]
   },
   {
     name: "add",
@@ -1778,6 +1805,11 @@ export const NativeFunctions = [
     receivers: ["DOMMatrixReadOnly"]
   },
   {
+    name: "translate",
+    signatures: [["input"]],
+    receivers: ["LanguageTranslator"]
+  },
+  {
     name: "drawFocusIfNeeded",
     signatures: [["element"],["path","element"]]
   },
@@ -2133,11 +2165,6 @@ export const NativeFunctions = [
     name: "setData",
     signatures: [["format","data"]],
     receivers: ["DataTransfer"]
-  },
-  {
-    name: "setData",
-    signatures: [["data"]],
-    receivers: ["PendingPostBeacon"]
   },
   {
     name: "setData",
@@ -2525,7 +2552,7 @@ export const NativeFunctions = [
   },
   {
     name: "resolve",
-    signatures: [["token"]],
+    signatures: [["token","?options"]],
     receivers: ["IdentityProvider"]
   },
   {
@@ -3394,11 +3421,6 @@ export const NativeFunctions = [
     name: "complete",
     signatures: [["?result"],["?paymentResult"]],
     receivers: ["PaymentResponse"]
-  },
-  {
-    name: "complete",
-    signatures: [["merchantSessionPromise"]],
-    receivers: ["MerchantValidationEvent"]
   },
   {
     name: "retry",
@@ -4293,7 +4315,13 @@ export const NativeFunctions = [
   },
   {
     name: "readBuffer",
-    signatures: [["src"],["mode"]]
+    signatures: [["src"],["mode"]],
+    receivers: ["WebGL2RenderingContext"]
+  },
+  {
+    name: "readBuffer",
+    signatures: [["srcBuffer"]],
+    receivers: ["MLContext"]
   },
   {
     name: "renderbufferStorageMultisample",
@@ -5760,7 +5788,13 @@ export const NativeFunctions = [
   },
   {
     name: "flatMap",
-    signatures: [["callback","?thisArg"]]
+    signatures: [["callback","?thisArg"]],
+    receivers: ["ReadonlyArray","Array"]
+  },
+  {
+    name: "flatMap",
+    signatures: [["mapper"]],
+    receivers: ["Observable"]
   },
   {
     name: "flat",
@@ -6335,10 +6369,6 @@ export const NativeFunctions = [
     signatures: [["x","y"]]
   },
   {
-    name: "requestStorageAccessFor",
-    signatures: [["requestedOrigin"]]
-  },
-  {
     name: "hasPrivateToken",
     signatures: [["issuer"]]
   },
@@ -6395,6 +6425,10 @@ export const NativeFunctions = [
     signatures: [["root","node","?init"]]
   },
   {
+    name: "moveBefore",
+    signatures: [["node","child"]]
+  },
+  {
     name: "Observable",
     signatures: [["callback"]]
   },
@@ -6409,6 +6443,22 @@ export const NativeFunctions = [
   {
     name: "drop",
     signatures: [["number_to_drop"]]
+  },
+  {
+    name: "switchMap",
+    signatures: [["mapper"]]
+  },
+  {
+    name: "inspect",
+    signatures: [["?inspect_observer"]]
+  },
+  {
+    name: "first",
+    signatures: [["?options"]]
+  },
+  {
+    name: "last",
+    signatures: [["?options"]]
   },
   {
     name: "getPartNode",
@@ -6510,6 +6560,10 @@ export const NativeFunctions = [
   },
   {
     name: "InputEvent",
+    signatures: [["type","?eventInitDict"]]
+  },
+  {
+    name: "InterestEvent",
     signatures: [["type","?eventInitDict"]]
   },
   {
@@ -6633,18 +6687,6 @@ export const NativeFunctions = [
   {
     name: "getHighEntropyValues",
     signatures: [["hints"]]
-  },
-  {
-    name: "PendingGetBeacon",
-    signatures: [["url","?options"]]
-  },
-  {
-    name: "setURL",
-    signatures: [["url"]]
-  },
-  {
-    name: "PendingPostBeacon",
-    signatures: [["url","?options"]]
   },
   {
     name: "ReportingObserver",
@@ -6781,6 +6823,10 @@ export const NativeFunctions = [
   {
     name: "VTTCue",
     signatures: [["startTime","endTime","text"]]
+  },
+  {
+    name: "DeviceProperties",
+    signatures: [["?devicePropertiesInitDict"]]
   },
   {
     name: "InputDeviceCapabilities",
@@ -7308,18 +7354,6 @@ export const NativeFunctions = [
     signatures: [["type","?eventInitDict"]]
   },
   {
-    name: "TCPServerSocket",
-    signatures: [["localAddress","?options"]]
-  },
-  {
-    name: "TCPSocket",
-    signatures: [["remoteAddress","remotePort","?options"]]
-  },
-  {
-    name: "UDPSocket",
-    signatures: [["options"]]
-  },
-  {
     name: "DocumentPictureInPictureEvent",
     signatures: [["type","eventInitDict"]]
   },
@@ -7604,6 +7638,20 @@ export const NativeFunctions = [
     receivers: ["MLModel"]
   },
   {
+    name: "writeBuffer",
+    signatures: [["dstBuffer","srcData","?srcElementOffset","?srcElementSize"],["dstBuffer","srcData","?srcByteOffset","?srcByteSize"]],
+    receivers: ["MLContext"]
+  },
+  {
+    name: "writeBuffer",
+    signatures: [["buffer","bufferOffset","data","?dataElementOffset","?dataElementCount"],["buffer","bufferOffset","data","?dataByteOffset","?byteSize"]],
+    receivers: ["GPUQueue"]
+  },
+  {
+    name: "dispatch",
+    signatures: [["graph","inputs","outputs"]]
+  },
+  {
     name: "MLModelLoader",
     signatures: [["context"]]
   },
@@ -7700,12 +7748,20 @@ export const NativeFunctions = [
     signatures: [["input","indices","?options"]]
   },
   {
+    name: "gelu",
+    signatures: [["?input"]]
+  },
+  {
     name: "gemm",
     signatures: [["a","b","?options"]]
   },
   {
     name: "gru",
     signatures: [["input","weight","recurrentWeight","steps","hiddenSize","?options"]]
+  },
+  {
+    name: "gruCell",
+    signatures: [["input","weight","recurrentWeight","hiddenState","hiddenSize","?options"]]
   },
   {
     name: "hardSigmoid",
@@ -7738,6 +7794,10 @@ export const NativeFunctions = [
   {
     name: "lstm",
     signatures: [["input","weight","recurrentWeight","steps","hiddenSize","?options"]]
+  },
+  {
+    name: "lstmCell",
+    signatures: [["input","weight","recurrentWeight","hiddenState","cellState","hiddenSize","?options"]]
   },
   {
     name: "pad",
@@ -7821,7 +7881,7 @@ export const NativeFunctions = [
   },
   {
     name: "softplus",
-    signatures: [["?options"],["input","?options"]]
+    signatures: [["?input"]]
   },
   {
     name: "softsign",
@@ -7896,6 +7956,14 @@ export const NativeFunctions = [
     signatures: [["timestamp"]]
   },
   {
+    name: "canTranslate",
+    signatures: [["options"]]
+  },
+  {
+    name: "createTranslator",
+    signatures: [["options"]]
+  },
+  {
     name: "AbortPaymentEvent",
     signatures: [["type","eventInitDict"]]
   },
@@ -7914,10 +7982,6 @@ export const NativeFunctions = [
   {
     name: "getDigitalGoodsService",
     signatures: [["paymentMethod"]]
-  },
-  {
-    name: "MerchantValidationEvent",
-    signatures: [["type","?eventInitDict"]]
   },
   {
     name: "enableDelegations",
@@ -7960,8 +8024,8 @@ export const NativeFunctions = [
     signatures: [["type","eventInitDict"]]
   },
   {
-    name: "setTimestamp",
-    signatures: [["timestamp"]]
+    name: "RTCEncodedAudioFrame",
+    signatures: [["originalFrame","?options"]]
   },
   {
     name: "setMetadata",
@@ -7969,7 +8033,7 @@ export const NativeFunctions = [
   },
   {
     name: "RTCEncodedVideoFrame",
-    signatures: [["originalFrame","?newMetadata"]]
+    signatures: [["originalFrame","?options"]]
   },
   {
     name: "RTCErrorEvent",
@@ -8100,10 +8164,6 @@ export const NativeFunctions = [
     signatures: [["?options"]]
   },
   {
-    name: "isAncestor",
-    signatures: [["parentId"]]
-  },
-  {
     name: "TaskController",
     signatures: [["?init"]]
   },
@@ -8177,10 +8237,6 @@ export const NativeFunctions = [
   },
   {
     name: "addRoutes",
-    signatures: [["rules"]]
-  },
-  {
-    name: "registerRouter",
     signatures: [["rules"]]
   },
   {
@@ -8258,6 +8314,10 @@ export const NativeFunctions = [
   {
     name: "SpeechSynthesisUtterance",
     signatures: [["?text"]]
+  },
+  {
+    name: "requestStorageAccessFor",
+    signatures: [["requestedOrigin"]]
   },
   {
     name: "StorageEvent",
@@ -8662,10 +8722,6 @@ export const NativeFunctions = [
   {
     name: "setBindGroup",
     signatures: [["index","bindGroup","?dynamicOffsets"],["index","bindGroup","dynamicOffsetsData","dynamicOffsetsDataStart","dynamicOffsetsDataLength"]]
-  },
-  {
-    name: "writeBuffer",
-    signatures: [["buffer","bufferOffset","data","?dataElementOffset","?dataElementCount"],["buffer","bufferOffset","data","?dataByteOffset","?byteSize"]]
   },
   {
     name: "writeTexture",

@@ -9,7 +9,6 @@
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_run_loop_timeout.h"
 #include "chrome/app/chrome_command_ids.h"
-#include "chrome/browser/browsing_data/cookies_tree_model.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_settings_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -403,26 +402,6 @@ class PageSpecificSiteDataDialogIsolatedWebAppInteractiveUiTest
   ~PageSpecificSiteDataDialogIsolatedWebAppInteractiveUiTest() override =
       default;
 
-  void SetUpOnMainThread() override {
-#if !BUILDFLAG(IS_MAC)
-    // TODO(https://crbug.com/1454297): OsIntegrationTestOverrideImpl seems
-    // to interfere with Kombucha on the Mac.
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    override_registration_ =
-        web_app::OsIntegrationTestOverrideImpl::OverrideForTesting();
-#endif  // BUILDFLAG(IS_MAC)
-    PageSpecificSiteDataDialogInteractiveUiTest::SetUpOnMainThread();
-  }
-  void TearDownOnMainThread() override {
-    web_app::test::UninstallWebApp(browser()->profile(), app_id_);
-
-#if !BUILDFLAG(IS_MAC)
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    override_registration_.reset();
-#endif  // BUILDFLAG(IS_MAC)
-    PageSpecificSiteDataDialogInteractiveUiTest::TearDownOnMainThread();
-  }
-
  protected:
   void SetUpFeatureList() override {
     feature_list_.InitWithFeatures(
@@ -475,16 +454,22 @@ class PageSpecificSiteDataDialogIsolatedWebAppInteractiveUiTest
 
  private:
   webapps::AppId app_id_;
-#if !BUILDFLAG(IS_MAC)
-  std::unique_ptr<
-      ::web_app::OsIntegrationTestOverrideImpl::BlockingRegistration>
+  web_app::OsIntegrationTestOverrideImpl::BlockingRegistration
       override_registration_;
-#endif  // !BUILDFLAG(IS_MAC)
 };
 
+// TODO(crbug.com/40776475): This test fails to pass on Mac with real app shims
+// working.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_AppNameIsDisplayedInsteadOfHostname \
+  DISABLED_AppNameIsDisplayedInsteadOfHostname
+#else
+#define MAYBE_AppNameIsDisplayedInsteadOfHostname \
+  AppNameIsDisplayedInsteadOfHostname
+#endif  // BUILDFLAG(IS_MAC)
 IN_PROC_BROWSER_TEST_F(
     PageSpecificSiteDataDialogIsolatedWebAppInteractiveUiTest,
-    AppNameIsDisplayedInsteadOfHostname) {
+    MAYBE_AppNameIsDisplayedInsteadOfHostname) {
   Browser* iwa_browser = InstallAndLaunchIsolatedWebApp();
   RunTestSequenceInContext(
       iwa_browser->window()->GetElementContext(),

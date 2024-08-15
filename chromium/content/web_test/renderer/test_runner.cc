@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <clocale>
 #include <limits>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -19,7 +20,6 @@
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -71,6 +71,7 @@
 #include "third_party/blink/public/web/web_input_element.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_manifest_manager.h"
+#include "third_party/blink/public/web/web_print_params.h"
 #include "third_party/blink/public/web/web_render_theme.h"
 #include "third_party/blink/public/web/web_script_source.h"
 #include "third_party/blink/public/web/web_security_policy.h"
@@ -359,6 +360,9 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void SetPrinting();
   void SetPrintingForFrame(const std::string& frame_name);
   void SetPrintingSize(int width, int height);
+  void SetPrintingMargin(int);
+  void SetShouldCenterAndShrinkToFitPaper(bool);
+  void SetPrintingScaleFactor(float);
   void SetShouldGeneratePixelResults(bool);
   void SetShouldStayOnPageAfterHandlingBeforeUnload(bool value);
   void SetSpellCheckResolvedCallback(v8::Local<v8::Function> callback);
@@ -788,6 +792,11 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
       .SetMethod("setPrintingForFrame",
                  &TestRunnerBindings::SetPrintingForFrame)
       .SetMethod("setPrintingSize", &TestRunnerBindings::SetPrintingSize)
+      .SetMethod("setPrintingMargin", &TestRunnerBindings::SetPrintingMargin)
+      .SetMethod("setShouldCenterAndShrinkToFitPaper",
+                 &TestRunnerBindings::SetShouldCenterAndShrinkToFitPaper)
+      .SetMethod("setPrintingScaleFactor",
+                 &TestRunnerBindings::SetPrintingScaleFactor)
       .SetMethod("setRphRegistrationMode",
                  &TestRunnerBindings::SetRphRegistrationMode)
       .SetMethod("setScrollbarPolicy", &TestRunnerBindings::NotImplemented)
@@ -1745,6 +1754,27 @@ void TestRunnerBindings::SetPrintingSize(int width, int height) {
   runner_->SetPrintingSize(width, height, *frame_);
 }
 
+void TestRunnerBindings::SetPrintingMargin(int margin) {
+  if (!frame_) {
+    return;
+  }
+  runner_->SetPrintingMargin(margin, *frame_);
+}
+
+void TestRunnerBindings::SetShouldCenterAndShrinkToFitPaper(bool b) {
+  if (!frame_) {
+    return;
+  }
+  runner_->SetShouldCenterAndShrinkToFitPaper(b);
+}
+
+void TestRunnerBindings::SetPrintingScaleFactor(float factor) {
+  if (!frame_) {
+    return;
+  }
+  runner_->SetPrintingScaleFactor(factor);
+}
+
 void TestRunnerBindings::ClearTrustTokenState(
     v8::Local<v8::Function> v8_callback) {
   if (!frame_) {
@@ -2112,10 +2142,7 @@ void TestRunnerBindings::CapturePrintingPixelsThen(
     return;
   }
   blink::WebLocalFrame* frame = GetWebFrame();
-  SkBitmap bitmap = PrintFrameToBitmap(
-      frame, runner_->GetPrintingPageSize(frame), runner_->GetPrintingMargin(),
-      runner_->GetPrintingPageRanges(frame));
-
+  SkBitmap bitmap = runner_->PrintFrameToBitmap(frame);
   v8::Isolate* isolate = frame->GetAgentGroupScheduler()->Isolate();
   v8::HandleScope handle_scope(isolate);
 
@@ -2152,7 +2179,7 @@ void TestRunnerBindings::CopyImageThen(int x,
   GetWebFrame()->CopyImageAtForTesting(gfx::Point(x, y));
   auto sequence_number_after = sequence_number_before;
   while (sequence_number_before.value() == sequence_number_after.value()) {
-    // TODO(crbug.com/872076): Ideally we would CHECK here that the mojo call
+    // TODO(crbug.com/40588468): Ideally we would CHECK here that the mojo call
     // succeeded, but this crashes under some circumstances (crbug.com/1232810).
     remote_clipboard->GetSequenceNumber(ui::ClipboardBuffer::kCopyPaste,
                                         &sequence_number_after);
@@ -2781,15 +2808,15 @@ static std::string GetPageRangesStringFromMetadata(
 printing::PageRanges TestRunner::GetPrintingPageRanges(
     blink::WebLocalFrame* frame) const {
   const std::string page_ranges_string = GetPageRangesStringFromMetadata(frame);
-  const std::vector<base::StringPiece> range_strings =
+  const std::vector<std::string_view> range_strings =
       base::SplitStringPiece(page_ranges_string, ",", base::TRIM_WHITESPACE,
                              base::SPLIT_WANT_NONEMPTY);
   printing::PageRanges result;
 
-  for (const base::StringPiece& range_string : range_strings) {
+  for (std::string_view range_string : range_strings) {
     // The format for each range is "<int> | <int>? - <int>?" where the page
     // numbers are 1-indexed.
-    const std::vector<base::StringPiece> page_strings = base::SplitStringPiece(
+    const std::vector<std::string_view> page_strings = base::SplitStringPiece(
         range_string, "-", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
     bool invalid = false;
 
@@ -2830,7 +2857,26 @@ printing::PageRanges TestRunner::GetPrintingPageRanges(
   printing::PageRange::Normalize(result);
   return result;
 }
-#endif
+
+SkBitmap TestRunner::PrintFrameToBitmap(blink::WebLocalFrame* frame) {
+  // Page size and margins are in CSS pixels.
+  auto print_params =
+      blink::WebPrintParams(gfx::SizeF(GetPrintingPageSize(frame)));
+  int default_margin = GetPrintingMargin();
+  print_params.default_page_description.margin_top = default_margin;
+  print_params.default_page_description.margin_right = default_margin;
+  print_params.default_page_description.margin_bottom = default_margin;
+  print_params.default_page_description.margin_left = default_margin;
+  print_params.scale_factor = printing_scale_factor_;
+  print_params.print_scaling_option =
+      should_center_and_shrink_to_fit_paper_
+          ? printing::mojom::PrintScalingOption::kCenterShrinkToFitPaper
+          : printing::mojom::PrintScalingOption::kSourceSize;
+
+  return content::PrintFrameToBitmap(frame, print_params,
+                                     GetPrintingPageRanges(frame));
+}
+#endif  // BUILDFLAG(ENABLE_PRINTING)
 
 SkBitmap TestRunner::DumpPixelsInRenderer(blink::WebLocalFrame* main_frame) {
   DCHECK(!main_frame->Parent());
@@ -2857,9 +2903,8 @@ SkBitmap TestRunner::DumpPixelsInRenderer(blink::WebLocalFrame* main_frame) {
     if (frame_to_print && frame_to_print->IsWebLocalFrame())
       target_frame = frame_to_print->ToWebLocalFrame();
   }
-  return PrintFrameToBitmap(target_frame, GetPrintingPageSize(target_frame),
-                            GetPrintingMargin(),
-                            GetPrintingPageRanges(target_frame));
+
+  return PrintFrameToBitmap(target_frame);
 #else
   NOTREACHED();
   return SkBitmap();

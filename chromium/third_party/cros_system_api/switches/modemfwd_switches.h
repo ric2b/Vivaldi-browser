@@ -21,6 +21,7 @@ const char kFlashModeCheck[] = "flash_mode_check";
 const char kReboot[] = "reboot";
 const char kClearAttachAPN[] = "clear_attach_apn";
 const char kFwVersion[] = "fw_version";
+const char kGetHeartbeatConfig[] = "get_heartbeat_config";
 
 // Keys used for the kFlashFirmware/kFwVersion/kGetFirmwareInfo switches
 const char kFwMain[] = "main";
@@ -29,6 +30,10 @@ const char kFwOem[] = "oem";
 const char kFwAp[] = "ap";
 const char kFwDev[] = "dev";
 const char kFwCarrierUuid[] = "carrier_uuid";
+
+// Keys used for the kGetHeartbeatConfig switch
+const char kHeartbeatMaxFailures[] = "max_failures";
+const char kHeartbeatInterval[] = "interval";
 
 }  // namespace modemfwd
 

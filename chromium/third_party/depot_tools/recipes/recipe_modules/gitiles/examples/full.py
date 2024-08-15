@@ -30,10 +30,10 @@ def RunSteps(api):
   data = api.gitiles.download_file(url, 'NONEXISTENT', attempts=1,
                                    accept_statuses=[404])
 
-  api.gitiles.download_archive(url, api.path['start_dir'].join('archive'))
+  api.gitiles.download_archive(url, api.path.start_dir / 'archive')
 
   try:
-    api.gitiles.download_archive(url, api.path['start_dir'].join('archive2'))
+    api.gitiles.download_archive(url, api.path.start_dir / 'archive2')
     assert False  # pragma: no cover
   except api.step.StepFailure as ex:
     assert '/root' in ex.gitiles_skipped_files

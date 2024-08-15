@@ -133,9 +133,9 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
   // chain. This is rare because non-network schemes basically don't redirect,
   // but can actually happen e.g. in extension scheme's dynamic URLs (see
   // `DynamicOriginBrowserTest.DynamicUrl` unit test).
-  // TODO(crbug.com/1403746): Consider removing the caching, as caches are often
-  // source of bug. The caching mechanism is left here to keep the existing
-  // behavior.
+  // TODO(crbug.com/40251638): Consider removing the caching, as caches are
+  // often source of bug. The caching mechanism is left here to keep the
+  // existing behavior.
   scoped_refptr<network::SharedURLLoaderFactory>
   GetOrCreateNonNetworkLoaderFactory();
 
@@ -258,6 +258,10 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
 
   // Records UKM for the navigation load.
   void RecordReceivedResponseUkmForOutermostMainFrame();
+
+  // Record static routing API evaluation related results.
+  void RecordServiceWorkerRouterEvaluationResults(
+      network::mojom::ServiceWorkerRouterInfo* router_info);
 
   raw_ptr<NavigationURLLoaderDelegate, DanglingUntriaged> delegate_;
   raw_ptr<BrowserContext> browser_context_;

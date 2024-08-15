@@ -3894,8 +3894,8 @@ static AOM_INLINE void read_bitdepth(
 #endif
 }
 
-void av1_read_film_grain_params(AV1_COMMON *cm,
-                                struct aom_read_bit_buffer *rb) {
+static void read_film_grain_params(AV1_COMMON *cm,
+                                   struct aom_read_bit_buffer *rb) {
   aom_film_grain_t *pars = &cm->film_grain_params;
   const SequenceHeader *const seq_params = cm->seq_params;
 
@@ -4063,7 +4063,7 @@ static AOM_INLINE void read_film_grain(AV1_COMMON *cm,
                                        struct aom_read_bit_buffer *rb) {
   if (cm->seq_params->film_grain_params_present &&
       (cm->show_frame || cm->showable_frame)) {
-    av1_read_film_grain_params(cm, rb);
+    read_film_grain_params(cm, rb);
   } else {
     memset(&cm->film_grain_params, 0, sizeof(cm->film_grain_params));
   }

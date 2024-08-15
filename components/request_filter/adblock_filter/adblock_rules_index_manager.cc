@@ -13,7 +13,6 @@
 #include "components/request_filter/adblock_filter/utils.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
-#include "content/public/browser/browser_thread.h"
 #include "third_party/flatbuffers/src/include/flatbuffers/flatbuffers.h"
 #include "vivaldi/components/request_filter/adblock_filter/flat/adblock_rules_index_generated.h"
 #include "vivaldi/components/request_filter/adblock_filter/flat/adblock_rules_list_generated.h"
@@ -31,9 +30,9 @@ enum class BufferType {
   kIndex,
 };
 
-std::string DoGetRuleBufferFromFile(const base::FilePath& buffer_path,
-                                    BufferType buffer_type,
-                                    const std::string& checksum) {
+std::string GetRuleBufferFromFile(const base::FilePath& buffer_path,
+                                  BufferType buffer_type,
+                                  const std::string& checksum) {
   std::string buffer_contents;
   base::ReadFileToString(buffer_path, &buffer_contents);
 
@@ -83,23 +82,11 @@ std::string DoGetRuleBufferFromFile(const base::FilePath& buffer_path,
                                                     : std::string();
   }
 }
-
-void GetRuleBufferFromFile(
-    const base::FilePath& buffer_path,
-    const std::string& checksum,
-    BufferType buffer_type,
-    base::OnceCallback<void(std::unique_ptr<std::string>)> callback) {
-  content::GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(std::move(callback),
-                     std::make_unique<std::string>(DoGetRuleBufferFromFile(
-                         buffer_path, buffer_type, checksum))));
-}
 }  // namespace
 
-RuleBufferHolder::RuleBufferHolder(std::unique_ptr<std::string> rule_buffer,
+RuleBufferHolder::RuleBufferHolder(std::string rule_buffer,
                                    const std::string& checksum)
-    : rule_buffer_(std::move(*rule_buffer)),
+    : rule_buffer_(std::move(rule_buffer)),
       checksum_(checksum),
       rules_list_(flat::GetRulesList(rule_buffer_.data())) {}
 
@@ -127,8 +114,10 @@ RulesIndexManager::RulesIndexManager(
       weak_factory_(this) {
   rule_service->GetRuleManager()->AddObserver(this);
 
-  for (const auto& rule_source : rule_sources_) {
-    ReadRules(rule_source.second);
+  for (const auto& [rule_source_id, rule_source] : rule_sources_) {
+    if (!rule_source.rules_list_checksum.empty()) {
+      ReadRules(rule_source);
+    }
   }
 
   if (index_checksum.empty()) {
@@ -145,25 +134,28 @@ RulesIndexManager::RulesIndexManager(
 
 RulesIndexManager::~RulesIndexManager() = default;
 
-void RulesIndexManager::OnRulesSourceUpdated(const RuleSource& rule_source) {
-  if (rule_source.group != group_ || rule_source.is_fetching)
+void RulesIndexManager::OnRuleSourceUpdated(
+    RuleGroup group,
+    const ActiveRuleSource& rule_source) {
+  if (group != group_ || rule_source.is_fetching)
     return;
 
-  bool is_new;
-  {
-    const auto& old_source = rule_sources_.find(rule_source.id);
-    is_new = old_source == rule_sources_.end();
-    if (is_new || rule_source.rules_list_checksum !=
-                      old_source->second.rules_list_checksum)
-      ReadRules(rule_source);
+  // If the last fetch failed, either we won't have anything to read, or
+  // the rules won't have changed, so skip reading. `kFileUnsupported` results
+  // from a successful fetch with no valid rules.
+  if (rule_source.last_fetch_result == FetchResult::kSuccess ||
+      rule_source.last_fetch_result == FetchResult::kFileUnsupported) {
+    const auto& old_source = rule_sources_.find(rule_source.core.id());
 
-    // Drop the |old_source| iterator here sisnce we're about to change the map.
+    if (old_source == rule_sources_.end() ||
+        rule_source.rules_list_checksum !=
+            old_source->second.rules_list_checksum)
+      ReadRules(rule_source);
+    // Make sure to drop the |old_source| iterator here sisnce we're about to
+    // change the map.
   }
 
-  if (is_new)
-    rule_sources_.emplace(rule_source.id, rule_source);
-  else
-    rule_sources_.at(rule_source.id) = rule_source;
+  rule_sources_.insert_or_assign(rule_source.core.id(), rule_source);
 }
 
 void RulesIndexManager::OnRuleSourceDeleted(uint32_t source_id,
@@ -173,7 +165,9 @@ void RulesIndexManager::OnRuleSourceDeleted(uint32_t source_id,
 
   // Keep any rules buffer around for the index currently in use, they'll be
   // cleared once the new index is ready.
-  old_rules_buffers_.push_back(std::move(rules_buffers_[source_id]));
+  if (rules_buffers_.count(source_id) != 0) {
+    old_rules_buffers_.push_back(std::move(rules_buffers_[source_id]));
+  }
 
   rule_sources_.erase(source_id);
   rules_buffers_.erase(source_id);
@@ -181,34 +175,49 @@ void RulesIndexManager::OnRuleSourceDeleted(uint32_t source_id,
   RebuildIndex();
 }
 
-void RulesIndexManager::ReadRules(const RuleSource& rule_source) {
-  const auto existing_buffer = rules_buffers_.find(rule_source.id);
-  if (existing_buffer != rules_buffers_.end() &&
-      existing_buffer->second->checksum() == rule_source.rules_list_checksum) {
-    // Checksum hasn't changed. Don't re-index.
+void RulesIndexManager::ReadRules(const ActiveRuleSource& rule_source) {
+  if (rule_source.last_fetch_result == FetchResult::kFileUnsupported) {
+    // We know there is no valid rules here. No point in trying.
+    // Keep any rules buffer around for the index currently in use, they'll be
+    // cleared once the new index is ready.
+    if (rules_buffers_.count(rule_source.core.id()) != 0) {
+      old_rules_buffers_.push_back(
+          std::move(rules_buffers_[rule_source.core.id()]));
+      rules_buffers_.erase(rule_source.core.id());
+      RebuildIndex();
+    }
     return;
   }
 
-  file_task_runner_->PostTask(
+  CHECK(!rule_source.rules_list_checksum.empty());
+
+  file_task_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,
-      base::BindOnce(
-          &GetRuleBufferFromFile,
-          rules_list_folder_.AppendASCII(base::NumberToString(rule_source.id)),
-          rule_source.rules_list_checksum, BufferType::kRulesList,
-          base::BindOnce(&RulesIndexManager::OnRulesRead,
-                         weak_factory_.GetWeakPtr(), rule_source.id,
-                         rule_source.rules_list_checksum)));
+      base::BindOnce(&GetRuleBufferFromFile,
+                     rules_list_folder_.AppendASCII(
+                         base::NumberToString(rule_source.core.id())),
+                     BufferType::kRulesList, rule_source.rules_list_checksum),
+      base::BindOnce(&RulesIndexManager::OnRulesRead,
+                     weak_factory_.GetWeakPtr(), rule_source.core.id(),
+                     rule_source.rules_list_checksum));
 }
 
 void RulesIndexManager::OnRulesRead(uint32_t source_id,
                                     const std::string& checksum,
-                                    std::unique_ptr<std::string> rules_buffer) {
-  if (rule_sources_.find(source_id) == rule_sources_.end()) {
+                                    std::string rules_buffer) {
+  const auto& rule_source = rule_sources_.find(source_id);
+
+  if (rule_source == rule_sources_.end()) {
     // The rule source was removed while we were fetching its buffer.
     return;
   }
 
-  if (rules_buffer->empty()) {
+  if (rule_source->second.rules_list_checksum != checksum) {
+    // The rule source was modified while we were fetching its buffer.
+    return;
+  }
+
+  if (rules_buffer.empty()) {
     // If we had a rules buffer for this source already, keep it for now.
     rule_buffer_read_fail_callback_.Run(group_, source_id);
     return;
@@ -216,7 +225,9 @@ void RulesIndexManager::OnRulesRead(uint32_t source_id,
 
   // Keep any rules buffer around for the index currently in use, they'll be
   // cleared once the new index is ready.
-  old_rules_buffers_.push_back(std::move(rules_buffers_[source_id]));
+  if (rules_buffers_.count(source_id) != 0) {
+    old_rules_buffers_.push_back(std::move(rules_buffers_[source_id]));
+  }
 
   rules_buffers_[source_id] =
       std::make_unique<RuleBufferHolder>(std::move(rules_buffer), checksum);
@@ -224,12 +235,12 @@ void RulesIndexManager::OnRulesRead(uint32_t source_id,
   RebuildIndex();
 }
 
-void RulesIndexManager::OnIndexRead(std::unique_ptr<std::string> index_buffer) {
+void RulesIndexManager::OnIndexRead(std::string index_buffer) {
   reload_in_progress_ = false;
 
   std::unique_ptr<RulesIndex> new_index;
   bool uses_all_buffers = false;
-  if (!index_buffer->empty()) {
+  if (!index_buffer.empty()) {
     RulesIndex::RulesBufferMap index_rules_buffer;
     for (const auto& buffer : rules_buffers_) {
       index_rules_buffer.insert({buffer.first, *buffer.second});
@@ -288,12 +299,13 @@ void RulesIndexManager::ReadIndex(const std::string& checksum) {
     reload_in_progress_ = false;
     return;
   }
-  file_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&GetRuleBufferFromFile,
-                                rules_list_folder_.Append(kIndexFileName),
-                                index_checksum_, BufferType::kIndex,
-                                base::BindOnce(&RulesIndexManager::OnIndexRead,
-                                               weak_factory_.GetWeakPtr())));
+  file_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&GetRuleBufferFromFile,
+                     rules_list_folder_.Append(kIndexFileName),
+                     BufferType::kIndex, index_checksum_),
+      base::BindOnce(&RulesIndexManager::OnIndexRead,
+                     weak_factory_.GetWeakPtr()));
 }
 
 }  // namespace adblock_filter

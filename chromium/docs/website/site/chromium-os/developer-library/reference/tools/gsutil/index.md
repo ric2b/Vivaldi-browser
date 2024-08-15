@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: cros-commit-pipeline
 title: gsutil
 ---
@@ -61,7 +61,7 @@ to copy out of.
 There are a variety of GS buckets that show up in CrOS.
 We try to cover everything that CrOS developers might see.
 
-As a general rule, buckets that start with `gs://chromeos-` are not browseable
+As a general rule, buckets that start with `gs://chromeos-` are not browsable
 by the public, although some files might be readable for tools to access.
 
 Buckets that start with `gs://chromiumos-` are fully readable by the public.
@@ -130,7 +130,7 @@ These are used by developers working on ARC++ (Android in CrOS).
 
 ### VM/container (Crostini) buckets
 
-These buckets are used for [Containers/VM/Crostini](./containers_and_vms.md).
+These buckets are used for [Containers/VM/Crostini](/chromium-os/developer-library/guides/containers/containers-and-vms/).
 
 *   `gs://chrome-component-termina/`: Termina VM images for signing. VM images
     uploaded here will be signed, then made available in the Omaha dashboard
@@ -146,7 +146,7 @@ These buckets are used for [Containers/VM/Crostini](./containers_and_vms.md).
 
 ### ClusterFuzz buckets
 
-See the [fuzzing documentation](testing/fuzzing.md#using-clusterfuzz) for details
+See the [fuzzing documentation](/chromium-os/developer-library/guides/testing/fuzzing/#using-clusterfuzz) for details
 on the buckets used by ClusterFuzz.
 
 ### Old/dead buckets
@@ -195,8 +195,8 @@ If you're confident you need a new bucket, please [file a bug][bugs] using the
 `Infra>Client>ChromeOS` component.
 
 
-[Archive Mirrors]: archive_mirrors.md
-[bugs]: reporting_bugs.md
+[Archive Mirrors]: /chromium-os/developer-library/reference/third-party/archive-mirrors/
+[bugs]: /chromium-os/developer-library/guides/bugs/reporting-bugs/
 [chromite]: https://chromium.googlesource.com/chromiumos/chromite/
 [gsutil Tool]: https://cloud.google.com/storage/docs/gsutil
 [Install gsutil]: https://cloud.google.com/storage/docs/gsutil_install

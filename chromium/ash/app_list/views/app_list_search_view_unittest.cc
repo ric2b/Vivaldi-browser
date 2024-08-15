@@ -25,6 +25,7 @@
 #include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
+#include "ash/public/cpp/image_util.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
@@ -58,6 +59,12 @@ const int kResultContainersCount =
     static_cast<int>(
         ash::SearchResultListView::SearchResultListType::kMaxValue) +
     1;
+
+enum class ResultIconType {
+  kNone,
+  kPlaceholder,
+  kLoaded,
+};
 
 // A callback that returns a FileMetadata which will be used by the image search
 // result list.
@@ -119,11 +126,12 @@ class AppListSearchViewTest : public AshTestBase {
     }
   }
 
-  void SetUpImageSearchResults(SearchModel::SearchResults* results,
-                               int init_id,
-                               int new_result_count,
-                               bool is_icon_loaded = true,
-                               FileMetadataLoader* metadata_loader = nullptr) {
+  void SetUpImageSearchResults(
+      SearchModel::SearchResults* results,
+      int init_id,
+      int new_result_count,
+      ResultIconType icon_type = ResultIconType::kLoaded,
+      FileMetadataLoader* metadata_loader = nullptr) {
     for (int i = 0; i < new_result_count; ++i) {
       std::unique_ptr<TestSearchResult> result =
           std::make_unique<TestSearchResult>();
@@ -131,10 +139,21 @@ class AppListSearchViewTest : public AshTestBase {
       result->set_display_type(ash::SearchResultDisplayType::kImage);
       result->SetTitle(
           base::UTF8ToUTF16(base::StringPrintf("Result %d", init_id + i)));
-      if (is_icon_loaded) {
-        result->SetIcon(
-            {ui::ImageModel::FromVectorIcon(vector_icons::kGoogleColorIcon),
-             /*dimension=*/100});
+      switch (icon_type) {
+        case ResultIconType::kLoaded:
+          result->SetIcon(
+              {ui::ImageModel::FromVectorIcon(vector_icons::kGoogleColorIcon),
+               /*dimension=*/100});
+          break;
+        case ResultIconType::kPlaceholder:
+          result->SetIcon({ui::ImageModel::FromImageSkia(
+                               image_util::CreateEmptyImage(gfx::Size(10, 10))),
+                           /*dimension=*/10,
+                           ash::SearchResultIconShape::kRoundedRectangle,
+                           /*is_placeholder=*/true});
+          break;
+        case ResultIconType::kNone:
+          break;
       }
       result->set_display_score(100);
       result->SetDetails(u"Detail");
@@ -275,7 +294,8 @@ class SearchResultImageViewTest : public SearchViewClamshellAndTabletTest {
   SearchResultImageViewTest() {
     scoped_feature_list_.InitWithFeatures(
         {features::kProductivityLauncherImageSearch,
-         features::kLauncherSearchControl},
+         features::kLauncherSearchControl,
+         features::kFeatureManagementLocalImageSearch},
         {});
   }
 
@@ -376,7 +396,7 @@ TEST_P(SearchResultImageViewTest, OneResultShowsImageInfo) {
         auto* test_helper = GetAppListTestHelper();
         SearchModel::SearchResults* results = test_helper->GetSearchResults();
         // Only shows 1 result.
-        SetUpImageSearchResults(results, 1, 1, /*is_icon_loaded=*/true,
+        SetUpImageSearchResults(results, 1, 1, ResultIconType::kLoaded,
                                 &loader);
       }));
 
@@ -482,8 +502,7 @@ TEST_P(SearchResultImageViewTest, PulsingBlocksShowWhenNoResultIcon) {
         auto* test_helper = GetAppListTestHelper();
         SearchModel::SearchResults* results = test_helper->GetSearchResults();
         // Create some image search results where the thumbnails aren't loaded.
-        SetUpImageSearchResults(results, 1, num_results,
-                                /*is_icon_loaded=*/false);
+        SetUpImageSearchResults(results, 1, num_results, ResultIconType::kNone);
       }));
 
   ui::ScopedAnimationDurationScaleMode non_zero_duration_mode(
@@ -515,6 +534,91 @@ TEST_P(SearchResultImageViewTest, PulsingBlocksShowWhenNoResultIcon) {
   // not.
   for (size_t i = 0; i < num_results; ++i) {
     EXPECT_FALSE(
+        search_result_image_views[i]->result_image_for_test()->GetVisible());
+    EXPECT_TRUE(search_result_image_views[i]
+                    ->pulsing_block_view_for_test()
+                    ->GetVisible());
+  }
+
+  // Pick the first pulsing block view and verify that it is animating.
+  auto* pulsing_block_view =
+      search_result_image_views[0]->pulsing_block_view_for_test();
+  EXPECT_FALSE(pulsing_block_view->IsAnimating());
+  EXPECT_TRUE(pulsing_block_view->FireAnimationTimerForTest());
+  EXPECT_TRUE(pulsing_block_view->IsAnimating());
+
+  // Manually set an icon to all results and update the image search result
+  // list.
+  auto* results = GetAppListTestHelper()->GetSearchResults();
+  for (size_t i = 0; i < num_results; ++i) {
+    results->GetItemAt(i)->SetIcon(
+        {ui::ImageModel::FromVectorIcon(vector_icons::kGoogleColorIcon),
+         /*dimension=*/100});
+  }
+  result_containers[2]->RunScheduledUpdateForTest();
+
+  // Verify that the result images show up and the pulsing block views are
+  // removed.
+  for (size_t i = 0; i < num_results; ++i) {
+    EXPECT_TRUE(
+        search_result_image_views[i]->result_image_for_test()->GetVisible());
+    EXPECT_FALSE(search_result_image_views[i]->pulsing_block_view_for_test());
+  }
+
+  client->set_search_callback(TestAppListClient::SearchCallback());
+}
+
+TEST_P(SearchResultImageViewTest, PulsingBlocksShownWithPlaceholdertIcon) {
+  GetAppListTestHelper()->ShowAppList();
+  const size_t image_max_results =
+      SharedAppListConfig::instance().image_search_max_results();
+  const size_t num_results = image_max_results;
+
+  TestAppListClient* const client = GetAppListTestHelper()->app_list_client();
+  client->set_search_callback(
+      base::BindLambdaForTesting([&](const std::u16string& query) {
+        if (query.empty()) {
+          AppListModelProvider::Get()->search_model()->DeleteAllResults();
+          return;
+        }
+        EXPECT_EQ(u"a", query);
+
+        auto* test_helper = GetAppListTestHelper();
+        SearchModel::SearchResults* results = test_helper->GetSearchResults();
+        // Create some image search results where the thumbnails aren't loaded.
+        SetUpImageSearchResults(results, 1, num_results,
+                                ResultIconType::kPlaceholder);
+      }));
+
+  ui::ScopedAnimationDurationScaleMode non_zero_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  // Press a key to start a search.
+  PressAndReleaseKey(ui::VKEY_A);
+
+  // Check result container visibility.
+  std::vector<raw_ptr<SearchResultContainerView, VectorExperimental>>
+      result_containers = GetSearchView()->result_container_views_for_test();
+  for (ash::SearchResultContainerView* container : result_containers) {
+    EXPECT_TRUE(container->RunScheduledUpdateForTest());
+  }
+
+  ASSERT_EQ(static_cast<int>(result_containers.size()), kResultContainersCount);
+  // SearchResultImageListView container should be visible.
+  EXPECT_TRUE(result_containers[2]->GetVisible());
+
+  std::vector<raw_ptr<SearchResultImageView, VectorExperimental>>
+      search_result_image_views =
+          static_cast<SearchResultImageListView*>(result_containers[2])
+              ->GetSearchResultImageViews();
+
+  // The SearchResultImageListView should have 3 result views.
+  EXPECT_EQ(image_max_results, search_result_image_views.size());
+
+  // Verify that the pulsing blocks are visible while the result image views are
+  // not.
+  for (size_t i = 0; i < num_results; ++i) {
+    EXPECT_TRUE(
         search_result_image_views[i]->result_image_for_test()->GetVisible());
     EXPECT_TRUE(search_result_image_views[i]
                     ->pulsing_block_view_for_test()
@@ -658,6 +762,60 @@ TEST_P(SearchResultImageViewTest, SearchCategoryMenuItemToggleTest) {
   app_list_client->set_search_callback(TestAppListClient::SearchCallback());
 }
 
+TEST_P(SearchResultImageViewTest,
+       TypingInitialCharacterWithMenuOpenTogglesCheckbox) {
+  GetAppListTestHelper()->ShowAppList();
+  auto* app_list_client = GetAppListTestHelper()->app_list_client();
+
+  app_list_client->set_available_categories_for_test(
+      {AppListSearchControlCategory::kApps,
+       AppListSearchControlCategory::kFiles,
+       AppListSearchControlCategory::kWeb});
+
+  // Press a character key to open the search.
+  PressAndReleaseKey(ui::VKEY_A);
+  GetSearchBoxView()->GetWidget()->LayoutRootViewIfNecessary();
+  views::ImageButton* filter_button = GetSearchBoxView()->filter_button();
+  EXPECT_TRUE(filter_button->GetVisible());
+
+  // Open the filter menu.
+  LeftClickOn(filter_button);
+  EXPECT_TRUE(GetSearchBoxView()->IsFilterMenuOpen());
+
+  // Set up the search callback to notify that the search is triggered.
+  bool is_search_triggered = false;
+  app_list_client->set_search_callback(base::BindLambdaForTesting(
+      [&](const std::u16string& query) { is_search_triggered = true; }));
+
+  // Toggleable categories are on by default.
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  EXPECT_TRUE(prefs->GetDict(prefs::kLauncherSearchCategoryControlStatus)
+                  .FindBool(GetAppListControlCategoryName(
+                      AppListSearchControlCategory::kApps))
+                  .value_or(true));
+
+  // Pressing a key that is not an initial of the items does not do anything to
+  // the menu.
+  PressAndReleaseKey(ui::VKEY_X);
+  EXPECT_TRUE(GetSearchBoxView()->IsFilterMenuOpen());
+
+  // As "A" is the initial character if "Apps", the corresponding menu item is
+  // automatically toggled and the menu is closed.
+  PressAndReleaseKey(ui::VKEY_A);
+  std::optional apps_search_enabled =
+      prefs->GetDict(prefs::kLauncherSearchCategoryControlStatus)
+          .FindBool(GetAppListControlCategoryName(
+              AppListSearchControlCategory::kApps));
+  ASSERT_TRUE(apps_search_enabled.has_value());
+  EXPECT_FALSE(*apps_search_enabled);
+  EXPECT_FALSE(GetSearchBoxView()->IsFilterMenuOpen());
+  EXPECT_TRUE(is_search_triggered);
+
+  // Reset the search callback.
+  app_list_client->set_search_callback(TestAppListClient::SearchCallback());
+}
+
 // Verifies that the filter button and all menu items in the search category
 // filter have tooltips.
 TEST_P(SearchResultImageViewTest, SearchCategoryMenuItemTooltips) {
@@ -704,7 +862,7 @@ TEST_P(SearchResultImageViewTest, SearchCategoryMenuItemTooltips) {
   check_tooltip(AppListSearchControlCategory::kHelp,
                 u"Key shortcuts, tips for using device, and more");
   check_tooltip(AppListSearchControlCategory::kImages,
-                u"Image search by content and image previews");
+                u"Search for text within images and see image previews");
   check_tooltip(AppListSearchControlCategory::kPlayStore,
                 u"Available apps from the Play Store");
   check_tooltip(AppListSearchControlCategory::kWeb,

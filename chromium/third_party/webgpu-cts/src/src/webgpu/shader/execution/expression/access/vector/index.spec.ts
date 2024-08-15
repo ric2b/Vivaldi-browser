@@ -16,7 +16,7 @@ g.test('concrete_scalar')
   .params(u =>
     u
       .combine('inputSource', allInputSources)
-      .combine('elementType', ['i32', 'u32', 'f32', 'f16'] as const)
+      .combine('elementType', ['i32', 'u32', 'f32', 'f16', 'bool'] as const)
       .combine('indexType', ['i32', 'u32'] as const)
       .combine('width', [2, 3, 4] as const)
   )
@@ -31,7 +31,11 @@ g.test('concrete_scalar')
     const vectorType = Type.vec(t.params.width, elementType);
     const elements: ScalarValue[] = [];
     for (let i = 0; i < t.params.width; i++) {
-      elements.push(elementType.create((i + 1) * 10));
+      if (t.params.elementType === 'bool') {
+        elements.push(elementType.create(i & 1));
+      } else {
+        elements.push(elementType.create((i + 1) * 10));
+      }
     }
     const vector = new VectorValue(elements);
     const cases: Case[] = [];

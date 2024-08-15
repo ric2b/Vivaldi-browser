@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">Nikoli po</translation>
 <translation id="2749881179542288782">Zkontrolovat pravopis a gramatiku</translation>
 <translation id="2785873697295365461">Popisovače souborů</translation>
-<translation id="2809586584051668049">a další (<ph name="NUMBER_ADDITIONAL_DISABLED" />)</translation>
 <translation id="2825758591930162672">Veřejný klíč subjektu</translation>
 <translation id="2850541429955027218">Přidat motiv</translation>
 <translation id="2861941300086904918">Správce zabezpečení nativního klienta</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">Otevřít jako okno</translation>
 <translation id="3280237271814976245">Uložit &amp;jako…</translation>
 <translation id="3285322247471302225">Nový &amp;list</translation>
-<translation id="3288047731229977326">Rozšíření spuštěná ve vývojářském režimu mohou poškodit počítač. Pokud nejste vývojář, měli byste s ohledem na svou bezpečnost rozšíření spuštěná v tomto režimu zakázat.</translation>
 <translation id="329838636886466101">Opravit aplikaci</translation>
 <translation id="33022249435934718">Popisovače – GDI</translation>
 <translation id="3303818374450886607">Kopie</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">Bylo vytvořeno rozšíření:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Zakázat rozšíření ve vývojářském režimu</translation>
 <translation id="4100839878934973028">Jiný program ve vašem počítači nainstaloval aplikaci, která může měnit funkce prohlížeče Vivaldi.</translation>
 <translation id="4104163789986725820">Export...</translation>
 <translation id="4109898769411476438">Před importem zavřete prohlížeč</translation>
@@ -261,7 +258,6 @@
 <translation id="5269977353971873915">Tisk se nezdařil</translation>
 <translation id="5284445933715251131">Pokračovat ve stahování</translation>
 <translation id="52912272896845572">Soubor soukromého klíče je neplatný.</translation>
-<translation id="5301954838959518834">Ano, chápu</translation>
 <translation id="5302932258331363306">Zobrazit náhrady</translation>
 <translation id="5317780077021120954">Uložit</translation>
 <translation id="5334142896108694079">Mezipaměť skriptů</translation>

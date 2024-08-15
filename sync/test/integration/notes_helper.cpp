@@ -317,9 +317,10 @@ void Remove(int profile, const NoteNode* parent, int index) {
     FindNodeInVerifier(model, parent, &v_parent);
     ASSERT_TRUE(NodesMatch(parent->children()[index].get(),
                            v_parent->children()[index].get()));
-    GetVerifierNotesModel()->Remove(v_parent->children()[index].get());
+    GetVerifierNotesModel()->Remove(v_parent->children()[index].get(),
+                                    FROM_HERE);
   }
-  model->Remove(parent->children()[index].get());
+  model->Remove(parent->children()[index].get(), FROM_HERE);
 }
 
 void RemoveAll(int profile) {
@@ -327,11 +328,12 @@ void RemoveAll(int profile) {
     const NoteNode* root_node = GetVerifierNotesModel()->root_node();
     for (auto& it_root : root_node->children()) {
       for (int j = it_root->children().size() - 1; j >= 0; --j) {
-        GetVerifierNotesModel()->Remove(it_root->children()[j].get());
+        GetVerifierNotesModel()->Remove(it_root->children()[j].get(),
+                                        FROM_HERE);
       }
     }
   }
-  GetNotesModel(profile)->RemoveAllUserNotes();
+  GetNotesModel(profile)->RemoveAllUserNotes(FROM_HERE);
 }
 
 void SortChildren(int profile, const NoteNode* parent) {

@@ -6,6 +6,7 @@
 import collections
 import contextlib
 import errno
+import glob
 import json
 import logging
 import os
@@ -228,6 +229,7 @@ class GitWrapper(SCMWrapper):
             filter_kwargs['predicate'] = self.out_cb
         self.filter = gclient_utils.GitFilter(**filter_kwargs)
         self._running_under_rosetta = None
+        self.current_revision = None
 
     def GetCheckoutRoot(self):
         return scm.GIT.GetCheckoutRoot(self.checkout_path)
@@ -248,6 +250,75 @@ class GitWrapper(SCMWrapper):
                     bool,
                     ['-c', 'core.quotePath=false', 'diff', '--name-only', base])
             )).split()
+
+    def GetSubmoduleStateFromIndex(self):
+        """Returns a map where keys are submodule names and values are commit
+        hashes. It reads data from the Git index, so only committed values are
+        present."""
+        out = self._Capture(['ls-files', '-s'])
+        result = {}
+        for l in out.split('\n'):
+            if not l.startswith('160000'):
+                # Not a submodule
+                continue
+            (_, commit, _, filepath) = l.split(maxsplit=3)
+            result[filepath] = commit
+        return result
+
+    def GetSubmoduleDiff(self):
+        """Returns a map where keys are submodule names and values are tuples of
+        (old_commit_hash, new_commit_hash). old_commit_hash matches the Git
+        index, whereas new_commit_hash matches currently checked out commit
+        hash."""
+        out = self._Capture([
+            'diff',
+            '--no-prefix',
+            '--no-ext-diff',
+            '--no-color',
+            '--ignore-submodules=dirty',
+            '--submodule=short',
+            '-G',
+            'Subproject commit',
+        ])
+        NO_COMMIT = 40 * '0'
+        committed_submodule = None
+        checked_submodule = None
+        filepath = None
+        state = 0
+        diff = {}
+        # Parsing git diff uses simple state machine. States:
+        # 0 - start state
+        # 1 - diff file/line detected, ready to process content
+        # 2 - gitlink detected, ready to process gitlink past and current
+        # content.
+        # 3 - past gitlink content detected. It contains a commit hash that's in
+        # git index.
+        # 4 - new gitlink content detected. It contains currently checked
+        # commit. At this point, we have all information needed, and we can
+        # reset state to 0.
+        for l in out.split('\n'):
+            if l.startswith('diff --git'):
+                # New file detected, reset state.
+                state = 1
+            elif state == 1 and l.startswith('index') and l.endswith('160000'):
+                # We detected gitlink
+                state = 2
+            elif state == 2 and l.startswith('+++ '):
+                # This line contains filename
+                filepath = l[4:]
+                state = 3
+            elif state == 3 and l.startswith('-Subproject commit '):
+                # This line contains what commit hash Git index expects
+                # (ls-files).
+                committed_submodule = l.split(' ')[-1]
+                state = 4
+            elif state == 4 and l.startswith('+Subproject commit '):
+                # This line contains currently checked out commit for this submodule.
+                checked_submodule = l.split(' ')[-1]
+                if NO_COMMIT not in (committed_submodule, checked_submodule):
+                    diff[filepath] = (committed_submodule, checked_submodule)
+                state = 0
+        return diff
 
     def diff(self, options, _args, _file_list):
         _, revision = gclient_utils.SplitUrlRevision(self.url)
@@ -712,11 +783,11 @@ class GitWrapper(SCMWrapper):
                 self._UpdateMirrorIfNotContains(mirror, options, rev_type,
                                                 revision)
             try:
-                self._Clone(revision, url, options)
+                self.current_revision = self._Clone(revision, url, options)
             except subprocess2.CalledProcessError as e:
                 logging.warning('Clone failed due to: %s', e)
                 self._DeleteOrMove(options.force)
-                self._Clone(revision, url, options)
+                self.current_revision = self._Clone(revision, url, options)
             if file_list is not None:
                 files = self._Capture(
                     ['-c', 'core.quotePath=false', 'ls-files']).splitlines()
@@ -739,6 +810,17 @@ class GitWrapper(SCMWrapper):
             self.Print('________ unmanaged solution; skipping %s' %
                        self.relpath)
             return self._Capture(['rev-parse', '--verify', 'HEAD'])
+
+        # Special case for rev_type = hash. If we use submodules, we can check
+        # information already.
+        if rev_type == 'hash':
+            if self.current_revision == revision:
+                if verbose:
+                    self.Print('Using submodule information to skip check')
+                if options.reset or options.force:
+                    self._Scrub('HEAD', options)
+
+                return revision
 
         self._maybe_break_locks(options)
 
@@ -789,15 +871,18 @@ class GitWrapper(SCMWrapper):
                             os.path.join(self.checkout_path, '.git', 'objects',
                                          'info', 'alternates'), 'a') as fh:
                         fh.write("\n" + os.path.join(url, 'objects'))
-            self._EnsureValidHeadObjectOrCheckout(revision, options, url)
+            current_revision = self._EnsureValidHeadObjectOrCheckout(
+                revision, options, url)
             self._FetchAndReset(revision, file_list, options)
 
             return_early = True
         else:
-            self._EnsureValidHeadObjectOrCheckout(revision, options, url)
+            current_revision = self._EnsureValidHeadObjectOrCheckout(
+                revision, options, url)
 
         if return_early:
-            return self._Capture(['rev-parse', '--verify', 'HEAD'])
+            return current_revision or self._Capture(
+                ['rev-parse', '--verify', 'HEAD'])
 
         cur_branch = self._GetCurrentBranch()
 
@@ -877,7 +962,11 @@ class GitWrapper(SCMWrapper):
             if not (options.force or options.reset):
                 self._CheckClean(revision)
             self._CheckDetachedHead(revision, options)
-            if self._Capture(['rev-list', '-n', '1', 'HEAD']) == revision:
+
+            if not current_revision:
+                current_revision = self._Capture(
+                    ['rev-list', '-n', '1', 'HEAD'])
+            if current_revision == revision:
                 self.Print('Up-to-date; skipping checkout.')
             else:
                 # 'git checkout' may need to overwrite existing untracked files.
@@ -1060,10 +1149,12 @@ class GitWrapper(SCMWrapper):
                     self.Print('_____ removing unversioned directory %s' % path)
                     gclient_utils.rmtree(full_path)
 
-        rev_hash = self._Capture(['rev-parse', '--verify', 'HEAD'])
+        if not current_revision:
+            current_revision = self._Capture(['rev-parse', '--verify', 'HEAD'])
         if verbose:
-            self.Print(f'Checked out revision {rev_hash}', timestamp=False)
-        return rev_hash
+            self.Print(f'Checked out revision {current_revision}',
+                       timestamp=False)
+        return current_revision
 
     def revert(self, options, _args, file_list):
         """Reverts local modifications.
@@ -1287,6 +1378,7 @@ class GitWrapper(SCMWrapper):
                 'in this repo, you should use \'git checkout <branch>\' to switch \n'
                 'to an existing branch or use \'git checkout %s -b <branch>\' to\n'
                 'create a new branch for your work.') % (revision, self.remote))
+        return revision
 
     def _AskForData(self, prompt, options):
         if options.jobs > 1:
@@ -1396,7 +1488,7 @@ class GitWrapper(SCMWrapper):
         # on most git operations. Since git cache is used, just deleted the .git
         # folder, and re-create it by cloning.
         try:
-            self._Capture(['rev-list', '-n', '1', 'HEAD'])
+            return self._Capture(['rev-list', '-n', '1', 'HEAD'])
         except subprocess2.CalledProcessError as e:
             if (b'fatal: bad object HEAD' in e.stderr and self.cache_dir
                     and self.cache_dir in url):
@@ -1405,9 +1497,8 @@ class GitWrapper(SCMWrapper):
                      'the current commit points to no longer existing object.\n'
                      '%s' % e))
                 self._DeleteOrMove(options.force)
-                self._Clone(revision, url, options)
-            else:
-                raise
+                return self._Clone(revision, url, options)
+            raise
 
     def _IsRebasing(self):
         # Check for any of REBASE-i/REBASE-m/REBASE/AM. Unfortunately git
@@ -1913,6 +2004,134 @@ class CipdWrapper(SCMWrapper):
     """
 
 
+class GcsRoot(object):
+    """Root to keep track of all GCS objects, per checkout"""
+
+    def __init__(self, root_dir):
+        self._mutator_lock = threading.Lock()
+        self._root_dir = root_dir
+        # Populated when the DEPS file is parsed
+        # The objects here have not yet been downloaded and written into
+        # the .gcs_entries file
+        self._parsed_objects = {}
+        # .gcs_entries keeps track of which GCS deps have already been installed
+        # Maps checkout_name -> {GCS dep path -> [object_name]}
+        # This file is in the same directory as .gclient
+        self._gcs_entries_file = os.path.join(self._root_dir, '.gcs_entries')
+        # Contents of the .gcs_entries file
+        self._gcs_entries = self.read_gcs_entries()
+
+    @property
+    def root_dir(self):
+        return self._root_dir
+
+    def add_object(self, checkout_name, dep_path, object_name):
+        """Records the object in the _parsed_objects variable
+
+        This does not actually download the object"""
+        with self._mutator_lock:
+            if checkout_name not in self._parsed_objects:
+                self._parsed_objects[checkout_name] = {}
+            if dep_path not in self._parsed_objects[checkout_name]:
+                self._parsed_objects[checkout_name][dep_path] = [object_name]
+            else:
+                self._parsed_objects[checkout_name][dep_path].append(
+                    object_name)
+
+    def read_gcs_entries(self):
+        """Reads .gcs_entries file and loads the content into _gcs_entries"""
+        if not os.path.exists(self._gcs_entries_file):
+            return {}
+
+        with open(self._gcs_entries_file, 'r') as f:
+            content = f.read().rstrip()
+            if content:
+                return json.loads(content)
+            return {}
+
+    def resolve_objects(self, checkout_name):
+        """Updates .gcs_entries with objects in _parsed_objects
+
+        This should only be called after the objects have been downloaded
+        and extracted."""
+        with self._mutator_lock:
+            object_dict = self._parsed_objects.get(checkout_name)
+            if not object_dict:
+                return
+            self._gcs_entries[checkout_name] = object_dict
+            with open(self._gcs_entries_file, 'w') as f:
+                f.write(json.dumps(self._gcs_entries, indent=2))
+            self._parsed_objects[checkout_name] = {}
+
+    def clobber_deps_with_updated_objects(self, checkout_name):
+        """Clobber the path if an object or GCS dependency is removed/added
+
+        This must be called before the GCS dependencies are
+        downloaded and extracted."""
+        with self._mutator_lock:
+            parsed_object_dict = self._parsed_objects.get(checkout_name, {})
+            parsed_paths = set(parsed_object_dict.keys())
+
+            resolved_object_dict = self._gcs_entries.get(checkout_name, {})
+            resolved_paths = set(resolved_object_dict.keys())
+
+            # If any GCS deps are added or removed entirely, clobber that path
+            intersected_paths = parsed_paths.intersection(resolved_paths)
+
+            # If any objects within a GCS dep are added/removed, clobber its
+            # extracted contents and relevant gcs dotfiles
+            for path in intersected_paths:
+                resolved_objects = resolved_object_dict[path]
+                parsed_objects = parsed_object_dict[path]
+
+                full_path = os.path.join(self.root_dir, path)
+                if (len(resolved_objects) != len(parsed_objects)
+                        and os.path.exists(full_path)):
+                    self.clobber_tar_content_names(full_path)
+                    self.clobber_hash_files(full_path)
+                    self.clobber_migration_files(full_path)
+
+    def clobber_tar_content_names(self, entry_directory):
+        """Delete paths written in .*_content_names files"""
+        content_names_files = glob.glob(
+            os.path.join(entry_directory, '.*_content_names'))
+        for file in content_names_files:
+            with open(file, 'r') as f:
+                names = json.loads(f.read().strip())
+                for name in names:
+                    name_path = os.path.join(entry_directory, name)
+                    if os.path.isdir(
+                            name_path) or not os.path.exists(name_path):
+                        continue
+                    os.remove(os.path.join(entry_directory, name))
+            os.remove(file)
+
+    def clobber_hash_files(self, entry_directory):
+        files = glob.glob(os.path.join(entry_directory, '.*_hash'))
+        for f in files:
+            os.remove(f)
+
+    def clobber_migration_files(self, entry_directory):
+        files = glob.glob(os.path.join(entry_directory,
+                                       '.*_is_first_class_gcs'))
+        for f in files:
+            os.remove(f)
+
+    def clobber(self):
+        """Remove all dep path gcs items and clear .gcs_entries"""
+        for _, objects_dict in self._gcs_entries.items():
+            for dep_path, _ in objects_dict.items():
+                full_path = os.path.join(self.root_dir, dep_path)
+                self.clobber_tar_content_names(full_path)
+                self.clobber_hash_files(full_path)
+                self.clobber_migration_files(full_path)
+
+        if os.path.exists(self._gcs_entries_file):
+            os.remove(self._gcs_entries_file)
+        with self._mutator_lock:
+            self._gcs_entries = {}
+
+
 class GcsWrapper(SCMWrapper):
     """Wrapper for GCS.
 
@@ -1977,6 +2196,14 @@ class CogWrapper(SCMWrapper):
 
     #override
     def GetActualRemoteURL(self, options):
+        return None
+
+    #override
+    def GetSubmoduleDiff(self):
+        return None
+
+    #override
+    def GetSubmoduleStateFromIndex(self):
         return None
 
     #override

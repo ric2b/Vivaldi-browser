@@ -83,11 +83,11 @@
 <translation id="3914946330804881301">Diimpor dari Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
 <translation id="3943857333388298514">Tempel</translation>
-<translation id="3974783668264968389">Vivaldi tidak dapat membuka kunci penyimpanan kunci aman Anda. Tanpa penyimpanan kunci, Anda akan kehilangan akun masuk tersimpan, kuki aman, dan fitur lain seperti Sinkronisasi, Surat, dan Kalenda akan berhenti bekerja.
-
-    Silakan keluar sekarang, buka kunci, lalu perbaiki penyimpanan kunci Anda, lalu coba lagi. Jika Anda ingin melanjutkan, klik kotak cek, dan tekan tombol "Lanjutkan dengan Kehilangan Data".</translation>
 <translation id="4005270918754737597">Lewati versi ini</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi tidak dapat membuka kunci penyimpanan kunci aman Anda. Tanpa penyimpanan kunci, Anda akan kehilangan akun masuk tersimpan, kuki aman, dan fitur seperti Sinkronisasi, Surat, dan Kalender akan berhenti berjalan.
+
+    Harap keluar sekarang, buka kunci atau perbaiki penyimpanan kunci, lalu coba lagi. Yakin ingin melanjutkan dan kehilangan data?</translation>
 <translation id="4074744496918018786">Buka Gambar di Jendela Penyamaran</translation>
 <translation id="410351446219883937">Putar otomatis</translation>
 <translation id="4281844954008187215">Ketentuan Layanan</translation>
@@ -178,6 +178,7 @@
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Inspeksi dokumen-portal</translation>
+<translation id="875142999698251063">Keluar sekarang</translation>
 <translation id="8768970203213061953">Lanskap 14</translation>
 <translation id="8773635261052182196">Anda tidak akan melihat lagi semua notifikasi ini. Anda dapat menyalakan mereka kembali di pengaturan vivaldi.</translation>
 <translation id="8774017153185436870">Situs mungkin memutar otomatis video</translation>

@@ -245,7 +245,7 @@ TEST_F(SamplingHeapProfilerTest, DISABLED_SequentialLargeSmallStats) {
 
 // Platform TLS: alloc+free[ns]: 22.184  alloc[ns]: 8.910  free[ns]: 13.274
 // thread_local: alloc+free[ns]: 18.353  alloc[ns]: 5.021  free[ns]: 13.331
-// TODO(crbug.com/1117342) Disabled on Mac
+// TODO(crbug.com/40145097) Disabled on Mac
 #if BUILDFLAG(IS_MAC)
 #define MAYBE_MANUAL_SamplerMicroBenchmark DISABLED_MANUAL_SamplerMicroBenchmark
 #else
@@ -314,7 +314,7 @@ TEST_F(SamplingHeapProfilerTest, StartStop) {
   EXPECT_EQ(0, GetRunningSessionsCount());
 }
 
-// TODO(crbug.com/1116543): Test is crashing on Mac.
+// TODO(crbug.com/40711998): Test is crashing on Mac.
 #if BUILDFLAG(IS_MAC)
 #define MAYBE_ConcurrentStartStop DISABLED_ConcurrentStartStop
 #else

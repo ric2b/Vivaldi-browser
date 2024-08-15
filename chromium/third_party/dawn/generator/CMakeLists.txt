@@ -25,14 +25,11 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-find_package(PythonInterp REQUIRED)
-message(STATUS "Dawn: using python at ${PYTHON_EXECUTABLE}")
-
 # Check for Jinja2
 if (NOT DAWN_JINJA2_DIR)
     message(STATUS "Dawn: Using system jinja2")
     execute_process(
-        COMMAND ${PYTHON_EXECUTABLE} -c "import jinja2"
+        COMMAND ${Python3_EXECUTABLE} -c "import jinja2"
         RESULT_VARIABLE RET
     )
     if (NOT RET EQUAL 0)
@@ -55,7 +52,7 @@ function(DawnGenerator)
 
     # Build the set of args common to all invocation of that generator.
     set(BASE_ARGS
-        ${PYTHON_EXECUTABLE}
+        ${Python3_EXECUTABLE}
         ${G_SCRIPT}
         --template-dir
         "${DAWN_TEMPLATE_DIR}"
@@ -83,9 +80,7 @@ function(DawnGenerator)
     endif()
 
     # Ask CMake to re-run if any of the dependencies changed as it might modify the build graph.
-    if(${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.12.0")
-        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${DEPENDENCIES})
-    endif()
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${DEPENDENCIES})
 
     # Call the generator to get the list of its outputs.
     execute_process(
@@ -105,10 +100,28 @@ function(DawnGenerator)
         COMMENT "Dawn: Generating files for ${G_PRINT_NAME}."
     )
 
-    set_source_files_properties(${OUTPUTS} PROPERTIES GENERATED TRUE)
-
     # Return the list of outputs.
     set(${G_RESULT_VARIABLE} ${OUTPUTS} PARENT_SCOPE)
+
+    # Prior to CMake 3.20 the GENERATED property is local to a directory which means that putting
+    # generated headers in INTERFACE properties causes dependent targets to complain that they
+    # cannot find the file. (because they don't see it as generated and want to check is is
+    # actually on the filesystem).
+    # Work around this by generating the files once if they aren't present at configuration time.
+    set(needToGenerate OFF)
+    foreach(path ${OUTPUTS})
+        if (NOT EXISTS ${path})
+            set(needToGenerate ON)
+        endif()
+    endforeach()
+
+    if (${needToGenerate})
+        message(STATUS "Dawn: Generating initial versions of files for ${G_PRINT_NAME}.")
+        execute_process(COMMAND ${BASE_ARGS} RESULT_VARIABLE RET)
+        if (NOT RET EQUAL 0)
+            message(FATAL_ERROR "Dawn: Failed to generate the initial version of files for ${G_PRINT_NAME}. Base args are '${BASE_ARGS}'.")
+        endif()
+    endif()
 endfunction()
 
 # Helper function to call dawn_generator.py:

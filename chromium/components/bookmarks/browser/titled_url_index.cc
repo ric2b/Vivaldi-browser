@@ -219,7 +219,7 @@ std::optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
                                                  &ancestor_words);
   }
 
-#if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
+#if defined(VIVALDI_BUILD)
   query_parser::QueryWordVector description_words, nickname_words;
   const std::u16string lower_description =
       base::i18n::ToLower(Normalize(node->GetTitledUrlNodeDescription()));
@@ -250,15 +250,16 @@ std::optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
         query_node->HasMatchIn(description_words, &description_matches);
     const bool has_nickname_matches =
         query_node->HasMatchIn(nickname_words, &nickname_matches);
-    if (!has_title_matches && !has_url_matches && !has_ancestor_matches
-        && !has_description_matches && !has_nickname_matches)
+    if (!has_title_matches && !has_url_matches && !has_ancestor_matches &&
+        !has_description_matches && !has_nickname_matches)
       return std::nullopt;
 #endif
 
     query_parser::QueryParser::SortAndCoalesceMatchPositions(&title_matches);
     query_parser::QueryParser::SortAndCoalesceMatchPositions(&url_matches);
 #if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
-    query_parser::QueryParser::SortAndCoalesceMatchPositions(&description_matches);
+    query_parser::QueryParser::SortAndCoalesceMatchPositions(
+        &description_matches);
     query_parser::QueryParser::SortAndCoalesceMatchPositions(&nickname_matches);
 #endif
   }
@@ -448,10 +449,9 @@ std::vector<std::u16string> TitledUrlIndex::ExtractIndexTerms(
     terms.push_back(term);
   }
 
-#if defined(VIVALDI_BUILD) && BUILDFLAG(IS_ANDROID)
+#if defined(VIVALDI_BUILD)
   for (const std::u16string& term :
-       ExtractQueryWords(
-           Normalize(node->GetTitledUrlNodeDescription()))) {
+       ExtractQueryWords(Normalize(node->GetTitledUrlNodeDescription()))) {
     terms.push_back(term);
   }
   for (const std::u16string& term :

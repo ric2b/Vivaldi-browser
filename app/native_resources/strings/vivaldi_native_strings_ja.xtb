@@ -83,11 +83,11 @@
 <translation id="3914946330804881301">Opera からインポートしたもの</translation>
 <translation id="3921292902397893431">怪獣８</translation>
 <translation id="3943857333388298514">貼り付け</translation>
-<translation id="3974783668264968389">Vivaldi はキーストアのロックを解除できませんでした。キーストアがない場合、保存したログインや安全な Cookie が失われ、同期、メール、カレンダーなどの一部の機能が動作しなくなります。
-
-    今すぐ終了し、キーストアのロックを解除するか修復してから、もう一度やり直してください。本当に続行する場合は、チェックボックスをクリックし、「Continue with Data Loss」ボタンを押してください。</translation>
 <translation id="4005270918754737597">このバージョンをスキップする</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi がセキュアキーストアのロックを解除できませんでした。キーストアがないと、保存したログインやセキュアな Cookie が失われ、同期、メール、カレンダーなどの一部の機能が動作しなくなります。
+
+今すぐ終了し、キーストアのロックを解除するか修復してから、もう一度お試しください。構わず続けますか？</translation>
 <translation id="4074744496918018786">プライベートウィンドウで画像を開く</translation>
 <translation id="410351446219883937">自動再生</translation>
 <translation id="4281844954008187215">利用規約</translation>
@@ -178,6 +178,7 @@
 <translation id="8669345741879513971">怪獣１０</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">ポータルドキュメントを検証する</translation>
+<translation id="875142999698251063">今すぐ終了する</translation>
 <translation id="8768970203213061953">風景１４</translation>
 <translation id="8773635261052182196">更新の通知は今後表示されません。再度表示させたい場合は、Vivaldi の設定から行ってください。</translation>
 <translation id="8774017153185436870">サイトが自動で動画を再生する可能性があります</translation>

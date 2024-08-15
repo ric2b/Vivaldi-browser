@@ -51,6 +51,50 @@ found in the LICENSE file.
             android:title="@string/create_new_folder"
             app:showAsAction="ifRoom"
             app:iconTint="@color/default_icon_color_secondary_tint_list" />
+        <!-- Vivaldi -->
+        <item
+            android:id="@+id/sort_bookmarks_id"
+            android:title="@string/panel_sort"
+            android:icon="@drawable/vivaldi_sort_button_24dp"
+            app:showAsAction="always"
+            app:iconTint="@color/default_icon_color_secondary_tint_list"
+            >
+            <menu>
+                <group
+                    android:checkableBehavior="single">
+                    <item
+                        android:id="@+id/sort_manual_id"
+                        android:checked="false"
+                        android:title="@string/sort_manual"/>
+                    <item
+                        android:id="@+id/sort_by_title_id"
+                        android:checked="false"
+                        android:title="@string/sort_by_title"/>
+                    <item
+                        android:id="@+id/sort_by_address_id"
+                        android:checked="false"
+                        android:title="@string/sort_by_address" />
+                    <item
+                        android:id="@+id/sort_by_nickname_id"
+                        android:checked="false"
+                        android:title="@string/sort_by_nickname"/>
+                    <item
+                        android:id="@+id/sort_by_description_id"
+                        android:checked="false"
+                        android:title="@string/sort_by_description" />
+                    <item
+                        android:id="@+id/sort_by_date_id"
+                        android:checked="false"
+                        android:title="@string/sort_by_date"/>
+                </group>
+            </menu>
+        </item>
+        <item
+            android:id="@+id/add_page_to_reading_list_menu_id"
+            android:title="@string/add_page_to_reading_list"
+            android:visible="false"
+            app:showAsAction="ifRoom" />
+        <!-- Vivaldi -->
         <item
             android:id="@+id/close_menu_id"
             android:icon="@drawable/material_ic_close_24dp"
@@ -63,19 +107,19 @@ found in the LICENSE file.
         android:visible="false" >
         <item
             android:id="@+id/selection_mode_edit_menu_id"
-            android:icon="@drawable/material_ic_edit_24dp"
+            android:icon="@drawable/bookmark_edit_active"
             android:title="@string/edit_bookmark"
             app:showAsAction="ifRoom"
             app:iconTint="@color/default_icon_color_secondary_tint_list" />
         <item
             android:id="@+id/selection_mode_move_menu_id"
-            android:icon="@drawable/material_ic_drive_file_move_24dp"
+            android:icon="@drawable/bookmark_move_active"
             android:title="@string/bookmark_toolbar_move"
             app:showAsAction="ifRoom"
             app:iconTint="@color/default_icon_color_secondary_tint_list" />
         <item
             android:id="@+id/selection_mode_delete_menu_id"
-            android:icon="@drawable/material_ic_delete_24dp"
+            android:icon="@drawable/vivaldi_mobile_trash_24dp"
             android:title="@string/bookmark_toolbar_delete"
             app:showAsAction="ifRoom"
             app:iconTint="@color/default_icon_color_secondary_tint_list" />

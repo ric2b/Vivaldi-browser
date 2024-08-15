@@ -20,10 +20,8 @@
 
 #include "config_components.h"
 
-#include "float.h"
-
+#include "libavutil/mem.h"
 #include "libavutil/pixdesc.h"
-#include "libavutil/eval.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/opt.h"
 #include "libavutil/timestamp.h"

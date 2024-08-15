@@ -14,7 +14,7 @@ namespace adblock_filter {
 
 TEST(AdBlockRuleParserTest, NothingParsed) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
 
   EXPECT_EQ(AdBlockMetadata(), parse_result.metadata);
 
@@ -23,7 +23,7 @@ TEST(AdBlockRuleParserTest, NothingParsed) {
 
 TEST(AdBlockRuleParserTest, ParseMetadata) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
 
   EXPECT_EQ(RuleParser::kMetadata,
             rule_parser.Parse("! Homepage: https://vivaldi.com"));
@@ -48,7 +48,7 @@ TEST(AdBlockRuleParserTest, ParseMetadata) {
 
 TEST(AdBlockRuleParserTest, SimpleRules) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
 
   std::vector<RequestFilterRule> expected_rules;
 
@@ -128,9 +128,56 @@ TEST(AdBlockRuleParserTest, SimpleRules) {
   }
 }
 
+TEST(AdBlockRuleParserTest, HostsFile) {
+  ParseResult parse_result;
+  RuleParser rule_parser(&parse_result, {});
+
+  std::vector<RequestFilterRule> expected_rules;
+
+  EXPECT_EQ(RuleParser::kRequestFilterRule, rule_parser.Parse("127.0.0.1 localhost localhost.mydomain google.com microsoft.com"));
+  expected_rules.emplace_back();
+  expected_rules.back().pattern = "google.com^";
+  expected_rules.back().anchor_type = RequestFilterRule::kAnchorHost;
+  expected_rules.back().resource_types.set();
+  expected_rules.back().party.set();
+
+  expected_rules.emplace_back();
+  expected_rules.back().pattern = "microsoft.com^";
+  expected_rules.back().anchor_type = RequestFilterRule::kAnchorHost;
+  expected_rules.back().resource_types.set();
+  expected_rules.back().party.set();
+}
+
+TEST(AdBlockRuleParserTest, NakedHostnameIsPureHost) {
+  ParseResult parse_result;
+  RuleParser rule_parser(&parse_result, {});
+
+  std::vector<RequestFilterRule> expected_rules;
+
+  EXPECT_EQ(RuleParser::kRequestFilterRule, rule_parser.Parse("google.com"));
+  expected_rules.emplace_back();
+  expected_rules.back().pattern = "google.com^";
+  expected_rules.back().anchor_type = RequestFilterRule::kAnchorHost;
+  expected_rules.back().resource_types.set();
+  expected_rules.back().party.set();
+}
+
+TEST(AdBlockRuleParserTest, NakedHostnameIsPureHostDisabled) {
+  ParseResult parse_result;
+  RuleParser rule_parser(&parse_result, {.naked_hostname_is_pure_host = false});
+
+  std::vector<RequestFilterRule> expected_rules;
+
+  EXPECT_EQ(RuleParser::kRequestFilterRule, rule_parser.Parse("google.com"));
+  expected_rules.emplace_back();
+  expected_rules.back().pattern = "google.com";
+  expected_rules.back().resource_types.set();
+  expected_rules.back().party.set();
+}
+
 TEST(AdBlockRuleParserTest, RegexRule) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
 
   std::vector<RequestFilterRule> expected_rules;
 
@@ -180,7 +227,7 @@ TEST(AdBlockRuleParserTest, RegexRule) {
 
 TEST(AdBlockRuleParserTest, BasicAnchors) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
 
   std::vector<RequestFilterRule> expected_rules;
 
@@ -234,7 +281,7 @@ TEST(AdBlockRuleParserTest, BasicAnchors) {
 
 TEST(AdBlockRuleParserTest, HostAnchors) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
 
   std::vector<RequestFilterRule> expected_rules;
 
@@ -323,7 +370,7 @@ TEST(AdBlockRuleParserTest, HostAnchors) {
 
 TEST(AdBlockRuleParserTest, ResourceTypes) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
 
   std::vector<RequestFilterRule> expected_rules;
 
@@ -392,7 +439,7 @@ TEST(AdBlockRuleParserTest, ResourceTypes) {
 
 TEST(AdBlockRuleParserTest, CaseSensitive) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
 
   std::vector<RequestFilterRule> expected_rules;
 
@@ -422,7 +469,7 @@ TEST(AdBlockRuleParserTest, CaseSensitive) {
 
 TEST(AdBlockRuleParserTest, Domains) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
 
   std::vector<RequestFilterRule> expected_rules;
 
@@ -492,7 +539,7 @@ TEST(AdBlockRuleParserTest, Domains) {
 
 TEST(AdBlockRuleParserTest, Parties) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
 
   std::vector<RequestFilterRule> expected_rules;
 
@@ -535,7 +582,7 @@ TEST(AdBlockRuleParserTest, Parties) {
 
 TEST(AdBlockRuleParserTest, Host) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
 
   std::vector<RequestFilterRule> expected_rules;
 
@@ -566,7 +613,7 @@ TEST(AdBlockRuleParserTest, Host) {
 
 TEST(AdBlockRuleParserTest, CSP) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
 
   std::vector<RequestFilterRule> expected_rules;
 
@@ -621,7 +668,7 @@ TEST(AdBlockRuleParserTest, CSP) {
 
 TEST(AdBlockRuleParserTest, Rewrite) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
 
   std::vector<RequestFilterRule> expected_rules;
 
@@ -674,7 +721,7 @@ TEST(AdBlockRuleParserTest, Rewrite) {
 
 TEST(AdBlockRuleParserTest, Redirect) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
 
   std::vector<RequestFilterRule> expected_rules;
 
@@ -722,7 +769,7 @@ TEST(AdBlockRuleParserTest, Redirect) {
 
 TEST(AdBlockRuleParserTest, AllowRuleAndActivation) {
   ParseResult parse_result;
-  RuleParser rule_parser(&parse_result, false);
+  RuleParser rule_parser(&parse_result, {});
 
   std::vector<RequestFilterRule> expected_rules;
 

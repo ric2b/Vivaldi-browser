@@ -230,6 +230,10 @@
 [submodule "third_party/material_color_utilities/src"]
 	path = third_party/material_color_utilities/src
 	url = ../../external/github.com/material-foundation/material-color-utilities.git
+[submodule "third_party/microsoft_dxheaders/src"]
+	path = third_party/microsoft_dxheaders/src
+	url = ../../external/github.com/microsoft/DirectX-Headers.git
+	gclient-condition = checkout_win
 [submodule "third_party/nasm"]
 	path = third_party/nasm
 	url = ../deps/nasm.git
@@ -252,6 +256,9 @@
 [submodule "third_party/perfetto"]
 	path = third_party/perfetto
 	url = ../../android/platform/external/perfetto.git
+[submodule "third_party/protobuf-javascript/src"]
+	path = third_party/protobuf-javascript/src
+	url = ../../external/github.com/protocolbuffers/protobuf-javascript.git
 [submodule "third_party/pthreadpool/src"]
 	path = third_party/pthreadpool/src
 	url = ../../external/github.com/Maratyszcza/pthreadpool.git

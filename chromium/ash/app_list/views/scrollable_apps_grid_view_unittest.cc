@@ -4,6 +4,7 @@
 
 #include "ash/app_list/views/scrollable_apps_grid_view.h"
 
+#include <cstddef>
 #include <limits>
 #include <list>
 #include <memory>
@@ -25,6 +26,7 @@
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
+#include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/test/test_shelf_item_delegate.h"
@@ -1204,5 +1206,95 @@ TEST_P(ScrollableAppsGridViewWithNudgeTest, VerifyVisibleRangeByDefault) {
 INSTANTIATE_TEST_SUITE_P(All,
                          ScrollableAppsGridViewWithNudgeTest,
                          testing::Bool());
+
+TEST_P(ScrollableAppsGridViewTest, RecordMetricsForAppLaunchByEntity) {
+  base::HistogramTester histograms;
+  GetAppListTestHelper()->AddAppListItemsWithCollection(
+      AppCollection::kEntertainment, 1);
+  AddAppListItem("id1");
+  ShowAppList();
+
+  histograms.ExpectUniqueSample(
+      "Apps.AppListBubble.AppsPage.AppLaunchesByEntity", AppEntity::kDefaultApp,
+      0);
+  histograms.ExpectUniqueSample(
+      "Apps.AppListBubble.AppsPage.AppLaunchesByEntity",
+      AppEntity::kThirdPartyApp, 0);
+
+  LeftClickOn(apps_grid_view_->GetItemViewAt(0));
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsPage.AppLaunchesByEntity", AppEntity::kDefaultApp,
+      1);
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsPage.AppLaunchesByEntity",
+      AppEntity::kThirdPartyApp, 0);
+
+  LeftClickOn(apps_grid_view_->GetItemViewAt(1));
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsPage.AppLaunchesByEntity", AppEntity::kDefaultApp,
+      1);
+  histograms.ExpectBucketCount(
+      "Apps.AppListBubble.AppsPage.AppLaunchesByEntity",
+      AppEntity::kThirdPartyApp, 1);
+}
+
+// Verifies that apps visibility is correctly calculated.
+TEST_P(ScrollableAppsGridViewTest, AppsVisibility) {
+  // Create enough apps so that the launcher can be scrolled.
+  PopulateApps(50);
+  ShowAppList();
+
+  ASSERT_NE(scroll_view_->GetVisibleBounds(),
+            scroll_view_->contents()->GetLocalBounds());
+
+  EXPECT_EQ(0, GetTestAppListClient()->activate_item_above_the_fold());
+  EXPECT_EQ(0, GetTestAppListClient()->activate_item_below_the_fold());
+
+  AppListItemView* above_the_fold_item = apps_grid_view_->GetItemViewAt(0);
+  GetEventGenerator()->MoveMouseTo(
+      above_the_fold_item->GetBoundsInScreen().CenterPoint());
+  GetEventGenerator()->ClickLeftButton();
+
+  EXPECT_TRUE(apps_grid_view_->IsAboveTheFold(above_the_fold_item));
+  EXPECT_EQ(1, GetTestAppListClient()->activate_item_above_the_fold());
+  EXPECT_EQ(0, GetTestAppListClient()->activate_item_below_the_fold());
+
+  AppListItemView* below_the_fold_item = apps_grid_view_->GetItemViewAt(49);
+
+  // Scroll the apps page to the end.
+  scroll_view_->ScrollToPosition(scroll_view_->vertical_scroll_bar(), INT_MAX);
+  GetEventGenerator()->MoveMouseTo(
+      below_the_fold_item->GetBoundsInScreen().CenterPoint());
+  GetEventGenerator()->ClickLeftButton();
+
+  EXPECT_FALSE(apps_grid_view_->IsAboveTheFold(below_the_fold_item));
+  EXPECT_EQ(1, GetTestAppListClient()->activate_item_above_the_fold());
+  EXPECT_EQ(1, GetTestAppListClient()->activate_item_below_the_fold());
+}
+
+// Verifies that apps visibility is correctly calculated.
+TEST_P(ScrollableAppsGridViewTest, AppsVisibilityOnShow) {
+  // Create enough apps so that the launcher can be scrolled.
+  PopulateApps(50);
+  ShowAppList();
+
+  ASSERT_NE(scroll_view_->GetVisibleBounds(),
+            scroll_view_->contents()->GetLocalBounds());
+
+  int apps_above = 0;
+  int apps_below = 0;
+
+  for (size_t index = 0; index < 50; index++) {
+    if (apps_grid_view_->IsAboveTheFold(
+            apps_grid_view_->GetItemViewAt(index))) {
+      ++apps_above;
+    } else {
+      ++apps_below;
+    }
+  }
+
+  EXPECT_EQ(apps_above, GetTestAppListClient()->items_above_the_fold_count());
+  EXPECT_EQ(apps_below, GetTestAppListClient()->items_below_the_fold_count());
+}
 
 }  // namespace ash

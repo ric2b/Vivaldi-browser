@@ -1,5 +1,6 @@
 # accessibility
 evliu@google.com
+mschillaci@google.com
 # account_manager
 sinhak@chromium.org
 # android
@@ -21,7 +22,6 @@ batoon@google.com
 youkichihosoi@chromium.org
 lingyufeng@chromium.org
 # ash_clipboard
-ckincaid@chromium.org
 dmblack@google.com
 # ash_user_education
 angusmclean@google.com
@@ -35,6 +35,7 @@ michelefan@chromium.org
 # assistant
 xiaohuic@chromium.org
 # autofill
+fleimgruber@google.com
 jihadghanna@google.com
 jkeitel@google.com
 jsaul@google.com
@@ -91,6 +92,7 @@ jorgelo@chromium.org
 julietlevesque@google.com
 khorimoto@chromium.org
 nikhilcn@google.com
+tjohnsonkanu@google.com
 tsergeant@chromium.org
 zentaro@chromium.org
 # chromeos_settings
@@ -178,6 +180,8 @@ shaktisahu@chromium.org
 dfried@chromium.org
 # file
 nigeltao@chromium.org
+# fingerprinting_protection
+thesalsa@google.com
 # gcm
 peter@chromium.org
 # geolocation
@@ -192,7 +196,6 @@ mcrouse@chromium.org
 tbansal@chromium.org
 sophiechang@chromium.org
 # holding_space
-ckincaid@chromium.org
 dmblack@google.com
 # image
 schenney@chromium.org
@@ -217,6 +220,8 @@ tby@chromium.org
 # login
 jorgelo@chromium.org
 alemate@chromium.org
+# mac
+bur@google.com
 # media
 evliu@google.com
 kron@chromium.org
@@ -256,6 +261,7 @@ khorimoto@chromium.org
 matthewmwang@chromium.org
 nidhijaju@chromium.org
 nikhilcn@google.com
+tjohnsonkanu@google.com
 toyoshim@chromium.org
 # new_tab_page
 dewittj@chromium.org
@@ -268,6 +274,7 @@ curranmax@chromium.org
 tbansal@chromium.org
 # omnibox
 ender@google.com
+jdonnelly@chromium.org
 manukh@chromium.org
 toyoshim@chromium.org
 # oobe
@@ -319,7 +326,6 @@ hansberry@chromium.org
 julietlevesque@google.com
 # platform
 iby@chromium.org
-mutexlox@chromium.org
 xuhong@chromium.org
 hcyang@google.com
 # plugin_vm
@@ -380,6 +386,7 @@ altimin@chromium.org
 spvw@chromium.org
 # search
 ender@google.com
+gangwu@chromium.org
 # security
 cthomp@chromium.org
 dullweber@chromium.org
@@ -402,6 +409,8 @@ khorimoto@chromium.org
 ellyjones@chromium.org
 jeffreycohen@chromium.org
 knollr@chromium.org
+# shortcuts
+dmurph@chromium.org
 # signin
 alexilin@chromium.org
 # simple
@@ -426,6 +435,7 @@ ckitagawa@chromium.org
 joenotcharles@google.com
 olivierli@chromium.org
 dfried@chromium.org
+dljames@chromium.org
 # translate
 perrier@chromium.org
 curranmax@chromium.org
@@ -433,6 +443,8 @@ tbansal@chromium.org
 toyoshim@chromium.org
 # update_engine
 poromov@chromium.org
+# user_education
+dfried@chromium.org
 # v8
 mlippautz@chromium.org
 # web_apk

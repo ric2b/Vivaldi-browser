@@ -46,6 +46,7 @@ class AvatarToolbarButton : public ToolbarButton {
     // Helper functions for testing.
     virtual void OnShowNameClearedForTesting() {}
     virtual void OnShowManagementTransientTextClearedForTesting() {}
+    virtual void OnShowSigninPausedDelayEnded() {}
 
     ~Observer() override = default;
   };
@@ -56,7 +57,6 @@ class AvatarToolbarButton : public ToolbarButton {
   ~AvatarToolbarButton() override;
 
   void UpdateText();
-  void UpdateIconWithoutObservers();
 
   // Expands the pill to show the intercept text.
   // Returns a callback to be used when the shown text should be hidden.
@@ -81,6 +81,9 @@ class AvatarToolbarButton : public ToolbarButton {
   // Attempts showing the In-Produce-Help for profile Switching.
   void MaybeShowProfileSwitchIPH();
 
+  // Attempts showing the In-Produce-Help for web sign out.
+  void MaybeShowWebSignoutIPH(const std::string& gaia_id);
+
   // Returns true if a text is set and is visible.
   bool IsLabelPresentAndVisible() const;
 
@@ -96,6 +99,7 @@ class AvatarToolbarButton : public ToolbarButton {
   std::optional<SkColor> GetHighlightBorderColor() const override;
   bool ShouldPaintBorder() const override;
   bool ShouldBlendHighlightColor() const override;
+  void AddedToWidget() override;
 
   void ButtonPressed(bool is_source_accelerator = false);
 
@@ -112,6 +116,7 @@ class AvatarToolbarButton : public ToolbarButton {
   // Used by the delegate when showing text timed events ended - for testing.
   void NotifyShowNameClearedForTesting() const;
   void NotifyManagementTransientTextClearedForTesting() const;
+  void NotifyShowSigninPausedDelayEnded() const;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(AvatarToolbarButtonTest,

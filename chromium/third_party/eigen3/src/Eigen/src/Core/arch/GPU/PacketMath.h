@@ -74,9 +74,7 @@ struct packet_traits<float> : default_packet_traits {
     HasGammaSampleDerAlpha = 1,
     HasIGammac = 1,
     HasBetaInc = 1,
-
-    HasBlend = 0,
-    HasFloor = 1,
+    HasBlend = 0
   };
 };
 
@@ -107,9 +105,7 @@ struct packet_traits<double> : default_packet_traits {
     HasGammaSampleDerAlpha = 1,
     HasIGammac = 1,
     HasBetaInc = 1,
-
     HasBlend = 0,
-    HasFloor = 1,
   };
 };
 
@@ -517,6 +513,33 @@ EIGEN_DEVICE_FUNC inline float4 pfloor<float4>(const float4& a) {
 template <>
 EIGEN_DEVICE_FUNC inline double2 pfloor<double2>(const double2& a) {
   return make_double2(floor(a.x), floor(a.y));
+}
+
+template <>
+EIGEN_DEVICE_FUNC inline float4 pceil<float4>(const float4& a) {
+  return make_float4(ceilf(a.x), ceilf(a.y), ceilf(a.z), ceilf(a.w));
+}
+template <>
+EIGEN_DEVICE_FUNC inline double2 pceil<double2>(const double2& a) {
+  return make_double2(ceil(a.x), ceil(a.y));
+}
+
+template <>
+EIGEN_DEVICE_FUNC inline float4 print<float4>(const float4& a) {
+  return make_float4(rintf(a.x), rintf(a.y), rintf(a.z), rintf(a.w));
+}
+template <>
+EIGEN_DEVICE_FUNC inline double2 print<double2>(const double2& a) {
+  return make_double2(rint(a.x), rint(a.y));
+}
+
+template <>
+EIGEN_DEVICE_FUNC inline float4 ptrunc<float4>(const float4& a) {
+  return make_float4(truncf(a.x), truncf(a.y), truncf(a.z), truncf(a.w));
+}
+template <>
+EIGEN_DEVICE_FUNC inline double2 ptrunc<double2>(const double2& a) {
+  return make_double2(trunc(a.x), trunc(a.y));
 }
 
 EIGEN_DEVICE_FUNC inline void ptranspose(PacketBlock<float4, 4>& kernel) {

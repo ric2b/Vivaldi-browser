@@ -32,7 +32,9 @@
 
 #include <memory>
 
+#include "base/check_is_test.h"
 #include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_id_helper.h"
 #include "base/trace_event/typed_macros.h"
@@ -79,6 +81,7 @@ DedicatedWorkerGlobalScope* DedicatedWorkerGlobalScope::Create(
         dedicated_worker_host,
     mojo::PendingRemote<mojom::blink::BackForwardCacheControllerHost>
         back_forward_cache_controller_host) {
+  TRACE_EVENT("blink.worker", "DedicatedWorkerGlobalScope::Create");
   std::unique_ptr<Vector<mojom::blink::OriginTrialFeature>>
       inherited_trial_features =
           std::move(creation_params->inherited_trial_features);
@@ -92,6 +95,15 @@ DedicatedWorkerGlobalScope* DedicatedWorkerGlobalScope::Create(
       creation_params->parent_cross_origin_isolated_capability;
   const bool parent_is_isolated_context =
       creation_params->parent_is_isolated_context;
+  base::TimeTicks start_time;
+  if (creation_params->dedicated_worker_start_time.has_value()) {
+    start_time = *creation_params->dedicated_worker_start_time;
+  } else {
+    CHECK_IS_TEST();
+    // Set a fake value for tests so that the value can be read in
+    // `DedicatedWorkerGlobalScope::WorkerScriptFetchFinished()`.
+    start_time = base::TimeTicks::Now();
+  }
 
   Vector<network::mojom::blink::ContentSecurityPolicyPtr> response_csp =
       std::move(creation_params->response_content_security_policies);
@@ -100,7 +112,7 @@ DedicatedWorkerGlobalScope* DedicatedWorkerGlobalScope::Create(
       thread, time_origin, std::move(inherited_trial_features),
       begin_frame_provider_params, parent_cross_origin_isolated_capability,
       parent_is_isolated_context, std::move(dedicated_worker_host),
-      std::move(back_forward_cache_controller_host));
+      std::move(back_forward_cache_controller_host), start_time);
 
   if (global_scope->IsOffMainThreadScriptFetchDisabled()) {
     // Legacy on-the-main-thread worker script fetch (to be removed):
@@ -147,7 +159,8 @@ DedicatedWorkerGlobalScope::DedicatedWorkerGlobalScope(
     mojo::PendingRemote<mojom::blink::DedicatedWorkerHost>
         dedicated_worker_host,
     mojo::PendingRemote<mojom::blink::BackForwardCacheControllerHost>
-        back_forward_cache_controller_host)
+        back_forward_cache_controller_host,
+    base::TimeTicks dedicated_worker_start_time)
     : DedicatedWorkerGlobalScope(
           ParseCreationParams(std::move(creation_params)),
           thread,
@@ -157,7 +170,8 @@ DedicatedWorkerGlobalScope::DedicatedWorkerGlobalScope(
           parent_cross_origin_isolated_capability,
           parent_is_isolated_context,
           std::move(dedicated_worker_host),
-          std::move(back_forward_cache_controller_host)) {}
+          std::move(back_forward_cache_controller_host),
+          dedicated_worker_start_time) {}
 
 DedicatedWorkerGlobalScope::DedicatedWorkerGlobalScope(
     ParsedCreationParams parsed_creation_params,
@@ -171,7 +185,8 @@ DedicatedWorkerGlobalScope::DedicatedWorkerGlobalScope(
     mojo::PendingRemote<mojom::blink::DedicatedWorkerHost>
         dedicated_worker_host,
     mojo::PendingRemote<mojom::blink::BackForwardCacheControllerHost>
-        back_forward_cache_controller_host)
+        back_forward_cache_controller_host,
+    base::TimeTicks dedicated_worker_start_time)
     : WorkerGlobalScope(std::move(parsed_creation_params.creation_params),
                         thread,
                         time_origin,
@@ -184,7 +199,8 @@ DedicatedWorkerGlobalScope::DedicatedWorkerGlobalScope(
           MakeGarbageCollected<WorkerAnimationFrameProvider>(
               this,
               begin_frame_provider_params)),
-      has_storage_access_(parsed_creation_params.parent_has_storage_access) {
+      has_storage_access_(parsed_creation_params.parent_has_storage_access),
+      dedicated_worker_start_time_(dedicated_worker_start_time) {
   // https://html.spec.whatwg.org/C/#run-a-worker
   // Step 14.10 "If shared is false and owner's cross-origin isolated
   // capability is false, then set worker global scope's cross-origin isolated
@@ -231,6 +247,8 @@ void DedicatedWorkerGlobalScope::Initialize(
     network::mojom::ReferrerPolicy response_referrer_policy,
     Vector<network::mojom::blink::ContentSecurityPolicyPtr> response_csp,
     const Vector<String>* /* response_origin_trial_tokens */) {
+  TRACE_EVENT("blink.worker", "DedicatedWorkerGlobalScope::Initialize",
+              "response_url", response_url);
   // Step 14.3. "Set worker global scope's url to response's url."
   InitializeURL(response_url);
 
@@ -284,6 +302,12 @@ void DedicatedWorkerGlobalScope::FetchAndRunClassicScript(
     const v8_inspector::V8StackTraceId& stack_id) {
   DCHECK(base::FeatureList::IsEnabled(features::kPlzDedicatedWorker));
   DCHECK(!IsContextPaused());
+  TRACE_EVENT("blink.worker",
+              "DedicatedWorkerGlobalScope::FetchAndRunClassicScript",
+              "script_url", script_url);
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
+      "blink.worker", "DedicatedWorkerGlobalScope Fetch", TRACE_ID_LOCAL(this));
+  fetch_classic_script_start_time_ = base::TimeTicks::Now();
 
   // TODO(crbug.com/1177199): SetPolicyContainer once we passed down policy
   // container from DedicatedWorkerHost
@@ -327,6 +351,9 @@ void DedicatedWorkerGlobalScope::FetchAndRunModuleScript(
     WorkerResourceTimingNotifier& outside_resource_timing_notifier,
     network::mojom::CredentialsMode credentials_mode,
     RejectCoepUnsafeNone reject_coep_unsafe_none) {
+  TRACE_EVENT("blink.worker",
+              "DedicatedWorkerGlobalScope::FetchAndRunModuleScript",
+              "module_url_record", module_url_record);
   // TODO(crbug.com/1177199): SetPolicyContainer once we passed down policy
   // container from DedicatedWorkerHost
 
@@ -383,6 +410,7 @@ void DedicatedWorkerGlobalScope::postMessage(ScriptState* script_state,
                                              const ScriptValue& message,
                                              const PostMessageOptions* options,
                                              ExceptionState& exception_state) {
+  TRACE_EVENT("blink.worker", "DedicatedWorkerGlobalScope::postMessage");
   Transferables transferables;
   scoped_refptr<SerializedScriptValue> serialized_message =
       PostMessageHelper::SerializeMessageByMove(script_state->GetIsolate(),
@@ -432,6 +460,13 @@ void DedicatedWorkerGlobalScope::DidFetchClassicScript(
     const v8_inspector::V8StackTraceId& stack_id) {
   DCHECK(IsContextThread());
   DCHECK(base::FeatureList::IsEnabled(features::kPlzDedicatedWorker));
+  TRACE_EVENT("blink.worker",
+              "DedicatedWorkerGlobalScope::DidFetchClassicScript");
+  TRACE_EVENT_NESTABLE_ASYNC_END0(
+      "blink.worker", "DedicatedWorkerGlobalScope Fetch", TRACE_ID_LOCAL(this));
+  base::UmaHistogramTimes(
+      "Worker.TopLevelScript.FetchClassicScriptTime",
+      base::TimeTicks::Now() - fetch_classic_script_start_time_);
 
   // Step 12. "If the algorithm asynchronously completes with null, then:"
   if (classic_script_loader->Failed()) {
@@ -571,6 +606,16 @@ void DedicatedWorkerGlobalScope::SetIsInBackForwardCache(
 
 bool DedicatedWorkerGlobalScope::HasStorageAccess() const {
   return has_storage_access_;
+}
+
+void DedicatedWorkerGlobalScope::WorkerScriptFetchFinished(
+    Script& worker_script,
+    std::optional<v8_inspector::V8StackTraceId> stack_id) {
+  CHECK(!dedicated_worker_start_time_.is_null());
+  base::UmaHistogramTimes(
+      "Worker.TopLevelScript.StartToWorkerScriptFetchFinishedTime",
+      base::TimeTicks::Now() - dedicated_worker_start_time_);
+  WorkerGlobalScope::WorkerScriptFetchFinished(worker_script, stack_id);
 }
 
 }  // namespace blink

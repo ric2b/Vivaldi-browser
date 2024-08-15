@@ -10,7 +10,6 @@
 #include "base/functional/bind.h"
 #include "base/path_service.h"
 #include "base/strings/escape.h"
-#include "base/strings/string_piece.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
@@ -33,8 +32,7 @@ const base::FilePath::CharType kInjectableResourcesFilePath[] =
 #elif BUILDFLAG(IS_IOS)
 const auto kResourceDir = base::DIR_ASSETS;
 const base::FilePath::CharType kRedirectableResourcesFilePath[] =
-    FILE_PATH_LITERAL(
-        "res/adblocker_resources/redirectable_resources.json");
+    FILE_PATH_LITERAL("res/adblocker_resources/redirectable_resources.json");
 const base::FilePath::CharType kInjectableResourcesFilePath[] =
     FILE_PATH_LITERAL("res/adblocker_resources/injectable_resources.json");
 #else
@@ -48,7 +46,7 @@ const base::FilePath::CharType kInjectableResourcesFilePath[] =
 
 #if !BUILDFLAG(IS_IOS)
 constexpr auto kAliasMap =
-    base::MakeFixedFlatMap<base::StringPiece, base::StringPiece>({
+    base::MakeFixedFlatMap<std::string_view, std::string_view>({
         // Aliases used by ublock rules
         {"1x1-transparent.gif", "1x1.gif"},
         {"2x2-transparent.png", "2x2.png"},
@@ -111,7 +109,7 @@ constexpr auto kAliasMap =
     });
 
 constexpr auto kMimetypeForEmpty =
-    base::MakeFixedFlatMap<flat::ResourceType, base::StringPiece>({
+    base::MakeFixedFlatMap<flat::ResourceType, std::string_view>({
         {flat::ResourceType_SUBDOCUMENT, "text/html,"},
         {flat::ResourceType_OTHER, "text/plain,"},
         {flat::ResourceType_STYLESHEET, "text/css,"},
@@ -120,7 +118,7 @@ constexpr auto kMimetypeForEmpty =
     });
 
 constexpr auto kMimeTypeForExtension =
-    base::MakeFixedFlatMap<base::StringPiece, base::StringPiece>({
+    base::MakeFixedFlatMap<std::string_view, std::string_view>({
         {".gif", "image/gif;base64,"},
         {".html", "text/html,"},
         {".js", "application/javascript,"},
@@ -136,7 +134,7 @@ constexpr auto kMimeTypeForExtension =
 // uBlock technically allows to inject any of those scripts, even if it doesn't
 // make sense for all of them.
 constexpr auto kInjectableRedirectables =
-    base::MakeFixedFlatSet<base::StringPiece>(
+    base::MakeFixedFlatSet<std::string_view>(
         {"amazon_ads.js", "doubleclick_instream_ad_status.js",
          "google-analytics_analytics.js", "google-analytics_cx_api.js",
          "google-analytics_ga.js", "googlesyndication_adsbygoogle.js",
@@ -158,8 +156,8 @@ std::unique_ptr<base::Value> LoadResources(
       LOG(ERROR) << "failed to initialize memory mapping for " << resource_file;
       return nullptr;
     }
-    base::StringPiece json_text(reinterpret_cast<char*>(mapped_file.data()),
-                                mapped_file.length());
+    std::string_view json_text(reinterpret_cast<char*>(mapped_file.data()),
+                               mapped_file.length());
     JSONStringValueDeserializer deserializer(json_text);
     return deserializer.Deserialize(nullptr, nullptr);
   }
@@ -170,6 +168,10 @@ std::unique_ptr<base::Value> LoadResources(
   JSONFileValueDeserializer deserializer(path);
   return deserializer.Deserialize(nullptr, nullptr);
 #endif
+}
+
+bool ShouldUseMainWorldForResource(std::string_view name) {
+  return name == "abp-main.js";
 }
 }  // namespace
 
@@ -216,13 +218,13 @@ std::optional<std::string> Resources::GetRedirect(
       resource_type == flat::ResourceType_PING)
     return std::nullopt;
 
-  base::StringPiece actual_name(name);
-  auto* actual_name_it = kAliasMap.find(name);
+  std::string_view actual_name(name);
+  auto actual_name_it = kAliasMap.find(name);
   if (actual_name_it != kAliasMap.end())
     actual_name = actual_name_it->second;
 
   if (actual_name == "empty") {
-    auto* mimetype_it = kMimetypeForEmpty.find(resource_type);
+    auto mimetype_it = kMimetypeForEmpty.find(resource_type);
     if (mimetype_it == kMimetypeForEmpty.end())
       return std::nullopt;
     return std::string("data:") + std::string(mimetype_it->second);
@@ -234,10 +236,10 @@ std::optional<std::string> Resources::GetRedirect(
     return std::nullopt;
 
   size_t extension_separator_position = actual_name.find_last_of('.');
-  if (extension_separator_position == base::StringPiece::npos)
+  if (extension_separator_position == std::string_view::npos)
     return std::nullopt;
 
-  auto* mimetype_it = kMimeTypeForExtension.find(
+  auto mimetype_it = kMimeTypeForExtension.find(
       actual_name.substr(extension_separator_position));
   if (mimetype_it == kMimeTypeForExtension.end())
     return std::nullopt;
@@ -247,18 +249,25 @@ std::optional<std::string> Resources::GetRedirect(
 }
 #endif  // !IS_IOS
 
-std::map<std::string, base::StringPiece> Resources::GetInjections() {
+std::map<std::string, Resources::InjectableResource>
+Resources::GetInjections() {
   DCHECK(loaded());
 
-  std::map<std::string, base::StringPiece> result;
+  std::map<std::string, InjectableResource> result;
 
   for (auto resource : injectable_resources_.GetDict()) {
-    result[resource.first] = base::StringPiece(resource.second.GetString());
+    result.try_emplace(
+        resource.first,
+        InjectableResource{std::string_view(resource.second.GetString()),
+                           ShouldUseMainWorldForResource(resource.first)});
   }
 
   for (auto resource : redirectable_resources_.GetDict()) {
     if (kInjectableRedirectables.count(resource.first)) {
-      result[resource.first] = base::StringPiece(resource.second.GetString());
+      result.try_emplace(
+          resource.first,
+          InjectableResource{std::string_view(resource.second.GetString()),
+                             false});
     }
   }
 

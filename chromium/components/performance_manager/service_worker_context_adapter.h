@@ -116,6 +116,8 @@ class ServiceWorkerContextAdapter
       int64_t service_worker_version_id) override;
   blink::AssociatedInterfaceProvider& GetRemoteAssociatedInterfaces(
       int64_t service_worker_version_id) override;
+  void SetForceUpdateOnPageLoadForTesting(
+      bool force_update_on_page_load) override;
 
   // content::ServiceWorkerContextObserver:
   void OnRegistrationCompleted(const GURL& scope) override;
@@ -173,7 +175,8 @@ class ServiceWorkerContextAdapter
   // Tracks the OnControlleeAdded and OnControlleeRemoved notification for each
   // service worker, with the goal of cleaning up duplicate notifications for
   // observers of this class.
-  // TODO(1015692): Fix the underlying code in content/browser/service_worker so
+  // TODO(crbug.com/40653867): Fix the underlying code in
+  // content/browser/service_worker so
   //                that duplicate notifications are no longer sent.
   base::flat_map<int64_t /*version_id*/,
                  base::flat_set<std::string /*client_uuid*/>>

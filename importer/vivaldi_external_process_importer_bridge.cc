@@ -11,6 +11,7 @@ namespace {
 
 const int kNumNotesToSend = 10;
 const int kNumSpeedDialToSend = 100;
+const int kNumExtensionsToSend = 100;
 
 }  // namespace
 
@@ -58,6 +59,26 @@ void ExternalProcessImporterBridge::AddSpeedDial(
     it = end_group;
   }
   DCHECK_EQ(0, sd_left);
+}
+void ExternalProcessImporterBridge::AddExtensions(
+    const std::vector<std::string>& extensions) {
+  observer_->OnExtensionsImportStart(extensions.size());
+
+  // |ex_left| is required for the checks below as Windows has a
+  // Debug bounds-check which prevents pushing an iterator beyond its end()
+  // (i.e., |it + 2 < s.end()| crashes in debug mode if |i + 1 == s.end()|).
+  int ex_left = extensions.end() - extensions.begin();
+  for (std::vector<std::string>::const_iterator it = extensions.begin();
+       it < extensions.end();) {
+    std::vector<std::string> ex_group;
+    const auto& end_group = it + std::min(ex_left, kNumExtensionsToSend);
+    ex_group.assign(it, end_group);
+
+    observer_->OnExtensionsImportGroup(ex_group);
+    ex_left -= end_group - it;
+    it = end_group;
+  }
+  DCHECK_EQ(0, ex_left);
 }
 
 void ExternalProcessImporterBridge::NotifyItemFailed(importer::ImportItem item,

@@ -70,11 +70,6 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="Not QUIC, destination different from origin"/>
 </enum>
 
-<enum name="BodyConsumerBaseFetchCheckPoint">
-  <int value="0" label="BodyConsumerBase Constructor"/>
-  <int value="1" label="BodyConsumerBase::DidFetchDataLoadFailed"/>
-</enum>
-
 <enum name="BooleanBroken">
   <int value="0" label="Not Broken"/>
   <int value="1" label="Broken"/>
@@ -245,6 +240,17 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="DnsHTTPAttempt"/>
 </enum>
 
+<!-- LINT.IfChange(DnsClientCapability) -->
+
+<enum name="DNS.DnsClientCapability">
+  <int value="0" label="Secure DNS disabled, insecure DNS disabled"/>
+  <int value="1" label="Secure DNS disabled, insecure DNS enabled"/>
+  <int value="2" label="Secure DNS enabled, insecure DNS disabled"/>
+  <int value="3" label="Secure DNS enabled, insecure DNS enabled"/>
+</enum>
+
+<!-- LINT.ThenChange(/net/dns/host_resolver_manager.cc:DnsClientCapability) -->
+
 <enum name="DNS.SvcbHttpsTransactionError">
   <int value="0" label="No transaction error"/>
   <int value="1" label="Insecure DNS transaction error (never task-fatal)"/>
@@ -315,6 +321,21 @@ chromium-metrics-reviews@google.com.
              nameserver"/>
 </enum>
 
+<enum name="DNS.WindowsReadSystemSettingsResult">
+  <int value="0" label="OK"/>
+  <int value="1" label="ReadAdapterDnsAddressesFailed"/>
+  <int value="2" label="ReadPolicySearchListFailed"/>
+  <int value="3" label="ReadTcpipSearchListFailed"/>
+  <int value="4" label="ReadTcpipDomainFailed"/>
+  <int value="5" label="ReadPolicyDevolutionSettingFailed"/>
+  <int value="6" label="ReadDnscacheDevolutionSettingFailed"/>
+  <int value="7" label="ReadTcpipDevolutionSettingFailed"/>
+  <int value="8" label="ReadPolicyAppendToMultiLabelNameFailed"/>
+  <int value="9" label="ReadPrimaryDnsSuffixPathFailed"/>
+  <int value="10" label="GetNameServersFailed"/>
+  <int value="11" label="NoNameServerFound"/>
+</enum>
+
 <enum name="DohServerAutoupgradeStatus">
   <int value="0" label="SuccessWithNoPriorFailures"/>
   <int value="1" label="SuccessWithSomePriorFailures"/>
@@ -341,9 +362,23 @@ chromium-metrics-reviews@google.com.
   <int value="25497" label="Kyber+X25519"/>
 </enum>
 
-<enum name="FetchManagerLoaderCheckPoint">
-  <int value="0" label="FetchManager::Loader Constructor"/>
-  <int value="1" label="FetchManager::Loader::Failed"/>
+<enum name="EcnPermutations">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="Not-ECT"/>
+  <int value="2" label="ECT(1)"/>
+  <int value="3" label="Not-ECT, ECT(1)"/>
+  <int value="4" label="ECT(0)"/>
+  <int value="5" label="Not-ECT, ECT(0)"/>
+  <int value="6" label="ECT(1), ECT(0)"/>
+  <int value="7" label="Not-ECT, ECT(1), ECT(0)"/>
+  <int value="8" label="CE"/>
+  <int value="9" label="Not-ECT, CE"/>
+  <int value="10" label="ECT(1), CE"/>
+  <int value="11" label="Not-ECT, ECT(1), CE"/>
+  <int value="12" label="ECT(0), CE"/>
+  <int value="13" label="Not-ECT, ECT(0), CE"/>
+  <int value="14" label="ECT(1), ECT(0), CE"/>
+  <int value="15" label="Not-ECT, ECT(1), ECT(0), CE"/>
 </enum>
 
 <enum name="Http2WireErrorCodes">
@@ -2236,14 +2271,6 @@ Called by update_net_trust_anchors.py.-->
   <int value="2" label="NETWORK_DISCONNECTED"/>
   <int value="3" label="NETWORK_SOON_TO_DISCONNECT"/>
   <int value="4" label="NETWORK_IP_ADDRESS_CHANGED"/>
-</enum>
-
-<enum name="QuicProtocolErrorRetryStatus">
-  <int value="0" label="NoRetryExceededMaxRetries"/>
-  <int value="1" label="NoRetryHeaderReceived"/>
-  <int value="2" label="NoRetryNoAlternativeService"/>
-  <int value="3" label="RetryAltServiceBroken"/>
-  <int value="4" label="RetryAltServiceNotBroken"/>
 </enum>
 
 <enum name="QuicRstStreamErrorCodes">

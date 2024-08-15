@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: fuzzing-main
 title: Fuzz testing in ChromeOS (dupe)
 ---
@@ -19,7 +19,7 @@ You can learn more about the benefits of fuzzing at [go/why-fuzz].
 ## Getting Started
 
 For more information about ChromeOS kernel fuzzing, see
-[here](kernel_fuzzing.md).
+[here](/chromium-os/developer-library/guides/testing/kernel-fuzzing/).
 Userspace fuzzing on ChromeOS will be discussed below.
 
 In ChromeOS, you can easily create and submit fuzz targets. The targets are
@@ -54,10 +54,10 @@ stuck, or to ask questions.
 *   [Guided in-process fuzzing of Chrome components] blog post.
 
 [ClusterFuzz]: https://clusterfuzz.com/
-[Creating a fuzz target that expects a protobuf]: fuzzing.md#lib
-[Debugging a fuzzer]: fuzzing.md#gdb
-[Detailed guide]: fuzzing.md#Detailed-instructions
-[fuzz target effectiveness]: fuzzing.md#Improving-fuzzer-effectiveness
+[Creating a fuzz target that expects a protobuf]: /chromium-os/developer-library/guides/testing/fuzzing/#lib
+[Debugging a fuzzer]: /chromium-os/developer-library/guides/testing/fuzzing/#gdb
+[Detailed guide]: /chromium-os/developer-library/guides/testing/fuzzing/#Detailed-instructions
+[fuzz target effectiveness]: /chromium-os/developer-library/guides/testing/fuzzing/#Improving-fuzzer-effectiveness
 [Fuzzing]: https://en.wikipedia.org/wiki/Fuzzing
 [Fuzzing for Chrome Browser]: https://chromium.googlesource.com/chromium/src/+/HEAD/testing/libfuzzer/README.md
 [go/fuzzing-success]: https://goto.google.com/fuzzing-success
@@ -68,5 +68,5 @@ stuck, or to ask questions.
 [libFuzzer and ClusterFuzz]: https://chromium.googlesource.com/chromium/src/+/HEAD/testing/libfuzzer/README.md
 [security]: https://bugs.chromium.org/p/chromium/issues/list?can=1&q=reporter:clusterfuzz@chromium.org%20-status:duplicate%20-status:wontfix%20type=bug-security
 [non-security bugs]: https://bugs.chromium.org/p/chromium/issues/list?can=1&q=reporter%3Aclusterfuzz%40chromium.org+-status%3Aduplicate+-status%3Awontfix+-type%3Dbug-security&sort=modified
-[Quickstart Guide]: fuzzing.md#Quickstart
-[Reproducing bugs]: fuzzing.md#Reproducing-crashes-from-ClusterFuzz
+[Quickstart Guide]: /chromium-os/developer-library/guides/testing/fuzzing/#Quickstart
+[Reproducing bugs]: /chromium-os/developer-library/guides/testing/fuzzing/#Reproducing-crashes-from-ClusterFuzz

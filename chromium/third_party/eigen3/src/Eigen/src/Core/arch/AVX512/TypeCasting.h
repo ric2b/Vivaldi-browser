@@ -37,6 +37,11 @@ struct type_casting_traits<double, int> : vectorized_type_casting_traits<double,
 template <>
 struct type_casting_traits<int, double> : vectorized_type_casting_traits<int, double> {};
 
+template <>
+struct type_casting_traits<double, int64_t> : vectorized_type_casting_traits<double, int64_t> {};
+template <>
+struct type_casting_traits<int64_t, double> : vectorized_type_casting_traits<int64_t, double> {};
+
 #ifndef EIGEN_VECTORIZE_AVX512FP16
 template <>
 struct type_casting_traits<half, float> : vectorized_type_casting_traits<half, float> {};
@@ -76,6 +81,19 @@ EIGEN_STRONG_INLINE Packet8d pcast<Packet8f, Packet8d>(const Packet8f& a) {
 }
 
 template <>
+EIGEN_STRONG_INLINE Packet8l pcast<Packet8d, Packet8l>(const Packet8d& a) {
+#if defined(EIGEN_VECTORIZE_AVX512DQ) && defined(EIGEN_VECTORIZE_AVS512VL)
+  return _mm512_cvttpd_epi64(a);
+#else
+  EIGEN_ALIGN16 double aux[8];
+  pstore(aux, a);
+  return _mm512_set_epi64(static_cast<int64_t>(aux[7]), static_cast<int64_t>(aux[6]), static_cast<int64_t>(aux[5]),
+                          static_cast<int64_t>(aux[4]), static_cast<int64_t>(aux[3]), static_cast<int64_t>(aux[2]),
+                          static_cast<int64_t>(aux[1]), static_cast<int64_t>(aux[0]));
+#endif
+}
+
+template <>
 EIGEN_STRONG_INLINE Packet16f pcast<Packet16i, Packet16f>(const Packet16i& a) {
   return _mm512_cvtepi32_ps(a);
 }
@@ -88,6 +106,19 @@ EIGEN_STRONG_INLINE Packet8d pcast<Packet16i, Packet8d>(const Packet16i& a) {
 template <>
 EIGEN_STRONG_INLINE Packet8d pcast<Packet8i, Packet8d>(const Packet8i& a) {
   return _mm512_cvtepi32_pd(a);
+}
+
+template <>
+EIGEN_STRONG_INLINE Packet8d pcast<Packet8l, Packet8d>(const Packet8l& a) {
+#if defined(EIGEN_VECTORIZE_AVX512DQ) && defined(EIGEN_VECTORIZE_AVS512VL)
+  return _mm512_cvtepi64_pd(a);
+#else
+  EIGEN_ALIGN16 int64_t aux[8];
+  pstore(aux, a);
+  return _mm512_set_pd(static_cast<double>(aux[7]), static_cast<double>(aux[6]), static_cast<double>(aux[5]),
+                       static_cast<double>(aux[4]), static_cast<double>(aux[3]), static_cast<double>(aux[2]),
+                       static_cast<double>(aux[1]), static_cast<double>(aux[0]));
+#endif
 }
 
 template <>
@@ -122,6 +153,16 @@ EIGEN_STRONG_INLINE Packet16f preinterpret<Packet16f, Packet16i>(const Packet16i
 template <>
 EIGEN_STRONG_INLINE Packet8d preinterpret<Packet8d, Packet16f>(const Packet16f& a) {
   return _mm512_castps_pd(a);
+}
+
+template <>
+EIGEN_STRONG_INLINE Packet8d preinterpret<Packet8d, Packet8l>(const Packet8l& a) {
+  return _mm512_castsi512_pd(a);
+}
+
+template <>
+EIGEN_STRONG_INLINE Packet8l preinterpret<Packet8l, Packet8d>(const Packet8d& a) {
+  return _mm512_castpd_si512(a);
 }
 
 template <>

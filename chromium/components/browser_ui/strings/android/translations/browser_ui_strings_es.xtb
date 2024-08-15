@@ -31,7 +31,6 @@
 <translation id="1620510694547887537">Cámara</translation>
 <translation id="1633720957382884102">Sitios relacionados</translation>
 <translation id="1644574205037202324">Historial</translation>
-<translation id="1647582022260550163">¿Seguro que quieres restablecer los permisos y borrar las cookies y los datos de sitios?</translation>
 <translation id="1652197001188145583">Cuando esta opción está activada, los sitios pueden solicitar permiso para usar dispositivos NFC. Si está desactivada, los sitios no pueden usar dispositivos NFC.</translation>
 <translation id="1660204651932907780">Permitir que los sitios reproduzcan sonidos (recomendado)</translation>
 <translation id="1677097821151855053">Las cookies y otros datos de los sitios se usan para recordarte. Así, podrás iniciar sesión o ver anuncios personalizados, entre otras cosas. Para gestionar las cookies de todos los sitios, ve a <ph name="BEGIN_LINK" />Configuración<ph name="END_LINK" />.</translation>
@@ -69,7 +68,6 @@
 <translation id="2241587408274973373">Tarjetas de la página Nueva pestaña</translation>
 <translation id="2241634353105152135">Solo una vez</translation>
 <translation id="2253414712144136228"><ph name="NAME_OF_LIST_ITEM" /> Eliminar</translation>
-<translation id="2253989982043948086">{NUM_SELECTED,plural, =1{1 sitio bloqueado}other{# sitios bloqueados}}</translation>
 <translation id="228293613124499805">Es probable que la mayoría de los sitios que visites guarden datos en tu dispositivo, a menudo para mejorar la experiencia, ya que guardan tus preferencias o la información que compartes con el sitio. Te recomendamos que actives esta opción.</translation>
 <translation id="2289270750774289114">Preguntar cuando un sitio web quiera buscar dispositivos Bluetooth cercanos (recomendado)</translation>
 <translation id="2315043854645842844">El sistema operativo no admite la selección de certificados de cliente.</translation>
@@ -94,7 +92,6 @@
 <translation id="2501278716633472235">Volver</translation>
 <translation id="2546283357679194313">Cookies y datos de sitios</translation>
 <translation id="2550801787432930915">Tarjeta de bajada de precio</translation>
-<translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{1 cookie bloqueada}other{# cookies bloqueadas}}</translation>
 <translation id="2570922361219980984">El acceso a la ubicación también está desactivado en este dispositivo. Actívalo en los <ph name="BEGIN_LINK" />ajustes de Android<ph name="END_LINK" />.</translation>
 <translation id="257931822824936280">Ampliado (hacer clic para contraer)</translation>
 <translation id="2586657967955657006">Portapapeles</translation>
@@ -124,7 +121,6 @@
 <translation id="3008272652534848354">Restablecer permisos</translation>
 <translation id="301521992641321250">Bloqueado automáticamente</translation>
 <translation id="3069226013421428034">Permite el inicio de sesión de terceros en un sitio específico.</translation>
-<translation id="3082992102194421695">{COUNT,plural, =1{Caduca mañana}other{Caduca dentro de # días}}</translation>
 <translation id="310297983047869047">Diapositiva anterior</translation>
 <translation id="3109724472072898302">Contraído</translation>
 <translation id="3114012059975132928">Reproductor de vídeo</translation>
@@ -136,6 +132,7 @@
 <translation id="3198916472715691905"><ph name="STORAGE_AMOUNT" /> de datos almacenados</translation>
 <translation id="321187648315454507">Para que <ph name="APP_NAME" /> pueda enviarte notificaciones, actívalas también en los <ph name="BEGIN_LINK" />ajustes de Android<ph name="END_LINK" />.</translation>
 <translation id="3227137524299004712">Micrófono</translation>
+<translation id="3232293466644486101">Eliminar datos de navegación...</translation>
 <translation id="3242646949159196181">Cuando esta opción está activada, los sitios pueden reproducir sonido. Si está desactivada, los sitios no pueden reproducir sonido.</translation>
 <translation id="3277252321222022663">Permitir que los sitios accedan a los sensores (recomendado)</translation>
 <translation id="3285500645985761267">Permitir que los sitios relacionados vean tu actividad en el grupo</translation>
@@ -177,6 +174,7 @@
 <translation id="3895926599014793903">Forzar zoom</translation>
 <translation id="3908288065506437185">Bloquear cookies de terceros en modo Incógnito</translation>
 <translation id="3918378745482005425">Es posible que no puedas usar algunas funciones. Los sitios relacionados podrán seguir usando cookies de terceros.</translation>
+<translation id="3933121352599513978">Ocultar solicitudes no deseadas (recomendado)</translation>
 <translation id="3955193568934677022">Permitir que los sitios reproduzcan contenido protegido (recomendado)</translation>
 <translation id="3967822245660637423">Descarga completa</translation>
 <translation id="3974105241379491420">Los sitios pueden solicitar permiso para usar la información que hayan guardado sobre ti</translation>
@@ -198,7 +196,9 @@
 <translation id="4278390842282768270">Permitido</translation>
 <translation id="429312253194641664">Un sitio web está reproduciendo elementos multimedia</translation>
 <translation id="42981349822642051">Mostrar</translation>
+<translation id="4336219115486912529">{COUNT,plural, =1{Caduca mañana}other{Caduca dentro de # días}}</translation>
 <translation id="4336566011000459927">Chrome volverá a limitar las cookies hoy</translation>
+<translation id="4336836404251800362"><ph name="RECENCY" /> <ph name="SEPARATOR" /> Tu última pestaña</translation>
 <translation id="4338831206024587507">Todos los sitios de <ph name="DOMAIN" /></translation>
 <translation id="4402755511846832236">Impide que los sitios detecten cuándo usas activamente este dispositivo</translation>
 <translation id="4412992751769744546">Permitir cookies de terceros</translation>
@@ -289,6 +289,7 @@
 <translation id="5853982612236235577">Cuando esta opción está activada, los sitios pueden solicitar permiso para enviar notificaciones. Si está desactivada, los sitios no pueden enviar notificaciones.</translation>
 <translation id="5860033963881614850">Desactivado</translation>
 <translation id="5876056640971328065">Pausar vídeo</translation>
+<translation id="5877248419911025165">Ocultar todas las solicitudes</translation>
 <translation id="5884085660368669834">Preferencia de sitio</translation>
 <translation id="5887687176710214216">Última visita: ayer</translation>
 <translation id="5916664084637901428">Activado</translation>
@@ -303,9 +304,11 @@
 <translation id="6015775454662021376">Controla el acceso de este sitio web a tu dispositivo</translation>
 <translation id="6040143037577758943">Cerrar</translation>
 <translation id="6042308850641462728">Más</translation>
+<translation id="6060464773477604108"><ph name="HOST_NAME" /> <ph name="SEPARATOR1" /> <ph name="RECENCY" /> <ph name="SEPARATOR2" /> Tu última pestaña</translation>
 <translation id="6064125863973209585">Descargas completadas</translation>
 <translation id="6071501408666570960">Puede que se cierre tu sesión en este sitio</translation>
 <translation id="6120483543004435978">Cuando esta opción está activada, los sitios pueden solicitar permiso para saber cuándo usas activamente tu dispositivo. Si está desactivada, los sitios no pueden saber cuándo usas activamente tu dispositivo.</translation>
+<translation id="6140839633433422817">¿Seguro que quieres restablecer los permisos y eliminar las cookies y los datos de sitios?</translation>
 <translation id="6165508094623778733">Más información</translation>
 <translation id="6171020522141473435">Cuando esta opción está activada, los sitios pueden solicitar permiso para usar dispositivos Bluetooth. Si está desactivada, los sitios no pueden usar dispositivos Bluetooth.</translation>
 <translation id="6177111841848151710">Bloqueado en el motor de búsqueda actual</translation>
@@ -339,6 +342,7 @@
 <translation id="6545864417968258051">Búsqueda de dispositivos Bluetooth</translation>
 <translation id="6552800053856095716">{PERMISSIONS_SUMMARY_BLOCKED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> y <ph name="NUM_MORE" /> más bloqueados}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> y <ph name="NUM_MORE" /> más bloqueados}}</translation>
 <translation id="6554732001434021288">Última visita: hace <ph name="NUM_DAYS" /> días</translation>
+<translation id="656065428026159829">Ver más</translation>
 <translation id="6561560012278703671">Usar notificaciones más discretas (bloquea las notificaciones emergentes para que no te interrumpan)</translation>
 <translation id="6593061639179217415">Vista ordenador</translation>
 <translation id="6608650720463149374"><ph name="GIGABYTES" /> GB</translation>
@@ -399,7 +403,6 @@
 <translation id="7561196759112975576">Siempre</translation>
 <translation id="757524316907819857">No permitir que los sitios reproduzcan contenido protegido</translation>
 <translation id="7594634374516752650">Conectado a un dispositivo Bluetooth</translation>
-<translation id="7641339528570811325">Borrar datos de navegación…</translation>
 <translation id="7649070708921625228">Ayuda</translation>
 <translation id="7658239707568436148">Cancelar</translation>
 <translation id="7667547420449112975">El maravilloso mago de Oz</translation>
@@ -423,6 +426,7 @@
 <translation id="7986741934819883144">Selecciona un contacto</translation>
 <translation id="7990211076305263060">Cuando esta opción está activada, los sitios pueden solicitar permiso para usar tu micrófono. Si está desactivada, los sitios no pueden usar tu micrófono.</translation>
 <translation id="8007176423574883786">Desactivada para este dispositivo</translation>
+<translation id="8009579582995973057"><ph name="HOST_NAME" /> <ph name="SEPARATOR1" /> <ph name="RECENCY" /> <ph name="SEPARATOR2" /> De <ph name="FROM_DEVICE" /></translation>
 <translation id="802154636333426148">No se ha podido descargar el archivo</translation>
 <translation id="8042586301629853791">Ordenar por:</translation>
 <translation id="8067883171444229417">Reproducir vídeo</translation>
@@ -457,7 +461,6 @@
 <translation id="8441146129660941386">Buscar hacia atrás</translation>
 <translation id="8444433999583714703">Para que <ph name="APP_NAME" /> tenga acceso a tu ubicación, actívala también en los <ph name="BEGIN_LINK" />ajustes de Android<ph name="END_LINK" />.</translation>
 <translation id="8447861592752582886">Revocar permiso de dispositivo</translation>
-<translation id="8451050538944905715">{NUM_SELECTED,plural, =1{1 cookie en uso}other{# cookies en uso}}</translation>
 <translation id="8487700953926739672">Disponible sin conexión</translation>
 <translation id="848952951823693243">Solicitar siempre la vista para móvil</translation>
 <translation id="8499083585497694743">Activar el micrófono</translation>
@@ -478,7 +481,6 @@
 <translation id="8721719390026067591">Cuando esta opción está activada, los sitios pueden solicitar permiso para buscar dispositivos Bluetooth. Si está desactivada, los sitios no pueden buscar dispositivos Bluetooth.</translation>
 <translation id="8725066075913043281">Reintentar</translation>
 <translation id="8730621377337864115">Hecho</translation>
-<translation id="8736193154595564524">{NUM_SELECTED,plural, =1{1 sitio permitido}other{# sitios permitidos}}</translation>
 <translation id="8751914237388039244">Selecciona una imagen</translation>
 <translation id="8800034312320686233">¿El sitio web no funciona?</translation>
 <translation id="8801436777607969138">Bloquea JavaScript en un sitio específico.</translation>
@@ -497,6 +499,7 @@
 <translation id="8959122750345127698">No se puede realizar la navegación: <ph name="URL" /></translation>
 <translation id="8986362086234534611">Dejar de recordar</translation>
 <translation id="8990043154272859344">Se cerrará tu sesión en todos los sitios</translation>
+<translation id="8993853206419610596">Mostrar todas las solicitudes</translation>
 <translation id="9002538116239926534">Cuando esta opción está activada, los sitios pueden guardar datos en tu dispositivo. Si está desactivada, los sitios no pueden guardar datos en tu dispositivo.</translation>
 <translation id="9011903857143958461"><ph name="SITE_NAME" /> permitido</translation>
 <translation id="9019902583201351841">Administrado por tus padres</translation>

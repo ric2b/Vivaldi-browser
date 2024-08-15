@@ -20,9 +20,9 @@
 #include "gtest/gtest.h"
 #include "platform/api/time.h"
 #include "platform/test/paths.h"
-#include "testing/util/read_file.h"
 #include "util/crypto/pem_helpers.h"
 #include "util/osp_logging.h"
+#include "util/read_file.h"
 #include "util/span_util.h"
 
 namespace openscreen::cast {

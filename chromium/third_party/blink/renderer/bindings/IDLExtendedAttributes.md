@@ -803,6 +803,22 @@ Usage: `[NotEnumerable]` can be specified on methods and attributes
 
 `[NotEnumerable]` indicates that the method or attribute is not enumerable.
 
+### [PassAsSpan]
+
+Summary: Denotes that an argument should be passed as `base::span<const
+uint8_t>`
+
+Usage: `[PassAsSpan]` can only be used on `ArrayBuffer`-like operation arguments
+(including `ArrayBufferView`s and typed arrays) that are read-only
+and not retained by the implementation.
+
+This extended attribute denotes that the implementation accepts this argument as
+a span of bytes (`base::span<const uint8_t>`).  The memory referred by the span
+is only valid for the duration of the bindings call. Passing array buffers as
+spans is much faster compared to passing a union of several array-like types
+(such as `BufferSource` union) both on the generated bindings side and on the
+implementation side.
+
 ### [RaisesException]
 
 Summary: Tells the code generator to append an `ExceptionState&` argument when calling the Blink implementation.
@@ -1239,11 +1255,13 @@ Usage: The method must adhere to the following requirements:
 2. Doesn't trigger JavaScript execution;
 3. Has no side effect.
 
-Those requirements lead to the specific inability to throw JS exceptions and to log warnings to the console, as logging uses `MakeGarbageCollected<ConsoleMessage>`. If any such error reporting needs to happen, the method marked with `[NoAllocDirectCall]` should expect a last parameter `bool* has_error`, in which it might store `true` to signal V8. V8 will in turn re-execute the "default" callback, giving the possibility of the exception/error to be reported. This mechanism also implies that the "fast" callback is idempotent up to the point of reporting the error.
+Those requirements lead to the specific inability to log warnings to the console, as logging uses `MakeGarbageCollected<ConsoleMessage>`. If logging needs to happen, the method marked with `[NoAllocDirectCall]` should expect a last parameter `bool* has_error`, in which it might store `true` to signal V8. V8 will in turn re-execute the "default" callback, giving the possibility of the exception/error to be reported. This mechanism also implies that the "fast" callback is idempotent up to the point of reporting the error.
 
-Note: if `[NoAllocDirectCall]` is applied to a method, then the corresponding implementation C++ class must **also** derive from the [`NoAllocDirectCallHost` class](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/bindings/no_alloc_direct_call_host.h).
+If `[NoAllocDirectCall]` is applied to a method, then the corresponding implementation C++ class must **also** derive from the [`NoAllocDirectCallHost` class](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/bindings/no_alloc_direct_call_host.h).
 
-Note: the [NoAllocDirectCall] extended attribute can only be applied to methods, and not attributes. An attribute getter's V8 return value constitutes a V8 allocation, and setters likely allocate on the Blink side.
+Calling `ThrowDOMException` would seemingly cause `MakeGarbageCollected<DOMException>` to occur, violating the requirement about potentially triggering garbage collection. However, `ThrowDOMException` from a `[NoAllocDirectCall]` method is actually safe in practice. When generating the bindings for a method which is marked as both `[NoAllocDirectCall]` and `[RaisesException]`, V8 will automatically use [`NoAllocDirectCallExceptionState`](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/bindings/no_alloc_direct_call_exception_state.h) instead of `ExceptionState`. This class will defer the allocation of the `DOMException` object via `PostDeferrableAction` until it is safe to allocate GC memory. The `WTF::String` inside of the `DOMException` is not a V8 object and does not participate in garbage collection, so its allocation is safe and doesn't violate the requirements of `[NoAllocDirectCall]`.
+
+Note: the `[NoAllocDirectCall]` extended attribute can only be applied to methods, and not attributes. An attribute getter's V8 return value constitutes a V8 allocation, and setters likely allocate on the Blink side.
 
 ### [PerWorldBindings]
 
@@ -1273,6 +1291,12 @@ Only used in some HTML*ELement.idl files and one other place.
 
 These extended attributes are _temporary_ and are only in use while some change is in progress. Unless you are involved with the change, you can generally ignore them, and should not use them.
 
+### [InjectionMitigated]
+
+Summary: Interfaces and interface members with an `[InjectionMitigated]` attribute are exposed only in contexts that enforce a [strict Content Security Policy](https://csp.withgoogle.com/docs/strict-csp.html) and [Trusted Types](https://w3c.github.io/trusted-types/dist/spec/).
+
+This attribute implements the core idea behind the [Securer Contexts explainer](https://github.com/mikewest/securer-contexts), and may be renamed as it works its way through the standards process.
+
 ### [IsCodeLike]
 
 This implements the TC39 "Dynamic Code Brand Checks" proposal. By attaching
@@ -1293,7 +1317,7 @@ Consult with the bindings team before you use this extended attribute.
 
 ### [IDLTypeImplementedAsV8Promise]
 
-Summary: Indicates that an IDL `Promise` type should be implemented as `v8::Local<v8::Promise>` rather than the default `ScriptPromise` type.
+Summary: Indicates that an IDL `Promise` type should be implemented as `v8::Local<v8::Promise>` rather than the default `ScriptPromiseUntyped` type.
 
 This is currently only used for the return types of `AsyncIteratorBase` methods. Consult with the bindings team before you use this extended attribute.
 

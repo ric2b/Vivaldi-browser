@@ -5,7 +5,7 @@ rule cxx
   deps = gcc
 
 rule alink_thin
-  command = rm -f $out && $ar rcsT $out $in
+  command = $ar rcsT $out $in
   description = AR $out
 
 rule link

@@ -120,7 +120,8 @@ bool CFX_XMLParser::DoSyntaxParse(CFX_XMLDocument* doc) {
       if (stream_->IsEOF())
         return true;
 
-      size_t buffer_chars = stream_->ReadBlock(buffer.data(), xml_plane_size_);
+      size_t buffer_chars =
+          stream_->ReadBlock(pdfium::make_span(buffer).first(xml_plane_size_));
       if (buffer_chars == 0)
         return true;
 
@@ -509,15 +510,15 @@ void CFX_XMLParser::ProcessTextChar(wchar_t character) {
         if (character != 0)
           current_text_ += character;
       } else {
-        if (csEntity == L"amp") {
+        if (csEntity.EqualsASCII("amp")) {
           current_text_ += L'&';
-        } else if (csEntity == L"lt") {
+        } else if (csEntity.EqualsASCII("lt")) {
           current_text_ += L'<';
-        } else if (csEntity == L"gt") {
+        } else if (csEntity.EqualsASCII("gt")) {
           current_text_ += L'>';
-        } else if (csEntity == L"apos") {
+        } else if (csEntity.EqualsASCII("apos")) {
           current_text_ += L'\'';
-        } else if (csEntity == L"quot") {
+        } else if (csEntity.EqualsASCII("quot")) {
           current_text_ += L'"';
         }
       }

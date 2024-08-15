@@ -1,5 +1,3 @@
-/// <reference types="@webgpu/types" />
-
 import { TestCaseRecorder } from '../framework/fixture.js';
 
 import { ErrorWithExtra, assert, objectEquals } from './util.js';

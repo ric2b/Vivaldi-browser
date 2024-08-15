@@ -22,6 +22,9 @@
 #include <vector>
 
 // IWYU pragma: begin_exports
+#include "absl/status/statusor.h"
+#include "absl/strings/str_format.h"
+#include "absl/strings/string_view.h"
 #include "./fuzztest/internal/io.h"
 #include "./fuzztest/internal/registration.h"
 #include "./fuzztest/internal/registry.h"
@@ -122,10 +125,28 @@ namespace fuzztest {
 //   }
 //   FUZZ_TEST(MySuite, MyThingNeverCrashes)
 //     .WithSeeds(ReadFilesFromDirectory(kCorpusPath));
-inline std::vector<std::tuple<std::string>> ReadFilesFromDirectory(
-    std::string_view dir) {
-  return internal::ReadFilesFromDirectory({dir.data(), dir.size()});
-}
+std::vector<std::tuple<std::string>> ReadFilesFromDirectory(
+    std::string_view dir);
+
+// Returns parsed dictionary entries from fuzzer dictionary definition in the
+// format specified at https://llvm.org/docs/LibFuzzer.html#dictionaries.
+// If dictionary is in wrong format, return error status.
+absl::StatusOr<std::vector<std::string>> ParseDictionary(
+    absl::string_view text);
+
+// Reads entries from `dictionary_file` and returns a vector usable by
+// .WithDictionary().
+//
+// Example:
+//
+//   void MyThingNeverCrashes(const std::string& s) {
+//     DoThingsWith(s);
+//   }
+//   FUZZ_TEST(MySuite, MyThingNeverCrashes)
+//     .WithDomains(String().WithDictionary(
+//       ReadDictionaryFromFile(kDictionaryPath)));
+std::vector<std::string> ReadDictionaryFromFile(
+    std::string_view dictionary_file);
 
 // Converts string_view into a byte-array, useful when working with the LLVM
 // fuzzer interfaces.

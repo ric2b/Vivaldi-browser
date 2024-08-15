@@ -79,6 +79,7 @@
 
 // Vivaldi
 @property(nonatomic, assign) ATBSettingType atbSettingForActiveWebState;
+@property(nonatomic, assign, readwrite) BOOL isNTP;
 /// Redraws the primary toolbar buttons based on device
 /// orientation.
 - (void)redrawToolbarButtons;

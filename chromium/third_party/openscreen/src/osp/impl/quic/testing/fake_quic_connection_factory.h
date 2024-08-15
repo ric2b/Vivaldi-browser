@@ -6,12 +6,15 @@
 #define OSP_IMPL_QUIC_TESTING_FAKE_QUIC_CONNECTION_FACTORY_H_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "gmock/gmock.h"
-#include "osp/impl/quic/quic_connection_factory.h"
+#include "osp/impl/quic/quic_connection_factory_client.h"
+#include "osp/impl/quic/quic_connection_factory_server.h"
 #include "osp/impl/quic/testing/fake_quic_connection.h"
 #include "osp/public/message_demuxer.h"
+#include "platform/api/task_runner.h"
 
 namespace openscreen::osp {
 
@@ -26,10 +29,10 @@ class FakeQuicConnectionFactoryBridge {
   void OnConnectionClosed(QuicConnection* connection);
   void OnOutgoingStream(QuicConnection* connection, QuicStream* stream);
 
-  void SetServerDelegate(QuicConnectionFactory::ServerDelegate* delegate,
+  void SetServerDelegate(QuicConnectionFactoryServer::ServerDelegate* delegate,
                          const IPEndpoint& endpoint);
   void RunTasks(bool is_client);
-  std::unique_ptr<QuicConnection> Connect(
+  ErrorOr<std::unique_ptr<QuicConnection>> Connect(
       const IPEndpoint& endpoint,
       QuicConnection::Delegate* connection_delegate);
 
@@ -46,25 +49,26 @@ class FakeQuicConnectionFactoryBridge {
   uint64_t next_connection_id_ = 0;
   bool connections_pending_ = true;
   ConnectionPair connections_ = {};
-  QuicConnectionFactory::ServerDelegate* delegate_ = nullptr;
+  QuicConnectionFactoryServer::ServerDelegate* delegate_ = nullptr;
 };
 
-class FakeClientQuicConnectionFactory final : public QuicConnectionFactory {
+class FakeClientQuicConnectionFactory final
+    : public QuicConnectionFactoryClient {
  public:
-  explicit FakeClientQuicConnectionFactory(
-      FakeQuicConnectionFactoryBridge* bridge);
+  FakeClientQuicConnectionFactory(TaskRunner& task_runner,
+                                  FakeQuicConnectionFactoryBridge* bridge);
   ~FakeClientQuicConnectionFactory() override;
 
   // UdpSocket::Client overrides.
-  void OnError(UdpSocket* socket, Error error) override;
-  void OnSendError(UdpSocket* socket, Error error) override;
+  void OnError(UdpSocket* socket, const Error& error) override;
+  void OnSendError(UdpSocket* socket, const Error& error) override;
   void OnRead(UdpSocket* socket, ErrorOr<UdpPacket> packet) override;
 
-  // QuicConnectionFactory overrides.
-  void SetServerDelegate(ServerDelegate* delegate,
-                         const std::vector<IPEndpoint>& endpoints) override;
-  std::unique_ptr<QuicConnection> Connect(
-      const IPEndpoint& endpoint,
+  // QuicConnectionFactoryClient overrides.
+  ErrorOr<std::unique_ptr<QuicConnection>> Connect(
+      const IPEndpoint& local_endpoint,
+      const IPEndpoint& remote_endpoint,
+      const std::string& fingerprint,
       QuicConnection::Delegate* connection_delegate) override;
 
   bool idle() const { return idle_; }
@@ -76,23 +80,21 @@ class FakeClientQuicConnectionFactory final : public QuicConnectionFactory {
   bool idle_ = true;
 };
 
-class FakeServerQuicConnectionFactory final : public QuicConnectionFactory {
+class FakeServerQuicConnectionFactory final
+    : public QuicConnectionFactoryServer {
  public:
-  explicit FakeServerQuicConnectionFactory(
-      FakeQuicConnectionFactoryBridge* bridge);
+  FakeServerQuicConnectionFactory(TaskRunner& task_runner,
+                                  FakeQuicConnectionFactoryBridge* bridge);
   ~FakeServerQuicConnectionFactory() override;
 
   // UdpSocket::Client overrides.
-  void OnError(UdpSocket* socket, Error error) override;
-  void OnSendError(UdpSocket* socket, Error error) override;
+  void OnError(UdpSocket* socket, const Error& error) override;
+  void OnSendError(UdpSocket* socket, const Error& error) override;
   void OnRead(UdpSocket* socket, ErrorOr<UdpPacket> packet) override;
 
-  // QuicConnectionFactory overrides.
+  // QuicConnectionFactoryServer overrides.
   void SetServerDelegate(ServerDelegate* delegate,
                          const std::vector<IPEndpoint>& endpoints) override;
-  std::unique_ptr<QuicConnection> Connect(
-      const IPEndpoint& endpoint,
-      QuicConnection::Delegate* connection_delegate) override;
 
   bool idle() const { return idle_; }
 

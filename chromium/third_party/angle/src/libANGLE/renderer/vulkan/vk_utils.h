@@ -18,6 +18,7 @@
 #include "common/FixedVector.h"
 #include "common/Optional.h"
 #include "common/PackedEnums.h"
+#include "common/SimpleMutex.h"
 #include "common/WorkerThread.h"
 #include "common/backtrace_utils.h"
 #include "common/debug.h"
@@ -211,7 +212,7 @@ class QueueSerialIndexAllocator final
     }
     SerialIndex allocate()
     {
-        std::lock_guard<std::mutex> lock(mMutex);
+        std::lock_guard<angle::SimpleMutex> lock(mMutex);
         if (mFreeIndexBitSetArray.none())
         {
             ERR() << "Run out of queue serial index. All " << kMaxQueueSerialIndexCount
@@ -227,7 +228,7 @@ class QueueSerialIndexAllocator final
 
     void release(SerialIndex index)
     {
-        std::lock_guard<std::mutex> lock(mMutex);
+        std::lock_guard<angle::SimpleMutex> lock(mMutex);
         ASSERT(index <= mLargestIndexEverAllocated);
         ASSERT(!mFreeIndexBitSetArray.test(index));
         mFreeIndexBitSetArray.set(index);
@@ -245,7 +246,7 @@ class QueueSerialIndexAllocator final
   private:
     angle::BitSetArray<kMaxQueueSerialIndexCount> mFreeIndexBitSetArray;
     std::atomic<size_t> mLargestIndexEverAllocated;
-    std::mutex mMutex;
+    angle::SimpleMutex mMutex;
 };
 
 class [[nodiscard]] ScopedQueueSerialIndex final : angle::NonCopyable
@@ -698,6 +699,14 @@ class AtomicRefCounted : angle::NonCopyable
         mRefCount.fetch_sub(1, std::memory_order_relaxed);
     }
 
+    unsigned int getAndReleaseRef()
+    {
+        ASSERT(isReferenced());
+        // This is used by RefCountedEvent which will decrement in clean up thread, so
+        // memory_order_acq_rel is needed.
+        return mRefCount.fetch_sub(1, std::memory_order_acq_rel);
+    }
+
     bool isReferenced() const { return mRefCount.load(std::memory_order_relaxed) != 0; }
 
     T &get() { return mObject; }
@@ -864,63 +873,6 @@ class Shared final : angle::NonCopyable
 
   private:
     RefCounted<T> *mRefCounted;
-};
-
-// Atomic version of Shared.  Useful when vulkan handles need to be accessed simultaneously
-// across multiple threads.
-template <typename T>
-class AtomicShared final
-{
-  public:
-    AtomicShared() : mRefCounted(nullptr) {}
-    ~AtomicShared() { ASSERT(mRefCounted == nullptr); }
-    AtomicShared(const AtomicShared &other) { *this = other; }
-    AtomicShared &operator=(const AtomicShared &other)
-    {
-        ASSERT(other.mRefCounted);
-        other.mRefCounted->addRef();
-        mRefCounted = other.mRefCounted;
-
-        return *this;
-    }
-
-    void set(VkDevice device, T &&newObject)
-    {
-        update(device, new AtomicRefCounted<T>(std::move(newObject)));
-    }
-
-    void reset(VkDevice device) { update(device, nullptr); }
-
-    bool isReferenced() const { return mRefCounted->isReferenced(); }
-
-    const T &get() const
-    {
-        ASSERT(mRefCounted && mRefCounted->isReferenced());
-        return mRefCounted->get();
-    }
-
-  private:
-    void update(VkDevice device, AtomicRefCounted<T> *refCounted)
-    {
-        if (mRefCounted)
-        {
-            mRefCounted->releaseRef();
-            if (!mRefCounted->isReferenced())
-            {
-                mRefCounted->get().destroy(device);
-                SafeDelete(mRefCounted);
-            }
-        }
-
-        mRefCounted = refCounted;
-
-        if (mRefCounted)
-        {
-            mRefCounted->addRef();
-        }
-    }
-
-    AtomicRefCounted<T> *mRefCounted;
 };
 
 template <typename T>

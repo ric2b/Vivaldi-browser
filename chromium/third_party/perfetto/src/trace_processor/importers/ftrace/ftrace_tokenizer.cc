@@ -17,12 +17,19 @@
 #include "src/trace_processor/importers/ftrace/ftrace_tokenizer.h"
 
 #include "perfetto/base/logging.h"
+#include "perfetto/base/status.h"
 #include "perfetto/protozero/proto_decoder.h"
 #include "perfetto/protozero/proto_utils.h"
+#include "perfetto/trace_processor/basic_types.h"
+#include "src/trace_processor/importers/common/machine_tracker.h"
+#include "src/trace_processor/importers/common/metadata_tracker.h"
 #include "src/trace_processor/importers/proto/packet_sequence_state.h"
 #include "src/trace_processor/sorter/trace_sorter.h"
+#include "src/trace_processor/storage/metadata.h"
 #include "src/trace_processor/storage/stats.h"
 #include "src/trace_processor/storage/trace_storage.h"
+#include "src/trace_processor/types/variadic.h"
+#include "src/trace_processor/util/status_macros.h"
 
 #include "protos/perfetto/common/builtin_clock.pbzero.h"
 #include "protos/perfetto/trace/ftrace/ftrace_event.pbzero.h"
@@ -160,6 +167,39 @@ base::Status FtraceTokenizer::TokenizeFtraceBundle(
     TokenizeFtraceEvent(cpu, clock_id, bundle.slice(it->data(), it->size()),
                         state);
   }
+
+  // First bundle on each cpu is special since ftrace is recorded in per-cpu
+  // buffers. In traces written by perfetto v44+ we know the timestamp from
+  // which this cpu's data stream is valid. This is important for parsing ring
+  // buffer traces, as not all per-cpu data streams will be valid from the same
+  // timestamp.
+  if (cpu >= per_cpu_seen_first_bundle_.size()) {
+    per_cpu_seen_first_bundle_.resize(cpu + 1);
+  }
+  if (!per_cpu_seen_first_bundle_[cpu]) {
+    per_cpu_seen_first_bundle_[cpu] = true;
+
+    // if this cpu's timestamp is the new max, update the metadata table entry
+    if (decoder.has_last_read_event_timestamp()) {
+      int64_t timestamp = 0;
+      ASSIGN_OR_RETURN(
+          timestamp,
+          ResolveTraceTime(
+              context_, clock_id,
+              static_cast<int64_t>(decoder.last_read_event_timestamp())));
+
+      std::optional<SqlValue> curr_latest_timestamp =
+          context_->metadata_tracker->GetMetadata(
+              metadata::ftrace_latest_data_start_ns);
+
+      if (!curr_latest_timestamp.has_value() ||
+          timestamp > curr_latest_timestamp->AsLong()) {
+        context_->metadata_tracker->SetMetadata(
+            metadata::ftrace_latest_data_start_ns,
+            Variadic::Integer(timestamp));
+      }
+    }
+  }
   return base::OkStatus();
 }
 
@@ -241,7 +281,8 @@ void FtraceTokenizer::TokenizeFtraceEvent(uint32_t cpu,
   }
 
   context_->sorter->PushFtraceEvent(cpu, *timestamp, std::move(event),
-                                    state->current_generation());
+                                    state->current_generation(),
+                                    context_->machine_id());
 }
 
 PERFETTO_ALWAYS_INLINE
@@ -301,7 +342,8 @@ void FtraceTokenizer::TokenizeFtraceCompactSchedSwitch(
       DlogWithLimit(timestamp.status());
       return;
     }
-    context_->sorter->PushInlineFtraceEvent(cpu, *timestamp, event);
+    context_->sorter->PushInlineFtraceEvent(cpu, *timestamp, event,
+                                            context_->machine_id());
   }
 
   // Check that all packed buffers were decoded correctly, and fully.
@@ -357,7 +399,8 @@ void FtraceTokenizer::TokenizeFtraceCompactSchedWaking(
       DlogWithLimit(timestamp.status());
       return;
     }
-    context_->sorter->PushInlineFtraceEvent(cpu, *timestamp, event);
+    context_->sorter->PushInlineFtraceEvent(cpu, *timestamp, event,
+                                            context_->machine_id());
   }
 
   // Check that all packed buffers were decoded correctly, and fully.
@@ -422,7 +465,8 @@ void FtraceTokenizer::TokenizeFtraceGpuWorkPeriod(uint32_t cpu,
   }
 
   context_->sorter->PushFtraceEvent(cpu, *timestamp, std::move(event),
-                                    state->current_generation());
+                                    state->current_generation(),
+                                    context_->machine_id());
 }
 
 }  // namespace trace_processor

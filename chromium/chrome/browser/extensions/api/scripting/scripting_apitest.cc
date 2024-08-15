@@ -21,11 +21,11 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/prerender_test_util.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "content/public/test/test_utils.h"
 #include "extensions/browser/api_test_utils.h"
 #include "extensions/browser/background_script_executor.h"
 #include "extensions/browser/disable_reason.h"
 #include "extensions/browser/script_executor.h"
-#include "extensions/common/extension_features.h"
 #include "extensions/common/features/feature_channel.h"
 #include "extensions/common/utils/content_script_utils.h"
 #include "extensions/test/extension_test_message_listener.h"
@@ -33,8 +33,14 @@
 #include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
+#include "pdf/buildflags.h"
 #include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(ENABLE_PDF)
+#include "base/test/scoped_feature_list.h"
+#include "pdf/pdf_features.h"
+#endif  // BUILDFLAG(ENABLE_PDF)
 
 namespace extensions {
 
@@ -131,11 +137,42 @@ IN_PROC_BROWSER_TEST_F(ScriptingAPITest, SubFramesTests) {
 // Test validating we don't insert content into nested WebContents.
 IN_PROC_BROWSER_TEST_F(ScriptingAPITest, NestedWebContents) {
   OpenURLInCurrentTab(
-      embedded_test_server()->GetURL("a.com", "/page_with_embedded_pdf.html"));
+      embedded_test_server()->GetURL("a.com", "/iframe_about_blank.html"));
+
+  content::RenderFrameHost* iframe_host = content::ChildFrameAt(
+      browser()->tab_strip_model()->GetActiveWebContents(), 0);
+  ASSERT_TRUE(iframe_host);
+  content::WebContents* inner_web_contents =
+      content::CreateAndAttachInnerContents(iframe_host);
+
+  EXPECT_TRUE(content::NavigateToURL(
+      inner_web_contents, embedded_test_server()->GetURL("/title1.html")));
 
   // From there, the test continues in the JS.
   ASSERT_TRUE(RunExtensionTest("scripting/nested_web_contents")) << message_;
 }
+
+#if BUILDFLAG(ENABLE_PDF)
+class ScriptingAPIOopifPdfTest : public ScriptingAPITest {
+ public:
+  ScriptingAPIOopifPdfTest() {
+    feature_list_.InitAndEnableFeature(chrome_pdf::features::kPdfOopif);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// Validate that extensions are not allowed to execute scripts within the PDF
+// extension frame and the PDF content frame.
+IN_PROC_BROWSER_TEST_F(ScriptingAPIOopifPdfTest, PdfFrames) {
+  OpenURLInCurrentTab(
+      embedded_test_server()->GetURL("a.com", "/page_with_embedded_pdf.html"));
+
+  // From there, the test continues in the JS.
+  ASSERT_TRUE(RunExtensionTest("scripting/pdf")) << message_;
+}
+#endif  // BUILDFLAG(ENABLE_PDF)
 
 IN_PROC_BROWSER_TEST_F(ScriptingAPITest, CSSInjection) {
   OpenURLInCurrentTab(
@@ -269,7 +306,7 @@ IN_PROC_BROWSER_TEST_F(ScriptingAPITest,
 // Test that if an extension with persistent scripts is quickly unloaded while
 // these scripts are being fetched, requests that wait on that extension's
 // script load will be unblocked. Regression for crbug.com/1250575
-// TODO(crbug.com/1484659): Disabled on ASAN due to leak caused by renderer gin
+// TODO(crbug.com/40282331): Disabled on ASAN due to leak caused by renderer gin
 // objects which are intended to be leaked.
 #if defined(ADDRESS_SANITIZER)
 #define MAYBE_RapidLoadUnload DISABLED_RapidLoadUnload
@@ -729,17 +766,14 @@ class ScriptingAPIPrerenderingTest : public ScriptingAPITest {
   content::test::ScopedPrerenderFeatureList scoped_feature_list_;
 };
 
-// TODO(crbug.com/1351648): disabled due to flakiness.
+// TODO(crbug.com/40857271): disabled due to flakiness.
 IN_PROC_BROWSER_TEST_F(ScriptingAPIPrerenderingTest, DISABLED_Basic) {
   ASSERT_TRUE(RunExtensionTest("scripting/prerendering")) << message_;
 }
 
 class ScriptingAndUserScriptsAPITest : public ScriptingAPITest {
  public:
-  ScriptingAndUserScriptsAPITest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        extensions_features::kApiUserScripts);
-  }
+  ScriptingAndUserScriptsAPITest() = default;
   ScriptingAndUserScriptsAPITest(const ScriptingAndUserScriptsAPITest&) =
       delete;
   ScriptingAndUserScriptsAPITest& operator=(
@@ -751,11 +785,6 @@ class ScriptingAndUserScriptsAPITest : public ScriptingAPITest {
     // The userScripts API is only available to users in developer mode.
     util::SetDeveloperModeForProfile(profile(), true);
   }
-
- private:
-  // The userScripts API is currently behind a feature restriction.
-  // TODO(crbug.com/1472902): Remove once the feature is stable for awhile.
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(ScriptingAndUserScriptsAPITest,

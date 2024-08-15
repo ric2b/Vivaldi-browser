@@ -3,8 +3,9 @@
 // found in the LICENSE file.
 
 #include "content/browser/preloading/prefetch/prefetch_type.h"
+
 #include "base/test/scoped_feature_list.h"
-#include "content/browser/preloading/prefetch/prefetch_features.h"
+#include "content/public/common/content_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/speculation_rules/speculation_rules.mojom.h"
 
@@ -34,6 +35,12 @@ TEST_F(PrefetchTypeTest, GetPrefetchTypeParams) {
       /*use_prefetch_proxy=*/false,
       blink::mojom::SpeculationEagerness::kConservative);
 
+  PrefetchType prefetch_type4(PreloadingTriggerType::kEmbedder,
+                              /*use_prefetch_proxy=*/true);
+
+  PrefetchType prefetch_type5(PreloadingTriggerType::kEmbedder,
+                              /*use_prefetch_proxy=*/false);
+
   EXPECT_TRUE(prefetch_type1.IsProxyRequiredWhenCrossOrigin());
   EXPECT_EQ(prefetch_type1.GetEagerness(),
             blink::mojom::SpeculationEagerness::kEager);
@@ -45,6 +52,10 @@ TEST_F(PrefetchTypeTest, GetPrefetchTypeParams) {
   EXPECT_FALSE(prefetch_type3.IsProxyRequiredWhenCrossOrigin());
   EXPECT_EQ(prefetch_type3.GetEagerness(),
             blink::mojom::SpeculationEagerness::kConservative);
+
+  EXPECT_TRUE(prefetch_type4.IsProxyRequiredWhenCrossOrigin());
+
+  EXPECT_FALSE(prefetch_type5.IsProxyRequiredWhenCrossOrigin());
 }
 
 TEST_F(PrefetchTypeTest, ComparePrefetchTypes) {
@@ -61,12 +72,15 @@ TEST_F(PrefetchTypeTest, ComparePrefetchTypes) {
       PreloadingTriggerType::kSpeculationRule,
       /*use_prefetch_proxy=*/true,
       blink::mojom::SpeculationEagerness::kConservative);
+  PrefetchType prefetch_type5(PreloadingTriggerType::kEmbedder,
+                              /*use_prefetch_proxy=*/true);
 
   // Explicitly test the == and != operators for |PrefetchType|.
   EXPECT_TRUE(prefetch_type1 == prefetch_type1);
   EXPECT_TRUE(prefetch_type1 == prefetch_type2);
   EXPECT_TRUE(prefetch_type1 != prefetch_type3);
   EXPECT_TRUE(prefetch_type1 != prefetch_type4);
+  EXPECT_TRUE(prefetch_type1 != prefetch_type5);
 }
 
 TEST_F(PrefetchTypeTest, PrefetchInitiator) {
@@ -90,14 +104,12 @@ TEST_F(PrefetchTypeTest, PrefetchInitiator) {
 
 TEST_F(PrefetchTypeTest, WptProxyTest) {
   PrefetchType prefetch_types[] = {
-      {PreloadingTriggerType::kSpeculationRule, /*use_proxy*/ true,
+      {PreloadingTriggerType::kSpeculationRule, /*use_prefetch_proxy=*/true,
        blink::mojom::SpeculationEagerness::kEager},
-      {PreloadingTriggerType::kSpeculationRule, /*use_proxy*/ true,
+      {PreloadingTriggerType::kSpeculationRule, /*use_prefetch_proxy=*/false,
        blink::mojom::SpeculationEagerness::kEager},
-      {PreloadingTriggerType::kSpeculationRule, /*use_proxy*/ false,
-       blink::mojom::SpeculationEagerness::kEager},
-      {PreloadingTriggerType::kSpeculationRule, /*use_proxy*/ false,
-       blink::mojom::SpeculationEagerness::kEager},
+      {PreloadingTriggerType::kEmbedder, /*use_prefetch_proxy=*/true},
+      {PreloadingTriggerType::kEmbedder, /*use_prefetch_proxy=*/false},
   };
   for (auto& prefetch_type : prefetch_types) {
     EXPECT_FALSE(prefetch_type.IsProxyBypassedForTesting());

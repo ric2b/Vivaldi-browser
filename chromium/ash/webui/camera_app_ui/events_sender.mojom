@@ -145,6 +145,7 @@ struct CaptureEventParams {
   ResolutionLevel resolution_level;
   AspectRatioSet aspect_ratio_set;
   CaptureDetails? capture_details;
+  double zoom_ratio;
 };
 
 struct AndroidIntentEventParams {
@@ -313,6 +314,9 @@ interface EventsSender {
 
   // Sends an event when a performance measurement is performed.
   SendPerfEvent(PerfEventParams params);
+
+  // Sends an event when a barcode is detected and it is unsupported protocol.
+  SendUnsupportedProtocolEvent();
 
   // Update the memory usage events parameter of the current camera session
   // which will be sent when the camera session ends.

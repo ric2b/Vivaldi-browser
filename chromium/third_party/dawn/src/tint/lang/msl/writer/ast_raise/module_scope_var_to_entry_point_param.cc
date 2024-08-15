@@ -216,7 +216,6 @@ struct ModuleScopeVarToEntryPointParam::State {
                 break;  // Ignore
             default: {
                 TINT_ICE() << "unhandled module-scope address space (" << sc << ")";
-                break;
             }
         }
     }
@@ -244,7 +243,7 @@ struct ModuleScopeVarToEntryPointParam::State {
             case core::AddressSpace::kWorkgroup:
                 break;
             case core::AddressSpace::kPushConstant: {
-                ctx.dst->Diagnostics().AddError(diag::System::Transform, Source{})
+                ctx.dst->Diagnostics().AddError(Source{})
                     << "unhandled module-scope address space (" << sc << ")";
                 break;
             }

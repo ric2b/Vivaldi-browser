@@ -32,14 +32,13 @@
 #include "internal.h"
 #include "scale_eval.h"
 #include "video.h"
-#include "libavutil/avstring.h"
 #include "libavutil/eval.h"
+#include "libavutil/imgutils_internal.h"
 #include "libavutil/internal.h"
-#include "libavutil/mathematics.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/pixdesc.h"
-#include "libavutil/imgutils.h"
 #include "libswscale/swscale.h"
 
 static const char *const var_names[] = {
@@ -999,8 +998,8 @@ static const AVOption scale_options[] = {
     { "height","Output video height",         OFFSET(h_expr),    AV_OPT_TYPE_STRING,        .flags = TFLAGS },
     { "flags", "Flags to pass to libswscale", OFFSET(flags_str), AV_OPT_TYPE_STRING, { .str = "" }, .flags = FLAGS },
     { "interl", "set interlacing", OFFSET(interlaced), AV_OPT_TYPE_BOOL, {.i64 = 0 }, -1, 1, FLAGS },
-    { "size",   "set video size",          OFFSET(size_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, FLAGS },
-    { "s",      "set video size",          OFFSET(size_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, FLAGS },
+    { "size",   "set video size",          OFFSET(size_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, .flags = FLAGS },
+    { "s",      "set video size",          OFFSET(size_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, .flags = FLAGS },
     {  "in_color_matrix", "set input YCbCr type",   OFFSET(in_color_matrix),  AV_OPT_TYPE_INT, { .i64 = -1 }, -1, AVCOL_SPC_NB-1, .flags = FLAGS, .unit = "color" },
     { "out_color_matrix", "set output YCbCr type",  OFFSET(out_color_matrix), AV_OPT_TYPE_INT, { .i64 = AVCOL_SPC_UNSPECIFIED }, 0, AVCOL_SPC_NB-1, .flags = FLAGS, .unit = "color"},
         { "auto",        NULL, 0, AV_OPT_TYPE_CONST, { .i64 = -1 },                     0, 0, FLAGS, .unit = "color" },

@@ -84,6 +84,21 @@ std::unique_ptr<net::DatagramServerSocket> DefaultSocketFactory(
   return base::WrapUnique(socket);
 }
 
+rtc::EcnMarking GetEcnMarking(net::DscpAndEcn tos) {
+  switch (tos.ecn) {
+    case net::ECN_NO_CHANGE:
+      NOTREACHED_NORETURN();
+    case net::ECN_NOT_ECT:
+      return rtc::EcnMarking::kNotEct;
+    case net::ECN_ECT1:
+      return rtc::EcnMarking::kEct1;
+    case net::ECN_ECT0:
+      return rtc::EcnMarking::kEct0;
+    case net::ECN_CE:
+      return rtc::EcnMarking::kCe;
+  }
+}
+
 }  // namespace
 
 namespace network {
@@ -296,7 +311,8 @@ bool P2PSocketUdp::HandleReadResult(int result) {
     delegate_->DumpPacket(data, true);
     auto packet = mojom::P2PReceivedPacket::New(
         data, recv_address_,
-        base::TimeTicks() + base::Nanoseconds(rtc::TimeNanos()));
+        base::TimeTicks() + base::Nanoseconds(rtc::TimeNanos()),
+        GetEcnMarking(socket_->GetLastTos()));
 
     if (interceptor_) {
       interceptor_->EnqueueReceive(std::move(packet), std::move(recv_buffer_),
@@ -388,8 +404,8 @@ bool P2PSocketUdp::DoSend(const P2PPendingPacket& packet) {
       &P2PSocketUdp::OnSend, base::Unretained(this), packet.id,
       packet.packet_options.packet_id, send_time_us / 1000);
 
-  // TODO(crbug.com/656607): Pass traffic annotation after DatagramSocketServer
-  // is updated.
+  // TODO(crbug.com/40489281): Pass traffic annotation after
+  // DatagramSocketServer is updated.
   int result = socket_->SendTo(packet.data.get(), packet.size, packet.to,
                                base::BindOnce(callback_binding));
 

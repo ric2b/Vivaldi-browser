@@ -18,7 +18,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "platform/test/paths.h"
-#include "testing/util/read_file.h"
+#include "util/read_file.h"
 
 namespace openscreen::cast {
 namespace {
@@ -54,7 +54,7 @@ class DeviceAuthNamespaceHandlerTest : public ::testing::Test {
 
   StaticCredentialsProvider creds_;
   VirtualConnectionRouter router_;
-  DeviceAuthNamespaceHandler auth_handler_{&creds_};
+  DeviceAuthNamespaceHandler auth_handler_{creds_};
 };
 
 // The tests in this file use a pre-recorded AuthChallenge as input and a

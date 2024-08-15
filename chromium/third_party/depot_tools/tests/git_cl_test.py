@@ -5,13 +5,14 @@
 # found in the LICENSE file.
 """Unit tests for git_cl.py."""
 
+import codecs
 import datetime
 import json
 import logging
-from io import StringIO
 import multiprocessing
 import optparse
 import os
+import io
 import shutil
 import sys
 import tempfile
@@ -196,8 +197,8 @@ class SystemExitMock(Exception):
 class TestGitClBasic(unittest.TestCase):
     def setUp(self):
         mock.patch('sys.exit', side_effect=SystemExitMock).start()
-        mock.patch('sys.stdout', StringIO()).start()
-        mock.patch('sys.stderr', StringIO()).start()
+        mock.patch('sys.stdout', io.StringIO()).start()
+        mock.patch('sys.stderr', io.StringIO()).start()
         self.addCleanup(mock.patch.stopall)
 
     def test_die_with_error(self):
@@ -249,6 +250,30 @@ class TestGitClBasic(unittest.TestCase):
         cl = git_cl.Changelist()
         options = optparse.Values()
         options.target_branch = 'refs/heads/bar'
+        with self.assertRaises(SystemExitMock):
+            cl.CMDUploadChange(options, [], 'foo',
+                               git_cl.ChangeDescription('bar'))
+
+        # ensure upload is called once
+        self.assertEqual(len(m.mock_calls), 1)
+        sys.exit.assert_called_once_with(1)
+        # option not set as retry didn't happen
+        self.assertFalse(hasattr(options, 'force'))
+        self.assertFalse(hasattr(options, 'edit_description'))
+
+    def test_upload_to_meta_config_branch_no_retry(self):
+        m = mock.patch('git_cl.Changelist._CMDUploadChange',
+                       side_effect=[git_cl.GitPushError(), None]).start()
+        mock.patch('git_cl.Changelist.GetRemoteBranch',
+                   return_value=('foo', 'bar')).start()
+        mock.patch('git_cl.Changelist.GetGerritProject',
+                   return_value='foo').start()
+        mock.patch('git_cl.gerrit_util.GetProjectHead',
+                   return_value='refs/heads/main').start()
+
+        cl = git_cl.Changelist()
+        options = optparse.Values()
+        options.target_branch = 'refs/meta/config'
         with self.assertRaises(SystemExitMock):
             cl.CMDUploadChange(options, [], 'foo',
                                git_cl.ChangeDescription('bar'))
@@ -500,7 +525,7 @@ class GitCookiesCheckerTest(unittest.TestCase):
         super(GitCookiesCheckerTest, self).setUp()
         self.c = git_cl._GitCookiesChecker()
         self.c._all_hosts = []
-        mock.patch('sys.stdout', StringIO()).start()
+        mock.patch('sys.stdout', io.StringIO()).start()
         self.addCleanup(mock.patch.stopall)
 
     def mock_hosts_creds(self, subhost_identity_pairs):
@@ -589,7 +614,7 @@ class TestGitCl(unittest.TestCase):
         self.calls = []
         self._calls_done = []
         self.failed = False
-        mock.patch('sys.stdout', StringIO()).start()
+        mock.patch('sys.stdout', io.StringIO()).start()
         mock.patch('git_cl.time_time',
                    lambda: self._mocked_call('time.time')).start()
         mock.patch('git_cl.metrics.collector.add_repeated',
@@ -708,15 +733,15 @@ class TestGitCl(unittest.TestCase):
             result = result.encode('utf-8')
         return result
 
-    @mock.patch('sys.stdin', StringIO('blah\nye\n'))
-    @mock.patch('sys.stdout', StringIO())
+    @mock.patch('sys.stdin', io.StringIO('blah\nye\n'))
+    @mock.patch('sys.stdout', io.StringIO())
     def test_ask_for_explicit_yes_true(self):
         self.assertTrue(git_cl.ask_for_explicit_yes('prompt'))
         self.assertEqual('prompt [Yes/No]: Please, type yes or no: ',
                          sys.stdout.getvalue())
 
     def test_LoadCodereviewSettingsFromFile_gerrit(self):
-        codereview_file = StringIO('GERRIT_HOST: true')
+        codereview_file = io.StringIO('GERRIT_HOST: true')
         self.calls = [
             ((['git', 'config', '--unset-all', 'rietveld.cc'], ), CERR1),
             ((['git', 'config', '--unset-all',
@@ -1989,8 +2014,8 @@ class TestGitCl(unittest.TestCase):
 
     @mock.patch('git_cl.RunGit')
     @mock.patch('git_cl.CMDupload')
-    @mock.patch('sys.stdin', StringIO('\n'))
-    @mock.patch('sys.stdout', StringIO())
+    @mock.patch('sys.stdin', io.StringIO('\n'))
+    @mock.patch('sys.stdout', io.StringIO())
     def test_upload_branch_deps(self, *_mocks):
         def mock_run_git(*args, **_kwargs):
             if args[0] == [
@@ -2430,7 +2455,7 @@ class TestGitCl(unittest.TestCase):
             ]), 0)
         self.assertIssueAndPatchset(patchset='1', git_short_host='else')
 
-    @mock.patch('sys.stderr', StringIO())
+    @mock.patch('sys.stderr', io.StringIO())
     def test_patch_gerrit_conflict(self):
         self._patch_common()
         self.calls += [
@@ -2447,7 +2472,7 @@ class TestGitCl(unittest.TestCase):
 
     @mock.patch('gerrit_util.GetChangeDetail',
                 side_effect=gerrit_util.GerritError(404, ''))
-    @mock.patch('sys.stderr', StringIO())
+    @mock.patch('sys.stderr', io.StringIO())
     def test_patch_gerrit_not_exists(self, *_mocks):
         self.mockGit.config['remote.origin.url'] = (
             'https://chromium.googlesource.com/my/repo')
@@ -2501,7 +2526,7 @@ class TestGitCl(unittest.TestCase):
         cl.branchref = 'refs/heads/main'
         return cl
 
-    @mock.patch('sys.stderr', StringIO())
+    @mock.patch('sys.stderr', io.StringIO())
     def test_gerrit_ensure_authenticated_missing(self):
         cl = self._test_gerrit_ensure_authenticated_common(
             auth={
@@ -2648,7 +2673,7 @@ class TestGitCl(unittest.TestCase):
         self.assertEqual(0, git_cl.main(['description', '-d']))
         self.assertEqual('foo\n', sys.stdout.getvalue())
 
-    @mock.patch('sys.stderr', StringIO())
+    @mock.patch('sys.stderr', io.StringIO())
     def test_StatusFieldOverrideIssueMissingArgs(self):
         try:
             self.assertEqual(git_cl.main(['status', '--issue', '1']), 0)
@@ -2699,7 +2724,7 @@ class TestGitCl(unittest.TestCase):
 
     def test_description_set_raw(self):
         mock.patch('git_cl.Changelist', ChangelistMock).start()
-        mock.patch('git_cl.sys.stdin', StringIO('hihi')).start()
+        mock.patch('git_cl.sys.stdin', io.StringIO('hihi')).start()
 
         self.assertEqual(0, git_cl.main(['description', '-n', 'hihi']))
         self.assertEqual('hihi', ChangelistMock.desc)
@@ -2753,7 +2778,7 @@ class TestGitCl(unittest.TestCase):
     def test_description_set_stdin(self):
         mock.patch('git_cl.Changelist', ChangelistMock).start()
         mock.patch('git_cl.sys.stdin',
-                   StringIO('hi \r\n\t there\n\nman')).start()
+                   io.StringIO('hi \r\n\t there\n\nman')).start()
 
         self.assertEqual(0, git_cl.main(['description', '-n', '-']))
         self.assertEqual('hi\n\t there\n\nman', ChangelistMock.desc)
@@ -4242,7 +4267,7 @@ class CMDTestCaseBase(unittest.TestCase):
 
     def setUp(self):
         super(CMDTestCaseBase, self).setUp()
-        mock.patch('git_cl.sys.stdout', StringIO()).start()
+        mock.patch('git_cl.sys.stdout', io.StringIO()).start()
         mock.patch('git_cl.uuid.uuid4', return_value='uuid4').start()
         mock.patch('git_cl.Changelist.GetIssue', return_value=123456).start()
         mock.patch(
@@ -4694,7 +4719,7 @@ class CMDTryTestCase(CMDTestCaseBase):
                                                'cr-buildbucket.appspot.com',
                                                'Batch', expected_request)
 
-    @mock.patch('sys.stderr', StringIO())
+    @mock.patch('sys.stderr', io.StringIO())
     def testScheduleOnBuildbucket_WrongBucket(self):
         with self.assertRaises(SystemExit):
             git_cl.main([
@@ -5252,6 +5277,51 @@ class CMDOwnersTestCase(CMDTestCaseBase):
         self.assertEqual(0, git_cl.main(['owners', '--batch']))
         self.assertIn('a@example.com', sys.stdout.getvalue())
         self.assertIn('b@example.com', sys.stdout.getvalue())
+
+
+class CMDLintTestCase(CMDTestCaseBase):
+    bad_indent = '\n'.join([
+        '// Copyright 1999 <a@example.com>',
+        'namespace foo {',
+        '  class a;',
+        '}',
+        '',
+    ])
+    filesInCL = ['foo', 'bar']
+
+    def setUp(self):
+        super(CMDLintTestCase, self).setUp()
+        mock.patch('git_cl.sys.stderr', io.StringIO()).start()
+        mock.patch('codecs.open', mock.mock_open()).start()
+        mock.patch('os.path.isfile', return_value=True).start()
+
+    def testLintSingleFile(self, *_mock):
+        codecs.open().read.return_value = self.bad_indent
+        self.assertEqual(1, git_cl.main(['lint', 'pdf.h']))
+        self.assertIn('pdf.h:3:  (cpplint) Do not indent within a namespace',
+                      git_cl.sys.stderr.getvalue())
+
+    def testLintMultiFiles(self, *_mock):
+        codecs.open().read.return_value = self.bad_indent
+        self.assertEqual(1, git_cl.main(['lint', 'pdf.h', 'pdf.cc']))
+        self.assertIn('pdf.h:3:  (cpplint) Do not indent within a namespace',
+                      git_cl.sys.stderr.getvalue())
+        self.assertIn('pdf.cc:3:  (cpplint) Do not indent within a namespace',
+                      git_cl.sys.stderr.getvalue())
+
+    @mock.patch('git_cl.Changelist.GetAffectedFiles',
+                return_value=['chg-1.h', 'chg-2.cc'])
+    @mock.patch('git_cl.Changelist.GetCommonAncestorWithUpstream',
+                return_value='upstream')
+    @mock.patch('git_cl.Settings.GetRoot', return_value='.')
+    @mock.patch('git_cl.FindCodereviewSettingsFile', return_value=None)
+    def testLintChangelist(self, *_mock):
+        codecs.open().read.return_value = self.bad_indent
+        self.assertEqual(1, git_cl.main(['lint']))
+        self.assertIn('chg-1.h:3:  (cpplint) Do not indent within a namespace',
+                      git_cl.sys.stderr.getvalue())
+        self.assertIn('chg-2.cc:3:  (cpplint) Do not indent within a namespace',
+                      git_cl.sys.stderr.getvalue())
 
 
 if __name__ == '__main__':

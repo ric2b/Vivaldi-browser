@@ -9,11 +9,14 @@
 #include <cmath>
 #include <limits>
 #include <map>
+#include <optional>
 #include <set>
 #include <utility>
 #include <vector>
 
+#include "base/test/gmock_expected_support.h"
 #include "base/time/time.h"
+#include "base/types/expected_macros.h"
 #include "build/build_config.h"
 #include "components/attribution_reporting/event_report_windows.h"
 #include "components/attribution_reporting/max_event_level_reports.h"
@@ -403,12 +406,16 @@ void RunRandomFakeReportsTest(const TriggerSpecs& specs,
   for (int i = 0; i < num_samples; i++) {
     // Use epsilon = 0 to ensure that random data is always sampled from the RR
     // mechanism.
-    RandomizedResponseData response =
-        internal::DoRandomizedResponseWithCache(specs, max_reports,
-                                                /*epsilon=*/0, map);
+    ASSERT_OK_AND_ASSIGN(
+        auto response,
+        internal::DoRandomizedResponseWithCache(
+            specs, max_reports,
+            /*epsilon=*/0, map,
+            /*max_trigger_state_cardinality=*/absl::Uint128Max(),
+            /*max_channel_capacity=*/std::numeric_limits<double>::infinity()));
     ASSERT_TRUE(response.response().has_value());
     auto [it, _] =
-        output_counts.try_emplace(*std::move(response).ResponseForTesting(), 0);
+        output_counts.try_emplace(std::move(*response.response()), 0);
     ++it->second;
   }
 
@@ -603,13 +610,39 @@ TEST(PrivacyMathTest, NonDefaultTriggerDataForSingleSharedSpec) {
   do {
     internal::StateMap map;
 
-    response =
-        internal::DoRandomizedResponseWithCache(kSpecs, /*max_reports=*/1,
-                                                /*epsilon=*/0, map)
-            .response();
+    ASSERT_OK_AND_ASSIGN(
+        auto response_data,
+        internal::DoRandomizedResponseWithCache(
+            kSpecs, /*max_reports=*/1,
+            /*epsilon=*/0, map,
+            /*max_trigger_state_cardinality=*/absl::Uint128Max(),
+            /*max_channel_capacity=*/std::numeric_limits<double>::infinity()));
+    response = response_data.response();
   } while (!response.has_value() || response->empty());
 
   ASSERT_EQ(uint64_t{123u}, response->front().trigger_data);
+}
+
+TEST(PrivacyMathTest, RandomizedResponse_StateLimited) {
+  auto cardinality_response = DoRandomizedResponse(
+      TriggerSpecs(), /*max_reports=*/MaxEventLevelReports(1), /*epsilon=*/0,
+      /*max_trigger_state_cardinality=*/0,
+      /*max_channel_capacity=*/std::numeric_limits<double>::infinity());
+
+  EXPECT_THAT(
+      cardinality_response,
+      base::test::ErrorIs(
+          RandomizedResponseError::kExceedsTriggerStateCardinalityLimit));
+
+  auto channel_capacity_response = DoRandomizedResponse(
+      TriggerSpecs(SourceType::kNavigation, EventReportWindows()),
+      /*max_reports=*/MaxEventLevelReports(1), /*epsilon=*/1,
+      /*max_trigger_state_cardinality=*/absl::Uint128Max(),
+      /*max_channel_capacity=*/0);
+
+  EXPECT_THAT(channel_capacity_response,
+              base::test::ErrorIs(
+                  RandomizedResponseError::kExceedsChannelCapacityLimit));
 }
 
 // Regression test for http://crbug.com/1504144 in which empty specs cause an
@@ -639,13 +672,95 @@ TEST(PrivacyMathTest, UnaryChannel) {
     EXPECT_EQ(1, GetNumStates(test_case.trigger_specs,
                               test_case.max_event_level_reports));
 
-    EXPECT_EQ(RandomizedResponseData(
-                  /*rate=*/1,
-                  /*channel_capacity=*/0,
-                  /*response=*/std::vector<FakeEventLevelReport>()),
-              DoRandomizedResponse(test_case.trigger_specs,
-                                   test_case.max_event_level_reports,
-                                   /*epsilon=*/0));
+    EXPECT_EQ(
+        RandomizedResponseData(
+            /*rate=*/1,
+            /*response=*/std::vector<FakeEventLevelReport>()),
+        DoRandomizedResponse(
+            test_case.trigger_specs, test_case.max_event_level_reports,
+            /*epsilon=*/0,
+            /*max_trigger_state_cardinality=*/absl::Uint128Max(),
+            /*max_channel_capacity=*/std::numeric_limits<double>::infinity()));
+  }
+}
+
+TEST(PrivacyMathTest, IsValid) {
+  const TriggerSpecs kSpecs(SourceType::kNavigation,
+                            *EventReportWindows::FromDefaults(
+                                base::Days(30), SourceType::kNavigation));
+
+  const MaxEventLevelReports kMaxEventLevelReports(1);
+
+  const struct {
+    const char* desc;
+    RandomizedResponse response;
+    bool expected;
+  } kTestCases[] = {
+      {
+          "null",
+          std::nullopt,
+          true,
+      },
+      {
+          "non_null",
+          std::vector<FakeEventLevelReport>{
+              {
+                  .trigger_data = 5,
+                  .window_index = 1,
+              },
+          },
+          true,
+      },
+      {
+          "too_many_reports",
+          std::vector<FakeEventLevelReport>{
+              {
+                  .trigger_data = 0,
+                  .window_index = 0,
+              },
+              {
+                  .trigger_data = 0,
+                  .window_index = 0,
+              },
+          },
+          false,
+      },
+      {
+          "invalid_trigger_data",
+          std::vector<FakeEventLevelReport>{
+              {
+                  .trigger_data = 8,
+                  .window_index = 0,
+              },
+          },
+          false,
+      },
+      {
+          "window_index_too_large",
+          std::vector<FakeEventLevelReport>{
+              {
+                  .trigger_data = 0,
+                  .window_index = 3,
+              },
+          },
+          false,
+      },
+      {
+          "window_index_negative",
+          std::vector<FakeEventLevelReport>{
+              {
+                  .trigger_data = 0,
+                  .window_index = -1,
+              },
+          },
+          false,
+      },
+  };
+
+  for (const auto& test_case : kTestCases) {
+    SCOPED_TRACE(test_case.desc);
+    EXPECT_EQ(test_case.expected,
+              IsValid(test_case.response, kSpecs, kMaxEventLevelReports));
   }
 }
 

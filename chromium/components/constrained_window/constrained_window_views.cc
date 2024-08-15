@@ -100,23 +100,13 @@ class WidgetModalDialogHostObserverViews : public views::WidgetObserver,
   const char* const native_window_property_;
 };
 
-void UpdateModalDialogPosition(views::Widget* widget,
+gfx::Rect GetModalDialogBounds(views::Widget* widget,
                                web_modal::ModalDialogHost* dialog_host,
                                const gfx::Size& size) {
-  // Do not forcibly update the dialog widget position if it is being dragged.
-  if (widget->HasCapture())
-    return;
-
-  views::Widget* host_widget =
+  views::Widget* const host_widget =
       views::Widget::GetWidgetForNativeView(dialog_host->GetHostView());
-
-  // If the host view is not backed by a Views::Widget, just update the widget
-  // size. This can happen on MacViews under the Cocoa browser where the window
-  // modal dialogs are displayed as sheets, and their position is managed by a
-  // ConstrainedWindowSheetController instance.
   if (!host_widget) {
-    widget->SetSize(size);
-    return;
+    return gfx::Rect();
   }
 
   gfx::Point position = dialog_host->GetDialogPosition(size);
@@ -133,7 +123,7 @@ void UpdateModalDialogPosition(views::Widget* widget,
         host_widget->GetClientAreaBoundsInScreen().OffsetFromOrigin();
     const gfx::Rect host_screen_bounds = host_widget->GetWindowBoundsInScreen();
 
-    // TODO(crbug.com/1341530): The requested dialog bounds should never fall
+    // TODO(crbug.com/40851111): The requested dialog bounds should never fall
     // outside the bounds of the transient parent.
     DCHECK(dialog_screen_bounds.Intersects(host_screen_bounds));
 
@@ -161,8 +151,30 @@ void UpdateModalDialogPosition(views::Widget* widget,
     // Readjust the position of the dialog.
     dialog_bounds.set_origin(dialog_screen_bounds.origin());
   }
+  return dialog_bounds;
+}
 
-  widget->SetBounds(dialog_bounds);
+void UpdateModalDialogPosition(views::Widget* widget,
+                               web_modal::ModalDialogHost* dialog_host,
+                               const gfx::Size& size) {
+  // Do not forcibly update the dialog widget position if it is being dragged.
+  if (widget->HasCapture()) {
+    return;
+  }
+
+  views::Widget* const host_widget =
+      views::Widget::GetWidgetForNativeView(dialog_host->GetHostView());
+
+  // If the host view is not backed by a Views::Widget, just update the widget
+  // size. This can happen on MacViews under the Cocoa browser where the window
+  // modal dialogs are displayed as sheets, and their position is managed by a
+  // ConstrainedWindowSheetController instance.
+  if (!host_widget) {
+    widget->SetSize(size);
+    return;
+  }
+
+  widget->SetBounds(GetModalDialogBounds(widget, dialog_host, size));
 }
 
 }  // namespace
@@ -176,7 +188,7 @@ void SetConstrainedWindowViewsClient(
 void UpdateWebContentsModalDialogPosition(
     views::Widget* widget,
     web_modal::WebContentsModalDialogHost* dialog_host) {
-  gfx::Size size = widget->GetRootView()->GetPreferredSize();
+  gfx::Size size = widget->GetRootView()->GetPreferredSize({});
   gfx::Size max_size = dialog_host->GetMaximumDialogSize();
   // Enlarge the max size by the top border, as the dialog will be shifted
   // outside the area specified by the dialog host by this amount later.
@@ -189,7 +201,7 @@ void UpdateWebContentsModalDialogPosition(
 void UpdateWidgetModalDialogPosition(views::Widget* widget,
                                      web_modal::ModalDialogHost* dialog_host) {
   UpdateModalDialogPosition(widget, dialog_host,
-                            widget->GetRootView()->GetPreferredSize());
+                            widget->GetRootView()->GetPreferredSize({}));
 }
 
 content::WebContents* GetTopLevelWebContents(
@@ -248,9 +260,17 @@ views::Widget* CreateWebModalDialogViews(views::WidgetDelegate* dialog,
         << ", scheme=" << url.scheme_piece() << ", host=" << url.host_piece();
   }
 
+  web_modal::ModalDialogHost* const dialog_host =
+      manager->delegate()->GetWebContentsModalDialogHost();
   views::Widget* widget = views::DialogDelegate::CreateDialogWidget(
-      dialog, nullptr,
-      manager->delegate()->GetWebContentsModalDialogHost()->GetHostView());
+      dialog, nullptr, dialog_host->GetHostView());
+  dialog->set_desired_bounds_delegate(base::BindRepeating(
+      [](views::Widget* widget,
+         web_modal::ModalDialogHost* dialog_host) -> gfx::Rect {
+        return GetModalDialogBounds(
+            widget, dialog_host, widget->GetRootView()->GetPreferredSize({}));
+      },
+      widget, dialog_host));
   widget->SetNativeWindowProperty(
       views::kWidgetIdentifierKey,
       const_cast<void*>(kConstrainedWindowWidgetIdentifier));
@@ -303,11 +323,17 @@ views::Widget* CreateBrowserModalDialogViews(views::DialogDelegate* dialog,
 
 views::Widget* ShowBrowserModal(std::unique_ptr<ui::DialogModel> dialog_model,
                                 gfx::NativeWindow parent) {
+  // TODO(crbug.com/41493925): Remove will_use_custom_frame once native frame
+  // dialogs support autosize.
+  bool will_use_custom_frame = views::DialogDelegate::CanSupportCustomFrame(
+      parent ? CurrentClient()->GetDialogHostView(parent) : nullptr);
   auto dialog = views::BubbleDialogModelHost::CreateModal(
-      std::move(dialog_model), ui::MODAL_TYPE_WINDOW);
+      std::move(dialog_model), ui::MODAL_TYPE_WINDOW, will_use_custom_frame);
   dialog->SetOwnedByWidget(true);
   auto* widget = constrained_window::CreateBrowserModalDialogViews(
       std::move(dialog), parent);
+  CHECK_EQ(widget->widget_delegate()->AsDialogDelegate()->use_custom_frame(),
+           will_use_custom_frame);
   widget->Show();
   return widget;
 }

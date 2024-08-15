@@ -377,7 +377,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             AppMenuHandler handler) {
         ModelList modelList = new ModelList();
         prepareMenu(menu, handler);
-        // TODO(crbug.com/1119550): Programmatically create menu item's PropertyModel instead of
+        // TODO(crbug.com/40145539): Programmatically create menu item's PropertyModel instead of
         // converting from MenuItems.
         int visibleBeforeReadAloudCount = 0;
         for (int i = 0; i < menu.size(); ++i) {
@@ -399,7 +399,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             if (item.hasSubMenu()) {
                 // Only support top level menu items have SUBMENU, and a SUBMENU item cannot have a
                 // SUBMENU.
-                // TODO(crbug.com/1183234) : Create a new SubMenuItemProperties property key set for
+                // TODO(crbug.com/40171109) : Create a new SubMenuItemProperties property key set
+                // for
                 // SUBMENU items.
                 ModelList subList = new ModelList();
                 for (int j = 0; j < item.getSubMenu().size(); ++j) {
@@ -469,11 +470,12 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 && !currentTab.isNativePage() && currentTab.getWebContents() != null;
 
         GURL url = isCurrentTabNotNull ? currentTab.getUrl() : GURL.emptyGURL();
-        final boolean isChromeScheme =
+        final boolean isNativePage =
                 url.getScheme().equals(UrlConstants.CHROME_SCHEME)
                 || url.getScheme().equals(VivaldiUrlConstants.VIVALDI_SCHEME)
                 || url.getScheme().equals(VivaldiUrlConstants.VIVALDI_NATIVE_SCHEME)
-                        || url.getScheme().equals(UrlConstants.CHROME_NATIVE_SCHEME);
+                        || url.getScheme().equals(UrlConstants.CHROME_NATIVE_SCHEME)
+                        || (isCurrentTabNotNull && currentTab.isNativePage());
         final boolean isFileScheme = url.getScheme().equals(UrlConstants.FILE_SCHEME);
         final boolean isContentScheme = url.getScheme().equals(UrlConstants.CONTENT_SCHEME);
 
@@ -607,7 +609,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         menu.findItem(R.id.paint_preview_show_id)
                 .setVisible(
                         isCurrentTabNotNull
-                                && shouldShowPaintPreview(isChromeScheme, currentTab, isIncognito));
+                                && shouldShowPaintPreview(isNativePage, currentTab, isIncognito));
 
         // Enable image descriptions if touch exploration is currently enabled, but not on the
         // native NTP or Start surface.
@@ -643,10 +645,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                                 && shouldShowWebContentsDependentMenuItem(currentTab)
                                 && PageZoomCoordinator.shouldShowMenuItem());
 
-        // Disable find in page on the native NTP or on Start surface.
-        menu.findItem(R.id.find_in_page_id)
-                .setVisible(
-                        isCurrentTabNotNull && shouldShowWebContentsDependentMenuItem(currentTab));
+        // Disable find in page on the native NTP (except for PDF native page) or on Start surface.
+        updateFindInPageMenuItem(menu, currentTab);
 
         if (ChromeApplicationImpl.isVivaldi()) {
             menu.findItem(R.id.share_menu_id).setEnabled(
@@ -672,14 +672,17 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 menu,
                 currentTab,
                 shouldShowHomeScreenMenuItem(
-                        isChromeScheme, isFileScheme, isContentScheme, isIncognito, url));
+                        isNativePage, isFileScheme, isContentScheme, isIncognito, url));
 
         if (ChromeApplicationImpl.isVivaldi())
-            updateRequestDesktopSiteMenuItem(menu, currentTab, hasWebContents, isChromeScheme);
+            updateRequestDesktopSiteMenuItem(menu, currentTab, hasWebContents, isNativePage);
         else
-        updateRequestDesktopSiteMenuItem(menu, currentTab, true /* can show */, isChromeScheme);
+        updateRequestDesktopSiteMenuItem(menu, currentTab, true /* can show */, isNativePage);
 
-        updateAutoDarkMenuItem(menu, currentTab, isChromeScheme);
+        if (ChromeApplicationImpl.isVivaldi())
+            menu.findItem(R.id.auto_dark_web_contents_row_menu_id).setVisible(false);
+        else
+        updateAutoDarkMenuItem(menu, currentTab, isNativePage);
 
         if (ChromeApplicationImpl.isVivaldi())
             menu.findItem(R.id.reader_mode_prefs_id).setVisible(false);
@@ -949,22 +952,22 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     }
 
     /**
-     * @param isChromeScheme Whether URL for the current tab starts with the chrome:// scheme.
+     * @param isNativePage Whether the current tab is a native page.
      * @param currentTab The currentTab for which the app menu is showing.
      * @param isIncognito Whether the currentTab is incognito.
      * @return Whether the paint preview menu item should be displayed.
      */
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
     public boolean shouldShowPaintPreview(
-            boolean isChromeScheme, @NonNull Tab currentTab, boolean isIncognito) {
+            boolean isNativePage, @NonNull Tab currentTab, boolean isIncognito) {
         if (ChromeApplicationImpl.isVivaldi()) return false;
-        return ChromeFeatureList.sPaintPreviewDemo.isEnabled() && !isChromeScheme && !isIncognito;
+        return ChromeFeatureList.sPaintPreviewDemo.isEnabled() && !isNativePage && !isIncognito;
     }
 
     /**
      * @param currentTab The currentTab for which the app menu is showing.
-     * @return Whether the currentTab should show an app menu item that requires a webContents.
-     *         This will return false for the Start service or native NTP, and true otherwise.
+     * @return Whether the currentTab should show an app menu item that requires a webContents. This
+     *     will return false for the Start surface or native NTP, and true otherwise.
      */
     protected boolean shouldShowWebContentsDependentMenuItem(@NonNull Tab currentTab) {
         return !currentTab.isNativePage() && currentTab.getWebContents() != null;
@@ -982,7 +985,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     }
 
     /**
-     * @param isChromeScheme Whether URL for the current tab starts with the chrome:// scheme.
+     * @param isNativePage Whether the current tab is a native page.
      * @param isFileScheme Whether URL for the current tab starts with the file:// scheme.
      * @param isContentScheme Whether URL for the current tab starts with the file:// scheme.
      * @param isIncognito Whether the current tab is incognito.
@@ -990,7 +993,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      * @return Whether the homescreen menu item should be displayed.
      */
     protected boolean shouldShowHomeScreenMenuItem(
-            boolean isChromeScheme,
+            boolean isNativePage,
             boolean isFileScheme,
             boolean isContentScheme,
             boolean isIncognito,
@@ -998,7 +1001,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         // Vivaldi
         if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return false;
         // Hide 'Add to homescreen' for the following:
-        // * chrome:// pages - Android doesn't know how to direct those URLs.
+        // * native pages - Android doesn't know how to direct those URLs.
         // * incognito pages - To avoid problems where users create shortcuts in incognito
         //                      mode and then open the webapp in regular mode.
         // * file:// - After API 24, file: URIs are not supported in VIEW intents and thus
@@ -1008,7 +1011,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         //                is not persisted when adding to the homescreen.
         // * If creating shortcuts it not supported by the current home screen.
         return WebappsUtils.isAddToHomeIntentSupported()
-                && !isChromeScheme
+                && !isNativePage
                 && !isFileScheme
                 && !isContentScheme
                 && !isIncognito
@@ -1194,10 +1197,6 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     /** Returns true if a badge (i.e. a red-dot) should be shown on the menu item icon. */
     protected boolean shouldShowBadgeOnMenuItemIcon(MenuItem item) {
         if (item.getItemId() == R.id.preferences_id) {
-            if (!ChromeFeatureList.isEnabled(
-                    ChromeFeatureList.SYNC_SHOW_IDENTITY_ERRORS_FOR_SIGNED_IN_USERS)) {
-                return false;
-            }
             // Theoretically mTabModelSelector could return a stub model.
             Profile profile = mTabModelSelector.getCurrentModel().getProfile();
             if (profile == null) {
@@ -1219,10 +1218,6 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      */
     protected String getContentDescription(MenuItem item) {
         if (item.getItemId() == R.id.preferences_id) {
-            if (!ChromeFeatureList.isEnabled(
-                    ChromeFeatureList.SYNC_SHOW_IDENTITY_ERRORS_FOR_SIGNED_IN_USERS)) {
-                return null;
-            }
             // Theoretically mTabModelSelector could return a stub model.
             Profile profile = mTabModelSelector.getCurrentModel().getProfile();
             if (profile == null) {
@@ -1435,18 +1430,35 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     }
 
     /**
+     * Updates the find in page menu item's state.
+     *
+     * @param menu {@link Menu} for find in page.
+     * @param currentTab Current tab being displayed.
+     */
+    private void updateFindInPageMenuItem(Menu menu, @Nullable Tab currentTab) {
+        MenuItem findInPageMenuRow = menu.findItem(R.id.find_in_page_id);
+        // PDF native page should show find in page menu item.
+        boolean itemVisible =
+                currentTab != null
+                        && (shouldShowWebContentsDependentMenuItem(currentTab)
+                                || (currentTab.isNativePage()
+                                        && currentTab.getNativePage().isPdf()));
+        findInPageMenuRow.setVisible(itemVisible);
+    }
+
+    /**
      * Updates the request desktop site item's state.
      *
      * @param menu {@link Menu} for request desktop site.
      * @param currentTab Current tab being displayed.
      * @param canShowRequestDesktopSite If the request desktop site menu item should show or not.
-     * @param isChromeScheme Whether URL for the current tab starts with the chrome:// scheme.
+     * @param isNativePage Whether the current tab is a native page.
      */
     protected void updateRequestDesktopSiteMenuItem(
             Menu menu,
             @Nullable Tab currentTab,
             boolean canShowRequestDesktopSite,
-            boolean isChromeScheme) {
+            boolean isNativePage) {
         MenuItem requestMenuRow = menu.findItem(R.id.request_desktop_site_row_menu_id);
         MenuItem requestMenuLabel = menu.findItem(R.id.request_desktop_site_id);
         MenuItem requestMenuCheck = menu.findItem(R.id.request_desktop_site_check_id);
@@ -1455,7 +1467,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         boolean itemVisible =
                 currentTab != null
                         && canShowRequestDesktopSite
-                        && !isChromeScheme
+                        && !isNativePage
                         && !shouldShowReaderModePrefs(currentTab)
                         && currentTab.getWebContents() != null;
 
@@ -1492,16 +1504,16 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      *
      * @param menu {@link Menu} for auto dark.
      * @param currentTab Current tab being displayed.
-     * @param isChromeScheme Whether URL for the current tab starts with the chrome:// scheme.
+     * @param isNativePage Whether the current tab is a native page.
      */
     protected void updateAutoDarkMenuItem(
-            Menu menu, @Nullable Tab currentTab, boolean isChromeScheme) {
+            Menu menu, @Nullable Tab currentTab, boolean isNativePage) {
         MenuItem autoDarkMenuRow = menu.findItem(R.id.auto_dark_web_contents_row_menu_id);
         MenuItem autoDarkMenuCheck = menu.findItem(R.id.auto_dark_web_contents_check_id);
 
         // Hide app menu item if on non-NTP chrome:// page or auto dark not enabled.
         boolean isAutoDarkEnabled = isAutoDarkWebContentsEnabled();
-        boolean itemVisible = currentTab != null && !isChromeScheme && isAutoDarkEnabled;
+        boolean itemVisible = currentTab != null && !isNativePage && isAutoDarkEnabled;
         autoDarkMenuRow.setVisible(itemVisible);
         if (!itemVisible) return;
 

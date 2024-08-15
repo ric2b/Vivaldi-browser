@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: debug-buttons
 title: Debug Button Shortcuts
 ---
@@ -241,10 +241,10 @@ Next boot stage     | `Ctrl + X`
 [official support page]: https://support.google.com/chromebook/answer/183101
 [firmware keyboard UI]: #Firmware-Keyboard-Interface
 [Magic SysRq]: https://www.kernel.org/doc/html/latest/admin-guide/sysrq.html
-[Developer Mode]: ./developer_mode.md
+[Developer Mode]: /chromium-os/developer-library/guides/device/developer-mode/
 [convertible]: https://en.wikipedia.org/wiki/Laptop#Convertible
 [firmware menu UI]: #Firmware-Menu-Interface
 [EC debug mode]: #EC-Debug-Mode
 [smart battery]: http://sbs-forum.org/specs/sbdat110.pdf
 [device-specific developer information]: https://www.chromium.org/chromium-os/developer-information-for-chrome-os-devices
-[boot firmware screen]: developer_mode.md
+[boot firmware screen]: /chromium-os/developer-library/guides/device/developer-mode/

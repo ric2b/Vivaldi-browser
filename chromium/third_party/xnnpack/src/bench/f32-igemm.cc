@@ -1064,36 +1064,6 @@ static void f32_igemm(benchmark::State& state,
       xnn_init_f32_minmax_sse_params,
       /*mr=*/6, /*nr=*/8, /*kr=*/1, /*sr=*/4);
   }
-  static void f32_igemm_1x8__sse2_dup(benchmark::State& state, const char* net) {
-    f32_igemm(state,
-      xnn_f32_igemm_minmax_ukernel_1x8__sse2_dup,
-      xnn_init_f32_minmax_sse_params,
-      /*mr=*/1, /*nr=*/8, /*kr=*/1, /*sr=*/1);
-  }
-  static void f32_igemm_3x8__sse2_dup(benchmark::State& state, const char* net) {
-    f32_igemm(state,
-      xnn_f32_igemm_minmax_ukernel_3x8__sse2_dup,
-      xnn_init_f32_minmax_sse_params,
-      /*mr=*/3, /*nr=*/8, /*kr=*/1, /*sr=*/1);
-  }
-  static void f32_igemm_4x8__sse2_dup(benchmark::State& state, const char* net) {
-    f32_igemm(state,
-      xnn_f32_igemm_minmax_ukernel_4x8__sse2_dup,
-      xnn_init_f32_minmax_sse_params,
-      /*mr=*/4, /*nr=*/8, /*kr=*/1, /*sr=*/1);
-  }
-  static void f32_igemm_5x8__sse2_dup(benchmark::State& state, const char* net) {
-    f32_igemm(state,
-      xnn_f32_igemm_minmax_ukernel_5x8__sse2_dup,
-      xnn_init_f32_minmax_sse_params,
-      /*mr=*/5, /*nr=*/8, /*kr=*/1, /*sr=*/1);
-  }
-  static void f32_igemm_6x8__sse2_dup(benchmark::State& state, const char* net) {
-    f32_igemm(state,
-      xnn_f32_igemm_minmax_ukernel_6x8__sse2_dup,
-      xnn_init_f32_minmax_sse_params,
-      /*mr=*/6, /*nr=*/8, /*kr=*/1, /*sr=*/1);
-  }
   static void f32_igemm_1x8__avx_broadcast(benchmark::State& state, const char* net) {
     f32_igemm(state,
       xnn_f32_igemm_minmax_ukernel_1x8__avx_broadcast,
@@ -1282,11 +1252,6 @@ static void f32_igemm(benchmark::State& state,
   BENCHMARK_CONV(f32_igemm_4x8s4__sse)
   BENCHMARK_CONV(f32_igemm_5x8s4__sse)
   BENCHMARK_CONV(f32_igemm_6x8s4__sse)
-  BENCHMARK_CONV(f32_igemm_1x8__sse2_dup)
-  BENCHMARK_CONV(f32_igemm_3x8__sse2_dup)
-  BENCHMARK_CONV(f32_igemm_4x8__sse2_dup)
-  BENCHMARK_CONV(f32_igemm_5x8__sse2_dup)
-  BENCHMARK_CONV(f32_igemm_6x8__sse2_dup)
   BENCHMARK_CONV(f32_igemm_1x8__avx_broadcast)
   BENCHMARK_CONV(f32_igemm_4x8__avx_broadcast)
   BENCHMARK_CONV(f32_igemm_5x8__avx_broadcast)
@@ -2079,6 +2044,35 @@ static void f32_igemm_4x4__scalar(benchmark::State& state, const char* net) {
 BENCHMARK_CONV(f32_igemm_1x4__scalar)
 BENCHMARK_CONV(f32_igemm_2x4__scalar)
 BENCHMARK_CONV(f32_igemm_4x4__scalar)
+
+#if XNN_ENABLE_RISCV_VECTOR && XNN_ARCH_RISCV
+  static void f32_igemm_1x4v__rvv(benchmark::State& state, const char* net) {
+    size_t vlenb = 0;
+    asm volatile("csrr %0, vlenb" : "=r"(vlenb));
+    // LMUL=4
+    size_t nr = vlenb * 1.0;
+    f32_igemm(state,
+      xnn_f32_igemm_minmax_ukernel_1x4v__rvv,
+      xnn_init_f32_minmax_scalar_params,
+      /*mr=*/1, /*nr=*/nr, /*kr=*/1, /*sr=*/1,
+      benchmark::utils::CheckRVV);
+  }
+
+  static void f32_igemm_7x4v__rvv(benchmark::State& state, const char* net) {
+    size_t vlenb = 0;
+    asm volatile("csrr %0, vlenb" : "=r"(vlenb));
+    // LMUL=4
+    size_t nr = vlenb * 1.0;
+    f32_igemm(state,
+      xnn_f32_igemm_minmax_ukernel_7x4v__rvv,
+      xnn_init_f32_minmax_scalar_params,
+      /*mr=*/7, /*nr=*/nr, /*kr=*/1, /*sr=*/1,
+      benchmark::utils::CheckRVV);
+  }
+
+  BENCHMARK_CONV(f32_igemm_1x4v__rvv)
+  BENCHMARK_CONV(f32_igemm_7x4v__rvv)
+#endif  // XNN_ENABLE_RISCV_VECTOR && XNN_ARCH_RISCV
 
 #ifndef XNNPACK_BENCHMARK_NO_MAIN
 BENCHMARK_MAIN();

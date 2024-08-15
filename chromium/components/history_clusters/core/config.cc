@@ -71,21 +71,6 @@ Config::Config() {
             sort_clusters_within_batch_for_query);
   }
 
-  // The `kJourneysLabels` feature and child params.
-  {
-    labels_from_hostnames = GetFieldTrialParamByFeatureAsBool(
-        internal::kJourneysLabels, "labels_from_hostnames",
-        labels_from_hostnames);
-
-    labels_from_entities = GetFieldTrialParamByFeatureAsBool(
-        internal::kJourneysLabels, "labels_from_entities",
-        labels_from_entities);
-
-    labels_from_search_visit_entities = GetFieldTrialParamByFeatureAsBool(
-        internal::kJourneysLabels, "labels_from_search_visit_entities",
-        labels_from_search_visit_entities);
-  }
-
   // The `kJourneysImages` feature.
   {
     images = base::FeatureList::IsEnabled(internal::kJourneysImages);
@@ -326,9 +311,6 @@ Config::Config() {
     should_show_all_clusters_unconditionally_on_prominent_ui_surfaces =
         base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kShouldShowAllClustersOnProminentUiSurfaces);
-
-    include_synced_visits =
-        base::FeatureList::IsEnabled(internal::kJourneysIncludeSyncedVisits);
 
     persist_caches_to_prefs =
         base::FeatureList::IsEnabled(internal::kJourneysPersistCachesToPrefs);

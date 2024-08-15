@@ -24,37 +24,39 @@ struct DawnTextureInfo {
     wgpu::TextureUsage fUsage = wgpu::TextureUsage::None;
     // TODO(b/308944094): Migrate aspect information to BackendTextureViews.
     wgpu::TextureAspect fAspect = wgpu::TextureAspect::All;
+    uint32_t fSlice = 0;
 
     wgpu::TextureFormat getViewFormat() const {
         return fViewFormat != wgpu::TextureFormat::Undefined ? fViewFormat : fFormat;
     }
 
     DawnTextureInfo() = default;
-    DawnTextureInfo(const wgpu::Texture& texture);
     DawnTextureInfo(uint32_t sampleCount,
                     Mipmapped mipmapped,
                     wgpu::TextureFormat format,
                     wgpu::TextureUsage usage,
                     wgpu::TextureAspect aspect)
-            : fSampleCount(sampleCount)
-            , fMipmapped(mipmapped)
-            , fFormat(format)
-            , fViewFormat(format)
-            , fUsage(usage)
-            , fAspect(aspect) {}
-
+            : DawnTextureInfo(sampleCount,
+                              mipmapped,
+                              /*format=*/format,
+                              /*viewFormat=*/format,
+                              usage,
+                              aspect,
+                              /*slice=*/0) {}
     DawnTextureInfo(uint32_t sampleCount,
                     Mipmapped mipmapped,
                     wgpu::TextureFormat format,
                     wgpu::TextureFormat viewFormat,
                     wgpu::TextureUsage usage,
-                    wgpu::TextureAspect aspect)
+                    wgpu::TextureAspect aspect,
+                    uint32_t slice)
             : fSampleCount(sampleCount)
             , fMipmapped(mipmapped)
             , fFormat(format)
             , fViewFormat(viewFormat)
             , fUsage(usage)
-            , fAspect(aspect) {}
+            , fAspect(aspect)
+            , fSlice(slice) {}
 };
 
 } // namespace skgpu::graphite

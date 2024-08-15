@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: package-upgrade-process
 title: New & Upgrade Package Process
 ---
@@ -486,11 +486,11 @@ cros_portage_upgrade --local-only [args]
 
 [portage-stable]: https://chromium.googlesource.com/chromiumos/overlays/portage-stable/
 [chromiumos-overlay]: https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/
-[ChromiumOS developer guide]: /developer_guide.md
-[contributor's guide]: /contributing.md
+[ChromiumOS developer guide]: /chromium-os/developer-library/guides/development/developer-guide/
+[contributor's guide]: /chromium-os/developer-library/guides/development/contributing/
 [re-applying a patch]: #Re_applying-a-patch-after-upgrade
 [upgrading to unstable versions]: #Upgrading-to-unstable-version
-[the ChromeOS development mailing list]: /contact.md
+[the ChromeOS development mailing list]: /chromium-os/developer-library/guides/who-do-i-notify/contact/
 [trybot]: https://www.chromium.org/chromium-os/build/local-trybot-documentation
-[USE flags]: ebuild_faq.md
+[USE flags]: /chromium-os/developer-library/guides/portage/ebuild-faq/
 [eclasses]: https://wiki.gentoo.org/wiki/Eclass

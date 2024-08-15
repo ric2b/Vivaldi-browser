@@ -53,9 +53,9 @@ VkStructureType GetSType() {
         guard_helper = PlatformGuardHelper()
 
         for struct in [x for x in self.vk.structs.values() if x.sType]:
-            out.extend(guard_helper.addGuard(struct.protect))
+            out.extend(guard_helper.add_guard(struct.protect))
             out.append(f'template <> inline VkStructureType GetSType<{struct.name}>() {{ return {struct.sType}; }}\n')
-        out.extend(guard_helper.addGuard(None))
+        out.extend(guard_helper.add_guard(None))
         out.append('''
 // Find an entry of the given type in the const pNext chain
 // returns nullptr if the entry is not found
@@ -132,9 +132,9 @@ template<typename T> VkObjectType GetObjectType() {
 #if VK_USE_64_BIT_PTR_DEFINES == 1
 ''')
         for handle in self.vk.handles.values():
-            out.extend(guard_helper.addGuard(handle.protect))
+            out.extend(guard_helper.add_guard(handle.protect))
             out.append(f'template<> inline VkObjectType GetObjectType<{handle.name}>() {{ return {handle.type}; }}\n')
-        out.extend(guard_helper.addGuard(None))
+        out.extend(guard_helper.add_guard(None))
         out.append('''
 #endif // VK_USE_64_BIT_PTR_DEFINES == 1
 } // namespace vku

@@ -127,13 +127,13 @@ void DoSplitviewClipRectAnimation(
     const gfx::Rect& target_clip_rect,
     std::unique_ptr<ui::ImplicitAnimationObserver> animation_observer);
 
-// Returns whether `window`'s state type is actually in the left or top position
-// based on whether the display is in primary screen orientation.
-// TODO(sophiewen): Consolidate with `IsPhysicalLeftOrTop(SnapPostiion)`.
-bool IsPhysicalLeftOrTop(aura::Window* window);
+// Returns whether `window`'s snap position is actually in the left or top
+// position based on whether the display is in primary screen orientation.
+// TODO(sophiewen): Consolidate with `IsPhysicallyLeftOrTop(SnapPostiion)`.
+bool IsPhysicallyLeftOrTop(aura::Window* window);
 
 // Returns the length of the window according to the screen orientation.
-int GetWindowLength(aura::Window* window, bool horizontal);
+ASH_EXPORT int GetWindowLength(aura::Window* window, bool horizontal);
 
 // Transforms `window` based on whether it is the primary or secondary window
 // and its distance from `divider_position` during split view resizing.
@@ -207,10 +207,10 @@ ASH_EXPORT bool IsLayoutPrimary(const display::Display& display);
 // according to the return values of |IsLayoutHorizontal| and
 // |IsLayoutPrimary|. Physical position refers to the position of the window
 // on the display that is held upward.
-ASH_EXPORT bool IsPhysicalLeftOrTop(SnapPosition position,
-                                    aura::Window* window);
-ASH_EXPORT bool IsPhysicalLeftOrTop(SnapPosition position,
-                                    const display::Display& display);
+ASH_EXPORT bool IsPhysicallyLeftOrTop(SnapPosition position,
+                                      aura::Window* window);
+ASH_EXPORT bool IsPhysicallyLeftOrTop(SnapPosition position,
+                                      const display::Display& display);
 
 // Returns the maximum value of the `divider_position_`, which is the width of
 // the current display's work area bounds in landscape orientation, or height
@@ -218,7 +218,7 @@ ASH_EXPORT bool IsPhysicalLeftOrTop(SnapPosition position,
 int GetDividerPositionUpperLimit(aura::Window* root_window);
 
 // Returns the minimum length of the window according to the screen orientation.
-int GetMinimumWindowLength(aura::Window* window, bool horizontal);
+ASH_EXPORT int GetMinimumWindowLength(aura::Window* window, bool horizontal);
 
 // Returns the target divider position for `root_window` for `snap_ratio` at
 // `snap_position`, clamped between 0 and the upper limit of `root_window`.
@@ -262,6 +262,18 @@ chromeos::WindowStateType GetOppositeSnapType(aura::Window* window);
 ASH_EXPORT bool CanSnapActionSourceStartFasterSplitView(
     WindowSnapActionSource snap_action_source);
 
+// Returns true if `window` should be *excluded* from the occluded window check,
+// e.g. if it is not visible or minimized or when it is a float or pip window.
+// If this is true, `window` will be ignored when determining whether to show
+// partial overview or consider the window for snap to replace.
+bool ShouldExcludeForOcclusionCheck(const aura::Window* window,
+                                    const aura::Window* target_root);
+
+// Returns the window that is fully visible (without occlusion) and snapped to
+// the opposite side of the given `window`. Returns nullptr if no such window
+// exists.
+aura::Window* GetOppositeVisibleSnappedWindow(aura::Window* window);
+
 // Returns true if the given `window` can be considered as the candidate for
 // faster split screen set up. Returns false otherwise. `snap_action_source` is
 // used to filter out some unwanted snap sources.
@@ -289,6 +301,11 @@ int GetWindowComponentForResize(aura::Window* window);
 // TODO(b/329326366): Remove this API and have clients call
 // `UpdateSnappedBounds()` directly.
 bool ShouldConsiderDivider(aura::Window* window);
+
+// Returns true if the minimum size of `window1` and `window2` and the divider
+// width can fit in the work area. The windows should belong to the same root
+// window.
+bool CanWindowsFitInWorkArea(aura::Window* window1, aura::Window* window2);
 
 // Builds the full histogram that records whether the window layout completes on
 // `SplitViewOverviewSession` exit. The full histogram is shown in the example

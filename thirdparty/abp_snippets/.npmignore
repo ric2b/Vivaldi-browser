@@ -1,0 +1,10 @@
+bundle/
+node_modules/
+rollup/
+source/
+test/
+.DS_Store
+.eslintrc.json
+.gitlab-ci.yml
+LICENSE.js
+package-lock.json

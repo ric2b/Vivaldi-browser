@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/magic_stack/magic_stack_ranking_model.h"
 
+#import "base/metrics/histogram_macros.h"
 #import "components/segmentation_platform/public/constants.h"
 #import "components/segmentation_platform/public/features.h"
 #import "components/segmentation_platform/public/segmentation_platform_service.h"
@@ -19,6 +20,7 @@
 #import "ios/chrome/browser/ui/content_suggestions/cells/shortcuts_mediator.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_consumer.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_metrics_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_metrics_recorder.h"
 #import "ios/chrome/browser/ui/content_suggestions/magic_stack/magic_stack_ranking_model_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/magic_stack/most_visited_tiles_config.h"
@@ -34,6 +36,7 @@
 #import "ios/chrome/browser/ui/content_suggestions/tab_resumption/tab_resumption_helper_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/tab_resumption/tab_resumption_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/tab_resumption/tab_resumption_mediator.h"
+#import "ios/chrome/browser/ui/ntp/home_start_data_source.h"
 
 @interface MagicStackRankingModel () <MostVisitedTilesMediatorDelegate,
                                       ParcelTrackingMediatorDelegate,
@@ -54,8 +57,7 @@
   // YES if the module ranking has been received from the SegmentationService.
   BOOL _magicStackOrderFromSegmentationReceived;
   // The latest Magic Stack module order sent up to the consumer. This includes
-  // any omissions due to filtering from `_magicStackOrderFromSegmentation` (or
-  // `magicStackOrder:` if kSegmentationPlatformIosModuleRanker is disabled) and
+  // any omissions due to filtering from `_magicStackOrderFromSegmentation` and
   // any additions beyond `_magicStackOrderFromSegmentation` (e.g. Set Up List).
   NSArray<NSNumber*>* _latestMagicStackOrder;
   // Module mediators.
@@ -65,6 +67,7 @@
   ParcelTrackingMediator* _parcelTrackingMediator;
   ShortcutsMediator* _shortcutsMediator;
   SafetyCheckMagicStackMediator* _safetyCheckMediator;
+  base::TimeTicks ranking_fetch_start_time_;
 }
 
 - (instancetype)initWithSegmentationService:
@@ -123,15 +126,9 @@
 #pragma mark - Public
 
 - (void)fetchLatestMagicStackRanking {
-  if (base::FeatureList::IsEnabled(segmentation_platform::features::
-                                       kSegmentationPlatformIosModuleRanker)) {
     [self fetchMagicStackModuleRankingFromSegmentationPlatform];
-  } else {
-    _latestMagicStackOrder = [self magicStackOrder];
-    [self.consumer setMagicStackOrder:_latestMagicStackOrder];
-  }
   if (!IsIOSMagicStackCollectionViewEnabled()) {
-    if (IsTabResumptionEnabled() && _tabResumptionMediator.itemConfig) {
+    if ([self shouldShowTabResumption]) {
       [self.consumer
           showTabResumptionWithItem:_tabResumptionMediator.itemConfig];
     }
@@ -149,6 +146,12 @@
             RunningSafetyCheckState::kDefault) {
       [self.consumer showSafetyCheck:_safetyCheckMediator.safetyCheckState];
     }
+    if (IsIOSParcelTrackingEnabled() &&
+        !IsParcelTrackingDisabled(GetApplicationContext()->GetLocalState()) &&
+        _parcelTrackingMediator.parcelTrackingItemToShow) {
+      [self.consumer showParcelTrackingItem:_parcelTrackingMediator
+                                                .parcelTrackingItemToShow];
+    }
     [self.consumer setShortcutTilesConfig:_shortcutsMediator.shortcutsConfig];
   }
 }
@@ -163,6 +166,8 @@
 #pragma mark - SetUpListMediatorAudience
 
 - (void)removeSetUpList {
+  UMA_HISTOGRAM_ENUMERATION(kMagicStackModuleDisabledHistogram,
+                            ContentSuggestionsModuleType::kCompactedSetUpList);
   DCHECK(IsIOSMagicStackCollectionViewEnabled());
   [self.delegate magicStackRankingModel:self
                           didRemoveItem:_setUpListMediator.setUpListConfigs[0]];
@@ -177,6 +182,8 @@
 #pragma mark - SafetyCheckMagicStackMediatorDelegate
 
 - (void)removeSafetyCheckModule {
+  UMA_HISTOGRAM_ENUMERATION(kMagicStackModuleDisabledHistogram,
+                            ContentSuggestionsModuleType::kSafetyCheck);
   if (IsIOSMagicStackCollectionViewEnabled()) {
     [self.delegate
         magicStackRankingModel:self
@@ -217,6 +224,8 @@
 }
 
 - (void)removeTabResumptionModule {
+  UMA_HISTOGRAM_ENUMERATION(kMagicStackModuleDisabledHistogram,
+                            ContentSuggestionsModuleType::kTabResumption);
   if (IsIOSMagicStackCollectionViewEnabled()) {
     [self.delegate magicStackRankingModel:self
                             didRemoveItem:_tabResumptionMediator.itemConfig];
@@ -238,19 +247,18 @@
     return;
   }
 
-  _latestMagicStackOrder =
-      base::FeatureList::IsEnabled(
-          segmentation_platform::features::kSegmentationPlatformIosModuleRanker)
-          ? [self segmentationMagicStackOrder]
-          : [self magicStackOrder];
-  for (NSUInteger index = 0; index < [_latestMagicStackOrder count]; index++) {
-    ContentSuggestionsModuleType type =
-        (ContentSuggestionsModuleType)[_latestMagicStackOrder[index] intValue];
-    if (type == ContentSuggestionsModuleType::kParcelTracking) {
-      MagicStackOrderChange change{MagicStackOrderChange::Type::kInsert};
-      change.new_module = type;
-      change.index = index;
-      [self.consumer updateMagicStackOrder:change];
+  _latestMagicStackOrder = [self segmentationMagicStackOrder];
+  if ([self isMagicStackOrderReady]) {
+    for (NSUInteger index = 0; index < [_latestMagicStackOrder count];
+         index++) {
+      ContentSuggestionsModuleType type = (ContentSuggestionsModuleType)
+          [_latestMagicStackOrder[index] intValue];
+      if (type == ContentSuggestionsModuleType::kParcelTracking) {
+        MagicStackOrderChange change{MagicStackOrderChange::Type::kInsert};
+        change.new_module = type;
+        change.index = index;
+        [self.consumer updateMagicStackOrder:change];
+      }
     }
   }
 
@@ -259,6 +267,8 @@
 }
 
 - (void)parcelTrackingDisabled {
+  UMA_HISTOGRAM_ENUMERATION(kMagicStackModuleDisabledHistogram,
+                            ContentSuggestionsModuleType::kParcelTracking);
   if (IsIOSMagicStackCollectionViewEnabled()) {
     [self.delegate magicStackRankingModel:self
                             didRemoveItem:_parcelTrackingMediator
@@ -278,6 +288,11 @@
       [self.consumer updateMagicStackOrder:change];
     }
   }
+}
+
+- (NSUInteger)indexForMagicStackModule:
+    (ContentSuggestionsModuleType)moduleType {
+  return [_latestMagicStackOrder indexOfObject:@(int(moduleType))];
 }
 
 #pragma mark - Private
@@ -306,6 +321,14 @@
 - (void)fetchMagicStackModuleRankingFromSegmentationPlatform {
   auto inputContext =
       base::MakeRefCounted<segmentation_platform::InputContext>();
+  if (base::FeatureList::IsEnabled(
+          segmentation_platform::features::
+              kSegmentationPlatformIosModuleRankerSplitBySurface)) {
+    inputContext->metadata_args.emplace(
+        segmentation_platform::kIsShowingStartSurface,
+        segmentation_platform::processing::ProcessedValue::FromFloat(
+            [self.homeStartDataSource isStartSurface]));
+  }
   int mvtFreshnessImpressionCount = _localState->GetInteger(
       prefs::kIosMagicStackSegmentationMVTImpressionsSinceFreshness);
   inputContext->metadata_args.emplace(
@@ -338,7 +361,27 @@
           parcelTrackingFreshnessImpressionCount));
   __weak MagicStackRankingModel* weakSelf = self;
   segmentation_platform::PredictionOptions options;
-  options.on_demand_execution = true;
+
+  if (base::FeatureList::IsEnabled(
+          kSegmentationPlatformIosModuleRankerCaching)) {
+    // Ignores tab resumption freshness since local tab always logs a freshness
+    // signal for Start.
+    BOOL hasNoFreshnessSignal = shortcutsFreshnessImpressionCount != 0 &&
+                                parcelTrackingFreshnessImpressionCount != 0;
+    if (IsSafetyCheckMagicStackEnabled()) {
+      hasNoFreshnessSignal =
+          hasNoFreshnessSignal && safetyCheckFreshnessImpressionCount != 0;
+    }
+    if (hasNoFreshnessSignal && [self.homeStartDataSource isStartSurface]) {
+      options = segmentation_platform::PredictionOptions::ForCached(true);
+    } else {
+      options = segmentation_platform::PredictionOptions::ForOnDemand(true);
+    }
+    options.can_update_cache_for_future_requests = true;
+  } else {
+    options.on_demand_execution = true;
+  }
+  ranking_fetch_start_time_ = base::TimeTicks::Now();
   _segmentationService->GetClassificationResult(
       segmentation_platform::kIosModuleRankerKey, options, inputContext,
       base::BindOnce(
@@ -352,6 +395,14 @@
     (const segmentation_platform::ClassificationResult&)result {
   if (result.status != segmentation_platform::PredictionStatus::kSucceeded) {
     return;
+  }
+
+  if ([self.homeStartDataSource isStartSurface]) {
+    LOCAL_HISTOGRAM_TIMES(kMagicStackStartSegmentationRankingFetchTimeHistogram,
+                          base::TimeTicks::Now() - ranking_fetch_start_time_);
+  } else {
+    LOCAL_HISTOGRAM_TIMES(kMagicStackNTPSegmentationRankingFetchTimeHistogram,
+                          base::TimeTicks::Now() - ranking_fetch_start_time_);
   }
 
   NSMutableArray* magicStackOrder = [NSMutableArray array];
@@ -402,9 +453,7 @@
         }
         break;
       case ContentSuggestionsModuleType::kTabResumption:
-        if (!IsTabResumptionEnabled() ||
-            tab_resumption_prefs::IsTabResumptionDisabled(_localState) ||
-            !_tabResumptionMediator.itemConfig) {
+        if (![self shouldShowTabResumption]) {
           break;
         }
         // If ShouldHideIrrelevantModules() is enabled and it is not ranked as
@@ -468,9 +517,7 @@
         }
         break;
       case ContentSuggestionsModuleType::kTabResumption:
-        if (!IsTabResumptionEnabled() ||
-            tab_resumption_prefs::IsTabResumptionDisabled(_localState) ||
-            !_tabResumptionMediator.itemConfig) {
+        if (![self shouldShowTabResumption]) {
           break;
         }
         // If ShouldHideIrrelevantModules() is enabled and it is not ranked as
@@ -513,50 +560,10 @@
   return magicStackOrder;
 }
 
-// Returns an array that represents the order of the modules to be shown in the
-// Magic Stack. In theory this should not ever be used, but is a fallback list
-// in case the segmentation ranking is not turned on.
-// TODO(crbug.com/326104853): Remove after MagicStack is launched.
-- (NSArray<NSNumber*>*)magicStackOrder {
-  NSMutableArray* magicStackModules = [NSMutableArray array];
-  if (IsTabResumptionEnabled() &&
-      !tab_resumption_prefs::IsTabResumptionDisabled(_localState) &&
-      _tabResumptionMediator.itemConfig) {
-    [magicStackModules
-        addObject:@(int(ContentSuggestionsModuleType::kTabResumption))];
-  }
-  if ([_setUpListMediator shouldShowSetUpList]) {
-    [self addSetUpListToMagicStackOrder:magicStackModules];
-  }
-  if (ShouldPutMostVisitedSitesInMagicStack()) {
-    [magicStackModules
-        addObject:@(int(ContentSuggestionsModuleType::kMostVisited))];
-  }
-  [magicStackModules
-      addObject:@(int(ContentSuggestionsModuleType::kShortcuts))];
-
-  if (IsSafetyCheckMagicStackEnabled() &&
-      !safety_check_prefs::IsSafetyCheckInMagicStackDisabled(_localState)) {
-    [self addSafetyCheckToMagicStackOrder:magicStackModules];
-  }
-
-  if (IsIOSParcelTrackingEnabled() &&
-      !IsParcelTrackingDisabled(GetApplicationContext()->GetLocalState())) {
-      [magicStackModules
-          addObject:@(int(ContentSuggestionsModuleType::kParcelTracking))];
-  }
-
-  return magicStackModules;
-}
-
 // Returns NO if client is expecting the order from Segmentation and it has not
 // returned yet.
 - (BOOL)isMagicStackOrderReady {
-  if (base::FeatureList::IsEnabled(segmentation_platform::features::
-                                       kSegmentationPlatformIosModuleRanker)) {
     return _magicStackOrderFromSegmentationReceived;
-  }
-  return YES;
 }
 
 // Shows the tab resumption tile with the given `item` configuration.
@@ -577,11 +584,7 @@
   if (!self.consumer) {
     return;
   }
-  _latestMagicStackOrder =
-      base::FeatureList::IsEnabled(
-          segmentation_platform::features::kSegmentationPlatformIosModuleRanker)
-          ? [self segmentationMagicStackOrder]
-          : [self magicStackOrder];
+  _latestMagicStackOrder = [self segmentationMagicStackOrder];
   if ([self isMagicStackOrderReady]) {
     // Only indicate the need for an explicit insertion if the tab resumption
     // item was received after building the initial Magic Stack order or getting
@@ -601,22 +604,11 @@
   [self.consumer showTabResumptionWithItem:item];
 }
 
-// Returns the index rank of `moduleType`.
-// Callers of this need to handle a NSNotFound return case and do nothing in
-// that case.
-- (NSUInteger)indexForMagicStackModule:
-    (ContentSuggestionsModuleType)moduleType {
-  NSUInteger index = [_latestMagicStackOrder indexOfObject:@(int(moduleType))];
-  if (index == NSNotFound) {
-    // It is possible that a feature is enabled but the segmentation model being
-    // used didn't return the feature's module (i.e. first browser session after
-    // enabling a feature, so the latest model will not be downloaded until the
-    // following session since experiment models are tied via finch). It is also
-    // possible that the segmentation result has not returned yet.
-    CHECK(base::FeatureList::IsEnabled(
-        segmentation_platform::features::kSegmentationPlatformIosModuleRanker));
-  }
-  return index;
+// Returns YES if the tab resumption module should added into the Magic Stack.
+- (BOOL)shouldShowTabResumption {
+  return IsTabResumptionEnabled() &&
+         !tab_resumption_prefs::IsTabResumptionDisabled(_localState) &&
+         _tabResumptionMediator.itemConfig;
 }
 
 @end

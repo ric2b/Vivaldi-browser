@@ -21,9 +21,11 @@
 #include "components/mirroring/service/fake_video_capture_host.h"
 #include "components/mirroring/service/mirror_settings.h"
 #include "components/mirroring/service/mirroring_features.h"
+#include "media/base/audio_codecs.h"
 #include "media/base/media_switches.h"
+#include "media/base/video_codecs.h"
+#include "media/cast/cast_config.h"
 #include "media/cast/test/utility/default_config.h"
-#include "media/cast/test/utility/net_utility.h"
 #include "media/video/video_decode_accelerator.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -573,8 +575,7 @@ class OpenscreenSessionHostTest : public mojom::ResourceProvider,
  private:
   base::test::TaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
-  const net::IPEndPoint receiver_endpoint_ =
-      media::cast::test::GetFreeLocalPort();
+  const net::IPEndPoint receiver_endpoint_ = GetFreeLocalPort();
   mojo::Receiver<mojom::ResourceProvider> resource_provider_receiver_{this};
   mojo::Receiver<mojom::SessionObserver> session_observer_receiver_{this};
   mojo::Receiver<mojom::CastMessageChannel> outbound_channel_receiver_{this};
@@ -736,7 +737,7 @@ TEST_F(OpenscreenSessionHostTest, StartRemotePlaybackTimeOut) {
   RemotePlaybackSessionTimeOut();
 }
 
-// TODO(https://crbug.com/1363017): reenable adaptive playout delay.
+// TODO(crbug.com/40238532): reenable adaptive playout delay.
 TEST_F(OpenscreenSessionHostTest, ChangeTargetPlayoutDelay) {
   CreateSession(SessionType::AUDIO_AND_VIDEO);
   StartSession();
@@ -864,8 +865,8 @@ TEST_F(OpenscreenSessionHostTest, ShouldEnableHardwareVp8EncodingIfSupported) {
                           session_host().last_offered_video_configs_.end(),
 
                           [](const media::cast::FrameSenderConfig& config) {
-                            return config.codec ==
-                                       media::cast::Codec::kVideoVp8 &&
+                            return config.video_codec() ==
+                                       media::VideoCodec::kVP8 &&
                                    config.use_hardware_encoder;
                           }));
 #endif
@@ -899,8 +900,8 @@ TEST_F(OpenscreenSessionHostTest, ShouldEnableHardwareH264EncodingIfSupported) {
                           session_host().last_offered_video_configs_.end(),
 
                           [](const media::cast::FrameSenderConfig& config) {
-                            return config.codec ==
-                                       media::cast::Codec::kVideoH264 &&
+                            return config.video_codec() ==
+                                       media::VideoCodec::kH264 &&
                                    config.use_hardware_encoder;
                           }));
 #endif

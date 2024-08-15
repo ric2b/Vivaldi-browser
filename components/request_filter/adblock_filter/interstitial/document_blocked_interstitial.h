@@ -9,7 +9,7 @@
 #include <string>
 
 #include "base/time/time.h"
-#include "components/ad_blocker/adblock_metadata.h"
+#include "components/ad_blocker/adblock_types.h"
 #include "components/security_interstitials/content/security_interstitial_page.h"
 
 class GURL;

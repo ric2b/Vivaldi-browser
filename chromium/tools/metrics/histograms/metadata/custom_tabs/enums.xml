@@ -33,22 +33,6 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="REFERRER"/>
 </enum>
 
-<enum name="CustomTabsBrandingDecision">
-  <summary>Used by CustomTabs.Branding.BrandingDecision</summary>
-  <int value="0" label="None">
-    Branding is not shown. Used when branding is already shown in the past set
-    cadence (e.g. one hour).
-  </int>
-  <int value="1" label="Shown on toolbar">
-    Branding is shown on the toolbar. Used when the client app launches CCT past
-    the set branding cadence.
-  </int>
-  <int value="2" label="Shown with Toast">
-    Branding is shown with a toast. Used when the client app launches CCT for
-    the first time.
-  </int>
-</enum>
-
 <enum name="CustomTabsCloseCause">
   <int value="0" label="User action in Chrome (back press, close button)"/>
   <int value="1" label="User action in Android (home)"/>
@@ -129,6 +113,11 @@ chromium-metrics-reviews@google.com.
   <int value="54"
       label="Scroll content may resize tab
              EXTRA_ACTIVITY_SCROLL_CONTENT_RESIZE"/>
+  <int value="55" label="Incognito EXTRA_OPEN_NEW_EPHEMERAL_TAB"/>
+  <int value="56"
+      label="Enable google bottom bar EXTRA_ENABLE_GOOGLE_BOTTOM_BAR"/>
+  <int value="57"
+      label="Google bottom bar buttons EXTRA_GOOGLE_BOTTOM_BAR_BUTTONS"/>
 </enum>
 
 <enum name="CustomTabsMinimizedEvents">
@@ -195,12 +184,28 @@ chromium-metrics-reviews@google.com.
              memory"/>
 </enum>
 
+<enum name="GoogleBottomBarButtonEvent">
+  <int value="0" label="Unknown button"/>
+  <int value="1" label="Chrome Page Insights button"/>
+  <int value="2" label="Embedder Page Insights button"/>
+  <int value="3" label="Disabled Save button"/>
+  <int value="4" label="Embedder Save button"/>
+  <int value="5" label="Chrome Share button"/>
+  <int value="6" label="Embedder Share button"/>
+</enum>
+
+<enum name="GoogleBottomBarCreatedEvent">
+  <int value="0" label="Even layout"/>
+  <int value="1" label="Spotlight layout"/>
+</enum>
+
 <enum name="IncognitoCCTCallerId">
   <int value="0" label="Other Apps"/>
   <int value="1" label="Google Apps"/>
   <int value="2" label="Chrome - Other features"/>
   <int value="3" label="Chrome - Reader mode"/>
   <int value="4" label="Chrome - Read later"/>
+  <int value="5" label="Ephemeral Tab"/>
 </enum>
 
 <enum name="MayLaunchUrlType">

@@ -59,6 +59,7 @@ namespace {
 using ::nearby::sharing::proto::DataUsage;
 using ::testing::ElementsAre;
 using ::testing::FieldsAre;
+using ::testing::UnorderedElementsAre;
 
 constexpr char kServiceId[] = "NearbySharing";
 constexpr Strategy kStrategy = Strategy::kP2pPointToPoint;
@@ -95,6 +96,8 @@ void InitializeTemporaryFile(std::filesystem::path& file) {
 
 }  // namespace
 
+namespace NearbyConnectionsManagerUnitTests {
+
 class MockDiscoveryListener
     : public NearbyConnectionsManager::DiscoveryListener {
  public:
@@ -128,6 +131,7 @@ class MockPayloadStatusListener
 class NearbyConnectionsManagerImplTest : public testing::Test {
  public:
   void SetUp() override {
+    FakeTaskRunner::ResetPendingTasksCount();
     NearbyFlags::GetInstance().OverrideBoolFlagValue(
         config_package_nearby::nearby_sharing_feature::kEnableMediumWebRtc,
         false);
@@ -1731,5 +1735,41 @@ TEST_F(NearbyConnectionsManagerImplTest,
       notification.WaitForNotificationWithTimeout(kSynchronizationTimeOut));
 }
 
+TEST_F(NearbyConnectionsManagerImplTest, UnknownFilePathsToDelete) {
+  nearby_connections_manager_->AddUnknownFilePathsToDeleteForTesting(
+      "test1.txt");
+  nearby_connections_manager_->AddUnknownFilePathsToDeleteForTesting(
+      "test2.txt");
+  auto unknown_file_paths =
+      nearby_connections_manager_->GetUnknownFilePathsToDelete();
+  nearby_connections_manager_->AddUnknownFilePathsToDeleteForTesting(
+      "test3.txt");
+
+  // Test if we get copy of container.
+  EXPECT_NE(unknown_file_paths.size(), 3);
+  EXPECT_EQ(unknown_file_paths.size(), 2);
+  EXPECT_EQ(nearby_connections_manager_->GetUnknownFilePathsToDelete().size(),
+            3);
+  unknown_file_paths =
+      nearby_connections_manager_->GetUnknownFilePathsToDelete();
+  EXPECT_THAT(unknown_file_paths,
+              UnorderedElementsAre("test1.txt", "test2.txt", "test3.txt"));
+  nearby_connections_manager_->ClearUnknownFilePathsToDelete();
+  EXPECT_EQ(nearby_connections_manager_->GetUnknownFilePathsToDelete().size(),
+            0);
+
+  // Test GetAndClearUnknownFilePathsToDelete
+  nearby_connections_manager_->AddUnknownFilePathsToDeleteForTesting(
+      "test1.txt");
+  nearby_connections_manager_->AddUnknownFilePathsToDeleteForTesting(
+      "test2.txt");
+  unknown_file_paths =
+      nearby_connections_manager_->GetAndClearUnknownFilePathsToDelete();
+  EXPECT_EQ(unknown_file_paths.size(), 2);
+  EXPECT_EQ(nearby_connections_manager_->GetUnknownFilePathsToDelete().size(),
+            0);
+}
+
+}  // namespace NearbyConnectionsManagerUnitTests
 }  // namespace sharing
 }  // namespace nearby

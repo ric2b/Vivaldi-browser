@@ -573,14 +573,15 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
       filterBar.addFilter(this.moreFiltersDropDownUI);
     } else {
       this.dataURLFilterUI = new UI.FilterBar.CheckboxFilterUI(
-          'hide-data-url', i18nString(UIStrings.hideDataUrls), true, this.networkHideDataURLSetting);
+          'hide-data-url', i18nString(UIStrings.hideDataUrls), true, this.networkHideDataURLSetting, 'hide-data-urls');
       this.dataURLFilterUI.addEventListener(
           UI.FilterBar.FilterUIEvents.FilterChanged, this.filterChanged.bind(this), this);
       UI.Tooltip.Tooltip.install(this.dataURLFilterUI.element(), i18nString(UIStrings.hidesDataAndBlobUrls));
       filterBar.addFilter(this.dataURLFilterUI);
 
       this.hideChromeExtensionsUI = new UI.FilterBar.CheckboxFilterUI(
-          'chrome-extension', i18nString(UIStrings.chromeExtensions), true, this.networkHideChromeExtensions);
+          'chrome-extension', i18nString(UIStrings.chromeExtensions), true, this.networkHideChromeExtensions,
+          'hide-extension-urls');
       this.hideChromeExtensionsUI.addEventListener(
           UI.FilterBar.FilterUIEvents.FilterChanged, this.filterChanged.bind(this), this);
       UI.Tooltip.Tooltip.install(this.hideChromeExtensionsUI.element(), i18nString(UIStrings.hideChromeExtension));
@@ -595,7 +596,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
 
       this.onlyBlockedResponseCookiesFilterUI = new UI.FilterBar.CheckboxFilterUI(
           'only-show-blocked-cookies', i18nString(UIStrings.hasBlockedCookies), true,
-          this.networkShowBlockedCookiesOnlySetting);
+          this.networkShowBlockedCookiesOnlySetting, 'only-show-blocked-cookies');
       this.onlyBlockedResponseCookiesFilterUI.addEventListener(
           UI.FilterBar.FilterUIEvents.FilterChanged, this.filterChanged.bind(this), this);
       UI.Tooltip.Tooltip.install(
@@ -604,14 +605,15 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
 
       this.onlyBlockedRequestsUI = new UI.FilterBar.CheckboxFilterUI(
           'only-show-blocked-requests', i18nString(UIStrings.blockedRequests), true,
-          this.networkOnlyBlockedRequestsSetting);
+          this.networkOnlyBlockedRequestsSetting, 'only-show-blocked-requests');
       this.onlyBlockedRequestsUI.addEventListener(
           UI.FilterBar.FilterUIEvents.FilterChanged, this.filterChanged.bind(this), this);
       UI.Tooltip.Tooltip.install(this.onlyBlockedRequestsUI.element(), i18nString(UIStrings.onlyShowBlockedRequests));
       filterBar.addFilter(this.onlyBlockedRequestsUI);
 
       this.onlyThirdPartyFilterUI = new UI.FilterBar.CheckboxFilterUI(
-          'only-show-third-party', i18nString(UIStrings.thirdParty), true, this.networkOnlyThirdPartySetting);
+          'only-show-third-party', i18nString(UIStrings.thirdParty), true, this.networkOnlyThirdPartySetting,
+          'only-show-third-party');
       this.onlyThirdPartyFilterUI.addEventListener(
           UI.FilterBar.FilterUIEvents.FilterChanged, this.filterChanged.bind(this), this);
       UI.Tooltip.Tooltip.install(
@@ -674,8 +676,8 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
   private static sortSearchValues(key: string, values: string[]): void {
     if (key === NetworkForward.UIFilter.FilterType.Priority) {
       values.sort((a, b) => {
-        const aPriority = (PerfUI.NetworkPriorities.uiLabelToNetworkPriority(a) as Protocol.Network.ResourcePriority);
-        const bPriority = (PerfUI.NetworkPriorities.uiLabelToNetworkPriority(b) as Protocol.Network.ResourcePriority);
+        const aPriority = PerfUI.NetworkPriorities.uiLabelToNetworkPriority(a);
+        const bPriority = PerfUI.NetworkPriorities.uiLabelToNetworkPriority(b);
         return PerfUI.NetworkPriorities.networkPriorityWeight(aPriority) -
             PerfUI.NetworkPriorities.networkPriorityWeight(bPriority);
       });
@@ -1777,8 +1779,11 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
         i18nString(UIStrings.saveAllAsHarWithContent), this.exportAll.bind(this),
         {jslogContext: 'save-all-as-har-with-content'});
     contextMenu.overrideSection().appendItem(
-        i18nString(UIStrings.overrideHeaders), this.#handleCreateResponseHeaderOverrideClick.bind(this, request),
-        {jslogContext: 'override-headers'});
+        i18nString(UIStrings.overrideHeaders), this.#handleCreateResponseHeaderOverrideClick.bind(this, request), {
+          disabled:
+              Persistence.NetworkPersistenceManager.NetworkPersistenceManager.isForbiddenNetworkUrl(request.url()),
+          jslogContext: 'override-headers',
+        });
 
     contextMenu.editSection().appendItem(
         i18nString(UIStrings.clearBrowserCache), this.clearBrowserCache.bind(this),

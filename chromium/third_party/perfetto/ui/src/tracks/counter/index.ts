@@ -25,7 +25,6 @@ import {
   LONG_NULL,
   NUM,
   Plugin,
-  PluginContext,
   PluginContextTrace,
   PluginDescriptor,
   PrimaryTrackSortKey,
@@ -134,23 +133,34 @@ export class TraceProcessorCounterTrack extends BaseCounterTrack {
 
   onMouseClick({x}: {x: number}): boolean {
     const {visibleTimeScale} = globals.timeline;
-    const time = visibleTimeScale.pxToHpTime(x);
+    const time = visibleTimeScale.pxToHpTime(x).toTime('floor');
 
-    const result = this.engine.query(`
-
+    const query = `
       select
         id,
         ts as leftTs,
-        max(ts) OVER (ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) as rightTs
-        from
-        ${this.rootTable}
-        where track_id = ${this.trackId} and ts > ${time} limit 1`);
+        (
+          select ts
+          from ${this.rootTable}
+          where
+            track_id = ${this.trackId}
+            and ts >= ${time}
+          order by ts
+          limit 1
+        ) as rightTs
+      from ${this.rootTable}
+      where
+        track_id = ${this.trackId}
+        and ts < ${time}
+      order by ts DESC
+      limit 1
+    `;
 
-    result.then((result) => {
+    this.engine.query(query).then((result) => {
       const it = result.iter({
         id: NUM,
         leftTs: LONG,
-        rightTs: LONG,
+        rightTs: LONG_NULL,
       });
       if (!it.valid()) {
         return;
@@ -158,7 +168,11 @@ export class TraceProcessorCounterTrack extends BaseCounterTrack {
       const trackKey = this.trackKey;
       const id = it.id;
       const leftTs = Time.fromRaw(it.leftTs);
-      const rightTs = Time.fromRaw(it.rightTs);
+
+      // TODO(stevegolton): Don't try to guess times and durations here, make it
+      // obvious to the user that this counter sample has no duration as it's
+      // the last one in the series
+      const rightTs = Time.fromRaw(it.rightTs ?? leftTs);
 
       globals.makeSelection(
         Actions.selectCounter({
@@ -175,8 +189,6 @@ export class TraceProcessorCounterTrack extends BaseCounterTrack {
 }
 
 class CounterPlugin implements Plugin {
-  onActivate(_ctx: PluginContext): void {}
-
   async onTraceLoad(ctx: PluginContextTrace): Promise<void> {
     await this.addCounterTracks(ctx);
     await this.addGpuFrequencyTracks(ctx);
@@ -313,7 +325,6 @@ class CounterPlugin implements Plugin {
         thread.end_ts as endTs
       from thread_counter_track
       join thread using(utid)
-      left join process using(upid)
       where thread_counter_track.name != 'thread_time'
     `);
 

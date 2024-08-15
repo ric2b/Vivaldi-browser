@@ -24,8 +24,6 @@
 #import "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/web_state.h"
-#import "ios/web/web_state/ui/crw_web_controller.h"
-#import "ios/web/web_state/web_state_impl.h"
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
@@ -52,6 +50,7 @@ NoteInteractionController* _noteInteractionController;
    [_noteInteractionController showNotes];
 }
 
+#if !defined(__IPHONE_16_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_16_0
 - (void)onCopyToNote:(UIMenuController*)sender {
   UIResponder* firstResponder = GetFirstResponder();
   vivaldi::NotesModel* notesModel =
@@ -97,6 +96,7 @@ NoteInteractionController* _noteInteractionController;
     }
   }
 }
+#endif
 
 - (void)dismissNoteController{
     [_noteInteractionController dismissNoteModalControllerAnimated:NO];

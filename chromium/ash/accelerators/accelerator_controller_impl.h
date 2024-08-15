@@ -20,11 +20,13 @@
 #include "ash/accelerators/accelerator_table.h"
 #include "ash/accelerators/ash_accelerator_configuration.h"
 #include "ash/accelerators/exit_warning_handler.h"
+#include "ash/accelerators/suspend_state_machine.h"
 #include "ash/accelerators/tablet_volume_controller.h"
 #include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility/ui/accessibility_confirmation_dialog.h"
 #include "ash/ash_export.h"
 #include "ash/public/cpp/accelerators.h"
+#include "ash/system/input_device_settings/input_device_settings_notification_controller.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
@@ -247,6 +249,7 @@ class ASH_EXPORT AcceleratorControllerImpl
   std::unique_ptr<AcceleratorCapslockStateMachine> capslock_state_machine_;
   std::unique_ptr<AcceleratorShiftDisableCapslockStateMachine>
       shift_disable_state_machine_;
+  std::unique_ptr<SuspendStateMachine> suspend_state_machine_;
 
   // Manages all accelerator mappings.
   raw_ptr<AshAcceleratorConfiguration> accelerator_configuration_;
@@ -291,6 +294,9 @@ class ASH_EXPORT AcceleratorControllerImpl
   // Please refer to the comment on |DebugInterfaceAsh| for the lifetime of this
   // pointer.
   raw_ptr<DebugDelegate> debug_delegate_ = nullptr;
+
+  std::unique_ptr<InputDeviceSettingsNotificationController>
+      notification_controller_;
 };
 
 }  // namespace ash

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/test/scoped_feature_list.h"
+#include "chrome/browser/enterprise/watermark/watermark_view.h"
 #include "chrome/browser/ui/test/test_browser_ui.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/common/chrome_features.h"
@@ -41,8 +42,10 @@ class WatermarkBrowserTestBase : public UiBrowserTest {
   }
 
   void ShowUi(const std::string& name) override {
-    BrowserView::GetBrowserViewForBrowser(browser())->SetWatermarkString(
-        watermark_message_);
+    if (auto* watermark_view = BrowserView::GetBrowserViewForBrowser(browser())
+                                   ->get_watermark_view_for_testing()) {
+      watermark_view->SetString(watermark_message_);
+    }
     ASSERT_TRUE(ui_test_utils::NavigateToURL(
         browser(), embedded_test_server()->GetURL(
                        "/enterprise/watermark/watermark_test_page.html")));

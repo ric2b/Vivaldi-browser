@@ -122,7 +122,14 @@ int NumberOfProcessors() {
 
   return static_cast<int>(res);
 #elif defined(OS_WIN)
-  return ::GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
+  // On machines with more than 64 logical processors this will not return the
+  // full number of processors. Instead it will return the number of processors
+  // in one processor group - something smaller than 65. However this is okay
+  // because gn doesn't parallelize well beyond 10-20 threads - it starts to run
+  // slower.
+  SYSTEM_INFO system_info = {};
+  ::GetNativeSystemInfo(&system_info);
+  return system_info.dwNumberOfProcessors;
 #else
 #error
 #endif

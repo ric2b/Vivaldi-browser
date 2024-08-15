@@ -36,7 +36,7 @@ struct NavigationRequestInfo;
 // The corresponding legacy class is ServiceWorkerControlleeRequestHandler which
 // used to live on a different thread. Currently, this class just delegates to
 // the legacy class.
-// TODO(crbug.com/1138155): Merge the classes together now that they are on
+// TODO(crbug.com/40725202): Merge the classes together now that they are on
 // the same thread.
 class CONTENT_EXPORT ServiceWorkerMainResourceLoaderInterceptor final
     : public NavigationLoaderInterceptor {
@@ -81,7 +81,7 @@ class CONTENT_EXPORT ServiceWorkerMainResourceLoaderInterceptor final
 
   static void CompleteWithoutLoader(
       NavigationLoaderInterceptor::LoaderCallback loader_callback,
-      base::WeakPtr<ServiceWorkerContainerHost> container_host);
+      base::WeakPtr<ServiceWorkerClient> service_worker_client);
 
  private:
   friend class ServiceWorkerMainResourceLoaderInterceptorTest;

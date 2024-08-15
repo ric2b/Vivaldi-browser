@@ -11,10 +11,11 @@ import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.browsing_data.BrowsingDataBridge;
 import org.chromium.chrome.browser.browsing_data.BrowsingDataType;
 import org.chromium.chrome.browser.browsing_data.TimePeriod;
+import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
+import org.chromium.chrome.browser.tab_ui.TabSwitcher;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
 
 import java.util.List;
@@ -72,5 +73,10 @@ public class QuickDeleteDelegateImpl extends QuickDeleteDelegate {
             return;
         }
         tabSwitcher.showQuickDeleteAnimation(onAnimationEnd, tabs);
+    }
+
+    @Override
+    boolean isInMultiWindowMode() {
+        return MultiWindowUtils.getInstanceCount() > 1;
     }
 }

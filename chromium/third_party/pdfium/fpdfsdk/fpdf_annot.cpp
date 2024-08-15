@@ -519,8 +519,9 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFAnnot_AddInkStroke(FPDF_ANNOTATION annot,
 
   auto ink_coord_list = inklist->AppendNew<CPDF_Array>();
   for (size_t i = 0; i < point_count; i++) {
-    ink_coord_list->AppendNew<CPDF_Number>(points[i].x);
-    ink_coord_list->AppendNew<CPDF_Number>(points[i].y);
+    // TODO(crbug.com/pdfium/2155): investigate safety issues.
+    ink_coord_list->AppendNew<CPDF_Number>(UNSAFE_BUFFERS(points[i].x));
+    ink_coord_list->AppendNew<CPDF_Number>(UNSAFE_BUFFERS(points[i].y));
   }
   return static_cast<int>(inklist->size() - 1);
 }
@@ -877,8 +878,9 @@ FPDFAnnot_GetVertices(FPDF_ANNOTATION annot,
       fxcrt::CollectionSize<unsigned long>(*vertices) / 2;
   if (buffer && length >= points_len) {
     for (unsigned long i = 0; i < points_len; ++i) {
-      buffer[i].x = vertices->GetFloatAt(i * 2);
-      buffer[i].y = vertices->GetFloatAt(i * 2 + 1);
+      // TODO(crbug.com/pdfium/2155): investigate safety issues.
+      UNSAFE_BUFFERS(buffer[i].x) = vertices->GetFloatAt(i * 2);
+      UNSAFE_BUFFERS(buffer[i].y) = vertices->GetFloatAt(i * 2 + 1);
     }
   }
   return points_len;
@@ -908,8 +910,9 @@ FPDFAnnot_GetInkListPath(FPDF_ANNOTATION annot,
       fxcrt::CollectionSize<unsigned long>(*path) / 2;
   if (buffer && length >= points_len) {
     for (unsigned long i = 0; i < points_len; ++i) {
-      buffer[i].x = path->GetFloatAt(i * 2);
-      buffer[i].y = path->GetFloatAt(i * 2 + 1);
+      // TODO(crbug.com/pdfium/2155): investigate safety issues.
+      UNSAFE_BUFFERS(buffer[i].x) = path->GetFloatAt(i * 2);
+      UNSAFE_BUFFERS(buffer[i].y) = path->GetFloatAt(i * 2 + 1);
     }
   }
   return points_len;
@@ -1009,8 +1012,9 @@ FPDFAnnot_SetStringValue(FPDF_ANNOTATION annot,
   if (!pAnnotDict)
     return false;
 
+  // SAFETY: required from caller.
   pAnnotDict->SetNewFor<CPDF_String>(
-      key, WideStringFromFPDFWideString(value).AsStringView());
+      key, UNSAFE_BUFFERS(WideStringFromFPDFWideString(value).AsStringView()));
   return true;
 }
 
@@ -1020,11 +1024,13 @@ FPDFAnnot_GetStringValue(FPDF_ANNOTATION annot,
                          FPDF_WCHAR* buffer,
                          unsigned long buflen) {
   const CPDF_Dictionary* pAnnotDict = GetAnnotDictFromFPDFAnnotation(annot);
-  if (!pAnnotDict)
+  if (!pAnnotDict) {
     return 0;
-
-  return Utf16EncodeMaybeCopyAndReturnLength(pAnnotDict->GetUnicodeTextFor(key),
-                                             buffer, buflen);
+  }
+  // SAFETY: required from caller.
+  return Utf16EncodeMaybeCopyAndReturnLength(
+      pAnnotDict->GetUnicodeTextFor(key),
+      UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, buflen)));
 }
 
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
@@ -1062,7 +1068,9 @@ FPDFAnnot_SetAP(FPDF_ANNOTATION annot,
   static_assert(std::size(kModeKeyForMode) == FPDF_ANNOT_APPEARANCEMODE_COUNT,
                 "length of kModeKeyForMode should be equal to "
                 "FPDF_ANNOT_APPEARANCEMODE_COUNT");
-  const char* mode_key = kModeKeyForMode[appearanceMode];
+
+  // TODO(crbug.com/pdfium/2155): investigate safety issues.
+  const char* mode_key = UNSAFE_BUFFERS(kModeKeyForMode[appearanceMode]);
 
   RetainPtr<CPDF_Dictionary> pApDict =
       pAnnotDict->GetMutableDictFor(pdfium::annotation::kAP);
@@ -1108,10 +1116,10 @@ FPDFAnnot_SetAP(FPDF_ANNOTATION annot,
     stream_dict->SetFor("Resources", SetExtGStateInResourceDict(
                                          pDoc, pAnnotDict.Get(), "Normal"));
   }
-
+  // SAFETY: required from caller.
+  ByteString new_stream_data = PDF_EncodeText(
+      UNSAFE_BUFFERS(WideStringFromFPDFWideString(value).AsStringView()));
   auto new_stream = pDoc->NewIndirect<CPDF_Stream>(std::move(stream_dict));
-  ByteString new_stream_data =
-      PDF_EncodeText(WideStringFromFPDFWideString(value).AsStringView());
   new_stream->SetData(new_stream_data.unsigned_span());
 
   // Storing reference to indirect object in annotation's AP
@@ -1140,8 +1148,10 @@ FPDFAnnot_GetAP(FPDF_ANNOTATION annot,
       static_cast<CPDF_Annot::AppearanceMode>(appearanceMode);
 
   RetainPtr<CPDF_Stream> pStream = GetAnnotAPNoFallback(pAnnotDict.Get(), mode);
+  // SAFETY: required from caller.
   return Utf16EncodeMaybeCopyAndReturnLength(
-      pStream ? pStream->GetUnicodeText() : WideString(), buffer, buflen);
+      pStream ? pStream->GetUnicodeText() : WideString(),
+      UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, buflen)));
 }
 
 FPDF_EXPORT FPDF_ANNOTATION FPDF_CALLCONV
@@ -1215,10 +1225,13 @@ FPDFAnnot_GetFormFieldName(FPDF_FORMHANDLE hHandle,
                            FPDF_WCHAR* buffer,
                            unsigned long buflen) {
   const CPDF_FormField* pFormField = GetFormField(hHandle, annot);
-  if (!pFormField)
+  if (!pFormField) {
     return 0;
-  return Utf16EncodeMaybeCopyAndReturnLength(pFormField->GetFullName(), buffer,
-                                             buflen);
+  }
+  // SAFETY: required from caller.
+  return Utf16EncodeMaybeCopyAndReturnLength(
+      pFormField->GetFullName(),
+      UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, buflen)));
 }
 
 FPDF_EXPORT int FPDF_CALLCONV
@@ -1245,8 +1258,10 @@ FPDFAnnot_GetFormAdditionalActionJavaScript(FPDF_FORMHANDLE hHandle,
   auto type = static_cast<CPDF_AAction::AActionType>(event);
   CPDF_AAction additional_action = pFormField->GetAdditionalAction();
   CPDF_Action action = additional_action.GetAction(type);
-  return Utf16EncodeMaybeCopyAndReturnLength(action.GetJavaScript(), buffer,
-                                             buflen);
+  // SAFETY: required from caller.
+  return Utf16EncodeMaybeCopyAndReturnLength(
+      action.GetJavaScript(),
+      UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, buflen)));
 }
 
 FPDF_EXPORT unsigned long FPDF_CALLCONV
@@ -1255,11 +1270,13 @@ FPDFAnnot_GetFormFieldAlternateName(FPDF_FORMHANDLE hHandle,
                                     FPDF_WCHAR* buffer,
                                     unsigned long buflen) {
   const CPDF_FormField* pFormField = GetFormField(hHandle, annot);
-  if (!pFormField)
+  if (!pFormField) {
     return 0;
-
-  return Utf16EncodeMaybeCopyAndReturnLength(pFormField->GetAlternateName(),
-                                             buffer, buflen);
+  }
+  // SAFETY: required from caller.
+  return Utf16EncodeMaybeCopyAndReturnLength(
+      pFormField->GetAlternateName(),
+      UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, buflen)));
 }
 
 FPDF_EXPORT unsigned long FPDF_CALLCONV
@@ -1268,10 +1285,13 @@ FPDFAnnot_GetFormFieldValue(FPDF_FORMHANDLE hHandle,
                             FPDF_WCHAR* buffer,
                             unsigned long buflen) {
   const CPDF_FormField* pFormField = GetFormField(hHandle, annot);
-  if (!pFormField)
+  if (!pFormField) {
     return 0;
-  return Utf16EncodeMaybeCopyAndReturnLength(pFormField->GetValue(), buffer,
-                                             buflen);
+  }
+  // SAFETY: required from caller.
+  return Utf16EncodeMaybeCopyAndReturnLength(
+      pFormField->GetValue(),
+      UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, buflen)));
 }
 
 FPDF_EXPORT int FPDF_CALLCONV FPDFAnnot_GetOptionCount(FPDF_FORMHANDLE hHandle,
@@ -1293,8 +1313,10 @@ FPDFAnnot_GetOptionLabel(FPDF_FORMHANDLE hHandle,
   if (!pFormField || index >= pFormField->CountOptions())
     return 0;
 
-  WideString ws = pFormField->GetOptionLabel(index);
-  return Utf16EncodeMaybeCopyAndReturnLength(ws, buffer, buflen);
+  // SAFETY: required from caller.
+  return Utf16EncodeMaybeCopyAndReturnLength(
+      pFormField->GetOptionLabel(index),
+      UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, buflen)));
 }
 
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
@@ -1369,8 +1391,9 @@ FPDFAnnot_SetFocusableSubtypes(FPDF_FORMHANDLE hHandle,
   std::vector<CPDF_Annot::Subtype> focusable_annot_types;
   focusable_annot_types.reserve(count);
   for (size_t i = 0; i < count; ++i) {
+    // TODO(crbug.com/pdfium/2155): investigate safety issues.
     focusable_annot_types.push_back(
-        static_cast<CPDF_Annot::Subtype>(subtypes[i]));
+        static_cast<CPDF_Annot::Subtype>(UNSAFE_BUFFERS(subtypes[i])));
   }
 
   pFormFillEnv->SetFocusableAnnotSubtypes(focusable_annot_types);
@@ -1408,8 +1431,9 @@ FPDFAnnot_GetFocusableSubtypes(FPDF_FORMHANDLE hHandle,
     return false;
 
   for (size_t i = 0; i < focusable_annot_types.size(); ++i) {
-    subtypes[i] =
-        static_cast<FPDF_ANNOTATION_SUBTYPE>(focusable_annot_types[i]);
+    // TODO(crbug.com/pdfium/2155): investigate safety issues.
+    UNSAFE_BUFFERS(subtypes[i] = static_cast<FPDF_ANNOTATION_SUBTYPE>(
+                       focusable_annot_types[i]));
   }
 
   return true;
@@ -1453,11 +1477,13 @@ FPDFAnnot_GetFormFieldExportValue(FPDF_FORMHANDLE hHandle,
                                   unsigned long buflen) {
   const CPDFSDK_Widget* pWidget =
       GetRadioButtonOrCheckBoxWidget(hHandle, annot);
-  if (!pWidget)
+  if (!pWidget) {
     return 0;
-
-  return Utf16EncodeMaybeCopyAndReturnLength(pWidget->GetExportValue(), buffer,
-                                             buflen);
+  }
+  // SAFETY: required from caller.
+  return Utf16EncodeMaybeCopyAndReturnLength(
+      pWidget->GetExportValue(),
+      UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, buflen)));
 }
 
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFAnnot_SetURI(FPDF_ANNOTATION annot,
@@ -1506,7 +1532,8 @@ FPDFAnnot_AddFileAttachment(FPDF_ANNOTATION annot, FPDF_WIDESTRING name) {
     return nullptr;
   }
 
-  WideString ws_name = WideStringFromFPDFWideString(name);
+  // SAFETY: required from caller.
+  WideString ws_name = UNSAFE_BUFFERS(WideStringFromFPDFWideString(name));
   if (ws_name.IsEmpty()) {
     return nullptr;
   }

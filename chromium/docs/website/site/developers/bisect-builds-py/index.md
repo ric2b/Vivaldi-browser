@@ -63,6 +63,9 @@ The three range specifications above are equivalent. Note that in all cases the
 bisect is being done from trunk builds so merges to a release branch will not be
 bisected.
 
+Note: bisect-builds.py script now requires Python 3 to run for Windows. Use
+python3 on Windows instead, in order to run the examples above.
+
 Valid archive types (the -a parameter) are `mac, mac64, win, win64, linux (not
 supported for builds after March 2016), linux64, linux-arm, and chromeos`.
 

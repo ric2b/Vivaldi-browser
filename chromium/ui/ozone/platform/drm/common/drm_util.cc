@@ -14,6 +14,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -23,7 +24,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "ui/base/ui_base_switches.h"
@@ -622,7 +622,7 @@ std::unique_ptr<display::DisplaySnapshot> CreateDisplaySnapshot(
         edid_parser.has_overscan_flag() && edid_parser.overscan_flag();
     color_info.color_space = display::GetColorSpaceFromEdid(edid_parser);
     // Populate the EDID primaries and gamma from the gfx::ColorSpace.
-    // TODO(https://crbug.com/1505062): Extract this directly.
+    // TODO(crbug.com/40945652): Extract this directly.
     if (auto sk_color_space = color_info.color_space.ToSkColorSpace()) {
       skcms_TransferFunction fn;
       skcms_Matrix3x3 to_xyzd50;
@@ -733,7 +733,7 @@ std::vector<uint64_t> ParsePathBlob(const drmModePropertyBlobRes& path_blob) {
   std::string path_str(
       static_cast<char*>(path_blob.data),
       base::strict_cast<std::string::size_type>(path_blob.length));
-  base::StringPiece path_string_piece(path_str);
+  std::string_view path_string_piece(path_str);
   path_string_piece = base::TrimString(path_string_piece, std::string("\0", 1u),
                                        base::TRIM_TRAILING);
 

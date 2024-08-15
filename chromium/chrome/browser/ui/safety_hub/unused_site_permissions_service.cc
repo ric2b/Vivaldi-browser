@@ -23,6 +23,7 @@
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/safety_hub/safety_hub_service.h"
 #include "chrome/common/chrome_features.h"
@@ -34,6 +35,7 @@
 #include "components/content_settings/core/browser/website_settings_info.h"
 #include "components/content_settings/core/browser/website_settings_registry.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/content_settings_constraints.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
@@ -67,7 +69,7 @@ size_t kAllowAgainMetricsExclusiveMaxCount = 31;
 size_t kAllowAgainMetricsBuckets = 31;
 
 base::TimeDelta GetRevocationThreshold() {
-  // TODO(crbug.com/1401701): Clean up no delay revocation after the feature is
+  // TODO(crbug.com/40250875): Clean up no delay revocation after the feature is
   // ready. Today, no delay revocation is necessary to enable manual testing.
   if (content_settings::features::kSafetyCheckUnusedSitePermissionsNoDelay
           .Get()) {
@@ -81,7 +83,7 @@ base::TimeDelta GetRevocationThreshold() {
 }
 
 base::TimeDelta GetCleanUpThreshold() {
-  // TODO(crbug.com/1401701): Clean up delayed clean up logic after the feature
+  // TODO(crbug.com/40250875): Clean up delayed clean up logic after the feature
   // is ready. Today, this is necessary to enable manual testing.
   if (content_settings::features::kSafetyCheckUnusedSitePermissionsWithDelay
           .Get()) {
@@ -136,18 +138,16 @@ UnusedSitePermissionsService::TabHelper::TabHelper(
 
 UnusedSitePermissionsService::TabHelper::~TabHelper() = default;
 
-UnusedSitePermissionsService::RevokedPermission::RevokedPermission(
-    ContentSettingsPattern origin,
-    std::set<ContentSettingsType> permission_types,
-    base::Time expiration)
-    : origin(origin),
-      permission_types(permission_types),
-      expiration(expiration) {}
+PermissionsData::PermissionsData() = default;
 
-UnusedSitePermissionsService::RevokedPermission::~RevokedPermission() = default;
+PermissionsData::~PermissionsData() = default;
 
-UnusedSitePermissionsService::RevokedPermission::RevokedPermission(
-    const RevokedPermission&) = default;
+PermissionsData::PermissionsData(const PermissionsData& other)
+    : origin(other.origin),
+      permission_types(other.permission_types),
+      constraints(other.constraints) {
+  chooser_permissions_data = other.chooser_permissions_data.Clone();
+}
 
 UnusedSitePermissionsService::UnusedSitePermissionsResult::
     UnusedSitePermissionsResult() = default;
@@ -163,19 +163,13 @@ UnusedSitePermissionsService::UnusedSitePermissionsResult::Clone() const {
 }
 
 void UnusedSitePermissionsService::UnusedSitePermissionsResult::
-    AddRevokedPermission(ContentSettingsPattern origin,
-                         std::set<ContentSettingsType> permission_types,
-                         base::Time expiration) {
-  RevokedPermission revoked_permission(std::move(origin), permission_types,
-                                       std::move(expiration));
-  revoked_permissions_.push_back(std::move(revoked_permission));
+    AddRevokedPermission(const PermissionsData& permissions_data) {
+  revoked_permissions_.push_back(std::move(permissions_data));
 }
 
-std::list<UnusedSitePermissionsService::RevokedPermission>
-UnusedSitePermissionsService::UnusedSitePermissionsResult::
-    GetRevokedPermissions() {
-  std::list<UnusedSitePermissionsService::RevokedPermission> result(
-      revoked_permissions_);
+std::list<PermissionsData> UnusedSitePermissionsService::
+    UnusedSitePermissionsResult::GetRevokedPermissions() {
+  std::list<PermissionsData> result(revoked_permissions_);
   return result;
 }
 
@@ -243,12 +237,17 @@ bool UnusedSitePermissionsService::UnusedSitePermissionsResult::
 
 std::u16string UnusedSitePermissionsService::UnusedSitePermissionsResult::
     GetNotificationString() const {
+#if !BUILDFLAG(IS_ANDROID)
   if (revoked_permissions_.empty()) {
     return std::u16string();
   }
   return l10n_util::GetPluralStringFUTF16(
       IDS_SETTINGS_SAFETY_HUB_UNUSED_SITE_PERMISSIONS_MENU_NOTIFICATION,
       revoked_permissions_.size());
+#else
+  // Menu notifications are not present on Android.
+  return std::u16string();
+#endif
 }
 
 int UnusedSitePermissionsService::UnusedSitePermissionsResult::
@@ -400,19 +399,16 @@ void UnusedSitePermissionsService::RegrantPermissionsForOrigin(
 }
 
 void UnusedSitePermissionsService::UndoRegrantPermissionsForOrigin(
-    const std::set<ContentSettingsType>& permissions,
-    const base::Value::Dict& chooser_permissions_data,
-    const std::optional<content_settings::ContentSettingConstraints> constraint,
-    const url::Origin origin) {
-  for (const auto& permission : permissions) {
+    const PermissionsData& permissions_data) {
+  for (const auto& permission : permissions_data.permission_types) {
     if (IsContentSetting(permission)) {
       hcsm()->SetContentSettingCustomScope(
-          ContentSettingsPattern::FromURLNoWildcard(origin.GetURL()),
-          ContentSettingsPattern::Wildcard(), permission,
-          ContentSetting::CONTENT_SETTING_DEFAULT);
+          permissions_data.origin, ContentSettingsPattern::Wildcard(),
+          permission, ContentSetting::CONTENT_SETTING_DEFAULT);
     } else if (IsChooserPermissionSupported() && IsWebsiteSetting(permission)) {
-      hcsm()->SetWebsiteSettingDefaultScope(origin.GetURL(), GURL(), permission,
-                                            base::Value());
+      hcsm()->SetWebsiteSettingDefaultScope(
+          permissions_data.origin.ToRepresentativeUrl(), GURL(), permission,
+          base::Value());
     } else {
       NOTREACHED() << "Unable to find ContentSettingsType in neither "
                    << "ContentSettingsRegistry nor WebsiteSettingsRegistry: "
@@ -421,9 +417,9 @@ void UnusedSitePermissionsService::UndoRegrantPermissionsForOrigin(
   }
 
   StorePermissionInRevokedPermissionSetting(
-      permissions, chooser_permissions_data, constraint,
-      ContentSettingsPattern::FromURLNoWildcard(origin.GetURL()),
-      ContentSettingsPattern::Wildcard());
+      permissions_data.permission_types,
+      permissions_data.chooser_permissions_data, permissions_data.constraints,
+      permissions_data.origin, ContentSettingsPattern::Wildcard());
 }
 
 void UnusedSitePermissionsService::ClearRevokedPermissionsList() {
@@ -551,7 +547,7 @@ UnusedSitePermissionsService::UpdateOnUIThread(
   return GetRevokedPermissions();
 }
 
-std::unique_ptr<UnusedSitePermissionsService::Result>
+std::unique_ptr<UnusedSitePermissionsService::UnusedSitePermissionsResult>
 UnusedSitePermissionsService::GetRevokedPermissions() {
   ContentSettingsForOneType settings = hcsm()->GetSettingsForOneType(
       ContentSettingsType::REVOKED_UNUSED_SITE_PERMISSIONS);
@@ -559,21 +555,33 @@ UnusedSitePermissionsService::GetRevokedPermissions() {
       UnusedSitePermissionsService::UnusedSitePermissionsResult>();
 
   for (const auto& revoked_permissions : settings) {
-    ContentSettingsPattern origin = revoked_permissions.primary_pattern;
+    PermissionsData permissions_data;
+    permissions_data.origin = revoked_permissions.primary_pattern;
     const base::Value& stored_value = revoked_permissions.setting_value;
     DCHECK(stored_value.is_dict());
 
     const base::Value::List* type_list =
         stored_value.GetDict().FindList(permissions::kRevokedKey);
     CHECK(type_list);
-    std::set<ContentSettingsType> permission_types;
     for (base::Value& type : type_list->Clone()) {
-      permission_types.insert(static_cast<ContentSettingsType>(type.GetInt()));
+      permissions_data.permission_types.insert(
+          static_cast<ContentSettingsType>(type.GetInt()));
     }
 
-    base::Time expiration = revoked_permissions.metadata.expiration();
+    permissions_data.constraints = content_settings::ContentSettingConstraints(
+        revoked_permissions.metadata.expiration() -
+        revoked_permissions.metadata.lifetime());
+    permissions_data.constraints.set_lifetime(
+        revoked_permissions.metadata.lifetime());
 
-    result->AddRevokedPermission(origin, permission_types, expiration);
+    auto* chooser_permissions_data_dict = stored_value.GetDict().FindDict(
+        permissions::kRevokedChooserPermissionsKey);
+    if (chooser_permissions_data_dict) {
+      permissions_data.chooser_permissions_data =
+          chooser_permissions_data_dict->Clone();
+    }
+
+    result->AddRevokedPermission(permissions_data);
   }
   return result;
 }
@@ -676,16 +684,13 @@ void UnusedSitePermissionsService::RevokeUnusedPermissions() {
 }
 
 void UnusedSitePermissionsService::StorePermissionInRevokedPermissionSetting(
-    const std::set<ContentSettingsType>& permissions,
-    const base::Value::Dict& chooser_permissions_data,
-    const std::optional<content_settings::ContentSettingConstraints> constraint,
-    const url::Origin origin) {
+    const PermissionsData& permissions_data) {
   // The |secondary_pattern| for
   // |ContentSettingsType::REVOKED_UNUSED_SITE_PERMISSIONS| is always wildcard.
   StorePermissionInRevokedPermissionSetting(
-      permissions, chooser_permissions_data, constraint,
-      ContentSettingsPattern::FromURLNoWildcard(origin.GetURL()),
-      ContentSettingsPattern::Wildcard());
+      permissions_data.permission_types,
+      permissions_data.chooser_permissions_data, permissions_data.constraints,
+      permissions_data.origin, ContentSettingsPattern::Wildcard());
 }
 
 void UnusedSitePermissionsService::StorePermissionInRevokedPermissionSetting(

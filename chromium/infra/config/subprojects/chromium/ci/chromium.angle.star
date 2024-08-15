@@ -25,6 +25,8 @@ ci.defaults.set(
     reclient_jobs = reclient.jobs.DEFAULT,
     service_account = ci.gpu.SERVICE_ACCOUNT,
     shadow_service_account = ci.gpu.SHADOW_SERVICE_ACCOUNT,
+    siso_enabled = True,
+    siso_remote_jobs = reclient.jobs.DEFAULT,
     thin_tester_cores = 2,
 )
 
@@ -120,7 +122,6 @@ ci.gpu.linux_builder(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
             apply_configs = [
-                "angle_internal",
                 "angle_top_of_tree",
                 "fuchsia",
             ],
@@ -356,7 +357,6 @@ ci.gpu.mac_builder(
         gclient_config = builder_config.gclient_config(
             config = "ios",
             apply_configs = [
-                "angle_internal",
                 "angle_top_of_tree",
             ],
         ),
@@ -390,7 +390,7 @@ ci.gpu.mac_builder(
         short_name = "x64",
     ),
     contact_team_email = "angle-team@google.com",
-    # TODO(crbug.com/1449999): Change to xcode_default once the machines
+    # TODO(crbug.com/40269985): Change to xcode_default once the machines
     # are upgraded to MacOS13
     xcode = xcode.x14main,
 )
@@ -403,7 +403,6 @@ ci.thin_tester(
         gclient_config = builder_config.gclient_config(
             config = "ios",
             apply_configs = [
-                "angle_internal",
                 "angle_top_of_tree",
             ],
         ),

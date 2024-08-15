@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">Jo pas</translation>
 <translation id="2749881179542288782">Kontrolloj gramatikën dhe drejtshkrimin</translation>
 <translation id="2785873697295365461">Përshkruesit e skedarëve</translation>
-<translation id="2809586584051668049">dhe <ph name="NUMBER_ADDITIONAL_DISABLED" /> të tjera</translation>
 <translation id="2825758591930162672">Çelësi publik i subjektit</translation>
 <translation id="2850541429955027218">Shtoj motivin</translation>
 <translation id="2861941300086904918">Përgjegjësi i sigurisë së Native Client</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">Hap si dritare</translation>
 <translation id="3280237271814976245">Regjistroj &amp;në...</translation>
 <translation id="3285322247471302225">&amp;Skedë të re</translation>
-<translation id="3288047731229977326">Shtesat që ekzekutohen në variantin e programuesit mund të rrezikojnë kompjuterin. Për arsye sigurie, këto lloje shtesash duhen çaktivizuar nëse nuk jeni programues.</translation>
 <translation id="329838636886466101">Riparoj</translation>
 <translation id="33022249435934718">Objektet GDI</translation>
 <translation id="3303818374450886607">Kopjet</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">Krijuat shtesën:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Çaktivizoj shtesat në variantin e programuesit</translation>
 <translation id="4100839878934973028">Një program kompjuterik instaloi një aplikacion që mund të ndryshojë funksionet e Vivaldit.</translation>
 <translation id="4104163789986725820">E&amp;ksportoj…</translation>
 <translation id="4109898769411476438">Mbyll shfletuesin e internetit para importit</translation>
@@ -261,7 +258,6 @@
 <translation id="5269977353971873915">E pamundur të printohej</translation>
 <translation id="5284445933715251131">Vazhdoj shkarkimin</translation>
 <translation id="52912272896845572">Është i pavlefshëm çelësi privat.</translation>
-<translation id="5301954838959518834">OK, e kuptova</translation>
 <translation id="5302932258331363306">Tregoj zëvendësimet</translation>
 <translation id="5317780077021120954">Regjistroj</translation>
 <translation id="5334142896108694079">Kashi i skripteve</translation>

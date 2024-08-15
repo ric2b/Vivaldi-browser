@@ -4,11 +4,12 @@
 
 #include "ui/native_theme/native_theme_win.h"
 
+#include <windows.h>
+
 #include <stddef.h>
 #include <uxtheme.h>
 #include <vsstyle.h>
 #include <vssym32.h>
-#include <windows.h>
 
 #include <optional>
 #include <tuple>
@@ -266,6 +267,7 @@ void NativeThemeWin::Paint(cc::PaintCanvas* canvas,
                            const gfx::Rect& rect,
                            const ExtraParams& extra,
                            ColorScheme color_scheme,
+                           bool in_forced_colors,
                            const std::optional<SkColor>& accent_color) const {
   if (rect.IsEmpty())
     return;
@@ -373,7 +375,7 @@ std::optional<base::TimeDelta> NativeThemeWin::GetPlatformCaretBlinkInterval()
 }
 
 NativeThemeWin::~NativeThemeWin() {
-  // TODO(https://crbug.com/787692): Calling CloseHandles() here breaks
+  // TODO(crbug.com/40551168): Calling CloseHandles() here breaks
   // certain tests and the reliability bots.
   // CloseHandles();
 }

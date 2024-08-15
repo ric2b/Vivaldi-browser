@@ -5,11 +5,12 @@
 package org.chromium.android_webview.media_integrity;
 
 import android.net.Uri;
-import android.util.LruCache;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.chromium.android_webview.AwBrowserContext;
+import org.chromium.android_webview.AwBrowserContext.MediaIntegrityProviderKey;
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.common.Lifetime;
@@ -30,7 +31,9 @@ import org.chromium.content_public.browser.WebContentsStatics;
 import org.chromium.mojo.bindings.InterfaceRequest;
 import org.chromium.mojo.system.MojoException;
 import org.chromium.url.GURL;
+import org.chromium.url.Origin;
 
+import java.lang.ref.WeakReference;
 import java.util.Objects;
 
 /**
@@ -42,104 +45,6 @@ import java.util.Objects;
  */
 @Lifetime.WebView
 public class AwMediaIntegrityServiceImpl implements WebViewMediaIntegrityService {
-
-    /**
-     * Static cache of already-initialized Play providers, to speed up calls for new providers from
-     * a similar context.
-     *
-     * <p>Cached entries will remain cached across page loads. While the cache itself is application
-     * global, the {@link ProviderKey} includes the Profile to avoid sharing values between
-     * profiles.
-     *
-     * <p>The cache size is estimated from the {@code Android.WebView.OriginsVisited} histogram,
-     * looking at the 1-day aggregation of a representative app where users browse multiple domains.
-     * The P95 for the metric over 1 day is 15.
-     *
-     * @see ProviderKey
-     */
-    private static final LruCache<ProviderKey, WebViewMediaIntegrityProvider> sProviderCache =
-            new LruCache<>(20) {
-
-                private int mEvictionCounter;
-
-                @Override
-                protected void entryRemoved(
-                        boolean evicted,
-                        ProviderKey key,
-                        WebViewMediaIntegrityProvider oldValue,
-                        WebViewMediaIntegrityProvider newValue) {
-                    // Log evictions due to lack of space.
-                    if (evicted) {
-                        RecordHistogram.recordCount100Histogram(
-                                "Android.WebView.MediaIntegrity"
-                                        + ".TokenProviderCacheEvictionsCumulative2",
-                                ++mEvictionCounter);
-                    }
-                }
-            };
-
-    /**
-     * Cache key for MediaIntegrityProviders. Ensures that values are keyed by
-     *
-     * <ul>
-     *   <li>top frame origin
-     *   <li>source frame origin
-     *   <li>WebView Profile identifier
-     *   <li>Api status
-     *   <li>cloud project number
-     * </ul>
-     */
-    private static final class ProviderKey {
-
-        private final Uri mTopFrameOrigin;
-        private final Uri mSourceOrigin;
-        private final int mProfileIdentifier;
-        @MediaIntegrityApiStatus private final int mRequestMode;
-        private final long mCloudProjectNumber;
-
-        ProviderKey(
-                Uri topFrameOrigin,
-                Uri sourceOrigin,
-                int profileIdentifier,
-                @MediaIntegrityApiStatus int requestMode,
-                long cloudProjectNumber) {
-            mTopFrameOrigin = topFrameOrigin;
-            mSourceOrigin = sourceOrigin;
-            mProfileIdentifier = profileIdentifier;
-            mRequestMode = requestMode;
-            mCloudProjectNumber = cloudProjectNumber;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(
-                    mTopFrameOrigin,
-                    mSourceOrigin,
-                    mProfileIdentifier,
-                    mRequestMode,
-                    mCloudProjectNumber);
-        }
-
-        @Override
-        public boolean equals(@Nullable Object obj) {
-            if (!(obj instanceof ProviderKey other)) {
-                return false;
-            }
-            return Objects.equals(this.mTopFrameOrigin, other.mTopFrameOrigin)
-                    && Objects.equals(this.mSourceOrigin, other.mSourceOrigin)
-                    && this.mProfileIdentifier == other.mProfileIdentifier
-                    && this.mRequestMode == other.mRequestMode
-                    && this.mCloudProjectNumber == other.mCloudProjectNumber;
-        }
-
-        public @MediaIntegrityApiStatus int getRequestMode() {
-            return mRequestMode;
-        }
-
-        public Uri getSourceOrigin() {
-            return mSourceOrigin;
-        }
-    }
 
     private static @WebViewMediaIntegrityErrorCode.EnumType int errorCodeToMojomErrorCode(
             @MediaIntegrityErrorCode int code) {
@@ -197,14 +102,41 @@ public class AwMediaIntegrityServiceImpl implements WebViewMediaIntegrityService
             return;
         }
 
-        final AwSettings awSettings = AwSettings.fromWebContents(mWebContents);
-        final String sourceOrigin = getOriginFromRenderFrame(mRenderFrameHost);
-        if (awSettings == null || sourceOrigin == null) {
+        final Origin sourceOrigin = mRenderFrameHost.getLastCommittedOrigin();
+        final Origin topLevelOrigin = mRenderFrameHost.getMainFrame().getLastCommittedOrigin();
+        if (sourceOrigin == null || topLevelOrigin == null) {
             callback.call(WebViewMediaIntegrityErrorCode.INTERNAL_ERROR);
             return;
         }
+
+        final AwSettings awSettings = AwSettings.fromWebContents(mWebContents);
+        if (awSettings == null) {
+            callback.call(WebViewMediaIntegrityErrorCode.INTERNAL_ERROR);
+            return;
+        }
+
+        // The GURL-based, string-based, and android.net.Uri-based origin representations are
+        // lossy. They are only used for the API-status check. Prefer using Origin-based origins in
+        // all other cases.
+        final GURL sourceGurl = mRenderFrameHost.getLastCommittedURL();
+        if (sourceGurl == null) {
+            callback.call(WebViewMediaIntegrityErrorCode.INTERNAL_ERROR);
+            return;
+        }
+        final GURL sourceOriginGurl = sourceGurl.getOrigin();
+        final String sourceOriginString = sourceOriginGurl.getValidSpecOrEmpty();
+        if (!Objects.equals(sourceOrigin.getScheme(), sourceOriginGurl.getScheme())
+                || "".equals(sourceOriginString)) {
+            // Note that sourceOrigin and sourceOriginGurl (getLastCommittedOrigin and
+            // getLastCommittedURL) may not agree on the origin in certain situations, including
+            // non-standard URIs and pages loaded via loadDataWithBaseURL. For now, we do not
+            // support these or loadDataWithBaseURL.
+            callback.call(WebViewMediaIntegrityErrorCode.NON_RECOVERABLE_ERROR);
+            return;
+        }
+
         @MediaIntegrityApiStatus
-        final int apiStatus = getMediaIntegrityApiStatus(sourceOrigin, awSettings);
+        final int apiStatus = getMediaIntegrityApiStatus(sourceOriginString, awSettings);
         if (apiStatus == MediaIntegrityApiStatus.DISABLED) {
             callback.call(WebViewMediaIntegrityErrorCode.API_DISABLED_BY_APPLICATION);
             return;
@@ -214,19 +146,25 @@ public class AwMediaIntegrityServiceImpl implements WebViewMediaIntegrityService
                 "Android.WebView.MediaIntegrity.GetTokenProviderCumulativeV2",
                 ++sGetTokenProviderCallCounter);
 
-        ProviderKey key = getProviderKey(cloudProjectNumber, apiStatus, sourceOrigin);
-        if (key == null) {
+        final AwContents awContents = AwContents.fromWebContents(mWebContents);
+        if (awContents == null) {
             callback.call(WebViewMediaIntegrityErrorCode.INTERNAL_ERROR);
             return;
         }
-        WebViewMediaIntegrityProvider cachedProvider = sProviderCache.get(key);
+        final AwBrowserContext awBrowserContext = awContents.getBrowserContext();
 
+        final MediaIntegrityProviderKey key =
+                new MediaIntegrityProviderKey(
+                        sourceOrigin, topLevelOrigin, apiStatus, cloudProjectNumber);
+        final MediaIntegrityProvider cachedProvider =
+                awBrowserContext.getCachedMediaIntegrityProvider(key);
         if (cachedProvider != null) {
-            ThreadUtils.assertOnUiThread();
             RecordHistogram.recordCount100Histogram(
                     "Android.WebView.MediaIntegrity.TokenProviderCacheHitsCumulativeV2",
                     ++sCacheHitCounter);
-            WebViewMediaIntegrityProvider.MANAGER.bind(cachedProvider, providerRequest);
+            final WebViewMediaIntegrityProvider integrityProvider =
+                    new WebViewMediaIntegrityProviderImpl(cachedProvider, key, awBrowserContext);
+            WebViewMediaIntegrityProvider.MANAGER.bind(integrityProvider, providerRequest);
             callback.call(/* error= */ null);
             return;
         }
@@ -236,7 +174,7 @@ public class AwMediaIntegrityServiceImpl implements WebViewMediaIntegrityService
         PlatformServiceBridge.getInstance()
                 .getMediaIntegrityProvider(
                         cloudProjectNumber,
-                        key.getRequestMode(),
+                        /* requestMode= */ apiStatus,
                         new ValueOrErrorCallback<MediaIntegrityProvider, Integer>() {
                             @Override
                             public void onResult(MediaIntegrityProvider provider) {
@@ -246,16 +184,13 @@ public class AwMediaIntegrityServiceImpl implements WebViewMediaIntegrityService
                                         "Android.WebView.MediaIntegrity"
                                                 + ".TokenProviderCreatedCumulativeV2",
                                         ++sProviderCreatedCounter);
-                                WebViewMediaIntegrityProvider integrityProvider =
-                                        new AwMediaIntegrityProviderImpl(provider);
+                                final WebViewMediaIntegrityProvider integrityProvider =
+                                        new WebViewMediaIntegrityProviderImpl(
+                                                provider, key, awBrowserContext);
                                 WebViewMediaIntegrityProvider.MANAGER.bind(
                                         integrityProvider, providerRequest);
                                 callback.call(/* error= */ null);
-                                if (!key.getSourceOrigin().toString().isEmpty()) {
-                                    // Cache the provider only if source origin is
-                                    // non-opaque
-                                    sProviderCache.put(key, integrityProvider);
-                                }
+                                awBrowserContext.putMediaIntegrityProviderInCache(key, provider);
                             }
 
                             @Override
@@ -267,36 +202,15 @@ public class AwMediaIntegrityServiceImpl implements WebViewMediaIntegrityService
                         });
     }
 
-    @Nullable
-    private ProviderKey getProviderKey(
-            long cloudProjectNumber,
-            @MediaIntegrityApiStatus int apiStatus,
-            @NonNull String sourceOrigin) {
-        final String topLevelOrigin = getOriginFromRenderFrame(mRenderFrameHost.getMainFrame());
-        if (topLevelOrigin == null) {
-            return null;
-        }
-        final AwContents awContents = AwContents.fromWebContents(mWebContents);
-        if (awContents == null) {
-            return null;
-        }
-        return new ProviderKey(
-                Uri.parse(sourceOrigin),
-                Uri.parse(topLevelOrigin),
-                awContents.getBrowserContext().hashCode(),
-                apiStatus,
-                cloudProjectNumber);
-    }
-
     private @MediaIntegrityApiStatus int getMediaIntegrityApiStatus(
-            @NonNull String sourceOrigin, @NonNull AwSettings awSettings) {
-        @MediaIntegrityApiStatus int apiStatus;
-        if ("".equals(sourceOrigin)) {
-            // An empty origin will be produced for non-http/https URLs.
-            apiStatus = awSettings.getWebViewIntegrityApiDefaultStatus();
-        } else {
-            apiStatus = awSettings.getWebViewIntegrityApiStatusForUri(Uri.parse(sourceOrigin));
-        }
+            @NonNull String sourceOriginString, @NonNull AwSettings awSettings) {
+        // An empty origin will be produced for many (but not all) non-http/non-https schemes.
+        // We disallow this in the caller.
+        assert !"".equals(sourceOriginString);
+
+        @MediaIntegrityApiStatus
+        int apiStatus =
+                awSettings.getWebViewIntegrityApiStatusForUri(Uri.parse(sourceOriginString));
         RecordHistogram.recordEnumeratedHistogram(
                 "Android.WebView.MediaIntegrity.ApiStatusV2",
                 apiStatus,
@@ -304,22 +218,21 @@ public class AwMediaIntegrityServiceImpl implements WebViewMediaIntegrityService
         return apiStatus;
     }
 
-    @Nullable
-    private String getOriginFromRenderFrame(RenderFrameHost host) {
-        final GURL sourceGurl = host.getLastCommittedURL();
-        if (sourceGurl == null) {
-            return null;
-        }
-        return sourceGurl.getOrigin().getValidSpecOrEmpty();
-    }
-
     @Lifetime.WebView
-    private static class AwMediaIntegrityProviderImpl implements WebViewMediaIntegrityProvider {
+    private static class WebViewMediaIntegrityProviderImpl
+            implements WebViewMediaIntegrityProvider {
         @NonNull private final MediaIntegrityProvider mProvider;
+        @NonNull private final MediaIntegrityProviderKey mCacheKey;
+        @NonNull private final WeakReference<AwBrowserContext> mAwBrowserContext;
         private int mRequestCounter;
 
-        public AwMediaIntegrityProviderImpl(@NonNull MediaIntegrityProvider provider) {
+        public WebViewMediaIntegrityProviderImpl(
+                @NonNull MediaIntegrityProvider provider,
+                @NonNull MediaIntegrityProviderKey cacheKey,
+                @NonNull AwBrowserContext awBrowserContext) {
             mProvider = provider;
+            mCacheKey = cacheKey;
+            mAwBrowserContext = new WeakReference<AwBrowserContext>(awBrowserContext);
         }
 
         @Override
@@ -354,6 +267,16 @@ public class AwMediaIntegrityServiceImpl implements WebViewMediaIntegrityService
                         public void onError(Integer error) {
                             ThreadUtils.assertOnUiThread();
                             Objects.requireNonNull(error);
+                            if (error == MediaIntegrityErrorCode.TOKEN_PROVIDER_INVALID) {
+                                // This callback could take an arbitrary amount of time. We use a
+                                // weak reference to avoid making assumptions about AwBrowserContext
+                                // lifetimes.
+                                final AwBrowserContext awBrowserContext = mAwBrowserContext.get();
+                                if (awBrowserContext != null) {
+                                    awBrowserContext.invalidateCachedMediaIntegrityProvider(
+                                            mCacheKey, mProvider);
+                                }
+                            }
                             final WebViewMediaIntegrityTokenResponse response =
                                     new WebViewMediaIntegrityTokenResponse();
                             response.setErrorCode(errorCodeToMojomErrorCode(error));

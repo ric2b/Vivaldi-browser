@@ -33,6 +33,7 @@ _DISABLED_ALWAYS = [
     "MissingApplicationIcon",  # False positive for non-production targets.
     "NetworkSecurityConfig",  # Breaks on library certificates b/269783280.
     "ObsoleteLintCustomCheck",  # We have no control over custom lint checks.
+    "OldTargetApi",  # We sometimes need targetSdkVersion to not be latest.
     "StringFormatCount",  # Has false-positives.
     "SwitchIntDef",  # Many C++ enums are not used at all in java.
     "Typos",  # Strings are committed in English first and later translated.
@@ -171,7 +172,7 @@ def _GenerateAndroidManifest(original_manifest_path, extra_manifest_paths,
   # Set minSdkVersion in the manifest to the correct value.
   doc, manifest, app_node = manifest_utils.ParseManifest(original_manifest_path)
 
-  # TODO(crbug.com/1126301): Should this be done using manifest merging?
+  # TODO(crbug.com/40148088): Should this be done using manifest merging?
   # Add anything in the application node of the extra manifests to the main
   # manifest to prevent unused resource errors.
   for path in extra_manifest_paths:

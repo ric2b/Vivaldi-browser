@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import {Actions} from '../../common/actions';
-import {ProfileType, Selection} from '../../common/state';
+import {ProfileType, LegacySelection} from '../../common/state';
 import {profileType} from '../../controller/flamegraph_controller';
 import {
   BASE_ROW,
@@ -27,7 +27,6 @@ import {globals} from '../../frontend/globals';
 import {NewTrackArgs} from '../../frontend/track';
 import {
   Plugin,
-  PluginContext,
   PluginContextTrace,
   PluginDescriptor,
   Slice,
@@ -109,13 +108,12 @@ class HeapProfileTrack extends BaseSliceTrack<HeapProfileTrackTypes> {
     );
   }
 
-  protected isSelectionHandled(selection: Selection): boolean {
+  protected isSelectionHandled(selection: LegacySelection): boolean {
     return selection.kind === 'HEAP_PROFILE';
   }
 }
 
 class HeapProfilePlugin implements Plugin {
-  onActivate(_ctx: PluginContext): void {}
   async onTraceLoad(ctx: PluginContextTrace): Promise<void> {
     const result = await ctx.engine.query(`
       select distinct(upid) from heap_profile_allocation

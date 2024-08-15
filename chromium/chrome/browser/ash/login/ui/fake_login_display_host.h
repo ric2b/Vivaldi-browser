@@ -37,10 +37,8 @@ class FakeLoginDisplayHost : public LoginDisplayHost {
   void BeforeSessionStart() override;
   bool IsFinalizing() override;
   void FinalizeImmediately() override;
-  void SetStatusAreaVisible(bool visible) override;
   void StartWizard(OobeScreenId first_screen) override;
   WizardController* GetWizardController() override;
-  KioskLaunchController* GetKioskLaunchController() override;
   void CancelUserAdding() override;
   void StartSignInScreen() override;
   void StartKiosk(const KioskAppId& kiosk_app_id, bool is_auto_launch) override;

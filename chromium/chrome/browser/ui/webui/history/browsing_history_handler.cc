@@ -27,6 +27,7 @@
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history/history_utils.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/sync/device_info_sync_service_factory.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -43,11 +44,14 @@
 #include "components/history_clusters/core/config.h"
 #include "components/history_clusters/core/features.h"
 #include "components/history_clusters/core/history_clusters_prefs.h"
+#include "components/history_embeddings/history_embeddings_features.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/prefs/pref_service.h"
 #include "components/query_parser/snippet.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/supervised_user/core/common/buildflags.h"
+#include "components/supervised_user/core/browser/supervised_user_preferences.h"
+#include "components/supervised_user/core/browser/supervised_user_service.h"
+#include "components/supervised_user/core/browser/supervised_user_url_filter.h"
 #include "components/sync/protocol/sync_enums.pb.h"
 #include "components/sync/service/sync_service.h"
 #include "components/sync_device_info/device_info.h"
@@ -57,14 +61,6 @@
 #include "content/public/browser/web_ui.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
-
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/supervised_user/supervised_user_navigation_observer.h"
-#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
-#include "components/supervised_user/core/browser/supervised_user_preferences.h"
-#include "components/supervised_user/core/browser/supervised_user_service.h"
-#include "components/supervised_user/core/browser/supervised_user_url_filter.h"
-#endif
 
 #include "app/vivaldi_apptools.h"
 #include "extensions/tools/vivaldi_tools.h"
@@ -84,8 +80,7 @@ static const char kDeviceTypeTablet[] = "tablet";
 // Gets the name and type of a device for the given sync client ID.
 // |name| and |type| are out parameters.
 void GetDeviceNameAndType(const syncer::DeviceInfoTracker* tracker,
-                          const std::string& client_id,
-                          std::string* name,
+                          const std::string& client_id, std::string* name,
                           std::string* type) {
   // DeviceInfoTracker must be syncing in order for remote history entries to
   // be available.
@@ -187,10 +182,8 @@ constexpr UrlIdentity::FormatOptions url_identity_options{
 // Converts `entry` to a base::Value::Dict to be owned by the caller.
 base::Value::Dict HistoryEntryToValue(
     const BrowsingHistoryService::HistoryEntry& entry,
-    BookmarkModel* bookmark_model,
-    Profile& profile,
-    const syncer::DeviceInfoTracker* tracker,
-    base::Clock* clock) {
+    BookmarkModel* bookmark_model, Profile& profile,
+    const syncer::DeviceInfoTracker* tracker, base::Clock* clock) {
   base::Value::Dict result;
   SetHistoryEntryUrlAndTitle(entry, &result);
 
@@ -203,8 +196,7 @@ base::Value::Dict HistoryEntryToValue(
 
   // When the domain is empty, use the scheme instead. This allows for a
   // sensible treatment of e.g. file: URLs when group by domain is on.
-  if (domain.empty())
-    domain = base::UTF8ToUTF16(entry.url.scheme() + ":");
+  if (domain.empty()) domain = base::UTF8ToUTF16(entry.url.scheme() + ":");
 
   // The items which are to be written into result are also described in
   // chrome/browser/resources/history/history.js in @typedef for
@@ -263,7 +255,6 @@ base::Value::Dict HistoryEntryToValue(
   result.Set("deviceName", device_name);
   result.Set("deviceType", device_type);
 
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   if (supervised_user::IsSubjectToParentalControls(*profile.GetPrefs())) {
     supervised_user::SupervisedUserService* supervised_user_service =
         SupervisedUserServiceFactory::GetForProfile(&profile);
@@ -274,7 +265,6 @@ base::Value::Dict HistoryEntryToValue(
     is_blocked_visit = entry.blocked_visit;
     host_filtering_behavior = static_cast<int>(filtering_behavior);
   }
-#endif
 
   result.Set("dateTimeOfDay", date_time_of_day);
   result.Set("dateRelativeDay", date_relative_day);
@@ -370,7 +360,7 @@ void BrowsingHistoryHandler::StartQueryHistory() {
       this, local_history, sync_service);
 
   // 150 = RESULTS_PER_PAGE from chrome/browser/resources/history/constants.js
-  SendHistoryQuery(150, std::u16string());
+  SendHistoryQuery(150, std::u16string(), std::nullopt);
 }
 
 void BrowsingHistoryHandler::HandleQueryHistory(const base::Value::List& args) {
@@ -406,11 +396,17 @@ void BrowsingHistoryHandler::HandleQueryHistory(const base::Value::List& args) {
     return;
   }
 
-  SendHistoryQuery(count.GetInt(), base::UTF8ToUTF16(search_text.GetString()));
+  std::optional<double> begin_timestamp;
+  if (args.size() == 4) {
+    begin_timestamp = args[3].GetIfDouble();
+  }
+  SendHistoryQuery(count.GetInt(), base::UTF8ToUTF16(search_text.GetString()),
+                   begin_timestamp);
 }
 
-void BrowsingHistoryHandler::SendHistoryQuery(int max_count,
-                                              const std::u16string& query) {
+void BrowsingHistoryHandler::SendHistoryQuery(
+    int max_count, const std::u16string& query,
+    std::optional<double> begin_timestamp) {
   history::QueryOptions options;
   options.max_count = max_count;
   options.duplicate_policy = history::QueryOptions::REMOVE_DUPLICATES_PER_DAY;
@@ -420,6 +416,11 @@ void BrowsingHistoryHandler::SendHistoryQuery(int max_count,
   if (base::StartsWith(query, kHostPrefix)) {
     options.host_only = true;
     query_without_prefix = query.substr(kHostPrefix.length());
+  }
+
+  if (begin_timestamp.has_value()) {
+    options.begin_time =
+        base::Time::FromMillisecondsSinceUnixEpoch(begin_timestamp.value());
   }
 
   browsing_history_service_->QueryHistory(query_without_prefix, options);
@@ -505,7 +506,7 @@ void BrowsingHistoryHandler::HandleRemoveBookmark(
   std::string url = args[0].GetString();
   Profile* profile = GetProfile();
   BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile);
-  bookmarks::RemoveAllBookmarks(model, GURL(url));
+  bookmarks::RemoveAllBookmarks(model, GURL(url), FROM_HERE);
 }
 
 void BrowsingHistoryHandler::HandleSetLastSelectedTab(
@@ -586,8 +587,7 @@ void BrowsingHistoryHandler::HistoryDeleted() {
 }
 
 void BrowsingHistoryHandler::HasOtherFormsOfBrowsingHistory(
-    bool has_other_forms,
-    bool has_synced_results) {
+    bool has_other_forms, bool has_synced_results) {
   if (IsJavascriptAllowed()) {
     FireWebUIListener("has-other-forms-changed", base::Value(has_other_forms));
   } else {

@@ -16,9 +16,11 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/password_manager/android/password_manager_eviction_util.h"
+#include "chrome/browser/password_manager/android/password_manager_util_bridge.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/browser_sync/sync_to_signin_migration.h"
 #include "components/password_manager/core/browser/features/password_features.h"
+#include "components/password_manager/core/browser/password_manager_buildflags.h"
 #include "components/password_manager/core/browser/password_manager_constants.h"
 #include "components/password_manager/core/browser/password_store/split_stores_and_local_upm.h"
 #include "components/prefs/pref_service.h"
@@ -144,6 +146,12 @@ bool ShouldDelayMigrationUntillMigrationWarningIsAcknowledged(
           password_manager::prefs::kEmptyProfileStoreLoginDatabase)) {
     return false;
   }
+
+  // There is no warning shown on automotive.
+  if (base::android::BuildInfo::GetInstance()->is_automotive()) {
+    return false;
+  }
+
   return !pref_service->GetBoolean(
       password_manager::prefs::kUserAcknowledgedLocalPasswordsMigrationWarning);
 }
@@ -270,8 +278,17 @@ void MaybeActivateSplitStoresAndLocalUpm(
       break;
     }
   }
-
   RecordActivationError(user_type, error);
+
+  if (ActivationError::kUnenrolled == error ||
+      ActivationError::kInitialUpmMigrationMissing == error) {
+    // Initial UPM was not activated properly. Attempt to migrate passwords
+    // to local GMSCore.
+    state_to_set_on_success = kOffAndMigrationPending;
+    error = CheckMinGmsVersionAndFlagEnabled(
+        password_manager::features::kUnifiedPasswordManagerSyncOnlyInGMSCore);
+  }
+
   if (error == ActivationError::kNone) {
     pref_service->SetInteger(kPasswordsUseUPMLocalAndSeparateStores,
                              static_cast<int>(state_to_set_on_success));
@@ -289,7 +306,29 @@ void MaybeDeactivateSplitStoresAndLocalUpm(
     const base::FilePath& login_db_directory) {
   CHECK_NE(GetSplitStoresAndLocalUpmPrefValue(pref_service), kOff);
 
-  // Only deactivate based on the *NoMigration* flag.
+  if (GetSplitStoresAndLocalUpmPrefValue(pref_service) ==
+      kOffAndMigrationPending) {
+    // The migration was previously scheduled but didn't succeed yet. Cancel it
+    // if the WithMigration flag was disabled since, or if the GmsCore version
+    // is no longer suitable. This provides an escape hatch for users who fail
+    // the migration every time and would otherwise stay with sync supppressed
+    // forever.
+    //
+    // Note: disabling the WithMigration flag does nothing to users who were
+    // already activated (kOn), see below.
+    ActivationError error = CheckMinGmsVersionAndFlagEnabled(
+        password_manager::features::
+            kUnifiedPasswordManagerLocalPasswordsAndroidWithMigration);
+    // See comment in the other RecordActivationError() call below.
+    RecordActivationError(GetUserType(pref_service, login_db_directory), error);
+    if (error != ActivationError::kNone) {
+      pref_service->SetInteger(kPasswordsUseUPMLocalAndSeparateStores,
+                               static_cast<int>(kOff));
+    }
+    return;
+  }
+
+  // The user was activated. Only deactivate based on the *NoMigration* flag.
   // - If problems arise when rolling out NoMigration (first launch), disable
   //   that flag server-side. Non-syncing users will revert to using the login
   //   DB. Syncing users will revert to a single PasswordStore talking to
@@ -370,10 +409,31 @@ UseUpmLocalAndSeparateStoresState GetSplitStoresAndLocalUpmPrefValue(
   NOTREACHED_NORETURN();
 }
 
-bool CanUseUPMBackend(bool is_pwd_sync_enabled, PrefService* pref_service) {
-  // TODO(crbug.com/1327294): Re-evaluate if the SyncService can be passed here
+bool AreMinUpmRequirementsMet() {
+  if (!IsInternalBackendPresent()) {
+    return false;
+  }
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kSkipLocalUpmGmsCoreVersionCheckForTesting)) {
+    return true;
+  }
+
+  int gms_version = 0;
+  // GMSCore version could not be parsed, probably no GMSCore installed.
+  if (!base::StringToInt(
+          base::android::BuildInfo::GetInstance()->gms_version_code(),
+          &gms_version)) {
+    return false;
+  }
+
+  // If the GMSCore version is pre-UPM an update is required.
+  return gms_version >= password_manager::features::kAccountUpmMinGmsVersion;
+}
+
+bool ShouldUseUpmWiring(bool is_pwd_sync_enabled, PrefService* pref_service) {
+  // TODO(crbug.com/40226137): Re-evaluate if the SyncService can be passed here
   // instead of the `is_pwd_sync_enabled` boolean.
-  // TODO(crbug.com/1500201): Re-evaluate unenrollment.
   if (is_pwd_sync_enabled &&
       password_manager_upm_eviction::IsCurrentUserEvicted(pref_service)) {
     return false;
@@ -398,6 +458,9 @@ void SetUsesSplitStoresAndUPMForLocal(
   base::UmaHistogramBoolean(
       "PasswordManager.LocalUpmActivated",
       password_manager::UsesSplitStoresAndUPMForLocal(pref_service));
+  base::UmaHistogramEnumeration(
+      "PasswordManager.LocalUpmActivationStatus",
+      GetSplitStoresAndLocalUpmPrefValue(pref_service));
 }
 
 }  // namespace password_manager_android_util

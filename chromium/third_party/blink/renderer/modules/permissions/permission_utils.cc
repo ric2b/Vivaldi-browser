@@ -119,9 +119,6 @@ String PermissionNameToString(PermissionName name) {
     case PermissionName::STORAGE_ACCESS:
       return "storage-access";
     case PermissionName::WINDOW_MANAGEMENT:
-      if (RuntimeEnabledFeatures::WindowPlacementPermissionAliasEnabled()) {
-        return "window_placement";
-      }
       return "window-management";
     case PermissionName::LOCAL_FONTS:
       return "local_fonts";
@@ -133,9 +130,11 @@ String PermissionNameToString(PermissionName name) {
       return "captured-surface-control";
     case PermissionName::SPEAKER_SELECTION:
       return "speaker-selection";
+    case PermissionName::KEYBOARD_LOCK:
+      return "keyboard-lock";
+    case PermissionName::POINTER_LOCK:
+      return "pointer-lock";
   }
-  NOTREACHED();
-  return "unknown";
 }
 
 PermissionDescriptorPtr CreatePermissionDescriptor(PermissionName name) {
@@ -351,19 +350,6 @@ PermissionDescriptorPtr ParsePermissionDescriptor(
     return CreateTopLevelStorageAccessPermissionDescriptor(origin_as_kurl);
   }
   if (name == V8PermissionName::Enum::kWindowManagement) {
-    UseCounter::Count(CurrentExecutionContext(script_state->GetIsolate()),
-                      WebFeature::kWindowManagementPermissionDescriptorUsed);
-    return CreatePermissionDescriptor(PermissionName::WINDOW_MANAGEMENT);
-  }
-  if (name == V8PermissionName::Enum::kWindowPlacement) {
-    if (!RuntimeEnabledFeatures::WindowPlacementPermissionAliasEnabled()) {
-      exception_state.ThrowTypeError(
-          "The Window Placement alias is not enabled.");
-      return nullptr;
-    }
-    Deprecation::CountDeprecation(
-        CurrentExecutionContext(script_state->GetIsolate()),
-        WebFeature::kWindowPlacementPermissionDescriptorUsed);
     return CreatePermissionDescriptor(PermissionName::WINDOW_MANAGEMENT);
   }
   if (name == V8PermissionName::Enum::kLocalFonts) {
@@ -394,6 +380,12 @@ PermissionDescriptorPtr ParsePermissionDescriptor(
       return nullptr;
     }
     return CreatePermissionDescriptor(PermissionName::SPEAKER_SELECTION);
+  }
+  if (name == V8PermissionName::Enum::kKeyboardLock) {
+    return CreatePermissionDescriptor(PermissionName::KEYBOARD_LOCK);
+  }
+  if (name == V8PermissionName::Enum::kPointerLock) {
+    return CreatePermissionDescriptor(PermissionName::POINTER_LOCK);
   }
   return nullptr;
 }

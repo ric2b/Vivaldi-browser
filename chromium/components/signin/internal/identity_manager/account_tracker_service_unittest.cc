@@ -156,10 +156,7 @@ class TrackingEvent {
         gaia_id_(gaia_id),
         email_(email) {}
 
-  bool operator==(const TrackingEvent& event) const {
-    return type_ == event.type_ && account_id_ == event.account_id_ &&
-           gaia_id_ == event.gaia_id_ && email_ == event.email_;
-  }
+  bool operator==(const TrackingEvent& event) const = default;
 
   std::string ToString() const {
     const char* typestr = "INVALID";
@@ -732,7 +729,7 @@ TEST_F(AccountTrackerServiceTest,
 }
 
 // iOS doesn't support the kEnableFetchingAccountCapabilities feature.
-// TODO(https://crbug.com/1305191): enable these tests on iOS once the feature
+// TODO(crbug.com/40217995): enable these tests on iOS once the feature
 // is supported.
 #if !BUILDFLAG(IS_IOS)
 TEST_F(AccountTrackerServiceTest,

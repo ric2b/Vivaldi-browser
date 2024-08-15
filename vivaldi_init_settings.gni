@@ -93,6 +93,9 @@ declare_overrides() {
 
   enable_precompiled_headers = !is_official_build && cc_wrapper == "" && !use_goma && !use_remoteexec
   enable_nocompile_tests = false
+  # We cannot use this functionality at present because the system assumes
+  # "../../" is the Chromium src dir, but it is the vivaldi dir for us
+  clang_use_chrome_plugins = false
 
   if (is_mac) {
     use_system_xcode = true

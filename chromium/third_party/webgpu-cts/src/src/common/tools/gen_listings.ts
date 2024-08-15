@@ -40,7 +40,7 @@ const outDir = argv[2];
 
 for (const suiteDir of argv.slice(3)) {
   // Run concurrently for each suite (might be a tiny bit more efficient)
-  void crawl(suiteDir, false).then(listing => {
+  void crawl(suiteDir).then(listing => {
     const suite = path.basename(suiteDir);
     const outFile = path.normalize(path.join(outDir, `${suite}/listing.js`));
     fs.mkdirSync(path.join(outDir, suite), { recursive: true });

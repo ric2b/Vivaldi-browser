@@ -11,11 +11,13 @@
 #include "base/auto_reset.h"
 #include "base/base64url.h"
 #include "base/check_is_test.h"
+#include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/pickle.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
@@ -1357,7 +1359,8 @@ void VolumeManager::OnClipboardDataChanged() {
     return;
   }
 
-  base::Pickle pickle(web_custom_data.data(), web_custom_data.size());
+  base::Pickle pickle =
+      base::Pickle::WithUnownedBuffer(base::as_byte_span(web_custom_data));
   std::vector<ui::FileInfo> file_info =
       file_manager::util::ParseFileSystemSources(
           base::OptionalToPtr(data->source()), pickle);
@@ -1672,7 +1675,7 @@ void VolumeManager::UnsubscribeFromArcEvents() {
   if (!IsArcEnabled(profile_)) {
     return;
   }
-  // TODO(crbug.com/672829): We need nullptr check here because
+  // TODO(crbug.com/40497410): We need nullptr check here because
   // ArcSessionManager may or may not be alive at this point.
   if (arc::ArcSessionManager* const session_manager =
           arc::ArcSessionManager::Get()) {
@@ -1687,8 +1690,7 @@ void VolumeManager::SubscribeAndMountArc() {
   documents_provider_root_manager_->AddObserver(this);
   // Registers a mount point for Android files only when the flag is enabled.
   RegisterAndroidFilesMountPoint();
-  if (arc::ArcSessionManager* const session_manager =
-          arc::ArcSessionManager::Get()) {
+  if (arc::ArcSessionManager::Get()) {
     arc::ArcSessionManager::Get()->AddObserver(this);
   } else {
     // Can be NULL only in tests.

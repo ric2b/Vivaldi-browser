@@ -21,6 +21,12 @@
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/gfx/ios/uikit_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 namespace {
 
 // The size of symbol icons.
@@ -175,6 +181,13 @@ const CGFloat kGroupColorViewSize = 18;
 }
 
 - (void)didMoveToWindow {
+
+  // Note: (prio@vivaldi.com) - Do no override window since we only
+  // override it with browser theme settings.
+  if (IsVivaldiRunning()) {
+    return;
+  } // End Vivaldi
+
   if (self.window) {
     if (self.theme == GridThemeLight) {
       UIUserInterfaceStyle previousStyle =
@@ -197,7 +210,7 @@ const CGFloat kGroupColorViewSize = 18;
   [super prepareForReuse];
   self.title = nil;
   self.titleHidden = NO;
-  self.groupColorName = nil;
+  self.groupColor = nil;
   self.selected = NO;
   self.opacity = 1.0;
 }
@@ -209,7 +222,7 @@ const CGFloat kGroupColorViewSize = 18;
   // title and close button.
   return YES;
 }
-// TODO(crbug.com/1511982): Add the accessibility custom actions.
+// TODO(crbug.com/41484563): Add the accessibility custom actions.
 
 #pragma mark - Public
 
@@ -240,10 +253,10 @@ const CGFloat kGroupColorViewSize = 18;
   _theme = theme;
 }
 
-- (void)setGroupColorName:(NSString*)groupColorName {
-  if (groupColorName) {
-    _groupColorName = groupColorName;
-    _groupColorView.backgroundColor = [UIColor colorNamed:_groupColorName];
+- (void)setGroupColor:(UIColor*)groupColor {
+  if (groupColor) {
+    _groupColor = groupColor;
+    _groupColorView.backgroundColor = groupColor;
   }
 }
 
@@ -450,7 +463,7 @@ const CGFloat kGroupColorViewSize = 18;
   }
 
   _state = state;
-  // TODO(crbug.com/1501837): Add the accessibility value for selected and
+  // TODO(crbug.com/40942154): Add the accessibility value for selected and
   // unselected states.
   self.accessibilityValue = nil;
   _closeTapTargetButton.enabled = ![self isInSelectionMode];

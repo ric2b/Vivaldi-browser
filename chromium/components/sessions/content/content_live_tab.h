@@ -42,8 +42,8 @@ class SESSIONS_EXPORT ContentLiveTab
   sessions::SerializedNavigationEntry GetEntryAtIndex(int index) override;
   sessions::SerializedNavigationEntry GetPendingEntry() override;
   int GetEntryCount() override;
-  std::unique_ptr<PlatformSpecificTabData> GetPlatformSpecificTabData()
-      override;
+  std::unique_ptr<tab_restore::PlatformSpecificTabData>
+  GetPlatformSpecificTabData() override;
   SerializedUserAgentOverride GetUserAgentOverride() override;
 
   const std::string& GetVivExtData() const override;

@@ -26,7 +26,7 @@ class LoopingFileSender final : public SimulatedAudioCapturer::Client,
  public:
   using ShutdownCallback = std::function<void()>;
 
-  LoopingFileSender(Environment* environment,
+  LoopingFileSender(Environment& environment,
                     ConnectionSettings settings,
                     const SenderSession* session,
                     SenderSession::ConfiguredSenders senders,
@@ -58,7 +58,7 @@ class LoopingFileSender final : public SimulatedAudioCapturer::Client,
 
   // SimulatedCapturer::Client overrides.
   void OnEndOfFile(SimulatedCapturer* capturer) final;
-  void OnError(SimulatedCapturer* capturer, std::string message) final;
+  void OnError(SimulatedCapturer* capturer, const std::string& message) final;
 
   const char* ToTrackName(SimulatedCapturer* capturer) const;
 
@@ -70,7 +70,7 @@ class LoopingFileSender final : public SimulatedAudioCapturer::Client,
   // Holds the required injected dependencies (clock, task runner) used for Cast
   // Streaming, and owns the UDP socket over which all communications occur with
   // the remote's Receivers.
-  Environment* const env_;
+  Environment& env_;
 
   // The connection settings used for this session.
   const ConnectionSettings settings_;

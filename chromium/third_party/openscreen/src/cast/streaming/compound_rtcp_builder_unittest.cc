@@ -47,9 +47,9 @@ class CompoundRtcpBuilderTest : public testing::Test {
 
  private:
   RtcpSession session_{kSenderSsrc, kReceiverSsrc, Clock::now()};
-  CompoundRtcpBuilder builder_{&session_};
+  CompoundRtcpBuilder builder_{session_};
   StrictMock<MockCompoundRtcpParserClient> client_;
-  CompoundRtcpParser parser_{&session_, &client_};
+  CompoundRtcpParser parser_{session_, client_};
 };
 
 // Tests that the builder, by default, produces RTCP packets that always include

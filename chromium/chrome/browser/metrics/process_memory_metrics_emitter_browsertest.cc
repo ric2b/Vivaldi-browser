@@ -190,7 +190,7 @@ void CheckExperimentalMemoryMetricsForProcessType(
                     histogram_tester, count, ValueRestriction::NONE,
                     number_of_processes);
 
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
   // It's a small metric, so should not be strictly zero in theory, but could be
   // if purge comes at the wrong time, or the thread cache is not available on
   // this platform.
@@ -218,7 +218,7 @@ void CheckExperimentalMemoryMetricsForProcessType(
                         "2.Tiny.Malloc.SyscallsPerMinute",
                     histogram_tester, count, ValueRestriction::ABOVE_ZERO,
                     number_of_processes);
-#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 }
 
 void CheckExperimentalMemoryMetrics(
@@ -563,9 +563,9 @@ class ProcessMemoryMetricsEmitterTest
 #endif
 };
 
-// TODO(crbug.com/732501): Re-enable on Win and Mac once not flaky.
+// TODO(crbug.com/41324945): Re-enable on Win and Mac once not flaky.
 IN_PROC_BROWSER_TEST_F(ProcessMemoryMetricsEmitterTest,
-                       // TODO(crbug.com/1459385): Re-enable this test
+                       // TODO(crbug.com/40274291): Re-enable this test
                        DISABLED_FetchAndEmitMetrics) {
   ASSERT_TRUE(embedded_test_server()->Start());
   const GURL url = embedded_test_server()->GetURL("foo.com", "/empty.html");
@@ -595,7 +595,7 @@ IN_PROC_BROWSER_TEST_F(ProcessMemoryMetricsEmitterTest,
   CheckPageInfoUkmMetrics(url, true);
 }
 
-// TODO(https://crbug.com/990148): Re-enable on Win, Linux, and Mac once not
+// TODO(crbug.com/41474189): Re-enable on Win, Linux, and Mac once not
 // flaky.
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #if defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER) ||            \
@@ -656,7 +656,7 @@ IN_PROC_BROWSER_TEST_F(ProcessMemoryMetricsEmitterTest,
 #define MAYBE_FetchAndEmitMetricsWithHostedApps \
   DISABLED_FetchAndEmitMetricsWithHostedApps
 #else
-// TODO(crbug.com/943207): Re-enable this test once it's not flaky anymore.
+// TODO(crbug.com/40618913): Re-enable this test once it's not flaky anymore.
 #define MAYBE_FetchAndEmitMetricsWithHostedApps \
   DISABLED_FetchAndEmitMetricsWithHostedApps
 #endif
@@ -701,7 +701,7 @@ IN_PROC_BROWSER_TEST_F(ProcessMemoryMetricsEmitterTest,
 }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
-// TODO(crbug.com/989810): Re-enable on Win and Mac once not flaky.
+// TODO(crbug.com/41474011): Re-enable on Win and Mac once not flaky.
 IN_PROC_BROWSER_TEST_F(ProcessMemoryMetricsEmitterTest,
                        DISABLED_FetchDuringTrace) {
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -709,7 +709,7 @@ IN_PROC_BROWSER_TEST_F(ProcessMemoryMetricsEmitterTest,
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
-  // TODO(crbug.com/1459385): Re-enable this test
+  // TODO(crbug.com/40274291): Re-enable this test
 
   base::HistogramTester histogram_tester;
 

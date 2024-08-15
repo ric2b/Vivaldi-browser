@@ -242,7 +242,10 @@ int EC_KEY_set_private_key(EC_KEY *key, const BIGNUM *priv_key) {
     return 0;
   }
   if (!ec_bignum_to_scalar(key->group, &scalar->scalar, priv_key) ||
-      ec_scalar_is_zero(key->group, &scalar->scalar)) {
+      // Zero is not a valid private key, so it is safe to leak the result of
+      // this comparison.
+      constant_time_declassify_int(
+          ec_scalar_is_zero(key->group, &scalar->scalar))) {
     OPENSSL_PUT_ERROR(EC, EC_R_INVALID_PRIVATE_KEY);
     ec_wrapped_scalar_free(scalar);
     return 0;
@@ -518,6 +521,11 @@ int EC_KEY_generate_key(EC_KEY *key) {
 }
 
 int EC_KEY_generate_key_fips(EC_KEY *eckey) {
+  if (eckey == NULL || eckey->group == NULL) {
+    OPENSSL_PUT_ERROR(EC, ERR_R_PASSED_NULL_PARAMETER);
+    return 0;
+  }
+
   boringssl_ensure_ecc_self_test();
 
   if (EC_KEY_generate_key(eckey) && EC_KEY_check_fips(eckey)) {

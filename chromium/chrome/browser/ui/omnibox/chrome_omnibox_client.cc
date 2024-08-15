@@ -427,7 +427,6 @@ void ChromeOmniboxClient::OnRevert() {
   AutocompleteActionPredictor* action_predictor =
       predictors::AutocompleteActionPredictorFactory::GetForProfile(profile_);
   action_predictor->UpdateDatabaseFromTransitionalMatches(GURL());
-  action_predictor->CancelPrerender();
 }
 
 void ChromeOmniboxClient::OnURLOpenedFromOmnibox(OmniboxLog* log) {
@@ -560,7 +559,7 @@ void ChromeOmniboxClient::DoPrerender(const AutocompleteMatch& match) {
   if (content::DevToolsAgentHost::IsDebuggerAttached(web_contents))
     return;
 
-  // TODO(https://crbug.com/1278634): Refactor relevant code to reuse common
+  // TODO(crbug.com/40208255): Refactor relevant code to reuse common
   // code, and ensure metrics are correctly recorded.
   DCHECK(!AutocompleteMatch::IsSearchType(match.type));
   gfx::Rect container_bounds = web_contents->GetContainerBounds();

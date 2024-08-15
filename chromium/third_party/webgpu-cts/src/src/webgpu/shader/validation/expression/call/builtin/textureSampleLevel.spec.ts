@@ -8,6 +8,8 @@ Validation tests for the ${builtin}() builtin.
 * test textureSampleLevel offset parameter must be correct type
 * test textureSampleLevel offset parameter must be a const-expression
 * test textureSampleLevel offset parameter must be between -8 and +7 inclusive
+* test textureSampleLevel returns the correct type
+* test textureSampleLevel doesn't work with texture types it's not supposed to
 `;
 
 import { makeTestGroup } from '../../../../../../common/framework/test_group.js';
@@ -21,6 +23,8 @@ import {
   isUnsignedType,
 } from '../../../../../util/conversion.js';
 import { ShaderValidationTest } from '../../../shader_validation_test.js';
+
+import { kTestTextureTypes } from './shader_builtin_utils.js';
 
 type TextureSampleLevelArguments = {
   coordsArgType: ScalarType | VectorType;
@@ -58,6 +62,48 @@ const kTextureTypes = keysOf(kValidTextureSampleLevelParameterTypes);
 const kValuesTypes = objectsToRecord(kAllScalarsAndVectors);
 
 export const g = makeTestGroup(ShaderValidationTest);
+
+g.test('return_type')
+  .specURL('https://gpuweb.github.io/gpuweb/wgsl/#texturesamplelevel')
+  .desc(
+    `
+Validates the return type of ${builtin} is the expected type.
+`
+  )
+  .params(u =>
+    u
+      .combine('returnType', keysOf(kValuesTypes))
+      .combine('textureType', keysOf(kValidTextureSampleLevelParameterTypes))
+      .beginSubcases()
+      .expand('offset', t =>
+        kValidTextureSampleLevelParameterTypes[t.textureType].offsetArgType
+          ? [false, true]
+          : [false]
+      )
+  )
+  .fn(t => {
+    const { returnType, textureType, offset } = t.params;
+    const returnVarType = kValuesTypes[returnType];
+    const { offsetArgType, coordsArgType, hasArrayIndexArg } =
+      kValidTextureSampleLevelParameterTypes[textureType];
+    const returnExpectedType = textureType.includes('depth') ? Type.f32 : Type.vec4f;
+
+    const varWGSL = returnVarType.toString();
+    const coordWGSL = coordsArgType.create(0).wgsl();
+    const arrayWGSL = hasArrayIndexArg ? ', 0' : '';
+    const offsetWGSL = offset ? `, ${offsetArgType?.create(0).wgsl()}` : '';
+
+    const code = `
+@group(0) @binding(0) var s: sampler;
+@group(0) @binding(1) var t: ${textureType};
+@fragment fn fs() -> @location(0) vec4f {
+  let v: ${varWGSL} = textureSampleLevel(t, s, ${coordWGSL}${arrayWGSL}, 0${offsetWGSL});
+  return vec4f(0);
+}
+`;
+    const expectSuccess = isConvertible(returnExpectedType, returnVarType);
+    t.expectCompileResult(expectSuccess, code);
+  });
 
 g.test('coords_argument')
   .specURL('https://gpuweb.github.io/gpuweb/wgsl/#texturesamplelevel')
@@ -278,5 +324,52 @@ Validates that only non-const offset arguments are rejected by ${builtin}
 }
 `;
     const expectSuccess = varType === 'c';
+    t.expectCompileResult(expectSuccess, code);
+  });
+
+g.test('texture_type')
+  .specURL('https://gpuweb.github.io/gpuweb/wgsl/#texturesamplelevel')
+  .desc(
+    `
+Validates that incompatible texture types don't work with ${builtin}
+`
+  )
+  .params(u =>
+    u
+      .combine('testTextureType', kTestTextureTypes)
+      .beginSubcases()
+      .combine('textureType', keysOf(kValidTextureSampleLevelParameterTypes))
+      .expand('offset', t =>
+        kValidTextureSampleLevelParameterTypes[t.textureType].offsetArgType
+          ? [false, true]
+          : [false]
+      )
+  )
+  .fn(t => {
+    const { testTextureType, textureType, offset } = t.params;
+    const { coordsArgType, offsetArgType, hasArrayIndexArg } =
+      kValidTextureSampleLevelParameterTypes[textureType];
+
+    const coordWGSL = coordsArgType.create(0).wgsl();
+    const arrayWGSL = hasArrayIndexArg ? ', 0' : '';
+    const offsetWGSL = offset ? `, ${offsetArgType?.create(0).wgsl()}` : '';
+
+    const code = `
+@group(0) @binding(0) var s: sampler;
+@group(0) @binding(1) var t: ${testTextureType};
+@fragment fn fs() -> @location(0) vec4f {
+  let v = textureSampleLevel(t, s, ${coordWGSL}${arrayWGSL}, 0${offsetWGSL});
+  return vec4f(0);
+}
+`;
+
+    const types = kValidTextureSampleLevelParameterTypes[testTextureType];
+    const typesMatch = types
+      ? types.coordsArgType === coordsArgType &&
+        types.hasArrayIndexArg === hasArrayIndexArg &&
+        (offset ? types.offsetArgType === offsetArgType : true)
+      : false;
+
+    const expectSuccess = testTextureType === textureType || typesMatch;
     t.expectCompileResult(expectSuccess, code);
   });

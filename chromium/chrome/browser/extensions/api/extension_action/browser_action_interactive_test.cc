@@ -260,7 +260,7 @@ class BrowserActionInteractiveTest : public ExtensionApiTest {
 // Tests opening a popup using the chrome.browserAction.openPopup API. This test
 // opens a popup in the starting window, closes the popup, creates a new window
 // and opens a popup in the new window. Both popups should succeed in opening.
-// TODO(crbug.com/1233996): Test flaking frequently on Lacros.
+// TODO(crbug.com/40781224): Test flaking frequently on Lacros.
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #define MAYBE_TestOpenPopup DISABLED_TestOpenPopup
 #else
@@ -284,7 +284,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, MAYBE_TestOpenPopup) {
     new_browser = chrome::FindBrowserWithTab(browser()->OpenURL(
         content::OpenURLParams(GURL("about:blank"), content::Referrer(),
                                WindowOpenDisposition::NEW_WINDOW,
-                               ui::PAGE_TRANSITION_TYPED, false)));
+                               ui::PAGE_TRANSITION_TYPED, false),
+        /*navigation_handle_callback=*/{}));
     // Pin the extension to test that it opens when the action is on the
     // toolbar.
     ToolbarActionsModel::Get(profile())->SetActionVisibility(
@@ -413,8 +414,15 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, FocusLossClosesPopup2) {
   ClosePopupViaFocusLoss();
 }
 
+// TODO(crbug.com/330684964): Test flaking frequently on Linux MSan builder.
+#if BUILDFLAG(IS_LINUX) && defined(MEMORY_SANITIZER)
+#define MAYBE_TabSwitchClosesPopup DISABLED_TabSwitchClosesPopup
+#else
+#define MAYBE_TabSwitchClosesPopup TabSwitchClosesPopup
+#endif
 // Test that the extension popup is closed on browser tab switches.
-IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, TabSwitchClosesPopup) {
+IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest,
+                       MAYBE_TabSwitchClosesPopup) {
   // Add a second tab to the browser and open an extension popup.
   chrome::NewTab(browser());
   ASSERT_EQ(2, browser()->tab_strip_model()->count());
@@ -566,9 +574,11 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, DestroyHWNDDoesNotCrash) {
   EXPECT_EQ(TRUE, ::IsWindow(browser_hwnd));
 
   // Create a new browser window to prevent the message loop from terminating.
-  browser()->OpenURL(content::OpenURLParams(
-      GURL("chrome://version"), content::Referrer(),
-      WindowOpenDisposition::NEW_WINDOW, ui::PAGE_TRANSITION_TYPED, false));
+  browser()->OpenURL(
+      content::OpenURLParams(GURL("chrome://version"), content::Referrer(),
+                             WindowOpenDisposition::NEW_WINDOW,
+                             ui::PAGE_TRANSITION_TYPED, false),
+      /*navigation_handle_callback=*/{});
 
   // Forcibly closing the browser HWND should not cause a crash.
   EXPECT_EQ(TRUE, ::CloseWindow(browser_hwnd));
@@ -604,15 +614,15 @@ class MainFrameSizeWaiter : public content::WebContentsObserver {
   base::RunLoop run_loop_;
 };
 
-// TODO(crbug.com/1249851): Test crashes on Windows
+// TODO(crbug.com/40791502): Test crashes on Windows
 #if BUILDFLAG(IS_WIN)
 #define MAYBE_BrowserActionPopup DISABLED_BrowserActionPopup
 #elif BUILDFLAG(IS_LINUX) && \
     (defined(THREAD_SANITIZER) || defined(ADDRESS_SANITIZER))
-// TODO(crbug.com/1269076): Test is flaky for linux tsan and asan builds
+// TODO(crbug.com/40803969): Test is flaky for linux tsan and asan builds
 #define MAYBE_BrowserActionPopup DISABLED_BrowserActionPopup
 #elif BUILDFLAG(IS_MAC)
-// TODO(crbug.com/1269076): Test is flaky on Mac as well.
+// TODO(crbug.com/40803969): Test is flaky on Mac as well.
 #define MAYBE_BrowserActionPopup DISABLED_BrowserActionPopup
 #else
 #define MAYBE_BrowserActionPopup BrowserActionPopup
@@ -730,7 +740,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, OpenPopupOnPopup) {
   // The window isn't considered "active" on MacOSX for odd reasons. The more
   // important test is that it *is* considered the last active browser, since
   // that's what we check when we try to open the popup.
-  // TODO(crbug.com/1115237): Now that this is an interactive test, is this
+  // TODO(crbug.com/40711219): Now that this is an interactive test, is this
   // ifdef still necessary?
 #if !BUILDFLAG(IS_MAC)
   ui_test_utils::BrowserActivationWaiter waiter(popup_browser);

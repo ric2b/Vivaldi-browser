@@ -370,6 +370,11 @@ IN_PROC_BROWSER_TEST_F(SyncConsentTest, SkippedSyncDisabledByPolicy) {
 }
 
 IN_PROC_BROWSER_TEST_F(SyncConsentTest, PRE_AbortedSetup) {
+  if (ash::features::AreLocalPasswordsEnabledForConsumers()) {
+    // With local passwords feature aborting at this stage would
+    // trigger user cleanup and remove all user information.
+    GTEST_SKIP();
+  }
   LoginAndShowSyncConsentScreenWithCapability();
   WaitForScreenShown();
   test::OobeJS().CreateVisibilityWaiter(true, {kSyncConsent})->Wait();
@@ -377,6 +382,12 @@ IN_PROC_BROWSER_TEST_F(SyncConsentTest, PRE_AbortedSetup) {
 }
 
 IN_PROC_BROWSER_TEST_F(SyncConsentTest, AbortedSetup) {
+  if (ash::features::AreLocalPasswordsEnabledForConsumers()) {
+    // With local passwords feature aborting at this stage would
+    // trigger user cleanup and remove all user information,
+    // so this test makes no sense.
+    GTEST_SKIP();
+  }
   EXPECT_EQ(session_manager::SessionState::LOGIN_PRIMARY,
             session_manager::SessionManager::Get()->session_state());
   Profile* profile = ProfileManager::GetPrimaryUserProfile();
@@ -671,9 +682,9 @@ IN_PROC_BROWSER_TEST_F(SyncConsentMinorModeTest, Accept) {
   EXPECT_TRUE(identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync));
   syncer::SyncUserSettings* settings = GetSyncUserSettings();
   EXPECT_FALSE(settings->IsSyncEverythingEnabled());
-  EXPECT_TRUE(settings->GetSelectedTypes().Empty());
+  EXPECT_TRUE(settings->GetSelectedTypes().empty());
   EXPECT_FALSE(settings->IsSyncAllOsTypesEnabled());
-  EXPECT_TRUE(settings->GetSelectedOsTypes().Empty());
+  EXPECT_TRUE(settings->GetSelectedOsTypes().empty());
 
   test::OobeJS().TapOnPath(kAcceptButton);
   consent_recorded_waiter.Wait();
@@ -732,9 +743,9 @@ IN_PROC_BROWSER_TEST_F(SyncConsentMinorModeTest, Decline) {
   EXPECT_TRUE(identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync));
   syncer::SyncUserSettings* settings = GetSyncUserSettings();
   EXPECT_FALSE(settings->IsSyncEverythingEnabled());
-  EXPECT_TRUE(settings->GetSelectedTypes().Empty());
+  EXPECT_TRUE(settings->GetSelectedTypes().empty());
   EXPECT_FALSE(settings->IsSyncAllOsTypesEnabled());
-  EXPECT_TRUE(settings->GetSelectedOsTypes().Empty());
+  EXPECT_TRUE(settings->GetSelectedOsTypes().empty());
 
   test::OobeJS().TapOnPath(kDeclineButton);
   consent_recorded_waiter.Wait();
@@ -742,9 +753,9 @@ IN_PROC_BROWSER_TEST_F(SyncConsentMinorModeTest, Decline) {
 
   // Expect all data types are still disabled.
   EXPECT_FALSE(settings->IsSyncEverythingEnabled());
-  EXPECT_TRUE(settings->GetSelectedTypes().Empty());
+  EXPECT_TRUE(settings->GetSelectedTypes().empty());
   EXPECT_FALSE(settings->IsSyncAllOsTypesEnabled());
-  EXPECT_TRUE(settings->GetSelectedOsTypes().Empty());
+  EXPECT_TRUE(settings->GetSelectedOsTypes().empty());
 
   EXPECT_EQ(SyncConsentScreen::CONSENT_NOT_GIVEN,
             consent_recorded_waiter.consent_given_);
@@ -776,6 +787,9 @@ IN_PROC_BROWSER_TEST_F(SyncConsentMinorModeTest, Decline) {
 }
 
 IN_PROC_BROWSER_TEST_F(SyncConsentMinorModeTest, PRE_AbortedSetup) {
+  if (ash::features::AreLocalPasswordsEnabledForConsumers()) {
+    GTEST_SKIP();
+  }
   LoginAndShowSyncConsentScreenWithCapability();
   WaitForScreenShown();
   test::OobeJS().CreateVisibilityWaiter(true, {kSyncConsent})->Wait();
@@ -783,6 +797,9 @@ IN_PROC_BROWSER_TEST_F(SyncConsentMinorModeTest, PRE_AbortedSetup) {
 }
 
 IN_PROC_BROWSER_TEST_F(SyncConsentMinorModeTest, AbortedSetup) {
+  if (ash::features::AreLocalPasswordsEnabledForConsumers()) {
+    GTEST_SKIP();
+  }
   EXPECT_EQ(session_manager::SessionState::LOGIN_PRIMARY,
             session_manager::SessionManager::Get()->session_state());
   Profile* profile = ProfileManager::GetPrimaryUserProfile();
@@ -796,9 +813,9 @@ IN_PROC_BROWSER_TEST_F(SyncConsentMinorModeTest, AbortedSetup) {
   syncer::SyncUserSettings* settings = GetSyncUserSettings();
   ASSERT_NE(settings, nullptr);
   EXPECT_FALSE(settings->IsSyncEverythingEnabled());
-  EXPECT_TRUE(settings->GetSelectedTypes().Empty());
+  EXPECT_TRUE(settings->GetSelectedTypes().empty());
   EXPECT_FALSE(settings->IsSyncAllOsTypesEnabled());
-  EXPECT_TRUE(settings->GetSelectedOsTypes().Empty());
+  EXPECT_TRUE(settings->GetSelectedOsTypes().empty());
 }
 
 IN_PROC_BROWSER_TEST_F(SyncConsentMinorModeTest,
@@ -1032,7 +1049,7 @@ INSTANTIATE_TEST_SUITE_P(All,
                                           testing::Bool(),
                                           testing::Bool()));
 
-// TODO(https://crbug.com/1522934): Re-enable after Resolving flakiness.
+// TODO(crbug.com/41495890): Re-enable after Resolving flakiness.
 IN_PROC_BROWSER_TEST_P(SyncConsentTestLacrosRevampWithParams,
                        DISABLED_ManageSync) {
   LoginAndShowSyncConsentScreenWithCapability();

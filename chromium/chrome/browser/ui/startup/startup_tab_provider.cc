@@ -5,12 +5,12 @@
 #include "chrome/browser/ui/startup/startup_tab_provider.h"
 
 #include <string>
+#include <string_view>
 
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/ranges/algorithm.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/branding_buildflags.h"
@@ -27,7 +27,6 @@
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/signin/signin_features.h"
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -43,6 +42,7 @@
 #include "chrome/common/url_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/util.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
 #include "components/url_formatter/url_fixer.h"
@@ -167,39 +167,6 @@ bool IsChromeControlledNtpUrl(const GURL& url) {
 
 }  // namespace
 
-StartupTabs StartupTabProviderImpl::GetOnboardingTabs(Profile* profile) const {
-// Chrome OS has its own welcome flow provided by OOBE.
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  return StartupTabs();
-#else
-  if (!profile || base::FeatureList::IsEnabled(kForYouFre)) {
-    return StartupTabs();
-  }
-
-  StandardOnboardingTabsParams standard_params;
-  standard_params.is_first_run = first_run::IsChromeFirstRun();
-  PrefService* prefs = profile->GetPrefs();
-  standard_params.has_seen_welcome_page =
-      prefs && prefs->GetBoolean(prefs::kHasSeenWelcomePage);
-
-  if (vivaldi::IsVivaldiRunning()) {
-    // This is set in web_ui in Chromium. We set this here for maintainability.
-    prefs->SetBoolean(prefs::kHasSeenWelcomePage, true);
-  }
-
-  standard_params.is_signin_allowed =
-      SyncServiceFactory::IsSyncAllowed(profile);
-  if (auto* identity_manager = IdentityManagerFactory::GetForProfile(profile)) {
-    standard_params.is_signed_in =
-        identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync);
-  }
-  standard_params.is_child_account = profile->IsChild();
-  standard_params.is_force_signin_enabled = signin_util::IsForceSigninEnabled();
-
-  return GetStandardOnboardingTabsForState(standard_params);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-}
-
 StartupTabs StartupTabProviderImpl::GetDistributionFirstRunTabs(
     StartupBrowserCreator* browser_creator) const {
   if (!browser_creator)
@@ -319,53 +286,6 @@ StartupTabs StartupTabProviderImpl::GetPrivacySandboxTabs(
 
 #endif  // !BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-// static
-bool StartupTabProviderImpl::CanShowWelcome(bool is_signin_allowed,
-                                            bool is_child_account,
-                                            bool is_force_signin_enabled) {
-  return is_signin_allowed && !is_child_account && !is_force_signin_enabled;
-}
-
-// static
-bool StartupTabProviderImpl::ShouldShowWelcomeForOnboarding(
-    bool has_seen_welcome_page,
-    bool is_signed_in) {
-  return !has_seen_welcome_page && !is_signed_in;
-}
-#endif
-
-// static
-StartupTabs StartupTabProviderImpl::GetStandardOnboardingTabsForState(
-    const StandardOnboardingTabsParams& params) {
-  StartupTabs tabs;
-  // NOTE(jarle@vivaldi.com): We only want to see the welcome page on first run.
-  // Ref. VB-26089.
-  if (vivaldi::IsVivaldiRunning()) {
-    StartupTabs vivaldi_start_tabs;
-    if (!tabs.empty()) {
-      vivaldi_start_tabs = tabs;
-    } else if (!params.has_seen_welcome_page) {
-      vivaldi_start_tabs = StartupTabs({StartupTab(
-          GURL(l10n_util::GetStringUTF8(IDS_WELCOME_PAGE_URL)))});
-    }
-    return vivaldi_start_tabs;
-  }
-
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-  DCHECK(!base::FeatureList::IsEnabled(kForYouFre));
-
-  if (CanShowWelcome(params.is_signin_allowed, params.is_child_account,
-                     params.is_force_signin_enabled) &&
-      ShouldShowWelcomeForOnboarding(params.has_seen_welcome_page,
-                                     params.is_signed_in)) {
-    tabs.emplace_back(GetWelcomePageUrl(!params.is_first_run));
-  }
-#endif
-
-  return tabs;
-}
-
 // static
 StartupTabs StartupTabProviderImpl::GetInitialPrefsTabsForState(
     bool is_first_run,
@@ -373,7 +293,6 @@ StartupTabs StartupTabProviderImpl::GetInitialPrefsTabsForState(
   // Constants: Magic words used by initial preferences files in place of a URL
   // host to indicate that internal pages should appear on first run.
   static constexpr char kNewTabUrlHost[] = "new_tab_page";
-  static constexpr char kWelcomePageUrlHost[] = "welcome_page";
 
   StartupTabs tabs;
   if (is_first_run) {
@@ -381,15 +300,6 @@ StartupTabs StartupTabProviderImpl::GetInitialPrefsTabsForState(
     for (GURL url : first_run_tabs) {
       if (url.host_piece() == kNewTabUrlHost) {
         url = GURL(chrome::kChromeUINewTabURL);
-      } else if (url.host_piece() == kWelcomePageUrlHost) {
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-        if (base::FeatureList::IsEnabled(kForYouFre)) {
-          // Do not show the in-tab welcome experience when the FRE is enabled.
-          continue;
-        } else {
-          url = GetWelcomePageUrl(false);
-        }
-#endif
       }
       tabs.emplace_back(url);
     }
@@ -489,7 +399,7 @@ StartupTabs StartupTabProviderImpl::GetPrivacySandboxTabsForState(
     return tabs;
 
   // Fallback to using about:blank if the user has customized the NTP.
-  // TODO(crbug.com/1306352): Stop using about:blank and create a dedicated
+  // TODO(crbug.com/40218325): Stop using about:blank and create a dedicated
   // Privacy Sandbox WebUI page for this scenario.
   if (HasExtensionNtpOverride(extension_registry) ||
       !IsChromeControlledNtpUrl(ntp_url)) {
@@ -501,16 +411,6 @@ StartupTabs StartupTabProviderImpl::GetPrivacySandboxTabsForState(
   return tabs;
 }
 
-#endif
-
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-// static
-GURL StartupTabProviderImpl::GetWelcomePageUrl(bool use_later_run_variant) {
-  GURL url(chrome::kChromeUIWelcomeURL);
-  return use_later_run_variant
-             ? net::AppendQueryParameter(url, "variant", "everywhere")
-             : url;
-}
 #endif
 
 // static

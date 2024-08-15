@@ -3483,12 +3483,13 @@ bool ValidateCreateImage(const ValidationContext *val,
                 break;
 
             case EGL_TEXTURE_INTERNAL_FORMAT_ANGLE:
-                if (!displayExtensions.imageD3D11Texture && !displayExtensions.vulkanImageANGLE)
+                if (!displayExtensions.imageD3D11Texture && !displayExtensions.vulkanImageANGLE &&
+                    !displayExtensions.mtlTextureClientBuffer)
                 {
-                    val->setError(
-                        EGL_BAD_PARAMETER,
-                        "EGL_TEXTURE_INTERNAL_FORMAT_ANGLE cannot be used without "
-                        "EGL_ANGLE_image_d3d11_texture or EGL_ANGLE_vulkan_image support.");
+                    val->setError(EGL_BAD_PARAMETER,
+                                  "EGL_TEXTURE_INTERNAL_FORMAT_ANGLE cannot be used without "
+                                  "EGL_ANGLE_image_d3d11_texture, EGL_ANGLE_vulkan_image, or "
+                                  "EGL_ANGLE_metal_texture_client_buffer support.");
                     return false;
                 }
                 break;
@@ -5751,7 +5752,7 @@ bool ValidateQuerySurface(const ValidationContext *val,
             break;
 
         default:
-            val->setError(EGL_BAD_ATTRIBUTE, "Invalid surface attribute: 0x%04X", attribute);
+            val->setError(EGL_BAD_ATTRIBUTE, "Invalid query surface attribute: 0x%04X", attribute);
             return false;
     }
 
@@ -6699,7 +6700,7 @@ bool ValidateLockSurfaceKHR(const ValidationContext *val,
                 }
                 break;
             default:
-                val->setError(EGL_BAD_ATTRIBUTE, "Invalid query surface64 attribute");
+                val->setError(EGL_BAD_ATTRIBUTE, "Invalid lock surface attribute");
                 return false;
         }
     }
@@ -6735,8 +6736,12 @@ bool ValidateQuerySurface64KHR(const ValidationContext *val,
         case EGL_BITMAP_POINTER_KHR:
             break;
         default:
-            val->setError(EGL_BAD_ATTRIBUTE, "Invalid eglQuerySurface64 attribute");
-            return false;
+        {
+            EGLint querySurfaceValue;
+            ANGLE_VALIDATION_TRY(
+                ValidateQuerySurface(val, dpy, surfaceID, attribute, &querySurfaceValue));
+        }
+        break;
     }
 
     if (value == nullptr)
@@ -6745,8 +6750,14 @@ bool ValidateQuerySurface64KHR(const ValidationContext *val,
         return false;
     }
 
+    // EGL_KHR_lock_surface3
+    //  If <attribute> is either EGL_BITMAP_POINTER_KHR or EGL_BITMAP_PITCH_KHR, and either
+    //  <surface> is not locked using eglLockSurfaceKHR ... then an EGL_BAD_ACCESS error is
+    //  generated.
+    const bool surfaceShouldBeLocked =
+        (attribute == EGL_BITMAP_POINTER_KHR) || (attribute == EGL_BITMAP_PITCH_KHR);
     const Surface *surface = dpy->getSurface(surfaceID);
-    if (!surface->isLocked())
+    if (surfaceShouldBeLocked && !surface->isLocked())
     {
         val->setError(EGL_BAD_ACCESS, "Surface is not locked");
         return false;
@@ -6966,4 +6977,17 @@ bool ValidateReleaseExternalContextANGLE(const ValidationContext *val, const egl
 
     return true;
 }
+
+bool ValidateSetValidationEnabledANGLE(const ValidationContext *val, EGLBoolean validationState)
+{
+    const ClientExtensions &clientExtensions = Display::GetClientExtensions();
+    if (!clientExtensions.noErrorANGLE)
+    {
+        val->setError(EGL_BAD_ACCESS, "EGL_ANGLE_no_error is not available.");
+        return false;
+    }
+
+    return true;
+}
+
 }  // namespace egl

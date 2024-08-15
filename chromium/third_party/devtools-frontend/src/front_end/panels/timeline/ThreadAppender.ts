@@ -8,6 +8,7 @@ import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as TraceEngine from '../../models/trace/trace.js';
+import * as AnnotationsManager from '../../services/annotations_manager/annotations_manager.js';
 import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 
 import {
@@ -160,7 +161,6 @@ export class ThreadAppender implements TrackAppender {
   #headerAppended: boolean = false;
   readonly threadType: TraceEngine.Handlers.Threads.ThreadType = TraceEngine.Handlers.Threads.ThreadType.MAIN_THREAD;
   readonly isOnMainFrame: boolean;
-  #ignoreListingEnabled = Root.Runtime.experiments.isEnabled('ignore-list-js-frames-on-timeline');
   #showAllEventsEnabled = Root.Runtime.experiments.isEnabled('timeline-show-all-events');
   #url: string = '';
   #headerNestingLevel: number|null = null;
@@ -279,7 +279,7 @@ export class ThreadAppender implements TrackAppender {
       style.nestingLevel = this.#headerNestingLevel;
     }
     const group = buildTrackHeader(
-        currentLevel, this.trackName(), style, /* selectable= */ true, this.#expanded, /* track= */ null,
+        currentLevel, this.trackName(), style, /* selectable= */ true, this.#expanded,
         /* showStackContextMenu= */ true);
     this.#compatibilityBuilder.registerTrackForGroup(group, this);
   }
@@ -444,7 +444,10 @@ export class ThreadAppender implements TrackAppender {
   #appendNodesAtLevel(
       nodes: Iterable<TraceEngine.Helpers.TreeHelpers.TraceEntryNode>, startingLevel: number,
       parentIsIgnoredListed: boolean = false): number {
-    const invisibleEntries = TraceEngine.EntriesFilter.EntriesFilter.maybeInstance()?.invisibleEntries() ?? [];
+    const invisibleEntries = AnnotationsManager.AnnotationsManager.AnnotationsManager.maybeInstance()
+                                 ?.getEntriesFilter()
+                                 .invisibleEntries() ??
+        [];
     let maxDepthInTree = startingLevel;
     for (const node of nodes) {
       let nextLevel = startingLevel;
@@ -492,7 +495,8 @@ export class ThreadAppender implements TrackAppender {
 
   #addDecorationsToEntry(entry: TraceEngine.Types.TraceEvents.TraceEventData, index: number): void {
     const flameChartData = this.#compatibilityBuilder.getFlameChartTimelineData();
-    if (TraceEngine.EntriesFilter.EntriesFilter.maybeInstance()?.isEntryModified(entry)) {
+    if (AnnotationsManager.AnnotationsManager.AnnotationsManager.maybeInstance()?.getEntriesFilter().isEntryModified(
+            entry)) {
       addDecorationToEvent(
           flameChartData, index, {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW});
     }
@@ -511,10 +515,6 @@ export class ThreadAppender implements TrackAppender {
   }
 
   isIgnoreListedEntry(entry: TraceEngine.Types.TraceEvents.TraceEventData): boolean {
-    if (!this.#ignoreListingEnabled) {
-      return false;
-    }
-
     if (!TraceEngine.Types.TraceEvents.isProfileCall(entry)) {
       return false;
     }

@@ -6,15 +6,9 @@
 import type { Protocol } from 'devtools-protocol';
 import { type CDPSession } from '../api/CDPSession.js';
 import type { Frame } from '../api/Frame.js';
+import type { Credentials } from '../api/Page.js';
 import { EventEmitter } from '../common/EventEmitter.js';
 import { type NetworkManagerEvents } from '../common/NetworkManagerEvents.js';
-/**
- * @public
- */
-export interface Credentials {
-    username: string;
-    password: string;
-}
 /**
  * @public
  */
@@ -49,10 +43,10 @@ export interface FrameProvider {
  */
 export declare class NetworkManager extends EventEmitter<NetworkManagerEvents> {
     #private;
-    constructor(ignoreHTTPSErrors: boolean, frameManager: FrameProvider);
+    constructor(frameManager: FrameProvider);
     addClient(client: CDPSession): Promise<void>;
     authenticate(credentials?: Credentials): Promise<void>;
-    setExtraHTTPHeaders(extraHTTPHeaders: Record<string, string>): Promise<void>;
+    setExtraHTTPHeaders(headers: Record<string, string>): Promise<void>;
     extraHTTPHeaders(): Record<string, string>;
     inFlightRequestsCount(): number;
     setOfflineMode(value: boolean): Promise<void>;

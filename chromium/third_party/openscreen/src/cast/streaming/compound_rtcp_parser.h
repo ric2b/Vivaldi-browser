@@ -79,7 +79,7 @@ class CompoundRtcpParser {
 
   // |session| and |client| must be non-null and must outlive the
   // CompoundRtcpParser instance.
-  CompoundRtcpParser(RtcpSession* session, Client* client);
+  CompoundRtcpParser(RtcpSession& session, Client& client);
   ~CompoundRtcpParser();
 
   // Parses the packet, invoking the Client callback methods when appropriate.
@@ -117,8 +117,8 @@ class CompoundRtcpParser {
                             Clock::time_point& receiver_reference_time);
   bool ParsePictureLossIndicator(ByteView in, bool& picture_loss_indicator);
 
-  RtcpSession* const session_;
-  Client* const client_;
+  RtcpSession& session_;
+  Client& client_;
 
   // Tracks the latest timestamp seen from any Receiver Reference Time Report,
   // and uses this to ignore stale RTCP packets that arrived out-of-order and/or

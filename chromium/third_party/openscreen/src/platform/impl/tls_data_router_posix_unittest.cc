@@ -73,7 +73,7 @@ class TlsNetworkingManagerPosixTest : public testing::Test {
  public:
   TlsNetworkingManagerPosixTest()
       : clock_(Clock::now()),
-        task_runner_(&clock_),
+        task_runner_(clock_),
         network_manager_(&network_waiter_) {}
 
   FakeTaskRunner& task_runner() { return task_runner_; }

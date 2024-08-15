@@ -83,7 +83,6 @@ export function createEmptyNonSerializableState(): NonSerializableState {
       ],
       constrainToArea: true,
       queryRequested: false,
-      argumentNames: [],
     },
   };
 }
@@ -124,22 +123,10 @@ export function createEmptyState(): State {
       mode: 'SEARCH',
     },
 
-    logsPagination: {
-      offset: 0,
-      count: 0,
-    },
-
-    ftracePagination: {
-      offset: 0,
-      count: 0,
-    },
-
-    ftraceFilter: {
-      excludedNames: [],
-    },
-
     status: {msg: '', timestamp: 0},
-    currentSelection: null,
+    selection: {
+      kind: 'empty',
+    },
     currentFlamegraphState: null,
     traceConversionInProgress: false,
 
@@ -169,14 +156,6 @@ export function createEmptyState(): State {
     fetchChromeCategories: false,
     chromeCategories: undefined,
     nonSerializableState: createEmptyNonSerializableState(),
-
-    logFilteringCriteria: {
-      // The first two log priorities are ignored.
-      minimumLevel: 2,
-      tags: [],
-      textEntry: '',
-      hideNonMatching: true,
-    },
 
     // Somewhere to store plugins' persistent state.
     plugins: {},

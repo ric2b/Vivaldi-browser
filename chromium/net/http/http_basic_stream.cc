@@ -5,6 +5,7 @@
 #include "net/http/http_basic_stream.h"
 
 #include <set>
+#include <string_view>
 #include <utility>
 
 #include "base/functional/bind.h"
@@ -37,6 +38,9 @@ int HttpBasicStream::InitializeStream(bool can_send_early,
                                       CompletionOnceCallback callback) {
   DCHECK(request_info_);
   state_.Initialize(request_info_, priority, net_log);
+  // RequestInfo is no longer needed after this point.
+  request_info_ = nullptr;
+
   int ret = OK;
   if (!can_send_early) {
     // parser() cannot outlive |this|, so we can use base::Unretained().
@@ -44,8 +48,6 @@ int HttpBasicStream::InitializeStream(bool can_send_early,
         base::BindOnce(&HttpBasicStream::OnHandshakeConfirmed,
                        base::Unretained(this), std::move(callback)));
   }
-  // RequestInfo is no longer needed after this point.
-  request_info_ = nullptr;
   return ret;
 }
 
@@ -169,15 +171,6 @@ void HttpBasicStream::GetSSLInfo(SSLInfo* ssl_info) {
   }
 }
 
-void HttpBasicStream::GetSSLCertRequestInfo(
-    SSLCertRequestInfo* cert_request_info) {
-  if (!state_.connection()->socket()) {
-    cert_request_info->Reset();
-    return;
-  }
-  parser()->GetSSLCertRequestInfo(cert_request_info);
-}
-
 int HttpBasicStream::GetRemoteEndpoint(IPEndPoint* endpoint) {
   if (!state_.connection() || !state_.connection()->socket())
     return ERR_SOCKET_NOT_CONNECTED;
@@ -211,7 +204,7 @@ const std::set<std::string>& HttpBasicStream::GetDnsAliases() const {
   return state_.GetDnsAliases();
 }
 
-base::StringPiece HttpBasicStream::GetAcceptChViaAlps() const {
+std::string_view HttpBasicStream::GetAcceptChViaAlps() const {
   return {};
 }
 

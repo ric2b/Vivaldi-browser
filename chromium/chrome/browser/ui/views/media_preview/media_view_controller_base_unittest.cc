@@ -8,17 +8,24 @@
 #include <optional>
 #include <string>
 
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
-#include "chrome/browser/ui/views/frame/test_with_browser_view.h"
+#include "chrome/browser/ui/views/media_preview/media_preview_metrics.h"
 #include "chrome/browser/ui/views/media_preview/media_view.h"
+#include "chrome/grit/generated_resources.h"
+#include "chrome/test/views/chrome_views_test_base.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/simple_combobox_model.h"
 #include "ui/views/controls/combobox/combobox.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/test/combobox_test_api.h"
+#include "ui/views/widget/unique_widget_ptr.h"
 
 using testing::_;
 using testing::Eq;
+using UserAction = media_preview_metrics::MediaPreviewDeviceSelectionUserAction;
 
 namespace {
 
@@ -31,21 +38,32 @@ std::u16string GetDeviceName(size_t index) {
 }
 
 media_preview_metrics::Context GetMetricsContext() {
-  media_preview_metrics::Context metrics_context(
-      media_preview_metrics::UiLocation::kPermissionPrompt);
-  metrics_context.preview_type = media_preview_metrics::PreviewType::kCamera;
-  return metrics_context;
+  return {media_preview_metrics::UiLocation::kPermissionPrompt,
+          media_preview_metrics::PreviewType::kCamera};
 }
+
+#if !BUILDFLAG(IS_MAC)
+std::optional<std::u16string> GetAnnouncementFromRootView(
+    views::View* root_view) {
+  if (!root_view || root_view->children().size() < 2u) {
+    return std::nullopt;
+  }
+  ui::AXNodeData node_data;
+  views::View* const hidden_polite_view = root_view->children()[1];
+  hidden_polite_view->GetAccessibleNodeData(&node_data);
+  return node_data.GetString16Attribute(ax::mojom::StringAttribute::kName);
+}
+#endif
 
 }  // namespace
 
 class MediaViewControllerBaseTestParameterized
-    : public TestWithBrowserView,
+    : public ChromeViewsTestBase,
       public ui::ComboboxModelObserver,
       public testing::WithParamInterface<bool> {
  protected:
   void SetUp() override {
-    TestWithBrowserView::SetUp();
+    ChromeViewsTestBase::SetUp();
     allow_device_selection_ = GetParam();
     media_view_ = std::make_unique<MediaView>();
     combobox_model_ = std::make_unique<ui::SimpleComboboxModel>(
@@ -60,12 +78,26 @@ class MediaViewControllerBaseTestParameterized
         /*allow_device_selection=*/allow_device_selection_,
         GetMetricsContext());
     combobox_model_->AddObserver(this);
+    combobox_test_api_.emplace(&controller_->GetComboboxForTesting().get());
   }
 
   void TearDown() override {
+    combobox_test_api_.reset();
     controller_.reset();
     media_view_.reset();
-    TestWithBrowserView::TearDown();
+    if (widget_) {
+      widget_->Close();
+    }
+    ChromeViewsTestBase::TearDown();
+  }
+
+  void InitializeWidget() {
+    widget_ = std::make_unique<views::Widget>();
+    views::Widget::InitParams init_params =
+        CreateParams(views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
+    widget_->Init(std::move(init_params));
+    widget_->Show();
+    widget_->SetContentsView(std::move(media_view_));
   }
 
   // ui::ComboboxModelObserver override
@@ -75,23 +107,23 @@ class MediaViewControllerBaseTestParameterized
   }
 
   bool IsComboboxVisible() const {
-    return controller_->device_selector_combobox_->GetVisible();
+    return controller_->GetComboboxForTesting()->GetVisible();
   }
   bool IsDeviceNameLabelVisible() const {
-    return controller_->device_name_label_->GetVisible();
+    return controller_->GetDeviceNameLabelViewForTesting()->GetVisible();
   }
   bool IsNoDeviceLabelVisible() const {
-    return controller_->no_devices_found_label_->GetVisible();
+    return controller_->GetNoDeviceLabelViewForTesting()->GetVisible();
   }
 
   const std::u16string& GetComboboxAccessibleName() const {
-    return controller_->device_selector_combobox_->GetAccessibleName();
+    return controller_->GetComboboxForTesting()->GetAccessibleName();
   }
   const std::u16string& GetDeviceNameLabel() const {
-    return controller_->device_name_label_->GetText();
+    return controller_->GetDeviceNameLabelViewForTesting()->GetText();
   }
   const std::u16string& GetNoDeviceLabel() const {
-    return controller_->no_devices_found_label_->GetText();
+    return controller_->GetNoDeviceLabelViewForTesting()->GetText();
   }
 
   void UpdateComboboxModel(size_t device_count) {
@@ -107,13 +139,33 @@ class MediaViewControllerBaseTestParameterized
     combobox_model_->UpdateItemList(std::move(items));
   }
 
+  const raw_ref<views::Label> GetDeviceNameLabelView() {
+    return controller_->GetDeviceNameLabelViewForTesting();
+  }
+
+  void TriggerComboboxMenuWillShow() { controller_->OnComboboxMenuWillShow(); }
+
+  void ExpectHistogramUserAction(UserAction action) {
+    const std::string histogram_name =
+        "MediaPreviews.UI.DeviceSelection.Permissions.Camera.Action";
+    if (allow_device_selection_) {
+      histogram_tester_.ExpectUniqueSample(histogram_name, action,
+                                           /*expected_bucket_count=*/1);
+    } else {
+      histogram_tester_.ExpectTotalCount(histogram_name, 0);
+    }
+  }
+
+  base::HistogramTester histogram_tester_;
   bool allow_device_selection_ = false;
   size_t actual_device_count_ = 0;
+  views::UniqueWidgetPtr widget_;
   std::unique_ptr<MediaView> media_view_;
   std::unique_ptr<ui::SimpleComboboxModel> combobox_model_;
   base::MockCallback<MediaViewControllerBase::SourceChangeCallback>
       source_change_callback_;
   std::unique_ptr<MediaViewControllerBase> controller_;
+  std::optional<views::test::ComboboxTestApi> combobox_test_api_;
 };
 
 INSTANTIATE_TEST_SUITE_P(MediaViewControllerBaseTest,
@@ -182,4 +234,76 @@ TEST_P(MediaViewControllerBaseTestParameterized,
     EXPECT_TRUE(IsDeviceNameLabelVisible());
     EXPECT_EQ(GetDeviceNameLabel(), GetDeviceName(1));
   }
+}
+
+#if !BUILDFLAG(IS_MAC)
+TEST_P(MediaViewControllerBaseTestParameterized,
+       OnDeviceListChanged_Announcement) {
+  InitializeWidget();
+  auto* const widget = GetDeviceNameLabelView()->GetWidget();
+  ASSERT_TRUE(widget);
+  auto* const root_view = widget->GetRootView();
+  ASSERT_TRUE(root_view);
+  ui::AXNodeData node_data;
+
+  EXPECT_TRUE(IsNoDeviceLabelVisible());
+
+  // No announcement because `has_device_list_changed_before_` is false.
+  UpdateComboboxModel(/*device_count=*/2);
+  EXPECT_EQ(std::nullopt, GetAnnouncementFromRootView(root_view));
+
+  // No announcement because selected device name is equal to
+  // `previous_device_name`.
+  UpdateComboboxModel(/*device_count=*/1);
+  EXPECT_EQ(std::nullopt, GetAnnouncementFromRootView(root_view));
+
+  UpdateComboboxModel(/*device_count=*/0);
+  if (allow_device_selection_) {
+    // Announcement expected with `kNoDeviceLabelText` value.
+    EXPECT_EQ(kNoDeviceLabelText, GetAnnouncementFromRootView(root_view));
+  } else {
+    EXPECT_EQ(std::nullopt, GetAnnouncementFromRootView(root_view));
+  }
+
+  const std::u16string device_1_announcement = l10n_util::GetStringFUTF16(
+      IDS_MEDIA_PREVIEW_ANNOUNCE_SELECTED_DEVICE_CHANGE, GetDeviceName(1));
+
+  UpdateComboboxModel(/*device_count=*/2);
+  if (allow_device_selection_) {
+    // Announcement expected for `device_1`.
+    EXPECT_EQ(device_1_announcement, GetAnnouncementFromRootView(root_view));
+  } else {
+    EXPECT_EQ(std::nullopt, GetAnnouncementFromRootView(root_view));
+  }
+
+  combobox_test_api_->PerformActionAt(1);  // Selected device is `device_2`.
+  UpdateComboboxModel(/*device_count=*/1);
+  if (allow_device_selection_) {
+    // Announcement expected for `device_1`.
+    EXPECT_EQ(device_1_announcement, GetAnnouncementFromRootView(root_view));
+  } else {
+    EXPECT_EQ(std::nullopt, GetAnnouncementFromRootView(root_view));
+  }
+}
+#endif
+
+TEST_P(MediaViewControllerBaseTestParameterized, ActionHistogram_NoAction) {
+  controller_.reset();
+  ExpectHistogramUserAction(UserAction::kNoAction);
+}
+
+TEST_P(MediaViewControllerBaseTestParameterized, ActionHistogram_Opened) {
+  UpdateComboboxModel(/*device_count=*/2);
+  TriggerComboboxMenuWillShow();
+  combobox_test_api_->PerformActionAt(0);
+  controller_.reset();
+  ExpectHistogramUserAction(UserAction::kOpened);
+}
+
+TEST_P(MediaViewControllerBaseTestParameterized, ActionHistogram_Selection) {
+  UpdateComboboxModel(/*device_count=*/2);
+  TriggerComboboxMenuWillShow();
+  combobox_test_api_->PerformActionAt(1);
+  controller_.reset();
+  ExpectHistogramUserAction(UserAction::kSelection);
 }

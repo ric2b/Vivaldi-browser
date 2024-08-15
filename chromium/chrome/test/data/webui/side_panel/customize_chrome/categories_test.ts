@@ -15,9 +15,8 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertDeepEquals, assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import type {MetricsTracker} from 'chrome://webui-test/metrics_test_support.js';
 import {fakeMetricsPrivate} from 'chrome://webui-test/metrics_test_support.js';
-import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import type {TestMock} from 'chrome://webui-test/test_mock.js';
-import {eventToPromise} from 'chrome://webui-test/test_util.js';
+import {eventToPromise, microtasksFinished} from 'chrome://webui-test/test_util.js';
 
 import {$$, createBackgroundImage, createTheme, installMock} from './test_support.js';
 
@@ -107,8 +106,9 @@ suite('CategoriesTest', () => {
     await setInitialSettings(1);
 
     const eventPromise = eventToPromise('collection-select', categoriesElement);
-    const category = categoriesElement.shadowRoot!.querySelector(
-                         '.collection')! as HTMLButtonElement;
+    const category =
+        categoriesElement.shadowRoot!.querySelector<HTMLElement>('.collection');
+    assertTrue(!!category);
     category.click();
     const event = (await eventPromise) as CustomEvent<BackgroundCollection>;
     assertTrue(!!event);
@@ -152,20 +152,6 @@ suite('CategoriesTest', () => {
     assertEquals(1, handler.getCallCount('openChromeWebStore'));
   });
 
-  test('clicking chrome colors sends event', async () => {
-    document.documentElement.toggleAttribute('chrome-refresh-2023', false);
-    await setInitialSettings(1);
-    const eventPromise =
-        eventToPromise('chrome-colors-select', categoriesElement);
-    const chromeColorsTile =
-        categoriesElement.shadowRoot!.querySelector('#chromeColorsTile');
-    assertTrue(!!chromeColorsTile);
-
-    (chromeColorsTile as HTMLElement).click();
-    const event = await eventPromise;
-    assertTrue(!!event);
-  });
-
   test('checks selected category', async () => {
     await setInitialSettings(2);
 
@@ -173,7 +159,7 @@ suite('CategoriesTest', () => {
     const theme = createTheme();
     callbackRouterRemote.setTheme(theme);
     await callbackRouterRemote.$.flushForTesting();
-    await waitAfterNextRender(categoriesElement);
+    await microtasksFinished();
 
     // Check that classic chrome is selected.
     let checkedCategories =
@@ -184,28 +170,13 @@ suite('CategoriesTest', () => {
         checkedCategories[0]!.parentElement!.getAttribute('aria-current'),
         'true');
 
-    // Set a theme with a color.
-    theme.foregroundColor = {value: 0xffff0000};
-    callbackRouterRemote.setTheme(theme);
-    await callbackRouterRemote.$.flushForTesting();
-    await waitAfterNextRender(categoriesElement);
-
-    // Check that chrome colors is selected.
-    checkedCategories =
-        categoriesElement.shadowRoot!.querySelectorAll('[checked]');
-    assertEquals(1, checkedCategories.length);
-    assertEquals(checkedCategories[0]!.parentElement!.id, 'chromeColorsTile');
-    assertEquals(
-        checkedCategories[0]!.parentElement!.getAttribute('aria-current'),
-        'true');
-
     // Set a theme with local background.
     const backgroundImage = createBackgroundImage('https://test.jpg');
     backgroundImage.isUploadedImage = true;
     theme.backgroundImage = backgroundImage;
     callbackRouterRemote.setTheme(theme);
     await callbackRouterRemote.$.flushForTesting();
-    await waitAfterNextRender(categoriesElement);
+    await microtasksFinished();
 
     // Check that upload image is selected.
     checkedCategories =
@@ -222,7 +193,7 @@ suite('CategoriesTest', () => {
     theme.backgroundImage = backgroundImage;
     callbackRouterRemote.setTheme(theme);
     await callbackRouterRemote.$.flushForTesting();
-    await waitAfterNextRender(categoriesElement);
+    await microtasksFinished();
 
     // Check that collection is selected.
     checkedCategories =
@@ -241,7 +212,7 @@ suite('CategoriesTest', () => {
     };
     callbackRouterRemote.setTheme(theme);
     await callbackRouterRemote.$.flushForTesting();
-    await waitAfterNextRender(categoriesElement);
+    await microtasksFinished();
 
     // Check that no category is selected.
     checkedCategories =
@@ -260,9 +231,7 @@ suite('CategoriesTest', () => {
     );
   });
 
-  test('non-gm3 classic chrome tile shows correct image', async () => {
-    document.documentElement.toggleAttribute('chrome-refresh-2023', false);
-
+  test('classic chrome tile shows correct image', async () => {
     await setInitialSettings(0);
 
     assertEquals(
@@ -271,28 +240,6 @@ suite('CategoriesTest', () => {
             '#classicChromeTile #cornerNewTabPageTile #cornerNewTabPage')!.src,
         'chrome://customize-chrome-side-panel.top-chrome/icons/' +
             'corner_new_tab_page.svg');
-  });
-
-  test('gm3 classic chrome tile shows correct image', async () => {
-    document.documentElement.toggleAttribute('chrome-refresh-2023', true);
-
-    await setInitialSettings(0);
-
-    assertEquals(
-        $$<HTMLImageElement>(
-            categoriesElement,
-            '#classicChromeTile #cornerNewTabPageTile #cornerNewTabPage')!.src,
-        'chrome://customize-chrome-side-panel.top-chrome/icons/' +
-            'gm3_corner_new_tab_page.svg');
-  });
-
-  test('Hide chrome colors collection when GM3', async () => {
-    document.documentElement.toggleAttribute('chrome-refresh-2023', true);
-
-    await setInitialSettings(0);
-
-    assertTrue(
-        !categoriesElement.shadowRoot!.querySelector('#chromeColorsTile'));
   });
 
   [true, false].forEach((flagEnabled) => {
@@ -324,7 +271,7 @@ suite('CategoriesTest', () => {
         theme.backgroundImage = backgroundImage;
         callbackRouterRemote.setTheme(theme);
         await callbackRouterRemote.$.flushForTesting();
-        await waitAfterNextRender(categoriesElement);
+        await microtasksFinished();
 
         // Check that wallpaper search is selected if flag is enabled and
         // nothing is selected if flag is disabled.

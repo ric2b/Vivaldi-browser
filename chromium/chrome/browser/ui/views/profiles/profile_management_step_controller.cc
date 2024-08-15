@@ -22,7 +22,7 @@
 #include "chrome/browser/ui/views/profiles/profile_picker_signed_in_flow_controller.h"
 #include "chrome/browser/ui/views/profiles/profile_picker_web_contents_host.h"
 #include "chrome/browser/ui/webui/search_engine_choice/search_engine_choice_ui.h"
-#include "components/search_engines/search_engine_choice_utils.h"
+#include "components/search_engines/search_engine_choice/search_engine_choice_utils.h"
 #include "google_apis/gaia/core_account_id.h"
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
@@ -185,7 +185,10 @@ class FinishSamlSignInStepController : public ProfileManagementStepController {
   static void ContinueSAMLSignin(std::unique_ptr<content::WebContents> contents,
                                  Browser* browser) {
     DCHECK(browser);
-    browser->tab_strip_model()->ReplaceWebContentsAt(0, std::move(contents));
+    // Make a new tab with the desired contents and close the old tab.
+    browser->tab_strip_model()->AppendWebContents(std::move(contents),
+                                                  /*foreground=*/true);
+    browser->tab_strip_model()->DetachAndDeleteWebContentsAt(/*index=*/0);
 
     ProfileMetrics::LogProfileAddSignInFlowOutcome(
         ProfileMetrics::ProfileSignedInFlowOutcome::kSAML);

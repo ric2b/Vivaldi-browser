@@ -7,14 +7,12 @@ package org.chromium.chrome.browser.ui.edge_to_edge;
 import static org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils.shouldDrawToEdge;
 
 import android.app.Activity;
-import android.graphics.Rect;
 import android.os.Build.VERSION_CODES;
 import android.view.View;
 
 import androidx.annotation.CallSuper;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.Px;
 import androidx.annotation.RequiresApi;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.graphics.Insets;
@@ -41,7 +39,8 @@ import org.chromium.ui.base.WindowAndroid;
  * Status Bar.
  */
 @RequiresApi(VERSION_CODES.R)
-public class EdgeToEdgeControllerImpl implements EdgeToEdgeController {
+public class EdgeToEdgeControllerImpl
+        implements EdgeToEdgeController, BrowserControlsStateProvider.Observer {
     private static final String TAG = "E2E_ControllerImpl";
 
     /** The outermost view in our view hierarchy that is identified with a resource ID. */
@@ -54,6 +53,7 @@ public class EdgeToEdgeControllerImpl implements EdgeToEdgeController {
     private final ObserverList<ChangeObserver> mEdgeChangeObservers = new ObserverList<>();
     private final @NonNull TabObserver mTabObserver;
     private final @Nullable TotallyEdgeToEdge mTotallyEdgeToEdge;
+    private final BrowserControlsStateProvider mBrowserControlsStateProvider;
 
     /** Multiplier to convert from pixels to DPs. */
     private final float mPxToDp;
@@ -67,8 +67,9 @@ public class EdgeToEdgeControllerImpl implements EdgeToEdgeController {
     private InsetObserver mInsetObserver;
     private @Nullable Insets mSystemInsets;
     private @Nullable Insets mKeyboardInsets;
-    private @Nullable Integer mBottomInsetOverride;
     private @Nullable WindowInsetsConsumer mWindowInsetsConsumer;
+    private boolean mBottomControlsAreVisible;
+    private int mBottomControlsHeight;
 
     /**
      * Creates an implementation of the EdgeToEdgeController that will use the Android APIs to allow
@@ -128,6 +129,8 @@ public class EdgeToEdgeControllerImpl implements EdgeToEdgeController {
                                                         : mCurrentTab.getWebContents()))
                         : null;
         mInsetObserver = InsetObserverSupplier.getValueOrNullFrom(mWindowAndroid);
+        mBrowserControlsStateProvider = browserControlsStateProvider;
+        mBrowserControlsStateProvider.addObserver(this);
     }
 
     @VisibleForTesting
@@ -146,8 +149,12 @@ public class EdgeToEdgeControllerImpl implements EdgeToEdgeController {
     @Override
     public void registerAdjuster(EdgeToEdgePadAdjuster adjuster) {
         mPadAdjusters.addObserver(adjuster);
-        int bottomInset = mIsActivityToEdge && mSystemInsets != null ? mSystemInsets.bottom : 0;
-        if (mSystemInsets != null) adjuster.overrideBottomInset(bottomInset);
+        if (mSystemInsets != null) {
+            boolean shouldPad = shouldPadAdjusters();
+            adjuster.overrideBottomInset(
+                    shouldPad ? mSystemInsets.bottom : 0,
+                    shouldPad && !mBottomControlsAreVisible ? mSystemInsets.bottom : 0);
+        }
     }
 
     @Override
@@ -180,6 +187,41 @@ public class EdgeToEdgeControllerImpl implements EdgeToEdgeController {
     @Override
     public boolean isEdgeToEdgeActive() {
         return mDidSetDecorAndListener;
+    }
+
+    // BrowserControlsStateProvider.Observer
+
+    @Override
+    public void onControlsOffsetChanged(
+            int topOffset,
+            int topControlsMinHeightOffset,
+            int bottomOffset,
+            int bottomControlsMinHeightOffset,
+            boolean needsAnimate) {
+        updateBrowserControlsVisibility(
+                mBottomControlsHeight > 0 && bottomOffset < mBottomControlsHeight);
+    }
+
+    @Override
+    public void onBottomControlsHeightChanged(
+            int bottomControlsHeight, int bottomControlsMinHeight) {
+        // The bottom controls are shown / hidden from the user by changing the height, rather than
+        // changing view visibility.
+        mBottomControlsHeight = bottomControlsHeight;
+        updateBrowserControlsVisibility(bottomControlsHeight > 0);
+    }
+
+    private void updateBrowserControlsVisibility(boolean visible) {
+        if (mBottomControlsAreVisible == visible || mSystemInsets == null) {
+            return;
+        }
+        mBottomControlsAreVisible = visible;
+        for (var adjuster : mPadAdjusters) {
+            boolean shouldPad = shouldPadAdjusters();
+            adjuster.overrideBottomInset(
+                    shouldPad ? mSystemInsets.bottom : 0,
+                    shouldPad && !mBottomControlsAreVisible ? mSystemInsets.bottom : 0);
+        }
     }
 
     /**
@@ -258,12 +300,7 @@ public class EdgeToEdgeControllerImpl implements EdgeToEdgeController {
             mEdgeToEdgeOSWrapper.setDecorFitsSystemWindows(mActivity.getWindow(), false);
             mWindowInsetsConsumer =
                     (view, windowInsets) -> handleWindowInsets(windowInsets, viewId, webContents);
-            if (EdgeToEdgeUtils.isInsetsManagementEnabled()) {
-                mInsetObserver.addInsetsConsumer(mWindowInsetsConsumer);
-            } else {
-                mEdgeToEdgeOSWrapper.setOnApplyWindowInsetsListener(
-                        rootView, mWindowInsetsConsumer);
-            }
+            mInsetObserver.addInsetsConsumer(mWindowInsetsConsumer);
         } else if (mSystemInsets != null) {
             // It's possible for toEdge to change more than once prior to the first time
             // #handleWindowInsets is called. #handleWindowInsets will call #adjustEdges using
@@ -299,6 +336,16 @@ public class EdgeToEdgeControllerImpl implements EdgeToEdgeController {
     }
 
     /**
+     * The {@link EdgeToEdgePadAdjuster}s should only be padded with an extra bottom inset if the
+     * activity is currently in edge-to-edge, and if the adjusters aren't already positioned above
+     * the system insets due to the keyboard or the bottom controls being visible.
+     */
+    private boolean shouldPadAdjusters() {
+        boolean keyboardIsVisible = mKeyboardInsets != null && mKeyboardInsets.bottom > 0;
+        return mIsActivityToEdge && !keyboardIsVisible;
+    }
+
+    /**
      * Adjusts whether the given view draws ToEdge or ToNormal. The ability to draw under System
      * Bars should have already been set. This method only sets the padding of the view and
      * transparency of the Nav Bar, etc.
@@ -314,13 +361,11 @@ public class EdgeToEdgeControllerImpl implements EdgeToEdgeController {
         // All the other edges need to be padded to prevent drawing under an edge that we
         // don't want drawn ToEdge (e.g. the Status Bar).
         int bottomPadding = toEdge ? 0 : mSystemInsets.bottom;
-        int bottomInsetForAdjusters = toEdge ? mSystemInsets.bottom : 0;
         if (mKeyboardInsets != null && mKeyboardInsets.bottom > bottomPadding) {
             // If the keyboard is showing, change the bottom padding to account for the keyboard.
             // Clear the bottom inset used for the adjusters, since there are no missing bottom
             // system bars above the keyboard to compensate for.
             bottomPadding = mKeyboardInsets.bottom;
-            bottomInsetForAdjusters = 0;
         }
 
         mEdgeToEdgeOSWrapper.setPadding(
@@ -331,34 +376,17 @@ public class EdgeToEdgeControllerImpl implements EdgeToEdgeController {
                 bottomPadding);
 
         for (var adjuster : mPadAdjusters) {
-            adjuster.overrideBottomInset(bottomInsetForAdjusters);
+            boolean shouldPad = shouldPadAdjusters();
+            adjuster.overrideBottomInset(
+                    shouldPad ? mSystemInsets.bottom : 0,
+                    shouldPad && !mBottomControlsAreVisible ? mSystemInsets.bottom : 0);
         }
         for (var observer : mEdgeChangeObservers) {
             observer.onToEdgeChange(isToEdge() ? mSystemInsets.bottom : 0);
         }
 
-        if (EdgeToEdgeUtils.isInsetsManagementEnabled()) {
-            int bottomInsetOnSaveArea = toEdge ? mSystemInsets.bottom : 0;
-            mInsetObserver.updateBottomInsetForEdgeToEdge(bottomInsetOnSaveArea);
-        } else if (webContents != null) {
-            pushInsetsToBlink(toEdge, webContents);
-        }
-    }
-
-    /**
-     * Pushes the current insets to Blink so the page will know how to pad bottom UI.
-     *
-     * @param toEdge Whether we're drawing all the way to the edge of the screen.
-     * @param webContents A {@link WebContents} that leads to a Blink Renderer.
-     */
-    private void pushInsetsToBlink(boolean toEdge, @NonNull WebContents webContents) {
-        // Push the insets back to the webpage if we have one.
-        // TODO(https://crbug.com/1475820) Move this work into the nascent
-        // SafeAreaInsetsTracker.
-        assert mSystemInsets != null : "Error, trying to notify Blink without system insets set";
-        Rect insetsRect = new Rect(0, 0, 0, toEdge ? scale(mSystemInsets.bottom) : 0);
-        Log.v(TAG, "Pushing back insets to Blink %s", insetsRect);
-        webContents.setDisplayCutoutSafeArea(insetsRect);
+        int bottomInsetOnSaveArea = toEdge ? mSystemInsets.bottom : 0;
+        mInsetObserver.updateBottomInsetForEdgeToEdge(bottomInsetOnSaveArea);
     }
 
     /**
@@ -370,13 +398,6 @@ public class EdgeToEdgeControllerImpl implements EdgeToEdgeController {
     @VisibleForTesting
     void drawToEdge(int viewId, boolean toEdge) {
         drawToEdge(viewId, toEdge, null);
-    }
-
-    /**
-     * @return the value of the pixel input when scaled back to density-independent pixels.
-     */
-    private int scale(@Px int unscaledValuePx) {
-        return (int) Math.ceil(unscaledValuePx * mPxToDp);
     }
 
     @CallSuper
@@ -392,6 +413,9 @@ public class EdgeToEdgeControllerImpl implements EdgeToEdgeController {
         if (mInsetObserver != null) {
             mInsetObserver.removeInsetsConsumer(mWindowInsetsConsumer);
             mInsetObserver = null;
+        }
+        if (mBrowserControlsStateProvider != null) {
+            mBrowserControlsStateProvider.removeObserver(this);
         }
     }
 
@@ -415,5 +439,9 @@ public class EdgeToEdgeControllerImpl implements EdgeToEdgeController {
 
     void setSystemInsetsForTesting(Insets systemInsetsForTesting) {
         mSystemInsets = systemInsetsForTesting;
+    }
+
+    void setKeyboardInsetsForTesting(Insets keyboardInsetsForTesting) {
+        mKeyboardInsets = keyboardInsetsForTesting;
     }
 }

@@ -11,14 +11,15 @@ export interface LoggingState {
   veid: number;
   parent: LoggingState|null;
   processedForDebugging?: boolean;
-  size?: DOMRect;
+  size: DOMRect;
   selectOpen?: boolean;
+  lastInputEventType?: string;
 }
 
 const state = new WeakMap<Loggable, LoggingState>();
 
 function nextVeId(): number {
-  const result = new Uint32Array(1);
+  const result = new Int32Array(1);
   crypto.getRandomValues(result);
   return result[0];
 }
@@ -44,6 +45,7 @@ export function getOrCreateLoggingState(loggable: Loggable, config: LoggingConfi
     config,
     veid: nextVeId(),
     parent: parent ? getLoggingState(parent) : null,
+    size: new DOMRect(0, 0, 0, 0),
   };
   state.set(loggable, loggableState);
   return loggableState;

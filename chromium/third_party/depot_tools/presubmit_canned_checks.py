@@ -1548,9 +1548,15 @@ def CheckOwnersFormat(input_api, output_api):
     if input_api.gerrit and input_api.gerrit.IsCodeOwnersEnabledOnRepo():
         return []
 
+    host = "none"
+    project = "none"
+    if input_api.gerrit:
+        host = input_api.gerrit.host
+        project = input_api.gerrit.project
     return [
         output_api.PresubmitError(
-            'code-owners is not enabled. Ask your host enable it on your gerrit '
+            f'code-owners is not enabled on {host}/{project}. '
+            'Ask your host enable it on your gerrit '
             'host. Read more about code-owners at '
             'https://chromium-review.googlesource.com/'
             'plugins/code-owners/Documentation/index.html.')
@@ -1568,9 +1574,15 @@ def CheckOwners(input_api, output_api, source_file_filter=None, allow_tbr=True):
     if input_api.gerrit and input_api.gerrit.IsCodeOwnersEnabledOnRepo():
         return []
 
+    host = "none"
+    project = "none"
+    if input_api.gerrit:
+        host = input_api.gerrit.host
+        project = input_api.gerrit.project
     return [
         output_api.PresubmitError(
-            'code-owners is not enabled. Ask your host enable it on your gerrit '
+            f'code-owners is not enabled on {host}/{project}. '
+            'Ask your host enable it on your gerrit '
             'host. Read more about code-owners at '
             'https://chromium-review.googlesource.com/'
             'plugins/code-owners/Documentation/index.html.')
@@ -1945,6 +1957,12 @@ def CheckForCommitObjects(input_api, output_api):
     Returns:
         A presubmit error if a commit object is not expected.
     """
+    if input_api.change.scm != 'git':
+        return [
+            output_api.PresubmitNotifyResult(
+                'Non-git workspace detected, skipping CheckForCommitObjects.')
+        ]
+
     # Get DEPS file.
     deps_file = input_api.os_path.join(input_api.PresubmitLocalPath(), 'DEPS')
     if not input_api.os_path.isfile(deps_file):
@@ -2159,8 +2177,11 @@ def CheckChangedLUCIConfigs(input_api, output_api):
     LUCI_CONFIG_HOST_NAME = 'config.luci.app'
 
     cl = git_cl.Changelist()
-    if input_api.change.issue and input_api.gerrit:
-        remote_branch = input_api.gerrit.GetDestRef(input_api.change.issue)
+    if input_api.gerrit:
+        if input_api.change.issue:
+            remote_branch = input_api.gerrit.GetDestRef(input_api.change.issue)
+        else:
+            remote_branch = input_api.gerrit.branch
     else:
         remote, remote_branch = cl.GetRemoteBranch()
         if remote_branch.startswith('refs/remotes/%s/' % remote):
@@ -2170,7 +2191,14 @@ def CheckChangedLUCIConfigs(input_api, output_api):
             remote_branch = remote_branch.replace('refs/remotes/branch-heads/',
                                                   'refs/branch-heads/', 1)
 
-    remote_host_url = cl.GetRemoteUrl()
+    if input_api.gerrit:
+        host = input_api.gerrit.host
+        project = input_api.gerrit.project
+        gerrit_url = f'https://{host}/{project}'
+        remote_host_url = gerrit_url.replace('-review.googlesource',
+                                             '.googlesource')
+    else:
+        remote_host_url = cl.GetRemoteUrl()
     if not remote_host_url:
         return [
             output_api.PresubmitError(

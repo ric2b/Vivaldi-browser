@@ -14,6 +14,11 @@
 #import "components/download/public/background_service/background_download_service.h"
 #import "components/feature_engagement/public/event_constants.h"
 #import "components/feature_engagement/public/tracker.h"
+#import "components/search_engines/prepopulated_engines.h"
+#import "components/search_engines/template_url.h"
+#import "components/search_engines/template_url_prepopulate_data.h"
+#import "components/search_engines/template_url_service.h"
+#import "components/signin/public/identity_manager/identity_manager.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/application_delegate/memory_warning_helper.h"
 #import "ios/chrome/app/application_delegate/metrics_mediator.h"
@@ -25,11 +30,13 @@
 #import "ios/chrome/app/main_controller.h"
 #import "ios/chrome/app/startup/app_launch_metrics.h"
 #import "ios/chrome/browser/commerce/model/push_notification/push_notification_feature.h"
+#import "ios/chrome/browser/content_notification/model/content_notification_util.h"
 #import "ios/chrome/browser/crash_report/model/crash_keys_helper.h"
 #import "ios/chrome/browser/download/model/background_service/background_download_service_factory.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_delegate.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_util.h"
+#import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_controller.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_delegate.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
@@ -38,6 +45,7 @@
 #import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/ui/keyboard/menu_builder.h"
 #import "ios/web/common/uikit_ui_util.h"
 #import "ios/web/public/thread/web_task_traits.h"
@@ -46,7 +54,7 @@
 namespace {
 // The time delay after firstSceneWillEnterForeground: before checking for main
 // intent signals.
-const int kMainIntentCheckDelay = 1;
+constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
 }  // namespace
 
 @interface MainApplicationDelegate () <AppStateObserver> {
@@ -241,12 +249,20 @@ const int kMainIntentCheckDelay = 1;
                             true);
   web::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE, base::BindOnce(^{
-        // TODO(b/325287919): Add separate call to register with Chime for
-        // Content notifications.
-        [self.pushNotificationDelegate
-            applicationDidRegisterWithAPNS:deviceToken];
-        if (IsContentPushNotificationsEnabled()) {
-          [self.pushNotificationDelegate registerNotificationCategories];
+        if ([self isContentNotificationAvailable]) {
+          Browser* browser = self.mainController.browserProviderInterface
+                                 .mainBrowserProvider.browser;
+          [self.pushNotificationDelegate
+              applicationDidRegisterWithAPNS:deviceToken
+                                browserState:browser->GetBrowserState()];
+          // Logs when a Registration succeeded with a loaded BrowserState.
+          base::UmaHistogramBoolean(
+              "ContentNotifications.Registration.BrowserStateUnavailable",
+              false);
+        } else {
+          [self.pushNotificationDelegate
+              applicationDidRegisterWithAPNS:deviceToken
+                                browserState:nil];
         }
       }));
 }
@@ -273,7 +289,7 @@ const int kMainIntentCheckDelay = 1;
   Browser* browser =
       _mainController.browserProviderInterface.mainBrowserProvider.browser;
   if (!browser) {
-    // TODO(crbug.com/1368617): We should store the completionHandler and wait
+    // TODO(crbug.com/40240359): We should store the completionHandler and wait
     // for mainBrowserProvider creation.
     completionHandler();
     return;
@@ -316,7 +332,7 @@ const int kMainIntentCheckDelay = 1;
   if (!sceneDelegate)
     return;
 
-  // TODO(crbug.com/1060645): This should be called later, or this flow should
+  // TODO(crbug.com/40679152): This should be called later, or this flow should
   // be changed completely.
   if (self.foregroundSceneCount == 0) {
     [_appState applicationWillEnterForeground:UIApplication.sharedApplication
@@ -345,40 +361,23 @@ const int kMainIntentCheckDelay = 1;
 }
 
 - (void)firstSceneWillEnterForeground:(NSNotification*)notification {
+  // This method may be invoked really early in the application lifetime
+  // even before the creation of the main loop. Thus it is not possible
+  // to use PostTask API here, and we have to use dispatch_async(...).
   __weak MainApplicationDelegate* weakSelf = self;
-  // Delay Main Intent check since signals for intents like spotlight actions
-  // are not guaranteed to occur before firstSceneWillEnterForeground.
   dispatch_after(
-      dispatch_time(DISPATCH_TIME_NOW,
-                    static_cast<int64_t>(kMainIntentCheckDelay * NSEC_PER_SEC)),
+      dispatch_time(DISPATCH_TIME_NOW, kMainIntentCheckDelay.InNanoseconds()),
       dispatch_get_main_queue(), ^{
-        MainApplicationDelegate* strongSelf = weakSelf;
-        if (!strongSelf) {
-          return;
-        }
-
-        BOOL appStartupFromExternalIntent = NO;
-        for (SceneState* scene in strongSelf.appState.connectedScenes) {
-          if (scene.startupHadExternalIntent) {
-            appStartupFromExternalIntent = YES;
-            scene.startupHadExternalIntent = NO;
-          }
-        }
-        if (!appStartupFromExternalIntent) {
-          base::UmaHistogramEnumeration(kAppLaunchSource,
-                                        AppLaunchSource::APP_ICON);
-          base::RecordAction(base::UserMetricsAction("IOSOpenByMainIntent"));
-        } else {
-          [self notifyFETAppStartupFromExternalIntent];
-          base::RecordAction(base::UserMetricsAction("IOSOpenByViewIntent"));
-        }
+        [weakSelf firstSceneDidEnterForeground];
       });
 
-  if (_startupInformation.isColdStart) {
-    [PushNotificationUtil registerDeviceWithAPNS];
-  } else if (IsContentPushNotificationsEnabled()) {
-    // Register on every foreground for Content Push Notifications.
-    [PushNotificationUtil registerDeviceWithAPNS];
+  // Register if it's a cold start or when bringing Chrome to foreground with
+  // Content Push Notifications available.
+  if (_startupInformation.isColdStart ||
+      [self isContentNotificationAvailable]) {
+    [PushNotificationUtil
+        registerDeviceWithAPNSWithContentNotificationsAvailable:
+            [self isContentNotificationAvailable]];
   }
 
   [_appState applicationWillEnterForeground:UIApplication.sharedApplication
@@ -430,6 +429,37 @@ const int kMainIntentCheckDelay = 1;
 
 #pragma mark - Private
 
+// Returns whether the application was started via an external intent or
+// directly (i.e. by tapping on the app button directly).
+- (BOOL)appStartupFromExternalIntent {
+  for (SceneState* scene in self.appState.connectedScenes) {
+    if (scene.startupHadExternalIntent) {
+      return YES;
+    }
+  }
+
+  return NO;
+}
+
+// Invoked on the main sequence after -firstSceneWillEnterForeground: is
+// called, after a small delay. The delay is there to give time for the
+// intents to be received by the application (as they are not guaranteed
+// to happen before -firstSceneWillEnterForeground:).
+- (void)firstSceneDidEnterForeground {
+  if ([self appStartupFromExternalIntent]) {
+    base::RecordAction(base::UserMetricsAction("IOSOpenByViewIntent"));
+    [self applicationStartupFromExternalIntent];
+  } else {
+    base::RecordAction(base::UserMetricsAction("IOSOpenByMainIntent"));
+    base::UmaHistogramEnumeration(kAppLaunchSource, AppLaunchSource::APP_ICON);
+  }
+}
+
+// Invoked when the app is started by an external intent.
+- (void)applicationStartupFromExternalIntent {
+  [self notifyFETAppStartupFromExternalIntent];
+}
+
 // Notifies the Feature Engagement Tracker (FET) that the app has launched from
 // an external intent (i.e. through the share sheet), which is an eligibility
 // criterion for the default browser blue dot promo.
@@ -450,6 +480,39 @@ const int kMainIntentCheckDelay = 1;
           browser->GetBrowserState());
 
   tracker->NotifyEvent(feature_engagement::events::kBlueDotPromoCriterionMet);
+}
+
+// `YES` if Content notification is enabled or registered. Called before
+// register device With APNS.
+- (BOOL)isContentNotificationAvailable {
+  if (!IsContentNotificationExperimentEnalbed()) {
+    return false;
+  }
+  Browser* browser =
+      _mainController.browserProviderInterface.mainBrowserProvider.browser;
+
+  if (!browser) {
+    base::UmaHistogramBoolean(
+        "ContentNotifications.Registration.BrowserStateUnavailable", true);
+    return NO;
+  }
+
+  ChromeBrowserState* browserState = browser->GetBrowserState();
+  signin::IdentityManager* identityManager =
+      IdentityManagerFactory::GetForBrowserState(browserState);
+  bool isUserSignedIn = identityManager && identityManager->HasPrimaryAccount(
+                                               signin::ConsentLevel::kSignin);
+  const TemplateURL* defaultSearchURLTemplate =
+      ios::TemplateURLServiceFactory::GetForBrowserState(browserState)
+          ->GetDefaultSearchProvider();
+  bool isDefaultSearchEngine =
+      defaultSearchURLTemplate && defaultSearchURLTemplate->prepopulate_id() ==
+                                      TemplateURLPrepopulateData::google.id;
+  PrefService* prefService = browserState->GetPrefs();
+  return IsContentNotificationEnabled(isUserSignedIn, isDefaultSearchEngine,
+                                      prefService) ||
+         IsContentNotificationRegistered(isUserSignedIn, isDefaultSearchEngine,
+                                         prefService);
 }
 
 @end

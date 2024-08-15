@@ -27,18 +27,18 @@ const char kRussianList[] =
 
 struct PermanentSource {
   base::StringPiece url;
-  bool allow_abp_snippets;
+  RuleSourceSettings settings;
 };
 
 const PermanentSource kPermanentKnownTrackingSources[] = {
-    {kDuckDuckGoList, false},
-    {"https://downloads.vivaldi.com/easylist/easyprivacy-current.txt", false}};
+    {kDuckDuckGoList, {}},
+    {"https://downloads.vivaldi.com/easylist/easyprivacy-current.txt", {}}};
 
 const PermanentSource kPermanentKnownAdBlockSources[] = {
-    {kEasyList, false},
-    {kPartnersList, false},
-    {kAdblockPlusAntiCv, true},
-    {kAdblockPlusAntiAdblock, true}};
+    {kEasyList, {}},
+    {kPartnersList, {}},
+    {kAdblockPlusAntiCv, {.allow_abp_snippets = true}},
+    {kAdblockPlusAntiAdblock, {.allow_abp_snippets = true}}};
 
 struct PresetSourceInfo {
   base::StringPiece url;
@@ -180,26 +180,27 @@ KnownRuleSourcesHandlerImpl::KnownRuleSourcesHandlerImpl(
       deleted_presets_(std::move(deleted_presets)),
       schedule_save_(std::move(schedule_save)) {
   for (const auto& permanent_source : kPermanentKnownTrackingSources) {
-    KnownRuleSource source(GURL(permanent_source.url),
-                           RuleGroup::kTrackingRules);
+    KnownRuleSource source(
+        *RuleSourceCore::FromUrl(GURL(permanent_source.url)));
     source.removable = false;
-    source.allow_abp_snippets = permanent_source.allow_abp_snippets;
+    source.core.set_settings(permanent_source.settings);
     known_sources_[static_cast<size_t>(RuleGroup::kTrackingRules)].insert(
-        {source.id, source});
+        {source.core.id(), source});
   }
 
   for (const auto& permanent_source : kPermanentKnownAdBlockSources) {
-    KnownRuleSource source(GURL(permanent_source.url),
-                           RuleGroup::kAdBlockingRules);
+    KnownRuleSource source(
+        *RuleSourceCore::FromUrl(GURL(permanent_source.url)));
     source.removable = false;
-    source.allow_abp_snippets = permanent_source.allow_abp_snippets;
+    source.core.set_settings(permanent_source.settings);
     known_sources_[static_cast<size_t>(RuleGroup::kAdBlockingRules)].insert(
-        {source.id, source});
+        {source.core.id(), source});
   }
 
   for (auto group : {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
     for (const auto& source : known_sources[static_cast<size_t>(group)]) {
-      known_sources_[static_cast<size_t>(group)].insert({source.id, source});
+      known_sources_[static_cast<size_t>(group)].insert(
+          {source.core.id(), source});
     }
   }
 
@@ -210,31 +211,25 @@ KnownRuleSourcesHandlerImpl::KnownRuleSourcesHandlerImpl(
                              storage_version < 4);
 
   if (storage_version < 1) {
-    EnableSource(
-        RuleGroup::kTrackingRules,
-        KnownRuleSource(GURL(kDuckDuckGoList), RuleGroup::kTrackingRules).id);
-    EnableSource(
-        RuleGroup::kAdBlockingRules,
-        KnownRuleSource(GURL(kEasyList), RuleGroup::kAdBlockingRules).id);
+    EnableSource(RuleGroup::kTrackingRules,
+                 RuleSourceCore::FromUrl(GURL(kDuckDuckGoList))->id());
+    EnableSource(RuleGroup::kAdBlockingRules,
+                 RuleSourceCore::FromUrl(GURL(kEasyList))->id());
   }
   if (storage_version < 3) {
-    EnableSource(
-        RuleGroup::kAdBlockingRules,
-        KnownRuleSource(GURL(kPartnersList), RuleGroup::kAdBlockingRules).id);
+    EnableSource(RuleGroup::kAdBlockingRules,
+                 RuleSourceCore::FromUrl(GURL(kPartnersList))->id());
   }
 
   if (storage_version < 5 &&
       (locale == "ru" || locale == "be" || locale == "uk")) {
-    EnableSource(
-        RuleGroup::kAdBlockingRules,
-        KnownRuleSource(GURL(kRussianList), RuleGroup::kAdBlockingRules).id);
+    EnableSource(RuleGroup::kAdBlockingRules,
+                 RuleSourceCore::FromUrl(GURL(kRussianList))->id());
   }
 
   if (storage_version < 6) {
-    EnableSource(
-        RuleGroup::kAdBlockingRules,
-        KnownRuleSource(GURL(kAdblockPlusAntiCv), RuleGroup::kAdBlockingRules)
-            .id);
+    EnableSource(RuleGroup::kAdBlockingRules,
+                 RuleSourceCore::FromUrl(GURL(kAdblockPlusAntiCv))->id());
   }
 
   if (storage_version < 7) {
@@ -242,18 +237,18 @@ KnownRuleSourcesHandlerImpl::KnownRuleSourcesHandlerImpl(
     // Avoid enabling our cached version of the list if the user added it
     // already by its original URL
     for (const auto& known_source : GetSourceMap(RuleGroup::kAdBlockingRules)) {
-      if (known_source.second.source_url ==
-          GURL("https://easylist-downloads.adblockplus.org/"
-               "antiadblockfilters.txt")) {
+      if (known_source.second.core.is_from_url() &&
+          known_source.second.core.source_url() ==
+              GURL("https://easylist-downloads.adblockplus.org/"
+                   "antiadblockfilters.txt")) {
         skip = true;
         break;
       }
     }
     if (!skip) {
-      EnableSource(RuleGroup::kAdBlockingRules,
-                   KnownRuleSource(GURL(kAdblockPlusAntiAdblock),
-                                   RuleGroup::kAdBlockingRules)
-                       .id);
+      EnableSource(
+          RuleGroup::kAdBlockingRules,
+          RuleSourceCore::FromUrl(GURL(kAdblockPlusAntiAdblock))->id());
     }
   }
 }
@@ -279,45 +274,33 @@ const std::set<std::string>& KnownRuleSourcesHandlerImpl::GetDeletedPresets(
   return deleted_presets_[static_cast<size_t>(group)];
 }
 
-std::optional<uint32_t> KnownRuleSourcesHandlerImpl::AddSourceFromUrl(
-    RuleGroup group,
-    const GURL& url) {
-  if (!url.is_valid())
-    return std::nullopt;
-
-  return AddSource(KnownRuleSource(url, group), true);
+bool KnownRuleSourcesHandlerImpl::AddSource(RuleGroup group,
+                                            RuleSourceCore source_core) {
+  return AddSource(group, KnownRuleSource(std::move(source_core)), true);
 }
 
-std::optional<uint32_t> KnownRuleSourcesHandlerImpl::AddSourceFromFile(
-    RuleGroup group,
-    const base::FilePath& file) {
-  if (file.empty() || !file.IsAbsolute() || file.ReferencesParent() ||
-      file.EndsWithSeparator())
-    return std::nullopt;
-
-  return AddSource(KnownRuleSource(file, group), true);
-}
-
-std::optional<uint32_t> KnownRuleSourcesHandlerImpl::AddSource(
-    const KnownRuleSource& known_source,
-    bool enable) {
-  KnownRuleSources& known_sources = GetSourceMap(known_source.group);
+bool KnownRuleSourcesHandlerImpl::AddSource(RuleGroup group,
+                                            KnownRuleSource known_source,
+                                            bool enable) {
+  KnownRuleSources& known_sources = GetSourceMap(group);
+  auto result = known_sources.try_emplace(known_source.core.id(),
+                                          std::move(known_source));
 
   // since the id is just a hash of the file path, if a source with the same id
   // exist, we have a source with the exact same path already.
-  if (known_sources.find(known_source.id) != known_sources.end())
-    return std::nullopt;
+  if (!result.second) {
+    return false;
+  }
 
-  known_sources.insert({known_source.id, known_source});
   schedule_save_.Run();
 
   for (Observer& observer : observers_)
-    observer.OnKnownSourceAdded(known_source);
+    observer.OnKnownSourceAdded(group, result.first->second);
 
   if (enable)
-    EnableSource(known_source.group, known_source.id);
+    EnableSource(group, known_source.core.id());
 
-  return known_source.id;
+  return true;
 }
 
 std::optional<KnownRuleSource> KnownRuleSourcesHandlerImpl::GetSource(
@@ -363,8 +346,8 @@ bool KnownRuleSourcesHandlerImpl::EnableSource(RuleGroup group,
   if (IsSourceEnabled(group, source_id))
     return true;
 
-  bool result =
-      rule_service_->GetRuleManager()->AddRulesSource(known_source->second);
+  bool result = rule_service_->GetRuleManager()->AddRulesSource(
+      group, known_source->second.core);
 
   DCHECK(result);
 
@@ -381,7 +364,8 @@ void KnownRuleSourcesHandlerImpl::DisableSource(RuleGroup group,
   if (known_source == known_sources.end())
     return;
 
-  rule_service_->GetRuleManager()->DeleteRuleSource(known_source->second);
+  rule_service_->GetRuleManager()->DeleteRuleSource(group,
+                                                    known_source->second.core);
 
   for (Observer& observer : observers_)
     observer.OnKnownSourceDisabled(group, source_id);
@@ -392,6 +376,29 @@ bool KnownRuleSourcesHandlerImpl::IsSourceEnabled(RuleGroup group,
   return rule_service_->GetRuleManager()
       ->GetRuleSource(group, source_id)
       .has_value();
+}
+
+bool KnownRuleSourcesHandlerImpl::SetSourceSettings(
+    RuleGroup group,
+    uint32_t source_id,
+    RuleSourceSettings settings) {
+  if (IsSourceEnabled(group, source_id)) {
+    return false;
+  }
+
+  KnownRuleSources& known_sources = GetSourceMap(group);
+  const auto known_source = known_sources.find(source_id);
+  if (known_source == known_sources.end()) {
+    return false;
+  }
+
+  if (!known_source->second.removable) {
+    return false;
+  }
+
+  known_source->second.core.set_settings(settings);
+  schedule_save_.Run();
+  return true;
 }
 
 void KnownRuleSourcesHandlerImpl::ResetPresetSources(RuleGroup group) {
@@ -433,9 +440,9 @@ void KnownRuleSourcesHandlerImpl::UpdateSourcesFromPresets(
       continue;
     }
 
-    KnownRuleSource preset_source(GURL(preset.url), group);
+    KnownRuleSource preset_source(*RuleSourceCore::FromUrl(GURL(preset.url)));
 
-    auto known_source = known_sources.find(preset_source.id);
+    auto known_source = known_sources.find(preset_source.core.id());
     // We already have a rule source with that URL
     if (known_source != known_sources.end()) {
       // It wasn't added manually
@@ -459,12 +466,12 @@ void KnownRuleSourcesHandlerImpl::UpdateSourcesFromPresets(
     if (known_preset != known_presets.end()) {
       // If there was a source with a URL matching this preset, it would have
       // been handled above.
-      DCHECK(known_preset->second != preset_source.id);
+      DCHECK(known_preset->second != preset_source.core.id());
 
       bool enable = IsSourceEnabled(group, known_preset->second);
       RemoveSource(group, known_preset->second);
       known_presets.erase(known_preset);
-      AddSource(preset_source, enable);
+      AddSource(group, std::move(preset_source), enable);
     } else if (store_missing_as_deleted) {
       // NOTE(julien): We weren't keeping track of deleted presets before.
       // This allows us to remedy that for people who had old setups.
@@ -474,7 +481,7 @@ void KnownRuleSourcesHandlerImpl::UpdateSourcesFromPresets(
           std::string(preset.id));
     } else if (deleted_presets_[static_cast<size_t>(group)].count(
                    std::string(preset.id)) == 0) {
-      AddSource(preset_source, false);
+      AddSource(group, std::move(preset_source), false);
     }
   }
 

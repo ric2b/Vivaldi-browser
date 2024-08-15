@@ -50,7 +50,8 @@ class ShellPermissionManager : public PermissionControllerDelegate {
       const url::Origin& embedding_origin) override;
   blink::mojom::PermissionStatus GetPermissionStatusForCurrentDocument(
       blink::PermissionType permission,
-      content::RenderFrameHost* render_frame_host) override;
+      content::RenderFrameHost* render_frame_host,
+      bool should_include_device_status) override;
   blink::mojom::PermissionStatus GetPermissionStatusForWorker(
       blink::PermissionType permission,
       content::RenderProcessHost* render_process_host,
@@ -64,6 +65,7 @@ class ShellPermissionManager : public PermissionControllerDelegate {
       RenderProcessHost* render_process_host,
       RenderFrameHost* render_frame_host,
       const GURL& requesting_origin,
+      bool should_include_device_status,
       base::RepeatingCallback<void(blink::mojom::PermissionStatus)> callback)
       override;
   void UnsubscribeFromPermissionStatusChange(

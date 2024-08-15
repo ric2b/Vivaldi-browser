@@ -412,7 +412,8 @@ const CGFloat kActivityIndicatorDimensionIPhone = 56;
   self.veil = [[UIView alloc] initWithFrame:self.view.bounds];
   [self.veil setAutoresizingMask:(UIViewAutoresizingFlexibleWidth |
                                   UIViewAutoresizingFlexibleHeight)];
-  [self.veil setBackgroundColor:[UIColor colorWithWhite:1.0 alpha:0.5]];
+  [self.veil setBackgroundColor:[[UIColor colorNamed:kSolidWhiteColor]
+                                    colorWithAlphaComponent:0.5]];
   [self.view addSubview:self.veil];
 
   // Disable user interaction for the navigation controller view to ensure
@@ -448,7 +449,7 @@ const CGFloat kActivityIndicatorDimensionIPhone = 56;
       [self.navigationItem.leftBarButtonItem setEnabled:YES];
       break;
     default:
-      NOTREACHED();
+      DUMP_WILL_BE_NOTREACHED_NORETURN();
       break;
   }
   self.savedBarButtonItem = nil;

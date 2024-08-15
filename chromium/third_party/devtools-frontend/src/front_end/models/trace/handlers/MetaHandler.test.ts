@@ -2,12 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as TraceModel from '../trace.js';
-
-const {assert} = chai;
-
 import {defaultTraceEvent} from '../../../testing/TraceHelpers.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
+import * as TraceModel from '../trace.js';
 
 describe('MetaHandler', function() {
   let baseEvents: TraceModel.Types.TraceEvents.TraceEventData[];
@@ -594,4 +591,29 @@ describe('MetaHandler', function() {
       [TraceModel.Types.TraceEvents.ProcessID(48531), 'Renderer'],
     ]);
   });
+
+  it('does not set a frame as a main frame if it has no URL.', async function() {
+    // This test exists because of a bug report from this trace where we
+    // incorrectly set the main frame ID, causing DevTools to pick an advert in
+    // an iframe as the main thread. This happened because we happily set
+    // mainFrameID to a frame that had no URL, which doesn't make sense.
+    const events = await TraceLoader.rawEvents(this, 'wrong-main-frame-bug.json.gz');
+    for (const event of events) {
+      TraceModel.Handlers.ModelHandlers.Meta.handleEvent(event);
+    }
+    await TraceModel.Handlers.ModelHandlers.Meta.finalize();
+    const data = TraceModel.Handlers.ModelHandlers.Meta.data();
+    assert.strictEqual(data.mainFrameId, 'D1731088F5DE299149240DF9E6025291');
+  });
+
+  it('will use isOutermostMainFrame to determine the main frame from the TracingStartedInBrowser event if it is present',
+     async function() {
+       const events = await TraceLoader.rawEvents(this, 'web-dev-outermost-frames.json.gz');
+       for (const event of events) {
+         TraceModel.Handlers.ModelHandlers.Meta.handleEvent(event);
+       }
+       await TraceModel.Handlers.ModelHandlers.Meta.finalize();
+       const data = TraceModel.Handlers.ModelHandlers.Meta.data();
+       assert.strictEqual(data.mainFrameId, '881522AC20B813B0C0E99E27CEBAB951');
+     });
 });

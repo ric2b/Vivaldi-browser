@@ -107,6 +107,7 @@ class InlineItemsBuilderTemplate {
   // InlineLayoutAlgorithm.
   void AppendFloating(LayoutObject* layout_object);
   void AppendOutOfFlowPositioned(LayoutObject* layout_object);
+  void FlushPendingFloatsInRuby();
 
   // Append a character.
   // The character is opaque to space collapsing; i.e., spaces before this
@@ -193,6 +194,9 @@ class InlineItemsBuilderTemplate {
 
   const SvgTextChunkOffsets* text_chunk_offsets_;
 
+  uint32_t ruby_text_nesting_level_ = 0;
+  HeapVector<Member<LayoutObject>> pending_floats_in_ruby_;
+
   const bool is_text_combine_;
   bool has_bidi_controls_ = false;
   bool has_floats_ = false;
@@ -249,8 +253,6 @@ class InlineItemsBuilderTemplate {
   void AppendGeneratedBreakOpportunity(LayoutObject*);
 
   void Exit(LayoutObject*);
-
-  bool MayBeBidiEnabled() const;
 
   bool ShouldInsertBreakOpportunityAfterLeadingPreservedSpaces(
       StringView,

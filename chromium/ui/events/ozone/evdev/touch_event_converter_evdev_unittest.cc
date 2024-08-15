@@ -207,7 +207,9 @@ class FakeHeatmapPalmDetector : public HeatmapPalmDetector {
  public:
   FakeHeatmapPalmDetector() { palm_tracking_ids_.clear(); }
 
-  void Start(ModelId model_id, std::string_view hidraw_path) override {}
+  void Start(ModelId model_id,
+             std::string_view hidraw_path,
+             std::optional<CropHeatmap> crop_heatmap) override {}
 
   bool IsPalm(int tracking_id) const override {
     return palm_tracking_ids_.find(tracking_id) != palm_tracking_ids_.end();
@@ -373,9 +375,9 @@ void MockTouchEventConverterEvdev::ConfigureReadMock(struct input_event* queue,
   int nwrite = HANDLE_EINTR(write(write_pipe_,
                                   queue + queue_index,
                                   sizeof(struct input_event) * read_this_many));
-  DCHECK(nwrite ==
-         static_cast<int>(sizeof(struct input_event) * read_this_many))
-      << "write() failed, errno: " << errno;
+  DPCHECK(nwrite ==
+          static_cast<int>(sizeof(struct input_event) * read_this_many))
+      << "write() failed";
 }
 
 // Test fixture.

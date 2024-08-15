@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/modules/ml/buildflags.h"
 #include "third_party/blink/renderer/modules/ml/ml_context.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 
 namespace blink {
 
@@ -50,28 +51,36 @@ void ML::CreateWebNNContext(
 void ML::Trace(Visitor* visitor) const {
   visitor->Trace(model_loader_service_);
   visitor->Trace(webnn_context_provider_);
+  visitor->Trace(pending_resolvers_);
   ExecutionContextClient::Trace(visitor);
   ScriptWrappable::Trace(visitor);
 }
 
-ScriptPromiseTyped<MLContext> ML::createContext(
-    ScriptState* script_state,
-    MLContextOptions* options,
-    ExceptionState& exception_state) {
+ScriptPromise<MLContext> ML::createContext(ScriptState* script_state,
+                                           MLContextOptions* options,
+                                           ExceptionState& exception_state) {
   ScopedMLTrace scoped_trace("ML::createContext");
   if (!script_state->ContextIsValid()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "Invalid script state");
-    return ScriptPromiseTyped<MLContext>();
+    return ScriptPromise<MLContext>();
   }
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolverTyped<MLContext>>(
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<MLContext>>(
       script_state, exception_state.GetContext());
 
   auto promise = resolver->Promise();
 
   MLContext::ValidateAndCreate(resolver, options, this);
   return promise;
+}
+
+void ML::RecordPendingResolver(ScriptPromiseResolver<MLContext>* resolver) {
+  pending_resolvers_.insert(resolver);
+}
+
+void ML::RemovePendingResolver(ScriptPromiseResolver<MLContext>* resolver) {
+  pending_resolvers_.erase(resolver);
 }
 
 void ML::EnsureModelLoaderServiceConnection(ScriptState* script_state) {
@@ -90,6 +99,16 @@ void ML::EnsureModelLoaderServiceConnection(ScriptState* script_state) {
   }
 }
 
+void ML::OnWebNNServiceConnectionError() {
+  webnn_context_provider_.reset();
+
+  for (const auto& resolver : pending_resolvers_) {
+    resolver->RejectWithDOMException(DOMExceptionCode::kUnknownError,
+                                     "WebNN service connection error.");
+  }
+  pending_resolvers_.clear();
+}
+
 void ML::EnsureWebNNServiceConnection() {
   if (webnn_context_provider_.is_bound()) {
     return;
@@ -97,6 +116,8 @@ void ML::EnsureWebNNServiceConnection() {
   GetExecutionContext()->GetBrowserInterfaceBroker().GetInterface(
       webnn_context_provider_.BindNewPipeAndPassReceiver(
           GetExecutionContext()->GetTaskRunner(TaskType::kInternalDefault)));
+  webnn_context_provider_.set_disconnect_handler(WTF::BindOnce(
+      &ML::OnWebNNServiceConnectionError, WrapWeakPersistent(this)));
 }
 
 }  // namespace blink

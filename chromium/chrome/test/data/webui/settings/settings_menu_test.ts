@@ -7,7 +7,7 @@
 // clang-format off
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import type {SettingsMenuElement, SettingsRoutes} from 'chrome://settings/settings.js';
-import {buildRouter, loadTimeData, pageVisibility, Router} from 'chrome://settings/settings.js';
+import {resetRouterForTesting, loadTimeData, pageVisibility, Router} from 'chrome://settings/settings.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {isVisible} from 'chrome://webui-test/test_util.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
@@ -32,12 +32,7 @@ suite('SettingsMenu', function() {
 
   // Test that navigating via the paper menu always clears the current
   // search URL parameter.
-  test('clearsUrlSearchParam', function() {
-    // As of iron-selector 2.x, need to force iron-selector to update before
-    // clicking items on it, or wait for 'iron-items-changed'
-    const ironSelector = settingsMenu.$.menu;
-    ironSelector.forceSynchronousItemUpdate();
-
+  test('clearsUrlSearchParam', async () => {
     const urlParams = new URLSearchParams('search=foo');
     Router.getInstance().navigateTo(
         Router.getInstance().getRoutes().BASIC, urlParams);
@@ -45,12 +40,14 @@ suite('SettingsMenu', function() {
         urlParams.toString(),
         Router.getInstance().getQueryParameters().toString());
     settingsMenu.$.people.click();
+    await settingsMenu.$.menu.updateComplete;
     assertEquals('', Router.getInstance().getQueryParameters().toString());
   });
 
   test('openResetSection', function() {
     Router.getInstance().navigateTo(routes.RESET);
     const selector = settingsMenu.$.menu;
+    assertTrue(!!selector.selected);
     const path = new window.URL(selector.selected.toString()).pathname;
     assertEquals('/reset', path);
   });
@@ -58,12 +55,14 @@ suite('SettingsMenu', function() {
   test('navigateToAnotherSection', function() {
     Router.getInstance().navigateTo(routes.RESET);
     const selector = settingsMenu.$.menu;
+    assertTrue(!!selector.selected);
     let path = new window.URL(selector.selected.toString()).pathname;
     assertEquals('/reset', path);
 
     Router.getInstance().navigateTo(routes.PEOPLE);
     flush();
 
+    assertTrue(!!selector.selected);
     path = new window.URL(selector.selected.toString()).pathname;
     assertEquals('/people', path);
   });
@@ -71,6 +70,7 @@ suite('SettingsMenu', function() {
   test('navigateToBasic', function() {
     Router.getInstance().navigateTo(routes.RESET);
     const selector = settingsMenu.$.menu;
+    assertTrue(!!selector.selected);
     const path = new window.URL(selector.selected.toString()).pathname;
     assertEquals('/reset', path);
 
@@ -84,7 +84,7 @@ suite('SettingsMenu', function() {
   // <if expr="_google_chrome">
   test('navigateToGetMostChrome', function() {
     loadTimeData.overrideValues({showGetTheMostOutOfChromeSection: true});
-    Router.resetInstanceForTesting(buildRouter());
+    resetRouterForTesting();
     createSettingsMenu();
     Router.getInstance().navigateTo(routes.GET_MOST_CHROME);
     flush();
@@ -99,7 +99,7 @@ suite('SettingsMenu', function() {
 
   test('noExperimental', async function() {
     loadTimeData.overrideValues({showAdvancedFeaturesMainControl: false});
-    Router.resetInstanceForTesting(buildRouter());
+    resetRouterForTesting();
     createSettingsMenu();
     await flushTasks();
 
@@ -110,7 +110,7 @@ suite('SettingsMenu', function() {
 
   test('navigateToExperimental', async function() {
     loadTimeData.overrideValues({showAdvancedFeaturesMainControl: true});
-    Router.resetInstanceForTesting(buildRouter());
+    resetRouterForTesting();
     createSettingsMenu();
     Router.getInstance().navigateTo(routes.AI);
     await flushTasks();
@@ -120,6 +120,7 @@ suite('SettingsMenu', function() {
     assertTrue(isVisible(entry));
 
     const selector = settingsMenu.$.menu;
+    assertTrue(!!selector.selected);
     const path = new window.URL(selector.selected.toString()).pathname;
     assertEquals('/ai', path);
   });

@@ -17,7 +17,6 @@
 #include "chrome/browser/flags/jni_headers/ChromeFeatureMap_jni.h"
 #include "chrome/browser/notifications/chime/android/features.h"
 #include "chrome/browser/push_messaging/push_messaging_features.h"
-#include "chrome/browser/signin/signin_features.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome_feature_list.h"
@@ -25,6 +24,7 @@
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/browser_sync/browser_sync_switches.h"
 #include "components/browser_ui/photo_picker/android/features.h"
+#include "components/browsing_data/core/features.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/content_settings/core/common/features.h"
 #include "components/contextual_search/core/browser/contextual_search_field_trial.h"
@@ -52,6 +52,7 @@
 #include "components/query_tiles/switches.h"
 #include "components/reading_list/features/reading_list_switches.h"
 #include "components/safe_browsing/core/common/features.h"
+#include "components/saved_tab_groups/features.h"
 #include "components/search_engines/search_engines_switches.h"
 #include "components/segmentation_platform/public/features.h"
 #include "components/send_tab_to_self/features.h"
@@ -60,6 +61,7 @@
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/supervised_user/core/common/features.h"
 #include "components/sync/base/features.h"
+#include "components/viz/common/features.h"
 #include "components/webapps/browser/features.h"
 #include "content/public/common/content_features.h"
 #include "device/fido/features.h"
@@ -89,15 +91,18 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &autofill::features::kAutofillEnableLocalIban,
     &autofill::features::kAutofillEnableSecurityTouchEventFilteringAndroid,
     &autofill::features::kAutofillVirtualViewStructureAndroid,
-    &autofill::features::kAutofillEnablePaymentsMandatoryReauth,
     &autofill::features::kAutofillEnableMovingGPayLogoToTheRightOnClank,
     &autofill::features::kAutofillEnableCvcStorageAndFilling,
     &autofill::features::kAutofillEnableSaveCardLoadingAndConfirmation,
+    &autofill::features::kAutofillEnableSyncingOfPixBankAccounts,
     &autofill::features::kAutofillUpdateChromeSettingsLinkToGPayWeb,
+    &blink::features::kBackForwardTransitions,
     &blink::features::kForceWebContentsDarkMode,
     &blink::features::kPrerender2,
+    &browsing_data::features::kBrowsingDataModel,
     &commerce::kCommerceMerchantViewer,
     &commerce::kCommercePriceTracking,
+    &commerce::kPriceInsights,
     &commerce::kShoppingList,
     &commerce::kShoppingPDPMetrics,
     &content_settings::kDarkenWebsitesCheckboxInThemesSetting,
@@ -108,9 +113,9 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &download::features::kDownloadsMigrateToJobsAPI,
     &base::features::kCollectAndroidFrameTimelineMetrics,
     &download::features::kDownloadNotificationServiceUnifiedAPI,
+    &features::kAndroidBrowserControlsInViz,
     &features::kGenericSensorExtraClasses,
     &features::kBackForwardCache,
-    &features::kBackForwardTransitions,
     &features::kBoardingPassDetector,
     &features::kNetworkServiceInProcess,
     &features::kElasticOverscroll,
@@ -118,13 +123,13 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &features::kNotificationOneTapUnsubscribe,
     &features::kPrivacyGuideAndroid3,
     &features::kPrivacyGuidePreloadAndroid,
+    &features::kPrefetchBrowserInitiatedTriggers,
     &features::kPushMessagingDisallowSenderIDs,
     &features::kPwaUpdateDialogForIcon,
     &features::kQuietNotificationPrompts,
-    &features::kToolbarUseHardwareBitmapDraw,
     &features::kWebNfc,
-    &features::kIncognitoNtpRevamp,
     &feature_engagement::kIPHTabSwitcherButtonFeature,
+    &feed::kFeedContainment,
     &feed::kFeedDynamicColors,
     &feed::kFeedFollowUiUpdate,
     &feed::kFeedImageMemoryCacheSizePercentage,
@@ -136,7 +141,6 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &feed::kFeedUserInteractionReliabilityReport,
     &feed::kInterestFeedV2,
     &feed::kInterestFeedV2Hearts,
-    &feed::kWebFeed,
     &feed::kWebFeedAwareness,
     &feed::kWebFeedOnboarding,
     &feed::kWebFeedSort,
@@ -144,12 +148,10 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &history::kOrganicRepeatableQueries,
     &history_clusters::internal::kJourneys,
     &history_clusters::internal::kOmniboxAction,
-    &history_clusters::internal::kOmniboxHistoryClusterProvider,
     &kAdaptiveButtonInTopToolbarTranslate,
     &kAdaptiveButtonInTopToolbarAddToBookmarks,
     &kAdaptiveButtonInTopToolbarCustomizationV2,
     &kAddToHomescreenIPH,
-    &kAdvancedPeripheralsSupportTabStrip,
     &kRedirectExplicitCTAIntentsToExistingActivity,
     &kAllowNewIncognitoTabIntents,
     &kAndroidAppIntegration,
@@ -157,9 +159,13 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &kAndroidHatsRefactor,
     &kAndroidHub,
     &kAndroidImprovedBookmarks,
+    // Vivaldi
+    &kAndroidNewStartPage,
+    // End Vivaldi
     &kAndroidNoVisibleHintForDifferentTLD,
-    &kAndroidTabGroupStableIds,
-    &kAndroidVisibleUrlTruncationV2,
+    &kAndroidTabDeclutter,
+    &kAndroidTabDeclutterRescueKillswitch,
+    &kAndroidToolbarScrollAblation,
     &kAnimatedImageDragShadow,
     &kAppSpecificHistory,
     &kArchiveTabService,
@@ -169,28 +175,31 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &kBackGestureActivityTabProvider,
     &kBackGestureMoveToBackDuringStartup,
     &kBackGestureRefactorAndroid,
+    &kBackToHomeAnimation,
     &kBackgroundThreadPool,
     &kBlockIntentsWhileLocked,
     &kBrowserControlsEarlyResize,
     &kCacheActivityTaskID,
     &kCastDeviceFilter,
     &kClearOmniboxFocusAfterNavigation,
-    &kCreateNewTabInitializeRenderer,
+    &kCCTBeforeUnload,
     &kCCTClientDataHeader,
     &kCCTEmbedderSpecialBehaviorTrigger,
     &kCCTExtendTrustedCdnPublisher,
     &kCCTFeatureUsage,
+    &kCCTEphemeralMode,
     &kCCTIncognitoAvailableToThirdParty,
     &kCCTIntentFeatureOverrides,
     &kCCTMinimized,
     &kCCTMinimizedEnabledByDefault,
+    &kCCTNestedSecurityIcon,
     &kCCTPageInsightsHub,
     &kCCTPageInsightsHubBetterScroll,
     &kCCTGoogleBottomBar,
+    &kCCTPrewarmTab,
     &kCCTReportParallelRequestStatus,
     &kCCTResizableForThirdParties,
-    &kCCTResizableSideSheet,
-    &kCCTResizableSideSheetForThirdParties,
+    &kCCTRevampedBranding,
     &kCCTTabModalDialog,
     &kDataSharingAndroid,
     &kDefaultBrowserPromoAndroid,
@@ -200,28 +209,26 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &kChromeSurveyNextAndroid,
     &kCommandLineOnNonRooted,
     &kContextMenuTranslateWithGoogleLens,
-    &kContextMenuPopupForAllScreenSizes,
     &kContextMenuSysUiMatchesActivity,
     &kContextualSearchDisableOnlineDetection,
     &kContextualSearchSuppressShortView,
-    &kContextualSearchThinWebViewImplementation,
-    &kDeferTabSwitcherLayoutCreation,
     &kDelayTempStripRemoval,
     &kDragDropIntoOmnibox,
     &kDragDropTabTearing,
     &kDrawEdgeToEdge,
-    &kDrawEdgeToEdgeInsetsManagement,
     &kDrawNativeEdgeToEdge,
     &kDrawWebEdgeToEdge,
     &kDynamicTopChrome,
     &kExperimentsForAgsa,
+    &kFeedPositionAndroid,
     &kFocusOmniboxInIncognitoTabIntents,
+    &kForceListTabSwitcher,
     &kFullscreenInsetsApiMigration,
     &kFullscreenInsetsApiMigrationOnAutomotive,
     &kGridTabSwitcherAndroidAnimations,
+    &kGcmNativeBackgroundTask,
     &kIncognitoReauthenticationForAndroid,
     &kIncognitoScreenshot,
-    &kInstantStart,
     &kLensOnQuickActionSearchWidget,
     &kLogoPolish,
     &kMagicStackAndroid,
@@ -230,15 +237,13 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &kNewTabSearchEngineUrlAndroid,
     &kNotificationPermissionVariant,
     &kNotificationPermissionBottomSheet,
-    &kOpenDownloadDialog,
     &kPageAnnotationsService,
-    &kPaintPreviewNewColdStartHeuristic,
     &kPreconnectOnTabCreation,
     &kPriceChangeModule,
     &kPwaRestoreUi,
+    &kPwaRestoreUiAtStartup,
     &kOmahaMinSdkVersionAndroid,
     &kShortCircuitUnfocusAnimation,
-    &kOmniboxNoopEditUrlSuggestionClicks,
     &kPartnerCustomizationsUma,
     &kQuickDeleteForAndroid,
     &kQuickDeleteAndroidFollowup,
@@ -255,24 +260,25 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &kReportParentalControlSitesChild,
     &kSearchEnginesPromoV3,
     &kSearchInCCT,
+    &kSearchResumptionModuleAndroid,
     &kShowNtpAtStartupAndroid,
     &kShowScrollableMVTOnNTPAndroid,
     &kShowScrollableMVTOnNtpPhoneAndroid,
     &kSmallerTabStripTitleLimit,
-    &kFeedPositionAndroid,
-    &kSearchResumptionModuleAndroid,
+    &kStopAppIndexingReport,
     &kSuppressToolbarCaptures,
     &kTabDragDropAndroid,
     &kTabAndLinkDragDropAndroid,
-    &kTabStripGroupIndicatorsAndroid,
-    &kTabEngagementReportingAndroid,
     &kTabGroupPaneAndroid,
     &kTabGroupParityAndroid,
+    &kTabIdMapAndroid,
     &kTabletTabSwitcherLongPressMenu,
     &kTabletToolbarIncognitoStatus,
     &kTabletToolbarReordering,
     &kTabResumptionModuleAndroid,
     &kTabStateFlatBuffer,
+    &kTabStripGroupCollapseAndroid,
+    &kTabStripGroupIndicatorsAndroid,
     &kTabStripLayoutOptimization,
     &kTabStripStartupRefactoring,
     &kTabToGTSAnimation,
@@ -285,10 +291,8 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &kTotallyEdgeToEdge,
     &kSafetyHub,
     &kStartSurfaceAndroid,
-    &kStartSurfaceOnTablet,
     &kStartSurfaceReturnTime,
     &kAccountReauthenticationRecentTimeWindow,
-    &kStartSurfaceWithAccessibility,
     &kSurfacePolish,
     &kUmaBackgroundSessions,
     &kUseLibunwindstackNativeUnwinderAndroid,
@@ -296,50 +300,44 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &kVoiceSearchAudioCapturePolicy,
     &kWebOtpCrossDeviceSimpleString,
     &kWebApkAllowIconUpdate,
-    &kWebApkIconUpdateThreshold,
+    &features::kCookieDeprecationFacilitatedTesting,
     &features::kDnsOverHttps,
     &notifications::features::kUseChimeAndroidSdk,
     &paint_preview::kPaintPreviewDemo,
     &language::kCctAutoTranslate,
     &language::kDetailedLanguageSettings,
     &messages::kMessagesForAndroidSaveCard,
-    &omnibox::kMostVisitedTilesHorizontalRenderGroup,
-    &omnibox::kOmniboxAnswerActions,
-    &omnibox::kOmniboxMatchToolbarAndStatusBarColor,
-    &omnibox::kOmniboxModernizeVisualUpdate,
-    &omnibox::kOmniboxOnClobberFocusTypeOnContent,
-    &omnibox::kGroupingFrameworkForNonZPS,
-    &omnibox::kOmniboxShortcutsAndroid,
-    &omnibox::kQueryTilesInZPSOnNTP,
-    &omnibox::kSearchReadyOmniboxAllowQueryEdit,
-    &omnibox::kSuggestionAnswersColorReverse,
     &omnibox::kUpdatedConnectionSecurityIndicators,
-    &omnibox::kOmniboxTouchDownTriggerForPrefetch,
     &optimization_guide::features::kPushNotifications,
     &page_info::kPageInfoAboutThisSiteMoreLangs,
     &password_manager::features::kBiometricTouchToFill,
     &password_manager::features::kPasswordGenerationBottomSheet,
-    &password_manager::features::kRecoverFromNeverSaveAndroid,
     &password_manager::features::kSharedPasswordNotificationUI,
     &password_manager::features::
         kUnifiedPasswordManagerLocalPasswordsAndroidNoMigration,
     &password_manager::features::
         kUnifiedPasswordManagerLocalPasswordsMigrationWarning,
     &permissions::features::kPermissionsPromptSurvey,
+    &permissions::features::kPermissionDedicatedCpssSettingAndroid,
+    &plus_addresses::features::kPlusAddressesEnabled,
+    &privacy_sandbox::kFingerprintingProtectionSetting,
+    &privacy_sandbox::kIpProtectionV1,
     &privacy_sandbox::kIpProtectionUx,
     &privacy_sandbox::kPrivacySandboxAdsNoticeCCT,
-    &plus_addresses::features::kFeature,
     &privacy_sandbox::kPrivacySandboxFirstPartySetsUI,
+    &privacy_sandbox::kPrivacySandboxRelatedWebsiteSetsUi,
     &privacy_sandbox::kPrivacySandboxSettings4,
     &privacy_sandbox::kPrivacySandboxProactiveTopicsBlocking,
     &privacy_sandbox::kTrackingProtectionNoticeRequestTracking,
-    &privacy_sandbox::kTrackingProtectionSettingsPageRollbackNotice,
     &privacy_sandbox::kTrackingProtectionOnboardingSkipSecurePageCheck,
+    &privacy_sandbox::kTrackingProtectionSettingsLaunch,
+    &privacy_sandbox::kTrackingProtectionSettingsPageRollbackNotice,
+    &privacy_sandbox::kTrackingProtectionUserBypassPwa,
+    &privacy_sandbox::kTrackingProtectionUserBypassPwaTrigger,
     &query_tiles::features::kQueryTiles,
     &safe_browsing::kFriendlierSafeBrowsingSettingsEnhancedProtection,
     &safe_browsing::kFriendlierSafeBrowsingSettingsStandardProtection,
     &safe_browsing::kHashPrefixRealTimeLookups,
-    &safe_browsing::kRedInterstitialFacelift,
     &safe_browsing::kSafeBrowsingCallNewGmsApiOnStartup,
     &safe_browsing::kSafeBrowsingNewGmsApiForBrowseUrlDatabaseCheck,
     &safe_browsing::kSafeBrowsingNewGmsApiForSubresourceFilterCheck,
@@ -355,19 +353,19 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &switches::kForceStartupSigninPromo,
     &switches::kForceDisableExtendedSyncPromos,
     &switches::kSearchEngineChoice,
+    &switches::kPersistentSearchEngineChoiceImport,
     &switches::kSearchEnginePromoDialogRewrite,
     &switches::kSeedAccountsRevamp,
-    &syncer::kPassExplicitSyncPassphraseToGmsCore,
     &syncer::kReplaceSyncPromosWithSignInPromos,
     &syncer::kSyncAndroidLimitNTPPromoImpressions,
-    &syncer::kSyncDecoupleAddressPaymentSettings,
     &syncer::kSyncEnableContactInfoDataTypeInTransportMode,
-    &syncer::kSyncShowIdentityErrorsForSignedInUsers,
     &syncer::kWebApkBackupAndRestoreBackend,
-    &webapps::features::kAmbientBadgeSuppressFirstVisit,
+    &tab_groups::kAndroidTabGroupStableIds,
+    &tab_groups::kTabGroupSyncAndroid,
     &webapps::features::kPwaUniversalInstallUi,
     &webapps::features::kWebApkInstallFailureNotification,
     &network::features::kPrivateStateTokens,
+    &switches::kPersistentSearchEngineChoiceImport,
 };
 
 // static
@@ -387,11 +385,11 @@ static jlong JNI_ChromeFeatureMap_GetNativeMap(JNIEnv* env) {
 
 BASE_FEATURE(kAdaptiveButtonInTopToolbarTranslate,
              "AdaptiveButtonInTopToolbarTranslate",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kAdaptiveButtonInTopToolbarAddToBookmarks,
              "AdaptiveButtonInTopToolbarAddToBookmarks",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kAdaptiveButtonInTopToolbarCustomizationV2,
              "AdaptiveButtonInTopToolbarCustomizationV2",
@@ -400,10 +398,6 @@ BASE_FEATURE(kAdaptiveButtonInTopToolbarCustomizationV2,
 BASE_FEATURE(kAddToHomescreenIPH,
              "AddToHomescreenIPH",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kAdvancedPeripheralsSupportTabStrip,
-             "AdvancedPeripheralsSupportTabStrip",
-             base::FEATURE_DISABLED_BY_DEFAULT);  // Vivaldi Ref. VAB-8645
 
 BASE_FEATURE(kAllowNewIncognitoTabIntents,
              "AllowNewIncognitoTabIntents",
@@ -417,6 +411,11 @@ BASE_FEATURE(kFocusOmniboxInIncognitoTabIntents,
              "FocusOmniboxInIncognitoTabIntents",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Long-term flag for debugging only.
+BASE_FEATURE(kForceListTabSwitcher,
+             "ForceListTabSwitcher",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kAndroidAppIntegration,
              "AndroidAppIntegration",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -429,22 +428,32 @@ BASE_FEATURE(kAndroidHatsRefactor,
              "AndroidHatsRefactor",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kAndroidHub, "AndroidHub", base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kAndroidHub, "AndroidHub", base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi
 
 BASE_FEATURE(kAndroidImprovedBookmarks,
              "AndroidImprovedBookmarks",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Vivaldi
+BASE_FEATURE(kAndroidNewStartPage,
+             "AndroidNewStartPage",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+// End Vivaldi
+
 BASE_FEATURE(kAndroidNoVisibleHintForDifferentTLD,
              "AndroidNoVisibleHintForDifferentTLD",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kAndroidTabDeclutter,
+             "AndroidTabDeclutter",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kAndroidTabGroupStableIds,
-             "AndroidTabGroupStableIds",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kAndroidTabDeclutterRescueKillswitch,
+             "AndroidTabDeclutterRescueKillswitch",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kAndroidVisibleUrlTruncationV2,
-             "AndroidVisibleUrlTruncationV2",
+BASE_FEATURE(kAndroidToolbarScrollAblation,
+             "AndroidToolbarScrollAblation",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kAnimatedImageDragShadow,
@@ -492,9 +501,9 @@ BASE_FEATURE(kClearOmniboxFocusAfterNavigation,
              "ClearOmniboxFocusAfterNavigation",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kCreateNewTabInitializeRenderer,
-             "CreateNewTabInitializeRenderer",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kCCTBeforeUnload,
+             "CCTBeforeUnload",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kCCTClientDataHeader,
              "CCTClientDataHeader",
@@ -502,6 +511,10 @@ BASE_FEATURE(kCCTClientDataHeader,
 
 BASE_FEATURE(kCCTEmbedderSpecialBehaviorTrigger,
              "CCTEmbedderSpecialBehaviorTrigger",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kCCTEphemeralMode,
+             "CCTEphemeralMode",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kCCTExtendTrustedCdnPublisher,
@@ -526,6 +539,10 @@ BASE_FEATURE(kCCTMinimizedEnabledByDefault,
              "CCTMinimizedEnabledByDefault",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kCCTNestedSecurityIcon,
+             "CCTNestedSecurityIcon",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kCCTPageInsightsHub,
              "CCTPageInsightsHub",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -538,6 +555,10 @@ BASE_FEATURE(kCCTGoogleBottomBar,
              "CCTGoogleBottomBar",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kCCTPrewarmTab,
+             "CCTPrewarmTab",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kCCTReportParallelRequestStatus,
              "CCTReportParallelRequestStatus",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -546,17 +567,13 @@ BASE_FEATURE(kCCTResizableForThirdParties,
              "CCTResizableForThirdParties",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kCCTResizableSideSheet,
-             "CCTResizableSideSheet",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kCCTResizableSideSheetForThirdParties,
-             "CCTResizableSideSheetForThirdParties",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kCCTRevampedBranding,
+             "CCTRevampedBranding",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kCCTTabModalDialog,
              "CCTTabModalDialog",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kDontAutoHideBrowserControls,
              "DontAutoHideBrowserControls",
@@ -576,10 +593,6 @@ BASE_FEATURE(kChromeSurveyNextAndroid,
 
 BASE_FEATURE(kCommandLineOnNonRooted,
              "CommandLineOnNonRooted",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kContextMenuPopupForAllScreenSizes,
-             "ContextMenuPopupForAllScreenSizes",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kContextMenuSysUiMatchesActivity,
@@ -602,20 +615,12 @@ BASE_FEATURE(kContextualSearchSuppressShortView,
              "ContextualSearchSuppressShortView",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kContextualSearchThinWebViewImplementation,
-             "ContextualSearchThinWebViewImplementation",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kDataSharingAndroid,
              "DataSharingAndroid",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kDefaultBrowserPromoAndroid,
              "DefaultBrowserPromoAndroid",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kDeferTabSwitcherLayoutCreation,
-             "DeferTabSwitcherLayoutCreation",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kDelayTempStripRemoval,
@@ -638,10 +643,6 @@ BASE_FEATURE(kDrawEdgeToEdge,
              "DrawEdgeToEdge",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kDrawEdgeToEdgeInsetsManagement,
-             "DrawEdgeToEdgeInsetsManagement",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kDrawNativeEdgeToEdge,
              "DrawNativeEdgeToEdge",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -652,7 +653,7 @@ BASE_FEATURE(kDrawWebEdgeToEdge,
 
 BASE_FEATURE(kDynamicTopChrome,
              "DynamicTopChrome",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi
 
 BASE_FEATURE(kExperimentsForAgsa,
              "ExperimentsForAgsa",
@@ -666,8 +667,17 @@ BASE_FEATURE(kFullscreenInsetsApiMigrationOnAutomotive,
              "FullscreenInsetsApiMigrationOnAutomotive",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// TODO(b/330367117): This flag should be cleaned up when phase 1 of AndroidHub
+// launches as launching AndroidHub simplifies its removal.
 BASE_FEATURE(kGridTabSwitcherAndroidAnimations,
              "GridTabSwitcherAndroidAnimations",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// TODO(b/41490045): This flag should be cleaned up as soon as there is enough
+// data to prove that this reduces ANRs and doesn't significantly regress
+// notifications.
+BASE_FEATURE(kGcmNativeBackgroundTask,
+             "GcmNativeBackgroundTask",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kIncognitoReauthenticationForAndroid,
@@ -677,8 +687,6 @@ BASE_FEATURE(kIncognitoReauthenticationForAndroid,
 BASE_FEATURE(kIncognitoScreenshot,
              "IncognitoScreenshot",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kInstantStart, "InstantStart", base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kLogoPolish, "LogoPolish", base::FEATURE_DISABLED_BY_DEFAULT);
 
@@ -710,10 +718,6 @@ BASE_FEATURE(kPageAnnotationsService,
              "PageAnnotationsService",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kPaintPreviewNewColdStartHeuristic,
-             "PaintPreviewNewColdStartHeuristic",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kPreconnectOnTabCreation,
              "PreconnectOnTabCreation",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -723,6 +727,10 @@ BASE_FEATURE(kPriceChangeModule,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kPwaRestoreUi, "PwaRestoreUi", base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPwaRestoreUiAtStartup,
+             "PwaRestoreUiAtStartup",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kBackGestureActivityTabProvider,
              "BackGestureActivityTabProvider",
@@ -734,6 +742,10 @@ BASE_FEATURE(kBackGestureMoveToBackDuringStartup,
 
 BASE_FEATURE(kBackGestureRefactorAndroid,
              "BackGestureRefactorAndroid",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kBackToHomeAnimation,
+             "BackToHomeAnimation",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kOmahaMinSdkVersionAndroid,
@@ -742,14 +754,6 @@ BASE_FEATURE(kOmahaMinSdkVersionAndroid,
 
 BASE_FEATURE(kShortCircuitUnfocusAnimation,
              "ShortCircuitUnfocusAnimation",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kOmniboxNoopEditUrlSuggestionClicks,
-             "OmniboxNoopEditUrlSuggestionClicks",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kOpenDownloadDialog,
-             "OpenDownloadDialog",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kPartnerCustomizationsUma,
@@ -812,7 +816,7 @@ BASE_FEATURE(kReportParentalControlSitesChild,
 
 BASE_FEATURE(kShowNtpAtStartupAndroid,
              "ShowNtpAtStartupAndroid",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kShowScrollableMVTOnNTPAndroid,
              "ShowScrollableMVTOnNTPAndroid",
@@ -824,11 +828,15 @@ BASE_FEATURE(kShowScrollableMVTOnNtpPhoneAndroid,
 
 BASE_FEATURE(kSmallerTabStripTitleLimit,
              "SmallerTabStripTitleLimit",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kStopAppIndexingReport,
+             "StopAppIndexingReport",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSuppressToolbarCaptures,
              "SuppressToolbarCaptures",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi
 
 BASE_FEATURE(kTabDragDropAndroid,
              "TabDragDropAndroid",
@@ -836,11 +844,7 @@ BASE_FEATURE(kTabDragDropAndroid,
 
 BASE_FEATURE(kTabAndLinkDragDropAndroid,
              "TabAndLinkDragDropAndroid",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kTabEngagementReportingAndroid,
-             "TabEngagementReportingAndroid",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kTabGroupPaneAndroid,
              "TabGroupPaneAndroid",
@@ -850,13 +854,9 @@ BASE_FEATURE(kTabGroupParityAndroid,
              "TabGroupParityAndroid",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kTabStripGroupIndicatorsAndroid,
-             "TabStripGroupIndicatorsAndroid",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kTabStateFlatBuffer,
-             "TabStateFlatBuffer",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kTabIdMapAndroid,
+             "TabIdMapAndroid",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kTabletTabSwitcherLongPressMenu,
              "TabletTabSwitcherLongPressMenu",
@@ -868,6 +868,18 @@ BASE_FEATURE(kTabletToolbarIncognitoStatus,
 
 BASE_FEATURE(kTabletToolbarReordering,
              "TabletToolbarReordering",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kTabStateFlatBuffer,
+             "TabStateFlatBuffer",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kTabStripGroupCollapseAndroid,
+             "TabStripGroupCollapseAndroid",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kTabStripGroupIndicatorsAndroid,
+             "TabStripGroupIndicatorsAndroid",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kTabStripLayoutOptimization,
@@ -930,10 +942,6 @@ BASE_FEATURE(kSearchResumptionModuleAndroid,
              "SearchResumptionModuleAndroid",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kStartSurfaceOnTablet,
-             "StartSurfaceOnTablet",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kStartSurfaceReturnTime,
              "StartSurfaceReturnTime",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -942,11 +950,7 @@ BASE_FEATURE(kAccountReauthenticationRecentTimeWindow,
              "AccountReauthenticationRecentTimeWindow",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kStartSurfaceWithAccessibility,
-             "StartSurfaceWithAccessibility",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kSurfacePolish, "SurfacePolish", base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kSurfacePolish, "SurfacePolish", base::FEATURE_DISABLED_BY_DEFAULT);// Vivaldi Ref. VAB-9134
 
 BASE_FEATURE(kTabResumptionModuleAndroid,
              "TabResumptionModuleAndroid",
@@ -988,10 +992,6 @@ BASE_FEATURE(kWebOtpCrossDeviceSimpleString,
 BASE_FEATURE(kWebApkAllowIconUpdate,
              "WebApkAllowIconUpdate",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kWebApkIconUpdateThreshold,
-             "WebApkIconUpdateThreshold",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace android
 }  // namespace chrome

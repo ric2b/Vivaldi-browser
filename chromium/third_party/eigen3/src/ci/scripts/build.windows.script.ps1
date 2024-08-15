@@ -12,7 +12,9 @@ cmd.exe /c "`"${VS_INSTALL_DIR}\VC\Auxiliary\Build\vcvarsall.bat`" $EIGEN_CI_MSV
 
 # Create and enter build directory.
 $rootdir = Get-Location
-mkdir $EIGEN_CI_BUILDDIR
+if (-Not (Test-Path ${EIGEN_CI_BUILDDIR})) {
+    mkdir $EIGEN_CI_BUILDDIR
+}
 cd $EIGEN_CI_BUILDDIR
 
 # We need to split EIGEN_CI_ADDITIONAL_ARGS, otherwise they are interpretted

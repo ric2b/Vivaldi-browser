@@ -86,19 +86,21 @@ class TestTransformer : public TransformStreamTransformer {
                              TransformStreamDefaultController*,
                              ExceptionState&) {}
 
-  ScriptPromise Transform(v8::Local<v8::Value> chunk,
-                          TransformStreamDefaultController* controller,
-                          ExceptionState& exception_state) override {
+  ScriptPromise<IDLUndefined> Transform(
+      v8::Local<v8::Value> chunk,
+      TransformStreamDefaultController* controller,
+      ExceptionState& exception_state) override {
     TransformVoid(chunk, controller, exception_state);
-    return ScriptPromise::CastUndefined(script_state_.Get());
+    return ToResolvedUndefinedPromise(script_state_.Get());
   }
 
   virtual void FlushVoid(TransformStreamDefaultController*, ExceptionState&) {}
 
-  ScriptPromise Flush(TransformStreamDefaultController* controller,
-                      ExceptionState& exception_state) override {
+  ScriptPromise<IDLUndefined> Flush(
+      TransformStreamDefaultController* controller,
+      ExceptionState& exception_state) override {
     FlushVoid(controller, exception_state);
-    return ScriptPromise::CastUndefined(script_state_.Get());
+    return ToResolvedUndefinedPromise(script_state_.Get());
   }
 
   ScriptState* GetScriptState() override { return script_state_.Get(); }
@@ -132,12 +134,12 @@ class MockTransformStreamTransformer : public TransformStreamTransformer {
       : script_state_(script_state) {}
 
   MOCK_METHOD3(Transform,
-               ScriptPromise(v8::Local<v8::Value> chunk,
-                             TransformStreamDefaultController*,
-                             ExceptionState&));
+               ScriptPromise<IDLUndefined>(v8::Local<v8::Value> chunk,
+                                           TransformStreamDefaultController*,
+                                           ExceptionState&));
   MOCK_METHOD2(Flush,
-               ScriptPromise(TransformStreamDefaultController*,
-                             ExceptionState&));
+               ScriptPromise<IDLUndefined>(TransformStreamDefaultController*,
+                                           ExceptionState&));
 
   ScriptState* GetScriptState() override { return script_state_.Get(); }
 
@@ -179,7 +181,7 @@ TEST_F(TransformStreamTest, TransformIsCalled) {
 
   EXPECT_CALL(*mock, Transform(_, _, _))
       .WillOnce(
-          Return(ByMove(ScriptPromise::CastUndefined(scope.GetScriptState()))));
+          Return(ByMove(ToResolvedUndefinedPromise(scope.GetScriptState()))));
 
   // The initial read is needed to relieve backpressure.
   EvalWithPrintingError(&scope,
@@ -202,7 +204,7 @@ TEST_F(TransformStreamTest, FlushIsCalled) {
 
   EXPECT_CALL(*mock, Flush(_, _))
       .WillOnce(
-          Return(ByMove(ScriptPromise::CastUndefined(scope.GetScriptState()))));
+          Return(ByMove(ToResolvedUndefinedPromise(scope.GetScriptState()))));
 
   EvalWithPrintingError(&scope,
                         "const writer = writable.getWriter();\n"
@@ -414,12 +416,12 @@ TEST_F(TransformStreamTest, WaitInTransform) {
     explicit WaitInTransformTransformer(ScriptState* script_state)
         : TestTransformer(script_state),
           transform_promise_resolver_(
-              MakeGarbageCollected<ScriptPromiseResolverTyped<IDLUndefined>>(
+              MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
                   script_state)) {}
 
-    ScriptPromise Transform(v8::Local<v8::Value>,
-                            TransformStreamDefaultController*,
-                            ExceptionState&) override {
+    ScriptPromise<IDLUndefined> Transform(v8::Local<v8::Value>,
+                                          TransformStreamDefaultController*,
+                                          ExceptionState&) override {
       return transform_promise_resolver_->Promise();
     }
 
@@ -437,7 +439,7 @@ TEST_F(TransformStreamTest, WaitInTransform) {
     }
 
    private:
-    const Member<ScriptPromiseResolverTyped<IDLUndefined>>
+    const Member<ScriptPromiseResolver<IDLUndefined>>
         transform_promise_resolver_;
     bool flush_called_ = false;
   };
@@ -483,11 +485,11 @@ TEST_F(TransformStreamTest, WaitInFlush) {
     explicit WaitInFlushTransformer(ScriptState* script_state)
         : TestTransformer(script_state),
           flush_promise_resolver_(
-              MakeGarbageCollected<ScriptPromiseResolverTyped<IDLUndefined>>(
+              MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
                   script_state)) {}
 
-    ScriptPromise Flush(TransformStreamDefaultController*,
-                        ExceptionState&) override {
+    ScriptPromise<IDLUndefined> Flush(TransformStreamDefaultController*,
+                                      ExceptionState&) override {
       return flush_promise_resolver_->Promise();
     }
 
@@ -499,8 +501,7 @@ TEST_F(TransformStreamTest, WaitInFlush) {
     }
 
    private:
-    const Member<ScriptPromiseResolverTyped<IDLUndefined>>
-        flush_promise_resolver_;
+    const Member<ScriptPromiseResolver<IDLUndefined>> flush_promise_resolver_;
   };
 
   V8TestingScope scope;

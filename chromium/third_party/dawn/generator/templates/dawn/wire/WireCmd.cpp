@@ -84,8 +84,7 @@
         //* trusted boundary.
         {%- set Provider = ", provider" if member.type.may_have_dawn_object else "" -%}
         WIRE_TRY({{as_cType(member.type.name)}}Serialize({{in}}, &{{out}}, buffer{{Provider}}));
-    {%- elif member.type.category == "function pointer" or member.type.name.get() == "void *" -%}
-        //* Function pointers and explicit "void *" types (i.e. userdata) cannot be serialized.
+    {%- elif not is_wire_serializable(member.type) -%}
         if ({{in}} != nullptr) return WireResult::FatalError;
     {%- else -%}
         {{out}} = {{in}};
@@ -108,8 +107,7 @@
                 {%- endif -%}
             ));
         {%- endif -%}
-    {%- elif member.type.category == "function pointer" or member.type.name.get() == "void *" %}
-        //* Function pointers and explicit "void *" types (i.e. userdata) cannot be deserialized.
+    {%- elif not is_wire_serializable(member.type) %}
         {{out}} = nullptr;
     {%- elif member.type.name.get() == "size_t" -%}
         //* Deserializing into size_t requires check that the uint64_t used on the wire won't narrow.
@@ -146,8 +144,7 @@
         {% endif %}
 
         {% for member in members %}
-            //* Function pointers and explicit "void *" types (i.e. userdata) do not get serialized.
-            {% if member.type.category == "function pointer" or  member.type.name.get() == "void *" %}
+            {% if not is_wire_serializable(member.type) %}
                 {% continue %}
             {% endif %}
             //* Value types are directly in the command, objects being replaced with their IDs.
@@ -176,8 +173,7 @@
     {% endif %}
 
     //* Returns the required transfer size for `record` in addition to the transfer structure.
-    DAWN_DECLARE_UNUSED size_t {{Return}}{{name}}GetExtraRequiredSize(const {{Return}}{{name}}{{Cmd}}& record) {
-        DAWN_UNUSED(record);
+    DAWN_DECLARE_UNUSED size_t {{Return}}{{name}}GetExtraRequiredSize([[maybe_unused]] const {{Return}}{{name}}{{Cmd}}& record) {
         size_t result = 0;
 
         //* Gather how much space will be needed for the extension chain.
@@ -221,7 +217,7 @@
                         //* Structures might contain more pointers so we need to add their extra size as well.
                         {% if member.type.category == "structure" %}
                             for (decltype(memberLength) i = 0; i < memberLength; ++i) {
-                                {% do assert(member.annotation == "const*", "unhandled annotation: " + member.annotation) %}
+                                {% do assert(member.annotation == "const*" or member.annotation == "*", "unhandled annotation: " + member.annotation)%}
                                 result += {{as_cType(member.type.name)}}GetExtraRequiredSize(record.{{as_varName(member.name)}}[i]);
                             }
                         {% endif %}
@@ -242,12 +238,11 @@
     DAWN_DECLARE_UNUSED WireResult {{Return}}{{name}}Serialize(
         const {{Return}}{{name}}{{Cmd}}& record,
         {{Return}}{{name}}Transfer* transfer,
-        SerializeBuffer* buffer
+        [[maybe_unused]] SerializeBuffer* buffer
         {%- if record.may_have_dawn_object -%}
             , const ObjectIdProvider& provider
         {%- endif -%}
     ) {
-        DAWN_UNUSED(buffer);
         //* Handle special transfer members of methods.
         {% if is_cmd %}
             transfer->commandId = {{Return}}WireCmd::{{name}};
@@ -338,13 +333,11 @@
         {{Return}}{{name}}{{Cmd}}* record,
         const volatile {{Return}}{{name}}Transfer* transfer,
         DeserializeBuffer* deserializeBuffer,
-        DeserializeAllocator* allocator
+        [[maybe_unused]] DeserializeAllocator* allocator
         {%- if record.may_have_dawn_object -%}
             , const ObjectIdResolver& resolver
         {%- endif -%}
     ) {
-        DAWN_UNUSED(allocator);
-
         {% if is_cmd %}
             DAWN_ASSERT(transfer->commandId == {{Return}}WireCmd::{{name}});
         {% endif %}

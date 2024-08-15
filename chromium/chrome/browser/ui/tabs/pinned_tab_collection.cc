@@ -37,6 +37,10 @@ void PinnedTabCollection::CloseTab(TabModel* tab_model) {
   impl_->CloseTab(tab_model);
 }
 
+tabs::TabModel* PinnedTabCollection::GetTabAtIndex(size_t index) const {
+  return impl_->GetTabAtIndex(index);
+}
+
 bool PinnedTabCollection::ContainsTab(TabModel* tab_model) const {
   return impl_->ContainsTab(tab_model);
 }
@@ -50,7 +54,7 @@ bool PinnedTabCollection::ContainsCollection(TabCollection* collection) const {
 }
 
 std::optional<size_t> PinnedTabCollection::GetIndexOfTabRecursive(
-    TabModel* tab_model) const {
+    const TabModel* tab_model) const {
   return impl_->GetIndexOfTab(tab_model);
 }
 

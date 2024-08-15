@@ -281,7 +281,7 @@ void test_gpu_contractions() {
   gpu_float2.device(gpu_device) = gpu_float2.random() - gpu_float2.constant(0.5f);
 
   typedef Tensor<float, 2>::DimensionPair DimPair;
-  Eigen::array<DimPair, 1> dims(DimPair(1, 0));
+  Eigen::array<DimPair, 1> dims{DimPair(1, 0)};
   gpu_res_float.device(gpu_device) = gpu_float1.contract(gpu_float2, dims).cast<Eigen::half>();
   gpu_res_half.device(gpu_device) = gpu_float1.cast<Eigen::half>().contract(gpu_float2.cast<Eigen::half>(), dims);
 

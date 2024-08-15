@@ -99,6 +99,7 @@ struct packet_traits<std::complex<float> > : default_packet_traits {
     HasMax = 0,
     HasSqrt = 1,
     HasLog = 1,
+    HasExp = 1,
 #ifdef EIGEN_VECTORIZE_VSX
     HasBlend = 1,
 #endif
@@ -373,6 +374,11 @@ EIGEN_STRONG_INLINE Packet2cf psqrt<Packet2cf>(const Packet2cf& a) {
 template <>
 EIGEN_STRONG_INLINE Packet2cf plog<Packet2cf>(const Packet2cf& a) {
   return plog_complex<Packet2cf>(a);
+}
+
+template <>
+EIGEN_STRONG_INLINE Packet2cf pexp<Packet2cf>(const Packet2cf& a) {
+  return pexp_complex<Packet2cf>(a);
 }
 
 //---------- double ----------

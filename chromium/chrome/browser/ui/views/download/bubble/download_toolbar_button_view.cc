@@ -148,7 +148,6 @@ gfx::Insets GetSecurityViewMargin() {
   return gfx::Insets(ChromeLayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_RELATED_CONTROL_VERTICAL));
 }
-
 }  // namespace
 
 DownloadToolbarButtonView::DownloadToolbarButtonView(BrowserView* browser_view)
@@ -388,6 +387,11 @@ void DownloadToolbarButtonView::UpdateDownloadIcon(
   }
 }
 
+void DownloadToolbarButtonView::AnnounceAccessibleAlertNow(
+    const std::u16string& alert_text) {
+  GetViewAccessibility().AnnounceText(alert_text);
+}
+
 bool DownloadToolbarButtonView::IsFullscreenWithParentViewHidden() const {
 #if BUILDFLAG(IS_MAC)
   if (fullscreen_utils::IsInContentFullscreen(browser_)) {
@@ -574,7 +578,6 @@ DownloadBubbleRowView* DownloadToolbarButtonView::ShowPrimaryDialogRow(
   bubble_delegate_->SetButtons(ui::DIALOG_BUTTON_NONE);
   bubble_delegate_->SetDefaultButton(ui::DIALOG_BUTTON_NONE);
   bubble_delegate_->set_margins(GetPrimaryViewMargin());
-  ResizeDialog();
   return row;
 }
 
@@ -586,21 +589,12 @@ void DownloadToolbarButtonView::OpenSecurityDialog(
   }
   bubble_contents_->ShowSecurityPage(content_id);
   bubble_delegate_->set_margins(GetSecurityViewMargin());
-  ResizeDialog();
 }
 
 void DownloadToolbarButtonView::CloseDialog(
     views::Widget::ClosedReason reason) {
   if (bubble_delegate_) {
     bubble_delegate_->GetWidget()->CloseWithReason(reason);
-  }
-}
-
-void DownloadToolbarButtonView::ResizeDialog() {
-  // Resize may be called when there is no delegate, e.g. during bubble
-  // construction.
-  if (bubble_delegate_) {
-    bubble_delegate_->SizeToContents();
   }
 }
 
@@ -656,14 +650,9 @@ void DownloadToolbarButtonView::CreateBubbleDialogDelegate() {
             ImmersiveModeController::ANIMATE_REVEAL_YES);
   }
 
-  // If the IPH is showing, close it to avoid showing the download dialog over
-  // it.
-  browser_->window()->CloseFeaturePromo(
-      feature_engagement::kIPHDeepScanPromptRemovalFeature,
-      user_education::EndFeaturePromoReason::kAbortPromo);
-
   auto bubble_delegate = std::make_unique<views::BubbleDialogDelegate>(
-      this, views::BubbleBorder::TOP_RIGHT);
+      this, views::BubbleBorder::TOP_RIGHT, views::BubbleBorder::DIALOG_SHADOW,
+      /*autosize=*/true);
   bubble_delegate->SetTitle(
       l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_HEADER_LABEL));
   bubble_delegate->SetShowTitle(false);
@@ -779,12 +768,14 @@ void DownloadToolbarButtonView::BubbleCloser::OnEvent(const ui::Event& event) {
 }
 
 void DownloadToolbarButtonView::ShowIphPromo() {
-  Profile* profile = browser_->profile();
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  Profile* profile = browser_->profile();
   // Don't show IPH Promo if safe browsing level is set by policy.
-  if (!safe_browsing::SafeBrowsingPolicyHandler::
-          IsSafeBrowsingProtectionLevelSetByPolicy(profile->GetPrefs()) &&
-      safe_browsing::GetSafeBrowsingState(*profile->GetPrefs()) ==
+  if (safe_browsing::SafeBrowsingPolicyHandler::
+          IsSafeBrowsingProtectionLevelSetByPolicy(profile->GetPrefs())) {
+    return;
+  }
+  if (safe_browsing::GetSafeBrowsingState(*profile->GetPrefs()) ==
           safe_browsing::SafeBrowsingState::STANDARD_PROTECTION &&
       !profile->IsOffTheRecord() &&
       browser_->window()->MaybeShowFeaturePromo(
@@ -792,29 +783,6 @@ void DownloadToolbarButtonView::ShowIphPromo() {
     return;
   }
 #endif
-
-  // Notify users that we're removing the ESB deep scanning
-  // prompt. Users should only see the prompt if:
-  // - They're not incognito, since we don't want to imply deep scans
-  //   happen incognito
-  // - They're ESB users, since this isn't relevant to SSB users
-  // - They didn't opt-in with the friendlier settings strings, since
-  //   then they should know this is possible.
-  // - chrome://settings/security currently shows the friendlier
-  //   settings strings, so that clicking "Settings" on the IPH would
-  //   show them strings saying this is possible.
-  if (!profile->IsOffTheRecord() &&
-      safe_browsing::IsEnhancedProtectionEnabled(*profile->GetPrefs()) &&
-      !profile->GetPrefs()->GetBoolean(
-          prefs::kSafeBrowsingEsbOptInWithFriendlierSettings) &&
-      base::FeatureList::IsEnabled(
-          safe_browsing::kFriendlierSafeBrowsingSettingsEnhancedProtection) &&
-      browser_->window()->MaybeShowFeaturePromo(
-          feature_engagement::kIPHDeepScanPromptRemovalFeature)) {
-    profile->GetPrefs()->SetBoolean(
-        prefs::kSafeBrowsingAutomaticDeepScanningIPHSeen, true);
-    return;
-  }
 }
 
 void DownloadToolbarButtonView::OnPartialViewClosed() {
@@ -917,8 +885,8 @@ void DownloadToolbarButtonView::CloseAutofillPopup() {
   }
   if (auto* autofill_client =
           autofill::ContentAutofillClient::FromWebContents(web_contents)) {
-    autofill_client->HideAutofillPopup(
-        autofill::PopupHidingReason::kOverlappingWithAnotherPrompt);
+    autofill_client->HideAutofillSuggestions(
+        autofill::SuggestionHidingReason::kOverlappingWithAnotherPrompt);
   }
 }
 
@@ -960,8 +928,6 @@ void DownloadToolbarButtonView::UpdateIconDormant() {
 void DownloadToolbarButtonView::OnAnyRowRemoved() {
   if (bubble_contents_->info().row_list_view_info().rows().empty()) {
     CloseDialog(views::Widget::ClosedReason::kUnspecified);
-  } else {
-    ResizeDialog();
   }
 }
 

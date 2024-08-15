@@ -142,7 +142,7 @@ IndexedDBTransaction::IndexedDBTransaction(
 
   locks_receiver_.SetUserData(
       IndexedDBLockRequestData::kKey,
-      std::make_unique<IndexedDBLockRequestData>(connection->client_token()));
+      std::make_unique<IndexedDBLockRequestData>(connection->client_id()));
 
   database_ = connection_->database();
   if (database_) {
@@ -309,8 +309,8 @@ bool IndexedDBTransaction::IsTransactionBlockingOtherClients() const {
                       if (!lock_request_data) {
                         return true;
                       }
-                      return lock_request_data->client_token !=
-                             connection_->client_token();
+                      return lock_request_data->client_id !=
+                             connection_->client_id();
                     })) {
       return true;
     }
@@ -437,7 +437,7 @@ void IndexedDBTransaction::Put(
       std::make_unique<IndexedDBDatabase::PutOperationParams>());
   IndexedDBValue& output_value = params->value;
 
-  // TODO(crbug.com/902498): Use mojom traits to map directly to
+  // TODO(crbug.com/41424769): Use mojom traits to map directly to
   // std::string.
   output_value.bits =
       std::string(input_value->bits.begin(), input_value->bits.end());

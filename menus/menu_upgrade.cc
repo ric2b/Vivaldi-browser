@@ -176,7 +176,7 @@ bool MenuUpgrade::AddFromBundle(const base::Value::Dict& bundle_dict,
     if (!FindNodeByGuid(profile_list, *guid)) {
       // Any children of bundle_dict must be added recursivly so that we can
       // test if they should be added.
-      if (const base::Value::List* children = bundle_dict.FindList("children")) {
+      if (bundle_dict.FindList("children")) {
         base::Value::Dict copy(bundle_dict.Clone());
         base::Value::List empty;
         copy.Set("children", std::move(empty));

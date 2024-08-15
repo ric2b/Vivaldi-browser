@@ -62,7 +62,7 @@ _TEMPLATE_LOADER = jinja2.FileSystemLoader(
 _TEMPLATE_ENV = jinja2.Environment(loader=_TEMPLATE_LOADER)
 _TEMPLATE_ISSUE_TITLE = jinja2.Template(
     '[{{ group.subscription_name }}]: '
-    '{{ regressions|length }} regressions in {{ group.name }}')
+    '[{{ regressions|length }}] regressions in {{ group.name }}')
 _TEMPLATE_ISSUE_CONTENT = _TEMPLATE_ENV.get_template(
     'alert_groups_bug_description.j2')
 _TEMPLATE_ISSUE_COMMENT = _TEMPLATE_ENV.get_template(
@@ -656,7 +656,10 @@ class AlertGroupWorkflow:
         self._GetTemplateArgs(all_regressions))
     comment = None
     if new_regression_notification:
-      comment = _TEMPLATE_ISSUE_COMMENT.render(self._GetTemplateArgs(added))
+      template_args = self._GetTemplateArgs(added)
+      skia_args = self._GetSkiaTemplateArgs(added)
+      template_args.update(skia_args)
+      comment = _TEMPLATE_ISSUE_COMMENT.render(template_args)
     components, cc, labels = self._ComputeBugUpdate(subscriptions, added)
     perf_issue_service_client.PostIssueComment(
         self._group.bug.bug_id,
@@ -1173,7 +1176,10 @@ class AlertGroupWorkflow:
     # Simultaneously trigger the pinpoint job in skia.
     # We currently ignore the result, just to collect data.
     try:
-      results = self._pinpoint.NewJobInSkia(pp_request)
+      improve_dir = self._GetImprovementDirection(regression)
+      skia_pp_req = pinpoint_service.UpdateSkiaBisectionRequest(pp_request,
+                                                                improve_dir)
+      results = self._pinpoint.NewJobInSkia(skia_pp_req)
       logging.info('[Pinpoint Skia] Triggering %s', results)
     except Exception as e: # pylint: disable=broad-except
       # Caught all exceptions as we only need to trigger and log the runs.

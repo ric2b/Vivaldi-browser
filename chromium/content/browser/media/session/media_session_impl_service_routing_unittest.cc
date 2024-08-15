@@ -104,6 +104,8 @@ class MockMediaSessionPlayerObserver : public MediaSessionPlayerObserver {
            audio_video_state_ == MediaAudioVideoState::kAudioVideo;
   }
 
+  bool IsPaused(int player_id) const override { return false; }
+
   std::string GetAudioOutputSinkId(int player_id) const override { return ""; }
 
   bool SupportsAudioOutputDeviceSwitching(int player_id) const override {
@@ -142,6 +144,8 @@ class MediaSessionImplServiceRoutingTest
     actions_.insert(MediaSessionAction::kStop);
     actions_.insert(MediaSessionAction::kSeekTo);
     actions_.insert(MediaSessionAction::kScrubTo);
+    actions_.insert(MediaSessionAction::kSeekForward);
+    actions_.insert(MediaSessionAction::kSeekBackward);
   }
 
   ~MediaSessionImplServiceRoutingTest() override = default;

@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: breakages-and-flakes
 title: Breakage and Flake Policy
 ---
@@ -77,7 +77,7 @@ of every 1000 builds. This may seem harmless at first, but lets run
 some numbers:
 
 * Assume that the commit queue spawns 100 builds (which is close to
-  the actual number of builders spawed by the CQ as of this time of
+  the actual number of builders spawned by the CQ as of this time of
   writing).
 
 * Next, assume that we have 300 developers committing to the tree
@@ -114,8 +114,8 @@ If the sheriff or on-call staff reaches out to you to help with
 solving a flake, please **treat this as a high priority issue**, and
 don't forget that a revert is always preferred over a forward fix.
 
-[chumped]: contributing.md#chumping
-[CL]: glossary.md#acronyms
-[commit queue]: cros_commit_pipeline.md
-[Parallel CQ]: cros_commit_pipeline.md#parallel-cq
-[post-submit]: cros_commit_pipeline.md#post-submit-builders
+[chumped]: /chromium-os/developer-library/guides/development/contributing/#chumping
+[CL]: /chromium-os/developer-library/glossary/#acronyms
+[commit queue]: /chromium-os/developer-library/reference/development/cros-commit-pipeline/
+[Parallel CQ]: /chromium-os/developer-library/reference/development/cros-commit-pipeline/#parallel-cq
+[post-submit]: /chromium-os/developer-library/reference/development/cros-commit-pipeline/#post-submit-builders

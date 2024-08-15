@@ -17,3 +17,15 @@ export function isSeaPenEnabled() {
 export function isSeaPenTextInputEnabled() {
   return loadTimeData.getBoolean('isSeaPenTextInputEnabled');
 }
+
+export function isSeaPenUINextEnabled() {
+  return loadTimeData.getBoolean('isSeaPenUINextEnabled');
+}
+
+export function isSeaPenEnterpriseEnabled() {
+  return loadTimeData.getBoolean('isSeaPenEnterpriseEnabled');
+}
+
+export function isLacrosEnabled() {
+  return loadTimeData.getBoolean('isLacrosEnabled');
+}

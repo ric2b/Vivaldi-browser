@@ -6,13 +6,13 @@
 
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
-#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
 #include "components/password_manager/core/browser/http_password_store_migrator.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/password_store/password_store_interface.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #include "url/gurl.h"
 
 namespace password_manager {
@@ -72,8 +72,7 @@ void HttpCredentialCleaner::OnHSTSQueryResult(
     FormKey key,
     HSTSResult hsts_result) {
   ++processed_results_;
-  base::ScopedClosureRunner report(base::BindOnce(
-      &HttpCredentialCleaner::SetPrefIfDone, base::Unretained(this)));
+  absl::Cleanup report = [this] { SetPrefIfDone(); };
 
   if (hsts_result == HSTSResult::kError)
     return;
@@ -91,7 +90,7 @@ void HttpCredentialCleaner::OnHSTSQueryResult(
       // Migrate credentials to HTTPS, by moving them.
       store_->AddLogin(
           HttpPasswordStoreMigrator::MigrateHttpFormToHttps(*form));
-      store_->RemoveLogin(*form);
+      store_->RemoveLogin(FROM_HERE, *form);
     }
     return;
   }
@@ -105,7 +104,7 @@ void HttpCredentialCleaner::OnHSTSQueryResult(
                 : HttpCredentialType::kHasEquivalentHttpsWithoutHsts);
     if (is_hsts) {
       // This HTTP credential is no more used.
-      store_->RemoveLogin(*form);
+      store_->RemoveLogin(FROM_HERE, *form);
     }
   } else {
     base::UmaHistogramEnumeration(

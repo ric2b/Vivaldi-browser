@@ -82,6 +82,16 @@ struct test_tensor_ostream_impl<std::complex<Scalar>, 2, Layout> {
     std::ostringstream os;
     os << t.format(Eigen::TensorIOFormat::Plain());
     VERIFY(os.str() == " (1,2) (12,3)\n(-4,2)  (0,5)\n(-1,4) (5,27)");
+
+    os.str("");
+    os.clear();
+    os << t.format(Eigen::TensorIOFormat::Numpy());
+    VERIFY(os.str() == "[[ 1+2j 12+3j]\n [-4+2j  0+5j]\n [-1+4j 5+27j]]");
+
+    os.str("");
+    os.clear();
+    os << t.format(Eigen::TensorIOFormat::Native());
+    VERIFY(os.str() == "{{ {1, 2}, {12, 3}},\n {{-4, 2},  {0, 5}},\n {{-1, 4}, {5, 27}}}");
   }
 };
 

@@ -40,7 +40,8 @@ namespace tint::ast::transform {
 /// `matNxM<f16>` matrices are the only type that violate std140-layout, this transformation is
 /// sufficient to have any WGSL structure be std140-layout conformant.
 ///
-/// @note This transform requires the PromoteSideEffectsToDecl transform to have been run first.
+/// @note This transform requires the DirectVariableAccess and PromoteSideEffectsToDecl transforms
+/// to have been run first.
 class Std140 final : public Castable<Std140, Transform> {
   public:
     /// Constructor

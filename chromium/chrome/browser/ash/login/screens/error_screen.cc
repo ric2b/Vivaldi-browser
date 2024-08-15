@@ -25,7 +25,6 @@
 #include "chrome/browser/ash/login/ui/login_web_dialog.h"
 #include "chrome/browser/ash/login/ui/webui_login_view.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
-#include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/ash/connectivity_diagnostics_dialog.h"
@@ -40,6 +39,7 @@
 #include "chromeos/ash/components/network/network_connection_handler.h"
 #include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
+#include "chromeos/ash/components/settings/cros_settings.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_names.h"
@@ -108,6 +108,10 @@ void ErrorScreen::AllowGuestSignin(bool allowed) {
   }
 }
 
+void ErrorScreen::DisallowOfflineLogin() {
+  ShowOfflineLoginOption(false);
+}
+
 void ErrorScreen::ShowOfflineLoginOption(bool show) {
   if (view_) {
     view_->SetOfflineSigninAllowed(show);
@@ -123,10 +127,12 @@ void ErrorScreen::OnOfflineLoginClicked() {
   LoginDisplayHost::default_host()->StartWizard(OfflineLoginView::kScreenId);
 }
 
+// static
 void ErrorScreen::AllowOfflineLogin(bool allowed) {
   g_offline_login_allowed_ = allowed;
 }
 
+// static
 void ErrorScreen::AllowOfflineLoginPerUser(bool allowed) {
   g_offline_login_per_user_allowed_ = allowed;
 }
@@ -269,7 +275,7 @@ void ErrorScreen::ShowNetworkErrorMessage(NetworkStateInformer::State state,
   // No need to show the screen again if it is already shown.
   if (is_hidden()) {
     SetUIState(NetworkError::UI_STATE_SIGNIN);
-    Show(nullptr /*wizard_context*/);
+    Show(/*wizard_context=*/nullptr);
   }
 }
 

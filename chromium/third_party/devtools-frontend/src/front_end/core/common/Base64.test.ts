@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const {assert} = chai;
-
 import * as Common from './common.js';
 
 describe('Base64 decoder', () => {
@@ -26,5 +24,18 @@ describe('Base64 decoder', () => {
 
   it('decodes correctly without padding', () => {
     decode('ABCDEF');  // Unpadded: QUJDREVG
+  });
+});
+
+describe('Base64 encoder', () => {
+  it('encodes ArrayBuffers correctly', async () => {
+    const buffer1 = new Uint8Array([0]);
+    assert.strictEqual(await Common.Base64.encode(buffer1), 'AA==');
+
+    const buffer2 = new Uint8Array([0, 1]);
+    assert.strictEqual(await Common.Base64.encode(buffer2), 'AAE=');
+
+    const buffer3 = new Uint8Array([0, 1, 2]);
+    assert.strictEqual(await Common.Base64.encode(buffer3), 'AAEC');
   });
 });

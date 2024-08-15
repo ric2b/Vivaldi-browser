@@ -34,7 +34,7 @@ class LegacyBookmarkModel;
 
 @end
 
-// TODO(crbug.com/1405746): Refactor all the methods in this protocol after the
+// TODO(crbug.com/40252439): Refactor all the methods in this protocol after the
 // view controller has been refactored. View controller should not know about
 // BookmarkNode.
 // Data source protocol to get data on demand.

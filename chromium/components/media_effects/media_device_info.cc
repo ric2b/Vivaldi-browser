@@ -26,6 +26,18 @@ std::optional<std::string> GetRealDefaultDeviceId(
   return std::nullopt;
 }
 
+std::optional<std::string> GetRealCommunicationsDeviceId(
+    const std::vector<media::AudioDeviceDescription>& infos) {
+  for (const auto& info : infos) {
+    if (info.is_communications_device &&
+        !media::AudioDeviceDescription::IsCommunicationsDevice(
+            info.unique_id)) {
+      return info.unique_id;
+    }
+  }
+  return std::nullopt;
+}
+
 std::vector<std::string> GetRealAudioDeviceNames(
     const std::vector<media::AudioDeviceDescription>& infos) {
   std::vector<std::string> real_names;
@@ -135,6 +147,16 @@ const std::optional<std::vector<media::VideoCaptureDeviceInfo>>&
 MediaDeviceInfo::GetVideoDeviceInfos() const {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   return video_device_infos_;
+}
+
+void MediaDeviceInfo::GetAudioInputStreamParameters(
+    const std::string& device_id,
+    audio::mojom::SystemInfo::GetInputStreamParametersCallback callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (audio_system_info_) {
+    audio_system_info_->GetInputStreamParameters(device_id,
+                                                 std::move(callback));
+  }
 }
 
 void MediaDeviceInfo::AddObserver(Observer* observer) {

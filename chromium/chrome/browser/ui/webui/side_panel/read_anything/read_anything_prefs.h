@@ -36,8 +36,11 @@ inline constexpr char kAccessibilityReadAnythingLineSpacing[] =
 inline constexpr char kAccessibilityReadAnythingLetterSpacing[] =
     "settings.a11y.read_anything.letter_spacing";
 
-// Map to represent the user's preferred voice per language for reading aloud.
-// TODO(crbug.com/1474951): Rename to kAccessibilityReadAnythingVoices
+// String to represent the user's preferred voice for reading aloud.
+// With auto voice switching on, it's a map to represent the user's preferred
+// voice per language for reading aloud.
+// TODO(crbug.com/40927698): Rename to kAccessibilityReadAnythingVoices when we
+// enable automatic voice switching.
 inline constexpr char kAccessibilityReadAnythingVoiceName[] =
     "settings.a11y.read_anything.voice_name";
 
@@ -60,6 +63,11 @@ inline constexpr char kAccessibilityReadAnythingOmniboxIconLabelShownCount[] =
 
 inline constexpr char kAccessibilityReadAnythingLinksEnabled[] =
     "settings.a11y.read_anything.links_enabled";
+
+// List of strings to represent the user's preferred
+// languages for the read anything UI.
+inline constexpr char kAccessibilityReadAnythingLanguagesEnabled[] =
+    "settings.a11y.read_anything.languages_enabled";
 
 }  // namespace prefs
 

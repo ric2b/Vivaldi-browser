@@ -6,6 +6,8 @@ import("//testing/test.gni")
 
 source_set("browser") {
   sources = [
+    "features.cc",
+    "features.h",
     "layout_shift_normalization.cc",
     "layout_shift_normalization.h",
     "metrics_lifecycle_observer.cc",
@@ -14,6 +16,8 @@ source_set("browser") {
     "metrics_navigation_throttle.h",
     "metrics_web_contents_observer.cc",
     "metrics_web_contents_observer.h",
+    "navigation_handle_user_data.cc",
+    "navigation_handle_user_data.h",
     "observers/assert_page_load_metrics_observer.cc",
     "observers/assert_page_load_metrics_observer.h",
     "observers/back_forward_cache_page_load_metrics_observer.cc",
@@ -77,6 +81,7 @@ source_set("browser") {
     "responsiveness_metrics_normalization.h",
   ]
   deps = [
+    "//base",
     "//build:chromeos_buildflags",
     "//components/keyed_service/content:content",
     "//components/keyed_service/core:core",

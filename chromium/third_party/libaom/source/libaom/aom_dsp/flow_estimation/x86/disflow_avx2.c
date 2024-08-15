@@ -145,7 +145,7 @@ static INLINE void compute_flow_vector(const uint8_t *src, const uint8_t *ref,
     // for a total of 11 pixels. Here we load 16 pixels, but only use
     // the first 11.
     __m256i row =
-        _mm256_loadu2_m128i((__m128i *)(ref_row + stride), (__m128i *)ref_row);
+        yy_loadu2_128((__m128i *)(ref_row + stride), (__m128i *)ref_row);
 
     // Expand pixels to int16s
     // We must use unpacks here, as we have one row in each 128-bit lane
@@ -273,8 +273,8 @@ static INLINE void sobel_filter(const uint8_t *src, int src_stride, int16_t *dx,
 
   // Loop setup: Load the first two rows (of 10 input rows) and apply
   // the horizontal parts of the two filters
-  __m256i row_m1_0 = _mm256_loadu2_m128i((__m128i *)(src - 1),
-                                         (__m128i *)(src - src_stride - 1));
+  __m256i row_m1_0 =
+      yy_loadu2_128((__m128i *)(src - 1), (__m128i *)(src - src_stride - 1));
   __m256i row_m1_0_a = _mm256_unpacklo_epi8(row_m1_0, zero);
   __m256i row_m1_0_b =
       _mm256_unpacklo_epi8(_mm256_srli_si256(row_m1_0, 1), zero);
@@ -293,8 +293,8 @@ static INLINE void sobel_filter(const uint8_t *src, int src_stride, int16_t *dx,
   for (int i = 0; i < DISFLOW_PATCH_SIZE; i += 2) {
     // Load rows (i+1, i+2) and apply both horizontal filters
     const __m256i row_p1_p2 =
-        _mm256_loadu2_m128i((__m128i *)(src + (i + 2) * src_stride - 1),
-                            (__m128i *)(src + (i + 1) * src_stride - 1));
+        yy_loadu2_128((__m128i *)(src + (i + 2) * src_stride - 1),
+                      (__m128i *)(src + (i + 1) * src_stride - 1));
     const __m256i row_p1_p2_a = _mm256_unpacklo_epi8(row_p1_p2, zero);
     const __m256i row_p1_p2_b =
         _mm256_unpacklo_epi8(_mm256_srli_si256(row_p1_p2, 1), zero);

@@ -31,6 +31,10 @@ TEST(NinjaBundleDataTargetWriter, Run) {
       SourceFile("//foo/Foo.xcassets/foo.imageset/FooIcon-29@2x.png"));
   bundle_data.sources().push_back(
       SourceFile("//foo/Foo.xcassets/foo.imageset/FooIcon-29@3x.png"));
+  bundle_data.sources().push_back(
+      SourceFile("//foo/Foo.xcassets/file/with/no/known/pattern"));
+  bundle_data.sources().push_back(
+      SourceFile("//foo/Foo.xcassets/nested/bar.xcassets/my/file"));
   bundle_data.action_values().outputs() = SubstitutionList::MakeForTest(
       "{{bundle_resources_dir}}/{{source_file_part}}");
   bundle_data.SetToolchain(setup.toolchain());
@@ -50,7 +54,9 @@ TEST(NinjaBundleDataTargetWriter, Run) {
       "../../foo/Foo.xcassets/foo.imageset/Contents.json "
       "../../foo/Foo.xcassets/foo.imageset/FooIcon-29.png "
       "../../foo/Foo.xcassets/foo.imageset/FooIcon-29@2x.png "
-      "../../foo/Foo.xcassets/foo.imageset/FooIcon-29@3x.png\n";
+      "../../foo/Foo.xcassets/foo.imageset/FooIcon-29@3x.png "
+      "../../foo/Foo.xcassets/file/with/no/known/pattern "
+      "../../foo/Foo.xcassets/nested/bar.xcassets/my/file\n";
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str);
 }

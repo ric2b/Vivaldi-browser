@@ -10,6 +10,7 @@
 #include "ash/components/arc/arc_features.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
+#include "ash/display/refresh_rate_controller.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/quick_pair/keyed_service/quick_pair_mediator.h"
@@ -21,13 +22,12 @@
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/functional/callback.h"
+#include "base/memory/ptr_util.h"
 #include "base/scoped_observation.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/ash/app_list/app_list_client_impl.h"
 #include "chrome/browser/ash/arc/util/arc_window_watcher.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
-#include "chrome/browser/ash/display/refresh_rate_controller.h"
-#include "chrome/browser/ash/game_mode/game_mode_controller.h"
 #include "chrome/browser/ash/geolocation/system_geolocation_source.h"
 #include "chrome/browser/ash/growth/campaigns_manager_client_impl.h"
 #include "chrome/browser/ash/growth/campaigns_manager_session.h"
@@ -82,6 +82,8 @@
 #include "chrome/browser/ui/views/select_file_dialog_extension_factory.h"
 #include "chrome/browser/ui/views/tabs/tab_scrubber_chromeos.h"
 #include "chromeos/ash/components/dbus/dbus_thread_manager.h"
+#include "chromeos/ash/components/dbus/resourced/resourced_client.h"
+#include "chromeos/ash/components/game_mode/game_mode_controller.h"
 #include "chromeos/ash/components/geolocation/simple_geolocation_provider.h"
 #include "chromeos/ash/components/heatmap/heatmap_palm_detector_impl.h"
 #include "chromeos/ash/components/network/network_connect.h"
@@ -108,6 +110,8 @@
 namespace {
 ChromeBrowserMainExtraPartsAsh* g_instance = nullptr;
 }  // namespace
+
+using GameMode = ash::ResourcedClient::GameMode;
 
 namespace internal {
 
@@ -204,16 +208,6 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
     } else {
       video_conference_tray_controller_ =
           std::make_unique<ash::FakeVideoConferenceTrayController>();
-    }
-  }
-
-  if (chromeos::features::IsMahiEnabled()) {
-    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-            chromeos::switches::kUseFakeMahiManager)) {
-      mahi_manager_ = std::make_unique<ash::FakeMahiManager>(
-          /*enable_callback_delays_for_animations=*/true);
-    } else {
-      mahi_manager_ = std::make_unique<ash::MahiManagerImpl>();
     }
   }
 
@@ -385,8 +379,6 @@ void ChromeBrowserMainExtraPartsAsh::PostProfileInit(Profile* profile,
   }
 
   ash_web_view_factory_ = std::make_unique<AshWebViewFactoryImpl>();
-  bool force_throttle = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      ash::switches::kForceRefreshRateThrottle);
 
   if (auto* picker_controller = ash::Shell::Get()->picker_controller()) {
     picker_client_ = std::make_unique<PickerClientImpl>(
@@ -396,10 +388,12 @@ void ChromeBrowserMainExtraPartsAsh::PostProfileInit(Profile* profile,
   oobe_dialog_util_ = std::make_unique<ash::OobeDialogUtilImpl>();
 
   game_mode_controller_ = std::make_unique<game_mode::GameModeController>();
-  refresh_rate_controller_ = std::make_unique<ash::RefreshRateController>(
-      ash::Shell::Get()->display_configurator(), ash::PowerStatus::Get(),
-      game_mode_controller_.get(),
-      ash::Shell::Get()->display_performance_mode_controller(), force_throttle);
+
+  game_mode_controller_->set_game_mode_changed_callback(
+      base::BindRepeating([](aura::Window* window, GameMode game_mode) {
+        ash::Shell::Get()->refresh_rate_controller()->SetGameMode(
+            window, game_mode == GameMode::BOREALIS);
+      }));
 
   // Initialize TabScrubberChromeOS after the Ash Shell has been initialized.
   TabScrubberChromeOS::GetInstance();
@@ -407,6 +401,16 @@ void ChromeBrowserMainExtraPartsAsh::PostProfileInit(Profile* profile,
 
 void ChromeBrowserMainExtraPartsAsh::PostBrowserStart() {
   mobile_data_notifications_ = std::make_unique<MobileDataNotifications>();
+
+  if (chromeos::features::IsMahiEnabled() &&
+      !chromeos::features::IsSparkyEnabled()) {
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            chromeos::switches::kUseFakeMahiManager)) {
+      mahi_manager_ = std::make_unique<ash::FakeMahiManager>();
+    } else {
+      mahi_manager_ = std::make_unique<ash::MahiManagerImpl>();
+    }
+  }
 
   did_post_browser_start_ = true;
   if (post_browser_start_callback_) {
@@ -428,6 +432,7 @@ void ChromeBrowserMainExtraPartsAsh::PostMainMessageLoopRun() {
   exo_parts_.reset();
 #endif
 
+  mahi_manager_.reset();
   mobile_data_notifications_.reset();
   chrome_shelf_controller_initializer_.reset();
   attestation_cleanup_manager_.reset();
@@ -446,7 +451,6 @@ void ChromeBrowserMainExtraPartsAsh::PostMainMessageLoopRun() {
   tab_cluster_ui_client_.reset();
 
   // Initialized in PostProfileInit (which may not get called in some tests).
-  refresh_rate_controller_.reset();
   game_mode_controller_.reset();
   oobe_dialog_util_.reset();
   picker_client_.reset();
@@ -472,8 +476,6 @@ void ChromeBrowserMainExtraPartsAsh::PostMainMessageLoopRun() {
   // needs to be released before destroying the profile.
   app_list_client_.reset();
   ash_shell_init_.reset();
-
-  mahi_manager_.reset();
 
   // These instances must be destructed after `ash_shell_init_`.
   video_conference_tray_controller_.reset();

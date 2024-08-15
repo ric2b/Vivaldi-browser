@@ -11,6 +11,7 @@
 #import "components/optimization_guide/core/optimization_guide_features.h"
 #import "ios/chrome/browser/commerce/model/push_notification/commerce_push_notification_client.h"
 #import "ios/chrome/browser/commerce/model/push_notification/push_notification_feature.h"
+#import "ios/chrome/browser/content_notification/model/content_notification_client.h"
 #import "ios/chrome/browser/push_notification/model/constants.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_util.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
@@ -25,6 +26,10 @@ PushNotificationClientManager::PushNotificationClientManager() {
 
   if (IsIOSTipsNotificationsEnabled()) {
     AddPushNotificationClient(std::make_unique<TipsNotificationClient>());
+  }
+
+  if (IsContentNotificationExperimentEnalbed()) {
+    AddPushNotificationClient(std::make_unique<ContentNotificationClient>());
   }
 }
 PushNotificationClientManager::~PushNotificationClientManager() = default;
@@ -93,7 +98,7 @@ std::vector<PushNotificationClientId>
 PushNotificationClientManager::GetClients() {
   std::vector<PushNotificationClientId> client_ids = {
       PushNotificationClientId::kCommerce};
-  if (IsContentPushNotificationsEnabled()) {
+  if (IsContentNotificationExperimentEnalbed()) {
     client_ids.push_back(PushNotificationClientId::kContent);
     client_ids.push_back(PushNotificationClientId::kSports);
   }

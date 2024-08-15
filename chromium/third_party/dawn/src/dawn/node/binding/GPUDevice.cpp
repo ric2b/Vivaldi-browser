@@ -176,11 +176,20 @@ GPUDevice::GPUDevice(Napi::Env env,
             auto r = interop::GPUDeviceLostReason::kDestroyed;
             switch (reason) {
                 case WGPUDeviceLostReason_Force32:
+                // This case never happens with wgpu::Device::SetDeviceCallback, and is specific to
+                // wgpu::DeviceDescriptor::deviceLostCallback.
+                case WGPUDeviceLostReason_FailedCreation:
                     UNREACHABLE("WGPUDeviceLostReason_Force32");
                     break;
                 case WGPUDeviceLostReason_Destroyed:
-                case WGPUDeviceLostReason_Undefined:
                     r = interop::GPUDeviceLostReason::kDestroyed;
+                    break;
+                case WGPUDeviceLostReason_InstanceDropped:
+                    UNREACHABLE("WGPUDeviceLostReason_InstanceDropped");
+                    break;
+                case WGPUDeviceLostReason_Undefined:
+                case WGPUDeviceLostReason_Unknown:
+                    r = interop::GPUDeviceLostReason::kUnknown;
                     break;
             }
             auto* self = static_cast<GPUDevice*>(userdata);

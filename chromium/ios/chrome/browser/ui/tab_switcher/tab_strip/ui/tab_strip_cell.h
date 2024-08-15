@@ -13,9 +13,21 @@
 // The title of the cell.
 @property(nonatomic, copy) NSString* title;
 
-// The group color of the cell. If the cell is not in a group then this should
-// be nil.
-@property(nonatomic, strong) UIColor* groupColor;
+// Preview parameters of the cell when dragged.
+@property(nonatomic, readonly) UIDragPreviewParameters* dragPreviewParameters;
+
+// Whether the cell intersects the left edge of the collection view. Default
+// value is NO.
+@property(nonatomic, assign) BOOL intersectsLeftEdge;
+
+// Whether the cell intersects the right edge of the collection view. Default
+// value is NO.
+@property(nonatomic, assign) BOOL intersectsRightEdge;
+
+// Sets the color of this cell's group stroke.
+// Subclasses should override this method. Default implementation is no-op.
+- (void)setGroupStrokeColor:(UIColor*)groupStrokeColor
+    NS_SWIFT_NAME(setGroupStrokeColor(_:));
 
 @end
 

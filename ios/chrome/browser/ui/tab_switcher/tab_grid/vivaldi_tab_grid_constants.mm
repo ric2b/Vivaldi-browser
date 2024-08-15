@@ -2,10 +2,6 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 // Accessibility identifiers for automated testing.
 NSString* const vTabGridRecentlyClosedTabsPageButtonIdentifier =
     @"TabGridRecentlyClosedTabsPageButtonIdentifier";
@@ -32,6 +28,9 @@ NSString* vTabGridEmptyStatePrivateTabsImage = @"tab_grid_incognito_tabs_empty";
 NSString* vTabGridEmptyStateSyncedTabsImage = @"tab_grid_remote_tabs_empty";
 NSString* vTabGridEmptyStateClosedTabsImage = @"tab_grid_closed_tabs_empty";
 
+// Assets for inactive tabs
+NSString* vTabGridInactiveTabsEduIcon = @"vivaldi_inactive_tabs_edu_icon";
+
 // Colors for grid cell item
 NSString* const vTabGridSelectedColor =
     @"grid_selected_color";
@@ -44,28 +43,13 @@ CGFloat const vTabGridEmptyStateViewContainerPadding = 16.0;
 CGFloat const vTabGridSelectedBorderWidth = 3.0;
 // Border width for not selected cell
 CGFloat const vTabGridNotSelectedBorderWidth = 2.0;
-// Tab grid collection top padding
-const CGFloat vTabGridCollectionTopPadding = 24.0;
-// Tab grid collection bottom padding
-const CGFloat vTabGridCollectionBottomPadding = 24.0;
-// Tab grid item size multiplier for iPad
-const CGFloat vTabGridItemSizeMultiplieriPad = 0.25;
-// Tab grid item size multiplier for iPhone portrait
-const CGFloat vTabGridItemSizeMultiplieriPhonePortrait = 0.5;
-// Tab grid item size multiplier for iPhone landscape
-const CGFloat vTabGridItemSizeMultiplieriPhoneLandscape = 0.25;
-// Tab grid item padding for iPhone
-const CGFloat vTabGridItemPaddingiPhone = 8.0;
-// Tab grid item padding for iPad
-const CGFloat vTabGridItemPaddingiPad = 12.0;
-// Tab grid section padding for iPhone portrait
-const CGFloat vTabGridSectionPaddingiPhonePortrait = 8.0;
-// Tab grid section padding for iPhone landscape
-const CGFloat vTabGridSectionPaddingiPhoneLandscape = 36.0;
-// Tab grid section padding for iPad portrait
-const CGFloat vTabGridSectionPaddingiPadPortrait = 64.0;
-// Tab grid section padding for iPad landscape
-const CGFloat vTabGridSectionPaddingiPadLandscape = 64.0;
+// Aspect Ratio for portrait mode.
+CGFloat const vTabGridPortraitAspectRatio = 6. / 5.;
+// Aspect Ratio for landscape mode on iPhone.
+CGFloat const vTabGridLandscapeAspectRatio = 6. / 8.;
+// Width thresholds for determining the columns count for
+// large width screen bounds.
+CGFloat const vTabGridLargeWidthThreshold = 800;
 
 // Section header height for recent and sync tabs.
 const CGFloat vSectionHeaderHeight = 24;

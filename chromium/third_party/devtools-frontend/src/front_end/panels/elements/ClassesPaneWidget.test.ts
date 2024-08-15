@@ -2,15 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import {createTarget, stubNoopSettings} from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
 import * as Elements from './elements.js';
-
-const {assert} = chai;
 
 const CLASS_NAMES = ['class-1', 'class-2', 'class-3'];
 
@@ -34,7 +31,7 @@ describeWithMockConnection('ClassesPaneWidget', () => {
     view.show(document.body);
 
     const model = target.model(SDK.DOMModel.DOMModel);
-    assertNotNullOrUndefined(model);
+    assert.exists(model);
     const node = new SDK.DOMModel.DOMNode(model);
     const createCheckboxLabel = sinon.spy(UI.UIUtils.CheckboxLabel, 'create');
     UI.Context.Context.instance().setFlavor(SDK.DOMModel.DOMNode, node);

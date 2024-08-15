@@ -12,7 +12,7 @@ The changes are relative to the previous release, unless the baseline is specifi
 * Add experimental API for reading and writing gain maps in AVIF files.
   If enabled at compile time, add `gainMap` field to `avifImage`,
   add `qualityGainMap` field to `avifEncoder`, add `gainMapPresent`,
-  `enableDecodingGainMap`, `enableParsingGainMapMetadata` and 
+  `enableDecodingGainMap`, `enableParsingGainMapMetadata` and
   `ignoreColorAndAlpha` to `avifDecoder`.
   Utility functions for working with gain maps are also added.
   Gain maps allow readers that support them to display HDR images that look
@@ -26,8 +26,8 @@ The changes are relative to the previous release, unless the baseline is specifi
   compilation flag.
   Add a --qgain-map flag to control the gain map quality in avifenc.
 * Add the headerFormat member of new type avifHeaderFormat to avifEncoder.
-* Add experimental API for reading and writing "avir"-branded AVIF files
-  behind the compilation flag AVIF_ENABLE_EXPERIMENTAL_AVIR.
+* Add experimental API for reading and writing "mif3"-branded AVIF files
+  behind the compilation flag AVIF_ENABLE_EXPERIMENTAL_MINI.
 * Implement avifImageScale() fallback when libyuv is not available.
 * Partial import of libyuv to third_party/libyuv (new LICENSE).
 * Add avifenc flag suffixes ":update" and ":u". Quality-relative,
@@ -35,7 +35,7 @@ The changes are relative to the previous release, unless the baseline is specifi
   input files.
 * Add experimental support for layered AVIF encoding in avifenc.
   Use the --layered flag to enable layered AVIF encoding.
-  Layered AVIF has multiple layers, which works like frame of animated AVIF, 
+  Layered AVIF has multiple layers, which works like frame of animated AVIF,
   and layers can be rendered in progressive manner on supported viewers
   (e.g. Chrome 94 or newer).
   Only aom supports layered AVIF encoding at the time of writing.
@@ -51,14 +51,18 @@ The changes are relative to the previous release, unless the baseline is specifi
 * Require libyuv by default (but it can still be disabled with
   -DAVIF_LIBYUV=OFF).
 * Add avifdec --icc flag to override the output color profile.
+* Add experimental API for reading and writing 16-bit AVIF files behind the
+  compilation flag AVIF_ENABLE_EXPERIMENTAL_SAMPLE_TRANSFORM.
+* Add AVIF_CHROMA_SAMPLE_POSITION_RESERVED to avifChromaSamplePosition enum.
 
 ### Changed since 1.0.0
-* Update aom.cmd: v3.8.2
-* Update dav1d.cmd: 1.4.0
+* Update aom.cmd: v3.9.0
+* Update dav1d.cmd: 1.4.1
 * Update libgav1.cmd: v0.19.0
+* Update libxml2.cmd: v2.12.6
 * Update libyuv.cmd: a6a2ec65
-* Update rav1e.cmd: v0.7.0
-* Update svt.cmd/svt.sh: v1.7.0
+* Update rav1e.cmd: v0.7.1
+* Update svt.cmd/svt.sh: v2.0.0
 * Update zlibpng.cmd: zlib 1.3 and libpng 1.6.40
 * AVIF sequences encoded by libavif will now also have the "avio" brand when
   there is at least one track made only of AV1 keyframes.
@@ -78,8 +82,9 @@ The changes are relative to the previous release, unless the baseline is specifi
   crbug.com/1504792 by [Fudan University](https://secsys.fudan.edu.cn/).
 * For codecs, AVIF_CODEC_* and AVIF_LOCAL_* are now merged into AVIF_CODEC_*
   that can only take the values: OFF, LOCAL or SYSTEM.
-* For the libyuv, libsharpyuv, zlibpng and jpeg dependencies, AVIF_LOCAL_* is
-  now replaced by flags AVIF_* that can take the values: OFF, LOCAL or SYSTEM.
+* For the gtest, jpeg, libsharpyuv, libxml2, libyuv and zlibpng dependencies,
+  AVIF_LOCAL_* is now replaced by flags AVIF_* that can take the values:
+  OFF, LOCAL or SYSTEM.
 * src/reformat.c: Allocate the threadData array directly.
 * AVIF_ENABLE_WERROR is set to OFF by default.
 * Fix wrong alpha plane deallocation when decoded tile pixel format does not
@@ -91,6 +96,11 @@ The changes are relative to the previous release, unless the baseline is specifi
   (https://crbug.com/oss-fuzz/65657).
 * ext/libjpeg.cmd now pulls libjpeg-turbo instead of libjpeg and AVIF_JPEG=LOCAL
   now expects the library dependency in ext/libjpeg-turbo/build.libavif.
+* Fix 'iloc' box parsing bugs that may have wrongly accepted, rejected or parsed
+  some files with rare values of offset_size, length_size, base_offset_size and
+  index_size.
+* 'infe' boxes with an item_type different from 'mime' and without a
+  null-terminated item_name are now considered invalid as per ISO/IEC 14496-12.
 
 ## [1.0.4] - 2024-02-08
 

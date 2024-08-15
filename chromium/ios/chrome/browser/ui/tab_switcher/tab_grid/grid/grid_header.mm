@@ -13,6 +13,12 @@
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/gfx/ios/uikit_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 @interface GridHeader ()
 // Visual components of the view.
 @property(nonatomic, weak) UIStackView* containerView;
@@ -32,7 +38,13 @@
     titleLabel.font =
         [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
     titleLabel.adjustsFontForContentSizeCategory = YES;
+
+    if (IsVivaldiRunning()) {
+      titleLabel.textColor = UIColor.labelColor;
+    } else {
     titleLabel.textColor = UIColorFromRGB(kGridHeaderTitleColor);
+    } // End Vivaldi
+
     [titleLabel setContentHuggingPriority:UILayoutPriorityDefaultLow
                                   forAxis:UILayoutConstraintAxisHorizontal];
     _titleLabel = titleLabel;
@@ -41,8 +53,14 @@
     valueLabel.translatesAutoresizingMaskIntoConstraints = NO;
     valueLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
     valueLabel.adjustsFontForContentSizeCategory = YES;
+
+    if (IsVivaldiRunning()) {
+      valueLabel.textColor = UIColor.secondaryLabelColor;
+    } else {
     valueLabel.textColor = UIColorFromRGB(kGridHeaderValueColor);
     valueLabel.alpha = 0.6;
+    } // End Vivaldi
+
     [valueLabel setContentHuggingPriority:UILayoutPriorityDefaultHigh
                                   forAxis:UILayoutConstraintAxisHorizontal];
     _valueLabel = valueLabel;
@@ -113,7 +131,7 @@
 // The collection view header always stretch across the whole collection view
 // width. To work around that, this method adds a padding to the container view
 // based on the current layout and the size classes.
-// TODO(crbug.com/1504112): Remove this method when the compositional layout is
+// TODO(crbug.com/40944622): Remove this method when the compositional layout is
 // fully landed.
 - (void)updateContentInsets {
   if (IsTabGridCompositionalLayoutEnabled()) {

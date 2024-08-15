@@ -22,6 +22,13 @@ class Profile;
 // Vivaldi
 struct ImportedNotesEntry;
 struct ImportedSpeedDialEntry;
+namespace extension_importer {
+class ChromiumExtensionsImporter;
+}
+struct ChromiumExtensionsImporterDeleter {
+  void operator()(extension_importer::ChromiumExtensionsImporter* ptr);
+};
+class ExternalProcessImporterHost;
 
 namespace autofill {
 class AutocompleteEntry;
@@ -100,6 +107,9 @@ class ProfileWriter : public base::RefCountedThreadSafe<ProfileWriter> {
   virtual void AddSpeedDial(
       const std::vector<ImportedSpeedDialEntry>& speeddial);
 
+  virtual void AddExtensions(const std::vector<std::string>& extensions,
+                             base::WeakPtr<ExternalProcessImporterHost> host);
+
  protected:
   friend class base::RefCountedThreadSafe<ProfileWriter>;
 
@@ -107,6 +117,11 @@ class ProfileWriter : public base::RefCountedThreadSafe<ProfileWriter> {
 
  private:
   const raw_ptr<Profile> profile_;
+
+  // Vivaldi
+  std::unique_ptr<extension_importer::ChromiumExtensionsImporter,
+                  ChromiumExtensionsImporterDeleter>
+      vivaldi_extensions_importer_;
 };
 
 #endif  // CHROME_BROWSER_IMPORTER_PROFILE_WRITER_H_

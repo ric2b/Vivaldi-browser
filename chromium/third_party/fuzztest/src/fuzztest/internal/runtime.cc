@@ -36,18 +36,22 @@
 #include <vector>
 
 #include "absl/functional/function_ref.h"
+#include "absl/log/check.h"
 #include "absl/random/bit_gen_ref.h"
 #include "absl/random/discrete_distribution.h"
 #include "absl/random/random.h"
 #include "absl/status/status.h"
+#include "absl/strings/match.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "./fuzztest/internal/configuration.h"
+#include "./fuzztest/internal/corpus_database.h"
 #include "./fuzztest/internal/coverage.h"
 #include "./fuzztest/internal/domains/domain_base.h"
 #include "./fuzztest/internal/fixture_driver.h"
@@ -93,11 +97,37 @@ void Runtime::PrintFinalStats(RawSink out) const {
   const absl::Duration fuzzing_time = clock_fn_() - stats_->start_time;
   absl::Format(out, "Elapsed time: %s\n", absl::FormatDuration(fuzzing_time));
   absl::Format(out, "Total runs: %d\n", stats_->runs);
+#ifndef FUZZTEST_USE_CENTIPEDE
   absl::Format(out, "Edges covered: %d\n", stats_->edges_covered);
   absl::Format(out, "Total edges: %d\n", stats_->total_edges);
   absl::Format(out, "Corpus size: %d\n", stats_->useful_inputs);
   absl::Format(out, "Max stack used: %d\n", stats_->max_stack_used);
+#endif
 }
+
+namespace {
+
+// Returns a reproduction command for replaying
+// `configuration.crashing_input_to_reproduce` from a command line, using the
+// `configuration.reproduction_command_template`.
+std::optional<std::string> GetReproductionCommand(
+    const Configuration& configuration) {
+  if (!configuration.reproduction_command_template.has_value()) {
+    return std::nullopt;
+  }
+  if (!configuration.crashing_input_to_reproduce.has_value()) {
+    return std::nullopt;
+  }
+  CHECK(absl::StrContains(*configuration.reproduction_command_template,
+                          kTestFilterPlaceholder));
+  return absl::StrReplaceAll(
+      *configuration.reproduction_command_template,
+      {{kTestFilterPlaceholder,
+        absl::StrCat("*",
+                     Basename(*configuration.crashing_input_to_reproduce))}});
+}
+
+}  // namespace
 
 void Runtime::PrintReport(RawSink out) const {
   // We don't want to try and print a fuzz report when we are not running a fuzz
@@ -156,6 +186,14 @@ void Runtime::PrintReport(RawSink out) const {
           });
       absl::Format(out, "\n  );\n");
       absl::Format(out, "}\n");
+    }
+    if (current_configuration_ != nullptr) {
+      const auto reproduction_command =
+          GetReproductionCommand(*current_configuration_);
+      if (reproduction_command.has_value()) {
+        absl::Format(out, "%s=== Reproduction command\n\n", separator);
+        absl::Format(out, "%s\n\n", *reproduction_command);
+      }
     }
   } else {
     absl::Format(out, "%s=== SETUP FAILURE!\n\n", separator);
@@ -789,17 +827,20 @@ void FuzzTestFuzzerImpl::RunInUnitTestMode(const Configuration& configuration) {
       return;
     }
 
+    CorpusDatabase corpus_database(configuration);
     for (const std::string& file :
-         configuration.corpus_database.GetRegressionInputs(test_.full_name())) {
+         corpus_database.GetRegressionInputs(test_.full_name())) {
       ReplayInput(file);
     }
     for (const std::string& file :
-         configuration.corpus_database.GetCoverageInputsIfAny(
-             test_.full_name())) {
+         corpus_database.GetCoverageInputsIfAny(test_.full_name())) {
       ReplayInput(file);
     }
 
     runtime_.SetRunMode(RunMode::kUnitTest);
+
+    // If crashing inputs are reported, there's no need for a smoke test.
+    if (corpus_database.use_crashing_inputs()) return;
 
     PopulateFromSeeds(/*corpus_files=*/{});
 
@@ -962,8 +1003,9 @@ int FuzzTestFuzzerImpl::RunInFuzzingMode(int* /*argc*/, char*** /*argv*/,
       return 0;
     }
 
-    PopulateFromSeeds(configuration.corpus_database.GetCoverageInputsIfAny(
-        test_.full_name()));
+    CorpusDatabase corpus_database(configuration);
+    PopulateFromSeeds(
+        corpus_database.GetCoverageInputsIfAny(test_.full_name()));
     InitializeCorpus(prng);
 
     FUZZTEST_INTERNAL_CHECK(!corpus_.empty(),

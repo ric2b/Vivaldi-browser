@@ -38,8 +38,8 @@ bool IsTransitionValid(ServiceListener::State from, ServiceListener::State to) {
              to == ServiceListener::State::kSearching ||
              to == ServiceListener::State::kStopping;
     default:
-      OSP_DCHECK(false) << "unknown ServiceListener::State value: "
-                        << static_cast<int>(from);
+      OSP_CHECK(false) << "unknown ServiceListener::State value: "
+                       << static_cast<int>(from);
       break;
   }
   return false;
@@ -52,7 +52,7 @@ ServiceListenerImpl::Delegate::~Delegate() = default;
 
 void ServiceListenerImpl::Delegate::SetListenerImpl(
     ServiceListenerImpl* listener) {
-  OSP_DCHECK(!listener_);
+  OSP_CHECK(!listener_);
   listener_ = listener;
 }
 
@@ -133,7 +133,7 @@ void ServiceListenerImpl::OnAllReceiversRemoved() {
   }
 }
 
-void ServiceListenerImpl::OnError(Error error) {
+void ServiceListenerImpl::OnError(const Error& error) {
   last_error_ = error;
   for (auto* observer : observers_) {
     observer->OnError(error);
@@ -190,15 +190,14 @@ bool ServiceListenerImpl::SearchNow() {
   return true;
 }
 
-void ServiceListenerImpl::AddObserver(Observer* observer) {
-  OSP_DCHECK(observer);
-  observers_.push_back(observer);
+void ServiceListenerImpl::AddObserver(Observer& observer) {
+  observers_.push_back(&observer);
 }
 
-void ServiceListenerImpl::RemoveObserver(Observer* observer) {
+void ServiceListenerImpl::RemoveObserver(Observer& observer) {
   // TODO(btolsch): Consider writing an ObserverList in base/ for things like
   // CHECK()ing that the list is empty on destruction.
-  observers_.erase(std::remove(observers_.begin(), observers_.end(), observer),
+  observers_.erase(std::remove(observers_.begin(), observers_.end(), &observer),
                    observers_.end());
 }
 
@@ -206,24 +205,21 @@ const std::vector<ServiceInfo>& ServiceListenerImpl::GetReceivers() const {
   return receiver_list_.receivers();
 }
 
-void ServiceListenerImpl::OnFatalError(Error error) {
+void ServiceListenerImpl::OnFatalError(const Error& error) {
   OnError(error);
 }
 
-void ServiceListenerImpl::OnRecoverableError(Error error) {
+void ServiceListenerImpl::OnRecoverableError(const Error& error) {
   OnError(error);
 }
 
 void ServiceListenerImpl::SetState(State state) {
-  OSP_DCHECK(IsTransitionValid(state_, state));
+  OSP_CHECK(IsTransitionValid(state_, state));
   state_ = state;
-  if (!observers_.empty()) {
-    MaybeNotifyObservers();
-  }
+  MaybeNotifyObservers();
 }
 
 void ServiceListenerImpl::MaybeNotifyObservers() {
-  OSP_DCHECK(!observers_.empty());
   switch (state_) {
     case State::kRunning:
       for (auto* observer : observers_) {

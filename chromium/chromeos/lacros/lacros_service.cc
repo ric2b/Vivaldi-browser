@@ -28,7 +28,9 @@
 #include "chromeos/crosapi/mojom/authentication.mojom.h"
 #include "chromeos/crosapi/mojom/automation.mojom.h"
 #include "chromeos/crosapi/mojom/browser_app_instance_registry.mojom.h"
+#include "chromeos/crosapi/mojom/browser_service.mojom.h"
 #include "chromeos/crosapi/mojom/browser_version.mojom.h"
+#include "chromeos/crosapi/mojom/cec_private.mojom.h"
 #include "chromeos/crosapi/mojom/cert_database.mojom.h"
 #include "chromeos/crosapi/mojom/cert_provisioning.mojom.h"
 #include "chromeos/crosapi/mojom/chaps_service.mojom.h"
@@ -66,12 +68,14 @@
 #include "chromeos/crosapi/mojom/file_system_provider.mojom.h"
 #include "chromeos/crosapi/mojom/firewall_hole.mojom.h"
 #include "chromeos/crosapi/mojom/force_installed_tracker.mojom.h"
+#include "chromeos/crosapi/mojom/full_restore.mojom.h"
 #include "chromeos/crosapi/mojom/fullscreen_controller.mojom.h"
 #include "chromeos/crosapi/mojom/geolocation.mojom.h"
 #include "chromeos/crosapi/mojom/guest_os_sk_forwarder.mojom.h"
 #include "chromeos/crosapi/mojom/holding_space_service.mojom.h"
 #include "chromeos/crosapi/mojom/identity_manager.mojom.h"
 #include "chromeos/crosapi/mojom/image_writer.mojom.h"
+#include "chromeos/crosapi/mojom/input_methods.mojom.h"
 #include "chromeos/crosapi/mojom/kerberos_in_browser.mojom.h"
 #include "chromeos/crosapi/mojom/keystore_service.mojom.h"
 #include "chromeos/crosapi/mojom/kiosk_session_service.mojom.h"
@@ -260,7 +264,7 @@ LacrosService::LacrosService()
   // available, close --mojo-platform-channel-handle, and remove it
   // from command line. It is for backward compatibility support by
   // ash-chrome.
-  // TODO(crbug.com/1180712): Remove this, when ash-chrome stops to support
+  // TODO(crbug.com/40170079): Remove this, when ash-chrome stops to support
   // legacy invitation flow.
   auto* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(crosapi::kCrosapiMojoPlatformChannelHandle) &&
@@ -289,6 +293,8 @@ LacrosService::LacrosService()
       crosapi::mojom::AppShortcutPublisher,
       &Crosapi::BindBrowserShortcutPublisher,
       Crosapi::MethodMinVersions::kBindBrowserShortcutPublisherMinVersion>();
+  ConstructRemote<crosapi::mojom::CecPrivate, &Crosapi::BindCecPrivate,
+                  Crosapi::MethodMinVersions::kBindCecPrivateMinVersion>();
   ConstructRemote<
       crosapi::mojom::AppWindowTracker, &Crosapi::BindChromeAppWindowTracker,
       Crosapi::MethodMinVersions::kBindChromeAppWindowTrackerMinVersion>();
@@ -410,6 +416,8 @@ LacrosService::LacrosService()
       crosapi::mojom::ForceInstalledTracker,
       &crosapi::mojom::Crosapi::BindForceInstalledTracker,
       Crosapi::MethodMinVersions::kBindForceInstalledTrackerMinVersion>();
+  ConstructRemote<crosapi::mojom::FullRestore, &Crosapi::BindFullRestore,
+                  Crosapi::MethodMinVersions::kBindFullRestoreMinVersion>();
   ConstructRemote<
       crosapi::mojom::FullscreenController, &Crosapi::BindFullscreenController,
       Crosapi::MethodMinVersions::kBindFullscreenControllerMinVersion>();
@@ -653,6 +661,8 @@ LacrosService::LacrosService()
       &crosapi::mojom::Crosapi::BindFileSystemAccessCloudIdentifierProvider,
       Crosapi::MethodMinVersions::
           kBindFileSystemAccessCloudIdentifierProviderMinVersion>();
+  ConstructRemote<crosapi::mojom::InputMethods, &Crosapi::BindInputMethods,
+                  Crosapi::MethodMinVersions::kBindInputMethodsMinVersion>();
 
 #if !BUILDFLAG(IS_CHROMEOS_DEVICE)
   // The test controller is not available on production devices as tests only
@@ -869,6 +879,19 @@ std::optional<uint32_t> LacrosService::CrosapiVersion() const {
   return chromeos::BrowserParamsProxy::Get()->CrosapiVersion();
 }
 
+int LacrosService::GetInterfaceVersion(base::Token interface_uuid) const {
+  if (!chromeos::BrowserParamsProxy::Get()->InterfaceVersions()) {
+    return -1;
+  }
+  const base::flat_map<base::Token, uint32_t>& versions =
+      chromeos::BrowserParamsProxy::Get()->InterfaceVersions().value();
+  auto it = versions.find(interface_uuid);
+  if (it == versions.end()) {
+    return -1;
+  }
+  return it->second;
+}
+
 void LacrosService::StartSystemIdleCache() {
   system_idle_cache_->Start();
 }
@@ -885,19 +908,6 @@ void LacrosService::ConstructRemote() {
   interfaces_.emplace(CrosapiInterface::Uuid_,
                       std::make_unique<LacrosService::InterfaceEntry<
                           CrosapiInterface, bind_func, MethodMinVersion>>());
-}
-
-int LacrosService::GetInterfaceVersionImpl(base::Token interface_uuid) const {
-  if (!chromeos::BrowserParamsProxy::Get()->InterfaceVersions()) {
-    return -1;
-  }
-  const base::flat_map<base::Token, uint32_t>& versions =
-      chromeos::BrowserParamsProxy::Get()->InterfaceVersions().value();
-  auto it = versions.find(interface_uuid);
-  if (it == versions.end()) {
-    return -1;
-  }
-  return it->second;
 }
 
 void LacrosService::AddObserver(Observer* obs) {

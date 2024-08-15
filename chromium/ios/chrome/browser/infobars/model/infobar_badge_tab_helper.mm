@@ -122,6 +122,10 @@ void InfobarBadgeTabHelper::UnregisterInfobar(infobars::InfoBar* infobar) {
     // observed, and remove the `else` condition.
     if (infobar_accept_observations.IsObservingSource(infobar_ios)) {
       infobar_accept_observations.RemoveObservation(infobar_ios);
+    } else {
+      DUMP_WILL_BE_NOTREACHED_NORETURN()
+          << "cannot find observed infobar with type: "
+          << static_cast<int>(infobar_ios->infobar_type());
     }
   }
 }
@@ -168,6 +172,10 @@ void InfobarBadgeTabHelper::InfobarAcceptanceObserver::InfobarDestroyed(
   // observed, and remove the `else` condition.
   if (scoped_observations_.IsObservingSource(infobar_ios)) {
     scoped_observations_.RemoveObservation(infobar_ios);
+  } else {
+    DUMP_WILL_BE_NOTREACHED_NORETURN()
+        << "cannot find observed infobar with type: "
+        << static_cast<int>(infobar_ios->infobar_type());
   }
 }
 
@@ -216,6 +224,8 @@ void InfobarBadgeTabHelper::InfobarManagerObserver::OnInfoBarReplaced(
     // observed, and remove the `else` condition.
     if (infobar_accept_observations.IsObservingSource(old_infobar_ios)) {
       infobar_accept_observations.RemoveObservation(old_infobar_ios);
+    } else {
+      DUMP_WILL_BE_NOTREACHED_NORETURN();
     }
     infobar_accept_observations.AddObservation(
         static_cast<InfoBarIOS*>(new_infobar));

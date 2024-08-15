@@ -12,6 +12,7 @@
 #import "base/metrics/histogram_functions.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/values.h"
+#import "components/autofill/core/common/unique_ids.h"
 #import "components/autofill/ios/browser/autofill_util.h"
 #import "components/autofill/ios/form_util/form_activity_observer.h"
 #import "components/autofill/ios/form_util/form_activity_params.h"
@@ -102,7 +103,7 @@ void FormActivityTabHelper::OnFormMessageReceived(
     FormSubmissionHandler(web_state, message);
   } else if (*command == "form.activity") {
     HandleFormActivity(web_state, message);
-  } else if (*command == "pwdform.removal") {
+  } else if (*command == "form.removal") {
     HandleFormRemoval(web_state, message);
   }
 }
@@ -129,9 +130,8 @@ void FormActivityTabHelper::HandleFormActivity(
 void FormActivityTabHelper::HandleFormRemoval(
     web::WebState* web_state,
     const web::ScriptMessage& message) {
-  const base::Value::Dict* message_body = nullptr;
   FormRemovalParams params;
-  if (!BaseFormActivityParams::FromMessage(message, &message_body, &params)) {
+  if (!FormRemovalParams::FromMessage(message, &params)) {
     return;
   }
 
@@ -140,15 +140,6 @@ void FormActivityTabHelper::HandleFormRemoval(
   web::WebFrame* sender_frame = frames_manager->GetFrameWithId(params.frame_id);
   if (!sender_frame) {
     return;
-  }
-
-  if (!params.unique_form_id) {
-    const std::string* unique_field_ids =
-        message_body->FindString("uniqueFieldID");
-    if (!unique_field_ids || !ExtractIDs(SysUTF8ToNSString(*unique_field_ids),
-                                         &params.removed_unowned_fields)) {
-      params.input_missing = true;
-    }
   }
 
   for (auto& observer : observers_)

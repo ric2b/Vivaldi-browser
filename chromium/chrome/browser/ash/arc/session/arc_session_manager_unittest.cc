@@ -54,6 +54,7 @@
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
+#include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
@@ -62,9 +63,12 @@
 #include "chromeos/ash/components/dbus/arc/arcvm_data_migrator_client.h"
 #include "chromeos/ash/components/dbus/arc/fake_arcvm_data_migrator_client.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
+#include "chromeos/ash/components/dbus/resourced/fake_resourced_client.h"
+#include "chromeos/ash/components/dbus/resourced/resourced_client.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "chromeos/ash/components/dbus/upstart/upstart_client.h"
 #include "chromeos/ash/components/login/auth/auth_events_recorder.h"
+#include "chromeos/ash/components/memory/swap_configuration.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
@@ -272,11 +276,7 @@ class ArcSessionManagerTestBase : public testing::Test {
                           base::test::TaskEnvironment::TimeSource::MOCK_TIME),
         fake_user_manager_(std::make_unique<ash::FakeChromeUserManager>()) {
     TestingBrowserProcess::GetGlobal()->SetLocalState(&test_local_state_);
-    arc::prefs::RegisterLocalStatePrefs(test_local_state_.registry());
-    ash::DemoSetupController::RegisterLocalStatePrefs(
-        test_local_state_.registry());
-    ash::device_settings_cache::RegisterPrefs(test_local_state_.registry());
-    user_manager::KnownUser::RegisterPrefs(test_local_state_.registry());
+    RegisterLocalState(test_local_state_.registry());
     auth_events_recorder_ = ash::AuthEventsRecorder::CreateForTesting();
   }
 
@@ -392,12 +392,20 @@ class ArcSessionManagerTest : public ArcSessionManagerTestBase {
         profile()->GetProfileUserName(), "1234567890"));
     GetFakeUserManager()->AddUser(account_id);
     GetFakeUserManager()->LoginUser(account_id);
+    resourced_client_ = ash::ResourcedClient::InitializeFake();
 
     ASSERT_EQ(ArcSessionManager::State::NOT_INITIALIZED,
               arc_session_manager()->state());
   }
 
-  void TearDown() override { ArcSessionManagerTestBase::TearDown(); }
+  void TearDown() override {
+    resourced_client_ = nullptr;
+    ash::ResourcedClient::Shutdown();
+    ArcSessionManagerTestBase::TearDown();
+  }
+
+ protected:
+  raw_ptr<ash::FakeResourcedClient> resourced_client_ = nullptr;
 };
 
 TEST_F(ArcSessionManagerTest, BaseWorkflow) {
@@ -2290,6 +2298,35 @@ TEST_F(ArcSessionManagerTest, TrimVmMemory) {
       0);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(callback_called);
+}
+
+TEST_F(ArcSessionManagerTest, RequestArcEnableMemoryMargin) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures({ash::kCrOSMemoryPressureSignalStudyArc,
+                                 ash::kCrOSMemoryPressureSignalStudyNonArc},
+                                {});
+  arc_session_manager()->SetProfile(profile());
+  arc_session_manager()->Initialize();
+
+  arc_session_manager()->RequestEnable();
+
+  EXPECT_EQ(resourced_client_->get_critical_margin_bps(), 800u);
+  EXPECT_EQ(resourced_client_->get_moderate_margin_bps(), 4000u);
+}
+
+TEST_F(ArcSessionManagerTest, RequestArcDisableMemoryMargin) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures({ash::kCrOSMemoryPressureSignalStudyArc,
+                                 ash::kCrOSMemoryPressureSignalStudyNonArc},
+                                {});
+  arc_session_manager()->SetProfile(profile());
+  arc_session_manager()->Initialize();
+  arc_session_manager()->RequestEnable();
+
+  arc_session_manager()->RequestDisable();
+
+  EXPECT_EQ(resourced_client_->get_critical_margin_bps(), 1500u);
+  EXPECT_EQ(resourced_client_->get_moderate_margin_bps(), 4000u);
 }
 
 class ArcTransitionToManagedTest

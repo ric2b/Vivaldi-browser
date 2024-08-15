@@ -21,6 +21,7 @@
 #include "content/public/browser/site_instance.h"
 #include "content/services/auction_worklet/public/mojom/auction_worklet_service.mojom.h"
 #include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom.h"
+#include "content/services/auction_worklet/public/mojom/real_time_reporting.mojom.h"
 #include "content/services/auction_worklet/public/mojom/seller_worklet.mojom.h"
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
@@ -161,6 +162,8 @@ class MockBidderWorklet : public auction_worklet::mojom::BidderWorklet,
       const std::optional<GURL>& debug_win_report_url = std::nullopt,
       std::vector<auction_worklet::mojom::PrivateAggregationRequestPtr>
           pa_requests = {},
+      std::vector<auction_worklet::mojom::RealTimeReportingContributionPtr>
+          real_time_contributions = {},
       auction_worklet::mojom::GenerateBidDependencyLatenciesPtr
           dependency_latencies =
               auction_worklet::mojom::GenerateBidDependencyLatenciesPtr(),
@@ -267,6 +270,7 @@ class MockSellerWorklet : public auction_worklet::mojom::SellerWorklet {
       const GURL& browser_signal_render_url,
       const std::vector<GURL>& browser_signal_ad_components,
       uint32_t browser_signal_bidding_duration_msecs,
+      const std::optional<blink::AdSize>& browser_signal_render_size,
       bool browser_signal_for_debugging_only_in_cooldown_or_lockout,
       const std::optional<base::TimeDelta> seller_timeout,
       uint64_t trace_id,

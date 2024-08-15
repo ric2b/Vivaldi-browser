@@ -16,8 +16,4 @@ BookmarkModelViewUsingAccountNodes::trash_node() const {
   return nullptr;
 }
 
-const bookmarks::BookmarkNode* BookmarkModelView::trash_node() const {
-  return nullptr;
-}
-
 }  // namespace bookmarks

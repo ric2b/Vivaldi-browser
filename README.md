@@ -35,16 +35,14 @@ The file `README` has the original readme from the developpers.
 
 ```bash
 ssh $USER@$FAST_MACHINE
-curl https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > Miniconda.sh
-bash Miniconda.sh -b -p ~/co
-source ~/co/bin/activate
-conda install git
 git config --global user.name  "..."
 git config --global user.email "..."
 
 ssh-keygen
 
 # *upload the key to github*
+
+tmux
 
 git clone --depth=1 git@github.com:ric2b/Vivaldi-browser.git w
 ```
@@ -54,11 +52,11 @@ git clone --depth=1 git@github.com:ric2b/Vivaldi-browser.git w
 ```bash
 # For each version
 curl -O https://vivaldi.com/source/vivaldi-source_6.0.2979.tar.xz
-time tar --xz -xf ... && mv vivaldi-source v60 && ls -la
+time tar --xz -xf ... && mv vivaldi-source v60 && ls -aF
 
 mv w/{.git,README.md} v60
 cd v60
-time git add . && time git commit -m 'Added version 6.0.2979' > /dev/null && git tag 6.0.2979
+V='6.0.2979' && time git add . 2>&1 | grep -v CRLF && time git commit -m "Added version $V" > /dev/null && git tag "$V"
 git log --oneline
 cd ..
 ```

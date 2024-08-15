@@ -13,6 +13,7 @@
 #import "components/language/core/browser/pref_names.h"
 #import "components/os_crypt/sync/os_crypt.h"
 #import "components/prefs/pref_service.h"
+#import "components/sync_device_info/local_device_info_util.h"
 #import "components/sync/base/command_line_switches.h"
 #import "components/sync/base/user_selectable_type.h"
 #import "components/sync/service/sync_service_observer.h"
@@ -228,7 +229,8 @@ PendingRegistration pendingRegistration;
 - (void)requestPendingRegistrationLogin {
   [self login:pendingRegistration.username
       password:pendingRegistration.password
-      save_password:false];
+          deviceName:[self sessionName]
+              save_password:false];
 }
 
 - (NSString*)getPendingRegistrationUsername {
@@ -249,6 +251,7 @@ PendingRegistration pendingRegistration;
 
 - (void)login:(std::string)username
         password:(std::string)password
+      deviceName:(NSString*)deviceName
         save_password:(BOOL)save_password {
   // If the user has started registration on another device, and tries to log in
   // here, we store the username and password in case we get a NOT_ACTIVE
@@ -257,6 +260,7 @@ PendingRegistration pendingRegistration;
   pendingRegistration.password = password;
   pendingRegistration.recoveryEmailAddress = SysNSStringToUTF8(
       l10n_util::GetNSString(IDS_SYNC_DEFAULT_RECOVERY_EMAIL_ADDRESS));
+  [self setSessionName:deviceName];
   _vivaldiAccountManager->Login(username, password, save_password);
   _syncService->SetSyncFeatureRequested();
 }
@@ -377,6 +381,19 @@ PendingRegistration pendingRegistration;
       // or offer to restart, depending on the failure cause.
     case EngineState::STARTING:
     case EngineState::STARTING_SERVER_ERROR:
+      if (!engineData.disable_reasons.Has(
+        SyncService::DISABLE_REASON_NOT_SIGNED_IN)) {
+        // We might enter this state for a brief moment after login while
+        // the credentials are being passed to sync itself.
+        // Don't show the UI just yet in this case.
+        if ([self getSimplifiedAccountState] == LOGGED_IN) {
+          // Show the settings view so the user can see the sync status
+          [self.commandHandler showSyncSettingsView];
+          [self reloadSyncStatusItem];
+          return;
+        }
+      }
+      ABSL_FALLTHROUGH_INTENDED;
     case EngineState::CLEARING_DATA:
       [self reloadSyncStatusItem];
       break;
@@ -549,13 +566,7 @@ PendingRegistration pendingRegistration;
     color = kSyncStatusRedBackgroundColor;
     // TODO(tomas@vivaldi.com): Some of these strings are not used on the
     // android side, only on desktop. Should they be used on iOS?
-    if (engineData.disable_reasons.Has(
-        SyncService::DISABLE_REASON_NOT_SIGNED_IN)) {
-      // We might enter this state for a brief moment after login while
-      // the credentials are being passed to sync itself.
-      statusText = @"Waiting for account details";
-      color = kSyncStatusYellowBackgroundColor;
-    } else if (!syncer::IsSyncAllowedByFlag()) {
+    if (!syncer::IsSyncAllowedByFlag()) {
       // Disabled by command line flag
       statusText = @"Sync was disabled from the command line";
       color = kSyncStatusYellowBackgroundColor;
@@ -707,6 +718,7 @@ PendingRegistration pendingRegistration;
   self.userInfoItem.userAvatar =
       [UIImage systemImageNamed:@"person.circle.fill"];
   self.userInfoItem.userName = SysUTF8ToNSString(account_info.username);
+  self.userInfoItem.sessionName = self.sessionName;
   [self.settingsConsumer.tableViewModel setHeader:self.userInfoItem
       forSectionWithIdentifier:SectionIdentifierSyncUserInfo];
 
@@ -786,9 +798,6 @@ PendingRegistration pendingRegistration;
       [UIColor colorNamed:kBlueColor];
   self.startSyncingButton.buttonTextColor =
       [UIColor colorNamed:kSolidButtonTextColor];
-  self.startSyncingButton.cellBackgroundColor =
-      self.startSyncingButton.buttonBackgroundColor;
-  self.startSyncingButton.disableButtonIntrinsicWidth = YES;
   self.startSyncingButton.enabled = [self getStartSyncingButtonEnabled];
 
   [model addSectionWithIdentifier:SectionIdentifierSyncStartSyncing];
@@ -1043,7 +1052,6 @@ PendingRegistration pendingRegistration;
 }
 
 #pragma mark Private - Create Account Server Request Handling
-
 - (void)sendCreateAccountRequestToServer:(BOOL)wantsNewsletter
                     completionHandler:(ServerRequestCompletionHandler)handler {
   PrefService* pref_service = GetApplicationContext()->GetLocalState();
@@ -1161,8 +1169,35 @@ PendingRegistration pendingRegistration;
 }
 
 - (void)setSessionName:(NSString*)name {
+  NSString* sessionName = name;
+
+  // If sessionName is nil or empty, save default client name.
+  if (name == nil || [name isEqualToString:@""]) {
+    sessionName = [self localDeviceClientName];
+  }
+
   _prefService->SetString(
-      vivaldiprefs::kSyncSessionName, SysNSStringToUTF8(name));
+      vivaldiprefs::kSyncSessionName, SysNSStringToUTF8(sessionName));
+}
+
+- (NSString*)sessionName {
+
+  NSString *sessionName =
+      base::SysUTF8ToNSString(
+            _prefService->GetString(vivaldiprefs::kSyncSessionName));
+
+  // If sessionName is nil or empty, return client_name.
+  // This is a fallback for the users without a custom session name from iOS
+  // client.
+  if (sessionName == nil || [sessionName isEqualToString:@""]) {
+    return [self localDeviceClientName];
+  }
+
+  return sessionName;
+}
+
+- (NSString*)localDeviceClientName {
+  return base::SysUTF8ToNSString(syncer::GetPersonalizableDeviceNameBlocking());
 }
 
 @end

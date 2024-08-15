@@ -7,6 +7,7 @@
 #include <map>
 
 #include "base/logging.h"
+#include "base/strings/stringprintf.h"
 #include "gn/filesystem_utils.h"
 #include "gn/label_pattern.h"
 #include "gn/parse_tree.h"
@@ -16,6 +17,34 @@
 #include "gn/value.h"
 #include "gn/value_extractors.h"
 #include "gn/variables.h"
+
+namespace {
+
+// Retrieves value from `scope` named `name` or `old_name`. If the value comes
+// from the `old_name` a warning is emitted to inform the name is obsolete.
+const Value* GetValueFromScope(Scope* scope,
+                               std::string_view name,
+                               std::string_view old_name) {
+  const Value* value = scope->GetValue(name, true);
+  if (value)
+    return value;
+
+  value = scope->GetValue(old_name, true);
+  if (value) {
+    // If there is a value found with the old name, print a warning to the
+    // console and use that value. This is to avoid breaking the existing
+    // build rules in the wild.
+    Err err(*value, "Deprecated variable name",
+            base::StringPrintf(
+                "The name \"%s\" is deprecated, use \"%s\" instead.",
+                std::string(old_name).c_str(), std::string(name).c_str()));
+    err.PrintNonfatalToStdout();
+  }
+
+  return value;
+}
+
+}  // namespace
 
 CreateBundleTargetGenerator::CreateBundleTargetGenerator(
     Target* target,
@@ -55,16 +84,16 @@ void CreateBundleTargetGenerator::DoRun() {
   if (!FillXcodeTestApplicationName())
     return;
 
-  if (!FillCodeSigningScript())
+  if (!FillPostProcessingScript())
     return;
 
-  if (!FillCodeSigningSources())
+  if (!FillPostProcessingSources())
     return;
 
-  if (!FillCodeSigningOutputs())
+  if (!FillPostProcessingOutputs())
     return;
 
-  if (!FillCodeSigningArgs())
+  if (!FillPostProcessingArgs())
     return;
 
   if (!FillBundleDepsFilter())
@@ -96,12 +125,13 @@ bool CreateBundleTargetGenerator::FillBundleDir(
     return false;
   if (str != bundle_root_dir.value() &&
       !IsStringInOutputDir(bundle_root_dir, str)) {
-    *err_ = Err(
-        value->origin(), "Path is not in bundle root dir.",
-        "The given file should be in the bundle root directory or below.\n"
-        "Normally you would do \"$bundle_root_dir/foo\". I interpreted this\n"
-        "as \"" +
-            str + "\".");
+    *err_ =
+        Err(value->origin(), "Path is not in bundle root dir.",
+            base::StringPrintf("The given file should be in the bundle root "
+                               "directory or below.Normally you would do "
+                               "\"$bundle_root_dir/foo\". I interpreted this "
+                               "as \"%s\".",
+                               str.c_str()));
     return false;
   }
   *bundle_dir = SourceDir(std::move(str));
@@ -188,8 +218,9 @@ bool CreateBundleTargetGenerator::FillXcodeTestApplicationName() {
   return true;
 }
 
-bool CreateBundleTargetGenerator::FillCodeSigningScript() {
-  const Value* value = scope_->GetValue(variables::kCodeSigningScript, true);
+bool CreateBundleTargetGenerator::FillPostProcessingScript() {
+  const Value* value = GetValueFromScope(
+      scope_, variables::kPostProcessingScript, variables::kCodeSigningScript);
   if (!value)
     return true;
 
@@ -201,20 +232,21 @@ bool CreateBundleTargetGenerator::FillCodeSigningScript() {
   if (err_->has_error())
     return false;
 
-  target_->bundle_data().set_code_signing_script(script_file);
+  target_->bundle_data().set_post_processing_script(script_file);
   return true;
 }
 
-bool CreateBundleTargetGenerator::FillCodeSigningSources() {
-  const Value* value = scope_->GetValue(variables::kCodeSigningSources, true);
+bool CreateBundleTargetGenerator::FillPostProcessingSources() {
+  const Value* value =
+      GetValueFromScope(scope_, variables::kPostProcessingSources,
+                        variables::kCodeSigningSources);
   if (!value)
     return true;
 
-  if (target_->bundle_data().code_signing_script().is_null()) {
-    *err_ = Err(
-        function_call_,
-        "No code signing script."
-        "You must define code_signing_script if you use code_signing_sources.");
+  if (target_->bundle_data().post_processing_script().is_null()) {
+    *err_ = Err(function_call_, "No post-processing script.",
+                "You must define post_processing_script if you use "
+                "post_processing_sources.");
     return false;
   }
 
@@ -224,36 +256,35 @@ bool CreateBundleTargetGenerator::FillCodeSigningSources() {
                                   err_))
     return false;
 
-  target_->bundle_data().code_signing_sources() = std::move(script_sources);
+  target_->bundle_data().post_processing_sources() = std::move(script_sources);
   return true;
 }
 
-bool CreateBundleTargetGenerator::FillCodeSigningOutputs() {
-  const Value* value = scope_->GetValue(variables::kCodeSigningOutputs, true);
+bool CreateBundleTargetGenerator::FillPostProcessingOutputs() {
+  const Value* value =
+      GetValueFromScope(scope_, variables::kPostProcessingOutputs,
+                        variables::kCodeSigningOutputs);
   if (!value)
     return true;
 
-  if (target_->bundle_data().code_signing_script().is_null()) {
-    *err_ = Err(
-        function_call_,
-        "No code signing script."
-        "You must define code_signing_script if you use code_signing_outputs.");
+  if (target_->bundle_data().post_processing_script().is_null()) {
+    *err_ = Err(function_call_, "No post-processing script.",
+                "You must define post_processing_script if you use "
+                "post_processing_outputs.");
     return false;
   }
 
   if (!value->VerifyTypeIs(Value::LIST, err_))
     return false;
 
-  SubstitutionList& outputs = target_->bundle_data().code_signing_outputs();
+  SubstitutionList& outputs = target_->bundle_data().post_processing_outputs();
   if (!outputs.Parse(*value, err_))
     return false;
 
   if (outputs.list().empty()) {
-    *err_ =
-        Err(function_call_,
-            "Code signing script has no output."
-            "If you have no outputs, the build system can not tell when your\n"
-            "code signing script needs to be run.");
+    *err_ = Err(function_call_, "Post-processing script has no output.",
+                "If you have no outputs, the build system can not tell when "
+                "your post-processing script needs to be run.");
     return false;
   }
 
@@ -268,23 +299,23 @@ bool CreateBundleTargetGenerator::FillCodeSigningOutputs() {
   return true;
 }
 
-bool CreateBundleTargetGenerator::FillCodeSigningArgs() {
-  const Value* value = scope_->GetValue(variables::kCodeSigningArgs, true);
+bool CreateBundleTargetGenerator::FillPostProcessingArgs() {
+  const Value* value = GetValueFromScope(scope_, variables::kPostProcessingArgs,
+                                         variables::kCodeSigningArgs);
   if (!value)
     return true;
 
-  if (target_->bundle_data().code_signing_script().is_null()) {
-    *err_ = Err(
-        function_call_,
-        "No code signing script."
-        "You must define code_signing_script if you use code_signing_args.");
+  if (target_->bundle_data().post_processing_script().is_null()) {
+    *err_ = Err(function_call_, "No post-processing script.",
+                "You must define post_processing_script if you use "
+                "post_processing_args.");
     return false;
   }
 
   if (!value->VerifyTypeIs(Value::LIST, err_))
     return false;
 
-  return target_->bundle_data().code_signing_args().Parse(*value, err_);
+  return target_->bundle_data().post_processing_args().Parse(*value, err_);
 }
 
 bool CreateBundleTargetGenerator::FillBundleDepsFilter() {

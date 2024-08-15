@@ -28,7 +28,8 @@ class TabModelJniBridge : public TabModel {
   TabModelJniBridge(JNIEnv* env,
                     jobject obj,
                     Profile* profile,
-                    chrome::android::ActivityType activity_type);
+                    chrome::android::ActivityType activity_type,
+                    bool track_in_native_model_list);
   void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
   TabModelJniBridge(const TabModelJniBridge&) = delete;
@@ -76,6 +77,13 @@ class TabModelJniBridge : public TabModel {
   void BroadcastSessionRestoreComplete(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
+
+  int GetTabCountNavigatedInTimeWindow(
+      const base::Time& begin_time,
+      const base::Time& end_time) const override;
+
+  void CloseTabsNavigatedInTimeWindow(const base::Time& begin_time,
+                                      const base::Time& end_time) override;
 
   // Returns a corresponding Java Class object.
   static jclass GetClazz(JNIEnv* env);

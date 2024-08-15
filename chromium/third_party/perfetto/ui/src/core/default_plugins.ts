@@ -28,6 +28,7 @@ export const defaultPlugins = [
   'dev.perfetto.AndroidNetwork',
   'dev.perfetto.AndroidPerf',
   'dev.perfetto.AndroidPerfTraceCounters',
+  'dev.perfetto.AndroidStartup',
   'dev.perfetto.BookmarkletApi',
   'dev.perfetto.CoreCommands',
   'dev.perfetto.LargeScreensPerf',
@@ -55,5 +56,5 @@ export const defaultPlugins = [
   'perfetto.Screenshots',
   'perfetto.ThreadState',
   'perfetto.VisualisedArgs',
-  'linuxDeviceTracks',
+  'org.kernel.LinuxKernelDevices',
 ];

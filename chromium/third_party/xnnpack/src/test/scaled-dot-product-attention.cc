@@ -3,31 +3,33 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <algorithm>  // For std::generate.
-#include <array>      // For std::array.
-#include <cstddef>    // For size_t.
-#include <cstdint>    // For uint32_t.
-#include <limits>     // For std::numeric_limits.
-#include <memory>     // For std::unique_ptr.
-#include <numeric>    // For std::accumulate.
-#include <random>     // For std::random_device, std::mt19937, std::uniform_real_distribution.
-#include <vector>     // For std::vector.
-
-#include <fp16/fp16.h>
-#include <gtest/gtest.h>
-
 #include <xnnpack.h>
 #include <xnnpack/aligned-allocator.h>
+#include <xnnpack/common.h>
 #include <xnnpack/node-type.h>
 #include <xnnpack/subgraph.h>
+
+#include <algorithm>  // For std::generate.
+#include <array>      // For std::array.
+#include <cassert>
+#include <cmath>
+#include <cstddef>  // For size_t.
+#include <cstdint>  // For uint32_t.
+#include <functional>
+#include <limits>   // For std::numeric_limits.
+#include <memory>   // For std::unique_ptr.
+#include <numeric>  // For std::accumulate.
+#include <random>   // For std::uniform_real_distribution.
+#include <vector>   // For std::vector.
+
+#include "replicable_random_device.h"
+#include <gtest/gtest.h>
+#include <fp16/fp16.h>
 
 template <class T>
 class ScaledDotProductAttentionTestBase : public ::testing::Test {
  protected:
-  ScaledDotProductAttentionTestBase()
-  {
-    random_device = std::make_unique<std::random_device>();
-    rng = std::mt19937((*random_device)());
+  ScaledDotProductAttentionTestBase() {
     f32dist = std::uniform_real_distribution<float>(0.1f, 1.0f);
     dim_dist = std::uniform_int_distribution<size_t>(5, 15);
     bernoulli_dist = std::bernoulli_distribution(0.5);
@@ -150,8 +152,7 @@ class ScaledDotProductAttentionTestBase : public ::testing::Test {
     return std::accumulate(dims.begin(), dims.end(), size_t(1), std::multiplies<size_t>());
   }
 
-  std::unique_ptr<std::random_device> random_device;
-  std::mt19937 rng;
+  xnnpack::ReplicableRandomDevice rng;
   std::uniform_real_distribution<float> f32dist;
   std::uniform_real_distribution<float> cap_dist;
   std::uniform_int_distribution<size_t> dim_dist;
@@ -350,8 +351,8 @@ TEST_F(ScaledDotProductAttentionTestF16, matches_operator_api) {
   std::generate(value.begin(), value.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
   std::generate(scale.begin(), scale.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
   std::generate(mask.begin(), mask.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-  std::fill(operator_output.begin(), operator_output.end(), fp16_ieee_from_fp32_value(nanf("")));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), fp16_ieee_from_fp32_value(nanf("")));
+  std::fill(operator_output.begin(), operator_output.end(), UINT16_C(0x7E00) /* NaN */);
+  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT16_C(0x7E00) /* NaN */);
 
   // Call operator API.
   const xnn_status status = xnn_create_scaled_dot_product_attention_nhtc_f16(cap_type, &cap_params, /*flags=*/0, &op);

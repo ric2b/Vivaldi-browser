@@ -36,6 +36,7 @@ import org.chromium.content_public.browser.MessagePayload;
 import org.chromium.content_public.browser.MessagePort;
 import org.chromium.net.test.util.TestWebServer;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -62,6 +63,10 @@ public class AwMediaIntegrityApiTest extends AwParameterizedTest {
 
     private static final long CLOUD_PROJECT_NUMBER = 123;
     private static final String CONTENT_BINDING_HASH = "content_binding";
+    private static final String UNTRUSTWORTHY_OR_NON_HTTP_HTTPS_ERROR_MESSAGE =
+            "NotSupportedError: Failed to execute 'getExperimentalMediaIntegrityTokenProvider' on"
+                + " 'WebView': getExperimentalMediaIntegrityTokenProvider: can only be used from"
+                + " trustworthy http/https origins";
 
     @Rule public AwActivityTestRule mRule;
 
@@ -76,7 +81,7 @@ public class AwMediaIntegrityApiTest extends AwParameterizedTest {
     }
 
     @Before
-    public void setUp() throws Exception {
+    public void setUp() throws Throwable {
         mPlatformBridge = new MockPlatformServiceBridge();
         PlatformServiceBridge.injectInstance(mPlatformBridge);
 
@@ -97,6 +102,13 @@ public class AwMediaIntegrityApiTest extends AwParameterizedTest {
                 .getSettings()
                 .setWebViewIntegrityApiStatus(
                         MediaIntegrityApiStatus.ENABLED, Collections.emptyMap());
+
+        // TODO(crbug.com/330151742): AWMI doesn't use the origin of the base URL set by loads from
+        // loadDataWithBaseUrl. For now, use a TestWebServer to load a default HTTPS page.
+        try (TestWebServer server = TestWebServer.startSsl()) {
+            String url = server.setEmptyResponse("");
+            mRule.loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(), url);
+        }
     }
 
     @Test
@@ -129,6 +141,142 @@ public class AwMediaIntegrityApiTest extends AwParameterizedTest {
     })
     public void testApiSurfaceNotExposedWhenFeatureDisabled() throws Exception {
         assertJsTruthy("!('android' in window)");
+    }
+
+    @Test
+    @MediumTest
+    @CommandLineFlags.Add({
+        "enable-features=" + AwFeatures.WEBVIEW_MEDIA_INTEGRITY_API_BLINK_EXTENSION
+    })
+    public void testProviderGetterNotExposedForDataUris() throws Throwable {
+        mRule.loadDataSync(
+                mAwContents, mContentsClient.getOnPageFinishedHelper(), "", "text/html", false);
+        assertNotExposed();
+    }
+
+    @Test
+    @MediumTest
+    @CommandLineFlags.Add({
+        "enable-features=" + AwFeatures.WEBVIEW_MEDIA_INTEGRITY_API_BLINK_EXTENSION
+    })
+    public void testProviderGetterExposedButRejectedForDataUrisWithHttpsBaseUrls()
+            throws Throwable {
+        // An HTTPS base URL has a secure context, unlike a plain data URL. This exposes the API,
+        // but we deliberately reject the data URL in the implementation.
+        mRule.loadDataWithBaseUrlSync(
+                mAwContents,
+                mContentsClient.getOnPageFinishedHelper(),
+                "",
+                "text/html",
+                false,
+                "https://example.com/",
+                null);
+        final String testScript =
+                getTestScript(CLOUD_PROJECT_NUMBER, asStringConstant(CONTENT_BINDING_HASH));
+        Assert.assertEquals(
+                getExpectedErrorMessage(MediaIntegrityErrorCode.NON_RECOVERABLE_ERROR),
+                runTestScriptAndWaitForResult(testScript));
+    }
+
+    @Test
+    @MediumTest
+    @CommandLineFlags.Add({
+        "enable-features=" + AwFeatures.WEBVIEW_MEDIA_INTEGRITY_API_BLINK_EXTENSION
+    })
+    public void testProviderGetterNotExposedForAboutBlank() throws Throwable {
+        mRule.loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(), "about:blank");
+        assertNotExposed();
+    }
+
+    @Test
+    @MediumTest
+    @CommandLineFlags.Add({
+        "enable-features=" + AwFeatures.WEBVIEW_MEDIA_INTEGRITY_API_BLINK_EXTENSION
+    })
+    public void testProviderGetterNotExposedForPlaintextHttp() throws Throwable {
+        mRule.loadDataWithBaseUrlSync(
+                mAwContents,
+                mContentsClient.getOnPageFinishedHelper(),
+                "",
+                "text/html",
+                false,
+                "http://example.com/",
+                null);
+        assertNotExposed();
+    }
+
+    @Test
+    @MediumTest
+    @CommandLineFlags.Add({
+        "enable-features=" + AwFeatures.WEBVIEW_MEDIA_INTEGRITY_API_BLINK_EXTENSION
+    })
+    public void testProviderGetterUseableForLocalhostHttp() throws Throwable {
+        try (TestWebServer server = TestWebServer.start()) {
+            String url = server.setEmptyResponse("");
+            mRule.loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(), url);
+        }
+        String mockToken = "abc123def456";
+        MockTokenProvider mockTokenProvider = new MockTokenProvider();
+        mockTokenProvider.addRequestToken(CONTENT_BINDING_HASH, mockToken);
+
+        mPlatformBridge.addProviderResponse(
+                CLOUD_PROJECT_NUMBER, MediaIntegrityApiStatus.ENABLED, mockTokenProvider);
+
+        String actualToken =
+                runTestScriptAndWaitForResult(
+                        getTestScript(
+                                CLOUD_PROJECT_NUMBER, asStringConstant(CONTENT_BINDING_HASH)));
+        Assert.assertEquals(mockToken, actualToken);
+
+        // Assert that the token manager was instantiated with the correct cloud project number
+        Assert.assertEquals(1, mPlatformBridge.getTotalProviderCallCount());
+        Assert.assertEquals(
+                1,
+                mPlatformBridge.getProviderCallCount(
+                        CLOUD_PROJECT_NUMBER, MediaIntegrityApiStatus.ENABLED));
+
+        // Assert that the content binding hash was passed to the TokenProvider
+        Assert.assertEquals(1, mockTokenProvider.getTotalCallCount());
+        Assert.assertEquals(1, mockTokenProvider.getCallCount(CONTENT_BINDING_HASH));
+    }
+
+    @Test
+    @MediumTest
+    @CommandLineFlags.Add({
+        "enable-features=" + AwFeatures.WEBVIEW_MEDIA_INTEGRITY_API_BLINK_EXTENSION
+    })
+    public void testProviderGetterExposedButRejectedForFileUris() throws Throwable {
+        mRule.loadUrlSync(
+                mAwContents,
+                mContentsClient.getOnPageFinishedHelper(),
+                "file:///android_asset/hello.html");
+        final String testScript =
+                getTestScript(CLOUD_PROJECT_NUMBER, asStringConstant(CONTENT_BINDING_HASH));
+        Assert.assertEquals(
+                UNTRUSTWORTHY_OR_NON_HTTP_HTTPS_ERROR_MESSAGE,
+                runTestScriptAndWaitForResult(testScript));
+    }
+
+    @Test
+    @MediumTest
+    @CommandLineFlags.Add({
+        "enable-features=" + AwFeatures.WEBVIEW_MEDIA_INTEGRITY_API_BLINK_EXTENSION
+    })
+    public void testProviderGetterExposedButRejectedForContentUris() throws Throwable {
+        final String testHtmlContentPath = "hello.html";
+        final String testHtmlContent =
+                "<!DOCTYPE html><html><body>Hello. I'm from a content-provider.</body></html>";
+        TestContentProvider.register(
+                testHtmlContentPath, "text/html", testHtmlContent.getBytes(StandardCharsets.UTF_8));
+        mRule.loadUrlSync(
+                mAwContents,
+                mContentsClient.getOnPageFinishedHelper(),
+                TestContentProvider.createContentUrl(testHtmlContentPath));
+        final String testScript =
+                getTestScript(CLOUD_PROJECT_NUMBER, asStringConstant(CONTENT_BINDING_HASH));
+        Assert.assertEquals(
+                UNTRUSTWORTHY_OR_NON_HTTP_HTTPS_ERROR_MESSAGE,
+                runTestScriptAndWaitForResult(testScript));
     }
 
     @Test
@@ -214,7 +362,7 @@ public class AwMediaIntegrityApiTest extends AwParameterizedTest {
         String testScript =
                 getTestScript(CLOUD_PROJECT_NUMBER, asStringConstant(CONTENT_BINDING_HASH));
 
-        try (TestWebServer server = TestWebServer.start()) {
+        try (TestWebServer server = TestWebServer.startSsl()) {
             String url = server.setEmptyResponse("");
             Map<String, @MediaIntegrityApiStatus Integer> rules =
                     Map.of(url, MediaIntegrityApiStatus.DISABLED);
@@ -227,6 +375,74 @@ public class AwMediaIntegrityApiTest extends AwParameterizedTest {
         Assert.assertEquals(
                 getExpectedErrorMessage(MediaIntegrityErrorCode.API_DISABLED_BY_APPLICATION),
                 runTestScriptAndWaitForResult(testScript));
+    }
+
+    @Test
+    @MediumTest
+    @CommandLineFlags.Add({
+        "enable-features=" + AwFeatures.WEBVIEW_MEDIA_INTEGRITY_API_BLINK_EXTENSION
+    })
+    public void testErrorWhenApiDisabledForSourceButEnabledForTopLevel() throws Exception {
+        final String result;
+        try (final TestWebServer topLevelServer = TestWebServer.startSsl();
+                final TestWebServer sourceServer = TestWebServer.startAdditionalSsl()) {
+            final String testScript =
+                    getTestScript(CLOUD_PROJECT_NUMBER, asStringConstant(CONTENT_BINDING_HASH));
+            final String sourceHtml = "<script>" + testScript + "</script>";
+            final String sourceUrl =
+                    sourceServer.setResponse("/", sourceHtml, Collections.emptyList());
+            final String topLevelHtml = "<iframe src=\"" + sourceUrl + "\"></iframe>";
+            final String topLevelUrl =
+                    topLevelServer.setResponse("/", topLevelHtml, Collections.emptyList());
+            final Map<String, @MediaIntegrityApiStatus Integer> rules =
+                    Map.of(sourceServer.getResponseUrl(""), MediaIntegrityApiStatus.DISABLED);
+            mAwContents
+                    .getSettings()
+                    .setWebViewIntegrityApiStatus(MediaIntegrityApiStatus.ENABLED, rules);
+            final int callCount = mMessageListener.getCurrentCallbackCount();
+            mRule.loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(), topLevelUrl);
+            result = mMessageListener.waitForResponse(callCount);
+        }
+
+        Assert.assertEquals(
+                getExpectedErrorMessage(MediaIntegrityErrorCode.API_DISABLED_BY_APPLICATION),
+                result);
+    }
+
+    @Test
+    @MediumTest
+    @CommandLineFlags.Add({
+        "enable-features=" + AwFeatures.WEBVIEW_MEDIA_INTEGRITY_API_BLINK_EXTENSION
+    })
+    public void testGetTokenWhenApiEnabledForSourceButDisabledForTopLevel() throws Exception {
+        final String mockToken = "abc123def456";
+        final MockTokenProvider mockTokenProvider = new MockTokenProvider();
+        mockTokenProvider.addRequestToken(CONTENT_BINDING_HASH, mockToken);
+        mPlatformBridge.addProviderResponse(
+                CLOUD_PROJECT_NUMBER, MediaIntegrityApiStatus.ENABLED, mockTokenProvider);
+
+        final String result;
+        try (final TestWebServer topLevelServer = TestWebServer.startSsl();
+                final TestWebServer sourceServer = TestWebServer.startAdditionalSsl()) {
+            final String testScript =
+                    getTestScript(CLOUD_PROJECT_NUMBER, asStringConstant(CONTENT_BINDING_HASH));
+            final String sourceHtml = "<script>" + testScript + "</script>";
+            final String sourceUrl =
+                    sourceServer.setResponse("/", sourceHtml, Collections.emptyList());
+            final String topLevelHtml = "<iframe src=\"" + sourceUrl + "\"></iframe>";
+            final String topLevelUrl =
+                    topLevelServer.setResponse("/", topLevelHtml, Collections.emptyList());
+            final Map<String, @MediaIntegrityApiStatus Integer> rules =
+                    Map.of(sourceServer.getResponseUrl(""), MediaIntegrityApiStatus.ENABLED);
+            mAwContents
+                    .getSettings()
+                    .setWebViewIntegrityApiStatus(MediaIntegrityApiStatus.DISABLED, rules);
+            final int callCount = mMessageListener.getCurrentCallbackCount();
+            mRule.loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(), topLevelUrl);
+            result = mMessageListener.waitForResponse(callCount);
+        }
+
+        Assert.assertEquals(mockToken, result);
     }
 
     @Test
@@ -278,14 +494,8 @@ public class AwMediaIntegrityApiTest extends AwParameterizedTest {
         String testScript =
                 getTestScript(CLOUD_PROJECT_NUMBER, asStringConstant(CONTENT_BINDING_HASH));
 
-        // Use a test server since caching only works for real origins.
-        try (TestWebServer server = TestWebServer.start()) {
-            String url = server.setEmptyResponse("/");
-            mRule.loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(), url);
-
-            Assert.assertEquals(mockToken, runTestScriptAndWaitForResult(testScript));
-            Assert.assertEquals(mockToken, runTestScriptAndWaitForResult(testScript));
-        }
+        Assert.assertEquals(mockToken, runTestScriptAndWaitForResult(testScript));
+        Assert.assertEquals(mockToken, runTestScriptAndWaitForResult(testScript));
 
         // Assert that the token manager was only instantiated once
         Assert.assertEquals(1, mPlatformBridge.getTotalProviderCallCount());
@@ -351,54 +561,63 @@ public class AwMediaIntegrityApiTest extends AwParameterizedTest {
     @CommandLineFlags.Add({
         "enable-features=" + AwFeatures.WEBVIEW_MEDIA_INTEGRITY_API_BLINK_EXTENSION
     })
-    public void testTokenProviderNotReusedAcrossOrigin() throws Exception {
-        String mockTokenAboutBlank = "abc123def456";
-        String mockTokenTestServer = "555555555";
+    public void testTokenProviderNotReusedAcrossDistinctOrigins() throws Exception {
+        String mockTokenTestServer1 = "abc123def456";
+        String mockTokenTestServer2 = "555555555";
 
-        String contentBindingAboutBlank = "about_blank";
-        String contentBindingTestServer = "test_server";
+        String contentBindingTestServer1 = "test_server1";
+        String contentBindingTestServer2 = "test_server2";
 
-        long cloudProjectNumberAboutBlank = 1234;
-        long cloudProjectNumberTestServer = 9876;
+        long cloudProjectNumberTestServer1 = 1234;
+        long cloudProjectNumberTestServer2 = 9876;
 
-        MockTokenProvider mockTokenProviderAboutBlank = new MockTokenProvider();
-        mockTokenProviderAboutBlank.addRequestToken(contentBindingAboutBlank, mockTokenAboutBlank);
+        MockTokenProvider mockTokenProviderTestServer1 = new MockTokenProvider();
+        mockTokenProviderTestServer1.addRequestToken(
+                contentBindingTestServer1, mockTokenTestServer1);
         mPlatformBridge.addProviderResponse(
-                cloudProjectNumberAboutBlank,
+                cloudProjectNumberTestServer1,
                 MediaIntegrityApiStatus.ENABLED,
-                mockTokenProviderAboutBlank);
+                mockTokenProviderTestServer1);
 
-        MockTokenProvider mockTokenProviderTestServer = new MockTokenProvider();
-        mockTokenProviderTestServer.addRequestToken(contentBindingTestServer, mockTokenTestServer);
+        MockTokenProvider mockTokenProviderTestServer2 = new MockTokenProvider();
+        mockTokenProviderTestServer2.addRequestToken(
+                contentBindingTestServer2, mockTokenTestServer2);
         mPlatformBridge.addProviderResponse(
-                cloudProjectNumberTestServer,
+                cloudProjectNumberTestServer2,
                 MediaIntegrityApiStatus.ENABLED,
-                mockTokenProviderTestServer);
+                mockTokenProviderTestServer2);
 
-        Assert.assertEquals(
-                mockTokenAboutBlank,
-                runTestScriptAndWaitForResult(
-                        getTestScript(
-                                cloudProjectNumberAboutBlank,
-                                asStringConstant(contentBindingAboutBlank))));
+        try (TestWebServer server1 = TestWebServer.startSsl()) {
+            try (TestWebServer server2 = TestWebServer.startAdditionalSsl()) {
+                String url1 = server1.setEmptyResponse("/");
+                mRule.loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(), url1);
 
-        try (TestWebServer server = TestWebServer.start()) {
-            String url = server.setEmptyResponse("/");
-            mRule.loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(), url);
-            Assert.assertEquals(
-                    mockTokenTestServer,
-                    runTestScriptAndWaitForResult(
-                            getTestScript(
-                                    cloudProjectNumberTestServer,
-                                    asStringConstant(contentBindingTestServer))));
+                Assert.assertEquals(
+                        mockTokenTestServer1,
+                        runTestScriptAndWaitForResult(
+                                getTestScript(
+                                        cloudProjectNumberTestServer1,
+                                        asStringConstant(contentBindingTestServer1))));
+
+                String url2 = server2.setEmptyResponse("/");
+                mRule.loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(), url2);
+
+                Assert.assertEquals(
+                        mockTokenTestServer2,
+                        runTestScriptAndWaitForResult(
+                                getTestScript(
+                                        cloudProjectNumberTestServer2,
+                                        asStringConstant(contentBindingTestServer2))));
+            }
         }
 
         // Assert that the token manager was instantiated twice.
         Assert.assertEquals(2, mPlatformBridge.getTotalProviderCallCount());
-
         // Assert that each token provider was called with the expected content binding.
-        Assert.assertEquals(1, mockTokenProviderAboutBlank.getCallCount(contentBindingAboutBlank));
-        Assert.assertEquals(1, mockTokenProviderTestServer.getCallCount(contentBindingTestServer));
+        Assert.assertEquals(
+                1, mockTokenProviderTestServer1.getCallCount(contentBindingTestServer1));
+        Assert.assertEquals(
+                1, mockTokenProviderTestServer2.getCallCount(contentBindingTestServer2));
     }
 
     @Test
@@ -420,9 +639,9 @@ public class AwMediaIntegrityApiTest extends AwParameterizedTest {
         mPlatformBridge.addProviderResponse(
                 CLOUD_PROJECT_NUMBER, MediaIntegrityApiStatus.ENABLED, mockTokenProviderB);
 
-        try (TestWebServer server = TestWebServer.start();
-                TestWebServer thirdPartyServer = TestWebServer.startAdditional();
-                TestWebServer fourthPartyServer = TestWebServer.startAdditional()) {
+        try (TestWebServer server = TestWebServer.startSsl();
+                TestWebServer thirdPartyServer = TestWebServer.startAdditionalSsl();
+                TestWebServer fourthPartyServer = TestWebServer.startAdditionalSsl()) {
 
             String testScript =
                     getTestScript(CLOUD_PROJECT_NUMBER, asStringConstant(CONTENT_BINDING_HASH));
@@ -634,57 +853,41 @@ public class AwMediaIntegrityApiTest extends AwParameterizedTest {
         "enable-features=" + AwFeatures.WEBVIEW_MEDIA_INTEGRITY_API_BLINK_EXTENSION
     })
     public void testErrorsMappedRequestToken() throws Exception {
-        {
-            MockTokenProvider mockTokenProvider = new MockTokenProvider();
-            mPlatformBridge.addProviderResponse(
-                    CLOUD_PROJECT_NUMBER, MediaIntegrityApiStatus.ENABLED, mockTokenProvider);
-            mockTokenProvider.addRequestError(
-                    CONTENT_BINDING_HASH, MediaIntegrityErrorCode.INTERNAL_ERROR);
-            Assert.assertEquals(
-                    getExpectedErrorMessage(MediaIntegrityErrorCode.INTERNAL_ERROR),
-                    runTestScriptAndWaitForResult(
-                            getTestScript(
-                                    CLOUD_PROJECT_NUMBER, asStringConstant(CONTENT_BINDING_HASH))));
-        }
+        MockTokenProvider mockTokenProvider = new MockTokenProvider();
+        mPlatformBridge.addProviderResponse(
+                CLOUD_PROJECT_NUMBER, MediaIntegrityApiStatus.ENABLED, mockTokenProvider);
 
-        {
-            MockTokenProvider mockTokenProvider = new MockTokenProvider();
-            mPlatformBridge.addProviderResponse(
-                    CLOUD_PROJECT_NUMBER, MediaIntegrityApiStatus.ENABLED, mockTokenProvider);
-            mockTokenProvider.addRequestError(
-                    CONTENT_BINDING_HASH, MediaIntegrityErrorCode.NON_RECOVERABLE_ERROR);
-            Assert.assertEquals(
-                    getExpectedErrorMessage(MediaIntegrityErrorCode.NON_RECOVERABLE_ERROR),
-                    runTestScriptAndWaitForResult(
-                            getTestScript(
-                                    CLOUD_PROJECT_NUMBER, asStringConstant(CONTENT_BINDING_HASH))));
-        }
+        mockTokenProvider.addRequestError(
+                CONTENT_BINDING_HASH, MediaIntegrityErrorCode.INTERNAL_ERROR);
+        Assert.assertEquals(
+                getExpectedErrorMessage(MediaIntegrityErrorCode.INTERNAL_ERROR),
+                runTestScriptAndWaitForResult(
+                        getTestScript(
+                                CLOUD_PROJECT_NUMBER, asStringConstant(CONTENT_BINDING_HASH))));
 
-        {
-            MockTokenProvider mockTokenProvider = new MockTokenProvider();
-            mPlatformBridge.addProviderResponse(
-                    CLOUD_PROJECT_NUMBER, MediaIntegrityApiStatus.ENABLED, mockTokenProvider);
-            mockTokenProvider.addRequestError(
-                    CONTENT_BINDING_HASH, MediaIntegrityErrorCode.INVALID_ARGUMENT);
-            Assert.assertEquals(
-                    getExpectedErrorMessage(MediaIntegrityErrorCode.INVALID_ARGUMENT),
-                    runTestScriptAndWaitForResult(
-                            getTestScript(
-                                    CLOUD_PROJECT_NUMBER, asStringConstant(CONTENT_BINDING_HASH))));
-        }
+        mockTokenProvider.addRequestError(
+                CONTENT_BINDING_HASH, MediaIntegrityErrorCode.NON_RECOVERABLE_ERROR);
+        Assert.assertEquals(
+                getExpectedErrorMessage(MediaIntegrityErrorCode.NON_RECOVERABLE_ERROR),
+                runTestScriptAndWaitForResult(
+                        getTestScript(
+                                CLOUD_PROJECT_NUMBER, asStringConstant(CONTENT_BINDING_HASH))));
 
-        {
-            MockTokenProvider mockTokenProvider = new MockTokenProvider();
-            mPlatformBridge.addProviderResponse(
-                    CLOUD_PROJECT_NUMBER, MediaIntegrityApiStatus.ENABLED, mockTokenProvider);
-            mockTokenProvider.addRequestError(
-                    CONTENT_BINDING_HASH, MediaIntegrityErrorCode.TOKEN_PROVIDER_INVALID);
-            Assert.assertEquals(
-                    getExpectedErrorMessage(MediaIntegrityErrorCode.TOKEN_PROVIDER_INVALID),
-                    runTestScriptAndWaitForResult(
-                            getTestScript(
-                                    CLOUD_PROJECT_NUMBER, asStringConstant(CONTENT_BINDING_HASH))));
-        }
+        mockTokenProvider.addRequestError(
+                CONTENT_BINDING_HASH, MediaIntegrityErrorCode.INVALID_ARGUMENT);
+        Assert.assertEquals(
+                getExpectedErrorMessage(MediaIntegrityErrorCode.INVALID_ARGUMENT),
+                runTestScriptAndWaitForResult(
+                        getTestScript(
+                                CLOUD_PROJECT_NUMBER, asStringConstant(CONTENT_BINDING_HASH))));
+
+        mockTokenProvider.addRequestError(
+                CONTENT_BINDING_HASH, MediaIntegrityErrorCode.TOKEN_PROVIDER_INVALID);
+        Assert.assertEquals(
+                getExpectedErrorMessage(MediaIntegrityErrorCode.TOKEN_PROVIDER_INVALID),
+                runTestScriptAndWaitForResult(
+                        getTestScript(
+                                CLOUD_PROJECT_NUMBER, asStringConstant(CONTENT_BINDING_HASH))));
     }
 
     /**
@@ -750,6 +953,13 @@ public class AwMediaIntegrityApiTest extends AwParameterizedTest {
                 yield "";
             }
         };
+    }
+
+    private void assertNotExposed() throws Throwable {
+        // Only the getExperimentalMediaIntegrityTokenProvider part of the API gets hidden or not.
+        assertJsTruthy(
+                "typeof(android.webview.getExperimentalMediaIntegrityTokenProvider) ==="
+                        + " 'undefined'");
     }
 
     /** WebMessageListener that allows us to get async JS responses back for verification. */

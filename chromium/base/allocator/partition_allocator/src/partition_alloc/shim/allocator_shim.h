@@ -2,22 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_SHIM_ALLOCATOR_SHIM_H_
-#define BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_SHIM_ALLOCATOR_SHIM_H_
+#ifndef PARTITION_ALLOC_SHIM_ALLOCATOR_SHIM_H_
+#define PARTITION_ALLOC_SHIM_ALLOCATOR_SHIM_H_
 
 #include <cstddef>
 #include <cstdint>
 
 #include "partition_alloc/partition_alloc_buildflags.h"
 
-#if BUILDFLAG(USE_ALLOCATOR_SHIM)
-#include "build/build_config.h"
+#if PA_BUILDFLAG(USE_ALLOCATOR_SHIM)
+#include "partition_alloc/build_config.h"
 #include "partition_alloc/partition_alloc_base/component_export.h"
 #include "partition_alloc/partition_alloc_base/types/strong_alias.h"
 #include "partition_alloc/shim/allocator_dispatch.h"
 #include "partition_alloc/tagging.h"
 
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && BUILDFLAG(USE_STARSCAN)
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && PA_BUILDFLAG(USE_STARSCAN)
 #include "partition_alloc/starscan/pcscan.h"
 #endif
 
@@ -80,6 +80,9 @@ void InsertAllocatorDispatch(AllocatorDispatch* dispatch);
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
 void RemoveAllocatorDispatchForTesting(AllocatorDispatch* dispatch);
 
+PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
+const AllocatorDispatch* GetAllocatorDispatchChainHeadForTesting();
+
 #if BUILDFLAG(IS_APPLE)
 // The fallback function to be called when try_free_default_function receives a
 // pointer which doesn't belong to the allocator.
@@ -88,16 +91,16 @@ void TryFreeDefaultFallbackToFindZoneAndFree(void* ptr);
 #endif  // BUILDFLAG(IS_APPLE)
 
 #if BUILDFLAG(IS_APPLE)
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
 void InitializeDefaultAllocatorPartitionRoot();
 bool IsDefaultAllocatorPartitionRootInitialized();
-#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 // On macOS, the allocator shim needs to be turned on during runtime.
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM) void InitializeAllocatorShim();
 #endif  // BUILDFLAG(IS_APPLE)
 
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM) void EnablePartitionAllocMemoryReclaimer();
 
 using EnableBrp =
@@ -125,7 +128,7 @@ void ConfigurePartitions(
     partition_alloc::TagViolationReportingMode memory_tagging_reporting_mode,
     BucketDistribution distribution,
     SchedulerLoopQuarantine scheduler_loop_quarantine,
-    size_t scheduler_loop_quarantine_capacity_in_bytes,
+    size_t scheduler_loop_quarantine_branch_capacity_in_bytes,
     ZappingByFreeFlags zapping_by_free_flags,
     UsePoolOffsetFreelists use_pool_offset_freelists);
 
@@ -134,14 +137,14 @@ PA_COMPONENT_EXPORT(ALLOCATOR_SHIM) uint32_t GetMainPartitionRootExtrasSize();
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM) void AdjustDefaultAllocatorForForeground();
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM) void AdjustDefaultAllocatorForBackground();
 
-#if BUILDFLAG(USE_STARSCAN)
+#if PA_BUILDFLAG(USE_STARSCAN)
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
 void EnablePCScan(partition_alloc::internal::PCScan::InitConfig);
 #endif
-#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 
 }  // namespace allocator_shim
 
-#endif  // BUILDFLAG(USE_ALLOCATOR_SHIM)
+#endif  // PA_BUILDFLAG(USE_ALLOCATOR_SHIM)
 
-#endif  // BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_SHIM_ALLOCATOR_SHIM_H_
+#endif  // PARTITION_ALLOC_SHIM_ALLOCATOR_SHIM_H_

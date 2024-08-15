@@ -13,7 +13,7 @@ class PrefService;
 
 // The Mediator for start page setting.
 @interface VivaldiStartPageSettingsMediator
-    : NSObject
+    : NSObject<VivaldiStartPageSettingsConsumer>
 
 - (instancetype)initWithOriginalPrefService:(PrefService*)originalPrefService
     NS_DESIGNATED_INITIALIZER;

@@ -241,18 +241,15 @@ public class OmniboxTestUtils {
      * Set the suggestions to the Omnibox to display.
      *
      * @param autocompleteResult The set of suggestions will be displayed on the Omnibox dropdown
-     *         list.
-     * @param inlineAutocompleteText the inline-autocomplete text.
+     *     list.
      */
-    public void setSuggestions(
-            AutocompleteResult autocompleteResult, String inlineAutocompleteText) {
+    public void setSuggestions(AutocompleteResult autocompleteResult) {
         checkFocus(true);
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     OnSuggestionsReceivedListener listener =
                             mAutocomplete.getSuggestionsReceivedListenerForTest();
-                    listener.onSuggestionsReceived(
-                            autocompleteResult, inlineAutocompleteText, true);
+                    listener.onSuggestionsReceived(autocompleteResult, true);
                 });
     }
 
@@ -562,7 +559,7 @@ public class OmniboxTestUtils {
                                     autocompleteSelectionStart);
                         }
 
-                        // TODO(crbug.com/1289474): Investigate why AutocompleteSelectionEnd was
+                        // TODO(crbug.com/40211958): Investigate why AutocompleteSelectionEnd was
                         // never enforced and why it doesn't work, then possibly re-enable the
                         // logic below: if (autocompleteSelectionEnd != null) {
                         //     Criteria.checkThat("Autocomplete Selection end",

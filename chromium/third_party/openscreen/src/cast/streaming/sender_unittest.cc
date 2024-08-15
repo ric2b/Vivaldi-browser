@@ -113,7 +113,7 @@ void OverrideRtpTimestamp(int frame_count, EncodedFrame* frame, int fps) {
 class SimulatedNetworkPipe {
  public:
   SimulatedNetworkPipe(TaskRunner& task_runner,
-                       Environment::PacketConsumer* remote)
+                       Environment::PacketConsumer& remote)
       : task_runner_(task_runner), remote_(remote) {
     // Create a fake IPv6 address using the "documentative purposes" prefix
     // concatenated with the `this` pointer.
@@ -136,15 +136,15 @@ class SimulatedNetworkPipe {
   void StartPacketTransmission(std::vector<uint8_t> packet) {
     task_runner_.PostTaskWithDelay(
         [this, pkt = std::move(packet)]() mutable {
-          remote_->OnReceivedPacket(local_endpoint_, FakeClock::now(),
-                                    std::move(pkt));
+          remote_.OnReceivedPacket(local_endpoint_, FakeClock::now(),
+                                   std::move(pkt));
         },
         network_delay_);
   }
 
  private:
   TaskRunner& task_runner_;
-  Environment::PacketConsumer* const remote_;
+  Environment::PacketConsumer& remote_;
 
   IPEndpoint local_endpoint_;
 
@@ -158,11 +158,11 @@ class SimulatedNetworkPipe {
 // the Sender.
 class MockReceiver : public Environment::PacketConsumer {
  public:
-  explicit MockReceiver(SimulatedNetworkPipe* pipe_to_sender)
+  explicit MockReceiver(SimulatedNetworkPipe& pipe_to_sender)
       : pipe_to_sender_(pipe_to_sender),
         rtcp_session_(kSenderSsrc, kReceiverSsrc, FakeClock::now()),
-        sender_report_parser_(&rtcp_session_),
-        rtcp_builder_(&rtcp_session_),
+        sender_report_parser_(rtcp_session_),
+        rtcp_builder_(rtcp_session_),
         rtp_parser_(kSenderSsrc),
         crypto_(kAesKey, kCastIvMask) {
     rtcp_builder_.SetPlayoutDelay(kTargetPlayoutDelay);
@@ -221,7 +221,7 @@ class MockReceiver : public Environment::PacketConsumer {
     uint8_t buffer[kMaxRtpPacketSizeForIpv6UdpOnEthernet];
     const ByteBuffer packet =
         rtcp_builder_.BuildPacket(FakeClock::now(), buffer);
-    pipe_to_sender_->StartPacketTransmission(
+    pipe_to_sender_.StartPacketTransmission(
         std::vector<uint8_t>(packet.begin(), packet.end()));
   }
 
@@ -296,21 +296,21 @@ class MockReceiver : public Environment::PacketConsumer {
       return;
     }
     const EncryptedFrame& encrypted = collector.PeekAtAssembledFrame();
-    EncodedFrameWithBuffer* const decrypted = &complete_frames_[frame_id];
+    EncodedFrameWithBuffer& decrypted = complete_frames_[frame_id];
     // Note: Not setting decrypted->reference_time here since the logic around
     // calculating the playout time is rather complex, and is definitely outside
     // the scope of the testing being done in this module. Instead, end-to-end
     // testing should exist elsewhere to confirm frame play-out times with real
     // Receivers.
-    decrypted->buffer.resize(FrameCrypto::GetPlaintextSize(encrypted));
-    crypto_.Decrypt(encrypted, decrypted->buffer);
-    encrypted.CopyMetadataTo(decrypted);
-    decrypted->data = decrypted->buffer;
+    decrypted.buffer.resize(FrameCrypto::GetPlaintextSize(encrypted));
+    crypto_.Decrypt(encrypted, decrypted.buffer);
+    encrypted.CopyMetadataTo(&decrypted);
+    decrypted.data = decrypted.buffer;
     incomplete_frames_.erase(frame_id);
     OnFrameComplete(frame_id);
   }
 
-  SimulatedNetworkPipe* const pipe_to_sender_;
+  SimulatedNetworkPipe& pipe_to_sender_;
   RtcpSession rtcp_session_;
   SenderReportParser sender_report_parser_;
   CompoundRtcpBuilder rtcp_builder_;
@@ -332,13 +332,13 @@ class SenderTest : public testing::Test {
  public:
   SenderTest()
       : fake_clock_(Clock::now()),
-        task_runner_(&fake_clock_),
+        task_runner_(fake_clock_),
         sender_environment_(&FakeClock::now, task_runner_),
-        sender_packet_router_(&sender_environment_,
+        sender_packet_router_(sender_environment_,
                               kNumPacketsPerBurst,
                               kBurstInterval),
-        sender_(&sender_environment_,
-                &sender_packet_router_,
+        sender_(sender_environment_,
+                sender_packet_router_,
                 {/* .sender_ssrc = */ kSenderSsrc,
                  /* .receiver_ssrc = */ kReceiverSsrc,
                  /* .rtp_timebase = */ kRtpTimebase,
@@ -348,9 +348,9 @@ class SenderTest : public testing::Test {
                  /* .aes_iv_mask = */ kCastIvMask,
                  /* .is_pli_enabled = */ true},
                 kRtpPayloadType),
-        receiver_to_sender_pipe_(task_runner_, &sender_packet_router_),
-        receiver_(&receiver_to_sender_pipe_),
-        sender_to_receiver_pipe_(task_runner_, &receiver_) {
+        receiver_to_sender_pipe_(task_runner_, sender_packet_router_),
+        receiver_(receiver_to_sender_pipe_),
+        sender_to_receiver_pipe_(task_runner_, receiver_) {
     sender_environment_.SetSocketSubscriber(&socket_subscriber_);
     sender_environment_.set_remote_endpoint(
         receiver_to_sender_pipe_.local_endpoint());
@@ -973,6 +973,27 @@ TEST_F(SenderTest, ProvidesSenderReports) {
             sender_reports.back().rtp_timestamp);
   EXPECT_EQ(uint32_t{1}, sender_reports.back().send_packet_count);
   EXPECT_EQ(uint32_t{kFrameDataSize}, sender_reports.back().send_octet_count);
+}
+
+TEST_F(SenderTest, ReferenceTimesCanBeNonMonotonic) {
+  // This tests that the sender is robust to encoded frames with non-monotonic
+  // reference times.  This situation does not prevent frames from being
+  // transmitted in correct order; however, lip sync will suffer if reference
+  // times do not correspond to RTP timestamps.
+  EXPECT_CALL(*receiver(), OnRtpPacket(_)).Times(AtLeast(1));
+  EXPECT_CALL(*receiver(), OnSenderReport(_)).Times(AtLeast(1));
+
+  // Send the 10 frames with non-monotonic reference times.
+  Clock::time_point reference_time = FakeClock::now();
+  for (int i = 0; i < 10; ++i) {
+    EncodedFrameWithBuffer frame;
+    PopulateFrameWithDefaults(sender()->GetNextFrameId(), reference_time, 0,
+                              13 /* bytes */, &frame);
+    // OverrideRtpTimestamp(i, &frame, 1000 /* fps */);
+    ASSERT_EQ(Sender::OK, sender()->EnqueueFrame(frame));
+    SimulateExecution(kFrameDuration);
+    reference_time -= microseconds(10);
+  }
 }
 
 // Tests that the Sender provides Kickstart packets whenever the Receiver may

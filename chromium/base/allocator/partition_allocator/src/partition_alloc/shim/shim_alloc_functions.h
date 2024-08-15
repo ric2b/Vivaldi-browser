@@ -2,17 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_SHIM_SHIM_ALLOC_FUNCTIONS_H_
+#ifdef PARTITION_ALLOC_SHIM_SHIM_ALLOC_FUNCTIONS_H_
 #error This header is meant to be included only once by allocator_shim*.cc
 #endif
 
-#ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_SHIM_SHIM_ALLOC_FUNCTIONS_H_
-#define BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_SHIM_SHIM_ALLOC_FUNCTIONS_H_
+#ifndef PARTITION_ALLOC_SHIM_SHIM_ALLOC_FUNCTIONS_H_
+#define PARTITION_ALLOC_SHIM_SHIM_ALLOC_FUNCTIONS_H_
 
 #include <bit>
 #include <cerrno>
 
-#include "build/build_config.h"
+#include "partition_alloc/build_config.h"
 #include "partition_alloc/partition_alloc_base/bits.h"
 #include "partition_alloc/partition_alloc_base/compiler_specific.h"
 #include "partition_alloc/partition_alloc_base/memory/page_size.h"
@@ -56,7 +56,7 @@ PA_ALWAYS_INLINE void* ShimCppNew(size_t size) {
   void* ptr;
   do {
     void* context = nullptr;
-#if BUILDFLAG(IS_APPLE) && !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#if BUILDFLAG(IS_APPLE) && !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
     context = malloc_default_zone();
 #endif
     ptr = chain_head->alloc_function(chain_head, size, context);
@@ -66,7 +66,7 @@ PA_ALWAYS_INLINE void* ShimCppNew(size_t size) {
 
 PA_ALWAYS_INLINE void* ShimCppNewNoThrow(size_t size) {
   void* context = nullptr;
-#if BUILDFLAG(IS_APPLE) && !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#if BUILDFLAG(IS_APPLE) && !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
   context = malloc_default_zone();
 #endif
   const allocator_shim::AllocatorDispatch* const chain_head =
@@ -80,7 +80,7 @@ PA_ALWAYS_INLINE void* ShimCppAlignedNew(size_t size, size_t alignment) {
   void* ptr;
   do {
     void* context = nullptr;
-#if BUILDFLAG(IS_APPLE) && !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#if BUILDFLAG(IS_APPLE) && !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
     context = malloc_default_zone();
 #endif
     ptr = chain_head->alloc_aligned_function(chain_head, alignment, size,
@@ -91,7 +91,7 @@ PA_ALWAYS_INLINE void* ShimCppAlignedNew(size_t size, size_t alignment) {
 
 PA_ALWAYS_INLINE void ShimCppDelete(void* address) {
   void* context = nullptr;
-#if BUILDFLAG(IS_APPLE) && !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#if BUILDFLAG(IS_APPLE) && !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
   context = malloc_default_zone();
 #endif
   const allocator_shim::AllocatorDispatch* const chain_head =
@@ -286,4 +286,4 @@ PA_ALWAYS_INLINE void ShimAlignedFree(void* address, void* context) {
 
 }  // extern "C"
 
-#endif  // BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_SHIM_SHIM_ALLOC_FUNCTIONS_H_
+#endif  // PARTITION_ALLOC_SHIM_SHIM_ALLOC_FUNCTIONS_H_

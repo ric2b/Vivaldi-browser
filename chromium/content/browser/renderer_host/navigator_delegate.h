@@ -91,7 +91,9 @@ class NavigatorDelegate {
 
   // Opens a URL with the given parameters. See PageNavigator::OpenURL, which
   // this is an alias of.
-  virtual WebContents* OpenURL(const OpenURLParams& params) = 0;
+  virtual WebContents* OpenURL(const OpenURLParams& params,
+                               base::OnceCallback<void(NavigationHandle&)>
+                                   navigation_handle_callback) = 0;
 
   // Returns whether to continue a navigation that needs to transfer to a
   // different process between the load start and commit.
@@ -155,6 +157,14 @@ class NavigatorDelegate {
   virtual void RegisterExistingOriginAsHavingDefaultIsolation(
       const url::Origin& origin,
       NavigationRequest* navigation_request_to_exclude) = 0;
+
+  // Request to capture the content area as a bitmap. Return false if the
+  // embedder is not overlaying any content on the current navigation entry's
+  // Document. Return true if a bitmap will be captured. Callback must be
+  // dispatched asynchronously (with an empty bitmap if the capture fails,
+  // e.g. not enough memory) if this returns true.
+  virtual bool MaybeCopyContentAreaAsBitmap(
+      base::OnceCallback<void(const SkBitmap&)> callback) = 0;
 };
 
 }  // namespace content

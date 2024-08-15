@@ -116,7 +116,7 @@ class ProfileTokenQuality {
   // The `pdm` is necessary to access the other profiles of the user and derive
   // observation types like `kEditedToSameTokenOfOtherProfile`.
   // The function returns true if at least one new observation was collected.
-  // TODO(crbug.com/1331312): Get rid of the `form_data` parameter.
+  // TODO(crbug.com/40227496): Get rid of the `form_data` parameter.
   bool AddObservationsForFilledForm(const FormStructure& form_structure,
                                     const FormData& form_data,
                                     const PersonalDataManager& pdm);
@@ -144,7 +144,7 @@ class ProfileTokenQuality {
   // first byte represents the `ObservationType` and the second byte the
   // `FormSignatureHash`.
   // Changing the encoding requires adding migration logic to `AutofillTable`.
-  // Tested by autofill_table_unittest.cc.
+  // Tested partially by autofill_table_unittest.cc.
   std::vector<uint8_t> SerializeObservationsForStoredType(FieldType type) const;
   void LoadSerializedObservationsForStoredType(
       FieldType type,

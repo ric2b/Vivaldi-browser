@@ -1440,26 +1440,29 @@ LocalFrame* HTMLMediaElement::LocalFrameForPlayer() {
                           : GetDocument().GetFrame();
 }
 
+bool HTMLMediaElement::IsValidInvokeAction(HTMLElement& invoker,
+                                           InvokeAction action) {
+  if (!RuntimeEnabledFeatures::HTMLInvokeActionsV2Enabled()) {
+    return HTMLElement::IsValidInvokeAction(invoker, action);
+  }
+
+  return HTMLElement::IsValidInvokeAction(invoker, action) ||
+         action == InvokeAction::kPlaypause || action == InvokeAction::kPause ||
+         action == InvokeAction::kPlay || action == InvokeAction::kToggleMuted;
+}
+
 bool HTMLMediaElement::HandleInvokeInternal(HTMLElement& invoker,
-                                            AtomicString& action) {
+                                            InvokeAction action) {
+  CHECK(IsValidInvokeAction(invoker, action));
+
   if (HTMLElement::HandleInvokeInternal(invoker, action)) {
     return true;
   }
 
-  if (!RuntimeEnabledFeatures::HTMLInvokeActionsV2Enabled()) {
-    return false;
-  }
-
-  if (!(EqualIgnoringASCIICase(action, keywords::kPlaypause) ||
-        EqualIgnoringASCIICase(action, keywords::kPause) ||
-        EqualIgnoringASCIICase(action, keywords::kPlay) ||
-        EqualIgnoringASCIICase(action, keywords::kToggleMuted))) {
-    return false;
-  }
   Document& document = GetDocument();
   LocalFrame* frame = document.GetFrame();
 
-  if (EqualIgnoringASCIICase(action, keywords::kPlaypause)) {
+  if (action == InvokeAction::kPlaypause) {
     if (paused_) {
       if (LocalFrame::HasTransientUserActivation(frame)) {
         Play();
@@ -1475,12 +1478,12 @@ bool HTMLMediaElement::HandleInvokeInternal(HTMLElement& invoker,
       pause();
       return true;
     }
-  } else if (EqualIgnoringASCIICase(action, keywords::kPause)) {
+  } else if (action == InvokeAction::kPause) {
     if (!paused_) {
       pause();
     }
     return true;
-  } else if (EqualIgnoringASCIICase(action, keywords::kPlay)) {
+  } else if (action == InvokeAction::kPlay) {
     if (paused_) {
       if (LocalFrame::HasTransientUserActivation(frame)) {
         Play();
@@ -1493,13 +1496,14 @@ bool HTMLMediaElement::HandleInvokeInternal(HTMLElement& invoker,
       }
     }
     return true;
-  } else {
-    CHECK(EqualIgnoringASCIICase(action, keywords::kToggleMuted));
+  } else if (action == InvokeAction::kToggleMuted) {
     // No user activation check as `setMuted` already handles the autoplay
     // policy check.
     setMuted(!muted_);
     return true;
   }
+
+  return false;
 }
 
 void HTMLMediaElement::StartPlayerLoad() {
@@ -2784,7 +2788,7 @@ WebMediaPlayer::Preload HTMLMediaElement::EffectivePreloadType() const {
   return preload;
 }
 
-ScriptPromiseTyped<IDLUndefined> HTMLMediaElement::playForBindings(
+ScriptPromise<IDLUndefined> HTMLMediaElement::playForBindings(
     ScriptState* script_state) {
   // We have to share the same logic for internal and external callers. The
   // internal callers do not want to receive a Promise back but when ::play()
@@ -2792,8 +2796,7 @@ ScriptPromiseTyped<IDLUndefined> HTMLMediaElement::playForBindings(
   // does is to populate |play_promise_resolvers_| before calling ::play() and
   // remove the Promise if ::play() failed.
   auto* resolver =
-      MakeGarbageCollected<ScriptPromiseResolverTyped<IDLUndefined>>(
-          script_state);
+      MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(script_state);
   auto promise = resolver->Promise();
   play_promise_resolvers_.push_back(resolver);
 
@@ -2933,8 +2936,6 @@ void HTMLMediaElement::PauseInternal(PlayPromiseError code,
 
     ScheduleRejectPlayPromises(code);
   }
-
-  OnPause();
 
   UpdatePlayState(pause_speech);
 }
@@ -3911,6 +3912,8 @@ void HTMLMediaElement::UpdatePlayState(bool pause_speech /* = true */) {
   ReportCurrentTimeToMediaSource();
   PseudoStateChanged(CSSSelector::kPseudoPaused);
   PseudoStateChanged(CSSSelector::kPseudoPlaying);
+
+  UpdateVideoVisibilityTracker();
 }
 
 void HTMLMediaElement::StopPeriodicTimers() {
@@ -4007,6 +4010,8 @@ void HTMLMediaElement::ContextDestroyed() {
 
   StopPeriodicTimers();
   removed_from_document_timer_.Stop();
+
+  UpdateVideoVisibilityTracker();
 }
 
 bool HTMLMediaElement::HasPendingActivity() const {

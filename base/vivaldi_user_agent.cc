@@ -13,8 +13,15 @@
 
 namespace vivaldi_user_agent {
 
+#if !BUILDFLAG(IS_IOS)
 const char kVivaldiSuffix[] = " Vivaldi/" VIVALDI_UA_VERSION;
 const char kVivaldiSuffixReduced[] = " Vivaldi/" VIVALDI_UA_VERSION_REDUCED;
+#else
+// Note:(prio@vivaldi.com) Use VivaiOS for iOS.
+// Ref:(https://bugs.vivaldi.com/browse/VIB-659)
+const char kVivaldiSuffix[] = " VivaiOS/" VIVALDI_UA_VERSION;
+const char kVivaldiSuffixReduced[] = " VivaiOS/" VIVALDI_UA_VERSION_REDUCED;
+#endif
 
 const GURL* g_ui_thread_gurl = nullptr;
 

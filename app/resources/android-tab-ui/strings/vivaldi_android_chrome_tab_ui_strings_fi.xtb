@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fi">
+<translation id="2947471979790858922">Toimintasi näissä yksityisvälilehdissä poistetaan tältä laitteelta</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Löydät sulkemasi välilehdet Vivaldin valikosta löytyvästä "Viimeaikaiset välilehdet" -kohdasta. Yksityisvälilehteäsi ei tallenneta.}
+        other {Löydät sulkemasi välilehdet Vivaldin valikosta löytyvästä "Viimeaikaiset välilehdet" -kohdasta. # yksityisvälilehteäsi ei tallenneta.}}</translation>
+<translation id="4871187110787939393">Suljetaanko kaikki yksityisvälilehdet?</translation>
 </translationbundle>

@@ -452,11 +452,11 @@ blink::UserAgentBrandVersion GetGreasedUserAgentBrandVersion(
 
 std::string GetPlatformForUAMetadata() {
 #if BUILDFLAG(IS_MAC)
-  // TODO(crbug.com/1103047): This can be removed/re-refactored once we use
+  // TODO(crbug.com/40704421): This can be removed/re-refactored once we use
   // "macOS" by default
   return "macOS";
 #elif BUILDFLAG(IS_CHROMEOS)
-  // TODO(crbug.com/1334198): The branding change to remove the space caused a
+  // TODO(crbug.com/40846294): The branding change to remove the space caused a
   // regression that's solved here. Ideally, we would just use the new OS name
   // without the space here too, but that needs a launch plan.
 # if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -478,6 +478,8 @@ blink::UserAgentMetadata GetUserAgentMetadata(const PrefService* pref_service,
   blink::UserAgentMetadata metadata;
 
   bool enable_updated_grease_by_policy = true;
+  // TODO(crbug.com/40838057): Remove this after M126 which deprecates the
+  // policy.
   if (pref_service) {
     if (pref_service->HasPrefPath(
             policy::policy_prefs::kUserAgentClientHintsGREASEUpdateEnabled))

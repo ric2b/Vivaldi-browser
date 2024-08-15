@@ -24,22 +24,23 @@
 #include "bsf_internal.h"
 
 #include "libavutil/log.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/eval.h"
 
 static const char *const var_names[] = {
-    "n",                           /// packet index, starting from zero
-    "tb",                          /// timebase
-    "pts",                         /// packet presentation timestamp
-    "dts",                         /// packet decoding timestamp
-    "nopts",                       /// AV_NOPTS_VALUE
-    "startpts",                    /// first seen non-AV_NOPTS_VALUE packet timestamp
-    "startdts",                    /// first seen non-AV_NOPTS_VALUE packet timestamp
-    "duration", "d",               /// packet duration
-    "pos",                         /// original position of packet in its source
-    "size",                        /// packet size
-    "key" ,                        /// packet keyframe flag
-    "state",                       /// random-ish state
+    "n",                           ///< packet index, starting from zero
+    "tb",                          ///< timebase
+    "pts",                         ///< packet presentation timestamp
+    "dts",                         ///< packet decoding timestamp
+    "nopts",                       ///< AV_NOPTS_VALUE
+    "startpts",                    ///< first seen non-AV_NOPTS_VALUE packet timestamp
+    "startdts",                    ///< first seen non-AV_NOPTS_VALUE packet timestamp
+    "duration", "d",               ///< packet duration
+    "pos",                         ///< original position of packet in its source
+    "size",                        ///< packet size
+    "key" ,                        ///< packet keyframe flag
+    "state",                       ///< random-ish state
     NULL
 };
 

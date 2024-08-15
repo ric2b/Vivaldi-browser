@@ -518,6 +518,13 @@ chromium-metrics-reviews@google.com.
   <int value="10"
       label="kDownstreamNetworkDisconnect: Hotspot disabled due to downstream
              network disconnected."/>
+  <int value="11"
+      label="kStartTimeout: Failed to start tethering within given time"/>
+  <int value="12"
+      label="kUpstreamNotAvailable: Hotspot disabled due to upstream network
+             not available."/>
+  <int value="13"
+      label="kUnknownError: Hotspot disabled due to an unknown error."/>
 </enum>
 
 <enum name="HotspotSetConfigResult">
@@ -1090,9 +1097,20 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="Error Page"/>
 </enum>
 
+<enum name="NetworkPortalState">
+  <summary>
+    Used for Network.NetworkPortalDetectorState for the Chrome detection result.
+  </summary>
+  <int value="0" label="Unknown"/>
+  <int value="1" label="Online"/>
+  <int value="2" label="PortalSuspected"/>
+  <int value="3" label="Portal"/>
+  <int value="4" label="NoInternet"/>
+</enum>
+
 <enum name="NetworkPortalStatus">
   <summary>
-    The portal status types from NetworkPortalDetector::CaptivePortalStatus
+    DEPRECATED. Remove with Network.NetworkPortalDetectorResult 2024-07-21.
   </summary>
   <int value="0" label="Unknown"/>
   <int value="1" label="Offline"/>
@@ -2313,6 +2331,25 @@ chromium-metrics-reviews@google.com.
 <enum name="VPNConfigurationSource">
   <int value="0" label="Configured manually"/>
   <int value="1" label="Configured by policy"/>
+</enum>
+
+<enum name="VPNConnectFailureReason">
+  <int value="0" label="Disconnect request"/>
+  <int value="1" label="Unknown"/>
+  <int value="2" label="Internal"/>
+  <int value="3" label="Underlying network change"/>
+  <int value="4" label="Authentication failure"/>
+  <int value="5" label="DNS lookup failure"/>
+  <int value="6" label="Connect timeout"/>
+  <int value="7" label="Invalid configuration"/>
+</enum>
+
+<enum name="VPNConnectionLostReason">
+  <int value="0" label="Disconnect request"/>
+  <int value="1" label="Unknown"/>
+  <int value="2" label="Internal"/>
+  <int value="3" label="Underlying network change"/>
+  <int value="4" label="Reconnect"/>
 </enum>
 
 <enum name="VPNDriver">

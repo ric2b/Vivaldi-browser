@@ -6043,6 +6043,123 @@ void main()
     ASSERT_GL_NO_ERROR() << "Draw to int texture with correct mask";
 }
 
+// Tests that switching the program properly syncs the framebuffer implementation
+TEST_P(WebGL2ValidationStateChangeTest, IncompatibleDrawFramebufferProgramSwitch)
+{
+    constexpr char kFS0[] = R"(#version 300 es
+precision mediump float;
+in vec2 texCoord;
+out ivec4 color;
+void main()
+{
+    color = ivec4(1, 0, 1, 1);
+})";
+    ANGLE_GL_PROGRAM(programInt, essl3_shaders::vs::Simple(), kFS0);
+
+    constexpr char kFS1[] = R"(#version 300 es
+precision mediump float;
+in vec2 texCoord;
+out vec4 color;
+void main()
+{
+    color = vec4(0, 1, 0, 1);
+})";
+    ANGLE_GL_PROGRAM(program, essl3_shaders::vs::Simple(), kFS1);
+
+    constexpr size_t kSize = 2;
+
+    GLFramebuffer fb;
+    glBindFramebuffer(GL_FRAMEBUFFER, fb);
+
+    GLRenderbuffer rb;
+    glBindRenderbuffer(GL_RENDERBUFFER, rb);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, kSize, kSize);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+
+    // Incompatible masked-out draw call
+    // Implementations may internally disable render targets to avoid runtime failures
+    glColorMask(false, false, false, false);
+    drawQuad(programInt, essl3_shaders::PositionAttrib(), 0.5f, 1.0f, true);
+    ASSERT_GL_NO_ERROR();
+
+    // Clear must not be affected
+    glColorMask(true, true, true, true);
+    glClearColor(1.0, 0.0, 0.0, 1.0);
+    glClear(GL_COLOR_BUFFER_BIT);
+    EXPECT_PIXEL_RECT_EQ(0, 0, kSize, kSize, GLColor::red);
+
+    // Compatible draw call
+    drawQuad(program, essl3_shaders::PositionAttrib(), 0.5f, 1.0f, true);
+    ASSERT_GL_NO_ERROR();
+    EXPECT_PIXEL_RECT_EQ(0, 0, kSize, kSize, GLColor::green);
+}
+
+// Tests that updating the render target storage properly syncs the framebuffer implementation
+TEST_P(WebGL2ValidationStateChangeTest, MultiAttachmentIncompatibleDrawFramebufferStorageUpdate)
+{
+    constexpr char kFS[] = R"(#version 300 es
+precision mediump float;
+in vec2 texCoord;
+layout(location = 0) out ivec4 colorInt;
+layout(location = 1) out vec4 colorFloat;
+void main()
+{
+    colorInt = ivec4(1, 0, 1, 1);
+    colorFloat = vec4(0, 1, 0, 1);
+})";
+
+    ANGLE_GL_PROGRAM(program, essl3_shaders::vs::Simple(), kFS);
+
+    // Explicitly set the program here so that
+    // drawQuad helpers do not switch it
+    glUseProgram(program);
+
+    constexpr size_t kSize = 2;
+
+    GLFramebuffer fb;
+    glBindFramebuffer(GL_FRAMEBUFFER, fb);
+
+    GLRenderbuffer rb0;
+    glBindRenderbuffer(GL_RENDERBUFFER, rb0);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, kSize, kSize);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb0);
+
+    GLRenderbuffer rb1;
+    glBindRenderbuffer(GL_RENDERBUFFER, rb1);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8I, kSize, kSize);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_RENDERBUFFER, rb1);
+
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+
+    constexpr GLenum bufs[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+    glDrawBuffers(2, bufs);
+
+    // Incompatible masked-out draw call
+    // Implementations may internally disable render targets to avoid runtime failures
+    glColorMask(false, false, false, false);
+    drawQuad(program, essl3_shaders::PositionAttrib(), 0.5f, 1.0f, true);
+    ASSERT_GL_NO_ERROR();
+
+    // Redefine storage, swapping numeric types
+    glBindRenderbuffer(GL_RENDERBUFFER, rb0);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8I, kSize, kSize);
+    glBindRenderbuffer(GL_RENDERBUFFER, rb1);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, kSize, kSize);
+
+    // The same draw call should be valid now
+    glColorMask(true, true, true, true);
+    drawQuad(program, essl3_shaders::PositionAttrib(), 0.5f, 1.0f, true);
+    ASSERT_GL_NO_ERROR();
+
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+    EXPECT_PIXEL_RECT32I_EQ(0, 0, kSize, kSize, GLColor32I(1, 0, 1, 1));
+
+    glReadBuffer(GL_COLOR_ATTACHMENT1);
+    EXPECT_PIXEL_RECT_EQ(0, 0, kSize, kSize, GLColor::green);
+}
+
 // Tests negative API state change cases with Transform Feedback bindings.
 TEST_P(WebGL2ValidationStateChangeTest, TransformFeedbackNegativeAPI)
 {
@@ -9492,6 +9609,49 @@ TEST_P(StateChangeTestES3, DepthTestWriteAndFunc)
     ASSERT_GL_NO_ERROR();
 }
 
+// Tests state change for depth test while depth write is enabled
+TEST_P(StateChangeTestES3, DepthTestToggleWithDepthWrite)
+{
+    ANGLE_GL_PROGRAM(program, essl1_shaders::vs::Simple(), essl1_shaders::fs::UniformColor());
+    glUseProgram(program);
+
+    GLint colorLoc = glGetUniformLocation(program, angle::essl1_shaders::ColorUniform());
+    ASSERT_NE(colorLoc, -1);
+
+    const int w = getWindowWidth();
+    const int h = getWindowHeight();
+
+    glClearColor(0, 0, 0, 1);
+    glClearDepthf(0.5);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // Enable depth write, but keep depth test disabled.  Internally, depth write may be disabled
+    // because of the depth test.
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_LESS);
+
+    // Draw with a different depth, but because depth test is disabled, depth is not actually
+    // changed.
+    glUniform4f(colorLoc, 1, 0, 0, 1);
+    drawQuad(program, essl1_shaders::PositionAttrib(), -0.3f);
+
+    // Enable depth test, but don't change state otherwise.  The following draw must change depth.
+    glEnable(GL_DEPTH_TEST);
+
+    glUniform4f(colorLoc, 0, 1, 0, 1);
+    drawQuad(program, essl1_shaders::PositionAttrib(), -0.2f);
+
+    // Verify that depth was changed in the last draw call.
+    EXPECT_PIXEL_RECT_EQ(0, 0, w, h, GLColor::green);
+
+    glDepthFunc(GL_GREATER);
+    glUniform4f(colorLoc, 0, 0, 1, 1);
+    drawQuad(program, essl1_shaders::PositionAttrib(), -0.1f);
+    EXPECT_PIXEL_RECT_EQ(0, 0, w, h, GLColor::blue);
+    ASSERT_GL_NO_ERROR();
+}
+
 // Tests state change for stencil test and function
 TEST_P(StateChangeTestES3, StencilTestAndFunc)
 {
@@ -10890,6 +11050,7 @@ GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(StateChangeTestES3);
 ANGLE_INSTANTIATE_TEST_ES3_AND(
     StateChangeTestES3,
     ES3_VULKAN().disable(Feature::SupportsIndexTypeUint8),
+    ES3_VULKAN().disable(Feature::UseDepthWriteEnableDynamicState),
     ES3_VULKAN()
         .disable(Feature::SupportsExtendedDynamicState)
         .disable(Feature::SupportsExtendedDynamicState2),

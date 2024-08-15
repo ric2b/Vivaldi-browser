@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: archive-mirrors
 title: ChromiumOS Archive Mirrors
 ---
@@ -581,8 +581,8 @@ this remains a non-issue.
 
 
 [BSD license]: https://en.wikipedia.org/wiki/BSD_licenses
-[bugs]: reporting_bugs.md
-[Contact]: contact.md
+[bugs]: /chromium-os/developer-library/guides/bugs/reporting-bugs/
+[Contact]: /chromium-os/developer-library/guides/who-do-i-notify/contact/
 [CPFE]: https://goto.google.com/cpfe
 [cros-cpfe]: https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/eclass/cros-cpfe.eclass
 [Custom Artifacts]: #custom-artifacts
@@ -590,7 +590,7 @@ this remains a non-issue.
 [distfiles mirrors]: https://gentoo.org/downloads/mirrors/
 [ebuild variable `S`]: https://devmanual.gentoo.org/ebuild-writing/variables/index.html#ebuild-defined-variables
 [Gentoo mirror]: #gentoo-mirror
-[gsutil]: gsutil.md
+[gsutil]: /chromium-os/developer-library/reference/tools/gsutil/
 [linux-firmware]: https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/
 [Manifest]: https://devmanual.gentoo.org/general-concepts/manifest/index.html
 [mirrors]: #mirrors

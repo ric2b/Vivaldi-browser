@@ -13,15 +13,13 @@
 
 namespace openscreen::discovery {
 
-MdnsSender::MdnsSender(UdpSocket* socket) : socket_(socket) {
-  OSP_CHECK(socket_);
-}
+MdnsSender::MdnsSender(UdpSocket& socket) : socket_(socket) {}
 
 MdnsSender::~MdnsSender() = default;
 
 Error MdnsSender::SendMulticast(const MdnsMessage& message) {
-  const IPEndpoint& endpoint = socket_->IsIPv6() ? kMulticastSendIPv6Endpoint
-                                                 : kMulticastSendIPv4Endpoint;
+  const IPEndpoint& endpoint = socket_.IsIPv6() ? kMulticastSendIPv6Endpoint
+                                                : kMulticastSendIPv4Endpoint;
   return SendMessage(message, endpoint);
 }
 
@@ -37,11 +35,11 @@ Error MdnsSender::SendMessage(const MdnsMessage& message,
     return Error::Code::kInsufficientBuffer;
   }
 
-  socket_->SendMessage(buffer.data(), writer.offset(), endpoint);
+  socket_.SendMessage(buffer.data(), writer.offset(), endpoint);
   return Error::Code::kNone;
 }
 
-void MdnsSender::OnSendError(UdpSocket* socket, Error error) {
+void MdnsSender::OnSendError(UdpSocket* socket, const Error& error) {
   OSP_LOG_ERROR << "Error sending packet " << error;
 }
 

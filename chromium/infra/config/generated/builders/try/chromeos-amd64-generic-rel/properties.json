@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "chromeos-amd64-generic-rel",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-chromiumos-archive",
@@ -35,6 +35,7 @@
               "legacy_gclient_config": {
                 "apply_configs": [
                   "chromeos",
+                  "chromium_with_telemetry_dependencies",
                   "checkout_lacros_sdk"
                 ],
                 "config": "chromium"
@@ -47,14 +48,13 @@
         {
           "bucket": "ci",
           "builder": "chromeos-amd64-generic-rel",
-          "project": "chromium-m124"
+          "project": "chromium-m126"
         }
       ]
     }
   },
   "$build/reclient": {
     "instance": "rbe-chromium-untrusted",
-    "jobs": 150,
     "metrics_project": "chromium-reclient-metrics",
     "scandeps_server": true
   },
@@ -65,7 +65,8 @@
     "enable_cloud_profiler": true,
     "enable_cloud_trace": true,
     "experiments": [],
-    "project": "rbe-chromium-untrusted"
+    "project": "rbe-chromium-untrusted",
+    "remote_jobs": 150
   },
   "$recipe_engine/resultdb/test_presentation": {
     "column_keys": [],

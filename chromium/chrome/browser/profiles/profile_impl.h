@@ -144,6 +144,7 @@ class ProfileImpl : public Profile {
   policy::UserCloudPolicyManager* GetUserCloudPolicyManager() override;
   policy::ProfileCloudPolicyManager* GetProfileCloudPolicyManager() override;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+  policy::CloudPolicyManager* GetCloudPolicyManager() override;
   policy::ProfilePolicyConnector* GetProfilePolicyConnector() override;
   const policy::ProfilePolicyConnector* GetProfilePolicyConnector()
       const override;
@@ -189,7 +190,8 @@ class ProfileImpl : public Profile {
               Delegate* delegate,
               CreateMode create_mode,
               base::Time path_creation_time,
-              scoped_refptr<base::SequencedTaskRunner> io_task_runner);
+              scoped_refptr<base::SequencedTaskRunner> io_task_runner,
+              bool* valid);
 
 #if BUILDFLAG(IS_ANDROID)
   // Takes the ownership of the pre-created PrefService and other objects if
@@ -204,7 +206,10 @@ class ProfileImpl : public Profile {
   void DoFinalInit(CreateMode create_mode);
 
   // Switch locale (when possible) and proceed to OnLocaleReady().
-  void OnPrefsLoaded(CreateMode create_mode, bool success);
+  void OnPrefsLoaded(CreateMode create_mode,
+                     /* vivaldi: Added to allow us to validate profiles. */
+                     bool* valid,
+                     bool success);
 
   // Does final prefs initialization and calls Init().
   void OnLocaleReady(CreateMode create_mode);

@@ -56,7 +56,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="Cryptohome.AuthFactorBackingStoreConfig"
-    enum="CryptohomeAuthFactorBackingStoreConfig" expires_after="2024-09-01">
+    enum="CryptohomeAuthFactorBackingStoreConfig" expires_after="2024-11-03">
   <owner>jadmanski@chromium.org</owner>
   <owner>cros-security-cryptohome+uma@google.com</owner>
   <summary>
@@ -69,7 +69,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cryptohome.BackupKeysetCleanupResult"
-    enum="CryptohomeBackupKeysetCleanupResult" expires_after="2024-07-21">
+    enum="CryptohomeBackupKeysetCleanupResult" expires_after="2024-09-22">
   <owner>betuls@google.com</owner>
   <owner>cros-security-cryptohome+uma@google.com</owner>
   <summary>
@@ -126,12 +126,15 @@ chromium-metrics-reviews@google.com.
   <token key="Operation">
     <variant name="BackUp"/>
     <variant name="CleanUp"/>
+    <variant name="Exchange"/>
     <variant name="FixXattr"/>
     <variant name="Move"/>
+    <variant name="RemoveReappearedDownloads"/>
     <variant name="Restore"/>
     <variant name="SetXattrForNewCryptoHome"/>
     <variant name="SetXattrToMigrated"/>
     <variant name="SetXattrToMigrating"/>
+    <variant name="UnmaskItem"/>
   </token>
 </histogram>
 
@@ -146,14 +149,14 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cryptohome.Errors" enum="CryptohomeError"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>apronin@chromium.org</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>Cryptohome errors.</summary>
 </histogram>
 
 <histogram name="Cryptohome.Fingerprint.AuthSignal"
-    enum="CryptohomeFingerprintScanResult" expires_after="2024-05-18">
+    enum="CryptohomeFingerprintScanResult" expires_after="2025-05-18">
   <owner>hcyang@google.com</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>
@@ -167,7 +170,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cryptohome.Fingerprint.EnrollSignal"
-    enum="CryptohomeFingerprintScanResult" expires_after="2024-05-18">
+    enum="CryptohomeFingerprintScanResult" expires_after="2025-05-18">
   <owner>hcyang@google.com</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>
@@ -244,7 +247,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Cryptohome.HomedirEncryptionType" enum="HomedirEncryptionType"
-    expires_after="2024-07-21">
+    expires_after="2024-09-22">
   <owner>dspaid@chromium.org</owner>
   <summary>
     The encryption type used for a user's cryptohome directory. This is logged
@@ -297,7 +300,7 @@ fully migrated pinweaver_manager to libhwsec (target: M120)-->
 fully migrated pinweaver_manager to libhwsec (target: M120)-->
 
 <histogram name="Cryptohome.LECredential.{Operation}{Action}"
-    enum="CryptohomeLECredError" expires_after="2024-07-21">
+    enum="CryptohomeLECredError" expires_after="2024-09-22">
   <owner>hcyang@google.com</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>
@@ -395,7 +398,7 @@ fully migrated pinweaver_manager to libhwsec (target: M120)-->
 </histogram>
 
 <histogram name="Cryptohome.MaskedDownloadsItems" units="items"
-    expires_after="2024-08-18">
+    expires_after="2024-10-20">
   <owner>benreich@chromium.org</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -547,7 +550,7 @@ fully migrated pinweaver_manager to libhwsec (target: M120)-->
 </histogram>
 
 <histogram name="Cryptohome.TimeToAuthSessionRemoveAuthFactorUSS" units="ms"
-    expires_after="2024-08-01">
+    expires_after="2024-10-06">
   <owner>thomascedeno@google.com</owner>
   <owner>cros-security-cryptohome+uma@google.com</owner>
   <summary>
@@ -584,7 +587,7 @@ fully migrated pinweaver_manager to libhwsec (target: M120)-->
 </histogram>
 
 <histogram name="Cryptohome.TimeToGenerateEccAuthValue" units="ms"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>yich@google.com</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>
@@ -597,7 +600,7 @@ fully migrated pinweaver_manager to libhwsec (target: M120)-->
 </histogram>
 
 <histogram name="Cryptohome.TimeToInitPkcs11" units="ms"
-    expires_after="2024-07-21">
+    expires_after="2024-09-22">
   <owner>apronin@chromium.org</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>
@@ -608,7 +611,7 @@ fully migrated pinweaver_manager to libhwsec (target: M120)-->
 </histogram>
 
 <histogram name="Cryptohome.TimeToMountEx" units="ms"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>betuls@chromium.org</owner>
   <owner>cros-security-cryptohome+uma@google.com</owner>
   <summary>
@@ -639,7 +642,7 @@ fully migrated pinweaver_manager to libhwsec (target: M120)-->
 </histogram>
 
 <histogram name="Cryptohome.TimeToPerformMount" units="ms"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>betuls@chromium.org</owner>
   <owner>cros-security-cryptohome+uma@google.com</owner>
   <summary>
@@ -650,7 +653,7 @@ fully migrated pinweaver_manager to libhwsec (target: M120)-->
 </histogram>
 
 <histogram name="Cryptohome.TimeToRelabelSELinuxContexts" units="ms"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>betuls@chromium.org</owner>
   <owner>cros-security-cryptohome+uma@google.com</owner>
   <summary>
@@ -660,7 +663,7 @@ fully migrated pinweaver_manager to libhwsec (target: M120)-->
 </histogram>
 
 <histogram name="Cryptohome.TimeToSetupVault" units="ms"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>sarthakkukreti@chromium.org</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>
@@ -705,7 +708,7 @@ fully migrated pinweaver_manager to libhwsec (target: M120)-->
 </histogram>
 
 <histogram name="Cryptohome.VaultKeysetMetric.{VaultKeysetMetric}"
-    units="count" expires_after="2024-09-01">
+    units="count" expires_after="2024-11-03">
   <owner>thomascedeno@google.com</owner>
   <owner>cros-security-cryptohome+uma@google.com</owner>
   <summary>
@@ -731,7 +734,7 @@ fully migrated pinweaver_manager to libhwsec (target: M120)-->
 </histogram>
 
 <histogram name="Cryptohome.VkToUssMigrationStatus"
-    enum="VkToUssMigrationStatus" expires_after="2024-09-01">
+    enum="VkToUssMigrationStatus" expires_after="2024-11-03">
   <owner>jadmanski@chromium.org</owner>
   <owner>cros-security-cryptohome+uma@google.com</owner>
   <summary>
@@ -774,7 +777,7 @@ fully migrated pinweaver_manager to libhwsec (target: M120)-->
 </histogram>
 
 <histogram name="Cryptohome.{Action}AuthBlockType"
-    enum="CryptohomeAuthBlockType" expires_after="2024-09-01">
+    enum="CryptohomeAuthBlockType" expires_after="2024-11-03">
   <owner>yich@google.com</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>
@@ -788,9 +791,9 @@ fully migrated pinweaver_manager to libhwsec (target: M120)-->
 </histogram>
 
 <histogram name="Cryptohome.{AuthBlockType}.CredentialRevocationResult"
-    enum="CryptohomeLECredError" expires_after="2024-07-07">
-  <owner>antrim@chromium.org</owner>
-  <owner>cros-lurs@google.com</owner>
+    enum="CryptohomeLECredError" expires_after="2025-04-24">
+  <owner>hardikgoyal@chromium.org</owner>
+  <owner>cros-security-cryptohome+uma@google.com</owner>
   <summary>
     Records the result of credentials revocation Revoke() method, which removes
     the credential label from PinWeaver. Reported when an auth factor which uses
@@ -800,9 +803,9 @@ fully migrated pinweaver_manager to libhwsec (target: M120)-->
 </histogram>
 
 <histogram name="Cryptohome.{AuthBlockType}.PrepareForRemovalResult"
-    enum="CryptohomeCryptoError" expires_after="2024-07-07">
-  <owner>antrim@chromium.org</owner>
-  <owner>cros-lurs@google.com</owner>
+    enum="CryptohomeCryptoError" expires_after="2024-09-15">
+  <owner>hardikgoyal@chromium.org</owner>
+  <owner>cros-security-cryptohome+uma@google.com</owner>
   <summary>
     Records the result of PrepareForRemoval() call of an auth factor. Reported
     when an auth factor is deleted.
@@ -811,7 +814,7 @@ fully migrated pinweaver_manager to libhwsec (target: M120)-->
 </histogram>
 
 <histogram name="Cryptohome.{AuthSessionFunction}.{AuthBlockType}" units="ms"
-    expires_after="2024-09-01">
+    expires_after="2024-11-03">
   <owner>thomascedeno@google.com</owner>
   <owner>cros-security-cryptohome+uma@google.com</owner>
   <summary>
@@ -844,7 +847,7 @@ fully migrated pinweaver_manager to libhwsec (target: M120)-->
 </histogram>
 
 <histogram name="Cryptohome.{AuthSessionLifetime}.{Type}" units="ms"
-    expires_after="2024-08-01">
+    expires_after="2024-10-06">
   <owner>thomascedeno@google.com</owner>
   <owner>cros-security-cryptohome+uma@google.com</owner>
   <summary>

@@ -11,6 +11,7 @@
 <translation id="1084824384139382525">Copy link addr&amp;ess</translation>
 <translation id="1163931534039071049">&amp;View frame source</translation>
 <translation id="1165039591588034296">Error</translation>
+<translation id="1175364870820465910">&amp;Print...</translation>
 <translation id="1181037720776840403">Remove</translation>
 <translation id="1187722533808055681">Idle wake ups</translation>
 <translation id="122082903575839559">Certificate Signature Algorithm</translation>
@@ -21,6 +22,7 @@
 <translation id="1257336506558170607">Export selected certificate</translation>
 <translation id="1297175357211070620">Destination</translation>
 <translation id="1303101771013849280">Bookmarks HTML File</translation>
+<translation id="1358741672408003399">Spelling and Grammar</translation>
 <translation id="1430915738399379752">Print</translation>
 <translation id="1451375123200651445">Webpage, Single File</translation>
 <translation id="1465176863081977902">C&amp;opy Audio Address</translation>
@@ -30,6 +32,7 @@
 <translation id="15662109988763471">The selected printer is not available or not installed correctly. Check your printer or try selecting another printer.</translation>
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1588870296199743671">Open Link With...</translation>
+<translation id="1589055389569595240">Show Spelling and Grammar</translation>
 <translation id="159359590073980872">Image Cache</translation>
 <translation id="1601560923496285236">Apply</translation>
 <translation id="1603914832182249871">(Incognito)</translation>
@@ -100,8 +103,8 @@
 <translation id="2719936478972253983">The following cookies were blocked</translation>
 <translation id="2721037002783622288">&amp;Search <ph name="SEARCH_ENGINE" /> for image</translation>
 <translation id="2738771556149464852">Not After</translation>
+<translation id="2749881179542288782">Check Grammar with Spelling</translation>
 <translation id="2785873697295365461">File descriptors</translation>
-<translation id="2809586584051668049">and <ph name="NUMBER_ADDITIONAL_DISABLED" /> more</translation>
 <translation id="2825758591930162672">Subject's Public Key</translation>
 <translation id="2850541429955027218">Add theme</translation>
 <translation id="2861941300086904918">Native Client security manager</translation>
@@ -113,6 +116,7 @@
 <translation id="2932085390869194046">Suggest Password...</translation>
 <translation id="2932883381142163287">Report abuse</translation>
 <translation id="2941112035454246133">Low</translation>
+<translation id="2972581237482394796">&amp;Redo</translation>
 <translation id="2993517869960930405">App Info</translation>
 <translation id="3003623123441819449">CSS Cache</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -131,7 +135,6 @@
 <translation id="3275778913554317645">Open as window</translation>
 <translation id="3280237271814976245">Save &amp;as...</translation>
 <translation id="3285322247471302225">New &amp;Tab</translation>
-<translation id="3288047731229977326">Extensions running in developer mode can harm your computer. If you're not a developer, you should disable these extensions running in developer mode to stay safe.</translation>
 <translation id="329838636886466101">Repair</translation>
 <translation id="33022249435934718">GDI Handles</translation>
 <translation id="3303818374450886607">Copies</translation>
@@ -158,8 +161,11 @@
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Screen Sharing Request</translation>
 <translation id="3708684582558000260">Don't allow closed sites to finish sending or receiving data</translation>
 <translation id="3711931198657368127">Pa&amp;ste and Go to <ph name="URL" /></translation>
+<translation id="3719826155360621982">Homepage</translation>
 <translation id="3727187387656390258">Inspect popup</translation>
 <translation id="3760460896538743390">Inspect &amp;Background Page</translation>
+<translation id="3786224729726357296">Delete site data and permissions for <ph name="SITE" /></translation>
+<translation id="3797900183766075808">&amp;Search <ph name="SEARCH_ENGINE" /> for “<ph name="SEARCH_TERMS" />”</translation>
 <translation id="3798449238516105146">Version</translation>
 <translation id="3810973564298564668">Manage</translation>
 <translation id="3838085852053358637">Failed to load extension</translation>
@@ -169,19 +175,21 @@
 <translation id="3905761538810670789">Repair app</translation>
 <translation id="3908501907586732282">Enable extension</translation>
 <translation id="3909701002594999354">Show All &amp;Controls</translation>
+<translation id="3909791450649380159">Cu&amp;t</translation>
 <translation id="3927932062596804919">Deny</translation>
 <translation id="3936390757709632190">&amp;Open audio in new tab</translation>
+<translation id="3943582379552582368">&amp;Back</translation>
 <translation id="3948116654032448504">&amp;Search <ph name="SEARCH_ENGINE" /> for Image</translation>
 <translation id="3979395879372752341">New extension added (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="398477389655464998">Copy Link to Highlight</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Add to Dictionary</translation>
+<translation id="4058793769387728514">Check Document Now</translation>
 <translation id="407520071244661467">Scale</translation>
 <translation id="4079140982534148664">Use Enhanced Spell Check</translation>
 <translation id="4087089424473531098">Created the extension:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Disable developer mode extensions</translation>
 <translation id="4100839878934973028">Another programme on your computer added an app that may change the way Vivaldi works.</translation>
 <translation id="4104163789986725820">E&amp;xport...</translation>
 <translation id="4109898769411476438">Close Browser Before Importing</translation>
@@ -200,10 +208,15 @@
 <translation id="4348766275249686434">Collect errors</translation>
 <translation id="4363771538994847871">No Cast destinations found. Need help?</translation>
 <translation id="4384652540891215547">Activate the extension</translation>
+<translation id="4394049700291259645">Disable</translation>
 <translation id="4409697491990005945">Margins</translation>
 <translation id="4423376891418188461">Restore Settings</translation>
 <translation id="4478664379124702289">Save Lin&amp;k As...</translation>
 <translation id="4520385623207007473">Cookies in use</translation>
+<translation id="4536111748245793305">Profile <ph name="VALUE" /></translation>
+<translation id="456449593072900590">Delete on exit</translation>
+<translation id="4580596421317071374">Passwords are saved to <ph name="GOOGLE_PASSWORD_MANAGER" /> on this device.</translation>
+<translation id="4593021220803146968">&amp;Go to <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apps and extensions can only be modified by the manager (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">An extension has changed what page is shown when you open a new tab.</translation>
 <translation id="4616405296204756919">You can use saved passwords on any device. They're saved to the <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
@@ -218,6 +231,7 @@
 <translation id="4839303808932127586">Sa&amp;ve video as...</translation>
 <translation id="4840096453115567876">Quit Incognito mode anyway?</translation>
 <translation id="488785315393301722">Show Details</translation>
+<translation id="4895799941222633551">Create &amp;shortcut...</translation>
 <translation id="4912643508233590958">Idle Wake Ups</translation>
 <translation id="49265687513387605">Unable to cast screen.  Check to see if you confirmed the prompt to start sharing your screen.</translation>
 <translation id="4927753642311223124">Nothing to see here, move along.</translation>
@@ -244,14 +258,15 @@
 <translation id="5269977353971873915">Print Failed</translation>
 <translation id="5284445933715251131">Continue Downloading</translation>
 <translation id="52912272896845572">Private key file is invalid.</translation>
-<translation id="5301954838959518834">OK, got it</translation>
 <translation id="5302932258331363306">Show Substitutions</translation>
 <translation id="5317780077021120954">Save</translation>
 <translation id="5334142896108694079">Script Cache</translation>
 <translation id="5360150013186312835">Show in Toolbar</translation>
 <translation id="5362741141255528695">Select private key file.</translation>
 <translation id="536638840841140142">None</translation>
+<translation id="5370819323174483825">&amp;Reload</translation>
 <translation id="5398572795982417028">Out of bounds page reference, limit is <ph name="MAXIMUM_PAGE" /></translation>
+<translation id="5423753908060469325">Create &amp;Shortcut...</translation>
 <translation id="5425042808445046667">Continue downloading</translation>
 <translation id="5427459444770871191">Rotate &amp;Clockwise</translation>
 <translation id="5431318178759467895">Colour</translation>
@@ -288,6 +303,7 @@
   <ph name="EXPONENT_HEX_DUMP" /></translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> peak)</translation>
 <translation id="5978277834170881274">&amp;Use basic spell check</translation>
+<translation id="5979421442488174909">&amp;Translate to <ph name="LANGUAGE" /></translation>
 <translation id="6042308850641462728">More</translation>
 <translation id="6059652578941944813">Certificate Hierarchy</translation>
 <translation id="6086846494333236931">Installed by your administrator</translation>
@@ -317,6 +333,7 @@
 <translation id="6498249116389603658">&amp;All your languages</translation>
 <translation id="6503077044568424649">Most visited</translation>
 <translation id="6508261954199872201">App: <ph name="APP_NAME" /></translation>
+<translation id="6516243500644829484">New &amp;private window</translation>
 <translation id="6518014396551869914">Cop&amp;y image</translation>
 <translation id="6550675742724504774">Options</translation>
 <translation id="6579369886355986318">Show all &amp;controls</translation>
@@ -324,6 +341,7 @@
 <translation id="6655190889273724601">Developer mode</translation>
 <translation id="666731172850799929">Open in <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Save your password</translation>
+<translation id="6691936601825168937">&amp;Forward</translation>
 <translation id="6786747875388722282">Extensions</translation>
 <translation id="6787839852456839824">Keyboard shortcuts</translation>
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
@@ -333,6 +351,7 @@
 <translation id="6886871292305414135">Open link in new &amp;tab</translation>
 <translation id="6892812721183419409">Open Link as <ph name="USER" /></translation>
 <translation id="6900284862687837908">Background App: <ph name="BACKGROUND_APP_URL" /></translation>
+<translation id="6916590542764765824">Manage Extensions</translation>
 <translation id="6945221475159498467">Select</translation>
 <translation id="6955446738988643816">Inspect Popup</translation>
 <translation id="6970856801391541997">Print Specific Pages</translation>
@@ -343,10 +362,12 @@
 <translation id="7070484045139057854">This Can Read and Change Site Data</translation>
 <translation id="708060913198414444">C&amp;opy audio address</translation>
 <translation id="7121728544325372695">Smart Dashes</translation>
+<translation id="7144856456372460176">&amp;Install <ph name="APP" />...</translation>
 <translation id="7175353351958621980">Loaded from:</translation>
 <translation id="7186088072322679094">Keep in Toolbar</translation>
 <translation id="7287143125007575591">Access denied.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
+<translation id="7339785458027436441">Check Spelling while Typing</translation>
 <translation id="7385854874724088939">Something went wrong when trying to print. Please check your printer and try again.</translation>
 <translation id="7412226954991670867">GPU Memory</translation>
 <translation id="7421925624202799674">&amp;View Page Source</translation>
@@ -355,6 +376,7 @@
 <translation id="7564847347806291057">End process</translation>
 <translation id="7576690715254076113">Collate</translation>
 <translation id="7629827748548208700">Tab: <ph name="TAB_NAME" /></translation>
+<translation id="7658239707568436148">Cancel</translation>
 <translation id="7659154729610375585">Exit Incognito mode anyway?</translation>
 <translation id="7661259717474717992">Allow sites to save and read cookie data</translation>
 <translation id="7663719505383602579">Receiver: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -370,6 +392,7 @@
 <translation id="7786889348652477777">&amp;Reload App</translation>
 <translation id="7791543448312431591">Add</translation>
 <translation id="7800518121066352902">Rotate C&amp;ounterclockwise</translation>
+<translation id="7814458197256864873">&amp;Copy</translation>
 <translation id="7818135753970109980">New theme added (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">C&amp;opy video address</translation>
 <translation id="7849264908733290972">Open &amp;Image in New Tab</translation>
@@ -377,6 +400,7 @@
 <translation id="7903925330883316394">Utility: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7947962633355574091">C&amp;opy Video Address</translation>
 <translation id="7966241909927244760">C&amp;opy Image Address</translation>
+<translation id="7973394300052703468">New &amp;Private Window</translation>
 <translation id="7978412674231730200">Private key</translation>
 <translation id="7982789257301363584">Network</translation>
 <translation id="7997826902155442747">Process Priority</translation>
@@ -394,11 +418,13 @@ Keep your key file in a safe place. You will need it to create new versions of y
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Download is in progress} other {Downloads are in progress}}</translation>
 <translation id="8230134520748321204">Save password for <ph name="ORIGIN" />?</translation>
+<translation id="8248050856337841185">&amp;Paste</translation>
 <translation id="8261378640211443080">This extension is not listed in the <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> and may have been added without your knowledge.</translation>
 <translation id="8351419472474436977">This extension has taken control of your proxy settings, which means it can change, break or eavesdrop on anything that you do online. If you aren't sure why this change happened, you probably don't want it.</translation>
 <translation id="8382913212082956454">Copy &amp;email address</translation>
 <translation id="8434480141477525001">NaCl Debug Port</translation>
 <translation id="8449008133205184768">Paste and Match Style</translation>
+<translation id="8477178913400731244">Delete data</translation>
 <translation id="8477384620836102176">&amp;General</translation>
 <translation id="8496717697661868878">Run This Plugin</translation>
 <translation id="8512476990829870887">End Process</translation>
@@ -429,16 +455,20 @@ Keep your key file in a safe place. You will need it to create new versions of y
 <translation id="895944840846194039">JavaScript Memory</translation>
 <translation id="8962083179518285172">Hide Details</translation>
 <translation id="8973557916016709913">Remove zoom level</translation>
+<translation id="897939795688207351">On <ph name="ORIGIN" /></translation>
 <translation id="9003647077635673607">Allow on all websites</translation>
 <translation id="9027459031423301635">Open Link in New &amp;Tab</translation>
+<translation id="9033857511263905942">&amp;Paste</translation>
 <translation id="9056810968620647706">No matches were found.</translation>
 <translation id="9084064520949870008">Open as Window</translation>
 <translation id="9137916601698928395">Open link as <ph name="USER" /></translation>
 <translation id="916607977885256133">Picture in Picture</translation>
+<translation id="9170848237812810038">&amp;Undo</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" added</translation>
 <translation id="9218430445555521422">Set as default</translation>
 <translation id="93766956588638423">Repair extension</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
 <translation id="98515147261107953">Landscape</translation>
+<translation id="994289308992179865">&amp;Loop</translation>
 <translation id="998747458861718449">I&amp;nspect</translation>
 </translationbundle>

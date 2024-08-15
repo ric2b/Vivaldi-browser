@@ -261,10 +261,12 @@ void MediaDialogView::AddedToWidget() {
   speech::SodaInstaller::GetInstance()->AddObserver(this);
 }
 
-gfx::Size MediaDialogView::CalculatePreferredSize() const {
+gfx::Size MediaDialogView::CalculatePreferredSize(
+    const views::SizeBounds& available_size) const {
   // If we have active sessions, then fit to them.
   if (!active_sessions_view_->empty()) {
-    return views::BubbleDialogDelegateView::CalculatePreferredSize();
+    return views::BubbleDialogDelegateView::CalculatePreferredSize(
+        available_size);
   }
   // Otherwise, use a standard size for bubble dialogs.
   const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
@@ -273,7 +275,6 @@ gfx::Size MediaDialogView::CalculatePreferredSize() const {
 }
 
 void MediaDialogView::UpdateBubbleSize() {
-  SizeToContents();
   if (!captions::IsLiveCaptionFeatureSupported()) {
     return;
   }
@@ -397,7 +398,10 @@ MediaDialogView::MediaDialogView(
     Profile* profile,
     content::WebContents* contents,
     global_media_controls::GlobalMediaControlsEntryPoint entry_point)
-    : BubbleDialogDelegateView(anchor_view, anchor_position),
+    : BubbleDialogDelegateView(anchor_view,
+                               anchor_position,
+                               views::BubbleBorder::DIALOG_SHADOW,
+                               true),
       service_(service),
       profile_(profile->GetOriginalProfile()),
       active_sessions_view_(AddChildView(
@@ -705,8 +709,12 @@ MediaDialogView::BuildMediaItemUIUpdatedView(
     const std::string& id,
     base::WeakPtr<media_message_center::MediaNotificationItem> item) {
   CHECK(media_color_theme_);
+  bool show_devices =
+      entry_point_ == GlobalMediaControlsEntryPoint::kPresentation;
   return std::make_unique<global_media_controls::MediaItemUIUpdatedView>(
-      id, item, media_color_theme_.value());
+      id, item, media_color_theme_.value(),
+      BuildDeviceSelector(id, item, service_, service_, profile_, entry_point_,
+                          show_devices, media_color_theme_));
 }
 
 BEGIN_METADATA(MediaDialogView)

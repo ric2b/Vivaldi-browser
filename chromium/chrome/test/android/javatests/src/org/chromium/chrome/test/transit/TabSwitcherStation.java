@@ -16,8 +16,7 @@ import static org.hamcrest.CoreMatchers.either;
 import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.junit.Assert.assertTrue;
 
-import static org.chromium.base.test.transit.LogicalElement.sharedUiThreadLogicalElement;
-import static org.chromium.base.test.transit.LogicalElement.unscopedUiThreadLogicalElement;
+import static org.chromium.base.test.transit.LogicalElement.uiThreadLogicalElement;
 import static org.chromium.base.test.transit.ViewElement.sharedViewElement;
 
 import android.view.View;
@@ -26,17 +25,18 @@ import androidx.annotation.CallSuper;
 
 import org.hamcrest.Matcher;
 
+import org.chromium.base.test.transit.ActivityElement;
 import org.chromium.base.test.transit.Elements;
-import org.chromium.base.test.transit.TransitStation;
+import org.chromium.base.test.transit.Station;
 import org.chromium.base.test.transit.Trip;
-import org.chromium.base.test.transit.UiThreadCondition;
 import org.chromium.base.test.transit.ViewElement;
 import org.chromium.base.test.util.ViewActionOnDescendant;
+import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.hub.HubFieldTrial;
 import org.chromium.chrome.browser.layouts.LayoutManager;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tasks.tab_management.ClosableTabGridView;
+import org.chromium.chrome.browser.tasks.tab_management.TabGridView;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ToolbarTestUtils;
@@ -51,7 +51,7 @@ import org.chromium.chrome.test.util.ToolbarTestUtils;
  *   <li>IncognitoTabSwitcherStation
  * </ul>
  */
-public abstract class TabSwitcherStation extends TransitStation {
+public abstract class TabSwitcherStation extends Station {
     public static final ViewElement TOOLBAR =
             sharedViewElement(withId(ToolbarTestUtils.TAB_SWITCHER_TOOLBAR));
     public static final ViewElement TOOLBAR_NEW_TAB_BUTTON =
@@ -83,7 +83,7 @@ public abstract class TabSwitcherStation extends TransitStation {
                     isDescendantOfA(
                             allOf(
                                     withId(R.id.content_view),
-                                    withParent(instanceOf(ClosableTabGridView.class)))),
+                                    withParent(instanceOf(TabGridView.class)))),
                     isDisplayed());
     public static final Matcher<View> TAB_THUMBNAIL =
             allOf(
@@ -91,16 +91,20 @@ public abstract class TabSwitcherStation extends TransitStation {
                     isDescendantOfA(
                             allOf(
                                     withId(R.id.content_view),
-                                    withParent(instanceOf(ClosableTabGridView.class)))),
+                                    withParent(instanceOf(TabGridView.class)))),
                     isDisplayed());
 
     protected final ChromeTabbedActivityTestRule mChromeTabbedActivityTestRule;
     protected final boolean mIsIncognito;
+    protected ActivityElement<ChromeTabbedActivity> mActivityElement;
+    protected TabModelSelectorCondition mTabModelSelectorCondition;
 
     /** Instantiate one of the subclasses instead. */
     protected TabSwitcherStation(
             ChromeTabbedActivityTestRule chromeTabbedActivityTestRule, boolean incognito) {
         super();
+
+        assert !HubFieldTrial.isHubEnabled();
         mChromeTabbedActivityTestRule = chromeTabbedActivityTestRule;
         mIsIncognito = incognito;
     }
@@ -108,14 +112,15 @@ public abstract class TabSwitcherStation extends TransitStation {
     @Override
     @CallSuper
     public void declareElements(Elements.Builder elements) {
+        mActivityElement = elements.declareActivity(ChromeTabbedActivity.class);
+        mTabModelSelectorCondition =
+                elements.declareEnterCondition(new TabModelSelectorCondition(mActivityElement));
+
         elements.declareView(TOOLBAR);
         elements.declareView(TOOLBAR_NEW_TAB_BUTTON);
 
         elements.declareLogicalElement(
-                unscopedUiThreadLogicalElement(
-                        "HubFieldTrial Hub is disabled", this::isHubDisabled));
-        elements.declareLogicalElement(
-                sharedUiThreadLogicalElement(
+                uiThreadLogicalElement(
                         "LayoutManager is showing TAB_SWITCHER", this::isTabSwitcherLayoutShowing));
     }
 
@@ -123,25 +128,19 @@ public abstract class TabSwitcherStation extends TransitStation {
         recheckActiveConditions();
 
         PageStation page =
-                new PageStation(
-                        mChromeTabbedActivityTestRule,
-                        /* incognito= */ false,
-                        /* isOpeningTab= */ true,
-                        /* isSelectingTab= */ true);
-        return Trip.travelSync(
-                this,
-                page,
-                (t) -> {
-                    t.addCondition(new TabSwitcherLayoutNotShowing());
-                    TOOLBAR_NEW_TAB_BUTTON.perform(click());
-                });
+                PageStation.newPageStationBuilder()
+                        .withActivityTestRule(mChromeTabbedActivityTestRule)
+                        .withIncognito(mIsIncognito)
+                        .withIsOpeningTabs(1)
+                        .withIsSelectingTabs(1)
+                        .build();
+        return Trip.travelSync(this, page, () -> TOOLBAR_NEW_TAB_BUTTON.perform(click()));
     }
 
     public <T extends TabSwitcherStation> T closeTabAtIndex(
             int index, Class<T> expectedDestinationType) {
 
-        TabModelSelector tabModelSelector =
-                mChromeTabbedActivityTestRule.getActivity().getTabModelSelector();
+        TabModelSelector tabModelSelector = mActivityElement.get().getTabModelSelector();
 
         // By default stay in the same tab switcher state, unless closing the last incognito tab.
         boolean landInIncognitoSwitcher = mIsIncognito;
@@ -166,23 +165,24 @@ public abstract class TabSwitcherStation extends TransitStation {
         return Trip.travelSync(
                 this,
                 tabSwitcher,
-                (t) ->
+                () ->
                         ViewActionOnDescendant.performOnRecyclerViewNthItemDescendant(
                                 RECYCLER_VIEW.getViewMatcher(), index, TAB_CLOSE_BUTTON, click()));
     }
 
-    public BasePageStation selectTabAtIndex(int index) {
-        BasePageStation page =
-                new PageStation(
-                        mChromeTabbedActivityTestRule,
-                        mIsIncognito,
-                        /* isOpeningTab= */ false,
-                        /* isSelectingTab= */ true);
+    public PageStation selectTabAtIndex(int index) {
+        PageStation page =
+                PageStation.newPageStationBuilder()
+                        .withActivityTestRule(mChromeTabbedActivityTestRule)
+                        .withIncognito(mIsIncognito)
+                        .withIsOpeningTabs(0)
+                        .withIsSelectingTabs(1)
+                        .build();
 
         return Trip.travelSync(
                 this,
                 page,
-                (t) ->
+                () ->
                         ViewActionOnDescendant.performOnRecyclerViewNthItemDescendant(
                                 RECYCLER_VIEW.getViewMatcher(), index, TAB_THUMBNAIL, click()));
     }
@@ -192,24 +192,12 @@ public abstract class TabSwitcherStation extends TransitStation {
     }
 
     private boolean isTabSwitcherLayoutShowing() {
-        LayoutManager layoutManager =
-                mChromeTabbedActivityTestRule.getActivity().getLayoutManager();
+        ChromeTabbedActivity activity = mActivityElement.get();
+        if (activity == null) {
+            return false;
+        }
+        LayoutManager layoutManager = activity.getLayoutManager();
         // TODO: Use #isLayoutFinishedShowing(LayoutType.TAB_SWITCHER) once available.
         return layoutManager.isLayoutVisible(LayoutType.TAB_SWITCHER);
-    }
-
-    protected class TabSwitcherLayoutNotShowing extends UiThreadCondition {
-        @Override
-        public boolean check() {
-            LayoutManager layoutManager =
-                    mChromeTabbedActivityTestRule.getActivity().getLayoutManager();
-            // TODO: Use #isLayoutHidden(LayoutType.TAB_SWITCHER) once available.
-            return !layoutManager.isLayoutVisible(LayoutType.TAB_SWITCHER);
-        }
-
-        @Override
-        public String buildDescription() {
-            return "LayoutManager is not showing TAB_SWITCHER";
-        }
     }
 }

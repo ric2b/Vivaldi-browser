@@ -6,6 +6,7 @@
 #import <UIKit/UIKit.h>
 
 #import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_column.h"
+#import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_state.h"
 #import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_style.h"
 
 @interface VivaldiSpeedDialViewContainerViewFlowLayout:
@@ -13,7 +14,16 @@
 
 @property (assign, nonatomic) VivaldiStartPageLayoutStyle layoutStyle;
 @property (assign, nonatomic) VivaldiStartPageLayoutColumn numberOfColumns;
-@property (assign, nonatomic) BOOL isPreview;
+@property (assign, nonatomic) VivaldiStartPageLayoutState layoutState;
+// Maximum number of rows the flowlayout should have. Minimum bound is
+// determined based on the actual number of items of the collection view.
+@property (assign, nonatomic) NSInteger maxNumberOfRows;
+
+/// Update collection view height after items loaded.
+- (void)adjustCollectionViewHeight;
+/// Height needed to show contents based on actual numberOfRows
+/// and maxNumberOfRows.
+- (CGFloat)heightNeededForContents;
 
 @end
 

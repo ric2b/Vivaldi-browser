@@ -18,6 +18,10 @@ assert(enable_perfetto_trace_processor_sqlite)
 
 source_set("operators") {
   sources = [
+    "counter_mipmap_operator.cc",
+    "counter_mipmap_operator.h",
+    "slice_mipmap_operator.cc",
+    "slice_mipmap_operator.h",
     "span_join_operator.cc",
     "span_join_operator.h",
     "window_operator.cc",
@@ -28,7 +32,9 @@ source_set("operators") {
     "../../../../../gn:default_deps",
     "../../../../../gn:sqlite",
     "../../../../../include/perfetto/trace_processor",
+    "../../../../../protos/perfetto/trace_processor:zero",
     "../../../../base",
+    "../../../containers",
     "../../../sqlite",
     "../../../util",
     "../../engine",
@@ -43,6 +49,7 @@ perfetto_unittest_source_set("unittests") {
     "../../../../../gn:default_deps",
     "../../../../../gn:gtest_and_gmock",
     "../../../../../gn:sqlite",
+    "../../../containers",
     "../../../sqlite",
     "../../engine",
   ]

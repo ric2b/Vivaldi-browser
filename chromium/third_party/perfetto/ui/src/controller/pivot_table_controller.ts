@@ -21,6 +21,7 @@ import {
   PivotTableQueryMetadata,
   PivotTableResult,
   PivotTableState,
+  getLegacySelection,
 } from '../common/state';
 import {featureFlags} from '../core/feature_flags';
 import {globals} from '../frontend/globals';
@@ -30,7 +31,7 @@ import {
 } from '../frontend/pivot_table_query_generator';
 import {Aggregation, PivotTree} from '../frontend/pivot_table_types';
 import {Engine} from '../trace_processor/engine';
-import {ColumnType, STR} from '../trace_processor/query_result';
+import {ColumnType} from '../trace_processor/query_result';
 
 import {Controller} from './controller';
 
@@ -188,7 +189,6 @@ export class PivotTableController extends Controller<{}> {
   engine: Engine;
   lastQueryAreaId = '';
   lastQueryAreaTracks = new Set<string>();
-  requestedArgumentNames = false;
 
   constructor(args: {engine: Engine}) {
     super({});
@@ -269,23 +269,6 @@ export class PivotTableController extends Controller<{}> {
         queryResult: {tree: treeBuilder.build(), metadata: query.metadata},
       }),
     );
-    globals.dispatch(Actions.setCurrentTab({tab: 'pivot_table'}));
-  }
-
-  async requestArgumentNames() {
-    this.requestedArgumentNames = true;
-    const result = await this.engine.query(`
-      select distinct flat_key from args
-    `);
-    const it = result.iter({flat_key: STR});
-
-    const argumentNames = [];
-    while (it.valid()) {
-      argumentNames.push(it.flat_key);
-      it.next();
-    }
-
-    globals.dispatch(Actions.setPivotTableArgumentNames({argumentNames}));
   }
 
   run() {
@@ -293,12 +276,8 @@ export class PivotTableController extends Controller<{}> {
       return;
     }
 
-    if (!this.requestedArgumentNames) {
-      this.requestArgumentNames();
-    }
-
     const pivotTableState = globals.state.nonSerializableState.pivotTable;
-    const selection = globals.state.currentSelection;
+    const selection = getLegacySelection(globals.state);
 
     if (
       pivotTableState.queryRequested ||

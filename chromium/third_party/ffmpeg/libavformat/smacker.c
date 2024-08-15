@@ -27,6 +27,7 @@
 
 #include "libavutil/channel_layout.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/mem.h"
 #include "avformat.h"
 #include "avio_internal.h"
 #include "demux.h"
@@ -404,9 +405,9 @@ static int smacker_read_seek(AVFormatContext *s, int stream_index,
     return 0;
 }
 
-const AVInputFormat ff_smacker_demuxer = {
-    .name           = "smk",
-    .long_name      = NULL_IF_CONFIG_SMALL("Smacker"),
+const FFInputFormat ff_smacker_demuxer = {
+    .p.name         = "smk",
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Smacker"),
     .priv_data_size = sizeof(SmackerContext),
     .read_probe     = smacker_probe,
     .read_header    = smacker_read_header,

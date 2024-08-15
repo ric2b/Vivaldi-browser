@@ -7,7 +7,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "chromeos-amd64-generic-rel",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-chromiumos-archive",
@@ -32,6 +32,7 @@
               "legacy_gclient_config": {
                 "apply_configs": [
                   "chromeos",
+                  "chromium_with_telemetry_dependencies",
                   "checkout_lacros_sdk"
                 ],
                 "config": "chromium"
@@ -42,7 +43,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "chromeos-amd64-generic-rel-gtest",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-chromiumos-archive",
@@ -74,7 +75,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "chromeos-amd64-generic-rel",
-                "project": "chromium-m124"
+                "project": "chromium-m126"
               }
             }
           }
@@ -84,7 +85,7 @@
         {
           "bucket": "ci",
           "builder": "chromeos-amd64-generic-rel-gtest",
-          "project": "chromium-m124"
+          "project": "chromium-m126"
         }
       ],
       "mirroring_builder_group_and_names": [

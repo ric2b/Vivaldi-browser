@@ -23,7 +23,11 @@ using bookmarks::BookmarkNode;
 - (void)refreshMenuItems:(NSArray*)items SDFolders:(NSArray*)SDFolders;
 
 /// Notifies the subscriber to refresh the children of the speed dial folders.
-- (void)refreshChildItems:(NSArray*)items;
+- (void)refreshChildItems:(NSArray*)items
+        topSitesAvailable:(BOOL)topSitesAvailable;
+
+/// Notifies the subscriber to show/hide the frequently visited pages.
+- (void)setFrequentlyVisitedPagesEnabled:(BOOL)enabled;
 
 /// Notifies the subscriber to show/hide the speed dials.
 - (void)setSpeedDialsEnabled:(BOOL)enabled;

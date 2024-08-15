@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Краявід 12</translation>
 <translation id="1158503667684816647">Больш не пытацца пацвярджэння</translation>
 <translation id="1222195720020481779">Запуск праграмы ўсталявання…</translation>
+<translation id="1270785070369717623">Нажаль, налады Opera GX недаступныя для імпарту падчас працы браўзера. Каб імпартаваць налады ў Vivaldi, закрыйце ўсе вокны Opera 15+ і націсніце "Працягнуць".</translation>
 <translation id="1276145862619442150">Старонкі для хуткага адкрыцця</translation>
 <translation id="1281950884873973195">Жывёліна 6</translation>
 <translation id="1411638389238344450">Адправіць спасылку па электроннай пошце</translation>
@@ -12,6 +13,7 @@
 <translation id="1462666970065907900">Сапраўды хочаце закрыць гэтае акно?</translation>
 <translation id="1480046233931937785">Падзякі</translation>
 <translation id="1526344461589023948">Падчас захавання спампаванага абнаўлення адбылася памылка. Праверце дыск на наяўнасць вольнага месца і паўтарыце спробу.</translation>
+<translation id="1635542496948266458">Пераключыць профілі</translation>
 <translation id="1657174850639146440">Пачварка 9</translation>
 <translation id="1676595396635191120">Новае прыватнае акно</translation>
 <translation id="1702758681952953055">Калі памылка паўтараецца, адпраўце нам справаздачу, уключыўшы ў яе наступнае:</translation>
@@ -27,12 +29,14 @@
 <translation id="1985669426322966465">Абнаўленне праграмнага забеспячэння</translation>
 <translation id="2079036669923635404">Націсніце сюды, каб абнавіць Vivaldi да версіі <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Падчас спампоўвання абнаўлення адбылася памылка. Праверце злучэнне і паўтарыце спробу.</translation>
+<translation id="2226825946708954262">⚠ Працягнуць са стратай даных</translation>
 <translation id="2339641773402824483">Праверка наяўнасці абнаўленняў…</translation>
 <translation id="2441056087170876076">Пачварка 2</translation>
 <translation id="2444387452209867610">Уставіць нататку</translation>
 <translation id="2486841023299517366">Жывёліна 4</translation>
 <translation id="2612127540243995147">Гатова да ўсталёўкі. Праграма будзе закрытая і перазапушчаная.</translation>
 <translation id="2613387515621326337">Перайсці на сайт</translation>
+<translation id="2645477450146475243">Нажаль, налады Opera недаступныя для імпарту падчас працы браўзера. Каб імпартаваць налады ў Vivaldi, закрыйце ўсе вокны Opera 15+ і націсніце "Працягнуць".</translation>
 <translation id="2647368062414805334">Нажаль, налады Edge недаступныя для імпарту падчас працы браўзера. Каб імпартаваць налады ў Vivaldi, закрыйце ўсе вокны Edge і націсніце "Працягнуць".</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Жывёліна 3</translation>
@@ -41,11 +45,14 @@
 <translation id="2923448633003185837">Уставіць і перайсці</translation>
 <translation id="2953943267837858202">Забаронена аўтаматычнае прайграванне відэа</translation>
 <translation id="2977472760057091832">Адкрыць спасылку ў прыватным акне</translation>
+<translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Адкрыць у новай укладцы</translation>
 <translation id="3027988479108856431">Нажаль, налады Yandex недаступныя для імпарту падчас працы браўзера. Каб імпартаваць налады ў Vivaldi, закрыйце ўсе вокны Yandex і націсніце "Працягнуць".</translation>
 <translation id="3084011186245865060">Краявід 6</translation>
+<translation id="3085906383264247940">Opera (Beta)</translation>
 <translation id="3093931836425623631">Браўзер Vivaldi створаны на аснове адкрытага праекта Chromium і іншага праграмнага забеспячэння з адкрытым зыходным кодам.</translation>
 <translation id="3127383884976966729">Жывёліна 7</translation>
+<translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">Новая закладка</translation>
 <translation id="3255747772218936245">Усталяваць абнаўленне</translation>
 <translation id="3259769196742189631">Праверка</translation>
@@ -64,6 +71,7 @@
 <translation id="3588820906588687999">Адкрыць выяву ў новай укладцы</translation>
 <translation id="3601066750251199488">Пачварка 3</translation>
 <translation id="3620979700683094848">Сайты могуць аўтаматычна прайграваць відэа</translation>
+<translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Даступна новая версія Vivaldi!</translation>
 <translation id="3708982624815781692">Спампоўванне скасавана.</translation>
 <translation id="3732157130969736834">Дадаць у закладкі</translation>
@@ -77,6 +85,9 @@
 <translation id="3943857333388298514">Уставіць</translation>
 <translation id="4005270918754737597">Мінуць гэтую версію</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4064545092083709582">Vivaldi не можа разблакіраваць ваша сховішча ключоў. Без сховішча ключоў вы страціце захаваныя лагіны, файлы cookie, а некаторыя функцыі, такія як сінхранізацыя, пошта і каляндар, перастануць працаваць.
+
+     Калі ласка, выйдзіце, разблакуйце або выпраўце сховішча ключоў і паўтарыце спробу.  Сапраўды хочаце працягнуць і страціць даныя?</translation>
 <translation id="4074744496918018786">Адкрыць выяву ў прыватным акне</translation>
 <translation id="410351446219883937">Аўтаматычнае прайграванне</translation>
 <translation id="4281844954008187215">Умовы выкарыстання</translation>
@@ -98,11 +109,13 @@
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> з <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Імпартаваныя старонкі для хуткага адкрыцця</translation>
 <translation id="5092656712000637858">Дадаць старонку на вэб-панэль</translation>
+<translation id="5106275083540628394">Не ўдалося расшыфраваць: ёсць рызыка страціць даныя</translation>
 <translation id="5177818338935286353">Пачварка 7</translation>
 <translation id="5213743983876949565">Жывёліна 1</translation>
 <translation id="5238244642230426581">Імпартаваныя закладкі</translation>
 <translation id="527605719918376753">Адключыць гук на ўкладцы</translation>
 <translation id="5305569355661722298">Пацвердзіце закрыццё акна</translation>
+<translation id="5322922669477407077">Opera (Developer)</translation>
 <translation id="5388358297987318779">Адкрыць выяву</translation>
 <translation id="5416008465899576639">Даступна новая версія Vivaldi.</translation>
 <translation id="5497042274492038489">Пацвердзіце закрыццё акна</translation>
@@ -118,6 +131,7 @@
 <translation id="6229528619562190452">Націсніце сюды, каб абнавіць Vivaldi.</translation>
 <translation id="6234173136417926046">Зрабіць выяву фонам старонкі</translation>
 <translation id="6339818817272922368">Лакальны акаўнт</translation>
+<translation id="6398710281890660037">Абараніць мой профіль</translation>
 <translation id="6438786710866753178">Краявід 4</translation>
 <translation id="6477028720702061455">Абярыце каталог з профілем Opera для імпарту</translation>
 <translation id="6510706699590490869">&amp;Абнавіць Vivaldi</translation>
@@ -129,8 +143,11 @@
 <translation id="6726279523566323394">Абярыце каталог профілю Brave для імпарту</translation>
 <translation id="6892812721183419409">Адкрыць спасылку як <ph name="USER" /></translation>
 <translation id="6896758677409633944">Скапіяваць</translation>
+<translation id="6960139763942959188">Зараз гэты профіль захоўваецца ў незашыфраваным фармаце. Vivaldi хоча абнавіць ваш профіль да больш бяспечнага зашыфраванага фармату. Перад тым як працягнуць, вам трэба выйсці і зрабіць рэзервовую копію профілю.</translation>
 <translation id="7086554968911045110">Краявід 7</translation>
+<translation id="7099506190679014195">Бяспечнае абнаўленне сховішча ключоў</translation>
 <translation id="7111492742514999492">Краявід 9</translation>
+<translation id="7208252576848052204">На жаль, вашы налады Arc недаступныя, калі гэты браўзер працуе. Каб імпартаваць гэтыя налады ў Vivaldi, закрыйце ўсе вокны Arc. Затым націсніце "Працягнуць".</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Падчас запуску сродку абнаўлення адбылася памылка. Праверце, ці хапае памяці і вольнага месца на дыску і паўтарыце спробу.</translation>
 <translation id="7658239707568436148">Скасаваць</translation>
@@ -161,6 +178,7 @@
 <translation id="8669345741879513971">Пачварка 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8689295374912158752">Правяраць дакументы</translation>
+<translation id="875142999698251063">Выйсці зараз</translation>
 <translation id="8768970203213061953">Краявід 14</translation>
 <translation id="8773635261052182196">Вы больш не будзеце атрымліваць апавяшчэнні. Вы можаце ўключыць іх ў наладах Vivaldi.</translation>
 <translation id="8774017153185436870">Сайты могуць аўтаматычна прайграваць відэа</translation>
@@ -172,6 +190,7 @@
 <translation id="9048058608784130603">Гатова абнаўленне <ph name="VERSION" /></translation>
 <translation id="9048224371732578627">Дазволена аўтаматычнае прайграванне відэа</translation>
 <translation id="9065203028668620118">Рэдагаваць</translation>
+<translation id="9090254883741610153">Хачу працягнуць</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Адкрыць выяву як <ph name="USER" /></translation>
 <translation id="9157539936604258187">Адкрыць спасылку</translation>

@@ -20,6 +20,7 @@ import org.chromium.chrome.browser.toolbar.ConstraintsChecker;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.ToolbarCaptureType;
 import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
+import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils;
 import org.chromium.components.browser_ui.widget.ViewResourceFrameLayout;
 import org.chromium.ui.resources.dynamics.ViewResourceAdapter;
 
@@ -27,6 +28,7 @@ import org.chromium.ui.resources.dynamics.ViewResourceAdapter;
 import android.annotation.SuppressLint;
 import android.view.MotionEvent;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * A {@link ViewResourceFrameLayout} that specifically handles redraw of the top shadow of the view
@@ -46,6 +48,8 @@ public class ScrollingBottomViewResourceFrameLayout extends ViewResourceFrameLay
 
     private @Nullable ConstraintsChecker mConstraintsChecker;
 
+    private boolean mLayoutChanged;
+
     public ScrollingBottomViewResourceFrameLayout(Context context, AttributeSet attrs) {
         super(context, attrs);
         mTopShadowHeightPx = getResources().getDimensionPixelOffset(R.dimen.toolbar_shadow_height);
@@ -62,6 +66,14 @@ public class ScrollingBottomViewResourceFrameLayout extends ViewResourceFrameLay
                     // first.
                     if (!super.isDirty()) {
                         return false;
+                    }
+
+                    // Navigating to and from edge-to-edge tabs causes changes to the layout, and
+                    // should trigger a new snapshot. This isn't ideal, though.
+                    // TODO (crbug.com/331692414) Remove once the edge-to-edge adjustment to the
+                    // bottom controls height / padding is refactored.
+                    if (EdgeToEdgeUtils.isEnabled() && mLayoutChanged) {
+                        return true;
                     }
 
                     if (mConstraintsChecker != null && mConstraintsChecker.areControlsLocked()) {
@@ -84,7 +96,19 @@ public class ScrollingBottomViewResourceFrameLayout extends ViewResourceFrameLay
                         ToolbarCaptureType.NUM_ENTRIES);
 
                 mCachedRect.set(dirtyRect);
-                if (mCachedRect.intersect(0, 0, getWidth(), mTopShadowHeightPx)) {
+
+                // Note(david@vivaldi.com): The tab group ui scene layer is part of the scrolling
+                // bottom view and the visibility can't be handled individually. Due to this we
+                // don't capture the screen of the tab group ui when the toolbar is not visible.
+                boolean isTabGroupUiVisible =
+                        VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                                VivaldiPreferences.TAB_STACK_TOOLBAR_VISIBLE, false);
+                int bottom = isTabGroupUiVisible
+                        ? mTopShadowHeightPx
+                        : getResources().getDimensionPixelSize(
+                                R.dimen.bottom_toolbar_height) + mTopShadowHeightPx;
+
+                if (mCachedRect.intersect(0, 0, getWidth(), bottom /* Vivaldi */)) {
                     canvas.save();
 
                     // Clip the canvas to only the section of the dirty rect that contains the top
@@ -98,9 +122,16 @@ public class ScrollingBottomViewResourceFrameLayout extends ViewResourceFrameLay
                 }
 
                 super.onCaptureStart(canvas, dirtyRect);
+                mLayoutChanged = false;
                 mLastCaptureSnapshotToken = mCurrentSnapshotToken;
             }
         };
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+        mLayoutChanged = changed;
     }
 
     /**

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_STATS_H_
-#define BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_STATS_H_
+#ifndef PARTITION_ALLOC_PARTITION_STATS_H_
+#define PARTITION_ALLOC_PARTITION_STATS_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -77,7 +77,7 @@ struct PartitionMemoryStats {
   size_t total_active_count;  // Total count of active objects in the partition.
   size_t total_decommittable_bytes;  // Total bytes that could be decommitted.
   size_t total_discardable_bytes;    // Total bytes that could be discarded.
-#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
+#if PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
   size_t
       total_brp_quarantined_bytes;  // Total bytes that are quarantined by BRP.
   size_t total_brp_quarantined_count;       // Total number of slots that are
@@ -162,4 +162,4 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) SimplePartitionStatsDumper
 
 }  // namespace partition_alloc
 
-#endif  // BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_STATS_H_
+#endif  // PARTITION_ALLOC_PARTITION_STATS_H_

@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "base/test/scoped_feature_list.h"
@@ -22,6 +23,7 @@
 #include "components/optimization_guide/core/optimization_metadata.h"
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using optimization_guide::OnDemandOptimizationGuideDecisionRepeatingCallback;
@@ -64,8 +66,18 @@ class MockOptGuideDecider
   MockOptGuideDecider operator=(const MockOptGuideDecider&) = delete;
   ~MockOptGuideDecider() override;
 
-  void RegisterOptimizationTypes(
-      const std::vector<OptimizationType>& optimization_types) override;
+  MOCK_METHOD(void,
+              RegisterOptimizationTypes,
+              (const std::vector<OptimizationType>& optimization_types),
+              (override));
+  MOCK_METHOD(void,
+              CanApplyOptimizationOnDemand,
+              (const std::vector<GURL>& urls,
+               const base::flat_set<OptimizationType>& optimization_types,
+               RequestContext request_context,
+               OnDemandOptimizationGuideDecisionRepeatingCallback callback,
+               std::optional<RequestContextMetadata> request_context_metadata),
+              (override));
 
   void CanApplyOptimization(
       const GURL& url,
@@ -76,14 +88,6 @@ class MockOptGuideDecider
       const GURL& url,
       OptimizationType optimization_type,
       OptimizationMetadata* optimization_metadata) override;
-
-  void CanApplyOptimizationOnDemand(
-      const std::vector<GURL>& urls,
-      const base::flat_set<OptimizationType>& optimization_types,
-      RequestContext request_context,
-      OnDemandOptimizationGuideDecisionRepeatingCallback callback,
-      std::optional<RequestContextMetadata> request_context_metadata =
-          std::nullopt) override;
 
   void AddOnDemandShoppingResponse(const GURL& url,
                                    const OptimizationGuideDecision decision,
@@ -102,7 +106,8 @@ class MockOptGuideDecider
       const std::string& country_code,
       const int64_t amount_micros = 0,
       const std::string& currency_code = "USD",
-      const std::string& gpc_title = "example_gpc_title");
+      const std::string& gpc_title = "example_gpc_title",
+      const std::vector<std::vector<std::string>>& product_categories = {});
 
   void AddPriceUpdateToPriceTrackingResponse(OptimizationMetadata* out_meta,
                                              const std::string& currency_code,
@@ -151,52 +156,48 @@ class MockOptGuideDecider
 // A mock WebWrapper where returned values can be manually set.
 class MockWebWrapper : public WebWrapper {
  public:
-  MockWebWrapper(const GURL& last_committed_url, bool is_off_the_record);
-
   // `result` specified the result of the subsequent javascript execution. This
   // object does not take ownership of the provided pointer.
   MockWebWrapper(const GURL& last_committed_url,
                  bool is_off_the_record,
-                 base::Value* result);
+                 base::Value* result = nullptr,
+                 std::u16string title = u"");
 
   MockWebWrapper(const MockWebWrapper&) = delete;
   MockWebWrapper operator=(const MockWebWrapper&) = delete;
 
   ~MockWebWrapper() override;
 
-  const GURL& GetLastCommittedURL() override;
+  MOCK_METHOD(const GURL&, GetLastCommittedURL, (), (override));
+  MOCK_METHOD(const std::u16string&, GetTitle, (), (override));
+  MOCK_METHOD(bool, IsFirstLoadForNavigationFinished, (), (override));
+  MOCK_METHOD(bool, IsOffTheRecord, (), (override));
+  MOCK_METHOD(void,
+              RunJavascript,
+              (const std::u16string& script,
+               base::OnceCallback<void(const base::Value)> callback),
+              (override));
+  MOCK_METHOD(ukm::SourceId, GetPageUkmSourceId, (), (override));
 
-  bool IsFirstLoadForNavigationFinished() override;
   void SetIsFirstLoadForNavigationFinished(bool finished);
 
-  bool IsOffTheRecord() override;
-
-  void RunJavascript(
-      const std::u16string& script,
-      base::OnceCallback<void(const base::Value)> callback) override;
-
-  ukm::SourceId GetPageUkmSourceId() override;
-
-  base::Value* GetMockExtractionResult();
-
  private:
-  const GURL last_committed_url_;
-  const bool is_off_the_record_;
-  bool is_first_load_finished_{true};
   const raw_ptr<base::Value> mock_js_result_;
 };
 
-class TestWebExtractor : public WebExtractor {
+class MockWebExtractor : public WebExtractor {
  public:
-  TestWebExtractor();
-  TestWebExtractor(const TestWebExtractor&) = delete;
-  TestWebExtractor operator=(const TestWebExtractor&) = delete;
+  MockWebExtractor();
+  MockWebExtractor(const MockWebExtractor&) = delete;
+  MockWebExtractor operator=(const MockWebExtractor&) = delete;
 
-  ~TestWebExtractor() override;
+  ~MockWebExtractor() override;
 
-  void ExtractMetaInfo(
-      WebWrapper* web_wrapper,
-      base::OnceCallback<void(const base::Value)> callback) override;
+  MOCK_METHOD(void,
+              ExtractMetaInfo,
+              (WebWrapper * web_wrapper,
+               base::OnceCallback<void(const base::Value)> callback),
+              (override));
 };
 
 class ShoppingServiceTestBase : public testing::Test {
@@ -216,7 +217,9 @@ class ShoppingServiceTestBase : public testing::Test {
   void DidNavigatePrimaryMainFrame(WebWrapper* web);
   void DidFinishLoad(WebWrapper* web);
   void DidNavigateAway(WebWrapper* web, const GURL& url);
+  void WebWrapperCreated(WebWrapper* web);
   void WebWrapperDestroyed(WebWrapper* web);
+  void OnWebWrapperSwitched(WebWrapper* web);
   static void MergeProductInfoData(ProductInfo* info,
                                    const base::Value::Dict& on_page_data_map);
 
@@ -233,6 +236,8 @@ class ShoppingServiceTestBase : public testing::Test {
 
   // Gets a handle to the cache.
   CommerceInfoCache& GetCache();
+
+  MockOptGuideDecider* GetMockOptGuideDecider();
 
  protected:
   base::test::TaskEnvironment task_environment_{

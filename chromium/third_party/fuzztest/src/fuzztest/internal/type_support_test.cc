@@ -45,6 +45,7 @@
 #include "./fuzztest/internal/meta.h"
 #include "./fuzztest/internal/printer.h"
 #include "./fuzztest/internal/test_protobuf.pb.h"
+#include "google/protobuf/text_format.h"
 
 namespace fuzztest::internal {
 namespace {
@@ -228,10 +229,13 @@ TEST(ProtobufTest, Printer) {
   internal::TestProtobuf proto;
   proto.set_b(true);
   proto.add_rep_subproto()->set_subproto_i32(17);
-  EXPECT_THAT(
-      TestPrintValue(proto),
-      ElementsAre(absl::StrCat("(", proto, ")"),
-                  absl::StrCat("ParseTestProto(R\"pb(", proto, ")pb\")")));
+  std::string proto_text;
+  ASSERT_TRUE(google::protobuf::TextFormat::PrintToString(proto, &proto_text));
+  EXPECT_THAT(TestPrintValue(proto),
+              ElementsAre(absl::StrCat("(", proto_text, ")"),
+                          MatchesRegex(absl::StrCat(
+                              R"re(.*ParseTe[sx]tProto.*\(R"pb\()re",
+                              proto_text, R"re(\)pb"\))re"))));
 }
 
 TEST(ProtobufEnumTest, Printer) {
@@ -316,11 +320,16 @@ TEST(VariantTest, Printer) {
 TEST(OptionalTest, Printer) {
   auto optional_int_domain = OptionalOf(Arbitrary<int>());
   EXPECT_THAT(TestPrintValue({}, optional_int_domain), Each("std::nullopt"));
-  EXPECT_THAT(TestPrintValue(1, optional_int_domain), ElementsAre("(1)", "1"));
+  EXPECT_THAT(
+      TestPrintValue(Domain<int>::corpus_type(std::in_place_type<int>, 1),
+                     optional_int_domain),
+      ElementsAre("(1)", "1"));
 
   auto optional_string_domain = OptionalOf(Arbitrary<std::string>());
   EXPECT_THAT(TestPrintValue({}, optional_string_domain), Each("std::nullopt"));
-  EXPECT_THAT(TestPrintValue("ABC", optional_string_domain),
+  EXPECT_THAT(TestPrintValue(Domain<std::string>::corpus_type(
+                                 std::in_place_type<std::string>, "ABC"),
+                             optional_string_domain),
               ElementsAre("(\"ABC\")", "\"ABC\""));
 }
 

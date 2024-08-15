@@ -7,19 +7,28 @@
 #include <memory>
 #include <utility>
 
+#include "build/branding_buildflags.h"
+#include "build/build_config.h"
 #include "cc/paint/skottie_wrapper.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/accessibility/accessibility_state_utils.h"
 #include "chrome/browser/ui/views/accessibility/non_accessible_image_view.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/webauthn/authenticator_request_sheet_model.h"
+#include "chrome/grit/generated_resources.h"
+#include "components/vector_icons/vector_icons.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/color/color_id.h"
+#include "ui/color/color_provider.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/text_constants.h"
 #include "ui/lottie/animation.h"
-#include "ui/native_theme/native_theme.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/animated_image_view.h"
 #include "ui/views/controls/image_view.h"
@@ -29,15 +38,24 @@
 
 namespace {
 
-// Margin between the top of the dialog and the start of any illustration.
+// Margins around any illustration.
 constexpr int kImageMarginTop = 22;
+constexpr int kImageMarginBottom = 2;
 
 template <typename T>
 void ConfigureHeaderIllustration(T* illustration, gfx::Size header_size) {
   illustration->SetBorder(views::CreateEmptyBorder(
-      gfx::Insets::TLBR(kImageMarginTop, 0, kImageMarginTop, 0)));
+      gfx::Insets::TLBR(kImageMarginTop, 0, kImageMarginBottom, 0)));
   illustration->SetSize(header_size);
   illustration->SetVerticalAlignment(views::ImageView::Alignment::kLeading);
+}
+
+const gfx::VectorIcon& GooglePasswordManagerIcon() {
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  return vector_icons::kGooglePasswordManagerIcon;
+#else
+  return kKeyIcon;
+#endif
 }
 
 }  // namespace
@@ -88,7 +106,7 @@ AuthenticatorRequestSheetView::BuildStepSpecificContent() {
 
 std::unique_ptr<views::View>
 AuthenticatorRequestSheetView::CreateIllustrationWithOverlays() {
-  constexpr int kImageHeight = 112, kImageMarginBottom = 2;
+  constexpr int kImageHeight = 112;
   constexpr int kHeaderHeight =
       kImageHeight + kImageMarginTop + kImageMarginBottom;
   const int dialog_width = ChromeLayoutProvider::Get()->GetDistanceMetric(
@@ -101,7 +119,10 @@ AuthenticatorRequestSheetView::CreateIllustrationWithOverlays() {
   View* illustration;
   if (model()->lottie_illustrations()) {
     auto animation = std::make_unique<views::AnimatedImageView>();
-    animation->SetPreferredSize(gfx::Size(dialog_width, kImageHeight));
+    // `AnimatedImageView` will horizontally center if the width is larger than
+    // the size from the Lottie file, but the height is just used to truncate
+    // the image, so that is disabled with a very large value.
+    animation->SetPreferredSize(gfx::Size(dialog_width, 9999));
     ConfigureHeaderIllustration(animation.get(), header_size);
     child_views_.step_illustration_animation_ = animation.get();
     illustration = animation.release();
@@ -159,6 +180,39 @@ AuthenticatorRequestSheetView::CreateContentsBelowIllustration() {
       BoxLayout::Orientation::kVertical, gfx::Insets(),
       views::LayoutProvider::Get()->GetDistanceMetric(
           views::DISTANCE_RELATED_CONTROL_VERTICAL)));
+
+  if (model()->has_gpm_banner()) {
+    auto container = std::make_unique<views::View>();
+    container->SetBorder(views::CreateEmptyBorder(
+        gfx::Insets::TLBR(0, 0,
+                          views::LayoutProvider::Get()->GetDistanceMetric(
+                              views::DISTANCE_RELATED_CONTROL_VERTICAL),
+                          0)));
+    container->SetLayoutManager(std::make_unique<BoxLayout>(
+        BoxLayout::Orientation::kHorizontal, gfx::Insets(),
+        views::LayoutProvider::Get()->GetDistanceMetric(
+            views::DISTANCE_RELATED_CONTROL_VERTICAL)));
+
+    auto image_view = std::make_unique<NonAccessibleImageView>();
+    constexpr int kIconSize = 18;
+    // The icon is vertically centered within this size. The addition of
+    // `kIconSize / 8` adds enough margin at the top so that the icon is better
+    // centered with the text.
+    image_view->SetPreferredSize(
+        gfx::Size(kIconSize, kIconSize + kIconSize / 8));
+    image_view->SetImage(ui::ImageModel::FromVectorIcon(
+        GooglePasswordManagerIcon(), gfx::kPlaceholderColor, kIconSize));
+    container->AddChildView(image_view.release());
+
+    auto gpm_label = std::make_unique<views::Label>(
+        l10n_util::GetStringUTF16(IDS_WEBAUTHN_SOURCE_GOOGLE_PASSWORD_MANAGER),
+        views::style::CONTEXT_DIALOG_BODY_TEXT);
+    gpm_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    gpm_label->SetVerticalAlignment(gfx::ALIGN_TOP);
+    container->AddChildView(gpm_label.release());
+
+    label_container->AddChildView(container.release());
+  }
 
   const std::u16string title = model()->GetStepTitle();
   if (!title.empty()) {
@@ -231,7 +285,8 @@ void AuthenticatorRequestSheetView::OnThemeChanged() {
 }
 
 void AuthenticatorRequestSheetView::UpdateIconImageFromModel() {
-  const bool is_dark = GetNativeTheme()->ShouldUseDarkColors();
+  const bool is_dark = color_utils::IsDark(
+      GetColorProvider()->GetColor(ui::kColorDialogBackground));
   if (child_views_.step_illustration_image_) {
     child_views_.step_illustration_image_->SetImage(
         ui::ImageModel::FromVectorIcon(
@@ -242,7 +297,7 @@ void AuthenticatorRequestSheetView::UpdateIconImageFromModel() {
     std::optional<std::vector<uint8_t>> lottie_bytes =
         ui::ResourceBundle::GetSharedInstance().GetLottieData(lottie_id);
     scoped_refptr<cc::SkottieWrapper> skottie =
-        cc::SkottieWrapper::CreateSerializable(std::move(*lottie_bytes));
+        cc::SkottieWrapper::UnsafeCreateSerializable(std::move(*lottie_bytes));
     child_views_.step_illustration_animation_->SetAnimatedImage(
         std::make_unique<lottie::Animation>(skottie));
     child_views_.step_illustration_animation_->SizeToPreferredSize();

@@ -62,6 +62,7 @@ android_library("devui_java") {
     "java/src/org/chromium/android_webview/devui/FlagsFragment.java",
     "java/src/org/chromium/android_webview/devui/HomeFragment.java",
     "java/src/org/chromium/android_webview/devui/MainActivity.java",
+    "java/src/org/chromium/android_webview/devui/NetLogsFragment.java",
     "java/src/org/chromium/android_webview/devui/PersistentErrorView.java",
     "java/src/org/chromium/android_webview/devui/SafeModeFragment.java",
     "java/src/org/chromium/android_webview/devui/WebViewPackageError.java",
@@ -203,6 +204,7 @@ source_set("nonembedded") {
     "//components/update_client:in_process_unzipper",
     "//components/version_info",
     "//components/version_info/android:channel_getter",
+    "//mojo/public/cpp/base:protobuf_support",
     "//url",
 
     # Called via JNI by LicenseContentProvider in :nonembedded_java.
@@ -242,7 +244,9 @@ android_resources("devui_resources") {
     "java/res_devui/layout/fragment_crashes_list.xml",
     "java/res_devui/layout/fragment_flags.xml",
     "java/res_devui/layout/fragment_home.xml",
+    "java/res_devui/layout/fragment_net_logs.xml",
     "java/res_devui/layout/fragment_safe_mode.xml",
+    "java/res_devui/layout/net_log_entry.xml",
     "java/res_devui/layout/persistent_error_message.xml",
     "java/res_devui/layout/safe_mode_actions_list_item.xml",
     "java/res_devui/layout/toggleable_flag.xml",
@@ -250,6 +254,7 @@ android_resources("devui_resources") {
     "java/res_devui/layout/two_line_sublist_item.xml",
     "java/res_devui/menu/components_options_menu.xml",
     "java/res_devui/menu/crashes_options_menu.xml",
+    "java/res_devui/menu/net_log_menu.xml",
     "java/res_devui/menu/options_menu.xml",
     "java/res_devui/values-night/colors.xml",
     "java/res_devui/values-night/styles.xml",

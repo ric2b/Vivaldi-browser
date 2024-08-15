@@ -168,7 +168,6 @@
 <translation id="7353601530677266744">Opdrachtregel</translation>
 <translation id="7364115444476960850">De pagina die je wilde bezoeken is geblokkeerd door Vivaldi's <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profielpad</translation>
-<translation id="7445762425076701745">De identiteit van de server waarmee je verbinding maakt, kan niet volledig worden geverifieerd. Je hebt verbinding gemaakt met een server die een naam gebruikt die alleen binnen je netwerk geldig is. Een externe certificeringsinstantie kan hiervoor nooit het eigendom verifiëren. Aangezien sommige certificeringsinstanties toch certificaten voor deze namen verlenen, kun je nooit zeker weten of je verbinding hebt met de bedoelde website en niet met een aanvaller.</translation>
 <translation id="7455133967321480974">Algemene standaardinstelling gebruiken (Blokkeren)</translation>
 <translation id="7518003948725431193">Er is geen webpagina gevonden voor het webadres: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Deze webpagina kan alleen correct worden weergegeven op basis van gegevens die je eerder hebt opgegeven. Je kunt deze gegevens opnieuw verzenden, maar hierdoor worden de acties herhaald die eerder op deze pagina zijn uitgevoerd.</translation>

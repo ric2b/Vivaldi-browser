@@ -8,7 +8,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/color/chrome_color_provider_utils.h"
-#include "components/omnibox/common/omnibox_features.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/color/color_id.h"
@@ -28,11 +27,6 @@ constexpr float kOmniboxHighContrastRatio = 6.0f;
 // Apply updates to the Omnibox text color tokens per GM3 spec.
 void ApplyGM3OmniboxTextColor(ui::ColorMixer& mixer,
                               const ui::ColorProviderKey& key) {
-  if (!omnibox::IsOmniboxCr23CustomizeGuardedFeatureEnabled(
-          omnibox::kOmniboxSteadyStateTextColor)) {
-    return;
-  }
-
   mixer[kColorOmniboxText] = {ui::kColorSysOnSurface};
   mixer[kColorOmniboxTextDimmed] = {ui::kColorSysOnSurfaceSubtle};
   mixer[kColorOmniboxSelectionBackground] = {ui::kColorSysStateTextHighlight};
@@ -51,7 +45,7 @@ void ApplyGM3OmniboxTextColor(ui::ColorMixer& mixer,
   mixer[kColorOmniboxResultsUrlSelected] = {kColorOmniboxResultsUrl};
 
   // These affect finance answers; e.g. 'goog stock'.
-  // TODO(crbug.com/1465985): These don't seem to apply anymore, at least on
+  // TODO(crbug.com/40923750): These don't seem to apply anymore, at least on
   //   desktop. Check with UX if we still care to color finance answers, and
   //   what those colors should in CR23.
   mixer[kColorOmniboxResultsTextNegativeSelected] = {
@@ -64,13 +58,10 @@ void ApplyGM3OmniboxTextColor(ui::ColorMixer& mixer,
 
 void ApplyCR2023OmniboxIconColors(ui::ColorMixer& mixer,
                                   const ui::ColorProviderKey& key) {
-  if (!omnibox::IsOmniboxCr23CustomizeGuardedFeatureEnabled(
-          omnibox::kOmniboxCR23SteadyStateIcons)) {
-    return;
-  }
-
   mixer[kColorPageActionIconHover] = {ui::kColorSysStateHoverOnSubtle};
   mixer[kColorPageInfoBackground] = {ui::kColorSysBaseContainerElevated};
+  mixer[kColorPageInfoLensOverlayBackground] = {ui::kColorSysTonalContainer};
+  mixer[kColorPageInfoLensOverlayForeground] = {ui::kColorSysOnTonalContainer};
   mixer[kColorPageInfoIconHover] = {ui::kColorSysStateHoverDimBlendProtection};
   mixer[kColorPageInfoIconPressed] = {ui::kColorSysStateRippleNeutralOnSubtle};
   mixer[kColorPageActionIcon] = {ui::kColorSysOnSurfaceSubtle};
@@ -87,11 +78,6 @@ void ApplyCR2023OmniboxIconColors(ui::ColorMixer& mixer,
 // Apply updates to the Omnibox "expanded state" color tokens per CR2023 spec.
 void ApplyCR2023OmniboxExpandedStateColors(ui::ColorMixer& mixer,
                                            const ui::ColorProviderKey& key) {
-  if (!omnibox::IsOmniboxCr23CustomizeGuardedFeatureEnabled(
-          omnibox::kExpandedStateColors)) {
-    return;
-  }
-
   // Update focus bar color.
   mixer[kColorOmniboxResultsFocusIndicator] = {ui::kColorSysStateFocusRing};
 
@@ -149,11 +135,6 @@ void ApplyCR2023OmniboxExpandedStateColors(ui::ColorMixer& mixer,
 // custom theme).
 void ApplyOmniboxCR2023FallbackColors(ui::ColorMixer& mixer,
                                       const ui::ColorProviderKey& key) {
-  if (!omnibox::IsOmniboxCr23CustomizeGuardedFeatureEnabled(
-          omnibox::kExpandedStateColors)) {
-    return;
-  }
-
   // Action chip hover & select colors for hovered suggestion rows (e.g. via
   // mouse cursor).
   mixer[kColorOmniboxResultsButtonInkDropRowHovered] = {ui::SetAlpha(
@@ -243,6 +224,7 @@ void AddOmniboxColorMixer(ui::ColorProvider* provider,
   // Results background, button, and focus colors.
   mixer[kColorOmniboxResultsBackground] =
       ui::GetColorWithMaxContrast(kColorOmniboxText);
+  mixer[kColorOmniboxResultsBackgroundIPH] = {ui::kColorSysSurface2};
   mixer[kColorOmniboxResultsBackgroundHovered] = ui::BlendTowardMaxContrast(
       kColorOmniboxResultsBackground, gfx::kGoogleGreyAlpha200);
   mixer[kColorOmniboxResultsBackgroundSelected] = ui::BlendTowardMaxContrast(
@@ -406,6 +388,11 @@ void AddOmniboxColorMixer(ui::ColorProvider* provider,
   // location bar icon colors.
   mixer[kColorPageInfoBackground] = {kColorToolbar};
   mixer[kColorPageInfoBackgroundTonal] = {ui::kColorSysTonalContainer};
+  // TODO(crbug.com/345521958): Remove these and fix the PageInfoBackground
+  // colors above. The definitions in this section need to handle CWS custom
+  // themes and the GM3 definitions above.
+  mixer[kColorPageInfoLensOverlayBackground] = {kColorToolbar};
+  mixer[kColorPageInfoLensOverlayForeground] = {kColorOmniboxText};
   // Literal constants are `kOmniboxOpacityHovered` and
   // `kOmniboxOpacitySelected`. This is so that we can more cleanly use the
   // colors in the inkdrop instead of handling themes and non-themes separately

@@ -44,12 +44,16 @@ protected:
             SkISize dimensions,
             const TextureInfo& info,
             sk_sp<MutableTextureState> mutableState,
+            std::string_view label,
             Ownership,
             skgpu::Budgeted);
 
     MutableTextureState* mutableState() const;
 
     void invokeReleaseProc() override;
+
+    void onDumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump,
+                                const char* dumpName) const override;
 
 private:
     SkISize fDimensions;
@@ -58,6 +62,6 @@ private:
     sk_sp<RefCntedCallback> fReleaseCallback;
 };
 
-} // namepsace skgpu::graphite
+} // namespace skgpu::graphite
 
 #endif // skgpu_graphite_Texture_DEFINED

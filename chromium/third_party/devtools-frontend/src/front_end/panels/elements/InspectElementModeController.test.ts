@@ -13,10 +13,11 @@ import {
   describeWithMockConnection,
   setMockConnectionResponseHandler,
 } from '../../testing/MockConnection.js';
+import {
+  setMockResourceTree,
+} from '../../testing/ResourceTreeHelpers.js';
 
 import * as Elements from './elements.js';
-
-const {assert} = chai;
 
 const NODE_ID = 1 as Protocol.DOM.NodeId;
 
@@ -40,6 +41,7 @@ describeWithMockConnection('InspectElementModeController', () => {
   }
 
   beforeEach(() => {
+    setMockResourceTree(false);
     stubNoopSettings();
     registerNoopActions(['elements.toggle-element-search']);
     const tabTarget = createTarget({type: SDK.Target.Type.Tab});

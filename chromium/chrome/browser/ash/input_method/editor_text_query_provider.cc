@@ -8,10 +8,13 @@
 
 #include "base/metrics/field_trial_params.h"
 #include "base/notreached.h"
+#include "base/strings/strcat.h"
 #include "base/values.h"
+#include "chrome/browser/ash/input_method/editor_helpers.h"
 #include "chrome/browser/ash/input_method/editor_metrics_recorder.h"
 #include "chrome/browser/manta/manta_service_factory.h"
 #include "chromeos/ash/services/orca/public/mojom/orca_service.mojom.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/manta/features.h"
 #include "components/manta/manta_service.h"
 #include "components/manta/manta_status.h"
@@ -24,19 +27,6 @@ namespace {
 
 std::string GetConfigLabelFromFieldTrialConfig() {
   return base::GetFieldTrialParamValue("OrcaEnabled", "config_label");
-}
-
-std::unique_ptr<manta::OrcaProvider> CreateProvider(Profile* profile) {
-  if (!manta::features::IsMantaServiceEnabled()) {
-    return nullptr;
-  }
-
-  if (manta::MantaService* service =
-          manta::MantaServiceFactory::GetForProfile(profile)) {
-    return service->CreateOrcaProvider();
-  }
-
-  return nullptr;
 }
 
 std::map<std::string, std::string> CreateProviderRequest(
@@ -64,6 +54,11 @@ std::map<std::string, std::string> CreateProviderRequest(
       !config_label.empty()) {
     provider_request["config_label"] = config_label;
   }
+
+  if (base::FeatureList::IsEnabled(chromeos::features::kOrcaInternationalize)) {
+    provider_request["i18n"] = "true";
+  }
+
   return provider_request;
 }
 
@@ -95,8 +90,12 @@ orca::mojom::TextQueryErrorCode ConvertErrorCode(
 }
 
 orca::mojom::TextQueryErrorPtr ConvertErrorResponse(manta::MantaStatus status) {
-  return orca::mojom::TextQueryError::New(ConvertErrorCode(status.status_code),
-                                          status.message);
+  // In case the system locale mismatches the locale returned in the response,
+  // returns a generic error.
+
+  return orca::mojom::TextQueryError::New(
+      ConvertErrorCode(status.status_code),
+      /*message=*/GetSystemLocale() == status.locale ? status.message : "");
 }
 
 std::vector<orca::mojom::TextQueryResultPtr> ParseSuccessResponse(
@@ -133,19 +132,19 @@ std::optional<size_t> GetLengthOfLongestResponse(
 
 }  // namespace
 
-TextQueryProviderForOrca::TextQueryProviderForOrca(
+EditorTextQueryProvider::EditorTextQueryProvider(
     mojo::PendingAssociatedReceiver<orca::mojom::TextQueryProvider> receiver,
-    Profile* profile,
-    EditorMetricsRecorder* metrics_recorder)
+    EditorMetricsRecorder* metrics_recorder,
+    std::unique_ptr<MantaProvider> manta_provider)
     : text_query_provider_receiver_(this, std::move(receiver)),
-      orca_provider_(CreateProvider(profile)),
-      metrics_recorder_(metrics_recorder) {}
+      metrics_recorder_(metrics_recorder),
+      manta_provider_(std::move(manta_provider)) {}
 
-TextQueryProviderForOrca::~TextQueryProviderForOrca() = default;
+EditorTextQueryProvider::~EditorTextQueryProvider() = default;
 
-void TextQueryProviderForOrca::Process(orca::mojom::TextQueryRequestPtr request,
-                                       ProcessCallback callback) {
-  if (orca_provider_ == nullptr) {
+void EditorTextQueryProvider::Process(orca::mojom::TextQueryRequestPtr request,
+                                      ProcessCallback callback) {
+  if (manta_provider_ == nullptr) {
     // TODO: b:300557202 - use the right error code
     auto response = orca::mojom::TextQueryResponse::NewError(
         orca::mojom::TextQueryError::New(
@@ -158,7 +157,7 @@ void TextQueryProviderForOrca::Process(orca::mojom::TextQueryRequestPtr request,
   metrics_recorder_->LogEditorState(EditorStates::kRequest);
 
   ++request_id_;
-  orca_provider_->Call(
+  manta_provider_->Call(
       CreateProviderRequest(std::move(request)),
       base::BindOnce(
           [](const std::string& request_id,
@@ -197,12 +196,9 @@ void TextQueryProviderForOrca::Process(orca::mojom::TextQueryRequestPtr request,
           std::move(callback)));
 }
 
-std::optional<mojo::PendingAssociatedReceiver<orca::mojom::TextQueryProvider>>
-TextQueryProviderForOrca::Unbind() {
-  if (text_query_provider_receiver_.is_bound()) {
-    return text_query_provider_receiver_.Unbind();
-  }
-  return std::nullopt;
+void EditorTextQueryProvider::SetProvider(
+    std::unique_ptr<MantaProvider> provider) {
+  manta_provider_ = std::move(provider);
 }
 
 }  // namespace ash::input_method

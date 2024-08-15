@@ -40,7 +40,7 @@ void UkmDatabaseClient::PreProfileInit(bool in_memory_database) {
   if (ukm_recorder_for_testing_) {
     ukm_observer_ = std::make_unique<UkmObserver>(ukm_recorder_for_testing_);
   } else {
-    if (auto *ukm_service = g_browser_process->GetMetricsServicesManager()->GetUkmService())
+    if (g_browser_process->GetMetricsServicesManager()->GetUkmService())
     ukm_observer_ = std::make_unique<UkmObserver>(
         g_browser_process->GetMetricsServicesManager()->GetUkmService());
   }

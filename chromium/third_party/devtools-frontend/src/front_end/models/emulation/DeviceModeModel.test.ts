@@ -5,6 +5,7 @@
 import * as SDK from '../../core/sdk/sdk.js';
 import {createTarget, stubNoopSettings} from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
+import {getMainFrame, navigate} from '../../testing/ResourceTreeHelpers.js';
 import * as EmulationModel from '../emulation/emulation.js';
 
 describe('Insets', () => {
@@ -77,36 +78,27 @@ describe('Rect', () => {
 });
 
 describeWithMockConnection('DeviceModeModel', () => {
-  const tests = (targetFactory: () => SDK.Target.Target) => {
-    let target: SDK.Target.Target;
+  let target: SDK.Target.Target;
 
-    beforeEach(() => {
-      stubNoopSettings();
-      target = targetFactory();
-    });
+  beforeEach(() => {
+    stubNoopSettings();
+    const tabTarget = createTarget({type: SDK.Target.Type.Tab});
+    createTarget({parentTarget: tabTarget, subtype: 'prerender'});
+    target = createTarget({parentTarget: tabTarget});
+  });
 
-    it('shows hinge on main frame resize', () => {
-      EmulationModel.DeviceModeModel.DeviceModeModel.instance({forceNew: true});
-      const resourceTreeModel = target.model(SDK.ResourceTreeModel.ResourceTreeModel);
-      const setShowHinge = sinon.spy(target.overlayAgent(), 'invoke_setShowHinge');
-      resourceTreeModel!.dispatchEventToListeners(SDK.ResourceTreeModel.Events.FrameResized);
-      assert.isTrue(setShowHinge.calledOnce);
-    });
+  it('shows hinge on main frame resize', () => {
+    EmulationModel.DeviceModeModel.DeviceModeModel.instance({forceNew: true});
+    const resourceTreeModel = target.model(SDK.ResourceTreeModel.ResourceTreeModel);
+    const setShowHinge = sinon.spy(target.overlayAgent(), 'invoke_setShowHinge');
+    resourceTreeModel!.dispatchEventToListeners(SDK.ResourceTreeModel.Events.FrameResized);
+    assert.isTrue(setShowHinge.calledOnce);
+  });
 
-    it('shows hinge on main frame navigation', () => {
-      EmulationModel.DeviceModeModel.DeviceModeModel.instance({forceNew: true});
-      const resourceTreeModel = target.model(SDK.ResourceTreeModel.ResourceTreeModel);
-      const setShowHinge = sinon.spy(target.overlayAgent(), 'invoke_setShowHinge');
-      resourceTreeModel!.dispatchEventToListeners(
-          SDK.ResourceTreeModel.Events.FrameNavigated, {} as SDK.ResourceTreeModel.ResourceTreeFrame);
-      assert.isTrue(setShowHinge.calledOnce);
-    });
-  };
-
-  describe('without tab target', () => tests(createTarget));
-  describe('with tab target', () => tests(() => {
-                                const tabTarget = createTarget({type: SDK.Target.Type.Tab});
-                                createTarget({parentTarget: tabTarget, subtype: 'prerender'});
-                                return createTarget({parentTarget: tabTarget});
-                              }));
+  it('shows hinge on main frame navigation', () => {
+    EmulationModel.DeviceModeModel.DeviceModeModel.instance({forceNew: true});
+    const setShowHinge = sinon.spy(target.overlayAgent(), 'invoke_setShowHinge');
+    navigate(getMainFrame(target));
+    assert.isTrue(setShowHinge.calledOnce);
+  });
 });

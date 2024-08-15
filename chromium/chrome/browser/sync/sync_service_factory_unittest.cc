@@ -19,8 +19,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/data_sharing/public/features.h"
-#include "components/password_manager/core/browser/features/password_features.h"
-#include "components/supervised_user/core/common/buildflags.h"
+#include "components/saved_tab_groups/features.h"
 #include "components/sync/base/command_line_switches.h"
 #include "components/sync/base/features.h"
 #include "components/sync/base/model_type.h"
@@ -36,7 +35,7 @@
 #include "chrome/browser/sync/wifi_configuration_sync_service_factory.h"
 #include "chromeos/ash/components/dbus/shill/shill_clients.h"
 #include "chromeos/ash/components/dbus/shill/shill_manager_client.h"
-#include "chromeos/ash/components/network/network_handler.h"
+#include "chromeos/ash/components/network/network_handler_test_helper.h"
 #include "chromeos/ash/components/sync_wifi/wifi_configuration_sync_service.h"
 #include "chromeos/ash/services/network_config/public/cpp/cros_network_config_test_helper.h"
 #endif
@@ -74,16 +73,8 @@ class SyncServiceFactoryTest : public testing::Test {
   }
 
  protected:
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  SyncServiceFactoryTest() {
-    // Fake network stack is required for WIFI_CONFIGURATIONS datatype.
-    ash::NetworkHandler::Initialize();
-  }
-  ~SyncServiceFactoryTest() override { ash::NetworkHandler::Shutdown(); }
-#else
   SyncServiceFactoryTest() = default;
   ~SyncServiceFactoryTest() override = default;
-#endif
 
   // Returns the collection of default datatypes.
   syncer::ModelTypeSet DefaultDatatypes() {
@@ -96,18 +87,12 @@ class SyncServiceFactoryTest : public testing::Test {
     syncer::ModelTypeSet datatypes;
 
     // These preprocessor conditions and their order should be in sync with
-    // preprocessor conditions in ChromeSyncClient::CreateDataTypeControllers:
+    // preprocessor conditions in ChromeSyncClient::CreateModelTypeControllers:
 
     // ChromeSyncClient types.
     datatypes.Put(syncer::READING_LIST);
     datatypes.Put(syncer::SECURITY_EVENTS);
-    if (base::FeatureList::IsEnabled(syncer::kSyncSegmentationDataType)) {
-      datatypes.Put(syncer::SEGMENTATION);
-    }
-
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
     datatypes.Put(syncer::SUPERVISED_USER_SETTINGS);
-#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
     datatypes.Put(syncer::APPS);
@@ -124,7 +109,9 @@ class SyncServiceFactoryTest : public testing::Test {
 
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
     BUILDFLAG(IS_WIN)
-    if (base::FeatureList::IsEnabled(features::kTabGroupsSave)) {
+    datatypes.Put(syncer::SAVED_TAB_GROUP);
+#elif BUILDFLAG(IS_ANDROID)
+    if (base::FeatureList::IsEnabled(tab_groups::kTabGroupSyncAndroid)) {
       datatypes.Put(syncer::SAVED_TAB_GROUP);
     }
 #endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) ||
@@ -149,8 +136,11 @@ class SyncServiceFactoryTest : public testing::Test {
     datatypes.Put(syncer::WORKSPACE_DESK);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-    // Common types. This excludes PASSWORDS because the password store factory
-    // is null for testing and hence no controller gets instantiated.
+    // Common types. This excludes PASSWORDS,
+    // INCOMING_PASSWORD_SHARING_INVITATION and
+    // INCOMING_PASSWORD_SHARING_INVITATION, because the password store factory
+    // is null for testing and hence no controller gets instantiated for those
+    // types.
     datatypes.Put(syncer::AUTOFILL);
     datatypes.Put(syncer::AUTOFILL_PROFILE);
     if (base::FeatureList::IsEnabled(
@@ -161,7 +151,7 @@ class SyncServiceFactoryTest : public testing::Test {
     datatypes.Put(syncer::AUTOFILL_WALLET_METADATA);
     datatypes.Put(syncer::AUTOFILL_WALLET_OFFER);
     datatypes.Put(syncer::BOOKMARKS);
-    if (base::FeatureList::IsEnabled(commerce::kProductSpecifications)) {
+    if (base::FeatureList::IsEnabled(commerce::kProductSpecificationsSync)) {
       datatypes.Put(syncer::COMPARE);
     }
     datatypes.Put(syncer::CONTACT_INFO);
@@ -181,15 +171,6 @@ class SyncServiceFactoryTest : public testing::Test {
     }
 #endif  // !BUILDFLAG(IS_ANDROID)
     if (base::FeatureList::IsEnabled(
-            password_manager::features::
-                kPasswordManagerEnableReceiverService)) {
-      datatypes.Put(syncer::INCOMING_PASSWORD_SHARING_INVITATION);
-    }
-    if (base::FeatureList::IsEnabled(
-            password_manager::features::kPasswordManagerEnableSenderService)) {
-      datatypes.Put(syncer::OUTGOING_PASSWORD_SHARING_INVITATION);
-    }
-    if (base::FeatureList::IsEnabled(
             data_sharing::features::kDataSharingFeature)) {
       datatypes.Put(syncer::COLLABORATION_GROUP);
       datatypes.Put(syncer::SHARED_TAB_GROUP_DATA);
@@ -202,18 +183,23 @@ class SyncServiceFactoryTest : public testing::Test {
     if (base::FeatureList::IsEnabled(syncer::kSyncPlusAddress)) {
       datatypes.Put(syncer::PLUS_ADDRESS);
     }
+
+    // TODO(b/318391357) add `syncer::COOKIES` (under IS_CHROMEOS) after adding
+    // a corresponding controller.
     return datatypes;
   }
 
   Profile* profile() { return profile_.get(); }
-
-  void RunUntilIdle() { task_environment_.RunUntilIdle(); }
 
  private:
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<TestingProfile> profile_;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+  // Fake network stack is required for WIFI_CONFIGURATIONS datatype. It's also
+  // used by `network_config_helper_`
+  ash::NetworkHandlerTestHelper network_handler_test_helper_;
+
   // Sets up  and  tears down the Chrome OS networking mojo service as needed
   // for the WIFI_CONFIGURATIONS sync service.
   ash::network_config::CrosNetworkConfigTestHelper network_config_helper_;
@@ -233,10 +219,8 @@ TEST_F(SyncServiceFactoryTest, CreateSyncServiceImplDefault) {
       SyncServiceFactory::GetAsSyncServiceImplForProfileForTesting(profile());
   syncer::ModelTypeSet types = sync_service->GetRegisteredDataTypesForTest();
   const syncer::ModelTypeSet default_types = DefaultDatatypes();
-  EXPECT_EQ(default_types.Size(), types.Size());
+  EXPECT_EQ(default_types.size(), types.size());
   for (syncer::ModelType type : default_types) {
     EXPECT_TRUE(types.Has(type)) << type << " not found in datatypes map";
   }
-  sync_service->Shutdown();
-  RunUntilIdle();
 }

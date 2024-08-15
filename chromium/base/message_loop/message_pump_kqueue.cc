@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/message_loop/message_pump_kqueue.h"
 
 #include <sys/errno.h>
@@ -532,7 +537,8 @@ bool MessagePumpKqueue::ProcessEvents(Delegate* delegate, size_t count) {
       scheduled_wakeup_time_ = base::TimeTicks::Max();
       --event_count_;
     } else {
-      NOTREACHED() << "Unexpected event for filter " << event->filter;
+      NOTREACHED_IN_MIGRATION()
+          << "Unexpected event for filter " << event->filter;
     }
   }
 

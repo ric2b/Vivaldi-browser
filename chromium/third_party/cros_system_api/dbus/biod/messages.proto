@@ -77,7 +77,8 @@ message CreateCredentialRequest {
 
 message CreateCredentialReply {
   // These values are persisted to logs. Entries should not be renumbered and
-  // numeric values should never be reused.
+  // numeric values should never be reused. Please update biod_metrics.cc and
+  // histograms.xml if new variants are added.
   enum CreateCredentialStatus {
     UNKNOWN = 0;
     SUCCESS = 1;
@@ -100,7 +101,8 @@ message AuthenticateCredentialRequest {
 
 message AuthenticateCredentialReply {
   // These values are persisted to logs. Entries should not be renumbered and
-  // numeric values should never be reused.
+  // numeric values should never be reused. Please update biod_metrics.cc and
+  // histograms.xml if new variants are added.
   enum AuthenticateCredentialStatus {
     UNKNOWN = 0;
     SUCCESS = 1;
@@ -127,6 +129,9 @@ message DeleteCredentialRequest {
 }
 
 message DeleteCredentialReply {
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused. Please update biod_metrics.cc and
+  // histograms.xml if new variants are added.
   enum DeleteCredentialStatus {
     UNKNOWN = 0;
     SUCCESS = 1;
@@ -153,9 +158,13 @@ message LegacyRecord {
 }
 
 message ListLegacyRecordsReply {
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused. Please update biod_metrics.cc and
+  // histograms.xml if new variants are added.
   enum ListLegacyRecordsStatus {
     UNKNOWN = 0;
     SUCCESS = 1;
+    INCORRECT_STATE = 2;  // E.g., no user is logged in.
   }
   optional ListLegacyRecordsStatus status = 2;
   repeated LegacyRecord legacy_records = 1;

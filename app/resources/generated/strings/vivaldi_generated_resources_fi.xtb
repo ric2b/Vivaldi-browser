@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">Ei jälkeen</translation>
 <translation id="2749881179542288782">Tarkista kielioppi oikeinkirjoituksen yhteydessä</translation>
 <translation id="2785873697295365461">Tiedostokuvaajat</translation>
-<translation id="2809586584051668049">ja <ph name="NUMBER_ADDITIONAL_DISABLED" /> muuta</translation>
 <translation id="2825758591930162672">Kohteen julkinen avain</translation>
 <translation id="2850541429955027218">Lisää teema</translation>
 <translation id="2861941300086904918">Asiakkaan tietosuojahallinnoija</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">Avaa ikkunaan</translation>
 <translation id="3280237271814976245">Tallenna &amp;nimellä…</translation>
 <translation id="3285322247471302225">Uusi &amp;välilehti</translation>
-<translation id="3288047731229977326">Kehittäjätilassa olevat laajennukset voivat vahingoittaa tietokonettasi. Jos et ole kehittäjä, poista kehittäjätilassa olevat laajennukset varmuuden vuoksi käytöstä.</translation>
 <translation id="329838636886466101">Korjaa</translation>
 <translation id="33022249435934718">GDI-kahvat</translation>
 <translation id="3303818374450886607">Kopioita</translation>
@@ -147,7 +145,7 @@
 <translation id="3331974543021145906">Sovelluksen tiedot</translation>
 <translation id="3341703758641437857">Salli tiedostojen URL-osoitteiden käyttöoikeus</translation>
 <translation id="3347086966102161372">K&amp;opioi kuvan osoite</translation>
-<translation id="3360297538363969800">Tulostus epäonnistui. Tarkista tulostin ja yritä uudelleen.</translation>
+<translation id="3360297538363969800">Tulostus epäonnistui. Tarkista tulostimesi ja yritä uudelleen.</translation>
 <translation id="3378572629723696641">Laajennus on mahdollisesti vioittunut.</translation>
 <translation id="3387614642886316601">Käytä parannettua oikolukua</translation>
 <translation id="3390013585654699824">Sovelluksen tiedot</translation>
@@ -166,7 +164,7 @@
 <translation id="3719826155360621982">Aloitussivu</translation>
 <translation id="3727187387656390258">Tarkastele ponnahdusta</translation>
 <translation id="3760460896538743390">Tarkastele &amp;taustasivua</translation>
-<translation id="3786224729726357296">Poista sivuston <ph name="SITE" /> teidot ja käyttöoikeudet</translation>
+<translation id="3786224729726357296">Poista sivuston <ph name="SITE" /> tiedot ja käyttöoikeudet</translation>
 <translation id="3797900183766075808">Etsi "<ph name="SEARCH_TERMS" />" hakukoneella <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3798449238516105146">Versio</translation>
 <translation id="3810973564298564668">Hallinnoi</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">Laajennus luotiin:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Poista kehittäjätilassa olevat laajennukset käytöstä</translation>
 <translation id="4100839878934973028">Joku muu tietokoneen sovellus lisäsi sovelluksen, joka voi vaikuttaa Vivaldin toimintaan.</translation>
 <translation id="4104163789986725820">&amp;Vie...</translation>
 <translation id="4109898769411476438">Sulje selain ennen tuontia</translation>
@@ -261,7 +258,6 @@
 <translation id="5269977353971873915">Tulostus epäonnistui</translation>
 <translation id="5284445933715251131">Jatka latausta</translation>
 <translation id="52912272896845572">Yksityinen avaintiedosto on virheellinen.</translation>
-<translation id="5301954838959518834">Selvä, ymmärrän</translation>
 <translation id="5302932258331363306">Näytä korvaukset</translation>
 <translation id="5317780077021120954">Tallenna</translation>
 <translation id="5334142896108694079">Skriptivälimuisti</translation>
@@ -310,7 +306,7 @@ Julkinen eksponentti (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bittiä):
 <translation id="5979421442488174909">&amp;Käännä kielelle <ph name="LANGUAGE" /></translation>
 <translation id="6042308850641462728">Lisää</translation>
 <translation id="6059652578941944813">Varmenteen hierarkia</translation>
-<translation id="6086846494333236931">Ylläpitäjän asentama</translation>
+<translation id="6086846494333236931">Ylläpidon asentama</translation>
 <translation id="6101226222197207147">Uusi sovellus lisätty (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6147020289383635445">Tulostuksen esikatselu epäonnistui.</translation>
 <translation id="6156863943908443225">Skriptivälimuisti</translation>
@@ -384,7 +380,7 @@ Julkinen eksponentti (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bittiä):
 <translation id="7659154729610375585">Haluatko silti poistua yksityisestä tilasta?</translation>
 <translation id="7661259717474717992">Salli sivustojen tallentaa ja lukea evästetietoja</translation>
 <translation id="7663719505383602579">Vastaanottaja: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7684212569183643648">Ylläpitäjän asentama</translation>
+<translation id="7684212569183643648">Ylläpidon asentama</translation>
 <translation id="7685049629764448582">JavaScript-muisti</translation>
 <translation id="7701869757853594372">KÄYTTÄJÄ-kahvat</translation>
 <translation id="7704305437604973648">Tehtävä</translation>

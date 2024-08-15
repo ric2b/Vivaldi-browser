@@ -70,7 +70,6 @@ class CORE_EXPORT ScrollbarThemeMac : public ScrollbarTheme {
   int ScrollbarThickness(float scale_from_dip,
                          EScrollbarWidth scrollbar_width) const override;
   bool UsesOverlayScrollbars() const override;
-  void UpdateScrollbarOverlayColorTheme(const Scrollbar&) override;
 
   void SetNewPainterForScrollbar(Scrollbar&);
 
@@ -122,6 +121,7 @@ class CORE_EXPORT ScrollbarThemeMac : public ScrollbarTheme {
                          const DisplayItemClient&,
                          const gfx::Rect& corner_rect,
                          mojom::blink::ColorScheme color_scheme,
+                         bool in_forced_colors,
                          const ui::ColorProvider* color_provider) override;
   void PaintThumbInternal(GraphicsContext&,
                           const Scrollbar&,

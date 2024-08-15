@@ -28,7 +28,6 @@
 
 #include "third_party/blink/renderer/core/html/canvas/image_data.h"
 
-#include "base/sys_byteorder.h"
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_image_bitmap_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_float32array_uint16array_uint8clampedarray.h"
@@ -289,7 +288,7 @@ ImageData* ImageData::CreateForTest(const gfx::Size& size,
                                          storage_format);
 }
 
-ScriptPromiseTyped<ImageBitmap> ImageData::CreateImageBitmap(
+ScriptPromise<ImageBitmap> ImageData::CreateImageBitmap(
     ScriptState* script_state,
     std::optional<gfx::Rect> crop_rect,
     const ImageBitmapOptions* options,
@@ -297,7 +296,7 @@ ScriptPromiseTyped<ImageBitmap> ImageData::CreateImageBitmap(
   if (IsBufferBaseDetached()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "The source data has been detached.");
-    return ScriptPromiseTyped<ImageBitmap>();
+    return ScriptPromise<ImageBitmap>();
   }
   return ImageBitmapSource::FulfillImageBitmap(
       script_state, MakeGarbageCollected<ImageBitmap>(this, crop_rect, options),
@@ -381,8 +380,7 @@ v8::Local<v8::Object> ImageData::AssociateWithWrapper(
     //
     // This is a perf hack breaking the web interop.
 
-    ScriptState* script_state =
-        ScriptState::From(wrapper->GetCreationContextChecked());
+    ScriptState* script_state = ScriptState::ForRelevantRealm(isolate, wrapper);
     v8::Local<v8::Value> v8_data =
         ToV8Traits<V8ImageDataArray>::ToV8(script_state, data_);
     bool defined_property;

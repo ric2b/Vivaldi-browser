@@ -8,9 +8,11 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "osp/impl/quic/quic_connection.h"
+#include "osp/impl/quic/quic_stream.h"
 #include "osp/public/protocol_connection.h"
 
 namespace openscreen::osp {
@@ -28,18 +30,18 @@ class QuicProtocolConnection final : public ProtocolConnection {
   };
 
   static std::unique_ptr<QuicProtocolConnection> FromExisting(
-      Owner* owner,
+      Owner& owner,
       QuicConnection* connection,
       ServiceConnectionDelegate* delegate,
       uint64_t endpoint_id);
 
-  QuicProtocolConnection(Owner* owner,
+  QuicProtocolConnection(Owner& owner,
                          uint64_t endpoint_id,
                          uint64_t connection_id);
   ~QuicProtocolConnection() override;
 
   // ProtocolConnection overrides.
-  void Write(const uint8_t* data, size_t data_size) override;
+  void Write(const ByteView& bytes) override;
   void CloseWriteEnd() override;
 
   QuicStream* stream() { return stream_; }
@@ -48,20 +50,14 @@ class QuicProtocolConnection final : public ProtocolConnection {
   void OnClose();
 
  private:
-  Owner* const owner_;
+  Owner& owner_;
   QuicStream* stream_ = nullptr;
 };
 
 struct ServiceStreamPair {
-  ServiceStreamPair(std::unique_ptr<QuicStream> stream,
-                    QuicProtocolConnection* protocol_connection);
-  ~ServiceStreamPair();
-  ServiceStreamPair(ServiceStreamPair&&) noexcept;
-  ServiceStreamPair& operator=(ServiceStreamPair&&) noexcept;
-
-  std::unique_ptr<QuicStream> stream;
-  uint64_t connection_id;
-  QuicProtocolConnection* protocol_connection;
+  QuicStream* stream = nullptr;
+  uint64_t protocol_connection_id = 0u;
+  QuicProtocolConnection* protocol_connection = nullptr;
 };
 
 class ServiceConnectionDelegate final : public QuicConnection::Delegate,
@@ -73,22 +69,21 @@ class ServiceConnectionDelegate final : public QuicConnection::Delegate,
 
     virtual uint64_t OnCryptoHandshakeComplete(
         ServiceConnectionDelegate* delegate,
-        uint64_t connection_id) = 0;
+        std::string connection_id) = 0;
     virtual void OnIncomingStream(
         std::unique_ptr<QuicProtocolConnection> connection) = 0;
     virtual void OnConnectionClosed(uint64_t endpoint_id,
-                                    uint64_t connection_id) = 0;
+                                    std::string connection_id) = 0;
     virtual void OnDataReceived(uint64_t endpoint_id,
-                                uint64_t connection_id,
-                                const uint8_t* data,
-                                size_t data_size) = 0;
+                                uint64_t protocol_connection_id,
+                                const ByteView& bytes) = 0;
   };
 
-  ServiceConnectionDelegate(ServiceDelegate* parent,
+  ServiceConnectionDelegate(ServiceDelegate& parent,
                             const IPEndpoint& endpoint);
   ~ServiceConnectionDelegate() override;
 
-  void AddStreamPair(ServiceStreamPair&& stream_pair);
+  void AddStreamPair(const ServiceStreamPair& stream_pair);
   void DropProtocolConnection(QuicProtocolConnection* connection);
 
   // This should be called at the end of each event loop that effects this
@@ -101,21 +96,19 @@ class ServiceConnectionDelegate final : public QuicConnection::Delegate,
   bool has_streams() const { return !streams_.empty(); }
 
   // QuicConnection::Delegate overrides.
-  void OnCryptoHandshakeComplete(uint64_t connection_id) override;
-  void OnIncomingStream(uint64_t connection_id,
-                        std::unique_ptr<QuicStream> stream) override;
-  void OnConnectionClosed(uint64_t connection_id) override;
-  QuicStream::Delegate* NextStreamDelegate(uint64_t connection_id,
+  void OnCryptoHandshakeComplete(const std::string& connection_id) override;
+  void OnIncomingStream(const std::string& connection_id,
+                        QuicStream* stream) override;
+  void OnConnectionClosed(const std::string& connection_id) override;
+  QuicStream::Delegate& NextStreamDelegate(const std::string& connection_id,
                                            uint64_t stream_id) override;
 
   // QuicStream::Delegate overrides.
-  void OnReceived(QuicStream* stream,
-                  const char* data,
-                  size_t data_size) override;
+  void OnReceived(QuicStream* stream, const ByteView& bytes) override;
   void OnClose(uint64_t stream_id) override;
 
  private:
-  ServiceDelegate* const parent_;
+  ServiceDelegate& parent_;
   IPEndpoint endpoint_;
   uint64_t endpoint_id_;
   std::unique_ptr<QuicProtocolConnection> pending_connection_;
@@ -124,9 +117,8 @@ class ServiceConnectionDelegate final : public QuicConnection::Delegate,
 };
 
 struct ServiceConnectionData {
-  explicit ServiceConnectionData(
-      std::unique_ptr<QuicConnection> connection,
-      std::unique_ptr<ServiceConnectionDelegate> delegate);
+  ServiceConnectionData(std::unique_ptr<QuicConnection> connection,
+                        std::unique_ptr<ServiceConnectionDelegate> delegate);
   ServiceConnectionData(ServiceConnectionData&&) noexcept;
   ~ServiceConnectionData();
   ServiceConnectionData& operator=(ServiceConnectionData&&) noexcept;

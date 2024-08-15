@@ -19,6 +19,7 @@
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/splitview/split_view_observer.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "ui/aura/window_observer.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/display/display_observer.h"
@@ -113,7 +114,7 @@ class ASH_EXPORT TabletModeWindowManager : public aura::WindowObserver,
 
   // display::DisplayObserver:
   void OnDisplayAdded(const display::Display& display) override;
-  void OnDisplayRemoved(const display::Display& display) override;
+  void OnDisplaysRemoved(const display::Displays& removed_displays) override;
 
   // SessionObserver:
   void OnActiveUserSessionChanged(const AccountId& account_id) override;
@@ -212,6 +213,8 @@ class ASH_EXPORT TabletModeWindowManager : public aura::WindowObserver,
 
   // True when tablet mode is about to end.
   bool is_exiting_ = false;
+
+  base::WeakPtrFactory<TabletModeWindowManager> weak_ptr_factory_{this};
 };
 
 }  // namespace ash

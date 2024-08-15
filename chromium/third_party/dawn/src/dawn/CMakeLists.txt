@@ -34,36 +34,18 @@ add_subdirectory(common)
 add_subdirectory(platform)
 add_subdirectory(native)
 add_subdirectory(wire)
-# TODO(dawn:269): Remove once the implementation-based swapchains are removed.
 add_subdirectory(utils)
-add_subdirectory(glfw)
-add_subdirectory(tests/benchmarks)
 
+if (DAWN_BUILD_BENCHMARKS)
+    add_subdirectory(tests/benchmarks)
+endif()
+if(DAWN_USE_GLFW)
+    add_subdirectory(glfw)
+endif()
 if (DAWN_BUILD_SAMPLES)
-    #TODO(dawn:269): Add this once implementation-based swapchains are removed.
-    #add_subdirectory(src/utils)
     add_subdirectory(samples)
 endif()
-
 if (DAWN_BUILD_NODE_BINDINGS)
-    set(NODE_BINDING_DEPS
-        ${NODE_ADDON_API_DIR}
-        ${NODE_API_HEADERS_DIR}
-        ${WEBGPU_IDL_PATH}
-    )
-    foreach(DEP ${NODE_BINDING_DEPS})
-        if (NOT EXISTS ${DEP})
-            message(FATAL_ERROR
-                "DAWN_BUILD_NODE_BINDINGS requires missing dependency '${DEP}'\n"
-                "Please follow the 'Fetch dependencies' instructions at:\n"
-                "./src/dawn/node/README.md"
-            )
-        endif()
-    endforeach()
-    if (NOT CMAKE_POSITION_INDEPENDENT_CODE)
-        message(FATAL_ERROR "DAWN_BUILD_NODE_BINDINGS requires building with DAWN_ENABLE_PIC")
-    endif()
-
     add_subdirectory(node)
 endif()
 
@@ -77,19 +59,9 @@ DawnJSONGenerator(
     RESULT_VARIABLE "DAWN_HEADERS_GEN_SOURCES"
 )
 
-# Headers only INTERFACE library with generated headers don't work in CMake
-# because the GENERATED property is local to a directory. Instead we make a
-# STATIC library with a placeholder cpp file.
-#
-# INTERFACE libraries can only have INTERFACE sources so the sources get added
-# to the dependant's list of sources. If these dependents are in another
-# directory, they don't see the GENERATED property and fail to configure
-# because the file doesn't exist on disk.
-add_library(dawn_headers STATIC ${DAWN_PLACEHOLDER_FILE})
-common_compile_options(dawn_headers)
-target_sources(dawn_headers INTERFACE
+add_library(dawn_headers INTERFACE)
+target_sources(dawn_headers PUBLIC
     "${DAWN_INCLUDE_DIR}/webgpu/webgpu.h"
-    PRIVATE
     ${DAWN_HEADERS_GEN_SOURCES}
 )
 target_link_libraries(dawn_headers INTERFACE dawn_public_config)
@@ -105,37 +77,17 @@ DawnJSONGenerator(
     RESULT_VARIABLE "DAWNCPP_HEADERS_GEN_SOURCES"
 )
 
-# This headers only library needs to be a STATIC library, see comment for
-# dawn_headers above.
-add_library(dawncpp_headers STATIC ${DAWN_PLACEHOLDER_FILE})
-common_compile_options(dawncpp_headers)
-target_sources(dawncpp_headers
-  INTERFACE
+add_library(dawncpp_headers INTERFACE)
+target_sources(dawncpp_headers PUBLIC
     "${DAWN_INCLUDE_DIR}/webgpu/webgpu_cpp.h"
     "${DAWN_INCLUDE_DIR}/webgpu/webgpu_enum_class_bitmasks.h"
-  PRIVATE
     ${DAWNCPP_HEADERS_GEN_SOURCES}
 )
 target_link_libraries(dawncpp_headers INTERFACE dawn_headers)
 install_if_enabled(dawncpp_headers)
-###############################################################################
-# Dawn C++ wrapper
-###############################################################################
 
-DawnJSONGenerator(
-    TARGET "cpp"
-    PRINT_NAME "Dawn C++ wrapper"
-    RESULT_VARIABLE "DAWNCPP_GEN_SOURCES"
-)
-
-add_library(dawncpp STATIC ${DAWN_PLACEHOLDER_FILE})
-common_compile_options(dawncpp)
-target_sources(dawncpp PRIVATE ${DAWNCPP_GEN_SOURCES})
-target_link_libraries(dawncpp PUBLIC dawncpp_headers)
-
-add_library(webgpu_cpp ALIAS dawncpp)
-
-install_if_enabled(dawncpp)
+add_library(dawncpp ALIAS dawncpp_headers)
+add_library(webgpu_cpp ALIAS dawncpp_headers)
 
 ###############################################################################
 # libdawn_proc
@@ -147,7 +99,7 @@ DawnJSONGenerator(
     RESULT_VARIABLE "DAWNPROC_GEN_SOURCES"
 )
 
-add_library(dawn_proc ${DAWN_PLACEHOLDER_FILE})
+add_library(dawn_proc)
 common_compile_options(dawn_proc)
 target_compile_definitions(dawn_proc PRIVATE "WGPU_IMPLEMENTATION")
 if(BUILD_SHARED_LIBS)

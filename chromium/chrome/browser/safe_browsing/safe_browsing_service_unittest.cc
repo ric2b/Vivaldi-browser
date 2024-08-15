@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
+
 #include <memory>
 
 #include "base/test/bind.h"
@@ -45,17 +46,26 @@ const char kTestDownloadUrl[] = "https://example.com";
 
 class SafeBrowsingServiceTest : public testing::Test {
  public:
-  SafeBrowsingServiceTest() = default;
+  SafeBrowsingServiceTest() {
+    feature_list_.InitWithFeatures(
+        {safe_browsing::kDownloadReportWithoutUserDecision,
+         safe_browsing::kExtendedReportingRemovePrefDependency},
+        {});
+  }
 
   void SetUp() override {
     browser_process_ = TestingBrowserProcess::GetGlobal();
 
     safe_browsing::SafeBrowsingServiceInterface::RegisterFactory(
         GetSafeBrowsingServiceFactory());
-    // TODO(crbug/925153): Port consumers of the |sb_service_| to use
+    // TODO(crbug.com/41437292): Port consumers of the |sb_service_| to use
     // the interface in components/safe_browsing, and remove this cast.
     sb_service_ = static_cast<SafeBrowsingService*>(
         safe_browsing::SafeBrowsingService::CreateSafeBrowsingService());
+    auto ref_counted_url_loader_factory =
+        base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+            &test_url_loader_factory_);
+    sb_service_->SetURLLoaderFactoryForTesting(ref_counted_url_loader_factory);
     browser_process_->SetSafeBrowsingService(sb_service_.get());
     sb_service_->Initialize();
     base::RunLoop().RunUntilIdle();
@@ -69,6 +79,7 @@ class SafeBrowsingServiceTest : public testing::Test {
   }
 
   void TearDown() override {
+    sb_service_->SetURLLoaderFactoryForTesting(nullptr);
     browser_process_->safe_browsing_service()->ShutDown();
     browser_process_->SetSafeBrowsingService(nullptr);
     safe_browsing::SafeBrowsingServiceInterface::RegisterFactory(nullptr);
@@ -79,6 +90,13 @@ class SafeBrowsingServiceTest : public testing::Test {
   }
 
   Profile* profile() { return profile_.get(); }
+
+  void ResetAndReinitFeatures(
+      const std::vector<base::test::FeatureRef>& enabled_features,
+      const std::vector<base::test::FeatureRef>& disabled_features) {
+    feature_list_.Reset();
+    feature_list_.InitWithFeatures(enabled_features, disabled_features);
+  }
 
  protected:
   void SetUpDownload() {
@@ -189,6 +207,11 @@ class SafeBrowsingServiceTest : public testing::Test {
 
   ::testing::NiceMock<download::MockDownloadItem> download_item_;
   GURL download_url_ = GURL(kTestDownloadUrl);
+
+ private:
+  network::TestURLLoaderFactory test_url_loader_factory_;
+  base::test::ScopedFeatureList feature_list_;
+  ChromePingManagerAllowerForTesting allow_ping_manager_;
 };
 
 TEST_F(SafeBrowsingServiceTest, SendDownloadReport_Success) {
@@ -213,6 +236,7 @@ TEST_F(SafeBrowsingServiceTest, SendDownloadReport_Success) {
             DownloadWarningAction::DOWNLOADS_PAGE,
             DownloadWarningAction::DISCARD,
             /*is_terminal_action=*/true, /*interval_msec=*/0);
+        EXPECT_TRUE(actual_request->has_warning_shown_timestamp_msec());
       }));
   ping_manager->SetURLLoaderFactoryForTesting(
       base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
@@ -239,6 +263,7 @@ TEST_F(
         std::unique_ptr<ClientSafeBrowsingReportRequest> actual_request =
             GetActualRequest(request);
         EXPECT_TRUE(actual_request->download_warning_actions().empty());
+        EXPECT_FALSE(actual_request->has_warning_shown_timestamp_msec());
       }));
   ping_manager->SetURLLoaderFactoryForTesting(
       base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
@@ -323,6 +348,44 @@ TEST_F(SafeBrowsingServiceTest, WhenUserIsInNoProtectionNormallyoReturnsFalse) {
       profile()->GetPrefs(),
       safe_browsing::SafeBrowsingState::NO_SAFE_BROWSING);
   EXPECT_FALSE(SafeBrowsingService::IsUserEligibleForESBPromo(profile()));
+}
+
+TEST_F(SafeBrowsingServiceTest,
+       SaveExtendedReportingPrefValueOnProfileAddedFeatureFlagEnabled) {
+  SetExtendedReportingPrefForTests(profile_->GetPrefs(), true);
+  sb_service_->OnProfileAdded(profile());
+  // Since the user enabled Extended Reporting, the preference value used to
+  // record the state of Extended Reporting before its deprecation should be set
+  // to true.
+  EXPECT_TRUE(profile_->GetPrefs()->GetBoolean(
+      prefs::kSafeBrowsingScoutReportingEnabledWhenDeprecated));
+}
+
+TEST_F(SafeBrowsingServiceTest,
+       SaveExtendedReportingPrefValueOnProfileAddedFeatureFlagDisabled) {
+  // SetUp:
+  //   * disable kExtendedReportingRemovePrefDependency
+  //   * Setup SBER enabled and
+  //   kSafeBrowsingScoutReportingEnabledWhenDeprecated true
+  ResetAndReinitFeatures(
+      {safe_browsing::kDownloadReportWithoutUserDecision},
+      {safe_browsing::kExtendedReportingRemovePrefDependency});
+  SetExtendedReportingPrefForTests(profile_->GetPrefs(), true);
+
+  // Simulate that kSafeBrowsingScoutReportingEnabledWhenDeprecated was set to
+  // true previously.
+  profile_->GetPrefs()->SetBoolean(
+      prefs::kSafeBrowsingScoutReportingEnabledWhenDeprecated, true);
+  EXPECT_TRUE(profile_->GetPrefs()->GetBoolean(
+      prefs::kSafeBrowsingScoutReportingEnabledWhenDeprecated));
+
+  // Add the profile to trigger the function.
+  sb_service_->OnProfileAdded(profile());
+
+  // The value of the pref should be reverted to false because the feature is
+  // disabled now.
+  EXPECT_FALSE(profile_->GetPrefs()->GetBoolean(
+      prefs::kSafeBrowsingScoutReportingEnabledWhenDeprecated));
 }
 
 class SafeBrowsingServiceAntiPhishingTelemetryTest

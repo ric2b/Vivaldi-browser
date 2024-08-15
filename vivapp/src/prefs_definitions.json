@@ -1254,8 +1254,24 @@
       "id": 313,
       "merge_method": "none"
     },
+    "vivaldi.mail.message_list_preview": {
+      "id": 314,
+      "merge_method": "none"
+    },
+    "vivaldi.mail.message_list_preview_vertical_only": {
+      "id": 315,
+      "merge_method": "none"
+    },
     "vivaldi.address_bar.search.direct_match_enabled": {
       "id": 316,
+      "merge_method": "none"
+    },
+    "vivaldi.address_bar.omnibox.show_open_tab": {
+      "id": 317,
+      "merge_method": "none"
+    },
+    "vivaldi.quick_commands.first_run_tip_dismissed": {
+      "id": 318,
       "merge_method": "none"
     }
   },
@@ -1405,7 +1421,9 @@
               "ctrl+shift+c"
             ]
           },
-          "COMMAND_APPEND_SELECTION_TO_NOTE": { "shortcuts": [] },
+          "COMMAND_APPEND_SELECTION_TO_NOTE": {
+            "shortcuts": []
+          },
           "COMMAND_DEVELOPER_TOOLS": {
             "shortcuts": [
               "ctrl+shift+i",
@@ -1566,6 +1584,9 @@
             "shortcuts": [
               "ctrl+shift+enter"
             ]
+          },
+          "COMMAND_MAIL_SHOW_QUICK_REPLY": {
+            "shortcuts": []
           },
           "COMMAND_MAIN_TOGGLE_ADDRESS_BAR": {
             "shortcuts": []
@@ -2198,7 +2219,9 @@
               "ctrl+shift+c"
             ]
           },
-          "COMMAND_APPEND_SELECTION_TO_NOTE": { "shortcuts": [] },
+          "COMMAND_APPEND_SELECTION_TO_NOTE": {
+            "shortcuts": []
+          },
           "COMMAND_DEVELOPER_TOOLS": {
             "shortcuts": [
               "ctrl+shift+i",
@@ -2364,6 +2387,9 @@
             "shortcuts": [
               "ctrl+shift+enter"
             ]
+          },
+          "COMMAND_MAIL_SHOW_QUICK_REPLY": {
+            "shortcuts": []
           },
           "COMMAND_MAIN_TOGGLE_ADDRESS_BAR": {
             "shortcuts": []
@@ -2997,7 +3023,9 @@
               "alt+meta+c"
             ]
           },
-          "COMMAND_APPEND_SELECTION_TO_NOTE": { "shortcuts": [] },
+          "COMMAND_APPEND_SELECTION_TO_NOTE": {
+            "shortcuts": []
+          },
           "COMMAND_DEVELOPER_TOOLS": {
             "shortcuts": [
               "alt+meta+i",
@@ -3144,6 +3172,9 @@
             "shortcuts": [
               "meta+shift+enter"
             ]
+          },
+          "COMMAND_MAIL_SHOW_QUICK_REPLY": {
+            "shortcuts": []
           },
           "COMMAND_MAIN_TOGGLE_ADDRESS_BAR": {
             "shortcuts": []
@@ -3746,6 +3777,10 @@
           "type": "boolean",
           "default": true
         },
+        "show_open_tab": {
+          "type": "boolean",
+          "default": true
+        },
         "number_of_bookmark_results": {
           "type": "integer",
           "default": 15
@@ -3772,6 +3807,7 @@
           "default": [
             "BEST_RESULT",
             "SEARCH",
+            "OPEN_TAB",
             "SUGGESTIONS",
             "DIRECT_MATCH",
             "NICKNAMES",
@@ -3928,6 +3964,11 @@
       "highlight_base_domain": {
         "type": "boolean",
         "default": true
+      },
+      "show_search_suggestions_warning": {
+        "type": "integer",
+        "default": 0,
+        "description": "Warning dialog that appears after MINIMUM_SEARCH_TO_SHOW_SUGGESTION_WARNING searches to explain why search suggestions are disabled by default."
       }
     },
     "bookmarks": {
@@ -4735,6 +4776,21 @@
         "type": "boolean",
         "default": true
       },
+      "show_quick_reply": {
+        "description": "Show quick reply editor below the message",
+        "type": "boolean",
+        "default": true
+      },
+      "quick_reply_quote": {
+        "description": "Include quotation from original message when replying via quick reply editor",
+        "type": "boolean",
+        "default": false
+      },
+      "quick_reply_height": {
+        "description": "Quick Reply editor height",
+        "type": "integer",
+        "default": 150
+      },
       "composer_colors": {
         "description": "Changes the default colors of fonts and background for viewing in the composer",
         "type": "enum",
@@ -4956,6 +5012,21 @@
           "width_wide": 600,
           "height": 240
         }
+      },
+      "message_list_preview": {
+        "description": "How many lines to preview in the mail list",
+        "type": "integer",
+        "default": 2
+      },
+      "message_list_preview_vertical_only": {
+        "description": "How many lines to preview in the mail list",
+        "type": "boolean",
+        "default": true
+      },
+      "prefetch_on_demand": {
+        "description": "Prefetch to generate a preview when necessary",
+        "type": "boolean",
+        "default": true
       },
       "search_on_enter": {
         "description": "Start mail search by pressing enter key",
@@ -5690,6 +5761,11 @@
         "type": "boolean",
         "default": false
       },
+      "first_run_tip_dismissed": {
+        "description": "Whether QC first run tip has been dismissed",
+        "type": "boolean",
+        "default": false
+      },
       "match_nickname": {
         "description": "Launch QC bookmark on its nickname match",
         "type": "boolean",
@@ -5969,7 +6045,13 @@
           "type": "boolean",
           "default": true
         },
+        "display_top_sites": {
+          "description": "Display top sites. Always in a separate group.",
+          "type": "boolean",
+          "default": true
+        },
         "order": {
+          "description": "Top Start Page navigation Speed Dial order",
           "type": "list",
           "default": []
         },
@@ -6128,16 +6210,6 @@
       "active": {
         "type": "boolean",
         "default": false
-      },
-      "is_using_separate_encryption_password": {
-        "description": "[DEPRECATED 2021/9]",
-        "type": "enum",
-        "enum_values": {
-          "unknown": 0,
-          "yes": 1,
-          "no": 2
-        },
-        "default": "unknown"
       },
       "session_name": {
         "type": "string",
@@ -6946,14 +7018,14 @@
         "type": "list",
         "default": [
           "PanelToggle",
-          "FlexibleSpacer",
+          "PanelWidthSpacer",
           "Back",
           "Forward",
           "Reload",
           "AddressField",
           "SearchField",
           "Proxy",
-          "FlexibleSpacer",
+          "Spacer",
           "UpdateButton",
           "Extensions",
           "AccountButton"
@@ -7009,7 +7081,8 @@
           "MailForward",
           "MailReload",
           "MailCompose",
-          "FlexibleSpacer",
+          "MailUndo",
+          "PanelWidthSpacer",
           "MailSearch",
           "MailMsgEdit",
           "MailMsgReply",
@@ -7024,6 +7097,7 @@
           "MailMsgArchive",
           "MailMsgTrash",
           "FlexibleSpacer",
+          "MailViewQuickResponse",
           "MailRenderingMethod",
           "MailViewThreading",
           "MailViewLayout"
@@ -7037,7 +7111,8 @@
           "MailForward",
           "MailReload",
           "MailCompose",
-          "FlexibleSpacer",
+          "MailUndo",
+          "PanelWidthSpacer",
           "MailMsgReply",
           "MailMsgReplyToAll",
           "MailMsgForward",
@@ -7061,7 +7136,8 @@
           "MailForward",
           "MailReload",
           "MailCompose",
-          "FlexibleSpacer",
+          "MailUndo",
+          "PanelWidthSpacer",
           "MailMsgSend",
           "MailMsgAttach",
           "MailMsgShowHeaders",
@@ -7383,6 +7459,11 @@
         },
         "show_name": {
           "description": "Always show name in workspace button",
+          "type": "boolean",
+          "default": true
+        },
+        "mouse_wheel_enabled": {
+          "description": "Scroll the mouse wheel over the button to switch workspaces.",
           "type": "boolean",
           "default": true
         }

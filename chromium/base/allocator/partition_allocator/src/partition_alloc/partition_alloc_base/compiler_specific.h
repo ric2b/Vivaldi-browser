@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_COMPILER_SPECIFIC_H_
-#define BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_COMPILER_SPECIFIC_H_
+#ifndef PARTITION_ALLOC_PARTITION_ALLOC_BASE_COMPILER_SPECIFIC_H_
+#define PARTITION_ALLOC_PARTITION_ALLOC_BASE_COMPILER_SPECIFIC_H_
 
-#include "build/build_config.h"
+#include "partition_alloc/build_config.h"
 
 // A wrapper around `__has_cpp_attribute`.
 #if defined(__has_cpp_attribute)
@@ -302,4 +302,16 @@ inline constexpr bool AnalyzerAssumeTrue(bool arg) {
 #define PA_LIFETIME_BOUND
 #endif
 
-#endif  // BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_COMPILER_SPECIFIC_H_
+// Clang instrumentation may allocate, leading to reentrancy in the allocator,
+// and crashes when generating a PGO profile. This attribute disables profiling
+// for a function.
+//
+// See
+// https://clang.llvm.org/docs/AttributeReference.html#no-profile-instrument-function
+#if PA_HAS_CPP_ATTRIBUTE(gnu::no_profile_instrument_function)
+#define PA_NOPROFILE [[gnu::no_profile_instrument_function]]
+#else
+#define PA_NOPROFILE
+#endif
+
+#endif  // PARTITION_ALLOC_PARTITION_ALLOC_BASE_COMPILER_SPECIFIC_H_

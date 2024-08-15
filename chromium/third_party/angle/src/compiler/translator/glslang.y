@@ -997,6 +997,9 @@ array_specifier
         ES3_1_OR_NEWER("[]", @2, "arrays of arrays");
         $$ = $1;
         $$->insert($$->begin(), 0u);
+        if (!context->checkIsValidArrayDimension(@2, $$)) {
+            YYABORT;
+        }
     }
     | array_specifier LEFT_BRACKET constant_expression RIGHT_BRACKET {
         ES3_1_OR_NEWER("[]", @2, "arrays of arrays");
@@ -1005,6 +1008,9 @@ array_specifier
         // Make the type an array even if size check failed.
         // This ensures useless error messages regarding a variable's non-arrayness won't follow.
         $$->insert($$->begin(), size);
+        if (!context->checkIsValidArrayDimension(@2, $$)) {
+            YYABORT;
+        }
     }
     ;
 
@@ -1618,16 +1624,16 @@ condition
     ;
 
 iteration_statement
-    : WHILE LEFT_PAREN { context->symbolTable.push(); context->incrLoopNestingLevel(); } condition RIGHT_PAREN statement_no_new_scope {
+    : WHILE LEFT_PAREN { context->symbolTable.push(); context->incrLoopNestingLevel(@1); } condition RIGHT_PAREN statement_no_new_scope {
         context->symbolTable.pop();
         $$ = context->addLoop(ELoopWhile, 0, $4, 0, $6, @1);
         context->decrLoopNestingLevel();
     }
-    | DO { context->incrLoopNestingLevel(); } statement_with_scope WHILE LEFT_PAREN expression RIGHT_PAREN SEMICOLON {
+    | DO { context->incrLoopNestingLevel(@1); } statement_with_scope WHILE LEFT_PAREN expression RIGHT_PAREN SEMICOLON {
         $$ = context->addLoop(ELoopDoWhile, 0, $6, 0, $3, @4);
         context->decrLoopNestingLevel();
     }
-    | FOR LEFT_PAREN { context->symbolTable.push(); context->incrLoopNestingLevel(); } for_init_statement for_rest_statement RIGHT_PAREN statement_no_new_scope {
+    | FOR LEFT_PAREN { context->symbolTable.push(); context->incrLoopNestingLevel(@1); } for_init_statement for_rest_statement RIGHT_PAREN statement_no_new_scope {
         context->symbolTable.pop();
         $$ = context->addLoop(ELoopFor, $4, $5.node1, reinterpret_cast<TIntermTyped*>($5.node2), $7, @1);
         context->decrLoopNestingLevel();

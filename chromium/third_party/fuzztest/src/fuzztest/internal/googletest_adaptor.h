@@ -38,9 +38,21 @@ class GTest_TestAdaptor : public ::testing::Test {
   void TestBody() override {
     auto test = test_.make();
     if (Runtime::instance().run_mode() == RunMode::kUnitTest) {
-      if (configuration_.crashing_input_to_reproduce.has_value() &&
-          testing::UnitTest::GetInstance()->test_to_run_count() > 1) {
+      // In "bug reproduction" mode, sometimes we need to reproduce multiple
+      // bugs, i.e., run multiple tests that lead to a crash.
+      bool needs_subprocess = false;
 #ifdef GTEST_HAS_DEATH_TEST
+      needs_subprocess =
+          configuration_.crashing_input_to_reproduce.has_value() &&
+          (
+              // When only a single test runs, it's okay to crash the process on
+              // error, as we don't need to run other tests.
+              testing::UnitTest::GetInstance()->test_to_run_count() > 1 ||
+              // EXPECT_EXIT is required in the death-test subprocess, but in
+              // the subprocess there's only one test to run.
+              testing::internal::InDeathTestChild());
+#endif
+      if (needs_subprocess) {
         configuration_.preprocess_crash_reproducing = [] {
           // EXPECT_EXIT disables event forwarding in gtest and as a result,
           // EXPECT/ASSERT-s are disabled. Here, we overwrite this option.
@@ -52,10 +64,15 @@ class GTest_TestAdaptor : public ::testing::Test {
         // process and using `EXPECT_DEATH` causes the test to pass. We use
         // `EXPECT_EXIT` so that the test exit unsuccessfully, meaning that the
         // test below fails without terminating the process.
-        EXPECT_EXIT((test->RunInUnitTestMode(configuration_), std::exit(0)),
-                    ::testing::ExitedWithCode(0), "");
+#ifdef GTEST_HAS_DEATH_TEST
+        EXPECT_EXIT(
+            (test->RunInUnitTestMode(configuration_),
+             void(
+                 R"( FuzzTest failure! Please see 'actual message' below for the crash report. )"),
+             std::exit(0)),
+            ::testing::ExitedWithCode(0), "");
 #else
-        test->RunInUnitTestMode(configuration_);
+        EXPECT_TRUE(false) << "Death test is not supported.";
 #endif
       } else {
         test->RunInUnitTestMode(configuration_);
@@ -109,6 +126,10 @@ class GTest_EventListener : public Base {
 // Registers FUZZ_TEST as GoogleTest TEST-s.
 void RegisterFuzzTestsAsGoogleTests(int* argc, char*** argv,
                                     const Configuration& configuration);
+
+// Set listing mode validator for GoogleTest to check that fuzz test listing was
+// properly handled.
+void SetFuzzTestListingModeValidatorForGoogleTest(bool listing_mode);
 
 }  // namespace fuzztest::internal
 

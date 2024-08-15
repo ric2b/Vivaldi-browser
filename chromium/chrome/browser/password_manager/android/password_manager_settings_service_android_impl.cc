@@ -145,7 +145,7 @@ void RecordFailedMigrationMetric(std::string_view infix_for_setting,
                                  AndroidBackendAPIErrorCode api_error) {
   base::UmaHistogramSparse(
       base::StrCat({"PasswordManager.PasswordSettingsMigrationFailed.",
-                    infix_for_setting, ".APIError"}),
+                    infix_for_setting, ".APIError2"}),
       static_cast<int>(api_error));
 }
 
@@ -173,8 +173,6 @@ PasswordManagerSettingsServiceAndroidImpl::
                                               syncer::SyncService* sync_service)
     : pref_service_(pref_service), sync_service_(sync_service) {
   CHECK(pref_service_);
-  if (!PasswordSettingsUpdaterAndroidBridgeHelper::CanCreateAccessor())
-    return;
   bridge_helper_ = PasswordSettingsUpdaterAndroidBridgeHelper::Create();
   lifecycle_helper_ = std::make_unique<PasswordManagerLifecycleHelperImpl>();
   Init();
@@ -194,8 +192,7 @@ PasswordManagerSettingsServiceAndroidImpl::
       bridge_helper_(std::move(bridge_helper)),
       lifecycle_helper_(std::move(lifecycle_helper)) {
   CHECK(pref_service_);
-  if (!bridge_helper_)
-    return;
+  CHECK(bridge_helper_);
   Init();
 }
 
@@ -211,10 +208,6 @@ bool PasswordManagerSettingsServiceAndroidImpl::IsSettingEnabled(
   const PrefService::Preference* regular_pref =
       GetRegularPrefFromSetting(pref_service_, setting);
   CHECK(regular_pref);
-
-  if (!bridge_helper_) {
-    return regular_pref->GetValue()->GetBool();
-  }
 
   if (!UsesUPMBackend()) {
     return regular_pref->GetValue()->GetBool();
@@ -266,14 +259,14 @@ void PasswordManagerSettingsServiceAndroidImpl::TurnOffAutoSignIn() {
   if (is_password_sync_enabled_) {
     account = SyncingAccount(sync_service_->GetAccountInfo().email);
   }
-  // TODO(crbug.com/1492135): Implement retries for writing to GMSCore.
+  // TODO(crbug.com/40285405): Implement retries for writing to GMSCore.
   bridge_helper_->SetPasswordSettingValue(
       account, PasswordManagerSetting::kAutoSignIn, false);
 }
 
 void PasswordManagerSettingsServiceAndroidImpl::Init() {
   CHECK(bridge_helper_);
-  // TODO(crbug.com/1485556): Copy the pref values to GMSCore for local users.
+  // TODO(crbug.com/40282601): Copy the pref values to GMSCore for local users.
   bridge_helper_->SetConsumer(weak_ptr_factory_.GetWeakPtr());
 
   lifecycle_helper_->RegisterObserver(base::BindRepeating(
@@ -298,13 +291,17 @@ void PasswordManagerSettingsServiceAndroidImpl::Init() {
 
   if (ShouldMigrateLocalSettings(pref_service_, is_password_sync_enabled_)) {
     MarkSettingsMigrationAsSuccessfulIfNothingToMigrate(pref_service_);
-    // TODO: b/332843285 - Don't create the migration callback when there's
-    // nothing to migrate.
-    start_migration_callback_ = base::BarrierCallback<
-        PasswordManagerSettingGmsAccessResult>(
-        2, base::BindOnce(
-               &PasswordManagerSettingsServiceAndroidImpl::MigratePrefsIfNeeded,
-               weak_ptr_factory_.GetWeakPtr()));
+    // If the migration was marked as done because there was nothing to migrate,
+    // there is no reason to create the migration callback.
+    if (!pref_service_->GetBoolean(
+            password_manager::prefs::kSettingsMigratedToUPMLocal)) {
+      start_migration_callback_ = base::BarrierCallback<
+          PasswordManagerSettingGmsAccessResult>(
+          2,
+          base::BindOnce(
+              &PasswordManagerSettingsServiceAndroidImpl::MigratePrefsIfNeeded,
+              weak_ptr_factory_.GetWeakPtr()));
+    }
   }
 
   // Unset the pref that marks the settings migration done, if the user is not
@@ -491,7 +488,7 @@ void PasswordManagerSettingsServiceAndroidImpl::FetchSettings() {
     // account has just signed out. So the account can't be queried via
     // `sync_service_->GetAccountInfo().email` but instead needs to be retrieved
     // via kGoogleServices*Last*SyncingUsername.
-    // TODO(crbug.com/1490523): Revisit this logic - does anything need to be
+    // TODO(crbug.com/40284768): Revisit this logic - does anything need to be
     // done for signed-in non-syncing users too?
     account = SyncingAccount(
         pref_service_->GetString(::prefs::kGoogleServicesLastSyncingUsername));
@@ -511,12 +508,7 @@ void PasswordManagerSettingsServiceAndroidImpl::
 }
 
 bool PasswordManagerSettingsServiceAndroidImpl::UsesUPMBackend() const {
-  // It's not possible to get or set the password settings values without the
-  // helper.
-  if (!bridge_helper_) {
-    return false;
-  }
-  return password_manager_android_util::CanUseUPMBackend(
+  return password_manager_android_util::ShouldUseUpmWiring(
       is_password_sync_enabled_, pref_service_);
 }
 

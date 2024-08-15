@@ -58,12 +58,17 @@
 #include "services/network/public/mojom/trust_tokens.mojom.h"
 #include "services/network/public/mojom/url_loader_network_service_observer.mojom.h"
 #include "services/network/restricted_cookie_manager.h"
+#include "services/network/tpcd/metadata/manager.h"
 #include "services/network/trust_tokens/trust_token_key_commitments.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 
 #if BUILDFLAG(IS_CT_SUPPORTED)
 #include "services/network/public/mojom/ct_log_info.mojom.h"
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
+
+namespace mojo_base {
+class ProtoWrapper;
+}
 
 namespace net {
 class FileNetLogObserver;
@@ -219,7 +224,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
                          base::Time update_time) override;
 
   void UpdateMaskedDomainList(
-      const std::string& raw_mdl,
+      mojo_base::ProtoWrapper masked_domain_list,
       const std::vector<std::string>& exclusion_list) override;
 
 #if BUILDFLAG(IS_ANDROID)
@@ -228,6 +233,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   void BindTestInterfaceForTesting(
       mojo::PendingReceiver<mojom::NetworkServiceTest> receiver) override;
   void SetFirstPartySets(net::GlobalFirstPartySets sets) override;
+
+  void SetTpcdMetadataGrants(
+      const std::vector<ContentSettingPatternSource>& settings) override;
+
   void SetExplicitlyAllowedPorts(const std::vector<uint16_t>& ports) override;
 #if BUILDFLAG(IS_LINUX)
   void SetGssapiLibraryLoadObserver(
@@ -282,6 +291,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
 
   FirstPartySetsManager* first_party_sets_manager() const {
     return first_party_sets_manager_.get();
+  }
+
+  network::tpcd::metadata::Manager* tpcd_metadata_manager() const {
+    return tpcd_metadata_manager_.get();
   }
 
   NetworkServiceProxyAllowList* network_service_proxy_allow_list() const {
@@ -484,6 +497,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
 #if BUILDFLAG(IS_LINUX)
   mojo::Remote<mojom::GssapiLibraryLoadObserver> gssapi_library_load_observer_;
 #endif  // BUILDFLAG(IS_LINUX)
+
+  std::unique_ptr<network::tpcd::metadata::Manager> tpcd_metadata_manager_;
 
   base::WeakPtrFactory<NetworkService> weak_factory_{this};
 };

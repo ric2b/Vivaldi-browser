@@ -28,7 +28,7 @@ class ServiceDispatcher final : public DnsSdPublisher,
                                 public DnsSdService {
  public:
   ServiceDispatcher(TaskRunner& task_runner,
-                    ReportingClient* reporting_client,
+                    ReportingClient& reporting_client,
                     const Config& config);
   ~ServiceDispatcher() override;
 

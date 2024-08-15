@@ -50,6 +50,22 @@ source_set("tracking_protection_onboarding") {
   public_deps = [ "//base" ]
 }
 
+source_set("tracking_protection_reminder_service") {
+  sources = [
+    "tracking_protection_reminder_service.cc",
+    "tracking_protection_reminder_service.h",
+  ]
+
+  deps = [
+    ":features",
+    ":privacy_sandbox_prefs",
+    "//components/keyed_service/core:core",
+    "//components/prefs",
+  ]
+
+  public_deps = [ "//base" ]
+}
+
 source_set("tracking_protection_settings") {
   sources = [
     "tracking_protection_settings.cc",
@@ -62,10 +78,12 @@ source_set("tracking_protection_settings") {
     ":privacy_sandbox_prefs",
     ":tracking_protection_onboarding",
     ":tracking_protection_prefs",
+    "//components/content_settings/core/browser",
     "//components/content_settings/core/common",
     "//components/keyed_service/core:core",
     "//components/pref_registry:pref_registry",
     "//components/prefs",
+    "//url:url",
   ]
 
   public_deps = [ "//base" ]
@@ -75,6 +93,20 @@ static_library("tracking_protection_prefs") {
   sources = [
     "tracking_protection_prefs.cc",
     "tracking_protection_prefs.h",
+  ]
+
+  deps = [
+    "//components/pref_registry:pref_registry",
+    "//components/prefs",
+  ]
+
+  public_deps = [ "//base" ]
+}
+
+source_set("privacy_sandbox_notice_storage") {
+  sources = [
+    "privacy_sandbox_notice_storage.cc",
+    "privacy_sandbox_notice_storage.h",
   ]
 
   deps = [
@@ -124,9 +156,11 @@ if (use_blink) {
 
     deps = [
       ":privacy_sandbox_prefs",
+      ":tracking_protection_reminder_service",
       ":tracking_protection_settings",
       "//components/browsing_topics/common:common",
       "//components/content_settings/core/browser",
+      "//components/content_settings/core/browser:cookie_settings",
       "//components/content_settings/core/common",
       "//components/keyed_service/core:core",
       "//components/pref_registry:pref_registry",
@@ -177,10 +211,14 @@ if (use_blink) {
 
 source_set("unit_tests") {
   testonly = true
-  sources = [ "tracking_protection_onboarding_unittest.cc" ]
+  sources = [
+    "privacy_sandbox_notice_storage_unittest.cc",
+    "tracking_protection_onboarding_unittest.cc",
+  ]
 
   deps = [
     ":features",
+    ":privacy_sandbox_notice_storage",
     ":privacy_sandbox_prefs",
     ":tracking_protection_onboarding",
     ":tracking_protection_prefs",

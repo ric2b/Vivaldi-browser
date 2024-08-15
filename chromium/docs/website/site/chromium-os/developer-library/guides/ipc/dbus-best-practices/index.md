@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/guides
-  - Chromium OS > Developer Library > Guides
+  - ChromiumOS > Guides
 page_name: dbus-best-practices
 title: ChromeOS D-Bus Best Practices
 ---
@@ -511,7 +511,7 @@ dbus-send --system --print-reply --type=method_call \
 ```
 
 [D-Bus]: https://www.freedesktop.org/wiki/Software/dbus/
-[D-Bus Usage in Chrome]: dbus_in_chrome.md
+[D-Bus Usage in Chrome]: /chromium-os/developer-library/guides/ipc/dbus-in-chrome/
 [libchrome package]: https://android.googlesource.com/platform/external/libchrome/+/HEAD/dbus/
 [libbrillo]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/libbrillo/brillo/dbus/
 [DBusDaemon and DBusServiceDaemon classes]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/libbrillo/brillo/daemons/dbus_daemon.h
@@ -528,5 +528,5 @@ dbus-send --system --print-reply --type=method_call \
 [difficult-to-track-down bug]: https://crbug.com/208247
 [start a service]: https://dbus.freedesktop.org/doc/dbus-specification.html#message-bus-starting-services
 [Upstart]: http://upstart.ubuntu.com/
-[sandboxed]: sandboxing.md
+[sandboxed]: /chromium-os/developer-library/guides/development/sandboxing/
 [this smbproviderd change]: https://crrev.com/c/982404

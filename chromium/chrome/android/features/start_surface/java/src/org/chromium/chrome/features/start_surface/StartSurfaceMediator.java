@@ -35,7 +35,6 @@ import android.content.res.Resources;
 import android.graphics.Point;
 import android.text.Editable;
 import android.view.View;
-import android.view.ViewGroup;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.Nullable;
@@ -77,13 +76,15 @@ import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
-import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
+import org.chromium.chrome.browser.tab_ui.TabSwitcher;
+import org.chromium.chrome.browser.tab_ui.TabSwitcher.Controller;
+import org.chromium.chrome.browser.tab_ui.TabSwitcher.TabSwitcherType;
 import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -92,9 +93,6 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.ActiveTabState;
 import org.chromium.chrome.browser.tasks.ReturnToChromeUtil;
-import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegate.TabSwitcherType;
-import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
-import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher.Controller;
 import org.chromium.chrome.browser.util.BrowserUiUtils.HostSurface;
 import org.chromium.chrome.features.start_surface.StartSurface.TabSwitcherViewObserver;
 import org.chromium.components.browser_ui.styles.ChromeColors;
@@ -141,7 +139,6 @@ class StartSurfaceMediator
     private final TabModelSelector mTabModelSelector;
     @Nullable private final PropertyModel mPropertyModel;
     private final boolean mIsStartSurfaceEnabled;
-    private final ObserverList<StartSurface.StateObserver> mStateObservers = new ObserverList<>();
     private final boolean mHadWarmStart;
     private final Runnable mInitializeMVTilesRunnable;
     private final Supplier<Tab> mParentTabSupplier;
@@ -149,20 +146,12 @@ class StartSurfaceMediator
             new ObservableSupplierImpl<>();
     private final CallbackController mCallbackController = new CallbackController();
     private final View mLogoContainerView;
-    private final boolean mMoveDownLogo;
     private final ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
     private final TabCreatorManager mTabCreatorManager;
     private final boolean mUseMagicStack;
     private final boolean mIsSurfacePolishEnabled;
     @Nullable private final ModuleDelegateCreator mModuleDelegateCreator;
     private boolean mShouldIgnoreTabSelecting;
-
-    // Boolean histogram used to record whether cached
-    // ChromePreferenceKeys.FEED_ARTICLES_LIST_VISIBLE is consistent with
-    // Pref.ARTICLES_LIST_VISIBLE.
-    @VisibleForTesting
-    static final String FEED_VISIBILITY_CONSISTENCY =
-            "Startup.Android.CachedFeedVisibilityConsistency";
 
     private static final int LAST_SHOW_TIME_NOT_SET = -1;
     @Nullable private ExploreSurfaceCoordinatorFactory mExploreSurfaceCoordinatorFactory;
@@ -200,21 +189,6 @@ class StartSurfaceMediator
      */
     private boolean mPendingObserver;
 
-    /**
-     * The value of {@link Pref#ARTICLES_LIST_VISIBLE} on Startup. Getting this value for recording
-     * the consistency of {@link ChromePreferenceKeys#FEED_ARTICLES_LIST_VISIBLE} with {@link
-     * Pref#ARTICLES_LIST_VISIBLE}.
-     */
-    private Boolean mFeedVisibilityPrefOnStartUp;
-
-    /**
-     * The value of {@link ChromePreferenceKeys#FEED_ARTICLES_LIST_VISIBLE} on Startup. Getting this
-     * value for recording the consistency with {@link Pref#ARTICLES_LIST_VISIBLE}.
-     */
-    @Nullable private Boolean mFeedVisibilityInSharedPreferenceOnStartUp;
-
-    private FeedPlaceholderCoordinator mFeedPlaceholderCoordinator;
-    private boolean mHasFeedPlaceholderShown;
     private boolean mHideOverviewOnTabSelecting = true;
     private StartSurface.OnTabSelectingListener mOnTabSelectingListener;
     private TabSwitcher mTabSwitcherModule;
@@ -241,7 +215,6 @@ class StartSurfaceMediator
             Supplier<Tab> parentTabSupplier,
             View logoContainerView,
             @Nullable BackPressManager backPressManager,
-            ViewGroup feedPlaceholderParentView,
             ActivityLifecycleDispatcher activityLifecycleDispatcher,
             ObservableSupplier<Profile> profileSupplier) {
         mTabSwitcherModule = tabSwitcherModule;
@@ -268,7 +241,6 @@ class StartSurfaceMediator
         mLogoContainerView = logoContainerView;
         mActivityLifecycleDispatcher = activityLifecycleDispatcher;
         mActivityLifecycleDispatcher.register(this);
-        mMoveDownLogo = ReturnToChromeUtil.moveDownLogo();
         mProfileSupplier = profileSupplier;
         mProfileSupplier.addObserver(this::onProfileAvailable);
 
@@ -291,21 +263,14 @@ class StartSurfaceMediator
                 mPropertyModel.set(IS_LENS_BUTTON_VISIBLE, false);
             }
 
-            // Show feed loading image if necessary.
-            if (shouldShowFeedPlaceholder()) {
-                assert feedPlaceholderParentView != null;
-                mFeedPlaceholderCoordinator =
-                        new FeedPlaceholderCoordinator(context, feedPlaceholderParentView, false);
-                mHasFeedPlaceholderShown = true;
-            }
-
             mIsIncognito = mTabModelSelector.isIncognitoSelected();
 
             mTabModelSelectorObserver =
                     new TabModelSelectorObserver() {
                         @Override
                         public void onTabModelSelected(TabModel newModel, TabModel oldModel) {
-                            // TODO(crbug.com/982018): Optimize to not listen for selected Tab model
+                            // TODO(crbug.com/40635216): Optimize to not listen for selected Tab
+                            // model
                             // change when overview is not shown.
                             updateIncognitoMode(newModel.isIncognito());
                         }
@@ -320,8 +285,7 @@ class StartSurfaceMediator
                 mNormalTabModelObserver =
                         new TabModelObserver() {
                             @Override
-                            public void willCloseTab(
-                                    Tab tab, boolean animate, boolean didCloseAlone) {
+                            public void willCloseTab(Tab tab, boolean didCloseAlone) {
                                 if (isHomepageShown()
                                         && mTabModelSelector.getModel(false).getCount() <= 1) {
                                     setTabCardVisibility(false);
@@ -472,7 +436,7 @@ class StartSurfaceMediator
                         public void onUrlFocusChange(boolean hasFocus) {
                             if (hasFakeSearchBox()) {
                                 setFakeBoxVisibility(!hasFocus);
-                                // TODO(crbug.com/1365694): We should call
+                                // TODO(crbug.com/40239477): We should call
                                 // setLogoVisibility(!hasFocus) here.
                                 // However, AppBarLayout's getTotalScrollRange() eliminates the gone
                                 // child view's heights. Therefore, when focus is got, the
@@ -604,7 +568,6 @@ class StartSurfaceMediator
         if (mTabSwitcherModule != null) {
             mTabSwitcherModule.initWithNative();
         }
-        mFeedVisibilityPrefOnStartUp = prefService.getBoolean(Pref.ARTICLES_LIST_VISIBLE);
 
         // Trigger the creation of spare tab for StartSurface after the native is initialized to
         // speed up navigation from start.
@@ -716,8 +679,6 @@ class StartSurfaceMediator
             createAndSetExploreSurfaceCoordinator();
         }
 
-        // TODO(crbug.com/1315676): Remove this property key since overview should always be visible
-        // when show() is called.
         mPropertyModel.set(IS_SHOWING_OVERVIEW, true);
 
         if (mNormalTabModel != null) {
@@ -752,14 +713,6 @@ class StartSurfaceMediator
         mayRecordHomepageSessionBegin();
 
         maybeScheduleSpareTabCreation();
-    }
-
-    void addStateChangeObserver(StartSurface.StateObserver observer) {
-        mStateObservers.addObserver(observer);
-    }
-
-    void removeStateChangeObserver(StartSurface.StateObserver observer) {
-        mStateObservers.removeObserver(observer);
     }
 
     void setLaunchOrigin(@NewTabPageLaunchOrigin int launchOrigin) {
@@ -842,10 +795,6 @@ class StartSurfaceMediator
     }
 
     void onHide() {
-        if (mFeedPlaceholderCoordinator != null) {
-            mFeedPlaceholderCoordinator.destroy();
-            mFeedPlaceholderCoordinator = null;
-        }
         if (mTabSwitcherModule != null) {
             mTabSwitcherModule.getTabListDelegate().postHiding();
         }
@@ -873,17 +822,6 @@ class StartSurfaceMediator
             if (exploreSurfaceCoordinator != null) {
                 exploreSurfaceCoordinator.onOverviewShownAtLaunch(activityCreationTimeMs);
             }
-        }
-
-        assert mPropertyModel == null || mFeedVisibilityInSharedPreferenceOnStartUp != null;
-        if (mFeedVisibilityPrefOnStartUp != null) {
-            RecordHistogram.recordBooleanHistogram(
-                    FEED_VISIBILITY_CONSISTENCY,
-                    mFeedVisibilityPrefOnStartUp.equals(
-                            mFeedVisibilityInSharedPreferenceOnStartUp));
-        }
-        if (mFeedPlaceholderCoordinator != null) {
-            mFeedPlaceholderCoordinator.onOverviewShownAtLaunch(activityCreationTimeMs);
         }
     }
 
@@ -972,7 +910,7 @@ class StartSurfaceMediator
         // Because there are multiple upstream tab selection listeners that attempt to re-trigger
         // the onTabSelecting in response to TabModelObserver#didSelectTab it is necessary to treat
         // this as a non-rentrant method until the original operation finishes.
-        // TODO(crbug/1495121): This can be removed once StartSurfaceRefactor is cleaned up.
+        // TODO(crbug.com/40286397): This can be removed once StartSurfaceRefactor is cleaned up.
         if (mShouldIgnoreTabSelecting) return;
         mShouldIgnoreTabSelecting = true;
 
@@ -985,20 +923,6 @@ class StartSurfaceMediator
     @Override
     public void onLogoVisibilityChanged() {
         updateTopToolbarPlaceholderHeight();
-    }
-
-    @VisibleForTesting
-    public boolean shouldShowFeedPlaceholder() {
-        if (mFeedVisibilityInSharedPreferenceOnStartUp == null) {
-            mFeedVisibilityInSharedPreferenceOnStartUp =
-                    ReturnToChromeUtil.getFeedArticlesVisibility();
-        }
-
-        return mIsStartSurfaceEnabled
-                && ChromeFeatureList.sInstantStart.isEnabled()
-                && ReturnToChromeUtil.getFeedArticlesVisibility()
-                && !mHadWarmStart
-                && !mHasFeedPlaceholderShown;
     }
 
     /** This interface builds the feed surface coordinator when showing if needed. */
@@ -1031,7 +955,7 @@ class StartSurfaceMediator
         mPropertyModel.set(IS_INCOGNITO, mIsIncognito);
         updateBackgroundColor(mPropertyModel);
 
-        // TODO(crbug.com/1021399): This looks not needed since there is no way to change incognito
+        // TODO(crbug.com/40657059): This looks not needed since there is no way to change incognito
         // mode when focusing on the omnibox and incognito mode change won't affect the visibility
         // of the tab switcher toolbar.
         if (mPropertyModel.get(IS_SHOWING_OVERVIEW)) notifyStateChange();
@@ -1116,16 +1040,14 @@ class StartSurfaceMediator
     }
 
     private void setLogoVisibility(boolean isVisible) {
-        if (!mMoveDownLogo) return;
+        if (!mIsSurfacePolishEnabled) return;
 
         if (isVisible && mLogoCoordinator == null) {
             mLogoCoordinator = initializeLogo();
             if (mIsNativeInitialized) mLogoCoordinator.initWithNative();
         }
         if (mLogoCoordinator != null) {
-            boolean isShowingHomepage = isHomepageShown();
-            mLogoCoordinator.updateVisibilityAndMaybeCleanUp(
-                    isShowingHomepage && isVisible, !isShowingHomepage, false);
+            mLogoCoordinator.updateVisibility(false);
         }
     }
 
@@ -1241,7 +1163,7 @@ class StartSurfaceMediator
     private void createAndSetExploreSurfaceCoordinator() {
         ExploreSurfaceCoordinator exploreSurfaceCoordinator =
                 mExploreSurfaceCoordinatorFactory.create(
-                        ColorUtils.inNightMode(mContext), mHasFeedPlaceholderShown, mLaunchOrigin);
+                        ColorUtils.inNightMode(mContext), mLaunchOrigin);
         mPropertyModel.set(EXPLORE_SURFACE_COORDINATOR, exploreSurfaceCoordinator);
         FeedReliabilityLogger feedReliabilityLogger =
                 exploreSurfaceCoordinator.getFeedReliabilityLogger();
@@ -1268,21 +1190,13 @@ class StartSurfaceMediator
             LogoUtils.setLogoViewLayoutParams(
                     logoView,
                     mContext.getResources(),
-                    false,
-                    StartSurfaceConfiguration.SURFACE_POLISH_LESS_BRAND_SPACE.getValue(),
+                    /* isTablet= */ false,
                     StartSurfaceConfiguration.isLogoPolishEnabled(),
                     StartSurfaceConfiguration.getLogoSizeForLogoPolish());
         }
 
         mLogoCoordinator =
-                new LogoCoordinator(
-                        mContext,
-                        logoClickedCallback,
-                        logoView,
-                        true,
-                        null,
-                        isHomepageShown(),
-                        this);
+                new LogoCoordinator(mContext, logoClickedCallback, logoView, true, null, this);
         return mLogoCoordinator;
     }
 
@@ -1300,7 +1214,7 @@ class StartSurfaceMediator
                 TASKS_SURFACE_BODY_TOP_MARGIN,
                 resources.getDimensionPixelSize(R.dimen.tasks_surface_body_top_margin));
 
-        // TODO(crbug.com/1315676): Clean up this code when the refactor is enabled.
+        // TODO(crbug.com/40221888): Clean up this code when the refactor is enabled.
         mPropertyModel.set(
                 MV_TILES_CONTAINER_TOP_MARGIN,
                 resources.getDimensionPixelSize(R.dimen.mv_tiles_container_top_margin));

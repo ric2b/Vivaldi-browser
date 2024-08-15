@@ -26,8 +26,11 @@ class MockOidcAuthenticationSigninInterceptor
               MaybeInterceptOidcAuthentication,
               (content::WebContents * intercepted_contents,
                ProfileManagementOicdTokens oidc_tokens,
-               std::string user_email),
+               std::string subject_id,
+               OidcInterceptionCallback oidc_callback),
               (override));
+
+  MOCK_METHOD(void, CreateBrowserAfterSigninInterception, (), (override));
 };
 
 #endif  // CHROME_BROWSER_ENTERPRISE_SIGNIN_MOCK_OIDC_AUTHENTICATION_SIGNIN_INTERCEPTOR_H_

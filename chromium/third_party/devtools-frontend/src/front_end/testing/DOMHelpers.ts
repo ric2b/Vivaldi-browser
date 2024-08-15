@@ -10,7 +10,7 @@
  **/
 
 import type * as NodeText from '../ui/components/node_text/node_text.js';
-const {assert} = chai;
+import * as UI from '../ui/legacy/legacy.js';
 
 const TEST_CONTAINER_ID = '__devtools-test-container-id';
 
@@ -39,22 +39,21 @@ export const renderElementIntoDOM = (element: HTMLElement, renderOptions: Render
 };
 
 function removeChildren(node: Node): void {
-  while (node.firstChild) {
-    const child = node.firstChild;
-    if (child.__widget) {
-      // Child is a widget, so we have to use the Widget system to remove it from the DOM.
-      child.__widget.detach();
-    } else if (child.__widgetCounter) {
-      // If an element has __widgetCounter, this means it is not a widget
-      // itself, but at least one of its children are, so we now recurse
-      // on this element's children. If we try to just remove this
-      // element, we will get errors about removing widgets using regular
-      // DOM operations.
-      removeChildren(child);
-    } else {
-      // Non-widget element, so remove using normal DOM APIs.
-      node.removeChild(child);
+  while (true) {
+    const {firstChild} = node;
+    if (firstChild === null) {
+      break;
     }
+    const widget = UI.Widget.Widget.get(firstChild);
+    if (widget) {
+      // Child is a widget, so we have to use the Widget system to remove it from the DOM.
+      widget.detach();
+      continue;
+    }
+    // For regular children, recursively remove their children, since some of them
+    // might be widgets, and only afterwards remove the child from the current node.
+    removeChildren(firstChild);
+    node.removeChild(firstChild);
   }
 }
 /**
@@ -74,24 +73,9 @@ export const resetTestDOM = () => {
   document.body.appendChild(newContainer);
 };
 
-/**
- * An easy way to assert the component's shadowRoot exists so you're able to assert on its contents.
- */
-export function assertShadowRoot(shadowRoot: ShadowRoot|null): asserts shadowRoot is ShadowRoot {
-  assert.instanceOf(shadowRoot, ShadowRoot);
-}
-
 type Constructor<T> = {
   new (...args: unknown[]): T,
 };
-
-/**
- * Asserts that `element` is of type `T`.
- */
-export function assertElement<T extends Element>(
-    element: Element|null, elementClass: Constructor<T>): asserts element is T {
-  assert.instanceOf(element, elementClass);
-}
 
 /**
  * Asserts that all emenents of `nodeList` are at least of type `T`.
@@ -103,15 +87,15 @@ export function assertElements<T extends Element>(
 
 export function getElementWithinComponent<T extends HTMLElement, V extends Element>(
     component: T, selector: string, elementClass: Constructor<V>) {
-  assertShadowRoot(component.shadowRoot);
+  assert.isNotNull(component.shadowRoot);
   const element = component.shadowRoot.querySelector(selector);
-  assertElement(element, elementClass);
+  assert.instanceOf(element, elementClass);
   return element;
 }
 
 export function getElementsWithinComponent<T extends HTMLElement, V extends Element>(
     component: T, selector: string, elementClass: Constructor<V>) {
-  assertShadowRoot(component.shadowRoot);
+  assert.isNotNull(component.shadowRoot);
   const elements = component.shadowRoot.querySelectorAll(selector);
   assertElements(elements, elementClass);
   return elements;
@@ -279,7 +263,7 @@ export function getCleanTextContentFromElements(el: ShadowRoot|HTMLElement, sele
 }
 
 export function assertNodeTextContent(component: NodeText.NodeText.NodeText, expectedContent: string) {
-  assertShadowRoot(component.shadowRoot);
+  assert.isNotNull(component.shadowRoot);
   const content = Array.from(component.shadowRoot.querySelectorAll('span')).map(span => span.textContent).join('');
   assert.strictEqual(content, expectedContent);
 }

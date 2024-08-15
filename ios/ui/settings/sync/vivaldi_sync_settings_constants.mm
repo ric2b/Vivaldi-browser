@@ -12,12 +12,9 @@ const int kSyncStatusRedBackgroundColor = 0xFADCE3;
 const int kSyncStatusYellowColor = 0XFFCC48;
 const int kSyncStatusYellowBackgroundColor = 0xFFF7E2;
 
-const CGFloat kFooterSectionHeight = 32.0;
-const CGFloat kPasswordSectionFooterHeight = 8.0;
-const CGFloat kHeaderSectionHeight = 32.0;
+const CGFloat kCommonHeaderSectionHeight = 20.0;
+const CGFloat kPasswordSectionHeaderHeight = 8.0;
 const CGFloat kLogoutSectionHeaderHeight = 96.0;
-const CGFloat kDecryptSectionHeaderHeight = 8.0;
-const CGFloat kSaveSectionHeaderHeight = 8.0;
 
 NSString* const kShowPasswordIcon = @"eye";
 NSString* const kHidePasswordIcon = @"eye.slash";

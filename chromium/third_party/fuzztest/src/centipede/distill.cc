@@ -28,12 +28,14 @@
 #include <vector>
 
 #include "absl/base/thread_annotations.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "./centipede/blob_file.h"
+#include "./centipede/corpus_io.h"
 #include "./centipede/defs.h"
 #include "./centipede/environment.h"
 #include "./centipede/feature.h"
@@ -43,7 +45,6 @@
 #include "./centipede/resource_pool.h"
 #include "./centipede/rusage_profiler.h"
 #include "./centipede/rusage_stats.h"
-#include "./centipede/shard_reader.h"
 #include "./centipede/thread_pool.h"
 #include "./centipede/util.h"
 #include "./centipede/workdir.h"
@@ -132,8 +133,8 @@ class InputCorpusShardReader {
     // Read elements from the current shard.
     centipede::ReadShard(  //
         corpus_path, features_path,
-        [&elts](const ByteArray &input, FeatureVec &features) {
-          elts.emplace_back(input, std::move(features));
+        [&elts](ByteArray input, FeatureVec features) {
+          elts.emplace_back(std::move(input), std::move(features));
         });
     return elts;
   }
@@ -199,6 +200,9 @@ class CorpusShardWriter {
 
  private:
   void WriteEltImpl(CorpusElt elt) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+    const std::string hash = Hash(elt.input);
+    const auto [iter, inserted] = input_hashes_.insert(hash);
+    if (!inserted) return;
     ++stats_.num_total_elts;
     const auto preprocessed_elt = PreprocessElt(std::move(elt));
     if (preprocessed_elt.has_value()) {
@@ -219,6 +223,7 @@ class CorpusShardWriter {
   mutable absl::Mutex mu_;
   std::unique_ptr<BlobFileWriter> corpus_writer_ ABSL_GUARDED_BY(mu_);
   std::unique_ptr<BlobFileWriter> feature_writer_ ABSL_GUARDED_BY(mu_);
+  absl::flat_hash_set<std::string> input_hashes_ ABSL_GUARDED_BY(mu_);
   Stats stats_ ABSL_GUARDED_BY(mu_);
 };
 
@@ -308,10 +313,10 @@ void DistillTask(const Environment &env,
 }
 
 int Distill(const Environment &env) {
-  RPROF_THIS_FUNCTION_WITH_TIMELAPSE(                                 //
-      /*enable=*/VLOG_IS_ON(1),                                       //
-      /*timelapse_interval=*/absl::Seconds(VLOG_IS_ON(2) ? 10 : 60),  //
-      /*also_log_timelapses=*/VLOG_IS_ON(10));
+  RPROF_THIS_FUNCTION_WITH_TIMELAPSE(                                      //
+      /*enable=*/ABSL_VLOG_IS_ON(1),                                       //
+      /*timelapse_interval=*/absl::Seconds(ABSL_VLOG_IS_ON(2) ? 10 : 60),  //
+      /*also_log_timelapses=*/ABSL_VLOG_IS_ON(10));
 
   // The RAM pool shared between all the threads, here and in `DistillTask`.
   perf::ResourcePool ram_pool{kRamQuota};

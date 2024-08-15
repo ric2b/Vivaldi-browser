@@ -8,8 +8,6 @@ import {TraceLoader} from '../../../testing/TraceLoader.js';
 import * as PerfUI from '../../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as Timeline from '../timeline.js';
 
-const {assert} = chai;
-
 describeWithEnvironment('NetworkTrackAppender', function() {
   let traceParsedData: TraceEngine.Handlers.Types.TraceParseData;
   let networkTrackAppender: Timeline.NetworkTrackAppender.NetworkTrackAppender;
@@ -44,7 +42,7 @@ describeWithEnvironment('NetworkTrackAppender', function() {
       const networkRequests = traceParsedData.NetworkRequests.byTime;
       for (let i = 0; i < networkRequests.length; i++) {
         const event = networkRequests[i];
-        if (TraceEngine.Handlers.ModelHandlers.PageLoadMetrics.isTraceEventMarkerEvent(event)) {
+        if (TraceEngine.Types.TraceEvents.isTraceEventMarkerEvent(event)) {
           assert.isNaN(flameChartData.entryTotalTimes[i]);
           continue;
         }

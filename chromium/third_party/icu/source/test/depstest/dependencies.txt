@@ -22,7 +22,7 @@ system_symbols:
     exp_and_tanhf
     stdlib_qsort
     system_locale
-    stdio_input stdio_output file_io readlink_function dir_io mmap_functions dlfcn
+    stdio_input stdio_output file_io dir_io mmap_functions dlfcn
     # C++
     cplusplus iostream
     std_mutex
@@ -110,11 +110,8 @@ group: file_io
     # Additional symbols in an optimized build.
     __xstat
 
-group: readlink_function
-    readlink  # putil.cpp uprv_tzname() calls this in a hack to get the time zone name
-
 group: dir_io
-    opendir closedir readdir  # for a hack to get the time zone name
+    opendir closedir readdir readlink realpath # for a hack to get the time zone name
 
 group: mmap_functions  # for memory-mapped data loading
     mmap munmap
@@ -148,6 +145,7 @@ group: iostream
     "std::basic_ostream<char, std::char_traits<char> >& std::operator<< <std::char_traits<char> >(std::basic_ostream<char, std::char_traits<char> >&, char const*)"
     std::ios_base::Init::Init()
     std::ios_base::Init::~Init()
+    std::ios_base_library_init()
     std::istream::get()
     std::istream::putback(char)
     # Additional symbols in an optimized build.
@@ -653,17 +651,21 @@ group: resourcebundle
     locbased.o
     loclikely.o
     localebuilder.o
+    ulocale.o
+    ulocbuilder.o
+    loclikelysubtags.o
   deps
     udata ucol_swp
     sort stringenumeration uhash uvector
     uscript_props propname
     bytesinkutil
     errorcode
+    lsr
 
 group: localematcher
     localematcher.o
   deps
-    resourcebundle localeprioritylist loclikelysubtags locdistance lsr
+    resourcebundle localeprioritylist locdistance
 
 group: localeprioritylist
     localeprioritylist.o
@@ -673,12 +675,7 @@ group: localeprioritylist
 group: locdistance
     locdistance.o
   deps
-    loclikelysubtags
-
-group: loclikelysubtags
-    loclikelysubtags.o
-  deps
-    lsr resourcebundle
+    resourcebundle
 
 group: lsr
     lsr.o
@@ -869,7 +866,7 @@ group: platform
     PIC system_misc system_debug malloc_functions ubsan
     c_strings c_string_formatting
     floating_point system_locale
-    stdio_input readlink_function dir_io
+    stdio_input dir_io
     dlfcn  # Move related code into icuplug.c?
     cplusplus
     std_mutex
@@ -918,7 +915,7 @@ group: charset_detector
 group: spoof_detection
     uspoof.o uspoof_build.o uspoof_conf.o uspoof_impl.o scriptset.o
   deps
-    uniset_props regex unorm uscript
+    uniset_props regex unorm uscript ubidi
 
 group: alphabetic_index
     alphaindex.o

@@ -21,22 +21,18 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <float.h>
-#include <stdlib.h>
+#include <stddef.h>
 
 #include <xevd.h>
 
 #include "libavutil/internal.h"
 #include "libavutil/common.h"
-#include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/pixfmt.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/cpu.h"
 
 #include "avcodec.h"
-#include "internal.h"
-#include "packet_internal.h"
 #include "codec_internal.h"
 #include "profiles.h"
 #include "decode.h"
@@ -50,8 +46,6 @@
  * The structure stores all the states associated with the instance of Xeve MPEG-5 EVC decoder
  */
 typedef struct XevdContext {
-    const AVClass *class;
-
     XEVD id;            // XEVD instance identifier @see xevd.h
     XEVD_CDSC cdsc;     // decoding parameters @see xevd.h
 
@@ -210,7 +204,8 @@ static int libxevd_image_copy(struct AVCodecContext *avctx, XEVD_IMGB *imgb, str
         }
     }
 
-    if (ret = ff_get_buffer(avctx, frame, 0) < 0)
+    ret = ff_get_buffer(avctx, frame, 0);
+    if (ret < 0)
         return ret;
 
     av_image_copy(frame->data, frame->linesize, (const uint8_t **)imgb->a,
@@ -252,6 +247,65 @@ static av_cold int libxevd_init(AVCodecContext *avctx)
     return 0;
 }
 
+static int libxevd_return_frame(AVCodecContext *avctx, AVFrame *frame,
+                                XEVD_IMGB *imgb, AVPacket **pkt_au)
+{
+    AVPacket *pkt_au_imgb = (AVPacket*)imgb->pdata[0];
+    int ret;
+
+    if (!pkt_au_imgb) {
+        av_log(avctx, AV_LOG_ERROR, "Invalid data needed to fill frame properties\n");
+
+        if (pkt_au)
+            av_packet_free(pkt_au);
+        av_frame_unref(frame);
+
+        imgb->release(imgb);
+        imgb = NULL;
+
+        return AVERROR_INVALIDDATA;
+    }
+
+    // got frame
+    ret = libxevd_image_copy(avctx, imgb, frame);
+    if (ret < 0) {
+        av_log(avctx, AV_LOG_ERROR, "Image copying error\n");
+
+        av_packet_free(&pkt_au_imgb);
+        av_frame_unref(frame);
+
+        imgb->release(imgb);
+        imgb = NULL;
+
+        return ret;
+    }
+
+    // use ff_decode_frame_props_from_pkt() to fill frame properties
+    ret = ff_decode_frame_props_from_pkt(avctx, frame, pkt_au_imgb);
+    if (ret < 0) {
+        av_log(avctx, AV_LOG_ERROR, "ff_decode_frame_props_from_pkt error\n");
+
+        av_packet_free(&pkt_au_imgb);
+        av_frame_unref(frame);
+
+        imgb->release(imgb);
+        imgb = NULL;
+
+        return ret;
+    }
+
+    frame->pkt_dts = imgb->ts[XEVD_TS_DTS];
+    frame->pts = imgb->ts[XEVD_TS_PTS];
+
+    av_packet_free(&pkt_au_imgb);
+
+    // xevd_pull uses pool of objects of type XEVD_IMGB.
+    // The pool size is equal MAX_PB_SIZE (26), so release object when it is no more needed
+    imgb->release(imgb);
+    imgb = NULL;
+
+    return 0;
+}
 /**
   * Decode frame with decoupled packet/frame dataflow
   *
@@ -286,17 +340,14 @@ static int libxevd_receive_frame(AVCodecContext *avctx, AVFrame *frame)
         XEVD_STAT stat;
         XEVD_BITB bitb;
         int nalu_size;
-        AVPacket* pkt_au;
+        AVPacket *pkt_au = av_packet_alloc();
         imgb = NULL;
 
-        pkt_au = av_packet_clone(pkt);
         if (!pkt_au) {
-            av_log(avctx, AV_LOG_ERROR, "Cannot clone AVPacket\n");
             av_packet_unref(pkt);
             return AVERROR(ENOMEM);
         }
-
-        av_packet_unref(pkt);
+        FFSWAP(AVPacket*, pkt_au, xectx->pkt);
 
         // get all nal units from AU
         while(pkt_au->size > (bs_read_pos + XEVD_NAL_UNIT_LENGTH_BYTE)) {
@@ -364,56 +415,7 @@ static int libxevd_receive_frame(AVCodecContext *avctx, AVFrame *frame)
                             return  AVERROR(EAGAIN);
                         }
                     } else {
-                        // got frame
-                        AVPacket* pkt_au_imgb = (AVPacket*)imgb->pdata[0];
-                        if(!pkt_au_imgb) {
-                            av_log(avctx, AV_LOG_ERROR, "Invalid data needed to fill frame properties\n");
-
-                            av_packet_free(&pkt_au);
-                            av_frame_unref(frame);
-
-                            imgb->release(imgb);
-                            imgb = NULL;
-
-                            return AVERROR_INVALIDDATA;
-                        }
-
-                        ret = libxevd_image_copy(avctx, imgb, frame);
-                        if(ret < 0) {
-                            av_log(avctx, AV_LOG_ERROR, "Image copying error\n");
-
-                            av_packet_free(&pkt_au_imgb);
-                            av_frame_unref(frame);
-
-                            imgb->release(imgb);
-                            imgb = NULL;
-
-                            return ret;
-                        }
-
-                        // use ff_decode_frame_props_from_pkt() to fill frame properties
-                        ret = ff_decode_frame_props_from_pkt(avctx, frame, pkt_au_imgb);
-                        if (ret < 0) {
-                            av_log(avctx, AV_LOG_ERROR, "ff_decode_frame_props_from_pkt error\n");
-
-                            av_packet_free(&pkt_au_imgb);
-                            av_frame_unref(frame);
-
-                            imgb->release(imgb);
-                            imgb = NULL;
-
-                            return ret;
-                        }
-
-                        frame->pkt_dts = imgb->ts[XEVD_TS_DTS];
-                        frame->pts = imgb->ts[XEVD_TS_PTS];
-
-                        av_packet_free(&pkt_au_imgb);
-
-                        // xevd_pull uses pool of objects of type XEVD_IMGB.
-                        // The pool size is equal MAX_PB_SIZE (26), so release object when it is no more needed
-                        imgb->release(imgb);
-                        imgb = NULL;
+                        return libxevd_return_frame(avctx, frame, imgb, &pkt_au);
                     }
                 }
             }
@@ -431,61 +433,13 @@ static int libxevd_receive_frame(AVCodecContext *avctx, AVFrame *frame)
 
             return AVERROR_EXTERNAL;
         } else { // XEVD_OK
-            AVPacket* pkt_au_imgb;
             if (!imgb) {
                 av_log(avctx, AV_LOG_ERROR, "Invalid decoded image data\n");
 
                 return AVERROR_EXTERNAL;
             }
 
-            pkt_au_imgb = (AVPacket*)imgb->pdata[0];
-            if(!pkt_au_imgb) {
-                av_log(avctx, AV_LOG_ERROR, "Invalid data needed to fill frame properties\n");
-
-                imgb->release(imgb);
-                imgb = NULL;
-
-                av_frame_unref(frame);
-
-                return AVERROR_INVALIDDATA;
-            }
-
-            // got frame
-            ret = libxevd_image_copy(avctx, imgb, frame);
-            if(ret < 0) {
-                av_packet_free(&pkt_au_imgb);
-                av_frame_unref(frame);
-
-                imgb->release(imgb);
-                imgb = NULL;
-
-                return ret;
-            }
-            // use ff_decode_frame_props_from_pkt() to fill frame properties
-            ret = ff_decode_frame_props_from_pkt(avctx, frame, pkt_au_imgb);
-            if (ret < 0) {
-                av_log(avctx, AV_LOG_ERROR, "ff_decode_frame_props_from_pkt error\n");
-
-                av_packet_free(&pkt_au_imgb);
-                av_frame_unref(frame);
-
-                imgb->release(imgb);
-                imgb = NULL;
-
-                return ret;
-            }
-
-            frame->pkt_dts = imgb->ts[XEVD_TS_DTS];
-            frame->pts = imgb->ts[XEVD_TS_PTS];
-
-            av_packet_free(&pkt_au_imgb);
-
-            // xevd_pull uses pool of objects of type XEVD_IMGB.
-            // The pool size is equal MAX_PB_SIZE (26), so release object when it is no more needed
-            imgb->release(imgb);
-            imgb = NULL;
-
-            return 0;
+            return libxevd_return_frame(avctx, frame, imgb, NULL);
         }
     }
 
@@ -512,27 +466,19 @@ static av_cold int libxevd_close(AVCodecContext *avctx)
     return 0;
 }
 
-#define OFFSET(x) offsetof(XevdContext, x)
-#define VD AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_DECODING_PARAM
-
-static const AVClass libxevd_class = {
-    .class_name = "libxevd",
-    .item_name  = av_default_item_name,
-    .version    = LIBAVUTIL_VERSION_INT,
-};
-
 const FFCodec ff_libxevd_decoder = {
     .p.name             = "evc",
-    .p.long_name        = NULL_IF_CONFIG_SMALL("EVC / MPEG-5 Essential Video Coding (EVC)"),
+    CODEC_LONG_NAME("EVC / MPEG-5 Essential Video Coding (EVC)"),
     .p.type             = AVMEDIA_TYPE_VIDEO,
     .p.id               = AV_CODEC_ID_EVC,
     .init               = libxevd_init,
     FF_CODEC_RECEIVE_FRAME_CB(libxevd_receive_frame),
     .close              = libxevd_close,
     .priv_data_size     = sizeof(XevdContext),
-    .p.priv_class       = &libxevd_class,
-    .p.capabilities     = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_OTHER_THREADS | AV_CODEC_CAP_AVOID_PROBING,
+    .p.capabilities     = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY |
+                          AV_CODEC_CAP_OTHER_THREADS | AV_CODEC_CAP_AVOID_PROBING,
     .p.profiles         = NULL_IF_CONFIG_SMALL(ff_evc_profiles),
     .p.wrapper_name     = "libxevd",
-    .caps_internal      = FF_CODEC_CAP_INIT_CLEANUP | FF_CODEC_CAP_NOT_INIT_THREADSAFE | FF_CODEC_CAP_SETS_PKT_DTS | FF_CODEC_CAP_SETS_FRAME_PROPS
+    .caps_internal      = FF_CODEC_CAP_INIT_CLEANUP | FF_CODEC_CAP_NOT_INIT_THREADSAFE |
+                          FF_CODEC_CAP_SETS_FRAME_PROPS,
 };

@@ -64,6 +64,10 @@
 - (void) centerXInSuperview;
 /// Center the view vertically within the superview
 - (void) centerYInSuperview;
+/// Center the view with respect to a given value
+- (void) centerToView:(UIView*)view;
+/// Center the view horizontally with respect to a given value
+- (void) centerXToView:(UIView*)view;
 /// Center the view vertically with respect to a given value
 - (void) centerYToView:(UIView*)view;
 

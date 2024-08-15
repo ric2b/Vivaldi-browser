@@ -169,7 +169,6 @@
 <translation id="7353601530677266744">Parancssor</translation>
 <translation id="7364115444476960850">A meglátogatni kívánt oldalt blokkolta a Vivaldi <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profil elérési útja</translation>
-<translation id="7445762425076701745">Nem sikerült teljesen ellenőrizni a szerver azonosságát, amelyhez kapcsolódsz. Egy olyan névvel kapcsolódsz a szerverhez, amelynek tulajdonjogát egy külső tanúsítványkibocsátó nem ellenőrizheti. Mivel egyes tanúsítványkibocsátók figyelmen kívül hagyják ezeket a neveket, így semmi nem biztosítja, hogy a kívánt webhelyhez kapcsolódsz, és nem egy támadó webhelyhez.</translation>
 <translation id="7455133967321480974">Globális alapértelmezés használata (Tiltás)</translation>
 <translation id="7518003948725431193">Nem található weboldal az internetcímen:<ph name="URL" /></translation>
 <translation id="7549584377607005141">Ez a weboldal korábban megadott adatokat kér ahhoz, hogy megfelelően jelenjen meg. Az adatokat újra elküldheti, de ezzel meg fog ismételni minden olyan műveletet, amelyet ez az oldal korábban végrehajtott.</translation>

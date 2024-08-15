@@ -264,8 +264,6 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   // will be transferred to the corresponding `Surface`s
   void ClearAllPendingCopyOutputRequests();
 
-  SurfaceAnimationManager* GetSurfaceAnimationManagerForTesting();
-
   const RegionCaptureBounds& current_capture_bounds() const {
     return current_capture_bounds_;
   }
@@ -274,7 +272,7 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
     return frame_sink_type_;
   }
 
-  void SetReservedResourceDelegate(ReservedResourceDelegate* delegate);
+  void SetExternalReservedResourceDelegate(ReservedResourceDelegate* delegate);
 
  private:
   friend class CompositorFrameSinkSupportTest;
@@ -289,7 +287,7 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   void ProcessCompositorFrameTransitionDirective(
       const CompositorFrameTransitionDirective& directive,
       Surface* surface);
-  void OnCompositorFrameTransitionDirectiveProcessed(
+  void OnSaveTransitionDirectiveProcessed(
       const CompositorFrameTransitionDirective& directive);
 
   void DidReceiveCompositorFrameAck();
@@ -355,9 +353,8 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
       base::flat_set<base::PlatformThreadId> thread_ids,
       bool passed_verification);
 
-  void SetSurfaceAnimationManager(
-      std::unique_ptr<SurfaceAnimationManager> surface_animation_manager);
-  std::unique_ptr<SurfaceAnimationManager> TakeSurfaceAnimationManager();
+  void ForAllReservedResourceDelegates(
+      base::FunctionRef<void(ReservedResourceDelegate&)> func);
 
   const raw_ptr<mojom::CompositorFrameSinkClient> client_;
 
@@ -399,7 +396,7 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   // rely on checking the number of pending frames in `pending_frames_` to
   // throttle frame production.
   //
-  // TODO(crbug.com/1396081): Track acks, presentation feedback, and resources
+  // TODO(crbug.com/40249303): Track acks, presentation feedback, and resources
   // being returned, on a per BeginFrameSource basis. For
   // BeginFrameArgs::kManualSourceId the feedback and resources should not be
   // tied to the current `begin_frame_source_`;
@@ -544,18 +541,15 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   mojom::CompositorFrameSinkType frame_sink_type_ =
       mojom::CompositorFrameSinkType::kUnspecified;
 
-  // This is responsible for transitioning between two CompositorFrames. The
-  // frames may be produced by Surfaces managed by distinct
-  // CompositorFrameSinks.
-  std::unique_ptr<SurfaceAnimationManager> surface_animation_manager_;
+  base::flat_map<blink::ViewTransitionToken,
+                 std::unique_ptr<SurfaceAnimationManager>>
+      view_transition_token_to_animation_manager_;
 
   // This is used for any viz side resources that are managed by viz. These
   // resources must use the reserved resource range defined by
   // `kVizReservedRangeStartId`.
-  raw_ptr<ReservedResourceDelegate> reserved_resource_delegate_ = nullptr;
-
-  // The sequence ID for the save directive pending copy.
-  uint32_t in_flight_save_sequence_id_ = 0;
+  raw_ptr<ReservedResourceDelegate> external_reserved_resource_delegate_ =
+      nullptr;
 
   base::flat_set<base::PlatformThreadId> thread_ids_;
 
@@ -564,6 +558,8 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
 
   // Number of clients that have started video capturing.
   uint32_t number_clients_capturing_ = 0;
+
+  const bool use_blit_request_for_view_transition_ = false;
 
   // Region capture bounds associated with the last surface that was aggregated.
   RegionCaptureBounds current_capture_bounds_;

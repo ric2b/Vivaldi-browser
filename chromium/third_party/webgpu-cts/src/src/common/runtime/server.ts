@@ -1,4 +1,4 @@
-/* eslint no-console: "off" */
+/* eslint-disable no-console, n/no-restricted-import */
 
 import * as fs from 'fs';
 import * as http from 'http';
@@ -27,6 +27,7 @@ Options:
   --compat                  Run tests in compatibility mode.
   --coverage                Add coverage data to each result.
   --verbose                 Print result/log of every test as it runs.
+  --debug                   Include debug messages in logging.
   --gpu-provider            Path to node module that provides the GPU implementation.
   --gpu-provider-flag       Flag to set on the gpu-provider as <flag>=<value>
   --unroll-const-eval-loops Unrolls loops in constant-evaluation shader execution tests
@@ -95,11 +96,15 @@ for (let i = 0; i < sys.args.length; ++i) {
       emitCoverage = true;
     } else if (a === '--force-fallback-adapter') {
       globalTestConfig.forceFallbackAdapter = true;
+    } else if (a === '--log-to-websocket') {
+      globalTestConfig.logToWebSocket = true;
     } else if (a === '--gpu-provider') {
       const modulePath = sys.args[++i];
       gpuProviderModule = require(modulePath);
     } else if (a === '--gpu-provider-flag') {
       gpuProviderFlags.push(sys.args[++i]);
+    } else if (a === '--debug') {
+      globalTestConfig.enableDebugLogs = true;
     } else if (a === '--unroll-const-eval-loops') {
       globalTestConfig.unrollConstEvalLoops = true;
     } else if (a === '--help') {
@@ -157,7 +162,6 @@ if (verbose) {
 
 // eslint-disable-next-line @typescript-eslint/require-await
 (async () => {
-  Logger.globalDebugMode = verbose;
   const log = new Logger();
   const testcases = new Map<string, TestTreeLeaf>();
 

@@ -362,10 +362,9 @@ TEST_F(UnitTestModeTest, OptionalProtoFieldThatIsNotAlwaysSetCanHaveNoValue) {
 }
 
 TEST_F(UnitTestModeTest, ProtobufOfMutatesTheProto) {
-  auto [status, std_out, std_err] =
-      Run("MySuite.FailsWhenI32ContainsTheSecretNumber");
+  auto [status, std_out, std_err] = Run("MySuite.FailsWhenI32IsSet");
   EXPECT_THAT(status, Eq(Signal(SIGABRT)));
-  EXPECT_THAT(std_err, HasSubstr("Secret number is found"));
+  EXPECT_THAT(std_err, HasSubstr("The field i32 is set!"));
 }
 
 TEST_F(UnitTestModeTest, ProtobufEnumEqualsLabel4) {
@@ -646,10 +645,15 @@ class GenericCommandLineInterfaceTest : public ::testing::Test {
       const absl::flat_hash_map<std::string, std::string>& flags,
       const absl::flat_hash_map<std::string, std::string>& env = {},
       absl::Duration timeout = absl::Minutes(10),
-      absl::string_view binary = kDefaultTargetBinary) {
+      absl::string_view binary = kDefaultTargetBinary,
+      const absl::flat_hash_map<std::string, std::string>& non_fuzztest_flags =
+          {}) {
     std::vector<std::string> args = {BinaryPath(binary)};
     for (const auto& [key, value] : flags) {
       args.push_back(CreateFuzzTestFlag(key, value));
+    }
+    for (const auto& [key, value] : non_fuzztest_flags) {
+      args.push_back(absl::StrCat("--", key, "=", value));
     }
     return RunCommand(args, WithTestSanitizerOptions(env), timeout);
   }
@@ -728,7 +732,7 @@ TEST_F(FuzzingModeCommandLineInterfaceTest,
   auto [status, std_out, std_err] =
       RunWith({{"fuzz", "MySuite.PassesWithPositiveInput"}},
               {{"FUZZTEST_MAX_FUZZING_RUNS", "-1"}},
-              /*timeout=*/absl::Seconds(1));
+              /*timeout=*/absl::Seconds(10));
   EXPECT_THAT(std_err, HasSubstr("will not limit fuzzing runs")) << std_err;
 }
 
@@ -1020,7 +1024,7 @@ TEST_F(FuzzingModeCommandLineInterfaceTest,
   auto [status, std_out, std_err] =
       RunWith({{"fuzz", "MySuite.PassesWithPositiveInput"}},
               /*env=*/{},
-              /*timeout=*/absl::Seconds(1));
+              /*timeout=*/absl::Seconds(10));
   EXPECT_THAT(std_err, HasSubstr("Fuzzing was terminated"));
   EXPECT_THAT(std_err, HasSubstr("=== Fuzzing stats"));
   EXPECT_THAT(std_err, HasSubstr("Total runs:"));
@@ -1100,7 +1104,7 @@ TEST_F(FuzzingModeCommandLineInterfaceTest,
   auto [status, std_out, std_err] =
       RunWith({{"fuzz", "MySuite.PassesWithPositiveInput"}},
               /*env=*/{},
-              /*timeout=*/absl::Seconds(1));
+              /*timeout=*/absl::Seconds(10));
   EXPECT_THAT(std_err,
               Not(HasSubstr("limit is specified but will be ignored")));
   EXPECT_THAT(status, Eq(ExitCode(0)));
@@ -1109,7 +1113,7 @@ TEST_F(FuzzingModeCommandLineInterfaceTest,
 TEST_F(FuzzingModeCommandLineInterfaceTest, RssLimitFlagWorks) {
   auto [status, std_out, std_err] = RunWith(
       {{"fuzz", "MySuite.LargeHeapAllocation"}, {"rss_limit_mb", "1024"}},
-      /*env=*/{}, /*timeout=*/absl::Seconds(1));
+      /*env=*/{}, /*timeout=*/absl::Seconds(10));
   EXPECT_THAT(std_err, HasSubstr("argument 0: "));
   EXPECT_THAT(std_err, ContainsRegex(absl::StrCat("RSS limit exceeded")));
   EXPECT_THAT(status, Eq(Signal(SIGABRT)));
@@ -1529,7 +1533,7 @@ TEST_P(FuzzingModeCrashFindingTest, FlatMappedDomainShowsMappedValue) {
 TEST_P(FuzzingModeCrashFindingTest, FlatMapPassesWhenCorrect) {
   auto [status, std_out, std_err] =
       Run("MySuite.FlatMapPassesWhenCorrect", kDefaultTargetBinary,
-          /*timeout=*/absl::Seconds(1));
+          /*timeout=*/absl::Seconds(10));
   EXPECT_THAT(status, Eq(ExitCode(0)));
 }
 
@@ -1600,7 +1604,7 @@ TEST_P(FuzzingModeCrashFindingTest,
 
 TEST_P(FuzzingModeCrashFindingTest, SeedInputIsUsedForMutation) {
   auto [status, std_out, std_err] = Run("MySuite.SeedInputIsUsedForMutation");
-  EXPECT_THAT(std_err, HasSubstr("argument 0: {1979, 19, 1234, 5678}"));
+  EXPECT_THAT(std_err, HasSubstr("argument 0: {1979, 9791, 1234, 6789"));
   ExpectTargetAbort(status, std_err);
 }
 

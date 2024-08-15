@@ -55,7 +55,7 @@ class IOSChromeSyncClient : public browser_sync::BrowserSyncClient {
   password_manager::PasswordReceiverService* GetPasswordReceiverService()
       override;
   password_manager::PasswordSenderService* GetPasswordSenderService() override;
-  syncer::DataTypeController::TypeVector CreateDataTypeControllers(
+  syncer::ModelTypeController::TypeVector CreateModelTypeControllers(
       syncer::SyncService* sync_service) override;
   syncer::SyncInvalidationsService* GetSyncInvalidationsService() override;
   trusted_vault::TrustedVaultClient* GetTrustedVaultClient() override;
@@ -74,6 +74,9 @@ class IOSChromeSyncClient : public browser_sync::BrowserSyncClient {
           std::map<syncer::ModelType, syncer::LocalDataDescription>)> callback)
       override;
   void TriggerLocalDataMigration(syncer::ModelTypeSet types) override;
+  void RegisterTrustedVaultAutoUpgradeSyntheticFieldTrial(
+      const syncer::TrustedVaultAutoUpgradeSyntheticFieldTrialGroup& group)
+      override;
 
  private:
   const raw_ptr<ChromeBrowserState> browser_state_;

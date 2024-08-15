@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "build/build_config.h"
+#include "partition_alloc/build_config.h"
 #include "partition_alloc/page_allocator.h"
 #include "partition_alloc/partition_alloc_base/debug/debugging_buildflags.h"
 #include "partition_alloc/partition_alloc_check.h"
@@ -16,6 +16,7 @@
 
 #if BUILDFLAG(IS_WIN)
 #include <windows.h>
+
 #include "base/win/windows_version.h"
 #endif
 
@@ -134,8 +135,8 @@ void RandomBitCorrelation(int random_bit) {
     return;  // bit is always 0.
   }
 
-#if BUILDFLAG(PA_DCHECK_IS_ON)
-  // Do fewer checks when BUILDFLAG(PA_DCHECK_IS_ON). Exercized code only
+#if PA_BUILDFLAG(PA_DCHECK_IS_ON)
+  // Do fewer checks when PA_BUILDFLAG(PA_DCHECK_IS_ON). Exercized code only
   // changes when the random number generator does, which should be almost
   // never. However it's expensive to run all the tests. So keep iterations
   // faster for local development builds, while having the stricter version run
@@ -252,7 +253,8 @@ TEST_RANDOM_BIT(48)
 #undef TEST_RANDOM_BIT
 
 // Checks that we can actually map memory in the requested range.
-// TODO(crbug.com/1318466): Extend to all operating systems once they are fixed.
+// TODO(crbug.com/40222892): Extend to all operating systems once they are
+// fixed.
 #if BUILDFLAG(IS_MAC)
 TEST(PartitionAllocAddressSpaceRandomizationTest, CanMapInAslrRange) {
   int tries = 0;

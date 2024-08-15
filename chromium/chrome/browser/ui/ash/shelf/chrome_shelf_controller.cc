@@ -10,7 +10,6 @@
 
 #include "ash/components/arc/arc_prefs.h"
 #include "ash/components/arc/arc_util.h"
-#include "ash/constants/app_types.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/metrics/login_unlock_throughput_recorder.h"
@@ -109,6 +108,7 @@
 #include "components/services/app_service/public/cpp/package_id.h"
 #include "components/services/app_service/public/cpp/shortcut/shortcut.h"
 #include "components/services/app_service/public/cpp/shortcut/shortcut_update.h"
+#include "components/services/app_service/public/cpp/types_util.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/user_manager/user_manager.h"
@@ -835,14 +835,7 @@ void ChromeShelfController::PinAppAtIndex(const std::string& app_id,
   if (target_index < 0 || model_->IsAppPinned(app_id))
     return;
 
-  ash::ShelfItem item;
-  item.type = ash::TYPE_PINNED_APP;
-  item.id = ash::ShelfID(app_id);
-
-  model_->AddAt(target_index, item,
-                std::make_unique<AppShortcutShelfItemController>(item.id));
-
-  ReportUpdateShelfIconList(model_);
+  EnsureAppPinnedInModelAtIndex(app_id, /*current_index=*/-1, target_index);
 }
 
 int ChromeShelfController::PinnedItemIndexByAppID(const std::string& app_id) {
@@ -1078,8 +1071,7 @@ void ChromeShelfController::OnAppUninstalledPrepared(
         app_id, [&show_in_shelf_changed,
                  &is_app_disabled](const apps::AppUpdate& update) {
           show_in_shelf_changed = update.ShowInShelfChanged();
-          is_app_disabled =
-              update.Readiness() == apps::Readiness::kDisabledByPolicy;
+          is_app_disabled = apps_util::IsDisabled(update.Readiness());
         });
     // If the app is hidden and disabled, we need to update the app pin state.
     // We don't remove the pin position from the preferences, in case we want to
@@ -1693,7 +1685,7 @@ void ChromeShelfController::AddAppUpdaterAndIconLoader(Profile* profile) {
       app_icon_loaders_for_profile.emplace_back(
           std::make_unique<AppServiceShortcutIconLoader>(
               profile, extension_misc::EXTENSION_ICON_MEDIUM,
-              // TODO(crbug.com/1480423): Update the size after the effects
+              // TODO(crbug.com/40281395): Update the size after the effects
               // visual done.
               extension_misc::EXTENSION_ICON_SMALLISH, this));
     }

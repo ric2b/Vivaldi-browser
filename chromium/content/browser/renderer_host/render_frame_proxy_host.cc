@@ -118,14 +118,13 @@ bool RenderFrameProxyHost::IsFrameTokenInUse(
 }
 
 RenderFrameProxyHost::RenderFrameProxyHost(
-    SiteInstanceImpl* site_instance,
+    SiteInstanceGroup* site_instance_group,
     scoped_refptr<RenderViewHostImpl> render_view_host,
     FrameTreeNode* frame_tree_node,
     const blink::RemoteFrameToken& frame_token)
-    : routing_id_(site_instance->GetProcess()->GetNextRoutingID()),
-      site_instance_deprecated_(site_instance),
-      site_instance_group_(site_instance->group()),
-      process_(site_instance->GetProcess()),
+    : routing_id_(site_instance_group->process()->GetNextRoutingID()),
+      site_instance_group_(site_instance_group),
+      process_(site_instance_group->process()),
       frame_tree_node_(frame_tree_node),
       render_frame_proxy_created_(false),
       render_view_host_(std::move(render_view_host)),
@@ -148,7 +147,8 @@ RenderFrameProxyHost::RenderFrameProxyHost(
 
   bool is_proxy_to_parent =
       !frame_tree_node_->IsMainFrame() &&
-      frame_tree_node_->parent()->GetSiteInstance() == site_instance;
+      frame_tree_node_->parent()->GetSiteInstance()->group() ==
+          site_instance_group;
   bool is_proxy_to_outer_delegate =
       frame_tree_node_->render_manager()->IsMainFrameForInnerDelegate();
 
@@ -196,10 +196,10 @@ RenderFrameProxyHost::~RenderFrameProxyHost() {
   TRACE_EVENT_END("navigation", perfetto::Track::FromPointer(this));
 }
 
-void RenderFrameProxyHost::SetChildRWHView(
-    RenderWidgetHostViewChildFrame* view,
-    const gfx::Size* initial_frame_size) {
-  cross_process_frame_connector_->SetView(view);
+void RenderFrameProxyHost::SetChildRWHView(RenderWidgetHostViewChildFrame* view,
+                                           const gfx::Size* initial_frame_size,
+                                           bool allow_paint_holding) {
+  cross_process_frame_connector_->SetView(view, allow_paint_holding);
   if (initial_frame_size)
     cross_process_frame_connector_->SetLocalFrameSize(*initial_frame_size);
 }
@@ -287,7 +287,7 @@ bool RenderFrameProxyHost::InitRenderFrameProxy(
       return false;
     }
 
-    // TODO(https://crbug.com/1393697): Support main frame proxy batch creation
+    // TODO(crbug.com/40248300): Support main frame proxy batch creation
     // with batched_proxy_ipc_sender.
     if (batched_proxy_ipc_sender) {
       batched_proxy_ipc_sender->AddNewChildProxyCreationTask(
@@ -385,35 +385,9 @@ void RenderFrameProxyHost::UpdateOpener() {
   }
 
   if (frame_tree_node_->opener()) {
-    bool create_proxies_in_opener = true;
-    if (::vivaldi::IsVivaldiRunning() &&
-        frame_tree_node_->render_manager()->IsMainFrameForInnerDelegate() &&
-        frame_tree_node_->render_manager()->GetProxyToOuterDelegate() == this) {
-      // NOTE(igor@vivaldi.com): Fix for Chromium bug 1013553.
-      //
-      // This proxy is the special proxy pointing from the webpage back to the
-      // app containing <webview> with the webpage. The same way
-      // RenderFrameHostManager::CreateProxiesForChildFrame() skips creating
-      // proxies pointing to the app in child iframes of the webpage (see
-      // comments in the method), there should be no proxies in the opener
-      // pointing the app. Essentially web pages should neither be able to reach
-      // the app via the window.opener nor via the window.parent links.
-      //
-      // Until Chromium confirms/provides a generic fix for the bug, apply the
-      // fix only to the Vivaldi windows, not an arbitrary Chrome app.
-      SiteInstance* site = GetSiteInstanceDeprecated();
-      if (site && site->GetSiteURL().possibly_invalid_spec() ==
-                      ::vivaldi::kVivaldiAppURLDomain) {
-        create_proxies_in_opener = false;
-      }
-    }
-    if (create_proxies_in_opener) {
-      // clang-format off
     frame_tree_node_->opener()->render_manager()->CreateOpenerProxies(
-        GetSiteInstanceDeprecated(), frame_tree_node_,
+        site_instance_group(), frame_tree_node_,
         frame_tree_node_->current_frame_host()->browsing_context_state());
-      // clang-format on
-    }
   }
 
   if (!is_render_frame_proxy_live())
@@ -583,8 +557,8 @@ void RenderFrameProxyHost::RouteMessageEvent(
   // TODO(lukasza): Move opaque-ness check into ChildProcessSecurityPolicyImpl.
   auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
   if (source_origin != u"null" &&
-      !policy->CanAccessDataForOrigin(
-          GetProcess()->GetID(), url::Origin::Create(GURL(source_origin)))) {
+      !policy->HostsOrigin(GetProcess()->GetID(),
+                           url::Origin::Create(GURL(source_origin)))) {
     bad_message::ReceivedBadMessage(
         GetProcess(), bad_message::RFPH_POST_MESSAGE_INVALID_SOURCE_ORIGIN);
     return;
@@ -600,6 +574,13 @@ void RenderFrameProxyHost::RouteMessageEvent(
   SiteInstanceGroup* target_group = target_rfh->GetSiteInstance()->group();
   if (!target_group->IsCoopRelatedSiteInstanceGroup(site_instance_group()) &&
       !target_rfh->delegate()->ShouldRouteMessageEvent(target_rfh)) {
+    return;
+  }
+
+  // Don't deliver any messages to PDF content frames.
+  if (target_rfh->GetSiteInstance()->GetSiteInfo().is_pdf()) {
+    bad_message::ReceivedBadMessage(
+        GetProcess(), bad_message::RFPH_POST_MESSAGE_PDF_CONTENT_FRAME);
     return;
   }
 
@@ -636,13 +617,13 @@ void RenderFrameProxyHost::RouteMessageEvent(
         source_rfh->frame_tree_node()
             ->render_manager()
             ->CreateRenderFrameProxyAndAncestorChainIfNeeded(
-                target_rfh->GetSiteInstance());
+                target_rfh->GetSiteInstance()->group());
       } else {
         // Ensure that we have a swapped-out RVH and proxy for the source frame
         // in the target SiteInstance. If it doesn't exist, create it on demand
         // and also create its opener chain, since that will also be accessible
         // to the target page.
-        // TODO(https://crbug.com/1427387): Using WebContents here disregards
+        // TODO(crbug.com/40261772): Using WebContents here disregards
         // the possibility of postMessaging an iframe. This is broken, and
         // sometimes leads to null event.source.
         target_rfh->delegate()->EnsureOpenerProxiesExist(source_rfh);
@@ -808,22 +789,24 @@ void RenderFrameProxyHost::OpenURL(blink::mojom::OpenURLParamsPtr params) {
   // the navigation start will be updated when the BeforeUnload ack is received.
   const auto navigation_start_time = base::TimeTicks::Now();
 
+  blink::LocalFrameToken* initiator_frame_token =
+      base::OptionalToPtr(params->initiator_frame_token);
+
   // TODO(lfg, lukasza): Remove |extra_headers| parameter from
   // RequestTransferURL method once both RenderFrameProxyHost and
   // RenderFrameHostImpl call RequestOpenURL from their OnOpenURL handlers.
   // See also https://crbug.com/647772.
   // TODO(clamy): The transition should probably be changed for POST navigations
   // to PAGE_TRANSITION_FORM_SUBMIT. See https://crbug.com/829827.
-  // TODO(https://crbug.com/1261963): Determine which source_site_instance from
-  // site_instance_group_ to use for navigations to about:blank, once
-  // RenderFrameProxyHost no longer has a site_instance_deprecated_.
   frame_tree_node_->navigator().NavigateFromFrameProxy(
-      current_rfh, validated_url,
-      base::OptionalToPtr(params->initiator_frame_token), GetProcess()->GetID(),
+      current_rfh, validated_url, initiator_frame_token, GetProcess()->GetID(),
       params->initiator_origin, params->initiator_base_url,
-      GetSiteInstanceDeprecated(), params->referrer.To<content::Referrer>(),
-      ui::PAGE_TRANSITION_LINK, params->should_replace_current_entry,
-      download_policy, params->post_body ? "POST" : "GET", params->post_body,
+      RenderFrameHostImpl::GetSourceSiteInstanceFromFrameToken(
+          initiator_frame_token, GetProcess()->GetID(),
+          current_rfh->GetStoragePartition()),
+      params->referrer.To<content::Referrer>(), ui::PAGE_TRANSITION_LINK,
+      params->should_replace_current_entry, download_policy,
+      params->post_body ? "POST" : "GET", params->post_body,
       params->extra_headers, std::move(blob_url_loader_factory),
       std::move(params->source_location), params->user_gesture,
       params->is_form_submission, params->impression,

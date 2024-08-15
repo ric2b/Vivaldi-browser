@@ -169,7 +169,6 @@
 <translation id="7353601530677266744">Kommandolinje</translation>
 <translation id="7364115444476960850">Siden du prøvde å få tilgang til ble blokkert av Vivaldis <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profilplassering</translation>
-<translation id="7445762425076701745">Identiteten til tjeneren du kobler til kan ikke bekreftes helt. Du er koblet til en tjener med et navn som bare er gyldig innenfor nettverket ditt, og en ekstern sertifikatautoritet har ikke noen måte å kunne validere eierskapet på. Siden noen sertifikatautoriteter utsteder sertifikater for disse navnene uansett, er det ikke mulig å forsikre om at du faktisk er koblet til den ønskede nettsiden, og ikke en angriper.</translation>
 <translation id="7455133967321480974">Bruk global standardinnstilling (Blokker)</translation>
 <translation id="7518003948725431193">Ingen nettside ble funnet på nettadressen: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Denne nettsiden krever data du har skrevet inn tidligere for å vises korrekt. Du kan sende dataene på nytt, men ved å gjøre det kan det vil du også gjenta en eventuell handling denne siden tidligere utførte.</translation>

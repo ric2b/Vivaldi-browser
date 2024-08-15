@@ -1,7 +1,7 @@
 ---
 breadcrumbs:
 - - /chromium-os/developer-library/reference
-  - Chromium OS > Developer Library > Reference
+  - ChromiumOS > Reference
 page_name: cros-deploy
 title: cros deploy
 ---
@@ -25,7 +25,7 @@ packages.  See the [Kernel Development guide][deploying-kernel] for supported
 methods.
 
 [script]: https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/cli/cros/cros_deploy.py
-[deploying-kernel]: kernel_development.md#Build-and-deploy
+[deploying-kernel]: /chromium-os/developer-library/guides/kernel/kernel-development/#Build-and-deploy
 
 [TOC]
 

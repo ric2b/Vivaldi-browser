@@ -249,6 +249,13 @@ void PositionView(UIView* view, CGPoint point) {
 }
 
 - (void)didMoveToWindow {
+
+  // Note: (prio@vivaldi.com) - Do no override window since we only
+  // override it with browser theme settings.
+  if (IsVivaldiRunning()) {
+    return;
+  } // End Vivaldi
+
   if (self.window) {
     if (self.theme == GridThemeLight) {
       UIUserInterfaceStyle previousStyle =

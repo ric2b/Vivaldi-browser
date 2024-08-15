@@ -64,7 +64,7 @@
 #include "content/renderer/worker/dedicated_worker_host_factory_client.h"
 #include "content/renderer/worker/worker_thread_registry.h"
 #include "device/gamepad/public/cpp/gamepads.h"
-#include "gin/array_buffer.h"  // TODO(crbug.com/1321521) remove import once resolved.
+#include "gin/array_buffer.h"  // TODO(crbug.com/40837434) remove import once resolved.
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "gpu/config/gpu_finch_features.h"
@@ -141,7 +141,7 @@ namespace content {
 
 namespace {
 
-// TODO(https://crbug.com/787252): Move this method and its callers to Blink.
+// TODO(crbug.com/40550966): Move this method and its callers to Blink.
 media::AudioParameters GetAudioHardwareParams() {
   blink::WebLocalFrame* const web_frame =
       blink::WebLocalFrame::FrameForCurrentContext();
@@ -458,20 +458,8 @@ std::unique_ptr<WebAudioDevice> RendererBlinkPlatformImpl::CreateAudioDevice(
     unsigned number_of_output_channels,
     const blink::WebAudioLatencyHint& latency_hint,
     media::AudioRendererSink::RenderCallback* callback) {
-  // The `number_of_output_channels` does not manifest the actual channel
-  // layout of the audio output device. We use the best guess to the channel
-  // layout based on the number of channels.
-  media::ChannelLayout layout =
-      media::GuessChannelLayout(number_of_output_channels);
-
-  // Use "discrete" channel layout when the best guess was not successful.
-  if (layout == media::CHANNEL_LAYOUT_UNSUPPORTED) {
-    layout = media::CHANNEL_LAYOUT_DISCRETE;
-  }
-
-  return RendererWebAudioDeviceImpl::Create(sink_descriptor, layout,
-                                            number_of_output_channels,
-                                            latency_hint, callback);
+  return RendererWebAudioDeviceImpl::Create(
+      sink_descriptor, number_of_output_channels, latency_hint, callback);
 }
 
 bool RendererBlinkPlatformImpl::DecodeAudioFileData(
@@ -752,7 +740,7 @@ CreateWebGPUGraphicsContext3DImpl(
   // buffers need to be mapped using the ArrayBuffer shared memory mapper. As
   // there is currently no way of specifying a custom mapper per buffer, we
   // have to map all buffers created by this provider using the custom mapper.
-  // TODO(crbug.com/1321521) instead of mapping all buffers created by this
+  // TODO(crbug.com/40837434) instead of mapping all buffers created by this
   // provider with the array buffer mapper, only map those that will actually
   // be used as ArrayBuffers and remove this per-provider mapper again.
   base::SharedMemoryMapper* buffer_mapper =
@@ -776,7 +764,7 @@ RendererBlinkPlatformImpl::CreateWebGPUGraphicsContext3DProvider(
   scoped_refptr<gpu::GpuChannelHost> gpu_channel_host(
       RenderThreadImpl::current()->EstablishGpuChannelSync());
   if (!gpu_channel_host) {
-    // TODO(crbug.com/973017): Collect GPU info and surface context creation
+    // TODO(crbug.com/41464325): Collect GPU info and surface context creation
     // error.
     return nullptr;
   }
@@ -900,7 +888,7 @@ void RendererBlinkPlatformImpl::CreateServiceWorkerSubresourceLoaderFactory(
     std::unique_ptr<network::PendingSharedURLLoaderFactory> fallback_factory,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
     scoped_refptr<base::SequencedTaskRunner> task_runner) {
-  // TODO(crbug.com/1371756): plumb `router_rules` with the function callers
+  // TODO(crbug.com/40241479): plumb `router_rules` with the function callers
   // if there is such use case. As of 2023-06-01, only
   // `DedicatedOrSharedWorkerFetchContextImpl` calls the function, and
   // no need to allow it set the `router_rules`.

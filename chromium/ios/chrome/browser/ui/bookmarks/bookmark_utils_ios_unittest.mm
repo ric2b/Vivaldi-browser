@@ -102,8 +102,8 @@ TEST_F(BookmarkIOSUtilsUnitTest, CreateOrUpdateWithinModel) {
   EXPECT_EQ(node->GetTitledUrlNodeUrl(), new_url);
 }
 
-// TODO(crbug.com/1446407): Add tests that call `UpdateBookmark` with
-//                          the account storage.
+// TODO(crbug.com/40268591): Add tests that call `UpdateBookmark` with the
+// account storage.
 
 TEST_F(BookmarkIOSUtilsUnitTest, CreateOrUpdateBetweenModels) {
   const BookmarkNode* local_or_syncable_mobile_node =
@@ -144,8 +144,8 @@ TEST_F(BookmarkIOSUtilsUnitTest, DeleteNodes) {
   toDelete.insert(f2b);
   toDelete.insert(f2);
 
-  bookmark_utils_ios::DeleteBookmarks(toDelete,
-                                      local_or_syncable_bookmark_model_);
+  bookmark_utils_ios::DeleteBookmarks(
+      toDelete, local_or_syncable_bookmark_model_, FROM_HERE);
 
   EXPECT_EQ(2u, mobileNode->children().size());
   const BookmarkNode* child0 = mobileNode->children()[0].get();

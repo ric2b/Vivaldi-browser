@@ -7,12 +7,17 @@
 
 #include "src/gpu/ganesh/geometry/GrAAConvexTessellator.h"
 
-#include "include/core/SkCanvas.h"
+#include "include/core/SkMatrix.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkPoint.h"
-#include "include/core/SkString.h"
+#include "include/core/SkRect.h"
+#include "include/private/base/SkAssert.h"
+#include "include/private/base/SkFloatingPoint.h"
 #include "include/private/base/SkTPin.h"
+#include "src/core/SkPathPriv.h"
 #include "src/gpu/ganesh/geometry/GrPathUtils.h"
+
+#include <algorithm>
 
 // Next steps:
 //  add an interactive sample app slide
@@ -45,7 +50,7 @@ static bool intersect(const SkPoint& p0, const SkPoint& n0,
         return false;
     }
     *t = (v.fX * n1.fY - v.fY * n1.fX) / perpDot;
-    return SkScalarIsFinite(*t);
+    return SkIsFinite(*t);
 }
 
 // This is a special case version of intersect where we have the vector
@@ -59,7 +64,7 @@ static bool perp_intersect(const SkPoint& p0, const SkPoint& n0,
         return false;
     }
     *t = v.dot(perp) / perpDot;
-    return SkScalarIsFinite(*t);
+    return SkIsFinite(*t);
 }
 
 static bool duplicate_pt(const SkPoint& p0, const SkPoint& p1) {

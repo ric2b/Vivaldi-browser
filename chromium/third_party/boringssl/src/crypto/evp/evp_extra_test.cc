@@ -24,6 +24,7 @@
 
 #include <openssl/bytestring.h>
 #include <openssl/crypto.h>
+#include <openssl/dh.h>
 #include <openssl/digest.h>
 #include <openssl/err.h>
 #include <openssl/pkcs8.h>
@@ -1018,40 +1019,122 @@ static void ExpectECGroupAndKey(const EVP_PKEY *pkey, int nid) {
 }
 
 TEST(EVPExtraTest, ECKeygen) {
-  // |EVP_PKEY_paramgen| may be used as an extremely roundabout way to get an
-  // |EC_GROUP|.
-  bssl::UniquePtr<EVP_PKEY_CTX> ctx(EVP_PKEY_CTX_new_id(EVP_PKEY_EC, nullptr));
-  ASSERT_TRUE(ctx);
-  ASSERT_TRUE(EVP_PKEY_paramgen_init(ctx.get()));
-  ASSERT_TRUE(
-      EVP_PKEY_CTX_set_ec_paramgen_curve_nid(ctx.get(), NID_X9_62_prime256v1));
-  EVP_PKEY *raw = nullptr;
-  ASSERT_TRUE(EVP_PKEY_paramgen(ctx.get(), &raw));
-  bssl::UniquePtr<EVP_PKEY> pkey(raw);
-  raw = nullptr;
-  ExpectECGroupOnly(pkey.get(), NID_X9_62_prime256v1);
+  for (bool copy : {false, true}) {
+    SCOPED_TRACE(copy);
 
-  // That resulting |EVP_PKEY| may be used as a template for key generation.
-  ctx.reset(EVP_PKEY_CTX_new(pkey.get(), nullptr));
-  ASSERT_TRUE(ctx);
-  ASSERT_TRUE(EVP_PKEY_keygen_init(ctx.get()));
-  raw = nullptr;
-  ASSERT_TRUE(EVP_PKEY_keygen(ctx.get(), &raw));
-  pkey.reset(raw);
-  raw = nullptr;
-  ExpectECGroupAndKey(pkey.get(), NID_X9_62_prime256v1);
+    auto maybe_copy = [&](bssl::UniquePtr<EVP_PKEY_CTX> *ctx) -> bool {
+      if (copy) {
+        ctx->reset(EVP_PKEY_CTX_dup(ctx->get()));
+      }
+      return *ctx != nullptr;
+    };
 
-  // |EVP_PKEY_paramgen| may also be skipped.
-  ctx.reset(EVP_PKEY_CTX_new_id(EVP_PKEY_EC, nullptr));
-  ASSERT_TRUE(ctx);
-  ASSERT_TRUE(EVP_PKEY_keygen_init(ctx.get()));
+    // |EVP_PKEY_paramgen| may be used as an extremely roundabout way to get an
+    // |EC_GROUP|.
+    bssl::UniquePtr<EVP_PKEY_CTX> ctx(
+        EVP_PKEY_CTX_new_id(EVP_PKEY_EC, nullptr));
+    ASSERT_TRUE(ctx);
+    ASSERT_TRUE(maybe_copy(&ctx));
+    ASSERT_TRUE(EVP_PKEY_paramgen_init(ctx.get()));
+    ASSERT_TRUE(maybe_copy(&ctx));
+    ASSERT_TRUE(EVP_PKEY_CTX_set_ec_paramgen_curve_nid(ctx.get(),
+                                                       NID_X9_62_prime256v1));
+    ASSERT_TRUE(maybe_copy(&ctx));
+    EVP_PKEY *raw = nullptr;
+    ASSERT_TRUE(EVP_PKEY_paramgen(ctx.get(), &raw));
+    bssl::UniquePtr<EVP_PKEY> pkey(raw);
+    raw = nullptr;
+    ExpectECGroupOnly(pkey.get(), NID_X9_62_prime256v1);
+
+    // That resulting |EVP_PKEY| may be used as a template for key generation.
+    ctx.reset(EVP_PKEY_CTX_new(pkey.get(), nullptr));
+    ASSERT_TRUE(ctx);
+    ASSERT_TRUE(maybe_copy(&ctx));
+    ASSERT_TRUE(EVP_PKEY_keygen_init(ctx.get()));
+    ASSERT_TRUE(maybe_copy(&ctx));
+    raw = nullptr;
+    ASSERT_TRUE(EVP_PKEY_keygen(ctx.get(), &raw));
+    pkey.reset(raw);
+    raw = nullptr;
+    ExpectECGroupAndKey(pkey.get(), NID_X9_62_prime256v1);
+
+    // |EVP_PKEY_paramgen| may also be skipped.
+    ctx.reset(EVP_PKEY_CTX_new_id(EVP_PKEY_EC, nullptr));
+    ASSERT_TRUE(ctx);
+    ASSERT_TRUE(maybe_copy(&ctx));
+    ASSERT_TRUE(EVP_PKEY_keygen_init(ctx.get()));
+    ASSERT_TRUE(maybe_copy(&ctx));
+    ASSERT_TRUE(EVP_PKEY_CTX_set_ec_paramgen_curve_nid(ctx.get(),
+                                                       NID_X9_62_prime256v1));
+    ASSERT_TRUE(maybe_copy(&ctx));
+    raw = nullptr;
+    ASSERT_TRUE(EVP_PKEY_keygen(ctx.get(), &raw));
+    pkey.reset(raw);
+    raw = nullptr;
+    ExpectECGroupAndKey(pkey.get(), NID_X9_62_prime256v1);
+  }
+}
+
+TEST(EVPExtraTest, DHKeygen) {
+  // Set up some DH params in an |EVP_PKEY|. There is currently no API to do
+  // this from EVP directly.
+  bssl::UniquePtr<BIGNUM> p(BN_get_rfc3526_prime_1536(nullptr));
+  ASSERT_TRUE(p);
+  bssl::UniquePtr<BIGNUM> g(BN_new());
+  ASSERT_TRUE(g);
+  ASSERT_TRUE(BN_set_u64(g.get(), 2));
+  bssl::UniquePtr<DH> params_dh(DH_new());
+  ASSERT_TRUE(params_dh);
   ASSERT_TRUE(
-      EVP_PKEY_CTX_set_ec_paramgen_curve_nid(ctx.get(), NID_X9_62_prime256v1));
-  raw = nullptr;
-  ASSERT_TRUE(EVP_PKEY_keygen(ctx.get(), &raw));
-  pkey.reset(raw);
-  raw = nullptr;
-  ExpectECGroupAndKey(pkey.get(), NID_X9_62_prime256v1);
+      DH_set0_pqg(params_dh.get(), p.release(), /*q=*/nullptr, g.release()));
+  bssl::UniquePtr<EVP_PKEY> params(EVP_PKEY_new());
+  ASSERT_TRUE(params);
+  ASSERT_TRUE(EVP_PKEY_set1_DH(params.get(), params_dh.get()));
+
+  for (bool copy : {false, true}) {
+    SCOPED_TRACE(copy);
+
+    auto maybe_copy = [&](bssl::UniquePtr<EVP_PKEY_CTX> *ctx) -> bool {
+      if (copy) {
+        ctx->reset(EVP_PKEY_CTX_dup(ctx->get()));
+      }
+      return *ctx != nullptr;
+    };
+
+    // |params| may be used as a template for key generation.
+    bssl::UniquePtr<EVP_PKEY_CTX> ctx(EVP_PKEY_CTX_new(params.get(), nullptr));
+    ASSERT_TRUE(ctx);
+    ASSERT_TRUE(maybe_copy(&ctx));
+    ASSERT_TRUE(EVP_PKEY_keygen_init(ctx.get()));
+    ASSERT_TRUE(maybe_copy(&ctx));
+    EVP_PKEY *raw = nullptr;
+    ASSERT_TRUE(EVP_PKEY_keygen(ctx.get(), &raw));
+    bssl::UniquePtr<EVP_PKEY> pkey(raw);
+
+    EXPECT_EQ(EVP_PKEY_id(pkey.get()), EVP_PKEY_DH);
+    const DH *dh = EVP_PKEY_get0_DH(pkey.get());
+    EXPECT_EQ(0, BN_cmp(DH_get0_p(dh), DH_get0_p(params_dh.get())));
+    EXPECT_EQ(0, BN_cmp(DH_get0_g(dh), DH_get0_g(params_dh.get())));
+    EXPECT_FALSE(DH_get0_q(dh));
+    EXPECT_TRUE(DH_get0_pub_key(dh));
+    EXPECT_TRUE(DH_get0_priv_key(dh));
+    EXPECT_EQ(1, EVP_PKEY_cmp_parameters(params.get(), pkey.get()));
+    EXPECT_EQ(0, EVP_PKEY_cmp(params.get(), pkey.get()));
+
+    // Generate a second key.
+    ctx.reset(EVP_PKEY_CTX_new(params.get(), nullptr));
+    ASSERT_TRUE(ctx);
+    ASSERT_TRUE(maybe_copy(&ctx));
+    ASSERT_TRUE(EVP_PKEY_keygen_init(ctx.get()));
+    ASSERT_TRUE(maybe_copy(&ctx));
+    raw = nullptr;
+    ASSERT_TRUE(EVP_PKEY_keygen(ctx.get(), &raw));
+    bssl::UniquePtr<EVP_PKEY> pkey2(raw);
+
+    EXPECT_EQ(1, EVP_PKEY_cmp_parameters(params.get(), pkey2.get()));
+    EXPECT_EQ(1, EVP_PKEY_cmp_parameters(pkey.get(), pkey2.get()));
+    EXPECT_EQ(0, EVP_PKEY_cmp(pkey.get(), pkey2.get()));
+  }
 }
 
 // Test that |EVP_PKEY_keygen| works for Ed25519.
@@ -1215,4 +1298,12 @@ TEST(EVPExtraTest, Parameters) {
   EXPECT_EQ(EVP_PKEY_RSA, EVP_PKEY_id(rsa.get()));
   EXPECT_FALSE(EVP_PKEY_copy_parameters(rsa.get(), p256.get()));
   EXPECT_EQ(EVP_PKEY_RSA, EVP_PKEY_id(rsa.get()));
+}
+
+TEST(EVPExtraTest, RawKeyUnsupported) {
+  static const uint8_t kKey[] = {1, 2, 3, 4};
+  EXPECT_FALSE(
+      EVP_PKEY_new_raw_public_key(EVP_PKEY_RSA, nullptr, kKey, sizeof(kKey)));
+  EXPECT_FALSE(
+      EVP_PKEY_new_raw_private_key(EVP_PKEY_RSA, nullptr, kKey, sizeof(kKey)));
 }

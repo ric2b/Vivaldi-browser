@@ -109,7 +109,11 @@ typedef NS_ENUM(NSUInteger, IPadLayoutState) {
 + (CGFloat)colorComponentFrom:(NSString* _Nonnull)string
                         start:(NSUInteger)start
                        length:(NSUInteger)length;
-
++ (NSString* _Nonnull)formattedURLStringForChromeScheme:
+  (NSString* _Nonnull)urlText;
+/// Returns whether the given URL string is an internal
+/// page.
++ (BOOL)isURLInternalPage:(NSString* _Nonnull)urlString;
 @end
 
 #endif  // IOS_UI_HELPERS_VIVALDI_GLOBAL_HELPERS_H_

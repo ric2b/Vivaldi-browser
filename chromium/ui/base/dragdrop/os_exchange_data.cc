@@ -87,9 +87,9 @@ std::optional<std::vector<FileInfo>> OSExchangeData::GetFilenames() const {
   return provider_->GetFilenames();
 }
 
-bool OSExchangeData::GetPickledData(const ClipboardFormatType& format,
-                                    base::Pickle* data) const {
-  return provider_->GetPickledData(format, data);
+std::optional<base::Pickle> OSExchangeData::GetPickledData(
+    const ClipboardFormatType& format) const {
+  return provider_->GetPickledData(format);
 }
 
 bool OSExchangeData::HasString() const {

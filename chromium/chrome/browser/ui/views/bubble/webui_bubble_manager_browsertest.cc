@@ -9,11 +9,11 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/bubble/webui_bubble_dialog_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/webui/top_chrome/top_chrome_web_ui_controller.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
-#include "ui/webui/mojo_bubble_web_ui_controller.h"
 
 namespace {
 
@@ -45,7 +45,7 @@ void DestroyBubble(WebUIBubbleManager* bubble_manager, Profile* profile) {
 
 }  // namespace
 
-class TestWebUIController : public ui::MojoBubbleWebUIController {
+class TestWebUIController : public TopChromeWebUIController {
   WEB_UI_CONTROLLER_TYPE_DECL();
 };
 WEB_UI_CONTROLLER_TYPE_IMPL(TestWebUIController)
@@ -58,12 +58,14 @@ class WebUIContentsWrapperT<TestWebUIController> final
                         content::BrowserContext* browser_context,
                         int task_manager_string_id,
                         bool webui_resizes_host = true,
-                        bool esc_closes_ui = true)
+                        bool esc_closes_ui = true,
+                        bool supports_draggable_regions = false)
       : WebUIContentsWrapper(webui_url,
                              browser_context,
                              task_manager_string_id,
                              webui_resizes_host,
                              esc_closes_ui,
+                             supports_draggable_regions,
                              "Test") {}
   void ReloadWebContents() override {}
   base::WeakPtr<WebUIContentsWrapper> GetWeakPtr() override {

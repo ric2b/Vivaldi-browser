@@ -12,7 +12,7 @@
 #include "content/common/content_export.h"
 #include "content/services/auction_worklet/public/mojom/private_aggregation_request.mojom-forward.h"
 #include "content/services/auction_worklet/public/mojom/seller_worklet.mojom.h"
-#include "third_party/blink/public/mojom/private_aggregation/aggregatable_report.mojom-forward.h"
+#include "third_party/blink/public/mojom/aggregation_service/aggregatable_report.mojom-forward.h"
 
 namespace url {
 class Origin;
@@ -77,6 +77,10 @@ CONTENT_EXPORT void SplitContributionsIntoBatchesThenSendToHost(
     const url::Origin& reporting_origin,
     std::optional<url::Origin> aggregation_coordinator_origin,
     const url::Origin& main_frame_origin);
+
+// Returns false if request has an invalid filtering ID.
+CONTENT_EXPORT bool HasValidFilteringId(
+    const auction_worklet::mojom::PrivateAggregationRequestPtr& request);
 
 }  // namespace content
 

@@ -36,8 +36,10 @@ import * as Root from '../../../../core/root/root.js';
 import * as Formatter from '../../../../models/formatter/formatter.js';
 import * as TextUtils from '../../../../models/text_utils/text_utils.js';
 import * as CodeMirror from '../../../../third_party/codemirror.next/codemirror.next.js';
+import * as Buttons from '../../../components/buttons/buttons.js';
 import * as CodeHighlighter from '../../../components/code_highlighter/code_highlighter.js';
 import * as TextEditor from '../../../components/text_editor/text_editor.js';
+import * as VisualLogging from '../../../visual_logging/visual_logging.js';
 import * as UI from '../../legacy.js';
 
 import selfXssDialogStyles from './selfXssDialog.css.legacy.js';
@@ -200,6 +202,7 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
 
     this.textEditorInternal = new TextEditor.TextEditor.TextEditor(this.placeholderEditorState(''));
     this.textEditorInternal.style.flexGrow = '1';
+
     this.element.appendChild(this.textEditorInternal);
     this.element.addEventListener('keydown', (event: KeyboardEvent) => {
       if (event.defaultPrevented) {
@@ -270,7 +273,7 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
     return [
       CodeMirror.EditorView.updateListener.of(update => this.dispatchEventToListeners(Events.EditorUpdate, update)),
       TextEditor.Config.baseConfiguration(doc),
-      TextEditor.Config.closeBrackets,
+      TextEditor.Config.closeBrackets.instance(),
       TextEditor.Config.autocompletion.instance(),
       TextEditor.Config.showWhitespace.instance(),
       TextEditor.Config.allowScrollPastEof.instance(),
@@ -325,7 +328,8 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
   }
 
   protected onPaste(): boolean {
-    if (Root.Runtime.Runtime.queryParam('isChromeForTesting') || this.selfXssWarningDisabledSetting.get()) {
+    if (Root.Runtime.Runtime.queryParam('isChromeForTesting') ||
+        Root.Runtime.Runtime.queryParam('disableSelfXssWarnings') || this.selfXssWarningDisabledSetting.get()) {
       return false;
     }
     void this.showSelfXssWarning();
@@ -467,6 +471,8 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
 
   private updateLineNumberFormatter(): void {
     this.textEditor.dispatch({effects: config.lineNumbers.reconfigure(this.getLineNumberFormatter())});
+    this.textEditor.shadowRoot?.querySelector('.cm-lineNumbers')
+        ?.setAttribute('jslog', `${VisualLogging.gutter('line-numbers').track({click: true})}`);
   }
 
   private updatePrettyPrintState(): void {
@@ -550,73 +556,35 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
     let error, content;
     if (deferredContent.content === null) {
       error = deferredContent.error;
-      this.rawContent = deferredContent.error;
+      content = deferredContent.error;
+    } else if (deferredContent.isEncoded) {
+      const view = new DataView(Common.Base64.decode(deferredContent.content));
+      const decoder = new TextDecoder();
+      content = decoder.decode(view, {stream: true});
+    } else if ('wasmDisassemblyInfo' in deferredContent && deferredContent.wasmDisassemblyInfo) {
+      const {wasmDisassemblyInfo} = deferredContent;
+      content = CodeMirror.Text.of(wasmDisassemblyInfo.lines);
+      this.wasmDisassemblyInternal = wasmDisassemblyInfo;
+    } else if (this.contentType === 'application/wasm') {
+      // If the input is wasm but v8-based wasm disassembly failed, fall back to wasmparser for backwards compatibility.
+      try {
+        this.wasmDisassemblyInternal = await disassembleWasm(deferredContent.content, progressIndicator);
+        content = CodeMirror.Text.of(this.wasmDisassemblyInternal.lines);
+      } catch (e) {
+        content = error = e.message;
+      }
     } else {
       content = deferredContent.content;
-      if (deferredContent.isEncoded) {
-        const view = new DataView(Common.Base64.decode(deferredContent.content));
-        const decoder = new TextDecoder();
-        this.rawContent = decoder.decode(view, {stream: true});
-      } else if ('wasmDisassemblyInfo' in deferredContent && deferredContent.wasmDisassemblyInfo) {
-        const {wasmDisassemblyInfo} = deferredContent;
-        this.rawContent = CodeMirror.Text.of(wasmDisassemblyInfo.lines);
-        this.wasmDisassemblyInternal = wasmDisassemblyInfo;
-      } else {
-        this.rawContent = content;
-        this.wasmDisassemblyInternal = null;
-      }
-    }
-
-    // If the input is wasm but v8-based wasm disassembly failed, fall back to wasmparser for backwards compatibility.
-    if (content && this.contentType === 'application/wasm' && !this.wasmDisassemblyInternal) {
-      const worker = Common.Worker.WorkerWrapper.fromURL(
-          new URL('../../../../entrypoints/wasmparser_worker/wasmparser_worker-entrypoint.js', import.meta.url));
-      const promise = new Promise<{
-        lines: string[],
-        offsets: number[],
-        functionBodyOffsets: {
-          start: number,
-          end: number,
-        }[],
-      }>((resolve, reject) => {
-        worker.onmessage =
-            // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ({data}: MessageEvent<any>) => {
-              if ('event' in data) {
-                switch (data.event) {
-                  case 'progress':
-                    progressIndicator?.setWorked(data.params.percentage);
-                    break;
-                }
-              } else if ('method' in data) {
-                switch (data.method) {
-                  case 'disassemble':
-                    if ('error' in data) {
-                      reject(data.error);
-                    } else if ('result' in data) {
-                      resolve(data.result);
-                    }
-                    break;
-                }
-              }
-            };
-        worker.onerror = reject;
-      });
-      worker.postMessage({method: 'disassemble', params: {content}});
-      try {
-        const {lines, offsets, functionBodyOffsets} = await promise;
-        this.rawContent = content = CodeMirror.Text.of(lines);
-        this.wasmDisassemblyInternal = new Common.WasmDisassembly.WasmDisassembly(lines, offsets, functionBodyOffsets);
-      } catch (e) {
-        this.rawContent = content = error = e.message;
-      } finally {
-        worker.terminate();
-      }
+      this.wasmDisassemblyInternal = null;
     }
 
     progressIndicator.setWorked(100);
     progressIndicator.done();
+
+    if (this.rawContent === content) {
+      return;
+    }
+    this.rawContent = content;
 
     this.formattedMap = null;
     this.prettyToggle.setEnabled(true);
@@ -626,7 +594,7 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
       this.textEditor.state = this.placeholderEditorState(error);
       this.prettyToggle.setEnabled(false);
     } else {
-      if (this.shouldAutoPrettyPrint && TextUtils.TextUtils.isMinified(content || '')) {
+      if (this.shouldAutoPrettyPrint && TextUtils.TextUtils.isMinified(deferredContent.content || '')) {
         await this.setPretty(true);
       } else {
         await this.setContent(this.rawContent || '');
@@ -718,6 +686,11 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
     this.innerRevealPositionIfNeeded();
     this.innerSetSelectionIfNeeded();
     this.innerScrollToLineIfNeeded();
+    this.textEditor.shadowRoot?.querySelector('.cm-lineNumbers')
+        ?.setAttribute('jslog', `${VisualLogging.gutter('line-numbers').track({click: true})}`);
+    this.textEditor.shadowRoot?.querySelector('.cm-foldGutter')
+        ?.setAttribute('jslog', `${VisualLogging.gutter('fold')}`);
+    this.textEditor.setAttribute('jslog', `${VisualLogging.textField().track({change: true})}`);
   }
 
   onTextChanged(): void {
@@ -1088,7 +1061,7 @@ export class SelfXssWarningDialog {
     dialog.setMaxContentSize(new UI.Geometry.Size(504, 340));
     dialog.setSizeBehavior(UI.GlassPane.SizeBehavior.SetExactWidthMaxHeight);
     dialog.setDimmed(true);
-    const shadowRoot = UI.Utils.createShadowRootWithCoreStyles(
+    const shadowRoot = UI.UIUtils.createShadowRootWithCoreStyles(
         dialog.contentElement, {cssFile: selfXssDialogStyles, delegatesFocus: undefined});
     const content = shadowRoot.createChild('div', 'widget');
 
@@ -1116,7 +1089,7 @@ export class SelfXssWarningDialog {
       buttonsBar.appendChild(cancelButton);
       const allowButton = UI.UIUtils.createTextButton(i18nString(UIStrings.allow), () => {
         resolve(input.value === i18nString(UIStrings.allowPasting));
-      }, {jslogContext: 'confirm', primary: true});
+      }, {jslogContext: 'confirm', variant: Buttons.Button.Variant.PRIMARY});
       allowButton.disabled = true;
       buttonsBar.appendChild(allowButton);
 
@@ -1301,6 +1274,42 @@ function markNonBreakableLines(disassembly: Common.WasmDisassembly.WasmDisassemb
   });
 }
 
+async function disassembleWasm(content: string, progressIndicator: UI.ProgressIndicator.ProgressIndicator):
+    Promise<Common.WasmDisassembly.WasmDisassembly> {
+  const worker = Common.Worker.WorkerWrapper.fromURL(
+      new URL('../../../../entrypoints/wasmparser_worker/wasmparser_worker-entrypoint.js', import.meta.url));
+  const promise = new Promise<Common.WasmDisassembly.WasmDisassembly>((resolve, reject) => {
+    worker.onmessage = ({data}: MessageEvent) => {
+      if ('event' in data) {
+        switch (data.event) {
+          case 'progress':
+            progressIndicator.setWorked(data.params.percentage);
+            break;
+        }
+      } else if ('method' in data) {
+        switch (data.method) {
+          case 'disassemble':
+            if ('error' in data) {
+              reject(data.error);
+            } else if ('result' in data) {
+              const {lines, offsets, functionBodyOffsets} = data.result;
+              resolve(new Common.WasmDisassembly.WasmDisassembly(lines, offsets, functionBodyOffsets));
+            }
+            break;
+        }
+      }
+    };
+    worker.onerror = reject;
+  });
+
+  worker.postMessage({method: 'disassemble', params: {content}});
+
+  try {
+    return await promise;  // The await is important here or we terminate the worker too early.
+  } finally {
+    worker.terminate();
+  }
+}
 const sourceFrameTheme = CodeMirror.EditorView.theme({
   '&.cm-editor': {height: '100%'},
   '.cm-scroller': {overflow: 'auto'},

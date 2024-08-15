@@ -28,6 +28,7 @@
 #include "ui/base/dragdrop/os_exchange_data_provider_factory.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/host/wayland_cursor_position.h"
@@ -107,7 +108,7 @@ class MockDropHandler : public WmDropHandler {
                void(const gfx::PointF& point, int operation, int modifiers));
   MOCK_METHOD0(MockOnDragDataAvailable, void());
   MOCK_METHOD3(MockDragMotion,
-               int(const gfx::PointF& point, int operation, int modifiers));
+               void(const gfx::PointF& point, int operation, int modifiers));
   MOCK_METHOD0(MockOnDragDrop, void());
   MOCK_METHOD0(OnDragLeave, void());
 
@@ -174,6 +175,10 @@ class WaylandDataDragControllerTest : public WaylandDragDropTest {
 
   WaylandDataDragController* drag_controller() const {
     return connection_->data_drag_controller();
+  }
+
+  WaylandDataDragController::State drag_controller_state() const {
+    return connection_->data_drag_controller()->state_;
   }
 
   WaylandDataDevice* data_device() const {
@@ -376,6 +381,92 @@ TEST_P(WaylandDataDragControllerTest, StartDragWithFileContents) {
     EXPECT_EQ(1u, source->mime_types().size());
     EXPECT_EQ(kText, source->mime_types().front());
   });
+}
+
+// Cancels a DnD session that we initiated while the cursor is over our window.
+TEST_P(WaylandDataDragControllerTest, CancelOutgoingDrag) {
+  FocusAndPressLeftPointerButton(window_.get(), &delegate_);
+
+  // Cancel the session once it's been fully initiated. Note that cancelling the
+  // session in OnDragEnter() would be too early, because when it's called we
+  // haven't finished our setup yet.
+  EXPECT_CALL(*drop_handler_, MockOnDragDataAvailable()).WillOnce([&]() {
+    drag_controller()->CancelSession();
+  });
+
+  RunMouseDragWithSampleData(
+      window_.get(), DragDropTypes::DRAG_COPY | DragDropTypes::DRAG_MOVE);
+}
+
+// Cancels a DnD session that we initiated while the cursor is outside of our
+// window.
+TEST_P(WaylandDataDragControllerTest, CancelOutgoingDragOutsideWindow) {
+  FocusAndPressLeftPointerButton(window_.get(), &delegate_);
+
+  // Wait for the session to be fully initiated, then send wl_data_device.leave.
+  EXPECT_CALL(*drop_handler_, MockOnDragDataAvailable()).WillOnce([&]() {
+    SendDndLeave();
+  });
+
+  EXPECT_CALL(*drop_handler_, OnDragLeave())
+      // First call happens due to our SendDndLeave() call above, second call
+      // because OnDragLeave() is always called for unsuccessful DnD sessions
+      // (see the comment in WaylandDataDragController::Reset()).
+      .Times(2)
+      .WillOnce([&]() { drag_controller()->CancelSession(); })
+      // Silences an extremely verbose GTest warning.
+      .WillOnce(::testing::Return());
+
+  RunMouseDragWithSampleData(
+      window_.get(), DragDropTypes::DRAG_COPY | DragDropTypes::DRAG_MOVE);
+}
+
+// Cancels an incoming DnD session on the client-side.
+// Regression test for https://crbug.com/336706549.
+TEST_P(WaylandDataDragControllerTest, CancelIncomingDrag) {
+  ASSERT_TRUE(window_);
+
+  EXPECT_CALL(*drop_handler_, OnDragEnter(_, _, _)).Times(1);
+  EXPECT_CALL(*drop_handler_, MockDragMotion(_, _, _)).Times(1);
+  EXPECT_CALL(*drop_handler_, OnDragLeave()).Times(1);
+
+  gfx::Point pointer_location = {10, 10};
+  PostToServerAndWait([&](wl::TestWaylandServerThread* server) {
+    const auto data = ToClipboardData(std::string(kSampleTextForDragAndDrop));
+    auto* data_device = server->data_device_manager()->data_device();
+    auto* data_offer = data_device->CreateAndSendDataOffer();
+    data_offer->OnOffer(
+        kMimeTypeText, ToClipboardData(std::string(kSampleTextForDragAndDrop)));
+
+    const uint32_t surface_id = window_->root_surface()->get_surface_id();
+    auto* surface = server->GetObject<wl::MockSurface>(surface_id);
+    data_device->OnEnter(server->GetNextSerial(), surface->resource(),
+                         wl_fixed_from_int(pointer_location.x()),
+                         wl_fixed_from_int(pointer_location.y()), data_offer);
+  });
+  WaitForDragDropTasks();
+
+  EXPECT_EQ(drag_controller(), data_device()->drag_delegate_);
+  EXPECT_NE(drag_controller_state(), WaylandDataDragController::State::kIdle);
+
+  drag_controller()->CancelSession();
+
+  EXPECT_EQ(drag_controller_state(), WaylandDataDragController::State::kIdle);
+  EXPECT_FALSE(data_device()->drag_delegate_);
+  Mock::VerifyAndClearExpectations(drop_handler_.get());
+
+  // We shouldn't be propagating drag events after cancelling the session.
+  EXPECT_CALL(*drop_handler_, OnDragEnter(_, _, _)).Times(0);
+  EXPECT_CALL(*drop_handler_, MockDragMotion(_, _, _)).Times(0);
+  EXPECT_CALL(*drop_handler_, OnDragLeave()).Times(0);
+
+  pointer_location += gfx::Vector2d(10, 10);
+  PostToServerAndWait([&](wl::TestWaylandServerThread* server) {
+    server->data_device_manager()->data_device()->OnMotion(
+        server->GetNextTime(), wl_fixed_from_int(pointer_location.x()),
+        wl_fixed_from_int(pointer_location.y()));
+  });
+  SendDndLeave();
 }
 
 MATCHER_P(PointFNear, n, "") {
@@ -893,7 +984,7 @@ TEST_P(WaylandDataDragControllerTest, DragToNonToplevelWindows) {
 }
 
 // Ensures that requests to create a |PlatformWindowType::kPopup| during drag
-// sessions return xdg_popup-backed windows.
+// sessions return wl_subsurface-backed windows.
 TEST_P(WaylandDataDragControllerTest, PopupRequestCreatesPopupWindow) {
   auto* origin_window = window_.get();
   FocusAndPressLeftPointerButton(origin_window, &delegate_);
@@ -920,7 +1011,8 @@ TEST_P(WaylandDataDragControllerTest, PopupRequestCreatesPopupWindow) {
   PostToServerAndWait([surface_id](wl::TestWaylandServerThread* server) {
     auto* surface = server->GetObject<wl::MockSurface>(surface_id);
     ASSERT_TRUE(surface);
-    EXPECT_NE(nullptr, surface->xdg_surface()->xdg_popup());
+    EXPECT_EQ(nullptr, surface->xdg_surface());
+    EXPECT_NE(nullptr, surface->sub_surface());
   });
 }
 
@@ -943,6 +1035,7 @@ TEST_P(WaylandDataDragControllerTest, MenuRequestCreatesPopupWindow) {
           auto* surface = server->GetObject<wl::MockSurface>(surface_id);
           ASSERT_TRUE(surface);
           EXPECT_EQ(nullptr, surface->sub_surface());
+          EXPECT_NE(nullptr, surface->xdg_surface()->xdg_popup());
         });
   };
 
@@ -1020,7 +1113,7 @@ TEST_P(WaylandDataDragControllerTest, AsyncNoopStartDrag) {
     ASSERT_TRUE(server->data_device_manager()->data_source());
   });
 
-  // TODO(crbug.com/1022722): Double-check if this should return false instead.
+  // TODO(crbug.com/40050639): Double-check if this should return false instead.
   EXPECT_TRUE(result);
 
   Mock::VerifyAndClearExpectations(drop_handler_.get());
@@ -1052,7 +1145,7 @@ TEST_P(WaylandDataDragControllerTest, SuppressPointerButtonReleasesAfterEnter) {
   EXPECT_TRUE(drag_controller()->data_source_);
 
   // Ok, we're done.
-  SendDndDrop();
+  SendDndFinished();
   EXPECT_FALSE(drag_controller()->data_source_);
   EXPECT_FALSE(drag_controller()->origin_window_);
   EXPECT_FALSE(drag_controller()->nested_dispatcher_);
@@ -1285,7 +1378,7 @@ TEST_P(WaylandDataDragControllerTest,
   WaitForDragDropTasks();
   wl::SyncDisplay(connection_->display_wrapper(), *connection_->display());
 
-  EXPECT_EQ(drag_controller()->state(),
+  EXPECT_EQ(drag_controller_state(),
             WaylandDataDragController::State::kStarted);
 
   SendDndLeave();
@@ -1293,8 +1386,7 @@ TEST_P(WaylandDataDragControllerTest,
   Mock::VerifyAndClearExpectations(drop_handler_.get());
   EXPECT_FALSE(drop_handler_->dropped_data());
   EXPECT_FALSE(data_device()->drag_delegate_);
-  EXPECT_EQ(drag_controller()->state(),
-            WaylandDataDragController::State::kIdle);
+  EXPECT_EQ(drag_controller_state(), WaylandDataDragController::State::kIdle);
 }
 
 // Emulate an incoming DnD session and verifies that data drag controller aborts
@@ -1340,8 +1432,7 @@ TEST_P(WaylandDataDragControllerTest, LeaveWindowWhileFetchingData) {
   Mock::VerifyAndClearExpectations(drop_handler_.get());
   EXPECT_FALSE(drop_handler_->dropped_data());
   EXPECT_FALSE(data_device()->drag_delegate_);
-  EXPECT_EQ(drag_controller()->state(),
-            WaylandDataDragController::State::kIdle);
+  EXPECT_EQ(drag_controller_state(), WaylandDataDragController::State::kIdle);
 }
 
 // Cursor position should be updated during a (outgoing) drag with mouse.
@@ -1398,18 +1489,51 @@ TEST_P(WaylandDataDragControllerTest,
       window_.get(), DragDropTypes::DRAG_COPY | DragDropTypes::DRAG_MOVE);
 }
 
+// Regression test for https://crbug.com/336449364.
+TEST_P(WaylandDataDragControllerTest, OutgoingSessionWithoutDndFinished) {
+  FocusAndPressLeftPointerButton(window_.get(), &delegate_);
+
+  // Once the drag session effectively starts at server-side, emulate a
+  // data_source.dnd_drop_performed without its subsequent dnd_finished.
+  ScheduleTestTask(
+      base::BindLambdaForTesting([&]() { SendDndDropPerformed(); }));
+
+  // Start the drag session, which spins a nested message loop, and ensure it
+  // quits even without wl_data_source.dnd_finished. In which case, the expected
+  // side effect is drag controller's internal state left inconsistent, ie: not
+  // reset to `kIdle`.
+  RunMouseDragWithSampleData(
+      window_.get(), DragDropTypes::DRAG_COPY | DragDropTypes::DRAG_MOVE);
+  EXPECT_NE(drag_controller_state(), WaylandDataDragController::State::kIdle);
+
+  // Then ensure that, even after such server-side bogus drag events flow,
+  // subsequent drags can start successfully.
+  FocusAndPressLeftPointerButton(window_.get(), &delegate_);
+  OSExchangeData os_exchange_data;
+  os_exchange_data.SetHtml(sample_text_for_dnd(), {});
+  bool started = drag_controller()->StartSession(
+      os_exchange_data, DragDropTypes::DRAG_COPY | DragDropTypes::DRAG_MOVE,
+      DragEventSource::kMouse);
+  wl::SyncDisplay(connection_->display_wrapper(), *connection_->display());
+  ASSERT_TRUE(started);
+
+  SendDndFinished();
+  EXPECT_EQ(drag_controller_state(), WaylandDataDragController::State::kIdle);
+}
+
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 INSTANTIATE_TEST_SUITE_P(XdgVersionStableTest,
                          WaylandDataDragControllerTest,
                          Values(wl::ServerConfig{}));
 
+#else
 INSTANTIATE_TEST_SUITE_P(
     XdgVersionStableTestWithAuraShell,
     WaylandDataDragControllerTest,
     Values(wl::ServerConfig{.enable_aura_shell =
                                 wl::EnableAuraShellProtocol::kEnabled},
            wl::ServerConfig{
-               .enable_aura_shell = wl::EnableAuraShellProtocol::kEnabled,
-               .aura_output_manager_protocol =
-                   wl::AuraOutputManagerProtocol::kEnabledV2}));
+               .enable_aura_shell = wl::EnableAuraShellProtocol::kEnabled}));
+#endif
 
 }  // namespace ui

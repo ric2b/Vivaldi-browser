@@ -13,6 +13,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -398,7 +399,7 @@ class ExtensionInstallDialogViewInteractiveBrowserTest
       prompt->AddPermissionMessages(permission_messages_);
 
     if (from_webstore_)
-      prompt->SetWebstoreData("69,420", true, 2.5, 37);
+      prompt->SetWebstoreData("69,420", true, 2.5, 37, "37");
 
     ExtensionInstallDialogView::SetInstallButtonDelayForTesting(0);
     auto* web_contents = browser()->tab_strip_model()->GetActiveWebContents();
@@ -488,7 +489,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionInstallDialogViewInteractiveBrowserTest,
   ShowAndVerifyUi();
 }
 
-// TODO(https://crbug.com/1126736): Flaky on Win10.
+// TODO(crbug.com/40718668): Flaky on Win10.
 #if BUILDFLAG(IS_WIN)
 #define MAYBE_InvokeUi_DetailedPermission DISABLED_InvokeUi_DetailedPermission
 #else
@@ -503,7 +504,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionInstallDialogViewInteractiveBrowserTest,
   ShowAndVerifyUi();
 }
 
-// TODO(https://crbug.com/1126741): Flaky on Win10.
+// TODO(crbug.com/40718673): Flaky on Win10.
 #if BUILDFLAG(IS_WIN)
 #define MAYBE_InvokeUi_WithWithholdingOption \
   DISABLED_InvokeUi_WithWithholdingOption
@@ -524,7 +525,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionInstallDialogViewInteractiveBrowserTest,
   ShowAndVerifyUi();
 }
 
-// TODO(crbug.com/1445932): Flaky on Win10.
+// TODO(crbug.com/40912720): Flaky on Win10.
 #if BUILDFLAG(IS_WIN)
 #define MAYBE_InvokeUi_AllInfoTypes DISABLED_InvokeUi_AllInfoTypes
 #else
@@ -640,7 +641,8 @@ void ExtensionInstallDialogRatingsSectionTest::TestRatingsSectionA11y(
       num_ratings, average_rating, expected_text.c_str()));
   std::unique_ptr<ExtensionInstallPrompt::Prompt> prompt =
       CreatePrompt(ExtensionInstallPrompt::REPAIR_PROMPT);
-  prompt->SetWebstoreData("1,234", true, average_rating, num_ratings);
+  prompt->SetWebstoreData("1,234", true, average_rating, num_ratings,
+                          base::NumberToString(num_ratings));
 
   ExtensionInstallDialogView* dialog = new ExtensionInstallDialogView(
       std::make_unique<ExtensionInstallPromptShowParams>(web_contents()),

@@ -7,6 +7,7 @@
 #include <set>
 #include <vector>
 
+#include "base/location.h"
 #include "base/uuid.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/notes/note_model_loader.h"
@@ -94,9 +95,9 @@ class NotesModel : public KeyedService {
   }
 
   // Adds a new folder node at the specified position with the given
-  // |creation_time|, |last_modification_time|, and |uuid|. If no UUID is provided
-  // (i.e. nullopt), then a random one will be generated. If a UUID is provided,
-  // it must be valid.
+  // |creation_time|, |last_modification_time|, and |uuid|. If no UUID is
+  // provided (i.e. nullopt), then a random one will be generated. If a UUID is
+  // provided, it must be valid.
   const NoteNode* AddFolder(
       const NoteNode* parent,
       size_t index,
@@ -106,9 +107,9 @@ class NotesModel : public KeyedService {
       std::optional<base::Uuid> uuid = std::nullopt);
 
   // Adds a note at the specified position with the given |creation_time|,
-  // |last_modification_time|, and |uuid|. If no UUID is provided (i.e. nullopt),
-  // then a random one will be generated. If a UUID is provided, it must be
-  // valid.
+  // |last_modification_time|, and |uuid|. If no UUID is provided (i.e.
+  // nullopt), then a random one will be generated. If a UUID is provided, it
+  // must be valid.
   const NoteNode* AddNote(
       const NoteNode* parent,
       size_t index,
@@ -160,12 +161,12 @@ class NotesModel : public KeyedService {
 
   // Removes the node at the given |index| from |parent|. Removing a folder node
   // recursively removes all nodes.
-  void Remove(const NoteNode* node);
+  void Remove(const NoteNode* node, const base::Location& location);
 
   // Removes all the non-permanent notes nodes that are editable by the user.
   // Observers are only notified when all nodes have been removed. There is no
   // notification for individual node removals.
-  void RemoveAllUserNotes();
+  void RemoveAllUserNotes(const base::Location& location);
 
   // Moves |node| to |new_parent| and inserts it at the given |index|.
   void Move(const NoteNode* node, const NoteNode* new_parent, size_t index);

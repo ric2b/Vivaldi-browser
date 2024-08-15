@@ -1088,6 +1088,10 @@ TEST_F(TargetTest, PullRecursiveBundleData) {
       SourceFile("//foo/Foo.xcassets/foo.imageset/FooEmpty-29@2x.png"));
   f.sources().push_back(
       SourceFile("//foo/Foo.xcassets/foo.imageset/FooEmpty-29@3x.png"));
+  f.sources().push_back(
+      SourceFile("//foo/Foo.xcassets/file/with/no/known/pattern"));
+  f.sources().push_back(
+      SourceFile("//foo/Foo.xcassets/nested/bar.xcassets/my/file"));
   f.action_values().outputs() = SubstitutionList::MakeForTest(
       "{{bundle_resources_dir}}/{{source_file_part}}");
   ASSERT_TRUE(f.OnResolved(&err));

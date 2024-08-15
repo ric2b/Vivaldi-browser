@@ -153,7 +153,7 @@ struct Decoder {
     // Functions
     ////////////////////////////////////////////////////////////////////////////
     ir::Function* CreateFunction(const pb::Function&) {
-        return mod_out_.values.Create<ir::Function>();
+        return mod_out_.allocators.values.Create<ir::Function>();
     }
 
     void PopulateFunction(ir::Function* fn_out, const pb::Function& fn_in) {
@@ -196,10 +196,12 @@ struct Decoder {
                 return Function::PipelineStage::kFragment;
             case pb::PipelineStage::Vertex:
                 return Function::PipelineStage::kVertex;
-            default:
-                TINT_ICE() << "unhandled PipelineStage: " << stage;
-                return Function::PipelineStage::kCompute;
+
+            case pb::PipelineStage::PipelineStage_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case pb::PipelineStage::PipelineStage_INT_MAX_SENTINEL_DO_NOT_USE_:
+                break;
         }
+        TINT_ICE() << "unhandled PipelineStage: " << stage;
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -322,11 +324,10 @@ struct Decoder {
             case pb::Instruction::KindCase::kUnreachable:
                 inst_out = CreateInstructionUnreachable(inst_in.unreachable());
                 break;
-            default:
-                TINT_UNIMPLEMENTED() << inst_in.kind_case();
+            case pb::Instruction::KindCase::KIND_NOT_SET:
                 break;
         }
-        TINT_ASSERT_OR_RETURN_VALUE(inst_out, nullptr);
+        TINT_ASSERT(inst_out);
 
         Vector<ir::Value*, 4> operands;
         for (auto id : inst_in.operands()) {
@@ -344,69 +345,69 @@ struct Decoder {
     }
 
     ir::Access* CreateInstructionAccess(const pb::InstructionAccess&) {
-        return mod_out_.instructions.Create<ir::Access>();
+        return mod_out_.allocators.instructions.Create<ir::Access>();
     }
 
     ir::CoreBinary* CreateInstructionBinary(const pb::InstructionBinary& binary_in) {
-        auto* binary_out = mod_out_.instructions.Create<ir::CoreBinary>();
+        auto* binary_out = mod_out_.allocators.instructions.Create<ir::CoreBinary>();
         binary_out->SetOp(BinaryOp(binary_in.op()));
         return binary_out;
     }
 
     ir::Bitcast* CreateInstructionBitcast(const pb::InstructionBitcast&) {
-        return mod_out_.instructions.Create<ir::Bitcast>();
+        return mod_out_.allocators.instructions.Create<ir::Bitcast>();
     }
 
     ir::BreakIf* CreateInstructionBreakIf(const pb::InstructionBreakIf&) {
-        auto* break_if_out = mod_out_.instructions.Create<ir::BreakIf>();
+        auto* break_if_out = mod_out_.allocators.instructions.Create<ir::BreakIf>();
         break_ifs_.Push(break_if_out);
         return break_if_out;
     }
 
     ir::CoreBuiltinCall* CreateInstructionBuiltinCall(const pb::InstructionBuiltinCall& call_in) {
-        auto* call_out = mod_out_.instructions.Create<ir::CoreBuiltinCall>();
+        auto* call_out = mod_out_.allocators.instructions.Create<ir::CoreBuiltinCall>();
         call_out->SetFunc(BuiltinFn(call_in.builtin()));
         return call_out;
     }
 
     ir::Construct* CreateInstructionConstruct(const pb::InstructionConstruct&) {
-        return mod_out_.instructions.Create<ir::Construct>();
+        return mod_out_.allocators.instructions.Create<ir::Construct>();
     }
 
     ir::Continue* CreateInstructionContinue(const pb::InstructionContinue&) {
-        auto* continue_ = mod_out_.instructions.Create<ir::Continue>();
+        auto* continue_ = mod_out_.allocators.instructions.Create<ir::Continue>();
         continues_.Push(continue_);
         return continue_;
     }
 
     ir::Convert* CreateInstructionConvert(const pb::InstructionConvert&) {
-        return mod_out_.instructions.Create<ir::Convert>();
+        return mod_out_.allocators.instructions.Create<ir::Convert>();
     }
 
     ir::ExitIf* CreateInstructionExitIf(const pb::InstructionExitIf&) {
-        auto* exit_out = mod_out_.instructions.Create<ir::ExitIf>();
+        auto* exit_out = mod_out_.allocators.instructions.Create<ir::ExitIf>();
         exit_ifs_.Push(exit_out);
         return exit_out;
     }
 
     ir::ExitLoop* CreateInstructionExitLoop(const pb::InstructionExitLoop&) {
-        auto* exit_out = mod_out_.instructions.Create<ir::ExitLoop>();
+        auto* exit_out = mod_out_.allocators.instructions.Create<ir::ExitLoop>();
         exit_loops_.Push(exit_out);
         return exit_out;
     }
 
     ir::ExitSwitch* CreateInstructionExitSwitch(const pb::InstructionExitSwitch&) {
-        auto* exit_out = mod_out_.instructions.Create<ir::ExitSwitch>();
+        auto* exit_out = mod_out_.allocators.instructions.Create<ir::ExitSwitch>();
         exit_switches_.Push(exit_out);
         return exit_out;
     }
 
     ir::Discard* CreateInstructionDiscard(const pb::InstructionDiscard&) {
-        return mod_out_.instructions.Create<ir::Discard>();
+        return mod_out_.allocators.instructions.Create<ir::Discard>();
     }
 
     ir::If* CreateInstructionIf(const pb::InstructionIf& if_in) {
-        auto* if_out = mod_out_.instructions.Create<ir::If>();
+        auto* if_out = mod_out_.allocators.instructions.Create<ir::If>();
         if (if_in.has_true_()) {
             if_out->SetTrue(Block(if_in.true_()));
         }
@@ -417,20 +418,20 @@ struct Decoder {
     }
 
     ir::Let* CreateInstructionLet(const pb::InstructionLet&) {
-        return mod_out_.instructions.Create<ir::Let>();
+        return mod_out_.allocators.instructions.Create<ir::Let>();
     }
 
     ir::Load* CreateInstructionLoad(const pb::InstructionLoad&) {
-        return mod_out_.instructions.Create<ir::Load>();
+        return mod_out_.allocators.instructions.Create<ir::Load>();
     }
 
     ir::LoadVectorElement* CreateInstructionLoadVectorElement(
         const pb::InstructionLoadVectorElement&) {
-        return mod_out_.instructions.Create<ir::LoadVectorElement>();
+        return mod_out_.allocators.instructions.Create<ir::LoadVectorElement>();
     }
 
     ir::Loop* CreateInstructionLoop(const pb::InstructionLoop& loop_in) {
-        auto* loop_out = mod_out_.instructions.Create<ir::Loop>();
+        auto* loop_out = mod_out_.allocators.instructions.Create<ir::Loop>();
         if (loop_in.has_initalizer()) {
             loop_out->SetInitializer(Block(loop_in.initalizer()));
         } else {
@@ -446,26 +447,26 @@ struct Decoder {
     }
 
     ir::NextIteration* CreateInstructionNextIteration(const pb::InstructionNextIteration&) {
-        auto* next_it_out = mod_out_.instructions.Create<ir::NextIteration>();
+        auto* next_it_out = mod_out_.allocators.instructions.Create<ir::NextIteration>();
         next_iterations_.Push(next_it_out);
         return next_it_out;
     }
 
     ir::Return* CreateInstructionReturn(const pb::InstructionReturn&) {
-        return mod_out_.instructions.Create<ir::Return>();
+        return mod_out_.allocators.instructions.Create<ir::Return>();
     }
 
     ir::Store* CreateInstructionStore(const pb::InstructionStore&) {
-        return mod_out_.instructions.Create<ir::Store>();
+        return mod_out_.allocators.instructions.Create<ir::Store>();
     }
 
     ir::StoreVectorElement* CreateInstructionStoreVectorElement(
         const pb::InstructionStoreVectorElement&) {
-        return mod_out_.instructions.Create<ir::StoreVectorElement>();
+        return mod_out_.allocators.instructions.Create<ir::StoreVectorElement>();
     }
 
     ir::Swizzle* CreateInstructionSwizzle(const pb::InstructionSwizzle& swizzle_in) {
-        auto* swizzle_out = mod_out_.instructions.Create<ir::Swizzle>();
+        auto* swizzle_out = mod_out_.allocators.instructions.Create<ir::Swizzle>();
         Vector<uint32_t, 4> indices;
         for (auto idx : swizzle_in.indices()) {
             indices.Push(idx);
@@ -475,7 +476,7 @@ struct Decoder {
     }
 
     ir::Switch* CreateInstructionSwitch(const pb::InstructionSwitch& switch_in) {
-        auto* switch_out = mod_out_.instructions.Create<ir::Switch>();
+        auto* switch_out = mod_out_.allocators.instructions.Create<ir::Switch>();
         for (auto& case_in : switch_in.cases()) {
             ir::Switch::Case case_out{};
             case_out.block = Block(case_in.block());
@@ -495,17 +496,17 @@ struct Decoder {
     }
 
     ir::CoreUnary* CreateInstructionUnary(const pb::InstructionUnary& unary_in) {
-        auto* unary_out = mod_out_.instructions.Create<ir::CoreUnary>();
+        auto* unary_out = mod_out_.allocators.instructions.Create<ir::CoreUnary>();
         unary_out->SetOp(UnaryOp(unary_in.op()));
         return unary_out;
     }
 
     ir::UserCall* CreateInstructionUserCall(const pb::InstructionUserCall&) {
-        return mod_out_.instructions.Create<ir::UserCall>();
+        return mod_out_.allocators.instructions.Create<ir::UserCall>();
     }
 
     ir::Var* CreateInstructionVar(const pb::InstructionVar& var_in) {
-        auto* var_out = mod_out_.instructions.Create<ir::Var>();
+        auto* var_out = mod_out_.allocators.instructions.Create<ir::Var>();
         if (var_in.has_binding_point()) {
             auto& bp_in = var_in.binding_point();
             var_out->SetBindingPoint(bp_in.group(), bp_in.binding());
@@ -550,11 +551,10 @@ struct Decoder {
                 return CreateTypeExternalTexture(type_in.external_texture());
             case pb::Type::KindCase::kSampler:
                 return CreateTypeSampler(type_in.sampler());
-            default:
+            case pb::Type::KindCase::KIND_NOT_SET:
                 break;
         }
         TINT_ICE() << type_in.kind_case();
-        return nullptr;
     }
 
     const type::Type* CreateTypeBasic(pb::TypeBasic basic_in) {
@@ -571,10 +571,12 @@ struct Decoder {
                 return mod_out_.Types().Get<f32>();
             case pb::TypeBasic::f16:
                 return mod_out_.Types().Get<f16>();
-            default:
-                TINT_ICE() << "invalid TypeBasic: " << basic_in;
-                return nullptr;
+
+            case pb::TypeBasic::TypeBasic_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case pb::TypeBasic::TypeBasic_INT_MAX_SENTINEL_DO_NOT_USE_:
+                break;
         }
+        TINT_ICE() << "invalid TypeBasic: " << basic_in;
     }
 
     const type::Vector* CreateTypeVector(const pb::TypeVector& vector_in) {
@@ -712,10 +714,14 @@ struct Decoder {
             case pb::Value::KindCase::kConstant:
                 value_out = b.Constant(ConstantValue(value_in.constant()));
                 break;
-            default:
-                TINT_ICE() << "invalid TypeDecl.kind: " << value_in.kind_case();
-                return nullptr;
+            case pb::Value::KindCase::KIND_NOT_SET:
+                break;
         }
+
+        if (!value_out) {
+            TINT_ICE() << "invalid TypeDecl.kind: " << value_in.kind_case();
+        }
+
         return value_out;
     }
 
@@ -788,10 +794,10 @@ struct Decoder {
                 return CreateConstantComposite(value_in.composite());
             case pb::ConstantValue::KindCase::kSplat:
                 return CreateConstantSplat(value_in.splat());
-            default:
-                TINT_ICE() << "invalid ConstantValue.kind: " << value_in.kind_case();
-                return nullptr;
+            case pb::ConstantValue::KindCase::KIND_NOT_SET:
+                break;
         }
+        TINT_ICE() << "invalid ConstantValue.kind: " << value_in.kind_case();
     }
 
     const core::constant::Value* CreateConstantScalar(const pb::ConstantValueScalar& value_in) {
@@ -806,10 +812,10 @@ struct Decoder {
                 return b.ConstantValue(f32(value_in.f32()));
             case pb::ConstantValueScalar::KindCase::kF16:
                 return b.ConstantValue(f16(value_in.f16()));
-            default:
-                TINT_ICE() << "invalid ConstantValueScalar.kind: " << value_in.kind_case();
-                return nullptr;
+            case pb::ConstantValueScalar::KindCase::KIND_NOT_SET:
+                break;
         }
+        TINT_ICE() << "invalid ConstantValueScalar.kind: " << value_in.kind_case();
     }
 
     const core::constant::Value* CreateConstantComposite(
@@ -874,10 +880,12 @@ struct Decoder {
                 return core::AddressSpace::kUniform;
             case pb::AddressSpace::workgroup:
                 return core::AddressSpace::kWorkgroup;
-            default:
-                TINT_ICE() << "invalid AddressSpace: " << in;
-                return core::AddressSpace::kUndefined;
+
+            case pb::AddressSpace::AddressSpace_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case pb::AddressSpace::AddressSpace_INT_MAX_SENTINEL_DO_NOT_USE_:
+                break;
         }
+        TINT_ICE() << "invalid AddressSpace: " << in;
     }
 
     core::Access AccessControl(pb::AccessControl in) {
@@ -888,10 +896,12 @@ struct Decoder {
                 return core::Access::kWrite;
             case pb::AccessControl::read_write:
                 return core::Access::kReadWrite;
-            default:
-                TINT_ICE() << "invalid Access: " << in;
-                return core::Access::kUndefined;
+
+            case pb::AccessControl::AccessControl_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case pb::AccessControl::AccessControl_INT_MAX_SENTINEL_DO_NOT_USE_:
+                break;
         }
+        TINT_ICE() << "invalid Access: " << in;
     }
 
     core::UnaryOp UnaryOp(pb::UnaryOp in) {
@@ -907,10 +917,11 @@ struct Decoder {
             case pb::UnaryOp::not_:
                 return core::UnaryOp::kNot;
 
-            default:
-                TINT_ICE() << "invalid UnaryOp: " << in;
-                return core::UnaryOp::kComplement;
+            case pb::UnaryOp::UnaryOp_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case pb::UnaryOp::UnaryOp_INT_MAX_SENTINEL_DO_NOT_USE_:
+                break;
         }
+        TINT_ICE() << "invalid UnaryOp: " << in;
     }
 
     core::BinaryOp BinaryOp(pb::BinaryOp in) {
@@ -947,11 +958,16 @@ struct Decoder {
                 return core::BinaryOp::kShiftLeft;
             case pb::BinaryOp::shift_right:
                 return core::BinaryOp::kShiftRight;
+            case pb::BinaryOp::logical_and:
+                return core::BinaryOp::kLogicalAnd;
+            case pb::BinaryOp::logical_or:
+                return core::BinaryOp::kLogicalOr;
 
-            default:
-                TINT_ICE() << "invalid BinaryOp: " << in;
-                return core::BinaryOp::kAdd;
+            case pb::BinaryOp::BinaryOp_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case pb::BinaryOp::BinaryOp_INT_MAX_SENTINEL_DO_NOT_USE_:
+                break;
         }
+        TINT_ICE() << "invalid BinaryOp: " << in;
     }
 
     core::type::TextureDimension TextureDimension(pb::TextureDimension in) {
@@ -968,18 +984,21 @@ struct Decoder {
                 return core::type::TextureDimension::kCube;
             case pb::TextureDimension::cube_array:
                 return core::type::TextureDimension::kCubeArray;
-            default:
+
+            case pb::TextureDimension::TextureDimension_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case pb::TextureDimension::TextureDimension_INT_MAX_SENTINEL_DO_NOT_USE_:
                 break;
         }
 
         TINT_ICE() << "invalid TextureDimension: " << in;
-        return core::type::TextureDimension::k1d;
     }
 
     core::TexelFormat TexelFormat(pb::TexelFormat in) {
         switch (in) {
             case pb::TexelFormat::bgra8_unorm:
                 return core::TexelFormat::kBgra8Unorm;
+            case pb::TexelFormat::r8_unorm:
+                return core::TexelFormat::kR8Unorm;
             case pb::TexelFormat::r32_float:
                 return core::TexelFormat::kR32Float;
             case pb::TexelFormat::r32_sint:
@@ -1012,12 +1031,13 @@ struct Decoder {
                 return core::TexelFormat::kRgba8Uint;
             case pb::TexelFormat::rgba8_unorm:
                 return core::TexelFormat::kRgba8Unorm;
-            default:
+
+            case pb::TexelFormat::TexelFormat_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case pb::TexelFormat::TexelFormat_INT_MAX_SENTINEL_DO_NOT_USE_:
                 break;
         }
 
         TINT_ICE() << "invalid TexelFormat: " << in;
-        return core::TexelFormat::kBgra8Unorm;
     }
 
     core::type::SamplerKind SamplerKind(pb::SamplerKind in) {
@@ -1026,12 +1046,13 @@ struct Decoder {
                 return core::type::SamplerKind::kSampler;
             case pb::SamplerKind::comparison:
                 return core::type::SamplerKind::kComparisonSampler;
-            default:
+
+            case pb::SamplerKind::SamplerKind_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case pb::SamplerKind::SamplerKind_INT_MAX_SENTINEL_DO_NOT_USE_:
                 break;
         }
 
         TINT_ICE() << "invalid SamplerKind: " << in;
-        return core::type::SamplerKind::kSampler;
     }
 
     core::InterpolationType InterpolationType(pb::InterpolationType in) {
@@ -1042,11 +1063,12 @@ struct Decoder {
                 return core::InterpolationType::kLinear;
             case pb::InterpolationType::perspective:
                 return core::InterpolationType::kPerspective;
-            default:
+
+            case pb::InterpolationType::InterpolationType_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case pb::InterpolationType::InterpolationType_INT_MAX_SENTINEL_DO_NOT_USE_:
                 break;
         }
         TINT_ICE() << "invalid InterpolationType: " << in;
-        return core::InterpolationType::kFlat;
     }
 
     core::InterpolationSampling InterpolationSampling(pb::InterpolationSampling in) {
@@ -1057,11 +1079,12 @@ struct Decoder {
                 return core::InterpolationSampling::kCentroid;
             case pb::InterpolationSampling::sample:
                 return core::InterpolationSampling::kSample;
-            default:
+
+            case pb::InterpolationSampling::InterpolationSampling_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case pb::InterpolationSampling::InterpolationSampling_INT_MAX_SENTINEL_DO_NOT_USE_:
                 break;
         }
         TINT_ICE() << "invalid InterpolationSampling: " << in;
-        return core::InterpolationSampling::kCenter;
     }
 
     core::BuiltinValue BuiltinValue(pb::BuiltinValue in) {
@@ -1096,11 +1119,12 @@ struct Decoder {
                 return core::BuiltinValue::kVertexIndex;
             case pb::BuiltinValue::workgroup_id:
                 return core::BuiltinValue::kWorkgroupId;
-            default:
+
+            case pb::BuiltinValue::BuiltinValue_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case pb::BuiltinValue::BuiltinValue_INT_MAX_SENTINEL_DO_NOT_USE_:
                 break;
         }
         TINT_ICE() << "invalid BuiltinValue: " << in;
-        return core::BuiltinValue::kPointSize;
     }
 
     core::BuiltinFn BuiltinFn(pb::BuiltinFn in) {
@@ -1225,6 +1249,14 @@ struct Decoder {
                 return core::BuiltinFn::kPack4X8Snorm;
             case pb::BuiltinFn::pack4x8_unorm:
                 return core::BuiltinFn::kPack4X8Unorm;
+            case pb::BuiltinFn::pack4xi8:
+                return core::BuiltinFn::kPack4XI8;
+            case pb::BuiltinFn::pack4xu8:
+                return core::BuiltinFn::kPack4XU8;
+            case pb::BuiltinFn::pack4xi8_clamp:
+                return core::BuiltinFn::kPack4XI8Clamp;
+            case pb::BuiltinFn::pack4xu8_clamp:
+                return core::BuiltinFn::kPack4XU8Clamp;
             case pb::BuiltinFn::pow:
                 return core::BuiltinFn::kPow;
             case pb::BuiltinFn::quantize_to_f16:
@@ -1275,6 +1307,10 @@ struct Decoder {
                 return core::BuiltinFn::kUnpack4X8Snorm;
             case pb::BuiltinFn::unpack4x8_unorm:
                 return core::BuiltinFn::kUnpack4X8Unorm;
+            case pb::BuiltinFn::unpack4xi8:
+                return core::BuiltinFn::kUnpack4XI8;
+            case pb::BuiltinFn::unpack4xu8:
+                return core::BuiltinFn::kUnpack4XU8;
             case pb::BuiltinFn::workgroup_barrier:
                 return core::BuiltinFn::kWorkgroupBarrier;
             case pb::BuiltinFn::texture_barrier:
@@ -1335,11 +1371,12 @@ struct Decoder {
                 return core::BuiltinFn::kSubgroupBallot;
             case pb::BuiltinFn::subgroup_broadcast:
                 return core::BuiltinFn::kSubgroupBroadcast;
-            default:
+
+            case pb::BuiltinFn::BuiltinFn_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case pb::BuiltinFn::BuiltinFn_INT_MAX_SENTINEL_DO_NOT_USE_:
                 break;
         }
         TINT_ICE() << "invalid BuiltinFn: " << in;
-        return core::BuiltinFn::kAbs;
     }
 };
 

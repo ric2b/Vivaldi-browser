@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Android arm64 Builder (dbg)",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -40,7 +40,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-pie-arm64-dbg",
-              "project": "chromium-m124"
+              "project": "chromium-m126"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -67,7 +67,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Android arm64 Builder (dbg)",
-                "project": "chromium-m124"
+                "project": "chromium-m126"
               }
             }
           }
@@ -77,16 +77,17 @@
         {
           "bucket": "ci",
           "builder": "Android arm64 Builder (dbg)",
-          "project": "chromium-m124"
+          "project": "chromium-m126"
         }
       ],
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
           "builder": "android-pie-arm64-dbg",
-          "project": "chromium-m124"
+          "project": "chromium-m126"
         }
-      ]
+      ],
+      "targets_spec_directory": "src/infra/config/generated/builders/try/android-pie-arm64-dbg/targets"
     }
   },
   "$build/flakiness": {
@@ -95,7 +96,6 @@
   },
   "$build/reclient": {
     "instance": "rbe-chromium-untrusted",
-    "jobs": 500,
     "metrics_project": "chromium-reclient-metrics",
     "scandeps_server": true
   },
@@ -106,7 +106,8 @@
     "enable_cloud_profiler": true,
     "enable_cloud_trace": true,
     "experiments": [],
-    "project": "rbe-chromium-untrusted"
+    "project": "rbe-chromium-untrusted",
+    "remote_jobs": -1
   },
   "$recipe_engine/resultdb/test_presentation": {
     "column_keys": [],

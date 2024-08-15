@@ -53,6 +53,9 @@ extern const char kVivaldiNotesSortingOrder[];
 // Setting for folder visiblity on bookmark folder page
 extern const char kVivaldiBookmarkFoldersViewMode[];
 
+extern const char kVivaldiBookmarksSortingMode[];
+extern const char kVivaldiBookmarksSortingOrder[];
+
 // Tabs
 // Desktop style tabs enabled status
 extern const char kVivaldiDesktopTabsEnabled[];
@@ -85,6 +88,8 @@ extern const char kVivaldiSpeedDialSortingOrder[];
 extern const char kVivaldiStartPageLayoutStyle[];
 // Start page speed dial maximum column
 extern const char kVivaldiStartPageSDMaximumColumns[];
+// Start page show/hide frequently visited
+extern const char kVivaldiStartPageShowFrequentlyVisited[];
 // Start page show/hide speed dials
 extern const char kVivaldiStartPageShowSpeedDials[];
 // Start page show/hide customize button

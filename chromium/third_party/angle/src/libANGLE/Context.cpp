@@ -65,10 +65,13 @@ namespace gl
 namespace
 {
 constexpr state::DirtyObjects kDrawDirtyObjectsBase{
-    state::DIRTY_OBJECT_ACTIVE_TEXTURES, state::DIRTY_OBJECT_DRAW_FRAMEBUFFER,
-    state::DIRTY_OBJECT_VERTEX_ARRAY,    state::DIRTY_OBJECT_TEXTURES,
-    state::DIRTY_OBJECT_PROGRAM,         state::DIRTY_OBJECT_PROGRAM_PIPELINE_OBJECT,
-    state::DIRTY_OBJECT_SAMPLERS,        state::DIRTY_OBJECT_IMAGES,
+    state::DIRTY_OBJECT_ACTIVE_TEXTURES,
+    state::DIRTY_OBJECT_DRAW_FRAMEBUFFER,
+    state::DIRTY_OBJECT_VERTEX_ARRAY,
+    state::DIRTY_OBJECT_TEXTURES,
+    state::DIRTY_OBJECT_PROGRAM_PIPELINE_OBJECT,
+    state::DIRTY_OBJECT_SAMPLERS,
+    state::DIRTY_OBJECT_IMAGES,
 };
 
 // TexImage uses the unpack state
@@ -133,9 +136,11 @@ constexpr state::DirtyBits kComputeDirtyBits{
 };
 constexpr state::ExtendedDirtyBits kComputeExtendedDirtyBits{};
 constexpr state::DirtyObjects kComputeDirtyObjectsBase{
-    state::DIRTY_OBJECT_ACTIVE_TEXTURES, state::DIRTY_OBJECT_TEXTURES,
-    state::DIRTY_OBJECT_PROGRAM,         state::DIRTY_OBJECT_PROGRAM_PIPELINE_OBJECT,
-    state::DIRTY_OBJECT_IMAGES,          state::DIRTY_OBJECT_SAMPLERS,
+    state::DIRTY_OBJECT_ACTIVE_TEXTURES,
+    state::DIRTY_OBJECT_TEXTURES,
+    state::DIRTY_OBJECT_PROGRAM_PIPELINE_OBJECT,
+    state::DIRTY_OBJECT_IMAGES,
+    state::DIRTY_OBJECT_SAMPLERS,
 };
 
 constexpr state::DirtyBits kCopyImageDirtyBitsBase{state::DIRTY_BIT_READ_FRAMEBUFFER_BINDING};
@@ -659,7 +664,21 @@ Context::Context(egl::Display *display,
 egl::Error Context::initialize()
 {
     if (!mImplementation)
+    {
         return egl::Error(EGL_NOT_INITIALIZED, "native context creation failed");
+    }
+
+    // If the final context version created (with backwards compatibility possibly added in),
+    // generate an error if it's higher than the maximum supported version for the display. This
+    // validation is always done even with EGL validation disabled because it's not possible to
+    // detect ahead of time if an ES 3.1 context is supported (no ES_31_BIT) or if
+    // KHR_no_config_context is used.
+    if (getClientType() == EGL_OPENGL_ES_API &&
+        getClientVersion() > getDisplay()->getMaxSupportedESVersion())
+    {
+        return egl::Error(EGL_BAD_ATTRIBUTE, "Requested version is not supported");
+    }
+
     return egl::NoError();
 }
 
@@ -3791,12 +3810,13 @@ Extensions Context::generateSupportedExtensions() const
     }
 
     // Some extensions are always available because they are implemented in the GL layer.
-    supportedExtensions.bindUniformLocationCHROMIUM   = true;
-    supportedExtensions.vertexArrayObjectOES          = true;
-    supportedExtensions.bindGeneratesResourceCHROMIUM = true;
-    supportedExtensions.clientArraysANGLE             = true;
-    supportedExtensions.requestExtensionANGLE         = true;
-    supportedExtensions.multiDrawANGLE                = true;
+    supportedExtensions.bindUniformLocationCHROMIUM      = true;
+    supportedExtensions.vertexArrayObjectOES             = true;
+    supportedExtensions.bindGeneratesResourceCHROMIUM    = true;
+    supportedExtensions.clientArraysANGLE                = true;
+    supportedExtensions.requestExtensionANGLE            = true;
+    supportedExtensions.multiDrawANGLE                   = true;
+    supportedExtensions.programBinaryReadinessQueryANGLE = true;
 
     // Enable the no error extension if the context was created with the flag.
     supportedExtensions.noErrorKHR = skipValidation();
@@ -4241,6 +4261,11 @@ void Context::initCaps()
             ANGLE_LIMIT_CAP(caps->maxShaderStorageBlocks[shaderType],
                             maxShaderStorageBufferBindings);
         }
+
+        // Pixel 7 MAX_TEXTURE_SIZE is 16K
+        constexpr GLint max2DTextureSize = 16383;
+        INFO() << "Limiting GL_MAX_TEXTURE_SIZE to " << max2DTextureSize;
+        ANGLE_LIMIT_CAP(caps->max2DTextureSize, max2DTextureSize);
 
         // Pixel 4 only supports GL_MAX_SAMPLES of 4
         constexpr GLint maxSamples = 4;
@@ -6329,6 +6354,7 @@ void Context::framebufferTexture2DMultisample(GLenum target,
         ImageIndex index    = ImageIndex::MakeFromTarget(textarget, level, 1);
         framebuffer->setAttachmentMultisample(this, GL_TEXTURE, attachment, index, textureObj,
                                               samples);
+        textureObj->onBindToMSRTTFramebuffer();
     }
     else
     {
@@ -9614,7 +9640,7 @@ egl::Error Context::releaseExternalContext()
     return egl::NoError();
 }
 
-std::mutex &Context::getProgramCacheMutex() const
+angle::SimpleMutex &Context::getProgramCacheMutex() const
 {
     return mDisplay->getProgramCacheMutex();
 }

@@ -594,12 +594,9 @@ export class NetworkSummaryItemElement extends NetworkSummaryItemElementBase {
     return this.i18n('OncType' + OncMojo.getNetworkTypeString(type));
   }
 
-  /**
-   * Return true if portalState is either kPortal or kProxyAuthRequired.
-   */
   private isPortalState_(portalState: PortalState): boolean {
     return portalState === PortalState.kPortal ||
-        portalState === PortalState.kProxyAuthRequired;
+        portalState === PortalState.kPortalSuspected;
   }
 }
 

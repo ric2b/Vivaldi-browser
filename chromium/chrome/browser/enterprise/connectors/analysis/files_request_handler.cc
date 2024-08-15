@@ -232,9 +232,15 @@ void FilesRequestHandler::OnGotFileInfo(
   file_info_[index].size = data.size;
   file_info_[index].mime_type = data.mime_type;
 
-  bool failed = analysis_settings_->cloud_or_local_settings.is_cloud_analysis()
-                    ? CloudResultIsFailure(result)
-                    : LocalResultIsFailure(result);
+  bool is_cloud =
+      analysis_settings_->cloud_or_local_settings.is_cloud_analysis();
+  bool is_resumable = IsResumableUpload(*request);
+  bool failed = is_resumable
+                    ? CloudResumableResultIsFailure(
+                          result, analysis_settings_->block_large_files,
+                          analysis_settings_->block_password_protected_files)
+                    : (is_cloud ? CloudMultipartResultIsFailure(result)
+                                : LocalResultIsFailure(result));
   if (failed) {
     FinishRequestEarly(std::move(request), result);
     return;
@@ -265,7 +271,7 @@ void FilesRequestHandler::FinishRequestEarly(
   // We add the request here in case we never actually uploaded anything, so it
   // wasn't added in OnGetRequestData
   safe_browsing::WebUIInfoSingleton::GetInstance()->AddToDeepScanRequests(
-      request->per_profile_request(), /*access_token*/ "",
+      request->per_profile_request(), /*access_token*/ "", /*upload_info*/ "",
       request->content_analysis_request());
   safe_browsing::WebUIInfoSingleton::GetInstance()->AddToDeepScanResponses(
       /*token=*/"", safe_browsing::BinaryUploadService::ResultToString(result),

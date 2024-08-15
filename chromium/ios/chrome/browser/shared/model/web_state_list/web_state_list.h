@@ -179,86 +179,6 @@ class WebStateList {
     raw_ptr<WebStateList> web_state_list_ = nullptr;
   };
 
-  // Represents a range in the WebStateList. Typically used for locating tab
-  // groups.
-  class Range {
-   public:
-    // Initializes the range with a start and count.
-    constexpr Range(int start, int count) : start_(start), count_(count) {
-      DCHECK_GE(count_, 0);
-    }
-
-    // Returns a range that is invalid, which is {kInvalidIndex, 0}.
-    static constexpr Range InvalidRange() { return Range(kInvalidIndex, 0); }
-
-    // Checks if the range is valid through comparison to InvalidRange(). If
-    // this is not valid, you must not call functions on this object.
-    constexpr bool IsValid() const { return *this != InvalidRange(); }
-
-    // Getters.
-    constexpr int range_begin() const { return start_; }
-    constexpr int count() const { return count_; }
-
-    // `range_end` is the first index not in the range.
-    constexpr int range_end() const { return start_ + count_; }
-    // Whether the index is inside the range.
-    constexpr bool contains(int index) const {
-      return start_ <= index && index < start_ + count_;
-    }
-
-    // Updates the range by moving it by one in a given direction.
-    constexpr void MoveLeft() {
-      CHECK_GT(start_, 0);
-      --start_;
-    }
-    constexpr void MoveRight() { ++start_; }
-
-    // Updates the range by expanding/contracting by one in a given direction.
-    constexpr void ExpandLeft() {
-      MoveLeft();
-      ExpandRight();
-    }
-    constexpr void ExpandRight() { ++count_; }
-    constexpr void ContractLeft() {
-      MoveRight();
-      ContractRight();
-    }
-    constexpr void ContractRight() {
-      CHECK_GT(count_, 0);
-      --count_;
-    }
-
-    constexpr bool operator==(const Range& other) const = default;
-    constexpr bool operator!=(const Range& other) const = default;
-
-    // Support for range-based for-loops. Ex:
-    //
-    //  Range range = ...;
-    //  for (int i : range) {
-    //    // ... do something with the index from the range.
-    //  }
-    //
-    class iterator {
-     public:
-      constexpr iterator(int current) : current_(current) {}
-
-      int operator*() const { return current_; }
-      void operator++() { ++current_; }
-      bool operator!=(const iterator& other) const {
-        return current_ != other.current_;
-      }
-
-     private:
-      int current_;
-    };
-    iterator begin() const { return iterator{start_}; }
-    iterator end() const { return iterator{range_end()}; }
-
-   private:
-    int start_;
-    int count_;
-  };
-
   explicit WebStateList(WebStateListDelegate* delegate);
 
   WebStateList(const WebStateList&) = delete;
@@ -374,11 +294,8 @@ class WebStateList {
   // after-which the pointer should not be used.
   const TabGroup* GetGroupOfWebStateAt(int index) const;
 
-  // Returns the range of WebStates belonging to the tab group. The group must
-  // be valid and belong to this WebStateList.
-  Range GetGroupRange(const TabGroup* group) const;
-
-  // Returns the list of all groups.
+  // Returns the list of all groups. The order is not particularly the order in
+  // which they appear in this WebStateList.
   std::set<const TabGroup*> GetGroups() const;
 
   // Creates a new tab group and moves the set of WebStates at `indices` to
@@ -396,6 +313,13 @@ class WebStateList {
       const std::set<int>& indices,
       const tab_groups::TabGroupVisualData& visual_data);
 
+  // Returns true if the specified group is contained by the model.
+  bool ContainsGroup(const TabGroup* group) const;
+
+  // Updates the visual data for the given group.
+  void UpdateGroupVisualData(const TabGroup* group,
+                             const tab_groups::TabGroupVisualData& visual_data);
+
   // Moves the set of WebStates at `indices` at the end of the given tab group.
   void MoveToGroup(const std::set<int>& indices, const TabGroup* group);
 
@@ -403,9 +327,13 @@ class WebStateList {
   // if any. The WebStates are reordered out of the groups if necessary.
   void RemoveFromGroups(const std::set<int>& indices);
 
+  // Moves the WebStates of `group` to be before the WebState at `before_index`.
+  // To move the group at the end, pass `before_index` greater or equal to
+  // `count`.
+  void MoveGroup(const TabGroup* group, int before_index);
+
   // Removes all WebStates from the group. The WebStates stay where they are.
   // The group is destroyed.
-  // TODO(crbug.com/325422747): Actually destroy the group.
   void DeleteGroup(const TabGroup* group);
 
   // Adds an observer to the model.
@@ -504,15 +432,27 @@ class WebStateList {
   // Assumes that the WebStateList is locked.
   void MoveToGroupImpl(const std::set<int>& indices, const TabGroup* group);
 
+  // Updates the visual data for the given group.
+  //
+  // Assumes that the WebStateList is locked.
+  void UpdateGroupVisualDataImpl(
+      const TabGroup* group,
+      const tab_groups::TabGroupVisualData& visual_data);
+
   // Removes the set of WebStates at `indices` from the groups they are in,
   // if any. The WebStates are reordered out of the groups if necessary.
   //
   // Assumes that the WebStateList is locked.
   void RemoveFromGroupsImpl(const std::set<int>& indices);
 
+  // Moves the WebStates of `group` to be before the WebState at `to_index`. To
+  // move the group at the end, pass `to_index` greater or equal to `count`.
+  //
+  // Assumes that the WebStateList is locked.
+  void MoveGroupImpl(const TabGroup* group, int to_index);
+
   // Removes all WebStates from the group. The WebStates stay where they are.
   // The group is destroyed.
-  // TODO(crbug.com/325422747): Actually destroy the group.
   //
   // Assumes that the WebStateList is locked.
   void DeleteGroupImpl(const TabGroup* group);
@@ -553,13 +493,15 @@ class WebStateList {
                              bool pinned,
                              const TabGroup* group);
 
+  // Removes `group` from `groups_` if `group` is empty.
+  //
+  // Assumes that the WebStateList is locked.
+  void DeleteGroupIfEmpty(const TabGroup* group);
+
   // Updates the active index, updates the WebState opener for the old active
   // WebState if exists and brings the new active WebState to the "realized"
   // state.
   void SetActiveIndex(int active_index);
-
-  // Returns true if the specified group is contained by the model.
-  bool ContainsGroup(const TabGroup* group) const;
 
   // Takes action when the active WebState changes. Does nothing it
   // there is no active WebState.
@@ -574,7 +516,7 @@ class WebStateList {
   std::vector<std::unique_ptr<WebStateWrapper>> web_state_wrappers_;
 
   // The current set of groups.
-  std::map<std::unique_ptr<TabGroup>, Range, base::UniquePtrComparator> groups_;
+  std::set<std::unique_ptr<TabGroup>, base::UniquePtrComparator> groups_;
 
   // List of observers notified of changes to the model.
   base::ObserverList<WebStateListObserver, true> observers_;
@@ -617,5 +559,21 @@ void CloseAllWebStates(WebStateList& web_state_list, int close_flags);
 // another batch operation. The `close_flags` is a bitwise combination of
 // ClosingFlags values.
 void CloseAllNonPinnedWebStates(WebStateList& web_state_list, int close_flags);
+
+// Helper function that closes all WebStates from `group` in `web_state_list`.
+// The operation is performed as a batch operation and thus cannot be called
+// from another batch operation. The `close_flags` is a bitwise combination of
+// ClosingFlags values.
+void CloseAllWebStatesInGroup(WebStateList& web_state_list,
+                              const TabGroup* group,
+                              int close_flags);
+
+// Helper function that closes all WebStates in `web_state_list` that are not at
+// `index_to_keep`. The operation is performed as a batch operation and thus
+// cannot be called from another batch operation. The `close_flags` is a bitwise
+// combination of ClosingFlags values.
+void CloseOtherWebStates(WebStateList& web_state_list,
+                         int index_to_keep,
+                         int close_flags);
 
 #endif  // IOS_CHROME_BROWSER_SHARED_MODEL_WEB_STATE_LIST_WEB_STATE_LIST_H_

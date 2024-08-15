@@ -3073,7 +3073,7 @@ static void rc_scene_detection_onepass_rt(AV1_COMP *cpi,
   }
   int num_zero_temp_sad = 0;
   uint32_t min_thresh = 10000;
-  if (cpi->oxcf.tune_cfg.content != AOM_CONTENT_SCREEN) {
+  if (cpi->sf.rt_sf.higher_thresh_scene_detection) {
     min_thresh = cm->width * cm->height <= 320 * 240 && cpi->framerate < 10.0
                      ? 50000
                      : 100000;

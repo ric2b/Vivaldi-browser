@@ -123,7 +123,6 @@ esac
 
 case "$UNAME" in
   Darwin) MD5SUM="md5 -r" ;;
-  FreeBSD) MD5SUM="gmd5sum" ;;
   NetBSD) MD5SUM="md5 -n" ;;
   OpenBSD) MD5SUM="md5" ;;
   *) MD5SUM="md5sum" ;;
@@ -234,12 +233,23 @@ unset ZSTD_CLEVEL
 println "test : compress to stdout"
 zstd tmp -c > tmpCompressed
 zstd tmp --stdout > tmpCompressed       # long command format
-println "test : compress to named file"
+
+println "test : compress to named file (-o)"
 rm -f tmpCompressed
 zstd tmp -o tmpCompressed
 test -f tmpCompressed   # file must be created
+
 println "test : force write, correct order"
 zstd tmp -fo tmpCompressed
+
+println "test : -c + -o : last one wins"
+rm -f tmpOut
+zstd tmp -c > tmpCompressed -o tmpOut
+test -f tmpOut   # file must be created
+rm -f tmpCompressed
+zstd tmp -o tmpOut -c > tmpCompressed
+test -f tmpCompressed   # file must be created
+
 println "test : forgotten argument"
 cp tmp tmp2
 zstd tmp2 -fo && die "-o must be followed by filename "
@@ -326,6 +336,51 @@ if [ "$isWindows" = false ] && [ "$UNAME" != "AIX" ]; then
   fi
 fi
 
+println "\n===>  multiple_thread test "
+
+datagen > tmp
+println "test : single-thread "
+zstd --fast --single-thread tmp -o tmpMT0
+println "test : one worker thread (default)"
+zstd --fast -T1 tmp -o tmpMT1
+println "test : two worker threads "
+zstd --fast -T2 tmp -o tmpMT2
+println "test : 16-thread "
+zstd --fast -T16 tmp -o tmpMT3
+println "test : 127-thread "
+zstd --fast -T127 tmp -o tmpMT4
+println "test : 128-thread "
+zstd --fast -T128 tmp -o tmpMT5
+println "test : max allowed numeric value is 4294967295 "
+zstd --fast -4294967295 tmp -o tmpMT6
+println "test : numeric value overflows 32-bit unsigned int "
+zstd --fast -4294967296 tmp -o tmptest9 && die "max allowed numeric value is 4294967295"
+
+datagen > tmp
+println "test : basic compression "
+zstd -f tmp  # trivial compression case, creates tmp.zst
+println "test : basic decompression"
+zstd -d -f -T1 tmp.zst
+println "note : decompression does not support -T mode, but execution support"
+rm -rf tmpMT*
+
+println "\n===>  --fast_argument test "
+datagen > tmp
+println "test : basic compression "
+zstd -f tmp  # trivial compression case, creates tmp.zst
+println "test: --fast=1"
+zstd --fast=1 -f tmp
+println "test: --fast=99"
+zstd --fast=99 -f tmp
+println "test: Invalid value -- negative number"
+zstd --fast=-1 -f tmp && die "error: Invalid value -- negative number"
+println "test: Invalid value -- zero"
+zstd --fast=0 -f tmp && die "error: Invalid value -- 0 number"
+println "test: max allowed numeric argument of --fast is 4294967295"
+zstd --fast=4294967295 -f tmp
+println "test: numeric value overflows 32-bit unsigned int "
+zstd --fast=4294967296 -f tmp && die "max allowed argument of --fast is 4294967295"
+
 println "\n===>  --exclude-compressed flag"
 rm -rf precompressedFilterTestDir
 mkdir -p precompressedFilterTestDir
@@ -354,6 +409,19 @@ zstd --long --rm -r precompressedFilterTestDir
 # Files should get compressed again without the --exclude-compressed flag.
 test -f precompressedFilterTestDir/input.5.zst.zst
 test -f precompressedFilterTestDir/input.6.zst.zst
+
+# Test some other compressed file extensions
+datagen $size > precompressedFilterTestDir/input.flac
+datagen $size > precompressedFilterTestDir/input.mov
+datagen $size > precompressedFilterTestDir/input.mp3
+zstd --exclude-compressed --long --rm -r precompressedFilterTestDir
+test ! -f precompressedFilterTestDir/input.flac.zst
+test ! -f precompressedFilterTestDir/input.mov.zst
+test ! -f precompressedFilterTestDir/input.mp3.zst
+zstd --long --rm -r precompressedFilterTestDir
+test -f precompressedFilterTestDir/input.flac.zst
+test -f precompressedFilterTestDir/input.mov.zst
+test -f precompressedFilterTestDir/input.mp3.zst
 rm -rf precompressedFilterTestDir
 println "Test completed"
 
@@ -394,6 +462,8 @@ println "test: --rm is disabled when output is stdout"
 test -f tmp
 zstd --rm tmp -c > $INTOVOID
 test -f tmp # tmp shall still be there
+zstd --rm tmp --stdout > $INTOVOID
+test -f tmp # tmp shall still be there
 zstd -f --rm tmp -c > $INTOVOID
 test -f tmp # tmp shall still be there
 zstd -f tmp -c > $INTOVOID --rm
@@ -411,7 +481,22 @@ zstd -f tmp tmp2 -o tmp3.zst --rm # just warns, no prompt
 test -f tmp
 test -f tmp2
 zstd -q tmp tmp2 -o tmp3.zst --rm && die "should refuse to concatenate"
-
+println "test: --rm is active with -o when single input"
+rm -f tmp2.zst
+zstd --rm tmp2 -o tmp2.zst
+test -f tmp2.zst
+test ! -f tmp2
+println "test: -c followed by -o => -o wins, so --rm remains active" # (#3719)
+rm tmp2.zst
+cp tmp tmp2
+zstd --rm tmp2 -c > $INTOVOID -o tmp2.zst
+test ! -f tmp2
+println "test: -o followed by -c => -c wins, so --rm is disabled" # (#3719)
+rm tmp3.zst
+cp tmp tmp2
+zstd -v --rm tmp2 -o tmp2.zst -c > tmp3.zst
+test -f tmp2
+test -f tmp3.zst
 println "test : should quietly not remove non-regular file"
 println hello > tmp
 zstd tmp -f -o "$DEVDEVICE" 2>tmplog > "$INTOVOID"

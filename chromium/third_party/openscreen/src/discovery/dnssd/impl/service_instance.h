@@ -24,7 +24,7 @@ class MdnsService;
 class ServiceInstance final : public DnsSdService {
  public:
   ServiceInstance(TaskRunner& task_runner,
-                  ReportingClient* reporting_client,
+                  ReportingClient& reporting_client,
                   const Config& config,
                   const InterfaceInfo& network_info);
   ServiceInstance(const ServiceInstance& other) = delete;

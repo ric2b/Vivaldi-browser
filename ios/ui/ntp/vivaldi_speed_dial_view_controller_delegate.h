@@ -22,6 +22,9 @@
 - (void)computeSortedItems:(NSMutableArray*)items
                     byMode:(SpeedDialSortingMode)mode;
 
+/// Remove most visited item from top site
+- (void)removeMostVisited:(VivaldiSpeedDialItem*)item;
+
 @end
 
 #endif  // IOS_UI_NTP_VIVALDI_SPEED_DIAL_VIEW_CONTROLLER_DELEGATE_H_

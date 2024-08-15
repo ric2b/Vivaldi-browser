@@ -16,10 +16,6 @@
 #include "components/prefs/pref_service.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
-#if BUILDFLAG(IS_IOS)
-#include "ios/chrome/browser/bookmarks/model/legacy_bookmark_model.h"
-#endif
-
 namespace vivaldi_partners {
 
 // To determine meta data changes for which we should clear the partner id
@@ -59,7 +55,7 @@ void RemovedPartnersTracker::Create(Profile* profile,
 #else
 /*static*/
 void RemovedPartnersTracker::Create(PrefService* prefs,
-                                    LegacyBookmarkModel* model) {
+                                    bookmarks::BookmarkModel* model) {
   new RemovedPartnersTracker(prefs, model);
 }
 #endif // !IS_IOS
@@ -96,7 +92,7 @@ RemovedPartnersTracker::RemovedPartnersTracker(Profile* profile,
 }
 #else
 RemovedPartnersTracker::RemovedPartnersTracker(PrefService* prefs,
-                                               LegacyBookmarkModel* model)
+                                               bookmarks::BookmarkModel* model)
     : model_(model), prefs_(prefs) {
   model_->AddObserver(this);
   if (model_->loaded())
@@ -116,7 +112,8 @@ void RemovedPartnersTracker::BookmarkNodeChanged(
 void RemovedPartnersTracker::OnWillRemoveBookmarks(
     const bookmarks::BookmarkNode* parent,
     size_t old_index,
-    const bookmarks::BookmarkNode* node) {
+    const bookmarks::BookmarkNode* node,
+    const base::Location& location) {
   TrackRemovals(node, true);
 }
 

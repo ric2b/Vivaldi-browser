@@ -2,13 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/message_loop/message_pump_glib.h"
 
 #include <glib.h>
 #include <math.h>
-#include "build/build_config.h"
 
 #include <algorithm>
+#include <string_view>
 #include <vector>
 
 #include "base/files/file_util.h"
@@ -30,6 +35,7 @@
 #include "base/test/task_environment.h"
 #include "base/test/trace_event_analyzer.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -670,8 +676,12 @@ class BaseWatcher : public MessagePumpGlib::FdWatcher {
   ~BaseWatcher() override = default;
 
   // base:MessagePumpGlib::FdWatcher interface
-  void OnFileCanReadWithoutBlocking(int /* fd */) override { NOTREACHED(); }
-  void OnFileCanWriteWithoutBlocking(int /* fd */) override { NOTREACHED(); }
+  void OnFileCanReadWithoutBlocking(int /* fd */) override {
+    NOTREACHED_IN_MIGRATION();
+  }
+  void OnFileCanWriteWithoutBlocking(int /* fd */) override {
+    NOTREACHED_IN_MIGRATION();
+  }
 
  protected:
   raw_ptr<MessagePumpGlib::FdWatchController> controller_;
@@ -760,7 +770,7 @@ void WriteFDWrapper(const int fd,
                     const char* buf,
                     int size,
                     WaitableEvent* event) {
-  ASSERT_TRUE(WriteFileDescriptor(fd, StringPiece(buf, size)));
+  ASSERT_TRUE(WriteFileDescriptor(fd, std::string_view(buf, size)));
 }
 
 }  // namespace

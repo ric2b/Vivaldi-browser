@@ -22,6 +22,7 @@
 #include "libavutil/avassert.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/log.h"
+#include "libavutil/mem.h"
 #include "libavcodec/mathops.h"
 #include "libavcodec/packet.h"
 #include "avformat.h"
@@ -98,22 +99,6 @@ static int audio_frame_obu(AVFormatContext *s, const IAMFDemuxContext *c,
     return 0;
 }
 
-static const IAMFParamDefinition *get_param_definition(AVFormatContext *s,
-                                                       const IAMFDemuxContext *c,
-                                                       unsigned int parameter_id)
-{
-    const IAMFContext *const iamf = &c->iamf;
-    const IAMFParamDefinition *param_definition = NULL;
-
-    for (int i = 0; i < iamf->nb_param_definitions; i++)
-        if (iamf->param_definitions[i]->param->parameter_id == parameter_id) {
-            param_definition = iamf->param_definitions[i];
-            break;
-        }
-
-    return param_definition;
-}
-
 static int parameter_block_obu(AVFormatContext *s, IAMFDemuxContext *c,
                                AVIOContext *pbc, int len)
 {
@@ -144,7 +129,7 @@ static int parameter_block_obu(AVFormatContext *s, IAMFDemuxContext *c,
     pb = &b.pub;
 
     parameter_id = ffio_read_leb(pb);
-    param_definition = get_param_definition(s, c, parameter_id);
+    param_definition = ff_iamf_get_param_definition(&c->iamf, parameter_id);
     if (!param_definition) {
         av_log(s, AV_LOG_VERBOSE, "Non existant parameter_id %d referenced in a parameter block. Ignoring\n",
                parameter_id);
@@ -299,9 +284,9 @@ int ff_iamf_read_packet(AVFormatContext *s, IAMFDemuxContext *c,
 
         len = ff_iamf_parse_obu_header(header, size, &obu_size, &start_pos, &type,
                                        &skip_samples, &discard_padding);
-        if (len < 0 || obu_size > max_size) {
+        if (len < 0 || obu_size > max_size || len > INT_MAX - read) {
             av_log(s, AV_LOG_ERROR, "Failed to read obu\n");
-            return len;
+            return len < 0 ? len : AVERROR_INVALIDDATA;
         }
         avio_seek(pb, -(size - start_pos), SEEK_CUR);
 
@@ -326,10 +311,8 @@ int ff_iamf_read_packet(AVFormatContext *s, IAMFDemuxContext *c,
             c->recon_size = 0;
         } else {
             int64_t offset = avio_skip(pb, obu_size);
-            if (offset < 0) {
-                ret = offset;
-                break;
-            }
+            if (offset < 0)
+                return offset;
         }
         max_size -= len;
         if (max_size < 0)

@@ -54,6 +54,10 @@ void JavaScriptDialogHelper::RunJavaScriptDialog(
     const std::u16string& default_prompt_text,
     DialogClosedCallback callback,
     bool* did_suppress_message) {
+  // Keep a local copy here. This is safe as the renderer is blocked until it is
+  // called.
+  dialog_callback_ = std::move(callback);
+
   base::Value::Dict request_info;
   request_info.Set(webview::kDefaultPromptText, default_prompt_text);
   request_info.Set(webview::kMessageText, message_text);
@@ -67,7 +71,7 @@ void JavaScriptDialogHelper::RunJavaScriptDialog(
   web_view_permission_helper->RequestPermission(
       WEB_VIEW_PERMISSION_TYPE_JAVASCRIPT_DIALOG, std::move(request_info),
       base::BindOnce(&JavaScriptDialogHelper::OnPermissionResponse,
-                     weak_factory_.GetWeakPtr(), std::move(callback)),
+                     weak_factory_.GetWeakPtr()),
       false /* allowed_by_default */);
 }
 
@@ -79,11 +83,12 @@ void JavaScriptDialogHelper::RunBeforeUnloadDialog(
   if (vivaldi::IsVivaldiRunning()) {
     // NOTE(pettern@vivaldi.com): We want beforeunload dialogs in Vivaldi,
     // so call the full implementation here.
-    content::JavaScriptDialogManager* helper =
-        javascript_dialogs::TabModalDialogManager::FromWebContents(web_contents);
-    if (helper) {
-      helper->RunBeforeUnloadDialog(web_contents, render_frame_host, is_reload,
-                                    std::move(callback));
+    content::JavaScriptDialogManager* tab_dialog_manager =
+        javascript_dialogs::TabModalDialogManager::FromWebContents(
+            web_contents);
+    if (tab_dialog_manager) {
+      tab_dialog_manager->RunBeforeUnloadDialog(web_contents, render_frame_host,
+                                                is_reload, std::move(callback));
       return;
     }
   }
@@ -100,13 +105,18 @@ bool JavaScriptDialogHelper::HandleJavaScriptDialog(
 }
 
 void JavaScriptDialogHelper::CancelDialogs(content::WebContents* web_contents,
-                                           bool reset_state) {}
+                                           bool reset_state) {
+// Calling the callback will resume the renderer.
+  if (dialog_callback_) {
+    std::move(dialog_callback_).Run(false, std::u16string());
+    dialog_callback_.Reset();
+  }
+}
 
-void JavaScriptDialogHelper::OnPermissionResponse(
-    DialogClosedCallback callback,
-    bool allow,
+void JavaScriptDialogHelper::OnPermissionResponse(bool allow,
     const std::string& user_input) {
-  std::move(callback).Run(allow && web_view_guest_->attached(),
+  bool allowed_and_attached = allow && web_view_guest_->attached();
+  std::move(dialog_callback_).Run(allowed_and_attached,
                           base::UTF8ToUTF16(user_input));
 }
 

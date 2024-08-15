@@ -4,9 +4,7 @@
 
 import {type Chrome} from '../../../extension-api/ExtensionAPI.js';
 import * as Common from '../../core/common/common.js';
-import * as Host from '../../core/host/host.js';
 import type * as Platform from '../../core/platform/platform.js';
-import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
@@ -21,23 +19,18 @@ import {
 } from '../../testing/MockConnection.js';
 import {MockProtocolBackend} from '../../testing/MockScopeChain.js';
 import {createFileSystemFileForPersistenceTests} from '../../testing/PersistenceHelpers.js';
+import {getInitializedResourceTreeModel} from '../../testing/ResourceTreeHelpers.js';
 import {encodeSourceMap} from '../../testing/SourceMapEncoder.js';
 import {setupPageResourceLoaderForSourceMap} from '../../testing/SourceMapHelpers.js';
 import {
   createContentProviderUISourceCode,
   createFakeScriptMapping,
 } from '../../testing/UISourceCodeHelpers.js';
-import {
-  recordedMetricsContain,
-  resetRecordedMetrics,
-} from '../../testing/UserMetricsHelpers.js';
 import * as Bindings from '../bindings/bindings.js';
 import * as Breakpoints from '../breakpoints/breakpoints.js';
 import * as Persistence from '../persistence/persistence.js';
 import * as TextUtils from '../text_utils/text_utils.js';
 import * as Workspace from '../workspace/workspace.js';
-
-const {assert} = chai;
 
 describeWithMockConnection('BreakpointManager', () => {
   const URL_HTML = 'http://site/index.html' as Platform.DevToolsPath.UrlString;
@@ -109,19 +102,7 @@ describeWithMockConnection('BreakpointManager', () => {
 
     // Wait for the resource tree model to load; otherwise, our uiSourceCodes could be asynchronously
     // invalidated during the test.
-    const resourceTreeModel = target.model(SDK.ResourceTreeModel.ResourceTreeModel);
-    assertNotNullOrUndefined(resourceTreeModel);
-    await new Promise<void>(resolver => {
-      if (resourceTreeModel.cachedResourcesLoaded()) {
-        resolver();
-      } else {
-        const eventListener =
-            resourceTreeModel.addEventListener(SDK.ResourceTreeModel.Events.CachedResourcesLoaded, () => {
-              Common.EventTarget.removeEventListeners([eventListener]);
-              resolver();
-            });
-      }
-    });
+    await getInitializedResourceTreeModel(target);
 
     breakpointManager = Breakpoints.BreakpointManager.BreakpointManager.instance(
         {forceNew: true, targetManager, workspace, debuggerWorkspaceBinding});
@@ -137,13 +118,13 @@ describeWithMockConnection('BreakpointManager', () => {
   describe('possibleBreakpoints', () => {
     it('correctly asks the back-end for breakable positions', async () => {
       const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-      assertNotNullOrUndefined(debuggerModel);
+      assert.exists(debuggerModel);
 
       // Create an inline script and get a UI source code instance for it.
       const script = await backend.addScript(target, scriptDescription, null);
       const {scriptId} = script;
       const uiSourceCode = await uiSourceCodeFromScript(debuggerModel, script);
-      assertNotNullOrUndefined(uiSourceCode);
+      assert.exists(uiSourceCode);
 
       function getPossibleBreakpointsStub(_request: Protocol.Debugger.GetPossibleBreakpointsRequest):
           Protocol.Debugger.GetPossibleBreakpointsResponse {
@@ -190,7 +171,7 @@ describeWithMockConnection('BreakpointManager', () => {
     it('are removed and kept in storage after a back-end error', async () => {
       // Simulates a back-end error.
       const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-      assertNotNullOrUndefined(debuggerModel);
+      assert.exists(debuggerModel);
 
       if (!debuggerModel.isReadyToPause()) {
         await debuggerModel.once(SDK.DebuggerModel.Events.DebuggerIsReadyToPause);
@@ -199,7 +180,7 @@ describeWithMockConnection('BreakpointManager', () => {
       // Create an inline script and get a UI source code instance for it.
       const script = await backend.addScript(target, scriptDescription, null);
       const uiSourceCode = await uiSourceCodeFromScript(debuggerModel, script);
-      assertNotNullOrUndefined(uiSourceCode);
+      assert.exists(uiSourceCode);
 
       // Set up the backend to respond with an error.
       backend.setBreakpointByUrlToFail(URL, BREAKPOINT_SCRIPT_LINE);
@@ -207,7 +188,7 @@ describeWithMockConnection('BreakpointManager', () => {
       // Set the breakpoint.
       const breakpoint =
           await breakpointManager.setBreakpoint(uiSourceCode, BREAKPOINT_SCRIPT_LINE, 2, ...DEFAULT_BREAKPOINT);
-      assertNotNullOrUndefined(breakpoint);
+      assert.exists(breakpoint);
 
       const removedSpy = sinon.spy(breakpoint, 'remove');
       await breakpoint.updateBreakpoint();
@@ -219,12 +200,12 @@ describeWithMockConnection('BreakpointManager', () => {
 
     it('are only set if the uiSourceCode is still valid (not removed)', async () => {
       const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-      assertNotNullOrUndefined(debuggerModel);
+      assert.exists(debuggerModel);
 
       // Add a script.
       const script = await backend.addScript(target, scriptDescription, null);
       const uiSourceCode = await uiSourceCodeFromScript(debuggerModel, script);
-      assertNotNullOrUndefined(uiSourceCode);
+      assert.exists(uiSourceCode);
 
       // Remove the project (and thus the uiSourceCode).
       Workspace.Workspace.WorkspaceImpl.instance().removeProject(uiSourceCode.project());
@@ -288,9 +269,8 @@ describeWithMockConnection('BreakpointManager', () => {
     });
 
     it('substitutes source-mapped variables', async () => {
-      Root.Runtime.experiments.enableForTest('evaluate-expressions-with-source-maps');
       const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-      assertNotNullOrUndefined(debuggerModel);
+      assert.exists(debuggerModel);
 
       const scriptInfo = {url: URL, content: 'function adder(n,r){const t=n+r;return t}'};
       // Created with `terser -m -o script.min.js --source-map "includeSources;url=script.min.js.map" original-script.js`
@@ -308,7 +288,7 @@ describeWithMockConnection('BreakpointManager', () => {
       // Get the uiSourceCode for the original source.
       const uiSourceCode = await debuggerWorkspaceBinding.uiSourceCodeForSourceMapSourceURLPromise(
           debuggerModel, ORIGINAL_SCRIPT_SOURCE_URL, script.isContentScript());
-      assertNotNullOrUndefined(uiSourceCode);
+      assert.exists(uiSourceCode);
 
       // Mock out "Debugger.setBreakpointByUrl and just echo back the request".
       const cdpSetBreakpointPromise = new Promise<Protocol.Debugger.SetBreakpointByUrlRequest>(res => {
@@ -324,7 +304,7 @@ describeWithMockConnection('BreakpointManager', () => {
       const breakpoint = await breakpointManager.setBreakpoint(
           uiSourceCode, 1, 0, 'param1 > 0' as Breakpoints.BreakpointManager.UserCondition, /* enabled */ true,
           /* isLogpoint */ false, Breakpoints.BreakpointManager.BreakpointOrigin.USER_ACTION);
-      assertNotNullOrUndefined(breakpoint);
+      assert.exists(breakpoint);
 
       await breakpoint.updateBreakpoint();
 
@@ -333,15 +313,12 @@ describeWithMockConnection('BreakpointManager', () => {
       assert.strictEqual(lineNumber, 0);
       assert.strictEqual(columnNumber, 20);
       assert.strictEqual(condition, 'n > 0\n\n//# sourceURL=debugger://breakpoint');
-
-      Root.Runtime.experiments.disableForTest('evaluate-expressions-with-source-maps');
     });
   });
 
   it('substitutes source-mapped variables for the same original script in different bundles correctly', async () => {
-    Root.Runtime.experiments.enableForTest('evaluate-expressions-with-source-maps');
     const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-    assertNotNullOrUndefined(debuggerModel);
+    assert.exists(debuggerModel);
 
     // Create two 'bundles' that are identical modulo variable names.
     const url1 = 'http://site/script1.js' as Platform.DevToolsPath.UrlString;
@@ -368,7 +345,7 @@ describeWithMockConnection('BreakpointManager', () => {
     // Get the uiSourceCode for the original source.
     const uiSourceCode = await debuggerWorkspaceBinding.uiSourceCodeForSourceMapSourceURLPromise(
         debuggerModel, ORIGINAL_SCRIPT_SOURCE_URL, /* isContentScript */ false);
-    assertNotNullOrUndefined(uiSourceCode);
+    assert.exists(uiSourceCode);
 
     // Mock out "Debugger.setBreakpointByUrl and echo back the first two 'Debugger.setBreakpointByUrl' requests.
     const cdpSetBreakpointPromise = new Promise<Map<string, Protocol.Debugger.SetBreakpointByUrlRequest>>(res => {
@@ -388,32 +365,30 @@ describeWithMockConnection('BreakpointManager', () => {
     const breakpoint = await breakpointManager.setBreakpoint(
         uiSourceCode, 1, 0, 'param1 > 0' as Breakpoints.BreakpointManager.UserCondition, /* enabled */ true,
         /* isLogpoint */ false, Breakpoints.BreakpointManager.BreakpointOrigin.USER_ACTION);
-    assertNotNullOrUndefined(breakpoint);
+    assert.exists(breakpoint);
 
     await breakpoint.updateBreakpoint();
 
     const requests = await cdpSetBreakpointPromise;
     const req1 = requests.get(url1);
-    assertNotNullOrUndefined(req1);
+    assert.exists(req1);
     assert.strictEqual(req1.url, url1);
     assert.strictEqual(req1.condition, 'n > 0\n\n//# sourceURL=debugger://breakpoint');
 
     const req2 = requests.get(url2);
-    assertNotNullOrUndefined(req2);
+    assert.exists(req2);
     assert.strictEqual(req2.url, url2);
     assert.strictEqual(req2.condition, 'o > 0\n\n//# sourceURL=debugger://breakpoint');
-
-    Root.Runtime.experiments.disableForTest('evaluate-expressions-with-source-maps');
   });
 
   it('allows awaiting the restoration of breakpoints', async () => {
     Root.Runtime.experiments.enableForTest(Root.Runtime.ExperimentName.INSTRUMENTATION_BREAKPOINTS);
     const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-    assertNotNullOrUndefined(debuggerModel);
+    assert.exists(debuggerModel);
 
     const {uiSourceCode, project} = createContentProviderUISourceCode({url: URL, mimeType: 'text/javascript'});
     const breakpoint = await breakpointManager.setBreakpoint(uiSourceCode, 0, 0, ...DEFAULT_BREAKPOINT);
-    assertNotNullOrUndefined(breakpoint);
+    assert.exists(breakpoint);
 
     // Make sure that we await all updates that are triggered by adding the model.
     await breakpoint.updateBreakpoint();
@@ -433,17 +408,17 @@ describeWithMockConnection('BreakpointManager', () => {
 
     // Retrieve the ModelBreakpoint that is linked to our DebuggerModel.
     const modelBreakpoint = breakpoint.modelBreakpoint(debuggerModel);
-    assertNotNullOrUndefined(modelBreakpoint);
+    assert.exists(modelBreakpoint);
 
     // Make sure that we do not have a linked script yet.
-    assert.isNull(modelBreakpoint.currentState);
+    assert.strictEqual(modelBreakpoint.currentState, null);
 
     // Now await restoring the breakpoint.
     // A successful restore should update the ModelBreakpoint of the DebuggerModel
     // to reflect a state, in which we have successfully set a breakpoint (i.e. a script id
     // is available).
     await breakpointManager.restoreBreakpointsForScript(script);
-    assertNotNullOrUndefined(modelBreakpoint.currentState);
+    assert.isNotNull(modelBreakpoint.currentState);
     assert.lengthOf(modelBreakpoint.currentState, 1);
     assert.strictEqual(modelBreakpoint.currentState[0].url, URL);
 
@@ -457,11 +432,11 @@ describeWithMockConnection('BreakpointManager', () => {
     Root.Runtime.experiments.enableForTest(Root.Runtime.ExperimentName.INSTRUMENTATION_BREAKPOINTS);
 
     const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-    assertNotNullOrUndefined(debuggerModel);
+    assert.exists(debuggerModel);
 
     const {uiSourceCode, project} = createContentProviderUISourceCode({url: URL, mimeType: 'text/javascript'});
     const breakpoint = await breakpointManager.setBreakpoint(uiSourceCode, 13, 0, ...DEFAULT_BREAKPOINT);
-    assertNotNullOrUndefined(breakpoint);
+    assert.exists(breakpoint);
 
     // Make sure that we await all updates that are triggered by adding the model.
     await breakpoint.updateBreakpoint();
@@ -481,7 +456,7 @@ describeWithMockConnection('BreakpointManager', () => {
 
     // Retrieve the ModelBreakpoint that is linked to our DebuggerModel.
     const modelBreakpoint = breakpoint.modelBreakpoint(debuggerModel);
-    assertNotNullOrUndefined(modelBreakpoint);
+    assert.exists(modelBreakpoint);
 
     assert.isNull(breakpoint.getLastResolvedState());
     const update = modelBreakpoint.scheduleUpdateInDebugger();
@@ -498,11 +473,11 @@ describeWithMockConnection('BreakpointManager', () => {
     Root.Runtime.experiments.enableForTest(Root.Runtime.ExperimentName.INSTRUMENTATION_BREAKPOINTS);
 
     const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-    assertNotNullOrUndefined(debuggerModel);
+    assert.exists(debuggerModel);
 
     const script = await backend.addScript(target, scriptDescription, null);
     const uiSourceCode = await uiSourceCodeFromScript(debuggerModel, script);
-    assertNotNullOrUndefined(uiSourceCode);
+    assert.exists(uiSourceCode);
 
     const breakpointId = 'BREAK_ID' as Protocol.Debugger.BreakpointId;
     void backend.responderToBreakpointByUrlRequest(URL, 13)({
@@ -517,13 +492,13 @@ describeWithMockConnection('BreakpointManager', () => {
     });
 
     const breakpoint = await breakpointManager.setBreakpoint(uiSourceCode, 13, 0, ...DEFAULT_BREAKPOINT);
-    assertNotNullOrUndefined(breakpoint);
+    assert.exists(breakpoint);
     await breakpoint.updateBreakpoint();
 
     // Retrieve the ModelBreakpoint that is linked to our DebuggerModel.
     const modelBreakpoint = breakpoint.modelBreakpoint(debuggerModel);
-    assertNotNullOrUndefined(modelBreakpoint);
-    assertNotNullOrUndefined(modelBreakpoint.currentState);
+    assert.exists(modelBreakpoint);
+    assert.exists(modelBreakpoint.currentState);
 
     // Test if awaiting breakpoint.remove is actually removing the state.
     const removalPromise = backend.breakpointRemovedPromise(breakpointId);
@@ -539,12 +514,12 @@ describeWithMockConnection('BreakpointManager', () => {
         {url: 'http://example.com/source.ts' as Platform.DevToolsPath.UrlString, mimeType: 'text/typescript'});
 
     const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-    assertNotNullOrUndefined(debuggerModel);
+    assert.exists(debuggerModel);
 
     // Create an inline script and get a UI source code instance for it.
     const script = await backend.addScript(target, scriptDescription, null);
     const uiSourceCode = await uiSourceCodeFromScript(debuggerModel, script);
-    assertNotNullOrUndefined(uiSourceCode);
+    assert.exists(uiSourceCode);
 
     // Register our interest in the breakpoint request.
     const breakpointResponder = backend.responderToBreakpointByUrlRequest(URL, BREAKPOINT_SCRIPT_LINE);
@@ -552,7 +527,7 @@ describeWithMockConnection('BreakpointManager', () => {
     // Set the breakpoint.
     const breakpoint =
         await breakpointManager.setBreakpoint(uiSourceCode, BREAKPOINT_SCRIPT_LINE, 2, ...DEFAULT_BREAKPOINT);
-    assertNotNullOrUndefined(breakpoint);
+    assert.exists(breakpoint);
 
     // Await the breakpoint request at the mock backend and send a CDP response once the request arrives.
     // Concurrently, enforce update of the breakpoint in the debugger.
@@ -589,12 +564,12 @@ describeWithMockConnection('BreakpointManager', () => {
 
   it('can set breakpoints in inline scripts', async () => {
     const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-    assertNotNullOrUndefined(debuggerModel);
+    assert.exists(debuggerModel);
 
     // Create an inline script and get a UI source code instance for it.
     const inlineScript = await backend.addScript(target, inlineScriptDescription, null);
     const uiSourceCode = await uiSourceCodeFromScript(debuggerModel, inlineScript);
-    assertNotNullOrUndefined(uiSourceCode);
+    assert.exists(uiSourceCode);
 
     // Register our interest in the breakpoint request.
     const breakpointResponder = backend.responderToBreakpointByUrlRequest(URL_HTML, INLINE_BREAKPOINT_RAW_LINE);
@@ -602,7 +577,7 @@ describeWithMockConnection('BreakpointManager', () => {
     // Set the breakpoint.
     const breakpoint =
         await breakpointManager.setBreakpoint(uiSourceCode, BREAKPOINT_SCRIPT_LINE, 2, ...DEFAULT_BREAKPOINT);
-    assertNotNullOrUndefined(breakpoint);
+    assert.exists(breakpoint);
 
     // Await the breakpoint request at the mock backend and send a CDP response once the request arrives.
     // Concurrently, enforce update of the breakpoint in the debugger.
@@ -629,12 +604,12 @@ describeWithMockConnection('BreakpointManager', () => {
 
   it('can restore breakpoints in inline scripts', async () => {
     const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-    assertNotNullOrUndefined(debuggerModel);
+    assert.exists(debuggerModel);
 
     // Create an inline script and get a UI source code instance for it.
     const inlineScript = await backend.addScript(target, inlineScriptDescription, null);
     const uiSourceCode = await uiSourceCodeFromScript(debuggerModel, inlineScript);
-    assertNotNullOrUndefined(uiSourceCode);
+    assert.exists(uiSourceCode);
 
     // Register our interest in the breakpoint request.
     const breakpointResponder = backend.responderToBreakpointByUrlRequest(URL_HTML, INLINE_BREAKPOINT_RAW_LINE);
@@ -642,7 +617,7 @@ describeWithMockConnection('BreakpointManager', () => {
     // Set the breakpoint on the front-end/model side.
     const breakpoint =
         await breakpointManager.setBreakpoint(uiSourceCode, BREAKPOINT_SCRIPT_LINE, 2, ...DEFAULT_BREAKPOINT);
-    assertNotNullOrUndefined(breakpoint);
+    assert.exists(breakpoint);
     assert.deepEqual(Array.from(breakpoint.getUiSourceCodes()), [uiSourceCode]);
 
     // Await the breakpoint request at the mock backend and send a CDP response once the request arrives.
@@ -672,7 +647,7 @@ describeWithMockConnection('BreakpointManager', () => {
     SDK.TargetManager.TargetManager.instance().setScopeTarget(target);
 
     const reloadedDebuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-    assertNotNullOrUndefined(reloadedDebuggerModel);
+    assert.exists(reloadedDebuggerModel);
 
     // Load the same inline script (with a different script id!) into the new target.
     // Once the model loads the script, it wil try to restore the breakpoint. Let us make sure the backend
@@ -681,7 +656,7 @@ describeWithMockConnection('BreakpointManager', () => {
     const reloadedInlineScript = await backend.addScript(target, inlineScriptDescription, null);
 
     const reloadedUiSourceCode = await uiSourceCodeFromScript(reloadedDebuggerModel, reloadedInlineScript);
-    assertNotNullOrUndefined(reloadedUiSourceCode);
+    assert.exists(reloadedUiSourceCode);
 
     // Verify the breakpoint was restored at the oriignal unbound location (before the backend binds it).
     const unboundLocations = breakpointManager.breakpointLocationsForUISourceCode(reloadedUiSourceCode);
@@ -713,8 +688,6 @@ describeWithMockConnection('BreakpointManager', () => {
     // Remove the default target so that we can simulate starting the debugger afresh.
     targetManager.removeTarget(target);
 
-    Root.Runtime.experiments.enableForTest(Root.Runtime.ExperimentName.SET_ALL_BREAKPOINTS_EAGERLY);
-
     // Set the breakpoint storage to contain a breakpoint and re-initialize
     // the breakpoint manager from that storage. This should create a breakpoint instance
     // in the breakpoint manager.
@@ -740,15 +713,11 @@ describeWithMockConnection('BreakpointManager', () => {
     });
     SDK.TargetManager.TargetManager.instance().setScopeTarget(createTarget());
     await breakpointSetPromise;
-
-    Root.Runtime.experiments.disableForTest(Root.Runtime.ExperimentName.SET_ALL_BREAKPOINTS_EAGERLY);
   });
 
   it('eagerly restores TypeScript breakpoints in a new target', async () => {
     // Remove the default target so that we can simulate starting the debugger afresh.
     targetManager.removeTarget(target);
-
-    Root.Runtime.experiments.enableForTest(Root.Runtime.ExperimentName.SET_ALL_BREAKPOINTS_EAGERLY);
 
     // Set the breakpoint storage to contain a source-mapped breakpoint and re-initialize
     // the breakpoint manager from that storage. This should create a breakpoint instance
@@ -782,20 +751,17 @@ describeWithMockConnection('BreakpointManager', () => {
     SDK.TargetManager.TargetManager.instance().setScopeTarget(createTarget());
     await breakpointSetPromise;
 
-    Root.Runtime.experiments.disableForTest(Root.Runtime.ExperimentName.SET_ALL_BREAKPOINTS_EAGERLY);
   });
 
   it('saves generated location into storage', async () => {
     // Remove the default target so that we can simulate starting the debugger afresh.
     targetManager.removeTarget(target);
 
-    Root.Runtime.experiments.enableForTest(Root.Runtime.ExperimentName.SET_ALL_BREAKPOINTS_EAGERLY);
-
     // Re-create a target and breakpoint manager.
     target = createTarget();
     SDK.TargetManager.TargetManager.instance().setScopeTarget(target);
     const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-    assertNotNullOrUndefined(debuggerModel);
+    assert.exists(debuggerModel);
     const breakpoints: Breakpoints.BreakpointManager.BreakpointStorageState[] = [];
     const setting = Common.Settings.Settings.instance().createLocalSetting('breakpoints', breakpoints);
     Breakpoints.BreakpointManager.BreakpointManager.instance(
@@ -810,11 +776,11 @@ describeWithMockConnection('BreakpointManager', () => {
     // Get the uiSourceCode for the original source.
     const uiSourceCode = await debuggerWorkspaceBinding.uiSourceCodeForSourceMapSourceURLPromise(
         debuggerModel, ORIGINAL_SCRIPT_SOURCE_URL, script.isContentScript());
-    assertNotNullOrUndefined(uiSourceCode);
+    assert.exists(uiSourceCode);
 
     // Set the breakpoint on the front-end/model side.
     const breakpoint = await breakpointManager.setBreakpoint(uiSourceCode, 1, 0, ...DEFAULT_BREAKPOINT);
-    assertNotNullOrUndefined(breakpoint);
+    assert.exists(breakpoint);
 
     // Set the breakpoint response for our upcoming request.
     void backend.responderToBreakpointByUrlRequest(URL, 0)({
@@ -839,14 +805,11 @@ describeWithMockConnection('BreakpointManager', () => {
                        condition: '' as SDK.DebuggerModel.BackendCondition,
                      }]);
 
-    Root.Runtime.experiments.disableForTest(Root.Runtime.ExperimentName.SET_ALL_BREAKPOINTS_EAGERLY);
   });
 
   it('restores latest breakpoints from storage', async () => {
     // Remove the default target so that we can simulate starting the debugger afresh.
     targetManager.removeTarget(target);
-
-    Root.Runtime.experiments.enableForTest(Root.Runtime.ExperimentName.SET_ALL_BREAKPOINTS_EAGERLY);
 
     const expectedBreakpointLines = [1, 2];
 
@@ -903,8 +866,6 @@ describeWithMockConnection('BreakpointManager', () => {
     });
 
     assert.deepEqual(Array.from(await breakpointRequestLines), expectedBreakpointLines);
-
-    Root.Runtime.experiments.disableForTest(Root.Runtime.ExperimentName.SET_ALL_BREAKPOINTS_EAGERLY);
   });
 
   describe('with instrumentation breakpoints turned on', () => {
@@ -924,7 +885,7 @@ describeWithMockConnection('BreakpointManager', () => {
         fileSystemPath: Platform.DevToolsPath.UrlString, fileSystemFileUrl: Platform.DevToolsPath.UrlString,
         content: string, type?: string) {
       const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-      assertNotNullOrUndefined(debuggerModel);
+      assert.exists(debuggerModel);
 
       const {uiSourceCode: fileSystemUiSourceCode, project} = createFileSystemFileForPersistenceTests(
           {fileSystemFileUrl, fileSystemPath, type: type}, scriptDescription.url, content, target);
@@ -938,7 +899,7 @@ describeWithMockConnection('BreakpointManager', () => {
       // Add the script.
       const script = await backend.addScript(target, scriptDescription, null);
       const uiSourceCode = debuggerWorkspaceBinding.uiSourceCodeForScript(script);
-      assertNotNullOrUndefined(uiSourceCode);
+      assert.exists(uiSourceCode);
       assert.strictEqual(uiSourceCode.project().type(), Workspace.Workspace.projectTypes.Network);
 
       // Set the breakpoint response for our upcoming request.
@@ -975,7 +936,7 @@ describeWithMockConnection('BreakpointManager', () => {
 
     it('can restore breakpoints in scripts', async () => {
       const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-      assertNotNullOrUndefined(debuggerModel);
+      assert.exists(debuggerModel);
 
       const breakpointLine = 0;
       const resolvedBreakpointLine = 3;
@@ -986,11 +947,11 @@ describeWithMockConnection('BreakpointManager', () => {
 
       // Get the uiSourceCode for the source.
       const uiSourceCode = debuggerWorkspaceBinding.uiSourceCodeForScript(script);
-      assertNotNullOrUndefined(uiSourceCode);
+      assert.exists(uiSourceCode);
 
       // Set the breakpoint on the front-end/model side.
       const breakpoint = await breakpointManager.setBreakpoint(uiSourceCode, breakpointLine, 0, ...DEFAULT_BREAKPOINT);
-      assertNotNullOrUndefined(breakpoint);
+      assert.exists(breakpoint);
 
       // Set the breakpoint response for our upcoming request.
       void backend.responderToBreakpointByUrlRequest(URL, breakpointLine)({
@@ -1026,14 +987,14 @@ describeWithMockConnection('BreakpointManager', () => {
       SDK.TargetManager.TargetManager.instance().setScopeTarget(target);
 
       const reloadedDebuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-      assertNotNullOrUndefined(reloadedDebuggerModel);
+      assert.exists(reloadedDebuggerModel);
 
       // Add the same script under a different scriptId.
       const reloadedScript = await backend.addScript(target, scriptInfo, null);
 
       // Get the uiSourceCode for the original source.
       const reloadedUiSourceCode = debuggerWorkspaceBinding.uiSourceCodeForScript(reloadedScript);
-      assertNotNullOrUndefined(reloadedUiSourceCode);
+      assert.exists(reloadedUiSourceCode);
 
       // Set the breakpoint response for our upcoming request.
       void backend.responderToBreakpointByUrlRequest(URL, breakpointLine)({
@@ -1066,7 +1027,7 @@ describeWithMockConnection('BreakpointManager', () => {
 
     it('can restore breakpoints in a default-mapped inline scripts without sourceURL comment', async () => {
       const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-      assertNotNullOrUndefined(debuggerModel);
+      assert.exists(debuggerModel);
 
       // Add script.
       const script = await backend.addScript(target, inlineScriptDescription, null);
@@ -1074,13 +1035,13 @@ describeWithMockConnection('BreakpointManager', () => {
       // Get the uiSourceCode for the source. This is the uiSourceCode in the DefaultScriptMapping,
       // as we haven't registered the uiSourceCode for the html file.
       const uiSourceCode = await debuggerWorkspaceBinding.uiSourceCodeForScript(script);
-      assertNotNullOrUndefined(uiSourceCode);
+      assert.exists(uiSourceCode);
       assert.strictEqual(uiSourceCode.project().type(), Workspace.Workspace.projectTypes.Debugger);
 
       // Set the breakpoint on the front-end/model side. The line number is relative to the v8 script.
       const breakpoint =
           await breakpointManager.setBreakpoint(uiSourceCode, BREAKPOINT_SCRIPT_LINE, 0, ...DEFAULT_BREAKPOINT);
-      assertNotNullOrUndefined(breakpoint);
+      assert.exists(breakpoint);
 
       // Set the breakpoint response for our upcoming request.
       void backend.responderToBreakpointByUrlRequest(URL_HTML, INLINE_BREAKPOINT_RAW_LINE)({
@@ -1116,7 +1077,7 @@ describeWithMockConnection('BreakpointManager', () => {
       SDK.TargetManager.TargetManager.instance().setScopeTarget(target);
 
       const reloadedDebuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-      assertNotNullOrUndefined(reloadedDebuggerModel);
+      assert.exists(reloadedDebuggerModel);
 
       // Add the same script under a different scriptId.
       const reloadedScript = await backend.addScript(target, inlineScriptDescription, null);
@@ -1124,7 +1085,7 @@ describeWithMockConnection('BreakpointManager', () => {
       // Get the uiSourceCode for the source. This is the uiSourceCode in the DefaultScriptMapping,
       // as we haven't registered the uiSourceCode for the html file.
       const reloadedUiSourceCode = debuggerWorkspaceBinding.uiSourceCodeForScript(reloadedScript);
-      assertNotNullOrUndefined(reloadedUiSourceCode);
+      assert.exists(reloadedUiSourceCode);
       assert.strictEqual(reloadedUiSourceCode.project().type(), Workspace.Workspace.projectTypes.Debugger);
 
       // Set the breakpoint response for our upcoming request.
@@ -1159,7 +1120,7 @@ describeWithMockConnection('BreakpointManager', () => {
 
     it('can restore breakpoints in an inline script without sourceURL comment', async () => {
       const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-      assertNotNullOrUndefined(debuggerModel);
+      assert.exists(debuggerModel);
 
       function dispatchDocumentOpened() {
         dispatchEvent(target, 'Page.documentOpened', {
@@ -1183,13 +1144,13 @@ describeWithMockConnection('BreakpointManager', () => {
 
       // Get the uiSourceCode for the source: this should be the uiSourceCode of the actual html script.
       const uiSourceCode = await debuggerWorkspaceBinding.uiSourceCodeForScript(script);
-      assertNotNullOrUndefined(uiSourceCode);
+      assert.exists(uiSourceCode);
       assert.strictEqual(uiSourceCode.project().type(), Workspace.Workspace.projectTypes.Network);
 
       // Set the breakpoint on the front-end/model side of the html uiSourceCode.
       const breakpoint =
           await breakpointManager.setBreakpoint(uiSourceCode, INLINE_BREAKPOINT_RAW_LINE, 0, ...DEFAULT_BREAKPOINT);
-      assertNotNullOrUndefined(breakpoint);
+      assert.exists(breakpoint);
 
       // Set the breakpoint response for our upcoming request to set a breakpoint on the raw location.
       void backend.responderToBreakpointByUrlRequest(URL_HTML, INLINE_BREAKPOINT_RAW_LINE)({
@@ -1225,7 +1186,7 @@ describeWithMockConnection('BreakpointManager', () => {
       SDK.TargetManager.TargetManager.instance().setScopeTarget(target);
 
       const reloadedDebuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-      assertNotNullOrUndefined(reloadedDebuggerModel);
+      assert.exists(reloadedDebuggerModel);
 
       dispatchDocumentOpened();
 
@@ -1234,7 +1195,7 @@ describeWithMockConnection('BreakpointManager', () => {
 
       // Get the uiSourceCode for the source: this should be the uiSourceCode of the actual html script.
       const reloadedUiSourceCode = debuggerWorkspaceBinding.uiSourceCodeForScript(reloadedScript);
-      assertNotNullOrUndefined(reloadedUiSourceCode);
+      assert.exists(reloadedUiSourceCode);
       assert.strictEqual(reloadedUiSourceCode.project().type(), Workspace.Workspace.projectTypes.Network);
 
       // Set the breakpoint response for our upcoming request.
@@ -1271,7 +1232,7 @@ describeWithMockConnection('BreakpointManager', () => {
       setupPageResourceLoaderForSourceMap(sourceMapContent);
 
       const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-      assertNotNullOrUndefined(debuggerModel);
+      assert.exists(debuggerModel);
 
       // Add script with source map.
       const scriptInfo = {url: URL, content: COMPILED_SCRIPT_SOURCES_CONTENT};
@@ -1281,11 +1242,11 @@ describeWithMockConnection('BreakpointManager', () => {
       // Get the uiSourceCode for the original source.
       const uiSourceCode = await debuggerWorkspaceBinding.uiSourceCodeForSourceMapSourceURLPromise(
           debuggerModel, ORIGINAL_SCRIPT_SOURCE_URL, script.isContentScript());
-      assertNotNullOrUndefined(uiSourceCode);
+      assert.exists(uiSourceCode);
 
       // Set the breakpoint on the front-end/model side.
       const breakpoint = await breakpointManager.setBreakpoint(uiSourceCode, 0, 0, ...DEFAULT_BREAKPOINT);
-      assertNotNullOrUndefined(breakpoint);
+      assert.exists(breakpoint);
 
       // Set the breakpoint response for our upcoming request.
       void backend.responderToBreakpointByUrlRequest(URL, 0)({
@@ -1321,7 +1282,7 @@ describeWithMockConnection('BreakpointManager', () => {
       SDK.TargetManager.TargetManager.instance().setScopeTarget(target);
 
       const reloadedDebuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-      assertNotNullOrUndefined(reloadedDebuggerModel);
+      assert.exists(reloadedDebuggerModel);
 
       // Add the same script under a different scriptId.
       const reloadedScript = await backend.addScript(target, scriptInfo, sourceMapInfo);
@@ -1329,7 +1290,7 @@ describeWithMockConnection('BreakpointManager', () => {
       // Get the uiSourceCode for the original source.
       const reloadedUiSourceCode = await debuggerWorkspaceBinding.uiSourceCodeForSourceMapSourceURLPromise(
           reloadedDebuggerModel, ORIGINAL_SCRIPT_SOURCE_URL, reloadedScript.isContentScript());
-      assertNotNullOrUndefined(uiSourceCode);
+      assert.exists(uiSourceCode);
 
       const unboundLocation = breakpointManager.breakpointLocationsForUISourceCode(reloadedUiSourceCode);
       assert.strictEqual(1, unboundLocation.length);
@@ -1405,7 +1366,7 @@ describeWithMockConnection('BreakpointManager', () => {
       pluginManager.addPlugin(new Plugin());
 
       const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-      assertNotNullOrUndefined(debuggerModel);
+      assert.exists(debuggerModel);
 
       let sourceURL;
       const sources = await pluginManager.getSourcesForScript(script);  // wait for plugin source setup to finish.
@@ -1415,16 +1376,16 @@ describeWithMockConnection('BreakpointManager', () => {
         assert.lengthOf(sources, 1);
         sourceURL = sources[0];
       }
-      assertNotNullOrUndefined(sourceURL);
+      assert.exists(sourceURL);
 
       // Get the uiSourceCode for the original source.
       const uiSourceCode = await debuggerWorkspaceBinding.uiSourceCodeForDebuggerLanguagePluginSourceURLPromise(
           debuggerModel, sourceURL);
-      assertNotNullOrUndefined(uiSourceCode);
+      assert.exists(uiSourceCode);
 
       // Set the breakpoint on the front-end/model side.
       const breakpoint = await breakpointManager.setBreakpoint(uiSourceCode, 0, 0, ...DEFAULT_BREAKPOINT);
-      assertNotNullOrUndefined(breakpoint);
+      assert.exists(breakpoint);
 
       // Set the breakpoint response for our upcoming request.
       void backend.responderToBreakpointByUrlRequest(URL, 0)({
@@ -1462,7 +1423,7 @@ describeWithMockConnection('BreakpointManager', () => {
       SDK.TargetManager.TargetManager.instance().setScopeTarget(target);
 
       const reloadedDebuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-      assertNotNullOrUndefined(reloadedDebuggerModel);
+      assert.exists(reloadedDebuggerModel);
 
       // Add the same script under a different scriptId.
       const reloadedScript = await backend.addScript(target, scriptInfo, null);
@@ -1470,7 +1431,7 @@ describeWithMockConnection('BreakpointManager', () => {
       // Get the uiSourceCode for the original source.
       const reloadedUiSourceCode = await debuggerWorkspaceBinding.uiSourceCodeForDebuggerLanguagePluginSourceURLPromise(
           reloadedDebuggerModel, sourceURL);
-      assertNotNullOrUndefined(reloadedUiSourceCode);
+      assert.exists(reloadedUiSourceCode);
 
       // Set the breakpoint response for our upcoming request.
       void backend.responderToBreakpointByUrlRequest(URL, 0)({
@@ -1531,7 +1492,7 @@ describeWithMockConnection('BreakpointManager', () => {
     const script = await backend.addScript(target, scriptInfo, null);
 
     const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-    assertNotNullOrUndefined(debuggerModel);
+    assert.exists(debuggerModel);
 
     // Set the breakpoint response for our upcoming requests. Both breakpoints should resolve
     // to the same raw location in order to have a clash.
@@ -1554,16 +1515,16 @@ describeWithMockConnection('BreakpointManager', () => {
     });
 
     const uiSourceCode = await uiSourceCodeFromScript(debuggerModel, script);
-    assertNotNullOrUndefined(uiSourceCode);
+    assert.exists(uiSourceCode);
 
     // Set the breakpoint on the front-end/model side.
     const breakpoint = await breakpointManager.setBreakpoint(uiSourceCode, 0, 0, ...DEFAULT_BREAKPOINT);
-    assertNotNullOrUndefined(breakpoint);
+    assert.exists(breakpoint);
 
     // This breakpoint will slide to lineNumber: 0, columnNumber: 0 and thus
     // clash with the previous breakpoint.
     const slidingBreakpoint = await breakpointManager.setBreakpoint(uiSourceCode, 2, 0, ...DEFAULT_BREAKPOINT);
-    assertNotNullOrUndefined(slidingBreakpoint);
+    assert.exists(slidingBreakpoint);
 
     // Wait until both breakpoints have run their updates.
     await breakpoint.refreshInDebugger();
@@ -1593,14 +1554,14 @@ describeWithMockConnection('BreakpointManager', () => {
         {fileSystemFileUrl, fileSystemPath}, scriptDescription.url, scriptDescription.content, target);
 
     const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-    assertNotNullOrUndefined(debuggerModel);
+    assert.exists(debuggerModel);
 
     // Add the same script via the debugger protocol.
     const bindingCreatedPromise = persistence.once(Persistence.Persistence.Events.BindingCreated);
     const script = await backend.addScript(target, scriptDescription, null);
     const uiSourceCode = await uiSourceCodeFromScript(debuggerModel, script);
     await bindingCreatedPromise;
-    assertNotNullOrUndefined(uiSourceCode);
+    assert.exists(uiSourceCode);
 
     // Set the breakpoint on the (network) script.
     void backend.responderToBreakpointByUrlRequest(URL, breakpointLine)({
@@ -1645,7 +1606,7 @@ describeWithMockConnection('BreakpointManager', () => {
         {fileSystemFileUrl, fileSystemPath}, scriptDescription.url, scriptDescription.content, target);
 
     const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-    assertNotNullOrUndefined(debuggerModel);
+    assert.exists(debuggerModel);
 
     // Add the same script with the same URL via the debugger protocol.
     const bindingCreatedPromise = persistence.once(Persistence.Persistence.Events.BindingCreated);
@@ -1653,7 +1614,7 @@ describeWithMockConnection('BreakpointManager', () => {
     const script = await backend.addScript(target, fileScriptDescription, null);
     const uiSourceCode = await uiSourceCodeFromScript(debuggerModel, script);
     await bindingCreatedPromise;
-    assertNotNullOrUndefined(uiSourceCode);
+    assert.exists(uiSourceCode);
 
     let addedBreakpoint: Breakpoints.BreakpointManager.Breakpoint|null = null;
     breakpointManager.addEventListener(Breakpoints.BreakpointManager.Events.BreakpointAdded, ({data: {breakpoint}}) => {
@@ -1674,7 +1635,7 @@ describeWithMockConnection('BreakpointManager', () => {
     });
     const breakpoint =
         await breakpointManager.setBreakpoint(uiSourceCode, breakpointLine, undefined, ...DEFAULT_BREAKPOINT);
-    assertNotNullOrUndefined(breakpoint);
+    assert.exists(breakpoint);
 
     // Expect that the breakpoint is only added to the network UI source code.
     assert.strictEqual(breakpoint, addedBreakpoint);
@@ -1686,7 +1647,7 @@ describeWithMockConnection('BreakpointManager', () => {
     const script = await backend.addScript(target, scriptInfo, null);
 
     const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
-    assertNotNullOrUndefined(debuggerModel);
+    assert.exists(debuggerModel);
 
     void backend.responderToBreakpointByUrlRequest(URL, 0)({
       breakpointId: 'BREAK_ID' as Protocol.Debugger.BreakpointId,
@@ -1701,11 +1662,11 @@ describeWithMockConnection('BreakpointManager', () => {
         'Debugger.setScriptSource', () => ({status: Protocol.Debugger.SetScriptSourceResponseStatus.Ok}));
 
     const uiSourceCode = await uiSourceCodeFromScript(debuggerModel, script);
-    assertNotNullOrUndefined(uiSourceCode);
+    assert.exists(uiSourceCode);
 
     // Set the breakpoint on the front-end/model side.
     const breakpoint = await breakpointManager.setBreakpoint(uiSourceCode, 0, 0, ...DEFAULT_BREAKPOINT);
-    assertNotNullOrUndefined(breakpoint);
+    assert.exists(breakpoint);
 
     // Wait for the breakpoint to be set in the backend.
     await breakpoint.refreshInDebugger();
@@ -1766,12 +1727,12 @@ describeWithMockConnection('BreakpointManager', () => {
       // Get the uiSourceCode for the original source in the main target.
       mainUiSourceCode = await debuggerWorkspaceBinding.uiSourceCodeForSourceMapSourceURLPromise(
           mainScript.debuggerModel, ORIGINAL_SCRIPT_SOURCE_URL, mainScript.isContentScript());
-      assertNotNullOrUndefined(mainUiSourceCode);
+      assert.exists(mainUiSourceCode);
 
       // Get the uiSourceCode for the original source in the worker target.
       workerUiSourceCode = await debuggerWorkspaceBinding.uiSourceCodeForSourceMapSourceURLPromise(
           workerScript.debuggerModel, ORIGINAL_SCRIPT_SOURCE_URL, workerScript.isContentScript());
-      assertNotNullOrUndefined(mainUiSourceCode);
+      assert.exists(mainUiSourceCode);
 
       // Stub the 'modelAdded' function that is called in the Breakpoint prototype.
       // The 'modelAdded' will kick off updating the debugger of each target
@@ -1784,7 +1745,7 @@ describeWithMockConnection('BreakpointManager', () => {
 
       // Set the breakpoint on the main target, but note that the debugger won't be updated.
       const bp = await breakpointManager.setBreakpoint(mainUiSourceCode, 0, 0, ...DEFAULT_BREAKPOINT);
-      assertNotNullOrUndefined(bp);
+      assert.exists(bp);
       breakpoint = bp;
 
       // Now restore the actual behavior of 'modelAdded'.
@@ -1950,64 +1911,5 @@ describeWithMockConnection('BreakpointManager', () => {
         }),
       ]);
     });
-  });
-});
-
-describeWithMockConnection('BreakpointManager storage', () => {
-  let target: SDK.Target.Target;
-  let debuggerWorkspaceBinding: Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding;
-  beforeEach(async () => {
-    const workspace = Workspace.Workspace.WorkspaceImpl.instance();
-    const targetManager = SDK.TargetManager.TargetManager.instance();
-    const resourceMapping = new Bindings.ResourceMapping.ResourceMapping(targetManager, workspace);
-    debuggerWorkspaceBinding = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
-      forceNew: true,
-      resourceMapping,
-      targetManager,
-    });
-    Bindings.IgnoreListManager.IgnoreListManager.instance({forceNew: true, debuggerWorkspaceBinding});
-    target = createTarget();
-    SDK.TargetManager.TargetManager.instance().setScopeTarget(target);
-    resetRecordedMetrics();
-  });
-
-  it('records breakpoint count after loading from storage', async () => {
-    // Create 200 breakpoints in the storage.
-    const breakpoints: Breakpoints.BreakpointManager.BreakpointStorageState[] = [];
-    for (let i = 0; i < 201; i++) {
-      breakpoints.push({
-        url: 'http://example.com/script.js' as Platform.DevToolsPath.UrlString,
-        resourceTypeName: 'script',
-        lineNumber: i,
-        condition: '' as Breakpoints.BreakpointManager.UserCondition,
-        enabled: true,
-        isLogpoint: false,
-      });
-    }
-    Common.Settings.Settings.instance().createLocalSetting('breakpoints', breakpoints).set(breakpoints);
-
-    assert.isFalse(recordedMetricsContain(
-        Host.InspectorFrontendHostAPI.EnumeratedHistogram.BreakpointsRestoredFromStorageCount,
-        Host.UserMetrics.BreakpointsRestoredFromStorageCount.LessThan300));
-
-    // Creating breakpoint manager to load the breakpoints from storage and record the breakpoint count.
-    Breakpoints.BreakpointManager.BreakpointManager.instance({
-      forceNew: true,
-      targetManager: SDK.TargetManager.TargetManager.instance(),
-      workspace: Workspace.Workspace.WorkspaceImpl.instance(),
-      debuggerWorkspaceBinding,
-    });
-
-    // Verify that we have recorded the breakpoint count in the 100-300 bucket.
-    assert.isTrue(recordedMetricsContain(
-        Host.InspectorFrontendHostAPI.EnumeratedHistogram.BreakpointsRestoredFromStorageCount,
-        Host.UserMetrics.BreakpointsRestoredFromStorageCount.LessThan300));
-
-    assert.isFalse(recordedMetricsContain(
-        Host.InspectorFrontendHostAPI.EnumeratedHistogram.BreakpointsRestoredFromStorageCount,
-        Host.UserMetrics.BreakpointsRestoredFromStorageCount.LessThan100));
-    assert.isFalse(recordedMetricsContain(
-        Host.InspectorFrontendHostAPI.EnumeratedHistogram.BreakpointsRestoredFromStorageCount,
-        Host.UserMetrics.BreakpointsRestoredFromStorageCount.LessThan1000));
   });
 });

@@ -8,23 +8,20 @@
 #include <atomic>
 #include <memory>
 
-#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
-#include "base/scoped_observation.h"
 #include "chrome/browser/ui/webui/searchbox/searchbox_handler.h"
-#include "components/omnibox/browser/autocomplete_controller.h"
-#include "components/omnibox/browser/omnibox.mojom.h"
 #include "components/omnibox/browser/omnibox_popup_selection.h"
 #include "components/url_formatter/spoof_checks/idna_metrics.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/vector_icon_types.h"
+#include "ui/webui/resources/cr_components/searchbox/searchbox.mojom.h"
 
 class GURL;
+class LensSearchboxClient;
 class MetricsReporter;
 class OmniboxController;
 class OmniboxEditModel;
@@ -32,7 +29,6 @@ class Profile;
 
 namespace content {
 class WebContents;
-class WebUIDataSource;
 }  // namespace content
 
 // An observer interface for changes to the WebUI Omnibox popup.
@@ -43,31 +39,16 @@ class OmniboxWebUIPopupChangeObserver : public base::CheckedObserver {
 };
 
 // Handles bidirectional communication between NTP realbox JS and the browser.
-class RealboxHandler : public SearchboxHandler,
-                       public AutocompleteController::Observer {
+class RealboxHandler : public SearchboxHandler {
  public:
-  enum class FocusState {
-    // kNormal means the row is focused, and Enter key navigates to the match.
-    kFocusedMatch,
-
-    // kFocusedButtonRemoveSuggestion state means the Remove Suggestion (X)
-    // button is focused. Pressing enter will attempt to remove this suggestion.
-    kFocusedButtonRemoveSuggestion,
-  };
-
-  static void SetupWebUIDataSource(content::WebUIDataSource* source,
-                                   Profile* profile);
-  static std::string AutocompleteMatchVectorIconToResourceName(
-      const gfx::VectorIcon& icon);
-  static std::string PedalVectorIconToResourceName(const gfx::VectorIcon& icon);
-
   // Note: `omnibox_controller` may be null for the Realbox, in which case
   //  an internally owned controller is created and used.
   RealboxHandler(
-      mojo::PendingReceiver<omnibox::mojom::PageHandler> pending_page_handler,
+      mojo::PendingReceiver<searchbox::mojom::PageHandler> pending_page_handler,
       Profile* profile,
       content::WebContents* web_contents,
       MetricsReporter* metrics_reporter,
+      LensSearchboxClient* lens_searchbox_client,
       OmniboxController* omnibox_controller);
 
   RealboxHandler(const RealboxHandler&) = delete;
@@ -83,8 +64,9 @@ class RealboxHandler : public SearchboxHandler,
   void RemoveObserver(OmniboxWebUIPopupChangeObserver* observer);
   bool HasObserver(const OmniboxWebUIPopupChangeObserver* observer) const;
 
-  // omnibox::mojom::PageHandler:
-  void SetPage(mojo::PendingRemote<omnibox::mojom::Page> pending_page) override;
+  // searchbox::mojom::PageHandler:
+  void SetPage(
+      mojo::PendingRemote<searchbox::mojom::Page> pending_page) override;
   void OnFocusChanged(bool focused) override;
   void QueryAutocomplete(const std::u16string& input,
                          bool prevent_inline_autocomplete) override;
@@ -113,34 +95,27 @@ class RealboxHandler : public SearchboxHandler,
       const GURL& url,
       omnibox::mojom::NavigationPredictor navigation_predictor) override;
   void PopupElementSizeChanged(const gfx::Size& size) override;
+  void OnThumbnailRemoved() override;
 
-  // AutocompleteController::Observer:
-  void OnResultChanged(AutocompleteController* controller,
-                       bool default_match_changed) override;
-
+  // Invoked by LensOverlayController.
+  void SetInputText(const std::string& input_text);
+  // Invoked by LensOverlayController.
+  void SetThumbnail(const std::string& thumbnail_url);
   // Invoked by OmniboxEditModel when selection changes.
   void UpdateSelection(OmniboxPopupSelection old_selection,
                        OmniboxPopupSelection selection);
 
+  void SetLensSearchboxClientForTesting(
+      LensSearchboxClient* lens_searchbox_client);
+
  private:
   OmniboxEditModel* edit_model() const;
-  AutocompleteController* autocomplete_controller() const;
   const AutocompleteMatch* GetMatchWithUrl(size_t index, const GURL& url);
 
-  raw_ptr<Profile> profile_;
-  raw_ptr<content::WebContents> web_contents_;
-  raw_ptr<MetricsReporter> metrics_reporter_;
-  raw_ptr<OmniboxController> controller_;
-  std::unique_ptr<OmniboxController> owned_controller_;
-  base::ScopedObservation<AutocompleteController,
-                          AutocompleteController::Observer>
-      autocomplete_controller_observation_{this};
-
-  // Since mojo::Remote is not thread-safe, use an atomic to signal readiness.
-  std::atomic<bool> page_set_;
-  mojo::Remote<omnibox::mojom::Page> page_;
-  mojo::Receiver<omnibox::mojom::PageHandler> page_handler_;
   base::ObserverList<OmniboxWebUIPopupChangeObserver> observers_;
+
+  // Owns this.
+  raw_ptr<LensSearchboxClient> lens_searchbox_client_;
 
   // Size of the WebUI popup element, as reported by ResizeObserver.
   gfx::Size webui_size_;

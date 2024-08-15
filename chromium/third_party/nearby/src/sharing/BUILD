@@ -1,11 +1,27 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 licenses(["notice"])
 
 cc_library(
     name = "connection_types",
     hdrs = ["nearby_connections_types.h"],
     deps = [
+        "//internal/base:files",
         "//internal/crypto_cros",
         "//internal/interop:authentication_status",
+        "//internal/platform:types",
         "//sharing/common:compatible_u8_string",
         "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/time",
@@ -30,7 +46,6 @@ cc_library(
         "file_attachment.h",
         "nearby_connection.h",
         "nearby_connections_manager.h",
-        "nearby_connections_types.h",
         "nearby_sharing_decoder.h",
         "share_target.h",
         "text_attachment.h",
@@ -38,22 +53,24 @@ cc_library(
     ],
     visibility = [
         "//location/nearby/cpp/sharing:__subpackages__",
+        "//location/nearby/sharing/sdk/quick_share_server:__pkg__",
         "//sharing:__subpackages__",
     ],
     deps = [
+        ":connection_types",
         "//internal/crypto_cros",
-        "//internal/interop:authentication_status",
         "//internal/network:url",
+        "//internal/platform:types",
         "//sharing/common:compatible_u8_string",
         "//sharing/common:enum",
         "//sharing/internal/base",
         "//sharing/internal/public:logging",
         "//sharing/proto:enums_cc_proto",
-        "//sharing/proto:share_cc_proto",
+        "//sharing/proto:wire_format_cc_proto",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:span",
     ],
 )
@@ -70,6 +87,7 @@ cc_library(
     ],
     visibility = [
         "//location/nearby/cpp/sharing:__subpackages__",
+        "//location/nearby/sharing/sdk/quick_share_server:__pkg__",
         "//sharing:__subpackages__",
     ],
     deps = [
@@ -93,7 +111,6 @@ cc_library(
         "nearby_file_handler.cc",
         "nearby_share_profile_info_provider_impl.cc",
         "nearby_sharing_decoder_impl.cc",
-        "nearby_sharing_event_logger.cc",
         "nearby_sharing_service.cc",
         "nearby_sharing_service_extension.cc",
         "nearby_sharing_service_factory.cc",
@@ -121,7 +138,6 @@ cc_library(
         "nearby_file_handler.h",
         "nearby_share_profile_info_provider_impl.h",
         "nearby_sharing_decoder_impl.h",
-        "nearby_sharing_event_logger.h",
         "nearby_sharing_service.h",
         "nearby_sharing_service_extension.h",
         "nearby_sharing_service_factory.h",
@@ -142,9 +158,11 @@ cc_library(
     ],
     visibility = [
         "//location/nearby/cpp/sharing:__subpackages__",
+        "//location/nearby/sharing/sdk/quick_share_server:__pkg__",
         "//sharing:__subpackages__",
     ],
     deps = [
+        ":connection_types",
         ":transfer_metadata",
         ":types",
         "//connections:core",
@@ -153,6 +171,7 @@ cc_library(
         "//internal/analytics:event_logger",
         "//internal/base",
         "//internal/base:bluetooth_address",
+        "//internal/base:files",
         "//internal/flags:nearby_flags",
         "//internal/network:url",
         "//internal/platform:base",
@@ -176,11 +195,14 @@ cc_library(
         "//sharing/local_device_data",
         "//sharing/proto:enums_cc_proto",
         "//sharing/proto:share_cc_proto",
+        "//sharing/proto:wire_format_cc_proto",
         "//sharing/scheduling",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/functional:bind_front",
         "@com_google_absl//absl/hash",
         "@com_google_absl//absl/meta:type_traits",
         "@com_google_absl//absl/random",
@@ -210,6 +232,7 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":connection_types",
         ":nearby_sharing_service",
         ":transfer_metadata",
         ":types",
@@ -219,10 +242,11 @@ cc_library(
         "//sharing/internal/public:logging",
         "//sharing/local_device_data",
         "//sharing/proto:enums_cc_proto",
-        "//sharing/proto:share_cc_proto",
         "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
     ],
 )
 
@@ -233,13 +257,44 @@ cc_test(
         ":connection_types",
         "@com_github_protobuf_matchers//protobuf-matchers",
         "@com_google_googletest//:gtest_main",
+    ] + select({
+        "@platforms//os:windows": [
+            "//internal/platform/implementation/windows",
+        ],
+        "//conditions:default": [
+            "//internal/platform/implementation/g3",
+        ],
+    }),
+)
+
+cc_test(
+    name = "paired_key_verification_runner_test",
+    size = "small",
+    srcs = ["paired_key_verification_runner_test.cc"],
+    deps = [
+        ":nearby_sharing_service",
+        ":test_support",
+        ":types",
+        "//internal/platform/implementation/g3",  # fixdeps: keep
+        "//internal/test",
+        "//proto:sharing_enums_cc_proto",
+        "//sharing/certificates",
+        "//sharing/certificates:test_support",
+        "//sharing/internal/public:logging",
+        "//sharing/internal/public:types",
+        "//sharing/internal/test:nearby_test",
+        "//sharing/proto:enums_cc_proto",
+        "//sharing/proto:share_cc_proto",
+        "//sharing/proto:wire_format_cc_proto",
+        "@com_github_protobuf_matchers//protobuf-matchers",
+        "@com_google_absl//absl/time",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
 cc_test(
     name = "nearby_sharing_service_test",
-    size = "small",
-    timeout = "short",
+    size = "medium",
     srcs = [
         "fake_nearby_connections_service.h",
         "incoming_frames_reader_test.cc",
@@ -249,12 +304,10 @@ cc_test(
         "nearby_connections_types_test.cc",
         "nearby_file_handler_test.cc",
         "nearby_share_profile_info_provider_impl_test.cc",
-        "nearby_sharing_event_logger_test.cc",
         "nearby_sharing_service_extension_test.cc",
         "nearby_sharing_service_impl_test.cc",
         "nearby_sharing_service_test.cc",
         "nearby_sharing_settings_test.cc",
-        "paired_key_verification_runner_test.cc",
         "payload_tracker_test.cc",
         "share_target_test.cc",
         "text_attachment_test.cc",
@@ -263,6 +316,7 @@ cc_test(
     ],
     shard_count = 8,
     deps = [
+        ":connection_types",
         ":nearby_sharing_service",
         ":test_support",
         ":transfer_metadata",
@@ -270,12 +324,12 @@ cc_test(
         "//base:casts",
         "//connections:core_types",
         "//internal/account",
-        "//internal/analytics:event_logger",
+        "//internal/analytics:mock_event_logger",
+        "//internal/base:files",
         "//internal/flags:nearby_flags",
         "//internal/network:types",
         "//internal/network:url",
         "//internal/platform/implementation:account_manager",
-        "//internal/platform/implementation:types",
         "//internal/platform/implementation/g3",  # fixdeps: keep
         "//internal/test",
         "//proto:sharing_enums_cc_proto",
@@ -297,6 +351,7 @@ cc_test(
         "//sharing/local_device_data:test_support",
         "//sharing/proto:enums_cc_proto",
         "//sharing/proto:share_cc_proto",
+        "//sharing/proto:wire_format_cc_proto",
         "//sharing/proto/analytics:sharing_log_cc_proto",
         "@com_github_protobuf_matchers//protobuf-matchers",
         "@com_google_absl//absl/base:core_headers",

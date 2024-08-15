@@ -284,7 +284,7 @@ int32_t WebrtcVideoEncoderWrapper::Encode(
 
   // Store RTP timestamp and FrameStats so they can be added to the
   // EncodedImage and EncodedFrame when encoding is complete.
-  rtp_timestamp_ = frame.timestamp();
+  rtp_timestamp_ = frame.rtp_timestamp();
   frame_stats_ = video_frame_adapter->TakeFrameStats();
   if (!frame_stats_) {
     // This could happen if WebRTC tried to encode the same frame twice.
@@ -497,7 +497,7 @@ void WebrtcVideoEncoderWrapper::OnFrameEncoded(
   }
 
   if (encode_result != WebrtcVideoEncoder::EncodeResult::SUCCEEDED) {
-    // TODO(crbug.com/1192865): Store this error and communicate it to WebRTC
+    // TODO(crbug.com/40175068): Store this error and communicate it to WebRTC
     // via the next call to Encode(). The VPX encoders are never expected to
     // return any error, but hardware-decoders such as H264 may fail.
     LOG(ERROR) << "Video encoder returned error "

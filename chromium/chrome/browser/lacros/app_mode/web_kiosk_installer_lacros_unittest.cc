@@ -15,12 +15,12 @@
 #include "chrome/browser/web_applications/test/fake_web_contents_manager.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
-#include "chrome/browser/web_applications/web_contents/web_app_url_loader.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chromeos/crosapi/mojom/web_kiosk_service.mojom.h"
 #include "chromeos/lacros/lacros_service.h"
+#include "components/webapps/browser/web_contents/web_app_url_loader.h"
 #include "components/webapps/common/web_app_id.h"
 #include "components/webapps/common/web_page_metadata.mojom.h"
 #include "content/public/test/browser_task_environment.h"
@@ -35,7 +35,6 @@ namespace {
 const char kAppInstallUrl[] = "https://example.com";
 const char kAppLaunchUrl[] = "https://example.com/launch";
 const char kManifestUrl[] = "https://example.com/manifest.json";
-const char16_t kAppTitle[] = u"app-title";
 
 std::optional<webapps::AppId> app_id() {
   return web_app::GenerateAppId(/*manifest_id=*/std::nullopt,
@@ -117,10 +116,6 @@ class WebKioskInstallerLacrosTest : public testing::Test {
   void InstallApp() {
     CreateWebAppWithManifest();
     InstallAppInternal(/*install_app_as_placeholder=*/false);
-
-    web_app::WebAppInstallInfo info;
-    info.start_url = GURL(kAppLaunchUrl);
-    info.title = kAppTitle;
   }
 
   webapps::AppId CreateWebAppWithManifest() {
@@ -131,7 +126,7 @@ class WebKioskInstallerLacrosTest : public testing::Test {
     auto& install_page_state =
         web_contents_manager().GetOrCreatePageState(install_url);
     install_page_state.url_load_result =
-        web_app::WebAppUrlLoaderResult::kUrlLoaded;
+        webapps::WebAppUrlLoaderResult::kUrlLoaded;
     install_page_state.redirection_url = std::nullopt;
 
     install_page_state.opt_metadata =

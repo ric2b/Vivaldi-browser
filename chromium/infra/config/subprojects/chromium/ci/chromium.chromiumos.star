@@ -32,6 +32,8 @@ ci.defaults.set(
     reclient_jobs = reclient.jobs.DEFAULT,
     service_account = ci.DEFAULT_SERVICE_ACCOUNT,
     shadow_service_account = ci.DEFAULT_SHADOW_SERVICE_ACCOUNT,
+    siso_enabled = True,
+    siso_remote_jobs = reclient.jobs.DEFAULT,
 )
 
 consoles.console_view(
@@ -292,7 +294,13 @@ ci.builder(
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
-            apply_configs = ["chromeos", "checkout_lacros_sdk"],
+            apply_configs = [
+                "chromeos",
+                # This is necessary due to a child builder running the
+                # telemetry_perf_unittests suite.
+                "chromium_with_telemetry_dependencies",
+                "checkout_lacros_sdk",
+            ],
         ),
         chromium_config = builder_config.chromium_config(
             config = "chromium",
@@ -500,14 +508,14 @@ ci.builder(
             target_arch = builder_config.target_arch.ARM,
             target_bits = 64,
             target_platform = builder_config.target_platform.CHROMEOS,
-            target_cros_boards = ["arm64-generic"],
+            cros_boards_with_qemu_images = ["arm64-generic-vm"],
         ),
     ),
     gn_args = gn_args.config(
         configs = [
             "chromeos_device",
             "reclient",
-            "arm64-generic",
+            "arm64-generic-vm",
             "dcheck_always_on",
             "ozone_headless",
         ],
@@ -965,7 +973,7 @@ ci.builder(
             "release",
         ],
     ),
-    # TODO(crbug.com/1202631) Enable tree closing when stable.
+    # TODO(crbug.com/40179221) Enable tree closing when stable.
     tree_closing = False,
     console_view_entry = consoles.console_view_entry(
         category = "lacros|arm",
@@ -1014,7 +1022,7 @@ ci.builder(
             "release",
         ],
     ),
-    # TODO(https://crbug.com/1342761): enable sheriff rotation and tree_closing
+    # TODO(crbug.com/40231151): enable sheriff rotation and tree_closing
     # when the builder is stable.
     sheriff_rotations = args.ignore_default(None),
     tree_closing = False,
@@ -1048,6 +1056,9 @@ ci.builder(
             target_platform = builder_config.target_platform.CHROMEOS,
         ),
         build_gs_bucket = "chromium-chromiumos-archive",
+    ),
+    builder_config_settings = builder_config.ci_settings(
+        retry_failed_shards = True,
     ),
     gn_args = gn_args.config(
         configs = [
@@ -1185,6 +1196,9 @@ ci.thin_tester(
             target_platform = builder_config.target_platform.CHROMEOS,
         ),
         build_gs_bucket = "chromium-chromiumos-archive",
+    ),
+    builder_config_settings = builder_config.ci_settings(
+        retry_failed_shards = True,
     ),
     tree_closing = False,
     console_view_entry = consoles.console_view_entry(

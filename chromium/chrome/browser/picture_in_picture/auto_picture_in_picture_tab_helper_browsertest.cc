@@ -24,6 +24,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/metrics/content/subprocess_metrics_provider.h"
 #include "components/permissions/permission_decision_auto_blocker.h"
 #include "content/public/browser/media_session.h"
 #include "content/public/browser/media_session_service.h"
@@ -544,8 +545,9 @@ IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWithVideoPlaybackBrowserTest,
                                         /*should_document_pip=*/false);
 }
 
+// TODO(crbug.com/335630150): Flaky.
 IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWithVideoPlaybackBrowserTest,
-                       OpensAndClosesDocumentAutopip) {
+                       DISABLED_OpensAndClosesDocumentAutopip) {
   // Load a page that registers for autopip and start video playback.
   LoadAutoDocumentPipPage(browser());
   auto* web_contents = browser()->tab_strip_model()->GetActiveWebContents();
@@ -604,8 +606,17 @@ IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWithVideoPlaybackBrowserTest,
                                         /*should_document_pip=*/false);
 }
 
-IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWithVideoPlaybackBrowserTest,
-                       OpensAndClosesDocumentAutopip_VideoSufficientlyVisible) {
+// TODO(crbug.com/40923043): Flaky on "Linux ASan LSan Tests (1)"
+#if BUILDFLAG(IS_LINUX) && defined(ADDRESS_SANITIZER) && defined(LEAK_SANITIZER)
+#define MAYBE_OpensAndClosesDocumentAutopip_VideoSufficientlyVisible \
+  DISABLED_OpensAndClosesDocumentAutopip_VideoSufficientlyVisible
+#else
+#define MAYBE_OpensAndClosesDocumentAutopip_VideoSufficientlyVisible \
+  OpensAndClosesDocumentAutopip_VideoSufficientlyVisible
+#endif
+IN_PROC_BROWSER_TEST_F(
+    AutoPictureInPictureWithVideoPlaybackBrowserTest,
+    MAYBE_OpensAndClosesDocumentAutopip_VideoSufficientlyVisible) {
   // Load a page that registers for autopip and start video playback.
   LoadAutoDocumentVideoVisibilityPipPage(browser());
   auto* web_contents = browser()->tab_strip_model()->GetActiveWebContents();
@@ -755,15 +766,31 @@ IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWithVideoPlaybackBrowserTest,
   EXPECT_FALSE(original_web_contents->HasPictureInPictureDocument());
 }
 
+// TODO(crbug.com/335565116): Re-enable this test.
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#define MAYBE_OverlaySettingViewIsShownForVideoPip \
+  DISABLED_OverlaySettingViewIsShownForVideoPip
+#else
+#define MAYBE_OverlaySettingViewIsShownForVideoPip \
+  OverlaySettingViewIsShownForVideoPip
+#endif
 IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWithVideoPlaybackBrowserTest,
-                       OverlaySettingViewIsShownForVideoPip) {
+                       MAYBE_OverlaySettingViewIsShownForVideoPip) {
   LoadAutoVideoPipPage(browser());
   auto* web_contents = browser()->tab_strip_model()->GetActiveWebContents();
   PlayVideo(web_contents);
   WaitForAudioFocusGained();
   WaitForMediaSessionPlaying(web_contents);
   WaitForMeetsVisibilityThreshold(web_contents);
-  OpenNewTab(browser());
+
+  {
+    // Open and switch to a new tab.
+    content::MediaStartStopObserver enter_pip_observer(
+        web_contents,
+        content::MediaStartStopObserver::Type::kEnterPictureInPicture);
+    OpenNewTab(browser());
+    enter_pip_observer.Wait();
+  }
 
   // Make sure that the overlay view is shown.
   EXPECT_TRUE(GetOverlayViewFromVideoPipWindow());
@@ -1206,15 +1233,9 @@ IN_PROC_BROWSER_TEST_F(AutoPictureInPictureTabHelperBrowserTest,
   tab_helper->set_auto_blocker_for_testing(nullptr);
 }
 
-// TODO(crbug.com/328717201): Test is flaky on win asan.
-#if BUILDFLAG(IS_WIN) && defined(ADDRESS_SANITIZER)
-#define MAYBE_AllowOncePersistsUntilNavigation \
-  DISABLED_AllowOncePersistsUntilNavigation
-#else
-#define MAYBE_AllowOncePersistsUntilNavigation AllowOncePersistsUntilNavigation
-#endif
+// TODO(crbug.com/331493435): Test is flaky.
 IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWithVideoPlaybackBrowserTest,
-                       MAYBE_AllowOncePersistsUntilNavigation) {
+                       DISABLED_AllowOncePersistsUntilNavigation) {
   LoadAutoVideoPipPage(browser());
   auto* web_contents = browser()->tab_strip_model()->GetActiveWebContents();
   PlayVideo(web_contents);
@@ -1303,4 +1324,59 @@ IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWithVideoPlaybackBrowserTest,
   }
 
   tab_helper->set_auto_blocker_for_testing(nullptr);
+}
+
+IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWithVideoPlaybackBrowserTest,
+                       MediaVideoVisibilityTrackerHistogramSamplesHaveCount) {
+  // Load a page that registers for autopip and start video playback.
+  LoadAutoVideoVisibilityPipPage(browser());
+  auto* web_contents = browser()->tab_strip_model()->GetActiveWebContents();
+  base::HistogramTester histograms;
+  PlayVideo(web_contents);
+  WaitForAudioFocusGained();
+  WaitForMediaSessionPlaying(web_contents);
+
+  AddOverlayToVideo(web_contents, /*should_occlude*/ true);
+  WaitForMeetsVisibilityThreshold(
+      web_contents, /*expected_meets_visibility_threshold*/ false);
+  SwitchToNewTabAndDontExpectAutopip();
+
+  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+
+  const char* const histogram_names[] = {
+      "Media.MediaVideoVisibilityTracker.ComputeOcclusion.ComputeOccludingArea."
+      "TotalDuration",
+      "Media.MediaVideoVisibilityTracker.ComputeOcclusion.TotalDuration",
+      "Media.MediaVideoVisibilityTracker."
+      "HitTestedNodesContributingToOcclusionCount.ExponentialHistogram."
+      "TotalCount",
+      "Media.MediaVideoVisibilityTracker."
+      "HitTestedNodesContributingToOcclusionCount.LinearHistogram.TotalCount",
+      "Media.MediaVideoVisibilityTracker.HitTestedNodesCount."
+      "ExponentialHistogram.TotalCount",
+      "Media.MediaVideoVisibilityTracker.HitTestedNodesCount.LinearHistogram."
+      "TotalCount",
+      "Media.MediaVideoVisibilityTracker.IgnoredNodesNotOpaque.Percentage",
+      "Media.MediaVideoVisibilityTracker.IgnoredNodesNotOpaqueCount."
+      "ExponentialHistogram.TotalCount",
+      "Media.MediaVideoVisibilityTracker.IgnoredNodesNotOpaqueCount."
+      "LinearHistogram.TotalCount",
+      "Media.MediaVideoVisibilityTracker.IgnoredNodesUserAgentShadowRoot."
+      "Percentage",
+      "Media.MediaVideoVisibilityTracker.IgnoredNodesUserAgentShadowRootCount."
+      "ExponentialHistogram.TotalCount",
+      "Media.MediaVideoVisibilityTracker.IgnoredNodesUserAgentShadowRootCount."
+      "LinearHistogram.TotalCount",
+      "Media.MediaVideoVisibilityTracker.NodesContributingToOcclusion."
+      "Percentage",
+      "Media.MediaVideoVisibilityTracker.OccludingRectsCount."
+      "ExponentialHistogram.TotalCount",
+      "Media.MediaVideoVisibilityTracker.OccludingRectsCount.LinearHistogram."
+      "TotalCount",
+  };
+
+  for (const auto* histogram_name : histogram_names) {
+    auto samples = histograms.GetHistogramSamplesSinceCreation(histogram_name);
+    EXPECT_GE(samples->TotalCount(), 1);
+  }
 }

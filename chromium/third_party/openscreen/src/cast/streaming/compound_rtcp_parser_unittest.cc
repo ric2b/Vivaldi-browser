@@ -38,7 +38,7 @@ class CompoundRtcpParserTest : public testing::Test {
  private:
   RtcpSession session_{kSenderSsrc, kReceiverSsrc, Clock::now()};
   StrictMock<MockCompoundRtcpParserClient> client_;
-  CompoundRtcpParser parser_{&session_, &client_};
+  CompoundRtcpParser parser_{session_, client_};
 };
 
 TEST_F(CompoundRtcpParserTest, ProcessesEmptyPacket) {

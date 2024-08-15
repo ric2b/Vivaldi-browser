@@ -61,6 +61,11 @@ class BuildExt(setuptools.command.build_ext.build_ext):
         cmd.append(f'--extra_toolchains=@local_config_cc//:cc-toolchain-{cpu}')
     except KeyError:
       pass
+    try:
+      ver = os.environ['MACOSX_DEPLOYMENT_TARGET']
+      cmd.append(f'--macos_minimum_os={ver}')
+    except KeyError:
+      pass
     # Register the local Python toolchains with highest priority.
     self.generate_python_toolchains()
     cmd.append('--extra_toolchains=//python/toolchains:all')
@@ -187,7 +192,7 @@ ext_module = setuptools.Extension(
 
 setuptools.setup(
     name='google-re2',
-    version='1.1',
+    version='1.1.20240501',
     description='RE2 Python bindings',
     long_description=long_description,
     long_description_content_type='text/plain',

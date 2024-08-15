@@ -103,9 +103,6 @@ class USER_MANAGER_EXPORT User {
   // UserType::kRegular and UserType::kChild.
   bool HasGaiaAccount() const;
 
-  // Returns true if it's Active Directory user.
-  bool IsActiveDirectoryUser() const;
-
   // Returns true if user is child.
   bool IsChild() const;
 
@@ -296,7 +293,7 @@ class USER_MANAGER_EXPORT User {
 
   void SetProfilePrefs(PrefService* prefs) { profile_prefs_ = prefs; }
 
-  void SetAffiliation(bool is_affiliated);
+  void SetAffiliated(bool is_affiliated);
 
  private:
   AccountId account_id_;

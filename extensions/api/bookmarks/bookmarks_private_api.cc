@@ -185,7 +185,7 @@ BookmarksPrivateEmptyTrashFunction::RunOnReady() {
   if (trash_node) {
     while (!trash_node->children().empty()) {
       const BookmarkNode* remove_node = trash_node->children()[0].get();
-      model->Remove(remove_node, {});
+      model->Remove(remove_node, {}, FROM_HERE);
     }
     success = true;
   }

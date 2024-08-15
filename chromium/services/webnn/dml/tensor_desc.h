@@ -5,17 +5,17 @@
 #ifndef SERVICES_WEBNN_DML_TENSOR_DESC_H_
 #define SERVICES_WEBNN_DML_TENSOR_DESC_H_
 
-#include <DirectML.h>
-#include <wrl.h>
 #include <vector>
 
 #include "base/component_export.h"
 #include "base/containers/span.h"
 #include "base/gtest_prod_util.h"
+#include "third_party/microsoft_dxheaders/include/directml.h"
+
+// Windows SDK headers should be included after DirectX headers.
+#include <wrl.h>
 
 namespace webnn::dml {
-
-using Microsoft::WRL::ComPtr;
 
 // The TensorDesc wraps a tensor description (DML_TENSOR_DESC) needed by a DML
 // graph. It owns the tensor's dimensions, strides and DML_BUFFER_TENSOR_DESC.
@@ -72,6 +72,8 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) TensorDesc final {
   // target axes of [0, 3], the new shape would be [2, 1, 1, 3].
   void MakeBroadcastCompatible(size_t minimum_rank,
                                base::span<const uint32_t> axes);
+
+  void SetTotalTensorSizeInBytes(uint64_t new_total_tensor_size_bytes);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(WebNNTensorDescTest, CreateAndCopyTensorDescA);

@@ -235,21 +235,18 @@ SenderSession::Client::~Client() = default;
 SenderSession::SenderSession(Configuration config)
     : config_(config),
       messenger_(
-          config_.message_port,
+          *config_.message_port,
           config_.message_source_id,
           config_.message_destination_id,
           [this](Error error) {
             OSP_DLOG_WARN << "SenderSession message port error: " << error;
-            config_.client->OnError(this, error);
+            config_.client.OnError(this, error);
           },
           config_.environment->task_runner()),
       rpc_messenger_([this](std::vector<uint8_t> message) {
         SendRpcMessage(std::move(message));
       }),
-      packet_router_(config_.environment) {
-  OSP_CHECK(config_.client);
-  OSP_CHECK(config_.environment);
-
+      packet_router_(*config_.environment) {
   // We may or may not do remoting this session, however our RPC handler
   // is not negotiation-specific and registering on construction here allows us
   // to record any unexpected RPC messages.
@@ -351,9 +348,9 @@ void SenderSession::OnAnswer(ErrorOr<ReceiverMessage> message) {
     // Answer timeouts are reported separately since API consumers
     // may wish to track them in metrics.
     if (message.error().code() == Error::Code::kMessageTimeout) {
-      config_.client->OnError(this, AnswerTimeoutError());
+      config_.client.OnError(this, AnswerTimeoutError());
     } else {
-      config_.client->OnError(this, message.error());
+      config_.client.OnError(this, message.error());
     }
     return;
   }
@@ -368,8 +365,8 @@ void SenderSession::OnAnswer(ErrorOr<ReceiverMessage> message) {
   ConfiguredSenders senders = SelectSenders(answer);
   // If we didn't select any senders, the negotiation was unsuccessful.
   if (!senders.audio_sender && !senders.video_sender) {
-    config_.client->OnError(this, Error(Error::Code::kNoStreamSelected,
-                                        "Invalid answer response message"));
+    config_.client.OnError(this, Error(Error::Code::kNoStreamSelected,
+                                       "Invalid answer response message"));
     return;
   }
 
@@ -381,15 +378,15 @@ void SenderSession::OnAnswer(ErrorOr<ReceiverMessage> message) {
     state_ = State::kRemoting;
   }
 
-  config_.client->OnNegotiated(this, std::move(senders), recommendations);
+  config_.client.OnNegotiated(this, std::move(senders), recommendations);
 }
 
 void SenderSession::OnCapabilitiesResponse(ErrorOr<ReceiverMessage> message) {
   // Some receivers may not send a capabilities response at all, or may send an
   // error response to indicate remoting is not supported.
   if (!message) {
-    config_.client->OnError(this, Error(Error::Code::kRemotingNotSupported,
-                                        message.error().ToString()));
+    config_.client.OnError(this, Error(Error::Code::kRemotingNotSupported,
+                                       message.error().ToString()));
     return;
   }
   if (!message.value().valid ||
@@ -410,17 +407,17 @@ void SenderSession::OnCapabilitiesResponse(ErrorOr<ReceiverMessage> message) {
     std::string error_message = StringPrintf(
         "Receiver is using too new of a version for remoting (%d > %d)",
         remoting_version, kSupportedRemotingVersion);
-    config_.client->OnError(this, Error(Error::Code::kRemotingNotSupported,
-                                        std::move(error_message)));
+    config_.client.OnError(this, Error(Error::Code::kRemotingNotSupported,
+                                       std::move(error_message)));
     return;
   }
 
-  config_.client->OnCapabilitiesDetermined(this, ToCapabilities(caps));
+  config_.client.OnCapabilitiesDetermined(this, ToCapabilities(caps));
 }
 
 void SenderSession::OnRpcMessage(ErrorOr<ReceiverMessage> message) {
   if (!message) {
-    config_.client->OnError(this, message.error());
+    config_.client.OnError(this, message.error());
     return;
   }
 
@@ -446,9 +443,9 @@ void SenderSession::HandleErrorMessage(ReceiverMessage message,
     if (converted_error.code() == Error::Code::kUnknownError) {
       converted_error = Error(default_error.code(), converted_error.message());
     }
-    config_.client->OnError(this, converted_error);
+    config_.client.OnError(this, converted_error);
   } else {
-    config_.client->OnError(this, default_error);
+    config_.client.OnError(this, default_error);
   }
 }
 
@@ -466,7 +463,7 @@ std::unique_ptr<Sender> SenderSession::CreateSender(Ssrc receiver_ssrc,
                        /* is_pli_enabled*/ true,
                        ToStreamType(type, config_.use_android_rtp_hack)};
   OSP_DCHECK(config.IsValid());
-  return std::make_unique<Sender>(config_.environment, &packet_router_,
+  return std::make_unique<Sender>(*config_.environment, packet_router_,
                                   std::move(config), type);
 }
 

@@ -724,16 +724,22 @@ AX_TEST_F('ChromeVoxBackgroundTest', 'SelectOptionSelected', async function() {
   const root = await this.runWithLoadedTree(site);
   const select = root.find({role: RoleType.COMBO_BOX_SELECT});
   const selectLastOption = () => {
-    const options = select.findAll({role: RoleType.LIST_BOX_OPTION});
+    const options = select.findAll({role: RoleType.MENU_LIST_OPTION});
     options[options.length - 1].doDefault();
   };
 
   mockFeedback.call(doCmd('nextObject'))
-      .expectSpeech('Button', 'Press Search+Space to activate')
-      .call(doDefault(select))
       .expectSpeech('apple')
       .expectSpeech('Button')
-      .expectSpeech('Expanded')
+      .expectSpeech('Collapsed')
+      .expectSpeech('Press Search+Space to activate')
+      .call(doDefault(select))
+      .expectSpeech('apple')
+      // TODO(crbug.com/260178552): flaky whether this is read as an expanded
+      // button or as a list item 1 of 3. This is also flaky when using
+      // ChromeVox. Accept either for now -- both convey the current selection.
+      // .expectSpeech('Button')
+      // .expectSpeech('Expanded')
       .call(selectLastOption)
       .expectNextSpeechUtteranceIsNot('apple')
       .expectSpeech('grapefruit');
@@ -2561,13 +2567,17 @@ AX_TEST_F('ChromeVoxBackgroundTest', 'ReadWindowTitle', async function() {
 });
 
 AX_TEST_F('ChromeVoxBackgroundTest', 'OutputEmptyQueueMode', async function() {
+  class FakeOutputAction extends OutputAction {
+    run() {}
+  }
+
   const mockFeedback = this.createMockFeedback();
   const root = await this.runWithLoadedTree('<p>unused</p>');
   const output = new Output();
   Output.forceModeForNextSpeechUtterance(QueueMode.CATEGORY_FLUSH);
   output.append(
       output.speechBuffer_, new Spannable(''),
-      {annotation: [new OutputAction()]});
+      {annotation: [new FakeOutputAction()]});
   output.withString('test');
   mockFeedback.clearPendingOutput()
       .call(output.go.bind(output))
@@ -3039,7 +3049,7 @@ AX_TEST_F('ChromeVoxBackgroundTest', 'SwipeLeftRight2', async function() {
   await mockFeedback.replay();
 });
 
-// TODO(crbug.com/1228418) - Improve the generation of summaries across ChromeOS
+// TODO(crbug.com/40777708) - Improve the generation of summaries across ChromeOS
 AX_TEST_F(
     // TODO(crbug.com/1419811): Test is flaky.
     'ChromeVoxBackgroundTest', 'DISABLED_AlertDialogAutoSummaryTextContent',
@@ -4031,21 +4041,24 @@ AX_TEST_F(
       await mockFeedback.replay();
     });
 
-AX_TEST_F('ChromeVoxBackgroundTest', 'GestureOnPopUpButton', async function() {
-  const mockFeedback = this.createMockFeedback();
-  const site = `
+// TODO(crbug.com/260291606): flaky.
+AX_TEST_F(
+    'ChromeVoxBackgroundTest', 'DISABLED_GestureOnPopUpButton',
+    async function() {
+      const mockFeedback = this.createMockFeedback();
+      const site = `
     <select><option>apple</option><option>banana</option></select>
   `;
-  await this.runWithLoadedTree(site);
-  mockFeedback.expectSpeech('Button', 'has pop up')
-      .call(doGesture(Gesture.CLICK))
-      .expectSpeech('Button', 'has pop up', 'Expanded')
-      .call(doGesture(Gesture.SWIPE_DOWN1))
-      .expectSpeech('banana')
-      .call(doGesture(Gesture.SWIPE_UP1))
-      .expectSpeech('apple');
-  await mockFeedback.replay();
-});
+      await this.runWithLoadedTree(site);
+      mockFeedback.expectSpeech('Button', 'has pop up')
+          .call(doGesture(Gesture.CLICK))
+          .expectSpeech('Button', 'has pop up', 'Expanded')
+          .call(doGesture(Gesture.SWIPE_DOWN1))
+          .expectSpeech('banana')
+          .call(doGesture(Gesture.SWIPE_UP1))
+          .expectSpeech('apple');
+      await mockFeedback.replay();
+    });
 
 AX_TEST_F('ChromeVoxBackgroundTest', 'NestedImages', async function() {
   const mockFeedback = this.createMockFeedback();

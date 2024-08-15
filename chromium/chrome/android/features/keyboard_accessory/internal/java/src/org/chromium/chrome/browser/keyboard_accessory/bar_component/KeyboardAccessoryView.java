@@ -30,6 +30,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.TraceEvent;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.keyboard_accessory.R;
+import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.ui.widget.ViewRectProvider;
 
 /**
@@ -43,7 +44,9 @@ class KeyboardAccessoryView extends LinearLayout {
     private static final int FADE_ANIMATION_DURATION_MS = 150; // Total duration of show/hide.
     private static final int HIDING_ANIMATION_DELAY_MS = 50; // Shortens animation duration.
 
+    private Tracker mFeatureEngagementTracker;
     private Callback<Integer> mObfuscatedLastChildAt;
+    private Callback<Boolean> mOnTouchEvent;
     private ObjectAnimator mAnimator;
     private AnimationListener mAnimationListener;
     private ViewPropertyAnimator mRunningAnimation;
@@ -70,7 +73,7 @@ class KeyboardAccessoryView extends LinearLayout {
                 public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                     if (newState != RecyclerView.SCROLL_STATE_IDLE) {
                         mBarItemsView.removeOnScrollListener(mScrollingIphCallback);
-                        KeyboardAccessoryIPHUtils.emitScrollingEvent();
+                        KeyboardAccessoryIPHUtils.emitScrollingEvent(mFeatureEngagementTracker);
                     }
                 }
             };
@@ -162,17 +165,21 @@ class KeyboardAccessoryView extends LinearLayout {
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent event) {
+        final boolean isViewObscured =
+                (event.getFlags()
+                                & (MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED
+                                        | MotionEvent.FLAG_WINDOW_IS_OBSCURED))
+                        != 0;
+        // The event is filtered out when the keyboard accessory view is fully or partially obscured
+        // given that no user education bubbles are shown to the user.
+        final boolean shouldFilterEvent = isViewObscured && !mAllowClicksWhileObscured;
+        mOnTouchEvent.onResult(shouldFilterEvent);
+
         if (!ChromeFeatureList.isEnabled(
                 ChromeFeatureList.AUTOFILL_ENABLE_SECURITY_TOUCH_EVENT_FILTERING_ANDROID)) {
             return super.onInterceptTouchEvent(event);
         }
-        final boolean isViewObscured =
-                (event.getFlags() & MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED) != 0
-                        || (event.getFlags() & MotionEvent.FLAG_WINDOW_IS_OBSCURED) != 0;
-
-        // The event is filtered out when the keyboard accessory view is fully or partially obscured
-        // given that no user education bubbles are shown to the user.
-        if (isViewObscured && !mAllowClicksWhileObscured) {
+        if (shouldFilterEvent) {
             return true;
         }
         // When keyboard accessory view is fully or partially obsured, clicks are allowed only if
@@ -183,6 +190,7 @@ class KeyboardAccessoryView extends LinearLayout {
         if (event.getAction() == MotionEvent.ACTION_UP) {
             mAllowClicksWhileObscured = false;
         }
+
         return super.onInterceptTouchEvent(event);
     }
 
@@ -228,6 +236,16 @@ class KeyboardAccessoryView extends LinearLayout {
         mBarItemsView.post(mBarItemsView::invalidateItemDecorations);
     }
 
+    void setFeatureEngagementTracker(Tracker tracker) {
+        assert tracker != null : "Tracker must not be null";
+        mFeatureEngagementTracker = tracker;
+    }
+
+    Tracker getFeatureEngagementTracker() {
+        assert mFeatureEngagementTracker != null : "Attempting to access null Tracker";
+        return mFeatureEngagementTracker;
+    }
+
     void setVisible(boolean visible) {
         TraceEvent.begin("KeyboardAccessoryView#setVisible");
         if (!visible || getVisibility() != VISIBLE) mBarItemsView.scrollToPosition(0);
@@ -266,6 +284,10 @@ class KeyboardAccessoryView extends LinearLayout {
 
     void setObfuscatedLastChildAt(Callback<Integer> obfuscatedLastChildAt) {
         mObfuscatedLastChildAt = obfuscatedLastChildAt;
+    }
+
+    void setOnTouchEventCallback(Callback<Boolean> onTouchEvent) {
+        mOnTouchEvent = onTouchEvent;
     }
 
     void disableAnimationsForTesting() {

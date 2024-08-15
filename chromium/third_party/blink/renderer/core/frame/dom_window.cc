@@ -109,8 +109,8 @@ v8::Local<v8::Object> DOMWindow::AssociateWithWrapper(
   // half-initialized context.
   if (world->DomDataStore().Set</*entered_context=*/false>(
           isolate, this, wrapper_type_info, wrapper)) {
-    V8DOMWrapper::SetNativeInfo(isolate, wrapper, wrapper_type_info, this);
-    DCHECK(V8DOMWrapper::HasInternalFieldsSet(wrapper));
+    V8DOMWrapper::SetNativeInfo(isolate, wrapper, this);
+    DCHECK(V8DOMWrapper::HasInternalFieldsSet(isolate, wrapper));
   }
   return wrapper;
 }
@@ -187,7 +187,7 @@ ScriptValue DOMWindow::openerForBindings(v8::Isolate* isolate) const {
   RecordWindowProxyAccessMetrics(
       WebFeature::kWindowProxyCrossOriginAccessOpener,
       WebFeature::kWindowProxyCrossOriginAccessFromOtherPageOpener);
-  ScriptState* script_state = ScriptState::From(isolate->GetCurrentContext());
+  ScriptState* script_state = ScriptState::ForCurrentRealm(isolate);
   return ScriptValue(isolate, ToV8Traits<IDLNullable<DOMWindow>>::ToV8(
                                   script_state, opener()));
 }
@@ -229,7 +229,7 @@ void DOMWindow::setOpenerForBindings(v8::Isolate* isolate,
   //       [[Enumerable]]: true, [[Configurable]]: true }).
   v8::Local<v8::Context> context = isolate->GetCurrentContext();
   v8::Local<v8::Object> this_wrapper =
-      ToV8Traits<DOMWindow>::ToV8(ScriptState::From(context), this)
+      ToV8Traits<DOMWindow>::ToV8(ScriptState::From(isolate, context), this)
           .As<v8::Object>();
   v8::PropertyDescriptor desc(opener.V8Value(), /*writable=*/true);
   desc.set_enumerable(true);

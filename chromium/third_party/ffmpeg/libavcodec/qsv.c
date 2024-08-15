@@ -20,6 +20,7 @@
 
 #include <mfxvideo.h>
 #include <mfxjpeg.h>
+#include <mfxvp8.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -29,8 +30,8 @@
 #include "libavutil/error.h"
 #include "libavutil/hwcontext.h"
 #include "libavutil/hwcontext_qsv.h"
-#include "libavutil/imgutils.h"
 #include "libavutil/avassert.h"
+#include "libavutil/mem.h"
 
 #include "avcodec.h"
 #include "qsv_internal.h"
@@ -38,8 +39,6 @@
 #define MFX_IMPL_VIA_MASK(impl) (0x0f00 & (impl))
 #define QSV_HAVE_USER_PLUGIN    !QSV_ONEVPL
 #define QSV_HAVE_AUDIO          !QSV_ONEVPL
-
-#include "mfxvp8.h"
 
 #if QSV_HAVE_USER_PLUGIN
 #include <mfxplugin.h>

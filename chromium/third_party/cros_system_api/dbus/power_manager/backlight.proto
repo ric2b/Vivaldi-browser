@@ -40,6 +40,8 @@ message SetBacklightBrightnessRequest {
     USER_REQUEST = 0;
     // Automated request based on a prediction of the desired brightness.
     MODEL = 1;
+    // User request via the Settings app.
+    USER_REQUEST_FROM_SETTINGS_APP = 2;
   }
   optional Cause cause = 3;
 
@@ -85,9 +87,39 @@ message BacklightBrightnessChange {
     USER_TOGGLED_ON = 12;
     // Changed due to battery saver state change.
     BATTERY_SAVER_STATE_CHANGED = 13;
-    // Next value to use: 14
+    // User request via the Settings app.
+    USER_REQUEST_FROM_SETTINGS_APP = 14;
+    // Next value to use: 15
   }
   optional Cause cause = 2;
 
   // Next value to use: 3
+}
+
+// Announcement of a change to the ambient light sensor state emitted by powerd
+// via a AmbientLightSensorEnabledChanged D-Bus signal.
+message AmbientLightSensorChange {
+  // Current status of the ambient light sensor.
+  optional bool sensor_enabled = 1;
+
+  // The reason the ambient light sensor status was changed.
+  enum Cause {
+    // Ambient light sensor usage was disabled because no sensor is present.
+    NO_SENSOR_PRESENT = 0;
+    // Ambient light sensor was disabled because it was not supplying readings.
+    NO_READINGS_FROM_ALS = 1;
+    // User directly toggled the ambient light sensor via the Settings app.
+    USER_REQUEST_SETTINGS_APP = 2;
+    // Ambient light sensor was disabled as a result of a brightness change
+    // triggered by the user (e.g. brightness keys or quick settings slider).
+    BRIGHTNESS_USER_REQUEST = 3;
+    // Ambient light sensor was disabled as a result of a brightness change
+    // triggered by the user from the Settings app.
+    BRIGHTNESS_USER_REQUEST_SETTINGS_APP = 4;
+    // Ambient light sensor status was changed as a result of a brightness
+    // change not triggered by the user.
+    BRIGHTNESS_OTHER = 5;
+    // Next value to use: 6
+  }
+  optional Cause cause = 2;
 }

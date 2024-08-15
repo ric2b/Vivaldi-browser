@@ -105,7 +105,6 @@
 <translation id="2738771556149464852">Kuni</translation>
 <translation id="2749881179542288782">Lisaks õigekirjale grammatika kontrollimine</translation>
 <translation id="2785873697295365461">Failideskriptorid</translation>
-<translation id="2809586584051668049">ja veel <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2825758591930162672">Subjekti avalik võti</translation>
 <translation id="2850541429955027218">Lisa teema</translation>
 <translation id="2861941300086904918">Native Clienti turvahaldur</translation>
@@ -136,7 +135,6 @@
 <translation id="3275778913554317645">Ava eraldi aknas</translation>
 <translation id="3280237271814976245">Salvesta nimega...</translation>
 <translation id="3285322247471302225">Uus kaart</translation>
-<translation id="3288047731229977326">Arendaja režiimis töötavad laiendused võivad arvutit kahjustada. Kui sa pole arendaja, peaksid turvalisuse säilitamiseks need arendaja režiimis töötavad laiendused keelama.</translation>
 <translation id="329838636886466101">Paranda</translation>
 <translation id="33022249435934718">GDI pidemed</translation>
 <translation id="3303818374450886607">Koopiate arv</translation>
@@ -192,7 +190,6 @@
 <translation id="4087089424473531098">Loodud laiendus:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4096508467498758490">Arendaja režiimi laienduste keelamine</translation>
 <translation id="4100839878934973028">Teine programm arvutis on lisanud rakenduse, mis võib muuta Vivaldi tööd.</translation>
 <translation id="4104163789986725820">Ekspordi...</translation>
 <translation id="4109898769411476438">Enne importimist tuleb brauser sulgeda</translation>
@@ -261,7 +258,6 @@
 <translation id="5269977353971873915">Printimine ebaõnnestus</translation>
 <translation id="5284445933715251131">Jätka allalaadimist</translation>
 <translation id="52912272896845572">Privaatvõtme fail on kehtetu.</translation>
-<translation id="5301954838959518834">Selge, sain aru</translation>
 <translation id="5302932258331363306">Asenduste näitamine</translation>
 <translation id="5317780077021120954">Salvesta</translation>
 <translation id="5334142896108694079">Skripti vahemälu</translation>

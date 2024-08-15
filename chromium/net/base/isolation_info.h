@@ -123,7 +123,7 @@ class NET_EXPORT IsolationInfo {
       const SiteForCookies& site_for_cookies,
       const std::optional<base::UnguessableToken>& nonce = std::nullopt);
 
-  // TODO(crbug/1372769): Remove this and create a safer way to ensure NIKs
+  // TODO(crbug.com/40871266): Remove this and create a safer way to ensure NIKs
   // created from NAKs aren't used by accident.
   static IsolationInfo DoNotUseCreatePartialFromNak(
       const net::NetworkAnonymizationKey& network_anonymization_key);
@@ -146,6 +146,10 @@ class NET_EXPORT IsolationInfo {
   IsolationInfo CreateForRedirect(const url::Origin& new_origin) const;
 
   RequestType request_type() const { return request_type_; }
+
+  bool IsMainFrameRequest() const {
+    return RequestType::kMainFrame == request_type_;
+  }
 
   bool IsEmpty() const { return !top_frame_origin_; }
 

@@ -12,12 +12,12 @@
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1591562245178063882">Aktueller Monat</translation>
 <translation id="1637811476055996098">Dateien auswählen</translation>
+<translation id="1680090928918677457">Kamera verwenden</translation>
 <translation id="1681022320378710418">aktuelle Uhrzeit</translation>
 <translation id="1727839386348365796">Pipette</translation>
 <translation id="1729654308190250600">Gib eine E-Mail-Adresse ein.</translation>
 <translation id="1758486001363313524">Andere...</translation>
 <translation id="1787192514241997742">Gesamtzeit: <ph name="REMAINING_TIME" /></translation>
-<translation id="1800494066469288780">Kamera zulassen</translation>
 <translation id="1822429046913737220">AM/PM</translation>
 <translation id="1832974991323546415">auf Remote-Gerät wiedergeben</translation>
 <translation id="1921819250265091946">tt</translation>
@@ -54,7 +54,6 @@
 <translation id="3220661731597678625">aktueller Schritt</translation>
 <translation id="3321030238473337787">Wiedergabegeschwindigkeit</translation>
 <translation id="3329013043687509092">Sättigung</translation>
-<translation id="3377518164566272702">Zugriff auf Mikrofon und Kamera zulassen</translation>
 <translation id="3450233048674729344">Wert muss kleiner als oder gleich <ph name="MAXIMUM" /> sein.</translation>
 <translation id="3732799496749320381">mm</translation>
 <translation id="3754210790023674521">Bild im Bild beenden</translation>
@@ -62,6 +61,7 @@
 <translation id="3822383571486410024">Verlängere diesen Text auf mindestens <ph name="MIN_CHARACTERS" /> Zeichen. Derzeit verwendest du <ph name="CURRENT_LENGTH" /> Zeichen.</translation>
 <translation id="383465348367842624">Vor dem <ph name="ATSIGN" />-Zeichen darf das Zeichen "<ph name="INVALIDCHARACTER" />" nicht verwendet werden.</translation>
 <translation id="3846214748874656680">Vollbildmodus beenden</translation>
+<translation id="3914173277599553213">Erforderlich</translation>
 <translation id="4031179711345676612">Mikrofonnutzung zulässig</translation>
 <translation id="4103419683916926126">Millisekunden</translation>
 <translation id="4201051445878709314">Vorherigen Monat anzeigen</translation>
@@ -77,6 +77,7 @@
 <translation id="4912200001568447310">aktuelles Element</translation>
 <translation id="4915360478455618802">Uhrzeitauswahl anzeigen</translation>
 <translation id="4924138096460353083">Unbestimmt</translation>
+<translation id="49269513399674318">Mikrofon verwenden</translation>
 <translation id="4950364064308314478">Lokale Datums- und Uhrzeitauswahl anzeigen</translation>
 <translation id="4971739861736909480"><ph name="ACCNAME" /> ausgewählt</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> ausgewählt</translation>
@@ -144,6 +145,7 @@
 <translation id="7080893216867146095">Standortfreigabe erlaubt</translation>
 <translation id="709897737746224366">Deine Eingabe muss mit dem geforderten Format übereinstimmen.</translation>
 <translation id="7102274145889307184">aktueller Standort</translation>
+<translation id="7134810312945846184">Mikrofon und Kamera verwenden</translation>
 <translation id="7263440858009898357">Wähle ein Element in der Liste aus.</translation>
 <translation id="7320576522385648310">Wird zwischengespeichert</translation>
 <translation id="7341556277900466204">Farbrad</translation>
@@ -188,7 +190,6 @@
 <translation id="9132465097189459683">Andere...</translation>
 <translation id="9155987714137265666"><ph name="WEEK" /> ab dem <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Bild im Bild</translation>
-<translation id="918430632320614861">Mikrofon zulassen</translation>
 <translation id="945780513535800434">Teilweise angeklickt</translation>
 <translation id="954003015749068518">Bild im Bild aktivieren</translation>
 </translationbundle>

@@ -62,14 +62,23 @@ DeskButton::DeskButton()
 
 DeskButton::~DeskButton() {}
 
-gfx::Size DeskButton::CalculatePreferredSize() const {
+void DeskButton::SetZeroState(bool zero_state) {
+  zero_state_ = zero_state;
+  UpdateBackground();
+}
+
+gfx::Size DeskButton::CalculatePreferredSize(
+    const views::SizeBounds& available_size) const {
   if (zero_state_) {
     return {kDeskButtonWidthVertical, kDeskButtonHeightVertical};
   }
 
   int height = kDeskButtonHeightHorizontal;
   int width =
-      GetButtonInsets().width() + desk_name_label_->GetPreferredSize().width();
+      GetButtonInsets().width() +
+      desk_name_label_
+          ->GetPreferredSize(views::SizeBounds(desk_name_label_->width(), {}))
+          .width();
   if (desk_button_container_->ShouldShowDeskProfilesUi()) {
     width += kDeskButtonAvatarSize.width() +
              kDeskButtonChildSpacingHorizontalExpanded;
@@ -187,8 +196,7 @@ void DeskButton::Init(DeskButtonContainer* desk_button_container) {
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
   SetFlipCanvasOnPaintForRTLUI(false);
-  SetBackground(views::CreateThemedRoundedRectBackground(
-      cros_tokens::kCrosSysSystemOnBase1, kDeskButtonCornerRadius));
+  UpdateBackground();
 
   SetInstallFocusRingOnFocus(true);
   SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
@@ -233,10 +241,7 @@ void DeskButton::SetActivation(bool is_activated) {
 
   is_activated_ = is_activated;
 
-  SetBackground(views::CreateThemedRoundedRectBackground(
-      is_activated_ ? cros_tokens::kCrosSysSystemPrimaryContainer
-                    : cros_tokens::kCrosSysSystemOnBase1,
-      kDeskButtonCornerRadius));
+  UpdateBackground();
   desk_name_label_->SetEnabledColorId(
       is_activated_ ? cros_tokens::kCrosSysSystemOnPrimaryContainer
                     : cros_tokens::kCrosSysOnSurface);
@@ -251,14 +256,14 @@ std::u16string DeskButton::GetTitle() const {
 
 gfx::Insets DeskButton::GetButtonInsets() const {
   if (desk_button_container_->zero_state()) {
-    return kDeskButtonInsectVerticalNoAvatar;
+    return kDeskButtonInsetVerticalNoAvatar;
   }
 
   if (IsShowingAvatar()) {
-    return kDeskButtonInsectHorizontalExpandedWithAvatar;
+    return kDeskButtonInsetHorizontalExpandedWithAvatar;
   }
 
-  return kDeskButtonInsectHorizontalExpandedNoAvatar;
+  return kDeskButtonInsetHorizontalExpandedNoAvatar;
 }
 
 void DeskButton::UpdateUi(const Desk* active_desk) {
@@ -368,6 +373,14 @@ void DeskButton::UpdateShelfAutoHideDisabler(
   } else {
     disabler.emplace(desk_button_container_->shelf());
   }
+}
+
+void DeskButton::UpdateBackground() {
+  SetBackground(views::CreateThemedRoundedRectBackground(
+      is_activated_ ? cros_tokens::kCrosSysSystemPrimaryContainer
+                    : (zero_state_ ? cros_tokens::kCrosSysSystemOnBase
+                                   : cros_tokens::kCrosSysSystemOnBase1),
+      kDeskButtonCornerRadius));
 }
 
 BEGIN_METADATA(DeskButton)

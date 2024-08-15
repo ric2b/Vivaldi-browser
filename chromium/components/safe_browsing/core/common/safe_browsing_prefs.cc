@@ -13,7 +13,6 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing/core/common/features.h"
 #include "net/base/url_util.h"
 #include "url/gurl.h"
 #include "url/url_canon.h"
@@ -226,7 +225,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
                              base::Time());
   registry->RegisterTimePref(prefs::kTailoredSecurityNextSyncFlowTimestamp,
                              base::Time());
-  // TODO(crbug.com/1469133): remove sync flow last user interaction pref.
+  // TODO(crbug.com/40925236): remove sync flow last user interaction pref.
   registry->RegisterIntegerPref(
       prefs::kTailoredSecuritySyncFlowLastUserInteractionState,
       TailoredSecurityRetryState::UNSET);
@@ -248,6 +247,10 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
       prefs::kSafeBrowsingEsbOptInWithFriendlierSettings, false);
   registry->RegisterBooleanPref(
       prefs::kSafeBrowsingAutomaticDeepScanningIPHSeen, false);
+  registry->RegisterBooleanPref(prefs::kSafeBrowsingAutomaticDeepScanPerformed,
+                                false);
+  registry->RegisterBooleanPref(
+      prefs::kSafeBrowsingScoutReportingEnabledWhenDeprecated, false);
 }
 
 const base::Value::Dict& GetExtensionTelemetryConfig(const PrefService& prefs) {
@@ -456,7 +459,14 @@ bool MatchesURLList(const GURL& target_url, const std::vector<GURL> url_list) {
   }
   GURL simple_target_url = GetSimplifiedURL(target_url);
   for (const GURL& url : url_list) {
-    if (GetSimplifiedURL(url) == simple_target_url) {
+    GURL simple_url = GetSimplifiedURL(url);
+    if (simple_url == simple_target_url) {
+      return true;
+    }
+    // Append trailing slash in case the policy specifies a URL with a path
+    // that does not append a slash. Simplified URLs will not match if the
+    // sole difference is a missing trailing slash.
+    if (simple_url.spec() + "/" == simple_target_url.spec()) {
       return true;
     }
   }
